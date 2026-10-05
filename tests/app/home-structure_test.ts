@@ -33,7 +33,7 @@ test("the huge greeting heading is gone: the header is compact", async () => {
   assert.ok(!/bell|通知/.test(header.replace(/アカウント・通知・規約・ログアウトの設定を開きます/, "")), "no fake notification control");
 });
 
-test("asset slots: header logo and Hero background are wired; the topic background stays empty until the art exists", async () => {
+test("asset slots: header logo, Hero background and the three topic backgrounds are wired", async () => {
   const header = await read("src/components/home/home-header.tsx");
   assert.ok(/export const HEADER_LOGO_SOURCE: ImageSource = require\('@\/assets\/images\/home\/kabumori_header_logo\.webp'\);/.test(header));
   assert.ok(/HEADER_LOGO_SLOT = \{ width: 132, height: 34 \}/.test(header));
@@ -41,11 +41,16 @@ test("asset slots: header logo and Hero background are wired; the topic backgrou
   const hero = await read("src/components/home/home-report-hero.tsx");
   assert.ok(/export const HERO_BACKGROUND_SOURCE: ImageSource = require\('@\/assets\/images\/home\/report_hero_background\.webp'\);/.test(hero));
   const topic = await read("src/components/home/home-topic-feature.tsx");
-  assert.ok(/export const TOPIC_BACKGROUND_SOURCE: ImageSource \| null = null;/.test(topic));
-  assert.ok(!/require\('@\/assets\/images\/home\//.test(topic.replace(/\/\/.*$/gm, "")), "topic must not require a missing home asset");
+  for (const level of ["beginner", "intermediate", "advanced"]) {
+    assert.ok(topic.includes(`${level}: require('@/assets/images/home/topic_background_${level}.webp'),`), level);
+  }
   const names: string[] = [];
   for await (const entry of Deno.readDir(new URL("assets/images/home/", repoRoot))) names.push(entry.name);
-  assert.deepEqual(names.sort(), ["kabumori_header_logo.webp", "report_hero_background.webp"], "only assets that exist may be required");
+  assert.deepEqual(
+    names.sort(),
+    ["kabumori_header_logo.webp", "report_hero_background.webp", "topic_background_advanced.webp", "topic_background_beginner.webp", "topic_background_intermediate.webp"],
+    "only assets that exist may be required",
+  );
 });
 
 test("the Hero draws none of the baked-in art text natively (no double display)", async () => {

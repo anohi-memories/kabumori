@@ -103,6 +103,14 @@ statusが`ready`または`in_progress`のTASKだけ開始する。`idle` / `done
 
 新しいTASKは「未割当」であることが明確な枠だけに置く。`idle`だけを空き判定に使わない。task_id、既存TASK本文、Report、next_ownerも確認し、既存割当を保護する。曖昧なら上書きせず停止する。
 
+### Mac移行後のローカル開発基準（2026-10-05〜）
+
+- 新Macで新規slotを開始するときの clean base は `/Users/yuya/Developer/kabumori-fresh`。
+- 旧 `/Users/yuya/Developer/kabumori` は既存worktree保護のため保持し、新規slotのbaseには使わない。
+- 既存worktreeは対応TASK完了まで継続可。旧repo / 旧worktreeの削除・rename・prune・resetは禁止。
+- 新規slotは `kabumori-fresh` の fresh `origin/main` から専用の独立worktree / checkoutを作成する。`kabumori-fresh` 本体を複数slotで共有しない。
+- 開始コードと完了コードの意味は変更なし。
+
 ## 完了確認コード
 
 ### C1 / C2 — Codex

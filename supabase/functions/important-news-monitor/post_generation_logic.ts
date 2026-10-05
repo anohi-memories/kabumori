@@ -252,6 +252,32 @@ function extractTobOfferorName(normalizedBody: string): string | null {
   return match?.[1]?.trim() || null;
 }
 
+// The three extractors above need the label at the start of its own line.  PDF-to-text extraction also
+// produces "上 場 会 社 名 積水ハウス株式会社 上場取引所 東・名" or "会 社 名 ニデック株式会社 代表者名 …"
+// where the label sits mid-line (table cells flattened) and is followed by other cells.  These are the
+// same issuer-field labels, read only from the cover area of the document, with the value cut at the
+// next cell label.  Everything found here is only ever a *candidate*: it counts for identity only if it
+// then matches the trusted candidate.companyName in companyIdentityEvidence.
+// The label must not directly follow another CJK character, so "子会社名" / "親会社名" / "関連会社名"
+// (a *different* company's field) are never read as the issuer's own field.
+const ISSUER_FIELD_LABEL =
+  /(?<![\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}])(?:上\s*場\s*会\s*社\s*名|会\s*社\s*名|商\s*号)[ \t　]+/gu;
+const ISSUER_FIELD_VALUE_END =
+  /[ \t　]+(?:上\s*場\s*取\s*引\s*所|代\s*表\s*者|代\s*表\s*取\s*締\s*役|コ\s*ー\s*ド\s*番\s*号|証\s*券\s*コ\s*ー\s*ド|本\s*社|問\s*合\s*せ|U\s*R\s*L|T\s*E\s*L)|[ \t　]*\((?![株有合]\))/u;
+const ISSUER_FIELD_COVER_LENGTH = 800;
+
+function extractIssuerFieldNames(normalizedBody: string): string[] {
+  const cover = normalizedBody.slice(0, ISSUER_FIELD_COVER_LENGTH);
+  const names: string[] = [];
+  for (const match of cover.matchAll(ISSUER_FIELD_LABEL)) {
+    const rest = cover.slice((match.index ?? 0) + match[0].length).split("\n")[0];
+    const end = rest.search(ISSUER_FIELD_VALUE_END);
+    const value = (end >= 0 ? rest.slice(0, end) : rest).trim();
+    if (value.length >= 2) names.push(value);
+  }
+  return names;
+}
+
 // Many disclosure formats (subsidiary changes, overseas M&A, press releases, ...) introduce every
 // named party — issuer, subsidiary, or counterparty alike — as "NAME（…、以下「ALIAS」）" instead of a
 // fixed header. This collects every such (name, alias) pair without judging which party is the
@@ -277,21 +303,64 @@ function extractAliasedEntityNames(normalizedBody: string): string[] {
 function primarySourceCompanyNameCandidates(bodySummary: string | null): string[] {
   if (!bodySummary) return [];
   const normalized = bodySummary.normalize("NFKC");
-  const candidates = [
-    extractHeaderCompanyName(normalized),
-    extractListedCompanyName(normalized),
-    extractTobOfferorName(normalized),
-    ...extractAliasedEntityNames(normalized),
-  ].filter((value): value is string => typeof value === "string" && value.length > 0);
-  return [...new Set(candidates)];
+  return [...new Set([...issuerFieldNames(normalized), ...extractAliasedEntityNames(normalized)])];
 }
 
-function normalizedCompanyIdentity(value: string, stripTdnetMarketPrefix: boolean): string {
+// Every name the body states in an explicit issuer field (as opposed to a name merely mentioned in
+// prose or an "以下「…」" alias).  These are the names allowed to use the safe-suffix rule.
+function issuerFieldNames(normalizedBody: string): string[] {
+  const names = [
+    extractHeaderCompanyName(normalizedBody),
+    extractListedCompanyName(normalizedBody),
+    extractTobOfferorName(normalizedBody),
+    ...extractIssuerFieldNames(normalizedBody),
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+  return [...new Set(names)];
+}
+
+// Any sign that the body names its issuer in a labelled field, whether or not the value could be read.
+// When such a label exists, "当社" must not be assumed to mean the TDnet company (a joint filing or an
+// unreadable header may name somebody else), so the self-reference rule below stays off.
+const ISSUER_LABEL_PRESENT =
+  /(?<![\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}])(?:上\s*場\s*会\s*社\s*名|会\s*社\s*名|商\s*号|発\s*行\s*者\s*名|届\s*出\s*者|提\s*出\s*会\s*社|公開買付者の名称)/u;
+
+// The disclosure never names its issuer and refers to itself only as 当社.  TDnet delivers every
+// document under the issuing company's own code, so once the TDnet URL / code / entityKey signals have
+// been verified, 当社 is the metadata company.  This applies only when the body has no issuer label at
+// all (see ISSUER_LABEL_PRESENT) and names no issuer field, so it can never override a body that names
+// a different company.
+function refersToIssuerOnlyAsToSha(normalizedBody: string): boolean {
+  return normalizedBody.includes("当社") && !ISSUER_LABEL_PRESENT.test(normalizedBody);
+}
+
+// TDnet's short names abbreviate a trailing "ホールディングス" / "フィナンシャルグループ" as ＨＤ / ＦＧ
+// (ＰＨＣＨＤ, プロクレアＨＤ, ＡＦＣ-ＨＤ ...), while the disclosure body spells it out. Only these two
+// end-anchored, unambiguous abbreviations are expanded, and only with at least two characters of company
+// name in front of them: "AFC-HDアムスライフサイエンス" (HD in the middle) is a different company from
+// "AFC-HD" and must not collapse into it.
+const ABBREVIATION_EXPANSIONS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/(?<=.{2})hd$/u, "ホールディングス"],
+  [/(?<=.{2})fg$/u, "フィナンシャルグループ"],
+];
+
+function normalizedCompanyIdentity(
+  value: string,
+  stripTdnetMarketPrefix: boolean,
+  expandAbbreviations = true,
+): string {
   let normalized = value.normalize("NFKC").trim().toLowerCase();
   if (stripTdnetMarketPrefix) normalized = normalized.replace(/^[gps]-/u, "");
-  return normalized
+  // PDF-to-text extraction often spaces a name out ("株 式会 社プロク レアホールディ ング ス"), so
+  // whitespace is removed first; otherwise the legal-form removal below could never see "株式会社".
+  normalized = normalized
+    .replace(/\s/gu, "")
     .replace(/株式会社|有限会社|合同会社|合資会社|合名会社|\(株\)|（株）/gu, "")
-    .replace(/[\s・･._・\-]/gu, "");
+    .replace(/[・･._・\-]/gu, "");
+  if (!expandAbbreviations) return normalized;
+  for (const [pattern, expansion] of ABBREVIATION_EXPANSIONS) {
+    normalized = normalized.replace(pattern, expansion);
+  }
+  return normalized.replace(/ファイナンシャル/gu, "フィナンシャル");
 }
 
 // A 5-character securities code whose final character is literally "0" denotes the ordinary/common
@@ -318,6 +387,8 @@ const KNOWN_COMPANY_NAME_ALIASES: Readonly<Record<string, string>> = {
   "80010": "伊藤忠商事", // TSE 8001 伊藤忠商事株式会社 — DB short display name is "伊藤忠"
   "37790": "ジェイ・エスコムホールディングス", // TSE 3779 ジェイ・エスコムホールディングス — DB short display name is "Ｊ・エスコムＨＤ"
   "72790": "ハイレックスコーポレーション", // TSE 7279 ハイレックスコーポレーション — DB short display name is "ハイレックス"
+  "290A0": "Synspective", // TSE 290A 株式会社Synspective — DB short display name is "Ｇ－Ｓｙｎｓ" (truncated)
+  "47650": "SBIグローバルアセットマネジメント", // TSE 4765 SBIグローバルアセットマネジメント — DB short display name is "ＳＢＩＧアセットＭ"
 };
 
 // A code/entity match is necessary but not by itself sufficient to accept a name difference.  The
@@ -344,6 +415,17 @@ function namesMatchWithSafeSuffix(
   if (accepted.length < 2 || primary.length < 2) return false;
   if (accepted === primary) return true;
   if (!allowSafeSuffix) return false;
+  // The abbreviation expansion above only widens exact equality.  The "short form + safe suffix" rule
+  // keeps comparing the names as written, so a ＨＤ-expanded short name can never grow into a longer
+  // company name (e.g. ポールＨＤ -> ポールトゥウィンホールディングス stays rejected).
+  return shortFormWithSafeSuffix(
+    normalizedCompanyIdentity(acceptedName, true, false),
+    normalizedCompanyIdentity(primaryName, false, false),
+  );
+}
+
+function shortFormWithSafeSuffix(accepted: string, primary: string): boolean {
+  if (accepted.length < 2 || primary.length < 2) return false;
   // Only the already-known metadata/display name may be the short form.  Accepting the inverse
   // direction would turn a source's short name into an alias for a longer metadata name (e.g.
   // G-BASE -> BASE), which is exactly the kind of false integration this guard is meant to prevent.
@@ -355,11 +437,7 @@ function namesMatchWithSafeSuffix(
 export function companyIdentityEvidence(candidate: GenerationCandidate): CompanyIdentityEvidence {
   const candidateNames = primarySourceCompanyNameCandidates(candidate.bodySummary);
   const normalizedBody = candidate.bodySummary?.normalize("NFKC") ?? "";
-  const headerNames = new Set([
-    extractHeaderCompanyName(normalizedBody),
-    extractListedCompanyName(normalizedBody),
-    extractTobOfferorName(normalizedBody),
-  ].filter((value): value is string => typeof value === "string" && value.length > 0));
+  const headerNames = new Set(issuerFieldNames(normalizedBody));
   const companyCode = candidate.companyCode?.trim() || null;
   const metadataName = candidate.companyName?.trim() || null;
   let trustedTdnetSource = false;
@@ -392,13 +470,19 @@ export function companyIdentityEvidence(candidate: GenerationCandidate): Company
   const normalizedSecurityCode = companyCode !== null
     ? normalizeSecurityCodeForComparison(companyCode)
     : null;
+  // 当社-only disclosures: no issuer name exists in the body to compare, and the TDnet signals already
+  // identify the issuer.  primarySourceName stays null — the body names nobody, and offering an alias
+  // or a subsidiary picked up from the prose as "the primary source name" would misstate what was
+  // confirmed.
+  const selfReferenceConfirmed = identitySignalsVerified && metadataName !== null &&
+    matchedName === null && headerNames.size === 0 && refersToIssuerOnlyAsToSha(normalizedBody);
   return {
     metadataName,
-    primarySourceName: matchedName ?? candidateNames[0] ?? null,
+    primarySourceName: selfReferenceConfirmed ? null : matchedName ?? candidateNames[0] ?? null,
     companyCode,
     normalizedSecurityCode,
     displaySecurityCode: normalizedSecurityCode,
-    sameCompanyConfirmed: identitySignalsVerified && matchedName !== null,
+    sameCompanyConfirmed: selfReferenceConfirmed || (identitySignalsVerified && matchedName !== null),
   };
 }
 
@@ -453,24 +537,53 @@ function hasUnsupportedMarketAssertion(candidate: GenerationCandidate, generated
   );
 }
 
-function explicitYears(candidate: GenerationCandidate): string[] {
+// Dates whose year belongs to the news itself when the body labels them so ("発表日 2026-09-09",
+// "適用日 2027-03-31"). PDF text often spaces kanji out ("発 表 日"), so the labels tolerate whitespace.
+const EVENT_DATE_LABELS = [
+  "発表日", "公表日", "適用日", "効力発生日", "実施日", "開始日", "契約締結日", "締結日", "決定日", "施行日", "予定日", "上場日",
+];
+const spaced = (label: string) => Array.from(label).join("\\s*");
+const LABELLED_EVENT_YEAR = new RegExp(
+  `(?:${EVENT_DATE_LABELS.map(spaced).join("|")})\\s*[:：]?\\s*((?:19|20)\\d{2})`,
+  "gu",
+);
+const FIRST_FISCAL_PERIOD_YEAR = /((?:19|20)\d{2})\s*年\s*\d{1,2}\s*月\s*期/u;
+// Only in earnings disclosures is the first fiscal period the subject. In TOB, M&A, dividend and other
+// notices it is a reference ("所有割合は2027年3月期第1四半期決算短信に記載", "2027年3月期からの中期経営計画"),
+// which the first backtest of this rule showed failing five more posts.
+const SUBJECT_PERIOD_CATEGORIES = new Set<string>(["earnings", "earnings_revision_up", "earnings_revision_down"]);
+
+/**
+ * Years the generated post must state. Headline and judgement-reason years define the candidate and
+ * stay required. A body year is required only when it is the news's own year: the year of a labelled
+ * event date, or — in an earnings disclosure whose headline and reason carry no year — the first fiscal
+ * period the body names ("2026年3月期"). Years that merely occur in the body (prior-year comparison columns, earlier
+ * resolution or announcement dates, warrant exercise periods, historical references, long-range plans)
+ * are not required: 2026-09-30/10-02 showed six TDnet/AJ posts failing on exactly such years, and
+ * no rewrite could fix them. The set never exceeds the previous rule's (body years within one year of
+ * the publication year), so this can only stop failures, never add any.
+ */
+export function explicitYears(candidate: GenerationCandidate): string[] {
   const headlineEvidence = [candidate.title, candidate.judgementReason]
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .join("\n");
   const headlineYears = headlineEvidence.match(/(?:19|20)\d{2}/gu) ?? [];
 
-  // PDF/RSS bodies often contain historical legal references, page metadata, or URLs (for example
-  // the 1930 Tariff Act and a 2022 performance reference). Requiring every such year in a short post
-  // creates false Fact failures. Keep body years only when they are close to the candidate's event
-  // year; headline/judgement years remain required because they define the candidate itself.
   const publishedYear = Number(candidate.publishedAt.slice(0, 4));
-  const bodyYears = typeof candidate.bodySummary === "string"
-    ? candidate.bodySummary.match(/(?:19|20)\d{2}/gu) ?? []
-    : [];
-  const relevantBodyYears = Number.isFinite(publishedYear)
-    ? bodyYears.filter((year) => Math.abs(Number(year) - publishedYear) <= 1)
-    : bodyYears;
-  return [...new Set([...headlineYears, ...relevantBodyYears])];
+  // Only years the previous rule would have required can stay required (ASCII years in the raw body,
+  // within one year of publication): the narrowed rule is strictly a relaxation.
+  const previouslyRequired = new Set(
+    (typeof candidate.bodySummary === "string" ? candidate.bodySummary.match(/(?:19|20)\d{2}/gu) ?? [] : [])
+      .filter((year) => !Number.isFinite(publishedYear) || Math.abs(Number(year) - publishedYear) <= 1),
+  );
+  const nearPublication = (year: string) => previouslyRequired.has(year);
+  const body = typeof candidate.bodySummary === "string" ? candidate.bodySummary.normalize("NFKC") : "";
+  const subjectBodyYears = [...body.matchAll(LABELLED_EVENT_YEAR)].map((match) => match[1]);
+  if (headlineYears.length === 0 && SUBJECT_PERIOD_CATEGORIES.has(candidate.category)) {
+    const firstPeriod = body.match(FIRST_FISCAL_PERIOD_YEAR)?.[1];
+    if (firstPeriod) subjectBodyYears.push(firstPeriod);
+  }
+  return [...new Set([...headlineYears, ...subjectBodyYears.filter(nearPublication)])];
 }
 
 function hasMissingExplicitYear(candidate: GenerationCandidate, generatedText: string): boolean {

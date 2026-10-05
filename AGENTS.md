@@ -11,6 +11,14 @@
 
 GitHub共有タスク運用は `.agent/ORCHESTRATION.md` を参照する。競合時は `PROJECT_RULES.md` を優先する。
 
+## Mac移行後のローカル開発基準（2026-10-05〜）
+
+- 新規Codex作業の clean base は `/Users/yuya/Developer/kabumori-fresh` とする。
+- 旧 `/Users/yuya/Developer/kabumori` は既存worktree保護のため保持し、新規作業のbaseには使用しない。
+- 既存H1/H2 worktreeは対応TASK完了まで継続してよい。旧repo / 旧worktreeを削除・rename・prune・resetしない。
+- 新規H slotは `kabumori-fresh` の fresh `origin/main` から専用の独立worktree / checkoutを作成する。
+- H1/H2/C1/C2の意味と既存TASK運用は従来どおり。
+
 ## Codex task start codes
 
 ユーザーが単独で以下を送った場合、一般用語やMarkdown見出しとして解釈せず、Codex共有タスクの開始コードとして扱う。

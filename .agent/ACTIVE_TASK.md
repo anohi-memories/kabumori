@@ -24,69 +24,70 @@
 - owner: codex
 - slot: codex-1
 - status: done
-- task_id: common-account-pr70-readiness-authorization-rereview-20261002
+- task_id: ai-lab-pr82-claim-rereview-20261004
 - start_code: H1
 - finish_code: C1
 - next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 PASS-WITH-FIX accepted. H1 fix aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65 incorporated into PR #70 and merged as 44121914b035e22380a4ca1bd8252a42713a2bbf. Source accepted; production migration/backfill/deploy NOT authorized. H1 free after fresh allocation.
+- allocation: Final C1 accepted CHANGES REQUIRED on PR #82 head 9f3b19a3cde490cf63735220ae191dcd4f11bdcb. Core diary concurrency/fencing is improved, but duplicate event_id labels, unsafe owner/inherited ACL drift, real-wrapper 401 classification, unresolved evergreen reclaim, claim-time cooldown semantics, non-canonical RPC payload acceptance and new test lint debt remain. No merge/deploy/production mutation. H1 free after fresh allocation.
 
 ## Codex H2
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: common-account-pr70-preproduction-gate-20261002
+- task_id: x-social-mobile-pr81-content-settings-hardening-rereview-20261003
 - start_code: H2
 - finish_code: C2
 - next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: merged common-account Phase 1のproduction適用前独立ゲート。actual disposable Supabase proof、production read-only preflight、migration-history/schema/ACL/FK、backfill dry-run/parityを確認。production mutation/apply/backfill/deploy禁止。推薦モデル Sol（極高）。
+- allocation: Focused rereview of PR #81 exact head 5595fb131813542c55c43bc783af623cdb9ea442. Verify H2 F1-F4 closure: exact JSON/persona DB contract, effective least-privilege ACL/RLS, strictly monotonic updated_at CAS, fail-closed drift guard, real migration transactionality and production catalog compatibility. No merge/apply/deploy/production write. Recommended Sol（高）.
 
 ## Claude G1
 - owner: claude
 - slot: claude-1
 - next_owner: none
 - status: done
-- task_id: kabumori-home-report-hero-8-state-assets-20261001
+- task_id: kabumori-topic-detail-learning-v2-20261003
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS. Base 8-state Hero PR #72 was already merged; follow-up PR #74 (global 6pt character/CTA lift + CTA height/inset) squash-merged as 9b37c350a3b9d1a936d0e03ddc281e315aba50f2, then final 02/07 aligned assets PR #75 squash-merged as 02ba0e2d728833fb76b74237cc3c237130bcdbf1. Final asset hashes pinned; app tests reported 255/255; EAS build 0; backend/production mutation 0; no Codex review required. G1 free after fresh allocation.
-- recommended_model: Sonnet5（中）
+- allocation: Final K1 PASS. PR #83 exact head c810accebada37760a98a18bb184b50a61b7937b squash-merged as f5919eb6af3da51c0d4d4a6342ad23b3f0a68980. 全50トピックを5段階の静的学習フローへ強化し、Homeの短い要約は維持。284/284 tests、402/375pt visual checks、EAS 0、backend/DB/RPC/API/AI mutation 0。Codex review不要。G1 free after fresh allocation.
+- recommended_model: Sonnet5（高）
+
 ## Claude G2
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-shared-report-v2-causal-calibration-prod-deploy-20261001
+- task_id: kabumori-shared-report-v2-20261005-morning-natural-observation
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: controlled production deploy/read-back of merged PR #71 causal-guard calibration to market-report-analysis only; gates OFF, no manual cycle; next live check is 10/2 morning; recommended Sonnet5（高）
+- allocation: read-only natural 2026-10-05 morning observation of production market-report-analysis v21 after PR #77 + PR #79 rollout; do not substantively observe before 08:10 JST, no polling/manual invoke/gate/deploy; inspect first-try vs retry, Hard/WARN boundaries, cost and factual integrity; recommended Sonnet5（中）
 
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
-- task_id: x-social-mobile-ai-consult-v1-20261002
+- status: review_required
+- task_id: x-social-mobile-content-settings-schema-hardening-20261003
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: codex
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: Implement real AI consultation before post generation: authenticated server-side conversational AI, natural chat/questions, current-setting explanation, bounded settings/persona proposals, explicit user confirmation before persistence. Reuse existing content-settings/persona storage and validators; no DB migration, no past-X fetch, no post generation/publish/scheduler/OAuth/common-account changes, no production deploy. Recommended Opus5.5（高）. K3 should normally send the authenticated Edge/API boundary to H2 Sol（高） review before merge.
+- allocation: K3 PASS to focused H2 rereview. PR #81 exact head 5595fb131813542c55c43bc783af623cdb9ea442 is open/mergeable; H2 F1-F4 are reported corrected with local disposable proof. No production apply/deploy/write. H2 review required before merge or any production migration approval. Recommended Sol（高）.
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
 - status: ready
-- task_id: x-social-mobile-publish-toggle-v1-20261002
+- task_id: x-social-mobile-pr76-fresh-main-integration-20261005
 - start_code: G4
 - finish_code: K4
 - next_owner: claude
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: Implement real per-account automatic-publishing ON/OFF using existing social_accounts.publish_enabled through a new authenticated server-side boundary. Owner/admin only; strict enable prerequisites, fail-safe disable, CAS/stale protection, exact-account authorization. No DB migration/RLS/grant change, no X API call, no scheduler/content-generation/AI-consult/common-account changes, no production deploy. Recommended Opus5.5（高）. K4 should normally send this posting-permission boundary to Codex Sol（高） review before merge.
+- allocation: Integration-only freshness gate for PR #76. Current corrective head fe1e846e59c69b591d29c6d21fc23c7b702d19cd is open but non-mergeable because main advanced 133 commits. Exactly one overlapping file: supabase/tests/migration_source_invariants_test.ts; preserve latest main and add the PR76 reserved migration version 20261003090000. Merge fresh origin/main with no force/rebase, rerun security/regression suites, no functional redesign, no production apply/deploy/X. Recommended Sonnet5（高）. After K4, H1 Sol（極高） rereview mandatory.
 
 ## Claude G5
 - owner: claude

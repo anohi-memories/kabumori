@@ -1,10 +1,778 @@
 # Codex Task 2 — CURRENT TASK
 
+- task_id: x-social-mobile-pr81-content-settings-hardening-rereview-20261003
+- owner: codex
+- slot: codex-2
+- status: review_required
+- next_owner: chatgpt
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused rereview / migration / RLS / JSON contract / CAS
+- target_pr: 81
+- target_head: 5595fb131813542c55c43bc783af623cdb9ea442
+- blocks_pr: 78
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #81 は、前回H2がFAILにした `social_mobile_content_settings` schema candidate のF1〜F4を直す hardening migration。
+
+今回は以下を独立確認し、**本番適用候補として source-level PASS にできるか**を判断する。
+
+- F1 JSON/persona durable contract
+- F2 effective ACL least privilege
+- F3 strictly monotonic updated_at CAS
+- F4 fail-closed drift handling
+
+PASSしても本番適用は別承認。PR #78 AI相談のmergeもまだ不可。
+
+## Mandatory startup
+
+1. PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / G3 TASK+Report / prior H2 reportを読む。
+2. H2専用worktree。
+3. fresh origin/main。
+4. PR #81 exact head `5595fb131813542c55c43bc783af623cdb9ea442` を確認。head違いならSTOP。
+5. K3時点でmainはPR baseから24 commits ahead、PR81の7ファイルとのoverlap 0。freshに再確認。
+6. H1はPR #82 AI Lab review中。H1 worktree/filesへ触れない。
+7. G4 publish-toggle migration/RPCへ触れない。
+8. production apply/write/deploy禁止。
+
+## Gate A — migration chain / ordering
+
+Review:
+- historical `20260922045046_social_mobile_content_settings_candidate.sql` is byte-unchanged.
+- hardening file is new `20261003120000_social_mobile_content_settings_hardening.sql`.
+- ordering is valid relative to G4/PR82/current main migrations.
+- no timestamp collision.
+- migration can safely run only after the historical candidate as intended.
+- transactional application assumption is valid under the actual Supabase migration mechanism used by this repo.
+- if file has no BEGIN/COMMIT, determine whether the real deploy path supplies transactionality; do not assume from local `psql -1`.
+
+This is important because the Report says the migration "must run inside one transaction".
+
+## Gate B — F1 JSON/settings/persona contract
+
+Independently verify validator functions and CHECKs.
+
+Settings must match actual current source writers:
+- exact approved root keys
+- exact JSON types
+- no NULL loophole
+- no `->>` coercion loophole
+- ja-JP / Asia-Tokyo
+- frequency integer 0..14
+- approvalMode allowed set
+- exact generationWindow shape
+- start/default time reject 24:00
+- endLocal allows 24:00
+- generationDayOffset exact allowed type/value
+- bounded string arrays and nonblank semantics
+- notes bounds.
+
+Persona:
+- exact current durable keys only
+- bounded strings/arrays
+- sentenceLength enum
+- analysis/provenance fields remain columns, not JSON
+- no raw posts/history/token/oauth/publish/account/scheduler keys.
+
+Compare against:
+- current main Settings writer
+- PR #78 writer/materializer
+- any other writer of this table in repo.
+
+A source writer that emits a shape rejected by DB is a blocker.
+
+## Gate C — validator function security
+
+For helper functions:
+- schema/name/owner
+- IMMUTABLE/PARALLEL SAFE claims are truthful
+- fixed search_path
+- no dynamic SQL
+- no table/data access
+- no side effects
+- EXECUTE grants minimal and necessary
+- PostgREST exposure as public RPC returns only boolean and cannot be abused for data access.
+
+Check whether using public schema functions is acceptable for rollout or should be moved to a private schema before apply. Do not block solely for aesthetics; block for actual attack/surface risk.
+
+## Gate D — F2 effective ACL / RLS
+
+Use disposable PostgreSQL/Supabase proof.
+
+Prove effective privileges, not source text:
+- PUBLIC none
+- anon none
+- authenticated exactly SELECT/INSERT/UPDATE
+- authenticated cannot DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN
+- service_role privileges are exactly what the chosen architecture requires; note that PR #78 Edge read path may or may not use service_role, verify actual code.
+- no unexpected column ACL
+- no unknown grantee survives hardening
+- RLS enabled
+- owner-only select/insert/update policy exact tenant binding
+- admin/member/viewer/nonmember/cross-brand blocked
+- no DELETE policy
+- policy subqueries work with actual brand_memberships RLS.
+
+Also inspect current production default ACL read-only if needed. K3 specifically lists this as a pre-apply residual risk.
+
+## Gate E — F3 CAS monotonicity
+
+Review trigger/function:
+- INSERT owns created_at and updated_at.
+- UPDATE preserves created_at.
+- UPDATE ignores caller-supplied updated_at.
+- `greatest(clock_timestamp(), old.updated_at + 1 microsecond)` strictly increases.
+- same transaction repeated updates advance.
+- long-running earlier transaction cannot regress.
+- concurrent old-version CAS gives exactly one winner.
+- stale token zero rows.
+- timestamp JSON/PostgREST round-trip equality is stable enough for PR #78.
+
+Try:
+- far-future old.updated_at
+- equal clock edge
+- multiple same-transaction updates
+- two concurrent connections
+- update after delete/recreate if feasible
+- upsert/insert-on-conflict paths used by current repository.
+
+Assess the theoretical delete+recreate old-token issue and whether it matters given brand lifecycle.
+
+## Gate F — F4 drift guard
+
+Independently review catalog checks.
+
+Must reject:
+- relation missing/wrong kind
+- column missing/extra/type/nullability drift
+- wrong PK
+- FK missing/wrong target/wrong delete action/not-valid/deferrable surprises
+- unexpected CHECK/UNIQUE/index
+- unexpected trigger/function binding
+- unexpected policy
+- unknown table/column grantee
+- post-hardening drift.
+
+Confirm only explicitly enumerated safe repair is accepted:
+- known candidate CHECK replacement
+- known overly broad grants normalization.
+
+Check for false positives against actual production catalog. A migration that will always stop on legitimate managed/Supabase metadata is not deployable.
+
+## Gate G — current rows / no hidden rewrite
+
+Production table is currently absent per prior H2 read, but candidate+hardening may be tested locally with rows.
+
+Verify:
+- invalid existing rows cause refusal, not silent mutation.
+- valid existing rows remain unchanged except server-owned version semantics going forward.
+- no data rewrite of settings/persona.
+- no unrelated table/role/default privilege mutation.
+
+## Gate H — lifecycle / common-account / G4 compatibility
+
+Confirm:
+- brand_id FK and CASCADE still match current main.
+- no dependency on unapplied common-account PR #70 production schema.
+- no conflict with G4 publish-toggle migration/RPC.
+- no collision with PR #82 AI Lab migration.
+- no change to Auth/Vault/X/scheduler.
+
+## Gate I — repository change
+
+Review app-side change:
+`apps/social-mobile/src/data/content-settings-repository.ts`
+
+Confirm removing analyzedAt/analyzedPostCount from persona_profile:
+- matches schema model
+- does not lose dedicated-column writes
+- does not erase existing confirmed persona metadata
+- PR #78 still composes cleanly after rebase.
+
+Run repository tests and inspect stale/confirm save path.
+
+## Tests
+
+Run independently:
+- `supabase/tests/social_mobile_content_settings_run.sh`
+- all SQL behavior/drift/ACL/CAS cases
+- same-transaction + multi-connection CAS
+- mutation checks if practical
+- social-mobile full test
+- content-settings repository focused tests
+- relevant `_shared/brand` and social-mobile dry-run tests
+- typecheck/lint/Deno lint
+- `git diff --check`
+- secret/scope scan.
+
+No paid AI/live X needed.
+
+## Production read-only preflight
+
+Allowed:
+- target table/function existence
+- migration history versions
+- `acldefault` / `pg_default_acl`
+- current roles/grantees relevant to this table
+- brands/brand_memberships dependent column/FK/RLS definitions
+- collision check for function/trigger/policy/index names.
+
+Do not read user content/settings/PII.
+
+Production mutation 0.
+
+## Verdict rules
+
+PASS:
+- F1-F4 independently closed;
+- migration chain and transactional apply semantics are safe;
+- current source writers are compatible;
+- no production catalog blocker.
+
+PASS-WITH-FIX:
+- only bounded source fix, fully re-tested, no architecture/schema redesign.
+
+CHANGES REQUIRED:
+- ACL/RLS escape;
+- validator mismatch;
+- CAS not actually monotonic;
+- drift guard unsafe;
+- transactionality assumption invalid;
+- real production catalog causes unavoidable stop or unsafe apply.
+
+## Report
+
+Append to `.agent/CODEX_REPORT_2.md`:
+- task_id
+- verdict
+- reviewed exact head
+- F1/F2/F3/F4 results
+- migration chain/transactionality
+- source-writer compatibility
+- effective ACL/RLS
+- CAS adversarial evidence
+- drift evidence
+- lifecycle/common-account/G4/PR82 compatibility
+- tests
+- production read-only findings
+- source fixes if any
+- production mutation
+- remaining risks
+- whether PR #81 may merge
+- whether production apply may be presented for separate approval
+- whether PR #78 review can resume after apply/read-back.
+
+Then status -> review_required, next_owner -> chatgpt, STOP for C2.
+
+Recommended model: **Sol（高）**.
+
+
+## H2 completion — 2026-10-03 JST
+
+- result: **CHANGES REQUIRED**; exact PR81 head `5595fb131813542c55c43bc783af623cdb9ea442` unchanged.
+- Report synchronized to origin/main in commit `31b2569acb07799ca773913ae05b2a8566c9c1db`; all prior history preserved.
+- Existing proof suite ALL_PASS; social-mobile 116/116; related Deno 158/158 (--no-check); focused repository 3/3; typecheck/lint/diff checks passed.
+- Three extra DB reproductions remain: deferrable PK accepted / actual upsert 55000; unknown helper EXECUTE grant retained; historical infinity timestamp breaks strictly-monotonic CAS.
+- Actual CLI local per-file transaction and failure rollback proved; whole candidate+hardening chain needs explicit atomic production plan.
+- source fixes / production writes / deploy / live AI/X/Push / PR merge: 0.
+- Detailed evidence and bounded G3 correction proposals are at the Report top; do not reclassify the green ordinary suite as overall PASS.
+- status: review_required
+- next_owner: chatgpt
+- STOP for C2. No production apply or PR78 merge approval.
+
+
+---
+
+# Codex Task 2 — CURRENT TASK
+
+- task_id: x-social-mobile-content-settings-schema-prereq-review-20261002
+- owner: codex
+- slot: codex-2
+- status: done
+- next_owner: none
+- priority: highest
+- recommended_model: Sol（高）
+- type: migration / RLS / optimistic-concurrency prerequisite review
+- target_migration: supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql
+- blocks_pr: 78
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #78 AI相談 v1 の前提となる既存 migration候補
+`20260922045046_social_mobile_content_settings_candidate.sql`
+を独立レビューする。
+
+C2でproductionに `public.social_mobile_content_settings` が存在しないことを確認済み。
+このTASKは、その既存候補を**本番へ適用してよいか判断する前のsource/schema review**であり、production applyはしない。
+
+## Mandatory startup
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK.
+2. Read PR #78 K3/C2 history and H2 blocker report.
+3. Independent H2 worktree/checkout.
+4. Fresh origin/main.
+5. Read exact migration candidate from main; do not edit/replace historical migration unless the review proves that is explicitly safe. Default is review-only.
+6. Read current production catalog READ ONLY for relevant dependencies only.
+7. Do not touch H1 PR #76 review worktree/files.
+
+## Review goals
+
+### A. Table contract
+Verify candidate creates exactly what current social-mobile settings/AI-consult code expects:
+- `brand_id` key/FK/delete behavior
+- `settings jsonb`
+- persona columns
+- `created_at`
+- `updated_at`
+- defaults and nullability
+- no publish/X/token fields in durable settings/persona.
+
+Compare source consumers:
+- content-settings repository
+- shared server normalizer/materializer
+- PR #78 CAS path
+- existing settings screen and any current writers.
+
+### B. JSON constraints
+Independently validate all current allowed settings:
+- locale
+- preferredTone
+- themes
+- objective
+- frequencyTargetPerWeek
+- approvalMode
+- generationWindow timezone/start/end/default/dayOffset
+- optionalNgWords
+- notes.
+
+Specifically prove:
+- endLocal may be `24:00`
+- startLocal/defaultGenerationLocal may NOT be `24:00`
+- invalid/missing/wrong-type data fails as intended
+- no publish permission can be smuggled through settings
+- persona cannot contain token/plain historical-post/publish controls.
+
+Check whether constraints are strong enough for every current writer, but do not over-constrain valid existing app values.
+
+### C. RLS / grants / tenant isolation
+Review:
+- RLS enabled
+- anon denied
+- authenticated SELECT/INSERT/UPDATE only
+- DELETE denied
+- owner-only policies bind `auth.uid()` to exact brand
+- foreign brand access blocked
+- service-role/runtime behavior remains appropriate
+- no policy recursion/problem with brand_memberships
+- owner-only semantics consistent with current social-mobile product contract.
+
+Use read-only production catalog to confirm referenced tables/columns/types/roles exist.
+
+### D. updated_at / CAS truth
+This is critical for PR #78.
+
+Prove:
+- `updated_at timestamptz NOT NULL DEFAULT now()`
+- BEFORE UPDATE trigger advances it on every update
+- current and planned writers cannot update settings/persona without advancing it
+- concurrent update -> stale confirmation cannot overwrite silently
+- insert race is detectable by PK/unique error
+- UPDATE with old updated_at returns zero rows
+- trigger ownership/search_path/function grants are safe
+- timestamp precision is sufficient for realistic concurrent writes; test same-transaction/same-clock edge cases if relevant.
+
+If timestamp CAS can collide within timestamp precision or be bypassed by a writer, classify severity and propose the smallest safe correction. Do not apply a production change.
+
+### E. FK / lifecycle / common-account interaction
+Review against current main after common-account source merge:
+- brand FK still valid
+- brand deletion cascade is intended
+- account/service deletion semantics do not leave unsafe settings rows
+- no conflict with common-account migrations or service entitlement work
+- no dependency on yet-unapplied common-account production migration.
+
+### F. migration idempotency / deployment behavior
+Review:
+- `create table if not exists` and subsequent statements on a partially-existing/drifted table
+- whether silently accepting a wrong pre-existing table is unsafe
+- trigger/policy recreation behavior
+- grants/revokes
+- function ownership/search_path
+- rollback expectations if migration fails part-way
+- Supabase migration history semantics.
+
+If the candidate needs a corrective migration rather than editing the historical file, report that explicitly; do not create/apply one unless separately assigned.
+
+### G. Production preflight
+READ ONLY:
+- confirm table still absent
+- referenced `brands` and `brand_memberships` shape compatible
+- auth.uid/policies can reference current columns/types
+- no naming collision with function/trigger/policy
+- production migration history does not list this candidate as applied
+- identify exact apply risks.
+
+Do not read user settings/content because table does not exist; do not read PII unnecessarily.
+
+## Local/disposable verification
+
+Use an H2-owned disposable local DB/Supabase environment if available without touching another slot.
+
+Apply the candidate locally only, then test:
+- owner SELECT/INSERT/UPDATE
+- non-owner/member/anon blocked
+- cross-brand blocked
+- delete blocked
+- updated_at advances
+- stale CAS update returns zero rows
+- concurrent insert conflict
+- defaults validate
+- 24:00 exact behavior
+- invalid JSON constraints fail
+- cascade on brand delete
+- no unexpected trigger side effects.
+
+If no safe local disposable environment is available, do not invent evidence; report which gates remain unproven.
+
+## Relationship to PR #78
+
+Do not re-review all PR #78 gates yet.
+
+This TASK only decides whether the schema prerequisite can become a valid base for resuming H2 PR #78 review.
+
+A PASS here does **not** merge PR #78 and does **not** authorize production migration apply.
+
+## Forbidden
+
+- production migration apply / db push
+- production INSERT/UPDATE/DELETE
+- RLS/grant change in production
+- Edge deploy
+- Auth/Vault/X/OpenAI/Cron mutation
+- PR #78 merge
+- H1 PR #76 changes.
+
+## Report
+
+Append to `.agent/CODEX_REPORT_2.md`:
+- verdict PASS / PASS-WITH-FIX-PROPOSAL / FAIL
+- exact migration/source reviewed
+- production catalog compatibility
+- table/JSON contract
+- RLS/grants
+- updated_at/CAS result
+- lifecycle/common-account compatibility
+- migration idempotency/drift risk
+- local disposable test evidence
+- production reads/mutations
+- changed_files (expected none)
+- exact next action
+- whether production apply can be presented for separate explicit approval
+- whether PR #78 review can resume after apply/read-back.
+
+Then status -> review_required, next_owner -> chatgpt, STOP for C2.
+
+Recommended model: **Sol（高）**.
+
+## H2 completion / C2 handoff — 2026-10-03 JST
+
+- verdict: **FAIL / CHANGES REQUIRED**. Unchanged historical candidate is NOT approved for production apply.
+- exact source: main `6ccaaf3a8bb4a2443e17412ae83421a6de7295e0`, migration SHA256 `b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb`.
+- blockers: P1 JSON null/type/structured forbidden-key gaps; P1 inherited authenticated TRUNCATE/TRIGGER/etc ACL; P2 transaction-clock updated_at collision/regression; P2 silently accepted CHECK/FK drift.
+- live catalog: target table/function absent, version20260922045046 not applied, brand/membership/FK/self-SELECT compatible. Two READ ONLY catalog transactions; no user data read.
+- local PostgreSQL17.11 proof: 104 behavioral observations incl42 adverse observations (NOT all PASS), eight additional apply/drift/rollback/lifecycle markers, two-connection CAS winner1/loser0, concurrent INSERT23505, forced rollback PASS.
+- existing static/shared tests: Node7/7 PASS. Initial Deno type-check blocked on missing npm:@types/node; no dependency install or false typecheck PASS.
+- source/schema candidate changes0. Fake DB dropped, H2 cluster stopped. Full evidence and minimal reproductions in latest H2 Report (C2 needs no local artifact access).
+- next: bounded corrective migration proposal/task, preserve historical candidate by default; corrected proof and separate explicit production approval required. PR78 incomplete review remains HOLD until accepted apply/read-back.
+- production mutation/deploy/AI/X/Auth/OAuth/Vault/Storage/Cron0; formal repo existing changes/H1/other workstreams untouched.
+- Report publication: `c1a9a1102b3f80f1ebf19e7b0a4367a4bb3ab40a`, exact content read-back PASS. Final pre-report fresh main: `18251ae795dc064dc5616e4ce6f2052e1db4957b`.
+- status: review_required / next_owner: chatgpt. **STOP for C2**. Recommended review model: Sol（高）.
+
+
+---
+
+# Codex Task 2 — CURRENT TASK
+
+- task_id: x-social-mobile-pr78-ai-consult-review-20261002
+- owner: codex
+- slot: codex-2
+- status: review_required
+- next_owner: chatgpt
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused review / authenticated AI API / settings persistence safety
+- target_pr: 78
+- target_head: 6e9f78a31bae9b65599732a9b416dcb50f2bfbc7
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #78「AI相談 v1」を独立レビューする。
+
+This is not a UI polish review. It adds:
+- authenticated Edge Function / AI provider boundary
+- saved settings/persona read path
+- untrusted structured AI output parsing
+- user-confirmed settings/persona persistence with optimistic concurrency.
+
+The review must prove that ordinary conversation, malicious/forged history, malformed model output, cross-tenant input, or a stale confirmation cannot silently mutate durable settings or reach posting/X/Auth/OAuth/scheduler boundaries.
+
+**merge / deploy / production settings write / AI live call / X API / Auth / Vault / migrationは禁止。**
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK.
+2. Read G3 current TASK/Report `x-social-mobile-ai-consult-v1-20261002`.
+3. Independent H2 worktree/checkout.
+4. Fresh fetch origin/main and PR #78 exact head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`.
+5. STOP if head differs.
+6. Re-check base-to-main overlap for all 11 PR files. K3 found main +7 commits, overlap 0.
+7. H1 is simultaneously reviewing PR #76. PR #76 files are separate; do not touch H1 branch/worktree/files.
+8. No source merge/deploy from H2.
+
+## Gate A — Auth / tenant isolation
+
+Independently verify:
+
+- Bearer/JWT is required and actually validated against Auth.
+- verified user id, not request data/history, is the identity boundary.
+- `brand_id` supplied by the client is only a selector; it must not grant authority.
+- membership query is scoped to the verified caller and exact brand.
+- role policy is explicit and consistent with current social-mobile ownership model.
+- foreign brand id, foreign workspace, missing membership, forged user id, duplicate membership, malformed brand id all fail closed.
+- brand must be the intended `social_mobile_user_v1` profile/context.
+- no service-role key is used by the consultation endpoint.
+- no response/log leaks user id, email, JWT, Authorization, provider key, raw settings from another tenant, or conversation text.
+- production schema/RLS read-only inspection may be used to verify assumptions; no writes.
+
+Clarify whether owner-only is intentional/safe versus any existing member/admin product semantics. Over-restriction can be noted separately; tenant escape is a blocker.
+
+## Gate B — request/context integrity
+
+Verify hard bounds:
+- exact request key allowlist
+- message length
+- history turn count
+- per-turn length
+- total history size
+- total body size
+- role values
+- method/content type
+- no hidden settings/token/account fields accepted.
+
+Review client-supplied history:
+- user can forge prior assistant turns; confirm this can influence only their own model context, not authorization/persistence.
+- forged assistant text must not be treated as previously confirmed settings/persona.
+- server must use its own saved confirmed settings/persona read, not client-claimed state.
+- confirmed-only persona rule is real.
+
+Attempt prompt-injection cases where history/message tells the model to emit forbidden keys, publish, schedule, reveal secrets, or claim something is saved.
+
+## Gate C — AI provider / structured-output trust boundary
+
+Prove:
+- provider secret is server-only
+- model is called at most once per send
+- no tools/web/X API
+- `store:false` or equivalent no-retention setting is actually set
+- timeout/output bounds are enforced
+- provider errors are bounded/retryable without raw provider leakage
+- strict schema is used as claimed, but server still treats returned JSON as untrusted
+- exact top-level key allowlist
+- exact editable settings allowlist
+- exact persona allowlist
+- forbidden control keys (publish/account/oauth/token/secret/schedule/cron/approval/generationWindow/locale/password/session/delete/vault etc.) fail closed even when nested/obfuscated in plausible structures
+- chat/question modes cannot carry deltas
+- same-as-saved deltas are dropped
+- malformed/partial output cannot create a pending proposal.
+
+Check client-side validator independently rejects an unsafe success envelope even if server were compromised or buggy.
+
+## Gate D — no implicit persistence / confirmation
+
+Trace every write path.
+
+Prove:
+- receiving AI response creates no DB write
+- normal chat creates no proposal
+- question creates no persistent delta
+- proposal remains memory/UI only
+- only explicit 「これで覚えて」 reaches save
+- dismiss/correction/retry cannot accidentally save the prior proposal
+- later proposal supersedes prior pending proposal safely
+- settings-only confirmation cannot erase/relabel existing persona
+- persona changes remain confirmed and bounded
+- no path toggles publish_enabled, approval permission, scheduled posts, X connection, Auth or common-account state.
+
+The Edge Function itself should be read-only. Enumerate every network/data call and prove there is no write call.
+
+## Gate E — optimistic concurrency / production schema truth
+
+This is a critical review point.
+
+The implementation relies on `social_mobile_content_settings.updated_at` as a compare-and-swap version.
+
+Use read-only production catalog/schema inspection to verify:
+- table exists in the target production project
+- expected columns exist
+- exact type/nullability/default of `updated_at`
+- RLS/policies match client read/write assumptions
+- INSERT/UPDATE permissions are what the mobile client needs
+- whether a trigger automatically changes `updated_at` on every update
+- whether any existing upsert/update path can change settings without advancing `updated_at`.
+
+If `updated_at` does not reliably advance, CAS may be illusory and must be a blocker or receive a bounded source-safe correction only if no schema change is required.
+
+Test:
+- row absent -> competing insert
+- row present -> competing update
+- touched field changed after proposal
+- unrelated field changed after proposal
+- persona changed after proposal
+- simultaneous confirm from two devices
+- update returns zero rows
+- RLS denial
+- malformed saved settings.
+
+No production writes.
+
+Also review the bundled fix allowing only `generationWindow.endLocal = "24:00"`:
+- confirm DB/server semantics really allow 24:00 there
+- no other time field accidentally accepts it
+- no validation weakening beyond the intended field.
+
+## Gate F — history-learning boundary
+
+Past-post learning is NOT implemented here.
+
+Verify:
+- history intent can be detected/displayed only
+- no X history fetch
+- no X token read
+- no X API
+- no persona derived from posts
+- no hidden call through shared helpers
+- explicit consent boundary remains intact.
+
+## Gate G — cost / abuse / rollout
+
+Assess:
+- one call/send, 25s timeout, 900 output tokens, bounded input
+- no recursive loops/retries/tools
+- current absence of per-user quota/rate limit.
+
+Do not automatically fail solely because per-user rate limiting is absent if the feature remains undeployed/private-gated, but clearly classify whether it must be added before:
+- production deploy
+- public enablement
+- wider multi-user rollout.
+
+Check whether existing platform/Supabase protections provide any effective abuse ceiling; do not assume.
+
+## Gate H — config/deployment truth
+
+Verify:
+- repository config will deploy `social-mobile-consult` with JWT verification ON.
+- if no explicit function stanza exists, determine actual Supabase default/current project behavior rather than assuming.
+- no secret/config/migration changes are hidden outside the 11 PR files.
+- no production deployment has occurred.
+
+## Tests / adversarial verification
+
+Run independently:
+- PR Edge logic tests
+- Deno check/lint
+- full social-mobile tests
+- typecheck/lint
+- relevant shared brand/content-setting tests
+- diff check / secret scan
+- focused mutation/adversarial tests for findings.
+
+No paid/live AI call required; provider should be stubbed.
+
+If a bounded defect is found:
+- H2 may make a small review fix on an H2-owned branch if it changes only PR #78 source/tests and no migration/config/production state.
+- add regression first where practical.
+- preserve original reviewed head in report.
+- do not merge/deploy.
+If a fix requires DB migration/RLS policy change or architecture change, STOP with CHANGES REQUIRED.
+
+## Production safety
+
+Allowed:
+- code review
+- local tests
+- read-only production schema/catalog/RLS inspection.
+
+Forbidden:
+- production settings writes
+- Edge deploy
+- migration/RLS/grant apply
+- Auth mutation
+- Vault read plaintext/write
+- X API/history/post
+- live paid AI request
+- Cron/scheduler change.
+
+## Report
+
+Append to `.agent/CODEX_REPORT_2.md` without deleting history:
+
+- task_id
+- verdict PASS / PASS-WITH-FIX / FAIL
+- original exact head
+- final reviewed candidate if fix
+- Auth/tenant result
+- request/history integrity
+- AI structured-output/injection result
+- no-implicit-persistence result
+- CAS/updated_at production-schema result
+- 24:00 validation result
+- history-learning boundary
+- cost/rate-limit rollout classification
+- JWT/deployment config result
+- tests/adversarial checks
+- changed_files/fix commit if any
+- production reads/mutations
+- real AI/X operations
+- remaining risks
+- merge recommendation
+- deploy/public-rollout recommendation
+- safety checks.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C2.
+
+Recommended model: **Sol（高）**.
+
+## H2 stop / C2 handoff — 2026-10-02 JST
+
+- verdict: **FAIL / CHANGES REQUIRED（production schema prerequisite BLOCKED、レビュー未完了）**。
+- original/final source head: `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`、source修正なし。
+- read-only production catalog: `public.social_mobile_content_settings` **不存在**。columns/policies/grants/triggers/constraintsなし。
+- Gate Eのupdated_at/CAS/RLS/write権限は証明不可。TASKの「schema不足・migrationを要する場合はSTOP」に従い、DB追加/適用/回避はしない。
+- 他Auth/AI/confirmation/config/adversarial gatesは未完了。merge/deploy/public rollout **HOLD**。
+- tests: head/11-file overlap0/diff/clean checkout確認。mandatory-stopによりEdge/app/shared test rerun・mutation/typecheck/lintはNOT RUN。G3申告結果を独立PASSに読み替えない。
+- existing source candidate: `20260922045046_social_mobile_content_settings_candidate.sql`。sourceにあるだけでlive適用済みとは扱わない。今回適用承認/DB修正提案の実行なし。
+- Report publication commit: `e439c546caec0e9d99e930f5412e395ae7351f40`。exact content read-back確認済み、過去履歴保持。
+- production catalog SELECT 1 query、production writes/deploy/AI/X/Auth/Vault/Cron操作0。正式repo未commit変更/H1/他slot操作0。
+- next: C2でschema prerequisiteを別承認/工程として扱うかを判断。解決後に未完了レビューを再開（推薦モデル：Sol（高））。
+- status: review_required / next_owner: chatgpt。**STOP for C2**。
+
+
+---
+
+# Codex Task 2 — CURRENT TASK
+
 - task_id: common-account-pr70-preproduction-gate-20261002
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（極高）
 - type: independent pre-production Auth/RLS/migration gate
@@ -195,6 +963,48 @@ At completion:
 
 No production apply is authorized by this TASK itself.
 
+## H2 completion — 2026-10-02 JST
+
+- result: **PARTIAL / Gate B BLOCKED（operator prerequisite）**。
+- source merge: PASS。accepted `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65` の8ファイルはfresh mainでも変更なし。target merge `44121914b035e22380a4ca1bd8252a42713a2bbf` 包含。
+- independent local tests: lifecycle20 PASS / mutation46 of46 DETECTED / social deletion8 PASS / migration invariants10 of10 PASS / shell-lint-diff PASS。
+- production read-only: 17 tables / 26 columns / 14 FKs / 2 helper契約整合、target migration未適用・新object collisionなし。PostgREST exposure setting/APIとactual managed Auth/Storageは未証明。
+- backfill readonly snapshot: accounts5 / Kabumori2 / X1 / Auth-only2 / manual-review3。Phase 0からAuth-only1件増。actual backfill0。
+- actual disposable Supabase: NOT RUN。指定・承認済みsandboxがないため既存project流用/新課金resource作成はしていない。
+- **migration apply HOLD / backfill HOLD**。source PASSをproduction適用許可に読み替えない。
+- next prerequisite: operatorがdisposable非production Supabase環境を指定・明示承認し、managed boundary proofを行う。C2再判断後にmigration applyとbackfill applyを別々に承認。
+- Report publication commit: `e27c63e0905131ac981380714a7e96738bce293f`。GitHub exact content / current task_id / old report history preservationをread-back確認。
+- final freshness/source check: `f8d0ab0ca1a30a6ff8c1fdf6ba4c471c5e3bea5a`（同期前に他slotの.agent変更のみ、対象8ソース差分0）。
+- code/deploy/production write/Auth/Storage/OAuth/Vault/X/OpenAI/Push変更: 0。正式repoの既存変更への操作0。他slot制御ファイル更新0。
+- status: review_required / next_owner: chatgpt。**STOP for C2**（推薦モデル：Sol（極高））。
+
+
+
+## Final C2 — Common account pre-production gate
+
+- verdict: **PARTIAL / operator prerequisite accepted**.
+- source_merge_status: **PASS / remains merged**.
+- migration_apply_readiness: **HOLD**.
+- backfill_readiness: **HOLD**.
+- accepted evidence:
+  - merged source integrity PASS
+  - local lifecycle 20 PASS
+  - mutation 46/46 DETECTED
+  - social deletion 8 PASS
+  - migration invariants 10/10 PASS
+  - production read-only catalog preflight substantially PASS for required schema/FK/helper/history conditions
+  - target migration not yet applied; no target object collision
+  - backfill dry-run snapshot: 5 Auth/common candidates, Kabumori 2, X 1, Auth-only 2, manual-review 3
+- mandatory blocker:
+  - no approved disposable nonproduction Supabase environment was available, so actual GoTrue/PostgREST/Storage/managed-role proof was not run.
+  - production Data API exposure/actual API behavior remains unproven.
+- production mutation: **0**.
+- no migration/backfill/deploy/Auth/Storage/OAuth/Vault/identity/Cron/flag operation was performed.
+- exact next operator action: designate an approved disposable nonproduction Supabase project/sandbox, or separately authorize creation of one, then rerun Gate B before any production apply decision.
+- existing production or unrelated Supabase projects must not be repurposed by assumption.
+- H2 is closed pending operator environment decision; no automatic production action or new task is authorized.
+- recommended model for resumed Gate B / final apply decision: **Sol（極高）**.
+
 ---
 
 ## Previous completed H2 task history — preserved below
@@ -359,3 +1169,37 @@ Report PASS/FAIL, exact reviewed head, disposition of all prior blockers, test e
 - production disposition: merge does not itself activate the fix in production; only `x-test-post` needs a separately controlled redeploy and post-deploy source/read-back verification. No DB/RPC/migration/Cron/OAuth/Vault changes are required.
 - production mutation during review: 0. Real X posts/API calls: 0.
 - H2 closed; reuse only after fresh allocation.
+
+
+## Final C2 — PR #78 AI consultation review blocked on schema prerequisite
+
+- verdict: **FAIL / CHANGES REQUIRED (schema prerequisite missing)**.
+- reviewed PR #78 exact head: `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`.
+- source fix from H2: none.
+- production read-only catalog proved `public.social_mobile_content_settings` does not exist.
+- therefore the durable settings/persona save path and `updated_at` CAS cannot work in current production, and Gate E cannot be approved.
+- this is a prerequisite failure, not proof that PR #78's AI conversation code is defective.
+- remaining Auth/AI/injection/persistence/security gates were intentionally not marked PASS because H2 stopped at the mandatory schema blocker.
+- PR #78 merge/deploy remains HOLD.
+- production mutation: 0; live AI/X operations: 0.
+- existing source candidate `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql` is present on main but is explicitly source-candidate-only and not applied to production.
+- next: independent review of that existing migration candidate against current production catalog and PR #78 CAS/RLS assumptions. Do not apply it yet.
+
+
+## Final C2 — content-settings schema prerequisite review
+
+- verdict: **FAIL / CHANGES REQUIRED accepted**.
+- unchanged historical candidate is NOT approved for production apply.
+- accepted blockers:
+  - P1 F1: null/type/unknown/forbidden JSON structure can pass durable CHECKs.
+  - P1 F2: effective default ACL leaves destructive/administrative privileges such as TRUNCATE/TRIGGER/REFERENCES/MAINTAIN to authenticated.
+  - P2 F3: updated_at=now() is not a strictly monotonic per-update version; same-transaction reuse and clock regression were reproduced.
+  - P2 F4: IF NOT EXISTS silently accepts same-name drift, including missing FK/CHECK constraints.
+- production target table remains absent; migration history does not show the candidate applied.
+- production mutation/apply/deploy: 0.
+- source changes from H2: 0.
+- G3 corrective assigned: `x-social-mobile-content-settings-schema-hardening-20261003`, recommended **Opus5.5（高）**.
+- default correction strategy: preserve historical candidate and add a new versioned hardening migration with exact JSON/persona contract, least-privilege ACL, monotonic CAS version, and explicit drift guard.
+- PR #78 remains merge/deploy HOLD.
+- after G3 K3, fresh H2 rereview required; recommended **Sol（高）**.
+- H2 closed and reusable after fresh allocation.

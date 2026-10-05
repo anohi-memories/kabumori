@@ -1,5 +1,810 @@
 # Claude Task 1 — CURRENT TASK
 
+- task_id: kabumori-topic-detail-learning-v2-20261003
+- owner: claude
+- slot: claude-1
+- status: done
+- next_owner: none
+- priority: high
+- recommended_model: Sonnet5（高）
+- purpose: Home「今日のトピック」のTOPカードは短い要約のまま維持し、topic detailだけを「しっかり学べる」学習ページへ強化する。既存50トピックすべてに具体例・株価/相場との関係・覚えておくポイントを追加し、DB/RPC/API/AIを増やさず静的curated content + native UIだけで完結する。
+
+## Allocation snapshot
+
+- allocated_at: 2026-10-03 JST
+- allocation main SHA: `309b0cb8d4940cdf82bfdd92116f294ba290336c`
+- G1 previous task `kabumori-home-topic-3level-backgrounds-20261003`: Final K1 PASS / merged / done
+- G2: separate `market-report-analysis` production deploy/read-back task; Hard Fact/backend scope, do not touch
+- open PRs at allocation were #82/#81/#78/#76 plus older unrelated PRs; no known mobile topic-detail ownership
+- target is app topic-detail UI/content only
+- before starting, fresh-check origin/main, open PRs, ACTIVE_TASK/CURRENT_STATE, and `git worktree list`; if any concurrent owner touches target files, STOP
+
+## Current truth — do not rediscover by redesigning unrelated parts
+
+Production `public.tips` currently has exactly 50 active tips:
+- 初級: 20
+- 中級: 20
+- 実践: 10
+
+Current `base_text`:
+- min 41 chars
+- max 66 chars
+- avg ~51.6 chars
+
+This short `base_text` is intentional and should remain the Home/TOP summary.
+
+Current data path:
+- app level: `beginner | intermediate | advanced`
+- DB difficulty: `初級 | 中級 | 実践`
+- `fetchDailyTopic()` calls read-only `get_daily_kabumori_tip(level, jstDate)`
+- RPC deterministically returns one active `public.tips` row for the level/date
+- detail re-fetches the exact same deterministic topic and verifies tapped `id`
+- existing detail content is local curated content in `src/lib/topic-detail-catalog.ts`, keyed by seeded title
+- all 50 seeded titles already have detail entries
+- unknown titles deliberately fall back to the RPC `base_text`; never fabricate content
+
+## Product goal
+
+### Home / TOP card
+Keep intentionally compact:
+- level badge
+- title
+- short `base_text`
+- 「詳しく見る →」
+
+Do NOT make Home more verbose.
+
+### Topic detail
+Turn the detail screen into a clear learning flow.
+
+Target reading order:
+1. topic identity — level / category / title
+2. short intro summary — use the fetched `topic.body` / `base_text`
+3. 「まずこれだけ」
+4. 「なぜ大事？」
+5. 「具体例」
+6. 「株価・相場とどう関係する？」
+7. 「覚えておくポイント」
+
+Equivalent natural Japanese headings are allowed when a topic needs slightly different wording, but the learning roles above must be represented.
+
+For advanced/practical topics, `「実践ではどう見る？」` may replace `「株価・相場とどう関係する？」` where that is clearer.
+
+## Important content rule
+
+Do NOT add a section claiming `今日の市場` / `今日の株価` / current real-time behavior in this task.
+
+Reason:
+- this task has no current-market data packet
+- static evergreen content must not imply live grounding
+
+Use evergreen wording such as:
+- 「相場ではどう見る？」
+- 「株価との関係」
+- 「実践ではどう見る？」
+- 「こんな場面を想像すると…」
+
+A future separate task may connect a topic to same-day market facts only after an explicit trustworthy data source is designed.
+
+## Curated content requirements — all 50 topics
+
+Enrich every existing seeded title.
+
+Each known title should have:
+- concise foundational explanation
+- why it matters
+- one concrete, easy-to-understand example
+- price/market/practical relationship
+- one memorable takeaway / caution
+
+Examples must be clearly hypothetical/educational when using numbers or scenarios.
+Do not imply the hypothetical value is a current quote, company result, market fact, or recommendation.
+
+Content style:
+- Japanese
+- plain and friendly
+- accurate enough for a beginner to learn from
+- no jargon left unexplained when avoidable
+- no buy/sell recommendation
+- no deterministic prediction
+- no specific current price/date
+- no invented company/event/fact
+- avoid alarmist language
+- avoid repeating the same sentence across sections
+- keep sections scan-friendly rather than essay-like
+
+The detail should feel meaningfully richer than current 4 short paragraphs, but not become a textbook wall of text.
+
+Suggested total explanatory body per topic:
+- roughly 220–550 Japanese characters across the detail sections
+- this is a design target, not permission to pad text
+
+## UI direction
+
+Keep the screen recognizably Kabumori:
+- ivory/light background
+- generous spacing
+- soft cards/section blocks
+- level accent:
+  - beginner: pale green
+  - intermediate: pale blue
+  - advanced: pale lavender
+- do not turn it into a brokerage terminal or finance-news page
+- no dense tables
+- no excessive icons
+- no decorative image generation required
+
+Recommended structure:
+- top header area with level badge + category + title
+- intro summary card using `topic.body`
+- section blocks/cards below
+- final takeaway block visually distinct but calm
+
+The content must remain easy to scan on normal iPhone widths.
+
+## Existing behavior to preserve
+
+Must preserve:
+- exact deterministic RPC fetch behavior
+- id verification before rendering detail
+- loading/error/mismatch states
+- Home topic background system
+- topic history screen
+- topic level preference contract
+- navigation params `id / level / jstDate`
+- unknown-title fail-safe fallback
+- level labels:
+  - 初心者向け
+  - 中級者向け
+  - 上級者向け
+
+Do not silently rename `advanced` to a new stored value.
+
+## Expected implementation scope
+
+Primary:
+- `src/app/topic-detail.tsx`
+- `src/lib/topic-detail-catalog.ts`
+- `tests/app/topic-detail-catalog_test.ts`
+
+Only if genuinely needed:
+- a small topic-detail-specific presentation helper/token file
+- focused tests for the detail UI contract
+
+Avoid touching:
+- `src/components/home/home-topic-feature.tsx`
+- `src/lib/daily-topic.ts`
+- `src/lib/home-topic.ts`
+unless a tiny compatibility change is proven necessary. If one is required, document why.
+
+## Explicit non-scope
+
+Do NOT change:
+- `public.tips` rows
+- DB schema
+- migrations
+- `get_daily_kabumori_tip`
+- Supabase grants/RLS/Auth
+- Edge Functions
+- AI/LLM calls
+- Web Search/API calls
+- report Hero
+- portfolio screen
+- news UI
+- X/social-mobile
+- common-account/auth
+- production settings
+- EAS/native config/plugins
+
+Production mutation: **0**.
+
+## Worktree / conflict safety
+
+Before work:
+1. read `PROJECT_RULES.md`
+2. read `.agent/ORCHESTRATION.md`
+3. read `.agent/CURRENT_STATE.md`
+4. read this TASK
+5. fresh `origin/main`
+6. inspect active slots / open PRs
+7. run `git worktree list`
+8. use an independent G1 worktree/checkout
+
+Recommended branch:
+`claude/g1-topic-detail-learning-v2-20261003`
+
+If any active work/PR touches:
+- `src/app/topic-detail.tsx`
+- `src/lib/topic-detail-catalog.ts`
+- `tests/app/topic-detail-catalog_test.ts`
+STOP and report the conflict.
+
+Do not use or modify another slot's worktree, branch, uncommitted files, or dev server.
+
+## EAS build conservation — mandatory
+
+This is JS/TS UI/content work.
+
+Expected:
+- EAS build created = **0**
+
+Use:
+- local Expo
+- iOS Simulator
+- existing reusable dev client + local Metro if safe
+
+Do not consume a new EAS build.
+
+## Tests / verification
+
+At minimum:
+
+### Catalog
+- exactly the 50 currently seeded titles are covered
+- no accidental extra/missing title
+- every known title contains all required learning roles
+- concrete example exists for every known title
+- takeaway exists for every known title
+- no blank heading/body
+- content length is substantial but bounded
+- evergreen guard forbids current-market/current-price/date claims
+- unknown title still returns null / fallback remains truthful
+
+### Navigation / safety
+- exact `id + level + jstDate` verification remains
+- mismatch stays fail-closed
+- fetch error remains honest
+- no new backend/API/AI call from detail render
+- Home TOP behavior unchanged
+- history -> detail still works
+
+### UI
+Verify at minimum ~402pt and ~375pt width:
+- long titles do not collide
+- level/category remain readable
+- intro summary is clearly separated from deeper learning
+- sections scan naturally
+- example section is visually identifiable
+- final takeaway is easy to find
+- no horizontal clipping
+- no excessive wall-of-text feel
+- safe-area/back navigation remains correct
+
+Run relevant deterministic app tests, Expo config, web export if supported, changed-scope type/lint, and `git diff --check`.
+Separate known pre-existing diagnostics from candidate regressions.
+
+## Acceptance criteria
+
+PASS candidate only if:
+- Home remains compact
+- detail is clearly richer and easier to learn from
+- all 50 seeded topics have curated concrete examples and takeaways
+- no real-time/current-market claim is fabricated
+- no DB/RPC/API/AI/backend change
+- no EAS build
+- loading/error/mismatch/fallback safety preserved
+- 402/375pt visual verification passes
+- focused PR only
+- no unrelated redesign
+
+## Delivery
+
+Create a focused PR.
+Do not self-merge.
+No production deploy.
+
+Report:
+- task_id
+- fresh main SHA
+- worktree/branch isolation check
+- changed_files
+- final detail content model / section roles
+- how all 50 topics were covered
+- representative beginner/intermediate/advanced examples
+- 402/375 visual findings
+- tests/checks
+- PR/head
+- EAS build created: no
+- backend/DB/RPC/API/AI mutation: 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+## Report — G1: topic detail learning v2 (task kabumori-topic-detail-learning-v2-20261003)
+
+- task_id: `kabumori-topic-detail-learning-v2-20261003`
+- result: implemented and Simulator-verified; PR open, **not merged**.
+- fresh main SHA: `c56c03b21b9883367f26d584fa20b36f1d401c28` (allocation SHA `309b0cb8…` was older). No open PR / slot touches `src/app/topic-detail.tsx`, `src/lib/topic-detail-catalog.ts` or their test (independent clone/branch).
+- PR: https://github.com/anohi-memories/kabumori/pull/83 — branch `claude/g1-topic-detail-learning-v2-20261003`, head `c810accebada37760a98a18bb184b50a61b7937b`
+- **EAS build created: no.** backend/DB/RPC/API/AI mutation: **0**.
+
+### worktree/branch isolation
+Dedicated scratch clone + branch; the shared checkout and other slots' worktrees/branches/dev servers were not used. A Simulator rig used its own Metro on a separate port only while the phone's Metro was stopped (shared node_modules cache rule).
+
+### changed_files
+`src/app/topic-detail.tsx`, `src/lib/topic-detail-catalog.ts`, `tests/app/topic-detail-catalog_test.ts` (replaced), `tests/app/topic-detail-screen_test.ts` (new), `docs/ui-review/topic-detail-3level-402pt-2026-10-03.webp`, `docs/ui-review/topic-detail-advanced-bottom-375pt-2026-10-03.webp`. Untouched: Home topic card, `daily-topic.ts`, `home-topic.ts`, DB/migrations/RPC/Edge Functions/Auth.
+
+### Final detail content model / section roles
+`TopicDetailEntry = { sections: TopicDetailSection[] }` with `TopicDetailSection = { role, heading, body }` and exactly five roles in fixed order: `basics` 「まずこれだけ」→ `why` 「なぜ大事？」→ `example` 「具体例」→ `market` 「株価・相場とどう関係する？」 (the ten 実践 topics: 「実践ではどう見る？」)→ `takeaway` 「覚えておくポイント」. Screen order: eyebrow → level badge + category → title → intro card (the fetched `topic.body`, same text as Home) → the five sections. 具体例 = level-tinted outlined card; 覚えておくポイント = calm accent-bar block; level accents pale green / blue / lavender (same palette as the Home topic badge).
+
+### How all 50 topics were covered
+Every one of the 50 seeded titles (initial 20 / intermediate 20 / practical 10) was written as a curated entry (avg ~355 chars, 295–430 per topic across the five sections; each section 25–200 chars). The test reads the seed migration `20260828213000_expand_tips_catalog.sql`, asserts the catalog title set equals it exactly (no missing/extra), and that 実践 = the last ten. Unknown title → `topicDetailFor` returns null → screen shows the intro summary + 「この用語の詳しい解説は準備中です。」 (nothing invented).
+
+### Representative examples (all explicitly 「たとえば（仮の数字です）…」 hypothetical)
+- 初級 PER: 1株あたり利益100円の会社A・Bで株価1,500円/3,000円ならPER 15倍/30倍。
+- 中級 ROE: 自己資本100億円・純利益10億円ならROE 10％、自己資本が200億円なら5％。
+- 実践 自社株買い: 発行1,000万株のうち100万株を消却すると、利益が同じならEPSは約11％上がる（実践ではどう見る？ = 取得上限と実際の進捗を確認）。
+
+### Content rules enforced by tests
+Evergreen only (no 現在の株価/本日/今日の市場/今週/最新/直近/具体的な年月日 etc.); no advice, prediction or guarantee wording; numbers only inside examples flagged hypothetical; no sentence repeated within or across topics; examples/takeaways unique across all 50.
+
+### Safety behavior preserved (pinned by `topic-detail-screen_test.ts`)
+`fetchDailyTopic(level, jstDate)` with the exact params, **id verified (`result.id !== id` → mismatch, fail-closed)**, error text, mismatch text, safe-area + BackButton unchanged; rendering adds no network/AI/DB call (imports pinned; one fetch only; catalog is static data). New: when params change the screen resets to loading and clears the previous topic (a reused screen no longer shows stale content). Labels unchanged.
+
+### Visual findings (Simulator: iPhone 17 Pro 402pt, real SE 3rd-gen sim 375pt; rig with real seeded titles/base_text)
+- Long 2-line titles (信用買い残…, 半導体株がSOX…) wrap cleanly under the badge row; level/category readable (category 1 line); no horizontal clipping; intro card clearly separated from the learning sections; sections 2–5 lines each, no wall-of-text feel; total scroll height ~1040–1150pt (1.3–1.8 screens); advanced shows 「実践ではどう見る？」, others 「株価・相場とどう関係する？」; back returns to Home and /topics; bottom padding 60pt + home indicator; loading/error/mismatch/fallback verified; Home topic card unchanged; Home→detail (CTA + body) and /topics→detail verified.
+- Simulator observations addressed in the final commit: beginner takeaway heading contrast 4.45:1 → 5.56:1 (AA), blue 6.13, lavender 6.62; example-card outline strengthened; intro and headings 15pt/weight aligned; reset-to-loading on new params. (The committed screenshots predate this small styling refinement.)
+
+### Tests / checks
+`deno test tests/app/` **284 passed / 0 failed** (catalog 16, screen 9 in the topic tests); `expo config --json` OK; `expo export --platform web` PASS; tsc(src): only the 2 known CSS-module diagnostics; `git diff --check` clean.
+
+### Remaining issues
+- Out of scope, noted: opening a past day from `/topics` still shows the eyebrow 「TODAY'S TOPIC」; no retry button on the detail error text (as before); a calculation like 「(60 ÷ 2,000)」 can break across lines (harmless).
+- Final styling refinements were verified numerically/by tests, not re-screenshotted.
+
+### safety_checks
+No DB/schema/RPC/Edge Function/Auth/AI/API change; no EAS build; no deploy; no real-time/market claims; no recommendation wording; PR not merged; no secrets committed.
+
+### next_recommendation
+K1 review of PR #83 (UI + static content, low risk). Then the user can read a few topics live on the dev client; a future task may connect a topic to same-day market facts only with an explicit trustworthy data source.
+
+Status: `done` / next_owner `none`.
+
+### Final K1 — accepted / merged
+- verdict: **PASS**.
+- PR #83 exact reviewed head: `c810accebada37760a98a18bb184b50a61b7937b`.
+- fresh main at K1 before merge: `e2ccfcc2e50942ed709eefdb1e62f87cbd693286`; the 20 commits since the G1 merge-base had **0 overlap** with the six PR files.
+- GitHub fresh mergeability read: `mergeable=true`, `mergeable_state=clean`; earlier normalized `mergeable=false` was stale.
+- squash merge: `f5919eb6af3da51c0d4d4a6342ad23b3f0a68980`.
+- accepted scope: topic-detail native UI + curated static learning content + focused tests/screenshots only.
+- accepted verification: 50/50 seeded topic coverage; five learning roles per topic; evergreen/hypothetical content guards; exact id/level/date fail-closed behavior; 284/284 app tests; Expo config/export PASS; diff check clean; 402pt/375pt Simulator verification.
+- EAS build: 0.
+- backend / DB / RPC / API / AI / Auth / Edge / production mutation: 0.
+- Codex review: **not required** — static UI/content-only scope, no sensitive boundary, focused deterministic tests and visual verification are sufficient.
+- remaining non-blockers: past-history detail still says `TODAY'S TOPIC`; no retry button on detail fetch error; occasional harmless line break inside a calculation.
+- AI Lab diary: **候補あり** — 「今日のトピック」を、短い要約から開くと具体例・相場との関係・覚えておくポイントまで学べる画面にし、初級〜上級の50テーマを同じ学習フローで読めるようにした。
+- next: G1 free after fresh allocation.
+
+---
+
+# Claude Task 1 — CURRENT TASK
+
+- task_id: kabumori-home-topic-3level-backgrounds-20261003
+- owner: claude
+- slot: claude-1
+- status: done
+- next_owner: none
+- priority: high
+- recommended_model: Sonnet5（高）
+- type: Kabumori Home UI / topic background canonical asset integration / level-based presentation
+- allocation_main_sha: f2a6882c72b93918118e42c8d0261d1df892fa4b
+- production_mutation_allowed: false
+
+## Purpose
+
+かぶモリTOPの「今日のトピック」カードを、ユーザーが確定した3段階背景シリーズへ切り替える。
+
+表示レベル:
+- beginner = 初級者向け
+- intermediate = 中級者向け
+- advanced = 上級者向け
+
+既存の `topic.level` をそのまま使い、
+追加API・追加AI・DB/RPC変更なしで背景だけを決定論的に切り替える。
+
+今回の目的は**TOPカードの背景3段階を実機相当で比較できる状態にすること**。
+トピック本文の長文化・詳細画面の情報設計は次TASK。今回は広げない。
+
+## User-approved visual system
+
+### Beginner
+- theme color: very pale green / mint + ivory
+- meaning: 基本をやさしく学ぶ
+- motif: open book + simple chart + pencil + sprout
+- plant stage: 双葉
+
+### Intermediate
+- theme color: pale blue + ivory
+- meaning: 複数資料を比較・分析する
+- motif: open book + magnifying glass + several data cards / bar / line / pie charts
+- plant stage: 若い苗（葉が増えた状態）
+
+### Advanced
+- theme color: pale lavender + ivory
+- meaning: 複数指標・材料の関係を組み合わせて考える
+- motif: analysis book + small candlesticks + line/bar charts + relation-node card
+- plant stage: さらに成長した植物 + small flower
+
+3枚共通:
+- same series / same soft illustration touch
+- left ~60% is quiet text space
+- right upper-to-middle is illustration cluster
+- bottom-right ~15–20% remains open for CTA
+- no character, no logo, no baked UI text
+- no financial-ad/news-show feel
+
+## Canonical asset filenames
+
+Repo canonical paths:
+
+- `assets/images/home/topic_background_beginner.webp`
+- `assets/images/home/topic_background_intermediate.webp`
+- `assets/images/home/topic_background_advanced.webp`
+
+Source originals should be the user-approved clean PNGs, preferably:
+
+- `topic_background_beginner.png` / `初級.png`
+- `topic_background_intermediate.png` / `中級.png`
+- `topic_background_advanced.png` / `上級.png`
+
+Expected canonical canvas for this approved series:
+- **1942 × 809 px**
+- aspect ratio ≈ **2.4005:1**
+
+### Source-asset safety gate — mandatory
+
+The user has approved the clean generated backgrounds, but chat screenshots also exist for intermediate/advanced.
+
+**Do NOT use screenshot wrappers as source assets.**
+
+Reject any source that contains:
+- black editor/app chrome
+- 「編集」
+- share/export button
+- bottom toolbar/icons
+- rounded screenshot frame
+- any UI overlay not part of the illustration
+
+Before coding:
+1. look only in repo/user-provided local asset locations (e.g. exact user-supplied files on Desktop/Downloads/project import area) for the clean originals.
+2. require all 3 clean originals to be available.
+3. verify all 3 have the same 1942×809 canvas (or report an exact clean-original size mismatch before proceeding).
+4. if any clean original is missing, **STOP** and list exactly which original(s) are missing. Do not crop the screenshots. Do not inpaint them. Do not regenerate or approximate them.
+
+If clean PNG originals are available:
+- convert to lossless WebP only (`cwebp -lossless -exact` or equivalent)
+- no resize
+- no crop
+- no recolor
+- no retouch
+- no sharpening/denoise
+- preserve exact pixels except format encoding/metadata
+- verify decoded RGBA equivalence where practical
+
+## Current source
+
+Current `src/components/home/home-topic-feature.tsx` has:
+- `TOPIC_BACKGROUND_SOURCE: ImageSource | null = null`
+- one static future background slot
+- `topic.level` already available
+- text width about 62%
+- CTA bottom-right
+
+Current `src/lib/home-topic.ts` already defines:
+- `beginner`
+- `intermediate`
+- `advanced`
+and the correct Japanese labels.
+
+Do not change backend topic-level semantics.
+
+## Required implementation
+
+### 1. Exact level -> asset mapping
+
+Replace the single null slot with an explicit immutable mapping, e.g.:
+
+`TOPIC_BACKGROUND_SOURCES: Record<TopicLevel, ImageSource>`
+
+Mapping must be exactly:
+- beginner -> beginner asset
+- intermediate -> intermediate asset
+- advanced -> advanced asset
+
+Use only `topic.level`. No text heuristics, no randomness, no date-based visual guessing.
+
+For loading/error/empty where there is no current topic:
+- do not invent a level
+- keep current truthful states
+- a neutral plain card/background is acceptable
+- do not falsely show beginner just because it is the default preference
+
+### 2. Card geometry must respect the canonical artwork
+
+The approved source is ~2.4005:1.
+
+Make the loaded-topic card render the background without visually distorting it.
+
+Preferred:
+- card ratio close to source ratio
+- background absolute fill
+- `contentFit="cover"` only if the card ratio ensures no meaningful crop of the right-side illustration / CTA-safe area
+- otherwise choose the simplest no-distortion layout that preserves the approved composition
+
+Do **not** stretch the image.
+
+The left text and right illustration must remain visually balanced.
+
+### 3. Text / CTA overlay
+
+Keep native dynamic UI:
+- level badge
+- title
+- short summary
+- `詳しく見る →`
+
+Rules:
+- left text remains within the intended quiet area, approximately left 55–60%
+- title max 2 lines
+- summary max 2 lines
+- CTA stays bottom-right
+- CTA must sit in the intentionally empty bottom-right artwork area
+- CTA must remain fully tappable
+- background illustration must not reduce text readability
+- whole loaded card continues to open topic detail
+- avoid adding a second competing navigation target
+
+If needed, make the loaded Pressable fill the card so CTA positioning is stable.
+
+### 4. Level badge
+
+The label stays:
+- 初心者向け
+- 中級者向け
+- 上級者向け
+
+Do not change wording.
+
+A minimal level-tinted badge treatment is allowed only if it clearly improves harmony:
+- beginner pale green
+- intermediate pale blue
+- advanced pale lavender
+
+But do not redesign the card or create new UI complexity just for badge colors.
+
+## Explicit non-scope
+
+Do NOT change:
+- daily topic RPC
+- DB/schema/migration
+- topic selection/date logic
+- AsyncStorage level preference contract
+- topic detail content generation
+- topic detail page copy/structure
+- report Hero
+- news cards
+- portfolio screen
+- AI Ask
+- Auth/common-account
+- X/social-mobile
+- backend/Edge Functions/Cron
+- production settings
+
+## Worktree / conflict safety
+
+Before work:
+1. read `PROJECT_RULES.md`
+2. read `.agent/ORCHESTRATION.md`
+3. read `.agent/CURRENT_STATE.md`
+4. read this TASK
+5. fresh `origin/main`
+6. inspect open PRs / slot scopes
+7. `git worktree list`
+
+Use an independent G1 worktree/checkout.
+Recommended branch:
+`claude/g1-home-topic-backgrounds-20261003`
+
+At allocation time:
+- G1 is done/free
+- G2 owns PR #79 Hard Fact report-analysis work and does not overlap Home topic UI
+- current open PRs do not target Home topic files
+
+If a new concurrent PR/slot begins touching:
+- `src/components/home/home-topic-feature.tsx`
+- `src/lib/home-topic.ts`
+- `tests/app/home-topic_test.ts`
+- `assets/images/home/topic_background_*.webp`
+STOP for conflict resolution.
+
+## EAS build conservation — mandatory
+
+This is JS/TS + image asset UI work.
+
+Expected:
+- EAS build created = **0**
+
+Use:
+- local Expo
+- iOS Simulator
+- existing reusable dev client + local Metro if safe
+
+Do not consume a new EAS build for this task.
+
+## Tests
+
+At minimum:
+
+### Asset integrity
+- exactly 3 canonical topic background assets
+- expected dimensions / lossless format
+- no screenshot UI/chrome in accepted source
+- mapping covers all 3 TopicLevel values exactly once
+
+### Logic / structure
+- beginner maps to beginner
+- intermediate maps to intermediate
+- advanced maps to advanced
+- loading/error/empty remain truthful
+- no backend/API/AI is called by background selection
+- detail navigation still works
+- label wording unchanged
+
+### UI
+- loaded card uses actual level background
+- title / summary remain readable
+- CTA is visible and tappable
+- no background stretching
+- no CTA collision with illustration
+- Home section order unchanged
+
+Run:
+- relevant `tests/app/home-topic_test.ts`
+- Home/app deterministic test suite
+- navigation regressions
+- `npx expo config --json`
+- `npx expo export --platform web`
+- changed-scope typecheck/lint where supported
+- `git diff --check`
+
+Known pre-existing diagnostics must be separated from candidate regressions.
+
+## Visual verification — required
+
+Use local iOS Simulator, minimum:
+- ~402pt width
+- ~375pt width
+
+Create local-only fixtures for:
+- beginner
+- intermediate
+- advanced
+
+Do not commit fixture-only production behavior.
+
+Capture or inspect each loaded card with:
+- representative 2-line title
+- representative 2-line summary
+- CTA
+
+Confirm:
+- beginner = pale green / basic learning / sprout
+- intermediate = pale blue / comparison-analysis / young plant
+- advanced = pale lavender / multi-indicator relation / small flower
+- three cards clearly differ by more than color alone
+- left text position is stable across all 3
+- right illustration cluster stays within its intended region
+- bottom-right CTA area remains clear
+- card height does not jump by level
+- surrounding Home sections are unchanged
+
+Create one compact 3-state comparison screenshot/contact sheet in `docs/ui-review/` if useful for K1.
+
+## Acceptance criteria
+
+PASS candidate only if:
+- exact clean user-approved originals are used
+- no screenshot crop / regeneration / approximation
+- 3 levels map to the correct background
+- source artwork is not stretched
+- native title/summary/badge/CTA remain readable and interactive
+- level switching does not change layout geometry
+- 402/375pt visual checks pass
+- no EAS build
+- backend/production mutation = 0
+- no unrelated Home redesign
+
+## Delivery
+
+Focused PR only.
+Do not self-merge.
+No deploy.
+
+Report:
+- task_id
+- fresh main SHA
+- exact source asset discovery paths/names (do not expose private home path beyond a safe basename in user-facing summary)
+- source PNG dimensions
+- final WebP dimensions + hashes
+- changed_files
+- exact level mapping
+- card geometry/contentFit
+- 402/375 visual findings for all 3 levels
+- tests/checks
+- PR/head
+- EAS build created: no
+- backend/production mutation: 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+## Report — G1: Home 「今日のトピック」 three-level backgrounds (task kabumori-home-topic-3level-backgrounds-20261003)
+
+- task_id: `kabumori-home-topic-3level-backgrounds-20261003`
+- result: implemented and Simulator-verified; PR open, **not merged**.
+- fresh main SHA: `520e43e2bde5ca2c3d4efb41d1f6fe356c885392` (allocation SHA `f2a6882c…` was older; no PR/slot touches the topic files; independent clone/branch)
+- PR: https://github.com/anohi-memories/kabumori/pull/80 — branch `claude/g1-home-topic-backgrounds-20261003`, head `2e5356a8a3e6af84ed9999929cd62556081cab65`
+- **EAS build created: no.** backend/production mutation: **0**.
+
+### Source assets (safety gate)
+- Discovery: the user's local assets folder (Desktop, folder `ゆめちゃん素材`), files `topic_background_beginner.png`, `topic_background_intermediate.png`, `topic_background_advanced.png`. All three clean originals present. An older extra `中級.png` (1944x809) was NOT used.
+- Each source: PNG RGB **1942x809**. Gate: border strips (12px) are light on all sides (min luma 200–235, corners pastel; mean luma 232–244) — no black editor/app chrome, no 「編集」, toolbar, share button or rounded screenshot frame; the three images were also seen in the chat and match. No crop/inpaint/regeneration.
+- Converted with `cwebp -lossless -exact` (no resize/crop/recolor/retouch/sharpen/denoise); decoded RGBA verified **pixel-identical** to each PNG.
+- Final WebP (all 1942x809, VP8L lossless): `assets/images/home/topic_background_beginner.webp` sha256 `9f7c50c743ebf79b0351ccc512a350bebebfec7705f7ba049a21444995b353c5` (892,968 B); `…_intermediate.webp` `d62958feecaff9ad5823608ed79b12010381a13ec14df6e192f6c42950539a0d` (870,722 B); `…_advanced.webp` `d9b32157e2c1cfdef294d2956463a1759b34c88acd8e26a4961115081d1fa3ee` (928,298 B).
+
+### Level mapping (exact, from `topic.level` only; `TOPIC_BACKGROUND_SOURCES: Record<TopicLevel, ImageSource>`)
+beginner → `topic_background_beginner.webp`; intermediate → `…_intermediate.webp`; advanced → `…_advanced.webp` (each required once; no text heuristic, date, randomness, network or AI). Loading / error / empty: plain neutral card with the existing truthful texts, **no level invented, no background shown**. Backend topic-level semantics and `home-topic.ts` untouched.
+
+### Card geometry
+- Loaded card: `width: '100%'` + `aspectRatio: 1942/809 (2.4005)`; background `absoluteFill`, `contentFit="cover"` (same ratio ⇒ exact fit, no stretch/crop). (First pass lacked `width: 100%` and measured 19pt short of the other sections — found in the Simulator and fixed.)
+- Native UI: level badge (文言 初心者向け/中級者向け/上級者向け unchanged; only a pale level tint), title ≤ 2 lines, summary ≤ 2 lines in the left `60%`; CTA 「詳しく見る →」 absolute bottom-right (`right 10 / bottom 6`); the whole card is one Pressable → `/topic-detail` (CTA is inside it: no second target).
+
+### Visual findings (iPhone 17 Pro 402pt, real SE 3rd-gen simulator 375pt, local fixtures, 2-line title + 2-line summary)
+- beginner = pale green, open book + chart + pencil + sprout; intermediate = pale blue, magnifier + several data cards/bar/line/pie + young plant; advanced = pale lavender, relation-node card + candlesticks + line/bar + small flower — clearly different by more than colour.
+- Card 370x154.3pt (402) / 343x142.5pt (375) = section width; **height identical for all three levels**; neighbours unchanged (holdings above, Ask AI below only shifted by the card's own height); left text x stable across levels; illustration stays right; bottom-right stays clear: CTA↔illustration min gap beginner 19.3 / intermediate 14.3 / advanced 10.0pt at 402pt, 15.5 / 11.0 / 7.0pt at 375pt; 375pt titles (all three) fit in 2 full lines; summary ends in 「…」 (intended).
+- Taps (CTA, card body, illustration) open `/topic-detail` once. loading/error/empty heights 96 / 105.3 / 96pt (error retry works); first viewport: at 402pt the header + top ~102pt of the card are above the tab bar; at 375pt the topic is below the first viewport (as before this change). Bottom tabs, no overflow/horizontal scroll, no red screen.
+- Screenshots in the PR: `docs/ui-review/home-topic-3level-contact-sheet-402pt-2026-10-03.webp`, `…first-viewport-402pt-beginner…`, `…card-375pt-advanced…`.
+
+### Tests / checks
+- `deno test tests/app/`: **266 passed / 0 failed** (new `home-topic-background_test.ts`: asset hash/VP8L/1942x809, exactly 3 files = 3 levels, exact 1:1 mapping, level-only selection (no heuristics/network/AI), truthful loading/error/empty, ratio/full-width/cover, 2+2 lines + CTA bottom-right + single navigation, labels unchanged, Home order unchanged; `home-structure_test.ts` asset-slot test updated). `npx expo config --json` OK; `npx expo export --platform web` PASS (3 backgrounds bundled); tsc(src): only the 2 known CSS-module diagnostics; `git diff --check` clean.
+
+### changed_files (10 vs main, +207/−50)
+3× `assets/images/home/topic_background_*.webp`, `src/components/home/home-topic-feature.tsx`, `src/constants/home-tokens.ts` (TOPIC_CARD), `tests/app/home-topic-background_test.ts` (new), `tests/app/home-structure_test.ts`, 3× `docs/ui-review/home-topic-*.webp`.
+
+### Remaining issues
+- Loaded card (154pt at 402) is ~+50–58pt taller than the plain loading/error/empty card (96–105pt), by design (art ratio) — the card "jumps" once when the topic loads.
+- At 375pt the topic section starts below the first viewport (also before this change).
+- In the dev client a dev-only gear overlay occasionally swallowed taps near the CTA's right edge (not an app issue).
+- Mac disk was ~97% full during verification (Simulator tooling hit ENOSPC once); scratch builds were removed afterwards.
+
+### safety_checks
+No topic RPC / DB / schema / selection-date logic / AsyncStorage contract / detail page / Hero / news / portfolio / Ask AI / Auth / X / backend / cron change; no EAS build; no deploy; PR not merged; screenshot-wrapper sources not used; no secrets committed (a local public `.env` copy stayed untracked).
+
+### next_recommendation
+K1 review of PR #80 (UI-only, low risk). Then the user can view it live on their iPhone via the dev client + local Metro; next task per the TASK: richer topic body / detail design.
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
+
+---
+
+## Archived previous G1 task state
+
+# Claude Task 1 — CURRENT TASK
+
 - task_id: kabumori-home-report-hero-8-state-assets-20261001
 - owner: claude
 - slot: claude-1
@@ -3593,4 +4398,41 @@ Production mutation: 0. Rollback: not needed. `review_required` / next_owner `ch
 - Codex review: **not required**. This is low-risk UI/asset-only follow-up with pinned asset hashes, focused regression tests, no backend/auth/data boundary changes, and user visual approval.
 - no remaining G1 implementation for this round.
 - AI Lab diary: **記録不要** — 2026-10-02 canonical diary entry already exists for another real task; do not create a duplicate same-day entry or falsify a future date.
+- G1 status: done / next_owner none.
+
+
+## Final K1 — 2026-10-03 Home Topic 3-level backgrounds
+
+- verdict: **PASS / MERGED / G1 CLOSED**.
+- reviewed PR: #80.
+- accepted exact head: `2e5356a8a3e6af84ed9999929cd62556081cab65`.
+- squash merge: `d6031e228efbf01f94ada22879cd6315457c43f7`.
+- source scope: Home topic presentation + 3 approved background assets + focused tests/docs only.
+- exact mapping accepted:
+  - beginner -> pale green / basic learning / sprout
+  - intermediate -> pale blue / comparison-analysis / young plant
+  - advanced -> pale lavender / multi-indicator relation / small flower
+- clean originals: all 3 source PNGs were 1942x809; screenshot/editor wrappers were not used.
+- conversion accepted: lossless WebP, no resize/crop/recolor/retouch; pinned hashes in tests.
+- visual review accepted:
+  - 402pt contact sheet clearly distinguishes all 3 levels by more than color.
+  - 375pt advanced card keeps 2-line title/summary and CTA readable.
+  - card geometry is stable across levels; no stretch/crop; CTA remains in the intended bottom-right safe area.
+- reported verification accepted:
+  - app tests 266/266 PASS
+  - Expo config PASS
+  - Expo web export PASS
+  - diff check clean
+  - only the 2 known pre-existing CSS-module TypeScript diagnostics remain
+  - Netlify PASS
+  - Vercel PASS
+- accepted known limitations:
+  - loaded card is taller than loading/error/empty by ~50–58pt.
+  - long summary ellipsizes at 2 lines by design.
+  - 375pt first viewport placement is unchanged from before this feature.
+- EAS build: 0.
+- backend / DB / RPC / Edge Function / Auth / X / production mutation: 0.
+- Codex review: **not required**. This is low-risk UI/asset-only presentation work with deterministic level mapping and focused regression coverage.
+- AI Lab diary: **updated** for 2026-10-03 with a public-safe summary of the three difficulty backgrounds and visual growth concept. Snapshot workflow completed successfully and generated the canonical snapshot commit.
+- next: richer topic body/detail-screen design can be the next G1 task if the user chooses.
 - G1 status: done / next_owner none.
