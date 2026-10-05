@@ -3,8 +3,8 @@
 - task_id: kabumori-topic-detail-visual-polish-20261005
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: ユーザーがG1へ直接渡す「かぶモリ学習ノート / PERって何？」のUI見本画像を正本ベースに、現在のtopic detail機能・50トピック本文・fetch安全性を変えず、詳細画面の見た目だけを最終仕上げする。
@@ -612,6 +612,35 @@ Status: `review_required` / next_owner `user`.
 - next: user opens the PR branch on iPhone and shares/approves the actual screen; then ChatGPT can finalize K1 or return a small corrective to G1.
 
 No production mutation. No merge.
+
+## Final K1 — Topic detail visual polish PASS / merged
+
+- verdict: **PASS**.
+- PR #84 accepted exact head: `b7bf774b964ed740a00b904447f029351cebef80`.
+- squash-merged to main as `25582625cdc60208df3b1340f8c03eba75cf3340`.
+- fresh pre-merge main comparison: 88 commits beyond the PR merge-base with **0 overlap** across all 7 PR files.
+- CI/status: combined status success; Vercel success; Netlify preview status success/canceled-by-design with neutral rule checks.
+- Simulator evidence accepted:
+  - 402pt beginner/intermediate/advanced comparison;
+  - 375pt long-title case;
+  - lower-screen example/caution/takeaway/bottom-safe-area case.
+- visual corrective accepted:
+  - long titles avoid the Hero illustration;
+  - straight inset accent bars replace curved-looking left borders;
+  - generic lightbulb emoji replaced with a native `例` mark;
+  - takeaway emoji removed;
+  - bottom safe-area padding corrected;
+  - narrow-width typography/caution wrapping tightened.
+- behavior preserved: all 50 curated topic texts, five learning roles, deterministic fetch, exact id mismatch fail-closed, Home/history navigation contract, unknown-title fallback.
+- verification: **297/297 app tests**, Expo config PASS, web export PASS, diff clean; only documented pre-existing CSS-module type diagnostics remain.
+- EAS build = 0.
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+- Codex review: **not required**; static native UI/presentation only, no sensitive boundary, strong regression + Simulator evidence.
+- remaining non-blockers: final tiny typography tweaks were test-verified but not re-screenshotted; real finger taps were not exercised by Simulator automation. Existing navigation behavior was unchanged and route handlers were verified.
+- AI Lab diary: **候補あり — 株アプリの学習画面を「かぶモリ学習ノート」として整え、初級〜上級の色や教材イラスト、読む順番、具体例・要点の見せ方を統一。小さいiPhoneや長いタイトルでも崩れないよう実画面で調整した。**
+- G1 is done/free after this K1.
+
+---
 
 ## Report 2 — G1: topic detail visual polish, Simulator continuation (task kabumori-topic-detail-visual-polish-20261005)
 
