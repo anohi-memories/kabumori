@@ -1,3 +1,19 @@
+## K4 — PR #76 corrective accepted as review candidate, fresh-main integration required first
+
+- G4 transactional corrective reported PASS on source/local disposable proof at exact head `fe1e846e59c69b591d29c6d21fc23c7b702d19cd`.
+- the corrective materially addresses prior H1 R1-R5 by moving toggle authority into one DB transaction, adding fresh pre-send permission checks on the Vault-account X path, removing service-role mutation from the Edge, aligning readiness semantics and pinning UI confirmation context.
+- reported local evidence: disposable PostgreSQL races/E2E PASS, 30/30 SQL mutation weakenings detected, publish-setting focused tests, VaultAccountXAuth tests, social-mobile tests/typecheck/lint, production mutation=0 and real X=0.
+- however fresh K4 GitHub state is **open / unmerged / mergeable=false**.
+- current main is **133 commits ahead** of the PR base.
+- fresh changed-file comparison finds exactly one overlapping PR path: `supabase/tests/migration_source_invariants_test.ts`.
+- conflict content is bounded/additive: PR #76 reserves `20261003090000_social_mobile_publish_permission_boundary`; latest main must otherwise be preserved.
+- therefore independent security rereview is deferred until the branch is freshened; reviewing a non-mergeable stale integration head would not be the final source candidate.
+- G4 reassigned `x-social-mobile-pr76-fresh-main-integration-20261005`, recommended **Sonnet5（高）**.
+- no functional redesign is authorized in that task. Merge fresh origin/main with normal history, resolve only the expected invariant-file addition, rerun relevant security/regression suites, push, STOP for K4.
+- after successful K4 freshness check: allocate H1 rereview, recommended **Sol（極高）**.
+- merge/migration apply/deploy/production mutation/real X remain HOLD.
+- H2/PR81 is separate and untouched.
+
 ## Final C1 — PR #82 durable-claim rereview CHANGES REQUIRED
 
 - verdict: **CHANGES REQUIRED**; PR #82 exact head `9f3b19a3cde490cf63735220ae191dcd4f11bdcb` remains open/unmerged.
