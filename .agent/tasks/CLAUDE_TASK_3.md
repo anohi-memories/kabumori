@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr81-production-schema-gate-20261005
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: production migration gate / read-only preflight / ordered rollout / post-apply read-back
