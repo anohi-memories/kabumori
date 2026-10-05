@@ -1,3 +1,16 @@
+## PR #82 merged / H1 production read-only preflight allocated
+
+- PR #82 exact accepted head `9d30a68317dd523a96e6ce96bf7a0f6de23235d5` passed Netlify and Vercel after Final C1.
+- fresh main comparison before merge showed **0 overlapping files** with the PR despite concurrent control-file updates.
+- PR #82 was squash-merged as main SHA `80e11c9207d44599db26a25195f1ee0091484231`.
+- GitHub read-back: PR closed/merged; main points to the merge SHA.
+- source merge only: production migration apply=0, Edge deploy=0, Cron/settings=0, real X=0, OAuth/Vault/token operations=0.
+- next gate is production **read-only** preflight, not rollout.
+- H1 assigned `ai-lab-pr82-production-readonly-preflight-20261005`, recommended **Sol（高）**.
+- H1 must verify migration ledger, superseded migration absence, production catalog/owner/effective ACL, exact migration apply transaction semantics, exact deploy target/order and pre/post read-back checklist.
+- H2 PR #76 and G3 PR #81 remain separate and must not be touched.
+- AI Lab diary: **記録不要** — merged change is internal duplicate-post/safety hardening rather than a new released user-facing capability.
+
 ## Final C1 — PR #82 AI Lab event-dedupe PASS-WITH-FIX accepted / CI merge hold
 
 - verdict: **PASS-WITH-FIX accepted** for the corrected source.
