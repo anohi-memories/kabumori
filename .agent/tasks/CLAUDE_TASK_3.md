@@ -3,7 +3,7 @@
 - task_id: x-social-mobile-pr81-hardening-residual-corrective-20261005
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: highest
 - recommended_model: Opus5.5（高）
