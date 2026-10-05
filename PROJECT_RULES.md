@@ -67,6 +67,15 @@ Sonnet5で安全に処理できる作業はSonnet5を優先する。設計判断
 4. リポジトリの状態を確認し、既存の未コミット変更を作業者の変更として尊重する。
 5. 依頼範囲と無関係なファイルを変更しない。
 
+## Mac移行後のローカル開発基準（2026-10-05〜）
+
+- 新Macでの新規作業の clean base は `/Users/yuya/Developer/kabumori-fresh` とする。
+- 旧 `/Users/yuya/Developer/kabumori` は既存worktree群の親リポジトリとして当面保持する。新規作業のbaseには使用しない。
+- 既存のG1〜G5 / H1 / H2 worktreeは、各TASKが完了するまでそのまま継続してよい。旧repoおよび旧worktreeを、完了確認前に削除・rename・prune・resetしない。
+- 新規slot作業は `kabumori-fresh` で fresh `origin/main` を確認し、そこからslot専用の独立worktreeまたは独立checkoutを作る。`kabumori-fresh` のmain作業ディレクトリ自体を複数slotで共有しない。
+- G1/G2/G3/G4/G5/H1/H2/K1〜K5/C1/C2/Fの意味・開始条件・完了確認フローは従来どおりとする。
+- `.env` などの秘密情報はローカル専用として扱い、stage / commit / pushしない。
+
 ## 変更と合意
 
 - 全体方針、優先順位、共通ルール、恒久的な決定はこのファイルへ集約する。
