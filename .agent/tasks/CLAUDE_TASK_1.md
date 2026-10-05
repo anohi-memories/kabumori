@@ -1,5 +1,390 @@
 # Claude Task 1 — CURRENT TASK
 
+- task_id: kabumori-detail-navigation-topic-level-switch-20261006
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- purpose: かぶモリの詳細画面から迷わず移動できるよう、トピック詳細で「同じ日の初級/中級/上級」を簡単に切替可能にし、トピック詳細と重要ニュース詳細の双方に明示的なHome/一覧導線を追加する。
+
+## User requirement — canonical
+
+### A. トピック詳細
+Homeに表示するトピックレベルは今までどおりSettingsの選択で決める。
+
+ただし、いったんトピック詳細を開いた後は、Settingsへ戻らなくても、その**同じ日**の
+- 初級
+- 中級
+- 上級
+
+を簡単に切り替えて全部読めるようにする。
+
+これは詳細画面内だけの閲覧切替。
+**Homeの保存済みレベル設定は絶対に変更しない。**
+
+また、現在左上にある単純な「もどる」だけではなく、詳細画面から明示的に
+- **ホーム**
+- **過去のトピック**
+
+へ戻れる2つの導線を用意する。
+
+### B. 重要ニュース詳細
+Homeの重要ニュースカードからニュース詳細へ直接入った場合でも、
+- **ニュース一覧**
+- **ホーム**
+
+の両方へ明示的に移動できるようにする。
+
+ブラウザ/ナビゲーション履歴の偶然に依存せず、どの入口から詳細を開いても2つの行き先を保証する。
+
+## Allocation / safety snapshot
+
+- allocated_at: 2026-10-06 JST
+- fresh main at allocation: `e303d81e940d413ed62ec93885b09063b3661aee`
+- G1 previous task: Final K1 PASS / done / free.
+- G2: done; H1 is reviewing separate PR #87; H2 done/free; G3/G4/G5 are separate production/account/social workstreams.
+- all currently open PRs were fresh-checked at allocation.
+- overlap with the following target paths: **0**:
+  - `src/app/topic-detail.tsx`
+  - `src/app/topics.tsx`
+  - `src/app/(tabs)/news/[id].tsx`
+  - `src/app/(tabs)/news/_layout.tsx`
+  - `src/app/(tabs)/news/index.tsx`
+  - `src/components/back-button.tsx`
+  - `src/lib/daily-topic.ts`
+  - `src/lib/home-topic.ts`
+
+Re-check immediately before coding. If overlap appears, STOP.
+
+## Current accepted baseline — preserve
+
+Topic detail visual polish is already accepted and merged:
+- 「かぶモリ学習ノート」
+- beginner green / intermediate blue / advanced lavender
+- canonical level artwork
+- numbered 1/2/3 learning flow
+- specific example card
+- caution band
+- takeaway block
+- 50 curated topics
+- deterministic `fetchDailyTopic(level, jstDate)`
+- exact `id / level / jstDate` verification
+- id mismatch fail-closed
+- unknown-title truthful fallback
+- Home and history navigation
+- 375pt / 402pt layout
+- long-title collision protection
+
+Do not regress or redesign this accepted screen.
+
+Important-news data/access behavior is also accepted:
+- detail reuses the user's permitted feed
+- no access-boundary change
+- no RPC/schema/auth change
+
+## A1. Topic detail — level switcher UX
+
+Add a compact 3-way level selector to the topic detail screen.
+
+Preferred placement:
+- below the `かぶモリ学習ノート` identity row
+- above the Hero
+
+Labels should be immediately understandable and compact:
+- `初級`
+- `中級`
+- `上級`
+
+Use one cohesive segmented-control / pill-row style, not three large cards.
+
+Requirements:
+- all 3 fit cleanly at 375pt.
+- current level is visually selected.
+- selected/accent treatment follows the existing level color family.
+- `accessibilityRole="button"` and selected state/hint should be clear.
+- switching must not scroll the user into a broken position or show stale mixed content.
+- a switch should feel lightweight; no Settings navigation.
+
+### Same-date invariant
+
+When viewing date `jstDate = D`:
+- beginner switch shows `fetchDailyTopic('beginner', D)`
+- intermediate switch shows `fetchDailyTopic('intermediate', D)`
+- advanced switch shows `fetchDailyTopic('advanced', D)`
+
+Never silently use today's date when the user is viewing a past topic.
+
+### Home setting invariant
+
+The switcher must **not**:
+- write AsyncStorage level preference
+- call the topic-level storage writer
+- change what Home will show next time
+
+Home remains controlled by the Settings preference only.
+
+## A2. Topic detail — switching/data behavior
+
+Keep the existing exact-id/fail-closed contract for direct navigation.
+
+For in-detail switching:
+- resolve the deterministic target topic for the current `jstDate`
+- on success, display that exact topic and update route params to its real `id / level / jstDate`
+- on failure, keep the currently visible topic intact and show a small honest inline error near the selector; do not blank the whole page
+- tapping the already-selected level does nothing
+
+Prefer a small **in-memory per-screen cache keyed by date+level**:
+- first visit to a level may fetch once
+- switching back to an already loaded level should be instant and should not refetch unnecessarily
+- do not add persistent storage
+- do not add a new backend endpoint/RPC
+
+Avoid the obvious double-fetch pattern (fetch target, then immediately refetch the same target only because params changed). A cache-aware route-param update is preferred.
+
+Do not eagerly add three permanent network calls to Home.
+Any extra topic requests belong only to the open detail screen.
+
+## A3. Topic detail — explicit destination navigation
+
+Replace the ambiguous single generic back control at the top of topic detail with a compact explicit navigation row.
+
+Required destinations:
+- **ホーム** -> explicit Home route
+- **過去のトピック** -> explicit `/topics`
+
+These buttons must not rely on `router.back()`.
+
+Preferred semantics:
+- direct destination navigation, e.g. replace/push chosen so it does not create a silly Home <-> detail <-> list loop
+- preserve iOS gesture/back behavior where reasonable, but explicit buttons are canonical
+- deep-link entry must still have both destinations available
+
+Do not change the existing `/topics` list's core behavior or its Settings-driven level unless necessary for a tiny compatibility fix.
+
+## B1. Important-news detail — explicit Home + list destinations
+
+Current news detail uses the nested news Stack and generally exposes a list-back behavior.
+
+Make the detail header guarantee both destinations:
+
+- **ニュース一覧** -> explicit `/news`
+- **ホーム** -> explicit Home route
+
+Preferred implementation:
+- customize the detail Stack header so the left action is explicitly `ニュース一覧`
+- add a clear `ホーム` action on the right
+- do not rely on `router.canGoBack()/router.back()` for either canonical action
+
+This must work when the detail was opened from:
+- Home market-wide important-news card
+- Home holding-news row
+- news list
+- a cold/deep link
+
+The normal detail, loading state, missing/error state should all retain a usable route to Home and the news list through the header.
+
+If the existing center-screen error button remains, it may still say `一覧へ戻る`; the explicit Home header action must remain available too.
+
+## B2. Important-news non-scope
+
+Do not change:
+- which news items are returned
+- importance/severity logic
+- source URLs
+- app copy / Fact behavior
+- access boundary
+- auth
+- RPC
+- schema
+- Home news split logic
+
+This task is navigation only for news.
+
+## Visual / interaction direction
+
+Keep Kabumori's existing tone:
+- calm
+- compact
+- readable
+- not a large toolbar
+- no icon/dependency proliferation
+
+Topic selector and destination controls should feel native to the newly polished learning page.
+
+Do not crowd the Hero.
+Do not reintroduce generic emoji decoration.
+
+## Primary scope
+
+Expected:
+- `src/app/topic-detail.tsx`
+- `src/app/(tabs)/news/_layout.tsx`
+- `src/app/(tabs)/news/[id].tsx` only if needed for error-state cleanup
+- focused app tests
+
+Allowed if useful:
+- one small pure topic-detail navigation/cache helper
+- `src/app/topics.tsx` only for a proven navigation compatibility issue
+- `src/components/back-button.tsx` only if a reusable non-regressive extension is clearly better than local controls
+
+Avoid unrelated Home changes.
+
+## Tests — required
+
+### Topic switcher
+Prove:
+- three levels render
+- selected state follows active topic
+- switch uses the **same jstDate**
+- success uses the returned target topic's real id
+- route params become exact target `id/level/jstDate`
+- direct route id mismatch still fails closed
+- switch failure keeps prior content
+- switching back to a cached level avoids an unnecessary network refetch
+- tapping selected level is a no-op
+- no Settings/AsyncStorage preference write from detail
+- Home topic preference contract is unchanged
+
+### Topic navigation
+Prove:
+- Home button explicitly targets Home
+- Past topics button explicitly targets `/topics`
+- buttons do not depend on history/back-stack availability
+- history -> detail -> Home works
+- Home -> detail -> past topics works
+- deep-link-ish detail state still exposes both destinations
+
+### News navigation
+Prove:
+- detail header exposes explicit `ニュース一覧`
+- detail header exposes explicit `ホーム`
+- both use direct routes, not `router.back()`
+- Home -> news detail -> Home path exists
+- Home -> news detail -> news list path exists
+- list -> detail still works
+- missing/error detail keeps usable header navigation
+
+## Simulator verification
+
+Use the restored iOS Simulator runtime.
+
+At minimum verify:
+- 402pt topic detail with switcher
+- 375pt topic detail with switcher + long title
+- switching beginner -> intermediate -> advanced on the same date
+- past-date topic and switching levels
+- Home and past-topics explicit buttons
+- important-news detail header at normal 402/375-like width
+- Home/list explicit news actions
+- no clipping / accidental double header / tab-bar regression
+
+Capture focused screenshots under `docs/ui-review/` if useful for K1.
+
+## Test/check commands
+
+Run:
+- focused new navigation/switcher tests
+- full `deno test tests/app/`
+- Expo config
+- web export if supported
+- changed-scope type/lint
+- `git diff --check`
+
+No EAS build.
+
+## Explicit non-scope / safety
+
+Do NOT change:
+- DB/schema/migrations
+- RPC
+- RLS/Auth
+- Edge Functions
+- AI/LLM
+- news generation
+- report generation
+- topic catalog content
+- Home stored topic preference
+- common account
+- X/social-mobile
+- production settings
+- native plugins/signing/config
+
+Production mutation: **0**.
+EAS build expected: **0**.
+
+## Worktree / Mac safety
+
+This is a new G1 task.
+
+Before work:
+1. read `PROJECT_RULES.md`
+2. read `.agent/ORCHESTRATION.md`
+3. read `.agent/CURRENT_STATE.md`
+4. read this TASK
+5. fresh `origin/main`
+6. re-check open PR overlap
+7. run `git worktree list`
+8. create/use an independent G1 worktree from clean base **`/Users/yuya/Developer/kabumori-fresh`**
+
+Recommended branch:
+`claude/g1-detail-navigation-topic-switch-20261006`
+
+Do not use/reset/prune/rename old protected worktrees.
+Do not touch another slot's branch, uncommitted files or dev server.
+
+## Completion criteria
+
+PASS candidate only if:
+- same-day beginner/intermediate/advanced switching works from detail
+- switching does not mutate Home's saved level
+- direct-detail id safety remains fail-closed
+- switch errors do not destroy current content
+- Home + past topics explicit actions work from topic detail
+- Home + news list explicit actions work from news detail
+- 375/402 Simulator checks pass
+- current topic visual design is preserved
+- no backend/native/production changes
+- tests green
+- focused PR only
+
+## Delivery
+
+Create one focused PR.
+Do not self-merge.
+No production deploy.
+
+Report:
+- task_id
+- fresh main SHA
+- worktree isolation proof
+- changed_files
+- topic switch architecture/cache behavior
+- same-date proof
+- no-Settings-write proof
+- topic explicit navigation behavior
+- news explicit navigation behavior
+- 402/375 findings
+- tests/checks
+- PR/head
+- EAS build created: no
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation: 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+---
+
+# Claude Task 1 — CURRENT TASK
+
 - task_id: kabumori-topic-detail-visual-polish-20261005
 - owner: claude
 - slot: claude-1
