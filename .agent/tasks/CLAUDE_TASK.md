@@ -1,10 +1,183 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-shared-report-v2-20261005-close-natural-observation
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（中）
+- purpose: 2026-10-05大引けの自然サイクルをread-onlyで後追い観測し、朝に発生したOpenAI 429が夕方まで継続したか／回復したかを確認する。回復してreport packetが完成していれば、production market-report-analysis v21（PR #77 + PR #79/H1）のlive挙動を初めて実データで評価する。manual invoke・mutationは禁止。
+
+## Context accepted by Final K2
+
+2026-10-05 morning natural observation:
+- classification: **OBSERVATION_INCOMPLETE**
+- data cycle: completed normally
+- analysis: 07:55/08:05とも生成段階で失敗、最終error `ANALYSIS_OPENAI_GENERATE_FAILED:429`
+- report packet: 0
+- model response: 0
+- therefore PR #77 / PR #79 live behavior is **unassessed**, not failed
+- account-wide read-only evidence also showed multiple OpenAI-dependent jobs returning 429 from 2026-10-04 00:00 JST onward
+- production mutation: 0
+- app_enabled=false / x_enabled=false preserved
+- no Codex review is needed for this provider-side incomplete observation
+
+## Target natural close schedule
+
+2026-10-05 JST:
+- data packet: 16:15
+- analysis: 16:20
+- analysis retry: 16:35
+- personalized: 17:15
+
+Current time is already after the natural close window, so this TASK may inspect retained production evidence immediately. Do not invoke or replay anything.
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, this TASK, and the previous morning Report.
+2. Use the existing dedicated G2 worktree only if it is still safe and isolated:
+   `/Users/yuya/Developer/kabumori-g2-market-report-reliability`
+3. New-Mac rule: do not create new work from old `/Users/yuya/Developer/kabumori`. If a new checkout/worktree is required, base it on fresh `/Users/yuya/Developer/kabumori-fresh`.
+4. Fresh-check origin/main and other slot ownership. Do not touch other slot branches/files/dev servers.
+5. This task is observation-only. Source changes are not expected.
+
+## Observation — read only
+
+Inspect the natural 2026-10-05 **close** cycle.
+
+### 1. Production baseline
+Fresh-read:
+- market-report-analysis version/status/verify_jwt/source identity
+- app_enabled / x_enabled
+- relevant cron active/schedules
+- confirm no G2 deploy/gate/manual invoke occurred since the morning observation
+
+Expected baseline is v21 / verify_jwt=false / gates OFF/OFF, but do not assume.
+
+### 2. Close cycle execution
+Record:
+- data close cycle status / attempts / timestamps / error
+- report close status / attempts / timestamps / error
+- current_data_packet_id
+- current_report_packet_id
+- whether 16:20 completed first try
+- whether 16:35 retry ran and whether it was no-op or required
+- duplicate packet counts for close / trading_date 2026-10-05
+
+If the close analysis again failed before receiving a model response:
+- classify **OBSERVATION_INCOMPLETE**
+- preserve the exact retained error
+- distinguish provider/quota/transport evidence from code behavior
+- do not infer PR #77/#79 behavior
+
+### 3. If a completed close report packet exists
+Then evaluate the same live criteria that morning could not reach:
+
+PR #77:
+- X formatted character count
+- broad/sector/company ordering
+- false company-before-broad WARN absence
+- App story narrative length
+- 700–899 chars must not trigger rewrite solely for length
+- <700 materially thin may trigger at most one bounded rewrite
+- WARN alone must not suppress delivery
+- safe-original fallback behavior
+- generation_attempts / content_regenerations / quality_rewrite / quality_rewrite_request_failed / delivered_generation / quality_warnings
+
+PR #79/H1:
+- Japan close/trading date vs relevant US/prior sessions
+- legitimate prior-session reference/watch wording
+- hypothetical/question wording
+- reaction/watch `を受け` phrasing where present
+- no false Hard rejection of supported prose
+- objective cross-check of values/change/date/session, stale/current, sign/direction/emoji, 1306 identity, news/ref existence, unsupported causality and broad absence claims
+
+Presentation v2:
+- presentation_version
+- X lead + exactly 3 points + context + news + watch + closing
+- app_story sections
+- session_views
+- key_news scope/order
+- fact status
+- quality warnings
+- diagnostics
+
+Usage:
+- total model calls
+- input/output tokens
+- cost
+- transport retry metrics
+
+### 4. Account-wide 429 follow-up
+Read-only only:
+- determine whether OpenAI-dependent jobs recovered later on 10/5 or continued returning 429
+- do not read secrets or billing credentials
+- do not claim exact billing balance unless directly available from an approved read-only source
+- if evidence only suggests `insufficient_quota`, say so explicitly
+
+## Classification
+
+Use one:
+- **PASS_FIRST_TRY**
+- **PASS_WITH_RETRY**
+- **FAIL_FALSE_REJECT**
+- **FAIL_FACTUAL_DEFECT**
+- **OBSERVATION_INCOMPLETE**
+
+Do not classify style/WARN alone as failure.
+
+## Safety / forbidden
+
+Absolutely no:
+- manual Edge invoke
+- manual retry/replay
+- DB write
+- source edit
+- deploy
+- gate change
+- cron change
+- X post/API mutation
+- app notification
+- Auth/Vault/secret access
+- billing mutation
+- legacy generator mutation
+
+Production mutation must remain 0.
+
+## Completion conditions / Report
+
+Report:
+- task_id / classification
+- observation time JST
+- production baseline read-back
+- close data/report cycle statuses/attempts/timestamps/errors
+- data/report packet IDs/hashes
+- duplicates
+- whether provider 429 recovered
+- if packet exists: Fact/local, Presentation v2, PR #77, PR #79/H1, factual cross-check, character counts, diagnostics, calls/tokens/cost, retry behavior
+- production mutation=0
+- remaining issues
+- recommendation for 10/6 morning natural observation vs consumer activation readiness
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-shared-report-v2-20261005-morning-natural-observation
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: production `market-report-analysis` v21（PR #77 + PR #79/H1）の最初の通常取引日朝刊をread-only観測し、配信信頼性・Hard/WARN境界・model call/costを実データで確認する。mutation/manual invokeは禁止。
