@@ -70,13 +70,13 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-social-mobile-pr81-hardening-residual-corrective-20261005
+- status: ready
+- task_id: ai-lab-pr82-production-rollout-runner-20261005
 - start_code: G3
 - finish_code: K3
-- next_owner: none
+- next_owner: claude
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: Final C2 PASS and PR #81 squash-merged as 686f23a7094389b793470503fceb2f47a71f8fbf. R1 deferrable PK, R2 helper owner/effective ACL, R3 finite CAS domain accepted. Production apply not yet authorized. G3 free after fresh allocation.
+- allocation: Company AI Lab PR #82 source is merged/reviewed; remaining blocker is production apply/history failure policy only. Build a bounded schema-first/history-second operator runner + runbook + disposable failure-state proof without editing the accepted migration/runtime and without production mutation. G4/PR76 untouched. Recommended Sonnet5（高）. After K3, avoid automatic Sol review; prefer no extra review or one focused Luna（高） only if the rollout script warrants it.
 
 ## Claude G4
 - owner: claude
