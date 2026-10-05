@@ -1,3 +1,32 @@
+## AI Lab PR #82 production DB rollout complete — Stage B/C/postflight PASS
+
+- User authorized proceeding in the safe order.
+- Corrected Stage B was rerun against production project `wsmznyzcvmuitkglfeuj` using the PR #88 canonical descriptor from current main.
+- Stage B result: **EXACT**.
+  - all 7 catalog hashes match the corrected pinned values;
+  - `function_acl` matches `5635c459265e8c99d22384083db40e89a1ba87c1ee7f3db2378073c1ae8c9532`;
+  - hash mismatches = 0;
+  - semantic mismatches = 0;
+  - exact 5 target functions;
+  - schema present;
+  - history count before Stage C = 0.
+- Stage A was **not** rerun.
+- Stage C executed exactly one history insert:
+  - version `20261004090000`
+  - name `ai_lab_topic_claims`
+- Separate read-only postflight:
+  - history_rows = 1;
+  - history_name = `ai_lab_topic_claims`;
+  - stray_history = 0;
+  - table present = true;
+  - function_count = 5;
+  - hash_mismatches = [];
+  - semantic_mismatches = [].
+- Company AI Lab production DB schema + migration ledger are now **EXACT / COMPLETE**.
+- No x-test-post deploy, Cron change, manual scheduler invocation, real X/OpenAI/Vault/OAuth/token operation was performed in this DB completion step.
+- Next safe dependency is **PR #76 G4 production rollout S0**. Because current main x-test-post contains the reviewed PR #76 guarded runtime together with merged AI Lab dedupe logic, do not deploy x-test-post ad hoc. Follow the reviewed runtime-first sequence: G4 S0 read-only preflight/package freeze -> explicit rollout approval -> guarded x-test-post deploy/read-back/drain -> PR76 migration -> RPC/ACL read-back -> publish-setting Edge.
+- After PR76 migration `20261003090000` is safely applied/read back, resume G3 for PR81 `20261003120000`.
+
 ## G1 assigned — Detail navigation + same-day topic level switching
 
 - task_id: `kabumori-detail-navigation-topic-level-switch-20261006`
