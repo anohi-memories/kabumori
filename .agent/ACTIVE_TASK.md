@@ -48,13 +48,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
+- next_owner: none
+- status: done
 - task_id: kabumori-topic-detail-visual-polish-20261005
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: iOS Simulator runtime導入後の最終UI確認を再開。PR #84の既存実装を402pt/375pt、初級/中級/上級、長タイトル、背景wash/fade、番号付き本文、具体例、要点、🌱/💡表示までSimulatorで確認し、必要なら小さな見た目修正のみ行う。別PR禁止、EAS 0、backend mutation 0。完了後K1。
+- allocation: Final K1 PASS。PR #84 exact head b7bf774b964ed740a00b904447f029351cebef80 を Simulator 402pt/375pt 実画面確認後に squash-merge、main 25582625cdc60208df3b1340f8c03eba75cf3340。297/297 tests、Expo config/export PASS、EAS 0、backend mutation 0。Codex review不要。G1 free。
 - recommended_model: Sonnet5（中）
 
 ## Claude G2
