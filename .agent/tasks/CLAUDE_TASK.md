@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-report-v2-editorial-three-points-20261005
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: 市況レポートの「今日のポイント」3点を、前日数値の単純列挙ではなく、その日の重要テーマ・注目点・注意点・出来事・背景が一目で分かり、詳細を読みたくなるeditorial headlineへ改善する。朝刊と大引けで役割を明確に分ける。既存の事実安全性・Hard Fact境界は弱めない。
@@ -213,7 +213,93 @@ When complete:
 
 ## Report
 
-Pending.
+### task_id / result
+- task_id: kabumori-shared-report-v2-editorial-three-points-20261005
+- result: **PASS candidate（source/testsのみ）**。PR [#87](https://github.com/anohi-memories/kabumori/pull/87)、branch `g2-editorial-three-points-20261005`、head `3561f1eaac41df0f23dcce8fdaace0decc654a0a`（base origin/main `a775ec8d`）。deployなし。
+
+### user-visible behavior before / after
+- before：3ポイントが指標と数値の行。10/5大引け live：「日経平均は69,946.86（前日比+2.40%）。」「TOPIX連動ETF（1306）は436.3円（前日比+1.42%）。」「10月2日のSOXは13,136.67（前日比+2.40%）。」。10/2朝刊 live：「日経平均は68,956.72（前日比+3.30%）でした。」「TOPIX連動ETF（1306）は434.4円（前日比+0.67%）。」「米国株は上昇、SOXは12,829.00（前日比+1.59%）でした。」
+- after（prompt契約）：
+  - 朝刊＝今日の「注目点」「注意点」「相場を見る軸」。今日の東京市場の値動きは言い切らない。前夜・前営業日の方向は入力どおり。
+  - 大引け＝「今日何が起きたか」「重要だった材料・相場を動かしたもの」「次に何を見るか」。理由を見出しにするのは causal claim がある場合だけ。無ければ「主因は絞れず」等の正直な不確実性。
+  - 数値は見出しの主役にせず context_ja / app_story へ。政策金利など数値そのものが核心の場合だけ例外。3つは役割を分け、言い換えの重複をしない。煽り・釣りは禁止。
+  - 業種・個別株の値動き（「半導体株が主導」「内需はまちまち」）は入力に根拠がある時だけ。入力には業種別騰落が無いため、TASK例のうち根拠の無い業種の断定を招くものは例文に使っていない。
+- live出力の変化は未観測（prompt変更のため、次の自然cycleで確認が必要）。
+
+### actual field / consumer path
+- X：`x_post.points_ja` → `_shared/market_report_packet.ts` `formatSharedXPost` の「📌 今日の注目ポイント」（朝刊）／「📌 今日の3ポイント」（大引け）
+- App ホームカード「今日のポイント」（`src/components/home/home-report-hero.tsx`）：`src/lib/home-report-highlights.ts` `buildReportHighlights` が `body.market_detail.today_claims`（数値の observation claim）→ `checkpoints_ja` → … の順で出していた。`market_detail` は `personalized-reports/market_detail.ts` `buildAppMarketDetail`（shared v2経路、app gate ON時）で作られる。
+- 変更後：`market_detail.points_ja`（presentation v2 の packet だけ、`x_post.points_ja` と同一）を最優先（source `shared_points`）。v1・既存の保存済みレポート・legacy経路は従来どおりのfallback。→ X と App が同じ3ポイントを表示。
+
+### implementation approach
+1. prompt（`analysis_logic.ts`）：COMMONに3ポイントの契約を1行追加し、`points_ja` の説明を「各40字以内の見出し」に変更。MORNING/CLOSEにそれぞれの役割の行を追加。model call・schema・JSON schemaは変更なし。
+2. telemetry（Quality WARN、rewriteなし）：`pointsEditorialWarnings`
+   - `X_POINTS_METRIC_RECAP:<n>`（n≥2）：指標名＋数値、または指標名＋向きだけの行（`isMetricRecapPoint`。日付・指標名・助詞・動きの語を除いて1字以下、または値の数字を含む）
+   - `X_POINTS_NEAR_DUPLICATE`：文字bigramのJaccard≥0.5
+   - どちらも `worthRewrite` の対象外。理由：指標の行は事実として安全で、書き直しは +2 calls。PR #77 の delivery-first / 呼び出し削減を戻さないため。最初は「3/3ならrewrite」で実装したが、10/1・10/2の実データ再現テストで3回目以降の呼び出しが復活したため、記録のみに変更した（K2判断で `worthRewrite` の1行で有効化できる。上限は不変）。
+3. `hard_fact_guards.ts`：指標・市場名の一覧を `MARKET_NAMES` として export するだけ（判定ロジックは不変）。
+4. App：`market_detail.points_ja`（追加のみ）と、ホームカードの優先順位。
+5. DESIGN §15.4.1 を追加。
+
+### changed_files
+- `supabase/functions/market-report-analysis/analysis_logic.ts`
+- `supabase/functions/market-report-analysis/hard_fact_guards.ts`（export追加のみ）
+- `supabase/functions/market-report-analysis/editorial_points_test.ts`（新規11件）
+- `supabase/functions/market-report-analysis/test_support.ts`（合成fixtureの3ポイントを見出し型に。9/30 closeのcontextに日経平均の値を移動）
+- `supabase/functions/market-report-analysis/analysis_test.ts` / `presentation_v2_test.ts` / `quality_calibration_test.ts`（期待値の更新）
+- `supabase/functions/personalized-reports/market_detail.ts` / `report_upgrade_test.ts`
+- `src/lib/home-report-highlights.ts` / `src/lib/report-presentation.ts` / `tests/app/home-report-highlights_test.ts`
+- `docs/market-report-shared-platform/DESIGN.md`
+
+### morning fixture examples（10/2朝刊の実入力、US 10/1 上昇）
+- before（live）：上記の数値3行 → `X_POINTS_METRIC_RECAP:3`（記録のみ、rewriteなし、calls不変）
+- after：「前夜の米株高を日本株が引き継げるか」「半導体株の強さが続くかに注目」「為替の動きには要注意」→ Hard 0件、points警告なし
+- 逆向き：「米国株の下落を日本株が引き継ぐか」→ Hard「方向の逆転」
+
+### close fixture examples（10/1大引けの実入力）
+- before：数値3行（「日経平均は68,956.72（前日比+3.30%）」ほか）→ `X_POINTS_METRIC_RECAP:3`、generate+fact の2 callsで配信
+- after：「日経平均が大きく上昇、主因は絞れず」「韓国の9月輸出が過去最高」「次は米国株の方向とドル円を確認」→ Hard 0件、警告なし
+- 根拠の無い因果：「米国株高を受けて日本株が上昇」「半導体輸出の増加を背景に日経平均が上昇」→ Hard「根拠の無い因果」
+- 日付違い：「9月30日の日経平均は68,956.72で上昇」→ Hard「日付と指標の不一致」。「TOPIXが小幅に上昇」→ Hard（1306）
+- 2点だけ → Hard `X_POST_POINTS_INVALID`
+
+### factual / causal safety
+- points_ja は従来どおり `guardTexts.factual`（起きたことを述べる文）として、値・日付・向き・stale・1306・emoji・根拠の無い因果・false absence・ref の検査をすべて受ける。forwardへの移動はしていない（朝刊の見出しでも向きの検査を外さない）。
+- Hard境界の変更：なし（PR #79/H1 の session/watch/causal テストは全て緑）。
+- 注意：朝刊の見出しで「円高に注意」のような為替の向きは、現行のguardでは為替の向きとして判定していない（既存の範囲。今回は広げも狭めもしていない）。
+
+### tests / check / lint / diff
+- market-report-analysis full **147/147**（editorial_points 11、session-date 14、H1 boundary 9、presentation_v2 22、causal 18、quality 9、h1_adversarial 13、content_guard 16、transport 14）
+- personalized-reports **129/129**、X shared consumer 8/8、market-report-data-packet 42/42、`_shared` 415/415（`--no-check`、既知の無関係type debt）
+- App：`tests/app/home-report-highlights_test.ts` 17/17
+- `deno check`：market-report-analysis/index.ts、personalized-reports/index.ts と変更ファイル9本 → exit 0。App側の2ファイルは `@/` の import map と `--sloppy-imports` で check → exit 0（`--sloppy-imports` なしでは extensionless import の既存エラー3件が出る。変更前も同じ）
+- `deno lint`：変更ファイル。`analysis_test.ts:34` の require-await 1件は 2026-09-17 `05a677f1e` からの既存指摘（今回の変更は同ファイル120行目のみ）。それ以外は0件。App 3ファイル exit 0。
+- `git diff --check` exit 0
+- CI（PR #87）：1 passing / 1 pending（作成時点）
+
+### model-call impact
+- 上限不変（MAX_GENERATIONS=2、最大4 calls）。新しい rewrite 条件は追加していない。points の警告は記録のみ。prompt が少し長くなる分、input tokens はわずかに増える（生成リクエストの instructions が約600字増える。Fact には入らない）。
+
+### schema compatibility
+- `market_report_packet.v1` / presentation v2：変更なし（`x_post.points_ja` は既存の field）。
+- `app_market_detail.v1`：optional な `points_ja` を追加（additive）。App の型も optional。古いレポートは fallback。
+- DB / RPC / migration：変更なし。
+
+### PR / commit / push
+- PR #87 open（MERGEABLE）、commit `3561f1ea`、通常push。merge・deployはしていない。
+
+### production mutation
+- **0**（deploy、invoke、DB、gate、cron、X、Auth/Vault：なし）。読み取りは本TASK開始前の10/5 close packetの確認のみ（前回のread-only観測で取得済みの内容を使用）。
+
+### remaining issues
+1. live のモデル出力が見出し型になるかは未観測。merge＋deploy後、朝刊と大引けの両方で `x_post.points_ja` と `X_POINTS_*` の記録を確認する必要がある。
+2. `X_POINTS_METRIC_RECAP:3` が live で続く場合は、`worthRewrite` で 3/3 だけを書き直し対象にするか判断（+2 calls、上限内）。
+3. 10/5大引けで見た内容品質の残り（米雇用統計が本文にほぼ出ない、「重要材料として確認されました」の内部語、「確認できません」3回、値だけの注目点「ドル円は…157.67円」）は本TASK範囲外。
+4. `analysis_test.ts:34` の既存lint 1件。
+
+### recommendation
+- Codex（または H1）の source review 後に merge → `market-report-analysis` のみの controlled deploy（personalized-reports は market_detail 変更があるため、App表示を反映するには personalized-reports の deploy も必要。app gate OFF の間は表示に影響しない）。
+- consumer activation 前に、deploy後の自然な朝刊と大引けを1回ずつ read-only 観測することを推奨（見出し型になっているか、Hard/WARN、calls）。
 
 ---
 
