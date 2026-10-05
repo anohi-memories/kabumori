@@ -1,5 +1,163 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-pr87-controlled-production-deploy-20261006
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Opus5.5（高）
+- type: controlled production deploy / exact-source read-back / no manual generation
+- source_pr: 87
+- merged_main_sha: 74e4dbff09e3b248164fd00bb720402d762ebcd8
+- production_mutation_allowed: true
+- allowed_production_targets:
+  - market-report-analysis
+  - personalized-reports
+
+## Purpose
+
+PR #87 is merged after K2 + independent H1 PASS.
+
+Deploy the exact merged source required for the new editorial three-point behavior:
+- `market-report-analysis`: generates morning/close `x_post.points_ja` as meaningful editorial headlines.
+- `personalized-reports`: carries the same shared `points_ja` into `market_detail.points_ja`.
+
+This task is **deploy + exact read-back only**.
+Do not manually generate a report and do not activate consumers.
+
+## Accepted source / review
+
+- PR #87 reviewed exact head: `3561f1eaac41df0f23dcce8fdaace0decc654a0a`
+- squash merge on main: `74e4dbff09e3b248164fd00bb720402d762ebcd8`
+- H1 verdict: PASS
+- source changes by H1: 0
+- production mutation before this task: 0
+
+Accepted verification:
+- market-report-analysis 147/147
+- personalized-reports 129/129
+- X shared consumer 8/8
+- app home highlights 17/17
+- market-report-data-packet 42/42
+- relevant Deno check/lint + git diff --check PASS
+
+## Startup / isolation
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK / Final C1.
+2. Use the existing G2 worktree only if still safe and independent. If a new checkout/worktree is needed, base it on fresh `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main.
+4. Require main to contain merge `74e4dbff09e3b248164fd00bb720402d762ebcd8`.
+5. Confirm no uncommitted changes owned by another slot.
+6. Fresh-read production before mutation.
+7. G1/G4/G5 may be active in separate workstreams; do not touch their files/functions/migrations/settings.
+
+## Pre-deploy read-only gate
+
+Record for both targets:
+- deployed version
+- status
+- verify_jwt
+- source identity/hash if available
+
+Also verify:
+- `app_enabled=false`
+- `x_enabled=false`
+- relevant market-report crons unchanged/active
+- no manual report/retry is currently being run by G2
+- no other slot currently owns either target Edge Function
+
+If target ownership or source state is ambiguous, STOP without deploy.
+
+## Exact deployment scope
+
+Deploy **only**:
+1. `market-report-analysis`
+2. `personalized-reports`
+
+Use exact fresh main source and their normal import graphs.
+
+Forbidden deploy targets include all other Edge Functions.
+
+Do not:
+- deploy market-report-data-packet
+- deploy X consumer/posting functions
+- deploy important-news-monitor
+- change DB/RPC/migration
+- change Cron
+- change secrets/Vault/Auth
+- change consumer gates
+- invoke report generation
+- invoke retry
+- send X
+- send app notification
+
+## Post-deploy read-back
+
+For each deployed function:
+- new version/status
+- verify_jwt
+- updated timestamp
+- source identity/hash
+- compare deployed import graph with exact fresh main bytes where tooling allows
+
+Confirm again:
+- app_enabled=false
+- x_enabled=false
+- crons unchanged
+- no unrelated Edge Function metadata changed
+
+Run no manual cycle.
+
+## Native App caveat
+
+PR #87 also changes the native App Home highlight selection to prefer shared `points_ja`.
+That native source is now merged, but existing installed app binaries will not gain this UI priority until the next normal native app build/release.
+
+This deploy should still:
+- generate editorial shared points in market-report-analysis;
+- persist/carry them through personalized-reports;
+- prepare backend data for the next app build.
+
+Do not trigger an EAS build in this task.
+
+## Completion / K2
+
+Report:
+- task_id / result
+- fresh main
+- production baseline before
+- exact deploy targets
+- before/after versions
+- verify_jwt/status/source read-back
+- exact-source/import-graph comparison
+- app_enabled/x_enabled
+- Cron unchanged proof
+- unrelated-function-change check
+- production mutations performed
+- manual generation/retry = 0
+- X/notification = 0
+- EAS = 0
+- remaining risks
+- next recommendation for natural close/morning observation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+After K2, expected next step is a **read-only natural-cycle observation**, not another deploy.
+
+Recommended model: **Opus5.5（高）**.
+
+## Report
+
+Pending.
+
+---
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-shared-report-v2-editorial-three-points-20261005
 - owner: claude
 - slot: claude-2
