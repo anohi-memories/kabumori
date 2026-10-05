@@ -1,3 +1,18 @@
+## Final C1 — PR #87 editorial three-points PASS / merged / G2 deploy gate next
+
+- H1 verdict: **PASS** on exact PR #87 head `3561f1eaac41df0f23dcce8fdaace0decc654a0a`.
+- independent review found no blocker in editorial contract, Hard Fact/causal safety, delivery-first call behavior, X/App shared truth, or regressions.
+- focused evidence accepted: market-report-analysis 147/147; personalized-reports 129/129; X shared 8/8; App home highlights 17/17; data-packet 42/42; relevant Deno check/lint + git diff PASS. One unrelated pre-existing lint issue remains outside scope.
+- final fresh merge gate: PR open/unmerged, mergeable/clean, head unchanged, changed-file overlap with current main = 0, CI statuses acceptable.
+- PR #87 squash-merged as `74e4dbff09e3b248164fd00bb720402d762ebcd8`.
+- H1 source changes = 0; production mutation/deploy/manual report/consumer activation = 0. H1 done/free.
+- next G2: `kabumori-pr87-controlled-production-deploy-20261006`, recommended **Opus5.5（高）**.
+- G2 exact deployment scope: `market-report-analysis` + `personalized-reports` only, exact fresh main, read-back required.
+- manual report/retry, consumer gate ON, DB/RPC/migration, X/notification, EAS and unrelated Edge deploy remain forbidden.
+- production mutation mutex: G2 deploy must not overlap G4/G5/G3 or any other production mutation. If another production mutation is active/authorized concurrently, G2 must STOP before deploy.
+- after K2 deploy verification, next step is read-only natural-cycle observation. Consumer activation remains HOLD until natural morning and close behavior is observed safely.
+- native caveat: backend can begin producing/carrying shared editorial points after deploy, but installed app binaries need the next normal native build/release to use the new Home priority logic.
+
 ## AI Lab PR #82 production DB rollout complete — Stage B/C/postflight PASS
 
 - User authorized proceeding in the safe order.
