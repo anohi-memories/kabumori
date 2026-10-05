@@ -1,5 +1,197 @@
 # Claude Task 4 — CURRENT TASK
 
+- task_id: x-social-mobile-pr76-final-security-corrective-20261005
+- owner: claude
+- slot: claude-4
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: bounded corrective implementation / pre-send readiness parity / SECURITY DEFINER ACL / rollout fail-closed
+- target_pr: 76
+- reviewed_head: 7f75c07a8c997b6a585e9c86dca01186eeea671f
+- production_mutation_allowed: false
+
+## Purpose
+
+Final H2 rereview returned **CHANGES REQUIRED** on PR #76.
+
+The original R1-R5 architecture is substantially closed. Do not redesign the feature. Correct exactly these residual security boundaries:
+
+1. F1: pre-send permission readiness is weaker than toggle-ON readiness.
+2. F2: unexpected default/effective EXECUTE grants can survive on the two SECURITY DEFINER functions.
+3. F3: documented migration-first rollout leaves a temporary fail-open interval for old runtime.
+
+No production apply/deploy/write or real X operation.
+
+## Startup / isolation
+
+1. Read PROJECT_RULES / CLAUDE.md / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK / full latest H2 report.
+2. Continue only in the existing isolated G4 worktree for PR #76 if it is still safe/clean. Do not use G3/H1/H2 worktrees.
+3. Fetch fresh origin/main. Confirm PR #76 exact head is still `7f75c07a8c997b6a585e9c86dca01186eeea671f` before editing. If moved, STOP.
+4. G3 PR #81 remains active. Do not touch its content-settings migration/files.
+5. PR #82 is now merged; current main migration is `20261004090000_ai_lab_topic_claims.sql`. H2's older note claiming PR82 still uses 20261003090000 is stale. Current intended versions are:
+   - PR76: `20261003090000_social_mobile_publish_permission_boundary.sql`
+   - PR81: `20261003120000_social_mobile_content_settings_hardening.sql`
+   - merged PR82: `20261004090000_ai_lab_topic_claims.sql`
+   Recheck fresh before push.
+6. Normal push only; no force push/rebase of other slot work.
+
+## F1 — exact pre-send readiness parity
+
+H2 positively reproduced two states where toggle ON rejects but pre-send authority still returns authorized:
+
+- `connection_status='identity_verified'` but `verified_at IS NULL`
+- nonblank `last_connection_error_code` such as `X_ACCESS_TOKEN_UNAUTHORIZED`
+
+Required correction:
+- the final authoritative pre-send permission check must reject both;
+- use fixed bounded refusal codes; no raw DB/backend text;
+- do not weaken intended refreshing/current-token behavior;
+- do not rely on the earlier cached `x_legacy_post_account` helper to imply these checks;
+- preserve the existing exact-account / brand-live / publish_enabled / identity / credential-reference checks.
+
+Tests must include:
+- missing verified_at -> pre-send refused, actual fake X callback 0;
+- recorded connection error -> pre-send refused, fake X callback 0;
+- normal eligible account still sends through fake callback;
+- 401 retry still performs a fresh permission check before any second request;
+- OFF remains fail-safe.
+
+Update any documentation claiming full parity so it is exactly true.
+
+## F2 — SECURITY DEFINER exact effective ACL
+
+H2 reproduced:
+- creator/apply-role default privileges can grant EXECUTE to an unexpected role;
+- current migration revokes only known roles, so the extra grant survives;
+- inherited membership can make an app role effectively execute the wrong function.
+
+Correct the migration boundary for exactly:
+- `set_social_account_publish_enabled(text,boolean,boolean)`
+- `assert_x_publish_permission_for_legacy_post(uuid,text,text)`
+
+Required:
+- validate expected creator/owner assumptions;
+- inspect/refuse or narrowly normalize unexpected direct EXECUTE grants on these two functions only;
+- assert **effective** privileges after creation, including inherited role membership;
+- PUBLIC/anon must have none;
+- authenticated may execute only the user toggle;
+- service_role may execute only the pre-send assertion;
+- unrelated roles must not retain effective EXECUTE;
+- no global ALTER DEFAULT PRIVILEGES and no role-membership mutation;
+- do not broaden table grants;
+- fixed empty search_path / schema-qualified references remain.
+
+Add adverse disposable-role tests:
+- unexpected default EXECUTE grantee;
+- unrelated direct grantee;
+- inherited unexpected EXECUTE;
+- expected clean role graph;
+- reapply/idempotency;
+- failure rolls back with no partial security surface.
+
+If exact owner/creator policy cannot be made safe within this migration without broader architecture change, STOP and report rather than expanding scope.
+
+## F3 — rollout must fail closed in every partial state
+
+Current documented migration-first sequence is not accepted.
+
+H2 reproduced:
+- migration applied, old sender still active;
+- caller can toggle OFF through the new RPC;
+- old sender can still start an X request because it has no new pre-send guard.
+
+Produce and test an operational sequence where **all partial rollout states fail closed**.
+
+Preferred direction to prove:
+1. deploy guarded runtime first while permission RPC is absent -> Vault-backed sends fail closed with `X_PUBLISH_PERMISSION_UNAVAILABLE`;
+2. verify new runtime exact bytes/version/read-back;
+3. apply the reviewed permission migration;
+4. read back RPC definitions/ACL/effective privileges;
+5. only then expose/deploy the user-facing publish-setting Edge/app capability.
+
+Alternative staged-grant design is allowed only if simpler and independently provable, but do not add broad new architecture.
+
+Required tests/proof:
+- old runtime + new toggle authority must never be an allowed operational state in the approved runbook;
+- new guarded runtime + missing RPC => no X callback;
+- new guarded runtime + valid RPC + ON => fake X callback allowed;
+- new guarded runtime + OFF/brand-disabled => callback 0;
+- rollback/abort points are explicit;
+- no Cron/manual backlog/candidate injection required.
+
+No production execution in this task.
+
+## Preserve already-closed behavior
+
+Do not regress:
+- auth.uid transactional caller authority;
+- owner/admin membership locking;
+- brand/account/CAS locking;
+- lock ordering/deadlock protection;
+- tenant-safe errors;
+- fail-safe OFF;
+- UI confirmation pinning;
+- no service-role user toggle write path;
+- no OAuth/Vault revoke on OFF;
+- no cancellation claim for already-started X request;
+- fresh check before 401 retry;
+- current narrow publish-toggle scope.
+
+## Required verification
+
+Run after correction:
+- migration source invariants;
+- publish-setting Edge logic/http/migration tests;
+- actual VaultAccountXAuth tests;
+- new F1 adapter callback-zero tests;
+- disposable PostgreSQL apply/reapply/behavior/race/E2E;
+- new F2 default/effective ACL adverse role cases;
+- F3 partial-rollout fail-closed harness;
+- mutation suite expanded for F1/F2/F3;
+- social-mobile full tests;
+- app typecheck/lint;
+- changed Deno check/lint;
+- relevant x-test-post + shared tests;
+- git diff --check;
+- secret/scope scan.
+
+Use fake X only. No real X/OpenAI/production.
+
+## PR handling / completion
+
+Amend PR #76 normally and preserve reviewed head in Report.
+
+Report:
+- task_id/result
+- old/new exact PR head
+- F1 correction + executable proof
+- F2 correction + effective ACL proof
+- F3 exact approved rollout sequence + partial-state proof
+- changed_files
+- SQL/runtime/app tests
+- fresh-main overlap/conflicts
+- migration-version check
+- production mutation/read/deploy/X = 0
+- remaining risks
+- safety checks
+- next recommendation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K4.
+
+After K4, independent H2 rereview is mandatory.
+Recommended rereview model: **Sol（極高）**.
+
+---
+
+# Previous G4 task history — preserved below
+
+# Previous G4 task — preserved history
+
 - task_id: x-social-mobile-pr76-fresh-main-integration-20261005
 - owner: claude
 - slot: claude-4
