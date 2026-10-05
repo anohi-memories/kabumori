@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr76-transactional-publish-toggle-rereview-20261005
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（極高）
 - type: final security rereview / authorization transaction / pre-send publish authority / migration RPC / concurrency
@@ -380,6 +380,21 @@ Append to `.agent/CODEX_REPORT_2.md`:
 Then status -> review_required, next_owner -> chatgpt, STOP for C2.
 
 Recommended model: **Sol（極高）**.
+
+
+## H2 completion — 2026-10-05 JST
+
+- result: **CHANGES REQUIRED**; PR76 exact head `7f75c07a8c997b6a585e9c86dca01186eeea671f` unchanged/open/unmerged.
+- H2 Report synchronized to origin/main: `a866e4d56058d16b981d227ad6a4d6eb8c73c780`; previous Report/TASK histories preserved.
+- Independent tests: focused/invariants 78/78; runtime 925/925 (--no-check); app 145/145 + domain 22/22; app typecheck/lint and changed Deno check/lint PASS; disposable DB APPLY/BEHAVIOR/RACE/E2E/CLEANUP PASS; mutations 30/30 detected; diff check PASS.
+- Remaining findings: F1 final pre-send SELECT omits verified_at/nonblank connection-error refusal; F2 unexpected default/inherited EXECUTE survives; F3 migration-first toggle authority + old runtime permits a new fake request after OFF.
+- Additional probes used the actual candidate SQL and actual send adapters on local fake data; real external X calls 0. Green ordinary tests do not resolve those findings.
+- Managed PostgREST/JWT verification and unsupported legacy exposure remain explicitly unverified/qualified; current aggregate does not demonstrate an active production legacy bypass.
+- Latest pre-publication main `e11f209ca764b2d1d79b769e7fd15ed961a8cbc3`; source overlap 0; only H2 TASK/REPORT published. No source fix, PR merge, production DB write, deploy, live API/post or other-slot mutation.
+- status: review_required
+- next_owner: chatgpt
+- STOP for C2; merge/apply/deploy recommendation NO until bounded corrections are independently verified.
+
 
 ---
 
