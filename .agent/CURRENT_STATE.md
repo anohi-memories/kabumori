@@ -1,3 +1,17 @@
+## Final K1 — Topic detail visual polish PASS / merged
+
+- verdict: **PASS**.
+- PR #84 exact accepted head `b7bf774b964ed740a00b904447f029351cebef80` was squash-merged as `25582625cdc60208df3b1340f8c03eba75cf3340`.
+- fresh pre-merge comparison: main had advanced 88 commits from the PR merge-base with **0 overlap** across the 7 PR files.
+- final Simulator evidence accepted at 402pt and 375pt across beginner/intermediate/advanced, long-title Hero, example/caution/takeaway and bottom safe area.
+- visual fixes accepted: long titles moved clear of artwork; straight inset accent bars; `例` mark instead of lightbulb emoji; takeaway emoji removed; safe-area bottom padding fixed; narrow-width typography tightened.
+- verification: 297/297 app tests; Expo config PASS; web export PASS; diff clean; only documented pre-existing CSS-module type diagnostics remain.
+- all 50 curated texts and existing fetch/id-mismatch/navigation/fallback behavior preserved.
+- EAS build = 0. backend/DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+- Codex review: **not required** for this static native UI/presentation change.
+- AI Lab diary: **候補あり — 株アプリの学習画面を「かぶモリ学習ノート」として整え、初級〜上級の色や教材イラスト、読む順番、具体例・要点の見せ方を統一。小さいiPhoneや長いタイトルでも崩れないよう実画面で調整した。**
+- G1 done/free.
+
 ## Final C2 — PR #76 security rereview PASS / source merged / G4 production gate next
 
 - H2 verdict: **PASS** on exact head `5448e545f4a88bbf6597a981c0bcbe4c01043c30`.
