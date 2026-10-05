@@ -1,3 +1,173 @@
+## H2 — PR #76 transactional publish-toggle final rereview — 2026-10-05 JST
+
+- task_id: x-social-mobile-pr76-transactional-publish-toggle-rereview-20261005
+- verdict: **CHANGES REQUIRED**. Ordinary paths and the original authority/pinning reproductions pass, but two independent security-contract gaps and one partial-rollout gap remain. Green supplied tests are not an overall PASS.
+- status: review_required / next_owner: chatgpt; **STOP for C2**.
+- reviewed_exact_head: `7f75c07a8c997b6a585e9c86dca01186eeea671f`; PR #76 remained open/unmerged, mergeable=true on completion read-back. No PR merge performed.
+- previous_bad_head: `a59a89e9c585fb6e780e1af2ecc898c830f5524e`.
+- fresh_main_start: `b4c34611d2d99d4dfe89363bee7d579141a38812`; pre-publication fresh main: `e11f209ca764b2d1d79b769e7fd15ed961a8cbc3`.
+- PR integrated base: `d345f67402a782a303ce46c640f685271d76b681`; latest main is 20 commits beyond it. PR has 22 changed paths; intersection with base-to-latest-main changed paths is **0**. Main changes during this review are shared orchestration/control files, not these source paths.
+- isolation: owned temporary checkout `/private/tmp/h2-fresh-20261005.99TWCY/review`, independently cloned from the new clean base `/Users/yuya/Developer/kabumori-fresh`, then fresh-fetched GitHub main/PR76 and detached exact head. An initial owned clone from the old repo was used only for startup controls before the new-Mac rule was discovered; it was not used for reviewed candidate edits/deploy. Old/shared checkouts were never modified. Both owned source checkouts stayed git-clean.
+- changed_files / source fixes: only H2 `.agent/CODEX_REPORT_2.md` and `.agent/tasks/CODEX_TASK_2.md` are synchronized to main. **Source implementation/test/migration changes: 0**. Additional adversarial harnesses exist only in owned `/private/tmp`, not in the PR/repository.
+- commit_hash / push: H2 control-file-only GitHub commits; publication SHAs are supplied with final read-back. No PR implementation commit, merge or deployment is made by this review.
+- deploy / production mutation: **0**.
+
+### Findings requiring correction
+
+#### F1 [P2] — pre-send readiness still permits states that ON correctly rejects
+
+Location: `supabase/migrations/20261003090000_social_mobile_publish_permission_boundary.sql:276-284` (compared with ON predicate at lines 194-206). The final authoritative SELECT checks identity_verified/nonblank platform_user_id and credential references, but omits `verified_at IS NOT NULL` and nonblank `last_connection_error_code`. The preceding real `x_legacy_post_account` helper also omits both, as does the credential-reader prerequisite. Thus using that helper does not supply the missing conditions.
+
+Independent disposable-DB reproduction, using the **unmodified candidate and real prerequisite migrations**:
+
+1. Create an eligible fake owner/account and running post; caller-JWT toggle ON returns `updated/true`.
+2. Clear only verified_at while keeping identity_verified/valid refs/ON.
+3. `fixture_permission(post, account, brand)` returns **`authorized`**.
+4. OFF succeeds; ON now returns **`blocked / CONNECTION_NOT_VERIFIED`**.
+5. Restore verified_at, ON succeeds; set only `last_connection_error_code = 'X_ACCESS_TOKEN_UNAUTHORIZED'`.
+6. Pre-send permission again returns **`authorized`**, while OFF→ON returns **`blocked / CONNECTION_DEGRADED`**.
+
+The actual PR76 `VaultAccountXAuth.load/send` was then connected to the real local permission RPC, with a fake X callback and no external fetch. A credential was loaded before each independent state change:
+
+```text
+missing_verified_at: mock_X_callback=1, real_network_calls=0
+recorded_connection_error: mock_X_callback=1, real_network_calls=0
+```
+
+These are positive bug reproductions, not successful safety tests. They violate Gate C/F's fresh structural-readiness contract; neither is a claim of actual production posting or a forged credential attack.
+
+Why the existing suite stayed green: `social_mobile_publish_permission_behavior.sql:120,125` sets `runtime = null` for exactly these two cases, and lines 153-155 skip the runtime assertion when null. ON rejection is tested, runtime parity is intentionally not tested for these rows. Documentation's “Parity ... tested case by case” is therefore too broad.
+
+Bounded proposed correction (not implemented): add both conditions to the final authoritative pre-send SELECT, return fixed refusal codes, and make these two SQL cases assert refusal plus actual-adapter X callback=0. Preserve intended refreshing/current-token policy, the shared helper contract and unrelated refresh behavior unless a separate necessity is established.
+
+#### F2 [P2] — unexpected default EXECUTE grants survive the migration
+
+Location: candidate lines **305-312**; preconditions lines 62-89. The migration revokes PUBLIC/anon/authenticated/service_role then grants the two intended roles, but does not inspect or remove other grants inherited from the apply role's default privileges. It also has no effective-role ACL postcondition. Known-role-only revocation is not an exact least-privilege boundary under the adverse role/default graph required by Gate H.
+
+Independent local-only probe before candidate application:
+
+```sql
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT EXECUTE ON FUNCTIONS TO h2_extra_execute;
+-- Apply unmodified candidate as nonsuperuser kb_publish_permission_owner.
+SELECT has_function_privilege('h2_extra_execute',
+ 'public.set_social_account_publish_enabled(text,boolean,boolean)','execute');
+SELECT has_function_privilege('h2_extra_execute',
+ 'public.assert_x_publish_permission_for_legacy_post(uuid,text,text)','execute');
+```
+
+Both results: **true**. Candidate commits successfully instead of refusing. In the same disposable role graph, temporarily granting `h2_extra_execute` to authenticated makes authenticated effectively able to EXECUTE the supposedly service_role-only pre-send assertion (**true**). The test membership was then revoked; the entire fake database was dropped and the owned cluster stopped.
+
+Current production catalog **does not show that adverse drift**: postgres/public function defaults are owner-only, and anon/authenticated/service_role have no parent-role memberships in the queried catalog. Therefore this is a **source fail-closed/default-ACL gap**, not a claim that production is currently exploitable. `postgres` is not superuser but is BYPASSRLS, so ownership/creator role remains relevant to security-definer rollout. The separate supabase_admin default is broad; do not assume every apply tool uses postgres or silently normalize global defaults.
+
+Bounded proposed correction (not implemented): validate the actual creator/owner and both functions' effective ACLs, refuse unknown grants/inheritance, or revoke extra grantees on these two new functions only and then assert exact effective role access before COMMIT. Do not alter global role memberships/default privileges or relax the caller authority checks. Add a default-grantee/inherited-EXECUTE mutation case; current 30 mutations only cover direct known-role/PUBLIC changes.
+
+#### F3 [P2] — migration-first rollout does not fail closed during the old-runtime interval
+
+Location: `supabase/tests/social_mobile_publish_permission.md:86-90` and candidate line 311. The documented order applies the publicly authenticated-executable toggle RPC before deploying the fresh pre-send runtime. Hiding the app or not deploying the thin toggle Edge yet does not remove direct caller-JWT access to that RPC.
+
+Independent partial-rollout probe: same real local migration/RPC; load the old current-main sender before OFF, invoke the caller's transactional OFF successfully, then execute only a fake request callback. Compare with the actual PR76 sender on the identical sequence:
+
+```text
+migration_only_old_runtime: OFF=updated, mock_X_callback=1, refusal=none, real_network_calls=0
+migration_and_new_runtime: OFF=updated, mock_X_callback=0,
+ refusal=X_ACCOUNT_PUBLISH_DISABLED, real_network_calls=0
+```
+
+This tests source-level partial rollout, **not the deployed production Function**. The old-main adapter did not change in main during this review. Gate N's “all partial rollout states fail closed” is not proved by the candidate plan: an enabled cached dispatch can still start an X request after the new RPC acknowledged OFF, before runtime deployment.
+
+Bounded recommendation: revise and separately approve an operational sequence that keeps new toggle authority unavailable until the guarded runtime is active. One option is guarded runtime first (missing permission RPC deliberately blocks Vault sends), then atomic RPC apply/read-back, then Edge/app exposure. Another is staging the toggle EXECUTE grant until guarded-runtime read-back succeeds. Explicitly accept the brief fail-closed availability tradeoff; do not quietly treat migration-first as safe or execute either plan from this review. Legacy paths below also need an exposure boundary.
+
+### R1-R5 / Gates A-N disposition
+
+| Gate | Independently established result |
+| --- | --- |
+| A / R1 | **Closed for reviewed toggle.** Caller identity is auth.uid(), not an argument. Exact account determines brand; current owner/admin membership, brand and account locks bind authorization and the only UPDATE in one transaction. Actual delete/demote-before-write schedules reject; writes after toggle decision wait. ON/OFF both enforce membership. Edge no longer holds service-role table mutation authority. |
+| B | **Supplied race evidence PASS.** Lock order table ROW EXCLUSIVE→brand SHARE→caller membership SHARE→account UPDATE; refresh commit-shaped SHARE ROW EXCLUSIVE/table→account probe queues without deadlock. Real deletion-acquire RPC races tested both ways. Timeout returns busy around the 3s bound with no mutation; nonmember foreign-lock probe returns without waiting. No lock spans external HTTP/X. This proves the tested schedules, not absence of every possible future writer deadlock. |
+| C / R2 | **Original mixed-brand TOCTOU closed for Vault path.** Actual loader's cached live+ON context is defeated by fresh DB assertion after brand disable; callback=0. New requests/401 retry check anew. Structural-readiness qualification remains F1. |
+| D | **Narrow coverage verified.** All wired non-Kabumori exact-account X sends in x-test-post funnel through VaultAccountXAuth.send/postToX, including AI Lab brand_post. The mobile toggle handler itself has no X/media path. Legacy Kabumori env/oauth_token_store, important-news-monitor and unwired v2/account-bound candidates are not covered; do not market this as a global X kill switch. |
+| E / R3 | **Closed for tested tenant errors.** Missing/foreign/revoked/moved/deleted rows collapse to not_found with no publish_enabled/readiness. Same-user move A→B is also refused on old authority. Members/viewers get bounded forbidden without current state; owner/admin-only CAS stale state is allowed while locks preserve authority. Unknown SQL/RPC responses become fixed unavailable; no post-decision privileged reread. |
+| F / R4 | **Original ON-predicate defect closed; end-to-end parity NOT closed (F1).** Trimmed user id, identity_verified, verified_at, own distinct/unshared refs, connection health, active/live and blocked refresh state are enforced for ON. No Vault-content validity promise is made. Fresh send must enforce the omitted structural conditions too. |
+| G | **OFF safety PASS within supported path.** Inactive/broken/ref-less fake account can be stopped; fingerprint of Vault/Auth/history/posts/other fields unchanged. updated_at not stamped. OFF during refresh can cause rotation commit to resolve uncertain, but does not re-enable or replay; existing tests cover the fail-safe result. Deletion already underway returns busy. |
+| H | **Ordinary ACL/search_path PASS; adversarial effective ACL FAIL (F2).** Exact signatures, SECURITY DEFINER, empty search_path, fixed codes/schema-qualified relations, no dynamic SQL or broader table UPDATE. Direct ordinary grants match design. Unknown default grant and inherited assertion privilege survive. |
+| I | **Chain/apply/reapply/collision PASS for inspected normal shape; adverse ACL qualification F2.** Real prerequisite migrations plus candidate apply; reapply deliberately refuses and preserves original objects. Explicit BEGIN/COMMIT requires standalone application without an outer transaction. Migration creates only the two intended RPCs/ACLs. Guards check existence/names and exact target signatures but are not a comprehensive type/owner/overload drift validator; production preflight must verify exact managed catalog before any separate apply. |
+| J | **SQL and shim contract verified, real managed PostgREST unverified.** Local caller authenticated + supplied JWT-sub fixture invokes the security-definer function with correct UID. Additional probe used the production-catalog auth.uid definition with only request.jwt.claims and an empty legacy sub GUC: caller role/auth.uid checks true; toggle updated/true. Security-definer does not erase claim GUCs. No real JWT signature/managed PostgREST call was attempted. |
+| K / R5 | **Closed in actual-hook/card test harness.** App's 32 publish-setting tests include A→B→A no resurrection, preview/eligibility/user/state changes, stale handlers and double-confirm/in-flight. Pin invalidation plus latest context gates prevent sending old confirmations; no claim of on-device UI testing. |
+| L | **PASS.** Exact 3-key contract; raw duplicate-key/escape ambiguity rejected; streamed UTF-8 byte count ≤512 (oversized chunk cancelled, not accumulated), fixed safe errors. OFF text does acknowledge in-flight cannot be recalled, but its unsupported-legacy scope needs the qualification below. Changed Deno require-await lint passed. |
+| M | **Explicit product/exposure risk, not a demonstrated active production bypass.** Ref-less legacy accounts can be stopped but not re-enabled by this RPC. Kabumori cached dispatch and important-news-monitor lack this fresh permission RPC. Current production aggregate has no owner/admin-controllable ON legacy account in the queried shape; do not report an active live bypass from the fake fixture. Generic UI/RPC nevertheless does not fence unsupported legacy accounts. Require a supported-account capability/exposure decision before release. |
+| N | **Partial-rollout plan NOT closed (F3).** Missing RPC denies new-runtime sends; missing toggle RPC denies Edge changes. The reverse state—new toggle authority + old sender—remains unsafe. No rollout executed. |
+
+### In-flight boundary / coverage detail
+
+- For the PR76 Vault path the accepted boundary is the fresh permission SELECT/authorized return immediately before request callback. OFF/disable authoritative before that snapshot is rejected. A commit after that authorization cannot cancel an already authorized/in-flight request. No claim of post-start cancellation.
+- The reactive 401 retry runs another fresh assertion after successful refresh; proactive refresh also rechecks before send. Tests demonstrate disable/deletion/block/unavailable => no new callback. No second X request starts just because the first assertion once passed.
+- The final SELECT unifies post/brand/account/refresh/deletion state; the legacy helper is a preceding statement for distinct/unshared refs and unbound-post contract. Do not describe all helper-only facts as locked for the duration of external X HTTP. This review does not introduce a long-lived lock across X.
+- Existing supported runtime path is unbound legacy brand_post, with one X account per brand. Unmerged PR41 account-bound publication and unwired v2 dispatcher are future integration work, not coverage proven here.
+
+### Legacy/Kabumori boundary and production read-only facts
+
+Only catalog and aggregate queries were performed, in READ ONLY transactions; no user identifiers/content, Vault plaintext, handles/emails, credentials or individual account values were queried for this review.
+
+- Both target RPC names absent; target migration ledger version `20261003090000` count=0. No live conflict observed.
+- Existing exact-account helper: postgres owner, security_definer, search_path empty, owner-only function ACL.
+- authenticated direct social_accounts UPDATE=false.
+- Relevant existing triggers: verified_at reconnect reset and social-mobile deletion guard. No generic updated_at-stamping trigger observed.
+- postgres/public default function privileges owner-only; no inherited memberships for anon/authenticated/service_role. These current facts do not remove F2's creator/default-graph failure mode.
+- Aggregate shape (4 accounts total, no identifiers): ref-less OFF 1 / owner-or-admin-controllable 1; ref-less ON 1 / controllable 0; Vault-backed OFF 1 / controllable 1; Vault-backed ON 1 / controllable 0. This is a metadata snapshot, not a production publish test.
+- Legacy ON/OFF asymmetry is a recovery/UX risk. Universal OFF copy promises “no new automatic posts” while cached Kabumori dispatch / independent important-news lane do not satisfy that guarantee. Safest bounded product response is hide/refuse unsupported legacy controls or clearly separate permissions until an explicitly reviewed guard exists; do not silently modify those other functions in PR76.
+
+### Independent tests and execution limits
+
+| Verification | Result |
+| --- | --- |
+| Focused Edge/logic/migration/Vault tests + migration invariants, checked | **78/78** = 68 focused + 10 invariants |
+| x-test-post + shared + publish-setting runtime regressions | **925/925**, explicitly `--no-check` |
+| social-mobile Node app tests | **145/145** |
+| App domain tests (data-view/post-interaction) | **22/22**, checked with Deno `--sloppy-imports` for Expo-style extensionless imports |
+| apps/social-mobile `npm run typecheck` / `npm run lint` | **PASS / PASS** |
+| Changed runtime/test Deno check + Deno lint | **11 files PASS / 11 files PASS** |
+| Disposable PostgreSQL 17.11 nonsuperuser fixture/real prerequisite chain | **APPLY / BEHAVIOR / RACE / E2E / CLEANUP PASS**; E2E 5 actual-handler/adapter scenarios through local shim |
+| Supplied mutation runner | **30/30 DETECTED** |
+| Independent readiness probes | **Two reproducible missing-refusal cases**, real SQL + actual PR adapter + mocked X |
+| Independent default/effective ACL probe | **Unexpected role executes both; inherited authenticated executes assert** |
+| Independent partial-rollout comparison | **Old sender 1 fake request after OFF; new sender 0** |
+| Production auth.uid definition / claims-only local replay | **PASS**, does not constitute real managed JWT verification |
+| x-test-post entire index type-check | **6 baseline diagnostics**, byte-identical messages/locations to startup main after checkout-path normalization; no new diagnostic. Not claimed globally type-clean |
+| Shell syntax / git diff --check / changed-source secret-pattern scan | **PASS** |
+
+Core commands:
+
+```sh
+DENO_NO_PACKAGE_JSON=1 deno test --no-config --allow-read supabase/functions/social-mobile-publish-setting supabase/functions/x-test-post/vault_account_auth_test.ts supabase/tests/migration_source_invariants_test.ts
+DENO_NO_PACKAGE_JSON=1 deno test --no-config --no-check --allow-read supabase/functions/x-test-post supabase/functions/_shared supabase/functions/social-mobile-publish-setting
+PUB_PGHOST=<owned-local-/private/tmp/socket> PUB_PGPORT=56536 PUB_PGSUPER=h2_local PUB_E2E=1 bash supabase/tests/social_mobile_publish_permission_run.sh
+PUB_PGHOST=<same-local-socket> PUB_PGPORT=56536 PUB_PGSUPER=h2_local bash supabase/tests/social_mobile_publish_permission_mutations.sh
+npm test && npm run typecheck && npm run lint  # apps/social-mobile only
+DENO_NO_PACKAGE_JSON=1 deno test --no-config --sloppy-imports apps/social-mobile/src/domain/data-view.test.ts apps/social-mobile/src/domain/post-interaction.test.ts
+```
+
+Environment caveats: initial plain root Deno check lacked root @types/node and npm auto-resolution hit restricted-network DNS. Tests were run successfully with package.json auto-discovery disabled/--no-config; no manifest/lockfile was changed to work around it. App's own locked `npm ci --ignore-scripts` succeeded only in the disposable checkout. An initial domain check rejected extensionless Expo imports; --sloppy-imports resolved this without source edits. None is classified as a newly failing PR test.
+
+The supplied mutation suite removed its fake databases. Extra adversarial fake database `h2_pr76_adversarial` was dropped and the H2-owned socket-only PostgreSQL stopped; fake fixtures are reproducible, not retained production data. Evidence harnesses/logs remain in the owned temporary directory and the essential reproduction steps/results are included above, so C2 does not need access to that directory.
+
+### Freshness, migration collision and rollout prerequisites
+
+- PR76 head rechecked unchanged at completion. Fresh main changes intersect none of the 22 PR source/test/doc paths; shared `.agent` histories must still be preserved when writing H2 controls.
+- Inspected migration filenames from every current open PR plus fresh main: PR76 `20261003090000`, PR81 `20261003120000`, PR82 `20261004090000` are distinct. Other open PR migration versions `20260927101423`, `20260927124300`, `20260921115317` also do not collide. No open-file response reached the 100-file pagination cap. No other PR's contents were changed/reviewed as an implementation task.
+- PR76 adds its reservation without removing current-main reservations; invariant tests pass.
+- No real PostgREST binary/stack was available locally. Fake-JWT shim E2E is not managed-platform authentication proof. Production Edge `verify_jwt` configuration, actual migration-executor role/effective privileges and exact managed RPC exposure still require read-only preflight plus an approved rollout test; no production call was authorized here.
+- Standard security-definer/default privilege reasoning was checked against official Supabase database-functions/RLS documentation via the Supabase skill. It influenced the adverse effective-ACL/creator-role probe; it did not authorize any production change.
+
+### Recommendation / C2 hand-back
+
+- **PR76 merge recommendation: NO for the reviewed head.** Return bounded corrections for F1, F2 and the F3 rollout contract to G4; recommended corrective/review model **Sol（高）** for independent verification (G4 implementation model is for ChatGPT to assign).
+- **Production migration/deploy/app exposure recommendation: NO.** This TASK grants none, and the partial-rollout and unsupported-account boundaries must be resolved before requesting separate approval.
+- Remaining unverified items: real managed PostgREST/JWT round-trip (without production mutation), exact production migration tool/creator contract, unsupported legacy exposure decision, future account-bound/v2 dispatcher integration, exhaustive races beyond the tested schedules.
+- Do not fix H1/PR82, G3/PR81, legacy Kabumori, important-news, Auth/Vault or broad orchestration files as part of this rereview.
+- safety_checks: source fixes 0; PR merge 0; production DB/schema/RPC/migration writes 0; Edge deploy 0; Cron/scheduler/settings/Auth/Vault/OAuth/secret changes 0; real X/OpenAI/Push/media calls 0; real posts 0; apps/admin/HANDOFF/other-slot files changed 0. Existing dirty old repo and clean new base left untouched; no reset/stash/prune/stage/commit of their changes. Only H2 TASK/REPORT publication.
+
+---
+
 ## H2 — PR #81 content-settings hardening rereview — 2026-10-03 JST
 
 - task_id: x-social-mobile-pr81-content-settings-hardening-rereview-20261003
