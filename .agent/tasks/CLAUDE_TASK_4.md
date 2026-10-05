@@ -2262,3 +2262,36 @@ K4 確認後、TASK どおり H2 で Codex **Sol（極高）** の独立再レ�
   2. 上記を前提にした、S1〜S5 への明示的な本番承認。
 - G5（共通アカウントの本番 migration）は in_progress。本番変更が重ならないことを S1 直前に確認する。
 - status: in_progress / next_owner: user のまま。
+
+### S0 complete (2026-10-06 00:49 JST; read-only; Claude ran the script with the user's permission)
+- 実行: `g4-preflight/run_s0.sh`。SELECT 2本、Edge 一覧、x-test-post のダウンロードとハッシュ照合（一時フォルダは削除済み）。本番への書き込みは 0。結果の要約は `g4-preflight/results/s0_results.json`（SHA-256 `f7a57e08…`）。
+- 識別: project `wsmznyzcvmuitkglfeuj`、`postgres`（superuser ではない）、PostgreSQL 17.6、既定の分離レベル read committed。
+- ledger:
+  - 73 行、最大 version `20261004090000`（AI Lab、exact 1行）。
+  - **PR76 `20261003090000` は 0 行**。PR81 `20261003120000` は 0 行。共通アカウント `20261001150000` は 0 行。同名の別 version はいずれもなし。
+- 対象の2関数: 同名の関数はどの schema にも 0 件。migration の前提はすべてそろっている（テーブル、helper、`auth.uid()`、列数 10／3／3、API ロール）。
+- 所有者:
+  - `x_legacy_post_account` の所有者は `postgres`（superuser ではない）で、作成ロールと同一。helper の ACL は所有者のみ。
+  - ロール継承はすべて false: anon→authenticated／service_role／owner、authenticated→service_role／owner、service_role→authenticated／owner。
+  - postgres の public の default function ACL は所有者のみ（`{postgres=X/postgres}`）。
+  - 以上から、migration の事前確認・事後確認とも通る見込み。
+- social_accounts:
+  - トリガーは想定どおり2つ（refresh reset、deletion guard）。authenticated の直接書き込み（UPDATE／INSERT／DELETE）は false。
+  - 形ごとの件数: 非Vault・authorization_pending・OFF 1、非Vault・verified・ON 1（かぶモリ）、Vault・verified・OFF 1、Vault・verified・ON 1（AI Lab）。
+  - **F1 の影響: Vault 連携・ON は1件で、構造チェックを通過する**（verified_at 欠落 0、エラー記録 0、refresh ブロック 0、refresh 中 0）。→ 適用後も AI Lab は止まらない見込み。
+- 投稿作業（Vault 連携ブランド、2ブランド）:
+  - running 0、1時間以上前から running 0、期限切れ pending 0、今後24時間の pending 10。
+  - **次の予定: 2026-10-06 07:41 JST（AI Lab）**。AI Lab の running／期限切れ pending は 0。
+- Cron: `dispatch-scheduled-posts`（毎分、active）が x-test-post を呼ぶ。
+- PostgREST: `pgrst_ddl_watch`・`pgrst_drop_watch` が有効 → DDL 後に schema cache が自動で再読込される。
+- AI Lab: claims テーブルあり、関数5つ（DB 完了と一致）。
+- Edge:
+  - `x-test-post` は ACTIVE v134、verify_jwt=false、updated_at 2026-10-01 14:19 JST（v131 の deploy 時刻。version だけ上がっているのは secret 更新によるもので、コードは不変）。
+  - `social-mobile-publish-setting` は未 deploy。関数は全20。
+- **本番 x-test-post の中身**:
+  - 46 ファイルが PR #66 merge（`9177dbcc`、v131 期）と完全一致。PR76 のガードなし、PR82 の runtime なし（旧版、ガードなし）。
+  - 型だけで import される `_shared/x_v2_claim_credentials.ts` は、server 側のバンドルで消える。これを照合スクリプトで「想定どおり不在」と扱うよう修正した（AI Lab の Stage B 誤検出と同種の偽陽性を防ぐため）。修正後の `compare_deployed.py` は `6dad40cc…`、manifest のハッシュは不変。
+- 判断: S0 に**問題なし**。PR82 の扱いは案 A（AI Lab の DB は完了済み。1回の x-test-post deploy で PR76 のガードと PR82 の runtime を同時に有効化する）。PR81 は同梱しない（どちらの deploy graph にも含まれない）。
+- 固定パッケージは最新 main `cf4498af` でも不変（PR87 の merge は x-test-post／_shared／publish-setting／migration に触れていない）。
+- 本番の mutex: G2（PR87 の deploy ゲート）と G5（共通アカウントの migration）が進行中。S1 の直前に、両者が本番変更を行っていないことを確認する。
+- 次: ユーザーの明示的な本番承認を待つ（S1〜S5、時間帯は 07:41 JST より前に完了させる）。
