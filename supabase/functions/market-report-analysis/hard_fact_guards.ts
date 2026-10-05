@@ -30,6 +30,11 @@ const GROUP_ALIASES: Array<{ aliases: string[]; keys: string[] }> = [
   { aliases: ["米国株式市場", "米国市場", "米国株", "米株", "主要3指数"], keys: ["dow", "sp500", "nasdaq_composite"] },
   { aliases: ["東京株式市場", "東京市場", "日本市場", "日本株"], keys: ["nikkei225", "topix_proxy_1306"] },
 ];
+/** Every name of a metric or a whole market, longest first (for editorial checks that set the names aside). */
+export const MARKET_NAMES: readonly string[] = [
+  ...Object.values(METRIC_ALIASES).flat(),
+  ...GROUP_ALIASES.flatMap((group) => group.aliases),
+].sort((a, b) => b.length - a.length);
 /** 「東京は上昇」 means the Tokyo market; 「東京エレクトロンは下落」 is a company. Only the bare word counts. */
 const TOKYO_ALONE = /(?<![一-龠ァ-ヶA-Za-z])東京(?=[はもがで、])/gu;
 /** A longer name that only looks like an alias: 日経平均先物 is another instrument, 欧米株 is not US stocks. */

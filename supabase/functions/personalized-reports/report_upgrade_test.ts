@@ -186,6 +186,18 @@ test("morning market detail labels Japanese closes as the previous session and h
   assert.equal(d.report_type, "morning");
 });
 
+test("market detail carries the day's three headlines X posts (v2), and none for a v1 packet", () => {
+  assert.deepEqual(detail("close").points_ja, [], "v1 points were metric lines: the home card keeps its own fallback");
+  const points = ["主要指数がそろって上昇、主因は絞れず", "G7が原油の協調放出で合意", "次は米国株と為替の反応を確認"];
+  const v2: MarketReportPacket = {
+    ...REPORT,
+    presentation_version: "market_presentation.v2",
+    x_post: { ...REPORT.x_post, points_ja: points.map((point) => ` ${point} `), context_ja: "背景", news_ja: "", watch_ja: "次" },
+  };
+  const d = buildAppMarketDetail({ reportType: "close", tradingDate: DAY, reportPacketId: "c2", report: v2, metrics: METRICS });
+  assert.deepEqual(d.points_ja, points);
+});
+
 test("close market detail carries the shared morning expectation for the morning→close comparison", () => {
   assert.deepEqual(detail("close").morning_reference, {
     headline_ja: "米国株高を受けた寄り付きに注目", direction: "up",

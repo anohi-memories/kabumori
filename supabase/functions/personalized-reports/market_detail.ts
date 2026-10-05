@@ -7,7 +7,7 @@
 // the identical market section and it can never contradict the shared analysis.
 // X-side code (_shared/market_report_packet.ts, x-test-post) is read, never changed.
 
-import type { MarketReportPacket, ReportType } from "../_shared/market_report_packet.ts";
+import { isPresentationV2, type MarketReportPacket, type ReportType } from "../_shared/market_report_packet.ts";
 import { type AppMarketStory, buildAppMarketStory } from "../_shared/market_report_story.ts";
 
 export type MetricFreshness = "fresh" | "stale" | "unavailable";
@@ -41,6 +41,9 @@ export type AppMarketDetail = {
   direction: MarketReportPacket["market_direction"];
   headline_ja: string;
   summary_ja: string;
+  // The three headlines of the day, the same ones X posts under 📌 (presentation v2 only; empty for v1,
+  // whose points were metric lines). Additive: the home card prefers them over today_claims.
+  points_ja: string[];
   metric_groups: MarketMetricGroup[];
   overnight_claims: MarketClaimLine[];
   today_claims: MarketClaimLine[];
@@ -190,6 +193,7 @@ export function buildAppMarketDetail(input: {
     direction: report.market_direction,
     headline_ja: report.headline_ja,
     summary_ja: report.market_summary_ja,
+    points_ja: isPresentationV2(report) ? report.x_post.points_ja.map((point) => point.trim()).filter(Boolean) : [],
     metric_groups: metricGroups(input.metrics, input.reportType, input.tradingDate),
     overnight_claims: report.claims.filter((claim) => claim.scope === "overnight").map(claimLine),
     today_claims: report.claims.filter((claim) => claim.scope === "today").map(claimLine),

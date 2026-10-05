@@ -462,7 +462,7 @@ test("X and the app read one packet: same hash, and no number that is not in the
     for (const token of text.normalize("NFKC").match(/\d+(?:,\d{3})*\.\d+/g) ?? []) assert.ok(allowed.has(token), `number not from the shared input: ${token}`);
   }
   // The story's metric lines come from packet.major_moves, the same values X cites.
-  assert.ok(story.includes("日経平均 66,753.72（前日比+1.94%）") && post.includes("日経平均は66,753.72（前日比+1.94%）"));
+  assert.ok(story.includes("日経平均 66,753.72（前日比+1.94%）") && post.includes("9月30日の日経平均は66,753.72（前日比+1.94%）"));
 });
 
 test("the shared packet and story hold no user or portfolio data", () => {
