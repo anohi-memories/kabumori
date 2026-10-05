@@ -1,3 +1,31 @@
+## K4 — PR #76 fresh-main integration PASS -> H2 final security rereview
+
+- verdict: **PASS to independent security rereview; merge/apply/deploy HOLD**.
+- old corrective head: `fe1e846e59c69b591d29c6d21fc23c7b702d19cd`.
+- fresh main merged by G4: `d345f67402a782a303ce46c640f685271d76b681`.
+- new exact PR #76 head: `7f75c07a8c997b6a585e9c86dca01186eeea671f`.
+- normal merge commit only; no rebase/force-push.
+- exactly one conflict occurred as predicted: `supabase/tests/migration_source_invariants_test.ts`.
+- resolution preserved all fresh-main RESERVED entries and added only `20261003090000_social_mobile_publish_permission_boundary`.
+- migration version collision check: none against main/open PRs; PR81 uses 20261003120000 and PR82 uses 20261004090000.
+- no functional publish-toggle/auth/RPC/UI code changed during freshness integration.
+- reported post-merge verification:
+  - migration invariants 10/10;
+  - publish-setting + migration + Vault focused 68/68;
+  - relevant runtime 925/925 (--no-check);
+  - social-mobile 145/145 + domain 22/22;
+  - typecheck/lint PASS;
+  - changed Deno check/lint PASS;
+  - disposable DB APPLY/BEHAVIOR/RACE/E2E/CLEANUP PASS;
+  - mutation suite 30/30 detected;
+  - diff/secret scan clean.
+- fresh GitHub state at K4: PR open/unmerged/mergeable=true; Netlify/Vercel success; current main 8 commits ahead of fresh base with **0 overlap** across PR files.
+- production read/write, migration apply, deploy, Auth/Vault/Cron mutation, real X = 0.
+- H1 is occupied by PR #82 final review, so free H2 is assigned `x-social-mobile-pr76-transactional-publish-toggle-rereview-20261005`.
+- H2 review must independently validate R1-R5, lock/deadlock behavior, SECURITY DEFINER grants, actual pre-send coverage, PostgREST/auth.uid semantics, Kabumori-style account boundary and fail-closed rollout ordering.
+- recommended Codex model: **Sol（極高）**.
+- no merge or production authorization is implied by K4.
+
 ## PR #82 residual corrective complete -> H1 final boundary rereview
 
 - direct Claude corrective updated PR #82 to exact head `51457826ea6c29d9c94ac0066786df8927fa1274`, open/unmerged/mergeable.
