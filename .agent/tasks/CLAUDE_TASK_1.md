@@ -3,10 +3,10 @@
 - task_id: kabumori-detail-navigation-topic-level-switch-20261006
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: user
+- status: ready
+- next_owner: claude
 - priority: high
-- recommended_model: Sonnet5（高）
+- recommended_model: Sonnet5（中）
 - purpose: かぶモリの詳細画面から迷わず移動できるよう、トピック詳細で「同じ日の初級/中級/上級」を簡単に切替可能にし、トピック詳細と重要ニュース詳細の双方に明示的なHome/一覧導線を追加する。
 
 ## User requirement — canonical
@@ -1037,7 +1037,47 @@ User reviews the branch live on the iPhone (server provided); K1 reviews PR #84 
 
 Status: `review_required` / next_owner `user`.
 
-### K1 — CODE PASS / VISUAL HOLD
+### User visual correction — unify Home action placement
+
+User visual review found one consistency issue before merge.
+
+### Required correction
+Unify the explicit navigation pattern across topic detail and important-news detail:
+
+- **left = list / previous destination**
+- **right = Home**
+
+Therefore topic detail must change from:
+- left: `‹ ホーム`
+- right: `過去のトピック ›`
+
+to:
+- left: **`‹ 過去のトピック`**
+- right: **`ホーム`**
+
+Important-news detail already matches the desired convention:
+- left: `‹ ニュース一覧`
+- right: `ホーム`
+
+Do not redesign the selector or Hero. Do not change navigation semantics beyond the label/action placement.
+
+### Verify
+- 375pt and 402pt: no clipping or awkward spacing.
+- topic left action directly opens `/topics`.
+- topic right action directly opens Home.
+- news header remains unchanged.
+- no router.back/canGoBack dependency.
+- rerun focused navigation tests and full app suite if practical.
+- update PR #90 only; do not open a new PR.
+- no EAS/backend/production changes.
+
+Append a short correction report and return to `review_required / next_owner chatgpt`.
+
+Recommended model: **Sonnet5（中）**.
+
+---
+
+## K1 — CODE PASS / VISUAL HOLD
 - verdict: **HOLD pending real-device visual acceptance**.
 - PR #84 exact reviewed head: `c9c173c153cbfd11229c9281b892d732728c3cd3`.
 - fresh main at K1: `45c964701cc6117f42eb75616c6640448c8f7bac`.
