@@ -94,14 +94,15 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: done
-- task_id: common-account-pr70-guard-boundary-corrective-20261002
+- status: ready
+- task_id: common-account-v1-phase1-production-migration-gate-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Final K5 PASS to rereview。PR #70 exact head 47a2ed6a1635177ba82004eace4bddb42d9d53e3。Phase 1からenforcing guardを外し、durable readiness/invalidation foundationへ限定。production mutation 0、merge/apply/deploy HOLD、H1 rereview assigned。
+- allocation: Common-account Phase 1 production migration gate. Fresh full production read-only preflight and exact single-file apply/history mechanism first, then mandatory STOP for explicit mutation approval. After approval only the accepted 20261001150000 migration may be applied, followed by exhaustive schema/RLS/ACL/function/history read-back. No backfill, deletion activation, Auth/Storage/OAuth/Vault mutation, Edge deploy, Cron or real X. Production mutation must not overlap G4/G3 or any other slot.
+- recommended_model: Opus5.5（極高）
 
 ## Deferred
 
