@@ -193,7 +193,7 @@ test('H1 REQUIRED: actual Vault wrapper known 401 is not permanently ambiguous',
   const auth = await VaultAccountXAuth.load({ scheduledPostId: sid(1), socialAccountId: 'fixture', brandId: 'ai_salaryman_lab' }, {
     read: async () => ({ accessToken: 'fixture-only', accessExpiresAt: null }),
     recordAccessUnauthorized: async () => 'RECORDED',
-  }, { resolveClient: async () => { throw new Error('should not refresh'); }, refreshEnabled: false });
+  }, { resolveClient: () => { throw new Error('should not refresh'); }, refreshEnabled: false });
   await assert.rejects(() => dispatch(1, [diary], { publishText: async () => {
     return sendAiLabXPost({ send: request => auth.send(request), request: async () => ({ status: 401, body: {} }) });
   } }), /X_ACCESS_TOKEN_UNAUTHORIZED/);
