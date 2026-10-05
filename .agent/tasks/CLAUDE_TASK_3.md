@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr81-hardening-residual-corrective-20261005
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: codex
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: bounded corrective implementation / migration drift / function ACL / CAS finite-domain / rollout plan
