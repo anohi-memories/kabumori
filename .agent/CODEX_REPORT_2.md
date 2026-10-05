@@ -1,3 +1,69 @@
+## H2 — PR #76 final focused security rereview — 2026-10-06 JST
+
+- task_id: x-social-mobile-pr76-final-security-rereview-20261005
+- verdict: **PASS — F1/F2/F3 closed on the exact reviewed source.** No new blocking finding. Source-only final independent review; this is not a merge or production-rollout approval.
+- status: review_required
+- next_owner: chatgpt
+- reviewed_exact_head: `5448e545f4a88bbf6597a981c0bcbe4c01043c30`; previous reviewed head `7f75c07a8c997b6a585e9c86dca01186eeea671f`.
+- PR: https://github.com/anohi-memories/kabumori/pull/76 ; OPEN / unmerged / mergeable=true and exact head unchanged at final API read-back.
+- fresh_main: startup `f2f7a034bd59a8e20641c0ed14606ca3d55e75c5`; pre-publication fresh fetch `b836823c0cd27d41a08f9d2c40c65966b23cfda4`. Merge-base `ef2f2018fcdaced2f3083ee8ba1b681abd04ee9d`. PR scope 26 files, main/PR file overlap 0. New main change during this review was another slot's TASK only; H2 TASK/task_id/head remained unchanged.
+- isolation: fresh independent detached checkout `/private/tmp/h2-pr76-final-20261005.ySeJcp/review`, cloned from the new-Mac clean base. Protected formal checkout, old worktrees, G4/H1 and their uncommitted changes were not operated on. The reviewed checkout remained git-clean. Local disposable PostgreSQL 17.11, Unix socket only, non-superuser migration owner; test databases removed, own server stopped.
+
+### F1 — pre-send parity: CLOSED
+
+- Read actual migration + VaultAccountXAuth.send / PostgREST adapter, not only source-string tests. Final permission SELECT explicitly refuses missing verified_at with X_ACCOUNT_NOT_VERIFIED and nonblank btrim-normalized last_connection_error_code with X_ACCOUNT_CONNECTION_DEGRADED. Space-only code remains eligible; uncertain/reauth_required preserve their specific refusal; refreshing is not a pre-send permission refusal.
+- Disposable behavior proof verifies all 18 ON-readiness cases against runtime refusal, plus blank-code eligibility. Actual adapter + real SQL over a local HTTP shim reproduces the two former F1 states after credentials/context were loaded: fake-X callbacks 0; OFF remains available; ON refuses with the matching reason; recovered eligible account sends exactly once.
+- Real refresh SQL + actual adapter fake-X timeline: read -> permission -> X401 -> begin -> commit -> read -> fresh permission -> X201. OFF committed after refresh/read and before retry gives only the initial rejected X401; retry callback 0.
+- Fixed refusal codes / malformed or unavailable backend responses fail closed; no raw backend/token material in responses or logs. Relevant adapter tests include zero callback on unreachable/unknown permission, proactive/retry recheck, refresh limits and redaction.
+
+### F2 — exact/effective SECURITY DEFINER ACL: CLOSED
+
+- Inspected both exact signatures only. Creator must own x_legacy_post_account and must be non-superuser; pre-existing exact target functions are refused. Both functions use SECURITY DEFINER and fixed empty search_path.
+- Creation-default grants to any non-owner grantee (including PUBLIC and grant option) are removed only from the two new functions. Postcondition proves exact direct ACL without grant option, effective app-role privileges, owner and definition. No production ALTER DEFAULT PRIVILEGES, role-membership mutation, or unrelated table grant is added.
+- Independently reran adverse disposable ACL harness: clean graph; schema/database-wide unexpected default EXECUTE (including grant option); authenticated/anon inheriting that unexpected default grantee; direct/grantable injection; cross-app and owner inheritance; wrong creator; superuser creator/helper owner; refusal and reapply atomicity. Unexpected-default/inherited case from previous H2 now leaves extra role with no target EXECUTE and app roles with the intended matrix.
+- Effective matrix: anon neither; authenticated switch only; service_role assertion only. Other roles may inherit the explicitly intended role/owner, or be superusers, as documented; this is not a promise to restrict superusers. Invalid app-role inheritance refuses the entire transaction.
+- Rejected apply preserves pre-existing function ACL/default ACL/role-membership fingerprints and leaves neither new function. Default-grant removal, direct/grantable ACL, effective-role, creator and superuser mutation probes all fail for the expected safety reason.
+
+### F3 — runtime-first rollout: CLOSED as a bounded plan
+
+- Documented order is guarded x-test-post -> exact deployed-source read-back -> at least 15-minute drain (operator must verify current runtime maximum) plus older running-post count 0 -> single permission migration -> definition/direct/effective ACL read-back -> JWT-verified publish-setting Edge -> app exposure.
+- Actual partial-state proof uses prerequisite migrations without the permission migration: cached eligible ON context + VaultAccountXAuth still produces X_PUBLISH_PERMISSION_UNAVAILABLE, fake-X callbacks 0, token endpoint requests 0; toggle Edge returns bounded 503 with row unchanged.
+- Actual post-migration proof: eligible ON sends once; OFF / brand-disabled stops before fake X. Migration refusal is transaction-atomic and leaves guarded/missing-RPC state safely blocking.
+- State-machine forward and every abort path pass. Abort after authority is created revokes authenticated toggle EXECUTE before restoring an old sender; hiding/removing Edge alone is not treated as sufficient. Relevant mutations detect migration-first, missing drain, old-runtime-first abort, exposure before read-back and missing abort path.
+- No actual platform/runtime drain or production preflight was performed. Production rollout remains a separately authorized operator gate, with byte read-back, real maximum-invocation confirmation, owner/ACL/schema preflight and all older invocations drained; missing evidence must HOLD, not be assumed.
+
+### Prior R1–R5 bounded regression and availability
+
+- PASS: current auth.uid transactional authority, table -> brand -> membership -> account lock order, bounded waits, demotion/removal/account-move/deletion races, CAS one-winner/stale semantics, tenant-safe answers, fail-safe OFF, no service-role user toggle, and no Auth/OAuth/Vault revocation by OFF. Existing refreshed-credential/in-flight limitations remain explicitly stated.
+- App focused tests and source inspection confirm confirmation/action pinned to account + expected state + signed-in user, checked against latest committed render; preview/cross-account/stale/user-switch refuse, one in-flight request, bounded Japanese error copy.
+- Availability tradeoff ACCEPTED, not a blocker: recorded nonblank connection errors (including a refresh 429) stop later sends/automatic refresh until legitimate reconnection clears the error. Matches chosen ON-readiness fail-closed contract; reconnect recovery path exists and fake-X recovery was proven. OFF racing refresh can still leave uncertainty requiring reconnect, already documented. Do not silently relax this safety contract.
+- Scope remains Vault-backed exact-account path; legacy env/oauth_token_store and important-news-monitor do not gain the same mid-dispatch guarantee. Unwired v2 and other open-PR paths are not claimed protected. Existing accepted scope limitation is not reopened by this corrective review.
+
+### Independent verification
+
+- PostgreSQL runner, PUB_E2E=1: **ROLLOUT_E2E (2) / APPLY + reapply refusal / BEHAVIOR / RACE / E2E (9) / CLEANUP PASS**. Actual Edge handler and VaultAccountXAuth, real SQL; fake Auth/Data API shim and fake X, not hosted Supabase.
+- Adverse ACL runner: **PUBLISH_PERMISSION_ACL_PASS**, 12 role situations plus reapply.
+- Mutation runner: **45/45 DETECTED** at named expected checks (SQL 34, ACL 6, rollout plan 5).
+- Type-checked Deno: publish-setting logic 15 + http 14 + migration 13; vault_account_auth 31; rollout state machine 5 = **78/78 PASS**. Migration invariants **10/10 PASS**; combined focused total **88/88**.
+- Exact PR's AI Lab real-wrapper/stub integration: **39/39 PASS**, type checking enabled, no real provider calls.
+- App focused publish-setting tests **32/32 PASS**; app TypeScript `tsc --noEmit` PASS; `expo lint` PASS.
+- bash syntax for three runners PASS; `git diff --check origin/main...HEAD` PASS; added-line private-key/OpenAI/GitHub-token/JWT-literal scans 0 matches.
+- Setup-only first attempts: sandbox shared-memory denial required authorized local-cluster initialization; missing app TypeScript dependency resolved by lockfile npm ci --ignore-scripts in own checkout; wrong test filename and omitted allow-run=node corrected in commands only. Final relevant runs all pass. No source workaround or test implementation change.
+- Unrelated broad suites were not repeated. G4's previously reported 984-function/148-app counts are not claimed as newly rerun H2 evidence.
+
+### Changes / delivery / safety / recommendation
+
+- source changes: **0**. changed_files for report delivery only: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md`. Prior TASK/Report histories preserved; no ACTIVE_TASK/CURRENT_STATE/other-slot control edits.
+- implementation commits reviewed: G4 corrective `a1a986ae`, fresh-main merge `ce1328c1`, test-stub correction `5448e545`. H2 made no implementation commit.
+- report publication: GitHub main contents update for these two control files only, blob-SHA conflict checks and final read-back required; exact resulting delivery SHAs recorded in H2 completion/final response. No PR branch push or merge.
+- production reads **0**; production DB/history/schema/RPC/RLS/Auth/Vault/OAuth/Storage/Cron/settings changes **0**; deploy **0**; real X/OpenAI/Push/API invoke **0**; secret exposure **0**. Local test-only fixture/membership writes are disposable, not production.
+- remaining risks: production catalog/role-owner compatibility and runtime drain still require live operator preflight; hosted GoTrue/PostgREST behavior is simulated locally here; in-flight X cannot be recalled after an authorized check; reconnect-required availability consequence; legacy-path scope limitation.
+- merge recommendation: **merge PR #76 at exact reviewed head after the usual final no-race check. This is the final routine independent review; no additional routine review is recommended after PASS unless concrete new source/blocker changes arise.**
+- production rollout recommendation: **do not apply/deploy from this review**. After C2/merge and explicit production authorization, follow S0–S6 exactly, fail closed on every unmet preflight/read-back/drain condition, and never restore old runtime while new toggle authority remains usable.
+- next_recommendation: **C2** to accept final PASS and decide merge / separately scoped production rollout. Recommended model: Sol（高） for the security/production decision. STOP; no further action.
+
+---
+
 ## H2 — PR #81 residual hardening final rereview — 2026-10-05 JST
 
 - task_id: x-social-mobile-pr81-residual-hardening-final-rereview-20261005
