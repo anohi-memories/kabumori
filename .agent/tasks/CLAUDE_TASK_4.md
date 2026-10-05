@@ -1,5 +1,146 @@
 # Claude Task 4 — CURRENT TASK
 
+- task_id: x-social-mobile-pr76-fresh-main-integration-20261005
+- owner: claude
+- slot: claude-4
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- type: integration-only / fresh-main merge / conflict resolution / regression verification
+- continues_from: x-social-mobile-publish-toggle-transactional-corrective-20261003
+- target_pr: 76
+- current_head: fe1e846e59c69b591d29c6d21fc23c7b702d19cd
+- production_mutation_allowed: false
+
+## K4 decision / purpose
+
+The transactional publish-toggle corrective itself is accepted as a **review candidate**, but PR #76 is currently not mergeable because main advanced substantially after the branch was created.
+
+Fresh K4 facts:
+- PR #76 exact head: `fe1e846e59c69b591d29c6d21fc23c7b702d19cd`
+- PR state: open / unmerged / mergeable=false
+- current main is 133 commits ahead of the PR base
+- overlap across PR #76 files: exactly one file
+  - `supabase/tests/migration_source_invariants_test.ts`
+- the conflict is logically additive:
+  - main has the current RESERVED migration map
+  - PR #76 adds:
+    `"20261003090000": "social_mobile_publish_permission_boundary"`
+- Netlify and Vercel on the current head are green.
+- Do NOT change the transactional/auth/publish implementation unless the fresh merge proves a real compatibility issue.
+
+This task exists only to freshen the branch safely before independent Codex security rereview.
+
+## Mandatory startup
+
+1. Read PROJECT_RULES / CLAUDE.md / ORCHESTRATION / CURRENT_STATE / this TASK and the completed corrective Report below.
+2. Continue in the existing isolated G4 worktree/checkout only. Do not use or modify G3/H1/H2 worktrees.
+3. Fetch fresh `origin/main`.
+4. Confirm PR #76 still points at `fe1e846e59c69b591d29c6d21fc23c7b702d19cd` before integration. If head moved, STOP and report.
+5. Confirm worktree clean except explicitly owned files.
+6. Do not rebase/force-push. Preserve review history with a normal merge commit from fresh `origin/main`.
+7. Do not touch PR #81 content-settings files or PR #82 AI Lab claim files.
+
+## Integration
+
+Merge fresh `origin/main` into the PR #76 branch.
+
+Expected conflict:
+`supabase/tests/migration_source_invariants_test.ts`
+
+Resolve by preserving **all current main content** and adding/preserving the PR #76 reservation:
+
+`"20261003090000": "social_mobile_publish_permission_boundary"`
+
+Do not remove or rewrite any newer RESERVED entries from main.
+
+If any additional file conflicts appear, STOP before resolving and report exact paths. This TASK is not authority for unrelated conflict resolution.
+
+After merge, verify migration versions are unique and there is no collision with:
+- PR #81: `20261003120000_social_mobile_content_settings_hardening.sql`
+- latest PR #82 candidate: `20261004090000_ai_lab_topic_claims.sql`
+- current main migrations.
+
+## No functional redesign
+
+Do not change:
+- `set_social_account_publish_enabled`
+- `assert_x_publish_permission_for_legacy_post`
+- lock order
+- RLS/ACL/security-definer contract
+- publish-setting Edge behavior
+- VaultAccountXAuth pre-send guard
+- UI confirmation pinning
+unless the fresh-main integration causes a concrete test/compiler incompatibility.
+
+If a concrete incompatibility appears, STOP and report instead of expanding this bounded task.
+
+## Required regression verification
+
+Run on the fresh-merged branch:
+
+1. migration source invariants
+2. publish-setting Edge focused tests
+3. publish-setting migration contract tests
+4. `vault_account_auth_test.ts`
+5. relevant x-test-post + shared brand tests
+6. social-mobile app tests
+7. app typecheck
+8. app lint
+9. changed runtime Deno check/lint
+10. `social_mobile_publish_permission_run.sh` disposable DB proof if it remains runnable on the fresh tree
+11. `git diff --check`
+12. secret/scope scan.
+
+Because main advanced 133 commits, do not rely only on previous test results.
+
+If full `x-test-post/index.ts` still has known baseline errors, compare against fresh main and prove no new error from PR #76.
+
+## Safety
+
+Forbidden:
+- production migration apply
+- db push
+- Edge deploy
+- publish toggle in production
+- production row mutation
+- Auth/Vault/Cron mutation
+- real X operation
+- PR merge.
+
+No other slot files/worktrees/dev servers.
+
+## Completion / K4
+
+Report:
+- task_id/result
+- old head
+- fresh main SHA merged
+- conflict paths
+- exact conflict resolution
+- migration-version collision result
+- tests
+- new exact PR head
+- push/read-back
+- production mutation=0
+- real X operations=0
+- any compatibility issue
+- next recommendation.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K4.
+
+After K4, independent H1 rereview is mandatory.
+
+Recommended Codex rereview: **Sol（極高）**.
+
+---
+
+# Claude Task 4 — CURRENT TASK
+
 - task_id: x-social-mobile-publish-toggle-transactional-corrective-20261003
 - owner: claude
 - slot: claude-4
