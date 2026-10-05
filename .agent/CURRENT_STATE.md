@@ -1,3 +1,14 @@
+## K1 — PR #90 detail navigation CODE PASS / visual acceptance HOLD
+
+- verdict: CODE PASS / user visual approval pending.
+- exact head: `0dd2b5af7e4736a67b11645d08e61f3114b8619a`.
+- fresh-main overlap: 0; PR open/mergeable/clean; CI success.
+- 322/322 app tests; focused 48; tsc clean; Expo config/web export/diff PASS.
+- same-date 初級/中級/上級 switching, no Home preference write, explicit topic Home/past routes, explicit news list/Home routes accepted.
+- 402pt/375pt Simulator screenshots reviewed; no clipping/double header regression.
+- Codex review not required.
+- merge HOLD only for user screenshot approval.
+
 ## Final C1 — PR #87 editorial three-points PASS / merged / G2 deploy gate next
 
 - H1 verdict: **PASS** on exact PR #87 head `3561f1eaac41df0f23dcce8fdaace0decc654a0a`.
