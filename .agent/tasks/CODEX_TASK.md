@@ -3,8 +3,8 @@
 - task_id: ai-lab-pr82-production-readonly-preflight-20261005
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - type: production read-only preflight / migration-ledger / catalog-ACL / rollout-order certification
