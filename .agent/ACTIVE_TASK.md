@@ -47,13 +47,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
+- next_owner: user
+- status: review_required
 - task_id: kabumori-topic-detail-visual-polish-20261005
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: ユーザーがG1へ直接渡す「かぶモリ学習ノート / PERって何？」の見本画像を正本ベースに、topic detailのUIだけを最終仕上げする。上部をレベル別Hero化、通常セクションは番号付きで軽く、具体例と覚えておくポイントだけ特別カード化。50トピック本文・fetch/id安全性・Homeは維持。既存3段階topic背景の安全な再利用を優先。新Macのclean base /Users/yuya/Developer/kabumori-fresh から独立G1 worktree必須。EAS 0 / backend mutation 0。
+- allocation: K1 code-side PASS / visual HOLD. PR #84 exact head c9c173c153cbfd11229c9281b892d732728c3cd3 is open/mergeable/clean with 0 overlap against fresh main in the four topic-detail files. 294/294 tests, Expo config/export PASS, EAS 0, backend mutation 0. Final merge waits for real-iPhone visual confirmation because the new Mac has no iOS Simulator runtime; verify Hero wrapping/art fade/375pt density and emoji rendering. Codex review不要。
 - recommended_model: Sonnet5（高）
 
 ## Claude G2
