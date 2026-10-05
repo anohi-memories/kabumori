@@ -48,13 +48,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
+- next_owner: user
+- status: review_required
 - task_id: kabumori-detail-navigation-topic-level-switch-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: トピック詳細で同じ日の初級/中級/上級を簡単に切替。Homeの保存済みレベル設定は変更しない。トピック詳細に「ホーム」「過去のトピック」明示導線、重要ニュース詳細に「ニュース一覧」「ホーム」明示導線を追加。履歴依存禁止、375/402 Simulator確認、EAS 0、backend mutation 0。
+- allocation: K1 CODE PASS / visual acceptance待ち。PR #90 exact head 0dd2b5af7e4736a67b11645d08e61f3114b8619a、open/mergeable/clean、fresh-main overlap 0、322/322 tests、402/375 Simulator確認済み。Codex不要。ユーザー承認後merge。
 - recommended_model: Sonnet5（高）
 
 ## Claude G2
