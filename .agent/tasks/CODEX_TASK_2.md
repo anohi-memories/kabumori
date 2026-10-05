@@ -1,5 +1,177 @@
 # Codex Task 2 — CURRENT TASK
 
+- task_id: x-social-mobile-pr76-final-security-rereview-20261005
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- type: final focused security rereview / publish authorization / SECURITY DEFINER ACL / rollout safety
+- target_pr: 76
+- target_head: 5448e545f4a88bbf6597a981c0bcbe4c01043c30
+- previous_reviewed_head: 7f75c07a8c997b6a585e9c86dca01186eeea671f
+- production_mutation_allowed: false
+
+## Purpose
+
+This is the **single final independent review** for PR #76 after G4 corrected H2 findings F1/F2/F3.
+
+Do not broaden scope and do not implement fixes in H2.
+If a genuine blocker remains, return CHANGES REQUIRED to ChatGPT/G4.
+If the exact corrected contract is satisfied, return PASS and recommend merge.
+
+Review exact head:
+`5448e545f4a88bbf6597a981c0bcbe4c01043c30`
+
+Fresh K4 facts:
+- PR OPEN / unmerged / mergeable=true
+- Netlify GREEN
+- Vercel GREEN
+- current fresh main is 29 commits ahead of PR base
+- overlap between PR changed files and fresh-main changed files = 0
+- production mutation/read/deploy/real X by G4 = 0
+
+## Focus A — F1 pre-send parity
+
+Independently verify:
+- missing `verified_at` is rejected before X;
+- nonblank `last_connection_error_code` is rejected before X;
+- whitespace-only error code remains allowed if that is the intended normalized contract;
+- normal eligible account still reaches exactly one fake-X callback;
+- 401 refresh/retry performs a fresh authorization check before retry;
+- OFF after refresh commit but before retry blocks the retry;
+- no regression to intended `refreshing` semantics;
+- fixed refusal codes only, no raw backend leakage.
+
+Use the actual VaultAccountXAuth path with fake X where practical.
+The prior bug reproduction must now fail closed.
+
+## Focus B — F2 exact/effective SECURITY DEFINER ACL
+
+For only:
+- `set_social_account_publish_enabled(text,boolean,boolean)`
+- `assert_x_publish_permission_for_legacy_post(uuid,text,text)`
+
+Verify:
+- creator/owner assumptions are explicit and fail closed;
+- unexpected default EXECUTE grants do not survive;
+- unexpected direct grants do not survive or are refused according to source contract;
+- PUBLIC/anon effective EXECUTE = none;
+- authenticated = toggle function only;
+- service_role = pre-send assertion only;
+- inherited memberships cannot widen the effective graph beyond the documented intended inheritance;
+- grant option is not leaked;
+- fixed empty search_path remains;
+- no global ALTER DEFAULT PRIVILEGES;
+- no role-membership mutation;
+- no unrelated table grant.
+
+Reproduce the previous H2 default-grantee/inherited-EXECUTE case against the corrected migration.
+
+## Focus C — F3 rollout fail-closed
+
+Independently verify the approved sequence makes every partial state fail closed:
+
+1. guarded x-test-post runtime first
+2. exact runtime read-back
+3. wait/drain older execution window as documented
+4. apply permission migration
+5. read back definitions/ACL/effective privileges
+6. only then deploy/expose publish-setting Edge/app
+
+Required:
+- guarded runtime + missing permission RPC => no X callback
+- old runtime + usable new toggle authority is not an allowed rollout state
+- migration refusal leaves guarded runtime safely blocking
+- after migration, ON allows fake X; OFF/brand-disabled block
+- rollback/abort paths never restore old runtime while toggle authority remains usable
+- no Cron/manual dispatch/backlog injection required.
+
+Do not execute production rollout.
+
+## Preserve prior closed R1–R5
+
+Do not re-open already accepted areas unless the new corrections regressed them:
+- transactional auth.uid authority;
+- membership/brand/account locking and CAS;
+- lock ordering/deadlock protections;
+- tenant-safe errors;
+- fail-safe OFF;
+- UI confirmation pinning;
+- fresh pre-send check before each X request;
+- no service-role user toggle mutation;
+- no OAuth/Vault revoke on OFF.
+
+A bounded regression sample is enough; do not repeat the entire historical review matrix unless needed by a finding.
+
+## Product availability judgment
+
+G4 notes that any nonblank recorded connection error, including some refresh failures such as a 429 path, can stop future sends until reconnection.
+
+Review whether this behavior is consistent with the chosen security contract:
+- if it is intentionally fail-closed and already matches toggle-ON readiness, treat as a documented availability tradeoff, not automatically a blocker;
+- only mark blocker if the implementation contradicts the stated product contract or creates an unsafe/stuck state with no legitimate recovery path.
+
+Do not expand this task into product redesign.
+
+## Verification
+
+Minimum:
+- focused migration/ACL disposable PostgreSQL proof;
+- focused publish permission behavior/E2E;
+- actual adapter fake-X callback-zero proof for F1;
+- rollout partial-state proof;
+- relevant mutation tests;
+- relevant Deno/app focused tests if changed behavior depends on them;
+- fresh diff/scope/secret check.
+
+No need to rerun unrelated broad suites that G4 already passed unless a finding requires it.
+
+## Safety
+
+Forbidden:
+- source implementation fixes;
+- PR merge;
+- production migration apply;
+- production DB/history write;
+- Edge deploy;
+- publish toggle in production;
+- real X;
+- Auth/Vault/OAuth/token/Cron mutation.
+
+## Completion / C2
+
+Append to `.agent/CODEX_REPORT_2.md`:
+- verdict PASS / CHANGES REQUIRED;
+- exact reviewed head;
+- F1/F2/F3 disposition;
+- R1–R5 regression result;
+- availability-tradeoff judgment;
+- focused tests;
+- production reads/mutations/deploy/X = 0;
+- remaining risks;
+- merge recommendation;
+- production rollout recommendation;
+- next recommendation.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C2.
+
+Review policy:
+- This is the final independent review for PR #76 unless this review finds a concrete blocker that requires source changes.
+- Do not recommend an additional routine review after PASS.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Previous H2 task history — preserved below
+
+# Previous H2 task — preserved history
+
 - task_id: x-social-mobile-pr81-residual-hardening-final-rereview-20261005
 - owner: codex
 - slot: codex-2
