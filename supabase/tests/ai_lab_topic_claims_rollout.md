@@ -33,11 +33,25 @@ Stage B compares, from a separate read-only session:
   `indisvalid`/`indisready`/`indislive`), relation (kind, persistence, RLS, FORCE RLS, policy count,
   trigger count, comment), table ACL (every non-owner grantee, plus column-ACL count), functions (exact
   signatures, SECURITY DEFINER, `search_path=""`, language, volatility, strictness, return type, body
-  hash), function ACL (every non-owner grantee);
+  hash), function ACL (every non-owner grantee, canonical form
+  `public.<name>(<argument types>) <grantee> <privilege> <t|f>`, sorted with `COLLATE "C"`, no parameter names);
+- every read-back transaction pins `search_path = pg_catalog, public` first, and every aggregated list has an
+  explicit ordering, so the server's or operator's `search_path` and the plan's row order cannot change a hash;
 - environment checks: table and five functions owned by the expected owner; no unexpected overload;
   no API role (`anon`, `authenticated`, `service_role`) a member of the owner; no effective table
   privilege for any API role (including PostgreSQL 17 `MAINTAIN`); no column privilege; EXECUTE only for
   `service_role`; the superseded `ai_lab_topic_event_usage` table absent.
+
+### 2026-10-05 Stage B false positive (fixed in the runner, not in the migration)
+
+The first production Stage B (after Stage A) matched six of seven sections and failed only `function_acl`
+(expected `28ba64ff…`, production `1720f5c8…`) while every semantic ACL check passed. Both hashes are the
+same five rows `<function>(<args>) service_role EXECUTE f` in different orders: the old SQL aggregated
+with `ORDER BY 1`, which inside an aggregate orders by the constant 1, i.e. not at all. The runner now
+builds the canonical, explicitly ordered form above (new pin `5635c459…`, equal to the hash of exactly
+those five grants); the other six pins are unchanged. Production stays `schema present / history missing`
+until the corrected runner's Stage B passes and `apply --resume-history` (Stage C only) is approved.
+Stage A is not re-run.
 
 ## Exit codes and what the operator does
 
@@ -170,6 +184,11 @@ privileges and the production ledger shape (`version` text PK, `statements` text
    completion, `--resume-history` misuse, altered migration bytes → STOP 10
 8. guards: every missing production switch refused before connecting; a fully switched target stops at
    the identity check
+9. the pinned `function_acl` equals the hash of the five canonical service_role EXECUTE grants; all seven
+   sections and `status` are identical under the session search_paths `"$user", public, extensions`,
+   `pg_catalog`, `public` and empty
+10. adverse function ACL changes (EXECUTE to anon / authenticated / an unrelated role, EXECUTE revoked from
+    service_role, grant option added, an overload) are each detected and block `apply`
 
 Test hooks used by the rehearsal (`AILAB_ROLLOUT_TEST_MIGRATION`, `AILAB_ROLLOUT_TEST_STAGE_A`,
 `AILAB_ROLLOUT_TEST_AFTER_STAGE_A_SQL`) are refused for any non-local target.

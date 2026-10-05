@@ -37,7 +37,7 @@ indexes=6c09f2bba2c432b20d1aa3d53bc81532b1e93c554d2e35abaaa286588f584df1
 relation=db2e11fbf44214b7547ff801c90d3539fb60f5923788a6566db6627737ac4c81
 table_acl=598c7a8f0e050d91f061f05609131f92897feb2cb64dc20e62183770ba43a54b
 functions=1f3acc739781ed1eb142efd14279bed79dc2d01e5846a8710e7e347e30ce58fa
-function_acl=28ba64ffe31f3b0457b6e0d338734de5b23bfaeb170d84c24c1d6f934d5bcdb9"
+function_acl=5635c459265e8c99d22384083db40e89a1ba87c1ee7f3db2378073c1ae8c9532"
 
 FUNCTIONS_SQL_LIST="'claim_ai_lab_topic','start_ai_lab_topic_provider','release_ai_lab_topic_claim','mark_ai_lab_topic_claim_ambiguous','settle_ai_lab_topic_claim_published'"
 SIGNATURES_SQL_LIST="'public.claim_ai_lab_topic(uuid,jsonb,integer)','public.start_ai_lab_topic_provider(uuid,uuid,text)','public.release_ai_lab_topic_claim(uuid,uuid,text,text)','public.mark_ai_lab_topic_claim_ambiguous(uuid,uuid,text,text)','public.settle_ai_lab_topic_claim_published(uuid,uuid,text,text,text)'"
@@ -88,6 +88,9 @@ psql_q() { psql -X -q -A -t -v ON_ERROR_STOP=1 -v owner="$AILAB_EXPECTED_OWNER" 
 descriptor_sql() {
   cat <<SQL
 begin transaction read only;
+-- Session-independent output: regprocedure/format_type render names relative to search_path, so pin it here
+-- (the operator's or server's search_path, e.g. the Supabase default with public and extensions, must not change any section).
+set local search_path = pg_catalog, public;
 with t as (select to_regclass('public.ai_lab_topic_claims') as oid),
 fns as (
   select p.oid from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -113,24 +116,28 @@ sections(name, body) as (
                                     md5(coalesce(obj_description(c.oid, 'pg_class'), '')))
                         from t join pg_class c on c.oid = t.oid)
   union all
-  select 'table_acl', (select coalesce((select string_agg(format('%s %s %s', case when a.grantee = 0 then 'PUBLIC' else pg_get_userbyid(a.grantee) end,
-                                                                  a.privilege_type, a.is_grantable), E'\n' order by 1)
-                                           from aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
-                                          where a.grantee <> c.relowner), 'none')
+  select 'table_acl', (select coalesce((select string_agg(line, E'\n' order by line collate "C")
+                                             from (select format('%s %s %s', case when a.grantee = 0 then 'PUBLIC' else pg_get_userbyid(a.grantee) end,
+                                                                 a.privilege_type, case when a.is_grantable then 't' else 'f' end) as line
+                                                     from aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
+                                                    where a.grantee <> c.relowner) acl), 'none')
                                 || E'\ncolumn_acls=' || (select count(*) from pg_attribute where attrelid = c.oid and attnum > 0 and attacl is not null)
                          from t join pg_class c on c.oid = t.oid)
   union all
   select 'functions', (select string_agg(format('%s secdef=%s config=%s lang=%s volatility=%s strict=%s returns=%s def=%s',
                                                 p.oid::regprocedure, p.prosecdef, p.proconfig, l.lanname, p.provolatile, p.proisstrict,
-                                                pg_get_function_result(p.oid), md5(pg_get_functiondef(p.oid))), E'\n' order by p.oid::regprocedure::text)
+                                                pg_get_function_result(p.oid), md5(pg_get_functiondef(p.oid))), E'\n' order by p.oid::regprocedure::text collate "C")
                          from fns f join pg_proc p on p.oid = f.oid join pg_language l on l.oid = p.prolang)
   union all
-  select 'function_acl', (select coalesce(string_agg(format('%s %s %s %s', p.oid::regprocedure,
-                                                            case when a.grantee = 0 then 'PUBLIC' else pg_get_userbyid(a.grantee) end,
-                                                            a.privilege_type, a.is_grantable), E'\n' order by 1), 'none')
-                            from fns f join pg_proc p on p.oid = f.oid,
-                                 lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
-                           where a.grantee <> p.proowner)
+  select 'function_acl', (select coalesce(string_agg(line, E'\n' order by line collate "C"), 'none')
+                            from (select format('%s.%s(%s) %s %s %s', n.nspname, p.proname,
+                                                (select coalesce(string_agg(format_type(u.t, null), ',' order by u.ord), '')
+                                                   from unnest(p.proargtypes::oid[]) with ordinality as u(t, ord)),
+                                                case when a.grantee = 0 then 'PUBLIC' else pg_get_userbyid(a.grantee) end,
+                                                a.privilege_type, case when a.is_grantable then 't' else 'f' end) as line
+                                    from fns f join pg_proc p on p.oid = f.oid join pg_namespace n on n.oid = p.pronamespace,
+                                         lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                                   where a.grantee <> p.proowner) acl)
 )
 select name || '=' || encode(sha256(convert_to(coalesce(body, '<absent>'), 'UTF8')), 'hex') from sections order by
   array_position(array['columns','constraints','indexes','relation','table_acl','functions','function_acl'], name);
@@ -142,6 +149,7 @@ SQL
 semantic_sql() {
   cat <<SQL
 begin transaction read only;
+set local search_path = pg_catalog, public;
 with api(role_name) as (select r from unnest(array['anon','authenticated','service_role']) r where exists (select 1 from pg_roles where rolname = r)),
 privs(p) as (select unnest(array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']
                            || case when current_setting('server_version_num')::int >= 170000 then array['MAINTAIN'] else array[]::text[] end)),
@@ -375,6 +383,7 @@ do \$\$ begin
   if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
   if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role nologin bypassrls; end if;
+  if not exists (select 1 from pg_roles where rolname = 'kb_ai_lab_unrelated') then create role kb_ai_lab_unrelated nologin; end if;
   if pg_has_role('service_role', '$owner', 'MEMBER') then execute 'revoke $owner from service_role'; end if;
 end \$\$;
 SQL
@@ -424,6 +433,47 @@ SQL
   # catalog sections of this fresh apply equal the pinned expectation (guards runner/migration drift)
   local live; live="$(descriptor_sql | psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$db" -f -)"
   expect "clean: live catalog sections equal the pinned expectation" "$live" "$EXPECTED_SECTIONS"
+
+  # 1a. the pinned function_acl is exactly the canonical text of the five reviewed grants (no names of parameters,
+  #     explicit schema, C order) -- the same five rows production reported on 2026-10-05.
+  local canonical_acl
+  canonical_acl="$(printf '%s\n%s\n%s\n%s\n%s' \
+    "public.claim_ai_lab_topic(uuid,jsonb,integer) service_role EXECUTE f" \
+    "public.mark_ai_lab_topic_claim_ambiguous(uuid,uuid,text,text) service_role EXECUTE f" \
+    "public.release_ai_lab_topic_claim(uuid,uuid,text,text) service_role EXECUTE f" \
+    "public.settle_ai_lab_topic_claim_published(uuid,uuid,text,text,text) service_role EXECUTE f" \
+    "public.start_ai_lab_topic_provider(uuid,uuid,text) service_role EXECUTE f" | shasum -a 256 | cut -d' ' -f1)"
+  expect "function_acl pin = canonical five service_role EXECUTE grants" "function_acl=$canonical_acl" "$(grep '^function_acl=' <<<"$EXPECTED_SECTIONS")"
+
+  # 1b. every section is independent of the session search_path (Supabase default, pg_catalog only, public only, empty)
+  local sp sections_sp
+  for sp in '"$user", public, extensions' 'pg_catalog' 'public' "''"; do
+    sections_sp="$(PGOPTIONS="-c search_path=$(printf '%s' "$sp" | tr -d ' ')" descriptor_sql | \
+      PGOPTIONS="-c search_path=$(printf '%s' "$sp" | tr -d ' ')" psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$db" -f -)"
+    expect "catalog sections identical under search_path [$sp]" "$sections_sp" "$EXPECTED_SECTIONS"
+    set +e
+    OUT="$(env PGOPTIONS="-c search_path=$(printf '%s' "$sp" | tr -d ' ')" AILAB_ROLLOUT_TARGET=local PGHOST="$host" PGPORT="$port" PGUSER="$owner" PGDATABASE="$db" AILAB_EXPECTED_OWNER="$owner" bash "$0" status 2>&1)"
+    set -e
+    expect "status EXACT under search_path [$sp]" "$OUT" "STATE schema=EXACT history=EXACT"
+  done
+
+  # 1c. adverse function ACL changes are always detected (catalog hash and/or semantic check)
+  local acl_change
+  for acl_change in \
+    "grant execute on function public.claim_ai_lab_topic(uuid,jsonb,integer) to anon" \
+    "grant execute on function public.release_ai_lab_topic_claim(uuid,uuid,text,text) to authenticated" \
+    "grant execute on function public.settle_ai_lab_topic_claim_published(uuid,uuid,text,text,text) to kb_ai_lab_unrelated" \
+    "revoke execute on function public.start_ai_lab_topic_provider(uuid,uuid,text) from service_role" \
+    "grant execute on function public.mark_ai_lab_topic_claim_ambiguous(uuid,uuid,text,text) to service_role with grant option" \
+    "create function public.release_ai_lab_topic_claim(p_claim_id uuid) returns text language sql as 'select null::text'"; do
+    fresh "acl_$RANDOM"
+    run apply >/dev/null
+    q "$acl_change" >/dev/null
+    run status
+    expect "ACL change detected: ${acl_change:0:70}" "$OUT" "STATE schema=UNSAFE history=EXACT"
+    run apply; expect "ACL change blocks apply: ${acl_change:0:50}" "$RC" "10"
+  done
+  db="$(printf '%s' "$PROOF_DBS" | awk '{print $1}')"  # back to the clean, completed database
 
   # 6. completed state: rerun is a read-only no-op
   local before; before="$(q "select count(*) from supabase_migrations.schema_migrations")/$(q "select count(*) from pg_proc where proname = 'claim_ai_lab_topic'")"
