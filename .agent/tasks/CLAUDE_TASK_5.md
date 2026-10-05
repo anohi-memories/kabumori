@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase1-production-migration-gate-20261006
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - start_code: G5
 - finish_code: K5
@@ -372,7 +372,209 @@ Recommended Claude model: **Opus5.5（極高）**.
 
 ## Report
 
-Pending.
+- task_id: common-account-v1-phase1-production-migration-gate-20261006
+- result: **PREFLIGHT_READY（条件付き）**。Phase A（本番 read-only preflight）と Phase B（適用・履歴の仕組みの固定）はともに PASS。
+  - ただし Report 時点で **G4 の production_mutation_window が ACTIVE** である（PR76 S1–S5、2026-10-06 ~01:00 JST にユーザー承認）。
+  - G5 の書き込みは、G4 が CLOSED を記録した後、Phase A を再実行して PASS してからに限る（下の「承認パッケージ」の C0〜C2）。
+- production writes actually performed: **0**（G5 の SQL による本番書き込みはゼロ）。migration 適用 / 履歴書き込み / backfill / deploy もすべてゼロ。
+- checked_main:
+  - 開始時 `e303d81e`（その後 `00342bbd`）。
+  - Report の基点は `e9671778`。push 前に fresh `origin/main` を再確認する。
+- worktree / isolation:
+  - G5 専用 worktree `/Users/yuya/Developer/kabumori-g5-prod-gate`（branch `claude/g5-phase1-prod-gate-20261006`、新 Mac の `kabumori-fresh` から作成）。
+  - control 用 worktree `/Users/yuya/Developer/kabumori-g5-control`（detached）。
+  - 他 slot の worktree / branch / TASK は変更していない。
+- production project ref: `wsmznyzcvmuitkglfeuj`（linked project 名 `stock-x-autopost`）。全クエリは `--project-ref` を明示して実行した。Gate B の使い捨て project や photo project は対象外。
+- migration path / hash:
+  - path: `supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql`
+  - SHA-256 `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3` = 承認済みの値と一致。ファイルの最終 commit は `aa4d2d42`。
+  - 一致しない場合は runner が Stage A の前に STOP 10 で止める。
+
+### 確認した Supabase docs / changelog（2026-10-06）
+
+- CLI v2.115.0+ は BEGIN/COMMIT を自前で持つファイルをそのまま実行し、履歴 INSERT はその後に別に送る。つまりスキーマと履歴は同じ transaction に入らない。
+- `db query --linked` は Management API の run-query を使い、migration 履歴を書かない。
+- Data API の既定変更について：
+  - 2026-04-28 から opt-in、2026-10-30 に全 project へ適用される。
+  - 新しい `public` table を API role へ自動で grant しなくなる。
+  - 明示的な GRANT は引き続き有効。
+- auth / storage schema 内で object を作ることは禁止。一方、public から `auth.users` を参照する FK は許可されている。
+- SECURITY DEFINER 関数には `search_path=''` を付け、PUBLIC / anon からの EXECUTE を revoke することが推奨されている。
+- いずれも docs の記述であり、本番の実測は下の Phase A で別途確認した。
+
+### Phase A — fresh production read-only preflight（PASS）
+
+ユーザーが `supabase db query --linked --project-ref wsmznyzcvmuitkglfeuj` で 9 本を実行した（各ファイルは SELECT 1 文のみ、catalog と集計値だけを出力、PII なし）。
+- runner は、書き込み語・複数文・PII 列を含むファイルを実行前に拒否する（ダミーで拒否を確認済み）。
+- 実行時刻：00〜07 は 00:56 JST、08 はその後。
+
+**A1 環境**
+- PostgreSQL 17.6。`current_user` / `session_user` は `postgres`（superuser ではない、BYPASSRLS あり）。
+- 既定の分離レベルは READ COMMITTED。`postgres` の `lock_timeout` は 0、`statement_timeout` は 2min。
+
+**A2 履歴（ledger）**
+- shape は runner の想定と一致：`version` text PK、`statements`、`name`、`created_by`、`idempotency_key` UNIQUE、`rollback`。owner は `postgres`。
+- 73 行、最大 version は `20261004090000`。
+- 対象 version の行 0、対象名の行 0、関連する名前の行 0。
+- repo と大きくずれている（repo にあって ledger に無いもの 59、ledger にだけあるもの 27）。このため `db push` / `migration up` は使えないと確定した。
+
+**A3 作成予定オブジェクトの不在**
+- どの schema にも無いことを確認：relation 12、型 12、関数 33、trigger 10、policy 2、名前パターンによる広い検索も 0。
+- `private` schema は存在する（owner `postgres`、relation 0、関数 1）。部分的な適用や手作業による導入の跡はない。
+
+**A4 依存関係の形（migration 自身の preflight を SELECT で再現）**
+- relation 17/17。
+- 型付き列 26/26。
+- FK 14/14：参照する列・参照先・削除時の動作・validated・not deferrable・型の一致をすべて照合。
+- `profiles` を参照する 6 つの子テーブルはすべて CASCADE。
+- helper 2 本は 20260928160000 と本文が完全一致し、text / IMMUTABLE / `search_path=""` / EXECUTE は `postgres` のみ。
+
+**A5 実行時の依存**
+- `postgres` が持つ権限：
+  - `auth.users`：REFERENCES / SELECT
+  - `auth.identities`、`storage.objects`、`storage.buckets`：SELECT
+  - `public.profiles`：INSERT / DELETE
+  - schema の USAGE / CREATE
+- `auth.uid()` は uuid を返し、authenticated から EXECUTE 可能。`gen_random_uuid()` も存在する。
+- `profiles` に必須の列は `id` だけ（`insert (id)` が成立する）。
+- `auth.users` に user trigger は無く、内部 FK trigger が 28 個ある。適用で内部 trigger がちょうど 2 個増える見込み。
+- Storage の `owner_id` は text、deprecated の `owner` は uuid。
+
+**A6 ロールと権限**
+- anon / authenticated / service_role はどの role の member でもない（owner の権限を継承しない）。
+- `postgres` が新規 object に付ける既定権限：
+  - public の table：API role に MAINTAIN / REFERENCES / TRIGGER / TRUNCATE だけ。
+  - public の function：API role には無し。
+  - private：既定権限の設定なし。
+  - grantee は API role と `postgres` だけで、想定外の grantee は無い。
+- migration が明示的に revoke するので、最終状態は設計どおりになる。proof では「既定で全付与」と「既定で付与なし」の両極端で同じ結果になることを証明した。
+
+**A7 公開経路**
+- event trigger：`ensure_rls`（public の新規 table の RLS を自動で有効化）、`pgrst_ddl_watch` / `pgrst_drop_watch`（PostgREST の schema cache を再読込）、拡張用の hook。
+- pg_graphql は未導入。`supabase_realtime` は FOR ALL TABLES ではない。
+- `authenticated` は元から `private` の USAGE を持つが、新しい private object には権限が無い。
+
+**A8 既存オブジェクトの指紋**
+- combined `d7a00f63a40e0c64da6b7f8993ea9a035e3d6d9d2a7deed861407c861c7795c3`。
+- 内訳：relation 84、constraint 569、index 200、policy 61、trigger 46、function 122。
+
+**A9 renderer canary**
+- 20260928160000 の object を、本番 17.6 とローカル 17.11 で同じ deparser にかけたハッシュが 7/7 section で一致した。
+- このため runner の Stage B に固定したハッシュは、本番でも同じ意味を持つ。
+
+### 本番変更の mutex チェック
+
+- 開始時：他 slot の本番書き込みは無かった。AI Lab の DB rollout は完了済み。
+- Report 時点（fresh main `e9671778`）：
+  - **G4 は `production_mutation_window: ACTIVE`**（x-test-post と publish-setting の deploy、migration `20261003090000` と履歴 1 行）。
+  - G2 は Edge deploy が `ready`（別の承認待ち）。
+  - G3 は done（PR81 は G4 の後）。
+- G5 は今回、読み取りだけを行い、承認前の書き込みもしていない。G4 の作業とは競合しない。
+- PR76 の migration は public に関数 2 本と、その権限を追加するだけで、G5 の依存オブジェクトには触れない。
+- ただし PR76 が適用されると、次の 2 つは必ず変わる：
+  - A8 の指紋
+  - A2 の行数（+1：`20261003090000`）
+- そのため G5 の書き込みの直前に Phase A を全部やり直す。
+
+### Phase B — 固定した適用・履歴の仕組み（PR [#91](https://github.com/anohi-memories/kabumori/pull/91)、head `cab1f0fe`、merge HOLD）
+
+- runner：`supabase/tests/common_account_lifecycle_rollout.sh`。AI Lab の PR #86 / #88 と同じ「スキーマ先、履歴後」方式で、この migration のバイト列に固定してある。
+- 手順書：`common_account_lifecycle_rollout.md`。
+- read-only bundle：`supabase/tests/common_account_lifecycle_preflight/`（今回実行した SQL と文面は同一で、異なるのは 1 行目のコメントだけ）。
+- 実行者：operator（ユーザー）が自分のシェルから psql で実行する。session pooler（5432）に `postgres.<ref>`、`PGSSLMODE=require`、password は `~/.pgpass`。Claude には本番への接続権限が無い。
+
+**各段階**
+- Stage A：
+  - `set lock_timeout = '5s'` の後、対象ファイルだけを `psql -v ON_ERROR_STOP=1` で実行する。ファイル自身の BEGIN/COMMIT はそのまま。
+  - lock_timeout はファイルの編集ではなく session 設定。`auth.users` への FK が要求する SHARE ROW EXCLUSIVE ロックの待ちを 5 秒に制限し、Auth の書き込みを長く止めない。
+- Stage B：新しい session で次を読み返す：
+  - pinned catalog の 10 section：columns / constraints / indexes / relations / policies / triggers / table_acl（column SELECT 11 個だけ）/ functions 33 / function_acl（authenticated 2、service_role 10、それ以外 0）/ state（`shadow` / `not_started` / 1、built-in 3 行、行数 0 / 0 / 0）
+  - 実効権限：API role の table・column・EXECUTE、owner、overload、RLS
+  - 既存オブジェクトの指紋が、Stage A 直前から変わっていないこと
+- Stage C：
+  - `insert into supabase_migrations.schema_migrations (version, name) values ('20261001150000', 'common_account_lifecycle_foundation')` を、独立した transaction で 1 行だけ実行する。
+  - statements は NULL（AI Lab の前例と同じ）。upsert / retry / repair はしない。
+  - 書くのは Stage B が EXACT になった後だけ。
+
+**失敗時の扱い**
+- SQL は成功したが履歴の書き込みに失敗：STOP 14（schema あり / history なし）。自動の再試行はしない。review を経て `apply --resume-history` を使う（Stage B を再実行してから Stage C）。
+- 応答を失った：Stage A は再実行しない。read-only で読み返して分類する（STOP 12）。
+  - ABSENT：適用されていない。新しい試行には review が必要。
+  - EXACT：review を経て `--resume-history`。
+  - UNSAFE：STOP。
+- lock 待ちが timeout した、または migration 自身が拒否した：rollback され、ABSENT / NONE を確認したうえで STOP 11。
+
+**読み返しによる状態の判定**
+- 未適用：`schema=ABSENT history=NONE`
+- schema あり / history なし：`EXACT/NONE`
+- history あり / schema が不正：`UNSAFE/EXACT` または `ABSENT/EXACT`（STOP 10）
+- 完全に成功：`EXACT/EXACT` かつ既存オブジェクトの指紋が不変
+
+### 承認パッケージ（Phase C / D、明示承認の後だけ）
+
+- C0. G4 の CURRENT_STATE / TASK が `production_mutation_window: CLOSED` を記録し、G2 の deploy を含めて他の本番変更が無いことを、fresh main で確認する。
+- C1. `bash supabase/tests/common_account_lifecycle_preflight/run.sh` を全 9 本実行し、Phase A を再取得する。期待値：
+  - A3 は不在のまま。A4 / A5 / A6 / A9 は今回と同じ。
+  - A2 は G4 の 1 行を加えた 74 行で、対象の行は 0。
+  - A8 は新しい値になる。これを適用前の baseline として記録する。
+  - 想定外の差分が 1 つでもあれば STOP。
+- C2. PR #91 head `cab1f0fe` の clean checkout を用意し、migration の SHA を確認する。
+- C3. operator のシェルで次を設定する：
+  - `CAL_ROLLOUT_TARGET=production`
+  - `CAL_ROLLOUT_ACK='apply 20261001150000_common_account_lifecycle_foundation to production after a same-day read-only preflight'`
+  - `CAL_ROLLOUT_PROJECT_REF=wsmznyzcvmuitkglfeuj`
+  - `CAL_EXPECTED_OWNER=postgres`
+  - `PGHOST=<session pooler host>` `PGPORT=5432` `PGUSER=postgres.wsmznyzcvmuitkglfeuj` `PGDATABASE=postgres` `PGSSLMODE=require`（password は `~/.pgpass`）
+  - そのうえで実行する：
+    - `bash supabase/tests/common_account_lifecycle_rollout.sh status`：期待 `STATE schema=ABSENT history=NONE`
+    - `bash supabase/tests/common_account_lifecycle_rollout.sh apply`：期待 `Stage B: existing objects unchanged`、`catalog read-back = EXACT`、`Stage C: history recorded`、`postflight: schema=EXACT history=EXACT`、`DONE`
+- C4. STOP[n] が出たら手順書の表に従って止める。blind retry、手作業での ACL 修正、履歴の repair、自動 rollback はしない。
+- D. 読み返し（read-only）：
+  - `status` が `EXACT/EXACT`。
+  - preflight bundle を再実行する：
+    - A3 が反転し、12 / 12 / 33 / 10 / 2 がちょうど存在する。
+    - A2 に `20261001150000 | common_account_lifecycle_foundation` が 1 行だけあり、ほかの履歴は変わらない。
+    - A8 が C1 の値と一致する。
+    - A5 の `auth.users` の内部 trigger が 28 から 30 になる。
+  - 新しい RPC は書き込みを伴うため、試しに呼び出さない。
+- 範囲外のまま：`backfill(false)` / `backfill(true)`、client の配線、削除経路の変更、enforce、Auth / Storage / OAuth / Vault、Edge deploy、Cron、flag、実 X。
+
+### tests / checks
+
+- `common_account_lifecycle_rollout.sh proof`（ローカル PG 17.11）：**143/143 PASS**。
+  - 本番の `ensure_rls` に相当する event trigger のケースを含む。
+  - Data API の既定権限は「全付与」と「付与なし」の両方。
+  - lock timeout のケース：`auth.users` への書き込みを保持中に Stage A が 1 秒で諦め、何も残らない。
+- runner への mutation 6/6 を、狙ったチェックで検出した：lock_timeout の除去、指紋比較の除去、履歴を検証より先に書く、overload 検出の除去、TLS ガードの除去、同名 / 別 version の履歴の見逃し。
+- 指紋 SQL：実際の catalog 変更 14 種をすべて検出し、ローカル適用の前後で値が一致した。
+- `common_account_lifecycle_run.sh` を fresh main で実行し 20/20 PASS。`migration_source_invariants_test.ts` 10 passed。`bash -n` / `git diff --check` clean。secret / PII スキャン 0 件。
+- PR #91 の CI：Vercel が「Deployment rate limited — retry in 24 hours」で fail。これは基盤側の上限で、PR は `supabase/tests` しか変更していない。Netlify は Report 時点で pending。
+
+### その他
+
+- changed_files：
+  - PR #91（`supabase/tests/common_account_lifecycle_rollout.sh` / `.md`、`supabase/tests/common_account_lifecycle_preflight/`（run.sh、.gitignore、sql 9 本））。
+  - この Report（`.agent/tasks/CLAUDE_TASK_5.md` のみ）。
+  - migration / 既存 source の変更は 0。
+- commit_hash / push：
+  - source `cab1f0fe` を branch に push し、PR #91 を open（未 merge）。
+  - 着手マーカー `8aeef379` と、この Report を main に push。
+- deploy：none。backfill：none。
+- observations（止める理由ではない）：
+  - Supabase CLI の linked mode は毎回 "Initialising login role..." を出し、CLI 用の login role `cli_login_postgres`（`postgres` の member、inherit=false）が存在する。G5 の SQL は何も書いていない。これは Phase 0 以来、どの read-only 実行でも同じ。
+  - GoTrue の `auth.scim_users.user_id` の FK は削除時の動作が NO ACTION。将来の削除 orchestrator で、Auth の削除を妨げ得る。
+- remaining_issues：
+  - G4 の window が閉じるのを待ち、Phase A を再取得すること。
+  - PR #91 を merge するかの判断（C2 は merge しなくても pinned commit から実行できる）。
+  - runner に追加のレビューを付けるかの判断。
+- safety_checks：
+  - production write 0。migration / 履歴 / backfill / Auth / Storage / OAuth / Vault / deploy / Cron / flag / 実 X はすべて 0。
+  - PII（token / JWT / email / user UUID / handle）の出力 0。Vault の値は読んでいない。
+  - 他 slot のファイルには触れていない。G4 の window とは、読み取りのみで重なった。
+- next_recommendation：
+  - K5 で、このパッケージと PR #91 を確認する。
+  - 承認する場合は、G4 の CLOSED と G2 の deploy の順序を決めたうえで、同じ G5 TASK を再承認する（C0 から開始）。
+  - runner は既に承認された AI Lab runner の構造をそのまま流用しており、mutation でも検証済みなので、追加の Codex レビューは任意と考える。必要と判断するなら、H 枠で軽量なレビュー（Luna）。
 
 ---
 
