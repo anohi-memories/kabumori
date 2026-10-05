@@ -43,6 +43,12 @@ export type GenerationCandidate = {
   judgementReason: string | null;
   judgementFactStatus: "passed" | "needs_review" | null;
   status: string;
+  /**
+   * TDnet only: stocks_master's official name for this candidate's own securities code, read-only and
+   * attached by tdnet_stocks_master.ts. Absent when the code is unknown, unlisted, not the ordinary-share
+   * form, or the lookup failed — then identity is decided exactly as before.
+   */
+  stocksMaster?: { tickerCode: string; companyName: string } | null;
 };
 
 export type GenerationCheck = {
@@ -434,6 +440,24 @@ function shortFormWithSafeSuffix(accepted: string, primary: string): boolean {
   return suffix.length >= 2 && SAFE_COMPANY_NAME_SUFFIXES.some((pattern) => pattern.test(primary));
 }
 
+// The 4-character root that stocks_master keys on, from a TDnet code: the 5-character ordinary-share form
+// ("45070" -> "4507", "290A0" -> "290A") or the bare 4-character root. Any other 5th character is a
+// different share class (see normalizeSecurityCodeForComparison) and never maps to a master name.
+export function stocksMasterRootCode(companyCode: string | null | undefined): string | null {
+  const code = companyCode?.trim() ?? "";
+  return /^[0-9a-z]{4}0?$/iu.test(code) ? code.slice(0, 4).toUpperCase() : null;
+}
+
+// stocks_master's official name for the candidate's OWN code, or null. The master row must be the very code
+// the TDnet signals were verified for; a mismatching or malformed row is ignored, never reinterpreted.
+function stocksMasterNameForCode(candidate: GenerationCandidate, companyCode: string): string | null {
+  const master = candidate.stocksMaster;
+  const root = stocksMasterRootCode(companyCode);
+  if (!master || root === null || master.tickerCode.trim().toUpperCase() !== root) return null;
+  const name = master.companyName.trim();
+  return name.length >= 2 ? name : null;
+}
+
 export function companyIdentityEvidence(candidate: GenerationCandidate): CompanyIdentityEvidence {
   const candidateNames = primarySourceCompanyNameCandidates(candidate.bodySummary);
   const normalizedBody = candidate.bodySummary?.normalize("NFKC") ?? "";
@@ -460,13 +484,24 @@ export function companyIdentityEvidence(candidate: GenerationCandidate): Company
   const acceptableMetadataNames = [metadataName, aliasName].filter(
     (value): value is string => value !== null,
   );
-  const matchedName = acceptableMetadataNames.length > 0
+  const matchedByMetadata = acceptableMetadataNames.length > 0
     ? candidateNames.find((name) =>
       acceptableMetadataNames.some((accepted) =>
         namesMatchWithSafeSuffix(accepted, name, headerNames.has(name))
       )
     ) ?? null
     : null;
+  // TDnet's short name is often a truncation or abbreviation of the official name (塩野義薬, Ｇ－売れるネットＧ,
+  // Ｒ－サンケイＲＥ, ＸＮＥＴ), while the disclosure spells the official name out.  The same securities code
+  // is the same company, so stocks_master's official name for that verified code is one more accepted
+  // spelling — exact match only (no safe-suffix widening), and only when the metadata-based rules above found
+  // nothing, so every identity already confirmed stays confirmed with the same primarySourceName.
+  const masterName = identitySignalsVerified && companyCode !== null
+    ? stocksMasterNameForCode(candidate, companyCode)
+    : null;
+  const matchedName = matchedByMetadata ?? (masterName !== null
+    ? candidateNames.find((name) => namesMatchWithSafeSuffix(masterName, name, false)) ?? null
+    : null);
   const normalizedSecurityCode = companyCode !== null
     ? normalizeSecurityCodeForComparison(companyCode)
     : null;
