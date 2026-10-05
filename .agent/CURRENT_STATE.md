@@ -1,3 +1,21 @@
+## Final K3 — PR #81 residual content-settings hardening PASS -> H2 rereview
+
+- verdict: **PASS to independent H2 rereview; merge/apply/deploy HOLD**.
+- PR #81 old reviewed head `5595fb131813542c55c43bc783af623cdb9ea442` -> corrected exact head `bcc01312c638f5922db4ffd6255ddddf6f611183`, normal push/no force.
+- GitHub fresh read-back: PR OPEN / unmerged / mergeable=true; Netlify and Vercel **green**.
+- fresh main comparison: PR #81 changed files overlap current main changes = **0**.
+- R1 reported fixed: exact immediate/non-deferrable PK/index arbiter required; H2's deferrable-PK reproduction now refused; real ON CONFLICT writer remains valid.
+- R2 reported fixed: known helper signatures/owner only; unknown grant/owner/overload refused; exact effective EXECUTE postconditions; no global default privilege or role-membership mutation.
+- R3 reported fixed: existing non-finite created_at/updated_at refused before mutation; finite CHECK added; valid far-future finite versions remain valid; monotonic CAS behavior preserved.
+- G3 reported disposable SQL `SOCIAL_MOBILE_CONTENT_SETTINGS_ALL_PASS` with 48 PASS markers, 37 drift refusals, non-finite/adverse cases, app 116/116, relevant Deno 162/162, typecheck/lint/bash/diff clean.
+- historical candidate `20260922045046_social_mobile_content_settings_candidate.sql` remains unchanged; hardening migration `20261003120000...` amended only because it is unapplied.
+- proposed production strategy: do not use ordinary migration-up for the two-file chain; apply candidate + hardening + migration-history records inside one separately approved operator-controlled outer transaction, then read back. This plan itself still requires H2 validation before any production mutation.
+- migration-number clarification: PR #76 = `20261003090000`; PR #81 = `20261003120000`; merged PR #82 = `20261004090000`. Current source filenames are distinct; the old PR76/PR82 collision note is stale.
+- production reads/writes/apply/deploy/Auth/Vault/X/OpenAI/Cron from G3: **0**.
+- H2 assigned `x-social-mobile-pr81-residual-hardening-final-rereview-20261005`, recommended **Sol（高）**.
+- PR #78 remains blocked until PR #81 passes review and a separately approved safe production apply/read-back is completed.
+- AI Lab diary: **記録不要** — this is internal schema/security hardening, not a new released user-facing capability.
+
 ## Final C2 — PR #76 transactional publish-toggle CHANGES REQUIRED -> G4 corrective
 
 - verdict: **CHANGES REQUIRED accepted** on exact PR #76 head `7f75c07a8c997b6a585e9c86dca01186eeea671f`; PR remains open/unmerged.
