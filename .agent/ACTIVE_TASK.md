@@ -60,13 +60,13 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-shared-report-v2-20261005-close-natural-observation
+- task_id: kabumori-shared-report-v2-editorial-three-points-20261005
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: 2026-10-05大引け自然サイクルをread-onlyで後追い観測。朝刊はOpenAI 429によりOBSERVATION_INCOMPLETEで、PR #77/#79のlive挙動は未評価。16:15/16:20/16:35の自然実行が回復したか、report packetがあればFact/Hard-WARN境界・rewrite・cost・重複を評価する。manual invoke/deploy/gate/DB/X/Auth/Vault mutation禁止。
-- recommended_model: Sonnet5（中）
+- allocation: 市況レポート「今日のポイント」3点を、前日数値の列挙から、その日の重要テーマへ改善。朝刊は本日の注目・要注意・見る軸、大引けは今日の出来事・根拠ある背景・重要性・次の注目を優先し、数値は主に本文根拠へ。unsupported causalityは禁止、Hard Fact境界・call ceiling・shared truth sourceは維持。production deploy/manual invoke/gate/DB/RPC/Auth/Vault/X mutation禁止。
+- recommended_model: Sonnet5（高）
 
 ## Claude G3
 - owner: claude
