@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-4
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: high
 - recommended_model: Sonnet5（高）
 - type: integration-only / fresh-main merge / conflict resolution / regression verification
@@ -1559,3 +1559,19 @@ K4でCodex **Sol（極高）** の独立再レビューを割り当て。重点:
 
 ### next recommendation
 K4確認後、TASKどおり H1 で Codex **Sol（極高）** の独立再レビュー（対象 head は上記 new exact PR head）。merge・適用・deployは再レビュー承認後に操作者が実施。
+
+
+## K4 decision — PR #76 fresh-main integration PASS
+
+- verdict: **PASS to independent security rereview; merge/apply/deploy HOLD**.
+- accepted fresh head: `7f75c07a8c997b6a585e9c86dca01186eeea671f`.
+- PR is open/unmerged/mergeable=true.
+- expected single conflict in `supabase/tests/migration_source_invariants_test.ts` was resolved by preserving fresh main and adding the PR76 reserved version only.
+- fresh GitHub comparison after integration: current main 8 commits ahead of base, **0 overlaps** across PR changed files.
+- Netlify/Vercel success.
+- functional corrective code was not changed by the integration task.
+- reported post-merge regression and disposable DB evidence is sufficient to proceed to independent review, not production.
+- H1 is occupied by PR #82; H2 assigned `x-social-mobile-pr76-transactional-publish-toggle-rereview-20261005`.
+- recommended H2 model: **Sol（極高）**.
+- production apply/deploy/toggle/X remain forbidden.
+- next_owner: codex; wait for C2.
