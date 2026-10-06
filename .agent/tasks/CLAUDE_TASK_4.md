@@ -3,8 +3,8 @@
 - task_id: x-morning-greeting-schedule-reliability-bc-20261006
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - type: GitHub Actions schedule resilience / missing-image detection / source-only
@@ -2528,4 +2528,88 @@ K4 確認後、TASK どおり H2 で Codex **Sol（極高）** の独立再レ�
 - **PR76 migration の前提は満たされた → G3／PR81（`20261003120000`）を再開してよい。** G5（共通アカウント）も、本番 mutex が CLOSED になったので、自分の再確認から進められる。
 - S6（アプリのコントロールの公開・実際の利用）は別の製品／QA 工程として未実施。
 - かぶモリ `morning_greeting` の毎日失敗（9/29〜）は別タスクで調査を推奨する。
+- status: review_required / next_owner: chatgpt。STOP for K4。
+
+---
+
+## Report — x-morning-greeting-schedule-reliability-bc-20261006 (2026-10-06)
+
+- task_id: `x-morning-greeting-schedule-reliability-bc-20261006`
+- result: **PASS — Plan B + C を source-only で実装し、PR #92 を作成**（https://github.com/anohi-memories/kabumori/pull/92）。本番操作は 0。
+- model_used: Opus 5.5（推薦は Sonnet5（高）。調査から同じセッションで続けたため）
+- base: fresh origin/main `9c6f71bf`。専用 worktree `/Users/yuya/Developer/kabumori-g4-mg-reliability`、branch `claude/g4-morning-greeting-reliability-20261006`
+- commit_hash: `3d547584`
+- push: branch push 済み、PR #92 open（未 merge）
+- deploy: なし
+
+### changed_files（5件のみ）
+- `.github/workflows/morning-greeting-image.yml` — Plan B（schedule を4本に）
+- `.github/workflows/morning-greeting-image-check.yml` — 新規、Plan C
+- `scripts/morning-greeting-image-check.ts` — 新規、Plan C の判定
+- `scripts/morning-greeting-image-check.test.ts` — 新規
+- `scripts/morning-greeting-image.test.ts` — schedule テストの更新と、冪等性テストの追加
+
+### 新しい schedule（UTC / JST）
+| workflow | cron (UTC) | JST |
+| --- | --- | --- |
+| 画像生成 | `17 15 * * *` | 00:17 |
+| 画像生成 | `47 17 * * *` | 02:47 |
+| 画像生成 | `17 19 * * *` | 04:17 |
+| 画像生成 | `17 20 * * *` | 05:17（06:30 の window 開始の 73 分前） |
+| 画像チェック | `7 21 * * *` | 06:07（主） |
+| 画像チェック | `47 0 * * *` | 09:47（予備） |
+
+- 旧 `30 20 * * *`（05:30 JST）は削除した。workflow_dispatch と target_date の入力は変更していない。
+- どの起動も JST 0 時より後なので、`resolveJstDate()` は遅延しても投稿日を指す（テストでは +9 時間まで確認）。
+
+### 重複生成を防ぐ仕組み（Plan B）
+- 既存の仕組みをそのまま使う。各 run はまず `generated/<date>.png` の有無を確かめ、あれば OpenAI を呼ばずに skip する。アップロードは `x-upsert: false`。concurrency group `morning-greeting-image` と `cancel-in-progress: false` はそのまま。
+- テスト: 同じ日に4回起動しても、OpenAI 呼び出し 1 回、upload 1 回、2回目以降は `skipped: true` かつ `image_api_called: 0`。target_date を明示した場合も、その日付の画像を作ることを確認。
+- ある run が 429 などで失敗しても、次の起動が自動でやり直す。
+
+### 画像チェックの設計（Plan C）
+- 読み取りだけで動く。`posting_windows`（`is_active,start_time,timezone`、kabumori と morning_greeting に限定）と、Storage の一覧取得（`POST /storage/v1/object/list/morning-greeting-assets`、prefix `generated`、search `<date>.png`、ファイル名は完全一致で照合、ページ送りあり）。OpenAI の secret は持たない。Storage／DB への書き込みも、X の操作もしない。
+- 判定:
+  - 朝の挨拶が OFF → pass（`disabled`）
+  - 画像が無い → `MORNING_GREETING_IMAGE_MISSING`
+  - 画像の作成時刻（`created_at`）が、その日の最も早い window 開始以降 → `MORNING_GREETING_IMAGE_LATE`
+  - それ以外 → pass（`on_time`）
+- 作成時刻で判定するので、チェック自体が GitHub に遅らされても同じ結論になる。10/6 のように画像が 10:25 に入った日は、チェックが何時に動いても LATE になる。
+- 読み取りの失敗や想定外の形式は、決まったエラーコードで失敗させる（READ_FAILED / RESPONSE_MALFORMED / WINDOW_* / LIST_TOO_LARGE）。pass にはしない。
+- 出力は `::error` の注記と JSON だけで、中身はエラーコード・日付・時刻のみ。キー・URL・例外メッセージは出さない。MISSING のときは、手動で画像を作るコマンドを注記に含める。
+- 失敗時は exit 1 で GitHub の run が失敗になり、通常の failed-run 通知が飛ぶ。scheduled workflow の通知先は「cron を最後に変更したユーザー」（GitHub docs）。
+- concurrency group は画像生成とは分けた（`morning-greeting-image-check`）。待機中のチェックが待機中の生成を押し出さないようにするため。
+
+### tests
+- `node --experimental-strip-types --test scripts/morning-greeting-image.test.ts scripts/morning-greeting-image-check.test.ts` → **44/44 pass**（変更前の既存 26/26 → 28 + 新規 16）
+- 内訳:
+  - cron の UTC↔JST の対応（定刻と遅延時）
+  - 冪等性、target_date の明示指定
+  - チェックの各判定: 期限内、無し、遅延、境界（期限ちょうどは LATE、1ms 前は pass）、OFF、類似したファイル名、ページ送り、一覧が終わらない場合、各種エラー、複数 window（最も早い開始を採用）
+  - 出力に秘密情報が出ないこと
+  - `main()` を実プロセスで起動し、exit 1 になり、キーや URL が出ないこと（env なし／接続拒否）
+  - workflow の静的な検証（secret は2つだけ、OPENAI なし、concurrency、permissions）
+- ミューテーション確認: 境界の `>=`→`>`、ページ送りの削除、例外メッセージの出力 → いずれもテストで検出できた
+- YAML は Ruby Psych で parse できることを確認。strict な `tsc` は新規・変更ファイルでエラー 0（既存の未変更ファイルの既存エラーのみ）。`git diff --check` も問題なし。
+
+### 10/7 の手動 fallback（実行していない）
+```
+gh workflow run morning-greeting-image.yml --repo anohi-memories/kabumori -f target_date=2026-10-07
+```
+PR の merge が明朝に間に合わない場合に使う。OpenAI 1回と Storage 1件の書き込みが発生するので、実行はユーザーの承認後。
+
+### safety_checks
+- production mutations = 0（deploy、DB、Storage、X、手動 dispatch のいずれも 0）
+- GitHub token / Vault / Supabase Cron / secret の変更 = 0。既存の GitHub secrets（SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / OPENAI_API_KEY）を再利用しただけ。
+- 他スロットの worktree・ファイルには触れていない（G3 の PR81、G2、G5）
+
+### remaining_issues
+- まだ GitHub の scheduler に依存している。4回の起動がすべて落ちる、または5時間超遅れる日は、まだ間に合わない可能性がある（そのときは 06:07 のチェックが、動けば通知する）。根本的には Plan A で解消する。
+- Storage の一覧 API は、本番ではまだ実際に呼んでいない（形式はモックで検証し、shape は storage-js の list() と型定義で確認）。merge 後に、読み取りだけの workflow_dispatch で確認することを推奨する: `target_date=2026-09-17`（pass 期待）と `2026-10-06`（IMAGE_LATE 期待）。もし API が想定と違っても、失敗として表に出る（黙って pass にはならない）。
+- 06:30 より後、実際の投稿時刻より前に手動で作った画像は LATE と判定される（安全側に倒した判定）。
+- 本文の生成が画像の確認より先に走り、画像が無い日にも OpenAI 本文のコストがかかる問題は、本 TASK の対象外（x-test-post の deploy が必要）。
+
+### next_recommendation
+- K4 → merge。merge 後は上記の read-only dispatch 2本で Storage list の実地確認をする。今夜 merge できない場合は、10/7 の手動 fallback の要否を判断する。
+- Plan A（Supabase pg_cron → GitHub `workflow_dispatch`）を別 TASK にする。このリポジトリの Actions 起動だけに絞った fine-grained token を Vault に保存する必要がある。Codex／Luna の security review を1回推奨。
 - status: review_required / next_owner: chatgpt。STOP for K4。
