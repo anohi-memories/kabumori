@@ -476,6 +476,159 @@ Then:
 
 Recommended model: **Sonnet5（高）**.
 
+## K1 corrective — native swipe parity must be structural, not redirect-after-pop
+
+K1 verdict: **HOLD / bounded corrective required before merge**.
+
+Accepted from PR #94 head `c15ea73a2694bdecb35c095bbacb7017ed32a45c`:
+- topic-list 初級/中級/上級 selector architecture;
+- Settings separation;
+- per-level in-memory pagination/cache/race safety;
+- local learned/read state using AsyncStorage;
+- stable learning identity based on `topic.id`;
+- focus refresh and detail-success marking semantics;
+- topic-detail selector reuse;
+- topic native swipe behavior;
+- 375-width geometry is likely safe but still must be observed in the final implementation.
+
+Not accepted as final:
+1. Home-origin news swipe currently reveals the news list for ~1 frame before redirecting to Home. User explicitly requested swipe to behave like the Back button, so the transition itself should be natural, not only the final destination.
+2. `usePreventRemove` is imported from `expo-router/build/react-navigation/core`, an internal package path. Do not ship this as the long-term app navigation contract.
+3. 375pt was an explicit acceptance condition and still lacks final observed evidence.
+
+### Required architectural correction
+
+Prefer a navigation structure in which **native iOS pop/swipe naturally exposes the actual origin screen** without intercept-and-redirect.
+
+Strong preferred design to evaluate:
+- add a root-level news-detail route (exact path/name is implementation choice);
+- Home -> root news detail while Home tab remains underneath;
+- News list -> the same root news detail while News tab/list remains underneath;
+- therefore native edge swipe/pop naturally returns Home or News list according to the true origin;
+- keep explicit `from=home|news` for deterministic visible Back-button fallback/deep-link behavior and tests;
+- keep the right-side `ニュース一覧 ›` action;
+- extract/reuse one news-detail content component if needed rather than duplicating the UI/data logic;
+- preserve loading/error/source behavior;
+- remove the internal `expo-router/build/...` import and the redirect/1-second guard.
+
+If another structure achieves all of the same properties with less change, it is acceptable, but it must:
+- use supported/public app APIs only;
+- preserve native interactive edge-swipe;
+- have **zero intermediate wrong screen flash** in normal observed use;
+- leave no stale detail when the News tab is reopened;
+- maintain Home-origin -> Home and news-origin -> list for both button and gesture.
+
+Do not solve by disabling swipe.
+
+### Deep-link / compatibility requirement
+
+Preserve a safe route for existing `/news/[id]` navigation/deep links:
+- either keep it as a thin compatibility entry that lands on the canonical detail safely, or prove no supported caller depends on it;
+- unknown origin must still have a safe Home fallback;
+- do not create duplicate detail implementations with drifting behavior.
+
+### Topic/list/read-state scope
+
+Do **not** redesign or discard the already-good topic list/read implementation unless needed for integration.
+
+Keep:
+- list level selector;
+- selected-only fetch;
+- per-level cache;
+- learned/unread;
+- local AsyncStorage;
+- Settings remains Home-only;
+- detail -> list current-level request;
+- normal list -> detail -> Back preserves existing list state.
+
+### Final verification
+
+Mandatory before returning K1:
+- 402pt and **observed 375pt** topic list screenshots;
+- 375pt selector + learned/unread state no clipping;
+- Home -> news detail -> real native edge swipe => Home, with no visible News-list flash;
+- News list -> detail -> edge swipe => News list;
+- visible `‹ 戻る` matches those exact destinations;
+- reopen News tab after Home swipe => list only, no stale detail;
+- Home -> topic detail -> swipe => Home;
+- Topics -> topic detail -> swipe => topics with state/scroll preserved;
+- full app tests;
+- tsc;
+- Expo config;
+- web export;
+- diff check.
+
+Update **existing PR #94 only**. No second PR.
+No EAS.
+No production/backend mutation.
+
+Recommended model: **Sonnet5（高）**.
+
+---
+
+## Report — G1: topic learning access, learned state and swipe parity (task kabumori-topic-learning-access-progress-and-swipe-20261006)
+
+- task_id: `kabumori-topic-learning-access-progress-and-swipe-20261006`
+- result: implemented; 402pt Simulator verified with real taps/swipes; **375pt NOT measured** (device-access permission pending, see remaining issues). PR open, **not merged**.
+- fresh main SHA at start: `a82e798` (allocation `9c6f71bf`; main only advanced with agent/ops commits). Open-PR overlap re-checked (all 8 open PRs incl. #92/#91): **none** on the target paths.
+- PR: https://github.com/anohi-memories/kabumori/pull/94 — branch `claude/g1-topic-learning-access-progress-swipe-20261006`, head `c15ea73a2694bdecb35c095bbacb7017ed32a45c` (1 commit).
+- **EAS build created: no (0).** backend/DB/RPC/API/AI/Auth/Edge/production mutation: **0**.
+
+### worktree isolation
+Independent clone of `origin/main` in the session scratchpad (own branch, `.env` copy, `node_modules` symlink; one Metro at a time). `kabumori-fresh` / old worktrees / other slots' branches and servers untouched; the PR #90 dev server I had started for the user's phone was stopped before the Simulator work.
+
+### A. swipe parity implementation and proof
+- Cause: a Home-origin news detail sits above the nested news index, so the native pop returned the list while 「‹ 戻る」 went Home.
+- Fix (`news/[id].tsx`): `usePreventRemove(true, …)` makes react-native-screens cancel the native dismiss and report the pop; a back gesture/action (`POP` / `GO_BACK`, `decideDetailRemoval`) is re-resolved through **`backFromNewsDetail(router, from)` — the exact function the header button calls** (parity by construction, origin from the explicit `from` param, no stack inference). Every other action (POP_TO, POP_TO_TOP, NAVIGATE, REPLACE…) is let through with `navigation.dispatch(data.action)`; a 1 s window after a redirect guards against redirecting our own redirect. Swipe is **not disabled**; no custom pan gesture, no new dependency. `usePreventRemove` is imported from `expo-router/build/react-navigation/core` (bundled react-navigation core, not re-exported from the package root); a test checks the module exists in the installed expo-router.
+- Topic detail: no override needed — root-stack native pop already lands on the origin (Home origin ⇒ Home, topics origin ⇒ topics); verified with real swipes, pinned by a structural test.
+- Simulator (402pt, real swipes from x=2): Home→topic detail ⇒ swipe = Home (`POP`, stack `[(tabs)]`) = button; topics→detail ⇒ swipe = topics with its 28 rows and scroll position intact; **Home market card → news detail ⇒ swipe = Home** (logged `POP` → redirect → `POP_TO_TOP` passed through; final tree identical to the button's), Home holding row same; news list → detail ⇒ swipe = news list (tab stays, stack `[index]`); cold `news/<id>` and missing id ⇒ swipe = Home = button; reports-style push without `from` ⇒ Home. After returning Home the news tab shows only the list (no stale detail). Right `ニュース一覧 ›` and `‹ 戻る` buttons unchanged; no double navigation, loop, white screen, double header or tab-bar damage. Mid-swipe frames: finger-tracking slide, no bounce; **for Home origin the news list is visible for ~1 frame (<0.5 s) before Home appears** (accepted consequence of redirecting after the native pop starts).
+- Unit tests pin: button target == swipe target for every origin (home / news / unknown / topics-origin fallback), only POP/GO_BACK are redirected (POP_TO, POP_TO_TOP, NAVIGATE, REPLACE, … allow), right-hand list action independent.
+
+### B. topic-list level architecture / cache behaviour
+- Shared `LevelSwitcher` (`src/components/level-switcher.tsx`, now also used by the detail; same look: level accent colours, 3 equal segments in one row).
+- `src/lib/topic-list.ts` (pure): one state entry per level `{rows, loadedDays, loading, attempted, error}`; only the selected level is fetched; a never-loaded level loads its first page once; a loaded level is restored without refetch; 「さらに過去…」 extends only the selected level; a page is applied to the level it was requested for (a slow answer of a level already left can never be appended to the visible level); a first page that fails entirely does not advance, is not auto-retried in a loop, and shows 「もう一度読み込む」. PAGE_DAYS 14 / MAX_DAYS 98 / `fetchDailyTopic(level, date)` unchanged; no new endpoint.
+- Initial level: explicit `level` route param wins, otherwise the Settings level is read **once** and only while the user has not chosen a level here; a later param-less return never resets the choice. Detail right-hand `トピック一覧 ›` → `dismissTo({pathname:'/topics', params:{level, req}})` (`req` = fresh id so the same level requested twice still re-applies, and the list scrolls to the top); origin `‹ 戻る` → `dismissTo('/topics')` without params (the existing list keeps its level, rows and scroll).
+- Copy: `ここでレベルを切り替えられます。設定のレベルは、ホームに表示するトピックだけを決めます。`
+
+### Settings separation proof
+No file other than Settings-side code calls `writeTopicLevel`/`writeTopicLevelTo` (repo-wide scan test); `topics.tsx`, `topic-detail.tsx`, `level-switcher.tsx`, `topic-list.ts`, `topic-detail-switch.ts` contain no write and no `kabumori:topic-level:v1`; `readTopicLevel()` is read in one place in the list; Home still reads Settings. Simulator: Settings = intermediate, list opened on intermediate, switching beginner/advanced and a detail-side switch left `kabumori:topic-level:v1` = `"intermediate"`; Home's card stayed intermediate. Fetch log: intermediate 14 dates first, +14 only per newly visited level, 0 on returning to a loaded one.
+
+### C. read identity choice + storage semantics
+- Identity = **`topic.id`** = `public.tips.id`: `get_daily_kabumori_tip` returns the tips row and picks it by `hashtext(date:level)` over the level's ids, so the same row (same id) recurs on other dates — progress follows the topic, not the dated row (Simulator: the same id on 10/1 and 9/24 shows learned on both). Test reads the migration + `parseDailyTipRow` to pin this.
+- `kabumori:topic-read:v1` = JSON array of ids; corrupt/missing ⇒ empty; deduplicated (re-mark moves to newest); ids trimmed, ≤100 chars; bounded to the newest 500; writes serialized (quick level switches lose nothing); a failing read/write never throws (UI keeps working). Pure module has no Supabase/network/RN import; binding file only wraps AsyncStorage.
+
+### read marking / refresh behaviour
+Marked when `status === 'ok' && topic` (direct Home/list load reaching ok, or an in-detail switch displaying its target). Never on loading, error, id mismatch or a failed switch (Simulator: storage stayed `[]` through error/mismatch/5 s loading/failed switch; one id added when it finally displayed). List reloads read state on focus (`useFocusEffect`): the opened row shows 「✓ 学習済み」 immediately on return; a level switched to inside the detail shows learned in that level's list; persists across app restart (6 ids kept). Row UI: date-line right edge `未読` (grey) / `✓ 学習済み` (level accent), a11y label includes the state. No reset, no percentage, no sync.
+
+### changed_files
+`src/app/(tabs)/news/[id].tsx`, `src/app/topic-detail.tsx`, `src/app/topics.tsx`, `src/lib/detail-navigation.ts`, new `src/components/level-switcher.tsx`, `src/lib/topic-list.ts`, `src/lib/topic-read.ts`, `src/lib/topic-read-storage.ts`; tests: updated `detail-navigation_test.ts`, `topic-detail-screen_test.ts`; new `detail-swipe-parity_test.ts`, `topic-list_test.ts`, `topic-read_test.ts`; 3 screenshots. Untouched: `_layout.tsx` files, `topic-history.ts`, `daily-topic.ts`, Home, news data/feed, catalog.
+
+### 402 / 375 findings
+- 402pt (iPhone 18 Pro): list selector 362×48 (segments 116×40), one row, level colours; new 3-line description fits; long titles wrap to 2 lines; learned/unread sits quietly on the date line (no competition with the title); learned = level accent. Detail design (selector, Hero, steps) unchanged after sharing the selector.
+- **375pt: not measured** — the temporary iPhone SE needed a macOS device-access approval that was never answered, so no taps/screenshots; the SE was deleted. By measured widths the selector (full-row, 3 equal flex segments) and a 335pt row cannot clip, but that is derived, not observed.
+- Small polish done after the Simulator pass (test-covered, not re-screenshotted): an explicit level request scrolls the list to its top (previously the scroll position carried over); the selector keeps its place (48 pt placeholder) while the Settings level is being read.
+
+### tests / checks (head `c15ea73a`)
+`deno test tests/app/` **375 passed / 0 failed** (new: swipe parity, list state/cache/race/failure, read store incl. corrupt/dup/bound/concurrency/failed write, Settings separation, identity); tsc(src) no diagnostics; `expo config` OK; `expo export --platform web` PASS; `git diff --check` clean.
+
+### Screenshots (`docs/ui-review/`, 402pt WebP q80)
+`topic_list_switcher_402pt.webp`, `topic_list_learned_402pt.webp` (mixed learned/unread), `news_swipe_back_home_402pt.webp` (Home-origin swipe frames).
+
+### remaining issues
+1. **375pt unverified** (permission); rerun is cheap once the Simulator control tool's device-access prompt is answered.
+2. Home-origin news swipe shows the news list for ~1 frame before landing on Home (native pop starts before the redirect) — cosmetic; fully avoiding it would require the detail to live outside the news stack.
+3. `usePreventRemove` is imported from a package-internal path (`expo-router/build/react-navigation/core`); an expo-router upgrade could move it (test guards existence).
+4. Not exercised: two swipes within the 1 s guard window, VoiceOver reading, a cold-start (app killed) news deep link, a real report-detail → news tap (an equivalent push without `from` was used).
+5. Carried over from before: Simulator rig (auth bypass/fixtures) is scratchpad-only; real-iPhone confirmation of real data/touch feel still useful.
+
+### safety_checks
+No DB/schema/migration/RPC/RLS/Auth/Edge/AI/news/report/catalog/native/config/EAS/production change; no new dependency; no Home preference write; `.env`/`node_modules` not committed; PR not merged. Production mutation: 0.
+
+### next_recommendation
+K1 reviews PR #94. The user can try it on the iPhone (server on request): Home topic / Home market news → swipe vs 戻る, list level switching, learned marks after returning from a detail.
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
+
 ---
 
 # USER NAVIGATION DECISION — SUPERSEDES PRIOR PLACEMENT CORRECTIONS

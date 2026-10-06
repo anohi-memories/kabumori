@@ -1,3 +1,44 @@
+## K1 — PR #94 topic learning access PARTIAL PASS / structural swipe corrective
+
+- verdict: **HOLD before merge**.
+- PR #94 current accepted head: `c15ea73a2694bdecb35c095bbacb7017ed32a45c`.
+- accepted: topic-list 3-level switcher, Settings/Home separation, per-level cache/pagination/race handling, local learned/read state, focus refresh, stable `topic.id` progress identity, topic-detail learned marking.
+- not final: Home-origin news native swipe currently flashes the nested news list for ~1 frame before redirecting Home; user asked swipe to behave like the visible Back action.
+- not final: current swipe fix imports `usePreventRemove` from internal `expo-router/build/react-navigation/core`; K1 requires a supported/public structural navigation solution instead.
+- not final: 375pt explicit visual acceptance evidence still missing.
+- G1 returned to ready. Preferred correction: root-level shared news detail so native pop/swipe naturally returns the actual underlying Home or News list, while explicit `from` remains for deterministic button/deep-link fallback.
+- update existing PR #94 only; no second PR.
+- no Codex review allocated yet; re-evaluate after corrected K1.
+- EAS 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation 0.
+- recommended model: **Sonnet5（高）**.
+
+## Final K3 — AI consultation fresh integration PASS / persona-generation follow-up assigned
+
+- verdict: **PASS (source-only)** for `x-social-mobile-ai-consult-v1-fresh-integration-20261006`.
+- PR #78 fresh-integrated onto current main with no textual conflicts and no weakening of PR81 validation.
+- accepted current PR #78 head: `d1f131c56b082d2af57660b5bd3d83ff8c619c7d`; GitHub reports mergeable.
+- memory contract proven:
+  - AI reply alone writes 0;
+  - only explicit 「これで覚えて」 enters save path;
+  - latest row is reread before save;
+  - stale proposal/CAS conflict fails closed and requires reconfirmation;
+  - confirmed settings/persona become next consultation context.
+- tenant/auth/model-output contract preserved; endpoint remains user-JWT only, no service-role shortcut, one Luna model call, store:false, no web/tools/X, dangerous mutation keys refused.
+- memory-to-generation round trip is proven for settings and the already-consumed persona subset.
+- native Simulator verification covered question/proposal/loading/retry/stale/reconfirm/save/continue conversation at 402pt using a temporary reverted rig; no EAS.
+- tests reported PASS: app 193/193; relevant Deno 52/52; brand generator 13/13; tsc/lint/diff/secret scan clean.
+- production mutation/deploy/merge/real X/OpenAI = 0.
+- additional Codex review: **not required**; integration did not materially change auth/tenant/CAS/model-output boundaries.
+- PR #78 remains open intentionally; do not merge yet.
+- V1 blocker discovered: confirmed persona fields `toneSignals`, `topicSignals`, `hashtagHabits`, `ctaStyle`, `openingClosingPatterns` are persisted/re-read but not yet consumed by generation. Also current default no-hashtag instruction can contradict a remembered hashtag habit.
+- fresh G3 task assigned: `x-social-mobile-ai-consult-persona-generation-guidance-20261006`, recommended **Sonnet5（高）**.
+- follow-up is source-only and limited to generation guidance / focused tests. It must not touch PR41 live routing, G5 common-account, Auth/Vault/OAuth/DB/production or G4 work.
+- separate later blockers remain:
+  1. PR81 production schema apply after G5 permits;
+  2. live general-user dispatch via PR #41;
+  3. reviewed service-role read boundary for `social_mobile_content_settings` because final PR81 currently grants service_role no table access;
+  4. real model quality/rate-limit/release QA before V1.
+
 ## G3 assigned — AI consultation V1 fresh integration
 
 - User product decision: **AI相談はV1必須**。利用者とAIが会話しながら投稿内容・口調を覚えさせる体験をX自動投稿アプリの中核として扱う。
@@ -1572,7 +1613,7 @@
 | --- | --- | --- | --- | --- |
 | H1 | `done` | `x-social-mobile-pr65-ephemeral-x-auth-session-review-20261001` | `none` | `.agent/tasks/CODEX_TASK.md` |
 | H2 | `done` | `x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930` | `none` | `.agent/tasks/CODEX_TASK_2.md` |
-| G1 | `review_required` | `kabumori-detail-navigation-topic-level-switch-20261006` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_1.md` |
+| G1 | `review_required` | `kabumori-topic-learning-access-progress-and-swipe-20261006` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_1.md` |
 | G2 | `in_progress` | `kabumori-shared-report-v2-rich-presentation-hard-facts-20261001` | `claude` | `.agent/tasks/CLAUDE_TASK.md` |
 | G3 | `review_required` | `x-social-mobile-e3-delete-revoke-residue-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_3.md` |
 | G4 | `review_required` | `x-social-mobile-x-account-switch-auth-session-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_4.md` |

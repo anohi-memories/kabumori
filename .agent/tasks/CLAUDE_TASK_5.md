@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase1-production-backfill-gate-20261006
 - owner: claude
 - slot: claude-5
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - start_code: G5
 - finish_code: K5
@@ -312,7 +312,154 @@ Recommended model: **Opus5.5（極高）**.
 
 ## Report
 
-Pending.
+- task_id: common-account-v1-phase1-production-backfill-gate-20261006
+- result: **BACKFILL_READY**。Phase A〜D は PASS、Phase E の適用パッケージは凍結済み。`backfill(true)` は実行していない。
+- production writes actually performed: **0**。
+  - 本番では read-only の確認を 1 回だけ実行した（runner の `status` と `check.sql`。後者は READ ONLY transaction で、最後は rollback）。
+  - backfill / deploy / Auth / Storage / OAuth / Vault / Cron / 実 X は 0。
+- fresh main：
+  - 開始時は `5f37d63e`。着手マーカー `7bf806d0`。Report の基点は `d2e148c3`。
+  - main 上の migration SHA は `e632214b…cde3`。runner（`50e08e1d` で main に入ったもの）の SHA は `86c1a3ed…` で、本番 apply 時のものと同一。
+- isolated worktree：`/Users/yuya/Developer/kabumori-g5-backfill`（branch `claude/g5-backfill-gate-20261006`、`kabumori-fresh` の fresh main から作成）。他スロットとは共有していない。
+- production project：`wsmznyzcvmuitkglfeuj`。
+- 確認した docs（2026-10-06）：
+  - PG17 の READ ONLY transaction は行ロック（FOR KEY SHARE を含む）も拒否する。ローカルでも実測した。dry-run（false）はロックを取らない。
+  - GoTrue の通常の更新（`last_sign_in_at` など）は FOR NO KEY UPDATE なので、backfill の FOR KEY SHARE とは衝突しない。衝突するのは削除・論理削除（phone の変更）だけ。
+  - Supavisor の session mode（5432）は接続を client に固定するので、SET LOCAL / lock_timeout が効く。
+  - 2026 年の Auth の変更で backfill に関係するのは、匿名 / 論理削除 / SSO の扱いだけ（本番ではすべて 0 件だった）。
+
+### Phase A — 基盤と現在の人数（read-only、2026-10-06 16:28 JST）
+
+- runner の `status` は `STATE schema=EXACT history=EXACT`。
+- 履歴：対象の行が exact に 1 行。同じ名前で別 version の行は 0。ledger は 75 行。
+- 関数：定義のハッシュがレビュー済みの source と一致した（ローカル PG17 の同じ deparse と同一）。
+  - `backfill(boolean)` `252686a2…`、`account_lifecycle_lock` `b016c1fe…`、plan view `e5f0c915…`。
+  - backfill は owner `postgres`、SECURITY DEFINER、`search_path=""`。anon / authenticated / service_role はどれも EXECUTE 不可。
+  - view と関数は e-mail を参照していない。
+- settings は `shadow` / `not_started` / epoch 1。built-in の checkpoint 3 行。
+- 人数（集計のみ）：
+  - auth.users は 5（匿名 0、論理削除 0、SSO 0、BAN 中 0）。identities は email が 5。
+  - common_accounts 0、entitlements 0、operations 0（in_progress 0）。
+  - 想定外の既存行は無い。
+
+### Phase B — 正規の dry-run（`backfill(false)`、READ ONLY transaction の中で実行）
+
+```
+auth_users 5 / common_accounts_to_create 5
+kabumori_candidates 2 = with_activity 1 + profile_only 1 / kabumori_to_create 2
+x_autopost_candidates 1 = identity_verified 1 + workspace_pending 0 / x_autopost_to_create 1
+x_autopost_excluded_admin 1 / auth_only 2 / admin_users 1
+not_active_accounts_with_candidates 0 / excluded_non_self_service_memberships 0
+applied false / created_common_accounts 0 / created_kabumori 0 / created_x_autopost 0 / skipped_account_not_active 0
+```
+
+- 前後の行数は同一だった（auth 5、accounts 0、entitlements 0、operations 0、ledger 75、profiles 2、brands 5、memberships 2）。
+- lifecycle operation の作成・履歴の変更・Auth / Storage / Vault / OAuth の変更はいずれも 0。
+
+### Phase C — 照合と分類（plan view を使わず、元テーブルから数え直した）
+
+- plan view の行数は 5、distinct も 5 で、auth.users にいない user は 0。どのログインも plan にちょうど 1 回だけ現れる。
+- account の無いログインは 5 で、`common_accounts_to_create` と一致。
+- Kabumori：候補 2 = activity 1 + profile のみ 1。profile なしで activity だけある人は 0。作成予定 2（既存の entitlement も、非 active の account も無い）。
+- X：
+  - 自分専用の self-service workspace を単独で所有している人は 2。そのうち admin が 1 なので対象外。消費者向けの候補は 1（verified 1、pending 0）。
+  - 共有 workspace / 内部 workspace を所有している人・他の workspace にも所属している人はすべて 0。
+  - workspace の内訳：self_service 2（どちらも所有者 1 人）、内部 3。membership は owner / self_service / 自分の workspace の 2 件だけ。
+  - social account の内訳：self_service に verified 1 と authorization_pending 1。内部に verified 2。
+- auth-only は 2。5 − (Kabumori 候補 2 ∪ X 候補 1) で整合する。
+- システム自身の footprint 関数による分類（ログインごとに集計）：
+  - footprint なし・候補なし：2
+  - X の footprint があり X 候補：1
+  - Kabumori の footprint があり Kabumori 候補：1
+  - **admin で、Kabumori と X の両方の footprint があり、Kabumori 候補だが X は対象外：1**
+    - これは設計どおりの H1-4（admin は消費者向け X entitlement を持たない）。X の footprint が entitlement に対応しないまま残ることは明示しておく。将来の削除判定ではもともと `ADMIN_ACCOUNT` で止まる。
+  - 黙って分類されたものや、どの分類に入るか曖昧なものは無い。
+- e-mail による統合：無い（view と関数の定義に e-mail は無く、plan は 1 ログイン 1 行）。
+- 現在のログインの X 削除記録：0。
+
+### Phase 0（2026-10-01）との比較
+
+| 項目 | Phase 0 | 今回 | 説明 |
+|---|---|---|---|
+| ログイン | 4 | 5 | +1 は auth-only（profile も workspace も無い新しいログイン） |
+| Kabumori 候補 | 2（activity 1 は admin、profile のみ 1） | 2（同じ） | 変化なし |
+| X 消費者候補 | 1（verified） | 1（verified） | 変化なし |
+| admin が自分専用の self-service workspace を所有 | 0 | 1（接続は authorization_pending） | admin（運営者）が X アプリで self-service 接続を開始した状態。設計どおり X の対象外 |
+| auth-only | 1 | 2 | 新しいログインのぶん |
+
+- どちらの差分も、通常の利用 / テストによる状態変化として説明できる。
+- K5 / ユーザーに確認したいこと（ブロッカーではない）：5 人目のログインと、admin による X workspace の作成が、運営側の想定内（テストなど）であること。
+
+### Phase D — ローカル / 使い捨て環境での証明（fresh main）
+
+- `common_account_lifecycle_run.sh` 20/20 PASS。既存の backfill 挙動テストを含む：
+  - false は行を変えない。true は想定どおりの行を作る。2 回目は no-op。
+  - admin の X 除外、profile のみ / activity の evidence、verified / pending、非 active の skip、既存 entitlement を書き換えない、e-mail で統合しない。
+- `migration_source_invariants_test.ts` 10 passed。
+- 新しい `supabase/tests/common_account_lifecycle_backfill/proof.sh` 32/32 PASS：
+  - check は READ ONLY で、書き込みなし。紛れ込んだ書き込みは拒否される。dry-run と、数え直した値が一致する。
+  - apply は承認した行だけを commit する。
+  - 次の場合はすべて exit 3 で、何も commit されない：commit 後の再実行、plan の変化（新しいログイン）、承認値の誤り、承認値の欠落、1 ログインの行が lock 中（lock timeout。先に作った行も含めて全部 rollback）、書き込み後の行の改変（postcondition）。
+- 防御を意図的に壊した版 6/6 を検出した：READ ONLY の除去、plan assert の除去、post assert の除去、lock_timeout の除去、precondition の除去、evidence check の除去。
+- 本番と同じ形の人数構成（admin が Kabumori を使い X workspace を所有、profile のみ、X verified、ログインのみ × 2）をローカルに作った：
+  - dry-run は本番と完全一致した。
+  - 凍結値で apply.sql を通すと COMMITTED（accounts 5、entitlements 3 = kabumori_activity 1 / kabumori_profile_only 1 / x_identity_verified 1、operations 0）。その後の dry-run で作成予定は 0。
+
+### Phase E — 凍結した本番適用パッケージ（未実行）
+
+- source：PR [#93](https://github.com/anohi-memories/kabumori/pull/93)、head `d9719dc6`（merge HOLD）。
+  - `check.sql` SHA `04c262e6…4413`、`apply.sql` SHA `04557809…3103`。
+- 実行者：operator（ユーザー）が `bash /Users/yuya/Developer/kabumori-g5-backfill/.g5-backfill/operator.sh apply` を実行する。
+  - wrapper は未追跡で、SHA は `6844aee1…6f46`。
+  - 次をすべて固定・確認してから進む：checkout が `d9719dc6`、tracked ファイルが clean、migration / runner / check / apply の SHA。
+  - 実行前に `BACKFILL` の手入力を求める。
+  - DB password は 1 回だけ非表示で入力し、process 内でだけ使う。
+- 凍結した承認値：`exp_auth_users=5 exp_accounts_to_create=5 exp_kab_to_create=2 exp_kab_activity=1 exp_kab_profile_only=1 exp_x_to_create=1 exp_x_verified=1 exp_x_pending=0 exp_x_excluded_admin=1 exp_auth_only=2`
+- 流れ：
+  1. runner の `status` が EXACT/EXACT でなければ STOP。
+  2. `check.sql`（read-only の事前確認）。
+  3. `apply.sql`：1 つの READ COMMITTED transaction の中で、`lock_timeout 5s`、`statement_timeout 120s`。
+     - precondition：0 / 0 / 0 と `shadow` / `not_started`。
+     - その場の plan が承認値と同じであること。
+     - `private.account_lifecycle_backfill(true)`。
+     - postcondition：作成数、account = ログイン数、全員 active、未作成 0、entitlement は全件 active / legacy_backfill で evidence の内訳が一致、admin に X が無い、auth-only に entitlement が無い、version = 1 + entitlement 数、operations 0、settings は不変。
+     - 再度 false を実行して作成予定が 0 であること。
+     - そのうえで COMMIT。
+  4. 結果に `COMMITTED=` が無ければ STOP（再実行しない）。
+  5. runner の `status` と `check.sql` で読み返す。
+- 失敗時の扱い：
+  - assertion の不一致・lock timeout・エラー → psql exit 3、transaction 全体を rollback、STOP。
+  - 応答を失った → 再実行しない。`check.sql` で分類する：accounts 0 なら未適用、承認どおりの行があり作成予定 0 なら適用済み、それ以外は STOP。
+  - 想定外の行・件数 → STOP。部分的な状態はそもそも commit されず、手作業で直すことはしない。
+- 期待する postflight（read-only）：
+  - accounts 5（全員 active、重複なし）。
+  - entitlements 3（`kabumori/active/legacy_backfill/kabumori_activity` 1、`kabumori_profile_only` 1、`x_autopost/…/x_identity_verified` 1）。
+  - auth-only 2 人は entitlement なし。admin の X entitlement 0。operations 0。
+  - dry-run の作成予定はすべて 0。既存のサービス行（profiles / brands / memberships）の件数は不変。
+  - 不明な service_key / source / evidence / status は CHECK 制約上ありえず、集計でも 0。
+- 範囲外のまま：client の配線、RLS の enforce、削除経路、orchestrator、Auth の削除、session / provider の revoke、Storage / Vault、Edge deploy、Cron、実 X。
+
+### その他
+
+- production mutex：開始時も Report 時も、本番変更の window を開いているスロットは無かった。G1 / G3 は review_required / ready（本番変更なし）、G2 は ready（read-only の観察）、G4 / H1 / H2 は done。backfill の適用時には、G5 の window を ACTIVE にしてから実行する。
+- changed_files：
+  - PR #93（`supabase/tests/common_account_lifecycle_backfill/` の README.md、check.sql、apply.sql、proof.sh）。
+  - この Report（`.agent/tasks/CLAUDE_TASK_5.md` のみ）。
+  - migration / 既存 source の変更は 0。
+- commit / push：PR #93 は `d9719dc6`（branch に push 済み、未 merge）。着手マーカー `7bf806d0` とこの Report を main に push。
+- deploy：0。backfill：0。
+- 前回 Report の訂正：`auth.scim_users.user_id` の FK を「NO ACTION」と書いたのは誤り。`confdeltype = n` は **ON DELETE SET NULL** で、Auth の削除を妨げない（GoTrue v2.197.0 の migration とも一致）。
+- remaining_issues：
+  - ユーザーによる確認（5 人目のログインと、admin の X workspace）。
+  - PR #93 を merge するかの判断（適用は固定 commit から実行できる）。
+  - Postgres 17.11 へのアップグレードが dashboard で可能になっているが、dry-run と書き込みの間に挟まないこと。
+- safety_checks：
+  - 本番書き込み 0。PII（UUID / e-mail / provider subject / handle / token）の出力 0。Vault の値は読んでいない。password は Claude が扱っていない。
+  - 他スロットのファイルには触れていない。テストで使った UUID は固定の偽値だけ。
+- next_recommendation：
+  - K5 で、このパッケージと PR #93 を確認する。
+  - ユーザーが本番の backfill を明示的に承認したら、同じ G5 を再開する：fresh mutex → Phase A/B の再取得 → 関数の定義 / owner / ACL の確認 → window を ACTIVE → `operator.sh apply` → postflight → window を CLOSED。
+  - 追加の Codex review は不要と考える（レビュー済みの関数だけを使い、tooling は mutation で検証済み）。
 
 ---
 

@@ -1,10 +1,188 @@
 # Claude Task 3 — CURRENT TASK
 
-- task_id: x-social-mobile-ai-consult-v1-fresh-integration-20261006
+- task_id: x-social-mobile-ai-consult-persona-generation-guidance-20261006
 - owner: claude
 - slot: claude-3
 - status: in_progress
 - next_owner: claude
+- priority: highest
+- recommended_model: Sonnet5（高）
+- type: source-only V1 completion / remembered persona -> generation prompt
+- source_pr: 78
+- source_head: d1f131c56b082d2af57660b5bd3d83ff8c619c7d
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Product decision
+
+AI相談はV1必須の中核機能。
+「覚えた」内容が実際の投稿生成に反映されなければV1完成とはしない。
+
+Previous G3 proved:
+- conversation -> proposal -> explicit 「これで覚えて」 -> CAS save -> reread -> next consultation works;
+- settings + confirmed persona survive the save/read round trip;
+- current post generator consumes settings and some persona signals.
+
+K3 found one V1 gap:
+confirmed persona fields
+`toneSignals`, `topicSignals`, `hashtagHabits`, `ctaStyle`, `openingClosingPatterns`
+are persisted and re-read but are not currently reflected in post-generation guidance.
+
+## Current conflict / dependency state
+
+- G5 common-account critical path is active. This task must remain source-only and must not touch Auth/entitlement/account deletion/common-account migrations or production.
+- G4 is a separate X-app slot handled in another chat. Current G4 morning-greeting work is done; future G4 UI work must not be edited here.
+- PR #41 remains open and owns live general-user scheduled-post routing + account-bound Vault path. Its changed files do **not** include:
+  - `supabase/functions/_shared/brand/social_mobile_content_settings.ts`
+  - `supabase/functions/_shared/brand/brand_post_generator.ts`
+  - their focused tests.
+- PR81 production schema apply is still deferred behind G5.
+- PR #78 stays open; no merge/deploy in this task.
+
+## Goal
+
+Make every user-confirmed persona signal that AI consultation can save materially available to social-mobile post generation, without changing security, DB, live dispatch, X, or account boundaries.
+
+The generation contract must cover:
+- preferredTone
+- themes
+- objective
+- optionalNgWords
+- notes
+- persona.toneSignals
+- persona.sentenceLength
+- persona.punctuationEmoji
+- persona.recurringVocabulary
+- persona.topicSignals
+- persona.hashtagHabits
+- persona.ctaStyle
+- persona.openingClosingPatterns
+
+Unconfirmed persona must contribute **zero persona guidance**.
+
+## Allowed scope
+
+Primary:
+- `supabase/functions/_shared/brand/social_mobile_content_settings.ts`
+- `supabase/functions/_shared/brand/brand_post_generator.ts` only if needed for conflict-free hashtag-policy composition
+- focused tests:
+  - `supabase/functions/_shared/brand/brand_post_generator_test.ts`
+  - PR78 memory-generation test(s)
+
+Small app/server test updates are allowed only if necessary to keep the same contract explicit.
+
+Do not edit:
+- PR #41 files;
+- x-test-post routing;
+- Vault/OAuth/token/auth code;
+- common-account/G5 files;
+- DB migrations/RLS/RPC;
+- account deletion;
+- publish toggle/permission;
+- G4 workflow/UI files;
+- production config/secrets.
+
+## Guidance requirements
+
+1. **All confirmed signals must be represented semantically in the model instructions.**
+   Do not merely save/read them.
+
+2. Preserve existing bounds and sanitization.
+   - no unbounded prompt injection from saved free text;
+   - values remain data/guidance, not system authority;
+   - do not let notes/persona override safety/publish/account instructions.
+
+3. Keep existing settings behavior stable:
+   - preferredTone / themes / objective / NG words remain;
+   - notes must remain bounded but should not silently lose most of the remembered intent if a safe larger bound is practical;
+   - approvalMode / generationWindow / frequencyTargetPerWeek remain operational/read-only and are not converted into AI-editable behavior here.
+
+4. **Hashtag interaction must be internally consistent.**
+   Current generic social-mobile generation ends with `ハッシュタグは付けないでください` when no fixed hashtags exist.
+   If a confirmed social-mobile persona contains `hashtagHabits`, do not emit a contradictory later instruction that nullifies the remembered preference.
+   Requirements:
+   - no confirmed hashtag preference -> existing no-hashtag default remains unchanged;
+   - confirmed hashtag habit -> generator may follow that confirmed habit within the user's own social-mobile profile;
+   - do not alter AI Lab's existing hashtag policy;
+   - do not alter Kabumori fixed-hashtag behavior;
+   - no cross-brand special-casing by raw brand id.
+
+5. Topic/tone/CTA/opening/closing signals must guide style, not invent personal facts.
+
+## Required tests
+
+At minimum prove:
+
+- confirmed persona with every field produces guidance containing every field;
+- unconfirmed persona produces none of the persona guidance;
+- default social-mobile profile with no confirmed hashtag habit still says no hashtags;
+- confirmed social-mobile hashtag habit does not coexist with a contradictory final no-hashtag instruction;
+- AI Lab hashtag behavior unchanged;
+- Kabumori fixed hashtag behavior unchanged;
+- content-settings save -> reread -> generation guidance still round-trips all remembered fields;
+- consultation cannot alter approval/publish/account/OAuth/schedule boundaries;
+- no PR41/live-dispatch code changed.
+
+Run:
+- focused shared-brand tests;
+- PR78 consult memory-generation tests;
+- relevant app tests if touched;
+- Deno check/lint on changed runtime;
+- `git diff --check`;
+- added-line secret scan.
+
+No real OpenAI/X call.
+
+## Production / merge
+
+Forbidden:
+- production mutation;
+- Edge deploy;
+- PR81 apply;
+- PR78 merge;
+- PR41 integration;
+- real X/OpenAI;
+- Auth/Vault/OAuth/Cron changes.
+
+At completion:
+- push only to PR #78 branch if clean;
+- keep PR #78 open;
+- status -> review_required / next_owner -> chatgpt;
+- K3 decides next.
+
+## Completion report
+
+Include:
+- result
+- fresh main / previous and new PR78 head
+- changed files
+- exact persona fields now consumed
+- hashtag behavior proof
+- memory-to-generation round trip
+- tests
+- G4/G5/PR41 conflict check
+- production mutation/deploy/merge = 0
+- remaining V1 blockers
+- next recommendation
+
+## Review policy
+
+This is bounded prompt/generation behavior, not a new auth/DB/permission boundary.
+Default: no Codex review if tests and scope are clean.
+If an unexpected cross-brand or publish-safety concern appears, STOP and report rather than widening scope.
+
+Recommended model: **Sonnet5（高）**.
+
+---
+
+# Previous G3 task — preserved history
+
+- task_id: x-social-mobile-ai-consult-v1-fresh-integration-20261006
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: source-only fresh-main integration / AI consultation V1 core / memory-to-generation contract
@@ -252,6 +430,78 @@ Default after a clean focused integration:
 - if review is warranted, prefer **Luna（高）**; use Sol only for a concrete security-boundary change.
 
 Recommended model: **Opus5.5（高）**.
+
+## Report — x-social-mobile-ai-consult-v1-fresh-integration-20261006
+
+- result: **PASS (source-only) — PR #78 fresh-integrated onto main; memory contract and memory-to-generation contract proven; PR kept open.** Production mutation 0, merge 0, deploy 0.
+- fresh main merged: `5f37d63e` (this TASK's in_progress commit). Original PR78 head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7` (confirmed exact before integration; single commit on merge-base `0c2c04e0`). New PR78 head: `d1f131c56b082d2af57660b5bd3d83ff8c619c7d` (GitHub: MERGEABLE) (non-destructive: merge commit `e9ed439b` + one commit `d1f131c5`; no rebase/force-push).
+- worktree: new independent `/Users/yuya/Developer/kabumori-g3-ai-consult` (branch `g3-ai-consult-v1-int` → pushed to `claude/g3-ai-consult-v1-20261002`). G4/G5 worktrees, dev servers and the other session's Simulator rig were not touched.
+
+### Conflicts / resolutions
+- Textual conflicts: **0** (`content-settings-repository.ts` auto-merged: main's PR81 `saveConfirmedProposal` metadata stripping + PR78's `updatedAt` read and `saveConfirmedIfUnchanged`).
+- Semantic checks against final PR81 (no PR81 validation weakened):
+  - `SocialMobileContentSettings` shape: app validator, server `isSocialMobileContentSettings` and DB `valid_settings` agree (9 keys; the app never writes `livePublishingEnabled`; server re-adds it as `false`).
+  - persona: `saveConfirmedIfUnchanged` strips `source/confirmed/analyzedAt/analyzedPostCount` from `persona_profile` and writes them to the dedicated columns, matching DB `valid_persona` (style-signal keys only). App/proposal bounds equal DB bounds (toneSignals 20×80, recurringVocabulary 30×50, topicSignals 20×80, openingClosingPatterns 20×100, free text 200; settings tone 120 / themes 8×100 / objective 160 / NG 20×60 / notes 1000).
+  - CAS: `update … eq(brand_id) eq(updated_at, expected)` + `select` → 0 rows = stale; first save `insert` → 23505 = stale. Compatible with the hardening trigger (`updated_at = greatest(clock_timestamp(), old+1µs)`, server-owned) and RLS owner policies (authenticated SELECT/INSERT/UPDATE only).
+  - 24:00: PR78's app `endTimePattern` makes the saved 24:00 default valid (server and DB already accept it in the window end only). PR81's repository test comment that worked around it is now obsolete and was updated.
+  - repository/server reads use the final PR81 column names; no candidate-only assumptions remain.
+
+### Changed files (vs main)
+PR78's 11 paths, plus:
+- `apps/social-mobile/src/app/(tabs)/consult.tsx` — fix: a signed-in (non-preview) workspace that is unreachable at confirm time now reports 「いまは保存できません…」 and saves nothing; previously it showed the sample-preview text 「ローカルプレビューとして確認しました」 and updated local state (misleading).
+- `apps/social-mobile/tests/consult-screen.test.mjs` — regression test for that (fails without the fix).
+- `apps/social-mobile/tests/consult-memory-generation.test.mjs` — new contract test (below).
+- `apps/social-mobile/tests/content-settings-repository.test.mjs` — uses the 24:00 defaults directly.
+No change to generator/runtime, DB migrations, RLS, Auth, X/OAuth, PR76, G5 or workflow files.
+
+### Memory contract proof (real screen code with stubbed RN/network, plus pure logic)
+- answer arriving / chat / question / explanation / retry / failure / dismiss / preview / unreachable-workspace: **0 writes** (consult-screen + consult tests).
+- only 「これで覚えて」 → re-read latest → `planConfirmedSave` (delta onto latest, unrelated newer values kept) → `saveConfirmedIfUnchanged` with the re-read `updated_at` → success re-reads and becomes the next turn's saved context.
+- a proposed field changed elsewhere → `reconfirm`, nothing written; row changed between re-read and write → `stale`, nothing written, proposal rebased and the user asked to press again.
+- persona is written only when the proposal changed it, always `persona_confirmed=true`, `persona_provenance='conversation'`; settings-only confirmation never touches persona columns.
+- server endpoint is read-only (`settings_saved=false` etc. enforced client-side), one provider call per send, `gpt-5.6-luna`, `store:false`, no tools/web/X, model output allowlisted; chat/question cannot carry deltas; publish/OAuth/token/schedule/approval/account keys refused.
+- tenant: verified Auth user + owner membership read with the caller's JWT + `social_mobile_user_v1` profile; missing/non-owned → same 404; no service role in the endpoint.
+
+### Memory-to-generation proof (`consult-memory-generation.test.mjs`, 4 tests, real code at every hop)
+validated AI proposal → `planConfirmedSave` → repository `saveConfirmedIfUnchanged` (recorded PostgREST insert) → that exact row returned by a stubbed PostgREST → real `handleSocialMobileBrandDryRun` reader (`normalize` + `materialize`) → real `generateBrandPost` with stubbed OpenAI fetch:
+- every saved settings field arrives unchanged (no remap), `livePublishingEnabled=false`, `personaProfile` = confirmed conversation persona;
+- prompt contains tone, objective, themes, NG words, notes and the confirmed persona lines (文体傾向 / 記号・絵文字 / 語彙);
+- approvalMode / generationWindow / frequency unchanged by consultation;
+- the same row is the next consultation's saved context (real consult handler);
+- an unconfirmed persona produces no 「確認済み」 guidance and is hidden from the next consultation; nothing saved → code defaults.
+- mutation check: renaming one guidance line, or saving `persona_confirmed=false`, makes the test fail.
+
+### Live scheduled-user generation — release blockers (not implemented here)
+1. On main, the only consumer that reads `social_mobile_content_settings` into generation is the user-JWT **dry-run preview** (`social-mobile-brand-dry-run`). `x-test-post`'s live `generateBrandPost` call is the AI Lab path and passes no content settings. Live scheduled-user generation still depends on **open PR #41** (`vault_account_brand_post.ts` `loadSocialMobileContentSettings`), which uses the same normalize/materialize contract.
+2. PR #41 reads the table with **service_role**, but the final PR81 hardening ACL grants service_role **nothing** on `social_mobile_content_settings` (authenticated S/I/U only). As written, PR #41's read would be refused and fail closed (`CONTENT_SETTINGS_READ_FAILED`), and its consent check (`x_account_publish_authority` reading `approvalMode`) has the same dependency. Needs a reviewed decision (narrow SELECT grant for service_role vs. a definer reader) in a separate DB task — not done here.
+3. Generation guidance consumes only `sentenceLength`, `punctuationEmoji`, `recurringVocabulary` from the persona and the first 300 chars of notes. `toneSignals`, `topicSignals`, `hashtagHabits`, `ctaStyle`, `openingClosingPatterns` confirmed in consultation are saved and re-read (and shown to the next consultation) but **not used by post generation**. Changing guidance is outside this task's scope (generator read-only); recommend a small follow-up.
+4. PR81 production schema still HOLD; the consult endpoint is not deployed. Until both, the app's real-data path falls back to "unavailable".
+
+### Native verification
+- iOS Simulator iPhone 18 Pro (402pt, iOS 27), local dev build (SDK-26 build-version patch on a scratch copy of the .app, as before), **real taps/swipes** via the Simulator control. No EAS.
+- The app gates every screen behind sign-in, and the Simulator control could not type into the TextInput, so a **temporary uncommitted rig** was used: auth gate bypassed in `_layout.tsx`; in `consult.tsx` only the dependency bindings were swapped (data status=ready, session token, `supabase.functions.invoke` → scripted endpoint envelopes parsed by the real `requestConsult`/`parseConsultResponse`, repository → versioned in-memory row, TextInput → tap-to-fill scripted messages). All screen logic/reducer/save planning ran unmodified. Rig fully reverted (`git status` clean), app uninstalled, build folder deleted.
+- verified on device: question reply (no proposal card); proposal card listing only changed fields with 「まだ保存していません。変わるのは次の項目だけです。」 and 「これで覚えて」/「この提案をやめる」; loading 「AIが考えています…」; retryable provider error 「AIが混み合っています…」 + 「もう一度送る」 → retry resent once (user turn not duplicated) while the pending proposal stayed; settings changed elsewhere → 「保存されている設定が、この提案のあとに変わっていました…もう一度「これで覚えて」を押してください。」 and nothing overwritten; second confirm → 「確認した内容を保存しました。投稿権限や投稿実行は変更していません。」 and the card closed; conversation continued after save and the next answer reflected the saved tone/themes; scrolling OK.
+- not verified natively: the software keyboard (rig input), 375pt narrow width (402pt only; layout is single-column flex and the screen harness covers state), real endpoint/DB (not deployed by design).
+- pre-existing app-wide issue observed (not introduced here, not fixed): every tab's `Screen` has no top safe-area inset with `headerShown:false`, so headings overlap the status bar/clock on iPhone 18 Pro (Home, AI相談, …). Recommend a separate small UI task (G4 UI).
+
+### Tests
+- app: `npm test` 193/193 (includes consult 29, consult-screen 12, memory-generation 4, repository 3); `tsc --noEmit` clean; `expo lint` clean.
+- Deno (`--no-config`, `DENO_NO_PACKAGE_JSON=1`, `--allow-read`): social-mobile-consult + brand-dry-run + content-settings (+hardening static, migration) 52/52; `deno check` index/logic_test/dry-run clean; `deno lint` consult clean. `brand_post_generator_test.ts` 13/13 with `--no-check` (its 3 type errors under `--no-config` are pre-existing on main, file untouched).
+- `git diff --check` clean; added-line secret scan (whole PR diff vs main) 0 hits.
+- no paid AI call, no X call (all model/X/PostgREST stubbed).
+
+### Gates
+- production mutation 0; Edge deploy 0; PR81 apply 0; DB/history write 0; Auth/Vault/OAuth/X/Cron 0; real X post 0; EAS 0.
+- PR #78 not merged (kept open). No feature flag.
+- G4/G5 conflict check: open PRs #93 (G5 backfill), #41, #33 touch none of these paths; G5 common-account / entitlement / G4 morning-greeting files untouched.
+
+### Remaining V1 blockers / next recommendation
+- PR81 production apply (after G5 critical path) → then deploy `social-mobile-consult` (verify_jwt=true) with the reviewed OPENAI secret path.
+- Decide the service_role read path for live generation (blocker 2), then fresh-integrate PR #41 (blocker 1).
+- Small follow-up: make generation guidance use the remaining confirmed persona signals (blocker 3).
+- App-wide top safe-area overlap (pre-existing) — separate UI task.
+- Review: integration did not change auth/tenant/CAS/model-output boundaries (one UI fail-closed fix + tests). Suggest no extra review, or at most one focused Luna（高） pass on `consult.tsx` confirm path if K3 wants it.
+- status → review_required / next_owner → chatgpt. STOP.
 
 ---
 
