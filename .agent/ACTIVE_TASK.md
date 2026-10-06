@@ -32,14 +32,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: common-account-v1-phase2-service-enrollment-corrective-rereview-20261006
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Mandatory focused re-review of corrected PR #95 exact head dd065e16. Verify prior R1-R5 closures, new service-start-intent migration/RPC atomic semantics, immutable session-bound transport, one-use re-enrollment intent, positive-ready push/notification gating, strict response validation, and PR #94/current-main compatibility. No merge/deploy/production mutation.
+- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #95 exact head dd065e16. Prior R1 and R5 are closed; original cross-user/retry-Push defects are materially improved. Remaining focused blockers are S1 same-user fresh-session reuse and S2 X queued auto-start after cleanup/sign-out. H1 free; corrected exact head will require focused Sol（高） re-review.
 - recommended_model: Sol（高）
 
 ## Codex H2
@@ -104,14 +104,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: review_required
+- status: ready
 - task_id: common-account-v1-phase2-service-enrollment-integration-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 accepts corrected PR #95 head dd065e16 as PASS_CANDIDATE only. G5 reports H1 R1-R5 reproduced and fixed with forward service-start-intent migration, immutable session-bound RPC transport, one-use user/session reactivation intent, positive-ready side-effect gate, and strict payload validation. Production/deploy/EAS remain 0. Merge and migration apply HOLD pending mandatory H1 re-review.
+- allocation: C1 corrective round 2 on existing PR #95. Fix only H1 S1/S2: bind cache/view/consent/positive-ready to stable login-session identity (e.g. validated JWT session_id) so same-user fresh login invalidates old explicit request/result while ordinary same-session token refresh preserves single-flight; and prevent queued X automatic enrollment from dispatching after cleanup/sign-out/unmount by checking cancellation/current generation before ensure/transport dispatch. Preserve already-passed R1-R5 corrections and PR94 navigation. No production migration apply/deploy/EAS/Phase3. Mandatory exact-head H1 re-review after correction.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
