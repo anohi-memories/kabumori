@@ -1,10 +1,198 @@
+# C1 CORRECTIVE — PR #95 security/session enrollment hardening
+
+This is the newest canonical instruction for G5 and supersedes the prior PASS_CANDIDATE disposition.
+
+- task_id remains: `common-account-v1-phase2-service-enrollment-integration-20261006`
+- status: ready
+- next_owner: claude
+- target PR: **#95**, update the existing PR; do not open a replacement PR unless technically unavoidable and reported first.
+- previous reviewed head: `c06fac6492708331b6ba816122c9852cdcea73e7`
+- current main now includes PR #94 merge `d30a518731e976ab1c0e4e19e26f461a174a3c1c`.
+- recommended model: **Opus5.5（極高）**.
+- production mutation / deploy / EAS / enforcement: **0**.
+
+## Mandatory fresh integration first
+
+Before editing:
+1. fresh-fetch `origin/main`;
+2. rebase/fresh-integrate PR #95 work onto current main;
+3. preserve PR #94's root `news-detail` registration and all topic/news navigation behavior;
+4. re-check G1/G2/G3/G4/H1/H2/G5 ownership and open-PR overlaps;
+5. use the existing isolated G5 worktree only if still clean and safe; otherwise create a fresh independent G5 worktree from `/Users/yuya/Developer/kabumori-fresh`;
+6. do not touch another slot's branch/server/uncommitted files.
+
+## C1 accepted H1 findings — all must close
+
+### R1 P1 — automatic bootstrap must never reactivate ended
+
+Current defect:
+- client read says active/missing;
+- lifecycle state can become `ended`;
+- stale automatic `start_*_service()` then reactivates ended inside the server transaction.
+
+Required correction:
+- close this **at the server lifecycle transaction boundary**, not with another client SELECT.
+- automatic/bootstrap service-start semantics must be fail-closed for an entitlement that is currently `ended`.
+- explicit reactivation must be distinguishable from automatic bootstrap and tied to a current authenticated user action.
+
+Preferred minimal contract:
+- add a **new forward migration**; never edit the already-applied Phase 1 migration.
+- keep/create an automatic start/ensure RPC for each service that:
+  - creates missing entitlement;
+  - returns active idempotently;
+  - **does not reactivate ended**;
+  - fails closed for deleting/suspended/provisioning/locked/other blocked states.
+- add a separate explicit reactivation RPC for each service, callable only from the authenticated re-enrollment action, that atomically locks and reactivates **only a currently ended entitlement**.
+- exact names/signatures are implementation choices; preserve authenticated-only EXECUTE, auth.uid identity, SECURITY DEFINER safety, empty/fixed search_path and existing lock ordering.
+- old binaries calling the existing automatic RPC should become safer/fail-closed on ended, not silently reactive.
+- no production apply in this task.
+
+If a different design is safer/smaller, document it and prove the same invariants.
+
+### R2 P1 — explicit re-enrollment intent must be one-use and user/session scoped
+
+For both apps where applicable, especially X:
+- a re-enrollment click must create a one-use intent pinned to the exact initiating `userId` and current session/generation;
+- consume/clear intent once the explicit reactivation request starts;
+- invalidate it on user change, sign-out, recovery transition, cancellation/unmount and new session generation;
+- user A's click must never trigger a reactivation request for user B.
+
+Add the exact A-click -> B-switch regression H1 reproduced.
+
+### R3 P2 — side effects require positive enrollment-ready state
+
+Kabumori:
+- do not pass a session to push-registration or notification-navigation hooks merely because there is currently no error.
+- while service initialization/retry is loading or unresolved, these hooks must receive null/no service session.
+- create/use an explicit **ready for this exact user/session generation** state.
+- rejected -> retry pending -> rejected must perform zero push-token registration and zero pending-notification navigation.
+- preserve password-recovery ordering and logout availability.
+
+### R4 P1 — enrollment request transport must be bound to immutable session credentials
+
+Do not allow a stale A operation to issue a mutation with singleton Supabase client's later B token.
+
+Preferred correction:
+- remove the client read -> later mutation chain where possible; let the atomic server RPC decide lifecycle state.
+- capture immutable session context at request initiation: at minimum `user.id`, session/access-token identity and a local generation/request id.
+- use a request transport whose Authorization is bound to that captured token for the enrollment/reactivation call, rather than asking a mutable singleton client for whatever token is current at dispatch time.
+- invalidate/abort stale pre-dispatch work on sign-out/user switch.
+- stale completions must never open the app for another user.
+- never log/persist the access token.
+
+A dedicated short-lived Supabase/fetch transport bound to the captured JWT is acceptable if implemented safely with the existing public URL/anon configuration and no new secret.
+
+Add adversarial tests:
+- delayed A preparation/read -> switch to B -> release A => no request using B credential;
+- sign-out during pending run;
+- A explicit reactivation intent -> B switch;
+- repeated auth events/same user remain idempotent.
+
+### R5 P2 — validate full RPC response fail-closed
+
+For both app implementations:
+- validate the exact canonical response shape.
+- `status`, exact `service`, and `started` boolean are mandatory where defined by the server contract.
+- validate every other required field in the exact current/new RPC contract.
+- missing/null/string/number `started`, wrong service, unknown status, malformed object => **not ready / fail closed**.
+- no coercion of malformed fields into a valid default.
+
+## Server/client contract tests — mandatory
+
+Use a disposable PostgreSQL fixture and focused client tests to prove:
+
+Automatic:
+- missing -> creates only requested service;
+- active -> idempotent;
+- ended -> remains ended / no reactivation;
+- deleting/suspended/provisioning/locked/unknown -> fail closed.
+
+Explicit reactivation:
+- current ended + explicit current-user action -> active;
+- no explicit action -> no reactivation;
+- active/non-ended unexpected state -> deterministic safe response, no unintended mutation;
+- same action cannot be reused across user/session switch.
+
+Concurrency:
+- end/withdraw racing automatic bootstrap cannot end as active because of stale automatic start;
+- user A -> user B switch cannot make stale A work mutate B;
+- same-user repeated events remain one logical initialization.
+
+Kabumori:
+- push and notification side effects only after positive ready for exact current session;
+- pending/rejected states have zero side effects.
+
+X:
+- login/service enrollment still creates no X OAuth credential/workspace/posting authorization/publish-enable side effect;
+- existing explicit X OAuth flow remains separate.
+
+Malformed responses:
+- both clients fail closed on every incomplete/wrong active response shape.
+
+## PR #94 integration regression
+
+Because PR #94 is now on main:
+- current main must retain `<Stack.Screen name="news-detail" />` in Kabumori root SignedInNavigator.
+- merge/rebase PR #95 changes without dropping that route.
+- rerun the Kabumori navigation/root-navigator tests and the common-account AuthGate tests together.
+- manually inspect the final `src/app/_layout.tsx` so it contains both:
+  - PR #94 root-detail registration;
+  - corrected PR #95 service-access/AuthGate logic.
+
+## Scope / migration safety
+
+Allowed:
+- source changes required for R1-R5;
+- one **new forward migration candidate** for the corrected lifecycle RPC contract;
+- client/domain/tests/runbook updates required by that candidate.
+
+Forbidden:
+- editing the already-applied historical migration in place;
+- applying the new migration to production;
+- enabling RLS/service-role enforcement;
+- Phase 3 deletion-orchestrator implementation;
+- production DB/Auth/Storage/OAuth/Vault mutation;
+- EAS/TestFlight;
+- real X;
+- unrelated G1-G4 work.
+
+## Completion / K5
+
+Update existing PR #95 to a new exact head.
+
+Report:
+- fresh main + PR94 merge ancestry;
+- migration/RPC contract delta;
+- exact automatic vs explicit-reactivation semantics;
+- session-bound transport design;
+- one-use user-scoped reactivation intent;
+- Kabumori positive-ready side-effect gate;
+- strict response validation;
+- all adversarial reproductions from H1 now passing;
+- combined Kabumori + X tests;
+- disposable PostgreSQL proof;
+- final `src/app/_layout.tsx` proof preserving `news-detail`;
+- changed files;
+- production mutation/deploy/EAS = 0;
+- remaining issues.
+
+Then:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K5.
+
+A **new focused H1 re-review is mandatory** on the corrected exact head before merge.
+Recommended reviewer: **Sol（高）**.
+
+---
+
 # Claude Task 5 — CURRENT TASK
 
 - task_id: common-account-v1-phase2-service-enrollment-integration-20261006
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: critical
 - start_code: G5
 - finish_code: K5
