@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase2-service-enrollment-corrective-rereview-20261006
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Sol（高）
 - type: focused auth/session/lifecycle-RPC/migration security re-review
