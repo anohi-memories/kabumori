@@ -1,3 +1,43 @@
+## Final C2 — PR #41 ACL rereview PASS / merged
+
+- H2 exact reviewed head: `c509117f8addf5a8687d60d9c18ae271b2c1777c`.
+- verdict: **PASS** for the bounded R1/R2 corrective; both previous privilege blockers are closed.
+- R1 closed:
+  - effective forbidden service_role table/column privileges are checked across all live columns;
+  - direct, inherited and PUBLIC-derived column privilege drift refuses atomically;
+  - authenticated PR81 privileges remain unchanged;
+  - clean graph keeps service_role unable to read the underlying settings table directly.
+- R2 closed:
+  - completion/reader/authority privileged routines enforce exact signature/kind/owner/search_path/direct ACL/effective EXECUTE boundaries;
+  - unknown default EXECUTE, inherited app-role access, grant option, overload/procedure and unsafe owner/creator states refuse atomically;
+  - authenticated cannot enable publish authority or call completion;
+  - intended service_role calls still work.
+- focused H2 review found no new blocker; no implementation edits were made by H2.
+- final merge gate:
+  - PR #41 head unchanged;
+  - GitHub mergeable=true;
+  - main advanced from PR base with **0 overlap** across PR #41's 16 changed files;
+  - Netlify Preview PASS;
+  - Vercel failure was `build-rate-limit`, treated as non-code/nonblocking per project Preview policy.
+- PR #41 squash-merged as:
+  `b90ee326600b075e3d0b23209b4eefc1b4cd9c16`.
+- source now on main:
+  - generic `social_mobile_user_v1` scheduled live-post dispatcher;
+  - remembered AI consultation settings/persona reach live generation;
+  - narrow service-only publish settings reader;
+  - completion / publish-authority Stage3B source candidates;
+  - PR76 guarded X sends preserved;
+  - AI Lab/Kabumori specialized paths preserved.
+- production migration/history apply = 0; Edge deploy = 0; publish-authority activation = 0; real X/OpenAI = 0; Auth/Vault/OAuth/Cron mutation = 0.
+- **No further routine PR #41 review is required.**
+- remaining release dependencies:
+  1. G5 common-account PR #95 source acceptance/merge and later entitlement-enforcement ordering;
+  2. PR81 production schema apply through its reviewed atomic procedure;
+  3. Stage3B production migration sequence + readback;
+  4. x-test-post/AI-consult production deployment;
+  5. no real-user publish-authority enablement until G5 `x_autopost` entitlement checks are in the required live-publish gates.
+- G3 and H2 are now done/free. Do not open the production mutation window from this C2.
+
 ## K1 — PR #100 canonical portfolio PASS / report-origin navigation HOLD — 2026-10-07
 
 - PR #100 exact reviewed head: `5a9735c80e3dbc01b25911a0aabc83fce3d56bc9`.
