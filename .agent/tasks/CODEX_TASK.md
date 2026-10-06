@@ -16,6 +16,59 @@
 
 ## Purpose
 
+Re-review the second G5 corrective on PR #95. The only intended blockers are S1 same-user fresh-session reuse and S2 queued X enrollment after cleanup.
+
+## Required checks
+
+- Fresh-fetch main and require exact PR #95 head `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`.
+- Use an isolated H1 worktree from `/Users/yuya/Developer/kabumori-fresh`.
+- Verify runtime identity is `userId + stable login session_id`, not userId alone.
+- Verify local token claim parsing is used only as an ephemeral session discriminator; malformed/missing/foreign-sub/session_id inputs fail closed, while the server still authenticates RPCs.
+- Reproduce A1 explicit reactivation pending -> same user fresh A2 -> release A1 in both apps; A2 must not inherit consent/result or become ready.
+- Verify same-login token refresh preserves safe single-flight.
+- Verify X unmount/sign-out/superseded effect before queued dispatch sends zero obsolete enrollment requests.
+- Verify normal X mount sends exactly once and existing in-flight stale-result suppression still works.
+- Re-run enough R1-R5 regressions to ensure the prior server/RPC, strict payload, immutable Authorization, push-gate and cross-user fixes remain intact.
+- Preserve PR #94 root news-detail and X OAuth separation.
+- Current allocation-time main is three commits past PR merge-base, with changes only in .agent control files and zero product overlap; re-check at review time.
+- No production access/write, migration apply, deploy, EAS, Phase3, Auth/Storage/OAuth/Vault/Cron/X/provider mutation.
+
+## Evidence
+
+Independently inspect/reproduce the reported G5 results: Kabumori 390/390, AuthProvider 10/10, X 221/221, DB start-intent runner 10 PASS markers, Phase1 20/20, migration invariants 10/10, and former S1/S2 adversarial probes now PASS.
+
+## Verdict / completion
+
+Return PASS, PASS-WITH-NONBLOCKING-NOTES, CHANGES REQUIRED, or BLOCKED.
+
+PASS authorizes only C1 source merge/readiness judgment. It does not authorize production migration apply or native release.
+
+Write the result to `.agent/CODEX_REPORT.md`, set H1 status `review_required`, next_owner `chatgpt`, and STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Previous H1 task history — preserved
+
+# Codex Task — CURRENT TASK
+
+- task_id: common-account-v1-phase2-session-identity-final-rereview-20261007
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: critical
+- recommended_model: Sol（高）
+- type: focused auth/session cancellation security re-review
+- target_pr: 95
+- target_head: 1e8119e12457d9f6fbb8aef86991f44bf46f9cd6
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
 Independently review the second G5 corrective on PR #95 after C1 narrowed the remaining blockers to S1/S2.
 
 Previously accepted and not to be reopened without concrete regression evidence:
