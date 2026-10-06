@@ -3,9 +3,9 @@
 - task_id: common-account-v1-phase1-production-migration-gate-20261006
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
-- production_mutation_window: **ACTIVE** — 2026-10-06, user explicitly approved the G5 common-account Phase 1 production migration (exact 20261001150000 only, schema-first / history-second runner, then read-back). Other slots: no production write until this line says CLOSED.
+- status: review_required
+- next_owner: chatgpt
+- production_mutation_window: **CLOSED** — 2026-10-06 14:58 JST. G5 applied exactly 20261001150000 (Stage A/B/C + postflight EXACT, one history row) and read it back; G5 performs no further production write. backfill / deploy / Auth / Storage / OAuth / Vault / Cron / real X = 0.
 - priority: highest
 - start_code: G5
 - finish_code: K5
@@ -387,10 +387,88 @@ Recommended Claude model: **Opus5.5（極高）**.
 ## Report
 
 - task_id: common-account-v1-phase1-production-migration-gate-20261006
-- result: **PREFLIGHT_READY**（2026-10-06 14:27 JST の Phase A 再取得で 9/9 PASS。差分は G4 PR76 による想定どおりのものだけ。下の「Phase A refresh」）。
-  - 初回 Report（00:56 JST）時点の「G4 window ACTIVE」という条件は、G4 が 14:11 JST に CLOSED を記録したことで解消した。
-  - 本番書き込みには、引き続きユーザー / ChatGPT の明示承認が必要。G5 は承認前の STOP にいる。
-- production writes actually performed: **0**（G5 の SQL による本番書き込みはゼロ）。migration 適用 / 履歴書き込み / backfill / deploy もすべてゼロ。
+- result: **APPLIED_PASS**（2026-10-06 14:54 JST。承認済みの migration 1 本だけを本番に適用し、読み返しがすべて一致した）。
+- production writes actually performed（すべてユーザーの明示承認の範囲内）：
+  - `20261001150000_common_account_lifecycle_foundation.sql` のスキーマ適用（Stage A）。1 transaction。
+  - migration 履歴に 1 行を insert（Stage C）。`20261001150000 / common_account_lifecycle_foundation`。
+  - これ以外の本番書き込みは 0。backfill / deploy / Auth / Storage / OAuth / Vault / Cron / flag / 実 X / 削除機能の有効化もすべて 0。
+- backfill: **0**（common_accounts 0 行、service_entitlements 0 行、operations 0 行を読み返しで確認）。deploy: **0**。
+
+### Production apply — 2026-10-06（ユーザーの明示承認による）
+
+- 承認：ユーザーがチャットで次の内容を明示的に承認した。
+  - G5 共通アカウント Phase 1 の本番 migration 適用。
+  - 手順は TASK どおり：fresh mutex → 必要なら最終 preflight → exact migration 1 本 → read-back。
+  - backfill・削除機能の有効化・Auth / Storage / OAuth / Vault・Edge deploy・Cron・実 X は行わない。
+- mutex：
+  - 適用前に fresh main を確認した（`e8036721`、直前は `a82e7987`）。
+  - 他スロットの状態：G2 は 14:34 に CLOSED（Edge deploy のみ。DB は変更していない）。G3 は書き込み保留（review_required）。G4 / G1 は本番変更なし。H1 / H2 は done。
+  - G5 の `production_mutation_window` を ACTIVE にしてから作業した（`9c6f71bf`）。CLOSED にしたのは 14:58 JST。
+- 最終 preflight（14:49〜14:52 JST）：
+  - 9 本の結果は 14:27 の baseline と完全に一致した（履歴 74 行、指紋 `db31ea2e…15dd`、対象のオブジェクト・履歴は不在）。
+  - G2 の deploy が 14:27 の後に入っていたため、TASK の決まりどおり再取得した。
+  - runner の `status` は `schema=ABSENT history=NONE`（psql の接続と本人確認も成功）。
+- 実行方法：
+  - operator（ユーザー）が wrapper `.g5-prod-gate/operator.sh`（未追跡、G5 worktree）から実行した。
+  - wrapper は次を固定・確認してから runner（PR #91 head `cab1f0fe`）を呼ぶ：checkout が `cab1f0fe` であること、tracked ファイルが clean であること、migration の SHA `e632214b…`、runner の SHA `86c1a3ed…`、test hook の解除。
+  - 接続：session pooler、`postgres.<ref>`、`PGSSLMODE=require`。DB password は wrapper の中で 1 回だけ非表示で入力し、process 内でだけ使用した（保存・表示なし。Claude はパスワードを扱っていない）。
+- runner の出力（14:54 JST）：
+  - `preflight: schema=ABSENT history=NONE`
+  - `Stage A: migration committed`（lock_timeout 5s。ロック待ちによる失敗なし）
+  - `Stage B: existing objects unchanged`、`catalog read-back = EXACT`（pin した 10 section と、実効権限などの意味チェックがすべて一致）
+  - `Stage C: history recorded (20261001150000 common_account_lifecycle_foundation)`
+  - `postflight: schema=EXACT history=EXACT`、`DONE`
+  - 別 session の `status`：`STATE schema=EXACT history=EXACT`
+- STOP・再試行・修復・手作業での ACL 修正・rollback はすべて 0。
+
+### Phase D — 読み返し（read-only、14:54〜14:57 JST）
+
+**1. 9 本の bundle（適用前の baseline との比較）**
+- 01 履歴：75 行。差分は 1 行だけ：`20261001150000 / common_account_lifecycle_foundation`（statements NULL）。同じ名前で別 version の行は 0。ほかの履歴は不変。
+- 02 作成物：ちょうど relation 12（table 5、view 1、index 6）、型 12、関数 33、trigger 10、policy 2。名前パターンでの広い検索も同じ集合で、ほかの schema に同名の物は無い。
+- 03 依存関係：完全に同一（列 26/26、FK 14/14、profiles の子の cascade、helper の本文と権限）。
+- 04：`auth.users` の内部 trigger が 28 → 30。`common_accounts_user_id_fkey`（ON DELETE CASCADE）が増えた。いずれも想定どおり。ほかは同一。
+- 05：public の関数 123 → 135（+12）、private の関数 1 → 22（+21）、public の relation 77 → 79、private の relation 0 → 4。role graph・schema ACL・既定権限は同一。
+- 06（公開経路）・08（canary）：同一。
+- 07 既存オブジェクトの指紋：`db31ea2e…15dd` で、適用前と完全一致。既存の table / 列 / 制約 / index / policy / trigger / 関数 / 型 / 既定権限は 1 つも変わっていない。
+
+**2. 読める形での独立した読み返し（`.g5-prod-gate/sql/09_post_apply_readback.sql`、Management API 経由、runner とは別の経路）**
+- RLS：table 5 つすべてで有効（FORCE は無効）。view は RLS の対象外で、権限も無い。owner はすべて `postgres`。
+- table の権限：anon / authenticated / service_role とも、6 つの relation のどれにも table レベルの実効権限（SELECT〜MAINTAIN）を持たない。直接 ACL も owner 以外は無い。
+- 列の権限：authenticated の SELECT だけで、ちょうど次の 11 列。INSERT / UPDATE / REFERENCES と、anon / service_role への権限は 0。
+  - `common_accounts`：user_id / status / lifecycle_version / created_at / updated_at
+  - `service_entitlements`：user_id / service_key / status / activated_at / ended_at / updated_at
+- policy：2 本とも permissive、SELECT、roles は `authenticated`、条件は `(( SELECT auth.uid() AS uid) = user_id)`。WITH CHECK は無い。
+- trigger：10 本すべて enabled（O）で、設計どおりの関数を呼ぶ。
+- index：6 本すべて valid / ready / live。
+- 関数 33 本：すべて owner は `postgres`、SECURITY DEFINER、`search_path=""`。
+  - client 用 2 本（`start_kabumori_service` / `start_x_autopost_service`）：直接 ACL は `authenticated:EXECUTE`。実効的に実行できるのは authenticated / postgres / supabase_admin だけ。
+  - backend 用 10 本：直接 ACL は `service_role:EXECUTE`。実効的に実行できるのは service_role / postgres / supabase_admin だけ。
+  - 内部の 21 本：直接 ACL は無い。実効的に実行できるのは owner の postgres と superuser の supabase_admin だけ。
+  - PUBLIC / anon には全関数で権限が無い。grant option も無い。authenticator は authenticated / service_role に `inherit=false` で属しているため、実効権限の一覧に出ない。
+- foundation の初期状態：settings は 1 行（`shadow` / `not_started` / epoch 1）。registry は built-in の 3 行（apple_revocation:apple_identity、session_revocation:always、storage_cleanup:always）。common_accounts / service_entitlements / operations はすべて 0 行。enforce は存在しない。
+- ledger：対象行は 1 行だけ。
+- schema の USAGE（参考）：`private` に対して authenticated は true（適用前からの状態）。anon と service_role は false。
+
+### 判定と残り
+
+- 判定：承認された exact migration だけが適用された。スキーマ・RLS・ACL・関数・履歴は、H1 で review 済みの source の契約と、pin した期待値の両方に一致した。既存オブジェクトは不変。drift・履歴の不確定・権限の不一致・部分適用は無い。
+- 追加の Codex review：不要と考える（TASK の Review guidance の「exact apply + 読み返しが一致」に該当）。
+- remaining / next：
+  - `private.account_lifecycle_backfill(false)`（read-only の件数集計）と `backfill(true)` は、それぞれ別の権限付与と承認が必要（今回は 0）。
+  - integration（Phase 2/3）・enforcing guard・削除 orchestrator は未着手（前回 Report の obligations のまま）。
+  - PR #91（runner と bundle）を merge するかの判断。本番ではこの PR の固定 commit から実行した。
+  - DB password は G4 の作業中にリセット済みのもの。今回の適用で変更はしていない。
+  - CLI の "Initialising login role..." は、毎回の read-only 実行と同じく観測として記録する。
+- safety_checks：
+  - 承認範囲外の本番書き込みは 0。
+  - PII（token / JWT / email / user UUID / handle）の出力 0。Vault の値は読んでいない。password は Claude が扱っていない。
+  - 他スロットのファイルには触れていない。G5 の window を開いている間、他スロットの本番変更は無かった。
+
+### 以前の結果（履歴として保持）
+
+- 14:27 JST 時点：**PREFLIGHT_READY**（Phase A 再取得 9/9 PASS。差分は G4 PR76 による想定どおりのものだけ。下の「Phase A refresh」）。
+- 00:56 JST の初回 Report の時点では、G4 の window が ACTIVE だったため条件付きだった。
 
 ### Phase A refresh — 2026-10-06 14:27 JST（G4 CLOSED 後の継続許可：read-only のみ）
 
