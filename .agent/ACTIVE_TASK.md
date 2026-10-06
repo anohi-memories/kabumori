@@ -57,13 +57,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
+- next_owner: chatgpt
+- status: review_required
 - task_id: kabumori-topic-learning-access-progress-and-swipe-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 STRUCTURAL PASS / 375pt final gateのみ。PR #94 head 64c71bd6a49c6d1f65cb84642b3f68f60ef9648a はroot-level news detail化でnative swipe parityを構造的に解決し、internal expo-router import/redirect flashを解消。topic list 3-level切替・未読/学習済み・Settings分離も受入。376/376 tests。現行headで375pt list + news header実測/screenshot後にK1最終merge判定。
+- allocation: Final K1 PASS on PR #94 exact head 97d374b48886ad33b61cd2288188d4b690e27a5c。375pt実測PASS、376/376 tests、root-level news detailでnative swipe parity解決、topic list 3-level/未読・学習済み/Settings分離を受入。PR #95と src/app/_layout.tsx が1ファイル重複し、H1がPR95 exact headをレビュー中のためmergeのみHOLD。追加G1実装不要。C1後に安全なmerge順/integrationを調整。
 - recommended_model: Sonnet5（中）
 
 ## Claude G2
