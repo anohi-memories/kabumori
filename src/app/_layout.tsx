@@ -1,9 +1,8 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
 import { AuthScreen } from '@/components/auth-screen';
 import { OnboardingScreens } from '@/components/onboarding-screens';
 import { PasswordResetScreen } from '@/components/password-reset-screen';
@@ -16,6 +15,30 @@ import { usePushNotificationNavigation } from '@/hooks/use-push-notification-nav
 import { AuthProvider, useAuth } from '@/providers/auth-provider';
 
 SplashScreen.preventAutoHideAsync();
+
+// expo-router/unstable-native-tabs (see src/app/(tabs)/_layout.tsx) only
+// registers routes that have a matching NativeTabs.Trigger inside that same
+// route group -- router.push() to anything outside it (topic-detail,
+// topics, settings, ai, search) silently does nothing if those routes are rendered
+// as if they were part of the tab group. This root Stack is what makes them
+// reachable: (tabs) is one full-screen Stack entry, and the rest are
+// ordinary pushed screens on top of it, each managing its own
+// header/back-button in-content (matching news/_layout.tsx and
+// reports/_layout.tsx's existing "Stack screens matched by file name"
+// pattern, which already worked correctly before this fix).
+function SignedInNavigator() {
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="topic-detail" />
+      <Stack.Screen name="topics" />
+      <Stack.Screen name="news-detail" />
+      <Stack.Screen name="settings" />
+      <Stack.Screen name="ai" />
+      <Stack.Screen name="search" />
+    </Stack>
+  );
+}
 
 function AuthGate() {
   const { session, loading, error, profileError, retry } = useAuth();
@@ -48,7 +71,7 @@ function AuthGate() {
       ) : session && profileError ? (
         <ProfileRecoveryScreen message={profileError} onRetry={retry} />
       ) : session ? (
-        <AppTabs />
+        <SignedInNavigator />
       ) : (
         <AuthScreen startupError={error} onRetry={retry} />
       )}

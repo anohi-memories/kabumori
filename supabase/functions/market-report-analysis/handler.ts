@@ -15,12 +15,23 @@
 import type { MarketDataPacket } from "../market-report-data-packet/packet_schema.ts";
 import { decideRunWindow, type ReportType } from "../market-report-data-packet/session_logic.ts";
 import { buildAnalysisInput, type NewsTextRow } from "./analysis_input.ts";
-import { ANALYSIS_MODEL, generateSharedAnalysis, type Requester, reportContentHash } from "./analysis_logic.ts";
+import { ANALYSIS_MODEL, generateSharedAnalysis, generationDiagnostics, type Requester, reportContentHash } from "./analysis_logic.ts";
+import {
+  fetchWithTransportRetry,
+  newTransportStats,
+  realSleep,
+  type Sleep,
+  transportDiagnostics,
+  type TransportRetryPolicy,
+  type TransportStats,
+} from "./transport_retry.ts";
 
 export type Deps = {
   env: (name: string) => string | undefined;
   fetch: typeof fetch;
   now: () => Date;
+  // Injectable for tests; production waits for real.
+  sleep?: Sleep;
 };
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
@@ -59,14 +70,20 @@ function extractOutputText(response: unknown): string | null {
   return text || null;
 }
 
-export function openAiRequester(apiKey: string, fetchImpl: typeof fetch): Requester {
+export function openAiRequester(
+  apiKey: string,
+  fetchImpl: typeof fetch,
+  retry: { stats: TransportStats; sleep?: Sleep; policy?: TransportRetryPolicy } = { stats: newTransportStats() },
+): Requester {
   return async (step, body) => {
-    const response = await fetchImpl(OPENAI_RESPONSES_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(OPENAI_TIMEOUT_MS),
-      body: JSON.stringify(body),
-    });
+    // Only the HTTP request is retried (429 / 5xx / network); a non-OK final response keeps its existing code.
+    const response = await fetchWithTransportRetry(() =>
+      fetchImpl(OPENAI_RESPONSES_URL, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(OPENAI_TIMEOUT_MS),
+        body: JSON.stringify(body),
+      }), { stats: retry.stats, sleep: retry.sleep, policy: retry.policy });
     if (!response.ok) throw new Error(`ANALYSIS_OPENAI_${step.toUpperCase()}_FAILED:${response.status}`);
     const raw = await response.json();
     const output = extractOutputText(raw);
@@ -162,6 +179,7 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
   }
 
   const diagnostics: Record<string, string> = { model: ANALYSIS_MODEL };
+  const transport = newTransportStats();
   const fail = async (code: string, extra: Record<string, string> = {}) => {
     await db.rpc("fail_market_report_analysis", {
       p_cycle_id: claim!.cycle_id,
@@ -198,7 +216,14 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
     diagnostics.metrics = String(input.majorMoves.length);
     diagnostics.direction = input.direction;
 
-    const outcome = await generateSharedAnalysis(input, openAiRequester(openAiApiKey, deps.fetch), deps.now);
+    const outcome = await generateSharedAnalysis(
+      input,
+      openAiRequester(openAiApiKey, deps.fetch, { stats: transport, sleep: deps.sleep ?? realSleep }),
+      deps.now,
+    );
+    Object.assign(diagnostics, transportDiagnostics(transport));
+    // Content regeneration (local / Fact rejection, quality rewrite) is not a transport retry.
+    Object.assign(diagnostics, generationDiagnostics(outcome.trace));
     diagnostics.calls = String(outcome.calls);
     diagnostics.input_tokens = String(outcome.inputTokens);
     diagnostics.output_tokens = String(outcome.outputTokens);
@@ -235,7 +260,7 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
     });
   } catch (error) {
     const code = safeCode(error);
-    await fail(code);
-    return respond({ status: "failed", error: code, reportType, tradingDate }, 500);
+    await fail(code, transportDiagnostics(transport));
+    return respond({ status: "failed", error: code, reportType, tradingDate, transportRetries: transport.retries }, 500);
   }
 }

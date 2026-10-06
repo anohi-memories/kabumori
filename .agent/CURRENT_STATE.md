@@ -1,8 +1,2027 @@
+## G4 assigned — POSTONA multi-social Phase 1 architecture inventory — 2026-10-06
+
+- G4 is now `ready` on `postona-multisocial-phase1-architecture-inventory-20261006`.
+- Scope is deliberately docs-only: inventory current X-specific seams, define provider-neutral X/Threads/Instagram account/post/publication architecture, provider capability matrix, Threads-first implementation sequence and Instagram follow-on.
+- Product direction: provisional brand **POSTONA (POST + PERSONA)**; multi-social architecture precedes final UI implementation.
+- Current G3 remains `ready` on PR41 live scheduled-user generation/content-settings service-read integration; G4 must read for architecture only and must not edit/integrate G3 runtime paths.
+- Current G5 remains `ready` on common-account Phase 2 corrective; common login/service entitlement/Auth/session/deletion/provider-credential lifecycle remain G5-owned and must not be altered by G4.
+- G4 runtime/app/migration/RPC/Edge/OAuth/Vault/secret/production/deploy/provider-call changes: prohibited in Phase 1.
+- Deliverable: `docs/postona/multi-social-phase1.md` plus G4 report/control updates only.
+- Recommended model: **Opus5.5（高）**.
+- Next action: send `G4` to Claude Code.
+
+## Final C1 — PR #95 CHANGES REQUIRED / PR #94 merged / G5 corrective assigned — 2026-10-06
+
+- H1 exact review target: PR #95 head `c06fac6492708331b6ba816122c9852cdcea73e7`.
+- C1 verdict: **CHANGES REQUIRED accepted**. PR #95 remains open/unmerged/undeployed.
+- accepted blockers:
+  - R1 P1: stale automatic start can reactivate a now-ended service;
+  - R2 P1: X re-enrollment consent can carry across user switch;
+  - R3 P2: Kabumori push/notification side effects can run while retry enrollment is unresolved;
+  - R4 P1: stale A enrollment flow can dispatch with mutable singleton client's B credential;
+  - R5 P2: malformed active RPC payload can be accepted ready.
+- H1 independently proved PR #94 / PR #95 source compatibility:
+  - only `src/app/_layout.tsx` overlapped;
+  - both merge orders produced the same tree;
+  - combined Kabumori app tests 392/392 passed.
+- therefore completed G1 PR #94 was landed first:
+  - accepted head `97d374b48886ad33b61cd2288188d4b690e27a5c`;
+  - squash merge `d30a518731e976ab1c0e4e19e26f461a174a3c1c`;
+  - G1 done/free.
+- G5 is now ready on the same Phase 2 task / existing PR #95 with a focused security corrective:
+  - fresh-integrate on main containing PR #94;
+  - preserve root `news-detail`;
+  - add a new forward migration candidate if needed; never edit the applied migration;
+  - automatic bootstrap must never reactivate ended;
+  - explicit reactivation must use a separate atomic, current-user action boundary;
+  - re-enrollment intent must be one-use and user/session scoped;
+  - request authorization must be bound to immutable captured session credentials;
+  - Kabumori side effects require positive current-session service-ready state;
+  - RPC active payload must be structurally validated fail-closed.
+- production mutation/deploy/EAS/enforcement = 0.
+- H1 is done/free now; a **new H1 Sol（高） re-review is mandatory** after corrected PR #95 head.
+- G5 recommended model: **Opus5.5（極高）**.
+- current main after control sync at record time: `8dc0ec67aaa341a74ace79d8b00cbcd4891ed19f`.
+
+## Final K1 — PR #94 PASS / merge HOLD for PR #95 overlap coordination
+
+- verdict: **PASS** for G1 implementation and final 375pt visual gate.
+- PR #94 accepted head: `97d374b48886ad33b61cd2288188d4b690e27a5c`.
+- 375pt observed PASS:
+  - topic list selector one row;
+  - long 2-line titles no clipping;
+  - 未読 / ✓ 学習済み clean;
+  - root news-detail header no overlap;
+  - topic detail stable.
+- native swipe parity is structurally resolved by moving news detail to root Stack; no intermediate news-list flash and no internal Expo Router API dependency.
+- topic list 初級/中級/上級, Settings separation, per-level cache/race handling, local learned state and focus refresh accepted.
+- tests/checks: 376/376 app tests; tsc clean; Expo config/web export/diff PASS.
+- PR #94 fresh-main source overlap = 0; Codex review not required; EAS 0; backend/production mutation 0.
+- merge intentionally HOLD because active common-account PR #95 also changes `src/app/_layout.tsx`, and H1 is reviewing PR #95 exact head `c06fac6492708331b6ba816122c9852cdcea73e7`.
+- merging PR #94 during H1 review would change main/integration assumptions. Complete H1/C1 first, then preserve both the PR94 root `news-detail` Stack registration and PR95 Auth/service-access gate in the final integration.
+- no further G1 source work is currently required.
+
+## Final K3 — AI remembered persona -> generation PASS / PR #78 merged / live path next
+
+- verdict: **PASS** for `x-social-mobile-ai-consult-persona-generation-guidance-20261006`.
+- accepted PR #78 source head: `1f33c58ca82a9d33d8c5c7282e0ac5c2fbb4aca9`.
+- all confirmed consultation persona fields now materially influence social-mobile generation:
+  - toneSignals;
+  - sentenceLength;
+  - punctuationEmoji;
+  - recurringVocabulary;
+  - topicSignals;
+  - hashtagHabits;
+  - ctaStyle;
+  - openingClosingPatterns.
+- unconfirmed persona contributes zero persona guidance.
+- hashtag precedence verified:
+  fixed brand hashtags > profile-owned policy (AI Lab) > confirmed social-mobile hashtag habit > default no-hashtag.
+- Kabumori fixed hashtag and AI Lab behavior unchanged.
+- remembered notes remain bounded/one-line and cannot become an independent fake instruction line.
+- tests reported PASS: shared/consult/dry-run/settings Deno 72/72; AI Lab regressions 59/59; app 193/193; typecheck/lint/diff/secret scan clean.
+- G4/G5/PR41 prohibited paths were untouched; production mutation/deploy/real X/OpenAI = 0.
+- extra Codex review: **not required** for this bounded prompt/generation change.
+- PR #78 CI: Netlify Preview success. Vercel status failure was `build-rate-limit`, not a code/test failure; project policy treats Netlify as development Preview surface.
+- PR #78 squash-merged after K3 as:
+  `60dff4e28a763e3c182495dfc41cadf94671952f`.
+- AI consultation V1 source core is now on main. Remaining release blockers are live scheduled-user wiring, production PR81 schema/deploy, real-model quality/rate limit/release QA, and common-account release gates.
+- fresh G3 task assigned: `x-social-mobile-pr41-live-generation-fresh-integration-20261006`, recommended **Opus5.5（高）**.
+- PR41 next task is source-only:
+  - fresh-integrate stale PR #41;
+  - replace direct service_role table read with a narrow service-only brand-scoped settings read boundary;
+  - ensure both generation loader and publish-authority consent check use the narrow boundary;
+  - preserve PR76/AI Lab/Kabumori;
+  - do not preempt G5 entitlement enforcement semantics;
+  - no production/merge/deploy.
+- because the next task changes a service_role/DB permission/live-publish boundary, one focused **Sol（高）** Codex review is expected after a clean PASS candidate; no routine repeated rereview.
+
+## K5 — Common-account Phase 2 PASS_CANDIDATE / H1 review required — 2026-10-06
+
+- G5 Phase 2 source integration is **PASS_CANDIDATE**, not yet final merge approval.
+- PR #95 exact head: `c06fac6492708331b6ba816122c9852cdcea73e7`; production mutation/deploy/EAS = 0.
+- accepted implementation candidate:
+  - Kabumori session bootstrap uses the reviewed service-start RPC instead of legacy profile bootstrap;
+  - X session tree enrolls service before workspace/onboarding reads;
+  - X posting OAuth remains separate and login alone creates no posting authorization/credential/workspace;
+  - fail-closed UI exists for lifecycle refusal and transient initialization failure;
+  - focused tests/builds are green.
+- mandatory independent review assigned to H1 because the diff crosses Auth/session bootstrap in both apps.
+- H1 critical focus: ended explicit-reactivation race, stale async/user-switch behavior, fail-closed no-bypass guarantees, X OAuth separation, and PR #94 same-file compatibility.
+- PR #95 merge/deploy HOLD until C1.
+- G5 Phase 3 deletion/enforcement is not started yet.
+- recommended H1 model: **Sol（高）**.
+- AI Lab diary: 候補あり — 2つのアプリで共通IDを使いながら、それぞれのサービス利用登録だけを安全に追加できるログイン後の仕組みを実装。Xのログインと投稿権限は混ぜず、退会中などの状態ではアプリを開かない設計にした。
+
+## Final K2 — 10/6 close safety PASS / editorial regression -> corrective G2
+
+- classification: **delivery/factual PASS_FIRST_TRY, editorial FAIL (EDITORIAL_REGRESSION)**.
+- natural 10/6 close completed on first analysis attempt; retry was no-op; report packet unique and Fact PASS.
+- exact 3 points:
+  1. 主要指数は上昇、主因は一つに絞れず
+  2. 国際情勢のニュースを確認
+  3. 次は米国株と為替の動きを見る
+- numeric-three-line regression is gone, but points are too generic and do not communicate the day's specific market content. Point 1/3 closely mirror prompt examples; point 2 is generic enough to fit almost any day.
+- factual safety is good: observed values/dates/directions/1306/stale labels match input; unsupported market causality was avoided; no visible Hard false reject in the delivered generation.
+- notable missed editorial signal: Nikkei closed at 70,683.98 after 69,946.86, a meaningful 70,000-level milestone, but the current “numbers should not be headline stars” instruction appears to suppress useful milestone headlines too aggressively.
+- delivery diagnostics: X 387 chars; App 657 chars; quality rewrite ran once; calls=4; delivered_generation=1 after the rewrite generation failed Fact and safe-original fallback delivered the first generation. Cost approx $0.011845.
+- generic/low-specificity headings are currently not detected by X_POINTS telemetry.
+- 10/7 morning observation is deferred until corrective source is implemented/deployed; observing the same prompt again is low value.
+- fresh corrective G2 assigned: `kabumori-editorial-points-specificity-corrective-20261006`, recommended **Sonnet5（高）**.
+- corrective goals: remove copyable example sentences from prompt; require day-specific entities/events; permit safely evidenced milestone/threshold numbers; add WARN-only generic specificity telemetry; preserve all Hard Fact checks and model-call ceiling; investigate unnecessary rewrite/call behavior without weakening delivery-first policy.
+- no Codex review by default if only prompt/telemetry/tests change and Hard/rewrite/call semantics remain unchanged. Escalate to focused Luna（高） only if runtime delivery semantics materially change.
+- production mutation from observation = 0.
+- AI Lab diary: **候補あり — 株アプリの市況見出しを「数字の羅列」から改善したところ、今度は抽象的すぎる見出しになったため、実際の本番出力を見ながら“その日固有の内容が伝わる見出し”へ再調整している。**
+
+## K1 recheck — PR #94 structural PASS / 375pt final gate
+
+- PR #94 latest reviewed head: `64c71bd6a49c6d1f65cb84642b3f68f60ef9648a`.
+- previous swipe blocker is resolved structurally: news detail is now a root Stack route, so native edge swipe naturally returns to the actual origin screen without redirect-after-pop.
+- removed the package-internal `expo-router/build/...` dependency / `usePreventRemove` interception and the transient News-list flash.
+- Home-origin news detail -> swipe Home; News-list-origin -> swipe list; report-origin -> report; explicit Back follows the same origin contract.
+- existing `/news/<id>` system URL is rewritten to the canonical root detail route via `+native-intent`.
+- 402pt visual evidence accepted for root news detail and topic list selector + learned/unread states.
+- topic-list 初級/中級/上級 switching, Settings separation, selected-only fetch/cache/race safety, local AsyncStorage learned state remain accepted.
+- latest reported checks: 376/376 app tests, tsc clean, Expo config PASS, web export PASS, diff clean.
+- fresh-main changed-file overlap = 0.
+- Vercel failure is rate-limit only and not a native source blocker.
+- merge remains HOLD only because the explicit 375pt observed visual gate is still missing.
+- G1 should now do one iPhone SE-class 375pt pass + screenshot and return K1; no code change expected.
+- Codex review not required. EAS 0. backend/production mutation 0.
+
+## Final K5 — Common-account legacy backfill APPLIED PASS / Phase 2 assigned — 2026-10-06
+
+- verdict: **PASS / BACKFILL_APPLIED_PASS**.
+- production backfill committed exactly once at 16:55 JST; G5 production_mutation_window CLOSED at 17:52 JST.
+- current production common-account population:
+  - common_accounts 5 / Auth users 5;
+  - service_entitlements 3 = Kabumori 2 + X autopost 1;
+  - all backfilled entitlements active / legacy_backfill with exact expected evidence distribution;
+  - Auth-only 2 have no entitlement;
+  - excluded admin has no X consumer entitlement;
+  - lifecycle operations 0.
+- postflight dry-run shows all to-create counts 0; profiles/brands/memberships and migration ledger remained unchanged.
+- schema/RLS/ACL/function semantics remain exact. The legacy foundation runner's status command now reports UNSAFE only because its pinned state section expected an empty population; independent 9-section + semantic diagnostics prove no schema/security drift. Treat this as a tooling-observation limitation, not a production defect.
+- additional Codex review not required for the backfill itself: reviewed function + fail-closed one-transaction apply + exact postflight.
+- AI Lab diary: 記録不要 — internal account migration/backfill completion; no user-facing capability activated yet.
+- next critical-path task assigned to G5: `common-account-v1-phase2-service-enrollment-integration-20261006`.
+- Phase 2 goal: wire both apps' authenticated-session bootstrap to reviewed service-start RPCs while keeping shared login, service entitlement and X posting authorization separate.
+- Phase 2 first pass is source-only/test-only; production mutation/deploy/enforcement/deletion orchestration remain 0.
+- recommended model: **Opus5.5（極高）**.
+
+## Final K5 — Common-account legacy backfill ready / explicit apply approval required — 2026-10-06
+
+- verdict: **PASS / BACKFILL_READY**.
+- production dry-run and independent classification are exact; production writes remain **0**.
+- current production population:
+  - Auth logins: 5
+  - common accounts to create: 5
+  - Kabumori entitlement candidates/to-create: 2 = activity 1 + profile-only 1
+  - X consumer entitlement candidates/to-create: 1 = identity-verified 1
+  - X excluded admin: 1
+  - Auth-only: 2
+  - non-active candidate accounts: 0
+- Phase 0 deltas are fully explained by later legitimate state changes: one new Auth-only login and one admin-owned self-service X workspace; the admin remains excluded from X consumer entitlement by design.
+- local/disposable proof: lifecycle 20/20 PASS, source invariants 10/10 PASS, dedicated backfill proof 32/32 PASS, six deliberate defense mutations all detected.
+- production apply package is fail-closed: one transaction, bounded lock timeout, exact approved counts/evidence assertions, full rollback on mismatch, no blind retry.
+- PR #93 contains only backfill check/apply/proof tooling and was squash-merged as `b9cb6dcc1d6c8ae880d417f01941cdc4d669ffe6`.
+- additional Codex review is not required before exact apply: the production function was already independently reviewed and the new operator tooling passed positive, idempotency, stale-plan, lock-timeout and mutation-defense proofs.
+- **K5 is not treated as production write approval.** Next step requires explicit user approval for `backfill(true)`.
+- after approval, same G5 resumes with fresh mutex/state check, fresh dry-run, exact function/ACL verification, opens G5 production window, executes only the frozen backfill transaction, then read-only postflight and closes the window.
+- expected postflight if approved and state unchanged: common_accounts 5; entitlements 3 = Kabumori 2 + X 1; Auth-only 2 with no entitlement; admin X entitlement 0; operations 0; all remaining to-create counts 0.
+- integration/RLS enforcement/deletion orchestration/Auth/Storage/OAuth/Vault/Edge/Cron/real-X remain separately gated.
+- AI Lab diary: 記録不要 — internal account migration/backfill safety work; no user-facing feature activated yet.
+- recommended continuation model: **Opus5.5（極高）**.
+
+## K1 — PR #94 topic learning access PARTIAL PASS / structural swipe corrective
+
+- verdict: **HOLD before merge**.
+- PR #94 current accepted head: `c15ea73a2694bdecb35c095bbacb7017ed32a45c`.
+- accepted: topic-list 3-level switcher, Settings/Home separation, per-level cache/pagination/race handling, local learned/read state, focus refresh, stable `topic.id` progress identity, topic-detail learned marking.
+- not final: Home-origin news native swipe currently flashes the nested news list for ~1 frame before redirecting Home; user asked swipe to behave like the visible Back action.
+- not final: current swipe fix imports `usePreventRemove` from internal `expo-router/build/react-navigation/core`; K1 requires a supported/public structural navigation solution instead.
+- not final: 375pt explicit visual acceptance evidence still missing.
+- G1 returned to ready. Preferred correction: root-level shared news detail so native pop/swipe naturally returns the actual underlying Home or News list, while explicit `from` remains for deterministic button/deep-link fallback.
+- update existing PR #94 only; no second PR.
+- no Codex review allocated yet; re-evaluate after corrected K1.
+- EAS 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation 0.
+- recommended model: **Sonnet5（高）**.
+
+## Final K3 — AI consultation fresh integration PASS / persona-generation follow-up assigned
+
+- verdict: **PASS (source-only)** for `x-social-mobile-ai-consult-v1-fresh-integration-20261006`.
+- PR #78 fresh-integrated onto current main with no textual conflicts and no weakening of PR81 validation.
+- accepted current PR #78 head: `d1f131c56b082d2af57660b5bd3d83ff8c619c7d`; GitHub reports mergeable.
+- memory contract proven:
+  - AI reply alone writes 0;
+  - only explicit 「これで覚えて」 enters save path;
+  - latest row is reread before save;
+  - stale proposal/CAS conflict fails closed and requires reconfirmation;
+  - confirmed settings/persona become next consultation context.
+- tenant/auth/model-output contract preserved; endpoint remains user-JWT only, no service-role shortcut, one Luna model call, store:false, no web/tools/X, dangerous mutation keys refused.
+- memory-to-generation round trip is proven for settings and the already-consumed persona subset.
+- native Simulator verification covered question/proposal/loading/retry/stale/reconfirm/save/continue conversation at 402pt using a temporary reverted rig; no EAS.
+- tests reported PASS: app 193/193; relevant Deno 52/52; brand generator 13/13; tsc/lint/diff/secret scan clean.
+- production mutation/deploy/merge/real X/OpenAI = 0.
+- additional Codex review: **not required**; integration did not materially change auth/tenant/CAS/model-output boundaries.
+- PR #78 remains open intentionally; do not merge yet.
+- V1 blocker discovered: confirmed persona fields `toneSignals`, `topicSignals`, `hashtagHabits`, `ctaStyle`, `openingClosingPatterns` are persisted/re-read but not yet consumed by generation. Also current default no-hashtag instruction can contradict a remembered hashtag habit.
+- fresh G3 task assigned: `x-social-mobile-ai-consult-persona-generation-guidance-20261006`, recommended **Sonnet5（高）**.
+- follow-up is source-only and limited to generation guidance / focused tests. It must not touch PR41 live routing, G5 common-account, Auth/Vault/OAuth/DB/production or G4 work.
+- separate later blockers remain:
+  1. PR81 production schema apply after G5 permits;
+  2. live general-user dispatch via PR #41;
+  3. reviewed service-role read boundary for `social_mobile_content_settings` because final PR81 currently grants service_role no table access;
+  4. real model quality/rate-limit/release QA before V1.
+
+## G3 assigned — AI consultation V1 fresh integration
+
+- User product decision: **AI相談はV1必須**。利用者とAIが会話しながら投稿内容・口調を覚えさせる体験をX自動投稿アプリの中核として扱う。
+- task_id: `x-social-mobile-ai-consult-v1-fresh-integration-20261006`.
+- status: ready; owner: Claude G3.
+- recommended model: **Opus5.5（高）**.
+- source PR: #78, old head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`, currently open / not mergeable against fresh main.
+- G4 morning-greeting reliability Plan B/C is complete/merged and G4 is separate; G4 will later be used for X-app UI work in its own chat.
+- G5 remains project-wide common-account critical path. Current G5 work is common-account production backfill gate. G3 may do non-conflicting source/UI/test work, but must not touch Auth/entitlement/account deletion/common-account migration or perform production DB/Auth/permission mutation.
+- PR81 production apply is still deferred behind G5 production priority. G3 AI-consult task therefore has `production_mutation_allowed=false`, `merge_allowed=false`, `deploy_allowed=false`.
+- PR78 integration scope is its 11 AI-consult/content-settings paths plus minimal contract tests only.
+- V1 acceptance contract:
+  - conversation alone never saves;
+  - AI proposes only explicit editable deltas;
+  - user must explicitly confirm ("これで覚えて");
+  - latest state is reread before save;
+  - CAS on updated_at prevents stale overwrite;
+  - confirmed settings/persona become the next consultation's remembered context;
+  - consultation cannot alter publish/X/OAuth/schedule/approval/deletion/Auth/entitlement boundaries;
+  - tenant isolation is preserved.
+- Memory-to-generation is a release requirement, not optional polish:
+  - current main generic brand generator already accepts `contentSettings` and feeds `socialMobileGenerationGuidance(contentSettings)` into the generation prompt;
+  - G3 must prove save -> reread -> generation-guidance compatibility for confirmed settings/persona;
+  - if the actual scheduled general-user dispatcher remains dependent on open PR #41, do not absorb PR41 into this task; record the exact missing live wiring as a release blocker.
+- No EAS, no paid real-AI production call, no Edge deploy, no DB migration/history write, no real X.
+- finish code: K3.
+
+## Common-account becomes project-wide critical path — 2026-10-06
+
+- user decision: **共通アカウント完成を、かぶモリ/X自動投稿の次工程より最優先**にする。
+- Phase 1 foundation is already production PASS.
+- G5 is now assigned `common-account-v1-phase1-production-backfill-gate-20261006`.
+- first G5 run is strictly read-only: foundation check + `account_lifecycle_backfill(false)` + classification parity + proof refresh + frozen apply package.
+- no backfill(true) is authorized yet; G5 must STOP for K5 and explicit production approval.
+- existing G1-G4 tasks are preserved, but unrelated production DB/Auth/permission mutations must not overtake an approved/active G5 production window.
+- after exact backfill, common-account Phase 2/3 will be prioritized and app-side integration work may be parallelized safely by service.
+- recommended G5 model: **Opus5.5（極高）**.
+
+## Final K5 — Common-account Phase 1 foundation applied PASS — 2026-10-06
+
+- verdict: **PASS / APPLIED_PASS**.
+- production migration `20261001150000_common_account_lifecycle_foundation.sql` applied exactly once; migration history row exact; production_mutation_window CLOSED at 14:58 JST.
+- postflight is exact: schema=EXACT / history=EXACT; RLS, column grants, SECURITY DEFINER/search_path, direct/effective EXECUTE ACLs, triggers, indexes, policies and initial lifecycle state all match the reviewed contract.
+- existing-object fingerprint remained unchanged, so unrelated production objects were not modified.
+- backfill = 0; common_accounts / service_entitlements / lifecycle operations remain empty.
+- deploy/Auth/Storage/OAuth/Vault/Cron/flag/real-X changes = 0.
+- extra Codex review not required: source boundary was already independently reviewed and production read-back found no drift or partial state.
+- rollout tooling/runbook PR #91 was squash-merged as `50e08e1daa0b1e91f9f170a5baaf175ebcd315cd`.
+- AI Lab diary: 記録不要 — infrastructure foundation rollout only; no user-facing capability activated.
+- G5 is done/free.
+- next common-account work is **backfill dry-run -> approved backfill -> Phase 2 app/service integration -> Phase 3 deletion/orchestrator/enforcement**. Each production mutation remains separately gated.
+
+## Final K4 — Morning greeting schedule reliability B+C PASS / PR #92 merged
+
+- verdict: **PASS**.
+- PR #92 exact head `3d5475849217e1ca9f40bbedf12a42c0e5671504` squash-merged as `19c85c4381c55161207032146d6f66eb8a0c99f5`.
+- changed files: exactly 5, limited to morning-greeting generator/check workflows and tests/scripts.
+- Plan B:
+  - generator schedules now 00:17 / 02:47 / 04:17 / 05:17 JST;
+  - existing `workflow_dispatch` preserved;
+  - existing generator concurrency preserved;
+  - repeated same-date runs skip once `generated/<date>.png` exists, avoiding duplicate OpenAI/upload work.
+- Plan C:
+  - read-only checks at 06:07 / 09:47 JST;
+  - reads posting window + Storage metadata only;
+  - missing => `MORNING_GREETING_IMAGE_MISSING`;
+  - image created at/after earliest posting-window start => `MORNING_GREETING_IMAGE_LATE`;
+  - read/shape errors fail closed;
+  - no OpenAI secret in the check workflow and no DB/Storage/X write.
+- tests: 44/44 PASS; YAML parse PASS; changed-file typecheck clean; diff check clean.
+- CI on exact head: Netlify/Vercel success.
+- branch was behind fresh main by control-only commits; fresh-main changes since merge-base touched only `.agent/`, so overlap with the 5 PR files = **0**.
+- production mutation/deploy/real X/GitHub token/Vault/Supabase pg_cron/manual dispatch = **0**.
+- extra Codex review: **not required** under minimal-review policy.
+- manual 10/7 fallback remains available via existing workflow_dispatch if needed.
+- remaining limitation: B+C still depend on GitHub scheduler. Plan A (Supabase pg_cron -> GitHub workflow_dispatch) remains a separate credential/Vault/Cron-boundary task.
+- G4 done/free.
+
+### G3 coordination snapshot at this K4
+- G3 task `x-social-mobile-pr81-production-apply-continuation-20261006` is `review_required` after Gate A/B/C preflight-ready HOLD.
+- Its report held production mutation only because G5 common-account apply was pending.
+- G5 current TASK now records its exact migration applied and `production_mutation_window: CLOSED` at 14:58 JST.
+- Therefore the former G5 mutex blocker is no longer active, but G3 must **rerun its fresh Gate A/B after the G5 ledger/default-ACL delta** before requesting/using any PR81 production approval.
+- This G4/K4 does not allocate or modify G3.
+
+## G1 assigned — Topic learning access / progress / swipe parity
+
+- task_id: `kabumori-topic-learning-access-progress-and-swipe-20261006`.
+- status: ready; owner: Claude G1.
+- recommended model: **Sonnet5（高）**.
+- fresh allocation main: `9c6f71bf00557c3c9b9ddc0a4198702600731660`.
+- previous G1 PR #90 is Final K1 PASS / merged / G1 free.
+- fresh open-PR overlap check: **0 overlap** with topic/news/navigation target paths.
+- user real-iPhone finding: news Home-origin edge swipe currently lands on news list while visible `戻る` lands Home. New invariant: **native swipe and visible Back must resolve to the same explicit origin destination** for Home/list origins on both topic and news detail.
+- topic list becomes independent learning access:
+  - compact 初級/中級/上級 selector;
+  - Settings level is only Home display preference and merely initial list default;
+  - list switching never writes Home preference;
+  - selected-level fetch only, with per-level in-memory loaded-page cache/race protection.
+- detail right-side topic-list action should request the currently viewed level; normal contextual Back to an existing list preserves that list's own current level.
+- add local-device learned/read state using existing AsyncStorage only; successful detail display / successful in-detail level switch marks learned; errors/mismatch do not.
+- list shows unobtrusive 未読 / 学習済み state and refreshes immediately after returning from detail.
+- no DB/RPC/Auth/Edge/account-sync/prod/EAS changes.
+- verify real Simulator edge swipes plus 375/402 list UI.
+- finish code: K1.
+
+## Final K2 — PR #87 production deploy PARTIAL PASS / close observation next
+
+- verdict: **PARTIAL PASS, safety stop accepted**.
+- `market-report-analysis` production deploy completed exactly:
+  - v23 -> **v24**
+  - ACTIVE / verify_jwt=false
+  - downloaded production import graph matched fresh main **11/11 byte-identical**
+  - PR #87 editorial-points logic is present.
+- `personalized-reports` was **not deployed**. G2 correctly stopped because current main contains older undeployed PR #43/#67 behavior in the same import graph, including legacy-path delivery logic outside PR #87's reviewed rollout scope.
+- this hold is not a PR #87 failure. With app gate OFF, the new `market_detail.points_ja` path is not yet needed for current delivery.
+- app_enabled=false / x_enabled=false before and after; relevant 8 crons unchanged; 20 unrelated Edge Functions unchanged.
+- production mutation performed: exactly one Edge deploy, `market-report-analysis` v24.
+- manual report/retry=0; X/notification=0; DB/RPC/migration/Cron/gate/Auth/Vault/EAS changes=0.
+- production mutation window CLOSED at 14:34 JST.
+- no Codex review required: deployed target is the exact already-reviewed source and post-deploy read-back is byte exact.
+- next G2: `kabumori-pr87-close-natural-observation-20261006`, read-only, recommended **Sonnet5（中）**.
+- first useful close observation is after 16:40 JST (16:20 analysis / 16:35 retry). Do not poll or manually generate before then.
+- separate deferred work: review the accumulated personalized-reports PR #43/#67/#87 bundle before any future deploy, especially legacy delivery impact. Do not bundle that into the close observation.
+- AI Lab diary: **記録不要 — 今回は既に記録済みの3ポイント改善のproduction反映確認で、新しい公開向け機能追加そのものではない。**
+
+## G4 assigned — Morning greeting GitHub schedule reliability Plan B + C
+
+- Investigation indicates the posting-window OFF/ON toggle is not the trigger for the delay; GitHub scheduled workflow creation itself began drifting on 2026-09-20 while the greeting was still OFF.
+- Current `.github/workflows/morning-greeting-image.yml` has `workflow_dispatch` plus one scheduled trigger at 20:30 UTC / 05:30 JST.
+- G3 remains occupied by `x-social-mobile-pr81-production-apply-continuation-20261006`; it is not touched.
+- G4 was genuinely free after Final K4 PR76 and is assigned `x-morning-greeting-schedule-reliability-bc-20261006`.
+- implementation scope:
+  - Plan B: multiple staggered schedule opportunities before morning posting, preserving correct JST target date and idempotency;
+  - Plan C: ~06:00 JST missing-image detector that fails visibly if the day's image is absent;
+  - preserve existing workflow_dispatch/manual fallback.
+- no GitHub PAT, Vault write, Supabase pg_cron, production DB mutation, Edge deploy or real X in this G4.
+- recommended Claude model: **Sonnet5（高）**.
+- review policy: no Codex by default; focused Luna（高） only if K4 exposes a concrete workflow-safety concern.
+- Plan A (Supabase pg_cron -> GitHub workflow_dispatch) is deliberately deferred to a separate task because it introduces a credential/Vault/Cron boundary. That later task should get at most one focused security review.
+
+## Final K5 — Common-account Phase 1 fresh preflight PASS / explicit production approval required — 2026-10-06
+
+- verdict: **PASS / PREFLIGHT_READY**.
+- G4-closed fresh Phase A refresh at 14:27 JST passed **9/9**.
+- observed production deltas are exactly the reviewed PR76 changes: ledger +1 row `20261003090000`, public functions +2; all other dependency/role/default-ACL/renderer checks remain compatible.
+- common-account target objects/history remain absent; exact migration SHA256 remains `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3`.
+- current pre-apply baseline: ledger 74 rows; existing-object fingerprint `db31ea2ebb931dab42c4de743978c28eac484d3d99f6b4cb6aa924c382d215dd`.
+- G5 production writes remain **0**. No migration/history/backfill/deploy/Auth/Storage/OAuth/Vault/Cron/real-X mutation has occurred.
+- additional Codex review is not required before exact apply; source and managed-boundary review were already completed, and rollout tooling proof is green.
+- G3 PR81 may continue read-only preflight only; it must not perform production mutation while the G5 production-apply decision is pending.
+- next step requires **explicit user approval** for the exact G5 production migration mutation. K5 itself is not treated as that approval.
+- after explicit approval, resume the same G5 with **Opus5.5（極高）**, fresh mutex check and any stale preflight refresh, then exact apply + exhaustive read-back. Backfill remains separately gated.
+
+## Final K4 — PR #76 production rollout PASS / G3 PR81 resumed
+
+- Final verdict: **PASS**. No further PR76 source or production review is required.
+- G4 report records production_mutation_window **CLOSED** at 2026-10-06 14:11 JST.
+- Production independently re-read at K4:
+  - migration ledger `20261003090000 / social_mobile_publish_permission_boundary` = exact 1 row; stray same-name history = 0;
+  - exact two target RPCs present;
+  - both owner postgres / SECURITY DEFINER / expected empty search_path configuration;
+  - effective EXECUTE exact: anon none; authenticated toggle only; service_role pre-send only;
+  - `x-test-post` ACTIVE v136 / verify_jwt=false; version increment after secret update did not change code according to G4 byte read-back;
+  - `social-mobile-publish-setting` ACTIVE v1 / verify_jwt=true;
+  - running scheduled work = 0; overdue pending = 0.
+- G4 exact rollout report:
+  - S1 guarded x-test-post deploy/read-back complete;
+  - S2 drain complete;
+  - S3 migration schema apply + Stage B exact + one exact history insert complete;
+  - S4 exact RPC/ACL/history read-back complete;
+  - S5 publish-setting deploy/read-back complete;
+  - S6 publish toggle/use = 0.
+- PR82 AI Lab runtime is active as approved. Natural AI Lab posts/claims observed healthy during rollout.
+- One unrelated pre-existing Kabumori `morning_greeting` failure stream predates this rollout and should be handled separately; it is not a PR76 blocker.
+- DB password was reset during the rollout; future direct psql/operator runs must use the new password.
+- additional Codex review: **not required**; source security review had already passed and production read-back is exact.
+- G4 done/free.
+- PR76 prerequisite now unblocks PR81.
+- fresh G3 task assigned: `x-social-mobile-pr81-production-apply-continuation-20261006`, recommended **Opus5.5（高）**.
+- G3 must first rerun read-only Gate A/B, freeze the exact already-reviewed PR81 two-file atomic package, then STOP for fresh explicit production approval. No production write is authorized by allocation alone.
+- G3 production apply must not overlap G2/G5 or any other production mutation.
+
+## Final K4 + G5 continuation — 2026-10-06
+
+- G4 PR76 production rollout is **PASS / complete**; production_mutation_window CLOSED at 14:11 JST.
+- x-test-post guarded runtime, PR76 migration/history, RPC ACLs and publish-setting read-back are exact; G4 performs no further production writes.
+- G5 common-account production gate may resume now, but **read-only only**.
+- G5 must rerun all 9 Phase A production preflight checks after the G4 changes, refresh ledger/object-fingerprint baselines, and reconfirm the exact common-account migration SHA/dependencies.
+- No common-account production write is authorized by this continuation. Fresh PASS must return to K5 for explicit mutation approval.
+- G2 remains ready, not active; do not let its deploy overlap the G5 mutation window later.
+- recommended G5 model: **Opus5.5（極高）**.
+
+## Final K1 — PR #90 detail navigation PASS / merged
+
+- verdict: **PASS**.
+- PR #90 exact head `39bdf30f4c1bdb4214acbe27bf918aeff8a39ab1` squash-merged as `bcbdc2b8df3ba66955ebbf3e10d04a19b446fe38`.
+- fresh changed-file overlap = 0; mergeable/clean; CI green.
+- final UX:
+  - left `‹ 戻る` resolves from explicit origin param;
+  - Home origin -> Home;
+  - topic/news list origin -> the relevant list;
+  - unknown/deep link -> Home fallback;
+  - right action is always `トピック一覧 ›` / `ニュース一覧 ›`.
+- topic level switching remains same-date and preserves origin; Home saved level is not modified.
+- 335/335 app tests; focused 61; tsc clean; Expo config/web export/diff PASS.
+- 402pt Simulator real-tap verification accepted. Final labels are shorter than the prior 375pt-verified variants, so no additional 375pt gate is required.
+- news edge-swipe still follows the native nested stack to the news list; explicit `戻る` follows the user-selected contextual-origin rule. Accepted as a non-blocking native gesture difference.
+- Codex review not required. EAS 0. backend/DB/RPC/API/AI/Auth/Edge/production mutation 0.
+- G1 done/free.
+
+## Interim K3/K4 — PR76 production rollout partially complete / G3 still blocked
+
+- K3: no fresh G3 continuation has run. Previous PR81 production schema gate remains done/HOLD; do not resume PR81 yet.
+- K4 read-only production verification on project `wsmznyzcvmuitkglfeuj` shows the G4 rollout is **partially complete**, not finished:
+  - `x-test-post` ACTIVE v136, `verify_jwt=false`;
+  - deployed source contains the PR76 pre-send permission guard and PR82 AI Lab runtime;
+  - PR76 RPCs exist:
+    - `set_social_account_publish_enabled(text,boolean,boolean)`
+    - `assert_x_publish_permission_for_legacy_post(uuid,text,text)`
+  - both are owner `postgres`, SECURITY DEFINER, empty search_path; effective EXECUTE is exact: authenticated=toggle only, service_role=pre-send only, PUBLIC/anon none;
+  - PR76 migration history version `20261003090000` is still **absent**;
+  - `social-mobile-publish-setting` is still **not deployed**.
+- This means the safe checkpoint is effectively **PR76 schema/runtime present / history missing / S5 pending**. Do not blindly rerun the PR76 migration DDL.
+- Natural AI Lab runtime observation during this partial state is healthy:
+  - recent scheduled brand posts include successful executions;
+  - recent AI Lab claims are published;
+  - running count = 0;
+  - overdue pending count = 0.
+- G4 remains in_progress with production_mutation_window ACTIVE until the same task completes the exact history/read-back checkpoint and S5 deploy/read-back, then explicitly records CLOSED.
+- No additional Codex review is needed; final source security review already passed.
+- G3/PR81 remains blocked until G4 records PR76 migration/history/read-back complete and closes the production mutation window.
+
+## Final K5 — Common-account Phase 1 production preflight ready / mutation HOLD — 2026-10-06
+
+- verdict: **PASS / PREFLIGHT_READY（条件付き）**.
+- fresh production read-only Phase A and rollout/history Phase B both PASS; production writes from G5 remain 0.
+- exact migration remains `20261001150000_common_account_lifecycle_foundation.sql`, SHA256 `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3`.
+- local rollout proof: 143/143 PASS; runner mutation checks 6/6 detected; lifecycle 20/20; migration invariants 10/10.
+- PR #91 contains only rollout runner/runbook/read-only preflight tooling; no runtime/migration source changes. Extra Codex review is not required at this point.
+- blocker: G4 still records `production_mutation_window: ACTIVE`. G5 production apply is therefore **not authorized yet**.
+- after G4 records CLOSED, G5 must rerun all 9 Phase A reads, refresh ledger/object-fingerprint baselines, then return for explicit same-task production apply approval.
+- PR #91 merge remains HOLD until that continuation decision; pinned head may be used only after fresh verification.
+- backfill, deletion activation, Auth/Storage/OAuth/Vault mutation, Edge deploy, Cron and real X remain out of scope.
+- AI Lab diary: 記録不要 — production rollout tooling/preflight only, no new released user-facing capability.
+- recommended Claude model for continuation: **Opus5.5（極高）**.
+
+## K1 — PR #90 detail navigation CODE PASS / visual acceptance HOLD
+
+- verdict: CODE PASS / user visual approval pending.
+- exact head: `0dd2b5af7e4736a67b11645d08e61f3114b8619a`.
+- fresh-main overlap: 0; PR open/mergeable/clean; CI success.
+- 322/322 app tests; focused 48; tsc clean; Expo config/web export/diff PASS.
+- same-date 初級/中級/上級 switching, no Home preference write, explicit topic Home/past routes, explicit news list/Home routes accepted.
+- 402pt/375pt Simulator screenshots reviewed; no clipping/double header regression.
+- Codex review not required.
+- merge HOLD only for user screenshot approval.
+
+## Final C1 — PR #87 editorial three-points PASS / merged / G2 deploy gate next
+
+- H1 verdict: **PASS** on exact PR #87 head `3561f1eaac41df0f23dcce8fdaace0decc654a0a`.
+- independent review found no blocker in editorial contract, Hard Fact/causal safety, delivery-first call behavior, X/App shared truth, or regressions.
+- focused evidence accepted: market-report-analysis 147/147; personalized-reports 129/129; X shared 8/8; App home highlights 17/17; data-packet 42/42; relevant Deno check/lint + git diff PASS. One unrelated pre-existing lint issue remains outside scope.
+- final fresh merge gate: PR open/unmerged, mergeable/clean, head unchanged, changed-file overlap with current main = 0, CI statuses acceptable.
+- PR #87 squash-merged as `74e4dbff09e3b248164fd00bb720402d762ebcd8`.
+- H1 source changes = 0; production mutation/deploy/manual report/consumer activation = 0. H1 done/free.
+- next G2: `kabumori-pr87-controlled-production-deploy-20261006`, recommended **Opus5.5（高）**.
+- G2 exact deployment scope: `market-report-analysis` + `personalized-reports` only, exact fresh main, read-back required.
+- manual report/retry, consumer gate ON, DB/RPC/migration, X/notification, EAS and unrelated Edge deploy remain forbidden.
+- production mutation mutex: G2 deploy must not overlap G4/G5/G3 or any other production mutation. If another production mutation is active/authorized concurrently, G2 must STOP before deploy.
+- after K2 deploy verification, next step is read-only natural-cycle observation. Consumer activation remains HOLD until natural morning and close behavior is observed safely.
+- native caveat: backend can begin producing/carrying shared editorial points after deploy, but installed app binaries need the next normal native build/release to use the new Home priority logic.
+
+## AI Lab PR #82 production DB rollout complete — Stage B/C/postflight PASS
+
+- User authorized proceeding in the safe order.
+- Corrected Stage B was rerun against production project `wsmznyzcvmuitkglfeuj` using the PR #88 canonical descriptor from current main.
+- Stage B result: **EXACT**.
+  - all 7 catalog hashes match the corrected pinned values;
+  - `function_acl` matches `5635c459265e8c99d22384083db40e89a1ba87c1ee7f3db2378073c1ae8c9532`;
+  - hash mismatches = 0;
+  - semantic mismatches = 0;
+  - exact 5 target functions;
+  - schema present;
+  - history count before Stage C = 0.
+- Stage A was **not** rerun.
+- Stage C executed exactly one history insert:
+  - version `20261004090000`
+  - name `ai_lab_topic_claims`
+- Separate read-only postflight:
+  - history_rows = 1;
+  - history_name = `ai_lab_topic_claims`;
+  - stray_history = 0;
+  - table present = true;
+  - function_count = 5;
+  - hash_mismatches = [];
+  - semantic_mismatches = [].
+- Company AI Lab production DB schema + migration ledger are now **EXACT / COMPLETE**.
+- No x-test-post deploy, Cron change, manual scheduler invocation, real X/OpenAI/Vault/OAuth/token operation was performed in this DB completion step.
+- Next safe dependency is **PR #76 G4 production rollout S0**. Because current main x-test-post contains the reviewed PR #76 guarded runtime together with merged AI Lab dedupe logic, do not deploy x-test-post ad hoc. Follow the reviewed runtime-first sequence: G4 S0 read-only preflight/package freeze -> explicit rollout approval -> guarded x-test-post deploy/read-back/drain -> PR76 migration -> RPC/ACL read-back -> publish-setting Edge.
+- After PR76 migration `20261003090000` is safely applied/read back, resume G3 for PR81 `20261003120000`.
+
+## G1 assigned — Detail navigation + same-day topic level switching
+
+- task_id: `kabumori-detail-navigation-topic-level-switch-20261006`
+- status: ready
+- owner: Claude G1
+- recommended model: **Sonnet5（高）**.
+- fresh allocation main: `e303d81e940d413ed62ec93885b09063b3661aee`.
+- G1 previous topic-detail polish is Final K1 PASS / merged / done; slot confirmed free.
+- fresh open-PR overlap check found **0 overlap** with topic-detail/topics/news-detail/news-layout/BackButton/daily-topic/home-topic target paths.
+- topic detail requirement:
+  - add compact 初級/中級/上級 selector;
+  - always switch on the same `jstDate`;
+  - do not write the saved Home topic level;
+  - exact id/fail-closed direct-navigation safety remains;
+  - switch failure keeps current content;
+  - prefer per-screen date+level cache to avoid duplicate refetch.
+- topic detail explicit destinations: **ホーム** and **過去のトピック**; do not rely on router.back history.
+- important-news detail explicit destinations: **ニュース一覧** and **ホーム**, including direct Home entry and deep-link/error cases.
+- preserve accepted topic learning-note visual design and news access/data behavior.
+- verify 375/402 Simulator, same-date three-level switching, past-date switching, explicit destination routes.
+- EAS build expected: 0.
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation: 0.
+- finish code: K1.
+
+## H1 PR #87 editorial three-points review — PASS, awaiting C1 — 2026-10-06
+
+- Exact reviewed head `3561f1eaac41df0f23dcce8fdaace0decc654a0a`; GitHub read-back: OPEN, unmerged, mergeable/clean.
+- Fresh main `e303d81e940d413ed62ec93885b09063b3661aee`, 44 commits past PR merge-base; changed-file overlap = 0.
+- Focused/full regression suites: market-report-analysis 147, personalized-reports 129, X shared consumer 8, app home highlights 17, data packet 42 — all pass.
+- Changed runtime files pass Deno check/lint; `git diff --check` passes. Existing `require-await` lint in `analysis_test.ts:34` predates this PR.
+- H1 product source edits = 0; production mutation/deploy/merge/consumer activation = 0. C1 next; subsequent deployment/observation remains a separate gate.
+
+## AI Lab Stage B runner false-positive fix merged — resume-history still requires approval
+
+- direct-copy Company AI Lab rollout correction completed outside G1-G5.
+- root cause of the production Stage B `function_acl` hash mismatch was confirmed as nondeterministic aggregate ordering from `string_agg(... ORDER BY 1)`, not an ACL privilege drift.
+- PR #88 exact source head `19515f6dab3486ec9f5acf771b1ca998a0f207e6` changed only:
+  - `supabase/tests/ai_lab_topic_claims_rollout.sh`
+  - `supabase/tests/ai_lab_topic_claims_rollout.md`
+- canonical `function_acl` descriptor now uses explicit schema + argument types + grantee/privilege/grantable, C collation ordering, and pinned read-back search_path. New expected hash: `5635c459265e8c99d22384083db40e89a1ba87c1ee7f3db2378073c1ae8c9532`.
+- local evidence: 108/108 proof checks PASS; 12/12 runner mutations detected; adverse ACL cases and search_path variants covered.
+- accepted migration/runtime remain unchanged; accepted migration SHA256 remains `30d8504173160f1dc9c3d7d1cf323d9890129d1ff117c2448aa1b2516629c09c`.
+- CI on PR head: Netlify/Vercel GREEN. Fresh-main changed-file overlap = 0.
+- PR #88 squash-merged as `81543e48acf6e227793d7a29fcc9e9653ce532a0`.
+- no extra Codex review allocated under minimal-review/Luna-first policy.
+- production was not accessed or mutated by this correction task. Current production checkpoint remains **schema present / migration history missing** from the earlier approved Stage A.
+- **Do not re-run Stage A.**
+- next production action, only after fresh explicit user approval: re-run corrected Stage B read-only verification against production, and only if EXACT, perform Stage C only (the reviewed `apply --resume-history` / exact history insert), then immediate ledger/postflight read-back.
+- x-test-post deploy remains separate and not authorized by this runner correction.
+
+## G5 assigned — Common-account Phase 1 production migration gate — 2026-10-06
+
+- task_id: `common-account-v1-phase1-production-migration-gate-20261006`.
+- G5 was confirmed free: previous task status done / next_owner none.
+- goal: fresh production read-only preflight + exact single-file apply/history package for `20261001150000_common_account_lifecycle_foundation.sql`.
+- accepted migration SHA256: `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3`.
+- start with production mutation = 0; after preflight G5 must STOP for explicit user approval before the first production write.
+- after approval, only the exact accepted migration may be applied, followed by exhaustive schema/RLS/ACL/function/history read-back.
+- backfill(true), deletion activation, Auth/Storage/OAuth/Vault mutation, Edge deploy, Cron and real X are out of scope.
+- production mutation must not overlap the separate G4/G3 rollout path; fresh mutex/state check is mandatory before any write.
+- recommended Claude model: **Opus5.5（極高）**.
+- finish code: K5.
+
+## Final K1 — Topic detail visual polish PASS / merged
+
+- verdict: **PASS**.
+- PR #84 exact accepted head `b7bf774b964ed740a00b904447f029351cebef80` was squash-merged as `25582625cdc60208df3b1340f8c03eba75cf3340`.
+- fresh pre-merge comparison: main had advanced 88 commits from the PR merge-base with **0 overlap** across the 7 PR files.
+- final Simulator evidence accepted at 402pt and 375pt across beginner/intermediate/advanced, long-title Hero, example/caution/takeaway and bottom safe area.
+- visual fixes accepted: long titles moved clear of artwork; straight inset accent bars; `例` mark instead of lightbulb emoji; takeaway emoji removed; safe-area bottom padding fixed; narrow-width typography tightened.
+- verification: 297/297 app tests; Expo config PASS; web export PASS; diff clean; only documented pre-existing CSS-module type diagnostics remain.
+- all 50 curated texts and existing fetch/id-mismatch/navigation/fallback behavior preserved.
+- EAS build = 0. backend/DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+- Codex review: **not required** for this static native UI/presentation change.
+- AI Lab diary: **候補あり — 株アプリの学習画面を「かぶモリ学習ノート」として整え、初級〜上級の色や教材イラスト、読む順番、具体例・要点の見せ方を統一。小さいiPhoneや長いタイトルでも崩れないよう実画面で調整した。**
+- G1 done/free.
+- AI Lab diary canonical entry was added for 2026-10-06; automatic snapshot sync completed successfully as main commit `6ed04831dec31ba9ea2258edcc5afacd2adb6991`.
+
+## Final C2 — PR #76 security rereview PASS / source merged / G4 production gate next
+
+- H2 verdict: **PASS** on exact head `5448e545f4a88bbf6597a981c0bcbe4c01043c30`.
+- F1 pre-send readiness parity: CLOSED.
+- F2 SECURITY DEFINER direct/effective ACL: CLOSED.
+- F3 runtime-first fail-closed rollout: CLOSED.
+- bounded R1-R5 regression: no blocker.
+- connection-error => reconnect-required behavior accepted as documented fail-closed availability tradeoff, not a security blocker.
+- focused evidence PASS: disposable PG apply/behavior/race/cleanup; actual-adapter fake-X E2E 9; missing-migration partial-state E2E 2; ACL harness; mutations 45/45; typed Deno 88/88; wrapper integration 39/39; app publish-setting 32/32; typecheck/lint/diff/secret checks.
+- final fresh merge gate: PR open/mergeable, Netlify/Vercel green, changed-file overlap with fresh main 0.
+- PR #76 squash-merged as `3c5f80a61d114d2936b761fc05ee3b3d69e85f63`.
+- no further routine source review is required.
+- production rollout is separately gated and must preserve exact order: guarded x-test-post first -> exact read-back/drain -> PR76 migration -> RPC/ACL read-back -> publish-setting Edge. No account toggle/real X is authorized.
+- G4 assigned `x-social-mobile-pr76-production-rollout-gate-20261006`, recommended **Opus5.5（高）**. First run is read-only preflight/package freeze and must STOP for explicit production approval.
+- G3/PR81 remains blocked until PR76 migration `20261003090000` is safely applied/read back.
+- H2 done/free.
+
+## PR #87 review moved to free H1 — 2026-10-06
+
+- H1 previous common-account review is confirmed done / next_owner none and is genuinely free.
+- PR #87 remains open / unmerged / mergeable=true at exact head `3561f1eaac41df0f23dcce8fdaace0decc654a0a`.
+- fresh allocation check: current main is 24 commits beyond the PR merge-base with **0 overlap** across PR #87's 13 changed files.
+- H1 assigned `kabumori-pr87-editorial-three-points-review-20261006`.
+- review scope: morning/close editorial contract, Hard Fact/causal safety, WARN-only telemetry, unchanged model-call ceiling, X/App shared `points_ja`, legacy fallback, and focused regressions.
+- recommended Codex model: **Luna（高）**.
+- merge/deploy/consumer activation remain **HOLD** until C1.
+- H2 remains reserved for PR #76 security review and was not modified by this allocation.
+
+## Routing correction — PR #87 review queued, H2 restored to PR #76
+
+- During Final K2 handling for PR #87, a cross-chat allocation race was detected: CURRENT_STATE/G4 already reserved H2 for the higher-risk PR #76 final security rereview, while H2 TASK/ACTIVE index had not yet been synchronized.
+- The temporary PR #87 H2 assignment was **reverted before H2 started**.
+- H2 canonical task is restored to `x-social-mobile-pr76-final-security-rereview-20261005`, recommended **Sol（高）**.
+- PR #87 K2 verdict itself remains **PASS as an implementation candidate**, but its independent review is now **QUEUED / no slot assigned**.
+- PR #87 must not merge/deploy yet. After H2/PR #76 reaches C2 and H2 becomes genuinely free, assign the focused PR #87 review with recommended **Luna（高）**, unless fresh state provides another safe free review slot.
+- H1 remains allocated to common-account final review and was not overwritten.
+- No product source, PR head, production runtime, DB, consumer gate, X, Auth or Vault state was changed by this routing correction.
+
+## Final K2 — PR #87 editorial three-points PASS to H2 review
+
+- verdict: **PASS to focused H2 review; merge/deploy HOLD**.
+- PR #87 exact head: `3561f1eaac41df0f23dcce8fdaace0decc654a0a`, open / mergeable / clean.
+- changed scope: 13 files across market-report prompt/telemetry/tests, personalized report market detail, App home-highlight presentation, and design docs. No DB/RPC/migration/auth/permission change.
+- user-facing behavior: morning 3 points are instructed to express today's focus/risk/watch axes; close 3 points express what happened, supported drivers/significance, and next watch. Numeric values move mainly to supporting body/context instead of dominating all three headlines.
+- X/App consistency: presentation-v2 App now prefers the same shared `points_ja` used by X; old/v1 stored reports retain existing fallback.
+- Hard Fact boundary: no guard decision logic changed; `MARKET_NAMES` export only. Existing date/session/value/sign/stale/1306/ref/unsupported-causality protections remain in the reported green suites.
+- delivery-first policy: new metric/near-duplicate detection is WARN/telemetry only; no rewrite trigger or new model call was added. Existing generation/fact call ceiling remains unchanged.
+- reported verification accepted for routing: market-report-analysis 147/147; personalized-reports 129/129; X shared 8/8; data-packet 42/42; _shared 415/415; App home highlights 17/17; relevant check/lint/diff PASS with one documented pre-existing lint item.
+- fresh no-race gate: current main is 6 commits beyond PR base, but those changes are orchestration/control files only; overlap with PR #87's 13 files = **0**.
+- production mutation / manual invoke / consumer gate / DB / Auth / Vault / X = **0**.
+- independent review is warranted because this crosses generation + personalized serialization + App presentation, but risk does not justify Sol. H2 assigned `kabumori-pr87-editorial-three-points-review-20261005`.
+- recommended Codex model: **Luna（高）**.
+- after C2 PASS: merge PR #87, then create a separate controlled deploy/observation step. Do not activate consumers until at least one natural morning and one natural close packet confirm the new headline behavior and factual guards.
+- AI Lab diary: **候補あり — 株アプリの朝刊・大引けで、数字の羅列だった「3つのポイント」を、その日の注目点や出来事が一目で伝わる見出しへ改善し、アプリと投稿で同じ要点を使うよう整理した。**
+
+## Final K4 — PR #76 F1/F2/F3 corrective PASS -> one final H2 review
+
+- verdict: **PASS to one final focused H2 rereview; merge/apply/deploy HOLD**.
+- exact PR #76 head: `5448e545f4a88bbf6597a981c0bcbe4c01043c30`; previous H2-reviewed head `7f75c07a8c997b6a585e9c86dca01186eeea671f`.
+- fresh GitHub: PR OPEN / unmerged / mergeable=true; Netlify GREEN; Vercel GREEN.
+- current main is 29 commits beyond PR base; changed-file overlap with PR #76 = **0**.
+- G4 F1 proof: missing verified_at and nonblank last_connection_error_code now reject before fake X callback; normal eligible path still sends; 401 retry rechecks permission; OFF between refresh and retry blocks second send.
+- G4 F2 proof: two SECURITY DEFINER functions now normalize/refuse unexpected direct/default EXECUTE, validate owner/creator, assert effective inherited privileges, preserve empty search_path, and avoid global default-ACL/role-membership changes. Disposable ACL harness PASS; prior adverse default-grantee case reproduced against old head and closed on new head.
+- G4 F3 proof: rollout is runtime-first fail-closed; permission migration only after guarded runtime exact read-back/drain; publish-setting/app exposure last. Partial-state and abort-path tests/mutations pass.
+- broad local evidence reported: disposable PG behavior/race/E2E PASS; ACL_PASS; mutations 45/45 detected; focused typed Deno tests PASS; x-test-post/shared/publish-setting 984 PASS; app tests/typecheck/lint PASS.
+- production mutation/read/deploy/real X/OpenAI/Vault/Auth/Cron = **0**.
+- because this remains a SECURITY DEFINER + posting-authority + production-rollout boundary, one independent final review is warranted. To follow minimal-review/Luna-first policy without under-scoping a security boundary, reviewer is **Sol（高）**, not Sol（極高）.
+- H2 task: `x-social-mobile-pr76-final-security-rereview-20261005`.
+- this H2 review is the **last routine review** for PR #76; after PASS, do not add another review before merge unless a new concrete source change/blocker appears.
+
+## Final K3 — PR #81 production schema gate = READ-ONLY HOLD
+
+- verdict: **HOLD by design / no production mutation**.
+- merged PR #81 source remains accepted; candidate SHA256 `b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb`, hardening SHA256 `83d44ccfd51bcd8fcd78d31236fa52d1d8f90c6642f12c5bb1586f9d1497467e`.
+- production read-only preflight was CLEAN on PostgreSQL 17.6:
+  - target table/functions/policies/triggers/constraints absent;
+  - PR #81 candidate/hardening history absent;
+  - live migration ledger shape matches the reviewed atomic procedure;
+  - applying role/dependency/default-ACL/role graph preconditions match H2 evidence.
+- Gate A blocks apply because PR #76 migration `20261003090000_social_mobile_publish_permission_boundary` sorts before PR #81 hardening `20261003120000` and PR #76 is still OPEN / unmerged / unapplied.
+- PR #81 was therefore **not** applied out of order; Gate C package was not frozen and no approval was requested.
+- production DB/history writes=0; deploy=0; X/OpenAI/Vault/OAuth/Cron=0.
+- PR #78 AI consultation remains blocked because its production schema prerequisite is not yet applied/read back.
+- no Codex review is needed for this K3 because there is no source change or production mutation to review.
+- G3 is closed/free after fresh allocation.
+- next orchestration step: **K4** on completed PR #76 corrective head `5448e545f4a88bbf6597a981c0bcbe4c01043c30`. Resolve PR #76 source/rollout disposition first, then create a fresh G3 continuation for PR #81 production apply.
+
+## AI Lab production rollout — Stage A applied / Stage B STOP — 2026-10-05
+
+- user explicitly approved the Company AI Lab PR #82 production DB rollout limited to Stage A/B/C + postflight; x-test-post deploy/Cron/manual scheduler/real X remain out of scope.
+- same-day preflight on production project `wsmznyzcvmuitkglfeuj` passed immediately before mutation:
+  - current_user=postgres
+  - PostgreSQL 17.6
+  - `public.ai_lab_topic_claims` absent
+  - superseded `public.ai_lab_topic_event_usage` absent
+  - target function count 0
+  - target migration history count 0 / stray history 0
+  - anon/authenticated/service_role are not members of postgres
+  - AI Lab running jobs 0 / overdue pending 0
+- exact merged migration blob `4f193f7ea1f812efd9e95907706b1b91eb1d283d` from main was applied as Stage A. Accepted SHA256 remains `30d8504173160f1dc9c3d7d1cf323d9890129d1ff117c2448aa1b2516629c09c`.
+- Stage B fresh read-only verification:
+  - table present
+  - exactly 5 target functions
+  - owner/effective table ACL/column ACL/function EXECUTE membership/overload/superseded-table semantic checks: **PASS / no mismatches**
+  - six of seven pinned catalog section hashes match
+  - only `function_acl` pinned hash mismatches: production actual `1720f5c85fc0cc888dfe034fb2bfed30d6734144bc3d4cb70c962b33d0a12094` vs runner expected `28ba64ffe31f3b0457b6e0d338734de5b23bfaeb170d84c24c1d6f934d5bcdb9`
+  - direct ACL read-back shows all five functions grant non-owner EXECUTE only to `service_role`, non-grantable; no unexpected grantee.
+- likely cause is runner catalog-hash serialization/environment dependence, not demonstrated privilege drift. Production default search_path includes public, so `regprocedure` string formatting omits the schema; this affects the hash representation.
+- per approved runbook, any Stage B hash mismatch is a mandatory STOP. **Stage C history was NOT written.**
+- current production checkpoint: **schema present / history missing**. Do not rerun Stage A. Future continuation must use the runner's explicit reviewed resume-history path only after correcting/reproving the Stage B descriptor or otherwise formally resolving the false-positive hash.
+- security advisor after Stage A reports the intended `ai_lab_topic_claims` pattern as INFO: RLS enabled with no policies. This is expected because direct table grants are absent and service_role uses the five narrow SECURITY DEFINER functions. No new warning names the five AI Lab functions as anon/authenticated executable.
+- production migration history write=0; Edge deploy=0; Cron=0; manual scheduler=0; real X/OpenAI/Vault/OAuth/token operation=0.
+- next: direct-copy Claude correction of runner descriptor only; preserve migration/runtime unchanged; local repro/proof; then separately authorize/resume Stage B -> Stage C. No Sol review by default; Luna(high) only if needed.
+
+## AI Lab PR #86 rollout runner merged — production mutation still HOLD
+
+- Direct-copy Company AI Lab rollout-tooling work completed outside G1-G5.
+- PR #86 exact head `35302261181f7f54e49870d7322d2112098fcd8c` changed only:
+  - `supabase/tests/ai_lab_topic_claims_rollout.sh`
+  - `supabase/tests/ai_lab_topic_claims_rollout.md`
+- accepted PR #82 migration/runtime remained unchanged; migration SHA256 remains `30d8504173160f1dc9c3d7d1cf323d9890129d1ff117c2448aa1b2516629c09c`.
+- local proof reported 87 PASS plus 10/10 mutation detections; existing topic-claims SQL runner/static checks, bash syntax, diff and secret/project-ref scans passed.
+- fresh merge gate: Netlify/Vercel green; main advanced only one .agent commit; changed-file overlap 0.
+- PR #86 squash-merged as `d618801fdfafce0439aada994a1cbddec2f631a9`.
+- no extra Codex review allocated; this is runner/docs/tests only and current evidence is sufficient under minimal-review/Luna-first policy.
+- production DB/history write, migration apply, Edge deploy, real X/OpenAI/Vault/OAuth/Cron change remain **0**.
+- next production gate requires fresh explicit user approval for the exact Stage A/B/C rollout sequence; source merge does not grant mutation authority.
+
+## G2 retasked — editorial three-point improvement
+
+- user-requested UX correction: the report's three "today's points" must not default to three previous-session metric recaps.
+- morning contract: prioritize today's focus / watch / risk / market-viewing axes. Prior-session numbers belong mainly in supporting detail.
+- close contract: prioritize what happened today / supported drivers / significance / next watch. Market causality must remain evidence-backed; honest uncertainty is allowed.
+- exact-three-points remains, but all three must carry distinct editorial meaning rather than numeric redundancy.
+- metric-only three-point regression coverage is required; presentation improvement must not weaken Hard Fact guards, increase model-call ceiling, split X/app truth sources, or turn quality issues into Hard delivery blocks.
+- previous close-only observation task was superseded before start; retained close evidence may be inspected read-only as supporting evidence, but provider recovery is not a prerequisite for implementation.
+- current G2: `kabumori-shared-report-v2-editorial-three-points-20261005`, status ready.
+- recommended Claude model: **Sonnet5（高）**.
+- production deploy/manual invoke/gate/DB/RPC/Auth/Vault/X mutation = forbidden in this task.
+- after K2, decide whether lightweight review is needed based on actual changed scope; do not auto-allocate Sol for presentation-only changes.
+
+## K1 recheck — G1 Simulator continuation not yet executed
+
+- verdict: **NOT READY FOR K1**.
+- PR #84 is still at the pre-Simulator head `c9c173c153cbfd11229c9281b892d732728c3cd3`, with exactly 1 commit / 4 changed files.
+- no final Simulator screenshots or continuation commit are present, and no continuation Report was appended after the iOS runtime installation.
+- this means the resumed G1 verification task has not actually run yet.
+- no merge, review, deploy or production action taken.
+- G1 remains ready for the Simulator verification continuation.
+- recommended Claude model: **Sonnet5（中）**.
+- next: run `G1`, then return with `K1`.
+
+## Routing correction — G3 restored / AI Lab direct instruction
+
+- User corrected the previous allocation: Company AI Lab PR #82 production-rollout work must **not** consume G3.
+- The accidental G3 task `ai-lab-pr82-production-rollout-runner-20261005` is withdrawn and preserved only as non-executable history.
+- G3 is restored to the original post-PR81 path: `x-social-mobile-pr81-production-schema-gate-20261005`.
+- G3 first performs production read-only preflight and migration-order coordination. PR #76 has earlier version `20261003090000`, so PR #81 `20261003120000` must not be applied ahead of it by assumption while PR #76 remains unresolved.
+- G3 prepares the exact H2-reviewed two-file atomic apply package, then **must STOP for fresh explicit production approval before any write**.
+- Only after PR #81 production apply + read-back PASS may PR #78 AI consultation v1 be fresh-integrated and its unfinished review resumed.
+- recommended Claude model for this DB/production gate: **Opus5.5（高）**.
+- Company AI Lab PR #82 rollout continuation will be given to the user as a direct-copy instruction outside G1-G5.
+
+## Final K2 — 2026-10-05 morning natural observation OBSERVATION_INCOMPLETE
+
+- verdict: **OBSERVATION_INCOMPLETE (provider-side 429)**. This is accepted as an incomplete live observation, **not** a failure of PR #77 / PR #79/H1.
+- G2 morning data cycle completed normally at 07:50 JST with one attempt and no data error; current data packet was produced successfully.
+- analysis did not produce a report packet. The retained final attempt failed at 08:05 JST with `ANALYSIS_OPENAI_GENERATE_FAILED:429`; report attempt count=2, packet count=0.
+- no model response reached the local Hard/WARN, Fact, quality-rewrite or delivery stages, so PR #77 rewrite behavior and PR #79/H1 watch/session/causal behavior remain **unassessed**.
+- read-only cross-check found multiple OpenAI-dependent jobs also returning 429 from 2026-10-04 00:00 JST onward, consistent with an account/provider quota/balance issue rather than this v21 runtime. Exact billing balance was not read.
+- production baseline remained market-report-analysis v21 / verify_jwt=false / app_enabled=false / x_enabled=false. Manual invoke/retry/deploy/gate/DB/Auth/Vault/X/notification mutation = **0**.
+- Codex review: **not required** for this K2. There is no code change or product defect to review; the missing evidence is operational/provider-side.
+- current G2 task is closed as done.
+- next G2: `kabumori-shared-report-v2-20261005-close-natural-observation`, status ready. Inspect the already-completed 10/5 close natural window read-only; if the provider recovered and a packet exists, perform the first live PR #77/#79 behavior assessment. If 429 persisted, classify OBSERVATION_INCOMPLETE again and recommend 10/6 morning observation.
+- recommended Claude model: **Sonnet5（中）**.
+- consumer activation remains **HOLD** until at least one completed v21 natural packet is observed safely.
+- AI Lab diary: **記録不要 — 外部API 429のread-only障害観測であり、公開日記に残す新機能・UI改善・実装成果ではない。**
+
+## AI Lab PR #82 rollout continuation -> G3
+
+- source implementation/review/main merge are complete.
+- production read-only preflight passed catalog/owner prerequisites; production mutation is still 0.
+- remaining blocker is operational: accepted migration owns its own COMMIT, so schema apply and CLI history insertion are not one atomic transaction.
+- chosen next step is **not another review**. G3 will create a bounded schema-first/history-second operator runner/runbook and prove failure states locally without editing the accepted migration/runtime.
+- G3 task: `ai-lab-pr82-production-rollout-runner-20261005`.
+- recommended Claude model: **Sonnet5（高）**.
+- future review policy: no automatic Sol. If K3 is clean and changes are only rollout tooling/docs/tests, prefer no extra review or one focused **Luna（高）** at most.
+- production migration/history writes, deploy, real X/OpenAI/Vault/OAuth/Cron changes remain forbidden in this task.
+
+## Common Account hosted Gate B complete -> H1 final review — 2026-10-05
+
+- disposable hosted Supabase `common-account-gateb-20261005` accepted the exact merged Phase 1 migration.
+- user Phase A fail-fast proof: **GATE_B_PHASE_A_PASS** for real Data API/RLS, client write denial, anon denial, service-role direct-table denial, RPC-only boundary, real Storage ownership blocker, Storage API cleanup, and readiness.
+- direct `common_accounts` delete while Auth user remained was refused with expected 23503-class `COMMON_ACCOUNT_ROW_DELETE_REQUIRES_LOGIN_REMOVAL`; row remained.
+- user Phase B fail-fast proof: **GATE_B_PHASE_B_PASS**.
+- real Auth Admin hard delete succeeded; Auth /user rejected afterward; refresh token rejected afterward.
+- critical hosted result: **old access JWT Data API: ALLOWED** after Auth deletion. Future destructive orchestrator must revoke/invalidate sessions before managed Auth delete; Auth-row deletion alone is insufficient.
+- hosted DB read-back for deleted fake user: auth.users 0, auth.identities 0, auth.sessions 0, auth.refresh_tokens 0, common_accounts 0, entitlements 0; durable lifecycle operation remained as `login_removed` and preserved the prior ready step observation.
+- production `stock-x-autopost` mutation: **0**. No real provider OAuth/X/Vault operation.
+- test project is being paused; photo-sharing `anohi-memories` is being restored. Do not reopen either from review without explicit authorization.
+- H1 assigned `common-account-gateb-managed-auth-final-review-20261005`, recommended **Sol（極高）**.
+- H1 is review-only. Production migration apply and backfill remain **HOLD** pending C1 and separate explicit user approval.
+- H2 left free for the planned G4/X security rereview path.
+
+## Final C1 + C2 — 2026-10-05
+
+### C1 — PR #82 production preflight
+- verdict: **PREFLIGHT COMPLETE / PRODUCTION ROLLOUT HOLD**.
+- production catalog/owner/ACL prerequisites for `20261004090000_ai_lab_topic_claims.sql` pass; target and superseded objects/history are absent.
+- exact deploy target is `x-test-post`; no Cron change required.
+- blocker is operational, not source: the accepted migration owns its own COMMIT, so Supabase CLI history insertion is not schema+ledger atomic. A history-write failure can leave complete schema without ledger.
+- no additional review task is allocated. Before production mutation, choose one narrowly specified apply/history policy and authorize it explicitly.
+- cold-ledger limitation remains: no historical event-claim backfill, so dedupe is forward-looking at cutover.
+- production mutation/apply/deploy/X/Vault/token/Cron = **0**.
+- H1 done/free.
+
+### C2 — PR #81 content-settings hardening
+- verdict: **PASS** for exact head `bcc01312c638f5922db4ffd6255ddddf6f611183`.
+- R1 deferrable/improper PK arbiter: CLOSED.
+- R2 helper owner/effective EXECUTE ACL drift: CLOSED.
+- R3 non-finite CAS timestamp domain: CLOSED.
+- prior JSON/RLS/table-ACL/CAS contract preserved.
+- reviewed atomic rollout plan accepted for a separate future production approval; ordinary db push/migration up is not the approved path for the two-file chain.
+- fresh merge gate: PR open/mergeable, Netlify+Vercel green, fresh-main overlap 0.
+- PR #81 squash-merged as main SHA `686f23a7094389b793470503fceb2f47a71f8fbf`.
+- production migration apply/deploy/Auth/Vault/X/OpenAI/Cron = **0**.
+- PR #78 remains blocked only on separately approved production schema apply/read-back before its remaining AI/Auth review resumes.
+- H2 and G3 done/free.
+- review policy: no extra post-merge review allocated; keep review count minimal and prefer Luna where future verification does not require Sol-level security depth.
+
+## G1 resumed — Simulator visual verification after runtime install
+
+- task_id: `kabumori-topic-detail-visual-polish-20261005`
+- status: ready
+- owner: Claude G1
+- recommended model: **Sonnet5（中）**.
+- user installed the iOS Simulator runtime on the new Mac, removing the only K1 visual blocker.
+- continuation is verification-first: reuse existing PR #84 / G1 branch if still safe; do not redesign or open a second PR.
+- required Simulator checks: ~402pt and ~375pt, beginner/intermediate/advanced, long title, dense example, takeaway, history path.
+-重点: Hero wrapping, art wash/fade seam, 375pt clipping/density, section rhythm, and whether 🌱/💡 look polished enough; only bounded visual corrections allowed.
+- capture final implementation screenshots under `docs/ui-review/`.
+- rerun focused/full app tests and standard Expo/diff checks after any correction.
+- EAS build = 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+- finish with K1.
+
+## Final K3 — PR #81 residual content-settings hardening PASS -> H2 rereview
+
+- verdict: **PASS to independent H2 rereview; merge/apply/deploy HOLD**.
+- PR #81 old reviewed head `5595fb131813542c55c43bc783af623cdb9ea442` -> corrected exact head `bcc01312c638f5922db4ffd6255ddddf6f611183`, normal push/no force.
+- GitHub fresh read-back: PR OPEN / unmerged / mergeable=true; Netlify and Vercel **green**.
+- fresh main comparison: PR #81 changed files overlap current main changes = **0**.
+- R1 reported fixed: exact immediate/non-deferrable PK/index arbiter required; H2's deferrable-PK reproduction now refused; real ON CONFLICT writer remains valid.
+- R2 reported fixed: known helper signatures/owner only; unknown grant/owner/overload refused; exact effective EXECUTE postconditions; no global default privilege or role-membership mutation.
+- R3 reported fixed: existing non-finite created_at/updated_at refused before mutation; finite CHECK added; valid far-future finite versions remain valid; monotonic CAS behavior preserved.
+- G3 reported disposable SQL `SOCIAL_MOBILE_CONTENT_SETTINGS_ALL_PASS` with 48 PASS markers, 37 drift refusals, non-finite/adverse cases, app 116/116, relevant Deno 162/162, typecheck/lint/bash/diff clean.
+- historical candidate `20260922045046_social_mobile_content_settings_candidate.sql` remains unchanged; hardening migration `20261003120000...` amended only because it is unapplied.
+- proposed production strategy: do not use ordinary migration-up for the two-file chain; apply candidate + hardening + migration-history records inside one separately approved operator-controlled outer transaction, then read back. This plan itself still requires H2 validation before any production mutation.
+- migration-number clarification: PR #76 = `20261003090000`; PR #81 = `20261003120000`; merged PR #82 = `20261004090000`. Current source filenames are distinct; the old PR76/PR82 collision note is stale.
+- production reads/writes/apply/deploy/Auth/Vault/X/OpenAI/Cron from G3: **0**.
+- H2 assigned `x-social-mobile-pr81-residual-hardening-final-rereview-20261005`, recommended **Sol（高）**.
+- PR #78 remains blocked until PR #81 passes review and a separately approved safe production apply/read-back is completed.
+- AI Lab diary: **記録不要** — this is internal schema/security hardening, not a new released user-facing capability.
+
+## Final C2 — PR #76 transactional publish-toggle CHANGES REQUIRED -> G4 corrective
+
+- verdict: **CHANGES REQUIRED accepted** on exact PR #76 head `7f75c07a8c997b6a585e9c86dca01186eeea671f`; PR remains open/unmerged.
+- H2 source changes: **0**. Review/verification only.
+- core R1-R5 disposition: transactional caller authority, membership/brand/account locking, original brand TOCTOU closure on guarded Vault path, tenant-safe error semantics, fail-safe OFF and UI confirmation pinning are materially accepted.
+- residual F1 / P2: pre-send authority still accepts two states that toggle ON rejects — missing `verified_at` and nonblank `last_connection_error_code`. H2 reproduced real local permission RPC + actual VaultAccountXAuth fake-X callback reaching the callback in both states.
+- residual F2 / P2: unexpected creator default EXECUTE grant can survive the migration; inherited role membership can make an app role effectively execute a function outside the intended exact ACL. Current production catalog did not show this adverse drift, but source must fail closed.
+- residual F3 / P2: documented migration-first rollout is not fail-closed. During migration-applied/old-runtime interval, caller can OFF through new RPC while old sender can still start a fake X request. Approved runbook must make guarded runtime active before toggle authority becomes usable, or prove an equivalent staged-grant sequence.
+- H2 disposable DB/race evidence supports the already-closed lock/deadlock/authority paths; production mutation/deploy/real X/Auth/Vault/Cron = **0**.
+- migration-version clarification: current merged PR #82 uses `20261004090000_ai_lab_topic_claims.sql`; PR #76 uses `20261003090000_social_mobile_publish_permission_boundary.sql`; PR #81 uses `20261003120000_social_mobile_content_settings_hardening.sql`. The stale H2 coordination note suggesting PR82 still used 20261003090000 is obsolete; current filenames were re-read and are distinct.
+- G4 assigned `x-social-mobile-pr76-final-security-corrective-20261005`, recommended **Opus5.5（高）**.
+- after K4, independent H2 rereview required, recommended **Sol（極高）**.
+- PR #76 merge / migration apply / Edge deploy / app exposure remain **HOLD**.
+- AI Lab diary: **記録不要** — this is internal authorization/security hardening, not a new released user-facing feature.
+
+## K1 — Topic detail visual polish CODE PASS / VISUAL HOLD
+
+- verdict: **HOLD pending real-device visual acceptance**.
+- PR #84 exact reviewed head: `c9c173c153cbfd11229c9281b892d732728c3cd3`.
+- fresh main at K1: `45c964701cc6117f42eb75616c6640448c8f7bac`.
+- fresh GitHub state: open/unmerged, `mergeable=true`, `mergeable_state=clean`.
+- main advanced 11 commits from the PR merge-base; **0 overlap** with the four topic-detail PR files.
+- accepted code/safety evidence: 294/294 app tests, Expo config/export PASS, diff clean, no content catalog/Home/backend/DB/RPC/API/AI/Auth/Edge/native/EAS changes.
+- visual acceptance is incomplete because the new Mac currently has no iOS Simulator runtime and G1 therefore could not produce final 402pt/375pt implementation screenshots.
+- required device check before merge: long-title Hero wrap, canonical art wash/fade seam, beginner/intermediate/advanced balance, numbered-step rhythm, example/takeaway density, and 🌱/💡 rendering quality.
+- Codex review: **not required** for this UI-only change.
+- merge/deploy: HOLD.
+- AI Lab diary: **記録不要（現時点）** — user-facing visual change is not yet accepted/merged.
+- next_owner: user for iPhone visual confirmation; if approved, ChatGPT finalizes K1/merge; if not, return a small visual corrective to G1.
+
+## PR #82 merged / H1 production read-only preflight allocated
+
+- PR #82 exact accepted head `9d30a68317dd523a96e6ce96bf7a0f6de23235d5` passed Netlify and Vercel after Final C1.
+- fresh main comparison before merge showed **0 overlapping files** with the PR despite concurrent control-file updates.
+- PR #82 was squash-merged as main SHA `80e11c9207d44599db26a25195f1ee0091484231`.
+- GitHub read-back: PR closed/merged; main points to the merge SHA.
+- source merge only: production migration apply=0, Edge deploy=0, Cron/settings=0, real X=0, OAuth/Vault/token operations=0.
+- next gate is production **read-only** preflight, not rollout.
+- H1 assigned `ai-lab-pr82-production-readonly-preflight-20261005`, recommended **Sol（高）**.
+- H1 must verify migration ledger, superseded migration absence, production catalog/owner/effective ACL, exact migration apply transaction semantics, exact deploy target/order and pre/post read-back checklist.
+- H2 PR #76 and G3 PR #81 remain separate and must not be touched.
+- AI Lab diary: **記録不要** — merged change is internal duplicate-post/safety hardening rather than a new released user-facing capability.
+
+## Final C1 — PR #82 AI Lab event-dedupe PASS-WITH-FIX accepted / CI merge hold
+
+- verdict: **PASS-WITH-FIX accepted** for the corrected source.
+- H1 reviewed original PR #82 head `51457826ea6c29d9c94ac0066786df8927fa1274` and found two bounded residual issues: a checked-test synchronous resolver mismatch (P3) and incomplete invalid/not-ready index drift detection (P2).
+- H1 corrected those on evidence branch exact head `9d30a68317dd523a96e6ce96bf7a0f6de23235d5`; compare against the reviewed PR head is direct **ahead 2 / behind 0**.
+- C1 adopted that exact evidence head into the existing PR #82 branch by normal fast-forward; no force push.
+- GitHub read-back: PR #82 OPEN / unmerged / mergeable=true / exact head `9d30a68317dd523a96e6ce96bf7a0f6de23235d5`.
+- H1 evidence accepted: focused checked Deno 104/104; relevant runtime 914/914 (--no-check); disposable PostgreSQL runner 132 PASS; independent SQL/dispatcher/workflow/provider tests 41/41; workflow Node regressions 49/49; changed helper check/lint/diff/secret scan PASS. Known full-entrypoint diagnostics match fresh-main baseline and are not introduced by PR #82.
+- residual source blockers in reviewed scope: **none demonstrated after fixes**.
+- CI after C1 fast-forward: Vercel and Netlify are rerunning/pending; therefore **merge remains HOLD until required checks are green**.
+- production mutation / migration apply / deploy / real X / OAuth / Vault / token / Cron operations: **0**.
+- production rollout remains a separate high-risk gate: production catalog/owner/default-ACL/membership and migration-ledger read-only preflight, exact apply-wrapper transaction certification, approved migration apply/read-back, then exact Function deploy. No production authorization is implied by this C1.
+- H1 is done/free after fresh allocation.
+- AI Lab diary: **記録不要** — this C1 is internal safety hardening/review of duplicate-post prevention, not a new user-facing feature or released behavior.
+
+## G1 allocation — Topic detail visual polish
+
+- task_id: `kabumori-topic-detail-visual-polish-20261005`
+- status: ready
+- owner: Claude G1
+- recommended model: **Sonnet5（高）**.
+- user will directly attach the approved visual reference showing `かぶモリ学習ノート`, a level-tinted Hero, numbered learning sections, distinct example card and final takeaway block.
+- implementation must treat the reference as visual direction only: native/dynamic text, no screenshot embedding, no baked copy.
+- preserve merged v2 behavior and all 50 curated topic texts; this is visual polish only.
+- preferred Hero uses existing approved beginner/intermediate/advanced topic artwork when it can be reused without distortion, meaningful crop or text collision; otherwise use native tint and report why.
+- normal sections stay light with numbered hierarchy; `具体例` and `覚えておくポイント` remain the emphasized blocks.
+- old `TODAY'S TOPIC` eyebrow should become `かぶモリ学習ノート`, resolving the past-topic label mismatch.
+- primary scope: `src/app/topic-detail.tsx`, `tests/app/topic-detail-screen_test.ts`; avoid catalog/content changes.
+- fresh allocation main: `d8a6fa7661b63a8e3c929f77232385369ebf3e94`; all current open PRs were checked and have **0 overlap** with the topic-detail target files/assets.
+- new Mac safety: clean base **`/Users/yuya/Developer/kabumori-fresh`**, fresh `origin/main`, independent G1 worktree/checkout. Old repo/worktrees must not be removed/reset/pruned.
+- EAS build expected: 0.
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation: 0.
+- finish code: K1.
+
+## K4 — PR #76 fresh-main integration PASS -> H2 final security rereview
+
+- verdict: **PASS to independent security rereview; merge/apply/deploy HOLD**.
+- old corrective head: `fe1e846e59c69b591d29c6d21fc23c7b702d19cd`.
+- fresh main merged by G4: `d345f67402a782a303ce46c640f685271d76b681`.
+- new exact PR #76 head: `7f75c07a8c997b6a585e9c86dca01186eeea671f`.
+- normal merge commit only; no rebase/force-push.
+- exactly one conflict occurred as predicted: `supabase/tests/migration_source_invariants_test.ts`.
+- resolution preserved all fresh-main RESERVED entries and added only `20261003090000_social_mobile_publish_permission_boundary`.
+- migration version collision check: none against main/open PRs; PR81 uses 20261003120000 and PR82 uses 20261004090000.
+- no functional publish-toggle/auth/RPC/UI code changed during freshness integration.
+- reported post-merge verification:
+  - migration invariants 10/10;
+  - publish-setting + migration + Vault focused 68/68;
+  - relevant runtime 925/925 (--no-check);
+  - social-mobile 145/145 + domain 22/22;
+  - typecheck/lint PASS;
+  - changed Deno check/lint PASS;
+  - disposable DB APPLY/BEHAVIOR/RACE/E2E/CLEANUP PASS;
+  - mutation suite 30/30 detected;
+  - diff/secret scan clean.
+- fresh GitHub state at K4: PR open/unmerged/mergeable=true; Netlify/Vercel success; current main 8 commits ahead of fresh base with **0 overlap** across PR files.
+- production read/write, migration apply, deploy, Auth/Vault/Cron mutation, real X = 0.
+- H1 is occupied by PR #82 final review, so free H2 is assigned `x-social-mobile-pr76-transactional-publish-toggle-rereview-20261005`.
+- H2 review must independently validate R1-R5, lock/deadlock behavior, SECURITY DEFINER grants, actual pre-send coverage, PostgREST/auth.uid semantics, Kabumori-style account boundary and fail-closed rollout ordering.
+- recommended Codex model: **Sol（極高）**.
+- no merge or production authorization is implied by K4.
+
+## PR #82 residual corrective complete -> H1 final boundary rereview
+
+- direct Claude corrective updated PR #82 to exact head `51457826ea6c29d9c94ac0066786df8927fa1274`, open/unmerged/mergeable.
+- branch incorporated fresh main with normal merge history; canonical diary retained latest main topic-detail-learning content while preserving stable event IDs; snapshot regenerated.
+- PR now changes 14 files and adds `ai_lab_provider_outcome.ts`.
+- reported fixes target every prior C1 residual:
+  - duplicate scalar diary labels reject instead of last-wins;
+  - migration owner/role-membership/effective privilege pre/postconditions;
+  - actual X request-observation wrapper producing typed proven-no-post errors rather than string matching;
+  - provider_started/ambiguous evergreen quarantine without age-based reopening;
+  - published evergreen cooldown from `published_at`;
+  - exact canonical candidate JSON validation and DB-owned evergreen theme mapping;
+  - changed-file lint debt removed.
+- reported verification: Functions 2543/2543 PASS; disposable PostgreSQL runner 132 PASS; SQL mutations 15/15 detected; TS mutations 15/15 detected; changed lint 0 except unchanged main x-test-post diagnostics; production mutation=0; real X=0.
+- GitHub checks: Netlify and Vercel success.
+- fresh comparison: main is 13 commits ahead of PR base with **0 overlapping PR #82 changed files**.
+- migration versions remain distinct from PR #76 and PR #81.
+- H1 assigned `ai-lab-pr82-final-boundary-rereview-20261005`, recommended **Sol（高）**.
+- review must independently prove actual VaultAccountXAuth request-observation safety, `pg_has_role` owner-membership direction/transitivity, 73h unresolved evergreen quarantine, publish-time cooldown and canonical theme mapping.
+- merge/migration apply/deploy remain HOLD until C1.
+- H2 remains free; G3/G4 remain separately assigned and untouched.
+
+## Final C2 — PR #81 content-settings hardening CHANGES REQUIRED
+
+- verdict: **CHANGES REQUIRED**; PR #81 exact reviewed head `5595fb131813542c55c43bc783af623cdb9ea442` remains open/unmerged.
+- H2 confirms the large original issues are substantially closed: normalized settings/persona JSON contract, table ACL/RLS least privilege, and finite normal-path monotonic CAS all pass independent local proof.
+- residual R1: a deferrable `PRIMARY KEY (brand_id)` is not rejected by the current drift guard. Hardening succeeds, but the actual repository `INSERT ... ON CONFLICT (brand_id) DO UPDATE` then fails with SQLSTATE 55000. Must reject deferrable/wrong arbiter drift.
+- residual R2: unexpected existing helper function EXECUTE ACL/owner drift can survive `CREATE OR REPLACE`. Table ACL is safe, but function-boundary least privilege is not fully fail-closed. Must verify exact owner/signature/effective EXECUTE grants and reject unknown drift.
+- residual R3: historical `updated_at='infinity'` is admitted by the candidate and cannot be advanced by `greatest(clock_timestamp(), old.updated_at + 1us)`. The same stale token can update repeatedly. Must refuse non-finite existing versions and enforce a finite version domain going forward.
+- migration tooling finding: actual Supabase CLI 2.116.0 proves per-file atomicity and failure rollback, but **not whole-chain atomicity**. Normal migration-up can commit the weak historical candidate before the hardening file. Production rollout needs an explicitly reviewed atomic/safe two-file plan or an equivalent source strategy; do not apply opportunistically.
+- production target table and both versions were absent at H2's read-only preflight; this reduces migration-history constraints but does not authorize apply.
+- app/source compatibility remains positive: social-mobile 116/116, repository focused 3/3, relevant Deno 158/158, PR78 source composition clean in local merge-tree.
+- fresh C2 comparison: main is 62 commits ahead of PR81 base with **0 overlapping PR81 files**; PR81 currently mergeable.
+- G3 assigned `x-social-mobile-pr81-hardening-residual-corrective-20261005`, recommended **Opus5.5（高）**.
+- PR81 merge, production apply and PR78 review/resume remain HOLD.
+- after K3, allocate fresh H2 rereview, recommended **Sol（高）**.
+- H2 closed/free after fresh allocation.
+- production mutation/deploy/live AI/X/Auth/Vault/Cron = 0.
+
+## K4 — PR #76 corrective accepted as review candidate, fresh-main integration required first
+
+- G4 transactional corrective reported PASS on source/local disposable proof at exact head `fe1e846e59c69b591d29c6d21fc23c7b702d19cd`.
+- the corrective materially addresses prior H1 R1-R5 by moving toggle authority into one DB transaction, adding fresh pre-send permission checks on the Vault-account X path, removing service-role mutation from the Edge, aligning readiness semantics and pinning UI confirmation context.
+- reported local evidence: disposable PostgreSQL races/E2E PASS, 30/30 SQL mutation weakenings detected, publish-setting focused tests, VaultAccountXAuth tests, social-mobile tests/typecheck/lint, production mutation=0 and real X=0.
+- however fresh K4 GitHub state is **open / unmerged / mergeable=false**.
+- current main is **133 commits ahead** of the PR base.
+- fresh changed-file comparison finds exactly one overlapping PR path: `supabase/tests/migration_source_invariants_test.ts`.
+- conflict content is bounded/additive: PR #76 reserves `20261003090000_social_mobile_publish_permission_boundary`; latest main must otherwise be preserved.
+- therefore independent security rereview is deferred until the branch is freshened; reviewing a non-mergeable stale integration head would not be the final source candidate.
+- G4 reassigned `x-social-mobile-pr76-fresh-main-integration-20261005`, recommended **Sonnet5（高）**.
+- no functional redesign is authorized in that task. Merge fresh origin/main with normal history, resolve only the expected invariant-file addition, rerun relevant security/regression suites, push, STOP for K4.
+- after successful K4 freshness check: allocate H1 rereview, recommended **Sol（極高）**.
+- merge/migration apply/deploy/production mutation/real X remain HOLD.
+- H2/PR81 is separate and untouched.
+
+## Final C1 — PR #82 durable-claim rereview CHANGES REQUIRED
+
+- verdict: **CHANGES REQUIRED**; PR #82 exact head `9f3b19a3cde490cf63735220ae191dcd4f11bdcb` remains open/unmerged.
+- previous core P1 improvement accepted: actual SQL-backed two-worker diary dispatch now results in one fake X; pre-X durable claim, provider_started boundary, claim_id fencing and settle-failure retention materially close the original race/reopen defect.
+- remaining P1: duplicate scalar `event_id:` labels within one diary entry overwrite the earlier value. Runtime and the actual snapshot workflow validator accept it, so a consumed diary event can be silently renamed and revived.
+- remaining P2 security: migration drift checks ignore unsafe relation/function owner identity and inherited role privileges. H1 reproduced successful reapply where service_role effectively inherited owner powers including TRUNCATE.
+- remaining P2 provider classification: actual VaultAccountXAuth converts a genuine 401 into typed `X_ACCESS_TOKEN_UNAUTHORIZED` / `X_ACCESS_TOKEN_REJECTED_AFTER_REFRESH`; the dispatcher only recognizes `X_REQUEST_FAILED:401`, so a proven no-post 401 becomes permanently ambiguous.
+- remaining P1 evergreen: unresolved provider_started/ambiguous evergreen rows become eligible again after 72h/48h purely by age. H1 time-simulation produced a second fake X while the first unresolved row remained settle-capable. Unresolved outcomes must stay quarantined until reconciled, regardless of cooldown age.
+- remaining P2 cooldown: published evergreen cooldown is currently measured from `claimed_at`, not actual publish/settlement time.
+- remaining P2 RPC contract: service-role candidate payload accepts extra keys and non-canonical event/theme mappings; e.g. an evergreen seed can lie about its theme tags and bypass the intended 48h generic-theme guard.
+- remaining P3: changed tests add net-new `require-await` lint debt; clean it without broad production lint suppression.
+- H1 evidence: candidate focused checked 97 PASS, existing runtime 907 PASS, supplied SQL runner 96 PASS, but independent safety harness still has required RED failures; evidence commit `0801619f4bcd882dadc71deab5cd07493a7ea80a` is not a release candidate.
+- fresh main now overlaps PR #82 in `ai_lab_dev_diary_context.md` and its snapshot due the merged topic-detail-learning diary update. Correction must fresh-merge/reconcile and preserve latest main content + stable IDs.
+- fresh GitHub comparison at C1: main is 13 commits ahead of PR base; exactly those 2 PR files overlap.
+- no production read/write, migration apply, real X/model/Vault/token operation, merge or deploy occurred.
+- G3/G4 remain occupied; do not overwrite them. Continue correction as direct Claude work in an independent worktree.
+- recommended Claude model: **Opus5.5（高）**; fresh rereview after correction: **Sol（高）**.
+- H1 closed/free after fresh allocation.
+
+## Final K1 — Topic detail learning v2 PASS / merged
+
+- verdict: **PASS**.
+- G1 task: `kabumori-topic-detail-learning-v2-20261003`.
+- PR #83 exact accepted head `c810accebada37760a98a18bb184b50a61b7937b` was squash-merged as `f5919eb6af3da51c0d4d4a6342ad23b3f0a68980`.
+- fresh pre-merge main `e2ccfcc2e50942ed709eefdb1e62f87cbd693286`; main had advanced 20 commits from G1's merge-base with **0 overlap** across the six PR files.
+- fresh GitHub mergeability was clean; no slot/file conflict.
+- Home topic card remains the short `base_text` summary. Detail now uses a five-role learning flow for all 50 seeded topics: basics -> why -> hypothetical example -> market/practical relation -> takeaway.
+- exact id/level/JST-date re-fetch and mismatch fail-closed behavior preserved; params change now clears stale detail before loading the new one.
+- accepted verification: 50/50 title coverage; 284/284 app tests; Expo config/export PASS; diff clean; 402pt + 375pt Simulator checks.
+- EAS build = 0. DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+- Codex review: **not required**; static native UI + curated content only, no sensitive boundary, focused tests and visual verification are sufficient.
+- remaining non-blockers: past-topic detail eyebrow still says `TODAY'S TOPIC`; fetch-error state has no retry button; a calculation may line-wrap awkwardly.
+- AI Lab diary: **候補あり** — 「今日のトピック」を開くと、具体例・相場との関係・覚えておくポイントまで読める学習画面にし、初級〜上級の50テーマを同じ流れで学べるようにした。
+- G1 is done/free after fresh allocation.
+
+## PR #82 corrective complete -> H1 durable-claim rereview
+
+- corrected PR #82 exact head `9f3b19a3cde490cf63735220ae191dcd4f11bdcb`, open/mergeable.
+- old rejected head preserved: `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09`; update was fast-forward, no force push.
+- changed scope now 13 files and replaces post-X usage logging with a durable pre-X claim lifecycle.
+- stable explicit diary `event_id` replaces mutable same-date ordinal identity; canonical diary, snapshot and auto-sync CI are updated.
+- new migration: `20261004090000_ai_lab_topic_claims.sql`; old unapplied `20261003090000_ai_lab_topic_event_usage.sql` removed.
+- candidate flow: claim -> generation/guards -> provider_started commit -> X -> published/ambiguous/released settlement -> existing completion. No long DB transaction spans X.
+- candidate reports brand-scoped advisory serialization + diary-event active uniqueness + claim_id fencing, evergreen 72h/48h DB cooldown, pool-exhausted skip, explicit identity conflict handling and fail-closed migration drift comparison.
+- reported tests: Functions 2503/2503 PASS; SQL runner 96 PASS; SQL 6 and TS 8 mutation weakenings detected; H1 prior RED scenarios ported and GREEN.
+- production mutation=0; real X=0; merge/deploy=0.
+- GitHub checks: Netlify and Vercel success.
+- fresh comparison: main 3 commits ahead of PR base with **0 overlap** across PR #82 changed files.
+- H1 is freshly assigned `ai-lab-pr82-claim-rereview-20261004`.
+- H1 must independently validate provider error classification (especially 400/401/422/429 release vs 403/5xx ambiguous), fencing/lease, crash windows, exact idempotency, migration transactionality/ACL/drift and workflow event_id enforcement.
+- recommended Codex model: **Sol（高）**.
+- merge / migration apply / deploy remain HOLD until C1.
+- H2 remains dedicated to PR #81 and is not overwritten.
+
+## Final C1 — PR #82 AI Lab event-dedupe CHANGES REQUIRED
+
+- verdict: **CHANGES REQUIRED**; PR #82 exact head `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09` remains open/unmerged.
+- P1 concurrency: two schedules can load the same empty usage state, select the same diary event under different angles, pass current guards and both reach X before either records usage. H1 reproduced two fake publishes.
+- P1 persistence/crash: X can succeed while topic-usage insert fails or the process stops before usage persistence; completion/fingerprint can still succeed or the outcome can be ambiguous, allowing a later slot to select/publish the same event again. The current swallow-on-usage-error rule preserves X retry safety but loses event-dedupe durability.
+- P2 identity: ordinal `diary-YYYY-MM-DD-N` event keys change under same-date insertion/reordering/parser removal, reviving a previously used event under a new key.
+- P2 idempotency/cooldown: conflicting duplicate scheduled_post_id can be silently ignored; exhausted evergreen fallback can violate the nominal 72h seed cooldown.
+- P2 migration drift: clean reapply works, but an existing same-name table with missing PK/CHECKs or wrong index can be silently accepted.
+- H1 safety evidence deliberately includes RED regressions: 2 controls PASS / 9 required safety failures; this validates the blockers, not the release candidate.
+- existing candidate happy-path tests remain useful but do not close the product invariant.
+- required correction contract: stable immutable non-sensitive event IDs; durable per-brand/per-event pre-X claim/reservation with fencing/ownership; pre-X failures may release safely; once provider/X outcome is possibly started/ambiguous, claim must stay blocked/quarantined until reconciled; confirmed X settles claim as published; metadata persistence failure must not reopen the event or trigger duplicate X retry.
+- do not hold a long DB transaction across X. Do not use scheduler spacing as proof.
+- migration must fail closed on incompatible pre-existing catalog and exact idempotency conflicts.
+- G3/G4 remain occupied by separate X work; no slot overwritten. Correction returns as direct Claude work in an independent worktree.
+- recommended Claude model: **Opus5.5（高）**; corrected candidate rereview **Sol（高）**.
+- production mutation / X / merge / deploy = 0.
+- H1 closed/free after fresh allocation.
+
+## Final K2 — PR #77 + PR #79 production deploy PASS
+
+- verdict: **PASS**.
+- production `market-report-analysis` fresh-read is **v21**, ACTIVE, `verify_jwt=false`, ezbr `fe5c1836cdeddabdb1300668a5f75ac92d3570872a1b1eb110798195991fa40c`.
+- production source read-back contains the merged PR #77 quality calibration and PR #79/H1 Hard-guard runtime.
+- G2 reported exact byte match against fresh main for the full deployed import graph.
+- only `market-report-analysis` changed in the before/after Edge Function metadata comparison.
+- app_enabled=false / x_enabled=false remain OFF/OFF.
+- all 8 relevant cron jobs remain active with unchanged schedules and command hashes.
+- tests accepted: analysis 136/136; personalized 128/128; X shared 8/8; data-packet 42/42; _shared runtime 361/361; target check/lint/diff PASS.
+- production mutation: exactly one Edge Function deploy, v20 -> v21. No manual cycle/retry, gate change, DB/Auth/Vault/X/notification mutation.
+- rollback source v20 captured; rollback not needed.
+- next G2: `kabumori-shared-report-v2-20261005-morning-natural-observation`, read-only.
+- timing gate: do not substantively observe before **2026-10-05 08:10 JST**; no polling or weekend/manual run.
+- recommended Claude model: **Sonnet5（中）**.
+- natural observation should classify first-try vs retry, verify PR #77 rewrite/cost behavior, PR #79 watch/session/causal behavior, factual integrity, packet duplication and model cost before any consumer activation decision.
+
+## K3 — PR #81 content-settings hardening PASS to H2 rereview
+
+- verdict: **PASS to focused H2 rereview; merge/apply/deploy HOLD**.
+- PR #81 exact head `5595fb131813542c55c43bc783af623cdb9ea442`, open/mergeable.
+- 7 changed files: one new hardening migration, disposable SQL fixture/behavior/runner, one static Deno test, content-settings repository adjustment and focused app test.
+- historical candidate `20260922045046_social_mobile_content_settings_candidate.sql` remains byte-unchanged; new hardening migration is `20261003120000_social_mobile_content_settings_hardening.sql`.
+- G3 reports H2 blockers closed:
+  - F1 exact null/type/key JSON+persona contract;
+  - F2 effective least-privilege ACL with authenticated SELECT/INSERT/UPDATE only;
+  - F3 strictly monotonic server-owned `updated_at`;
+  - F4 fail-closed catalog drift guard with only enumerated CHECK/grant repair.
+- reported local proof: PostgreSQL 17.11 disposable cluster; 61 invalid settings + 24 invalid persona cases rejected; ACL/RLS/CAS/lifecycle/adverse drift tests; concurrent CAS one winner; long transaction no regression; mutation checks detected 8 weakened variants.
+- app/server verification: social-mobile 116/116; relevant Deno 158/158; typecheck/lint/Deno lint/bash syntax/diff PASS.
+- production reads 0; production mutations/apply/deploy/Auth/Vault/X/OpenAI/Cron 0.
+- fresh K3 merge check: main is 24 commits ahead of PR base with **0 overlap** across PR #81 files; Netlify and Vercel checks green.
+- PR #78 remains separate/unmerged and still depends on schema acceptance/apply/read-back before its unfinished Auth/AI review resumes.
+- H1 is occupied by PR #82 AI Lab event-dedupe review; H2 was free and is now assigned `x-social-mobile-pr81-content-settings-hardening-rereview-20261003`.
+- H2 must additionally verify actual Supabase migration transactionality, production default ACL/current grantees and that drift guards will not false-block legitimate managed metadata.
+- recommended H2 model: **Sol（高）**.
+- no production migration approval is granted by K3.
+- AI Lab diary: no update; this is an internal schema correction, not a merged/released user-facing capability.
+
+## PR #82 — AI Lab event-dedupe to H1 review
+
+- direct Claude implementation completed outside G1-G5, preserving active G3/G4 tasks.
+- PR #82 exact head `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09`, open/mergeable.
+- changed files: 8, limited to AI Lab diary/topic selection/store/dispatch/tests/x-test-post plus dedicated migration `20261003090000_ai_lab_topic_event_usage.sql`.
+- candidate changes dedupe unit from TopicUnit/rotation to durable eventKey usage. One diary entry's changed/difficulty/decided/angles share one eventKey and should all cool down after publication.
+- reported verification: new 26 tests; Functions 2474/2474 PASS; disposable PostgreSQL migration proof 13 PASS; production mutation=0; real X operations=0; deploy=0.
+- Netlify/Vercel checks green.
+- fresh comparison: main is 13 commits ahead of PR base with **0 overlapping changed files**.
+- explicit unresolved risks requiring independent proof: concurrent dispatches may both select the same unused event before usage is recorded; a usage INSERT failure after confirmed X success may leave that event eligible later; eventKey uses same-date ordinal; migration uses IF NOT EXISTS and needs ACL/drift review.
+- scheduler spacing is not accepted as a correctness guarantee.
+- H1 assigned `ai-lab-pr82-event-dedupe-review-20261003`.
+- recommended model: **Sol（高）**.
+- merge/deploy/migration apply remain HOLD until C1.
+- H2 stays free for the upcoming G3 schema-hardening review.
+
+## G1 allocation — Topic detail learning v2
+
+- task_id: `kabumori-topic-detail-learning-v2-20261003`
+- status: ready
+- owner: Claude G1
+- recommended model: **Sonnet5（高）**
+- goal: keep Home topic card compact while enriching only the detail page for all 50 seeded topics.
+- current production truth checked read-only: 50 active tips = 初級20 / 中級20 / 実践10; `base_text` is intentionally short (41–66 chars, avg ~51.6).
+- current RPC truth checked read-only: `get_daily_kabumori_tip(text,date)` remains deterministic/STABLE and returns only id/title/category/base_text/difficulty; no mutation or AI.
+- current app truth: all 50 seeded titles already have curated detail entries, currently mostly 4 short sections. v2 adds a clearer learning flow with concrete example, price/market relationship, and memorable takeaway.
+- explicit safety: do not claim live/current-market linkage without a trusted same-day data source; use evergreen `相場ではどう見る？` style wording.
+- scope: `src/app/topic-detail.tsx`, `src/lib/topic-detail-catalog.ts`, focused tests only unless a tiny compatibility helper is proven necessary.
+- non-scope: DB/RPC/migration/Auth/Edge/API/AI/Home card/report/news/portfolio/X/common-account/production.
+- EAS build expected: 0.
+- G2 remains separate on `market-report-analysis` production deploy/read-back.
+- start gate: fresh origin/main + active PRs + independent worktree check; any concurrent ownership of target files => STOP.
+- allocation control commits: G1 TASK `89d95ec8fb320c7f03f535b44344fada87897cdf`; ACTIVE_TASK `29bab8d6d31f2ee41f3fe70dc42c69179de793c6`.
+
+## Final C1 — PR #79 accepted and merged
+
+- verdict: **PASS-WITH-FIX / accepted**.
+- H1 reviewed original PR #79 head `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f` and produced exact reviewed/fixed source `b6d2dce3cc45c73951e51d139fefeddad7e2906e`.
+- bounded H1 fixes:
+  - question tokens such as `続くか` no longer prefix-match causal assertions `続くから/するから/なるから`;
+  - asserted continuative premises remain factual and cannot be erased by a later question;
+  - bounded honest degree-modifier questions remain deliverable;
+  - terminal prior-night reaction-watch prose is no longer a causal Hard false positive;
+  - actual/speculative market effects still require evidence and objective date/value/sign/ref contradictions remain Hard.
+- H1 final verification: analysis 136/136, session-date 14/14, H1 boundary 9/9, personalized 128/128, X shared 8/8, data-packet 42/42; target check/lint/diff PASS. `_shared` runtime 361/361 with --no-check due documented unrelated checked-type debt.
+- C1 fast-forwarded the existing PR #79 head branch to exact H1 source with no force; fresh GitHub read-back confirmed exact head and mergeable=true.
+- fresh main overlap against all five PR files = 0.
+- PR #79 merged -> `4dbf11f2848059cc967d942efc9d60613d855537`.
+- source merge only; Edge deploy/gates/manual cycle/DB/Auth/Vault/X mutation = 0.
+- PR #77 remains merged but production-unapplied. G2 now owns one combined `market-report-analysis` deploy/read-back for PR #77 + PR #79 with app/x gates OFF.
+- next G2 task: `kabumori-shared-report-v2-pr77-pr79-prod-deploy-20261003`.
+- recommended Claude model: **Sonnet5（高）**.
+- after deploy acceptance, observe the next normal trading-day morning cycle read-only rather than forcing a weekend/manual run.
+
+## Final K2 — corrected PR #79 to focused rereview
+
+- verdict: **PASS to focused Codex rereview; merge/deploy HOLD**.
+- PR #79 exact head: `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`, open/mergeable.
+- fresh no-race check: main `95fcb391f47296ebf5a7d880a03b834e430b1c6a`; overlap with PR #79 files = 0.
+- G2 reports previous H1 blockers corrected:
+  - P1 hypothetical-tail bypass closed while genuine hypotheses stay non-factual;
+  - P2 normal prior-night watch wording passes the session-date guard;
+  - P3 changed-file lint fixed;
+  - wrong-date numeric/session, 10/1 mixed-session, stale/current, 1306, polarity, unsupported causality and unknown-ref guards remain Hard.
+- reported verification: session-date 14/14; H1 boundary 4/4; analysis 131/131; personalized 128/128; X shared 8/8; data-packet 42/42; _shared 361/361; check/lint/diff PASS.
+- production mutation=0.
+- H1 was genuinely free and is now assigned `kabumori-pr79-hard-guard-rereview-20261003`.
+- recommended Codex model: **Sol（高）**.
+- rereview must explicitly test `GOVERNED_BY_QUESTION`, bounded WATCH_RELATION additions, MOVE_LIST narrowing, prior Hard invariants, and the separate causal-guard interaction for `前夜の米国株高を受け、日本株の反応を見る`.
+- no merge/deploy until C1.
+- PR #77 remains merged but production-unapplied; after PR #79 acceptance, bundle PR #77 + PR #79 into one `market-report-analysis` deploy with app/x gates OFF.
+- ACTIVE_TASK malformed G2/G3 index from prior concurrent edits was repaired from canonical G2/G3 TASK headers without changing G3's underlying task.
+
+## Final C1 — PR #79 hard-guard review CHANGES REQUIRED
+
+- verdict: **CHANGES REQUIRED accepted**.
+- reviewed PR #79 runtime head remains `9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`; open/unmerged.
+- H1 independently found:
+  - **P1**: sentence-wide `HYPOTHETICAL` can suppress an already asserted wrong-date/direction fact before a later hypothetical tail.
+  - **P2**: ordinary morning wording such as `前夜の米国株高を受け、日本株の反応を見る` and `米国株高の流れをどう受け止めるかが焦点` still false-rejects.
+  - **P3**: changed-file lint fails because `directionIn` became unused.
+- H1 original suite: analysis 123/123 PASS; focused evidence added 2 PASS / 2 FAIL; extended suite 125 PASS / 2 FAIL. Other relevant suites remained green.
+- H1 runtime source fix=0; test-only evidence commit `6140968378c44aecd2d40a1cc7d344f2e98e8b4e`; production mutation=0.
+- no merge / no deploy.
+- G2 corrective assigned: `kabumori-pr79-hypothetical-and-watch-phrasing-corrective-20261003`.
+- recommended Claude model: **Opus5.5（高）**.
+- next K2 must send the corrected exact head to a focused Codex rereview before merge/deploy; recommended **Sol（高）**.
+- PR #77 remains merged but production-unapplied; rollout still waits for PR #79 acceptance, then both changes should be bundled into one market-report-analysis deploy with app/x gates OFF.
+
+## Final C2 — content-settings schema candidate FAIL / G3 hardening required
+
+- verdict: **FAIL / CHANGES REQUIRED**. Existing `20260922045046_social_mobile_content_settings_candidate.sql` is not approved for production apply.
+- H2 production preflight still confirms target table/function absent and migration version unapplied; referenced brand/membership schema is compatible.
+- P1 F1: DB JSON CHECK boundary is too weak. NULL, type coercion, malformed nested structure and forbidden/unknown structured keys can be persisted under authenticated owner writes.
+- P1 F2: effective production-like default ACL leaves authenticated with non-DML capabilities including TRUNCATE/TRIGGER/REFERENCES/MAINTAIN; H2 locally demonstrated TRUNCATE despite DELETE denial.
+- P2 F3: `updated_at = now()` is transaction-start time, not a strict per-update version. Same-transaction timestamp reuse and version regression by a long-running earlier transaction were reproduced. Normal two-transaction CAS did produce one winner, but that does not close the deterministic clock issue.
+- P2 F4: `CREATE TABLE IF NOT EXISTS` silently accepts drift. H2 removed expected CHECK/FK constraints in a disposable DB, reran candidate, and it still succeeded without restoring/refusing the drift.
+- H2 made no source/schema changes and performed no production writes/apply/deploy/Auth/Vault/X/OpenAI/Cron operations.
+- PR #78 remains open/unmerged and blocked; unfinished Auth/AI/injection review is not considered PASS.
+- G3 is reassigned `x-social-mobile-content-settings-schema-hardening-20261003`.
+- default strategy: preserve historical candidate, add a new versioned hardening migration; exact JSON/persona allowlists/types/null safety, least-privilege effective ACL, monotonic server-owned CAS version, and explicit drift guard are mandatory.
+- local disposable PostgreSQL/Supabase proof is mandatory before K3.
+- production migration apply remains forbidden and will require separate explicit approval after independent review.
+- G3 recommended model: **Opus5.5（高）**.
+- after K3: fresh H2 review, recommended **Sol（高）**.
+- AI Lab diary: no update; this is an internal rejected schema candidate, not completed/released functionality.
+
+## Final K2 — corrected PR #79 to H1 review
+
+- verdict: **PASS to focused review; merge/deploy HOLD**.
+- PR #79 corrected head: `9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`, open/mergeable.
+- G2 reproduced the prior K2 laundering gap on old head and reports it closed on the corrected head.
+- legitimate 10/2 watch-reference phrasing remains accepted; assertion-before-watch, wrong-date numeric/session, 10/1 mixed-session, stale/current, 1306, polarity, causality and unknown-ref cases remain Hard in reported regressions.
+- reported verification: session-date 10/10; market-report-analysis 123/123; personalized 128/128; X shared 8/8; data-packet 42/42; _shared 361/361; check/lint/diff PASS.
+- production mutation=0.
+- fresh K2 no-race check found PR mergeable with no overlap against current main in its three files.
+- H1 became genuinely free after its prior X publish-toggle C1 closed, so H1 is now assigned `kabumori-pr79-session-date-hard-guard-review-20261003`.
+- recommended Codex model: **Sol（高）**.
+- H1 must explicitly inspect WATCH_RELATION/MOVE_LIST/NOUN/PLACE and the pre-existing HYPOTHETICAL skip behavior before any merge.
+- PR #77 remains merged but production-unapplied; production rollout waits for C1 acceptance of PR #79, then both changes should be bundled into one market-report-analysis deploy with app/x gates OFF.
+
+## Final C1 — PR #76 publish-toggle review FAIL / corrective required
+
+- verdict: **FAIL / CHANGES REQUIRED**; PR #76 remains open/unmerged at exact head `a59a89e9c585fb6e780e1af2ecc898c830f5524e`.
+- H1 independently reproduced critical concurrency/authorization failures against the actual candidate code.
+- P1 R1: membership is checked as a snapshot, then a service-role PATCH can still enable/disable after the caller loses or is demoted from owner/admin.
+- P1 R2: brand active/live is checked separately from the write, while the posting runtime can reuse cached brand context. H1 reproduced an interleaving where there was no authoritative instant with brand active/live + account ON together, yet the runtime publish guard passed.
+- P2 R3: after account movement/revocation, the no-match service-role reread can expose foreign-tenant current state.
+- P2 R4: ON readiness read and write predicates differ; blank/whitespace platform identity and credential-structure semantics are not aligned with runtime authority checks.
+- P2 R5: an ON confirmation opened for account A can submit for account B after context/props change; preview transition can leave confirmation actionable.
+- positive baseline remains: initial JWT/account/member checks, ordinary boolean CAS, narrow publish_enabled PATCH, fail-safe OFF intent and most normal-path tests are useful but insufficient for merge.
+- H1 made no source fix because the safe repair requires a transaction/authorization boundary and runtime pre-send permission contract, outside bounded review authority.
+- production mutation=0; real X operations=0; PR merge/deploy=0.
+- G4 corrective assigned: `x-social-mobile-publish-toggle-transactional-corrective-20261003`.
+- corrective must atomically bind caller + current owner/admin membership + authoritative brand/account + expected state + ON prerequisites, add a fresh authoritative pre-send guard so stale cached state cannot begin a new X write, close tenant-safe reread semantics, align readiness checks and pin UI confirmation context.
+- narrow new migration/RPC is allowed only for this corrective source task; production apply remains forbidden.
+- G4 recommended Claude model: **Opus5.5（極高）**.
+- after K4, independent Codex rereview is mandatory; recommended **Sol（極高）**.
+- H1 closed/free after fresh allocation.
+- AI Lab diary: no update; this is a rejected internal candidate, not a completed product capability.
+
+## Final C2 — PR #78 HOLD: production content-settings schema missing
+
+- verdict: **FAIL / CHANGES REQUIRED (schema prerequisite)**.
+- PR #78 exact head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7` remains open/unmerged.
+- H2 performed one read-only production catalog check and proved `public.social_mobile_content_settings` does **not exist**; this is relation absence, not an empty/RLS-hidden table.
+- impact: current production cannot persist confirmed consultation settings/persona, and PR #78's `updated_at` optimistic concurrency cannot be validated or function.
+- this does **not** establish a defect in PR #78's AI conversation implementation; H2 correctly stopped before claiming unexecuted Auth/AI/injection gates as PASS.
+- H2 source changes: 0. Production writes/migrations/RLS/grants/deploy/Auth/Vault/X/live-AI operations: 0.
+- main already contains source-only candidate `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql`; it defines the expected settings/persona table, owner RLS and updated_at trigger, but its comment explicitly says source candidate only and production has not applied it.
+- do not merge/deploy PR #78 yet.
+- do not apply the migration merely because it exists.
+- H2 is freshly reassigned `x-social-mobile-content-settings-schema-prereq-review-20261002` to independently review that existing candidate against current production catalog, RLS, JSON constraints, CAS semantics and lifecycle/common-account interactions.
+- recommended H2 model: **Sol（高）**.
+- after that review, C2 will decide whether a separate explicit production migration approval can be presented; only after successful apply/read-back may the remaining PR #78 security review resume.
+- AI Lab diary: no update; this is an internal blocked prerequisite, not a completed/released product capability.
+
+## K2 — PR #79 session-date guard calibration: CHANGES REQUIRED
+
+- PR #79 initial head `a70dfdd23257c6361b60f1b9221f6029b0fccaf9` remains open/unmerged; production mutation=0.
+- positive evidence accepted: exact 10/2 false rejects pass; wrong-date numeric/session, 10/1 mixed-session, stale/current, 1306, polarity, causality and unknown-ref protections remain covered; analysis 122/122 and broad regressions reported PASS.
+- fresh no-race check: PR mergeable and no overlap with current main in its three files.
+- K2 found a new Hard-boundary false-negative risk: sentence-wide `WATCH_FRAME` can let a later `確認します/注目です` launder an earlier same-sentence assertion such as `10月2日は、米国株高が続き、日本株の反応を確認します`.
+- decision: **do not merge / do not deploy**. Amend PR #79 so the prior-session move must itself participate in a recognized watch relation.
+- new G2 corrective: `kabumori-pr79-session-date-watch-relation-corrective-20261002`, recommended **Opus5.5（高）**.
+- next K2 requires focused Codex review before merge/deploy because this changes a Hard Fact boundary.
+- H1/H2 are both currently allocated to X-app reviews; they were not overwritten. If still occupied at next K2, PR #79 stays review-pending.
+
+## K3 — PR #78 AI consultation v1 PASS to Codex review
+
+- verdict: **PASS to focused Codex review; merge/deploy HOLD**.
+- PR #78 exact head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`, open/mergeable.
+- delta is 11 files: consultation screen/client/domain, confirmed settings repository path, content-setting validators, tests, and new read-only `social-mobile-consult` Edge Function/tests.
+- G3 reports: social-mobile 153/153 PASS; relevant Deno suite 196/196; typecheck/lint/check/diff/secret/scope clean; no migration, deploy, production mutation, paid live AI, X API or real X post.
+- source architecture preserves **conversation -> proposal -> explicit user confirmation -> save**. The Edge endpoint itself is intended read-only; durable memory is confirmed structured settings/persona only.
+- fresh K3 merge gate: main advanced 7 commits since PR base with **0 overlap** across PR #78's 11 files.
+- Netlify preview success. Vercel failure points to the known free-tier build-rate-limit and is not treated as a source-quality failure for this native/API candidate.
+- high-risk review points remain: JWT/member isolation, forged conversation history, prompt/structured-output injection, no implicit writes, client/server validator independence, `updated_at` CAS truth against actual production schema/trigger behavior, 24:00 validator narrowing, no-X history-learning boundary, per-user rate-limit rollout risk, and actual verify_jwt deployment configuration.
+- H1 remains occupied with PR #76 publish-toggle review. H2 was done/free after Final C2 and is freshly assigned `x-social-mobile-pr78-ai-consult-review-20261002`.
+- H2 recommended model: **Sol（高）**.
+- PR #78 must not merge/deploy until C2.
+- AI Lab diary: no update at this K3; feature is not merged/released and the current same-day diary already has a canonical entry.
+
+## Final K2 — PR #77 quality rewrite calibration
+
+- verdict: **PASS / merged**.
+- accepted head: `7174179c17cdc89b840fd923ad7a2d706f1a0f91`.
+- fresh main comparison found no overlapping runtime changes; merged -> `08a9f7101f2655d51ee3d7d6d5af3705ef5fa4db`.
+- quality-only improvements accepted:
+  - broad-first/company-last X text no longer falsely WARNs;
+  - real company-first / company-only omissions still WARN;
+  - App 700–899 chars remains telemetry-only; <700 may request one bounded rewrite;
+  - safe-original fallback and call ceiling unchanged.
+- reported tests: quality 9/9; analysis 113/113; personalized 128/128; X shared 8/8; data-packet 42/42; _shared 361/361; check/lint/diff PASS.
+- no Hard Fact source changed in PR #77; no Codex review required.
+- production mutation=0 except GitHub merge. PR #77 is intentionally **not deployed separately**; bundle it with the next accepted analysis deploy.
+- newly accepted blocker from the Report: 10/2 07:55 had a separate Hard date/session false positive where the report trading date scoped a forward-looking Japan-watch sentence containing prior-session US-stock direction.
+- next G2: narrow Hard date/session calibration, source/tests/PR only.
+- recommended Claude model: **Opus5.5（高）**.
+- because the next task changes a Hard boundary, K2 must reassess focused Codex review before production deploy. H1/H2 are currently occupied and must not be overwritten.
+
+## Final C2 — Common Account pre-production gate HOLD
+
+- verdict: **PARTIAL / operator prerequisite accepted**.
+- merged source remains accepted; this is not a source rollback.
+- production migration apply: **HOLD**.
+- production backfill apply: **HOLD**.
+- H2 independently reran merged local evidence: lifecycle 20 PASS, mutations 46/46 detected, social deletion 8 PASS, migration invariants 10/10 PASS.
+- production read-only catalog preflight found required tables/columns/FKs/helper contracts compatible, target migration not yet applied and no target object collision.
+- production backfill dry-run snapshot: Auth/common candidates 5, Kabumori 2, X 1, Auth-only 2, manual-review 3. Phase 0 had 4 Auth users; the additional user is Auth-only under current consumer-classification rules.
+- blocking prerequisite: no approved disposable nonproduction Supabase project/sandbox, so real GoTrue/PostgREST/Storage/managed-role/Data API proof is still NOT RUN.
+- production mutation/read safety: only authorized SELECT/catalog reads were used; writes/apply/backfill/Auth/Storage/OAuth/Vault/deploy/Cron/flag changes = 0.
+- next operator action: explicitly designate an approved disposable nonproduction Supabase environment, or separately authorize creation of one. Do not infer that any existing unrelated Supabase project is disposable.
+- after Gate B proof, C2/final rollout gate must separately decide migration apply and backfill apply; each remains separately approval-gated.
+- recommended model for resumed pre-production gate: **Sol（極高）**.
+
+## K4 — PR #76 publish-toggle source PASS to Codex review
+
+- verdict: **PASS to focused Codex review; merge/deploy HOLD**.
+- G4 candidate PR #76 exact head `a59a89e9c585fb6e780e1af2ecc898c830f5524e`, open/mergeable.
+- changed files: 10, limited to account-detail publish-toggle client/domain/tests and new `social-mobile-publish-setting` Edge Function/tests.
+- reported verification accepted for routing: Edge 37 PASS + check; social-mobile 134 PASS + typecheck/lint/diff; no migration/RLS/grant; production mutation 0; real X operations 0.
+- fresh K4 merge gate: Netlify success, Vercel success; main advanced 5 commits since PR base with **0 overlap** across the 10 PR files.
+- source architecture is plausible but not final-approved because this changes the future-X-publishing permission boundary.
+- main review risks: exact Auth/brand membership isolation, service-role write safety, ON readiness predicates, fail-safe OFF, stale CAS, brand active/live TOCTOU vs runtime publish guard, Edge JWT/config truth, and exact publish_enabled-only mutation.
+- H2 is occupied by common-account preproduction gate; H1 is genuinely free and assigned `x-social-mobile-pr76-publish-toggle-review-20261002`.
+- H1 recommended model: **Sol（高）**.
+- PR #76 must not be merged/deployed until C1.
+- native/provider E2E remains a later post-review/deploy step using disposable state; no production toggle is authorized here.
+- AI Lab diary: no new entry at this K4. The source feature is not merged/released yet and 2026-10-02 already has a canonical daily entry.
+
+## Final K2 — PR #71 deploy + first live Presentation v2 morning
+
+- deploy verdict: **PASS**. Production `market-report-analysis` v20 contains accepted PR #71 source; verify_jwt=false; gates OFF/OFF; cron unchanged.
+- first live v2 morning (2026-10-02) also **completed safely** on the scheduled retry:
+  - data packet `eec5aee4-d4b9-4651-9625-6071a1084900`
+  - report packet `7e11eb93-4ba4-4505-a965-8dac89d15158`
+  - Fact passed / local issues empty / one report packet only.
+- factual integrity observed: session dates are separated correctly, 1306 identity preserved, stale JGB dates are explicit, no unsupported Tokyo-market cause asserted.
+- formatted X body is **486 chars**, on target.
+- delivery-first fallback worked: a safe original remained deliverable even after a quality rewrite path did not become the delivered generation.
+- live quality telemetry exposed two calibration issues:
+  1. false company-before-broad warning even though the X paragraph and key_news are broad-first/company-last;
+  2. 846-char complete App story triggers a rewrite solely for being modestly below the 900-char preference.
+- these are quality/cost issues, not Hard Fact issues. Final run used 3 calls / $0.010230.
+- next G2: quality-warning/rewrite calibration only. Hard guards and PR #71 causal semantics are frozen.
+- recommended Claude model: **Sonnet5（高）**.
+- no Codex review allocated for this narrow quality-only task.
+
+## G4 assigned — social-mobile automatic publishing toggle v1
+
+- task_id: `x-social-mobile-publish-toggle-v1-20261002`
+- status: **ready**.
+- parallel-safe with G3 AI consultation: G4 owns only the per-social-account posting-permission toggle; it must not edit consultation/content-settings/persona files.
+- current production schema already has `social_accounts.publish_enabled`; authenticated clients have SELECT only, so G4 will add a narrow authenticated server-side write boundary rather than weakening RLS/direct grants.
+- ON is strict: exact account + owner/admin membership + active/live brand + verified X connection + required credential references + expected-state match.
+- OFF is fail-safe: authorized owner/admin may disable future publishing even when connection is degraded; it does not revoke X, delete tokens/posts, or alter Auth/common-account state.
+- stale UI is protected with compare-and-set semantics; only `publish_enabled` may change.
+- no DB migration/RLS/grant, X API, scheduler/Cron, post generation, AI consultation, account deletion, common-account work, or production deploy.
+- recommended Claude model: **Opus5.5（高）**.
+- because this changes a posting-permission/security boundary, K4 should normally allocate focused Codex review with **Sol（高）** before merge.
+
+## Final C1 — PR #70 source accepted and merged
+
+- verdict: **PASS-WITH-FIX / accepted**.
+- H1 reviewed PR #70 assigned head `47a2ed6a1635177ba82004eace4bddb42d9d53e3` and produced bounded fix `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65`.
+- bounded fix prevents direct application-row deletion from falsely recording login removal while Auth user still exists; actual Auth cascade remains shadow/unverified observation only.
+- final independent evidence accepted: lifecycle 20 PASS, mutations 46/46 detected, social deletion 8 PASS, migration invariants 10 PASS; old six blockers and latest seven adverse cases remain resolved.
+- PR branch fast-forwarded to exact reviewed fix, fresh main overlap 0, checks completed; PR #70 merged.
+- merge/main SHA: `44121914b035e22380a4ca1bd8252a42713a2bbf`.
+- source merge only. **Supabase migration is not applied. Backfill is not run. Auth/Storage/OAuth/Vault are unchanged.**
+- H2 assigned `common-account-pr70-preproduction-gate-20261002`, recommended **Sol（極高）**, for independent pre-production gate: actual disposable Supabase proof + production read-only preflight + backfill dry-run/parity.
+- production apply/backfill/deploy remain HOLD pending C2 and explicit approval.
+
+## H1 completed — PR #70 readiness authorization rereview (2026-10-02 JST)
+
+- task_id: `common-account-pr70-readiness-authorization-rereview-20261002`; status `review_required`, next_owner `chatgpt`.
+- result: **PASS-WITH-FIX**. Original PR head `47a2ed6a1635177ba82004eace4bddb42d9d53e3` is unchanged; final verified candidate `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65` published to H1-only branch `codex/h1-pr70-readiness-review-20261002`.
+- old six blockers + latest seven adverse cases resolved independently; no Auth-destructive SQL or enforcing mode; durable readiness/version/epoch/set and explicit evaluation-only inventory accepted within Phase 1.
+- new bounded P2 fixed: deleting only a common application row could falsely record login_removed while Auth still existed. Regression first failed; minimal observation-integrity check now refuses it, while real shadow Auth cascades remain allowed.
+- final verification: lifecycle 20 PASS, mutation 46/46 DETECTED, existing X deletion 8 PASS, invariants 10 PASS, syntax/lint/diff PASS. Scratch probe proved both admin-visible/admin-gone cascade orders record unverified removal identically.
+- H1 did not update G5 branch/PR, merge runtime into main, or allocate another slot. **PR #70 merge HOLD until C1 accepts and arranges exact fix incorporation**; unchanged original head is not approved.
+- production read/mutation=0, real X operations=0; owned fake probe DB removed, local cluster stopped. Detailed evidence appended to `.agent/CODEX_REPORT.md`.
+- next: **C1, 推薦モデル：Sol（高）**. Production requires separate **Sol（極高）**, actual disposable Supabase proof, exact read-only preflight/history/ACL/API checks and explicit approval. H1 STOP.
+
+## G3 assigned — AI consultation v1
+
+- task_id: `x-social-mobile-ai-consult-v1-20261002`
+- status: **ready**.
+- product order: AI consultation/profile learning foundation first; post generation comes later.
+- current app already has consultation UI, deterministic proposal scaffolding, confirmed settings/persona storage and an untrusted structured-result validator. G3 will reuse these and replace the runtime pseudo-conversation with a real authenticated server-side AI conversation boundary.
+- behavior: natural chat/general questions, adaptive follow-up questions, explanation of current saved posting profile, and reviewable settings/persona deltas. Nothing is saved until explicit user confirmation.
+- durable memory is confirmed structured settings/persona only; raw transcript is not added to a new database table.
+- past-X-post retrieval/analysis is explicitly deferred to G4 after K3/source review; history intent remains consent-gated.
+- no new DB migration because common-account PR #70 migration review is active; if existing settings/persona schema is insufficient G3 must STOP rather than create a migration.
+- no X API call, post generation, publish/scheduler, OAuth/Auth-provider change, account deletion, common-account change or production deploy.
+- recommended Claude model: **Opus5.5（高）**.
+- because an authenticated AI Edge/API boundary is expected, K3 should normally allocate H2 focused review with **Sol（高）** before merge.
+
+## Final K5 — PR #70 readiness authorization corrective
+
+- verdict: **PASS to focused Codex rereview; merge/apply/deploy HOLD**.
+- PR #70 exact head `47a2ed6a1635177ba82004eace4bddb42d9d53e3`, open/mergeable at K5.
+- key correction: Phase 1 has no enforcing Auth-delete guard. Auth-cascade trigger is observation/shadow only; readiness is durable state bound to lifecycle version + requirement epoch + required checkpoint set.
+- built-in checkpoint semantics are fixed/fail-closed; entitlement owner/service transfer is prohibited.
+- G5 reports previous six blockers and later seven adverse cases all covered by committed regressions.
+- reported verification: lifecycle 20 PASS; mutation 45/45 detected; social-mobile deletion 8 PASS; migration invariants 10 PASS; shell/diff checks clean.
+- production mutation/read: 0. No migration apply/backfill/Auth/Storage/OAuth/Vault/deploy/Cron/flag/provider change.
+- PR is 75 commits behind main, but fresh base-to-main comparison shows no overlap with its eight files.
+- H1 assigned `common-account-pr70-readiness-authorization-rereview-20261002`, recommended **Sol（高）**.
+- merge/apply remains blocked pending C1.
+- even after source acceptance, production preflight/apply requires a separate **Sol（極高）** review, actual disposable Supabase proof, exact production read-only catalog/history/ACL/FK checks, backfill dry-run/parity and explicit approval.
+- AI Lab diary: no update; 2026-10-02 already has a coherent X-app daily entry and should not be overwritten with a second unrelated workstream.
+
+## Final K3 PASS — social-mobile native navigation cleanup
+
+- verdict: **PASS**.
+- PR #73 accepted at exact head `645923ba87c8667073061d13a2fc46bbb31ebcbe` and squash-merged as `a81a60bb731e2c51aa907b4cc08234cb602c4f6a`.
+- native iOS Release-like verification confirmed previously dead History, Schedule, Settings 「会話で相談する」 and Accounts rows now navigate correctly; Accounts 「ログイン方法」 styling is restored.
+- audit result: all proven-broken `Link asChild > Card/View` and function-style direct-child cases in app/components were removed; remaining ActionButton cases are safe because they forward press behavior.
+- tests: social-mobile 113/113 PASS; typecheck/lint/diff PASS.
+- scope remained UI/navigation-only; no x-connect/OAuth/Auth/account-deletion/common-account/DB/RLS/RPC/Edge/Vault/flag/scheduler change.
+- production mutation 0; real X operations 0; deploy 0.
+- no Codex review required for this narrow UI-only change.
+- Netlify preview passed; Vercel failure was the known free-tier build-rate-limit, not a candidate-quality failure.
+- remaining separate UI polish: `/accounts/[id]` is now reachable but has no visible header/back button; edge-swipe works.
+- no TestFlight/App Store/native production build from this task.
+- G3 closed and reusable after fresh allocation.
+
+## Final C1 — PR #70 corrective rereview FAIL
+
+- verdict: **FAIL / CHANGES REQUIRED accepted**.
+- reviewed head `eebe9405d758e0c120f9e6f1a70cdb1e973a0855` remains open/unmerged.
+- previous six H1 blockers are confirmed resolved.
+- new blockers accepted:
+  - P1: common_accounts cascade guard can execute after Auth CASCADE already erased admin / foreign membership blockers, so delete-instant table rechecks are not a reliable authorization boundary.
+  - P2: previously ready deletion authorization is not invalidated by checkpoint registry / Apple identity requirement changes.
+  - P2: built-in checkpoint names can retain names while their required semantics are weakened.
+  - P2: direct/operator entitlement ownership transfer invalidates destination version only, leaving source stale.
+- production mutation/read from H1: 0; no current production corruption established.
+- architecture direction: preserve no-managed-delete Phase 1. Replace reliance on post-cascade blocker discovery with a durable pre-delete authorization/invalidation contract prepared before managed deletion begins. Any producer not wired to invalidate readiness keeps enforce disabled.
+- G5 assigned `common-account-pr70-guard-boundary-corrective-20261002`, recommended **Opus5.5（極高）**.
+- PR #70 merge/apply/backfill/deploy remain HOLD.
+- after corrective K5, focused Codex rereview required; production apply still requires separate **Sol（極高）** review + real disposable Supabase proof + explicit approval.
+
+## H1 completed — PR #70 corrective rereview (2026-10-01 JST)
+
+- task_id: `common-account-pr70-corrective-rereview-20261001`; status `review_required`, next_owner `chatgpt`.
+- verdict: **FAIL / CHANGES REQUIRED** at unchanged exact head `eebe9405d758e0c120f9e6f1a70cdb1e973a0855`. Merge/apply/backfill/deploy HOLD.
+- previous six blockers: all independently verified resolved; additive-only/no managed Auth destruction or false completion responsibility gate PASS.
+- new findings: P1 post-cascade guard can miss late admin/foreign-membership blockers; P2 already-ready operation accepts changed checkpoint/Apple requirements; P2 built-in requirement mapping corruption can skip mandatory checkpoints; P2 owner-side entitlement transfer leaves old account version unchanged.
+- evidence: lifecycle 19 PASS markers, mutation 29/29 DETECTED, existing social deletion 8 PASS, migration invariants 10 PASS, syntax/lint/diff PASS; seven additional fake-DB counterexamples and cascade instrumentation reproduced. Storage SELECT-denied/type-mismatch fail closed.
+- source fix=0; root delete-boundary/ready invalidation is lifecycle-contract correction reserved for G5. No G5 allocation/overwrite by H1.
+- production read/mutation=0 in this rereview; real X operations=0; no claim of current production corruption. Owned fake probe database removed; owned local cluster stopped.
+- detailed report append in `.agent/CODEX_REPORT.md`, prior histories and other slots preserved.
+- next: **C1, 推薦モデル：Sol（高）**. C1 should decide a separate corrective assignment; separate **Sol（極高）** pre-production review plus actual disposable Supabase proof and explicit approval remain required. H1 STOP.
+
+## Final K2 — PR #71 delivery-first causal guard calibration
+
+- verdict: **PASS / merged**.
+- accepted head: `99e5058e7d3b2ea7695bad157902c68a5d62d06a`.
+- fresh no-race check: no overlap with main changes; PR mergeable.
+- merged -> `9bbafeaf4314f88bf5541ea5b6cf76e0e5c3a20e`.
+- exact 10/1 false reject is fixed in deterministic regression tests.
+- unsupported market causality, fabricated refs, mixed-session/date-value errors, stale/current errors and 1306 mislabel remain Hard.
+- call budget unchanged; source task production mutation=0.
+- Codex review deferred until after live shadow observation because consumer gates remain OFF and current priority is validating delivery reliability with actual model output before spending another review cycle.
+- next G2: controlled market-report-analysis-only deploy/read-back; no gate activation/manual cycle.
+- recommended Claude model: **Sonnet5（高）**.
+
+## G3 assigned — social-mobile native navigation cleanup
+
+- task_id: `x-social-mobile-native-link-navigation-cleanup-20261001`
+- status: **ready**.
+- confirmed main issues: Accounts 「ログイン方法」 still uses the proven-bad Link-asChild + function-style Pressable composition; Settings 「会話で相談する」 uses Link-asChild around a non-forwarding Card and is a dead tap.
+- required: fix those two issues, remove the accounts allowlist exception, narrowly audit app/components for only the same two proven invalid patterns, add regression coverage, and native-tap verify in an isolated G3 Simulator.
+- G4 PR #65 is already merged/final, so its former Accounts ownership no longer blocks this work.
+- strict non-scope: x-connect/OAuth/Auth/account-deletion/common-account/DB/RLS/RPC/Edge/Vault/scheduler/flags/deploy.
+- production mutation / real X operations expected: 0 / 0.
+- recommended Claude model: **Sonnet5（高）**.
+- K3 will decide merge; extra Codex review normally unnecessary if the final delta remains UI/navigation-only.
+
+## Final K4 PASS — iOS X account switching
+
+- verdict: **PASS**.
+- PR #65 accepted at exact reviewed head `e5a66f5ba71f64b1a38d8f89faff3d0a31972949` and squash-merged as `6b1f2f6229a1b75743b57900d869368c2c5e8693`.
+- isolated native operator proof confirmed that the posting-X auth session did not silently reuse Safari's logged-in account A; a different disposable account B could authenticate up to the final X consent boundary.
+- cancel returned safely and retry again opened a fresh login path.
+- final X consent/linking was intentionally not completed; real X posts = 0.
+- independent production read-only verification for the test window: 0 new Auth users, memberships, social accounts, OAuth states, token-store updates, or Vault secret creates/updates.
+- source/security review remained valid because runtime source did not change after the reviewed head; no further Codex review required.
+- fresh merge gate passed: checks green, head unchanged, no main overlap with the five PR files.
+- iOS ephemeral/private auth remains best-effort by platform/browser; verified outcome is prevention of silent normal-browser identity reuse, not a guaranteed account chooser.
+- Android/Web unchanged. No TestFlight/App Store/native binary release in this K4; source enters the next native build.
+- separate UI follow-up remains for the accounts-screen Link-asChild styling defect found by G3.
+- G4 closed and reusable after fresh allocation.
+
+## Final K5 — PR #70 corrective lifecycle foundation
+
+- verdict: **PASS to focused Codex rereview; merge/apply/deploy HOLD**.
+- PR #70 corrective exact head: `eebe9405d758e0c120f9e6f1a70cdb1e973a0855`, open/mergeable.
+- architecture correction: Phase 1 no longer deletes Supabase Auth users or claims managed-account deletion completion. It stops at durable lifecycle/readiness for a future managed orchestrator.
+- all six prior H1 counterexamples are now represented as committed regressions and reported PASS; G5 additionally reports 19 lifecycle checks and 29/29 mutation detections.
+- production mutation/read: 0; no migration apply/backfill/Auth/Storage/OAuth/Vault/deploy/Cron/flag changes.
+- fresh base-to-main comparison found no overlap with the eight PR #70 files.
+- H1 assigned `common-account-pr70-corrective-rereview-20261001`, recommended **Sol（高）**, exact-head rereview.
+- merge/apply remains blocked until C1 acceptance.
+- even after source acceptance, production preflight/apply requires separate **Sol（極高）** review, real disposable Supabase proof and explicit approval.
+- AI Lab diary: no duplicate update; 2026-10-01 already captures this common-account concurrency/safety work at public-safe granularity.
+
+## Final C1 — PR #70 lifecycle foundation FAIL
+
+- verdict: **FAIL / CHANGES REQUIRED accepted**.
+- PR #70 head `89cf128bd9219897806b2b641cce4866f6e16c52` remains open/unmerged and is not approved for production apply.
+- H1 independently reproduced six blockers:
+  - SQL Auth deletion can report completion while Storage-owned state remains.
+  - absent-account preview can remain valid after backfill introduces a service.
+  - backfill can grant entitlement after concurrent account lock/state change.
+  - admin + self-service workspace can receive X consumer entitlement.
+  - migration preflight can accept an Auth FK on the wrong column.
+  - rollback can remove enforcement when lifecycle settings row is missing.
+- baseline lifecycle/race/ACL behavior had substantial passing evidence, but these blockers invalidate merge readiness.
+- production mutation from H1: 0; current production corruption was not established.
+- architecture correction: Phase 1 will no longer perform or claim managed Auth destruction. It will stop at durable lifecycle/service state and a readiness contract; actual Auth/Storage/provider/session cleanup moves to a later common-account orchestrator phase.
+- G5 assigned `common-account-pr70-corrective-lifecycle-foundation-20261001`, recommended **Opus5.5（極高）**, to amend PR #70 and commit all six H1 counterexamples as regression tests.
+- merge/apply/deploy/backfill remain HOLD.
+- after corrective K5, focused Codex rereview required; before any production apply, separate **Sol（極高）** review and explicit approval required.
+
+## H1 completed — PR #70 lifecycle foundation review (2026-10-01 JST)
+
+- task_id: `common-account-pr70-lifecycle-foundation-review-20261001`; status `review_required`, next_owner `chatgpt`.
+- verdict: **FAIL / CHANGES REQUIRED**. Original/final PR head `89cf128bd9219897806b2b641cce4866f6e16c52`, unchanged. Source merge/apply/backfill/deploy HOLD.
+- P1: finalization reports completed in the local production-shaped Storage model while an owned object remains; production catalog confirms ownership has no Auth FK. No actual production deletion/orphan claimed.
+- P2: stale empty preview accepted after backfill adds a service; entitlement granted after concurrent operator lock; admin/self-service owner wrongly backfilled; wrong-column FK preflight accepted; missing settings permits rollback of the effective-enforce guard.
+- actual checks: original lifecycle 16 PASS, existing social deletion 8 PASS, migration invariants 10 PASS; syntax/lint/diff PASS; scratch removal of common row lock caught by race 7. Six counterexamples separately reproduced.
+- source fix=0. Core managed-service deletion/confirmation/backfill contract needs G5 correction, outside H1's bounded-fix authority. No G5 reassignment by H1.
+- production mutation=0; read-only schema metadata only. Local PostgreSQL does not prove GoTrue/PostgREST/Storage/provider E2E.
+- detailed evidence appended to `.agent/CODEX_REPORT.md`, prior reports/other-slot controls preserved.
+- next: **C1, 推薦モデル：Sol（高）**; then separately scoped G5 correction and repeat review. **Sol（極高） pre-production review remains mandatory**, followed by explicit approval. H1 STOP.
+
+## K2 — 2026-10-01 Presentation v2 close false reject
+
+- verdict: **FAIL for validator calibration; safety containment itself worked**.
+- natural close data completed, but report failed both analysis attempts with `ANALYSIS_LOCAL_CHECK_FAILED`; report packet=0.
+- final rejected sentence: `AI向け半導体需要を背景に半導体輸出も大幅増と報じられました`.
+- production input news actually supports that AI-demand -> semiconductor-export relationship. The sentence describes the news event; it does not claim that this caused the Nikkei/Tokyo market move.
+- current causal Hard guard is therefore over-strict for Presentation v2 news prose.
+- attempt-1 fabricated/mistyped news ref was a valid Hard failure and remains protected.
+- app/x gates remain OFF; observation mutation=0.
+- product decision: delivery reliability outranks over-strict suppression. Hard BLOCK should target objective lies/contradictions; supported news prose and honest uncertainty should remain deliverable.
+- next G2: focused source/test correction `kabumori-shared-report-v2-delivery-first-causal-guard-calibration-20261001`.
+- recommended Claude model: **Opus5.5（高）**.
+- no Codex allocated yet; K2 will decide after seeing the actual delta and adversarial tests.
+
+## Final K5 — Common Account v1 Phase 1
+
+- verdict: **PASS to focused Codex review; merge/apply/deploy HOLD**.
+- G5 source candidate: PR #70 exact head `89cf128bd9219897806b2b641cce4866f6e16c52`, open/mergeable, 7 files, additive migration/tests/docs only.
+- candidate adds common account + service entitlement + lifecycle serialization primitives, shadow backfill, least-privilege RLS/grants, deletion guard shadow mode, rollback and disposable race tests.
+- reported verification includes 16 lifecycle runner checks, 8 two-session race scenarios, 10 mutation-defect detections, rollback byte-match/reapply, existing social-mobile deletion regression and migration invariant checks.
+- production mutation/read from G5: 0; no migration/backfill/deploy/Auth/OAuth/Vault/Cron/flag changes.
+- fresh overlap check: PR #70 base-to-main change only touched G5 control file; no PR runtime overlap. G4 PR #65 files remain untouched.
+- H1 assigned `common-account-pr70-lifecycle-foundation-review-20261001` with **Sol（高）**. Focus: SQL Auth deletion semantics, lifecycle serialization, guard trigger, ACL/RLS/SECURITY DEFINER, backfill, preflight/rollback, Supabase compatibility.
+- no source merge or production apply is authorized by K5.
+- if H1 accepts the candidate, production preflight/apply still requires a separate **Sol（極高）** review and explicit approval.
+- AI Lab diary: 候補あり — 共通ログインとサービスごとの利用登録を分け、利用開始と全体削除の同時実行まで競合テストした進捗を2026-10-01の公開安全な日記へ反映。
+
+## K4 HOLD 2 — PR #65 isolated provider proof
+
+- PR #65 remains open / mergeable at exact reviewed head `e5a66f5ba71f64b1a38d8f89faff3d0a31972949`; GitHub checks are green.
+- fresh main is 86 commits ahead of the original PR base but overlaps none of the five PR #65 source/test files.
+- prior G4 follow-up STOP is accepted as an environment blocker only: no isolated runnable Simulator build/public client config was available; source remained unchanged, production mutation 0, real X posts 0.
+- G3 is now complete, but G4 still must use its own worktree/environment.
+- G4 is returned to ready. An isolated local Simulator native build is now authorized because it is necessary to verify the only remaining platform behavior.
+- provider proof must stop before final X authorization/callback/linking: verify Safari account A is not silently reused, a different disposable B can authenticate, cancel/retry works, then close. This avoids creating production social-account/Vault state solely for testing.
+- reconnect path no longer requires a provider-side persisted connection for this gate because connect/reconnect use the same reviewed hook and automated tests already cover reconnect/cancel/retry; the missing evidence is specifically native iOS ephemeral-session behavior.
+- no new Codex review unless runtime source changes.
+- recommended Claude model: **Sonnet5（高）**.
+- AI Lab diary: 記録不要 at this HOLD; no new product behavior was completed.
+
+## Final C1 — Common account deletion safety accepted
+
+- verdict: **FAIL / CHANGES REQUIRED accepted**.
+- existing production Kabumori deletion is confirmed not common-account-safe: admin self-delete lacks a server authorization guard, and a one-service hard Auth delete can remove cross-service ownership references without revoking/cleaning the other service.
+- H1 intentionally made no runtime patch. A read-only preflight followed by a separate Auth hard delete has a create-vs-delete race and must not be represented as safe.
+- current production snapshot had 0 dual Kabumori + user-facing-X users, so no current cross-service corruption was established.
+- production mutation from H1: 0; runtime source candidate: none; deploy remains HOLD.
+- G3 deletion UI work is complete/merged. G4 PR #65 remains isolated and open for operator provider-side account-switch E2E only.
+- G5 assigned `common-account-v1-phase1-additive-lifecycle-foundation-20261001`: additive common-account/service-entitlement schema + lifecycle serialization foundation, shadow backfill candidate, and least-privilege RLS/grants. No production apply/backfill/deploy.
+- Phase 1 must serialize service provisioning vs whole-account deletion; simple final SELECT/preflight-only fixes are forbidden.
+- recommended G5 model: **Opus5.5（極高）**.
+
+## Final K3 PASS — social-mobile account deletion UI
+
+- verdict: **PASS**.
+- PR #68 accepted at exact head `ec292b50f8d9622a9c35dd1ce62a7d9ec1c1512b` and squash-merged as `c1f4f42ab78430ee0c214759b4ddac280b7f2265`.
+- root cause: expo-router `Link asChild` style merging dropped a function-valued Pressable style, so the button background/padding disappeared while its white label remained.
+- fix: the two affected navigation buttons now use standalone Pressable + router navigation; Settings now exposes account management above the long content form.
+- native iOS Simulator Release check: both labels visible; routes land correctly; deletion feature gate remains OFF.
+- tests: 94/94, typecheck/lint/diff PASS.
+- no deletion backend/scope/Auth/DB/RLS/RPC/Vault/OAuth/feature-flag change; production mutation 0; real X operations 0.
+- no Codex review required for this narrow UI-only fix.
+- remaining non-blocking UI findings are tracked separately: similar accounts-screen styling in G4-owned scope and dead/non-forwarding Link-asChild cards such as Settings 「会話で相談する」.
+- source is merged; no App Store/TestFlight/native binary release occurred in this K3.
+- G3 closed and reusable after fresh allocation.
+
+## Final K2 — Presentation v2 production deploy
+
+- verdict: **PASS**.
+- production `market-report-analysis` v17 accepted; verify_jwt=false.
+- deployed source/read-back matches merged PR #67 v2 baseline.
+- app_enabled=false / x_enabled=false confirmed; 8 relevant cron jobs remain active/unchanged.
+- G2 mutation accepted as one target Function deploy only; no manual cycle / DB / Auth / Vault / X / gate mutation.
+- concurrent x-test-post v130 -> v131 occurred at 14:19:06 JST, before G2 deploy started at 14:21:09 JST. PR #66 had merged at 14:10 JST and the deployed x-test-post source matches latest main per G2 read-back. It is therefore recorded as a separate concurrent workstream mutation, not a G2 violation. x_enabled=false, so the shared X consumer remains inactive.
+- no rollback required.
+- next G2: first natural Presentation v2 close observation after 16:40 JST on 2026-10-01.
+- recommended Claude model: **Sonnet5（中）**.
+- ACTIVE_TASK G2/G3 index section was found interleaved/corrupted by concurrent control-file updates; it has been rebuilt from the canonical G2 and G3 TASK headers without changing G3's underlying TASK.
+
+## K4 HOLD — PR #65 operator account-switch E2E remains
+
+- PR #65 exact head `e5a66f5ba71f64b1a38d8f89faff3d0a31972949` remains open / mergeable.
+- source/security review is already accepted; focused 14/14, mobile 103/103, data/post 22/22, typecheck/lint/export checks passed in the accepted review.
+- fresh main has advanced 67 commits from the PR base, but none of PR #65's five source/test files overlap those main-side changes.
+- sole remaining merge condition: operator provider-side iOS E2E proving a different disposable X account can authenticate without silent reuse of the prior normal-browser X session; also verify cancel/retry/reconnect.
+- no additional Codex review unless runtime source changes.
+- G4 returned to ready for this E2E only; recommended Sonnet5（高）.
+- no merge / deploy / real X post authorized by this K4.
+
+## H1 completed — Kabumori deletion cross-service boundary (C1 pending)
+
+- task: `common-account-kabumori-delete-cross-service-safety-review-20261001`; status `review_required`, next_owner `chatgpt`.
+- verdict: **FAIL / CHANGES REQUIRED** for the existing production hard-delete path; not evidence of an executed deletion or current orphan.
+- production source read-back: account-delete ACTIVE v8 / verify_jwt=true; both files byte-equal to reviewed main.
+- P1 risks: unguarded admin self-deletion and shared Auth cascades to X membership/OAuth state while X workspace/accounts/credentials may remain. Current aggregate: 4 Auth users, 2 Kabumori profiles, 1 admin with a profile, 1 X membership, 0 dual-service users, 0 ownerless user workspaces.
+- interim runtime guard: not implemented. Read checks followed by a separate Auth DELETE do not serialize concurrent workspace creation; borrowing the X deletion lease changes posting/lifecycle state and service scope. Safe correction requires a separately scoped common deletion boundary.
+- verification: focused tests 23/23; four offline vulnerability probes; targeted typecheck/runtime lint PASS. Combined test lint has five pre-existing require-await findings. No device/E2E/destructive deletion test claimed.
+- changed: H1 control/report files only; production mutation 0, deploy none. G3/G4 and previous reports remain unchanged.
+- next: C1 review with **Sol（高）**; then separately plan/authorize G5 Phase 1 lifecycle serialization, explicit service registration and recent reauthentication. No Phase 1 allocation/production approval follows automatically. H1 STOP.
+
+## Final K5 — Common Account v1 Phase 0
+
+- verdict: **PASS**.
+- task: `common-account-v1-phase0-prod-readonly-inventory-20261001`; G5 changed no runtime/source code and made no production mutation.
+- production inventory completed through aggregate/read-only evidence: Auth/identity population, Kabumori/X user classification, ownership/cascade, RLS/service-role boundaries, OAuth/Vault references, deletion flows and Apple revoke readiness.
+- production population at review time: 4 Auth users; email identities only; no current user classified as both Kabumori and user-facing X workspace owner.
+- key lifecycle risk: the deployed Kabumori deletion path hard-deletes the shared Auth user without X-service/admin-aware cleanup/guarding. This can become a cross-service deletion/orphan risk once shared-account users span services.
+- current X deletion scope also relies on Kabumori profile presence as a proxy; Phase 1 must replace proxy semantics with explicit service registration/entitlement.
+- migration planning: additive common-account/service-entitlement shadow approach remains the preferred v1 direction; no backfill/migration was executed.
+- G5 Phase 1 is **HOLD** until the deletion-boundary review below and pending G3/G4 overlapping social-mobile Auth/deletion work are reconciled.
+- Codex review for G5 Phase 0 itself: not required (read-only/no runtime delta).
+- H1 assigned `common-account-kabumori-delete-cross-service-safety-review-20261001` for existing production Kabumori account-delete cross-service safety review and bounded source-only fail-closed correction candidate.
+- recommended H1 model: **Sol（高）**. No production deploy authorized.
+- AI Lab diary: 記録不要 — 2026-10-01既存エントリが、共通部分とサービス固有部分を分けてサービス単位で安全に利用終了するという今回の公開可能な要点をすでに記録しているため重複しない。
+
+## Final C1 — PR #67 shared report Presentation v2
+
+- verdict: **PASS-WITH-FIX / accepted**.
+- original G2 head `5877045f7`; H1 final reviewed head `d6f9c9a0285920871d0ce86cc4559f9675c0ebb9`.
+- H1 fixed nine demonstrated P2-class guard/fallback/order issues and added 13 adversarial tests.
+- final: analysis 86/86, personalized 128/128, data-packet 42/42, X shared 8/8, _shared 329/329 with --no-check; target runtime check/lint/diff PASS.
+- fresh overlap check showed no main runtime overlap; PR #67 merged -> `09975d02cc81b1614818951173a94aa8677291a0`.
+- review production mutation=0.
+- app/x gates are still OFF; C1 does not authorize consumer activation.
+- next G2: deploy only `market-report-analysis` v2 source with gates OFF and exact read-back; no manual cycle.
+- recommended Claude model: **Sonnet5（高）**.
+- later activation prerequisites remain: natural live-model v2 observation, X long-post provider/account capability verification, App native story UI integration.
+
+## Final C2 PASS — PR #66 AI Lab topic dedup
+
+- verdict: **PASS**.
+- accepted exact head: `4f692e4d805ccd3ee628058bb20ee6c1f62cdd6d`.
+- H2 found no blocking issue and made no PR source change.
+- verification: focused 24/24, related 55/55, full functions 2337/2337; shared runtime type checks pass; x-test-post retains only six pre-existing base diagnostics; diff check pass.
+- fresh diary priority, deterministic rotation/cooldown, max-three content regeneration, fail-closed rejection, and AI-Lab-only prompt/guard scope were accepted.
+- known limitation: no persisted recent post body, so this is not true semantic-history comparison; accepted as an emergency stopgap.
+- PR #66 is safe to merge after a fresh no-race check.
+- production activation remains a separate controlled `x-test-post` redeploy/read-back step. No schema/RPC/Cron/Auth/OAuth/Vault change is needed.
+- production mutation / real X during review: 0 / 0.
+- H2 closed and reusable after fresh allocation.
+
+## H1 completed — PR #67 shared report v2 source review (2026-10-01 JST)
+
+- task_id: `kabumori-pr67-shared-report-v2-hard-fact-review-20261001`; status `review_required`, next_owner `chatgpt`.
+- verdict: **PASS-WITH-FIX**, source/tests only. Original `5877045f7554cd4e089fb3b79091bf8e2bb38456`; final pushed PR #67 head `d6f9c9a0285920871d0ce86cc4559f9675c0ebb9`.
+- deterministic factual guard holes/false positives, malformed structured output, safe-original fallback after exhausted quality-rewrite requests, and model-input news ordering fixed within TASK authority; 13 adversarial tests added.
+- analysis 86, personalized 128, data 42, X shared 8 = 264 PASS; `_shared` 329 PASS (--no-check). Target check/lint/diff PASS; unrelated whole-_shared type errors recorded in H1 Report.
+- production mutation=0; no merge/deploy/manual cycle/DB/Cron/gate/X operation. Consumer activation remains unapproved.
+- C1 decides source merge only. Rollout requires actual v2 model observations, verification of the ~500-Japanese-character X API posting contract/entitlement, and separate G1 native story rendering. G2's eight-packet production replay is reported evidence, not an independently repeated live DB audit by H1.
+- recommended C1 model: **Luna（中）**. H1 STOP after report sync; H2/PR #66 and other slot files untouched.
+
+## G5 assigned — Common Account v1 Phase 0 read-only inventory
+
+- task_id: `common-account-v1-phase0-prod-readonly-inventory-20261001`
+- status: **ready**
+- scope: repository + production read-only migration preflight for shared account/Auth: provider aggregates, Kabumori/X A-B-C-D population, legacy entitlement candidates, ownership, RLS/service_role, deletion/cascade, OAuth/Vault boundary, Apple revoke readiness, and future registration/login impact map.
+- strict safety: no implementation, migration, RLS/Auth change, identity link/unlink, OAuth revoke, Vault secret read/mutation, deploy, backfill, account deletion or other production mutation.
+- concurrency: G5 was genuinely unassigned before allocation. G1/G2/G3/G4 and H1/H2 currently have separate workstreams. G3 account-deletion UI cleanup and G4 posting-OAuth auth-session scope must not be edited or merged by G5. Dedicated G5 worktree/checkout and fresh competition check required at start.
+- completion: update G5 Report, status -> review_required, then STOP for K5.
+- recommended model: **Opus5.5（極高）**.
+
+## G3 assigned — finish social-mobile account deletion UI
+
+- task: `x-social-mobile-account-deletion-ui-release-finish-20261001`
+- recommended Claude model: **Sonnet5（高）**.
+- previous E3 operational deletion/revoke task is Final K3 PASS and preserved as history.
+- scope is UI-only release cleanup: root-cause/fix invisible native button labels on Login methods and add a discoverable account-management entry from Settings.
+- do not change current deletion scope/backend/Auth/RLS/RPC/Vault/OAuth semantics and do not implement the new common-account/service-entitlement design here.
+- do not touch G4 X account-switch files; PR #65 remains a separate held workstream.
+- source/tests/PR only; deletion feature gate remains globally OFF; production mutation 0; no destructive operation or real X action.
+
+## K2 — PR #67 shared report v2 source candidate
+
+- verdict: **PASS to focused review; merge/deploy HOLD**.
+- PR #67 exact head: `5877045f7554cd4e089fb3b79091bf8e2bb38456`; open / mergeable.
+- scope: 27 files, +4622/-146; production mutation=0.
+- main-side changes after PR base do not overlap PR #67 runtime files.
+- reported verification: analysis 73/73, personalized 128/128, X shared 8/8, data-packet 42/42, _shared 329/329; 8 historical Fact-passed packets replayed with 0 new Hard false positives; check/lint/diff PASS.
+- deterministic samples: X ~492–494 chars; App narrative ~1005–1042 chars; same shared fact spine.
+- exact 10/1 mixed-session regression is deterministically blocked; Hard factual defects are separated from non-blocking Quality WARN.
+- live-model v2 output is still unobserved; consumer gates remain app=false / x=false.
+- H1 assigned `kabumori-pr67-shared-report-v2-hard-fact-review-20261001`; recommended model **Sol（高）**.
+- H2 remains occupied by PR #66 and was not overwritten.
+## H2 assigned — PR #66 AI Lab topic dedup review
+
+- task: `x-ai-lab-pr66-topic-dedup-review-20261001`
+- target: PR #66 exact head `4f692e4d805ccd3ee628058bb20ee6c1f62cdd6d`
+- PR is open and GitHub reports mergeable=true. Current Netlify/Vercel preview checks are successful/neutral; no failing candidate check was found.
+- review focus: topic rotation/cooldown correctness, bounded regenerate-and-reject behavior, read-only schedule count semantics, and AI-Lab-only isolation.
+- rationale: 7 files / ~943 additions change production posting-content behavior, so one focused review is warranted; no Auth/DB/security boundary change, therefore Luna（高） rather than Sol.
+- no merge/deploy authorized by assignment. production mutation 0.
+
+## Final K3 PASS — social-mobile deletion / X revoke E3
+
+- verdict: **PASS**.
+- one approved disposable-account deletion completed end-to-end with scope `social_only`.
+- service-specific workspace, membership, X social account, X authorization/credential material, transient OAuth state and owned service data were removed as designed.
+- unexpected residue: **0**. Retained deletion audit is intentional.
+- shared Supabase Auth user, login identity, sessions and main-app profile were intentionally retained because the current server classified the account as `social_only`.
+- protected production posting accounts, credential references, refresh/posting state and scheduler data were unchanged; real X posts = 0.
+- source changes / PR / deploy from this task: none. Global deletion feature flag remains off.
+- remaining release blocker: on native iOS Release, deletion and posting-X navigation buttons on Login methods can render without visible button text despite remaining tappable; deletion navigation is also too deep.
+- Codex review: **not required** at this K3 because no source implementation changed; review again when fixing UI/deletion behavior or before broad production activation.
+- common-account implication: current deletion scope uses a main-app presence proxy. The new shared-account design should replace that with explicit per-service entitlement/registration.
+- AI Lab diary: 候補あり — 使い捨てアカウントで「このアプリだけ利用終了」の流れを最後まで試し、他のサービス用ログインを残したままX連携とアプリ専用データだけ消えることを確認した。
+- G3 is complete; reuse only after a fresh allocation/competition check.
+
+## Orchestration / current slot snapshot — G5 registration (2026-10-01 JST)
+
+- checked_main: `2d2d044bcce5804cfdd3b7f64e25b66e45db16fd`（fresh `origin/main`）。以下は各TASKの先頭メタデータを読み取ったスナップショットであり、完了判定・再割当は行っていない。
+- G5は未割当の予備Claude実装枠。用途は固定せず、ユーザーまたはChatGPTが明示割当した場合のみ使用。G1/G2=かぶモリ、G3/G4=Xの基本ルーティングを維持し、MIC用に自動消費しない。
+- `G5` → `.agent/tasks/CLAUDE_TASK_5.md`（ready / in_progressのみ開始）。`K5` → 同TASK末尾の `## Report` の完了確認。
+- 単独 `G` / `K` はG1〜G5から対象が1枠だけと明白な場合のみ使用。`F` はH1/H2 + G1〜G5の全7枠のTASK/ReportとACTIVE_TASK/CURRENT_STATEを確認する。
+- 独立worktree/checkoutルールはG1〜G5/H1/H2すべてに適用。既存TASK/Report・他slotのbranch・未コミット変更・dev serverを保護する。
+- 通常のK5でもORCHESTRATIONの会社員AIラボ開発日記の更新判定を適用する。
+
+| Slot | status（TASK正本） | task_id | next_owner | TASK |
+| --- | --- | --- | --- | --- |
+| H1 | `done` | `x-social-mobile-pr65-ephemeral-x-auth-session-review-20261001` | `none` | `.agent/tasks/CODEX_TASK.md` |
+| H2 | `done` | `x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930` | `none` | `.agent/tasks/CODEX_TASK_2.md` |
+| G1 | `review_required` | `kabumori-topic-learning-access-progress-and-swipe-20261006` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_1.md` |
+| G2 | `in_progress` | `kabumori-shared-report-v2-rich-presentation-hard-facts-20261001` | `claude` | `.agent/tasks/CLAUDE_TASK.md` |
+| G3 | `review_required` | `x-social-mobile-e3-delete-revoke-residue-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_3.md` |
+| G4 | `review_required` | `x-social-mobile-x-account-switch-auth-session-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_4.md` |
+| G5 | `idle` | `none` | `none` | `.agent/tasks/CLAUDE_TASK_5.md` |
+
+- 既存索引との差分: G1のidle/none、G2のready、G3のreadyは正本TASKと不一致だったためACTIVE_TASKの索引だけ同期。G1/G3の以前のallocationはprevious_allocationとして保存し、G2のallocationと全既存TASK/Reportは変更しない。
+- G1/G3/G4はreview_requiredの既存TASK/Reportを保護する。H1/H2のdoneも新規未割当を意味しない。新規割当には必ず本文・Report・next_owner・競合・作業環境のfresh確認が必要。
+- 下記の過去の完了記録とArchived slot snapshotは履歴。現在の割当は各TASK/Reportと上記スナップショットを参照する。
+
+## G2 v2 scope update after 2026-10-01 interim observation
+
+- accepted new evidence: shared completed 9/30 morning, 9/30 close, and 10/1 morning consecutively with gates OFF.
+- 10/1 morning required one content regeneration but no transport retry; guards repaired the draft and final Fact passed.
+- legacy path showed both non-delivery and factual regression, including the mixed-session App morning error.
+- decision: continue toward shared-v2; do not spend this task extending legacy X/App generators.
+- v2 scope now explicitly includes:
+  - market-wide editorial news prioritization (broad market/policy/geopolitics/sector > isolated corporate by default when supported),
+  - scoped absence claims,
+  - morning session-aware wording,
+  - separate observability for content regeneration vs transport retry,
+  - exact mixed-session hard-block fixture.
+- consumer gates remain OFF; source/tests/PR only.
+- recommended Claude model: **Opus5.5（高）**.
+
+## Final K2 — 2026-09-30 close shared cycle
+
+- verdict: **PASS by orchestrator read-only verification**.
+- prior G2 observation TASK had remained ready/Pending; ChatGPT completed the read-only verification directly at K2 rather than inventing a Claude Report.
+- natural close: data attempt 1 completed; analysis final status completed on scheduled attempt 2.
+- data packet: `321d799b-4d41-48e0-aedf-12d0ad257701`.
+- report packet: `2ea922ce-d2f0-457c-b235-8ad02bcb449d`.
+- accepted packet: Fact passed / local issues empty / final transport retries 0.
+- 9/30 values: Nikkei 66,753.72 (+1.94%); TOPIX-linked ETF (1306) 431.5 (+1.43%).
+- 1306 identity preserved; accepted output keeps the rise reason unconfirmed instead of inventing causality.
+- one current data packet and one current report packet; consumer gates remain app=false / x=false.
+- K2 production mutation: 0.
+- exact first-attempt content rejection is not preserved in the final cycle row or edge-log body, so it is intentionally not guessed.
+- shared morning + close technical foundation is naturally completing.
+- consumer activation remains blocked pending richer presentation and stronger date/session integrity.
+
+## G2 shared report v2 / rich presentation
+
+- assigned: `kabumori-shared-report-v2-rich-presentation-hard-facts-20261001`.
+- target: X ≈500-char readable digest; App market-wide materially longer structured narrative; same shared Fact spine.
+- quality policy: objective lies are Hard BLOCK; style/Voice/unknown-cause/data-gap issues are WARN when safely expressible so routine delivery is not suppressed unnecessarily.
+- exact 2026-10-01 mixed-session regression (old Nikkei value + newer 1306 value presented as one date) must be deterministically blocked in the new shared path.
+- source/tests/PR only; no deploy and no consumer gate activation.
+- recommended Claude model: **Opus5.5（高）**.
+
+## Final C1 PASS — PR #65 iOS X account switching source/security
+
+- verdict: **PASS**.
+- accepted exact PR head: `e5a66f5ba71f64b1a38d8f89faff3d0a31972949`.
+- H1 result: PASS-WITH-FIX (tests only); client/runtime source is unchanged from original PR head `e8a7785d5635096aa428899d28e629a95b7e3f31`.
+- original -> final head delta is exactly one test file: `apps/social-mobile/tests/x-connect-auth-session.test.mjs`.
+- focused 14/14, mobile 103/103, data-view/post-interaction 22/22, typecheck/lint/Web+iOS exports/diff checks PASS.
+- OAuth/security invariants accepted: PKCE/state/redirect/callback/host validation and server-side duplicate-account protection unchanged; no undocumented X parameter; no global cookie clearing; no DB/RLS/RPC/migration/Edge/Vault/Auth-provider mutation.
+- production mutation: 0; real X login/post/revoke: 0.
+- **merge remains HOLD**: safe operator provider-side E2E must still confirm a different X account can authenticate without silently reusing the previous browser session, including cancel/retry/reconnect.
+- H1 is closed/free. G4 remains review_required until that E2E and final merge decision.
+
+## H1 PR #65 source review — 2026-10-01
+
+- verdict: **PASS-WITH-FIX (tests only)**, final PR head `e5a66f5ba71f64b1a38d8f89faff3d0a31972949` (initial `e8a7785`).
+- Expo 57.0.3 JS/native source supports the iOS private-session option. Android/Web receive undefined and retain SDK defaults; OAuth state/PKCE/redirect/callback/server ownership remain unchanged.
+- H1 executed the actual hook and installed SDK JS with synthetic dependencies instead of relying on source-string assertions; focused 14/14, mobile 103/103, view/interaction 22/22, typecheck/lint/Web+iOS exports/diff checks PASS.
+- No client runtime changes by H1; test amendment pushed. Production mutation 0.
+- Source-safe to merge **conditional on C1 and safe operator provider-side account-switch E2E**. Actual device/browser behavior and exact native module version inside the installed development binary were not verified; keep merge hold.
+- H1 review_required / next_owner chatgpt. Recommended C1 model: Luna（中）.
+
+## K4 interim — PR #65 iOS X account switching
+
+- verdict: **SOURCE PASS / MERGE HOLD**.
+- PR #65 is open and mergeable at exact head `e8a7785d5635096aa428899d28e629a95b7e3f31`.
+- source scope is narrow: iOS posting-account X auth requests a private/ephemeral auth session; Android/Web remain unchanged; PKCE/state/redirect/callback/server duplicate-account protection are untouched.
+- reported tests: focused 10/10, social-mobile 99/99, typecheck/lint/export/diff checks PASS.
+- production mutation: 0; real X post/revoke/account mutation: 0.
+- blocker before merge: the actual provider-side behavior (different X account can be authenticated instead of silently reusing the previous session) has not yet been confirmed by an operator.
+- focused Codex review is required because this is an OAuth/authentication boundary. H1 assigned on exact head; recommended model Sol（高）.
+- merge condition: H1/C1 source acceptance **and** safe operator provider-side account-switch E2E.
+- AI Lab diary: 候補あり — X接続で前回ログインしたアカウントが引き継がれ、別アカウントを選びにくい問題を見つけた。iOSでは通常ブラウザのログイン状態を共有しにくい認証方式へ切り替える修正を入れ、ソーステストとは別に実際のログイン画面でも確認する方針にした。
+- G4 remains review_required until the merge conditions are satisfied.
+
+## X social-mobile next phase — E3 cleanup + X account switch fix
+
+- G3: disposable X account connection now succeeded with a genuinely new test identity. E3 may continue with read-only baseline, but must STOP for fresh explicit user approval immediately before the first account deletion / revoke / credential-removal action.
+- G3 destructive scope after approval: disposable account only; verify deletion result, per-account X authorization revoke, residue, and protected production invariants. No real X post.
+- G4: reproduced UX issue where iOS X auth reused the previous browser login and made account switching difficult. This is considered a real production UX defect worth fixing for multi-account X users.
+- current client uses Expo WebBrowser auth session; G4 will prefer the documented iOS private/ephemeral auth-session behavior if confirmed in the installed API, without global cookie clearing or undocumented X parameters.
+- G3 and G4 must use separate worktrees. G3 is operational verification and must not edit the X-connect source; G4 is source-only and must not touch the E3 disposable/protected production data.
+- recommended models: G3 Opus5.5（高） / G4 Sonnet5（高）.
+
+## AI Lab diary automation LIVE — 2026-10-01
+
+- result: **PASS / live on main**.
+- normal K1/K2/K3/K4 diary updates no longer require a G3/G4 task.
+- ChatGPT directly edits only the public-safe canonical Markdown diary; generated snapshot is never hand-edited in the normal path.
+- GitHub Actions automatically validates dates/sanitization, regenerates the runtime snapshot, runs parity/freshness/sanitizer/brand regression tests, and commits only the snapshot on success.
+- first real E2E: Markdown-only commit `b0c4de4c5ae0386ce73b5cf8504d53be95584dda` -> Actions run `36737155236` -> **49/49 PASS** -> bot snapshot commit `ee378347fe8c9d19a265291f91c17d8b7a42c2d8`.
+- recursion guard verified: snapshot-only bot commit triggered **0** new check runs.
+- production mutation: **0**. No automatic production deploy or X post is part of this workflow.
+- explicit boundary: live production posting code will use the new snapshot only after the existing separate single-function deploy/read-back gate.
+- G4 is free after this completion.
+
+## G4 diary automation supersedes manual diary update
+
+- user decision: normal AI Lab diary updates must not consume G3/G4.
+- the previous G4 manual diary update task was still ready/unstarted and is superseded before execution.
+- new G4 task: implement ChatGPT direct Markdown writes plus automated snapshot generation and parity/freshness/sanitizer/regression checks.
+- production deploy remains a separate controlled gate.
+- recommended model: Sonnet5（高）.
+
+## Final K4 PASS — AI Lab diary K-check orchestration rule
+
+- verdict: **PASS**.
+- K1 / K2 / K3 / K4 のすべてで、会社員AIラボ開発日記の更新判定を必須化した運用ルールを確認。
+- X専用handoffは、この部屋がK3/K4のみ担当し、K1/K2のTASK本体へ介入しない境界を維持。
+- consistency checks / diary context test 29/29 PASS.
+- accepted report commit: `ff434d072b3c20fdc9b4059150f1ea22615af18b`.
+- production mutation: 0; deployなし。
+- Codex review: 不要。
+- AI Lab diary: 候補あり — 開発の進捗を自動投稿の題材として残せるよう、完了確認のたびに安全な開発内容を選別して共有メモへ回す運用を整えた。
+- G4 is free after this K4 and may be reused only after fresh allocation.
+
+## Final K3 — native E3 blocked before destructive gate
+
+- verdict: **BLOCKED / safety stop**.
+- PR #63 source is already accepted and merged; no additional source review is required for this stop.
+- native iOS release/simulator verification confirmed the app can select real Supabase data instead of silently falling back to mock.
+- X connect reached the real authorization flow, but the X account used for the test was already connected to an existing production posting account, so the connection was rejected and E3 could not continue.
+- destructive production actions: 0. No account deletion, X revoke, Vault mutation, real X post, or feature activation was performed.
+- existing production posting accounts and credential references remained unchanged; the disposable test identity remains pending without a stored token.
+- next requirement: prepare a genuinely new disposable X account that is not connected to any production posting account, then resume E3. Fresh explicit user approval is still mandatory immediately before the first delete / revoke / credential-removal action.
+- no new Codex review required at this point; the remaining gate is operational E2E completion, not an unreviewed source change.
+- AI Lab diary: 候補あり — iOS版で実データ接続とX認証の確認を進めたが、テスト用アカウントが既存接続と重なっていたため安全側で停止。AIとの個人開発では、機能を進めること以上に「本番へ影響を出さない確認」に時間を使う日もある。
+- G3 remains occupied by this E3 workstream until the disposable-account requirement is resolved or the task is explicitly superseded.
+
+## Final K1 PASS — Home visual rebuild PR #60
+
+- task: `kabumori-home-visual-rebuild-reference-20260930`
+- result: PASS / merged.
+- final PR head: `5f88ef12db6b93ce65dee9c4e565c9615baea8d1`
+- squash merge: `0ddf49132ecdab9b0d1afde8330556907cb34315`
+- local simulator screenshot accepted for this phase.
+- EAS builds consumed: 0.
+- backend / production mutation: 0.
+- no Codex review required.
+- G1 is now free.
+- next likely Home increment: insert user-created header-logo / report-Hero-background / topic-background assets, then final local spacing polish. Keep local-first / EAS-at-major-milestones policy.
+- recommended model for straightforward asset insertion: Sonnet5（中）; use Sonnet5（高） only if layout restructuring is needed.
+
+## K1 interim — G1 Home visual rebuild (2026-09-30)
+
+- PR #60 head reviewed: `0c298e0ce76addd5d7372374211dd4da9ccd5f8f`.
+- PR open, unmerged, GitHub mergeable/clean.
+- 19 changed files, UI-only scope; no overlap with files changed on main since the PR base.
+- architecture accepted: dedicated compact Header / Report Hero / market news / holding news / topic / Ask AI + asset slots; fixed approved 04 only.
+- Claude reports app tests 216/216 PASS, Expo export PASS, local iOS Simulator checks, EAS build 0.
+- final K1 **not passed** because visual density/composition still materially differs from canonical reference: Hero ~296pt vs ~213pt, Home ~1016pt vs ~850pt, character too small, points currently full-width below character instead of left/lower-left layered composition.
+- next: local Simulator refinement only; no EAS. Require screenshot/view comparison before next K1.
+- no Codex review yet.
+- recommended model: Sonnet5（高）.
+
+## EAS build conservation — current G1 override
+
+- user reports only 2 EAS builds remain this month; future monthly allowance is also limited.
+- current G1 Home rebuild must use local Expo / iOS Simulator for iterative visual work.
+- no new EAS build for spacing, typography, asset placement, backgrounds, card sizing, or ordinary JS/TS UI iteration.
+- current G1 completion no longer requires a fresh EAS build; local simulator verification + PR/tests is enough.
+- a new EAS build may be created only after user local approval and explicit request, or when a native/config change genuinely requires rebuilding.
+- starting with the next G1 instruction sheet, this local-first / milestone-only EAS policy becomes the formal default.
+
+## G1 — Home visual rebuild from reference assigned
+
+- user decision: stop iterating on the old Home layout; rebuild the Home presentation layer from the visual reference.
+- task_id: `kabumori-home-visual-rebuild-reference-20260930`
+- G1 status: ready.
+- recommended model: **Sonnet5（高）**.
+- keep existing Home data fetching, pull-to-refresh, navigation, backend/RPC contracts and current bottom tabs.
+- rebuild visual layer:
+  - compact Header
+  - designed Report Hero
+  - fixed approved 04 CharacterLayer for now
+  - Hero background asset slot
+  - Header logo asset slot
+  - compact visual Market News
+  - dense Holding News
+  - Topic background asset slot / featured card
+  - compact honest AI entry
+- PR #60 is not to be merged as-is; reuse its exact approved 04 asset and integrity test while expanding/superseding the old layout.
+- no 10-state selector yet.
+- no backend / DB / Edge Function / cron / consumer gate / Auth / X mutation.
+- final visual assets can be inserted later without rebuilding layout.
+- completion: simulator -> coherent Home -> one iOS preview -> K1.
+
+
+
+## Final K2 PR #57 production sync
+
+- verdict: **PASS**.
+- production market-report-analysis v14 accepted; verify_jwt=false.
+- app_enabled=false / x_enabled=false confirmed by ChatGPT read-only check.
+- market-report/personalized cron schedules remain active and unchanged.
+- deploy scope was market-report-analysis only; no manual cycle, DB/Auth/Vault/X/cron/gate mutation.
+- no Codex review required for this deploy-only gate.
+- next G2: read-only 2026-09-30 natural morning observation after 08:10 JST.
+- recommended model: Sonnet5（中）.
+
 # Current State
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-26 JST
+- checked_at: 2026-09-29 JST
 - repo: kabumori
 - branch: main
 
@@ -10,6 +2029,7 @@
 
 - かぶモリアプリ実装は G1 / G2。
 - X自動投稿・複数ブランドX実装は G3 / G4。
+- `G5`: 予備のClaude実装スロット。用途は固定せず、ユーザーまたはChatGPTが明示割当した場合のみ使用する。既存の基本ルーティングの自動fallbackにはしない。
 - 各ペア内のどちらへ入れるかは、空き状況・競合・依存関係を見てChatGPTが判断する。
 - H1/H2はCodexのレビュー・バグ修正・検証枠。
 - ユーザーが個別TASKについて明示指定した場合はその指定を優先する。
@@ -40,16 +2060,391 @@
 - かぶモリExpo/native本体はVercel制限の主対象ではないため、Netlify Web Preview対応は現時点では進めない。
 - かぶモリのiOS実機/TestFlight/native-only機能は従来どおりExpo/EAS/実機で確認する。
 
-## Current slot snapshot
+## Final C1 — data-packet controlled production sync
 
-- H1: `review_required` — `x-oauth-refresh-stage3a-final-security-review-20260926`; PR #38 source-only PASS-WITH-FIX at head `748deb1` (unexpected proactive refresh-start failures now stop before X write); disposable DB/ACL/race and 655 X tests PASS; production apply/deploy remains separately gated; C1 required
-- H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
-- G1: `review_required` — `kabumori-ios-internal-visual-qa-build-20260926` (icon full-bleed correction)
-  - **Real-device icon acceptance: PASS** ("アイコンOK"). Build 10e8610e-c2b2-4baf-a780-4e038c15f4f9 confirmed by the user: no white/double frame on the home screen.
-  - Icon/splash/onboarding visual-acceptance work for this feature area is now fully closed end-to-end. Production mutation 0. Ready for chatgpt to close out.
-- G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
+- verdict: **PASS**.
+- H1 task `kabumori-data-packet-prod-sync-verification-rollout-20260929` is closed.
+- accepted deployed source: `d79b0c8524af56cc56c5245f5037517fc689d917`.
+- production `market-report-data-packet` v11 -> v12; `verify_jwt=false` preserved.
+- all 8 runtime files read back byte-identical; same-session reuse is live in production source.
+- tests 42/42 PASS; runtime check/lint PASS.
+- cron jobs 28-33 unchanged before/after.
+- consumer gates remain app=false / x=false.
+- all other 18 Edge Functions unchanged.
+- production mutation was exactly one target function deploy; no DB/schema/RPC/Cron/Auth/Vault/secret/gate mutation and no manual cycle.
+- rollback not required.
+- fresh-main post-check: no target/shared source change after deployed commit, so v12 is still current.
+- next gate: natural scheduled morning/close observation with consumers OFF. This C1 does not authorize consumer activation.
+- G2 PR #57 content-guard correction remains separate and unresolved.
+
+## K1 interim — PR #60 needs iOS visual build before merge
+
+- source review: PASS for phase-1 scope at head `ccb62538c43e6e8e6d6df40b9cb760cf32d718a5`.
+- PR #60 is open/mergeable; main-side overlap with its 4 files is 0.
+- fixed 04 asset wiring and 96x64 CharacterSlot implementation are acceptable as a starting point.
+- final K1 is deferred because simulator visual QA and fresh iOS preview build have not been reported yet.
+- G1 is returned to ready; next action is simulator check -> optional constant-only micro-adjustment -> one EAS preview build -> K1.
+- no Codex review required.
+- recommended model: Sonnet5（高）.
+
+## G1 04 asset received
+
+- user supplied the exact approved neutral artwork.
+- verified source: 1536x1024 PNG, RGBA transparency.
+- canonical visual: Yume-chan + robot + pointer + tablet, exactly as supplied.
+- canonical app filename remains `assets/images/report-states/report_04_neutral.webp`.
+- allowed transform: lossless PNG -> WebP encoding with alpha preserved, no resize or visual edits.
+- phase 1 remains fixed 04 display only; dynamic 10-state selection remains deferred until visual placement approval.
+
+## G1 UI phase — fixed report_04_neutral.webp first
+
+- user decision: add the approved 04 neutral Yume-chan artwork to the Home report card first and keep it fixed.
+- purpose of this phase: adjust real-device size/position/spacing only.
+- do not implement the 10-state report-content selector yet.
+- canonical asset filename: `report_04_neutral.webp`.
+- repo currently does not contain that asset; exact prior approved binary must be provided to G1. Regeneration/substitution is forbidden.
+- preferred repo path once supplied: `assets/images/report-states/report_04_neutral.webp`.
+- reuse existing `CharacterSlot` / `ReportHighlightCard` seam; current 48x48 placeholder is not the final visual size.
+- preserve transparent background and no crop/decorative wrapper.
+- after implementation, create fresh iOS preview for user visual QA; expect micro-adjustment rounds.
+- phase 2 (other 9 assets + dynamic selection based on report state) starts only after phase 1 visual acceptance.
+- recommended model: **Sonnet5（高）**.
+
+## G1 restored to Home/UI workstream
+
+- user direction: continue this room as the Kabumori app UI/Home workstream.
+- G1 is now assigned `kabumori-home-ui-continuation-20260929`.
+- canonical baseline is merged PR #56 plus the accepted PR #53/#55 routing/UI work.
+- G1 scope: Home visual hierarchy, tabs/menu/navigation UX, stocks/news/topics/reports/AI/settings presentation, safe area, UI states and real-device visual QA.
+- market-report backend, Edge Functions, DB/RPC/migrations, cron, consumer gates and X are explicitly out of G1 scope in this room.
+- no speculative redesign is authorized: G1 should inspect/sync first and wait for the next concrete user screenshot/UI instruction before source edits.
+- recommended model: **Sonnet5（高）**.
+- completion code: K1.
+
+## Final K1 — stale G1 data-packet task closed
+
+- verdict: **CLOSED / SUPERSEDED**.
+- original G1 task stopped correctly before mutation because production DB reads were blocked.
+- H1 later completed the exact rollout safely and Final C1 accepted it.
+- production is already on `market-report-data-packet` v12 with same-session reuse; cron/gates/verify_jwt/other Functions were unchanged.
+- no remaining G1 work exists for this task.
+- G1 is now done and must not be restarted for this rollout.
+
+## Final K1 — PR #56 app navigation/menu/topics consolidation
+
+- verdict: **PASS**.
+- G1 report clarified the queued backend deploy task had not started; no backend deploy was falsely credited.
+- user-directed app baseline supersedes the prior v3 tab set:
+  - bottom tabs = ホーム / 銘柄 / ニュース / レポート / メニュー
+  - メニュー = トピック / AIに聞く / 設定
+  - standalone portfolio removed; portfolio summary is integrated into 銘柄 → ポートフォリオ
+  - /topics added using deterministic existing daily-topic RPC per JST date; no new RPC/migration
+  - shared in-app back button added to pushed screens
+- reviewed PR #56 exact head: `ad42874809b708fd218bd05de246d3490214f2b8`.
+- branch was behind main, but main-side files since merge-base had **0 overlap** with PR #56 files.
+- GitHub mergeable=true; Vercel + Netlify statuses success.
+- reported tests 194/194 PASS; tsc only known unrelated CSS errors; Expo config/export PASS.
+- user real-device PASS was already reported for prior branch build `5531aacd...` at commit `16ae556`.
+- latest branch build `4883189c-f180-4447-b57e-a8365bb8f401` at `ad42874` includes the final portfolio-in-銘柄 change; its user QA is still pending.
+- PR #56 merged -> `6946f810e7353ded46962053201e7cf060aca891`.
+- production mutation 0; no Codex review used.
+- original G1 backend task `kabumori-data-packet-session-reuse-prod-sync-20260929` is re-issued from fresh main; it remains incomplete until separately run.
+- recommended model for re-issued G1: Sonnet5（高）.
+
+## Final K1 — post-PR55 iOS preview build
+
+- verdict: **PASS for build/readiness gate**.
+- fresh-main build source: `28e0588844954463aa6d099fbdcf86b987110b47`, containing PR #55 merge `e8326163...`.
+- tests: 187/187 PASS; routing regression guard PASS; config/export/diff checks PASS; no source changes.
+- new iOS internal preview build: `eda47220-6c93-4224-91ed-eefe6d778045`, status finished.
+- old broken build `d9ed1da1...` remains prohibited.
+- production mutation 0.
+- physical iPhone acceptance is still pending and must be judged from the user's observation; build PASS does not mark visual/navigation QA PASS.
+- known non-blocker: /news and /portfolio currently rely on iOS edge-swipe for back.
+- G1 slot may proceed with backend deploy-only work because that cannot change this already-built app binary.
+
+## Final K2 — PR #57 accepted and merged
+
+- verdict: **PASS**.
+- accepted PR #57 head: `b8bbfe981735e6a2e42987011f1e4a4e7ab2824c`.
+- merge SHA: `9488f9e8b12bb1c7c0fcf872767d078ed818c128`.
+- final accepted guard behavior:
+  - 1306 proxy identity is preserved; 1306 is not relabeled as the TOPIX index.
+  - unsupported causal assertions are rejected locally before Fact.
+  - a valid causal claim does not globally license unrelated causal wording.
+  - cause support preserves direction/polarity; inverted cases such as 半導体株安 -> 半導体株高 are rejected.
+  - controlled aliases such as 米株 -> 米国株 retain polarity.
+- final reported tests: content guard 16/16; market-report-analysis 51/51; data-packet 42/42; personalized-reports 125/125; x shared consumer 6/6; _shared 279/279; deno check/lint/diff PASS.
+- source task production mutation: 0.
+- Vercel preview failure on the last head was rate-limit-only; not a source blocker. PR was mergeable and main-side source overlap was 0.
+- no Codex source review added under reduced-review policy.
+- consumer activation remains unapproved.
+
+## Routing correction — market-report-analysis production sync belongs to G2
+
+- user correction accepted: `kabumori-market-report-analysis-prod-sync-content-guard-20260929` belongs to **G2**, not H1.
+- previous H1 assignment was still `ready` and had not executed.
+- H1 misassignment is cancelled before start; production mutation 0, deploy 0, source change 0.
+- G2 is now the sole owner of the rollout.
+- G2 scope:
+  - fresh-main preflight
+  - consumer gates must remain app=false / x=false
+  - deploy only `market-report-analysis` if production is stale
+  - exact source read-back
+  - verify_jwt / cron / gates / other-Function invariants
+  - no manual real cycle
+  - no DB/schema/RPC/Auth/Vault/X mutation
+- recommended model: **Sonnet5（高）**.
+- completion code remains **K2**.
+- H1 must not run this rollout concurrently.
+
+## K2 — PR #57 second review: polarity-safe causality still required
+
+- verdict: **CHANGES REQUIRED**; PR #57 remains open, unmerged, undeployed.
+- reviewed head: `485f4bf8bd767601d70625eb383bb5ec8b6c2248`.
+- previous global bypass is fixed and mixed supported+unsupported regression is present.
+- new confirmed defect: `causeSupported()` uses longest-common-substring >= 3, which can drop direction/polarity and falsely treat an inverted cause as supported.
+  - example: support `半導体株安` vs generated `半導体株高` share `半導体株` and can pass.
+  - example: support `米国株安` vs generated `米国株高` can share enough core text to pass.
+- required: controlled deterministic normalization/matching that preserves movement/polarity semantics; add explicit inverted-direction regressions.
+- current head local report: content guard 13/13, analysis 48/48, data-packet 42/42, personalized 125/125, x-test-post 6/6, _shared 279/279; no production mutation.
+- GitHub: mergeable=true; Vercel/Netlify current head success; no workflow-run Deno CI.
+- main changes since PR merge-base have **0 overlap** with PR #57 files.
+- no Codex review yet; this remains a focused G2 source correction.
+- recommended model: Opus5.5（高）.
+
+## K2 — PR #57 content guard review
+
+- verdict: **CHANGES REQUIRED**; PR #57 is not merged or deployed.
+- reviewed head: `1c166437be0e514a25026fbab1c8e2ba9f4d483a`.
+- overall scope/tests are strong and production mutation remains 0.
+- confirmed flaw: `unsupportedCausalSentences()` returns no issues if **any** valid causal claim exists, creating a global bypass for unrelated unsupported causal wording elsewhere in headline/summary/x_post/claims.
+- current tests cover "no causal support" and "one valid causal support" separately, but not a mixed report containing both one valid cause and a different unsupported cause.
+- required fix: validate unsupported causality without globally licensing all causal wording; add deterministic mixed supported+unsupported regression.
+- main-side change since PR base has no overlap with PR source files; no rebase conflict is currently indicated.
+- Vercel/Netlify status checks on current head are success.
+- keep PR #57 open and amend same branch if practical.
+- no Codex review yet; re-evaluate at corrected K2 / consumer activation boundary.
+- recommended model: Opus5.5（高）.
+
+## Final K2 — shared analysis deploy/observe
+
+- verdict: **CHANGES REQUIRED before consumer activation**.
+- PR #45 retry hardening production deploy/read-back: PASS; transport layer showed no regression.
+- 2026-09-29 natural shared packet completion: **0/2**.
+- morning failure: data-stage block because production `market-report-data-packet` is behind main and lacks same-session reuse fix already present under `aecfa60`.
+- close failure: attempt 1 local-check rejection for mislabeling 1306 as TOPIX; attempt 2 Fact rejection for asserting an unconfirmed causal explanation.
+- transport retries were 0; these were not retry-layer failures.
+- no duplicate packet/fencing issue observed; gates remain app=false/x=false.
+- consumer activation remains blocked.
+- follow-up split safely:
+  - G1: production sync of reviewed `market-report-data-packet` only. Recommended Sonnet5（高）.
+  - G2: source/test correction for instrument identity + causality preservation in `market-report-analysis`. Recommended Opus5.5（高）.
+- Codex review deferred until G2 source scope is final / consumer activation boundary.
+
+## Final K1 PR #55 routing recovery
+
+- verdict: **PASS**.
+- real-device build `d9ed1da1-9542-45c7-b704-d89eaba9a978` exposed a release-blocking regression: non-tab destinations from Home/Settings were unreachable.
+- root cause: `expo-router/unstable-native-tabs` registered only Trigger-backed screens when rendered as the root navigator.
+- PR #55 reviewed exact head `5859f6ce6f94fbb45a065821afbcc2778598b8a9`.
+- fix restructures to standard root Stack + `(tabs)` NativeTabs group; non-tab routes remain root Stack screens.
+- moved Home/Settings source bodies were byte-identical; main-side work since branch fork did not overlap routing files.
+- reported tests: 187/187 PASS; iOS Simulator release verification recovered /news, /news/[id], /portfolio, /topic-detail, preserved reports/[id] and all 5 tabs.
+- Vercel/Netlify commit statuses success; production mutation 0.
+- PR #55 merged -> `e8326163f90f969ede063e52533731a2273ef7b2`.
+- no Codex review used.
+- old build `d9ed1da1...` is invalid and must not be used further.
+- G1 reassigned to fresh-main post-#55 EAS internal/preview build + user real-device re-QA.
+- known lower-severity follow-up: /news and /portfolio lack explicit in-app back buttons; iOS edge-swipe works.
+- recommended model: Sonnet5（中）.
+
+## Final K1 Home v3 correction + post-merge iOS QA gate
+
+- verdict: **PASS** for PR #53 source review.
+- reviewed head: `e53465f7cd75fbd0a763347cca51343709f835c2`.
+- PR #53 merged -> main `3b9ca0424e1ef6e079cc852e45ff66d0271c001e`.
+- scope stayed UI/navigation/static educational content only; production mutation 0; no DB/Auth/RLS/backend/G2 change.
+- 17 changed files; reported 103/103 focused regression PASS; Netlify/Vercel status checks were success at K1.
+- main had advanced 10 commits since the PR base, but those implementation changes were news-discovery/backend docs/agent state and did not overlap PR #53 implementation files; GitHub reported mergeable=true.
+- no Codex review used under reduced-review policy.
+- G1 reassigned to `kabumori-home-v3-postmerge-ios-preview-qa-20260929`.
+- next gate: fresh-main EAS internal/preview iOS build, then user physical iPhone acceptance for first viewport, Topic Detail, Settings safe-area and approved bottom tabs.
+- recommended model: Sonnet5（中）.
+
+## Final K1 Home news-first UI
+
+- verdict: **PASS**.
+- PR #46 final head `f95f9c2` merged -> main `58b53777ce64c054f6c8859940914b71a89472d4`.
+- approved Home order implemented: 今日のかぶモリレポート -> 重要ニュース -> 保有銘柄最新ニュース -> 今日のトピック -> AIに聞く.
+- report hero uses today's stored report only; older/future reports cannot be mislabeled as today. Report fetch failure has explicit error/retry.
+- report points are dynamic text with no per-point chevrons; one CTA opens report detail.
+- one existing important-news feed is split into market/holding sections; home network calls 3 -> 2.
+- topic and AI remain honest future-ready "準備中" shells because no production source/route exists yet.
+- current news feed has no thumbnail URL field; UI uses deterministic fallback visuals only. Real thumbnail acquisition is a separate news lane.
+- 22 Home tests + 38 focused regressions PASS; no new src TypeScript errors; Expo config/export/diff checks PASS.
+- production mutation 0; no Codex review required.
+- follow-ups: approved mini Yume+robot cutout assets, topic backend + level setting, AI route/service, final tab redesign, authenticated real-device Home visual QA.
+
+
+## Final K1 Daily topic + knowledge level
+
+- verdict: **PASS**.
+- PR #48 reviewed head `98732bf` received independent separate-Claude DB/RPC review PASS with no P1/P2/P3 findings.
+- reviewer validated SECURITY DEFINER/search_path/ACL/RLS/read-only/determinism/fail-closed behavior against a disposable PostgreSQL 17.11 instance and ran focused app tests 30/30 PASS.
+- ChatGPT merged the exact reviewed head -> main `9ccbb59da2b6c48b0022ec2a31305a69262c2966`.
+- no Codex review budget was used.
+- production migration apply remains **not performed**; app code is merged but RPC is not live until the migration is applied in a later controlled step.
+- follow-ups still open: production migration apply + authenticated real-device topic/settings QA, approved mini Yume+robot assets, AI route/service, final tab redesign.
+
+
+## G1 Daily topic production apply: STOPPED before mutation
+
+- task_id: `kabumori-daily-topic-prod-apply-verify-20260928` -- `review_required`, next_owner chatgpt.
+- Identified the exact-scope apply mechanism (`supabase db query --project-ref ... --file supabase/migrations/20260928123000_add_daily_kabumori_tip_rpc.sql`, not a broad `db push`) and re-confirmed the target SQL's SHA-256 (`425f1e33...`) unchanged on fresh main.
+- **Did not apply anything.** This session's own safety layer refused the mandated pre-apply read-only checks (`to_regprocedure`/`public.tips` existence, privilege check) under a "Production Reads" classifier category -- the same one that blocked the predecessor task's schema-dump check. No workaround was attempted.
+- Since the task's own instruction requires STOPping before mutation whenever pre-apply confirmation can't be completed, no apply was attempted regardless of tooling.
+- Needs either the user to run the identified command themselves (after the pre-apply checks), or this session's permissions extended, for a future G1 pass to complete Phase B end-to-end.
+- Production mutation 0.
+
+## Final K1 Daily topic rollout preflight
+
+- verdict: **PASS**.
+- PR #51 exact head `164485b` is a pure rename, 0 content changes; target path is now `20260928123000_add_daily_kabumori_tip_rpc.sql`.
+- PR #51 merged -> `4c07a81702c36f95bd26acdccd68a137d8bd5eea`.
+- direct production read-only K1 closed the prior gap:
+  - daily-topic RPC does not exist yet;
+  - remote migration history contains neither 20260928120000 nor 20260928123000;
+  - MIC Phase 3A tables already exist despite missing migration-history entry, confirming pre-existing out-of-band migration drift.
+- unrelated older duplicate prefix `20260922090000` remains in repo; not part of this task.
+- because of migration-history drift, broad `db push` is explicitly forbidden for daily-topic rollout.
+- G1 advanced to exact one-RPC production apply/readback task, recommended Sonnet5（高）.
+
+
+## H2 stale review cleanup
+
+- user requested H2 be emptied.
+- previous `kabumori-pr32-morning-fact-contract-final-review-20260925` was not completed and never received a fabricated final verdict.
+- because target PR #32 was already merged, the old reservation was closed as obsolete/stale.
+- `.agent/CODEX_REPORT_2.md` history is preserved.
+- H2 is now `idle` with `task_id: none` and is available for a future explicit assignment.
+- no new review task was assigned by this cleanup.
+- production mutation: 0.
+
+## Final K1 Daily topic production rollout
+
+- verdict: **PASS**.
+- Claude stopped safely before mutation because its local safety layer blocked production reads.
+- ChatGPT then performed the mandated fresh pre-check using the Supabase connector and confirmed the RPC was absent, tips existed, RLS was enabled, authenticated/anon had no direct tips SELECT, and service_role retained SELECT.
+- exact current-main reviewed SQL `20260928123000_add_daily_kabumori_tip_rpc.sql` was applied directly and alone; no broad migration push or unrelated migration was run.
+- production read-back PASS:
+  - SECURITY DEFINER + empty search_path
+  - authenticated EXECUTE yes
+  - anon/PUBLIC EXECUTE no
+  - direct authenticated/anon tips SELECT no
+  - service_role SELECT unchanged
+  - RLS still enabled, policies unchanged
+  - beginner/intermediate/advanced map to 初級/中級/実践
+  - invalid level returns 0
+  - same date+level deterministic
+  - use_count/last_used_at unchanged across repeated calls
+  - authenticated role invocation succeeds; anon role receives 42501 permission denied
+- daily-topic backend is live.
+- migration-history version `20260928123000` remains unrecorded because exact direct SQL execution was intentionally used. Production already has known out-of-band migration drift; broad `db push` remains forbidden until a dedicated migration-history hygiene task.
+- no Codex review used.
+- remaining product gate: real-device visual/settings QA.
+
+## G1 Daily topic real-device QA
+
+- assigned: `kabumori-daily-topic-real-device-qa-20260929`.
+- backend is live and production security/functional readback already PASS.
+- next gate is user-visible iPhone acceptance only.
+- reuse an existing current-main internal build if available; otherwise create exactly one nonproduction/internal iOS build.
+- no source change, no production DB/config mutation, no Codex review expected.
+- user must physically confirm the three level switches, same-day determinism, and Home report/news regression before this feature is considered visually closed.
+- recommended model: Sonnet5（中）.
+
+## G1 real-device Home QA — changes required
+
+- 2026-09-29 user iPhone screenshots: **CHANGES REQUIRED**.
+- Home does not visually match approved v3 despite section order being correct.
+- concrete drift: oversized/empty report hero + 🌱 placeholder, generic news visuals, oversized disabled AI area, bottom tabs still Home/銘柄/ポート/レポート/重要ニュース instead of approved Home/銘柄/レポート/AIに聞く/設定.
+- today's topic backend works, but `public.tips.base_text` is intrinsically short (50 active tips; median roughly 50–53 Japanese chars by difficulty), so truncation alone is not the issue.
+- G1 correction adds a tappable topic detail screen plus source-only curated long-form evergreen explanations for all 50 current seed titles; no new DB/LLM call.
+- Settings header/close control overlaps iPhone status bar and is treated as a P1 usability defect; preferred fix is a dedicated Settings route/tab with proper safe-area handling.
+- character cutout asset is still not approved in repo; do not invent one.
+- no Codex review expected if scope stays UI/navigation/static educational content only.
+- recommended model: Sonnet5（高）.
+
+## Archived slot snapshot — before G5 registration
+
+- H1: `review_required` — `x-social-mobile-auth-phase2-final-acceptance-review-20260928`; PASS-WITH-FIX at PR #47 `ed5f8b7` (initial G3 correction `5fd483a`); prior 7 + additional 3 source boundaries accepted. H1 pinned callback/recovery contexts, retained in-flight exchanges and limited provider authorize paths; fix pushed. Mobile 43/43 + data-view 14/14, typecheck/lint/Web+iOS export and four H1 mutation probes PASS; exact-head Preview SUCCESS. Production mutation 0; awaiting C1/source merge, real provider/device activation remains separately gated; see latest `.agent/CODEX_REPORT.md`.
+- H2: `idle` — unassigned; stale deferred PR #32 morning Fact-contract review was closed as obsolete after PR #32 had already been merged. Historical partial report preserved; slot is now genuinely reusable.
+- G1: `review_required` — header logo ported to fresh main as an independent logo-only PR #62 (head 805371d6, 4 files, 218/218 tests, no EAS build, production mutation 0); awaiting K1; user-created Hero background / topic background / 10 Yume-chan overlays still to come.
+- G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
+
+
+
+## Final K2 shared market unification proof
+
+- verdict: **PASS for source/non-destructive proof; production cutover still gated**.
+- PR #43 head `4aa4251` merged by ChatGPT -> `a0ac6484ecdc59670241c2ffb2e0340e93fd5994`.
+- 318/318 related tests PASS; same report_packet_id/content_hash proven across X simplified, App market-complete and App personalized surfaces.
+- privacy boundary PASS; `x-test-post/index.ts` / PR #41 untouched; production mutation from G2=0.
+- live read-only K2 at ~17:58 JST:
+  - gates: app=false / x=false
+  - shared morning 2026-09-28: analysis failed on OpenAI 429; no report packet
+  - shared close 2026-09-28: completed on report attempt 2; packet `1a0cf2b9-8de9-4e10-a4ea-059428637b31`
+  - App legacy close completed + Fact passed + notified
+  - old X close failed `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE`
+- implication: shared architecture is the correct path, but upstream-analysis reliability must be hardened before enabling both consumers.
+- no Codex review required for PR #43 itself; focused release-boundary review is reserved for the later live shared-gate activation.
+
+## Final K2 shared analysis reliability hardening
+
+- verdict: **PASS**.
+- PR #45 head `b37e1c9` merged by ChatGPT -> `6ea31efec1876596085e9b66727b2626ab0ba477`.
+- retry scope is bounded to transient OpenAI transport failures; claim/idempotency/content-validation semantics unchanged.
+- related suite 338/338 PASS; production mutation before merge=0; gates remain app=false / x=false.
+- no separate Codex review before gated-OFF deployment under reduced-review policy; H1 is occupied and H2 is preserved deferred, so neither is overwritten.
+- focused Codex review remains required/strongly preferred before consumer activation, especially `x_enabled=true`.
+
+## G2 shared analysis production observation
+
+- 2026-09-28 recovery note: accidental local shared-checkout `supabase/config.toml` overwrite was restored; production mutation=0. Continue deployment only from dedicated checkout `/Users/yuya/Developer/kabumori-g2-market-report-reliability` at fresh main `fc0afd32`. Historical branch `g2-shared-analysis-reliability-20260928` and shared checkout are not deployment workspaces.
+
+
+- assigned: `kabumori-shared-analysis-prod-deploy-observe-20260928`.
+- deploy only `market-report-analysis` from merged main; preserve verify_jwt=false and all cron/settings.
+- no manual cycle forcing; observe the next natural morning and close cycle.
+- app/x consumer gates remain false throughout.
+- recommended Claude model: Sonnet5（高）.
+
+## G2 shared analysis reliability hardening
+
+- assigned: `kabumori-shared-report-reliability-hardening-20260928`.
+- goal: bounded retry/backoff for retryable 429/5xx/network failures in `market-report-analysis`, with explicit worst-case call budget and no idempotency drift.
+- product policy for initial cutover: keep shared consumer fail-closed; do not fall back to a separate legacy market analysis and reintroduce contradictory market truth.
+- no production gate activation/deploy/cron mutation in this source task.
+- legacy X VOICE-only fixes remain frozen.
+- recommended Claude model: Opus5.5（高）.
+
+## G2 shared morning/close unification
+
+- assigned: `kabumori-shared-market-report-unification-20260928`.
+- user priority: stop spending effort on legacy X morning/close VOICE-only fixes before unification; first make X and App consume the same market truth.
+- target product split:
+  - X = market-wide simplified morning/close.
+  - App = complete report with `市場全体 | マイポート`; market tab uses shared packet, my-portfolio tab adds holdings/news/impacts.
+- source of truth: `market_data_packet -> market_report_packet`.
+- first gate is non-destructive proof for X simplified / App market-complete / App personalized using the same report_packet_id/content_hash.
+- production `app_enabled/x_enabled` activation is NOT authorized in this source task; prepare cutover plan, then stop for K2 and focused review if needed.
+- legacy X VOICE issue is frozen and will be re-evaluated only on the unified shared path.
+- known conflict: open PR #41 changes `supabase/functions/x-test-post/index.ts`; G2 must not edit that file while PR #41 remains unresolved. If required, STOP and report conflict.
+- G3/G4 current social-mobile tasks are separate worktrees/scopes and must not be touched.
+- recommended Claude model: Opus5.5（高）.
 
 ## G1 Kabumori onboarding + icon integration
 
@@ -1201,3 +3596,880 @@ Status: backlog only / no G1-G2 task assigned.
 - no second account production activation, rollout-row mutation, publish_enabled change, Edge deploy, production migration apply, manual refresh/X post, migration repair or db push is authorized.
 - if no unambiguous second account exists, candidate selection remains an operator gate rather than being guessed.
 - recommended Claude model: Opus5.5（高）.
+
+
+## Final K3 Stage 3B pilot prep
+
+- verdict: **PASS for source/plan preparation; production activation remains gated**.
+- PR #41 head `cd7adf5d1eb5a91773f21c7d8959766e1dd38229`.
+- exact second-account candidate identified read-only: `sa_bfdab0e0696ec8e56ed2dd83` / `yumeyoasobi`; rollout remains off, publish disabled, no production mutation.
+- new generic account-bound brand_post path reuses existing VaultAccountXAuth and Stage 3A authority; AI Lab and Kabumori behavior unchanged.
+- new service_role-only SECURITY DEFINER completion RPC added; disposable DB/race/isolation tests PASS.
+- candidate remains owner/product-gated: explicit owner consent and content-settings contract are prerequisites before activation.
+- one final H1 review assigned because the change crosses multi-account publish isolation + SECURITY DEFINER/RPC boundary.
+- recommended Codex model: Sol（高）.
+
+
+## G4 PR #33 invite E2E after binding secret
+
+- user configured sensitive Netlify env `ADMIN_INVITE_BINDING_SECRET` and retried Deploy Preview #33 on 2026-09-27 JST.
+- assigned: `x-admin-pr33-bounded-invite-e2e-after-binding-secret-20260927`.
+- scope: verify rebuilt PR #33 Preview -> one disposable invite -> confirm real AMR=otp + same-user/session signed purpose binding -> password setup -> cookie clear -> logout/relogin -> non-admin denial -> cleanup.
+- cookie/secret/token/password values must never be logged or reported.
+- temporary Invite User template adjustment is allowed only if needed and must be restored; Reset Password template/mobile redirect/admin_users remain untouched.
+- PR merge and Vercel production deploy are not authorized in this task.
+- recommended Claude model: Opus5.5（高）.
+
+
+## Final C1 Stage 3B review
+
+- verdict: **FAIL**.
+- PR #41 reviewed head `cd7adf5d1eb5a91773f21c7d8959766e1dd38229`.
+- P1 design blocker: Stage 3A rollout controls refresh, not publish. A valid token could still post after pilot expiry/off/refresh ceiling. Stage 3B requires a separate exact-account publish authority/timebox checked at publish boundary, with fail-closed expiry/revocation.
+- P2 blocker: generic completion RPC accepts AI Lab's own matching row/account and must explicitly exclude AI Lab.
+- exact-account/ACL/refresh-race boundaries otherwise acceptable; production mutation=0.
+- G3 reassigned source-only correction; no production pilot/merge until fixed and re-reviewed.
+- recommended Claude model: Opus5.5（高）.
+
+
+## Final K3 Stage 3B publish authority fix
+
+- verdict: **PASS for source correction**.
+- PR #41 fixed head `6b25305e57bb1d6ad119c06c779042daba210547`.
+- explicit exact-account publish authority/timebox added separately from refresh rollout.
+- valid-token posts are blocked by missing/off/revoked/not-started/expired publish authority and by consent/admin/account gates; authority is checked again immediately before X create.
+- rollback publish-authority `revoked` alone is sufficient to stop subsequent new X creates.
+- AI Lab/Kabumori are explicitly excluded from generic setter/check/dispatcher/completion path; matching AI Lab regression now fails closed with no side effects.
+- Stage 3A refresh and AI Lab/Kabumori specialized paths remain unchanged; production mutation=0.
+- one focused H1 re-review assigned for prior P1/P2 + atomicity only.
+- recommended Codex model: Sol（高）.
+
+
+## Final K4 PR #33 product scope correction
+
+- technical invite E2E: PASS at PR #33 `0cc48fe`.
+- product correction: this Admin is an internal operator site for one owner/two accounts; there is no intended invited-user workflow, and non-admin invitees cannot access Admin because `admin_users` remains authoritative.
+- actual requirement is owner password recovery only.
+- do not configure production invite secret/template/redirects for this Admin.
+- before merge, PR #33 should be treated as recovery-only; invite-specific code is unnecessary complexity and should be removed or intentionally left disabled only if removal cost is judged higher.
+- Preview-only `ADMIN_INVITE_BINDING_SECRET` can be deleted after the PR decision.
+
+## H1 PR #41 focused re-review
+
+- verdict: PASS-WITH-FIX for source; fixed head `59f4f53`; previous candidate `6b25305`.
+- separate publish authority and 30-day maximum window fail closed for no row/off/revoked/not-started/expired, consent/admin/account disables and exact account mismatch. Stage 3A refresh ceiling remains refresh-only. Rollback `revoked` blocks subsequent X creates at the next check; one already in-flight create may cross the commit boundary.
+- matching AI Lab row/account is rejected by generic completion without fingerprint/log/status write; AI Lab and Kabumori specialized routes unchanged.
+- H1 fixed final-check gap across proactive/reactive token refresh; PR #41 updated, but no merge, migration, deploy, real token refresh or X post. Owner consent, content-settings contract and separately authorized pilot remain pending. See `.agent/CODEX_REPORT.md`; C1 required.
+
+
+## Final C1 Stage 3B focused re-review
+
+- verdict: **PASS-WITH-FIX for source readiness**.
+- PR #41 final reviewed/fixed head `59f4f53037f231e831774c04e9a1b1982eff3bd9`.
+- publish authority/timebox and AI Lab exclusion are accepted.
+- H1 fixed one additional revocation gap by rechecking publish authority immediately before each actual X create, including post-refresh retry paths.
+- Deno 619/0 plus focused disposable DB behavior/ACL/race tests PASS; production mutation=0.
+- no merge/apply/deploy/second-account production activation occurred.
+- current product direction is to pause further infrastructure deepening and prioritize user-facing X auto-post app features; any Stage 3B production pilot should be a separately authorized future task.
+
+
+## X social-mobile app implementation phase 1
+
+- user explicitly directed pausing deeper Stage 3B/Admin infrastructure work and moving to user-facing app feature implementation.
+- G3 assigned: `x-social-mobile-auth-x-connect-onboarding-phase1-20260928`.
+  - scope: auth/session/X connect/reauth/onboarding inventory + narrow implementation gaps.
+  - must reuse existing OAuth/Vault authority; no Stage 3B production activation.
+  - recommended Claude model: Opus5.5（高）.
+- G4 assigned: `x-social-mobile-home-posting-settings-ux-phase1-20260928`.
+  - scope: Home/posting status/settings/schedule/history/posting UX inventory + narrow user-facing implementation gaps.
+  - no fake backend behavior, no production posting.
+  - recommended Claude model: Sonnet5（高）.
+- G3/G4 must use independent worktrees and stop on file overlap.
+
+
+## Final K3 social-mobile auth/X-connect/onboarding phase 1
+
+- verdict: **PASS**.
+- PR #42 head `c5e0157f867450047a5f79a204df45aaeefecfa6`.
+- login -> X connect/reconnect -> verified handle -> minimum settings gate/skip -> Home is now represented as one first-run source journey.
+- existing Supabase session and `x-oauth-connect-user` OAuth path are reused; no parallel auth/token path.
+- real-data fake-account fallback removed; ambiguous workspace/account state fails closed.
+- tests 16/16 plus typecheck/lint/Expo web export PASS; production mutation=0.
+- new signup and password recovery remain explicit product decisions.
+- per reduced-review policy, no H1 is inserted now; review app-side Phase 1 in a consolidated pass after G4 unless a new high-risk boundary is introduced.
+
+
+## Final K4 social-mobile Home/posting UX phase 1
+
+- verdict: **PASS**.
+- PR #44 head `f0ecc9f984a676acb3a2d4fd522c6219583e06eb`.
+- Home now exposes connected account summary, auto-post state, next scheduled post, latest result and clear settings/schedule/history navigation.
+- fixed three truthfulness bugs: invalid per-account filtering of real scheduled/history rows, blocked/unavailable falling through to mock preview, and real post detail reading mockRepository only.
+- consult confirmation now persists through the existing content-settings repository and preserves already-saved settings instead of merging from defaults.
+- no G3-owned provider/auth files changed; no DB/RLS/RPC/migration/production mutation.
+- one consolidated H1 review assigned for PR #42 + #44 integration before merge.
+- recommended Codex model: Luna（高）.
+
+
+## Queued G3 next — multi-provider signup/login
+
+Status: queued / do not start before Phase 1 consolidated H1/C1 and PR #42/#44 merge decision.
+
+Planned task:
+- X / Apple / Google / Email signup/login
+- provider linking / duplicate-account prevention
+- X login versus X posting-account connection must remain separate trust/consent steps
+- first-workspace creation/onboarding continuation
+- password recovery/deep-link design
+- no production Auth provider/config changes without separate authorization
+
+Reason for deferral:
+- H1 is currently reviewing PR #42 + #44 exact heads and their combined provider/state contract.
+- starting auth/signup work now would touch the same auth/onboarding area and could invalidate or duplicate the review.
+- after C1, merge/integrate Phase 1 first, then branch the next G3 from the accepted main state.
+
+Recommended Claude model: Opus5.5（高）.
+
+
+## Final C1 social-mobile Phase 1 consolidated review
+
+- verdict: **PASS-WITH-FIX**.
+- accepted heads: PR #42 `c5e0157f867450047a5f79a204df45aaeefecfa6`; PR #44 fixed `966d4123c13c4dcda1799772d262dde5be8cacb8`.
+- H1 fixed one P2 status-mapping/history issue in PR #44 and retested the combined tree.
+- required merge order: #42 then #44.
+- combined checks: social-mobile 16/16, data-view 14/14, typecheck/lint/Expo web export/diff PASS.
+- Phase 1 auth/X-connect/onboarding + Home/posting/history source work is accepted and may be closed after merge.
+- production DB/config/OAuth/real-account E2E remain separate future gates.
+- next G3 after merge: queued multi-provider signup/login (X / Apple / Google / Email), provider linking, duplicate-account prevention, password recovery and first-workspace onboarding.
+
+
+## G3 social-mobile multi-provider Auth Phase 2
+
+- assigned: `x-social-mobile-multi-provider-auth-phase2-20260928`.
+- mandatory first step: integrate accepted Phase 1 in reviewed order PR #42 `c5e0157` -> PR #44 `966d412`, with exact-head/check verification and fresh-main regression.
+- after integration, implement source-first X / Apple / Google / Email signup/login.
+- X app-auth and X posting-account authorization must remain separate; posting continues through existing `x-oauth-connect-user`/Vault path.
+- provider linking and duplicate-account prevention are mandatory.
+- password recovery and first-workspace/onboarding continuation are included.
+- no production provider enablement, Auth console mutation, DB migration, Stage 3B activation or real X post without separate authorization.
+- recommended Claude model: Opus5.5（高）.
+
+## Queued G4 next — posting interaction Phase 2
+
+Status: queued; start after PR #42/#44 are integrated to main to avoid stale-base/provider overlap.
+
+Planned scope:
+- draft/post preview
+- manual edit
+- AI regenerate
+- approve
+- schedule/post action wiring only where backend contract already exists
+- failure reason
+- retry
+- reconnect-to-X CTA when auth requires it
+- schedule/history -> detail -> edit/approve flow
+- preserve explicit distinction between manual approval and auto-post
+- no production post or publish-authority activation by default
+
+Recommended Claude model: Sonnet5（高）.
+
+
+## Final K3 social-mobile multi-provider Auth Phase 2
+
+- verdict: **PASS for source implementation**.
+- Phase 0 merged accepted Phase 1 in required order:
+  - PR #42 -> `f0cac1505184a2abd9c9d504142012a1be999cf3`
+  - PR #44 -> `7870d10170d31e0a6b78ab245f4e9152a3628f00`
+- Phase 2 PR #47 head `7bda196147a749431774fba915a86d41bf43dc5d`.
+- X / Apple / Google / Email signup/login source support implemented.
+- email signup/recovery, explicit provider linking, duplicate-account guard and first-workspace/onboarding continuation implemented.
+- X app-auth and posting-account OAuth/Vault path remain intentionally separate.
+- tests 32/32 + data-view 14/14 + typecheck/lint/Expo web+iOS export PASS.
+- production Auth/config/DB/X mutation=0.
+- because this changes Auth/provider identity boundaries, one focused H1 review is assigned before merge/provider activation.
+- recommended Codex model: Sol（高）.
+
+
+## Final C1 multi-provider Auth focused review
+
+- verdict: **FAIL**.
+- PR #47 reviewed head `7bda196147a749431774fba915a86d41bf43dc5d`; remains unmerged.
+- seven executable Auth-boundary failures reproduced:
+  1. explicit provider linking rejects Supabase-returned external provider URL.
+  2. duplicate callbacks can report false success before/after failed exchange.
+  3. native PKCE callback drops `sb_flow_id`, risking wrong verifier selection.
+  4. signup UI reintroduces existing-email enumeration through distinct messages.
+  5. provider access/refresh credentials can be persisted implicitly in plaintext AsyncStorage by SDK session persistence.
+  6. password-recovery mode is not exact-user/session bound and survives incompatible user switch.
+  7. callback parser accepts malformed/ambiguous authority/duplicate-conflicting credential params.
+- additional gaps: stale onboarding/new-account state across time/user switch; provider/email readiness truthfulness; Apple linking config/path distinction.
+- passed boundaries: X app-login remains separate from posting-X; Apple native nonce source contract passed; no service_role/user_metadata authorization/provider-token logging found.
+- production_mutation=0.
+- G3 reassigned one bundled Auth correction task; recommended Claude model Opus5.5（高）.
+- after K3, use one final focused H1 acceptance pass only.
+
+
+## Final K3 Auth Phase 2 bundled correction
+
+- verdict: **PASS for source correction**.
+- PR #47 fixed head `5fd483a5fc651da07d0791c68eaa557cdb201357`.
+- all seven prior H1 Auth findings corrected:
+  provider-link URL provenance, duplicate callback truthfulness, flowId PKCE selection, signup enumeration, provider-credential persistence, exact-user/session recovery, strict callback parsing.
+- additional corrections: exact-user onboarding/user-switch handling, fail-closed provider readiness, Apple native-vs-browser linking/config distinction.
+- provider tokens are stripped from persisted storage/context while Supabase app-session restore remains supported.
+- X app-auth remains separate from posting-X/Vault.
+- tests 37/37 + data-view 14/14 + typecheck/lint + Expo web/iOS export PASS; mutation tests 11/11 detect guarded regressions.
+- production_mutation=0.
+- one final focused H1 acceptance review assigned; no further review loop unless it finds a concrete defect.
+- recommended Codex model: Sol（高）.
+
+
+## Final C1 Auth Phase 2 accepted and merged
+
+- verdict: **PASS-WITH-FIX**.
+- accepted PR #47 head `ed5f8b7890e538593dba369dd85cb99a12b27242`.
+- H1 bounded fixes closed residual callback cache/recovery-action/provider-authorize-path defects.
+- prior seven Auth findings + onboarding/readiness/Apple-linking gaps accepted at source level.
+- final checks: mobile 43/43, data-view 14/14, typecheck/lint, Expo web+iOS export, diff/secret checks PASS.
+- PR #47 merged to main as `fbddef2535b82bf4775c2e4fddb93eeefb8c638a`.
+- production provider enablement, redirect allowlist, SMTP/template, Apple/Google/X developer-console setup, real-device E2E and real X posting remain separate future gates.
+- no further H1 loop is required absent a concrete discrepancy.
+
+
+## G3 Auth release readiness Phase 3 — assigned 2026-09-28
+
+- task_id: `x-social-mobile-auth-release-readiness-phase3-20260928`
+- slot: G3
+- status: ready
+- accepted Auth Phase 2 is merged to main as `fbddef2535b82bf4775c2e4fddb93eeefb8c638a`; no further H1 loop required absent a concrete discrepancy.
+- scope: account/login-method UX, provider readiness truthfulness, Auth/deep-link/build-config validation, and exact real-device/console E2E checklist.
+- preserve all accepted callback/PKCE/recovery/session/provider-token boundaries.
+- no production provider/config/SMTP/redirect/developer-console mutation; no DB migration; no real X post.
+- must not edit G4 posting interaction files.
+- review policy: no automatic Codex review; if independent review becomes necessary while Codex capacity is constrained, use separate Claude review first.
+- recommended Claude model: **Opus5.5（高）**.
+
+
+## G4 posting interaction Phase 2 — assigned 2026-09-28
+
+- task_id: `x-social-mobile-posting-interaction-phase2-20260928`
+- slot: G4
+- status: ready
+- scope: truthful post preview/detail, manual edit where persistence exists, AI regenerate where backend exists, approve/schedule/post wiring only on real contracts, failure reason/retry/reconnect UX, and schedule/history/detail navigation.
+- never fake backend success; unavailable capabilities must remain visibly unavailable.
+- manual approval and auto-post remain distinct.
+- no real X post, publish-authority activation, production DB/RLS/RPC/backend mutation, or Auth/provider mutation.
+- must not edit G3 Auth/account/provider-readiness files.
+- review policy: no automatic Codex review unless a new high-risk DB/API/Auth/publish boundary is introduced.
+- recommended Claude model: **Sonnet5（高）**.
+
+
+## Final K4 posting interaction Phase 2
+
+- verdict: **PASS**.
+- PR #49 head `15e9f74a6de98a4a8b49eadb6c2f962a6250c94e`.
+- post detail now shows truthful status/failure availability, auto-post vs approval mode, X reconnect CTA, and disabled edit/regenerate/approve/retry controls with reasons when backend support does not exist.
+- no fake backend success and no new DB/API/Auth/publish boundary.
+- tests: post-interaction 8/8, data-view 14/14, mobile 43/43, typecheck/lint, Expo web+iOS export, diff/secret scan PASS.
+- production_mutation=0; no extra Codex review required.
+- PR #49 merged as `9eef82bf0729c25bf6aaf15951c138704b5b67b7`.
+- remaining real posting-operation blockers: no canonical post body/edit persistence, dispatcher RPCs service_role-only/unapplied, and failure-log authenticated read path unresolved.
+
+
+## Final K4 social-mobile posting interaction Phase 2
+
+- verdict: **PASS**.
+- PR #49 head `15e9f74a6de98a4a8b49eadb6c2f962a6250c94e` verified OPEN/MERGEABLE with exactly 4 changed files and no G3 overlap.
+- implementation truthfully exposes post status/mode/reconnect state and disabled edit/regenerate/approve/retry actions with explicit reasons rather than fake backend success.
+- no new DB/API/Auth/publish boundary; new read reuses the existing content-settings repository only.
+- tests: post-interaction 8/8, data-view 14/14, auth/mobile 43/43, typecheck/lint, Expo web+iOS export, diff/secret checks PASS.
+- production mutation=0; no real X post.
+- Codex review: **not required**.
+- PR #49 squash-merged to main as `9eef82bf0729c25bf6aaf15951c138704b5b67b7`.
+
+## G4 posting backend foundation Phase 3 — assigned 2026-09-28
+
+- task_id: `x-social-mobile-posting-backend-foundation-phase3-20260928`.
+- goal: unlock authoritative post body + safe post-detail read + draft edit persistence + sanitized failure reason first; regenerate/approve/retry remain later.
+- mandatory first step: read-only verify live schema/grants for `scheduled_posts`, `post_execution_logs`, and membership authority. Stop on material schema discrepancy.
+- do not weaken existing service-role dispatcher RPC grants merely for mobile access.
+- candidate DB/API/Edge changes are source-only; no migration apply/deploy/production mutation.
+- G3 Auth/account/provider-readiness files are excluded.
+- because Phase 3 introduces a new DB/API authorization boundary, independent review is required before merge/apply; while Codex capacity is constrained, use a **separate-room Claude Opus5.5（高）** reviewer in an independent worktree rather than H1/H2.
+- implementation recommended model: **Opus5.5（高）**.
+
+
+## Final K3 Auth release readiness Phase 3
+
+- verdict: **PASS**.
+- PR #50 head `d1f34674c10db1f71eab2766308cf4e9bba9482b` verified OPEN/MERGEABLE with 12 changed files and no G4 file overlap.
+- added truthful account/login-method UX, deterministic provider readiness diagnostics, app/deep-link config checks, and exact real-device/operator E2E gates.
+- no new Auth API, privilege, token-storage, DB/RPC, or publish boundary introduced; accepted Phase 2 security boundaries remain intact.
+- tests: mobile 57/57, data-view 14/14, typecheck/lint, Expo web+iOS export, diff/secret checks PASS; mutation checks 11/11.
+- production_mutation=0.
+- Vercel Preview failure was rate-limit-only; not a source blocker.
+- Codex/independent review: **not required**.
+- PR #50 squash-merged to main as `ff46c397018a215c53b091feaae86076b37489a7`.
+- remaining operator gates: iOS bundle identifier, redirect allow-list, provider/SMTP console setup, then real-device E2E G0-G10.
+
+## G3 account lifecycle release Phase 4 — assigned 2026-09-28
+
+- task_id: `x-social-mobile-account-lifecycle-release-phase4-20260928`.
+- goal: inventory and source-prepare account deletion, account/security UX, privacy/terms/support configuration, and release lifecycle requirements.
+- no real-user deletion, production Auth/DB/RLS/RPC/provider mutation, or real X post.
+- G4 posting backend files are excluded.
+- if a new privileged account-deletion boundary is implemented, independent review is mandatory; with Codex constrained, use separate-room Claude Opus5.5（高） in an independent worktree.
+- implementation recommended model: **Opus5.5（高）**.
+
+
+## G3 / G4 temporarily closed by user — 2026-09-28
+
+User requested both X-app Claude slots to stop at the current clean boundary.
+
+### G3
+- slot: G3
+- status: **idle / unassigned**
+- previous task: `x-social-mobile-account-lifecycle-release-phase4-20260928`
+- state at close: in progress, no completion Report yet; do **not** treat as done/PASS.
+- accepted foundation remains Auth Phase 3 merged main `ff46c397018a215c53b091feaae86076b37489a7`.
+- any local branch/worktree changes from the interrupted session must be preserved and inspected before future reuse.
+- future resume requires a new explicit TASK or reactivation.
+- recommended model on resume: **Opus5.5（高）**.
+
+### G4
+- slot: G4
+- status: **idle / unassigned**
+- previous task: `x-social-mobile-posting-backend-foundation-phase3-20260928`
+- state at close: safe STOP after Stage A; no source/migration/RPC/Edge changes; production_mutation=0.
+- key preserved finding: production lacks an applied canonical user→brand/workspace membership boundary required for safe mobile post read/edit authorization.
+- next dependency before resuming: review/decide the existing `brand_memberships` Phase 4 candidate, then resume post-body/read/edit/failure-reason design on that single membership authority.
+- no review is pending for the stopped G4 task because it introduced no new boundary.
+- recommended model on resume: **Opus5.5（高）**.
+
+No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
+
+
+## G3 Phase 4 resumed from preserved checkpoint
+
+- task: `x-social-mobile-account-lifecycle-release-phase4-20260928`
+- worktree: `/Users/yuya/Developer/kabumori-g3-phase1d`
+- branch: `claude/g3-account-lifecycle-p4`
+- preserve all uncommitted work.
+- continue only to source-only review-ready completion.
+- no production mutation/deploy/migration apply/real account deletion.
+- independent review mandatory before merge because privileged deletion boundary is included.
+- recommended Claude model: Opus5.5（高）.
+
+
+## Final K3 account lifecycle Phase 4
+
+- verdict: **PASS for source-only implementation**.
+- draft PR #52 head `12146c4ab2bc635a2781b673146e1f8ad8350258`.
+- implemented: legal/privacy/support config, account deletion UX, recent-auth reauthentication flow, source-only service_role deletion RPC candidate, `social-mobile-account-delete` Edge candidate, X revoke, Apple revoke, Vault cleanup and hashed audit.
+- tests: mobile 71/71, data-view 14/14, Deno 13/13, disposable Postgres behavior/race/cleanup PASS, mutation checks 22/22; typecheck/lint/Expo web+iOS export PASS.
+- production_mutation=0; no migration apply, Edge deploy, real deletion or X post.
+- independent review mandatory before merge because this crosses auth-admin/Vault/service_role/external revoke boundaries.
+- use a separate Claude Opus5.5（高） review in an independent worktree; do not merge PR #52 before that review.
+
+
+## H2 assigned — PR #52 privileged account deletion review
+
+- task_id: `x-social-mobile-account-deletion-privileged-review-20260928`
+- target: draft PR #52 head `12146c4ab2bc635a2781b673146e1f8ad8350258`
+- review focus: service_role DB functions, function ACL/search_path, Vault cleanup authority, Auth admin deletion/session behavior, X revoke, Apple revoke, exact-user/workspace binding, races, idempotency and partial-failure recovery.
+- production mutation forbidden.
+- small bounded fixes allowed; design-level uncertainty must stop and report.
+- finish code: C2.
+- recommended Codex model: Sol（高）.
+
+
+## Final C2 PR #52 privileged account deletion review
+
+- verdict: **FAIL**.
+- reviewed draft PR #52 head `12146c4ab2bc635a2781b673146e1f8ad8350258`.
+- P1 blockers:
+  1. deletion not durably serialized against X OAuth reconnect or purge -> Auth deletion gap.
+  2. social-mobile deletion deletes shared Auth and cascades Kabumori main-app data without matching cross-product consent.
+  3. shared/corrupt Vault secret references are not rejected before privileged deletion.
+- P2 blockers:
+  - missing X credentials can be treated as revoke success,
+  - Apple single-use authorizationCode retry is not resumable,
+  - Edge web CORS/path support incomplete,
+  - client deletion state needs exact user/session pinning.
+- privileged RPC ACL/search_path and several tenant guards passed.
+- production_mutation=0.
+- PR #52 remains DRAFT/unmerged.
+- G3 assigned one coordinated correction task; recommended Opus5.5（高）.
+
+
+## Final K3 account deletion correction Phase 4b
+
+- verdict: **PASS for source correction**.
+- PR #52 fixed head `002d24ac99df2fbdf4e2423c1428ccb488a79f29`.
+- previous C2 R1-R6 plus exact user/session client pinning are addressed in one coordinated design.
+- durable tombstone/lease and guard triggers now cover deletion across HTTP/transaction boundaries.
+- cross-product deletion defaults to least-destructive social-only behavior when Kabumori main-app data exists.
+- Vault credential ownership ambiguity fails closed.
+- X missing-credential false success fixed.
+- Apple single-use revoke now has durable checkpoint/retry semantics.
+- CORS/platform behavior made truthful.
+- tests: disposable Postgres behavior/acquire race/reconnect race/cleanup PASS; Deno 17/17; mobile 72/72; data-view 14/14; typecheck/lint/Expo web+iOS; mutation 23/23.
+- production_mutation=0.
+- one final focused H2 acceptance review required before merge.
+- recommended Codex model: Sol（高）.
+
+
+## H2 final acceptance assigned for PR #52
+
+- task_id: `x-social-mobile-account-deletion-final-acceptance-review-20260929`
+- target: PR #52 fixed head `002d24ac99df2fbdf4e2423c1428ccb488a79f29`.
+- focused scope: prior R1-R6, client session pinning, guard-trigger coverage, auth.users finalization and source merge readiness.
+- production mutation prohibited.
+- finish code: C2.
+- recommended Codex model: Sol（高）.
+
+
+## Final C2 Phase 4b account deletion acceptance
+- verdict: **FAIL**.
+- reviewed PR #52 head `002d24ac99df2fbdf4e2423c1428ccb488a79f29`.
+- R2-R6 and client session pinning passed.
+- remaining P1: first-onboarding transaction can start before tombstone visibility and commit after deletion snapshot/purge, leaving orphaned social rows.
+- required fix: shared early per-user serialization between first-onboarding creation and deletion acquire, tested in both directions.
+- additional P2: checked Deno test suite TS2353 test-only typing mismatch.
+- production_mutation=0; PR #52 remains DRAFT/unmerged.
+- G3 Phase 4c assigned; recommended Opus5.5（高）.
+
+
+## Final K3 account deletion Phase 4c
+
+- verdict: **PASS for source correction**.
+- PR #52 fixed head `4bc819555c07c8792f5b78ea29aa6b9a35694042`.
+- common workspace serialization added before onboarding/deletion critical points.
+- onboarding-first and deletion-first race proofs PASS with orphan rows=0 and no deadlock.
+- finalize rechecks no workspace/account state reappeared before success.
+- checked Deno tests 17/17 PASS; TS2353 fixed.
+- mobile 72/72, data-view 14/14, typecheck/lint, Expo web+iOS, diff/secret checks PASS.
+- previous R1-R6/client pinning regressions remain green.
+- production_mutation=0.
+- one final H2 focused acceptance required before merge.
+- recommended Codex model: Sol（高）.
+
+
+## H2 final concurrency acceptance assigned
+
+- task_id: `x-social-mobile-account-deletion-final-concurrency-acceptance-20260929`
+- target: PR #52 head `4bc819555c07c8792f5b78ea29aa6b9a35694042`.
+- scope: onboarding-first/deletion-first concurrency, orphan invariant, deadlock/isolation, checked Deno tests, regression spot-check.
+- production mutation prohibited.
+- finish code: C2.
+- recommended Codex model: Sol（高）.
+
+
+## Final C2 PR #52 accepted and merged
+- verdict: **PASS**.
+- accepted exact head: `4bc819555c07c8792f5b78ea29aa6b9a35694042`.
+- H2 independently confirmed both first-onboarding/deletion race orders, orphan invariant=0, no deadlock in intended protocol, READ COMMITTED guard behavior, and checked Deno 17/17.
+- prior R2-R6 and exact client user/session pinning remain accepted.
+- PR #52 squash-merged to main as `136dcd2b35b161ccc4769da15b05e796f095e881`.
+- source-only completion; no production migration apply, Edge deploy, real deletion, Vault mutation, or real X/Apple revoke.
+- remaining rollout gates: exact migration apply/readback, Edge deploy/byte-compare, disposable-account real-device/provider E2E, cross-app delete coordination, and legal/support/retention decisions.
+
+
+## G3 account deletion production rollout preflight assigned
+
+- task_id: `x-social-mobile-account-deletion-prod-preflight-20260929`
+- accepted source: PR #52 squash merge `136dcd2b35b161ccc4769da15b05e796f095e881`.
+- scope: read-only production preflight for exact migration, owners/ACL/FKs/isolation/Auth/Vault/Storage/Edge prerequisites, rollback/recovery and disposable-account E2E plan.
+- no migration apply, Edge deploy, real deletion/revoke, Vault/Auth/provider mutation or activation.
+- finish code: K3.
+- recommended Claude model: Opus5.5（高）.
+
+
+## Final K3 account deletion production preflight
+
+- verdict: **PASS / READY_FOR_ROLLOUT_WITH_OPERATOR_GATES**.
+- exact accepted migration identified and unchanged.
+- live schema/ownership/ACL/isolation/Auth/Vault/Storage assumptions checked read-only; no STOP condition fired.
+- workspace creation path and READ COMMITTED assumptions match reviewed design.
+- sanitized rollout runbook committed at `apps/social-mobile/docs/account-deletion-rollout-runbook.md`.
+- production_mutation=0.
+- unrelated pre-existing security/configuration findings are intentionally not stored in the public repo and require separate private operational follow-up.
+
+
+## G3 account deletion production rollout Stage 1 assigned
+
+- task_id: `x-social-mobile-account-deletion-prod-rollout-stage1-20260929`
+- scope: exact single migration apply/read-back, then `social-mobile-account-delete` Edge deploy/source identity and non-destructive smoke.
+- forbidden: real user deletion, Vault credential mutation through deletion flow, real X/Apple revoke, app feature activation.
+- after K3 PASS, focused H2 production verification is required before Stage 2 real disposable-account E2E.
+- recommended Claude model: Opus5.5（高）.
+
+
+## Final K3 account deletion production rollout Stage 1
+
+- verdict: **PASS**.
+- exact accepted migration applied once in one transaction; post-apply read-back PASS.
+- production objects added only by the accepted migration.
+- `social-mobile-account-delete` Edge Function deployed ACTIVE with JWT verification enabled and deployed source byte-matched accepted source.
+- non-destructive OPTIONS/auth/error smoke PASS.
+- no real user deletion, Vault mutation, X/Apple revoke, X post, provider console change or feature activation.
+- next gate: focused H2 production verification before Stage 2 disposable-account E2E.
+- recommended Codex model: Sol（高）.
+
+
+## H2 production Stage 1 verification assigned
+
+- task_id: `x-social-mobile-account-deletion-prod-stage1-verification-20260929`
+- scope: independently verify applied migration identity/ACL/search_path/triggers/isolation, deployed Edge identity/verify_jwt, non-destructive smoke and production mutation scope.
+- no destructive operations.
+- finish code: C2.
+- recommended Codex model: Sol（高）.
+
+
+## G3 account deletion Stage 2 E2E assigned
+
+- task_id: `x-social-mobile-account-deletion-prod-e2e-stage2-20260929`
+- scope: disposable-account-only production E2E for never-connected, social-only/shared-profile retention, disposable X-connected when safely available, retry/lost-response, and unrelated-data invariants.
+- before the first destructive valid-user action, Claude must STOP and obtain fresh explicit user confirmation.
+- Apple remains excluded unless separately configured and approved.
+- app feature activation remains OFF.
+- finish code: K3.
+- recommended Claude model: Opus5.5（高）.
+
+
+## Stage 2 E2E blocked by onboarding deletion entry
+- Stage 2 stopped before any destructive action.
+- blocker: onboarding-incomplete users cannot reach the account-deletion screen.
+- production_mutation=0.
+- G3 assigned a UI/navigation-only fix; no backend change.
+- recommended Claude model: Sonnet5（高）.
+
+
+## Final K3 onboarding deletion entry fix
+- verdict: PASS.
+- PR #59 head `2a5fab88ddad660f8c359465c67c4aadcbc6ed00`.
+- onboarding-incomplete states now expose a secondary account-deletion entry and can open the deletion screen without Home.
+- recent-auth, typed confirmation, user/session pinning and feature-off behavior remain unchanged.
+- tests: mobile 78/78, data-view 14/14, typecheck/lint, Expo web+iOS export, diff/secret checks PASS.
+- production_mutation=0.
+- Codex review not required because this was UI/navigation only.
+- PR #59 squash-merged as `cbf3945c0c576695fc7d5d5cb2e108ae15f65bea`.
+
+
+## G3 Stage 2 E2E resumed after PR #59
+- task_id: `x-social-mobile-account-deletion-prod-e2e-stage2-resume-20260930`
+- use disposable identities only.
+- obtain fresh explicit user confirmation before first destructive valid-user action.
+- feature remains OFF.
+- recommended Claude model: Opus5.5（高）.
+
+
+## G4 会社員AIラボ development-diary content shift assigned
+- task_id: `x-ai-salaryman-dev-diary-content-shift-20260930`
+- goal: shift automatic posts from repetitive AI-usage tips to non-engineer individual-development diary content.
+- create a sanitized shared progress context readable by both the API post generator and ChatGPT.
+- raw orchestration/security/private data must never flow directly into posts.
+- other brands unchanged; no G3/Auth/account-deletion files.
+- production activation waits for K4 sample review.
+- recommended Claude model: Sonnet5（高）.
+
+
+## Final K4 AI Lab dev-diary source review
+- verdict: PASS for content direction and source implementation; production activation waits for focused H2 review.
+- PR #61 head `385e561fa93dee5eaa6dfc215016f2c79531a53a`.
+- 10 representative samples match the requested non-engineer personal-development diary direction.
+- root cause identified: scheduled AI Lab generation lacked a topic seed and repeatedly fell back to a generic AI-tools topic.
+- safe diary context and sanitizer added; no production mutation.
+- current limitation: diary Markdown updates require x-test-post redeploy; periodic automatic progress aggregation is not implemented yet.
+- focused review is justified because PR #61 touches the shared post generator as well as the AI Lab dispatch path.
+- recommended Codex model: Luna（高）.
+
+
+## H2 PR #61 AI Lab dev-diary review assigned
+- task_id: `x-ai-salaryman-dev-diary-pr61-review-20260930`
+- target: PR #61 head `385e561fa93dee5eaa6dfc215016f2c79531a53a`.
+- scope: topic wiring, no-fabrication fallback, sanitizer, cross-brand hashtag behavior, Edge runtime file loading, tests and secret safety.
+- no deploy or real X post.
+- finish code: C2.
+- recommended Codex model: Luna（高）.
+
+
+## Final C2 PR #61 AI Lab dev-diary review
+- verdict: **FAIL / do not merge or deploy yet**.
+- topic wiring, freshness fallback and sanitizer direction are acceptable.
+- blocker 1: runtime availability of the Markdown diary asset is not proven for the real Supabase Edge deployment packaging; current read failure can silently fall back to evergreen.
+- blocker 2: shared no-fixed-hashtag prompt behavior also changes neutral profiles outside AI Lab.
+- no production mutation and no source fix by H2.
+- PR #61 remains open.
+- G4 assigned a bounded correction.
+
+
+## G4 PR #61 runtime correction assigned
+- task_id: `x-ai-salaryman-dev-diary-pr61-runtime-fix-20260930`
+- keep Markdown as canonical human/ChatGPT diary source while using a deployment-safe bundled runtime representation.
+- restore other no-fixed-hashtag profiles to prior behavior; make AI Lab exception explicit.
+- no production deploy or real X post.
+- finish code: K4.
+- recommended Claude model: Sonnet5（高）.
+
+
+## Final K4 PR #61 runtime correction
+- verdict: PASS for source correction.
+- PR #61 head `be146f7bd3cabfb5ae42200ad441b427928d58cf`.
+- runtime diary now uses an imported generated TypeScript snapshot derived from the canonical Markdown; no runtime filesystem/static-asset dependency remains.
+- Markdown/snapshot parity is tested and was manually proven to fail on drift.
+- hashtag control is now profile-scoped: AI Lab only; neutral no-fixed-hashtag and fixed-hashtag brands retain prior behavior.
+- relevant brand tests: 112/112 PASS; production_mutation=0.
+- final focused H2 re-review required before merge/deploy.
+
+
+## H2 PR #61 final review assigned
+- task_id: `x-ai-salaryman-dev-diary-pr61-final-review-20260930`
+- target: PR #61 head `be146f7bd3cabfb5ae42200ad441b427928d58cf`.
+- scope: verify resolution of runtime bundling/parity and hashtag cross-brand blockers, plus regression safety.
+- no deploy or real X post.
+- finish code: C2.
+- recommended Codex model: Luna（高）.
+
+
+## Final K3 Stage 2 account-deletion E2E partial
+- verdict: **PARTIAL**.
+- E1 never-connected deletion: PASS.
+- E2 shared-Auth/social-only deletion: PASS; Kabumori login/profile retained while social data was removed.
+- E4 retry/idempotency: PASS.
+- E5 unrelated-data invariants: PASS.
+- E3 X-connected disposable flow: BLOCKED before X revoke/Vault mutation.
+- blocker D1: native social-mobile data-source selection can fall back to mock because the public Expo env is not read in a bundle-safe static form.
+- additional UX issues: web deletion completion feedback is not visible; signup feedback permits confusing repeated submission.
+- feature activation readiness: NO.
+- only disposable test identities were mutated; existing real users/accounts/workspaces were untouched.
+
+
+## G3 native data-source and delete UX fix assigned
+- task_id: `x-social-mobile-native-data-source-and-delete-ux-fix-20260930`
+- scope: D1 native real-vs-mock selection, D2 web deletion completion feedback, D3 signup feedback/duplicate-submit protection.
+- no backend/migration/Edge/Auth-provider/production mutation.
+- finish code: K3.
+- recommended Claude model: Sonnet5（高）.
+
+
+## Final C2 PR #61 final review
+- verdict: **FAIL / do not merge or deploy yet**.
+- previous runtime packaging blocker: RESOLVED.
+- previous hashtag cross-brand blocker: RESOLVED.
+- remaining blocker: diary date validation accepts shape-valid but impossible calendar dates because JavaScript normalizes them, which can incorrectly pass freshness and allow a false current-progress topic.
+- no production mutation and no source fix by H2.
+- PR #61 remains open.
+
+
+## G4 PR #61 strict date validation fix assigned
+- task_id: `x-ai-salaryman-dev-diary-pr61-date-validation-fix-20260930`
+- scope: reject impossible calendar dates before freshness selection and add regressions.
+- preserve runtime snapshot/import architecture and hashtag behavior.
+- no deploy or real X post.
+- finish code: K4.
+- recommended Claude model: Sonnet5（中）.
+
+
+## Final K4 PR #61 strict date validation fix
+- verdict: PASS for source correction.
+- PR #61 head `67ee04b41e37553885d43f4630628d135061cbf8`.
+- strict round-trip UTC calendar validation rejects impossible dates and preserves valid leap/month-end dates.
+- impossible dates cannot enter fresh diary selection and fall back to evergreen.
+- runtime snapshot architecture and cross-brand hashtag behavior unchanged.
+- relevant shared-brand tests: 119/119 PASS; production_mutation=0.
+- one final H2 acceptance review required before merge/deploy.
+
+
+## H2 PR #61 final acceptance assigned
+- task_id: `x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930`
+- target: PR #61 head `67ee04b41e37553885d43f4630628d135061cbf8`.
+- scope: strict-date regression plus preservation of previously accepted runtime/hashtag/safety behavior.
+- no deploy or real X post.
+- finish code: C2.
+- recommended Codex model: Luna（中）.
+
+
+## Final K3 native data-source and delete UX fix
+- verdict: **PASS for source-only correction**.
+- PR #63 head `5f2eae26bb1ee60c2bd7c7885c06816e86e8d852`.
+- D1 native data-source selection now uses bundle-safe static Expo env access and shares one decision path with provider initialization.
+- invalid/incomplete configuration blocks truthfully; explicit mock preview remains supported.
+- D2 adds truthful visible web deletion-completion feedback while preserving native Alert and deletion protections.
+- D3 adds signup in-progress/success feedback, same-tick duplicate-submit protection and cooldown only after success.
+- tests: mobile 89/89, data-view 14/14, typecheck/lint, Expo web+iOS export, diff/secret checks PASS; production_mutation=0.
+- native E3 can resume after merge, but a focused review is required because this crosses the native real/mock boundary and Auth/deletion UX.
+
+
+## H1 PR #63 native data-source/Auth UX review assigned
+- task_id: `x-social-mobile-pr63-native-data-source-auth-ux-review-20260930`
+- target: PR #63 head `5f2eae26bb1ee60c2bd7c7885c06816e86e8d852`.
+- scope: native data-source selection, delete completion feedback, signup duplicate/success feedback and regression safety.
+- no deploy, real X operation or real-user deletion.
+- finish code: C1.
+- recommended Codex model: Luna（高）.
+
+
+## Final C2 PR #61 accepted
+- verdict: **PASS**.
+- accepted exact head: `67ee04b41e37553885d43f4630628d135061cbf8`.
+- runtime snapshot packaging, AI Lab-only hashtag control, strict calendar-date validation, freshness fallback, sanitizer scope and cross-brand behavior accepted.
+- H2 found no remaining issue in focused acceptance scope.
+- G4-reported tests at accepted head: context 29/29, profiles 7/7, generator 13/13, scheduled AI Lab 8/8, shared-brand suite 119/119; H2 independently verified test declaration counts.
+- production_mutation=0.
+- PR #61 may proceed to merge and separately controlled x-test-post production rollout.
+
+
+## G4 PR #61 merge and production rollout assigned
+- task_id: `x-ai-salaryman-dev-diary-pr61-merge-prod-rollout-20260930`
+- accepted head: `67ee04b41e37553885d43f4630628d135061cbf8`.
+- scope: exact PR merge, then single-function x-test-post production deploy/read-back.
+- no manual X post, DB/Auth/Vault/Cron mutation or broad deploy.
+- finish code: K4.
+- recommended Claude model: Opus5.5（高）.
+
+
+## H1 PR #63 native data-source and Auth UX review — 2026-09-30
+
+- H1 result: **PASS**, exact head `5f2eae26bb1ee60c2bd7c7885c06816e86e8d852`; PR open/unmerged, GitHub mergeable=true.
+- Expo public env selection is static/bundle-safe and fails closed; web deletion confirmation is visible and truthful; signup duplicate guard/cooldown only claims success after success.
+- Tests: app 89/89 + data-view 14/14, typecheck/lint, Web+iOS JS exports, diff and secret/scope checks PASS.
+- Native PR: Netlify preview passed; Vercel rate-limit check is not required under native Expo policy. No simulator/EAS/live auth or deletion E2E was performed.
+- No findings blocking source merge; production mutation 0. H1 awaits C1, then native E3 may resume.
+- Recommended model for C1: Luna（中）.
+
+
+## G4 PR #61 merge confirmed; deploy explicitly authorized
+- GitHub independently confirms PR #61 merged at `f0ea0a964797524022f0b8aa51a670a78806dd26`.
+- accepted reviewed head remains `67ee04b41e37553885d43f4630628d135061cbf8`.
+- do not retry the merge.
+- G4 is explicitly authorized to continue with the already-reviewed single-function production deploy of `x-test-post` only, preserving verify_jwt=false, then perform read-only source/version/metadata verification.
+- no DB/Auth/Vault/Cron/settings/secret changes and no manual X post/manual scheduled invocation.
+- recommended Claude model: Opus5.5（高）.
+
+
+## Final C1 PR #63 accepted
+- verdict: **PASS**.
+- accepted exact head: `5f2eae26bb1ee60c2bd7c7885c06816e86e8d852`.
+- native Expo env selection is bundle-safe/fail-closed; delete-completion and signup feedback are accepted.
+- tests: app 89/89, data-view 14/14, typecheck/lint, Web+iOS exports, diff/secret checks PASS.
+- no DB/RLS/RPC/migration/Edge/Vault/X/Apple/production setting changes.
+- production_mutation=0.
+- PR #63 may proceed to merge; native E3 may resume afterward.
+
+
+## G3 PR #63 merge and native E3 resume assigned
+- task_id: `x-social-mobile-pr63-merge-native-e3-resume-20260930`
+- accepted head: `5f2eae26bb1ee60c2bd7c7885c06816e86e8d852`.
+- scope: exact PR merge, local native real-data build, disposable X connection and read-only state verification.
+- mandatory STOP for fresh user approval before deletion/X revoke/Vault mutation.
+- no real X post and feature remains OFF.
+- finish code: K3.
+- recommended Claude model: Opus5.5（高）.
+
+
+## Manual x-test-post deploy completed
+- user manually executed the isolated production deploy from accepted merge `f0ea0a964797524022f0b8aa51a670a78806dd26`.
+- terminal log shows successful `x-test-post` deploy twice with the same source and `--no-verify-jwt`.
+- read-only Supabase metadata now shows `x-test-post` ACTIVE v129, verify_jwt=false.
+- prior baseline was v127, so the duplicate same-source deploy accounts for two version increments.
+- no further deploy is needed or authorized.
+- G4 should continue with read-only source identity/all-function metadata/manual-post verification and final Report only.
+
+
+## PR #63 merged; G3 native E3 resume authorized
+- PR #63 exact accepted head `5f2eae26bb1ee60c2bd7c7885c06816e86e8d852` was squash-merged successfully.
+- merge commit: `2648f38ac3a0e3421dbd6104b46c44dbd009b6d8`.
+- changed scope remains the reviewed 10 `apps/social-mobile` source/test files.
+- G3 should not retry merge; continue from Phase B using fresh main.
+- allowed before destructive gate: local/native build, real Supabase mode verification, disposable X connection, read-only state verification.
+- mandatory STOP and fresh user approval before account deletion, X revoke, or Vault mutation.
+- no real X post and feature remains OFF.
+- recommended Claude model: Opus5.5（高）.
+
+
+## Final K4 PR #61 production rollout
+- verdict: **PASS / rollout complete**.
+- PR #61 squash merge: `f0ea0a964797524022f0b8aa51a670a78806dd26`.
+- accepted source head: `67ee04b41e37553885d43f4630628d135061cbf8`.
+- production `x-test-post`: ACTIVE **v129**, `verify_jwt=false`.
+- duplicate same-source manual deploy moved v127 -> v128 -> v129; no further deploy is required.
+- G4 downloaded production v129 and byte-compared the deployed module graph against the accepted merge: **45/45 files matched**.
+- deployed bundle contains the expected diary snapshot import, strict calendar validation, AI Lab-only hashtag control and scheduled topic-seed wiring.
+- all-function metadata comparison found only `x-test-post` changed during this rollout; function count remained 20.
+- manual X posts / manual scheduled invocations: **0**.
+- natural scheduler later executed an AI Lab `brand_post` successfully under v129; no forced invocation was used.
+- DB/RLS/RPC/migration/Auth/Vault/Cron/settings/secret changes: none by this rollout.
+- remaining product limitation: automatic periodic development-progress aggregation is not implemented; diary updates still require Markdown edit -> snapshot regeneration -> commit -> x-test-post redeploy. The current latest diary entry is 2026-09-29 and will age out of the 3-day freshness window, after which evergreen topics are used rather than fabricating current progress.
+
+## G1 assigned — Home report Hero 8-state integration — 2026-10-01
+
+- task_id: `kabumori-home-report-hero-8-state-assets-20261001`
+- previous stale G1 review_required state was reconciled: header-logo PR #62 is already merged as `0224ff7ed41380749ed677c1dc27942e916fcffb`.
+- target: user-approved 1536x960 Hero background plus final 8 character states (01 very positive / 02 positive / 03 neutral / 04 uncertain / 05 caution / 06 negative / 07 very negative / 08 volatile).
+- current main still has no Hero background and still fixes the old `report_04_neutral.webp`; G1 will replace that presentation only after the exact user-approved assets are available in its isolated worktree/session.
+- character composition uses full-canvas 1:1 overlay with the 8:5 Hero stage; no per-state scaling/offset and no artwork regeneration.
+- state selection is deterministic from stored Fact-passed report fields only; no extra AI/API call. Volatile is an explicit-evidence override, not “worse than very negative”.
+- Hero fixed title/description/「今日のポイント」 are baked into the approved background, so native duplicates must be removed while retaining accessibility semantics. Dynamic report type, 1–3 point rows and CTA stay native.
+- G2 remains a separate shared-report/backend workstream; G1 must not touch its generation/validator scope.
+- EAS conservation: local Expo/iOS Simulator only; new EAS build expected 0.
+- backend / DB / RPC / Edge Function / Auth / common-account / X / production mutation: 0.
+- finish code: K1.
+- recommended model: **Sonnet5（高）**.
+
+## Final K1 closure — Home Hero 8-state integration — 2026-10-02
+- verdict: **PASS / MERGED / G1 CLOSED**.
+- PR #72 accepted exact head: `b96c566353db82b967989dc5a5855a1324876bd4`.
+- squash merge: `fa0c714731e13ac87f38fc98e08cd127fb709192`.
+- final main source includes the approved Hero background + 8 character states with deterministic stored-report selection and no additional AI/API call.
+- app tests reported 255/255 PASS; local iOS Simulator verified 402pt / 375pt / 360pt and 1/2/3-point layouts.
+- EAS build: 0.
+- backend / DB / RPC / Edge Function / Cron / Auth / common-account / X / production mutation: 0.
+- Codex review: not required for this UI-only scope.
+- G1 is now free after fresh allocation.
+
+## K1 diary follow-up — Kabumori Hero 8-state — 2026-10-02
+- public-safe development-diary candidate exists for the completed Kabumori Hero work.
+- canonical diary already has a real 2026-10-02 entry and its documented contract is one entry per day.
+- no duplicate same-day entry and no future-dated 2026-10-03 entry were created.
+- candidate text is preserved in the current G3 Report for possible later reuse.
+- source/runtime diary files unchanged; production mutation 0.
+
+## Final K1 — Home Hero 02/07 alignment + position follow-up — 2026-10-02
+- verdict: **PASS / MERGED / G1 CLOSED**.
+- PR #74 accepted exact head `ae9001b472d74a2892f0d572c538ab67b5992d6b`, squash merge `9b37c350a3b9d1a936d0e03ddc281e315aba50f2`.
+- PR #75 accepted exact head `eeb294c3ea8bb39417c46ba29436abb8c2cee091`, squash merge `02ba0e2d728833fb76b74237cc3c237130bcdbf1`.
+- final main after source merges: `02ba0e2d728833fb76b74237cc3c237130bcdbf1` (later .agent-only closure commits follow).
+- final Hero uses one global 6pt lift for every state, CTA height 28pt / bottom inset 6pt, with no per-state app offset.
+- final 02/07 aligned assets are live on main; pinned sha256: 02 `4b152fdbe5586c79549fe071868ae428c1b416e3253c15d2a4987e42672527fa`, 07 `8927eae433315354a7ebb65df7c6e1316201ebf5c38b612c6194085db7d9e024`.
+- reported app tests: 255/255 PASS. Netlify PASS for both; PR #75 Vercel PASS. PR #74 Vercel failure was rate-limit-only and is not a native Kabumori merge gate.
+- EAS build 0; backend / DB / RPC / Edge Function / Auth / X / production mutation 0.
+- Codex review: not required for this low-risk UI/asset-only follow-up.
+- AI Lab diary: 記録不要 — 2026-10-02 canonical diary entry already exists for another real task; duplicate same-day or future-dated entry was not created.
+- G1 is free after fresh allocation.
+
+## G1 assigned — Home Topic 3-level backgrounds — 2026-10-03
+- task_id: `kabumori-home-topic-3level-backgrounds-20261003`.
+- goal: wire the user-approved beginner/intermediate/advanced 「今日のトピック」 background series into Home using existing `topic.level` only.
+- visual semantics: beginner=pale green/basic learning/sprout; intermediate=pale blue/comparison-analysis/young plant; advanced=pale lavender/multi-indicator relation/small flower.
+- canonical repo targets: `assets/images/home/topic_background_beginner.webp`, `topic_background_intermediate.webp`, `topic_background_advanced.webp`.
+- source gate: only clean user-approved originals may be used. Chat/editor screenshots with black chrome, 「編集」, share/export controls or toolbar overlays must not be cropped, inpainted, regenerated or committed. Expected approved series canvas is 1942x809; if any clean original is missing, G1 must STOP and name the missing file(s).
+- implementation scope: Home topic presentation + focused tests/assets only; topic content/detail expansion is deferred to the next task.
+- local Simulator verification at ~402pt and ~375pt for all 3 levels; no new EAS build.
+- backend / DB / RPC / Edge / Auth / X / production mutation: 0.
+- recommended model: **Sonnet5（高）**.
+- finish code: K1.
+
+## Final K1 — Home Topic 3-level backgrounds — 2026-10-03
+- verdict: **PASS / MERGED / G1 CLOSED**.
+- PR #80 exact accepted head: `2e5356a8a3e6af84ed9999929cd62556081cab65`.
+- squash merge: `d6031e228efbf01f94ada22879cd6315457c43f7`.
+- final source: 3 clean 1942x809 level backgrounds, exact `topic.level` mapping, same-ratio card geometry, native badge/title/summary/CTA retained.
+- visual review: 402pt contact sheet and 375pt advanced card accepted; all 3 levels differ by more than color, CTA/text remain readable, level switching does not alter geometry.
+- tests/checks: 266/266 PASS, Expo config PASS, Expo web export PASS, diff clean; only known pre-existing CSS-module TypeScript diagnostics remain.
+- Netlify PASS / Vercel PASS.
+- EAS build 0; backend / DB / RPC / Edge Function / Auth / X / production mutation 0.
+- Codex review: not required for this UI/asset-only deterministic presentation change.
+- AI Lab diary: 候補あり — 学習レベルごとに背景の色・教材モチーフ・植物の成長を変え、同じシリーズ感のまま難易度が一目で伝わるUIにした。2026-10-03 entryへ反映済み。snapshot sync workflow PASS.
+- next recommended product step: richer topic body / topic-detail UI and content depth.
+- G1 is free after fresh allocation.

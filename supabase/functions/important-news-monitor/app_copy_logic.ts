@@ -155,7 +155,7 @@ export const APP_COPY_DRAFT_INSTRUCTIONS = [
   "title_ja: 60字以内。何が起きたかが分かる見出し。煽り、感嘆符、見出しラベル（【速報】等）は使いません。",
   "summary_ja: 1〜2文、200字以内。一覧で「何が起きたか」「誰・何に関係するか」が分かるようにします。",
   "detail_ja: 段落を空行（\\n\\n）で区切り、800字以内。原文が支える場合だけ2〜4個の短い段落にし、主体・場所・時刻、出来事の順序、公式発表、距離・人数・被害、発生後の運用状況など、要約や要点と重複しない追加の事実を優先します。原文の情報量が少ない場合は短い1段落で構いません。水増しや繰り返しをしません。",
-  "key_points_ja: 原文が支える場合は2〜4項目、各80字以内。各項目は別の短い事実にし、detail_jaの段落と同じ文を繰り返しません。原文が薄い場合に項目数を埋める必要はありません。",
+  "key_points_ja: 0項目、または2〜4項目にします（各80字以内）。1項目だけにはしません。各項目は別の短い事実にし、detail_jaの段落と同じ文を繰り返しません。原文が支える別々の事実が2つ未満なら、水増しせず空配列にします。",
   "市場や株価への影響・日本株との関連は別の表示項目で扱うため、detail_jaにはイベントの事実と確認済み状況だけを書き、一般的な市場コメントで水増ししません。",
   "URL、HTML、ハッシュタグ、絵文字、売買推奨、株価の上げ下げの断定は含めません。",
   "原文の情報が不足して正確に書けない場合は sufficient_information を false にし、各文字列を空、key_points_ja を空配列にしてください。",
@@ -167,14 +167,55 @@ export const APP_COPY_FACT_INSTRUCTIONS = [
   "自然な意訳や要約は許容します。ただし意味・確度・範囲が変わっていれば passed を false にします。issues は短い日本語で返してください。",
 ].join("\n");
 
-export function appCopyDraftRequestBody(source: AppCopySource): Record<string, unknown> {
+// App-copy Fact issues a rewrite can fix without touching any fact (2026-09-29/30: Milei/Falklands
+// "より広い表現" and a missing headline element; Asian benchmarks headline narrowed to the Nikkei).
+// Every issue must name one of these and none of the hard-fact terms; otherwise the copy stays failed.
+const SAFE_APP_COPY_FACT_ISSUE =
+  /広い|狭い|広げ|狭め|広すぎ|狭すぎ|主題|抜け|欠け|欠落|含まれていない|触れていない|確度|強め|弱め|強すぎ|弱すぎ|断定|言い切|ニュアンス/u;
+const HARD_APP_COPY_FACT_ISSUE =
+  /数字|数値|金額|割合|[%％]|単位|換算|日付|日時|時刻|年月日|曜日|人物|人名|企業|会社|社名|固有名詞|名称|取り違え|誤り|誤訳|誤認|原文に無い|原文にない|元情報にない|追加|捏造|存在しない/u;
+
+export function isRetryableAppCopyFactFailure(issues: string[]): boolean {
+  return issues.length > 0 &&
+    issues.every((issue) => SAFE_APP_COPY_FACT_ISSUE.test(issue) && !HARD_APP_COPY_FACT_ISSUE.test(issue));
+}
+
+/** Appended to the draft instructions for the one rewrite after a wording-only Fact failure. */
+export const APP_COPY_FACT_RETRY_INSTRUCTION =
+  "入力の previous_copy は前回の日本語コピー、fact_issues はそのFactチェックの指摘です。指摘された表現だけを、原文の範囲・主題・確度に合わせて直してください。数字・日付・人物・企業・固有名詞を変えず、原文にない事実を追加しません。指摘のない箇所はできるだけそのまま維持します。";
+
+/** Appended to the draft instructions for the one retry after a single key point. */
+export const APP_COPY_KEY_POINTS_RETRY_INSTRUCTION =
+  "前回の出力では key_points_ja が1項目でした。key_points_ja は2〜4項目、または空配列にしてください（1項目は不可）。原文が支える別々の事実が2つ未満なら空配列にします。その他の項目も同じ基準で作り直してください。";
+
+export function appCopyDraftRequestBody(
+  source: AppCopySource,
+  keyPointsRetry = false,
+  factRetry: { copy: AppCopy; issues: string[] } | null = null,
+): Record<string, unknown> {
+  const extra = [
+    keyPointsRetry ? APP_COPY_KEY_POINTS_RETRY_INSTRUCTION : null,
+    factRetry ? APP_COPY_FACT_RETRY_INSTRUCTION : null,
+  ].filter((line): line is string => line !== null);
+  const input = factRetry
+    ? {
+      ...appCopyModelInput(source),
+      previous_copy: {
+        title_ja: factRetry.copy.titleJa,
+        summary_ja: factRetry.copy.summaryJa,
+        detail_ja: factRetry.copy.detailJa,
+        key_points_ja: factRetry.copy.keyPointsJa,
+      },
+      fact_issues: factRetry.issues,
+    }
+    : appCopyModelInput(source);
   return {
     model: APP_COPY_MODEL,
     store: false,
     reasoning: { effort: "low" },
     max_output_tokens: 1800,
-    instructions: APP_COPY_DRAFT_INSTRUCTIONS,
-    input: JSON.stringify(appCopyModelInput(source)),
+    instructions: [APP_COPY_DRAFT_INSTRUCTIONS, ...extra].join("\n"),
+    input: JSON.stringify(input),
     text: { format: { type: "json_schema", name: "important_news_app_copy", strict: true, schema: DRAFT_SCHEMA } },
   };
 }
@@ -255,8 +296,11 @@ function safeCode(error: unknown): string {
 }
 
 /**
- * One generation, then (only if the local checks pass) one Fact check. Never
- * retries. Every failure mode returns status "failed" and no copy is shown.
+ * One generation, then (only if the local checks pass) one Fact check. Two bounded retries exist, each
+ * at most once: one more draft when the model returned exactly one key point (count restated), and one
+ * rewrite when every Fact issue is wording/scope/certainty only (isRetryableAppCopyFactFailure), after
+ * which the local checks and Fact run again. API errors and every other failure are never retried.
+ * Every failure mode returns status "failed" and no copy is shown.
  */
 export async function generateAppCopy(source: AppCopySource, request: AppCopyRequester): Promise<AppCopyOutcome> {
   const outcome: AppCopyOutcome = {
@@ -276,7 +320,12 @@ export async function generateAppCopy(source: AppCopySource, request: AppCopyReq
   try {
     const draft = await request("draft", appCopyDraftRequestBody(source));
     account(draft);
-    const parsed = parseAppCopyDraft(draft.payload);
+    let parsed = parseAppCopyDraft(draft.payload);
+    if (parsed.error === "APP_COPY_KEY_POINTS_TOO_FEW") {
+      const retry = await request("draft", appCopyDraftRequestBody(source, true));
+      account(retry);
+      parsed = parseAppCopyDraft(retry.payload);
+    }
     if (!parsed.copy) {
       outcome.error = parsed.error;
       return outcome;
@@ -288,14 +337,36 @@ export async function generateAppCopy(source: AppCopySource, request: AppCopyReq
       outcome.error = "APP_COPY_LOCAL_CHECK_FAILED";
       return outcome;
     }
-    const fact = await request("fact", appCopyFactRequestBody(source, parsed.copy));
-    account(fact);
-    const verdict = fact.payload as { passed?: unknown; issues?: unknown };
-    const issues = Array.isArray(verdict?.issues)
-      ? verdict.issues.filter((issue): issue is string => typeof issue === "string").slice(0, 10)
-      : [];
-    outcome.issues = issues;
-    if (verdict?.passed === true) {
+    const checkFact = async (copy: AppCopy) => {
+      const fact = await request("fact", appCopyFactRequestBody(source, copy));
+      account(fact);
+      const verdict = fact.payload as { passed?: unknown; issues?: unknown };
+      const issues = Array.isArray(verdict?.issues)
+        ? verdict.issues.filter((issue): issue is string => typeof issue === "string").slice(0, 10)
+        : [];
+      return { passed: verdict?.passed === true, issues };
+    };
+    let verdict = await checkFact(parsed.copy);
+    if (!verdict.passed && isRetryableAppCopyFactFailure(verdict.issues)) {
+      const rewrite = await request("draft", appCopyDraftRequestBody(source, false, { copy: parsed.copy, issues: verdict.issues }));
+      account(rewrite);
+      const rewritten = parseAppCopyDraft(rewrite.payload);
+      if (!rewritten.copy) {
+        outcome.issues = verdict.issues;
+        outcome.error = rewritten.error;
+        return outcome;
+      }
+      outcome.copy = rewritten.copy;
+      const rewrittenLocal = localAppCopyIssues(rewritten.copy);
+      if (rewrittenLocal.length > 0) {
+        outcome.issues = rewrittenLocal;
+        outcome.error = "APP_COPY_LOCAL_CHECK_FAILED";
+        return outcome;
+      }
+      verdict = await checkFact(rewritten.copy);
+    }
+    outcome.issues = verdict.issues;
+    if (verdict.passed) {
       outcome.status = "passed";
     } else {
       outcome.error = "APP_COPY_FACT_FAILED";

@@ -27,16 +27,16 @@ test("onboarding is decided from a local hook, not read directly from AsyncStora
   );
 });
 
-test("the onboarding branch is evaluated before the session/profile branches, and only replaces them, not AppTabs itself", async () => {
+test("the onboarding branch is evaluated before the session/profile branches, and only replaces them, not the signed-in navigator itself", async () => {
   const source = await layoutSource();
   const onboardingBranch = source.indexOf("onboardingCompleted === false");
   const profileBranch = source.indexOf("session && profileError");
-  const appTabsBranch = source.indexOf("<AppTabs");
+  const signedInBranch = source.indexOf("<SignedInNavigator");
   const authScreenBranch = source.indexOf("<AuthScreen");
-  assert.ok(onboardingBranch > -1 && profileBranch > -1 && appTabsBranch > -1 && authScreenBranch > -1);
+  assert.ok(onboardingBranch > -1 && profileBranch > -1 && signedInBranch > -1 && authScreenBranch > -1);
   assert.ok(onboardingBranch < profileBranch, "onboarding must be checked before the profile-recovery branch");
-  assert.ok(profileBranch < appTabsBranch, "profile-recovery must still be checked before AppTabs, unchanged from PR #36");
-  assert.ok(appTabsBranch < authScreenBranch, "AppTabs vs AuthScreen ordering is unchanged from PR #36");
+  assert.ok(profileBranch < signedInBranch, "profile-recovery must still be checked before the signed-in navigator, unchanged from PR #36");
+  assert.ok(signedInBranch < authScreenBranch, "signed-in navigator vs AuthScreen ordering is unchanged from PR #36");
 });
 
 test("auth loading is still an explicit early gate; onboarding does not replace it, only extends the same gate", async () => {

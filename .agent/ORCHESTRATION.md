@@ -7,7 +7,7 @@
 - `PROJECT_RULES.md` を最優先とする。
 - `AGENTS.md` / `CLAUDE.md` の開始手順にも従う。
 - `.agent/` は共有タスク運用専用。既存の別用途handoff文書は勝手に置き換えない。
-- 通常の実装主担当はClaude Code。Claude実装枠はG1〜G4の4枠。
+- 通常の実装主担当はClaude Code。Claude実装枠はG1〜G5の5枠。
 - Codexは通常、レビュー・バグ修正・検証を担当。Codex枠はH1/H2の2枠。
 - Claudeが5時間利用制限に到達した場合に限り、ChatGPTの判断でCodexへ臨時実装を割り当ててよい。
 - 並行作業はtask_idと変更対象が安全に分離されている場合だけ許可する。
@@ -16,6 +16,7 @@
 
 - `G1` / `G2`: かぶモリアプリ（モバイルアプリ本体）開発
 - `G3` / `G4`: X自動投稿アプリ開発
+- `G5`: 予備のClaude実装スロット。用途は固定せず、ユーザーまたはChatGPTが明示割当した場合のみ使用する。既存の基本ルーティングの自動fallbackにはしない。
 - ユーザーから個別TASKについて明示指示がある場合はその指示を優先する。
 - Codex（H1/H2）はアプリ別に固定しない。原則レビュー・バグ修正・検証を担当する。
 
@@ -27,14 +28,15 @@
 - Claude G2: `.agent/tasks/CLAUDE_TASK.md`（ReportはTASK内）
 - Claude G3: `.agent/tasks/CLAUDE_TASK_3.md`（ReportはTASK内）
 - Claude G4: `.agent/tasks/CLAUDE_TASK_4.md`（ReportはTASK内）
+- Claude G5: `.agent/tasks/CLAUDE_TASK_5.md`（ReportはTASK末尾の `## Report`）
 
-`.agent/ACTIVE_TASK.md` は6枠の索引、`.agent/CURRENT_STATE.md` は短い現在地として扱う。詳細指示と割当の正本は各TASK/Report。
+`.agent/ACTIVE_TASK.md` は7枠の索引、`.agent/CURRENT_STATE.md` は短い現在地として扱う。詳細指示と割当の正本は各TASK/Report。
 
 ## 役割
 
 ### Claude Code（くろちゃん）
 
-通常の新機能開発・大規模変更・継続実装を担当する。G1〜G4を使う。
+通常の新機能開発・大規模変更・継続実装を担当する。基本ルーティングではG1〜G4を使い、G5は明示割当時だけ使用する。
 
 ### Codex（こでさん）
 
@@ -53,7 +55,7 @@ Claudeの5時間制限時だけ、ChatGPTがH1/H2へ「臨時実装」と明記�
 
 全体オーケストレーションを担当する。
 
-- 実装タスクをG1〜G4へ安全に分割する
+- 実装タスクをG1〜G4へ安全に分割し、予備のG5へは明示割当した場合のみ置く
 - スロット間の競合を避ける
 - 実装の節目と変更リスクからCodexレビューの要否を判断する
 - 必要な場合、未割当のH1/H2へ具体的なレビュー/バグ修正TASKを作る
@@ -76,14 +78,15 @@ Claudeの5時間制限時だけ、ChatGPTがH1/H2へ「臨時実装」と明記�
 
 NaN## 作業開始コード
 
-### G1 / G2 / G3 / G4 — Claude
+### G1 / G2 / G3 / G4 / G5 — Claude
 
 - `G1`: `.agent/tasks/CLAUDE_TASK_1.md`
 - `G2`: `.agent/tasks/CLAUDE_TASK.md`
 - `G3`: `.agent/tasks/CLAUDE_TASK_3.md`
 - `G4`: `.agent/tasks/CLAUDE_TASK_4.md`
+- `G5`: `.agent/tasks/CLAUDE_TASK_5.md`（明示割当済みで `ready` / `in_progress` の場合のみ開始）
 
-Claudeに単独で `G` が来た場合、ready/in_progressの開始可能枠が1つだけなら開始してよい。複数なら推測せずG1〜G4の指定を求める。
+Claudeに単独で `G` が来た場合、G1〜G5のready/in_progressの開始可能枠が1つだけと明白なら開始してよい。G5も明示割当済みの場合だけ候補に含める。複数なら推測せずG1〜G5の指定を求める。
 
 ### H1 / H2 — Codex
 
@@ -100,6 +103,14 @@ statusが`ready`または`in_progress`のTASKだけ開始する。`idle` / `done
 
 新しいTASKは「未割当」であることが明確な枠だけに置く。`idle`だけを空き判定に使わない。task_id、既存TASK本文、Report、next_ownerも確認し、既存割当を保護する。曖昧なら上書きせず停止する。
 
+### Mac移行後のローカル開発基準（2026-10-05〜）
+
+- 新Macで新規slotを開始するときの clean base は `/Users/yuya/Developer/kabumori-fresh`。
+- 旧 `/Users/yuya/Developer/kabumori` は既存worktree保護のため保持し、新規slotのbaseには使わない。
+- 既存worktreeは対応TASK完了まで継続可。旧repo / 旧worktreeの削除・rename・prune・resetは禁止。
+- 新規slotは `kabumori-fresh` の fresh `origin/main` から専用の独立worktree / checkoutを作成する。`kabumori-fresh` 本体を複数slotで共有しない。
+- 開始コードと完了コードの意味は変更なし。
+
 ## 完了確認コード
 
 ### C1 / C2 — Codex
@@ -110,16 +121,37 @@ statusが`ready`または`in_progress`のTASKだけ開始する。`idle` / `done
 
 対象TASK、対応Codex Report、必要な範囲のCURRENT_STATEを確認し、レビュー内容、修正内容、テスト、commit/push/deploy、残課題、安全確認を評価する。他スロットを勝手に完了処理しない。
 
-### K1 / K2 / K3 / K4 — Claude
+### K1 / K2 / K3 / K4 / K5 — Claude
 
 - `K1`: G1
 - `K2`: G2
 - `K3`: G3
 - `K4`: G4
+- `K5`: G5のみ。`.agent/tasks/CLAUDE_TASK_5.md` と同TASK末尾の `## Report` を確認
 
 対応TASK内のReportと必要な範囲のCURRENT_STATEを確認する。TASK完了条件、実装、テスト、commit/push/deploy、残課題、他スロット影響を評価し、Codexレビューが必要かChatGPTが判断する。
 
-単独`K`は、未評価の完了対象Claude枠が1つだけと明白な場合だけ使用する。複数ならK1〜K4を指定する。
+単独`K`は、G1〜G5の未評価の完了対象Claude枠が1つだけと明白な場合だけ使用する。複数ならK1〜K5を指定する。
+
+#### 会社員AIラボ開発日記の更新判定（K1 / K2 / K3 / K4 / K5 共通・必須）
+
+K1 / K2 / K3 / K4 / K5 のどの完了確認でも、ChatGPT（ちゃ）は上記の評価に加えて、必ず次を判定する。ユーザーから毎回「開発メモを更新して」と指示されることを前提にしない。
+
+- 判定: その作業内容に、会社員AIラボの「今日の個人開発」として外部公開してよい開発内容があり、開発日記共有メモへ残す価値があるか。
+- 題材として優先するもの: 新しく作った機能、UI改善、バグ修正、開発中に分かったこと、AIとの開発で試したこと、テストや確認で苦労したこと、個人開発上の工夫、仕様変更や設計改善。単なる内部作業ログではなく、「非エンジニア会社員がAIと個人開発している日記」の題材になるものを優先し、外部公開して安全な粒度へ要約する。
+- 判定結果は、そのKの完了記録（`.agent/CURRENT_STATE.md` の Final K 項目）に1行で残す。記録不要の場合も残す。
+  - 記録価値あり: `- AI Lab diary: 候補あり — <外部公開してよい1〜2文の要約>`
+  - 記録不要: `- AI Lab diary: 記録不要 — <短い理由>`
+- 候補の要約と日記本文には、次を絶対に含めない: branch名、TASK ID、commit hash、PR番号、内部URL、email、token / JWT、password / secret、Authorization header、DB table名、RPC名、Edge Function内部名、Vault情報、production security情報、raw `.agent` 内容、その他攻撃面や内部構造を不必要に公開する情報。既存のdiary sanitizer / safetyルールは弱めない。
+- 記録価値ありの場合の反映:
+  - 共有メモの正本は `supabase/functions/_shared/brand/ai_lab_dev_diary_context.md`。通常のK1 / K2 / K3 / K4 / K5では、ChatGPT（ちゃ）がFinal Kに残した公開安全な候補だけを使い、実際の作業日付でこのMarkdownへ直接追記する。通常の日記更新のためにG3 / G4を消費しない。
+  - ChatGPTが通常の日記更新で直接編集してよいのは上記Markdown正本だけ。生成物 `ai_lab_dev_diary_context.snapshot.ts` は直接編集しない。
+  - Markdownのmain push後は `.github/workflows/ai-lab-diary-snapshot.yml` が自動でcanonical generatorを実行し、snapshotを再生成する。workflowはparity / freshness・calendar-date / sanitizer・関連brand regressionを検証し、すべてPASSした場合だけ生成snapshotをmainへfast-forwardでcommitする。
+  - workflowはMarkdown正本だけをtrigger対象とし、snapshotだけのbot commitでは再起動しない。raceやテスト失敗時はfail-closedでpushせず、既存内容を上書きしない。
+  - workflow失敗時はChatGPTがFinal KまたはCURRENT_STATEに失敗を記録する。コードやworkflowの修理が必要な場合だけ、本当に空いているG3 / G4へ修正TASKを作る。単なる通常の日記追記ではTASKを作らない。
+  - 自動workflowはproduction deploy、scheduler invoke、X投稿、DB / RLS / RPC / Auth / Vault / Cron / settings / secret変更を行わない。新しいsnapshotをproductionへ反映する必要がある場合は、従来のaccepted commit固定・isolated directory・single target・read-backを使う別のproduction gateとして扱う。
+  - 日記エントリは直近数日分だけが自動投稿の題材になる。古い候補を反映するために、実施日を偽って新しい日付で書かない。
+- この判定は、Codexレビュー要否の判断とは独立して毎回行う。
 
 ### F — 全体統括
 
@@ -128,9 +160,9 @@ statusが`ready`または`in_progress`のTASKだけ開始する。`idle` / `done
 - `.agent/ACTIVE_TASK.md`
 - `.agent/CURRENT_STATE.md`
 - H1/H2のTASKとCodex Report
-- G1〜G4のTASK内Report
+- G1〜G5のTASKと各TASK末尾の `## Report`
 
-6枠の状態・競合・実際の空き状況・レビュー待ち・deploy待ちを整理する。別チャット担当の個別TASKを文脈なしに完了扱いしたり次工程へ進めたりしない。
+7枠の状態・競合・実際の空き状況・レビュー待ち・deploy待ちを整理する。別チャット担当の個別TASKを文脈なしに完了扱いしたり次工程へ進めたりしない。
 
 ## 完了報告のGitHub同期
 
@@ -138,7 +170,7 @@ statusが`ready`または`in_progress`のTASKだけ開始する。`idle` / `done
 
 - H1: `.agent/tasks/CODEX_TASK.md` + `.agent/CODEX_REPORT.md`
 - H2: `.agent/tasks/CODEX_TASK_2.md` + `.agent/CODEX_REPORT_2.md`
-- G1〜G4: 各TASK末尾の`## Report`
+- G1〜G5: 各TASK末尾の`## Report`
 
 Reportにはtask_id、result、changed_files、tests、commit_hash、push、deploy、remaining_issues、safety_checks、next_recommendationを含める。
 
@@ -146,12 +178,12 @@ Reportにはtask_id、result、changed_files、tests、commit_hash、push、depl
 
 ## 並行作業と競合防止
 
-- G1〜G4 / H1・H2を並行稼働させる場合、各slotは**専用の独立Git worktreeまたは独立checkout**を使う。同一ディレクトリを複数セッション/slotで共有しない。Git branchが別でも作業ディレクトリが同じなら独立とはみなさない。
+- G1〜G5 / H1・H2を並行稼働させる場合、各slotは**専用の独立Git worktreeまたは独立checkout**を使う。同一ディレクトリを複数セッション/slotで共有しない。Git branchが別でも作業ディレクトリが同じなら独立とはみなさない。
 - 作業開始時に、`git worktree list`等で自分の作業ディレクトリとbranchを確認し、他slotと共有されていないことを確かめる。既存の別slotのworktree/checkoutへ切り替えて作業しない。
 - 各slotは他slotのbranchをcheckout/reset/rebaseしない。他slot所有の未コミット変更・作業ファイルを変更、削除、stage、commitしない。必要な変更の引き継ぎは所有者と内容を確認し、明示的に合意した安全な方法で行う。
 - dev serverは可能な限り自分のworktreeから起動し、他slotのserverを停止・再起動しない。serverの作業ディレクトリや所有者が確認できない場合は操作しない。
 - shared checkoutしか利用できず、安全な独立worktree/checkoutを作成できない場合は作業開始前に停止し、理由と必要な対応を報告する。共有状態のままbranch切替やreset等で作業を進めない。
-- 6枠は別task_idかつ変更対象が分離される場合のみ同時進行可能。
+- 7枠は別task_idかつ変更対象が分離される場合のみ同時進行可能。
 - 同じファイルを複数枠で同時編集しない。
 - 同じDB migration / RPC / Edge Function / workflow / production設定 / API境界 / 認証・権限ロジックを複数枠で同時変更しない。
 - 一方のpush後、他枠はpush前にfresh `origin/main`確認をやり直す。
@@ -182,4 +214,4 @@ Sonnet5で安全に処理できる作業はSonnet5を優先する。設計判断
 
 ## MICおよびその他案件
 
-G1〜G4に安全な空き枠がない場合、既存スロットへ無理に割り込ませない。その場合はChatGPTが直接コピーしてClaudeへ渡せる完成指示を作る。
+G1〜G5の既存TASK/Reportを保護する。G1〜G4に安全かつ利用許可のある空き枠がない場合、既存スロットへ無理に割り込ませず、ChatGPTが直接コピーしてClaudeへ渡せる完成指示を作る。G5がidleでもMIC用に自動消費しない。ユーザーまたはChatGPTがG5へ明示割当し、task_id・TASK本文・Report・next_owner・ACTIVE_TASK・CURRENT_STATE・fresh `origin/main`から真の未割当と非競合を確認し、専用の独立worktree/checkoutを用意できる場合のみG5を使う。

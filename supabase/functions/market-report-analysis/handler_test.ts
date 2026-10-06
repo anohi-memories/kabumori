@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { type Deps, handleRequest } from "./handler.ts";
 import { buildAnalysisInput } from "./analysis_input.ts";
+import { rich0917 } from "./test_support.ts";
 
 const directory = new URL("./fixtures/", import.meta.url);
 const dataFixture = JSON.parse(await Deno.readTextFile(new URL("close_2026-09-17_data_packet.json", directory)));
@@ -12,21 +13,9 @@ const SECRET = "cron-secret-for-tests";
 type Call = { url: string; method: string; body: Record<string, unknown> | null };
 
 function analysisPayload() {
-  const built = buildAnalysisInput({
+  return rich0917(buildAnalysisInput({
     dataPacket: dataFixture.payload, dataPacketId: dataFixture.id, dataContentHash: dataFixture.content_hash, newsRows,
-  });
-  return {
-    headline_ja: "日経平均は64,136.25で小幅高",
-    market_summary_ja: "日経平均は+0.33%、TOPIX連動ETF（1306）は+0.83%でした。",
-    claims: [{ claim_id: "c1", text_ja: "日経平均は+0.33%でした。", claim_type: "observation", evidence_refs: ["metric:nikkei225"], scope: "today" }],
-    key_news: [{ ref: built.news[0].ref, why_it_matters_ja: "業績見通しの変更です。" }],
-    strong_themes: [], weak_themes: [], next_watch_ja: ["今夜の米国株"], risks_ja: [],
-    x_post: {
-      lead_ja: "きょうの日本株は日経平均が+0.33%、TOPIX連動ETF（1306）が+0.83%でした",
-      points_ja: ["日経平均は64,136.25で取引終了", "TOPIX連動ETF（1306）は427.4円", "前夜のNYダウは−1.21%でした"],
-      closing_ja: "今夜の米国株の動きもあわせて見ておきたいです",
-    },
-  };
+  }));
 }
 
 function harness(options: { claimOutcome?: string; dataQuality?: string; factPassed?: boolean } = {}) {

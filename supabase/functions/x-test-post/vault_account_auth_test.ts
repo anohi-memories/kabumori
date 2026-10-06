@@ -28,6 +28,8 @@ type Account = {
   connection: "identity_verified" | "failed"; errorCode: string | null; publish: boolean;
   /** Stage 3A rollout authority; anything but null refuses begin before any Vault read. */
   rolloutRefusal: string | null;
+  /** verified_at is set (identity verification stamp). */
+  verified?: boolean;
 };
 
 /**
@@ -53,6 +55,15 @@ class FakeCoreDb implements VaultAccountCredentialRpc {
     post_ai: { brand: "ai_salaryman_lab", running: true, attempt: 1 },
     post_future: { brand: "brand_future", running: true, attempt: 1 },
   };
+  /** Brand publish state and account deletions, as the pre-send permission check sees them. */
+  brands: Record<string, { active: boolean; mode: "live" | "dry_run" | "disabled" }> = {
+    ai_salaryman_lab: { active: true, mode: "live" },
+    brand_future: { active: true, mode: "live" },
+  };
+  deleting = new Set<string>();
+  /** Every RPC and (when a test records them) every X request, in order. */
+  timeline: string[] = [];
+  permissionFailure: Error | null = null;
   refreshedFor = new Map<string, string>();
   commitReply: string | null = null;
   failCommit = false;
@@ -70,8 +81,24 @@ class FakeCoreDb implements VaultAccountCredentialRpc {
     if (!a.publish) throw new Error("X_ACCOUNT_PUBLISH_DISABLED");
     return a;
   }
+  /** Mirror of assert_x_publish_permission_for_legacy_post (20261003090000). Not part of `calls`. */
+  async assertPublishPermission(ref: VaultAccountRef) {
+    this.timeline.push("permission");
+    if (this.permissionFailure) throw this.permissionFailure;
+    const a = this.#account(ref);
+    const brand = this.brands[a.brand];
+    if (!brand) throw new Error("BRAND_NOT_FOUND");
+    if (!brand.active) throw new Error("BRAND_DISABLED");
+    if (brand.mode !== "live") throw new Error(brand.mode === "dry_run" ? "BRAND_PUBLISH_MODE_DRY_RUN" : "BRAND_PUBLISH_MODE_DISABLED");
+    if (a.verified === false) throw new Error("X_ACCOUNT_NOT_VERIFIED");
+    if (this.deleting.has(a.brand)) throw new Error("SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS");
+    if (a.state === "uncertain") throw new Error("X_REFRESH_BLOCKED_UNCERTAIN");
+    if (a.state === "reauth_required") throw new Error("X_REFRESH_REAUTH_REQUIRED");
+    if (a.errorCode?.trim()) throw new Error("X_ACCOUNT_CONNECTION_DEGRADED");
+  }
   async read(ref: VaultAccountRef) {
     this.calls.push("read");
+    this.timeline.push("read");
     const a = this.#account(ref);
     if (a.state === "refreshing") throw new Error("X_REFRESH_IN_PROGRESS");
     if (a.state === "uncertain") throw new Error("X_REFRESH_BLOCKED_UNCERTAIN");
@@ -80,6 +107,7 @@ class FakeCoreDb implements VaultAccountCredentialRpc {
   }
   async begin(ref: VaultAccountRef) {
     this.calls.push("begin");
+    this.timeline.push("begin");
     const a = this.#account(ref);
     if (a.state === "refreshing") throw new Error("X_REFRESH_IN_PROGRESS");
     if (a.state === "uncertain") throw new Error("X_REFRESH_BLOCKED_UNCERTAIN");
@@ -94,6 +122,7 @@ class FakeCoreDb implements VaultAccountCredentialRpc {
   }
   async commit(lease: XRefreshLease, ref: VaultAccountRef, access: string, refresh: string | null, expiresIn: number | null) {
     this.calls.push(`commit:${ref.socialAccountId}:${refresh === null ? "access_only" : "rotated"}:${expiresIn}`);
+    this.timeline.push("commit");
     if (this.failCommit) throw new Error("X_REFRESH_PERSIST_FAILED");
     const a = this.accounts[ref.socialAccountId];
     if (!a || a.state !== "refreshing" || a.lease !== lease.leaseToken) return "lease_lost";
@@ -304,12 +333,13 @@ test("second 401 after one refresh marks re-authorization and stops; no second r
   assert.equal(x.tokenCalls.length, 1);
   assert.equal(db.accounts.ai_salaryman_lab_x.state, "reauth_required");
   assert.equal(db.accounts.ai_salaryman_lab_x.connection, "failed");
-  // A later request in the same attempt never refreshes again.
-  await rejects(auth.send(x.request), "X_ACCESS_TOKEN_REJECTED_AFTER_REFRESH");
+  // A later request in the same attempt never refreshes again, and (since the pre-send permission
+  // check) is not sent to X at all: the account is no longer the verified, publishable account.
+  await rejects(auth.send(x.request), "X_ACCOUNT_NOT_VERIFIED");
   assert.equal(x.tokenCalls.length, 1);
   // The next scheduled job fails closed before generation / X.
   await rejects(load(db, AI, x.fetchImpl), "X_ACCOUNT_NOT_VERIFIED");
-  assert.equal(x.creates.length, 3);
+  assert.equal(x.creates.length, 2);
 });
 
 test("after an accepted X write in the attempt (thread), a 401 never refreshes", async () => {
@@ -365,6 +395,9 @@ test("the same post attempt cannot refresh twice even across auth instances", as
   await rejects((await load(db, AI, x.fetchImpl)).send(x.request), "X_ACCESS_TOKEN_REJECTED_AFTER_REFRESH");
   db.accounts.ai_salaryman_lab_x.state = "idle";  // operator reset without reconnect
   db.accounts.ai_salaryman_lab_x.connection = "identity_verified";
+  // The recorded error is still there: the send-time permission check refuses first (H2 F1).
+  await rejects((await load(db, AI, x.fetchImpl)).send(x.request), "X_ACCOUNT_CONNECTION_DEGRADED");
+  db.accounts.ai_salaryman_lab_x.errorCode = null;  // ... and the reset cleared it too
   await rejects((await load(db, AI, x.fetchImpl)).send(x.request), "X_REFRESH_ALREADY_USED_FOR_ATTEMPT");
   assert.equal(x.tokenCalls.length, 1);
 });
@@ -548,4 +581,247 @@ test("expected concurrent-refresh refusal may use a still-valid credential", asy
   assert.equal((await (await load(db, AI, x.fetchImpl, true, () => now)).send(x.request)).status, 201);
   assert.deepEqual(x.creates, ["tok_AI_still_valid"]);
   assert.equal(x.tokenCalls.length, 0);
+});
+
+// --- Fresh publish permission before every X write (20261003090000) --------------------------------
+
+/** A fake X whose create-post requests are also written to the DB timeline. */
+function timedX(db: FakeCoreDb, tokenResponses: Array<Response | Error>, validTokens: Set<string>, onRequest?: (n: number) => void) {
+  const x = fakeX(tokenResponses, validTokens);
+  const request = async (accessToken: string): Promise<XRequestResult> => {
+    db.timeline.push("x");
+    onRequest?.(x.creates.length + 1);
+    return await x.request(accessToken);
+  };
+  return { ...x, request };
+}
+const precededByPermission = (timeline: string[]) =>
+  timeline.every((entry, index) => entry !== "x" || timeline[index - 1] === "permission");
+
+test("every X write is immediately preceded by a fresh permission check: first request, the 401 retry, and after a proactive refresh", async () => {
+  // Valid token: one check, one request.
+  const plain = new FakeCoreDb();
+  plain.accounts.ai_salaryman_lab_x.access = "tok_AI_valid";
+  const px = timedX(plain, [], new Set(["tok_AI_valid"]));
+  assert.equal((await (await load(plain, AI, px.fetchImpl)).send(px.request)).status, 201);
+  assert.deepEqual(plain.timeline, ["read", "permission", "x"]);
+
+  // 401 -> refresh -> retry: a NEW check directly before the retried request.
+  const reactive = new FakeCoreDb();
+  const rx = timedX(reactive, [Response.json({ access_token: "tok_AI_new", refresh_token: "rt_AI_2", expires_in: 7200 })], new Set(["tok_AI_new"]));
+  assert.equal((await (await load(reactive, AI, rx.fetchImpl)).send(rx.request)).status, 201);
+  assert.deepEqual(reactive.timeline, ["read", "permission", "x", "begin", "commit", "read", "permission", "x"]);
+
+  // Proactive refresh: checked before the rotation and again directly before the request.
+  const proactive = new FakeCoreDb();
+  const now = Date.parse("2026-10-03T00:00:00Z");
+  proactive.accounts.ai_salaryman_lab_x.expiresAt = new Date(now + 60_000).toISOString();
+  const ox = timedX(proactive, [Response.json({ access_token: "tok_AI_new", expires_in: 7200 })], new Set(["tok_AI_new"]));
+  assert.equal((await (await load(proactive, AI, ox.fetchImpl, true, () => now)).send(ox.request)).status, 201);
+  assert.deepEqual(proactive.timeline, ["read", "permission", "begin", "commit", "read", "permission", "x"]);
+
+  for (const db of [plain, reactive, proactive]) assert.ok(precededByPermission(db.timeline), db.timeline.join(","));
+});
+
+test("H1 R2: a brand disabled after the dispatcher loaded its context cannot authorize a send (zero X requests, zero token requests)", async () => {
+  for (const disable of [
+    (db: FakeCoreDb) => { db.brands.ai_salaryman_lab.active = false; },
+    (db: FakeCoreDb) => { db.brands.ai_salaryman_lab.mode = "disabled"; },
+    (db: FakeCoreDb) => { db.brands.ai_salaryman_lab.mode = "dry_run"; },
+  ]) {
+    const db = new FakeCoreDb();
+    db.accounts.ai_salaryman_lab_x.access = "tok_AI_valid";
+    const x = timedX(db, [], new Set(["tok_AI_valid"]));
+    // Loaded while everything was live and ON: this is the cached context of the dispatch.
+    const auth = await load(db, AI, x.fetchImpl);
+    disable(db); // ... generation runs; meanwhile the brand is switched off
+    await assert.rejects(auth.send(x.request), /^Error: BRAND_(DISABLED|PUBLISH_MODE_DISABLED|PUBLISH_MODE_DRY_RUN)$/u);
+    assert.deepEqual(x.creates, []);
+    assert.equal(x.tokenCalls.length, 0);
+    assert.ok(!db.timeline.includes("x"));
+  }
+});
+
+test("a stale cached account ON cannot authorize a send after the owner switched OFF", async () => {
+  const db = new FakeCoreDb();
+  db.accounts.ai_salaryman_lab_x.access = "tok_AI_valid";
+  // An expiring token would normally trigger a proactive refresh: it must not even rotate the token.
+  const now = Date.parse("2026-10-03T00:00:00Z");
+  db.accounts.ai_salaryman_lab_x.expiresAt = new Date(now + 60_000).toISOString();
+  const x = timedX(db, [Response.json({ access_token: "tok_AI_new" })], new Set(["tok_AI_valid", "tok_AI_new"]));
+  const auth = await load(db, AI, x.fetchImpl, true, () => now);
+  db.accounts.ai_salaryman_lab_x.publish = false;
+  await rejects(auth.send(x.request), "X_ACCOUNT_PUBLISH_DISABLED");
+  assert.deepEqual(x.creates, []);
+  assert.equal(x.tokenCalls.length, 0);
+  assert.deepEqual(db.timeline, ["read", "permission"]);
+});
+
+test("permission lost between the first request and its 401 retry: the retry is not sent", async () => {
+  const db = new FakeCoreDb();
+  const x = timedX(
+    db,
+    [Response.json({ access_token: "tok_AI_new", refresh_token: "rt_AI_2" })],
+    new Set(["tok_AI_new"]),
+    // While the first request is at X (it will answer 401), the brand is disabled.
+    (n) => { if (n === 1) db.brands.ai_salaryman_lab.active = false; },
+  );
+  const auth = await load(db, AI, x.fetchImpl);
+  await rejects(auth.send(x.request), "BRAND_DISABLED");
+  assert.deepEqual(x.creates, ["tok_AI_expired"], "only the first (rejected) request reached X");
+  assert.equal(db.timeline.filter((entry) => entry === "x").length, 1);
+});
+
+test("the exact account must still be the brand's verified account at send time", async () => {
+  const mismatch = new FakeCoreDb();
+  mismatch.accounts.ai_salaryman_lab_x.access = "tok_AI_valid";
+  const mx = timedX(mismatch, [], new Set(["tok_AI_valid"]));
+  const auth = await load(mismatch, AI, mx.fetchImpl);
+  // The brand's account was replaced after the context was loaded.
+  mismatch.accounts.replacement = { ...mismatch.accounts.ai_salaryman_lab_x };
+  delete mismatch.accounts.ai_salaryman_lab_x;
+  await rejects(auth.send(mx.request), "X_CLAIM_ACCOUNT_MISMATCH");
+  assert.deepEqual(mx.creates, []);
+
+  for (const [change, code] of [
+    [(db: FakeCoreDb) => { db.accounts.ai_salaryman_lab_x.connection = "failed"; }, "X_ACCOUNT_NOT_VERIFIED"],
+    [(db: FakeCoreDb) => { db.accounts.ai_salaryman_lab_x.state = "uncertain"; }, "X_REFRESH_BLOCKED_UNCERTAIN"],
+    [(db: FakeCoreDb) => { db.accounts.ai_salaryman_lab_x.state = "reauth_required"; }, "X_REFRESH_REAUTH_REQUIRED"],
+    [(db: FakeCoreDb) => { db.deleting.add("ai_salaryman_lab"); }, "SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS"],
+    [(db: FakeCoreDb) => { db.posts.post_ai.running = false; }, "X_LEGACY_POST_NOT_RUNNING"],
+  ] as const) {
+    const db = new FakeCoreDb();
+    db.accounts.ai_salaryman_lab_x.access = "tok_AI_valid";
+    const x = timedX(db, [], new Set(["tok_AI_valid"]));
+    const loaded = await load(db, AI, x.fetchImpl);
+    change(db);
+    await rejects(loaded.send(x.request), code);
+    assert.deepEqual(x.creates, [], code);
+  }
+});
+
+test("H2 F1: a missing verified_at or a recorded connection error at send time is refused before any X or token request", async () => {
+  const now = Date.parse("2026-10-05T00:00:00Z");
+  for (const [change, code] of [
+    [(a: Account) => { a.verified = false; }, "X_ACCOUNT_NOT_VERIFIED"],
+    [(a: Account) => { a.errorCode = "X_ACCESS_TOKEN_UNAUTHORIZED"; }, "X_ACCOUNT_CONNECTION_DEGRADED"],
+    [(a: Account) => { a.errorCode = "X_REFRESH_RATE_LIMITED"; }, "X_ACCOUNT_CONNECTION_DEGRADED"],
+  ] as const) {
+    const db = new FakeCoreDb();
+    // An expiring token: a proactive refresh would run if the check did not refuse first.
+    db.accounts.ai_salaryman_lab_x.expiresAt = new Date(now + 60_000).toISOString();
+    const x = timedX(db, [Response.json({ access_token: "tok_AI_new" })], new Set(["tok_AI_expired", "tok_AI_new"]));
+    const auth = await load(db, AI, x.fetchImpl, true, () => now);
+    change(db.accounts.ai_salaryman_lab_x);
+    await rejects(auth.send(x.request), code);
+    assert.deepEqual(x.creates, [], code);
+    assert.equal(x.tokenCalls.length, 0, code);
+    assert.deepEqual(db.timeline, ["read", "permission"], code);
+  }
+  // A blank code is no error.
+  const blank = new FakeCoreDb();
+  blank.accounts.ai_salaryman_lab_x.access = "tok_AI_valid";
+  blank.accounts.ai_salaryman_lab_x.errorCode = "  ";
+  const bx = timedX(blank, [], new Set(["tok_AI_valid"]));
+  assert.equal((await (await load(blank, AI, bx.fetchImpl)).send(bx.request)).status, 201);
+});
+
+test("H2 F1 consequence: a 401 recorded without a refresh stops the account's next attempt before X; a committed refresh clears the error before the retry's check", async () => {
+  const db = new FakeCoreDb();
+  const x = timedX(db, [], new Set(["tok_AI_valid"]));
+  await rejects((await load(db, AI, x.fetchImpl, false)).send(x.request), "X_ACCESS_TOKEN_UNAUTHORIZED");
+  assert.equal(db.accounts.ai_salaryman_lab_x.errorCode, "X_ACCESS_TOKEN_UNAUTHORIZED");
+  db.posts.post_ai.attempt = 2; // the next attempt of the same post
+  await rejects((await load(db, AI, x.fetchImpl, false)).send(x.request), "X_ACCOUNT_CONNECTION_DEGRADED");
+  assert.deepEqual(x.creates, ["tok_AI_expired"], "only the first (rejected) request reached X");
+
+  // Refresh enabled: the reactive refresh commits (clearing the error) before the retry's own check.
+  const refreshing = new FakeCoreDb();
+  const rx = timedX(refreshing, [Response.json({ access_token: "tok_AI_new", refresh_token: "rt_AI_2" })], new Set(["tok_AI_new"]));
+  assert.equal((await (await load(refreshing, AI, rx.fetchImpl)).send(rx.request)).status, 201);
+  assert.equal(refreshing.accounts.ai_salaryman_lab_x.errorCode, null);
+  assert.ok(precededByPermission(refreshing.timeline), refreshing.timeline.join(","));
+});
+
+test("fail closed: a permission check that cannot be reached or answers anything unexpected sends nothing", async () => {
+  for (const failure of [new Error("connection reset by peer"), new TypeError("fetch failed"), new Error("permission denied tok_leak")]) {
+    const db = new FakeCoreDb();
+    db.accounts.ai_salaryman_lab_x.access = "tok_AI_valid";
+    const x = timedX(db, [], new Set(["tok_AI_valid"]));
+    const auth = await load(db, AI, x.fetchImpl);
+    db.permissionFailure = failure;
+    await rejects(auth.send(x.request), "X_PUBLISH_PERMISSION_UNAVAILABLE");
+    assert.deepEqual(x.creates, []);
+  }
+});
+
+test("in-flight semantics: OFF after a request's check does not recall that request; the next request needs a new check and is refused", async () => {
+  const db = new FakeCoreDb();
+  db.accounts.ai_salaryman_lab_x.access = "tok_AI_valid";
+  const x = timedX(
+    db,
+    [],
+    new Set(["tok_AI_valid"]),
+    // The owner switches OFF while the first request is already on its way to X.
+    (n) => { if (n === 1) db.accounts.ai_salaryman_lab_x.publish = false; },
+  );
+  const auth = await load(db, AI, x.fetchImpl);
+  assert.equal((await auth.send(x.request)).status, 201, "the request already in flight completes");
+  await rejects(auth.send(x.request), "X_ACCOUNT_PUBLISH_DISABLED");
+  assert.deepEqual(x.creates, ["tok_AI_valid"], "no second request (e.g. a thread reply) starts after OFF");
+});
+
+test("RPC adapter: the permission check sends exactly the post, account and brand; only 'authorized' passes", async () => {
+  const sent: Array<{ url: string; body: unknown; redirect: RequestRedirect | undefined; auth: string | null }> = [];
+  const reply = (response: () => Response) =>
+    createVaultAccountCredentialRpc({
+      supabaseUrl: "https://e.supabase.co/",
+      serviceRoleKey: "srk",
+      fetchImpl: async (input, init) => {
+        sent.push({ url: String(input), body: JSON.parse(String(init?.body)), redirect: init?.redirect, auth: new Headers(init?.headers).get("Authorization") });
+        return response();
+      },
+    });
+  await reply(() => Response.json("authorized")).assertPublishPermission(AI);
+  assert.deepEqual(sent, [{
+    url: "https://e.supabase.co/rest/v1/rpc/assert_x_publish_permission_for_legacy_post",
+    body: { p_scheduled_post_id: "post_ai", p_social_account_id: "ai_salaryman_lab_x", p_brand_id: "ai_salaryman_lab" },
+    redirect: "manual",
+    auth: "Bearer srk",
+  }]);
+  // A fixed refusal code from the database is kept.
+  await rejects(reply(() => Response.json({ message: "BRAND_DISABLED" }, { status: 400 })).assertPublishPermission(AI), "BRAND_DISABLED");
+  await rejects(reply(() => Response.json({ message: "X_ACCOUNT_PUBLISH_DISABLED" }, { status: 400 })).assertPublishPermission(AI), "X_ACCOUNT_PUBLISH_DISABLED");
+  // Not applied yet (PGRST202), privilege errors, free text, and any 2xx answer other than "authorized": unavailable.
+  for (const response of [
+    () => Response.json({ code: "PGRST202", message: "Could not find the function" }, { status: 404 }),
+    () => Response.json({ message: "permission denied for function tok_leak" }, { status: 403 }),
+    () => new Response("upstream error", { status: 502 }),
+    () => Response.json("allowed"),
+    () => Response.json(null),
+    () => Response.json(true),
+    () => Response.json(["authorized"]),
+    () => Response.json({ status: "authorized" }),
+  ]) {
+    await rejects(reply(response).assertPublishPermission(AI), "X_PUBLISH_PERMISSION_UNAVAILABLE");
+  }
+  await rejects(
+    createVaultAccountCredentialRpc({ supabaseUrl: "https://e", serviceRoleKey: "k", fetchImpl: async () => { throw new TypeError("network"); } })
+      .assertPublishPermission(AI),
+    "X_PUBLISH_PERMISSION_UNAVAILABLE",
+  );
+});
+
+test("source: every request() call in send() has the permission check as the statement directly before it", async () => {
+  const source = await Deno.readTextFile(new URL("./vault_account_auth.ts", import.meta.url));
+  const body = source.slice(source.indexOf("  async send("), source.indexOf("  /** Fail closed"));
+  const lines = body.split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("//"));
+  const requests = lines.flatMap((line, index) => /await request\(/u.test(line) ? [index] : []);
+  assert.equal(requests.length, 2, "the first request and the single retry");
+  for (const index of requests) {
+    let previous = index - 1;
+    // The proactive-refresh block closes with "}" between its check and the first request.
+    while (lines[previous] === "}") previous -= 1;
+    assert.equal(lines[previous], "await this.#assertPublishPermission();", lines[index]);
+  }
 });

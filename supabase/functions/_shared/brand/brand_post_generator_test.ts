@@ -167,6 +167,167 @@ test("the same generator instructs Kabumori's own fixed hashtags when given a Ka
   assert.doesNotMatch(capturedInstructions, /文字数上限は設定されていません/u);
 });
 
+test("AI Lab (voiceControlsHashtags: true) is the sole opt-in: with no fixed_hashtags configured, the generator defers to its own voice instructions instead of overriding them with 'never add a hashtag' (regression: #個人開発 policy must not be contradicted)", async () => {
+  let capturedInstructions = "";
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    capturedInstructions = String(JSON.parse(String(init?.body)).instructions);
+    return Response.json({
+      output: [{ content: [{ type: "output_text", text: "今日は投稿の詳細画面を見直しました。 #個人開発" }] }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+  };
+  await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context: aiLabContext(),
+    postType: "brand_post",
+    fetchImpl,
+  });
+  // Must not tell the model to never add a hashtag -- that would directly contradict AI Lab's own
+  // "#個人開発 is the default hashtag" voice instruction elsewhere in this same prompt.
+  assert.doesNotMatch(capturedInstructions, /ハッシュタグは付けないでください/u);
+  assert.match(capturedInstructions, /固定のハッシュタグ指定はありません/u);
+  // The brand's own hashtag policy is still present in the same prompt.
+  assert.match(capturedInstructions, /#個人開発/u);
+});
+
+test("a neutral no-fixed-hashtag profile without the opt-in (social_mobile_user_v1) keeps the prior 'never add a hashtag' instruction unchanged (H2 cross-brand scope fix)", async () => {
+  let capturedInstructions = "";
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    capturedInstructions = String(JSON.parse(String(init?.body)).instructions);
+    return Response.json({
+      output: [{ content: [{ type: "output_text", text: "今日の小さな工夫のメモです。" }] }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+  };
+  const context = resolveBrandContext(
+    {
+      id: "user_workspace",
+      display_name: "My Workspace",
+      is_active: false,
+      publish_mode: "disabled",
+      code_profile_key: "social_mobile_user_v1",
+    },
+    null,
+    { brand_id: "user_workspace", fixed_hashtags: [], note_url: null, image_policy: {}, enabled_post_types: ["brand_post"] },
+  );
+  await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context,
+    postType: "brand_post",
+    generationPurpose: "social_mobile_preview",
+    fetchImpl,
+  });
+  assert.match(capturedInstructions, /ハッシュタグは付けないでください/u);
+  assert.doesNotMatch(capturedInstructions, /固定のハッシュタグ指定はありません/u);
+});
+
+// --- confirmed social-mobile hashtag habit (AI consult V1) -------------------------------------------------
+
+const confirmedPersona = {
+  source: "conversation" as const,
+  confirmed: true,
+  hashtagHabits: "ハッシュタグは1つだけ、本文の最後に付ける",
+};
+const userSettings = (personaProfile?: typeof confirmedPersona | { source: "conversation"; confirmed: false; hashtagHabits: string }) => ({
+  preferredTone: "落ち着いて",
+  locale: "ja-JP" as const,
+  themes: ["個人開発"],
+  objective: "気づきを届ける",
+  frequencyTargetPerWeek: 3,
+  approvalMode: "manual_review" as const,
+  generationWindow: {
+    timezone: "Asia/Tokyo" as const,
+    startLocal: "09:00" as const,
+    endLocal: "24:00" as const,
+    defaultGenerationLocal: "17:00" as const,
+    generationDayOffset: -1 as const,
+  },
+  optionalNgWords: [],
+  notes: "",
+  livePublishingEnabled: false as const,
+  ...(personaProfile ? { personaProfile } : {}),
+});
+
+async function socialMobileInstructions(
+  contentSettings: ReturnType<typeof userSettings> | undefined,
+): Promise<string> {
+  let captured = "";
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    captured = String(JSON.parse(String(init?.body)).instructions);
+    return Response.json({
+      output: [{ content: [{ type: "output_text", text: "今日の小さな工夫のメモです。" }] }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+  };
+  const context = resolveBrandContext(
+    { id: "user_workspace", display_name: "My Workspace", is_active: false, publish_mode: "disabled", code_profile_key: "social_mobile_user_v1" },
+    null,
+    { brand_id: "user_workspace", fixed_hashtags: [], note_url: null, image_policy: {}, enabled_post_types: ["brand_post"] },
+  );
+  await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context,
+    postType: "brand_post",
+    generationPurpose: "social_mobile_preview",
+    contentSettings,
+    fetchImpl,
+  });
+  return captured;
+}
+
+test("social-mobile: with no confirmed hashtag habit the prompt still says never add a hashtag", async () => {
+  for (const settings of [undefined, userSettings(), userSettings({ source: "conversation", confirmed: false, hashtagHabits: "毎回3つ付ける" })]) {
+    const instructions = await socialMobileInstructions(settings);
+    assert.match(instructions, /ハッシュタグは付けないでください/u);
+    assert.doesNotMatch(instructions, /毎回3つ付ける|確認した次の方針/u);
+  }
+});
+
+test("social-mobile: a confirmed hashtag habit is followed and never contradicted by a later no-hashtag line", async () => {
+  const instructions = await socialMobileInstructions(userSettings(confirmedPersona));
+  assert.match(instructions, /ハッシュタグは、利用者が確認した次の方針に従ってください/u);
+  assert.match(instructions, /ハッシュタグは1つだけ、本文の最後に付ける/u);
+  assert.doesNotMatch(instructions, /ハッシュタグは付けないでください/u);
+  assert.doesNotMatch(instructions, /固定のハッシュタグ指定はありません/u);
+});
+
+test("a confirmed hashtag habit never overrides fixed hashtags or AI Lab's own hashtag policy", async () => {
+  // AI Lab keeps deferring to its own voice instructions even if a persona were passed.
+  let captured = "";
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    captured = String(JSON.parse(String(init?.body)).instructions);
+    return Response.json({
+      output: [{ content: [{ type: "output_text", text: "個人開発のメモです。" }] }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+  };
+  await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context: aiLabContext(),
+    postType: "brand_post",
+    contentSettings: userSettings(confirmedPersona),
+    fetchImpl,
+  });
+  assert.match(captured, /固定のハッシュタグ指定はありません/u);
+  assert.doesNotMatch(captured, /確認した次の方針/u);
+
+  // Fixed hashtags (Kabumori-shaped) stay in force too.
+  const fixed = resolveBrandContext(
+    { id: "kabumori", display_name: "かぶモリ", is_active: true, publish_mode: "live", code_profile_key: "kabumori_v1" },
+    { id: "kabumori_x", brand_id: "kabumori", platform: "x", handle: "yume_daka", publish_enabled: true, oauth_client_ref: "default" },
+    { brand_id: "kabumori", fixed_hashtags: ["#日本株"], note_url: null, image_policy: {}, enabled_post_types: [] },
+  );
+  await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context: fixed,
+    postType: "tip",
+    contentSettings: userSettings(confirmedPersona),
+    fetchImpl,
+  });
+  assert.match(captured, /本文の末尾にこのハッシュタグをそのまま付けてください: #日本株/u);
+  assert.doesNotMatch(captured, /確認した次の方針/u);
+});
+
 test("a disabled brand is rejected before any OpenAI call, and an unsupported post_type is rejected after context checks but still before use", async () => {
   let calls = 0;
   const fetchImpl: typeof fetch = async () => {

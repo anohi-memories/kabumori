@@ -517,17 +517,22 @@ test("P-環境のミカタHD is confirmed only through its companyCode-scoped ex
   assert.equal(identity.displaySecurityCode, "406A");
 });
 
-test("the P-環境 alias never applies to a different companyCode", () => {
-  const identity = companyIdentityEvidence(candidate({
-    sourceType: "tdnet",
-    sourceName: "tdnet",
-    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
-    companyName: "Ｐ－環境のミカタＨＤ",
-    companyCode: "99990",
-    entityKey: "company:99990",
-    bodySummary: "各 位\n会 社 名 環境のミカタホールディングス株式会社\n代表者名 代表取締役",
-  }));
-  assert.equal(identity.sameCompanyConfirmed, false);
+test("P-環境のミカタHD no longer depends on its alias: ＨＤ is an explicit synonym of ホールディングス", () => {
+  // The 406A0 alias predates the ＨＤ synonym rule; the name now matches on its own merits, so the result
+  // does not hinge on the companyCode (cross-code scoping of aliases is pinned by the 伊藤忠 test above).
+  // The TDnet code / entityKey / URL signals are still required, and a different company still fails.
+  const identityFor = (name: string, code: string) =>
+    companyIdentityEvidence(candidate({
+      sourceType: "tdnet",
+      sourceName: "tdnet",
+      sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+      companyName: name,
+      companyCode: code,
+      entityKey: `company:${code.toLowerCase()}`,
+      bodySummary: "各 位\n会 社 名 環境のミカタホールディングス株式会社\n代表者名 代表取締役",
+    }));
+  assert.equal(identityFor("Ｐ－環境のミカタＨＤ", "99990").sameCompanyConfirmed, true);
+  assert.equal(identityFor("Ｐ－別のミカタＨＤ", "99990").sameCompanyConfirmed, false);
 });
 
 test("7: J・エスコムHD (companyCode 37790, 4-digit code in body + abbreviated DB name) no longer false-fails identity", () => {
@@ -1157,6 +1162,22 @@ test("classifier: mentioning a country by name is not itself a non-retryable sig
   assert.equal(isRetryableVoiceFailure(["米国の特使という表現がやや硬いです"]), false); // unrecognized -> safe default false, not a false "blocked as factual" case
   assert.equal(isRetryableVoiceFailure(["重複表現があり、米国の記述が続きます"]), true); // recognized retryable pattern, country mention doesn't block it
   assert.equal(isRetryableVoiceFailure(["国名の誤りがあります（米国ではなく英国が正しい）"]), false); // genuine country-name factual error stays blocked
+});
+
+test("voice retry: restated closings, 'unnatural as a post' and meta sentences about the input are wording-only (2026-09-29 Starship)", () => {
+  assert.equal(isRetryableVoiceFailure([
+    "「日本株への直接的な影響は、入力情報からは確認できません」は入力データについての説明に聞こえ、投稿文として不自然です。",
+    "「関係するのはSpaceXとStarlinkです」は直前までに両者が登場しており、内容を言い直す締めになっています。",
+  ]), true);
+  assert.equal(isRetryableVoiceFailure(["締めの一文が文として不自然です"]), true);
+  assert.equal(isRetryableVoiceFailure(["前段を言い直しているだけの締めです"]), true);
+});
+
+test("voice retry: content missing from the input and factual problems stay non-retryable", () => {
+  assert.equal(isRetryableVoiceFailure(["入力情報にない主張が含まれています"]), false);
+  assert.equal(isRetryableVoiceFailure(["入力データに含まれない数字を言い直しています"]), false);
+  assert.equal(isRetryableVoiceFailure(["言い直した結果、事実が変わっています"]), false);
+  assert.equal(isRetryableVoiceFailure(["投稿文として不自然です", "企業の取り違え"]), false);
 });
 
 test("classifier: grammar/particle-level issues (助詞・単複・文法・敬体) are retryable", () => {

@@ -1,3 +1,1272 @@
+## H2 — PR #76 final focused security rereview — 2026-10-06 JST
+
+- task_id: x-social-mobile-pr76-final-security-rereview-20261005
+- verdict: **PASS — F1/F2/F3 closed on the exact reviewed source.** No new blocking finding. Source-only final independent review; this is not a merge or production-rollout approval.
+- status: review_required
+- next_owner: chatgpt
+- reviewed_exact_head: `5448e545f4a88bbf6597a981c0bcbe4c01043c30`; previous reviewed head `7f75c07a8c997b6a585e9c86dca01186eeea671f`.
+- PR: https://github.com/anohi-memories/kabumori/pull/76 ; OPEN / unmerged / mergeable=true and exact head unchanged at final API read-back.
+- fresh_main: startup `f2f7a034bd59a8e20641c0ed14606ca3d55e75c5`; pre-publication fresh fetch `b836823c0cd27d41a08f9d2c40c65966b23cfda4`. Merge-base `ef2f2018fcdaced2f3083ee8ba1b681abd04ee9d`. PR scope 26 files, main/PR file overlap 0. New main change during this review was another slot's TASK only; H2 TASK/task_id/head remained unchanged.
+- isolation: fresh independent detached checkout `/private/tmp/h2-pr76-final-20261005.ySeJcp/review`, cloned from the new-Mac clean base. Protected formal checkout, old worktrees, G4/H1 and their uncommitted changes were not operated on. The reviewed checkout remained git-clean. Local disposable PostgreSQL 17.11, Unix socket only, non-superuser migration owner; test databases removed, own server stopped.
+
+### F1 — pre-send parity: CLOSED
+
+- Read actual migration + VaultAccountXAuth.send / PostgREST adapter, not only source-string tests. Final permission SELECT explicitly refuses missing verified_at with X_ACCOUNT_NOT_VERIFIED and nonblank btrim-normalized last_connection_error_code with X_ACCOUNT_CONNECTION_DEGRADED. Space-only code remains eligible; uncertain/reauth_required preserve their specific refusal; refreshing is not a pre-send permission refusal.
+- Disposable behavior proof verifies all 18 ON-readiness cases against runtime refusal, plus blank-code eligibility. Actual adapter + real SQL over a local HTTP shim reproduces the two former F1 states after credentials/context were loaded: fake-X callbacks 0; OFF remains available; ON refuses with the matching reason; recovered eligible account sends exactly once.
+- Real refresh SQL + actual adapter fake-X timeline: read -> permission -> X401 -> begin -> commit -> read -> fresh permission -> X201. OFF committed after refresh/read and before retry gives only the initial rejected X401; retry callback 0.
+- Fixed refusal codes / malformed or unavailable backend responses fail closed; no raw backend/token material in responses or logs. Relevant adapter tests include zero callback on unreachable/unknown permission, proactive/retry recheck, refresh limits and redaction.
+
+### F2 — exact/effective SECURITY DEFINER ACL: CLOSED
+
+- Inspected both exact signatures only. Creator must own x_legacy_post_account and must be non-superuser; pre-existing exact target functions are refused. Both functions use SECURITY DEFINER and fixed empty search_path.
+- Creation-default grants to any non-owner grantee (including PUBLIC and grant option) are removed only from the two new functions. Postcondition proves exact direct ACL without grant option, effective app-role privileges, owner and definition. No production ALTER DEFAULT PRIVILEGES, role-membership mutation, or unrelated table grant is added.
+- Independently reran adverse disposable ACL harness: clean graph; schema/database-wide unexpected default EXECUTE (including grant option); authenticated/anon inheriting that unexpected default grantee; direct/grantable injection; cross-app and owner inheritance; wrong creator; superuser creator/helper owner; refusal and reapply atomicity. Unexpected-default/inherited case from previous H2 now leaves extra role with no target EXECUTE and app roles with the intended matrix.
+- Effective matrix: anon neither; authenticated switch only; service_role assertion only. Other roles may inherit the explicitly intended role/owner, or be superusers, as documented; this is not a promise to restrict superusers. Invalid app-role inheritance refuses the entire transaction.
+- Rejected apply preserves pre-existing function ACL/default ACL/role-membership fingerprints and leaves neither new function. Default-grant removal, direct/grantable ACL, effective-role, creator and superuser mutation probes all fail for the expected safety reason.
+
+### F3 — runtime-first rollout: CLOSED as a bounded plan
+
+- Documented order is guarded x-test-post -> exact deployed-source read-back -> at least 15-minute drain (operator must verify current runtime maximum) plus older running-post count 0 -> single permission migration -> definition/direct/effective ACL read-back -> JWT-verified publish-setting Edge -> app exposure.
+- Actual partial-state proof uses prerequisite migrations without the permission migration: cached eligible ON context + VaultAccountXAuth still produces X_PUBLISH_PERMISSION_UNAVAILABLE, fake-X callbacks 0, token endpoint requests 0; toggle Edge returns bounded 503 with row unchanged.
+- Actual post-migration proof: eligible ON sends once; OFF / brand-disabled stops before fake X. Migration refusal is transaction-atomic and leaves guarded/missing-RPC state safely blocking.
+- State-machine forward and every abort path pass. Abort after authority is created revokes authenticated toggle EXECUTE before restoring an old sender; hiding/removing Edge alone is not treated as sufficient. Relevant mutations detect migration-first, missing drain, old-runtime-first abort, exposure before read-back and missing abort path.
+- No actual platform/runtime drain or production preflight was performed. Production rollout remains a separately authorized operator gate, with byte read-back, real maximum-invocation confirmation, owner/ACL/schema preflight and all older invocations drained; missing evidence must HOLD, not be assumed.
+
+### Prior R1–R5 bounded regression and availability
+
+- PASS: current auth.uid transactional authority, table -> brand -> membership -> account lock order, bounded waits, demotion/removal/account-move/deletion races, CAS one-winner/stale semantics, tenant-safe answers, fail-safe OFF, no service-role user toggle, and no Auth/OAuth/Vault revocation by OFF. Existing refreshed-credential/in-flight limitations remain explicitly stated.
+- App focused tests and source inspection confirm confirmation/action pinned to account + expected state + signed-in user, checked against latest committed render; preview/cross-account/stale/user-switch refuse, one in-flight request, bounded Japanese error copy.
+- Availability tradeoff ACCEPTED, not a blocker: recorded nonblank connection errors (including a refresh 429) stop later sends/automatic refresh until legitimate reconnection clears the error. Matches chosen ON-readiness fail-closed contract; reconnect recovery path exists and fake-X recovery was proven. OFF racing refresh can still leave uncertainty requiring reconnect, already documented. Do not silently relax this safety contract.
+- Scope remains Vault-backed exact-account path; legacy env/oauth_token_store and important-news-monitor do not gain the same mid-dispatch guarantee. Unwired v2 and other open-PR paths are not claimed protected. Existing accepted scope limitation is not reopened by this corrective review.
+
+### Independent verification
+
+- PostgreSQL runner, PUB_E2E=1: **ROLLOUT_E2E (2) / APPLY + reapply refusal / BEHAVIOR / RACE / E2E (9) / CLEANUP PASS**. Actual Edge handler and VaultAccountXAuth, real SQL; fake Auth/Data API shim and fake X, not hosted Supabase.
+- Adverse ACL runner: **PUBLISH_PERMISSION_ACL_PASS**, 12 role situations plus reapply.
+- Mutation runner: **45/45 DETECTED** at named expected checks (SQL 34, ACL 6, rollout plan 5).
+- Type-checked Deno: publish-setting logic 15 + http 14 + migration 13; vault_account_auth 31; rollout state machine 5 = **78/78 PASS**. Migration invariants **10/10 PASS**; combined focused total **88/88**.
+- Exact PR's AI Lab real-wrapper/stub integration: **39/39 PASS**, type checking enabled, no real provider calls.
+- App focused publish-setting tests **32/32 PASS**; app TypeScript `tsc --noEmit` PASS; `expo lint` PASS.
+- bash syntax for three runners PASS; `git diff --check origin/main...HEAD` PASS; added-line private-key/OpenAI/GitHub-token/JWT-literal scans 0 matches.
+- Setup-only first attempts: sandbox shared-memory denial required authorized local-cluster initialization; missing app TypeScript dependency resolved by lockfile npm ci --ignore-scripts in own checkout; wrong test filename and omitted allow-run=node corrected in commands only. Final relevant runs all pass. No source workaround or test implementation change.
+- Unrelated broad suites were not repeated. G4's previously reported 984-function/148-app counts are not claimed as newly rerun H2 evidence.
+
+### Changes / delivery / safety / recommendation
+
+- source changes: **0**. changed_files for report delivery only: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md`. Prior TASK/Report histories preserved; no ACTIVE_TASK/CURRENT_STATE/other-slot control edits.
+- implementation commits reviewed: G4 corrective `a1a986ae`, fresh-main merge `ce1328c1`, test-stub correction `5448e545`. H2 made no implementation commit.
+- report publication: GitHub main contents update for these two control files only, blob-SHA conflict checks and final read-back required; exact resulting delivery SHAs recorded in H2 completion/final response. No PR branch push or merge.
+- production reads **0**; production DB/history/schema/RPC/RLS/Auth/Vault/OAuth/Storage/Cron/settings changes **0**; deploy **0**; real X/OpenAI/Push/API invoke **0**; secret exposure **0**. Local test-only fixture/membership writes are disposable, not production.
+- remaining risks: production catalog/role-owner compatibility and runtime drain still require live operator preflight; hosted GoTrue/PostgREST behavior is simulated locally here; in-flight X cannot be recalled after an authorized check; reconnect-required availability consequence; legacy-path scope limitation.
+- merge recommendation: **merge PR #76 at exact reviewed head after the usual final no-race check. This is the final routine independent review; no additional routine review is recommended after PASS unless concrete new source/blocker changes arise.**
+- production rollout recommendation: **do not apply/deploy from this review**. After C2/merge and explicit production authorization, follow S0–S6 exactly, fail closed on every unmet preflight/read-back/drain condition, and never restore old runtime while new toggle authority remains usable.
+- next_recommendation: **C2** to accept final PASS and decide merge / separately scoped production rollout. Recommended model: Sol（高） for the security/production decision. STOP; no further action.
+
+---
+
+## H2 — PR #81 residual hardening final rereview — 2026-10-05 JST
+
+- task_id: x-social-mobile-pr81-residual-hardening-final-rereview-20261005
+- verdict: **PASS for the exact reviewed source and the bounded atomic-rollout plan.** R1/R2/R3 are closed in independent disposable PostgreSQL proofs. This is not production approval, a merge, or a PR #78 final review.
+- status: review_required / next_owner: chatgpt; STOP for C2.
+- reviewed_exact_head: `bcc01312c638f5922db4ffd6255ddddf6f611183`; previous bad head `5595fb131813542c55c43bc783af623cdb9ea442`. PR #81 remained open/unmerged/mergeable=true on API read-back.
+- fresh_main: startup `5d11923ae5ffd19a76f6e0a3fb750f299d3e1a5b`; pre-publication fetch `ed9404b91d96226b941d66540d5520bd17364b47`. Actual merge-base `cde3a7d3e09d3d2875522620e55672c0426044ef`. Main changed 63 paths from that base; intersection with the 8 PR paths = **0**. H1/G1/G2/G4 workstreams not edited.
+- reviewed_changes: app content-settings repository and its test; hardening migration; fixture/behavior/runner/rollout plan; hardening static test. Historical candidate unchanged, SHA256 `b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb`.
+- changed_files_by_H2: only .agent/CODEX_REPORT_2.md and .agent/tasks/CODEX_TASK_2.md for delivery. No implementation fixes, source commits, merge, or deploy.
+
+### R1 — CLOSED
+The guard checks constraint non-deferrability/immediacy/validation and the exact single-column brand_id PK index (primary/unique/immediate/valid/ready/live, exact key, btree/default opclass/collation, no predicate/expression). Supplied tests independently reject deferrable-immediate, initially deferred, composite and missing PKs. An actual authenticated owner INSERT … ON CONFLICT(brand_id) DO UPDATE succeeds through RLS. H2-only additional fake-cluster catalog adversaries independently refuse invalid/unready/not-live/not-unique/non-immediate index flags, wrong collation and wrong opclass; no version helper is left after refusal. No silent unknown-PK repair.
+
+### R2 — CLOSED
+Exact signatures, routine kind, table-owner identity, and non-owner grantees are checked before CREATE OR REPLACE. Post-conditions require five invoker helpers with pg_catalog search_path, no PUBLIC EXECUTE, only authenticated EXECUTE on the four pure CHECK validators, and no authenticated EXECUTE on the version trigger. The prior unknown-helper-EXECUTE reproduction, legacy-helper grant, overload, unknown name, procedure, foreign owner and post-hardening foreign grant are refused.
+Independent inherited-role adversaries: anon inherits authenticated; service_role inherits authenticated through a bridge; authenticated inherits the owner. All cause the effective-function-privilege post-condition to abort and roll back (no new helper/partial hardening); role membership is unchanged by the migration. Unknown default function grantee is also refused at the post-condition and rolled back. Baseline unrelated role has no EXECUTE. Revoking any of the nested required validator grants makes real authenticated writes fail, proving those four grants are needed. No global default-ACL or role mutation in source.
+
+### R3 — CLOSED
+Existing updated_at +/-infinity and created_at infinity are refused before mutation and kept byte-identical. H2 additionally proved created_at -infinity refusal with the row unchanged. Finite CHECK protects both timestamps, including when the owner disables the trigger locally. Caller non-finite values are overwritten by server-owned finite INSERT/UPDATE timestamps; year 2999 historical rows survive unchanged and advance exactly 1us. Same-transaction monotonicity, concurrent CAS one winner, earlier long transaction no regression, stale zero-row and competing insert proofs pass. PR #78 still passes the original timestamp string directly to eq(updated_at, expectedUpdatedAt), without Date/ms conversion. Merge-tree with unchanged PR #78 head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7` is clean (tree `7fb711e20492ab2addf6c98e430c00a950f7938e`); this is composition evidence, not full PR #78 acceptance.
+
+### Previously closed contract — preserved
+Legitimate settings/persona writers and real owner upsert pass; 61 invalid settings and 24 invalid persona shapes are rejected. Exact JSON keys/types/null behavior, only endLocal=24:00, owner-only SELECT/INSERT/UPDATE, cross-brand/admin/member/viewer/anon denial, DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN denial, service-role table denial and brand cascade/lifecycle remain proven. Persona analysis metadata stays in dedicated columns rather than JSON. No durable publish/token/OAuth field was added.
+
+### Atomic rollout and live migration-history review — PASS, procedure-specific
+Read-only production catalog on project wsmznyzcvmuitkglfeuj (one BEGIN READ ONLY transaction, no user content/PII/secrets):
+- PostgreSQL 17.6, current role postgres. Target table and same-prefix helpers absent. Both target versions absent.
+- Live history columns: version text NOT NULL PK; statements text[], name text, created_by text, idempotency_key text UNIQUE, rollback text[] are nullable. No default required for the proposed (version,name) inserts; RLS off, owner postgres, no explicit ACL.
+- brands.id text PK, membership brand/user FKs cascade, owner/admin/member/viewer role CHECK, auth.uid(), authenticated self-SELECT membership policy match the dependency contract.
+- Observed owner public defaults: table Dxtm inherited by anon/authenticated/service_role, function owner-only. Relevant inheritance graph has no unexpected effective app-role owner/validator access.
+- PR #76 version 20261003090000, PR #81 version 20261003120000, merged PR #82 version 20261004090000 are distinct; all four checked ledger versions (including historical candidate) absent. The earlier PR76/PR82 same-version warning is obsolete. Independent workstream rollout/order must still be coordinated.
+
+The reviewed procedure is one operator-controlled psql --single-transaction with ON_ERROR_STOP=1 across the unchanged candidate file, corrected hardening file, and a plain INSERT of the two exact (version,name) history rows. Neither file has an outer COMMIT or nontransactional operation. H2 reproduced atomic success on the **six-column live history shape** and, independently, a duplicate-history failure and a failure after history insertion: no target table/helpers/new history survive, and the preexisting row is unchanged.
+Supplied runner also proves forced failure after hardening leaves nothing while per-file application leaves the weak candidate. Therefore normal db push/migration up is **not** an approved path for this pair. Keeping the old candidate is safe only under the reviewed whole-chain transaction, not in arbitrary per-file rollout.
+
+CLI bookkeeping interpretation was source-reviewed against [Supabase CLI v2.116.0 history logic](https://github.com/supabase/cli/blob/v2.116.0/apps/cli/src/legacy/shared/legacy-migration-history.ts): applied-version listing uses version; statements is nullable. Version/name-only recording is compatible with listing/pending detection, but does not archive replay/down SQL. Keep immutable repo sources; do not imply ordinary migration fetch/down is a complete rollback plan. [CLI file application](https://github.com/supabase/cli/blob/v2.116.0/apps/cli/src/legacy/shared/legacy-migration-apply.ts) is per-file, not whole-chain.
+
+Future apply must have separate explicit approval, same-day catalog/history/owner/defaults/role preflight, fixed reviewed source, production connection supplied securely (not pasted in chat/logs), preferably psql -X, both exact files and history in the same transaction, then separate-session read-back of PK/index/FK/CHECK/trigger/RLS/policies/effective privileges/history. Stop on any mismatch, never run a follow-up db push/repair to bypass a failed preflight. After a committed read-back failure, **do not assume the table remains empty or drop it automatically**; inspect current state and obtain a separate reviewed recovery approval.
+
+### Independent tests
+- Disposable PostgreSQL 17.11, Unix socket only, non-superuser fixture owner: runner ALL_PASS, **48 PASS markers**. Precisely 31 SMCS_DRIFT_REFUSED markers, 3 NONFINITE_REFUSED, 3 enumerated repairs; G3's prose count “37 drift refusals” should not be used as the distinct-unknown-drift count.
+- Additional H2 harness: 7 PK/index adversaries; 3 inherited-role adversaries; unknown function default grantee; negative-created infinity; production-shaped ledger atomic success; duplicate-history rollback; after-history rollback — ALL_PASS.
+- social-mobile npm test: **116/116**, focused repository **3/3**, npm run typecheck PASS, npm run lint PASS.
+- Relevant Deno brand + social-mobile-brand-dry-run runtime tests: **162/162** with --no-check --allow-read.
+- Content-settings-focused Deno tests with actual typechecking, cached-only and nodeModulesDir=none: **16/16** PASS.
+- Optional full checked Deno suite: 5 preexisting diagnostics in unchanged brand_post_generator_test.ts (3 never-property), dispatch_gate_test.ts (optional BrandRecord id), x_oauth2_post.ts (Uint8Array/BufferSource). Not a full checked-suite PASS; no out-of-scope fix. Initial default nodeModulesDir checking also lacked root @types/node; the focused cached-only run resolved that without source/lockfile edits.
+- bash -n PASS; deno lint on changed hardening static test PASS; git diff --check PASS; added-line secret signature scan 0; owned review checkout clean.
+- Initial H2 extra harness inherited-owner scenario encountered a test-fixture membership cycle, not a product failure; membership orientation was isolated correctly and the final harness passed.
+- All runner/extra disposable DBs dropped; remaining test DB count 0; dedicated PostgreSQL stopped. Local proof scripts/logs only under /private/tmp/h2-pr81-20261005.OHrR02, not committed.
+
+### Remaining risks / recommendation / safety
+No remaining R1/R2/R3 source blocker in this reviewed head. Recommend C2 source PASS and normal PR #81 merge after fresh integration checks. Production apply remains **NOT authorized**; present the bounded atomic procedure for a separate operator approval, coordinate pending histories with H1/G4, and do not merge/apply PR #78 solely on this report. Managed PostgREST E2E/native login not run; finite PostgreSQL range exhaustion safely errors rather than reusing a token; pure validators are intentionally callable by authenticated; semantic secret detection inside arbitrary free text is not promised. Optional broader Deno checked-suite diagnostics remain separate baseline work.
+
+Production writes/history repair/apply/DB grants/RLS/deploy/Auth/Vault/X/OpenAI/Push/Cron/settings = **0**. PR merge = 0. apps/admin, HANDOFF, other workstreams and formal checkout changes = 0. Secret/PII exposure = 0. Supabase skills guided ACL/RLS catalog/effective-privilege verification; no production mutation performed.
+- implementation_commit: reviewed G3 head above; H2 source commit none.
+- push: H2 TASK/REPORT only are being delivered with blob-SHA checks; exact delivery commit/read-back verified in completion message. No implementation push.
+- next_recommendation: C2 review (Sol（高）); preserve review_required / next_owner: chatgpt and STOP.
+
+---
+
+## H2 — PR #76 transactional publish-toggle final rereview — 2026-10-05 JST
+
+- task_id: x-social-mobile-pr76-transactional-publish-toggle-rereview-20261005
+- verdict: **CHANGES REQUIRED**. Ordinary paths and the original authority/pinning reproductions pass, but two independent security-contract gaps and one partial-rollout gap remain. Green supplied tests are not an overall PASS.
+- status: review_required / next_owner: chatgpt; **STOP for C2**.
+- reviewed_exact_head: `7f75c07a8c997b6a585e9c86dca01186eeea671f`; PR #76 remained open/unmerged, mergeable=true on completion read-back. No PR merge performed.
+- previous_bad_head: `a59a89e9c585fb6e780e1af2ecc898c830f5524e`.
+- fresh_main_start: `b4c34611d2d99d4dfe89363bee7d579141a38812`; pre-publication fresh main: `e11f209ca764b2d1d79b769e7fd15ed961a8cbc3`.
+- PR integrated base: `d345f67402a782a303ce46c640f685271d76b681`; latest main is 20 commits beyond it. PR has 22 changed paths; intersection with base-to-latest-main changed paths is **0**. Main changes during this review are shared orchestration/control files, not these source paths.
+- isolation: owned temporary checkout `/private/tmp/h2-fresh-20261005.99TWCY/review`, independently cloned from the new clean base `/Users/yuya/Developer/kabumori-fresh`, then fresh-fetched GitHub main/PR76 and detached exact head. An initial owned clone from the old repo was used only for startup controls before the new-Mac rule was discovered; it was not used for reviewed candidate edits/deploy. Old/shared checkouts were never modified. Both owned source checkouts stayed git-clean.
+- changed_files / source fixes: only H2 `.agent/CODEX_REPORT_2.md` and `.agent/tasks/CODEX_TASK_2.md` are synchronized to main. **Source implementation/test/migration changes: 0**. Additional adversarial harnesses exist only in owned `/private/tmp`, not in the PR/repository.
+- commit_hash / push: H2 control-file-only GitHub commits; publication SHAs are supplied with final read-back. No PR implementation commit, merge or deployment is made by this review.
+- deploy / production mutation: **0**.
+
+### Findings requiring correction
+
+#### F1 [P2] — pre-send readiness still permits states that ON correctly rejects
+
+Location: `supabase/migrations/20261003090000_social_mobile_publish_permission_boundary.sql:276-284` (compared with ON predicate at lines 194-206). The final authoritative SELECT checks identity_verified/nonblank platform_user_id and credential references, but omits `verified_at IS NOT NULL` and nonblank `last_connection_error_code`. The preceding real `x_legacy_post_account` helper also omits both, as does the credential-reader prerequisite. Thus using that helper does not supply the missing conditions.
+
+Independent disposable-DB reproduction, using the **unmodified candidate and real prerequisite migrations**:
+
+1. Create an eligible fake owner/account and running post; caller-JWT toggle ON returns `updated/true`.
+2. Clear only verified_at while keeping identity_verified/valid refs/ON.
+3. `fixture_permission(post, account, brand)` returns **`authorized`**.
+4. OFF succeeds; ON now returns **`blocked / CONNECTION_NOT_VERIFIED`**.
+5. Restore verified_at, ON succeeds; set only `last_connection_error_code = 'X_ACCESS_TOKEN_UNAUTHORIZED'`.
+6. Pre-send permission again returns **`authorized`**, while OFF→ON returns **`blocked / CONNECTION_DEGRADED`**.
+
+The actual PR76 `VaultAccountXAuth.load/send` was then connected to the real local permission RPC, with a fake X callback and no external fetch. A credential was loaded before each independent state change:
+
+```text
+missing_verified_at: mock_X_callback=1, real_network_calls=0
+recorded_connection_error: mock_X_callback=1, real_network_calls=0
+```
+
+These are positive bug reproductions, not successful safety tests. They violate Gate C/F's fresh structural-readiness contract; neither is a claim of actual production posting or a forged credential attack.
+
+Why the existing suite stayed green: `social_mobile_publish_permission_behavior.sql:120,125` sets `runtime = null` for exactly these two cases, and lines 153-155 skip the runtime assertion when null. ON rejection is tested, runtime parity is intentionally not tested for these rows. Documentation's “Parity ... tested case by case” is therefore too broad.
+
+Bounded proposed correction (not implemented): add both conditions to the final authoritative pre-send SELECT, return fixed refusal codes, and make these two SQL cases assert refusal plus actual-adapter X callback=0. Preserve intended refreshing/current-token policy, the shared helper contract and unrelated refresh behavior unless a separate necessity is established.
+
+#### F2 [P2] — unexpected default EXECUTE grants survive the migration
+
+Location: candidate lines **305-312**; preconditions lines 62-89. The migration revokes PUBLIC/anon/authenticated/service_role then grants the two intended roles, but does not inspect or remove other grants inherited from the apply role's default privileges. It also has no effective-role ACL postcondition. Known-role-only revocation is not an exact least-privilege boundary under the adverse role/default graph required by Gate H.
+
+Independent local-only probe before candidate application:
+
+```sql
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT EXECUTE ON FUNCTIONS TO h2_extra_execute;
+-- Apply unmodified candidate as nonsuperuser kb_publish_permission_owner.
+SELECT has_function_privilege('h2_extra_execute',
+ 'public.set_social_account_publish_enabled(text,boolean,boolean)','execute');
+SELECT has_function_privilege('h2_extra_execute',
+ 'public.assert_x_publish_permission_for_legacy_post(uuid,text,text)','execute');
+```
+
+Both results: **true**. Candidate commits successfully instead of refusing. In the same disposable role graph, temporarily granting `h2_extra_execute` to authenticated makes authenticated effectively able to EXECUTE the supposedly service_role-only pre-send assertion (**true**). The test membership was then revoked; the entire fake database was dropped and the owned cluster stopped.
+
+Current production catalog **does not show that adverse drift**: postgres/public function defaults are owner-only, and anon/authenticated/service_role have no parent-role memberships in the queried catalog. Therefore this is a **source fail-closed/default-ACL gap**, not a claim that production is currently exploitable. `postgres` is not superuser but is BYPASSRLS, so ownership/creator role remains relevant to security-definer rollout. The separate supabase_admin default is broad; do not assume every apply tool uses postgres or silently normalize global defaults.
+
+Bounded proposed correction (not implemented): validate the actual creator/owner and both functions' effective ACLs, refuse unknown grants/inheritance, or revoke extra grantees on these two new functions only and then assert exact effective role access before COMMIT. Do not alter global role memberships/default privileges or relax the caller authority checks. Add a default-grantee/inherited-EXECUTE mutation case; current 30 mutations only cover direct known-role/PUBLIC changes.
+
+#### F3 [P2] — migration-first rollout does not fail closed during the old-runtime interval
+
+Location: `supabase/tests/social_mobile_publish_permission.md:86-90` and candidate line 311. The documented order applies the publicly authenticated-executable toggle RPC before deploying the fresh pre-send runtime. Hiding the app or not deploying the thin toggle Edge yet does not remove direct caller-JWT access to that RPC.
+
+Independent partial-rollout probe: same real local migration/RPC; load the old current-main sender before OFF, invoke the caller's transactional OFF successfully, then execute only a fake request callback. Compare with the actual PR76 sender on the identical sequence:
+
+```text
+migration_only_old_runtime: OFF=updated, mock_X_callback=1, refusal=none, real_network_calls=0
+migration_and_new_runtime: OFF=updated, mock_X_callback=0,
+ refusal=X_ACCOUNT_PUBLISH_DISABLED, real_network_calls=0
+```
+
+This tests source-level partial rollout, **not the deployed production Function**. The old-main adapter did not change in main during this review. Gate N's “all partial rollout states fail closed” is not proved by the candidate plan: an enabled cached dispatch can still start an X request after the new RPC acknowledged OFF, before runtime deployment.
+
+Bounded recommendation: revise and separately approve an operational sequence that keeps new toggle authority unavailable until the guarded runtime is active. One option is guarded runtime first (missing permission RPC deliberately blocks Vault sends), then atomic RPC apply/read-back, then Edge/app exposure. Another is staging the toggle EXECUTE grant until guarded-runtime read-back succeeds. Explicitly accept the brief fail-closed availability tradeoff; do not quietly treat migration-first as safe or execute either plan from this review. Legacy paths below also need an exposure boundary.
+
+### R1-R5 / Gates A-N disposition
+
+| Gate | Independently established result |
+| --- | --- |
+| A / R1 | **Closed for reviewed toggle.** Caller identity is auth.uid(), not an argument. Exact account determines brand; current owner/admin membership, brand and account locks bind authorization and the only UPDATE in one transaction. Actual delete/demote-before-write schedules reject; writes after toggle decision wait. ON/OFF both enforce membership. Edge no longer holds service-role table mutation authority. |
+| B | **Supplied race evidence PASS.** Lock order table ROW EXCLUSIVE→brand SHARE→caller membership SHARE→account UPDATE; refresh commit-shaped SHARE ROW EXCLUSIVE/table→account probe queues without deadlock. Real deletion-acquire RPC races tested both ways. Timeout returns busy around the 3s bound with no mutation; nonmember foreign-lock probe returns without waiting. No lock spans external HTTP/X. This proves the tested schedules, not absence of every possible future writer deadlock. |
+| C / R2 | **Original mixed-brand TOCTOU closed for Vault path.** Actual loader's cached live+ON context is defeated by fresh DB assertion after brand disable; callback=0. New requests/401 retry check anew. Structural-readiness qualification remains F1. |
+| D | **Narrow coverage verified.** All wired non-Kabumori exact-account X sends in x-test-post funnel through VaultAccountXAuth.send/postToX, including AI Lab brand_post. The mobile toggle handler itself has no X/media path. Legacy Kabumori env/oauth_token_store, important-news-monitor and unwired v2/account-bound candidates are not covered; do not market this as a global X kill switch. |
+| E / R3 | **Closed for tested tenant errors.** Missing/foreign/revoked/moved/deleted rows collapse to not_found with no publish_enabled/readiness. Same-user move A→B is also refused on old authority. Members/viewers get bounded forbidden without current state; owner/admin-only CAS stale state is allowed while locks preserve authority. Unknown SQL/RPC responses become fixed unavailable; no post-decision privileged reread. |
+| F / R4 | **Original ON-predicate defect closed; end-to-end parity NOT closed (F1).** Trimmed user id, identity_verified, verified_at, own distinct/unshared refs, connection health, active/live and blocked refresh state are enforced for ON. No Vault-content validity promise is made. Fresh send must enforce the omitted structural conditions too. |
+| G | **OFF safety PASS within supported path.** Inactive/broken/ref-less fake account can be stopped; fingerprint of Vault/Auth/history/posts/other fields unchanged. updated_at not stamped. OFF during refresh can cause rotation commit to resolve uncertain, but does not re-enable or replay; existing tests cover the fail-safe result. Deletion already underway returns busy. |
+| H | **Ordinary ACL/search_path PASS; adversarial effective ACL FAIL (F2).** Exact signatures, SECURITY DEFINER, empty search_path, fixed codes/schema-qualified relations, no dynamic SQL or broader table UPDATE. Direct ordinary grants match design. Unknown default grant and inherited assertion privilege survive. |
+| I | **Chain/apply/reapply/collision PASS for inspected normal shape; adverse ACL qualification F2.** Real prerequisite migrations plus candidate apply; reapply deliberately refuses and preserves original objects. Explicit BEGIN/COMMIT requires standalone application without an outer transaction. Migration creates only the two intended RPCs/ACLs. Guards check existence/names and exact target signatures but are not a comprehensive type/owner/overload drift validator; production preflight must verify exact managed catalog before any separate apply. |
+| J | **SQL and shim contract verified, real managed PostgREST unverified.** Local caller authenticated + supplied JWT-sub fixture invokes the security-definer function with correct UID. Additional probe used the production-catalog auth.uid definition with only request.jwt.claims and an empty legacy sub GUC: caller role/auth.uid checks true; toggle updated/true. Security-definer does not erase claim GUCs. No real JWT signature/managed PostgREST call was attempted. |
+| K / R5 | **Closed in actual-hook/card test harness.** App's 32 publish-setting tests include A→B→A no resurrection, preview/eligibility/user/state changes, stale handlers and double-confirm/in-flight. Pin invalidation plus latest context gates prevent sending old confirmations; no claim of on-device UI testing. |
+| L | **PASS.** Exact 3-key contract; raw duplicate-key/escape ambiguity rejected; streamed UTF-8 byte count ≤512 (oversized chunk cancelled, not accumulated), fixed safe errors. OFF text does acknowledge in-flight cannot be recalled, but its unsupported-legacy scope needs the qualification below. Changed Deno require-await lint passed. |
+| M | **Explicit product/exposure risk, not a demonstrated active production bypass.** Ref-less legacy accounts can be stopped but not re-enabled by this RPC. Kabumori cached dispatch and important-news-monitor lack this fresh permission RPC. Current production aggregate has no owner/admin-controllable ON legacy account in the queried shape; do not report an active live bypass from the fake fixture. Generic UI/RPC nevertheless does not fence unsupported legacy accounts. Require a supported-account capability/exposure decision before release. |
+| N | **Partial-rollout plan NOT closed (F3).** Missing RPC denies new-runtime sends; missing toggle RPC denies Edge changes. The reverse state—new toggle authority + old sender—remains unsafe. No rollout executed. |
+
+### In-flight boundary / coverage detail
+
+- For the PR76 Vault path the accepted boundary is the fresh permission SELECT/authorized return immediately before request callback. OFF/disable authoritative before that snapshot is rejected. A commit after that authorization cannot cancel an already authorized/in-flight request. No claim of post-start cancellation.
+- The reactive 401 retry runs another fresh assertion after successful refresh; proactive refresh also rechecks before send. Tests demonstrate disable/deletion/block/unavailable => no new callback. No second X request starts just because the first assertion once passed.
+- The final SELECT unifies post/brand/account/refresh/deletion state; the legacy helper is a preceding statement for distinct/unshared refs and unbound-post contract. Do not describe all helper-only facts as locked for the duration of external X HTTP. This review does not introduce a long-lived lock across X.
+- Existing supported runtime path is unbound legacy brand_post, with one X account per brand. Unmerged PR41 account-bound publication and unwired v2 dispatcher are future integration work, not coverage proven here.
+
+### Legacy/Kabumori boundary and production read-only facts
+
+Only catalog and aggregate queries were performed, in READ ONLY transactions; no user identifiers/content, Vault plaintext, handles/emails, credentials or individual account values were queried for this review.
+
+- Both target RPC names absent; target migration ledger version `20261003090000` count=0. No live conflict observed.
+- Existing exact-account helper: postgres owner, security_definer, search_path empty, owner-only function ACL.
+- authenticated direct social_accounts UPDATE=false.
+- Relevant existing triggers: verified_at reconnect reset and social-mobile deletion guard. No generic updated_at-stamping trigger observed.
+- postgres/public default function privileges owner-only; no inherited memberships for anon/authenticated/service_role. These current facts do not remove F2's creator/default-graph failure mode.
+- Aggregate shape (4 accounts total, no identifiers): ref-less OFF 1 / owner-or-admin-controllable 1; ref-less ON 1 / controllable 0; Vault-backed OFF 1 / controllable 1; Vault-backed ON 1 / controllable 0. This is a metadata snapshot, not a production publish test.
+- Legacy ON/OFF asymmetry is a recovery/UX risk. Universal OFF copy promises “no new automatic posts” while cached Kabumori dispatch / independent important-news lane do not satisfy that guarantee. Safest bounded product response is hide/refuse unsupported legacy controls or clearly separate permissions until an explicitly reviewed guard exists; do not silently modify those other functions in PR76.
+
+### Independent tests and execution limits
+
+| Verification | Result |
+| --- | --- |
+| Focused Edge/logic/migration/Vault tests + migration invariants, checked | **78/78** = 68 focused + 10 invariants |
+| x-test-post + shared + publish-setting runtime regressions | **925/925**, explicitly `--no-check` |
+| social-mobile Node app tests | **145/145** |
+| App domain tests (data-view/post-interaction) | **22/22**, checked with Deno `--sloppy-imports` for Expo-style extensionless imports |
+| apps/social-mobile `npm run typecheck` / `npm run lint` | **PASS / PASS** |
+| Changed runtime/test Deno check + Deno lint | **11 files PASS / 11 files PASS** |
+| Disposable PostgreSQL 17.11 nonsuperuser fixture/real prerequisite chain | **APPLY / BEHAVIOR / RACE / E2E / CLEANUP PASS**; E2E 5 actual-handler/adapter scenarios through local shim |
+| Supplied mutation runner | **30/30 DETECTED** |
+| Independent readiness probes | **Two reproducible missing-refusal cases**, real SQL + actual PR adapter + mocked X |
+| Independent default/effective ACL probe | **Unexpected role executes both; inherited authenticated executes assert** |
+| Independent partial-rollout comparison | **Old sender 1 fake request after OFF; new sender 0** |
+| Production auth.uid definition / claims-only local replay | **PASS**, does not constitute real managed JWT verification |
+| x-test-post entire index type-check | **6 baseline diagnostics**, byte-identical messages/locations to startup main after checkout-path normalization; no new diagnostic. Not claimed globally type-clean |
+| Shell syntax / git diff --check / changed-source secret-pattern scan | **PASS** |
+
+Core commands:
+
+```sh
+DENO_NO_PACKAGE_JSON=1 deno test --no-config --allow-read supabase/functions/social-mobile-publish-setting supabase/functions/x-test-post/vault_account_auth_test.ts supabase/tests/migration_source_invariants_test.ts
+DENO_NO_PACKAGE_JSON=1 deno test --no-config --no-check --allow-read supabase/functions/x-test-post supabase/functions/_shared supabase/functions/social-mobile-publish-setting
+PUB_PGHOST=<owned-local-/private/tmp/socket> PUB_PGPORT=56536 PUB_PGSUPER=h2_local PUB_E2E=1 bash supabase/tests/social_mobile_publish_permission_run.sh
+PUB_PGHOST=<same-local-socket> PUB_PGPORT=56536 PUB_PGSUPER=h2_local bash supabase/tests/social_mobile_publish_permission_mutations.sh
+npm test && npm run typecheck && npm run lint  # apps/social-mobile only
+DENO_NO_PACKAGE_JSON=1 deno test --no-config --sloppy-imports apps/social-mobile/src/domain/data-view.test.ts apps/social-mobile/src/domain/post-interaction.test.ts
+```
+
+Environment caveats: initial plain root Deno check lacked root @types/node and npm auto-resolution hit restricted-network DNS. Tests were run successfully with package.json auto-discovery disabled/--no-config; no manifest/lockfile was changed to work around it. App's own locked `npm ci --ignore-scripts` succeeded only in the disposable checkout. An initial domain check rejected extensionless Expo imports; --sloppy-imports resolved this without source edits. None is classified as a newly failing PR test.
+
+The supplied mutation suite removed its fake databases. Extra adversarial fake database `h2_pr76_adversarial` was dropped and the H2-owned socket-only PostgreSQL stopped; fake fixtures are reproducible, not retained production data. Evidence harnesses/logs remain in the owned temporary directory and the essential reproduction steps/results are included above, so C2 does not need access to that directory.
+
+### Freshness, migration collision and rollout prerequisites
+
+- PR76 head rechecked unchanged at completion. Fresh main changes intersect none of the 22 PR source/test/doc paths; shared `.agent` histories must still be preserved when writing H2 controls.
+- Inspected migration filenames from every current open PR plus fresh main: PR76 `20261003090000`, PR81 `20261003120000`, PR82 `20261004090000` are distinct. Other open PR migration versions `20260927101423`, `20260927124300`, `20260921115317` also do not collide. No open-file response reached the 100-file pagination cap. No other PR's contents were changed/reviewed as an implementation task.
+- PR76 adds its reservation without removing current-main reservations; invariant tests pass.
+- No real PostgREST binary/stack was available locally. Fake-JWT shim E2E is not managed-platform authentication proof. Production Edge `verify_jwt` configuration, actual migration-executor role/effective privileges and exact managed RPC exposure still require read-only preflight plus an approved rollout test; no production call was authorized here.
+- Standard security-definer/default privilege reasoning was checked against official Supabase database-functions/RLS documentation via the Supabase skill. It influenced the adverse effective-ACL/creator-role probe; it did not authorize any production change.
+
+### Recommendation / C2 hand-back
+
+- **PR76 merge recommendation: NO for the reviewed head.** Return bounded corrections for F1, F2 and the F3 rollout contract to G4; recommended corrective/review model **Sol（高）** for independent verification (G4 implementation model is for ChatGPT to assign).
+- **Production migration/deploy/app exposure recommendation: NO.** This TASK grants none, and the partial-rollout and unsupported-account boundaries must be resolved before requesting separate approval.
+- Remaining unverified items: real managed PostgREST/JWT round-trip (without production mutation), exact production migration tool/creator contract, unsupported legacy exposure decision, future account-bound/v2 dispatcher integration, exhaustive races beyond the tested schedules.
+- Do not fix H1/PR82, G3/PR81, legacy Kabumori, important-news, Auth/Vault or broad orchestration files as part of this rereview.
+- safety_checks: source fixes 0; PR merge 0; production DB/schema/RPC/migration writes 0; Edge deploy 0; Cron/scheduler/settings/Auth/Vault/OAuth/secret changes 0; real X/OpenAI/Push/media calls 0; real posts 0; apps/admin/HANDOFF/other-slot files changed 0. Existing dirty old repo and clean new base left untouched; no reset/stash/prune/stage/commit of their changes. Only H2 TASK/REPORT publication.
+
+---
+
+## H2 — PR #81 content-settings hardening rereview — 2026-10-03 JST
+
+- task_id: x-social-mobile-pr81-content-settings-hardening-rereview-20261003
+- verdict: **CHANGES REQUIRED — ordinary paths pass, three adversarial boundaries remain unclosed**.
+- status: review_required / next_owner: chatgpt; STOP for C2.
+- reviewed_exact_head: `5595fb131813542c55c43bc783af623cdb9ea442` (GitHub PR #81 open/unmerged; exact head checked at startup and completion).
+- fresh_main_start: `a633961056e5f8b628ae59c72163306c21c3f399`; pre-publication fresh_main: `fea45fe0f0656d22e8ffef2d750fd1b62035fd26`.
+- PR #78 original head remains `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`, open/unmerged.
+- implementation/source fixes: **0**. This review does not rewrite the historical candidate or widen into a corrective implementation. Assign the bounded residual fixes back to G3 and re-review.
+- changed_files in repository: **.agent/CODEX_REPORT_2.md / .agent/tasks/CODEX_TASK_2.md only**; histories retained. PR81's seven files were reviewed, not changed.
+- implementation commit: none. Control-file publication uses normal GitHub Contents API commits; exact publication SHAs are confirmed by read-back and in the completion response/history.
+- PR81 merge recommendation: **HOLD**. Production apply recommendation: **HOLD**. PR78 review may resume only after accepted corrected prerequisite, separately approved atomic apply and read-back; this is not PR78 merge approval.
+
+### Residual findings (independently reproduced, fake local DB only)
+
+**R1 / P2 — deferrable primary key drift is silently accepted and breaks the actual Settings writer**  
+File `supabase/migrations/20261003120000_social_mobile_content_settings_hardening.sql:60-68`.
+
+The primary-key guard checks only count and conkey. It does not reject condeferrable/condeferrable-index semantics. After the original candidate, replacing its PK with `PRIMARY KEY (brand_id) DEFERRABLE INITIALLY IMMEDIATE` and applying hardening succeeds. Output: `DEFERRABLE_PK_ACCEPTED=true`. The real repository pattern `INSERT ... ON CONFLICT (brand_id) DO UPDATE`, executed as authenticated owner through RLS, then fails with SQLSTATE **55000**: `ON CONFLICT does not support deferrable unique constraints/exclusion constraints as arbiters`. This is a missing Gate F wrong-PK check, not an observed live broken table (production target is absent).
+
+Minimal correction: explicitly require the known immediate, nondeferrable PK/index contract, reject unexpected drift rather than changing someone else's PK, and add this drift + actual-upsert regression.
+
+**R2 / P2 — unexpected existing helper EXECUTE grant survives hardening**  
+File `...hardening.sql:448-458`; initial guard and postconditions do not assert helper ACL/owner identity.
+
+In an exact candidate DB, pre-create `public.social_mobile_content_settings_valid_persona(jsonb)` and grant EXECUTE to a synthetic unknown role. CREATE OR REPLACE preserves that role's existing ACL. REVOKE addresses only PUBLIC/anon/authenticated/service_role. Hardening succeeds and `UNKNOWN_HELPER_EXECUTE_SURVIVES=true`. The table ACL is correctly narrowed; this finding is specifically a **function-boundary least-privilege/drift** gap, not a table tenant escape. The resulting reviewed validators are pure booleans; no secret/data-read or X/publish exploit was demonstrated.
+
+Minimal correction: fail closed on unexpected pre-existing helper ownership/signatures/grantees, normalize only explicitly owned/known ACLs, and assert exact effective helper ACLs after apply. Cover unknown helper grant and post-hardening drift; do not globally alter default privileges.
+
+**R3 / P2 — valid historical infinity version survives and is not strictly monotonic**  
+File `...hardening.sql:299-310, 375-381`.
+
+The unchanged candidate permits an existing `updated_at='infinity'` (no insert ownership trigger/finite CHECK). Its settings/persona otherwise meet the new contract. Hardening accepts it without rewrite or refusal. `greatest(clock_timestamp(), infinity + 1 microsecond)` remains infinity. An authenticated owner UPDATE leaves `INFINITY_VERSION_STAYS=true`, and another UPDATE with the same old version changes **1** row (`REUSED_OLD_INFINITY_TOKEN_CHANGED=1`) rather than zero. Thus strict-per-row CAS is not established for every admitted existing row.
+
+This is **not** a problem with newly inserted hardened rows: their timestamps are server-owned finite wall-clock values. Normal finite/far-future versions, including 2999, pass. It is an unhandled historical-row precondition, and production currently has no target rows/table.
+
+Minimal correction: refuse non-finite existing version timestamps before hardening (do not silently rewrite them), enforce the finite version domain going forward, and add the infinity fixture. Document created_at handling separately if needed. Keep the existing finite CAS and app string-token interface.
+
+### F1-F4 disposition / gate summary
+
+| Original finding | Independent result |
+| --- | --- |
+| F1 JSON/persona | **Closed for inspected normalized writer shapes**: exact root/window keysets, explicit JSON types, null-safe CHECK, locale/timezone, integer bounds, per-item arrays, 24:00 only for end, persona allowlist and column metadata. 61 invalid settings + 24 invalid persona cases rejected. Structural validation cannot detect semantic secrets hidden in permitted human text. |
+| F2 effective table ACL/RLS | **Original table flaw closed**: PUBLIC/anon/service_role none; authenticated S/I/U only; DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN denied; no column ACL; tenant/owner RLS passed. **Gate C helper ACL still fails R2**. |
+| F3 version | **Finite paths closed**, same-transaction and concurrent/long-transaction evidence passed. **Not globally closed for accepted historical infinity (R3)**. |
+| F4 drift | Existing 20 drift cases refused and enumerated repair passed. **Not closed for deferrable PK and helper ACL drift (R1/R2)**. |
+
+The existing PASS test suite does not prove the three omitted cases are safe. No source fix was mixed into the reviewed exact PR head.
+
+### Migration chain / actual transactionality
+
+- Historical `20260922045046_social_mobile_content_settings_candidate.sql` byte-unchanged, SHA256 `b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb`.
+- New hardening version `20261003120000` is unique in PR81/current main, ordered after the historical candidate, and refuses absent target relation.
+- Independent SQL runner proves candidate+hardening in a single explicit transaction; invalid existing rows/drift refuse without partial hardening.
+- **Also tested the installed actual Supabase CLI 2.116.0**, not merely psql -1: separate disposable CLI project with exactly these two files, explicit DB URL bound to H2's local Unix socket. `migration up` succeeded; history contains exactly `20260922045046,20261003120000`.
+- A third **repo-external fake test migration**, create marker then raise, failed as intended. Read-back: `CLI_ATOMIC_MARKER_ABSENT=true`, failed history count=0. This proves per-file rollback through the real CLI.
+- Official pinned CLI source corroborates that headerless compatible statements plus history run in one extended-protocol batch. Neither reviewed file contains authored transaction controls or nontransactional statements. Source: [CLI migration apply](https://github.com/supabase/cli/blob/v2.116.0/apps/cli/src/legacy/shared/legacy-migration-apply.ts), [batch contract](https://github.com/supabase/cli/blob/v2.116.0/apps/cli/src/legacy/shared/legacy-db-connection.service.ts).
+- **Per-file atomicity is not whole-chain atomicity.** Normal migration-up commits the historical candidate before hardening. An interrupted/failed second file could leave the known weak candidate. No repository-owned production apply path establishing an outer transaction for both files was found. A later rollout must explicitly approve/prove an atomic two-file application or equivalent safe plan; do not infer this from the CLI's per-file guarantee.
+- No CLI db push, remote migration apply, history repair/reconcile or production transaction was used. CLI output calls the explicit supplied URL “remote database”, but it was the disposable local Unix socket, not Supabase production. First sandbox CLI help/version attempt failed writing CLI telemetry; ordinary approved help/version rerun succeeded, no app/secrets setting change.
+
+### Writer compatibility / repository change
+
+- Inspected main Settings upsert, conversation saveConfirmedProposal, PR78 saveConfirmedIfUnchanged and shared persona materializer/normalizer; no other writer of this table found in relevant source.
+- Normalized settings have exact nine durable keys and five window keys; blank NG strings are dropped, arrays bounded; persona proposals trim/filter/bound durable style signals.
+- PR81 deletes analyzedAt/analyzedPostCount from persona_profile only; dedicated persona_last_analyzed_at/count writes remain. Source object is not mutated; settings-only save omits persona columns, confirmed metadata retained.
+- Focused repository tests **3/3 PASS**; full app **116/116 PASS**.
+- PR78 CAS uses the returned timestamp **string**, not JS Date millisecond reconstruction; local JSON timestamp round-trip passed at microsecond precision. Managed PostgREST E2E was not run.
+- PR78 and PR81 source composition tested with `git merge-tree --write-tree`: clean, tree `f330f255bfcec3437c01d025c384eb4cabb384ef`. This is composition evidence, not a rebase/merge or independent PR78 approval.
+- Known pre-existing main validator rejects its own endLocal=24:00 default; PR78 contains its narrow fix. PR81 did not change this file; accepted finite-window saved shapes remain compatible. Record this dependency instead of claiming the unmerged main default flow works.
+- Shared server contract adds livePublishingEnabled=false **only to runtime guidance**, not durable repository JSON. That flag is not a writer-controlled DB publish permission.
+- PR78 and existing dry-run reads use caller JWT + publishable key. No service-role DML on this settings table is currently required.
+
+### Independent local tests / adversarial evidence
+
+H2 checkout `/private/tmp/h2-pr81-review.zzmdmR/repo`, detached exact PR head, clean. Own PostgreSQL **17.11**, Unix socket-only port 56434, non-superuser kb_smcs_owner setup role; client probes SET ROLE authenticated/anon/service_role. Synthetic users/brands only.
+
+- Original SQL runner: **ALL_PASS** (apply/reapply, single transaction, behavior incl. 61+24 invalid JSON, owner/RLS/ACL, same-tx CAS, two-connection one-winner CAS, long-tx no regression, competing insert, invalid existing-row refusal, 20 drift refusals, 3 enumerated repairs, cascade/unrelated preservation, cleanup).
+- Extra local adversarial cases: **three unresolved defects reproduced**, exact outputs above; valid existing-row full JSON comparison unchanged=true.
+- Independently ran **one** source-external now() mutant: suite failed at `same transaction advances strictly`, expected detection. Did not rerun/claim G3's other seven mutants.
+- Social-mobile full test **116/116 PASS**; repository focused **3/3 PASS** (subset, not additional distinct total).
+- Deno shared-brand + social-mobile-brand-dry-run **158/158 PASS**, explicitly `--no-check --allow-read`; this is runtime test success, not a separate Deno typecheck claim.
+- App TypeScript check PASS; app lint PASS; changed Deno static test lint PASS; bash syntax PASS; git diff --check PASS.
+- Dependencies installed lockfile-exact via npm ci --ignore-scripts in H2 isolated app only. No root package/lock or formal-repo dependency change; checkout remained clean.
+- Proof/artifacts are repo-external. All runner fake DBs removed, h2_pr81_adversarial and h2_pr81_cli dropped, H2-owned cluster stopped. Source/test files were not edited.
+- This is PostgreSQL/CLI local proof, not live Supabase Auth/PostgREST/managed deletion E2E.
+
+### Production read-only catalog / conflicts / lifecycle
+
+Exactly **3 READ ONLY catalog transactions**, no settings/user content/PII:
+- Target table and same-prefix functions absent; both migration history versions absent.
+- DB role for catalog tool = postgres; dependency tables owned by postgres.
+- postgres/public default table ACL remains anon/authenticated/service_role Dxtm (TRUNCATE/REFERENCES/TRIGGER/MAINTAIN); function default owner-only. Supabase_admin's separate defaults are broader and not conflated with postgres defaults. A rollout using a different creator role needs another preflight.
+- brands.id text PK; memberships brand_id text FK CASCADE, user_id uuid Auth FK CASCADE, composite PK, owner/admin/member/viewer check; RLS enabled; authenticated self-membership SELECT permitted. Public CREATE denied anon/authenticated.
+- Existing dependency deletion-guard triggers unchanged. Brand FK cascade proved locally, existing purge deletes brands, no new common-account schema dependency. No actual account deletion/Auth/Vault action.
+- PR81 seven changed paths have **zero overlap** with fresh main changes since merge-base. Later main movement before sync changed H1/index controls only; H2 control blobs unchanged.
+- H1 PR82 and G4 PR76 paths do not overlap PR81. PR81 version 20261003120000 differs from both.
+- **Out-of-scope coordination note:** current PR76 and PR82 each propose a different file with version 20261003090000. This pre-existing cross-PR timestamp collision was not changed and is not PR81's own version collision; orchestrator must settle it before combining their migration histories. Do not apply all repo migrations opportunistically.
+- H1 became done; G4 review_required on latest main. Their TASK/Report/source/checkouts were untouched.
+- Supabase skill changelog markdown endpoint returned unsupported content-type 400; no successful changelog read claimed. Used relevant security instructions and pinned CLI source/runtime proof.
+
+### Safety / C2 next recommendation
+
+- code changes / historical migration rewrite / PR merge / source push: **0**.
+- production DB write/schema/RPC/grant/migration/history/settings/deploy/Cron/scheduler: **0**.
+- live/paid OpenAI / X / Push / OAuth / Vault / Storage / user-account actions: **0**.
+- formal repo existing changes / other workstream modifications / apps/admin / HANDOFF / root package/lock/env: **0**.
+- actual user-content/PII/secret reads and exposure: **0**.
+- Control-file sync only, full prior TASK/Report preserved; normal conflict-checked publication with remote read-back, no force push/stash/reset.
+- C2: send G3 the bounded R1/R2/R3 corrections and explicit transaction-plan requirement. Suggested implementation Opus5.5（高）, rereview Sol（高）. Keep PR81/apply/PR78 HOLD. No production authorization is implied.
+- Final state: **review_required / next_owner: chatgpt**.
+
+---
+
+## H2 — Content-settings schema prerequisite review — 2026-10-03 JST
+
+- task_id: x-social-mobile-content-settings-schema-prereq-review-20261002
+- verdict: **FAIL / CHANGES REQUIRED — existing candidate is not ready for production apply**.
+- status: review_required / next_owner: chatgpt; STOP for C2.
+- reviewed main: `6ccaaf3a8bb4a2443e17412ae83421a6de7295e0`; pre-publication fresh main: `46d4258158e76f8131b9103014e8356e78c2d8eb`. Target migration/consumer sources and H2 controls were unchanged between these checkpoints.
+- target: `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql`
+- exact migration SHA256: `b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb`; last source edit: `649111c002f9e19f39e872797e3018829fdd7dbc`.
+- PR #78 consumer inspected at exact head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`; this is schema review only, NOT completion of the remaining PR #78 Auth/AI/security gates.
+- implementation/source changes: **0**; no candidate rewrite, corrective migration creation, or PR merge.
+- repository changed_files: **.agent/CODEX_REPORT_2.md / .agent/tasks/CODEX_TASK_2.md only**, completion record with histories preserved.
+- production apply / deploy recommendation: **HOLD**. Do not present the unchanged candidate as approved for apply.
+
+### Independent production preflight — catalog only, READ ONLY
+
+Two explicit READ ONLY transactions against `wsmznyzcvmuitkglfeuj`; no user content/settings/PII/token query.
+
+- `public.social_mobile_content_settings` remains absent; touch function absent; migration history version `20260922045046` count **0**. No candidate-named function collision.
+- `brands.id` text PK; `brand_memberships.brand_id` text FK -> brands ON DELETE CASCADE; user_id uuid FK -> auth.users ON DELETE CASCADE; composite PK(brand_id,user_id); roles owner/admin/member/viewer. Required dependencies compatible.
+- Both referenced tables have RLS enabled. Membership self-SELECT binds verified `auth.uid()` to user_id, and authenticated has SELECT; candidate policy subqueries therefore do not recurse through content-settings.
+- `auth.uid()`: stable invoker UUID function, existing request.jwt.claim.sub/claims implementation. Local fixture uses the sub GUC path, not live Auth.
+- Important apply-specific fact: postgres/public default table ACL gives authenticated and service_role **TRUNCATE / REFERENCES / TRIGGER / MAINTAIN**, not DML. Candidate must normalize effective grants explicitly; source GRANT statements alone do not describe the eventual ACL.
+- Public CREATE is denied to anon/authenticated/service_role. Candidate trigger is invoker, not SECURITY DEFINER; no unqualified helper lookup in its body. Direct EXECUTE is revoked from PUBLIC/anon/authenticated/service_role.
+- Existing brand/membership deletion-guard triggers are present. This review did not invoke them or run real account deletion.
+
+### Findings — apply blockers / bounded corrections to assign separately
+
+**F1 / P1 — persisted JSON boundary is weaker than the stated contract** (`candidate.sql:35-67`).
+
+CHECK expressions can evaluate NULL and be accepted. Present-but-null locale/preferredTone/objective/approvalMode/frequency, notes:null, and missing/null generationWindow members were saved successfully under the authenticated owner role. `->>` also coerces types: preferredTone:number/bool, objective:bool, frequency:"3", dayOffset:"-1" pass. Arrays are count-only: numeric/object/null members and overlong strings pass. Locale en-US and arbitrary-looking timezone Fake/Zone are accepted by SQL even though current app/server use ja-JP/Asia-Tokyo.
+
+The forbidden-key denylist is incomplete. Owner direct INSERT/UPDATE can persist settings access_token/secret/oauth/publish_mode, nested generationWindow.publish_enabled, and persona secret/publishEnabled/historical_posts/nested token/wrong-type signals. Tests used ONLY synthetic "fake" values; no real secret read/saved. This proves **durable malformed/forbidden structured data**, not an actual publish-enabled mutation or cross-tenant/X exploit. Existing normal app writers validate/project data, but a browser validator is not the database security boundary.
+
+Small correction proposal: exact structured allowlists/types/required fields at both settings/window/persona levels, bounded string-array elements, null-safe rejection (`IS TRUE` / explicit missing-null checks), and compatible value constraints for current legitimate writers. Preserve legitimate endLocal=24:00 and valid persona metadata. Arbitrary human text in allowed notes cannot be semantically proven secret-free by a structural schema; do not promise that.
+
+**F2 / P1 — DELETE denial does not mean destruction denial with live default ACL** (`candidate.sql:88-91`).
+
+Reproducing production's exact defaults, authenticated has SELECT/INSERT/UPDATE, DELETE=false, but TRUNCATE=true, TRIGGER=true, REFERENCES=true, MAINTAIN=true. A local authenticated-role transaction truncated **all settings rows despite RLS**, then was rolled back. anon has no table privileges after REVOKE ALL. service_role inherits those non-DML rights and has no SELECT/INSERT/UPDATE.
+
+This is a confirmed SQL privilege flaw; there is **no claim that PostgREST exposes a TRUNCATE endpoint or an identified arbitrary-SQL production exploit**. Still it violates the requested least-privilege SELECT/INSERT/UPDATE-only contract.
+
+Small correction proposal: normalize PUBLIC/anon/authenticated/service-role table ACL, then grant only intended operations. Existing dry-run and PR78 reads use user JWT + publishable key, so missing service_role DML is not currently proven to break those readers; decide any future service-role requirement separately. Do not globally change database default privileges or unrelated tables.
+
+**F3 / P2 — timestamp is not a per-update version** (`candidate.sql:71-86`).
+
+updated_at is timestamptz NOT NULL DEFAULT now(), with BEFORE UPDATE trigger overwriting caller input. Ordinary distinct transactions advance it; concurrent CAS test had winner=1 / loser=0, and competing INSERT produced 23505 / one row.
+
+But `now()` is transaction-start time. Two updates within one transaction reuse the same timestamp: a second UPDATE with the original transaction version matched **1** row, not zero. A long-running earlier transaction also moved the version backwards after another transaction updated the row. This is a deterministic transaction-clock issue, not a probabilistic microsecond collision claim. No current single-row PostgREST race failure was demonstrated; its normal two-request race passed.
+
+Small correction proposal: retain the compatible timestamptz CAS contract, but use a server-owned strictly increasing value on UPDATE, e.g. `greatest(clock_timestamp(), old.updated_at + interval '1 microsecond')`, with insert timestamp ownership considered. Alternatively explicit revision counter would require coordinated schema/client work. Test same transaction, equal clock, regression/ABA, upsert, all writers before acceptance. No fix applied here.
+
+**F4 / P2 — IF NOT EXISTS silently accepts a drifted same-name table** (`candidate.sql:5-69`).
+
+Exact-shape reapply preserved rows/policies/trigger. But after locally removing JSON CHECKs and the brand FK, reapply succeeded and left **all three missing constraints missing**; malformed settings/persona then stored. CREATE TABLE IF NOT EXISTS is not schema reconciliation. Unexpected existing columns/types/constraints/grants/policies need fail-closed preflight or explicit versioned correction, not blind apply.
+
+Fresh transactional apply -> read-back -> ROLLBACK restored absence; a forced halfway error in an explicitly wrapped transaction restored the original two fake rows. The SQL file itself has no BEGIN/COMMIT; do not assume unwrapped/manual execution is atomic. It also does not itself write migration history: application tool / explicit authorized bookkeeping must be settled in a later rollout task, never repair/reconcile opportunistically.
+
+### Table/writer contract and accepted boundaries
+
+- Expected columns exist in the candidate: brand_id PK/FK cascade, settings/jsonb default, persona_profile/jsonb {}, provenance enum conversation/past_post_analysis/manual, confirmed=false, optional last_analyzed_at/count 0..1000, created_at/updated_at timestamptz defaults.
+- Default settings create successfully; valid lower/upper bounds and valid persona shape save; SQL endLocal 24:00 accepted, start/default 24:00 and end 24:01/prefix/suffix rejected.
+- Main mobile validator still rejects its own 24:00 default. PR78 contains the narrowly scoped endTimePattern fix; do not silently merge it via this schema task. Shared server normalizer/materializer inspected, and schema-invalid data can be dropped/defaulted, but that is not a durable DB constraint.
+- Existing settings screen calls repository.upsert; settings-only upsert omits persona. Local proof preserved confirmed persona. Existing saveConfirmedProposal and PR78 saveConfirmedIfUnchanged write same table; BEFORE UPDATE applies to their UPDATE/upsert paths. PR78 insert race / eq(updated_at) design depends on fixing/accepting F3 semantics, not merely the existence of a trigger.
+- Ordinary RLS: owner SELECT/INSERT/UPDATE work; member/admin/foreign owner SELECT hidden and UPDATE zero; unauthorized INSERT/cross-brand reassignment denied; anon reads/inserts denied; owner DELETE denied. Owner-only agrees with PR78 and existing repository, not broader publish-toggle owner/admin policy.
+- Brand FK cascade proved locally. Existing social-mobile purge explicitly deletes brands, so candidate settings rows follow that cascade without needing a new common-account table. Auth-only deletion removes membership, hides settings from caller, but leaves brand/settings until service workspace cleanup; this is not a proof of end-to-end managed deletion.
+- Common-account Phase1 foundation remains separately HOLD/unapplied; candidate has no new dependency on it. Lifecycle FK compatibility is source/schema-level, not managed Auth/Vault/Storage deletion certification.
+- Candidate creates one noninternal BEFORE UPDATE trigger on this table; no unrelated runtime triggers or tables were modified.
+
+### Independent local evidence / limitations
+
+H2-only disposable PostgreSQL **17.11**, Unix socket only, database `h2_settings_review`, synthetic users/brands; catalog-compatible required columns/FKs/self-membership RLS + actual public default ACL reproduced. Local postgres is a superuser for setup; client tests SET ROLE authenticated/anon and verify non-superuser RLS behavior. This is **not** managed Supabase/GoTrue/PostgREST E2E.
+
+- Behavioral harness: **104 observations** — 59 expected/harness assertions, **42 admitted-invalid/version-defect observations**, 3 effective-ACL observations. Not "104/104 product PASS"; the successful TRUNCATE reproduction is adverse evidence, not a safety PASS.
+- Additional apply/reapply/drift/rollback/cascade/upsert markers: 8 verified outputs.
+- Real two-connection INSERT race: PASS, winner one / loser 23505 / one stored row.
+- Forced-error transactional rollback: PASS, original two rows restored.
+- Existing source tests run with Node 24.19 type stripping: **7/7 PASS** (migration/static3 + shared-content4). They do not detect F1/F2/F3/F4; regex tests are not DB security proof.
+- Initial `deno test --allow-read` could not type-check due missing npm:@types/node in this clean checkout. No install/package/lock edit or type-check success claim. Same test files executed via standard Node runtime; Deno check remains environment-unverified.
+- Source checkout clean; git diff --check PASS; migration SHA256 unchanged.
+- Fake DB was dropped and H2-owned cluster stopped. Proof harness files remain outside repo in `/private/tmp/h2-settings-schema.tebpFt/`; **the findings/reproductions above are in this Report so C2 need not access local artifacts**.
+- Relevant docs: [PostgreSQL CHECK/null semantics](https://www.postgresql.org/docs/17/ddl-constraints.html), [transaction-time vs clock_timestamp](https://www.postgresql.org/docs/17/functions-datetime.html), [RLS including TRUNCATE exception](https://www.postgresql.org/docs/17/ddl-rowsecurity.html), [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security).
+- Supabase skill changelog .md endpoint could not be opened by the web reader (400); used current official RLS docs instead. No speculative feature implementation.
+
+### Minimal disposable reproductions (NOT production instructions)
+
+After applying the **unchanged candidate** in a fake owner workspace:
+1. Owner UPDATE settings to its valid default with `locale:null`, or window `{}`: succeeds; invalid contract should reject.
+2. Owner UPDATE persona_profile to `{"secret":"fake","historical_posts":["fake"]}`: succeeds; structural deny boundary is incomplete.
+3. With production-default authenticated ACL, BEGIN / SET ROLE authenticated / TRUNCATE this table / SELECT count / ROLLBACK: count zero across tenants, despite DELETE denied.
+4. BEGIN; owner UPDATE once; UPDATE again WHERE updated_at=now(): second row count1; timestamp stays identical.
+5. Remove two CHECKs + brand FK in a transaction; rerun original candidate; catalog count for those three constraints remains0; ROLLBACK.
+No such mutation was performed on production.
+
+### Next action / C2 disposition / safety
+
+- **Do not separately approve production apply of the unchanged historical candidate.**
+- Assign a narrowly bounded corrective-schema task (recommended **Sol（高）** review, **Opus5.5（高）** implementation as appropriate). Default proposal is a new versioned hardening migration with explicit contract/ACL/drift checks and compatible monotonic CAS; preserve historical migration rather than silently rewriting a recorded source candidate. Decide whether original+corrective must be applied atomically or a consolidated never-applied candidate is explicitly permitted.
+- Corrected candidate must pass fresh local invalid-JSON/ACL/CAS/drift proof; then C2 can consider a **separate explicit production apply approval** with live preflight and read-back.
+- Only after accepted schema apply/read-back may PR78's unfinished independent review resume; schema PASS alone does not approve PR78 merge/deploy/public enablement.
+- production writes/apply/migration-history/RLS/grants/deploy/settings/DB change: **0**.
+- paid/live OpenAI / X / Push / Auth/OAuth/Vault/Storage / Cron/scheduler operations: **0**.
+- formal repo existing changes / H1/G3/G4/other workstream changes / apps/admin / HANDOFF / root package/lock/env changes: **0**.
+- Read-only catalog transactions: **2**. Actual user data reads: **0**. Secret/PII/report exposure: **0**.
+- H1 fresh task is PR79 Hard Fact review; G4 transactional publish-toggle corrective is distinct. Neither worktree/TASK/report/source touched.
+- Only H2 TASK/Report are synchronized via GitHub; publication SHAs identified in completion response and GitHub history. Preserve all prior entries; final status review_required / next_owner chatgpt.
+
+---
+
+## H2 — PR #78 AI相談 v1 review：production schema前提不成立で停止 — 2026-10-02 JST
+
+- task_id: x-social-mobile-pr78-ai-consult-review-20261002
+- verdict: **FAIL / CHANGES REQUIRED（schema prerequisite BLOCKED・独立レビュー未完了）**。
+- original_exact_head: `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`。GitHub PR #78 open/unmerged、指定head一致を確認。
+- final_reviewed_candidate: 元headのまま。source fix / implementation commitなし。
+- fresh_main: `9c8436cc12e781194314bcf2c66e0994a7fa0053`。PRとmainのmerge-base `0c2c04e031e6b8d10a4d0f30067a54f33daa7b3b`。
+- merge_recommendation: **HOLD / 未承認**。全gateを通したレビューではない。
+- deploy/public_rollout_recommendation: **HOLD**。今回deploy・実AI・production write許可なし。
+- changed_files: **.agent/CODEX_REPORT_2.md / .agent/tasks/CODEX_TASK_2.md の停止記録のみ**。過去履歴保持。
+- next_owner: chatgpt。review_requiredでSTOP for C2。
+
+### P1 — 必須の設定保存テーブルがproductionに存在しない
+
+project `wsmznyzcvmuitkglfeuj` へ1回の `BEGIN TRANSACTION READ ONLY` catalog SELECTを実施し、次を確認:
+
+```text
+to_regclass('public.social_mobile_content_settings') IS NOT NULL = false
+columns = []
+RLS = null
+grants = []
+policies = []
+triggers = []
+constraints = []
+```
+
+これは「RLSで行が見えない」「0件の空table」ではなく、**publicのrelationそのものが不存在**というcatalog証拠。利用者レコード/PII/設定値は読んでいない。
+
+影響:
+- `apps/social-mobile/src/data/content-settings-repository.ts:49` は当該tableのsettings/persona/updated_atをSELECTする。不存在時はunavailable扱いになる。
+- 同ファイル `:134` の明示確認保存は同tableへINSERTまたは `brand_id + updated_at` 条件のUPDATE。現行productionではその永続化を成立させられない。
+- `supabase/functions/social-mobile-consult/logic.ts:269` のsaved-state readは同table依存。一部のmissing table/column responseはdefaultsへfallbackする（`:290-294`）。**fallbackで会話できる可能性は、confirmed settings/persona保存やCASが成立する証明ではない**。このレビューでは本番Functionを呼んでいないので実際のHTTP fallback結果を断定しない。
+- Gate Eの `updated_at` exact型/nullability/default、RLS/SELECT/INSERT/UPDATE、touch trigger、すべての既存writerがversionを進めるかをlive schemaで証明できない。
+
+TASKは「required production schemaが不足し、migration/RLS変更を要する場合は勝手に追加せずSTOP with CHANGES REQUIRED」と定めている。よってsource変更・schema追加・migration適用へ進まず停止した。これは今回のPRによるproduction破損の証拠ではなく、既存schema prerequisite未成立の検出。
+
+### Existing source candidate（適用提案/承認ではない）
+
+指定headに `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql` が既にあることを必要最小限確認した:
+- source上のCREATE TABLE定義あり。
+- source上 `updated_at timestamptz NOT NULL DEFAULT now()` とtouch trigger記載あり。
+
+**source候補の存在をproduction適用済みと読み替えない**。このH2でそのmigrationの安全性を全レビューしたわけではない。migration history修復・db push・適用、新migration作成、RLS追加はすべて0。
+
+### Startup / isolation / source freshness
+
+- PROJECT_RULES / AGENTS / HANDOFF / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / 最新H2 TASK、G3 current TASK/Reportを確認。
+- 正式repo `/Users/yuya/Developer/kabumori` はmainで多数の既存dirty changesを確認し、それには一切操作していない。
+- H2専用checkout `/private/tmp/h2-pr78-review.bZPBQe/repo` を新規作成し、指定PR headへdetached checkout。worktree/status clean。H1のPR #76 checkout/branch/filesには触れていない。
+- fresh GitHub mainをfetch。PR merge-baseからmainまで、PRの11 source/test paths overlapは0。
+- GitHub APIのbase.shaは移動するmain側refなので、diff検証には実merge-baseを使用。PR deltaはTASKどおり11 files、2661 additions / 115 deletions。別mainの.agent変更をPR source変更と混同していない。
+- `git diff --check <merge-base> HEAD`: PASS。
+
+### Review gatesの進捗（未検証をPASSにしない）
+
+| Gate | 結果 |
+| --- | --- |
+| A Auth/tenant isolation | **未完了**。Auth server GET、caller JWTのREST headers、owner/profile read周辺を部分確認したが、handler/adversarial全体未検証。owner-only妥当性/duplicate membership等も最終判定しない。 |
+| B request/history integrity | **未完了**。request allowlist/message/history boundsをsource上で部分確認。forged history/injection実証は未実施。 |
+| C provider/structured trust | **未完了**。契約sourceの一部を読んだだけで、server/client validator・partial output・nested controlsを独立実証していない。 |
+| D no implicit persistence | **未完了**。table依存のrepository save pathを確認したが、screen/confirmation全経路を独立検証していない。 |
+| E live CAS/schema | **BLOCKED**。production table不存在。 |
+| 24:00 narrowing | **未検証**。live DB constraintがないためserver/DB整合のPASSを出さない。 |
+| F history-learning no-X boundary | **未完了**。G3申告をレビュー済みと扱わない。 |
+| G cost/abuse | **未完了**。G3はper-request boundsのみ・per-user quotaなしと申告。public enablement前の制限要否はC2/再レビューで別判断。 |
+| H verify_jwt/deploy config | **未完了**。[official docs](https://supabase.com/docs/guides/functions/auth-headers)のdefault verify_jwt ONと実project/repo deploy truthを区別し、今回のconfig安全判定は出していない。 |
+
+### Tests / adversarial checks
+
+- exact PR head / merge-base-to-main overlap / clean checkout / diff check: **確認済みPASS**。
+- live schema/catalog SELECT: **成功、table不存在を確認**。
+- targeted Edge tests / Deno check-lint / social-mobile全test / app typecheck-lint / shared regressions / mutation-adversarial / full secret scan: **NOT RUN**。必須schema停止条件でレビューを打ち切ったため。
+- G3 Reportの153/153 app、196/196 Deno、26 Edge等は**申告履歴**であり、このH2で再実行・受入れした証拠ではない。
+- failing test: なし（testを実行していない）。阻害理由はread-only production catalogに基づくschema欠落であり、test結果を作っていない。
+
+### Exact next action / remaining issues
+
+C2がschema前提の扱いを決める。既存content-settings candidateを別のDB review/apply承認対象にするか、承認済み非production schemaで先にfull reviewを進めるかを明示する。**今回のH2から自動的に本番migration適用へ移らない**。
+
+必要なschemaを整える別承認/工程の後、production relation/columns/RLS/grants/updated_at triggerをread-backし、CASの実効性（全既存writersを含む）を検証。その後、同じexact PR headまたは新しく指定されたheadの残るA〜H/adversarial/testsを完了してからmerge/deploy可否を判断する。
+DB前提が解決しても、未検証のAI/Auth/security gatesまでPASS扱いしない。推薦モデル：**Sol（高）**。
+
+### Safety / sync
+
+- production reads: **catalog-only 1 query / READ ONLY transaction**。利用者データSELECTなし。
+- production INSERT/UPDATE/DELETE / migration / RLS/RPC/grant / backfill: **0**。
+- merge / Edge deploy / live paid AI / X API/history/upload/post / Push / Auth/OAuth/Vault操作 / Cron/settings変更: **0**。
+- source/test fix: **0**。正式repoの既存未commit変更への変更・削除・stage・commit・stash・reset: **0**。
+- H1/G3/G4/他workstream、apps/admin、HANDOFF/root package/env変更: **0**。
+- secret/JWT/user id/email/会話本文のReport露出: **0**。
+- この停止ReportとH2 TASKだけをGitHub mainへ同期し、read-back確認する。publication commitはGitHub file historyとH2完了応答で識別する。過去Report/TASKは保持。
+- review_required / next_owner: chatgpt。STOP for C2。
+
+---
+
+## H2 — Common-account PR #70 production前ゲート — 2026-10-02 JST
+
+- task_id: common-account-pr70-preproduction-gate-20261002
+- result: **PARTIAL / mandatory real-Supabase proof BLOCKED（operator prerequisite）**。
+- source_merge_status: **PASS / merged**。source受入れとproduction適用可否は別判定。
+- migration_apply_readiness: **HOLD**。actual disposable Supabase proofが未実施で、production Data API exposureも未証明。
+- backfill_readiness: **HOLD**。read-only試算は完了したが、migration未適用・managed proof未実施・別途backfill明示承認が必要。
+- next_owner: chatgpt / **C2待ち**。production apply/backfill/deployは今回一切許可されていない。
+- exact_reviewed_main: 独立checkout/test時 `416de8fdac6a6f4c37740536759e0b09b96c81f4`。同期直前fresh GitHub main / FETCH_HEAD `e39b42f732a00c0dceb8e6f2542a83cc350b999e`。
+- merged_target: `44121914b035e22380a4ca1bd8252a42713a2bbf`。
+- accepted_source_head: `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65`。
+- implementation_commit: **新規なし**。上記accepted sourceがmerge済みで、H2によるsource修正なし。
+- changed_files: **.agent/CODEX_REPORT_2.md / .agent/tasks/CODEX_TASK_2.md の完了記録のみ**。既存Report/TASK履歴は保持。
+- deploy: 0。production mutation: 0。Auth/Storage/OAuth/Vault操作: 0。実X/OpenAI/Push: 0。
+- GitHub同期: このH2制御2ファイルだけをmainへ同期し、最新TASK/Reportをread-backする。同期commit SHAはH2完了応答およびGitHub file historyで確認可能（実装commitと混同しない）。
+
+### 判定を分離
+
+| Gate | 判定 | 証拠 / 限界 |
+| --- | --- | --- |
+| A: merged source integrity | PASS | accepted sourceの8ファイルとfresh mainはbyte-identical。target mergeをancestorとして包含。 |
+| B: actual disposable Supabase proof | BLOCKED / NOT RUN | 指定・承認済みの使い捨て実Supabase環境がない。ローカルPG成功をmanaged proofに読み替えない。 |
+| C: production read-only preflight | PARTIAL | SQL catalog/型/FK/helper/owner権限/history/既存RLS metadataは整合。PostgREST設定/実API境界は未証明。 |
+| D: backfill read-only parity | PASS（aggregate試算のみ） | 5 accounts / 2 Kabumori / 1 X候補。書き込みなし。Phase 0からの人口差分を下記に記録。 |
+| E: rollout / rollback | sequencing reviewed | applyとbackfillを別々に承認する順序が必須。managed環境でのrollback/reapplyは未実証。 |
+| F: production disposition | HOLD | source merge PASS ≠ migration apply PASS ≠ backfill PASS。 |
+
+### 作業環境・freshness・競合
+
+正式repo `/Users/yuya/Developer/kabumori` はread-onlyでstatus/branch/HEAD確認。既存未commit変更が多数あるため、そのcheckoutを作業に使っていない。ファイル変更/stage/commit/stash/resetはしていない。
+
+H2専用checkout: `/private/tmp/h2-common-account-gate-iZx94E/repo`。正式repoからshared cloneし、fresh GitHub mainのexact SHAへdetached checkout。cloneのoriginはローカル正式repoなので、**それをGitHub正本とは扱わず**、GitHub branches/main readと `git fetch https://github.com/anohi-memories/kabumori.git main` のFETCH_HEADを照合した。同期前にもfresh-checkし、同じH2 task_id/ready/codexとReport blob不変を確認。
+
+最新mainは他slotの.agent記録で進んでいたが、以下8ファイルはaccepted sourceから差分0:
+- `docs/common-account/phase1-lifecycle-foundation.md`
+- `supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql`
+- `supabase/tests/common_account_lifecycle_behavior.sql`
+- `supabase/tests/common_account_lifecycle_fixture.sql`
+- `supabase/tests/common_account_lifecycle_mutations.sh`
+- `supabase/tests/common_account_lifecycle_rollback.sql`
+- `supabase/tests/common_account_lifecycle_run.sh`
+- `supabase/tests/migration_source_invariants_test.ts`
+
+G3 AI consultation / G4 publish toggleはcommon-account、migration、削除境界への変更禁止で対象非競合。G2は別market-report-analysis品質調整。open PR #41/#33/#11/#10/#3のchanged pathsにも対象8ファイルのoverlapなし。未mergeの別migration/認証作業はこのH2で適用・mergeしない。CURRENT_STATE/ACTIVE_TASK/他slot TASKは更新しない。
+
+### Gate A — source責任境界
+
+- migrationはadditive lifecycle/readiness foundation。既存Auth/Storage/Vault/providerのdestructive SQLなし。`DELETE FROM auth.users` はmigrationにない（隔離fixture/testの模擬Auth cascadeは別物）。
+- 5新テーブルはRLS ON。publicの2テーブルはauthenticatedの本人SELECTのみ、SELECT対象columnも限定。client writeなし、service_role直接table grantなし、backendは指定RPCのみ。
+- 33新関数はSECURITY DEFINER / empty search_path / schema-qualified。transaction内でdefault EXECUTEをrevokeし、public RPCは目的別にexact roleへgrant。private helperはownerのみ。
+- Phase 1はshadow only、enforcing modeなし。observerはmanaged login cleanupを代行しない。`ready_for_managed_auth_delete` はAuth削除完了ではない。
+- accepted fix: Auth rowが残ったままcommon application rowを直接DELETEすると23503で拒否し、login_removedを誤記録しない。Auth cascadeの模擬経路はshadow/unverified observationのまま。
+- readinessはlifecycle_version / requirement_epoch / exact required-checkpoint setへbound。built-in checkpoint意味の改変・entitlement owner/service transferは拒否。
+- **既存Kabumori legacy hard-deleteは未変更でunsafeのまま**。Phase 1のmerge/applyだけでは安全にならない。X legacy sagaも自動的にcommon lifecycleへ移行しない。
+- admin/foreign workspace/Apple identity/Storage等の未接続producerはfresh evaluationでのみ再確認される。すべてのwriter/deletion routeの統合前にenforceへ進めない。
+- checkpointはbackendのattestationであり、実際のsession/provider/Storage cleanupがDBだけで証明されたものではない。prepareと外部Auth Admin API deleteはatomicではない。
+
+### Gate B — 実Supabaseは未証明
+
+read-onlyのproject/branch inventoryではproduction `stock-x-autopost` と別の既存projectだけが確認でき、productionのbranchはdefault/mainのみ。**別既存projectを使い捨て環境と推測せず、勝手なproject作成/課金resource作成/破壊テストもしていない**。
+
+したがって以下はすべて実SupabaseではNOT RUN:
+- single migration apply / real role owner behavior
+- public/private Data API exposure、PostgREST RPC / SQLSTATE/error mapping
+- anon/authenticated本人SELECT・他人非露出・client write denial
+- service_role直接table grant denialとRPC-only path
+- GoTrue/Auth Admin API deleteでのobserver発火、direct application-row delete refusal
+- managed auth.identities / sessions / refresh token / stale JWT境界
+- Storage API cleanup / owner_idとbucket compatibilityの実動作
+- rollback/reapply
+- provider OAuth（今回実OAuthを行う計画もなし）
+
+ローカルPGのrole/fixture/SQL `auth.users` deleteはGoTrue・Storage・PostgRESTの代替証明にはならない。特にproductionの `supabase_auth_admin` はnonsuperuser / non-BYPASSRLSであり、実managed runtimeがtriggerをどう実行するかはNOT RUN。
+
+### Gate C — production SELECT/catalog preflight
+
+project `wsmznyzcvmuitkglfeuj` へ `BEGIN TRANSACTION READ ONLY` のSELECT/catalog queryのみ。DO/DDL/INSERT/UPDATE/DELETE/migration/RPC mutationは行っていない。PIIやtokenを取得・Reportへ出していない。
+
+catalog結果:
+- required 17 tables: 全存在。
+- source-derived 26 exact column/type checks: mismatch 0。
+- source-derived 14 exact FK checks: mismatch 0（referencing/referenced columns、型、delete action、validated、nondeferrableを含む）。
+- profilesへぶら下がるnon-CASCADE FK: 0。
+- private schema / anon / authenticated / service_role: 存在。
+- required helper 2件: `social_mobile_account_deletion_workspace(uuid)` / `social_mobile_account_deletion_subject(uuid)`、return text、owner postgres、immutable SQL、SECURITY INVOKER、empty search_path。client/service_role EXECUTEなし、postgres EXECUTEあり。既存pure helper定義も整合。
+- target新table/view/function/index name collision: 0。
+- target migration `20261001150000`: migration history未記録。current max history version `20260930090000`。
+- auth.users/identities PK(id)、profiles PK(id)、admin_users PK(user_id)、brand_memberships PK(brand_id,user_id)、brands PK(id)等をcatalog確認。必要な17テーブルすべて既存RLS ON / FORCE RLS OFF。
+- profiles/activity tablesはowner-self authenticated policy、admin_usersはself SELECT、workspace系はmember/self SELECT。OAuth-state/tombstoneテーブルにはclient policyなし。これはmetadata確認であり実JWT/RLS behavior testではない。
+- 計画上のmigration owner postgresはnonsuperuser/BYPASSRLS、必要Auth/Storage/legacy SELECT権限あり、auth.users SELECT/UPDATE（locking）、profiles INSERT/DELETE権限あり。新SECURITY DEFINER関数のmanaged環境実行は未証明。
+- managed shape: storage.objects/buckets owner_id:text、legacy owner:uuid、objects.bucket_id:text。auth.identities.user_id:uuid/provider:text、sessions.user_id:uuid、refresh_tokens.user_id:varchar/session_id:uuid。users→identities/sessions CASCADE、sessions→refresh_tokens CASCADEが確認でき、owner_id→auth.users FKはない。
+- SQL `current_setting('pgrst.db_schemas',true)` はnull、catalog上のexplicit pgrst.db_schemas configは空。**これをprivate schema非露出/安全の証明にはしない**。API gateway/service設定はこのSQL観測で確定できず、actual Data API exposure判定は未証明。
+- deletion関連Function metadataだけread-only確認: account-delete v10 ACTIVE / verify_jwt=true、social-mobile-account-delete v5 ACTIVE / true。H2のdeployは0。
+
+結論: **migration自身のSQL preflightに必要なcatalog条件はPASS**。しかし「実Supabase適用/managed role/API境界までPASS」とはしない。
+
+### Gate D — readonly backfill parity / Phase 0差分
+
+候補viewの既存Auth/legacy SELECTとpure helperをそのまま使い、新table未適用分のみtyped empty CTEで代替してaggregateした。未適用RPCを作成・呼出しせず、個人単位ID/email/handleは出力していない。`applied=false`。
+
+| Aggregate | 今回 | Phase 0 |
+| --- | ---: | ---: |
+| Auth users / common_accounts would-create | 5 | 4 |
+| Kabumori candidate / entitlement would-create | 2 | 2 |
+| Kabumori activity | 1 | 1 |
+| Kabumori profile-only | 1 | 1 |
+| X candidate / entitlement would-create | 1 | 1 |
+| X identity_verified | 1 | 1 |
+| X workspace_pending | 0 | 0 |
+| Auth-only（consumer entitlement candidateなし） | 2 | 1 |
+| dual-service | 0 | 0 |
+| admin_users | 1 | 1 |
+| profile-only + Auth-only manual review | 3 | 2 |
+
+その他今回aggregate:
+- admin exclusion: 1（adminでもcommon account対象。X consumer entitlementには入れない）。
+- excluded non-self-service memberships: 0。
+- multiple-owner workspace / orphan user-facing workspace / unexpected derived ownership: すべて0。
+
+Phase 0からAuth-only候補が1件増えたためaccount/manual-review countsが各1増。Kabumori/X判定は変化なし。「Auth-only」はview上のconsumer candidateなしの分類で、admin-excludedなloginも入り得る。用途を勝手に推測しない。profile-only1件とAuth-only2件は operator確認対象。email-based mergeなし。
+これらは単一read-only snapshotのwould-create countsであり、actual backfill成功・将来のcounts固定を保証しない。適用承認時には必ずfresh dry-runを再実行する。
+
+### Gate E — 必須rollout順序 / rollback
+
+source docs §15の「dry-run後apply」は、**今回TASKのより厳格な承認境界で補完**する。docsを勝手に書き換えず、本番runbookは次を満たす必要がある。
+
+1. operatorが使い捨て実Supabase環境を指定・明示承認し、Gate B全部を証明。
+2. C2で証拠を受け入れ、production fresh origin/main/競合/catalog/history/API configを再確認。
+3. **single migrationだけのproduction apply明示承認**を取得。`supabase db push` / history repairは禁止。
+4. exact source1ファイルをapply後、tables/columns/FKs/constraints/trigger/owner/grants/RLS/33関数ACL/search_path、shadow/not_started/epoch1、built-in registry、新account/operationが空をread-back。
+5. 実installed backfill(false) dry-runとPhase 0/今回試算をparity確認。manual-review/unknown populationをoperator確認。
+6. **migration applyとは別のbackfill apply明示承認**を取得してからbackfill(true)。counts/state/idempotencyをread-back。
+7. Phase 2 registration/creators/既存writersを統合。
+8. Phase 3 deletion adapters + Auth/Storage/session/provider orchestratorを別レビュー・検証。
+9. producerを完全に統合し、managed proofと明示承認を経て初めて新migrationでenforcementを検討。
+
+rollbackはintegration開始前で、exact shadow / not_started / built-in registry intact、operationは完了済みを含め0、non-active account0、self-registered entitlement0、依存0を肯定的に確認したときだけ。one transaction / DROPなしCASCADE / refusal時partial teardownなし。local suiteで10拒否case・exact baseline restoreを再確認した。ただしdynamic/client依存をPG catalogだけでは検知できないので、運用統合なしのoperator確認も必要。managed Supabase rollback/reapply proofはNOT RUN。
+
+### 独立test rerun
+
+H2専用PostgreSQL 17.11 / Unix socket only / fake data。non-superuser fixture ownerで実施。既存sourceを改変していない。
+
+| 検証 | 結果 |
+| --- | --- |
+| common_account_lifecycle_run.sh | **20 PASS markers / exit 0**。exact preflight8 drift、behavior、14二者race、isolation/no-deadlock、rollback10 refusal + exact restore/reapplyを含む。 |
+| common_account_lifecycle_mutations.sh（CAL_JOBS=4） | **46/46 DETECTED / exit 0**。各mutantは意図したnamed failureで検知。 |
+| social_mobile_account_deletion_run.sh | **8 PASS markers / exit 0**。behavior/acquire/reconnect/onboarding両順序/isolation/no-deadlock/cleanup。 |
+| deno test --no-config --allow-read supabase/tests/migration_source_invariants_test.ts | **10/10 PASS**。 |
+| 3 shell runner bash -n / invariants deno lint | PASS。 |
+| git diff --check / accepted8 files integrity / target ancestry | PASS。 |
+
+operator/harnessメモ: 初回local initdbはsandbox shared-memory permissionで起動前に失敗し、許可されたH2専用local操作として起動し直した。削除回帰の初回commandはCAL_変数を渡したためDEL_PGHOST requiredでfixture実行前に拒否されたが、正しいDEL_変数で8/8通過した。code/test修正や本番への切替はなし。
+完了時、test DBはすべてcleanupされpostgres/template0/template1だけであること確認。H2所有local clusterのみ停止済み。独立checkout clean。
+
+### Unresolved prerequisites / exact next operator action
+
+**本番適用には進めない。** C2はsource PASSを維持しつつ、Gate B/C未証明とmanual-review3件を受け取る。
+
+次の1手: **利用許可のあるdisposable非production Supabase project/sandboxを指定し、その環境だけにfake users/Storage fixture、migration apply、Auth Admin API deletion、Data API/RLS/ACL、rollback/reapplyを実施する明示承認を出す**。現在の別既存project/productionを流用しない。新project作成が必要なら課金を含め別承認を先に受ける。secretは安全な環境/connectorに設定し、チャットへ貼らない。real provider OAuthは不要。
+その後C2で再ゲートし、production migration適用とbackfill適用を別々に判断する。推薦モデル：**Sol（極高）**。
+
+### Safety checks
+
+- production INSERT/UPDATE/DELETE / migration apply / backfill: **0**。
+- deploy / Cron / flag / provider/settings変更: **0**。
+- real Auth create/update/delete / identity link-unlink / Storage write-delete / OAuth revoke / Vault mutation-read-secret: **0**。
+- production business/Edge Function手動実行 / X/OpenAI/Push: **0**（Supabase SELECT/catalog read-only connectorは実施）。
+- code・apps/admin・HANDOFF.md・root package/env・他slotファイル変更: **0**。
+- formal repo既存未commit変更へのH2変更/stage/commit/stash/reset: **0**。
+- PII/raw user id/email/handle/token/secret Report露出: **0**。
+- 全既存Report/TASK履歴を保持。review_required / next_owner: chatgptでSTOP for C2。
+
+---
+
+## H2 — AI Lab topic-deduplication PR #66 focused review — 2026-10-01
+
+- task_id: x-ai-lab-pr66-topic-dedup-review-20261001
+- result / verdict: **PASS**. Source review and requested regression checks support merging PR #66; no source edits, merge, or deploy were performed.
+- reviewed_head: PR #66 exact head 4f692e4d805ccd3ee628058bb20ee6c1f62cdd6d; open, GitHub mergeable=true, Netlify preview and Vercel status both success.
+- fresh_main_at_report: 040ca2919bb42db7499c08aa59325b3a388607ef. PR base was 2d2d044bcce5804cfdd3b7f64e25b66e45db16fd; inspected the 22 main commits since that base. None touched the PR's seven source paths. Current PR head remains unchanged.
+- changed_files_reviewed: all seven task-scoped files: ai_lab_brand_post_store.ts, ai_lab_dev_diary_context.ts, ai_lab_scheduled_brand_post.ts, ai_lab_theme_guard.ts, ai_lab_topic_dedup_test.ts, brand_post_generator.ts, and x-test-post/index.ts.
+- findings: none blocking within scope.
+- root_cause_and_rotation: production entry uses deterministic rotation over sanitized, fresh diary units before evergreen; concrete changed/difficulty/decision facts are carried in every seed; generic angle candidates are excluded with reason codes; balance/interleave avoids adjacent same-entry selections when multiple entries exist. The 200-shape randomized cyclic test passed. A single-entry diary truthfully cycles distinct cuts and does not fabricate a new event.
+- counter: countAiLabBrandPostsBefore performs one read-only GET scoped by brand_id=ai_salaryman_lab, post_type=brand_post, and strict scheduled_for < current; it reads PostgREST exact count from content-range. HTTP/parse/network failure returns null and invokes deterministic scheduled-hour fallback without blocking. No unrelated brand/type rows affect the exact query.
+- guard/retry: exactly three total generation attempts (initial plus at most two content-only retries); rejected drafts are held out of publish/completion, while generator/transport errors are not automatically retried. After a passing draft, brand/type, character count, cross-brand duplicate and final pre-publish guards remain in sequence. Retry instructions contain reason categories, not rejected draft text. Generic-theme and opener checks are scoped to AI Lab.
+- cross_brand: omitted/empty extraInstructions adds no prompt lines; only the AI Lab dispatcher supplies new lines. Runtime brand/type checks remain in place. No neutral/Kabumori/Mio voice, hashtag, scheduling, OAuth/Vault, DB/RPC/migration, Cron, or X API behavior changed.
+- tests:
+  - deno test -A --no-check supabase/functions/_shared/brand/ai_lab_topic_dedup_test.ts: **24 passed / 0 failed**.
+  - related diary/scheduled/store/generator/dispatch-guard tests: **55 passed / 0 failed**.
+  - deno test -A --no-check supabase/functions: **2337 passed / 0 failed**.
+  - deno check on the five changed shared runtime modules: **pass**.
+  - deno check supabase/functions/x-test-post/index.ts: six existing type errors in OAuth/image/morning-lane code. The same check at PR base 2d2d044 produced the same six diagnostics; no new AI Lab diagnostic was introduced.
+  - git diff --check 2d2d044..4f692e4: **pass**.
+- known_limitations: published body text is not persisted, so true semantic comparison with actual recent AI Lab posts is unavailable; current guard is bounded regex-theme/opener detection plus rotation, not semantic comparison over persisted history. One fresh diary entry can only rotate distinct cuts. Diary edits can reorder rotation; on counter-read failure, scheduled-hour fallback assumes AI Lab schedule slots do not collide within an hour.
+- merge_deploy_safety: **safe to merge** based on exact reviewed head, requested tests, current mergeable status, and no overlapping main-side source paths. After merge, only x-test-post needs a separately controlled redeploy; no deploy was requested/performed here.
+- changed_by_H2: .agent/CODEX_REPORT_2.md and .agent/tasks/CODEX_TASK_2.md only. PR source files unchanged.
+- production_mutation: **0**. Merge **0**, deploy **0**, real X/API calls **0**, DB/schema/RPC/migration **0**, Cron/settings/OAuth/Vault changes **0**.
+- safety_checks: local fixtures/stubs only; no production invocation, real X post, database write, or external AI generation.
+- next_recommendation: C2 may close the review. Treat the semantic-history limitation as a separate future task if true recent-post comparison is required.
+
+---
+## H2 — AI Lab development-diary PR #61 final acceptance review — 2026-09-30
+
+- task_id: `x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930`
+- result / verdict: **PASS**. Strict calendar validation closes the final finding; PR #61 is safe to merge and later deploy from the reviewed source. H2 did not merge or deploy.
+- reviewed_head: PR #61 exact head `67ee04b41e37553885d43f4630628d135061cbf8`; open, GitHub mergeable=true. Fresh main SHA: `75383d6ebc36066247d37ac005c5fdc30e9aa685`; PR is 3 commits ahead / 5 behind. Main changes since merge-base have no overlap with the PR's 10 source paths.
+- prior_blockers:
+  - runtime Markdown packaging: **RESOLVED**. Runtime uses the ordinary import graph to load the generated snapshot; no runtime filesystem/static-asset dependency. Current-head canonical Markdown and snapshot were independently parsed and found byte-identical (2,068 characters); parity test remains.
+  - hashtag scope: **RESOLVED**. Only AI Lab opts into its own hashtag voice policy. Neutral social-mobile retains the prior no-hashtag instruction; the fixed-hashtag branch remains unchanged.
+  - impossible calendar dates: **RESOLVED**. `isValidCalendarDate` checks YYYY-MM-DD format and UTC year/month/day round-trip before an entry can survive sanitization. Impossible entries are excluded before freshness/topic selection and fall back to evergreen.
+- date_validation_tests: current head explicitly rejects `2026-09-31`, non-leap `2026-02-29`, out-of-range months/days and malformed shapes; accepts leap day `2028-02-29` and valid month-end dates; verifies impossible dates are dropped by sanitization and selection falls back to evergreen. The selector integration test uses `2026-09-31` against `2026-09-30`, but the independent sanitizer assertion directly catches the former shape-only bug.
+- safety_and_scope: AI Lab scheduled `brand_post` branch still selects the diary/evergreen topic and passes it as `topicSeed`. Snapshot parity passed; the committed diary has no matches for the sanitizer's URL/email/token/JWT/branch/task/commit/PR/schema denylist patterns. No G3/Auth/account-deletion, DB/RLS/RPC, migration, or credential files are in the PR diff. No other brand's hashtag behavior changed.
+- changed_files_by_H2: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only. PR source unchanged.
+- tests: G4 Report at this head records `ai_lab_dev_diary_context_test.ts` **29/29**, profile **7/7**, generator **13/13**, scheduled AI Lab **8/8**, shared brand suite **119/119** under Deno; changed-file `deno check`, `git diff --check`, and secret scan PASS. H2 independently counted current source test declarations: 29 / 7 / 13 / 8, coherent with the focused report. H2 did not rerun the test executables. GitHub combined status: Netlify preview success; Vercel preview failed only on build rate limit; no PR-triggered GitHub Actions runs were returned.
+- merge_deploy_safety: **PASS for merge and subsequent separately controlled deploy** based on reviewed source, clean task scope, and GitHub mergeability. The Vercel preview rate limit is not treated as a code blocker under current repository policy. No merge/deploy was performed or authorized by this review.
+- implementation_commit: G4 reports date-validation fix at PR head `67ee04b`; H2 made no source commit.
+- push: H2 review record synchronized to GitHub; only H2 TASK/REPORT changed.
+- production_mutation: **0**. Deploy **0**, real X/API **0**, DB/RLS/RPC/migration **0**, Cron/settings **0**.
+- remaining_issues: none found within this focused acceptance scope. Test execution results are G4-reported; H2 independently verified current-head test declaration counts, not execution.
+- safety_checks: no PR source edit, merge, deploy, production/API call, or unrelated workstream change.
+- next_recommendation: C2 may close this H2 review. Any merge/deploy remains a separate operation with its own authorization and preflight.
+
+---
+
+## H2 — AI Lab development-diary PR #61 final focused review — 2026-09-30
+
+- task_id: `x-ai-salaryman-dev-diary-pr61-final-review-20260930`
+- result: **FAIL — do not merge/deploy yet.** No source edits, production operations, or PR actions were performed.
+- reviewed_head: PR #61 exact head `be146f7bd3cabfb5ae42200ad441b427928d58cf` (open, GitHub mergeable=true). Fresh `main` SHA at review: `0224ff7ed41380749ed677c1dc27942e916fcffb`; PR branch is 2 commits ahead / 16 behind. Main-side changes since merge-base do not overlap the 10 PR source paths, though the PR should be rechecked against main before merge.
+- prior_blocker_runtime_packaging: **RESOLVED in source.** Runtime loader imports `ai_lab_dev_diary_context.snapshot.ts` through the ordinary module graph; `ai_lab_dev_diary_context.ts` contains no runtime filesystem/static-asset read. The snapshot is parsed from the reviewed ref and was byte-identical to the canonical Markdown (2,068 characters). The parity test reads the Markdown only in the test process and compares it with the loader result.
+- prior_blocker_hashtag_scope: **RESOLVED in source.** `voiceControlsHashtags` is enabled only on the AI Lab profile; neutral `social_mobile_user_v1` keeps the explicit no-hashtag instruction; the fixed-hashtag branch remains first and unchanged. New regression tests cover neutral no-hashtag and fixed-hashtag behavior.
+- blocking_finding: `supabase/functions/_shared/brand/ai_lab_dev_diary_context.ts` validates dates with a shape-only `YYYY-MM-DD` regex (line 36 / sanitizer line 68), then constructs `new Date(date + T00:00:00Z)` for freshness (around line 190). Impossible calendar dates such as `2026-09-31` are normalized by JavaScript to a real following date rather than rejected. Near that normalized date, a malformed/stale diary entry can pass the freshness gate and supply a diary topic; if its prose says “today”, this can fabricate current-day progress. The current “malformed date” test covers slash format and non-date text, not an impossible calendar date. Require strict calendar round-trip validation plus a regression proving impossible dates fall back to evergreen before considering merge/deploy.
+- wiring_and_scope: `x-test-post/index.ts` selects the topic only inside the guarded AI Lab `brand_post` scheduled branch and passes it as `topicSeed` to `generateBrandPost`; no other brand dispatch path is changed. PR file list is 10 files, all diary context/shared brand generator/profile and the one AI Lab dispatch call site. No G3/Auth/account-deletion, DB/RLS/RPC, migration, or secret-bearing file changes were present.
+- sanitizer_safety: the selector sanitizes fields before topic choice and excludes future/stale/no-safe-entry cases to evergreen. The denylist is finite (as the code comments acknowledge), so the Markdown must remain curated public-safe material; it is not a general semantic secret detector. No actual secret was observed in the reviewed diary or snapshot.
+- tests: PR description reports earlier results: context 20/20, profile 7/7, generator 12/12, scheduled AI Lab 8/8, shared brand 109/109, isolated checks and diff check PASS. These counts are stale for the reviewed head: source now contains 22 context test declarations and 13 generator test declarations. GitHub combined status has Netlify preview success and Vercel preview failure due build-rate-limit; no PR-triggered GitHub Actions workflow run is available. A clean checkout/test rerun was not possible from this environment, so current-head test pass is **not independently verified**. The parity and cross-brand regression tests themselves were inspected.
+- changed_files_by_H2: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only. PR source files unchanged.
+- implementation_commit: none. H2 correction commit: none.
+- push: H2 control-file review record synchronized to GitHub; no source commit/push by H2.
+- deploy / real X post / production mutation: **0**.
+- remaining_issues: strict impossible-date rejection and regression; current-head test suite needs rerun with updated counts.
+- safety_checks: no source edit; no deploy; no real X post/API; no DB/RLS/RPC/Auth/account-deletion changes; no G3 files or credentials touched; no production mutation.
+- next_recommendation: return the impossible-date finding and stale/unverified test evidence to G4/ChatGPT for a small source+test correction and current-head rerun, then re-review the new exact PR head. Keep PR #61 unmerged and undeployed.
+
+---
+
+## H2 — AI Lab development-diary PR #61 focused review — 2026-09-30
+
+- task_id: `x-ai-salaryman-dev-diary-pr61-review-20260930`
+- result: **FAIL — do not merge/deploy until the runtime asset blocker is resolved.** No code fix was made because the required asset packaging solution is outside the current review-only correction and cannot be proven from the available isolated checkout.
+- reviewed_head: PR #61 `385e561fa93dee5eaa6dfc215016f2c79531a53a`; PR remains open. Fresh GitHub comparison: origin/main `229ac6d7cc11d5a3a58b62a84c9a8ab178c7dab1`, PR head is 1 commit ahead / 7 behind. Changed-file list is limited to the 8 files reported by GitHub.
+- root_cause: The PR description says scheduled AI Lab posts always used the shared generator's static generic topic because no `topicSeed` was passed. The updated `x-test-post/index.ts` now selects a diary/evergreen seed and passes it to `generateBrandPost`; source inspection confirms this direct wiring.
+- blocking_finding:
+  - `ai_lab_dev_diary_context.ts` reads an adjacent Markdown file via `node:fs/promises` and `import.meta.url`. The source comment claims the full function directory is automatically bundled, but the PR does not add `supabase/config.toml` (confirmed 404 at the reviewed head) or another asset packaging mechanism.
+  - Supabase's official Wasm bundling guide says non-code static assets must be included through `static_files` in `supabase/config.toml`; it also notes static files require the CLI/Docker path and are not deployed via `--use-api`: [Supabase Edge Function static-file bundling](https://supabase.com/docs/guides/functions/wasm).
+  - The current catch in the scheduled dispatch converts any read failure to an empty string, so missing runtime asset silently selects evergreen topics. This masks failure and defeats the fresh-diary behavior. The Node/Deno local test that reads the checkout file does not prove deployment packaging/runtime availability.
+  - required follow-up: add a supported packaging path for the Markdown (or embed it as code), verify the produced Edge bundle contains it, and exercise the loader under the Supabase Edge runtime. Until then the TASK requirement “canonical Markdown load works in the Supabase Edge runtime” is unproven.
+- additional_scope_note:
+  - The shared generator's no-fixed-hashtag prompt changed from “do not add a hashtag” to “defer to the profile's voice instructions.” This correctly resolves AI Lab's conflicting `#個人開発` instruction and configured fixed hashtags still use the unchanged branch. It also changes the prompt for `social_mobile_user_v1`, which has no fixed hashtags; the added regression test covers AI Lab and a configured Kabumori hashtag case, but not this no-fixed-hashtag neutral profile. Confirm this broader prompt change is intended or scope it to profiles that declare a hashtag policy.
+- other_review:
+  - No database/RLS/RPC/Auth/account-deletion changes were present in the PR file list.
+  - The diary selector is explicitly wired in the scheduled branch; future-dated entries are rejected and missing/unsafe/stale entries use fixed evergreen seeds rather than claiming a current-day event.
+  - Sanitization covers the tested URL/email/token/branch/task/commit/PR/table/RLS/RPC categories. It is a finite pattern denylist, so it should not be described as a universal semantic detector for arbitrary personal/private prose; safety currently also depends on the Markdown being curated public-safe material.
+  - Cross-brand fixed-hashtag behavior is preserved by the branch condition, but the no-fixed-hashtag profile note above remains.
+- tests:
+  - PR description reports: diary context 20/20; brand profiles 7/7; generator 12/12; scheduled brand tests 8/8; shared brand suite 109/109; `git diff --check` clean; changed-file isolated `deno check` clean. These numbers were reported by the PR author, not independently rerun in this review.
+  - GitHub combined commit status currently shows Vercel and Netlify deploy-preview success only; it does not provide independent test results.
+  - Independent checkout/test attempt was blocked: GitHub DNS resolution failed when cloning into a new disposable `/private/tmp` checkout. No retry workaround was attempted. Review proceeded from GitHub's exact PR head files/patches and official Supabase docs.
+- changed_files: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only for this review record; PR source unchanged.
+- implementation_commit: none; fixes none.
+- push: H2 control-file synchronization only; no PR source commit/push.
+- deploy: 0. Real X post/API: 0. Production mutation: 0.
+- remaining_issues: Resolve static asset packaging/runtime proof; decide whether no-fixed-hashtag behavior should affect the neutral social-mobile profile; independently run tests from a clean checkout when network access returns.
+- safety_checks: no production deploy or invocation; no database/RLS/RPC/Auth/account-deletion changes; no X/API calls; no source changes; no other slot files touched.
+- next_recommendation: Keep PR #61 blocked from merge/deploy until the Markdown runtime asset is demonstrably bundled and readable. Re-review the exact updated head and verify the neutral profile's hashtag behavior after the bounded follow-up.
+
+---
+
+## H2 — Account deletion production Stage 1 independent verification — 2026-09-29
+
+- task_id: `x-social-mobile-account-deletion-prod-stage1-verification-20260929`
+- result / verdict: **FAIL / STOP at the unrelated-production-change verification gate. All target checks performed PASS; no deletion-source defect was identified.**
+- status: `review_required`; next_owner: `chatgpt`.
+- accepted_source_merge: `136dcd2b35b161ccc4769da15b05e796f095e881` (accepted PR #52 head `4bc819555c07c8792f5b78ea29aa6b9a35694042`).
+- fresh_origin_main_at_start: `d79b0c8524af56cc56c5245f5037517fc689d917`; final report preparation base: `bb575627c6cf0e01da3c2b694822b9a2ef256435`. Intervening main changes did not touch H2's controls or the accepted deletion source.
+- independent_worktree: `/private/tmp/kabumori-h2-account-deletion-report-20260929`, H2-owned branch `codex/h2-account-deletion-report-20260929`. Only this previously clean H2 checkout was fast-forwarded. Formal shared checkout and other worktrees were not edited.
+- changed_files: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only. Source fixes / implementation commits: **0**.
+- report_commit_hash: `6c9f680be8548ca65c01b029937be952cf0199c7` (H2 TASK/REPORT only). Push: **SUCCESS**, normal fast-forward to origin/main. Fresh remote read-back confirmed this commit's inclusion, this task_id at the Report head and TASK `review_required / next_owner: chatgpt`. This delivery acknowledgement changes only the H2 Report; no source commit, merge or deploy by H2.
+- production_mutation_by_H2: **0**.
+
+### A — Migration production identity / RPC protection (sanitized)
+
+- Exact file: `supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql`.
+- Independently recomputed SHA-256: `7481078f91e87447216a2ae93e0c12b78ce6a68801205f4fdd74bb9bd6588657`, matching the approved value. There is no source delta from the accepted merge in this migration or deletion Edge directory.
+- Read-only production catalog read-back: **21/21** function names, signatures, body hashes and definer/invoker modes match the accepted file. Expected owner and empty search_path are preserved. Client execution is denied; intended service execution surface matches exactly. No unexpected overload/collision was found. Privilege detail and unrelated security observations are intentionally not published.
+- Both state/audit tables retain the reviewed columns, validated checks/keys, RLS and direct-access protection; no unexpected trigger/FK on these tables was present.
+- All **11/11** expected BEFORE INSERT OR UPDATE, FOR EACH ROW guards are enabled and call the reviewed guard function. Their definitions match the accepted structure.
+- READ COMMITTED remains the default/current isolation, with no incompatible database/role or relevant function override. Catalog inspection finds only the reviewed onboarding RPC as the workspace creator. All three existing onboarding RPC body hashes match the repository and runbook; no body change was caused by this migration.
+- State/audit aggregate counts before and after non-destructive smoke: **0 / 0**.
+- Migration-history version `20260928160000` remains **unrecorded (0 rows)**. This is the runbook's known consequence of exact direct SQL application, not evidence that the objects were absent. No history repair, reconcile, rollback or migration operation was performed by H2.
+
+### B — Edge production identity
+
+- `social-mobile-account-delete`: **version 1 / ACTIVE / verify_jwt=true**.
+- Production updated_at: **2026-09-29T13:05:33.691Z** (22:05:33.691 JST).
+- Retrieved runtime source through Supabase's read-only get-edge-function API. Exactly **4/4** files match the accepted repository source by SHA-256 over the returned source bytes: `index.ts`, `http.ts`, `delete_logic.ts`, `apple_revoke.ts`. No test/extra source files were included.
+- The exact source has no console/logger calls. Fixed error responses do not echo raw RPC/provider errors or credentials. Caller identity is revalidated before the deletion flow, and no caller-supplied user ID is trusted.
+- Production configuration **names only** were checked: Apple revocation configuration is absent; the accepted source keeps that path fail-closed. No configuration values/digests were output. Required existing X configuration was present; X was not contacted.
+- Deletion Function metadata remained unchanged across H2 verification. Other Function metadata was compared independently; the single parallel change below triggered STOP.
+
+### C — Independently repeated non-destructive HTTP smoke
+
+Only a public legacy anon JWT, validated as an anon/non-user credential for the exact project, was used where needed. No user session token, service-role bearer or authenticated user deletion request was sent. Keys/Authorization headers/raw request or response bodies were not printed or persisted. Each case was attempted once, retry **0**.
+
+| case | observed | verdict |
+| --- | --- | --- |
+| OPTIONS/CORS preflight | 204; expected origin/headers/methods | PASS |
+| POST without Authorization | 401 at gateway | PASS |
+| POST with malformed JWT | 401 at gateway | PASS |
+| unauthenticated preview | 401 `AUTH_REQUIRED` | PASS |
+| unauthenticated delete | 401 `AUTH_REQUIRED` | PASS |
+| invalid action | 400 `ACTION_REQUIRED` | PASS |
+| GET | 405 `METHOD_NOT_ALLOWED` | PASS |
+
+- Smoke: **7/7 PASS**. Valid-user requests **0**. State/audit remained **0/0** afterward; no deletion lifecycle started.
+- No regression suite was rerun: this is production read-back/HTTP verification, with no source change. The earlier exact-source checked-Deno/concurrency proofs remain historical evidence, not newly claimed test executions. Control-file `git diff --check` and staged diff check: **PASS**.
+
+### D — STOP finding / production mutation audit / evidence limits
+
+- Independent metadata snapshot detected one unrelated Function change during H2 verification:
+  - `market-report-data-packet`: **v11 -> v12**.
+  - before updated_at: `2026-09-17T05:43:45.492Z`.
+  - after updated_at: `2026-09-29T13:23:18.972Z` (22:23:18.972 JST).
+- This timestamp is **after** the deletion Function's Stage 1 deploy. H1 TASK separately authorizes that exact Function's controlled rollout. Its completion evidence was absent at the initial `f04d392` follow-up check, then arrived at fresh origin/main `bb57562` while H2 prepared this Report. The appended H1 Report records the exact matching **v12 / 22:23:18.972 JST** as its one authorized target deploy, with its own read-back showing all other 18 Functions unchanged. The observed change is therefore reconciled with H1's published delivery evidence, rather than attributed to G3. H2 still does not silently waive the current TASK's explicit unrelated-change STOP gate or perform more production operations.
+- Other **18/19** Function records, including the deletion Function, were unchanged across the two snapshots. **No further production queries or HTTP requests were made after the delta was detected.** H2 did not redeploy, revert, fix or investigate H1's implementation.
+- G3 Stage 1 Report declares only the accepted single-file migration and the new deletion Function deploy, with no real user/Vault/provider/post/activation operation. Current accepted object identity and zero state/audit rows independently corroborate no deletion lifecycle through this implementation.
+- Historical absence of arbitrary Auth/Vault/provider-console operations cannot be independently proven from current catalog/counts alone. G3's before/after operator-held evidence is not included in the public repository; its historical assertions are identified as G3 evidence rather than falsely claimed H2 measurements. No user/Vault plaintext, provider console or real token was inspected by H2.
+
+### E — C2 disposition / Stage 2 readiness / remaining gates
+
+- **Stage 2 readiness: NO until C2 reconciles the observed parallel rollout and accepts a coordinated invariant snapshot.** Target migration/Edge/non-destructive checks performed are green, but the overall no-unrelated-change acceptance gate did not pass. This STOP is not a claim that the deletion implementation is defective.
+- Do not repeat apply/deploy or perform a disposable-user deletion merely to clear this result. C2 should accept/reconcile the now-published H1 delivery against this exact delta and decide whether any further bounded read-only check is needed. A new check should explicitly allow the separately owned Function change; it is not automatically required by a deletion-source defect.
+- After that acceptance, separately authorize Stage 2 for never-connected, social-only/shared-main-profile retention, X-connected disposable users, lost-response/retry and unrelated-data invariants. None of those destructive/provider E2Es was performed here.
+- Apple production configuration and native E2E remain separate gates. Legal URLs/support, audit/history retention decisions, published-X-post wording, Kabumori cross-app deletion coordination and explicit app feature activation remain operator/product gates. No app activation is approved by this verification.
+- Supabase/PostgreSQL skills guided current official auth-header docs, changelog, least-privilege and lock/isolation review. This inspection requested no pgcrypto/index maintenance or broader security audit.
+
+### Safety / handoff
+
+- Production DB write/schema/RPC/RLS/migration/history/Vault/Storage/Auth/provider configuration/Cron/settings/secrets/OAuth/activation changes: **0** by H2.
+- Deploy, real X/Apple revoke, X post, OpenAI/Push call and valid-user deletion: **0**. Only the explicitly allowed seven non-destructive Function HTTP requests and read-only metadata/catalog/configuration-name checks occurred.
+- Source/app/admin/HANDOFF/root package/lock/.env, existing shared uncommitted changes, other slot TASK/Report files and dev servers: **untouched**. CLI-created local ignored/untracked cache is not staged or committed.
+- next_recommendation: C2 reconcile the parallel deployment and decide the bounded next verification gate. **STOP for C2; status review_required / next_owner chatgpt.**
+
+---
+
+## H2 — PR #52 Phase 4c final concurrency acceptance — 2026-09-29
+
+- task_id: `x-social-mobile-account-deletion-final-concurrency-acceptance-20260929`
+- result / verdict: **PASS for source; source merge ready: YES, subject to C2 acceptance.** The previously reproduced first-onboarding race and checked-Deno typing defect are corrected at the exact reviewed head. This is not production activation approval.
+- status: `review_required`; next_owner: `chatgpt`.
+- exact_reviewed_head: `4bc819555c07c8792f5b78ea29aa6b9a35694042`; Draft PR #52, branch `claude/g3-account-lifecycle-p4`. Fresh PR fetch and GitHub API read-back at start/end both confirmed the exact OPEN/DRAFT head; base `249df4ce4debd2de21db101fecbe4cd735c56e39`.
+- previous_failed_head: `002d24ac99df2fbdf4e2423c1428ccb488a79f29`.
+- fresh_origin_main_at_start: `bf260da7f094ca7f66bd8a8cc72c5b864f482506`; final report synchronization base after the other-workstream fresh-check: `38c2bd66f7711a0b5727a4bc862e45fc3071d243` (H2 control files unchanged remotely).
+- independent_review_worktree: `/private/tmp/kabumori-h2-account-deletion-final-20260929`; reused only the previous clean H2-owned checkout and fast-forwarded to the exact PR head. Source remains Git-clean, with no H2 source fixes. Managed-worktree tool was unavailable for this mirror chat (Not a git repository); no G3 checkout was used.
+- implementation_commit: existing G3 `4bc819555c07c8792f5b78ea29aa6b9a35694042`; H2 implementation commits: **0**.
+- changed_files by H2: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only, in `/private/tmp/kabumori-h2-account-deletion-report-20260929`.
+- report_commit_hash: `00a90f1750836f93d2968ee207bcca2f428f83c4` (H2 Report/TASK only).
+- push: **SUCCESS** to origin/main. Fresh remote read-back confirmed this report commit's inclusion, the current task_id/PASS at the Report head and TASK `review_required / next_owner: chatgpt`. This follow-up records only confirmed delivery; final synchronization SHA is in the completion message.
+- merge / deploy / production_mutation: **0 / 0 / 0**.
+
+### A/B — Independent two-direction proof, with actual lock-wait observation
+
+Used PostgreSQL **17.11**, an H2-only local Unix-socket cluster at `/private/tmp/kabumori-h2-concurrency-proof.W6NlKH`, fake Auth/Vault data and a **non-superuser** fixture owner. The real, unmodified `begin_social_mobile_x_oauth_connection` RPC was loaded from the existing onboarding and reconnect migrations. No replacement writer, real credential or production fixture was used.
+
+1. **Onboarding first, still uncommitted:** A invokes the real authenticated first-onboarding RPC, reaches its completed creation point, then stays open. B starts service-role deletion acquire. H2 independently queries `pg_stat_activity` and observes B waiting on **Lock/advisory** before letting A commit. B then snapshots the committed new workspace. Credentials → mark-X-revoked(empty set for this never-connected fixture) → purge → finalize run as separate committed service-role calls. Finalize returns `completed`, `login_deleted=true`.
+2. **Deletion first:** B acquires deletion inside an open transaction. A invokes real first onboarding. H2 observes A waiting on **Lock/advisory**, then commits B. A fails with `SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS`; its transaction creates no workspace. Using the existing lease, the remaining deletion calls finish with `completed`.
+3. After each reported success, independent counts for brands, accounts, memberships, OAuth states (including initiated-by-user), refresh references, tombstones and Auth user are **all 0**. Local `pg_stat_database.deadlocks=0` throughout the independent protocol proof. This verifies the original adverse interleaving, not just a passing reconnect on an already committed workspace.
+
+The existing exact-head runner was also rerun independently and reported all eight markers: BEHAVIOR, ACQUIRE_RACE, RECONNECT_RACE, ONBOARDING_FIRST_RACE(orphan=0), DELETION_FIRST_RACE(orphan=0), ISOLATION_GUARD, NO_DEADLOCK, CLEANUP **PASS**.
+
+### C — Common lock, lock order, isolation and intended RPC boundary
+
+- Shared primitive: `social_mobile_account_deletion_workspace_lock(text)`, a transaction advisory lock on `hashtextextended('social_mobile_workspace:' || derived_workspace, 0)`.
+- The BEFORE INSERT guard on `brands` and `brand_memberships` takes it before creation/FK key-share critical points; deletion acquire takes it before its first workspace snapshot/row locks. Lease-holding and operator steps preserve deletion-lock → workspace-lock → row/Auth-lock order. Existing begin/complete OAuth RPC bodies were not changed.
+- Both writer guard and mutation-capable outer deletion functions are volatile/default-volatile. Under READ COMMITTED the guard reads the tombstone after its lock wait and acquire reads committed workspace rows after waiting; both actual observations above prove the relevant post-lock visibility.
+- Independent **REPEATABLE READ and SERIALIZABLE** first-onboarding probes both fail before workspace creation with `SOCIAL_MOBILE_WORKSPACE_CREATION_REQUIRES_READ_COMMITTED`; workspace rows remain 0. This is a deliberate fail-closed prerequisite, not a silent stale-snapshot acceptance.
+- [PostgREST transaction documentation](https://docs.postgrest.org/en/v13/references/transactions.html#isolation-level) confirms READ COMMITTED by default, but role/function overrides can change it. A future rollout must read back the actual authenticated/service RPC isolation settings; no production setting was inspected or changed in this review. [PG17 isolation](https://www.postgresql.org/docs/17/transaction-iso.html) and [advisory locking](https://www.postgresql.org/docs/17/explicit-locking.html#ADVISORY-LOCKS) were checked. No claim that every unrelated writer is globally deadlock-free is made; the intended two-direction onboarding/deletion protocol is proven without deadlock.
+
+### D — Finalize invariant / negative and mutation evidence
+
+- Under deletion/workspace locks and the Auth row lock, finalize rechecks brands/memberships/accounts/OAuth-state presence before removing login/tombstone.
+- An independent fake-only lease-authorized row-reappearance probe returned `operator_required / WORKSPACE_REAPPEARED`; Auth and tombstone remained. Existing full behavior proof makes the same assertion. This is a defensive owner-only fixture, not evidence an authenticated client can forge a lease.
+- Four H2-only mutation checks changed **only disposable DB function bodies**, restored the exact candidate bodies afterward and detected:
+  1. creator guard's workspace-lock removal;
+  2. acquire's workspace-lock removal;
+  3. isolation guard removal;
+  4. finalize's orphan invariant removal.
+- The first two mutations lose the expected committed-workspace snapshot/invariant and fail the independent complete-success assertions; this is not relabeled a real-provider test. Finalize mutation incorrectly accepts the reappeared row and is detected. The unrelated/redundant hold-lock mutation was not required or counted as detected.
+- Scratch proof scripts are preserved (`acceptance.sql`, `races.mjs`) under the above H2-only directory. C2 can use this Report directly without opening local artifacts.
+
+### E — Checked Deno and required regressions
+
+- `DENO_NO_PACKAGE_JSON=1 deno test --cached-only --no-lock --allow-read=supabase/functions/social-mobile-account-delete supabase/functions/social-mobile-account-delete/`: **17/17 PASS, type checking enabled**. No `--no-check` was used. The environment flag isolates unrelated root package resolution, not TypeScript checking.
+- `DENO_NO_PACKAGE_JSON=1 deno check --cached-only --no-lock supabase/functions/social-mobile-account-delete/*.ts`: **all 7 files PASS**, including tests and entrypoint; TS2353 is gone.
+- Social-mobile `npm test`: **72/72 PASS**. Data-view `node --experimental-strip-types --test src/domain/data-view.test.ts`: **14/14 PASS**.
+- `npm run typecheck` / `npm run lint`: **PASS**.
+- `EXPO_NO_TELEMETRY=1 npx expo export --platform web --platform ios --output-dir <H2 scratch>/expo-export`: **both PASS**. This is bundle proof only, not signed-in real-device QA. No real backend env/secret was supplied.
+- Full PR `git diff --check 249df4c..HEAD` and Phase 4c `git diff --check 002d24a..HEAD`: **PASS**. Exact source checkout stays Git-clean; tracked packages unchanged.
+- Candidate apply inside BEGIN → read back every candidate RPC's client-denied ACL/empty search_path, SECURITY DEFINER except the pure/internal helpers, service-role-denied lock helper/direct state reads, RLS and all **11** guard triggers → ROLLBACK → object absence: **PASS**. Reapply only in the disposable DB for behavior/race proof. Final ACL read-back: invalid entries **0**, test owner superuser=false.
+- Client credential scan found only the existing rejection pattern for service-role/secret input, not a key. Edge console/logger output paths: **0**. Mock tests verify token-free responses and server-derived user identity. Audit fake-data tests remain green.
+- Disposable runner DB cleanup PASS; independent `h2_concurrency_proof` DB removed and database count read back **0**; H2-only PG server stopped. Test scripts/export preserved, no material user files deleted.
+
+### Previous accepted boundaries preserved (focused spot-check)
+
+- **R2:** same server-derived scope; scope mismatch rejects; social-only retains Auth/main profile; late profile before finalize preserves login. Full DB behavior proves these.
+- **R3:** shared/duplicate/foreign Vault references refuse before revoke; credential fingerprints and purge ownership checks remain unchanged. Full DB proof preserves other-workspace secrets.
+- **R4:** verified/connected missing credentials stays operator-required; never-connected has no false required revoke. DB + Edge tests PASS.
+- **R5:** durable Apple success checkpoint survives downstream failure; resume does not reuse a consumed code; client drops codes after attempts. DB + Edge/client tests PASS.
+- **R6:** OPTIONS/CORS and truthful native-iOS Apple requirements unchanged; HTTP tests PASS.
+- **Exact client user/session pin:** switched user or same-user/new session makes no deletion request; full mobile test PASS.
+- No additional Edge implementation, auth/users finalize operation, legal wording or cross-product deletion design changed in Phase 4c. Review does not reopen accepted unrelated boundaries.
+
+### C2 disposition / remaining production gates / safety
+
+- **No remaining source blocker found in this focused acceptance.** C2 may accept the exact reviewed head for source merge. H2 performed no merge.
+- Production remains unapproved/unactivated. Required later gates: exact single-file migration + owner/privilege/managed Auth/Storage/FK/ACL and isolation read-back; JWT-verification-ON deletion Edge deploy + runtime byte comparison; disposable-account real X/Apple/native/browser E2E and lost-response recovery; Kabumori-side delete coordination; owner/legal retention/support/terms decisions and explicit build activation. Issued JWTs still are not instantly invalidated; previous Report's Auth operational caveats remain applicable.
+- Supabase/PostgreSQL skills guided current changelog, isolation, lock-order and privilege verification. Changelog PG17.11 pgcrypto/index warning does not request any production maintenance here; this candidate uses core SHA-256 and no legacy pgcrypto encryption.
+- Production reads/writes/schema/migrations/RLS/RPC/Auth/Vault/Storage/Cron/settings/provider console/OAuth changes, deploy, real X/Apple/OpenAI/Push/API calls/posts: **0**. Only GitHub/official-document read requests, isolated fake-only tests and Report/TASK Git synchronization.
+- Formal repo existing uncommitted changes, other slot source/control files, apps/admin, HANDOFF, root package/lock/.env/src and user dev servers: **untouched**. Latest other-workstream main advances are fast-forwarded only into the H2 Report checkout, not staged as H2 changes.
+- next_recommendation: C2 review this PASS evidence and decide source merge separately from any explicitly approved future production rollout. **STOP for C2.**
+
+---
+
+## H2 — PR #52 Phase 4b final acceptance — 2026-09-29
+
+- task_id: `x-social-mobile-account-deletion-final-acceptance-review-20260929`
+- result / verdict: **FAIL — source merge ready: NO.** The old committed-state scenarios are corrected, but an independently reproduced in-flight first-onboarding race still produces a false successful deletion with orphaned social data. Apply/deploy/activation must remain blocked.
+- exact_reviewed_head: `002d24ac99df2fbdf4e2423c1428ccb488a79f29`; Draft PR #52, `claude/g3-account-lifecycle-p4`. GitHub API read-back still reported this exact OPEN/DRAFT head.
+- previous_failed_head: `12146c4ab2bc635a2781b673146e1f8ad8350258`.
+- independent_review_worktree: `/private/tmp/kabumori-h2-account-deletion-final-20260929`; source stayed Git-clean and byte-unchanged. Managed worktree creation returned Not a git repository for this mirror chat; manual creation of a dedicated H2 worktree was the documented fallback. No G3 checkout was reused.
+- fresh_origin_main_at_start: `a03fefc771e76f5bb53c5f54968fbffb269a0db8`; report-only synchronization base: `267ed44870304671c47c5af93a30e4d639880501`.
+- source_fixes / implementation_commit: **0 / existing G3 head above**. TASK's new-design-issue FAIL/STOP rule was applied; neither the concurrency design nor the test-only typing defect was patched.
+- changed_files: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only.
+- report_commit_hash: `5bd6545582160907371dc1ba5f577b0378a1828b` (H2 Report/TASK only).
+- push: **SUCCESS** to origin/main; fresh remote read-back confirmed this report commit is included, the current task_id is at the Report head, and TASK is `review_required / next_owner: chatgpt`. This follow-up only records the confirmed delivery result; its final sync SHA is provided in the completion message.
+- deploy / merge / production_mutation: **0 / 0 / 0**.
+
+### Blocking finding — R1 P1: a pre-existing uncommitted first onboarding escapes the tombstone
+
+Relevant exact-head locations in `supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql`:
+- `:121-123`: the guard only reads a currently visible tombstone; no common lock is taken by this writer guard.
+- `:228-230`: blocker returns allowed when the workspace is not visible.
+- `:326-360`: acquire takes a deletion-only per-user advisory lock and snapshots visible workspace rows, without first serializing against an in-flight first membership creation.
+- `:580-594`: finalize locks the Auth user only after purge, then deletes Auth plus the tombstone without rechecking for workspace rows that became visible while waiting.
+
+Independent fake-only PG17 proof used the **real, unmodified** `begin_social_mobile_x_oauth_connection` RPC from the existing onboarding/reconnect migrations and the exact reviewed deletion migration. No fake replacement of that writer was used:
+
+1. Create only a fake Auth user, with no social workspace and no main-app profile.
+2. Connection A: `BEGIN`; set that fake JWT subject; switch to `authenticated`; invoke the real first-onboarding RPC; reset role; keep the transaction uncommitted for four seconds. Its guard checks completed while there was no tombstone. The membership FK holds an Auth key-share lock.
+3. After one second, connection B executes deletion acquire, credentials, mark-X-revoked with an empty set, and purge in separate committed calls. A's rows are invisible: snapshot is empty and purge reports success.
+4. B invokes finalize. Its late Auth `FOR UPDATE` waits for A. A commits its new workspace/account/OAuth state; B then deletes Auth, which cascades membership but not brands/accounts, and removes the tombstone.
+5. Independently observed result:
+
+```json
+{"credential_status":"ok","marked":"x_revoked","purged":"purged","login_deleted":"true","remaining_brands":1,"remaining_accounts":1,"remaining_memberships":0,"remaining_tombstones":0}
+```
+
+This is a normal first-onboarding writer interleaving, not a forged lease, client secret-reference mutation or production fixture. The Edge interprets the completed finalize response as success, although social workspace/account data remains ownerless. The guard cannot retroactively reject writes whose trigger ran before the tombstone existed. G3's reconnect race tests the **opposite** order (deletion first, already committed existing workspace second), so its passing result does not cover this failure.
+
+Required design correction: serialize deletion **before** its first workspace/credential snapshot against first-onboarding/membership creation, and define consistent lock order plus final invariants. A common per-user/creation lock or suitably early Auth-row locking needs its own two-direction concurrency proof; a late finalize-only lock is insufficient. Do not silently patch this protocol during final acceptance. C2 should return this narrowly scoped R1 failure to G3.
+
+### Additional validation issue — P2: checked Deno tests do not compile
+
+`supabase/functions/social-mobile-account-delete/delete_logic_test.ts:107-115` declares the override tuple as `Partial<DeletionDeps>` but includes the fake-only `providers` field. Default checked `deno test` fails **TS2353** at line 115. The helper itself already accepts `Partial<DeletionDeps> & { providers?: string[] }`; this is a test typing mismatch, not an observed production failure. `--no-check` passes 17/17 and entrypoint `deno check` passes. Do not describe all Deno checking as green. No fix was made after invoking the design STOP rule.
+
+### Focused acceptance matrix
+
+| boundary | result at reviewed head |
+| --- | --- |
+| R1 | **FAIL overall**: committed snapshot/reconnect and purge/finalize-gap markers now reject; durable lease/re-acquire works; the pre-start uncommitted first-onboarding race above remains unsafe |
+| R2 | PASS for tested cross-product cases: server scope, expected-scope mismatch, social_only keeps Auth/profile, late profile before finalize preserves login under Auth-row lock; overall completion remains blocked by R1 |
+| R3 | PASS for initial shared/duplicate/foreign-verifier fixtures and ownership checks at credentials/purge; fingerprint checks reject rotation instead of purging unrevoked material |
+| R4 | PASS: connected/verified missing material enters operator_required; truly never-connected needs no revoke; Edge never marks missing required material as revoked |
+| R5 | PASS for completed checkpoint/resume: Apple revoke followed by purge failure resumes without replaying the consumed code; checkpoint absent requires a code; client discards code after every attempt |
+| R6 | PASS: OPTIONS 204 plus required CORS headers, all HTTP responses carry CORS; Apple login deletion on unsupported browser/Android is truthfully labeled native-iOS-required |
+| client pin | PASS: exact userId + JWT sessionId; switched user or same-user/new session produces SESSION_CHANGED with zero new deletion requests |
+
+### Guard coverage / posting interaction
+
+- Eleven INSERT/UPDATE triggers were independently read back: brands, brand_memberships, social_accounts, social_account_oauth_states, x_account_refresh_state_v2, x_account_refresh_rollout, scheduled_posts, publish_claims, published_content_fingerprints, post_execution_logs, posting_windows. They enforce exclusion after a visible tombstone and preserve other-user writes; mere table coverage does **not** establish concurrency completeness (R1).
+- Existing onboarding begin/complete and credential refresh bodies were inspected only for their interaction. Complete/refresh updates Vault and guarded account/state rows in one DB transaction, so a guard exception rolls back those Vault writes. Current running/publishing/refreshing checks and disabling pending posts are retained.
+- Untargeted dependent tables (e.g. brand_settings/report-specific rows) are not silently expanded into purge: NO ACTION FK dependents stop it atomically; daily_content_plans is an intended cascade. Additional guards on unrelated report tables were not added. No dispatcher or other writer was changed.
+- Existing lock order differences may produce an aborted transaction under contention rather than a silent bypass for committed rows. No production concurrency/E2E claim is made. The proven first-onboarding false success is the merge blocker.
+
+### Direct auth.users finalization assessment
+
+- Current read-only production catalog: auth.users owner `supabase_auth_admin`; `postgres` has SELECT and DELETE on auth.users and DELETE on vault.secrets; auth.users has no noninternal trigger. Candidate is **not installed**. Thus a postgres-owned definer has the currently needed table capabilities; the actual migration owner must still be pinned/read back on any separately approved rollout.
+- Live FK catalog confirms Auth deletion cascades identities, sessions, MFA, OAuth consent/authorization, WebAuthn and profiles/memberships; SCIM is NO ACTION. Main-app profile protection is explicitly rechecked under lock. Unknown dependents block rather than requiring a broad purge.
+- Supabase's current official hard-delete handler uses a transaction plus `tx.Destroy(user)`; direct SQL has the same row/FK hard-delete mechanism but does **not** create that handler's Auth audit-log event. This candidate's own successful finalize audit is transactional and pseudonymous. It is not an assertion of complete operational equivalence to every Auth API hook/version.
+- Issued JWTs remain valid until expiration; session rows disappear on hard delete, preventing refresh. No instant global JWT invalidation is claimed. The sensitive writer protection is exactly what R1 still fails for the uncommitted first-onboarding case.
+- Storage ownership/FK capability and managed-schema drift require exact rollout preflight; no live Auth user, token or Storage owner was read or deleted. See [Supabase user-deletion guidance](https://supabase.com/docs/guides/auth/managing-user-data), [official Auth hard-delete source](https://github.com/supabase/auth/blob/master/internal/api/admin.go).
+
+### Independently executed verification
+
+1. Own-worktree `npm ci --offline --ignore-scripts --no-audit --no-fund`: 821 cached packages; tracked dependency files unchanged.
+2. Full social-mobile `npm test`: **72/72 PASS**; data-view **14/14 PASS**; `npm run typecheck` and `npm run lint`: **PASS**.
+3. Expo Web + iOS export: **PASS**, output in H2-only scratch, no real backend environment injected. This is bundling proof, not signed-in device QA.
+4. Deno runtime tests with scoped allow-read / cached-only / `--no-check`: **17/17 PASS**; exact `index.ts` `deno check`: **PASS**. Checked Deno test suite: **FAIL TS2353** as above.
+5. Existing disposable PostgreSQL runner: **BEHAVIOR / ACQUIRE_RACE / RECONNECT_RACE / CLEANUP PASS**, with real onboarding migrations, fake Auth/Vault and non-superuser owner. Prior R1/R3/R4/R5 markers run in its behavior proof; R6/client markers run in Edge/client tests.
+6. Independent apply inside BEGIN -> all candidate function client ACL/search_path checks, state-table RLS/direct-service-read denial, 11-trigger readback -> ROLLBACK and object absence: **PASS**. Reapply only in the same throwaway DB for the independent adverse interleaving.
+7. Independent opposite-order first-onboarding probe: **safety expectation FAIL, defect reproduced**; exact outcome above. Scratch scripts/SQL preserved under `/private/tmp/kabumori-h2-deletion-proof.QjcRgz` but this Report includes the complete sequence and result so C2 need not open a local artifact.
+8. Source `git diff --check` for full PR and Phase 4b diff: **PASS**. Client service-role/private-key patterns: zero matches; Edge console/logger paths: zero. Existing fake Apple signing-key generation is test-only, not a literal secret. Audit behavior test excludes raw IDs/tokens.
+9. New broad mutation suite was **not rerun** after the reproducible design-level STOP; G3's 23/23 claim is not relabeled independent H2 evidence. The independent opposite-order probe demonstrates the existing passing suite's missing interleaving.
+10. H2 throwaway DB dropped, readback count **0**, H2-only PostgreSQL server stopped. Scratch/export preserved. No material user/project file was deleted.
+
+### C2 disposition / exact next gates / safety
+
+- TASK -> `review_required`; next_owner -> `chatgpt`.
+- C2 should return R1's first-onboarding/deletion serialization gap plus the checked-test typing issue to G3; recommended correction model **Opus5.5（高）**. No other TASK was changed or automatically reassigned.
+- Source merge ready **NO** until both are corrected and exact-head focused regression passes, including both orders of first-onboarding vs deletion and zero orphan rows after reported success.
+- Later rollout remains separately gated: single-file migration approval and owner/ACL/Storage/managed Auth readback; JWT-verification-ON Edge deploy + source byte compare; disposable-account real X/Apple/native/browser E2E; cross-app account-delete coordination; owner/legal retention and legal URL decisions; build activation. None was performed here.
+- Production writes/migrations/RLS/RPC/Vault/Auth/Storage/settings/Cron, deploy, real X/Apple/OpenAI/Push/API invokes/posts and console/OAuth changes: **0**. Only two production catalog SELECTs; no user rows or Vault plaintext.
+- Formal repo existing changes, G1/G2/G3/G4/H1 controls/source, apps/admin, HANDOFF, root package/lock/.env/src, dev servers: **untouched**. Report worktree only fast-forwarded approved remote state before editing these two H2 control files.
+- Supabase skills used for current changelog/Auth/Vault/CORS/session semantics and privilege/locking checks; applicable current changelog was inspected, not a request to change production.
+
+---
+
+## H2 — PR #52 account-deletion privileged review — 2026-09-29
+
+- task_id: `x-social-mobile-account-deletion-privileged-review-20260928`
+- result / verdict: **FAIL — not safe to merge as a deletion implementation at the reviewed head.** Source/production enablement must remain blocked pending C2/G3 decisions and corrections.
+- exact_reviewed_head: `12146c4ab2bc635a2781b673146e1f8ad8350258`; Draft PR #52, branch `claude/g3-account-lifecycle-p4`, source diff base `249df4c`.
+- independent_review_worktree: `/private/tmp/kabumori-h2-account-deletion-review-20260929`; code remained byte-unchanged and Git-clean.
+- fresh_origin_main_at_start: `3d8bbea33dd085a67599d2c9f8e48357c986e4ac`; report base after fresh-check: `d5054639f3608195016ef9771e8dc2203195c487`.
+- source_fixes: **0**. TASK's design-level/partial-destruction STOP policy was invoked; no unrelated OAuth/backend fixes were attempted.
+- changed_files (shared report only): `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md`.
+- implementation_commit: existing G3 head above; no H2 implementation commit.
+- report_commit_hash: `29e9a66de38770b9f0dff4b5e407c64736b94998` (H2 Report/TASK only).
+- push: **SUCCESS** to origin/main. Fresh remote read-back confirmed that commit's inclusion, this task_id at the Report head, and TASK `review_required / next_owner: chatgpt`. This follow-up changes only the push-result record; its final sync SHA is provided in the completion message.
+- deploy / merge / production_mutation: **0 / 0 / 0**.
+
+### Merge-blocking findings
+
+#### R1 — P1: deletion is not serialized against OAuth reconnect, nor across purge -> Auth deletion
+
+Locations:
+- `supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql:127`, `:189` (transaction-local advisory locks); `:193-222` (purge re-check/deletion).
+- `supabase/functions/social-mobile-account-delete/delete_logic.ts:143-175` (separate credentials/revoke/purge/Auth requests).
+- Existing interacting RPCs (read-only review, NOT changed): `begin_social_mobile_x_oauth_connection` and `complete_social_mobile_x_oauth_connection`.
+
+The advisory lock ends at each PostgREST transaction. Turning posting off is not a durable deletion marker: a normal freshly onboarded workspace is also inactive/disabled. Existing authenticated reconnect RPCs do not consult a deletion state or acquire the deletion lock.
+
+Two legal interleavings were independently reproduced with candidate SQL + actual existing onboarding/reconnect RPC source in a disposable PostgreSQL database:
+1. begin -> credentials snapshot -> authenticated reconnect begin+complete -> purge. Complete replaced the Vault tokens with a new fake access/refresh pair after the snapshot. Purge still succeeded. Only the old snapshot is sent to X by the Edge code; newly issued credentials can therefore be discarded locally without being revoked at X. External validity of real new X tokens is an inference from the call order, not a real-provider test.
+2. purge commits -> authenticated begin reconnect recreates the derived workspace/account -> Auth-user delete. Auth deletion cascaded the membership but left the recreated brand and social-account rows as orphans. This also applies to an Auth admin API failure/retry gap. New callback completion during that gap can additionally install new secrets before Auth deletion.
+
+Proof markers:
+- `H2_RECONNECT_AFTER_CREDENTIAL_SNAPSHOT_REPRODUCED`
+- `H2_PURGE_AUTH_DELETE_GAP_ORPHAN_REPRODUCED`
+
+Required decision: a durable per-user deletion state/lease/tombstone honored by every relevant onboarding/complete/post/refresh writer, plus guarded finalization/recovery. A lock on just begin/purge is insufficient. This is cross-boundary design work, not a safe local patch to this PR. G4/other-lane RPCs were not changed.
+
+#### R2 — P1: shared Auth deletion also deletes Kabumori main-app data without matching UI consent
+
+- `supabase/functions/social-mobile-account-delete/index.ts:63-65` deletes the shared Supabase Auth user.
+- `apps/social-mobile/src/domain/account-deletion.ts:27-33` lists login/workspace/X/schedule/history deletion but does not explain deletion of the same user's Kabumori main-app profile/data.
+- G3's own `docs/account-lifecycle-phase4.md` §3 acknowledges this cross-product cascade.
+- Live read-only FK catalog confirms `public.profiles.id -> auth.users.id ON DELETE CASCADE`.
+
+The exact user is correct, but exact-user binding does not settle cross-product destructive consent. C2/owner must choose whether this is global account deletion (and disclose the full product scope) or social-app-only removal that retains shared Auth. Main-app `account-delete` can also orphan the social workspace, as already noted by G3; that other lane was reported only, not edited.
+
+#### R3 — P1 defensive tenant boundary: foreign/shared Vault reference is not rejected
+
+- Migration `:201-220` unions referenced secret IDs and deletes them, without checking whether another workspace/account/OAuth/refresh row also references any of those IDs.
+- Live social-account index metadata contains PK, brand/platform uniqueness and platform/platform_user_id uniqueness, but no unique ownership constraint on Vault secret IDs.
+- An isolated, schema-valid corruption fixture made A's access-secret reference equal B's. A's begin/purge returned ready/purged; B's account remained but its secret was deleted.
+- Marker: `H2_SHARED_SECRET_REFERENCE_CROSS_TENANT_REPRODUCED`.
+
+This is not evidence that an ordinary client can assign arbitrary Vault IDs; it is a missing fail-closed invariant at a privileged destructive boundary. Refuse ambiguous/foreign references before external revoke or deletion, and bind a stable exact credential set. No live secret IDs/plaintext were inspected.
+
+### Additional source defects / release blockers
+
+#### R4 — P2: missing X credential material becomes false revocation completion
+
+`delete_logic.ts:145-157` silently skips null/empty tokens and records credentials_revoked. The credentials RPC can return null for a missing/deleted Vault object and does not expose whether an account was genuinely never connected. The independent mock returned one account with both tokens null: result was 200 ok:true, X revoke calls 0, Auth deletion executed. Distinguish truly unconnected/no-grant accounts from missing required credential material and fail closed on the latter. A direct local fix must not break normal unconnected-account deletion.
+
+#### R5 — P2: Apple single-use-code retry is not idempotent
+
+`apple_revoke.ts:65-75` exchanges and consumes the authorization code before purge/Auth completion; `delete_logic.ts:159-170` repeats the exchange on every retry. With real helper + fake Apple responses, the first request exchanged/revoked successfully then got PURGE_FAILED; retrying the same request got APPLE_REVOKE_FAILED before purge, because the code was already consumed. No durable Apple-revoked checkpoint is used. The screen resets reauth only on REAUTH_REQUIRED/APPLE_REAUTH_REQUIRED, not on this failure, so its normal retry retains the unusable code.
+
+Apple's official guidance describes authorizationCode as single-use; do not claim every step is repeat-safe. Define safe resumption or explicitly obtain a new same-user native authorization code without losing the deletion state. Do not merely ignore revoke failure. [Apple WWDC guidance](https://developer.apple.com/videos/play/wwdc2022/10122/)
+
+#### R6 — P2: web deletion cannot call the candidate Edge endpoint
+
+`index.ts:19` returns 405 for OPTIONS and no response supplies CORS allow-origin/headers. The browser request uses Authorization/apikey/JSON and needs preflight. A local captured entry-handler test confirmed OPTIONS=405 and no Access-Control-Allow-Origin. Native app behavior is different; successful web export does not test this request. [Supabase CORS guidance](https://supabase.com/docs/guides/functions/cors)
+
+Apple browser reauth is a separate limitation: it does not produce the native authorizationCode required by the Edge pre-check. One APPLE_CLIENT_ID is configured; native App ID vs web Services ID/audience and the supported deletion UX need an explicit rollout decision. Do not present browser Apple deletion as supported.
+
+### Boundary assessment (including what passed)
+
+- **Auth / IDOR:** Edge derives uid and provider identities from GET /auth/v1/user using the caller's Bearer token. Client body does not name the subject. Confirmation constant and signed-token sub + newest amr timestamp <=600 seconds precede side effects. Existing gate tests passed; independent wrong body-id probe still used only the verified uid. No source path that lets an unverified client select a different uid was found.
+- **Client exact reauth:** password/native Apple/browser helper compare the resulting user against the previously captured user and reject mismatches. However the deletion screen's reauthed/confirmation state is not keyed/reset to user/session; deleteAccount fetches whichever session is current. Session switching between confirmation and submission is a remaining client-context issue to cover with a pinned user/session test, not a demonstrated cross-user backend IDOR.
+- **DB privileges:** four externally callable RPCs are SECURITY DEFINER with empty search_path; all client/PUBLIC execute revoked, only service_role (plus owner) can execute. Internal helper execute revoked even from service_role. Audit RLS enabled, no direct client/service read grant. Disposable non-superuser owner proof verified actual ACL denial, not just strings.
+- **Workspace guards:** live schema + baseline proof cover admin, foreign owned workspace, foreign profile, shared derived workspace, role mismatch, running post/publishing claim and refreshing state. Own owner membership being absent is not explicitly rejected; derived ID alone is accepted. Blocked cases return/raise fixed codes without proceeding to revoke/purge.
+- **In-flight posting/refresh:** current running/refreshing rows are rejected; begin disables brand/account/refresh rollout, purge re-checks. Existing race proof covers two purge transactions only, not the complete multi-HTTP workflow. R1 remains unresolved.
+- **FK ordering/atomicity:** unknown dependent FK correctly aborts the purge transaction. Independent fake Vault-delete-denied trigger likewise rolled back workspace/account/secrets. Edge purge error test prevented Auth deletion. This protects local purge; it cannot roll back prior X/Apple revocation or begin's committed posting changes.
+- **Vault capability:** live metadata only: vault.secrets and decrypted_secrets owner=supabase_admin; current postgres has SELECT+DELETE, service_role has r/d; no noninternal delete trigger was found. These facts establish capability for a postgres-owned definer under current ACL, NOT an already applied candidate or a test of encrypted deletion. Candidate functions do not exist in production and do not pin OWNER; eventual single-file apply must explicitly verify actual owner, ACL and intended Vault delete capability. No live Vault plaintext read, mutation or production delete proof.
+- **X revoke:** source POST /2/oauth2/revoke, form token/token_type_hint/client_id, Basic client credentials matches X's official SDK for a confidential client. Refresh is attempted before access; any non-2xx/throw stops before purge/Auth. No token/header log path. App type, correct same X client, already-revoked token responses and real revocation semantics remain operator/QA gates; no Developer Portal or real provider request was made. R1/R3/R4 prevent accepting overall revocation safety. [Official X OAuth SDK](https://github.com/xdevplatform/twitter-api-typescript-sdk/blob/main/src/OAuth2User.ts)
+- **Apple binding:** ES256 secret generation/signature test passes, expected iss/kid/aud/sub/5min TTL. Code exchange is server-to-Apple HTTPS; returned id_token sub must match the verified user's Apple identity. Apple subject mismatch/no ID token refuses revoke. Official Supabase Auth identity source maps JSON id to ProviderID(sub), while identity_id is the row UUID: using identity.id here is correct, not a defect. [Supabase identity source](https://github.com/supabase/auth/blob/master/internal/models/identity.go)
+- **Auth terminal state:** purge error blocks Auth delete, Auth failure returns AUTH_DELETE_FAILED, only 200 ok:true reaches client success/local sign-out. Non-Apple mock retry after Auth failure succeeds on nothing_to_purge. 404 counted as success at the adapter, but a later request for an already removed user normally fails getUser before reaching the 404 branch; lost-response terminal recovery is not fully specified.
+- **Session invalidation:** hard Auth delete cascades session rows and invalidates refresh issuance, but issued access JWTs remain cryptographically valid until expiry. No deletion/session tombstone check is added to the existing sensitive RPCs. Do not claim immediate global access-token invalidation; R1 requires a sensitive-operation gate regardless. [Supabase user deletion/session guidance](https://supabase.com/docs/guides/auth/managing-user-data)
+- **UI / legal:** explicit build flag + backend configured is required; otherwise setup_pending. Legal links fail closed on missing/placeholder/secret-like URLs, no invented policy text. X posts retained is disclosed; fixed errors never echo provider/server messages. Retained deterministic uid SHA-256 is pseudonymous, not proof of irreversibly anonymous data; retention and privacy wording need owner/legal decisions. R2 remains unresolved.
+- **Audit:** fixed steps/reasons, uid hash, no raw uid/credential stored. Edge record failure is best-effort and swallowed; terminal deletion can be unrecorded if final audit fails. Define observability/recovery for a lost final response without retrying one-time external actions.
+
+### Verification independently executed at exact PR head
+
+1. `npm ci --offline --ignore-scripts --no-audit --no-fund` in H2's own social-mobile app: 821 packages installed from cache; no shared node_modules used, no tracked dependency/lockfile change. First test attempt without dependencies failed with two module-not-found harness failures; subsequent complete run passed.
+2. `npm test`: **71/71 PASS** (account-deletion client tests included).
+3. `node --test src/domain/data-view.test.ts`: **14/14 PASS**.
+4. `npm run typecheck`, `npm run lint`: **PASS**.
+5. `CI=1 EXPO_NO_TELEMETRY=1 npx --no-install expo export --platform web --platform ios --output-dir <H2-tmp>/expo-export`: **both PASS**, no real backend env injected. Export is bundling proof, not signed-in browser/device QA.
+6. Deno cached-only/no-lock/no-config test with allow-read limited to the candidate directory: **13/13 PASS**; `deno check .../index.ts`: **PASS**. Initial no-allow-read attempt failed one source-reading test due to permission; scoped read permission resolved the harness issue.
+7. G3 disposable runner (PG17, Unix socket only, fake data, non-superuser fixture owner): **BEHAVIOR / RACE / CLEANUP PASS**. Public/client ACL and shared/admin/foreign/active-work guards checked; its race is concurrent purge only.
+8. Independent candidate **apply inside BEGIN -> ACL/object checks -> ROLLBACK -> candidate table/functions absent**: PASS. Then reapplied to own throwaway DB for focused behavior proofs.
+9. Independent SQL probes: R1 reconnect-after-snapshot reproduced; R1 purge/Auth gap orphan reproduced; R3 cross-tenant shared-secret fixture reproduced; Vault-delete-denied atomic rollback PASS. Existing exact onboarding/reconnect RPC bodies used, auth.uid and Vault are local minimal stubs. Production catalog source matched those RPCs. No encrypted real Vault or real provider operation was used.
+10. Additional outside-repo Edge/mock tests **6/6 PASS as reproduction/control checks**: verified uid vs body, null credentials false success (R4), purge/X failure stops Auth, non-Apple Auth retry, consumed Apple-code retry failure (R5), OPTIONS/CORS rejection (R6). A reproduction PASS means the defect was observed, not that release safety passed.
+11. `git diff 249df4c..12146c4 --check`: PASS; review worktree git status clean. Client secret scan has no service role/client secret/private key references; no Edge console/logger path. Key-pattern scan only matched dynamically generated fake PEM in apple_revoke_test, not a literal credential.
+12. Disposable proof database was dropped; catalog count=0 confirmed, own PG server stopped. Scratch evidence files/export preserved under `/private/tmp/kabumori-h2-deletion-proof.QjcRgz`; nothing from them was committed.
+
+### Concrete reproduction / remediation handoff for C2 (no external local file needed)
+
+- R1 snapshot race: create fake own workspace -> service begin -> capture credentials -> authenticated begin OAuth(new state) -> authenticated complete(new fake tokens) -> verify Vault material differs from captured pair -> service purge still returns purged.
+- R1 finalize gap: same fake user still exists after purge -> authenticated begin OAuth recreates workspace -> delete fake auth.users row -> assert brands/social_accounts remain and owner membership is gone.
+- R3: two fake users/workspaces -> set A's access-secret ref to B's access-secret -> begin+purge A -> B social_accounts remains but referenced Vault object is missing. Test source must be local only, never production fixtures.
+- R4: credentials RPC mock array contains an existing account with access_token=null/refresh_token=null -> handleAccountDeletion returns ok:true with zero revoke calls and one Auth delete.
+- R5: real Apple helper with fake first code exchange/revoke 200 + purge RPC error -> repeat same code -> fake exchange 400(single-use) -> APPLE_REVOKE_FAILED, no second purge/Auth.
+- R6: capture Deno.serve handler, send OPTIONS with Origin and requested authorization/apikey/content-type headers -> 405, no allow-origin.
+
+### Exact next gates
+
+- C2 must return R1/R2/R3 for design correction before merging this deletion implementation. Suggested G3 implementation model: **Opus5.5（高）**; do not alter G3's current TASK or another lane automatically.
+- Add durable workflow and writer exclusion/recovery tests, same-user/session confirmation binding, credential completeness/ownership checks, Apple resumability, and truthful native/web support.
+- Resolve global-vs-product-specific deletion and main-app deletion coupling with the owner; resolve retained audit/privacy/history policy.
+- Re-run exact-head tests plus interleavings and destructive boundary proof; independent security review again.
+- Only separately approved production preflight may inspect/apply one migration, pin/check definer ownership/Vault ACL, deploy candidate with JWT verification ON, byte-compare and perform disposable-account/provider E2E.
+- No production apply/deploy/E2E is authorized or recommended from this FAIL report.
+
+### Safety / C2 disposition
+
+- TASK -> `review_required`; next_owner -> `chatgpt`.
+- Production DB/schema/RLS/RPC/Vault/Auth/Storage/settings/Cron mutations: **0**.
+- Edge deploy, actual user/data deletion, real X/Apple revoke, X/OpenAI/Push calls/posts, provider console/OAuth changes: **0**.
+- Other workstream source/control files, apps/admin, HANDOFF, root package/lock/.env/src, formal repo's existing uncommitted changes: **untouched**.
+- Read-only production work limited to schema/FK/index/RPC/owner/ACL/trigger catalogs; no user rows or Vault plaintext.
+- PR #52 remains unchanged at reviewed head; no source fix/merge and no review bypass.
+- Current G1/G2 parallel updates did not overlap H2 controls or deletion source. Earlier N3 unfinished local report/code was preserved separately and not mixed into this task.
+
+---
+
 ## H2 — PR #15 admin auth / cross-brand final review — 2026-09-25
 
 - task_id: `x-admin-pr15-auth-crossbrand-final-review-20260925`
@@ -2389,3 +3658,16 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - push: `origin/main` contains `732c630166bf8bc0fcaf7a4b5968d1d24a53c0db` after fresh fetch/read-back.
 - safety_checks: Formal repo and existing uncommitted changes were untouched; no `apps/admin/**`, `HANDOFF.md`, H1 files, production settings, migrations, secrets, tokens, OAuth, X/OpenAI/Vault/Storage/Cron operations were changed or exposed.
 - next_recommendation: C2 review the production-shaped contract and metadata findings. Do not create/apply a production reader, deploy history-learning, or call X history until the separate rollout gate is approved.
+
+
+---
+
+## H2 stale-task closure — 2026-09-28
+
+- previous_task_id: `kabumori-pr32-morning-fact-contract-final-review-20260925`
+- disposition: **closed as obsolete/stale; no final PASS/PASS-WITH-FIX/FAIL verdict was manufactured**
+- original state: review was interrupted and explicitly deferred on 2026-09-25; partial work was preserved.
+- target PR #32 was later merged independently, so keeping H2 reserved for that unfinished review no longer serves an active merge gate.
+- historical partial review/report content above is preserved unchanged.
+- H2 slot is now intentionally empty and may be reassigned only through a new explicit TASK.
+- production mutation from this cleanup: 0.

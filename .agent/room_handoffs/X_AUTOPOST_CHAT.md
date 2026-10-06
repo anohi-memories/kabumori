@@ -3,7 +3,7 @@
 - scope: room-local
 - applies_to: X自動投稿アプリ専用のChatGPT部屋のみ
 - does_not_apply_to: 他のChatGPT部屋 / かぶモリアプリ本体 / MIC / その他プロジェクト
-- updated_at: 2026-09-25 JST
+- updated_at: 2026-09-30 JST
 
 ## この部屋のちゃの担当
 
@@ -43,6 +43,16 @@
 **「私の担当ではありません」**
 
 とだけ返し、そのTASKの中身・状態・実装内容には言及しない。
+
+### 会社員AIラボ開発日記の更新判定（この部屋での運用）
+
+- 共有ルールは `.agent/ORCHESTRATION.md` の「会社員AIラボ開発日記の更新判定（K1 / K2 / K3 / K4 共通・必須）」。K1〜K4すべてが対象で、各Kを担当する部屋のちゃが、自分の完了確認の中で判定する。
+- この部屋ではK3 / K4の確認時に必ず判定し、Final Kへ `AI Lab diary: 候補あり` または `記録不要` を残す。
+- 候補ありなら、通常はG3 / G4へ日記更新TASKを作らず、ChatGPTが公開安全な候補だけを `supabase/functions/_shared/brand/ai_lab_dev_diary_context.md` へ実際の作業日付で直接追記する。
+- ChatGPTは通常の日記更新でMarkdown正本だけを直接編集し、生成snapshotは編集しない。Markdown push後のsnapshot生成・parity / freshness / sanitizer等の検証は `.github/workflows/ai-lab-diary-snapshot.yml` に任せる。
+- workflowが失敗した場合は失敗を記録し、コード/workflow修理が必要な場合だけ空いているG3 / G4へ修正TASKを作る。テスト失敗を無視してsnapshotを手修正したり、本番へ進めたりしない。
+- K1 / K2 はこの部屋の担当ではない。K1 / K2 のコードが来た場合は従来どおり「私の担当ではありません」とだけ返し、そのTASK本体・Report・statusには触れない。日記反映時に限り、CURRENT_STATEのFinal K1 / K2にある公開安全な `AI Lab diary: 候補あり` 行だけを利用できる。
+- 日記同期workflowはproduction deployやX投稿をしない。production反映が必要なら共有ルールの別production gateを使う。
 
 ### 質問の解釈
 

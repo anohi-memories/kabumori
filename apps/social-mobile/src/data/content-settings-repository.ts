@@ -7,7 +7,8 @@ import {
 } from '@/domain/content-settings';
 
 export type ContentSettingsResult =
-  | { state: 'ready'; data: SocialMobileContentSettings; persona: PersonaProfile | null }
+  /** `updatedAt` is the saved row's version (null when nothing is saved yet); it guards a confirmed save. */
+  | { state: 'ready'; data: SocialMobileContentSettings; persona: PersonaProfile | null; updatedAt: string | null }
   | { state: 'blocked' | 'unavailable'; data: SocialMobileContentSettings; persona: PersonaProfile | null; reason: string };
 
 type SettingsRow = {
@@ -17,7 +18,10 @@ type SettingsRow = {
   persona_confirmed?: unknown;
   persona_last_analyzed_at?: unknown;
   persona_last_analyzed_count?: unknown;
+  updated_at?: unknown;
 };
+
+export type ConfirmedSaveResult = { ok: true } | { ok: false; reason: string; stale?: true };
 
 function safePersona(value: unknown, metadata: Pick<SettingsRow, 'persona_provenance' | 'persona_confirmed' | 'persona_last_analyzed_at' | 'persona_last_analyzed_count'>): PersonaProfile | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
@@ -45,7 +49,7 @@ export class SupabaseContentSettingsRepository {
   async read(brandId: string): Promise<ContentSettingsResult> {
     const { data, error } = await this.client
       .from('social_mobile_content_settings')
-      .select('settings,persona_profile,persona_provenance,persona_confirmed,persona_last_analyzed_at,persona_last_analyzed_count')
+      .select('settings,persona_profile,persona_provenance,persona_confirmed,persona_last_analyzed_at,persona_last_analyzed_count,updated_at')
       .eq('brand_id', brandId)
       .maybeSingle<SettingsRow>();
     if (error) {
@@ -53,10 +57,10 @@ export class SupabaseContentSettingsRepository {
       if (error.code === '42P01' || error.code === '42703') return { state: 'unavailable', data: SOCIAL_MOBILE_CONTENT_DEFAULTS, persona: null, reason: '設定保存機能はまだ利用できません。' };
       return { state: 'unavailable', data: SOCIAL_MOBILE_CONTENT_DEFAULTS, persona: null, reason: '設定を取得できません。' };
     }
-    if (!data) return { state: 'ready', data: SOCIAL_MOBILE_CONTENT_DEFAULTS, persona: null };
+    if (!data) return { state: 'ready', data: SOCIAL_MOBILE_CONTENT_DEFAULTS, persona: null, updatedAt: null };
     const parsed = validateSocialMobileContentSettings(data.settings);
     if (!parsed.ok) return { state: 'unavailable', data: SOCIAL_MOBILE_CONTENT_DEFAULTS, persona: null, reason: '保存された設定を確認できません。' };
-    return { state: 'ready', data: parsed.value, persona: safePersona(data.persona_profile, data) };
+    return { state: 'ready', data: parsed.value, persona: safePersona(data.persona_profile, data), updatedAt: typeof data.updated_at === 'string' ? data.updated_at : null };
   }
 
   async upsert(brandId: string, settings: unknown): Promise<{ ok: true } | { ok: false; reason: string }> {
@@ -81,9 +85,13 @@ export class SupabaseContentSettingsRepository {
   ): Promise<{ ok: true } | { ok: false; reason: string }> {
     const parsed = validateSocialMobileContentSettings(settings);
     if (!parsed.ok || !persona.confirmed) return { ok: false, reason: '保存前の確認が完了していません。' };
+    // Provenance, confirmation and analysis metadata have dedicated columns; the database's persona
+    // contract accepts only style-signal keys in persona_profile, so they are not duplicated there.
     const profile = { ...persona };
     delete (profile as Partial<PersonaProfile> & { source?: unknown }).source;
     delete (profile as Partial<PersonaProfile> & { confirmed?: unknown }).confirmed;
+    delete (profile as Partial<PersonaProfile>).analyzedAt;
+    delete (profile as Partial<PersonaProfile>).analyzedPostCount;
     const { error } = await this.client.from('social_mobile_content_settings').upsert({
       brand_id: brandId,
       settings: parsed.value,
@@ -97,5 +105,47 @@ export class SupabaseContentSettingsRepository {
     if (error.code === '42501') return { ok: false, reason: 'このワークスペースへ保存する権限がありません。' };
     if (error.code === '23514') return { ok: false, reason: '保存内容を確認してください。' };
     return { ok: false, reason: '設定を保存できません。時間をおいて再度お試しください。' };
+  }
+
+  /**
+   * Saves a user-confirmed conversation proposal only if the row is still the
+   * version the confirmation was planned against (`expectedUpdatedAt`; null =
+   * no row existed). A row changed or created in between is reported as
+   * `stale` and nothing is written, so a confirmation can never silently
+   * overwrite newer settings. `persona` is written only when the proposal
+   * changed it; otherwise the saved persona columns are left untouched.
+   */
+  async saveConfirmedIfUnchanged(
+    brandId: string,
+    settings: unknown,
+    persona: PersonaProfile | null,
+    expectedUpdatedAt: string | null,
+  ): Promise<ConfirmedSaveResult> {
+    const parsed = validateSocialMobileContentSettings(settings);
+    if (!parsed.ok || (persona && !persona.confirmed)) return { ok: false, reason: '保存前の確認が完了していません。' };
+    const values: Record<string, unknown> = { settings: parsed.value };
+    if (persona) {
+      const profile: Record<string, unknown> = { ...persona };
+      for (const key of ['source', 'confirmed', 'analyzedAt', 'analyzedPostCount']) delete profile[key];
+      Object.assign(values, {
+        persona_profile: profile,
+        persona_provenance: persona.source,
+        persona_confirmed: true,
+        persona_last_analyzed_at: persona.analyzedAt ?? null,
+        persona_last_analyzed_count: persona.analyzedPostCount ?? null,
+      });
+    }
+    const table = this.client.from('social_mobile_content_settings');
+    const { data, error } = expectedUpdatedAt === null
+      ? await table.insert({ brand_id: brandId, ...values }).select('brand_id')
+      : await table.update(values).eq('brand_id', brandId).eq('updated_at', expectedUpdatedAt).select('brand_id');
+    const stale: ConfirmedSaveResult = { ok: false, stale: true, reason: '保存されている設定が変わっていました。内容を確認して、もう一度お試しください。' };
+    if (error) {
+      if (error.code === '23505') return stale;
+      if (error.code === '42501') return { ok: false, reason: 'このワークスペースへ保存する権限がありません。' };
+      if (error.code === '23514') return { ok: false, reason: '保存内容を確認してください。' };
+      return { ok: false, reason: '設定を保存できません。時間をおいて再度お試しください。' };
+    }
+    return Array.isArray(data) && data.length === 1 ? { ok: true } : stale;
   }
 }

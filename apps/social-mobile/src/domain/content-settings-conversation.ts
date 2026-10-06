@@ -1,4 +1,4 @@
-import { validateSocialMobileContentSettings, type PersonaProfile, type SocialMobileContentSettings } from './content-settings';
+import { validateSocialMobileContentSettings, type PersonaProfile, type SocialMobileContentSettings } from './content-settings.ts';
 
 export type ConversationalSettingsProposal = {
   changes: Partial<SocialMobileContentSettings>;
@@ -22,9 +22,22 @@ export type ConversationalAssistantInput = {
   userUtterance: string;
 };
 
+/**
+ * The only settings a conversation may propose. Posting controls (approval mode, generation window,
+ * locale) are not here on purpose: a chat can describe them but never change them.
+ */
+export type ConversationalSettingsDelta = Partial<Pick<
+  SocialMobileContentSettings,
+  'preferredTone' | 'themes' | 'objective' | 'frequencyTargetPerWeek' | 'optionalNgWords' | 'notes'
+>>;
+
+/** chat = just an answer, question = the assistant needs more, proposal = something to confirm. */
+export type ConversationalKind = 'chat' | 'question' | 'proposal';
+
 export type ConversationalAssistantResult = {
+  kind: ConversationalKind;
   assistantReply: string;
-  proposedSettingsDelta: Partial<SocialMobileContentSettings>;
+  proposedSettingsDelta: ConversationalSettingsDelta;
   proposedPersonaDelta: PersonaDelta;
   followUpQuestions: string[];
   provenance: 'conversation' | 'past_post_analysis';
@@ -77,39 +90,89 @@ function boundedStrings(value: unknown, max: number, maxLength: number): string[
     : [];
 }
 
+const CONTROL_KEY = /publish|account|oauth|token|secret|schedule|cron/iu;
+const SETTINGS_DELTA_KEYS = new Set(['preferredTone', 'themes', 'objective', 'frequencyTargetPerWeek', 'optionalNgWords', 'notes']);
+const PERSONA_DELTA_KEYS = new Set(['toneSignals', 'sentenceLength', 'punctuationEmoji', 'recurringVocabulary', 'topicSignals', 'hashtagHabits', 'ctaStyle', 'openingClosingPatterns']);
+
+function stringList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+/** Allowlisted, type-checked settings delta; null when anything outside the contract is present. */
+function safeSettingsDelta(value: Record<string, unknown>): ConversationalSettingsDelta | null {
+  if (Object.keys(value).some((key) => !SETTINGS_DELTA_KEYS.has(key))) return null;
+  const delta: ConversationalSettingsDelta = {};
+  if (value.preferredTone !== undefined) {
+    if (typeof value.preferredTone !== 'string' || !value.preferredTone.trim()) return null;
+    delta.preferredTone = value.preferredTone.trim().slice(0, 120);
+  }
+  if (value.themes !== undefined) {
+    if (!stringList(value.themes)) return null;
+    delta.themes = boundedStrings(value.themes, 8, 100);
+  }
+  if (value.objective !== undefined) {
+    if (typeof value.objective !== 'string' || !value.objective.trim()) return null;
+    delta.objective = value.objective.trim().slice(0, 160);
+  }
+  if (value.frequencyTargetPerWeek !== undefined) {
+    const n = value.frequencyTargetPerWeek;
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > 14) return null;
+    delta.frequencyTargetPerWeek = n;
+  }
+  if (value.optionalNgWords !== undefined) {
+    if (!stringList(value.optionalNgWords)) return null;
+    delta.optionalNgWords = boundedStrings(value.optionalNgWords, 20, 60);
+  }
+  if (value.notes !== undefined) {
+    if (typeof value.notes !== 'string') return null;
+    delta.notes = value.notes.trim().slice(0, 1000);
+  }
+  return delta;
+}
+
 /**
- * Treats an eventual LLM response as untrusted data. This validator is also
- * used by the deterministic source candidate, so a future model cannot smuggle
- * publish, account, OAuth, token, or scheduler controls into a proposal.
+ * Treats an LLM response as untrusted data. This validator is also used by the
+ * deterministic local candidate, so a model cannot smuggle publish, account,
+ * OAuth, token, or scheduler controls into a proposal: control-like keys are
+ * refused and the settings/persona deltas are allowlists.
  */
 export function validateConversationalAssistantResult(value: unknown): ConversationalAssistantResult | null {
-  if (!isRecord(value) || Object.keys(value).some((key) => key !== 'publishPermissionChanged' && /publish|account|oauth|token|secret|schedule|cron/iu.test(key))) return null;
+  if (!isRecord(value) || Object.keys(value).some((key) => key !== 'publishPermissionChanged' && CONTROL_KEY.test(key))) return null;
   if (value.requiresConfirmation !== true || value.publishPermissionChanged !== false) return null;
   if (typeof value.assistantReply !== 'string' || value.assistantReply.trim().length === 0) return null;
   if (!isRecord(value.proposedSettingsDelta) || !isRecord(value.proposedPersonaDelta)) return null;
-  if (Object.keys(value.proposedSettingsDelta).some((key) => /publish|account|oauth|token|secret|schedule|cron/iu.test(key))) return null;
   if (!Array.isArray(value.followUpQuestions) || !Array.isArray(value.uncertainty)) return null;
+  if (value.kind !== undefined && value.kind !== 'chat' && value.kind !== 'question' && value.kind !== 'proposal') return null;
   const provenance = value.provenance === 'conversation' || value.provenance === 'past_post_analysis' ? value.provenance : null;
   const confidence = value.confidence === 'low' || value.confidence === 'medium' || value.confidence === 'high' ? value.confidence : null;
   const history = value.historyLearningIntent;
   if (!provenance || !confidence || !isRecord(history) || typeof history.explicitConsent !== 'boolean') return null;
+  const safeSettings = safeSettingsDelta(value.proposedSettingsDelta);
+  if (!safeSettings) return null;
   const persona = value.proposedPersonaDelta as Record<string, unknown>;
-  if ('source' in persona || 'confirmed' in persona || Object.keys(persona).some((key) => /publish|account|oauth|token|secret|posts?/iu.test(key))) return null;
+  if (Object.keys(persona).some((key) => !PERSONA_DELTA_KEYS.has(key))) return null;
   const safePersona: PersonaDelta = {
-    ...(boundedStrings(persona.toneSignals, 20, 80).length ? { toneSignals: boundedStrings(persona.toneSignals, 20, 80) } : {}),
+    ...(Array.isArray(persona.toneSignals) ? { toneSignals: boundedStrings(persona.toneSignals, 20, 80) } : {}),
     ...(persona.sentenceLength === 'short' || persona.sentenceLength === 'mixed' || persona.sentenceLength === 'long' ? { sentenceLength: persona.sentenceLength } : {}),
-    ...(typeof persona.punctuationEmoji === 'string' ? { punctuationEmoji: persona.punctuationEmoji.slice(0, 200) } : {}),
-    ...(boundedStrings(persona.recurringVocabulary, 30, 50).length ? { recurringVocabulary: boundedStrings(persona.recurringVocabulary, 30, 50) } : {}),
-    ...(boundedStrings(persona.topicSignals, 20, 80).length ? { topicSignals: boundedStrings(persona.topicSignals, 20, 80) } : {}),
-    ...(typeof persona.hashtagHabits === 'string' ? { hashtagHabits: persona.hashtagHabits.slice(0, 200) } : {}),
-    ...(typeof persona.ctaStyle === 'string' ? { ctaStyle: persona.ctaStyle.slice(0, 200) } : {}),
-    ...(boundedStrings(persona.openingClosingPatterns, 20, 100).length ? { openingClosingPatterns: boundedStrings(persona.openingClosingPatterns, 20, 100) } : {}),
+    ...(typeof persona.punctuationEmoji === 'string' && persona.punctuationEmoji.trim() ? { punctuationEmoji: persona.punctuationEmoji.trim().slice(0, 200) } : {}),
+    ...(Array.isArray(persona.recurringVocabulary) ? { recurringVocabulary: boundedStrings(persona.recurringVocabulary, 30, 50) } : {}),
+    ...(Array.isArray(persona.topicSignals) ? { topicSignals: boundedStrings(persona.topicSignals, 20, 80) } : {}),
+    ...(typeof persona.hashtagHabits === 'string' && persona.hashtagHabits.trim() ? { hashtagHabits: persona.hashtagHabits.trim().slice(0, 200) } : {}),
+    ...(typeof persona.ctaStyle === 'string' && persona.ctaStyle.trim() ? { ctaStyle: persona.ctaStyle.trim().slice(0, 200) } : {}),
+    ...(Array.isArray(persona.openingClosingPatterns) ? { openingClosingPatterns: boundedStrings(persona.openingClosingPatterns, 20, 100) } : {}),
   };
+  const followUpQuestions = boundedStrings(value.followUpQuestions, 5, 160);
+  const hasChange = Object.keys(safeSettings).length > 0 || Object.keys(safePersona).length > 0;
+  // A chat/question answer never carries a proposal, whatever else the payload contains.
+  const declared = value.kind as ConversationalKind | undefined;
+  const carries = hasChange && declared !== 'chat' && declared !== 'question';
+  const kind: ConversationalKind = carries ? 'proposal' : declared === 'question' || (declared !== 'chat' && followUpQuestions.length) ? 'question' : 'chat';
   return {
-    assistantReply: value.assistantReply.trim().slice(0, 500),
-    proposedSettingsDelta: value.proposedSettingsDelta as Partial<SocialMobileContentSettings>,
-    proposedPersonaDelta: safePersona,
-    followUpQuestions: boundedStrings(value.followUpQuestions, 5, 160),
+    kind,
+    assistantReply: value.assistantReply.trim().slice(0, 1200),
+    proposedSettingsDelta: carries ? safeSettings : {},
+    proposedPersonaDelta: carries ? safePersona : {},
+    followUpQuestions,
     provenance,
     confidence,
     uncertainty: boundedStrings(value.uncertainty, 5, 160),
@@ -119,7 +182,11 @@ export function validateConversationalAssistantResult(value: unknown): Conversat
   };
 }
 
-/** Source candidate for a future LLM boundary; it has no network or persistence side effects. */
+/**
+ * Deterministic local stand-in used only in the sample-data preview (no backend) and in tests. The
+ * real conversation goes through the authenticated `social-mobile-consult` endpoint. It has no network
+ * or persistence side effects.
+ */
 export function createConversationalAssistantProposal(input: ConversationalAssistantInput): ConversationalAssistantResult {
   const settingsProposal = proposeContentSettingsFromConversation(input.userUtterance, input.currentSettings);
   const historyLearningIntent = parsePastPostLearningRequest(input.userUtterance);
@@ -127,7 +194,9 @@ export function createConversationalAssistantProposal(input: ConversationalAssis
     ? { punctuationEmoji: '会話で指定された記号・絵文字の傾向を確認する' }
     : {};
   const changes = Object.keys(settingsProposal.changes).length ? '希望する設定案をまとめました。' : '投稿の雰囲気をもう少し教えてください。';
+  const hasChange = Object.keys(settingsProposal.changes).length > 0 || Object.keys(proposedPersonaDelta).length > 0;
   return {
+    kind: hasChange ? 'proposal' : 'question',
     assistantReply: historyLearningIntent.explicitConsent
       ? `${changes}過去の投稿を読む前に、対象アカウントと取得範囲を確認します。`
       : `${changes}保存前に内容を確認してください。`,
@@ -143,17 +212,22 @@ export function createConversationalAssistantProposal(input: ConversationalAssis
   };
 }
 
-/** Applies only an explicitly confirmed proposal. It never changes publishing permission. */
+/**
+ * Applies only an explicitly confirmed proposal, as a delta onto the given
+ * state. It never changes publishing permission, and a settings-only
+ * confirmation leaves an existing persona (and its provenance) untouched.
+ */
 export function applyConfirmedConversationProposal(
   currentSettings: SocialMobileContentSettings,
   currentPersona: PersonaProfile | null,
   result: ConversationalAssistantResult,
-): { settings: SocialMobileContentSettings; persona: PersonaProfile | null } {
+): { settings: SocialMobileContentSettings; persona: PersonaProfile | null; personaChanged: boolean } {
   const settingsCandidate = { ...currentSettings, ...result.proposedSettingsDelta };
   const settingsResult = validateSocialMobileContentSettings(settingsCandidate);
   const settings = settingsResult.ok ? settingsResult.value : currentSettings;
-  const persona = Object.keys(result.proposedPersonaDelta).length || currentPersona
-    ? { ...(currentPersona ?? {}), ...result.proposedPersonaDelta, source: result.provenance, confirmed: true }
-    : null;
-  return { settings, persona: persona as PersonaProfile | null };
+  const personaChanged = Object.keys(result.proposedPersonaDelta).length > 0;
+  const persona = personaChanged
+    ? ({ ...(currentPersona ?? {}), ...result.proposedPersonaDelta, source: result.provenance, confirmed: true } as PersonaProfile)
+    : currentPersona;
+  return { settings, persona, personaChanged };
 }

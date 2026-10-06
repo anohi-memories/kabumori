@@ -71,6 +71,8 @@ export type MarketDetail = {
     }>;
   }>;
   overnight_claims: Array<{ text_ja: string; claim_type: string }>;
+  /** The day's three headlines shared with X (presentation v2). Absent on older reports. */
+  points_ja?: string[];
   today_claims: Array<{ text_ja: string; claim_type: string }>;
   tailwind_themes_ja: string[];
   headwind_themes_ja: string[];

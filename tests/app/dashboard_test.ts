@@ -73,8 +73,9 @@ test('dashboard section errors use fixed copy instead of backend details', () =>
   assert.equal(dashboardSectionError('stocks'), '登録銘柄を読み込めませんでした。');
   assert.equal(dashboardSectionError('news'), '重要ニュースを読み込めませんでした。');
   assert.equal(dashboardSectionError('reports'), 'レポートを読み込めませんでした。');
+  assert.equal(dashboardSectionError('topic'), '今日のトピックを読み込めませんでした。');
 
-  for (const section of ['stocks', 'news', 'reports'] as const) {
+  for (const section of ['stocks', 'news', 'reports', 'topic'] as const) {
     assert.notEqual(dashboardSectionError(section), backendError);
     assert.equal(dashboardSectionError(section).includes(backendError), false);
   }

@@ -72,6 +72,8 @@ import { loadBrandXTokens } from "../_shared/brand/token_loader.ts";
 import { xOAuthClientRegistryFromEnv } from "../_shared/x_v2_account_refresh.ts";
 import { createVaultAccountCredentialRpc, VaultAccountXAuth } from "./vault_account_auth.ts";
 import {
+  countAiLabBrandPostsBefore,
+  createAiLabTopicPort,
   loadAiLabRecentDedupeFingerprints,
   recordAndCompleteAiLabBrandPost,
 } from "../_shared/brand/ai_lab_brand_post_store.ts";
@@ -79,6 +81,13 @@ import {
   AiLabConfirmedPostCompletionError,
   dispatchAiLabScheduledBrandPost,
 } from "../_shared/brand/ai_lab_scheduled_brand_post.ts";
+import {
+  buildAiLabTopicCandidates,
+  loadAiLabDevDiaryMarkdown,
+} from "../_shared/brand/ai_lab_dev_diary_context.ts";
+import { aiLabDiversityInstructions } from "../_shared/brand/ai_lab_theme_guard.ts";
+import { sendAiLabXPost } from "../_shared/brand/ai_lab_provider_outcome.ts";
+import { generateBrandPost } from "../_shared/brand/brand_post_generator.ts";
 import {
   checkVaultAccountPublishAuthority,
   completeVaultAccountBrandPost,
@@ -4085,22 +4094,92 @@ Deno.serve(async (req) => {
         }
       }
       try {
+        // Dev-diary content shift: the topic is a concrete recent development event (sanitized,
+        // whitelisted -- see ai_lab_dev_diary_context.ts) or a safe evergreen reflection. Never falls
+        // back to the brand-agnostic generator's own generic topic default for this brand.
+        // loadAiLabDevDiaryMarkdown() reads a bundled `import`-ed constant, not a file, so it never rejects.
+        const diaryMarkdown = await loadAiLabDevDiaryMarkdown();
+        // Event-level dedupe with a pre-X claim: the candidates are built locally in priority order
+        // (fresh diary events newest first, one angle each, then evergreen seeds); the database
+        // (claim_ai_lab_topic, serialized per brand) claims the first one that is not already
+        // claimed/published/ambiguous and not in an evergreen cooldown. Nothing claimable means this
+        // slot is skipped -- the dispatcher never reaches X without a claim. The rotation index only
+        // varies the angle and the evergreen order; it never overrides a claim or a cooldown. Post text
+        // is not stored anywhere, so recentPostTexts stays unset.
+        const rotationIndex = await countAiLabBrandPostsBefore({
+          supabaseUrl,
+          serviceRoleKey,
+          scheduledFor: scheduledPost.scheduled_for,
+        }) ?? Math.floor(Date.parse(scheduledPost.scheduled_for) / 3_600_000);
+        const { candidates, exclusions } = buildAiLabTopicCandidates({
+          markdown: diaryMarkdown,
+          now: new Date(),
+          rotationIndex,
+        });
+        const topicPort = createAiLabTopicPort({
+          supabaseUrl,
+          serviceRoleKey,
+          scheduledPostId: scheduledPost.id,
+          candidates,
+          // PROJECT_RULES: candidate exclusions are logged with machine-readable reason codes (no text).
+          onClaimResult: (claimResult) =>
+            console.info("AI_LAB_TOPIC_CLAIM", {
+              scheduledPostId: scheduledPost.id,
+              rotationIndex,
+              claimedEventKey: claimResult.claim?.eventKey ?? null,
+              claimedUnitKey: claimResult.claim?.unitKey ?? null,
+              conflict: claimResult.conflict,
+              rejectedByDatabase: claimResult.rejected,
+              excludedLocally: exclusions,
+            }),
+        });
         const result = await dispatchAiLabScheduledBrandPost({
           context: brandContext,
           postType: scheduledPost.post_type,
           scheduledPostId: scheduledPost.id,
           openAiApiKey,
+          topic: topicPort,
+          onContentRejected: ({ attempt, violations }) =>
+            console.warn("AI_LAB_CONTENT_REJECTED", {
+              scheduledPostId: scheduledPost.id,
+              attempt,
+              violations,
+            }),
+          generate: ({ retryViolations, topicSeed, ...args }) =>
+            generateBrandPost({
+              ...args,
+              topicSeed,
+              extraInstructions: aiLabDiversityInstructions(retryViolations),
+            }),
           loadRecentFingerprints: () => loadAiLabRecentDedupeFingerprints({
             supabaseUrl,
             serviceRoleKey,
           }),
-          publishText: (text) => postToX(xAuth, text),
+          // AI Lab is always on the exact-account Vault path. Its sends are observed per X request so that
+          // only a failure proven to have created no post (ai_lab_provider_outcome.ts) can release the
+          // topic claim; anything else stays ambiguous. postToX/VaultAccountXAuth behavior is unchanged.
+          publishText: (text) => {
+            const vaultAccount = xAuth.vaultAccount;
+            if (!vaultAccount) return postToX(xAuth, text);
+            return sendAiLabXPost({
+              send: (request) => vaultAccount.send(request),
+              request: (accessToken) => requestXPost(accessToken, text, undefined, undefined, "manual"),
+              onRequestFailedStatus: (status) => console.error("X API request failed", { status }),
+            });
+          },
           completePublishedPost: (args) => recordAndCompleteAiLabBrandPost({
             supabaseUrl,
             serviceRoleKey,
             ...args,
           }),
         });
+        if (result.topicSettlement === "SETTLE_FAILED") {
+          // The event stays provider_started (never reopened); only the "published" label is missing.
+          console.error("AI_LAB_TOPIC_SETTLEMENT_FAILED", {
+            scheduledPostId: scheduledPost.id,
+            eventKey: result.topicEventKey,
+          });
+        }
         if (!result.fingerprintPersisted) {
           console.error("AI_LAB_POST_FINGERPRINT_PERSISTENCE_FAILED", {
             scheduledPostId: scheduledPost.id,
@@ -4117,6 +4196,8 @@ Deno.serve(async (req) => {
           characterCount: result.characterCount,
           xPostId: result.xPostId,
           fingerprintPersisted: result.fingerprintPersisted,
+          topicEventKey: result.topicEventKey,
+          topicSettlement: result.topicSettlement,
           refreshExecuted: xAuth.refreshExecuted,
         }, 201);
       } catch (error) {

@@ -9,11 +9,12 @@ const configured = buildLegalLinks({
 });
 
 test("every release-blocking entry is present and in a predictable order", () => {
-  const ids = settingsEntries(configured, { email: "mail@example.com" }).map((entry) => entry.id);
+  const ids = settingsEntries(configured, { email: "mail@example.com" }, "初心者向け").map((entry) => entry.id);
   assert.deepEqual(ids, [
     "account-email",
     "password",
     "notifications",
+    "topic-level",
     "privacy",
     "terms",
     "support",
@@ -23,7 +24,7 @@ test("every release-blocking entry is present and in a predictable order", () =>
 });
 
 test("deleting the account is the last entry and is marked destructive", () => {
-  const entries = settingsEntries(configured, { email: "mail@example.com" });
+  const entries = settingsEntries(configured, { email: "mail@example.com" }, "初心者向け");
   const last = entries[entries.length - 1];
   assert.equal(last.id, "delete-account");
   assert.equal(last.kind, "destructive");
@@ -32,7 +33,7 @@ test("deleting the account is the last entry and is marked destructive", () => {
 
 test("no entry can dead-end: a link either has a destination or explains why not", () => {
   for (const legal of [configured, buildLegalLinks({})]) {
-    for (const entry of settingsEntries(legal, { email: null })) {
+    for (const entry of settingsEntries(legal, { email: null }, "初心者向け")) {
       if (entry.kind !== "link") continue;
       assert.ok(
         (entry.url && !entry.unavailableMessage) || (!entry.url && entry.unavailableMessage),
@@ -43,8 +44,17 @@ test("no entry can dead-end: a link either has a destination or explains why not
 });
 
 test("the signed-in address is shown, and its absence is stated rather than left blank", () => {
-  const [withEmail] = settingsEntries(configured, { email: "mail@example.com" });
+  const [withEmail] = settingsEntries(configured, { email: "mail@example.com" }, "初心者向け");
   assert.equal(withEmail.description, "mail@example.com");
-  const [withoutEmail] = settingsEntries(configured, { email: null });
+  const [withoutEmail] = settingsEntries(configured, { email: null }, "初心者向け");
   assert.ok(withoutEmail.description.length > 0);
+});
+
+test("the topic-level entry shows whatever label the caller resolved for the current level", () => {
+  for (const label of ["初心者向け", "中級者向け", "上級者向け"]) {
+    const entry = settingsEntries(configured, { email: null }, label).find((e) => e.id === "topic-level");
+    assert.ok(entry, "topic-level entry must exist");
+    assert.equal(entry.kind, "action");
+    assert.ok(entry.description.includes(label));
+  }
 });

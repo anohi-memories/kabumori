@@ -16,6 +16,7 @@
 //     stance from evidence code says exists, and writes fact / inference / watch
 //     text that is checked against the packet.
 
+import { falseAbsenceClaims } from "../_shared/absence_claims.ts";
 import type { AppMarketSection, MarketDirection } from "../_shared/market_report_packet.ts";
 import type { AppMarketDetail } from "./market_detail.ts";
 import { MIC_MARKET_FACT_INSTRUCTIONS, MIC_MARKET_INSTRUCTIONS, type MicPacketEntry } from "./mic_market_context.ts";
@@ -1142,6 +1143,17 @@ export function reportTexts(body: ReportBody): string[] {
   ];
 }
 
+/** Any news in the per-user packet: market news, or a holding's / watch stock's own or related news. */
+function packetHasNews(packet: unknown): boolean {
+  const value = packet as { market_news?: unknown[]; holdings?: unknown[]; watch?: unknown[] } | null;
+  if (!value || typeof value !== "object") return false;
+  const stockHasNews = (stock: unknown) => {
+    const item = stock as { own_news?: unknown[]; related_market_news?: unknown[] };
+    return (item.own_news?.length ?? 0) > 0 || (item.related_market_news?.length ?? 0) > 0;
+  };
+  return (value.market_news?.length ?? 0) > 0 || [...(value.holdings ?? []), ...(value.watch ?? [])].some(stockHasNews);
+}
+
 export function localReportIssues(
   body: ReportBody,
   snapshot: PortfolioSnapshot,
@@ -1158,6 +1170,10 @@ export function localReportIssues(
   if (length(body.summary_ja) > REPORT_LIMITS.summary) issues.push("SUMMARY_TOO_LONG");
   if (length(body.overview_ja) > REPORT_LIMITS.overview) issues.push("OVERVIEW_TOO_LONG");
   issues.push(...holdingImpactIssues(body, snapshot, packet));
+  // Report-level "no material" without a scope is false whenever the packet holds any news (2026-09-30 close).
+  if (falseAbsenceClaims([body.summary_ja, body.overview_ja, ...body.risk_notes_ja, ...body.checkpoints_ja], packetHasNews(packet)).length > 0) {
+    issues.push("FALSE_BROAD_NO_MATERIAL_CLAIM");
+  }
   if (body.watch_notes.some((note) => length(note.note_ja) > REPORT_LIMITS.watchNote)) issues.push("WATCH_NOTE_TOO_LONG");
   if (body.watch_notes.length > REPORT_LIMITS.maxWatchNotes) issues.push("TOO_MANY_WATCH_NOTES");
   if (body.risk_notes_ja.length > REPORT_LIMITS.maxRisks || body.risk_notes_ja.some((note) => length(note) > REPORT_LIMITS.riskNote)) {

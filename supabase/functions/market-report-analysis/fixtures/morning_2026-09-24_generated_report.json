@@ -1,0 +1,273 @@
+{
+  "content_hash": "f92946e254efcaec0e8672635f95f822250aeff54528b9be6ca822a8622ebe78",
+  "id": "93ff6ee5-57d0-4701-a385-8e806666d8c3",
+  "payload": {
+    "claims": [
+      {
+        "claim_id": "c1",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:nikkei225"
+        ],
+        "scope": "today",
+        "text_ja": "9月18日の日経平均は65,018.95（前日比+1.38%）でした。"
+      },
+      {
+        "claim_id": "c2",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:topix_proxy_1306"
+        ],
+        "scope": "today",
+        "text_ja": "9月18日のTOPIX連動ETF（1306）は426.3円（前日比−0.26%）でした。"
+      },
+      {
+        "claim_id": "c3",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:dow",
+          "metric:sp500",
+          "metric:nasdaq_composite"
+        ],
+        "scope": "overnight",
+        "text_ja": "9月23日の米国市場は、主要3指数がそろって下落しました。"
+      },
+      {
+        "claim_id": "c4",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:sox"
+        ],
+        "scope": "overnight",
+        "text_ja": "9月23日の米国市場では、フィラデルフィア半導体株指数（SOX）が12,534.27（前日比+0.81%）でした。"
+      },
+      {
+        "claim_id": "c5",
+        "claim_type": "consistent_with",
+        "evidence_refs": [
+          "metric:dow",
+          "metric:sp500",
+          "metric:nasdaq_composite"
+        ],
+        "scope": "overnight",
+        "text_ja": "9月23日の米国市場の下落と、入力で確定した日本株の下落方向は同時期に確認できますが、影響は断定できません。"
+      },
+      {
+        "claim_id": "c6",
+        "claim_type": "causal",
+        "evidence_refs": [
+          "news:09f609d1-f0f0-48e1-9873-eadcb6d3e5e3"
+        ],
+        "scope": "today",
+        "text_ja": "北朝鮮による新型兵器システムとするミサイル試験が実施され、日本の防衛当局は日本のEEZ外への落下と評価しました。"
+      },
+      {
+        "claim_id": "c7",
+        "claim_type": "causal",
+        "evidence_refs": [
+          "news:6a0d5f8a-a77c-416e-b708-f580aef5a6bb"
+        ],
+        "scope": "today",
+        "text_ja": "紅海とバブ・エル・マンデブ海峡で、フーシ派がサウジアラビア船舶への封鎖を宣言しました。"
+      },
+      {
+        "claim_id": "c8",
+        "claim_type": "insufficient_evidence",
+        "evidence_refs": [
+          "metric:nikkei225",
+          "metric:topix_proxy_1306"
+        ],
+        "scope": "today",
+        "text_ja": "日本株の下落方向について、個別材料と値動きの因果を確認できる情報は限られています。"
+      }
+    ],
+    "data_content_hash": "838a3f32a1f4d73211801f8824c7761c3fdcf0d7daa9186a6d7c0aa7e56ea940",
+    "data_gaps_ja": [
+      "日本国債2年利回りは8月31日時点の値です",
+      "日本国債10年利回りは8月31日時点の値です",
+      "日経平均先物は確認できる取得元がないため載せていません",
+      "業種別の騰落は取得元がないため載せていません",
+      "経済指標の予定は取得元がないため載せていません"
+    ],
+    "data_packet_id": "42cfcb58-4ebf-4888-83ce-89629658cb5a",
+    "direction_basis": [
+      "dow",
+      "sp500",
+      "nasdaq_composite"
+    ],
+    "fact": {
+      "ai_status": "passed",
+      "generation_attempts": 2,
+      "local_issues": []
+    },
+    "generated_at": "2026-09-23T22:55:37.077Z",
+    "headline_ja": "米株安と重要材料を確認、日本株は下落方向",
+    "key_news": [
+      {
+        "headline_ja": "北朝鮮が、新型兵器システムとするミサイル試験を実施しました",
+        "ref_id": "news:09f609d1-f0f0-48e1-9873-eadcb6d3e5e3",
+        "why_it_matters_ja": "北朝鮮のミサイル試験を受け、安全保障関連を含む反応の有無が材料になります。"
+      },
+      {
+        "headline_ja": "紅海とバブ・エル・マンデブ海峡で、フーシ派がサウジアラビア船舶への封鎖を宣言しました",
+        "ref_id": "news:6a0d5f8a-a77c-416e-b708-f580aef5a6bb",
+        "why_it_matters_ja": "重要な海上輸送路に関する動きで、原油供給や海運、輸送コストへの波及が焦点です。"
+      },
+      {
+        "headline_ja": "桜島で18〜21日に17回噴火、警戒レベル3を継続",
+        "ref_id": "news:63397e35-83df-44fe-baf9-582fcb4bd33f",
+        "why_it_matters_ja": "桜島で18〜21日に17回の噴火があり、警戒レベル3が継続しています。"
+      },
+      {
+        "headline_ja": "株式会社IDAJ 及びその子会社等の株式取得（連結子会社化）に関するお知らせ",
+        "ref_id": "news:4648e165-2a2f-4694-807b-a0afae614bb1",
+        "why_it_matters_ja": "兼松がIDAJ及びその子会社等の株式取得と連結子会社化を発表しました。"
+      },
+      {
+        "headline_ja": "CEホールディングスのTOB成立、上場廃止予定へ SK-03による公開買付けに7,624,702株の応募があり、買付予定数の下限を上回って成立しました",
+        "ref_id": "news:9d2ddbf7-11bf-4366-9de5-001f292ae70b",
+        "why_it_matters_ja": "CEホールディングスのTOBが成立し、上場廃止予定となりました。"
+      }
+    ],
+    "major_moves": [
+      {
+        "change_pct_display": "+1.38%",
+        "freshness": "fresh",
+        "label": "日経平均",
+        "metric_key": "nikkei225",
+        "session_date": "2026-09-18",
+        "value_display": "65,018.95"
+      },
+      {
+        "change_pct_display": "−0.26%",
+        "freshness": "fresh",
+        "label": "TOPIX連動ETF（1306）",
+        "metric_key": "topix_proxy_1306",
+        "session_date": "2026-09-18",
+        "value_display": "426.3円"
+      },
+      {
+        "change_pct_display": "−1.03%",
+        "freshness": "fresh",
+        "label": "NYダウ",
+        "metric_key": "dow",
+        "session_date": "2026-09-23",
+        "value_display": "51,511.59"
+      },
+      {
+        "change_pct_display": "−0.76%",
+        "freshness": "fresh",
+        "label": "S&P500",
+        "metric_key": "sp500",
+        "session_date": "2026-09-23",
+        "value_display": "7,706.03"
+      },
+      {
+        "change_pct_display": "−0.69%",
+        "freshness": "fresh",
+        "label": "ナスダック総合",
+        "metric_key": "nasdaq_composite",
+        "session_date": "2026-09-23",
+        "value_display": "26,936.04"
+      },
+      {
+        "change_pct_display": "+0.81%",
+        "freshness": "fresh",
+        "label": "フィラデルフィア半導体株指数（SOX）",
+        "metric_key": "sox",
+        "session_date": "2026-09-23",
+        "value_display": "12,534.27"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "ドル円",
+        "metric_key": "usdjpy",
+        "session_date": "2026-09-23",
+        "value_display": "157.92円"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "米国2年債利回り",
+        "metric_key": "us2y",
+        "session_date": "2026-09-22",
+        "value_display": "4.71%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "米国10年債利回り",
+        "metric_key": "us10y",
+        "session_date": "2026-09-22",
+        "value_display": "4.96%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "stale",
+        "label": "日本国債2年利回り",
+        "metric_key": "jgb2y",
+        "session_date": "2026-08-31",
+        "value_display": "1.743%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "stale",
+        "label": "日本国債10年利回り",
+        "metric_key": "jgb10y",
+        "session_date": "2026-08-31",
+        "value_display": "2.943%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "WTI原油",
+        "metric_key": "wti",
+        "session_date": "2026-09-22",
+        "value_display": "96.41ドル"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "ブレント原油",
+        "metric_key": "brent",
+        "session_date": "2026-09-22",
+        "value_display": "114.89ドル"
+      }
+    ],
+    "market_direction": "down",
+    "market_summary_ja": "9月23日の米国市場は、NYダウが51,511.59（前日比−1.03%）、S&P500が7,706.03（前日比−0.76%）、ナスダック総合が26,936.04（前日比−0.69%）と下落しました。9月18日の東京市場では日経平均が65,018.95（前日比+1.38%）でしたが、TOPIX連動ETF（1306）は426.3円（前日比−0.26%）。北朝鮮のミサイル試験や紅海周辺の封鎖宣言なども確認されており、値動きとの因果は確認できないものの、朝は海外市場と材料を分けて見たい場面です。",
+    "model": "gpt-5.6-luna",
+    "next_watch_ja": [
+      "9月23日の米国株安が日本株でどの程度意識されるか",
+      "安全保障関連を含む個別銘柄の反応",
+      "紅海周辺の封鎖宣言が航路や原油供給に及ぼす範囲"
+    ],
+    "report_type": "morning",
+    "risks_ja": [
+      "地政学的な動きが海運や原油供給に波及する可能性",
+      "日本国債2年・10年利回りは8月31日時点の古い値です",
+      "個別ニュースの影響は銘柄ごとに異なります"
+    ],
+    "schema_version": "market_report_packet.v1",
+    "strong_themes": [],
+    "trading_date": "2026-09-24",
+    "weak_themes": [
+      {
+        "claim_ids": [
+          "c7"
+        ],
+        "name_ja": "海運・輸送コスト"
+      }
+    ],
+    "x_post": {
+      "closing_ja": "海外株安と個別材料、日本株の反応を切り分けて見る朝です。",
+      "lead_ja": "9月23日の米国株は3指数そろって下落。朝は材料が多めです🌍",
+      "points_ja": [
+        "NYダウは51,511.59（前日比−1.03%）。S&P500も下落。",
+        "北朝鮮のミサイル試験、紅海周辺の船舶封鎖宣言を確認。",
+        "9月18日は日経平均が上昇、TOPIX連動ETF（1306）は下落でした📊"
+      ]
+    }
+  }
+}

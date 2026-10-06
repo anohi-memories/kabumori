@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAnalysisInput } from "./analysis_input.ts";
-import { assemblePacket, generationRequestBody, type GeneratedAnalysis, localAnalysisIssues } from "./analysis_logic.ts";
+import { assemblePacket, generationRequestBody, type GeneratedAnalysis, localAnalysisCheck, localAnalysisIssues } from "./analysis_logic.ts";
 import { appMarketSection, formatSharedXPost, sharedXPostIssues } from "../_shared/market_report_packet.ts";
 
 const directory = new URL("./fixtures/", import.meta.url);
@@ -111,16 +111,23 @@ test("regression: the 16:20 Fact failure (『同じ日に』 across 9/17 US and 
   assert.ok(issues.includes("日付の違う東京市場と米国市場を「同じ日」と表現"), issues.join(" / "));
 });
 
-test("regression: the 16:35 packet that passed Fact is now rejected for every K1 finding", () => {
-  const issues = localAnalysisIssues(generatedAnalysis(), input0918());
-  const has = (fragment: string) => issues.some((issue) => issue.includes(fragment));
-  assert.ok(has("本文に内部の項目名や識別子: change_pct"), issues.join(" / "));
-  assert.ok(has("X本文で不確実性の注記を繰り返している"), issues.join(" / "));
-  assert.ok(has("insufficient_evidence の claim が複数ある"), issues.join(" / "));
-  assert.ok(has("テーマではない（指数・方向差・報道）: 日経平均の上昇"), issues.join(" / "));
-  assert.ok(has("テーマではない（指数・方向差・報道）: 日経平均とTOPIX連動ETF（1306）の方向差"), issues.join(" / "));
-  assert.ok(has("テーマではない（指数・方向差・報道）: 日銀決定発表後の上昇報道"), issues.join(" / "));
-  assert.ok(has("重要材料（日銀・政策金利）が要約に無い"), issues.join(" / "));
+test("regression: the 16:35 packet that passed Fact — the leak is a hard reject, the K1 style findings are warnings", () => {
+  const check = localAnalysisCheck(generatedAnalysis(), input0918());
+  const hard = (fragment: string) => check.hard.some((issue) => issue.includes(fragment));
+  const warned = (fragment: string) => check.warnings.some((issue) => issue.includes(fragment));
+  // Internal field names in reader text are broken output: still rejected.
+  assert.ok(hard("本文に内部の項目名や識別子: change_pct"), check.hard.join(" / "));
+  // Style and editorial findings no longer withhold a hard-fact-safe packet; they are recorded.
+  assert.ok(warned("X本文で不確実性の注記を繰り返している"), check.warnings.join(" / "));
+  assert.ok(warned("insufficient_evidence の claim が複数ある"), check.warnings.join(" / "));
+  assert.ok(warned("テーマではない（指数・方向差・報道）: 日経平均の上昇"), check.warnings.join(" / "));
+  assert.ok(warned("テーマではない（指数・方向差・報道）: 日経平均とTOPIX連動ETF（1306）の方向差"), check.warnings.join(" / "));
+  assert.ok(warned("テーマではない（指数・方向差・報道）: 日銀決定発表後の上昇報道"), check.warnings.join(" / "));
+  assert.ok(warned("重要材料（日銀・政策金利）が要約に無い"), check.warnings.join(" / "));
+  // Names that are not themes never reach a reader: they are dropped from the packet. The one theme
+  // backed by the semiconductor index stays.
+  const packet = assemblePacket(input0918(), generatedAnalysis(), { generatedAt: new Date(0), attempts: 1 });
+  assert.deepEqual([...packet.strong_themes, ...packet.weak_themes].map((theme) => theme.name_ja), ["9月17日の米国株・半導体株高"]);
 });
 
 test("a date-explicit analysis that surfaces the BOJ decision passes, with readable X and app text", () => {
@@ -137,29 +144,29 @@ test("a date-explicit analysis that surfaces the BOJ decision passes, with reada
   assert.equal(packet.market_direction, "mixed");
 });
 
-test("each K1 rule is enforced individually", () => {
+test("each K1 rule is detected individually, as a hard reject or as a warning", () => {
   const built = input0918();
-  const cases: Array<[string, (analysis: GeneratedAnalysis) => void]> = [
-    ["本文に内部の項目名や識別子: session_date", (a) => { a.claims[1].text_ja = "session_dateは9月18日です。"; }],
-    ["本文に内部の項目名や識別子: metric:", (a) => { a.risks_ja = ["metric:nikkei225 の変動"]; }],
-    ["X本文で不確実性の注記を繰り返している", (a) => { a.x_post.closing_ja = "理由は確認できません。影響も断定できません。"; }],
-    ["要約で不確実性の注記を繰り返している", (a) => { a.market_summary_ja = "日銀が政策金利を1.25%へ引き上げました。理由は確認できません。影響も断定できません。"; }],
-    ["重要材料のニュースが key_news に無い", (a) => { a.key_news = []; }],
-    ["重要材料（日銀・政策金利）がX本文に無い", (a) => {
+  const cases: Array<["hard" | "warnings", string, (analysis: GeneratedAnalysis) => void]> = [
+    ["hard", "本文に内部の項目名や識別子: session_date", (a) => { a.claims[1].text_ja = "session_dateは9月18日です。"; }],
+    ["hard", "本文に内部の項目名や識別子: metric:", (a) => { a.risks_ja = ["metric:nikkei225 の変動"]; }],
+    ["warnings", "X本文で不確実性の注記を繰り返している", (a) => { a.x_post.closing_ja = "理由は確認できません。影響も断定できません。"; }],
+    ["warnings", "要約で不確実性の注記を繰り返している", (a) => { a.market_summary_ja = "日銀が政策金利を1.25%へ引き上げました。理由は確認できません。影響も断定できません。"; }],
+    ["warnings", "重要材料のニュースが key_news に無い", (a) => { a.key_news = []; }],
+    ["warnings", "重要材料（日銀・政策金利）がX本文に無い", (a) => {
       a.x_post.lead_ja = "日経平均は+1.38%でした";
       a.x_post.points_ja = ["日経平均65,018.95、前日比+1.38%", "TOPIX連動ETF（1306）は−0.26%", "指数で方向が分かれました"];
       a.x_post.closing_ja = "次の取引日も見たいです";
     }],
-    ["テーマの根拠（ニュース等）が無い", (a) => {
+    ["warnings", "テーマの根拠（ニュース等）が無い", (a) => {
       a.claims.push({ claim_id: "c9", text_ja: "日経平均は65,018.95でした。", claim_type: "observation", evidence_refs: ["metric:nikkei225"], scope: "today" });
       a.strong_themes = [{ name_ja: "輸出関連", claim_ids: ["c9"] }];
     }],
   ];
-  for (const [expected, mutate] of cases) {
+  for (const [level, expected, mutate] of cases) {
     const analysis = compliantAnalysis();
     mutate(analysis);
-    const issues = localAnalysisIssues(analysis, built);
-    assert.ok(issues.some((issue) => issue.includes(expected)), `${expected} not detected: ${issues.join(" / ")}`);
+    const issues = localAnalysisCheck(analysis, built)[level];
+    assert.ok(issues.some((issue) => issue.includes(expected)), `${expected} not detected as ${level}: ${issues.join(" / ")}`);
   }
 });
 

@@ -12,6 +12,14 @@
 GitHub共有タスク運用は `.agent/ORCHESTRATION.md` を参照する。競合時は `PROJECT_RULES.md` を優先する。
 
 
+## Mac移行後のローカル開発基準（2026-10-05〜）
+
+- 新規Claude作業の clean base は `/Users/yuya/Developer/kabumori-fresh` とする。
+- 旧 `/Users/yuya/Developer/kabumori` は既存worktree群の保護用として保持し、新規作業のbaseには使用しない。
+- 既存G1〜G5 worktreeは対応TASK完了まで継続してよい。旧repo / 旧worktreeを削除・rename・prune・resetしない。
+- 新規G slotは `kabumori-fresh` で fresh `origin/main` を確認し、slot専用の独立worktree / checkoutを作成してから作業する。
+- G1〜G5 / K1〜K5 の意味と既存TASK運用は従来どおり。詳細は `.agent/ORCHESTRATION.md` を正とする。
+
 ## レビュー頻度の最新方針
 
 作業開始時に `.agent/ORCHESTRATION.md` の「レビュー最適化方針（2026-09-25〜）」を必ず確認する。

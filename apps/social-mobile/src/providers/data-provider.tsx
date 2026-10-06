@@ -1,17 +1,20 @@
-import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
-import { selectDataSource } from '@/data/repository-selection';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import { initialDataStatus, selectDataSource } from '@/data/repository-selection';
 import type { SocialDataSnapshot } from '@/data/supabase-repository';
 import { useAuth } from '@/providers/auth-provider';
 
 type DataStatus = 'mock_preview' | 'loading' | 'ready' | 'blocked' | 'unavailable';
-type DataContextValue = { status: DataStatus; reason: string | null; snapshot: SocialDataSnapshot | null };
+type DataContextValue = { status: DataStatus; reason: string | null; snapshot: SocialDataSnapshot | null; reload: () => void };
 const DataContext = createContext<DataContextValue | null>(null);
 
 export function DataProvider({ children }: PropsWithChildren) {
   const { session } = useAuth();
-  const [status, setStatus] = useState<DataStatus>(process.env.EXPO_PUBLIC_DATA_SOURCE === 'supabase' ? 'loading' : 'mock_preview');
+  const [status, setStatus] = useState<DataStatus>(initialDataStatus);
   const [reason, setReason] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<SocialDataSnapshot | null>(null);
+  // Bumped after an account change (e.g. X connected) so the snapshot is re-read.
+  const [generation, setGeneration] = useState(0);
+  const reload = useCallback(() => setGeneration((value) => value + 1), []);
   useEffect(() => {
     let cancelled = false;
     void Promise.resolve().then(async () => {
@@ -26,8 +29,8 @@ export function DataProvider({ children }: PropsWithChildren) {
       setStatus(result.state); setReason(result.reason ?? null); setSnapshot(result.state === 'ready' ? result.data : null);
     });
     return () => { cancelled = true; };
-  }, [session]);
-  const value = useMemo(() => ({ status, reason, snapshot }), [reason, snapshot, status]);
+  }, [session, generation]);
+  const value = useMemo(() => ({ status, reason, snapshot, reload }), [reason, reload, snapshot, status]);
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
 export function useDataStatus() { const value = useContext(DataContext); if (!value) throw new Error('useDataStatus must be used inside DataProvider'); return value; }

@@ -100,6 +100,7 @@ test("mixed important-news cost fixture measures stage and whole-path input redu
   // This remains below the 30% whole-workload target because judgement, app-copy and web-search
   // inputs are unchanged; report the measured result instead of overstating it.
   assert.ok(wholeReduction < 0.3, `whole-path reduction must not be overstated: ${wholeReduction}`);
-  assert.equal(beforeWholePath, 27641);
-  assert.equal(afterWholePath, 23978);
+  // +23 characters (2026-09-29): the app-copy key_points rule now states "0 or 2-4 items".
+  assert.equal(beforeWholePath, 27664);
+  assert.equal(afterWholePath, 24001);
 });

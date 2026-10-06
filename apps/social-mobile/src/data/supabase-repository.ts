@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PlannedPost, SocialAccount, Workspace } from '@/domain/types';
+import { mapScheduledPostStatus } from '@/domain/post-status';
 
 export const KABUMORI_BRAND_ID = 'kabumori';
 export type ReadState = 'ready' | 'blocked' | 'unavailable';
@@ -49,7 +50,7 @@ export class SupabaseSocialRepository {
     });
     const posts: PlannedPost[] = (scheduleRows ?? []).flatMap((row) => {
       if (typeof row.brand_id !== 'string' || !brandIds.includes(row.brand_id) || typeof row.id !== 'string' || typeof row.scheduled_for !== 'string' || typeof row.post_type !== 'string') return [];
-      const status = row.status === 'published' ? 'published' : row.status === 'failed' ? 'failed' : row.status === 'publishing' ? 'publishing' : row.status === 'draft' ? 'draft' : 'scheduled';
+      const status = mapScheduledPostStatus(row.status);
       // Production scheduled_posts has no social_account_id relation. Do not
       // attribute a post to the first account merely because it is available.
       return [{ id: row.id, accountId: 'unknown', scheduledAt: row.scheduled_for, origin: 'ai_generated', status, text: '' }];

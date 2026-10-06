@@ -10,6 +10,7 @@ import {
 } from "./analysis_logic.ts";
 import { formatSharedXPost } from "../_shared/market_report_packet.ts";
 import type { Metric } from "../market-report-data-packet/packet_schema.ts";
+import { rich0917 } from "./test_support.ts";
 
 const directory = new URL("./fixtures/", import.meta.url);
 const dataFixture = JSON.parse(await Deno.readTextFile(new URL("close_2026-09-17_data_packet.json", directory)));
@@ -24,33 +25,9 @@ function input() {
   });
 }
 
+/** A full presentation-v2 analysis for 9/17 (the shape a production run returns). */
 function goodAnalysis(): GeneratedAnalysis {
-  const built = input();
-  const newsRef = built.news[1].ref;
-  return {
-    headline_ja: "日経平均は64,136.25で小幅高",
-    market_summary_ja: "日経平均は+0.33%、TOPIX連動ETF（1306）は+0.83%でした。前夜の米国株はNYダウが−1.21%と下げましたが、東京市場は上昇で終えました。",
-    claims: [
-      { claim_id: "c1", text_ja: "日経平均は64,136.25（+0.33%）で取引を終えました。", claim_type: "observation", evidence_refs: ["metric:nikkei225"], scope: "today" },
-      { claim_id: "c2", text_ja: "カカクコムでTOB価格の引き上げが伝えられました。", claim_type: "causal", evidence_refs: [newsRef], scope: "today" },
-      { claim_id: "c3", text_ja: "指数全体の上昇理由は入力からは確認できません。", claim_type: "insufficient_evidence", evidence_refs: [], scope: "today" },
-      { claim_id: "c4", text_ja: "今夜の米国株の動きを確認したいところです。", claim_type: "watch_point", evidence_refs: [], scope: "next" },
-    ],
-    key_news: [{ ref: newsRef, why_it_matters_ja: "非公開化の条件が変わる材料です。" }],
-    strong_themes: [{ name_ja: "非公開化関連", claim_ids: ["c2"] }],
-    weak_themes: [],
-    next_watch_ja: ["今夜の米国株の動き"],
-    risks_ja: ["前夜の米国株安の影響"],
-    x_post: {
-      lead_ja: "きょうの日本株は日経平均が+0.33%で、TOPIX連動ETF（1306）も+0.83%でした📈",
-      points_ja: [
-        "日経平均は64,136.25で取引終了",
-        "前夜のNYダウは−1.21%でも東京は上昇",
-        "カカクコムでTOB価格引き上げの連絡",
-      ],
-      closing_ja: "今夜の米国株がどう動くか、あしたの手がかりになりそうです",
-    },
-  };
+  return rich0917(input());
 }
 
 function requester(responses: Array<{ step: "generate" | "fact"; payload: unknown }>, calls: Array<{ step: string; body: Record<string, unknown> }>): Requester {
@@ -133,11 +110,14 @@ test("one generation + one Fact check produces the packet; usage and cost are co
   assert.equal(packet.schema_version, "market_report_packet.v1");
   assert.equal(packet.data_packet_id, dataFixture.id);
   assert.equal(packet.market_direction, "up");
-  assert.equal(packet.key_news[0].headline_ja, input().news[1].headline_ja);
+  // Broad-market news is listed first, whatever order the model returned.
+  assert.equal(packet.key_news[0].headline_ja, input().news[0].headline_ja);
+  assert.equal(packet.key_news[0].scope, "broad");
+  assert.equal(packet.presentation_version, "market_presentation.v2");
   assert.equal(packet.fact.generation_attempts, 1);
   const post = formatSharedXPost(packet);
   assert.ok(post.startsWith("【大引け】きょうの日本株まとめ🌙\n"));
-  assert.ok(post.includes("📌 今日の3ポイント\n・日経平均は64,136.25で取引終了"));
+  assert.ok(post.includes("📌 今日の3ポイント\n・東京市場は上昇、主因は絞れず"));
   // Only OpenAI Responses bodies, no tools (no web_search).
   for (const call of calls) assert.equal("tools" in call.body, false);
   assert.match(await reportContentHash(packet), /^[0-9a-f]{64}$/);

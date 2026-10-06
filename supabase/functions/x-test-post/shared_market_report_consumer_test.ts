@@ -149,3 +149,47 @@ test("app market section is the shared packet verbatim", () => {
   assert.deepEqual(section.major_moves, REPORT.major_moves);
   assert.deepEqual(section.claims, [{ text_ja: "日経平均は+0.33%でした。", claim_type: "observation", scope: "today" }]);
 });
+
+// --- presentation v2 (2026-10-01): the ~500-character digest from the same packet the app reads -----------------
+
+import { assemblePacket } from "../market-report-analysis/analysis_logic.ts";
+import { inputOf, loadFixture, richClose0930 } from "../market-report-analysis/test_support.ts";
+import { PRESENTATION_VERSION, X_POST_TARGET_MAX_CHARS, X_POST_TARGET_MIN_CHARS } from "../_shared/market_report_packet.ts";
+
+const close0930 = await loadFixture("close_2026-09-30");
+function v2Completed(): Extract<SharedMarketReportResult, { status: "completed" }> {
+  const input = inputOf(close0930);
+  const report = assemblePacket(input, richClose0930(input), { generatedAt: new Date("2026-09-30T07:35:20Z"), attempts: 1 });
+  return { ...(COMPLETED as Extract<SharedMarketReportResult, { status: "completed" }>), report, data: close0930.data.payload as unknown as Record<string, unknown> };
+}
+
+test("presentation v2 packet: the X post is the ~500-character digest, formatted in code with no model call", async () => {
+  const shared = v2Completed();
+  assert.equal(shared.report.presentation_version, PRESENTATION_VERSION);
+  const { log, deps } = recordingDeps();
+  const result = await publishSharedMarketReport("close", shared, deps);
+  const body = formatSharedXPost(shared.report);
+  const length = Array.from(body).length;
+  assert.ok(length >= X_POST_TARGET_MIN_CHARS && length <= X_POST_TARGET_MAX_CHARS, `length ${length}`);
+  assert.equal(result.text, appendKabumoriReportFixedHashtags(body));
+  for (const heading of ["📌 今日の3ポイント", "📰 ", "👀 明日以降の注目点", "💬 今日のひとこと"]) assert.ok(body.includes(heading), heading);
+  const values = log[1].args[1] as Record<string, unknown>;
+  assert.deepEqual([values.api_cost_usd, values.web_search_calls, values.fact_check_status], [0, 0, "passed"]);
+  assert.deepEqual((values.market_data as { quality_warnings: string[] }).quality_warnings, []);
+  // The market detail the app builds from the same packet cites the same Nikkei value.
+  assert.ok(body.includes("66,753.72") && appMarketSection(shared.report, "r1", "b".repeat(64)).market_summary_ja.includes("66,753.72"));
+});
+
+test("a short packet is posted with its quality warnings recorded; only broken output is withheld", async () => {
+  const { log, deps } = recordingDeps();
+  await publishSharedMarketReport("close", COMPLETED, deps);
+  const recorded = (log[1].args[1] as { market_data: { quality_warnings: string[] } }).market_data.quality_warnings;
+  assert.ok(recorded.some((warning) => warning.startsWith("X_POST_SHORTER_THAN_TARGET")), recorded.join(" / "));
+  assert.deepEqual(log.map((entry) => entry.op), ["createRun", "updateRun", "postToX", "completePost"], "posted");
+
+  const broken = v2Completed();
+  broken.report = { ...broken.report, x_post: { ...broken.report.x_post, points_ja: ["一つだけ"] } };
+  const second = recordingDeps();
+  await assert.rejects(() => publishSharedMarketReport("close", broken, second.deps), /SHARED_MARKET_REPORT_FORMAT_INVALID/);
+  assert.ok(!second.log.some((entry) => entry.op === "postToX"));
+});

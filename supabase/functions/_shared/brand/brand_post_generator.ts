@@ -12,6 +12,7 @@ import {
 } from "./publish_guard.ts";
 import { type BrandContext, BrandContextError } from "./brand_context.ts";
 import {
+  confirmedHashtagHabit,
   type SocialMobileContentSettings,
   socialMobileGenerationGuidance,
 } from "./social_mobile_content_settings.ts";
@@ -85,6 +86,7 @@ export async function generateBrandPost({
   topicSeed,
   generationPurpose = "scheduled",
   contentSettings,
+  extraInstructions = [],
   fetchImpl = fetch,
 }: {
   openAiApiKey: string;
@@ -93,6 +95,11 @@ export async function generateBrandPost({
   topicSeed?: string;
   generationPurpose?: "scheduled" | "social_mobile_preview";
   contentSettings?: SocialMobileContentSettings;
+  /**
+   * Caller-supplied, brand-scoped prompt lines (currently only AI Lab's diversity rules). Omitted/empty
+   * leaves the prompt byte-identical to before, so no other brand's generation changes.
+   */
+  extraInstructions?: readonly string[];
   fetchImpl?: typeof fetch;
 }): Promise<BrandPostDraft> {
   // Generation is allowed for dry_run and live (same rule as buildBrandDryRunPreview) -- only a
@@ -107,11 +114,26 @@ export async function generateBrandPost({
     throw new BrandContextError("BRAND_POST_TYPE_UNSUPPORTED");
   }
 
+  // Default (every profile except an explicit opt-in): with no fixed_hashtags configured, tell
+  // the model to never add one -- unchanged from the original, safe behavior for e.g.
+  // social_mobile_user_v1. A profile whose own voiceInstructions define their own hashtag policy
+  // (currently only AI Lab's "#個人開発 as default, no stuffing") opts in via
+  // BrandCodeProfile.voiceControlsHashtags so this generic module defers to that instead of
+  // contradicting it -- the opt-in is per-profile, never a brand-id check here.
+  //
+  // A hashtag habit the user confirmed in conversation (contentSettings come only from the social-mobile
+  // path) replaces the blanket "never add one" line, so the prompt never both remembers and forbids it.
+  // Fixed hashtags and a profile's own hashtag voice keep priority; unconfirmed habits never count.
+  const confirmedHabit = confirmedHashtagHabit(contentSettings);
   const hashtagInstruction =
     context.operationalSettings.fixed_hashtags.length > 0
       ? `本文の末尾にこのハッシュタグをそのまま付けてください: ${
         context.operationalSettings.fixed_hashtags.join(" ")
       }`
+      : context.codeProfile.voiceControlsHashtags
+      ? "固定のハッシュタグ指定はありません。ハッシュタグを使うかどうか、使う場合に何を使うかは、上記の指示に従ってください。"
+      : confirmedHabit
+      ? `ハッシュタグは、利用者が確認した次の方針に従ってください（方針にない使い方はしない）: ${confirmedHabit}`
       : "ハッシュタグは付けないでください。";
   const lengthPolicy = context.codeProfile.postLengthPolicy;
   const instructions = [
@@ -120,6 +142,7 @@ export async function generateBrandPost({
       ? [context.codeProfile.dryRunPromptPreamble]
       : []),
     ...(contentSettings ? socialMobileGenerationGuidance(contentSettings) : []),
+    ...extraInstructions,
     lengthPolicy
       ? "日本語で、自然な一つの投稿本文だけを書いてください。見出し・箇条書き記号・前置きは不要です。"
       : "日本語で、200〜400文字程度の自然な一つの投稿本文だけを書いてください。見出し・箇条書き記号・前置きは不要です。",

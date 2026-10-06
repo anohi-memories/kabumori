@@ -1,0 +1,270 @@
+{
+  "content_hash": "0593fee14dc74766a9a33934454e86c2caee35ae0cf7a5b2263c1b672cfd16b5",
+  "id": "20507c64-c2cc-4d8e-8102-cacd079b1e55",
+  "payload": {
+    "claims": [
+      {
+        "claim_id": "c1",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:nikkei225"
+        ],
+        "scope": "today",
+        "text_ja": "9月29日の日経平均は65,481.27（前日比−0.60%）となった。"
+      },
+      {
+        "claim_id": "c2",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:topix_proxy_1306"
+        ],
+        "scope": "today",
+        "text_ja": "9月29日のTOPIX連動ETF（1306）は425.4円（前日比−0.65%）だった。"
+      },
+      {
+        "claim_id": "c3",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:dow",
+          "metric:sp500",
+          "metric:nasdaq_composite"
+        ],
+        "scope": "overnight",
+        "text_ja": "9月29日の米国市場では、NYダウ、S&P500、ナスダック総合がいずれも下落した。"
+      },
+      {
+        "claim_id": "c4",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:sox"
+        ],
+        "scope": "overnight",
+        "text_ja": "9月29日のフィラデルフィア半導体株指数（SOX）は12,629.16（前日比+1.32%）だった。"
+      },
+      {
+        "claim_id": "c5",
+        "claim_type": "consistent_with",
+        "evidence_refs": [
+          "metric:dow",
+          "metric:sp500",
+          "metric:nasdaq_composite",
+          "metric:sox",
+          "metric:nikkei225",
+          "metric:topix_proxy_1306"
+        ],
+        "scope": "overnight",
+        "text_ja": "米国株の下落と半導体株指数の上昇は確認できるが、日本株の値動きとの因果関係は確認できない。"
+      },
+      {
+        "claim_id": "c6",
+        "claim_type": "insufficient_evidence",
+        "evidence_refs": [
+          "metric:nikkei225",
+          "metric:topix_proxy_1306"
+        ],
+        "scope": "today",
+        "text_ja": "東京市場の下落理由は、入力された指標とニュースからは確認できない。"
+      },
+      {
+        "claim_id": "c7",
+        "claim_type": "watch_point",
+        "evidence_refs": [
+          "metric:usdjpy"
+        ],
+        "scope": "next",
+        "text_ja": "ドル円は9月29日時点で157.12円だった。"
+      }
+    ],
+    "data_content_hash": "1580b314b874c5d4c3a931796e7abf44756fa89fb724a688f8a35d89a768abfe",
+    "data_gaps_ja": [
+      "日本国債2年利回りは8月31日時点の値です",
+      "日本国債10年利回りは8月31日時点の値です",
+      "WTI原油は9月22日時点の値です",
+      "ブレント原油は9月22日時点の値です",
+      "日経平均先物は確認できる取得元がないため載せていません",
+      "業種別の騰落は取得元がないため載せていません",
+      "経済指標の予定は取得元がないため載せていません"
+    ],
+    "data_packet_id": "8cf1195b-4eab-4ad2-a558-fdef247afd1f",
+    "direction_basis": [
+      "dow",
+      "sp500",
+      "nasdaq_composite"
+    ],
+    "fact": {
+      "ai_status": "passed",
+      "generation_attempts": 1,
+      "local_issues": []
+    },
+    "generated_at": "2026-09-29T22:55:19.418Z",
+    "headline_ja": "米株安と半導体高が交錯、東京市場は下落",
+    "key_news": [
+      {
+        "headline_ja": "米国がカナダ産の約10億ドル相当の輸入を禁止し、措置が火曜日早朝に発効しました",
+        "ref_id": "news:a0ebda48-29d0-4ec1-b9e4-0ba90c220d96",
+        "why_it_matters_ja": "米国によるカナダ産輸入の禁止が発効し、米加間の関税応酬が拡大している。"
+      },
+      {
+        "headline_ja": "イラクから最後の米軍部隊が撤退し、20年以上にわたる米軍駐留が終了しました",
+        "ref_id": "news:9fb691a0-9959-4854-bd99-e8ad40786f0b",
+        "why_it_matters_ja": "イラクから最後の米軍部隊が撤退し、20年以上の米軍駐留が終了した。"
+      },
+      {
+        "headline_ja": "2027年２月期第２四半期(中間期)業績予想と実績との差異および通期業績予想の修正に関するお知らせ",
+        "ref_id": "news:e569a715-9a6f-407d-9c09-3a18a4e6b0b6",
+        "why_it_matters_ja": "セキチューが中間期の実績との差異と通期業績予想の修正を公表した。"
+      },
+      {
+        "headline_ja": "米国Cross Vascular社の買収および増資に伴う特定子会社の異動に関するお知らせ",
+        "ref_id": "news:6b047f8e-0455-4fe4-81ed-636d7856d768",
+        "why_it_matters_ja": "日本ライフラインが米国企業の買収と増資に関するお知らせを公表した。"
+      },
+      {
+        "headline_ja": "株主優待制度の廃止に関するお知らせ",
+        "ref_id": "news:3814a8c0-733d-43a6-b6c3-9f396087fc21",
+        "why_it_matters_ja": "伊藤園が株主優待制度の廃止を公表した。"
+      }
+    ],
+    "major_moves": [
+      {
+        "change_pct_display": "−0.60%",
+        "freshness": "fresh",
+        "label": "日経平均",
+        "metric_key": "nikkei225",
+        "session_date": "2026-09-29",
+        "value_display": "65,481.27"
+      },
+      {
+        "change_pct_display": "−0.65%",
+        "freshness": "fresh",
+        "label": "TOPIX連動ETF（1306）",
+        "metric_key": "topix_proxy_1306",
+        "session_date": "2026-09-29",
+        "value_display": "425.4円"
+      },
+      {
+        "change_pct_display": "−0.26%",
+        "freshness": "fresh",
+        "label": "NYダウ",
+        "metric_key": "dow",
+        "session_date": "2026-09-29",
+        "value_display": "51,349.92"
+      },
+      {
+        "change_pct_display": "−0.17%",
+        "freshness": "fresh",
+        "label": "S&P500",
+        "metric_key": "sp500",
+        "session_date": "2026-09-29",
+        "value_display": "7,670.84"
+      },
+      {
+        "change_pct_display": "−0.09%",
+        "freshness": "fresh",
+        "label": "ナスダック総合",
+        "metric_key": "nasdaq_composite",
+        "session_date": "2026-09-29",
+        "value_display": "26,797.54"
+      },
+      {
+        "change_pct_display": "+1.32%",
+        "freshness": "fresh",
+        "label": "フィラデルフィア半導体株指数（SOX）",
+        "metric_key": "sox",
+        "session_date": "2026-09-29",
+        "value_display": "12,629.16"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "ドル円",
+        "metric_key": "usdjpy",
+        "session_date": "2026-09-29",
+        "value_display": "157.12円"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "米国2年債利回り",
+        "metric_key": "us2y",
+        "session_date": "2026-09-28",
+        "value_display": "4.92%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "米国10年債利回り",
+        "metric_key": "us10y",
+        "session_date": "2026-09-28",
+        "value_display": "5.24%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "stale",
+        "label": "日本国債2年利回り",
+        "metric_key": "jgb2y",
+        "session_date": "2026-08-31",
+        "value_display": "1.743%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "stale",
+        "label": "日本国債10年利回り",
+        "metric_key": "jgb10y",
+        "session_date": "2026-08-31",
+        "value_display": "2.943%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "stale",
+        "label": "WTI原油",
+        "metric_key": "wti",
+        "session_date": "2026-09-22",
+        "value_display": "96.41ドル"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "stale",
+        "label": "ブレント原油",
+        "metric_key": "brent",
+        "session_date": "2026-09-22",
+        "value_display": "114.89ドル"
+      }
+    ],
+    "market_direction": "down",
+    "market_summary_ja": "9月29日の日経平均は65,481.27（前日比−0.60%）、TOPIX連動ETF（1306）は425.4円（前日比−0.65%）でした。9月29日の米国市場ではNYダウ、S&P500、ナスダック総合が下落し、フィラデルフィア半導体株指数（SOX）は上昇しました。東京市場の下落理由は、入力情報だけでは確認できません。",
+    "model": "gpt-5.6-luna",
+    "next_watch_ja": [
+      "ドル円157.12円の水準を確認する。",
+      "9月29日の米国株下落と半導体株高が東京市場でどう表れるかを見る。",
+      "日本株の下落理由が新たに確認されるかを追う。"
+    ],
+    "report_type": "morning",
+    "risks_ja": [
+      "米加間の関税応酬の拡大。",
+      "エチオピア情勢など海外の地政学ニュース。",
+      "日本国債利回りと原油価格は古い値のため、現状との比較には注意が必要。"
+    ],
+    "schema_version": "market_report_packet.v1",
+    "strong_themes": [],
+    "trading_date": "2026-09-30",
+    "weak_themes": [
+      {
+        "claim_ids": [
+          "c4",
+          "c5"
+        ],
+        "name_ja": "半導体関連"
+      }
+    ],
+    "x_post": {
+      "closing_ja": "値動きの理由は、今回の材料だけでは断定できません。",
+      "lead_ja": "9月29日の日本株は下落、米国株も下げました。",
+      "points_ja": [
+        "日経平均は65,481.27（前日比−0.60%）📉",
+        "TOPIX連動ETF（1306）は425.4円、−0.65%。",
+        "米国株は下落、SOXは前日比+1.32%でした。"
+      ]
+    }
+  }
+}
