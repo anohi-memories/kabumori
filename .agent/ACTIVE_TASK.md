@@ -54,7 +54,7 @@
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: PR #90 visual correction。ナビ位置を全詳細画面で統一し、左＝一覧/戻り先、右＝ホームにする。トピック詳細のみ「‹ 過去のトピック」左／「ホーム」右へ変更。ニュース詳細は現状維持。375/402確認、focused tests、EAS 0、backend mutation 0。
+- allocation: PR #90 visual/navigation correction。左は contextual「‹ 戻る」= Home起点ならHome、一覧起点なら各一覧、unknown/deep linkはHome fallback。右は常時一覧ボタン（トピック一覧 / ニュース一覧）。nested news stackの偶然に依存しないようentry originを明示param等で保持。topic level切替でもorigin維持。375/402確認、focused tests、EAS 0、backend mutation 0。
 - recommended_model: Sonnet5（中）
 
 ## Claude G2
