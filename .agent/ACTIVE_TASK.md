@@ -70,13 +70,13 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-pr87-close-natural-observation-20261006
+- task_id: kabumori-editorial-points-specificity-corrective-20261006
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: market-report-analysis v24 の最初の自然な10/6大引けをread-only観測。3ポイントが数値3連発ではなく、出来事・重要材料・次の注目になっているか、Hard false reject、warning/rewrite/callsを確認。16:40 JSTより前は待機せず停止。production mutation禁止。
-- recommended_model: Sonnet5（中）
+- allocation: 10/6大引けの自然観測でfactual safetyはPASSしたが、3ポイントが「主要指数上昇／国際情勢を確認／米国株と為替を見る」と抽象化しすぎてeditorial未達。具体例文のprompt除去、generic見出し抑制、節目数値の例外、WARN-only specificity telemetry、不要rewrite/call増の見直しをsource/test onlyで実施。Hard境界・call ceilingは維持。production mutation禁止。
+- recommended_model: Sonnet5（高）
 
 ## Claude G3
 - owner: claude
