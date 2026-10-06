@@ -1,5 +1,127 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-pr99-controlled-analysis-deploy-20261007
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Opus5.5（中）
+- type: controlled production deploy / exact-source read-back
+- source_pr: 99
+- reviewed_head: cd33b1f22f532be9273d63f0f42f0a0d9c1de156
+- merged_main_sha: e3379f8066877b5b64fede2dc84cbdb995c85b8e
+- production_mutation_allowed: true
+- allowed_production_target:
+  - market-report-analysis
+
+## Purpose
+
+Deploy the accepted PR #99 editorial-specificity corrective to production `market-report-analysis` only.
+
+Do not deploy `personalized-reports`. Its accumulated undeployed PR #43/#67/#87 bundle remains a separate review/deploy decision.
+
+## Accepted source / review
+
+- PR #99 exact reviewed head: `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`
+- H1 verdict: PASS-WITH-NONBLOCKING-NOTES
+- squash merge: `e3379f8066877b5b64fede2dc84cbdb995c85b8e`
+- source changes by H1: 0
+
+Accepted behavior:
+- prompt finished examples removed;
+- day-specific entities/events required;
+- safe milestone/threshold headlines allowed;
+- generic-point telemetry WARN-only;
+- X shortness rewrite only below 300 chars; warning remains below target;
+- App story threshold unchanged;
+- safe-original fallback unchanged;
+- max model-call ceiling unchanged at 4;
+- bounded fixed-code rejection diagnostics only;
+- Hard Fact semantics unchanged.
+
+## Startup / isolation
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK / Final C1.
+2. Fresh-fetch origin/main and require merge `e3379f8066877b5b64fede2dc84cbdb995c85b8e`.
+3. Use independent G2 worktree/checkout. New worktree must derive from fresh `/Users/yuya/Developer/kabumori-fresh`.
+4. Confirm no unrelated uncommitted changes.
+5. Fresh-check production mutation mutex. If G3/G5/G4 or any other slot has an ACTIVE/approved production mutation window, STOP before deploy.
+
+## Pre-deploy read-only gate
+
+Record:
+- current `market-report-analysis` version/status/verify_jwt
+- source/import-graph identity/hash if available
+- app_enabled / x_enabled
+- relevant market-report Cron schedules/active state
+- no manual report/retry currently being run by G2
+- no other slot owns this Edge Function
+
+If source identity or target ownership is ambiguous, STOP.
+
+## Deploy
+
+Deploy **only** `market-report-analysis` from exact fresh main.
+
+Forbidden:
+- personalized-reports deploy
+- any other Edge Function deploy
+- DB/RPC/migration write
+- Cron/gate change
+- secret/Vault/Auth change
+- manual report generation/retry
+- X send
+- notification
+- EAS build
+
+## Post-deploy read-back
+
+Verify:
+- new version ACTIVE
+- verify_jwt unchanged
+- deployed import graph matches exact fresh-main bytes
+- PR #99 specificity/rewrite/diagnostics source is present
+- app_enabled / x_enabled unchanged
+- relevant Cron unchanged
+- unrelated Edge Functions unchanged
+
+Do not manually generate a packet.
+
+## Completion / K2
+
+Report:
+- baseline before
+- exact deploy target
+- before/after version
+- source/import graph read-back
+- gate/Cron/unrelated-function comparison
+- production mutations
+- manual generation/retry=0
+- X/notification/EAS=0
+- next natural observation recommendation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- production_mutation_window -> CLOSED
+- STOP for K2.
+
+Expected next observation after deploy:
+- first natural morning or close cycle;
+- inspect exact three points, X_POINTS_GENERIC/METRIC_RECAP, calls, quality rewrite, rejection_reasons;
+- no manual generation.
+
+Recommended model: **Opus5.5（中）**.
+
+## Report
+
+Pending.
+
+---
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-editorial-points-specificity-corrective-20261006
 - owner: claude
 - slot: claude-2

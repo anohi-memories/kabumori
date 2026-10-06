@@ -1,0 +1,287 @@
+{
+ "content_hash": "",
+ "id": "bd5e85ee-9d6c-41b7-8631-40d72ff1f69f",
+ "payload": {
+  "app_story": {
+   "caution_ja": "米国2年債・10年債利回りは10月2日時点、WTI原油とブレント原油は9月29日時点の値です。当日の相場環境とは異なる可能性があります。",
+   "cross_asset_ja": "10月5日のドル円は158.23円でした。10月5日の日本国債2年利回りは1.909%、10年利回りは3.085%。米国債利回りと原油は取得時点が古い値です。",
+   "japan_ja": "10月6日の日経平均は70,683.98（前日比+1.05%）、TOPIX連動ETF（1306）は440.4円（前日比+0.94%）と上昇しました。東京市場の上昇を説明するニュースは確認できません。",
+   "news_ja": "市場全体のニュースとして、国連人権理事会がスーダンでの即時停戦を求める決議を採択したことなどが報じられました。ただし、これらのニュースと10月6日の東京市場の上昇との関係は確認できません。",
+   "overseas_ja": "10月5日の米国市場は上昇。NYダウは51,267.90（前日比+0.18%）、S&P500は7,773.95（前日比+0.66%）、ナスダック総合は27,477.31（前日比+1.05%）でした。",
+   "strong_ja": "",
+   "summary_ja": "10月6日の東京市場は主要指数が上昇しました。値動きの理由を明記したニュースは確認できず、国際情勢の報道が複数ありました。",
+   "watch_ja": "10月5日の米国株上昇と10月6日の東京市場上昇が次の市場でも続くか、ドル円の変化とあわせて確認します。"
+  },
+  "claims": [
+   {
+    "claim_id": "c1",
+    "claim_type": "observation",
+    "evidence_refs": [
+     "metric:nikkei225"
+    ],
+    "scope": "today",
+    "text_ja": "10月6日の日経平均は70,683.98（前日比+1.05%）と上昇しました。"
+   },
+   {
+    "claim_id": "c2",
+    "claim_type": "observation",
+    "evidence_refs": [
+     "metric:topix_proxy_1306"
+    ],
+    "scope": "today",
+    "text_ja": "10月6日のTOPIX連動ETF（1306）は440.4円（前日比+0.94%）と上昇しました。"
+   },
+   {
+    "claim_id": "c3",
+    "claim_type": "observation",
+    "evidence_refs": [
+     "metric:dow",
+     "metric:sp500",
+     "metric:nasdaq_composite",
+     "metric:sox"
+    ],
+    "scope": "overnight",
+    "text_ja": "10月5日の米国市場では、NYダウ、S&P500、ナスダック総合、フィラデルフィア半導体株指数（SOX）がいずれも上昇しました。"
+   },
+   {
+    "claim_id": "c4",
+    "claim_type": "insufficient_evidence",
+    "evidence_refs": [
+     "metric:nikkei225",
+     "metric:topix_proxy_1306"
+    ],
+    "scope": "today",
+    "text_ja": "10月6日の東京市場の上昇について、値動きの理由を説明するニュースは確認できません。"
+   },
+   {
+    "claim_id": "c5",
+    "claim_type": "observation",
+    "evidence_refs": [
+     "news:e3d9f544-e281-4817-b75d-3ecb3306fcf4"
+    ],
+    "scope": "today",
+    "text_ja": "国連人権理事会は、スーダンでの民間人への攻撃を非難し、即時停戦を求める決議を採択しました。"
+   },
+   {
+    "claim_id": "c6",
+    "claim_type": "watch_point",
+    "evidence_refs": [
+     "metric:nikkei225",
+     "metric:usdjpy"
+    ],
+    "scope": "next",
+    "text_ja": "次は、東京市場の上昇が米国株や為替の動きとどのように並んで推移するかを確認します。"
+   }
+  ],
+  "data_content_hash": "7edf117946b98b06e53fd7bb55926f0900144e3f19746f6e6b8dc68e97053935",
+  "data_gaps_ja": [
+   "米国2年債利回りは10月2日時点の値です",
+   "米国10年債利回りは10月2日時点の値です",
+   "WTI原油は9月29日時点の値です",
+   "ブレント原油は9月29日時点の値です",
+   "日経平均先物は確認できる取得元がないため載せていません",
+   "東証グロース市場250指数は確認できる取得元がないため載せていません",
+   "業種別の騰落は取得元がないため載せていません",
+   "経済指標の予定は取得元がないため載せていません"
+  ],
+  "data_packet_id": "ecb5c896-ca56-43df-bde0-172c9a579c51",
+  "direction_basis": [
+   "nikkei225",
+   "topix_proxy_1306"
+  ],
+  "fact": {
+   "ai_status": "passed",
+   "generation_attempts": 1,
+   "local_issues": [],
+   "quality_warnings": [
+    "X_POST_SHORTER_THAN_TARGET:387",
+    "APP_STORY_SHORTER_THAN_TARGET:657"
+   ]
+  },
+  "generated_at": "2026-10-06T07:20:55.002Z",
+  "headline_ja": "日経平均とTOPIX連動ETF（1306）が上昇",
+  "key_news": [
+   {
+    "headline_ja": "国連人権理事会は、スーダンで民間人への攻撃を非難し、即時停戦を求める決議を採択しました",
+    "ref_id": "news:e3d9f544-e281-4817-b75d-3ecb3306fcf4",
+    "scope": "broad",
+    "why_it_matters_ja": "国連人権理事会がスーダンでの即時停戦を求める決議を採択しました。"
+   },
+   {
+    "headline_ja": "イエメン政府側部隊は、サウジアラビアの支援を受けてフーシ派への大規模攻勢を開始し、戦略的なバブ・エル・マンデブ海峡を「確保した」と発表しました",
+    "ref_id": "news:67a20110-edef-4c96-9f12-8d453aa1a841",
+    "scope": "broad",
+    "why_it_matters_ja": "イエメン政府側部隊が、バブ・エル・マンデブ海峡を確保したと発表しました。フーシ派側は進軍を否定しています。"
+   },
+   {
+    "headline_ja": "ゼレンスキー氏、黒海でトウモロコシ運搬船への攻撃を非難",
+    "ref_id": "news:1cb8e0da-7c77-4423-a9f5-ce84aabc10f5",
+    "scope": "broad",
+    "why_it_matters_ja": "黒海でのトウモロコシ運搬船への攻撃について、ウクライナ大統領が非難しました。"
+   },
+   {
+    "headline_ja": "不二越、3Q累計は営業利益72.8％増 2026年11月期第3四半期累計の売上高は前年同期比10.4％増の1,923億円、営業利益は72.8％増の114億円でした",
+    "ref_id": "news:514559f8-6407-4ac3-9f9a-190b19db0953",
+    "scope": "company",
+    "why_it_matters_ja": "不二越は第3四半期累計で売上高と営業利益が前年同期比で増加したと発表しました。"
+   }
+  ],
+  "major_moves": [
+   {
+    "change_pct_display": "+1.05%",
+    "freshness": "fresh",
+    "label": "日経平均",
+    "metric_key": "nikkei225",
+    "session_date": "2026-10-06",
+    "value_display": "70,683.98"
+   },
+   {
+    "change_pct_display": "+0.94%",
+    "freshness": "fresh",
+    "label": "TOPIX連動ETF（1306）",
+    "metric_key": "topix_proxy_1306",
+    "session_date": "2026-10-06",
+    "value_display": "440.4円"
+   },
+   {
+    "change_pct_display": "+0.18%",
+    "freshness": "fresh",
+    "label": "NYダウ",
+    "metric_key": "dow",
+    "session_date": "2026-10-05",
+    "value_display": "51,267.90"
+   },
+   {
+    "change_pct_display": "+0.66%",
+    "freshness": "fresh",
+    "label": "S&P500",
+    "metric_key": "sp500",
+    "session_date": "2026-10-05",
+    "value_display": "7,773.95"
+   },
+   {
+    "change_pct_display": "+1.05%",
+    "freshness": "fresh",
+    "label": "ナスダック総合",
+    "metric_key": "nasdaq_composite",
+    "session_date": "2026-10-05",
+    "value_display": "27,477.31"
+   },
+   {
+    "change_pct_display": "+0.27%",
+    "freshness": "fresh",
+    "label": "フィラデルフィア半導体株指数（SOX）",
+    "metric_key": "sox",
+    "session_date": "2026-10-05",
+    "value_display": "13,172.74"
+   },
+   {
+    "change_pct_display": null,
+    "freshness": "fresh",
+    "label": "ドル円",
+    "metric_key": "usdjpy",
+    "session_date": "2026-10-05",
+    "value_display": "158.23円"
+   },
+   {
+    "change_pct_display": null,
+    "freshness": "stale",
+    "label": "米国2年債利回り",
+    "metric_key": "us2y",
+    "session_date": "2026-10-02",
+    "value_display": "4.83%"
+   },
+   {
+    "change_pct_display": null,
+    "freshness": "stale",
+    "label": "米国10年債利回り",
+    "metric_key": "us10y",
+    "session_date": "2026-10-02",
+    "value_display": "5.28%"
+   },
+   {
+    "change_pct_display": null,
+    "freshness": "fresh",
+    "label": "日本国債2年利回り",
+    "metric_key": "jgb2y",
+    "session_date": "2026-10-05",
+    "value_display": "1.909%"
+   },
+   {
+    "change_pct_display": null,
+    "freshness": "fresh",
+    "label": "日本国債10年利回り",
+    "metric_key": "jgb10y",
+    "session_date": "2026-10-05",
+    "value_display": "3.085%"
+   },
+   {
+    "change_pct_display": null,
+    "freshness": "stale",
+    "label": "WTI原油",
+    "metric_key": "wti",
+    "session_date": "2026-09-29",
+    "value_display": "96.16ドル"
+   },
+   {
+    "change_pct_display": null,
+    "freshness": "stale",
+    "label": "ブレント原油",
+    "metric_key": "brent",
+    "session_date": "2026-09-29",
+    "value_display": "113.96ドル"
+   }
+  ],
+  "market_direction": "up",
+  "market_summary_ja": "10月6日の東京市場は上昇。日経平均は70,683.98（前日比+1.05%）、TOPIX連動ETF（1306）は440.4円（前日比+0.94%）でした。10月5日の米国市場も主要指数が上昇しましたが、東京市場の値動きとの因果を明記したニュースは確認できません。国際情勢では、国連人権理事会によるスーダンでの即時停戦を求める決議などが報じられています。",
+  "model": "gpt-5.6-luna",
+  "next_watch_ja": [
+   "10月5日の米国株上昇と、10月6日の東京市場の上昇が次の市場でも続くか。",
+   "10月5日のドル円は158.23円でした。為替の変化を確認します。",
+   "米国債利回りと原油は取得時点が古いため、最新値の更新を待ちます。"
+  ],
+  "presentation_version": "market_presentation.v2",
+  "report_type": "close",
+  "risks_ja": [
+   "国際情勢では、スーダンや黒海、イエメンをめぐる動きが報じられています。",
+   "10月2日時点の米国債利回りと9月29日時点の原油価格は、当日の状況を示すものではありません。"
+  ],
+  "schema_version": "market_report_packet.v1",
+  "session_views": [
+   {
+    "basis": [
+     "nikkei225",
+     "topix_proxy_1306"
+    ],
+    "direction": "up",
+    "market": "tokyo",
+    "session_date": "2026-10-06"
+   },
+   {
+    "basis": [
+     "dow",
+     "sp500",
+     "nasdaq_composite"
+    ],
+    "direction": "up",
+    "market": "us",
+    "session_date": "2026-10-05"
+   }
+  ],
+  "strong_themes": [],
+  "trading_date": "2026-10-06",
+  "weak_themes": [],
+  "x_post": {
+   "closing_ja": "上昇は確認できましたが、材料を一つに決めつけにくい一日でした。",
+   "context_ja": "10月6日の日経平均は70,683.98（前日比+1.05%）、TOPIX連動ETF（1306）は440.4円（前日比+0.94%）。10月5日の米国市場も上昇しました。東京市場との因果は確認できません。",
+   "lead_ja": "日経平均とTOPIX連動ETF（1306）がそろって上昇しました📈",
+   "news_ja": "国連人権理事会は、スーダンでの民間人への攻撃を非難し、即時停戦を求める決議を採択。黒海での船への攻撃やイエメン情勢も報じられました。",
+   "points_ja": [
+    "主要指数は上昇、主因は一つに絞れず",
+    "国際情勢のニュースを確認",
+    "次は米国株と為替の動きを見る"
+   ],
+   "watch_ja": "10月5日のドル円は158.23円。米国株と為替の動きが、次の東京市場でどう並ぶかを見ます。"
+  }
+ }
+}
