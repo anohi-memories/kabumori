@@ -1,5 +1,194 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: x-social-mobile-pr81-production-apply-continuation-20261006
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: production schema continuation / same-day preflight / exact atomic apply / post-apply read-back
+- source_pr: 81
+- merged_main_sha: 686f23a7094389b793470503fceb2f47a71f8fbf
+- prerequisite_pr76: satisfied
+- blocks_pr: 78
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #76 production prerequisite is now satisfied and Final K4 PASS.
+
+Verified production state before this allocation:
+- PR76 history exact: `20261003090000 / social_mobile_publish_permission_boundary` = 1 row;
+- exact two PR76 SECURITY DEFINER RPCs present with expected owner/search_path/effective EXECUTE graph;
+- `x-test-post` active with guarded runtime;
+- `social-mobile-publish-setting` ACTIVE v1 / verify_jwt=true;
+- running=0 / overdue pending=0;
+- G4 production_mutation_window = CLOSED.
+
+Resume the previously accepted PR #81 rollout plan.
+
+Target files:
+- `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql`
+- `supabase/migrations/20261003120000_social_mobile_content_settings_hardening.sql`
+
+Accepted SHA256:
+- candidate: `b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb`
+- hardening: `83d44ccfd51bcd8fcd78d31236fa52d1d8f90c6642f12c5bb1586f9d1497467e`
+
+Reviewed production apply method:
+one operator-controlled
+`psql -X --single-transaction -v ON_ERROR_STOP=1`
+session containing:
+1. candidate SQL;
+2. hardening SQL;
+3. exact history insert for `20260922045046 / social_mobile_content_settings_candidate`;
+4. exact history insert for `20261003120000 / social_mobile_content_settings_hardening`.
+
+No `db push`, no `migration up`, no `--include-all`, no history repair, no unrelated migration.
+
+## Startup / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / Final K4 PR76 / Final C2 PR81 / prior G3 report / this TASK.
+2. Use fresh `/Users/yuya/Developer/kabumori-fresh` and a new independent G3 worktree.
+3. Fetch fresh origin/main.
+4. Confirm current main still contains PR81 accepted merge and both SQL files are byte unchanged.
+5. Do not touch G4 worktree/runtime or G5/common-account work.
+6. Production mutation mutex: before any production write, verify G2/G5/other slots are not mutating production. If another production mutation window is ACTIVE, STOP.
+7. Do not read secrets/token plaintext/user content.
+
+## Gate A — same-day production ordering
+
+Read-only verify:
+- PR76 history exact one row;
+- PR82 history exact one row;
+- PR81 candidate and hardening history absent unless legitimately already applied;
+- no version/name collision;
+- no newer unresolved prerequisite that changes the reviewed order;
+- do not reorder/repair history.
+
+If PR76 is not exact anymore, STOP.
+
+## Gate B — fresh production preflight
+
+One explicit READ ONLY transaction.
+
+Verify:
+- `public.social_mobile_content_settings` absent unless an exact reviewed prior apply exists;
+- same-prefix helper functions absent unless exact;
+- exact live migration-ledger shape;
+- applying role = reviewed owner assumptions;
+- `brands` / `brand_memberships` dependencies unchanged;
+- default ACL and API role graph unchanged from accepted H2 baseline;
+- no same-name relation/function/policy/trigger collisions;
+- no unexpected overload/grant drift.
+
+Any drift => STOP; no repair.
+
+## Gate C — freeze exact package
+
+Freeze:
+- fresh main SHA;
+- both SQL SHA256;
+- exact two version/name pairs;
+- exact operator command;
+- exact post-apply read-back SQL;
+- failure/abort behavior.
+
+Run local syntax/diff/secret checks only as needed. Do not modify accepted migrations.
+
+## Mandatory STOP for approval
+
+After A/B/C are clean, STOP before first production write and report:
+- project identity;
+- fresh main SHA;
+- exact hashes;
+- current ledger state;
+- exact outer transaction;
+- expected schema/history changes;
+- mutex state;
+- rollback/abort behavior;
+- confirmation PR76/PR82/G5 are not bundled.
+
+Request fresh explicit approval for PR81 production apply.
+
+TASK creation or prior approvals do not authorize mutation.
+
+## After fresh explicit approval only
+
+Immediately rerun Gate A/B.
+If any material state changed, approval is invalid; STOP.
+
+Then execute only the reviewed outer transaction.
+
+Open a new separate READ ONLY session and verify:
+- exact two history rows;
+- table columns/types/nullability/defaults exact;
+- PK/index immediate, nondeferrable, valid/ready/live;
+- FK/check constraints exact;
+- finite timestamp CHECK exact;
+- RLS enabled;
+- exact policies;
+- table effective ACL exact;
+- helper signatures/owners/search_path/effective EXECUTE exact;
+- exact one expected version trigger;
+- no overloads/unexpected grants/column ACL.
+
+Mismatch => STOP, no auto-drop/history repair, no PR78 continuation.
+
+No Edge deploy in this task.
+
+## PR78 continuation
+
+Only after PR81 production schema/read-back PASS:
+- report schema prerequisite satisfied;
+- do not merge/rebase PR78 inside the same production mutation;
+- next G3 task should fresh-integrate/rebase PR #78 current head onto fresh main and resume remaining AI/Auth/security work.
+
+## Safety
+
+Before explicit approval forbidden:
+- production DDL/DML/history write;
+- Edge deploy;
+- X/OpenAI/Auth/Vault/OAuth/Cron mutation.
+
+Always forbidden:
+- accepted migration rewrite;
+- PR76/PR82/G5 bundling;
+- history repair/reorder;
+- production test data writes.
+
+## Completion / K3
+
+Report:
+- result
+- fresh main
+- Gate A/B/C
+- hashes
+- approval requested/received
+- exact production mutations
+- post-apply read-back
+- deploy=0
+- X/OpenAI/Vault/OAuth/Cron=0
+- whether PR78 may resume
+- remaining risks
+- next recommendation
+
+Then status -> review_required / next_owner -> chatgpt / STOP for K3.
+
+Review policy:
+- PR81 source and migration plan already had independent final review.
+- do not add routine Codex review after exact apply/read-back PASS.
+- only review if a concrete production mismatch or source change appears.
+
+Recommended model: **Opus5.5（高）**.
+
+---
+
+# Previous G3 task history — preserved below
+
+# Previous G3 task — preserved history
+
 - task_id: x-social-mobile-pr81-production-schema-gate-20261005
 - owner: claude
 - slot: claude-3
