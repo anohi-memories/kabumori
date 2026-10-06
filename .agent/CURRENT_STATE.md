@@ -1,3 +1,21 @@
+## Final K1 — PR #90 detail navigation PASS / merged
+
+- verdict: **PASS**.
+- PR #90 exact head `39bdf30f4c1bdb4214acbe27bf918aeff8a39ab1` squash-merged as `bcbdc2b8df3ba66955ebbf3e10d04a19b446fe38`.
+- fresh changed-file overlap = 0; mergeable/clean; CI green.
+- final UX:
+  - left `‹ 戻る` resolves from explicit origin param;
+  - Home origin -> Home;
+  - topic/news list origin -> the relevant list;
+  - unknown/deep link -> Home fallback;
+  - right action is always `トピック一覧 ›` / `ニュース一覧 ›`.
+- topic level switching remains same-date and preserves origin; Home saved level is not modified.
+- 335/335 app tests; focused 61; tsc clean; Expo config/web export/diff PASS.
+- 402pt Simulator real-tap verification accepted. Final labels are shorter than the prior 375pt-verified variants, so no additional 375pt gate is required.
+- news edge-swipe still follows the native nested stack to the news list; explicit `戻る` follows the user-selected contextual-origin rule. Accepted as a non-blocking native gesture difference.
+- Codex review not required. EAS 0. backend/DB/RPC/API/AI/Auth/Edge/production mutation 0.
+- G1 done/free.
+
 ## Interim K3/K4 — PR76 production rollout partially complete / G3 still blocked
 
 - K3: no fresh G3 continuation has run. Previous PR81 production schema gate remains done/HOLD; do not resume PR81 yet.
