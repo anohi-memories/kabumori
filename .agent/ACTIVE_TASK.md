@@ -81,11 +81,11 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: x-social-mobile-ai-consult-v1-fresh-integration-20261006
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_3.md
 - allocation: V1必須の「AIと相談する」PR #78をfresh mainへsource-only統合。会話→提案→明示確認→保存→次回相談/投稿生成へ反映、までをV1契約として検証する。G5 common-account critical pathとは競合させず、Auth/entitlement/account deletion/DB migration/production mutationは禁止。PR81 production applyはG5完了後に別途再開。PR78 merge/deployもまだ禁止。PR #41がlive scheduled-user生成の残り配線ならここでは実装せずrelease blockerとして明示。Recommended Opus5.5（高）.
 - recommended_model: Opus5.5（高）
