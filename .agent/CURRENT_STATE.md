@@ -1572,7 +1572,7 @@
 | --- | --- | --- | --- | --- |
 | H1 | `done` | `x-social-mobile-pr65-ephemeral-x-auth-session-review-20261001` | `none` | `.agent/tasks/CODEX_TASK.md` |
 | H2 | `done` | `x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930` | `none` | `.agent/tasks/CODEX_TASK_2.md` |
-| G1 | `review_required` | `kabumori-detail-navigation-topic-level-switch-20261006` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_1.md` |
+| G1 | `review_required` | `kabumori-topic-learning-access-progress-and-swipe-20261006` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_1.md` |
 | G2 | `in_progress` | `kabumori-shared-report-v2-rich-presentation-hard-facts-20261001` | `claude` | `.agent/tasks/CLAUDE_TASK.md` |
 | G3 | `review_required` | `x-social-mobile-e3-delete-revoke-residue-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_3.md` |
 | G4 | `review_required` | `x-social-mobile-x-account-switch-auth-session-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_4.md` |
