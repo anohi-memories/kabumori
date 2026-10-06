@@ -93,13 +93,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: done
 - task_id: postona-multisocial-phase1-architecture-inventory-20261006
 - start_code: G4
 - finish_code: K4
-- next_owner: claude
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: POSTONA multi-social Phase 1. Docs-only inventory and provider-neutral architecture design before runtime implementation. Map current X-specific seams, define X/Threads/Instagram provider-neutral post/account/publication model, capability matrix, Threads-first implementation slices and Instagram follow-on. Preserve active G3 PR41 live-generation boundary and G5 common-account/Auth/enrollment boundary. Runtime/migration/Edge/OAuth/Vault/production changes prohibited.
+- allocation: Final K4 PASS. POSTONA multi-social Phase 1 docs-only architecture accepted. Exact one-file design document from former PR #96 was integrated unchanged directly to fresh main as 25fd6aeec85528a06f78995f4306aaeba98f9d75 after the PR merge raced a moving base; PR #96 closed as superseded. Runtime/DB/Edge/OAuth/Vault/production/provider calls 0. No Codex review. G4 free, but Phase 2a waits for G3 PR #41 and G5 PR #95 acceptance/merge.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
