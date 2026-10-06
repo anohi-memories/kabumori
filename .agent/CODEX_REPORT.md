@@ -1,3 +1,15 @@
+# H1 — Common-account Phase 2 service enrollment review — 2026-10-06
+
+- task_id: common-account-v1-phase2-service-enrollment-review-20261006
+- status: Pending.
+- target_pr: 95
+- target_head: c06fac6492708331b6ba816122c9852cdcea73e7
+- recommended_model: Sol（高）
+
+---
+
+# Previous H1 report history — preserved
+
 # H1 — PR #87 editorial “今日のポイント3点” review — 2026-10-06
 
 - task_id: `kabumori-pr87-editorial-three-points-review-20261006`
@@ -2002,3 +2014,4 @@ Prepare's locks end when its request commits. Admin/membership/identity/Storage 
 - Supabase/Postgres skills informed explicit grants/effective privilege, managed ownership and stale-token review. Current changelog consulted (Markdown unsupported; HTML fallback); no unrelated version upgrade or schema change inferred.
 - remaining: exact future apply/history policy, full fresh production preflight/API parity, optional hosted rollback/other error mappings before reliance, backfill population approval, all future destructive/writer integration and stale-JWT enforcement proof. These are separated from foundation source acceptance, not falsely marked completed.
 - next_recommendation: **C1 — Sol（極高）**, accept/resolve conditions and, only if preflight/apply mechanism is pinned, request narrowly specified production migration approval. Backfill/enforcement/destructive orchestration remain HOLD. H1 `review_required` / `next_owner: chatgpt`; STOP after verified GitHub sync.
+
