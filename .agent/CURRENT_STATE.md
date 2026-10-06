@@ -1,3 +1,30 @@
+## G3 assigned — AI consultation V1 fresh integration
+
+- User product decision: **AI相談はV1必須**。利用者とAIが会話しながら投稿内容・口調を覚えさせる体験をX自動投稿アプリの中核として扱う。
+- task_id: `x-social-mobile-ai-consult-v1-fresh-integration-20261006`.
+- status: ready; owner: Claude G3.
+- recommended model: **Opus5.5（高）**.
+- source PR: #78, old head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`, currently open / not mergeable against fresh main.
+- G4 morning-greeting reliability Plan B/C is complete/merged and G4 is separate; G4 will later be used for X-app UI work in its own chat.
+- G5 remains project-wide common-account critical path. Current G5 work is common-account production backfill gate. G3 may do non-conflicting source/UI/test work, but must not touch Auth/entitlement/account deletion/common-account migration or perform production DB/Auth/permission mutation.
+- PR81 production apply is still deferred behind G5 production priority. G3 AI-consult task therefore has `production_mutation_allowed=false`, `merge_allowed=false`, `deploy_allowed=false`.
+- PR78 integration scope is its 11 AI-consult/content-settings paths plus minimal contract tests only.
+- V1 acceptance contract:
+  - conversation alone never saves;
+  - AI proposes only explicit editable deltas;
+  - user must explicitly confirm ("これで覚えて");
+  - latest state is reread before save;
+  - CAS on updated_at prevents stale overwrite;
+  - confirmed settings/persona become the next consultation's remembered context;
+  - consultation cannot alter publish/X/OAuth/schedule/approval/deletion/Auth/entitlement boundaries;
+  - tenant isolation is preserved.
+- Memory-to-generation is a release requirement, not optional polish:
+  - current main generic brand generator already accepts `contentSettings` and feeds `socialMobileGenerationGuidance(contentSettings)` into the generation prompt;
+  - G3 must prove save -> reread -> generation-guidance compatibility for confirmed settings/persona;
+  - if the actual scheduled general-user dispatcher remains dependent on open PR #41, do not absorb PR41 into this task; record the exact missing live wiring as a release blocker.
+- No EAS, no paid real-AI production call, no Edge deploy, no DB migration/history write, no real X.
+- finish code: K3.
+
 ## Common-account becomes project-wide critical path — 2026-10-06
 
 - user decision: **共通アカウント完成を、かぶモリ/X自動投稿の次工程より最優先**にする。
