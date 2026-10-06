@@ -45,15 +45,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: x-social-mobile-pr41-live-generation-security-review-20261007
+- status: ready
+- task_id: x-social-mobile-pr41-acl-focused-rereview-20261007
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Final C2 accepted CHANGES REQUIRED on PR #41 exact head 280aa0f83d4f039ba3e43f32da202a91fd2333f2. Two blockers only: R1 effective column-level service_role privilege drift; R2 unexpected default/inherited EXECUTE on completion/authority RPCs. H2 closed; no merge/deploy/production mutation. Focused rereview only after bounded G3 corrective.
-- recommended_model: Sol（高）
+- allocation: Focused rereview only of corrected PR #41 exact head c509117f8addf5a8687d60d9c18ae271b2c1777c. Verify R1 effective table/column privilege fail-closed behavior and R2 default/inherited EXECUTE/owner/overload/atomic rollback closure. Bounded runtime regression only; no full PR41 rereview. No merge/deploy/production. Recommended Sol（高）.
 
 ## Claude G1
 - owner: claude
@@ -86,9 +85,9 @@
 - task_id: x-social-mobile-pr41-acl-corrective-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: Bounded corrective for H2/C2 PR #41 findings only. R1: fail closed on any effective service_role column privilege drift, including inherited/PUBLIC column grants, with atomic rollback. R2: exact/effective EXECUTE hardening for completion + publish-authority privileged RPCs against unknown default ACL, inheritance, grant option, overload/owner drift; no global ACL/role repair. Preserve already-passed live-generation/runtime behavior and G5 boundaries. Source-only; no production/merge/deploy. Recommended Opus5.5（高）.
+- allocation: K3 accepts corrected PR #41 head c509117f8addf5a8687d60d9c18ae271b2c1777c as PASS_CANDIDATE. R1/R2 adverse ACL cases reported closed; runtime unchanged; latest-main changed-file overlap 0. Merge remains HOLD pending focused H2 rereview only. Production/deploy/real X/OpenAI remain 0. Recommended reviewer Sol（高）.
 - recommended_model: Opus5.5（高）
 
 ## Claude G4
