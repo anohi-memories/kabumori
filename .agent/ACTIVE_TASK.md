@@ -33,14 +33,14 @@
 - owner: codex
 - slot: codex-1
 - status: done
-- task_id: kabumori-pr87-editorial-three-points-review-20261006
+- task_id: common-account-v1-phase2-service-enrollment-review-20261006
 - start_code: H1
 - finish_code: C1
 - next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 PASS。PR #87 exact reviewed head 3561f1eaac41df0f23dcce8fdaace0decc654a0a は独立レビューPASS後、squash-merged as 74e4dbff09e3b248164fd00bb720402d762ebcd8。source fix 0、production mutation 0。H1 free after fresh allocation。
-- recommended_model: Luna（高）
+- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #95 exact head c06fac6492708331b6ba816122c9852cdcea73e7. R1/R2/R4 P1 and R3/R5 P2 returned to G5. No merge/deploy/production mutation. H1 free; corrected exact head will require a new focused Sol（高） review.
+- recommended_model: Sol（高）
 
 ## Codex H2
 - owner: codex
@@ -57,38 +57,38 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
+- next_owner: none
+- status: done
 - task_id: kabumori-topic-learning-access-progress-and-swipe-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 HOLD。topic list 3-level switch + learned/read は受け入れ。news Home-origin swipe は最終到達先こそHomeだが一瞬News listが見えるredirect-after-popで、内部 `expo-router/build/...` usePreventRemove依存もあるため未採用。root-level detail等の構造的native swipe parityへ修正し、375pt実測も追加。既存PR #94を更新、EAS 0、backend/production mutation 0。
-- recommended_model: Sonnet5（高）
+- allocation: Final K1 PASS and merged after C1 coordination. PR #94 exact head 97d374b48886ad33b61cd2288188d4b690e27a5c squash-merged as d30a518731e976ab1c0e4e19e26f461a174a3c1c. Native swipe parity, topic list 3-level switch, local 未読/学習済み, 375/402 verification complete. G1 free.
+- recommended_model: Sonnet5（中）
 
 ## Claude G2
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-pr87-close-natural-observation-20261006
+- task_id: kabumori-editorial-points-specificity-corrective-20261006
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: market-report-analysis v24 の最初の自然な10/6大引けをread-only観測。3ポイントが数値3連発ではなく、出来事・重要材料・次の注目になっているか、Hard false reject、warning/rewrite/callsを確認。16:40 JSTより前は待機せず停止。production mutation禁止。
-- recommended_model: Sonnet5（中）
+- allocation: 10/6大引けの自然観測でfactual safetyはPASSしたが、3ポイントが「主要指数上昇／国際情勢を確認／米国株と為替を見る」と抽象化しすぎてeditorial未達。具体例文のprompt除去、generic見出し抑制、節目数値の例外、WARN-only specificity telemetry、不要rewrite/call増の見直しをsource/test onlyで実施。Hard境界・call ceilingは維持。production mutation禁止。
+- recommended_model: Sonnet5（高）
 
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
-- task_id: x-social-mobile-ai-consult-persona-generation-guidance-20261006
+- status: ready
+- task_id: x-social-mobile-pr41-live-generation-fresh-integration-20261006
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: Final K3 PASS on PR #78 fresh integration head d1f131c56b082d2af57660b5bd3d83ff8c619c7d; no Codex review. Continue source-only V1 completion: make every confirmed persona signal actually influence social-mobile post-generation guidance, including toneSignals/topicSignals/hashtagHabits/ctaStyle/openingClosingPatterns, while preserving existing default no-hashtag, AI Lab and Kabumori behavior. PR78 stays open; no merge/deploy/production. G5 common-account has priority; PR41/live dispatch untouched. Recommended Sonnet5（高）.
-- recommended_model: Sonnet5（高）
+- allocation: Final K3 PASS on AI persona-generation guidance. PR #78 head 1f33c58ca82a9d33d8c5c7282e0ac5c2fbb4aca9 squash-merged as 60dff4e28a763e3c182495dfc41cadf94671952f; Netlify preview success, Vercel failure was build-rate-limit and non-blocking. Next source-only task fresh-integrates stale PR #41 live general-user auto-post path. Replace direct service_role SELECT on social_mobile_content_settings with a narrow service-only brand-scoped read boundary; preserve AI Lab/Kabumori/PR76 and document, but do not implement, G5 entitlement enforcement. No production/merge/deploy. Recommended Opus5.5（高）.
+- recommended_model: Opus5.5（高）
 
 ## Claude G4
 - owner: claude
@@ -112,7 +112,7 @@
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Project-wide critical path Phase 2. Wire Kabumori and X authenticated-session bootstrap to the already-reviewed start_kabumori_service/start_x_autopost_service RPCs, preserving one shared Auth identity and keeping X posting OAuth separate. First pass is source-only + tests + rollout package; no production deploy/mutation, no RLS enforcement, no deletion-orchestrator work. Must fresh-check G1/G3 file overlap before editing.
+- allocation: C1 corrective on existing PR #95. Fix H1 R1-R5: atomic automatic-vs-explicit reactivation contract, one-use user/session-scoped re-enrollment intent, positive-ready push/notification gate, immutable session-bound request transport, strict RPC payload validation. Fresh-integrate on main containing PR #94 and preserve root news-detail registration. New forward migration candidate allowed; no production apply/deploy/EAS. Mandatory H1 re-review after corrected head.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred

@@ -34,6 +34,7 @@ function SignedInNavigator() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="topic-detail" />
       <Stack.Screen name="topics" />
+      <Stack.Screen name="news-detail" />
       <Stack.Screen name="settings" />
       <Stack.Screen name="ai" />
       <Stack.Screen name="search" />

@@ -12,6 +12,7 @@ import {
 } from "./publish_guard.ts";
 import { type BrandContext, BrandContextError } from "./brand_context.ts";
 import {
+  confirmedHashtagHabit,
   type SocialMobileContentSettings,
   socialMobileGenerationGuidance,
 } from "./social_mobile_content_settings.ts";
@@ -119,6 +120,11 @@ export async function generateBrandPost({
   // (currently only AI Lab's "#個人開発 as default, no stuffing") opts in via
   // BrandCodeProfile.voiceControlsHashtags so this generic module defers to that instead of
   // contradicting it -- the opt-in is per-profile, never a brand-id check here.
+  //
+  // A hashtag habit the user confirmed in conversation (contentSettings come only from the social-mobile
+  // path) replaces the blanket "never add one" line, so the prompt never both remembers and forbids it.
+  // Fixed hashtags and a profile's own hashtag voice keep priority; unconfirmed habits never count.
+  const confirmedHabit = confirmedHashtagHabit(contentSettings);
   const hashtagInstruction =
     context.operationalSettings.fixed_hashtags.length > 0
       ? `本文の末尾にこのハッシュタグをそのまま付けてください: ${
@@ -126,6 +132,8 @@ export async function generateBrandPost({
       }`
       : context.codeProfile.voiceControlsHashtags
       ? "固定のハッシュタグ指定はありません。ハッシュタグを使うかどうか、使う場合に何を使うかは、上記の指示に従ってください。"
+      : confirmedHabit
+      ? `ハッシュタグは、利用者が確認した次の方針に従ってください（方針にない使い方はしない）: ${confirmedHabit}`
       : "ハッシュタグは付けないでください。";
   const lengthPolicy = context.codeProfile.postLengthPolicy;
   const instructions = [

@@ -3,7 +3,6 @@ import test from "node:test";
 
 import {
   goHome,
-  goHomeFromNews,
   goNewsList,
   goTopicList,
   HOME_ROUTE,
@@ -177,24 +176,4 @@ test("destination helpers go straight to Home, the topic list and the news list 
   assert.equal(HOME_ROUTE, "/");
   assert.equal(TOPICS_ROUTE, "/topics");
   assert.equal(NEWS_LIST_ROUTE, "/news");
-});
-
-test("news detail Home: empties the news tab's stack, then selects the Home tab -- no history dependence", () => {
-  const calls: string[] = [];
-  const router = {
-    canDismiss: () => true,
-    dismissAll: () => calls.push("dismissAll"),
-    navigate: (href: string) => calls.push(`navigate:${href}`),
-  };
-  goHomeFromNews(router);
-  assert.deepEqual(calls, ["dismissAll", "navigate:/"]);
-
-  // A single-screen stack (cold deep link): nothing to dismiss, Home is still reached.
-  const cold: string[] = [];
-  goHomeFromNews({
-    canDismiss: () => false,
-    dismissAll: () => cold.push("dismissAll"),
-    navigate: (href: string) => cold.push(`navigate:${href}`),
-  });
-  assert.deepEqual(cold, ["navigate:/"]);
 });

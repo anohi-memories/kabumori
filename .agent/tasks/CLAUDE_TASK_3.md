@@ -1,5 +1,251 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: x-social-mobile-pr41-live-generation-fresh-integration-20261006
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: source-only fresh integration / live scheduled-user generation / narrow content-settings service read boundary
+- source_pr: 41
+- source_head: 59f4f53037f231e831774c04e9a1b1982eff3bd9
+- prerequisite_ai_consult_merge: 60dff4e28a763e3c182495dfc41cadf94671952f
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Product goal
+
+V1の中核である「AIと相談して覚えた投稿内容・口調」を、
+一般ユーザーの実際の定期自動投稿経路でも使えるsourceへつなぐ。
+
+PR #78 AI相談V1は Final K3 PASS 後、squash-merged to main:
+`60dff4e28a763e3c182495dfc41cadf94671952f`.
+
+AI相談側は以下まで完成済み:
+- 会話だけでは保存0;
+- 明示的「これで覚えて」でのみ保存;
+- CASで古い提案を拒否;
+- confirmed settings/personaが次回相談へ反映;
+- 全8 persona signals + settingsがgeneration guidanceへ反映;
+- default/AI Lab/Kabumori hashtag behaviorに回帰なし.
+
+残るlive側の主要blockerはPR #41.
+
+## Current PR #41 facts
+
+PR #41 is open and currently stale/not mergeable against modern main.
+It owns:
+- generic Vault-backed scheduled `brand_post` path for `social_mobile_user_v1`;
+- `x-test-post` routing;
+- completion RPC candidate;
+- per-account publish-authority candidate.
+
+Current PR41 source loads `public.social_mobile_content_settings` directly with service_role.
+Final PR81 hardening intentionally grants service_role no table access, therefore the direct read fails closed.
+The publish-authority SQL also reads that table while executing as service_role and has the same dependency.
+
+Do not solve this by granting broad table SELECT to service_role unless a narrower design is proven impossible.
+
+## G4 / G5 coordination
+
+- G4 is another X-app slot owned by another chat. Inspect its TASK/Report for overlap, but do not execute/modify G4.
+- G5 common-account remains project-wide critical path.
+- Current G5 Phase2 service-enrollment work touches app auth/session/enrollment files, not PR41 backend paths.
+- This G3 is source-only and must not perform production DB/Auth/permission mutation.
+- Do **not** implement common-account entitlement enforcement here. G5 owns the product semantics/timing for enforcement and deletion.
+- Before editing, fresh-check G5 head/changed files again. Any overlap => STOP.
+
+## Mandatory startup / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK.
+2. Read Final K3 AI consultation reports and merged PR78 source.
+3. Read current G4/G5 TASK/Report for conflict only.
+4. Use fresh `/Users/yuya/Developer/kabumori-fresh`; fetch fresh origin/main.
+5. Create a new independent G3 worktree.
+6. Fetch exact PR41 head `59f4f53037f231e831774c04e9a1b1982eff3bd9`.
+7. Inventory every PR41 changed file and every migration dependency before integration.
+8. Do not rebase/reset/force-push another slot worktree.
+
+## Phase A — reassess PR41 against current main
+
+Before editing, determine what remains valid vs obsolete.
+
+Re-check:
+- current `x-test-post` routing after PR76/PR82;
+- current Vault account auth/refresh code;
+- current scheduled_posts/account-bound queue shape;
+- current publish permission boundary;
+- current PR81 settings/persona contract;
+- current G5 common-account foundation/enrollment source;
+- whether PR41's two historical migrations are still safe to keep at their 20260927 versions or should be replaced/renumbered because they were never merged/applied and now depend on later source.
+
+Do not preserve old migration numbering merely for convenience if clean-bootstrap/order semantics would be wrong.
+
+## Phase B — narrow settings read boundary
+
+Preferred architecture:
+- keep `social_mobile_content_settings` table denied to service_role;
+- expose the minimum publish-time read through a tightly scoped service-only function/RPC;
+- exact brand-scoped input;
+- only `social_mobile_user_v1` eligible;
+- return only fields needed for publish consent + generation:
+  - settings
+  - persona_profile
+  - persona provenance/confirmed/analyzed metadata as required;
+- no email/user identity/token/Vault data;
+- no mutation.
+
+Security requirements:
+- explicit owner;
+- SECURITY DEFINER only if needed;
+- `search_path = ''` or equally pinned safe path;
+- PUBLIC/anon/authenticated EXECUTE none;
+- service_role EXECUTE only;
+- no unexpected overload/procedure;
+- safe behavior for missing brand/settings;
+- cannot read Kabumori/AI Lab/internal profile settings through this reader;
+- no broad service_role SELECT on the underlying settings table.
+
+PR41 Edge/runtime loader must use this narrow boundary instead of direct table SELECT.
+
+PR41 publish-authority consent check must either:
+- reuse the same narrow helper safely inside SQL; or
+- use an equally narrow reviewed internal SQL helper.
+Do not leave one of the two direct-table reads unresolved.
+
+## Phase C — fresh-integrate live scheduled-user path
+
+Integrate only the still-valid PR41 functionality onto fresh main:
+- generic `social_mobile_user_v1` scheduled brand_post dispatcher;
+- exact-account Vault X port;
+- admin/publish gates before generation and immediately before X create;
+- explicit user auto-post consent;
+- confirmed content settings/persona passed to current main `generateBrandPost`;
+- NG words;
+- cross-brand duplicate protection;
+- bounded X length;
+- confirmed-X completion becomes terminal/non-replayable.
+
+Preserve:
+- Kabumori legacy path untouched;
+- AI Lab specialized path untouched;
+- PR76 publish permission semantics;
+- PR82 AI Lab dedupe;
+- current AI consultation generation guidance.
+
+Do not special-case raw user brand IDs.
+
+## Phase D — common-account boundary awareness
+
+Do **not** activate entitlement enforcement here.
+
+However document the exact future insertion point(s) where G5 Phase3 should require active `x_autopost` entitlement before:
+- claiming/generating a user scheduled post;
+- allowing/re-authorizing live publish authority.
+
+The current source must remain safe/dormant until explicit rollout gates are satisfied.
+
+If current PR41 would allow a future user to bypass G5 service enrollment semantics once enabled, STOP and report the conflict rather than inventing G5 policy.
+
+## Migration rules
+
+Because PR41 migrations are unmerged/unapplied candidates:
+- fresh-check repo + production history before choosing final migration versions;
+- no duplicate versions;
+- no normal `db push` assumption;
+- no production apply in this task;
+- migration source must be clean-bootstrap coherent with PR81 and current main;
+- if renumbering/replacing old candidate migrations is safest, do so only within PR41 branch and document old->new mapping;
+- all functions/tables/grants must be idempotency/precondition aware per project conventions.
+
+## Tests
+
+At minimum:
+- narrow settings reader refuses PUBLIC/anon/authenticated;
+- service_role reads only exact allowed brand;
+- wrong/internal brand fails/empty safely;
+- no direct service_role table SELECT required;
+- publish-authority consent check works through narrow boundary;
+- manual_review/no row/unconfirmed state does not publish;
+- auto_post_preference + confirmed settings reaches `generateBrandPost`;
+- all AI-consult remembered generation fields survive into live generation prompt;
+- authority checked pre-generation and pre-X;
+- account/brand mismatch fails;
+- OFF/revoked/expired authority fails;
+- NG word blocks;
+- duplicate blocks;
+- X success + completion ambiguity never causes replay;
+- AI Lab path unchanged;
+- Kabumori path unchanged;
+- PR76 guard unchanged;
+- G5 enrollment/app files untouched.
+
+Run relevant:
+- disposable PostgreSQL behavior/ACL/adversarial tests;
+- x-test-post focused Deno tests;
+- shared-brand tests;
+- PR78 memory-generation contract;
+- typecheck/lint where applicable;
+- git diff --check;
+- added-line secret scan.
+
+No real X/OpenAI.
+
+## Production / merge gates
+
+Forbidden:
+- production migration/history write;
+- Edge deploy;
+- real X/OpenAI;
+- Vault/OAuth/Auth mutation;
+- Cron change;
+- publish enablement;
+- PR41 merge;
+- G5 enforcement or deletion changes.
+
+Keep resulting PR open for K3.
+
+## Review policy
+
+This task introduces/changes a DB permission + service_role read boundary.
+If implementation reaches PASS candidate, K3 should normally allocate **one focused Codex review**.
+
+Recommended reviewer:
+- **Sol（高）** for the narrow SECURITY DEFINER/RPC/ACL + live-publish boundary.
+- Do not perform repeated routine rereviews unless the review finds a concrete P1/P2 in the same boundary.
+
+## Completion report
+
+Include:
+- result
+- fresh main
+- old/new PR41 head
+- migration version decisions
+- changed files
+- settings-reader design
+- ACL/owner/search_path proof
+- live generation path proof
+- PR78 memory->live generation proof
+- G4/G5 conflict check
+- tests
+- production mutation/deploy/real X/OpenAI = 0
+- remaining V1 blockers
+- whether focused Codex review is required
+- next recommendation
+
+At completion:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+Recommended model: **Opus5.5（高）**.
+
+---
+
+# Previous G3 task — preserved history
+
 - task_id: x-social-mobile-ai-consult-persona-generation-guidance-20261006
 - owner: claude
 - slot: claude-3

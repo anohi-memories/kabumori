@@ -1,3 +1,142 @@
+## Final C1 — PR #95 CHANGES REQUIRED / PR #94 merged / G5 corrective assigned — 2026-10-06
+
+- H1 exact review target: PR #95 head `c06fac6492708331b6ba816122c9852cdcea73e7`.
+- C1 verdict: **CHANGES REQUIRED accepted**. PR #95 remains open/unmerged/undeployed.
+- accepted blockers:
+  - R1 P1: stale automatic start can reactivate a now-ended service;
+  - R2 P1: X re-enrollment consent can carry across user switch;
+  - R3 P2: Kabumori push/notification side effects can run while retry enrollment is unresolved;
+  - R4 P1: stale A enrollment flow can dispatch with mutable singleton client's B credential;
+  - R5 P2: malformed active RPC payload can be accepted ready.
+- H1 independently proved PR #94 / PR #95 source compatibility:
+  - only `src/app/_layout.tsx` overlapped;
+  - both merge orders produced the same tree;
+  - combined Kabumori app tests 392/392 passed.
+- therefore completed G1 PR #94 was landed first:
+  - accepted head `97d374b48886ad33b61cd2288188d4b690e27a5c`;
+  - squash merge `d30a518731e976ab1c0e4e19e26f461a174a3c1c`;
+  - G1 done/free.
+- G5 is now ready on the same Phase 2 task / existing PR #95 with a focused security corrective:
+  - fresh-integrate on main containing PR #94;
+  - preserve root `news-detail`;
+  - add a new forward migration candidate if needed; never edit the applied migration;
+  - automatic bootstrap must never reactivate ended;
+  - explicit reactivation must use a separate atomic, current-user action boundary;
+  - re-enrollment intent must be one-use and user/session scoped;
+  - request authorization must be bound to immutable captured session credentials;
+  - Kabumori side effects require positive current-session service-ready state;
+  - RPC active payload must be structurally validated fail-closed.
+- production mutation/deploy/EAS/enforcement = 0.
+- H1 is done/free now; a **new H1 Sol（高） re-review is mandatory** after corrected PR #95 head.
+- G5 recommended model: **Opus5.5（極高）**.
+- current main after control sync at record time: `8dc0ec67aaa341a74ace79d8b00cbcd4891ed19f`.
+
+## Final K1 — PR #94 PASS / merge HOLD for PR #95 overlap coordination
+
+- verdict: **PASS** for G1 implementation and final 375pt visual gate.
+- PR #94 accepted head: `97d374b48886ad33b61cd2288188d4b690e27a5c`.
+- 375pt observed PASS:
+  - topic list selector one row;
+  - long 2-line titles no clipping;
+  - 未読 / ✓ 学習済み clean;
+  - root news-detail header no overlap;
+  - topic detail stable.
+- native swipe parity is structurally resolved by moving news detail to root Stack; no intermediate news-list flash and no internal Expo Router API dependency.
+- topic list 初級/中級/上級, Settings separation, per-level cache/race handling, local learned state and focus refresh accepted.
+- tests/checks: 376/376 app tests; tsc clean; Expo config/web export/diff PASS.
+- PR #94 fresh-main source overlap = 0; Codex review not required; EAS 0; backend/production mutation 0.
+- merge intentionally HOLD because active common-account PR #95 also changes `src/app/_layout.tsx`, and H1 is reviewing PR #95 exact head `c06fac6492708331b6ba816122c9852cdcea73e7`.
+- merging PR #94 during H1 review would change main/integration assumptions. Complete H1/C1 first, then preserve both the PR94 root `news-detail` Stack registration and PR95 Auth/service-access gate in the final integration.
+- no further G1 source work is currently required.
+
+## Final K3 — AI remembered persona -> generation PASS / PR #78 merged / live path next
+
+- verdict: **PASS** for `x-social-mobile-ai-consult-persona-generation-guidance-20261006`.
+- accepted PR #78 source head: `1f33c58ca82a9d33d8c5c7282e0ac5c2fbb4aca9`.
+- all confirmed consultation persona fields now materially influence social-mobile generation:
+  - toneSignals;
+  - sentenceLength;
+  - punctuationEmoji;
+  - recurringVocabulary;
+  - topicSignals;
+  - hashtagHabits;
+  - ctaStyle;
+  - openingClosingPatterns.
+- unconfirmed persona contributes zero persona guidance.
+- hashtag precedence verified:
+  fixed brand hashtags > profile-owned policy (AI Lab) > confirmed social-mobile hashtag habit > default no-hashtag.
+- Kabumori fixed hashtag and AI Lab behavior unchanged.
+- remembered notes remain bounded/one-line and cannot become an independent fake instruction line.
+- tests reported PASS: shared/consult/dry-run/settings Deno 72/72; AI Lab regressions 59/59; app 193/193; typecheck/lint/diff/secret scan clean.
+- G4/G5/PR41 prohibited paths were untouched; production mutation/deploy/real X/OpenAI = 0.
+- extra Codex review: **not required** for this bounded prompt/generation change.
+- PR #78 CI: Netlify Preview success. Vercel status failure was `build-rate-limit`, not a code/test failure; project policy treats Netlify as development Preview surface.
+- PR #78 squash-merged after K3 as:
+  `60dff4e28a763e3c182495dfc41cadf94671952f`.
+- AI consultation V1 source core is now on main. Remaining release blockers are live scheduled-user wiring, production PR81 schema/deploy, real-model quality/rate limit/release QA, and common-account release gates.
+- fresh G3 task assigned: `x-social-mobile-pr41-live-generation-fresh-integration-20261006`, recommended **Opus5.5（高）**.
+- PR41 next task is source-only:
+  - fresh-integrate stale PR #41;
+  - replace direct service_role table read with a narrow service-only brand-scoped settings read boundary;
+  - ensure both generation loader and publish-authority consent check use the narrow boundary;
+  - preserve PR76/AI Lab/Kabumori;
+  - do not preempt G5 entitlement enforcement semantics;
+  - no production/merge/deploy.
+- because the next task changes a service_role/DB permission/live-publish boundary, one focused **Sol（高）** Codex review is expected after a clean PASS candidate; no routine repeated rereview.
+
+## K5 — Common-account Phase 2 PASS_CANDIDATE / H1 review required — 2026-10-06
+
+- G5 Phase 2 source integration is **PASS_CANDIDATE**, not yet final merge approval.
+- PR #95 exact head: `c06fac6492708331b6ba816122c9852cdcea73e7`; production mutation/deploy/EAS = 0.
+- accepted implementation candidate:
+  - Kabumori session bootstrap uses the reviewed service-start RPC instead of legacy profile bootstrap;
+  - X session tree enrolls service before workspace/onboarding reads;
+  - X posting OAuth remains separate and login alone creates no posting authorization/credential/workspace;
+  - fail-closed UI exists for lifecycle refusal and transient initialization failure;
+  - focused tests/builds are green.
+- mandatory independent review assigned to H1 because the diff crosses Auth/session bootstrap in both apps.
+- H1 critical focus: ended explicit-reactivation race, stale async/user-switch behavior, fail-closed no-bypass guarantees, X OAuth separation, and PR #94 same-file compatibility.
+- PR #95 merge/deploy HOLD until C1.
+- G5 Phase 3 deletion/enforcement is not started yet.
+- recommended H1 model: **Sol（高）**.
+- AI Lab diary: 候補あり — 2つのアプリで共通IDを使いながら、それぞれのサービス利用登録だけを安全に追加できるログイン後の仕組みを実装。Xのログインと投稿権限は混ぜず、退会中などの状態ではアプリを開かない設計にした。
+
+## Final K2 — 10/6 close safety PASS / editorial regression -> corrective G2
+
+- classification: **delivery/factual PASS_FIRST_TRY, editorial FAIL (EDITORIAL_REGRESSION)**.
+- natural 10/6 close completed on first analysis attempt; retry was no-op; report packet unique and Fact PASS.
+- exact 3 points:
+  1. 主要指数は上昇、主因は一つに絞れず
+  2. 国際情勢のニュースを確認
+  3. 次は米国株と為替の動きを見る
+- numeric-three-line regression is gone, but points are too generic and do not communicate the day's specific market content. Point 1/3 closely mirror prompt examples; point 2 is generic enough to fit almost any day.
+- factual safety is good: observed values/dates/directions/1306/stale labels match input; unsupported market causality was avoided; no visible Hard false reject in the delivered generation.
+- notable missed editorial signal: Nikkei closed at 70,683.98 after 69,946.86, a meaningful 70,000-level milestone, but the current “numbers should not be headline stars” instruction appears to suppress useful milestone headlines too aggressively.
+- delivery diagnostics: X 387 chars; App 657 chars; quality rewrite ran once; calls=4; delivered_generation=1 after the rewrite generation failed Fact and safe-original fallback delivered the first generation. Cost approx $0.011845.
+- generic/low-specificity headings are currently not detected by X_POINTS telemetry.
+- 10/7 morning observation is deferred until corrective source is implemented/deployed; observing the same prompt again is low value.
+- fresh corrective G2 assigned: `kabumori-editorial-points-specificity-corrective-20261006`, recommended **Sonnet5（高）**.
+- corrective goals: remove copyable example sentences from prompt; require day-specific entities/events; permit safely evidenced milestone/threshold numbers; add WARN-only generic specificity telemetry; preserve all Hard Fact checks and model-call ceiling; investigate unnecessary rewrite/call behavior without weakening delivery-first policy.
+- no Codex review by default if only prompt/telemetry/tests change and Hard/rewrite/call semantics remain unchanged. Escalate to focused Luna（高） only if runtime delivery semantics materially change.
+- production mutation from observation = 0.
+- AI Lab diary: **候補あり — 株アプリの市況見出しを「数字の羅列」から改善したところ、今度は抽象的すぎる見出しになったため、実際の本番出力を見ながら“その日固有の内容が伝わる見出し”へ再調整している。**
+
+## K1 recheck — PR #94 structural PASS / 375pt final gate
+
+- PR #94 latest reviewed head: `64c71bd6a49c6d1f65cb84642b3f68f60ef9648a`.
+- previous swipe blocker is resolved structurally: news detail is now a root Stack route, so native edge swipe naturally returns to the actual origin screen without redirect-after-pop.
+- removed the package-internal `expo-router/build/...` dependency / `usePreventRemove` interception and the transient News-list flash.
+- Home-origin news detail -> swipe Home; News-list-origin -> swipe list; report-origin -> report; explicit Back follows the same origin contract.
+- existing `/news/<id>` system URL is rewritten to the canonical root detail route via `+native-intent`.
+- 402pt visual evidence accepted for root news detail and topic list selector + learned/unread states.
+- topic-list 初級/中級/上級 switching, Settings separation, selected-only fetch/cache/race safety, local AsyncStorage learned state remain accepted.
+- latest reported checks: 376/376 app tests, tsc clean, Expo config PASS, web export PASS, diff clean.
+- fresh-main changed-file overlap = 0.
+- Vercel failure is rate-limit only and not a native source blocker.
+- merge remains HOLD only because the explicit 375pt observed visual gate is still missing.
+- G1 should now do one iPhone SE-class 375pt pass + screenshot and return K1; no code change expected.
+- Codex review not required. EAS 0. backend/production mutation 0.
+
 ## Final K5 — Common-account legacy backfill APPLIED PASS / Phase 2 assigned — 2026-10-06
 
 - verdict: **PASS / BACKFILL_APPLIED_PASS**.

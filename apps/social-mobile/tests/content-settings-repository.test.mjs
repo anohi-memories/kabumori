@@ -34,9 +34,8 @@ function recordingClient() {
 // The persona keys the database contract allows inside persona_profile.
 const PERSONA_JSON_KEYS = new Set(['toneSignals', 'sentenceLength', 'punctuationEmoji', 'recurringVocabulary', 'topicSignals', 'hashtagHabits', 'ctaStyle', 'openingClosingPatterns']);
 
-// The current main validator rejects its own 24:00 default (fixed separately in PR #78), so this
-// test uses a window ending at 23:59 to exercise the persona path on its own.
-const settings = { ...SOCIAL_MOBILE_CONTENT_DEFAULTS, generationWindow: { ...SOCIAL_MOBILE_CONTENT_DEFAULTS.generationWindow, endLocal: '23:59' } };
+// The saved defaults (a window ending at 24:00) are valid as-is since PR #78 aligned the app validator.
+const settings = SOCIAL_MOBILE_CONTENT_DEFAULTS;
 
 test('a confirmed past-post persona keeps its metadata in columns, not in persona_profile', async () => {
   const Repository = await loadRepository();

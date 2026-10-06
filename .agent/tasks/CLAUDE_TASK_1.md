@@ -3,8 +3,8 @@
 - task_id: kabumori-topic-learning-access-progress-and-swipe-20261006
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: 実機確認で判明した戻るジェスチャー不一致を解消し、トピック一覧をSettings依存の単一レベル閲覧から「初級/中級/上級を自由に切替できる学習一覧」へ拡張し、端末内の既読/学習済み表示を追加する。
@@ -476,6 +476,131 @@ Then:
 
 Recommended model: **Sonnet5（高）**.
 
+## Final K1 close — PR #94 merged after C1 coordination
+
+- PR #94 exact accepted head `97d374b48886ad33b61cd2288188d4b690e27a5c` was squash-merged after H1 completed PR #95 compatibility review.
+- merge SHA: `d30a518731e976ab1c0e4e19e26f461a174a3c1c`.
+- C1 accepted H1's proof that PR #94 and the reviewed PR #95 source were composition-compatible; PR #95 itself is not merge-ready for separate security reasons.
+- merged functionality:
+  - native swipe/back parity for topic and root-level news detail;
+  - topic-list 初級/中級/上級 switcher;
+  - Settings remains Home-display preference only;
+  - local `未読 / ✓ 学習済み` state;
+  - 375pt and 402pt visual verification.
+- tests/checks already accepted: 376/376 app tests, tsc clean, Expo config/web export/diff PASS.
+- EAS 0; backend/production mutation 0.
+- G1 done/free.
+
+---
+
+## Final K1 — PR #94 PASS / merge HOLD only for PR #95 overlap coordination
+
+- verdict: **PASS** for G1 implementation and visual verification.
+- exact accepted PR #94 head: `97d374b48886ad33b61cd2288188d4b690e27a5c`.
+- latest commit after the reviewed code head is **docs/screenshots only**; no source change after `64c71bd6a49c6d1f65cb84642b3f68f60ef9648a`.
+- final observed 375pt Simulator verification: **PASS**.
+  - topic list selector fits in one row at 375pt;
+  - long titles wrap to 2 lines without horizontal clipping;
+  - `未読` / `✓ 学習済み` align cleanly;
+  - list rows remain readable;
+  - root news-detail header `‹ 戻る / ニュース詳細 / ニュース一覧 ›` fits without overlap;
+  - topic detail 375pt remains visually stable.
+- screenshots accepted:
+  - `docs/ui-review/topic_list_375pt.webp`;
+  - `docs/ui-review/news_detail_375pt.webp`;
+  - `docs/ui-review/topic_detail_375pt.webp`.
+- navigation contract accepted:
+  - root-level news detail removes the prior redirect-after-pop flash;
+  - native iOS swipe naturally returns the true origin screen;
+  - Home -> news detail -> swipe = Home;
+  - news list -> detail -> swipe = news list;
+  - report -> detail -> swipe = report;
+  - topic detail swipe remains origin-correct.
+- no `usePreventRemove`, no `expo-router/build/...` internal import, no redirect guard.
+- topic list 3-level switcher, Settings/Home separation, selected-only fetch/cache/race handling, local learned-state persistence and focus refresh accepted.
+- tests/checks accepted: **376/376 app tests**, tsc clean, Expo config PASS, web export PASS, diff clean.
+- fresh-main changed-file overlap for PR #94 itself: **0**.
+- Vercel status is build-rate-limit only; Netlify preview status is non-blocking for this native-app source change.
+- Codex review for PR #94: **not required**.
+- EAS build = 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+
+### Merge coordination hold
+- PR #95 (common-account Phase 2) is currently under allocated H1 review and also modifies `src/app/_layout.tsx`.
+- PR #94 adds root `news-detail` registration in that same file.
+- Because H1 is reviewing PR #95 exact head `c06fac6492708331b6ba816122c9852cdcea73e7`, merging PR #94 now would change main during that review and could invalidate the integration assumption.
+- Therefore PR #94 is **PASS but intentionally not merged yet**.
+- next: complete H1/C1 for PR #95, then coordinate merge order / fresh integration so `news-detail` root registration and common-account Auth gate are both preserved. No additional G1 implementation is required unless that integration exposes a concrete conflict.
+
+- G1 source work is complete; slot should be treated as blocked only by cross-PR merge coordination, not by implementation quality.
+
+---
+
+## K1 recheck — STRUCTURAL PASS / 375pt verification only
+
+- verdict: **STRUCTURAL PASS / merge HOLD only for observed 375pt evidence**.
+- PR #94 latest head reviewed: `64c71bd6a49c6d1f65cb84642b3f68f60ef9648a`.
+- the previous swipe blocker is resolved structurally:
+  - important-news detail moved to root Stack as `src/app/news-detail.tsx`;
+  - native edge swipe now naturally reveals the true origin screen;
+  - Home-origin -> Home;
+  - News-list-origin -> News list;
+  - report-origin -> report;
+  - no redirect-after-pop flash;
+  - no `usePreventRemove`;
+  - no `expo-router/build/...` internal import;
+  - no 1-second redirect guard.
+- `/news/<id>` native/deep-link compatibility is rewritten through `+native-intent` to the canonical root detail route.
+- 402pt screenshots reviewed and accepted:
+  - root news detail layout;
+  - topic list level switcher;
+  - mixed 未読 / ✓ 学習済み.
+- topic-list level switching, Settings separation, per-level fetch/cache/race handling and local learned/read state remain accepted.
+- latest reported tests/checks on head: **376/376 app tests**, tsc clean, Expo config PASS, web export PASS, diff clean.
+- fresh-main changed-file overlap at K1: **0**.
+- Vercel status is rate-limited, not a source failure and not a native-app merge blocker; Netlify rules checks are neutral/success.
+- Codex review: **not required** for this app navigation/local-storage change.
+- EAS build = 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+
+### Only remaining merge gate
+
+Run one final **observed 375pt iPhone SE-class Simulator pass** on the current PR #94 head.
+
+Required:
+- topic list at 375pt with selector visible;
+- at least one long 2-line title;
+- 未読 / ✓ 学習済み indicators;
+- no horizontal clipping;
+- all three selector segments on one row;
+- scroll/list row layout remains readable;
+- capture `docs/ui-review/topic_list_375pt.webp` (or equivalent).
+
+Also do one quick 375pt root news-detail header check:
+- `‹ 戻る` / `ニュース詳細` / `ニュース一覧 ›` fit without overlap.
+
+No code change is expected. If no issue is found:
+- update existing PR #94 only;
+- append final verification result;
+- status -> `review_required`;
+- next_owner -> `chatgpt`;
+- STOP for K1.
+
+If a 375pt visual issue is found, make only the smallest bounded visual correction and rerun affected tests.
+
+Recommended model: **Sonnet5（中）**.
+
+## Final verification result — observed 375pt pass (K1 gate), PR #94
+
+- PR #94 (existing, not merged): branch `claude/g1-topic-learning-access-progress-swipe-20261006`, head **`97d374b48886ad33b61cd2288188d4b690e27a5c`** = reviewed code head `64c71bd6` + 3 screenshots (docs only; **no code change**).
+- Device: iPhone SE (3rd generation), iOS 27.0, 375x667 pt, driven with real taps/swipes (rig-only ctl used for pushing `/topics`, seeding the Settings level and fixtures). The device-access approval that blocked the previous attempts was granted this time. Rig = scratchpad auth-bypass/fixture copy of the PR head (not committed). EAS build = 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+- **Topic list @375pt — PASS.** Settings level = initial selection (beginner by default; Settings=intermediate re-opened on intermediate). Selector is one row: 335x48 (x=20); segments 107x40 at x=4/114/224, inside the track; accent colours green/blue/lavender follow the level. New description wraps to 3 lines (h=60, 335 wide) with no clipping. Three long titles wrap to exactly 2 lines (row 107 pt vs 86 pt for 1 line; title width 281.5): beginner 「PERが高い株と低い株は何が違うのですか？」, intermediate 「ROEが高い会社は本当に良い会社と言えるのでしょうか？」, advanced 「セクターローテーションが起きたときに何を見て判断すればよいか？」. Real taps opened 10/6 and 10/5 and came back: mixed `✓ 学習済み` (level-coloured) and `未読`, right edges aligned. Level switch beginner → intermediate → advanced via taps keeps every level's list intact. Scrolling shows rows at an 86 pt rhythm; rows are 335 wide (right edge 355 < 375); no horizontal clipping or overlap.
+- **Root news detail header @375pt — PASS.** From a Home market card (nav tree `news-detail(from=home)`): row 44 high; `‹ 戻る` x=20 w=38.5; `ニュース詳細` is a full-width centred text (≈ x 139.5–235.5, centre 187.5 = screen centre; ≈81 pt to 戻る, ≈25 pt to the right button); `ニュース一覧 ›` x=260.5 w=94.5 (right edge 355). No overlap or clipping. Body scrolls (742.5 vs 603) and ends with ~60 pt clear below the source button (SE has no bottom inset). Left-edge swipe (x=2) and the 戻る button both returned to Home.
+- **Topic detail @375pt — PASS (extra).** Nav row (`‹ 戻る` 38.5 / `トピック一覧 ›` x=240.5 w=94.5 in a 335 row), notebook label + date (date x=256 w=79), selector 335x48, Hero grows with 2-line (h 283) and 3-line (h 317) titles, 1-line Hero 190; nothing clipped.
+- Screenshots (`docs/ui-review/`): `topic_list_375pt.webp` (selector + 2-line title + learned/unread in one frame), `news_detail_375pt.webp`, `topic_detail_375pt.webp`.
+- Remaining (unchanged from the structural report): an app cold start from `kabumori://news/<id>` was not observed (a running app was used); a deep link opened over another screen swipes back to that screen while 戻る goes Home (deep-link-only); a refresh spinner can linger on the news list after returning (pre-existing, `news/index.tsx` unchanged).
+- Status: `review_required` / next_owner `chatgpt`. STOP for K1.
+
+---
+
 ## K1 corrective — native swipe parity must be structural, not redirect-after-pop
 
 K1 verdict: **HOLD / bounded corrective required before merge**.
@@ -636,6 +761,17 @@ Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 - Simulator (402pt, frame-accurate video at 0.02 s): button back — list frames **0 after and also 0 before**, i.e. the real-device flash was **not reproduced** in the Simulator, so the fix cannot be shown to be the cause/cure there; per back: `reset-armed`, `blur`, `popToTop` exactly once, news stack `[index]`, no stale detail, no white screen over 3 repeats; from=news and the right-hand `ニュース一覧 ›` unchanged.
 - Swipe back (Home origin): during the drag the list underneath is visible (native interactive pop); after release the detail briefly re-appears (~0.06–0.3 s) and then Home shows — the same before and after this change (inherent to the prevent-and-redirect approach). If this is what the user saw, avoiding it needs the Home-origin news detail to live **above** the tabs (a root-stack route like the topic detail, so the native swipe pops straight to Home) — a larger change (tab bar hidden on the news detail, entry/deep-link routing) that needs a product decision.
 - Found, not caused by this change (same before/after): cold `kabumori://news/<id>` → 戻る → tap a Home news card leaves the news list on a spinner (nav tree keeps a stale `id` param on root/(tabs)); and after `from=news` 戻る the list heading rendered ~60 pt lower once. Neither investigated.
+
+### Addendum 2 — news detail moved to the root stack (supersedes the swipe-redirect design above), PR #94 head `64c71bd6a49c6d1f65cb84642b3f68f60ef9648a`
+
+- User confirmed on the real iPhone: the **swipe** (not the button) from a Home-origin news detail briefly showed the news list.
+- Root cause: the detail lived in the nested news stack above the list; the native pop revealed the list, then the redirect jumped Home. Prevent-and-redirect could not remove that.
+- **Fix: the news detail is now a root-stack route** (`src/app/news-detail.tsx`, registered next to `topic-detail`). A root pop lands exactly on the screen it was opened from, so swipe == 戻る by construction. Removed: `usePreventRemove` interception, the Home-first/`popToTop` reset, `decideDetailRemoval`, the `expo-router/build/...` internal import, the nested `(tabs)/news/[id].tsx` (the news tab is its list only). Entries (Home grid, holding rows, news list, reports) push `/news-detail` with `from`; `kabumori://news/<id>` is rewritten by `+native-intent` (`newsDetailRedirectPath`).
+- Origins: `home` → Home, `news` → news list, **`reports` → back to the report** (new; `router.back()` is used only here, justified by the explicit origin + root-stack predecessor), unknown/deep link → Home. Right action always the news list. In-screen row (‹ 戻る / ニュース詳細 (screen-centred) / ニュース一覧 ›) is present in loading, missing and error states too.
+- Visible change: **no tab bar on the news detail** (same as the topic detail); bottom inset handled as scroll padding.
+- Simulator (402pt, real taps/swipes, video at 0.02 s): news-list frames after a Home-origin swipe **0** (0.4 s and 1.0 s swipes: 0/373, 0/407), button 0/350, holding row 0/583, report origin returns to the report (underneath = report), topic detail 0/628, three rapid open/close cycles clean; dragging shows Home underneath; no double motion; news tab stack is `[index]` only in every dump and `news-detail` never survives a pop; missing/loading/error states keep both row buttons; the earlier "list stuck on spinner after a cold link then a Home card" bug did not recur; learned marks / list level switching / topic detail unchanged.
+- Tests: 376 pass / 0 fail; tsc, expo config, web export, diff check clean. Screenshot `docs/ui-review/news_detail_root_402pt.webp` replaces the old swipe montage.
+- Remaining / for K1: (1) 375pt still not measured (device permission); (2) an app **cold start** from `kabumori://news/<id>` was not observed (the dev client opens its launcher); a running app was used; (3) a deep link opened while another tab/screen is showing pushes the detail above it, so the swipe goes to that screen while 戻る goes Home (deep-link-only mismatch; acceptable by the "unknown → Home" rule); (4) pre-existing, not caused here: the news list can show a stuck refresh spinner after returning (also in the old build; `news/index.tsx` unchanged apart from the route name); (5) the earlier addendum's cleanup logic and 60 pt list-heading shift observation belong to the removed nested design.
 
 ---
 

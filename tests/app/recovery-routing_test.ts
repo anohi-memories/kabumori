@@ -66,5 +66,6 @@ test("other links, including unknown ones, pass through unchanged", () => {
 test("the native-intent entry point delegates to the tested helper", async () => {
   const source = await Deno.readTextFile(new URL("../../src/app/+native-intent.tsx", import.meta.url));
   assert.match(source, /export function redirectSystemPath\(/);
-  assert.match(source, /return recoveryRedirectPath\(path\);/);
+  assert.match(source, /const recovery = recoveryRedirectPath\(path\);\n  if \(recovery !== path\) return recovery;/, "recovery links keep precedence");
+  assert.match(source, /return newsDetailRedirectPath\(path\) \?\? path;/);
 });

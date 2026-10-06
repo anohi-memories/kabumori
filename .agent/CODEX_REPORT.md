@@ -1,3 +1,128 @@
+# Final C1 — PR #95 review accepted / corrections required
+
+- C1 accepts H1 verdict **CHANGES REQUIRED** for exact head `c06fac6492708331b6ba816122c9852cdcea73e7`.
+- Current PR #95 must not merge or deploy.
+- Blocking corrections: R1/R2/R4 P1; R3/R5 P2.
+- C1 accepted H1's PR #94 compatibility proof. PR #94 may land first; corrected PR #95 must fresh-integrate on top of that main and preserve root `news-detail`.
+- H1 is closed/free. Re-review will use a new exact corrected head.
+- production mutation/deploy = 0.
+- recommended re-review model: **Sol（高）**.
+
+---
+
+# H1 — PR #95 Phase 2 service-enrollment security review — 2026-10-06
+
+- task_id: `common-account-v1-phase2-service-enrollment-review-20261006`
+- result / verdict: **CHANGES REQUIRED**. Source-only review; do not merge/deploy this candidate.
+- status: `review_required`; next_owner: `chatgpt` (STOP for C1).
+- target: [PR #95](https://github.com/anohi-memories/kabumori/pull/95), exact head `c06fac6492708331b6ba816122c9852cdcea73e7`. Head unchanged at final fresh fetch; GitHub read-back OPEN/unmerged. GitHub mergeability was `unknown`, not claimed clean.
+- Fresh main: startup `4756c5015bd55a1ae9612f40a33fed2ddca4a3c4`, final review `f69527897597ccb82439622860ac41651aa7abc2`. Main's changed-file overlap with PR95's 11 product files: 0.
+- changed_files (H1): **only** `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`. Product-source edits: **0**. No other slot/control index rewritten.
+- commit_hash: reviewed source `c06fac6492708331b6ba816122c9852cdcea73e7`; no H1 product commit. Initial control-only review sync `5be6e926df6973a9559d9146324bd6b6ca2b57a9`, independently fetched/read back from origin/main. Final header-cleanup commit SHA is reported after remote verification in the final response.
+- push: **verified** initial H1 TASK/Report-only main synchronization at `5be6e926df6973a9559d9146324bd6b6ca2b57a9`; no source push. This follow-up removes the inherited Pending placeholder above the current result; previous review history remains below.
+- merge / deploy / production access / production mutation / EAS / Auth / Storage / OAuth / Vault / Cron / X API: **0**.
+
+## Blocking findings
+
+### R1 — P1: automatic start can silently reactivate a service ended after the read
+
+Locations: `src/lib/service-enrollment.ts:72-80` and identical `apps/social-mobile/src/domain/service-enrollment.ts:72-80`; canonical server contract `supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql:818-840` (unchanged by PR95).
+
+The client only declines automatic enrollment if its earlier SELECT observed `ended`. When it observed active/missing, it unconditionally invokes the no-argument start RPC. The RPC locks the current entitlement and **reactivates ended** without distinguishing automatic bootstrap from explicit re-enrollment. The lock protects row consistency, not user intent.
+
+Independent PostgreSQL 17.11 proof, exact foundation + production-shaped repository fixtures, autocommit interleaving:
+
+1. Authenticated fake user starts Kabumori and SELECT observes active.
+2. Backend `withdraw_kabumori_service(user)` completes and returns ended; entitlement is ended, profile removed.
+3. The stale automatic client invokes `start_kabumori_service()` with no new user action.
+4. It returns `{status:active, service:kabumori, started:true}`; entitlement is active and profile is recreated.
+5. X reproduces the same active -> backend begin/finish-service-deletion -> ended -> stale `start_x_autopost_service()` -> active sequence, without creating a workspace.
+
+No arbitrary status UPDATE was used to simulate withdrawal. These are real candidate lifecycle functions in a dedicated local fixture, not evidence of a production incident. The TASK explicitly requires safety for Phase3 lifecycle states: G5's documented “no ended-producing route today” does not discharge this gate.
+
+Minimum correction: automatic bootstrap must refuse ended **inside the same server lifecycle transaction/lock**; explicit reactivation must be distinguishable and tied to the current user/session/action (and stale action/version invalidation where necessary). A second client SELECT alone cannot close this TOCTOU window. Any server-contract/source-candidate change must be separately scoped by ChatGPT/G5; H1 did not edit/apply a migration.
+
+### R2 — P1: X re-enrollment intent is reused after changing users
+
+Location: `apps/social-mobile/src/features/service-enrollment/service-enrollment-gate.tsx:48-67,74-78`.
+
+`attempt.reenroll` stays true after the click; changing `userId` reruns the effect and calls `enrollment.reenroll(newUserId)`. The outcome is tagged by user, but the consent is not. The existing X AuthProvider can replace A with B without unmounting this gate (`onAuthStateChange` sets the next session and loading=false).
+
+Executed the actual transpiled TSX with a hook/effect dependency+cleanup harness and fake RLS/RPC client: A and B both ended; switching without a click caused no writes (control); A clicked “利用登録する”, producing write A; switching to B with no B click produced **write B**. Expected only A. The harness replaces rendering/native APIs, not the component's effect/attempt code; this is not device E2E.
+
+Minimum correction: one-use re-enrollment intent pinned to the exact initiating user/session/request generation; consume it and invalidate it on user/session change, sign-out, recovery and cancellation. Tagging only the returned view is insufficient. Add a mounted-gate A-click -> B-switch regression.
+
+### R3 — P2: Kabumori retry enables Push hooks before enrollment succeeds
+
+Location: `src/app/_layout.tsx:59-63`; producer `src/providers/auth-provider.tsx:141-155`.
+
+Retry/re-enroll clears `serviceAccess` and `profileError`, retains session and sets loading=true. `serviceSession` tests only the absence of errors, not loading or positively verified current-session enrollment. Before the new result, both Push hooks receive that session. The registration hook can request permissions/upsert a token and notification navigation can consume a pending tap even if enrollment is rejected again.
+
+Actual AuthProvider -> AuthGate TSX harness: begin with `SERVICE_NOT_READY`, click retry, keep preparation pending. Provider emits `{session:A, loading:true, serviceAccess:null, profileError:null}`; both hooks receive **A**, expected null. The signed-in UI itself remains a spinner; this finding concerns side effects, not a falsely claimed rendered-app bypass.
+
+Minimum correction: gate effects on positive ready for the **current** session/generation and `!loading` (also preserve recovery ordering), not merely “no error yet.” Add rejected -> pending retry -> rejected tests proving no token or routing side effects.
+
+### R4 — P1: an obsolete A request can issue the start RPC using B's current credential
+
+Locations: `src/lib/auth.ts:18-35`, `src/lib/service-enrollment.ts:103-125`; same singleton client pattern in X gate `:22-29` and duplicate domain gate.
+
+`ensure(userId)` only tags the cache; the run does not receive/pin that user/session. `reset()` forgets a promise but does not invalidate its pending read/start chain. Supabase obtains its **current** access token when each request is dispatched. After the A SELECT waits across sign-out/user switch, the A continuation can dispatch the start RPC authenticated as B. Provider/effect generation guards prevent rendering stale results, not the already-issued mutation.
+
+Independent test with actual installed supabase-js **2.115.0**, actual `enrollService/createEnrollmentGate`, synthetic A/B sessions, and fully intercepted fetch: delay A's entitlement SELECT; reset; set SDK session B; release A's read. Captured RPC subject is **B** (expected no RPC from the invalidated request). No real credentials/network were used. RLS still binds the write to B; this is unintended enrollment/possible reactivation of B, not arbitrary cross-user SQL access.
+
+Minimum correction: bind enrollment run, response and credential to immutable current user/session context; invalidate/cancel stale operations before dispatch and scope single-flight accordingly. Ensure the RPC cannot inherit a changed singleton credential. Add delayed SELECT + switch/sign-out + pending explicit re-enrollment regressions for both clients; UI stale-completion suppression alone does not fix it.
+
+### R5 — P2: incomplete active RPC payload is treated as ready
+
+Locations: `src/lib/service-enrollment.ts:85-88` and duplicate X domain.
+
+The canonical active response always includes boolean `started`; the client converts every missing/wrong value into false. Actual domain probe with `{status:'active', service:'kabumori'}` (no started) returns ready. This fails the TASK's explicit requirement that malformed responses never open the gate. This is a boundary-validation defect, not a claim that the reviewed SQL currently produces such payloads.
+
+Minimum correction: structurally validate the full active response, including `typeof started === 'boolean'`, and fail closed otherwise. Cover missing/null/string/number started and wrong service for both apps.
+
+## Other review dispositions
+
+- **Canonical RPC/grants/RLS:** source inspection and local fixture confirm only no-argument service-specific public RPCs, auth.uid() identity, SECURITY DEFINER empty search_path and authenticated-only EXECUTE. No direct client common-account INSERT/UPDATE or email-based merge/inference was introduced. Kabumori profile is created atomically by start; no active bootstrap `ensure_my_profile` fallback remains.
+- **Lifecycle states:** known account locked/deleting and service deleting/suspended/provisioning/invalid-login fail closed in canonical responses. Normal active idempotence, missing service-only addition and explicit static-ended UI are covered and pass. Atomic ended intent safety fails R1, cross-user consent R2/R4, malformed contract R5.
+- **Session concurrency:** same-user concurrent promises share a run; transient exceptions clear current cache, and decided outcomes are user-tagged. Generation/cancelled guards avoid accepting many stale UI results. They do not pin session/credential or cancel mutations (R2/R4); therefore this review gate fails.
+- **Kabumori UI:** rejected/error screens and logout are present, signed-in navigator waits on loading/decision, no profile-only shortcut. Push/notification effect gate fails R3. Recovery screen ordering remains before application UI; no native recovery E2E claim.
+- **X/OAuth separation:** ServiceEnrollmentGate is inside auth/recovery routing and outside DataProvider/OnboardingGate. Enrollment only reads entitlement and starts `x_autopost`; it creates no workspace/social-account/OAuth state/credential/publish enablement. X connection remains explicit; no posting authorization was expanded. Logout and account-deletion help remain reachable without loading workspace data. Explicit mock selection/invalid-config fail-closed logic and provider-token stripping are unchanged. Enrollment consent/mutation safety still fails R2/R4.
+
+## PR94 compatibility / freshness
+
+- PR94 advanced from `64c71bd6a49c6d1f65cb84642b3f68f60ef9648a` to final `97d374b48886ad33b61cd2288188d4b690e27a5c` during review; delta was three 375pt review images, no product source delta.
+- Product overlap: only `src/app/_layout.tsx`. PR94 adds root `news-detail` registration in SignedInNavigator; PR95 changes the separate AuthGate enrollment hunk.
+- Both `git merge-tree --write-tree PR94 PR95` and reverse order succeed with the **same tree** `00ab532dd8565c330d070bab369d622d45996ffe`.
+- Archived that combined tree into a separate temporary directory; **392/392 Kabumori App tests passed**, preserving PR94 root-detail/native-intent/swipe source contracts and PR95 gates (including the still-present R3 defect). This is source/behavior compatibility, not native visual/swipe E2E.
+- Neither PR was merged/modified. PR94 remains OPEN/unmerged at API read-back. PR94 was moving: do not blind-merge. After fixing PR95 and C1 acceptance, rebase against then-current main/PR94 merge state, refetch both heads and rerun overlap + combined tests. PR95 is **not merge-ready** due to R1–R5 regardless of textual compatibility.
+
+## Independent tests / builds
+
+- Exact PR95: `deno test --no-check --no-config --allow-read tests/app/` — **352 passed / 0 failed**.
+- X `npm test --prefix apps/social-mobile` — **157 passed / 0 failed**. Initial missing dependency-loader failures were resolved using read-only symlinks in the isolated H1 directory to existing dependency installations; no dependency source or shared worktree changed.
+- X `npm run typecheck` and `npm run lint` — **PASS**.
+- Kabumori app-only `tsc --noEmit` (temporary config includes src + expo-env, excludes unrelated Deno functions) — **two pre-existing unchanged CSS-resolution diagnostics**: `src/components/animated-icon.web.tsx:5` (`animated-icon.module.css`) and `src/constants/theme.ts:6` (`@/global.css`). No PR95 changed-file diagnostic; do not report full repository typecheck as clean.
+- Both `expo export --platform web` — **PASS**, dummy public config, output only in H1 temporary directory. No deployment/EAS/native build.
+- Exact foundation `common_account_lifecycle_run.sh` on dedicated local Unix-socket PostgreSQL17.11/non-superuser fixture owner — **20 PASS markers**, including behavior, both commit orders, lock order/no-deadlock, additive/preflight/rollback and cleanup.
+- Additional actual lifecycle ended interleavings for both services — **unsafe behavior reproduced** (R1); not included in ordinary runner's passing assertions.
+- Additional local actual-logic/TSX/SDK adversarial assertions — **0 passed / 4 failed**, corresponding exactly to R2–R5 expected-safe properties; these are reviewer-added probes outside the product tree, not four failures in G5's shipped suite. Tests can all be rerun via `node --test` on the artifact below.
+- Combined PR94/95 App tests — **392 passed / 0 failed**.
+- `git diff --check` — **PASS**. Changed-file secret-pattern scan for secret keys/private keys/GitHub tokens/JWT literals — **0 matches**; no secret values printed. Scan is not a blanket security assurance.
+
+Local evidence (temporary, not committed product changes): `/private/tmp/kabumori-h1-pr95-review-20261006.xvKugu/` contains `adversarial.mjs`, `adversarial.log`, `ended-proof.sql`, `ended-proof.log`, `lifecycle-proof.log`, `combined-tests.log`, app export logs and app-only tsc log. Reproduction descriptions above remain self-contained if temp files expire. No simulator/device E2E was performed; this TASK is source-only.
+
+## Safety / remaining issues / next recommendation
+
+- Independent detached exact-head source and own control branch from `/Users/yuya/Developer/kabumori-fresh`; no shared checkout, no other slot's files/staging/server changed. Reviewer probes/exports/fixtures remained temporary. The dedicated fake-data DB was dropped and the dedicated PostgreSQL server stopped after proof.
+- Supabase and Postgres-best-practices skills informed the current-session credential checks, privilege inspection and atomic lifecycle/lock review; production access was not required.
+- Remaining blockers: **R1–R5**. No H1 product repair, new migration, RPC change or Phase3 broadening was attempted.
+- **Next recommendation:** C1 / ChatGPT accept this review result and return focused corrections to G5. Recommended model for C1 and exact-head re-review: **Sol（高）**. Server intent-contract correction requires a clearly scoped source-candidate task, not production apply permission. After fixes, re-review both clients + canonical RPC together with pending-read/user-switch/ended-race/effect tests; refresh PR94 compatibility again.
+- **STOP for C1**; no PR95 merge/deploy recommendation until corrected head passes. Production rollout/enforcement remains a separate approval gate.
+
+---
+
+# Previous H1 report history — preserved
+
 # H1 — PR #87 editorial “今日のポイント3点” review — 2026-10-06
 
 - task_id: `kabumori-pr87-editorial-three-points-review-20261006`
