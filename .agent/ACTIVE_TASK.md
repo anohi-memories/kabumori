@@ -81,14 +81,14 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
-- task_id: x-social-mobile-ai-consult-persona-generation-guidance-20261006
+- status: ready
+- task_id: x-social-mobile-pr41-live-generation-fresh-integration-20261006
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: Final K3 PASS on PR #78 fresh integration head d1f131c56b082d2af57660b5bd3d83ff8c619c7d; no Codex review. Continue source-only V1 completion: make every confirmed persona signal actually influence social-mobile post-generation guidance, including toneSignals/topicSignals/hashtagHabits/ctaStyle/openingClosingPatterns, while preserving existing default no-hashtag, AI Lab and Kabumori behavior. PR78 stays open; no merge/deploy/production. G5 common-account has priority; PR41/live dispatch untouched. Recommended Sonnet5（高）.
-- recommended_model: Sonnet5（高）
+- allocation: Final K3 PASS on AI persona-generation guidance. PR #78 head 1f33c58ca82a9d33d8c5c7282e0ac5c2fbb4aca9 squash-merged as 60dff4e28a763e3c182495dfc41cadf94671952f; Netlify preview success, Vercel failure was build-rate-limit and non-blocking. Next source-only task fresh-integrates stale PR #41 live general-user auto-post path. Replace direct service_role SELECT on social_mobile_content_settings with a narrow service-only brand-scoped read boundary; preserve AI Lab/Kabumori/PR76 and document, but do not implement, G5 entitlement enforcement. No production/merge/deploy. Recommended Opus5.5（高）.
+- recommended_model: Opus5.5（高）
 
 ## Claude G4
 - owner: claude
