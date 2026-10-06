@@ -1,3 +1,23 @@
+## Final K2 — 10/6 close safety PASS / editorial regression -> corrective G2
+
+- classification: **delivery/factual PASS_FIRST_TRY, editorial FAIL (EDITORIAL_REGRESSION)**.
+- natural 10/6 close completed on first analysis attempt; retry was no-op; report packet unique and Fact PASS.
+- exact 3 points:
+  1. 主要指数は上昇、主因は一つに絞れず
+  2. 国際情勢のニュースを確認
+  3. 次は米国株と為替の動きを見る
+- numeric-three-line regression is gone, but points are too generic and do not communicate the day's specific market content. Point 1/3 closely mirror prompt examples; point 2 is generic enough to fit almost any day.
+- factual safety is good: observed values/dates/directions/1306/stale labels match input; unsupported market causality was avoided; no visible Hard false reject in the delivered generation.
+- notable missed editorial signal: Nikkei closed at 70,683.98 after 69,946.86, a meaningful 70,000-level milestone, but the current “numbers should not be headline stars” instruction appears to suppress useful milestone headlines too aggressively.
+- delivery diagnostics: X 387 chars; App 657 chars; quality rewrite ran once; calls=4; delivered_generation=1 after the rewrite generation failed Fact and safe-original fallback delivered the first generation. Cost approx $0.011845.
+- generic/low-specificity headings are currently not detected by X_POINTS telemetry.
+- 10/7 morning observation is deferred until corrective source is implemented/deployed; observing the same prompt again is low value.
+- fresh corrective G2 assigned: `kabumori-editorial-points-specificity-corrective-20261006`, recommended **Sonnet5（高）**.
+- corrective goals: remove copyable example sentences from prompt; require day-specific entities/events; permit safely evidenced milestone/threshold numbers; add WARN-only generic specificity telemetry; preserve all Hard Fact checks and model-call ceiling; investigate unnecessary rewrite/call behavior without weakening delivery-first policy.
+- no Codex review by default if only prompt/telemetry/tests change and Hard/rewrite/call semantics remain unchanged. Escalate to focused Luna（高） only if runtime delivery semantics materially change.
+- production mutation from observation = 0.
+- AI Lab diary: **候補あり — 株アプリの市況見出しを「数字の羅列」から改善したところ、今度は抽象的すぎる見出しになったため、実際の本番出力を見ながら“その日固有の内容が伝わる見出し”へ再調整している。**
+
 ## K1 recheck — PR #94 structural PASS / 375pt final gate
 
 - PR #94 latest reviewed head: `64c71bd6a49c6d1f65cb84642b3f68f60ef9648a`.
