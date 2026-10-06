@@ -105,14 +105,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: review_required
-- task_id: common-account-v1-phase1-production-backfill-gate-20261006
+- status: ready
+- task_id: common-account-v1-phase2-service-enrollment-integration-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: chatgpt
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Final K5 PASS / BACKFILL_READY. Production read-only dry-run and parity proof are exact: auth 5, common_accounts_to_create 5, Kabumori entitlements 2, X entitlement 1, Auth-only 2, X excluded-admin 1. Production writes/backfill remain 0. PR #93 backfill gate tooling merged as b9cb6dcc. Waiting only for explicit user approval before backfill(true); G3/G2 production mutation must not overlap an approved/active G5 window.
+- allocation: Project-wide critical path Phase 2. Wire Kabumori and X authenticated-session bootstrap to the already-reviewed start_kabumori_service/start_x_autopost_service RPCs, preserving one shared Auth identity and keeping X posting OAuth separate. First pass is source-only + tests + rollout package; no production deploy/mutation, no RLS enforcement, no deletion-orchestrator work. Must fresh-check G1/G3 file overlap before editing.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
