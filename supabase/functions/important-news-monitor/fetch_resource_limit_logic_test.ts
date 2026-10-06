@@ -77,7 +77,9 @@ test("all groups within the fetch limits are selected", async () => {
 });
 
 test("groups beyond the PDF limit are deferred for a later fetch", async () => {
-  const plan = planImportantNewsFetchGroups(await groups([input(1), input(2), input(3), input(4)]));
+  const plan = planImportantNewsFetchGroups(await groups(
+    Array.from({ length: MAX_IMPORTANT_NEWS_FETCH_GROUPS + 1 }, (_, index) => input(index + 1)),
+  ));
   assert.equal(plan.selectedGroups.length, MAX_IMPORTANT_NEWS_FETCH_GROUPS);
   assert.equal(plan.selectedPdfCount, MAX_IMPORTANT_NEWS_PDF_ENRICHMENTS);
   assert.equal(plan.deferredGroups.length, 1);
@@ -114,7 +116,9 @@ test("a group crossing the remaining boundary is deferred whole", async () => {
 });
 
 test("deferred groups remain eligible on the next fetch", async () => {
-  const first = planImportantNewsFetchGroups(await groups([input(1), input(2), input(3), input(4)]));
+  const first = planImportantNewsFetchGroups(await groups(
+    Array.from({ length: MAX_IMPORTANT_NEWS_FETCH_GROUPS + 1 }, (_, index) => input(index + 1)),
+  ));
   const next = planImportantNewsFetchGroups(first.deferredGroups);
   assert.equal(first.deferredCandidateCount, 1);
   assert.equal(next.selectedCandidateCount, 1);

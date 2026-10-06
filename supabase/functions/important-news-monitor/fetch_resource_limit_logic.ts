@@ -1,7 +1,9 @@
 import type { ImportantNewsCandidateGroup } from "./important_news_grouping_logic.ts";
 
-export const MAX_IMPORTANT_NEWS_FETCH_GROUPS = 3;
-export const MAX_IMPORTANT_NEWS_PDF_ENRICHMENTS = 3;
+// Interim (TDnet T1): every TDnet disclosure needs a PDF, so the PDF limit is what actually bounds a run; raising only the
+// group limit changes nothing for TDnet. Groups and PDFs move together. PDFs are fetched one at a time here.
+export const MAX_IMPORTANT_NEWS_FETCH_GROUPS = 6;
+export const MAX_IMPORTANT_NEWS_PDF_ENRICHMENTS = 6;
 export const MAX_IMPORTANT_NEWS_LIGHTWEIGHT_CANDIDATES = 100;
 
 // market_macro has its own quota, deliberately separate from the corporate (TDnet/company_ir) lane's
