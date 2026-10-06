@@ -1,3 +1,24 @@
+## Final K2 — PR #99 PASS_CANDIDATE / one focused H1 review required — 2026-10-07
+
+- G2 corrective result: **PASS_CANDIDATE**, not final merge approval.
+- PR #99 exact head: `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`; open/unmerged.
+- allocation-time freshness: current main is 3 commits ahead of PR base; changed-file overlap across PR #99's 10 files = **0**.
+- accepted corrective direction:
+  - remove copyable finished example sentences from the model prompt;
+  - require day-specific concrete entities/events;
+  - permit safely evidenced milestone/threshold numbers;
+  - add WARN-only `X_POINTS_GENERIC` specificity telemetry;
+  - keep generic/recap/duplicate quality signals non-Hard and non-rewrite;
+  - preserve all existing Hard Fact boundaries and max model-call ceiling;
+  - add bounded fixed-code `rejection_reasons` diagnostics without raw model/user text.
+- reported tests: market-report-analysis 160/160; personalized-reports 129/129; X shared 8/8; data-packet 42/42; _shared 422/422; relevant Deno check/lint/diff PASS aside from one documented pre-existing require-await warning.
+- no deploy/manual report/DB/Cron/gate/X/notification/Auth/Vault/EAS/production mutation.
+- one bounded runtime-delivery change requires independent review: X-only shortness rewrite threshold narrows from target 430 chars to **rewrite only below 300 chars**; omission and App-story conditions remain unchanged; call ceiling remains max 4 and safe-original fallback remains.
+- therefore one focused H1 review is assigned: `kabumori-pr99-editorial-specificity-focused-review-20261007`, recommended **Luna（高）**.
+- H1 review scope is limited to prompt specificity, WARN-only telemetry, 430→300 rewrite semantics, bounded diagnostics, and Hard/call-boundary regressions. No routine second review after PASS.
+- merge/deploy remain HOLD until C1.
+- AI Lab diary: existing 2026-10-06 market-report headline-regression entry already covers this work; no duplicate diary entry needed.
+
 ## G1 assigned — Canonical portfolio UI v1 — 2026-10-06
 
 - task_id: `kabumori-portfolio-canonical-ui-v1-20261006`.
