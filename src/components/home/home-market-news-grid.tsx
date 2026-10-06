@@ -63,7 +63,7 @@ export function HomeMarketNewsGrid({ palette, items, loading, error, onRetry }: 
             return (
               <Pressable
                 key={item.news_id}
-                onPress={() => router.push({ pathname: '/news/[id]', params: { id: item.news_id } })}
+                onPress={() => router.push({ pathname: '/news/[id]', params: { id: item.news_id, from: 'home' } })}
                 style={({ pressed }) => [styles.card, { width: cardWidth }, pressed && styles.pressed]}
                 accessibilityRole="button"
                 accessibilityHint="ニュースの詳細を開きます">

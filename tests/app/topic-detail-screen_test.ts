@@ -10,7 +10,7 @@ const code = async (path: string) => (await read(path)).replace(/\{\/\*[\s\S]*?\
 
 test("the safe fetch contract is unchanged: exact (level, jstDate), id verified, fail-closed", async () => {
   const screen = await read("src/app/topic-detail.tsx");
-  assert.ok(screen.includes("useLocalSearchParams<{ id?: string; level?: string; jstDate?: string }>()"));
+  assert.ok(screen.includes("useLocalSearchParams<{ id?: string; level?: string; jstDate?: string; from?: string }>()"));
   assert.ok(screen.includes("if (!isTopicLevel(level) || !jstDate || !id) {"));
   assert.ok(screen.includes("fetchDailyTopic(level, jstDate)"));
   assert.ok(screen.includes("if (!result || result.id !== id) {"), "a different id is a mismatch");
@@ -18,7 +18,7 @@ test("the safe fetch contract is unchanged: exact (level, jstDate), id verified,
   assert.ok(screen.includes(".catch(() => {") && screen.includes("setStatus('error')"));
   assert.ok(screen.includes("今日のトピックを取得できませんでした。もう一度お試しください。"));
   assert.ok(screen.includes("この内容は表示できません。Homeに戻ってもう一度開き直してください。"));
-  assert.ok(screen.includes("edges={['top']}") && screen.includes("60 + insets.bottom") && screen.includes("<BackButton />"), "safe area (bottom inset as scroll padding, so content is not cut at the home indicator) + back button kept");
+  assert.ok(screen.includes("edges={['top']}") && screen.includes("60 + insets.bottom") && screen.includes("styles.navRow"), "safe area (bottom inset as scroll padding, so content is not cut at the home indicator) + explicit destinations kept");
 });
 
 test("rendering the learning content makes no network, AI or database call of its own", async () => {
@@ -27,12 +27,14 @@ test("rendering the learning content makes no network, AI or database call of it
   assert.deepEqual(
     [...new Set(imports)].sort(),
     [
-      "from '@/components/back-button'",
       "from '@/constants/kabumori-theme'",
       "from '@/lib/daily-topic'",
+      "from '@/lib/detail-navigation'",
       "from '@/lib/home-topic'",
       "from '@/lib/topic-detail-catalog'",
       "from '@/lib/topic-detail-presentation'",
+      "from '@/lib/topic-detail-switch'",
+      "from '@/lib/topic-history'",
       "from 'expo-image'",
       "from 'expo-router'",
       "from 'react'",
@@ -40,7 +42,8 @@ test("rendering the learning content makes no network, AI or database call of it
       "from 'react-native-safe-area-context'",
     ].sort(),
   );
-  assert.equal((screen.match(/fetchDailyTopic\(/g) ?? []).length, 1, "the one existing deterministic fetch only");
+  assert.equal((screen.match(/fetchDailyTopic\(/g) ?? []).length, 1, "one direct deterministic fetch call (the in-screen switch passes the same function by reference)");
+  assert.equal((screen.match(/fetchDailyTopic\b/g) ?? []).length, 3, "import + the direct call + the switch's by-reference use");
   assert.ok(!/fetch\(|supabase|XMLHttp|openai|anthropic|\.rpc\(/i.test(screen));
   const catalog = (await read("src/lib/topic-detail-catalog.ts")).replace(/\/\/.*$/gm, "");
   assert.ok(!/^import /m.test(catalog) && !/fetch\(|supabase|await |async /.test(catalog), "the catalog is static data");
@@ -50,13 +53,16 @@ test("new params reset the screen to loading, never showing the previous topic",
   const screen = await read("src/app/topic-detail.tsx");
   const effect = screen.slice(screen.indexOf("useEffect(() => {"), screen.indexOf("fetchDailyTopic(level, jstDate)"));
   assert.ok(effect.includes("setTopic(null);\n    setStatus('loading');"));
+  // ...except a topic this screen already loaded for exactly these params (the cache-aware route update).
+  assert.ok(effect.indexOf("cache.get(jstDate, level)") < effect.lastIndexOf("setTopic(null);"));
 });
 
-test("reading order: back -> notebook label -> Hero (badge, category, title, summary) -> numbered steps -> example -> takeaway", async () => {
+test("reading order: destinations -> notebook label -> level selector -> Hero (badge, category, title, summary) -> numbered steps -> example -> takeaway", async () => {
   const screen = await read("src/app/topic-detail.tsx");
   const order = [
-    "<BackButton />",
+    "styles.navRow",
     'accessibilityLabel="かぶモリ学習ノート"',
+    "styles.switcher",
     "styles.hero,",
     "TOPIC_LEVEL_LABEL[topic.level]",
     "{topic.category}",
