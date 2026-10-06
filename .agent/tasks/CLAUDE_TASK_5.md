@@ -3,7 +3,7 @@
 This is the newest canonical instruction for G5 and supersedes the prior PASS_CANDIDATE disposition.
 
 - task_id remains: `common-account-v1-phase2-service-enrollment-integration-20261006`
-- status: ready
+- status: in_progress
 - next_owner: claude
 - target PR: **#95**, update the existing PR; do not open a replacement PR unless technically unavoidable and reported first.
 - previous reviewed head: `c06fac6492708331b6ba816122c9852cdcea73e7`
