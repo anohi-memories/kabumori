@@ -3,10 +3,10 @@
 - task_id: `kabumori-pr99-editorial-specificity-focused-review-20261007`
 - result / verdict: **PASS-WITH-NONBLOCKING-NOTES**.
 - target_pr: 99; exact reviewed head: `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`.
-- fresh main: `e241c29feb27fefb8d4f58adc19ed5dee59b1d25`; H1 TASK remains current. PR #99 stayed **OPEN/unmerged** at final read-back; `mergeable=UNKNOWN` (no clean-merge claim). Main and PR changed-file overlap: **0**.
+- fresh main used for review: `e241c29feb27fefb8d4f58adc19ed5dee59b1d25`; H1 TASK remained current. PR #99 stayed **OPEN/unmerged** at post-sync read-back; GitHub's `mergeable` field fluctuated between `MERGEABLE` and `UNKNOWN`, so H1 makes no mergeability/merge claim. Main and PR changed-file overlap: **0**.
 - recommended_model: **Luna（高）**.
 - changed_files (H1): `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md` only. Product-source edits: **0**.
-- commit_hash: reviewed PR source commit `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`; H1 made no product commit. `push`: only H1 TASK/Report control files will be synchronized to main and verified; PR/source-branch push = 0. The control-sync commit SHA will be given in the completion message after read-back.
+- commit_hash: reviewed PR source commit `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`; H1 made no product commit. `push`: H1 TASK/Report-only sync is verified on `origin/main` at `fbbc48c9bd8fd0be0ec6c8191945342da41f1156`; PR/source-branch push = 0.
 - production access/mutation, DB/RPC/migration/Cron, Edge deploy, manual report/retry, Auth/Vault/secret access, X/app notification, merge/deploy: **0**.
 
 ## Findings
