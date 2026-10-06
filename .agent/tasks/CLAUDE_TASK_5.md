@@ -4,7 +4,7 @@ This is the newest canonical instruction for G5 and supersedes the previous C1 c
 
 - task_id: `common-account-v1-phase2-service-enrollment-integration-20261006`
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - target PR: **#95**, continue updating the existing PR.
 - reviewed head requiring correction: `dd065e16f64a37582f73d05f1ab57ff7d276a5f7`
 - recommended model: **Opus5.5（極高）**
