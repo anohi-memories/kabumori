@@ -1,3 +1,15 @@
+# Final C1 — PR #95 review accepted / corrections required
+
+- C1 accepts H1 verdict **CHANGES REQUIRED** for exact head `c06fac6492708331b6ba816122c9852cdcea73e7`.
+- Current PR #95 must not merge or deploy.
+- Blocking corrections: R1/R2/R4 P1; R3/R5 P2.
+- C1 accepted H1's PR #94 compatibility proof. PR #94 may land first; corrected PR #95 must fresh-integrate on top of that main and preserve root `news-detail`.
+- H1 is closed/free. Re-review will use a new exact corrected head.
+- production mutation/deploy = 0.
+- recommended re-review model: **Sol（高）**.
+
+---
+
 # H1 — PR #95 Phase 2 service-enrollment security review — 2026-10-06
 
 - task_id: `common-account-v1-phase2-service-enrollment-review-20261006`
