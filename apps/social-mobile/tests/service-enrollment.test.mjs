@@ -1,7 +1,9 @@
 // Common-account Phase 2 (H1/C1 corrective): X autopost enrollment.
 // - the shared logic: strict answers (R5), session-bound transport and cancellation (R4);
 // - the real ServiceEnrollmentGate, transpiled and driven through a hook runtime with dependency-tracked
-//   effects and cleanups: A-click -> B-switch (R2), delayed A -> switch / sign-out (R4), same-user refresh;
+//   effects and cleanups: A-click -> B-switch (R2), delayed A -> switch / sign-out (R4), same-user refresh,
+//   a new login of the same person never inheriting the old login's restart or answer (S1), and queued
+//   automatic work that is cancelled before it is sent (S2);
 // - source contracts: routing, X/OAuth separation, no direct writes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,8 +16,17 @@ import * as enrollmentModule from '../src/domain/service-enrollment.ts';
 
 const {
   createEnrollmentGate, createSessionBoundTransport, EnrollmentCancelledError, EnrollmentUnavailableError,
-  parseServiceAnswer, reactivateServiceExplicitly, startServiceAutomatically,
+  loginSessionIdOf, parseServiceAnswer, reactivateServiceExplicitly, startServiceAutomatically,
 } = enrollmentModule;
+
+// Synthetic unsigned access tokens with only the claims the client reads (sub, session_id): a person's
+// login N, and the same login's token after a refresh. Built at run time; not credentials.
+const b64url = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+const loginUuid = (user, login) => `00000000-0000-4000-8000-${String(user.charCodeAt(0)).padStart(6, '0')}${String(login).padStart(6, '0')}`;
+const tokenOf = (user, login = 1, refresh = 0) => `${b64url({ alg: 'none' })}.${b64url({ sub: `user-${user}`, session_id: loginUuid(user, login), iat: refresh })}.unsigned`;
+const sessionOf = (user, login = 1, refresh = 0) => ({ access_token: tokenOf(user, login, refresh), user: { id: `user-${user}` } });
+const contextOf = (user, login = 1, refresh = 0) => ({ userId: `user-${user}`, accessToken: tokenOf(user, login, refresh) });
+const flush = () => new Promise((r) => setImmediate(r));
 
 const root = resolve(import.meta.dirname, '..');
 const read = (path) => readFile(join(root, path), 'utf8');
@@ -95,18 +106,18 @@ test('R4: transient failures are retryable, a removed login is blocked', async (
 });
 
 test('R4: a pending request of A is cancelled when B starts or on sign-out, and never carries B\'s token', async () => {
-  const server = fakeServer((entry) => (entry.token.startsWith('token-A') ? 'hold' : { body: ACTIVE }));
+  const server = fakeServer((entry) => (entry.token === tokenOf('B') ? { body: ACTIVE } : 'hold'));
   const gate = createEnrollmentGate((context, signal) => startServiceAutomatically(
     createSessionBoundTransport({ url: 'https://f', apiKey: 'k', accessToken: context.accessToken, fetch: server.fetchImpl }), 'x_autopost', signal));
-  const a = gate.ensure({ userId: 'user-A', accessToken: 'token-A' });
-  await new Promise((r) => setImmediate(r));
-  const b = gate.ensure({ userId: 'user-B', accessToken: 'token-B' });
+  const a = gate.ensure(contextOf('A'));
+  await flush();
+  const b = gate.ensure(contextOf('B'));
   await assert.rejects(a, EnrollmentCancelledError);
   assert.equal((await b).kind, 'ready');
-  assert.deepEqual(server.requests.map((r) => r.token), ['token-A', 'token-B'], 'A only ever used its own token');
+  assert.deepEqual(server.requests.map((r) => r.token), [tokenOf('A'), tokenOf('B')], 'A only ever used its own token');
   assert.ok(server.requests[0].signal.aborted);
-  const c = gate.ensure({ userId: 'user-A', accessToken: 'token-A2' });
-  await new Promise((r) => setImmediate(r));
+  const c = gate.ensure(contextOf('A', 2));
+  await flush();
   gate.reset(); // sign-out while pending
   await assert.rejects(c, EnrollmentCancelledError);
   assert.equal(server.requests.length, 3);
@@ -198,12 +209,14 @@ async function gateHarness(server) {
     render, settle,
     isApp: () => tree === CHILDREN || find(tree, (n) => n === CHILDREN) !== null || tree?.props?.children === CHILDREN,
     button: (label) => find(tree, (n) => n.type === 'ActionButton' && n.props.label === label),
+    hasSignOut: () => find(tree, (n) => n.type === 'SignOutButton') !== null,
     unmount() { for (const slot of slots) if (slot && typeof slot.cleanup === 'function') slot.cleanup(); },
+    /** After unmount(): the next render mounts a fresh gate (the module's shared gate survives, as in the app). */
+    clear() { slots.length = 0; tree = null; },
     restore() { globalThis.fetch = originalFetch; },
   };
 }
 
-const sessionOf = (user) => ({ access_token: `token-${user}`, user: { id: `user-${user}` } });
 const ENDED = (version) => ({ body: { status: 'reenroll_required', service: 'x_autopost', lifecycle_version: version } });
 
 test('R2: A clicks 「利用登録する」, then the session switches to B: no restart is ever sent for B', async () => {
@@ -219,9 +232,9 @@ test('R2: A clicks 「利用登録する」, then the session switches to B: no 
     h.setSession(sessionOf('B'));
     await h.settle();
     const restarts = server.requests.filter((r) => r.fn === 'reactivate_x_autopost_service');
-    assert.deepEqual(restarts.map((r) => [r.token, r.body]), [['token-A', { p_expected_lifecycle_version: 3 }]], 'exactly one restart, for A only');
+    assert.deepEqual(restarts.map((r) => [r.token, r.body]), [[tokenOf('A'), { p_expected_lifecycle_version: 3 }]], 'exactly one restart, for A only');
     assert.ok(restarts[0].signal.aborted, 'A\'s pending restart was cancelled by the switch');
-    assert.ok(!server.requests.some((r) => r.token === 'token-B' && r.fn !== 'start_x_autopost_service'), 'B only gets its automatic start');
+    assert.ok(!server.requests.some((r) => r.token === tokenOf('B') && r.fn !== 'start_x_autopost_service'), 'B only gets its automatic start');
     assert.ok(h.button('利用登録する'), 'B sees its own restart screen; nothing was restarted for B');
     assert.equal(h.isApp(), false);
   } finally { h.unmount(); h.restore(); }
@@ -248,13 +261,13 @@ test('R2: a click restarts exactly the clicking person, once, and opens the app 
     await h.settle();
     h.button('利用登録する').props.onPress();
     await h.settle();
-    assert.deepEqual(server.requests.map((r) => [r.fn, r.token]), [['start_x_autopost_service', 'token-A'], ['reactivate_x_autopost_service', 'token-A']]);
+    assert.deepEqual(server.requests.map((r) => [r.fn, r.token]), [['start_x_autopost_service', tokenOf('A')], ['reactivate_x_autopost_service', tokenOf('A')]]);
     assert.equal(h.isApp(), true);
   } finally { h.unmount(); h.restore(); }
 });
 
 test('R4: delayed A start -> switch to B -> release A: no request with B\'s token for A, A cannot open the app for B', async () => {
-  const server = fakeServer((entry) => (entry.token === 'token-A' ? 'hold' : ENDED(2)));
+  const server = fakeServer((entry) => (entry.token === tokenOf('A') ? 'hold' : ENDED(2)));
   const h = await gateHarness(server);
   try {
     h.setSession(sessionOf('A'));
@@ -263,7 +276,7 @@ test('R4: delayed A start -> switch to B -> release A: no request with B\'s toke
     await h.settle();
     server.held[0]?.release({ body: ACTIVE });
     await h.settle();
-    assert.deepEqual(server.requests.map((r) => r.token), ['token-A', 'token-B']);
+    assert.deepEqual(server.requests.map((r) => r.token), [tokenOf('A'), tokenOf('B')]);
     assert.ok(server.requests[0].signal.aborted);
     assert.equal(h.isApp(), false, 'B (ended) is not opened by A\'s late answer');
   } finally { h.unmount(); h.restore(); }
@@ -288,7 +301,7 @@ test('same person, refreshed token: one logical enrollment, no second start', as
     h.setSession(sessionOf('A'));
     await h.settle();
     assert.equal(h.isApp(), true);
-    h.setSession({ access_token: 'token-A-refreshed', user: { id: 'user-A' } });
+    h.setSession(sessionOf('A', 1, 1)); // the same login, refreshed token
     await h.settle();
     assert.equal(server.requests.length, 1);
     assert.equal(h.isApp(), true);
@@ -303,6 +316,205 @@ test('malformed active answer keeps the app closed (R5 through the gate)', async
     await h.settle();
     assert.equal(h.isApp(), false);
     assert.ok(h.button('再読み込み'), 'fails closed to the retryable UNKNOWN view');
+  } finally { h.unmount(); h.restore(); }
+});
+
+// ---------------------------------------------------------------------------------------------
+// S1: requests, answers and the open state belong to one login (the token's session id), not merely to the person.
+test('S1: the login is the token\'s session id, only for a well-formed token of exactly this person', () => {
+  assert.equal(loginSessionIdOf('user-A', tokenOf('A')), loginUuid('A', 1));
+  assert.equal(loginSessionIdOf('user-A', tokenOf('A', 1, 5)), loginUuid('A', 1), 'a refreshed token keeps its login');
+  assert.equal(loginSessionIdOf('user-A', tokenOf('A', 2)), loginUuid('A', 2), 'a new sign-in is a new login');
+  const claims = (payload) => `${b64url({ alg: 'none' })}.${b64url(payload)}.unsigned`;
+  for (const token of [
+    'token-A', '', tokenOf('A').split('.').slice(0, 2).join('.'), `${tokenOf('A')}.extra`,
+    tokenOf('B'), claims({ sub: 'user-A' }), claims({ sub: 'user-A', session_id: null }), claims({ sub: 'user-A', session_id: 7 }),
+    claims({ sub: 'user-A', session_id: 'not-a-uuid' }), claims({ sub: 'user-A', session_id: `${loginUuid('A', 1)}0` }),
+    claims(['user-A']), claims('user-A'), `${b64url({})}.%%%.unsigned`, `${b64url({})}.${b64url({ sub: 'user-A', session_id: loginUuid('A', 1) })}=.unsigned`,
+  ]) assert.equal(loginSessionIdOf('user-A', token), null, token);
+  assert.equal(loginSessionIdOf('user-A', claims({ sub: 'user-A', session_id: loginUuid('A', 1), user_metadata: { name: '株森 太郎' } })), loginUuid('A', 1));
+});
+
+test('S1: the shared gate shares a pending restart with its own refreshed token only; another login of the same person aborts it', async () => {
+  const server = fakeServer((entry) => (entry.fn.startsWith('reactivate') ? 'hold' : { body: ACTIVE }));
+  const transport = (context) => createSessionBoundTransport({ url: 'https://f', apiKey: 'k', accessToken: context.accessToken, fetch: server.fetchImpl });
+  const gate = createEnrollmentGate((context, signal) => startServiceAutomatically(transport(context), 'x_autopost', signal));
+  const explicit = gate.explicit(contextOf('A', 1), (context, signal) => reactivateServiceExplicitly(transport(context), 'x_autopost', 3, signal));
+  await flush();
+  assert.equal(gate.ensure(contextOf('A', 1, 1)), explicit, 'the same login (refreshed token) shares its own restart');
+  const second = gate.ensure(contextOf('A', 2));
+  assert.notEqual(second, explicit, 'a new login never adopts the old restart');
+  await assert.rejects(explicit, EnrollmentCancelledError);
+  assert.ok(server.requests[0].signal.aborted);
+  assert.equal((await second).kind, 'ready');
+  assert.deepEqual(server.requests.map((r) => [r.fn, r.token]), [['reactivate_x_autopost_service', tokenOf('A', 1)], ['start_x_autopost_service', tokenOf('A', 2)]]);
+  assert.deepEqual(await gate.ensure({ userId: 'user-A', accessToken: 'token-A' }), { kind: 'blocked', reason: 'ACCOUNT_NOT_FOUND' }, 'an unidentified login is never sent');
+  assert.equal(server.requests.length, 2);
+  gate.reset();
+});
+
+for (const [label, arrive] of [
+  ['a new sign-in A2 (gate stays mounted)', (h, A2) => { h.setSession(A2); }],
+  ['sign-out, then a fresh login A2', (h, A2) => { h.setSession(null); h.unmount(); h.clear(); h.setSession(A2); }],
+  ['a recovery link (new login A2; the gate leaves for the password screen and comes back)', (h, A2) => { h.unmount(); h.clear(); h.setSession(A2); }],
+]) {
+  test(`S1: A1 clicks 「利用登録する」, ${label} before the answer: A1's answer never opens the app for A2`, async () => {
+    let holdRestart = true;
+    const server = fakeServer((entry) => (entry.fn === 'reactivate_x_autopost_service' ? (holdRestart ? 'hold' : { body: ACTIVE }) : ENDED(3)));
+    const h = await gateHarness(server);
+    try {
+      h.setSession(sessionOf('A', 1));
+      await h.settle();
+      h.button('利用登録する').props.onPress();
+      await h.settle();
+      const restart = server.requests.find((r) => r.fn === 'reactivate_x_autopost_service');
+      assert.equal(restart.token, tokenOf('A', 1));
+      arrive(h, sessionOf('A', 2));
+      await h.settle();
+      assert.ok(restart.signal.aborted, 'the old login\'s pending restart was cancelled');
+      server.held[0].release({ body: ACTIVE }); // A1's answer arrives anyway
+      await h.settle();
+      assert.equal(h.isApp(), false, 'A1\'s answer does not open the app for A2');
+      assert.ok(h.button('利用登録する'), 'A2 is asked itself');
+      assert.deepEqual(server.requests.map((r) => [r.fn, r.token]), [
+        ['start_x_autopost_service', tokenOf('A', 1)], ['reactivate_x_autopost_service', tokenOf('A', 1)], ['start_x_autopost_service', tokenOf('A', 2)]]);
+
+      // A2's own confirmation: sent once, with A2's token, and only then open.
+      holdRestart = false;
+      h.button('利用登録する').props.onPress();
+      await h.settle();
+      assert.deepEqual(server.requests.filter((r) => r.fn === 'reactivate_x_autopost_service').map((r) => r.token), [tokenOf('A', 1), tokenOf('A', 2)]);
+      assert.equal(h.isApp(), true);
+    } finally { h.unmount(); h.restore(); }
+  });
+}
+
+test('S1: A1\'s answer landing in the same turn as the new login A2 never opens the app for A2', async () => {
+  const server = fakeServer((entry) => (entry.fn === 'reactivate_x_autopost_service' ? 'hold' : ENDED(3)));
+  const h = await gateHarness(server);
+  try {
+    h.setSession(sessionOf('A', 1));
+    await h.settle();
+    h.button('利用登録する').props.onPress();
+    await h.settle();
+    h.setSession(sessionOf('A', 2));
+    h.render(); // A2 committed; its automatic start is still queued
+    server.held[0].release({ body: ACTIVE });
+    await h.settle();
+    assert.equal(h.isApp(), false);
+    assert.ok(h.button('利用登録する'), 'A2 is asked itself');
+  } finally { h.unmount(); h.restore(); }
+});
+
+test('S1: the app opened for login A1 closes for a new login A2 of the same person until A2\'s own answer', async () => {
+  const server = fakeServer((entry) => (entry.token === tokenOf('A', 2) ? 'hold' : { body: ACTIVE }));
+  const h = await gateHarness(server);
+  try {
+    h.setSession(sessionOf('A', 1));
+    await h.settle();
+    assert.equal(h.isApp(), true);
+    h.setSession(sessionOf('A', 2));
+    await h.settle();
+    assert.equal(h.isApp(), false, 'A1\'s open state is not A2\'s');
+    server.held[0].release({ body: { ...ACTIVE, started: false } });
+    await h.settle();
+    assert.equal(h.isApp(), true, 'A2 opens on its own answer');
+    h.setSession(sessionOf('A', 2, 1));
+    await h.settle();
+    assert.equal(h.isApp(), true, 'a refresh of A2 keeps it open');
+    assert.deepEqual(server.requests.map((r) => r.token), [tokenOf('A', 1), tokenOf('A', 2)], 'no request for the refresh');
+  } finally { h.unmount(); h.restore(); }
+});
+
+test('S1 control: a refreshed token of the same login keeps the click\'s own pending restart and opens on its answer', async () => {
+  const server = fakeServer((entry) => (entry.fn === 'reactivate_x_autopost_service' ? 'hold' : ENDED(3)));
+  const h = await gateHarness(server);
+  try {
+    h.setSession(sessionOf('A', 1));
+    await h.settle();
+    h.button('利用登録する').props.onPress();
+    await h.settle();
+    h.setSession(sessionOf('A', 1, 1));
+    await h.settle();
+    const restart = server.requests.find((r) => r.fn === 'reactivate_x_autopost_service');
+    assert.equal(restart.signal.aborted, false, 'the same login does not cancel its own restart');
+    server.held[0].release({ body: ACTIVE });
+    await h.settle();
+    assert.equal(h.isApp(), true);
+    assert.equal(server.requests.length, 2, 'one automatic start and the one restart; no new start for the refreshed token');
+  } finally { h.unmount(); h.restore(); }
+});
+
+test('S1: a session whose login cannot be identified sends nothing and stays closed with sign-out reachable', async () => {
+  const server = fakeServer(() => ({ body: ACTIVE }));
+  const h = await gateHarness(server);
+  try {
+    h.setSession({ access_token: 'token-A', user: { id: 'user-A' } });
+    await h.settle();
+    assert.equal(server.requests.length, 0);
+    assert.equal(h.isApp(), false);
+    assert.ok(h.hasSignOut(), 'the person can sign out and sign in again');
+  } finally { h.unmount(); h.restore(); }
+});
+
+// ---------------------------------------------------------------------------------------------
+// S2: queued automatic work is checked before anything is sent.
+test('S2: unmount (sign-out / recovery) before the queued task runs: zero requests, and nothing is left behind', async () => {
+  const server = fakeServer(() => ({ body: ACTIVE }));
+  const h = await gateHarness(server);
+  try {
+    h.setSession(sessionOf('A'));
+    h.render(); // committed: the automatic start is queued
+    h.unmount();
+    await flush();
+    await flush();
+    assert.equal(server.requests.length, 0, 'the queued task sent nothing');
+    // A later mount of the same login is not served by anything the obsolete task could have created.
+    h.clear();
+    await h.settle();
+    assert.equal(server.requests.length, 1);
+    assert.equal(h.isApp(), true);
+  } finally { h.unmount(); h.restore(); }
+});
+
+test('S2: sign-out before the queued task runs (session gone while mounted): zero requests', async () => {
+  const server = fakeServer(() => ({ body: ACTIVE }));
+  const h = await gateHarness(server);
+  try {
+    h.setSession(sessionOf('A'));
+    h.render();
+    h.setSession(null);
+    h.render();
+    await h.settle();
+    assert.equal(server.requests.length, 0);
+  } finally { h.unmount(); h.restore(); }
+});
+
+for (const [label, next] of [['another person', sessionOf('B')], ['another login of the same person', sessionOf('A', 2)]]) {
+  test(`S2: superseded by ${label} before the queued task runs: the obsolete task sends nothing`, async () => {
+    const server = fakeServer(() => ({ body: ACTIVE }));
+    const h = await gateHarness(server);
+    try {
+      h.setSession(sessionOf('A', 1));
+      h.render();
+      h.setSession(next);
+      h.render();
+      await h.settle();
+      assert.deepEqual(server.requests.map((r) => r.token), [next.access_token], 'only the current login was sent');
+      assert.equal(h.isApp(), true);
+    } finally { h.unmount(); h.restore(); }
+  });
+}
+
+test('S2 control: a normal mount sends exactly one automatic start and opens', async () => {
+  const server = fakeServer(() => ({ body: ACTIVE }));
+  const h = await gateHarness(server);
+  try {
+    h.setSession(sessionOf('A'));
+    await h.settle();
+    await h.settle();
+    assert.deepEqual(server.requests.map((r) => [r.fn, r.token]), [['start_x_autopost_service', tokenOf('A')]]);
+    assert.equal(h.isApp(), true);
   } finally { h.unmount(); h.restore(); }
 });
 

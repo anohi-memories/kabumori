@@ -19,7 +19,9 @@ import { supabase, supabasePublicConfig } from '@/lib/supabase';
 // `kabumori` entitlement and the profile row in one idempotent server transaction, and never restarts an
 // ended service. It replaces the former ensure_my_profile() call, so the profile is never created outside
 // the service start. Each request carries the access token of the session it was started for (never the
-// shared client's later token) and is cancelled if that session goes away first.
+// shared client's later token) and is cancelled if that session goes away first. Requests and answers
+// belong to one login (the token's session id): a refreshed token shares them, a new sign-in of the same
+// person never inherits them.
 function contextOf(session: Session): EnrollmentContext {
   return { userId: session.user.id, accessToken: session.access_token };
 }
@@ -36,7 +38,7 @@ const enrollmentGate = createEnrollmentGate((context, signal) =>
   startServiceAutomatically(transportFor(context), 'kabumori', signal),
 );
 
-/** Enrolls the session's person in Kabumori (shared, one request per person). Throws only on a transient failure or a cancellation. */
+/** Enrolls the session's person in Kabumori (shared, one request per login). Throws only on a transient failure or a cancellation. */
 export function prepareSession(session: Session): Promise<EnrollmentOutcome> {
   return enrollmentGate.ensure(contextOf(session));
 }

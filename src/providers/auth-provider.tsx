@@ -2,7 +2,7 @@ import { Session } from '@supabase/supabase-js';
 import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 
 import { prepareSession, reactivateKabumori, resetServiceEnrollment } from '@/lib/auth';
-import { ENROLLMENT_NOTICE, EnrollmentCancelledError, type EnrollmentOutcome } from '@/lib/service-enrollment';
+import { ENROLLMENT_NOTICE, EnrollmentCancelledError, loginSessionIdOf, type EnrollmentOutcome } from '@/lib/service-enrollment';
 import {
   serviceAccessOf,
   serviceFailureOf,
@@ -31,8 +31,9 @@ type AuthState = {
    */
   serviceAccess: ServiceAccess | null;
   /**
-   * The session only once its enrollment is positively ready for this exact person and no request is
-   * pending; null otherwise. The app and its side effects (push, notification routing) use this.
+   * The session only once its enrollment is positively ready for this exact person and login (a new
+   * sign-in of the same person needs its own) and no request is pending; null otherwise. The app and its
+   * side effects (push, notification routing) use this.
    */
   serviceSession: Session | null;
   /** Shown once when this session added Kabumori to a common account that already used another service. */
@@ -46,6 +47,11 @@ type AuthState = {
 const AuthContext = createContext<AuthState | null>(null);
 
 type Settled = { outcome: EnrollmentOutcome } | { failure: unknown };
+
+/** The login a session belongs to: its token's session id, kept by a refresh, new for every sign-in. */
+function loginOf(session: Session) {
+  return loginSessionIdOf(session.user.id, session.access_token);
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -72,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function settle(nextSession: Session, request: number, settled: Settled) {
     if (!mounted.current || request !== generation.current) return;
+    const owner = { userId: nextSession.user.id, sessionId: loginOf(nextSession), request };
     if ('failure' in settled) {
       // Superseded by a newer request (sign-out, another person, an explicit action); that one settles.
       if (settled.failure instanceof EnrollmentCancelledError) return;
@@ -79,14 +86,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(null);
       setService({
         phase: 'failed',
-        userId: nextSession.user.id,
-        request,
+        ...owner,
         message: settled.failure instanceof Error ? settled.failure.message : 'サービスの利用準備を確認できませんでした。',
       });
     } else if (settled.outcome.kind === 'ready') {
       setSession(nextSession);
       setError(null);
-      setService({ phase: 'ready', userId: nextSession.user.id, request });
+      setService({ phase: 'ready', ...owner });
       if (settled.outcome.sharedAccountNotice && noticeShownFor.current !== nextSession.user.id) {
         noticeShownFor.current = nextSession.user.id;
         setEnrollmentNotice(ENROLLMENT_NOTICE);
@@ -94,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       setSession(nextSession);
       setError(null);
-      setService({ phase: 'refused', userId: nextSession.user.id, request, access: settled.outcome });
+      setService({ phase: 'refused', ...owner, access: settled.outcome });
     }
     setLoading(false);
   }
@@ -118,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       // Pending until this request settles: nothing may act on the session meanwhile.
       if (active && request === generation.current) {
-        setService({ phase: 'pending', userId: nextSession.user.id, request });
+        setService({ phase: 'pending', userId: nextSession.user.id, sessionId: loginOf(nextSession), request });
       }
       prepareSession(nextSession).then(
         (outcome) => {
@@ -165,35 +171,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error,
         profileError: serviceFailureOf(service),
         serviceAccess: serviceAccessOf(service),
-        serviceSession: serviceReadySession(session, loading, service),
+        serviceSession: serviceReadySession(session, session ? loginOf(session) : null, loading, service),
         enrollmentNotice,
         dismissEnrollmentNotice: () => setEnrollmentNotice(null),
         retry: () => {
           resetServiceEnrollment();
           ++generation.current;
           setService((previous) =>
-            previous.phase === 'signed_out' ? previous : { phase: 'pending', userId: previous.userId, request: generation.current },
+            previous.phase === 'signed_out'
+              ? previous
+              : { phase: 'pending', userId: previous.userId, sessionId: previous.sessionId, request: generation.current },
           );
           setLoading(true);
           setAttempt((value) => value + 1);
         },
         reenroll: () => {
           const current = session;
+          const sessionId = current ? loginOf(current) : null;
+          // Only the login that was shown the restart screen may confirm it.
           if (
             explicitInFlight.current ||
             !current ||
+            sessionId === null ||
             service.phase !== 'refused' ||
             service.access.kind !== 'reenroll_required' ||
-            service.userId !== current.user.id
+            service.userId !== current.user.id ||
+            service.sessionId !== sessionId
           ) {
             return;
           }
           const lifecycleVersion = service.access.lifecycleVersion;
           const request = ++generation.current;
           explicitInFlight.current = true;
-          setService({ phase: 'pending', userId: current.user.id, request });
+          setService({ phase: 'pending', userId: current.user.id, sessionId, request });
           setLoading(true);
-          // Sent now, once, with this session's own token; a newer request or sign-out supersedes it.
+          // Sent now, once, with this session's own token. A newer request, another login (whose automatic
+          // start aborts it) or sign-out supersedes it; an answer that still arrives is never settled.
           reactivateKabumori(current, lifecycleVersion)
             .then(
               (outcome) => settleRef.current(current, request, { outcome }),

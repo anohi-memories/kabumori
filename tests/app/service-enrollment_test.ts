@@ -1,8 +1,9 @@
 // Common-account Phase 2 (H1/C1 corrective): Kabumori enrollment.
-// - the shared logic: strict answers (R5), session-bound transport and cancellation (R4);
-// - the positive-ready rule for side effects (R3);
+// - the shared logic: strict answers (R5), session-bound transport and cancellation (R4), one login per
+//   request and answer (S1: the token's session id; a refresh keeps it, a new sign-in does not inherit);
+// - the positive-ready rule for side effects (R3, for the exact person and login);
 // - source wiring of auth.ts / auth-provider.tsx / _layout.tsx (PR #94's root news-detail preserved).
-// The real AuthProvider is also driven through a hook runtime in tests/node/ (R2/R3/R4).
+// The real AuthProvider (with the real lib/auth) is also driven through a hook runtime in tests/node/.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -12,6 +13,7 @@ import {
   EnrollmentCancelledError,
   EnrollmentUnavailableError,
   enrollmentBlockedCopy,
+  loginSessionIdOf,
   parseServiceAnswer,
   reactivateServiceExplicitly,
   startServiceAutomatically,
@@ -20,6 +22,20 @@ import { serviceReadySession, type ServiceState } from "../../src/lib/service-se
 
 const ACTIVE = { status: "active", service: "kabumori", started: true, shared_account: false };
 const UNKNOWN = { kind: "blocked", reason: "UNKNOWN" };
+const LOGIN_UNIDENTIFIED = { kind: "blocked", reason: "ACCOUNT_NOT_FOUND" };
+
+// Synthetic unsigned access tokens with only the claims the client reads (sub, session_id): a person's
+// login N, and the same login's token after a refresh. Built at run time; not credentials.
+const b64url = (value: unknown) => {
+  let binary = "";
+  for (const byte of new TextEncoder().encode(JSON.stringify(value))) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
+};
+const loginUuid = (user: string, login: number) =>
+  `00000000-0000-4000-8000-${String(user.charCodeAt(0)).padStart(6, "0")}${String(login).padStart(6, "0")}`;
+const tokenOf = (user: string, login = 1, refresh = 0) =>
+  `${b64url({ alg: "none" })}.${b64url({ sub: `user-${user}`, session_id: loginUuid(user, login), iat: refresh })}.unsigned`;
+const ctx = (user: string, login = 1, refresh = 0) => ({ userId: `user-${user}`, accessToken: tokenOf(user, login, refresh) });
 
 test("R5: the exact active answer is ready; every incomplete or wrong answer fails closed", () => {
   assert.deepEqual(parseServiceAnswer("kabumori", ACTIVE), { kind: "ready", started: true, sharedAccountNotice: false });
@@ -88,50 +104,107 @@ test("R4: transient failures are retryable; a removed login is blocked", async (
 });
 
 test("R4: delayed A -> switch to B / sign-out: A is cancelled and never carries B's token", async () => {
-  const server = fakeServer((entry) => (entry.token.startsWith("token-A") ? "hold" : ACTIVE));
+  const server = fakeServer((entry) => (entry.token === tokenOf("B") ? ACTIVE : "hold"));
   const gate = createEnrollmentGate((context, signal) => startServiceAutomatically(transportFor(context.accessToken, server.fetchImpl), "kabumori", signal));
-  const a = gate.ensure({ userId: "user-A", accessToken: "token-A" });
+  const a = gate.ensure(ctx("A"));
   await new Promise((r) => setTimeout(r, 0));
-  const b = gate.ensure({ userId: "user-B", accessToken: "token-B" });
+  const b = gate.ensure(ctx("B"));
   await assert.rejects(a, EnrollmentCancelledError);
   assert.equal((await b).kind, "ready");
-  assert.deepEqual(server.requests.map((r) => r.token), ["token-A", "token-B"]);
+  assert.deepEqual(server.requests.map((r) => r.token), [tokenOf("A"), tokenOf("B")]);
   assert.ok(server.requests[0].signal.aborted);
-  const again = gate.ensure({ userId: "user-A", accessToken: "token-A2" });
+  const again = gate.ensure(ctx("A", 2));
   await new Promise((r) => setTimeout(r, 0));
   gate.reset();
   await assert.rejects(again, EnrollmentCancelledError);
   assert.equal(server.requests.length, 3);
 });
 
-test("same person: concurrent and later events share one enrollment, even with a refreshed token", async () => {
+test("same login: concurrent and later events share one enrollment, even with a refreshed token", async () => {
   const server = fakeServer(() => ACTIVE);
   const gate = createEnrollmentGate((context, signal) => startServiceAutomatically(transportFor(context.accessToken, server.fetchImpl), "kabumori", signal));
-  await Promise.all([gate.ensure({ userId: "u", accessToken: "t1" }), gate.ensure({ userId: "u", accessToken: "t1" })]);
-  await gate.ensure({ userId: "u", accessToken: "t2" });
+  await Promise.all([gate.ensure(ctx("A")), gate.ensure(ctx("A"))]);
+  await gate.ensure(ctx("A", 1, 1));
   assert.equal(server.requests.length, 1);
 });
 
-test("R3: side effects get a session only on a positive, settled ready for that exact person", () => {
+test("S1: the login is the token's session id, only for a well-formed token of exactly this person", () => {
+  assert.equal(loginSessionIdOf("user-A", tokenOf("A")), loginUuid("A", 1));
+  assert.equal(loginSessionIdOf("user-A", tokenOf("A", 1, 7)), loginUuid("A", 1), "a refreshed token keeps its login");
+  assert.equal(loginSessionIdOf("user-A", tokenOf("A", 2)), loginUuid("A", 2), "a new sign-in is a new login");
+  const claims = (payload: unknown) => `${b64url({ alg: "none" })}.${b64url(payload)}.unsigned`;
+  for (const token of [
+    "token-A", "", tokenOf("A").split(".").slice(0, 2).join("."), `${tokenOf("A")}.extra`,
+    tokenOf("B"), claims({ sub: "user-A" }), claims({ sub: "user-A", session_id: null }), claims({ sub: "user-A", session_id: 7 }),
+    claims({ sub: "user-A", session_id: "not-a-uuid" }), claims({ sub: "user-A", session_id: `${loginUuid("A", 1)}0` }),
+    claims(["user-A"]), claims("user-A"), `${b64url({})}.%%%.unsigned`, `${b64url({})}.${b64url({ sub: "user-A", session_id: loginUuid("A", 1) })}=.unsigned`,
+  ]) {
+    assert.equal(loginSessionIdOf("user-A", token), null, token);
+  }
+  assert.equal(
+    loginSessionIdOf("user-A", claims({ sub: "user-A", session_id: loginUuid("A", 1), user_metadata: { name: "株森 太郎" } })),
+    loginUuid("A", 1),
+    "other (non-ASCII) claims do not disturb the ones read",
+  );
+});
+
+test("S1: a pending explicit restart is shared by its own refreshed token only; another login of the same person aborts it and gets its own", async () => {
+  const server = fakeServer((entry) => (entry.fn.startsWith("reactivate") ? "hold" : ACTIVE));
+  const transport = (context: { accessToken: string }) => transportFor(context.accessToken, server.fetchImpl);
+  const gate = createEnrollmentGate((context, signal) => startServiceAutomatically(transport(context), "kabumori", signal));
+  const explicit = gate.explicit(ctx("A", 1), (context, signal) => reactivateServiceExplicitly(transport(context), "kabumori", 3, signal));
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(gate.ensure(ctx("A", 1, 1)), explicit, "the same login (refreshed token) shares its own restart");
+  const second = gate.ensure(ctx("A", 2));
+  assert.notEqual(second, explicit, "a new login never adopts the old restart");
+  await assert.rejects(explicit, EnrollmentCancelledError);
+  assert.ok(server.requests[0].signal.aborted);
+  assert.equal((await second).kind, "ready");
+  assert.deepEqual(server.requests.map((r) => [r.fn, r.token]), [
+    ["reactivate_kabumori_service", tokenOf("A", 1)],
+    ["start_kabumori_service", tokenOf("A", 2)],
+  ]);
+  assert.equal(gate.ensure(ctx("A", 2, 4)), second, "the second login's decided outcome is reused by its refreshed token");
+  // A token whose login cannot be identified is never sent, and cancels what was pending.
+  assert.deepEqual(await gate.ensure({ userId: "user-A", accessToken: "token-A" }), LOGIN_UNIDENTIFIED);
+  assert.deepEqual(await gate.explicit({ userId: "user-A", accessToken: tokenOf("B") }, () => Promise.reject(new Error("must not run"))), LOGIN_UNIDENTIFIED);
+  assert.equal(server.requests.length, 2);
+  assert.notEqual(gate.ensure(ctx("A", 2)), second, "the unidentified token replaced the remembered outcome");
+  gate.reset();
+});
+
+test("an answer that arrives after its request was cancelled is not an outcome", async () => {
+  const controller = new AbortController();
+  const transport = createSessionBoundTransport({ url: "https://f", apiKey: "k", accessToken: tokenOf("A"),
+    fetch: (async () => ({ ok: true, status: 200, json: async () => { controller.abort(); return ACTIVE; } })) as unknown as typeof fetch });
+  await assert.rejects(startServiceAutomatically(transport, "kabumori", controller.signal), EnrollmentCancelledError);
+});
+
+test("R3/S1: side effects get a session only on a positive, settled ready for that exact person and login", () => {
   const session = { user: { id: "user-A" } };
+  const login = loginUuid("A", 1);
   const states: ServiceState[] = [
     { phase: "signed_out" },
-    { phase: "pending", userId: "user-A", request: 1 },
-    { phase: "refused", userId: "user-A", request: 1, access: { kind: "blocked", reason: "SERVICE_NOT_READY" } },
-    { phase: "pending", userId: "user-A", request: 2 }, // retry pending
-    { phase: "refused", userId: "user-A", request: 2, access: { kind: "blocked", reason: "SERVICE_NOT_READY" } },
-    { phase: "failed", userId: "user-A", request: 3, message: "x" },
-    { phase: "refused", userId: "user-A", request: 4, access: { kind: "reenroll_required", lifecycleVersion: 3 } },
-    { phase: "ready", userId: "user-B", request: 5 }, // another person's ready
+    { phase: "pending", userId: "user-A", sessionId: login, request: 1 },
+    { phase: "refused", userId: "user-A", sessionId: login, request: 1, access: { kind: "blocked", reason: "SERVICE_NOT_READY" } },
+    { phase: "pending", userId: "user-A", sessionId: login, request: 2 }, // retry pending
+    { phase: "refused", userId: "user-A", sessionId: login, request: 2, access: { kind: "blocked", reason: "SERVICE_NOT_READY" } },
+    { phase: "failed", userId: "user-A", sessionId: login, request: 3, message: "x" },
+    { phase: "refused", userId: "user-A", sessionId: login, request: 4, access: { kind: "reenroll_required", lifecycleVersion: 3 } },
+    { phase: "ready", userId: "user-B", sessionId: login, request: 5 }, // another person's ready
+    { phase: "ready", userId: "user-A", sessionId: loginUuid("A", 2), request: 5 }, // another login of the same person
+    { phase: "ready", userId: "user-A", sessionId: null, request: 5 },
   ];
   for (const state of states) {
-    assert.equal(serviceReadySession(session, false, state), null, JSON.stringify(state));
-    assert.equal(serviceReadySession(session, true, state), null);
+    assert.equal(serviceReadySession(session, login, false, state), null, JSON.stringify(state));
+    assert.equal(serviceReadySession(session, login, true, state), null);
   }
-  const ready: ServiceState = { phase: "ready", userId: "user-A", request: 6 };
-  assert.equal(serviceReadySession(session, true, ready), null, "not while loading");
-  assert.equal(serviceReadySession(null, false, ready), null);
-  assert.equal(serviceReadySession(session, false, ready), session);
+  const ready: ServiceState = { phase: "ready", userId: "user-A", sessionId: login, request: 6 };
+  assert.equal(serviceReadySession(session, login, true, ready), null, "not while loading");
+  assert.equal(serviceReadySession(null, login, false, ready), null);
+  assert.equal(serviceReadySession(session, null, false, ready), null, "an unidentified login is never ready");
+  assert.equal(serviceReadySession(session, loginUuid("A", 2), false, ready), null, "a new login is not ready on the old one's state");
+  assert.equal(serviceReadySession(session, login, false, ready), session);
 });
 
 test("every refusal has Japanese copy; only transient-looking ones offer a retry", () => {
@@ -182,8 +255,9 @@ test("the provider marks every accepted session pending before enrolling, and th
   const reenroll = provider.slice(provider.indexOf("reenroll: () => {"));
   assert.match(reenroll, /explicitInFlight\.current \|\|/);
   assert.match(reenroll, /service\.userId !== current\.user\.id/);
+  assert.match(reenroll, /service\.sessionId !== sessionId/);
   assert.match(reenroll, /reactivateKabumori\(current, lifecycleVersion\)/);
-  assert.match(provider, /serviceSession: serviceReadySession\(session, loading, service\)/);
+  assert.match(provider, /serviceSession: serviceReadySession\(session, session \? loginOf\(session\) : null, loading, service\)/);
 });
 
 test("the root layout opens the app and its side effects only on serviceSession, and keeps PR #94's root news-detail", async () => {
