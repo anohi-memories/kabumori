@@ -1,3 +1,30 @@
+## Final K2 — PR #99 controlled production deploy PASS / morning observation next — 2026-10-07
+
+- verdict: **PASS** for controlled deploy.
+- production `market-report-analysis` deployed exactly once:
+  - v24 -> **v25**
+  - ACTIVE
+  - verify_jwt=false unchanged
+  - production download/import graph matched exact fresh main **11/11 byte-identical**.
+- deployed source includes PR #99 logic:
+  - generic-point detection;
+  - X shortness rewrite threshold below 300 chars;
+  - bounded rejection diagnostics;
+  - specific editorial prompt rules.
+- `personalized-reports` intentionally remains v40 and was not deployed.
+- app_enabled=false / x_enabled=false unchanged.
+- all 8 relevant market-report Cron entries unchanged in schedule/active/command hash.
+- across 21 Edge Functions, only `market-report-analysis` metadata/version changed; 20 unrelated Functions unchanged.
+- production mutation performed: exactly one Edge deploy, v24 -> v25.
+- manual generation/retry=0; X/notification/EAS=0; DB/RPC/migration/Cron/gate/secrets/Vault/Auth changes=0.
+- production mutation window CLOSED at 01:08 JST.
+- no further Codex review required for this deploy because deployed bytes exactly match the already reviewed/merged source.
+- next G2: `kabumori-pr99-morning-natural-observation-20261007`, recommended **Sonnet5（中）**.
+- target natural morning cycle: 07:55 analysis / 08:05 retry. First useful observation is after **08:10 JST**. Do not poll, sleep, or manually invoke before then.
+- observation must inspect exact 3 points, specificity/generic telemetry, metric recap, rewrite/calls, rejection_reasons and Hard Fact safety.
+- `personalized-reports` accumulated PR #43/#67/#87 deploy remains a separate task and is not part of this observation.
+- AI Lab diary: no duplicate entry; this is deployment/validation of the already-recorded market-report headline iteration.
+
 ## K3 handoff — corrected PR #41 -> H2 focused ACL rereview
 
 - corrected PR #41 exact head: `c509117f8addf5a8687d60d9c18ae271b2c1777c`.
