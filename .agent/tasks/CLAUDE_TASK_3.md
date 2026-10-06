@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr41-acl-corrective-20261007
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: codex
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: bounded security corrective / effective column privileges / exact RPC ACL
