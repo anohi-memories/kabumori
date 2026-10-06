@@ -81,11 +81,11 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: x-social-mobile-pr41-live-generation-fresh-integration-20261006
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_3.md
 - allocation: Final K3 PASS on AI persona-generation guidance. PR #78 head 1f33c58ca82a9d33d8c5c7282e0ac5c2fbb4aca9 squash-merged as 60dff4e28a763e3c182495dfc41cadf94671952f; Netlify preview success, Vercel failure was build-rate-limit and non-blocking. Next source-only task fresh-integrates stale PR #41 live general-user auto-post path. Replace direct service_role SELECT on social_mobile_content_settings with a narrow service-only brand-scoped read boundary; preserve AI Lab/Kabumori/PR76 and document, but do not implement, G5 entitlement enforcement. No production/merge/deploy. Recommended Opus5.5（高）.
 - recommended_model: Opus5.5（高）
