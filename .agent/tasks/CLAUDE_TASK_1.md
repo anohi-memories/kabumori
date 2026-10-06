@@ -476,6 +476,61 @@ Then:
 
 Recommended model: **Sonnet5（高）**.
 
+## K1 recheck — STRUCTURAL PASS / 375pt verification only
+
+- verdict: **STRUCTURAL PASS / merge HOLD only for observed 375pt evidence**.
+- PR #94 latest head reviewed: `64c71bd6a49c6d1f65cb84642b3f68f60ef9648a`.
+- the previous swipe blocker is resolved structurally:
+  - important-news detail moved to root Stack as `src/app/news-detail.tsx`;
+  - native edge swipe now naturally reveals the true origin screen;
+  - Home-origin -> Home;
+  - News-list-origin -> News list;
+  - report-origin -> report;
+  - no redirect-after-pop flash;
+  - no `usePreventRemove`;
+  - no `expo-router/build/...` internal import;
+  - no 1-second redirect guard.
+- `/news/<id>` native/deep-link compatibility is rewritten through `+native-intent` to the canonical root detail route.
+- 402pt screenshots reviewed and accepted:
+  - root news detail layout;
+  - topic list level switcher;
+  - mixed 未読 / ✓ 学習済み.
+- topic-list level switching, Settings separation, per-level fetch/cache/race handling and local learned/read state remain accepted.
+- latest reported tests/checks on head: **376/376 app tests**, tsc clean, Expo config PASS, web export PASS, diff clean.
+- fresh-main changed-file overlap at K1: **0**.
+- Vercel status is rate-limited, not a source failure and not a native-app merge blocker; Netlify rules checks are neutral/success.
+- Codex review: **not required** for this app navigation/local-storage change.
+- EAS build = 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+
+### Only remaining merge gate
+
+Run one final **observed 375pt iPhone SE-class Simulator pass** on the current PR #94 head.
+
+Required:
+- topic list at 375pt with selector visible;
+- at least one long 2-line title;
+- 未読 / ✓ 学習済み indicators;
+- no horizontal clipping;
+- all three selector segments on one row;
+- scroll/list row layout remains readable;
+- capture `docs/ui-review/topic_list_375pt.webp` (or equivalent).
+
+Also do one quick 375pt root news-detail header check:
+- `‹ 戻る` / `ニュース詳細` / `ニュース一覧 ›` fit without overlap.
+
+No code change is expected. If no issue is found:
+- update existing PR #94 only;
+- append final verification result;
+- status -> `review_required`;
+- next_owner -> `chatgpt`;
+- STOP for K1.
+
+If a 375pt visual issue is found, make only the smallest bounded visual correction and rerun affected tests.
+
+Recommended model: **Sonnet5（中）**.
+
+---
+
 ## K1 corrective — native swipe parity must be structural, not redirect-after-pop
 
 K1 verdict: **HOLD / bounded corrective required before merge**.
