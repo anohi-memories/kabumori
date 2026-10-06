@@ -63,8 +63,8 @@
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 HOLD。topic list 3-level switch + learned/read は受け入れ。news Home-origin swipe は最終到達先こそHomeだが一瞬News listが見えるredirect-after-popで、内部 `expo-router/build/...` usePreventRemove依存もあるため未採用。root-level detail等の構造的native swipe parityへ修正し、375pt実測も追加。既存PR #94を更新、EAS 0、backend/production mutation 0。
-- recommended_model: Sonnet5（高）
+- allocation: K1 STRUCTURAL PASS / 375pt final gateのみ。PR #94 head 64c71bd6a49c6d1f65cb84642b3f68f60ef9648a はroot-level news detail化でnative swipe parityを構造的に解決し、internal expo-router import/redirect flashを解消。topic list 3-level切替・未読/学習済み・Settings分離も受入。376/376 tests。現行headで375pt list + news header実測/screenshot後にK1最終merge判定。
+- recommended_model: Sonnet5（中）
 
 ## Claude G2
 - owner: claude
