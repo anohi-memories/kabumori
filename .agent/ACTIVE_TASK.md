@@ -48,14 +48,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: none
-- status: done
-- task_id: kabumori-detail-navigation-topic-level-switch-20261006
+- next_owner: claude
+- status: ready
+- task_id: kabumori-topic-learning-access-progress-and-swipe-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS。PR #90 exact head 39bdf30f4c1bdb4214acbe27bf918aeff8a39ab1 を squash-merge as bcbdc2b8df3ba66955ebbf3e10d04a19b446fe38。左「戻る」はentry originへ、右は常時トピック一覧/ニュース一覧。topic level同日切替・Home設定非変更、335/335 tests、EAS 0、backend mutation 0。Codex不要。G1 free。
-- recommended_model: Sonnet5（中）
+- allocation: 実機確認フォロー。① topic/news詳細のiOS edge-swipeを左「戻る」と同じorigin先へ統一、②トピック一覧に初級/中級/上級切替（SettingsはHome初期表示専用）、③トピック既読/学習済みを端末内AsyncStorageで表示。detail成功表示のみ既読化、一覧focus復帰で即反映。375/402 Simulator実スワイプ確認、EAS 0、backend/production mutation 0。
+- recommended_model: Sonnet5（高）
 
 ## Claude G2
 - owner: claude
