@@ -3,9 +3,9 @@
 - task_id: kabumori-pr87-controlled-production-deploy-20261006
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
-- production_mutation_window: **ACTIVE** — 2026-10-06 14:40 JST〜。G2 deploys `market-report-analysis` only. `personalized-reports` is HELD (main carries undeployed PR #43/#67 changes incl. a new hard check on the live legacy app path; K2 decision needed). G3/G5/others: do not perform production writes until G2 records CLOSED.
+- status: review_required
+- next_owner: chatgpt
+- production_mutation_window: **CLOSED** — 2026-10-06 14:34 JST（ACTIVE 14:31:45〜）。G2 performs no further production write. Deployed `market-report-analysis` only (v24). `personalized-reports` NOT deployed (HELD for K2; see Report).
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: controlled production deploy / exact-source read-back / no manual generation
@@ -154,7 +154,65 @@ Recommended model: **Opus5.5（高）**.
 
 ## Report
 
-Pending.
+### task_id / result
+- task_id: kabumori-pr87-controlled-production-deploy-20261006
+- result: **PARTIAL PASS — `market-report-analysis` deployed and exact; `personalized-reports` HELD (not deployed) for K2 decision**（TASKの「source stateがambiguousならSTOP」に従った）。
+
+### fresh main
+- deploy HEAD: `af4c89968f25f960f2d9af11d18b4db6eb63462d`（origin/main、detached）。merge `74e4dbff09e3b248164fd00bb720402d762ebcd8` を含む。
+- `74e4dbff..af4c8996` の `supabase/functions/**` 変更は important-news-monitor のみ（両targetのimport graph外）。
+- worktree: 既存のG2専用 `/Users/yuya/Developer/kabumori-g2-market-report-reliability`（独立、toplevel assert、`supabase/config.toml` なし、未commit変更なし。他slotのファイルは触っていない）。
+- pre-deploy test（af4c8996）：market-report-analysis 147/147、personalized-reports 129/129、X shared consumer 8/8、data-packet 42/42、`deno check market-report-analysis/index.ts` PASS。
+
+### production mutex
+- G4：`production_mutation_window: CLOSED`（14:11）。G3（PR81）・G5（common-account）：in_progress だが read-only preflight 中で、いずれも本番writeは明示承認待ち（`production_mutation_allowed: false` / `false_until_explicit_gate`）。ACTIVEな窓なし。
+- G2はTASK headerに `production_mutation_window: ACTIVE`（commit `e6f8dc4f`、14:31:45）を記録してからdeployし、read-back後に CLOSED（14:34）。
+
+### production baseline before
+- `market-report-analysis`: v23 ACTIVE、verify_jwt=false、ezbr `fe5c1836cded…`（v21と同一bytes。v22/v23は番号のみ）、updated 2026-10-03 21:23:42 JST。read-back 11ファイルすべて main `74e4dbff^`（PR #87直前）とbyte一致 → mainとの差はPR #87の `analysis_logic.ts` / `hard_fact_guards.ts` だけ。
+- `personalized-reports`: v40 ACTIVE、verify_jwt=false、ezbr `2fe1b50edf59…`、updated 2026-09-25 22:11:15 JST。read-back 6ファイルが main **`0cba7323`**（2026-09-25 22:10、PR #34 merge）と完全一致。
+- gates: app_enabled=false / x_enabled=false（updated 2026-09-17 10:47:14 UTC）
+- cron 8件（analysis morning/retry/close/retry、data-packet morning/close、personalized morning/close）active、schedule・md5(command) 記録。
+
+### why `personalized-reports` was HELD
+- main の personalized-reports graph は `0cba7323` 以降、PR #87 に加えて **未deployの PR #43（`shared_gate.ts` へのrefactor）と PR #67（presentation v2：`_shared/market_report_packet.ts` +105/−16、`market_detail.ts` story、`report_logic.ts` +16、`delivery_policy.ts` +1、`_shared/market_report_story.ts`・`_shared/absence_claims.ts` の新規import）** を含む。
+- 特に `report_logic.ts` は `falseAbsenceClaims` による新しいlocal issue `FALSE_BROAD_NO_MATERIAL_CLAIM` を追加し、`delivery_policy.ts` にも登録している。これは **app gate OFF のlegacy経路（現在ユーザーに出ている旧アプリ朝刊/大引け）にも効く**ため、deployすると live のアプリレポート生成挙動が PR #87 のレビュー範囲外で変わる。
+- PR #87 の personalized-reports 側の効果（`market_detail.points_ja`）は app gate ON の shared 経路でしか作られないため、gate OFF の間は deploy を保留してもユーザー影響なし。
+- 判断材料：PR #67 の当時の rollout TASK は「market-report-analysis のみ」を deploy しており、personalized-reports は意図的に未deployのまま。
+
+### exact deploy target / command
+- `supabase functions deploy market-report-analysis --workdir /Users/yuya/Developer/kabumori-g2-market-report-reliability --project-ref wsmznyzcvmuitkglfeuj --no-verify-jwt --use-api`
+- 2026-10-06 14:33:12〜14:33:17 JST（1回目はauto mode classifierで拒否 → ユーザー「きょか」で実行）
+- uploaded: market-report-analysis 6本、`_shared` 4本、`market-report-data-packet/packet_schema.ts`・`session_logic.ts`（import graph）。deployされたFunctionは1本のみ。
+
+### after / read-back
+- `market-report-analysis`: **v24** ACTIVE、verify_jwt=false、ezbr `ed2db6d57e13…`、updated 2026-10-06 14:33:15 JST
+- `supabase functions download --use-api` の11ファイルを `git show af4c8996:<path>` とbyte比較 → **11/11 same**（analysis_logic / hard_fact_guards / index / handler / analysis_input / transport_retry、`_shared` absence_claims / kabumori_voice / market_report_packet / market_report_story、data-packet session_logic）
+- PR #87 logic present：`pointsEditorialWarnings`、朝刊/大引けの3つのポイントの指示、`export const MARKET_NAMES`
+- `personalized-reports`: v40 / ezbr `2fe1b50edf59…` / updated 2026-09-25 22:11 → **不変**
+
+### gates / cron / unrelated functions
+- app_enabled=false / x_enabled=false：before/after 完全一致
+- cron 8件：schedule・active・md5(command) before/after 完全一致
+- 全21 Function の version / updated_at / verify_jwt / ezbr / status / entrypoint_path を比較：変化は `market-report-analysis` のみ（20本不変）
+
+### production mutations performed
+- **1件**：Edge Function `market-report-analysis` v23→v24
+- manual generation / retry = 0（deploy後 `market_report_packets` 新規0件、14:33:50時点）
+- X / app notification = 0、EAS = 0、DB/RPC/migration/cron/gate/secrets/Vault/Auth = 0
+
+### rollback
+- rollback source = main `74e4dbff^`（`a96fc09745e0731f0c97876f5563771eb04803b8`）の market-report-analysis graph（本番v23とbyte一致を確認済み）。不要のため未実施。
+
+### remaining risks
+1. 今日の大引け（analysis 16:20 / retry 16:35 JST）が PR #87 prompt の最初の自然サイクル。3ポイントが見出し型になるか、`X_POINTS_*` 記録、Hard/WARN、calls を確認する必要がある。
+2. `personalized-reports` は main と乖離したまま（PR #43/#67/#87）。App gate ON 前に、この3PR分をまとめて review/deploy するTASKが必要（特に `FALSE_BROAD_NO_MATERIAL_CLAIM` が legacy アプリレポートの配信率に与える影響の評価）。
+3. Native App のホームカード優先順位（`points_ja`）は次のアプリbuildまで反映されない。
+4. 10/5大引け・10/6朝刊とも1回目の分析が約36秒で失敗し、理由がretryで上書きされて残っていない（診断の課題）。
+
+### next recommendation
+- read-only の自然サイクル観測：本日 10/6 大引け（16:20 / 16:35 JST）と 10/7 朝刊（07:55 / 08:05 JST）。見る点：`x_post.points_ja` が朝刊=注目/注意/見る軸、大引け=起きたこと/材料/次の注目になっているか、`X_POINTS_METRIC_RECAP` の有無、Hard false reject 0、calls（rewriteが増えていないこと）。
+- 別TASK：`personalized-reports` の PR #43/#67/#87 bundle の差分レビューと deploy 判断（legacy経路への影響評価込み）。
 
 ---
 
