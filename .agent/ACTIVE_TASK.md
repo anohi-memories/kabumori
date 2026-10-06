@@ -84,13 +84,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: x-social-mobile-pr76-production-rollout-gate-20261006
+- status: ready
+- task_id: x-morning-greeting-schedule-reliability-bc-20261006
 - start_code: G4
 - finish_code: K4
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Final K4 PASS. PR76 S1-S5 production rollout complete and exact: guarded x-test-post active, migration 20261003090000 history exact 1, two SECURITY DEFINER RPCs/ACL exact, social-mobile-publish-setting ACTIVE v1 verify_jwt=true, running/overdue 0. production_mutation_window CLOSED. No extra Codex review. G4 free after fresh allocation.
+- allocation: Source-only reliability fix for morning greeting image generation. Plan B: multiple staggered GitHub schedule opportunities before the morning post. Plan C: ~06:00 JST missing-image detector using existing GitHub/Supabase patterns, with no new external notification service. Preserve workflow_dispatch and generator idempotency; avoid duplicate OpenAI calls. No PAT/Vault/pg_cron/production mutation in this task. Plan A is separate after K4. Recommended Sonnet5（高）; no Codex review by default.
 
 ## Claude G5
 - owner: claude
