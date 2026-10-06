@@ -14,7 +14,11 @@
 -- production published_content_fingerprints / post_execution_logs tables.
 -- (Renumbered from the unapplied candidate 20260927101423 so that the Stage 3B
 -- set -- completion, publish settings reader, publish authority -- sorts after
--- the PR81 settings hardening it depends on. Body unchanged.)
+-- the PR81 settings hardening it depends on. Function body unchanged.)
+-- ACL: the creator must be a non-superuser owner of the queue tables; the
+-- function ends with exactly owner + service_role EXECUTE, and any other
+-- direct or effective grantee (default privileges, inherited application
+-- roles) refuses the whole file instead of being silently normalized.
 -- Transaction: one explicit transaction; apply alone; not re-runnable.
 begin;
 
@@ -25,8 +29,27 @@ begin
      or to_regclass('public.post_execution_logs') is null then
     raise exception 'STAGE3B_PRECONDITION_MISSING';
   end if;
-  if to_regprocedure('public.complete_vault_account_brand_post(uuid,text,text,text)') is not null then
+  -- No routine of this name in any kind or signature (no overload / procedure collision).
+  if exists (select 1 from pg_catalog.pg_proc p
+             where p.pronamespace = 'public'::regnamespace and p.proname = 'complete_vault_account_brand_post') then
     raise exception 'STAGE3B_PRECONDITION_ALREADY_APPLIED';
+  end if;
+  if to_regrole('anon') is null or to_regrole('authenticated') is null or to_regrole('service_role') is null then
+    raise exception 'STAGE3B_PRECONDITION_ROLES';
+  end if;
+  -- Safe owner: the creator owns the SECURITY DEFINER function, so it must be a non-superuser that
+  -- owns the queue tables the function runs against.
+  if (select r.rolsuper from pg_catalog.pg_roles r where r.rolname = current_user) is distinct from false
+     or (select c.relowner from pg_catalog.pg_class c where c.oid = 'public.scheduled_posts'::regclass)
+          is distinct from (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user)
+     or (select c.relowner from pg_catalog.pg_class c where c.oid = 'public.social_accounts'::regclass)
+          is distinct from (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user) then
+    raise exception 'STAGE3B_PRECONDITION_OWNER';
+  end if;
+  -- Application roles must not inherit the owner or service_role (they would gain its EXECUTE).
+  if pg_catalog.pg_has_role('anon', current_user, 'usage') or pg_catalog.pg_has_role('authenticated', current_user, 'usage')
+     or pg_catalog.pg_has_role('anon', 'service_role', 'usage') or pg_catalog.pg_has_role('authenticated', 'service_role', 'usage') then
+    raise exception 'STAGE3B_PRECONDITION_ROLE_GRAPH';
   end if;
 end $$;
 
@@ -111,5 +134,42 @@ $$;
 revoke all on function public.complete_vault_account_brand_post(uuid, text, text, text)
 from public, anon, authenticated, service_role;
 grant execute on function public.complete_vault_account_brand_post(uuid, text, text, text) to service_role;
+
+-- Postcondition: exact definition, exact direct ACL and exact effective EXECUTE. Any other grantee (for
+-- example one the creator's default privileges added) is NOT removed silently: it aborts the whole file.
+do $$
+declare v_fn oid := 'public.complete_vault_account_brand_post(uuid,text,text,text)'::regprocedure;
+        v_owner oid := (select c.relowner from pg_catalog.pg_class c where c.oid = 'public.scheduled_posts'::regclass);
+        v_service oid := 'service_role'::regrole;
+begin
+  if (select count(*) from pg_catalog.pg_proc p
+      where p.pronamespace = 'public'::regnamespace and p.proname = 'complete_vault_account_brand_post') <> 1
+     or not exists (select 1 from pg_catalog.pg_proc p
+                    where p.oid = v_fn and p.prokind = 'f' and p.prosecdef and p.proowner = v_owner
+                      and p.proconfig = array['search_path=""']) then
+    raise exception 'STAGE3B_COMPLETION_EFFECTIVE_ACL:DEFINITION';
+  end if;
+  -- Direct grants: besides the owner, exactly one plain EXECUTE for service_role (no PUBLIC, no grant option).
+  if exists (select 1 from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a
+             where p.oid = v_fn and a.grantee <> p.proowner
+               and not (a.grantee = v_service and a.privilege_type = 'EXECUTE' and not a.is_grantable))
+     or (select count(*) from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a
+         where p.oid = v_fn and a.grantee = v_service) <> 1 then
+    raise exception 'STAGE3B_COMPLETION_EFFECTIVE_ACL:DIRECT_ACL';
+  end if;
+  -- Effective EXECUTE (inheritance included).
+  if pg_catalog.has_function_privilege('anon', v_fn, 'execute')
+     or pg_catalog.has_function_privilege('authenticated', v_fn, 'execute')
+     or not pg_catalog.has_function_privilege('service_role', v_fn, 'execute') then
+    raise exception 'STAGE3B_COMPLETION_EFFECTIVE_ACL:EFFECTIVE';
+  end if;
+  -- Every other role: only by inheriting the owner or service_role.
+  if exists (select 1 from pg_catalog.pg_roles r
+             where not r.rolsuper and pg_catalog.has_function_privilege(r.oid, v_fn, 'execute')
+               and not pg_catalog.pg_has_role(r.oid, v_owner, 'usage')
+               and not pg_catalog.pg_has_role(r.oid, v_service, 'usage')) then
+    raise exception 'STAGE3B_COMPLETION_EFFECTIVE_ACL:OTHER_ROLES';
+  end if;
+end $$;
 
 commit;

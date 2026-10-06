@@ -18,7 +18,12 @@
 --
 -- SECURITY DEFINER (owned by the settings table owner) only because
 -- service_role has no table privilege; search_path = ''; EXECUTE for
--- service_role only.
+-- service_role only. The file refuses (and rolls back completely) if
+-- service_role can reach the table or ANY column by any effective privilege
+-- (direct, inherited or via PUBLIC), if the creator is not the non-superuser
+-- table owner, if an application role inherits the owner or service_role, or
+-- if the function ends with any grantee besides owner + plain service_role
+-- EXECUTE.
 --
 -- Requires: PR81 settings table + hardening (20260922045046, 20261003120000)
 -- and the Stage 3B completion RPC (20261006160000).
@@ -40,6 +45,31 @@ begin
   if exists (select 1 from pg_catalog.pg_proc p
              where p.pronamespace = 'public'::regnamespace and p.proname = 'read_social_mobile_publish_settings') then
     raise exception 'PUBLISH_SETTINGS_READER_PRECONDITION_ALREADY_APPLIED';
+  end if;
+  if to_regrole('anon') is null or to_regrole('authenticated') is null or to_regrole('service_role') is null then
+    raise exception 'PUBLISH_SETTINGS_READER_PRECONDITION_ROLES';
+  end if;
+  -- Safe owner: the creator is the non-superuser owner of the settings table (the definer runs as it).
+  if (select r.rolsuper from pg_catalog.pg_roles r where r.rolname = current_user) is distinct from false
+     or (select c.relowner from pg_catalog.pg_class c where c.oid = 'public.social_mobile_content_settings'::regclass)
+          is distinct from (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user) then
+    raise exception 'PUBLISH_SETTINGS_READER_PRECONDITION_OWNER';
+  end if;
+  -- Application roles must not inherit the owner or service_role.
+  if pg_catalog.pg_has_role('anon', current_user, 'usage') or pg_catalog.pg_has_role('authenticated', current_user, 'usage')
+     or pg_catalog.pg_has_role('anon', 'service_role', 'usage') or pg_catalog.pg_has_role('authenticated', 'service_role', 'usage') then
+    raise exception 'PUBLISH_SETTINGS_READER_PRECONDITION_ROLE_GRAPH';
+  end if;
+  -- The reader is only narrow if service_role cannot reach the table any other way: no effective
+  -- privilege on the table or on ANY live column -- direct, inherited from another role, or via PUBLIC.
+  -- Unknown drift is refused, never normalized (authenticated's PR81 client privileges are untouched).
+  if pg_catalog.has_table_privilege('service_role', 'public.social_mobile_content_settings',
+       'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+       || case when pg_catalog.current_setting('server_version_num')::integer >= 170000 then ',MAINTAIN' else '' end)
+     or exists (select 1 from pg_catalog.pg_attribute a
+                where a.attrelid = 'public.social_mobile_content_settings'::regclass and a.attnum > 0 and not a.attisdropped
+                  and pg_catalog.has_column_privilege('service_role', a.attrelid, a.attnum, 'SELECT,INSERT,UPDATE,REFERENCES')) then
+    raise exception 'PUBLISH_SETTINGS_READER_PRECONDITION_SERVICE_ACCESS';
   end if;
 end $$;
 
@@ -90,25 +120,39 @@ revoke all on function public.read_social_mobile_publish_settings(uuid, text)
 from public, anon, authenticated, service_role;
 grant execute on function public.read_social_mobile_publish_settings(uuid, text) to service_role;
 
--- Post-conditions: one definer function with the pinned path, owned by the table owner,
--- executable by service_role only; the table itself still grants service_role nothing.
+-- Post-conditions: one definer function with the pinned path, owned by the table owner; besides the owner
+-- exactly one plain EXECUTE for service_role (any other grantee -- e.g. from the creator's default
+-- privileges -- aborts the file instead of being removed silently); exact effective EXECUTE; and the
+-- table still unreachable for service_role on every column.
 do $$
 declare v_fn oid := 'public.read_social_mobile_publish_settings(uuid,text)'::regprocedure;
+        v_owner oid := (select c.relowner from pg_catalog.pg_class c
+                        where c.oid = 'public.social_mobile_content_settings'::regclass);
+        v_service oid := 'service_role'::regrole;
 begin
   if (select count(*) from pg_catalog.pg_proc p
       where p.pronamespace = 'public'::regnamespace and p.proname = 'read_social_mobile_publish_settings') <> 1
-     or not (select p.prosecdef and p.proconfig = array['search_path=""'] and p.prokind = 'f'
-             and p.proowner = (select c.relowner from pg_catalog.pg_class c
-                               where c.oid = 'public.social_mobile_content_settings'::regclass)
-             from pg_catalog.pg_proc p where p.oid = v_fn)
-     or exists (select 1 from pg_catalog.aclexplode((select p.proacl from pg_catalog.pg_proc p where p.oid = v_fn)) a
-                where a.grantee <> (select p.proowner from pg_catalog.pg_proc p where p.oid = v_fn)
-                  and (a.grantee = 0 or a.grantee <> 'service_role'::regrole))
+     or not exists (select 1 from pg_catalog.pg_proc p
+                    where p.oid = v_fn and p.prokind = 'f' and p.prosecdef and p.proowner = v_owner
+                      and p.proconfig = array['search_path=""'])
+     or exists (select 1 from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a
+                where p.oid = v_fn and a.grantee <> p.proowner
+                  and not (a.grantee = v_service and a.privilege_type = 'EXECUTE' and not a.is_grantable))
+     or (select count(*) from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a
+         where p.oid = v_fn and a.grantee = v_service) <> 1
      or not pg_catalog.has_function_privilege('service_role', v_fn, 'EXECUTE')
      or pg_catalog.has_function_privilege('anon', v_fn, 'EXECUTE')
      or pg_catalog.has_function_privilege('authenticated', v_fn, 'EXECUTE')
+     or exists (select 1 from pg_catalog.pg_roles r
+                where not r.rolsuper and pg_catalog.has_function_privilege(r.oid, v_fn, 'EXECUTE')
+                  and not pg_catalog.pg_has_role(r.oid, v_owner, 'usage')
+                  and not pg_catalog.pg_has_role(r.oid, v_service, 'usage'))
      or pg_catalog.has_table_privilege('service_role', 'public.social_mobile_content_settings',
-                                       'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') then
+          'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+          || case when pg_catalog.current_setting('server_version_num')::integer >= 170000 then ',MAINTAIN' else '' end)
+     or exists (select 1 from pg_catalog.pg_attribute a
+                where a.attrelid = 'public.social_mobile_content_settings'::regclass and a.attnum > 0 and not a.attisdropped
+                  and pg_catalog.has_column_privilege('service_role', a.attrelid, a.attnum, 'SELECT,INSERT,UPDATE,REFERENCES')) then
     raise exception 'PUBLISH_SETTINGS_READER_POSTCONDITION_FAILED';
   end if;
 end $$;

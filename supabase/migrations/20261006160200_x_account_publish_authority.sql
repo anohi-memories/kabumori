@@ -25,7 +25,10 @@
 -- refused by id here and in the setter).
 --
 -- Requires Stage 3A (live), the Stage 3B completion RPC (20261006160000) and
--- the publish settings reader (20261006160100). (Renumbered from the unapplied
+-- the publish settings reader (20261006160100). ACL: the creator must be a
+-- non-superuser owner of social_accounts; the table and both routines end
+-- with exactly the intended owner/service_role privileges, and any other
+-- direct or effective grantee refuses the whole file. (Renumbered from the unapplied
 -- candidate 20260927124300 so that a clean bootstrap creates it after the PR81
 -- settings hardening it depends on.)
 -- Transaction: one explicit transaction; apply alone; not re-runnable.
@@ -39,8 +42,26 @@ begin
      or to_regclass('public.brand_settings') is null then
     raise exception 'STAGE3B_PUBLISH_PRECONDITION_MISSING';
   end if;
-  if to_regclass('public.x_account_publish_authority') is not null then
+  if to_regclass('public.x_account_publish_authority') is not null
+     or exists (select 1 from pg_catalog.pg_proc p
+                where p.pronamespace = 'public'::regnamespace
+                  and p.proname in ('check_x_account_publish_authority', 'set_x_account_publish_authority')) then
     raise exception 'STAGE3B_PUBLISH_PRECONDITION_ALREADY_APPLIED';
+  end if;
+  if to_regrole('anon') is null or to_regrole('authenticated') is null or to_regrole('service_role') is null then
+    raise exception 'STAGE3B_PUBLISH_PRECONDITION_ROLES';
+  end if;
+  -- Safe owner: the creator owns the SECURITY DEFINER setter and the authority table, so it must be a
+  -- non-superuser that owns the account table the setter writes against.
+  if (select r.rolsuper from pg_catalog.pg_roles r where r.rolname = current_user) is distinct from false
+     or (select c.relowner from pg_catalog.pg_class c where c.oid = 'public.social_accounts'::regclass)
+          is distinct from (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user) then
+    raise exception 'STAGE3B_PUBLISH_PRECONDITION_OWNER';
+  end if;
+  -- Application roles must not inherit the owner or service_role.
+  if pg_catalog.pg_has_role('anon', current_user, 'usage') or pg_catalog.pg_has_role('authenticated', current_user, 'usage')
+     or pg_catalog.pg_has_role('anon', 'service_role', 'usage') or pg_catalog.pg_has_role('authenticated', 'service_role', 'usage') then
+    raise exception 'STAGE3B_PUBLISH_PRECONDITION_ROLE_GRAPH';
   end if;
 end $$;
 
@@ -179,5 +200,94 @@ from public, anon, authenticated, service_role;
 grant execute on function public.check_x_account_publish_authority(uuid, text, text),
   public.set_x_account_publish_authority(text, text, text, timestamptz, timestamptz)
 to service_role;
+
+-- Postcondition: exact definitions, exact direct ACLs and exact effective privileges for the authority
+-- table and both routines. Any other grantee (for example one the creator's default privileges added,
+-- with or without grant option) is NOT removed silently: it aborts the whole file.
+do $$
+declare v_check oid := 'public.check_x_account_publish_authority(uuid,text,text)'::regprocedure;
+        v_set oid := 'public.set_x_account_publish_authority(text,text,text,timestamptz,timestamptz)'::regprocedure;
+        v_table oid := 'public.x_account_publish_authority'::regclass;
+        v_owner oid := (select c.relowner from pg_catalog.pg_class c where c.oid = 'public.social_accounts'::regclass);
+        v_service oid := 'service_role'::regrole;
+        v_table_privs text := 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+          || case when pg_catalog.current_setting('server_version_num')::integer >= 170000 then ',MAINTAIN' else '' end;
+        v_write_privs text := 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+          || case when pg_catalog.current_setting('server_version_num')::integer >= 170000 then ',MAINTAIN' else '' end;
+begin
+  -- Routines: one of each name, plain functions, owned by the account-table owner, pinned search_path;
+  -- the predicate is SECURITY INVOKER, the setter SECURITY DEFINER.
+  if (select count(*) from pg_catalog.pg_proc p
+      where p.pronamespace = 'public'::regnamespace
+        and p.proname in ('check_x_account_publish_authority', 'set_x_account_publish_authority')) <> 2
+     or not exists (select 1 from pg_catalog.pg_proc p where p.oid = v_check and p.prokind = 'f' and not p.prosecdef
+                      and p.proowner = v_owner and p.proconfig = array['search_path=""'])
+     or not exists (select 1 from pg_catalog.pg_proc p where p.oid = v_set and p.prokind = 'f' and p.prosecdef
+                      and p.proowner = v_owner and p.proconfig = array['search_path=""']) then
+    raise exception 'STAGE3B_PUBLISH_EFFECTIVE_ACL:ROUTINE_DEFINITION';
+  end if;
+  -- Routine direct grants: besides the owner, exactly one plain EXECUTE for service_role each.
+  if exists (select 1 from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a
+             where p.oid in (v_check, v_set) and a.grantee <> p.proowner
+               and not (a.grantee = v_service and a.privilege_type = 'EXECUTE' and not a.is_grantable))
+     or (select count(*) from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a
+         where p.oid = v_check and a.grantee = v_service) <> 1
+     or (select count(*) from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a
+         where p.oid = v_set and a.grantee = v_service) <> 1 then
+    raise exception 'STAGE3B_PUBLISH_EFFECTIVE_ACL:ROUTINE_DIRECT_ACL';
+  end if;
+  -- Routine effective EXECUTE (inheritance included), and no other role except via owner/service_role.
+  if pg_catalog.has_function_privilege('anon', v_check, 'execute') or pg_catalog.has_function_privilege('anon', v_set, 'execute')
+     or pg_catalog.has_function_privilege('authenticated', v_check, 'execute')
+     or pg_catalog.has_function_privilege('authenticated', v_set, 'execute')
+     or not pg_catalog.has_function_privilege('service_role', v_check, 'execute')
+     or not pg_catalog.has_function_privilege('service_role', v_set, 'execute')
+     or exists (select 1 from pg_catalog.pg_roles r
+                where not r.rolsuper
+                  and (pg_catalog.has_function_privilege(r.oid, v_check, 'execute')
+                       or pg_catalog.has_function_privilege(r.oid, v_set, 'execute'))
+                  and not pg_catalog.pg_has_role(r.oid, v_owner, 'usage')
+                  and not pg_catalog.pg_has_role(r.oid, v_service, 'usage')) then
+    raise exception 'STAGE3B_PUBLISH_EFFECTIVE_ACL:ROUTINE_EFFECTIVE';
+  end if;
+  -- Authority table: owned by the same owner, RLS on; besides the owner exactly one plain SELECT for
+  -- service_role; no column-level grants at all.
+  if (select c.relowner from pg_catalog.pg_class c where c.oid = v_table) is distinct from v_owner
+     or not (select c.relrowsecurity from pg_catalog.pg_class c where c.oid = v_table)
+     or exists (select 1 from pg_catalog.pg_class c, pg_catalog.aclexplode(c.relacl) a
+                where c.oid = v_table and a.grantee <> c.relowner
+                  and not (a.grantee = v_service and a.privilege_type = 'SELECT' and not a.is_grantable))
+     or (select count(*) from pg_catalog.pg_class c, pg_catalog.aclexplode(c.relacl) a
+         where c.oid = v_table and a.grantee = v_service) <> 1
+     or exists (select 1 from pg_catalog.pg_attribute att
+                where att.attrelid = v_table and att.attnum > 0 and att.attacl is not null) then
+    raise exception 'STAGE3B_PUBLISH_EFFECTIVE_ACL:TABLE_DIRECT_ACL';
+  end if;
+  -- Authority table effective privileges: application roles none (table or any column, by any path,
+  -- predefined-role membership included); service_role SELECT only; any other role only via the owner
+  -- (any privilege) or service_role (SELECT only). PostgreSQL's predefined data-access roles
+  -- (pg_read_all_data / pg_write_all_data / pg_maintain) and their members are cluster-wide
+  -- administrative grants by design, not drift on this table, and are left out of that last scan only.
+  if pg_catalog.has_table_privilege('anon', v_table, v_table_privs)
+     or pg_catalog.has_any_column_privilege('anon', v_table, 'SELECT,INSERT,UPDATE,REFERENCES')
+     or pg_catalog.has_table_privilege('authenticated', v_table, v_table_privs)
+     or pg_catalog.has_any_column_privilege('authenticated', v_table, 'SELECT,INSERT,UPDATE,REFERENCES')
+     or not pg_catalog.has_table_privilege('service_role', v_table, 'SELECT')
+     or pg_catalog.has_table_privilege('service_role', v_table, v_write_privs)
+     or pg_catalog.has_any_column_privilege('service_role', v_table, 'INSERT,UPDATE,REFERENCES')
+     or exists (select 1 from pg_catalog.pg_roles r
+                where not r.rolsuper and not pg_catalog.pg_has_role(r.oid, v_owner, 'usage')
+                  and r.rolname !~ '^pg_'
+                  and not exists (select 1 from pg_catalog.pg_roles pr
+                                  where pr.rolname in ('pg_read_all_data', 'pg_write_all_data', 'pg_maintain')
+                                    and pg_catalog.pg_has_role(r.oid, pr.oid, 'usage'))
+                  and (pg_catalog.has_table_privilege(r.oid, v_table, v_write_privs)
+                       or pg_catalog.has_any_column_privilege(r.oid, v_table, 'INSERT,UPDATE,REFERENCES')
+                       or ((pg_catalog.has_table_privilege(r.oid, v_table, 'SELECT')
+                            or pg_catalog.has_any_column_privilege(r.oid, v_table, 'SELECT'))
+                           and not pg_catalog.pg_has_role(r.oid, v_service, 'usage')))) then
+    raise exception 'STAGE3B_PUBLISH_EFFECTIVE_ACL:TABLE_EFFECTIVE';
+  end if;
+end $$;
 
 commit;
