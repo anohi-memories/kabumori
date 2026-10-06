@@ -3,8 +3,8 @@
 - task_id: postona-multisocial-phase1-architecture-inventory-20261006
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: architecture inventory / provider-neutral design / docs-only
@@ -313,6 +313,77 @@ Default: **no Codex review** if K4 confirms the deliverable is accurate and scop
 If a specific architecture/security concern is discovered, at most one focused review later.
 
 推薦モデル：**Opus5.5（高）**
+
+## Report — postona-multisocial-phase1-architecture-inventory-20261006 (2026-10-06)
+
+- task_id: postona-multisocial-phase1-architecture-inventory-20261006
+- result: **PASS（ドキュメントのみ）**。成果物 `docs/postona/multi-social-phase1.md`（354行）。PR [#96](https://github.com/anohi-memories/kabumori/pull/96) を作成済み・未 merge（merge_allowed=false）。
+- model_used: Opus 5.5
+- fresh main used: 調査の基準は `e7da97d4`。push 前に再確認した main（`48ef27cc` 以降）と衝突しないことを merge-tree で確認した。
+- workspace: `kabumori-fresh` から作った G4 専用 worktree `/Users/yuya/Developer/kabumori-g4-postona`（branch `claude/g4-postona-multisocial-phase1-20261006`、commit `df718397`）。
+- changed_files: `docs/postona/multi-social-phase1.md` のみ（PR）。このほかに、この TASK ファイルの status と Report を更新した（main）。
+- 調査の方法: 読み取り専用で3つを並行して調べた。
+  - バックエンドの12領域
+  - アプリの X 結合53か所
+  - 公式ドキュメント（X / Threads / Instagram）の比較
+
+  主な結論はソースで実際に確認した:
+  - `x-test-post/index.ts:4018-4021` の AI Lab 限定分岐
+  - `scheduled_posts` にアカウントがないこと（`supabase-repository.ts:54-56`）
+  - `PLATFORM_NOT_SUPPORTED`（`20261003090000:225`）
+  - アプリの型 `SocialPlatform` に threads と instagram があること
+
+### architecture conclusions
+- すでに中立なもの: ワークスペース（brands）とメンバー権限、内容設定・ペルソナ、生成器、アプリの `SocialPlatform` 型。
+- 構造的な X 依存は5つ:
+  - A. 投稿キューにアカウント・プラットフォームがない（`x_post_id` もある）。
+  - B. `social_accounts` の本番 DDL が `CHECK (platform='x')` で、RPC も `'x'` で絞っている。
+  - C. X の2トークン前提（2つの参照が存在・別物・非共有であることを送信・ON・削除で要求）。Meta の長期トークン1本の方式と合わない。
+  - D. 送信経路が `x-test-post`／`postToX`／`VaultAccountXAuth` だけ。しかも main では user ワークスペースの `brand_post` が AI Lab 以外送られない。
+  - E. 接続経路が `x-oauth-connect-user`／X 用 RPC だけで、アカウント id に `':x'` が埋め込まれている。
+- プロバイダ中立の境界の案:
+  - 4層（ログイン／サービス利用権／SNS 接続／投稿許可）は分けたままにする。
+  - `social_accounts` は新しい表を作らずに広げる。
+  - 資格情報はプロバイダごとの型にする（`oauth2_rotating_refresh` と `long_lived_access`）。
+  - 論理投稿と配信先を分け、本文は配信先ごとに作成時に保存し、再試行は配信先単位にする。
+  - Connect／Credential／Publish／Disconnect の各アダプタを用意する。X 版は既存コードを包むだけにする。
+- 名前の衝突: コード内の "thread" は X の返信の連なりを指す。新しい識別子では Meta のプロバイダを `threads` と書く。
+
+### Threads Phase 2 slice / Instagram
+- 2-0（コードなし）: Meta アプリ、審査の計画、データ削除・連携解除コールバック、リダイレクト URI の確認（カスタムスキームが使えるかは要検証）。
+- 2a: 中立化の継ぎ目。挙動は変えない。`platform` の CHECK を広げ資格情報の型を入れる migration 候補を作る。
+- 2b: Threads の接続と準備状態。
+- 2c: 手動テスト投稿（テスターアカウントのみ）。
+- 2d: 定期投稿。**PR #41 の merge が必須**。
+- 2e: 生成の出し分け。
+- 2f: 履歴。
+- 2g: 複数配信は後回し。
+- Instagram: プロアカウントが前提で、メディアが必須。IG Login と FB Login のどちらにするか決める（削除できるのは FB Login のみ）。公開 URL で渡す素材ライブラリ、上限 50 か 100／24時間（要検証）、Advanced Access と Business Verification。
+
+### G3/G5 dependencies
+- G3: PR #41（review_required、head `280aa0f8`）が定期送信の土台になる。merge まで `x-test-post` には触らない。PR81 は本番未適用で保留中。
+- G5: PR #95（共通アカウント Phase 2）、サービスキー `x_autopost`、オンボーディングと AuthGate、OAuth・Vault・資格情報ライフサイクル、退会。Threads の接続と資格情報の型は G5 と合意してから進める。
+
+### tests / checks
+- `git diff --check` 問題なし。main との差分は docs 1ファイルのみ。runtime・app・migration・Edge・workflow の変更なし。秘密情報パターン 0。
+- 本番への書き込み・deploy・プロバイダアプリや認証情報の作成・OAuth・Vault・secret の変更・実際の X／Threads／Instagram の呼び出し = **0**。本番読み取りもなし（この TASK では不要だった）。
+
+### remaining open product decisions（設計書 §9 に11項目）
+主なもの:
+- 複数 SNS へ同時に配信するか
+- SNS ごとに本文を生成して保存するか
+- 同意の単位（アカウントかワークスペースか）
+- X の URL 付き投稿のコスト（$0.20／件）の扱い
+- Threads の最初の範囲
+- IG Login か FB Login か
+- サービスキー `x_autopost` と、アプリ名・scheme の変更時期
+- Meta の Business Verification の名義
+
+### next_recommendation
+- K4 で確認する。範囲がドキュメントのみに収まっているので、Codex レビューは不要（TASK の方針どおり）。
+- 次の G4 は「POSTONA Phase 2a — 中立化の継ぎ目と Threads 接続の準備（挙動変更なし）」を提案する。PR #41 と PR #95 の merge 状況を確認してから始める。
+- 並行して、ユーザーに Meta アプリの登録と審査の計画（2-0）、および §9 の判断をお願いする。
+- status: review_required / next_owner: chatgpt。STOP for K4。
 
 ---
 
