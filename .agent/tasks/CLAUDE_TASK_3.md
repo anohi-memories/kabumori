@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr81-production-apply-continuation-20261006
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: production schema continuation / same-day preflight / exact atomic apply / post-apply read-back
@@ -182,6 +182,44 @@ Review policy:
 - only review if a concrete production mismatch or source change appears.
 
 Recommended model: **Opus5.5（高）**.
+
+## Report — x-social-mobile-pr81-production-apply-continuation-20261006
+
+- result: **PREFLIGHT_READY / HOLD — Gate A/B/C PASS (read-only); approval NOT requested** because Final K5 (`2328415d`) holds G3 production writes while the G5 common-account production-apply decision is pending. Production mutations **0**.
+- fresh main at start: `af4c8996` (this TASK's in_progress commit; contains PR81 merge `686f23a7`). Main later advanced to `8f86112f` (K5 hold + G4 morning-greeting allocation, control files only; PR81 files untouched).
+- worktree: new independent `/Users/yuya/Developer/kabumori-g3-pr81-apply` (detached). G4/G5 worktrees not touched (G4 `s3_stage_a.sh` only read for the pooler connection pattern).
+- hashes (byte-unchanged vs accepted): candidate `b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb`; hardening `83d44ccfd51bcd8fcd78d31236fa52d1d8f90c6642f12c5bb1586f9d1497467e`.
+- local proof on fresh main (PG 17.11, UTF8, disposable): `social_mobile_content_settings_run.sh` → `SOCIAL_MOBILE_CONTENT_SETTINGS_ALL_PASS` (48 markers). Note: a cluster made with `--locale=C` but without `-E UTF8` is SQL_ASCII and fails the length checks — always `-E UTF8`.
+
+### Gate A — ordering (read-only, user-run at 2026-10-06 05:28 UTC; auto mode denies Claude's production reads)
+- ledger 74 rows (was 72 on 10/05): +`20261003090000 social_mobile_publish_permission_boundary` (1 row) and +`20261004090000 ai_lab_topic_claims` (1 row) — exactly PR76 and PR82.
+- versions ≥ 20261002: only `20261002090000`, `20261003090000`, `20261004090000`. PR81 versions/names absent; no collision.
+- pre-existing, unrelated: duplicate ledger name `add_us_premarket_report` (two versions) — reported only. Earlier ledger notes (repo `20260929090000` missing from ledger; ledger-only `20260924001508`/`20260924024406`) unchanged.
+- common-account `20261001150000` is unapplied and sorts between the PR81 candidate and hardening versions; it is a separate file/feature with no object overlap, but if G5 applies first, Gate A/B must be re-read (ledger/default ACL baseline changes).
+
+### Gate B — fresh preflight (one READ ONLY transaction; `transaction_read_only=on`)
+- diff vs the accepted 10/05 baseline: **only** the ledger changes above (+ newly added probe keys). Target table/any-schema same-name relation absent; same-prefix routines/policies/triggers/constraints 0; ledger shape (version text PK, statements, name, created_by, idempotency_key UNIQUE, rollback; no triggers) unchanged; `current_user=postgres` (non-superuser, bypassrls), owns `brands`; brands/brand_memberships columns/constraints/RLS/self-select policy unchanged; auth.uid unchanged; default ACL (postgres→anon/authenticated/service_role TRUNCATE/REFERENCES/TRIGGER/MAINTAIN on tables; functions postgres only) unchanged; public schema ACL and API role graph unchanged.
+- new probe: production event trigger `ensure_rls` (`rls_auto_enable`, SECURITY DEFINER, ddl_command_end on CREATE TABLE in `public`; src md5 `99be20677b456ea8d3be47bdd44fb369`) runs `alter table … enable row level security` and swallows errors. The candidate enables RLS itself, so the effect is idempotent. Reproduced byte-identically (same md5) in the local rehearsal: apply + read-back exact, `force_rls=false`.
+- probe-filter note: `pr76_rpcs=[]` is a too-narrow name filter (`social_mobile_%publish%`); PR76 functions are `set_social_account_publish_enabled` / `assert_x_publish_permission_for_legacy_post`, already independently read back at K4. Not drift.
+
+### Gate C — frozen package (untracked, `/Users/yuya/Developer/kabumori-g3-pr81-apply/.g3-local/`)
+- `pr81_apply.sh` — operator runs it; checks 4 SHA-256 then ONE `psql -X --single-transaction -v ON_ERROR_STOP=1` via session pooler (`aws-0-ap-northeast-1.pooler.supabase.com:5432`, `postgres.wsmznyzcvmuitkglfeuj`, password prompt, sslmode=require): `select current_user` → `pr81_guard.sql` → candidate → hardening → `pr81_history_insert.sql`. Exit 0 = committed; 3 = whole transaction rolled back; never rerun blindly.
+- `pr81_guard.sql` `bb78f9700b903e55b23d3c33cd1b322e67faa5e34ced5328e3b7fe8438703ab8` — operator-side fail-closed assertion only (no schema change): `set local lock_timeout='5s'`; current_user=postgres; PR76 history exact 1 row; PR81 history/objects absent.
+- `pr81_history_insert.sql` `bf8778d9f315815357911bffaa0ceb18383106441da5cca3d50520115ff17311` — exactly `(20260922045046, social_mobile_content_settings_candidate)` and `(20261003120000, social_mobile_content_settings_hardening)`, `(version, name)` only as reviewed.
+- `pr81_readback.sql` `12f136b10c450c20578b47df03b8d0b1eff04a39e78556a0eca10923d850c5d4` — separate READ ONLY session: history rows, columns/defaults/column ACL, constraints (deferrable/validated/def), PK index flags, RLS/force, policies, trigger, table ACL + effective privileges, function owner/secdef/volatility/search_path/src md5/ACL/effective EXECUTE, overloads, row count only. Expected output frozen from the local prod-shaped rehearsal in `readback_expected_local.json` (only `ledger_count` should differ: production expects 76).
+- local prod-shaped rehearsal (role named `postgres`, nonsuperuser bypassrls; ensure_rls copy; ledger with PR76/PR82 rows) of the exact script: first run hit a local-only schema-permission error inside the guard → exit 3, nothing left (proves abort path); after fixing the local fixture → exit 0, `PR81_GUARD_OK`, 2 history rows; immediate rerun → `PR81_GUARD: PR81 history already present`, exit 3.
+- expected read-back: 9 columns; 7 constraints all non-deferrable/validated incl. `finite_versions`; PK btree immediate/valid/ready/live; RLS on / force off; 3 owner policies (select/insert/update) for authenticated; one `social_mobile_content_settings_version` BEFORE INSERT OR UPDATE trigger; 5 functions owner postgres, non-secdef, `search_path=pg_catalog`; effective table privileges anon none / authenticated SELECT,INSERT,UPDATE / service_role none; EXECUTE authenticated on 4 validators only; overloads 0; rows 0.
+
+### Approval / mutations / side effects
+- approval requested: **no** (K5 hold). approval received: no.
+- production DDL/DML/history writes 0; deploy 0; X/OpenAI/Auth/Vault/OAuth/Cron 0. Production reads: one user-run catalog/ledger-only READ ONLY preflight (no user content/PII/token/Vault).
+- PR78 may resume: **no** (PR81 schema not applied).
+
+### Remaining risks / next recommendation
+- Decide order between G5 common-account apply and G3 PR81 apply (mutex: never concurrent). If G5 goes first, G3 resume must rerun the preflight (`.g3-local/pr81_preflight_v2.sql`, sha `6c9782a1…`) and accept G5's reviewed deltas before requesting approval.
+- On resume: fresh mutex check → user-run preflight → diff → request explicit approval with this package → immediate Gate A/B re-read → operator runs `pr81_apply.sh` (needs the DB password reset during G4) → user-run `pr81_readback.sql` → compare to `readback_expected_local.json`.
+- Pre-existing ledger irregularities (missing `20260929090000`, ledger-only `20260924001508/024406`, duplicate name `add_us_premarket_report`) remain for a separate ledger-hygiene task; they do not affect the manual PR81 path.
+- status → review_required / next_owner → chatgpt. STOP.
 
 ---
 

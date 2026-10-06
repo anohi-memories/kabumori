@@ -72,11 +72,11 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: x-social-mobile-pr81-production-apply-continuation-20261006
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_3.md
 - allocation: PR81 continuation may continue read-only Gate A/B/C only. Production write is NOT authorized and must STOP before mutation while G5 common-account production apply decision is pending. Production mutex with G5/G2 mandatory. Recommended Opus5.5（高）.
 - recommended_model: Opus5.5（高）
