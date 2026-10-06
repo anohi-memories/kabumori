@@ -2,7 +2,7 @@ import { router, Stack } from 'expo-router';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
-import { backFromNewsDetail, goNewsList } from '@/lib/detail-navigation';
+import { backFromNewsDetail, goNewsList, resetStackWhenHidden } from '@/lib/detail-navigation';
 
 const colors = KABUMORI_COLORS.light;
 
@@ -28,12 +28,14 @@ export default function NewsLayout() {
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen
         name="[id]"
-        options={({ route }) => ({
+        options={({ route, navigation }) => ({
           title: 'ニュース詳細',
           headerBackVisible: false,
           headerLeft: () => (
             <Pressable
-              onPress={() => backFromNewsDetail(router, (route.params as { from?: unknown } | undefined)?.from)}
+              onPress={() =>
+                backFromNewsDetail(router, (route.params as { from?: unknown } | undefined)?.from, () => resetStackWhenHidden(navigation))
+              }
               accessibilityRole="button"
               accessibilityLabel="戻る"
               hitSlop={8}

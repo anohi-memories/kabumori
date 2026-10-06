@@ -4,14 +4,21 @@ import { router, useFocusEffect, useLocalSearchParams, useNavigation } from 'exp
 import { usePreventRemove } from 'expo-router/build/react-navigation/core';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { backFromNewsDetail, decideDetailRemoval, goNewsList } from '@/lib/detail-navigation';
+import {
+  backFromNewsDetail,
+  decideDetailRemoval,
+  goNewsList,
+  resetStackWhenHidden,
+  type NewsStackNavigation,
+} from '@/lib/detail-navigation';
 import { fetchMyImportantNewsItem, ImportantStockNews } from '@/lib/important-news';
 import { categoryLabels, formatNewsTime, importanceLabel, targetLabel } from '@/lib/news-labels';
 import { buildNewsPresentation } from '@/lib/news-presentation';
 
 export default function ImportantNewsDetailScreen() {
   const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
-  const navigation = useNavigation();
+  // The news stack's navigation: the screen's own navigation prop also carries the stack actions used for the reset.
+  const navigation = useNavigation() as unknown as NewsStackNavigation & { dispatch(action: unknown): void };
   // Edge-swipe parity with the header's 「‹ 戻る」. The swipe would natively pop to whatever sits below this
   // screen (the news list when it was opened from Home), so the removal is prevented and a back gesture is
   // re-resolved through the same origin-based function the button uses. Anything else (this screen's own
@@ -21,7 +28,7 @@ export default function ImportantNewsDetailScreen() {
   usePreventRemove(true, ({ data }) => {
     if (decideDetailRemoval(data.action.type) === 'redirect-to-back' && Date.now() >= redirectingUntil.current) {
       redirectingUntil.current = Date.now() + 1000;
-      backFromNewsDetail(router, from);
+      backFromNewsDetail(router, from, () => resetStackWhenHidden(navigation));
       return;
     }
     navigation.dispatch(data.action);

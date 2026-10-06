@@ -121,14 +121,15 @@ test("history -> detail -> Home and Home -> detail -> past topics exist as real 
 test("news detail: the header has an origin-based 「‹ 戻る」 (left) and an always-available 「ニュース一覧 ›」 (right)", async () => {
   const layout = await code("src/app/(tabs)/news/_layout.tsx");
   assert.ok(layout.includes("headerLeft: () => ("), "custom left action");
-  assert.ok(layout.includes("onPress={() => backFromNewsDetail(router, (route.params as { from?: unknown } | undefined)?.from)}") && layout.includes("‹ 戻る"));
+  assert.ok(layout.includes("backFromNewsDetail(router, (route.params as { from?: unknown } | undefined)?.from, () => resetStackWhenHidden(navigation))") && layout.includes("‹ 戻る"));
   assert.ok(layout.includes("headerRight: () => (") && layout.includes("onPress={() => goNewsList(router)}") && layout.includes("ニュース一覧 ›"));
   assert.ok(!/ホーム<|goHome\(/.test(layout), "no third Home button");
   assert.ok(layout.includes("headerBackVisible: false"), "no second (implicit) back control");
   assert.ok(!/router\.(back|canGoBack)\(|headerBackTitle/.test(layout), "neither action depends on history");
   const nav = await code("src/lib/detail-navigation.ts");
   const home = nav.slice(nav.indexOf("export function goHomeFromNews"));
-  assert.ok(home.includes("if (router.canDismiss()) router.dismissAll();") && home.includes("router.navigate(HOME_ROUTE);"));
+  assert.ok(home.indexOf("router.navigate(HOME_ROUTE);") < home.indexOf("resetStack?.();"), "Home is selected first, the stack is emptied after");
+  assert.ok(!/dismissAll|canDismiss/.test(nav), "no visible pop before the tab switch");
   assert.ok(!/replace\(/.test(nav), "replace('/') would stack a second (tabs)");
   assert.ok(layout.includes('<Stack.Screen name="index" options={{ headerShown: false }} />'), "the list keeps its own header");
 });

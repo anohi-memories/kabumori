@@ -54,10 +54,36 @@ export function topicListRouteParams(level: TopicLevel, now: number = Date.now()
 }
 
 export type NewsHomeRouter = {
-  canDismiss(): boolean;
-  dismissAll(): void;
   navigate(href: '/'): void;
 };
+
+/** The news tab's own stack navigation (the screen's `navigation` prop), as far as the reset needs it. */
+export type NewsStackNavigation = {
+  addListener(type: 'blur', callback: () => void): () => void;
+  popToTop(): void;
+};
+
+/**
+ * Empties the news tab's stack back to its list, but only once the news tab is no longer on screen (its
+ * screen got `blur`). Popping while the tab is still visible would play the pop animation and show the news
+ * list for a moment on the way Home. If the blur never comes (the Home navigation did not happen) the
+ * listener is just dropped, so a detail that is still on screen is never popped from under the user.
+ */
+export function resetStackWhenHidden(navigation: NewsStackNavigation, fallbackMs = 2000): void {
+  let finished = false;
+  let unsubscribe: () => void = () => {};
+  const timer = setTimeout(() => {
+    finished = true;
+    unsubscribe();
+  }, fallbackMs);
+  unsubscribe = navigation.addListener('blur', () => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timer);
+    unsubscribe();
+    navigation.popToTop();
+  });
+}
 
 export function goHome(router: DismissRouter): void {
   router.dismissTo(HOME_ROUTE);
@@ -78,12 +104,14 @@ export function goNewsList(router: DismissRouter): void {
 }
 
 // The news detail lives in the news tab's own nested stack, so dismissTo('/') cannot reach the Home tab from
-// there (Simulator-verified: it does nothing). Instead the tab's stack is first emptied back to the list --
-// so no detail stays behind when the news tab is opened later -- and then the Home tab is selected.
-// replace('/') would stack a second (tabs) copy, and navigate('/') alone would leave the detail open.
-export function goHomeFromNews(router: NewsHomeRouter): void {
-  if (router.canDismiss()) router.dismissAll();
+// there (Simulator-verified: it does nothing). The Home tab is selected FIRST, straight from the detail, so
+// the news list never flashes on the way Home (popping the stack first played the pop animation over the
+// list). Only then is the news stack emptied back to its list (`resetStack`, see resetStackWhenHidden), out
+// of sight, so no detail is left behind when the news tab is opened later.
+// replace('/') would stack a second (tabs) copy.
+export function goHomeFromNews(router: NewsHomeRouter, resetStack?: () => void): void {
   router.navigate(HOME_ROUTE);
+  resetStack?.();
 }
 
 /** Topic detail 「‹ 戻る」: the origin's screen (Home, or the topic list); Home when the origin is unknown. */
@@ -93,9 +121,9 @@ export function backFromTopicDetail(router: DismissRouter, from: unknown): void 
 }
 
 /** News detail 「‹ 戻る」: the origin's screen (Home, or the news list); Home when the origin is unknown. */
-export function backFromNewsDetail(router: DismissRouter & NewsHomeRouter, from: unknown): void {
+export function backFromNewsDetail(router: DismissRouter & NewsHomeRouter, from: unknown, resetStack?: () => void): void {
   if (newsBackTarget(from) === 'news') goNewsList(router);
-  else goHomeFromNews(router);
+  else goHomeFromNews(router, resetStack);
 }
 
 // ---- native back gesture parity -------------------------------------------------------------------------

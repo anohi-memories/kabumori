@@ -15,12 +15,11 @@ import { topicDetailRouteParams } from "../../src/lib/topic-detail-switch.ts";
 
 // A recording router. Anything that depends on history (back / canGoBack) is recorded too, so the tests
 // can assert it is never used: origin routing is asserted, not stack accident.
-function recorder(options: { canDismiss?: boolean } = {}) {
+function recorder() {
   const calls: string[] = [];
+  const reset = () => calls.push("reset");
   const router = {
     dismissTo: (href: string) => calls.push(`dismissTo:${href}`),
-    canDismiss: () => options.canDismiss ?? true,
-    dismissAll: () => calls.push("dismissAll"),
     navigate: (href: string) => calls.push(`navigate:${href}`),
     back: () => calls.push("back"),
     canGoBack: () => {
@@ -28,7 +27,7 @@ function recorder(options: { canDismiss?: boolean } = {}) {
       return false;
     },
   };
-  return { calls, router };
+  return { calls, router, reset };
 }
 
 test("parseDetailOrigin accepts exactly home / topics / news (a string or the first of an array)", () => {
@@ -78,10 +77,10 @@ test("topic: a level switch keeps the origin in the route params (and adds none 
   assert.ok(!("from" in topicDetailRouteParams(topic, "2026-10-01", null)));
 });
 
-test("news: Home card / holding row -> detail -> 戻る empties the news stack and selects Home", () => {
-  const { calls, router } = recorder();
-  backFromNewsDetail(router, "home");
-  assert.deepEqual(calls, ["dismissAll", "navigate:/"]);
+test("news: Home card / holding row -> detail -> 戻る selects Home FIRST, then empties the news stack", () => {
+  const { calls, router, reset } = recorder();
+  backFromNewsDetail(router, "home", reset);
+  assert.deepEqual(calls, ["navigate:/", "reset"], "Home first: the news list never flashes on the way");
 });
 
 test("news: news list -> detail -> 戻る goes to the news list", () => {
@@ -92,15 +91,11 @@ test("news: news list -> detail -> 戻る goes to the news list", () => {
 
 test("news: a cold deep link / unknown / foreign origin -> 戻る falls back to Home", () => {
   for (const from of [undefined, null, "", "garbage", "topics", "reports"]) {
-    const { calls, router } = recorder();
-    backFromNewsDetail(router, from);
-    assert.deepEqual(calls, ["dismissAll", "navigate:/"], String(from));
+    const { calls, router, reset } = recorder();
+    backFromNewsDetail(router, from, reset);
+    assert.deepEqual(calls, ["navigate:/", "reset"], String(from));
     assert.equal(newsBackTarget(from), "home");
   }
-  // A single-screen stack (nothing to dismiss) still reaches Home.
-  const cold = recorder({ canDismiss: false });
-  backFromNewsDetail(cold.router, undefined);
-  assert.deepEqual(cold.calls, ["navigate:/"]);
 });
 
 test("news: the right 「ニュース一覧」 opens the news list from every origin", () => {

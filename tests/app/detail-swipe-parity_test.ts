@@ -21,11 +21,10 @@ function recorder() {
   const calls: string[] = [];
   const router = {
     dismissTo: (href: DismissHref) => calls.push(`dismissTo:${typeof href === "string" ? href : href.pathname}`),
-    canDismiss: () => true,
-    dismissAll: () => calls.push("dismissAll"),
     navigate: (href: string) => calls.push(`navigate:${href}`),
   };
-  return { calls, router };
+  const reset = () => calls.push("reset");
+  return { calls, router, reset };
 }
 
 test("a swipe / back action is redirected to the explicit back; the screen's own navigation passes through", () => {
@@ -42,13 +41,13 @@ test("a swipe / back action is redirected to the explicit back; the screen's own
 
 test("news Home origin: the button target and the swipe target are the same function and the same result (Home)", () => {
   const button = recorder();
-  backFromNewsDetail(button.router, "home"); // 戻る button
+  backFromNewsDetail(button.router, "home", button.reset); // 戻る button
   const swipe = recorder();
   // The swipe is redirected by the screen through the very same function with the same origin.
   assert.equal(decideDetailRemoval("POP"), "redirect-to-back");
-  backFromNewsDetail(swipe.router, "home");
+  backFromNewsDetail(swipe.router, "home", swipe.reset);
   assert.deepEqual(swipe.calls, button.calls);
-  assert.deepEqual(button.calls, ["dismissAll", "navigate:/"]);
+  assert.deepEqual(button.calls, ["navigate:/", "reset"]);
 });
 
 test("news news-list origin: button == swipe == the news list", () => {
@@ -63,10 +62,10 @@ test("news news-list origin: button == swipe == the news list", () => {
 test("news unknown / cold deep link: the swipe and the button both fall back to Home", () => {
   for (const from of [undefined, "", "garbage", "topics"]) {
     const button = recorder();
-    backFromNewsDetail(button.router, from);
+    backFromNewsDetail(button.router, from, button.reset);
     const swipe = recorder();
-    backFromNewsDetail(swipe.router, from);
-    assert.deepEqual(swipe.calls, ["dismissAll", "navigate:/"], String(from));
+    backFromNewsDetail(swipe.router, from, swipe.reset);
+    assert.deepEqual(swipe.calls, ["navigate:/", "reset"], String(from));
     assert.deepEqual(swipe.calls, button.calls);
   }
 });
@@ -95,7 +94,7 @@ test("news detail screen: it prevents native removal and redirects only a back g
   const screen = await code("src/app/(tabs)/news/[id].tsx");
   assert.ok(screen.includes("usePreventRemove(true, ({ data }) => {"));
   assert.ok(screen.includes("decideDetailRemoval(data.action.type) === 'redirect-to-back' && Date.now() >= redirectingUntil.current"));
-  assert.ok(screen.includes("backFromNewsDetail(router, from);"), "the same function the header button calls");
+  assert.ok(screen.includes("backFromNewsDetail(router, from, () => resetStackWhenHidden(navigation));"), "the same function the header button calls");
   assert.ok(screen.includes("navigation.dispatch(data.action);"), "anything else is let through");
   assert.ok(screen.includes("redirectingUntil.current = Date.now() + 1000;"));
   assert.ok(screen.includes("useLocalSearchParams<{ id: string; from?: string }>()"));
@@ -108,7 +107,7 @@ test("news detail screen: it prevents native removal and redirects only a back g
 
 test("the header 戻る calls the same origin function as the swipe redirect, from the same `from` param", async () => {
   const layout = await code("src/app/(tabs)/news/_layout.tsx");
-  assert.ok(layout.includes("backFromNewsDetail(router, (route.params as { from?: unknown } | undefined)?.from)"));
+  assert.ok(layout.includes("backFromNewsDetail(router, (route.params as { from?: unknown } | undefined)?.from, () => resetStackWhenHidden(navigation))"));
   assert.ok(layout.includes("‹ 戻る") && layout.includes("ニュース一覧 ›") && layout.includes("headerBackVisible: false"));
 });
 

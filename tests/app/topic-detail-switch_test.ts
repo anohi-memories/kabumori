@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   goHome,
   goHomeFromNews,
+  resetStackWhenHidden,
   goNewsList,
   goTopicList,
   HOME_ROUTE,
@@ -179,22 +180,53 @@ test("destination helpers go straight to Home, the topic list and the news list 
   assert.equal(NEWS_LIST_ROUTE, "/news");
 });
 
-test("news detail Home: empties the news tab's stack, then selects the Home tab -- no history dependence", () => {
+test("news detail Home: selects the Home tab first, then empties the news stack -- no history dependence", () => {
   const calls: string[] = [];
-  const router = {
-    canDismiss: () => true,
-    dismissAll: () => calls.push("dismissAll"),
-    navigate: (href: string) => calls.push(`navigate:${href}`),
-  };
-  goHomeFromNews(router);
-  assert.deepEqual(calls, ["dismissAll", "navigate:/"]);
+  goHomeFromNews({ navigate: (href: string) => calls.push(`navigate:${href}`) }, () => calls.push("reset"));
+  assert.deepEqual(calls, ["navigate:/", "reset"]);
 
-  // A single-screen stack (cold deep link): nothing to dismiss, Home is still reached.
+  // Without a reset (nothing to clean up) Home is still reached.
   const cold: string[] = [];
-  goHomeFromNews({
-    canDismiss: () => false,
-    dismissAll: () => cold.push("dismissAll"),
-    navigate: (href: string) => cold.push(`navigate:${href}`),
-  });
+  goHomeFromNews({ navigate: (href: string) => cold.push(`navigate:${href}`) });
   assert.deepEqual(cold, ["navigate:/"]);
+});
+
+// A fake stack navigation: `blur` listeners can be fired by hand.
+function fakeStack() {
+  const listeners = new Set<() => void>();
+  const log: string[] = [];
+  return {
+    log,
+    listeners,
+    navigation: {
+      addListener: (_type: "blur", callback: () => void) => {
+        listeners.add(callback);
+        return () => {
+          listeners.delete(callback);
+        };
+      },
+      popToTop: () => log.push("popToTop"),
+    },
+    blur: () => [...listeners].forEach((callback) => callback()),
+  };
+}
+
+test("the news stack is emptied only after the news tab is hidden (blur), and only once", () => {
+  const stack = fakeStack();
+  resetStackWhenHidden(stack.navigation, 10_000);
+  assert.deepEqual(stack.log, [], "nothing is popped while the detail is still on screen");
+  stack.blur();
+  assert.deepEqual(stack.log, ["popToTop"]);
+  stack.blur();
+  assert.deepEqual(stack.log, ["popToTop"], "a second blur does nothing");
+  assert.equal(stack.listeners.size, 0, "the listener is removed");
+});
+
+test("if the tab never goes away the listener is dropped and the visible detail is never popped", async () => {
+  const stack = fakeStack();
+  resetStackWhenHidden(stack.navigation, 15);
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.equal(stack.listeners.size, 0);
+  stack.blur();
+  assert.deepEqual(stack.log, []);
 });
