@@ -105,14 +105,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: review_required
 - task_id: common-account-v1-phase1-production-backfill-gate-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Project-wide critical path. First run is read-only only: verify foundation exactness, run private.account_lifecycle_backfill(false) in READ ONLY mode, reconcile production legacy classification, refresh local/disposable backfill proof, freeze exact backfill(true) package, then STOP for explicit production approval. No backfill write yet. G3/G2 production mutation must not overlap an approved/active G5 window.
+- allocation: Final K5 PASS / BACKFILL_READY. Production read-only dry-run and parity proof are exact: auth 5, common_accounts_to_create 5, Kabumori entitlements 2, X entitlement 1, Auth-only 2, X excluded-admin 1. Production writes/backfill remain 0. PR #93 backfill gate tooling merged as b9cb6dcc. Waiting only for explicit user approval before backfill(true); G3/G2 production mutation must not overlap an approved/active G5 window.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
