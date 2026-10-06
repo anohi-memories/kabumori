@@ -3,8 +3,8 @@
 - task_id: kabumori-pr99-editorial-specificity-focused-review-20261007
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna（高）
 - type: focused runtime-delivery review / prompt specificity / WARN-only telemetry
