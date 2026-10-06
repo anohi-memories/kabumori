@@ -3,7 +3,7 @@
 - task_id: common-account-v1-phase1-production-backfill-gate-20261006
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: critical
 - start_code: G5
