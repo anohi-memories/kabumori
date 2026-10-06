@@ -94,14 +94,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: in_progress
+- status: review_required
 - task_id: common-account-v1-phase1-production-migration-gate-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Common-account Phase 1 production migration gate. Fresh full production read-only preflight and exact single-file apply/history mechanism first, then mandatory STOP for explicit mutation approval. After approval only the accepted 20261001150000 migration may be applied, followed by exhaustive schema/RLS/ACL/function/history read-back. No backfill, deletion activation, Auth/Storage/OAuth/Vault mutation, Edge deploy, Cron or real X. Production mutation must not overlap G4/G3 or any other slot.
+- allocation: Final K5 accepts PREFLIGHT_READY only. Phase A/B passed; production writes remain 0. G4 production_mutation_window is still ACTIVE, so G5 may not write yet. After G4 records CLOSED, rerun all 9 Phase A reads, refresh the existing-object fingerprint/ledger baseline, then return for same-task production apply approval. PR #91 runner/runbook remains merge HOLD for now; no extra Codex review allocated.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
