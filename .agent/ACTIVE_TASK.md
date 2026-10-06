@@ -81,7 +81,7 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - task_id: x-social-mobile-ai-consult-persona-generation-guidance-20261006
 - start_code: G3
 - finish_code: K3

@@ -3,7 +3,7 @@
 - task_id: x-social-mobile-ai-consult-persona-generation-guidance-20261006
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: highest
 - recommended_model: Sonnet5（高）
