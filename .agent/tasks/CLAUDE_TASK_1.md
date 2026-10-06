@@ -3,8 +3,8 @@
 - task_id: kabumori-topic-learning-access-progress-and-swipe-20261006
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: 実機確認で判明した戻るジェスチャー不一致を解消し、トピック一覧をSettings依存の単一レベル閲覧から「初級/中級/上級を自由に切替できる学習一覧」へ拡張し、端末内の既読/学習済み表示を追加する。
@@ -528,6 +528,17 @@ No code change is expected. If no issue is found:
 If a 375pt visual issue is found, make only the smallest bounded visual correction and rerun affected tests.
 
 Recommended model: **Sonnet5（中）**.
+
+## Final verification result — observed 375pt pass (K1 gate), PR #94
+
+- PR #94 (existing, not merged): branch `claude/g1-topic-learning-access-progress-swipe-20261006`, head **`97d374b48886ad33b61cd2288188d4b690e27a5c`** = reviewed code head `64c71bd6` + 3 screenshots (docs only; **no code change**).
+- Device: iPhone SE (3rd generation), iOS 27.0, 375x667 pt, driven with real taps/swipes (rig-only ctl used for pushing `/topics`, seeding the Settings level and fixtures). The device-access approval that blocked the previous attempts was granted this time. Rig = scratchpad auth-bypass/fixture copy of the PR head (not committed). EAS build = 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+- **Topic list @375pt — PASS.** Settings level = initial selection (beginner by default; Settings=intermediate re-opened on intermediate). Selector is one row: 335x48 (x=20); segments 107x40 at x=4/114/224, inside the track; accent colours green/blue/lavender follow the level. New description wraps to 3 lines (h=60, 335 wide) with no clipping. Three long titles wrap to exactly 2 lines (row 107 pt vs 86 pt for 1 line; title width 281.5): beginner 「PERが高い株と低い株は何が違うのですか？」, intermediate 「ROEが高い会社は本当に良い会社と言えるのでしょうか？」, advanced 「セクターローテーションが起きたときに何を見て判断すればよいか？」. Real taps opened 10/6 and 10/5 and came back: mixed `✓ 学習済み` (level-coloured) and `未読`, right edges aligned. Level switch beginner → intermediate → advanced via taps keeps every level's list intact. Scrolling shows rows at an 86 pt rhythm; rows are 335 wide (right edge 355 < 375); no horizontal clipping or overlap.
+- **Root news detail header @375pt — PASS.** From a Home market card (nav tree `news-detail(from=home)`): row 44 high; `‹ 戻る` x=20 w=38.5; `ニュース詳細` is a full-width centred text (≈ x 139.5–235.5, centre 187.5 = screen centre; ≈81 pt to 戻る, ≈25 pt to the right button); `ニュース一覧 ›` x=260.5 w=94.5 (right edge 355). No overlap or clipping. Body scrolls (742.5 vs 603) and ends with ~60 pt clear below the source button (SE has no bottom inset). Left-edge swipe (x=2) and the 戻る button both returned to Home.
+- **Topic detail @375pt — PASS (extra).** Nav row (`‹ 戻る` 38.5 / `トピック一覧 ›` x=240.5 w=94.5 in a 335 row), notebook label + date (date x=256 w=79), selector 335x48, Hero grows with 2-line (h 283) and 3-line (h 317) titles, 1-line Hero 190; nothing clipped.
+- Screenshots (`docs/ui-review/`): `topic_list_375pt.webp` (selector + 2-line title + learned/unread in one frame), `news_detail_375pt.webp`, `topic_detail_375pt.webp`.
+- Remaining (unchanged from the structural report): an app cold start from `kabumori://news/<id>` was not observed (a running app was used); a deep link opened over another screen swipes back to that screen while 戻る goes Home (deep-link-only); a refresh spinner can linger on the news list after returning (pre-existing, `news/index.tsx` unchanged).
+- Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 
 ---
 
