@@ -86,8 +86,8 @@ Recommended model: **Sonnet5（中）**.
 - task_id: kabumori-detail-navigation-topic-level-switch-20261006
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: かぶモリの詳細画面から迷わず移動できるよう、トピック詳細で「同じ日の初級/中級/上級」を簡単に切替可能にし、トピック詳細と重要ニュース詳細の双方に明示的なHome/一覧導線を追加する。
@@ -524,6 +524,33 @@ No DB/RPC/RLS/Auth/Edge/AI/news/report-generation/catalog/native/config/EAS/prod
 K1 reviews PR #90 (UI/navigation-only, low risk: no Codex review needed). The user may try it on the iPhone (server on request).
 
 Status: `review_required` / next_owner `chatgpt`. STOP for K1.
+
+## Final K1 — contextual Back + list navigation PASS / merged
+
+- verdict: **PASS**.
+- PR #90 exact accepted head: `39bdf30f4c1bdb4214acbe27bf918aeff8a39ab1`.
+- squash-merged as `bcbdc2b8df3ba66955ebbf3e10d04a19b446fe38`.
+- fresh pre-merge main comparison: changed-file overlap = **0**.
+- GitHub merge gate: `mergeable=true`, `mergeable_state=clean`; CI/status green.
+- final navigation contract accepted:
+  - topic detail left `‹ 戻る`: Home origin -> Home, topics origin -> /topics, unknown -> Home fallback;
+  - topic detail right `トピック一覧 ›`: always /topics;
+  - news detail left `‹ 戻る`: Home origin -> Home, news-list origin -> /news, unknown -> Home fallback;
+  - news detail right `ニュース一覧 ›`: always /news;
+  - origin is explicit route param and survives topic-level switching.
+- topic same-date 初級/中級/上級 switching and per-screen cache accepted; Home saved topic level remains unchanged.
+- 402pt Simulator real-tap verification accepted.
+- 375pt was not re-measured after the final label swap; K1 accepts this because the final labels are shorter than the previously verified 375pt variants and layout geometry has more headroom, with no code-path difference.
+- iOS edge-swipe on Home-origin news detail still returns to the nested news list while the explicit `戻る` button returns Home; accepted as native stack gesture behavior. The explicit button behavior is canonical.
+- tests/checks: **335/335 app tests**, focused 61, tsc clean, Expo config PASS, web export PASS, diff clean.
+- Codex review: **not required**; UI/navigation-only, no sensitive backend boundary, strong deterministic tests and Simulator evidence.
+- EAS build = 0.
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+- remaining non-blockers: real-iPhone touch/real-feed check remains useful but is not a merge blocker.
+- AI Lab diary: no new separate entry required; this is a navigation follow-up to the already recorded 2026-10-06 learning-screen work.
+- G1 done/free.
+
+---
 
 ## Report 2 — G1: contextual Back + always-available list (USER NAVIGATION DECISION, same task / same PR #90)
 
