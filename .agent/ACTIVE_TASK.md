@@ -32,15 +32,15 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: kabumori-pr99-editorial-specificity-focused-review-20261007
+- status: ready
+- task_id: common-account-v1-phase2-session-identity-final-rereview-20261007
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts PASS-WITH-NONBLOCKING-NOTES on PR #99 exact head cd33b1f22f532be9273d63f0f42f0a0d9c1de156. Prompt specificity/WARN-only telemetry/X rewrite 300-char threshold/bounded rejection diagnostics/Hard-call boundaries all accepted. PR #99 squash-merged as e3379f8066877b5b64fede2dc84cbdb995c85b8e. H1 free after fresh allocation.
-- recommended_model: Luna（高）
+- allocation: Mandatory focused exact-head re-review of PR #95 head 1e8119e1. Verify S1 same-user fresh-session isolation, stable session_id-based runtime identity, same-session token-refresh behavior, S2 queued X pre-dispatch cancellation, and regressions of already-passed R1-R5. No merge/deploy/production migration apply or production mutation.
+- recommended_model: Sol（高）
 
 ## Codex H2
 - owner: codex
@@ -105,14 +105,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: review_required
 - task_id: common-account-v1-phase2-service-enrollment-integration-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: C1 corrective round 2 on existing PR #95. Fix only H1 S1/S2: bind cache/view/consent/positive-ready to stable login-session identity (e.g. validated JWT session_id) so same-user fresh login invalidates old explicit request/result while ordinary same-session token refresh preserves single-flight; and prevent queued X automatic enrollment from dispatching after cleanup/sign-out/unmount by checking cancellation/current generation before ensure/transport dispatch. Preserve already-passed R1-R5 corrections and PR94 navigation. No production migration apply/deploy/EAS/Phase3. Mandatory exact-head H1 re-review after correction.
+- allocation: Final K5 accepts corrective round 2 as PASS_CANDIDATE only on PR #95 exact head 1e8119e12457d9f6fbb8aef86991f44bf46f9cd6. G5 reports S1 same-user fresh-session isolation and S2 queued X cancellation fixed; prior R1-R5 remain green. PR open/mergeable at K5; current main advanced only in .agent files with zero product overlap. Production migration apply/deploy/EAS remain 0. Merge HOLD pending mandatory H1 rereview.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
