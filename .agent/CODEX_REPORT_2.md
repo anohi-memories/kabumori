@@ -9,7 +9,7 @@
 - isolation: independent clone from kabumori-fresh, /private/tmp/h2-pr41-20261007.gpGVR3/review, detached exact candidate, clean tracked files. No shared slot/worktree/dev-server operations.
 - changed_files: this Report and .agent/tasks/CODEX_TASK_2.md only for GitHub synchronization. Source/migration implementation edits: 0. Disposable test helpers/logs outside repo only.
 - implementation_commit: review-only, none.
-- commit_hash / push: GitHub Contents API creates isolated control-file commits; exact commit SHAs returned by the API and independently verified after synchronization. No PR/source push.
+- commit_hash / push: SUCCESS — Report commit d8fa25a2c5e1132f281a06e8751a09b09a3ac4ec; TASK handback commit 95f00061fec267826e51d09e64a8c6b128f97865. Fresh GitHub main read-back matched both files byte-for-byte; fresh fetched main includes both commits. Isolated control-file commits only; no PR/source push. This final receipt records those verified commits.
 - deploy: 0; merge: 0; production read: 0; production mutation: 0.
 
 ### Findings — blocking
