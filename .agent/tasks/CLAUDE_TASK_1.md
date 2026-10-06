@@ -629,6 +629,14 @@ K1 reviews PR #94. The user can try it on the iPhone (server on request): Home t
 
 Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 
+### Addendum (after the user's real-device video) — Home-origin news 戻る, PR #94 head `ea8b01e81b7eebcaa77b08bd9dd177ceea7ae8a0`
+
+- User report (screen recording, frames inspected): from a Home-origin news detail the news list is visible for ~0.5 s on the way back to Home.
+- Cause of the button path: `backFromNewsDetail` did `dismissAll()` (pops the news stack while the news tab is still on screen) and only then `navigate('/')`. Fix: **`navigate('/')` first, then `resetStackWhenHidden(navigation)`** — the news stack is emptied with `popToTop()` only after the screen's `blur` (the tab is hidden); if no blur arrives within 2 s the listener is dropped and nothing is popped. Used by both the header `‹ 戻る` and the swipe redirect. Unit tests cover the order, a single reset, and the no-blur path (377 tests pass; tsc / expo config / web export clean).
+- Simulator (402pt, frame-accurate video at 0.02 s): button back — list frames **0 after and also 0 before**, i.e. the real-device flash was **not reproduced** in the Simulator, so the fix cannot be shown to be the cause/cure there; per back: `reset-armed`, `blur`, `popToTop` exactly once, news stack `[index]`, no stale detail, no white screen over 3 repeats; from=news and the right-hand `ニュース一覧 ›` unchanged.
+- Swipe back (Home origin): during the drag the list underneath is visible (native interactive pop); after release the detail briefly re-appears (~0.06–0.3 s) and then Home shows — the same before and after this change (inherent to the prevent-and-redirect approach). If this is what the user saw, avoiding it needs the Home-origin news detail to live **above** the tabs (a root-stack route like the topic detail, so the native swipe pops straight to Home) — a larger change (tab bar hidden on the news detail, entry/deep-link routing) that needs a product decision.
+- Found, not caused by this change (same before/after): cold `kabumori://news/<id>` → 戻る → tap a Home news card leaves the news list on a spinner (nav tree keeps a stale `id` param on root/(tabs)); and after `from=news` 戻る the list heading rendered ~60 pt lower once. Neither investigated.
+
 ---
 
 # USER NAVIGATION DECISION — SUPERSEDES PRIOR PLACEMENT CORRECTIONS
