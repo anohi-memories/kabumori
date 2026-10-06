@@ -3,8 +3,8 @@
 This is the newest canonical instruction for G5 and supersedes the prior PASS_CANDIDATE disposition.
 
 - task_id remains: `common-account-v1-phase2-service-enrollment-integration-20261006`
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - target PR: **#95**, update the existing PR; do not open a replacement PR unless technically unavoidable and reported first.
 - previous reviewed head: `c06fac6492708331b6ba816122c9852cdcea73e7`
 - current main now includes PR #94 merge `d30a518731e976ab1c0e4e19e26f461a174a3c1c`.
@@ -440,6 +440,148 @@ At completion:
 Recommended model: **Opus5.5（極高）**.
 
 ## Report
+
+### C1 corrective — 2026-10-06（R1〜R5 の修正、最新）
+
+- task_id: common-account-v1-phase2-service-enrollment-integration-20261006
+- result: **PASS_CANDIDATE（C1 指摘 R1〜R5 を修正済み）**。
+  - source のみ。新しい migration は**未適用**。
+  - 本番の変更 0、deploy 0、EAS 0、本番への接続 0。
+- PR：[#95](https://github.com/anohi-memories/kabumori/pull/95)
+  - 新しい head `dd065e16f64a37582f73d05f1ab57ff7d276a5f7`（旧 head は `c06fac64`）。
+  - force-push はしていない（main の merge commit `09e0ff98` と修正の commit `dd065e16` の 2 つ）。
+  - GitHub 上の状態は MERGEABLE。merge は HOLD。
+- fresh main と PR #94 の取り込み：
+  - `origin/main` `58fd96ce` を merge した。この main には PR #94 の merge `d30a5187` が含まれている。
+  - 衝突は 0。`src/app/_layout.tsx` には次の 2 つが両方ある。
+    - PR #94 の root `<Stack.Screen name="news-detail" />`
+    - 修正後の AuthGate（静的テストで固定済み）
+- 他スロットとの重なり：open PR（#41 G3、#33 admin、codex 系）と G1〜G4 / H1 / H2 の状態を確認し、重なりは 0。G1 は done。
+
+#### migration / RPC の契約の差分（R1）
+
+新しい前方向の migration `20261006230000_common_account_service_start_intent.sql`。Phase 1 の migration は編集していない。
+
+- **自動の start**（`start_kabumori_service()` / `start_x_autopost_service()`、名前と権限は不変）：
+
+  | 状態 | 応答 | 変更 |
+  |---|---|---|
+  | 未登録 | `{status:'active', service, started:true, shared_account}` | 作成（Kabumori は profile も） |
+  | active | `{…, started:false, …}` | なし |
+  | **ended** | `{status:'reenroll_required', service, lifecycle_version}` | **なし**（lifecycle のロックの中で決める） |
+  | deleting / suspended / provisioning / locked / 削除中の account | `{status:'blocked', reason}` | なし |
+
+  - 古い呼び出し側も、安全側に変わるだけ。
+- **明示的な再開**（新設：`reactivate_kabumori_service(bigint)` / `reactivate_x_autopost_service(bigint)`、authenticated のみ）：
+
+  | 状態 | 応答 | 変更 |
+  |---|---|---|
+  | **今 ended**、かつ `lifecycle_version` が本人の確認した値と一致 | active | 再開。version が進むので、同じ確認は 1 回しか使えない |
+  | version が違う | `lifecycle_changed` | なし |
+  | active | `started:false` | なし |
+  | 未登録 / account なし | `not_registered` | 何も作らない |
+  | それ以外 | blocked | なし |
+
+- 変えていないもの：ロックの順番（auth.users → account → entitlement）、`auth.uid()`、SECURITY DEFINER、`search_path=''`、authenticated だけが EXECUTE。
+- 置き換わるのは `private.account_lifecycle_start_service` だけ。catalog 上、それ以外は byte 一致（runner で証明）。
+- rollout の順番：この migration を本番に適用（別途承認）してから、この client を含む app を出す。client は新しい応答の形しか受け付けず、それ以外は fail closed になる。
+
+#### client（両アプリで同じロジック。5 行の header より下は byte 一致で、テストが固定している）
+
+- **R4 session-bound transport**
+  - RPC の前に client 側で読むことはしない。判定はサーバーが atomic に行う。
+  - request ごとに、開始した時点の session の access token を Authorization に固定した PostgREST fetch を使う。共有 client の「今の token」は使わない。token の log / 保存はしない。
+  - 送信前なら、sign-out / 別の user / 新しい request で abort し、送らない。
+  - 1 人 1 リクエストの single-flight。同じ人の token 更新では再送しない。
+- **R2 一回限りの明示的な意図**
+  - Kabumori（`reenroll()`）と X の gate（クリック）は、クリックしたその場で、その session の token と、サーバーが返した version で 1 回だけ送る。
+  - 送信中にもう一度押しても送らない。
+  - 何も記憶しないので、別の人が意図を引き継ぐ経路が無い。
+  - 結果は、最新の request で、かつクリックした本人のときだけ画面に反映する。
+- **R3 Kabumori：「ready」を確認してから**
+  - `serviceSession` は「この人に対して ready が確定し、loading でない」ときだけ session を返す（`src/lib/service-session.ts`）。
+  - push の登録・通知の遷移・`SignedInNavigator` はすべてこれを使う。
+  - pending / 再試行中 / 拒否 / 失敗では null。
+  - 受け入れたセッションは、request の前に必ず pending にする。最新の request だけが結果を確定できる。取り消された request は失敗として表示しない。
+- **R5 応答の厳格な検証**：次のすべてを満たす応答だけを受け付ける。それ以外は blocked `UNKNOWN`（ready にはならない）。
+  - key の集合が完全一致
+  - `started` と `shared_account` が boolean
+  - service が完全一致
+  - version が safe integer で 1 以上
+  - reason が既知のもの
+
+#### H1 の再現ケース：すべて PASS になった
+
+| H1 | 今回の再現テスト | 結果 |
+|---|---|---|
+| R1 withdraw → 古い自動 start（Kabumori / X） | DB の behavior B1 / B2 と 2 セッションの race 4a〜4c | ended のまま。profile も再作成されない |
+| R2 A がクリック → B に切り替え | X の gate を実際に動かすテスト、Kabumori の provider を実際に動かすテスト | 再開の送信は A の 1 件だけ。B には 0 件。B は自分の再開画面のまま |
+| R3 拒否 → 再試行の待ち → 拒否 | Kabumori の provider を実際に動かすテスト、純関数のテスト | どの render でも serviceSession は null |
+| R4 A の遅延 → B に切り替え / sign-out | gate の単体テスト、X の gate テスト、Kabumori の provider テスト | A は abort され、B の token では一切送らない。A の遅い応答で app は開かない |
+| R5 `{status:'active', service}`（started なし）など | 両アプリで 24 種以上の不正な応答 | すべて UNKNOWN。gate も閉じたまま |
+
+#### テスト / 確認
+
+| 対象 | 結果 |
+|---|---|
+| DB `supabase/tests/common_account_service_start_intent_run.sh`（ローカル PG17.11、偽データ） | PREFLIGHT / ADDITIVE / REAPPLY_REFUSED / BEHAVIOR と、race 5 種（end→start、start→end、X の end→start、確認 1 回で再開 2 回、end→古い再開）がすべて PASS |
+| migration を意図的に壊した版 8 種 | 6 種は狙ったチェックで検出、1 種（anon に権限）は migration 自身の postflight が拒否。残る 1 種（entitlement の行ロックを外す）は、全 lifecycle の呼び出しが account 行で直列化されているため、冗長な二重防御と分類 |
+| Phase 1 `common_account_lifecycle_run.sh` | 20 / 20 PASS（変化なし） |
+| Kabumori `deno test --no-check --allow-read tests/app/` | 387 / 387（PR #94 の分を含む） |
+| Kabumori `node --test tests/node/auth-provider-enrollment.test.mjs` | 4 / 4（実物の AuthProvider） |
+| Kabumori `tsc`（`src/`） | 以前からある CSS の 2 件だけ |
+| X `npm test` | 207 / 207（実物の ServiceEnrollmentGate を含む） |
+| X `tsc` / `expo lint` | PASS |
+| `expo export --platform web` | 両アプリとも成功。bundle に start / reactivate があり、`ensure_my_profile` は無い |
+| client を意図的に壊した版 9 種 | 8 種を検出。残る 1 種は X のクリック handler の、表示中の user の再確認（同じ render から作られ、UI からは到達できない二重防御） |
+| `migration_source_invariants_test.ts` | 10 / 10 |
+| `git diff --check` / 秘密情報・PII の scan | clean / 0 |
+
+#### changed_files（`dd065e16`、15 ファイル）
+
+- 新規：
+  - `supabase/migrations/20261006230000_common_account_service_start_intent.sql`
+  - `supabase/tests/common_account_service_start_intent_run.sh`
+  - `supabase/tests/common_account_service_start_intent_behavior.sql`
+  - `src/lib/service-session.ts`
+  - `tests/node/auth-provider-enrollment.test.mjs`
+- 変更：
+  - `src/lib/service-enrollment.ts`、`src/lib/auth.ts`
+  - `src/lib/supabase.ts`（公開 URL / publishable key を export するだけ）
+  - `src/providers/auth-provider.tsx`、`src/app/_layout.tsx`
+  - `tests/app/service-enrollment_test.ts`
+  - `apps/social-mobile/src/domain/service-enrollment.ts`
+  - `apps/social-mobile/src/features/service-enrollment/service-enrollment-gate.tsx`
+  - `apps/social-mobile/tests/service-enrollment.test.mjs`
+  - `docs/common-account/phase2-service-enrollment.md`
+- この Report：`.agent/tasks/CLAUDE_TASK_5.md` のみ。
+
+#### その他
+
+- production mutation / deploy / EAS：**0 / 0 / 0**。migration の本番適用は 0。
+- remaining_issues：
+  - 新しい migration の本番適用は、別途承認が必要（Phase 1 と同じ単一ファイルの手順 + 読み返し）。app を出す前に必要。
+  - 既に送信済みの request は取り消せない。ただし送るのは本人の token だけで、その応答は無視する（docs に明記）。
+  - Kabumori の provider を実際に動かすテストは Node で動かす（`tests/node/`）。Deno の標準コマンドは typescript に必要な env の権限を持たないため。
+  - 実機（Simulator / iPhone）での確認はまだ。native build は承認が必要な別工程。
+  - 古い binary で登録した人の扱い（check → 必要なら backfill）、Phase 3。
+- safety_checks：
+  - RLS / producer / 削除経路 / Auth / Storage / OAuth / Vault / X の publish 権限 / Cron / Edge は変更していない。
+  - client から common テーブルへの直接書き込みは 0。e-mail での統合は 0。
+  - 他スロットのファイルは編集していない。公開 env はダミー値だけを使った。
+- next_recommendation：TASK のとおり、この head `dd065e16` について H1 の focused re-review（Sol 高）が必須。
+  - 重点：
+    - migration の自動 / 明示の意味と race
+    - session に結び付いた transport と abort
+    - 一回限りの意図
+    - serviceSession
+    - 厳格な検証
+    - PR #94 との共存
+  - re-review が PASS の後で、migration の本番適用の gate → app の build、の順番で進める。
+
+---
+
+### 以前の Report（PASS_CANDIDATE、`c06fac64`、C1 で CHANGES REQUIRED。履歴として保持）
 
 - task_id: common-account-v1-phase2-service-enrollment-integration-20261006
 - result: **PASS_CANDIDATE**（source のみ。本番の変更 0、deploy 0、EAS 0）。
