@@ -48,13 +48,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
+- next_owner: none
+- status: done
 - task_id: kabumori-detail-navigation-topic-level-switch-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: PR #90 visual/navigation correction。左は contextual「‹ 戻る」= Home起点ならHome、一覧起点なら各一覧、unknown/deep linkはHome fallback。右は常時一覧ボタン（トピック一覧 / ニュース一覧）。nested news stackの偶然に依存しないようentry originを明示param等で保持。topic level切替でもorigin維持。375/402確認、focused tests、EAS 0、backend mutation 0。
+- allocation: Final K1 PASS。PR #90 exact head 39bdf30f4c1bdb4214acbe27bf918aeff8a39ab1 を squash-merge as bcbdc2b8df3ba66955ebbf3e10d04a19b446fe38。左「戻る」はentry originへ、右は常時トピック一覧/ニュース一覧。topic level同日切替・Home設定非変更、335/335 tests、EAS 0、backend mutation 0。Codex不要。G1 free。
 - recommended_model: Sonnet5（中）
 
 ## Claude G2
