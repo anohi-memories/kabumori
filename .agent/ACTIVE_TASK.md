@@ -96,14 +96,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: review_required
+- status: done
 - task_id: common-account-v1-phase1-production-migration-gate-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Final K5 accepts fresh PREFLIGHT_READY. G4-closed Phase A refresh passed 9/9; only expected PR76 ledger/function deltas observed; production writes remain 0. G5 is now waiting only for explicit user approval of the exact common-account production migration apply. G3 may continue read-only only and must not mutate production before this decision.
+- allocation: Final K5 PASS. Common-account Phase 1 lifecycle foundation migration 20261001150000 applied to production with exact schema/RLS/ACL/function/history read-back; production_mutation_window CLOSED at 14:58 JST. Backfill and all Phase 2/3 integrations remain unstarted. PR #91 rollout tooling merged as 50e08e1d. G5 free after fresh allocation.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
