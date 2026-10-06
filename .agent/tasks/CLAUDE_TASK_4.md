@@ -3,9 +3,9 @@
 - task_id: x-social-mobile-pr76-production-rollout-gate-20261006
 - owner: claude
 - slot: claude-4
-- status: in_progress
-- next_owner: claude
-- production_mutation_window: **ACTIVE** — G4 PR76 S1–S5 (user approved 2026-10-06 ~01:00 JST; x-test-post + publish-setting deploy, migration 20261003090000 + one history row). Other slots: no production write until this line says CLOSED.
+- status: review_required
+- next_owner: chatgpt
+- production_mutation_window: **CLOSED** — 2026-10-06 14:11 JST. G4 PR76 S1–S5 complete and read back (x-test-post v135 code / publish-setting v1 / migration 20261003090000 + one exact history row). G4 performs no further production write.
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: production rollout gate / read-only preflight / runtime-first deployment plan / migration gate
@@ -2296,3 +2296,68 @@ K4 確認後、TASK どおり H2 で Codex **Sol（極高）** の独立再レ�
 - 固定パッケージは最新 main `cf4498af` でも不変（PR87 の merge は x-test-post／_shared／publish-setting／migration に触れていない）。
 - 本番の mutex: G2（PR87 の deploy ゲート）と G5（共通アカウントの migration）が進行中。S1 の直前に、両者が本番変更を行っていないことを確認する。
 - 次: ユーザーの明示的な本番承認を待つ（S1〜S5、時間帯は 07:41 JST より前に完了させる）。
+
+
+## Report — x-social-mobile-pr76-production-rollout-gate-20261006 (final, 2026-10-06)
+
+- task_id: x-social-mobile-pr76-production-rollout-gate-20261006
+- result: **PASS — PR76 production rollout S1–S5 complete; every read-back exact**. production_mutation_window **CLOSED**（14:11 JST）。
+- model_used: Opus 5.5
+- fresh main at close: `7ef61a15`. Source freeze: `e303d81e`（x-test-post／_shared／publish-setting／migration は close 時点の main とも同一）。
+- approval: ユーザーの明示承認「S1〜S5 をすべて承認」（2026-10-06 00:5x JST、S0 完了後）。S1 直前に S0 を再実行して実質的な変化なしを確認し、全ブランドで running 0／期限切れ 0 も確認した。
+
+### 本番で行った操作（承認範囲内。これ以外はしていない）
+| step | 時刻（JST） | 実行者 | 内容 | 読み戻し |
+| --- | --- | --- | --- | --- |
+| S1 | 00:57:25 完了（T1） | Claude | `supabase functions deploy x-test-post --no-verify-jwt --use-api`（1関数のみ、prune なし） | v134→**v135**、ACTIVE、verify_jwt=false、ソースが固定 main と完全一致（47ファイル。型専用の `_shared/x_v2_claim_credentials.ts` はバンドルされないので想定どおり不在）、PR76 ガードあり、PR82 runtime あり。他の関数は不変 |
+| S2 | 01:12:44 | Claude | ドレイン（T1 から 15 分以上。公式ドキュメントの実行時間上限は 150 秒／400 秒）＋クエリ h | T1 より前に開始した running 0、running 0、期限切れ 0 |
+| S3-A | 1回目 ~01:20 | 操作者 | `s3_stage_a.sh`（psql、session pooler、postgres） | **パスワード認証に失敗。接続段階で終了（exit 2）、SQL は1文も実行されていない**。読み戻しで関数 0・履歴 0 を確認 |
+| S3-A | ~01:40 | 操作者 | DB パスワードをリセット（事前に影響を確認: Supabase 管理下のサービスは自動追従。リポジトリのコード・ワークフロー・Edge は DB パスワード未使用。secret `SUPABASE_DB_URL` はどのコードも未使用）してから再実行 | 適用成功 |
+| S3-B | 01:43 | Claude | `s4_readback.sql`＋`check_s4.py stage-b` | **S4_EXACT (stage-b)** |
+| S3-C | 1回目 ~14:05 | 操作者 | `s3_stage_c.sh` | 照合スクリプトの不具合（操作者のターミナルでは CLI の JSON が配列で返るのに、`{rows: …}` 形式しか想定していなかった）で、**履歴を書く前に STOP**。読み戻し自体は stage-b で EXACT。`check_s4.py` を両形式に対応させ、ローカルで両形式と段階違いを確認 |
+| S3-C | 14:09 | 操作者 | `s3_stage_c.sh` 再実行 | Stage B EXACT → 履歴 insert 1行 → **S4_EXACT (final)** |
+| S4 | 14:09 | Claude（独立の読み戻し） | 同じ読み戻し | **S4_EXACT (final)**。ledger: `20261003090000 / social_mobile_publish_permission_boundary` 1行 |
+| S5 | 14:10:33 | Claude | `supabase functions deploy social-mobile-publish-setting --use-api`（config で verify_jwt=true） | **v1、ACTIVE、verify_jwt=true**、ソースが固定 main（= PR76 merge）と完全一致（3ファイル）。関数一覧の変化はこの1件の追加のみ |
+| S6 | — | — | なし | アカウントの形は S0 と同一（トグル 0） |
+
+### S4 の読み戻し（固定の期待値と完全一致）
+- 2関数: `public.set_social_account_publish_enabled(p_social_account_id text, p_desired_enabled boolean, p_expected_current_enabled boolean)` と `public.assert_x_publish_permission_for_legacy_post(p_scheduled_post_id uuid, p_social_account_id text, p_brand_id text)`
+  - owner は postgres（= helper の所有者）、SECURITY DEFINER、plpgsql、volatile、strict ではない
+  - config: switch は `lock_timeout=3s,search_path=""`、check は `search_path=""`
+  - 本体 SHA-256: switch `2da9f9a2…`、check `eab80dd2…`
+- 直接 ACL: `check:service_role:EXECUTE:false;switch:authenticated:EXECUTE:false`、PUBLIC なし
+- 実効 EXECUTE: anon はなし、authenticated は switch のみ、service_role は check のみ。その他のロールは 0。同名の関数は2つだけ。
+- ledger: 該当行は exact 1、同名の別 version は 0。PR81 `20261003120000` と共通アカウント `20261001150000` は未記録（未着手、想定どおり）。
+- PostgREST: `pgrst_ddl_watch`・`pgrst_drop_watch` が有効なので、schema cache の手動再読込は不要だった。
+
+### 適用後の稼働状況（読み取りのみ）
+- 部分適用の間（K4 の中間確認時点）にも、AI Lab の自然な投稿は成功し、claims は published になっていた。
+- close 時点: running 0、期限切れ 0。S1 以降の投稿は成功 8・失敗 1。
+- **失敗の1件はかぶモリの `morning_greeting`（06:43 予定）**。error_code なし。かぶモリは Vault 連携ではないので PR76 のガードを通らず、PR82 の変更も AI Lab の処理だけ。さらに `morning_greeting` は **9/29 から毎日1件ずつ失敗**しており、今回の変更より前からの既存問題。別途調査を推奨する。
+
+### 観測したこと（記録）
+- 01:00 前後に、全関数の version が一斉に +1 され、updated_at は不変だった（誰かの `secrets set` によるもの）。x-test-post も v135→v136 になったが、updated_at・ezbr・ソースのハッシュは S1 から不変。
+- **別の作業が、本番作業の時間帯中（00:59 JST）に `important-news-monitor` を再 deploy していた**（v92→v94、PR #89 系）。PR76 の対象とは無関係で影響はないが、本番 mutex の告知（G4 は ACTIVE）と重なっていたので記録しておく。
+- DB パスワードをリセットした。今後 psql や運用ランナーを使う人・ツールは新しいパスワードが必要。
+
+### 固定パッケージと証跡（未追跡、`/Users/yuya/Developer/kabumori-g4-pr76-rollout/g4-preflight/`）
+- migration `b2ed7c75…`、x-test-post の manifest `faaccc7a…`（48ファイル。うち型専用1）、publish-setting の manifest `a844d7fc…`。
+- 使ったファイル:
+  - `run_s0.sh`、`s0_preflight.sql`、`s0_cron.sql`
+  - `readback_function.sh`、`compare_deployed.py`（`6dad40cc…`）、`check_s2.py`
+  - `s3_stage_a.sh`（`50081e69…`）、`s3_stage_c.sh`（`eda5f3d7…`）
+  - `s4_readback.sql`（`85704e9b…`）、`check_s4.py`（`2da42d66…`）、`expected_s4.json`
+  - `references/*.json`
+- 結果: `results/`（s0、x-test-post と publish-setting の読み戻し、`s4_stage_b.json`、`s4_final.json` `e0f15820…`）。
+- worktree には production link（`supabase/config.toml`、`supabase/.temp/`）が残っている。リポジトリには commit していない。
+
+### production / safety
+- 本番への書き込みは承認された4種類だけ: x-test-post の deploy、migration（DDL＋権限）、履歴1行、publish-setting の deploy。DB パスワードのリセットは操作者が行った。
+- publish toggle 0、アカウントや投稿の行の変更 0、実 X の手動操作 0、Cron・手動 dispatch・backlog 0、Auth・Vault・OAuth の変更 0。PR81 は同梱していない。PR82 の runtime は承認どおり同時に有効化した。
+- Codex の追加レビューは不要（TASK どおり。読み戻しで不一致なし、ソース変更なし）。
+
+### remaining blockers / next
+- **PR76 migration の前提は満たされた → G3／PR81（`20261003120000`）を再開してよい。** G5（共通アカウント）も、本番 mutex が CLOSED になったので、自分の再確認から進められる。
+- S6（アプリのコントロールの公開・実際の利用）は別の製品／QA 工程として未実施。
+- かぶモリ `morning_greeting` の毎日失敗（9/29〜）は別タスクで調査を推奨する。
+- status: review_required / next_owner: chatgpt。STOP for K4。
