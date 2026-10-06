@@ -1,5 +1,77 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-pr87-close-natural-observation-20261006
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（中）
+- type: read-only natural production observation
+- production_mutation_allowed: false
+
+## Purpose
+
+2026-10-06 大引けの自然生成を read-only で確認し、PR #87 の「今日の3ポイント」が本番で狙いどおりになっているか評価する。
+
+## Time gate
+
+- 16:15 data
+- 16:20 analysis
+- 16:35 retry
+- 17:15 personalized close
+
+16:40 JSTより前に開始した場合は、待機せず「まだ観測時刻前」と報告して停止する。
+最初の観測は16:40 JST以降を推奨。
+
+## Baseline
+
+- market-report-analysis v24 ACTIVE / verify_jwt=false
+- v24 は fresh main と byte-identical
+- personalized-reports は v40 のまま（今回deployせず）
+- app_enabled=false / x_enabled=false
+- relevant crons unchanged
+- production mutation window CLOSED
+
+## Observe
+
+- close data/report cycle status・attempt・error
+- packet ids / content hash / duplicate
+- first try or retry
+- exactly 3 points
+- 3点が数値3連発ではなく、出来事・重要材料・次に見る点になっているか
+- unsupported causality がないか
+- Hard Fact false reject がないか
+- warning / rewrite / model calls / tokens / cost（記録があれば）
+
+分類:
+- PASS_FIRST_TRY
+- PASS_WITH_RETRY
+- FAIL_FALSE_REJECT
+- FAIL_FACTUAL_DEFECT
+- OBSERVATION_INCOMPLETE
+
+## Safety
+
+read-onlyのみ。manual generation/retry、deploy、gate/Cron変更、DB write、X/通知などのproduction mutationは禁止。
+
+## Report
+
+classification / observation time / cycle / packet ids / exact 3 points / editorial評価 / factual safety / diagnostics / production mutation=0 / 10/7朝刊観測の要否を書く。
+
+完了時:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-pr87-controlled-production-deploy-20261006
 - owner: claude
 - slot: claude-2
