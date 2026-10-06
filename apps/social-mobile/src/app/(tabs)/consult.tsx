@@ -105,10 +105,16 @@ export default function ConsultScreen() {
   async function confirmProposal() {
     const pending = state.pending;
     if (!pending || saving) return;
-    if (preview || !repository || !brandId || status !== "ready") {
+    if (preview) {
       const applied = applyConfirmedConversationProposal(saved.settings, saved.persona, pending.result);
       setSaved({ settings: applied.settings, persona: applied.persona, updatedAt: null });
       dispatch({ type: "saved", text: "ローカルプレビューとして確認しました。実データへはまだ保存していません。" });
+      return;
+    }
+    // A signed-in workspace that cannot be reached right now is not a preview: nothing is saved, and the
+    // screen must not suggest that it was.
+    if (!repository || !brandId || status !== "ready") {
+      dispatch({ type: "save_failed", text: "いまは保存できません。時間をおいて、もう一度お試しください。" });
       return;
     }
     setSaving(true);

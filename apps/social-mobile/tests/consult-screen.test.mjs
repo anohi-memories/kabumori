@@ -76,8 +76,10 @@ async function consultHarness({ status = 'ready', script, stored } = {}) {
     '@/domain/content-settings-conversation': conversation,
     '@/domain/consult-session': session,
     '@/providers/auth-provider': { useAuth: () => ({ session: status === 'mock_preview' ? null : { access_token: 'jwt-1' } }) },
-    '@/providers/data-provider': { useDataStatus: () => ({ status, snapshot: { workspace: { id: 'u_1' } } }) },
+    '@/providers/data-provider': { useDataStatus: () => ({ status: live.status, snapshot: { workspace: { id: 'u_1' } } }) },
   };
+  // The data status can change while the screen is open (e.g. the workspace becomes unreachable).
+  const live = { status };
   const source = await readFile(new URL('../src/app/(tabs)/consult.tsx', import.meta.url), 'utf8');
   const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const module = { exports: {} };
@@ -91,7 +93,7 @@ async function consultHarness({ status = 'ready', script, stored } = {}) {
     await settle();
     return render();
   };
-  return { render, say, store, ai };
+  return { render, say, store, ai, live };
 }
 
 test('greeting, casual chat and a follow-up question show replies and no proposal; nothing is written', async () => {
@@ -254,6 +256,22 @@ test('empty or oversized input cannot be sent', async () => {
   button(tree, '送信').onPress();
   await settle();
   assert.equal(h.ai.calls.length, 0);
+});
+
+test('a signed-in workspace that becomes unreachable before 「これで覚えて」 saves nothing and never claims a preview save', async () => {
+  const h = await consultHarness({
+    script: () => ({ ok: true, result: result({ kind: 'proposal', assistantReply: 'この内容で覚えてよいか確認してください。', proposedSettingsDelta: { preferredTone: '親しみやすく' } }) }),
+  });
+  await h.say('親しみやすくしたい');
+  h.live.status = 'unavailable';
+  button(h.render(), 'これで覚えて').onPress();
+  await settle();
+  const shown = texts(h.render());
+  assert.ok(shown.some((t) => t.includes('いまは保存できません')));
+  assert.ok(!shown.some((t) => t.includes('保存しました') || t.includes('ローカルプレビュー')));
+  assert.equal(h.store.writes.length, 0);
+  // The proposal stays visible so the user can confirm again later.
+  assert.ok(button(h.render(), 'これで覚えて'));
 });
 
 test('the sample-data preview never calls the endpoint and never writes', async () => {
