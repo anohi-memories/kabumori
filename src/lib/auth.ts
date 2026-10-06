@@ -3,20 +3,40 @@ import * as Linking from 'expo-linking';
 
 import { RECOVERY_PATH, resetEmailIssue } from '@/lib/password-recovery';
 import { removeThisDevicePushTokenBestEffort } from '@/lib/push-notifications';
+import {
+  createEnrollmentGate,
+  enrollService,
+  type EnrollmentClient,
+  type EnrollmentOutcome,
+} from '@/lib/service-enrollment';
 import { supabase } from '@/lib/supabase';
 
-// The profile row is created by public.ensure_my_profile(), which derives the id from auth.uid()
-// inside one idempotent statement. The previous client-side select-then-insert could not be made
-// atomic and defined this invariant in app code; the RPC makes it a server-side guarantee that a
-// caller can only ever apply to their own account.
-export async function ensureProfile() {
-  const { error } = await supabase.rpc('ensure_my_profile');
-  if (error) throw new Error(`プロフィールを準備できませんでした。${error.message}`);
+// Every accepted session is enrolled in Kabumori through the common-account lifecycle RPC
+// public.start_kabumori_service(): for auth.uid() only, it ensures the common account, the active
+// `kabumori` entitlement and the profile row in one idempotent server transaction. It replaces the
+// former ensure_my_profile() call, so the profile is never created outside the service start.
+const kabumoriEnrollment: EnrollmentClient = {
+  readOwnEntitlements: () => supabase.from('service_entitlements').select('service_key,status'),
+  startService: () => supabase.rpc('start_kabumori_service'),
+};
+
+const enrollmentGate = createEnrollmentGate((allowReenroll) =>
+  enrollService(kabumoriEnrollment, 'kabumori', { allowReenroll }),
+);
+
+/** Enrolls the session's person in Kabumori (shared, one request per person). Throws only on a transient failure. */
+export function prepareSession(session: Session): Promise<EnrollmentOutcome> {
+  return enrollmentGate.ensure(session.user.id);
 }
 
-export async function prepareSession(session: Session) {
-  await ensureProfile();
-  return session;
+/** The person chose to use Kabumori again after ending it. */
+export function reenrollKabumori(session: Session): Promise<EnrollmentOutcome> {
+  return enrollmentGate.reenroll(session.user.id);
+}
+
+/** Forgets the remembered outcome (sign-out, another person, an explicit retry). */
+export function resetServiceEnrollment() {
+  enrollmentGate.reset();
 }
 
 export async function signInWithEmail(email: string, password: string) {
@@ -40,6 +60,7 @@ export async function signOut() {
   await removeThisDevicePushTokenBestEffort();
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
+  resetServiceEnrollment();
 }
 
 /**

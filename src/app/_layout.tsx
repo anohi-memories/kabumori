@@ -1,12 +1,14 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-native';
+import { useEffect } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, useColorScheme, View } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AuthScreen } from '@/components/auth-screen';
 import { OnboardingScreens } from '@/components/onboarding-screens';
 import { PasswordResetScreen } from '@/components/password-reset-screen';
 import { ProfileRecoveryScreen } from '@/components/profile-recovery-screen';
+import { ServiceAccessScreen } from '@/components/service-access-screen';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import { useOnboardingV1 } from '@/hooks/use-onboarding';
 import { useRecoveryLink } from '@/hooks/use-recovery-link';
@@ -40,12 +42,31 @@ function SignedInNavigator() {
 }
 
 function AuthGate() {
-  const { session, loading, error, profileError, retry } = useAuth();
+  const {
+    session,
+    loading,
+    error,
+    profileError,
+    serviceAccess,
+    enrollmentNotice,
+    dismissEnrollmentNotice,
+    retry,
+    reenroll,
+  } = useAuth();
   const colorScheme = useColorScheme();
   const { link, clearRecoveryLink } = useRecoveryLink();
   const { completed: onboardingCompleted, complete: completeOnboarding } = useOnboardingV1();
-  useRegisterPushToken(session);
-  usePushNotificationNavigation(session);
+  // Kabumori service data (push tokens, notification routing) is touched only after the session's
+  // common-account enrollment succeeded; a refused or failed enrollment keeps the app closed.
+  const serviceSession = session && !serviceAccess && !profileError ? session : null;
+  useRegisterPushToken(serviceSession);
+  usePushNotificationNavigation(serviceSession);
+
+  useEffect(() => {
+    if (!enrollmentNotice) return;
+    Alert.alert('利用登録が完了しました', enrollmentNotice);
+    dismissEnrollmentNotice();
+  }, [enrollmentNotice, dismissEnrollmentNotice]);
 
   // A reset link takes precedence over both the app and the login form: it can arrive while signed
   // out, and it also creates a session of its own that would otherwise skip the new password.
@@ -67,6 +88,8 @@ function AuthGate() {
       <AnimatedSplashOverlay />
       {onboardingCompleted === false ? (
         <OnboardingScreens onComplete={completeOnboarding} />
+      ) : session && serviceAccess ? (
+        <ServiceAccessScreen access={serviceAccess} onRetry={retry} onReenroll={reenroll} />
       ) : session && profileError ? (
         <ProfileRecoveryScreen message={profileError} onRetry={retry} />
       ) : session ? (
