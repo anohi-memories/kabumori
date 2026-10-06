@@ -1,3 +1,15 @@
+# H1 — PR #95 session-identity / queued-cancellation final focused re-review — 2026-10-07
+
+- task_id: common-account-v1-phase2-session-identity-final-rereview-20261007
+- status: Pending.
+- target_pr: 95
+- target_head: 1e8119e12457d9f6fbb8aef86991f44bf46f9cd6
+- recommended_model: Sol（高）
+
+---
+
+# Previous H1 report history — preserved
+
 # H1 — PR #99 editorial specificity / delivery-threshold review — 2026-10-07 JST
 
 - task_id: `kabumori-pr99-editorial-specificity-focused-review-20261007`
