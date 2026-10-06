@@ -1,3 +1,24 @@
+## G1 assigned — Topic learning access / progress / swipe parity
+
+- task_id: `kabumori-topic-learning-access-progress-and-swipe-20261006`.
+- status: ready; owner: Claude G1.
+- recommended model: **Sonnet5（高）**.
+- fresh allocation main: `9c6f71bf00557c3c9b9ddc0a4198702600731660`.
+- previous G1 PR #90 is Final K1 PASS / merged / G1 free.
+- fresh open-PR overlap check: **0 overlap** with topic/news/navigation target paths.
+- user real-iPhone finding: news Home-origin edge swipe currently lands on news list while visible `戻る` lands Home. New invariant: **native swipe and visible Back must resolve to the same explicit origin destination** for Home/list origins on both topic and news detail.
+- topic list becomes independent learning access:
+  - compact 初級/中級/上級 selector;
+  - Settings level is only Home display preference and merely initial list default;
+  - list switching never writes Home preference;
+  - selected-level fetch only, with per-level in-memory loaded-page cache/race protection.
+- detail right-side topic-list action should request the currently viewed level; normal contextual Back to an existing list preserves that list's own current level.
+- add local-device learned/read state using existing AsyncStorage only; successful detail display / successful in-detail level switch marks learned; errors/mismatch do not.
+- list shows unobtrusive 未読 / 学習済み state and refreshes immediately after returning from detail.
+- no DB/RPC/Auth/Edge/account-sync/prod/EAS changes.
+- verify real Simulator edge swipes plus 375/402 list UI.
+- finish code: K1.
+
 ## Final K2 — PR #87 production deploy PARTIAL PASS / close observation next
 
 - verdict: **PARTIAL PASS, safety stop accepted**.
