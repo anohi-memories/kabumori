@@ -82,11 +82,11 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: x-social-mobile-pr41-acl-corrective-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_3.md
 - allocation: Bounded corrective for H2/C2 PR #41 findings only. R1: fail closed on any effective service_role column privilege drift, including inherited/PUBLIC column grants, with atomic rollback. R2: exact/effective EXECUTE hardening for completion + publish-authority privileged RPCs against unknown default ACL, inheritance, grant option, overload/owner drift; no global ACL/role repair. Preserve already-passed live-generation/runtime behavior and G5 boundaries. Source-only; no production/merge/deploy. Recommended Opus5.5（高）.
 - recommended_model: Opus5.5（高）
