@@ -1,3 +1,36 @@
+## Final K4 — Morning greeting schedule reliability B+C PASS / PR #92 merged
+
+- verdict: **PASS**.
+- PR #92 exact head `3d5475849217e1ca9f40bbedf12a42c0e5671504` squash-merged as `19c85c4381c55161207032146d6f66eb8a0c99f5`.
+- changed files: exactly 5, limited to morning-greeting generator/check workflows and tests/scripts.
+- Plan B:
+  - generator schedules now 00:17 / 02:47 / 04:17 / 05:17 JST;
+  - existing `workflow_dispatch` preserved;
+  - existing generator concurrency preserved;
+  - repeated same-date runs skip once `generated/<date>.png` exists, avoiding duplicate OpenAI/upload work.
+- Plan C:
+  - read-only checks at 06:07 / 09:47 JST;
+  - reads posting window + Storage metadata only;
+  - missing => `MORNING_GREETING_IMAGE_MISSING`;
+  - image created at/after earliest posting-window start => `MORNING_GREETING_IMAGE_LATE`;
+  - read/shape errors fail closed;
+  - no OpenAI secret in the check workflow and no DB/Storage/X write.
+- tests: 44/44 PASS; YAML parse PASS; changed-file typecheck clean; diff check clean.
+- CI on exact head: Netlify/Vercel success.
+- branch was behind fresh main by control-only commits; fresh-main changes since merge-base touched only `.agent/`, so overlap with the 5 PR files = **0**.
+- production mutation/deploy/real X/GitHub token/Vault/Supabase pg_cron/manual dispatch = **0**.
+- extra Codex review: **not required** under minimal-review policy.
+- manual 10/7 fallback remains available via existing workflow_dispatch if needed.
+- remaining limitation: B+C still depend on GitHub scheduler. Plan A (Supabase pg_cron -> GitHub workflow_dispatch) remains a separate credential/Vault/Cron-boundary task.
+- G4 done/free.
+
+### G3 coordination snapshot at this K4
+- G3 task `x-social-mobile-pr81-production-apply-continuation-20261006` is `review_required` after Gate A/B/C preflight-ready HOLD.
+- Its report held production mutation only because G5 common-account apply was pending.
+- G5 current TASK now records its exact migration applied and `production_mutation_window: CLOSED` at 14:58 JST.
+- Therefore the former G5 mutex blocker is no longer active, but G3 must **rerun its fresh Gate A/B after the G5 ledger/default-ACL delta** before requesting/using any PR81 production approval.
+- This G4/K4 does not allocate or modify G3.
+
 ## G1 assigned — Topic learning access / progress / swipe parity
 
 - task_id: `kabumori-topic-learning-access-progress-and-swipe-20261006`.
