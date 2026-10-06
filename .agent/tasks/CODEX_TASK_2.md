@@ -3,8 +3,13 @@
 - task_id: x-social-mobile-pr41-live-generation-security-review-20261007
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
+- h2_review_result: CHANGES REQUIRED
+- h2_reviewed_head: 280aa0f83d4f039ba3e43f32da202a91fd2333f2
+- h2_review_completed_at: 2026-10-07 JST
+- h2_review_blockers: R1 effective column privileges; R2 default/inherited RPC EXECUTE
+- h2_report_commit: d8fa25a2c5e1132f281a06e8751a09b09a3ac4ec
 - priority: highest
 - recommended_model: Sol（高）
 - type: one focused security review / SECURITY DEFINER reader / service_role ACL / live user auto-post boundary
