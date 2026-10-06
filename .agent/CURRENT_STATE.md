@@ -1,3 +1,19 @@
+## Final K5 — PR #95 round-2 PASS_CANDIDATE / focused H1 rereview assigned — 2026-10-07
+
+- G5 result: **PASS_CANDIDATE**, not final merge approval.
+- exact PR #95 head: `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`; PR is open/unmerged and was mergeable at K5.
+- S1 is reported fixed by binding runtime cache/view/readiness/explicit consent to `userId + stable login session_id`; same-user fresh login invalidates old pending/explicit work, while same-session token refresh preserves single-flight.
+- S2 is reported fixed by checking cancellation/current user+session+generation before X queued automatic enrollment enters ensure/transport; pre-dispatch unmount/sign-out/supersede sends zero obsolete requests.
+- former H1 S1-X / S1-Kabumori / S2 adversarial reproductions are reported PASS with valid fixtures.
+- prior R1-R5 corrections remain green; SQL was unchanged in this round.
+- reported tests: Kabumori 390/390; AuthProvider 10/10; X 221/221; X tsc/lint PASS; both web exports PASS; start-intent DB runner 10 PASS markers; Phase1 20/20; migration invariants 10/10; diff/secret/PII/log scan clean.
+- current main moved three commits past PR merge-base, but allocation-time comparison shows only .agent control-file changes and zero overlap with PR #95 product files; H1 must re-check freshness.
+- production mutation / migration apply / deploy / EAS / real provider call = **0**.
+- H1 focused rereview assigned: `common-account-v1-phase2-session-identity-final-rereview-20261007`, target exact head `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`, recommended **Sol（高）**.
+- G5 remains review_required / next_owner codex. PR #95 merge and production migration apply remain HOLD.
+- later gates only: source PASS -> separate production migration approval/apply/read-back -> native validation/build/release.
+- AI Lab diary: no additional entry; this is another internal security-hardening iteration of the same common-account milestone.
+
 ## Final K5 — PR #95 round-2 PASS_CANDIDATE / final focused H1 re-review assigned — 2026-10-07
 
 - G5 result: **PASS_CANDIDATE**, not final merge approval.
