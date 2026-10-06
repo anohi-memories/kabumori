@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase2-service-enrollment-review-20261006
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - type: focused auth/session/service-enrollment security review
@@ -173,6 +173,17 @@ Then:
 - STOP for C1.
 
 Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-06
+
+- Exact reviewed PR #95 head: `c06fac6492708331b6ba816122c9852cdcea73e7`; unchanged at final fresh fetch.
+- Verdict: **CHANGES REQUIRED**; R1/R2/R4 are P1, R3/R5 are P2. See `.agent/CODEX_REPORT.md` for reproductions and minimum safe corrections.
+- Ended silently reactivated after completed withdrawal in a disposable PostgreSQL fixture for both services; explicit current-user action is not guaranteed.
+- Adversarial probes reproduce cross-user re-enrollment consent, stale request using the new user's SDK credential, pending-retry push gate bypass, and malformed active payload accepted as ready.
+- Existing tests: Kabumori 352/352, X 157/157; combined latest PR94 + PR95 Kabumori 392/392. Both web exports and X typecheck/lint passed. Kabumori app-only tsc has two unchanged CSS-resolution diagnostics, no changed-file diagnostic.
+- Final compatibility target PR #94: `97d374b48886ad33b61cd2288188d4b690e27a5c`; both merge-tree orders produce `00ab532dd8565c330d070bab369d622d45996ffe`. No actual PR merge.
+- Product source changes: 0. Production access/mutation, merge, deploy, EAS, Auth/Storage/OAuth/Vault changes: 0.
+- Next: STOP for C1. ChatGPT should return corrections to G5; no merge recommendation until corrected exact head passes focused re-review. Recommended model: **Sol（高）** for C1/re-review.
 
 ---
 
@@ -3508,4 +3519,3 @@ Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 - recommended Claude model: **Opus5.5（高）**.
 - corrected candidate requires fresh Codex rereview: **Sol（高）**.
 - H1 closed and reusable after fresh allocation.
-
