@@ -1,3 +1,37 @@
+## Final C2 — PR #41 CHANGES REQUIRED accepted / bounded G3 ACL corrective
+
+- H2 reviewed exact PR #41 head `280aa0f83d4f039ba3e43f32da202a91fd2333f2`.
+- verdict: **CHANGES REQUIRED accepted**. PR #41 remains open/unmerged/undeployed.
+- blocker R1 P2:
+  - reader migration checks table-level service_role privilege but can miss effective column-level privileges;
+  - H2 reproduced a pre-existing column SELECT grant where migration COMMITed and service_role could directly read settings rows cross-brand;
+  - source must refuse any effective service_role column privilege drift, including inherited/PUBLIC cases, across all live columns, without repairing unrelated ACLs.
+- blocker R2 P1:
+  - completion and publish-authority migrations revoke only known roles and can retain unknown default/inherited EXECUTE;
+  - H2 reproduced authenticated ability to enable publish authority and to forge completion state under adverse default-ACL/inheritance fixtures;
+  - source must enforce exact signature/kind/owner/search_path/raw+effective EXECUTE/grant-option matrix and fail atomically on unsafe default ACL/role inheritance/overload drift.
+- clean-path review results remain accepted:
+  - narrow reader tenant binding is correct;
+  - both consent paths use the reader;
+  - missing row/manual_review fail closed;
+  - generic live dispatcher/PR76 guard/PR78 memory-to-live generation are correct;
+  - AI Lab/Kabumori paths unchanged;
+  - G5 enforcement intentionally deferred and candidate remains dormant without explicit authority activation.
+- independent H2 evidence:
+  - x-test-post 534/534;
+  - dispatcher/routing/invariants 30/30;
+  - PR76 focused 33/33;
+  - focused consult/dry-run/brand/AI Lab 85/85;
+  - app memory-generation/consult/settings 36/36;
+  - broad 3 failures reproduced on baseline and are unrelated.
+- production reads/writes = 0; migration/history apply = 0; deploy = 0; real X/OpenAI = 0; Auth/Vault/OAuth/Cron changes = 0.
+- H2 is closed after C2.
+- fresh G3 corrective assigned:
+  `x-social-mobile-pr41-acl-corrective-20261007`
+  recommended **Opus5.5（高）**.
+- corrective scope is only R1/R2 + bounded regressions. No G5 work, no runtime redesign, no production.
+- because H2 found concrete P1/P2 in the same high-risk boundary, one focused rereview of the corrected R1/R2 boundary is required after K3, recommended **Sol（高）**. Do not repeat a broad routine review.
+
 ## Final K2 — PR #99 PASS_CANDIDATE / one focused H1 review required — 2026-10-07
 
 - G2 corrective result: **PASS_CANDIDATE**, not final merge approval.
