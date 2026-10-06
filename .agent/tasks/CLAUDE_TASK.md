@@ -3,8 +3,8 @@
 - task_id: kabumori-pr87-controlled-production-deploy-20261006
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - production_mutation_window: **CLOSED** — 2026-10-06 14:34 JST（ACTIVE 14:31:45〜）。G2 performs no further production write. Deployed `market-report-analysis` only (v24). `personalized-reports` NOT deployed (HELD for K2; see Report).
 - priority: high
 - recommended_model: Opus5.5（高）
