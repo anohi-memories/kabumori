@@ -6,7 +6,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import { fetchDailyTopic } from '@/lib/daily-topic';
-import { goHome, goPastTopics } from '@/lib/detail-navigation';
+import { backFromTopicDetail, goTopicList, parseDetailOrigin } from '@/lib/detail-navigation';
 import { isTopicLevel, TOPIC_LEVEL_LABEL, type HomeTopic, type TopicLevel } from '@/lib/home-topic';
 import { topicDetailFor, type TopicDetailSection } from '@/lib/topic-detail-catalog';
 import {
@@ -59,8 +59,8 @@ const FADE_STRIP_HEIGHT = 2;
 // level/date changed in the meantime (e.g. from another tab or a midnight
 // rollover while this screen was open).
 //
-// Navigation: explicit ホーム / 過去のトピック destinations (never router.back(), so a cold deep link has
-// both too) and a 初級/中級/上級 selector that only changes what this open screen shows -- it resolves the
+// Navigation: a contextual 「‹ 戻る」 (resolved from the explicit `from` origin param, Home when unknown, never
+// from stack history) and an always-available 「トピック一覧 ›」, and a 初級/中級/上級 selector that only changes what this open screen shows -- it resolves the
 // SAME jstDate through the same read-only fetch, keeps loaded levels in an in-memory cache, and never
 // writes the Settings level that drives Home.
 //
@@ -70,7 +70,7 @@ const FADE_STRIP_HEIGHT = 2;
 // static curated catalog (src/lib/topic-detail-catalog.ts): rendering makes no network, AI or database
 // call of its own.
 export default function TopicDetailScreen() {
-  const params = useLocalSearchParams<{ id?: string; level?: string; jstDate?: string }>();
+  const params = useLocalSearchParams<{ id?: string; level?: string; jstDate?: string; from?: string }>();
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [status, setStatus] = useState<Status>('loading');
@@ -123,6 +123,9 @@ export default function TopicDetailScreen() {
   }, [params.id, params.level, params.jstDate, cache]);
 
   const viewDate = typeof params.jstDate === 'string' ? params.jstDate : '';
+  // How this screen was opened (home | topics); null for a deep link. It only decides where 「戻る」 goes and
+  // is carried through level switches.
+  const origin = parseDetailOrigin(params.from);
 
   // In-screen level switch: the target is the deterministic topic of the SAME date. On success the exact
   // returned topic is shown and the route params become its real id/level/jstDate; on failure the current
@@ -144,7 +147,7 @@ export default function TopicDetailScreen() {
         setTopic(next);
         setStatus('ok');
         setPendingLevel(null);
-        router.setParams(topicDetailRouteParams(next, viewDate));
+        router.setParams(topicDetailRouteParams(next, viewDate, origin));
       };
       const cached = cache.get(viewDate, target);
       if (cached) {
@@ -162,7 +165,7 @@ export default function TopicDetailScreen() {
         }
       });
     },
-    [cache, pendingLevel, topic, viewDate],
+    [cache, origin, pendingLevel, topic, viewDate],
   );
 
   const detail = topic ? topicDetailFor(topic.title) : null;
@@ -178,20 +181,20 @@ export default function TopicDetailScreen() {
       <ScrollView contentContainerStyle={[styles.container, { paddingBottom: 60 + insets.bottom }]}>
         <View style={styles.navRow}>
           <Pressable
-            onPress={() => goHome(router)}
+            onPress={() => backFromTopicDetail(router, params.from)}
             accessibilityRole="button"
-            accessibilityLabel="ホームへ"
+            accessibilityLabel="戻る"
             hitSlop={8}
             style={styles.navButton}>
-            <Text style={styles.navText}>‹ ホーム</Text>
+            <Text style={styles.navText}>‹ 戻る</Text>
           </Pressable>
           <Pressable
-            onPress={() => goPastTopics(router)}
+            onPress={() => goTopicList(router)}
             accessibilityRole="button"
-            accessibilityLabel="過去のトピックへ"
+            accessibilityLabel="トピック一覧へ"
             hitSlop={8}
             style={styles.navButton}>
-            <Text style={styles.navText}>過去のトピック ›</Text>
+            <Text style={styles.navText}>トピック一覧 ›</Text>
           </Pressable>
         </View>
 

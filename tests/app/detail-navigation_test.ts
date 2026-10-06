@@ -7,10 +7,11 @@ const repoRoot = new URL("../../", import.meta.url);
 const read = (path: string) => Deno.readTextFile(new URL(path, repoRoot));
 const code = async (path: string) => (await read(path)).replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/^\s*\/\/.*$/gm, "");
 
-test("topic detail: ホーム and 過去のトピック are explicit controls that use direct destinations, not history", async () => {
+test("topic detail: 「‹ 戻る」 (origin-based) and 「トピック一覧 ›」 (always the list) replace the old controls", async () => {
   const screen = await code("src/app/topic-detail.tsx");
-  assert.ok(screen.includes("onPress={() => goHome(router)}") && screen.includes("<Text style={styles.navText}>‹ ホーム</Text>"));
-  assert.ok(screen.includes("onPress={() => goPastTopics(router)}") && screen.includes("<Text style={styles.navText}>過去のトピック ›</Text>"));
+  assert.ok(screen.includes("onPress={() => backFromTopicDetail(router, params.from)}") && screen.includes("<Text style={styles.navText}>‹ 戻る</Text>"));
+  assert.ok(screen.includes("onPress={() => goTopicList(router)}") && screen.includes("<Text style={styles.navText}>トピック一覧 ›</Text>"));
+  assert.ok(!/ホーム<|過去のトピック ›|goHome\(|goPastTopics/.test(screen), "no third Home button, no old labels");
   assert.ok(!/router\.(back|canGoBack)\(/.test(screen), "no history dependence");
   assert.ok(!/BackButton/.test(screen), "the single generic back control is replaced");
   const nav = await code("src/lib/detail-navigation.ts");
@@ -23,7 +24,7 @@ test("topic detail: both destinations are above every state, so loading / error 
   const navigation = screen.indexOf("styles.navRow");
   const states = screen.indexOf("status === 'loading' ?");
   assert.ok(navigation > 0 && states > navigation, "the nav row is rendered before (outside) the status branches");
-  assert.ok(screen.indexOf("goPastTopics(router)") < states && screen.indexOf("goHome(router)") < states);
+  assert.ok(screen.indexOf("goTopicList(router)") < states && screen.indexOf("backFromTopicDetail(router, params.from)") < states);
 });
 
 test("topic detail: the selector sits between the notebook label and the Hero, with compact 初級/中級/上級 buttons", async () => {
@@ -41,7 +42,7 @@ test("topic detail: switching resolves the SAME date, updates the route to the r
   const screen = await code("src/app/topic-detail.tsx");
   assert.ok(screen.includes("const viewDate = typeof params.jstDate === 'string' ? params.jstDate : '';"));
   assert.ok(screen.includes("resolveTopicForLevel({ level: target, jstDate: viewDate, cache, fetchTopic: fetchDailyTopic })"));
-  assert.ok(screen.includes("router.setParams(topicDetailRouteParams(next, viewDate))"), "params become the exact id/level/jstDate");
+  assert.ok(screen.includes("router.setParams(topicDetailRouteParams(next, viewDate, origin))"), "params become the exact id/level/jstDate, origin carried over");
   assert.ok(!/todayJst|new Date\(|Date\.now/.test(screen), "never falls back to today's date");
   // No Settings / storage writer reachable from the detail screen.
   const imports = [...new Set(screen.match(/from '[^']+'/g) ?? [])];
@@ -110,11 +111,12 @@ test("history -> detail -> Home and Home -> detail -> past topics exist as real 
   assert.ok(topics.includes("readTopicLevel()"));
 });
 
-test("news detail: the header offers ニュース一覧 (left) and ホーム (right) as direct routes", async () => {
+test("news detail: the header has an origin-based 「‹ 戻る」 (left) and an always-available 「ニュース一覧 ›」 (right)", async () => {
   const layout = await code("src/app/(tabs)/news/_layout.tsx");
   assert.ok(layout.includes("headerLeft: () => ("), "custom left action");
-  assert.ok(layout.includes("onPress={() => goNewsList(router)}") && layout.includes("‹ ニュース一覧"));
-  assert.ok(layout.includes("headerRight: () => (") && layout.includes("onPress={() => goHomeFromNews(router)}") && layout.includes(">ホーム<"));
+  assert.ok(layout.includes("onPress={() => backFromNewsDetail(router, (route.params as { from?: unknown } | undefined)?.from)}") && layout.includes("‹ 戻る"));
+  assert.ok(layout.includes("headerRight: () => (") && layout.includes("onPress={() => goNewsList(router)}") && layout.includes("ニュース一覧 ›"));
+  assert.ok(!/ホーム<|goHome\(/.test(layout), "no third Home button");
   assert.ok(layout.includes("headerBackVisible: false"), "no second (implicit) back control");
   assert.ok(!/router\.(back|canGoBack)\(|headerBackTitle/.test(layout), "neither action depends on history");
   const nav = await code("src/lib/detail-navigation.ts");
@@ -148,4 +150,21 @@ test("news: which items are returned, the access boundary and presentation are u
   assert.ok(detail.includes("fetchMyImportantNewsItem(String(id))") && detail.includes("buildNewsPresentation(item)"));
   const imports = (await code("src/app/(tabs)/news/_layout.tsx")).match(/from '[^']+'/g) ?? [];
   assert.deepEqual(imports.sort(), ["from '@/constants/kabumori-theme'", "from '@/lib/detail-navigation'", "from 'expo-router'", "from 'react-native'"].sort());
+});
+
+test("every entry point passes its explicit origin as the `from` param", async () => {
+  const push = (text: string, path: string) => assert.ok(text.includes(path), path);
+  push(await read("src/app/(tabs)/index.tsx"), "jstDate: todayJstValue, from: 'home' },");
+  push(await read("src/app/topics.tsx"), "jstDate: row.date, from: 'topics' },");
+  push(await read("src/components/home/home-market-news-grid.tsx"), "params: { id: item.news_id, from: 'home' }");
+  push(await read("src/components/home/home-holding-news-list.tsx"), "params: { id: item.news_id, from: 'home' }");
+  push(await read("src/app/(tabs)/news/index.tsx"), "params: { id: item.news_id, from: 'news' }");
+});
+
+test("the origin is read from route params only: no storage, no backend, no stack inspection", async () => {
+  const nav = await code("src/lib/detail-navigation.ts");
+  assert.ok(!/AsyncStorage|setItem|supabase|fetch\(|canGoBack|\.back\(|useNavigationState|getState\(/.test(nav));
+  assert.ok(!/^import /m.test(nav), "the navigation helpers are dependency-free");
+  const screen = await code("src/app/topic-detail.tsx");
+  assert.ok(screen.includes("const origin = parseDetailOrigin(params.from);"));
 });

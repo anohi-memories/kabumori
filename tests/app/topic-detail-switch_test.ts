@@ -5,7 +5,7 @@ import {
   goHome,
   goHomeFromNews,
   goNewsList,
-  goPastTopics,
+  goTopicList,
   HOME_ROUTE,
   NEWS_LIST_ROUTE,
   TOPICS_ROUTE,
@@ -158,7 +158,7 @@ test("the inline error names the level and says the shown content is unchanged",
   assert.equal(topicSwitchErrorMessage("advanced"), "上級のトピックを取得できませんでした。表示中の内容はそのままです。");
 });
 
-test("explicit destinations go straight to Home, the past-topics list and the news list -- never back()", () => {
+test("destination helpers go straight to Home, the topic list and the news list -- never back()", () => {
   const calls: string[] = [];
   const router = {
     dismissTo: (href: string) => calls.push(`dismissTo:${href}`),
@@ -171,7 +171,7 @@ test("explicit destinations go straight to Home, the past-topics list and the ne
     replace: () => calls.push("replace"),
   };
   goHome(router);
-  goPastTopics(router);
+  goTopicList(router);
   goNewsList(router);
   assert.deepEqual(calls, ["dismissTo:/", "dismissTo:/topics", "dismissTo:/news"]);
   assert.equal(HOME_ROUTE, "/");

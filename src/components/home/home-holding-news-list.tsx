@@ -54,7 +54,7 @@ export function HomeHoldingNewsList({ palette, items, loading, error, onRetry }:
           return (
             <Pressable
               key={item.news_id}
-              onPress={() => router.push({ pathname: '/news/[id]', params: { id: item.news_id } })}
+              onPress={() => router.push({ pathname: '/news/[id]', params: { id: item.news_id, from: 'home' } })}
               style={({ pressed }) => [
                 styles.row,
                 index > 0 && { borderTopColor: HOME_COLORS.cardBorder, borderTopWidth: StyleSheet.hairlineWidth },

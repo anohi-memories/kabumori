@@ -3,6 +3,7 @@
 // deterministic (level, SAME jstDate) topic through the existing read-only fetch, keeps what was already
 // loaded in a small in-memory cache, and never touches the Settings level preference that drives Home.
 
+import type { DetailOrigin } from './detail-navigation';
 import type { HomeTopic, TopicLevel } from './home-topic';
 
 /** Compact labels for the 3-way selector (the Hero badge keeps the longer 初心者向け wording). */
@@ -62,9 +63,17 @@ export async function resolveTopicForLevel(options: {
   }
 }
 
-/** The exact route params of a displayed topic: its real id, its real level and the date being viewed. */
-export function topicDetailRouteParams(topic: HomeTopic, jstDate: string): { id: string; level: TopicLevel; jstDate: string } {
-  return { id: topic.id, level: topic.level, jstDate };
+/**
+ * The exact route params of a displayed topic: its real id, its real level and the date being viewed. The
+ * origin (`from`, how the screen was opened) is carried over unchanged so 「戻る」 keeps working after a switch.
+ */
+export function topicDetailRouteParams(
+  topic: HomeTopic,
+  jstDate: string,
+  origin: DetailOrigin | null = null,
+): { id: string; level: TopicLevel; jstDate: string; from?: DetailOrigin } {
+  const params = { id: topic.id, level: topic.level, jstDate };
+  return origin ? { ...params, from: origin } : params;
 }
 
 export function topicSwitchErrorMessage(level: TopicLevel): string {

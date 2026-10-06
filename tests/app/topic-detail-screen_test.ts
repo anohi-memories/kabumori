@@ -10,7 +10,7 @@ const code = async (path: string) => (await read(path)).replace(/\{\/\*[\s\S]*?\
 
 test("the safe fetch contract is unchanged: exact (level, jstDate), id verified, fail-closed", async () => {
   const screen = await read("src/app/topic-detail.tsx");
-  assert.ok(screen.includes("useLocalSearchParams<{ id?: string; level?: string; jstDate?: string }>()"));
+  assert.ok(screen.includes("useLocalSearchParams<{ id?: string; level?: string; jstDate?: string; from?: string }>()"));
   assert.ok(screen.includes("if (!isTopicLevel(level) || !jstDate || !id) {"));
   assert.ok(screen.includes("fetchDailyTopic(level, jstDate)"));
   assert.ok(screen.includes("if (!result || result.id !== id) {"), "a different id is a mismatch");

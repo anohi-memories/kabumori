@@ -79,7 +79,7 @@ export default function TopicsScreen() {
               row.topic &&
               router.push({
                 pathname: '/topic-detail',
-                params: { id: row.topic.id, level: row.topic.level, jstDate: row.date },
+                params: { id: row.topic.id, level: row.topic.level, jstDate: row.date, from: 'topics' },
               })
             }
             accessibilityRole="button"
