@@ -1,3 +1,98 @@
+## H2 — PR #41 live-generation security review — 2026-10-07 JST
+
+- task_id: x-social-mobile-pr41-live-generation-security-review-20261007
+- result / verdict: **CHANGES REQUIRED**. Two reproduced migration/privilege blockers; no implementation changes made by H2.
+- status: review_required
+- next_owner: chatgpt
+- reviewed_exact_head: 280aa0f83d4f039ba3e43f32da202a91fd2333f2 (PR #41, open/unmerged; head unchanged at final fresh fetch).
+- fresh_main: startup 676ce44b3d7f9282276428fbfee0dedc4ce4d385; final pre-sync 8a6c1475c4594cdc5371fa79016f0c8269444285 (previous check 06335b3aa0319d8902642c4ab06ae5385db6ebd2); PR merge-base e7da97d4625fb1474db5c5397e598eedf2589efe.
+- isolation: independent clone from kabumori-fresh, /private/tmp/h2-pr41-20261007.gpGVR3/review, detached exact candidate, clean tracked files. No shared slot/worktree/dev-server operations.
+- changed_files: this Report and .agent/tasks/CODEX_TASK_2.md only for GitHub synchronization. Source/migration implementation edits: 0. Disposable test helpers/logs outside repo only.
+- implementation_commit: review-only, none.
+- commit_hash / push: GitHub Contents API creates isolated control-file commits; exact commit SHAs returned by the API and independently verified after synchronization. No PR/source push.
+- deploy: 0; merge: 0; production read: 0; production mutation: 0.
+
+### Findings — blocking
+
+#### R1 — P2: reader migration misses effective column-level service_role table access
+
+- location: supabase/migrations/20261006160100_social_mobile_publish_settings_reader.sql:110-111 (preconditions at 28-44 also do not reject this).
+- The postcondition checks has_table_privilege only. A column SELECT grant is a separate privilege; has_table_privilege(...,'SELECT') remains false even when has_column_privilege(...,'settings','SELECT') is true.
+- Independent reproduction: apply the actual PR81 candidate+hardening and Stage3A/completion to a nonsuperuser-owned disposable PG17 database; before applying the new reader, GRANT SELECT(settings) ON public.social_mobile_content_settings TO service_role; insert two fake user-brand settings rows.
+- Apply the actual unmodified reader migration: **COMMIT succeeds**, contrary to the documented invariant that the underlying table is inaccessible (including columns).
+- Read-back: TABLE_SELECT=false, COLUMN_SELECT=true. SET ROLE service_role; SELECT count(settings) FROM public.social_mobile_content_settings returns DIRECT_CROSS_BRAND_ROWS=2. No running scheduled post or narrow-reader binding is required for that direct read. No X/provider call.
+- The provided reader behavior test asserts no *direct* column grants in a clean fixture, but does not inject drift before migration; that is not an apply-time guarantee and does not test inherited/effective column privileges.
+- Required bounded correction: refuse unexpected effective column SELECT/DML privilege on every relevant live column, including inherited/PUBLIC grants, before committing (do not widen privileges or silently alter unrelated ACL/role graphs). Add direct and inherited column-drift fixtures proving refusal and atomic rollback. Do not claim this grant exists in production: production was intentionally not read.
+
+#### R2 — P1: completion and authority RPC migrations retain unexpected default/inherited EXECUTE
+
+- locations:
+  - supabase/migrations/20261006160200_x_account_publish_authority.sql:176-183;
+  - supabase/migrations/20261006160000_vault_account_brand_post_completion.sql:111-115.
+- REVOKE targets only PUBLIC/anon/authenticated/service_role. An unknown default-ACL grantee survives CREATE FUNCTION, and there is no postcondition validating the exact effective EXECUTE matrix or rejecting inherited application-role access. The reader migration catches this drift for its own function; the other two migrations do not.
+- Independent authority reproduction: start from a disposable DB with the actual clean reader already applied; create local fake role h2_unknown; GRANT h2_unknown TO authenticated; ALTER DEFAULT PRIVILEGES FOR ROLE kb_refresh_pilot_owner IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO h2_unknown; apply the actual authority migration. It **COMMITs**.
+- Read-back: AUTH_READER_EXECUTE=false, AUTH_SETTER_EXECUTE=true. SET ROLE authenticated can call set_x_account_publish_authority('sa_pilot','enabled','ADVERSE_AUTH',now(),now()+interval '1 day'); result AUTH_UNAUTHORIZED_ENABLE=enabled and AUTH_ENABLED_ROWS=1. The caller does not need owner membership or a service_role credential. Thus a normal app role can acquire the supposedly operator/service-only publish-activation capability through a drifted role/default ACL.
+- Independent completion reproduction on a separate fake database: same unknown default EXECUTE/inheritance; actual completion migration **COMMITs**. AUTH_COMPLETION_EXECUTE=true; SET ROLE authenticated can call complete_vault_account_brand_post for a known fake running user-brand post, supplying a fabricated numeric X id/hash. FAKE_COMPLETION_PERSISTED=true; POST_STATUS=succeeded, without any X request.
+- This demonstrates unauthorized publish-authority enablement and forged completion state under the precise adverse conditions the TASK asks to cover. It does not assert those drifted grants exist in production.
+- Required bounded correction: validate exact signatures/kinds, explicit safe ownership, raw and effective EXECUTE/GRANT OPTION, and application-role inheritance for all new privileged RPCs; unknown default ACL/overloads or unsafe owner/role graph must fail closed with no partial mutation. Add actual default-ACL/inherited-role behavioral fixtures, including authenticated setter/completion calls refused. No global default-privilege/role repair, no broad grants, no G5 implementation needed for this fix.
+
+### Focus A/B — reader/tenant and ACL disposition
+
+- Clean graph: SECURITY DEFINER justified by table denial; explicitly owned by settings-table owner; STABLE, empty search_path, no dynamic widening in function body; exact running brand_post + exact brand + brand-bound row; only social_mobile_user_v1 profile; six settings/persona output columns, no identity/token/Vault fields; no-row returns no consent.
+- Clean behavior proof: foreign brand, pending/completed/other type, nonexistent/malformed post, AI Lab/Kabumori/internal profile refused; authenticated/anon execution refused.
+- Additional adverse reader fixtures: unknown function default ACL => refused and reader absent after rollback; service_role default EXECUTE WITH GRANT OPTION => normalized narrowly to plain EXECUTE, grant option false; unknown overload => refused before mutation; authenticated inheriting service_role => refused and reader absent after rollback.
+- R1 remains the column-access failure. R2 is the inconsistent authority/completion boundary; do not generalize the reader's successful checks to the entire chain.
+
+### Focus C — consent completeness
+
+- Both actual paths use read_social_mobile_publish_settings: runtime loadSocialMobileContentSettingsForPublish and SQL check_x_account_publish_authority. No remaining direct settings-table service read in those two paths.
+- Missing row/manual_review/malformed settings do not become auto consent; malformed settings normalize to manual_review. RPC unavailable/malformed/multi-row responses fail closed.
+- Ordinary consent behavior passes fake/runtime and disposable SQL tests. RPC ACL drift remains independently blocking.
+
+### Focus D — migration chain
+
+- Actual sequence completion 20261006160000 -> reader 20261006160100 -> authority 20261006160200 sorts after PR81 20261003120000. Clean disposable bootstrap, missing authority dependency, reapply refusal, behavior/races and cleanup reproduced.
+- Neither these three nor the retired versions 20260927101423/20260927124300 appears in current-main migration inventory. Source invariant rejects retired reuse; 11/11 migration invariant tests PASS.
+- Production absence/history/application claims in G3 report are **not independently confirmed** in this review: production reads prohibited. Before any separately approved rollout, live preflight must verify them.
+- Do not use supabase db push or history repair. Reapply/collision refusal is not proof of all ACL drift: R1/R2 are actual accepted unsafe states.
+
+### Focus E/F — live publish and cross-system disposition
+
+- Runtime profile/exact-account/admin/live/post-type gates preserved; authority before generation and immediately before publish; postToX's beforeCreate callback repeats authority check inside each Vault send callback, including reactive/proactive refresh.
+- PR76 assertPublishPermission remains before every request callback, including after refresh/401; actual fake send tests pass. Refused first gate => zero generation/X; revocation during generation => zero X create.
+- All confirmed PR78 settings/persona fields reach the real generateBrandPost with mocked provider; unconfirmed persona omitted; 140-character/NG-word/cross-brand duplicate checks before X, no subsequent transform.
+- Confirmed X completion failure sets the non-replay marker; global failure handler skips fail_scheduled_post. Missing success response id also skips failure marking. Clean completion is exact-account/idempotent/terminal.
+- AI Lab specialized/topic-claim path, Kabumori legacy path, Vault ownership/refresh implementation remain unchanged by candidate except added bounded tests/callback hook.
+- G5 entitlement enforcement deliberately absent. Clean graph is dormant without an explicit enabled authority row/window; documented insertion points (publish predicate, enable/re-enable, scheduled-user claim) are appropriate. No real-user authority activation before G5 entitlement enforcement. R2 breaks the claimed service/operator-only activation guarantee under ACL drift; fix before acceptance.
+
+### Independently run tests / evidence
+
+- PostgreSQL 17.11, non-superuser fixture owner, Unix socket only: actual PR81 hardening + refresh core/rollout + 3 candidate migrations, PILOT_BEHAVIOR_PASS / PUBLISH_AUTHORITY_BEHAVIOR_PASS / PUBLISH_SETTINGS_READER_BEHAVIOR_PASS / PILOT_RACE_PASS / PUBLISH_RACE_PASS / PILOT_CLEANUP_PASS.
+- Adverse reader matrix: clean ACCEPT; column-drift ACCEPT (R1 reproduced); unknown default EXECUTE REFUSE with rollback; grant-option case no grant option; overload REFUSE; inherited application EXECUTE REFUSE with rollback.
+- Separate authority/completion adverse databases: unauthorized authenticated enable and forged completion both reproduced (R2).
+- x-test-post whole test directory: **534/534 PASS**.
+- PR41 dispatcher + routing + migration invariants: **30/30 PASS** (14+5+11).
+- Vault account auth/PR76 request/refresh permissions: **33/33 PASS**.
+- Focused consult/dry-run/brand generator/dispatcher + AI Lab scheduled/topic tests: **85/85 PASS**.
+- PR78 app memory-generation/consult/settings repository: **36/36 PASS**.
+- Candidate broad _shared: **433 PASS / 3 FAIL**. All same failures reproduced on PR's main base e7da97d4: **419 PASS / 3 FAIL** (two diary parity/validator tests, one stale persona-confirmed string assertion). Therefore not caused by PR41's implementation diff.
+- Startup main 676ce44b (PR97 corrections), with proper local node subprocess permission and its own cwd: **422/422 PASS**. Corrected diary/static-test files are not PR41 changed files; retain these fresh-main corrections on any future integration. No unrelated fix by H2.
+- Targeted deno check and lint: PASS. Initial typecheck/test environment lacked existing Node/TypeScript deps; resolved only in owned temp checkout, tracked package/lock files unchanged. Initial broad validator run lacking allow-run was superseded by the properly permitted local-node-only runs above.
+- git diff --check candidate diff / working tree: PASS; targeted added-line secret pattern scan 0; tracked working tree clean. The broad scan is not a guarantee against all imaginable secret formats.
+- Evidence root: /private/tmp/h2-pr41-20261007.gpGVR3 (pilot.log, adverse.log, per-case logs, x-test.log, shared.log, base-e7-shared.log, baseline-shared.log, focused-brand.log, vault-auth.log, app-memory.log, typecheck.log).
+- Cleanup: all 10 H2-only disposable databases removed; H2_TEST_DATABASES_LEFT=0; owned PG server stopped. No other slot database/server touched.
+
+### Safety / remaining issues / next recommendation
+
+- production read/write, deploy, migration/history apply/repair, Cron/scheduler/settings/user/Auth/Vault/OAuth/secret changes, real X/OpenAI/Push calls, manual production invoke, synthetic production candidate = **0**.
+- H1/G1-G5 source/worktrees/uncommitted changes, apps/admin, HANDOFF, formal-repo dirty files unchanged.
+- Supabase/Postgres skill informed least-privilege/SECURITY DEFINER/ACL checks; official functions documentation checked: https://supabase.com/docs/guides/database/functions . Changelog markdown fetch was unsupported; no broad web investigation or implementation performed.
+- merge_recommendation: **HOLD PR #41** for the two concrete privilege defects. No deploy/apply/activation.
+- exact_next_action: C2 accept the findings, return one bounded G3 corrective for R1 effective column-privilege refusal and R2 all-new-RPC default/effective ACL hardening plus behavioral/adverse tests. Preserve current-main PR97 test fixes; then review only that changed security boundary, not another full routine review. Recommended corrective reviewer: Sol（高）.
+- TASK: review_required / next_owner: chatgpt; stop for C2.
+
+---
+
 ## H2 — PR #76 final focused security rereview — 2026-10-06 JST
 
 - task_id: x-social-mobile-pr76-final-security-rereview-20261005
