@@ -1,3 +1,18 @@
+## G4 assigned — Morning greeting GitHub schedule reliability Plan B + C
+
+- Investigation indicates the posting-window OFF/ON toggle is not the trigger for the delay; GitHub scheduled workflow creation itself began drifting on 2026-09-20 while the greeting was still OFF.
+- Current `.github/workflows/morning-greeting-image.yml` has `workflow_dispatch` plus one scheduled trigger at 20:30 UTC / 05:30 JST.
+- G3 remains occupied by `x-social-mobile-pr81-production-apply-continuation-20261006`; it is not touched.
+- G4 was genuinely free after Final K4 PR76 and is assigned `x-morning-greeting-schedule-reliability-bc-20261006`.
+- implementation scope:
+  - Plan B: multiple staggered schedule opportunities before morning posting, preserving correct JST target date and idempotency;
+  - Plan C: ~06:00 JST missing-image detector that fails visibly if the day's image is absent;
+  - preserve existing workflow_dispatch/manual fallback.
+- no GitHub PAT, Vault write, Supabase pg_cron, production DB mutation, Edge deploy or real X in this G4.
+- recommended Claude model: **Sonnet5（高）**.
+- review policy: no Codex by default; focused Luna（高） only if K4 exposes a concrete workflow-safety concern.
+- Plan A (Supabase pg_cron -> GitHub workflow_dispatch) is deliberately deferred to a separate task because it introduces a credential/Vault/Cron boundary. That later task should get at most one focused security review.
+
 ## Final K5 — Common-account Phase 1 fresh preflight PASS / explicit production approval required — 2026-10-06
 
 - verdict: **PASS / PREFLIGHT_READY**.
