@@ -1,5 +1,266 @@
 # Claude Task 5 — CURRENT TASK
 
+- task_id: common-account-v1-phase2-service-enrollment-integration-20261006
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- priority: critical
+- start_code: G5
+- finish_code: K5
+- recommended_model: Opus5.5（極高）
+- type: shared-account Phase 2 integration / service enrollment / auth-session wiring / source-only first
+- production_mutation_allowed: false
+- deploy_allowed: false
+- enforcement_allowed: false
+- deletion_orchestrator_allowed: false
+
+## Priority
+
+Common account remains the project-wide critical path by explicit user decision.
+
+This task begins Phase 2 now that:
+- Phase 1 foundation is production PASS;
+- legacy production backfill is production PASS;
+- current common_accounts = 5;
+- current service_entitlements = 3:
+  - Kabumori 2
+  - X autopost 1
+- Auth-only accounts = 2;
+- lifecycle operations = 0;
+- guard mode remains shadow;
+- integration_state remains not_started.
+
+Existing G1-G4 tasks must be preserved. Do not overwrite their branches or files. Source-only work may proceed in parallel only where target files are disjoint.
+
+## Goal
+
+Wire both applications to the common-account service-enrollment contract so that future users and existing common-account users no longer depend on legacy footprint inference.
+
+Required product behavior:
+
+1. Kabumori signup / first accepted session:
+   - same Supabase Auth identity remains the canonical person;
+   - create/ensure common account through the reviewed lifecycle RPC boundary;
+   - create/ensure active `kabumori` entitlement;
+   - create/ensure Kabumori profile as part of the service-start contract;
+   - idempotent on repeated cold start / auth-state change / sign-in;
+   - never create duplicate rows;
+   - never infer by email or merge accounts.
+
+2. X autopost signup / first accepted session:
+   - same Supabase Auth identity remains canonical;
+   - create/ensure common account through lifecycle RPC boundary;
+   - create/ensure active `x_autopost` entitlement;
+   - do NOT create workspace/social account merely because login occurred unless current product contract explicitly requires it;
+   - posting OAuth remains separate from login identity and service entitlement.
+
+3. Existing common-account login in another app:
+   - if entitlement for that service is missing, app can enroll only that service;
+   - preserve the user's shared login;
+   - no account merge flow in V1;
+   - ended/deleting/suspended states fail closed according to accepted lifecycle semantics; no silent reactivation.
+
+4. Existing service user:
+   - repeated service-start path is idempotent;
+   - no unintended profile/workspace/OAuth mutation.
+
+## Canonical RPC boundary
+
+Use only the already-reviewed public service-start RPCs:
+- `public.start_kabumori_service()`
+- `public.start_x_autopost_service()`
+
+Do not duplicate lifecycle SQL in clients or Edge Functions.
+Do not directly INSERT/UPDATE common_accounts or service_entitlements from app clients.
+
+Before implementation, re-read exact function definitions and return contracts from current main/production-reviewed migration.
+
+## Mandatory startup / isolation
+
+1. Read:
+   - PROJECT_RULES.md
+   - .agent/ORCHESTRATION.md
+   - .agent/CURRENT_STATE.md
+   - .agent/ACTIVE_TASK.md
+   - this G5 TASK + prior G5 report
+   - common-account Phase 1 migration/design docs
+2. Fresh fetch `origin/main` from:
+   `/Users/yuya/Developer/kabumori-fresh`
+3. Create a new dedicated G5 worktree.
+4. Check current G1/G2/G3/G4 worktrees/tasks and open PR changed files.
+5. Prove no file overlap before editing.
+6. If auth/session/onboarding files overlap another active slot/PR, STOP and report exact overlap; do not edit around it.
+
+## Phase A — inventory the current app flows
+
+Read-only/source inspection only.
+
+Kabumori:
+- map signup, sign-in, session restore, auth-state-change, password recovery and profile bootstrap.
+- identify every call to `ensure_my_profile` or direct profile bootstrap.
+- identify which calls are truly required after service start and which can be replaced by/ordered behind `start_kabumori_service()`.
+
+X autopost:
+- map email/Google/Apple/X login flow.
+- map post-auth session bootstrap.
+- map first X posting-authorization/onboarding flow.
+- identify where service enrollment should happen without conflating it with X OAuth/workspace creation.
+
+Shared:
+- identify app behavior for an Auth user whose common account exists but entitlement is absent/ended/deleting/suspended.
+- identify existing error handling/offline/retry behavior.
+
+Document exact touched-file plan before edits.
+
+## Phase B — implement service-start integration
+
+### Kabumori
+
+Implement a single idempotent service-start path used by all accepted signed-in sessions.
+
+Requirements:
+- call `start_kabumori_service()` with the user JWT;
+- only after successful service start treat Kabumori session bootstrap as service-ready;
+- preserve current profile-dependent flows;
+- do not separately create profile in a way that races lifecycle RPC;
+- recovery/login restore must converge on same path;
+- transient network failure must not corrupt auth; surface retryable service-initialization state;
+- lifecycle refusal (deleting/locked/ended semantics as returned) must fail closed and not silently bypass to legacy profile-only operation.
+
+### X autopost
+
+Implement a single idempotent service-start path after authenticated session acceptance.
+
+Requirements:
+- call `start_x_autopost_service()` with user JWT;
+- service enrollment must be independent of posting OAuth;
+- login alone must not set publish_enabled, create posting credentials, touch Vault, call X API or start posting;
+- if workspace creation currently happens only when user chooses “Xを連携”, preserve that separation;
+- repeated auth restore/sign-in is safe and idempotent;
+- lifecycle refusal fails closed with a user-actionable state.
+
+### Shared UX behavior
+
+Use concise non-enumerating pre-auth copy.
+Post-auth, it is acceptable to explain:
+- “共通IDはお持ちです。このサービスの利用登録を行います”
+only when supported by authenticated state.
+
+Do not add account merge UI.
+
+## Phase C — tests
+
+Add/adjust focused tests proving at minimum:
+
+Kabumori:
+- new Auth user -> common service start -> profile/service ready;
+- existing common account, missing Kabumori entitlement -> Kabumori entitlement only;
+- already active entitlement -> idempotent;
+- repeated auth-state events -> one logical initialization;
+- lifecycle blocked state -> no legacy bypass;
+- retryable network error -> no duplicate/corrupt state.
+
+X:
+- new Auth user -> X service entitlement active;
+- existing common account missing X entitlement -> X only;
+- active X entitlement -> idempotent;
+- login does not create posting authorization/credentials/publish enablement;
+- lifecycle blocked state -> no OAuth/workspace shortcut;
+- repeated session restore safe.
+
+Cross-app:
+- one Auth identity can hold both entitlements;
+- adding second service does not mutate first service's data;
+- no email-based merge path;
+- no direct client writes to common tables.
+
+Run relevant app/unit/typecheck/lint/diff tests.
+
+## Phase D — production-readiness package, no production mutation
+
+Do NOT deploy in this first pass.
+
+Prepare exact rollout plan:
+- target native/app source changes;
+- any Edge Function changes if genuinely required (prefer none if client RPC is sufficient);
+- required environment/config changes, ideally none;
+- backward compatibility while old app binaries still exist;
+- rollback behavior;
+- how to observe new enrollment without PII;
+- how to avoid breaking existing users during staged app rollout.
+
+Important:
+old binaries still using legacy behavior may remain installed. Do not enable enforcement in this task.
+
+## Explicitly out of scope
+
+Do NOT:
+- change existing RLS policies to require entitlement yet;
+- change service_role producer filters yet;
+- enable delete guard enforcement;
+- replace account-delete/social-mobile-account-delete yet;
+- implement common-account hard-delete orchestrator;
+- revoke sessions;
+- revoke Apple/X providers;
+- mutate Storage/Vault;
+- change X publish authorization;
+- merge accounts by email;
+- deploy production;
+- run EAS/TestFlight;
+- perform real X or paid-model calls for this task.
+
+These come after source integration is reviewed and compatible.
+
+## Review gate
+
+Because this task crosses:
+- Auth/session bootstrap
+- both apps
+- common-account lifecycle RPCs
+
+K5 should normally allocate a focused Codex review unless the actual diff turns out materially smaller than expected.
+
+Likely recommended Codex model if review is needed:
+**Sol（高）**.
+
+## Completion / K5
+
+Report:
+- task_id
+- result: PASS_CANDIDATE / BLOCKED / PARTIAL
+- fresh main
+- isolated worktree
+- exact touched files
+- current-flow inventory
+- implemented Kabumori behavior
+- implemented X behavior
+- tests
+- backward compatibility
+- rollout plan
+- production mutation = 0
+- deploy = 0
+- remaining issues
+- safety checks
+- next recommendation
+
+At completion:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K5.
+
+Recommended model: **Opus5.5（極高）**.
+
+## Report
+
+Pending.
+
+---
+
+# Previous G5 task history — preserved
+
+# Claude Task 5 — CURRENT TASK
+
 - task_id: common-account-v1-phase1-production-backfill-gate-20261006
 - owner: claude
 - slot: claude-5
@@ -3424,5 +3685,6 @@ Report 時点の fresh `origin/main` と open PR で確認。
 - merge decision: **HOLD** pending H1 rereview of exact head `47a2ed6a1635177ba82004eace4bddb42d9d53e3`.
 - production apply remains separately gated by **Sol（極高）**, disposable real Supabase proof, exact production read-only preflight/history/ACL/FK checks, and explicit approval.
 - AI Lab diary: **no update**. 2026-10-02 already has a different, coherent daily entry for the X app; do not overwrite/mix it merely to record another same-day workstream.
+
 
 
