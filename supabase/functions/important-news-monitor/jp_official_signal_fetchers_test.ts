@@ -149,3 +149,17 @@ test("flag OFF: the lane's only entry point is behind the env flag and fetchSour
   const beforeGuard = source.slice(0, guard);
   assert.equal(/fetchOfficialPageText\(|selectJpOfficialSignals\(/u.test(beforeGuard.replace(/^import[\s\S]*?;\n/gmu, "")), false);
 });
+
+test("source spoof: the URL host must belong to the signal's own source_id (fake go.jp hosts, cross-source URLs, IP hosts)", () => {
+  const spoofed = [
+    row({ source_url: "https://evil-mof.go.jp/a.html" }),
+    row({ source_url: "https://mof.go.jp.evil.com/a.html" }),
+    row({ source_url: "https://www.fsa.go.jp/news/a.html" }),
+    row({ source_url: "https://169.254.169.254/a.html" }),
+    row({ source_url: "https://www.mof.go.jp./a.html" }),
+    row({ source_id: "jp_kantei_news", source_url: "https://www.mof.go.jp/a.html", title: "経済財政諮問会議" }),
+  ];
+  const { selected, drops } = selectJpOfficialSignals(spoofed, NOW);
+  assert.equal(selected.length, 0);
+  assert.equal(drops.host_not_allowed, spoofed.length);
+});
