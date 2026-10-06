@@ -70,13 +70,13 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-pr99-controlled-analysis-deploy-20261007
+- task_id: kabumori-pr99-morning-natural-observation-20261007
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: PR #99 merge済み。market-report-analysis のみをexact fresh mainからcontrolled production deployしてbyte/source read-back。personalized-reportsは触らない。manual generation/retry、DB/RPC/migration、Cron/gate、X/通知、EASは禁止。production mutex必須。
-- recommended_model: Opus5.5（中）
+- allocation: PR #99 correctiveをmarket-report-analysis v25へexact deploy済み。10/7朝刊07:55/08:05の最初の自然サイクルをread-only観測し、3ポイントの具体性、generic/metric telemetry、rewrite/calls、rejection_reasons、Hard Fact安全性を確認。08:10 JSTより前は待機せず停止。production mutation禁止。
+- recommended_model: Sonnet5（中）
 
 ## Claude G3
 - owner: claude
