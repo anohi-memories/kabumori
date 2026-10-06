@@ -3,8 +3,8 @@
 - task_id: postona-multisocial-phase1-architecture-inventory-20261006
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: architecture inventory / provider-neutral design / docs-only
@@ -314,7 +314,102 @@ If a specific architecture/security concern is discovered, at most one focused r
 
 推薦モデル：**Opus5.5（高）**
 
+## Report — postona-multisocial-phase1-architecture-inventory-20261006 (2026-10-06)
+
+- task_id: postona-multisocial-phase1-architecture-inventory-20261006
+- result: **PASS（ドキュメントのみ）**。成果物 `docs/postona/multi-social-phase1.md`（354行）。PR [#96](https://github.com/anohi-memories/kabumori/pull/96) を作成済み・未 merge（merge_allowed=false）。
+- model_used: Opus 5.5
+- fresh main used: 調査の基準は `e7da97d4`。push 前に再確認した main（`48ef27cc` 以降）と衝突しないことを merge-tree で確認した。
+- workspace: `kabumori-fresh` から作った G4 専用 worktree `/Users/yuya/Developer/kabumori-g4-postona`（branch `claude/g4-postona-multisocial-phase1-20261006`、commit `df718397`）。
+- changed_files: `docs/postona/multi-social-phase1.md` のみ（PR）。このほかに、この TASK ファイルの status と Report を更新した（main）。
+- 調査の方法: 読み取り専用で3つを並行して調べた。
+  - バックエンドの12領域
+  - アプリの X 結合53か所
+  - 公式ドキュメント（X / Threads / Instagram）の比較
+
+  主な結論はソースで実際に確認した:
+  - `x-test-post/index.ts:4018-4021` の AI Lab 限定分岐
+  - `scheduled_posts` にアカウントがないこと（`supabase-repository.ts:54-56`）
+  - `PLATFORM_NOT_SUPPORTED`（`20261003090000:225`）
+  - アプリの型 `SocialPlatform` に threads と instagram があること
+
+### architecture conclusions
+- すでに中立なもの: ワークスペース（brands）とメンバー権限、内容設定・ペルソナ、生成器、アプリの `SocialPlatform` 型。
+- 構造的な X 依存は5つ:
+  - A. 投稿キューにアカウント・プラットフォームがない（`x_post_id` もある）。
+  - B. `social_accounts` の本番 DDL が `CHECK (platform='x')` で、RPC も `'x'` で絞っている。
+  - C. X の2トークン前提（2つの参照が存在・別物・非共有であることを送信・ON・削除で要求）。Meta の長期トークン1本の方式と合わない。
+  - D. 送信経路が `x-test-post`／`postToX`／`VaultAccountXAuth` だけ。しかも main では user ワークスペースの `brand_post` が AI Lab 以外送られない。
+  - E. 接続経路が `x-oauth-connect-user`／X 用 RPC だけで、アカウント id に `':x'` が埋め込まれている。
+- プロバイダ中立の境界の案:
+  - 4層（ログイン／サービス利用権／SNS 接続／投稿許可）は分けたままにする。
+  - `social_accounts` は新しい表を作らずに広げる。
+  - 資格情報はプロバイダごとの型にする（`oauth2_rotating_refresh` と `long_lived_access`）。
+  - 論理投稿と配信先を分け、本文は配信先ごとに作成時に保存し、再試行は配信先単位にする。
+  - Connect／Credential／Publish／Disconnect の各アダプタを用意する。X 版は既存コードを包むだけにする。
+- 名前の衝突: コード内の "thread" は X の返信の連なりを指す。新しい識別子では Meta のプロバイダを `threads` と書く。
+
+### Threads Phase 2 slice / Instagram
+- 2-0（コードなし）: Meta アプリ、審査の計画、データ削除・連携解除コールバック、リダイレクト URI の確認（カスタムスキームが使えるかは要検証）。
+- 2a: 中立化の継ぎ目。挙動は変えない。`platform` の CHECK を広げ資格情報の型を入れる migration 候補を作る。
+- 2b: Threads の接続と準備状態。
+- 2c: 手動テスト投稿（テスターアカウントのみ）。
+- 2d: 定期投稿。**PR #41 の merge が必須**。
+- 2e: 生成の出し分け。
+- 2f: 履歴。
+- 2g: 複数配信は後回し。
+- Instagram: プロアカウントが前提で、メディアが必須。IG Login と FB Login のどちらにするか決める（削除できるのは FB Login のみ）。公開 URL で渡す素材ライブラリ、上限 50 か 100／24時間（要検証）、Advanced Access と Business Verification。
+
+### G3/G5 dependencies
+- G3: PR #41（review_required、head `280aa0f8`）が定期送信の土台になる。merge まで `x-test-post` には触らない。PR81 は本番未適用で保留中。
+- G5: PR #95（共通アカウント Phase 2）、サービスキー `x_autopost`、オンボーディングと AuthGate、OAuth・Vault・資格情報ライフサイクル、退会。Threads の接続と資格情報の型は G5 と合意してから進める。
+
+### tests / checks
+- `git diff --check` 問題なし。main との差分は docs 1ファイルのみ。runtime・app・migration・Edge・workflow の変更なし。秘密情報パターン 0。
+- 本番への書き込み・deploy・プロバイダアプリや認証情報の作成・OAuth・Vault・secret の変更・実際の X／Threads／Instagram の呼び出し = **0**。本番読み取りもなし（この TASK では不要だった）。
+
+### remaining open product decisions（設計書 §9 に11項目）
+主なもの:
+- 複数 SNS へ同時に配信するか
+- SNS ごとに本文を生成して保存するか
+- 同意の単位（アカウントかワークスペースか）
+- X の URL 付き投稿のコスト（$0.20／件）の扱い
+- Threads の最初の範囲
+- IG Login か FB Login か
+- サービスキー `x_autopost` と、アプリ名・scheme の変更時期
+- Meta の Business Verification の名義
+
+### next_recommendation
+- K4 で確認する。範囲がドキュメントのみに収まっているので、Codex レビューは不要（TASK の方針どおり）。
+- 次の G4 は「POSTONA Phase 2a — 中立化の継ぎ目と Threads 接続の準備（挙動変更なし）」を提案する。PR #41 と PR #95 の merge 状況を確認してから始める。
+- 並行して、ユーザーに Meta アプリの登録と審査の計画（2-0）、および §9 の判断をお願いする。
+- status: review_required / next_owner: chatgpt。STOP for K4。
+
 ---
+
+## Final K4 — PASS / architecture accepted — 2026-10-06
+
+- verdict: **PASS**.
+- scope accepted: docs-only architecture inventory / provider-neutral multi-social design.
+- runtime/app/migration/RPC/Edge/workflow/OAuth/Vault/secret/production/provider-call changes: **0**.
+- deliverable accepted: `docs/postona/multi-social-phase1.md` (354 lines).
+- exact source candidate: former PR #96 head `df718397d015f76f91684f0b4ed3bdd9e43f539d`, one changed file only.
+- CI on the candidate: Netlify Preview PASS / Vercel PASS.
+- fresh-main note: main advanced during K4 and GitHub rejected the immediate PR merge because the base changed. The accepted one-file document was therefore written unchanged to fresh main as commit `25fd6aeec85528a06f78995f4306aaeba98f9d75`; PR #96 was then closed as superseded by that exact main integration.
+- architecture accepted:
+  - keep common login / service entitlement / social-provider connection / publish authorization as separate layers;
+  - keep X-specific credential and publish internals behind provider adapters rather than generalizing by weakening existing X safety rules;
+  - split logical post intent from publication target so retries/idempotency can operate per SNS target;
+  - Threads first, Instagram second;
+  - Instagram media/material-library requirements remain a later dedicated slice.
+- no Codex review required: this K4 changed no runtime/security boundary and the task remained docs-only.
+- coordination:
+  - G3 PR #41 is still open and `review_required`; its live scheduled-user/publish path must be resolved before G4 touches that runtime seam.
+  - G5 PR #95 is still open and `review_required`; H1 focused rereview is active. Common-account/Auth/session/provider-credential lifecycle remains G5-owned.
+  - therefore Phase 2a runtime work is **not assigned yet**.
+- AI Lab diary: **記録不要** — 今回は将来のマルチSNS化に向けた設計整理のみで、ユーザー向け機能や実動作の追加はまだない。
+- next recommendation: after G3 PR #41 and G5 PR #95 are accepted/merged, create the next G4 task for POSTONA Phase 2a (provider-neutral seams + Threads preparation), with fresh overlap checks first.
+- G4: **done / free**.
 
 # Previous G4 task history — preserved below
 

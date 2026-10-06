@@ -1,5 +1,524 @@
 # Claude Task 1 — CURRENT TASK
 
+- task_id: kabumori-portfolio-canonical-ui-v1-20261006
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- purpose: ユーザー承認済み「ポートフォリオ正本」デザインを、既存の保有銘柄・保存済み大引けレポート・検索/監視機能に接続した実用画面として実装する。
+
+## Canonical product decision
+
+The user has approved the current portfolio mock as the **canonical portfolio design**.
+
+This task is an implementation of that design, not a redesign.
+
+Visual reference if available from the current ChatGPT conversation:
+- ivory/off-white Kabumori background;
+- header: `PORTFOLIO` + large `ポートフォリオ`;
+- top-right compact `★ ウォッチリスト` and search icon;
+- large white asset-summary card;
+- pale-green AI `今日のポートフォリオ` card;
+- white `今日の資産への影響` card with top 3 holdings;
+- `保有銘柄` section with compact stock cards;
+- dark-green `このポートフォリオについてAIに聞く` CTA above the existing native tab bar;
+- bottom native tabs remain Home / 銘柄 / ニュース / レポート / メニュー with 銘柄 selected.
+
+If the image itself is not available in Claude Code, **this TASK text is the canonical source of truth**. Do not invent a different layout.
+
+## Fresh allocation / safety
+
+- allocated_at: 2026-10-06 JST
+- fresh main at allocation: `676ce44b3d7f9282276428fbfee0dedc4ce4d385`
+- previous G1 task: Final K1 PASS / PR #94 merged / G1 done/free.
+- fresh open-PR overlap check with the planned portfolio/search/stock files: **0 overlap**.
+- H1/H2 are currently reviewing unrelated common-account / social-mobile security boundaries.
+- G5 is currently review_required on common-account PR #95.
+- **Do not touch `src/app/_layout.tsx`, common-account/auth/session files, migrations, RPCs, Edge Functions, X/social-mobile files, or any H1/H2/G5-owned boundary.**
+- production mutation = 0.
+- EAS build = 0.
+
+## Current implementation inventory — preserve functionality
+
+Current `src/app/(tabs)/explore.tsx` is an older combined screen containing:
+- holding/watch section switch;
+- stock search;
+- tracked-stock registration/editing;
+- current `PortfolioSummary`.
+
+Existing data/features to preserve:
+- `tracked_stocks` is the current user registration source:
+  - holding/watch;
+  - quantity;
+  - average price;
+  - cash/margin;
+  - long/short;
+  - target prices;
+  - memo.
+- `stocks_master` currently has only:
+  - id;
+  - ticker_code;
+  - company_name;
+  - market.
+- **There is no company-logo field today.**
+- `TrackedStockEditor` is working and must remain usable.
+- `/search` currently redirects into explore search mode; this task should make search a real dedicated screen again without changing the root navigator.
+- latest stored personalized close reports already contain:
+  - market value;
+  - day P/L;
+  - day change %;
+  - unrealized P/L;
+  - per-holding price/change;
+  - per-holding market_value/day_pl/unrealized_pl/unrealized_pl_percent;
+  - Fact-passed `overview_ja`;
+  - Fact-passed `holding_impacts`;
+  - stock-linked news ids;
+  - top/gainer/decliner metadata;
+  - sector weights.
+- report display-time code performs no AI call. Keep that property.
+
+## Core principle — no fake realtime data
+
+The canonical mock visually says things like `現在値` and `今日`, but the app currently has **saved close-report data**, not a live realtime quote stream.
+
+Therefore:
+- do not imply realtime;
+- display a small basis label such as `10/6 終値ベース` / `最新の保存済み大引け`;
+- in holding rows use `終値` / `最新終値`, not `現在値`, unless the actual source is genuinely current;
+- if the latest close report is not today's trading date, adapt labels honestly:
+  - `最新のポートフォリオ` rather than falsely saying today's close;
+  - `10/6の資産への影響` rather than today's impact when stale.
+- do not invent figures to fill the design.
+
+## Phase A — portfolio view model / deterministic helpers
+
+Prefer extracting pure presentation/selectors into a small module, e.g. `src/lib/portfolio-view.ts`.
+
+Implement/test deterministic helpers for:
+
+### A1. Latest close basis
+Use existing `fetchRecentReports` + `latestCloseReport`.
+
+The latest valid close snapshot is the canonical source for financial metrics.
+
+### A2. Portfolio asset summary
+From `snapshot.totals`:
+- asset value = `market_value`
+- unrealized P/L = `unrealized_pl`
+- day P/L = `day_pl`
+- day change % = `day_change_percent`
+
+Portfolio unrealized P/L %:
+- there is no direct total percent field today.
+- only compute if the cost basis can be derived safely and denominator is finite/positive:
+  - estimated cost basis = `market_value - unrealized_pl`
+  - percent = `unrealized_pl / estimated_cost_basis * 100`
+- if not safe, show `—`.
+- pin this math in tests.
+- never sum rounded display strings.
+
+### A3. Tiny asset sparkline
+Use recent valid **close** snapshots' `totals.market_value` in chronological order.
+
+No new chart dependency.
+
+Preferred:
+- a tiny lightweight in-app sparkline using simple native Views/segments;
+- 6–12 usable points;
+- skip null/non-finite values;
+- flat/single-point history has a truthful quiet fallback.
+
+If a clean dependency-free line is not practical, omit the sparkline rather than adding a package or faking history.
+
+### A4. Impact top 3
+For holdings with numeric `day_pl`:
+- rank by `abs(day_pl)` descending;
+- show at most 3;
+- display company / ticker / signed yen impact / price change %;
+- no rank medals or gamified styling.
+
+If fewer than 1 numeric holding exists, omit the whole section instead of substituting an unrelated metric.
+
+### A5. Holding display rows
+Use the latest snapshot for financial facts and current tracked-stock records for current registration/edit behavior.
+
+Do not silently drop newly registered holdings simply because they were added after the latest report:
+- current tracked holdings are the current registration list;
+- enrich each by ticker/stock identity from the latest snapshot where available;
+- if no snapshot row exists yet, show the holding with `最新レポート未反映` / values `—`.
+
+If this join cannot be done safely with the existing identifiers, document the exact limitation and choose the least misleading implementation.
+
+### A6. Honest AI/impact text
+Use only already-stored Fact-passed report fields:
+- `body.overview_ja`
+- `holding_impacts`
+- report-linked stock news.
+
+No display-time AI call.
+
+For the main AI card:
+- prefer `overview_ja`;
+- trim only by presentation (line clamp/ellipsis), not by rewriting or generating new prose;
+- link to the exact report detail for `今日のポイントを見る ›`.
+
+For per-stock material:
+- prefer existing Fact-passed impact text.
+- do not create unsupported causal claims.
+- safe small tags:
+  - if stock-linked news exists -> `ニュース`;
+  - if a reliable structured basis explicitly maps to a known category, show that category;
+  - otherwise use a neutral `材料`/stance tag or omit the tag.
+- do not guess `決算` / `金利` / `原油` from company name or free-form prose.
+
+## Phase B — canonical portfolio screen
+
+Rewrite the default `銘柄` tab (`src/app/(tabs)/explore.tsx`) so its **default view is the canonical portfolio dashboard**.
+
+### B1. Header
+Top:
+- eyebrow `PORTFOLIO`
+- large title `ポートフォリオ`
+
+Right:
+- compact rounded `★ ウォッチリスト`
+- circular/simple search icon using existing RN/icon capabilities; no emoji; no new icon dependency.
+
+Do not show logout here.
+
+Logout remains reachable from the existing Menu/settings flow; if that assumption is false, verify before removing the old button and preserve a safe reachable logout elsewhere.
+
+### B2. Asset summary card
+White rounded card, radius ~18, soft/no heavy shadow.
+
+Hierarchy:
+- small `資産評価額`
+- dominant value
+- small truthful basis label
+- optional tiny sparkline on the right/top
+- lower divider
+- left: `評価損益`
+- right: date-aware `今日の増減` or equivalent honest label
+- use calm Kabumori positive/negative colors, not trading-terminal intensity.
+
+If metrics unavailable:
+- render `—`, not 0;
+- show one concise reason/basis note.
+
+### B3. Portfolio AI summary card
+Pale green card.
+
+- small restrained AI badge/icon; reuse existing asset/component only if it fits; do not add a new mascot;
+- title: `今日のポートフォリオ` when report basis is today, otherwise `最新のポートフォリオ`;
+- body: stored `overview_ja`, clamped to a compact 2–4 line read;
+- CTA: `今日のポイントを見る ›` or date-neutral `詳しいポイントを見る ›` when stale;
+- CTA opens the exact underlying report detail.
+- subtle botanical decoration is optional only if an existing Kabumori asset can be reused without new image work.
+
+### B4. Asset impact section
+White rounded card:
+- heading date-aware `今日の資産への影響` or `10/6の資産への影響`;
+- optional info affordance only if it has actual explanatory behavior; no dead `?`;
+- right `詳しく見る ›` -> exact report detail;
+- 1–3 impact rows;
+- each row: fallback avatar, company, ticker, signed day P/L, change %.
+
+### B5. Holdings
+Heading:
+- green stack/portfolio-style existing icon or a simple native geometric mark; no new dependency;
+- `保有銘柄`
+- compact count badge `N銘柄`.
+
+The mock shows a `…` action.
+- implement it only if it has a real useful action (e.g. safe existing edit/sort action);
+- otherwise omit it rather than shipping a dead control.
+
+Each row:
+- company avatar/future-logo slot;
+- company name;
+- ticker;
+- latest close;
+- change %;
+- unrealized P/L;
+- unrealized P/L %;
+- one restrained material tag;
+- one short Fact-passed/known-safe material line when available.
+
+Current editing must remain reachable:
+- tapping a holding row may continue to open `TrackedStockEditor` for V1 if no stock-detail route exists;
+- accessibility hint must say it edits holding information;
+- do not pretend a stock-detail screen exists.
+
+Default holding order:
+- market value descending when safely available;
+- rows without market value afterwards;
+- deterministic fallback order.
+
+### B6. Company logo / avatar
+Do **not** change DB/schema and do not scrape/download company logos in this task.
+
+Current master has no logo field.
+
+Implement a polished fallback avatar that keeps the canonical layout stable:
+- circular soft neutral background;
+- one short deterministic label from company name or ticker;
+- avoid awkward long Japanese strings;
+- accessibility includes full company name.
+
+Architecture should make it easy to replace the avatar with a licensed logo later, but do not introduce fake logo URLs or hard-code Toyota/MUFG/Nissui logos.
+
+### B7. AI CTA
+Near bottom, above the native tab bar:
+- dark green rounded CTA;
+- `このポートフォリオについてAIに聞く ›`
+- small subcopy: `なぜ上がった？ リスクは？ 業種のバランスは？`
+- route to existing `/ai`.
+- The current AI screen honestly says the feature is preparing; do not fake a chat or answer.
+
+Leave enough bottom spacing so the CTA is not visually glued to NativeTabs.
+
+## Phase C — search as a real screen
+
+Current `src/app/search.tsx` is only a redirect back into explore.
+
+Convert it into a real search screen, reusing/extracting the current working search behavior from explore:
+- stock code / company name search;
+- 350ms debounce or equivalent;
+- query sanitization;
+- max 30;
+- registered-state check;
+- tap unregistered result -> `TrackedStockEditor`;
+- registered result visibly says registered and does not duplicate;
+- save returns/refreshes cleanly;
+- explicit Back button;
+- same Kabumori visual tone.
+
+The portfolio search icon must open `/search`.
+
+Do not touch root navigator: `search` is already registered.
+
+## Phase D — watchlist entry, without inventing tag UI yet
+
+The user wants a dedicated Watchlist later, including user-defined/tag filtering, but **its canonical design has not been approved yet**.
+
+Therefore this task must not invent the final tag system or schema.
+
+Still, the top `★ ウォッチリスト` button must not be dead.
+
+Preferred safe interim:
+- keep watchlist as a dedicated visual subview/state inside the existing `explore` tab using route/local params, without adding a new root route and without touching `src/app/_layout.tsx`;
+- show the current `tracking_type='watch'` records;
+- provide a clear `‹ ポートフォリオ` return action;
+- preserve edit/delete via `TrackedStockEditor`;
+- honest empty state;
+- do not add tags yet;
+- do not modify schema.
+
+If a cleaner approach exists that does not touch active H1/G5-owned root navigation files, use it and document it.
+
+Future tags are explicitly deferred.
+
+## Phase E — empty / loading / stale states
+
+Must look intentional.
+
+### No close report yet
+Still show:
+- portfolio header;
+- Watchlist/search;
+- current registered holdings from `tracked_stocks`;
+- asset summary card with `—`;
+- concise copy such as `評価額は大引けレポート作成後に表示されます`.
+
+Do not hide the whole portfolio.
+
+### Report load failure
+- keep holdings/search/watch usable;
+- small non-blocking report-data error;
+- pull-to-refresh/retry if appropriate.
+
+### No holdings
+- asset/impact sections may be empty;
+- clear CTA toward Search;
+- Watchlist remains accessible.
+
+### Stale report
+- basis date visible;
+- do not use false `今日` wording.
+
+## Phase F — preserve current capabilities
+
+Do not regress:
+- adding holding/watch stocks;
+- editing holding data;
+- deleting registration;
+- target prices/memo;
+- auth/RLS behavior;
+- stock search;
+- current NativeTabs;
+- report detail;
+- News/Topic navigation merged from PR #94.
+
+Do not remove or silently orphan existing watch registrations.
+
+## Expected file scope
+
+Likely:
+- `src/app/(tabs)/explore.tsx`
+- `src/app/search.tsx`
+- new small portfolio UI components under `src/components/portfolio/`
+- new pure helper module such as `src/lib/portfolio-view.ts`
+- existing `src/components/tracked-stock-editor.tsx` only if a small reusable API change is needed
+- `src/lib/stocks.ts` only for compatible presentation typing if needed
+- focused `tests/app/portfolio*_test.ts`
+- focused search/watch tests
+
+Do **not** touch:
+- `src/app/_layout.tsx`
+- AuthProvider/service enrollment
+- migrations/RPC
+- G5 PR95 files
+- X/social-mobile
+- report generation backend
+- Home news/report generation logic.
+
+## Tests — required
+
+Add/pin pure tests for:
+- portfolio unrealized % safe math;
+- latest close snapshot selection / stale label behavior;
+- sparkline history selection if implemented;
+- top 3 impact ordering by absolute day P/L;
+- missing/null day P/L section behavior;
+- holding row join with current tracked registrations;
+- row absent from report -> honest `未反映`;
+- deterministic fallback avatar label;
+- no fake 0 values from null;
+- stale report never gets false `今日` labels;
+- search is a real screen contract, not redirect;
+- existing stock search semantics preserved;
+- watch records remain partitioned and editable;
+- Settings/Auth/common-account code untouched by portfolio helpers.
+
+Run:
+- focused portfolio/search/stock tests;
+- full `deno test tests/app/`;
+- app-only tsc / changed-scope typecheck;
+- Expo config;
+- web export if supported;
+- `git diff --check`.
+
+## Simulator verification — required
+
+Use iOS Simulator.
+
+At minimum:
+- ~402pt full portfolio upper/mid view;
+- ~375pt portfolio with holding rows;
+- asset summary;
+- AI summary card;
+- top-3 impact section;
+- holdings section;
+- fallback avatar on at least one row;
+- Watchlist entry/subview;
+- Search screen;
+- no overlap with NativeTabs;
+- AI CTA spacing;
+- long Japanese company name at 375pt;
+- null/missing report state if practical via fixture.
+
+Capture screenshots under `docs/ui-review/`:
+- `portfolio_canonical_402pt.webp`
+- `portfolio_canonical_375pt.webp`
+- optionally `portfolio_search_375pt.webp` / `portfolio_watchlist_375pt.webp`.
+
+## Company logos — explicit decision
+
+This task **does not implement external company logos**.
+
+Reason:
+- current stock master has no logo metadata;
+- licensing/source policy is not yet decided.
+
+Ship the fallback-avatar architecture now.
+A later dedicated task can evaluate a licensed logo source and add `logo_url`/asset metadata safely.
+
+## Worktree / Mac safety
+
+New G1 task:
+1. read `PROJECT_RULES.md`
+2. read `.agent/ORCHESTRATION.md`
+3. read `.agent/CURRENT_STATE.md`
+4. read this TASK
+5. fresh `origin/main`
+6. fresh open-PR overlap check
+7. `git worktree list`
+8. create/use independent G1 worktree from clean base `/Users/yuya/Developer/kabumori-fresh`
+
+Recommended branch:
+`claude/g1-portfolio-canonical-ui-v1-20261006`
+
+Do not reuse/reset/prune protected old slot worktrees.
+Do not touch another slot's dev server or uncommitted files.
+
+## Completion criteria
+
+PASS candidate only if:
+- default 銘柄 tab matches the approved canonical portfolio composition;
+- primary metrics come from real saved report facts, never mock data;
+- stale/non-realtime basis is honest;
+- latest/current tracked holdings remain editable;
+- asset impact uses deterministic day P/L;
+- AI prose is existing Fact-passed stored report prose only;
+- search is a real working screen;
+- Watchlist top button has a working interim destination while tags remain deferred;
+- no external logo dependency/schema change;
+- 375/402 Simulator layout passes;
+- current stock registration/edit/search behavior has no regression;
+- no root/Auth/common-account/backend/production/EAS changes.
+
+## Delivery
+
+Create one focused PR.
+Do not self-merge.
+No deploy / no EAS.
+
+Report:
+- task_id
+- fresh main SHA
+- worktree isolation
+- changed_files
+- portfolio data-source mapping
+- stale/realtime honesty behavior
+- current-tracked vs snapshot join behavior
+- impact ranking behavior
+- AI card source
+- search extraction
+- interim Watchlist behavior
+- logo fallback behavior
+- 402/375 findings
+- screenshots
+- tests/checks
+- PR/head
+- EAS build: 0
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation: 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+---
+
+# Claude Task 1 — CURRENT TASK
+
 - task_id: kabumori-topic-learning-access-progress-and-swipe-20261006
 - owner: claude
 - slot: claude-1

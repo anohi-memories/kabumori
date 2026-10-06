@@ -1,10 +1,206 @@
 # Claude Task 3 — CURRENT TASK
 
-- task_id: x-social-mobile-pr41-live-generation-fresh-integration-20261006
+- task_id: x-social-mobile-pr41-acl-corrective-20261007
 - owner: claude
 - slot: claude-3
 - status: in_progress
 - next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: bounded security corrective / effective column privileges / exact RPC ACL
+- target_pr: 41
+- previous_head: 280aa0f83d4f039ba3e43f32da202a91fd2333f2
+- h2_review: x-social-mobile-pr41-live-generation-security-review-20261007
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## C2 accepted findings
+
+H2 reviewed exact PR #41 head:
+`280aa0f83d4f039ba3e43f32da202a91fd2333f2`
+
+Verdict: **CHANGES REQUIRED**.
+
+Only two blocking findings are in scope for this corrective.
+
+### R1 — P2 effective column privilege drift
+
+Target migration:
+`supabase/migrations/20261006160100_social_mobile_publish_settings_reader.sql`
+
+Current postcondition checks table privilege but can miss column-level grants.
+
+Reproduced H2 case:
+- an effective column SELECT on `social_mobile_content_settings.settings` is granted to service_role before migration;
+- table-level SELECT remains false;
+- migration currently COMMITs;
+- service_role can directly read settings rows cross-brand, bypassing the narrow reader.
+
+Required correction:
+- migration must fail closed if service_role has **any effective column privilege that violates the intended table denial**, including privilege inherited through another role or PUBLIC;
+- inspect every live column, not only `settings`;
+- cover at least SELECT / INSERT / UPDATE / REFERENCES or the full set of column privileges PostgreSQL exposes for this relation;
+- preserve legitimate authenticated client privileges from PR81; do not globally revoke/repair unrelated ACLs;
+- do not silently normalize unknown column ACL drift;
+- refusal must roll back the migration completely;
+- reader must remain absent after refused apply.
+
+Required adverse fixtures:
+- direct service_role column SELECT;
+- inherited service_role column SELECT;
+- PUBLIC-derived column SELECT where effective for service_role;
+- at least one column UPDATE/DML drift case;
+- each must refuse atomically.
+
+### R2 — P1 unexpected default/inherited EXECUTE
+
+Target migrations:
+- `20261006160000_vault_account_brand_post_completion.sql`
+- `20261006160200_x_account_publish_authority.sql`
+
+Current source revokes only known roles.
+Unknown function default ACL grantees can survive CREATE FUNCTION.
+If authenticated inherits that role, it can effectively execute service/operator-only RPCs.
+
+H2 reproduced:
+- authenticated could call `set_x_account_publish_authority(...enabled...)`;
+- authenticated could call `complete_vault_account_brand_post(...)`;
+- both migrations COMMIT instead of refusing.
+
+Required correction for every privileged function created by these two migrations:
+- exact signature and routine kind;
+- no unexpected overload/procedure collision;
+- explicit safe owner;
+- fixed safe search_path;
+- exact direct ACL;
+- no unexpected grantee;
+- no grant option;
+- exact effective EXECUTE matrix;
+- PUBLIC/anon/authenticated must not gain effective EXECUTE;
+- service_role must have only the intended EXECUTE;
+- unsafe application-role inheritance must refuse;
+- unknown default EXECUTE grantee must cause atomic refusal;
+- do not change global ALTER DEFAULT PRIVILEGES;
+- do not change role memberships;
+- do not broadly grant/revoke unrelated objects.
+
+Prefer the already-reviewed robust ACL pattern used in the PR76/reader hardening where applicable, but do not copy assumptions blindly.
+
+Required adverse fixtures:
+- unknown default EXECUTE;
+- authenticated inherits unknown default grantee;
+- anon inherits unknown default grantee;
+- grant option;
+- unexpected direct grant;
+- unknown overload/procedure;
+- unsafe owner/creator;
+- verify failed migration leaves no partial table/function/ACL mutation.
+
+Behavioral proof must explicitly show:
+- authenticated setter call is refused;
+- authenticated completion call is refused;
+- service_role intended calls still work in the clean graph.
+
+## Preserve accepted PR41 behavior
+
+Do not redesign or reopen already-passed areas unless these ACL corrections affect them:
+
+- narrow reader tenant binding;
+- no direct settings-table read in runtime/authority paths;
+- missing row/manual_review = no publish;
+- `auto_post_preference` only;
+- generic `social_mobile_user_v1` dispatcher;
+- PR76 pre-send guard;
+- authority pre-generation + immediately pre-X;
+- PR78 remembered settings/persona -> live generation;
+- NG/length/duplicate gates;
+- exact account/brand binding;
+- terminal/non-replayable confirmed X completion;
+- AI Lab / Kabumori paths unchanged;
+- G5 entitlement enforcement still not implemented here.
+
+## Freshness / G4 / G5
+
+1. Read current ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK / H2 report.
+2. Fresh fetch current main and PR #41.
+3. Use a new independent G3 worktree based on `/Users/yuya/Developer/kabumori-fresh`.
+4. Preserve fresh-main corrections that landed after the prior PR41 integration, including test/static corrections.
+5. Read current G4 and G5 TASKs for conflict only.
+6. G4 is a separate chat-owned X slot; do not alter it.
+7. G5 owns common-account Auth/session/enforcement/deletion semantics. Do not touch its app/migration/RPC files.
+8. If current main now overlaps the PR41 source/migration files materially, STOP and report before editing.
+
+## Tests
+
+Rerun only what is needed plus bounded regressions:
+
+- new R1 column ACL adverse matrix;
+- new R2 function ACL/default/inheritance adverse matrix;
+- existing reader behavior;
+- existing publish authority behavior/race;
+- existing completion behavior;
+- x-test-post focused runtime;
+- PR76 guard regression;
+- PR78 memory-to-live generation;
+- AI Lab/Kabumori bounded regression;
+- migration invariants;
+- `git diff --check`;
+- added-line secret scan.
+
+No need to rerun unrelated broad suites unless a changed shared helper requires it.
+
+## Safety
+
+Forbidden:
+- production read/write;
+- migration/history apply;
+- Edge deploy;
+- PR merge;
+- real X/OpenAI;
+- Auth/Vault/OAuth/Cron mutation;
+- publish-authority activation;
+- G5 entitlement enforcement.
+
+## Completion
+
+Update PR #41 branch normally; no force-push.
+
+Report:
+- old/new head;
+- exact files changed;
+- R1 correction and direct/inherited/PUBLIC column ACL proofs;
+- R2 correction and effective EXECUTE/default ACL proofs;
+- clean-graph intended permissions;
+- atomic rollback proofs;
+- bounded runtime regression results;
+- G4/G5 overlap check;
+- production/deploy/merge/real X/OpenAI = 0.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+### Review policy
+
+Because H2 found concrete P1/P2 in the same security boundary, one **focused rereview of only R1/R2** is required after correction.
+
+Do not repeat the full PR41 review if unchanged live/runtime behavior is covered by bounded regression.
+
+Recommended reviewer after K3: **Sol（高）**.
+
+Recommended Claude model: **Opus5.5（高）**.
+
+---
+
+# Previous G3 task — preserved history
+
+- task_id: x-social-mobile-pr41-live-generation-fresh-integration-20261006
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: codex
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: source-only fresh integration / live scheduled-user generation / narrow content-settings service read boundary
@@ -241,6 +437,95 @@ At completion:
 - STOP for K3.
 
 Recommended model: **Opus5.5（高）**.
+
+## Report — x-social-mobile-pr41-live-generation-fresh-integration-20261006
+
+- result: **PASS candidate (source-only)** — PR #41 を最新 main に統合し、利用者の設定の読み取りを「公開時だけの狭い RPC」1本に絞った。PR #41 は open のまま、GitHub: MERGEABLE。本番変更 0 / deploy 0 / merge 0 / 実 X・OpenAI 0。
+- fresh main: 統合時 `e7da97d4`（この TASK の in_progress コミット。PR78 squash `60dff4e2` を含む）。その後の main は `.agent` などの記録だけで、今回の変更ファイルとの重なりなし。
+- PR41 head: 旧 `59f4f53037f231e831774c04e9a1b1982eff3bd9` → 新 `280aa0f83d4f039ba3e43f32da202a91fd2333f2`（通常 merge `48681238` + 1 コミット。rebase / force-push なし）。
+- worktree: 新規 `/Users/yuya/Developer/kabumori-g3-pr41-live`。G4/G5 の worktree・dev server には触れていない。
+
+### Phase A — 現在の main に対する再評価
+- 衝突は `x-test-post/index.ts` の import 1 か所のみ（AI Lab の dev-diary/topic import と汎用 Vault 口座の import を両方残した）。汎用経路のブロックと `postToX` の `beforeCreate` は自動で合わさり、内容は変わっていない。
+- まだ有効: 汎用 `social_mobile_user_v1` brand_post 経路、口座固定の Vault X 送信、投稿権限（生成前と X 作成直前）、同意、NG 語、ブランド横断の重複、140 字、完了 RPC（確定済み X 投稿は再送しない）。
+- PR76: 送信前ガード `assert_x_publish_permission_for_legacy_post` は `VaultAccountXAuth.send` の中にあり、汎用経路も同じ `send` を通る。順序は PR76 ガード →（更新時は再ガード）→ PR41 の権限再確認（`beforeCreate`）→ X 作成。X を作るたびに両方が走る。PR76 のコードは無変更。
+- PR82: AI Lab の dispatcher・topic claim は無変更（汎用経路は `ai_salaryman_lab` 以外だけ）。
+- 不要になった前提: 「設定テーブルが未作成なら同意なし」の分岐（PR81 の後では常に存在する前提に変更）、service_role による設定テーブルの直接 SELECT。
+
+### Migration の番号（旧 → 新）
+- `20260927101423_vault_account_brand_post_completion` → `20261006160000_vault_account_brand_post_completion`（本文は変更なし、注記のみ）
+- 新規 `20261006160100_social_mobile_publish_settings_reader`
+- `20260927124300_x_account_publish_authority` → `20261006160200_x_account_publish_authority`（同意確認を reader 経由に変更）
+- 理由: 3 本とも main にも本番にも未適用。新しい設計は PR81 の hardening（`20261003120000`）に依存するので、何もない状態から順に作り直したときに後ろに来る番号が必要。本番履歴の最新（`20261004090000`）・repo・open PR の番号と重複なし。旧 2 番号は `migration_source_invariants_test.ts` で「再利用禁止」として登録した。
+
+### 変更ファイル（main との差分、14 ファイル）
+`_shared/brand/vault_account_brand_post.ts` (+test), `x-test-post/index.ts`, `x-test-post/vault_account_auth_test.ts`（PR41 由来のテスト）, `x-test-post/vault_account_brand_post_routing_test.ts`, migrations 3 本, `supabase/tests/{migration_source_invariants_test.ts, social_mobile_publish_settings_reader_behavior.sql（新規）, x_account_publish_authority_behavior.sql, x_account_refresh_pilot.md, x_account_refresh_pilot_behavior.sql, x_account_refresh_pilot_run.sh}`。
+禁止領域（G5 の app/auth/enrollment、PR76 migration/`vault_account_auth.ts`、AI Lab、`brand_post_generator.ts`、`social_mobile_content_settings.ts`、退会、workflow）の変更 0 を機械的に確認。
+
+### 設定の読み取り設計（Phase B）
+`public.read_social_mobile_publish_settings(p_scheduled_post_id uuid, p_brand_id text)` → `settings, persona_profile, persona_provenance, persona_confirmed, persona_last_analyzed_at, persona_last_analyzed_count`
+- 応答する条件: その投稿が **実行中（running）の brand_post**、**ちょうどそのブランド**、ブランド単位の行（`social_account_id` なし）で、かつブランドのプロファイルが `social_mobile_user_v1`。
+- 返すのは設定・ペルソナの列だけ（user id / email / token / Vault なし）。保存がなければ 0 行（＝同意なし）。書き込みなし。
+- 拒否コード: 入力不正 `..._REQUEST_INVALID`、別投稿・別ブランド・pending/終了済み・別 post_type `..._POST_NOT_RUNNING`、Kabumori・AI Lab・その他の内部プロファイル `..._BRAND_NOT_ELIGIBLE`。
+- 呼び出し元: Edge の `loadSocialMobileContentSettingsForPublish`（RPC。拒否・失敗はすべて fail closed）と、`check_x_account_publish_authority` の同意確認（直接・動的なテーブル読み取りは削除）。
+
+### ACL / 所有者 / search_path の証明
+- `SECURITY DEFINER`、`search_path = ''`、STABLE、オーバーロードなし。所有者は設定テーブルの所有者（migration 内で明示的に `alter function ... owner to <テーブル所有者>`）。
+- EXECUTE: service_role のみ。PUBLIC / anon / authenticated は不可（実行すると 42501）。
+- 設定テーブル自体は service_role に権限なし（列単位の権限も含めて 0）。migration の事後条件で、これに反する場合は適用を中止。
+- 使い捨て DB で、service_role がテーブルを直接 SELECT / UPDATE すると 42501 になることを確認。
+
+### 本番生成経路の証明（Phase C）
+- `dispatchVaultAccountScheduledBrandPost` → 現在の main の `generateBrandPost`（PR78 の全項目ガイダンス）。順序は「権限 → 設定 → 重複の材料 → 生成 → 長さ・NG 語・重複 → 権限の再確認 → X → 完了」。
+- 同意は `approvalMode = auto_post_preference` のみ。行なし・manual_review は生成も X も 0。
+
+### PR78 の記憶 → 本番生成の証明
+新しいテストで、本番の dispatcher から本物の `generateBrandPost`（OpenAI だけ差し替え）に渡し、指示文に次がすべて出ることを確認:
+- 設定: トーン / 目的 / テーマ / NG 語 / メモ
+- 確認済みペルソナ全 8 項目: 口調 / 文の長さ / 記号・絵文字 / 語彙 / 話題 / 呼びかけ / 書き出し・締め / ハッシュタグ習慣
+- ハッシュタグの習慣は「付けないでください」と同居しない。140 字の上限も同じ指示文に入る。
+- 未確認ペルソナは指示 0 行で、従来のハッシュタグ禁止が残る。
+
+### G5 の境界（Phase D、実装はしていない）
+- 今は動かない構造: 運用者が `x_account_publish_authority` に enabled の期間（最大 30 日）を作らない限り投稿しない（このテーブルも本番に未作成）。
+- G5 Phase 3 が、実際の利用者に期間を有効化する前に、ブランドの owner の `service_entitlements(service_key='x_autopost')` が有効であることを、次の 3 か所で要求する必要がある（`vault_account_brand_post.ts` の先頭コメントと手順書に記載）:
+  1. `check_x_account_publish_authority`（生成前と X 作成直前に評価される唯一の判定）
+  2. `set_x_account_publish_authority('enabled')`（期間の付与・再付与）
+  3. 利用者の予約投稿の claim（終了したサービスの投稿を claim・生成しない）
+- G5 のサービス退会では、その口座の権限行も終了・取り消しにする必要がある。
+- 今のソースで、有効化後に G5 の登録を迂回できる経路はない（有効化そのものが運用者の明示操作）。ただし上の 3 点がないまま期間を有効化すると、サービス終了後も最大 30 日投稿し得る。このため、有効化の前提条件として明記した。
+
+### テスト
+- 使い捨て PostgreSQL 17（UTF8）: `x_account_refresh_pilot_run.sh` → PILOT_BEHAVIOR / PUBLISH_AUTHORITY_BEHAVIOR / **PUBLISH_SETTINGS_READER_BEHAVIOR** / PILOT_RACE / PUBLISH_RACE / CLEANUP すべて PASS。
+  - PR81 の candidate + hardening を本物のまま適用している。
+  - 前提が欠けた状態での権限 migration の適用が拒否されること、各 migration の再適用が拒否されることも確認。
+- reader の変異確認: ①プロファイル確認を外す ②実行中の投稿か確認を外す ③ブランド一致確認を外す → いずれもテストが失敗。
+- Deno: x-test-post 534/534、PR41 TS 14/14、ルーティング + migration 不変条件 16/16、consult + dry-run + 不変条件 47/47。
+  - `deno check`: PR41 本体・テストはクリーン。`x-test-post/index.ts` の型エラー 6 件は main にも同じ 6 件があり、今回の変更とは無関係。
+  - `deno lint` クリーン。
+- アプリ（PR78 の契約）: memory-generation + consult + repository 36/36。
+- `git diff --check` クリーン、追加行の秘密情報スキャン 0 件。実 X / OpenAI 呼び出し 0。
+- 既存の別件: `_shared` 全体では 433 合格 / 3 失敗。3 件とも main でも同じように失敗する。
+  - 2 件は AI Lab 日記スナップショットの古さ。
+  - 1 件は `social_mobile_phase15_static_test` が、前回 G3（PR78）で厳密化した `persona.confirmed === true` を古い文字列で検査しているもの（動作は正しい）。
+  - どちらも別の作業として切り出し済み（テスト・スナップショットのみの修正）。
+
+### 本番・ゲート
+本番 migration / 履歴の書き込み 0、Edge deploy 0、実 X / OpenAI 0、Vault / OAuth / Auth の変更 0、Cron 0、投稿の有効化 0、PR41 merge 0、G5 の enforcement・退会の変更 0。
+
+### 残る V1 の課題
+1. PR81 の本番適用（G5 の後）→ その後に Stage 3B の 3 migration を順に適用（各 1 本ずつ・読み戻し付き）、x-test-post の deploy。
+2. G5 Phase 3 の entitlement 要件（上の 3 点）を、本番で投稿権限を有効化する前に入れる。
+3. AI 相談エンドポイントの deploy（PR78、PR81 の後）。
+4. 既存のテスト 3 件の修正（別の作業）。
+
+### レビュー
+- 新しい DB 権限の境界（service_role 用の SECURITY DEFINER の reader と、本番投稿の境界）を追加したので、TASK のとおり **集中レビュー 1 回（Sol（高））を推奨**。
+- 観点: reader の ACL・所有者・search_path と応答条件、同意確認の reader 経由化、migration の番号付け直しと事前・事後条件。
+
+### 次の推奨
+K3 で Sol（高）の集中レビューを 1 回。PASS 後も PR #41 は merge せず、PR81 の本番適用と G5 Phase 3 を待つ。
+- status → review_required / next_owner → chatgpt。STOP。
 
 ---
 

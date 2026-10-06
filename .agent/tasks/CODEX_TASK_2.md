@@ -1,5 +1,252 @@
 # Codex Task 2 — CURRENT TASK
 
+- task_id: x-social-mobile-pr41-live-generation-security-review-20261007
+- owner: codex
+- slot: codex-2
+- status: done
+- next_owner: none
+- h2_review_result: CHANGES REQUIRED
+- h2_reviewed_head: 280aa0f83d4f039ba3e43f32da202a91fd2333f2
+- h2_review_completed_at: 2026-10-07 JST
+- h2_review_blockers: R1 effective column privileges; R2 default/inherited RPC EXECUTE
+- h2_report_commit: d8fa25a2c5e1132f281a06e8751a09b09a3ac4ec
+- priority: highest
+- recommended_model: Sol（高）
+- type: one focused security review / SECURITY DEFINER reader / service_role ACL / live user auto-post boundary
+- target_pr: 41
+- target_head: 280aa0f83d4f039ba3e43f32da202a91fd2333f2
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Independently review the exact G3 PASS-candidate head for PR #41.
+
+This is the **single focused review** required because the candidate introduces:
+- a new narrow SECURITY DEFINER settings reader;
+- a service_role-only EXECUTE boundary;
+- live general-user scheduled X posting;
+- publish-consent enforcement tied to saved social-mobile settings;
+- three unmerged/unapplied migration candidates rebased onto the modern PR81/PR76/PR82 world.
+
+Do not broaden into G5 Phase 3 entitlement implementation or general app review.
+
+## Exact candidate
+
+Review only:
+`280aa0f83d4f039ba3e43f32da202a91fd2333f2`
+
+PR #41 is currently open / mergeable.
+K3 observed:
+- Netlify Preview: success;
+- Vercel: success;
+- production mutation/deploy/real X/OpenAI: 0.
+
+If target head moves, STOP and report stale review target.
+
+## Mandatory startup / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / G3 report / this TASK.
+2. Use fresh independent H2 worktree from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh fetch origin/main and PR #41 exact head.
+4. Confirm no shared worktree/dev server with G1-G5/H1.
+5. Read current G4/G5 TASK/Report for conflict/context only.
+6. Source/disposable tests only. No production reads/writes unless separately authorized; this review does not need them.
+7. Do not modify implementation source. Report findings only.
+
+## Focus A — narrow publish-settings reader
+
+Target:
+`public.read_social_mobile_publish_settings(uuid,text)`
+
+Verify exact behavior, not just string assertions:
+
+- SECURITY DEFINER only if actually needed;
+- owner is explicit and safe;
+- `search_path = ''` or equally safe;
+- STABLE/read-only semantics;
+- no dynamic SQL that widens authority;
+- exact input/post/brand binding;
+- post must be running `brand_post`;
+- scheduled post brand must equal requested brand;
+- only `social_mobile_user_v1` brand profile eligible;
+- Kabumori / AI Lab / internal profiles cannot be read;
+- no user id/email/token/Vault/provider credential output;
+- no mutation path;
+- missing settings returns no consent safely.
+
+Verify that the function cannot be abused as a generic cross-tenant settings oracle.
+
+## Focus B — ACL / effective privileges
+
+Independently prove:
+
+- underlying `social_mobile_content_settings` remains unreadable to service_role directly;
+- no table/column SELECT grant was accidentally widened;
+- reader EXECUTE:
+  - PUBLIC = none;
+  - anon = none;
+  - authenticated = none;
+  - service_role = yes only;
+- no grant option;
+- no unexpected effective EXECUTE through inherited role/default privilege drift;
+- no unknown overload/procedure/signature collision;
+- owner/default ACL assumptions fail closed where required.
+
+Use adverse role/default-ACL fixtures, not only the clean graph.
+
+## Focus C — consent path completeness
+
+There must be **no remaining direct service_role table read** in either publish path.
+
+Verify both:
+1. Edge/runtime settings loader;
+2. `check_x_account_publish_authority` consent check
+
+use the narrow reviewed boundary or an equally narrow internal helper.
+
+Required consent behavior:
+- no row => no publish;
+- `manual_review` => no publish;
+- only `auto_post_preference` may proceed;
+- wrong/internal brand => no publish;
+- malformed/unavailable reader response => fail closed;
+- no fallback to defaults that accidentally means consent.
+
+## Focus D — migration chain / numbering
+
+Candidate migration sequence:
+
+1. `20261006160000_vault_account_brand_post_completion`
+2. `20261006160100_social_mobile_publish_settings_reader`
+3. `20261006160200_x_account_publish_authority`
+
+Old unmerged candidate numbers must not remain reusable:
+- `20260927101423`
+- `20260927124300`
+
+Independently verify:
+- all three are absent from current main/prod assumptions as claimed by source inventory;
+- modern numbering correctly sorts after PR81 hardening `20261003120000`;
+- clean-bootstrap order works;
+- exact dependencies are asserted;
+- reapply/collision/precondition failures are atomic/fail closed;
+- no ordinary db-push assumption is introduced;
+- no unexpected table/function/ACL changes outside intended scope;
+- source invariant prevents accidental resurrection of old candidate versions.
+
+No production apply in H2.
+
+## Focus E — live scheduled-user publish path
+
+Review the actual integrated runtime:
+
+- only generic `social_mobile_user_v1` enters this dispatcher;
+- Kabumori legacy path unchanged;
+- AI Lab specialized path unchanged;
+- exact scheduled post / brand / X account binding;
+- admin/live/post-type/account publish gates;
+- PR76 pre-send permission guard remains on every X request;
+- PR41 authority check occurs before generation and immediately before X create;
+- credential refresh/retry cannot bypass the fresh checks;
+- settings/persona from the reviewed reader are passed into current main `generateBrandPost`;
+- all AI-consult remembered fields reach live generation;
+- NG words / length / duplicate gates occur before X;
+- no transform after final publish checks;
+- confirmed X success + completion failure cannot make the post replayable.
+
+Use fake X/provider callbacks where practical; callback-zero is required for refused states.
+
+## Focus F — cross-system boundaries
+
+Preserve:
+- PR76 permission semantics;
+- PR82 AI Lab topic-claim/dedupe path;
+- current PR78 AI-consult generation guidance;
+- Vault ownership/account isolation.
+
+G5:
+- candidate deliberately does **not** implement common-account entitlement enforcement yet.
+- confirm source remains dormant unless explicit `x_account_publish_authority` is enabled;
+- confirm K3-documented future enforcement insertion points are sensible:
+  1. publish-authority check;
+  2. authority enable/re-enable;
+  3. scheduled-user claim.
+- if the candidate can become live without an explicit authority row/window and thereby bypass G5, mark blocker.
+- do not implement G5 policy in H2.
+
+## Focus G — tests and known baseline failures
+
+Independently reproduce the focused security/runtime evidence:
+- disposable PostgreSQL reader ACL/behavior/adversarial tests;
+- publish authority behavior/race;
+- migration apply/reapply/precondition/cleanup;
+- x-test-post focused runtime;
+- PR41 dispatcher tests;
+- PR78 memory-to-live-generation contract;
+- AI Lab/Kabumori bounded regression;
+- git diff check / secret scan.
+
+G3 reports three unrelated pre-existing broad `_shared` failures:
+- two AI Lab diary snapshot staleness failures;
+- one social_mobile_phase15_static_test stale source-string expectation.
+
+Do not turn those into PR41 blockers unless the exact PR41 diff causes them. Confirm baseline comparison.
+
+## Verdict
+
+Return one:
+- PASS
+- PASS-WITH-NONBLOCKING-NOTES
+- CHANGES REQUIRED
+- BLOCKED
+
+PASS requires confidence in:
+- reader authority/tenant safety;
+- exact ACL/effective privilege boundary;
+- consent completeness;
+- migration chain correctness;
+- no live publish bypass;
+- no PR76/AI Lab/Kabumori regression.
+
+Do not merge PR #41.
+Do not deploy/apply migrations.
+Do not perform real X/OpenAI.
+Do not mutate Auth/Vault/OAuth/Cron/production.
+
+## Completion / C2
+
+Append to `.agent/CODEX_REPORT_2.md`:
+- task_id;
+- exact reviewed head;
+- verdict;
+- findings by severity;
+- reader/tenant-boundary disposition;
+- ACL/effective privilege disposition;
+- consent-path disposition;
+- migration-chain disposition;
+- live-publish disposition;
+- PR76/PR82/G5 disposition;
+- focused test evidence;
+- production mutation/read/deploy/X/OpenAI = 0;
+- merge recommendation;
+- exact next action.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C2.
+
+This is intended to be the **only routine independent review** for this candidate.
+If PASS, do not recommend another review unless a concrete new source/security change occurs.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Previous H2 task — preserved history
+
 - task_id: x-social-mobile-pr76-final-security-rereview-20261005
 - owner: codex
 - slot: codex-2
