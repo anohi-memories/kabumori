@@ -3,8 +3,9 @@
 - task_id: kabumori-pr99-controlled-analysis-deploy-20261007
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
+- production_mutation_window: **ACTIVE** — 2026-10-07 01:15 JST〜。G2 deploys `market-report-analysis` only (PR #99). No other slot performs a production write until G2 records CLOSED.
 - priority: high
 - recommended_model: Opus5.5（中）
 - type: controlled production deploy / exact-source read-back
