@@ -244,11 +244,110 @@ test("default date uses Asia Tokyo calendar date", () => {
   assert.equal(resolveJstDate(new Date("2026-08-31T23:30:00Z")), "2026-09-01");
 });
 
-// The scheduled trigger fires at 20:30 UTC, which is 05:30 JST *the following calendar day* — this is
-// the exact case the daily schedule depends on: resolveJstDate() must land on that following JST date,
-// not the UTC date the cron fired on, or every scheduled run would generate the wrong day's image.
-test("20:30 UTC (the scheduled trigger time) resolves to 05:30 JST the next day", () => {
-  assert.equal(resolveJstDate(new Date("2026-09-05T20:30:00Z")), "2026-09-06");
+async function workflowCronExpressions(file: string): Promise<string[]> {
+  const workflow = await readFile(new URL(`../.github/workflows/${file}`, import.meta.url), "utf8");
+  return [...workflow.matchAll(/^\s*-\s*cron:\s*"([^"]+)"/gmu)].map((match) => match[1]);
+}
+
+// Daily "M H * * *" only; returns the UTC hour/minute it fires at.
+function parseDailyCron(expression: string): { hour: number; minute: number } {
+  const match = /^(\d{1,2}) (\d{1,2}) \* \* \*$/u.exec(expression);
+  assert.ok(match, `expected a daily "M H * * *" cron, got ${expression}`);
+  return { minute: Number(match[1]), hour: Number(match[2]) };
+}
+
+const EARLIEST_POSTING_WINDOW_START_JST_MINUTES = 6 * 60 + 30; // posting_windows morning_greeting 06:30 JST
+
+// Every scheduled wake-up fires on UTC day D-1 for JST posting day D. resolveJstDate() must land on D --
+// not the UTC date the cron fired on -- both on time and when GitHub delays the run by hours, or the run
+// would generate the wrong day's image.
+test("generator schedule: >= 4 off-the-hour wake-ups, all after JST midnight and the last >= 60 min before the window, each resolving to the posting day even when delayed", async () => {
+  const crons = await workflowCronExpressions("morning-greeting-image.yml");
+  assert.deepEqual(crons, ["17 15 * * *", "47 17 * * *", "17 19 * * *", "17 20 * * *"]);
+  assert.ok(crons.length >= 4);
+
+  const jstMinutes = crons.map((expression) => {
+    const { hour, minute } = parseDailyCron(expression);
+    assert.ok(minute >= 5 && minute <= 55, `${expression} is too close to the top of the hour`);
+    return ((hour + 9) % 24) * 60 + minute;
+  });
+  assert.deepEqual(jstMinutes, [17, 2 * 60 + 47, 4 * 60 + 17, 5 * 60 + 17]);
+  assert.ok(Math.max(...jstMinutes) <= EARLIEST_POSTING_WINDOW_START_JST_MINUTES - 60);
+
+  for (const expression of crons) {
+    const { hour, minute } = parseDailyCron(expression);
+    const firedAt = new Date(Date.UTC(2026, 9, 6, hour, minute));
+    assert.equal(resolveJstDate(firedAt), "2026-10-07", `${expression} on time`);
+    for (const delayHours of [1, 5, 9]) {
+      const delayed = new Date(firedAt.getTime() + delayHours * 3_600_000);
+      assert.equal(resolveJstDate(delayed), "2026-10-07", `${expression} delayed ${delayHours}h`);
+    }
+  }
+});
+
+test("each wake-up maps to the documented JST time (UTC+9, next calendar day)", () => {
+  assert.equal(resolveJstDate(new Date("2026-10-06T15:17:00Z")), "2026-10-07"); // 00:17 JST
+  assert.equal(resolveJstDate(new Date("2026-10-06T17:47:00Z")), "2026-10-07"); // 02:47 JST
+  assert.equal(resolveJstDate(new Date("2026-10-06T19:17:00Z")), "2026-10-07"); // 04:17 JST
+  assert.equal(resolveJstDate(new Date("2026-10-06T20:17:00Z")), "2026-10-07"); // 05:17 JST
+});
+
+// Several wake-ups per day must cost at most one OpenAI image call per JST date: the first run that finds
+// no stored image generates and uploads it (x-upsert false); every later run that day sees it and skips.
+test("idempotent across wake-ups: repeated runs for the same JST date call OpenAI once and upload once", async () => {
+  const stored = new Set<string>();
+  let openAiCalls = 0;
+  let uploads = 0;
+  const fakeSupabaseAndOpenAi: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url === OPENAI_MORNING_GREETING_IMAGE_ENDPOINT) {
+      openAiCalls += 1;
+      return new Response(JSON.stringify({ data: [{ b64_json: "iVBORw==" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.endsWith("canonical/yume-reference.png")) return pngResponse();
+    const generated = /generated\/(\d{4}-\d{2}-\d{2})\.png$/u.exec(url)?.[1];
+    assert.ok(generated, `unexpected mock URL: ${url}`);
+    if (init?.method === "POST") {
+      assert.equal((init.headers as Record<string, string>)["x-upsert"], "false");
+      if (stored.has(generated)) return new Response("Duplicate", { status: 409 });
+      stored.add(generated);
+      uploads += 1;
+      return new Response("stored", { status: 200 });
+    }
+    return stored.has(generated)
+      ? new Response(new Uint8Array([137]), { status: 206 })
+      : new Response("missing", { status: 404 });
+  };
+
+  const results = [];
+  for (let wakeUp = 0; wakeUp < 4; wakeUp += 1) {
+    results.push(await runMorningGreetingImageWorkflow({
+      supabaseUrl: SUPABASE_URL,
+      serviceRoleKey: "service-role-test",
+      openAiApiKey: "openai-test",
+      date: "",
+      fetchImpl: fakeSupabaseAndOpenAi,
+    }));
+  }
+  assert.deepEqual(results.map((result) => result.skipped), [false, true, true, true]);
+  assert.deepEqual(results.map((result) => result.image_api_called), [1, 0, 0, 0]);
+  assert.equal(openAiCalls, 1);
+  assert.equal(uploads, 1);
+  assert.deepEqual([...stored], [resolveJstDate()]);
+
+  // An explicit target_date (the manual workflow_dispatch fallback) is generated independently of today.
+  const manual = await runMorningGreetingImageWorkflow({
+    supabaseUrl: SUPABASE_URL,
+    serviceRoleKey: "service-role-test",
+    openAiApiKey: "openai-test",
+    date: "2026-10-07",
+    fetchImpl: fakeSupabaseAndOpenAi,
+  });
+  assert.equal(manual.output_storage_path, "storage://morning-greeting-assets/generated/2026-10-07.png");
+  assert.ok(stored.has("2026-10-07"));
 });
 
 test("a JST date just before midnight and just after are on opposite sides of the UTC/JST boundary", () => {
@@ -258,7 +357,7 @@ test("a JST date just before midnight and just after are on opposite sides of th
   assert.equal(resolveJstDate(new Date("2026-09-05T15:00:00Z")), "2026-09-06");
 });
 
-test("workflow keeps workflow_dispatch (with target_date) and adds a daily 20:30 UTC schedule, injecting only the required secrets", async () => {
+test("workflow keeps workflow_dispatch (with target_date) and the serializing concurrency group, with staggered daily schedules, injecting only the required secrets", async () => {
   const workflow = await readFile(
     new URL("../.github/workflows/morning-greeting-image.yml", import.meta.url),
     "utf8",
@@ -267,9 +366,10 @@ test("workflow keeps workflow_dispatch (with target_date) and adds a daily 20:30
   assert.match(workflow, /workflow_dispatch:/u);
   assert.match(workflow, /target_date:/u);
   assert.match(workflow, /MORNING_GREETING_DATE: \$\{\{ inputs\.target_date \}\}/u);
-  // schedule must now exist, at exactly 20:30 UTC daily (05:30 JST the next day).
+  // Scheduled wake-ups (exact set and JST mapping: see the generator schedule test above).
   assert.match(workflow, /^\s*schedule:/mu);
-  assert.match(workflow, /cron:\s*"30 20 \* \* \*"/u);
+  assert.doesNotMatch(workflow, /cron:\s*"30 20 \* \* \*"/u);
+  assert.match(workflow, /^concurrency:\n\s+group: morning-greeting-image\n\s+cancel-in-progress: false$/mu);
   assert.match(workflow, /OPENAI_API_KEY: \$\{\{ secrets\.OPENAI_API_KEY \}\}/u);
   assert.match(workflow, /SUPABASE_URL: \$\{\{ secrets\.SUPABASE_URL \}\}/u);
   assert.match(workflow, /SUPABASE_SERVICE_ROLE_KEY: \$\{\{ secrets\.SUPABASE_SERVICE_ROLE_KEY \}\}/u);

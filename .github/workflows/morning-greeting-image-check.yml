@@ -1,0 +1,42 @@
+name: Check morning greeting image
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: "JST date (YYYY-MM-DD); blank uses today's JST date"
+        required: false
+        type: string
+  schedule:
+    # Fails this workflow (GitHub's normal failed-run notification) when the day's image is missing, or
+    # was stored after the posting window opened. Read-only: no image generation, no writes, no X.
+    # The verdict compares the image's created_at with the window start, so a check run that GitHub
+    # delays still reports correctly; the second trigger covers a dropped first one.
+    #   21:07 UTC = 06:07 JST (after the last generation wake-up at 05:17 JST, before the 06:30 window)
+    #   00:47 UTC = 09:47 JST (backup)
+    - cron: "7 21 * * *"
+    - cron: "47 0 * * *"
+
+permissions:
+  contents: read
+
+# Separate from the generator's group on purpose: a queued check must never displace a queued generation.
+concurrency:
+  group: morning-greeting-image-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Check the day's image was stored before the posting window
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MORNING_GREETING_DATE: ${{ inputs.target_date }}
+        run: node --experimental-strip-types scripts/morning-greeting-image-check.ts
