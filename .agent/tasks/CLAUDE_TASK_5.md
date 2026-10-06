@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase1-production-migration-gate-20261006
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - start_code: G5
 - finish_code: K5
@@ -386,10 +386,41 @@ Recommended Claude model: **Opus5.5（極高）**.
 ## Report
 
 - task_id: common-account-v1-phase1-production-migration-gate-20261006
-- result: **PREFLIGHT_READY（条件付き）**。Phase A（本番 read-only preflight）と Phase B（適用・履歴の仕組みの固定）はともに PASS。
-  - ただし Report 時点で **G4 の production_mutation_window が ACTIVE** である（PR76 S1–S5、2026-10-06 ~01:00 JST にユーザー承認）。
-  - G5 の書き込みは、G4 が CLOSED を記録した後、Phase A を再実行して PASS してからに限る（下の「承認パッケージ」の C0〜C2）。
+- result: **PREFLIGHT_READY**（2026-10-06 14:27 JST の Phase A 再取得で 9/9 PASS。差分は G4 PR76 による想定どおりのものだけ。下の「Phase A refresh」）。
+  - 初回 Report（00:56 JST）時点の「G4 window ACTIVE」という条件は、G4 が 14:11 JST に CLOSED を記録したことで解消した。
+  - 本番書き込みには、引き続きユーザー / ChatGPT の明示承認が必要。G5 は承認前の STOP にいる。
 - production writes actually performed: **0**（G5 の SQL による本番書き込みはゼロ）。migration 適用 / 履歴書き込み / backfill / deploy もすべてゼロ。
+
+### Phase A refresh — 2026-10-06 14:27 JST（G4 CLOSED 後の継続許可：read-only のみ）
+
+- 開始前の mutex チェック（fresh main `5ea7da8a`、マーカー `52efd4e7`）：
+  - G4 は done / `production_mutation_window: CLOSED`（14:11 JST）。
+  - G2 は ready（Edge deploy は未開始）。G1 / H1 / H2 は done。G3 は ready。
+  - 本番変更の window を開いているスロットは無かった。
+- Report 時点（fresh main `af4c8996`）：G3 が `in_progress`（PR81 continuation、割当上は最初に read-only Gate A/B）。window の行は無い。
+- migration：fresh main 上で SHA-256 `e632214b…cde3` のまま（最終 commit `aa4d2d42`）。PR #91 head `cab1f0fe` も変化なし。
+- ユーザーが、commit 済みの bundle（`supabase/tests/common_account_lifecycle_preflight/run.sh`）で 9 本を実行。全 OK、`"_tag":"Error"` は 0。
+- 前回（00:56 JST）との機械比較：
+
+| check | 結果 |
+|---|---|
+| 00 環境 | 同一（PG 17.6、`postgres`、READ COMMITTED） |
+| 01 履歴 | 想定どおりの差分だけ：+1 行 `20261003090000 / social_mobile_publish_permission_boundary`（statements NULL）。73 → **74 行**。対象 version / 名前の行は 0 のまま。最大 version は `20261004090000` のまま |
+| 02 対象オブジェクトの不在 | 同一（すべて 0。`private` は relation 0 / 関数 1） |
+| 03 依存関係の形 | 同一（26/26、14/14、cascade、helper の本文と権限） |
+| 04 実行時の依存 | 同一（`auth.users` の内部 trigger 28 を含む） |
+| 05 ロールと権限 | 想定どおりの差分だけ：public の関数 121 → 123（PR76 の 2 本）。role graph・schema ACL・既定権限は同一 |
+| 06 公開経路 | 同一（event trigger、拡張、publication） |
+| 07 既存オブジェクトの指紋 | functions section だけ変化（122 → 124）。relations / constraints / indexes / policies / triggers / types / schemas_and_default_acls の各ハッシュは前回と同一 |
+| 08 renderer canary | 同一（7/7） |
+
+- 07 の functions の変化について：PR76 の migration は public に関数 2 本を作り、revoke / grant をその 2 本だけに行う（source で確認。動的な revoke ループも対象はその 2 本に限定されている）。K4 の本番読み返しも exact。G5 の依存 helper の本文・権限は 03 で同一。
+- **新しい baseline（適用前）**：
+  - 既存オブジェクトの指紋 combined `db31ea2ebb931dab42c4de743978c28eac484d3d99f6b4cb6aa924c382d215dd`
+  - 内訳：relations 84、constraints 569、indexes 200、policies 61、triggers 46、functions 124
+  - 履歴 74 行
+- 注意（K4 の記録より）：rollout 中に DB password がリセットされた。C3 の psql では新しい password を `~/.pgpass` に入れる。
+- G3 の PR81（`20261003120000`、`social_mobile_content_settings` の変更）が G5 より先に本番へ入る場合、指紋と履歴がまた変わる。その場合は G5 の書き込み直前に Phase A を再取得する（C1）。G5 と G3 / G2 の本番変更は同時に行わない。
 - checked_main:
   - 開始時 `e303d81e`（その後 `00342bbd`）。
   - Report の基点は `e9671778`。push 前に fresh `origin/main` を再確認する。
@@ -525,12 +556,11 @@ Recommended Claude model: **Opus5.5（極高）**.
 
 ### 承認パッケージ（Phase C / D、明示承認の後だけ）
 
-- C0. G4 の CURRENT_STATE / TASK が `production_mutation_window: CLOSED` を記録し、G2 の deploy を含めて他の本番変更が無いことを、fresh main で確認する。
-- C1. `bash supabase/tests/common_account_lifecycle_preflight/run.sh` を全 9 本実行し、Phase A を再取得する。期待値：
-  - A3 は不在のまま。A4 / A5 / A6 / A9 は今回と同じ。
-  - A2 は G4 の 1 行を加えた 74 行で、対象の行は 0。
-  - A8 は新しい値になる。これを適用前の baseline として記録する。
-  - 想定外の差分が 1 つでもあれば STOP。
+- C0. fresh main で、G2（Edge deploy）・G3（PR81 apply）を含め、どのスロットも本番変更の window を開いていないことを確認する（G4 は 14:11 JST に CLOSED 済み）。
+- C1. `bash supabase/tests/common_account_lifecycle_preflight/run.sh` を全 9 本実行し、14:27 JST の baseline と比べる。期待値：
+  - 本番に変化が無ければ、9 本すべて同一（履歴 74 行、指紋 `db31ea2e…15dd`）。
+  - 間に G3 の PR81 などが入っていれば、その変更に由来する差分だけを許容し、新しい値を適用前の baseline として記録する。
+  - A3（不在）・A4（依存関係）・A5・A6（role / 既定権限）・A9（canary）に想定外の差分が 1 つでもあれば STOP。
 - C2. PR #91 head `cab1f0fe` の clean checkout を用意し、migration の SHA を確認する。
 - C3. operator のシェルで次を設定する：
   - `CAL_ROLLOUT_TARGET=production`
