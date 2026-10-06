@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWi
 import { Image, type ImageSource } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { LevelSwitcher } from '@/components/level-switcher';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import { fetchDailyTopic } from '@/lib/daily-topic';
 import { backFromTopicDetail, goTopicList, parseDetailOrigin } from '@/lib/detail-navigation';
@@ -15,7 +16,6 @@ import {
   resolveTopicForLevel,
   topicDetailRouteParams,
   topicSwitchErrorMessage,
-  TOPIC_SWITCH_LEVELS,
 } from '@/lib/topic-detail-switch';
 import {
   splitTrailingCaution,
@@ -26,6 +26,7 @@ import {
   TOPIC_DETAIL_ART_CLEAR_RATIO,
 } from '@/lib/topic-detail-presentation';
 import { formatTopicDate } from '@/lib/topic-history';
+import { topicReadStore } from '@/lib/topic-read-storage';
 
 const palette = KABUMORI_COLORS.light;
 
@@ -122,6 +123,13 @@ export default function TopicDetailScreen() {
     };
   }, [params.id, params.level, params.jstDate, cache]);
 
+  // Learning progress (this device only): a topic counts as learned once it is actually displayed -- the
+  // direct load reached `ok`, or an in-screen switch showed its target. Loading, error, id mismatch and a
+  // failed switch never mark anything (topic stays null / unchanged there).
+  useEffect(() => {
+    if (status === 'ok' && topic) void topicReadStore.mark(topic.id);
+  }, [status, topic]);
+
   const viewDate = typeof params.jstDate === 'string' ? params.jstDate : '';
   // How this screen was opened (home | topics); null for a deep link. It only decides where 「戻る」 goes and
   // is carried through level switches.
@@ -189,7 +197,7 @@ export default function TopicDetailScreen() {
             <Text style={styles.navText}>‹ 戻る</Text>
           </Pressable>
           <Pressable
-            onPress={() => goTopicList(router)}
+            onPress={() => goTopicList(router, topic?.level)}
             accessibilityRole="button"
             accessibilityLabel="トピック一覧へ"
             hitSlop={8}
@@ -214,28 +222,12 @@ export default function TopicDetailScreen() {
             </View>
 
             {/* Level selector: the same date, another level. Viewing only -- Home's saved level is never written. */}
-            <View style={[styles.switcher, { backgroundColor: colors.soft, borderColor: colors.outline }]}>
-              {TOPIC_SWITCH_LEVELS.map(({ level, label }) => {
-                const selected = topic.level === level;
-                const levelColors = TOPIC_DETAIL_LEVEL_COLORS[level];
-                return (
-                  <Pressable
-                    key={level}
-                    onPress={() => switchLevel(level)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${label}のトピック`}
-                    accessibilityState={{ selected, busy: pendingLevel === level }}
-                    accessibilityHint="同じ日の別のレベルに切り替えます。Homeの設定は変わりません。"
-                    style={[styles.switchSegment, selected && { backgroundColor: levelColors.strong }]}>
-                    {pendingLevel === level ? (
-                      <ActivityIndicator size="small" color={levelColors.strong} />
-                    ) : (
-                      <Text style={[styles.switchText, { color: selected ? '#ffffff' : levelColors.strong }]}>{label}</Text>
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
+            <LevelSwitcher
+              active={topic.level}
+              pending={pendingLevel}
+              onSelect={switchLevel}
+              hint="同じ日の別のレベルに切り替えます。Homeの設定は変わりません。"
+            />
             {switchError ? (
               <Text style={styles.switchError} accessibilityLiveRegion="polite">
                 {topicSwitchErrorMessage(switchError)}
@@ -386,9 +378,6 @@ const styles = StyleSheet.create({
   labelIcon: { fontSize: 18 },
   labelText: { fontSize: 16, fontWeight: '900', letterSpacing: 0.4 },
   labelDate: { marginLeft: 'auto', color: palette.muted, fontSize: 13, fontWeight: '700' },
-  switcher: { marginTop: 12, flexDirection: 'row', borderRadius: 14, borderWidth: 1, padding: 3, gap: 3 },
-  switchSegment: { flex: 1, minHeight: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  switchText: { fontSize: 15, fontWeight: '900' },
   switchError: { color: '#9a3a2c', fontSize: 13, lineHeight: 19, marginTop: 8 },
   hero: { marginTop: 14, borderRadius: 22, overflow: 'hidden' },
   artBox: { position: 'absolute', top: 0, left: 0, right: 0 },

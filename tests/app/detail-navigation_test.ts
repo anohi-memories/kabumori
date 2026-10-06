@@ -10,13 +10,15 @@ const code = async (path: string) => (await read(path)).replace(/\{\/\*[\s\S]*?\
 test("topic detail: 「‹ 戻る」 (origin-based) and 「トピック一覧 ›」 (always the list) replace the old controls", async () => {
   const screen = await code("src/app/topic-detail.tsx");
   assert.ok(screen.includes("onPress={() => backFromTopicDetail(router, params.from)}") && screen.includes("<Text style={styles.navText}>‹ 戻る</Text>"));
-  assert.ok(screen.includes("onPress={() => goTopicList(router)}") && screen.includes("<Text style={styles.navText}>トピック一覧 ›</Text>"));
+  assert.ok(screen.includes("onPress={() => goTopicList(router, topic?.level)}") && screen.includes("<Text style={styles.navText}>トピック一覧 ›</Text>"), "the right action opens the list on the level being viewed");
   assert.ok(!/ホーム<|過去のトピック ›|goHome\(|goPastTopics/.test(screen), "no third Home button, no old labels");
   assert.ok(!/router\.(back|canGoBack)\(/.test(screen), "no history dependence");
   assert.ok(!/BackButton/.test(screen), "the single generic back control is replaced");
   const nav = await code("src/lib/detail-navigation.ts");
   assert.ok(nav.includes("router.dismissTo(HOME_ROUTE)") && nav.includes("router.dismissTo(TOPICS_ROUTE)") && nav.includes("router.dismissTo(NEWS_LIST_ROUTE)"));
-  assert.ok(!/back\(|canGoBack/.test(nav));
+  assert.ok(nav.includes("router.dismissTo({ pathname: TOPICS_ROUTE, params: topicListRouteParams(level) })"));
+  assert.ok(!/canGoBack/.test(nav));
+  assert.equal((nav.match(/router\.back\(\)/g) ?? []).length, 1, "the only back() is the explicit reports origin");
 });
 
 test("topic detail: both destinations are above every state, so loading / error / id-mismatch / deep-link states keep them", async () => {
@@ -24,18 +26,22 @@ test("topic detail: both destinations are above every state, so loading / error 
   const navigation = screen.indexOf("styles.navRow");
   const states = screen.indexOf("status === 'loading' ?");
   assert.ok(navigation > 0 && states > navigation, "the nav row is rendered before (outside) the status branches");
-  assert.ok(screen.indexOf("goTopicList(router)") < states && screen.indexOf("backFromTopicDetail(router, params.from)") < states);
+  assert.ok(screen.indexOf("goTopicList(router, topic?.level)") < states && screen.indexOf("backFromTopicDetail(router, params.from)") < states);
 });
 
 test("topic detail: the selector sits between the notebook label and the Hero, with compact 初級/中級/上級 buttons", async () => {
   const screen = await read("src/app/topic-detail.tsx");
-  const order = ['accessibilityLabel="かぶモリ学習ノート"', "styles.switcher", "TOPIC_SWITCH_LEVELS.map(", "styles.hero,"].map((needle) => screen.indexOf(needle));
+  const order = ['accessibilityLabel="かぶモリ学習ノート"', "<LevelSwitcher", "styles.hero,"].map((needle) => screen.indexOf(needle));
   assert.ok(order.every((position) => position >= 0));
   assert.deepEqual([...order].sort((a, b) => a - b), order);
-  assert.ok(screen.includes('accessibilityRole="button"') && screen.includes("accessibilityState={{ selected, busy: pendingLevel === level }}"));
-  assert.ok(screen.includes("const selected = topic.level === level;"), "selected state follows the active topic");
+  assert.ok(screen.includes("active={topic.level}"), "selected state follows the active topic");
   assert.ok(screen.includes("同じ日の別のレベルに切り替えます。Homeの設定は変わりません。"));
-  assert.ok(/switcher: \{[^}]*flexDirection: 'row'/.test(screen) && /switchSegment: \{ flex: 1,/.test(screen), "three equal segments in one row fit any width");
+  // The shared selector: three equal buttons in one row (fits any width), one cohesive control.
+  const component = await read("src/components/level-switcher.tsx");
+  assert.ok(component.includes('accessibilityRole="button"') && component.includes("accessibilityState={{ selected, busy: pending === level }}"));
+  assert.ok(component.includes("const selected = active === level;"));
+  assert.ok(/switcher: \{[^}]*flexDirection: 'row'/.test(component) && /segment: \{ flex: 1,/.test(component), "three equal segments in one row fit any width");
+  assert.ok(component.includes("TOPIC_SWITCH_LEVELS.map("));
 });
 
 test("topic detail: switching resolves the SAME date, updates the route to the real topic, and never writes the Home preference", async () => {
@@ -46,7 +52,9 @@ test("topic detail: switching resolves the SAME date, updates the route to the r
   assert.ok(!/todayJst|new Date\(|Date\.now/.test(screen), "never falls back to today's date");
   // No Settings / storage writer reachable from the detail screen.
   const imports = [...new Set(screen.match(/from '[^']+'/g) ?? [])];
-  assert.ok(!imports.some((entry) => /storage|async-storage|topic-level/.test(entry)), imports.join(", "));
+  // The only storage the detail touches is the device-local learning progress; never the Home level preference.
+  assert.ok(!imports.some((entry) => /async-storage|topic-level/.test(entry)), imports.join(", "));
+  assert.ok(imports.every((entry) => !/storage/.test(entry) || entry === "from '@/lib/topic-read-storage'"), imports.join(", "));
   assert.ok(!/writeTopicLevel|setItem|AsyncStorage|TOPIC_LEVEL_STORAGE_KEY/.test(screen));
   const lib = await code("src/lib/topic-detail-switch.ts");
   assert.ok(!/setItem|AsyncStorage|writeTopicLevel|localStorage/.test(lib) && !/^import (?!type)/m.test(lib), "the switch logic has no storage and no runtime imports");
@@ -111,45 +119,62 @@ test("history -> detail -> Home and Home -> detail -> past topics exist as real 
   assert.ok(topics.includes("readTopicLevel()"));
 });
 
-test("news detail: the header has an origin-based 「‹ 戻る」 (left) and an always-available 「ニュース一覧 ›」 (right)", async () => {
+test("news detail is a ROOT-stack route (like the topic detail): a native swipe pops straight to where it was opened from", async () => {
+  const root = await read("src/app/_layout.tsx");
+  assert.ok(root.includes('<Stack.Screen name="news-detail" />'));
+  const file = await Deno.stat(new URL("src/app/news-detail.tsx", repoRoot));
+  assert.ok(file.isFile);
+  // The nested news-tab detail route is gone, so there is no screen that can sit between the swipe and its origin.
+  const removed = await Deno.stat(new URL("src/app/(tabs)/news/[id].tsx", repoRoot)).catch(() => null);
+  assert.equal(removed, null);
   const layout = await code("src/app/(tabs)/news/_layout.tsx");
-  assert.ok(layout.includes("headerLeft: () => ("), "custom left action");
-  assert.ok(layout.includes("onPress={() => backFromNewsDetail(router, (route.params as { from?: unknown } | undefined)?.from)}") && layout.includes("‹ 戻る"));
-  assert.ok(layout.includes("headerRight: () => (") && layout.includes("onPress={() => goNewsList(router)}") && layout.includes("ニュース一覧 ›"));
-  assert.ok(!/ホーム<|goHome\(/.test(layout), "no third Home button");
-  assert.ok(layout.includes("headerBackVisible: false"), "no second (implicit) back control");
-  assert.ok(!/router\.(back|canGoBack)\(|headerBackTitle/.test(layout), "neither action depends on history");
+  assert.ok(layout.includes('<Stack.Screen name="index" />') && !layout.includes("[id]") && !/headerLeft|headerRight/.test(layout));
+});
+
+test("news detail: an in-screen row has an origin-based 「‹ 戻る」 (left) and an always-available 「ニュース一覧 ›」 (right)", async () => {
+  const screen = await code("src/app/news-detail.tsx");
+  assert.ok(screen.includes("onPress={() => backFromNewsDetail(router, from)}") && screen.includes("‹ 戻る"));
+  assert.ok(screen.includes("onPress={() => goNewsList(router)}") && screen.includes("ニュース一覧 ›"));
+  assert.ok(!/ホーム<|goHome\(/.test(screen), "no third Home button");
+  assert.ok(!/usePreventRemove|beforeRemove|gestureEnabled|canGoBack|navigation\.dispatch/.test(screen), "no interception: the native pop already lands on the origin");
+  assert.ok(!/expo-router\/build/.test(screen), "no package-internal import any more");
+  assert.ok(/navTitle: \{ position: 'absolute', left: 0, right: 0, textAlign: 'center'/.test(screen), "the title is centred on the screen");
   const nav = await code("src/lib/detail-navigation.ts");
-  const home = nav.slice(nav.indexOf("export function goHomeFromNews"));
-  assert.ok(home.includes("if (router.canDismiss()) router.dismissAll();") && home.includes("router.navigate(HOME_ROUTE);"));
+  assert.ok(!/dismissAll|canDismiss|resetStack|usePreventRemove/.test(nav));
   assert.ok(!/replace\(/.test(nav), "replace('/') would stack a second (tabs)");
-  assert.ok(layout.includes('<Stack.Screen name="index" options={{ headerShown: false }} />'), "the list keeps its own header");
 });
 
-test("news detail: the header is a stack option, so loading and missing/error states keep both destinations", async () => {
-  const detail = await code("src/app/(tabs)/news/[id].tsx");
-  assert.ok(!/<Stack\.Screen|headerShown/.test(detail), "the detail never hides the stack header");
-  assert.ok(!/router\.(back|canGoBack)\(/.test(detail), "the in-body error button is direct too");
-  assert.ok(detail.includes("onPress={() => goNewsList(router)}") && detail.includes("一覧へ戻る"));
+test("news detail: the row is shared by every state, so loading and missing/error keep both destinations", async () => {
+  const screen = await code("src/app/news-detail.tsx");
+  assert.ok(screen.includes("function NewsDetailShell("));
+  // loading, missing/error and the loaded article are all rendered inside the shell.
+  assert.equal((screen.match(/<NewsDetailShell from=\{from\}>/g) ?? []).length, 3);
+  assert.ok(screen.includes("edges={['top']}") && screen.includes("60 + insets.bottom"), "safe area; no tab bar covers the bottom any more");
+  assert.ok(!/router\.(back|canGoBack)\(/.test(screen), "the in-body error button is direct too");
+  assert.ok(screen.includes("onPress={() => goNewsList(router)} style={styles.backButton}") && screen.includes("一覧へ戻る"));
 });
 
-test("news detail: every entry still opens it, and Home -> detail -> Home / list is guaranteed by the header", async () => {
-  const entries = [
-    "src/components/home/home-market-news-grid.tsx",
-    "src/components/home/home-holding-news-list.tsx",
-    "src/app/(tabs)/news/index.tsx",
-    "src/app/(tabs)/reports/[id].tsx",
+test("news detail: every entry opens the root route and passes its origin; a news/<id> link is rewritten to it", async () => {
+  const entries: Array<[string, string]> = [
+    ["src/components/home/home-market-news-grid.tsx", "from: 'home'"],
+    ["src/components/home/home-holding-news-list.tsx", "from: 'home'"],
+    ["src/app/(tabs)/news/index.tsx", "from: 'news'"],
+    ["src/app/(tabs)/reports/[id].tsx", "from: 'reports'"],
   ];
-  for (const path of entries) assert.ok((await read(path)).includes("pathname: '/news/[id]'"), path);
+  for (const [path, origin] of entries) {
+    const text = await read(path);
+    assert.ok(text.includes("pathname: '/news-detail'") && text.includes(origin), path);
+    assert.ok(!text.includes("'/news/[id]'"), `${path} must not use the removed nested route`);
+  }
+  const intent = await read("src/app/+native-intent.tsx");
+  assert.ok(intent.includes("newsDetailRedirectPath(path)"));
   const push = await read("src/hooks/use-push-notification-navigation.ts");
   assert.ok(push.includes("router.push('/news')"));
 });
 
 test("news: which items are returned, the access boundary and presentation are untouched by the navigation work", async () => {
-  const detail = await read("src/app/(tabs)/news/[id].tsx");
+  const detail = await read("src/app/news-detail.tsx");
   assert.ok(detail.includes("fetchMyImportantNewsItem(String(id))") && detail.includes("buildNewsPresentation(item)"));
-  const imports = (await code("src/app/(tabs)/news/_layout.tsx")).match(/from '[^']+'/g) ?? [];
-  assert.deepEqual(imports.sort(), ["from '@/constants/kabumori-theme'", "from '@/lib/detail-navigation'", "from 'expo-router'", "from 'react-native'"].sort());
 });
 
 test("every entry point passes its explicit origin as the `from` param", async () => {
@@ -159,12 +184,13 @@ test("every entry point passes its explicit origin as the `from` param", async (
   push(await read("src/components/home/home-market-news-grid.tsx"), "params: { id: item.news_id, from: 'home' }");
   push(await read("src/components/home/home-holding-news-list.tsx"), "params: { id: item.news_id, from: 'home' }");
   push(await read("src/app/(tabs)/news/index.tsx"), "params: { id: item.news_id, from: 'news' }");
+  push(await read("src/app/(tabs)/reports/[id].tsx"), "params: { id: item.news_id, from: 'reports' }");
 });
 
 test("the origin is read from route params only: no storage, no backend, no stack inspection", async () => {
   const nav = await code("src/lib/detail-navigation.ts");
-  assert.ok(!/AsyncStorage|setItem|supabase|fetch\(|canGoBack|\.back\(|useNavigationState|getState\(/.test(nav));
-  assert.ok(!/^import /m.test(nav), "the navigation helpers are dependency-free");
+  assert.ok(!/AsyncStorage|setItem|supabase|fetch\(|canGoBack|useNavigationState|getState\(/.test(nav));
+  assert.ok(!/^import (?!type )/m.test(nav), "the navigation helpers have no runtime dependency (type imports only)");
   const screen = await code("src/app/topic-detail.tsx");
   assert.ok(screen.includes("const origin = parseDetailOrigin(params.from);"));
 });

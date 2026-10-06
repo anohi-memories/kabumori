@@ -264,7 +264,7 @@ export default function ReportDetailScreen() {
           {marketNews.map((item) => (
             <Pressable
               key={item.news_id}
-              onPress={() => router.push({ pathname: '/news/[id]', params: { id: item.news_id } })}
+              onPress={() => router.push({ pathname: '/news-detail', params: { id: item.news_id, from: 'reports' } })}
               style={styles.newsLink}
               accessibilityRole="button">
               <Text style={styles.newsLinkText}>{item.headline_ja} ›</Text>
@@ -432,7 +432,7 @@ function ImpactCard({ row, close }: { row: ImpactRow; close: boolean }) {
       {row.news.map((item) => (
         <Pressable
           key={item.news_id}
-          onPress={() => router.push({ pathname: '/news/[id]', params: { id: item.news_id } })}
+          onPress={() => router.push({ pathname: '/news-detail', params: { id: item.news_id, from: 'reports' } })}
           style={styles.newsLink}
           accessibilityRole="button">
           <Text style={styles.newsLinkText}>{item.headline_ja} ›</Text>
@@ -478,7 +478,7 @@ function StockCard({ row, rank }: { row: StockRow; rank: number | null }) {
       {row.news.map((item) => (
         <Pressable
           key={item.news_id}
-          onPress={() => router.push({ pathname: '/news/[id]', params: { id: item.news_id } })}
+          onPress={() => router.push({ pathname: '/news-detail', params: { id: item.news_id, from: 'reports' } })}
           style={styles.newsLink}
           accessibilityRole="button">
           <Text style={styles.newsLinkText}>{item.headline_ja} ›</Text>

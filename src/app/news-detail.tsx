@@ -1,14 +1,51 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { goNewsList } from '@/lib/detail-navigation';
+import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
+import { backFromNewsDetail, goNewsList } from '@/lib/detail-navigation';
 import { fetchMyImportantNewsItem, ImportantStockNews } from '@/lib/important-news';
 import { categoryLabels, formatNewsTime, importanceLabel, targetLabel } from '@/lib/news-labels';
 import { buildNewsPresentation } from '@/lib/news-presentation';
 
+const palette = KABUMORI_COLORS.light;
+
+// The important-news detail is a route of the ROOT stack (above the tabs), like the topic detail. A root
+// screen's native edge swipe pops straight to the screen it was opened from, so the swipe and 「‹ 戻る」
+// agree without any interception, and no list is ever revealed in between. 戻る comes from the explicit
+// `from` param (home | news | reports; unknown = Home); 「ニュース一覧 ›」 always opens the news list.
+// Both stay on screen in the loading and missing/error states.
+function NewsDetailShell({ from, children }: { from: string | undefined; children: ReactNode }) {
+  return (
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <View style={styles.navRow}>
+        <Pressable
+          onPress={() => backFromNewsDetail(router, from)}
+          accessibilityRole="button"
+          accessibilityLabel="戻る"
+          hitSlop={8}
+          style={styles.navButton}>
+          <Text style={styles.navText}>‹ 戻る</Text>
+        </Pressable>
+        <Text style={styles.navTitle} accessibilityRole="header" pointerEvents="none">ニュース詳細</Text>
+        <Pressable
+          onPress={() => goNewsList(router)}
+          accessibilityRole="button"
+          accessibilityLabel="ニュース一覧へ"
+          hitSlop={8}
+          style={styles.navButton}>
+          <Text style={styles.navText}>ニュース一覧 ›</Text>
+        </Pressable>
+      </View>
+      {children}
+    </SafeAreaView>
+  );
+}
+
 export default function ImportantNewsDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, from } = useLocalSearchParams<{ id?: string; from?: string }>();
+  const insets = useSafeAreaInsets();
   const [item, setItem] = useState<ImportantStockNews | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -33,22 +70,26 @@ export default function ImportantNewsDetailScreen() {
 
   if (loading && !item) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color="#397449" />
-      </View>
+      <NewsDetailShell from={from}>
+        <View style={styles.center}>
+          <ActivityIndicator color="#397449" />
+        </View>
+      </NewsDetailShell>
     );
   }
 
   if (!item) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.missingText}>
-          {error || 'このニュースは表示できません。一覧の対象から外れた可能性があります。'}
-        </Text>
-        <Pressable onPress={() => goNewsList(router)} style={styles.backButton}>
-          <Text style={styles.backButtonText}>一覧へ戻る</Text>
-        </Pressable>
-      </View>
+      <NewsDetailShell from={from}>
+        <View style={styles.center}>
+          <Text style={styles.missingText}>
+            {error || 'このニュースは表示できません。一覧の対象から外れた可能性があります。'}
+          </Text>
+          <Pressable onPress={() => goNewsList(router)} style={styles.backButton}>
+            <Text style={styles.backButtonText}>一覧へ戻る</Text>
+          </Pressable>
+        </View>
+      </NewsDetailShell>
     );
   }
 
@@ -60,7 +101,8 @@ export default function ImportantNewsDetailScreen() {
   const categories = categoryLabels(item.coverage_categories);
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+    <NewsDetailShell from={from}>
+    <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: 60 + insets.bottom }]}>
       <View style={styles.badgeRow}>
         <View style={[
           styles.typeBadge,
@@ -152,13 +194,20 @@ export default function ImportantNewsDetailScreen() {
         </View>
       )}
     </ScrollView>
+    </NewsDetailShell>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: '#f7f8f5' },
+  navRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, minHeight: 44 },
+  navButton: { minHeight: 44, justifyContent: 'center' },
+  navText: { color: palette.accent, fontWeight: '800', fontSize: 15 },
+  // Centred on the screen (not between the unequal-width buttons); it never takes touches.
+  navTitle: { position: 'absolute', left: 0, right: 0, textAlign: 'center', color: palette.text, fontWeight: '800', fontSize: 16 },
   scroll: { flex: 1, backgroundColor: '#f7f8f5' },
-  // Extra bottom space keeps the last section clear of the tab bar.
-  content: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 130 },
+  // The bottom inset is added as scroll padding at render time (no tab bar sits over this screen).
+  content: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 12 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#f7f8f5' },
   missingText: { color: '#5e6d63', textAlign: 'center', lineHeight: 22 },
   backButton: { marginTop: 16, borderRadius: 10, backgroundColor: '#397449', paddingHorizontal: 16, paddingVertical: 10 },
