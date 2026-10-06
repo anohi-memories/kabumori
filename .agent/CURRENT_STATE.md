@@ -1,3 +1,38 @@
+## Final K3 — AI remembered persona -> generation PASS / PR #78 merged / live path next
+
+- verdict: **PASS** for `x-social-mobile-ai-consult-persona-generation-guidance-20261006`.
+- accepted PR #78 source head: `1f33c58ca82a9d33d8c5c7282e0ac5c2fbb4aca9`.
+- all confirmed consultation persona fields now materially influence social-mobile generation:
+  - toneSignals;
+  - sentenceLength;
+  - punctuationEmoji;
+  - recurringVocabulary;
+  - topicSignals;
+  - hashtagHabits;
+  - ctaStyle;
+  - openingClosingPatterns.
+- unconfirmed persona contributes zero persona guidance.
+- hashtag precedence verified:
+  fixed brand hashtags > profile-owned policy (AI Lab) > confirmed social-mobile hashtag habit > default no-hashtag.
+- Kabumori fixed hashtag and AI Lab behavior unchanged.
+- remembered notes remain bounded/one-line and cannot become an independent fake instruction line.
+- tests reported PASS: shared/consult/dry-run/settings Deno 72/72; AI Lab regressions 59/59; app 193/193; typecheck/lint/diff/secret scan clean.
+- G4/G5/PR41 prohibited paths were untouched; production mutation/deploy/real X/OpenAI = 0.
+- extra Codex review: **not required** for this bounded prompt/generation change.
+- PR #78 CI: Netlify Preview success. Vercel status failure was `build-rate-limit`, not a code/test failure; project policy treats Netlify as development Preview surface.
+- PR #78 squash-merged after K3 as:
+  `60dff4e28a763e3c182495dfc41cadf94671952f`.
+- AI consultation V1 source core is now on main. Remaining release blockers are live scheduled-user wiring, production PR81 schema/deploy, real-model quality/rate limit/release QA, and common-account release gates.
+- fresh G3 task assigned: `x-social-mobile-pr41-live-generation-fresh-integration-20261006`, recommended **Opus5.5（高）**.
+- PR41 next task is source-only:
+  - fresh-integrate stale PR #41;
+  - replace direct service_role table read with a narrow service-only brand-scoped settings read boundary;
+  - ensure both generation loader and publish-authority consent check use the narrow boundary;
+  - preserve PR76/AI Lab/Kabumori;
+  - do not preempt G5 entitlement enforcement semantics;
+  - no production/merge/deploy.
+- because the next task changes a service_role/DB permission/live-publish boundary, one focused **Sol（高）** Codex review is expected after a clean PASS candidate; no routine repeated rereview.
+
 ## K5 — Common-account Phase 2 PASS_CANDIDATE / H1 review required — 2026-10-06
 
 - G5 Phase 2 source integration is **PASS_CANDIDATE**, not yet final merge approval.
