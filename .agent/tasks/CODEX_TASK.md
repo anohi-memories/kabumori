@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase2-service-enrollment-review-20261006
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Sol（高）
 - type: focused auth/session/service-enrollment security review
@@ -173,6 +173,27 @@ Then:
 - STOP for C1.
 
 Recommended model: **Sol（高）**.
+
+## Final C1 — PR #95 CHANGES REQUIRED accepted / H1 closed
+
+- verdict: **ACCEPT H1 REVIEW / CHANGES REQUIRED**.
+- exact reviewed PR #95 head: `c06fac6492708331b6ba816122c9852cdcea73e7`.
+- PR #95 remains OPEN / unmerged / undeployed.
+- C1 accepts all five findings:
+  - R1 P1: automatic bootstrap can silently reactivate an entitlement that became ended after the client's read;
+  - R2 P1: X explicit re-enrollment intent can be reused after user switch;
+  - R3 P2: Kabumori push/notification side effects can run during pending retry before enrollment is positively ready;
+  - R4 P1: stale enrollment work can dispatch with the singleton Supabase client's new user's credential;
+  - R5 P2: malformed active RPC payload can be accepted as ready.
+- no production incident is claimed; these are source-contract/security defects proven in isolated fixtures/harnesses.
+- C1 rejects merge/deploy of current PR #95.
+- PR #94 compatibility proof is accepted: only `src/app/_layout.tsx` overlapped, both merge orders produced the same tree, and combined Kabumori tests passed 392/392.
+- PR #94 is now safe to land first; PR #95 correction must start from fresh main after that merge and preserve the root `news-detail` route.
+- H1 source edits: 0; production mutation/deploy/EAS/Auth/Storage/OAuth/Vault/X = 0.
+- H1 is done/free. A new focused H1 re-review will be allocated only after G5 produces a corrected exact head.
+- recommended re-review model: **Sol（高）**.
+
+---
 
 ## H1 completion — 2026-10-06
 
