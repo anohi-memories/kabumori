@@ -1,3 +1,21 @@
+## Final K1 — PR #94 PASS / merge HOLD for PR #95 overlap coordination
+
+- verdict: **PASS** for G1 implementation and final 375pt visual gate.
+- PR #94 accepted head: `97d374b48886ad33b61cd2288188d4b690e27a5c`.
+- 375pt observed PASS:
+  - topic list selector one row;
+  - long 2-line titles no clipping;
+  - 未読 / ✓ 学習済み clean;
+  - root news-detail header no overlap;
+  - topic detail stable.
+- native swipe parity is structurally resolved by moving news detail to root Stack; no intermediate news-list flash and no internal Expo Router API dependency.
+- topic list 初級/中級/上級, Settings separation, per-level cache/race handling, local learned state and focus refresh accepted.
+- tests/checks: 376/376 app tests; tsc clean; Expo config/web export/diff PASS.
+- PR #94 fresh-main source overlap = 0; Codex review not required; EAS 0; backend/production mutation 0.
+- merge intentionally HOLD because active common-account PR #95 also changes `src/app/_layout.tsx`, and H1 is reviewing PR #95 exact head `c06fac6492708331b6ba816122c9852cdcea73e7`.
+- merging PR #94 during H1 review would change main/integration assumptions. Complete H1/C1 first, then preserve both the PR94 root `news-detail` Stack registration and PR95 Auth/service-access gate in the final integration.
+- no further G1 source work is currently required.
+
 ## Final K3 — AI remembered persona -> generation PASS / PR #78 merged / live path next
 
 - verdict: **PASS** for `x-social-mobile-ai-consult-persona-generation-guidance-20261006`.
