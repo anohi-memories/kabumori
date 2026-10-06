@@ -61,13 +61,13 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-pr87-controlled-production-deploy-20261006
+- task_id: kabumori-pr87-close-natural-observation-20261006
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: PR #87 merge済み。market-report-analysis と personalized-reports の2 targetだけをexact fresh mainからcontrolled production deployし、before/after version・verify_jwt・source/import graph・consumer gates OFF・Cron不変をread-back。manual report/retry、consumer ON、DB/RPC/migration、X/通知、EAS禁止。G4/G5等のproduction mutationとは同時実行禁止。
-- recommended_model: Opus5.5（高）
+- allocation: market-report-analysis v24 の最初の自然な10/6大引けをread-only観測。3ポイントが数値3連発ではなく、出来事・重要材料・次の注目になっているか、Hard false reject、warning/rewrite/callsを確認。16:40 JSTより前は待機せず停止。production mutation禁止。
+- recommended_model: Sonnet5（中）
 
 ## Claude G3
 - owner: claude
