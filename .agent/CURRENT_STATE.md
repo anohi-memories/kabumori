@@ -1,3 +1,44 @@
+## K3 — PR #41 live-generation PASS_CANDIDATE / single H2 security review
+
+- K3 verdict: **PASS_CANDIDATE; merge HOLD pending one focused H2 review**.
+- exact PR #41 head: `280aa0f83d4f039ba3e43f32da202a91fd2333f2`; GitHub reports mergeable.
+- CI at K3: Netlify Preview PASS; Vercel PASS.
+- candidate fresh-integrates generic `social_mobile_user_v1` live scheduled-post generation onto modern main while preserving PR76 guarded sends, PR82 AI Lab path, Kabumori legacy path and merged PR78 generation guidance.
+- new narrow settings reader replaces direct service_role SELECT:
+  - `read_social_mobile_publish_settings(uuid,text)`;
+  - exact running brand_post + requested-brand binding;
+  - `social_mobile_user_v1` only;
+  - settings/persona metadata only, no identity/token/Vault fields;
+  - reported SECURITY DEFINER / empty search_path / service_role EXECUTE only;
+  - underlying table remains unreadable to service_role.
+- both runtime generation loader and publish-authority consent path are reported to use the narrow boundary.
+- user consent remains fail-closed: no row/manual_review => no generation/X; only `auto_post_preference` proceeds.
+- migration candidates were renumbered after PR81:
+  1. `20261006160000_vault_account_brand_post_completion`;
+  2. `20261006160100_social_mobile_publish_settings_reader`;
+  3. `20261006160200_x_account_publish_authority`.
+  Old unmerged candidate versions are source-invariant forbidden from reuse.
+- live-generation proof reports all merged AI-consult remembered settings + all 8 confirmed persona signals reaching the actual generic scheduled-user generator; unconfirmed persona remains excluded.
+- publish path order remains fail-closed: authority before generation -> settings/consent -> generate -> length/NG/duplicate -> authority recheck -> PR76-guarded X send -> terminal completion. Confirmed X completion ambiguity is non-replayable.
+- G5 entitlement enforcement is intentionally not implemented by G3. Candidate remains dormant without explicit publish-authority activation. Future G5 insertion points are documented before authority enablement/production rollout.
+- reported tests:
+  - disposable PostgreSQL reader/authority/race/cleanup PASS;
+  - x-test-post 534/534;
+  - PR41 TS 14/14;
+  - routing + migration invariants 16/16;
+  - consult/dry-run/invariants 47/47;
+  - app memory-generation/consult/repository 36/36;
+  - diff/secret scan clean;
+  - three broad `_shared` failures reproduced on main and classified pre-existing.
+- production migration/history write = 0; Edge deploy = 0; real X/OpenAI = 0; Auth/Vault/OAuth/Cron/publish activation = 0; PR41 merge = 0.
+- review decision: **one focused H2 review required** because the candidate changes SECURITY DEFINER/ACL/service_role/live-publish boundaries.
+- H2 task: `x-social-mobile-pr41-live-generation-security-review-20261007`.
+- exact H2 target: `280aa0f83d4f039ba3e43f32da202a91fd2333f2`.
+- H2 recommended model: **Sol（高）**.
+- H1 remains separately occupied by the G5 common-account PR #95 corrective rereview, so no review-slot conflict.
+- if H2 PASS: C2 may accept and decide PR41 merge; no routine rereview.
+- if H2 finds a concrete P1/P2: one bounded G3 corrective, then rereview only the changed security boundary.
+
 ## Final K4 — POSTONA multi-social Phase 1 PASS — 2026-10-06
 
 - verdict: **PASS**.
