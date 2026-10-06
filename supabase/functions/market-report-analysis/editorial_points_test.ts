@@ -61,16 +61,19 @@ test("prompt: the points are headlines with a morning role and a close role", ()
   const closePrompt = String(generationRequestBody(closeInput, []).instructions);
   for (const prompt of [morningPrompt, closePrompt]) {
     assert.ok(prompt.includes("points_ja: ちょうど3つ、各40字以内の見出し"));
-    assert.ok(prompt.includes("数値（指数の値・前日比・価格）を見出しの主役にしません"));
-    assert.ok(prompt.includes("3つは役割を分け"));
+    assert.ok(prompt.includes("最低1つ入れます"), "each headline carries a specific word of the day");
+    assert.ok(prompt.includes("どの日にも当てはまる見出しは書きません"));
+    assert.ok(prompt.includes("数値そのものがその日の出来事である場合は、数値を入れた見出しにしてかまいません"), "milestone exception");
+    assert.ok(prompt.includes("入力だけでは確かめられない記録の言葉は使いません"), "no unprovable records");
+    assert.ok(prompt.includes("もっとも重要な別々のテーマを選びます"));
     assert.ok(prompt.includes("根拠の無い理由を見出しにしない"));
   }
   assert.ok(morningPrompt.includes("朝刊の3つのポイントは、今日の「注目点」「注意点」「相場を見る軸」"));
   assert.ok(morningPrompt.includes("上昇した・下落したと言い切りません"));
   assert.ok(!morningPrompt.includes("大引けの3つのポイント"));
-  assert.ok(closePrompt.includes("大引けの3つのポイントは、「今日何が起きたか」「重要だった材料・相場を動かしたもの」「次に何を見るか」"));
+  assert.ok(closePrompt.includes("「何が起きたか」「何が重要だったか（根拠のある材料）」「次に何を見るか」"));
   assert.ok(closePrompt.includes("causal の claim がある"));
-  assert.ok(closePrompt.includes("主因は一つに絞れず"));
+  assert.ok(closePrompt.includes("理由が確認できないことを正直に書きます"));
   assert.ok(!closePrompt.includes("朝刊の3つのポイント"));
 });
 
@@ -113,10 +116,10 @@ test("recap: three (or two) metric lines are recorded; one number inside a headl
 });
 
 test("duplicates: the same point said twice is recorded; distinct roles are not", () => {
-  assert.deepEqual(pointsEditorialWarnings(["日経平均が大きく上昇", "日経平均が大きく上昇した", "次は米国株を確認"]), [
+  assert.deepEqual(pointsEditorialWarnings(["日経平均が大幅に上昇した", "日経平均が大幅に上昇して終えた", "ユーロ圏のGDP改定値を確認"]), [
     "X_POINTS_NEAR_DUPLICATE",
   ]);
-  assert.deepEqual(pointsEditorialWarnings(["主要指数がそろって上昇、主因は絞れず", "G7が原油の協調放出で合意", "次は米国株と為替の反応を確認"]), []);
+  assert.deepEqual(pointsEditorialWarnings(["日経平均が大幅高、上昇の主因は絞れず", "G7が原油の協調放出で合意", "次は米国株と為替の反応を確認"]), []);
 });
 
 test("morning: watch / caution headlines on rich prior-session data pass every hard check without a points warning", () => {
@@ -138,11 +141,11 @@ test("morning: a headline that turns the prior-night move around is still a hard
 
 test("close: recap / material / next-watch headlines with honest uncertainty pass", () => {
   const check = localAnalysisCheck(
-    close(["日経平均が大きく上昇、主因は絞れず", "韓国の9月輸出が過去最高", "次は米国株の方向とドル円を確認"]),
+    close(["日経平均が大幅高、上昇の主因は絞れず", "韓国の9月輸出が過去最高", "次は米国株の方向とドル円を確認"]),
     closeInput,
   );
   assert.deepEqual(check.hard, []);
-  assert.deepEqual(recap(check.warnings), []);
+  assert.deepEqual(recap(check.warnings), [], "one generic watch point is allowed");
 });
 
 test("close: a market cause the news does not state cannot become a headline", () => {
@@ -160,7 +163,7 @@ test("close: wrong-date values and the 1306 identity are still checked inside a 
 });
 
 test("exactly three points stays a hard requirement", () => {
-  const check = localAnalysisCheck(close(["日経平均が大きく上昇、主因は絞れず", "韓国の9月輸出が過去最高"]), closeInput);
+  const check = localAnalysisCheck(close(["日経平均が大幅高、上昇の主因は絞れず", "韓国の9月輸出が過去最高"]), closeInput);
   assert.ok(check.hard.includes("X_POST_POINTS_INVALID"));
 });
 
