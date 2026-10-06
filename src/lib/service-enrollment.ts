@@ -1,26 +1,28 @@
 // Common-account service enrollment (Phase 2). Every accepted Kabumori session is enrolled through the
 // reviewed lifecycle RPC public.start_kabumori_service(): it creates the common account if missing, the
 // active `kabumori` entitlement and the Kabumori profile row, atomically and idempotently, for
-// auth.uid() only. This module holds the decision logic; the Supabase calls come in through
-// EnrollmentClient so the logic is testable without the app runtime.
+// auth.uid() only, and never restarts an ended service (20261006230000). This module holds the decision
+// logic; it never consults a shared client, so a request can only ever carry the credential it started with.
 //
-// What it never does: write common_accounts / service_entitlements directly, look at e-mail, merge
-// accounts, or start a service that the person ended (an `ended` entitlement is restarted only by an
-// explicit user action, `allowReenroll`).
+// Rules (identical in both apps below this header; a test pins that):
+//   * the server decides the lifecycle state in one atomic call -- there is no client read before it;
+//   * every request is bound to the access token captured when it started, and is cancelled (never sent)
+//     if the person signs out or changes before dispatch;
+//   * an ended service is restarted only by reactivate_*_service(version), sent from the person's own
+//     click with the version the server reported, once;
+//   * only the exact canonical answers are accepted; anything else fails closed;
+//   * no direct table write, no e-mail, no account merge, and each app enrolls only its own service.
 
 export type EnrollmentServiceKey = 'kabumori' | 'x_autopost';
 
 export type EnrollmentQueryError = { message: string; code?: string };
-export type EnrollmentQueryResult<T> = { data: T | null; error: EnrollmentQueryError | null };
+export type RpcResult = { data: unknown; error: EnrollmentQueryError | null };
 
-export type EntitlementRow = { service_key: string; status: string };
+/** Immutable request context, captured when the request starts. */
+export type EnrollmentContext = { userId: string; accessToken: string };
 
-export interface EnrollmentClient {
-  /** The caller's own entitlement rows (RLS: service_entitlements_select_own). */
-  readOwnEntitlements(): PromiseLike<EnrollmentQueryResult<EntitlementRow[]>>;
-  /** The reviewed start RPC for this app's service, called with the user's JWT. */
-  startService(): PromiseLike<EnrollmentQueryResult<unknown>>;
-}
+/** Calls one RPC with a credential fixed at creation. */
+export type RpcTransport = (fn: string, args: Record<string, unknown>, signal: AbortSignal) => Promise<RpcResult>;
 
 export type EnrollmentBlockReason =
   | 'ACCOUNT_DELETION_IN_PROGRESS'
@@ -32,11 +34,11 @@ export type EnrollmentBlockReason =
   | 'UNKNOWN';
 
 export type EnrollmentOutcome =
-  /** Entitlement active. `sharedAccountNotice`: this start added the service to an account that already used another one. */
+  /** Entitlement active. `sharedAccountNotice`: this call started the service on an account that already used another one. */
   | { kind: 'ready'; started: boolean; sharedAccountNotice: boolean }
-  /** The person ended this service earlier; restarting it needs their explicit action. */
-  | { kind: 'reenroll_required' }
-  /** The lifecycle refused the start (deletion in progress, locked, ...). Fail closed. */
+  /** The service was ended; restarting it needs the person's explicit action at this lifecycle version. */
+  | { kind: 'reenroll_required'; lifecycleVersion: number }
+  /** The lifecycle refused the start (deletion in progress, locked, ...), or the answer was not understood. */
   | { kind: 'blocked'; reason: EnrollmentBlockReason };
 
 /** A transient failure (network, server); nothing was decided, the caller may retry. */
@@ -47,6 +49,23 @@ export class EnrollmentUnavailableError extends Error {
   }
 }
 
+/** The request was cancelled before it was sent (sign-out, another person, a newer request). */
+export class EnrollmentCancelledError extends Error {
+  constructor() {
+    super('enrollment request cancelled');
+    this.name = 'EnrollmentCancelledError';
+  }
+}
+
+const START_RPC: Record<EnrollmentServiceKey, string> = {
+  kabumori: 'start_kabumori_service',
+  x_autopost: 'start_x_autopost_service',
+};
+const REACTIVATE_RPC: Record<EnrollmentServiceKey, string> = {
+  kabumori: 'reactivate_kabumori_service',
+  x_autopost: 'reactivate_x_autopost_service',
+};
+
 const BLOCK_REASONS: readonly EnrollmentBlockReason[] = [
   'ACCOUNT_DELETION_IN_PROGRESS',
   'ACCOUNT_LOCKED',
@@ -55,56 +74,145 @@ const BLOCK_REASONS: readonly EnrollmentBlockReason[] = [
   'SERVICE_NOT_READY',
 ];
 
+const UNKNOWN: EnrollmentOutcome = { kind: 'blocked', reason: 'UNKNOWN' };
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Errors the RPC raises for a person whose login cannot be used (no auth.uid(), login removed). */
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]) {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+}
+
+/** Strict reading of the canonical start / reactivate answers. Anything else is not "ready". */
+export function parseServiceAnswer(service: EnrollmentServiceKey, data: unknown): EnrollmentOutcome {
+  if (!isRecord(data)) return UNKNOWN;
+  switch (data.status) {
+    case 'active':
+      if (hasExactKeys(data, ['status', 'service', 'started', 'shared_account'])
+          && data.service === service && typeof data.started === 'boolean' && typeof data.shared_account === 'boolean') {
+        return { kind: 'ready', started: data.started, sharedAccountNotice: data.started && data.shared_account };
+      }
+      return UNKNOWN;
+    case 'reenroll_required':
+    case 'lifecycle_changed': {
+      const version = data.lifecycle_version;
+      if (hasExactKeys(data, ['status', 'service', 'lifecycle_version']) && data.service === service
+          && typeof version === 'number' && Number.isSafeInteger(version) && version >= 1) {
+        return { kind: 'reenroll_required', lifecycleVersion: version };
+      }
+      return UNKNOWN;
+    }
+    case 'blocked': {
+      const reason = BLOCK_REASONS.find((known) => known === data.reason);
+      return hasExactKeys(data, ['status', 'reason']) && reason ? { kind: 'blocked', reason } : UNKNOWN;
+    }
+    default:
+      // includes not_registered (a restart for a service that was never started): retry runs the automatic start
+      return UNKNOWN;
+  }
+}
+
+/** Errors the RPCs raise for a person whose login cannot be used (no auth.uid(), login removed). */
 function isLoginGone(error: EnrollmentQueryError) {
   return /ACCOUNT_LIFECYCLE_(ACCOUNT_NOT_FOUND|AUTH_REQUIRED)/u.test(error.message);
 }
 
-export async function enrollService(
-  client: EnrollmentClient,
-  service: EnrollmentServiceKey,
-  options: { allowReenroll?: boolean } = {},
-): Promise<EnrollmentOutcome> {
-  const read = await client.readOwnEntitlements();
-  if (read.error) throw new EnrollmentUnavailableError();
-  const rows = Array.isArray(read.data) ? read.data : [];
-  const own = rows.find((row) => row.service_key === service);
-  const otherActive = rows.some((row) => row.service_key !== service && row.status === 'active');
-
-  if (own?.status === 'ended' && !options.allowReenroll) return { kind: 'reenroll_required' };
-
-  const start = await client.startService();
-  if (start.error) {
-    if (isLoginGone(start.error)) return { kind: 'blocked', reason: 'ACCOUNT_NOT_FOUND' };
+function interpret(service: EnrollmentServiceKey, result: RpcResult): EnrollmentOutcome {
+  if (result.error) {
+    if (isLoginGone(result.error)) return { kind: 'blocked', reason: 'ACCOUNT_NOT_FOUND' };
     throw new EnrollmentUnavailableError();
   }
-  const result = start.data;
-  if (isRecord(result) && result.status === 'active' && result.service === service) {
-    const started = result.started === true;
-    return { kind: 'ready', started, sharedAccountNotice: started && !own && otherActive };
-  }
-  if (isRecord(result) && result.status === 'blocked') {
-    const reason = BLOCK_REASONS.find((known) => known === result.reason) ?? 'UNKNOWN';
-    return { kind: 'blocked', reason };
-  }
-  // An answer this client does not understand is never treated as "ready".
-  return { kind: 'blocked', reason: 'UNKNOWN' };
+  return parseServiceAnswer(service, result.data);
+}
+
+/** The automatic start (every accepted session). The server never restarts an ended service here. */
+export async function startServiceAutomatically(
+  transport: RpcTransport, service: EnrollmentServiceKey, signal: AbortSignal,
+): Promise<EnrollmentOutcome> {
+  if (signal.aborted) throw new EnrollmentCancelledError();
+  return interpret(service, await transport(START_RPC[service], {}, signal));
+}
+
+/** The explicit restart of an ended service, at the lifecycle version the person confirmed. */
+export async function reactivateServiceExplicitly(
+  transport: RpcTransport, service: EnrollmentServiceKey, lifecycleVersion: number, signal: AbortSignal,
+): Promise<EnrollmentOutcome> {
+  if (signal.aborted) throw new EnrollmentCancelledError();
+  if (!Number.isSafeInteger(lifecycleVersion) || lifecycleVersion < 1) return UNKNOWN;
+  return interpret(service, await transport(REACTIVATE_RPC[service], { p_expected_lifecycle_version: lifecycleVersion }, signal));
 }
 
 /**
- * One logical enrollment per signed-in person: concurrent callers (sign-in, the initial session,
- * every auth-state event) share the same request, and a decided outcome is reused until reset()
- * (sign-out, user change, an explicit retry). Transient failures are not remembered.
+ * PostgREST RPC over fetch with the Authorization fixed to one access token. The token is held only in
+ * this closure for the request; it is never logged or stored.
  */
-export function createEnrollmentGate(run: (allowReenroll: boolean) => Promise<EnrollmentOutcome>) {
-  let current: { userId: string; promise: Promise<EnrollmentOutcome> } | null = null;
+export function createSessionBoundTransport(options: {
+  url: string;
+  apiKey: string;
+  accessToken: string;
+  fetch?: typeof fetch;
+}): RpcTransport {
+  const base = options.url.replace(/\/+$/u, '');
+  const send = options.fetch ?? fetch;
+  return async (fn, args, signal) => {
+    if (signal.aborted) throw new EnrollmentCancelledError();
+    let response: Response;
+    try {
+      response = await send(`${base}/rest/v1/rpc/${fn}`, {
+        method: 'POST',
+        headers: {
+          apikey: options.apiKey,
+          Authorization: `Bearer ${options.accessToken}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(args),
+        signal,
+      });
+    } catch {
+      if (signal.aborted) throw new EnrollmentCancelledError();
+      return { data: null, error: { message: 'network' } };
+    }
+    let body: unknown = null;
+    try {
+      body = await response.json();
+    } catch {
+      body = null;
+    }
+    if (!response.ok) {
+      const detail = isRecord(body) ? body : {};
+      return {
+        data: null,
+        error: {
+          message: typeof detail.message === 'string' ? detail.message : `HTTP ${response.status}`,
+          code: typeof detail.code === 'string' ? detail.code : undefined,
+        },
+      };
+    }
+    return { data: body, error: null };
+  };
+}
 
-  function start(userId: string, allowReenroll: boolean) {
-    const entry = { userId, promise: run(allowReenroll) };
+/**
+ * One logical enrollment per signed-in person. Concurrent callers for the same person share one request; a
+ * decided outcome is reused until reset(). A request for another person, a newer request and reset() each
+ * abort the previous one, so its pending work can never be sent. Transient failures are not remembered.
+ */
+export function createEnrollmentGate(
+  automatic: (context: EnrollmentContext, signal: AbortSignal) => Promise<EnrollmentOutcome>,
+) {
+  let current: { userId: string; controller: AbortController; promise: Promise<EnrollmentOutcome> } | null = null;
+
+  function begin(
+    context: EnrollmentContext,
+    run: (context: EnrollmentContext, signal: AbortSignal) => Promise<EnrollmentOutcome>,
+  ) {
+    current?.controller.abort();
+    const controller = new AbortController();
+    const entry = { userId: context.userId, controller, promise: run({ ...context }, controller.signal) };
     current = entry;
     entry.promise.catch(() => {
       if (current === entry) current = null;
@@ -113,15 +221,19 @@ export function createEnrollmentGate(run: (allowReenroll: boolean) => Promise<En
   }
 
   return {
-    ensure(userId: string) {
-      if (current && current.userId === userId) return current.promise;
-      return start(userId, false);
+    ensure(context: EnrollmentContext) {
+      if (current && current.userId === context.userId) return current.promise;
+      return begin(context, automatic);
     },
-    /** The person chose to use the service again after ending it. */
-    reenroll(userId: string) {
-      return start(userId, true);
+    /** An explicit action of this person, sent now; it replaces (and cancels) whatever was pending. */
+    explicit(
+      context: EnrollmentContext,
+      run: (context: EnrollmentContext, signal: AbortSignal) => Promise<EnrollmentOutcome>,
+    ) {
+      return begin(context, run);
     },
     reset() {
+      current?.controller.abort();
       current = null;
     },
   };

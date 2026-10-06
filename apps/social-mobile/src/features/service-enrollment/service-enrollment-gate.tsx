@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { colors, typography } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
@@ -6,80 +6,122 @@ import { SignOutButton } from '@/components/sign-out-button';
 import { selectDataSource } from '@/data/repository-selection';
 import {
   createEnrollmentGate,
+  createSessionBoundTransport,
   ENROLLMENT_NOTICE,
   enrollmentBlockedCopy,
-  enrollService,
+  EnrollmentCancelledError,
+  EnrollmentUnavailableError,
+  reactivateServiceExplicitly,
   REENROLL_COPY,
-  type EnrollmentClient,
+  startServiceAutomatically,
+  type EnrollmentContext,
   type EnrollmentOutcome,
 } from '@/domain/service-enrollment';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseConfig } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 import AccountDeletionScreen from '@/app/account-deletion';
 
-// One enrollment per signed-in person for the life of the app process. The client only calls the
-// reviewed RPC and reads its own entitlement rows (RLS); it never writes a common-account table.
-const enrollment = createEnrollmentGate((allowReenroll) => {
-  if (!supabase) return Promise.reject(new Error('Supabase接続設定がありません。'));
-  const client = supabase;
-  const xEnrollment: EnrollmentClient = {
-    readOwnEntitlements: () => client.from('service_entitlements').select('service_key,status'),
-    startService: () => client.rpc('start_x_autopost_service'),
-  };
-  return enrollService(xEnrollment, 'x_autopost', { allowReenroll });
-});
+// Each request carries the access token of the session it was started for -- never a shared client's
+// later token -- and the gate cancels it (unsent) when the person signs out or changes first. The client
+// only calls the reviewed RPCs; it never writes a common-account table.
+function transportFor(context: EnrollmentContext) {
+  const config = getSupabaseConfig();
+  if (!config.ok) throw new EnrollmentUnavailableError();
+  return createSessionBoundTransport({ url: config.config.url, apiKey: config.config.publishableKey, accessToken: context.accessToken });
+}
 
-type View_ =
-  | { userId: string | null; kind: 'loading' }
-  | { userId: string | null; kind: 'error' }
-  | { userId: string | null; kind: 'outcome'; outcome: EnrollmentOutcome; noticeAcknowledged: boolean };
+const enrollment = createEnrollmentGate((context, signal) => startServiceAutomatically(transportFor(context), 'x_autopost', signal));
+
+type GateView =
+  | { userId: string | null; request: number; kind: 'loading' }
+  | { userId: string | null; request: number; kind: 'error' }
+  | { userId: string | null; request: number; kind: 'outcome'; outcome: EnrollmentOutcome; noticeAcknowledged: boolean };
 
 /**
  * Real-data sessions are enrolled in X autopost (common-account `x_autopost` entitlement) before the
  * app loads any workspace data. Login alone creates no workspace, social account, OAuth state or
  * credential and enables no publishing; "Xを接続" remains the separate posting authorization. A refused
- * or ended enrollment keeps the app closed. The local mock preview is never gated.
+ * or ended enrollment keeps the app closed; an ended one is restarted only by the person's own click,
+ * sent at once for that person. The local mock preview is never gated.
  */
 export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
   const { session } = useAuth();
   const userId = session?.user.id ?? null;
+  const accessToken = session?.access_token ?? null;
   const selection = useMemo(() => selectDataSource(), []);
-  const [view, setView] = useState<View_>({ userId: null, kind: 'loading' });
-  const [attempt, setAttempt] = useState<{ n: number; reenroll: boolean }>({ n: 0, reenroll: false });
+  const [view, setView] = useState<GateView>({ userId: null, request: 0, kind: 'loading' });
+  const [attempt, setAttempt] = useState(0);
+  // Every automatic run and every click is one request; only the latest may change the view.
+  const request = useRef(0);
+  // The person the gate shows now; an explicit answer only applies while it is still the clicking person.
+  const currentUser = useRef<string | null>(userId);
+  const explicitInFlight = useRef(false);
   // The deletion view is opened for one user only; another user never inherits it.
   const [deletionOpenFor, setDeletionOpenFor] = useState<string | null>(null);
 
-  // Leaving the signed-in tree (sign-out, recovery) forgets the remembered outcome.
+  // Leaving the signed-in tree (sign-out, recovery) cancels pending work and forgets the outcome.
   useEffect(() => () => enrollment.reset(), []);
 
   useEffect(() => {
-    if (selection.kind === 'mock' || !userId) return;
+    currentUser.current = userId;
+  }, [userId]);
+
+  // Automatic enrollment for the current person (first render, another person, an explicit retry).
+  // A token refresh of the same person does not re-enroll.
+  useEffect(() => {
+    if (selection.kind === 'mock' || !userId || !accessToken) return;
+    const mine = ++request.current;
     let cancelled = false;
+    // All state updates happen asynchronously (same pattern as DataProvider).
     void Promise.resolve().then(async () => {
       try {
-        const outcome = await (attempt.reenroll ? enrollment.reenroll(userId) : enrollment.ensure(userId));
-        if (!cancelled) setView({ userId, kind: 'outcome', outcome, noticeAcknowledged: false });
-      } catch {
-        if (!cancelled) setView({ userId, kind: 'error' });
+        const outcome = await enrollment.ensure({ userId, accessToken });
+        if (!cancelled && mine === request.current) setView({ userId, request: mine, kind: 'outcome', outcome, noticeAcknowledged: false });
+      } catch (failure) {
+        if (failure instanceof EnrollmentCancelledError) return;
+        if (!cancelled && mine === request.current) setView({ userId, request: mine, kind: 'error' });
       }
     });
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt, selection, userId]);
 
   const retry = useCallback(() => {
     enrollment.reset();
-    setView({ userId, kind: 'loading' });
-    setAttempt((current) => ({ n: current.n + 1, reenroll: false }));
+    setView({ userId, request: ++request.current, kind: 'loading' });
+    setAttempt((value) => value + 1);
   }, [userId]);
+
+  // The person's own click: sent now, once, for exactly this person and session, at the version the
+  // server reported. Nothing is remembered for later, so another person can never inherit it.
   const reenroll = useCallback(() => {
-    enrollment.reset();
-    setView({ userId, kind: 'loading' });
-    setAttempt((current) => ({ n: current.n + 1, reenroll: true }));
-  }, [userId]);
+    if (explicitInFlight.current || !userId || !accessToken) return;
+    if (view.kind !== 'outcome' || view.userId !== userId || view.outcome.kind !== 'reenroll_required') return;
+    const lifecycleVersion = view.outcome.lifecycleVersion;
+    const clickedFor = userId;
+    const mine = ++request.current;
+    explicitInFlight.current = true;
+    setView({ userId: clickedFor, request: mine, kind: 'loading' });
+    enrollment
+      .explicit({ userId: clickedFor, accessToken }, (context, signal) =>
+        reactivateServiceExplicitly(transportFor(context), 'x_autopost', lifecycleVersion, signal))
+      .then(
+        (outcome) => {
+          if (mine === request.current && currentUser.current === clickedFor) {
+            setView({ userId: clickedFor, request: mine, kind: 'outcome', outcome, noticeAcknowledged: false });
+          }
+        },
+        (failure: unknown) => {
+          if (failure instanceof EnrollmentCancelledError) return;
+          if (mine === request.current && currentUser.current === clickedFor) setView({ userId: clickedFor, request: mine, kind: 'error' });
+        },
+      )
+      .finally(() => { explicitInFlight.current = false; });
+  }, [accessToken, userId, view]);
 
   if (selection.kind === 'mock') return <>{children}</>;
   // Everything decided is tagged with the person it belongs to; another person never sees it.
-  const current: View_ = view.userId === userId ? view : { userId, kind: 'loading' };
+  const current: GateView = view.userId === userId ? view : { userId, request: 0, kind: 'loading' };
   if (current.kind === 'outcome' && current.outcome.kind === 'ready' && (!current.outcome.sharedAccountNotice || current.noticeAcknowledged)) {
     return <>{children}</>;
   }

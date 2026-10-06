@@ -49,6 +49,7 @@ function AuthGate() {
     error,
     profileError,
     serviceAccess,
+    serviceSession,
     enrollmentNotice,
     dismissEnrollmentNotice,
     retry,
@@ -57,9 +58,8 @@ function AuthGate() {
   const colorScheme = useColorScheme();
   const { link, clearRecoveryLink } = useRecoveryLink();
   const { completed: onboardingCompleted, complete: completeOnboarding } = useOnboardingV1();
-  // Kabumori service data (push tokens, notification routing) is touched only after the session's
-  // common-account enrollment succeeded; a refused or failed enrollment keeps the app closed.
-  const serviceSession = session && !serviceAccess && !profileError ? session : null;
+  // Kabumori service data (push tokens, notification routing) is touched only once the session's
+  // common-account enrollment is positively ready for this exact person (never while pending or retrying).
   useRegisterPushToken(serviceSession);
   usePushNotificationNavigation(serviceSession);
 
@@ -93,8 +93,12 @@ function AuthGate() {
         <ServiceAccessScreen access={serviceAccess} onRetry={retry} onReenroll={reenroll} />
       ) : session && profileError ? (
         <ProfileRecoveryScreen message={profileError} onRetry={retry} />
-      ) : session ? (
+      ) : serviceSession ? (
         <SignedInNavigator />
+      ) : session ? (
+        <View style={styles.loading}>
+          <ActivityIndicator color={KABUMORI_COLORS.light.accent} size="large" />
+        </View>
       ) : (
         <AuthScreen startupError={error} onRetry={retry} />
       )}

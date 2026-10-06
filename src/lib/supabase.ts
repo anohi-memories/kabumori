@@ -8,6 +8,9 @@ const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabasePublishableKey =
   process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
 
+/** Public (non-secret) project address and key, for requests bound to one session's token. */
+export const supabasePublicConfig = { url: supabaseUrl, publishableKey: supabasePublishableKey } as const;
+
 export const supabase = createClient(
   supabaseUrl,
   supabasePublishableKey,
