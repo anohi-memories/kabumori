@@ -3,8 +3,8 @@
 - task_id: postona-multisocial-phase1-architecture-inventory-20261006
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: architecture inventory / provider-neutral design / docs-only
@@ -386,6 +386,30 @@ If a specific architecture/security concern is discovered, at most one focused r
 - status: review_required / next_owner: chatgpt。STOP for K4。
 
 ---
+
+## Final K4 — PASS / architecture accepted — 2026-10-06
+
+- verdict: **PASS**.
+- scope accepted: docs-only architecture inventory / provider-neutral multi-social design.
+- runtime/app/migration/RPC/Edge/workflow/OAuth/Vault/secret/production/provider-call changes: **0**.
+- deliverable accepted: `docs/postona/multi-social-phase1.md` (354 lines).
+- exact source candidate: former PR #96 head `df718397d015f76f91684f0b4ed3bdd9e43f539d`, one changed file only.
+- CI on the candidate: Netlify Preview PASS / Vercel PASS.
+- fresh-main note: main advanced during K4 and GitHub rejected the immediate PR merge because the base changed. The accepted one-file document was therefore written unchanged to fresh main as commit `25fd6aeec85528a06f78995f4306aaeba98f9d75`; PR #96 was then closed as superseded by that exact main integration.
+- architecture accepted:
+  - keep common login / service entitlement / social-provider connection / publish authorization as separate layers;
+  - keep X-specific credential and publish internals behind provider adapters rather than generalizing by weakening existing X safety rules;
+  - split logical post intent from publication target so retries/idempotency can operate per SNS target;
+  - Threads first, Instagram second;
+  - Instagram media/material-library requirements remain a later dedicated slice.
+- no Codex review required: this K4 changed no runtime/security boundary and the task remained docs-only.
+- coordination:
+  - G3 PR #41 is still open and `review_required`; its live scheduled-user/publish path must be resolved before G4 touches that runtime seam.
+  - G5 PR #95 is still open and `review_required`; H1 focused rereview is active. Common-account/Auth/session/provider-credential lifecycle remains G5-owned.
+  - therefore Phase 2a runtime work is **not assigned yet**.
+- AI Lab diary: **記録不要** — 今回は将来のマルチSNS化に向けた設計整理のみで、ユーザー向け機能や実動作の追加はまだない。
+- next recommendation: after G3 PR #41 and G5 PR #95 are accepted/merged, create the next G4 task for POSTONA Phase 2a (provider-neutral seams + Threads preparation), with fresh overlap checks first.
+- G4: **done / free**.
 
 # Previous G4 task history — preserved below
 
