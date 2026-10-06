@@ -1,3 +1,27 @@
+## Final K5 — Common-account legacy backfill ready / explicit apply approval required — 2026-10-06
+
+- verdict: **PASS / BACKFILL_READY**.
+- production dry-run and independent classification are exact; production writes remain **0**.
+- current production population:
+  - Auth logins: 5
+  - common accounts to create: 5
+  - Kabumori entitlement candidates/to-create: 2 = activity 1 + profile-only 1
+  - X consumer entitlement candidates/to-create: 1 = identity-verified 1
+  - X excluded admin: 1
+  - Auth-only: 2
+  - non-active candidate accounts: 0
+- Phase 0 deltas are fully explained by later legitimate state changes: one new Auth-only login and one admin-owned self-service X workspace; the admin remains excluded from X consumer entitlement by design.
+- local/disposable proof: lifecycle 20/20 PASS, source invariants 10/10 PASS, dedicated backfill proof 32/32 PASS, six deliberate defense mutations all detected.
+- production apply package is fail-closed: one transaction, bounded lock timeout, exact approved counts/evidence assertions, full rollback on mismatch, no blind retry.
+- PR #93 contains only backfill check/apply/proof tooling and was squash-merged as `b9cb6dcc1d6c8ae880d417f01941cdc4d669ffe6`.
+- additional Codex review is not required before exact apply: the production function was already independently reviewed and the new operator tooling passed positive, idempotency, stale-plan, lock-timeout and mutation-defense proofs.
+- **K5 is not treated as production write approval.** Next step requires explicit user approval for `backfill(true)`.
+- after approval, same G5 resumes with fresh mutex/state check, fresh dry-run, exact function/ACL verification, opens G5 production window, executes only the frozen backfill transaction, then read-only postflight and closes the window.
+- expected postflight if approved and state unchanged: common_accounts 5; entitlements 3 = Kabumori 2 + X 1; Auth-only 2 with no entitlement; admin X entitlement 0; operations 0; all remaining to-create counts 0.
+- integration/RLS enforcement/deletion orchestration/Auth/Storage/OAuth/Vault/Edge/Cron/real-X remain separately gated.
+- AI Lab diary: 記録不要 — internal account migration/backfill safety work; no user-facing feature activated yet.
+- recommended continuation model: **Opus5.5（極高）**.
+
 ## K1 — PR #94 topic learning access PARTIAL PASS / structural swipe corrective
 
 - verdict: **HOLD before merge**.
