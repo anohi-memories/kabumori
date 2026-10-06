@@ -32,14 +32,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: common-account-v1-phase2-service-enrollment-review-20261006
+- status: ready
+- task_id: common-account-v1-phase2-service-enrollment-corrective-rereview-20261006
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #95 exact head c06fac6492708331b6ba816122c9852cdcea73e7. R1/R2/R4 P1 and R3/R5 P2 returned to G5. No merge/deploy/production mutation. H1 free; corrected exact head will require a new focused Sol（高） review.
+- allocation: Mandatory focused re-review of corrected PR #95 exact head dd065e16. Verify prior R1-R5 closures, new service-start-intent migration/RPC atomic semantics, immutable session-bound transport, one-use re-enrollment intent, positive-ready push/notification gating, strict response validation, and PR #94/current-main compatibility. No merge/deploy/production mutation.
 - recommended_model: Sol（高）
 
 ## Codex H2
@@ -104,14 +104,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: review_required
 - task_id: common-account-v1-phase2-service-enrollment-integration-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: C1 corrective on existing PR #95. Fix H1 R1-R5: atomic automatic-vs-explicit reactivation contract, one-use user/session-scoped re-enrollment intent, positive-ready push/notification gate, immutable session-bound request transport, strict RPC payload validation. Fresh-integrate on main containing PR #94 and preserve root news-detail registration. New forward migration candidate allowed; no production apply/deploy/EAS. Mandatory H1 re-review after corrected head.
+- allocation: K5 accepts corrected PR #95 head dd065e16 as PASS_CANDIDATE only. G5 reports H1 R1-R5 reproduced and fixed with forward service-start-intent migration, immutable session-bound RPC transport, one-use user/session reactivation intent, positive-ready side-effect gate, and strict payload validation. Production/deploy/EAS remain 0. Merge and migration apply HOLD pending mandatory H1 re-review.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
