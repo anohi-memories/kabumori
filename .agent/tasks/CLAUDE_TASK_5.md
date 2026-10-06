@@ -3,8 +3,8 @@
 This is the newest canonical instruction for G5 and supersedes the previous C1 corrective section only where it differs.
 
 - task_id: `common-account-v1-phase2-service-enrollment-integration-20261006`
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - target PR: **#95**, continue updating the existing PR.
 - reviewed head requiring correction: `dd065e16f64a37582f73d05f1ab57ff7d276a5f7`
 - recommended model: **Opus5.5（極高）**
@@ -560,7 +560,170 @@ Recommended model: **Opus5.5（極高）**.
 
 ## Report
 
-### C1 corrective — 2026-10-06（R1〜R5 の修正、最新）
+### C1 corrective round 2 — 2026-10-07（S1 / S2 の修正、最新）
+
+- task_id: common-account-v1-phase2-service-enrollment-integration-20261006
+- result: **PASS_CANDIDATE（H1 指摘 S1 / S2 を修正済み。R1〜R5 は維持）**。
+  - source のみ。新しい migration は**未適用**。
+  - 本番の変更 0、deploy 0、EAS 0、本番への接続 0。
+- PR：[#95](https://github.com/anohi-memories/kabumori/pull/95)
+  - 新しい head `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`（レビュー済みの旧 head は `dd065e16`）。
+  - force-push はしていない。commit は次の 3 つ。
+    - main の merge `da95e90d`
+    - 修正 `8ff2c981`
+    - 最新 main の merge `1e8119e1`
+  - GitHub 上の状態は MERGEABLE。merge は HOLD。
+- fresh main：`origin/main` `2f3b1ea9` を merge した。
+  - これには PR #99 `e3379f80` と PR #94 `d30a5187` が含まれる。
+  - 衝突は 0。`src/app/_layout.tsx` の `<Stack.Screen name="news-detail" />` は残っている。
+- 他スロットとの重なり：open PR（#41 G3、#33、#11、#10、#3）と、PR #95 の 17 ファイルとの重なりは 0。
+  - #41 は `supabase/tests/migration_source_invariants_test.ts` を変更する。PR #95 はこのファイルを実行するだけで、変更していない。
+
+#### S1 の対応：「人」ではなく「ログイン」に結び付ける
+
+- **ログインの ID**：新しい関数 `loginSessionIdOf(userId, token)` を共通ロジックに追加した。両アプリで byte 一致。
+  - access token の `session_id` を読む。
+    - これは Supabase Auth の必須 claim で、サインイン 1 回ごとのセッションの UUID。
+    - 公式 docs で「すべての access token に含まれる」「セッションはサインイン時に作られる」と確認した。auth-js の型でも必須。
+  - 受け付ける条件：
+    - token の形が正しい（3 つに区切られた base64url）
+    - `sub` が本人と一致する
+    - `session_id` が UUID
+  - 復号するだけで、署名の検証はしない。検証はサーバーがリクエストごとに行う。この ID は端末内でログインを区別するためだけに使い、権限の判断には使わない。log にも保存にも出さない。
+  - 条件を満たさない token は「識別できないログイン」として扱う。
+    - 何も送信しない。
+    - 結果は blocked `ACCOUNT_NOT_FOUND`（「ログイン情報が無効です。もう一度ログインしてください」）。ready には決してならない。
+    - ログアウトは押せる。
+- **共通 gate**：single-flight を「人」ではなく「人 + ログイン」で区別する。
+  - 同じログインの token 更新：処理を共有する（クリックした再開もそのまま共有する）。
+  - 同じ人の新しいログイン：古い処理を abort し、送信待ちの明示的な再開も abort する。新しいログインは自分の自動 start を送り、ended なら自分で確認し直す。
+  - 取り消した後に届いた応答は、結果として扱わない（transport で再確認する）。
+- **Kabumori**：`ServiceState` の全状態にログインを付けた。
+  - `serviceSession` は「この人の、このログインの ready」のときだけ session を返す。
+  - `reenroll()` は、再開画面を見せたそのログインからしか受け付けない。
+- **X**：gate の表示、開いている状態、クリックの結果、自動 start の effect を、すべて「人 + ログイン」で区別する。
+  - 新しいログインでは、そのログイン自身の応答が届くまで gate を閉じる。
+
+#### S2 の対応：送信前に、取り消されていないかを確認する
+
+- X の自動 start は、キューに入った処理が gate に入る**前**に、次の 3 点を確認する。
+  - effect の cleanup が走っていない（unmount = sign-out / recovery、別の人 / ログイン、retry）
+  - より新しい request が無い
+  - 人とログインが変わっていない
+- どれかに当てはまれば何も送らず、gate の状態も作らない。送信済みの処理の abort は、従来どおり。
+
+#### 同じログインの token 更新
+
+- 処理は 1 つのまま（追加の request は 0）。クリックした本人のログインは、自分の再開の応答で開く。
+- テスト：
+  - Kabumori：実物の provider と lib/auth で、TOKEN_REFRESHED を 2 回送る。
+  - X：実物の gate で確認。
+  - 共通 gate の単体テストでも確認。
+- 仮に token 更新で `session_id` が変わった場合でも、起きるのは冪等な自動 start が 1 回増えることだけ（安全側）。docs に明記した。
+
+#### R1〜R5 に後退が無いこと
+
+- SQL は今回変更していない。DB の runner 2 本を、この head で再実行して PASS。
+- client の R2 / R3 / R4 / R5 の既存テストは、すべてそのまま PASS。
+  - token をテスト用の合成 JWT に置き換えただけで、検証している内容は同じ。
+- 古い head で H1 が再現した 3 件（S1 X / S1 Kabumori / S2）を、H1 のテストそのもので実行した。
+  - 変えたのは、テストファイル内の移動した位置の目印だけ。
+  - 結果は、3 件とも PASS。
+
+#### テスト / 確認（head `1e8119e1`）
+
+| 対象 | 結果 |
+|---|---|
+| Kabumori `deno test --no-check --allow-read tests/app/` | 390 / 390（新規 3 + 既存の更新） |
+| Kabumori `node --test tests/node/auth-provider-enrollment.test.mjs` | 10 / 10。新規 6 件は **実物の lib/auth**、共通 gate、transport を使い、fetch だけ差し替え |
+| X `npm test` | 221 / 221（新規 14） |
+| X `tsc` / `expo lint` | PASS |
+| Kabumori `tsc`（`src/`） | 以前からある CSS の 2 件だけ |
+| `expo export --platform web`（両アプリ、ダミーの公開 env） | 成功。bundle に start / reactivate があり、`ensure_my_profile` は無い |
+| DB `common_account_service_start_intent_run.sh`（ローカル PG17.11、偽データ） | PASS marker 10 個（ALL_PASS） |
+| DB `common_account_lifecycle_run.sh`（Phase 1） | 20 / 20 |
+| `migration_source_invariants_test.ts` | 10 / 10 |
+| 意図的に壊した版（14 種） | 12 種を検出。残り 2 種は二重防御で、テストからは到達できない（下記） |
+| H1 の再現テスト（`adversarial.mjs`） | S1 X / S1 Kabumori / S2 X：PASS。control は下記 |
+| `git diff --check` / 秘密情報・PII・log 出力の scan | clean / 0 |
+
+- 新しい必須テスト：
+
+  | TASK の必須項目 | テスト |
+  |---|---|
+  | X：A1 が ended → クリック → 応答を保留 → 同じ人の A2 → A1 を解放 → A2 は ready にならない | X：gate が残ったまま、sign-out → ログイン、recovery の 3 経路 + 同じ tick に応答が届く場合 |
+  | Kabumori：同じシナリオを実物の AuthProvider + lib/auth で | 新しいサインイン、sign-out → 新しいログイン、PASSWORD_RECOVERY の 3 経路 + A2 の auth event がキューにある間に A1 の応答が届く場合 |
+
+  - どの経路でも結果は同じ：
+    - A1 の送信は abort される。
+    - A2 は、どの render でも ready にならない。
+    - A2 は自分で再開を押し、A2 の token で 1 回だけ送られて、初めて開く。
+  - 同じログインの更新：Kabumori と X の両方で control テストを追加した。
+  - S2：次の各場合の送信数を確認した。
+
+    | 場合 | 送信数 |
+    |---|---|
+    | 実行前に unmount | **0**（後から mount しても、古い処理の残り物は無い） |
+    | 実行前に sign-out | **0** |
+    | 実行前に別の人 / 同じ人の別ログインに置き換わる | 古い処理は **0**、今のログインだけ 1 |
+    | 通常の mount | **ちょうど 1** |
+
+  - 送信中の abort / 結果を無視するテスト（既存）も PASS。
+- 壊した版で検出したもの（12 種）：
+  - gate を人だけで区別する
+  - X の effect がログインを見ない
+  - 送信前の確認を外す
+  - `cancelled` の確認を外す
+  - 表示の持ち主がログインを見ない
+  - `sub` を確認しない
+  - どんな `session_id` でも受け付ける
+  - 識別できないログインを送る
+  - 取り消し後の応答を使う
+  - Kabumori の ready がログインを見ない
+  - Kabumori の `reenroll` がログインを見ない（source の固定テストで検出）
+  - 前の処理を abort しない
+- 検出できなかったもの（2 種）：X のクリック結果の持ち主の再確認と、「ready には識別できたログインが必要」。どちらも、別の防御が先に判定するため到達できない。docs に明記した。
+- H1 の control テストについて：
+  - そのままだと FAIL する。H1 の control は `userId:'A'` で、token の `sub` は `user-A` だったため。
+  - 新しい検証では、この token は「識別できないログイン」になり、送信されない（この挙動は意図どおり）。
+  - `userId:'user-A'` に揃えると PASS する。
+
+#### changed_files（今回、10 ファイル。PR 全体では 17 ファイル）
+
+- `src/lib/service-enrollment.ts`、`apps/social-mobile/src/domain/service-enrollment.ts`（header より下は byte 一致）
+- `src/lib/service-session.ts`、`src/providers/auth-provider.tsx`、`src/lib/auth.ts`（コメントのみ）
+- `apps/social-mobile/src/features/service-enrollment/service-enrollment-gate.tsx`
+- `tests/app/service-enrollment_test.ts`、`tests/node/auth-provider-enrollment.test.mjs`、`apps/social-mobile/tests/service-enrollment.test.mjs`
+- `docs/common-account/phase2-service-enrollment.md`
+- この Report：`.agent/tasks/CLAUDE_TASK_5.md` のみ。
+
+#### その他
+
+- production mutation / deploy / EAS：**0 / 0 / 0**。migration の本番適用は 0。本物の provider への呼び出しは 0。
+- remaining_issues：
+  - 新しい migration の本番適用は、別途承認が必要（変更なし）。app を出す前に必要。
+  - 既に送信済みの request は取り消せない。
+    - A1 が送った明示的な再開は、サーバー側で A1 の token のまま完了することがある。これは本人のその version での確認で、1 回限り。
+    - その応答で A2 が ready になることはない。A2 は自分でサーバーに問い合わせる。
+  - Auth の設定で access token から `session_id` が外れた場合（通常は必須 claim）、全員が「識別できないログイン」として fail closed になる。実機確認のときに、本物の token で確認してほしい。
+  - PR #41 の migration（`20261006160000`〜`160200`）は、PR #95 の `20261006230000` より前の時刻になる。本番適用の順番は、migration の gate で調整が必要。
+  - 実機（Simulator / iPhone）での確認はまだ。native build は承認が必要な別工程。
+- safety_checks：
+  - RLS / producer / 削除経路 / Auth / Storage / OAuth / Vault / X の publish 権限 / Cron / Edge は変更していない。
+  - token・JWT・session ID は、実行中のメモリにだけ置き、log にも保存にも出さない。テストの token は実行時に作る合成のもので、本物の認証情報ではない。
+  - ローカル PG は停止し、作業用の DB は削除した。他スロットのファイルは編集していない。
+- next_recommendation：TASK のとおり、head `1e8119e1` について H1 の focused re-review（Sol 高）が必須。
+  - 重点：
+    - `loginSessionIdOf` の検証
+    - gate の「人 + ログイン」での共有と abort
+    - Kabumori の状態のログイン付け
+    - X の送信前の確認とログインでの区別
+    - H1 の control の fixture について（上記）
+  - PASS の後で、migration の本番適用の gate → app の build、の順番で進める。
+
+---
+
+### C1 corrective — 2026-10-06（R1〜R5 の修正。round 2 の前の Report、履歴として保持）
 
 - task_id: common-account-v1-phase2-service-enrollment-integration-20261006
 - result: **PASS_CANDIDATE（C1 指摘 R1〜R5 を修正済み）**。
