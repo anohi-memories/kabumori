@@ -12,6 +12,15 @@
 - ユーザーの個別指定がある場合はその指定を優先する。
 - 競合防止ルールは常に優先する。
 
+## Project Critical Path — Common Account
+
+- priority: **CRITICAL / project-wide**
+- user decision: 共通アカウント完成を、かぶモリ・X自動投稿の次工程より最優先とする。
+- G5 owns the shared common-account critical path.
+- Existing G1-G4 tasks are preserved. Non-conflicting UI/source/read-only work may continue, but **no unrelated production DB/Auth/permission mutation may overtake an active/approved G5 production window**.
+- G3 PR81 production apply remains HOLD whenever G5 has an approved/active production write.
+- next shared milestone: production legacy backfill dry-run -> explicit backfill approval -> exact backfill -> Phase 2 integrations -> Phase 3 deletion/enforcement.
+
 ## Deployment policy
 
 - X自動投稿・Web管理画面の開発中/PR/テスト用PreviewはNetlifyを優先する。
@@ -96,14 +105,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: done
-- task_id: common-account-v1-phase1-production-migration-gate-20261006
+- status: ready
+- task_id: common-account-v1-phase1-production-backfill-gate-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Final K5 PASS. Common-account Phase 1 lifecycle foundation migration 20261001150000 applied to production with exact schema/RLS/ACL/function/history read-back; production_mutation_window CLOSED at 14:58 JST. Backfill and all Phase 2/3 integrations remain unstarted. PR #91 rollout tooling merged as 50e08e1d. G5 free after fresh allocation.
+- allocation: Project-wide critical path. First run is read-only only: verify foundation exactness, run private.account_lifecycle_backfill(false) in READ ONLY mode, reconcile production legacy classification, refresh local/disposable backfill proof, freeze exact backfill(true) package, then STOP for explicit production approval. No backfill write yet. G3/G2 production mutation must not overlap an approved/active G5 window.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
