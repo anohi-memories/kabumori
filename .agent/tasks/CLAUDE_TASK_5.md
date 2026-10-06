@@ -1,5 +1,325 @@
 # Claude Task 5 — CURRENT TASK
 
+- task_id: common-account-v1-phase1-production-backfill-gate-20261006
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- priority: critical
+- start_code: G5
+- finish_code: K5
+- recommended_model: Opus5.5（極高）
+- type: production legacy backfill dry-run / parity gate / explicit apply gate
+- production_project_ref: wsmznyzcvmuitkglfeuj
+- production_mutation_allowed: false_until_explicit_approval
+- backfill_apply_allowed: false_until_explicit_approval
+- integration_allowed: false
+- enforcement_allowed: false
+- auth_delete_allowed: false
+
+## Priority
+
+The user has made the common-account system the project-wide critical path.
+
+Until this common-account sequence reaches a safe integration checkpoint:
+- G5 common-account work has priority over unrelated app production mutation.
+- G1/G2/G3/G4 existing tasks must be preserved, not overwritten.
+- Read-only observation and source-only/UI work may continue if non-conflicting.
+- No other slot may open a production DB/Auth/permission mutation window while G5 has an active production mutation window.
+- In particular, G3 PR81 production apply must remain HOLD while a G5 production write is authorized/active.
+
+## Current accepted baseline
+
+Common-account Phase 1 foundation is already installed in production and Final K5 PASS:
+- migration: `20261001150000_common_account_lifecycle_foundation.sql`
+- SHA256: `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3`
+- schema/history: EXACT / EXACT
+- RLS/ACL/functions/triggers/indexes/policies: exact reviewed contract
+- existing-object fingerprint unchanged by foundation apply
+- common_accounts: 0
+- service_entitlements: 0
+- lifecycle operations: 0
+- backfill: 0
+- guard mode: shadow
+- integration_state: not_started
+- enforcement: not enabled
+- PR #91 rollout/preflight tooling merged to main as `50e08e1daa0b1e91f9f170a5baaf175ebcd315cd`
+
+Phase 0/previous dry-run history suggested a very small legacy population, but **do not hard-code old counts**. Re-read current production.
+
+## Canonical backfill semantics
+
+The already-reviewed production function is:
+`private.account_lifecycle_backfill(boolean)`
+
+Important source contract:
+- `false` = aggregate/count-only dry-run. No account or entitlement writes.
+- `true` = iterates current `auth.users` in UUID order, takes lifecycle locks, re-reads each user's plan after lock, creates only missing rows, is idempotent, and never changes an existing entitlement.
+- one `common_accounts` row per current Auth login.
+- Kabumori candidate = existing `profiles` row; legacy evidence distinguishes:
+  - `kabumori_activity`
+  - `kabumori_profile_only`
+- X candidate = sole owner of the person's own `social_mobile_user_v1` self-service workspace; admin users are excluded from X consumer entitlement.
+- X legacy evidence distinguishes:
+  - `x_identity_verified`
+  - `x_workspace_pending`
+- email is never used to merge people.
+- Auth-only logins receive a common account but no service entitlement.
+- account status not active => new entitlement is skipped.
+- existing entitlement is never rewritten by backfill.
+
+## Mandatory startup / isolation
+
+1. Read:
+   - `PROJECT_RULES.md`
+   - `.agent/ORCHESTRATION.md`
+   - `.agent/CURRENT_STATE.md`
+   - `.agent/ACTIVE_TASK.md`
+   - this G5 TASK + previous G5 reports
+   - merged migration source
+   - PR #91 rollout/runbook
+2. Use fresh base:
+   `/Users/yuya/Developer/kabumori-fresh`
+3. Fetch fresh `origin/main`.
+4. Create a new G5-dedicated isolated worktree/checkout from fresh main.
+5. Confirm no shared worktree with G1-G4/H1/H2.
+6. Confirm production project exactly `wsmznyzcvmuitkglfeuj`.
+7. Read current Supabase docs/changelog relevant to:
+   - transaction/read-only semantics
+   - row locks
+   - SECURITY DEFINER / grants
+   - Auth user lifecycle
+8. Fresh-read other slot states and production mutation windows.
+
+If isolation or ownership is ambiguous => STOP.
+
+## Phase A — production read-only foundation check
+
+Before any backfill dry-run:
+
+- verify Phase 1 target migration history is exact one row;
+- verify common-account foundation schema/status is still EXACT;
+- verify settings remain `shadow / not_started`;
+- verify no unexpected lifecycle operation is in progress;
+- read aggregate counts only for:
+  - auth.users
+  - common_accounts
+  - service_entitlements by service/status/source/evidence
+  - lifecycle operations by type/status
+- expected at this stage is still zero population unless another authorized task legitimately changed it.
+- if any pre-existing common-account/entitlement population is unexpected, STOP and classify. Do not overwrite/rebuild.
+
+Do not output raw UUID, email, provider subject, X handle, token, secret or user content.
+
+## Phase B — authoritative dry-run
+
+Run the already-reviewed function with `p_apply=false` under a transaction that is explicitly READ ONLY.
+
+The dry-run result must record these aggregate fields:
+- auth_users
+- common_accounts_to_create
+- kabumori_candidates
+- kabumori_with_activity
+- kabumori_profile_only
+- kabumori_to_create
+- x_autopost_candidates
+- x_autopost_identity_verified
+- x_autopost_workspace_pending
+- x_autopost_to_create
+- x_autopost_excluded_admin
+- auth_only
+- not_active_accounts_with_candidates
+- admin_users
+- excluded_non_self_service_memberships
+- applied
+- created_common_accounts
+- created_kabumori
+- created_x_autopost
+- skipped_account_not_active
+
+Required invariants for dry-run:
+- `applied=false`
+- all created_* = 0
+- production row counts unchanged before/after
+- no lifecycle operation created
+- no migration history change
+- no Auth/Storage/Vault/OAuth mutation
+
+## Phase C — parity / classification verification
+
+Independently verify the plan semantics with production reads, using only aggregate or non-identifying output.
+
+At minimum prove:
+- every current Auth login appears exactly once in the backfill plan;
+- `common_accounts_to_create` matches missing current Auth logins;
+- Kabumori candidate total splits exactly into activity + profile-only;
+- Kabumori to-create excludes only already-existing entitlement or non-active account;
+- X candidate is limited to self-service sole-owner workspace;
+- admin-owned/operator/internal workspaces do not become X consumer entitlements;
+- X verified + pending split equals X candidate count;
+- Auth-only count reconciles with total population;
+- ambiguous/shared/internal/foreign workspace footprints are excluded, not silently classified;
+- no email-based merge exists;
+- current raw candidate population materially matches the known Phase 0 story, or every difference is explained by a legitimate subsequent user/state change.
+
+If an individual row must be inspected to explain an anomaly:
+- keep PII local/operator-only;
+- Report only non-identifying classification and counts.
+
+Unknown/ambiguous classification => STOP / BLOCKED.
+Do not apply.
+
+## Phase D — local/disposable proof refresh
+
+Re-run the relevant existing lifecycle/backfill tests from fresh main.
+
+At minimum:
+- lifecycle suite
+- migration/source invariants
+- backfill false branch leaves rows unchanged
+- backfill true creates expected rows on fixture
+- second apply is idempotent
+- admin X exclusion
+- profile-only Kabumori evidence
+- activity Kabumori evidence
+- X verified/pending evidence
+- non-active account skip
+- no existing entitlement rewrite
+- no email merge
+
+Do not modify the accepted migration in this task.
+
+If a test defect is found in test tooling only, report and STOP before production apply package unless the correction is clearly isolated and reviewed.
+
+## Phase E — freeze exact production apply package
+
+If Phase A-D are PASS, prepare—not execute—the exact production write package.
+
+The package must:
+1. fresh-check all slot states and production mutex;
+2. rerun the read-only dry-run immediately before write;
+3. confirm no material count/classification change;
+4. use the existing reviewed `private.account_lifecycle_backfill(true)` only;
+5. execute in one operator-controlled transaction with stop-on-error;
+6. set a bounded lock timeout so a busy Auth user causes safe STOP rather than long blocking;
+7. never use `db push`, migration repair, ad-hoc inserts, updates, deletes, or manual entitlement rows;
+8. never modify Auth, Storage, OAuth, Vault, providers, Cron, Edge Functions or existing service rows.
+
+Document exact failure behavior:
+- lock timeout/error => transaction rollback, STOP;
+- response lost => do not blindly rerun; first read counts/plan and classify;
+- unexpected row/count => STOP;
+- partial state must not be manually repaired in this TASK.
+
+## Mandatory STOP before production backfill(true)
+
+After A-D PASS and E is frozen:
+
+- append the approval package to Report;
+- status -> `review_required`;
+- next_owner -> `chatgpt`;
+- result -> `BACKFILL_READY`;
+- production writes -> 0;
+- STOP for K5.
+
+**Do not run backfill(true) without explicit user/ChatGPT production approval.**
+
+The user's project-wide prioritization instruction is NOT itself approval for the production backfill write.
+
+## After explicit backfill approval only
+
+Resume the same G5 task.
+
+Immediately:
+1. fresh-fetch origin/main;
+2. re-read ACTIVE_TASK/CURRENT_STATE;
+3. assert no other production mutation window is active;
+4. rerun Phase A/B enough to prove the package is not stale;
+5. verify exact function definition/owner/ACL is unchanged;
+6. open G5 production_mutation_window;
+7. run only the frozen backfill(true) transaction.
+
+Then separate read-only postflight must verify:
+- common_accounts count = current Auth user count, except any login legitimately disappeared during safe rollback/retry classification;
+- no duplicate common account;
+- entitlement totals exactly match approved candidate counts;
+- every backfilled entitlement source = `legacy_backfill`;
+- legacy_evidence distribution matches approved dry-run;
+- status = active for created entitlements;
+- Auth-only users have common account and no entitlement;
+- X excluded-admin count created 0 X entitlements;
+- no unknown service_key/source/evidence/status;
+- no lifecycle operation was created;
+- no existing service row changed;
+- no Auth/Storage/OAuth/Vault/Edge/Cron mutation;
+- rerun `backfill(false)`: all to-create counts are 0 for active candidates;
+- production_mutation_window -> CLOSED.
+
+If exact postflight PASS:
+- result -> `BACKFILL_APPLIED_PASS`
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K5.
+
+## Explicitly out of scope
+
+This task MUST NOT:
+- wire Kabumori signup/login/session to entitlement;
+- wire X signup/login/session to entitlement;
+- change existing RLS policies to enforce entitlement;
+- change producers/service_role gates;
+- change account-delete or social-mobile-account-delete;
+- build common account manager UI;
+- enable enforcing delete guard;
+- create deletion orchestrator;
+- hard-delete Auth users;
+- revoke sessions/providers;
+- mutate Storage/Vault;
+- deploy Edge Functions;
+- change Cron;
+- run real X.
+
+Those are the next Phase 2/3 tasks after backfill is exact.
+
+## Completion / K5 Report
+
+Report:
+- task_id
+- result: BACKFILL_READY / BACKFILL_APPLIED_PASS / BLOCKED / PARTIAL
+- fresh main
+- isolated worktree
+- production project
+- foundation exactness
+- dry-run aggregate
+- parity/classification result
+- Phase 0 comparison
+- tests
+- production mutex
+- exact apply package
+- production writes actually performed
+- postflight if applied
+- changed_files
+- commit/push
+- deploy
+- backfill
+- remaining_issues
+- safety_checks
+- next_recommendation
+
+Never report apply as successful unless exact read-back proves it.
+
+Recommended model: **Opus5.5（極高）**.
+
+## Report
+
+Pending.
+
+---
+
+# Previous G5 task history — preserved
+
+# Claude Task 5 — CURRENT TASK
+
 - task_id: common-account-v1-phase1-production-migration-gate-20261006
 - owner: claude
 - slot: claude-5
@@ -2874,4 +3194,5 @@ Report 時点の fresh `origin/main` と open PR で確認。
 - merge decision: **HOLD** pending H1 rereview of exact head `47a2ed6a1635177ba82004eace4bddb42d9d53e3`.
 - production apply remains separately gated by **Sol（極高）**, disposable real Supabase proof, exact production read-only preflight/history/ACL/FK checks, and explicit approval.
 - AI Lab diary: **no update**. 2026-10-02 already has a different, coherent daily entry for the X app; do not overwrite/mix it merely to record another same-day workstream.
+
 
