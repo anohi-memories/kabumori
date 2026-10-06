@@ -39,7 +39,7 @@
 - next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Mandatory focused exact-head re-review of PR #95 head 1e8119e1. Verify S1 same-user fresh-session isolation, stable session_id-based runtime identity, same-session token-refresh behavior, S2 queued X pre-dispatch cancellation, and regressions of already-passed R1-R5. No merge/deploy/production migration apply or production mutation.
+- allocation: Focused exact-head rereview of PR #95 head 1e8119e1. Verify same-user fresh-session isolation, stable session_id runtime identity, same-session refresh behavior, queued X pre-dispatch cancellation, and R1-R5 regressions. No merge/deploy/production migration apply.
 - recommended_model: Sol（高）
 
 ## Codex H2
@@ -112,7 +112,7 @@
 - next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Final K5 accepts corrective round 2 as PASS_CANDIDATE only on PR #95 exact head 1e8119e12457d9f6fbb8aef86991f44bf46f9cd6. G5 reports S1 same-user fresh-session isolation and S2 queued X cancellation fixed; prior R1-R5 remain green. PR open/mergeable at K5; current main advanced only in .agent files with zero product overlap. Production migration apply/deploy/EAS remain 0. Merge HOLD pending mandatory H1 rereview.
+- allocation: K5 accepts round-2 corrective as PASS_CANDIDATE on PR #95 exact head 1e8119e12457d9f6fbb8aef86991f44bf46f9cd6. S1/S2 are reported fixed, prior R1-R5 remain green, and product overlap with current main is zero at allocation. Production migration apply/deploy/EAS remain 0. Merge HOLD pending mandatory H1 rereview.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
