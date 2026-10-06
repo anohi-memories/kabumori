@@ -3,8 +3,8 @@
 - task_id: x-morning-greeting-schedule-reliability-bc-20261006
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - type: GitHub Actions schedule resilience / missing-image detection / source-only
