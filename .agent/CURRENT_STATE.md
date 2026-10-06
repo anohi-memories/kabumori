@@ -1,3 +1,16 @@
+## Final K5 — Common-account Phase 1 fresh preflight PASS / explicit production approval required — 2026-10-06
+
+- verdict: **PASS / PREFLIGHT_READY**.
+- G4-closed fresh Phase A refresh at 14:27 JST passed **9/9**.
+- observed production deltas are exactly the reviewed PR76 changes: ledger +1 row `20261003090000`, public functions +2; all other dependency/role/default-ACL/renderer checks remain compatible.
+- common-account target objects/history remain absent; exact migration SHA256 remains `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3`.
+- current pre-apply baseline: ledger 74 rows; existing-object fingerprint `db31ea2ebb931dab42c4de743978c28eac484d3d99f6b4cb6aa924c382d215dd`.
+- G5 production writes remain **0**. No migration/history/backfill/deploy/Auth/Storage/OAuth/Vault/Cron/real-X mutation has occurred.
+- additional Codex review is not required before exact apply; source and managed-boundary review were already completed, and rollout tooling proof is green.
+- G3 PR81 may continue read-only preflight only; it must not perform production mutation while the G5 production-apply decision is pending.
+- next step requires **explicit user approval** for the exact G5 production migration mutation. K5 itself is not treated as that approval.
+- after explicit approval, resume the same G5 with **Opus5.5（極高）**, fresh mutex check and any stale preflight refresh, then exact apply + exhaustive read-back. Backfill remains separately gated.
+
 ## Final K4 — PR #76 production rollout PASS / G3 PR81 resumed
 
 - Final verdict: **PASS**. No further PR76 source or production review is required.
