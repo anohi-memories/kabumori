@@ -63,7 +63,7 @@
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: 実機確認フォロー。① topic/news詳細のiOS edge-swipeを左「戻る」と同じorigin先へ統一、②トピック一覧に初級/中級/上級切替（SettingsはHome初期表示専用）、③トピック既読/学習済みを端末内AsyncStorageで表示。detail成功表示のみ既読化、一覧focus復帰で即反映。375/402 Simulator実スワイプ確認、EAS 0、backend/production mutation 0。
+- allocation: K1 HOLD。topic list 3-level switch + learned/read は受け入れ。news Home-origin swipe は最終到達先こそHomeだが一瞬News listが見えるredirect-after-popで、内部 `expo-router/build/...` usePreventRemove依存もあるため未採用。root-level detail等の構造的native swipe parityへ修正し、375pt実測も追加。既存PR #94を更新、EAS 0、backend/production mutation 0。
 - recommended_model: Sonnet5（高）
 
 ## Claude G2
