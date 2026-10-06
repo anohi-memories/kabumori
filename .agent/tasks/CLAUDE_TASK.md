@@ -3,8 +3,8 @@
 - task_id: kabumori-pr87-close-natural-observation-20261006
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（中）
 - type: read-only natural production observation
@@ -66,7 +66,65 @@ classification / observation time / cycle / packet ids / exact 3 points / editor
 
 ## Report
 
-Pending.
+### classification
+- **配信・安全性：PASS_FIRST_TRY**（16:20の最初の自然分析で完了、Fact/local safe、重複なし、事実の誤りなし）。ただし品質書き直し1回が入り、その書き直しがFactで不合格になって最初の版が配信された（下記）。
+- **編集（3ポイント）：実質的に未達（EDITORIAL_REGRESSION）**。形式は「起きたこと／材料／次に見る点」になったが、中身が空疎で、**ユーザー判断では10/5朝刊までの数値3行より悪い**。PR #87のcompletion条件「出来事・根拠ある背景・重要性・次の注目が中心」は、形だけで中身を満たしていない。
+
+### observation time
+- 2026-10-06 18:16〜18:30 JST（16:40以降。read-only）
+
+### production baseline read-back
+- `market-report-analysis` v24 ACTIVE / verify_jwt=false / ezbr `ed2db6d57e13…`（updated 2026-10-06 14:33:15 JST）。`personalized-reports` v40（2fe1b50edf59、9/25）不変。app_enabled=false / x_enabled=false。deploy後のmanual cycleなし。
+
+### cycle（close, trading_date 2026-10-06）
+- data：completed、attempt 1、16:15:01.4 → 16:15:01.8 JST、error なし、data packet `ecb5c896-ca56-43df-bde0-172c9a579c51`
+- report：completed、**report_attempt_count=1**（16:20:01.5開始 → 16:20:55.5完了、約54秒）、failed_at=null、error なし。retry（16:35）は no-op（attempt増加なし）
+- report packet `bd5e85ee-9d6c-41b7-8631-40d72ff1f69f`、content_hash `e8aacbc522c4f8f87f9aa88e13075078a7e6527347532f921fcb514c64f76b6c`、fact_status=passed、presentation v2、direction up
+- duplicate：10/6 closeのreport packetは1件のみ
+- 旧アプリ 17:15 personalized close は completed（gate OFF のlegacy経路）
+
+### exact 3 points
+1. 「主要指数は上昇、主因は一つに絞れず」
+2. 「国際情勢のニュースを確認」
+3. 「次は米国株と為替の動きを見る」
+（exactly 3 / 数値の羅列ではない）
+
+### editorial評価（ユーザーの感想「数値ばかりの方がまだマシ」を裏づける）
+- ポイント1と3は、私がPR #87のプロンプトに入れた**例文をほぼそのまま**返している（「主要指数がそろって上昇、主因は絞れず」「次は米国株と為替の反応を確認」）。例文が「型」として使われ、その日の中身にならなかった。
+- ポイント2「国際情勢のニュースを確認」は**どの日にも当てはまる**文で、何のニュースか分からない（実際の材料はスーダン停戦決議、イエメン、黒海の船舶攻撃、不二越の決算）。
+- 今日の最大の事実が見出しにない：日経平均は**70,683.98で、10/5終値69,946.86から初めて7万円台に乗せた**（手元のパケットの範囲で）。「数値を見出しの主役にしない」というルールが強すぎ、節目・大きな動きまで見出しから外した可能性が高い。TASK例にも「数値そのものがニュースの核心なら例外」とあるが、プロンプトでは政策金利の決定だけを例示しており、節目が例外として伝わっていない。
+- 本文全体も短い：X 387字（目標430〜560字、`X_POST_SHORTER_THAN_TARGET:387`）、アプリ本文657字（`APP_STORY_SHORTER_THAN_TARGET:657`）。
+- 朝刊10/6（数値3行）と比べると、情報量は大引けのほうが少ない。
+
+### factual safety（入力データと手作業で突き合わせ）
+- 日経平均 70,683.98（+1.05%、10/6）・1306 440.4円（+0.94%、10/6）・NYダウ 51,267.90（+0.18%）・S&P500 7,773.95（+0.66%）・ナスダック 27,477.31（+1.05%）・SOX 13,172.74（+0.27%）・ドル円 158.23円（以上10/5）・日本国債2年 1.909%・10年 3.085%（10/5、fresh）：すべて入力と一致。米国債（10/2時点）・原油（9/29時点）は「古い値」と明記。
+- 指数の方向・セッション日付・1306表記：問題なし。「TOPIX」単独表記なし。
+- 因果：値動きの理由は「確認できません」と書き、ニュースとの関係も「確認できません」。unsupported causality なし。
+- ref/ニュース：key_news 4件（broad 3、company 1）、broad先頭。未知のrefなし。
+- false absence claim なし。Hard false reject の確認できる事例：なし（下記の書き直し分は本文が残っておらず判定不能）。
+
+### diagnostics
+- calls=4、generation_attempts=2、content_regenerations=1、**quality_rewrite=true**、quality_rewrite_request_failed=false、delivered_generation=**1**（安全な最初の版を配信）、hard_rejections=`fact`、transport_retries=0
+- quality_warnings（配信版）：`X_POST_SHORTER_THAN_TARGET:387 / APP_STORY_SHORTER_THAN_TARGET:657`。**`X_POINTS_*` の記録は無し**（3ポイントは数値行ではなく、重複もしていないため。「どの日にも当てはまる見出し」を検出する仕組みは今回の実装に無い）。
+- 書き直しの理由：アプリ本文657字が700字未満（PR #77の「材料的に薄い」閾値）＋X本文が目標未満。書き直しの版はFactで不合格となり、設計どおり安全な最初の版が配信された。書き直し版の本文・Factの指摘文は記録に残っておらず、**その不合格が正当だったか（false rejectか）は判定不能**。
+- tokens：input 29,320 / output 4,984、cost **$0.011845**。10/2朝刊（3 calls、$0.010230）、10/6朝刊（2 calls、$0.005873）より高い。**avoidable な書き直し（4 calls）**が戻った形。
+
+### production mutation
+- **0**（read-only SELECT と `functions list` のみ）
+
+### remaining issues / recommendation
+1. **編集の修正TASKが必要（高優先）**：
+   - プロンプトから**具体的な例文を外し**、役割と「具体的に書く」条件だけにする（例文の丸写しを防ぐ）。
+   - **節目・大きな動き**（7万円台、大幅高・安、急変など）は、数値を入れて見出しにしてよいと明記する。
+   - 材料のポイントは**出来事の固有名詞（どこの・何が）**を必ず入れる。「国際情勢を確認」のような汎用文を禁止。
+   - 汎用的な見出し（「ニュースを確認」「動きを見る」だけ等）を検出する品質警告（記録のみ）を追加。
+   - 理想の見本として、ユーザーが提示した朝刊の例（「米ハイテク株の強さを、日本株が引き継げるか」「7万円台を固められるか、利益確定売りには注意」「原油安は追い風、米長期金利の高さは要注意」）の構造（問い／注意点／具体的な数値を根拠に添える）を参照する。ただし材料データ（個別株・最新の原油・最高値判定・金利見通し）が今の入力に無く、シナリオ表現（「〜しそう」）はHard境界の方針判断が必要。
+2. **書き直しの診断**：書き直しがFactで不合格になった理由が残らない。`hard_rejections` に不合格の文面（短縮）を残すと、false rejectか判断できる。
+3. **短い本文**：大引けのX/アプリが目標未満で書き直しが走った。プロンプトの長さ指示と、書き直しの条件（アプリ700字未満＋X目標未満）の見直しを、修正TASKに含めるか判断。
+4. **10/7朝刊観測**：**PR #87の修正前に観測しても同じ結果が見込まれるため、修正TASKのdeployまで不要**。修正deploy後の最初の朝刊（または大引け）で再観測。
+5. `personalized-reports` の PR #43/#67/#87 まとめdeployは別TASK（前回Report参照）。
+
+---
 
 ---
 
