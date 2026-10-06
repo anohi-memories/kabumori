@@ -1,3 +1,13 @@
+## Final K4 + G5 continuation — 2026-10-06
+
+- G4 PR76 production rollout is **PASS / complete**; production_mutation_window CLOSED at 14:11 JST.
+- x-test-post guarded runtime, PR76 migration/history, RPC ACLs and publish-setting read-back are exact; G4 performs no further production writes.
+- G5 common-account production gate may resume now, but **read-only only**.
+- G5 must rerun all 9 Phase A production preflight checks after the G4 changes, refresh ledger/object-fingerprint baselines, and reconfirm the exact common-account migration SHA/dependencies.
+- No common-account production write is authorized by this continuation. Fresh PASS must return to K5 for explicit mutation approval.
+- G2 remains ready, not active; do not let its deploy overlap the G5 mutation window later.
+- recommended G5 model: **Opus5.5（極高）**.
+
 ## Final K1 — PR #90 detail navigation PASS / merged
 
 - verdict: **PASS**.
