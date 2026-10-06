@@ -146,7 +146,11 @@ const proposal = validateConversationalAssistantResult({
     optionalNgWords: ['絶対儲かる'],
     notes: '読者は忙しい会社員。家族の話は書かない。',
   },
-  proposedPersonaDelta: { sentenceLength: 'short', punctuationEmoji: '絵文字は使わない', recurringVocabulary: ['小さな工夫', '試してみる'], toneSignals: ['淡々'] },
+  proposedPersonaDelta: {
+    sentenceLength: 'short', punctuationEmoji: '絵文字は使わない', recurringVocabulary: ['小さな工夫', '試してみる'], toneSignals: ['淡々'],
+    topicSignals: ['個人開発', '仕事の効率化'], hashtagHabits: 'ハッシュタグは1つだけ、本文の最後に付ける', ctaStyle: '最後に軽く問いかける',
+    openingClosingPatterns: ['最初に結論', '最後は一言で締める'],
+  },
   followUpQuestions: [],
   provenance: 'conversation',
   confidence: 'high',
@@ -182,6 +186,7 @@ test('confirmed settings and persona reach the post-generation prompt without a 
   assert.equal(used.livePublishingEnabled, false);
   assert.deepEqual(used.personaProfile, {
     source: 'conversation', confirmed: true, toneSignals: ['淡々'], sentenceLength: 'short', punctuationEmoji: '絵文字は使わない', recurringVocabulary: ['小さな工夫', '試してみる'],
+    topicSignals: ['個人開発', '仕事の効率化'], hashtagHabits: 'ハッシュタグは1つだけ、本文の最後に付ける', ctaStyle: '最後に軽く問いかける', openingClosingPatterns: ['最初に結論', '最後は一言で締める'],
   });
 
   // Consultation never changes the read-only controls.
@@ -196,16 +201,23 @@ test('confirmed settings and persona reach the post-generation prompt without a 
     '扱うテーマ候補: 個人開発、仕事の小さな工夫',
     '避ける語句: 絶対儲かる',
     '利用者メモ（事実として未確認の内容は採用しない）: 読者は忙しい会社員。家族の話は書かない。',
-    '確認済みの文体傾向: short',
+    '確認済みの口調の特徴: 淡々',
+    '確認済みの文体傾向: 短めの文を中心にする',
     '確認済みの記号・絵文字傾向: 絵文字は使わない',
     '確認済みの語彙傾向: 小さな工夫、試してみる',
+    '確認済みの話題の傾向: 個人開発、仕事の効率化',
+    '確認済みの呼びかけ方: 最後に軽く問いかける',
+    '確認済みの書き出し・締めの型: 最初に結論、最後は一言で締める',
+    'ハッシュタグは1つだけ、本文の最後に付ける',
   ]) assert.ok(instructions.includes(line), `missing in prompt: ${line}`);
+  // The remembered hashtag habit replaces the blanket ban, so the prompt never both remembers and forbids it.
+  assert.ok(!instructions.includes('ハッシュタグは付けないでください'));
 });
 
 test('the confirmed state is what the next consultation knows', async () => {
   const { row } = await confirmedRow();
   const context = await nextConsultationContext(row);
-  for (const value of ['落ち着いて、ていねいに', '個人開発', '試せるヒントをひとつ届ける', '絶対儲かる', '家族の話は書かない', '絵文字は使わない', '小さな工夫', '淡々']) {
+  for (const value of ['落ち着いて、ていねいに', '個人開発', '試せるヒントをひとつ届ける', '絶対儲かる', '家族の話は書かない', '絵文字は使わない', '小さな工夫', '淡々', '仕事の効率化', 'ハッシュタグは1つだけ', '最後に軽く問いかける', '最初に結論']) {
     assert.ok(context.includes(value), `missing in next consultation: ${value}`);
   }
 });
@@ -216,8 +228,10 @@ test('an unconfirmed persona is never remembered guidance, in generation or in t
   const { used, instructions } = await generationPrompt(unconfirmed);
   assert.equal(used.personaProfile?.confirmed, false);
   assert.doesNotMatch(instructions, /確認済み/u);
-  // Saved settings still apply; only the persona is withheld.
+  // Saved settings still apply; only the persona is withheld, and the default no-hashtag rule stays.
   assert.ok(instructions.includes('希望するトーン: 落ち着いて、ていねいに'));
+  assert.ok(instructions.includes('ハッシュタグは付けないでください'));
+  assert.ok(!instructions.includes('ハッシュタグは1つだけ'));
   const context = await nextConsultationContext(unconfirmed);
   assert.ok(!context.includes('絵文字は使わない'));
   assert.ok(context.includes('落ち着いて、ていねいに'));
