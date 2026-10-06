@@ -1,3 +1,28 @@
+## Final K5 — PR #95 round-2 PASS_CANDIDATE / final focused H1 re-review assigned — 2026-10-07
+
+- G5 result: **PASS_CANDIDATE**, not final merge approval.
+- exact PR #95 head: `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`; PR open/unmerged and GitHub mergeable at K5.
+- S1 reported closed:
+  - runtime context now distinguishes `userId + stable login session_id`;
+  - malformed/missing/foreign-sub/session-id token identity fails closed;
+  - same-user fresh login invalidates old pending/explicit work and old results cannot certify the new session;
+  - same-session token refresh preserves single-flight.
+- S2 reported closed:
+  - X queued automatic enrollment validates cancellation/current user+session+generation before entering ensure/transport;
+  - unmount/sign-out/superseded effect before microtask dispatch sends zero obsolete requests.
+- former H1 S1-X / S1-Kabumori / S2 adversarial probes are reported PASS with corrected valid fixtures.
+- prior R1-R5 security corrections are reported preserved; SQL itself was unchanged in this round.
+- reported test evidence: Kabumori 390/390; real AuthProvider 10/10; X 221/221; X tsc/lint PASS; both web exports PASS; service-start-intent DB runner 10 PASS markers; Phase1 20/20; migration invariants 10/10; diff/secret/PII/log scan clean.
+- current main moved 3 commits beyond PR merge-base `2f3b1ea9...`; allocation-time comparison shows those commits changed only `.agent/tasks/CLAUDE_TASK.md` and `.agent/tasks/CLAUDE_TASK_5.md`, so product overlap with PR #95's 17 files is **0**. H1 must re-check freshness.
+- production mutation / migration apply / deploy / EAS / real provider call = **0**.
+- remaining issues are later gates only: production migration apply requires separate explicit approval after source acceptance; native Simulator/iPhone and build/release are later; migration ordering with PR #41 must be coordinated before production.
+- mandatory H1 exact-head focused re-review assigned because this change still touches Auth/session readiness and cancellation boundaries.
+- H1 task: `common-account-v1-phase2-session-identity-final-rereview-20261007`.
+- H1 target: `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`.
+- H1 recommended model: **Sol（高）**.
+- G5 remains review_required / next_owner codex. PR #95 merge and production migration apply remain HOLD.
+- AI Lab diary: no additional entry; this is a repeated internal security-hardening iteration of the same common-account milestone.
+
 ## Final C1 — PR #99 focused review PASS / merged / G2 controlled deploy next — 2026-10-07
 
 - H1 verdict: **PASS-WITH-NONBLOCKING-NOTES** on exact PR #99 head `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`.
