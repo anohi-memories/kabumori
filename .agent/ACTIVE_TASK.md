@@ -32,15 +32,15 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: kabumori-pr87-editorial-three-points-review-20261006
+- status: ready
+- task_id: common-account-v1-phase2-service-enrollment-review-20261006
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 PASS。PR #87 exact reviewed head 3561f1eaac41df0f23dcce8fdaace0decc654a0a は独立レビューPASS後、squash-merged as 74e4dbff09e3b248164fd00bb720402d762ebcd8。source fix 0、production mutation 0。H1 free after fresh allocation。
-- recommended_model: Luna（高）
+- allocation: Mandatory focused review of PR #95 exact head c06fac64. Review lifecycle RPC boundary, fail-closed states, ended explicit-reactivation race, single-flight/user switching, Kabumori gate, X OAuth separation, and compatibility with moving PR #94. Source review only; no merge/deploy/production mutation.
+- recommended_model: Sol（高）
 
 ## Codex H2
 - owner: codex
@@ -105,14 +105,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: review_required
 - task_id: common-account-v1-phase2-service-enrollment-integration-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Project-wide critical path Phase 2. Wire Kabumori and X authenticated-session bootstrap to the already-reviewed start_kabumori_service/start_x_autopost_service RPCs, preserving one shared Auth identity and keeping X posting OAuth separate. First pass is source-only + tests + rollout package; no production deploy/mutation, no RLS enforcement, no deletion-orchestrator work. Must fresh-check G1/G3 file overlap before editing.
+- allocation: K5 accepts PASS_CANDIDATE for PR #95 exact head c06fac64, production/deploy 0. Mandatory H1 review allocated before merge because both apps' Auth/session bootstrap changes. PR #95 merge/deploy HOLD pending C1. G5 must not start Phase 3 yet.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
