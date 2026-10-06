@@ -1,0 +1,563 @@
+[
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "56120",
+  "company_name": "日鋳鉄管",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-05 09:00:41.07752+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "07785904-f063-40a2-83bd-e9ff5afd1bf8",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "（開示事項の経過）ダクタイル鉄管（直管）製造に係る事業の会社分割及び株式会社クボタとの製造合弁会社設立に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "58440",
+  "company_name": "京都ＦＧ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-05 11:00:39.179486+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "08584611-60d3-475a-b659-80a14db627d2",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式の取得状況に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "36120",
+  "company_name": "ワールド",
+  "coverage_categories": [
+   "geopolitics",
+   "fx",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-05 10:00:42.083107+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "08668d03-2a84-4217-bda0-3b4ab289bef6",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2027年２月期 中間決算説明会資料"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "14140",
+  "company_name": "ショーボンド",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-05 10:00:40.752712+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "0c023479-c872-4ff3-892e-0f8ce1cd9a81",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式の取得状況に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": "passed",
+  "app_summary_ja": "ウクライナのゼレンスキー大統領は、黒海でトウモロコシを運んでいたトルコ所有の船へのロシアの攻撃を非難しました。船長が死亡し、乗組員11人が救助されたとしています。",
+  "app_title_ja": "ゼレンスキー氏、黒海でトウモロコシ運搬船への攻撃を非難",
+  "company_code": null,
+  "company_name": null,
+  "coverage_categories": [
+   "geopolitics"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-05 16:00:10.973487+00",
+  "generated_text": "【速報】黒海で穀物船が攻撃され、死者も\n\nゼレンスキー大統領は、トルコが所有するトウモロコシ輸送船がロシアの攻撃を受け、船長が死亡したと発表しました。乗組員11人が救助され、1人の行方が分かっていないとのことです。ルーマニア側は船の火災を受けた救助活動で2人が死亡したと発表しており、死者数には報道間で違いがあります。ロシア側はこの攻撃についてコメントしていません。黒海の海運・穀物輸送への影響が懸念されますが、具体的な影響はまだ不確かです。\n\n出典: https://www.bbc.co.uk/news/articles/cr0j0w3p8453o",
+  "generation_fact_status": "failed",
+  "id": "1cb8e0da-7c77-4423-a9f5-ce84aabc10f5",
+  "published_at": "2026-10-05 15:17:23+00",
+  "source_type": "breaking_market",
+  "title": "Zelensky condemns 'horrific' Russian strike on boat carrying corn in Black Sea"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "36120",
+  "company_name": "ワールド",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-05 11:00:38.998956+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "1e043b6a-5f42-45c8-b274-200080630312",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "国内小売事業 2027年2月期 月次売上概況（9月度）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "31480",
+  "company_name": "クリエイトＳＤＨ",
+  "coverage_categories": [
+   "disaster",
+   "regulation_policy",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-05 14:00:49.876678+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "2a9b4ae5-601c-40ac-a2fb-d27f6685e455",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2027年5月期 第1四半期決算短信〔日本基準〕(連結)"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "45820",
+  "company_name": "Ｇ－シンバイオ製薬",
+  "coverage_categories": [
+   "regulation_policy",
+   "corporate"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-06 00:00:09.646546+00",
+  "generated_text": "【速報】シンバイオ製薬、英国でBCVの条件付き承認に向け協議開始\n造血幹細胞移植後のアデノウイルス感染症を対象に、英国の医薬品規制当局MHRAと条件付き早期製造販売承認（CMA）の取得に向けた協議を始めました。承認取得が決まったわけではありません。2026年12月期の連結業績見通しへの影響はないとしています。\n\n出典: https://www.release.tdnet.info/inbs/140120261006545630.pdf",
+  "generation_fact_status": "passed",
+  "id": "31b81bda-f245-45ca-b61f-385fa0932324",
+  "published_at": "2026-10-05 23:44:00+00",
+  "source_type": "tdnet",
+  "title": "ブリンシドホビル（BCV）の英国における条件付き早期製造販売承認（CMA）取得に向けた協議開始"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "61430",
+  "company_name": "ソディック",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-05 09:00:40.758586+00",
+  "generated_text": "【速報】ソディック、570万株超を売出しへ\n\n既存株主が普通株式5,709,200株を売り出すことを決議しました。需要状況に応じて、最大855,900株のオーバーアロットメントによる売出しも予定されています。\n\n会社は株主基盤の拡充と株式の流動性向上を目的に挙げています。売出価格は未定で、追加売出しも実施されない場合があります。\n\n出典: https://www.release.tdnet.info/inbs/140120260925540358.pdf",
+  "generation_fact_status": "failed",
+  "id": "3441a76f-2cd9-4869-ab07-44fabc2c95ba",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "株式の売出しに関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "29260",
+  "company_name": "篠崎屋",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-06 05:00:18.984454+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "36c59edb-db88-4981-9830-933c6b641e6f",
+  "published_at": "2026-10-06 01:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年９月期 ９月度月次店舗売上のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "71380",
+  "company_name": "Ｇ－ＴＯＲＩＣＯ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-06 00:00:09.377707+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "3c68c339-d68f-4369-930d-327f1b73d695",
+  "published_at": "2026-10-05 23:30:00+00",
+  "source_type": "tdnet",
+  "title": "イーサリアム（ETH）の追加取得及び月次保有状況に関するお知らせ（2026年９月末時点）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "64740",
+  "company_name": "不二越",
+  "coverage_categories": [
+   "fx",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-05 13:00:46.530742+00",
+  "generated_text": "【速報】不二越、3Q累計は営業利益72.8％増\n\n2026年11月期第3四半期累計の売上高は前年同期比10.4％増の1,923億円、営業利益は72.8％増の114億円でした。建設機械向けなどの需要回復に加え、構造改革による固定費削減も利益を押し上げています📊\n\n通期業績予想と配当予想は、いずれも変更ありません。\n\n出典: https://www.release.tdnet.info/inbs/140120261002545509.pdf",
+  "generation_fact_status": "passed",
+  "id": "514559f8-6407-4ac3-9f9a-190b19db0953",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2026年11月期 第３四半期決算短信〔日本基準〕（連結）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "31860",
+  "company_name": "ネクステージ",
+  "coverage_categories": [
+   "disaster",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-05 13:00:46.060842+00",
+  "generated_text": "【速報】ネクステージ（3186）の2026年11月期3Q累計は、売上高6,004億円（前年同期比26.0％増）、営業利益216億円（同66.7％増）。経常利益は201億円、純利益は138億円でした📊\n\n通期業績予想は据え置き。配当予想にも変更はありません。\n\n出典: https://www.release.tdnet.info/inbs/140120261002545461.pdf",
+  "generation_fact_status": "passed",
+  "id": "56e9d9fe-f99b-4c82-b6e0-89f704fa3a67",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2026年11月期 第３四半期決算短信〔日本基準〕(連結)"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": null,
+  "company_name": null,
+  "coverage_categories": [
+   "geopolitics"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-05 20:00:12.038989+00",
+  "generated_text": "【速報】メキシコ、国境付近の銃撃で米側に証拠求める\n\n米大使は、9月下旬にテキサス州で沿岸警備隊員が銃撃の標的になったとされる件について、投稿しました。メキシコのシェインバウム大統領は、メキシコ側から銃撃があったとする証拠を米国に求めたと明らかにしました。メキシコ国家警備隊、陸軍、海軍は、メキシコ領から米国へ発砲があったことを確認していないとしています。\n\n出典: https://www.aljazeera.com/news/2026/10/5/mexico-seeks-evidence-of-border-shooting-that-prompted-us-troop-deployment",
+  "generation_fact_status": "passed",
+  "id": "5feb4526-fcff-43a2-873b-ce987b34b7f9",
+  "published_at": "2026-10-05 19:43:33+00",
+  "source_type": "breaking_market",
+  "title": "Mexico seeks evidence of border shooting that prompted US troop deployment"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "33770",
+  "company_name": "バイク王",
+  "coverage_categories": [
+   "fx",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-05 08:00:43.48847+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "64f44402-d2eb-4479-b49d-f979b882ac03",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2026年11月期 第３四半期決算短信〔日本基準〕(連結)"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": null,
+  "company_name": null,
+  "coverage_categories": [
+   "geopolitics",
+   "shipping_logistics"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-05 16:00:10.670792+00",
+  "generated_text": "【速報】イエメン政府側部隊は、サウジアラビアの支援を受けてフーシ派への大規模攻勢を開始し、戦略的なバブ・エル・マンデブ海峡を「確保した」と発表しました。政府側は、海峡を見下ろすドゥバブで空港を掌握し、港湾都市モカへの道路を遮断したとしていますが、フーシ派側メディアは同地域での進軍を否定しています。サウジ主導の連合は、攻勢を支援する空爆で「高価値」目標300か所以上を破壊したと発表しました。\n\n出典: https://www.bbc.co.uk/news/articles/cw8rzd6lp0xpo",
+  "generation_fact_status": "passed",
+  "id": "67a20110-edef-4c96-9f12-8d453aa1a841",
+  "published_at": "2026-10-05 14:37:17+00",
+  "source_type": "breaking_market",
+  "title": "Yemeni government forces say they have 'secured' Bab al-Mandab Strait"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "27890",
+  "company_name": "カルラ",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-05 12:00:43.537708+00",
+  "generated_text": "【速報】カルラ、2027年2月期の通期純利益予想を154百万円から66百万円へ下方修正。57.1％の減額です。売上高、営業利益、経常利益の予想は据え置きました。\n\n中間期の純利益は83百万円で、予想を82百万円下回りました。天候不順や人件費・原材料費の高騰に加え、第1四半期に役員退職慰労金を特別損失に計上したことなどが理由です。\n\n出典: https://www.release.tdnet.info/inbs/140120261002545363.pdf",
+  "generation_fact_status": "passed",
+  "id": "8452640d-2095-486f-99c3-32f208246466",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2027年２月期第２四半期（中間期）連結業績予想値と実績値との差異および通期連結業績予想修正に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "76790",
+  "company_name": "薬王堂ＨＤ",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-05 08:00:44.685927+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "852b5180-021f-4441-82b2-5b21cedee828",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2027年２月期 第２四半期（中間期）決算短信〔日本基準〕(連結)"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "76790",
+  "company_name": "薬王堂ＨＤ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-05 12:00:44.234903+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "86186b2c-370f-4db4-b614-032d706171ca",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2026年９月度 月次速報に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "70370",
+  "company_name": "テノ．",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-05 08:00:43.032248+00",
+  "generated_text": "【速報】テノ．ホールディングスは、連結子会社セーフティージャパン・リスクマネジメントの全株式2,600株を、シード・コーポレーションへ5億円で譲渡する契約を締結しました。関係当局の承認が前提で、譲渡後は連結範囲から外れる予定です。\n\n2026年12月期に特別利益として株式売却益を計上する見込みですが、金額は精査中。連結業績への影響も確認中で、業績予想の修正が必要な場合は改めて開示するとしています。\n\n出典: https://www.release.tdnet.info/inbs/140120260824525048.pdf",
+  "generation_fact_status": "passed",
+  "id": "8b61ce9f-8e65-4a3c-a86f-faf767451654",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "連結子会社の異動（株式譲渡）に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": "passed",
+  "app_summary_ja": "米国・イスラエルの報道によると、フライドバイ機の副操縦士は、テルアビブの空港または市内の高層建物に航空機を墜落させる計画だったとされます。副操縦士は機長を負傷させた後、乗客に制圧されました。",
+  "app_title_ja": "フライドバイ副操縦士、テルアビブでの墜落を計画か",
+  "company_code": null,
+  "company_name": null,
+  "coverage_categories": [
+   "geopolitics"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-05 12:00:33.385675+00",
+  "generated_text": "【速報】フライドバイ機の副操縦士が、テルアビブのベン・グリオン空港または市内の高層建物に機体を墜落させようとしていたと、米国とイスラエルの報道が伝えています。\n\nUAE検察当局によると、副操縦士はドバイ発テルアビブ行きの便で機長を非常用斧で襲い、乗客に取り押さえられました。別の乗務員がサウジアラビアに着陸させたとのことです。\n\n出典: https://www.bbc.co.uk/news/articles/cm3691y79xp5o",
+  "generation_fact_status": "failed",
+  "id": "ad8a0958-71f0-4f62-8530-e3f676bd101d",
+  "published_at": "2026-10-05 11:34:59+00",
+  "source_type": "breaking_market",
+  "title": "Flydubai co-pilot planned to crash plane into Tel Aviv airport or building, reports say"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "21170",
+  "company_name": "ウェルネオシュガー",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-05 14:00:50.173839+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "b2e60379-80d6-4fa9-80ee-62035b348c88",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式の取得状況および取得終了に関するお知らせ（会社法第165条第2項の規定による定款の定めに基づく自己株式の取得）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "70490",
+  "company_name": "Ｇ－識学",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-06 06:00:16.435638+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "d153d8bc-78ea-47ad-ac09-3c6cf299e1c4",
+  "published_at": "2026-10-06 01:00:00+00",
+  "source_type": "tdnet",
+  "title": "2027年２月期プラットフォームサービス月次売上高(9月度)のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "45440",
+  "company_name": "ＨＵグループＨＤ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-05 14:00:50.415694+00",
+  "generated_text": "【速報】H.U.グループホールディングス（4544）の自己株式取得が終了しました。\n\n10月1〜2日に2万1,600株を約7,542万円で取得。5月14日の取締役会決議に基づく累計では147万5,000株、取得額は49億9,986万4,362円となり、上限の50億円に達しました。\n\n出典: https://www.release.tdnet.info/inbs/140120261002545541.pdf",
+  "generation_fact_status": "failed",
+  "id": "d3aa0a5e-8819-4b50-ad13-b8bd14b22655",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式の取得状況および取得終了に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "61430",
+  "company_name": "ソディック",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-05 09:00:40.409348+00",
+  "generated_text": "【速報】ソディック、上限30億円の自己株取得を決議\n\n取得上限は240万株で、自己株式を除く発行済み株式の4.80％。株主還元の強化と資本効率の向上に加え、株式売出しに伴う需給への影響を和らげる目的です。市場動向などによっては、一部または全部を取得しない可能性があります。\n\n出典: https://www.release.tdnet.info/inbs/140120260925540353.pdf",
+  "generation_fact_status": "passed",
+  "id": "de0064ff-b3d6-4b6e-97de-40b470a69c1f",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式取得に係る事項の決定に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "45470",
+  "company_name": "キッセイ薬",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-05 13:00:46.742781+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "de1bf621-2168-4be4-b535-1649e235b98d",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式の取得状況に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "42720",
+  "company_name": "日化薬",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-06 07:00:26.400533+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "e07dffb8-0e62-4a80-9c67-c3a8fd610abb",
+  "published_at": "2026-10-06 01:30:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式の取得状況に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": null,
+  "company_name": null,
+  "coverage_categories": [
+   "geopolitics"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-06 04:00:19.966942+00",
+  "generated_text": "【速報】国連人権理事会は、スーダンで民間人への攻撃を非難し、即時停戦を求める決議を採択しました。独立した事実調査団の任期も延長する内容で、賛成28、反対10、棄権9でした。\n\n出典: https://www.aljazeera.com/news/2026/10/6/un-rights-council-condemns-attacks-on-civilians-in-sudan-calls-for-truce",
+  "generation_fact_status": "passed",
+  "id": "e3d9f544-e281-4817-b75d-3ecb3306fcf4",
+  "published_at": "2026-10-06 02:54:31+00",
+  "source_type": "breaking_market",
+  "title": "UN rights council condemns attacks on civilians in Sudan, calls for truce"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": null,
+  "company_name": null,
+  "coverage_categories": [
+   "geopolitics",
+   "semiconductors"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-05 15:00:32.752035+00",
+  "generated_text": "【速報】米軍が英国のRAFフェアフォード基地に配備していたB-1爆撃機約12機を撤収したと、アルジャジーラが報じました。米国は、基地への攻撃がさらに起きる懸念を理由に挙げています。基地周辺では攻撃計画の疑いを受けて住民が避難する事態がありましたが、イランは関与を否定しています。\n\n専門家は、撤収で便利な発進拠点は失われるものの、米国の攻撃能力そのものは維持されるとの見方を示しています。\n\n出典: https://www.aljazeera.com/news-analysis/2026/10/5/us-pulls-bombers-from-uk-base-is-iran-maneouvering-trumps-war-plans",
+  "generation_fact_status": "passed",
+  "id": "ec57f2f4-f362-4631-9bc5-2bb73f3dbc27",
+  "published_at": "2026-10-05 14:19:44+00",
+  "source_type": "breaking_market",
+  "title": "US pulls bombers from UK base: Is Iran manoeuvring Trump’s war plans?"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "36120",
+  "company_name": "ワールド",
+  "coverage_categories": [
+   "geopolitics",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-05 10:00:41.338898+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "f35ab81c-7962-4acc-a84b-5077a78e4d97",
+  "published_at": "2026-10-05 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2027年２月期 第２四半期（中間期）決算短信〔ＩＦＲＳ〕（連結）"
+ }
+]
