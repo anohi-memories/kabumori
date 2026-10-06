@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase2-service-enrollment-integration-20261006
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - start_code: G5
 - finish_code: K5
@@ -253,7 +253,122 @@ Recommended model: **Opus5.5（極高）**.
 
 ## Report
 
-Pending.
+- task_id: common-account-v1-phase2-service-enrollment-integration-20261006
+- result: **PASS_CANDIDATE**（source のみ。本番の変更 0、deploy 0、EAS 0）。
+- PR：[#95](https://github.com/anohi-memories/kabumori/pull/95)、head `c06fac64`（未 merge、merge は HOLD）。
+- fresh main：開始時 `59ca05c3`。着手マーカー `0597a632`。Report の基点は `6cfd6528`。
+- isolated worktree：`/Users/yuya/Developer/kabumori-g5-phase2`（branch `claude/g5-phase2-enrollment-20261006`、`kabumori-fresh` の fresh main から作成）。
+
+### 他スロットとの重なり（すべて報告）
+
+- 開始時：open PR（#94 G1、#78 G3、#41、#33 admin）と、全 worktree の未 commit の変更を確認した。認証 / セッション / 登録まわりのファイルとの重なりは 0。
+  - 旧 Mac の共有 checkout `/Users/yuya/Developer/kabumori`（9/12 時点の main、9/8 の未 commit の変更）にだけ `src/app/_layout.tsx` の変更があった。どのスロットも使っていないので、対象外とした。
+- **作業中に発生した重なり**：G1 の PR #94 が addendum 2（head `64c71bd6`、ニュース詳細をルートの Stack に移動）で `src/app/_layout.tsx` を変更した。
+  - 内容は `SignedInNavigator` に `<Stack.Screen name="news-detail" />` を 1 行足すだけ。G5 の変更（`AuthGate` のフックと分岐）とは別の hunk。
+  - 実際の差分を確認し、ローカルで試しに merge した：`git merge-tree` で衝突 0。merge 後の tree で Kabumori のテスト 392 / 392 PASS（#94 の分を含む）。試しの merge は push しておらず、削除済み。
+  - G5 は #94 の範囲を回避するための編集をしていない。どちらを先に merge しても、もう一方は機械的に rebase できる。merge の順番は K5 で判断してほしい。
+
+### 現在の flow の棚卸し（Phase A、source の読み取りのみ）
+
+**Kabumori（`src/`）**
+- ログインはメール / パスワードだけ（`src/lib/auth.ts`）。
+- セッションは `AuthProvider`（`src/providers/auth-provider.tsx`）が持つ。起動時の `getSession` と、唯一の `onAuthStateChange` 購読の両方が `acceptSession` → `prepareSession` に入る。
+- 変更前は、`prepareSession` が `ensure_my_profile()` を、セッションを受け入れるたび（sign-in / sign-up の中でも）に呼んでいた。これが profile を直接作る唯一の場所。
+- 画面の振り分けは `src/app/_layout.tsx` の `AuthGate` が条件付きの render で行う（recovery → loading → onboarding → profileError → app → login）。
+- push の登録は、profile の失敗中にも走っていた。
+- 退会は `account-delete` Edge（今回は変更していない）。
+
+**X（`apps/social-mobile/`）**
+- ログイン方法：email / Google / Apple / X。PKCE を使い、provider token は保存しない。
+- セッション：`AuthProvider` 内の `onAuthStateChange`。RPC は 1 つも呼ばない。
+- ログイン後に読むもの：`DataProvider` / `OnboardingGate` が RLS で workspace を読むだけ。
+- workspace / social account / OAuth state は、「Xを接続」で `x-oauth-connect-user` → `begin_social_mobile_x_oauth_connection` を通ったときだけ作られる。ログインしただけでは何も作られない。
+- 退会は `social-mobile-account-delete`（今回は変更していない）。
+
+**共通**
+- どちらのアプリも、common account / entitlement を参照していなかった。
+- entitlement が無い・ended・deleting・suspended のときの挙動は、どちらのアプリにも無かった（今回追加した）。
+
+### 実装した Kabumori の挙動
+
+- 受け入れた全セッションで `public.start_kabumori_service()` を呼ぶ（`ensure_my_profile()` を置き換え）。サーバーの 1 transaction の中で、次の 3 つを冪等に用意する：common account、active な `kabumori` entitlement、profile。profile を別に作ることはしない。
+- 結果ごとの挙動：
+  - ready → app を開く。
+  - 拒否（削除手続き中 / 利用停止 / 退会手続き中 / 停止 / 準備中 / ログイン無効 / 不明）→ `ServiceAccessScreen`。app は開かず、profile だけで動く fallback も無い。再試行は一時的な拒否のときだけ出し、ログアウトは常に出す。
+  - ended → 「このサービスは退会済みです。共通IDはお持ちです…」と表示し、「利用登録する」を明示的に押したときだけ再開する。
+  - 一時的な失敗 → 既存の profileError 画面（再試行 / ログアウト）。auth は壊さない。
+- 冪等性：1 人につき 1 リクエストを共有する（sign-in の中の呼び出し、INITIAL_SESSION、各 event）。決まった結果は sign-out / 別の人 / 明示的な retry まで再利用する。一時的な失敗は記憶しない。
+- push token の登録と通知の遷移は、enrollment が ready のときだけ動く。
+- 別のサービスを既に使っている common account に Kabumori を追加したときだけ、「共通IDはお持ちです。このサービスの利用登録を行いました。」を 1 回表示する。
+
+### 実装した X の挙動
+
+- `ServiceEnrollmentGate` が auth / recovery の後、`DataProvider` / `OnboardingGate` の前で `public.start_x_autopost_service()` を呼ぶ。enrollment が済むまで workspace のデータは読まない。
+- ログインしても、workspace / social account / OAuth state / credential / publish_enabled / Vault / X API / 投稿のどれにも触れない。「Xを接続」は従来どおり、別の投稿用の許可として残る。`auth-provider.tsx` は変更していない。
+- 拒否 / ended / 一時的な失敗は、それぞれに合わせた画面で app を開かない。ログアウトと「アカウントの削除について」は常に押せる（App Review 5.1.1(v)）。
+- mock preview では gate しない。signed-in の tree を離れると、記憶した結果を忘れる。
+- 判定のロジックは Kabumori と同一（header より下が byte 一致で、テストが固定している）。
+
+### テスト / 確認
+
+| 対象 | 結果 |
+|---|---|
+| Kabumori `deno test --no-check --allow-read tests/app/` | 352 / 352 PASS（新規 17） |
+| Kabumori `tsc --noEmit` | `src/` は以前からある CSS module の 2 件だけ |
+| Kabumori `expo export --platform web`（ダミーの公開 env） | 成功。bundle に `start_kabumori_service` があり、`ensure_my_profile` は無い |
+| X `npm test` | 157 / 157 PASS（新規 9） |
+| X `tsc --noEmit` / `expo lint` / `expo export --platform web` | すべて成功 |
+| ロジックを意図的に壊した版 | 8 / 8 を検出 |
+| DB の挙動（既存の `common_account_lifecycle_run.sh`、20 / 20 PASS） | start は account + entitlement（Kabumori は profile も）を作る、冪等、X の start は workspace を作らない、1 ID で両方を持てる、deleting は拒否、login の無い token は拒否 |
+| 試しの merge（#94 + #95） | 392 / 392 PASS |
+
+- 壊した版 8 種：ended を黙って再開する、unknown を ready とする、別サービスの応答を受け入れる、single-flight を外す、失敗を記憶する、読み取りエラーなのに start する、無効な login を retry する、notice を毎回出す。
+- Kabumori の root には ESLint の設定が無い（以前からの状態）ため、lint は実行していない。
+- TASK Phase C の各項目は、上記のテストで対応している。
+  - Kabumori：新規 / X だけの account に Kabumori を追加 / active で冪等 / 繰り返しの event で 1 回 / 拒否で legacy の迂回なし / 一時エラーで状態を壊さない。
+  - X：新規 / Kabumori だけの account / 冪等 / 投稿の許可を作らない / 拒否で OAuth の近道なし / 繰り返しの restore。
+  - cross-app：1 ID で 2 つの entitlement / 2 つ目が 1 つ目を変えない / e-mail での統合なし / client からの直接書き込みなし。
+
+### 後方互換性と rollout の計画（Phase D、未実施）
+
+- サーバー側の変更は不要：RPC / 権限 / RLS / 列の権限は Phase 1 の適用で本番に入っている。Edge / config / secret / flag / migration も不要。
+- app：両アプリの次の native build にこの source を入れる（EAS / TestFlight は別途承認）。2 つのアプリは独立していて、どちらが先でもよい。
+- 古い binary：Kabumori は `ensure_my_profile()`（本番に存在）を呼び続け、X は何も呼ばない。enforcement が無いので、既存のユーザーへの影響は 0。
+  - 古い binary で新しく登録した人は、新しい binary を開くまで entitlement を持たない。enforcement の前に、read-only の `check.sql` で観察し、必要なら別途承認を得て `backfill(true)` を実行する。
+- rollback：以前の binary に戻す / source を revert する。その間に作られた entitlement は shadow なので無害で、サーバー側に戻すものは無い。
+- PII を出さない観察：`check.sql` の `entitlements_by_kind` の `self_service` 行の増え方と、dry-run の `*_to_create`。
+- 詳しくは `docs/common-account/phase2-service-enrollment.md`。
+
+### changed_files（PR #95、11 ファイル、+1104 / −19）
+
+- Kabumori：`src/lib/service-enrollment.ts`（新規）、`src/lib/auth.ts`、`src/providers/auth-provider.tsx`、`src/app/_layout.tsx`、`src/components/service-access-screen.tsx`（新規）、`tests/app/service-enrollment_test.ts`（新規）
+- X：`apps/social-mobile/src/domain/service-enrollment.ts`（新規）、`apps/social-mobile/src/features/service-enrollment/service-enrollment-gate.tsx`（新規）、`apps/social-mobile/src/app/_layout.tsx`、`apps/social-mobile/tests/service-enrollment.test.mjs`（新規）
+- docs：`docs/common-account/phase2-service-enrollment.md`（新規）
+- この Report：`.agent/tasks/CLAUDE_TASK_5.md` のみ。
+
+### その他
+
+- commit / push：`c06fac64` を branch に push し、PR #95 を open。着手マーカーとこの Report は main に push。
+- production mutation：**0**。deploy：**0**。EAS：0。本番への接続：0。実 X / 有料モデル：0。
+- remaining_issues：
+  - G1 の PR #94 とは同じファイルで hunk が別（上記）。merge の順番を決めてほしい。
+  - `ended` の確認と start は 2 回の呼び出しで、その間に終了された場合は start が再開してしまう。今は ended を作る経路が無い（Phase 3）ので、実害は無い。docs に明記した。
+  - Kabumori は、auth event のたびに読み込み画面が一瞬出る（以前からの挙動）。enrollment の結果は記憶するので、2 回目以降の往復は増えない。
+  - 実機（Simulator / iPhone）での確認はまだ。native build は承認が必要な別工程。
+  - その後：古い binary で登録した人の扱い（check → 必要なら backfill）、Phase 3（削除経路 / enforcement / orchestrator）。
+- safety_checks：
+  - RLS / producer / 削除経路 / Auth / Storage / Vault / X の publish 権限 / Cron / Edge は変更していない。e-mail での統合も無い。
+  - client から common テーブルへの直接書き込みは無い（テストで固定）。
+  - 他スロットのファイルは編集していない。秘密情報 / PII は diff に無い。
+  - 公開 env はダミー値だけを使い、本物の `.env` には触れていない。
+- next_recommendation：
+  - K5 の後、TASK の Review gate に従って focused Codex review（Sol 高）を推奨する。
+  - 重点：
+    - ended を勝手に再開しないこと
+    - 拒否時に fail closed であること（Kabumori に profile だけの迂回が無い、X が OAuth / workspace に触れない）
+    - single-flight / reset の正しさ（sign-out → 別 user）
+    - X の gate が mock と削除の導線を保っていること
+    - #94 との merge の順番
 
 ---
 
