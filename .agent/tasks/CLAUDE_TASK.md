@@ -3,8 +3,9 @@
 - task_id: kabumori-pr87-controlled-production-deploy-20261006
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
+- production_mutation_window: **ACTIVE** — 2026-10-06 14:40 JST〜。G2 deploys `market-report-analysis` only. `personalized-reports` is HELD (main carries undeployed PR #43/#67 changes incl. a new hard check on the live legacy app path; K2 decision needed). G3/G5/others: do not perform production writes until G2 records CLOSED.
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: controlled production deploy / exact-source read-back / no manual generation
