@@ -32,15 +32,15 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: common-account-v1-phase2-service-enrollment-corrective-rereview-20261006
+- status: ready
+- task_id: kabumori-pr99-editorial-specificity-focused-review-20261007
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #95 exact head dd065e16. Prior R1 and R5 are closed; original cross-user/retry-Push defects are materially improved. Remaining focused blockers are S1 same-user fresh-session reuse and S2 X queued auto-start after cleanup/sign-out. H1 free; corrected exact head will require focused Sol（高） re-review.
-- recommended_model: Sol（高）
+- allocation: PR #99 focused review。10/6大引けのeditorial regression修正について、prompt specificity、WARN-only generic telemetry、X短文rewrite閾値430→300のruntime semantics、bounded rejection_reasons、Hard境界不変を確認。source fix/merge/deploy/production mutation禁止。
+- recommended_model: Luna（高）
 
 ## Codex H2
 - owner: codex
@@ -69,13 +69,13 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-editorial-points-specificity-corrective-20261006
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: 10/6大引けの自然観測でfactual safetyはPASSしたが、3ポイントが「主要指数上昇／国際情勢を確認／米国株と為替を見る」と抽象化しすぎてeditorial未達。具体例文のprompt除去、generic見出し抑制、節目数値の例外、WARN-only specificity telemetry、不要rewrite/call増の見直しをsource/test onlyで実施。Hard境界・call ceilingは維持。production mutation禁止。
+- allocation: K2 PASS_CANDIDATE。PR #99 head cd33b1f22f532be9273d63f0f42f0a0d9c1de156。完成例文除去、具体性条件、節目数値例外、WARN-only generic telemetry、bounded rejection diagnosticsを実装。Hard/call ceiling不変。ただしX短文rewrite閾値を430→300へ変更したため、focused H1 reviewを1回実施。production mutation 0。
 - recommended_model: Sonnet5（高）
 
 ## Claude G3
