@@ -1,3 +1,23 @@
+## Final K5 — Common-account legacy backfill APPLIED PASS / Phase 2 assigned — 2026-10-06
+
+- verdict: **PASS / BACKFILL_APPLIED_PASS**.
+- production backfill committed exactly once at 16:55 JST; G5 production_mutation_window CLOSED at 17:52 JST.
+- current production common-account population:
+  - common_accounts 5 / Auth users 5;
+  - service_entitlements 3 = Kabumori 2 + X autopost 1;
+  - all backfilled entitlements active / legacy_backfill with exact expected evidence distribution;
+  - Auth-only 2 have no entitlement;
+  - excluded admin has no X consumer entitlement;
+  - lifecycle operations 0.
+- postflight dry-run shows all to-create counts 0; profiles/brands/memberships and migration ledger remained unchanged.
+- schema/RLS/ACL/function semantics remain exact. The legacy foundation runner's status command now reports UNSAFE only because its pinned state section expected an empty population; independent 9-section + semantic diagnostics prove no schema/security drift. Treat this as a tooling-observation limitation, not a production defect.
+- additional Codex review not required for the backfill itself: reviewed function + fail-closed one-transaction apply + exact postflight.
+- AI Lab diary: 記録不要 — internal account migration/backfill completion; no user-facing capability activated yet.
+- next critical-path task assigned to G5: `common-account-v1-phase2-service-enrollment-integration-20261006`.
+- Phase 2 goal: wire both apps' authenticated-session bootstrap to reviewed service-start RPCs while keeping shared login, service entitlement and X posting authorization separate.
+- Phase 2 first pass is source-only/test-only; production mutation/deploy/enforcement/deletion orchestration remain 0.
+- recommended model: **Opus5.5（極高）**.
+
 ## Final K5 — Common-account legacy backfill ready / explicit apply approval required — 2026-10-06
 
 - verdict: **PASS / BACKFILL_READY**.
