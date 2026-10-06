@@ -1,3 +1,26 @@
+## Final C1 — PR #99 focused review PASS / merged / G2 controlled deploy next — 2026-10-07
+
+- H1 verdict: **PASS-WITH-NONBLOCKING-NOTES** on exact PR #99 head `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`.
+- focused review accepted:
+  - finished example sentences removed from prompt;
+  - day-specific entity/event specificity required;
+  - safe milestone/threshold headlines allowed;
+  - `X_POINTS_GENERIC` remains WARN-only and does not trigger Hard/rewrite;
+  - X shortness warning remains below target, but X-only shortness rewrite now occurs only below 300 chars;
+  - App-story rewrite rule, omission rules, max 4 calls and safe-original fallback remain unchanged;
+  - `rejection_reasons` stores bounded fixed classifications only and does not persist raw model/user text;
+  - Hard Fact semantics unchanged.
+- independent H1 evidence: market-report-analysis 160/160; relevant compatibility 22/22; changed TS Deno check PASS; diff clean; only pre-existing require-await lint remains.
+- final fresh merge gate: PR #99 head unchanged, open/unmerged, mergeable=true, main advanced with **0 changed-file overlap**. Vercel failure is build-rate-limit only ("retry in 24 hours"), not code/test failure; Netlify status success.
+- PR #99 squash-merged as `e3379f8066877b5b64fede2dc84cbdb995c85b8e`.
+- H1 source changes / production mutation / deploy / manual report = 0. H1 done/free.
+- next G2 task: `kabumori-pr99-controlled-analysis-deploy-20261007`, recommended **Opus5.5（中）**.
+- deploy scope: `market-report-analysis` only. `personalized-reports` remains separately held.
+- deploy must preserve app/x gates and Cron, perform exact source/import-graph read-back, and not overlap any other production mutation window.
+- manual generation/retry, DB/RPC/migration, Cron/gate, X/notification, Auth/Vault and EAS remain forbidden.
+- after K2 deploy verification, observe the first natural morning/close packet read-only. Do not manually generate.
+- AI Lab diary: no duplicate entry; the existing market-report headline-regression entry already covers this iteration.
+
 ## Final C2 — PR #41 CHANGES REQUIRED accepted / bounded G3 ACL corrective
 
 - H2 reviewed exact PR #41 head `280aa0f83d4f039ba3e43f32da202a91fd2333f2`.
