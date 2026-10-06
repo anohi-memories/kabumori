@@ -93,15 +93,14 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: x-morning-greeting-schedule-reliability-bc-20261006
+- status: ready
+- task_id: postona-multisocial-phase1-architecture-inventory-20261006
 - start_code: G4
 - finish_code: K4
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Final K4 PASS. PR #92 exact head 3d5475849217e1ca9f40bbedf12a42c0e5671504 squash-merged as 19c85c4381c55161207032146d6f66eb8a0c99f5. Plan B adds four staggered generator schedules (00:17/02:47/04:17/05:17 JST) with same-day idempotency; Plan C adds read-only missing/late checks at 06:07/09:47 JST. 44/44 tests, fresh-main overlap 0, CI green, production mutation/deploy/X/PAT/Vault/pg_cron=0. No Codex review required. G4 free after fresh allocation. Plan A remains separate.
-- recommended_model: Sonnet5（高）
-
+- allocation: POSTONA multi-social Phase 1. Docs-only inventory and provider-neutral architecture design before runtime implementation. Map current X-specific seams, define X/Threads/Instagram provider-neutral post/account/publication model, capability matrix, Threads-first implementation slices and Instagram follow-on. Preserve active G3 PR41 live-generation boundary and G5 common-account/Auth/enrollment boundary. Runtime/migration/Edge/OAuth/Vault/production changes prohibited.
+- recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
 - slot: claude-5
