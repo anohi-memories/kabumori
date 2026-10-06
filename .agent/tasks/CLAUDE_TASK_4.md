@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr76-production-rollout-gate-20261006
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - production_mutation_window: **CLOSED** — 2026-10-06 14:11 JST. G4 PR76 S1–S5 complete and read back (x-test-post v135 code / publish-setting v1 / migration 20261003090000 + one exact history row). G4 performs no further production write.
 - priority: highest
 - recommended_model: Opus5.5（高）
