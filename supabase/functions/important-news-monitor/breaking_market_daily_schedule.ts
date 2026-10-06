@@ -19,7 +19,7 @@ import {
 //
 // A slot becomes due at its hour and is consumed by one billed search.  The hourly fetch cron is the only
 // caller, so a slot whose run was skipped or failed without cost (e.g. HTTP 429, nothing billed) is
-// retried on the next hourly fetch for up to DAILY_SLOT_CATCH_UP_MS; a search that was billed is never
+// retried on the next fetch for up to DAILY_SLOT_CATCH_UP_MS; a search that was billed is never
 // repeated.  So the ceiling is 4 billed searches a day, regardless of cron cadence.
 //
 // The 12-topic catalog and its rotation (selectBreakingMarketQueriesForCycle) are unchanged and not called
@@ -29,6 +29,8 @@ export const DAILY_BREAKING_MARKET_SEARCH_LIMIT = 4;
 export const MAX_DAILY_BREAKING_MARKET_SEARCHES_PER_FETCH = 1;
 /** A slot may still run until this long after its hour (exclusive: the hours H and H+1 only). */
 export const DAILY_SLOT_CATCH_UP_MS = 2 * 60 * 60 * 1000;
+/** With no run history a slot runs only in the first 10 minutes of its hour (the fetch cron fires at :00). */
+export const NO_HISTORY_WINDOW_MS = 10 * 60 * 1000;
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -85,8 +87,9 @@ export function dailySlotStartMs(now: Date, hourJst: number): number {
 /**
  * Latest attempt per query key that consumed its slot, from important_news_monitor_runs rows shaped
  * `{ started_at, queries: diagnostics->breakingMarket->queries }`.  An attempt that failed without
- * billing anything (HTTP 429, timeout before any search ran) does not count, so the slot is retried;
- * any attempt that searched or used tokens does.  Malformed rows are skipped.
+ * billing anything (HTTP 429 or a 5xx answer) does not count, so the slot is retried; any attempt that
+ * searched or used tokens does, and so does a failure with no HTTP status (timeout / network), which
+ * may have run the search.  Malformed rows are skipped.
  */
 export function dailySlotConsumedAt(rows: unknown): Map<string, number> {
   const latest = new Map<string, number>();
@@ -101,6 +104,7 @@ export function dailySlotConsumedAt(rows: unknown): Map<string, number> {
       const attempt = item as {
         queryKey?: unknown;
         providerStatus?: unknown;
+        httpStatus?: unknown;
         webSearchCallCount?: unknown;
         inputTokens?: unknown;
         outputTokens?: unknown;
@@ -109,7 +113,12 @@ export function dailySlotConsumedAt(rows: unknown): Map<string, number> {
       const billed = (typeof attempt.webSearchCallCount === "number" && attempt.webSearchCallCount > 0) ||
         (typeof attempt.inputTokens === "number" && attempt.inputTokens > 0) ||
         (typeof attempt.outputTokens === "number" && attempt.outputTokens > 0);
-      if (attempt.providerStatus === "failed" && !billed) continue;
+      // Only a failure the provider answered with a rate-limit or server error is known to be free.
+      // A timeout / network error (no HTTP status) may have run the search, so it consumes the slot:
+      // with a 10-minute fetch cadence a retry loop on those would otherwise repeat up to 12 times.
+      const status = attempt.httpStatus;
+      const knownUnbilled = typeof status === "number" && (status === 429 || (status >= 500 && status <= 599));
+      if (attempt.providerStatus === "failed" && !billed && knownUnbilled) continue;
       if (at > (latest.get(attempt.queryKey) ?? Number.NEGATIVE_INFINITY)) latest.set(attempt.queryKey, at);
     }
   }
@@ -129,7 +138,9 @@ export function selectDailyBreakingMarketQueries(
   slots: readonly DailyBreakingMarketSlot[] = DAILY_BREAKING_MARKET_SLOTS,
 ): BreakingMarketQuery[] {
   const nowMs = now.getTime();
-  const lateness = consumedAt ? DAILY_SLOT_CATCH_UP_MS : HOUR_MS;
+  // Without history a slot can only run in the first NO_HISTORY_WINDOW_MS of its hour, so an unreadable
+  // history cannot repeat a search on every cycle of the hour at a 10-minute fetch cadence.
+  const lateness = consumedAt ? DAILY_SLOT_CATCH_UP_MS : NO_HISTORY_WINDOW_MS;
   const due = [...slots]
     .sort((a, b) => a.hourJst - b.hourJst)
     .map((slot) => ({ slot, start: dailySlotStartMs(now, slot.hourJst) }))

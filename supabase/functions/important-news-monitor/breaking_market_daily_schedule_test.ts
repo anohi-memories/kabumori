@@ -33,12 +33,17 @@ const billed = (queryKey: string) => ({ queryKey, providerStatus: "succeeded", w
 const unbilled429 = (queryKey: string) => ({ queryKey, providerStatus: "failed", httpStatus: 429, webSearchCallCount: 0, inputTokens: 0, outputTokens: 0 });
 
 /** Runs `days` days of hourly fetches against the real selector, recording each attempt as run diagnostics. */
-function simulate(days: number, attempt: (key: string, when: Date) => unknown = billed, useHistory = true) {
+function simulate(
+  days: number,
+  attempt: (key: string, when: Date) => unknown = billed,
+  useHistory = true,
+  stepMinutes = 60,
+) {
   const rows: Row[] = [];
   const searches: Array<{ key: string; when: Date }> = [];
   const perCycle: number[] = [];
-  for (let hour = 0; hour < days * 24; hour += 1) {
-    const when = new Date(DAY_START + hour * HOUR + 2000); // the cron fires a couple of seconds after :00
+  for (let step = 0; step < (days * 24 * 60) / stepMinutes; step += 1) {
+    const when = new Date(DAY_START + step * stepMinutes * 60 * 1000 + 2000); // the cron fires a couple of seconds after the mark
     const history = useHistory ? dailySlotConsumedAt(rows) : null;
     const selected = selectDailyBreakingMarketQueries(when, history);
     perCycle.push(selected.length);
@@ -250,4 +255,64 @@ test("projected generic searches: 4 a day against 96 before", () => {
   const { searches } = simulate(1);
   assert.equal(before, 96);
   assert.equal(searches.length, DAILY_BREAKING_MARKET_SEARCH_LIMIT);
+});
+
+// --- 10-minute fetch cadence (2026-10-06) ---------------------------------------------------------------
+// The fetch cron moves from hourly to every 10 minutes so BBC / Al Jazeera items are noticed sooner.  The
+// generic search is driven by the daily slots, not by the cadence, so its cost must not move.
+
+test("10-minute cadence: still exactly four generic searches a day, one per slot", () => {
+  const { searches, perCycle } = simulate(1, billed, true, 10);
+  assert.equal(perCycle.length, 144);
+  assert.equal(searches.length, 4);
+  assert.ok(perCycle.every((count) => count <= 1));
+  assert.deepEqual(
+    searches.map((item) => item.key),
+    DAILY_BREAKING_MARKET_SLOTS.map((slot) => slot.key),
+  );
+  // Each runs in the first cycle of its hour, not later.
+  for (const [index, slot] of DAILY_BREAKING_MARKET_SLOTS.entries()) {
+    assert.equal(new Date(searches[index].when.getTime() + 9 * HOUR).getUTCHours(), slot.hourJst);
+    assert.equal(new Date(searches[index].when.getTime() + 9 * HOUR).getUTCMinutes(), 0);
+  }
+});
+
+test("10-minute cadence: a week is 28 searches", () => {
+  assert.equal(simulate(7, billed, true, 10).searches.length, 28);
+});
+
+test("10-minute cadence: with no history readable the day is still 4 searches, never a repeat inside the hour", () => {
+  const { searches } = simulate(3, billed, false, 10);
+  assert.equal(searches.length, 12);
+});
+
+test("10-minute cadence: HTTP 429 and 5xx are retried every cycle for the two-hour window and cost nothing", () => {
+  const free = (status: number) => (key: string, when: Date) => {
+    const hourJst = new Date(when.getTime() + 9 * HOUR).getUTCHours();
+    return key === "boj_monetary_policy" && (hourJst === 13 || hourJst === 14)
+      ? { queryKey: key, providerStatus: "failed", httpStatus: status, webSearchCallCount: 0, inputTokens: 0, outputTokens: 0 }
+      : billed(key);
+  };
+  for (const status of [429, 500, 503]) {
+    const { searches } = simulate(1, free(status), true, 10);
+    const boj = searches.filter((item) => item.key === "boj_monetary_policy");
+    assert.equal(boj.length, 12, `HTTP ${status}: 13:00-14:50 every cycle`);
+    assert.equal(searches.length - boj.length, 3);
+  }
+});
+
+test("a timeout / network failure (no HTTP status, nothing billed on record) consumes the slot — no retry loop", () => {
+  for (const failure of [
+    { providerStatus: "failed", httpStatus: null, webSearchCallCount: 0, inputTokens: 0, outputTokens: 0 },
+    { providerStatus: "failed", webSearchCallCount: 0, inputTokens: 0, outputTokens: 0 },
+    { providerStatus: "failed", httpStatus: 400, webSearchCallCount: 0, inputTokens: 0, outputTokens: 0 },
+  ]) {
+    const { searches } = simulate(1, (key) => (key === "boj_monetary_policy" ? { queryKey: key, ...failure } : billed(key)), true, 10);
+    assert.equal(searches.filter((item) => item.key === "boj_monetary_policy").length, 1, JSON.stringify(failure));
+    assert.equal(searches.length, 4);
+  }
+});
+
+test("the history read (newest 100 run rows) covers the two-hour catch-up window at a 10-minute cadence", () => {
+  assert.ok(DAILY_SLOT_CATCH_UP_MS / (10 * 60 * 1000) <= 100);
 });
