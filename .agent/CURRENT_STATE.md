@@ -1,3 +1,17 @@
+## Final K5 — Common-account Phase 1 production preflight ready / mutation HOLD — 2026-10-06
+
+- verdict: **PASS / PREFLIGHT_READY（条件付き）**.
+- fresh production read-only Phase A and rollout/history Phase B both PASS; production writes from G5 remain 0.
+- exact migration remains `20261001150000_common_account_lifecycle_foundation.sql`, SHA256 `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3`.
+- local rollout proof: 143/143 PASS; runner mutation checks 6/6 detected; lifecycle 20/20; migration invariants 10/10.
+- PR #91 contains only rollout runner/runbook/read-only preflight tooling; no runtime/migration source changes. Extra Codex review is not required at this point.
+- blocker: G4 still records `production_mutation_window: ACTIVE`. G5 production apply is therefore **not authorized yet**.
+- after G4 records CLOSED, G5 must rerun all 9 Phase A reads, refresh ledger/object-fingerprint baselines, then return for explicit same-task production apply approval.
+- PR #91 merge remains HOLD until that continuation decision; pinned head may be used only after fresh verification.
+- backfill, deletion activation, Auth/Storage/OAuth/Vault mutation, Edge deploy, Cron and real X remain out of scope.
+- AI Lab diary: 記録不要 — production rollout tooling/preflight only, no new released user-facing capability.
+- recommended Claude model for continuation: **Opus5.5（極高）**.
+
 ## K1 — PR #90 detail navigation CODE PASS / visual acceptance HOLD
 
 - verdict: CODE PASS / user visual approval pending.
