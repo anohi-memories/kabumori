@@ -1,3 +1,28 @@
+## Final C1 — PR #95 second review CHANGES REQUIRED / focused S1-S2 corrective — 2026-10-07
+
+- H1 exact reviewed PR #95 head: `dd065e16f64a37582f73d05f1ab57ff7d276a5f7`.
+- C1 verdict: **CHANGES REQUIRED accepted**. PR #95 remains open/unmerged/undeployed; production migration apply remains forbidden.
+- prior corrective progress accepted:
+  - R1 automatic-ended reactivation: PASS;
+  - R5 malformed response fail-closed: PASS;
+  - original cross-user re-enrollment and retry-Push defects are materially corrected;
+  - immutable captured Authorization closes the former A-token/B-token substitution path.
+- remaining blockers are now narrowly scoped:
+  - **S1 P2:** same Auth user can establish a fresh login/session while an older explicit reactivation is pending; current cache/view/readiness identity is userId-only, so the old result can certify the new session.
+  - **S2 P2:** X queues automatic enrollment in a microtask and can still enter `ensure()` after unmount/sign-out cleanup; queued unsent work must be cancelled before dispatch.
+- G5 corrective requirements:
+  - carry a validated stable login/session identity (prefer Supabase JWT `session_id` or equivalent) alongside userId through cache, request generation, explicit consent, view state and positive-ready state;
+  - ordinary token refresh within the same login session must retain safe single-flight behavior;
+  - a genuinely new same-user session must abort/invalidate old pending/explicit work and ignore its result;
+  - never key this solely on raw access_token; do not log/persist tokens;
+  - X effect must check cancellation/current session/request generation **before** calling `ensure()` or transport dispatch, including immediate unmount/sign-out/superseded-effect windows;
+  - add A1 explicit reactivation -> same-user A2 fresh-session regressions for Kabumori and X; sign-out/recovery variants; same-session token-refresh control; X immediate-unmount-before-microtask and superseded-effect-before-dispatch tests.
+- preserve already-passed server migration/RPC R1 semantics, strict R5 parser validation, immutable token-bound transport, PR #94 root news-detail, and X OAuth separation.
+- Phase 3, production migration apply, deploy, EAS, Auth/Storage/OAuth/Vault/Cron/X mutation remain out of scope.
+- G5 status: ready; recommended model: **Opus5.5（極高）**.
+- H1 is done/free now. After a corrected exact PR #95 head, allocate focused H1 re-review with **Sol（高）**.
+- AI Lab diary: 追加更新なし — 同日の共通アカウント作業の公開安全な候補と重複し、今回の内容は内部セッション安全性の追加修正が中心。
+
 ## K3 — PR #41 live-generation PASS_CANDIDATE / single H2 security review
 
 - K3 verdict: **PASS_CANDIDATE; merge HOLD pending one focused H2 review**.
