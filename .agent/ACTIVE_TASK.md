@@ -83,25 +83,26 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: in_progress
+- status: done
 - task_id: x-social-mobile-pr76-production-rollout-gate-20261006
 - start_code: G4
 - finish_code: K4
-- next_owner: claude
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Interim K4 check confirms partial production rollout. S0 passed. x-test-post is ACTIVE v136 / verify_jwt=false and deployed source contains both PR76 pre-send guard and PR82 AI Lab runtime. PR76 two SECURITY DEFINER RPCs are present with expected owner/search_path/effective EXECUTE ACL. However migration history 20261003090000 is still absent and social-mobile-publish-setting is still not deployed. Recent AI Lab natural posts succeeded and claims are published; running=0 / overdue pending=0. Continue the same G4 only: do not rerun migration schema DDL blindly; reconcile exact Stage A-present/history-missing checkpoint, complete exact history/read-back, then S5 publish-setting deploy/read-back, then CLOSE production mutation window. No extra Codex review. Recommended Opus5.5（高）.
+- allocation: Final K4 accepted. PR76 production rollout S1–S5 complete with exact read-back; production_mutation_window CLOSED at 14:11 JST. x-test-post guarded runtime active, migration 20261003090000/history exact, publish-setting deployed. No further G4 production write.
+- recommended_model: Opus5.5（高）
 
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: review_required
+- status: ready
 - task_id: common-account-v1-phase1-production-migration-gate-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: chatgpt
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Final K5 accepts PREFLIGHT_READY only. Phase A/B passed; production writes remain 0. G4 production_mutation_window is still ACTIVE, so G5 may not write yet. After G4 records CLOSED, rerun all 9 Phase A reads, refresh the existing-object fingerprint/ledger baseline, then return for same-task production apply approval. PR #91 runner/runbook remains merge HOLD for now; no extra Codex review allocated.
+- allocation: G4 production window is CLOSED. Resume the same G5 only for a fresh all-9 Phase A read-only preflight and baseline refresh. Production migration write is still NOT authorized. On fresh PASS, STOP again for explicit mutation approval. No backfill/deploy/Auth/Storage/OAuth/Vault/Cron/real X.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
