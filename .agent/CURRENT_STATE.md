@@ -1,3 +1,33 @@
+## G1 assigned — Canonical portfolio UI v1 — 2026-10-06
+
+- task_id: `kabumori-portfolio-canonical-ui-v1-20261006`.
+- status: ready; owner: Claude G1.
+- recommended model: **Sonnet5（高）**.
+- fresh allocation main: `676ce44b3d7f9282276428fbfee0dedc4ce4d385`.
+- previous G1 topic/navigation work is Final K1 PASS / merged / slot free.
+- fresh open-PR overlap check across portfolio/search/stock target files: **0 overlap**.
+- current H1/H2/G5 work is security/common-account/social-mobile and may continue in parallel; G1 must not touch root Auth/common-account/migration/RPC boundaries.
+- user-approved portfolio design is now canonical:
+  - PORTFOLIO / ポートフォリオ header;
+  - top Watchlist + Search;
+  - asset summary;
+  - pale-green portfolio AI summary;
+  - top 3 asset-impact rows;
+  - holdings cards;
+  - portfolio AI CTA above native tabs.
+- implementation must use real stored facts only:
+  - latest valid close report for totals/price/day P&L/unrealized P&L;
+  - Fact-passed `overview_ja` / `holding_impacts`;
+  - current `tracked_stocks` remains registration/edit source;
+  - stale close basis must be explicit; do not imply realtime.
+- top asset-impact rows are deterministic `abs(day_pl)` top 3.
+- current stock master has no company logo field; no external-logo scraping/schema work in this task. Implement a polished fallback avatar only.
+- `/search` should become a real dedicated stock search screen, preserving existing register/edit semantics.
+- Watchlist final tags are deferred until design is approved; top Watchlist button must still lead to a working interim view using existing watch registrations, without root navigator changes.
+- no `src/app/_layout.tsx`, Auth/session, migration, RPC, Edge, X/social-mobile, production or EAS changes.
+- required Simulator proof: 402pt + 375pt portfolio, fallback avatar, Watchlist interim, Search, no NativeTabs overlap.
+- finish code: K1.
+
 ## Final C1 — PR #95 second review CHANGES REQUIRED / focused S1-S2 corrective — 2026-10-07
 
 - H1 exact reviewed PR #95 head: `dd065e16f64a37582f73d05f1ab57ff7d276a5f7`.
