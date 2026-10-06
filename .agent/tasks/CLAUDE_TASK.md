@@ -3,8 +3,8 @@
 - task_id: kabumori-editorial-points-specificity-corrective-20261006
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - type: editorial-quality corrective / prompt + telemetry + diagnostics
@@ -215,7 +215,86 @@ Recommended model: **Sonnet5（高）**.
 
 ## Report
 
-Pending.
+### task_id / result
+- task_id: kabumori-editorial-points-specificity-corrective-20261006
+- result: **PASS candidate（source/testsのみ）**。PR [#99](https://github.com/anohi-memories/kabumori/pull/99)、branch `g2-editorial-points-specificity-20261007`、head `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`（base origin/main `dadfcd3a`）。deployなし。
+- 注意：**プロンプトの効果（モデルが実際に具体的な見出しを書くか）は、手動生成が禁止のため未検証**。テストで確認できるのは、プロンプトの文言、検出・記録、Hard境界、書き直しの条件だけ。deploy後の自然サイクルで観測が必要。
+
+### root cause（10/6大引けの3ポイント）
+1. PR #87 のプロンプトに入れた**完成例文**を、モデルが中身として使った（1つ目と3つ目はほぼ丸写し）。
+2. 「数値を見出しの主役にしない」が強く、例外が**政策金利の決定だけ**だったため、節目（日経平均が前日の69,946.86から70,683.98で7万円台に乗せた）まで見出しから外れた。
+3. 具体性を求める指示が無く、汎用の見出し（「国際情勢のニュースを確認」）を検出する手段も無かった。
+
+### exact prompt changes（`analysis_logic.ts`）
+- 完成した例文をすべて削除。PR #87 の COMMON の BAD 例（指数値の入った文）、MORNING の例3つ、CLOSE の例（「主要指数がそろって上昇、主因は絞れず」「（入力の重要ニュース）が最大の材料に」「次は米国株と為替の反応を確認」「上昇したが、主因は一つに絞れず」「大型株中心に上昇、材料は分散」）。回帰テストでプロンプトにこれらと10/6の3ポイントが含まれないことを固定。
+- COMMON の「3つのポイント」を規則だけに書き換え：
+  (1) その日の入力にある具体的な語（国・地域、企業・業種、指標、出来事の名前）を最低1つ。「ニュースを確認」「動きを見る」「情勢に注目」「材料を確認」「今後の動向に注意」のようなどの日にも当てはまる見出しは書かない。材料を見出しにするときはどこの何の出来事かを書く。
+  (2) 指標名＋値・前日比だけの見出しは書かない。ただし、節目を超えた・大幅な上昇/下落・急変・政策金利の決定など数値そのものが出来事のときは数値を入れてよい。入力の値と前日比から確かめられる範囲（前日の終値を上回った等）に限り、「初めて」「史上最高」「〜年ぶり」は書かない。
+  (3) その日にもっとも重要な**別々のテーマ**を選ぶ（固定の型にしない）。薄い日は理由が確認できないことを正直に書いてよいが、3つすべてを抽象的にしない。重複・言い換えは不可。
+  (4) 煽り・釣りは禁止。(5) 本文と同じHardの決まりに従う（方向・根拠の無い理由・日付・1306）。
+- MORNING：「注目点・注意点・相場を見る軸」を、入力の前夜・前営業日の値動きとニュースに結びつけて書く。今日の東京市場は動いたと言い切らない。前夜の方向は入力どおり。
+- CLOSE：「何が起きたか／何が重要だったか（根拠のある材料）／次に何を見るか」から重要な3つを選ぶ。理由を見出しにできるのは causal の claim があるときだけ。無いときは見えている事実と理由が確認できないことを書く。明日以降は断定しない。
+- 「初めて」「史上最高」は **Hard にしていない**（ニュース本文の「初の〜」の言い換えを誤って止めるため）。プロンプトの規則と観測で扱う。
+
+### telemetry changes（WARN only、rewrite triggerにしない）
+- **`X_POINTS_GENERIC:<n>`**（n≥2で記録）：市場名（`MARKET_NAMES`、`hard_fact_guards.ts` から export）・日付・絵文字・固定の汎用語彙（ニュース・情勢・材料・動向・動き・状況・確認・注目・注意・見る・反応 …）を除いて、内容の字（漢字・カタカナ・英字）が**1字以下**しか残らない見出しを汎用と数える。数字を含む見出しは汎用にしない。固定語彙だけなので、固有名詞を含む見出しには当たらない。見る点が1つだけ汎用（「次は米国株と為替の動きを見る」）なのは許容。
+- 10/6 の実データ：3つとも汎用 → `X_POINTS_GENERIC:3`、Hard は0（品質のみ）。TASK例の BAD 5つ（ニュースを確認 等）も汎用と判定。具体的な見出し（「スーダン停戦決議を国連人権理事会が採択」「日経平均が7万円台に乗せ、前日の終値を上回る」「不二越の3Q累計は営業利益72.8%増」「前夜の米株高を日本株が引き継げるか」等）は当たらない。
+- `X_POINTS_METRIC_RECAP`：節目・超え・上回る・突破・大幅・急騰落・万円台・政策金利・利上げ/利下げ・据え置き を含む見出しは「値の再掲」に数えない（節目の見出しを警告しない）。素の再掲（「日経平均は70,683.98（前日比+1.05%）」）は従来どおり。
+- `worthRewrite` は `X_POINTS_*` を一括で書き直し対象外（`COSMETIC_WARNING` に含む）。
+
+### rewrite / call-condition disposition（調査結果）
+- 10/6 close の書き直しの原因は、`X_POST_SHORTER_THAN_TARGET:387`（目標430字）と `APP_STORY_SHORTER_THAN_TARGET:657`（700字未満）の**2つ**（どちらも書き直し対象だった）。
+- **PR #87 との関係**：見出しが短くなった（各40字以内）ため、プロンプトの各段落の下限どおり（context 90・news 70・watch 50・closing 40）に書くと X 本文は約390字で、430字の目標には**水増ししないと届かない**。X の長さだけの書き直しは、PR #87 以降、毎回起きうる状態だった。
+- **変更（最小）**：`X_POST_SHORTER_THAN_TARGET` は **300字未満のときだけ**書き直し対象（`X_POST_REWRITE_BELOW_CHARS = 300`）。430字未満は記録のみ。omission 系（context/watch の空）は従来どおり。
+- **変更していない**：アプリ本文700字の条件（PR #77）。10/6 は japan 99字（下限120）・news 94字（下限120）・watch 52字（下限60）と、モデルが下限を2割ほど下回り、657字になった。**この修正後も10/6と同じ出力なら書き直しが1回走る**（calls 4）。X の長さが原因の書き直しは無くなる。アプリの閾値を下げる（例 700→600）か、プロンプトの下限の書き方を直すかは K2 判断。変更するなら PR #77 の方針（下限の合計から導いた700）の見直しになるため、今回は触らなかった。
+- 呼び出しの上限（生成2＋Fact2＝最大4）は不変。新しい書き直し条件の追加は無し（1つの条件を絞っただけ）。
+
+### diagnostics disposition（実装した）
+- 書き直し・生成が不合格になったとき、**本文も指摘文も保存せず、固定コードだけ**を `report_diagnostics.rejection_reasons`（160字まで）に残す。`GenerationTrace.rejectionReasons` を追加（`hardRejections` と同じ順）。
+  - local：issue のラベル（最初のコロンの前）を分類 → `date` / `number` / `direction` / `causal` / `1306` / `ref` / `absence` / `format` / `other`（複数は `+`）。
+  - Fact：同じ分類＋指摘件数 `:n`（例 `date+ref:2`）。
+  - 例 10/6 のような「書き直しがFactで不合格」は `hard_rejections=fact` と `rejection_reasons=<コード>:<件数>` で、false reject かどうかを後から判断できる。
+- 引用文はラベルに含まれないので、引用中の語（「上昇」等）では分類しない（テストで固定）。
+- DBの変更なし：`report_diagnostics` は任意キーの jsonb（migration は `jsonb_typeof = 'object'` のみ）。handler の変更なし。
+
+### changed_files（PR #99）
+- `supabase/functions/market-report-analysis/analysis_logic.ts`
+- `supabase/functions/market-report-analysis/editorial_specificity_test.ts`（新規13件）
+- `supabase/functions/market-report-analysis/editorial_points_test.ts`（期待値更新）
+- `supabase/functions/market-report-analysis/analysis_test.ts` / `presentation_v2_test.ts` / `test_support.ts`（期待値・合成 fixture の3ポイントを具体的な見出しに）
+- `supabase/functions/market-report-analysis/fixtures/close_2026-10-06_{data_packet,news_rows,generated_report}.json`（本番の実入力と配信された実出力。市場データと公開ニュースのみ、個人データなし）
+- `docs/market-report-shared-platform/DESIGN.md`（§15.4.1.1）
+- 触っていない：`hard_fact_guards.ts`、personalized-reports、handler、`_shared`。
+
+### tests
+- 新規 `editorial_specificity_test.ts` 13件：コピー可能な文がプロンプトに無い／規則の文言／10/6の3ポイントは `X_POINTS_GENERIC:3` かつ Hard 0／汎用語彙と固有名詞の判定／汎用1つは許容・2つ以上は記録・Hard でも書き直しでもない／節目の見出しが再掲に数えられない／節目の見出し（7万円台・70,683.98円・大幅高）が10/6入力で Hard 0／間違った値（入力に無い数値）・間違った日付・符号逆転・1306をTOPIXと書く・根拠の無い因果は節目の見出しでも Hard／ちょうど3つは Hard／朝刊の前向きな見出しを維持し方向の逆転は Hard／X 387字だけでは書き直さない（299字は書き直す、アプリ657は書き直す、omission は従来どおり）／アプリ本文が薄くなければ2 calls で配信／不合格の診断に本文が残らない／上限不変。
+- market-report-analysis **160/160**（editorial_specificity 13、editorial_points 11、session-date 14、H1 boundary 9、presentation_v2 22、causal 18、quality 9、h1_adversarial 13、content_guard 16、transport 14）
+- personalized-reports 129/129、X shared consumer 8/8、market-report-data-packet 42/42、`_shared` 422/422（`--no-check`）
+- `deno check`（market-report-analysis/index.ts、personalized-reports/index.ts、変更ファイル）exit 0。`deno lint`：変更ファイルで `analysis_test.ts:34` の require-await 1件のみ（2026-09-17 `05a677f1e` からの既存指摘、今回の行ではない）。`git diff --check` exit 0。
+
+### model-call ceiling
+- 不変（MAX_GENERATIONS=2、最大4 calls）。新しい呼び出し・書き直し条件の追加なし。X の長さの書き直しを1つ減らす（呼び出しは減る方向）。prompt は例文を削る一方、規則が増えるため全体の長さはほぼ同じ。
+
+### Hard boundary
+- 変更なし：日付・セッション・値・符号・古い値・1306・ref・根拠の無い因果・false absence・ちょうど3つ・安全な最初の版へのフォールバック。generic / recap / duplicate は WARN のみ。`hard_fact_guards.ts` は未変更。
+- 旧PR #87 の既知の限界（変更なし）：節目の見出しに使える数字は、入力のどこかに現れる数字に限られる（入力に無い数値は Hard）。「7万円台」は入力に `7` が現れるため通るが、他の節目（例：「1万円台」）が常に通るとは限らない。
+
+### commit / PR
+- commit `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`、PR #99（open）、通常push。merge・deployなし。fresh main との重なり：market-report-analysis / `_shared/market_report*` / DESIGN への他の変更なし（確認済み）。
+
+### production mutation
+- **0**（本番の読み取りは前TASK（10/6観測）で取得済みのデータの再利用と、10/6 close の fixture 化のための read-only SELECT のみ）。deploy・手動生成・DB・Cron・gate・X・通知・EAS・Auth/Vault なし。
+
+### review policy（K2への申告）
+- TASKの基準では、Hard・書き直しトリガー・呼び出し上限・配信の意味が**大きく変わる場合**に focused review。今回は prompt・telemetry・diagnostics・テストが中心で、Hard は不変、呼び出し上限は不変。**書き直しトリガーは1か所を絞った**（X の長さ 430→300 字）ので、K2 は「大きな変更か」を判断してください。私の見立ては、書き直しが減る方向の小さな変更で、レビューは任意。
+
+### recommended deploy + natural-observation plan
+1. PR #99 のレビュー（K2）→ merge → **`market-report-analysis` のみ** controlled deploy（`personalized-reports` は不要：今回の変更は共有分析のみ）。これは PR #87 と同じ手順。
+2. deploy 後の自然サイクルを read-only で観測：次の大引け（または朝刊）で `x_post.points_ja` の3つ、`X_POINTS_GENERIC` / `X_POINTS_METRIC_RECAP` の記録、`quality_warnings`、calls、`rejection_reasons`。
+3. **観測前に期待を持ちすぎない**：プロンプトの規則だけで、モデルが具体的な見出しを書くかは未検証。もし deploy 後も汎用の見出しが続く場合の次の手は、(a) 入力に「今日の見出し候補」（節目・最大の動き・最重要ニュースの要旨）をコードで用意してモデルに渡す、(b) `X_POINTS_GENERIC:>=2` を書き直しの対象にする（+2 calls、上限内）、のどちらか。(a) は入力の構造変更になるため別TASK。
+4. 別TASK（今回は範囲外）：本文の質（米雇用統計が本文にほぼ出ない・「重要材料として確認されました」の内部語・「確認できません」の反復）、ユーザー提示の理想例に必要な材料データ（個別株・最新の原油・最高値判定・金利見通し）とシナリオ表現の方針、`personalized-reports` の PR #43/#67/#87 まとめ deploy。
+
+---
 
 ---
 
