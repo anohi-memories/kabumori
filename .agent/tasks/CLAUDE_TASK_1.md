@@ -3,8 +3,8 @@
 - task_id: kabumori-topic-learning-access-progress-and-swipe-20261006
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: 実機確認で判明した戻るジェスチャー不一致を解消し、トピック一覧をSettings依存の単一レベル閲覧から「初級/中級/上級を自由に切替できる学習一覧」へ拡張し、端末内の既読/学習済み表示を追加する。
@@ -475,6 +475,96 @@ Then:
 - STOP for K1.
 
 Recommended model: **Sonnet5（高）**.
+
+## K1 corrective — native swipe parity must be structural, not redirect-after-pop
+
+K1 verdict: **HOLD / bounded corrective required before merge**.
+
+Accepted from PR #94 head `c15ea73a2694bdecb35c095bbacb7017ed32a45c`:
+- topic-list 初級/中級/上級 selector architecture;
+- Settings separation;
+- per-level in-memory pagination/cache/race safety;
+- local learned/read state using AsyncStorage;
+- stable learning identity based on `topic.id`;
+- focus refresh and detail-success marking semantics;
+- topic-detail selector reuse;
+- topic native swipe behavior;
+- 375-width geometry is likely safe but still must be observed in the final implementation.
+
+Not accepted as final:
+1. Home-origin news swipe currently reveals the news list for ~1 frame before redirecting to Home. User explicitly requested swipe to behave like the Back button, so the transition itself should be natural, not only the final destination.
+2. `usePreventRemove` is imported from `expo-router/build/react-navigation/core`, an internal package path. Do not ship this as the long-term app navigation contract.
+3. 375pt was an explicit acceptance condition and still lacks final observed evidence.
+
+### Required architectural correction
+
+Prefer a navigation structure in which **native iOS pop/swipe naturally exposes the actual origin screen** without intercept-and-redirect.
+
+Strong preferred design to evaluate:
+- add a root-level news-detail route (exact path/name is implementation choice);
+- Home -> root news detail while Home tab remains underneath;
+- News list -> the same root news detail while News tab/list remains underneath;
+- therefore native edge swipe/pop naturally returns Home or News list according to the true origin;
+- keep explicit `from=home|news` for deterministic visible Back-button fallback/deep-link behavior and tests;
+- keep the right-side `ニュース一覧 ›` action;
+- extract/reuse one news-detail content component if needed rather than duplicating the UI/data logic;
+- preserve loading/error/source behavior;
+- remove the internal `expo-router/build/...` import and the redirect/1-second guard.
+
+If another structure achieves all of the same properties with less change, it is acceptable, but it must:
+- use supported/public app APIs only;
+- preserve native interactive edge-swipe;
+- have **zero intermediate wrong screen flash** in normal observed use;
+- leave no stale detail when the News tab is reopened;
+- maintain Home-origin -> Home and news-origin -> list for both button and gesture.
+
+Do not solve by disabling swipe.
+
+### Deep-link / compatibility requirement
+
+Preserve a safe route for existing `/news/[id]` navigation/deep links:
+- either keep it as a thin compatibility entry that lands on the canonical detail safely, or prove no supported caller depends on it;
+- unknown origin must still have a safe Home fallback;
+- do not create duplicate detail implementations with drifting behavior.
+
+### Topic/list/read-state scope
+
+Do **not** redesign or discard the already-good topic list/read implementation unless needed for integration.
+
+Keep:
+- list level selector;
+- selected-only fetch;
+- per-level cache;
+- learned/unread;
+- local AsyncStorage;
+- Settings remains Home-only;
+- detail -> list current-level request;
+- normal list -> detail -> Back preserves existing list state.
+
+### Final verification
+
+Mandatory before returning K1:
+- 402pt and **observed 375pt** topic list screenshots;
+- 375pt selector + learned/unread state no clipping;
+- Home -> news detail -> real native edge swipe => Home, with no visible News-list flash;
+- News list -> detail -> edge swipe => News list;
+- visible `‹ 戻る` matches those exact destinations;
+- reopen News tab after Home swipe => list only, no stale detail;
+- Home -> topic detail -> swipe => Home;
+- Topics -> topic detail -> swipe => topics with state/scroll preserved;
+- full app tests;
+- tsc;
+- Expo config;
+- web export;
+- diff check.
+
+Update **existing PR #94 only**. No second PR.
+No EAS.
+No production/backend mutation.
+
+Recommended model: **Sonnet5（高）**.
+
+---
 
 ## Report — G1: topic learning access, learned state and swipe parity (task kabumori-topic-learning-access-progress-and-swipe-20261006)
 
