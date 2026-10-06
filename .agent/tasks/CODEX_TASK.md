@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase2-service-enrollment-corrective-rereview-20261006
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - type: focused auth/session/lifecycle-RPC/migration security re-review
@@ -168,6 +168,17 @@ Then:
 - STOP for C1.
 
 Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-07 JST
+
+- Exact reviewed head: `dd065e16f64a37582f73d05f1ab57ff7d276a5f7` (PR95 unchanged at final review fetch).
+- Verdict: **CHANGES REQUIRED**. Prior SQL automatic-ended race R1 and malformed-response R5 are corrected. Original cross-user and retry-Push reproductions pass, but session/cancellation gates remain incomplete.
+- Remaining blockers: **S1 P2**, both clients reuse an old explicit request/result for a fresh same-user login (`session_id` changes); **S2 P2**, X's queued automatic task dispatches after unmount/sign-out because cleanup is checked only after the request.
+- Independent proofs: actual X TSX, actual Kabumori AuthProvider + lib/auth + shared domain, intercepted fake transport; 3 expected-safe assertions fail (S1 in two clients, S2), same-session single-flight control passes.
+- Existing suites: Kabumori 387/387; AuthProvider 4/4; X 207/207; migration invariants 10/10; new SQL behavior/ACL/additive/5 race cases PASS; Phase 1 20 PASS markers. X typecheck/lint and both Web exports PASS. Kabumori app-only tsc retains 2 unchanged CSS-resolution diagnostics.
+- PR94 merge is already in both current main and PR95; root news-detail is preserved. Final review main `676ce44b3d7f9282276428fbfee0dedc4ce4d385`; product changed-file overlap 0; merge-tree succeeds (no actual merge).
+- Product source edit/push, production access/mutation/apply/deploy/EAS/Auth/Storage/OAuth/Vault/Cron/X operations: 0.
+- Next: STOP for C1; ChatGPT returns focused S1/S2 correction to G5 and requests exact-head re-review. Recommended model: **Sol（高）** for C1/re-review. Source acceptance is not production migration or native release approval.
 
 ---
 
