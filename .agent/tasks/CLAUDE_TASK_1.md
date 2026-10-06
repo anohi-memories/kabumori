@@ -515,6 +515,72 @@ Then:
 
 Recommended model: **Sonnet5（高）**.
 
+## K1 — PORTFOLIO PASS / merge HOLD for contextual report-detail navigation
+
+- verdict: **PASS for portfolio implementation / HOLD before merge for one navigation integration issue**.
+- exact reviewed PR #100 head: `5a9735c80e3dbc01b25911a0aabc83fce3d56bc9`.
+- fresh main at K1: `7c0c6565230096d77e339156b3977d2b1128062e`.
+- fresh-main changed-file overlap across all 17 PR files: **0**.
+- accepted:
+  - canonical portfolio composition closely matches the approved reference;
+  - 402pt and 375pt Simulator screenshots are visually acceptable;
+  - real saved-close data only; no fake realtime values;
+  - asset value / unrealized P&L / day P&L / day % mapping is deterministic;
+  - stale basis wording is honest;
+  - sparkline uses stored close history only;
+  - top-3 impact = absolute `day_pl`;
+  - current tracked holdings remain the registration source and unmatched rows remain visible as not-yet-reflected;
+  - Fact-passed stored overview/holding-impact text only; no display-time AI;
+  - real dedicated stock-search screen works;
+  - interim Watchlist subview preserves existing watch registrations/edit/delete;
+  - company-logo absence is handled by one deterministic fallback-avatar slot;
+  - tests/checks reported **404/404 app tests**, src tsc clean, Expo config PASS, web export PASS, diff clean;
+  - EAS 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation 0.
+- screenshots reviewed:
+  - `portfolio_canonical_402pt.webp`;
+  - `portfolio_canonical_375pt.webp`;
+  - `portfolio_holdings_375pt.webp`;
+  - `portfolio_watchlist_375pt.webp`;
+  - `portfolio_search_375pt.webp`.
+- Codex review: **not required** for this UI/read-only presentation/search extraction.
+
+### Remaining navigation blocker
+
+Portfolio AI summary and impact detail currently open the nested Reports-tab route `/reports/[id]`.
+
+Observed consequence:
+- Portfolio -> report detail -> Back / native edge swipe returns to the Reports list, not to the Portfolio origin.
+
+This conflicts with the app-wide navigation behavior already adopted for Topic and News:
+- **visible Back and native swipe should return to the actual origin screen**.
+
+Required final behavior:
+- Portfolio -> report detail -> visible Back = Portfolio;
+- Portfolio -> report detail -> native edge swipe = Portfolio;
+- Reports list -> report detail -> visible Back/swipe = Reports list;
+- deep-link/unknown origin has a safe fallback.
+
+Preferred structural solution:
+- mirror the accepted root-level `news-detail` pattern with a canonical root-level report-detail route;
+- preserve the Reports tab's existing list behavior/deep-link compatibility;
+- pass explicit origin for deterministic button/fallback semantics;
+- do not intercept native swipe with package-internal APIs.
+
+### Current coordination constraint
+
+Do **not** implement that structural navigation correction yet because active G5/H1 common-account work currently owns `src/app/_layout.tsx` / root Auth navigation boundary.
+
+- PR #100 itself has no current overlap and remains safe/open.
+- wait for H1/C1 to finish and the root layout boundary to become safe;
+- then assign one bounded G1 correction on existing PR #100 (or a fresh follow-up if rebasing is cleaner) to add contextual report-detail navigation;
+- no other portfolio UI/data changes are requested.
+
+- merge: **HOLD**.
+- status remains `review_required` / next_owner `chatgpt` until the root navigation boundary is clear.
+- recommended corrective model when unblocked: **Sonnet5（中）**.
+
+---
+
 ## Report — G1: portfolio canonical UI v1 (task kabumori-portfolio-canonical-ui-v1-20261006)
 
 - task_id: `kabumori-portfolio-canonical-ui-v1-20261006`
