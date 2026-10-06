@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase1-production-migration-gate-20261006
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - production_mutation_window: **CLOSED** — 2026-10-06 14:58 JST. G5 applied exactly 20261001150000 (Stage A/B/C + postflight EXACT, one history row) and read it back; G5 performs no further production write. backfill / deploy / Auth / Storage / OAuth / Vault / Cron / real X = 0.
 - priority: highest
 - start_code: G5
