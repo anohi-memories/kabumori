@@ -83,13 +83,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: in_progress
 - task_id: x-social-mobile-pr76-production-rollout-gate-20261006
 - start_code: G4
 - finish_code: K4
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: PR #76 source is merged and final security review PASS. Perform same-day production read-only preflight and freeze the exact runtime-first rollout package, then STOP for fresh explicit approval before S1. Approved order: guarded x-test-post -> byte read-back/drain -> PR76 migration -> RPC/ACL read-back -> publish-setting Edge. No publish toggle or real X. This must complete before G3/PR81 production apply resumes. Recommended Opus5.5（高）.
+- allocation: Interim K4 check confirms partial production rollout. S0 passed. x-test-post is ACTIVE v136 / verify_jwt=false and deployed source contains both PR76 pre-send guard and PR82 AI Lab runtime. PR76 two SECURITY DEFINER RPCs are present with expected owner/search_path/effective EXECUTE ACL. However migration history 20261003090000 is still absent and social-mobile-publish-setting is still not deployed. Recent AI Lab natural posts succeeded and claims are published; running=0 / overdue pending=0. Continue the same G4 only: do not rerun migration schema DDL blindly; reconcile exact Stage A-present/history-missing checkpoint, complete exact history/read-back, then S5 publish-setting deploy/read-back, then CLOSE production mutation window. No extra Codex review. Recommended Opus5.5（高）.
 
 ## Claude G5
 - owner: claude
