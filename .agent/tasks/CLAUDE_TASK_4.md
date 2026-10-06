@@ -1,5 +1,173 @@
 # Claude Task 4 — CURRENT TASK
 
+- task_id: x-morning-greeting-schedule-reliability-bc-20261006
+- owner: claude
+- slot: claude-4
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- type: GitHub Actions schedule resilience / missing-image detection / source-only
+- production_mutation_allowed: false
+
+## Purpose
+
+GitHub Actions scheduled trigger for `.github/workflows/morning-greeting-image.yml` has become unreliable since 2026-09-20, with multi-hour delayed or missing scheduled starts.
+
+Confirmed current workflow:
+- `workflow_dispatch` already exists;
+- scheduled trigger is currently only:
+  - `30 20 * * *` = 05:30 JST;
+- image generation script resolves the actual JST date when execution starts;
+- posting window ON/OFF is read only after GitHub has started the job, so it does not cause scheduler delay.
+
+This task implements only:
+- Plan B: redundant scheduled wake-ups to tolerate GitHub scheduler delay/drop;
+- Plan C: early missing-image detection/alerting.
+
+Do NOT implement Plan A (Supabase pg_cron -> GitHub workflow_dispatch) in this task.
+Do NOT introduce GitHub PAT, Vault secret, Supabase Cron, production DB writes, Edge deploy, or real posting.
+
+## Slot / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / this TASK.
+2. Use fresh `/Users/yuya/Developer/kabumori-fresh` and an independent G4 worktree.
+3. G3 is active on PR81 production schema; do not touch its files/worktree.
+4. G2/G5 may have separate production gates; this task is source-only and must not enter their mutation mutex.
+5. Protect all existing production workflows and secrets.
+
+## Current evidence
+
+Use the already-investigated timeline as context:
+- 9/17 05:41 scheduled start: on-time;
+- 9/18 05:40: on-time;
+- 9/19 05:40: on-time;
+- 9/20 07:25: first delayed start;
+- 9/21–9/25 roughly 07:37–08:29;
+- 9/26 08:26;
+- by 10/6 around 10:22.
+- manual workflow_dispatch starts promptly.
+
+Do not hard-code assumptions from this timeline into runtime logic.
+
+## Plan B — redundant schedules
+
+Goal: give GitHub multiple opportunities to create the image before the morning post without creating duplicate images.
+
+Requirements:
+- preserve existing `workflow_dispatch`;
+- add multiple scheduled wake-ups sufficiently before posting;
+- do not schedule near :00 if avoidable;
+- prefer staggered minutes/hours so GitHub load concentration is lower;
+- every scheduled run must target the correct JST calendar date;
+- generator must remain idempotent / safe if multiple runs start for the same date;
+- preserve `concurrency.group: morning-greeting-image` and `cancel-in-progress: false` unless evidence shows a better safe configuration;
+- do not delete the existing safety behavior that avoids duplicate stored images;
+- avoid wasting OpenAI calls when the day's image already exists.
+
+Recommended initial cadence:
+- 00:17 JST
+- 02:47 JST
+- 04:17 JST
+- 05:17 JST
+
+Claude may adjust the exact non-round minutes after reviewing script behavior, but keep at least 4 opportunities with the final one >=60 minutes before the earliest expected morning posting window whenever practical.
+
+If multiple cron expressions are used, document their JST/UTC mapping inline.
+
+## Plan C — missing-image detection
+
+Goal: detect failure early rather than discovering it after the scheduled morning post.
+
+Implement the smallest reliable detection mechanism.
+
+At approximately 06:00 JST:
+- check whether the target JST day's morning image exists;
+- if present: no-op/success;
+- if missing: record a clear machine-detectable failure and make the workflow visibly fail/alert through the existing GitHub Actions notification surface.
+
+Prefer avoiding any new external notification service in this task.
+
+Acceptable approaches include:
+- a dedicated lightweight workflow/check script;
+- or a verification job in a separate scheduled workflow.
+
+Requirements:
+- detection must not generate the image itself unless existing retry behavior is explicitly reused safely;
+- no production posting;
+- no manual scheduler invoke;
+- no database mutation beyond a necessary read to determine image existence;
+- do not expose Supabase/service-role secrets in logs;
+- fixed, non-sensitive error code/message;
+- exact JST date handling;
+- local/unit/static tests where practical.
+
+If a DB read is needed, use existing repository patterns and existing GitHub secrets only. Do not introduce new secret types.
+
+## Tonight / 10-07 safety
+
+Do not rely on the newly edited schedule being merged in time to create tomorrow's image.
+
+Document a one-line operator fallback using the existing `workflow_dispatch` with explicit target_date=2026-10-07 so the image can be created manually before the morning post if needed.
+
+Do not execute the manual dispatch from this task unless separately instructed.
+
+## Verification
+
+At minimum:
+- YAML parse/static validation;
+- cron UTC<->JST mapping proof;
+- current-date and explicit target_date behavior;
+- duplicate/idempotency behavior;
+- "image already exists" avoids a new OpenAI generation;
+- missing-image detector:
+  - existing image => pass;
+  - missing image => deterministic failure;
+  - no secret leakage;
+- relevant script tests;
+- git diff --check;
+- no unrelated changed files;
+- no production mutation/deploy/real X/Cron/Vault/GitHub token write.
+
+## PR / completion
+
+Create a focused PR for Plan B + C only.
+
+Report:
+- task_id/result
+- changed_files
+- exact new schedule in UTC and JST
+- duplicate/idempotency proof
+- missing-image detection design
+- tests
+- manual 10/7 fallback command/instructions
+- production mutations = 0
+- GitHub/Vault/Supabase Cron token changes = 0
+- remaining risks
+- recommended next step for Plan A
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K4.
+
+## Review policy
+
+This task is workflow/script resilience only and does not add a new secret, token, Vault write, or production Cron.
+
+Default: **no Codex review** if K4 shows focused changes and tests pass.
+If a specific workflow-safety concern remains, at most one focused **Luna（高）** review.
+
+Plan A is a separate high-risk task and may receive one focused security review because it introduces a GitHub credential + Vault + production pg_cron boundary.
+
+Recommended model: **Sonnet5（高）**.
+
+---
+
+# Previous G4 task history — preserved below
+
+# Previous G4 task — preserved history
+
 - task_id: x-social-mobile-pr76-production-rollout-gate-20261006
 - owner: claude
 - slot: claude-4
