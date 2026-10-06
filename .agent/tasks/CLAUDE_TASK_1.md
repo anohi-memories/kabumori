@@ -86,8 +86,8 @@ Recommended model: **Sonnet5（中）**.
 - task_id: kabumori-detail-navigation-topic-level-switch-20261006
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: かぶモリの詳細画面から迷わず移動できるよう、トピック詳細で「同じ日の初級/中級/上級」を簡単に切替可能にし、トピック詳細と重要ニュース詳細の双方に明示的なHome/一覧導線を追加する。
@@ -522,6 +522,47 @@ No DB/RPC/RLS/Auth/Edge/AI/news/report-generation/catalog/native/config/EAS/prod
 
 ### next_recommendation
 K1 reviews PR #90 (UI/navigation-only, low risk: no Codex review needed). The user may try it on the iPhone (server on request).
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
+
+## Report 2 — G1: contextual Back + always-available list (USER NAVIGATION DECISION, same task / same PR #90)
+
+- result: implemented per the "USER NAVIGATION DECISION — SUPERSEDES PRIOR PLACEMENT CORRECTIONS" section; 402pt Simulator verified with real taps/swipes; **375pt NOT measured this round** (see remaining issues). PR #90 updated (no second PR), **not merged**.
+- PR: https://github.com/anohi-memories/kabumori/pull/90 — branch `claude/g1-detail-navigation-topic-switch-20261006`, **head `39bdf30f4c1bdb4214acbe27bf918aeff8a39ab1`** (2 commits: `0dd2b5af` switcher + first nav, `39bdf30f` contextual back).
+- main SHA at start of this round: `91b5d04`. Overlap re-check (all open PRs #91/#90/#78/#41/#33/#11/#10/#3) on topic-detail / topics / news / Home entry files / detail-navigation: none except PR #90 itself.
+- **EAS build created: no (0).** backend/DB/RPC/API/AI/Auth/Edge/production mutation: **0**.
+
+### Behaviour (replaces the earlier ホーム / 過去のトピック / ニュース一覧 / ホーム labels)
+- Topic detail: left `‹ 戻る`, right `トピック一覧 ›`. News detail (stack header): left `‹ 戻る`, right `ニュース一覧 ›`. No third Home button.
+- **Origin = explicit route param `from=home|topics|news`** (name chosen: `from`), passed by the entry points: Home topic card → `from:'home'`; `/topics` rows → `from:'topics'`; Home market-news card and Home holding-news row → `from:'home'`; news list rows → `from:'news'`. Parsed by `parseDetailOrigin` (string or first array item; anything else = unknown). Not stored anywhere; no backend/schema/RPC/Auth.
+- `戻る`: topic → `topics` only when `from=topics`, else Home (`dismissTo('/')`); `from=topics` → `dismissTo('/topics')`. News → `news` only when `from=news` (`dismissTo('/news')`), else Home via `goHomeFromNews` (`dismissAll` then `navigate('/')`, because `dismissTo('/')` is a silent no-op inside the nested news stack). Unknown/cold deep link → Home. No `back()/canGoBack()`/stack inspection.
+- List action ignores the origin: `トピック一覧 ›` → `dismissTo('/topics')`, `ニュース一覧 ›` → `dismissTo('/news')`.
+- Level switching preserves the origin: `router.setParams(topicDetailRouteParams(next, viewDate, origin))` carries `from` (and adds none when there was none).
+
+### changed_files (this round)
+`src/lib/detail-navigation.ts` (origin helpers), `src/lib/topic-detail-switch.ts` (`from` in params), `src/app/topic-detail.tsx`, `src/app/(tabs)/news/_layout.tsx` (header uses `options={({route}) => …}`), entry points `src/app/(tabs)/index.tsx`, `src/app/topics.tsx`, `src/components/home/home-market-news-grid.tsx`, `src/components/home/home-holding-news-list.tsx`, `src/app/(tabs)/news/index.tsx` (one `from` param each, nothing else), tests `detail-navigation_test.ts`, `topic-detail-screen_test.ts`, `topic-detail-switch_test.ts`, new `detail-origin_test.ts`; screenshots replaced (the older ones showed the superseded labels).
+
+### 402pt Simulator results (iPhone 18 Pro, real taps; params/stack read from the nav tree)
+- Topic: Home→detail→戻る ⇒ Home, stack `[(tabs)]`; `/topics`→detail→戻る ⇒ `/topics` (`[tabs,topics]`); level switches (topics origin 中級→上級→初級→中級, Home origin 上級) keep `from`, real id/level, same date, and 戻る still follows the origin; 右 `トピック一覧 ›` ⇒ `/topics` from Home origin (`[tabs,topics]`, no detail left) and from topics origin (`[tabs,topics]`, no double topics); cold deep link (no `from`) ⇒ 戻る Home / 一覧 `/topics`; loading / error / mismatch states keep both buttons and route per `from`.
+- News: Home market card and holding row → 戻る ⇒ Home tab, news stack `[index]` only (opening the news tab later shows the list only); news list → 戻る ⇒ news list (tab stays); `ニュース一覧 ›` from Home market / holding / list origins ⇒ news list, no stale detail, no doubled list; cold `news/<id>` ⇒ 戻る Home / 一覧 list; missing id / loading / error states keep both buttons with correct `from` routing; centre `一覧へ戻る` ⇒ list.
+- Layout 402: topic nav row x=20 w362 h44; `‹ 戻る` 38.3×44, `トピック一覧 ›` 94.7×44, no clip/wrap. News header (iOS 27 glass capsules): left ≈47pt, right ≈103pt, title `ニュース詳細` ≈154–248pt — no overlap, no double header, tab bar intact. Approved topic design (selector/Hero/steps) unchanged.
+
+### remaining issues / for K1
+1. **375pt not measured this round** (the temporary iPhone SE 3rd gen was created but the Simulator control tool's device-access permission prompt was left unanswered, so no taps/screenshots). Derived, not measured: widths are width-independent — topic row 335pt vs ≈133pt of buttons; news header: left capsule ends ≈63pt, title ≈140–234pt, right capsule starts ≈256pt ⇒ no overlap. A 375pt pass is cheap to rerun once the permission is granted (earlier round verified 375pt for the previous, longer labels).
+2. **Edge-swipe vs 戻る on news detail**: opened from Home the stack is `[index, detail]`, so the iOS edge-swipe returns to the news **list**, whereas `‹ 戻る` returns to **Home**. Topic detail has no such mismatch (only topics origin has an extra stack entry, and there swipe = 戻る). Fix would need `gestureEnabled:false` or custom swipe handling — spec decision needed; left as is.
+3. Reports → news detail has no `from` (not one of the four listed entries) ⇒ 戻る goes Home, not back to the report. A `from:'report'` origin would be a small follow-up if wanted.
+4. The topic-detail mismatch text still says 「Homeに戻ってもう一度開き直してください」 though 戻る may go to the list (text unchanged, pinned by tests).
+5. One unexplained, non-reproducible observation: once, after 戻る from a news detail in the error state with `from=news`, the detail looked still present; two retries with the same steps behaved correctly (stack `[index]`).
+6. Unchanged from before: the Simulator rig (auth bypass/fixtures) is scratchpad-only; real-iPhone check of real data/touch feel is still useful.
+
+### tests / checks (head `39bdf30f`)
+`deno test tests/app/` **335 passed / 0 failed** (focused 61; new behavioural origin tests: parse, Home→Back, topics→Back, cold fallback, right list from every origin, level switch keeps origin, news equivalents, never back()/canGoBack()); tsc(src): no diagnostics; `expo config` OK; `expo export --platform web` PASS; `git diff --check` clean.
+
+### Screenshots (`docs/ui-review/`, 402pt; replaces the four earlier ones)
+`topic_detail_nav_402pt.webp`, `news_detail_nav_402pt.webp`, `news_detail_swipe_back_402pt.webp`.
+
+### safety_checks
+No DB/RPC/RLS/Auth/Edge/AI/news logic/catalog/native/config/EAS/production change; no storage; no new dependency; `.env`/`node_modules` not committed; PR not merged.
 
 Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 
