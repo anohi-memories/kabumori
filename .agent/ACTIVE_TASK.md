@@ -32,14 +32,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: common-account-v1-phase2-service-enrollment-review-20261006
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Mandatory focused review of PR #95 exact head c06fac64. Review lifecycle RPC boundary, fail-closed states, ended explicit-reactivation race, single-flight/user switching, Kabumori gate, X OAuth separation, and compatibility with moving PR #94. Source review only; no merge/deploy/production mutation.
+- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #95 exact head c06fac6492708331b6ba816122c9852cdcea73e7. R1/R2/R4 P1 and R3/R5 P2 returned to G5. No merge/deploy/production mutation. H1 free; corrected exact head will require a new focused Sol（高） review.
 - recommended_model: Sol（高）
 
 ## Codex H2
@@ -57,13 +57,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: chatgpt
-- status: review_required
+- next_owner: none
+- status: done
 - task_id: kabumori-topic-learning-access-progress-and-swipe-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS on PR #94 exact head 97d374b48886ad33b61cd2288188d4b690e27a5c。375pt実測PASS、376/376 tests、root-level news detailでnative swipe parity解決、topic list 3-level/未読・学習済み/Settings分離を受入。PR #95と src/app/_layout.tsx が1ファイル重複し、H1がPR95 exact headをレビュー中のためmergeのみHOLD。追加G1実装不要。C1後に安全なmerge順/integrationを調整。
+- allocation: Final K1 PASS and merged after C1 coordination. PR #94 exact head 97d374b48886ad33b61cd2288188d4b690e27a5c squash-merged as d30a518731e976ab1c0e4e19e26f461a174a3c1c. Native swipe parity, topic list 3-level switch, local 未読/学習済み, 375/402 verification complete. G1 free.
 - recommended_model: Sonnet5（中）
 
 ## Claude G2
@@ -105,14 +105,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: review_required
+- status: ready
 - task_id: common-account-v1-phase2-service-enrollment-integration-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 accepts PASS_CANDIDATE for PR #95 exact head c06fac64, production/deploy 0. Mandatory H1 review allocated before merge because both apps' Auth/session bootstrap changes. PR #95 merge/deploy HOLD pending C1. G5 must not start Phase 3 yet.
+- allocation: C1 corrective on existing PR #95. Fix H1 R1-R5: atomic automatic-vs-explicit reactivation contract, one-use user/session-scoped re-enrollment intent, positive-ready push/notification gate, immutable session-bound request transport, strict RPC payload validation. Fresh-integrate on main containing PR #94 and preserve root news-detail registration. New forward migration candidate allowed; no production apply/deploy/EAS. Mandatory H1 re-review after corrected head.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
