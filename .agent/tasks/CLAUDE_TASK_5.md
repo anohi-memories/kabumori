@@ -3,9 +3,9 @@
 - task_id: common-account-v1-phase1-production-backfill-gate-20261006
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
-- production_mutation_window: **ACTIVE** — 2026-10-06, user explicitly approved the G5 common-account legacy backfill (frozen private.account_lifecycle_backfill(true) transaction only, then read-only postflight). Other slots: no production DB/Auth/permission write until this line says CLOSED.
+- status: review_required
+- next_owner: chatgpt
+- production_mutation_window: **CLOSED** — 2026-10-06 17:52 JST. G5 ran exactly the frozen private.account_lifecycle_backfill(true) transaction once (COMMITTED 16:55 JST; 5 common accounts, 3 legacy entitlements, 0 operations) and finished the read-only postflight; G5 performs no further production write.
 - priority: critical
 - start_code: G5
 - finish_code: K5
@@ -314,10 +314,92 @@ Recommended model: **Opus5.5（極高）**.
 ## Report
 
 - task_id: common-account-v1-phase1-production-backfill-gate-20261006
-- result: **BACKFILL_READY**。Phase A〜D は PASS、Phase E の適用パッケージは凍結済み。`backfill(true)` は実行していない。
-- production writes actually performed: **0**。
-  - 本番では read-only の確認を 1 回だけ実行した（runner の `status` と `check.sql`。後者は READ ONLY transaction で、最後は rollback）。
-  - backfill / deploy / Auth / Storage / OAuth / Vault / Cron / 実 X は 0。
+- result: **BACKFILL_APPLIED_PASS**（2026-10-06 16:55 JST に COMMITTED。read-only の postflight はすべて承認値と一致した）。
+- production writes actually performed（ユーザーの明示承認の範囲内）：
+  - 凍結済みの `apply.sql` を 1 回だけ実行した。1 transaction の中で `private.account_lifecycle_backfill(true)` を 1 回呼んだだけ。
+  - その結果：`common_accounts` 5 行、`service_entitlements` 3 行（いずれも insert）。lifecycle の version は trigger で更新された。
+  - それ以外の本番書き込みは 0：client の配線 / RLS の enforce / 削除 orchestrator / Auth / Storage / OAuth / Vault / Edge deploy / Cron / 実 X / 既存サービス行の変更はすべて 0。再実行・修復・rollback も 0。
+
+### 本番適用 — 2026-10-06（ユーザーの明示承認による）
+
+- 承認：ユーザーがチャットで、G5 共通アカウントの legacy backfill の本番適用を明示的に承認した。
+  - 手順は TASK どおり：fresh な mutex / state の確認 → fresh な dry-run → 関数の定義 / owner / ACL の再確認 → window を ACTIVE → 凍結済みの transaction だけを実行 → read-only の postflight → window を CLOSED。
+  - client の配線、RLS の enforce、削除 orchestrator、Auth / Storage / OAuth / Vault、Edge deploy、Cron、実 X は行わない。
+- mutex：
+  - fresh main（`1be32879`、その後 `2bbaeffe`）で確認した。どのスロットも window を開いておらず、G1 / G2 は ready、G3 は review_required、G4 / H1 / H2 は done。
+  - PR #93 は `b9cb6dcc` で main に入っていた。check / apply / proof / README は凍結した版と byte が一致。
+  - 着手マーカー `11e71aa6`。window の ACTIVE は `ccc39926`（16:5x JST、fresh な確認の後）。CLOSED は 17:52 JST。
+- fresh な確認（16:45 JST、read-only）：
+  - runner の `status` は EXACT / EXACT。
+  - `check.sql` の全 10 項目が、承認時（16:28）の確認と完全に同一：関数の定義ハッシュ・owner・SECURITY DEFINER・`search_path=""`・API ロールの EXECUTE 不可、dry-run 5 / 2 / 1、照合、PG 17.6。
+- 実行（16:54〜16:55 JST、operator が `.g5-backfill/operator.sh apply` で実行、`BACKFILL` を手入力、DB password は非表示で 1 回入力）：
+  - wrapper が固定・確認したもの：checkout `d9719dc6`（main の `b9cb6dcc` と同じファイル）、clean、migration / runner / check / apply の SHA。
+  - runner の `status` が EXACT/EXACT → `check.sql` の事前確認（16:28 と同一）→ `apply.sql`。
+  - `apply.sql` の中で：
+    - その場の plan が承認値と同じ。
+    - `result` は `applied: true`、`created_common_accounts 5`、`created_kabumori 2`、`created_x_autopost 1`、`skipped_account_not_active 0`。
+    - postcondition はすべて成立（account 5 = ログイン 5、全員 active、未作成 0、entitlement 3 は全件 active / legacy_backfill、evidence は activity 1 / profile のみ 1 / verified 1、admin に X は無い、auth-only 2 人に entitlement は無い、version = 1 + entitlement 数、operations 0、settings は不変）。
+    - 再度 false を実行して作成予定は 0。
+    - `COMMITTED={"operations": 0, "entitlements": 3, "common_accounts": 5}`。
+
+### read-only の postflight
+
+- `check.sql`（16:55 JST、READ ONLY）：
+  - account 5（全員 active）＝ auth.users 5。account の無いログイン 0。plan の行も distinct も 5。
+  - entitlement 3：`kabumori/active/legacy_backfill/kabumori_activity` 1、`kabumori/active/legacy_backfill/kabumori_profile_only` 1、`x_autopost/active/legacy_backfill/x_identity_verified` 1。それ以外の種類は 0（不明な service_key / source / evidence / status も無い）。
+  - dry-run の作成予定：common_accounts / kabumori / x_autopost とも 0。候補の分類（Kabumori 2、X 1、admin の X 除外 1、auth-only 2）は事前と同じ。
+  - lifecycle operations は 0（in_progress 0）。settings は `shadow` / `not_started` / epoch 1、registry は built-in の 3 行。
+  - 既存のサービス行の件数は不変（profiles 2、brands 5、memberships 2）。ledger は 75 行で不変。auth.users は 5 で、匿名 / 論理削除 / SSO / BAN 中はいずれも 0。
+- **runner の `status` が `schema=UNSAFE history=EXACT` を返した件の分類**（ブロッカーではないと確定した）：
+  - 原因：runner の pin には「適用直後の空の state（`accounts=0 entitlements=0 operations=0`）」が 10 番目の section として含まれている。backfill で件数が変わると、必ず UNSAFE になる。
+  - 証明：runner 自身の descriptor / semantic の SQL を、そのまま read-only で本番に流した（`operator.sh diag`、17:51 JST）。
+    - 10 section のうち 9（columns / constraints / indexes / relations / policies / triggers / table_acl / functions / function_acl）は pin と完全一致。スキーマ・RLS・ACL・関数は 1 つも変わっていない。
+    - `state` は `b11335df…`。これはローカルで同じ backfill をした後の値と完全一致し、内容は `settings=shadow/not_started/1 registry=…3 行 accounts=5 entitlements=3 operations=0`。
+    - semantic check（owner、overload、API ロールの membership、table / column / EXECUTE の実効権限、RLS）は 0 件。
+    - runner が数える既存オブジェクトの指紋は `ac4f83b4…` で、適用前と同一。
+  - 今後について：runner の `status` は foundation を入れた時点の確認用で、利用が始まった後は state の section のせいで UNSAFE と出る。今後の foundation 確認には diag の 9 section と semantic を使う（下の remaining に記載）。
+
+### TASK の postflight 要件との対応
+
+| 要件 | 結果 |
+|---|---|
+| common_accounts = 現在の Auth ログイン数 | 5 = 5 |
+| 重複する common account が無い | PK + 5 行 / 5 人、未作成 0 |
+| entitlement の合計が承認した候補数と一致 | 3 = Kabumori 2 + X 1 |
+| 全件 source = `legacy_backfill` | 3 / 3 |
+| legacy_evidence の内訳が dry-run と一致 | activity 1 / profile のみ 1 / verified 1 |
+| 作成した entitlement は status = active | 3 / 3 |
+| auth-only は account あり・entitlement なし | 2 人（apply の postcondition で確認） |
+| 除外した admin に X entitlement を作っていない | 0 |
+| 不明な service_key / source / evidence / status が無い | 0 |
+| lifecycle operation を作っていない | 0 |
+| 既存のサービス行を変えていない | profiles / brands / memberships の件数は不変。関数は新しい表だけに書く |
+| Auth / Storage / OAuth / Vault / Edge / Cron の変更が無い | 0（実行したのは transaction 1 つだけ） |
+| `backfill(false)` を再実行して作成予定が 0 | 0 / 0 / 0 |
+| production_mutation_window を CLOSED に | 17:52 JST |
+
+### 適用後の changed_files / remaining / next
+
+- changed_files：この Report と header だけ（`.agent/tasks/CLAUDE_TASK_5.md`）。source の変更は 0（PR #93 は既に main に入っている）。
+- deploy：0。backfill：1 回（上記のとおり）。
+- 証跡（未追跡、G5 worktree `/Users/yuya/Developer/kabumori-g5-backfill/.g5-backfill/`）：
+  - `logs/` に status / precheck / apply / status-after / readback / diag の各ログ。いずれも集計値だけで、password も PII も含まない。
+  - `diag/` に、runner の descriptor / semantic の SQL と、比較に使った pin・ローカルの値。
+- remaining_issues：
+  - runner の `status` は、今後は `UNSAFE`（state section が原因）と出る。foundation の確認には diag（9 section + semantic）を使うよう、runbook に追記するのが望ましい（小さな文書の task。今回は行っていない）。
+  - admin の X footprint（自分専用 workspace、接続は pending）は、entitlement に対応しないまま残る。設計どおりで、削除判定では `ADMIN_ACCOUNT` で止まる。
+  - Phase 2 / 3（creator / 削除経路の配線、enforcing guard、orchestrator）は未着手。
+  - 新しいログイン・profile・workspace は、配線ができるまで自動では entitlement を持たない。必要なら、配線までの間に read-only の `backfill(false)` で差分を観察する。
+- safety_checks：
+  - 承認範囲外の本番書き込みは 0。PII の出力 0。Vault の値は読んでいない。password は Claude が扱っていない。
+  - 他スロットのファイルには触れていない。G5 の window を開いている間、他スロットの本番変更は無かった。
+- next_recommendation：
+  - K5。追加の Codex review は不要と考える（レビュー済みの関数だけを使い、fail-closed の transaction で、postflight が承認値と完全一致したため）。
+  - 次は Phase 2（Kabumori の `ensure_my_profile` と X onboarding を lifecycle の start RPC につなぐ配線）の設計 / 実装 task を推奨する。
+
+### 以前の結果（履歴として保持）
+
+- 16:28 JST 時点：**BACKFILL_READY**（以下の Phase A〜E）。この時点の本番書き込みは 0。
 - fresh main：
   - 開始時は `5f37d63e`。着手マーカー `7bf806d0`。Report の基点は `d2e148c3`。
   - main 上の migration SHA は `e632214b…cde3`。runner（`50e08e1d` で main に入ったもの）の SHA は `86c1a3ed…` で、本番 apply 時のものと同一。
