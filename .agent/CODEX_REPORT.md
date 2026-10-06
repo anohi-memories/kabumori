@@ -1,3 +1,15 @@
+# H1 — PR #95 corrective Phase 2 service-enrollment re-review — 2026-10-06
+
+- task_id: common-account-v1-phase2-service-enrollment-corrective-rereview-20261006
+- status: Pending.
+- target_pr: 95
+- target_head: dd065e16f64a37582f73d05f1ab57ff7d276a5f7
+- recommended_model: Sol（高）
+
+---
+
+# Previous H1 report history — preserved
+
 # Final C1 — PR #95 review accepted / corrections required
 
 - C1 accepts H1 verdict **CHANGES REQUIRED** for exact head `c06fac6492708331b6ba816122c9852cdcea73e7`.
