@@ -1,3 +1,483 @@
+# Claude Task 1 — CURRENT TASK
+
+- task_id: kabumori-topic-learning-access-progress-and-swipe-20261006
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- purpose: 実機確認で判明した戻るジェスチャー不一致を解消し、トピック一覧をSettings依存の単一レベル閲覧から「初級/中級/上級を自由に切替できる学習一覧」へ拡張し、端末内の既読/学習済み表示を追加する。
+
+## User requirement — canonical
+
+The user verified PR #90 on a real iPhone and requested:
+
+1. **Swipe-back must behave exactly like the visible `‹ 戻る` button.**
+   - entered detail from Home -> both button and swipe return Home.
+   - entered detail from list -> both button and swipe return that list.
+   - applies to topic detail and important-news detail.
+
+2. **Topic list must have its own 初級 / 中級 / 上級 switcher.**
+   - Settings level is only the preference for what Home shows.
+   - detail and list must provide easy access to every level without changing Home preference.
+
+3. **Topic list must show whether a topic has been read/learned.**
+   - user should immediately see learned vs unread topics.
+
+## Allocation / safety snapshot
+
+- allocated_at: 2026-10-06 JST
+- fresh main at allocation: `9c6f71bf00557c3c9b9ddc0a4198702600731660`
+- previous G1 task `kabumori-detail-navigation-topic-level-switch-20261006`: Final K1 PASS / PR #90 merged / done / G1 free.
+- fresh open-PR check: **0 overlap** across the target navigation/topic files with all currently open PRs.
+- G5 may have an unrelated production mutation window, but this G1 task is source-only, native UI/local storage only, with **production mutation = 0** and an independent worktree. Do not touch G5/G2/G3/G4 workstreams.
+
+## A. Swipe-back parity — mandatory
+
+### Existing canonical button semantics
+
+Topic detail:
+- `from=home` -> `‹ 戻る` goes Home.
+- `from=topics` -> `‹ 戻る` goes `/topics`.
+- unknown/cold deep link -> Home.
+- right action always `トピック一覧 ›`.
+
+News detail:
+- `from=home` -> `‹ 戻る` goes Home.
+- `from=news` -> `‹ 戻る` goes `/news`.
+- unknown/cold deep link -> Home.
+- right action always `ニュース一覧 ›`.
+
+### Required gesture result
+
+The native iOS back swipe must resolve to the **same destination as the left button for the same origin**.
+
+Required cases:
+- Home -> topic detail -> swipe => Home
+- topics -> topic detail -> swipe => topics
+- Home -> news detail -> swipe => Home
+- news list -> news detail -> swipe => news list
+- unknown/deep-link fallback: if a swipe-back route exists, it must not contradict the explicit fallback model
+
+Do not accept the current PR #90 behavior where Home-origin news detail's button returns Home but native edge swipe returns the news list.
+
+### Implementation guidance
+
+Do not simply disable swipe for Home-origin details. The user explicitly wants swipe to work.
+
+Choose the safest native-compatible mechanism after inspecting Expo Router / React Navigation behavior in this repo. Candidate approaches may include:
+- intercept/prevent native removal/back action and redirect using the explicit `from` origin;
+- restructure only the detail presentation/navigation boundary if that is materially safer;
+- another minimal approach proven by Simulator.
+
+Do **not**:
+- add a brittle custom full-screen pan gesture unless native-stack interception cannot satisfy the requirement;
+- add a new dependency just for this;
+- infer origin from stack shape;
+- regress the explicit `from` route-param contract.
+
+If native gesture interception has platform-specific limitations, document them and prove the chosen implementation with real Simulator swipes.
+
+### Topic detail
+
+Topic detail is a root Stack route and may already naturally match origin in common cases. Verify it rather than assuming.
+
+### News detail
+
+This is the known mismatch:
+Home-origin news detail currently lives above the nested news index, so a native pop returns list.
+
+Fix this so the actual edge swipe destination matches `backFromNewsDetail(..., from)`.
+
+Also ensure:
+- header left button remains `‹ 戻る`
+- header right remains `ニュース一覧 ›`
+- no double navigation
+- swipe does not leave stale detail behind when reopening News tab
+
+## B. Topic list level switcher
+
+### Product rule
+
+Settings level means only:
+**“Which level does Home's 今日のトピック show?”**
+
+It must no longer mean:
+**“Which level can the topic list browse?”**
+
+### List UX
+
+Add a compact 3-way selector near the top of `/topics`, consistent with topic detail:
+- 初級
+- 中級
+- 上級
+
+Use the same level color family where practical:
+- beginner green
+- intermediate blue
+- advanced lavender
+
+At 375pt all three fit on one row.
+
+### Initial level
+
+When the topic list is first opened without an explicit list-level request:
+- read the Settings/Home preference once and use it as the **initial selected list level only**.
+
+After that:
+- switching the list level is local to the list screen;
+- it must never call `writeTopicLevel`;
+- it must never modify `kabumori:topic-level:v1`.
+
+### Detail -> list continuity
+
+When the user taps `トピック一覧 ›` from a detail:
+- open/reveal the list with the **currently viewed detail level selected**.
+- this is navigation context only, not a Settings write.
+
+When returning via contextual `戻る` to an already-existing topics screen:
+- preserve that list screen's current selected level/state if possible.
+- do not unexpectedly force it to the detail's level unless the user explicitly used the right-side `トピック一覧 ›` action that requests that level.
+
+Choose a small route param such as `level=beginner|intermediate|advanced` for explicit list selection if useful, but avoid conflict with the existing detail route semantics.
+
+### Fetch behavior
+
+Current list fetches 14 dates for one level.
+
+Do **not** eagerly fetch all 3 levels.
+
+Preferred:
+- fetch only selected level;
+- maintain in-memory per-screen state/cache per level for loaded rows, loaded-day count, error;
+- switching to a never-loaded level loads its first page;
+- switching back to a previously loaded level restores instantly without refetching already loaded dates;
+- `さらに過去...` extends only the currently selected level;
+- protect against race conditions where a slow old-level request appends into the newly selected level.
+
+Keep:
+- PAGE_DAYS = 14 unless a measured reason to change;
+- MAX_DAYS = 98 unless a measured reason to change;
+- same deterministic `fetchDailyTopic(level,date)`;
+- no new backend endpoint/RPC.
+
+### Copy update
+
+The current text:
+`レベルは設定から変更できます。`
+becomes misleading.
+
+Replace with clear copy conveying:
+- this list can switch levels here;
+- Settings controls the Home display level only.
+
+Keep it concise and natural Japanese.
+
+## C. Read / learned state
+
+### v1 scope
+
+Implement **local-device read state only**.
+
+No DB, Supabase table, RPC, account sync or migration in this task.
+
+Reason:
+- fast and low-risk;
+- immediately useful;
+- can be upgraded to account-synced learning progress later if product needs it.
+
+### Marking rule
+
+A topic becomes “read/learned” only after its detail has **successfully resolved and is actually displayed**.
+
+Mark as read when:
+- direct Home/list detail load reaches valid `status=ok`;
+- in-detail level switch successfully displays a new target topic.
+
+Do not mark:
+- loading
+- error
+- id mismatch
+- failed level switch
+
+### Storage
+
+Use a dedicated module, e.g. `src/lib/topic-read-storage.ts`.
+
+Use the existing AsyncStorage dependency; no new package.
+
+Suggested key:
+`kabumori:topic-read:v1`
+
+Choose a stable content identity after inspecting topic identity semantics.
+
+Preferred behavior:
+- if `topic.id` is stable for the same learning item across dates, use it (optionally namespaced by level).
+- if the RPC id is a date-instance identity, use a stable content key such as `level + canonical title` so learning the same topic once does not look unread just because it appears on another date.
+- document which identity was chosen and prove it with tests/inspection.
+
+The user intent is **learning progress**, not merely “this exact dated row was tapped”.
+
+Storage requirements:
+- corrupt/missing storage => safely treat as empty
+- deduplicate
+- bounded small data
+- no crash if write fails; UI can remain functional
+
+### List UI
+
+Each topic row must clearly communicate state without making the list noisy.
+
+Preferred:
+- unread: small neutral `未読` indicator/dot
+- learned: calm green check / `学習済み`
+
+Do not use large badges that compete with the topic title.
+
+Accessibility labels should include the state.
+
+### Refresh behavior
+
+When returning from detail to topics:
+- read-state UI must refresh immediately (e.g. useFocusEffect or equivalent).
+- the row just opened should show learned without restarting the app.
+
+If a detail-level switch marks multiple level topics as read, the corresponding rows should show learned when that level is viewed in the list.
+
+### No manual reset in this task
+
+Do not add:
+- “mark unread”
+- progress reset
+- completion percentages
+- streaks
+- account sync
+
+Those can be future enhancements.
+
+## D. Interaction between Settings, list, detail
+
+The final product contract:
+
+### Home
+- reads Settings topic level
+- shows one level
+- Settings remains the only writer of Home level preference
+
+### Topic list
+- starts from Settings level only as an initial default when no explicit list-level param is given
+- freely switches 初級/中級/上級
+- does not change Settings
+- remembers loaded list data in-memory while screen stays alive
+- shows read/learned state
+
+### Topic detail
+- freely switches same-date 初級/中級/上級
+- does not change Settings
+- marks successfully displayed topics as learned
+- right-side list action opens list at the currently viewed level
+- contextual button Back + native swipe both return to the same origin
+
+Pin this contract in tests.
+
+## E. News behavior
+
+Only navigation/gesture parity changes for news.
+
+Do not add read-state to news.
+
+Do not change:
+- feed
+- news importance
+- source/app copy
+- alert settings
+- RPC/access boundary
+- Home split logic
+
+## Primary scope
+
+Expected:
+- `src/app/topics.tsx`
+- `src/app/topic-detail.tsx`
+- `src/app/_layout.tsx` only if root-stack gesture handling requires it
+- `src/app/(tabs)/news/_layout.tsx`
+- `src/app/(tabs)/news/[id].tsx` only if needed
+- `src/lib/detail-navigation.ts`
+- new `src/lib/topic-read-storage.ts` (or equivalent)
+- focused tests
+
+Allowed:
+- `src/lib/topic-history.ts` for pure list state helpers
+- `src/lib/topic-detail-switch.ts` for route/list level continuity
+- Home/list entry files only if a route param must be added or preserved
+
+Avoid unrelated UI/backend files.
+
+## Required tests
+
+### Swipe/back parity
+Pin:
+- topic Home-origin button target == swipe/back removal target == Home
+- topic topics-origin == topics
+- news Home-origin == Home
+- news news-origin == news list
+- unknown fallback safe
+- right-side list action remains independent
+
+Where full native swipe itself cannot be unit tested, unit-test the interception/removal decision and verify actual swipes in Simulator.
+
+### List level switch
+Pin:
+- initial list level from Settings when no explicit level param
+- explicit list-level param wins for that navigation
+- switching does not write Settings
+- only selected level is fetched
+- correct same date sequence per level
+- switching back uses cached rows
+- load more extends only active level
+- slow previous-level result cannot pollute new level
+- current list selection survives normal detail Back path where screen instance remains
+- detail right-side list action requests current detail level
+
+### Read state
+Pin:
+- successful valid detail => mark read
+- successful in-detail level switch => mark target read
+- mismatch/error/failed switch => no mark
+- corrupt storage => empty/safe
+- duplicate writes => one identity
+- list learned/unread mapping
+- focus return refreshes read state
+- storage key/version pinned
+- no Supabase/network dependency in read-state module
+
+### Settings separation
+Pin:
+- detail imports/writes no Home preference writer
+- list switching writes no Home preference
+- Home still reads Settings as before
+- only Settings-side code writes Home level preference
+
+## Simulator / real interaction verification
+
+Use restored iOS Simulator.
+
+Required:
+- 402pt and 375pt topic list selector
+- switch list beginner -> intermediate -> advanced
+- open unread row -> detail -> contextual Back -> same list -> row now learned
+- detail right `トピック一覧 ›` opens list at the current detail level
+- Home topic -> detail -> native edge swipe => Home
+- topics -> detail -> native edge swipe => topics
+- Home market news -> detail -> native edge swipe => Home
+- news list -> detail -> native edge swipe => news list
+- left button matches each of those swipe destinations
+- no stale news detail after returning Home
+- no clipping / duplicated header / unexpected tab switch
+
+Capture focused screenshots under `docs/ui-review/`:
+- topic list 402pt showing level selector + mixed learned/unread
+- topic list 375pt
+- optional navigation screenshot if useful
+
+## Test/check commands
+
+Run:
+- focused navigation/list/read-state tests
+- full `deno test tests/app/`
+- tsc changed scope
+- Expo config
+- web export if supported
+- `git diff --check`
+
+No EAS build.
+
+## Explicit non-scope
+
+Do NOT change:
+- DB/schema/migration/RPC/RLS/Auth
+- Edge Functions
+- AI/LLM
+- production
+- EAS/native signing/plugins
+- topic catalog editorial content
+- Home report/news behavior
+- X/social-mobile
+- common-account
+- Settings meaning/writer except copy only if proven necessary
+
+Production mutation: **0**.
+EAS build expected: **0**.
+
+## Worktree / Mac safety
+
+New G1 task:
+1. read `PROJECT_RULES.md`
+2. read `.agent/ORCHESTRATION.md`
+3. read `.agent/CURRENT_STATE.md`
+4. read this TASK
+5. clean base: `/Users/yuya/Developer/kabumori-fresh`
+6. fresh `origin/main`
+7. fresh open-PR overlap check
+8. `git worktree list`
+9. independent G1 worktree
+
+Recommended branch:
+`claude/g1-topic-learning-access-progress-swipe-20261006`
+
+Do not use/reset/prune protected old worktrees.
+Do not touch other slot dev servers or uncommitted files.
+
+## Completion criteria
+
+PASS candidate only if:
+- button and native swipe have the same contextual return target for topic and news details
+- topic list can switch all 3 levels without changing Home Settings
+- list fetch/cache/race behavior is safe
+- learned/unread state persists locally and refreshes on return
+- detail switching marks learned only on success
+- detail -> list preserves current viewed level intentionally
+- accepted learning-note UI remains intact
+- no backend/production/EAS changes
+- 375/402 visual checks pass
+- tests green
+- focused PR only
+
+## Delivery
+
+Create one focused PR.
+Do not self-merge.
+No production deploy.
+
+Report:
+- task_id
+- fresh main SHA
+- worktree isolation
+- swipe parity implementation and proof
+- topic-list level architecture/cache behavior
+- Settings separation proof
+- read identity choice + storage semantics
+- read marking/refresh behavior
+- changed_files
+- 402/375 findings
+- tests/checks
+- PR/head
+- EAS build created: no
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation: 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+---
+
 # USER NAVIGATION DECISION — SUPERSEDES PRIOR PLACEMENT CORRECTIONS
 
 This section is the newest canonical navigation requirement and **supersedes any earlier instruction in this TASK that says left=list / right=Home or left=Home / right=list unconditionally**.
