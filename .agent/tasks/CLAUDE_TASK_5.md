@@ -1,3 +1,122 @@
+# C1 CORRECTIVE ROUND 2 — PR #95 same-user session identity + queued-task cancellation
+
+This is the newest canonical instruction for G5 and supersedes the previous C1 corrective section only where it differs.
+
+- task_id: `common-account-v1-phase2-service-enrollment-integration-20261006`
+- status: ready
+- next_owner: claude
+- target PR: **#95**, continue updating the existing PR.
+- reviewed head requiring correction: `dd065e16f64a37582f73d05f1ab57ff7d276a5f7`
+- recommended model: **Opus5.5（極高）**
+- production mutation / migration apply / deploy / EAS / Phase3: **forbidden**
+
+## What already passed — preserve exactly
+
+Do not reopen or weaken these accepted corrections:
+- R1 server transaction semantics: automatic start never reactivates ended; explicit reactivation is separate and lifecycle_version-bound.
+- R5 strict canonical response validation fail-closed.
+- captured immutable Authorization transport; no mutable singleton current-token substitution.
+- cross-user A -> B intent isolation and double-tap protections already added.
+- Kabumori positive-ready gating for the original retry-pending case.
+- PR #94 root news-detail/navigation behavior.
+- X login/service enrollment remains separate from posting OAuth/workspace/credential/publish authorization.
+
+The new forward migration remains source-only and **must not be applied to production** in this task.
+
+## S1 P2 — bind readiness/consent/cache to a real login-session identity
+
+Current remaining defect:
+- request/cache/view identity is effectively `userId` only;
+- user A1 can explicitly re-enroll, then establish a fresh Supabase login A2 for the same user before A1 resolves;
+- A1's old explicit promise/result can be adopted by A2 and mark A2 service-ready without A2 action.
+
+Required correction:
+1. Derive and validate a stable **login-session identity** for each accepted Supabase session, preferably JWT `session_id` if available and valid.
+2. Context identity must include at least:
+   - userId;
+   - stable login/session id;
+   - local request/generation where needed.
+3. Key/validate:
+   - single-flight cache;
+   - pending automatic enrollment;
+   - explicit reactivation consent/request;
+   - returned view/result;
+   - Kabumori service-ready/serviceSession;
+   - X gate ready/open state
+   against that session context, not userId alone.
+4. A token refresh inside the **same** login session should not unnecessarily restart enrollment.
+5. A truly new same-user session must:
+   - invalidate/abort pre-dispatch old work where possible;
+   - not reuse an older explicit reactivation promise or consent;
+   - ignore older already-sent request results for UI/readiness;
+   - require its own valid state/action where contract requires.
+6. Do not key solely on access_token.
+7. Do not log or persist access tokens/JWTs/session identifiers beyond what is safely required in ephemeral runtime state.
+
+Mandatory regression tests:
+- X: A1 ended -> explicit tap -> hold response -> same user A2 new session -> release A1 => A2 must not open ready.
+- Kabumori: same scenario through actual AuthProvider/lib/auth path => A2 serviceSession must remain not-ready until A2's own valid flow.
+- sign-out then same-user fresh login variant.
+- recovery/new-session variant where applicable.
+- same-login token refresh control must preserve safe single-flight/idempotence.
+
+## S2 P2 — cancel queued X automatic work before dispatch
+
+Current remaining defect:
+- X effect schedules a microtask;
+- cleanup/unmount/sign-out can happen before the microtask runs;
+- queued task then calls `enrollment.ensure()` before consulting cancellation, resurrecting state and dispatching an old-user automatic start.
+
+Required correction:
+1. Before entering `enrollment.ensure()` or any transport dispatch from queued/effect work, verify:
+   - effect is not cancelled;
+   - gate is still mounted/current;
+   - user + stable session identity + request generation are still current.
+2. Cleanup/sign-out/user/session change/recovery/superseding effect must invalidate queued **unsent** work, not only already-created in-flight entries.
+3. Do not allow obsolete queued work to recreate singleton gate/cache state after reset.
+4. Preserve existing behavior for already-sent requests: they may finish server-side under their captured credential, but stale results must not certify the new/current session.
+
+Mandatory regression tests:
+- render/commit X gate, unmount before queued microtask flush -> **zero** enrollment request.
+- supersede effect/session before dispatch -> obsolete task sends zero.
+- sign-out before dispatch -> zero.
+- existing in-flight abort/result suppression still passes.
+- same-session normal mount still dispatches exactly once.
+
+## Scope / safety
+
+- Keep source changes as narrow as possible around session-context identity, cache/gate generation and queued-effect cancellation.
+- Do not change deletion/enforcement/producer/RLS/Auth hard-delete/Storage/OAuth/Vault/Cron/X publish behavior.
+- Do not apply the new migration.
+- No production access/write, deploy, EAS or real provider call.
+- Fresh-integrate against current main before final report; preserve PR #94 and other merged work.
+- Re-run relevant prior R1-R5 tests to prove no regression.
+
+## Completion / K5
+
+Return:
+- exact new PR #95 head;
+- S1 disposition;
+- S2 disposition;
+- same-session refresh disposition;
+- R1-R5 regression disposition;
+- tests;
+- changed_files;
+- production mutation/deploy/EAS = 0;
+- remaining issues;
+- next recommendation.
+
+At completion:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K5.
+
+A corrected PASS_CANDIDATE must receive another focused H1 exact-head re-review before merge.
+
+Recommended model: **Opus5.5（極高）**.
+
+---
+
 # C1 CORRECTIVE — PR #95 security/session enrollment hardening
 
 This is the newest canonical instruction for G5 and supersedes the prior PASS_CANDIDATE disposition.
