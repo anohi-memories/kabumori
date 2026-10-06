@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase1-production-backfill-gate-20261006
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: in_progress
+- next_owner: claude
 - priority: critical
 - start_code: G5
 - finish_code: K5
