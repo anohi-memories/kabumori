@@ -72,13 +72,14 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - task_id: x-social-mobile-pr81-production-apply-continuation-20261006
 - start_code: G3
 - finish_code: K3
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: PR76 production prerequisite is now satisfied. Resume PR81 with fresh same-day read-only Gate A/B, freeze the exact already-reviewed two-file atomic package, then STOP for fresh explicit production apply approval. After approval only: apply candidate+hardening+exact two history rows in one outer psql transaction and separate-session read-back. No Edge deploy. PR78 resumes only after exact schema/read-back PASS. Production mutex with G2/G5 mandatory. Recommended Opus5.5（高）.
+- allocation: PR81 continuation may continue read-only Gate A/B/C only. Production write is NOT authorized and must STOP before mutation while G5 common-account production apply decision is pending. Production mutex with G5/G2 mandatory. Recommended Opus5.5（高）.
+- recommended_model: Opus5.5（高）
 
 ## Claude G4
 - owner: claude
@@ -94,14 +95,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: review_required
 - task_id: common-account-v1-phase1-production-migration-gate-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: G4 production window is CLOSED. Resume the same G5 only for a fresh all-9 Phase A read-only preflight and baseline refresh. Production migration write is still NOT authorized. On fresh PASS, STOP again for explicit mutation approval. No backfill/deploy/Auth/Storage/OAuth/Vault/Cron/real X.
+- allocation: Final K5 accepts fresh PREFLIGHT_READY. G4-closed Phase A refresh passed 9/9; only expected PR76 ledger/function deltas observed; production writes remain 0. G5 is now waiting only for explicit user approval of the exact common-account production migration apply. G3 may continue read-only only and must not mutate production before this decision.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
