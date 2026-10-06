@@ -1,4 +1,5 @@
 import type { ImportantNewsCategory, IncomingNewsCandidate } from "./news_candidate_logic.ts";
+import { isUnreadableOfficialUrl } from "./jp_official_enrichment.ts";
 import {
   classifyJpOfficialTitle,
   isJpOfficialSourceId,
@@ -175,6 +176,11 @@ export function selectJpOfficialSignals(
       drop("host_not_allowed");
       continue;
     }
+    // A link that can never be read as HTML (PDF / XML / spreadsheet) cannot be enriched: known permanent, no HTTP.
+    if (config.enrich && isUnreadableOfficialUrl(sourceUrl)) {
+      drop("unsupported_url");
+      continue;
+    }
     if (seenUrls.has(sourceUrl)) {
       drop("duplicate_in_batch");
       continue;
@@ -206,7 +212,10 @@ export function toJpOfficialIncomingCandidate(selected: JpOfficialSelected, body
     bodySummary,
     companyName: null,
     companyCode: null,
-    entityKey: `jp_official:${selected.sourceId}`,
+    // The stored title-duplicate rule matches on (entity_key, normalised title) within 24h. The 30-minute bucket in the
+    // key keeps that rule to "same release, published at about the same time": a repeated routine title a few hours
+    // later (a second missile directive, a second cabinet summary) is a separate event and must not be suppressed.
+    entityKey: `jp_official:${selected.sourceId}:${Math.floor(Date.parse(selected.publishedAt) / (30 * 60 * 1000))}`,
     category: selected.category,
     publishedAt: selected.publishedAt,
   };
