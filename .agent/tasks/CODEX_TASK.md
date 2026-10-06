@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase2-session-identity-final-rereview-20261007
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - type: focused auth/session cancellation security re-review
@@ -46,6 +46,16 @@ PASS authorizes only C1 source merge/readiness judgment. It does not authorize p
 Write the result to `.agent/CODEX_REPORT.md`, set H1 status `review_required`, next_owner `chatgpt`, and STOP for C1.
 
 Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-07
+
+- Exact reviewed PR #95 head: `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`; OPEN/unmerged at fresh read-back.
+- Verdict: **CHANGES REQUIRED**. S1's old same-user cache reuse is corrected, but one P2 Kabumori auth-event/deferred-task window still admits stale A1 readiness after a changed-login/sign-out notification. S2 X queued cancellation is corrected/PASS.
+- Shipped tests: Kabumori 390, AuthProvider 10, X 221; local DB start-intent 10 / Phase1 20 PASS markers; migration invariants 10; both web exports and X typecheck/lint PASS.
+- Independent actual-source probes: former S1/S2 plus same-session controls 5 PASS; new timing variants 3 FAIL, one root cause. No product fix performed in H1.
+- H1 changed only this TASK and `.agent/CODEX_REPORT.md`; production access/mutation, merge, deploy and native release = 0.
+- C1: hold PR95; return the focused synchronous auth-owner/readiness fencing correction and the before-deferred-task regression to G5. Preserve same-login refresh single-flight and already-corrected S2. Recommended corrective re-review: **Sol（高）**.
+- STOP for C1; detailed evidence and minimum correction are in the current H1 Report.
 
 ---
 
