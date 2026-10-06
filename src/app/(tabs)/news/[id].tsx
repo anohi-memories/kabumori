@@ -1,14 +1,31 @@
-import { useCallback, useState } from 'react';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams, useNavigation } from 'expo-router';
+// usePreventRemove is part of the bundled react-navigation core but is not re-exported from the package root.
+import { usePreventRemove } from 'expo-router/build/react-navigation/core';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { goNewsList } from '@/lib/detail-navigation';
+import { backFromNewsDetail, decideDetailRemoval, goNewsList } from '@/lib/detail-navigation';
 import { fetchMyImportantNewsItem, ImportantStockNews } from '@/lib/important-news';
 import { categoryLabels, formatNewsTime, importanceLabel, targetLabel } from '@/lib/news-labels';
 import { buildNewsPresentation } from '@/lib/news-presentation';
 
 export default function ImportantNewsDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
+  const navigation = useNavigation();
+  // Edge-swipe parity with the header's 「‹ 戻る」. The swipe would natively pop to whatever sits below this
+  // screen (the news list when it was opened from Home), so the removal is prevented and a back gesture is
+  // re-resolved through the same origin-based function the button uses. Anything else (this screen's own
+  // explicit navigation) passes through; the short window is a guard against ever redirecting our own
+  // redirect.
+  const redirectingUntil = useRef(0);
+  usePreventRemove(true, ({ data }) => {
+    if (decideDetailRemoval(data.action.type) === 'redirect-to-back' && Date.now() >= redirectingUntil.current) {
+      redirectingUntil.current = Date.now() + 1000;
+      backFromNewsDetail(router, from);
+      return;
+    }
+    navigation.dispatch(data.action);
+  });
   const [item, setItem] = useState<ImportantStockNews | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

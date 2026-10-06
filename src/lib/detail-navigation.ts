@@ -12,6 +12,8 @@
 // straight back to it (no stacked copies, no Home <-> detail <-> list loop); if it does not (a deep link,
 // a notification), it replaces the current screen with the target instead of failing.
 
+import type { TopicLevel } from './home-topic';
+
 export const HOME_ROUTE = '/';
 export const TOPICS_ROUTE = '/topics';
 export const NEWS_LIST_ROUTE = '/news';
@@ -37,7 +39,19 @@ export function newsBackTarget(from: unknown): 'home' | 'news' {
   return parseDetailOrigin(from) === 'news' ? 'news' : 'home';
 }
 
-export type DismissRouter = { dismissTo(href: '/' | '/topics' | '/news'): void };
+/**
+ * The topic list can be opened on a specific level (the level currently viewed in a detail). `req` is a
+ * fresh request id: asking for the same level twice is still a new request, so the list applies it again.
+ */
+export type TopicListHref = { pathname: '/topics'; params: { level: TopicLevel; req: string } };
+
+export type DismissHref = '/' | '/topics' | '/news' | TopicListHref;
+
+export type DismissRouter = { dismissTo(href: DismissHref): void };
+
+export function topicListRouteParams(level: TopicLevel, now: number = Date.now()): TopicListHref['params'] {
+  return { level, req: String(now) };
+}
 
 export type NewsHomeRouter = {
   canDismiss(): boolean;
@@ -49,8 +63,14 @@ export function goHome(router: DismissRouter): void {
   router.dismissTo(HOME_ROUTE);
 }
 
-export function goTopicList(router: DismissRouter): void {
-  router.dismissTo(TOPICS_ROUTE);
+/**
+ * The topic list. With a level it opens (or reveals) the list on that level -- the detail's right-hand
+ * 「トピック一覧 ›」 passes the level being viewed. Without one the list is revealed as it is, keeping
+ * whatever level and loaded rows it already has (the origin-based 戻る uses this form).
+ */
+export function goTopicList(router: DismissRouter, level?: TopicLevel | null): void {
+  if (level) router.dismissTo({ pathname: TOPICS_ROUTE, params: topicListRouteParams(level) });
+  else router.dismissTo(TOPICS_ROUTE);
 }
 
 export function goNewsList(router: DismissRouter): void {
@@ -76,4 +96,23 @@ export function backFromTopicDetail(router: DismissRouter, from: unknown): void 
 export function backFromNewsDetail(router: DismissRouter & NewsHomeRouter, from: unknown): void {
   if (newsBackTarget(from) === 'news') goNewsList(router);
   else goHomeFromNews(router);
+}
+
+// ---- native back gesture parity -------------------------------------------------------------------------
+// The iOS edge swipe pops the screen natively, so on its own it goes to whatever sits below in the stack
+// (the news list for a Home-origin news detail), which can differ from 「‹ 戻る」. The detail therefore
+// prevents the native removal and re-resolves it through the same origin-based function the button uses.
+// Only a back gesture / back action is redirected; the screen's own explicit navigation (POP_TO, POP_TO_TOP,
+// NAVIGATE, REPLACE ...) must pass through untouched or it would be caught in a loop.
+
+/** Navigation action types produced by an edge swipe (POP) or a back action (GO_BACK). */
+export const NATIVE_BACK_ACTION_TYPES: readonly string[] = ['POP', 'GO_BACK'];
+
+export function isNativeBackAction(actionType: unknown): boolean {
+  return typeof actionType === 'string' && NATIVE_BACK_ACTION_TYPES.includes(actionType);
+}
+
+/** What the detail does with a removal it was asked to allow: redirect a back gesture, let anything else pass. */
+export function decideDetailRemoval(actionType: unknown): 'redirect-to-back' | 'allow' {
+  return isNativeBackAction(actionType) ? 'redirect-to-back' : 'allow';
 }

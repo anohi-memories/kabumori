@@ -27,6 +27,7 @@ test("rendering the learning content makes no network, AI or database call of it
   assert.deepEqual(
     [...new Set(imports)].sort(),
     [
+      "from '@/components/level-switcher'",
       "from '@/constants/kabumori-theme'",
       "from '@/lib/daily-topic'",
       "from '@/lib/detail-navigation'",
@@ -35,6 +36,7 @@ test("rendering the learning content makes no network, AI or database call of it
       "from '@/lib/topic-detail-presentation'",
       "from '@/lib/topic-detail-switch'",
       "from '@/lib/topic-history'",
+      "from '@/lib/topic-read-storage'",
       "from 'expo-image'",
       "from 'expo-router'",
       "from 'react'",
@@ -62,7 +64,7 @@ test("reading order: destinations -> notebook label -> level selector -> Hero (b
   const order = [
     "styles.navRow",
     'accessibilityLabel="かぶモリ学習ノート"',
-    "styles.switcher",
+    "<LevelSwitcher",
     "styles.hero,",
     "TOPIC_LEVEL_LABEL[topic.level]",
     "{topic.category}",
