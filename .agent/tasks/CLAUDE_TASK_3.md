@@ -3,7 +3,7 @@
 - task_id: x-social-mobile-ai-consult-v1-fresh-integration-20261006
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: highest
 - recommended_model: Opus5.5（高）
