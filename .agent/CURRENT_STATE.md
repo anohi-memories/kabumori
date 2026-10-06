@@ -1,3 +1,23 @@
+## Final K2 — PR #87 production deploy PARTIAL PASS / close observation next
+
+- verdict: **PARTIAL PASS, safety stop accepted**.
+- `market-report-analysis` production deploy completed exactly:
+  - v23 -> **v24**
+  - ACTIVE / verify_jwt=false
+  - downloaded production import graph matched fresh main **11/11 byte-identical**
+  - PR #87 editorial-points logic is present.
+- `personalized-reports` was **not deployed**. G2 correctly stopped because current main contains older undeployed PR #43/#67 behavior in the same import graph, including legacy-path delivery logic outside PR #87's reviewed rollout scope.
+- this hold is not a PR #87 failure. With app gate OFF, the new `market_detail.points_ja` path is not yet needed for current delivery.
+- app_enabled=false / x_enabled=false before and after; relevant 8 crons unchanged; 20 unrelated Edge Functions unchanged.
+- production mutation performed: exactly one Edge deploy, `market-report-analysis` v24.
+- manual report/retry=0; X/notification=0; DB/RPC/migration/Cron/gate/Auth/Vault/EAS changes=0.
+- production mutation window CLOSED at 14:34 JST.
+- no Codex review required: deployed target is the exact already-reviewed source and post-deploy read-back is byte exact.
+- next G2: `kabumori-pr87-close-natural-observation-20261006`, read-only, recommended **Sonnet5（中）**.
+- first useful close observation is after 16:40 JST (16:20 analysis / 16:35 retry). Do not poll or manually generate before then.
+- separate deferred work: review the accumulated personalized-reports PR #43/#67/#87 bundle before any future deploy, especially legacy delivery impact. Do not bundle that into the close observation.
+- AI Lab diary: **記録不要 — 今回は既に記録済みの3ポイント改善のproduction反映確認で、新しい公開向け機能追加そのものではない。**
+
 ## G4 assigned — Morning greeting GitHub schedule reliability Plan B + C
 
 - Investigation indicates the posting-window OFF/ON toggle is not the trigger for the delay; GitHub scheduled workflow creation itself began drifting on 2026-09-20 while the greeting was still OFF.
