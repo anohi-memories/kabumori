@@ -1,3 +1,23 @@
+## K1 — PR #100 canonical portfolio PASS / report-origin navigation HOLD — 2026-10-07
+
+- PR #100 exact reviewed head: `5a9735c80e3dbc01b25911a0aabc83fce3d56bc9`.
+- portfolio implementation itself: **PASS**.
+- accepted 402pt/375pt canonical visuals: asset summary, stored Fact-passed AI overview, top-3 asset impact, holdings, fallback avatars, interim Watchlist, dedicated Search.
+- real-data contract accepted:
+  - latest saved close snapshot only;
+  - stale/non-realtime basis explicit;
+  - null => `—`, never fake zero;
+  - current tracked holdings remain visible even before next report;
+  - Fact-passed overview/holding-impact text only;
+  - no display-time AI.
+- tests/checks reported: 404/404 app tests; src tsc clean; Expo config PASS; web export PASS; diff clean.
+- fresh-main changed-file overlap across PR100's 17 files = 0.
+- no Codex review required; EAS 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation 0.
+- only blocker before merge: Portfolio -> nested report detail currently Back/swipes to Reports list. App-wide convention requires actual-origin return, so Portfolio origin must return Portfolio while Reports-list origin must return Reports list.
+- preferred fix is root-level report-detail mirroring root `news-detail`, with explicit origin and native swipe parity.
+- this correction is **temporarily blocked from implementation** because active G5/H1 currently owns the root `src/app/_layout.tsx` Auth/navigation boundary. Do not overlap.
+- PR #100 remains open/unmerged. Once C1 clears the root boundary, give G1 one bounded Sonnet5（中） correction; no portfolio redesign/data changes required.
+
 ## Final K2 — PR #99 controlled production deploy PASS / morning observation next — 2026-10-07
 
 - verdict: **PASS** for controlled deploy.
