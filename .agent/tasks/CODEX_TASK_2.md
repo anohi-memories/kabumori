@@ -3,8 +3,12 @@
 - task_id: x-social-mobile-pr41-acl-focused-rereview-20261007
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
+- h2_review_result: PASS
+- h2_reviewed_head: c509117f8addf5a8687d60d9c18ae271b2c1777c
+- h2_review_completed_at: 2026-10-07 JST
+- h2_report_commit: c620b8a9145fc72a0b558c00f511173d3f0ce7f4
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused corrective rereview / R1 effective column privileges / R2 effective RPC EXECUTE
