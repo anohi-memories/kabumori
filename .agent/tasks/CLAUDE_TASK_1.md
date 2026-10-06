@@ -3,8 +3,8 @@
 - task_id: kabumori-topic-learning-access-progress-and-swipe-20261006
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: 実機確認で判明した戻るジェスチャー不一致を解消し、トピック一覧をSettings依存の単一レベル閲覧から「初級/中級/上級を自由に切替できる学習一覧」へ拡張し、端末内の既読/学習済み表示を追加する。
@@ -475,6 +475,23 @@ Then:
 - STOP for K1.
 
 Recommended model: **Sonnet5（高）**.
+
+## Final K1 close — PR #94 merged after C1 coordination
+
+- PR #94 exact accepted head `97d374b48886ad33b61cd2288188d4b690e27a5c` was squash-merged after H1 completed PR #95 compatibility review.
+- merge SHA: `d30a518731e976ab1c0e4e19e26f461a174a3c1c`.
+- C1 accepted H1's proof that PR #94 and the reviewed PR #95 source were composition-compatible; PR #95 itself is not merge-ready for separate security reasons.
+- merged functionality:
+  - native swipe/back parity for topic and root-level news detail;
+  - topic-list 初級/中級/上級 switcher;
+  - Settings remains Home-display preference only;
+  - local `未読 / ✓ 学習済み` state;
+  - 375pt and 402pt visual verification.
+- tests/checks already accepted: 376/376 app tests, tsc clean, Expo config/web export/diff PASS.
+- EAS 0; backend/production mutation 0.
+- G1 done/free.
+
+---
 
 ## Final K1 — PR #94 PASS / merge HOLD only for PR #95 overlap coordination
 
