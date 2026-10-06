@@ -476,6 +476,48 @@ Then:
 
 Recommended model: **Sonnet5（高）**.
 
+## Final K1 — PR #94 PASS / merge HOLD only for PR #95 overlap coordination
+
+- verdict: **PASS** for G1 implementation and visual verification.
+- exact accepted PR #94 head: `97d374b48886ad33b61cd2288188d4b690e27a5c`.
+- latest commit after the reviewed code head is **docs/screenshots only**; no source change after `64c71bd6a49c6d1f65cb84642b3f68f60ef9648a`.
+- final observed 375pt Simulator verification: **PASS**.
+  - topic list selector fits in one row at 375pt;
+  - long titles wrap to 2 lines without horizontal clipping;
+  - `未読` / `✓ 学習済み` align cleanly;
+  - list rows remain readable;
+  - root news-detail header `‹ 戻る / ニュース詳細 / ニュース一覧 ›` fits without overlap;
+  - topic detail 375pt remains visually stable.
+- screenshots accepted:
+  - `docs/ui-review/topic_list_375pt.webp`;
+  - `docs/ui-review/news_detail_375pt.webp`;
+  - `docs/ui-review/topic_detail_375pt.webp`.
+- navigation contract accepted:
+  - root-level news detail removes the prior redirect-after-pop flash;
+  - native iOS swipe naturally returns the true origin screen;
+  - Home -> news detail -> swipe = Home;
+  - news list -> detail -> swipe = news list;
+  - report -> detail -> swipe = report;
+  - topic detail swipe remains origin-correct.
+- no `usePreventRemove`, no `expo-router/build/...` internal import, no redirect guard.
+- topic list 3-level switcher, Settings/Home separation, selected-only fetch/cache/race handling, local learned-state persistence and focus refresh accepted.
+- tests/checks accepted: **376/376 app tests**, tsc clean, Expo config PASS, web export PASS, diff clean.
+- fresh-main changed-file overlap for PR #94 itself: **0**.
+- Vercel status is build-rate-limit only; Netlify preview status is non-blocking for this native-app source change.
+- Codex review for PR #94: **not required**.
+- EAS build = 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+
+### Merge coordination hold
+- PR #95 (common-account Phase 2) is currently under allocated H1 review and also modifies `src/app/_layout.tsx`.
+- PR #94 adds root `news-detail` registration in that same file.
+- Because H1 is reviewing PR #95 exact head `c06fac6492708331b6ba816122c9852cdcea73e7`, merging PR #94 now would change main during that review and could invalidate the integration assumption.
+- Therefore PR #94 is **PASS but intentionally not merged yet**.
+- next: complete H1/C1 for PR #95, then coordinate merge order / fresh integration so `news-detail` root registration and common-account Auth gate are both preserved. No additional G1 implementation is required unless that integration exposes a concrete conflict.
+
+- G1 source work is complete; slot should be treated as blocked only by cross-PR merge coordination, not by implementation quality.
+
+---
+
 ## K1 recheck — STRUCTURAL PASS / 375pt verification only
 
 - verdict: **STRUCTURAL PASS / merge HOLD only for observed 375pt evidence**.
