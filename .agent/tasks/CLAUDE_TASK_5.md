@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase1-production-migration-gate-20261006
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: highest
 - start_code: G5
 - finish_code: K5
@@ -369,6 +369,19 @@ If the exact approved migration applies cleanly and exhaustive read-back matches
 If there is any production drift, uncertain history state, privilege mismatch, partial outcome or security ambiguity, allocate focused Codex review.
 
 Recommended Claude model: **Opus5.5（極高）**.
+
+## Continuation authorization — 2026-10-06 after G4 CLOSED
+
+- G4 PR76 production rollout is complete and its production_mutation_window is CLOSED as of 14:11 JST.
+- This continuation authorizes **read-only Phase A refresh only**. It does NOT yet authorize the common-account production migration write.
+- Before doing any read, fresh-fetch origin/main and re-read ACTIVE_TASK/CURRENT_STATE. Confirm G2/G3/H1/H2 or another operator is not in an active production mutation window.
+- Re-run all 9 production read-only Phase A checks from the existing approved preflight bundle.
+- Expected state changes versus the previous baseline include PR76 migration/history and its objects; refresh the ledger row count and existing-object fingerprint rather than comparing to the stale pre-G4 values.
+- Reconfirm target common-account migration objects/history remain absent, dependencies/owners/role graph/default ACL remain compatible, renderer canary remains valid, and exact migration SHA256 remains `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3`.
+- If all 9 checks PASS, update Report with the fresh baseline, set status review_required / next_owner chatgpt, and STOP for explicit production mutation approval.
+- If any unexpected drift appears, STOP BLOCKED; do not apply, repair, drop, rewrite history, or change ACLs.
+- backfill/deploy/Auth/Storage/OAuth/Vault/Cron/real X remain forbidden.
+- Recommended model: **Opus5.5（極高）**.
 
 ## Report
 
