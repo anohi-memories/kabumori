@@ -1,3 +1,25 @@
+## Interim K3/K4 — PR76 production rollout partially complete / G3 still blocked
+
+- K3: no fresh G3 continuation has run. Previous PR81 production schema gate remains done/HOLD; do not resume PR81 yet.
+- K4 read-only production verification on project `wsmznyzcvmuitkglfeuj` shows the G4 rollout is **partially complete**, not finished:
+  - `x-test-post` ACTIVE v136, `verify_jwt=false`;
+  - deployed source contains the PR76 pre-send permission guard and PR82 AI Lab runtime;
+  - PR76 RPCs exist:
+    - `set_social_account_publish_enabled(text,boolean,boolean)`
+    - `assert_x_publish_permission_for_legacy_post(uuid,text,text)`
+  - both are owner `postgres`, SECURITY DEFINER, empty search_path; effective EXECUTE is exact: authenticated=toggle only, service_role=pre-send only, PUBLIC/anon none;
+  - PR76 migration history version `20261003090000` is still **absent**;
+  - `social-mobile-publish-setting` is still **not deployed**.
+- This means the safe checkpoint is effectively **PR76 schema/runtime present / history missing / S5 pending**. Do not blindly rerun the PR76 migration DDL.
+- Natural AI Lab runtime observation during this partial state is healthy:
+  - recent scheduled brand posts include successful executions;
+  - recent AI Lab claims are published;
+  - running count = 0;
+  - overdue pending count = 0.
+- G4 remains in_progress with production_mutation_window ACTIVE until the same task completes the exact history/read-back checkpoint and S5 deploy/read-back, then explicitly records CLOSED.
+- No additional Codex review is needed; final source security review already passed.
+- G3/PR81 remains blocked until G4 records PR76 migration/history/read-back complete and closes the production mutation window.
+
 ## Final K5 — Common-account Phase 1 production preflight ready / mutation HOLD — 2026-10-06
 
 - verdict: **PASS / PREFLIGHT_READY（条件付き）**.
