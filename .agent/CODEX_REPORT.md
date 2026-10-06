@@ -1,3 +1,39 @@
+# H1 — PR #99 editorial specificity / delivery-threshold review — 2026-10-07 JST
+
+- task_id: `kabumori-pr99-editorial-specificity-focused-review-20261007`
+- result / verdict: **PASS-WITH-NONBLOCKING-NOTES**.
+- target_pr: 99; exact reviewed head: `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`.
+- fresh main used for review: `e241c29feb27fefb8d4f58adc19ed5dee59b1d25`; H1 TASK remained current. PR #99 stayed **OPEN/unmerged** at post-sync read-back; GitHub's `mergeable` field fluctuated between `MERGEABLE` and `UNKNOWN`, so H1 makes no mergeability/merge claim. Main and PR changed-file overlap: **0**.
+- recommended_model: **Luna（高）**.
+- changed_files (H1): `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md` only. Product-source edits: **0**.
+- commit_hash: reviewed PR source commit `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`; H1 made no product commit. `push`: H1 TASK/Report-only sync is verified on `origin/main`; PR/source-branch push = 0.
+- production access/mutation, DB/RPC/migration/Cron, Edge deploy, manual report/retry, Auth/Vault/secret access, X/app notification, merge/deploy: **0**.
+
+## Findings
+
+- **A — Prompt specificity: PASS.** Finished example sentences were removed. Morning role remains forward-looking and explicitly avoids asserting today's not-yet-completed Tokyo move. Close points prioritize the day's event/material/watch point without fixed copyable slots, and do not assert future movement. Every point is asked to contain an input-grounded entity/event; numbers are allowed for evidenced milestones. Unsupported records such as “史上最高” / “初めて” are discouraged by prompt, not newly made a Hard rule.
+- **B — WARN-only telemetry: PASS.** `X_POINTS_GENERIC` joins the existing `X_POINTS_*` warnings. It is emitted only from the local warning list, does not enter `hard`, and is excluded from rewrite hints. The 10/6 three generic headlines are detected. Specific company/event/place headlines in test cases remain unflagged; a single generic watch point is tolerated. `POINT_MILESTONE` exempts genuine threshold/event headlines from metric-recap telemetry while ordinary numeric recaps remain recorded.
+- **C — Rewrite threshold: PASS.** The X length warning remains visible below its target, but only `<300` creates an X-length rewrite hint. A local end-to-end probe confirmed a safe ~387-character post uses only generate+Fact (2 calls) when App/other conditions are good. A <300-character nonempty-section draft actually follows generate → Fact → generate → Fact (4 calls max) and delivers the second safe draft. App-story `<700`, omission warnings, the max-4 call bound and safe-original fallback remain covered by the existing suite. No accidental X-only call path was found.
+- **D — Rejection diagnostics: PASS.** New `rejection_reasons` values are generated from a fixed allowlist (`1306`, `date`, `number`, `direction`, `causal`, `ref`, `absence`, `format`, `other`, `none`) and bounded to 160 characters; Fact issue text is split before classification and is never copied to that field. Hard-rejection kinds are fixed and generation count is bounded. No schema migration is needed for existing diagnostics JSON. The adjacent bounded `quality_warnings` behavior predates this PR; the new rejection field does not introduce raw model/user text. Added fixture scan found no private-key/token/email-pattern matches.
+- **E — Hard/regression boundary: PASS.** Prompt, telemetry and milestone changes do not alter Hard result conditions. Existing tests continue to assert date/session/value/sign/stale, 1306, refs, unsupported causality, broad-absence, exactly three points, and safe-original fallback. No changed accept/reject branch outside the explicitly requested safe-packet rewrite policy was found.
+
+## Verification
+
+- `deno test --no-check --allow-read=supabase/functions/market-report-analysis/fixtures supabase/functions/market-report-analysis/`: **160 passed, 0 failed**.
+- Relevant compatibility regressions — `market-report-data-packet/packet_builder_test.ts`, `personalized-reports/shared_market_consumer_test.ts`, `x-test-post/shared_market_report_consumer_test.ts`: **22 passed, 0 failed**.
+- `deno check --no-config` on all six changed TypeScript files: **PASS**.
+- `deno lint --no-config` on changed TS files reports one existing `require-await` at `analysis_test.ts:34`; that line is unchanged in PR #99. All six pass with only that pre-existing rule excluded.
+- `git diff --check`: **PASS**.
+- First suite launch without fixture permission and a `deno check` using repository defaults could not start due local fixture-read / `npm:@types/node` environment configuration; rerunning the suite with fixture-only read access and checking changed TS with `--no-config` succeeded. No dependency install or repository config change was made.
+- All tests and probes were local/source-only. No production database/report/retry, OpenAI/model, X, notification, or deploy operation occurred.
+
+## Recommendation / remaining work
+
+- **C1 only:** PR #99 is ready for ChatGPT's merge-readiness judgment after this focused review; this is not merge or deployment approval. GitHub API reports `mergeable=UNKNOWN`, and actual model-output improvement remains unverified until a natural cycle; observe then without manual report/retry.
+- TASK status: `review_required`; next_owner: `chatgpt`. **STOP for C1.**
+
+---
+
 # H1 — PR #95 corrective Phase 2 service-enrollment re-review — 2026-10-07 JST
 
 - task_id: common-account-v1-phase2-service-enrollment-corrective-rereview-20261006

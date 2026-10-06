@@ -1,5 +1,201 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: x-social-mobile-pr41-acl-corrective-20261007
+- owner: claude
+- slot: claude-3
+- status: in_progress
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: bounded security corrective / effective column privileges / exact RPC ACL
+- target_pr: 41
+- previous_head: 280aa0f83d4f039ba3e43f32da202a91fd2333f2
+- h2_review: x-social-mobile-pr41-live-generation-security-review-20261007
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## C2 accepted findings
+
+H2 reviewed exact PR #41 head:
+`280aa0f83d4f039ba3e43f32da202a91fd2333f2`
+
+Verdict: **CHANGES REQUIRED**.
+
+Only two blocking findings are in scope for this corrective.
+
+### R1 — P2 effective column privilege drift
+
+Target migration:
+`supabase/migrations/20261006160100_social_mobile_publish_settings_reader.sql`
+
+Current postcondition checks table privilege but can miss column-level grants.
+
+Reproduced H2 case:
+- an effective column SELECT on `social_mobile_content_settings.settings` is granted to service_role before migration;
+- table-level SELECT remains false;
+- migration currently COMMITs;
+- service_role can directly read settings rows cross-brand, bypassing the narrow reader.
+
+Required correction:
+- migration must fail closed if service_role has **any effective column privilege that violates the intended table denial**, including privilege inherited through another role or PUBLIC;
+- inspect every live column, not only `settings`;
+- cover at least SELECT / INSERT / UPDATE / REFERENCES or the full set of column privileges PostgreSQL exposes for this relation;
+- preserve legitimate authenticated client privileges from PR81; do not globally revoke/repair unrelated ACLs;
+- do not silently normalize unknown column ACL drift;
+- refusal must roll back the migration completely;
+- reader must remain absent after refused apply.
+
+Required adverse fixtures:
+- direct service_role column SELECT;
+- inherited service_role column SELECT;
+- PUBLIC-derived column SELECT where effective for service_role;
+- at least one column UPDATE/DML drift case;
+- each must refuse atomically.
+
+### R2 — P1 unexpected default/inherited EXECUTE
+
+Target migrations:
+- `20261006160000_vault_account_brand_post_completion.sql`
+- `20261006160200_x_account_publish_authority.sql`
+
+Current source revokes only known roles.
+Unknown function default ACL grantees can survive CREATE FUNCTION.
+If authenticated inherits that role, it can effectively execute service/operator-only RPCs.
+
+H2 reproduced:
+- authenticated could call `set_x_account_publish_authority(...enabled...)`;
+- authenticated could call `complete_vault_account_brand_post(...)`;
+- both migrations COMMIT instead of refusing.
+
+Required correction for every privileged function created by these two migrations:
+- exact signature and routine kind;
+- no unexpected overload/procedure collision;
+- explicit safe owner;
+- fixed safe search_path;
+- exact direct ACL;
+- no unexpected grantee;
+- no grant option;
+- exact effective EXECUTE matrix;
+- PUBLIC/anon/authenticated must not gain effective EXECUTE;
+- service_role must have only the intended EXECUTE;
+- unsafe application-role inheritance must refuse;
+- unknown default EXECUTE grantee must cause atomic refusal;
+- do not change global ALTER DEFAULT PRIVILEGES;
+- do not change role memberships;
+- do not broadly grant/revoke unrelated objects.
+
+Prefer the already-reviewed robust ACL pattern used in the PR76/reader hardening where applicable, but do not copy assumptions blindly.
+
+Required adverse fixtures:
+- unknown default EXECUTE;
+- authenticated inherits unknown default grantee;
+- anon inherits unknown default grantee;
+- grant option;
+- unexpected direct grant;
+- unknown overload/procedure;
+- unsafe owner/creator;
+- verify failed migration leaves no partial table/function/ACL mutation.
+
+Behavioral proof must explicitly show:
+- authenticated setter call is refused;
+- authenticated completion call is refused;
+- service_role intended calls still work in the clean graph.
+
+## Preserve accepted PR41 behavior
+
+Do not redesign or reopen already-passed areas unless these ACL corrections affect them:
+
+- narrow reader tenant binding;
+- no direct settings-table read in runtime/authority paths;
+- missing row/manual_review = no publish;
+- `auto_post_preference` only;
+- generic `social_mobile_user_v1` dispatcher;
+- PR76 pre-send guard;
+- authority pre-generation + immediately pre-X;
+- PR78 remembered settings/persona -> live generation;
+- NG/length/duplicate gates;
+- exact account/brand binding;
+- terminal/non-replayable confirmed X completion;
+- AI Lab / Kabumori paths unchanged;
+- G5 entitlement enforcement still not implemented here.
+
+## Freshness / G4 / G5
+
+1. Read current ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK / H2 report.
+2. Fresh fetch current main and PR #41.
+3. Use a new independent G3 worktree based on `/Users/yuya/Developer/kabumori-fresh`.
+4. Preserve fresh-main corrections that landed after the prior PR41 integration, including test/static corrections.
+5. Read current G4 and G5 TASKs for conflict only.
+6. G4 is a separate chat-owned X slot; do not alter it.
+7. G5 owns common-account Auth/session/enforcement/deletion semantics. Do not touch its app/migration/RPC files.
+8. If current main now overlaps the PR41 source/migration files materially, STOP and report before editing.
+
+## Tests
+
+Rerun only what is needed plus bounded regressions:
+
+- new R1 column ACL adverse matrix;
+- new R2 function ACL/default/inheritance adverse matrix;
+- existing reader behavior;
+- existing publish authority behavior/race;
+- existing completion behavior;
+- x-test-post focused runtime;
+- PR76 guard regression;
+- PR78 memory-to-live generation;
+- AI Lab/Kabumori bounded regression;
+- migration invariants;
+- `git diff --check`;
+- added-line secret scan.
+
+No need to rerun unrelated broad suites unless a changed shared helper requires it.
+
+## Safety
+
+Forbidden:
+- production read/write;
+- migration/history apply;
+- Edge deploy;
+- PR merge;
+- real X/OpenAI;
+- Auth/Vault/OAuth/Cron mutation;
+- publish-authority activation;
+- G5 entitlement enforcement.
+
+## Completion
+
+Update PR #41 branch normally; no force-push.
+
+Report:
+- old/new head;
+- exact files changed;
+- R1 correction and direct/inherited/PUBLIC column ACL proofs;
+- R2 correction and effective EXECUTE/default ACL proofs;
+- clean-graph intended permissions;
+- atomic rollback proofs;
+- bounded runtime regression results;
+- G4/G5 overlap check;
+- production/deploy/merge/real X/OpenAI = 0.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+### Review policy
+
+Because H2 found concrete P1/P2 in the same security boundary, one **focused rereview of only R1/R2** is required after correction.
+
+Do not repeat the full PR41 review if unchanged live/runtime behavior is covered by bounded regression.
+
+Recommended reviewer after K3: **Sol（高）**.
+
+Recommended Claude model: **Opus5.5（高）**.
+
+---
+
+# Previous G3 task — preserved history
+
 - task_id: x-social-mobile-pr41-live-generation-fresh-integration-20261006
 - owner: claude
 - slot: claude-3

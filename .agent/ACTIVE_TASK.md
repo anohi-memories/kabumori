@@ -32,27 +32,28 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: common-account-v1-phase2-service-enrollment-corrective-rereview-20261006
+- status: ready
+- task_id: kabumori-pr99-editorial-specificity-focused-review-20261007
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #95 exact head dd065e16. Prior R1 and R5 are closed; original cross-user/retry-Push defects are materially improved. Remaining focused blockers are S1 same-user fresh-session reuse and S2 X queued auto-start after cleanup/sign-out. H1 free; corrected exact head will require focused Sol（高） re-review.
-- recommended_model: Sol（高）
+- allocation: PR #99 focused review。10/6大引けのeditorial regression修正について、prompt specificity、WARN-only generic telemetry、X短文rewrite閾値430→300のruntime semantics、bounded rejection_reasons、Hard境界不変を確認。source fix/merge/deploy/production mutation禁止。
+- recommended_model: Luna（高）
 
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: x-social-mobile-pr41-live-generation-security-review-20261007
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: One focused independent review of PR #41 exact head 280aa0f83d4f039ba3e43f32da202a91fd2333f2. Review the new service_role-only SECURITY DEFINER settings reader, exact/effective ACL including adverse default/inheritance cases, consent completeness, renumbered 3-migration chain, live scheduled-user X path, PR76/PR82/Kabumori regressions, and G5 dormant/enforcement handoff. No merge/deploy/production mutation. If PASS, no routine rereview. Recommended Sol（高）.
+- allocation: Final C2 accepted CHANGES REQUIRED on PR #41 exact head 280aa0f83d4f039ba3e43f32da202a91fd2333f2. Two blockers only: R1 effective column-level service_role privilege drift; R2 unexpected default/inherited EXECUTE on completion/authority RPCs. H2 closed; no merge/deploy/production mutation. Focused rereview only after bounded G3 corrective.
+- recommended_model: Sol（高）
 
 ## Claude G1
 - owner: claude
@@ -69,25 +70,25 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-editorial-points-specificity-corrective-20261006
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: 10/6大引けの自然観測でfactual safetyはPASSしたが、3ポイントが「主要指数上昇／国際情勢を確認／米国株と為替を見る」と抽象化しすぎてeditorial未達。具体例文のprompt除去、generic見出し抑制、節目数値の例外、WARN-only specificity telemetry、不要rewrite/call増の見直しをsource/test onlyで実施。Hard境界・call ceilingは維持。production mutation禁止。
+- allocation: K2 PASS_CANDIDATE。PR #99 head cd33b1f22f532be9273d63f0f42f0a0d9c1de156。完成例文除去、具体性条件、節目数値例外、WARN-only generic telemetry、bounded rejection diagnosticsを実装。Hard/call ceiling不変。ただしX短文rewrite閾値を430→300へ変更したため、focused H1 reviewを1回実施。production mutation 0。
 - recommended_model: Sonnet5（高）
 
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
-- task_id: x-social-mobile-pr41-live-generation-fresh-integration-20261006
+- status: in_progress
+- task_id: x-social-mobile-pr41-acl-corrective-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: K3 accepts PASS_CANDIDATE only on PR #41 exact head 280aa0f83d4f039ba3e43f32da202a91fd2333f2. Source integration/tests/CI are green, but the candidate introduces a SECURITY DEFINER/service_role/live-publish boundary, so merge remains HOLD pending the single focused H2 security review. Production/deploy/real X/OpenAI remain 0. Recommended reviewer Sol（高）.
+- allocation: Bounded corrective for H2/C2 PR #41 findings only. R1: fail closed on any effective service_role column privilege drift, including inherited/PUBLIC column grants, with atomic rollback. R2: exact/effective EXECUTE hardening for completion + publish-authority privileged RPCs against unknown default ACL, inheritance, grant option, overload/owner drift; no global ACL/role repair. Preserve already-passed live-generation/runtime behavior and G5 boundaries. Source-only; no production/merge/deploy. Recommended Opus5.5（高）.
 - recommended_model: Opus5.5（高）
 
 ## Claude G4

@@ -1,3 +1,88 @@
+## Final C2 — PR #41 CHANGES REQUIRED accepted / bounded G3 ACL corrective
+
+- H2 reviewed exact PR #41 head `280aa0f83d4f039ba3e43f32da202a91fd2333f2`.
+- verdict: **CHANGES REQUIRED accepted**. PR #41 remains open/unmerged/undeployed.
+- blocker R1 P2:
+  - reader migration checks table-level service_role privilege but can miss effective column-level privileges;
+  - H2 reproduced a pre-existing column SELECT grant where migration COMMITed and service_role could directly read settings rows cross-brand;
+  - source must refuse any effective service_role column privilege drift, including inherited/PUBLIC cases, across all live columns, without repairing unrelated ACLs.
+- blocker R2 P1:
+  - completion and publish-authority migrations revoke only known roles and can retain unknown default/inherited EXECUTE;
+  - H2 reproduced authenticated ability to enable publish authority and to forge completion state under adverse default-ACL/inheritance fixtures;
+  - source must enforce exact signature/kind/owner/search_path/raw+effective EXECUTE/grant-option matrix and fail atomically on unsafe default ACL/role inheritance/overload drift.
+- clean-path review results remain accepted:
+  - narrow reader tenant binding is correct;
+  - both consent paths use the reader;
+  - missing row/manual_review fail closed;
+  - generic live dispatcher/PR76 guard/PR78 memory-to-live generation are correct;
+  - AI Lab/Kabumori paths unchanged;
+  - G5 enforcement intentionally deferred and candidate remains dormant without explicit authority activation.
+- independent H2 evidence:
+  - x-test-post 534/534;
+  - dispatcher/routing/invariants 30/30;
+  - PR76 focused 33/33;
+  - focused consult/dry-run/brand/AI Lab 85/85;
+  - app memory-generation/consult/settings 36/36;
+  - broad 3 failures reproduced on baseline and are unrelated.
+- production reads/writes = 0; migration/history apply = 0; deploy = 0; real X/OpenAI = 0; Auth/Vault/OAuth/Cron changes = 0.
+- H2 is closed after C2.
+- fresh G3 corrective assigned:
+  `x-social-mobile-pr41-acl-corrective-20261007`
+  recommended **Opus5.5（高）**.
+- corrective scope is only R1/R2 + bounded regressions. No G5 work, no runtime redesign, no production.
+- because H2 found concrete P1/P2 in the same high-risk boundary, one focused rereview of the corrected R1/R2 boundary is required after K3, recommended **Sol（高）**. Do not repeat a broad routine review.
+
+## Final K2 — PR #99 PASS_CANDIDATE / one focused H1 review required — 2026-10-07
+
+- G2 corrective result: **PASS_CANDIDATE**, not final merge approval.
+- PR #99 exact head: `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`; open/unmerged.
+- allocation-time freshness: current main is 3 commits ahead of PR base; changed-file overlap across PR #99's 10 files = **0**.
+- accepted corrective direction:
+  - remove copyable finished example sentences from the model prompt;
+  - require day-specific concrete entities/events;
+  - permit safely evidenced milestone/threshold numbers;
+  - add WARN-only `X_POINTS_GENERIC` specificity telemetry;
+  - keep generic/recap/duplicate quality signals non-Hard and non-rewrite;
+  - preserve all existing Hard Fact boundaries and max model-call ceiling;
+  - add bounded fixed-code `rejection_reasons` diagnostics without raw model/user text.
+- reported tests: market-report-analysis 160/160; personalized-reports 129/129; X shared 8/8; data-packet 42/42; _shared 422/422; relevant Deno check/lint/diff PASS aside from one documented pre-existing require-await warning.
+- no deploy/manual report/DB/Cron/gate/X/notification/Auth/Vault/EAS/production mutation.
+- one bounded runtime-delivery change requires independent review: X-only shortness rewrite threshold narrows from target 430 chars to **rewrite only below 300 chars**; omission and App-story conditions remain unchanged; call ceiling remains max 4 and safe-original fallback remains.
+- therefore one focused H1 review is assigned: `kabumori-pr99-editorial-specificity-focused-review-20261007`, recommended **Luna（高）**.
+- H1 review scope is limited to prompt specificity, WARN-only telemetry, 430→300 rewrite semantics, bounded diagnostics, and Hard/call-boundary regressions. No routine second review after PASS.
+- merge/deploy remain HOLD until C1.
+- AI Lab diary: existing 2026-10-06 market-report headline-regression entry already covers this work; no duplicate diary entry needed.
+
+## G1 assigned — Canonical portfolio UI v1 — 2026-10-06
+
+- task_id: `kabumori-portfolio-canonical-ui-v1-20261006`.
+- status: ready; owner: Claude G1.
+- recommended model: **Sonnet5（高）**.
+- fresh allocation main: `676ce44b3d7f9282276428fbfee0dedc4ce4d385`.
+- previous G1 topic/navigation work is Final K1 PASS / merged / slot free.
+- fresh open-PR overlap check across portfolio/search/stock target files: **0 overlap**.
+- current H1/H2/G5 work is security/common-account/social-mobile and may continue in parallel; G1 must not touch root Auth/common-account/migration/RPC boundaries.
+- user-approved portfolio design is now canonical:
+  - PORTFOLIO / ポートフォリオ header;
+  - top Watchlist + Search;
+  - asset summary;
+  - pale-green portfolio AI summary;
+  - top 3 asset-impact rows;
+  - holdings cards;
+  - portfolio AI CTA above native tabs.
+- implementation must use real stored facts only:
+  - latest valid close report for totals/price/day P&L/unrealized P&L;
+  - Fact-passed `overview_ja` / `holding_impacts`;
+  - current `tracked_stocks` remains registration/edit source;
+  - stale close basis must be explicit; do not imply realtime.
+- top asset-impact rows are deterministic `abs(day_pl)` top 3.
+- current stock master has no company logo field; no external-logo scraping/schema work in this task. Implement a polished fallback avatar only.
+- `/search` should become a real dedicated stock search screen, preserving existing register/edit semantics.
+- Watchlist final tags are deferred until design is approved; top Watchlist button must still lead to a working interim view using existing watch registrations, without root navigator changes.
+- no `src/app/_layout.tsx`, Auth/session, migration, RPC, Edge, X/social-mobile, production or EAS changes.
+- required Simulator proof: 402pt + 375pt portfolio, fallback avatar, Watchlist interim, Search, no NativeTabs overlap.
+- finish code: K1.
+
 ## Final C1 — PR #95 second review CHANGES REQUIRED / focused S1-S2 corrective — 2026-10-07
 
 - H1 exact reviewed PR #95 head: `dd065e16f64a37582f73d05f1ab57ff7d276a5f7`.

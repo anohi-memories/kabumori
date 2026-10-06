@@ -3,7 +3,7 @@
 This is the newest canonical instruction for G5 and supersedes the previous C1 corrective section only where it differs.
 
 - task_id: `common-account-v1-phase2-service-enrollment-integration-20261006`
-- status: ready
+- status: in_progress
 - next_owner: claude
 - target PR: **#95**, continue updating the existing PR.
 - reviewed head requiring correction: `dd065e16f64a37582f73d05f1ab57ff7d276a5f7`
