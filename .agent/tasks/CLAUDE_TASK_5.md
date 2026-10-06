@@ -5,6 +5,7 @@
 - slot: claude-5
 - status: in_progress
 - next_owner: claude
+- production_mutation_window: **ACTIVE** — 2026-10-06, user explicitly approved the G5 common-account legacy backfill (frozen private.account_lifecycle_backfill(true) transaction only, then read-only postflight). Other slots: no production DB/Auth/permission write until this line says CLOSED.
 - priority: critical
 - start_code: G5
 - finish_code: K5
