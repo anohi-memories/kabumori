@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr41-acl-focused-rereview-20261007
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - h2_review_result: PASS
 - h2_reviewed_head: c509117f8addf5a8687d60d9c18ae271b2c1777c
 - h2_review_completed_at: 2026-10-07 JST
