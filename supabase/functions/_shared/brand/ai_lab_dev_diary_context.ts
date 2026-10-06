@@ -26,12 +26,19 @@ import { type AiLabGenericThemeId, detectGenericThemes } from "./ai_lab_theme_gu
 
 export type DevDiaryEntry = {
   date: string; // YYYY-MM-DD
+  /** 人が付ける安定ID（`event_id:` 行）。本文・angle の修正や並べ替えでも変わらない出来事の鍵。 */
+  eventId: string | null;
   project: string | null;
   changed: string;
   difficulty: string | null;
   decided: string | null;
   remaining: string | null;
   angles: string[];
+  /**
+   * 1エントリに2回以上書かれた1行ラベル（event_id / project / changed / difficulty / decided / remaining）。
+   * 空でなければエントリ全体が無効（後勝ちで event_id を差し替えて使用済みの出来事を別名で復活させない）。
+   */
+  duplicateLabels: string[];
 };
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
@@ -80,20 +87,43 @@ export function isSanitizedDiaryField(text: string): boolean {
  * module treats as required.
  */
 export function sanitizeDiaryEntry(entry: DevDiaryEntry): DevDiaryEntry | null {
+  if (entry.duplicateLabels.length > 0) return null;
   if (!isValidCalendarDate(entry.date)) return null;
   if (!isSanitizedDiaryField(entry.changed)) return null;
   return {
     date: entry.date,
+    eventId: entry.eventId && isValidDiaryEventId(entry.eventId, entry.date) ? entry.eventId : null,
     project: entry.project && isSanitizedDiaryField(entry.project) ? entry.project : null,
     changed: entry.changed,
     difficulty: entry.difficulty && isSanitizedDiaryField(entry.difficulty) ? entry.difficulty : null,
     decided: entry.decided && isSanitizedDiaryField(entry.decided) ? entry.decided : null,
     remaining: entry.remaining && isSanitizedDiaryField(entry.remaining) ? entry.remaining : null,
     angles: entry.angles.filter((angle) => isSanitizedDiaryField(angle)),
+    duplicateLabels: [],
   };
 }
 
-const LABELS = ["project", "changed", "difficulty", "decided", "remaining", "angle"] as const;
+// 公開して問題ない、人が付ける出来事ID: `YYYYMMDD-slug`（日付は見出しと一致、64文字以内）。
+const DIARY_EVENT_ID_PATTERN = /^(\d{8})-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
+// 内部識別子に見える区切り（PR番号・作業スロット名・DB/秘密まわりの語）。
+const INTERNAL_ID_SEGMENT =
+  /^(?:pr\d*|[ghkc][1-5]|task|branch|commit|claude|codex|rpc|rls|sql|db|table|token|secret|vault|key|supabase)$/u;
+
+function looksLikeCommitHash(segment: string): boolean {
+  return segment.length >= 7 && /^[0-9a-f]+$/u.test(segment) && /\d/u.test(segment) && /[a-f]/u.test(segment);
+}
+
+/** event_id の形式検証。日付部分が見出しの日付と一致し、内部識別子らしい区切りを含まないこと。 */
+export function isValidDiaryEventId(eventId: string, date: string): boolean {
+  if (eventId.length > 64) return false;
+  const match = DIARY_EVENT_ID_PATTERN.exec(eventId);
+  if (!match || match[1] !== date.replaceAll("-", "")) return false;
+  return !eventId.split("-").slice(1).some((segment) =>
+    INTERNAL_ID_SEGMENT.test(segment) || looksLikeCommitHash(segment)
+  );
+}
+
+const LABELS = ["event_id", "project", "changed", "difficulty", "decided", "remaining", "angle"] as const;
 type Label = (typeof LABELS)[number];
 
 function isLabelLine(line: string): { label: Label; value: string } | null {
@@ -111,18 +141,20 @@ function isLabelLine(line: string): { label: Label; value: string } | null {
  */
 export function parseDevDiaryMarkdown(markdown: string): DevDiaryEntry[] {
   const entries: DevDiaryEntry[] = [];
-  let current: { date: string; project: string | null; changed: string | null; difficulty: string | null; decided: string | null; remaining: string | null; angles: string[] } | null = null;
+  let current: { date: string; eventId: string | null; project: string | null; changed: string | null; difficulty: string | null; decided: string | null; remaining: string | null; angles: string[]; seen: Set<string>; duplicateLabels: string[] } | null = null;
 
   function flush() {
     if (current && current.changed !== null) {
       entries.push({
         date: current.date,
+        eventId: current.eventId,
         project: current.project,
         changed: current.changed,
         difficulty: current.difficulty,
         decided: current.decided,
         remaining: current.remaining,
         angles: current.angles,
+        duplicateLabels: current.duplicateLabels,
       });
     }
     current = null;
@@ -133,14 +165,26 @@ export function parseDevDiaryMarkdown(markdown: string): DevDiaryEntry[] {
     const heading = /^##\s+(\d{4}-\d{2}-\d{2})\s*$/u.exec(line);
     if (heading) {
       flush();
-      current = { date: heading[1], project: null, changed: null, difficulty: null, decided: null, remaining: null, angles: [] };
+      current = { date: heading[1], eventId: null, project: null, changed: null, difficulty: null, decided: null, remaining: null, angles: [], seen: new Set(), duplicateLabels: [] };
       continue;
     }
     if (!current) continue;
     const labeled = isLabelLine(line);
-    if (!labeled || labeled.value.length === 0) continue;
+    if (!labeled) continue;
+    // 1行ラベルは1エントリに1回だけ。2回目以降は値が空でも重複として記録し、後の値で上書きしない。
+    // 重複のあるエントリは sanitizeDiaryEntry が丸ごと無効にする（後勝ちで event_id を差し替えさせない）。
+    if (labeled.label !== "angle") {
+      if (current.seen.has(labeled.label)) {
+        if (!current.duplicateLabels.includes(labeled.label)) current.duplicateLabels.push(labeled.label);
+        continue;
+      }
+      current.seen.add(labeled.label);
+    }
+    if (labeled.value.length === 0) continue;
     if (labeled.label === "angle") {
       current.angles.push(labeled.value);
+    } else if (labeled.label === "event_id") {
+      current.eventId = labeled.value;
     } else if (labeled.label === "changed") {
       current.changed = labeled.value;
     } else {
@@ -222,13 +266,19 @@ export function selectAiLabTopicSeed({
 }
 
 // ---------------------------------------------------------------------------------------------------
-// 応急修正(2026-10-01): 重複テーマ連投の止血。`selectAiLabTopicSeed`（上）は「最新エントリの角度1行を
-// 乱数で選ぶ」だけで、履歴も具体的な事実も使わなかったため、同じエントリ・同じ汎用角度が連続した。
-// 本番の呼び出し元(x-test-post)は下の `selectAiLabRotatingTopicSeed` を使う。上は既存テスト互換の旧実装。
+// 題材候補の組み立て（本番の呼び出し元 x-test-post が使う）。`selectAiLabTopicSeed`（上）は既存テスト互換の旧実装。
+//
+// 重複判定の単位は「文章」でも「切り口」でもなく【実際の開発イベント】。1つの日記エントリ（= 1つの
+// event_id）から作る changed / difficulty / decided / angle の各切り口は、同じイベントに属する。
+//
+// この関数は「優先順に並べた候補」を返すだけで、どれを使うかは決めない。実際に使う題材は DB の
+// claim_ai_lab_topic（ai_lab_topic_claims、migration 20261004090000）が、ブランド単位のロックの中で
+// 先頭から順に「まだ誰も確保していない／クールダウン中でない」ものを1件だけ確保して決める。
+// 同時に動いた2つの投稿処理が同じイベントを確保することはなく、確保できなかった側は X へ進まない。
 // ---------------------------------------------------------------------------------------------------
 
-// evergreen seed ごとの汎用テーマタグ（EVERGREEN_TOPIC_SEEDS と同じ並び）。直近投稿が同じ汎用テーマなら避ける。
-const EVERGREEN_THEME_TAGS: ReadonlyArray<readonly AiLabGenericThemeId[]> = [
+// evergreen seed ごとの汎用テーマタグ（EVERGREEN_TOPIC_SEEDS と同じ並び）。DB 側の48時間テーマクールダウンに使う。
+export const EVERGREEN_THEME_TAGS: ReadonlyArray<readonly AiLabGenericThemeId[]> = [
   ["unglamorous_work"],
   ["ai_trial_error"],
   [],
@@ -238,22 +288,39 @@ const EVERGREEN_THEME_TAGS: ReadonlyArray<readonly AiLabGenericThemeId[]> = [
   [],
 ];
 
+/**
+ * イベントの安定キー。DB 側（ai_lab_topic_claims.event_key の CHECK）と同じ形。
+ * - 日記: `diary:<event_id>`（event_id は日記に人が書く安定ID。本文や並び順に依存しない）。
+ * - evergreen: `evergreen-N`（EVERGREEN_TOPIC_SEEDS の添字）。evergreen は再利用される（DB 側で72時間／48時間のクールダウン）。
+ */
+export const AI_LAB_EVENT_KEY_PATTERN = /^(?:diary:\d{8}-[a-z][a-z0-9]*(?:-[a-z0-9]+)*|evergreen-\d{1,2})$/u;
+
+export function diaryEventKey(eventId: string): string {
+  return `diary:${eventId}`;
+}
+
+export function evergreenEventKey(index: number): string {
+  return `evergreen-${index}`;
+}
+
 export type AiLabTopicExclusion = {
-  /** 非機密の識別子のみ（日付・種別）。本文は入れない。 */
+  /** 非機密の識別子のみ（日付・eventKey・unitKey）。本文は入れない。 */
   candidate: string;
   stage: "freshness" | "sanitize" | "theme_cooldown" | "recent_overlap";
   reason: string;
 };
 
-export type AiLabRotatingTopicSelection = {
-  topic: string;
-  source: "diary" | "evergreen";
-  /** 例: "2026-10-01#changed" / "evergreen#3"。ログ用の非機密ID。 */
+/** DB の claim 関数へ優先順に渡す1候補。topic（生成に渡す題材文）は DB へは送らない。 */
+export type AiLabTopicCandidate = {
+  kind: "diary" | "evergreen";
+  eventKey: string;
+  /** 例: "diary:20261001-x-auth#changed" / "evergreen-3"。ログ用の非機密ID。 */
   unitKey: string;
-  exclusions: AiLabTopicExclusion[];
+  themeTags: readonly AiLabGenericThemeId[];
+  topic: string;
 };
 
-type TopicUnit = { key: string; entryDate: string; seed: string };
+type TopicUnit = { key: string; seed: string };
 
 function relativeDayLabel(age: number): string {
   if (age <= 0) return "今日";
@@ -261,9 +328,13 @@ function relativeDayLabel(age: number): string {
   return `${age}日前`;
 }
 
-/** 1エントリを「別々に語れる話題」の列へ分解する。どの話題にも同じエントリの具体的な事実を添える。 */
-function diaryUnitsFor(
+/**
+ * 1イベントの「切り口」を列挙する。どの切り口にも同じイベントの具体的な事実を添える。切り口は同じ
+ * イベントの言い換えにすぎないので、候補にはこのうち1つしか入れない（イベントは1回しか確保されない）。
+ */
+export function diaryUnitsFor(
   entry: DevDiaryEntry,
+  eventKey: string,
   age: number,
   exclusions: AiLabTopicExclusion[],
 ): TopicUnit[] {
@@ -275,79 +346,28 @@ function diaryUnitsFor(
   ].filter((line): line is string => line !== null).join("\n");
 
   const units: TopicUnit[] = [
-    {
-      key: `${entry.date}#changed`,
-      entryDate: entry.date,
-      seed: `${facts}\n今回の切り口: 何を作った・直したのか、実際に何が起きたのか`,
-    },
+    { key: `${eventKey}#changed`, seed: `${facts}\n今回の切り口: 何を作った・直したのか、実際に何が起きたのか` },
   ];
   if (entry.difficulty) {
-    units.push({
-      key: `${entry.date}#difficulty`,
-      entryDate: entry.date,
-      seed: `${facts}\n今回の切り口: どこで詰まり、何に気づいたのか`,
-    });
+    units.push({ key: `${eventKey}#difficulty`, seed: `${facts}\n今回の切り口: どこで詰まり、何に気づいたのか` });
   }
   if (entry.decided) {
-    units.push({
-      key: `${entry.date}#decided`,
-      entryDate: entry.date,
-      seed: `${facts}\n今回の切り口: なぜその判断（止める・変える・決める）をしたのか`,
-    });
+    units.push({ key: `${eventKey}#decided`, seed: `${facts}\n今回の切り口: なぜその判断（止める・変える・決める）をしたのか` });
   }
   entry.angles.forEach((angle, index) => {
-    // 具体的な出来事に触れない汎用角度（「下調べだけで1日」等）はクールダウン対象。使わない。
+    // 具体的な出来事に触れない汎用角度（「下調べだけで1日」等）は使わない。
     const generic = detectGenericThemes(angle);
     if (generic.length > 0) {
       exclusions.push({
-        candidate: `${entry.date}#angle${index + 1}`,
+        candidate: `${eventKey}#angle${index + 1}`,
         stage: "theme_cooldown",
         reason: `GENERIC_THEME:${generic.join(",")}`,
       });
       return;
     }
-    units.push({
-      key: `${entry.date}#angle${index + 1}`,
-      entryDate: entry.date,
-      seed: `${facts}\n今回の切り口: ${angle}`,
-    });
+    units.push({ key: `${eventKey}#angle${index + 1}`, seed: `${facts}\n今回の切り口: ${angle}` });
   });
   return units;
-}
-
-/**
- * 話題を「同じエントリが隣り合わない」巡回列に並べる（巡回の末尾→先頭も含む）。
- * 1エントリの話題数が他の合計を超えると隣り合いが避けられないため、超えた分は後ろの話題から落とす
- * （落とした事実は exclusions に残す）。エントリが1件だけのときは避けようがないので落とさず、
- * 同じエントリの別の切り口を順に使う。
- */
-function interleaveByEntry(
-  perEntry: TopicUnit[][],
-  exclusions: AiLabTopicExclusion[],
-): TopicUnit[] {
-  const groups = perEntry.filter((units) => units.length > 0).map((units) => [...units]);
-  if (groups.length > 1) {
-    for (;;) {
-      const total = groups.reduce((sum, units) => sum + units.length, 0);
-      const biggest = groups.reduce((a, b) => (b.length > a.length ? b : a));
-      if (biggest.length <= total - biggest.length) break;
-      const dropped = biggest.pop()!;
-      exclusions.push({ candidate: dropped.key, stage: "theme_cooldown", reason: "ENTRY_QUOTA_BALANCE" });
-    }
-  }
-  // 話題数の多いエントリから、偶数番目→奇数番目の順に詰めると、同じエントリは隣り合わない。
-  const ordered = groups
-    .map((units, index) => ({ units, index }))
-    .sort((a, b) => b.units.length - a.units.length || a.index - b.index)
-    .flatMap(({ units }) => units);
-  const slots: TopicUnit[] = new Array(ordered.length);
-  let position = 0;
-  for (const unit of ordered) {
-    if (position >= slots.length) position = 1;
-    slots[position] = unit;
-    position += 2;
-  }
-  return slots;
 }
 
 function pickByRotation<T>(items: readonly T[], rotationIndex: number): T {
@@ -355,20 +375,28 @@ function pickByRotation<T>(items: readonly T[], rotationIndex: number): T {
   return items[((safe % items.length) + items.length) % items.length];
 }
 
+function rotate<T>(items: readonly T[], rotationIndex: number): T[] {
+  if (items.length === 0) return [];
+  const safe = Number.isFinite(rotationIndex) ? Math.trunc(rotationIndex) : 0;
+  const start = ((safe % items.length) + items.length) % items.length;
+  return [...items.slice(start), ...items.slice(0, start)];
+}
+
 /**
- * 会社員AIラボの題材を1件選ぶ（応急修正版）。
+ * 会社員AIラボの題材候補を優先順に並べる。
  *
- * - 新しい開発日記（maxAgeDays以内）がある限り、evergreenより必ず優先する。
- * - 日記は最新1件ではなく、新鮮なエントリ全部の話題を「同じエントリが隣り合わない」列にし、
- *   `rotationIndex`（投稿ごとに1ずつ増える連番）で巡回する。新鮮なエントリが2件以上ある限り、連続する
- *   2投稿が同じエントリになることはない（1件だけのときは同じエントリの別の切り口を順に使う）。同じ話題の
- *   再登場は列の長さ分の投稿数が経った後（数日単位のクールダウン）。履歴DBを持たないため、これが
- *   「直近に使った話題を避ける」の実装。
- * - 汎用角度は話題に使わない。evergreenのみ、`recentPostTexts`（直近投稿本文。渡された場合のみ）と同じ
- *   汎用テーマのseedを避ける。
- * - 除外した候補は `exclusions` に理由コード付きで返す（PROJECT_RULES「候補選定と除外ログ」）。
+ * 1. fresh（maxAgeDays以内）な日記イベントを新しい順に、1イベント1候補（切り口は rotationIndex で1つ選ぶ）
+ * 2. evergreen seed 全件（rotationIndex で開始位置をずらす）
+ *
+ * 使用済み・確保中・クールダウン中の判定はここではしない（DB の claim が正本）。DB は先頭から確保を
+ * 試みるので、未使用の fresh イベントがあれば必ずそれが evergreen より先に選ばれる。全候補が使えなければ
+ * 確保なし＝その枠は投稿しない（evergreen のクールダウンを破って埋めない）。
+ *
+ * - event_id が無い・不正・重複している日記エントリは候補にしない（ログに理由を残す）。
+ * - `recentPostTexts`（直近投稿本文。渡された場合のみ）と同じ汎用テーマの evergreen は候補から外す。
+ * - 除外した候補は `exclusions` に理由コード付きで返す（PROJECT_RULES「候補選定と除外ログ」）。本文は入れない。
  */
-export function selectAiLabRotatingTopicSeed({
+export function buildAiLabTopicCandidates({
   markdown,
   now,
   rotationIndex,
@@ -380,60 +408,65 @@ export function selectAiLabRotatingTopicSeed({
   rotationIndex: number;
   maxAgeDays?: number;
   recentPostTexts?: readonly string[];
-}): AiLabRotatingTopicSelection {
+}): { candidates: AiLabTopicCandidate[]; exclusions: AiLabTopicExclusion[] } {
   const exclusions: AiLabTopicExclusion[] = [];
+  const parsed = parseDevDiaryMarkdown(markdown);
+  const idCounts = new Map<string, number>();
+  for (const entry of parsed) {
+    if (entry.eventId) idCounts.set(entry.eventId, (idCounts.get(entry.eventId) ?? 0) + 1);
+  }
 
-  const fresh: Array<{ entry: DevDiaryEntry; age: number }> = [];
-  for (const raw of parseDevDiaryMarkdown(markdown)) {
+  const fresh: Array<{ entry: DevDiaryEntry; eventKey: string; age: number }> = [];
+  for (const raw of parsed) {
+    if (raw.duplicateLabels.length > 0) {
+      exclusions.push({ candidate: raw.date, stage: "sanitize", reason: `DIARY_DUPLICATE_LABEL:${raw.duplicateLabels.join(",")}` });
+      continue;
+    }
     const entry = sanitizeDiaryEntry(raw);
     if (!entry) {
       exclusions.push({ candidate: raw.date, stage: "sanitize", reason: "DIARY_ENTRY_UNSAFE_OR_INVALID" });
       continue;
     }
+    if (!entry.eventId) {
+      exclusions.push({ candidate: entry.date, stage: "sanitize", reason: "DIARY_EVENT_ID_MISSING_OR_INVALID" });
+      continue;
+    }
+    const eventKey = diaryEventKey(entry.eventId);
+    if ((idCounts.get(entry.eventId) ?? 0) > 1) {
+      exclusions.push({ candidate: eventKey, stage: "sanitize", reason: "DIARY_EVENT_ID_DUPLICATE" });
+      continue;
+    }
     const age = daysBetween(new Date(`${entry.date}T00:00:00Z`), now);
     if (age < 0) {
-      exclusions.push({ candidate: entry.date, stage: "freshness", reason: "DIARY_ENTRY_IN_FUTURE" });
+      exclusions.push({ candidate: eventKey, stage: "freshness", reason: "DIARY_ENTRY_IN_FUTURE" });
     } else if (age > maxAgeDays) {
-      exclusions.push({ candidate: entry.date, stage: "freshness", reason: "DIARY_ENTRY_STALE" });
+      exclusions.push({ candidate: eventKey, stage: "freshness", reason: "DIARY_ENTRY_STALE" });
     } else {
-      fresh.push({ entry, age });
+      fresh.push({ entry, eventKey, age });
     }
   }
   fresh.sort((a, b) => (a.entry.date < b.entry.date ? 1 : a.entry.date > b.entry.date ? -1 : 0));
 
-  const diaryUnits = interleaveByEntry(
-    fresh.map(({ entry, age }) => diaryUnitsFor(entry, age, exclusions)),
-    exclusions,
-  );
-  if (diaryUnits.length > 0) {
-    const unit = pickByRotation(diaryUnits, rotationIndex);
-    return { topic: unit.seed, source: "diary", unitKey: unit.key, exclusions };
+  const candidates: AiLabTopicCandidate[] = [];
+  for (const { entry, eventKey, age } of fresh) {
+    const units = diaryUnitsFor(entry, eventKey, age, exclusions);
+    const unit = pickByRotation(units, rotationIndex);
+    candidates.push({ kind: "diary", eventKey, unitKey: unit.key, themeTags: [], topic: unit.seed });
   }
 
-  // fresh な日記が本当に無い場合だけ evergreen。直近投稿と同じ汎用テーマのseedは避ける。
   const recentThemes = new Set(recentPostTexts.flatMap((text) => detectGenericThemes(text)));
-  const allowed: number[] = [];
-  EVERGREEN_TOPIC_SEEDS.forEach((_, index) => {
-    const overlap = EVERGREEN_THEME_TAGS[index]?.filter((id) => recentThemes.has(id)) ?? [];
+  const evergreenOrder = rotate(EVERGREEN_TOPIC_SEEDS.map((_, index) => index), rotationIndex);
+  for (const index of evergreenOrder) {
+    const key = evergreenEventKey(index);
+    const tags = EVERGREEN_THEME_TAGS[index] ?? [];
+    const overlap = tags.filter((id) => recentThemes.has(id));
     if (overlap.length > 0) {
-      exclusions.push({
-        candidate: `evergreen#${index}`,
-        stage: "recent_overlap",
-        reason: `RECENT_GENERIC_THEME:${overlap.join(",")}`,
-      });
-    } else {
-      allowed.push(index);
+      exclusions.push({ candidate: key, stage: "recent_overlap", reason: `RECENT_GENERIC_THEME:${overlap.join(",")}` });
+      continue;
     }
-  });
-  // 全部が直近テーマと重なる場合でも投稿自体は止めない（ガード側の再生成が最終防衛線）。
-  const pool = allowed.length > 0 ? allowed : EVERGREEN_TOPIC_SEEDS.map((_, index) => index);
-  const index = pickByRotation(pool, rotationIndex);
-  return {
-    topic: EVERGREEN_TOPIC_SEEDS[index],
-    source: "evergreen",
-    unitKey: `evergreen#${index}`,
-    exclusions,
-  };
+    candidates.push({ kind: "evergreen", eventKey: key, unitKey: key, themeTags: tags, topic: EVERGREEN_TOPIC_SEEDS[index] });
+  }
+  return { candidates, exclusions };
 }
 
 /**
@@ -443,6 +476,6 @@ export function selectAiLabRotatingTopicSeed({
  * not guarantee for a non-imported sibling file. Kept async only so callers do not need to change
  * between this and a future IO-backed source; today it never rejects.
  */
-export async function loadAiLabDevDiaryMarkdown(): Promise<string> {
-  return AI_LAB_DEV_DIARY_MARKDOWN_SNAPSHOT;
+export function loadAiLabDevDiaryMarkdown(): Promise<string> {
+  return Promise.resolve(AI_LAB_DEV_DIARY_MARKDOWN_SNAPSHOT);
 }

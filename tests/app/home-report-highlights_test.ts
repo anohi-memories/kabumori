@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildReportHighlights, currentReport, reportCardStatus } from "../../src/lib/home-report-highlights.ts";
-import type { PersonalizedReport, ReportBody } from "../../src/lib/report-presentation.ts";
+import type { MarketDetail, PersonalizedReport, ReportBody } from "../../src/lib/report-presentation.ts";
 
 function report(overrides: Partial<PersonalizedReport> & { body?: ReportBody | null } = {}): PersonalizedReport {
   return {
@@ -76,6 +76,36 @@ test("prefers today_claims from market_detail when present", () => {
   }));
   assert.equal(result.source, "today_claims");
   assert.deepEqual(result.points, ["日経平均は続伸しました。", "半導体関連株が買われました。"]);
+});
+
+test("prefers the shared report's three headlines over today_claims", () => {
+  const detail: MarketDetail = {
+    version: "1",
+    report_type: "close",
+    direction: "up",
+    headline_ja: "h",
+    summary_ja: "s",
+    metric_groups: [],
+    overnight_claims: [],
+    today_claims: [{ text_ja: "日経平均は69,946.86（前日比+2.40%）で終えました。", claim_type: "observation" }],
+    tailwind_themes_ja: [],
+    headwind_themes_ja: [],
+    key_news: [],
+    watch_points_ja: [],
+    risks_ja: [],
+    data_gaps_ja: [],
+    morning_reference: null,
+  };
+  const points = ["主要指数がそろって上昇、主因は絞れず", "G7が原油の協調放出で合意", "次は米国株と為替の反応を確認"];
+  const result = buildReportHighlights(report({ body: { market_detail: { ...detail, points_ja: points } } }));
+  assert.equal(result.source, "shared_points");
+  assert.deepEqual(result.points, points);
+
+  // An older report without the field, or with an empty list, keeps today_claims.
+  for (const market_detail of [detail, { ...detail, points_ja: [] }]) {
+    const fallback = buildReportHighlights(report({ body: { market_detail } }));
+    assert.equal(fallback.source, "today_claims");
+  }
 });
 
 test("falls back to checkpoints_ja when no today_claims", () => {

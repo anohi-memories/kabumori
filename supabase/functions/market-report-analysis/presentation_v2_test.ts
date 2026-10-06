@@ -342,7 +342,8 @@ test("10/1 replay: the packet that led with one company's impairment is reordere
   };
   const check = localAnalysisCheck(replay, input);
   assert.deepEqual(check.hard, [], "its facts were right");
-  assert.ok(has(check.warnings, "X本文が個別企業の開示を市場全体のニュースより前に扱っている"), check.warnings.join(" / "));
+  // The digest told the Nidec notice and none of the five broad items available that morning.
+  assert.ok(has(check.warnings, "X本文が個別企業の開示だけを扱い、市場全体のニュースに触れていない"), check.warnings.join(" / "));
   const ordered = assemblePacket(input, replay, { generatedAt: NOW(), attempts: 1 }).key_news;
   assert.deepEqual(ordered.map((news) => news.scope), ["broad", "broad", "broad", "company"]);
   assert.ok(ordered[3].headline_ja.includes("減損損失"), "the company notice is kept, after the market-wide items");
@@ -461,7 +462,7 @@ test("X and the app read one packet: same hash, and no number that is not in the
     for (const token of text.normalize("NFKC").match(/\d+(?:,\d{3})*\.\d+/g) ?? []) assert.ok(allowed.has(token), `number not from the shared input: ${token}`);
   }
   // The story's metric lines come from packet.major_moves, the same values X cites.
-  assert.ok(story.includes("日経平均 66,753.72（前日比+1.94%）") && post.includes("日経平均は66,753.72（前日比+1.94%）"));
+  assert.ok(story.includes("日経平均 66,753.72（前日比+1.94%）") && post.includes("9月30日の日経平均は66,753.72（前日比+1.94%）"));
 });
 
 test("the shared packet and story hold no user or portfolio data", () => {

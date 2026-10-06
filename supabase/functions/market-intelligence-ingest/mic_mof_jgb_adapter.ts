@@ -1,14 +1,30 @@
 // Ministry of Finance Japan -- JGB yield data (国債金利情報) adapter.
 //
-// Endpoint confirmed by direct fetch during implementation:
-// https://www.mof.go.jp/jgbs/reference/interest_rate/data/jgbcm_all.csv
-// Shift-JIS encoded CSV. Line 0 is a title/unit line, line 1 is the real
-// header ("基準日,1年,2年,...,40年"), data rows use Japanese era-based
-// dates (e.g. "S49.9.24" = Showa 49, "R8.8.31" = Reiwa 8) and "-" for a
-// maturity with no quoted yield that day.
+// MOF publishes the same table in two Shift-JIS CSV files (both confirmed by
+// direct fetch, 2026-10-01):
+//   current  .../interest_rate/jgbcm.csv           the latest month, one row per
+//                                                   business day, updated daily
+//   all      .../interest_rate/data/jgbcm_all.csv  history since 1974, extended
+//                                                   only about once a month
+// Line 0 is a title/unit line, line 1 is the real header
+// ("基準日,1年,2年,...,40年"), data rows use Japanese era-based dates (e.g.
+// "S49.9.24" = Showa 49, "R8.8.31" = Reiwa 8) and "-" for a maturity with no
+// quoted yield that day. The current file ends with a blank-cell row and a
+// "※..." note row.
+//
+// Until 2026-10 this adapter read only the history file. Its newest row was
+// 2026-08-31 while the current file already had 2026-09-30, so Production
+// JGB2Y/JGB10Y stayed a month old (observation_status 'stale') although every
+// fetch "succeeded". Both files are now read and merged BY OBSERVATION DATE:
+// no file name, month in the title, or today's date is trusted, so it does
+// not matter whether the current file holds the previous or the new month
+// around a month boundary.
 import type { NormalizedMarketMetric } from "./mic_normalize_logic.ts";
 
-export const MOF_JGB_CSV_URL = "https://www.mof.go.jp/jgbs/reference/interest_rate/data/jgbcm_all.csv";
+export const MOF_JGB_CURRENT_CSV_URL = "https://www.mof.go.jp/jgbs/reference/interest_rate/jgbcm.csv";
+export const MOF_JGB_ALL_CSV_URL = "https://www.mof.go.jp/jgbs/reference/interest_rate/data/jgbcm_all.csv";
+// Kept under its original name: the history file.
+export const MOF_JGB_CSV_URL = MOF_JGB_ALL_CSV_URL;
 export const MOF_SOURCE_KEY = "mof_jgb";
 
 export class MofAdapterError extends Error {
@@ -40,6 +56,7 @@ export function parseMofEraDate(raw: string): string {
     throw new MofAdapterError("MOF_INVALID_DATE", `unexpected date format: ${raw}`);
   }
   const [, era, yearStr, monthStr, dayStr] = match;
+  if (Number(yearStr) === 0) throw new MofAdapterError("MOF_INVALID_DATE", `invalid era year: ${raw}`);
   const baseYear = ERA_BASE_YEAR[era];
   const year = baseYear + Number(yearStr);
   const month = monthStr.padStart(2, "0");
@@ -64,32 +81,99 @@ export function parseMofJgbCsv(text: string): ParsedMofCsv {
 
 export type MofObservation = { metricKey: string; date: string; value: number };
 
-// Rows are in ascending date order in the source file; scans from the end
-// to find the newest non-missing ("-") value per mapped maturity.
-export function latestMofObservations(
+export type MofSourceFile = "current" | "all";
+export type MofDatedObservation = MofObservation & { sourceFile: MofSourceFile };
+
+function isRealIsoDate(date: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return false;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+}
+
+// Every valid (date, value) pair of one file for the mapped maturities. A row
+// is skipped, never fatal, when its date is not a real era date (blank row,
+// "※" note row, typo) or its cell is missing ("-", empty) or not a plain
+// decimal number. A missing mapped column is fatal for that file.
+export function collectMofObservations(
   parsed: ParsedMofCsv,
   mappings: MofMaturityMapping[] = MOF_MATURITY_MAPPINGS,
-): MofObservation[] {
-  const results: MofObservation[] = [];
+  sourceFile: MofSourceFile = "all",
+): MofDatedObservation[] {
+  const results: MofDatedObservation[] = [];
   for (const mapping of mappings) {
     const columnIndex = parsed.headers.indexOf(mapping.columnHeader);
     if (columnIndex === -1) {
       throw new MofAdapterError("MOF_COLUMN_NOT_FOUND", `column not found: ${mapping.columnHeader}`);
     }
-    for (let i = parsed.rows.length - 1; i >= 0; i--) {
-      const row = parsed.rows[i];
-      const raw = row[columnIndex];
-      if (raw === undefined || raw === "-" || raw === "") continue;
+    for (const row of parsed.rows) {
+      let date: string;
+      try {
+        date = parseMofEraDate(row[0] ?? "");
+      } catch {
+        continue;
+      }
+      if (!isRealIsoDate(date)) continue;
+      const raw = row[columnIndex]?.trim();
+      if (raw === undefined || !/^-?\d+(?:\.\d+)?$/.test(raw)) continue;
       const value = Number(raw);
       if (!Number.isFinite(value)) continue;
-      results.push({ metricKey: mapping.metricKey, date: parseMofEraDate(row[0]), value });
-      break;
+      results.push({ metricKey: mapping.metricKey, date, value, sourceFile });
     }
   }
   return results;
 }
 
-export function normalizeMofObservation(observation: MofObservation, fetchedAt: Date): NormalizedMarketMetric {
+// Newest observation per metric across both files, chosen by observation date
+// only. For the same date the current file wins over the history file (it is
+// the one MOF updates daily). `latestAllowedDate` drops rows dated in the
+// future, so one mistyped date cannot become "the latest".
+export function mergeLatestMofObservations(
+  fromAll: readonly MofDatedObservation[],
+  fromCurrent: readonly MofDatedObservation[],
+  mappings: MofMaturityMapping[] = MOF_MATURITY_MAPPINGS,
+  latestAllowedDate?: string,
+): MofDatedObservation[] {
+  const byMetric = new Map<string, Map<string, MofDatedObservation>>();
+  // History first, then current: a later insert for the same date replaces it.
+  for (const observation of [...fromAll, ...fromCurrent]) {
+    if (latestAllowedDate && observation.date > latestAllowedDate) continue;
+    const byDate = byMetric.get(observation.metricKey) ?? new Map<string, MofDatedObservation>();
+    byDate.set(observation.date, observation);
+    byMetric.set(observation.metricKey, byDate);
+  }
+  const results: MofDatedObservation[] = [];
+  for (const mapping of mappings) {
+    const byDate = byMetric.get(mapping.metricKey);
+    if (!byDate || byDate.size === 0) continue;
+    const latestDate = [...byDate.keys()].sort().at(-1)!;
+    results.push(byDate.get(latestDate)!);
+  }
+  return results;
+}
+
+// Newest non-missing value per mapped maturity within ONE parsed file.
+export function latestMofObservations(
+  parsed: ParsedMofCsv,
+  mappings: MofMaturityMapping[] = MOF_MATURITY_MAPPINGS,
+): MofObservation[] {
+  return mergeLatestMofObservations(collectMofObservations(parsed, mappings, "all"), [], mappings)
+    .map(({ metricKey, date, value }) => ({ metricKey, date, value }));
+}
+
+// What happened to each file in this fetch: "ok", "empty" (readable, but no
+// usable row -- e.g. a new month's file before its first business day) or
+// "failed:<CODE>". Stored in each metric's metadata so a run that completed
+// on one file only is visible afterwards.
+export type MofFetchSummary = { current: string; all: string };
+
+export function normalizeMofObservation(
+  observation: MofObservation & { sourceFile?: MofSourceFile },
+  fetchedAt: Date,
+  fetchSummary?: MofFetchSummary,
+): NormalizedMarketMetric {
+  const sourceFile = observation.sourceFile ?? "all";
   return {
     metricKey: observation.metricKey,
     value: observation.value,
@@ -104,12 +188,22 @@ export function normalizeMofObservation(observation: MofObservation, fetchedAt: 
     fetchedAt: fetchedAt.toISOString(),
     sourceKey: MOF_SOURCE_KEY,
     provider: "MOF",
-    sourceUrl: MOF_JGB_CSV_URL,
+    sourceUrl: sourceFile === "current" ? MOF_JGB_CURRENT_CSV_URL : MOF_JGB_ALL_CSV_URL,
     isDelayed: true,
     delayMinutes: MOF_EXPECTED_DELAY_MINUTES,
     qualityTier: "official",
     isOfficial: true,
-    metadata: { mofDate: observation.date },
+    metadata: {
+      mofDate: observation.date,
+      mofSourceFile: sourceFile,
+      ...(fetchSummary
+        ? {
+          mofFetch: fetchSummary,
+          // True when one of the two files could not be read at all.
+          mofPartial: fetchSummary.current.startsWith("failed") || fetchSummary.all.startsWith("failed"),
+        }
+        : {}),
+    },
   };
 }
 
@@ -119,26 +213,86 @@ export type FetchMofJgbMetricsParams = {
   timeoutMs?: number;
 };
 
+type MofFileOutcome =
+  | { status: "ok"; observations: MofDatedObservation[] }
+  | { status: "empty" }
+  | { status: "failed"; code: string; detail: string };
+
+// Never throws: every problem with one file becomes that file's outcome.
+async function loadMofFile(
+  url: string,
+  sourceFile: MofSourceFile,
+  mappings: MofMaturityMapping[],
+  timeoutMs: number,
+  fetchImpl: typeof fetch,
+  latestAllowedDate: string,
+): Promise<MofFileOutcome> {
+  let text: string;
+  try {
+    const response = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
+      return { status: "failed", code: "MOF_HTTP_ERROR", detail: `status=${response.status}` };
+    }
+    text = new TextDecoder("shift-jis").decode(await response.arrayBuffer());
+  } catch (error) {
+    return { status: "failed", code: "MOF_FETCH_FAILED", detail: String(error) };
+  }
+  try {
+    const lines = text.split(/\r?\n/).filter((line) => line.length > 0);
+    // Title + header and nothing else: a valid file with no rows yet.
+    if (lines.length === 2 && lines[1].split(",")[0] === "基準日") return { status: "empty" };
+    const observations = collectMofObservations(parseMofJgbCsv(text), mappings, sourceFile)
+      .filter((observation) => observation.date <= latestAllowedDate);
+    return observations.length > 0 ? { status: "ok", observations } : { status: "empty" };
+  } catch (error) {
+    const code = error instanceof MofAdapterError ? error.code : "MOF_MALFORMED_CSV";
+    return { status: "failed", code, detail: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+const describeOutcome = (outcome: MofFileOutcome) =>
+  outcome.status === "failed" ? `failed:${outcome.code}` : outcome.status;
+
+// Contract when one file is unavailable:
+//   current ok     / all failed -> use the current file (metadata.mofPartial = true)
+//   current failed / all ok     -> use the history file as a fallback (mofPartial =
+//                                  true). Its newest row can be a month old; nothing
+//                                  here calls that "fresh" -- the metric keeps its
+//                                  real observation date and the observation-freshness
+//                                  view classifies it by that date.
+//   current empty  / all ok     -> history file (not a failure: no rows yet)
+//   both failed                 -> the run fails (MOF_FETCH_FAILED / MOF_HTTP_ERROR / ...)
+//   no usable row in either     -> the run fails (MOF_NO_VALID_OBSERVATION)
 export async function fetchMofJgbMetrics(
   params: FetchMofJgbMetricsParams = {},
   fetchImpl: typeof fetch = fetch,
 ): Promise<NormalizedMarketMetric[]> {
-  let response: Response;
-  try {
-    response = await fetchImpl(MOF_JGB_CSV_URL, { signal: AbortSignal.timeout(params.timeoutMs ?? 20_000) });
-  } catch (error) {
-    throw new MofAdapterError("MOF_FETCH_FAILED", String(error));
-  }
-  if (!response.ok) {
-    throw new MofAdapterError("MOF_HTTP_ERROR", `status=${response.status}`);
-  }
-  const buffer = await response.arrayBuffer();
-  const text = new TextDecoder("shift-jis").decode(buffer);
-  const parsed = parseMofJgbCsv(text);
-  const observations = latestMofObservations(parsed, params.mappings);
-  if (observations.length === 0) {
-    throw new MofAdapterError("MOF_NO_VALID_OBSERVATION", "no observations found for the configured mappings");
-  }
+  const mappings = params.mappings ?? MOF_MATURITY_MAPPINGS;
+  const timeoutMs = params.timeoutMs ?? 20_000;
   const fetchedAt = params.fetchedAt ?? new Date();
-  return observations.map((observation) => normalizeMofObservation(observation, fetchedAt));
+  // Date-only observations may reach today's date in JST, not tomorrow in
+  // JST. A blanket +24h would admit a real future date before 15:00 UTC.
+  const latestAllowedDate = new Date(fetchedAt.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const [current, all] = await Promise.all([
+    loadMofFile(MOF_JGB_CURRENT_CSV_URL, "current", mappings, timeoutMs, fetchImpl, latestAllowedDate),
+    loadMofFile(MOF_JGB_ALL_CSV_URL, "all", mappings, timeoutMs, fetchImpl, latestAllowedDate),
+  ]);
+  if (current.status === "failed" && all.status === "failed") {
+    throw new MofAdapterError(current.code, `current: ${current.detail}; all: ${all.code}: ${all.detail}`);
+  }
+  const observations = mergeLatestMofObservations(
+    all.status === "ok" ? all.observations : [],
+    current.status === "ok" ? current.observations : [],
+    mappings,
+    latestAllowedDate,
+  );
+  const fetchSummary: MofFetchSummary = { current: describeOutcome(current), all: describeOutcome(all) };
+  if (observations.length === 0) {
+    throw new MofAdapterError(
+      "MOF_NO_VALID_OBSERVATION",
+      `no observations found for the configured mappings (current=${fetchSummary.current}, all=${fetchSummary.all})`,
+    );
+  }
+  return observations.map((observation) => normalizeMofObservation(observation, fetchedAt, fetchSummary));
 }

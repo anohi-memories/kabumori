@@ -1,5 +1,2636 @@
 # Claude Task 1 — CURRENT TASK
 
+- task_id: kabumori-topic-learning-access-progress-and-swipe-20261006
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- purpose: 実機確認で判明した戻るジェスチャー不一致を解消し、トピック一覧をSettings依存の単一レベル閲覧から「初級/中級/上級を自由に切替できる学習一覧」へ拡張し、端末内の既読/学習済み表示を追加する。
+
+## User requirement — canonical
+
+The user verified PR #90 on a real iPhone and requested:
+
+1. **Swipe-back must behave exactly like the visible `‹ 戻る` button.**
+   - entered detail from Home -> both button and swipe return Home.
+   - entered detail from list -> both button and swipe return that list.
+   - applies to topic detail and important-news detail.
+
+2. **Topic list must have its own 初級 / 中級 / 上級 switcher.**
+   - Settings level is only the preference for what Home shows.
+   - detail and list must provide easy access to every level without changing Home preference.
+
+3. **Topic list must show whether a topic has been read/learned.**
+   - user should immediately see learned vs unread topics.
+
+## Allocation / safety snapshot
+
+- allocated_at: 2026-10-06 JST
+- fresh main at allocation: `9c6f71bf00557c3c9b9ddc0a4198702600731660`
+- previous G1 task `kabumori-detail-navigation-topic-level-switch-20261006`: Final K1 PASS / PR #90 merged / done / G1 free.
+- fresh open-PR check: **0 overlap** across the target navigation/topic files with all currently open PRs.
+- G5 may have an unrelated production mutation window, but this G1 task is source-only, native UI/local storage only, with **production mutation = 0** and an independent worktree. Do not touch G5/G2/G3/G4 workstreams.
+
+## A. Swipe-back parity — mandatory
+
+### Existing canonical button semantics
+
+Topic detail:
+- `from=home` -> `‹ 戻る` goes Home.
+- `from=topics` -> `‹ 戻る` goes `/topics`.
+- unknown/cold deep link -> Home.
+- right action always `トピック一覧 ›`.
+
+News detail:
+- `from=home` -> `‹ 戻る` goes Home.
+- `from=news` -> `‹ 戻る` goes `/news`.
+- unknown/cold deep link -> Home.
+- right action always `ニュース一覧 ›`.
+
+### Required gesture result
+
+The native iOS back swipe must resolve to the **same destination as the left button for the same origin**.
+
+Required cases:
+- Home -> topic detail -> swipe => Home
+- topics -> topic detail -> swipe => topics
+- Home -> news detail -> swipe => Home
+- news list -> news detail -> swipe => news list
+- unknown/deep-link fallback: if a swipe-back route exists, it must not contradict the explicit fallback model
+
+Do not accept the current PR #90 behavior where Home-origin news detail's button returns Home but native edge swipe returns the news list.
+
+### Implementation guidance
+
+Do not simply disable swipe for Home-origin details. The user explicitly wants swipe to work.
+
+Choose the safest native-compatible mechanism after inspecting Expo Router / React Navigation behavior in this repo. Candidate approaches may include:
+- intercept/prevent native removal/back action and redirect using the explicit `from` origin;
+- restructure only the detail presentation/navigation boundary if that is materially safer;
+- another minimal approach proven by Simulator.
+
+Do **not**:
+- add a brittle custom full-screen pan gesture unless native-stack interception cannot satisfy the requirement;
+- add a new dependency just for this;
+- infer origin from stack shape;
+- regress the explicit `from` route-param contract.
+
+If native gesture interception has platform-specific limitations, document them and prove the chosen implementation with real Simulator swipes.
+
+### Topic detail
+
+Topic detail is a root Stack route and may already naturally match origin in common cases. Verify it rather than assuming.
+
+### News detail
+
+This is the known mismatch:
+Home-origin news detail currently lives above the nested news index, so a native pop returns list.
+
+Fix this so the actual edge swipe destination matches `backFromNewsDetail(..., from)`.
+
+Also ensure:
+- header left button remains `‹ 戻る`
+- header right remains `ニュース一覧 ›`
+- no double navigation
+- swipe does not leave stale detail behind when reopening News tab
+
+## B. Topic list level switcher
+
+### Product rule
+
+Settings level means only:
+**“Which level does Home's 今日のトピック show?”**
+
+It must no longer mean:
+**“Which level can the topic list browse?”**
+
+### List UX
+
+Add a compact 3-way selector near the top of `/topics`, consistent with topic detail:
+- 初級
+- 中級
+- 上級
+
+Use the same level color family where practical:
+- beginner green
+- intermediate blue
+- advanced lavender
+
+At 375pt all three fit on one row.
+
+### Initial level
+
+When the topic list is first opened without an explicit list-level request:
+- read the Settings/Home preference once and use it as the **initial selected list level only**.
+
+After that:
+- switching the list level is local to the list screen;
+- it must never call `writeTopicLevel`;
+- it must never modify `kabumori:topic-level:v1`.
+
+### Detail -> list continuity
+
+When the user taps `トピック一覧 ›` from a detail:
+- open/reveal the list with the **currently viewed detail level selected**.
+- this is navigation context only, not a Settings write.
+
+When returning via contextual `戻る` to an already-existing topics screen:
+- preserve that list screen's current selected level/state if possible.
+- do not unexpectedly force it to the detail's level unless the user explicitly used the right-side `トピック一覧 ›` action that requests that level.
+
+Choose a small route param such as `level=beginner|intermediate|advanced` for explicit list selection if useful, but avoid conflict with the existing detail route semantics.
+
+### Fetch behavior
+
+Current list fetches 14 dates for one level.
+
+Do **not** eagerly fetch all 3 levels.
+
+Preferred:
+- fetch only selected level;
+- maintain in-memory per-screen state/cache per level for loaded rows, loaded-day count, error;
+- switching to a never-loaded level loads its first page;
+- switching back to a previously loaded level restores instantly without refetching already loaded dates;
+- `さらに過去...` extends only the currently selected level;
+- protect against race conditions where a slow old-level request appends into the newly selected level.
+
+Keep:
+- PAGE_DAYS = 14 unless a measured reason to change;
+- MAX_DAYS = 98 unless a measured reason to change;
+- same deterministic `fetchDailyTopic(level,date)`;
+- no new backend endpoint/RPC.
+
+### Copy update
+
+The current text:
+`レベルは設定から変更できます。`
+becomes misleading.
+
+Replace with clear copy conveying:
+- this list can switch levels here;
+- Settings controls the Home display level only.
+
+Keep it concise and natural Japanese.
+
+## C. Read / learned state
+
+### v1 scope
+
+Implement **local-device read state only**.
+
+No DB, Supabase table, RPC, account sync or migration in this task.
+
+Reason:
+- fast and low-risk;
+- immediately useful;
+- can be upgraded to account-synced learning progress later if product needs it.
+
+### Marking rule
+
+A topic becomes “read/learned” only after its detail has **successfully resolved and is actually displayed**.
+
+Mark as read when:
+- direct Home/list detail load reaches valid `status=ok`;
+- in-detail level switch successfully displays a new target topic.
+
+Do not mark:
+- loading
+- error
+- id mismatch
+- failed level switch
+
+### Storage
+
+Use a dedicated module, e.g. `src/lib/topic-read-storage.ts`.
+
+Use the existing AsyncStorage dependency; no new package.
+
+Suggested key:
+`kabumori:topic-read:v1`
+
+Choose a stable content identity after inspecting topic identity semantics.
+
+Preferred behavior:
+- if `topic.id` is stable for the same learning item across dates, use it (optionally namespaced by level).
+- if the RPC id is a date-instance identity, use a stable content key such as `level + canonical title` so learning the same topic once does not look unread just because it appears on another date.
+- document which identity was chosen and prove it with tests/inspection.
+
+The user intent is **learning progress**, not merely “this exact dated row was tapped”.
+
+Storage requirements:
+- corrupt/missing storage => safely treat as empty
+- deduplicate
+- bounded small data
+- no crash if write fails; UI can remain functional
+
+### List UI
+
+Each topic row must clearly communicate state without making the list noisy.
+
+Preferred:
+- unread: small neutral `未読` indicator/dot
+- learned: calm green check / `学習済み`
+
+Do not use large badges that compete with the topic title.
+
+Accessibility labels should include the state.
+
+### Refresh behavior
+
+When returning from detail to topics:
+- read-state UI must refresh immediately (e.g. useFocusEffect or equivalent).
+- the row just opened should show learned without restarting the app.
+
+If a detail-level switch marks multiple level topics as read, the corresponding rows should show learned when that level is viewed in the list.
+
+### No manual reset in this task
+
+Do not add:
+- “mark unread”
+- progress reset
+- completion percentages
+- streaks
+- account sync
+
+Those can be future enhancements.
+
+## D. Interaction between Settings, list, detail
+
+The final product contract:
+
+### Home
+- reads Settings topic level
+- shows one level
+- Settings remains the only writer of Home level preference
+
+### Topic list
+- starts from Settings level only as an initial default when no explicit list-level param is given
+- freely switches 初級/中級/上級
+- does not change Settings
+- remembers loaded list data in-memory while screen stays alive
+- shows read/learned state
+
+### Topic detail
+- freely switches same-date 初級/中級/上級
+- does not change Settings
+- marks successfully displayed topics as learned
+- right-side list action opens list at the currently viewed level
+- contextual button Back + native swipe both return to the same origin
+
+Pin this contract in tests.
+
+## E. News behavior
+
+Only navigation/gesture parity changes for news.
+
+Do not add read-state to news.
+
+Do not change:
+- feed
+- news importance
+- source/app copy
+- alert settings
+- RPC/access boundary
+- Home split logic
+
+## Primary scope
+
+Expected:
+- `src/app/topics.tsx`
+- `src/app/topic-detail.tsx`
+- `src/app/_layout.tsx` only if root-stack gesture handling requires it
+- `src/app/(tabs)/news/_layout.tsx`
+- `src/app/(tabs)/news/[id].tsx` only if needed
+- `src/lib/detail-navigation.ts`
+- new `src/lib/topic-read-storage.ts` (or equivalent)
+- focused tests
+
+Allowed:
+- `src/lib/topic-history.ts` for pure list state helpers
+- `src/lib/topic-detail-switch.ts` for route/list level continuity
+- Home/list entry files only if a route param must be added or preserved
+
+Avoid unrelated UI/backend files.
+
+## Required tests
+
+### Swipe/back parity
+Pin:
+- topic Home-origin button target == swipe/back removal target == Home
+- topic topics-origin == topics
+- news Home-origin == Home
+- news news-origin == news list
+- unknown fallback safe
+- right-side list action remains independent
+
+Where full native swipe itself cannot be unit tested, unit-test the interception/removal decision and verify actual swipes in Simulator.
+
+### List level switch
+Pin:
+- initial list level from Settings when no explicit level param
+- explicit list-level param wins for that navigation
+- switching does not write Settings
+- only selected level is fetched
+- correct same date sequence per level
+- switching back uses cached rows
+- load more extends only active level
+- slow previous-level result cannot pollute new level
+- current list selection survives normal detail Back path where screen instance remains
+- detail right-side list action requests current detail level
+
+### Read state
+Pin:
+- successful valid detail => mark read
+- successful in-detail level switch => mark target read
+- mismatch/error/failed switch => no mark
+- corrupt storage => empty/safe
+- duplicate writes => one identity
+- list learned/unread mapping
+- focus return refreshes read state
+- storage key/version pinned
+- no Supabase/network dependency in read-state module
+
+### Settings separation
+Pin:
+- detail imports/writes no Home preference writer
+- list switching writes no Home preference
+- Home still reads Settings as before
+- only Settings-side code writes Home level preference
+
+## Simulator / real interaction verification
+
+Use restored iOS Simulator.
+
+Required:
+- 402pt and 375pt topic list selector
+- switch list beginner -> intermediate -> advanced
+- open unread row -> detail -> contextual Back -> same list -> row now learned
+- detail right `トピック一覧 ›` opens list at the current detail level
+- Home topic -> detail -> native edge swipe => Home
+- topics -> detail -> native edge swipe => topics
+- Home market news -> detail -> native edge swipe => Home
+- news list -> detail -> native edge swipe => news list
+- left button matches each of those swipe destinations
+- no stale news detail after returning Home
+- no clipping / duplicated header / unexpected tab switch
+
+Capture focused screenshots under `docs/ui-review/`:
+- topic list 402pt showing level selector + mixed learned/unread
+- topic list 375pt
+- optional navigation screenshot if useful
+
+## Test/check commands
+
+Run:
+- focused navigation/list/read-state tests
+- full `deno test tests/app/`
+- tsc changed scope
+- Expo config
+- web export if supported
+- `git diff --check`
+
+No EAS build.
+
+## Explicit non-scope
+
+Do NOT change:
+- DB/schema/migration/RPC/RLS/Auth
+- Edge Functions
+- AI/LLM
+- production
+- EAS/native signing/plugins
+- topic catalog editorial content
+- Home report/news behavior
+- X/social-mobile
+- common-account
+- Settings meaning/writer except copy only if proven necessary
+
+Production mutation: **0**.
+EAS build expected: **0**.
+
+## Worktree / Mac safety
+
+New G1 task:
+1. read `PROJECT_RULES.md`
+2. read `.agent/ORCHESTRATION.md`
+3. read `.agent/CURRENT_STATE.md`
+4. read this TASK
+5. clean base: `/Users/yuya/Developer/kabumori-fresh`
+6. fresh `origin/main`
+7. fresh open-PR overlap check
+8. `git worktree list`
+9. independent G1 worktree
+
+Recommended branch:
+`claude/g1-topic-learning-access-progress-swipe-20261006`
+
+Do not use/reset/prune protected old worktrees.
+Do not touch other slot dev servers or uncommitted files.
+
+## Completion criteria
+
+PASS candidate only if:
+- button and native swipe have the same contextual return target for topic and news details
+- topic list can switch all 3 levels without changing Home Settings
+- list fetch/cache/race behavior is safe
+- learned/unread state persists locally and refreshes on return
+- detail switching marks learned only on success
+- detail -> list preserves current viewed level intentionally
+- accepted learning-note UI remains intact
+- no backend/production/EAS changes
+- 375/402 visual checks pass
+- tests green
+- focused PR only
+
+## Delivery
+
+Create one focused PR.
+Do not self-merge.
+No production deploy.
+
+Report:
+- task_id
+- fresh main SHA
+- worktree isolation
+- swipe parity implementation and proof
+- topic-list level architecture/cache behavior
+- Settings separation proof
+- read identity choice + storage semantics
+- read marking/refresh behavior
+- changed_files
+- 402/375 findings
+- tests/checks
+- PR/head
+- EAS build created: no
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation: 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+---
+
+# USER NAVIGATION DECISION — SUPERSEDES PRIOR PLACEMENT CORRECTIONS
+
+This section is the newest canonical navigation requirement and **supersedes any earlier instruction in this TASK that says left=list / right=Home or left=Home / right=list unconditionally**.
+
+## Final navigation model
+
+Use a contextual **Back** action on the left and an always-available **List** action on the right.
+
+### Topic detail
+
+Left:
+- label: `‹ 戻る`
+- if opened from Home -> returns to Home
+- if opened from `/topics` -> returns to `/topics`
+- if origin is unknown/cold deep link -> safe fallback to Home
+
+Right:
+- label: `トピック一覧 ›`
+- always opens `/topics`, regardless of origin
+
+### Important-news detail
+
+Left:
+- label: `‹ 戻る`
+- if opened from Home market-news/holding-news card -> returns to Home
+- if opened from news list -> returns to `/news`
+- if origin is unknown/cold deep link -> safe fallback to Home
+
+Right:
+- label: `ニュース一覧 ›`
+- always opens `/news`, regardless of origin
+
+## Implementation preference — deterministic origin, not accidental stack history
+
+Do **not** depend only on `router.back()` for the canonical destination because the nested news stack can make the visual origin differ from the actual stack predecessor.
+
+Prefer an explicit lightweight route param such as `from=home|topics|news` (exact naming is implementation choice) passed by the known entry points:
+- Home topic -> topic detail: origin Home
+- topics list -> topic detail: origin topics
+- Home market/holding news -> news detail: origin Home
+- news list -> news detail: origin news
+
+Requirements:
+- left Back resolves from this explicit origin;
+- unknown/missing origin falls back safely to Home;
+- right List ignores origin and always goes to the relevant list;
+- topic level switching must preserve the origin param when route params are updated;
+- no persistent storage for origin;
+- no backend/schema/RPC/Auth change.
+
+## Visual intent
+
+Keep the current compact top-row style:
+- left Back action visually reads as navigation/back;
+- right list action is the stable escape hatch to browse related content;
+- do not add a third Home button.
+
+At 375pt:
+- no clipping;
+- `‹ 戻る` and `トピック一覧 ›` fit comfortably;
+- `‹ 戻る` and `ニュース一覧 ›` fit comfortably.
+
+## Tests to add/update
+
+Topic:
+- Home -> detail -> Back => Home
+- topics -> detail -> Back => topics
+- cold/deep link -> Back => Home fallback
+- right Topic list => topics from every origin
+- level switch preserves origin
+
+News:
+- Home -> detail -> Back => Home
+- news list -> detail -> Back => news list
+- cold/deep link -> Back => Home fallback
+- right News list => news list from every origin
+
+Do not use stack accident as proof; assert explicit origin routing.
+
+Recommended model: **Sonnet5（中）**.
+
+---
+
+# Claude Task 1 — CURRENT TASK
+
+- task_id: kabumori-detail-navigation-topic-level-switch-20261006
+- owner: claude
+- slot: claude-1
+- status: done
+- next_owner: none
+- priority: high
+- recommended_model: Sonnet5（中）
+- purpose: かぶモリの詳細画面から迷わず移動できるよう、トピック詳細で「同じ日の初級/中級/上級」を簡単に切替可能にし、トピック詳細と重要ニュース詳細の双方に明示的なHome/一覧導線を追加する。
+
+## User requirement — canonical
+
+### A. トピック詳細
+Homeに表示するトピックレベルは今までどおりSettingsの選択で決める。
+
+ただし、いったんトピック詳細を開いた後は、Settingsへ戻らなくても、その**同じ日**の
+- 初級
+- 中級
+- 上級
+
+を簡単に切り替えて全部読めるようにする。
+
+これは詳細画面内だけの閲覧切替。
+**Homeの保存済みレベル設定は絶対に変更しない。**
+
+また、現在左上にある単純な「もどる」だけではなく、詳細画面から明示的に
+- **ホーム**
+- **過去のトピック**
+
+へ戻れる2つの導線を用意する。
+
+### B. 重要ニュース詳細
+Homeの重要ニュースカードからニュース詳細へ直接入った場合でも、
+- **ニュース一覧**
+- **ホーム**
+
+の両方へ明示的に移動できるようにする。
+
+ブラウザ/ナビゲーション履歴の偶然に依存せず、どの入口から詳細を開いても2つの行き先を保証する。
+
+## Allocation / safety snapshot
+
+- allocated_at: 2026-10-06 JST
+- fresh main at allocation: `e303d81e940d413ed62ec93885b09063b3661aee`
+- G1 previous task: Final K1 PASS / done / free.
+- G2: done; H1 is reviewing separate PR #87; H2 done/free; G3/G4/G5 are separate production/account/social workstreams.
+- all currently open PRs were fresh-checked at allocation.
+- overlap with the following target paths: **0**:
+  - `src/app/topic-detail.tsx`
+  - `src/app/topics.tsx`
+  - `src/app/(tabs)/news/[id].tsx`
+  - `src/app/(tabs)/news/_layout.tsx`
+  - `src/app/(tabs)/news/index.tsx`
+  - `src/components/back-button.tsx`
+  - `src/lib/daily-topic.ts`
+  - `src/lib/home-topic.ts`
+
+Re-check immediately before coding. If overlap appears, STOP.
+
+## Current accepted baseline — preserve
+
+Topic detail visual polish is already accepted and merged:
+- 「かぶモリ学習ノート」
+- beginner green / intermediate blue / advanced lavender
+- canonical level artwork
+- numbered 1/2/3 learning flow
+- specific example card
+- caution band
+- takeaway block
+- 50 curated topics
+- deterministic `fetchDailyTopic(level, jstDate)`
+- exact `id / level / jstDate` verification
+- id mismatch fail-closed
+- unknown-title truthful fallback
+- Home and history navigation
+- 375pt / 402pt layout
+- long-title collision protection
+
+Do not regress or redesign this accepted screen.
+
+Important-news data/access behavior is also accepted:
+- detail reuses the user's permitted feed
+- no access-boundary change
+- no RPC/schema/auth change
+
+## A1. Topic detail — level switcher UX
+
+Add a compact 3-way level selector to the topic detail screen.
+
+Preferred placement:
+- below the `かぶモリ学習ノート` identity row
+- above the Hero
+
+Labels should be immediately understandable and compact:
+- `初級`
+- `中級`
+- `上級`
+
+Use one cohesive segmented-control / pill-row style, not three large cards.
+
+Requirements:
+- all 3 fit cleanly at 375pt.
+- current level is visually selected.
+- selected/accent treatment follows the existing level color family.
+- `accessibilityRole="button"` and selected state/hint should be clear.
+- switching must not scroll the user into a broken position or show stale mixed content.
+- a switch should feel lightweight; no Settings navigation.
+
+### Same-date invariant
+
+When viewing date `jstDate = D`:
+- beginner switch shows `fetchDailyTopic('beginner', D)`
+- intermediate switch shows `fetchDailyTopic('intermediate', D)`
+- advanced switch shows `fetchDailyTopic('advanced', D)`
+
+Never silently use today's date when the user is viewing a past topic.
+
+### Home setting invariant
+
+The switcher must **not**:
+- write AsyncStorage level preference
+- call the topic-level storage writer
+- change what Home will show next time
+
+Home remains controlled by the Settings preference only.
+
+## A2. Topic detail — switching/data behavior
+
+Keep the existing exact-id/fail-closed contract for direct navigation.
+
+For in-detail switching:
+- resolve the deterministic target topic for the current `jstDate`
+- on success, display that exact topic and update route params to its real `id / level / jstDate`
+- on failure, keep the currently visible topic intact and show a small honest inline error near the selector; do not blank the whole page
+- tapping the already-selected level does nothing
+
+Prefer a small **in-memory per-screen cache keyed by date+level**:
+- first visit to a level may fetch once
+- switching back to an already loaded level should be instant and should not refetch unnecessarily
+- do not add persistent storage
+- do not add a new backend endpoint/RPC
+
+Avoid the obvious double-fetch pattern (fetch target, then immediately refetch the same target only because params changed). A cache-aware route-param update is preferred.
+
+Do not eagerly add three permanent network calls to Home.
+Any extra topic requests belong only to the open detail screen.
+
+## A3. Topic detail — explicit destination navigation
+
+Replace the ambiguous single generic back control at the top of topic detail with a compact explicit navigation row.
+
+Required destinations:
+- **ホーム** -> explicit Home route
+- **過去のトピック** -> explicit `/topics`
+
+These buttons must not rely on `router.back()`.
+
+Preferred semantics:
+- direct destination navigation, e.g. replace/push chosen so it does not create a silly Home <-> detail <-> list loop
+- preserve iOS gesture/back behavior where reasonable, but explicit buttons are canonical
+- deep-link entry must still have both destinations available
+
+Do not change the existing `/topics` list's core behavior or its Settings-driven level unless necessary for a tiny compatibility fix.
+
+## B1. Important-news detail — explicit Home + list destinations
+
+Current news detail uses the nested news Stack and generally exposes a list-back behavior.
+
+Make the detail header guarantee both destinations:
+
+- **ニュース一覧** -> explicit `/news`
+- **ホーム** -> explicit Home route
+
+Preferred implementation:
+- customize the detail Stack header so the left action is explicitly `ニュース一覧`
+- add a clear `ホーム` action on the right
+- do not rely on `router.canGoBack()/router.back()` for either canonical action
+
+This must work when the detail was opened from:
+- Home market-wide important-news card
+- Home holding-news row
+- news list
+- a cold/deep link
+
+The normal detail, loading state, missing/error state should all retain a usable route to Home and the news list through the header.
+
+If the existing center-screen error button remains, it may still say `一覧へ戻る`; the explicit Home header action must remain available too.
+
+## B2. Important-news non-scope
+
+Do not change:
+- which news items are returned
+- importance/severity logic
+- source URLs
+- app copy / Fact behavior
+- access boundary
+- auth
+- RPC
+- schema
+- Home news split logic
+
+This task is navigation only for news.
+
+## Visual / interaction direction
+
+Keep Kabumori's existing tone:
+- calm
+- compact
+- readable
+- not a large toolbar
+- no icon/dependency proliferation
+
+Topic selector and destination controls should feel native to the newly polished learning page.
+
+Do not crowd the Hero.
+Do not reintroduce generic emoji decoration.
+
+## Primary scope
+
+Expected:
+- `src/app/topic-detail.tsx`
+- `src/app/(tabs)/news/_layout.tsx`
+- `src/app/(tabs)/news/[id].tsx` only if needed for error-state cleanup
+- focused app tests
+
+Allowed if useful:
+- one small pure topic-detail navigation/cache helper
+- `src/app/topics.tsx` only for a proven navigation compatibility issue
+- `src/components/back-button.tsx` only if a reusable non-regressive extension is clearly better than local controls
+
+Avoid unrelated Home changes.
+
+## Tests — required
+
+### Topic switcher
+Prove:
+- three levels render
+- selected state follows active topic
+- switch uses the **same jstDate**
+- success uses the returned target topic's real id
+- route params become exact target `id/level/jstDate`
+- direct route id mismatch still fails closed
+- switch failure keeps prior content
+- switching back to a cached level avoids an unnecessary network refetch
+- tapping selected level is a no-op
+- no Settings/AsyncStorage preference write from detail
+- Home topic preference contract is unchanged
+
+### Topic navigation
+Prove:
+- Home button explicitly targets Home
+- Past topics button explicitly targets `/topics`
+- buttons do not depend on history/back-stack availability
+- history -> detail -> Home works
+- Home -> detail -> past topics works
+- deep-link-ish detail state still exposes both destinations
+
+### News navigation
+Prove:
+- detail header exposes explicit `ニュース一覧`
+- detail header exposes explicit `ホーム`
+- both use direct routes, not `router.back()`
+- Home -> news detail -> Home path exists
+- Home -> news detail -> news list path exists
+- list -> detail still works
+- missing/error detail keeps usable header navigation
+
+## Simulator verification
+
+Use the restored iOS Simulator runtime.
+
+At minimum verify:
+- 402pt topic detail with switcher
+- 375pt topic detail with switcher + long title
+- switching beginner -> intermediate -> advanced on the same date
+- past-date topic and switching levels
+- Home and past-topics explicit buttons
+- important-news detail header at normal 402/375-like width
+- Home/list explicit news actions
+- no clipping / accidental double header / tab-bar regression
+
+Capture focused screenshots under `docs/ui-review/` if useful for K1.
+
+## Test/check commands
+
+Run:
+- focused new navigation/switcher tests
+- full `deno test tests/app/`
+- Expo config
+- web export if supported
+- changed-scope type/lint
+- `git diff --check`
+
+No EAS build.
+
+## Explicit non-scope / safety
+
+Do NOT change:
+- DB/schema/migrations
+- RPC
+- RLS/Auth
+- Edge Functions
+- AI/LLM
+- news generation
+- report generation
+- topic catalog content
+- Home stored topic preference
+- common account
+- X/social-mobile
+- production settings
+- native plugins/signing/config
+
+Production mutation: **0**.
+EAS build expected: **0**.
+
+## Worktree / Mac safety
+
+This is a new G1 task.
+
+Before work:
+1. read `PROJECT_RULES.md`
+2. read `.agent/ORCHESTRATION.md`
+3. read `.agent/CURRENT_STATE.md`
+4. read this TASK
+5. fresh `origin/main`
+6. re-check open PR overlap
+7. run `git worktree list`
+8. create/use an independent G1 worktree from clean base **`/Users/yuya/Developer/kabumori-fresh`**
+
+Recommended branch:
+`claude/g1-detail-navigation-topic-switch-20261006`
+
+Do not use/reset/prune/rename old protected worktrees.
+Do not touch another slot's branch, uncommitted files or dev server.
+
+## Completion criteria
+
+PASS candidate only if:
+- same-day beginner/intermediate/advanced switching works from detail
+- switching does not mutate Home's saved level
+- direct-detail id safety remains fail-closed
+- switch errors do not destroy current content
+- Home + past topics explicit actions work from topic detail
+- Home + news list explicit actions work from news detail
+- 375/402 Simulator checks pass
+- current topic visual design is preserved
+- no backend/native/production changes
+- tests green
+- focused PR only
+
+## Delivery
+
+Create one focused PR.
+Do not self-merge.
+No production deploy.
+
+Report:
+- task_id
+- fresh main SHA
+- worktree isolation proof
+- changed_files
+- topic switch architecture/cache behavior
+- same-date proof
+- no-Settings-write proof
+- topic explicit navigation behavior
+- news explicit navigation behavior
+- 402/375 findings
+- tests/checks
+- PR/head
+- EAS build created: no
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation: 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+## Report — G1: detail navigation + topic level switch (task kabumori-detail-navigation-topic-level-switch-20261006)
+
+- task_id: `kabumori-detail-navigation-topic-level-switch-20261006`
+- result: implemented and Simulator-verified; one real defect found by the Simulator pass and fixed before the PR. PR open, **not merged**.
+- fresh main SHA (clone at start): `0c0f88be0e44ab0d8e730f4388afa4d2b0494141` (allocation SHA was `e303d81e`; main only advanced with agent/ops commits, 0 overlap with the target paths).
+- PR: https://github.com/anohi-memories/kabumori/pull/90 — branch `claude/g1-detail-navigation-topic-switch-20261006`, head `0dd2b5af7e4736a67b11645d08e61f3114b8619a` (1 commit).
+- **EAS build created: no (0).** backend/DB/RPC/API/AI/Auth/Edge/production mutation: **0**.
+
+### worktree isolation proof
+Independent clone of `origin/main` in the session scratchpad (own branch, own `.env` copy, `node_modules` symlink); overlap re-checked immediately before coding: all 7 open PRs (#87/#78/#41/#33/#11/#10/#3) touch none of the 8 target paths. The clean base `kabumori-fresh` and the old repo/worktrees were not modified; nothing deleted/pruned/reset. Only one Metro ran at a time (stopped afterwards; the user's iPhone server on 8081 was not running).
+
+### changed_files (9 code/test, +4 screenshots)
+`src/app/topic-detail.tsx`, `src/app/(tabs)/news/_layout.tsx`, `src/app/(tabs)/news/[id].tsx` (error-state button only), new `src/lib/topic-detail-switch.ts`, new `src/lib/detail-navigation.ts`, tests: `topic-detail-screen_test.ts` (updated), new `topic-detail-switch_test.ts`, new `detail-navigation_test.ts`. `topics.tsx`, `back-button.tsx`, `daily-topic.ts`, `home-topic.ts`, Home, catalog: untouched.
+
+### topic switch architecture / cache behaviour
+- Route params stay the source of truth for the screen; `viewDate = params.jstDate`.
+- Pure helper `resolveTopicForLevel({level, jstDate, cache, fetchTopic})`: cache hit → returns without a network call; else `fetchDailyTopic(level, jstDate)`; a null / wrong-level result = `unavailable`, a throw = `error` (never thrown to the UI, never cached).
+- In-memory per-screen cache `createTopicViewCache()` keyed by date+level (never persisted, never shared with Home). A verified direct load joins the cache.
+- Switch success: show the returned topic immediately, then `router.setParams({id, level, jstDate})` with the topic's real id. The route-param effect looks in the cache first (`cached.id === params.id`), so there is **no second fetch** for the same (level, date); a cached level switches instantly with zero fetches.
+- Failure: the current topic/status are untouched; only a small `accessibilityLiveRegion` message under the selector (`{レベル}のトピックを取得できませんでした。表示中の内容はそのままです。`). A newer tap supersedes an in-flight one (sequence token; a late older result is dropped). Tapping the shown level is a no-op (no fetch, no params change; it only drops a pending switch to another level).
+- Direct-route fail-closed contract unchanged: invalid params → mismatch, `result.id !== id` → mismatch, fetch error → error, new params reset to loading.
+
+### same-date proof
+Unit tests assert every switch calls the fetcher with exactly the viewed date (a past date, never today); the screen has no `todayJst/Date` use. Simulator: from /topics opened 10/1 (today−5), switching to 中級 stayed on 10月1日（木） with `params.jstDate=2026-10-01`.
+
+### no-Settings-write proof
+The detail screen does not import any storage / `topic-level-storage` module and contains no `setItem`/`writeTopicLevel` (test-pinned, plus a repo-wide scan that only Settings-side code writes the level). Simulator: Settings level `intermediate`; after switching to 上級 and 初級 in the detail, `kabumori:topic-level:v1` was still `intermediate` and Home's card still showed 中級 after 「ホーム」.
+
+### topic explicit navigation
+Top row: `‹ ホーム` (left) and `過去のトピック ›` (right), rendered above every status branch (loading/error/mismatch/deep-link states keep both). `goHome(router)` = `router.dismissTo('/')`, `goPastTopics(router)` = `router.dismissTo('/topics')` — expo-router POP_TO: pops back to the existing screen if it is below, otherwise replaces the detail with the target (no stacked copies, no loop). No `back()/canGoBack()`. Simulator: Home→detail→ホーム ⇒ stack `[(tabs)]` only; Home→detail→過去のトピック ⇒ `/topics`; topics→detail→過去のトピック→…loop ⇒ stack never exceeds `[tabs, topics, detail]`; Menu→今日のトピック→detail→ホーム ⇒ **Home tab selected**; cold deep link (`kabumori://topic-detail?…`, stack = detail only) ⇒ both buttons work.
+
+### news explicit navigation
+Stack header of `news/[id]`: left `‹ ニュース一覧` (`dismissTo('/news')`), right `ホーム`, `headerBackVisible: false` (no second back control); the header is a stack option so loading and missing/error states keep it; the in-body 「一覧へ戻る」 uses the same direct route. **Simulator found `dismissTo('/')` is a silent no-op from inside the nested news stack** (tested with real taps at 402/375 and via a direct call), so `ホーム` uses `goHomeFromNews`: `if (canDismiss()) dismissAll(); navigate('/')` — empties the news stack back to the list (no stale detail when the tab is reopened) and selects the Home tab. `replace('/')` (stacks a second (tabs)) and bare `navigate('/')` (leaves the detail open) were rejected after testing. Re-verified with real taps: Home market card → detail → ホーム ⇒ Home tab, news stack `[index]`; entries Home market card, Home holding row, news list tab, cold deep link all reach the list via ニュース一覧 and Home via ホーム; edge-swipe back still works with the custom header (375pt).
+
+### 402 / 375 findings
+- 402pt (iPhone 18 Pro): nav row y=8 h44; label row h≈22; selector h48 (3 × 116×40); Hero starts y≈152; Hero heights 189.7 (≤7 chars) / 233.3 (8–16) / 291.3 (17+). Balanced, Hero not crowded; accepted learning-note design intact.
+- 375pt (iPhone SE 3rd): 17+-char title: selector segments 107×40, nav `‹ ホーム` 52.5 + `過去のトピック ›` 108.5 in a 335 row (one line), date 79 wide, no wrap/overlap; Hero 283/190/225. Selector row pushes the Hero down ~60pt, still comfortable.
+- news header at 402/375: `‹ ニュース一覧` / `ニュース詳細` / `ホーム` fit, no double header, no clipping, tab bar intact (iOS 27 renders the header buttons as glass capsules).
+- Level colours: selected segment = that level's accent (green/blue/lavender), white text; follows the existing colour system.
+- Minor (accepted): the inline switch-error text pushes the Hero down ~46pt while visible; ニュース tab keeps stale `id` param after the stack is emptied (no visible effect).
+
+### tests / checks (head `0dd2b5af`)
+`deno test tests/app/` **322 passed / 0 failed** (focused: 48); tsc(src): no diagnostics; `expo config` OK; `expo export --platform web` PASS; `git diff --check` clean.
+
+### Screenshots (`docs/ui-review/`, WebP q80)
+`topic_switch_402pt.webp`, `topic_switch_375pt_long.webp`, `news_detail_header_375pt.webp`, `news_detail_home_action_402pt.webp`.
+
+### remaining issues
+- Verification was on the Simulator with an auth-bypass/fixture rig kept in the scratchpad only (not committed); the real iPhone dev-client check by the user is still useful (real feed data, touch feel, the iOS glass header).
+- 375pt rapid-tap race (A6) and Home→detail→past-topics at 375pt were not separately exercised (402pt covered; 375pt behaviour identical by code).
+- Flicker between switches was inspected via commit-level logs, not video.
+- SDK-27 dev client launch crash on iOS 27 remains an environment issue (Simulator runs used a scratchpad-only patched copy).
+
+### safety_checks
+No DB/RPC/RLS/Auth/Edge/AI/news/report-generation/catalog/native/config/EAS/production change; no new dependency; no storage write; `.env` and `node_modules` kept out of the commit; PR not merged.
+
+### next_recommendation
+K1 reviews PR #90 (UI/navigation-only, low risk: no Codex review needed). The user may try it on the iPhone (server on request).
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
+
+## Final K1 — contextual Back + list navigation PASS / merged
+
+- verdict: **PASS**.
+- PR #90 exact accepted head: `39bdf30f4c1bdb4214acbe27bf918aeff8a39ab1`.
+- squash-merged as `bcbdc2b8df3ba66955ebbf3e10d04a19b446fe38`.
+- fresh pre-merge main comparison: changed-file overlap = **0**.
+- GitHub merge gate: `mergeable=true`, `mergeable_state=clean`; CI/status green.
+- final navigation contract accepted:
+  - topic detail left `‹ 戻る`: Home origin -> Home, topics origin -> /topics, unknown -> Home fallback;
+  - topic detail right `トピック一覧 ›`: always /topics;
+  - news detail left `‹ 戻る`: Home origin -> Home, news-list origin -> /news, unknown -> Home fallback;
+  - news detail right `ニュース一覧 ›`: always /news;
+  - origin is explicit route param and survives topic-level switching.
+- topic same-date 初級/中級/上級 switching and per-screen cache accepted; Home saved topic level remains unchanged.
+- 402pt Simulator real-tap verification accepted.
+- 375pt was not re-measured after the final label swap; K1 accepts this because the final labels are shorter than the previously verified 375pt variants and layout geometry has more headroom, with no code-path difference.
+- iOS edge-swipe on Home-origin news detail still returns to the nested news list while the explicit `戻る` button returns Home; accepted as native stack gesture behavior. The explicit button behavior is canonical.
+- tests/checks: **335/335 app tests**, focused 61, tsc clean, Expo config PASS, web export PASS, diff clean.
+- Codex review: **not required**; UI/navigation-only, no sensitive backend boundary, strong deterministic tests and Simulator evidence.
+- EAS build = 0.
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+- remaining non-blockers: real-iPhone touch/real-feed check remains useful but is not a merge blocker.
+- AI Lab diary: no new separate entry required; this is a navigation follow-up to the already recorded 2026-10-06 learning-screen work.
+- G1 done/free.
+
+---
+
+## Report 2 — G1: contextual Back + always-available list (USER NAVIGATION DECISION, same task / same PR #90)
+
+- result: implemented per the "USER NAVIGATION DECISION — SUPERSEDES PRIOR PLACEMENT CORRECTIONS" section; 402pt Simulator verified with real taps/swipes; **375pt NOT measured this round** (see remaining issues). PR #90 updated (no second PR), **not merged**.
+- PR: https://github.com/anohi-memories/kabumori/pull/90 — branch `claude/g1-detail-navigation-topic-switch-20261006`, **head `39bdf30f4c1bdb4214acbe27bf918aeff8a39ab1`** (2 commits: `0dd2b5af` switcher + first nav, `39bdf30f` contextual back).
+- main SHA at start of this round: `91b5d04`. Overlap re-check (all open PRs #91/#90/#78/#41/#33/#11/#10/#3) on topic-detail / topics / news / Home entry files / detail-navigation: none except PR #90 itself.
+- **EAS build created: no (0).** backend/DB/RPC/API/AI/Auth/Edge/production mutation: **0**.
+
+### Behaviour (replaces the earlier ホーム / 過去のトピック / ニュース一覧 / ホーム labels)
+- Topic detail: left `‹ 戻る`, right `トピック一覧 ›`. News detail (stack header): left `‹ 戻る`, right `ニュース一覧 ›`. No third Home button.
+- **Origin = explicit route param `from=home|topics|news`** (name chosen: `from`), passed by the entry points: Home topic card → `from:'home'`; `/topics` rows → `from:'topics'`; Home market-news card and Home holding-news row → `from:'home'`; news list rows → `from:'news'`. Parsed by `parseDetailOrigin` (string or first array item; anything else = unknown). Not stored anywhere; no backend/schema/RPC/Auth.
+- `戻る`: topic → `topics` only when `from=topics`, else Home (`dismissTo('/')`); `from=topics` → `dismissTo('/topics')`. News → `news` only when `from=news` (`dismissTo('/news')`), else Home via `goHomeFromNews` (`dismissAll` then `navigate('/')`, because `dismissTo('/')` is a silent no-op inside the nested news stack). Unknown/cold deep link → Home. No `back()/canGoBack()`/stack inspection.
+- List action ignores the origin: `トピック一覧 ›` → `dismissTo('/topics')`, `ニュース一覧 ›` → `dismissTo('/news')`.
+- Level switching preserves the origin: `router.setParams(topicDetailRouteParams(next, viewDate, origin))` carries `from` (and adds none when there was none).
+
+### changed_files (this round)
+`src/lib/detail-navigation.ts` (origin helpers), `src/lib/topic-detail-switch.ts` (`from` in params), `src/app/topic-detail.tsx`, `src/app/(tabs)/news/_layout.tsx` (header uses `options={({route}) => …}`), entry points `src/app/(tabs)/index.tsx`, `src/app/topics.tsx`, `src/components/home/home-market-news-grid.tsx`, `src/components/home/home-holding-news-list.tsx`, `src/app/(tabs)/news/index.tsx` (one `from` param each, nothing else), tests `detail-navigation_test.ts`, `topic-detail-screen_test.ts`, `topic-detail-switch_test.ts`, new `detail-origin_test.ts`; screenshots replaced (the older ones showed the superseded labels).
+
+### 402pt Simulator results (iPhone 18 Pro, real taps; params/stack read from the nav tree)
+- Topic: Home→detail→戻る ⇒ Home, stack `[(tabs)]`; `/topics`→detail→戻る ⇒ `/topics` (`[tabs,topics]`); level switches (topics origin 中級→上級→初級→中級, Home origin 上級) keep `from`, real id/level, same date, and 戻る still follows the origin; 右 `トピック一覧 ›` ⇒ `/topics` from Home origin (`[tabs,topics]`, no detail left) and from topics origin (`[tabs,topics]`, no double topics); cold deep link (no `from`) ⇒ 戻る Home / 一覧 `/topics`; loading / error / mismatch states keep both buttons and route per `from`.
+- News: Home market card and holding row → 戻る ⇒ Home tab, news stack `[index]` only (opening the news tab later shows the list only); news list → 戻る ⇒ news list (tab stays); `ニュース一覧 ›` from Home market / holding / list origins ⇒ news list, no stale detail, no doubled list; cold `news/<id>` ⇒ 戻る Home / 一覧 list; missing id / loading / error states keep both buttons with correct `from` routing; centre `一覧へ戻る` ⇒ list.
+- Layout 402: topic nav row x=20 w362 h44; `‹ 戻る` 38.3×44, `トピック一覧 ›` 94.7×44, no clip/wrap. News header (iOS 27 glass capsules): left ≈47pt, right ≈103pt, title `ニュース詳細` ≈154–248pt — no overlap, no double header, tab bar intact. Approved topic design (selector/Hero/steps) unchanged.
+
+### remaining issues / for K1
+1. **375pt not measured this round** (the temporary iPhone SE 3rd gen was created but the Simulator control tool's device-access permission prompt was left unanswered, so no taps/screenshots). Derived, not measured: widths are width-independent — topic row 335pt vs ≈133pt of buttons; news header: left capsule ends ≈63pt, title ≈140–234pt, right capsule starts ≈256pt ⇒ no overlap. A 375pt pass is cheap to rerun once the permission is granted (earlier round verified 375pt for the previous, longer labels).
+2. **Edge-swipe vs 戻る on news detail**: opened from Home the stack is `[index, detail]`, so the iOS edge-swipe returns to the news **list**, whereas `‹ 戻る` returns to **Home**. Topic detail has no such mismatch (only topics origin has an extra stack entry, and there swipe = 戻る). Fix would need `gestureEnabled:false` or custom swipe handling — spec decision needed; left as is.
+3. Reports → news detail has no `from` (not one of the four listed entries) ⇒ 戻る goes Home, not back to the report. A `from:'report'` origin would be a small follow-up if wanted.
+4. The topic-detail mismatch text still says 「Homeに戻ってもう一度開き直してください」 though 戻る may go to the list (text unchanged, pinned by tests).
+5. One unexplained, non-reproducible observation: once, after 戻る from a news detail in the error state with `from=news`, the detail looked still present; two retries with the same steps behaved correctly (stack `[index]`).
+6. Unchanged from before: the Simulator rig (auth bypass/fixtures) is scratchpad-only; real-iPhone check of real data/touch feel is still useful.
+
+### tests / checks (head `39bdf30f`)
+`deno test tests/app/` **335 passed / 0 failed** (focused 61; new behavioural origin tests: parse, Home→Back, topics→Back, cold fallback, right list from every origin, level switch keeps origin, news equivalents, never back()/canGoBack()); tsc(src): no diagnostics; `expo config` OK; `expo export --platform web` PASS; `git diff --check` clean.
+
+### Screenshots (`docs/ui-review/`, 402pt; replaces the four earlier ones)
+`topic_detail_nav_402pt.webp`, `news_detail_nav_402pt.webp`, `news_detail_swipe_back_402pt.webp`.
+
+### safety_checks
+No DB/RPC/RLS/Auth/Edge/AI/news logic/catalog/native/config/EAS/production change; no storage; no new dependency; `.env`/`node_modules` not committed; PR not merged.
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
+
+---
+
+# Claude Task 1 — CURRENT TASK
+
+- task_id: kabumori-topic-detail-visual-polish-20261005
+- owner: claude
+- slot: claude-1
+- status: done
+- next_owner: none
+- priority: high
+- recommended_model: Sonnet5（中）
+- purpose: ユーザーがG1へ直接渡す「かぶモリ学習ノート / PERって何？」のUI見本画像を正本ベースに、現在のtopic detail機能・50トピック本文・fetch安全性を変えず、詳細画面の見た目だけを最終仕上げする。
+
+## Allocation snapshot
+
+- allocated_at: 2026-10-05 JST
+- fresh main SHA at allocation: `d8a6fa7661b63a8e3c929f77232385369ebf3e94`
+- previous G1 `kabumori-topic-detail-learning-v2-20261003`: Final K1 PASS / PR #83 merged / done
+- all current open PRs (#82/#81/#78/#76/#41/#33/#11/#10/#3) were checked and have **0 overlap** with the primary topic-detail files/assets listed below
+- G2 is separate report-observation work; G3/G4/H1/H2 are separate X/social/backend workstreams
+- this is UI-only visual polish; no backend, DB, RPC, API, AI, Auth, Edge, production or EAS work
+
+## Critical reference-image rule
+
+The user will send G1 a visual reference image showing the desired direction:
+- top back control
+- `かぶモリ学習ノート`
+- pale-green beginner Hero
+- `初心者向け | 指標`
+- large `PERって何？`
+- short summary inside the Hero
+- soft book / sprout / pencil / chart illustration on the Hero right side
+- numbered learning sections
+- a visually distinct `具体例` card
+- a visually distinct final `覚えておくポイント` block
+
+Treat that user-provided image as the **visual direction / design reference**.
+
+Do NOT:
+- embed the screenshot itself in the app
+- bake text into an image
+- copy screenshot pixels as a fixed UI
+- replace native text with image text
+- add a new image-generation workflow
+
+All copy remains native, dynamic, accessible UI.
+
+If the reference image is not actually visible in the current Claude session, **STOP and ask the user to resend it**. Do not invent a different design.
+
+## Product direction
+
+The reference image is preferred over the earlier plain detail screen.
+
+Target feel:
+- recognizably Kabumori
+- warm ivory / off-white page
+- calm Japanese learning-app feel
+- soft level-specific tint
+- generous whitespace
+- strong but not childish hierarchy
+- polished, production-quality native app
+- not a broker terminal
+- not a finance-news article
+- not a generic web blog
+- not a card wall
+
+The Home topic card remains the short entry point.
+The detail page becomes the polished learning notebook.
+
+## Preserve current product behavior — mandatory
+
+Current merged v2 behavior is accepted and should stay intact:
+- all 50 seeded topics
+- five learning roles
+  - basics
+  - why
+  - example
+  - market
+  - takeaway
+- beginner / intermediate / advanced level semantics
+- advanced market heading may remain `実践ではどう見る？`
+- current curated text content
+- hypothetical-number labeling
+- evergreen/no-current-market safety
+- unknown-title truthful fallback
+- exact `id / level / jstDate` params
+- deterministic `fetchDailyTopic(level, jstDate)`
+- id mismatch fail-closed
+- loading / error / mismatch states
+- Home -> detail
+- history -> detail
+- BackButton behavior
+
+This task is **not** a content rewrite.
+
+Do not edit the 50-topic catalog text unless a tiny presentation-only compatibility change is absolutely necessary and documented.
+
+## Desired screen composition
+
+### 1. Header / identity
+
+Reference direction:
+- existing BackButton at the top
+- underneath, a small brand-learning label:
+  - **かぶモリ学習ノート**
+- remove the old generic `TODAY'S TOPIC` eyebrow from the normal detail layout
+
+This also fixes the prior visual mismatch where a past topic still looked like "today's" content.
+
+If an existing suitable sprout/leaf icon or already-installed icon set can be reused safely, a tiny icon may accompany the label.
+Do not add a new dependency only for this icon.
+
+### 2. Level-aware Hero
+
+Create a polished Hero block under the learning-note label.
+
+Hero contains native/dynamic:
+- level badge:
+  - 初心者向け
+  - 中級者向け
+  - 上級者向け
+- category
+- topic title
+- short fetched `topic.body` summary
+
+The current separate intro card may be visually integrated into the Hero so the summary is not duplicated.
+
+Hero level system:
+- beginner: pale green / mint
+- intermediate: pale blue
+- advanced: pale lavender
+
+Use the reference image as the composition guide:
+- text-dominant left side
+- subtle illustration cluster on the right
+- large readable title
+- summary below title
+- rounded corners
+- soft border / very subtle shadow only if it improves hierarchy
+
+### 3. Existing canonical topic artwork
+
+Prefer reusing the existing approved canonical level artwork if it fits the reference safely:
+
+- `assets/images/home/topic_background_beginner.webp`
+- `assets/images/home/topic_background_intermediate.webp`
+- `assets/images/home/topic_background_advanced.webp`
+
+These already represent:
+- beginner: book + sprout/basic learning
+- intermediate: analysis/magnifier/young plant
+- advanced: multi-indicator/flower
+
+If reused:
+- use only `topic.level` for mapping
+- never stretch
+- do not materially crop important artwork
+- keep text readable at 375pt and 402pt
+- it is acceptable to soften/fade the artwork with a native overlay so long titles stay readable
+- do not edit/re-encode/regenerate the canonical assets
+
+If the canonical artwork cannot fit this Hero cleanly without distortion/crop/readability problems, use a simpler native-tint Hero and report why. Do not create new art.
+
+### 4. Main learning sections
+
+Do **not** turn every section into a separate card.
+
+Use the reference-image rhythm:
+- normal white/ivory page
+- generous vertical spacing
+- clear heading/body hierarchy
+- small level-colored number circles for the normal learning steps
+
+Preferred numbering:
+- `1 まずこれだけ`
+- `2 なぜ大事？`
+- `3 株価・相場とどう関係する？`
+  - advanced may show `3 実践ではどう見る？`
+
+The `具体例` and `覚えておくポイント` blocks remain special and do not need a numbered circle.
+
+Keep body copy easy to scan:
+- about 15–16pt native text
+- comfortable line-height
+- dark ink, not pure black
+- enough width/spacing for Japanese
+- no unnecessary separators
+
+### 5. 具体例 block
+
+Make the example easy to recognize.
+
+Reference direction:
+- pale level tint
+- ~16–18px corner radius
+- subtle outline
+- clear `具体例` heading
+- one small existing icon is allowed, e.g. bulb/note, without new dependency
+- hypothetical numbers can have subtle emphasis if implementable without parsing fragile free text
+
+Do NOT require custom per-topic diagrams/formula images.
+The small formula-note illustration in the reference is optional inspiration only.
+
+Do not add brittle text parsers merely to bold numbers.
+
+### 6. 株価・相場との関係
+
+Keep this as a normal learning section rather than another big card.
+
+A key caution sentence may be highlighted with:
+- a pale inset band, or
+- a small left accent bar
+
+only when it can be derived from the existing section presentation without inventing extra text.
+
+Do not fabricate a separate "important sentence" per topic.
+
+### 7. 覚えておくポイント
+
+Final takeaway should feel like the end of a lesson.
+
+Reference direction:
+- pale level tint
+- strong but calm left accent line
+- clear heading `覚えておくポイント`
+- current takeaway body
+- optional tiny existing sprout/leaf icon
+
+This should be visually easy to find when scrolling.
+
+## Cross-level visual system
+
+The user approved the beginner reference, but implementation must work across all levels.
+
+### Beginner
+- pale green
+- gentle/basic-learning feel
+- book/sprout motif where existing art allows
+
+### Intermediate
+- pale blue
+- more analytical feel
+- magnifier/data motif where existing art allows
+
+### Advanced
+- pale lavender
+- more mature/practical feel
+- multi-indicator/flower motif where existing art allows
+
+Do not make three unrelated screens.
+They must feel like one system with level-specific accents.
+
+## Layout / geometry guidance
+
+At 375pt and 402pt widths:
+- no horizontal clipping
+- Hero title may wrap naturally; design for long 2–3 line titles
+- illustration must never cover title/summary
+- badge/category should wrap safely if necessary
+- body should not feel cramped
+- content should not become dramatically longer only because of decoration
+- keep bottom safe-area spacing
+- keep BackButton comfortably tappable
+
+Use the reference image's density as a guide:
+- polished but airy
+- not oversized
+- not excessive blank space
+- about one clear visual rhythm throughout the page
+
+## Primary implementation scope
+
+Primary:
+- `src/app/topic-detail.tsx`
+- `tests/app/topic-detail-screen_test.ts`
+
+Allowed if genuinely needed:
+- one small topic-detail-specific token/presentation helper
+- existing Home/topic tokens if reuse is clearly appropriate
+- focused final screenshots under `docs/ui-review/`
+
+Avoid changing:
+- `src/lib/topic-detail-catalog.ts`
+- `src/lib/daily-topic.ts`
+- `src/lib/home-topic.ts`
+- `src/components/home/home-topic-feature.tsx`
+
+unless a tiny compatibility change is proven necessary.
+
+## Explicit non-scope
+
+Do NOT change:
+- any of the 50 learning texts for editorial reasons
+- Home topic card behavior/content
+- topic selection logic
+- AsyncStorage level preference
+- DB/schema/migrations
+- RPC
+- RLS/Auth
+- Edge Functions
+- API/Web Search
+- AI/LLM
+- report Hero
+- portfolio
+- news UI
+- X/social-mobile
+- common-account
+- production settings
+- native plugins/config/signing
+
+Production mutation: **0**.
+
+## Worktree / Mac safety — mandatory
+
+This is a **new task after the Mac migration**.
+
+Before work:
+1. read `PROJECT_RULES.md`
+2. read `.agent/ORCHESTRATION.md`
+3. read `.agent/CURRENT_STATE.md`
+4. read this TASK
+5. use clean base **`/Users/yuya/Developer/kabumori-fresh`**
+6. fresh `origin/main`
+7. inspect open PRs / active slot scopes
+8. run `git worktree list`
+9. create/use an independent G1 worktree/checkout from fresh main
+
+Recommended branch:
+`claude/g1-topic-detail-visual-polish-20261005`
+
+Do NOT use old `/Users/yuya/Developer/kabumori` as the new base.
+Do NOT delete/rename/prune/reset old repo or old worktrees.
+Do NOT share another slot's worktree, branch, uncommitted files or dev server.
+
+At allocation time, all current open PRs have 0 overlap with:
+- `src/app/topic-detail.tsx`
+- `src/lib/topic-detail-catalog.ts`
+- `tests/app/topic-detail-screen_test.ts`
+- the three canonical topic background assets
+
+Re-check immediately before coding. If overlap appears, STOP.
+
+## EAS conservation
+
+This is JS/TS UI work.
+
+Expected EAS build created: **0**.
+
+Use:
+- local Expo
+- iOS Simulator
+- existing reusable dev client if safe
+
+Do not create a new EAS build.
+
+## Verification
+
+### Functional preservation
+Verify:
+- Home -> detail
+- /topics history -> detail
+- exact params
+- id mismatch fail-closed
+- loading
+- error
+- unknown-title fallback
+- beginner/intermediate/advanced
+- no new backend/network/AI call from the visual layer
+
+### Visual
+At minimum:
+- ~402pt iPhone width
+- ~375pt iPhone width
+- beginner
+- intermediate
+- advanced
+- at least one long-title topic
+- representative dense example
+- bottom takeaway
+- past-history detail path
+
+Compare against the user-provided reference and record:
+- what was matched
+- any deliberate difference and why
+- whether existing canonical artwork could be reused safely
+
+Capture final implementation screenshots for K1 if practical.
+Do not treat the reference screenshot itself as implementation evidence.
+
+### Tests/checks
+Run:
+- focused topic-detail tests
+- full `deno test tests/app/` if practical
+- Expo config
+- web export if supported
+- changed-scope type/lint
+- `git diff --check`
+
+Separate pre-existing diagnostics from regressions.
+
+## Acceptance criteria
+
+PASS candidate only if:
+- the reference image's hierarchy and polish are recognizably reflected
+- screen looks more like a finished Kabumori learning product than the prior plain detail page
+- Home/topic behavior and all 50 contents remain intact
+- beginner/intermediate/advanced all look coherent
+- long titles remain safe
+- no screenshot/text baking
+- no new generated artwork/dependency unless explicitly justified
+- no backend/data/auth changes
+- EAS 0
+- focused PR only
+
+## Delivery
+
+Create a focused PR.
+Do not self-merge.
+No production deploy.
+
+Report:
+- task_id
+- fresh main SHA
+- worktree / clean-base isolation proof
+- reference image visible: yes/no
+- changed_files
+- final visual structure
+- existing-art reuse decision
+- beginner/intermediate/advanced findings
+- 402pt/375pt visual findings
+- tests/checks
+- PR/head
+- EAS build created: no
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation: 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+## K1 continuation — Simulator runtime restored
+
+The user has now installed the iOS Simulator runtime on the new Mac.
+
+This continuation is **verification-first**, not a redesign.
+
+Recommended model: **Sonnet5（中）**.
+
+### Start conditions
+1. fresh `origin/main`
+2. re-read this TASK / CURRENT_STATE
+3. confirm PR #84 exact current head and no new overlap
+4. confirm `xcrun simctl list runtimes` now shows an available iOS runtime
+5. use the same isolated G1 worktree/branch for PR #84 if it is still safe; do not create unrelated work or touch other slots
+
+### Required visual verification
+Run the final implementation in iOS Simulator and inspect at minimum:
+- ~402pt width
+- ~375pt width
+- beginner
+- intermediate
+- advanced
+- at least one long 2–3 line title
+- one dense example
+- final takeaway block
+- history -> detail path
+
+Specifically judge:
+- Hero title wrapping and text/art collision
+- canonical background art composition
+- left-to-right wash and bottom fade seam/banding
+- level/category readability
+- numbered-section rhythm and 50pt body indent
+- example-card density
+- takeaway balance
+- page scroll rhythm
+- 🌱 and 💡 rendering: if they look like generic emoji or visually cheap compared with the reference, replace them **without a new dependency** using the simplest existing/native option, or remove them if that looks cleaner
+- no clipping at 375pt
+- no unintended excessive Hero height
+
+### Allowed corrections
+Only small visual corrections proven necessary by the Simulator check:
+- spacing
+- font size/line-height
+- Hero padding/min-height
+- wash/fade values
+- icon/emoji presentation
+- section indentation
+- radius/border/tint balance
+
+Do not rewrite catalog content or change data/backend behavior.
+
+After any correction:
+- rerun focused topic-detail tests
+- run full `deno test tests/app/` if practical
+- Expo config
+- web export if supported
+- changed-scope type/lint
+- `git diff --check`
+
+### Evidence
+Capture final Simulator screenshots under `docs/ui-review/` for:
+- one 402pt representative full/upper screen
+- one 375pt long-title or lower-screen case
+- ideally enough evidence to show all three level accents without bloating the PR
+
+Update the existing PR #84; do not open a second PR.
+Do not merge.
+EAS build = 0.
+Production/backend mutation = 0.
+
+Then append a continuation result to the Report with:
+- runtime availability proof
+- whether any visual correction was needed
+- changed files/commit/head
+- 402pt findings
+- 375pt findings
+- beginner/intermediate/advanced findings
+- emoji/icon decision
+- screenshots added
+- tests
+- remaining issues
+
+Finally:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+---
+
+### K1 recheck — continuation not yet executed
+- verdict: **NOT READY FOR K1**.
+- PR #84 remains at the pre-Simulator head `c9c173c153cbfd11229c9281b892d732728c3cd3`.
+- PR still has exactly 1 commit / 4 changed files and contains no final Simulator screenshot evidence.
+- no continuation Report was appended after the iOS runtime installation.
+- therefore the restored-runtime G1 continuation has not run yet.
+- no merge/review/deploy action taken.
+- next: run `G1` to perform the Simulator verification task above, then return with `K1`.
+- recommended model: **Sonnet5（中）**.
+
+## Report — G1: topic detail visual polish (task kabumori-topic-detail-visual-polish-20261005)
+
+- task_id: `kabumori-topic-detail-visual-polish-20261005`
+- result: implemented; **iOS Simulator verification NOT done (blocker, see below)**; live check on the user's iPhone pending. PR open, **not merged**.
+- fresh main SHA: `1c633e846c8d3ae49ca95aa13b6063f26f85e052`
+- PR: https://github.com/anohi-memories/kabumori/pull/84 — branch `claude/g1-topic-detail-visual-polish-20261005`, head `c9c173c153cbfd11229c9281b892d732728c3cd3`
+- **EAS build created: no.** backend/DB/RPC/API/AI/Auth/Edge/production mutation: **0**.
+
+### worktree / clean-base isolation proof
+Independent clone of `origin/main` in the session scratchpad (own branch, own node_modules symlink, own dev server); the clean base `/Users/yuya/Developer/kabumori-fresh` was confirmed to exist but not used or modified; the old `/Users/yuya/Developer/kabumori` repo/worktrees were not used as a base and nothing was deleted/renamed/pruned/reset. Open PRs touching the target files: none (checked at start; main had no changes to them since the allocation).
+
+### Reference image visible: **yes** (the user's 「かぶモリ学習ノート / PERって何？」 design image was in the session).
+
+### changed_files (4, +392/−114)
+`src/app/topic-detail.tsx`, `src/lib/topic-detail-presentation.ts` (new, pure), `tests/app/topic-detail-screen_test.ts`, `tests/app/topic-detail-presentation_test.ts` (new). Untouched: the 50-topic catalog text, `daily-topic.ts`, `home-topic.ts`, Home topic card.
+
+### final visual structure
+BackButton → 🌱 かぶモリ学習ノート (old TODAY'S TOPIC eyebrow removed) → level-aware Hero (rounded 22, level tint; badge 「初心者向け/中級者向け/上級者向け」 | category; title 34/42; the fetched `topic.body` summary 15.5/25 integrated in the Hero — no separate intro card) → numbered steps `1 まずこれだけ`, `2 なぜ大事？`, `3 株価・相場とどう関係する？` (advanced: `3 実践ではどう見る？`) with level-tinted 38pt circles, 21pt headings, body 15.5/26 indented under the heading text, no card per step → 具体例: pale-tint outlined 18pt card with a bulb → (inside step 3 only when the existing last sentence starts with ただし / ただ、/ もっとも) an inset band with a left accent bar (lossless split, nothing added; ~7 of 50 topics) → 覚えておくポイント: tinted block with a 5pt strong left accent line and a small 🌱. Page background ivory `#fbfbf6`, body ink `#2a3830`.
+
+### existing-art reuse decision
+**Reused** the canonical `assets/images/home/topic_background_{beginner,intermediate,advanced}.webp` at the top of the Hero at their own 1942:809 ratio (full card width, `contentFit="cover"` on a same-ratio box ⇒ no stretch/crop), mapped only by `topic.level`, untouched (no edit/re-encode/regeneration, no new asset). Readability under long titles is handled by a native left→right tint wash (20 equal flex strips, strongest under the text, clear over the right 40%) and a short non-overlapping bottom fade where the art ends inside a taller Hero. The art is decorative: `pointerEvents="none"`, hidden from accessibility.
+
+### Level system
+beginner pale green/mint, intermediate pale blue, advanced pale lavender; one component set, level colours from `TOPIC_DETAIL_LEVEL_COLORS` (hero/badge/soft/outline/strong). Tests assert every heading/accent colour is ≥ 4.5:1 on each tinted surface of its level and on the page background.
+
+### Behavior preserved (pinned by tests)
+All 50 texts and 5 roles, advanced market heading 「実践ではどう見る？」, hypothetical-number labelling, evergreen content, unknown-title truthful fallback (Hero summary + 「この用語の詳しい解説は準備中です。」), exact `id/level/jstDate` params, deterministic `fetchDailyTopic(level, jstDate)`, **id mismatch fail-closed**, loading/error/mismatch texts, safe area + BackButton, Home → detail, history → detail; no new network/AI/DB call from the visual layer (imports and single fetch pinned). Unchanged-by-design: new params still reset to loading.
+
+### Tests / checks
+`deno test tests/app/` **294 passed / 0 failed** (topic suites: 35); `npx expo config --json` OK; `npx expo export --platform web` PASS; tsc(src): only the 2 known CSS-module diagnostics; `git diff --check` clean.
+
+### 402pt / 375pt visual findings — NOT available
+The planned Simulator pass (402pt iPhone 17 Pro, 375pt SE 3rd gen; beginner/intermediate/advanced, long 3-line title, dense example, takeaway, history path, screenshots, comparison with the reference) **could not run: this Mac's iOS Simulator runtime is gone** (`xcrun simctl list runtimes` is empty; all devices `unavailable`; the CoreSimulator image list was emptied during the Mac migration/cleanup; restoring it needs an ~8 GB Apple download, e.g. `xcodebuild -downloadPlatform iOS`, which I did not run without the user's approval). Nothing was fabricated: no screenshots or measurements are claimed. Substitute evidence so far: tests (structure/safety/contrast/split), web export; pending: the user's live iPhone check (dev client + local Metro) of this branch.
+
+### Reference comparison (design intent only, from code review — not visual evidence)
+Matched in structure: back control, 学習ノート label, level-aware Hero with badge|category + large title + summary + illustration on the right, numbered circles 1–3, outlined 具体例 card with bulb, inset caution band, 覚えておくポイント block with thick left line + sprout. Deliberate differences: the illustration is the existing canonical level art (not the reference's book/pencil illustration, not regenerated); the formula-note mini illustration inside 具体例 is omitted (optional in the TASK); emoji stand in for icons (no new dependency).
+
+### Remaining issues
+- Visual verification outstanding (Simulator blocked; needs the runtime restored or the user's device review).
+- Risks to check on device: art/wash seam and readability for 3-line titles, Hero height, 34pt title wrapping at 375pt, emoji rendering.
+- Out of scope (unchanged): no retry button on the detail error text.
+
+### safety_checks
+No content/DB/RPC/Auth/AI/API/Edge/native/EAS change; no new dependency or asset; no deploy; PR not merged; no secrets committed (local public `.env` copy untracked).
+
+### next_recommendation
+User reviews the branch live on the iPhone (server provided); K1 reviews PR #84 after that or in parallel (UI-only, low risk). Restore the iOS Simulator runtime when convenient so future UI tasks regain Simulator verification.
+
+Status: `review_required` / next_owner `user`.
+
+### User visual correction — unify Home action placement
+
+User visual review found one consistency issue before merge.
+
+### Required correction
+Unify the explicit navigation pattern across topic detail and important-news detail:
+
+- **left = list / previous destination**
+- **right = Home**
+
+Therefore topic detail must change from:
+- left: `‹ ホーム`
+- right: `過去のトピック ›`
+
+to:
+- left: **`‹ 過去のトピック`**
+- right: **`ホーム`**
+
+Important-news detail already matches the desired convention:
+- left: `‹ ニュース一覧`
+- right: `ホーム`
+
+Do not redesign the selector or Hero. Do not change navigation semantics beyond the label/action placement.
+
+### Verify
+- 375pt and 402pt: no clipping or awkward spacing.
+- topic left action directly opens `/topics`.
+- topic right action directly opens Home.
+- news header remains unchanged.
+- no router.back/canGoBack dependency.
+- rerun focused navigation tests and full app suite if practical.
+- update PR #90 only; do not open a new PR.
+- no EAS/backend/production changes.
+
+Append a short correction report and return to `review_required / next_owner chatgpt`.
+
+Recommended model: **Sonnet5（中）**.
+
+---
+
+## K1 — CODE PASS / VISUAL HOLD
+- verdict: **HOLD pending real-device visual acceptance**.
+- PR #84 exact reviewed head: `c9c173c153cbfd11229c9281b892d732728c3cd3`.
+- fresh main at K1: `45c964701cc6117f42eb75616c6640448c8f7bac`.
+- GitHub fresh state: `mergeable=true`, `mergeable_state=clean`.
+- main advanced 11 commits from the PR head's merge-base; **0 overlap** with the four topic-detail PR files.
+- code/safety side accepted: 294/294 app tests, Expo config/export PASS, diff clean, no catalog/Home/backend/DB/RPC/API/AI/Auth/Edge/native/EAS change.
+- visual acceptance is **not complete** because no iOS Simulator runtime was available and no 402pt/375pt screenshots from the final implementation exist.
+- must visually verify on a real iPhone before merge:
+  - Hero long-title wrapping at narrow width;
+  - canonical art + left-to-right wash / bottom fade seam;
+  - beginner/intermediate/advanced balance;
+  - numbered-section rhythm and body indentation;
+  - example/takeaway density;
+  - 🌱 / 💡 rendering and whether they look polished enough for Kabumori.
+- Codex review: **not required** for this UI-only task.
+- merge/deploy: HOLD.
+- AI Lab diary: **記録不要（現時点）** — user-facing visual change is not yet accepted/merged.
+- next: user opens the PR branch on iPhone and shares/approves the actual screen; then ChatGPT can finalize K1 or return a small corrective to G1.
+
+No production mutation. No merge.
+
+## Final K1 — Topic detail visual polish PASS / merged
+
+- verdict: **PASS**.
+- PR #84 accepted exact head: `b7bf774b964ed740a00b904447f029351cebef80`.
+- squash-merged to main as `25582625cdc60208df3b1340f8c03eba75cf3340`.
+- fresh pre-merge main comparison: 88 commits beyond the PR merge-base with **0 overlap** across all 7 PR files.
+- CI/status: combined status success; Vercel success; Netlify preview status success/canceled-by-design with neutral rule checks.
+- Simulator evidence accepted:
+  - 402pt beginner/intermediate/advanced comparison;
+  - 375pt long-title case;
+  - lower-screen example/caution/takeaway/bottom-safe-area case.
+- visual corrective accepted:
+  - long titles avoid the Hero illustration;
+  - straight inset accent bars replace curved-looking left borders;
+  - generic lightbulb emoji replaced with a native `例` mark;
+  - takeaway emoji removed;
+  - bottom safe-area padding corrected;
+  - narrow-width typography/caution wrapping tightened.
+- behavior preserved: all 50 curated topic texts, five learning roles, deterministic fetch, exact id mismatch fail-closed, Home/history navigation contract, unknown-title fallback.
+- verification: **297/297 app tests**, Expo config PASS, web export PASS, diff clean; only documented pre-existing CSS-module type diagnostics remain.
+- EAS build = 0.
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+- Codex review: **not required**; static native UI/presentation only, no sensitive boundary, strong regression + Simulator evidence.
+- remaining non-blockers: final tiny typography tweaks were test-verified but not re-screenshotted; real finger taps were not exercised by Simulator automation. Existing navigation behavior was unchanged and route handlers were verified.
+- AI Lab diary: **候補あり — 株アプリの学習画面を「かぶモリ学習ノート」として整え、初級〜上級の色や教材イラスト、読む順番、具体例・要点の見せ方を統一。小さいiPhoneや長いタイトルでも崩れないよう実画面で調整した。**
+- G1 is done/free after this K1.
+
+---
+
+## Report 2 — G1: topic detail visual polish, Simulator continuation (task kabumori-topic-detail-visual-polish-20261005)
+
+- result: **iOS Simulator verification done at 402pt and 375pt; small visual corrections were needed and applied.** PR #84 updated (no second PR), **not merged**.
+- PR: https://github.com/anohi-memories/kabumori/pull/84 — branch `claude/g1-topic-detail-visual-polish-20261005`, **head `b7bf774b964ed740a00b904447f029351cebef80`** (3 commits: `c9c173c1` initial → `8c010c2f` Simulator corrections → `b7bf774b` 375pt tweaks + screenshots).
+- **EAS build created: no (0).** backend/DB/RPC/API/AI/Auth/Edge/production mutation: **0**.
+
+### runtime availability proof
+`xcrun simctl list runtimes` shows iOS 27.0 and the iPhone 18 Pro / iPhone SE (3rd generation) device types are available again. The 402pt pass ran on an iPhone 18 Pro, the 375pt pass on a temporary iPhone SE (3rd gen) device (deleted afterwards). Metro was a local dev server (one at a time; the user's iPhone server was stopped meanwhile). The verification rig used an auth bypass + fixtures in a **scratchpad copy only — not committed**.
+Dev-client note: the SDK-27-built dev client crashes at launch on iOS 27 (UIScene lifecycle). The Simulator checks used a patched copy of the build (vtool SDK 26.0 + ad-hoc re-sign) in the scratchpad; nothing of that is in the repo. `expo run:ios` also needs `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8` (CocoaPods).
+
+### was a visual correction needed? **Yes** (first Simulator pass found real defects)
+1. Long titles (ROE… / 信用買い残… / 金利…) ran over the Hero illustration → titles of 8+ characters now use a smaller size and start below the art (`topicDetailTitleStyle`, `TOPIC_DETAIL_ART_CLEAR_RATIO = 0.78`).
+2. Left accent "borders" bent into arcs on the rounded caution band / takeaway block → replaced by straight absolutely-positioned inset bars (no `borderLeftWidth` anywhere; pinned by test).
+3. 💡 looked cheap → replaced by a level-tinted circle with 「例」.
+4. Right-hand 🌱 squeezed the takeaway text → removed from the takeaway (text now uses the full width).
+5. Content was hard-cut at the home indicator → bottom safe area moved into the scroll padding (`60 + insets.bottom`, `edges={['top']}`).
+6. Spacing trimmed slightly (section gap 28, body line height 25) — scroll heights dropped from 1388–1616pt to 1370–1544pt.
+Second pass (after `8c010c2f`) confirmed all of the above; two small 375pt leftovers were then fixed in `b7bf774b`: 8–16 character titles 28/36 → **27/35** (ROEって何を見る指標？ no longer breaks mid-word at 375pt) and caution text 15/24 → **14.5/23** (no lone trailing 「す。」 line in the 375pt caution band). These last two tweaks are test-covered and web-export checked but were **not re-screenshotted** after the change (the committed 375pt screenshot predates them).
+
+### changed files since the first Report
+`src/app/topic-detail.tsx`, `src/lib/topic-detail-presentation.ts`, `tests/app/topic-detail-screen_test.ts`, `tests/app/topic-detail-presentation_test.ts`, + 3 screenshots (below). Catalog text, `daily-topic.ts`, `home-topic.ts`, Home card untouched; fetch / `id` mismatch fail-closed / params contract unchanged.
+
+### 402pt findings (iPhone 18 Pro)
+- Hero height: PER 214.7, ROE 259.3, 信用買い残 291.3, 金利 291.3 (pt). Short title (PER) sits left of the art with no collision; long titles start below the illustration with a 11–15pt gap to the art.
+- Wash/fade: smooth, no visible banding at the wash seam or the bottom fade (equal-width strips / 2pt fade strips).
+- Numbered rhythm: 38pt circles, 21pt headings, body indent 50pt read cleanly; no card-per-step noise. Example card density comfortable; takeaway block balanced after removing the right emoji.
+- Bottom: 94pt of padding, takeaway is no longer cut by the home indicator.
+- Scroll heights (402): PER 1386, ROE 1370, 信用買い残 1452, 金利 1512.
+
+### 375pt findings (iPhone SE 3rd gen)
+- Hero heights: PER 215, ROE 287, 信用買い残 317, 金利 283. No horizontal clipping anywhere; art does not collide with titles.
+- Found + fixed (see above): ROE title mid-word break; lone trailing line in the caution band. 17+ character titles wrap to 3 lines cleanly at 26/34.
+- Scroll heights (375): PER 1402, ROE 1414, 信用買い残 1444, 金利 1544.
+- Remaining cosmetic: ~60pt of empty space left of the art above the long below-art titles (accepted; keeps text off the illustration).
+
+### beginner / intermediate / advanced
+Green (beginner PER), blue (intermediate ROE), lavender (advanced 信用買い残・金利) all read as one family: Hero tint, badge, circles, example outline and takeaway block follow `TOPIC_DETAIL_LEVEL_COLORS`; accent headings stay AA-contrast on their surfaces (test-pinned ≥ 4.5). No level looked washed-out or too heavy; the lavender art/wash seam is as clean as green/blue.
+
+### emoji / icon decision
+Keep **🌱** only on the 「かぶモリ学習ノート」 label (renders fine, no new dependency). **💡 replaced** by a 「例」 circle (no emoji). Takeaway **🌱 removed**. Straight accent bars instead of curved borders. No new icon dependency or asset.
+
+### screenshots added (`docs/ui-review/`, WebP q80)
+- `topic_detail_final_3level_402pt.webp` — 402pt, beginner/intermediate/advanced accents together
+- `topic_detail_final_375pt_long.webp` — 375pt long-title case
+- `topic_detail_final_bottom_402pt.webp` — 402pt lower screen (example, takeaway, bottom padding)
+Total ≈ 360 KB. (Full per-level/per-size PNGs stayed in the scratchpad, not committed.)
+
+### navigation checks
+Home → detail → back and `/topics` (history) → detail → back verified in the Simulator via the app's own handlers. loading / error / id-mismatch / unknown-title fallback states render fine. **Real finger taps were not verified** (the Simulator tool had no accessibility permission for taps); the user's iPhone review still covers touch.
+
+### tests (at head `b7bf774b`)
+`deno test tests/app/` **297 passed / 0 failed** (topic suites 38); `npx expo config --json` OK; `npx expo export --platform web` PASS; tsc(src): only the 2 known CSS-module diagnostics; `git diff --check` clean.
+
+### remaining issues
+- Final 27/35 title + 14.5 caution tweaks not re-screenshotted (low risk; confirm on the user's iPhone).
+- Real touch input not exercised in the Simulator.
+- SDK-27 dev client launch crash on iOS 27 is an environment issue (needs a rebuild with a newer SDK/Xcode, or the scratchpad workaround) — unrelated to this PR.
+
+### safety_checks
+No content/DB/RPC/Auth/AI/API/Edge/native/EAS change; no new dependency or asset beyond the three review screenshots; no deploy; PR not merged; no secrets committed (`.env` and `node_modules` explicitly kept out of every commit).
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
+
+---
+
+# Claude Task 1 — CURRENT TASK
+
+- task_id: kabumori-topic-detail-learning-v2-20261003
+- owner: claude
+- slot: claude-1
+- status: done
+- next_owner: none
+- priority: high
+- recommended_model: Sonnet5（高）
+- purpose: Home「今日のトピック」のTOPカードは短い要約のまま維持し、topic detailだけを「しっかり学べる」学習ページへ強化する。既存50トピックすべてに具体例・株価/相場との関係・覚えておくポイントを追加し、DB/RPC/API/AIを増やさず静的curated content + native UIだけで完結する。
+
+## Allocation snapshot
+
+- allocated_at: 2026-10-03 JST
+- allocation main SHA: `309b0cb8d4940cdf82bfdd92116f294ba290336c`
+- G1 previous task `kabumori-home-topic-3level-backgrounds-20261003`: Final K1 PASS / merged / done
+- G2: separate `market-report-analysis` production deploy/read-back task; Hard Fact/backend scope, do not touch
+- open PRs at allocation were #82/#81/#78/#76 plus older unrelated PRs; no known mobile topic-detail ownership
+- target is app topic-detail UI/content only
+- before starting, fresh-check origin/main, open PRs, ACTIVE_TASK/CURRENT_STATE, and `git worktree list`; if any concurrent owner touches target files, STOP
+
+## Current truth — do not rediscover by redesigning unrelated parts
+
+Production `public.tips` currently has exactly 50 active tips:
+- 初級: 20
+- 中級: 20
+- 実践: 10
+
+Current `base_text`:
+- min 41 chars
+- max 66 chars
+- avg ~51.6 chars
+
+This short `base_text` is intentional and should remain the Home/TOP summary.
+
+Current data path:
+- app level: `beginner | intermediate | advanced`
+- DB difficulty: `初級 | 中級 | 実践`
+- `fetchDailyTopic()` calls read-only `get_daily_kabumori_tip(level, jstDate)`
+- RPC deterministically returns one active `public.tips` row for the level/date
+- detail re-fetches the exact same deterministic topic and verifies tapped `id`
+- existing detail content is local curated content in `src/lib/topic-detail-catalog.ts`, keyed by seeded title
+- all 50 seeded titles already have detail entries
+- unknown titles deliberately fall back to the RPC `base_text`; never fabricate content
+
+## Product goal
+
+### Home / TOP card
+Keep intentionally compact:
+- level badge
+- title
+- short `base_text`
+- 「詳しく見る →」
+
+Do NOT make Home more verbose.
+
+### Topic detail
+Turn the detail screen into a clear learning flow.
+
+Target reading order:
+1. topic identity — level / category / title
+2. short intro summary — use the fetched `topic.body` / `base_text`
+3. 「まずこれだけ」
+4. 「なぜ大事？」
+5. 「具体例」
+6. 「株価・相場とどう関係する？」
+7. 「覚えておくポイント」
+
+Equivalent natural Japanese headings are allowed when a topic needs slightly different wording, but the learning roles above must be represented.
+
+For advanced/practical topics, `「実践ではどう見る？」` may replace `「株価・相場とどう関係する？」` where that is clearer.
+
+## Important content rule
+
+Do NOT add a section claiming `今日の市場` / `今日の株価` / current real-time behavior in this task.
+
+Reason:
+- this task has no current-market data packet
+- static evergreen content must not imply live grounding
+
+Use evergreen wording such as:
+- 「相場ではどう見る？」
+- 「株価との関係」
+- 「実践ではどう見る？」
+- 「こんな場面を想像すると…」
+
+A future separate task may connect a topic to same-day market facts only after an explicit trustworthy data source is designed.
+
+## Curated content requirements — all 50 topics
+
+Enrich every existing seeded title.
+
+Each known title should have:
+- concise foundational explanation
+- why it matters
+- one concrete, easy-to-understand example
+- price/market/practical relationship
+- one memorable takeaway / caution
+
+Examples must be clearly hypothetical/educational when using numbers or scenarios.
+Do not imply the hypothetical value is a current quote, company result, market fact, or recommendation.
+
+Content style:
+- Japanese
+- plain and friendly
+- accurate enough for a beginner to learn from
+- no jargon left unexplained when avoidable
+- no buy/sell recommendation
+- no deterministic prediction
+- no specific current price/date
+- no invented company/event/fact
+- avoid alarmist language
+- avoid repeating the same sentence across sections
+- keep sections scan-friendly rather than essay-like
+
+The detail should feel meaningfully richer than current 4 short paragraphs, but not become a textbook wall of text.
+
+Suggested total explanatory body per topic:
+- roughly 220–550 Japanese characters across the detail sections
+- this is a design target, not permission to pad text
+
+## UI direction
+
+Keep the screen recognizably Kabumori:
+- ivory/light background
+- generous spacing
+- soft cards/section blocks
+- level accent:
+  - beginner: pale green
+  - intermediate: pale blue
+  - advanced: pale lavender
+- do not turn it into a brokerage terminal or finance-news page
+- no dense tables
+- no excessive icons
+- no decorative image generation required
+
+Recommended structure:
+- top header area with level badge + category + title
+- intro summary card using `topic.body`
+- section blocks/cards below
+- final takeaway block visually distinct but calm
+
+The content must remain easy to scan on normal iPhone widths.
+
+## Existing behavior to preserve
+
+Must preserve:
+- exact deterministic RPC fetch behavior
+- id verification before rendering detail
+- loading/error/mismatch states
+- Home topic background system
+- topic history screen
+- topic level preference contract
+- navigation params `id / level / jstDate`
+- unknown-title fail-safe fallback
+- level labels:
+  - 初心者向け
+  - 中級者向け
+  - 上級者向け
+
+Do not silently rename `advanced` to a new stored value.
+
+## Expected implementation scope
+
+Primary:
+- `src/app/topic-detail.tsx`
+- `src/lib/topic-detail-catalog.ts`
+- `tests/app/topic-detail-catalog_test.ts`
+
+Only if genuinely needed:
+- a small topic-detail-specific presentation helper/token file
+- focused tests for the detail UI contract
+
+Avoid touching:
+- `src/components/home/home-topic-feature.tsx`
+- `src/lib/daily-topic.ts`
+- `src/lib/home-topic.ts`
+unless a tiny compatibility change is proven necessary. If one is required, document why.
+
+## Explicit non-scope
+
+Do NOT change:
+- `public.tips` rows
+- DB schema
+- migrations
+- `get_daily_kabumori_tip`
+- Supabase grants/RLS/Auth
+- Edge Functions
+- AI/LLM calls
+- Web Search/API calls
+- report Hero
+- portfolio screen
+- news UI
+- X/social-mobile
+- common-account/auth
+- production settings
+- EAS/native config/plugins
+
+Production mutation: **0**.
+
+## Worktree / conflict safety
+
+Before work:
+1. read `PROJECT_RULES.md`
+2. read `.agent/ORCHESTRATION.md`
+3. read `.agent/CURRENT_STATE.md`
+4. read this TASK
+5. fresh `origin/main`
+6. inspect active slots / open PRs
+7. run `git worktree list`
+8. use an independent G1 worktree/checkout
+
+Recommended branch:
+`claude/g1-topic-detail-learning-v2-20261003`
+
+If any active work/PR touches:
+- `src/app/topic-detail.tsx`
+- `src/lib/topic-detail-catalog.ts`
+- `tests/app/topic-detail-catalog_test.ts`
+STOP and report the conflict.
+
+Do not use or modify another slot's worktree, branch, uncommitted files, or dev server.
+
+## EAS build conservation — mandatory
+
+This is JS/TS UI/content work.
+
+Expected:
+- EAS build created = **0**
+
+Use:
+- local Expo
+- iOS Simulator
+- existing reusable dev client + local Metro if safe
+
+Do not consume a new EAS build.
+
+## Tests / verification
+
+At minimum:
+
+### Catalog
+- exactly the 50 currently seeded titles are covered
+- no accidental extra/missing title
+- every known title contains all required learning roles
+- concrete example exists for every known title
+- takeaway exists for every known title
+- no blank heading/body
+- content length is substantial but bounded
+- evergreen guard forbids current-market/current-price/date claims
+- unknown title still returns null / fallback remains truthful
+
+### Navigation / safety
+- exact `id + level + jstDate` verification remains
+- mismatch stays fail-closed
+- fetch error remains honest
+- no new backend/API/AI call from detail render
+- Home TOP behavior unchanged
+- history -> detail still works
+
+### UI
+Verify at minimum ~402pt and ~375pt width:
+- long titles do not collide
+- level/category remain readable
+- intro summary is clearly separated from deeper learning
+- sections scan naturally
+- example section is visually identifiable
+- final takeaway is easy to find
+- no horizontal clipping
+- no excessive wall-of-text feel
+- safe-area/back navigation remains correct
+
+Run relevant deterministic app tests, Expo config, web export if supported, changed-scope type/lint, and `git diff --check`.
+Separate known pre-existing diagnostics from candidate regressions.
+
+## Acceptance criteria
+
+PASS candidate only if:
+- Home remains compact
+- detail is clearly richer and easier to learn from
+- all 50 seeded topics have curated concrete examples and takeaways
+- no real-time/current-market claim is fabricated
+- no DB/RPC/API/AI/backend change
+- no EAS build
+- loading/error/mismatch/fallback safety preserved
+- 402/375pt visual verification passes
+- focused PR only
+- no unrelated redesign
+
+## Delivery
+
+Create a focused PR.
+Do not self-merge.
+No production deploy.
+
+Report:
+- task_id
+- fresh main SHA
+- worktree/branch isolation check
+- changed_files
+- final detail content model / section roles
+- how all 50 topics were covered
+- representative beginner/intermediate/advanced examples
+- 402/375 visual findings
+- tests/checks
+- PR/head
+- EAS build created: no
+- backend/DB/RPC/API/AI mutation: 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+## Report — G1: topic detail learning v2 (task kabumori-topic-detail-learning-v2-20261003)
+
+- task_id: `kabumori-topic-detail-learning-v2-20261003`
+- result: implemented and Simulator-verified; PR open, **not merged**.
+- fresh main SHA: `c56c03b21b9883367f26d584fa20b36f1d401c28` (allocation SHA `309b0cb8…` was older). No open PR / slot touches `src/app/topic-detail.tsx`, `src/lib/topic-detail-catalog.ts` or their test (independent clone/branch).
+- PR: https://github.com/anohi-memories/kabumori/pull/83 — branch `claude/g1-topic-detail-learning-v2-20261003`, head `c810accebada37760a98a18bb184b50a61b7937b`
+- **EAS build created: no.** backend/DB/RPC/API/AI mutation: **0**.
+
+### worktree/branch isolation
+Dedicated scratch clone + branch; the shared checkout and other slots' worktrees/branches/dev servers were not used. A Simulator rig used its own Metro on a separate port only while the phone's Metro was stopped (shared node_modules cache rule).
+
+### changed_files
+`src/app/topic-detail.tsx`, `src/lib/topic-detail-catalog.ts`, `tests/app/topic-detail-catalog_test.ts` (replaced), `tests/app/topic-detail-screen_test.ts` (new), `docs/ui-review/topic-detail-3level-402pt-2026-10-03.webp`, `docs/ui-review/topic-detail-advanced-bottom-375pt-2026-10-03.webp`. Untouched: Home topic card, `daily-topic.ts`, `home-topic.ts`, DB/migrations/RPC/Edge Functions/Auth.
+
+### Final detail content model / section roles
+`TopicDetailEntry = { sections: TopicDetailSection[] }` with `TopicDetailSection = { role, heading, body }` and exactly five roles in fixed order: `basics` 「まずこれだけ」→ `why` 「なぜ大事？」→ `example` 「具体例」→ `market` 「株価・相場とどう関係する？」 (the ten 実践 topics: 「実践ではどう見る？」)→ `takeaway` 「覚えておくポイント」. Screen order: eyebrow → level badge + category → title → intro card (the fetched `topic.body`, same text as Home) → the five sections. 具体例 = level-tinted outlined card; 覚えておくポイント = calm accent-bar block; level accents pale green / blue / lavender (same palette as the Home topic badge).
+
+### How all 50 topics were covered
+Every one of the 50 seeded titles (initial 20 / intermediate 20 / practical 10) was written as a curated entry (avg ~355 chars, 295–430 per topic across the five sections; each section 25–200 chars). The test reads the seed migration `20260828213000_expand_tips_catalog.sql`, asserts the catalog title set equals it exactly (no missing/extra), and that 実践 = the last ten. Unknown title → `topicDetailFor` returns null → screen shows the intro summary + 「この用語の詳しい解説は準備中です。」 (nothing invented).
+
+### Representative examples (all explicitly 「たとえば（仮の数字です）…」 hypothetical)
+- 初級 PER: 1株あたり利益100円の会社A・Bで株価1,500円/3,000円ならPER 15倍/30倍。
+- 中級 ROE: 自己資本100億円・純利益10億円ならROE 10％、自己資本が200億円なら5％。
+- 実践 自社株買い: 発行1,000万株のうち100万株を消却すると、利益が同じならEPSは約11％上がる（実践ではどう見る？ = 取得上限と実際の進捗を確認）。
+
+### Content rules enforced by tests
+Evergreen only (no 現在の株価/本日/今日の市場/今週/最新/直近/具体的な年月日 etc.); no advice, prediction or guarantee wording; numbers only inside examples flagged hypothetical; no sentence repeated within or across topics; examples/takeaways unique across all 50.
+
+### Safety behavior preserved (pinned by `topic-detail-screen_test.ts`)
+`fetchDailyTopic(level, jstDate)` with the exact params, **id verified (`result.id !== id` → mismatch, fail-closed)**, error text, mismatch text, safe-area + BackButton unchanged; rendering adds no network/AI/DB call (imports pinned; one fetch only; catalog is static data). New: when params change the screen resets to loading and clears the previous topic (a reused screen no longer shows stale content). Labels unchanged.
+
+### Visual findings (Simulator: iPhone 17 Pro 402pt, real SE 3rd-gen sim 375pt; rig with real seeded titles/base_text)
+- Long 2-line titles (信用買い残…, 半導体株がSOX…) wrap cleanly under the badge row; level/category readable (category 1 line); no horizontal clipping; intro card clearly separated from the learning sections; sections 2–5 lines each, no wall-of-text feel; total scroll height ~1040–1150pt (1.3–1.8 screens); advanced shows 「実践ではどう見る？」, others 「株価・相場とどう関係する？」; back returns to Home and /topics; bottom padding 60pt + home indicator; loading/error/mismatch/fallback verified; Home topic card unchanged; Home→detail (CTA + body) and /topics→detail verified.
+- Simulator observations addressed in the final commit: beginner takeaway heading contrast 4.45:1 → 5.56:1 (AA), blue 6.13, lavender 6.62; example-card outline strengthened; intro and headings 15pt/weight aligned; reset-to-loading on new params. (The committed screenshots predate this small styling refinement.)
+
+### Tests / checks
+`deno test tests/app/` **284 passed / 0 failed** (catalog 16, screen 9 in the topic tests); `expo config --json` OK; `expo export --platform web` PASS; tsc(src): only the 2 known CSS-module diagnostics; `git diff --check` clean.
+
+### Remaining issues
+- Out of scope, noted: opening a past day from `/topics` still shows the eyebrow 「TODAY'S TOPIC」; no retry button on the detail error text (as before); a calculation like 「(60 ÷ 2,000)」 can break across lines (harmless).
+- Final styling refinements were verified numerically/by tests, not re-screenshotted.
+
+### safety_checks
+No DB/schema/RPC/Edge Function/Auth/AI/API change; no EAS build; no deploy; no real-time/market claims; no recommendation wording; PR not merged; no secrets committed.
+
+### next_recommendation
+K1 review of PR #83 (UI + static content, low risk). Then the user can read a few topics live on the dev client; a future task may connect a topic to same-day market facts only with an explicit trustworthy data source.
+
+Status: `done` / next_owner `none`.
+
+### Final K1 — accepted / merged
+- verdict: **PASS**.
+- PR #83 exact reviewed head: `c810accebada37760a98a18bb184b50a61b7937b`.
+- fresh main at K1 before merge: `e2ccfcc2e50942ed709eefdb1e62f87cbd693286`; the 20 commits since the G1 merge-base had **0 overlap** with the six PR files.
+- GitHub fresh mergeability read: `mergeable=true`, `mergeable_state=clean`; earlier normalized `mergeable=false` was stale.
+- squash merge: `f5919eb6af3da51c0d4d4a6342ad23b3f0a68980`.
+- accepted scope: topic-detail native UI + curated static learning content + focused tests/screenshots only.
+- accepted verification: 50/50 seeded topic coverage; five learning roles per topic; evergreen/hypothetical content guards; exact id/level/date fail-closed behavior; 284/284 app tests; Expo config/export PASS; diff check clean; 402pt/375pt Simulator verification.
+- EAS build: 0.
+- backend / DB / RPC / API / AI / Auth / Edge / production mutation: 0.
+- Codex review: **not required** — static UI/content-only scope, no sensitive boundary, focused deterministic tests and visual verification are sufficient.
+- remaining non-blockers: past-history detail still says `TODAY'S TOPIC`; no retry button on detail fetch error; occasional harmless line break inside a calculation.
+- AI Lab diary: **候補あり** — 「今日のトピック」を、短い要約から開くと具体例・相場との関係・覚えておくポイントまで学べる画面にし、初級〜上級の50テーマを同じ学習フローで読めるようにした。
+- next: G1 free after fresh allocation.
+
+---
+
+# Claude Task 1 — CURRENT TASK
+
+- task_id: kabumori-home-topic-3level-backgrounds-20261003
+- owner: claude
+- slot: claude-1
+- status: done
+- next_owner: none
+- priority: high
+- recommended_model: Sonnet5（高）
+- type: Kabumori Home UI / topic background canonical asset integration / level-based presentation
+- allocation_main_sha: f2a6882c72b93918118e42c8d0261d1df892fa4b
+- production_mutation_allowed: false
+
+## Purpose
+
+かぶモリTOPの「今日のトピック」カードを、ユーザーが確定した3段階背景シリーズへ切り替える。
+
+表示レベル:
+- beginner = 初級者向け
+- intermediate = 中級者向け
+- advanced = 上級者向け
+
+既存の `topic.level` をそのまま使い、
+追加API・追加AI・DB/RPC変更なしで背景だけを決定論的に切り替える。
+
+今回の目的は**TOPカードの背景3段階を実機相当で比較できる状態にすること**。
+トピック本文の長文化・詳細画面の情報設計は次TASK。今回は広げない。
+
+## User-approved visual system
+
+### Beginner
+- theme color: very pale green / mint + ivory
+- meaning: 基本をやさしく学ぶ
+- motif: open book + simple chart + pencil + sprout
+- plant stage: 双葉
+
+### Intermediate
+- theme color: pale blue + ivory
+- meaning: 複数資料を比較・分析する
+- motif: open book + magnifying glass + several data cards / bar / line / pie charts
+- plant stage: 若い苗（葉が増えた状態）
+
+### Advanced
+- theme color: pale lavender + ivory
+- meaning: 複数指標・材料の関係を組み合わせて考える
+- motif: analysis book + small candlesticks + line/bar charts + relation-node card
+- plant stage: さらに成長した植物 + small flower
+
+3枚共通:
+- same series / same soft illustration touch
+- left ~60% is quiet text space
+- right upper-to-middle is illustration cluster
+- bottom-right ~15–20% remains open for CTA
+- no character, no logo, no baked UI text
+- no financial-ad/news-show feel
+
+## Canonical asset filenames
+
+Repo canonical paths:
+
+- `assets/images/home/topic_background_beginner.webp`
+- `assets/images/home/topic_background_intermediate.webp`
+- `assets/images/home/topic_background_advanced.webp`
+
+Source originals should be the user-approved clean PNGs, preferably:
+
+- `topic_background_beginner.png` / `初級.png`
+- `topic_background_intermediate.png` / `中級.png`
+- `topic_background_advanced.png` / `上級.png`
+
+Expected canonical canvas for this approved series:
+- **1942 × 809 px**
+- aspect ratio ≈ **2.4005:1**
+
+### Source-asset safety gate — mandatory
+
+The user has approved the clean generated backgrounds, but chat screenshots also exist for intermediate/advanced.
+
+**Do NOT use screenshot wrappers as source assets.**
+
+Reject any source that contains:
+- black editor/app chrome
+- 「編集」
+- share/export button
+- bottom toolbar/icons
+- rounded screenshot frame
+- any UI overlay not part of the illustration
+
+Before coding:
+1. look only in repo/user-provided local asset locations (e.g. exact user-supplied files on Desktop/Downloads/project import area) for the clean originals.
+2. require all 3 clean originals to be available.
+3. verify all 3 have the same 1942×809 canvas (or report an exact clean-original size mismatch before proceeding).
+4. if any clean original is missing, **STOP** and list exactly which original(s) are missing. Do not crop the screenshots. Do not inpaint them. Do not regenerate or approximate them.
+
+If clean PNG originals are available:
+- convert to lossless WebP only (`cwebp -lossless -exact` or equivalent)
+- no resize
+- no crop
+- no recolor
+- no retouch
+- no sharpening/denoise
+- preserve exact pixels except format encoding/metadata
+- verify decoded RGBA equivalence where practical
+
+## Current source
+
+Current `src/components/home/home-topic-feature.tsx` has:
+- `TOPIC_BACKGROUND_SOURCE: ImageSource | null = null`
+- one static future background slot
+- `topic.level` already available
+- text width about 62%
+- CTA bottom-right
+
+Current `src/lib/home-topic.ts` already defines:
+- `beginner`
+- `intermediate`
+- `advanced`
+and the correct Japanese labels.
+
+Do not change backend topic-level semantics.
+
+## Required implementation
+
+### 1. Exact level -> asset mapping
+
+Replace the single null slot with an explicit immutable mapping, e.g.:
+
+`TOPIC_BACKGROUND_SOURCES: Record<TopicLevel, ImageSource>`
+
+Mapping must be exactly:
+- beginner -> beginner asset
+- intermediate -> intermediate asset
+- advanced -> advanced asset
+
+Use only `topic.level`. No text heuristics, no randomness, no date-based visual guessing.
+
+For loading/error/empty where there is no current topic:
+- do not invent a level
+- keep current truthful states
+- a neutral plain card/background is acceptable
+- do not falsely show beginner just because it is the default preference
+
+### 2. Card geometry must respect the canonical artwork
+
+The approved source is ~2.4005:1.
+
+Make the loaded-topic card render the background without visually distorting it.
+
+Preferred:
+- card ratio close to source ratio
+- background absolute fill
+- `contentFit="cover"` only if the card ratio ensures no meaningful crop of the right-side illustration / CTA-safe area
+- otherwise choose the simplest no-distortion layout that preserves the approved composition
+
+Do **not** stretch the image.
+
+The left text and right illustration must remain visually balanced.
+
+### 3. Text / CTA overlay
+
+Keep native dynamic UI:
+- level badge
+- title
+- short summary
+- `詳しく見る →`
+
+Rules:
+- left text remains within the intended quiet area, approximately left 55–60%
+- title max 2 lines
+- summary max 2 lines
+- CTA stays bottom-right
+- CTA must sit in the intentionally empty bottom-right artwork area
+- CTA must remain fully tappable
+- background illustration must not reduce text readability
+- whole loaded card continues to open topic detail
+- avoid adding a second competing navigation target
+
+If needed, make the loaded Pressable fill the card so CTA positioning is stable.
+
+### 4. Level badge
+
+The label stays:
+- 初心者向け
+- 中級者向け
+- 上級者向け
+
+Do not change wording.
+
+A minimal level-tinted badge treatment is allowed only if it clearly improves harmony:
+- beginner pale green
+- intermediate pale blue
+- advanced pale lavender
+
+But do not redesign the card or create new UI complexity just for badge colors.
+
+## Explicit non-scope
+
+Do NOT change:
+- daily topic RPC
+- DB/schema/migration
+- topic selection/date logic
+- AsyncStorage level preference contract
+- topic detail content generation
+- topic detail page copy/structure
+- report Hero
+- news cards
+- portfolio screen
+- AI Ask
+- Auth/common-account
+- X/social-mobile
+- backend/Edge Functions/Cron
+- production settings
+
+## Worktree / conflict safety
+
+Before work:
+1. read `PROJECT_RULES.md`
+2. read `.agent/ORCHESTRATION.md`
+3. read `.agent/CURRENT_STATE.md`
+4. read this TASK
+5. fresh `origin/main`
+6. inspect open PRs / slot scopes
+7. `git worktree list`
+
+Use an independent G1 worktree/checkout.
+Recommended branch:
+`claude/g1-home-topic-backgrounds-20261003`
+
+At allocation time:
+- G1 is done/free
+- G2 owns PR #79 Hard Fact report-analysis work and does not overlap Home topic UI
+- current open PRs do not target Home topic files
+
+If a new concurrent PR/slot begins touching:
+- `src/components/home/home-topic-feature.tsx`
+- `src/lib/home-topic.ts`
+- `tests/app/home-topic_test.ts`
+- `assets/images/home/topic_background_*.webp`
+STOP for conflict resolution.
+
+## EAS build conservation — mandatory
+
+This is JS/TS + image asset UI work.
+
+Expected:
+- EAS build created = **0**
+
+Use:
+- local Expo
+- iOS Simulator
+- existing reusable dev client + local Metro if safe
+
+Do not consume a new EAS build for this task.
+
+## Tests
+
+At minimum:
+
+### Asset integrity
+- exactly 3 canonical topic background assets
+- expected dimensions / lossless format
+- no screenshot UI/chrome in accepted source
+- mapping covers all 3 TopicLevel values exactly once
+
+### Logic / structure
+- beginner maps to beginner
+- intermediate maps to intermediate
+- advanced maps to advanced
+- loading/error/empty remain truthful
+- no backend/API/AI is called by background selection
+- detail navigation still works
+- label wording unchanged
+
+### UI
+- loaded card uses actual level background
+- title / summary remain readable
+- CTA is visible and tappable
+- no background stretching
+- no CTA collision with illustration
+- Home section order unchanged
+
+Run:
+- relevant `tests/app/home-topic_test.ts`
+- Home/app deterministic test suite
+- navigation regressions
+- `npx expo config --json`
+- `npx expo export --platform web`
+- changed-scope typecheck/lint where supported
+- `git diff --check`
+
+Known pre-existing diagnostics must be separated from candidate regressions.
+
+## Visual verification — required
+
+Use local iOS Simulator, minimum:
+- ~402pt width
+- ~375pt width
+
+Create local-only fixtures for:
+- beginner
+- intermediate
+- advanced
+
+Do not commit fixture-only production behavior.
+
+Capture or inspect each loaded card with:
+- representative 2-line title
+- representative 2-line summary
+- CTA
+
+Confirm:
+- beginner = pale green / basic learning / sprout
+- intermediate = pale blue / comparison-analysis / young plant
+- advanced = pale lavender / multi-indicator relation / small flower
+- three cards clearly differ by more than color alone
+- left text position is stable across all 3
+- right illustration cluster stays within its intended region
+- bottom-right CTA area remains clear
+- card height does not jump by level
+- surrounding Home sections are unchanged
+
+Create one compact 3-state comparison screenshot/contact sheet in `docs/ui-review/` if useful for K1.
+
+## Acceptance criteria
+
+PASS candidate only if:
+- exact clean user-approved originals are used
+- no screenshot crop / regeneration / approximation
+- 3 levels map to the correct background
+- source artwork is not stretched
+- native title/summary/badge/CTA remain readable and interactive
+- level switching does not change layout geometry
+- 402/375pt visual checks pass
+- no EAS build
+- backend/production mutation = 0
+- no unrelated Home redesign
+
+## Delivery
+
+Focused PR only.
+Do not self-merge.
+No deploy.
+
+Report:
+- task_id
+- fresh main SHA
+- exact source asset discovery paths/names (do not expose private home path beyond a safe basename in user-facing summary)
+- source PNG dimensions
+- final WebP dimensions + hashes
+- changed_files
+- exact level mapping
+- card geometry/contentFit
+- 402/375 visual findings for all 3 levels
+- tests/checks
+- PR/head
+- EAS build created: no
+- backend/production mutation: 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+## Report — G1: Home 「今日のトピック」 three-level backgrounds (task kabumori-home-topic-3level-backgrounds-20261003)
+
+- task_id: `kabumori-home-topic-3level-backgrounds-20261003`
+- result: implemented and Simulator-verified; PR open, **not merged**.
+- fresh main SHA: `520e43e2bde5ca2c3d4efb41d1f6fe356c885392` (allocation SHA `f2a6882c…` was older; no PR/slot touches the topic files; independent clone/branch)
+- PR: https://github.com/anohi-memories/kabumori/pull/80 — branch `claude/g1-home-topic-backgrounds-20261003`, head `2e5356a8a3e6af84ed9999929cd62556081cab65`
+- **EAS build created: no.** backend/production mutation: **0**.
+
+### Source assets (safety gate)
+- Discovery: the user's local assets folder (Desktop, folder `ゆめちゃん素材`), files `topic_background_beginner.png`, `topic_background_intermediate.png`, `topic_background_advanced.png`. All three clean originals present. An older extra `中級.png` (1944x809) was NOT used.
+- Each source: PNG RGB **1942x809**. Gate: border strips (12px) are light on all sides (min luma 200–235, corners pastel; mean luma 232–244) — no black editor/app chrome, no 「編集」, toolbar, share button or rounded screenshot frame; the three images were also seen in the chat and match. No crop/inpaint/regeneration.
+- Converted with `cwebp -lossless -exact` (no resize/crop/recolor/retouch/sharpen/denoise); decoded RGBA verified **pixel-identical** to each PNG.
+- Final WebP (all 1942x809, VP8L lossless): `assets/images/home/topic_background_beginner.webp` sha256 `9f7c50c743ebf79b0351ccc512a350bebebfec7705f7ba049a21444995b353c5` (892,968 B); `…_intermediate.webp` `d62958feecaff9ad5823608ed79b12010381a13ec14df6e192f6c42950539a0d` (870,722 B); `…_advanced.webp` `d9b32157e2c1cfdef294d2956463a1759b34c88acd8e26a4961115081d1fa3ee` (928,298 B).
+
+### Level mapping (exact, from `topic.level` only; `TOPIC_BACKGROUND_SOURCES: Record<TopicLevel, ImageSource>`)
+beginner → `topic_background_beginner.webp`; intermediate → `…_intermediate.webp`; advanced → `…_advanced.webp` (each required once; no text heuristic, date, randomness, network or AI). Loading / error / empty: plain neutral card with the existing truthful texts, **no level invented, no background shown**. Backend topic-level semantics and `home-topic.ts` untouched.
+
+### Card geometry
+- Loaded card: `width: '100%'` + `aspectRatio: 1942/809 (2.4005)`; background `absoluteFill`, `contentFit="cover"` (same ratio ⇒ exact fit, no stretch/crop). (First pass lacked `width: 100%` and measured 19pt short of the other sections — found in the Simulator and fixed.)
+- Native UI: level badge (文言 初心者向け/中級者向け/上級者向け unchanged; only a pale level tint), title ≤ 2 lines, summary ≤ 2 lines in the left `60%`; CTA 「詳しく見る →」 absolute bottom-right (`right 10 / bottom 6`); the whole card is one Pressable → `/topic-detail` (CTA is inside it: no second target).
+
+### Visual findings (iPhone 17 Pro 402pt, real SE 3rd-gen simulator 375pt, local fixtures, 2-line title + 2-line summary)
+- beginner = pale green, open book + chart + pencil + sprout; intermediate = pale blue, magnifier + several data cards/bar/line/pie + young plant; advanced = pale lavender, relation-node card + candlesticks + line/bar + small flower — clearly different by more than colour.
+- Card 370x154.3pt (402) / 343x142.5pt (375) = section width; **height identical for all three levels**; neighbours unchanged (holdings above, Ask AI below only shifted by the card's own height); left text x stable across levels; illustration stays right; bottom-right stays clear: CTA↔illustration min gap beginner 19.3 / intermediate 14.3 / advanced 10.0pt at 402pt, 15.5 / 11.0 / 7.0pt at 375pt; 375pt titles (all three) fit in 2 full lines; summary ends in 「…」 (intended).
+- Taps (CTA, card body, illustration) open `/topic-detail` once. loading/error/empty heights 96 / 105.3 / 96pt (error retry works); first viewport: at 402pt the header + top ~102pt of the card are above the tab bar; at 375pt the topic is below the first viewport (as before this change). Bottom tabs, no overflow/horizontal scroll, no red screen.
+- Screenshots in the PR: `docs/ui-review/home-topic-3level-contact-sheet-402pt-2026-10-03.webp`, `…first-viewport-402pt-beginner…`, `…card-375pt-advanced…`.
+
+### Tests / checks
+- `deno test tests/app/`: **266 passed / 0 failed** (new `home-topic-background_test.ts`: asset hash/VP8L/1942x809, exactly 3 files = 3 levels, exact 1:1 mapping, level-only selection (no heuristics/network/AI), truthful loading/error/empty, ratio/full-width/cover, 2+2 lines + CTA bottom-right + single navigation, labels unchanged, Home order unchanged; `home-structure_test.ts` asset-slot test updated). `npx expo config --json` OK; `npx expo export --platform web` PASS (3 backgrounds bundled); tsc(src): only the 2 known CSS-module diagnostics; `git diff --check` clean.
+
+### changed_files (10 vs main, +207/−50)
+3× `assets/images/home/topic_background_*.webp`, `src/components/home/home-topic-feature.tsx`, `src/constants/home-tokens.ts` (TOPIC_CARD), `tests/app/home-topic-background_test.ts` (new), `tests/app/home-structure_test.ts`, 3× `docs/ui-review/home-topic-*.webp`.
+
+### Remaining issues
+- Loaded card (154pt at 402) is ~+50–58pt taller than the plain loading/error/empty card (96–105pt), by design (art ratio) — the card "jumps" once when the topic loads.
+- At 375pt the topic section starts below the first viewport (also before this change).
+- In the dev client a dev-only gear overlay occasionally swallowed taps near the CTA's right edge (not an app issue).
+- Mac disk was ~97% full during verification (Simulator tooling hit ENOSPC once); scratch builds were removed afterwards.
+
+### safety_checks
+No topic RPC / DB / schema / selection-date logic / AsyncStorage contract / detail page / Hero / news / portfolio / Ask AI / Auth / X / backend / cron change; no EAS build; no deploy; PR not merged; screenshot-wrapper sources not used; no secrets committed (a local public `.env` copy stayed untracked).
+
+### next_recommendation
+K1 review of PR #80 (UI-only, low risk). Then the user can view it live on their iPhone via the dev client + local Metro; next task per the TASK: richer topic body / detail design.
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
+
+---
+
+## Archived previous G1 task state
+
+# Claude Task 1 — CURRENT TASK
+
 - task_id: kabumori-home-report-hero-8-state-assets-20261001
 - owner: claude
 - slot: claude-1
@@ -576,8 +3207,8 @@ Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 - task_id: kabumori-home-visual-rebuild-reference-20260930
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: ユーザーが提示した理想Home案を視覚正本として、現行Homeの見た目を「微調整」ではなくUIレイヤーを全面再構築する。データ取得・ナビ・ルーティング・既存機能・backend契約は再利用し、見た目とレイアウトだけを新規に組み直す。
@@ -3593,4 +6224,41 @@ Production mutation: 0. Rollback: not needed. `review_required` / next_owner `ch
 - Codex review: **not required**. This is low-risk UI/asset-only follow-up with pinned asset hashes, focused regression tests, no backend/auth/data boundary changes, and user visual approval.
 - no remaining G1 implementation for this round.
 - AI Lab diary: **記録不要** — 2026-10-02 canonical diary entry already exists for another real task; do not create a duplicate same-day entry or falsify a future date.
+- G1 status: done / next_owner none.
+
+
+## Final K1 — 2026-10-03 Home Topic 3-level backgrounds
+
+- verdict: **PASS / MERGED / G1 CLOSED**.
+- reviewed PR: #80.
+- accepted exact head: `2e5356a8a3e6af84ed9999929cd62556081cab65`.
+- squash merge: `d6031e228efbf01f94ada22879cd6315457c43f7`.
+- source scope: Home topic presentation + 3 approved background assets + focused tests/docs only.
+- exact mapping accepted:
+  - beginner -> pale green / basic learning / sprout
+  - intermediate -> pale blue / comparison-analysis / young plant
+  - advanced -> pale lavender / multi-indicator relation / small flower
+- clean originals: all 3 source PNGs were 1942x809; screenshot/editor wrappers were not used.
+- conversion accepted: lossless WebP, no resize/crop/recolor/retouch; pinned hashes in tests.
+- visual review accepted:
+  - 402pt contact sheet clearly distinguishes all 3 levels by more than color.
+  - 375pt advanced card keeps 2-line title/summary and CTA readable.
+  - card geometry is stable across levels; no stretch/crop; CTA remains in the intended bottom-right safe area.
+- reported verification accepted:
+  - app tests 266/266 PASS
+  - Expo config PASS
+  - Expo web export PASS
+  - diff check clean
+  - only the 2 known pre-existing CSS-module TypeScript diagnostics remain
+  - Netlify PASS
+  - Vercel PASS
+- accepted known limitations:
+  - loaded card is taller than loading/error/empty by ~50–58pt.
+  - long summary ellipsizes at 2 lines by design.
+  - 375pt first viewport placement is unchanged from before this feature.
+- EAS build: 0.
+- backend / DB / RPC / Edge Function / Auth / X / production mutation: 0.
+- Codex review: **not required**. This is low-risk UI/asset-only presentation work with deterministic level mapping and focused regression coverage.
+- AI Lab diary: **updated** for 2026-10-03 with a public-safe summary of the three difficulty backgrounds and visual growth concept. Snapshot workflow completed successfully and generated the canonical snapshot commit.
+- next: richer topic body/detail-screen design can be the next G1 task if the user chooses.
 - G1 status: done / next_owner none.

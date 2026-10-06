@@ -517,17 +517,22 @@ test("P-環境のミカタHD is confirmed only through its companyCode-scoped ex
   assert.equal(identity.displaySecurityCode, "406A");
 });
 
-test("the P-環境 alias never applies to a different companyCode", () => {
-  const identity = companyIdentityEvidence(candidate({
-    sourceType: "tdnet",
-    sourceName: "tdnet",
-    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
-    companyName: "Ｐ－環境のミカタＨＤ",
-    companyCode: "99990",
-    entityKey: "company:99990",
-    bodySummary: "各 位\n会 社 名 環境のミカタホールディングス株式会社\n代表者名 代表取締役",
-  }));
-  assert.equal(identity.sameCompanyConfirmed, false);
+test("P-環境のミカタHD no longer depends on its alias: ＨＤ is an explicit synonym of ホールディングス", () => {
+  // The 406A0 alias predates the ＨＤ synonym rule; the name now matches on its own merits, so the result
+  // does not hinge on the companyCode (cross-code scoping of aliases is pinned by the 伊藤忠 test above).
+  // The TDnet code / entityKey / URL signals are still required, and a different company still fails.
+  const identityFor = (name: string, code: string) =>
+    companyIdentityEvidence(candidate({
+      sourceType: "tdnet",
+      sourceName: "tdnet",
+      sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+      companyName: name,
+      companyCode: code,
+      entityKey: `company:${code.toLowerCase()}`,
+      bodySummary: "各 位\n会 社 名 環境のミカタホールディングス株式会社\n代表者名 代表取締役",
+    }));
+  assert.equal(identityFor("Ｐ－環境のミカタＨＤ", "99990").sameCompanyConfirmed, true);
+  assert.equal(identityFor("Ｐ－別のミカタＨＤ", "99990").sameCompanyConfirmed, false);
 });
 
 test("7: J・エスコムHD (companyCode 37790, 4-digit code in body + abbreviated DB name) no longer false-fails identity", () => {

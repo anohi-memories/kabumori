@@ -1,3 +1,28 @@
+# H1 — PR #87 editorial “今日のポイント3点” review — 2026-10-06
+
+- task_id: `kabumori-pr87-editorial-three-points-review-20261006`
+- verdict: **PASS** for exact PR #87 head `3561f1eaac41df0f23dcce8fdaace0decc654a0a`.
+- GitHub read-back before verdict: PR OPEN, unmerged, `mergeable=true`, `mergeable_state=clean`; PR head unchanged.
+- Fresh `origin/main`: `e303d81e940d413ed62ec93885b09063b3661aee`; it is 44 commits beyond merge-base `a775ec8d4447bf0c84b12f6dedbd74e89be1a1c2`. Changed-file overlap with the PR's 13 files: **0**.
+- H1 product source changes: **0**. Production mutation/deploy/manual invocation/consumer activation/DB/Auth/Vault/X changes: **0**.
+
+## Review findings
+
+- **A — Editorial contract: PASS.** Morning instructions steer the three points toward today's focus, risks and watch axes; close instructions distinguish what happened, supported material/significance and the next watch. The exactly-three validation remains a hard requirement. The new metric-recap and near-duplicate detectors are narrow warning telemetry; the prompt adds no hard-coded sector or theme claim.
+- **B — Factual/causal safety: PASS.** `MARKET_NAMES` is exported for reuse; no Hard Fact decision logic was changed. Existing date/session, value/sign, stale-data, 1306 identity, reference, unsupported-causality and false-absence checks remain in the analysis path. The close causal and morning watch regressions pass.
+- **C — Delivery/model calls: PASS.** The new `X_POINTS_*` warnings are explicitly cosmetic and `qualityRewriteHints` does not turn them into a rewrite. No additional generation/fact call or retry was added; existing bounded delivery and safe-original behavior remains covered by regression tests.
+- **D — X/App shared truth: PASS.** X formatting consumes `x_post.points_ja`; presentation-v2 `market_detail.points_ja` copies those same values. The home card prefers shared points, while older/v1 data with no shared points keeps the pre-existing today-claims/checkpoints fallback. Type additions are optional/additive; no second App analysis path was introduced.
+- **E — Regression verification: PASS.** Focused/full runs: market-report-analysis **147/147**, personalized-reports **129/129**, X shared consumer **8/8**, App home highlights **17/17**, market-report-data-packet **42/42**. Deno check passed on changed runtime modules; Deno lint passed on the nine changed runtime/test files selected. `git diff --check` passed.
+
+## Caveats / recommendation
+
+- A broader lint invocation including `analysis_test.ts` reports the existing `require-await` at line 34. `git blame origin/main` confirms that line predates this PR and it is unchanged by PR #87; this is not a new blocker.
+- Deno's default type-checked invocation of the App test cannot resolve the Expo `@/` TypeScript path alias; the App behavior suite passes with `--no-check`. Server-side changed runtime modules pass typed `deno check`.
+- **Merge recommendation:** PASS after C1 acceptance. **Deploy recommendation:** no deploy in this H1; keep production rollout and natural morning/close observation as a separate controlled gate.
+- Remaining review blockers: none found. C1 / ChatGPT is the next owner. PR #87 remains unmerged; H1 did not alter its source.
+
+---
+
 # H1 — Phase 1D stopped before source candidate
 
 - task_id: `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
@@ -1394,3 +1419,586 @@ Official current [Auth user management](https://supabase.com/docs/guides/auth/ma
 - remaining_Phase2/3: wire every inventory producer/legacy creator/deleter; enroll all logins; explicit caller/recent-reauth and stale-session enforcement; service cleanup/provider revokes/Vault purge/Storage API convergence; Auth Admin delete + read-back/audit; only then separately design/enforce a reviewed boundary. These are honest incompleteness, not implemented by this review.
 - preproduction_gate: **separate Sol（極高） review mandatory**, actual disposable Supabase project proof, exact production read-only catalog/ACL/FK/function/migration-history/version check, API exposure/managed-role behavior, backfill dry-run/parity, rollout/rollback proof and explicit approval. This source acceptance does not authorize applying even one migration or enabling enforcement.
 - next_recommendation: **C1, 推薦モデル：Sol（高）**. TASK `review_required`, next_owner `chatgpt`; STOP after synchronization. C1 should accept/arrange the exact bounded fix, not merge the unchanged PR candidate or bypass production gates.
+
+---
+
+# H1 Report — PR #76 per-account publishing permission review (2026-10-02 JST)
+
+- task_id: `x-social-mobile-pr76-publish-toggle-review-20261002`
+- result / verdict: **FAIL / CHANGES REQUIRED**. Merge/deploy HOLD; no source fix attempted because the critical correction requires a transaction/authorization-boundary decision beyond this TASK's no-schema/no-RPC-change scope.
+- reviewed_original_head / final_candidate_head: **`a59a89e9c585fb6e780e1af2ecc898c830f5524e`**, unchanged. GitHub PR #76 was read back open/unmerged with this exact head before delivery.
+- isolated environment: H1-owned `/private/tmp/kabumori-h1-resume.DHxA95/repo`, clean single-worktree checkout, own review then report branch. Shared Developer checkout and all G1–G5/H2 branches/worktrees/dev servers untouched.
+- startup origin/main: `a76cb12`; fresh report base: `85b40b464c29311eae7fba84e13a50cb41dd1a52`. PR parent/base `416de8fdac6a6f4c37740536759e0b09b96c81f4`. Independently compared all ten candidate files to base-to-fresh-main changes: **overlap 0**, including intervening G2/PR77 changes; no consultation/content-settings/common-account file edited.
+
+## Findings / executed counterexamples
+
+### P1 / R1 — membership authorization is not bound to the privileged write
+
+- locations: `social-mobile-publish-setting/logic.ts:193–195,216–222`; `http.ts:153–177`.
+- Auth identity is verified and the first membership read is correctly scoped. However, the resulting role is used as a snapshot while the subsequent PATCH runs with service-role authority and predicates only on account id/brand/state/readiness. No caller identity, current membership or role participates in the write transaction, and the existing deletion guard is not a membership-role guard.
+- executed HTTP reproduction using actual `createHandler` and a fake backend that evaluates the emitted PostgREST predicates: read owner membership; remove it or demote to viewer/member before returning that snapshot; continue valid active/live account flow. **All three return 200 and set publish_enabled=true after authority is gone.** The problem applies to OFF as well because that privileged PATCH has the same independent membership lookup.
+- runtime posting does not reauthorize this initiating user's membership; an active/live brand can therefore consume the persisted ON permission. Extra HTTP membership rereads or a post-write reread cannot make this atomic and cannot undo an already-observed permission.
+- correction recommendation, not implementation: design a narrow transactional server/database boundary that binds verified caller + authoritative brand + current owner/admin membership + state CAS + ON prerequisites and serializes against relevant permission-changing writers. Existing authenticated role has no direct write policy/grant to substitute safely. Any new RPC/migration/ACL or writer coordination must be separately scoped/approved; do not weaken client grants or infer production approval.
+
+### P1 / R2 — brand TOCTOU is NOT proven non-publishing by the real runtime guard
+
+- locations: `logic.ts:210–222`; `http.ts:153–169`; `_shared/brand/brand_context.ts:89–136`; `x-test-post/index.ts:3945–3950,4075`; `x-test-post/vault_account_auth.ts:97–151`.
+- ON's active/live check is a separate brands GET and is absent from the conditional UPDATE. The dispatcher loads brand and account in separate HTTP calls and `assertBrandPublishAllowed` evaluates that cached object, not the current database. AI Lab's later final content/length guard also uses that same context. VaultAccountXAuth loads the access credential before generation and ordinarily sends its cached token without a fresh brand/readiness lookup.
+- concrete interleaving proved with actual `createHandler`, `loadBrandContext` and `assertBrandPublishAllowed`: (1) brand active/live, account OFF; (2) toggle reads eligible brand and pauses; (3) dispatcher independently reads active/live brand; (4) disable brand; (5) release stale toggle, which PATCHes ON; (6) dispatcher reads now-ON account and accepts its mixed cached context. **There was no state in this schedule where current brand was active/live AND account ON, yet the publish guard passes.** Thus the claimed downstream safeguard is not sufficient even for a consistently authorized snapshot, not merely an already-authorized post completing after OFF.
+- existing running-post credential reader (`20260925140000...`, exact-account-authority helper) verifies account state/readiness but contains **no brand active/live recheck**; no secret was read to establish this. Separate executed fake VaultAccountXAuth proof: one credential read at load, one fake send callback, no final permission read. No real X API was invoked.
+- minimum design recommendation: atomically bind ON authorization to brand state, and explicitly establish the downstream fresh pre-send permission contract/in-flight semantics, with adverse interleaving tests. Changing existing posting runtime/schema is outside this PR's allowed bounded review correction; no such change made. Do not claim absolute external-X atomicity from an additional HTTP read alone.
+
+### P2 / R3 — no-match reread is no longer tenant-bound
+
+- locations: `logic.ts:224–229`.
+- after conditional PATCH matches zero rows, the service-role `readAccount(account.id)` result is used without checking that latest.brand_id is still the authorized brand or rechecking membership.
+- executed schedule: membership read from brand A; move account to foreign brand B and set ON; old brand predicate prevents update (good), but latest read of B returns `409 STALE_STATE/current_enabled:true` to caller with no B membership (bad). Initial absent/foreign lookup is indistinguishable as designed; this retry path breaks that isolation under movement/revocation. No unauthorized UPDATE in this probe.
+- correction: before returning latest state, verify current authorized account/brand/membership; when no longer in scope, use the same safe not-found shape. The transactional fix must also handle this path.
+
+### P2 / R4 — ON readiness read and PATCH predicate have unequal semantics
+
+- locations: `logic.ts:165–171`; `http.ts:165–168`.
+- read phase rejects an empty platform_user_id; PATCH only requires not-null. Executed fake HTTP/CAS: eligible read, identity becomes empty before write, other fields still present -> **200/ON**. Existing runtime helper rejects `nullif(btrim(platform_user_id),'')`; whitespace-only identity is also stricter there than in the candidate's truthy-string read.
+- candidate also only checks reference presence, while actual credential loader additionally rejects equal access/refresh refs and shared refs, plus refresh-state failures. Distinguish permission-setting eligibility from actual credential usability; do not claim this endpoint proves every runtime prerequisite. Presence-only is not a Vault plaintext read, and actual runtime can still refuse sending.
+- correction: align the atomic readiness predicate and initial validation with the documented nonempty/exact-account contract; define which transient runtime states should merely prevent send vs prevent ON. No repair/schema change attempted.
+
+### P2 / R5 — ON confirmation is not pinned to account/eligibility/preview
+
+- locations: `publish-setting-card.tsx:16–20,30–35`; account-detail wires no per-account key; hook builds body from current account prop at submit.
+- executed transpilation/React-stub harness of real hook+card: open ON confirmation on account A, replace props with eligible B, confirm -> request is for **B**, which was not the account originally confirmed. The branch also leaves the confirm button active after props.preview becomes true; confirm then sends a request in preview mode.
+- static mount in mock_preview correctly exposes no switches, and normal cancel sends zero requests, but the state-transition guarantee is missing. These are component-level executable proofs; actual native router remount behavior and production preview-transition reachability were not claimed/verified.
+- correction: bind confirmation to exact account/expected state (and auth context where appropriate), invalidate/reset it on context changes, and recheck current action eligibility/preview at confirmation/submit. Native/web navigation/props-transition regressions should cover it. No client runtime edit attempted while architectural gate is stopped.
+
+## Remaining lower-risk observations
+
+- Duplicate JSON keys: actual handler accepts duplicate desired_enabled and JSON.parse last-value wins; a duplicate false then true produces ON. No tenant/Auth bypass by itself, but “exactly three fields” is a parsed-object contract, not a strict raw-JSON uniqueness contract. Reject duplicates if strict unambiguous input is intended (P3 hardening).
+- Body limit: method and content-type checks are real; empty/malformed/oversized (>1024 JS characters) inputs return bounded REQUEST_INVALID. However request.text buffers the entire body **before** the length check, and this is a character limit, not a streaming 1KB byte-allocation limit. Do not report resource-exhaustion protection that the code does not provide.
+- Same-state success truthfully confirms its earlier account snapshot, not current state after arbitrary concurrency; returns no PATCH. Boolean CAS closes ordinary duplicate requests but is not a version/ABA guarantee. UI requests use boolean CAS exactly as specified.
+- OFF copy says “いつでもONに戻せます”; actual active/live/connection prerequisites can prevent re-enabling. Prefer conditional wording. OFF does not cancel an already in-flight external send; explain this alongside the R2 runtime contract.
+
+## Gate dispositions
+
+- **Auth/tenant baseline:** missing/invalid JWT -> 401; Auth server supplies user id, no user_metadata authorization; caller brand_id extras -> 400; authoritative account brand and exact caller membership; viewer/member rejected for both directions; initial nonexistent and foreign return same bounded 404. Service key only server-side. **FAIL under R1/R3 races**, not blanket PASS.
+- **ON:** initial platform/active/live/identity/verified timestamp/refs/error checks and same-row status/null refs/error CAS present; connection-status-failed race refuses. **FAIL R1/R2/R4**; reference presence is not full token/state readiness.
+- **OFF:** owner/admin baseline may turn OFF with inactive brand/degraded connection/missing refs; no brand/Vault read needed, no revoke/delete/history/Auth changes. Deletion tombstone can intentionally return ACCOUNT_BUSY. **R1 current authorization race still applies.** No absolute in-flight cancellation claim accepted.
+- **CAS/concurrency:** exact id + authoritative original brand + boolean expected state; mismatched read -> 409; zero rows never success; exact PATCH response id/value is checked; fake concurrent duplicate ON yielded one 200 update and one 409 stale refusal. **CAS is not cross-table authorization or isolation**, R1–R4 remain.
+- **Exact mutation boundary:** five allowlisted HTTP endpoint classes; only PATCH social_accounts with body `{publish_enabled: desired}`; no explicit updated_at/other column, no other-table/RPC/X/Vault/plaintext/Auth/cron write. Source migrations show deletion guard before social_accounts update and refresh-reset AFTER UPDATE OF verified_at; publish-only update does not name verified_at, so it does not invoke that column trigger. Source inventory found no generic social_accounts updated_at trigger. Existing updated_at is a connection/refresh stamp; not explicitly touching it avoids that lease interference. **Production catalog parity unverified** (see limits below); no claim of verified deployed trigger set.
+- **Edge/config:** no tracked supabase/config.toml or deploy override for this new function; repository invokes normal Deno entrypoint, no --no-verify-jwt override. Current official docs say verify_jwt defaults ON, and handler independently validates bearer through Auth /user; **default-on source expectation**, not proven deployed metadata. This new function is not deployed by H1. Future deployment must explicitly keep verify_jwt=true and read back metadata/bytes; unauth/invalid-JWT smoke checks require separately approved nonproduction environment. CORS wildcard with bearer auth/no cookies is not an authorization bypass. Safe bounded errors, no console/request/response-secret logging found.
+- **Client:** normal ON confirm/cancel/loading/in-flight double-tap/stale-error reload/exact server response-id-and-value/unknown error sanitization, degraded-ON OFF and static preview refusal pass executed tests. No approvalMode/G3 settings coupling. **FAIL R5 context transitions**; neither simulator nor real backend/provider E2E executed.
+
+## Independently executed verification
+
+- candidate Edge tests: **37/37** (24 logic + 13 HTTP), with type checking, using `deno test --node-modules-dir=auto`; initial plain invocation failed dependency-type resolution before execution, then auto-resolution succeeded. Generated untracked deno.lock removed using apply_patch, never committed.
+- `deno check` candidate index.ts: PASS; runtime `deno lint` index/logic/http: PASS; entire candidate directory lint: **FAIL with five require-await findings in pre-existing candidate test helpers** (logic_test lines59/64/69/74/78), not suppressed or falsely reported PASS.
+- mobile full `npm test`: **134/134**; domain data-view/post-interaction: **22/22**; `npm run typecheck`: PASS; `npm run lint`: exit0. npm ci used the owned checkout's committed lock and ignore-scripts; no manifest/lockfile change. Existing Node module-type/deprecation warnings are not test failures.
+- relevant X/publish guard/token-loader/Vault routing/dispatch/credential-reader regressions: **48/48 with --no-check**. Checked run **FAILS two existing errors outside PR76**: dispatch_gate_test.ts:57 optional BrandRecord.id and x_oauth2_post.ts:66 Uint8Array<ArrayBufferLike>/BufferSource. Candidate Edge checked test/check and mobile typecheck are clean; no repository-wide clean-typecheck claim.
+- H1 scratch actual-code probes: **7 server/runtime tests + 2 client tests executed**. Six server tests confirm current adverse behavior (R1, R2 mixed snapshot, cached send, R4, duplicates, R3); seventh positively checks concurrent CAS. Client tests confirm both R5 adverse transitions. “Passed” here means **the bug/counterexample was reproduced**, not a correction/regression success. Scratch first run had an incomplete typed RPC fake and did not execute; supplied complete rejecting unused ports, then reran checked server proofs successfully.
+- local scratch recipes (not Git source changes): `/private/tmp/kabumori-h1-resume.DHxA95/pr76_adversarial_test.ts` and `pr76_client_probe.mjs`. Ran against exact assigned source before switching report-only branch to fresh main; all fake domains/tokens/identities, no real backend/X calls. Recipes require the candidate checkout for reproducibility; report checkout is now main/control only. Reproduce on a clean exact-head checkout with the imports/paths adjusted, or the preserved H1 own review branch; never another slot's checkout.
+- `git diff --check` candidate: PASS; secret-shape scan all10 changed files: **0 suspected matches** (private keys, secret API keys, JWT-shaped tokens); all test credentials inspected are synthetic fixture strings. This scan is supporting evidence, not absolute absence proof.
+
+## Production/docs limits and safety
+
+- official Supabase authorization-header/auth docs checked through search_docs: https://supabase.com/docs/guides/functions/auth-headers and https://supabase.com/docs/guides/functions/auth-legacy-jwt. Changelog.md fetch rejected unsupported markdown content type; not treated as successful changelog verification.
+- authorized read-only production trigger-catalog query attempted, one permitted retry after permission-review timeout; **both returned approval-review deadline errors, no query results**. Successful production catalog reads: **0 confirmed**; execution completion cannot be established from those tool errors. No further retries or bypass; cannot attest production trigger/default-JWT metadata parity.
+- production mutation/deploy/migration/RPC/ACL/flags/Cron/Vault/Auth = **0**; real X API/post/media/auth/revoke/refresh = **0**. Fake send callbacks are not X operations. No test production rows/users created; no cleanup of production data required. No DB server/dev server started for this task.
+- source changed_files/fix commit: **none**. PR/G4 head unchanged; no merge, no source push to main or other slot, no new PR or G4 allocation. Only H1 control/report files change on delivery.
+- changed_files_control: `.agent/tasks/CODEX_TASK.md`, append `.agent/CODEX_REPORT.md`, H1 section only `.agent/ACTIVE_TASK.md`, prepend `.agent/CURRENT_STATE.md`; preserve prior reports and all other slots byte-for-byte.
+- commit_hash_control / push: report delivery commit; actual hash and remote read-back recorded in completion response. Do not infer push success without that verification.
+- remaining_issues: R1/R2 blockers + R3/R4/R5; test-helper lint, current existing shared checked-type errors; native and real approved nonproduction Data API/JWT/trigger E2E unverified; production configuration/trigger metadata read-back absent.
+- merge recommendation: **DO NOT MERGE unchanged PR #76**. C1 must decide corrective scope and route implementation without assuming this review authorizes schema or publishing-runtime changes. Corrective design should preserve OFF availability, exact one-setting mutation, tenant hiding and existing consumer/token/cron boundaries, then return a new exact candidate with adversarial tests for independent review.
+- deployment/E2E recommendation: HOLD. After corrected-source review/C1, separately authorize exact single-function deploy (verify_jwt=true + byte/metadata read-back) and disposable-state native/API testing. No production live-enable/test post implied by a function-deploy approval.
+- next_recommendation: **C1, 推薦モデル：Sol（高）**. For any separately authorized transactional auth/RPC correction, recommended implementation **Opus5.5（高）** and new **Sol（高）** review. TASK review_required / next_owner chatgpt; H1 STOP.
+
+## Delivery conflict / main synchronization HOLD
+
+- While completing the report, origin/main advanced to `9c8436c` and independently prepended a new K3/H2 review allocation to `.agent/CURRENT_STATE.md`. Replaying the H1-only report commit produced a conflict in that shared control file. Per ORCHESTRATION, stopped and aborted only the H1-owned rebase; did not overwrite/resolve another slot's control history or force-push main.
+- Report plus H1 review_required state are published on own report branch `codex/h1-pr76-publish-toggle-report-20261002` only. **Canonical main H1 status is not updated by this delivery**; C1 must safely integrate the four control files preserving current K3/H2/G2 state. No claim of successful main synchronization. No source or PR76 mutation.
+
+## H1 resume — dedicated TASK/REPORT canonical delivery (2026-10-02 JST)
+
+- Fresh fetch confirms PR76 head and H1 assignment are unchanged; this resume performs delivery only, no new source tests or Supabase/X operation. Original review evidence above remains the basis for FAIL.
+- Shared CURRENT_STATE/ACTIVE_TASK changed again during delivery. Per orchestration, do not overwrite or resolve those shared-file updates. Fresh main `6957a4f` has unchanged H1-dedicated TASK/REPORT; publish **only `.agent/tasks/CODEX_TASK.md` and `.agent/CODEX_REPORT.md`** from that base. Prior history is preserved exactly. Other-slot TASKs, CURRENT_STATE and ACTIVE_TASK are untouched.
+- Earlier branch-only synchronization HOLD is historical and superseded only after the dedicated-file main push/read-back succeeds. **Shared index/summary may still say ready**; C1 should use the authoritative H1 TASK/REPORT and safely update only H1 index/summary as needed. This H1 does not change G4/H2 allocation or take over their files.
+- No code fix, PR merge, deploy, production mutation or X operation. Next C1, 推薦モデル：Sol（高）. Exact canonical commit/push/read-back outcome reported in completion.
+
+---
+
+# H1 — PR #79 session-date Hard-boundary review (2026-10-03 JST)
+
+- task_id: `kabumori-pr79-session-date-hard-guard-review-20261003`
+- result / verdict: **CHANGES REQUIRED**. Do not merge or deploy the unchanged candidate.
+- original reviewed head / final runtime head: **`9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`** / same. H1 made no runtime fix.
+- test-only evidence head: **`6140968378c44aecd2d40a1cc7d344f2e98e8b4e`**, normal push to H1-only branch `codex/h1-pr79-hard-guard-review-20261003`. The two failing tests intentionally assert the required behavior; this is NOT a green release candidate or a proposed runtime deployment commit.
+- isolation: H1-owned checkout `/private/tmp/kabumori-h1-resume.DHxA95/repo`; no shared Developer checkout, G2/H2/G4 branch or uncommitted work touched.
+- independently fetched fresh main `c1a9a11`, then `520e43e2bde5ca2c3d4efb41d1f6fe356c885392` for delivery. PR79 merge-base is `85b40b464c29311eae7fba84e13a50cb41dd1a52`, not head^; main-side intersection with the three PR files is **0**. GitHub read-back before delivery: PR open, exact head unchanged, 3 files, mergeable=true. Mergeability is not correctness approval.
+
+## Findings / required corrections
+
+### R1 — P1: hypothetical tail erases an already asserted wrong-date/direction fact
+
+At reviewed PR head `9ce344b`, `hard_fact_guards.ts:180` returns null when `HYPOTHETICAL` matches anywhere in the metric clause. With no numeric token, the later `if (!statesValue && direction === null) return` at line 283 also skips date checking. The strengthened WATCH_RELATION is never reached.
+
+Independently reproduced against the 10/2 morning fixture (US metrics all positive, session 10/1):
+
+- `10月2日は、米国株高が強まり波及するかどうかを見ます。`
+- `10月2日は、米国株高が鮮明となり波及するかどうかを見ます。`
+- `10月2日は、米国株高が継続し波及するかどうかを見ます。`
+- **`10月2日の米国株は下落しており次も続くかを見ます。`**
+
+All four produce **no local Hard rejection**, in market_summary, X context, X closing, App summary, App japan, and an observation claim (24 checks). The last explicitly attaches the wrong date to US stocks and states a fall before asking whether it continues: both date and direction contradict the immutable input. It cannot be justified as a wholly hypothetical move. By contrast, `米国株高が強まるかどうか`, `米国株が上昇すれば`, and `米国株安が続くか` remain genuine uncertain/conditional controls and must not become factual assertions.
+
+This global skip predates PR79 and is independently visible in merge-base source. It is nevertheless a **blocking pre-deploy defect under Gate D**, not waived as unrelated history. Do not shift these objective contradictions to the LLM Fact checker.
+
+Required: distinguish a hypothesis governing the move from an earlier asserted move plus a hypothetical tail. Preserve the existing genuine conditional/negative controls and all Gate A positives. Do not merely blacklist the three reproduced verbs, remove hypothetical support wholesale, or accept another sentence-wide watch escape.
+
+### R2 — P2: normal prior-session watch wording still causes delivery false rejects
+
+Both following sentences produce the US 10/1-versus-10/2 date Hard error in all six factual placements (12 checks):
+
+- `10月2日は、前夜の米国株高を受け、日本株の反応を見る。`
+- `10月2日は、米国株高の流れをどう受け止めるかが焦点。`
+
+These do not assert that the US session rose today. The first explicitly refers to the previous night; the second asks how a known move will be received. They are plausible routine morning phrasing, not a safe-to-reject objective contradiction. WATCH_RELATION (`:88-94`) accepts `を踏まえ` and `を受けた動き…`, but not the simple `を受け、…を見る`; it accepts `の影響` but not `の流れをどう…か`. The original broad a70dfdd watch pattern included these watch verbs; the corrective narrowing leaves a recurring delivery-churn risk. The third requested variant, `前日の米国株上昇を踏まえて…確認する`, passes.
+
+Required: support these bounded reference relations while still rejecting assertion-before-watch, past confirmation, wrong-date numeric facts and R1. No blanket exemption for an explicit prior-night marker: a subsequent assertion may still describe today's move.
+
+### R3 — P3: reported changed-file lint PASS is not reproducible
+
+`directionIn` at `hard_fact_guards.ts:168` became unused after callers switched to `directionUse`. Running `deno lint` on the two PR TS files returns exit 1 / `no-unused-vars`; adding the H1 test file yields the same one finding. It was used in merge-base source. Remove the unused wrapper or otherwise resolve the actual lint finding; do not report the G2 lint evidence as independently accepted.
+
+## Other gates / safeguards verified
+
+- **Gate A PASS**: all mandated positive watch shapes and correctly dated prior-session values pass; summary/X/App/claims are covered by the candidate's checked tests, not watch-only fields.
+- **Gate B specified examples PASS**: existing assertion-before-watch, no-comma, assertion-then-real-question, past-watch and date-attached forms remain Hard. R1 adds a separate real bypass that these tests missed.
+- MOVE_LIST/NOUN/PLACE/REFERRED_MOVE/TOPIC inspected. MOVE_LIST can consume verbal material, e.g. bare `や上昇した半導体株高`; an undated relative past clause can itself refer to the prior session, so that alone is not proof of an objective lie. In added explicit-`今日` controls, `今日上昇した…` is rejected by the date guard; `今日反落した…` has no metricFactIssues rejection but localAnalysisCheck catches `反落` via the existing multi-day-word rule. The parallel-move regression therefore **passes**; this review does not falsely claim both are blocked by WATCH_RELATION or label a bare ambiguous past reference as a proved contradiction.
+- **Gate C PASS** for required wrong-date numeric/change cases, 9/29 Nikkei + 9/30 1306 mixed-date regression, stale/current, 1306 naming, sign/direction/emoji, unsupported market causality and unknown refs. These correct ordinary paths do not repair R1's nonnumeric conditional-tail bypass.
+- **Gate F PASS within source scope**: PR diff has no changes to `analysis_logic.ts`, `_shared`, or data-packet source. PR77 quality WARN/rewrite, safe-original fallback, packet contract and model-call ceiling remain unchanged; their tests pass. This does not authorize a production rollout.
+- H1 deliberately returns correction to G2: safely closing the combined hypothesis/assertion classification and reference-relation gaps needs a coordinated guard-boundary correction with positive and negative semantics proved together. A wrapper cleanup or an ad-hoc one-verb regex patch would not resolve the review. No broader parsing framework, model/prompt/call-budget/contract or production-specific change was attempted.
+
+## Independent test results
+
+Original exact runtime candidate, before H1 test addition:
+
+- full `market-report-analysis`: **123 PASS / 0 FAIL**, type-checked test run. Includes session-date 10, presentation_v2 22, causal_calibration 18, quality_calibration 9, h1_adversarial 13, content_guard 16, transport_retry 14.
+- `personalized-reports`: **128 PASS**, X shared consumer **8 PASS**, `market-report-data-packet` **42 PASS**, `_shared` **361 PASS**. These four were run with `--no-check --allow-all`; no claim of full shared/consumer TypeScript validation. Test doubles/fixtures only, no production invoke or real model/provider call.
+- `deno check --no-lock --node-modules-dir=auto` for analysis entrypoint plus session-date test: **PASS**. Additional check of analysis_input, analysis_logic, hard_fact_guards, handler, index, transport_retry and H1 boundary test: **PASS**, dependencies transitively checked.
+- changed-file `deno lint`: **FAIL**, one R3 unused-wrapper issue; separately verified exit 1. An earlier chained shell command ended with successful diff-check, but its lint error was retained and NOT counted as PASS.
+- `git diff --check`: **PASS**.
+
+H1 evidence at `6140968` (same runtime, one extra test file):
+
+- `h1_pr79_boundary_test.ts`: **2 PASS / 2 FAIL**. Failing: R1 hypothetical-tail assertion; R2 legitimate watch variants. Passing: explicitly current parallel-move controls; genuine hypotheses + original delivered packet.
+- extended full analysis: **125 PASS / 2 FAIL**. Existing 123 remain passing; independent failures are intentionally not skipped or rewritten to bless current broken behavior.
+- Initial scratch parallel-move test using ambiguous bare past modifiers had a third failure; refined it to explicit `今日` assertions to avoid equating legitimate prior-session relative clauses with a proven current-session claim. Final results above supersede that exploratory 1 PASS / 3 FAIL run.
+
+## Delivery / remaining issues / next step
+
+- changed_files_source: only `supabase/functions/market-report-analysis/h1_pr79_boundary_test.ts` on H1-owned evidence branch. Candidate runtime/docs and G2 PR branch unchanged; no fix commit is claimed.
+- changed_files_control: only H1 `.agent/tasks/CODEX_TASK.md` and append `.agent/CODEX_REPORT.md`, based on fresh main. Preserve prior TASK history and the existing Report byte-for-byte; no CURRENT_STATE/ACTIVE_TASK or other-slot write.
+- commit_hash_control / push: completion-report delivery commit; exact hash and remote verification in final response. Source evidence push returned success; remote SHA read-back is required before claiming final publication.
+- merge / deploy: **none**. Production reads/mutations **0/0**; DB/Auth/Vault/secrets/OAuth/Cron/gates, real X and manual Edge/model operations **0**. Supabase skill safety procedures informed the local-only verification; no production boundary was expanded.
+- remaining_issues: R1/R2/R3; no actual model run/native UI/production telemetry was requested or performed for this guard review.
+- next_recommendation: **C1, 推薦モデル：Sol（高）**. C1 should accept CHANGES REQUIRED and route a focused G2 source correction (**推薦モデル：Opus5.5（高）**), carrying the evidence tests plus all mandated controls. Do not allocate or overwrite a slot from this H1 review.
+- rollout prerequisites: corrected exact head + independent green positive/negative review; only afterward C1 may approve merge. Later PR77+accepted PR79 rollout remains one explicitly approved `market-report-analysis` deploy, app/x gates OFF, exact byte read-back, natural-cycle observation. No deployment/merge permission is implied by this report.
+- authoritative H1 TASK now `review_required`, next_owner `chatgpt`; shared indexes may be stale until C1 safely synchronizes H1 only. H1 STOP after dedicated report publication/read-back.
+
+---
+
+# H1 — PR #79 corrected Hard-guard rereview (2026-10-03 JST)
+
+- task_id: `kabumori-pr79-hard-guard-rereview-20261003`
+- verdict / result: **PASS-WITH-FIX** for the exact corrected H1 candidate below. **Unchanged PR head f7083ba is not approved**: it still had the newly reproduced question-token bypass and causal-watch delivery false positive.
+- original reviewed head: **`f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`**.
+- final verified head / fix commit: **`b6d2dce3cc45c73951e51d139fefeddad7e2906e`**. Direct descendant of the original head; one bounded correction commit on **H1-only** `codex/h1-pr79-rereview-20261003`. Normal push succeeded and `git ls-remote` independently returned this exact SHA.
+- mandatory isolation: H1-owned checkout `/private/tmp/kabumori-h1-resume.DHxA95/repo`, own source/report branches. Shared checkout, G2 branch/PR, H2 and other worktrees untouched. Startup main `cde3a7d`; delivery base `8aab09ca3cdd7a12752602db4eeafadcaf159ea9`.
+- original PR metadata independently read twice: open, exact f7083ba, four changed files; actual merge-base `85b40b464c29311eae7fba84e13a50cb41dd1a52`. Main-side intersection with PR files **0**, also **0** with the H1-added analysis_logic source file. Main's other-slot UI/news/diary changes are not adopted or overwritten by this review.
+
+## Gate results / findings / bounded H1 fixes
+
+**Prior P1/P2/P3:** G2's five required assertion-before-question sentences now produce a session-date Hard rejection in all six factual placements; the incorrect US fall also produces direction inversion. Original watch-reference examples, correct explicit prior-session dates and genuine conditions remain date-safe. The unused wrapper is gone and original three-file lint actually exits 0. Exact candidate's existing full analysis suite independently passes **131/131**.
+
+**New R1 — P1, fixed:** `HYPOTHETICAL` and the relation's `続くか` alternative matched a prefix of the causal assertion **`続くから`** (also `するから/なるから`). Before the H1 patch, both `10月2日は、米国株安が続くから反応を見ます。` and `10月2日の米国株は下落するから、反応を見ます。` produced **no local Hard issue**, although the US packet is only 10/1 and is positive. Separately, the 6-kanji/3-hiragana prefix admitted an asserted copula such as `10月2日の米国株は下落が明白で続くかを見ます。`.
+
+- Regression-first: added required date+direction checks across all six factual placements, not only `metricFactIssues` or a watch field. They failed against f7083ba.
+- Minimal correction: question `か` must not continue as `から`, in both HYPOTHETICAL and the two watch-relation branches. GOVERNED_BY_QUESTION excludes a prefix ending in continuative `で/し/て/り`; this distinguishes an already asserted premise from the next question without a general parser or blacklisting three particular example verbs.
+- Final checks include `明白で`, `確定し`, `明確となり`, punctuation/no-punctuation, particle forms and the case with **matching positive direction** (`米国株高が続くから`): that last still fails the date guard rather than relying on inversion. Genuine `強まるかどうか`, `上昇すれば`, `株安が続くか`, `強くなるか`, and past questions `上昇したかどうか/強まったかどうか` remain non-factual.
+
+**New R2 — P2, fixed / bounded degree modifiers:** the known `一段と強まるかどうか` and independently tested `さらに強まるかどうか` were honest questions but falsely treated as dated facts by the old prefix pattern. Added only these two degree-modifier tokens before the same bounded predicate; a further asserted predicate still fails the classification. Six-kanji and three-hiragana positive controls also pass. This is not unrestricted text between the move and a question.
+
+**Gate E / R3 — P2, fixed / causal interaction:** the date fix alone was insufficient: `前夜の米国株高を受け、日本株の反応を見る` still failed the causal Hard checker in all six factual placements. The existing original positive `米国市場の上昇を受けた動きが続くかを確認します` did too. These purely terminal plans/questions assert no effect that happened. Rejecting them is a real product-policy delivery false positive, not solved by moving text into watch fields or weakening a prompt.
+
+- H1 authority explicitly allows one narrow causal-watch classification correction. Added two anchored **whole-effect** predicates inside `unsupportedCausalSentences`:
+  - Only link `を受け、` or `を受けて`, followed by `日本株/東京市場` + `の反応/値動き/動き/受け止め方を` + terminal `見る/見ます/確認する/確認します`.
+  - Only link `を受けた`, followed by a fixed result noun (`動き/流れ/買い/売り/反応/値動き/展開`) + `が/は/も続くかを` + the same terminal watch verbs.
+- This removes no evidence requirement for an actual or speculative market effect, past confirmation, different causal links, or a watch followed by an assertion. It is per-link, with the entire effect span matched to the end; no sentence-wide watch shortcut. Cause-side metric/date/sign/ref checks still execute unchanged.
+- Before fixing, four added tests yielded **5 PASS / 3 FAIL** (the three failures: lexical/copula bypass, degree-modifier false reject, full-delivery causal watch). After fixing, all three pass. Added a separate causal negative test and cause-side contradiction test; final H1 boundary suite **9/9 PASS**.
+- Final pure-watch positives pass **all Hard guards** in all six factual placements. Negative cases retain unsupported-causality Hard: actual `日本株が上昇しました`, watch then assertion, watch-before-rise, watch-before-先行, `見ると上昇`, past confirmation, speculative `上昇が続く可能性`, `を受けた動きが続くから`, and `動きが強まり続くか`. Cause-side wrong-date NYダウ value, US direction inversion, incorrect change sign and unknown ref stay Hard.
+
+**Gates C/D / remaining safeguards PASS:** G2's six negative P2 relations, explicit prior-night marker followed by current assertion, date-attached prior-night wording, wrong-date numeric/change, the exact 10/1 mixed 9/29 Nikkei + 9/30 1306 regression, stale/current, 1306 naming, sign/direction/emoji, unsupported causality and fabricated refs remain protected. MOVE_LIST's narrowed nominal-only list no longer swallows the verbal assertion control. No test's unrelated failure is substituted for the required date/direction/causality invariant.
+
+**PR77 compatibility PASS:** H1 changes only Hard clause/question and terminal causal-watch classification, tests and the corresponding design notes. Quality WARN/rewrite code, safe-original fallback, prompt/model, MAX_GENERATIONS, transport/model call ceilings and packet schema are unchanged. Quality calibration, fallback and transport budget regressions pass.
+
+## Final independent verification
+
+At the corrected source tree (one source commit b6d2dce3):
+
+- full `market-report-analysis`: **136 PASS / 0 FAIL**, checked run; session-date **14**, H1 boundary **9**, presentation_v2 **22**, causal_calibration **18**, quality_calibration **9**, h1_adversarial **13**, content_guard **16**, transport_retry **14** included.
+- `personalized-reports`: **128 PASS**, X shared consumer **8 PASS**, data-packet **42 PASS**, all run **with type checking**. Rerun after the fix; no `--no-check` for these suites.
+- `_shared`: checked run **FAIL before tests**, five pre-existing unrelated type errors: three `never` capturedBody accesses in brand_post_generator_test, optional brand id in dispatch_gate_test, and ArrayBufferLike/BufferSource in x_oauth2_post. Those files are unchanged by PR/H1. Then full runtime suite **361 PASS** with **`--no-check`**. This is runtime verification, NOT a claim that the shared checked suite is clean.
+- explicit `deno check --no-lock --node-modules-dir=auto`: **PASS** for analysis index/guards/logic/two boundary tests, personalized index, X shared consumer test and data-packet index. Full analysis test run also checks all its test modules.
+- `deno lint` on all four relevant TS files (including the newly touched analysis_logic): **PASS, exit 0**, no suppression.
+- `git diff --check`: **PASS**; source diff from f7083ba only four files, 107 insertions / 6 deletions.
+- No real model, Edge, database, Auth or X test call. All runtime tests use local fixtures/test doubles. Consulted official [Supabase Deno unit-test guidance](https://supabase.com/docs/guides/functions/unit-test); the skill kept verification local/no production mutation. Changelog Markdown fetched once, returned unsupported content type, not treated as successful API-version verification; no Supabase API/config change was made.
+
+## Delivery / remaining obligations / C1
+
+- changed_files_source (H1 fix only): `supabase/functions/market-report-analysis/hard_fact_guards.ts`, `analysis_logic.ts`, `h1_pr79_boundary_test.ts`, `docs/market-report-shared-platform/DESIGN.md`.
+- commit_hash_source / push: **`b6d2dce3cc45c73951e51d139fefeddad7e2906e`**, H1-only branch normal push and remote SHA read-back confirmed. **G2 PR #79 head is still f7083ba**; no merge, source-main write, force-push or automatic PR incorporation by H1.
+- changed_files_control: only H1 `.agent/tasks/CODEX_TASK.md` + append `.agent/CODEX_REPORT.md`, based on fresh main. Prior histories preserved byte-for-byte; shared CURRENT_STATE/ACTIVE_TASK and all other-slot control files untouched. Exact control commit/push/read-back recorded in completion reply.
+- production reads / mutations: **0/0**; deploy, gate change, manual cycle/retry, DB/schema/RPC/migration, Cron/Auth/Vault/secrets, real X and real model/provider operations **0**. Supabase testing skill did not broaden authority.
+- remaining_issues: no blocking finding in the tested exact scope after the fix; `_shared` checked-type debt remains unrelated/unfixed. Finite Japanese patterns are still conservative for arbitrary long/unknown modifiers; no claim of exhaustive NLP. Actual live-model phrasing, first-cycle completion/cost/hard_rejection telemetry remain unverified until a separately approved natural-cycle rollout.
+- merge recommendation: **conditional source acceptance only for b6d2dce3 or verified equivalent incorporation**, not unchanged f7083ba. C1 should arrange exact bounded fix incorporation into the existing PR, confirm new PR head/source/read-back, fresh main overlap and required checks. Do not create or overwrite another slot TASK from this H1.
+- rollout prerequisites: C1 acceptance and source merge first; then separate explicit approval for one `market-report-analysis` deployment containing PR77 + accepted PR79, app/x gates OFF, exact byte read-back, natural cycle only. No production authorization is inferred from review PASS.
+- next_recommendation: **C1, 推薦モデル：Sol（高）**. TASK `review_required` / next_owner `chatgpt`; dedicated TASK/REPORT authoritative, shared indexes for C1 to align safely. H1 STOP after report publication/read-back.
+
+## H1 — PR #82 event-level dedupe review — 2026-10-03 JST
+
+- task_id: `ai-lab-pr82-event-dedupe-review-20261003`
+- result / verdict: **CHANGES REQUIRED**. Do not merge/deploy unchanged PR #82. Passing sequential happy-path tests do not satisfy the explicit concurrency/usage-failure safety gate.
+- reviewed exact head: `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09`; GitHub independently read back open/head-matching/8 changed files at startup and before completion. No H1 update to that PR/head.
+- actual merge-base: `95fcb391f47296ebf5a7d880a03b834e430b1c6a`. GitHub's live base SHA is not the merge-base. Fresh main `a633961056e5f8b628ae59c72163306c21c3f399`: zero path overlap with the eight PR files; main-side diary Markdown/snapshot updates noted, not overwritten.
+- isolation: H1-owned `/private/tmp/kabumori-h1-resume.DHxA95/repo`; disposable detached baseline worktree + PostgreSQL 17 under H1-owned `/private/tmp/kabumori-h1-pr82-db.8K53G5`. No G3/G4/shared checkout, server, migration or uncommitted changes touched.
+- changed_files_source: only `supabase/functions/_shared/brand/h1_pr82_event_boundary_test.ts` and `supabase/tests/h1_pr82_event_usage_review.sql`. No runtime/migration implementation change. Evidence-only commit **`100ab65f8142adc11916f467f68415d15cbc00b1`** pushed to `codex/h1-pr82-event-review-20261003`; remote SHA read-back confirmed. Intentionally RED safety tests, not a release candidate or replacement PR.
+- changed_files_control: H1 TASK + append-only H1 REPORT on fresh-main-only report branch. Prior histories preserved; shared CURRENT_STATE/ACTIVE_TASK and all other-slot TASK/Report files intentionally untouched. Final control commit/read-back recorded in completion reply.
+
+### Findings / reproduction
+
+1. **P1 — no atomic event ownership before X** (`ai_lab_scheduled_brand_post.ts:139`, usage table PK `scheduled_post_id`). Two distinct schedules read the same empty usage/fingerprint snapshot, select the same diary event with different angles, pass every existing content/dispatch/fingerprint guard and both reach fake X. The barrier regression observes **two publishes**. Usage is only written after X; different scheduled UUIDs can both insert the same event, independently confirmed in PostgreSQL. A per-schedule claim/spacing does not serialize event ownership.
+2. **P1 — successful X + failed usage write loses dedupe; crash windows are not closed** (`ai_lab_scheduled_brand_post.ts:143–161`, `x-test-post/index.ts:4085–4102`). Usage false/throw is absorbed; completion/fingerprint can succeed, then the next successful usage GET returns no record for this event. The next schedule selects it again and a different valid paraphrase reaches fake X: **two publishes**. Cross-brand hash logic deliberately excludes own-brand fingerprints and is not event protection. A confirmed-X/before-usage paused-hook regression likewise reaches two publishes; a hard process crash at that boundary has no earlier durable event claim to preserve. An accepted-X/lost-response regression also repeats on the next slot. After usage succeeds but completion fails, the positive control excludes the event and raises `AiLabConfirmedPostCompletionError`; current outer handler suppresses `fail_scheduled_post` for that handled error. This protects that handled same-schedule failure, not all crash/recovery interleavings. No claim that the same scheduled row automatically retries: production recovery/operator behavior was not invoked. Different next schedules already prove the event-level defect.
+3. **P2 — ordinal event identity is mutable** (`ai_lab_dev_diary_context.ts:341–346`). Same-date insertion or reordering moves a consumed event from ordinal 1 to 2; prior usage of key 1 then incorrectly suppresses another event and revives the consumed one. Removing another entry's required `changed` field drops it before ordinal assignment and moves a consumed ordinal-2 event to ordinal 1. All three safety regressions fail. Sanitizing an unsafe field after assignment preserves ordinal in the unchanged order; that narrower positive case is not insertion/reordering stability. Comments requiring append-only same-date edits do not enforce durable identity.
+4. **P2 — silent conflicting schedule ID acknowledged as new persistence** (`ai_lab_brand_post_store.ts:190–206`). `resolution=ignore-duplicates,return=minimal` plus `response.ok` cannot distinguish exact idempotent replay from an existing different event/unit/X ID. PostgreSQL `ON CONFLICT(scheduled_post_id) DO NOTHING` leaves the old event/X ID unchanged; mocked PostgREST success is reported true for the mismatched new event. Exact replay can be accepted only after identity equivalence; mismatches must be rejected/quarantined, not overwritten or reported as saved.
+5. **P2 — migration reapply accepts unsafe drift** (`20261003090000_ai_lab_topic_event_usage.sql:16–30`). On a fresh table RLS/effective named-role ACL are correct. Reapply after deliberately removing PK/event CHECK/brand CHECK and replacing the same-named index with an X-ID index succeeds without rejection/repair. Wrong-brand/raw-event/duplicate-schedule insertion then succeeds. Existing permissive policies survive (named-role ACL still revoked, so policy presence alone does not prove anon access). Clean reapply is idempotent; unsafe drift acceptance is a separate failed requirement.
+6. **P2 — advertised evergreen cooldown is not a hard boundary** (`ai_lab_dev_diary_context.ts:454–462`). Exhausting all seven seeds inside 72h selects least-recent anyway; regression with all seeds used 1–7 hours ago fails. Fallback can also bypass the generic-theme exclusion used to construct the allowed pool. Normal non-exhausted tests verify 72h seed/48h theme rules. Decide explicit safe-skip/product contract; do not claim unconditional cooldown with the present fallback. Usage read failure returns null and blocks diary selection but still publishes evergreen with no seed/theme history; that is diary-only fail-closed, not event-wide fail-closed.
+7. **P3 — strict changed-file lint not clean**. New `ai_lab_event_dedupe_test.ts` adds 20 `require-await` warnings in async stubs. Remaining 29 checked-file warnings are reproduced unchanged on the merge-base (diary async loader 1, scheduled test 16, topic test 9, entrypoint 3). Three changed runtime modules typecheck; runtime lint still has the pre-existing loader/entrypoint debt. H1-owned async stubs have an explicitly scoped `require-await` exemption and otherwise lint clean. No unrelated lint/type refactor attempted.
+
+### Old bug / other review gates
+
+- Independently executed the selector from the detached actual merge-base against 9/30 fixture, rotations 100–105: `changed → angle1 → difficulty → angle2 → decided → changed`, all from the same real event. New implementation's focused 26 tests establish all five units share one event key, persisted usage excludes all angles, newest unused fresh event wins, then evergreen; rotation cannot override correctly loaded used keys.
+- `loadAiLabTopicUsage`: AI-Lab brand equality, 14-day lower bound, descending publication time, limit 200, metadata-only select; HTTP/parse/malformed-row failure yields null. Nominal low-volume history fits the cap, but a saturated 200-row response has no pagination/completeness signal; omitted rows cannot be treated as proven unused. No production volume inspection or claim that saturation occurred.
+- `recordAiLabTopicUsage`: event regex before network, metadata-only payload, never propagates read/write errors. Field-shape CHECKs are not durable identity validation, and calendar/ordinal ranges are only syntactic at this DB boundary. No raw body column or raw diary/post text write introduced; X ID check is length-only, so this is schema convention + trusted writer, not a general body-content sanitizer.
+- Existing content retries (max 3), brand/account/type/live dispatch guards, adjacent final length/content gate and cross-brand fingerprint check are still wired. Tests cover rejection before X and no usage on known pre-X failures. AI Lab-specific hook only; no other brand, morning/close, OAuth, Cron/config/secret/gate/posting-window source change in PR82.
+- Topic exclusions contain key-shaped candidates + machine codes, no diary/post body. New usage failure logs event key/schedule ID only. The schedule UUID is an existing operational ID, not a newly logged secret; no new internal diary prose leaked.
+
+### PostgreSQL 17 proof / ACL / cleanup
+
+- Exact candidate migration applied only through `psql` on an empty isolated local server with fake NOLOGIN anon/authenticated/service_role roles. Simulated broad default table grants before creation, then checked effective privileges including PostgreSQL 17 MAINTAIN.
+- **16 observation probes + four invalid-input CHECK cases** executed successfully. These include observations of unsafe states, so this is reproduction success, NOT a migration safety PASS.
+- Fresh: RLS enabled, zero policies; anon/authenticated have no SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN; service_role has SELECT/INSERT only and none of the other privileges. Four invalid brand/event/unit/X-empty inputs rejected. Owner/superuser/BYPASSRLS semantics are not claimed to protect privileged administrators.
+- Fresh index matches `(brand_id,published_at DESC)`; forced-index EXPLAIN confirms it supports the bounded ordered read. This checks compatibility, not a realistic planner/performance benchmark on a two-row table.
+- Clean second application retains data/ACL. Drift third application accepts missing constraints/wrong index/old policy; same event on two schedules and conflicting schedule id independently demonstrated.
+- Transaction rolled back all fake data/schema/default ACL/roles; separate read-back returned table absent and fake roles absent (`t|t`). H1-only local server then stopped. No production migration ledger or project DB touched. Local disposable files retained for reproducibility; no user material deleted.
+
+### Tests / exact verification limits
+
+- Focused seven checked suites: **96 PASS / 0 FAIL**, including new candidate event suite **26 PASS**.
+- Existing `_shared` + `x-test-post`, excluding H1 adverse file: **901 PASS / 0 FAIL**, `--no-check --allow-read --allow-env`. No live endpoints/model/X called by H1 probes; production credentials never loaded.
+- H1 required-contract safety file, checked: **2 controls PASS / 9 required safety regressions FAIL**. This is deliberate RED evidence: concurrent schedules, usage failure/next publish, lost X response, confirmed-X/before-usage window, three identity edits, mismatched idempotency, exhausted cooldown. Earlier fixture-account mismatch was corrected before the definitive run; no false guard-failure counted as a vulnerability.
+- Changed store/diary/dispatcher module `deno check` PASS. Full `x-test-post/index.ts` check FAIL on **six pre-existing errors**, independently reproduced on the actual merge-base: `_shared/x_oauth2_post.ts:66`, `index.ts:3047` Uint8Array/BufferSource; greeting image `:136/:221` Blob/fetch bytes; greeting logic `:316` missing retry_count; morning lane `:230` unknown timestamp precision. No new checked error introduced by reviewed event wiring. Do not describe the full entrypoint as typecheck PASS.
+- Strict lint selected eight files: 49 candidate problems, 29 baseline + 20 new async-stub warnings; H1 own file 0. H1 test + changed store/dispatcher subset lint PASS. No blanket claim of candidate lint PASS.
+- `git diff --check` PASS; exact PR scope checked; secret-shape scan of focused runtime/tests/SQL found no real-key-shaped matches (the candidate contains explicitly synthetic short `sk-abcdefghijklmnop` sanitizer fixture, not a real credential).
+- Full 2474-Function suite reported by the implementer was not rerun; H1 independently ran the relevant scope above. No production runtime/source/config read-back, native UI or live provider integration attempted for this source-only gate.
+
+### Correction contract / next owner / rollout
+
+- Stable persisted diary event ID must survive insertion/reordering/optional-field sanitization; explicit non-sensitive immutable IDs preferred. Preserve already-used ordinal history through a reviewed compatibility mapping; do not reset usage or backfill arbitrary "unused" IDs and revive backlog.
+- Before any X side effect, atomically acquire a **durable per-brand/per-event claim** and bind scheduled ID + attempt/fencing token. A/B on the same event cannot both own an active claim. Diary used-state and evergreen cooldown need explicit different lifecycle semantics; permanent unique usage on an evergreen seed would prevent legitimate reuse forever.
+- Lease may expire/release only for a provably pre-X failure or fenced pre-provider state. Atomically record provider-started before calling X; after start, timeout/network error/crash is ambiguous and must remain blocked/quarantined until read-only reconciliation proves outcome. Expiry alone must never reopen a may-have-posted event. A short DB advisory lock/transaction ending before X is insufficient; do not hold a long database transaction across X.
+- Confirmed X ID must settle the existing claim as published and persist event usage/completion consistently. If final persistence fails, retain the pre-X claim as blocked; never delete it/requeue X to "repair" the DB. Cross-system exactly-once cannot be promised without provider idempotency or verified reconciliation; ambiguous outcomes may safely lose a slot rather than duplicate X.
+- Idempotency verifies exact scheduled/event/unit/X identity; conflicts yield explicit operator-safe errors. Read failure or incomplete capped history must not prove a seed unused. Exhausted cooldown pool should safely skip unless product explicitly authorizes weaker semantics.
+- Migration must refuse incompatible pre-existing catalogs (columns/types/null/defaults/CHECK/PK/index/RLS/effective ACL/policies) or perform reviewed deterministic repair. A safe clean reapply remains supported; unexpected ownership/role inheritance/grants must not silently broaden service or tenant access.
+- Add corrected positive A/B ownership + pre/post-X failure/recovery + stable-ID + drift refusal + evergreen re-entry tests. Preserve all existing content/cross-brand/final dispatch guards; do not solve it by changing frequency, X text, unrelated brands or Cron.
+- merge recommendation: **HOLD / return for correction**. No large reservation/migration redesign improvised in H1. C1 should assign a non-conflicting correction owner/worktree, respecting active G3/G4 ownership. Suggested corrective implementation model **Opus5.5（高）**; rereview **Sol（高）**.
+- rollout order only after corrected source acceptance: reviewed additive claim/schema migration first, deployment after compatibility verification, then authorized natural-cycle observation. Each production step needs separate explicit approval; no backlog/test candidate injection/manual X/Cron/frequency/content/gate/OAuth change inferred here.
+- production read / write: **0 / 0**; real model/X/token operations, merge/deploy = **0**. Supabase/Postgres skills restricted verification to disposable local SQL and exposed ACL/drift/crash boundaries; did not grant production authority.
+- next_recommendation: **C1, 推薦モデル：Sol（高）**. H1 TASK `review_required`, next_owner `chatgpt`; STOP after exact control-file push/read-back. Shared indexes may be aligned by C1, not overwritten by H1.
+
+## H1 — PR #82 durable-claim rereview — 2026-10-04 JST
+
+- task_id: `ai-lab-pr82-claim-rereview-20261004`
+- result / verdict: **CHANGES REQUIRED**; HOLD merge/deploy. No runtime or migration fix improvised.
+- exact reviewed head: `9f3b19a3cde490cf63735220ae191dcd4f11bdcb`; PR #82 open/unmerged, independently rechecked after tests.
+- merge-base: `0e907cfcd2a3ca88764190fd25459aa021b0a7af`. Completion-side fresh main: `1a713f8c7fc48629262c6cdc7c11fed1fa316e8e`.
+- independent checkout: `/private/tmp/kabumori-h1-20261004.ijIgLn/repo`; separate report worktree from fresh main. Shared Developer checkout and all other slot worktrees were not edited.
+- changed_files: H1 evidence only `supabase/tests/h1_pr82_claim_boundary_test.mjs`, `supabase/tests/h1_pr82_workflow_boundary_test.mjs`; control sync only `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`. Candidate's 13 source/config files unchanged by H1.
+- commit_hash / evidence push: `0801619f4bcd882dadc71deab5cd07493a7ea80a`, H1-only branch `codex/h1-pr82-claims-20261004`, successfully pushed. **Intentionally RED safety evidence, not a release candidate.** No new PR created and PR #82 branch not mutated.
+- deploy / merge / production read / production write / real model-X-Vault-token operations: **0 / 0 / 0 / 0 / 0**.
+
+### Previous blockers and demonstrated improvements
+
+- Ordinary same-diary concurrent dispatch is now protected: actual candidate SQL, actual topic port and actual dispatcher, two scheduled UUIDs, same candidate list, simultaneous calls => exactly one fake X and one published row. A second angle shares the same event identity. This closes the previously proven ordinary two-worker race, not all other boundaries below.
+- Durable provider_started precedes X; the claim SQL transaction ends before generation/provider work. No DB transaction spans the fake X barrier. Lost response after committed start causes zero X and keeps diary blocked. X-confirmed + settle error + successful completion leaves provider_started, returns SETTLE_FAILED and prevents later diary claim.
+- Expired **claimed** lease can be reclaimed with a new claim_id. Old worker cannot start, release the new row or settle its expired row. Exact idempotent settlement/conflicting X/event/unit, ambiguous-to-published, published no-release, same-schedule conflicts are covered by candidate SQL runner plus actual dispatch controls.
+- Permanent diary active partial UNIQUE independently rejects a direct second active row. Removing only UNIQUE makes that independent control fail. Removing only advisory locking makes the runner's two-session race fail on duplicate-key insert; either weakened protection is detected. The one brand-wide xact advisory key is deterministic; collisions could over-serialize, not grant a second diary owner. Other RPCs are fenced state updates, not alternate claim acquisition; API direct inserts denied on clean install.
+- Explicit event_id survives ordinary reordering/body changes and candidate cross-entry duplicate/missing/unsafe filtering. Same-date uniqueness in CI is an intentional documented one-entry-per-day constraint, not runtime multi-event support. All eight current IDs were inspected: date-bound public descriptions, no PR/commit/task/token/DB identifiers. However duplicate labels inside one entry remain a blocker.
+- Old unconditional least-recent evergreen fallback is removed; normal canonical 72h/48h pool exhaustion returns no claim and prevents X. Released/expired rows do not consume cooldown. Re-entry for a confirmed settled seed after cooldown is intentionally allowed.
+
+### Findings requiring correction
+
+1. **P1 — duplicate event_id scalar silently revives a consumed diary event.** `ai_lab_dev_diary_context.ts:168–169` assigns each event_id label without counting/rejecting duplicate labels. Appending a second valid date-bound ID to the same entry overwrites the first ID and produces a fresh diary key. The actual workflow parser/validator also accepts it: runtime H1 required assertion fails (one diary candidate instead of zero), CI required assertion fails (no exception). Existing duplicate tests cover separate entries, not duplicate labels inside an entry. Reject ambiguous scalar identity before candidate construction and before snapshot generation; do not silently sanitize/select an ID. Preserve any previously published identity during correction.
+
+2. **P2 security — ACL proof ignores owner identity and effective inherited grants.** Migration lines 422–444 exclude relowner/proowner from ACL checks without refusing API role ownership or unsafe inheritance. Local clean/reapply is safe under the expected migration owner, but reapply accepts table owner service_role and claim-function owner anon. Independently reversing the local fixture membership edge so service_role inherits the table owner makes `has_table_privilege(...,'TRUNCATE')` true **before and after successful reapply**. Named ACL revocation does not revoke inherited owner grants; ownership also carries DDL control even when explicit DML is revoked. Refuse unsafe table/function owners and effective named-role privileges/membership, including PG17 MAINTAIN; pin a reviewed owner policy rather than silently changing production role graphs. No claim that production actually has this drift: production roles were not read.
+
+3. **P2 — real proven 401 rejection is permanently quarantined.** Dispatcher line 54 only recognizes exact X_REQUEST_FAILED:400/401/422/429. Actual AI Lab postToX uses VaultAccountXAuth: `.send()` converts a genuine 401 to X_ACCESS_TOKEN_UNAUTHORIZED when refresh is disabled/used, or X_ACCESS_TOKEN_REJECTED_AFTER_REFRESH after a second 401 (vault_account_auth.ts:139–156). The supplied status fixture bypasses this contract. H1 executed the real wrapper with fixture credentials/no refresh and fake 401, through the actual dispatcher and SQL: row becomes ambiguous, not released. The diary then remains blocked despite no accepted write. Introduce a typed/proven pre-write rejection classification shared with the actual abstraction; never broadly match generic local/proxy failures or refresh/transport uncertainty. Preserve account/Vault/OAuth behavior; do not perform actual token refresh in a test.
+
+4. **P1 safety contract — unresolved evergreen becomes eligible again solely by age.** Migration lines 231–245 require claimed_at inside 72h/48h even for provider_started/ambiguous. A still unresolved row aged 73h permits another claim on the same seed; no evergreen active UNIQUE prevents it. The old provider-started row remains independently settle-capable. Local wall-time simulation paused the actual dispatcher after start, aged only local timestamps, ran a replacement dispatcher and resumed the first: **two fake X calls** and independently valid settlements. This is a deliberate time-simulation probe, **not evidence an Edge isolate really runs for 73 hours**, and not a reproduction of the already-fixed ordinary diary race. Even without such a long-lived worker, an unresolved possibly-posted outcome automatically becomes reclaimable, contrary to Gate L's quarantine contract. Define evergreen unresolved-outcome semantics explicitly: permanently/operationally block unresolved starts, or require proven reconciliation before allowing a new generation; reuse only confirmed settled eligible seeds. Do not turn evergreen into a forever-unique published pool.
+
+5. **P2 — cooldown is claim-time based, not publish-time based.** A seed claimed 72h1m ago but confirmed published 71h59m ago is already claimable. Both 72h seed and 48h theme clocks use claimed_at, and ignore settled_at; slow/late confirmed publish makes the gap materially shorter. Bind confirmed cooldown to an explicit publication/settlement timestamp, while unresolved starts remain quarantined. If the product intentionally means reservation-to-reservation spacing, amend the contract explicitly; it is not the previous usage-after-publish behavior or a proved publish-to-publish cooldown.
+
+6. **P2 — strict DB payload/theme relationship is not enforced.** Extra JSON keys (e.g. body) are accepted and discarded, despite the comment at line 255 saying table CHECK rejects them. CHECK only sees extracted columns. Tags are an allowed-name subset but are not bound to canonical seed; supplying evergreen-5 with [] bypasses its overlap with recently published evergreen-0/unglamorous_work. Kind/event regex admits out-of-pool evergreen seeds and loose unit relationships. Actual RPC probes independently accept extra-key input and bypass the 48h theme guard. This is a service-only contract/defense-in-depth failure, not a public unauthenticated exploit; current canonical TS builder supplies honest mappings. Validate the entire JSON object and canonical kind/event/unit/theme mapping before selecting/claiming, not only the inserted row; reject malformed entries even if an earlier candidate could be selected. Never store post bodies.
+
+7. **P3 — changed test-file lint has net-new debt.** Exact changed TS tests/snapshot: 65 require-await diagnostics vs 25 at merge-base, net +40 (event suite 30, scheduled suite 21 vs 16, topic suite 14 vs 9). Runtime lint's four diagnostics are unchanged baseline, not new runtime errors. Clean new fake async signatures with Promise.resolve/reject or a narrowly justified test-only rule policy; no broad production lint disable.
+
+### Verification evidence and limits
+
+- Candidate focused checked Deno suites: **97 PASS / 0 FAIL**, including rewritten event suite 32 plus diary, topic, scheduled and cross-brand suites. Command uses `--no-config --no-npm --no-lock --node-modules-dir=none`; no dependency/network install was needed.
+- Existing `_shared` + `x-test-post` runtime tests: **907 PASS / 0 FAIL**, **--no-check** because baseline type debt is independently documented. This is relevant-scope runtime coverage, not all Functions typechecking or live provider acceptance.
+- Supplied disposable SQL runner on H1-owned PostgreSQL **17.11**: **96 PASS**, clean apply/reapply under non-superuser migration owner, Supabase-style default grants, normal RLS/ACL, lease/idempotency/provider lifecycle, two-session claim race and its ten schema-drift cases. Those passes do not cover the additional owner/inheritance holes above.
+- H1 actual-SQL/dispatcher/wrapper harness: **16 assertions: 6 control PASS / 10 required safety failures**. All failures are behavioral safety assertions after setup/cleanup correction, not missing permissions/test-fixture errors. Clean privileges independently include all 8 PG17 table privileges for anon/authenticated/service_role, including MAINTAIN.
+- H1 actual workflow validator harness: **3 assertions: 2 controls PASS / 1 required failure**. Canonical eight entries pass; missing/date-invalid/repeated entries reject before generation; duplicate labels silently pass. Node workflow regression suites separately **49 PASS**.
+- Advisory-lock-only mutation detected by candidate SQL runner; UNIQUE-only mutation detected by H1 independent direct insert. Mutation SQL lived outside the Git tree in H1-owned temporary files, not modified candidate migration.
+- Three changed runtime helpers `deno check` PASS. Full x-test-post entrypoint has **six errors on both candidate and exact merge-base**: Uint8Array/BufferSource/Blob/BodyInit compatibility, missing morning retry_count, timestamp_precision unknown. Runtime lint has the **same four baseline diagnostics**. Changed test-file lint result is the separate net-new finding above; no blanket check/lint PASS.
+- `git diff --check` PASS. Focused real-key/private-key-shape scan found no matches; credentials in harness are explicitly fake and fake X/model/Vault callbacks never call production. Internal-ID check of all eight canonical event IDs and snapshot passed. No production text/PII/token/secrets read.
+- Gate E source and SQL agree: settle missing claim raises NOT_FOUND instead of reporting success; mismatch IDs reject; published exact repeat is IDEMPOTENT. TS RPC errors propagate into safe retained claims. Unknown successful settlement strings are not runtime-validated, but this alone did not reopen the row in demonstrated paths; strengthen return enums while correcting, without retrying X.
+- Actual provider source uses fixed HTTPS X endpoint and manual redirects on the Vault request path; genuine non-2xx status is passed or converted by that wrapper. 403/5xx/network/timeouts/missing-ID remain conservative ambiguous; supplied event tests cover them. No real provider semantics/credentials/refresh requests were exercised. X official manage-post documentation and PostgreSQL explicit-locking documentation consulted; local executed source/SQL is the primary evidence for this verdict.
+- Migration BEGIN/COMMIT clean apply and refusal/rollback proven with local psql. Repository workflows/scripts searched did not provide an explicit deployed SQL wrapper; **actual Supabase production apply-wrapper/nested-transaction behavior is not certified**. This remains a separate rollout prerequisite, not permission to execute db push or deploy.
+- Other brand behavior: candidate entrypoint change is scoped to AI Lab brand-post topic port; Kabumori reports, OAuth/Vault modules, common account, Cron/scheduler source and PR #81/#76 are not edited. Relevant existing runtime/cross-brand tests pass. This does not attest current production byte identity.
+- Fresh comparison now has **two PR-file overlaps**: canonical diary MD and snapshot changed on main with topic-detail-learning content. Initial no-overlap statement is no longer current. Exact candidate review was not silently rebased; correction must freshen and preserve both new main content and the stable IDs. No same timestamp/topic-claim migration found on fresh main; no production migration ledger query made.
+- Cleanup: every H1 boundary/runner database was confirmed absent; H1-owned `/private/tmp/kabumori-h1-20261004.ijIgLn/pgdata` server stopped successfully. Local fake role/cluster files retained for reproducible evidence, no production residue. No other session database/server stopped.
+
+### Correction / C1 / rollout recommendation
+
+- C1 should accept **CHANGES REQUIRED**, assign a non-conflicting correction owner/worktree (do not overwrite occupied G3/G4), preserve fresh main diary updates, and return for focused rereview. Recommended corrective model **Opus5.5（高）**; recommended C1/rereview **Sol（高）**.
+- First close duplicate-label identity and effective ACL/owner checks, use real-wrapper provider outcome codes, separate unresolved evergreen quarantine from confirmed cooldown and enforce canonical JSON mappings. Add executable adversarial tests, not just in-memory DB reimplementations. Retain durable diary protection and fencing; never repair a failed settle by resending X.
+- No large migration/security redesign in H1 and no runtime fix to claim PASS-WITH-FIX. Evidence branch stays unmerged/RED until a corrected candidate explicitly passes the relevant gates.
+- Future rollout only after source acceptance and separate production authority: inspect production catalog/owner/default ACL and old superseded-table presence read-only; certify exact SQL apply-wrapper/transaction behavior; apply only approved migration; verify catalog/ACL/function definitions; deploy only approved exact source; use authorized natural-cycle observation without manual X/backlog/candidate injection/Cron/token/gate changes. Cross-system exactly-once is not promised.
+- safety_checks: other workstreams, synced sources, ACTIVE_TASK/CURRENT_STATE/H2 and shared user changes preserved; all tests disposable/fake; no external production mutation. Supabase/Postgres skills guided stricter drift, effective-privilege and crash-boundary checks; did not expand authority.
+- next_recommendation: **C1, 推薦モデル：Sol（高）**. H1 TASK -> `review_required`, `next_owner: chatgpt`; STOP after exact H1 control-file sync/read-back. C1 owns shared index alignment.
+
+---
+
+# H1 — PR #82 final boundary rereview (2026-10-05)
+
+- task_id: `ai-lab-pr82-final-boundary-rereview-20261005`
+- result: **PASS-WITH-FIX**, only for the corrected source/evidence head below. Unchanged original PR head still has the two bounded findings; do not treat it as an unconditional PASS.
+- status: `review_required`; next_owner: `chatgpt`; recommended_model: **Sol（高）**.
+- reviewed exact PR head: `51457826ea6c29d9c94ac0066786df8927fa1274`; previous rejected head: `9f3b19a3cde490cf63735220ae191dcd4f11bdcb`.
+- source commits: `cf6bf2cf1113ac1bc083609a86ca97668484e013` (two corrections + independent tests), `9d30a68317dd523a96e6ce96bf7a0f6de23235d5` (align the independent fixture's synchronous resolver contract).
+- source push/read-back: final `9d30a68317dd523a96e6ce96bf7a0f6de23235d5` on `codex/h1-pr82-final-20261005`; PR #82 original branch was deliberately preserved. C1 must adopt these changes before accepting source.
+- fresh main before control synchronization: `1c633e846c8d3ae49ca95aa13b6063f26f85e052` (24 commits ahead of PR base `12af08b80e6e1cef1246ff115cd157b97885e780`); overlap with the original 14 PR files: **0**. Main changed only control/project instructions in that interval. No same migration timestamp found on main; G4/PR76 `20261003090000`, G3/PR81 `20261003120000`, PR82 `20261004090000` are distinct. No production migration ledger was read.
+- PR #82 read-back: OPEN, unmerged, mergeable=true, exact head unchanged, 14 files. No merge or check bypass.
+
+## Findings and bounded corrections
+
+1. **P3, fixed — new checked-test type error.** `realVaultAuth` returned `Promise.reject` from the synchronous `XOAuthClientResolver`, causing a new TS2739 diagnostic. It now throws synchronously. The analogous independent fixture also follows that contract. Runtime/OAuth behavior is unchanged.
+2. **P2, fixed — incomplete index drift proof.** Comparing `pg_get_indexdef` alone admitted a same-DDL partial UNIQUE index whose catalog marked it invalid/not ready. A disposable PostgreSQL catalog probe reproduced acceptance on the original candidate. The shape guard now compares `indisvalid`, `indisready`, and `indislive`; the same probe rejects with SCHEMA_DRIFT. PostgreSQL documents that invalid indexes do not guarantee uniqueness and not-ready indexes are ignored by inserts/updates: [PG17 index catalog](https://www.postgresql.org/docs/17/catalog-pg-index.html). This is a migration-source guard correction, not a production schema change.
+
+No remaining demonstrated P1/P2 finding in the corrected review scope. These fixes do not redesign the claim/provider protocol or expand production authority.
+
+## Gates A–C: identity, provider proof, dispatcher
+
+- Actual parser/sanitizer/candidate builder and extracted actual workflow validator reject missing/invalid/repeated event IDs and duplicate scalar labels before generation. The previous duplicate-label RED case now produces zero diary candidate and fails CI; no last-wins identity rewrite. Reordering/body/angle edits preserve an existing valid ID. All eight canonical public IDs were inspected for unsafe/internal identifiers; fresh-main topic-detail-learning prose is preserved, with intentional stable-ID metadata only. Canonical Markdown and generated snapshot match exact deterministic generator bytes.
+- Actual `VaultAccountXAuth.send` + observed sender were exercised with fake credential, refresh and request callbacks, not a copied auth implementation. Authentic 400/401/422/429 yield typed no-post evidence. Refresh-disabled 401 retains the transformed X_ACCESS_TOKEN_UNAUTHORIZED message and releases safely; genuine 401/refresh/401 retains X_ACCESS_TOKEN_REJECTED_AFTER_REFRESH; 401/refresh/success returns success. Mixed uncertainty, 403/408/3xx/5xx, transport/read errors and a local error merely mentioning 401 never become typed no-post. Failed proactive fake refresh is NOT_SENT only because no create-post callback ran.
+- Source uses fixed HTTPS `POST /2/tweets` and manual redirects; full response-text read must succeed before a response is observed as a status. Official [X create-post endpoint](https://docs.x.com/x-api/posts/create-post) and [X response contract](https://docs.x.com/x-api/fundamentals/response-codes-and-errors) establish success/error semantics. 422 is interpreted under [RFC9110 unprocessable-content semantics](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.5.21), not a claim that X advertises a live endpoint-specific 422 guarantee. Safety depends on the actual authenticated response and these contracts, not message text; provider bugs/cross-system exactly-once are not certified by local tests.
+- Only `AiLabProviderNoPostError` releases after durable provider start. Generic errors remain ambiguous. Ambiguous-write or settle-write failure leaves provider_started blocked. Confirmed X completion failure never reopens the claim or retries X. Pre-X guards release only their own fenced claim; false/error/lost response from start-provider never reaches X. Real SQL-port/dispatcher integration and previous accepted concurrency/fencing controls pass.
+
+## Gates D–F: quarantine, publish clock, canonical payload
+
+- Real SQL (not an in-memory SQL substitute) blocks unresolved provider_started and ambiguous seeds and overlapping canonical themes after 73h, 7d and longer simulated age. Claimed rows block within lease and expire only pre-X. The previous 73h paused-sender/replacement case stays at **one fake X** with no replacement claim. No lease/age recovery of possible writes.
+- Published seed/theme cooldown uses server-owned `published_at`, not `claimed_at`: 72h seed and 48h theme, including +/- one-minute edge probes. Earlier claims cannot shorten the clock; released/expired claims do not consume confirmed cooldown. Correctly aged published rows may re-enter if no unresolved blocker remains.
+- RPC validates the entire bounded candidate array before expiring/inserting claims: exact four-key set/types, duplicate event keys, canonical seven evergreen seeds, unit equality, exact canonical theme arrays, diary syntax/unit relationship and empty diary themes. Extra/missing/wrong fields and malformed later candidates reject atomically with no earlier insertion. Executable SQL/TypeScript canonical-tag parity passes; caller-provided tags cannot bypass cooldown. No post body is stored.
+
+## Gates G–H: effective privileges and migration drift
+
+- Actual migration owner is a non-superuser/non-API local owner. Clean install/reapply succeeds; table and all five narrow functions retain that owner. Direct API table rights including PG17 MAINTAIN are false, column ACL absent; only service_role has narrow function EXECUTE. API/authenticator migration owners are refused.
+- Direct service_role/authenticated and nested service-role-to-owner membership were built locally. Effective TRUNCATE became true, `pg_has_role(api, owner, 'MEMBER')` was true, and reapply refused without changing the role graph. The reverse owner-to-API membership used by the clean fixture does not spuriously fail. This verifies the correct argument direction/transitivity in [PostgreSQL role information](https://www.postgresql.org/docs/17/functions-info.html).
+- API table/function owner drift (each named API role for function ownership), unexpected EXECUTE/table grantees, overloads, wrong PK/partial UNIQUE/index/check, RLS/policy/trigger and column-ACL drift are refused. Unknown-grant failures roll back rather than partially repairing the catalog. The additional invalid/not-ready index probe passes only after the H1 guard correction.
+- Two-session actual SQL race permits one active diary claim. Removing only the advisory lock from an outside-Git mutation copy is detected by the runner; removing only the diary UNIQUE is detected by the independent direct-insert control. Neither weakened copy was committed. This rereview did **not** independently rerun all claimed 15 SQL + 15 TS mutation variants.
+
+## Gate I / executed verification
+
+- Focused checked Deno suites (event, diary, topic, scheduled dispatcher, cross-brand): **104 PASS / 0 FAIL** after the bounded fixes.
+- Full relevant `_shared` + `x-test-post` runtime scope, with `--no-check`: **914 PASS / 0 FAIL**. No network permission granted.
+- Supplied disposable SQL runner, local PostgreSQL 17.11: **132 PASS**, including clean/reapply, two-session race, lease/fencing, canonical payload, age/publish-clock, ACL and drift. Re-run after the index-guard fix.
+- H1 independent real-SQL/dispatcher tests 20 + actual-workflow tests 3 + actual-Vault/provider matrix 18: **41 PASS / 0 FAIL** at final source head. Fake X/model/credential/refresh ports only.
+- Actual workflow's Node regression suites: **49 PASS / 0 FAIL**; deterministic generated snapshot parity PASS. Counts overlap with Deno suites and must not be summed as unique coverage.
+- Four changed runtime helpers: `deno check` PASS. Nine changed TypeScript helper/snapshot/test files: `deno lint` PASS; no broad disable introduced.
+- Full entrypoint check is **not clean**: the same **six known errors** occur on candidate and fresh-main source (Uint8Array/BufferSource/Blob/BodyInit, missing morning retry_count, timestamp_precision unknown). Full entrypoint lint has the same **three known diagnostics** (unused xWeightedLength/decryptToken, prefer-const). Diagnostic text matches exactly after path/line normalization. Main advanced only control files after the baseline checkout, leaving this source baseline unchanged.
+- `git diff --check` PASS; targeted secret/private-key/JWT-shape scan found no real-key matches; canonical event IDs contain no production UUID/token. Test credentials are explicit fixtures. Candidate claim of 2543 entire-Functions tests is not presented as independently run here.
+
+## Changed files / isolation / safety
+
+- `supabase/functions/_shared/brand/ai_lab_event_dedupe_test.ts`
+- `supabase/migrations/20261004090000_ai_lab_topic_claims.sql`
+- `supabase/tests/h1_pr82_claim_boundary_test.mjs`
+- `supabase/tests/h1_pr82_provider_matrix_test.mjs`
+- `supabase/tests/h1_pr82_workflow_boundary_test.mjs`
+- H1 control only: `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`.
+
+- New-Mac rules followed: new isolated H1 source/base/report worktrees from `/Users/yuya/Developer/kabumori-fresh`; its primary checkout and all old/shared worktrees were preserved. Existing H1 report history is append-only; G1–G5/H2/ACTIVE_TASK/CURRENT_STATE were not edited. C1 owns shared-index alignment.
+- Relevant content-diversity, fingerprint/cross-brand dedupe, attempt-budget, completion and other-brand regressions pass. Source change remains AI Lab-only; no new model call, common-account behavior, Kabumori/Mio/OAuth/Vault implementation, scheduler/Cron or other-workstream mutation.
+- Production Supabase reads/writes, migration apply, deploy, real X/media/refresh/OAuth/Vault/token/Cron operations: **0**. No production credentials loaded. This review is not current production byte/catalog certification.
+- Local test databases confirmed absent and H1-owned local cluster stopped; local fake evidence files retained for reproducibility. A final local restart initially omitted its socket options and caused connection-only harness failure; it was stopped, restarted with the original local-only socket configuration, and all 41 tests passed again. No other session's database/server was stopped and no production data was created.
+- Supabase/Postgres skills guided effective-privilege, crash-boundary and index-state drift checks; they did not expand mutation authority.
+
+## C1 / merge / rollout recommendation
+
+- **C1, 推薦モデル：Sol（高）**: accept PASS-WITH-FIX only after adopting the two bounded corrections from final evidence head `9d30a68317dd523a96e6ce96bf7a0f6de23235d5` into PR #82 (normal owned workflow; no force push), verifying its updated exact head and required repository checks. Do not merge the uncorrected `51457826` as an unconditional PASS.
+- No demonstrated residual source blocker after fixes. Production rollout remains separately gated: read-only owner/default ACL/membership/catalog and migration-ledger compatibility; certify the actual approved apply wrapper/BEGIN-COMMIT behavior; apply only the approved migration and read back ACL/definitions; then deploy separately approved exact Function source. Production apply-wrapper/nested-transaction behavior has not been certified here.
+- No authorization for production apply/deploy, manual X, backlog/candidate injection, token/gate/Cron changes is inferred. Natural-cycle observation requires its own authorization. No exactly-once guarantee is claimed across PostgreSQL and X.
+- H1 is stopped at `review_required` / `next_owner: chatgpt`; do not restart until C1 assigns the next step. Control-file synchronization is a separate control-only main commit; source remains the read-back evidence branch, not merged.
+
+---
+
+# H1 — PR #82 production read-only preflight (2026-10-05)
+
+- task_id: `ai-lab-pr82-production-readonly-preflight-20261005`
+- verdict: **PREFLIGHT COMPLETE / PRODUCTION ROLLOUT HOLD**. Current target catalog and owner prerequisites pass. A safe, exact single-file production apply mechanism and its history-failure policy still require a C1 decision; catalog PASS is not deployment authority.
+- status: `review_required`; next_owner: `chatgpt`; recommended C1: **Sol（高）**, future high-risk mutation gate: **Sol（極高）**.
+- fresh main at start: `3b3708eab5fc97190096ab66543bdc5fb1c48434`; refreshed pre-report base: `ed9404b91d96226b941d66540d5520bd17364b47`. Latest G1 control updates were fast-forwarded without changing that slot.
+- accepted PR82 source `9d30a68317dd523a96e6ce96bf7a0f6de23235d5` is squash-merged at `80e11c9207d44599db26a25195f1ee0091484231`, verified ancestor of fresh main. Accepted Functions/target migration bytes match the merge. Later main news-discovery changes are outside the x-test-post import closure. No accepted source was corrected or rewritten.
+- exact migration: `supabase/migrations/20261004090000_ai_lab_topic_claims.sql`; SHA256 `30d8504173160f1dc9c3d7d1cf323d9890129d1ff117c2448aa1b2516629c09c`.
+- production project: `wsmznyzcvmuitkglfeuj`; read session/current role `postgres`; PostgreSQL **17.6**. No application credential/Vault plaintext loaded.
+
+## A — actual production ledger / collisions
+
+- Ledger has **72 rows**; no version `20261004090000` or name `ai_lab_topic_claims`. Superseded `20261003090000` / `ai_lab_topic_event_usage` also absent. PR76 version/name and PR81 version/name are absent too; no target collision found. Never repair a superseded/colliding entry if a later pre-apply check finds one: STOP.
+- Fresh main has **103 migration files**. Only **45** production rows match both repository version and name; **11** additional rows have matching names under other versions; **16** are unmatched by that filename/name comparison. **58** source files lack an exact version+name ledger match. This is a metadata comparison, NOT proof that 58 schemas are unapplied or that unmatched effects are absent.
+- Historical server-assigned timestamps and renamed/missing source history make the global chain unsuitable for an unreviewed bulk push. No reconciliation, include-all, migration repair, db pull/push, or unrelated schema inspection/repair was attempted. Existing history must be preserved.
+
+## B — actual production catalog / owner / ACL preconditions
+
+- Catalog query across schemas found **zero** `ai_lab_topic_*` relations/indexes and **zero** target/topic-named functions, including all five RPC names and possible overloads. Claim table and superseded table both absent; topic-named types/policies/user triggers absent. Therefore target owner/RLS/constraints/index state/function security/search_path/effective table/column/EXECUTE ACL are **not yet applicable**, not falsely reported as installed-and-safe.
+- Intended apply owner `postgres`: non-superuser, BYPASSRLS, public schema USAGE/CREATE and database TEMP available; built-in `pg_catalog.gen_random_uuid()` exists. No API role (anon/authenticated/service_role) or authenticator is a MEMBER of postgres, directly or transitively. Reverse postgres-to-API membership is true and expected; it is not owner authority flowing to the APIs.
+- Relevant postgres/public default ACL: table owner has `arwdDxtm`; anon/authenticated/service_role have `Dxtm` (including PG17 MAINTAIN); function schema default names postgres EXECUTE. The migration's exact REVOKE ALL, PUBLIC/function revokes and effective ACL postconditions address these defaults without globally rewriting them. No unexpected default grantee was found in that scope.
+- Migration ledger owner is postgres; INSERT is permitted. Columns are version/statements/name/created_by/idempotency_key/rollback, with PK(version), UNIQUE(idempotency_key), zero user triggers. Present metadata shows no artificial failing constraint; it cannot rule out transport/commit uncertainty.
+- PostgREST DDL/drop watch event triggers exist and are enabled. API schema-cache/readiness still requires post-apply verification; trigger presence alone is not an RPC smoke result.
+
+## C — exact tooling / transaction proof and STOP boundaries
+
+Used the installed **Supabase CLI 2.116.0** with a byte-identical copy of ONLY the merged migration in an H1-owned scratch directory, no linked project and an explicit H1 Unix-socket local DB URL. Local PostgreSQL 17.11, non-superuser owner named postgres, production-shaped API memberships/default grants. No production migration tool was invoked.
+
+| Local proof | Target relation/functions | Target history row | Result |
+|---|---|---|---|
+| exact clean CLI apply | present / 5 | 1 | PASS |
+| exact SQL reapply + CLI no-op | present / 5 | still 1 | PASS |
+| unexpected default grantee causes final ACL failure before COMMIT | absent / 0 | 0 | complete target rollback |
+| injected history CHECK refusal after the migration's COMMIT | present / 5 | 0 | demonstrated schema/history gap |
+| one-file CLI directory + prior ledger version absent locally | not applied | prior row unchanged | rejects before apply |
+
+- Exact SQL owns its BEGIN/COMMIT. All target DDL and ACL validation are atomic up to its authored COMMIT. Failure before that point leaves no target partial DDL/ACL. Temporary helper functions live only in pg_temp; clean read-back shows postgres owner, RLS true, zero policies/column ACL, zero invalid/not-ready/dead indexes, zero public helper copies.
+- **Schema + migration-history are NOT one atomic commit through this CLI for this authored-transaction file.** The CLI executes authored controls sequentially, then inserts history only after every file statement succeeds; cleanup ROLLBACK cannot undo an already executed COMMIT. This is independently demonstrated, not inferred from generic per-file claims. Pinned [CLI apply implementation](https://github.com/supabase/cli/blob/v2.116.0/apps/cli/src/legacy/shared/legacy-migration-apply.ts) corroborates the order.
+- **An isolated one-file `migration up` is not immediately production-compatible** with existing remote versions missing from that scratch directory. The local prior-history probe raises LegacyMigrationMissingLocalError without applying the target. [Pinned migration-up selector](https://github.com/supabase/cli/blob/v2.116.0/apps/cli/src/legacy/commands/migration/up/up.handler.ts) also verifies remote/local alignment and can upsert configured Vault secrets before applying files: a future runner must exclude Vault configuration, not use a shared full-project config opportunistically.
+- Do not solve either boundary with --include-all, fake history stubs, repair/revert, broad db push, an outer `psql -1` around an inner COMMIT, or editing this accepted migration in place.
+- The Supabase Management [apply-migration API](https://supabase.com/docs/reference/api/v1-apply-a-migration) exposes query/name and no client-specified version. Its server transaction/history wrapper for authored BEGIN/COMMIT is **not independently certified here**; previous tasks document generated history versions. Do not substitute that API and claim equivalent atomicity without reviewing the chosen path/version policy.
+- C1 must choose a separately reviewed single-file runner/history policy. Options require explicit scope: accept a documented schema-first/history-second checkpoint and mandatory read-back on any failure, or prove a specifically approved atomic body+ledger wrapper without changing unrelated code/history. No production wrapper/source candidate was created in this read-only task.
+- Failure/timeout safe stop: do not deploy; read catalog AND ledger. Neither target nor history => remain unapplied; fully safe target but missing history => STOP for narrowly authorized bookkeeping decision; history present but target wrong/missing => STOP; any unsafe/incompatible target => STOP. Never automatically drop/down-migrate, reopen claims, blindly rerun X, or relabel history. A missing response may mean commit happened.
+
+## D–E — exact deploy target / current live baseline
+
+- Static import-graph walk over all Function entrypoints finds the changed topic store/diary/snapshot/dispatcher/provider modules in **`x-test-post` only**. This is the only required Function deploy target. No migration dependency requires a scheduler/Cron/OAuth/other-Function change.
+- Live read-back baseline: x-test-post **ACTIVE v133**, **verify_jwt=false**, package digest `bb2ae611653674269c63405ee57c778f892519c08c6e41718f6a965b9809716b`. The deployed topic store/diary/snapshot/dispatcher/entrypoint differ from accepted merged bytes; provider observer is absent. VaultAccountXAuth source is byte-equal to merged source. Production does not already contain the PR82 claim mechanism.
+- Cron `dispatch-scheduled-posts` is active at `* * * * *`, invokes x-test-post. Only job metadata/boolean target tests read, never raw command/headers/body or secrets. No scheduling/frequency/authorization change is required by this PR.
+- AI Lab brand active=true, publish_mode=live; its one X account publish_enabled=true; enabled_post_types=[brand_post]. Ten existing active JST windows were read (07:30–08:30 through 22:00–23:00); no setting changed. These are live gates, not a paused test environment.
+- Final queue metadata snapshot **2026-10-05 14:05:30 JST**: running=0, overdue pending=0, future pending=5, next scheduled **16:11:08 JST**. Earlier aggregate queried an irrelevant `publishing` label; it was not used as safety proof. Source and final query use the actual `running`/`succeeded` status contract. Snapshot is point-in-time, not a future drain guarantee.
+- Rollout order: accepted exact migration only -> ledger/catalog/ACL/definitions/API cache read-back -> separately approved exact x-test-post deploy, preserving verify_jwt=false -> downloaded source-byte/import-closure + version/status read-back -> permitted non-posting readiness checks -> separately authorized natural-cycle observation.
+- Deploy-first is **AI-Lab send fail-closed** when claim RPC is missing: claim failure occurs before generation/start-provider/X. It can still claim/fail a schedule and load existing Vault credentials before that boundary, so it is not a read-only/no-side-effect smoke and is not an acceptable intentional ordering shortcut. Other brands do not use the topic RPC.
+- Migration-first leaves old consumers publishing under old logic until cutover. Zero running at one instant does not prove old warm workers drained. Recheck no in-flight/overdue work immediately before any separately approved cutover, allow old invocations to finish without force retry, and verify new source afterward. If a safe cutover cannot be established without changing gates/Cron, STOP and request that additional authority; do not infer it.
+- **Cold ledger limitation:** clean creation has no historical event claims. There is no historical post-to-event backfill in the approved SQL. Therefore already-posted diary topics from the old system may be selected again if still fresh; this task did not read old post text to guess mappings. C1 must accept forward-only dedupe at the cutover or separately scope a verified historical transition. No backfill/seed/injection was done, and no retrospective no-repeat guarantee is claimed.
+
+## Pre/post read-back checklist (future authority required)
+
+1. Freeze exact source SHA/hash and apply mechanism. Re-read project identity, current/session role, target/superseded version+name and object absence, default ACL/memberships, current Function digest, live gates/Cron and running/due queue counts. Any drift/collision => STOP.
+2. Apply ONLY the approved target using that reviewed mechanism. On error/lost response use the catalog+ledger checkpoint above; no automatic repair or deploy.
+3. Require target history version/name policy satisfied; table/index/constraint shape, valid+ready+live indexes, RLS/no unexpected policies/triggers, no column/API table rights including MAINTAIN, owner postgres, exactly five signatures, SECURITY DEFINER + empty search_path, only intended service EXECUTE, no public/private persistent helpers. Inspect definitions/digests, not mere function-name existence.
+4. Confirm API schema-cache exposure/readiness without mutating production claims. Catalog checks and download/source comparison are safe. GET method-guard (expected 405) can confirm reachability without scheduler/credential/model/X behavior if explicitly included in smoke authority; it does not prove RPC behavior. Do not send POST/default/unknown/dry-run modes: existing dry runs can generate/write, and unknown POST can enter normal dispatch. Actual functional SQL/dispatcher probes remain disposable/fake, not production test rows.
+5. Deploy only accepted exact x-test-post, verify_jwt=false unchanged; compare downloaded normalized-path files' UTF-8 bytes across the entire expected module graph, expected entrypoint/imports, new version/status/package digest. Existing digest must change; version alone is insufficient. No arbitrary other-Function redeploy to propagate shared modules.
+6. Natural observation only if separately approved: future naturally scheduled AI Lab brand_post, no manual invoke/backlog/seed, no gate/Cron/token change; read minimal claim state/schedule status/outcome metadata, no text/PII/Vault plaintext. Retain provider_started/ambiguous on uncertainty, never reopen/resend to make the test pass. Include cold-ledger and old-worker limits in acceptance criteria.
+
+## Safety / completion
+
+- production reads: necessary migration-ledger metadata, PG catalog/roles/default ACL/ledger shape/PostgREST trigger metadata, one target Function source/metadata, Cron metadata, AI Lab gate/window metadata and aggregate schedule state. No user/post content, tokens, secret values or Vault plaintext read. The Function inventory tool returned all metadata; detailed source retrieval was restricted to x-test-post.
+- production mutations **0**; production apply/deploy/repair/history rewrite/gate/Cron/OAuth/Vault/token/refresh/real X/media/model/manual scheduler operations **0**.
+- changed_files: `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md` only. No source commit/merge/deploy. Control report is append-only; prior review history and all G/H2/index files preserved. H1 isolated from kabumori-fresh; old/shared worktrees untouched.
+- local proof files retained outside Git at `/private/tmp/kabumori-h1-preflight-20261005.pdBLYW`; all **four** H1 throwaway DBs deleted after inspection and own cluster stopped. Their fake data can be recreated from the local proof script; no production residue. CLI-created own temporary metadata moved outside the worktree, not deleted/staged.
+- `git diff --check`: PASS before control sync. No runtime/type-test rerun is claimed for this source-unchanged task; previous accepted 104/914/132/41/49 proof remains separate history. This turn's exact clean/reapply/rollback/history/selection experiments are the apply-path evidence.
+- Supabase/Postgres skills guided least-privilege/default-ACL review and exact failure-boundary probes. Current changelog was checked (markdown fetch unsupported, HTML fallback); no unrelated upgrade/schema fix was performed.
+- next_recommendation: **C1（Sol・高）** accepts the read-only findings, resolves the apply-path/history and cold-ledger/cutover decisions, and only then requests narrowly specified production mutation authority (**Sol・極高**). H1 stops at review_required; shared-index alignment belongs to C1.
+
+---
+
+# H1 — Common-account hosted Gate B final review (2026-10-05)
+
+- task_id: `common-account-gateb-managed-auth-final-review-20261005`
+- verdict: **PASS-WITH-CONDITIONS — Phase 1 foundation installation only**. No new blocking source defect found within the additive/shadow contract. Recorded hosted evidence is sufficient to advance to C1 and a separately authorized, fresh-preflighted single-migration mutation gate. This is NOT permission to apply now, backfill, activate deletion, enforce, or deploy.
+- source reviewed: accepted fix `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65`, merge `44121914b035e22380a4ca1bd8252a42713a2bbf`; review worktree main `86a15390ec17ca38a543a3ebf7ffca79d3e67292`. Merge ancestry verified. Migration, lifecycle docs/fixture/behavior/runner/mutations/rollback bytes remain equal to the accepted source. The shared migration-invariants test has one unrelated reserved-version addition, independently inspected and tested.
+- exact target: `supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql`; SHA256 `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3`.
+- source implementation/fix/merge/deploy: **none**. Only H1 TASK/REPORT control synchronization. Dedicated new worktree `/private/tmp/kabumori-h1-gateb-20261005.tEjJuC/repo`; base checkout, previous worktrees, other slots and synced project references untouched.
+
+## Evidence provenance / what was and was not independently repeated
+
+Read the current TASK/CURRENT_STATE recorded hosted evidence, prior common-account H1 source/corrective/readiness reports and H2 preproduction report, complete accepted migration/design/rollback and relevant proof runner. The TASK explicitly records the user's fail-fast `GATE_B_PHASE_A_PASS`, `GATE_B_PHASE_B_PASS`, ChatGPT's direct-row refusal and post-delete DB observations. Those are **recorded operator/ChatGPT hosted evidence**, not scripts re-executed by H1. Raw hosted scripts/request transcripts or a hosted definition-byte dump are not included in the repository artifacts inspected; this review does not independently attest their exact assertion coverage beyond the recorded contract. C1 must retain that provenance, not relabel it as an H1 fresh hosted E2E. No destructive replay was needed/authorized.
+
+The hosted proof covers a minimal production-shaped fixture, not every current production dependency. H2's previous 20 lifecycle PASS / 46 mutations detected / 8 deletion PASS already independently exercised the identical accepted local source, including rollback/reapply and race cases. Those are prior evidence, not this turn's fresh counts. Actual hosted application and managed actors address different unknowns than the local fixture does.
+
+## Final gates — disposition
+
+| Gate | Disposition and limit |
+|---|---|
+| 1. Previous Gate B unknowns | **PASS for installation scope using recorded evidence**: exact hosted apply, real own/cross-user RLS, denied writes/anon/service table access, service RPC, Storage blocker/API cleanup and real Auth Admin cascade address the principal missing managed boundaries. Not a production parity or complete deletion-orchestrator proof. |
+| 2. Stale access JWT | **Foundation PASS; destructive orchestration HOLD**. Source never revokes/deletes managed sessions/login, requires session_revocation attestation, and disallows whole-account completed. Existing issued JWT remains a risk outside this foundation. Neither a checkpoint nor Auth deletion nor global sign-out proves immediate JWT invalidation. |
+| 3. Observer truthfulness | **PASS**. Shadow only; no blocker reconstruction/authorization after cascades. Direct common-row deletion with live Auth parent refuses 23503; actual Auth cascade records unverified login_removed and clears raw subject linkage, never verified account completion. |
+| 4. RLS/grants/Data API | **PASS in recorded hosted fixture; production read-back required**. All five tables RLS; public two only authenticated own-row column SELECT; no client writes or authorization by editable metadata. API acceptance alone is not cross-user data disclosure. |
+| 5. Service role boundary | **PASS**. BYPASSRLS does not create SQL table privileges. Direct tables revoked; 10 public backend RPCs service-only, two no-argument client start RPCs authenticated-only/auth.uid-bound, 21 private functions owner-only after PUBLIC revoke. Server must derive p_user_id from verified caller; that future Edge obligation is not implemented here. |
+| 6. Storage | **PASS for refusal/cleanup observation**, not race-free permanent emptiness. owner_id/deprecated owner probe blocks even with attested cleanup; unknown/unreadable shape refuses. Recorded object cleanup used Storage API, not SQL. Still-valid JWT can create new ownership later; future writer gate/re-enumeration remains mandatory. |
+| 7. Managed Auth/cascade | **PASS using recorded read-back**: users/identities/sessions/refresh/common/entitlements absent; one durable login_removed operation preserves ready-step evidence. Non-FK operation survives; login_removed is not completion. Auth /user and refresh rejection do not prove old access JWT rejected by every other API. |
+| 8. Hosted rollback/reapply/error mapping | **DEFER with conditions**, not falsely PASS. Local identical-source atomic refusal/affirmative rollback/reapply is prior evidence; real hosted clean apply and guard/cascade worked. No automatic rollback/reapply is needed for foundation-only install. Exact managed rollback/other RPC HTTP-error mappings may be deferred until separately approved rollback/destructive integration; no reliance on an untested mapping or automatic retry now. |
+| 9. Production rollout | **Conditional next gate**, checklist below. Mandatory fresh target/dependency/owner/effective ACL/API/apply-history checks plus exact-file approval. This review's small catalog read is not the full rollout preflight. |
+| 10. Backfill | **HOLD / separate approval** after installed-schema read-back, fresh dry-run/parity and operator review of uncertain population. Migration does not run backfill. |
+
+## Stale-JWT security implication — mandatory correction to future acceptance criteria
+
+Deleting Auth removes refresh capability but does not retroactively invalidate issued JWTs. **Revoking sessions/signing out before hard delete is necessary but alone is NOT sufficient** to prevent the stale access token from calling Data API/Storage before exp. Official [user-management guidance](https://supabase.com/docs/guides/auth/managing-user-data) and [sign-out guidance](https://supabase.com/docs/guides/auth/signout) explicitly preserve that distinction. [Session guidance](https://supabase.com/docs/guides/auth/sessions) describes live session_id validation for sensitive operations.
+
+The hosted `old access JWT Data API: ALLOWED` means the gateway accepted that JWT; without response/endpoint assertions it does **not** establish that removed common rows or another user's data were readable. Common/entitlement rows cascade away, and the new client start helper requires a live locked Auth parent before recreating application state. However Storage has no ownership Auth FK and legacy writers are not lifecycle-gated, so the whole system is not protected by the foundation.
+
+Before any future destructive orchestrator can attest session_revocation as operational safety: authenticate/re-authenticate server-side; stop new sign-in/refresh/writer paths for the deleting subject; revoke all applicable sessions/refresh capability; **also** deny old-JWT sensitive writers with current session/lifecycle authority at every relevant API/Storage path, or independently prove an explicit bounded-expiry plus writer/in-flight quiescence strategy; re-enumerate Storage through its API; refresh readiness immediately before managed deletion; then verify managed deletion/cleanup and audit. Ban alone, token signature checks, successful signOut, deleted auth.sessions, or a DB checkpoint are not that proof. No such gate or token change was implemented here.
+
+Prepare's locks end when its request commits. Admin/membership/identity/Storage producers remain evaluation-only and are not serialized through the later separate Auth API call. Ready is bound lifecycle/requirement evidence, not an atomic external deletion permit. Future enrollment, producer/deleter integration and stale-token policy require their own design/review/hosted proof before enforcement. Existing Kabumori/X legacy deletion routes remain unchanged/unsafe.
+
+## Minimal fresh read-only observations
+
+- Production `wsmznyzcvmuitkglfeuj`: one SELECT of catalog/history/role/default-ACL metadata only; session role postgres, PG17.6. Target version/name history count **0**; exact public target/private lifecycle relations **0**; new RPC/private-function names/overloads **0**. No installation assumed.
+- API roles anon/authenticated/service_role and authenticator are not members of postgres. service_role/anon are not members of authenticated; authenticator membership in authenticated is the normal role-switch machinery, not an end-user grant. Inspected postgres global/public/private defaults show only known owner/API grantees; public table Dxtm defaults are explicitly revoked by this migration. No default privilege rewrite or effective installed-ACL claim made.
+- Full fresh source-derived 17-table/26-column/14-FK/helper and owner privilege/API configuration checks were **not repeated** by this limited review. H2's 2026-10-02 snapshot cannot certify today's entire schema. Require them immediately before the separately approved apply, including any later production changes from other slots.
+- Disposable `wrmtvdgsxwmlzekvbmsa`: get-project metadata confirms **INACTIVE**. No DB/Auth/Storage query, resume, pause or restore attempted. Photo project untouched.
+- No PII, tokens, Vault plaintext, user/post content or Auth session contents read; no functional production RPC invoked.
+
+## Exact rollout / STOP checklist — future separate authority
+
+1. C1 accepts the recorded evidence and this narrowed verdict; freeze the exact SQL hash above. Confirm fresh main ancestry and byte parity, production project identity, independent operator checkout and other active migration work. No source changes or borrowed/shared slot state.
+2. Fresh read-only production preflight: exact target version/name and every created table/view/index/function/signature/trigger collision absent; expected owner and role memberships; global/schema defaults and effective existing dependency grants; source-derived 17 tables / 26 column types / 14 exact validated non-deferrable FK actions, profiles children CASCADE, two exact helper signatures/definitions/owner; managed Auth/Storage shapes; public/private API exposure configuration. Unexpected owner/grantee/overload/helper/drift => STOP, do not fix it in the apply.
+3. Obtain approval for **only this exact migration plus explicitly specified history bookkeeping**. Choose and certify the actual single-file runner/owner/transaction/history policy before execution. No ordinary db push, include-all, history repair/relabel or unrelated migration. Hosted apply success does not itself prove schema+history atomicity for the future path. SQL owns BEGIN/COMMIT; any separate CLI history insertion is outside that COMMIT (previous H1 tooling proof). Do not wrap authored COMMIT in an outer transaction and call it atomic or assume Management API's generated version equals the filename.
+4. Apply only the authorized bytes, with stop-on-error. Lost response/history failure => read catalog AND history before further action. Absent both => not applied; schema present/history absent => STOP for narrow bookkeeping authority; history present/schema wrong/partial/unsafe => STOP. **No blind reapply**: source intentionally refuses already-present target tables. No automatic rollback/drop/repair, and no deploy/backfill following an uncertain result.
+5. Read back five tables + private view, exact columns/defaults/PK/FK/CHECKs, valid/ready/live indexes, ten expected triggers enabled, owners, all 33 function signatures/definitions/SECURITY DEFINER/empty search_path, no unexpected overloads. Effective role/table/column/EXECUTE rights (including MAINTAIN and inherited/default privileges): authenticated only intended columns and two own-row SELECT policies; anon/PUBLIC no entry; service only ten public backend RPCs; no API helper/view access. Require unchanged existing dependency definitions/grants. Wrong privilege/owner => STOP, no ad-hoc GRANT repair.
+6. Require exactly one shadow/not_started/epoch1 settings row, exactly three fixed built-in checkpoint meanings (session/storage always, Apple conditional), empty common_accounts/entitlements/operations, expected explicit history version/name policy. Verify API schema-cache/exposure without production test users/deletion/readiness mutations. If actual API denial/error mapping must be probed with a login, obtain separate bounded authority; do not borrow credentials or introduce fixture rows.
+7. After read-back PASS, run only installed private backfill(false) aggregate dry-run if included in read authority; compare with fresh legacy population, not frozen historical 5/2/1 counts. Profile-only/Auth-only/admin/internal/shared/unknown records require operator review. **Stop for separate backfill(true) approval**. No client registration/deletion/enforcing activation or runtime deploy follows automatically.
+8. Recovery rollback is a distinct approved mutation, not a routine error handler. Affirm single shadow/not_started settings, exact built-in registry/no extensions, zero operations including finished, all accounts active, no self-service entitlements, no tracked or operator-confirmed dynamic/client dependencies; every DROP without CASCADE in one transaction. Missing state/use/dependency => STOP. Hosted rollback and exact error mapping must be proven before relying on that path; no project restart or destructive replay from this H1.
+
+## Tests / safety / handoff
+
+- This turn executed source invariants **10 passed / 0 failed**, lifecycle/mutation runner `bash -n` PASS, accepted-source byte/hash/ancestry comparison PASS, `git diff --check` PASS. Entire SQL/design/rollback responsibility/ACL/observer paths reviewed. No fresh local lifecycle/mutation/deletion DB run, no fresh hosted scripts, no Expo/native typecheck claimed; none were changed.
+- production reads: one metadata SELECT; disposable reads: one project status lookup; photo reads: 0. Production/test/photo **mutations = 0**. DB apply/backfill/rollback/deploy/Auth/Storage/Vault/provider/OAuth/token/refresh/Cron/manual real-X operations = **0**. No local proof DB/cluster created and no test data requiring cleanup.
+- changed_files: `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md` only. Prior report/task history preserved; CURRENT_STATE/ACTIVE_TASK/other slot controls and source untouched. Commit/push: control-only synchronization, actual SHA/read-back reported in final response; no source commit.
+- Supabase/Postgres skills informed explicit grants/effective privilege, managed ownership and stale-token review. Current changelog consulted (Markdown unsupported; HTML fallback); no unrelated version upgrade or schema change inferred.
+- remaining: exact future apply/history policy, full fresh production preflight/API parity, optional hosted rollback/other error mappings before reliance, backfill population approval, all future destructive/writer integration and stale-JWT enforcement proof. These are separated from foundation source acceptance, not falsely marked completed.
+- next_recommendation: **C1 — Sol（極高）**, accept/resolve conditions and, only if preflight/apply mechanism is pinned, request narrowly specified production migration approval. Backfill/enforcement/destructive orchestration remain HOLD. H1 `review_required` / `next_owner: chatgpt`; STOP after verified GitHub sync.

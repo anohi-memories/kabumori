@@ -1,5 +1,1029 @@
 # Claude Task 5 — CURRENT TASK
 
+- task_id: common-account-v1-phase1-production-backfill-gate-20261006
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- priority: critical
+- start_code: G5
+- finish_code: K5
+- recommended_model: Opus5.5（極高）
+- type: production legacy backfill dry-run / parity gate / explicit apply gate
+- production_project_ref: wsmznyzcvmuitkglfeuj
+- production_mutation_allowed: false_until_explicit_approval
+- backfill_apply_allowed: false_until_explicit_approval
+- integration_allowed: false
+- enforcement_allowed: false
+- auth_delete_allowed: false
+
+## Priority
+
+The user has made the common-account system the project-wide critical path.
+
+Until this common-account sequence reaches a safe integration checkpoint:
+- G5 common-account work has priority over unrelated app production mutation.
+- G1/G2/G3/G4 existing tasks must be preserved, not overwritten.
+- Read-only observation and source-only/UI work may continue if non-conflicting.
+- No other slot may open a production DB/Auth/permission mutation window while G5 has an active production mutation window.
+- In particular, G3 PR81 production apply must remain HOLD while a G5 production write is authorized/active.
+
+## Current accepted baseline
+
+Common-account Phase 1 foundation is already installed in production and Final K5 PASS:
+- migration: `20261001150000_common_account_lifecycle_foundation.sql`
+- SHA256: `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3`
+- schema/history: EXACT / EXACT
+- RLS/ACL/functions/triggers/indexes/policies: exact reviewed contract
+- existing-object fingerprint unchanged by foundation apply
+- common_accounts: 0
+- service_entitlements: 0
+- lifecycle operations: 0
+- backfill: 0
+- guard mode: shadow
+- integration_state: not_started
+- enforcement: not enabled
+- PR #91 rollout/preflight tooling merged to main as `50e08e1daa0b1e91f9f170a5baaf175ebcd315cd`
+
+Phase 0/previous dry-run history suggested a very small legacy population, but **do not hard-code old counts**. Re-read current production.
+
+## Canonical backfill semantics
+
+The already-reviewed production function is:
+`private.account_lifecycle_backfill(boolean)`
+
+Important source contract:
+- `false` = aggregate/count-only dry-run. No account or entitlement writes.
+- `true` = iterates current `auth.users` in UUID order, takes lifecycle locks, re-reads each user's plan after lock, creates only missing rows, is idempotent, and never changes an existing entitlement.
+- one `common_accounts` row per current Auth login.
+- Kabumori candidate = existing `profiles` row; legacy evidence distinguishes:
+  - `kabumori_activity`
+  - `kabumori_profile_only`
+- X candidate = sole owner of the person's own `social_mobile_user_v1` self-service workspace; admin users are excluded from X consumer entitlement.
+- X legacy evidence distinguishes:
+  - `x_identity_verified`
+  - `x_workspace_pending`
+- email is never used to merge people.
+- Auth-only logins receive a common account but no service entitlement.
+- account status not active => new entitlement is skipped.
+- existing entitlement is never rewritten by backfill.
+
+## Mandatory startup / isolation
+
+1. Read:
+   - `PROJECT_RULES.md`
+   - `.agent/ORCHESTRATION.md`
+   - `.agent/CURRENT_STATE.md`
+   - `.agent/ACTIVE_TASK.md`
+   - this G5 TASK + previous G5 reports
+   - merged migration source
+   - PR #91 rollout/runbook
+2. Use fresh base:
+   `/Users/yuya/Developer/kabumori-fresh`
+3. Fetch fresh `origin/main`.
+4. Create a new G5-dedicated isolated worktree/checkout from fresh main.
+5. Confirm no shared worktree with G1-G4/H1/H2.
+6. Confirm production project exactly `wsmznyzcvmuitkglfeuj`.
+7. Read current Supabase docs/changelog relevant to:
+   - transaction/read-only semantics
+   - row locks
+   - SECURITY DEFINER / grants
+   - Auth user lifecycle
+8. Fresh-read other slot states and production mutation windows.
+
+If isolation or ownership is ambiguous => STOP.
+
+## Phase A — production read-only foundation check
+
+Before any backfill dry-run:
+
+- verify Phase 1 target migration history is exact one row;
+- verify common-account foundation schema/status is still EXACT;
+- verify settings remain `shadow / not_started`;
+- verify no unexpected lifecycle operation is in progress;
+- read aggregate counts only for:
+  - auth.users
+  - common_accounts
+  - service_entitlements by service/status/source/evidence
+  - lifecycle operations by type/status
+- expected at this stage is still zero population unless another authorized task legitimately changed it.
+- if any pre-existing common-account/entitlement population is unexpected, STOP and classify. Do not overwrite/rebuild.
+
+Do not output raw UUID, email, provider subject, X handle, token, secret or user content.
+
+## Phase B — authoritative dry-run
+
+Run the already-reviewed function with `p_apply=false` under a transaction that is explicitly READ ONLY.
+
+The dry-run result must record these aggregate fields:
+- auth_users
+- common_accounts_to_create
+- kabumori_candidates
+- kabumori_with_activity
+- kabumori_profile_only
+- kabumori_to_create
+- x_autopost_candidates
+- x_autopost_identity_verified
+- x_autopost_workspace_pending
+- x_autopost_to_create
+- x_autopost_excluded_admin
+- auth_only
+- not_active_accounts_with_candidates
+- admin_users
+- excluded_non_self_service_memberships
+- applied
+- created_common_accounts
+- created_kabumori
+- created_x_autopost
+- skipped_account_not_active
+
+Required invariants for dry-run:
+- `applied=false`
+- all created_* = 0
+- production row counts unchanged before/after
+- no lifecycle operation created
+- no migration history change
+- no Auth/Storage/Vault/OAuth mutation
+
+## Phase C — parity / classification verification
+
+Independently verify the plan semantics with production reads, using only aggregate or non-identifying output.
+
+At minimum prove:
+- every current Auth login appears exactly once in the backfill plan;
+- `common_accounts_to_create` matches missing current Auth logins;
+- Kabumori candidate total splits exactly into activity + profile-only;
+- Kabumori to-create excludes only already-existing entitlement or non-active account;
+- X candidate is limited to self-service sole-owner workspace;
+- admin-owned/operator/internal workspaces do not become X consumer entitlements;
+- X verified + pending split equals X candidate count;
+- Auth-only count reconciles with total population;
+- ambiguous/shared/internal/foreign workspace footprints are excluded, not silently classified;
+- no email-based merge exists;
+- current raw candidate population materially matches the known Phase 0 story, or every difference is explained by a legitimate subsequent user/state change.
+
+If an individual row must be inspected to explain an anomaly:
+- keep PII local/operator-only;
+- Report only non-identifying classification and counts.
+
+Unknown/ambiguous classification => STOP / BLOCKED.
+Do not apply.
+
+## Phase D — local/disposable proof refresh
+
+Re-run the relevant existing lifecycle/backfill tests from fresh main.
+
+At minimum:
+- lifecycle suite
+- migration/source invariants
+- backfill false branch leaves rows unchanged
+- backfill true creates expected rows on fixture
+- second apply is idempotent
+- admin X exclusion
+- profile-only Kabumori evidence
+- activity Kabumori evidence
+- X verified/pending evidence
+- non-active account skip
+- no existing entitlement rewrite
+- no email merge
+
+Do not modify the accepted migration in this task.
+
+If a test defect is found in test tooling only, report and STOP before production apply package unless the correction is clearly isolated and reviewed.
+
+## Phase E — freeze exact production apply package
+
+If Phase A-D are PASS, prepare—not execute—the exact production write package.
+
+The package must:
+1. fresh-check all slot states and production mutex;
+2. rerun the read-only dry-run immediately before write;
+3. confirm no material count/classification change;
+4. use the existing reviewed `private.account_lifecycle_backfill(true)` only;
+5. execute in one operator-controlled transaction with stop-on-error;
+6. set a bounded lock timeout so a busy Auth user causes safe STOP rather than long blocking;
+7. never use `db push`, migration repair, ad-hoc inserts, updates, deletes, or manual entitlement rows;
+8. never modify Auth, Storage, OAuth, Vault, providers, Cron, Edge Functions or existing service rows.
+
+Document exact failure behavior:
+- lock timeout/error => transaction rollback, STOP;
+- response lost => do not blindly rerun; first read counts/plan and classify;
+- unexpected row/count => STOP;
+- partial state must not be manually repaired in this TASK.
+
+## Mandatory STOP before production backfill(true)
+
+After A-D PASS and E is frozen:
+
+- append the approval package to Report;
+- status -> `review_required`;
+- next_owner -> `chatgpt`;
+- result -> `BACKFILL_READY`;
+- production writes -> 0;
+- STOP for K5.
+
+**Do not run backfill(true) without explicit user/ChatGPT production approval.**
+
+The user's project-wide prioritization instruction is NOT itself approval for the production backfill write.
+
+## After explicit backfill approval only
+
+Resume the same G5 task.
+
+Immediately:
+1. fresh-fetch origin/main;
+2. re-read ACTIVE_TASK/CURRENT_STATE;
+3. assert no other production mutation window is active;
+4. rerun Phase A/B enough to prove the package is not stale;
+5. verify exact function definition/owner/ACL is unchanged;
+6. open G5 production_mutation_window;
+7. run only the frozen backfill(true) transaction.
+
+Then separate read-only postflight must verify:
+- common_accounts count = current Auth user count, except any login legitimately disappeared during safe rollback/retry classification;
+- no duplicate common account;
+- entitlement totals exactly match approved candidate counts;
+- every backfilled entitlement source = `legacy_backfill`;
+- legacy_evidence distribution matches approved dry-run;
+- status = active for created entitlements;
+- Auth-only users have common account and no entitlement;
+- X excluded-admin count created 0 X entitlements;
+- no unknown service_key/source/evidence/status;
+- no lifecycle operation was created;
+- no existing service row changed;
+- no Auth/Storage/OAuth/Vault/Edge/Cron mutation;
+- rerun `backfill(false)`: all to-create counts are 0 for active candidates;
+- production_mutation_window -> CLOSED.
+
+If exact postflight PASS:
+- result -> `BACKFILL_APPLIED_PASS`
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K5.
+
+## Explicitly out of scope
+
+This task MUST NOT:
+- wire Kabumori signup/login/session to entitlement;
+- wire X signup/login/session to entitlement;
+- change existing RLS policies to enforce entitlement;
+- change producers/service_role gates;
+- change account-delete or social-mobile-account-delete;
+- build common account manager UI;
+- enable enforcing delete guard;
+- create deletion orchestrator;
+- hard-delete Auth users;
+- revoke sessions/providers;
+- mutate Storage/Vault;
+- deploy Edge Functions;
+- change Cron;
+- run real X.
+
+Those are the next Phase 2/3 tasks after backfill is exact.
+
+## Completion / K5 Report
+
+Report:
+- task_id
+- result: BACKFILL_READY / BACKFILL_APPLIED_PASS / BLOCKED / PARTIAL
+- fresh main
+- isolated worktree
+- production project
+- foundation exactness
+- dry-run aggregate
+- parity/classification result
+- Phase 0 comparison
+- tests
+- production mutex
+- exact apply package
+- production writes actually performed
+- postflight if applied
+- changed_files
+- commit/push
+- deploy
+- backfill
+- remaining_issues
+- safety_checks
+- next_recommendation
+
+Never report apply as successful unless exact read-back proves it.
+
+Recommended model: **Opus5.5（極高）**.
+
+## Report
+
+Pending.
+
+---
+
+# Previous G5 task history — preserved
+
+# Claude Task 5 — CURRENT TASK
+
+- task_id: common-account-v1-phase1-production-migration-gate-20261006
+- owner: claude
+- slot: claude-5
+- status: done
+- next_owner: none
+- production_mutation_window: **CLOSED** — 2026-10-06 14:58 JST. G5 applied exactly 20261001150000 (Stage A/B/C + postflight EXACT, one history row) and read it back; G5 performs no further production write. backfill / deploy / Auth / Storage / OAuth / Vault / Cron / real X = 0.
+- priority: highest
+- start_code: G5
+- finish_code: K5
+- recommended_model: Opus5.5（極高）
+- type: production migration preflight / exact single-file rollout gate / read-back
+- production_project_ref: wsmznyzcvmuitkglfeuj
+- production_mutation_allowed: false_until_explicit_gate
+- backfill_allowed: false
+- auth_delete_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Common-account v1 Phase 1 の additive lifecycle foundation は source review / hosted Gate B / Final C1 まで完了し、
+**foundation installation 自体は PASS-WITH-CONDITIONS** で受理済み。
+
+このTASKは、productionへ exact Phase 1 migration を安全に入れるための専用G5 gate。
+
+ただし開始時点では production write 権限はない。
+まず fresh read-only preflight と exact apply/history package の固定まで行い、
+**実際の production migration write の直前で必ず STOP してユーザーの明示承認を待つ。**
+
+承認後に同一TASKを再開した場合のみ、承認された exact migration 1本だけを適用し、
+直後に schema / ACL / RLS / function / migration-history read-back を行う。
+
+このTASKでは backfill(true)、削除フロー有効化、Edge deploy、Auth削除、Storage削除、OAuth/Vault操作は行わない。
+
+## Canonical accepted source
+
+Accepted foundation:
+- PR #70 merged source commit: `44121914b035e22380a4ca1bd8252a42713a2bbf`
+- accepted fixed source commit: `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65`
+- target migration:
+  `supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql`
+- accepted migration SHA256:
+  `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3`
+
+Fresh main may contain later unrelated commits.
+Before any rollout work, prove target migration bytes still match the accepted SHA256 exactly.
+Mismatch => STOP. Do not “fix” production or amend the migration in this TASK.
+
+## Accepted Gate B / C1 facts
+
+Hosted disposable Supabase proof already established:
+- exact migration applies on a real managed Supabase project
+- authenticated own-row RLS read works
+- cross-user read denied
+- client direct write denied
+- anon read denied
+- service_role direct table access denied
+- narrow RPC boundary works
+- real Storage ownership blocks deletion readiness
+- Storage API cleanup allows readiness
+- direct common_accounts delete while Auth parent exists is refused
+- real Auth Admin hard delete cascades Auth/common/entitlement state as intended
+- durable login_removed lifecycle observation survives
+
+Critical hosted security result:
+- an already-issued access JWT remained usable against Data API after Auth deletion
+
+Therefore:
+- this Phase 1 foundation may be installed
+- but destructive orchestration / enforcement is NOT authorized here
+- session/global sign-out or refresh-token deletion alone must never be treated as stale-access-token invalidation
+- future deletion orchestration needs live writer denial or independently proven bounded-expiry/quiescence
+
+Do not re-open those architecture questions by weakening the accepted source.
+
+## Mandatory startup / isolation
+
+Before doing anything:
+
+1. Read:
+   - `PROJECT_RULES.md`
+   - `.agent/ORCHESTRATION.md`
+   - `.agent/CURRENT_STATE.md`
+   - `.agent/ACTIVE_TASK.md`
+   - this G5 TASK + prior G5 Report
+   - final H1/C1 common-account review/report
+2. Use the new-Mac clean base:
+   `/Users/yuya/Developer/kabumori-fresh`
+3. Fetch fresh `origin/main`.
+4. Create a **new G5-dedicated independent worktree/checkout** from fresh origin/main.
+5. Confirm it is not shared with G1-G4/H1/H2.
+6. Never checkout/reset/rebase/delete another slot branch/worktree.
+7. Confirm clean git status.
+8. Check current Supabase changelog/docs relevant to:
+   - migration/apply semantics
+   - Auth/RLS/Data API grants
+   - SECURITY DEFINER behavior
+   - managed Auth/Storage boundaries
+9. Confirm production target is exactly:
+   `wsmznyzcvmuitkglfeuj`
+   and not the disposable Gate B project or photo project.
+
+If safe independent worktree cannot be established => STOP.
+
+## Production-mutation mutex — critical
+
+G4 currently has a separate X/social-mobile production rollout workstream.
+Other slots may also advance while G5 is working.
+
+**No two slots may perform production mutation concurrently.**
+
+Before every production write:
+- fresh-fetch origin/main
+- re-read ACTIVE_TASK / CURRENT_STATE
+- inspect relevant G/H TASK states
+- confirm no other slot is in a production mutation/apply/deploy window
+- confirm no overlapping migration/RPC/Auth/permission work has landed since preflight
+
+If G4/G3/H1/H2 or another operator is applying/deploying/mutating the same production project:
+**STOP before write.**
+Read-only work may continue only if it cannot race with the mutation.
+
+Do not “win the race” by applying first.
+
+## Phase A — fresh production read-only preflight
+
+Production reads only.
+
+Re-run the full preflight immediately against current production, not historical snapshots.
+
+At minimum verify:
+
+### Migration/history collision
+- target version/name absent
+- no equivalent partial/manual foundation install
+- no unexpected same-version migration
+- no source/history collision
+- no prior failed partial target objects
+
+### Exact dependency shape
+Re-derive from current accepted migration and verify all production dependencies it expects, including the previously reviewed:
+- required relations
+- required columns/types/nullability
+- exact FK targets/actions/validation/deferrability
+- helper function signatures/definitions/owners
+- profile child cascade assumptions
+- X/social-mobile helper dependencies
+- `private` schema presence
+- Auth/Storage managed schema shapes actually relied on
+
+Use source-derived exact checks, not only counts.
+
+### Ownership / role graph / defaults
+Verify:
+- current execution/apply owner
+- relation/function owners
+- API roles and inherited role memberships
+- schema privileges
+- default privileges that could grant unexpected table/function rights
+- no unexpected overload/procedure/name collision
+- Data API exposed schemas/config relevant to the new public objects
+
+Unexpected owner/grantee/member/default ACL => STOP.
+
+### Current target objects
+All objects created by the foundation must be absent before first apply.
+If any target table/view/index/function/trigger/policy already exists:
+STOP and classify exact state.
+Do not drop, rename, repair or reapply.
+
+### Concurrent production work
+Verify no pending/active migration from G4/G3 or another workstream would make this preflight stale.
+If another production mutation lands after preflight, Phase A must be repeated before write.
+
+## Phase B — freeze the exact apply/history mechanism
+
+Before asking for mutation approval, document the exact command/tool/API path that will be used.
+
+Requirements:
+- exact one migration file only
+- exact SHA256 above
+- no ordinary `db push`
+- no include-all
+- no migration-history repair/relabel
+- no unrelated migration
+- no ad-hoc SQL edits
+- no blind retry
+- no assumption that schema + migration history are atomic unless actually proven for the chosen path
+
+The migration owns its own transaction boundary.
+Explicitly document:
+- who executes the SQL
+- how the filename/version/name are represented in migration history
+- when history is written
+- what happens if SQL succeeds but history bookkeeping fails
+- what happens if response is lost
+- what exact read-back determines:
+  - not applied
+  - schema present/history absent
+  - history present/schema invalid
+  - full success
+
+If the chosen mechanism cannot be made deterministic and fail-closed:
+STOP and report BLOCKED.
+Do not improvise a new production apply path.
+
+## Mandatory approval stop
+
+After Phase A + B are PASS:
+
+- write a concise approval package in the G5 Report:
+  - production project ref
+  - fresh main SHA
+  - migration path + SHA256
+  - preflight PASS summary
+  - exact apply mechanism
+  - exact migration-history policy
+  - exact failure/STOP rules
+  - expected read-back
+  - confirmation that backfill/deploy/Auth/Storage/OAuth/Vault are out of scope
+  - confirmation no other production mutation is active
+- set status to `review_required`
+- next_owner: `chatgpt`
+- STOP for K5
+
+**Do not apply the migration yet.**
+
+ChatGPT/user must explicitly approve the production mutation package.
+
+## Phase C — only after explicit production approval
+
+When the same G5 TASK is explicitly re-authorized:
+
+1. Re-read TASK / ACTIVE_TASK / CURRENT_STATE.
+2. Fresh origin/main and production-mutation mutex check again.
+3. Re-run any preflight element made stale by intervening changes.
+4. Reconfirm migration bytes/hash.
+5. Apply only the exact authorized migration through the frozen mechanism.
+6. Stop-on-error.
+
+Never:
+- rerun blindly after timeout/lost response
+- use ordinary db push
+- apply later migrations “while here”
+- fix ACLs manually
+- repair history without separate authority
+- roll back automatically
+
+If apply outcome is uncertain:
+perform read-only catalog + history classification and STOP.
+
+## Phase D — mandatory production read-back after successful apply
+
+Read-only verification immediately after apply.
+
+At minimum verify:
+
+### Schema/object exactness
+- all expected public/private relations
+- exact columns/defaults/constraints/checks
+- PK/FK actions and validation
+- indexes valid/ready/live
+- expected triggers enabled
+- expected policies
+- no unexpected overloads
+
+### Function security
+For every created function:
+- exact signature
+- owner
+- SECURITY DEFINER/INVOKER as intended
+- exact empty/fixed search_path contract
+- exact effective EXECUTE grantees including inherited roles
+- no PUBLIC/anon/authenticated/service_role privilege beyond intended design
+
+### Table/RLS/API privilege model
+- RLS enabled where expected
+- authenticated own-row SELECT only on intended public columns
+- client INSERT/UPDATE/DELETE/TRUNCATE denied
+- anon entry denied
+- service_role direct-table privilege denied
+- backend service_role uses only intended narrow RPCs
+- private view/helpers not exposed to API roles
+- default/inherited privileges do not defeat intended grants
+
+### Foundation defaults
+- settings row exists exactly once with expected shadow/not-started semantics
+- built-in checkpoint registry/requirements are exact
+- no enforcement mode accidentally enabled
+- no account/entitlement/operation population was created by migration itself
+- target migration history is exactly as approved
+
+### Existing dependency preservation
+Verify the migration did not mutate unrelated existing objects/grants/helpers.
+
+Any mismatch:
+STOP.
+Do not patch production inside this TASK unless a new explicit corrective authority is issued.
+
+## Explicitly out of scope
+
+This G5 task MUST NOT:
+- run `private.account_lifecycle_backfill(true)`
+- create production common_accounts/service_entitlements for existing users
+- activate client registration/service-start wiring
+- change Kabumori `ensure_my_profile`
+- change X onboarding
+- change current deletion routes
+- enable deletion enforcement
+- hard-delete any Auth user
+- revoke sessions/tokens
+- touch Apple/X OAuth
+- touch Vault secrets
+- delete Storage objects
+- deploy Edge Functions
+- change Cron
+- change feature flags
+- run real X
+- mutate photo-sharing or disposable Gate B projects
+
+After migration read-back PASS, backfill(false) may only be done if the specific read-only authority is clearly included in the next orchestration step; backfill(true) is always a separate explicit approval.
+
+## Completion / K5
+
+Report must contain:
+- task_id
+- result: PREFLIGHT_READY / APPLIED_PASS / BLOCKED / PARTIAL
+- checked_main
+- dedicated worktree/isolation
+- production project ref
+- migration path/hash
+- fresh preflight results
+- concurrent production-mutation check
+- chosen apply/history mechanism
+- exact approval boundary used
+- production writes actually performed
+- migration-history result
+- schema/RLS/ACL/function read-back
+- tests/checks
+- changed_files
+- commit_hash / push
+- deploy
+- backfill
+- remaining_issues
+- safety_checks
+- next_recommendation
+
+Never report apply/push/deploy/backfill as successful unless actually verified.
+
+### If stopping before approval
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- result -> `PREFLIGHT_READY`
+- production mutation = 0
+
+### If resumed after explicit approval and apply/read-back succeeds
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- result -> `APPLIED_PASS`
+- backfill = 0
+- deploy = 0
+
+## Review guidance after K5
+
+Do not automatically allocate another Codex review merely because this is a migration.
+ChatGPT will inspect the actual G5 evidence.
+
+If the exact approved migration applies cleanly and exhaustive read-back matches the already H1-reviewed source contract, an additional review may be unnecessary.
+If there is any production drift, uncertain history state, privilege mismatch, partial outcome or security ambiguity, allocate focused Codex review.
+
+Recommended Claude model: **Opus5.5（極高）**.
+
+## Continuation authorization — 2026-10-06 after G4 CLOSED
+
+- G4 PR76 production rollout is complete and its production_mutation_window is CLOSED as of 14:11 JST.
+- This continuation authorizes **read-only Phase A refresh only**. It does NOT yet authorize the common-account production migration write.
+- Before doing any read, fresh-fetch origin/main and re-read ACTIVE_TASK/CURRENT_STATE. Confirm G2/G3/H1/H2 or another operator is not in an active production mutation window.
+- Re-run all 9 production read-only Phase A checks from the existing approved preflight bundle.
+- Expected state changes versus the previous baseline include PR76 migration/history and its objects; refresh the ledger row count and existing-object fingerprint rather than comparing to the stale pre-G4 values.
+- Reconfirm target common-account migration objects/history remain absent, dependencies/owners/role graph/default ACL remain compatible, renderer canary remains valid, and exact migration SHA256 remains `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3`.
+- If all 9 checks PASS, update Report with the fresh baseline, set status review_required / next_owner chatgpt, and STOP for explicit production mutation approval.
+- If any unexpected drift appears, STOP BLOCKED; do not apply, repair, drop, rewrite history, or change ACLs.
+- backfill/deploy/Auth/Storage/OAuth/Vault/Cron/real X remain forbidden.
+- Recommended model: **Opus5.5（極高）**.
+
+## Report
+
+- task_id: common-account-v1-phase1-production-migration-gate-20261006
+- result: **APPLIED_PASS**（2026-10-06 14:54 JST。承認済みの migration 1 本だけを本番に適用し、読み返しがすべて一致した）。
+- production writes actually performed（すべてユーザーの明示承認の範囲内）：
+  - `20261001150000_common_account_lifecycle_foundation.sql` のスキーマ適用（Stage A）。1 transaction。
+  - migration 履歴に 1 行を insert（Stage C）。`20261001150000 / common_account_lifecycle_foundation`。
+  - これ以外の本番書き込みは 0。backfill / deploy / Auth / Storage / OAuth / Vault / Cron / flag / 実 X / 削除機能の有効化もすべて 0。
+- backfill: **0**（common_accounts 0 行、service_entitlements 0 行、operations 0 行を読み返しで確認）。deploy: **0**。
+
+### Production apply — 2026-10-06（ユーザーの明示承認による）
+
+- 承認：ユーザーがチャットで次の内容を明示的に承認した。
+  - G5 共通アカウント Phase 1 の本番 migration 適用。
+  - 手順は TASK どおり：fresh mutex → 必要なら最終 preflight → exact migration 1 本 → read-back。
+  - backfill・削除機能の有効化・Auth / Storage / OAuth / Vault・Edge deploy・Cron・実 X は行わない。
+- mutex：
+  - 適用前に fresh main を確認した（`e8036721`、直前は `a82e7987`）。
+  - 他スロットの状態：G2 は 14:34 に CLOSED（Edge deploy のみ。DB は変更していない）。G3 は書き込み保留（review_required）。G4 / G1 は本番変更なし。H1 / H2 は done。
+  - G5 の `production_mutation_window` を ACTIVE にしてから作業した（`9c6f71bf`）。CLOSED にしたのは 14:58 JST。
+- 最終 preflight（14:49〜14:52 JST）：
+  - 9 本の結果は 14:27 の baseline と完全に一致した（履歴 74 行、指紋 `db31ea2e…15dd`、対象のオブジェクト・履歴は不在）。
+  - G2 の deploy が 14:27 の後に入っていたため、TASK の決まりどおり再取得した。
+  - runner の `status` は `schema=ABSENT history=NONE`（psql の接続と本人確認も成功）。
+- 実行方法：
+  - operator（ユーザー）が wrapper `.g5-prod-gate/operator.sh`（未追跡、G5 worktree）から実行した。
+  - wrapper は次を固定・確認してから runner（PR #91 head `cab1f0fe`）を呼ぶ：checkout が `cab1f0fe` であること、tracked ファイルが clean であること、migration の SHA `e632214b…`、runner の SHA `86c1a3ed…`、test hook の解除。
+  - 接続：session pooler、`postgres.<ref>`、`PGSSLMODE=require`。DB password は wrapper の中で 1 回だけ非表示で入力し、process 内でだけ使用した（保存・表示なし。Claude はパスワードを扱っていない）。
+- runner の出力（14:54 JST）：
+  - `preflight: schema=ABSENT history=NONE`
+  - `Stage A: migration committed`（lock_timeout 5s。ロック待ちによる失敗なし）
+  - `Stage B: existing objects unchanged`、`catalog read-back = EXACT`（pin した 10 section と、実効権限などの意味チェックがすべて一致）
+  - `Stage C: history recorded (20261001150000 common_account_lifecycle_foundation)`
+  - `postflight: schema=EXACT history=EXACT`、`DONE`
+  - 別 session の `status`：`STATE schema=EXACT history=EXACT`
+- STOP・再試行・修復・手作業での ACL 修正・rollback はすべて 0。
+
+### Phase D — 読み返し（read-only、14:54〜14:57 JST）
+
+**1. 9 本の bundle（適用前の baseline との比較）**
+- 01 履歴：75 行。差分は 1 行だけ：`20261001150000 / common_account_lifecycle_foundation`（statements NULL）。同じ名前で別 version の行は 0。ほかの履歴は不変。
+- 02 作成物：ちょうど relation 12（table 5、view 1、index 6）、型 12、関数 33、trigger 10、policy 2。名前パターンでの広い検索も同じ集合で、ほかの schema に同名の物は無い。
+- 03 依存関係：完全に同一（列 26/26、FK 14/14、profiles の子の cascade、helper の本文と権限）。
+- 04：`auth.users` の内部 trigger が 28 → 30。`common_accounts_user_id_fkey`（ON DELETE CASCADE）が増えた。いずれも想定どおり。ほかは同一。
+- 05：public の関数 123 → 135（+12）、private の関数 1 → 22（+21）、public の relation 77 → 79、private の relation 0 → 4。role graph・schema ACL・既定権限は同一。
+- 06（公開経路）・08（canary）：同一。
+- 07 既存オブジェクトの指紋：`db31ea2e…15dd` で、適用前と完全一致。既存の table / 列 / 制約 / index / policy / trigger / 関数 / 型 / 既定権限は 1 つも変わっていない。
+
+**2. 読める形での独立した読み返し（`.g5-prod-gate/sql/09_post_apply_readback.sql`、Management API 経由、runner とは別の経路）**
+- RLS：table 5 つすべてで有効（FORCE は無効）。view は RLS の対象外で、権限も無い。owner はすべて `postgres`。
+- table の権限：anon / authenticated / service_role とも、6 つの relation のどれにも table レベルの実効権限（SELECT〜MAINTAIN）を持たない。直接 ACL も owner 以外は無い。
+- 列の権限：authenticated の SELECT だけで、ちょうど次の 11 列。INSERT / UPDATE / REFERENCES と、anon / service_role への権限は 0。
+  - `common_accounts`：user_id / status / lifecycle_version / created_at / updated_at
+  - `service_entitlements`：user_id / service_key / status / activated_at / ended_at / updated_at
+- policy：2 本とも permissive、SELECT、roles は `authenticated`、条件は `(( SELECT auth.uid() AS uid) = user_id)`。WITH CHECK は無い。
+- trigger：10 本すべて enabled（O）で、設計どおりの関数を呼ぶ。
+- index：6 本すべて valid / ready / live。
+- 関数 33 本：すべて owner は `postgres`、SECURITY DEFINER、`search_path=""`。
+  - client 用 2 本（`start_kabumori_service` / `start_x_autopost_service`）：直接 ACL は `authenticated:EXECUTE`。実効的に実行できるのは authenticated / postgres / supabase_admin だけ。
+  - backend 用 10 本：直接 ACL は `service_role:EXECUTE`。実効的に実行できるのは service_role / postgres / supabase_admin だけ。
+  - 内部の 21 本：直接 ACL は無い。実効的に実行できるのは owner の postgres と superuser の supabase_admin だけ。
+  - PUBLIC / anon には全関数で権限が無い。grant option も無い。authenticator は authenticated / service_role に `inherit=false` で属しているため、実効権限の一覧に出ない。
+- foundation の初期状態：settings は 1 行（`shadow` / `not_started` / epoch 1）。registry は built-in の 3 行（apple_revocation:apple_identity、session_revocation:always、storage_cleanup:always）。common_accounts / service_entitlements / operations はすべて 0 行。enforce は存在しない。
+- ledger：対象行は 1 行だけ。
+- schema の USAGE（参考）：`private` に対して authenticated は true（適用前からの状態）。anon と service_role は false。
+
+### 判定と残り
+
+- 判定：承認された exact migration だけが適用された。スキーマ・RLS・ACL・関数・履歴は、H1 で review 済みの source の契約と、pin した期待値の両方に一致した。既存オブジェクトは不変。drift・履歴の不確定・権限の不一致・部分適用は無い。
+- 追加の Codex review：不要と考える（TASK の Review guidance の「exact apply + 読み返しが一致」に該当）。
+- remaining / next：
+  - `private.account_lifecycle_backfill(false)`（read-only の件数集計）と `backfill(true)` は、それぞれ別の権限付与と承認が必要（今回は 0）。
+  - integration（Phase 2/3）・enforcing guard・削除 orchestrator は未着手（前回 Report の obligations のまま）。
+  - PR #91（runner と bundle）を merge するかの判断。本番ではこの PR の固定 commit から実行した。
+  - DB password は G4 の作業中にリセット済みのもの。今回の適用で変更はしていない。
+  - CLI の "Initialising login role..." は、毎回の read-only 実行と同じく観測として記録する。
+- safety_checks：
+  - 承認範囲外の本番書き込みは 0。
+  - PII（token / JWT / email / user UUID / handle）の出力 0。Vault の値は読んでいない。password は Claude が扱っていない。
+  - 他スロットのファイルには触れていない。G5 の window を開いている間、他スロットの本番変更は無かった。
+
+### 以前の結果（履歴として保持）
+
+- 14:27 JST 時点：**PREFLIGHT_READY**（Phase A 再取得 9/9 PASS。差分は G4 PR76 による想定どおりのものだけ。下の「Phase A refresh」）。
+- 00:56 JST の初回 Report の時点では、G4 の window が ACTIVE だったため条件付きだった。
+
+### Phase A refresh — 2026-10-06 14:27 JST（G4 CLOSED 後の継続許可：read-only のみ）
+
+- 開始前の mutex チェック（fresh main `5ea7da8a`、マーカー `52efd4e7`）：
+  - G4 は done / `production_mutation_window: CLOSED`（14:11 JST）。
+  - G2 は ready（Edge deploy は未開始）。G1 / H1 / H2 は done。G3 は ready。
+  - 本番変更の window を開いているスロットは無かった。
+- Report 時点（fresh main `af4c8996`）：G3 が `in_progress`（PR81 continuation、割当上は最初に read-only Gate A/B）。window の行は無い。
+- migration：fresh main 上で SHA-256 `e632214b…cde3` のまま（最終 commit `aa4d2d42`）。PR #91 head `cab1f0fe` も変化なし。
+- ユーザーが、commit 済みの bundle（`supabase/tests/common_account_lifecycle_preflight/run.sh`）で 9 本を実行。全 OK、`"_tag":"Error"` は 0。
+- 前回（00:56 JST）との機械比較：
+
+| check | 結果 |
+|---|---|
+| 00 環境 | 同一（PG 17.6、`postgres`、READ COMMITTED） |
+| 01 履歴 | 想定どおりの差分だけ：+1 行 `20261003090000 / social_mobile_publish_permission_boundary`（statements NULL）。73 → **74 行**。対象 version / 名前の行は 0 のまま。最大 version は `20261004090000` のまま |
+| 02 対象オブジェクトの不在 | 同一（すべて 0。`private` は relation 0 / 関数 1） |
+| 03 依存関係の形 | 同一（26/26、14/14、cascade、helper の本文と権限） |
+| 04 実行時の依存 | 同一（`auth.users` の内部 trigger 28 を含む） |
+| 05 ロールと権限 | 想定どおりの差分だけ：public の関数 121 → 123（PR76 の 2 本）。role graph・schema ACL・既定権限は同一 |
+| 06 公開経路 | 同一（event trigger、拡張、publication） |
+| 07 既存オブジェクトの指紋 | functions section だけ変化（122 → 124）。relations / constraints / indexes / policies / triggers / types / schemas_and_default_acls の各ハッシュは前回と同一 |
+| 08 renderer canary | 同一（7/7） |
+
+- 07 の functions の変化について：PR76 の migration は public に関数 2 本を作り、revoke / grant をその 2 本だけに行う（source で確認。動的な revoke ループも対象はその 2 本に限定されている）。K4 の本番読み返しも exact。G5 の依存 helper の本文・権限は 03 で同一。
+- **新しい baseline（適用前）**：
+  - 既存オブジェクトの指紋 combined `db31ea2ebb931dab42c4de743978c28eac484d3d99f6b4cb6aa924c382d215dd`
+  - 内訳：relations 84、constraints 569、indexes 200、policies 61、triggers 46、functions 124
+  - 履歴 74 行
+- 注意（K4 の記録より）：rollout 中に DB password がリセットされた。C3 の psql では新しい password を `~/.pgpass` に入れる。
+- G3 の PR81（`20261003120000`、`social_mobile_content_settings` の変更）が G5 より先に本番へ入る場合、指紋と履歴がまた変わる。その場合は G5 の書き込み直前に Phase A を再取得する（C1）。G5 と G3 / G2 の本番変更は同時に行わない。
+- checked_main:
+  - 開始時 `e303d81e`（その後 `00342bbd`）。
+  - Report の基点は `e9671778`。push 前に fresh `origin/main` を再確認する。
+- worktree / isolation:
+  - G5 専用 worktree `/Users/yuya/Developer/kabumori-g5-prod-gate`（branch `claude/g5-phase1-prod-gate-20261006`、新 Mac の `kabumori-fresh` から作成）。
+  - control 用 worktree `/Users/yuya/Developer/kabumori-g5-control`（detached）。
+  - 他 slot の worktree / branch / TASK は変更していない。
+- production project ref: `wsmznyzcvmuitkglfeuj`（linked project 名 `stock-x-autopost`）。全クエリは `--project-ref` を明示して実行した。Gate B の使い捨て project や photo project は対象外。
+- migration path / hash:
+  - path: `supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql`
+  - SHA-256 `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3` = 承認済みの値と一致。ファイルの最終 commit は `aa4d2d42`。
+  - 一致しない場合は runner が Stage A の前に STOP 10 で止める。
+
+### 確認した Supabase docs / changelog（2026-10-06）
+
+- CLI v2.115.0+ は BEGIN/COMMIT を自前で持つファイルをそのまま実行し、履歴 INSERT はその後に別に送る。つまりスキーマと履歴は同じ transaction に入らない。
+- `db query --linked` は Management API の run-query を使い、migration 履歴を書かない。
+- Data API の既定変更について：
+  - 2026-04-28 から opt-in、2026-10-30 に全 project へ適用される。
+  - 新しい `public` table を API role へ自動で grant しなくなる。
+  - 明示的な GRANT は引き続き有効。
+- auth / storage schema 内で object を作ることは禁止。一方、public から `auth.users` を参照する FK は許可されている。
+- SECURITY DEFINER 関数には `search_path=''` を付け、PUBLIC / anon からの EXECUTE を revoke することが推奨されている。
+- いずれも docs の記述であり、本番の実測は下の Phase A で別途確認した。
+
+### Phase A — fresh production read-only preflight（PASS）
+
+ユーザーが `supabase db query --linked --project-ref wsmznyzcvmuitkglfeuj` で 9 本を実行した（各ファイルは SELECT 1 文のみ、catalog と集計値だけを出力、PII なし）。
+- runner は、書き込み語・複数文・PII 列を含むファイルを実行前に拒否する（ダミーで拒否を確認済み）。
+- 実行時刻：00〜07 は 00:56 JST、08 はその後。
+
+**A1 環境**
+- PostgreSQL 17.6。`current_user` / `session_user` は `postgres`（superuser ではない、BYPASSRLS あり）。
+- 既定の分離レベルは READ COMMITTED。`postgres` の `lock_timeout` は 0、`statement_timeout` は 2min。
+
+**A2 履歴（ledger）**
+- shape は runner の想定と一致：`version` text PK、`statements`、`name`、`created_by`、`idempotency_key` UNIQUE、`rollback`。owner は `postgres`。
+- 73 行、最大 version は `20261004090000`。
+- 対象 version の行 0、対象名の行 0、関連する名前の行 0。
+- repo と大きくずれている（repo にあって ledger に無いもの 59、ledger にだけあるもの 27）。このため `db push` / `migration up` は使えないと確定した。
+
+**A3 作成予定オブジェクトの不在**
+- どの schema にも無いことを確認：relation 12、型 12、関数 33、trigger 10、policy 2、名前パターンによる広い検索も 0。
+- `private` schema は存在する（owner `postgres`、relation 0、関数 1）。部分的な適用や手作業による導入の跡はない。
+
+**A4 依存関係の形（migration 自身の preflight を SELECT で再現）**
+- relation 17/17。
+- 型付き列 26/26。
+- FK 14/14：参照する列・参照先・削除時の動作・validated・not deferrable・型の一致をすべて照合。
+- `profiles` を参照する 6 つの子テーブルはすべて CASCADE。
+- helper 2 本は 20260928160000 と本文が完全一致し、text / IMMUTABLE / `search_path=""` / EXECUTE は `postgres` のみ。
+
+**A5 実行時の依存**
+- `postgres` が持つ権限：
+  - `auth.users`：REFERENCES / SELECT
+  - `auth.identities`、`storage.objects`、`storage.buckets`：SELECT
+  - `public.profiles`：INSERT / DELETE
+  - schema の USAGE / CREATE
+- `auth.uid()` は uuid を返し、authenticated から EXECUTE 可能。`gen_random_uuid()` も存在する。
+- `profiles` に必須の列は `id` だけ（`insert (id)` が成立する）。
+- `auth.users` に user trigger は無く、内部 FK trigger が 28 個ある。適用で内部 trigger がちょうど 2 個増える見込み。
+- Storage の `owner_id` は text、deprecated の `owner` は uuid。
+
+**A6 ロールと権限**
+- anon / authenticated / service_role はどの role の member でもない（owner の権限を継承しない）。
+- `postgres` が新規 object に付ける既定権限：
+  - public の table：API role に MAINTAIN / REFERENCES / TRIGGER / TRUNCATE だけ。
+  - public の function：API role には無し。
+  - private：既定権限の設定なし。
+  - grantee は API role と `postgres` だけで、想定外の grantee は無い。
+- migration が明示的に revoke するので、最終状態は設計どおりになる。proof では「既定で全付与」と「既定で付与なし」の両極端で同じ結果になることを証明した。
+
+**A7 公開経路**
+- event trigger：`ensure_rls`（public の新規 table の RLS を自動で有効化）、`pgrst_ddl_watch` / `pgrst_drop_watch`（PostgREST の schema cache を再読込）、拡張用の hook。
+- pg_graphql は未導入。`supabase_realtime` は FOR ALL TABLES ではない。
+- `authenticated` は元から `private` の USAGE を持つが、新しい private object には権限が無い。
+
+**A8 既存オブジェクトの指紋**
+- combined `d7a00f63a40e0c64da6b7f8993ea9a035e3d6d9d2a7deed861407c861c7795c3`。
+- 内訳：relation 84、constraint 569、index 200、policy 61、trigger 46、function 122。
+
+**A9 renderer canary**
+- 20260928160000 の object を、本番 17.6 とローカル 17.11 で同じ deparser にかけたハッシュが 7/7 section で一致した。
+- このため runner の Stage B に固定したハッシュは、本番でも同じ意味を持つ。
+
+### 本番変更の mutex チェック
+
+- 開始時：他 slot の本番書き込みは無かった。AI Lab の DB rollout は完了済み。
+- Report 時点（fresh main `e9671778`）：
+  - **G4 は `production_mutation_window: ACTIVE`**（x-test-post と publish-setting の deploy、migration `20261003090000` と履歴 1 行）。
+  - G2 は Edge deploy が `ready`（別の承認待ち）。
+  - G3 は done（PR81 は G4 の後）。
+- G5 は今回、読み取りだけを行い、承認前の書き込みもしていない。G4 の作業とは競合しない。
+- PR76 の migration は public に関数 2 本と、その権限を追加するだけで、G5 の依存オブジェクトには触れない。
+- ただし PR76 が適用されると、次の 2 つは必ず変わる：
+  - A8 の指紋
+  - A2 の行数（+1：`20261003090000`）
+- そのため G5 の書き込みの直前に Phase A を全部やり直す。
+
+### Phase B — 固定した適用・履歴の仕組み（PR [#91](https://github.com/anohi-memories/kabumori/pull/91)、head `cab1f0fe`、merge HOLD）
+
+- runner：`supabase/tests/common_account_lifecycle_rollout.sh`。AI Lab の PR #86 / #88 と同じ「スキーマ先、履歴後」方式で、この migration のバイト列に固定してある。
+- 手順書：`common_account_lifecycle_rollout.md`。
+- read-only bundle：`supabase/tests/common_account_lifecycle_preflight/`（今回実行した SQL と文面は同一で、異なるのは 1 行目のコメントだけ）。
+- 実行者：operator（ユーザー）が自分のシェルから psql で実行する。session pooler（5432）に `postgres.<ref>`、`PGSSLMODE=require`、password は `~/.pgpass`。Claude には本番への接続権限が無い。
+
+**各段階**
+- Stage A：
+  - `set lock_timeout = '5s'` の後、対象ファイルだけを `psql -v ON_ERROR_STOP=1` で実行する。ファイル自身の BEGIN/COMMIT はそのまま。
+  - lock_timeout はファイルの編集ではなく session 設定。`auth.users` への FK が要求する SHARE ROW EXCLUSIVE ロックの待ちを 5 秒に制限し、Auth の書き込みを長く止めない。
+- Stage B：新しい session で次を読み返す：
+  - pinned catalog の 10 section：columns / constraints / indexes / relations / policies / triggers / table_acl（column SELECT 11 個だけ）/ functions 33 / function_acl（authenticated 2、service_role 10、それ以外 0）/ state（`shadow` / `not_started` / 1、built-in 3 行、行数 0 / 0 / 0）
+  - 実効権限：API role の table・column・EXECUTE、owner、overload、RLS
+  - 既存オブジェクトの指紋が、Stage A 直前から変わっていないこと
+- Stage C：
+  - `insert into supabase_migrations.schema_migrations (version, name) values ('20261001150000', 'common_account_lifecycle_foundation')` を、独立した transaction で 1 行だけ実行する。
+  - statements は NULL（AI Lab の前例と同じ）。upsert / retry / repair はしない。
+  - 書くのは Stage B が EXACT になった後だけ。
+
+**失敗時の扱い**
+- SQL は成功したが履歴の書き込みに失敗：STOP 14（schema あり / history なし）。自動の再試行はしない。review を経て `apply --resume-history` を使う（Stage B を再実行してから Stage C）。
+- 応答を失った：Stage A は再実行しない。read-only で読み返して分類する（STOP 12）。
+  - ABSENT：適用されていない。新しい試行には review が必要。
+  - EXACT：review を経て `--resume-history`。
+  - UNSAFE：STOP。
+- lock 待ちが timeout した、または migration 自身が拒否した：rollback され、ABSENT / NONE を確認したうえで STOP 11。
+
+**読み返しによる状態の判定**
+- 未適用：`schema=ABSENT history=NONE`
+- schema あり / history なし：`EXACT/NONE`
+- history あり / schema が不正：`UNSAFE/EXACT` または `ABSENT/EXACT`（STOP 10）
+- 完全に成功：`EXACT/EXACT` かつ既存オブジェクトの指紋が不変
+
+### 承認パッケージ（Phase C / D、明示承認の後だけ）
+
+- C0. fresh main で、G2（Edge deploy）・G3（PR81 apply）を含め、どのスロットも本番変更の window を開いていないことを確認する（G4 は 14:11 JST に CLOSED 済み）。
+- C1. `bash supabase/tests/common_account_lifecycle_preflight/run.sh` を全 9 本実行し、14:27 JST の baseline と比べる。期待値：
+  - 本番に変化が無ければ、9 本すべて同一（履歴 74 行、指紋 `db31ea2e…15dd`）。
+  - 間に G3 の PR81 などが入っていれば、その変更に由来する差分だけを許容し、新しい値を適用前の baseline として記録する。
+  - A3（不在）・A4（依存関係）・A5・A6（role / 既定権限）・A9（canary）に想定外の差分が 1 つでもあれば STOP。
+- C2. PR #91 head `cab1f0fe` の clean checkout を用意し、migration の SHA を確認する。
+- C3. operator のシェルで次を設定する：
+  - `CAL_ROLLOUT_TARGET=production`
+  - `CAL_ROLLOUT_ACK='apply 20261001150000_common_account_lifecycle_foundation to production after a same-day read-only preflight'`
+  - `CAL_ROLLOUT_PROJECT_REF=wsmznyzcvmuitkglfeuj`
+  - `CAL_EXPECTED_OWNER=postgres`
+  - `PGHOST=<session pooler host>` `PGPORT=5432` `PGUSER=postgres.wsmznyzcvmuitkglfeuj` `PGDATABASE=postgres` `PGSSLMODE=require`（password は `~/.pgpass`）
+  - そのうえで実行する：
+    - `bash supabase/tests/common_account_lifecycle_rollout.sh status`：期待 `STATE schema=ABSENT history=NONE`
+    - `bash supabase/tests/common_account_lifecycle_rollout.sh apply`：期待 `Stage B: existing objects unchanged`、`catalog read-back = EXACT`、`Stage C: history recorded`、`postflight: schema=EXACT history=EXACT`、`DONE`
+- C4. STOP[n] が出たら手順書の表に従って止める。blind retry、手作業での ACL 修正、履歴の repair、自動 rollback はしない。
+- D. 読み返し（read-only）：
+  - `status` が `EXACT/EXACT`。
+  - preflight bundle を再実行する：
+    - A3 が反転し、12 / 12 / 33 / 10 / 2 がちょうど存在する。
+    - A2 に `20261001150000 | common_account_lifecycle_foundation` が 1 行だけあり、ほかの履歴は変わらない。
+    - A8 が C1 の値と一致する。
+    - A5 の `auth.users` の内部 trigger が 28 から 30 になる。
+  - 新しい RPC は書き込みを伴うため、試しに呼び出さない。
+- 範囲外のまま：`backfill(false)` / `backfill(true)`、client の配線、削除経路の変更、enforce、Auth / Storage / OAuth / Vault、Edge deploy、Cron、flag、実 X。
+
+### tests / checks
+
+- `common_account_lifecycle_rollout.sh proof`（ローカル PG 17.11）：**143/143 PASS**。
+  - 本番の `ensure_rls` に相当する event trigger のケースを含む。
+  - Data API の既定権限は「全付与」と「付与なし」の両方。
+  - lock timeout のケース：`auth.users` への書き込みを保持中に Stage A が 1 秒で諦め、何も残らない。
+- runner への mutation 6/6 を、狙ったチェックで検出した：lock_timeout の除去、指紋比較の除去、履歴を検証より先に書く、overload 検出の除去、TLS ガードの除去、同名 / 別 version の履歴の見逃し。
+- 指紋 SQL：実際の catalog 変更 14 種をすべて検出し、ローカル適用の前後で値が一致した。
+- `common_account_lifecycle_run.sh` を fresh main で実行し 20/20 PASS。`migration_source_invariants_test.ts` 10 passed。`bash -n` / `git diff --check` clean。secret / PII スキャン 0 件。
+- PR #91 の CI：Vercel が「Deployment rate limited — retry in 24 hours」で fail。これは基盤側の上限で、PR は `supabase/tests` しか変更していない。Netlify は Report 時点で pending。
+
+### その他
+
+- changed_files：
+  - PR #91（`supabase/tests/common_account_lifecycle_rollout.sh` / `.md`、`supabase/tests/common_account_lifecycle_preflight/`（run.sh、.gitignore、sql 9 本））。
+  - この Report（`.agent/tasks/CLAUDE_TASK_5.md` のみ）。
+  - migration / 既存 source の変更は 0。
+- commit_hash / push：
+  - source `cab1f0fe` を branch に push し、PR #91 を open（未 merge）。
+  - 着手マーカー `8aeef379` と、この Report を main に push。
+- deploy：none。backfill：none。
+- observations（止める理由ではない）：
+  - Supabase CLI の linked mode は毎回 "Initialising login role..." を出し、CLI 用の login role `cli_login_postgres`（`postgres` の member、inherit=false）が存在する。G5 の SQL は何も書いていない。これは Phase 0 以来、どの read-only 実行でも同じ。
+  - GoTrue の `auth.scim_users.user_id` の FK は削除時の動作が NO ACTION。将来の削除 orchestrator で、Auth の削除を妨げ得る。
+- remaining_issues：
+  - G4 の window が閉じるのを待ち、Phase A を再取得すること。
+  - PR #91 を merge するかの判断（C2 は merge しなくても pinned commit から実行できる）。
+  - runner に追加のレビューを付けるかの判断。
+- safety_checks：
+  - production write 0。migration / 履歴 / backfill / Auth / Storage / OAuth / Vault / deploy / Cron / flag / 実 X はすべて 0。
+  - PII（token / JWT / email / user UUID / handle）の出力 0。Vault の値は読んでいない。
+  - 他 slot のファイルには触れていない。G4 の window とは、読み取りのみで重なった。
+- next_recommendation：
+  - K5 で、このパッケージと PR #91 を確認する。
+  - 承認する場合は、G4 の CLOSED と G2 の deploy の順序を決めたうえで、同じ G5 TASK を再承認する（C0 から開始）。
+  - runner は既に承認された AI Lab runner の構造をそのまま流用しており、mutation でも検証済みなので、追加の Codex レビューは任意と考える。必要と判断するなら、H 枠で軽量なレビュー（Luna）。
+
+---
+
+# Previous G5 task history — preserved
+
+# Claude Task 5 — CURRENT TASK
+
 - task_id: common-account-pr70-guard-boundary-corrective-20261002
 - owner: claude
 - slot: claude-5
@@ -2170,3 +3194,5 @@ Report 時点の fresh `origin/main` と open PR で確認。
 - merge decision: **HOLD** pending H1 rereview of exact head `47a2ed6a1635177ba82004eace4bddb42d9d53e3`.
 - production apply remains separately gated by **Sol（極高）**, disposable real Supabase proof, exact production read-only preflight/history/ACL/FK checks, and explicit approval.
 - AI Lab diary: **no update**. 2026-10-02 already has a different, coherent daily entry for the X app; do not overwrite/mix it merely to record another same-day workstream.
+
+

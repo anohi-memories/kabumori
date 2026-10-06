@@ -1,10 +1,2368 @@
 # Claude Task 2 — CURRENT TASK
 
-- task_id: kabumori-shared-report-v2-quality-rewrite-calibration-20261002
+- task_id: kabumori-pr87-close-natural-observation-20261006
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（中）
+- type: read-only natural production observation
+- production_mutation_allowed: false
+
+## Purpose
+
+2026-10-06 大引けの自然生成を read-only で確認し、PR #87 の「今日の3ポイント」が本番で狙いどおりになっているか評価する。
+
+## Time gate
+
+- 16:15 data
+- 16:20 analysis
+- 16:35 retry
+- 17:15 personalized close
+
+16:40 JSTより前に開始した場合は、待機せず「まだ観測時刻前」と報告して停止する。
+最初の観測は16:40 JST以降を推奨。
+
+## Baseline
+
+- market-report-analysis v24 ACTIVE / verify_jwt=false
+- v24 は fresh main と byte-identical
+- personalized-reports は v40 のまま（今回deployせず）
+- app_enabled=false / x_enabled=false
+- relevant crons unchanged
+- production mutation window CLOSED
+
+## Observe
+
+- close data/report cycle status・attempt・error
+- packet ids / content hash / duplicate
+- first try or retry
+- exactly 3 points
+- 3点が数値3連発ではなく、出来事・重要材料・次に見る点になっているか
+- unsupported causality がないか
+- Hard Fact false reject がないか
+- warning / rewrite / model calls / tokens / cost（記録があれば）
+
+分類:
+- PASS_FIRST_TRY
+- PASS_WITH_RETRY
+- FAIL_FALSE_REJECT
+- FAIL_FACTUAL_DEFECT
+- OBSERVATION_INCOMPLETE
+
+## Safety
+
+read-onlyのみ。manual generation/retry、deploy、gate/Cron変更、DB write、X/通知などのproduction mutationは禁止。
+
+## Report
+
+classification / observation time / cycle / packet ids / exact 3 points / editorial評価 / factual safety / diagnostics / production mutation=0 / 10/7朝刊観測の要否を書く。
+
+完了時:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Claude Task 2 — CURRENT TASK
+
+- task_id: kabumori-pr87-controlled-production-deploy-20261006
+- owner: claude
+- slot: claude-2
+- status: done
+- next_owner: none
+- production_mutation_window: **CLOSED** — 2026-10-06 14:34 JST（ACTIVE 14:31:45〜）。G2 performs no further production write. Deployed `market-report-analysis` only (v24). `personalized-reports` NOT deployed (HELD for K2; see Report).
+- priority: high
+- recommended_model: Opus5.5（高）
+- type: controlled production deploy / exact-source read-back / no manual generation
+- source_pr: 87
+- merged_main_sha: 74e4dbff09e3b248164fd00bb720402d762ebcd8
+- production_mutation_allowed: true
+- allowed_production_targets:
+  - market-report-analysis
+  - personalized-reports
+
+## Purpose
+
+PR #87 is merged after K2 + independent H1 PASS.
+
+Deploy the exact merged source required for the new editorial three-point behavior:
+- `market-report-analysis`: generates morning/close `x_post.points_ja` as meaningful editorial headlines.
+- `personalized-reports`: carries the same shared `points_ja` into `market_detail.points_ja`.
+
+This task is **deploy + exact read-back only**.
+Do not manually generate a report and do not activate consumers.
+
+## Accepted source / review
+
+- PR #87 reviewed exact head: `3561f1eaac41df0f23dcce8fdaace0decc654a0a`
+- squash merge on main: `74e4dbff09e3b248164fd00bb720402d762ebcd8`
+- H1 verdict: PASS
+- source changes by H1: 0
+- production mutation before this task: 0
+
+Accepted verification:
+- market-report-analysis 147/147
+- personalized-reports 129/129
+- X shared consumer 8/8
+- app home highlights 17/17
+- market-report-data-packet 42/42
+- relevant Deno check/lint + git diff --check PASS
+
+## Startup / isolation
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK / Final C1.
+2. Use the existing G2 worktree only if still safe and independent. If a new checkout/worktree is needed, base it on fresh `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main.
+4. Require main to contain merge `74e4dbff09e3b248164fd00bb720402d762ebcd8`.
+5. Confirm no uncommitted changes owned by another slot.
+6. Fresh-read production before mutation.
+7. Fresh-check the production mutation mutex. If G4/G5/G3 or any other slot is actively performing or authorized to perform a production mutation at the same time, STOP before deploy. Read-only work may coexist, production writes/deploys may not.
+8. G1/G4/G5 may be active in separate workstreams; do not touch their files/functions/migrations/settings.
+
+## Pre-deploy read-only gate
+
+Record for both targets:
+- deployed version
+- status
+- verify_jwt
+- source identity/hash if available
+
+Also verify:
+- `app_enabled=false`
+- `x_enabled=false`
+- relevant market-report crons unchanged/active
+- no manual report/retry is currently being run by G2
+- no other slot currently owns either target Edge Function
+
+If target ownership or source state is ambiguous, STOP without deploy.
+
+## Exact deployment scope
+
+Deploy **only**:
+1. `market-report-analysis`
+2. `personalized-reports`
+
+Use exact fresh main source and their normal import graphs.
+
+Forbidden deploy targets include all other Edge Functions.
+
+Do not:
+- deploy market-report-data-packet
+- deploy X consumer/posting functions
+- deploy important-news-monitor
+- change DB/RPC/migration
+- change Cron
+- change secrets/Vault/Auth
+- change consumer gates
+- invoke report generation
+- invoke retry
+- send X
+- send app notification
+
+## Post-deploy read-back
+
+For each deployed function:
+- new version/status
+- verify_jwt
+- updated timestamp
+- source identity/hash
+- compare deployed import graph with exact fresh main bytes where tooling allows
+
+Confirm again:
+- app_enabled=false
+- x_enabled=false
+- crons unchanged
+- no unrelated Edge Function metadata changed
+
+Run no manual cycle.
+
+## Native App caveat
+
+PR #87 also changes the native App Home highlight selection to prefer shared `points_ja`.
+That native source is now merged, but existing installed app binaries will not gain this UI priority until the next normal native app build/release.
+
+This deploy should still:
+- generate editorial shared points in market-report-analysis;
+- persist/carry them through personalized-reports;
+- prepare backend data for the next app build.
+
+Do not trigger an EAS build in this task.
+
+## Completion / K2
+
+Report:
+- task_id / result
+- fresh main
+- production baseline before
+- exact deploy targets
+- before/after versions
+- verify_jwt/status/source read-back
+- exact-source/import-graph comparison
+- app_enabled/x_enabled
+- Cron unchanged proof
+- unrelated-function-change check
+- production mutations performed
+- manual generation/retry = 0
+- X/notification = 0
+- EAS = 0
+- remaining risks
+- next recommendation for natural close/morning observation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+After K2, expected next step is a **read-only natural-cycle observation**, not another deploy.
+
+Recommended model: **Opus5.5（高）**.
+
+## Report
+
+### task_id / result
+- task_id: kabumori-pr87-controlled-production-deploy-20261006
+- result: **PARTIAL PASS — `market-report-analysis` deployed and exact; `personalized-reports` HELD (not deployed) for K2 decision**（TASKの「source stateがambiguousならSTOP」に従った）。
+
+### fresh main
+- deploy HEAD: `af4c89968f25f960f2d9af11d18b4db6eb63462d`（origin/main、detached）。merge `74e4dbff09e3b248164fd00bb720402d762ebcd8` を含む。
+- `74e4dbff..af4c8996` の `supabase/functions/**` 変更は important-news-monitor のみ（両targetのimport graph外）。
+- worktree: 既存のG2専用 `/Users/yuya/Developer/kabumori-g2-market-report-reliability`（独立、toplevel assert、`supabase/config.toml` なし、未commit変更なし。他slotのファイルは触っていない）。
+- pre-deploy test（af4c8996）：market-report-analysis 147/147、personalized-reports 129/129、X shared consumer 8/8、data-packet 42/42、`deno check market-report-analysis/index.ts` PASS。
+
+### production mutex
+- G4：`production_mutation_window: CLOSED`（14:11）。G3（PR81）・G5（common-account）：in_progress だが read-only preflight 中で、いずれも本番writeは明示承認待ち（`production_mutation_allowed: false` / `false_until_explicit_gate`）。ACTIVEな窓なし。
+- G2はTASK headerに `production_mutation_window: ACTIVE`（commit `e6f8dc4f`、14:31:45）を記録してからdeployし、read-back後に CLOSED（14:34）。
+
+### production baseline before
+- `market-report-analysis`: v23 ACTIVE、verify_jwt=false、ezbr `fe5c1836cded…`（v21と同一bytes。v22/v23は番号のみ）、updated 2026-10-03 21:23:42 JST。read-back 11ファイルすべて main `74e4dbff^`（PR #87直前）とbyte一致 → mainとの差はPR #87の `analysis_logic.ts` / `hard_fact_guards.ts` だけ。
+- `personalized-reports`: v40 ACTIVE、verify_jwt=false、ezbr `2fe1b50edf59…`、updated 2026-09-25 22:11:15 JST。read-back 6ファイルが main **`0cba7323`**（2026-09-25 22:10、PR #34 merge）と完全一致。
+- gates: app_enabled=false / x_enabled=false（updated 2026-09-17 10:47:14 UTC）
+- cron 8件（analysis morning/retry/close/retry、data-packet morning/close、personalized morning/close）active、schedule・md5(command) 記録。
+
+### why `personalized-reports` was HELD
+- main の personalized-reports graph は `0cba7323` 以降、PR #87 に加えて **未deployの PR #43（`shared_gate.ts` へのrefactor）と PR #67（presentation v2：`_shared/market_report_packet.ts` +105/−16、`market_detail.ts` story、`report_logic.ts` +16、`delivery_policy.ts` +1、`_shared/market_report_story.ts`・`_shared/absence_claims.ts` の新規import）** を含む。
+- 特に `report_logic.ts` は `falseAbsenceClaims` による新しいlocal issue `FALSE_BROAD_NO_MATERIAL_CLAIM` を追加し、`delivery_policy.ts` にも登録している。これは **app gate OFF のlegacy経路（現在ユーザーに出ている旧アプリ朝刊/大引け）にも効く**ため、deployすると live のアプリレポート生成挙動が PR #87 のレビュー範囲外で変わる。
+- PR #87 の personalized-reports 側の効果（`market_detail.points_ja`）は app gate ON の shared 経路でしか作られないため、gate OFF の間は deploy を保留してもユーザー影響なし。
+- 判断材料：PR #67 の当時の rollout TASK は「market-report-analysis のみ」を deploy しており、personalized-reports は意図的に未deployのまま。
+
+### exact deploy target / command
+- `supabase functions deploy market-report-analysis --workdir /Users/yuya/Developer/kabumori-g2-market-report-reliability --project-ref wsmznyzcvmuitkglfeuj --no-verify-jwt --use-api`
+- 2026-10-06 14:33:12〜14:33:17 JST（1回目はauto mode classifierで拒否 → ユーザー「きょか」で実行）
+- uploaded: market-report-analysis 6本、`_shared` 4本、`market-report-data-packet/packet_schema.ts`・`session_logic.ts`（import graph）。deployされたFunctionは1本のみ。
+
+### after / read-back
+- `market-report-analysis`: **v24** ACTIVE、verify_jwt=false、ezbr `ed2db6d57e13…`、updated 2026-10-06 14:33:15 JST
+- `supabase functions download --use-api` の11ファイルを `git show af4c8996:<path>` とbyte比較 → **11/11 same**（analysis_logic / hard_fact_guards / index / handler / analysis_input / transport_retry、`_shared` absence_claims / kabumori_voice / market_report_packet / market_report_story、data-packet session_logic）
+- PR #87 logic present：`pointsEditorialWarnings`、朝刊/大引けの3つのポイントの指示、`export const MARKET_NAMES`
+- `personalized-reports`: v40 / ezbr `2fe1b50edf59…` / updated 2026-09-25 22:11 → **不変**
+
+### gates / cron / unrelated functions
+- app_enabled=false / x_enabled=false：before/after 完全一致
+- cron 8件：schedule・active・md5(command) before/after 完全一致
+- 全21 Function の version / updated_at / verify_jwt / ezbr / status / entrypoint_path を比較：変化は `market-report-analysis` のみ（20本不変）
+
+### production mutations performed
+- **1件**：Edge Function `market-report-analysis` v23→v24
+- manual generation / retry = 0（deploy後 `market_report_packets` 新規0件、14:33:50時点）
+- X / app notification = 0、EAS = 0、DB/RPC/migration/cron/gate/secrets/Vault/Auth = 0
+
+### rollback
+- rollback source = main `74e4dbff^`（`a96fc09745e0731f0c97876f5563771eb04803b8`）の market-report-analysis graph（本番v23とbyte一致を確認済み）。不要のため未実施。
+
+### remaining risks
+1. 今日の大引け（analysis 16:20 / retry 16:35 JST）が PR #87 prompt の最初の自然サイクル。3ポイントが見出し型になるか、`X_POINTS_*` 記録、Hard/WARN、calls を確認する必要がある。
+2. `personalized-reports` は main と乖離したまま（PR #43/#67/#87）。App gate ON 前に、この3PR分をまとめて review/deploy するTASKが必要（特に `FALSE_BROAD_NO_MATERIAL_CLAIM` が legacy アプリレポートの配信率に与える影響の評価）。
+3. Native App のホームカード優先順位（`points_ja`）は次のアプリbuildまで反映されない。
+4. 10/5大引け・10/6朝刊とも1回目の分析が約36秒で失敗し、理由がretryで上書きされて残っていない（診断の課題）。
+
+### next recommendation
+- read-only の自然サイクル観測：本日 10/6 大引け（16:20 / 16:35 JST）と 10/7 朝刊（07:55 / 08:05 JST）。見る点：`x_post.points_ja` が朝刊=注目/注意/見る軸、大引け=起きたこと/材料/次の注目になっているか、`X_POINTS_METRIC_RECAP` の有無、Hard false reject 0、calls（rewriteが増えていないこと）。
+- 別TASK：`personalized-reports` の PR #43/#67/#87 bundle の差分レビューと deploy 判断（legacy経路への影響評価込み）。
+
+---
+
+# Claude Task 2 — CURRENT TASK
+
+- task_id: kabumori-shared-report-v2-editorial-three-points-20261005
+- owner: claude
+- slot: claude-2
+- status: done
+- next_owner: none
+- priority: high
+- recommended_model: Sonnet5（高）
+- purpose: 市況レポートの「今日のポイント」3点を、前日数値の単純列挙ではなく、その日の重要テーマ・注目点・注意点・出来事・背景が一目で分かり、詳細を読みたくなるeditorial headlineへ改善する。朝刊と大引けで役割を明確に分ける。既存の事実安全性・Hard Fact境界は弱めない。
+
+## User requirement — canonical
+
+現在の問題:
+- 「今日のポイント」3点が、3点とも前日の指数・騰落率などの数値要約になりやすい。
+- これでは「今日何を見るべきか」「今日は何が重要だったか」が伝わらず、詳細を開きたくなる見出しになっていない。
+
+望む体験:
+
+### 朝刊
+3ポイントは、**本日の注目点・要注意点・相場を見る軸**を出す。
+
+例の方向性:
+- 「半導体株の反応に注目」
+- 「円高進行には要注意」
+- 「米重要指標を前に様子見ムードも」
+- 「原油高が輸送・化学株の重しになるか」
+- 「前夜の米株高を日本株が引き継げるか」
+
+前日数値は必要なら**本文の根拠・補足**に書く。
+3ポイントの見出し自体を「日経平均 68,956円」「NYダウ +1.2%」「1306 +0.4%」のような数値3連発にしない。
+
+### 大引け
+3ポイントは、**今日何が起きたか／何が相場を動かしたか／何が重要だったか／次に何を見るか**を出す。
+
+例の方向性:
+- 「半導体株が上昇を主導」
+- 「円高進行で輸出株は重い展開」
+- 「大型株は堅調、内需はまちまち」
+- 「材料難のなか高値圏でもみ合い」
+- 「上昇したが主因は断定できず、明日は米指標待ち」
+
+具体的な指数値・騰落率・価格は**本文で説明**する。
+原因を見出しにする場合は、既存ニュース・market data・fact sourceで裏付けられる場合だけ。根拠が薄い場合は断定せず、観察事実または不確実性を正直に書く。
+
+## Editorial contract for the 3 points
+
+3点は次を満たすこと。
+
+1. **三つとも意味が違う**
+   - 同じ指数や同じ材料を言い換えただけの3点にしない。
+   - 可能なら「市場全体」「セクター/材料」「次に見る点」のように役割を分ける。
+
+2. **数値そのものを見出しの主役にしない**
+   - 数値は詳細本文・context・supporting textへ。
+   - 例外: 歴史的急変、政策金利、非常に重要な閾値など、その数値自体がニュースの核心である場合のみ headline 使用可。
+
+3. **一目で“なぜ読む価値があるか”が分かる**
+   - ただし煽り・釣りタイトルは禁止。
+   - 「何が起きた／何を見る／何に注意」の意味が短く伝わる。
+
+4. **朝刊と大引けを混同しない**
+   - 朝刊は forward-looking / watch / risk / focus。
+   - 大引けは completed-session recap / supported driver / significance / next watch。
+   - 朝刊で「今日上昇した」と未確定事実を断定しない。
+   - 大引けで「明日上がる」など将来を断定しない。
+
+5. **Hard Fact安全性を最優先**
+   - wrong date/session、stale/current、sign、1306 identity、存在しないref、unsupported causality、false broad absenceは従来どおりHard。
+   - 元ニュースに書かれているニュース内部の因果説明は使ってよい。
+   - 市場全体の上げ下げ原因は根拠がある場合だけ。
+   - 原因不明なら「主因は断定できない」と書いてよい。それを品質不足として落とさない。
+
+6. **“前日の数値3点”への退行をテストで防ぐ**
+   - 3ポイントすべてが bare metric / price / percentage recap になるケースを防ぐ。
+   - ただしmetricを含むこと自体をHard禁止にはしない。重要なのはheadlineの意味が数字ではなくtheme/insightであること。
+
+## Scope / preferred implementation
+
+最初に実際のconsumer pathを追跡し、「今日のポイント」3点をどのfieldが表示しているか確認すること。
+Presentation v2 / shared report truth sourceを壊さない。
+
+優先:
+- prompt / editorial instruction
+- formatter / presentation helper
+- narrow validation or quality telemetry
+- focused regression tests
+
+避ける:
+- market_data_packetの事実構造変更
+- market_report_packet schema破壊
+- Hard Fact guardの緩和
+- 新しいmodel call追加
+- call ceiling増加
+- DB schema/RPC/migration変更
+- consumer gate変更
+
+既存schemaで安全に実現できるならschema追加はしない。
+Quality改善のためだけに配信をHard BLOCKしない。delivery-first方針を維持する。
+
+## Supporting read-only evidence
+
+2026-10-05 morningはOpenAI 429でreport packetが生成されず、v21 live behaviorは未評価。
+開始時点で、2026-10-05 close natural cycleの保持済みデータを**read-onlyで短く確認してよい**。
+
+- close packetが存在すれば、現在の3ポイントがどう生成されているか実例として観察する。
+- 429でpacketが無ければ、その事実だけ記録して実装へ進む。
+- manual invoke / manual retryは禁止。
+- provider回復を待つためのpolling/sleepは禁止。
+
+過去のcompleted packet（例 10/2）もread-onlyで参考にしてよい。
+本TASKはprovider障害の解消待ちで止めない。
+
+## Required implementation behavior
+
+### Morning acceptance examples
+
+BAD:
+- 「日経平均 68,956.72円」
+- 「TOPIX連動ETF +0.67%」
+- 「NYダウ +0.42%」
+
+GOOD:
+- 「前夜の米株高を日本株が引き継げるか」
+- 「半導体株の強さが続くかに注目」
+- 「円相場の変化には要注意」
+
+GOOD detail body:
+- 見出しの下で前日終値、騰落率、US session、為替水準などを根拠として説明する。
+
+### Close acceptance examples
+
+BAD:
+- 「日経平均 +1.20%」
+- 「1306 +0.85%」
+- 「SOX +2.1%」
+
+GOOD:
+- 「半導体株が上昇を主導」
+- 「円高で輸出株には重さ」
+- 「明日は米指標と為替を確認」
+
+原因が裏付けられない場合:
+- 「上昇したが、主因は一つに絞れず」
+- 「大型株中心に上昇、材料は分散」
+など、観察可能な事実＋不確実性を優先する。
+
+## Verification
+
+最低限:
+- morning fixture: 前日market metricsが豊富でも3ポイントがmetric-only 3連発にならない
+- close fixture: completed-session factsから出来事/材料/意味を優先する
+- unsupported causeをheadlineに捏造しない
+- weak/no-cause inputで honest uncertainty が許容される
+- exactly 3 points維持
+- point duplication / near-duplicateを避ける
+- existing PR #77 quality behaviorを壊さない
+- existing PR #79/H1 session/watch/causal guardを壊さない
+- X/app shared truth source consistency維持
+- model call count ceiling不変
+- relevant market-report-analysis tests
+- presentation_v2 / quality / causal / session-date / content guard regressions
+- personalized-reports / X shared consumer / data-packet relevant tests
+- deno check/lint changed files
+- git diff --check
+
+## Git / delivery
+
+- fresh origin/mainから開始。
+- 専用G2 worktreeを確認。新規worktreeが必要なら `/Users/yuya/Developer/kabumori-fresh` をclean baseにする。
+- 他slotのbranch/worktree/未commit/dev serverを触らない。
+- source変更はbranch + PRにまとめる。
+- **production deploy禁止**。
+- consumer gate変更禁止。
+- manual report invoke禁止。
+- DB/RPC/migration/Auth/Vault/X操作禁止。
+
+## Completion conditions
+
+PASS candidate only if:
+- morning 3 pointsが「今日の注目・注意・見る軸」中心になる
+- close 3 pointsが「今日の出来事・根拠ある背景・重要性・次の注目」中心になる
+- 数値は主に本文根拠へ移る
+- metric-only 3連発への退行テストがある
+- unsupported market causalityを増やさない
+- Hard Fact boundaryを弱めない
+- model call ceilingを増やさない
+- existing shared consumer/schema compatibilityを維持
+- production mutation=0
+
+## Required Report
+
+- task_id / result
+- user-visible behavior before/after
+- actual field/consumer path identified
+- implementation approach
+- changed_files
+- morning fixture examples before/after
+- close fixture examples before/after
+- factual/causal safety notes
+- tests/check/lint/diff
+- model-call impact
+- schema compatibility
+- PR / commit / push
+- production mutation=0
+- remaining issues
+- whether close/morning natural observation is still needed before consumer activation
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+### task_id / result
+- task_id: kabumori-shared-report-v2-editorial-three-points-20261005
+- result: **PASS candidate（source/testsのみ）**。PR [#87](https://github.com/anohi-memories/kabumori/pull/87)、branch `g2-editorial-three-points-20261005`、head `3561f1eaac41df0f23dcce8fdaace0decc654a0a`（base origin/main `a775ec8d`）。deployなし。
+
+### user-visible behavior before / after
+- before：3ポイントが指標と数値の行。10/5大引け live：「日経平均は69,946.86（前日比+2.40%）。」「TOPIX連動ETF（1306）は436.3円（前日比+1.42%）。」「10月2日のSOXは13,136.67（前日比+2.40%）。」。10/2朝刊 live：「日経平均は68,956.72（前日比+3.30%）でした。」「TOPIX連動ETF（1306）は434.4円（前日比+0.67%）。」「米国株は上昇、SOXは12,829.00（前日比+1.59%）でした。」
+- after（prompt契約）：
+  - 朝刊＝今日の「注目点」「注意点」「相場を見る軸」。今日の東京市場の値動きは言い切らない。前夜・前営業日の方向は入力どおり。
+  - 大引け＝「今日何が起きたか」「重要だった材料・相場を動かしたもの」「次に何を見るか」。理由を見出しにするのは causal claim がある場合だけ。無ければ「主因は絞れず」等の正直な不確実性。
+  - 数値は見出しの主役にせず context_ja / app_story へ。政策金利など数値そのものが核心の場合だけ例外。3つは役割を分け、言い換えの重複をしない。煽り・釣りは禁止。
+  - 業種・個別株の値動き（「半導体株が主導」「内需はまちまち」）は入力に根拠がある時だけ。入力には業種別騰落が無いため、TASK例のうち根拠の無い業種の断定を招くものは例文に使っていない。
+- live出力の変化は未観測（prompt変更のため、次の自然cycleで確認が必要）。
+
+### actual field / consumer path
+- X：`x_post.points_ja` → `_shared/market_report_packet.ts` `formatSharedXPost` の「📌 今日の注目ポイント」（朝刊）／「📌 今日の3ポイント」（大引け）
+- App ホームカード「今日のポイント」（`src/components/home/home-report-hero.tsx`）：`src/lib/home-report-highlights.ts` `buildReportHighlights` が `body.market_detail.today_claims`（数値の observation claim）→ `checkpoints_ja` → … の順で出していた。`market_detail` は `personalized-reports/market_detail.ts` `buildAppMarketDetail`（shared v2経路、app gate ON時）で作られる。
+- 変更後：`market_detail.points_ja`（presentation v2 の packet だけ、`x_post.points_ja` と同一）を最優先（source `shared_points`）。v1・既存の保存済みレポート・legacy経路は従来どおりのfallback。→ X と App が同じ3ポイントを表示。
+
+### implementation approach
+1. prompt（`analysis_logic.ts`）：COMMONに3ポイントの契約を1行追加し、`points_ja` の説明を「各40字以内の見出し」に変更。MORNING/CLOSEにそれぞれの役割の行を追加。model call・schema・JSON schemaは変更なし。
+2. telemetry（Quality WARN、rewriteなし）：`pointsEditorialWarnings`
+   - `X_POINTS_METRIC_RECAP:<n>`（n≥2）：指標名＋数値、または指標名＋向きだけの行（`isMetricRecapPoint`。日付・指標名・助詞・動きの語を除いて1字以下、または値の数字を含む）
+   - `X_POINTS_NEAR_DUPLICATE`：文字bigramのJaccard≥0.5
+   - どちらも `worthRewrite` の対象外。理由：指標の行は事実として安全で、書き直しは +2 calls。PR #77 の delivery-first / 呼び出し削減を戻さないため。最初は「3/3ならrewrite」で実装したが、10/1・10/2の実データ再現テストで3回目以降の呼び出しが復活したため、記録のみに変更した（K2判断で `worthRewrite` の1行で有効化できる。上限は不変）。
+3. `hard_fact_guards.ts`：指標・市場名の一覧を `MARKET_NAMES` として export するだけ（判定ロジックは不変）。
+4. App：`market_detail.points_ja`（追加のみ）と、ホームカードの優先順位。
+5. DESIGN §15.4.1 を追加。
+
+### changed_files
+- `supabase/functions/market-report-analysis/analysis_logic.ts`
+- `supabase/functions/market-report-analysis/hard_fact_guards.ts`（export追加のみ）
+- `supabase/functions/market-report-analysis/editorial_points_test.ts`（新規11件）
+- `supabase/functions/market-report-analysis/test_support.ts`（合成fixtureの3ポイントを見出し型に。9/30 closeのcontextに日経平均の値を移動）
+- `supabase/functions/market-report-analysis/analysis_test.ts` / `presentation_v2_test.ts` / `quality_calibration_test.ts`（期待値の更新）
+- `supabase/functions/personalized-reports/market_detail.ts` / `report_upgrade_test.ts`
+- `src/lib/home-report-highlights.ts` / `src/lib/report-presentation.ts` / `tests/app/home-report-highlights_test.ts`
+- `docs/market-report-shared-platform/DESIGN.md`
+
+### morning fixture examples（10/2朝刊の実入力、US 10/1 上昇）
+- before（live）：上記の数値3行 → `X_POINTS_METRIC_RECAP:3`（記録のみ、rewriteなし、calls不変）
+- after：「前夜の米株高を日本株が引き継げるか」「半導体株の強さが続くかに注目」「為替の動きには要注意」→ Hard 0件、points警告なし
+- 逆向き：「米国株の下落を日本株が引き継ぐか」→ Hard「方向の逆転」
+
+### close fixture examples（10/1大引けの実入力）
+- before：数値3行（「日経平均は68,956.72（前日比+3.30%）」ほか）→ `X_POINTS_METRIC_RECAP:3`、generate+fact の2 callsで配信
+- after：「日経平均が大きく上昇、主因は絞れず」「韓国の9月輸出が過去最高」「次は米国株の方向とドル円を確認」→ Hard 0件、警告なし
+- 根拠の無い因果：「米国株高を受けて日本株が上昇」「半導体輸出の増加を背景に日経平均が上昇」→ Hard「根拠の無い因果」
+- 日付違い：「9月30日の日経平均は68,956.72で上昇」→ Hard「日付と指標の不一致」。「TOPIXが小幅に上昇」→ Hard（1306）
+- 2点だけ → Hard `X_POST_POINTS_INVALID`
+
+### factual / causal safety
+- points_ja は従来どおり `guardTexts.factual`（起きたことを述べる文）として、値・日付・向き・stale・1306・emoji・根拠の無い因果・false absence・ref の検査をすべて受ける。forwardへの移動はしていない（朝刊の見出しでも向きの検査を外さない）。
+- Hard境界の変更：なし（PR #79/H1 の session/watch/causal テストは全て緑）。
+- 注意：朝刊の見出しで「円高に注意」のような為替の向きは、現行のguardでは為替の向きとして判定していない（既存の範囲。今回は広げも狭めもしていない）。
+
+### tests / check / lint / diff
+- market-report-analysis full **147/147**（editorial_points 11、session-date 14、H1 boundary 9、presentation_v2 22、causal 18、quality 9、h1_adversarial 13、content_guard 16、transport 14）
+- personalized-reports **129/129**、X shared consumer 8/8、market-report-data-packet 42/42、`_shared` 415/415（`--no-check`、既知の無関係type debt）
+- App：`tests/app/home-report-highlights_test.ts` 17/17
+- `deno check`：market-report-analysis/index.ts、personalized-reports/index.ts と変更ファイル9本 → exit 0。App側の2ファイルは `@/` の import map と `--sloppy-imports` で check → exit 0（`--sloppy-imports` なしでは extensionless import の既存エラー3件が出る。変更前も同じ）
+- `deno lint`：変更ファイル。`analysis_test.ts:34` の require-await 1件は 2026-09-17 `05a677f1e` からの既存指摘（今回の変更は同ファイル120行目のみ）。それ以外は0件。App 3ファイル exit 0。
+- `git diff --check` exit 0
+- CI（PR #87）：1 passing / 1 pending（作成時点）
+
+### model-call impact
+- 上限不変（MAX_GENERATIONS=2、最大4 calls）。新しい rewrite 条件は追加していない。points の警告は記録のみ。prompt が少し長くなる分、input tokens はわずかに増える（生成リクエストの instructions が約600字増える。Fact には入らない）。
+
+### schema compatibility
+- `market_report_packet.v1` / presentation v2：変更なし（`x_post.points_ja` は既存の field）。
+- `app_market_detail.v1`：optional な `points_ja` を追加（additive）。App の型も optional。古いレポートは fallback。
+- DB / RPC / migration：変更なし。
+
+### PR / commit / push
+- PR #87 open（MERGEABLE）、commit `3561f1ea`、通常push。merge・deployはしていない。
+
+### production mutation
+- **0**（deploy、invoke、DB、gate、cron、X、Auth/Vault：なし）。読み取りは本TASK開始前の10/5 close packetの確認のみ（前回のread-only観測で取得済みの内容を使用）。
+
+### remaining issues
+1. live のモデル出力が見出し型になるかは未観測。merge＋deploy後、朝刊と大引けの両方で `x_post.points_ja` と `X_POINTS_*` の記録を確認する必要がある。
+2. `X_POINTS_METRIC_RECAP:3` が live で続く場合は、`worthRewrite` で 3/3 だけを書き直し対象にするか判断（+2 calls、上限内）。
+3. 10/5大引けで見た内容品質の残り（米雇用統計が本文にほぼ出ない、「重要材料として確認されました」の内部語、「確認できません」3回、値だけの注目点「ドル円は…157.67円」）は本TASK範囲外。
+4. `analysis_test.ts:34` の既存lint 1件。
+
+### recommendation
+- Codex（または H1）の source review 後に merge → `market-report-analysis` のみの controlled deploy（personalized-reports は market_detail 変更があるため、App表示を反映するには personalized-reports の deploy も必要。app gate OFF の間は表示に影響しない）。
+- consumer activation 前に、deploy後の自然な朝刊と大引けを1回ずつ read-only 観測することを推奨（見出し型になっているか、Hard/WARN、calls）。
+
+---
+
+# Claude Task 2 — CURRENT TASK
+
+- task_id: kabumori-shared-report-v2-20261005-close-natural-observation
+- owner: claude
+- slot: claude-2
+- status: done
+- next_owner: none
+- priority: high
+- recommended_model: Sonnet5（中）
+- purpose: 2026-10-05大引けの自然サイクルをread-onlyで後追い観測し、朝に発生したOpenAI 429が夕方まで継続したか／回復したかを確認する。回復してreport packetが完成していれば、production market-report-analysis v21（PR #77 + PR #79/H1）のlive挙動を初めて実データで評価する。manual invoke・mutationは禁止。
+
+## Context accepted by Final K2
+
+2026-10-05 morning natural observation:
+- classification: **OBSERVATION_INCOMPLETE**
+- data cycle: completed normally
+- analysis: 07:55/08:05とも生成段階で失敗、最終error `ANALYSIS_OPENAI_GENERATE_FAILED:429`
+- report packet: 0
+- model response: 0
+- therefore PR #77 / PR #79 live behavior is **unassessed**, not failed
+- account-wide read-only evidence also showed multiple OpenAI-dependent jobs returning 429 from 2026-10-04 00:00 JST onward
+- production mutation: 0
+- app_enabled=false / x_enabled=false preserved
+- no Codex review is needed for this provider-side incomplete observation
+
+## Target natural close schedule
+
+2026-10-05 JST:
+- data packet: 16:15
+- analysis: 16:20
+- analysis retry: 16:35
+- personalized: 17:15
+
+Current time is already after the natural close window, so this TASK may inspect retained production evidence immediately. Do not invoke or replay anything.
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, this TASK, and the previous morning Report.
+2. Use the existing dedicated G2 worktree only if it is still safe and isolated:
+   `/Users/yuya/Developer/kabumori-g2-market-report-reliability`
+3. New-Mac rule: do not create new work from old `/Users/yuya/Developer/kabumori`. If a new checkout/worktree is required, base it on fresh `/Users/yuya/Developer/kabumori-fresh`.
+4. Fresh-check origin/main and other slot ownership. Do not touch other slot branches/files/dev servers.
+5. This task is observation-only. Source changes are not expected.
+
+## Observation — read only
+
+Inspect the natural 2026-10-05 **close** cycle.
+
+### 1. Production baseline
+Fresh-read:
+- market-report-analysis version/status/verify_jwt/source identity
+- app_enabled / x_enabled
+- relevant cron active/schedules
+- confirm no G2 deploy/gate/manual invoke occurred since the morning observation
+
+Expected baseline is v21 / verify_jwt=false / gates OFF/OFF, but do not assume.
+
+### 2. Close cycle execution
+Record:
+- data close cycle status / attempts / timestamps / error
+- report close status / attempts / timestamps / error
+- current_data_packet_id
+- current_report_packet_id
+- whether 16:20 completed first try
+- whether 16:35 retry ran and whether it was no-op or required
+- duplicate packet counts for close / trading_date 2026-10-05
+
+If the close analysis again failed before receiving a model response:
+- classify **OBSERVATION_INCOMPLETE**
+- preserve the exact retained error
+- distinguish provider/quota/transport evidence from code behavior
+- do not infer PR #77/#79 behavior
+
+### 3. If a completed close report packet exists
+Then evaluate the same live criteria that morning could not reach:
+
+PR #77:
+- X formatted character count
+- broad/sector/company ordering
+- false company-before-broad WARN absence
+- App story narrative length
+- 700–899 chars must not trigger rewrite solely for length
+- <700 materially thin may trigger at most one bounded rewrite
+- WARN alone must not suppress delivery
+- safe-original fallback behavior
+- generation_attempts / content_regenerations / quality_rewrite / quality_rewrite_request_failed / delivered_generation / quality_warnings
+
+PR #79/H1:
+- Japan close/trading date vs relevant US/prior sessions
+- legitimate prior-session reference/watch wording
+- hypothetical/question wording
+- reaction/watch `を受け` phrasing where present
+- no false Hard rejection of supported prose
+- objective cross-check of values/change/date/session, stale/current, sign/direction/emoji, 1306 identity, news/ref existence, unsupported causality and broad absence claims
+
+Presentation v2:
+- presentation_version
+- X lead + exactly 3 points + context + news + watch + closing
+- app_story sections
+- session_views
+- key_news scope/order
+- fact status
+- quality warnings
+- diagnostics
+
+Usage:
+- total model calls
+- input/output tokens
+- cost
+- transport retry metrics
+
+### 4. Account-wide 429 follow-up
+Read-only only:
+- determine whether OpenAI-dependent jobs recovered later on 10/5 or continued returning 429
+- do not read secrets or billing credentials
+- do not claim exact billing balance unless directly available from an approved read-only source
+- if evidence only suggests `insufficient_quota`, say so explicitly
+
+## Classification
+
+Use one:
+- **PASS_FIRST_TRY**
+- **PASS_WITH_RETRY**
+- **FAIL_FALSE_REJECT**
+- **FAIL_FACTUAL_DEFECT**
+- **OBSERVATION_INCOMPLETE**
+
+Do not classify style/WARN alone as failure.
+
+## Safety / forbidden
+
+Absolutely no:
+- manual Edge invoke
+- manual retry/replay
+- DB write
+- source edit
+- deploy
+- gate change
+- cron change
+- X post/API mutation
+- app notification
+- Auth/Vault/secret access
+- billing mutation
+- legacy generator mutation
+
+Production mutation must remain 0.
+
+## Completion conditions / Report
+
+Report:
+- task_id / classification
+- observation time JST
+- production baseline read-back
+- close data/report cycle statuses/attempts/timestamps/errors
+- data/report packet IDs/hashes
+- duplicates
+- whether provider 429 recovered
+- if packet exists: Fact/local, Presentation v2, PR #77, PR #79/H1, factual cross-check, character counts, diagnostics, calls/tokens/cost, retry behavior
+- production mutation=0
+- remaining issues
+- recommendation for 10/6 morning natural observation vs consumer activation readiness
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+- result: **SUPERSEDED_BEFORE_START** by explicit user request on 2026-10-05. No observation or production action was performed under this task. Its close-cycle read-only evidence may still be inspected as supporting evidence in the replacement task below, but this task itself must not be started.
+
+---
+
+# Claude Task 2 — CURRENT TASK
+
+- task_id: kabumori-shared-report-v2-20261005-morning-natural-observation
+- owner: claude
+- slot: claude-2
+- status: done
+- next_owner: none
+- priority: high
+- recommended_model: Sonnet5（中）
+- purpose: production `market-report-analysis` v21（PR #77 + PR #79/H1）の最初の通常取引日朝刊をread-only観測し、配信信頼性・Hard/WARN境界・model call/costを実データで確認する。mutation/manual invokeは禁止。
+
+## Timing gate — strict
+
+Target natural schedule on Monday 2026-10-05 JST:
+- data packet: 07:50
+- analysis: 07:55
+- analysis retry: 08:05
+- personalized: 08:35, but app consumer gate is OFF and this TASK does not need to wait for it
+
+**Do not perform substantive observation before 2026-10-05 08:10 JST.**
+
+If started before 08:10 JST:
+- read-only preflight only
+- do not poll continuously
+- do not sleep/wait in a long-running shell
+- do not invoke any Function
+- report `WAIT_UNTIL_AFTER_2026-10-05_0810_JST`
+- leave TASK ready
+- STOP
+
+## Production baseline to verify
+
+Project: `wsmznyzcvmuitkglfeuj`
+
+Expected before observation:
+- `market-report-analysis` v21
+- verify_jwt=false
+- ezbr `fe5c1836cdeddabdb1300668a5f75ac92d3570872a1b1eb110798195991fa40c`
+- app_enabled=false
+- x_enabled=false
+- no manual cycle since deploy
+
+Fresh-read these; do not assume.
+
+## Observation — read only
+
+After 08:10 JST, inspect the natural 2026-10-05 morning cycle.
+
+### 1. Cycle execution
+
+Record:
+- data cycle status / attempts / errors / timestamps
+- report status / report attempts / errors / timestamps
+- current data_packet_id
+- current report_packet_id
+- whether 07:55 completed on first scheduled analysis attempt
+- whether 08:05 retry ran, and whether it was no-op or needed to recover
+- duplicate packet counts for this report_type/trading_date
+
+Do not invent the first-attempt reason if the exact reason/body is not retained.
+
+### 2. Presentation v2 fields
+
+Require a completed safe packet before calling the natural observation PASS.
+
+Inspect:
+- presentation_version
+- X lead / exactly 3 points / context / news / watch / closing
+- app_story sections
+- session_views
+- key_news scope/order
+- fact status
+- quality_warnings
+- diagnostics
+
+### 3. PR #77 live behavior
+
+Check:
+- formatted X character count
+- broad/sector/company ordering
+- no false `company before broad` warning when broad material actually leads
+- App story narrative char count
+- if App story is 700–899 chars and otherwise complete, it must **not** trigger a quality rewrite solely for length
+- if <700 and materially thin, one bounded rewrite is acceptable
+- quality WARN alone must not suppress the packet
+- safe-original fallback remains deliverable if a later quality rewrite fails
+
+Record:
+- generation_attempts
+- content_regenerations
+- quality_rewrite
+- quality_rewrite_request_failed
+- delivered_generation
+- quality_warnings
+- transport retries
+- total model calls/tokens/cost
+
+### 4. PR #79/H1 live behavior
+
+Inspect actual generated wording for:
+- today's Japan watch date vs prior-night US session
+- legitimate prior-session watch/reference prose
+- hypothetical/question wording
+- `を受け` reaction-watch wording
+
+Confirm there is no false Hard rejection for a safe watch sentence.
+
+At the same time, manually cross-check delivered factual prose against the immutable input:
+- metric value/change/date/session
+- stale/current wording
+- direction/sign/emoji
+- 1306 identity
+- news/ref existence
+- unsupported market/index causality
+- broad false absence claims
+
+If the first scheduled attempt fails due local Hard but retry later succeeds:
+- classify whether the rejection was a true defect or another false positive
+- this is not an automatic PASS merely because retry recovered
+- preserve exact diagnostic text when available
+
+### 5. Delivery reliability assessment
+
+Classify the natural cycle as one of:
+
+- **PASS_FIRST_TRY**
+  - first natural analysis completes
+  - Fact/local checks safe
+  - no unnecessary quality rewrite
+  - no duplicate/retry side effect
+
+- **PASS_WITH_RETRY**
+  - scheduled retry was genuinely needed but final packet is safe
+  - document exact reason and whether it indicates remaining calibration debt
+
+- **FAIL_FALSE_REJECT**
+  - safe/supported prose was blocked by local/Fact logic
+
+- **FAIL_FACTUAL_DEFECT**
+  - model produced an objective lie/contradiction and guard correctly blocked it, or unsafe final output escaped
+
+- **OBSERVATION_INCOMPLETE**
+  - cycle/data/provider infrastructure did not produce enough evidence
+
+Do not turn a stylistic WARN into FAIL.
+
+## Cost / usefulness
+
+Compare this cycle qualitatively to the 10/2 morning baseline:
+- 10/2 final run: 3 calls / about $0.010230
+- target after PR #77: avoid the extra quality rewrite for near-target complete output
+
+Do not require an exact lower dollar amount if input size/news volume changed. Focus on whether avoidable calls were removed.
+
+## Safety / forbidden
+
+Read-only only.
+
+Forbidden:
+- manual Edge invoke
+- manual retry
+- DB write
+- gate change
+- cron change
+- deploy
+- source edit
+- X post
+- app notification
+- Auth/Vault/secrets
+- legacy generator mutation
+
+Do not activate app/x consumers in this TASK.
+
+## Completion conditions
+
+PASS candidate only if:
+- natural 10/5 morning report packet safely completes
+- objective input facts are represented correctly
+- no false PR #79 watch/session/causal Hard rejection
+- PR #77 rewrite/warning behavior matches intended delivery-first policy
+- no duplicate packet/provider side effect
+- production mutation=0
+
+## Required Report
+
+- task_id/result classification
+- observation time JST
+- production function/gate read-back
+- cycle statuses/attempts/timestamps/errors
+- data/report packet ids/hashes
+- duplicate counts
+- Fact/local result
+- key diagnostics
+- actual X char count
+- App narrative char count
+- news ordering assessment
+- PR #77 behavior assessment
+- PR #79/H1 behavior assessment
+- objective factual cross-check
+- model calls/tokens/cost
+- retry/no-op behavior
+- production mutation=0
+- remaining issues
+- recommendation for same-day close natural observation vs next rollout step
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+### task_id / result
+- task_id: kabumori-shared-report-v2-20261005-morning-natural-observation
+- result: **OBSERVATION_INCOMPLETE**（provider側）。10/5朝刊の分析は 07:55 / 08:05 とも `ANALYSIS_OPENAI_GENERATE_FAILED:429` で失敗し、report packetは0件。v21（PR #77 + PR #79/H1）のlive-model挙動は**未観測**。v21のコード起因の失敗ではない（model応答を1件も受け取っていない）。
+
+### observation time
+- 2026-10-05 09:11〜09:25 JST（08:10以降。read-onlyのみ）
+
+### production function / gate read-back
+- `market-report-analysis` v21、verify_jwt=false、ezbr `fe5c1836cdeddabdb1300668a5f75ac92d3570872a1b1eb110798195991fa40c`、updated 2026-10-03 21:23:42 JST → baseline一致
+- market-report-data-packet v16、personalized-reports v38、x-test-post v133（変化なし）
+- `market_report_consumer_settings`: app_enabled=false / x_enabled=false（updated_at 2026-09-17 10:47:14 UTC）
+- deploy後のmanual cycleなし：`market_report_packets` の最新 created_at は 2026-10-02 07:20:42 UTC（10/2大引け）。deploy後のpacketは0件。
+
+### cycle statuses / attempts / timestamps / errors（morning, trading_date 2026-10-05）
+- data：cycle_status=completed、attempt_count=1、started 07:50:01.018 / completed 07:50:01.602 JST、last_error=null、current_data_packet_id `5c6fd292-5448-4d59-8719-f76daaaa28d7`。diagnostics：yahoo ^N225/1306.T/^DJI/^GSPC/^IXIC/^SOX・mic_metrics・mic_thresholds・news_refs・stored_packets すべて ok
+- report：report_status=**failed**、report_attempt_count=2、最終 started 08:05:00.961 / failed 08:05:02.851 JST、report_last_error=`ANALYSIS_OPENAI_GENERATE_FAILED:429`、current_report_packet_id=null
+  - 07:55の1回目の失敗時刻・本文は、08:05の再試行で上書きされ保持されていない（attempt_count=2から2回とも失敗と判断。1回目の理由が同じ429とは行に残っていないので断定しない）
+- report_diagnostics（最終attempt）：model `gpt-5.6-luna`、metrics 13、news_items 15、direction up、`transport_retries=0`、`transport_retry_exhausted=false`、`transport_success_after_retry=false`
+  - `transport_retry.ts` は 429 を、本文が `insufficient_quota` の場合だけ再試行しない（JSONでない429は再試行する）。再試行0回で即失敗（約2秒）なので、**`insufficient_quota`（残高切れ）の429**と読める
+
+### account-wide 429（read-only cross-check）
+- `important_news_monitor_runs`：2026-10-03 14:00 UTCまで正常 → **2026-10-03 15:00 UTC（10/4 00:00 JST）以降、毎時すべて breaking_market の検索が429**、10/5 09:00 JSTの回まで継続
+- `morning_report_runs`（旧X朝刊）：08:20 / 08:22 / 08:25 JST すべて `MORNING_REPORT_LANE_A_US_MARKET_FAILED:429`
+- `post_execution_logs`：brand_post 08:13 JST `BRAND_POST_GENERATION_FAILED:429`、morning_report 3回 failed（429）
+- `personalized_reports`：08:35 JST morning `REPORT_OPENAI_FAILED:429`（旧アプリ朝刊も今朝は未生成）
+- → OpenAIのアカウント全体が10/4 0時JSTから429。2026-09-28と同じ「テスト期間の手動チャージ残高切れ」と整合（残高そのものはread-onlyで確認できないため、**残高確認はユーザー側**）
+
+### data / report packet ids / hashes / duplicates
+- data packet: `5c6fd292-5448-4d59-8719-f76daaaa28d7`
+- report packet: なし（hashなし）
+- duplicate: 2026-10-05の `market_report_packets` は0件（重複なし）。cycle行は morning 10/5 の1行のみ
+
+### Fact/local result・diagnostics・文字数・ニュース順
+- model応答なしのため、Fact/local check、generation_attempts、content_regenerations、quality_rewrite、quality_rewrite_request_failed、delivered_generation、quality_warnings、X文字数、App narrative文字数、key_news順は**すべて観測不能**（packetもreport_diagnosticsの該当項目も無い）
+
+### PR #77 / PR #79/H1 behavior assessment
+- **未評価**。今朝の失敗はOpenAIリクエストの段階で、local Hard/WARN・Fact・quality rewriteのどれにも到達していない。false Hard rejectもfactual defectも発生していない（判定材料なし）。PASSとは扱わない。
+
+### objective factual cross-check
+- 対象となる生成文が無いため実施不能。data packetは正常（全source ok、metrics 13、news 15）。
+
+### model calls / tokens / cost
+- 成功した生成呼び出し：0。packetが無いので `generation_calls / input_tokens / output_tokens / api_cost_usd` の記録なし。insufficient_quotaの429は課金されない想定だが、DBからは確認できない。
+- 10/2朝刊（3 calls / 約$0.010230）との比較は不能。
+
+### retry / no-op behavior
+- 08:05 retry：実行された（no-opではない）。同じ429で約2秒で失敗。transport層の再試行は0回で、残高切れの429で無駄な再試行をしない設計どおり。今朝の状況では、cron retryでもtransport retryでも回復できない。
+
+### production mutation
+- **0**。invoke / retry / DB write / gate / cron / deploy / source edit / X / 通知 / Auth / Vault / secrets：なし。read-only SELECT と `functions list` のみ。
+
+### remaining issues
+1. **OpenAIの429（残高切れの可能性が高い）が10/4 0時JSTから継続中**。ユーザーが残高・`insufficient_quota` を確認し、チャージする必要がある。チャージしないと、今日の大引け（data 16:15 / analysis 16:20 / retry 16:35 JST）、旧X・旧アプリ、important-news-monitorもすべて失敗が続く。
+2. v21のlive挙動（PR #77のrewrite抑制、PR #79/H1のwatch文の配信）は未観測のまま。
+3. cycle行は失敗理由を最後のattemptで上書きするので、07:55の1回目の理由が残らない（既知の診断上の制約。今回は全処理429で実害なし）。
+4. 本番cutover・launch前に、自動チャージまたは残高アラートを必須にすることを推奨（2026-09-28と同じ事象の再発）。
+
+### recommendation
+- OpenAIの残高確認・チャージ（ユーザー）を先に。チャージが今日16:20 JSTより前に済めば、**同日の大引けの自然サイクル（16:20 / 16:35 JST）をread-onlyで観測**するTASKを推奨（大引けで初めてv21を観測できる）。チャージが間に合わなければ、10/6朝刊（07:55 / 08:05 JST）の観測に回す。
+- manual invokeで埋め合わせはしない。
+
+---
+
+# Previous completed G2 task — combined PR #77 + PR #79 production deploy
+
+# Claude Task 2 — CURRENT TASK
+
+- task_id: kabumori-shared-report-v2-pr77-pr79-prod-deploy-20261003
+- owner: claude
+- slot: claude-2
+- status: done
+- next_owner: none
+- priority: highest
+- recommended_model: Sonnet5（高）
+- purpose: merged PR #77 quality calibration + C1-accepted PR #79 Hard-guard fixes を production `market-report-analysis` のみに1回で反映し、app/x consumer gates OFFのまま exact source/read-back と非影響を確認する。manual cycleは禁止。次の自然朝刊でlive-model挙動を見る。
+
+## Accepted source
+
+- PR #77: already merged, production-unapplied.
+- PR #79:
+  - G2 candidate `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`
+  - H1 reviewed/fixed exact source `b6d2dce3cc45c73951e51d139fefeddad7e2906e`
+  - C1 fast-forwarded PR branch to exact H1 source and verified read-back.
+  - merged main SHA: `4dbf11f2848059cc967d942efc9d60613d855537`
+- H1 final verdict: PASS-WITH-FIX.
+- accepted verification:
+  - market-report-analysis 136/136
+  - session-date 14/14
+  - H1 boundary 9/9
+  - personalized-reports 128/128
+  - X shared consumer 8/8
+  - data-packet 42/42
+  - _shared runtime 361/361 with --no-check due documented unrelated pre-existing type debt
+  - explicit target checks / changed-file lint / diff PASS
+
+## Accepted behavior
+
+Must be present in deployed source:
+- PR #77:
+  - broad-first/company-last does not false-WARN.
+  - 700–899-char App story is telemetry-only, not automatic rewrite.
+  - safe-original fallback preserved.
+- PR #79 + H1:
+  - legitimate prior-session watch prose remains deliverable.
+  - assertion-before-watch and wrong-date completed-session claims remain Hard.
+  - hypothetical tail cannot erase an earlier asserted wrong-date/wrong-direction fact.
+  - `続くから/するから/なるから` are not misread as questions.
+  - bounded honest questions such as `一段と強まるかどうか` remain deliverable.
+  - terminal reaction-watch phrasing like `前夜の米国株高を受け、日本株の反応を見る` does not false-Hard merely because of `を受け`.
+  - actual/speculative market effects still require evidence.
+  - wrong-date numbers, 10/1 mixed-session regression, stale/current, 1306 identity, sign/polarity, unsupported causality, unknown refs remain protected.
+- model/prompt/call ceiling/packet schema unchanged.
+
+## Why Sonnet5（高）
+
+Implementation/review is complete. This is a narrow production Edge Function deploy/read-back with strict production-safety verification and no design work.
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, this TASK, Final C1 for PR #79.
+2. Use only the dedicated independent G2 checkout/worktree.
+3. Fresh-fetch `origin/main`.
+4. Require merge SHA `4dbf11f2848059cc967d942efc9d60613d855537` to be an ancestor of deployment HEAD.
+5. Fresh-check whether any later main commit changes:
+   - `supabase/functions/market-report-analysis/**`
+   - imported shared market-report files
+   If yes, compare and STOP unless clearly compatible and already accepted.
+6. Confirm no other active slot owns `market-report-analysis`.
+7. Never use/fallback to the shared Developer checkout.
+8. Fail hard on wrong directory/worktree.
+
+## Production preflight — READ ONLY
+
+Project:
+`wsmznyzcvmuitkglfeuj`
+
+Capture:
+- current production `market-report-analysis` version / updated_at / verify_jwt / source identity
+- rollback source identity
+- `market_report_consumer_settings.app_enabled`
+- `market_report_consumer_settings.x_enabled`
+- relevant market-report/personalized cron schedules/active/command hashes
+- all Edge Function metadata snapshot sufficient to prove only target changes
+
+Expected accepted baseline before this rollout was v20, but do not assume it. Fresh-read actual production.
+
+Require:
+- app_enabled=false
+- x_enabled=false
+- verify_jwt=false
+- no unexpected cron drift
+- no conflicting ownership
+
+If production already matches the exact merged source:
+- do not redeploy
+- report NO-OP PASS.
+
+## Pre-deploy verification from fresh main
+
+Run:
+- full market-report-analysis
+- session-date calibration
+- H1 boundary tests
+- presentation_v2
+- causal_calibration
+- quality_calibration
+- h1_adversarial
+- content_guard
+- transport_retry
+- relevant personalized-reports suite
+- X shared consumer
+- market-report-data-packet
+- _shared runtime suite
+- deno check on target runtime/source
+- deno lint changed/runtime files
+- git diff --check
+
+Document any known unrelated checked-type debt separately; do not call it new.
+
+## Controlled deploy
+
+If production is stale, deploy **exactly one** Edge Function:
+
+`market-report-analysis`
+
+Use explicit project ref `wsmznyzcvmuitkglfeuj`.
+Preserve `verify_jwt=false`.
+
+Forbidden:
+- broad function deploy
+- personalized-reports deploy
+- x-test-post deploy
+- DB/schema/RPC/migration
+- cron mutation
+- app_enabled/x_enabled mutation
+- Auth/Vault/secrets
+- X post/API operation
+- app notification mutation
+- manual market-report cycle
+- manual retry
+- legacy generator changes
+
+## Post-deploy read-back
+
+Immediately:
+1. record target version / updated_at / verify_jwt
+2. read back deployed source
+3. compare deployed source with fresh merged main
+4. prove PR #77 + PR #79/H1 accepted logic is present
+5. re-read app_enabled/x_enabled -> must remain false/false
+6. re-read cron -> unchanged
+7. compare all Edge Function metadata -> only target may change because of this task
+8. record rollback source
+
+If another Function changes concurrently:
+- record exact timing/identity
+- do not claim G2 caused it
+- stop only if overlap/safety becomes uncertain.
+
+## Timing / observation
+
+This TASK is deploy/read-back only.
+
+Do **not** manually invoke a report.
+
+Current date is Saturday 2026-10-03 JST. The next intended natural live-model observation is the next normal trading-day morning schedule, expected Monday 2026-10-05:
+- data 07:50 JST
+- analysis 07:55 JST
+- retry 08:05 JST
+
+Do not force a weekend cycle just to get evidence.
+
+Next K2 should assign a read-only natural-cycle observation after the deploy is accepted.
+
+## Failure / rollback
+
+If wrong source/function is deployed, verify_jwt changes, gates/cron change, or source read-back differs:
+- STOP immediately.
+- rollback only `market-report-analysis` to captured pre-deploy exact source if necessary and safe.
+- report every mutation.
+
+## Completion conditions
+
+PASS only if:
+- exact merged PR #77 + PR #79 accepted source is production truth for `market-report-analysis`
+- only target Function changed if deployment was needed
+- verify_jwt=false preserved
+- app/x gates remain OFF/OFF
+- cron unchanged
+- no manual cycle
+- rollback source known
+- production mutation fully enumerated
+
+## Required Report
+
+- task_id/result
+- fresh main SHA/worktree
+- production version before/after
+- exact deployed source identity/read-back
+- tests/check/lint/diff
+- verify_jwt before/after
+- gates before/after
+- cron before/after
+- all-function metadata comparison
+- deploy command/scope
+- production mutations
+- rollback source/status
+- remaining issues
+- recommendation for 2026-10-05 morning natural observation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+### task_id / result
+- task_id: kabumori-shared-report-v2-pr77-pr79-prod-deploy-20261003
+- result: **PASS（deploy実施）**。production `market-report-analysis` を merged PR #77 + PR #79/H1 のsourceへ1回で反映。11ファイルすべてfresh mainとbyte一致。target以外のFunction・verify_jwt・gates・cronは不変。manual cycleなし。
+
+### fresh main / worktree
+- deploy HEAD: `309b0cb8d4940cdf82bfdd92116f294ba290336c`（origin/main、detached）
+- `4dbf11f2848059cc967d942efc9d60613d855537`（PR #79 merge）はancestor：OK
+- `4dbf11f2..309b0cb8` に `supabase/functions/**` の変更なし（`.agent/` のみ）。market-report-analysis の import は `_shared/absence_claims.ts`・`kabumori_voice.ts`・`market_report_packet.ts`・`market_report_story.ts`・`market-report-data-packet/session_logic.ts`（`packet_schema.ts` は型のみ）
+- worktree: 専用 `/Users/yuya/Developer/kabumori-g2-market-report-reliability`（toplevel assert済み、`supabase/config.toml` なし、共有checkoutはdeploy/設定に未使用。共有checkoutは read-only `db query --linked` SELECTのみ）
+- 他slotの所有：CLAUDE_TASK_1/3/4/5・CODEX_TASK/2 のcurrent taskに `market-report-analysis` のactive所有なし（CODEX_TASK＝PR79 rereview done）
+
+### production version before/after
+- before: v20、updated_at 1790866929071（2026-10-02 00:02 JST）、verify_jwt=false、ezbr `4250b5ceb848…`
+- after: **v21**、updated_at 1791030222395（2026-10-03 21:23:42 JST頃）、verify_jwt=false、ezbr `fe5c1836cded…`
+- deploy実行: 2026-10-03 21:23:39〜21:23:45 JST（ユーザー許可「許可」後。1回目はauto mode classifierで拒否→ユーザー承認で実行）
+
+### exact deployed source / read-back
+- `supabase functions download market-report-analysis --use-api` をscratch dirへ取得し、`git show 309b0cb8:<path>` とbyte比較：
+  - market-report-analysis: index.ts / handler.ts / analysis_logic.ts / hard_fact_guards.ts / analysis_input.ts / transport_retry.ts → **same**
+  - _shared: absence_claims.ts / kabumori_voice.ts / market_report_packet.ts / market_report_story.ts → **same**
+  - market-report-data-packet/session_logic.ts → **same**
+- accepted logicの存在：`GOVERNED_BY_QUESTION`（PR #79/H1 P1）、`APP_STORY_REWRITE_BELOW_CHARS`・`editorialPriorityWarnings`（PR #77）、`rewriteRequestFailed`（safe-original fallback）を確認、`directionIn` なし。byte一致によりH1修正（`続くから/するから/なるから`、`一段と強まるかどうか`、terminal reaction-watchの因果扱い）を含むmerged sourceそのもの。
+- model/prompt/call ceiling/packet schema：mergedのまま（変更なし）
+
+### tests / check / lint / diff（fresh main 309b0cb8）
+- market-report-analysis full **136/136**、session-date 14/14、H1 boundary 9/9、presentation_v2 22/22、causal_calibration 18/18、quality_calibration 9/9、h1_adversarial 13/13、content_guard 16/16、transport_retry 14/14
+- personalized-reports 128/128、X shared consumer 8/8、market-report-data-packet 42/42、`_shared` 361/361（`--no-check`、既知の無関係type debtのため）
+- `deno check --node-modules-dir=none`：market-report-analysis/*.ts＋importする `_shared` 4ファイル → exit 0
+- `deno lint`：PR #77/#79 変更ファイル（7）exit 0、runtime 11ファイル exit 0。ディレクトリ全体では既存2件（`handler_test.ts:23`・`analysis_test.ts:34` の require-await、2026-09-17 `05a677f1e` 由来、今回未変更）＝新規ではない
+- `git diff --check` exit 0
+
+### verify_jwt / gates / cron
+- verify_jwt: false → **false**
+- `market_report_consumer_settings`: app_enabled=false / x_enabled=false（updated_at 2026-09-17 10:47:14 UTC）→ **完全一致**
+- cron（jobname ~ market|report|personal、8件）：schedule・active・md5(command) before/after **完全一致**
+  - market-report-analysis-morning `55 22 * * 0-4` / -morning-retry `5 23 * * 0-4`（md5 82f3090e…）
+  - market-report-analysis-close `20 7 * * 1-5` / -close-retry `35 7 * * 1-5`（md5 216cf5da…）
+  - market-report-data-packet-morning `50 22 * * 0-4` / -close `15 7 * * 1-5`
+  - personalized-reports-morning `35 23 * * 0-4` / -close `15 8 * * 1-5`
+  - すべて active=true
+
+### all-function metadata comparison
+- 20 Functionの version / updated_at / verify_jwt / ezbr_sha256 / status / entrypoint_path を before/after 比較
+- 変化は `market-report-analysis` のみ（version 20→21、updated_at、ezbr、entrypoint_pathのversion suffix `_20`→`_21`）
+- 他19本は全項目同一（personalized-reports v38、x-test-post v133、market-report-data-packet v16 ほか）。並行deployなし。
+
+### deploy command / scope
+- `supabase functions deploy market-report-analysis --workdir /Users/yuya/Developer/kabumori-g2-market-report-reliability --project-ref wsmznyzcvmuitkglfeuj --no-verify-jwt --use-api`
+- uploaded assets: market-report-analysis 6本、`_shared` 4本、market-report-data-packet/packet_schema.ts・session_logic.ts（import graph）。deployed functionは `market-report-analysis` の1本のみ。
+
+### production mutations
+- **1件のみ**：Edge Function `market-report-analysis` v20→v21
+- なし：他Function deploy、DB/schema/RPC/migration、cron、app/x gate、Auth/Vault/secrets、X操作、通知、manual cycle/invoke/retry、legacy generator
+
+### rollback source / status
+- rollback source = 本番v20のread-back。main `a76cb1217fd65f976234ea91815b551309ac814e`（PR #77 merge `08a9f710` の第1親、PR #71反映済み）と全11ファイルbyte一致を確認済み
+- rollbackは不要（実施なし）。必要時は `a76cb121` をdetachで同じ明示引数でdeployし、byte read-back
+
+### remaining issues
+1. live-model挙動は未観測（manual cycle禁止のため）。PR #77の700〜899字rewrite停止、PR #79の前夜watch文のdeliverability、Hardの維持は自然サイクルで確認が必要。
+2. 内容品質の既知事項（火山ニュースの選定、「重要材料として確認された…」の内部語、+0.04%を上昇と書く、「確認できません」の反復）は未TASK。
+3. app/x gateはOFFのまま。昨日の大引けがアプリに出ない件はgate OFFによるもの（本TASK範囲外）。
+4. 既存lint debt 2件（test files）・`x-test-post/index.ts` の既存type debtは無関係のまま。
+
+### 2026-10-05 朝の自然観測の推奨
+- read-onlyで：data 07:50 / analysis 07:55 / retry 08:05 JST（personalized 08:35 JSTはgate OFF）
+- 見る項目：`market_report_runs`（または同等）の status、`generation_attempts`・`content_regenerations`・`hard_rejections`・`quality_rewrite`・`quality_rewrite_request_failed`・`delivered_generation`・`quality_warnings`・`transport_*`、Fact結果、App story char_count（700〜899ならrewriteなしで配信されること）、session-date issueの有無、X/Appの本文（日付・向き・因果）
+- 07:55で完了なら retry 08:05 はno-opのはず。FAILなら次TASKでhard_rejectionsの文を確認。function versionがv21のままであることも確認。
+
+### next
+- status -> review_required / next_owner -> chatgpt。STOP for K2。
+
+---
+
+# Previous completed G2 task — PR #79 hypothetical/watch corrective
+
+# Claude Task 2 — CURRENT TASK
+
+- task_id: kabumori-pr79-hypothetical-and-watch-phrasing-corrective-20261003
 - owner: claude
 - slot: claude-2
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
+- priority: highest
+- recommended_model: Opus5.5（高）
+- purpose: H1のCHANGES REQUIREDを受け、PR #79のHard Fact境界をもう一度狭く修正する。P1のhypothetical-tailによるwrong-date/direction bypassを塞ぎ、同時にP2の正当な前夜watch表現のfalse rejectを減らし、P3 lintも解消する。同じPR #79をamend。source/testsのみ、merge/deployは禁止。
+
+## C1 accepted findings
+
+Reviewed PR #79 runtime head:
+`9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`
+
+H1 verdict:
+**CHANGES REQUIRED**
+
+H1 test-only evidence:
+`6140968378c44aecd2d40a1cc7d344f2e98e8b4e`
+
+Do not treat that evidence commit as a runtime release candidate. Reproduce the semantics on the G2 branch.
+
+## P1 — HYPOTHETICAL must not erase an earlier asserted fact
+
+Current behavior can return no Hard issue if a metric clause contains a hypothetical tail anywhere.
+
+Examples H1 proved incorrectly pass:
+
+- `10月2日は、米国株高が強まり波及するかどうかを見ます`
+- `10月2日は、米国株高が鮮明となり波及するかどうかを見ます`
+- `10月2日は、米国株高が継続し波及するかどうかを見ます`
+- `10月2日の米国株は下落しており次も続くかを見ます`
+
+The last sentence is especially important:
+- date is wrong for the US session,
+- direction is wrong,
+- both assertions occur **before** the hypothetical tail.
+
+These must be Hard.
+
+### Preserve genuine hypotheses
+
+Do not simply remove hypothetical support.
+
+Forms such as the following should remain non-factual when they genuinely place the move itself inside the condition/question:
+
+- `米国株高が強まるかどうかを見る`
+- `米国株が上昇すれば、日本株の反応を見る`
+- `米国株安が続くかを見る`
+
+The key distinction is:
+
+**earlier asserted move + later hypothetical tail**  
+vs  
+**the move itself is hypothetical/conditional**.
+
+Implement the smallest deterministic clause-level distinction.
+
+Do not solve with a verb blacklist for only `強まり/鮮明/継続`.
+
+Do not move protection to LLM Fact only.
+
+## P2 — legitimate prior-night watch phrasing must not false-reject
+
+H1 independently confirmed these ordinary morning phrases currently false-reject in all factual placements:
+
+1. `10月2日は、前夜の米国株高を受け、日本株の反応を見る。`
+2. `10月2日は、米国株高の流れをどう受け止めるかが焦点。`
+
+These do **not** assert that the US market rose on 10/2.
+
+They must pass the session-date Hard guard.
+
+Also keep passing:
+- `前日の米国株上昇を踏まえて、日本株の反応を確認する`
+- existing Gate-A positive watch forms from PR #79
+- explicit correct prior-session date forms
+
+### Bounded relation expansion only
+
+Extend the watch relation only enough to cover safe prior-session reference shapes.
+
+Examples of acceptable bounded forms:
+- `<prior move> を受け、<Japan reaction> を見る/確認する`
+- `<prior move> の流れをどう受け止めるか...`
+
+But do not allow:
+- `10月2日は、米国株高を受け、米国株高が続き、日本株を見る`
+- `10月2日は、米国株高の流れが続き、日本株の反応を見る`
+- a completed/asserted wrong-date move merely because `前夜` appears somewhere earlier
+
+An explicit `前夜` marker is useful evidence but not a blanket exemption.
+
+## P3 — lint
+
+Remove or otherwise resolve the now-unused `directionIn` wrapper.
+
+Changed-file `deno lint` must exit 0.
+
+Do not hide the finding with lint suppression unless there is a concrete reason documented in the Report.
+
+## Mandatory regressions
+
+### Must FAIL Hard
+
+1. `10月2日の米国株は下落しており次も続くかを見ます`
+2. `10月2日は、米国株高が強まり波及するかどうかを見ます`
+3. `10月2日は、米国株高が鮮明となり波及するかどうかを見ます`
+4. `10月2日は、米国株高が継続し波及するかどうかを見ます`
+5. assertion-before-watch cases from prior K2:
+   - 続き
+   - 確認され
+   - 鮮明となり
+   - 一段と強まり
+   - 継続し
+6. wrong-date numeric values/change
+7. exact 10/1 mixed-session Nikkei/1306 bug
+8. stale-as-current
+9. 1306 -> TOPIX index
+10. direction/sign/emoji inversion
+11. unsupported market causality
+12. unknown/fabricated ref
+
+Run the critical P1 sentences through:
+- market_summary
+- X context
+- X closing
+- App summary
+- App japan
+- observation claim
+
+### Must PASS
+
+1. `10月2日は、前夜の米国株高を受け、日本株の反応を見る`
+2. `10月2日は、米国株高の流れをどう受け止めるかが焦点`
+3. `前日の米国株上昇を踏まえて、日本株の反応を確認する`
+4. existing 10/2 legitimate watch references
+5. `米国株高が強まるかどうかを見る`
+6. `米国株が上昇すれば、日本株の反応を見る`
+7. `米国株安が続くかを見る`
+8. correctly dated prior-session value statements
+
+Be careful with direction validation in genuine hypotheses: do not accidentally treat a conditional `米国株安が続くか` as an asserted direction.
+
+## Implementation guidance
+
+Audit:
+- `HYPOTHETICAL`
+- `directionWord` / `directionUse`
+- session-date early-return path
+- `WATCH_RELATION`
+- `MOVE_LIST`
+- `REFERRED_MOVE`
+- `TOPIC_AFTER_DATE`
+
+Prefer one of these designs:
+- determine whether the hypothetical marker occurs **before and governs** the move assertion, rather than anywhere in the clause;
+- or extract the move-expression span and classify only that span as factual vs hypothetical.
+
+Avoid a new broad parser framework.
+
+No prompt/model/call-budget change unless absolutely unavoidable; if you think it is necessary, STOP and report instead of expanding scope.
+
+## Full verification
+
+Run:
+- session_date_calibration
+- H1 equivalent boundary regressions
+- presentation_v2
+- causal_calibration
+- quality_calibration
+- h1_adversarial
+- content_guard
+- transport_retry
+- full market-report-analysis
+- personalized-reports full/relevant
+- X shared consumer
+- market-report-data-packet
+- _shared relevant/full
+- deno check
+- deno lint on changed files
+- git diff --check
+
+All must be green.
+
+## PR rule
+
+- amend **PR #79**
+- no new PR unless technically unavoidable
+- record prior head `9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`
+- record final head
+- fresh-check main overlap before push
+- no merge in this TASK
+
+## Production / safety
+
+Forbidden:
+- deploy
+- manual invoke/retry
+- app/x gate change
+- cron
+- DB/schema/RPC/migration
+- Auth/Vault/secrets
+- X operation
+- personalized-reports/x-test-post changes
+- news acquisition changes
+
+PR #77 remains merged but production-unapplied.
+
+## Review requirement
+
+Because this remains a Hard Fact boundary, next K2 must send the corrected exact PR #79 head to a focused Codex rereview before merge/deploy.
+
+Recommended Codex model: **Sol（高）**.
+
+Do not bypass the rereview even if all local tests pass.
+
+## Completion conditions
+
+PASS candidate only if:
+- P1 hypothetical-tail bypass is closed,
+- genuine hypotheses still pass,
+- P2 normal prior-night phrasing no longer false-rejects,
+- all prior numeric/session/mixed-session/causal/ref protections remain strict,
+- lint/check/diff pass,
+- no model-call increase,
+- production mutation=0.
+
+## Required Report
+
+Include:
+- task_id/result
+- prior/final PR #79 head
+- exact P1 root cause and fix
+- exact P2 watch-relation expansion
+- P3 lint fix
+- positive/negative regressions
+- six-placement P1 evidence
+- 10/1 mixed-session result
+- full tests/check/lint/diff
+- changed_files
+- production mutation=0
+- remaining issues
+- recommendation for Codex rereview
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+### task_id / result
+- task_id: kabumori-pr79-hypothetical-and-watch-phrasing-corrective-20261003
+- result: **PASS candidate（source/testsのみ）**。P1を閉じ、正当な仮定は通過、P2の3文は日付Hard guardを通過、P3 lint exit 0。Codex focused rereview待ち。merge/deployなし。
+
+### PR #79 head
+- prior head: `9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`
+- branch上の中間: `24c6203a`（H1の `h1_pr79_boundary_test.ts` を cherry-pick、author anohi-memories）
+- final head: `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`（通常push、force pushなし。PR #79 OPEN / MERGEABLE、本文に追加修正の節を追記）
+- push前のmain重なり確認：merge-base以降のmainに market-report-analysis / `_shared/market_report*` / DESIGN.md の変更なし（`.agent/` のみ）
+
+### P1 root cause と修正
+- root cause：`directionWord` が、向きの語のうしろの**節のどこか**に `HYPOTHETICAL`（かどうか/するか/続くか/すれば/なら…）があれば `null` を返していた。そのため「下落しており次も**続くか**」「強まり波及**するかどうか**」のように、先に値動きを言い切ってから仮定を足した節で、向きの検査も日付照合（`directionUse` → 早期return）も外れていた。
+- 修正（`hard_fact_guards.ts`）：
+  - `statedDirection(clause)` に従来の向き抽出を分離し、`{direction, end}` を返す。
+  - `directionWord` は、仮定の語までのあいだが `GOVERNED_BY_QUESTION = /^(?:が|は|も)?[一-龠々ァ-ヶー]{0,6}[ぁ-ん]{0,3}$/u` に合う場合だけ（＝仮定が向きの語に**直接かかる**）`null`。「が強まる」「が上昇す」「安が続く」は仮定、「しており次も」「が強まり波及する」「が鮮明となり波及する」「が継続し波及する」は言い切り。
+  - 新しいparser frameworkは入れていない（既存regexの範囲判定のみ）。
+
+### P2 watch-relation の拡張（正確な差分）
+- `WATCH_RELATION` に2形を追加：
+  - `^を(?:踏まえ|受け)て?、?(?:NOUN{1,12}(?:の|を|に|で|が|は|も)){0,3}WATCH_VERB` （「を受け、日本株の反応を見る」。従来は「踏まえ」のみ）
+  - `^の流れを?PLACEどう[^、。]*?か[^、。]*?WATCH_VERB`（「米国株高の流れをどう受け止めるかが焦点」）
+- `MOVE_LIST`（向きの語の直後の並列の読み飛ばし）を名詞の値動きだけに限定：`/^(?:(?:や|と|・|および|及び)[一-龠々ァ-ヶーA-Za-z0-9]{1,14}?(?:高|安|上昇|下落))+/u`
+- 他の条件（値・前日比なし、`REFERRED_MOVE`、日付が取引日かつ主題「10月2日は」、他市場に取られていない）はそのまま。「前夜」は免除条件にしていない。
+
+### P3
+- 未使用の `directionIn` を削除。`deno lint`（hard_fact_guards.ts / session_date_calibration_test.ts / h1_pr79_boundary_test.ts）：Checked 3 files、exit 0。lint suppressionなし。
+
+### Regressions
+- Must FAIL（すべてHard）：
+  1. `10月2日の米国株は下落しており次も続くかを見ます`（日付不一致＋向き逆転）
+  2–4. `…米国株高が強まり/鮮明となり/継続し 波及するかどうかを見ます`
+  5. 既存 assertion-before-watch（続き/確認され/鮮明となり/一段と強まり/継続し、読点なし形、米国市場の上昇の形）
+  - P2の否定形：`10月2日は、米国株高を受け、米国株高が続き、日本株を見る` / `…を受け、買いが先行し、日本株の反応を見る` / `…米国株高の流れが続き、日本株の反応を見る` / `…米国株高の流れが強まり、どう受け止めるかが焦点` / `10月2日は、前夜の米国株高が続き、日本株の反応を確認します` / `10月2日の前夜の米国株は上昇しました`
+  6–12. wrong-date値・前日比、10/1混在、stale、1306→TOPIX、向き/符号/絵文字、根拠の無い市場因果、未知ref：既存テストで不変
+- Must PASS（日付issueなし）：`10月2日は、前夜の米国株高を受け、日本株の反応を見る` / `10月2日は、米国株高の流れをどう受け止めるかが焦点` / `前日の米国株上昇を踏まえて、日本株の反応を確認する` / 既存10/2 watch文 / `米国株高が強まるかどうかを見る` / `米国株が上昇すれば、日本株の反応を見る` / `米国株安が続くかを見る`（向きも判定しない）/ 正しい日付の前営業日の値
+- six-placement P1 evidence：P1の4文を market_summary_ja、x_post.context_ja、x_post.closing_ja、app_story.summary_ja、app_story.japan_ja、observation claim の6か所それぞれに置き、`localAnalysisCheck(...).hard` に日付不一致（1は向き逆転も）が出ることを確認（test「P1: a move stated before a question or condition is still dated and directed, in all six placements」、H1「asserted move before a hypothetical tail」）。P2の3文は同じ6か所で日付issueなし。
+- 10/1 mixed-session：`9月30日は日経平均65,481.27（-0.60%）、1306は431.5（+1.43%）でした` ほか2文、Hardのまま（「日付と指標の不一致（日経平均は9月29日の値…）」）。
+
+### Full verification
+- session_date_calibration 14/14、h1_pr79_boundary 4/4、presentation_v2 22/22、causal_calibration 18/18、quality_calibration 9/9、h1_adversarial 13/13、content_guard 16/16、transport_retry 14/14
+- market-report-analysis full **131/131**、personalized-reports 128/128、X shared consumer 8/8、market-report-data-packet 42/42、`_shared` 361/361（`--no-check`）
+- `deno check --node-modules-dir=none`（market-report-analysis/index.ts・hard_fact_guards.ts・analysis_logic.ts・2テスト、personalized-reports/index.ts、x-test-post/shared_market_report_consumer_test.ts、market-report-data-packet/index.ts）：exit 0
+  - 参考：`x-test-post/index.ts` の check は既存の型エラー（x_oauth2_post / morning_greeting など、本PR未変更）で失敗。本変更をstashした状態でも同じく失敗することを確認。
+- `deno lint`（変更ファイル）exit 0、`git diff --check` exit 0
+- model呼び出し回数・prompt・model・packet契約：変更なし
+
+### changed_files（PR #79、9ce344b → f7083ba）
+- `supabase/functions/market-report-analysis/hard_fact_guards.ts`
+- `supabase/functions/market-report-analysis/session_date_calibration_test.ts`（P1/P2テスト4件追加）
+- `supabase/functions/market-report-analysis/h1_pr79_boundary_test.ts`（H1から取り込み）
+- `docs/market-report-shared-platform/DESIGN.md`（§15.3.1 にP1/P2を追記）
+
+### production mutation
+- **0**。deploy、invoke/retry、gate、cron、DB/RPC/migration、Auth/Vault/secrets、X操作、personalized-reports/x-test-post変更、ニュース取得変更：すべてなし。PR #77 は merged・本番未反映のまま。
+
+### remaining issues
+1. 「10月2日は、前夜の米国株高を受け、日本株の反応を見る」は日付Hard guardは通るが、`market_summary_ja`・`x_post.context_ja`・`x_post.closing_ja` 等に書くと、既存の因果ガード（PR #71、`CAUSAL_LINK` の「を受け、」＋効果側に「日本株」）で「根拠の無い因果の断定」としてHard。`x_post.watch_ja`・`app_story.watch_ja`・`next_watch_ja` では全体として通過（因果検査は過去形の文のみ対象）。TASKのP2は「session-date Hard guardを通る」なので因果ガードは変更していない。見る点の文で「〜を受け、…反応を見る」を因果から外すかはK2判断（変更するならCodex reviewの範囲も広がる）。prompt側は「〜を受けて」を理由として書かないよう既に指示している。
+2. 「10月2日は、米国株高が一段と強まるかどうかを見ます」のように、向きの語と仮定のあいだに漢字・かな・漢字・かなが続く仮定は、言い切りとして日付照合されHardになる（止める側に倒れる。実測で日付不一致1件）。DESIGN §15.3.1 に記載。
+3. 内容品質の既知事項（火山ニュース選定、内部語の漏れ、+0.04%を上昇と書く、確認できませんの反復）は本TASK範囲外で未着手。
+
+### Codex rereview の推奨
+- Hard Fact境界の変更なので、final head `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f` を focused Codex rereview（**Sol 高**）へ。重点：`GOVERNED_BY_QUESTION` の範囲（6字/3字の上限で言い切りを仮定として通す形が無いか）、`WATCH_RELATION` の「を受け」「の流れを…どう…か」の追加、`MOVE_LIST` の名詞限定、remaining issue 1 の扱い。
+- rereview PASS後の PR #77 + PR #79 合同deployは別TASKで。
+
+---
+
+# Previous completed G2 task — PR #79 watch-relation corrective
+
+# Claude Task 2 — CURRENT TASK
+
+- task_id: kabumori-pr79-session-date-watch-relation-corrective-20261002
+- owner: claude
+- slot: claude-2
+- status: review_required
+- next_owner: codex
+- priority: highest
+- recommended_model: Opus5.5（高）
+- purpose: PR #79 の日付/session Hard guard緩和を、後段にwatch語があるだけで誤った当日米国セッション主張まで通し得る境界から、prior-session move が実際にwatch対象として参照されている場合だけ通す狭い規則へ修正する。同じPR #79をamendする。source/testsのみ、deploy/mergeは禁止。
+
+## K2 finding
+
+Current PR #79 uses all of:
+- no metric value/change,
+- `use.referred`,
+- trading-date topic,
+- `WATCH_FRAME.test(sentence)`
+
+to skip the date mismatch.
+
+The last condition is sentence-wide. That means a later watch phrase can accidentally launder an earlier same-sentence assertion.
+
+Potential false-negative shapes:
+
+- `10月2日は、米国株高が続き、日本株の反応を確認します`
+- `10月2日は、米国株高が確認され、日本株の反応を確認します`
+- `10月2日は、米国株高が鮮明となり、日本株の反応に注目です`
+- `10月2日は、米国株高が一段と強まり、日本株の反応を見ます`
+
+These are not equivalent to:
+- `10月2日は、米国株高が日本株でどう表れるかを見ます`
+- `10月2日は、米国株高を踏まえ、日本株の反応を確認します`
+
+The first group can assert that the US move itself is occurring/continuing on 10/2. They must remain Hard if the packet only has the 10/1 US session.
+
+## Required design rule
+
+The exemption must prove that the direction/move is **syntactically/semantically part of the forward-looking watch relation**, not merely that:
+- the move is noun-like, and
+- some unrelated watch verb exists later in the same sentence.
+
+Prefer a narrow deterministic relation over a broad verb blacklist.
+
+Good approaches include a small set of supported watch relation shapes such as:
+- `<prior move> が ... どう ... か ... 見る/確認/注目`
+- `<prior move> の受け止め方 ... 確認/注目`
+- `<prior move> を踏まえ ... 確認/見る`
+- `<prior move> を受けた動きが続くか ...`
+- explicit `前夜の<move>`, `前営業日の<move>`, or the correct session date attached to the move
+
+Do not rely on a generic sentence-wide `確認します|注目|見る` match by itself.
+
+If a safer alternative is to require explicit prior-session markers for ambiguous shapes and clarify the generation prompt accordingly, that is acceptable **only if** it does not reintroduce routine retry churn. Explain the trade-off and test it.
+
+## Must PASS
+
+Keep all previously intended legitimate watch references:
+
+1. `10月2日は、米国株高や半導体株高が日本株でどう表れるかを見ます`
+2. `10月2日は、米国株高や半導体株高の受け止め方を確認する一日です`
+3. `東京市場との関係は確認できないため、10月2日は米国株高や半導体株高が日本株でどう表れるかを見ます`
+4. `10月2日は、米国株高を踏まえ、日本株の反応を確認します`
+5. `10月2日は、前夜の米国株高が日本株にどう波及するかではなく、実際の値動きを確認します`
+6. `10月2日は、米国市場の上昇を受けた動きが続くかを確認します`
+7. correct explicit-date forms.
+
+## Must FAIL — add these regressions
+
+In addition to every existing negative test, add:
+
+1. `10月2日は、米国株高が続き、日本株の反応を確認します`
+2. `10月2日は、米国株高が確認され、日本株の反応を確認します`
+3. `10月2日は、米国株高が鮮明となり、日本株の反応に注目です`
+4. `10月2日は、米国株高が一段と強まり、日本株の反応を見ます`
+5. `10月2日は、米国株高が継続し、日本株を見る一日です`
+6. `10月2日は、米国株高が続いています。日本株の反応を確認します`
+7. the same assertion-before-watch pattern with `米国市場の上昇` instead of `米国株高`.
+
+Also preserve:
+- `10月2日の米国株は上昇しました` FAIL
+- `10月2日は米国株高でした` FAIL
+- wrong-date numeric values FAIL
+- 10/1 mixed-session numeric bug FAIL
+- stale/current, 1306, polarity, causality, unknown-ref Hard guards unchanged.
+
+## Test strategy
+
+1. First add failing tests against current PR #79 head to prove the laundering gap.
+2. Apply the smallest deterministic correction.
+3. Re-run:
+   - session_date_calibration full suite
+   - presentation_v2
+   - causal_calibration
+   - quality_calibration
+   - h1_adversarial
+   - content_guard
+   - transport retry
+   - full market-report-analysis
+   - personalized 128+
+   - X shared consumer
+   - data-packet
+   - _shared
+   - deno check/lint
+   - git diff --check
+4. Existing PR #79 positive tests must remain green without weakening numeric/session protections.
+
+## PR / branch rule
+
+- amend **PR #79**, do not create a separate PR unless technically unavoidable.
+- record original head `a70dfdd23257c6361b60f1b9221f6029b0fccaf9` and final head.
+- fresh-check main overlap before push.
+- no merge in this TASK.
+
+## Production / rollout
+
+Forbidden:
+- deploy
+- manual invoke/retry
+- gate change
+- cron/DB/Auth/Vault/secret mutation
+- personalized-reports / x-test-post changes
+
+PR #77 quality calibration remains merged but production-unapplied. Keep bundling PR #77 + corrected PR #79 into one later market-report-analysis deploy.
+
+## Review routing
+
+This corrective still changes a Hard Fact boundary.
+
+At next K2:
+- if corrected source/tests pass, **focused Codex review is required before merge/deploy**.
+- H1/H2 are currently occupied. Do not overwrite them.
+- if neither H slot is free, leave PR #79 review-pending rather than bypassing the review.
+
+Recommended Codex reviewer when a slot frees: **Sol（高）**.
+
+## Completion report
+
+Include:
+- task_id/result
+- original/final PR #79 head
+- reproduced laundering counterexamples before fix
+- exact corrected watch-relation rule
+- all positive/negative results
+- 10/1 mixed-session result
+- full tests/check/lint/diff
+- changed_files
+- production mutation=0
+- recommendation for H1/H2 review
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+### Report — kabumori-pr79-session-date-watch-relation-corrective-20261002
+
+- task_id：`kabumori-pr79-session-date-watch-relation-corrective-20261002`
+- result：**source-readyのPASS候補**。PR #79を同じbranchで修正した（追加commit、force pushなし）。未merge、deployなし。
+- PR #79のhead：
+  - 修正前：`a70dfdd23257c6361b60f1b9221f6029b0fccaf9`
+  - 修正後：`9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`
+- fresh main：着手時 `06ca3522`。branchを切ったあと、mainに `market-report-analysis/**` と `_shared` の変更は無い（push前に確認）。PRはMERGEABLE。
+- worktree/branch：G2専用checkout、branch `g2-session-date-guard-calibration-20261002`。
+
+#### reproduced laundering counterexamples before fix（`a70dfdd` で再現）
+
+- 次の文は、修正前は**通っていた**（日付の不一致が出ない）。
+  - 「10月2日は、米国株高が続き、日本株の反応を確認します」
+  - 「10月2日は、米国株高が確認され、日本株の反応を確認します」
+  - 「10月2日は、米国株高が鮮明となり、日本株の反応に注目です」
+  - 「10月2日は、米国株高が一段と強まり、日本株の反応を見ます」
+  - 「10月2日は、米国株高が継続し、日本株を見る一日です」
+  - 「10月2日は、米国市場の上昇が続き、日本株の反応を確認します」
+  - 「10月2日は、米国市場の上昇が鮮明となり、日本株の反応に注目です」
+- 「10月2日は、米国株高が続いています。日本株の反応を確認します」は、文が分かれるので、修正前から不合格だった。
+- 原因：
+  - 条件4が `WATCH_FRAME.test(sentence)`（文全体のどこかに見る点の語があればよい）だった。
+  - 条件2（参照）は、向きの語の直後が「が」などの助詞かどうかだけを見ていた。
+  - そのため「米国株高**が**続き、…確認します」は、「が」で条件2を満たし、うしろの「確認します」で条件4を満たした。
+- 先にテストを追加し、`a70dfdd` のコードで失敗することを確認してから直した。
+
+#### exact corrected watch-relation rule
+
+条件1〜3は変更なし（値・前日比を書いていない／向きの語が名詞として参照されている／日付がレポートの取引日で文の主題）。
+
+**条件4を置き換えた**：値動きの語の**直後から**読んで、次のどれかの形であること（`WATCH_RELATION`）。並列（「米国株高**や半導体株高**が…」）は、読み飛ばしてから判定する。
+
+1. `が`（場所）`どう…か` ＋ 見る・確認する・注目
+   - 例：「米国株高が日本株でどう表れるかを見ます」
+2. `が`（場所）`続くか`／`<名詞>(する)かどうか` ＋ 見る・確認する・注目
+   - 例：「米国株高が日本株に波及するかどうかを見ます」
+3. `の受け止め方`／`の影響`／`の波及`／`への反応`（＋を・に・も・は）の**直後**に、見る・確認する・注目
+   - 例：「米国株高や半導体株高の受け止め方を確認する一日です」
+4. `を踏まえ(て)`、（名詞＋助詞を3つまで）＋ 見る・確認する
+   - 例：「米国株高を踏まえ、日本株の反応を確認します」
+5. `を受けた` 動き・流れ・買い・売り・反応・値動き・展開 ＋ が・は・も ＋ `続くか`／`どう…か` ＋ 見る・確認する
+   - 例：「米国市場の上昇を受けた動きが続くかを確認します」
+
+共通の制約：
+- 「場所」と、形4の名詞の部分に置けるのは、名詞を書く文字（漢字・カタカナ・英数字と「の・や・と・・」）＋助詞だけ。動詞はこの文字だけでは書けないので、「続き」「確認され」「鮮明となり」「強まり」「継続し」は、値動きと見る点のあいだに入れない。
+- 見る点の語は過去形でない形だけ：見ます／見る／見たい／見ていく／確認します／確認する／確認したい／注目／焦点／見極め。
+- 「文のどこかに見る点の語がある」だけでは、成立しない。
+
+明示の「前夜の」「前営業日の」を理由に外す規則は、**入れていない**。「前夜の米国株高が続き、…」も、今日続いているという言い切りを含みうるため。指定の文（「前夜の米国株高が日本株にどう波及するかではなく、…」）は、形1で合格する。
+
+#### all positive / negative results
+
+- **合格（指定の1〜7）**：
+  1. 「10月2日は、米国株高や半導体株高が日本株でどう表れるかを見ます」
+  2. 「10月2日は、米国株高や半導体株高の受け止め方を確認する一日です」
+  3. 「東京市場との関係は確認できないため、10月2日は米国株高や半導体株高が日本株でどう表れるかを見ます」
+  4. 「10月2日は、米国株高を踏まえ、日本株の反応を確認します」
+  5. 「10月2日は、前夜の米国株高が日本株にどう波及するかではなく、実際の値動きを確認します」
+  6. 「10月2日は、米国市場の上昇を受けた動きが続くかを確認します」
+  7. 正しい日付を明記した形（「10月2日は、10月1日の米国株高が…」、正しい日付の数値を並べた形、東京と米国をそれぞれの日付で書いた形）
+  - 追加で確認した合格の形：
+    - 「米国株の上昇が日本株でどう受け止められるかに注目です」
+    - 「米国株高が日本株に波及するかどうかを見ます」
+    - 「米国株高の影響を確認します」
+    - 「米国株高を踏まえて日本株の反応を見ます」
+  - 置き場所：要約、Xの背景・締め、アプリの `summary_ja`・`japan_ja`、claimのそれぞれで、日付の不一致が出ない。
+- **不合格（指定の1〜7。すべてHard）**：
+  1. 「…米国株高が続き、日本株の反応を確認します」
+  2. 「…米国株高が確認され、日本株の反応を確認します」
+  3. 「…米国株高が鮮明となり、日本株の反応に注目です」
+  4. 「…米国株高が一段と強まり、日本株の反応を見ます」
+  5. 「…米国株高が継続し、日本株を見る一日です」
+  6. 「…米国株高が続いています。日本株の反応を確認します」
+  7. 「米国市場の上昇」での同じ形（続き／確認され／鮮明となり／一段と強まり）
+  - どの欄（要約・X・アプリ・claim）に置いても不合格。
+- **追加で確認した不合格**（自分で探した形）：
+  - 言い切りのあとに、本物の問いが続く形：「米国株高が続き、日本株でどう表れるかを見ます」
+  - 読点の無い形：「米国株高が続き日本株でどう表れるかを見ます」「…が鮮明となり日本株で…」「…が強まり日本株に波及するかどうかを見ます」
+  - 「米国株高が進んだ東京市場でどう表れるかを見ます」
+  - 「米国株高を踏まえ、買いが先行し、日本株の反応を確認します」（読点なしも）
+  - 「米国株高を受けた買いが先行し、日本株の反応を確認します」
+  - 「米国株高の受け止め方が分かれました」「米国株高の流れが続き、…」「米国株高の影響が続き日本株の反応を確認します」
+- **これまでの不合格も、そのまま**：
+  - 「10月2日の米国株は上昇しました」「10月2日は米国株が上昇しました」「10月2日は米国株高でした」「10月2日は米国株高」「10月2日の米国市場は上昇」
+  - 「10月2日の米国株高が…を見ます」（日付が指標にかかる）
+  - 「10月2日は米国株が上昇し、日本株の反応を確認します」
+  - 「…米国株の上昇を確認しました」「…米国株高となり、…」「…米国株も上昇したことを確認します」「…米国株が上昇した流れを確認します」
+  - 「9月30日は、米国株高が…を見ます」
+  - 別の日付に付いた値・前日比（見る点の文に数値を入れた形を含む）
+  - 向きの逆転、古い値・現在、1306→TOPIX、絵文字、根拠の無い市場の因果、入力に無いref
+
+#### 10/1 mixed-session result
+
+- **不合格のまま**：
+  - 「9月30日は日経平均65,481.27（-0.60%）、1306は431.5（+1.43%）でした」
+  - 実際に配信された旧アプリの文
+  - 見る点の言い方に値を入れた「10月1日は、日経平均65,481.27からの動きを確認します」
+  - 指摘：`日付と指標の不一致（日経平均は9月29日の値、本文は9月30日）`
+- `localAnalysisCheck` の経路でも不合格。既存の `presentation_v2_test.ts` と `causal_calibration_test.ts` の同じ回帰も、変更なしで合格。
+
+#### full tests/check/lint/diff
+
+- `session_date_calibration_test.ts`：**10/10**（PR #79の最初の9件＋今回の1件。合格の形と不合格の形の文も追加）
+- market-report-analysis：**123/123**
+  - presentation_v2 22、causal_calibration 18、quality_calibration 9、h1_adversarial 13、content_guard 16、transport_retry 14 を含む。既存のテストは変更していない。
+- personalized-reports 128/128、x-test-post shared consumer 8/8、market-report-data-packet 42/42、`_shared` 361/361（`--no-check`）
+- `deno check`（runtimeの9ファイル＋テスト）：PASS
+- `deno lint`（変更の2ファイル）：問題なし
+- `git diff --check`：PASS
+
+#### changed_files（今回のcommit `9ce344b`。PR #79の対象ファイルは同じ3つ）
+
+- `supabase/functions/market-report-analysis/hard_fact_guards.ts`
+  - `WATCH_FRAME`（文全体の一致）を削除。
+  - `WATCH_VERB`、`MOVE_LIST`、`NOUN`、`PLACE`、`WATCH_RELATION` を追加。
+  - `directionUse` が、向きの語の終わりの位置を返すようにした。
+- `supabase/functions/market-report-analysis/session_date_calibration_test.ts`
+- `docs/market-report-shared-platform/DESIGN.md`（§15.3.1 の条件4を書き直し）
+- PRの説明文も、新しい条件に合わせて更新した。
+- 変えていないもの：`analysis_logic.ts`、prompt、`_shared/**`、personalized-reports、x-test-post、migration、呼び出し回数。
+
+#### production mutation
+
+- **0**。deploy、手動のinvoke・retry、gate・cron・DBの変更はしていない。
+
+#### remaining issues
+
+1. **PR #79より前からある挙動（今回は変更していない）**：
+   - 指標の節に「かどうか」「するか」「続くか」「すれば」「なら」などがあると、`HYPOTHETICAL` の規則で、その節は言い切りとして扱わない。向きも日付も照合しない。
+   - 例：「10月2日は、米国株高が強まり波及するかどうかを見ます」は、PR #79より前のmainでも、修正後でも通る。うしろに別の指標の言及（「日本株に」）があれば、節が区切られるので、今回の規則で止まる。
+   - これはPR #67・H1のreviewを経た既存の境界で、本TASKの差分ではない。締める必要があるかは、reviewで判断してほしい。
+2. 実際のモデルでは未確認。5つの形に当てはまらない正当な見る点の文は、これまで通りHardになる（安全側）。例：
+   - 「10月2日は、米国株高の流れを引き継げるかが焦点です」（「の流れ」は対象外）
+   - 「10月2日、米国株高が…」（日付の直後が読点だけ）
+   - 朝刊での頻度は、deploy後の自然なcycleで見る。再発が多ければ、形を足すか、promptで日付の書き方を示す（今回はpromptを変えていない）。
+3. 形の判定は、文字の種類と決まった語による近似。名詞を書く文字だけで言い切りを書く形（体言止めの連続など）は、想定の外。その場合は、LLMのFactが最後の検査になる。
+4. PR #77は、merge済みだが本番に未deploy。本PRとまとめてdeployする方針は変わらない。
+
+#### recommendation for H1/H2 review
+
+- **focusedなCodex reviewが必要**（指示どおり。Hardの検査の境界を変えるため）。H1・H2が空くまで、PR #79はreview待ちのままにする。G2からmerge・deployの提案はしない。
+- 推奨reviewer：**Sol（高）**。
+- 見てほしい点：
+  1. `WATCH_RELATION` の5つの形と `NOUN`・`PLACE` の文字の範囲で、「値動きが今日起きている・続いている」と読める文が通らないか。
+  2. `MOVE_LIST`（並列の読み飛ばし）が、言い切りを飛ばしていないか。
+  3. `REFERRED_MOVE` と `TOPIC_AFTER_DATE`（最初のcommitの部分）の境界。
+  4. remaining issuesの1（`HYPOTHETICAL` の既存の挙動）を、この機会に締めるべきか。
+- review後：PR #77と本PRをまとめて、`market-report-analysis` を1回だけ単独deployする（gate OFF、byte照合）。そのあと、朝刊の自然なcycleで、`hard_rejections` の内訳と、1回目で完成するかを確認する。
+
+---
+
+# Previous completed G2 task — PR #79 initial session-date calibration
+
+# Claude Task 2 — CURRENT TASK
+
+- task_id: kabumori-shared-report-v2-morning-session-date-guard-calibration-20261002
+- owner: claude
+- slot: claude-2
+- status: done
+- next_owner: none
+- priority: highest
+- recommended_model: Opus5.5（高）
+- purpose: 2026-10-02朝刊の1回目を落とした「今日の日付 + 前夜の米国株高を今日の注目材料として参照する文」を、米国市場の当日実績と誤解してHard BLOCKする日付guardの誤検出を狭く修正する。本物の別日数値混同は絶対に通さない。source + tests + PRのみ。deploy/gate/manual cycleは禁止。
+
+## Accepted baseline
+
+- PR #71 causal calibration merged and production v20にdeploy済み。
+- PR #77 quality rewrite calibration merged as `08a9f7101f2655d51ee3d7d6d5af3705ef5fa4db`, **まだproduction未deploy**。
+- app_enabled=false / x_enabled=false.
+- 10/2 morning final packet completed safely on scheduled retry.
+- this task may edit Hard Fact date/session logic, so it is higher risk than PR #77.
+- H1/H2 are currently owned by other tasks; do not overwrite them. Review routing is decided at K2 after fresh slot check.
+
+## Exact live regression — 2026-10-02 07:55 morning
+
+The first natural analysis run was rejected with:
+
+`日付と指標の不一致（NYダウ・S&P500・ナスダック総合は10月1日の値、本文は10月2日）`
+
+Observed rejected sentence shapes included:
+
+- `10月2日は、米国株高や半導体株高が日本株でどう表れるかを見ます`
+- `10月2日は、米国株高や半導体株高の受け止め方を確認する一日です`
+- `東京市場との関係は確認できないため、10月2日は米国株高や半導体株高が日本株でどう表れるかを見ます`
+
+Meaning:
+- `10月2日` dates today's Japanese-market watch/setup.
+- `米国株高 / 半導体株高` refers to the already-observed 10/1 US session.
+- the sentence does **not** claim that US stocks rose on 10/2.
+
+Current guard attaches the sentence-leading trading date to the later US-market mention whenever a direction word is present, even without a numeric value/session assertion.
+
+This is a delivery-harming false positive.
+
+## Product rule
+
+Hard date/session blocking exists to stop objective lies, especially:
+- wrong date attached to a concrete value/change,
+- wrong date attached to a clear completed-session market statement.
+
+It must **not** block a forward-looking sentence merely because today's date and yesterday's market move coexist in one sentence.
+
+### Must PASS
+
+At minimum:
+
+1. `10月2日は、米国株高や半導体株高が日本株でどう表れるかを見ます`
+2. `10月2日は、米国株高や半導体株高の受け止め方を確認する一日です`
+3. `10月2日は、米国株高を踏まえ、日本株の反応を確認します`
+4. `10月2日は、前夜の米国株高が日本株にどう波及するかではなく、実際の値動きを確認します`
+5. same semantics inside market_summary / X context / X closing / App prose, not only dedicated watch fields
+6. explicit correct form: `10月2日は、10月1日の米国株高が日本株でどう表れるかを見ます`
+
+These sentences may still be checked by unsupported-causality logic where appropriate. This task only removes the **wrong date/session attribution**.
+
+### Must FAIL
+
+Keep strict:
+
+1. `10月2日の米国株は上昇しました` when the packet only has the 10/1 US session.
+2. `10月2日は米国株が上昇しました` / `10月2日は米国株高でした`.
+3. `10月2日のNYダウは50,926.56でした` when that value is for 10/1.
+4. `10月2日はNYダウ50,926.56、S&P500 7,666.45でした`.
+5. exact 10/1 legacy mixed-session regression:
+   - `9月30日は日経平均65,481.27（-0.60%）、1306は431.5（+1.43%）でした`
+6. any metric value/change attached to the wrong session date.
+7. stale metric presented as current/latest.
+8. 1306 presented as TOPIX index.
+9. direction/sign/emoji inversion.
+10. fabricated/unknown ref and unsupported market causality remain unchanged in their own guards.
+
+## Implementation guidance
+
+Audit `metricFactIssues` in `hard_fact_guards.ts`.
+
+Do not solve this by broadly disabling date checks whenever no number is present.
+
+A direction-only statement can still make a false dated factual claim:
+- `10月2日の米国株は上昇しました`
+must remain Hard.
+
+Instead distinguish **completed-session assertion** from **today's forward-looking/watch frame**.
+
+Candidate signals may include:
+- sentence/metric clause is interrogative, conditional, or forward-looking: `見る`, `見ます`, `確認します`, `注目`, `どう表れるか`, `受け止め方`, `続くか`, `反応` etc.
+- the written date is the report trading date and grammatically scopes the watch/action rather than the prior-session metric fact.
+- past/completed assertions such as `上昇しました`, `上昇でした`, `米国株高でした`, concrete value/change, or explicit `10月2日の米国株` must stay strict.
+
+Prefer a small deterministic predicate with explicit tests over a broad NLP heuristic.
+
+Do not move factual prose wholesale into the `forward` bucket merely to bypass guards.
+
+## Guard invariants
+
+Do not weaken:
+- numeric metric/value matching
+- value-vs-change matching
+- printed sign validation
+- session-date matching for concrete numeric facts
+- stale/current guard
+- direction polarity
+- 1306 identity
+- PR #71 causal calibration
+- PR #77 quality behavior
+- report schema / model / call budget
+
+No new LLM call.
+
+## Exact regression tests
+
+Use the 10/2 morning data fixture already merged by PR #77 where practical.
+
+Add focused tests covering:
+- all PASS phrases above
+- all FAIL phrases above
+- same phrase placed in multiple factual presentation fields
+- correct prior-session explicit date remains PASS
+- trading-date + completed US-session assertion remains FAIL
+- forward-looking wording with a concrete wrong-date numeric US value remains FAIL
+- sentence with today's Japan date and previous-US move plus a **separate** correct numeric US date remains PASS
+- mixed Tokyo/US clauses where each has its own date remain PASS
+- 10/1 mixed-session numeric regression remains FAIL
+
+Also rerun:
+- metric/hard-fact full tests
+- presentation_v2
+- causal_calibration
+- quality_calibration
+- H1 adversarial
+- content_guard
+- market-report-analysis full suite
+- personalized/X/data-packet/_shared relevant regressions
+- deno check
+- deno lint
+- git diff --check
+
+## Scope / safety
+
+Allowed:
+- `supabase/functions/market-report-analysis/hard_fact_guards.ts`
+- focused market-report-analysis tests/fixtures
+- tiny analysis_logic prompt clarification only if strictly necessary and justified
+- DESIGN documentation
+
+Forbidden:
+- production deploy
+- manual invoke/retry
+- app/x gate change
+- DB/schema/RPC/migration
+- cron/Auth/Vault/secrets
+- personalized-reports
+- x-test-post
+- news acquisition
+- native App UI
+- additional model calls
+
+## Review requirement at K2
+
+Because this changes a Hard Fact boundary, K2 must reassess independent Codex review.
+
+- Do not overwrite H1/H2 if still occupied.
+- If the delta is extremely narrow and exhaustive adversarial tests prove the strict negative cases, ChatGPT may still choose a focused review before production deploy.
+- No production deploy is authorized by this TASK itself.
+
+## Completion conditions
+
+PASS candidate only if:
+- exact 10/2 false-positive phrases pass
+- clear 10/2-US-session false assertions still fail
+- concrete wrong-date values always fail
+- exact 10/1 mixed-session regression still fails
+- stale/current/1306/direction/causal/ref protections remain intact
+- PR #77 quality behavior remains intact
+- model-call budget unchanged
+- production mutation=0
+
+## Required Report
+
+- task_id/result
+- fresh main/worktree
+- exact root cause
+- exact date-scope rule chosen
+- why false dated completed-session statements still fail
+- exact 10/2 positive regressions
+- negative/adversarial regressions
+- 10/1 mixed-session result
+- full tests/check/lint/diff
+- changed_files
+- PR/head SHA
+- production mutation=0
+- remaining issues
+- recommendation: Codex review vs merge, then combined deploy of PR #77 + this fix
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+### Report — kabumori-shared-report-v2-morning-session-date-guard-calibration-20261002
+
+- task_id：`kabumori-shared-report-v2-morning-session-date-guard-calibration-20261002`
+- result：**source-readyのPASS候補**。PR #79（未merge、deployなし）。
+  - 10/2朝刊の1回目を落とした文は、合格するようになった。
+  - 「10月2日の米国株は上昇しました」のような、セッションが動いたという言い切りと、値・前日比を別の日付で書く文は、不合格のまま。
+  - 10/1の別日の値の混同も、不合格のまま。
+- fresh main SHA：着手時 `c4da29a2`。作業branchは `85b40b46`（in_progressの記録commit）の上。PR #77のmerge `08a9f71` を含む。
+- worktree/branch：G2専用checkout `/Users/yuya/Developer/kabumori-g2-market-report-reliability`、branch `g2-session-date-guard-calibration-20261002`。
+- 所有の確認：open PR（#78、#76、#41、#33ほか）とほかのslotに、`market-report-analysis/**` を扱うものは無い。
+
+#### exact root cause
+
+- `metricFactIssues` は、指標（または市場を指す語）の言及ごとに、次のどちらかがあれば日付の照合を行う：その指標の数値が書かれている／向きの語がある。
+- 日付は「言及の直前にある、いちばん近い日付」を使う。
+- 「10月2日は、米国株高や半導体株高が日本株でどう表れるかを見ます」では：
+  - 「米国株」の直後の「高」が向きの語（別名＋高・安）として読まれ、照合の対象になった。
+  - 直前の日付は文頭の「10月2日」。
+  - 米国3指数のセッションは10月1日なので、不一致としてHardになった。
+- 実際の文の意味：「10月2日」は今日の見る点の日付で、「米国株高」はすでに分かっている10月1日のセッションを**名詞として参照**している。米国株が10月2日に動いたとは言っていない。
+- 検査が区別していなかったのは、次の2つ：
+  - 「セッションが動いた」という言い切り
+  - すでに起きた値動きへの参照
+- これらの文は、「見る点」の欄（`watch_ja` など）では通っていた。要約、Xの背景・締め、アプリの本文などの「事実を述べる欄」に書かれたときだけ落ちていた。
+
+#### exact date-scope rule chosen
+
+日付の照合から外すのは、次を**すべて**満たす場合だけ（`watchFrame`）。
+
+1. その指標の値・前日比を書いていない（`!statesValue`）。
+2. 向きの語が、名詞として参照されている（`REFERRED_MOVE`）。
+   - 向きの語の直後が、が／を／の／や／へ／は／も／・／など／と／に／で、のいずれか。
+   - 「となり」「になり」「でした」「です」は含めない。
+   - 例：「米国株高**が**…」「米国株高**を**踏まえ」「上昇**の**受け止め方」。
+   - 参照ではないもの：「上昇しました」「上昇し、」「上昇した」「米国株高でした」「米国株高となり」、文末の「米国株高」「上昇」（体言止め）。
+3. 日付が、文の主題になっている、レポートの取引日である。
+   - 日付は言及より前にあり、その指標の節の中の日付ではない。
+   - 日付がレポートの `tradingDate` と同じ。
+   - 日付の直後が「は」または「には」（`TOPIC_AFTER_DATE`）。「10月2日**の**米国株」のように指標にかかる形は対象外。
+4. 文が見る点を述べている（`WATCH_FRAME`）。
+   - 見ます／見る／見たい／見ていく／確認します／確認する／確認したい／注目／焦点／見極め／どう…か／かどうか／続くか。
+   - 過去形の「確認しました」は含まない。
+
+補足：
+- 「数値が無ければ日付を見ない」という広い緩和はしていない。
+- 事実を述べる欄を、まとめて「見る点」の扱いに移すこともしていない。
+- 向きの逆転の検査は、この場合もそのまま行う（「10月2日は、米国株安が…を見ます」は、向きの逆転でHard）。
+- 追加のLLM呼び出しは無い。promptは変えていない。
+
+#### why false dated completed-session statements still fail
+
+- **言い切りの形**は、条件2を満たさない。
+  - 「10月2日の米国株は上昇しました」「10月2日は米国株が上昇しました」：「上昇」の直後が「しました」。
+  - 「10月2日は米国株高でした」：直後が「でした」。
+  - 「10月2日は米国株高」「10月2日の米国市場は上昇」：直後が文末。
+  - 「10月2日は、米国株高となり、…」：直後が「とな」。
+  - 「10月2日は米国株が上昇し、日本株の反応を確認します」：直後が「し、」。うしろに見る点の述語があっても、不合格。
+  - 「10月2日は、米国株も上昇したことを確認します」「米国株が上昇した流れを確認します」：直後が「した」。
+- **日付が指標にかかる形**は、条件3を満たさない。
+  - 「10月2日の米国株高が日本株でどう表れるかを見ます」：日付の直後が「の」。
+- **見る点の文ではないもの**は、条件4を満たさない。
+  - 「10月2日は、米国株高が日本株を押し上げました」
+  - 「10月2日は、米国株の上昇を確認しました」
+- **取引日ではない日付**は、条件3を満たさない。
+  - 「9月30日は、米国株高が…を見ます」
+- **値・前日比を書いた文**は、条件1を満たさない。見る点の文でも不合格。
+  - 「10月2日は、NYダウ50,926.56の水準が日本株でどう表れるかを見ます」
+  - 「10月2日は、S&P500の+0.19%が…を見ます」
+  - 「10月2日は、日経平均68,956.72からの動きを確認します」
+
+#### exact 10/2 positive regressions（すべて合格）
+
+- 07:55に不合格になった3つの形：
+  - 「10月2日は、米国株高や半導体株高が日本株でどう表れるかを見ます」
+  - 「10月2日は、米国株高や半導体株高の受け止め方を確認する一日です」
+  - 「東京市場との関係は確認できないため、10月2日は米国株高や半導体株高が日本株でどう表れるかを見ます」
+- 指示書の追加の形：
+  - 「10月2日は、米国株高を踏まえ、日本株の反応を確認します」
+  - 「10月2日は、前夜の米国株高が日本株にどう波及するかではなく、実際の値動きを確認します」
+- 別の言い方：
+  - 「10月2日は、米国株の上昇が日本株でどう受け止められるかに注目です」
+  - 「10月2日は、米国市場の上昇を受けた動きが続くかを確認します」
+- 置き場所：要約（`market_summary_ja`）、Xの背景、Xの締め、アプリの `summary_ja`・`japan_ja`、observationのclaimのそれぞれに置いて、日付の不一致が出ないことを確認した（10/2に配信されたpacketを土台に使用）。
+- 日付を正しく書いた形（修正前から合格）：
+  - 「10月2日は、10月1日の米国株高が日本株でどう表れるかを見ます」
+  - 同じ文に、正しい日付の米国の数値を並べた形
+  - 東京と米国を、それぞれの日付で書いた形
+- 生成の流れの再現：07:55の形の下書きは、1回目の生成でFactへ進み、配信される（calls 2、`hard_rejections=[]`）。
+
+#### negative / adversarial regressions（すべてHardのまま）
+
+- 10/2の米国セッションの言い切り：上の節の各文。要約・X・アプリ・claimのどの欄に置いても不合格。
+- 別の日付に付いた値・前日比：
+  - 「10月2日のNYダウは50,926.56でした」
+  - 「10月2日はNYダウ50,926.56、S&P500 7,666.45でした」
+  - 「10月2日の日経平均は68,956.72（前日比+3.30%）でした」
+  - 見る点の文に数値を入れた形
+- ほかのHard検査（10/2に配信された下書きを変異させて確認）：
+  - 向きの逆転（参照の形の「米国株安が…を見ます」を含む）
+  - 古い値を日付なしで書く／現在の値として書く
+  - 1306→TOPIX
+  - 絵文字の向き
+  - 根拠の無い市場の因果（「米国株高を受けて東京市場も上昇しました」）
+  - 入力に無いref
+- 修正前のコードでも、これらはすべて不合格だった（緩んだものは無い）。
+
+#### 10/1 mixed-session result
+
+- fixture：取引日10/1、日経平均＝9/29のセッション（65,481.27、−0.60%、stale）、1306＝9/30のセッション。
+- **不合格のまま**：
+  - 「9月30日は日経平均65,481.27（-0.60%）、1306は431.5（+1.43%）でした」
+  - 実際に配信された旧アプリの文（「9月30日（水）は日経平均が65,481.27で-0.60%、…」）
+  - 見る点の言い方に値を入れた「10月1日は、日経平均65,481.27からの動きを確認します」
+  - 指摘：`日付と指標の不一致（日経平均は9月29日の値、本文は9月30日）`
+- `localAnalysisCheck` の経路でも不合格。既存の `presentation_v2_test.ts` と `causal_calibration_test.ts` の同じ回帰も、変更なしで合格。
+
+#### full tests/check/lint/diff
+
+- 新規 `session_date_calibration_test.ts`：**9/9**
+  - 修正前：通すべき4件がFAILED。止めるべき5件は、修正前も後もPASS（＝不合格のまま）。
+- market-report-analysis：**122/122**
+  - presentation_v2 22、causal_calibration 18、quality_calibration 9、h1_adversarial 13、content_guard 16、transport_retry 14 を含む。既存のテストは変更していない。
+- personalized-reports 128/128、x-test-post shared consumer 8/8、market-report-data-packet 42/42、`_shared` 361/361（`--no-check`）
+- `deno check`（runtimeの9ファイル＋新規テスト）：PASS
+- `deno lint`（変更・新規の2ファイル）：問題なし
+- `git diff --check`：PASS
+
+#### changed_files（PR #79、3ファイル）
+
+- `supabase/functions/market-report-analysis/hard_fact_guards.ts`
+  - `REFERRED_MOVE`、`WATCH_FRAME`、`TOPIC_AFTER_DATE` の追加
+  - `directionUse` / `directionWord`（向きの語の位置を返す形に分けた。`directionIn` の結果は同じ）
+  - `metricFactIssues` の日付の照合に、`watchFrame` の条件を追加
+- `supabase/functions/market-report-analysis/session_date_calibration_test.ts`（新規）
+- `docs/market-report-shared-platform/DESIGN.md`（§15.3.1 を追記）
+- 変えていないもの：`analysis_logic.ts`（prompt、因果、質の判定）、`_shared/**`、handler、transport retry、personalized-reports、x-test-post、migration。
+
+#### PR / head SHA
+
+- PR：https://github.com/anohi-memories/kabumori/pull/79
+- head：`a70dfdd23257c6361b60f1b9221f6029b0fccaf9`
+- model-call budget：変更なし（`MAX_GENERATIONS=2`。判定はコードだけ）。
+
+#### production mutation
+
+- **0**。行ったのは、read-onlyのSELECT（10/2大引けのcycleの状態の確認）だけ。deploy、手動のinvoke、gate・cron・DBの変更はしていない。
+
+#### 参考：10/2大引けの自然なcycle（read-only、本TASKの作業中に確認）
+
+- 本番は v20（PR #71まで。PR #77は未deploy）。
+- **1回目（16:20）で完成**：`report_attempt_count=1`、packet `bc7ca780…`、Fact passed。v2の大引けがliveで完成した最初の回。
+- diagnostics：`generation_attempts=2`、`hard_rejections=local`、`quality_rewrite=true`、`delivered_generation=1`、`quality_warnings=APP_STORY_SHORTER_THAN_TARGET:835`、calls 3、`cost_usd=0.009795`、transport retry 0。
+- 読み取れること：1回目の生成がFactまで合格 → 長さ835字のための質の書き直し → 書き直しはローカル検査で不合格 → 元の下書きを配信。PR #77をdeployすれば、この書き直しは発生しない（835は700〜899の帯）。
+- 日付の誤検出は、この回では出ていない。gateはOFF/OFF。
+
+#### remaining issues
+
+1. **実際のモデルでは未確認**。見る点の文の言い方は多様で、今回の条件に当てはまらない形は、これまで通りHardになる（安全側）。例：
+   - 「10月2日は、米国株が上昇した流れを確認します」（「上昇した」は言い切りの扱い）
+   - 「10月2日、米国株高が…」（日付の直後が読点だけ）
+   - 朝刊での頻度は、deploy後の自然なcycleで見る。
+2. 見る点の述語（`WATCH_FRAME`）と参照の助詞（`REFERRED_MOVE`）は、語のリストによる近似。4条件をすべて満たすのに実際は言い切りである文は、想定していない。そうした文があれば、LLMのFactが最後の検査になる。
+3. 質の書き直しがローカル検査で落ちた理由は、配信に成功したrunでは保存されない（10/2の朝刊・大引けとも）。書き直しが毎回落ちているなら、その原因は別途の調査対象。PR #77のdeploy後は、書き直し自体が減る。
+4. PR #77（質の書き直しの較正）は、merge済みだが本番に未deploy。
+5. 内容の質（確認できない旨の繰り返し、日本株との関わりが薄い地政学ニュース、ほぼ横ばいを「上昇」と書く）は、範囲外のまま。
+
+#### recommendation: Codex review vs merge, then combined deploy of PR #77 + this fix
+
+- **Codex review**：判断はK2に委ねる。材料：
+  - Hardの検査の境界を変える変更である。
+  - 差分は `metricFactIssues` の日付の照合の1条件だけ（3ファイル。既存テストの変更なし）。
+  - 4つの条件をすべて満たす場合だけ外す形で、止めるべき例は修正前後で同じ結果。
+  - G2の見立て：focusedなreviewを1回入れる価値はある。確認してほしい点は、`REFERRED_MOVE` と `WATCH_FRAME` の語のリストに、言い切りを通してしまう形が無いか。
+  - gateがOFFの間は利用者に出ないため、「先にdeployして自然なcycleで観察し、reviewはconsumerの有効化の前に行う」という順でも安全側。
+- **deploy**：merge後、PR #77とまとめて、`market-report-analysis` を1回だけ単独deployする（gate OFF、これまでと同じ手順とbyte照合）。
+  - 効果：朝刊の誤検出（本PR）と、不要な書き直し（PR #77）の両方が、次の自然なcycleから反映される。
+- **観察**：deploy後の朝刊で、次を確認する。
+  - 1回目で完成するか。
+  - `hard_rejections` の内訳（日付の不一致が再発しないか）。
+  - `quality_rewrite=false` になるか、calls・cost。
+
+---
+
+# Previous completed G2 task — quality rewrite calibration
+
+# Claude Task 2 — CURRENT TASK
+
+- task_id: kabumori-shared-report-v2-quality-rewrite-calibration-20261002
+- owner: claude
+- slot: claude-2
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: 10/2朝刊の最初のlive Presentation v2で確認した、誤ったニュース優先度WARNと軽微な長さ不足による不要なquality rewriteを修正する。Hard Fact / Fact / transport / packet契約は変更しない。source + tests + PRのみ。
@@ -5634,4 +7992,146 @@ K2 decision:
 - no new Hard-fact source change is justified from this sample.
 - next fix should target **quality-warning/rewrite calibration only**, so stylistic/near-target issues do not cause unnecessary model rewrites.
 - no Codex review required for that narrow quality-only change unless it touches Hard Fact behavior.
+
+
+
+## Final K2 — PR #77 quality calibration
+
+- verdict: **PASS / merged**.
+- accepted PR: #77
+- accepted head: `7174179c17cdc89b840fd923ad7a2d706f1a0f91`
+- fresh no-race comparison before merge found no overlap between main-side changes and PR #77 files; PR was mergeable.
+- merge/main SHA: `08a9f7101f2655d51ee3d7d6d5af3705ef5fa4db`.
+- accepted behavior:
+  - broad-first/company-last X news no longer raises the false priority warning
+  - genuinely company-first/company-only-with-broad-input cases still WARN
+  - 700–899 App story remains telemetry-only and does not spend a rewrite
+  - <700 may still request one bounded rewrite
+  - safe-original fallback unchanged
+  - Hard Fact / causal / ref / date / stale / 1306 behavior was not changed by PR #77
+- reported verification accepted: quality calibration 9/9; market-report-analysis 113/113; personalized 128/128; X shared 8/8; data-packet 42/42; _shared 361/361; check/lint/diff PASS.
+- model-call ceiling unchanged.
+- production mutation from this source task/K2: GitHub merge only; no Edge deploy/gate/manual cycle.
+- PR #77 will **not** be deployed separately. It will be bundled into the next accepted market-report-analysis deploy after the morning session-date false-positive guard is fixed, to avoid unnecessary deployment churn.
+- no Codex review was added for PR #77 because it is quality-only and Hard behavior is unchanged.
+
+
+
+## Final K2 — PR #79 changes required
+
+Verdict: **CHANGES REQUIRED before Codex review / merge**.
+
+Accepted positives:
+- exact 10/2 morning false-positive phrases now pass.
+- concrete wrong-date values, completed-session assertions, 10/1 mixed-session regression, stale/current, 1306, polarity, causality and unknown refs remain covered by reported tests.
+- PR #79 head `a70dfdd23257c6361b60f1b9221f6029b0fccaf9` is open/mergeable.
+- fresh main comparison found no overlap with the three PR #79 files.
+- reported verification: session-date 9/9; market-report-analysis 122/122; personalized 128/128; X shared 8/8; data-packet 42/42; _shared 361/361; check/lint/diff PASS.
+- production mutation=0.
+
+New K2 blocker:
+- the relaxation is still too broad because `WATCH_FRAME` is tested anywhere in the sentence while `REFERRED_MOVE` only proves that the direction word is followed by a particle.
+- this can suppress the date/session check for a sentence that first makes a completed/current-session assertion and only later contains a watch verb.
+- adversarial examples that the current PR logic can plausibly let through:
+  - `10月2日は、米国株高が続き、日本株の反応を確認します`
+  - `10月2日は、米国株高が確認され、日本株の反応を確認します`
+  - `10月2日は、米国株高が鮮明となり、日本株の反応に注目です`
+- in these sentences, `10月2日` can genuinely be read as dating the US move. They must not bypass the session-date Hard guard merely because a later phrase says `確認します` or `注目です`.
+
+Decision:
+- do not merge PR #79 yet.
+- do not deploy PR #77/#79 yet.
+- tighten the exemption so the **watch relation itself** governs the referred prior-session move, rather than accepting any sentence that contains a watch word somewhere later.
+- H1/H2 are both currently allocated to other reviews; do not overwrite them.
+- after the correction, K2 should run a focused Codex review before production deploy because this is a Hard Fact boundary.
+
+
+
+## Final K2 — corrected PR #79 source candidate
+
+Verdict: **PASS to focused Codex review; MERGE / DEPLOY HOLD**.
+
+Accepted source candidate:
+- PR #79 final head: `9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`
+- PR remains open / mergeable.
+- current PR scope remains 3 files.
+- fresh main comparison at K2 found no overlap with PR #79 files.
+- production mutation=0.
+
+Accepted behavior:
+- the original 10/2 legitimate watch references still pass.
+- the K2-found laundering shapes such as `10月2日は、米国株高が続き、日本株の反応を確認します` now fail Hard.
+- assertion-before-watch variants, no-comma variants, and equivalent `米国市場の上昇` forms are covered.
+- concrete wrong-date values, explicit completed-session assertions, 10/1 mixed-session bug, stale/current, 1306, polarity, unsupported market causality and unknown refs remain Hard.
+- model-call budget is unchanged.
+
+Accepted verification reported by G2:
+- session_date_calibration 10/10
+- market-report-analysis 123/123
+- personalized-reports 128/128
+- X shared consumer 8/8
+- market-report-data-packet 42/42
+- _shared 361/361
+- deno check/lint/diff PASS
+
+Review gate:
+- a focused Codex review is still required because PR #79 changes a Hard Fact boundary.
+- H1 and H2 are both currently allocated to unrelated X-app reviews and must not be overwritten.
+- therefore PR #79 stays review-pending. No merge and no production deploy are authorized.
+- recommended reviewer model when a Codex slot becomes genuinely free: **Sol（高）**.
+- review should explicitly inspect:
+  - WATCH_RELATION / MOVE_LIST / NOUN / PLACE for over-permission,
+  - REFERRED_MOVE / TOPIC_AFTER_DATE boundary,
+  - the pre-existing HYPOTHETICAL behavior that can skip direction/date checks for clauses containing `かどうか` / `続くか`,
+  - all positive and adversarial regressions.
+
+Rollout after review, not before:
+- if Codex accepts the corrected Hard boundary, merge PR #79,
+- then deploy merged PR #77 + PR #79 together in one `market-report-analysis` deploy with app/x gates OFF,
+- then observe the next natural morning cycle read-only.
+
+
+
+## Final K2 — PR #79 corrected head to Codex rereview
+
+- verdict: **PASS to focused Codex rereview; merge/deploy HOLD**.
+- corrected PR #79 head: `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`.
+- PR remains open / mergeable.
+- fresh K2 comparison: current main `95fcb391f47296ebf5a7d880a03b834e430b1c6a`; overlap with PR #79 files = 0.
+- G2 reports prior H1 findings addressed:
+  - P1 hypothetical-tail bypass closed with a scoped `GOVERNED_BY_QUESTION` rule;
+  - genuine hypotheses remain non-factual;
+  - P2 ordinary prior-night watch variants now pass the session-date guard;
+  - P3 changed-file lint is clean;
+  - wrong-date numeric/session, 10/1 mixed-session, stale/current, 1306, polarity, unsupported causality, unknown-ref protections remain Hard.
+- reported verification accepted for routing:
+  - session_date_calibration 14/14
+  - h1_pr79_boundary 4/4
+  - market-report-analysis 131/131
+  - personalized-reports 128/128
+  - X shared consumer 8/8
+  - market-report-data-packet 42/42
+  - _shared 361/361
+  - deno check / changed-file lint / diff PASS
+- production mutation=0.
+- H1 is genuinely free and has been assigned `kabumori-pr79-hard-guard-rereview-20261003`.
+- recommended Codex model: **Sol（高）**.
+- rereview must also decide whether the separate causal guard still creates a delivery false-positive for `前夜の米国株高を受け、日本株の反応を見る` in factual presentation fields.
+- no merge/deploy until C1 accepts the rereview.
+
+
+
+## Final K2 — combined PR77+PR79 production deploy
+
+- verdict: **PASS**.
+- production `market-report-analysis` is now v21, verify_jwt=false, ezbr `fe5c1836cdeddabdb1300668a5f75ac92d3570872a1b1eb110798195991fa40c`.
+- independent ChatGPT read-back confirms v21 is ACTIVE and source includes the accepted PR #77/PR #79 runtime.
+- app_enabled=false / x_enabled=false remain unchanged.
+- all 8 relevant cron jobs remain active with the expected schedules and command hashes.
+- G2 reported exact deployed-source byte match against fresh main for the full 11-file import graph.
+- only `market-report-analysis` changed in the G2 before/after Edge Function metadata comparison.
+- no manual market-report invoke/retry, no consumer activation, no DB/Auth/Vault/X mutation.
+- accepted test evidence: analysis 136/136, personalized 128/128, X shared 8/8, data-packet 42/42, _shared runtime 361/361; target check/lint/diff PASS.
+- rollback source is production v20 and was captured/read-back; rollback not needed.
+- next step is read-only observation of the next natural 2026-10-05 morning cycle. No weekend/manual run.
 

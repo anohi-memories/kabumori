@@ -1,0 +1,309 @@
+{
+  "content_hash": "09d0c3efdf9f09c83f31b225916a81043198f4e35d775ef5a33d3118be963ddf",
+  "id": "7e11eb93-4ba4-4505-a965-8dac89d15158",
+  "payload": {
+    "app_story": {
+      "caution_ja": "日本国債2年利回りと日本国債10年利回りは8月31日時点の値です。業種別の騰落と経済指標の予定は確認できません。",
+      "cross_asset_ja": "10月1日のドル円は157.98円でした。9月30日の米国2年債利回りは4.88%、米国10年債利回りは5.29%。10月1日のフィラデルフィア半導体株指数（SOX）は上昇し、9月29日のWTI原油は96.16ドル、ブレント原油は113.96ドルでした。",
+      "japan_ja": "10月1日の東京市場では、日経平均が68,956.72（前日比+3.30%）、TOPIX連動ETF（1306）が434.4円（前日比+0.67%）でした。10月2日は、両指標の方向や米国株との組み合わせを確認します。",
+      "news_ja": "市場全体では、イエメンで政府軍とフーシ派の戦闘が続くこと、ロシア側がカリーニングラードへの直接攻撃に警告したこと、エチオピアの首都で爆発があったことが報じられました。東京市場との関係は確認できません。個別ではニデックが過年度決算を修正しました。",
+      "overseas_ja": "10月1日の米国市場では、NYダウが50,926.56（前日比+0.04%）、S&P500が7,666.45（前日比+0.19%）、ナスダック総合が26,871.60（前日比+0.04%）と、そろって上昇しました。",
+      "strong_ja": "半導体株は、10月1日のフィラデルフィア半導体株指数（SOX）が上昇した点で注目されます。",
+      "summary_ja": "10月1日の東京市場は上昇し、米国株と半導体株も上げました。市場全体のニュースは複数ありますが、東京市場との関係は確認できません。",
+      "watch_ja": "10月2日は、米国株とフィラデルフィア半導体株指数（SOX）の動き、日経平均とTOPIX連動ETF（1306）の方向を確認します。地政学関連ニュースの続報も対象です。"
+    },
+    "claims": [
+      {
+        "claim_id": "c1",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:nikkei225"
+        ],
+        "scope": "today",
+        "text_ja": "10月1日の日経平均は68,956.72（前日比+3.30%）と上昇しました。"
+      },
+      {
+        "claim_id": "c2",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:topix_proxy_1306"
+        ],
+        "scope": "today",
+        "text_ja": "10月1日のTOPIX連動ETF（1306）は434.4円（前日比+0.67%）と上昇しました。"
+      },
+      {
+        "claim_id": "c3",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:dow",
+          "metric:sp500",
+          "metric:nasdaq_composite"
+        ],
+        "scope": "overnight",
+        "text_ja": "10月1日の米国市場では、NYダウ、S&P500、ナスダック総合がいずれも上昇しました。"
+      },
+      {
+        "claim_id": "c4",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:sox"
+        ],
+        "scope": "overnight",
+        "text_ja": "10月1日のフィラデルフィア半導体株指数（SOX）は12,829.00（前日比+1.59%）と上昇しました。"
+      },
+      {
+        "claim_id": "c5",
+        "claim_type": "consistent_with",
+        "evidence_refs": [
+          "metric:nikkei225",
+          "metric:dow",
+          "metric:sp500",
+          "metric:nasdaq_composite",
+          "metric:sox"
+        ],
+        "scope": "overnight",
+        "text_ja": "10月1日の米国株高と半導体株高は、10月1日の東京市場の上昇と同時期に確認された動きです。ただし、東京市場への影響は確認できません。"
+      },
+      {
+        "claim_id": "c6",
+        "claim_type": "insufficient_evidence",
+        "evidence_refs": [
+          "metric:nikkei225",
+          "metric:topix_proxy_1306"
+        ],
+        "scope": "today",
+        "text_ja": "東京市場の値動きの理由を説明するニュースは確認できません。"
+      },
+      {
+        "claim_id": "c7",
+        "claim_type": "watch_point",
+        "evidence_refs": [
+          "metric:nikkei225",
+          "metric:dow",
+          "metric:sp500",
+          "metric:nasdaq_composite",
+          "metric:sox"
+        ],
+        "scope": "next",
+        "text_ja": "10月2日は、東京市場の上昇が続くか、米国株と半導体株の動きがどう推移するかを確認します。"
+      }
+    ],
+    "data_content_hash": "08d40a1f1adb038dc08227fe906f6a2bf53d326d6cb0786da6a12bc24fc5a103",
+    "data_gaps_ja": [
+      "日本国債2年利回りは8月31日時点の値です",
+      "日本国債10年利回りは8月31日時点の値です",
+      "日経平均先物は確認できる取得元がないため載せていません",
+      "業種別の騰落は取得元がないため載せていません",
+      "経済指標の予定は取得元がないため載せていません"
+    ],
+    "data_packet_id": "eec5aee4-d4b9-4651-9625-6071a1084900",
+    "direction_basis": [
+      "dow",
+      "sp500",
+      "nasdaq_composite"
+    ],
+    "fact": {
+      "ai_status": "passed",
+      "generation_attempts": 1,
+      "local_issues": [],
+      "quality_warnings": [
+        "X本文が個別企業の開示を市場全体のニュースより前に扱っている",
+        "APP_STORY_SHORTER_THAN_TARGET:846"
+      ]
+    },
+    "generated_at": "2026-10-01T23:05:37.788Z",
+    "headline_ja": "米株高と半導体高を確認、東京市場は上昇",
+    "key_news": [
+      {
+        "headline_ja": "イエメンでは政府軍とフーシ派の戦闘が続いています",
+        "ref_id": "news:39c8fad7-7356-4f52-a222-ba34d9f850b5",
+        "scope": "broad",
+        "why_it_matters_ja": "イエメンで政府軍とフーシ派の戦闘が続き、フーシ派が複数の前線で攻撃を強めたと報じられました。"
+      },
+      {
+        "headline_ja": "プーチン大統領は、ロシア領カリーニングラードが直接攻撃を受けた場合、あらゆる兵器を使うと警告したとBBCが報じました",
+        "ref_id": "news:53e120bc-c65a-47b3-b5f6-7a6be06abf2a",
+        "scope": "broad",
+        "why_it_matters_ja": "ロシア側が、カリーニングラードが直接攻撃を受けた場合にあらゆる兵器を使うと警告したと報じられました。"
+      },
+      {
+        "headline_ja": "エチオピアの衝突、首都でも爆発と報道 エチオピア北部で続く連邦軍と武装勢力の衝突が広がるなか、首都アディスアベバで爆発があったと報じられました",
+        "ref_id": "news:0ca106f0-ba64-4a86-a3d2-0b0662fa560c",
+        "scope": "broad",
+        "why_it_matters_ja": "エチオピア北部の衝突が続くなか、首都アディスアベバで爆発があったと報じられました。"
+      },
+      {
+        "headline_ja": "ニデックは不適切な会計処理に伴う過年度決算の修正を公表",
+        "ref_id": "news:c8cbe103-df5b-4735-a76f-9a6edcd92d86",
+        "scope": "company",
+        "why_it_matters_ja": "ニデックが過年度決算を修正し、2021年3月期から2025年3月期までの営業利益累計などを修正しました。"
+      }
+    ],
+    "major_moves": [
+      {
+        "change_pct_display": "+3.30%",
+        "freshness": "fresh",
+        "label": "日経平均",
+        "metric_key": "nikkei225",
+        "session_date": "2026-10-01",
+        "value_display": "68,956.72"
+      },
+      {
+        "change_pct_display": "+0.67%",
+        "freshness": "fresh",
+        "label": "TOPIX連動ETF（1306）",
+        "metric_key": "topix_proxy_1306",
+        "session_date": "2026-10-01",
+        "value_display": "434.4円"
+      },
+      {
+        "change_pct_display": "+0.04%",
+        "freshness": "fresh",
+        "label": "NYダウ",
+        "metric_key": "dow",
+        "session_date": "2026-10-01",
+        "value_display": "50,926.56"
+      },
+      {
+        "change_pct_display": "+0.19%",
+        "freshness": "fresh",
+        "label": "S&P500",
+        "metric_key": "sp500",
+        "session_date": "2026-10-01",
+        "value_display": "7,666.45"
+      },
+      {
+        "change_pct_display": "+0.04%",
+        "freshness": "fresh",
+        "label": "ナスダック総合",
+        "metric_key": "nasdaq_composite",
+        "session_date": "2026-10-01",
+        "value_display": "26,871.60"
+      },
+      {
+        "change_pct_display": "+1.59%",
+        "freshness": "fresh",
+        "label": "フィラデルフィア半導体株指数（SOX）",
+        "metric_key": "sox",
+        "session_date": "2026-10-01",
+        "value_display": "12,829.00"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "ドル円",
+        "metric_key": "usdjpy",
+        "session_date": "2026-10-01",
+        "value_display": "157.98円"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "米国2年債利回り",
+        "metric_key": "us2y",
+        "session_date": "2026-09-30",
+        "value_display": "4.88%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "米国10年債利回り",
+        "metric_key": "us10y",
+        "session_date": "2026-09-30",
+        "value_display": "5.29%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "stale",
+        "label": "日本国債2年利回り",
+        "metric_key": "jgb2y",
+        "session_date": "2026-08-31",
+        "value_display": "1.743%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "stale",
+        "label": "日本国債10年利回り",
+        "metric_key": "jgb10y",
+        "session_date": "2026-08-31",
+        "value_display": "2.943%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "WTI原油",
+        "metric_key": "wti",
+        "session_date": "2026-09-29",
+        "value_display": "96.16ドル"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "ブレント原油",
+        "metric_key": "brent",
+        "session_date": "2026-09-29",
+        "value_display": "113.96ドル"
+      }
+    ],
+    "market_direction": "up",
+    "market_summary_ja": "10月1日の東京市場では、日経平均が68,956.72（前日比+3.30%）、TOPIX連動ETF（1306）が434.4円（前日比+0.67%）でした。10月1日の米国市場も、NYダウ、S&P500、ナスダック総合が上昇。フィラデルフィア半導体株指数（SOX）は10月1日に12,829.00（前日比+1.59%）でした。市場全体では地政学関連のニュースが確認されていますが、東京市場の値動きとの関係は確認できません。",
+    "model": "gpt-5.6-luna",
+    "next_watch_ja": [
+      "10月2日の東京市場で、日経平均とTOPIX連動ETF（1306）の方向がそろうかを確認します。",
+      "10月1日の米国株とフィラデルフィア半導体株指数（SOX）の動きが続くかを見ます。",
+      "地政学関連ニュースの続報を確認します。"
+    ],
+    "presentation_version": "market_presentation.v2",
+    "report_type": "morning",
+    "risks_ja": [
+      "東京市場の値動きと地政学関連ニュースの関係は確認できません。",
+      "日本国債2年利回りと日本国債10年利回りは8月31日時点の値です。",
+      "業種別の騰落や経済指標の予定は確認できません。"
+    ],
+    "schema_version": "market_report_packet.v1",
+    "session_views": [
+      {
+        "basis": [
+          "nikkei225",
+          "topix_proxy_1306"
+        ],
+        "direction": "up",
+        "market": "tokyo",
+        "session_date": "2026-10-01"
+      },
+      {
+        "basis": [
+          "dow",
+          "sp500",
+          "nasdaq_composite"
+        ],
+        "direction": "up",
+        "market": "us",
+        "session_date": "2026-10-01"
+      }
+    ],
+    "strong_themes": [
+      {
+        "claim_ids": [
+          "c4",
+          "c5"
+        ],
+        "name_ja": "半導体"
+      }
+    ],
+    "trading_date": "2026-10-02",
+    "weak_themes": [],
+    "x_post": {
+      "closing_ja": "値動きは強めでしたが、東京市場との関係を確認できる材料は限られています。",
+      "context_ja": "10月1日の東京市場では日経平均とTOPIX連動ETF（1306）が上昇。10月1日の米国市場もNYダウ、S&P500、ナスダック総合が上昇し、フィラデルフィア半導体株指数（SOX）も上げました。東京市場との関係は確認できません。",
+      "lead_ja": "10月1日の日本株は上昇。日経平均の伸びが目立ちました📈",
+      "news_ja": "市場全体では、イエメンで政府軍とフーシ派の戦闘が続いていることや、ロシア側の警告、エチオピアの爆発が報じられました。ニデックの過年度決算修正も公表されています。",
+      "points_ja": [
+        "日経平均は68,956.72（前日比+3.30%）でした。",
+        "TOPIX連動ETF（1306）は434.4円（前日比+0.67%）。",
+        "米国株は上昇、SOXは12,829.00（前日比+1.59%）でした。"
+      ],
+      "watch_ja": "10月2日は、米国株と半導体株の動き、日経平均とTOPIX連動ETF（1306）の方向を分けて見たいところです。"
+    }
+  }
+}

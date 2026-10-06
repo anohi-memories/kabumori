@@ -68,6 +68,14 @@ export type SourceDefinition = {
   /** Minimum gap between two requests to this source's host (GDELT: 5 s). */
   min_request_gap_ms: number;
   timeout_ms: number;
+  /**
+   * Ask this source for an uncompressed body ("Accept-Encoding: identity") instead of the runtime default
+   * (gzip, br). Only for a publisher whose compressed responses have no length framing: ec.europa.eu answers
+   * gzip with "Connection: close" and no Content-Length / Transfer-Encoding, ends the TCP connection without
+   * a TLS close_notify, and the Edge Runtime's fetch fails the body read ("body read failed"). Uncompressed
+   * it answers chunked. One fixed value on purpose: not a general header map.
+   */
+  request_accept_encoding?: "identity";
   policy: SourcePolicy;
   commercial_usage_status: CommercialUsageStatus;
   content_usage_scope: ContentUsageScope;

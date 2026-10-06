@@ -8,16 +8,28 @@ on:
         required: false
         type: string
   schedule:
-    # 20:30 UTC = 05:30 JST the following day (JST = UTC+9), well ahead of the ~06:30-07:00 JST morning
-    # greeting post. target_date is intentionally left unset here (see the "Generate and store one image"
-    # step below): the script resolves the JST calendar date at the moment it actually runs
-    # (resolveJstDate() in scripts/morning-greeting-image.ts), not the UTC date GitHub's scheduler used to
-    # fire the job — so this always targets the correct JST day regardless of that UTC/JST offset.
-    - cron: "30 20 * * *"
+    # GitHub creates scheduled runs late (hours, since 2026-09-20) or occasionally not at all, so a single
+    # 05:30 JST trigger regularly missed the ~06:30-07:00 JST morning greeting post. Several staggered,
+    # off-the-hour wake-ups each get a chance to create the day's image; whichever runs first generates it
+    # and every later run finds generated/<date>.png already in Storage and skips without calling OpenAI.
+    # A run that failed (e.g. OpenAI 429) is retried by the next wake-up.
+    #
+    # All four fire after JST midnight (JST = UTC+9), so the script's resolveJstDate() -- target_date is
+    # intentionally left unset for scheduled runs -- lands on the posting day even when a run is delayed:
+    #   15:17 UTC = 00:17 JST
+    #   17:47 UTC = 02:47 JST
+    #   19:17 UTC = 04:17 JST
+    #   20:17 UTC = 05:17 JST (last chance, >= 60 min before the 06:30 JST window start)
+    - cron: "17 15 * * *"
+    - cron: "47 17 * * *"
+    - cron: "17 19 * * *"
+    - cron: "17 20 * * *"
 
 permissions:
   contents: read
 
+# Serializes overlapping wake-ups (e.g. delayed runs created close together): a queued run starts only
+# after the running one finishes, then sees the stored image and skips. Never cancels a running generation.
 concurrency:
   group: morning-greeting-image
   cancel-in-progress: false

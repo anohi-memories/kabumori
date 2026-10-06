@@ -85,9 +85,13 @@ export class SupabaseContentSettingsRepository {
   ): Promise<{ ok: true } | { ok: false; reason: string }> {
     const parsed = validateSocialMobileContentSettings(settings);
     if (!parsed.ok || !persona.confirmed) return { ok: false, reason: '保存前の確認が完了していません。' };
+    // Provenance, confirmation and analysis metadata have dedicated columns; the database's persona
+    // contract accepts only style-signal keys in persona_profile, so they are not duplicated there.
     const profile = { ...persona };
     delete (profile as Partial<PersonaProfile> & { source?: unknown }).source;
     delete (profile as Partial<PersonaProfile> & { confirmed?: unknown }).confirmed;
+    delete (profile as Partial<PersonaProfile>).analyzedAt;
+    delete (profile as Partial<PersonaProfile>).analyzedPostCount;
     const { error } = await this.client.from('social_mobile_content_settings').upsert({
       brand_id: brandId,
       settings: parsed.value,

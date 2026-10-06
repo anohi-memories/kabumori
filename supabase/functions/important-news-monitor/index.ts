@@ -69,15 +69,12 @@ import {
   MARKET_MACRO_SOURCES,
 } from "./market_macro_source_fetchers.ts";
 import {
-  BREAKING_MARKET_QUERIES,
   BREAKING_MARKET_SOURCE_DOMAINS,
   BreakingMarketQueryError,
-  breakingMarketLastSearchedAt,
   fetchBreakingMarketQueryWithDiagnostics,
-  MAX_BREAKING_MARKET_SEARCHES_PER_FETCH,
-  selectBreakingMarketQueriesForCycle,
   type BreakingMarketQueryDiagnostics,
 } from "./breaking_market_source_fetchers.ts";
+import { dailySlotConsumedAt, selectDailyBreakingMarketQueries } from "./breaking_market_daily_schedule.ts";
 import { buildCollectionRunDiagnostics } from "./news_collection_diagnostics.ts";
 import {
   judgeCandidateWithEscalation,
@@ -92,6 +89,7 @@ import {
   type GenerationRunner,
   type PostGenerationResult,
 } from "./post_generation_logic.ts";
+import { postgrestStocksMasterLookup, withStocksMasterName } from "./tdnet_stocks_master.ts";
 import {
   dispatchGeneration,
   type GenerationDispatchRepository,
@@ -538,11 +536,11 @@ async function updateRun(
   if (!result.ok) throw new Error("NEWS_MONITOR_RUN_UPDATE_FAILED");
 }
 
-// 48 hours covers several full rotations at any cadence up to 2 hours; a topic absent from it is
-// treated as never searched and therefore goes first.
-const BREAKING_MARKET_HISTORY_WINDOW_MS = 48 * 60 * 60 * 1000;
+// A daily slot is due for at most a few hours after its hour; 30 hours always reaches back to the start
+// of the current JST day's earliest slot, and a topic absent from it has not been searched today.
+const BREAKING_MARKET_HISTORY_WINDOW_MS = 30 * 60 * 60 * 1000;
 
-/** Latest attempt per breaking_market query key, or null (stateless fallback) when the read fails. */
+/** Latest slot-consuming attempt per breaking_market query key, or null (hour-only fallback) when the read fails. */
 async function recentBreakingMarketSearchHistory(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -552,14 +550,14 @@ async function recentBreakingMarketSearchHistory(
     select: "started_at,queries:diagnostics->breakingMarket->queries",
     started_at: `gte.${new Date(now.getTime() - BREAKING_MARKET_HISTORY_WINDOW_MS).toISOString()}`,
     order: "started_at.desc",
-    limit: "500",
+    limit: "100",
   });
   try {
     const result = await fetch(`${supabaseUrl}/rest/v1/important_news_monitor_runs?${params}`, {
       headers: headers(serviceRoleKey),
     });
     if (!result.ok) throw new Error(`HTTP_${result.status}`);
-    return breakingMarketLastSearchedAt(await result.json());
+    return dailySlotConsumedAt(await result.json());
   } catch (error) {
     console.error("Important news breaking market rotation history unavailable", {
       code: "NEWS_BREAKING_ROTATION_HISTORY_FAILED",
@@ -942,7 +940,12 @@ async function selectCandidatesForGeneration(
     headers: headers(serviceRoleKey),
   });
   if (!result.ok) throw new Error("NEWS_GENERATION_CANDIDATE_LOOKUP_FAILED");
-  return (await result.json() as StoredGenerationCandidate[]).map(toGenerationCandidate);
+  const stocksMasterLookup = postgrestStocksMasterLookup(supabaseUrl, headers(serviceRoleKey));
+  return await Promise.all(
+    (await result.json() as StoredGenerationCandidate[]).map((row) =>
+      withStocksMasterName(toGenerationCandidate(row), stocksMasterLookup)
+    ),
+  );
 }
 
 // P0.6: candidate must already be claimed (status = 'generating', see claimCandidateForGeneration) before
@@ -1017,7 +1020,8 @@ function createGenerationRepository(
       if (!result.ok) throw new Error("NEWS_GENERATION_CLAIM_FAILED");
       const rows = await result.json() as StoredGenerationCandidate[];
       if (!rows[0]) return null;
-      return { ...toGenerationCandidate(rows[0]), status: "ready_for_generation" };
+      const stocksMasterLookup = postgrestStocksMasterLookup(supabaseUrl, headers(serviceRoleKey));
+      return { ...await withStocksMasterName(toGenerationCandidate(rows[0]), stocksMasterLookup), status: "ready_for_generation" };
     },
     async save(candidateId, generated) {
       const params = new URLSearchParams({ id: `eq.${candidateId}`, status: "eq.generating" });
@@ -2136,8 +2140,8 @@ Deno.serve(async (req) => {
 
     // breaking_market lane (P0.5): same independence guarantee as market_macro above — its own quota,
     // its own fetch/dedupe/insert loop, never touching acquiredCandidates/allCandidates. Runs at most
-    // MAX_BREAKING_MARKET_SEARCHES_PER_FETCH web_search queries this cycle (selectBreakingMarketQueriesForCycle
-    // is a pure, deterministic rotation — never more, regardless of how many queries exist in the list).
+    // MAX_DAILY_BREAKING_MARKET_SEARCHES_PER_FETCH web_search queries this cycle (selectDailyBreakingMarketQueries
+    // returns at most one, and only for a due daily slot).
     // A missing OPENAI_API_KEY or a per-query failure only disables this lane for the run; it never fails
     // the corporate/official_macro lanes, which have already completed by this point.
     const breakingMarketResults: CandidateResult[] = [];
@@ -2153,12 +2157,11 @@ Deno.serve(async (req) => {
         sourceErrors.push("breaking_market:OPENAI_API_KEY_MISSING");
       } else {
         const now = new Date();
-        const selectedQueries = selectBreakingMarketQueriesForCycle(
-          BREAKING_MARKET_QUERIES,
-          now,
-          MAX_BREAKING_MARKET_SEARCHES_PER_FETCH,
-          await recentBreakingMarketSearchHistory(supabaseUrl, serviceRoleKey, now),
-        );
+        // Generic web search is cut to 4 a day (one Japan-market topic per JST slot, see
+        // breaking_market_daily_schedule.ts); most fetch cycles select nothing here. The headline-trigger
+        // lane below runs on every cycle regardless.
+        const dailySlotHistory = await recentBreakingMarketSearchHistory(supabaseUrl, serviceRoleKey, now);
+        const selectedQueries = selectDailyBreakingMarketQueries(now, dailySlotHistory);
         breakingMarketQueriesRun = selectedQueries.map((query) => query.key);
         const breakingCandidates: IncomingNewsCandidate[] = [];
         for (const query of selectedQueries) {

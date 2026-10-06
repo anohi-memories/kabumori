@@ -129,7 +129,7 @@ export default function HomeScreen() {
             displayedTopic &&
             router.push({
               pathname: '/topic-detail',
-              params: { id: displayedTopic.id, level: displayedTopic.level, jstDate: todayJstValue },
+              params: { id: displayedTopic.id, level: displayedTopic.level, jstDate: todayJstValue, from: 'home' },
             })
           }
           onRetry={() => void load(true)}

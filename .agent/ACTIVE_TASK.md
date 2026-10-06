@@ -12,6 +12,15 @@
 - ユーザーの個別指定がある場合はその指定を優先する。
 - 競合防止ルールは常に優先する。
 
+## Project Critical Path — Common Account
+
+- priority: **CRITICAL / project-wide**
+- user decision: 共通アカウント完成を、かぶモリ・X自動投稿の次工程より最優先とする。
+- G5 owns the shared common-account critical path.
+- Existing G1-G4 tasks are preserved. Non-conflicting UI/source/read-only work may continue, but **no unrelated production DB/Auth/permission mutation may overtake an active/approved G5 production window**.
+- G3 PR81 production apply remains HOLD whenever G5 has an approved/active production write.
+- next shared milestone: production legacy backfill dry-run -> explicit backfill approval -> exact backfill -> Phase 2 integrations -> Phase 3 deletion/enforcement.
+
 ## Deployment policy
 
 - X自動投稿・Web管理画面の開発中/PR/テスト用PreviewはNetlifyを優先する。
@@ -23,82 +32,88 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
-- task_id: x-social-mobile-pr76-publish-toggle-review-20261002
+- status: done
+- task_id: kabumori-pr87-editorial-three-points-review-20261006
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Focused security review of PR #76 exact head a59a89e9c585fb6e780e1af2ecc898c830f5524e. Verify Auth/tenant isolation, owner/admin policy, strict ON prerequisites, fail-safe OFF, CAS/races, brand active/live TOCTOU vs runtime publish guard, exact publish_enabled-only mutation, JWT/config and safe client behavior. No merge/deploy/production toggle/X operation. Recommended Sol（高）.
+- allocation: Final C1 PASS。PR #87 exact reviewed head 3561f1eaac41df0f23dcce8fdaace0decc654a0a は独立レビューPASS後、squash-merged as 74e4dbff09e3b248164fd00bb720402d762ebcd8。source fix 0、production mutation 0。H1 free after fresh allocation。
+- recommended_model: Luna（高）
 
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
-- task_id: common-account-pr70-preproduction-gate-20261002
+- status: done
+- task_id: x-social-mobile-pr76-final-security-rereview-20261005
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: merged common-account Phase 1のproduction適用前独立ゲート。actual disposable Supabase proof、production read-only preflight、migration-history/schema/ACL/FK、backfill dry-run/parityを確認。production mutation/apply/backfill/deploy禁止。推薦モデル Sol（極高）。
+- allocation: Final C2 PASS on PR #76 exact head 5448e545f4a88bbf6597a981c0bcbe4c01043c30. F1/F2/F3 closed, availability tradeoff accepted, no extra review required. PR #76 squash-merged as 3c5f80a61d114d2936b761fc05ee3b3d69e85f63. H2 free after fresh allocation.
 
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: none
-- status: done
-- task_id: kabumori-home-report-hero-8-state-assets-20261001
+- next_owner: claude
+- status: ready
+- task_id: kabumori-topic-learning-access-progress-and-swipe-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS. Base 8-state Hero PR #72 was already merged; follow-up PR #74 (global 6pt character/CTA lift + CTA height/inset) squash-merged as 9b37c350a3b9d1a936d0e03ddc281e315aba50f2, then final 02/07 aligned assets PR #75 squash-merged as 02ba0e2d728833fb76b74237cc3c237130bcdbf1. Final asset hashes pinned; app tests reported 255/255; EAS build 0; backend/production mutation 0; no Codex review required. G1 free after fresh allocation.
-- recommended_model: Sonnet5（中）
+- allocation: 実機確認フォロー。① topic/news詳細のiOS edge-swipeを左「戻る」と同じorigin先へ統一、②トピック一覧に初級/中級/上級切替（SettingsはHome初期表示専用）、③トピック既読/学習済みを端末内AsyncStorageで表示。detail成功表示のみ既読化、一覧focus復帰で即反映。375/402 Simulator実スワイプ確認、EAS 0、backend/production mutation 0。
+- recommended_model: Sonnet5（高）
+
 ## Claude G2
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-shared-report-v2-quality-rewrite-calibration-20261002
+- task_id: kabumori-pr87-close-natural-observation-20261006
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: source/tests/PR only; fix 10/2 live false editorial-priority WARN and stop near-target App length from triggering unnecessary quality rewrite; Hard Fact behavior unchanged; no deploy/gate/manual cycle; recommended Sonnet5（高）
+- allocation: market-report-analysis v24 の最初の自然な10/6大引けをread-only観測。3ポイントが数値3連発ではなく、出来事・重要材料・次の注目になっているか、Hard false reject、warning/rewrite/callsを確認。16:40 JSTより前は待機せず停止。production mutation禁止。
+- recommended_model: Sonnet5（中）
 
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
-- task_id: x-social-mobile-ai-consult-v1-20261002
+- status: in_progress
+- task_id: x-social-mobile-ai-consult-v1-fresh-integration-20261006
 - start_code: G3
 - finish_code: K3
 - next_owner: claude
-- source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: Implement real AI consultation before post generation: authenticated server-side conversational AI, natural chat/questions, current-setting explanation, bounded settings/persona proposals, explicit user confirmation before persistence. Reuse existing content-settings/persona storage and validators; no DB migration, no past-X fetch, no post generation/publish/scheduler/OAuth/common-account changes, no production deploy. Recommended Opus5.5（高）. K3 should normally send the authenticated Edge/API boundary to H2 Sol（高） review before merge.
+- source: .agent/tasks/CLAUDE_TASK_3.md
+- allocation: V1必須の「AIと相談する」PR #78をfresh mainへsource-only統合。会話→提案→明示確認→保存→次回相談/投稿生成へ反映、までをV1契約として検証する。G5 common-account critical pathとは競合させず、Auth/entitlement/account deletion/DB migration/production mutationは禁止。PR81 production applyはG5完了後に別途再開。PR78 merge/deployもまだ禁止。PR #41がlive scheduled-user生成の残り配線ならここでは実装せずrelease blockerとして明示。Recommended Opus5.5（高）.
+- recommended_model: Opus5.5（高）
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: review_required
-- task_id: x-social-mobile-publish-toggle-v1-20261002
+- status: done
+- task_id: x-morning-greeting-schedule-reliability-bc-20261006
 - start_code: G4
 - finish_code: K4
-- next_owner: codex
-- source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: K4 PASS to focused Codex review. PR #76 exact head a59a89e9c585fb6e780e1af2ecc898c830f5524e is open/mergeable; CI green; main +5 commits with no overlap. Source/tests only, production mutation 0, X operations 0. H1 review assigned before merge because this is a posting-permission/security boundary. Recommended review Sol（高）.
+- next_owner: none
+- source: .agent/tasks/CLAUDE_TASK_4.md
+- allocation: Final K4 PASS. PR #92 exact head 3d5475849217e1ca9f40bbedf12a42c0e5671504 squash-merged as 19c85c4381c55161207032146d6f66eb8a0c99f5. Plan B adds four staggered generator schedules (00:17/02:47/04:17/05:17 JST) with same-day idempotency; Plan C adds read-only missing/late checks at 06:07/09:47 JST. 44/44 tests, fresh-main overlap 0, CI green, production mutation/deploy/X/PAT/Vault/pg_cron=0. No Codex review required. G4 free after fresh allocation. Plan A remains separate.
+- recommended_model: Sonnet5（高）
 
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: done
-- task_id: common-account-pr70-guard-boundary-corrective-20261002
+- status: ready
+- task_id: common-account-v1-phase1-production-backfill-gate-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Final K5 PASS to rereview。PR #70 exact head 47a2ed6a1635177ba82004eace4bddb42d9d53e3。Phase 1からenforcing guardを外し、durable readiness/invalidation foundationへ限定。production mutation 0、merge/apply/deploy HOLD、H1 rereview assigned。
+- allocation: Project-wide critical path. First run is read-only only: verify foundation exactness, run private.account_lifecycle_backfill(false) in READ ONLY mode, reconcile production legacy classification, refresh local/disposable backfill proof, freeze exact backfill(true) package, then STOP for explicit production approval. No backfill write yet. G3/G2 production mutation must not overlap an approved/active G5 window.
+- recommended_model: Opus5.5（極高）
 
 ## Deferred
 
