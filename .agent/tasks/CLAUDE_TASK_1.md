@@ -1,3 +1,86 @@
+# USER NAVIGATION DECISION — SUPERSEDES PRIOR PLACEMENT CORRECTIONS
+
+This section is the newest canonical navigation requirement and **supersedes any earlier instruction in this TASK that says left=list / right=Home or left=Home / right=list unconditionally**.
+
+## Final navigation model
+
+Use a contextual **Back** action on the left and an always-available **List** action on the right.
+
+### Topic detail
+
+Left:
+- label: `‹ 戻る`
+- if opened from Home -> returns to Home
+- if opened from `/topics` -> returns to `/topics`
+- if origin is unknown/cold deep link -> safe fallback to Home
+
+Right:
+- label: `トピック一覧 ›`
+- always opens `/topics`, regardless of origin
+
+### Important-news detail
+
+Left:
+- label: `‹ 戻る`
+- if opened from Home market-news/holding-news card -> returns to Home
+- if opened from news list -> returns to `/news`
+- if origin is unknown/cold deep link -> safe fallback to Home
+
+Right:
+- label: `ニュース一覧 ›`
+- always opens `/news`, regardless of origin
+
+## Implementation preference — deterministic origin, not accidental stack history
+
+Do **not** depend only on `router.back()` for the canonical destination because the nested news stack can make the visual origin differ from the actual stack predecessor.
+
+Prefer an explicit lightweight route param such as `from=home|topics|news` (exact naming is implementation choice) passed by the known entry points:
+- Home topic -> topic detail: origin Home
+- topics list -> topic detail: origin topics
+- Home market/holding news -> news detail: origin Home
+- news list -> news detail: origin news
+
+Requirements:
+- left Back resolves from this explicit origin;
+- unknown/missing origin falls back safely to Home;
+- right List ignores origin and always goes to the relevant list;
+- topic level switching must preserve the origin param when route params are updated;
+- no persistent storage for origin;
+- no backend/schema/RPC/Auth change.
+
+## Visual intent
+
+Keep the current compact top-row style:
+- left Back action visually reads as navigation/back;
+- right list action is the stable escape hatch to browse related content;
+- do not add a third Home button.
+
+At 375pt:
+- no clipping;
+- `‹ 戻る` and `トピック一覧 ›` fit comfortably;
+- `‹ 戻る` and `ニュース一覧 ›` fit comfortably.
+
+## Tests to add/update
+
+Topic:
+- Home -> detail -> Back => Home
+- topics -> detail -> Back => topics
+- cold/deep link -> Back => Home fallback
+- right Topic list => topics from every origin
+- level switch preserves origin
+
+News:
+- Home -> detail -> Back => Home
+- news list -> detail -> Back => news list
+- cold/deep link -> Back => Home fallback
+- right News list => news list from every origin
+
+Do not use stack accident as proof; assert explicit origin routing.
+
+Recommended model: **Sonnet5（中）**.
+
+---
+
 # Claude Task 1 — CURRENT TASK
 
 - task_id: kabumori-detail-navigation-topic-level-switch-20261006
@@ -2576,8 +2659,8 @@ Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 - task_id: kabumori-home-visual-rebuild-reference-20260930
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: ユーザーが提示した理想Home案を視覚正本として、現行Homeの見た目を「微調整」ではなくUIレイヤーを全面再構築する。データ取得・ナビ・ルーティング・既存機能・backend契約は再利用し、見た目とレイアウトだけを新規に組み直す。
