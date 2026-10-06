@@ -58,7 +58,7 @@ test("Phase 15 preview reads canonical persona columns instead of profile metada
 test("Phase 15 shared persona mapping preserves confirmed-only preview guidance", async () => {
   const settings = await source("supabase/functions/_shared/brand/social_mobile_content_settings.ts");
   assert.match(settings, /materializeSocialMobilePersonaProfile/iu);
-  assert.match(settings, /if \(persona && persona\.confirmed\)/iu);
+  assert.match(settings, /if \(persona && persona\.confirmed( === true)?\)/iu);
   assert.match(settings, /source: source/iu);
   assert.match(settings, /confirmed,/iu);
 });
