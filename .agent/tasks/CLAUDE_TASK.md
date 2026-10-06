@@ -1,10 +1,172 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-pr99-morning-natural-observation-20261007
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（中）
+- type: read-only natural production observation
+- production_mutation_allowed: false
+
+## Purpose
+
+Observe the first natural morning cycle after PR #99 was deployed to production market-report-analysis v25.
+
+This is the decisive quality check for:
+- specificity of the three points;
+- generic-headline telemetry;
+- milestone/threshold behavior;
+- rewrite/call reduction;
+- rejection diagnostics;
+- preserved factual safety.
+
+Do not manually generate or retry anything.
+
+## Time gate
+
+Target 2026-10-07 JST natural morning cycle:
+- analysis: 07:55
+- retry if needed: 08:05
+
+If started before 08:10 JST:
+- do not poll;
+- do not sleep/wait;
+- do not manually invoke;
+- report OBSERVATION_NOT_READY and STOP.
+
+Best start time: after 08:10 JST.
+
+## Baseline
+
+Accepted K2:
+- market-report-analysis v25 ACTIVE / verify_jwt=false
+- production import graph = fresh main, 11/11 byte-identical
+- PR #99 specificity/rewrite/diagnostics logic present
+- personalized-reports remains v40 and is intentionally not part of this task
+- app_enabled=false / x_enabled=false
+- relevant crons unchanged
+- production mutation window CLOSED
+- manual generation/retry since deploy = 0
+
+## Observe
+
+Read-only inspect the 2026-10-07 morning natural cycle:
+
+1. analysis status / attempt count / timestamps / error
+2. whether first try or scheduled retry succeeded
+3. report packet / data packet / content hash / duplicate count
+4. exact three `x_post.points_ja`
+5. `quality_warnings`
+6. `X_POINTS_GENERIC`
+7. `X_POINTS_METRIC_RECAP`
+8. `X_POINTS_NEAR_DUPLICATE`
+9. generation attempts / content regenerations / quality rewrite
+10. model calls / tokens / cost if recorded
+11. `rejection_reasons` if any rejection occurred
+
+## Editorial acceptance
+
+Morning three points should:
+- be day-specific;
+- use concrete input-grounded entities/events/indicators;
+- express today's focus / caution / market-reading axis;
+- not be three raw metric recap lines;
+- not be generic lines that fit any day;
+- not copy old prompt examples;
+- not assert completed Tokyo-session movement before it happens.
+
+A single watch-style point may be somewhat generic only if the other points are clearly specific and the watch target is grounded in input.
+
+Milestone/threshold numeric wording is acceptable when the number/event is safely evidenced and genuinely newsworthy.
+
+## Factual safety
+
+Verify:
+- date/session/value/sign
+- stale labeling
+- 1306 identity
+- refs
+- unsupported causality
+- false broad absence
+- exactly three points
+
+No weakening of Hard Fact is acceptable.
+
+## Rewrite/call acceptance
+
+Preferred:
+- no rewrite solely because X is between 300 and 430 chars;
+- if App/omission/Hard conditions require rewrite, that is allowed;
+- max 4 calls remains;
+- safe-original fallback works if rewrite fails Fact.
+
+## Classification
+
+Use one:
+- PASS_FIRST_TRY
+- PASS_WITH_RETRY
+- PASS_WITH_NONBLOCKING_WARNINGS
+- FAIL_EDITORIAL_GENERIC
+- FAIL_FACTUAL
+- FAIL_FALSE_REJECT
+- OBSERVATION_NOT_READY
+- OBSERVATION_INCOMPLETE
+
+## Safety
+
+Read-only only.
+
+Forbidden:
+- manual report/retry/replay
+- Edge deploy
+- DB/RPC/migration write
+- Cron/gate change
+- X send
+- app notification
+- Auth/Vault/secret access
+- EAS
+- production mutation
+
+## Completion / K2
+
+Report:
+- classification
+- observation time
+- cycle/attempts
+- packet ids/hashes
+- exact 3 points
+- editorial assessment
+- factual-safety assessment
+- warnings/telemetry
+- calls/rewrite/tokens/cost
+- rejection_reasons
+- manual action = 0
+- production mutation = 0
+- whether PR #99 can be considered validated in production
+- whether any further source correction is needed
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+Recommended model: **Sonnet5（中）**.
+
+## Report
+
+Pending.
+
+---
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-pr99-controlled-analysis-deploy-20261007
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - production_mutation_window: **CLOSED** — 2026-10-07 01:08 JST（ACTIVE 01:05〜）。G2 performs no further production write. Deployed `market-report-analysis` only (v25, PR #99).
 - priority: high
 - recommended_model: Opus5.5（中）
