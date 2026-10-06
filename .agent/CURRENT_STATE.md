@@ -1,3 +1,19 @@
+## K1 recheck — PR #94 structural PASS / 375pt final gate
+
+- PR #94 latest reviewed head: `64c71bd6a49c6d1f65cb84642b3f68f60ef9648a`.
+- previous swipe blocker is resolved structurally: news detail is now a root Stack route, so native edge swipe naturally returns to the actual origin screen without redirect-after-pop.
+- removed the package-internal `expo-router/build/...` dependency / `usePreventRemove` interception and the transient News-list flash.
+- Home-origin news detail -> swipe Home; News-list-origin -> swipe list; report-origin -> report; explicit Back follows the same origin contract.
+- existing `/news/<id>` system URL is rewritten to the canonical root detail route via `+native-intent`.
+- 402pt visual evidence accepted for root news detail and topic list selector + learned/unread states.
+- topic-list 初級/中級/上級 switching, Settings separation, selected-only fetch/cache/race safety, local AsyncStorage learned state remain accepted.
+- latest reported checks: 376/376 app tests, tsc clean, Expo config PASS, web export PASS, diff clean.
+- fresh-main changed-file overlap = 0.
+- Vercel failure is rate-limit only and not a native source blocker.
+- merge remains HOLD only because the explicit 375pt observed visual gate is still missing.
+- G1 should now do one iPhone SE-class 375pt pass + screenshot and return K1; no code change expected.
+- Codex review not required. EAS 0. backend/production mutation 0.
+
 ## Final K5 — Common-account legacy backfill APPLIED PASS / Phase 2 assigned — 2026-10-06
 
 - verdict: **PASS / BACKFILL_APPLIED_PASS**.
