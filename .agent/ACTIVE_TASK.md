@@ -81,11 +81,11 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: x-social-mobile-ai-consult-persona-generation-guidance-20261006
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_3.md
 - allocation: Final K3 PASS on PR #78 fresh integration head d1f131c56b082d2af57660b5bd3d83ff8c619c7d; no Codex review. Continue source-only V1 completion: make every confirmed persona signal actually influence social-mobile post-generation guidance, including toneSignals/topicSignals/hashtagHabits/ctaStyle/openingClosingPatterns, while preserving existing default no-hashtag, AI Lab and Kabumori behavior. PR78 stays open; no merge/deploy/production. G5 common-account has priority; PR41/live dispatch untouched. Recommended Sonnet5（高）.
 - recommended_model: Sonnet5（高）

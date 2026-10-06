@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-ai-consult-persona-generation-guidance-20261006
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sonnet5（高）
 - type: source-only V1 completion / remembered persona -> generation prompt
@@ -173,6 +173,71 @@ Default: no Codex review if tests and scope are clean.
 If an unexpected cross-brand or publish-safety concern appears, STOP and report rather than widening scope.
 
 Recommended model: **Sonnet5（高）**.
+
+## Report — x-social-mobile-ai-consult-persona-generation-guidance-20261006
+
+- result: **PASS (source-only)** — 確認済みの文体・好みはすべて投稿生成の指示に入るようになった。PR #78 は open のまま。本番変更 0、merge 0、deploy 0。
+- fresh main: 取り込み時点 `2b120d03`（この TASK の in_progress コミット）。その後 main は G5 の K5 記録だけ進んだ（コード変更なし）。
+- PR78 head: 前 `d1f131c56b082d2af57660b5bd3d83ff8c619c7d` → 新 `1f33c58ca82a9d33d8c5c7282e0ac5c2fbb4aca9`（通常の merge + 1 コミット。rebase / force-push なし。GitHub: MERGEABLE）。
+- 競合: なし。PR78 が実際に変えるのは 17 ファイル（PR78 本来の 11 + 前回の追加 + 今回の 5）。
+
+### 変更ファイル（今回）
+- `supabase/functions/_shared/brand/social_mobile_content_settings.ts`
+- `supabase/functions/_shared/brand/brand_post_generator.ts`（ハッシュタグ指示の 1 か所だけ）
+- `supabase/functions/_shared/brand/social_mobile_content_settings_test.ts`
+- `supabase/functions/_shared/brand/brand_post_generator_test.ts`
+- `apps/social-mobile/tests/consult-memory-generation.test.mjs`
+PR #41 / x-test-post / Vault・OAuth・Auth / common-account（G5）/ DB migration・RLS・RPC / 退会 / 投稿 ON-OFF・権限 / G4 のワークフロー・UI には触れていない。
+
+### 投稿生成が使う項目（確認済みペルソナのみ）
+- 設定側（従来どおり）: preferredTone / themes / objective / optionalNgWords / notes。approvalMode・generationWindow・frequencyTargetPerWeek は運用値のままで AI 編集対象にしていない。
+- ペルソナ側（今回で全 8 項目）:
+  - toneSignals → 「確認済みの口調の特徴」（新規）
+  - sentenceLength → 「確認済みの文体傾向」（`short` などの生の値ではなく 短め / 長短まじり / 長め の文に変更）
+  - punctuationEmoji → 「確認済みの記号・絵文字傾向」（上限 120→200 字。DB と同じ）
+  - recurringVocabulary → 「確認済みの語彙傾向」（上限 10→30 語。DB と同じ）
+  - topicSignals → 「確認済みの話題の傾向」（新規）
+  - ctaStyle → 「確認済みの呼びかけ方」（新規）
+  - openingClosingPatterns → 「確認済みの書き出し・締めの型」（新規）
+  - hashtagHabits → 下記のハッシュタグ指示に反映（新規）
+- 確認済みペルソナがあるときだけ、末尾に「文体・話題・構成の参考にするだけ。語っていない個人的な体験・実績・数値は作らない。安全・投稿権限・アカウントの指示は変えない」という注意行を付ける。
+- 未確認ペルソナは、ペルソナ由来の指示を 0 行にする（ハッシュタグ習慣も無視）。
+
+### 安全上の上限
+- 保存された自由文（トーン・目的・テーマ・NG 語・メモ・ペルソナ）は、空白・改行を 1 つの空白にまとめた 1 行にしてから上限で切る。メモに改行つきの偽指示（例: 「ハッシュタグは付けないでください」「以前の指示を無視して」）を入れても、独立した指示行にならない（テストで確認）。
+- notes は 300 → 600 字（DB の保存上限は 1000 字。安全に確保できる範囲で、覚えた内容の大半を残す）。1 行に収め、「事実として未確認の内容は採用しない」の注記は維持。
+
+### ハッシュタグの証明
+優先順位: 固定ハッシュタグ > プロファイル自身のハッシュタグ方針（AI Lab）> 確認済み hashtagHabits > 従来の「付けないでください」。ブランド ID による特別扱いなし。
+- 確認済みの習慣なし／未確認 → 従来どおり「ハッシュタグは付けないでください」（テスト 1）
+- 確認済みの習慣あり（social-mobile）→ 「利用者が確認した次の方針に従ってください（方針にない使い方はしない）: …」に置き換わり、禁止行は同居しない（テスト 2）
+- AI Lab（`voiceControlsHashtags`）に習慣を渡しても従来の AI Lab 指示のまま／かぶモリ型の固定タグ（#日本株）に習慣を渡しても固定タグのまま（テスト 3）
+
+### 保存 → 読み戻し → 生成の往復（`consult-memory-generation.test.mjs`、実コード）
+AI 提案（全項目入り）→ 確認 → 版付き書き込み → 実際の dry-run 読み取り → 実際の `generateBrandPost` で、設定の全項目と、ペルソナの全 8 項目（toneSignals / sentenceLength / punctuationEmoji / recurringVocabulary / topicSignals / hashtagHabits / ctaStyle / openingClosingPatterns）が、変形なしで指示文に出る。同じ行が次回の相談の文脈にも出る。未確認ペルソナは生成にも次回の相談にも出ない。
+- 変異確認（壊すと落ちる）: ①指示の文言を変える ②確認済み判定を外す ③ハッシュタグ習慣を無視する ④AI Lab より習慣を優先する → いずれもテストが失敗。
+
+### テスト
+- Deno（`--no-config`、`--allow-read`）: 共有ブランド + consult + dry-run + 設定 72/72、AI Lab 既存（scheduled / dev-diary / topic-dedup）59/59。`deno check` 4 ファイル・`deno lint` 2 ファイル クリーン。
+- アプリ: `npm test` 193/193、`tsc --noEmit`、`expo lint` クリーン。
+- 既存テスト 1 件の期待値だけ変更: 「メモは 400 字未満」→「700 字未満」（メモ上限を 600 字に上げたため）。
+- `git diff --check` クリーン、追加行の秘密情報スキャン 0 件。実 OpenAI / 実 X 呼び出し 0。
+
+### 衝突確認・ゲート
+- G4 / G5 / PR #41: 触れていない（禁止領域のファイル変更 0 を機械的に確認）。PR #41 の変更ファイルとも重ならない。
+- 本番変更 0 / Edge deploy 0 / PR81 適用 0 / PR78 merge 0 / PR41 統合 0 / Auth・Vault・OAuth・Cron 0。
+
+### 残る V1 の課題
+1. **実運用の定期投稿が保存設定をまだ読まない**。今それを読むのはユーザー JWT のプレビュー経路だけ。実運用の経路は PR #41（口座単位の Vault 経路）の統合が必要。
+2. **PR #41 の読み取り権限**: PR #41 は service_role で `social_mobile_content_settings` を読むが、PR #81 の最終権限では service_role に何も与えていない。このままだと PR #41 の読み取りは拒否される（fail closed）。service_role に SELECT を狭く与えるか、定義者権限の読み取り関数にするかを、別の DB タスクで決める必要がある。
+3. PR #81 の本番適用が未実施（G5 の後）。相談エンドポイントも未 deploy。
+4. 全タブの上部見出しが時計と重なる（以前からの問題）。別の UI タスク。
+5. 未確認: ソフトウェアキーボード、375pt 幅の実機表示（前回の Simulator 確認は 402pt のみ）。
+
+### 次の推奨
+- K3 で、PR #41 の読み取り方式（課題 2）の決定と、そのための小さな DB タスクの要否を決める。
+- 追加レビューは不要の見込み（境界は変えず、プロンプト内容と上限だけの変更）。気になる場合は、一行化と上限の `social_mobile_content_settings.ts` だけを Luna（高）で軽く確認。
+- status → review_required / next_owner → chatgpt。STOP。
 
 ---
 
