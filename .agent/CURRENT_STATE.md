@@ -1,3 +1,17 @@
+## Final K5 — Common-account Phase 1 foundation applied PASS — 2026-10-06
+
+- verdict: **PASS / APPLIED_PASS**.
+- production migration `20261001150000_common_account_lifecycle_foundation.sql` applied exactly once; migration history row exact; production_mutation_window CLOSED at 14:58 JST.
+- postflight is exact: schema=EXACT / history=EXACT; RLS, column grants, SECURITY DEFINER/search_path, direct/effective EXECUTE ACLs, triggers, indexes, policies and initial lifecycle state all match the reviewed contract.
+- existing-object fingerprint remained unchanged, so unrelated production objects were not modified.
+- backfill = 0; common_accounts / service_entitlements / lifecycle operations remain empty.
+- deploy/Auth/Storage/OAuth/Vault/Cron/flag/real-X changes = 0.
+- extra Codex review not required: source boundary was already independently reviewed and production read-back found no drift or partial state.
+- rollout tooling/runbook PR #91 was squash-merged as `50e08e1daa0b1e91f9f170a5baaf175ebcd315cd`.
+- AI Lab diary: 記録不要 — infrastructure foundation rollout only; no user-facing capability activated.
+- G5 is done/free.
+- next common-account work is **backfill dry-run -> approved backfill -> Phase 2 app/service integration -> Phase 3 deletion/orchestrator/enforcement**. Each production mutation remains separately gated.
+
 ## Final K4 — Morning greeting schedule reliability B+C PASS / PR #92 merged
 
 - verdict: **PASS**.
