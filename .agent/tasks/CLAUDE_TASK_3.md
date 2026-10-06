@@ -1,5 +1,262 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: x-social-mobile-ai-consult-v1-fresh-integration-20261006
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: source-only fresh-main integration / AI consultation V1 core / memory-to-generation contract
+- source_pr: 78
+- source_head: 6e9f78a31bae9b65599732a9b416dcb50f2bfbc7
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Product decision
+
+「AIと相談する」はV1必須の中核機能。
+単なるチャットではなく、利用者とAIが会話しながら投稿内容・口調・好みを整理し、
+利用者が明示確認した内容だけを覚え、その保存内容が実際の投稿生成へ反映されることをV1完成条件とする。
+
+## Current dependencies
+
+- PR #81 source is merged and independently reviewed, but production schema apply is still HOLD while G5 common-account critical path is active.
+- G5 currently owns common-account legacy backfill / entitlement critical path. Do not overlap Auth/entitlement/account deletion/production DB work.
+- G4 morning-greeting reliability task is complete; G4 is a separate X-app slot and will later handle UI work. Do not edit G4-owned work.
+- PR #78 is still open at head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7` and is currently not mergeable against fresh main.
+- PR #78 changed paths are limited to the AI-consult/content-settings surface:
+  - `apps/social-mobile/src/app/(tabs)/consult.tsx`
+  - `apps/social-mobile/src/data/consult-client.ts`
+  - `apps/social-mobile/src/data/content-settings-repository.ts`
+  - `apps/social-mobile/src/domain/consult-session.ts`
+  - `apps/social-mobile/src/domain/content-settings-conversation.ts`
+  - `apps/social-mobile/src/domain/content-settings.ts`
+  - `apps/social-mobile/tests/consult-screen.test.mjs`
+  - `apps/social-mobile/tests/consult.test.mjs`
+  - `supabase/functions/social-mobile-consult/index.ts`
+  - `supabase/functions/social-mobile-consult/logic.ts`
+  - `supabase/functions/social-mobile-consult/logic_test.ts`
+- Current main brand generator already supports `contentSettings` and feeds `socialMobileGenerationGuidance(contentSettings)` into the prompt. This contract must remain compatible.
+
+## Goal
+
+Fresh-integrate PR #78 onto current main and make the AI consultation V1 source ready for later production activation, without touching production or G5 boundaries.
+
+The task must prove:
+1. natural conversation works;
+2. AI can explain what it currently understands;
+3. proposal is delta-only;
+4. nothing is saved merely because the AI replied;
+5. only explicit user confirmation ("これで覚えて") commits;
+6. stale proposals never overwrite newer settings;
+7. confirmed persona/settings survive re-read and are the same shape consumed by post generation;
+8. AI cannot alter publish ON/OFF, X account/OAuth, schedule, approval mode, deletion, entitlement or Auth;
+9. one user's workspace/settings cannot leak into another user's consultation;
+10. the consultation source can be merged later without silently activating a production path before PR81 schema is live.
+
+## Mandatory startup / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK / prior PR78 body / final PR81 H2/C2 evidence.
+2. Read current G4 and G5 TASKs for conflict only; do not execute or modify them.
+3. Use new-Mac clean base `/Users/yuya/Developer/kabumori-fresh`.
+4. Fetch fresh `origin/main` and PR #78 head.
+5. Create a new independent G3 worktree/checkout. Never share G4/G5 workdir or dev server.
+6. Confirm PR #78 exact head before integration.
+7. Do not rebase/reset/force-push another slot branch.
+8. Prefer a normal fresh-main integration into the PR branch or an equivalent non-destructive continuation. If the PR branch has moved unexpectedly, STOP.
+
+## Scope
+
+Primary scope is the existing PR #78 11 paths above plus the smallest narrowly-related tests necessary to prove current-main compatibility.
+
+Allowed only when necessary for the memory-to-generation contract:
+- read-only inspection of `supabase/functions/_shared/brand/social_mobile_content_settings.ts`
+- read-only inspection/tests around `brand_post_generator.ts`
+- a narrowly-scoped contract test may be added if it does not change the generator/runtime behavior.
+
+Do not edit:
+- G5 common-account / entitlement / lifecycle files or migration;
+- Auth signup/login/provider wiring;
+- account deletion;
+- X OAuth/token/Vault paths;
+- PR #41 generic live auto-post implementation;
+- PR #76 publish permission code;
+- morning greeting workflows;
+- DB migrations, RLS, RPC, Cron;
+- production settings or secrets.
+
+If a required fix would cross one of these boundaries, STOP and report it as the next task rather than expanding scope.
+
+## Fresh-main integration
+
+Resolve PR #78 conflicts against current main deliberately.
+
+Especially verify:
+- final PR81 `SocialMobileContentSettings` shape;
+- final persona provenance/confirmed fields;
+- final `updated_at` CAS contract;
+- 24:00 generation-window semantics;
+- current RLS-facing repository calls;
+- no old candidate migration assumptions remain in app/server code.
+
+Do not weaken current PR81 validation to make PR78 fit.
+
+## AI consultation behavior
+
+Preserve/verify:
+- authenticated user JWT only; no service-role shortcut;
+- owner membership + `social_mobile_user_v1` workspace proof;
+- tenant-safe not-found behavior;
+- bounded request/history/body sizes;
+- exactly one AI provider call per send;
+- `gpt-5.6-luna`, structured output, `store:false`, no web/tools/X call;
+- no conversation body/token/email/secret logging;
+- untrusted model output allowlist + length/type validation;
+- chat/question responses cannot carry mutation deltas;
+- ambiguous user intent asks instead of silently proposing;
+- proposal changes only explicitly requested editable fields;
+- current settings explanation produces no delta;
+- history-learning intent is detected but does not pretend to have read X history;
+- publish/account/oauth/token/schedule/cron/approval/deletion/auth/entitlement changes remain forbidden.
+
+## Explicit memory contract
+
+The UI must make the state transition clear:
+
+conversation
+→ AI proposal
+→ user sees exactly what will change
+→ user presses explicit confirmation
+→ latest settings are re-read
+→ only proposal-target fields are applied
+→ CAS on `updated_at`
+→ stale/conflicting proposal refuses and asks for reconfirmation
+→ confirmed state becomes the next consultation's saved context.
+
+No implicit save on:
+- send;
+- AI reply;
+- navigation;
+- retry;
+- app resume;
+- preview/example mode.
+
+Persona must be treated as remembered truth only after user confirmation.
+
+## Memory-to-post-generation proof
+
+This is a V1 acceptance requirement.
+
+Prove with source/tests that:
+- the exact confirmed settings/persona persisted by the consultation path materialize into the final `SocialMobileContentSettings` / confirmed persona contract;
+- the current main post-generation guidance consumes those remembered values without a lossy/remapped shadow schema;
+- preferred tone, themes/objective/notes/NG words and confirmed persona signals used by generation are preserved through save → read → guidance;
+- unconfirmed persona is not treated as remembered guidance;
+- unrelated read-only controls such as approval mode/generation time are not changed by consultation.
+
+If the current live scheduled-user dispatcher that consumes this guidance still depends on open PR #41, do not implement PR #41 here. Instead, report the exact missing live wiring as a release blocker and prove the reusable generator contract only.
+
+## UX / native verification
+
+Use local iOS Simulator where practical.
+
+Verify:
+- normal conversation;
+- loading;
+- retryable provider error;
+- question;
+- proposal card;
+- explicit "これで覚えて";
+- successful save;
+- stale-save conflict;
+- continue conversation after save;
+- keyboard/scroll/safe-area on narrow width;
+- no misleading "保存済み" wording before confirmation.
+
+No EAS build.
+
+## Tests
+
+At minimum:
+- all PR78 consult server logic tests;
+- all social-mobile consult/session/screen tests;
+- content-settings repository tests;
+- PR81-related content-settings tests affected by integration;
+- targeted generation-guidance compatibility test;
+- unauthorized / wrong-member / cross-brand refusal;
+- unknown-key and dangerous-key model output refusal;
+- one provider call maximum;
+- no X call;
+- no save before confirmation;
+- stale CAS refusal;
+- confirmed persona/settings re-read into next consultation;
+- memory-to-generation guidance round trip;
+- typecheck;
+- lint;
+- Deno check/lint for changed runtime;
+- `git diff --check`;
+- added-line secret scan.
+
+Use fake model/X where appropriate. Do not make a paid real-AI production call in this task.
+
+## Merge / production gates
+
+This task is **source-only**.
+
+Forbidden:
+- PR merge;
+- Edge deploy;
+- PR81 production schema apply;
+- DB/history write;
+- Auth/Vault/OAuth/X/Cron mutation;
+- production feature flag;
+- real X post.
+
+Reason:
+PR81 production schema must be exact before the consultation endpoint can be activated safely, and G5 critical-path production work has priority.
+
+At completion, if source integration/tests PASS:
+- keep PR #78 open;
+- report exact integrated head;
+- status -> review_required / next_owner -> chatgpt;
+- K3 will decide whether one focused review is needed.
+- Do not request production deploy yet.
+
+## Completion report
+
+Include:
+- task_id / result
+- fresh main and original/new PR78 head
+- conflicts and exact resolutions
+- changed files
+- memory contract proof
+- memory-to-generation proof
+- whether PR #41 remains required for live scheduled-user generation
+- native verification
+- tests
+- production mutation = 0
+- merge/deploy = 0
+- G4/G5 conflict check
+- remaining V1 blockers
+- next recommendation
+
+## Review policy
+
+This is Auth/RLS-adjacent AI behavior but no new DB/auth/permission boundary is introduced.
+
+Default after a clean focused integration:
+- one independent review only if fresh integration materially changes auth/tenant/CAS/model-output safety boundaries;
+- otherwise no routine rereview of already-reviewed unchanged contracts.
+- if review is warranted, prefer **Luna（高）**; use Sol only for a concrete security-boundary change.
+
+Recommended model: **Opus5.5（高）**.
+
+---
+
+# Previous G3 task — preserved history
+
 - task_id: x-social-mobile-pr81-production-apply-continuation-20261006
 - owner: claude
 - slot: claude-3
