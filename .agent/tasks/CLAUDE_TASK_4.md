@@ -551,8 +551,8 @@ Recommended Codex rereview: **Sol（極高）**.
 - task_id: x-social-mobile-publish-toggle-transactional-corrective-20261003
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Opus5.5（極高）
 - type: corrective implementation / authorization transaction / posting safety / concurrency
