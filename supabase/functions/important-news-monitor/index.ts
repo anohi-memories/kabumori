@@ -59,10 +59,14 @@ import {
   enrichTdnetCandidatesWithPdfSummaries,
   fetchCompanyIrSource,
   fetchTdnetCandidates,
+  fetchTdnetPdfBodySummary,
   runNewsSourceProviders,
   type CompanyIrSource,
   type NewsSourceProvider,
 } from "./official_source_fetchers.ts";
+import { runTdnetEnrichmentWorker } from "./tdnet_enrichment_worker.ts";
+import { toTdnetQueueInsert } from "./tdnet_intake_logic.ts";
+import { createTdnetQueueRepository } from "./tdnet_queue_repository.ts";
 import {
   fetchMarketMacroSource,
   MARKET_MACRO_ALLOWED_DOMAINS,
@@ -316,6 +320,38 @@ async function runUnpdfEdgeVerification(): Promise<Record<string, unknown>> {
       stackHead,
     };
   }
+}
+
+function tdnetQueueEnabled(): boolean {
+  return Deno.env.get("IMPORTANT_NEWS_TDNET_QUEUE") === "enabled";
+}
+
+/** TDnet T1 worker: stores one issuer's enriched disclosures exactly like the legacy group path (dup rows, one representative). */
+async function insertTdnetEventMembers(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  members: PreparedNewsCandidate[],
+): Promise<Map<string, string>> {
+  const ids = new Map<string, string>();
+  const fresh: PreparedNewsCandidate[] = [];
+  for (const prepared of members) {
+    const duplicate = await findStoredDuplicate(supabaseUrl, serviceRoleKey, prepared);
+    if (!duplicate) {
+      fresh.push(prepared);
+    } else if (duplicate.contentHash === prepared.contentHash || duplicate.sourceUrl === prepared.sourceUrl) {
+      ids.set(prepared.sourceUrl, duplicate.id);
+    } else {
+      ids.set(prepared.sourceUrl, (await insertCandidate(supabaseUrl, serviceRoleKey, prepared, duplicate.id)).id);
+    }
+  }
+  for (const group of groupImportantNewsCandidates(fresh)) {
+    const representative = await insertCandidate(supabaseUrl, serviceRoleKey, await aggregateImportantNewsGroup(group), null);
+    ids.set(group.members[0].sourceUrl, representative.id);
+    for (const member of group.members.slice(1)) {
+      ids.set(member.sourceUrl, (await insertCandidate(supabaseUrl, serviceRoleKey, member, representative.id)).id);
+    }
+  }
+  return ids;
 }
 
 function parseIncoming(value: unknown): IncomingNewsCandidate {
@@ -1685,6 +1721,30 @@ Deno.serve(async (req) => {
       candidateId?: unknown;
       limit?: unknown;
     };
+    if (body.mode === "tdnet_enrich") {
+      // TDnet T1 Stage B: drains the intake queue (PDF enrichment -> candidates). Does nothing unless the queue
+      // flag is on, so deploying this code cannot change the legacy behaviour.
+      if (!tdnetQueueEnabled()) return response({ mode: body.mode, status: "disabled" });
+      const repo = createTdnetQueueRepository(supabaseUrl, serviceRoleKey);
+      const limit = typeof body.limit === "number" && Number.isInteger(body.limit) && body.limit >= 1 && body.limit <= 20
+        ? body.limit
+        : undefined;
+      const result = await runTdnetEnrichmentWorker({
+        repo,
+        workerId: `tdnet-worker-${crypto.randomUUID()}`,
+        now: () => Date.now(),
+        prepare: async (candidate) => await prepareNewsCandidate(parseIncoming(candidate)),
+        findDuplicate: async (prepared) => {
+          const duplicate = await findStoredDuplicate(supabaseUrl, serviceRoleKey, prepared);
+          return duplicate && (duplicate.contentHash === prepared.contentHash || duplicate.sourceUrl === prepared.sourceUrl)
+            ? { id: duplicate.id }
+            : null;
+        },
+        loadPdfSummary: fetchTdnetPdfBodySummary,
+        createCandidates: async (members) => await insertTdnetEventMembers(supabaseUrl, serviceRoleKey, members),
+      }, { maxItems: limit, skipRoutine: Deno.env.get("IMPORTANT_NEWS_TDNET_SKIP_ROUTINE") === "enabled" });
+      return response({ mode: body.mode, status: "completed", result, queue: await repo.stats(Date.now()).catch(() => null) });
+    }
     if (body.mode === "unpdf_edge_verification") {
       const result = await runUnpdfEdgeVerification();
       return response(result, result.success === true ? 200 : 500);
@@ -2037,20 +2097,39 @@ Deno.serve(async (req) => {
       });
     }
     const acquiredCandidates: IncomingNewsCandidate[] = [];
+    const tdnetQueueDiagnostics = { enabled: tdnetQueueEnabled(), seen: 0, newlyQueued: 0, fellBackToLegacy: 0 };
     if (body.fetchSources === true) {
       const tdnetDate = typeof body.tdnetDate === "string" ? body.tdnetDate : undefined;
       let companySources: CompanyIrSource[] = [];
       try { companySources = await selectCompanyIrSources(supabaseUrl, serviceRoleKey); }
       catch { sourceErrors.push("company_ir:COMPANY_IR_SOURCES_LOOKUP_FAILED"); }
       const providers: NewsSourceProvider[] = [
-        { key: "tdnet", fetchCandidates: () => fetchTdnetCandidates({ date: tdnetDate }) },
+        // With the T1 queue on, the whole list is read (up to 6 pages): everything is queued, nothing is cut at 100.
+        { key: "tdnet", fetchCandidates: () => fetchTdnetCandidates({ date: tdnetDate, maxPages: tdnetQueueEnabled() ? 6 : undefined }) },
         ...companySources.map((source) => ({
           key: `company_ir:${source.id}`,
           fetchCandidates: () => fetchCompanyIrSource(source),
         })),
       ];
       const collected = await runNewsSourceProviders(providers);
-      acquiredCandidates.push(...collected.candidates);
+      if (tdnetQueueEnabled()) {
+        // TDnet T1 Stage A: queue every disclosure (cheap), leave PDF enrichment to the worker. If queueing fails the
+        // disclosures fall back to the legacy path below, so a queue problem can never lose a disclosure.
+        const tdnetItems = collected.candidates.filter((candidate) => candidate.sourceType === "tdnet");
+        const others = collected.candidates.filter((candidate) => candidate.sourceType !== "tdnet");
+        try {
+          const rows = tdnetItems.map(toTdnetQueueInsert).filter((row): row is NonNullable<typeof row> => row !== null);
+          tdnetQueueDiagnostics.seen = tdnetItems.length;
+          tdnetQueueDiagnostics.newlyQueued = await createTdnetQueueRepository(supabaseUrl, serviceRoleKey).enqueue(rows);
+          acquiredCandidates.push(...others);
+        } catch (error) {
+          sourceErrors.push(`tdnet_queue:${safeError(error)}`);
+          tdnetQueueDiagnostics.fellBackToLegacy = tdnetItems.length;
+          acquiredCandidates.push(...collected.candidates);
+        }
+      } else {
+        acquiredCandidates.push(...collected.candidates);
+      }
       sourceErrors.push(...collected.errors);
       for (const key of collected.succeededSources) {
         if (key.startsWith("company_ir:")) {
@@ -2347,6 +2426,7 @@ Deno.serve(async (req) => {
         lightweightProcessedCount: candidateBatch.lightweightProcessedCount,
         deferredCandidateCount: candidateBatch.deferredCandidateCount,
       },
+      tdnetQueue: tdnetQueueDiagnostics,
       marketMacro: {
         fetchedCount: marketMacroFetchedCount,
         duplicateCount: marketMacroDuplicateCount,
