@@ -1,5 +1,185 @@
 # Codex Task — CURRENT TASK
 
+- task_id: common-account-v1-phase2-service-enrollment-review-20261006
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: critical
+- recommended_model: Sol（高）
+- type: focused auth/session/service-enrollment security review
+- target_pr: 95
+- target_head: c06fac6492708331b6ba816122c9852cdcea73e7
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Independently review Phase 2 common-account service enrollment wiring for both Kabumori and X social-mobile.
+
+PR #95 changes authenticated-session bootstrap so each app enrolls the corresponding service through the already-reviewed lifecycle RPC boundary.
+
+This review is mandatory because the diff crosses:
+- Auth/session bootstrap
+- both native apps
+- lifecycle service-start RPCs
+- fail-closed behavior for account/service lifecycle states
+
+Do not broaden into Phase 3 deletion/enforcement implementation.
+
+## Freshness / isolation
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / G5 report / this TASK.
+2. Use a fresh independent H1 worktree from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fetch fresh origin/main and PR #95.
+4. Require exact head `c06fac6492708331b6ba816122c9852cdcea73e7`. Head moved => STOP and report stale review target.
+5. Confirm no H1 directory/worktree is shared with G1-G5/H2.
+6. Review source only. No production access/write, no deploy, no EAS, no Auth/Storage/OAuth/Vault mutation.
+7. PR #94 currently also changes `src/app/_layout.tsx`; review compatibility against its current head, but do not merge either PR. Re-check overlap/freshness before final verdict.
+
+## Review focus A — canonical lifecycle RPC contract
+
+Verify both clients use only:
+- `public.start_kabumori_service()`
+- `public.start_x_autopost_service()`
+
+Verify:
+- no direct client INSERT/UPDATE into common-account tables;
+- no email merge/inference;
+- return payload/service key/user state is validated fail-closed;
+- unknown/malformed responses never become ready;
+- Kabumori profile creation is not raced by legacy `ensure_my_profile`;
+- X login does not create workspace/social account/OAuth state/credential/publish enablement.
+
+Read the exact current migration/source definitions so review is against the server contract, not assumptions.
+
+## Review focus B — lifecycle-state safety
+
+Independently test/inspect:
+- active entitlement -> idempotent ready;
+- missing entitlement -> only that service is added;
+- deleting / locked / suspended / provisioning / invalid-login / unknown -> fail closed;
+- no legacy profile-only bypass in Kabumori;
+- no OAuth/workspace shortcut in X.
+
+### Ended / explicit reactivation — critical
+
+G5 reports an acknowledged two-call pattern:
+1. client observes ended;
+2. user explicitly chooses to re-enroll;
+3. client calls start RPC.
+
+Determine whether a stale/racing request can silently reactivate an entitlement that became ended after the UI observation but before the start call.
+
+Current Phase 2 source must satisfy the product contract:
+**ended must never silently reactivate; reactivation must be tied to an explicit current user action.**
+
+If the current client+RPC contract cannot guarantee this under the lifecycle states that Phase 3 will introduce, mark CHANGES REQUIRED and state the minimum safe correction. Do not dismiss a real race solely because no current production route creates ended yet.
+
+## Review focus C — session concurrency / user switching
+
+Verify:
+- single-flight is scoped to the actual user/session;
+- sign-out clears remembered state;
+- switching from user A to user B cannot reuse A's success/error;
+- transient failures are not cached as durable failure;
+- retries cannot duplicate/corrupt lifecycle rows;
+- token refresh/auth events do not cause unintended repeated state mutation;
+- password recovery ordering is safe;
+- stale async completion after sign-out/user switch cannot reopen app for wrong user.
+
+Use adversarial tests where practical.
+
+## Review focus D — Kabumori app gate
+
+Verify:
+- app cannot enter signed-in application tree until enrollment is ready;
+- push registration/notification navigation do not proceed on rejected enrollment;
+- profile-dependent code still works after start RPC;
+- explicit re-enrollment UX is accurate and non-enumerating before auth;
+- logout always remains possible;
+- no old `ensure_my_profile` fallback remains in active session bootstrap.
+
+## Review focus E — X app gate / OAuth separation
+
+Verify:
+- ServiceEnrollmentGate sits after auth/recovery but before user workspace data/onboarding;
+- login alone does not touch X posting authorization;
+- X OAuth remains explicit user action;
+- rejection cannot be bypassed by onboarding/deep link;
+- deletion/account-help route remains reachable as required;
+- mock/preview behavior cannot leak into production;
+- provider login (email/Google/Apple/X) all converge safely without storing provider tokens.
+
+## Review focus F — PR #94 compatibility
+
+PR #94 currently changes the same Kabumori `src/app/_layout.tsx` in another hunk.
+
+At review time:
+- fetch current PR #94 head;
+- compare exact overlapping file;
+- test both merge orders or an equivalent merge-tree proof;
+- ensure combined behavior preserves both:
+  - PR #94 root-level navigation/swipe contract;
+  - PR #95 AuthGate/service-enrollment contract.
+- If PR #94 is still moving, do not recommend blind merge. State the safe merge order/fresh rebase requirement.
+
+## Review focus G — tests / build evidence
+
+Rerun or independently reproduce relevant:
+- Kabumori app tests including new enrollment tests;
+- X tests including new enrollment tests;
+- cross-app lifecycle DB fixture tests where practical;
+- typecheck / web export / lint where configured;
+- mutation/adversarial tests around unknown response, ended behavior, user switch, stale completion;
+- git diff --check / secret scan.
+
+Distinguish pre-existing diagnostics from PR regressions.
+
+## Verdict
+
+Return one of:
+- PASS
+- PASS-WITH-NONBLOCKING-NOTES
+- CHANGES REQUIRED
+- BLOCKED
+
+PASS requires confidence that current Phase 2 source is safe to merge as source, while production deploy/enforcement remain separate gates.
+
+Do not merge PR #95.
+Do not deploy.
+Do not modify product source in H1; if a blocker exists, return it to G5 for correction.
+
+## Completion / C1
+
+Write `.agent/CODEX_REPORT.md` with:
+- exact reviewed head
+- verdict
+- findings by severity
+- ended/reactivation disposition
+- session concurrency/user-switch disposition
+- Kabumori gate disposition
+- X/OAuth separation disposition
+- PR94 compatibility disposition
+- test evidence
+- production mutation = 0
+- merge recommendation
+- exact next action
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Previous H1 task history — preserved
+
+# Codex Task — CURRENT TASK
+
 - task_id: kabumori-pr87-editorial-three-points-review-20261006
 - owner: codex
 - slot: codex-1
@@ -3328,3 +3508,4 @@ Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 - recommended Claude model: **Opus5.5（高）**.
 - corrected candidate requires fresh Codex rereview: **Sol（高）**.
 - H1 closed and reusable after fresh allocation.
+
