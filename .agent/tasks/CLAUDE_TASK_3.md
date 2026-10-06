@@ -1,5 +1,183 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: x-social-mobile-ai-consult-persona-generation-guidance-20261006
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Sonnet5（高）
+- type: source-only V1 completion / remembered persona -> generation prompt
+- source_pr: 78
+- source_head: d1f131c56b082d2af57660b5bd3d83ff8c619c7d
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Product decision
+
+AI相談はV1必須の中核機能。
+「覚えた」内容が実際の投稿生成に反映されなければV1完成とはしない。
+
+Previous G3 proved:
+- conversation -> proposal -> explicit 「これで覚えて」 -> CAS save -> reread -> next consultation works;
+- settings + confirmed persona survive the save/read round trip;
+- current post generator consumes settings and some persona signals.
+
+K3 found one V1 gap:
+confirmed persona fields
+`toneSignals`, `topicSignals`, `hashtagHabits`, `ctaStyle`, `openingClosingPatterns`
+are persisted and re-read but are not currently reflected in post-generation guidance.
+
+## Current conflict / dependency state
+
+- G5 common-account critical path is active. This task must remain source-only and must not touch Auth/entitlement/account deletion/common-account migrations or production.
+- G4 is a separate X-app slot handled in another chat. Current G4 morning-greeting work is done; future G4 UI work must not be edited here.
+- PR #41 remains open and owns live general-user scheduled-post routing + account-bound Vault path. Its changed files do **not** include:
+  - `supabase/functions/_shared/brand/social_mobile_content_settings.ts`
+  - `supabase/functions/_shared/brand/brand_post_generator.ts`
+  - their focused tests.
+- PR81 production schema apply is still deferred behind G5.
+- PR #78 stays open; no merge/deploy in this task.
+
+## Goal
+
+Make every user-confirmed persona signal that AI consultation can save materially available to social-mobile post generation, without changing security, DB, live dispatch, X, or account boundaries.
+
+The generation contract must cover:
+- preferredTone
+- themes
+- objective
+- optionalNgWords
+- notes
+- persona.toneSignals
+- persona.sentenceLength
+- persona.punctuationEmoji
+- persona.recurringVocabulary
+- persona.topicSignals
+- persona.hashtagHabits
+- persona.ctaStyle
+- persona.openingClosingPatterns
+
+Unconfirmed persona must contribute **zero persona guidance**.
+
+## Allowed scope
+
+Primary:
+- `supabase/functions/_shared/brand/social_mobile_content_settings.ts`
+- `supabase/functions/_shared/brand/brand_post_generator.ts` only if needed for conflict-free hashtag-policy composition
+- focused tests:
+  - `supabase/functions/_shared/brand/brand_post_generator_test.ts`
+  - PR78 memory-generation test(s)
+
+Small app/server test updates are allowed only if necessary to keep the same contract explicit.
+
+Do not edit:
+- PR #41 files;
+- x-test-post routing;
+- Vault/OAuth/token/auth code;
+- common-account/G5 files;
+- DB migrations/RLS/RPC;
+- account deletion;
+- publish toggle/permission;
+- G4 workflow/UI files;
+- production config/secrets.
+
+## Guidance requirements
+
+1. **All confirmed signals must be represented semantically in the model instructions.**
+   Do not merely save/read them.
+
+2. Preserve existing bounds and sanitization.
+   - no unbounded prompt injection from saved free text;
+   - values remain data/guidance, not system authority;
+   - do not let notes/persona override safety/publish/account instructions.
+
+3. Keep existing settings behavior stable:
+   - preferredTone / themes / objective / NG words remain;
+   - notes must remain bounded but should not silently lose most of the remembered intent if a safe larger bound is practical;
+   - approvalMode / generationWindow / frequencyTargetPerWeek remain operational/read-only and are not converted into AI-editable behavior here.
+
+4. **Hashtag interaction must be internally consistent.**
+   Current generic social-mobile generation ends with `ハッシュタグは付けないでください` when no fixed hashtags exist.
+   If a confirmed social-mobile persona contains `hashtagHabits`, do not emit a contradictory later instruction that nullifies the remembered preference.
+   Requirements:
+   - no confirmed hashtag preference -> existing no-hashtag default remains unchanged;
+   - confirmed hashtag habit -> generator may follow that confirmed habit within the user's own social-mobile profile;
+   - do not alter AI Lab's existing hashtag policy;
+   - do not alter Kabumori fixed-hashtag behavior;
+   - no cross-brand special-casing by raw brand id.
+
+5. Topic/tone/CTA/opening/closing signals must guide style, not invent personal facts.
+
+## Required tests
+
+At minimum prove:
+
+- confirmed persona with every field produces guidance containing every field;
+- unconfirmed persona produces none of the persona guidance;
+- default social-mobile profile with no confirmed hashtag habit still says no hashtags;
+- confirmed social-mobile hashtag habit does not coexist with a contradictory final no-hashtag instruction;
+- AI Lab hashtag behavior unchanged;
+- Kabumori fixed hashtag behavior unchanged;
+- content-settings save -> reread -> generation guidance still round-trips all remembered fields;
+- consultation cannot alter approval/publish/account/OAuth/schedule boundaries;
+- no PR41/live-dispatch code changed.
+
+Run:
+- focused shared-brand tests;
+- PR78 consult memory-generation tests;
+- relevant app tests if touched;
+- Deno check/lint on changed runtime;
+- `git diff --check`;
+- added-line secret scan.
+
+No real OpenAI/X call.
+
+## Production / merge
+
+Forbidden:
+- production mutation;
+- Edge deploy;
+- PR81 apply;
+- PR78 merge;
+- PR41 integration;
+- real X/OpenAI;
+- Auth/Vault/OAuth/Cron changes.
+
+At completion:
+- push only to PR #78 branch if clean;
+- keep PR #78 open;
+- status -> review_required / next_owner -> chatgpt;
+- K3 decides next.
+
+## Completion report
+
+Include:
+- result
+- fresh main / previous and new PR78 head
+- changed files
+- exact persona fields now consumed
+- hashtag behavior proof
+- memory-to-generation round trip
+- tests
+- G4/G5/PR41 conflict check
+- production mutation/deploy/merge = 0
+- remaining V1 blockers
+- next recommendation
+
+## Review policy
+
+This is bounded prompt/generation behavior, not a new auth/DB/permission boundary.
+Default: no Codex review if tests and scope are clean.
+If an unexpected cross-brand or publish-safety concern appears, STOP and report rather than widening scope.
+
+Recommended model: **Sonnet5（高）**.
+
+---
+
+# Previous G3 task — preserved history
+
 - task_id: x-social-mobile-ai-consult-v1-fresh-integration-20261006
 - owner: claude
 - slot: claude-3
