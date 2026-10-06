@@ -1,3 +1,15 @@
+## G4 assigned — POSTONA multi-social Phase 1 architecture inventory — 2026-10-06
+
+- G4 is now `ready` on `postona-multisocial-phase1-architecture-inventory-20261006`.
+- Scope is deliberately docs-only: inventory current X-specific seams, define provider-neutral X/Threads/Instagram account/post/publication architecture, provider capability matrix, Threads-first implementation sequence and Instagram follow-on.
+- Product direction: provisional brand **POSTONA (POST + PERSONA)**; multi-social architecture precedes final UI implementation.
+- Current G3 remains `ready` on PR41 live scheduled-user generation/content-settings service-read integration; G4 must read for architecture only and must not edit/integrate G3 runtime paths.
+- Current G5 remains `ready` on common-account Phase 2 corrective; common login/service entitlement/Auth/session/deletion/provider-credential lifecycle remain G5-owned and must not be altered by G4.
+- G4 runtime/app/migration/RPC/Edge/OAuth/Vault/secret/production/deploy/provider-call changes: prohibited in Phase 1.
+- Deliverable: `docs/postona/multi-social-phase1.md` plus G4 report/control updates only.
+- Recommended model: **Opus5.5（高）**.
+- Next action: send `G4` to Claude Code.
+
 ## Final C1 — PR #95 CHANGES REQUIRED / PR #94 merged / G5 corrective assigned — 2026-10-06
 
 - H1 exact review target: PR #95 head `c06fac6492708331b6ba816122c9852cdcea73e7`.
