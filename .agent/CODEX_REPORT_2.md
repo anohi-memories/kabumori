@@ -1,3 +1,119 @@
+## H2 — PR #41 focused R1/R2 ACL rereview — 2026-10-07 JST
+
+- task_id: x-social-mobile-pr41-acl-focused-rereview-20261007
+- result / verdict: **PASS** for the corrected R1/R2 privilege boundary. Both previous blockers are closed; no new blocker found in this bounded review.
+- status: review_required
+- next_owner: chatgpt
+- exact_reviewed_head: c509117f8addf5a8687d60d9c18ae271b2c1777c (PR #41 open/unmerged; head unchanged at final API read-back).
+- previous_reviewed_head: 280aa0f83d4f039ba3e43f32da202a91fd2333f2
+- fresh_main: startup fb52674435a86609d0c31e766e66446805810da1; final pre-sync 0aeceeb69ece2207f99a492a9456f64d3bae5066.
+- isolation: new independent clone /private/tmp/h2-pr41-acl-20261007.wzJ2FP/review from kabumori-fresh; detached exact head; tracked working tree clean. No shared checkout/dev server/other-slot database used.
+- changed_files_by_H2: .agent/CODEX_REPORT_2.md and .agent/tasks/CODEX_TASK_2.md only (completion synchronization). Implementation/migration source edits: 0. Supplemental test script/logs outside repo only.
+- implementation_commit: reviewed G3 correction c509117f8addf5a8687d60d9c18ae271b2c1777c; H2 source commit none.
+- commit_hash / push: completion control-file synchronization pending; exact resulting commits/read-back recorded in final receipt.
+- merge: 0; deploy: 0; production read/write/apply: 0; real X/OpenAI/Push/Auth/Vault/OAuth: 0.
+
+### Scope / exact delta / freshness
+
+Only the concrete R1/R2 fixes were re-reviewed, not the full PR41 implementation. The correction commit changes exactly six files:
+- supabase/migrations/20261006160000_vault_account_brand_post_completion.sql
+- supabase/migrations/20261006160100_social_mobile_publish_settings_reader.sql
+- supabase/migrations/20261006160200_x_account_publish_authority.sql
+- supabase/tests/x_account_refresh_pilot_run.sh
+- supabase/tests/x_account_stage3b_acl_adverse_run.sh
+- supabase/tests/x_account_stage3b_base_fixture.sql
+
+No functions/app runtime files change in c509117f relative to its fresh-main integration parent. The fixture extraction preserves the existing fake-only core/auth/brand/pilot setup; existing pilot behavior/race proof remains green. The earlier PR41 runtime/body behavior accepted by C2 is preserved.
+
+Fresh fetched main vs PR merge-base: **0 changed-file overlap** across all 16 PR41 changed files; main-only changes are other .agent slots/control state and market-report-analysis/docs, not the reviewed migrations/runtime. H1/G5 are separately reviewing PR95 Auth/session; G4 is docs-only done. No G5 entitlement or unrelated correction was attempted. GitHub mergeable currently returns null (pending recomputation), so do not claim a green mergeability gate; C2 must re-check it immediately before any merge.
+
+### R1 disposition — PASS
+
+The reader now checks both before creation and before COMMIT:
+- all forbidden effective table privileges on social_mobile_content_settings (SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER, plus MAINTAIN on PG17);
+- SELECT/INSERT/UPDATE/REFERENCES on **every live column**, using has_column_privilege, not table-only ACL inspection;
+- direct, inherited and PUBLIC-derived privilege paths are included;
+- drift causes refusal, not broad revoke/default-ACL/membership repair.
+
+Independent PG17 runner results:
+- direct column SELECT: refused;
+- inherited column SELECT: refused;
+- PUBLIC column SELECT: refused;
+- column INSERT, UPDATE, REFERENCES: refused;
+- table DELETE: refused.
+All seven refuse with PUBLISH_SETTINGS_READER_PRECONDITION_SERVICE_ACCESS, preserve catalog/default ACL/column ACL/application membership fingerprint, leave reader absent, and keep the injected grant unchanged. Clean apply succeeds, authenticated PR81 table/column SELECT/INSERT/UPDATE remains exactly unchanged, service_role direct table/column read and writes remain denied.
+
+### R2 disposition — PASS
+
+Completion, reader and authority/check/set routines now have:
+- preflight refusal for any same-name routine of any signature/kind;
+- creator required to be non-superuser and exact relevant table owner;
+- explicit owner alignment and pinned empty search_path;
+- exact direct ACL: owner plus one plain service_role EXECUTE; no PUBLIC/unknown grantee/grant option;
+- effective EXECUTE denial for anon/authenticated, required intended service_role EXECUTE, and additional-role effective-access scan;
+- app-role owner/service-role inheritance refusal;
+- authority-table RLS/owner/direct ACL/column ACL/effective table and column boundary checks.
+
+Unknown default grantee is refused atomically rather than silently normalized. No global ALTER DEFAULT PRIVILEGES or role membership changes occur in these migrations. Known service_role default grant option is deliberately revoked/regranted into plain EXECUTE (tested); unsafe unknown grant option causes refusal.
+
+Independent provided matrix: 27 routine cases (3 migrations x unknown default / authenticated inheritance / anon inheritance / unknown grant option / overload / procedure / superuser / non-owner / authenticated-service inheritance), plus one authority unknown default DML case, all refused atomically. Together with R1 this is **35/35 refused cases PASS**, plus known grant-option normalization and clean graph PASS.
+
+H2 added nine independent supplemental probes outside repo:
+- authenticated inherits owner: completion, reader, authority all refuse;
+- anon inherits service_role: all three refuse;
+- explicit unknown direct EXECUTE injected by local-only CREATE FUNCTION event-trigger fixture: all three refuse at direct-ACL postcondition.
+For the owner probe H2 removed the fixture-only owner->authenticated membership first, then granted owner->authenticated in the inverse direction; this avoids the circular-membership limitation in the supplied fixture. The graph was restored after each case.
+All **9/9 supplemental refusals PASS** with identical catalog/default ACL/role-membership fingerprint and no partial target routines/authority table. Combined adverse refusal proof = **44/44**.
+
+Clean behavioral proof:
+- anon/authenticated setter enable, completion, authority check, reader and direct authority INSERT all denied with permission denied; authority rows remain 0 and running post remains running.
+- service_role setter returns enabled; completion returns fingerprint_persisted=true; direct authority UPDATE remains denied.
+Thus the previous authenticated ability to enable authority or forge completion is not present after a successful corrected clean apply, and unsafe ACL fixtures cannot commit.
+
+### Bounded accepted-behavior regressions
+
+Independent existing pilot runner:
+- PILOT_BEHAVIOR_PASS
+- PUBLISH_AUTHORITY_BEHAVIOR_PASS
+- PUBLISH_SETTINGS_READER_BEHAVIOR_PASS
+- PILOT_RACE_PASS (independent account leases; one claim)
+- PUBLISH_RACE_PASS (revocation effective at commit; post-commit checks refuse)
+- PILOT_CLEANUP_PASS
+
+These cover exact running brand/tenant binding, no-row/manual_review consent refusal, intended authority/check/completion, idempotent terminal completion and unchanged local race behavior.
+
+Independent Deno:
+- focused dispatcher/generator/AI Lab/settings/phase15/routing/rollout invariants: **65/65 PASS**.
+- full PR76 Vault-auth guarded-send test file: **33/33 PASS**.
+- migration source invariants: **11/11 PASS**.
+- total independently rerun Deno in this bounded turn: **109/109 PASS**.
+- deno check vault_account_brand_post.ts: PASS.
+- bash -n on both supplied runners: PASS.
+- git diff --check corrected commit/working tree: PASS.
+- targeted added-line secret-pattern scan: 0 matches (not a guarantee for every imaginable secret format).
+- no broad unrelated suite repeated. G3's 534/534 x-test-post and 436/436 _shared are prior reported evidence, not fresh H2 test counts.
+
+Live-generation mock regression includes every remembered AI-consult preference / confirmed persona signal reaching the actual generateBrandPost prompt, unconfirmed persona exclusion, no-row/manual_review callbacks zero, authority before generation and before X, length/NG/dedupe, confirmed-completion non-replayable handling. PR76 tests cover each send/refresh/retry guarded check. Brand-generator/AI Lab/routing fixtures retain AI Lab specialized and Kabumori legacy boundaries. Real fetch is forbidden/mocked; no live X/OpenAI.
+
+### Evidence / cleanup / safety
+
+- PostgreSQL: owned disposable 17.11 Homebrew, Unix socket only on port 56642. All apply/adverse/behavioral writes confined to that instance; no production connection.
+- Evidence root: /private/tmp/h2-pr41-acl-20261007.wzJ2FP (adverse.log, extra.sh, extra.log, pilot.log, focused.log, pr76.log, invariants.log, check.log).
+- Cleanup read-back: 0 non-default databases; 0 kb_s3b_acl_* residual roles; authenticated->owner and anon->service_role usage both false. Owned PostgreSQL stopped. No other DB/server was touched.
+- Formal repo / old repo / other workstreams / apps/admin / HANDOFF / secrets untouched.
+- Source changes 0, merge 0, production read/write/schema/RPC/migration/history/Cron/scheduler/settings/Auth/Vault/OAuth/secret changes 0, deploy 0, real X/OpenAI/Push/manual production invokes 0.
+- Supabase/Postgres skills informed effective-privilege/least-privilege/SECURITY DEFINER checks. Official functions documentation checked: https://supabase.com/docs/guides/database/functions . Changelog markdown fetch unsupported; no broad web investigation.
+
+### Remaining issues / exact next action
+
+- No remaining R1/R2 source blocker.
+- **Recommend PR #41 source merge at exact c509117f after C2 final freshness/head/no-race/mergeability check. No further routine review is required.**
+- Production rollout is separate and NOT authorized/performed here. Before apply, verify live creator/table owner is non-superuser, effective role graph/table-column/default ACLs, exact dependency/history/name collisions, and coordinate G5 rollout/enforcement ordering. No production claim is made from disposable proof.
+- Candidate remains intentionally dormant without explicit authority activation; G5 entitlement enforcement remains deferred and must not be silently enabled by this review.
+- Current C2 handback: review_required / next_owner: chatgpt; STOP.
+
+---
+
 ## H2 — PR #41 live-generation security review — 2026-10-07 JST
 
 - task_id: x-social-mobile-pr41-live-generation-security-review-20261007
