@@ -84,13 +84,14 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: done
 - task_id: x-morning-greeting-schedule-reliability-bc-20261006
 - start_code: G4
 - finish_code: K4
-- next_owner: claude
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Source-only reliability fix for morning greeting image generation. Plan B: multiple staggered GitHub schedule opportunities before the morning post. Plan C: ~06:00 JST missing-image detector using existing GitHub/Supabase patterns, with no new external notification service. Preserve workflow_dispatch and generator idempotency; avoid duplicate OpenAI calls. No PAT/Vault/pg_cron/production mutation in this task. Plan A is separate after K4. Recommended Sonnet5（高）; no Codex review by default.
+- allocation: Final K4 PASS. PR #92 exact head 3d5475849217e1ca9f40bbedf12a42c0e5671504 squash-merged as 19c85c4381c55161207032146d6f66eb8a0c99f5. Plan B adds four staggered generator schedules (00:17/02:47/04:17/05:17 JST) with same-day idempotency; Plan C adds read-only missing/late checks at 06:07/09:47 JST. 44/44 tests, fresh-main overlap 0, CI green, production mutation/deploy/X/PAT/Vault/pg_cron=0. No Codex review required. G4 free after fresh allocation. Plan A remains separate.
+- recommended_model: Sonnet5（高）
 
 ## Claude G5
 - owner: claude
