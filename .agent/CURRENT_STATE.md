@@ -1,3 +1,14 @@
+## Common-account becomes project-wide critical path — 2026-10-06
+
+- user decision: **共通アカウント完成を、かぶモリ/X自動投稿の次工程より最優先**にする。
+- Phase 1 foundation is already production PASS.
+- G5 is now assigned `common-account-v1-phase1-production-backfill-gate-20261006`.
+- first G5 run is strictly read-only: foundation check + `account_lifecycle_backfill(false)` + classification parity + proof refresh + frozen apply package.
+- no backfill(true) is authorized yet; G5 must STOP for K5 and explicit production approval.
+- existing G1-G4 tasks are preserved, but unrelated production DB/Auth/permission mutations must not overtake an approved/active G5 production window.
+- after exact backfill, common-account Phase 2/3 will be prioritized and app-side integration work may be parallelized safely by service.
+- recommended G5 model: **Opus5.5（極高）**.
+
 ## Final K5 — Common-account Phase 1 foundation applied PASS — 2026-10-06
 
 - verdict: **PASS / APPLIED_PASS**.
