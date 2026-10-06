@@ -1,3 +1,20 @@
+## K3 handoff — corrected PR #41 -> H2 focused ACL rereview
+
+- corrected PR #41 exact head: `c509117f8addf5a8687d60d9c18ae271b2c1777c`.
+- G3 result: PASS_CANDIDATE source-only for the bounded H2 R1/R2 corrective.
+- R1 report: effective table/column privilege checks now cover direct, inherited and PUBLIC paths; adverse direct/inherited/PUBLIC column SELECT plus INSERT/UPDATE/REFERENCES/table-DML cases refuse atomically.
+- R2 report: privileged completion/reader/authority routines now enforce exact signature/kind/owner/search_path/direct ACL/effective EXECUTE and reject unknown default ACL, inheritance, grant option, overload/procedure and unsafe creator/owner states.
+- reported adverse ACL runner: 35 refusal cases PASS; clean service_role path PASS.
+- bounded regressions: x-test-post 534/534; focused Deno 63/63; _shared 436/436; pilot reader/authority/race/cleanup PASS.
+- production read/write/apply = 0; deploy = 0; merge = 0; real X/OpenAI = 0.
+- latest-main freshness check after G3: main advanced, but overlap with all 16 PR41 changed files = 0; no fresh integration needed before review.
+- H2 rereview is now actually assigned in `.agent/tasks/CODEX_TASK_2.md`:
+  - task_id: `x-social-mobile-pr41-acl-focused-rereview-20261007`
+  - exact target: `c509117f8addf5a8687d60d9c18ae271b2c1777c`
+  - scope: R1/R2 only + bounded regression
+  - recommended model: **Sol（高）**.
+- merge remains HOLD until C2.
+
 ## Final K5 — PR #95 round-2 PASS_CANDIDATE / focused H1 rereview assigned — 2026-10-07
 
 - G5 result: **PASS_CANDIDATE**, not final merge approval.
