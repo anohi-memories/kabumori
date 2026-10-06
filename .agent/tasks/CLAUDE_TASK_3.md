@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-3
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: bounded security corrective / effective column privileges / exact RPC ACL
