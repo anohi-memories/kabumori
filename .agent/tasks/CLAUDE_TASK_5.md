@@ -3,8 +3,9 @@
 - task_id: common-account-v1-phase1-production-migration-gate-20261006
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: in_progress
+- next_owner: claude
+- production_mutation_window: **ACTIVE** — 2026-10-06, user explicitly approved the G5 common-account Phase 1 production migration (exact 20261001150000 only, schema-first / history-second runner, then read-back). Other slots: no production write until this line says CLOSED.
 - priority: highest
 - start_code: G5
 - finish_code: K5
