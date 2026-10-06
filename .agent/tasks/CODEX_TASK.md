@@ -1,5 +1,191 @@
 # Codex Task — CURRENT TASK
 
+- task_id: common-account-v1-phase2-service-enrollment-corrective-rereview-20261006
+- owner: codex
+- slot: codex-1
+- status: done
+- next_owner: none
+- priority: critical
+- recommended_model: Sol（高）
+- type: focused auth/session/lifecycle-RPC/migration security re-review
+- target_pr: 95
+- target_head: dd065e16f64a37582f73d05f1ab57ff7d276a5f7
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Independently re-review the G5 corrective for Phase 2 common-account service enrollment after the prior H1 CHANGES REQUIRED verdict.
+
+The previous blockers were R1-R5:
+- R1 P1: stale automatic start could silently reactivate ended;
+- R2 P1: explicit re-enrollment intent could cross user/session boundaries;
+- R3 P2: Kabumori push/notification side effects could run before positive enrollment-ready;
+- R4 P1: stale A work could dispatch using mutable singleton client credential for B;
+- R5 P2: malformed active RPC payload could be accepted as ready.
+
+G5 reports all five corrected on PR #95 head `dd065e16f64a37582f73d05f1ab57ff7d276a5f7`.
+This re-review must independently verify those claims. Do not merge or deploy.
+
+## Freshness / isolation
+
+1. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, ACTIVE_TASK, G5 latest Report, previous H1 report, and this TASK.
+2. Use a fresh independent H1 worktree/check-out from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #95.
+4. Require exact head `dd065e16f64a37582f73d05f1ab57ff7d276a5f7`. If moved, STOP and report stale review target.
+5. Confirm no directory/worktree is shared with G1-G5/H2.
+6. Source/disposable-local review only. Production access/write, migration apply, deploy, EAS, Auth/Storage/OAuth/Vault/Cron/X mutation are forbidden.
+
+## Review focus A — R1 automatic vs explicit lifecycle semantics
+
+Review the new forward migration:
+`supabase/migrations/20261006230000_common_account_service_start_intent.sql`
+
+Verify at the actual SQL/lock/ACL boundary:
+- existing automatic `start_kabumori_service()` / `start_x_autopost_service()` never reactivate a currently ended entitlement;
+- missing -> create requested service only;
+- active -> idempotent;
+- deleting/suspended/provisioning/locked/deleting-account -> fail closed;
+- ended -> reenroll_required with a valid lifecycle_version and no mutation;
+- explicit `reactivate_*_service(bigint)` only reactivates currently ended when expected lifecycle_version matches;
+- stale/replayed explicit intent cannot reactivate after version changes;
+- non-ended or missing entitlement does not get silently created/reactivated by explicit reactivation;
+- lock order, auth.uid identity, SECURITY DEFINER, fixed empty search_path, grants and API role exposure remain safe;
+- the already-applied Phase 1 migration was not edited;
+- old binary calls become safer/fail-closed, not silently reactive.
+
+Use disposable PostgreSQL concurrency/race tests, including the exact former R1 reproduction.
+
+## Review focus B — R2 one-use re-enrollment intent
+
+Independently reproduce:
+- A sees ended -> A explicitly taps re-enroll -> switch to B;
+- no B reactivation request may occur without B action;
+- double tap cannot issue reusable intent;
+- sign-out/recovery/new session invalidates prior intent;
+- stale completion cannot mark another user ready.
+
+Check both Kabumori provider path and X ServiceEnrollmentGate.
+
+## Review focus C — R3 positive-ready side-effect gate
+
+Verify Kabumori push registration, pending-notification navigation and signed-in app tree use a positive service-ready state for the exact current session/user generation.
+
+Reproduce:
+- rejected -> retry pending -> rejected;
+- during pending, push/session side-effect input remains null;
+- stale success cannot reopen side effects for wrong user/session;
+- password recovery/logout behavior remains valid.
+
+## Review focus D — R4 immutable session-bound transport
+
+Verify the enrollment/reactivation request Authorization is bound to the captured initiating session token and does not query the mutable shared Supabase client for a later token at dispatch time.
+
+Reproduce:
+- delayed A preparation -> switch to B -> release A => no RPC authenticated as B from A operation;
+- sign-out while pending;
+- token refresh for same user does not corrupt single-flight semantics;
+- abort/invalidation happens before dispatch when possible;
+- already-sent request response is ignored if stale;
+- access tokens are never logged or persisted.
+
+Also verify use of public Supabase URL/publishable key introduces no new secret exposure.
+
+## Review focus E — R5 strict response validation
+
+For both clients verify all canonical payload variants are validated structurally and fail closed:
+- exact service;
+- known status;
+- required boolean fields such as started/shared_account;
+- lifecycle_version safe integer where required;
+- known reason values;
+- exact/allowed key set.
+
+Re-test missing/null/string/number/wrong-service/unknown-status payloads and ensure none opens the gate.
+
+## Review focus F — regression / compatibility
+
+Verify current main already contains PR #94 merge and PR #95 preserves:
+- root `news-detail` navigation/swipe behavior;
+- Auth/service-access gate;
+- no legacy `ensure_my_profile` bootstrap bypass;
+- X login remains separate from X posting OAuth/workspace/credential/publish authorization.
+
+Re-check current main/PR changed-file overlap before verdict.
+
+## Required evidence
+
+Independently rerun or reproduce as practical:
+- new service-start-intent disposable PostgreSQL runner and race cases;
+- Phase 1 lifecycle regression suite;
+- Kabumori app tests and real AuthProvider-focused Node tests;
+- X tests including actual ServiceEnrollmentGate;
+- X typecheck/lint;
+- both web exports;
+- migration source invariants;
+- git diff --check and secret/PII scan.
+
+G5 reported:
+- Kabumori 387/387;
+- AuthProvider 4/4;
+- X 207/207;
+- Phase 1 20/20;
+- migration source invariants 10/10.
+Do not merely trust these counts; independently inspect/reproduce enough to support the verdict.
+
+## Verdict
+
+Return one of:
+- PASS
+- PASS-WITH-NONBLOCKING-NOTES
+- CHANGES REQUIRED
+- BLOCKED
+
+PASS means the corrected source candidate is safe to proceed to C1 merge/readiness judgment, **not** authorization to apply the new migration to production or release native apps.
+
+If any blocker exists, do not modify product source in H1. Report the minimum correction back to G5.
+
+## Completion / C1
+
+Write `.agent/CODEX_REPORT.md` with:
+- exact reviewed head;
+- verdict/findings by severity;
+- R1-R5 disposition individually;
+- migration/ACL/lock/race disposition;
+- session-bound transport and user-switch disposition;
+- Kabumori side-effect gate disposition;
+- X OAuth separation disposition;
+- PR #94/current-main compatibility;
+- test evidence;
+- production mutation = 0;
+- merge recommendation;
+- exact next action.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-07 JST
+
+- Exact reviewed head: `dd065e16f64a37582f73d05f1ab57ff7d276a5f7` (PR95 unchanged at final review fetch).
+- Verdict: **CHANGES REQUIRED**. Prior SQL automatic-ended race R1 and malformed-response R5 are corrected. Original cross-user and retry-Push reproductions pass, but session/cancellation gates remain incomplete.
+- Remaining blockers: **S1 P2**, both clients reuse an old explicit request/result for a fresh same-user login (`session_id` changes); **S2 P2**, X's queued automatic task dispatches after unmount/sign-out because cleanup is checked only after the request.
+- Independent proofs: actual X TSX, actual Kabumori AuthProvider + lib/auth + shared domain, intercepted fake transport; 3 expected-safe assertions fail (S1 in two clients, S2), same-session single-flight control passes.
+- Existing suites: Kabumori 387/387; AuthProvider 4/4; X 207/207; migration invariants 10/10; new SQL behavior/ACL/additive/5 race cases PASS; Phase 1 20 PASS markers. X typecheck/lint and both Web exports PASS. Kabumori app-only tsc retains 2 unchanged CSS-resolution diagnostics.
+- PR94 merge is already in both current main and PR95; root news-detail is preserved. Final review main `676ce44b3d7f9282276428fbfee0dedc4ce4d385`; product changed-file overlap 0; merge-tree succeeds (no actual merge).
+- Product source edit/push, production access/mutation/apply/deploy/EAS/Auth/Storage/OAuth/Vault/Cron/X operations: 0.
+- Next: STOP for C1; ChatGPT returns focused S1/S2 correction to G5 and requests exact-head re-review. Recommended model: **Sol（高）** for C1/re-review. Source acceptance is not production migration or native release approval.
+
+---
+
+# Previous H1 task history — preserved
+
+# Codex Task — CURRENT TASK
+
 - task_id: common-account-v1-phase2-service-enrollment-review-20261006
 - owner: codex
 - slot: codex-1

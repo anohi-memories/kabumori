@@ -16,6 +16,13 @@ export const MAX_MARKET_MACRO_CANDIDATES_PER_FETCH = 30;
 // each returning at most 3 candidates, so the natural ceiling per cycle is already small.
 export const MAX_BREAKING_MARKET_CANDIDATES_PER_FETCH = 15;
 
+// JP official lane (JP Coverage Phase B): Japanese government releases read from news_discovery_signals. Its own
+// quota, independent of the corporate, market_macro and breaking_market lanes, so a heavy overseas or TDnet day can
+// never starve it and it can never take their budget.  This is a ceiling on INSERTED candidates per fetch (each
+// one costs a page fetch and an importance judgement), not a target: in steady state only a few releases a day
+// pass the deterministic theme filter, so it rarely binds.  Not a share of the feed: no 50:50, no auto-importance.
+export const MAX_JP_OFFICIAL_CANDIDATES_PER_FETCH = 6;
+
 export type ImportantNewsCandidateBatchPlan<T> = {
   selectedCandidates: T[];
   deferredCandidates: T[];

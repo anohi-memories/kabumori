@@ -33,38 +33,38 @@
 - owner: codex
 - slot: codex-1
 - status: done
-- task_id: common-account-v1-phase2-service-enrollment-review-20261006
+- task_id: common-account-v1-phase2-service-enrollment-corrective-rereview-20261006
 - start_code: H1
 - finish_code: C1
 - next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #95 exact head c06fac6492708331b6ba816122c9852cdcea73e7. R1/R2/R4 P1 and R3/R5 P2 returned to G5. No merge/deploy/production mutation. H1 free; corrected exact head will require a new focused Sol（高） review.
+- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #95 exact head dd065e16. Prior R1 and R5 are closed; original cross-user/retry-Push defects are materially improved. Remaining focused blockers are S1 same-user fresh-session reuse and S2 X queued auto-start after cleanup/sign-out. H1 free; corrected exact head will require focused Sol（高） re-review.
 - recommended_model: Sol（高）
 
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: x-social-mobile-pr76-final-security-rereview-20261005
+- status: ready
+- task_id: x-social-mobile-pr41-live-generation-security-review-20261007
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Final C2 PASS on PR #76 exact head 5448e545f4a88bbf6597a981c0bcbe4c01043c30. F1/F2/F3 closed, availability tradeoff accepted, no extra review required. PR #76 squash-merged as 3c5f80a61d114d2936b761fc05ee3b3d69e85f63. H2 free after fresh allocation.
+- allocation: One focused independent review of PR #41 exact head 280aa0f83d4f039ba3e43f32da202a91fd2333f2. Review the new service_role-only SECURITY DEFINER settings reader, exact/effective ACL including adverse default/inheritance cases, consent completeness, renumbered 3-migration chain, live scheduled-user X path, PR76/PR82/Kabumori regressions, and G5 dormant/enforcement handoff. No merge/deploy/production mutation. If PASS, no routine rereview. Recommended Sol（高）.
 
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: none
-- status: done
-- task_id: kabumori-topic-learning-access-progress-and-swipe-20261006
+- next_owner: claude
+- status: ready
+- task_id: kabumori-portfolio-canonical-ui-v1-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS and merged after C1 coordination. PR #94 exact head 97d374b48886ad33b61cd2288188d4b690e27a5c squash-merged as d30a518731e976ab1c0e4e19e26f461a174a3c1c. Native swipe parity, topic list 3-level switch, local 未読/学習済み, 375/402 verification complete. G1 free.
-- recommended_model: Sonnet5（中）
+- allocation: ユーザー承認済みポートフォリオ正本を実装。銘柄タブdefaultを資産評価額→保存済みFact-passedポート総括→資産への影響top3→保有銘柄→AI CTAへ再構築。最新大引け/ tracked_stocks実データのみ、stale basis明示、企業ロゴは未実装でfallback avatar。検索を独立実画面化、Watchlistはタグ未確定のため既存監視銘柄を安全なinterim subviewへ。src/app/_layout.tsx/Auth/migration/RPC/G5境界禁止。375/402 Simulator、EAS 0、backend/production mutation 0。
+- recommended_model: Sonnet5（高）
 
 ## Claude G2
 - owner: claude
@@ -81,27 +81,26 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: review_required
 - task_id: x-social-mobile-pr41-live-generation-fresh-integration-20261006
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: Final K3 PASS on AI persona-generation guidance. PR #78 head 1f33c58ca82a9d33d8c5c7282e0ac5c2fbb4aca9 squash-merged as 60dff4e28a763e3c182495dfc41cadf94671952f; Netlify preview success, Vercel failure was build-rate-limit and non-blocking. Next source-only task fresh-integrates stale PR #41 live general-user auto-post path. Replace direct service_role SELECT on social_mobile_content_settings with a narrow service-only brand-scoped read boundary; preserve AI Lab/Kabumori/PR76 and document, but do not implement, G5 entitlement enforcement. No production/merge/deploy. Recommended Opus5.5（高）.
+- allocation: K3 accepts PASS_CANDIDATE only on PR #41 exact head 280aa0f83d4f039ba3e43f32da202a91fd2333f2. Source integration/tests/CI are green, but the candidate introduces a SECURITY DEFINER/service_role/live-publish boundary, so merge remains HOLD pending the single focused H2 security review. Production/deploy/real X/OpenAI remain 0. Recommended reviewer Sol（高）.
 - recommended_model: Opus5.5（高）
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
 - status: done
-- task_id: x-morning-greeting-schedule-reliability-bc-20261006
+- task_id: postona-multisocial-phase1-architecture-inventory-20261006
 - start_code: G4
 - finish_code: K4
 - next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Final K4 PASS. PR #92 exact head 3d5475849217e1ca9f40bbedf12a42c0e5671504 squash-merged as 19c85c4381c55161207032146d6f66eb8a0c99f5. Plan B adds four staggered generator schedules (00:17/02:47/04:17/05:17 JST) with same-day idempotency; Plan C adds read-only missing/late checks at 06:07/09:47 JST. 44/44 tests, fresh-main overlap 0, CI green, production mutation/deploy/X/PAT/Vault/pg_cron=0. No Codex review required. G4 free after fresh allocation. Plan A remains separate.
-- recommended_model: Sonnet5（高）
-
+- allocation: Final K4 PASS. POSTONA multi-social Phase 1 docs-only architecture accepted. Exact one-file design document from former PR #96 was integrated unchanged directly to fresh main as 25fd6aeec85528a06f78995f4306aaeba98f9d75 after the PR merge raced a moving base; PR #96 closed as superseded. Runtime/DB/Edge/OAuth/Vault/production/provider calls 0. No Codex review. G4 free, but Phase 2a waits for G3 PR #41 and G5 PR #95 acceptance/merge.
+- recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
 - slot: claude-5
@@ -112,7 +111,7 @@
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: C1 corrective on existing PR #95. Fix H1 R1-R5: atomic automatic-vs-explicit reactivation contract, one-use user/session-scoped re-enrollment intent, positive-ready push/notification gate, immutable session-bound request transport, strict RPC payload validation. Fresh-integrate on main containing PR #94 and preserve root news-detail registration. New forward migration candidate allowed; no production apply/deploy/EAS. Mandatory H1 re-review after corrected head.
+- allocation: C1 corrective round 2 on existing PR #95. Fix only H1 S1/S2: bind cache/view/consent/positive-ready to stable login-session identity (e.g. validated JWT session_id) so same-user fresh login invalidates old explicit request/result while ordinary same-session token refresh preserves single-flight; and prevent queued X automatic enrollment from dispatching after cleanup/sign-out/unmount by checking cancellation/current generation before ensure/transport dispatch. Preserve already-passed R1-R5 corrections and PR94 navigation. No production migration apply/deploy/EAS/Phase3. Mandatory exact-head H1 re-review after correction.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred

@@ -1,3 +1,98 @@
+# H1 — PR #95 corrective Phase 2 service-enrollment re-review — 2026-10-07 JST
+
+- task_id: common-account-v1-phase2-service-enrollment-corrective-rereview-20261006
+- result / verdict: **CHANGES REQUIRED** — two remaining P2 session/cancellation blockers (S1, S2); improvements to the previous R1–R5 are acknowledged individually below.
+- status: `review_required`; next_owner: `chatgpt`; STOP for C1.
+- target_pr: 95
+- target_head: dd065e16f64a37582f73d05f1ab57ff7d276a5f7
+- recommended_model: Sol（高）
+- fresh main: startup `c1534335b6ab6bd93d38ba8f1959583cf2da0b15`, final review `676ce44b3d7f9282276428fbfee0dedc4ce4d385`; exact PR95 head unchanged at refetch and API read-back (OPEN/unmerged). API mergeability was unknown; not claimed clean.
+- changed_files (H1): **only** `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`. Product-source changes: **0**; probes/config/exports kept outside source in temporary directories.
+- commit_hash: reviewed source is the exact target above; no H1 product commit. Control-only sync commit SHA is communicated after verified remote read-back in final response.
+- push: H1 TASK/Report-only sync to main is the requested completion operation; source/PR head push: **0**. Do not count a local commit as a successful remote sync.
+- production access/mutation/migration apply/deploy/EAS/managed Auth/Storage/OAuth/Vault/Cron/X/model calls: **0**. Fixture SQL ran on dedicated local PostgreSQL, not production.
+
+## Remaining findings / minimum correction
+
+### S1 — P2: a fresh login for the same user inherits an old explicit reactivation request/result
+
+Locations: `src/lib/service-enrollment.ts:207-225` and identical X domain; `src/lib/auth.ts:23-41`; `apps/social-mobile/src/features/service-enrollment/service-enrollment-gate.tsx:65-87,109-124`; Kabumori acceptance path `src/providers/auth-provider.tsx:123-125`.
+
+The immutable token correctly prevents A -> B credential substitution. However, request identity, single-flight cache, X effect dependencies/current-view tags and success checks are all **userId-only**. A token refresh and a **new Supabase login/session_id for the same user** are indistinguishable. X does not invalidate its effect/request on the new login. Kabumori processes the new auth event, but `ensure()` returns the previous explicit promise and its new generation adopts that old result. The purported positive-ready session gate therefore does not establish readiness for the exact new session.
+
+Independent reproduction in both actual client paths:
+
+1. Fake session A1 (same user, synthetic JWT session_id ending 1001) receives ended/version 3.
+2. Click re-enroll; intercept and hold the captured-A1 reactivation response.
+3. Replace session with A2 (same user, distinct JWT session_id ending 1002), without A2 re-enrollment action. X gate stays mounted; Kabumori emits SIGNED_IN.
+4. Release A1's response as canonical active.
+5. **X:** old signal is not aborted and the old answer opens APP for A2. **Kabumori:** old signal is not aborted and AuthProvider's serviceSession becomes A2 through the reused explicit promise.
+
+The X test executes the actual transpiled ServiceEnrollmentGate with dependency-aware hooks. The Kabumori test executes the actual transpiled AuthProvider **and actual lib/auth** with actual shared enrollment logic, only replacing native/auth event plumbing and intercepting fetch. No SDK current-token shortcut is simulated into the product code; the defect is the user-only cache/result identity. These are local source-runtime probes, not simulator/production E2E or proof of arbitrary other-user access.
+
+Minimum correction: carry a validated, stable login/session identity (e.g. Supabase JWT `session_id`) alongside userId in context/cache/state/view; same-session token refresh may retain single-flight, but a new session must abort/invalidate the prior operation and ignore its result, including explicit intent. Pin positive-ready and consent to that context/generation. Do not merely key on access_token (would unnecessarily restart on ordinary refresh), and do not log/persist tokens. Add real-provider/gate A1-click -> same-user A2-session tests, sign-out/recovery variants and same-session refresh control. An already-sent A1 request may finish server-side under A1; the correction must not claim to undo it, but its response cannot certify A2.
+
+### S2 — P2: X sends a not-yet-dispatched automatic request after gate cleanup/sign-out
+
+Location: `apps/social-mobile/src/features/service-enrollment/service-enrollment-gate.tsx:71-85`.
+
+The effect queues a Promise microtask. Cleanup sets `cancelled=true` and unmount resets the singleton gate, but the queued task **still calls enrollment.ensure() before checking cancelled**. If no entry exists yet, reset has nothing to abort; the later task creates a fresh non-aborted request. A captured access token can remain valid after local sign-out, so this can create/enroll the old user's service after the user left, although the eventual UI result is suppressed. This is an **unsent** cancellation window, distinct from the explicitly accepted limitation of an already-sent request.
+
+Independent actual-X-gate probe: render A1 and commit effects (automatic request queued), unmount before flushing the microtask, flush; fake endpoint captures **one start_x_autopost_service request**, expected zero. The product source's cancelled flag is checked only after dispatch. No real request/data was sent.
+
+Minimum correction: check cancellation/current session/request generation **before entering enrollment.ensure/transport dispatch**; invalidate queued work as well as existing gate entries during user change, recovery and sign-out/unmount. Do not let an obsolete task resurrect singleton state after cleanup. Add immediate-unmount-before-microtask and superseded-effect-before-dispatch controls, while retaining the existing in-flight abort/result suppression tests.
+
+## Prior R1–R5 disposition
+
+- **R1 — corrected / PASS.** New forward migration separates automatic start from explicit reactivation. Under the existing lifecycle locks, automatic currently-ended returns reenroll_required/version without entitlement/profile mutation. Missing creates only requested service; active is idempotent; deleting/suspended/provisioning/locked/deleting-account refuse. Explicit currently-ended + matching lifecycle_version reactivates once; trigger increments version, stale/replayed version fails, missing account/service does not get created. Original Kabumori withdrawal -> stale automatic start and X begin/finish deletion -> stale start now leave ended/no profile/workspace. Behavior and actual two-session races independently rerun successfully.
+- **R2 — cross-user/double-tap corrective passes; session intent gate still FAILS S1.** The stored reenroll boolean is removed; click captures token/version, in-flight ref prevents a second tap, A -> B tests and logout/unmount tests pass. Fresh same-user sessions are not represented; old explicit response is adopted by the new login (S1). No claim that every R2 condition is satisfied.
+- **R3 — original retry side-effect gate corrected; exact-session condition remains incomplete via S1.** Explicit pending/refused/failed/ready service state + !loading closes the previous refused -> pending retry -> refused Push path, and SignedInNavigator uses serviceSession. Original real-provider and domain tests pass. User/generation fencing protects A -> B stale outcomes; readiness itself is still tagged only by userId, so old same-user explicit success can authorize new-session side effects (S1). Recovery UI ordering remains before app; no native recovery E2E claimed.
+- **R4 — immutable Authorization corrected / PASS for old credential-substitution case; pre-dispatch cancellation FAILS S2 and session invalidation S1.** Direct PostgREST fetch closes over the initiating token/public URL/publishable key; it never resolves a mutable SDK current token. A requests cannot dispatch as B through this transport. Different-user/explicit/reset abort and transient retry tests pass. Already-sent requests may finish, stale results must be ignored; unsent queued work after cleanup still dispatches (S2).
+- **R5 — corrected / PASS.** Exact allowed keys, service/status, required boolean started/shared_account, positive safe-integer lifecycle_version and known reason validated. Missing/null/string/number/wrong-service/extra/unknown variants fail closed. Both modules byte-match below header and both suites execute the parser/gate assertions. Old active payload without new shared_account intentionally fails closed until the new server contract is applied.
+
+## SQL / ACL / lifecycle boundaries
+
+- Exact new migration: `supabase/migrations/20261006230000_common_account_service_start_intent.sql`. Already-applied Phase1 file `20261001150000_common_account_lifecycle_foundation.sql` is unchanged in PR95.
+- Foundation lock retains auth.users row -> common_accounts FOR UPDATE -> service_entitlements FOR UPDATE order; no external network within DB transaction. Old no-argument public starts now refuse ended; old binary safety is stricter, not silent reactivation.
+- Public reactivate RPCs use auth.uid(), no caller-supplied userId. SECURITY DEFINER + exact empty search_path; helpers revoked from API roles and new public RPCs EXECUTE only authenticated. Migration postflight verifies effective anon/authenticated/service_role privileges for old/new functions.
+- Independent non-superuser disposable fixture verifies catalog additive preservation (only automatic helper replaced; expected functions added), preflight without foundation, second apply refusal, auth/ACL failures, missing/active/ended/blocked/version/foreign-subject cases and five lock races. Foundation behavior/locks/backfill/rollback regression also passes separately. Local proof is not an assertion that production catalogs are already changed or drift-free.
+- No managed Auth deletion/Storage/Vault/producer/OAuth/X publish change in this PR's new migration. Version change behavior comes from the unchanged foundation trigger, confirmed by behavior/race tests.
+
+## Current-main / PR94 / X separation
+
+- PR94 merge `d30a5187` is an ancestor of both fresh main and exact PR95. Root `<Stack.Screen name="news-detail" />` is preserved with the enrollment AuthGate; navigation/native-intent/swipe source-contract App tests pass. No operator/device swipe claim.
+- PR95 vs final main product changed-file overlap: **0** across 17 PR files. Read-only merge-tree succeeds: `1341c329faa1d5bf03d8b2563e5d483bd96f09be`. No actual PR merge or branch-head rewrite.
+- X auth/recovery -> enrollment -> DataProvider/OnboardingGate separation remains; logout/deletion-help screens are reachable without workspace data. Enrollment RPCs create only entitlement (and Kabumori profile for its own app), not X workspace/social account/OAuth state/Vault credentials/publish mode/enablement. Posting OAuth remains separate explicit action. No direct client common-table writes or email merge; no ensure_my_profile bootstrap bypass.
+- The new client/server contract is intentionally incompatible with the old active payload: **migration approval/apply/read-back must precede any native release**. This H1 authorizes neither operation. After correction/C1, fresh main/PR checks remain required; not a blind-merge recommendation.
+
+## Independently rerun evidence
+
+- Kabumori `deno test --no-check --no-config --allow-read tests/app/`: **387/387 PASS**.
+- Actual Kabumori AuthProvider shipped Node suite: **4/4 PASS**.
+- X `npm test --prefix apps/social-mobile`: **207/207 PASS**, including actual mounted gate/cross-user/strict parser tests.
+- X typecheck and Expo lint: **PASS**.
+- Kabumori app-only TypeScript (temporary src-only config excluding unrelated Deno functions): **two unchanged CSS-resolution diagnostics**, animated-icon.web.tsx:5 / theme.ts:6; no changed-file diagnostic. Not a repository-wide clean tsc claim.
+- Both `expo export --platform web`: **PASS**, dummy public configuration, temporary local outputs, no deploy/EAS.
+- New service-start-intent runner: preflight/additive/reapply/behavior + five concurrency cases + ALL_PASS, **10 PASS markers**. Phase1 lifecycle runner: **20 PASS markers**, cleanup included.
+- `migration_source_invariants_test.ts`: **10/10 PASS**.
+- Reviewer-added actual-source assertions: **1 PASS / 3 FAIL** — S1 X, S1 Kabumori, S2; passing control proves same-login single-flight. Fake credentials and intercepted fetch only, not extra failures in G5's shipped suites.
+- `git diff --check`: **PASS**. Changed-file secret/PII review: no new credentials/private keys/GitHub tokens/JWT literal values or personal identifiers exposed; automated secret-pattern scan **0 matches**. No blanket security assurance inferred from scan.
+- Dependencies: own temp checkout links read-only to existing installed dependencies; no install/package mutation or other slot file edit. Source tracked-file diff remains 0.
+- Local artifacts: `/private/tmp/kabumori-h1-pr95-corrective-20261007.CexvBo/` contains `adversarial.mjs`, `adversarial.log`, test/DB/export/tsc logs. `node --test adversarial.mjs` reruns the actual-source probes. All relevant repro steps are recorded above if artifacts expire.
+- Dedicated Unix-socket PostgreSQL17.11 had TCP listening disabled; fixture databases cleaned by runners; this H1's server stopped. No production access or other server operation.
+
+## Recommendation / remaining issues
+
+- **Remaining blockers: S1, S2 (P2)**. The prior five findings are materially improved; do not re-report all five as unchanged, but do not mark all session/cancellation conditions PASS.
+- **Merge recommendation: HOLD / CHANGES REQUIRED.** ChatGPT C1 should return a focused session-id and queued-task cancellation corrective to G5 on the existing PR, then assign exact-head re-review. Recommended C1/re-review model: **Sol（高）**. Do not expand into Phase3 or apply migration during correction.
+- Product source edit/push, merge, deployment, production access/mutation and native E2E performed by H1: **0**.
+- Supabase and Postgres-best-practices skills informed immutable credential/current-session and privilege/transaction-lock verification. Relevant current official Auth/function docs/changelog checked; local source/runtime proofs determine this verdict.
+- **STOP for C1**. Production migration and native release require later independent gates even after eventual source PASS.
+
+---
+
+# Previous H1 report history — preserved
+
 # Final C1 — PR #95 review accepted / corrections required
 
 - C1 accepts H1 verdict **CHANGES REQUIRED** for exact head `c06fac6492708331b6ba816122c9852cdcea73e7`.

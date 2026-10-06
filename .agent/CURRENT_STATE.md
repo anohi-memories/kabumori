@@ -1,3 +1,116 @@
+## Final C1 — PR #95 second review CHANGES REQUIRED / focused S1-S2 corrective — 2026-10-07
+
+- H1 exact reviewed PR #95 head: `dd065e16f64a37582f73d05f1ab57ff7d276a5f7`.
+- C1 verdict: **CHANGES REQUIRED accepted**. PR #95 remains open/unmerged/undeployed; production migration apply remains forbidden.
+- prior corrective progress accepted:
+  - R1 automatic-ended reactivation: PASS;
+  - R5 malformed response fail-closed: PASS;
+  - original cross-user re-enrollment and retry-Push defects are materially corrected;
+  - immutable captured Authorization closes the former A-token/B-token substitution path.
+- remaining blockers are now narrowly scoped:
+  - **S1 P2:** same Auth user can establish a fresh login/session while an older explicit reactivation is pending; current cache/view/readiness identity is userId-only, so the old result can certify the new session.
+  - **S2 P2:** X queues automatic enrollment in a microtask and can still enter `ensure()` after unmount/sign-out cleanup; queued unsent work must be cancelled before dispatch.
+- G5 corrective requirements:
+  - carry a validated stable login/session identity (prefer Supabase JWT `session_id` or equivalent) alongside userId through cache, request generation, explicit consent, view state and positive-ready state;
+  - ordinary token refresh within the same login session must retain safe single-flight behavior;
+  - a genuinely new same-user session must abort/invalidate old pending/explicit work and ignore its result;
+  - never key this solely on raw access_token; do not log/persist tokens;
+  - X effect must check cancellation/current session/request generation **before** calling `ensure()` or transport dispatch, including immediate unmount/sign-out/superseded-effect windows;
+  - add A1 explicit reactivation -> same-user A2 fresh-session regressions for Kabumori and X; sign-out/recovery variants; same-session token-refresh control; X immediate-unmount-before-microtask and superseded-effect-before-dispatch tests.
+- preserve already-passed server migration/RPC R1 semantics, strict R5 parser validation, immutable token-bound transport, PR #94 root news-detail, and X OAuth separation.
+- Phase 3, production migration apply, deploy, EAS, Auth/Storage/OAuth/Vault/Cron/X mutation remain out of scope.
+- G5 status: ready; recommended model: **Opus5.5（極高）**.
+- H1 is done/free now. After a corrected exact PR #95 head, allocate focused H1 re-review with **Sol（高）**.
+- AI Lab diary: 追加更新なし — 同日の共通アカウント作業の公開安全な候補と重複し、今回の内容は内部セッション安全性の追加修正が中心。
+
+## K3 — PR #41 live-generation PASS_CANDIDATE / single H2 security review
+
+- K3 verdict: **PASS_CANDIDATE; merge HOLD pending one focused H2 review**.
+- exact PR #41 head: `280aa0f83d4f039ba3e43f32da202a91fd2333f2`; GitHub reports mergeable.
+- CI at K3: Netlify Preview PASS; Vercel PASS.
+- candidate fresh-integrates generic `social_mobile_user_v1` live scheduled-post generation onto modern main while preserving PR76 guarded sends, PR82 AI Lab path, Kabumori legacy path and merged PR78 generation guidance.
+- new narrow settings reader replaces direct service_role SELECT:
+  - `read_social_mobile_publish_settings(uuid,text)`;
+  - exact running brand_post + requested-brand binding;
+  - `social_mobile_user_v1` only;
+  - settings/persona metadata only, no identity/token/Vault fields;
+  - reported SECURITY DEFINER / empty search_path / service_role EXECUTE only;
+  - underlying table remains unreadable to service_role.
+- both runtime generation loader and publish-authority consent path are reported to use the narrow boundary.
+- user consent remains fail-closed: no row/manual_review => no generation/X; only `auto_post_preference` proceeds.
+- migration candidates were renumbered after PR81:
+  1. `20261006160000_vault_account_brand_post_completion`;
+  2. `20261006160100_social_mobile_publish_settings_reader`;
+  3. `20261006160200_x_account_publish_authority`.
+  Old unmerged candidate versions are source-invariant forbidden from reuse.
+- live-generation proof reports all merged AI-consult remembered settings + all 8 confirmed persona signals reaching the actual generic scheduled-user generator; unconfirmed persona remains excluded.
+- publish path order remains fail-closed: authority before generation -> settings/consent -> generate -> length/NG/duplicate -> authority recheck -> PR76-guarded X send -> terminal completion. Confirmed X completion ambiguity is non-replayable.
+- G5 entitlement enforcement is intentionally not implemented by G3. Candidate remains dormant without explicit publish-authority activation. Future G5 insertion points are documented before authority enablement/production rollout.
+- reported tests:
+  - disposable PostgreSQL reader/authority/race/cleanup PASS;
+  - x-test-post 534/534;
+  - PR41 TS 14/14;
+  - routing + migration invariants 16/16;
+  - consult/dry-run/invariants 47/47;
+  - app memory-generation/consult/repository 36/36;
+  - diff/secret scan clean;
+  - three broad `_shared` failures reproduced on main and classified pre-existing.
+- production migration/history write = 0; Edge deploy = 0; real X/OpenAI = 0; Auth/Vault/OAuth/Cron/publish activation = 0; PR41 merge = 0.
+- review decision: **one focused H2 review required** because the candidate changes SECURITY DEFINER/ACL/service_role/live-publish boundaries.
+- H2 task: `x-social-mobile-pr41-live-generation-security-review-20261007`.
+- exact H2 target: `280aa0f83d4f039ba3e43f32da202a91fd2333f2`.
+- H2 recommended model: **Sol（高）**.
+- H1 remains separately occupied by the G5 common-account PR #95 corrective rereview, so no review-slot conflict.
+- if H2 PASS: C2 may accept and decide PR41 merge; no routine rereview.
+- if H2 finds a concrete P1/P2: one bounded G3 corrective, then rereview only the changed security boundary.
+
+## Final K4 — POSTONA multi-social Phase 1 PASS — 2026-10-06
+
+- verdict: **PASS**.
+- accepted deliverable: `docs/postona/multi-social-phase1.md` (docs-only, 354 lines).
+- accepted candidate had exactly one changed file and both Netlify Preview / Vercel checks passed.
+- fresh-main advanced while K4 was merging. GitHub rejected the immediate PR merge because the base changed; the exact accepted document was integrated unchanged to main as `25fd6aeec85528a06f78995f4306aaeba98f9d75`, and PR #96 was closed as superseded.
+- no runtime/app/migration/RPC/Edge/workflow/OAuth/Vault/secret/production/provider-call changes.
+- architecture direction accepted: provider-neutral posting model; keep login / entitlement / SNS connection / publish authorization separate; Threads first; Instagram after media/material-library design; target-level retry/idempotency.
+- Codex review: **not required** for this docs-only phase.
+- dependency gate: G3 PR #41 and G5 PR #95 remain open/review_required. G4 Phase 2a is intentionally not assigned until those boundaries are accepted/merged and fresh overlap is rechecked.
+- G4 is **done / free**.
+- AI Lab diary: 記録不要 — 設計整理のみで、ユーザー向け機能や実動作はまだ追加していない。
+
+## Final K5 — PR #95 corrective PASS_CANDIDATE / mandatory H1 re-review — 2026-10-06
+
+- G5 corrective result: **PASS_CANDIDATE**, not final merge approval.
+- PR #95 exact corrected head: `dd065e16f64a37582f73d05f1ab57ff7d276a5f7`; GitHub open/unmerged and currently mergeable.
+- C1/H1 blockers R1-R5 are reported corrected and their former reproductions now PASS:
+  - R1: automatic start no longer reactivates ended; explicit reactivation is version-bound and separate;
+  - R2: re-enrollment intent is one-use and pinned to current user/session;
+  - R3: Kabumori push/notification/signed-in side effects require positive ready for the current session;
+  - R4: request Authorization is bound to the captured initiating session, not mutable singleton current credentials;
+  - R5: malformed RPC payloads fail closed.
+- new forward migration candidate: `20261006230000_common_account_service_start_intent.sql`; already-applied Phase 1 migration was not edited.
+- reported regression evidence: disposable PostgreSQL behavior/races PASS; Phase 1 20/20; Kabumori 387/387; real AuthProvider 4/4; X 207/207; X tsc/lint PASS; both web exports PASS; migration invariants 10/10; diff/secret scan clean.
+- PR #94 is already on main and its root news-detail registration is preserved alongside the Auth/service gate.
+- production mutation / migration apply / deploy / EAS / production access = **0**.
+- remaining release order is safety-sensitive: corrected source review first; only after PASS may a separate production migration-apply gate be considered; native build/release remains later.
+- because this corrective changes Auth/session transport plus lifecycle RPC semantics and adds a forward migration, **mandatory H1 re-review assigned**.
+- H1 task: `common-account-v1-phase2-service-enrollment-corrective-rereview-20261006`.
+- H1 exact target: `dd065e16f64a37582f73d05f1ab57ff7d276a5f7`.
+- H1 recommended model: **Sol（高）**.
+- G5 remains review_required / next_owner codex; PR #95 merge and production apply remain HOLD.
+- AI Lab diary: 追加更新なし — 同日の共通アカウント作業について既に公開安全な候補があり、今回の内容は主にセキュリティ境界の修正・再検証で重複するため。
+
+## G4 assigned — POSTONA multi-social Phase 1 architecture inventory — 2026-10-06
+
+- G4 is now `ready` on `postona-multisocial-phase1-architecture-inventory-20261006`.
+- Scope is deliberately docs-only: inventory current X-specific seams, define provider-neutral X/Threads/Instagram account/post/publication architecture, provider capability matrix, Threads-first implementation sequence and Instagram follow-on.
+- Product direction: provisional brand **POSTONA (POST + PERSONA)**; multi-social architecture precedes final UI implementation.
+- Current G3 remains `ready` on PR41 live scheduled-user generation/content-settings service-read integration; G4 must read for architecture only and must not edit/integrate G3 runtime paths.
+- Current G5 remains `ready` on common-account Phase 2 corrective; common login/service entitlement/Auth/session/deletion/provider-credential lifecycle remain G5-owned and must not be altered by G4.
+- G4 runtime/app/migration/RPC/Edge/OAuth/Vault/secret/production/deploy/provider-call changes: prohibited in Phase 1.
+- Deliverable: `docs/postona/multi-social-phase1.md` plus G4 report/control updates only.
+- Recommended model: **Opus5.5（高）**.
+- Next action: send `G4` to Claude Code.
+
 ## Final C1 — PR #95 CHANGES REQUIRED / PR #94 merged / G5 corrective assigned — 2026-10-06
 
 - H1 exact review target: PR #95 head `c06fac6492708331b6ba816122c9852cdcea73e7`.
