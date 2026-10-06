@@ -72,13 +72,13 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-social-mobile-pr81-production-schema-gate-20261005
+- status: ready
+- task_id: x-social-mobile-pr81-production-apply-continuation-20261006
 - start_code: G3
 - finish_code: K3
-- next_owner: none
-- source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: Final K3 = intentional read-only HOLD. PR #81 production preflight is CLEAN, source hashes unchanged, production writes/deploy/X/OpenAI/Vault/OAuth/Cron = 0. Apply package was not frozen because earlier PR #76 migration 20261003090000 is still open/unmerged/unapplied. Do not apply PR #81 ahead by assumption. PR #78 remains blocked. Next orchestration step is K4 for completed PR #76 corrective; after PR #76 disposition is resolved, allocate a fresh G3 continuation for PR #81 production apply gate. No Codex review needed for this read-only HOLD.
+- next_owner: claude
+- source: .agent/tasks/CLAUDE_TASK_3.md
+- allocation: PR76 production prerequisite is now satisfied. Resume PR81 with fresh same-day read-only Gate A/B, freeze the exact already-reviewed two-file atomic package, then STOP for fresh explicit production apply approval. After approval only: apply candidate+hardening+exact two history rows in one outer psql transaction and separate-session read-back. No Edge deploy. PR78 resumes only after exact schema/read-back PASS. Production mutex with G2/G5 mandatory. Recommended Opus5.5（高）.
 
 ## Claude G4
 - owner: claude
@@ -89,8 +89,7 @@
 - finish_code: K4
 - next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Final K4 accepted. PR76 production rollout S1–S5 complete with exact read-back; production_mutation_window CLOSED at 14:11 JST. x-test-post guarded runtime active, migration 20261003090000/history exact, publish-setting deployed. No further G4 production write.
-- recommended_model: Opus5.5（高）
+- allocation: Final K4 PASS. PR76 S1-S5 production rollout complete and exact: guarded x-test-post active, migration 20261003090000 history exact 1, two SECURITY DEFINER RPCs/ACL exact, social-mobile-publish-setting ACTIVE v1 verify_jwt=true, running/overdue 0. production_mutation_window CLOSED. No extra Codex review. G4 free after fresh allocation.
 
 ## Claude G5
 - owner: claude
