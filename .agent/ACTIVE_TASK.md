@@ -57,14 +57,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: none
-- status: done
-- task_id: kabumori-topic-learning-access-progress-and-swipe-20261006
+- next_owner: claude
+- status: ready
+- task_id: kabumori-portfolio-canonical-ui-v1-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS and merged after C1 coordination. PR #94 exact head 97d374b48886ad33b61cd2288188d4b690e27a5c squash-merged as d30a518731e976ab1c0e4e19e26f461a174a3c1c. Native swipe parity, topic list 3-level switch, local 未読/学習済み, 375/402 verification complete. G1 free.
-- recommended_model: Sonnet5（中）
+- allocation: ユーザー承認済みポートフォリオ正本を実装。銘柄タブdefaultを資産評価額→保存済みFact-passedポート総括→資産への影響top3→保有銘柄→AI CTAへ再構築。最新大引け/ tracked_stocks実データのみ、stale basis明示、企業ロゴは未実装でfallback avatar。検索を独立実画面化、Watchlistはタグ未確定のため既存監視銘柄を安全なinterim subviewへ。src/app/_layout.tsx/Auth/migration/RPC/G5境界禁止。375/402 Simulator、EAS 0、backend/production mutation 0。
+- recommended_model: Sonnet5（高）
 
 ## Claude G2
 - owner: claude
