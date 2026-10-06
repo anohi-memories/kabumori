@@ -1,3 +1,20 @@
+## K5 — Common-account Phase 2 PASS_CANDIDATE / H1 review required — 2026-10-06
+
+- G5 Phase 2 source integration is **PASS_CANDIDATE**, not yet final merge approval.
+- PR #95 exact head: `c06fac6492708331b6ba816122c9852cdcea73e7`; production mutation/deploy/EAS = 0.
+- accepted implementation candidate:
+  - Kabumori session bootstrap uses the reviewed service-start RPC instead of legacy profile bootstrap;
+  - X session tree enrolls service before workspace/onboarding reads;
+  - X posting OAuth remains separate and login alone creates no posting authorization/credential/workspace;
+  - fail-closed UI exists for lifecycle refusal and transient initialization failure;
+  - focused tests/builds are green.
+- mandatory independent review assigned to H1 because the diff crosses Auth/session bootstrap in both apps.
+- H1 critical focus: ended explicit-reactivation race, stale async/user-switch behavior, fail-closed no-bypass guarantees, X OAuth separation, and PR #94 same-file compatibility.
+- PR #95 merge/deploy HOLD until C1.
+- G5 Phase 3 deletion/enforcement is not started yet.
+- recommended H1 model: **Sol（高）**.
+- AI Lab diary: 候補あり — 2つのアプリで共通IDを使いながら、それぞれのサービス利用登録だけを安全に追加できるログイン後の仕組みを実装。Xのログインと投稿権限は混ぜず、退会中などの状態ではアプリを開かない設計にした。
+
 ## Final K2 — 10/6 close safety PASS / editorial regression -> corrective G2
 
 - classification: **delivery/factual PASS_FIRST_TRY, editorial FAIL (EDITORIAL_REGRESSION)**.
