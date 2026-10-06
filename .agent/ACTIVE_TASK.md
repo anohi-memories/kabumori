@@ -81,14 +81,14 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
-- task_id: x-social-mobile-ai-consult-v1-fresh-integration-20261006
+- status: ready
+- task_id: x-social-mobile-ai-consult-persona-generation-guidance-20261006
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: V1必須の「AIと相談する」PR #78をfresh mainへsource-only統合。会話→提案→明示確認→保存→次回相談/投稿生成へ反映、までをV1契約として検証する。G5 common-account critical pathとは競合させず、Auth/entitlement/account deletion/DB migration/production mutationは禁止。PR81 production applyはG5完了後に別途再開。PR78 merge/deployもまだ禁止。PR #41がlive scheduled-user生成の残り配線ならここでは実装せずrelease blockerとして明示。Recommended Opus5.5（高）.
-- recommended_model: Opus5.5（高）
+- allocation: Final K3 PASS on PR #78 fresh integration head d1f131c56b082d2af57660b5bd3d83ff8c619c7d; no Codex review. Continue source-only V1 completion: make every confirmed persona signal actually influence social-mobile post-generation guidance, including toneSignals/topicSignals/hashtagHabits/ctaStyle/openingClosingPatterns, while preserving existing default no-hashtag, AI Lab and Kabumori behavior. PR78 stays open; no merge/deploy/production. G5 common-account has priority; PR41/live dispatch untouched. Recommended Sonnet5（高）.
+- recommended_model: Sonnet5（高）
 
 ## Claude G4
 - owner: claude
