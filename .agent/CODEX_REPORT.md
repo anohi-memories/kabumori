@@ -1,15 +1,3 @@
-# H1 — Common-account Phase 2 service enrollment review — 2026-10-06
-
-- task_id: common-account-v1-phase2-service-enrollment-review-20261006
-- status: Pending.
-- target_pr: 95
-- target_head: c06fac6492708331b6ba816122c9852cdcea73e7
-- recommended_model: Sol（高）
-
----
-
-# Previous H1 report history — preserved
-
 # H1 — PR #95 Phase 2 service-enrollment security review — 2026-10-06
 
 - task_id: `common-account-v1-phase2-service-enrollment-review-20261006`
@@ -18,8 +6,8 @@
 - target: [PR #95](https://github.com/anohi-memories/kabumori/pull/95), exact head `c06fac6492708331b6ba816122c9852cdcea73e7`. Head unchanged at final fresh fetch; GitHub read-back OPEN/unmerged. GitHub mergeability was `unknown`, not claimed clean.
 - Fresh main: startup `4756c5015bd55a1ae9612f40a33fed2ddca4a3c4`, final review `f69527897597ccb82439622860ac41651aa7abc2`. Main's changed-file overlap with PR95's 11 product files: 0.
 - changed_files (H1): **only** `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`. Product-source edits: **0**. No other slot/control index rewritten.
-- commit_hash: reviewed source `c06fac6492708331b6ba816122c9852cdcea73e7`; no H1 product commit. Control sync SHA is the commit introducing this section, to be verified by GitHub read-back and reported in the final response.
-- push: no source push. Only H1 TASK/Report synchronization to main; completion must be verified from remote, not assumed from a local commit.
+- commit_hash: reviewed source `c06fac6492708331b6ba816122c9852cdcea73e7`; no H1 product commit. Initial control-only review sync `5be6e926df6973a9559d9146324bd6b6ca2b57a9`, independently fetched/read back from origin/main. Final header-cleanup commit SHA is reported after remote verification in the final response.
+- push: **verified** initial H1 TASK/Report-only main synchronization at `5be6e926df6973a9559d9146324bd6b6ca2b57a9`; no source push. This follow-up removes the inherited Pending placeholder above the current result; previous review history remains below.
 - merge / deploy / production access / production mutation / EAS / Auth / Storage / OAuth / Vault / Cron / X API: **0**.
 
 ## Blocking findings
@@ -120,6 +108,8 @@ Local evidence (temporary, not committed product changes): `/private/tmp/kabumor
 - **STOP for C1**; no PR95 merge/deploy recommendation until corrected head passes. Production rollout/enforcement remains a separate approval gate.
 
 ---
+
+# Previous H1 report history — preserved
 
 # H1 — PR #87 editorial “今日のポイント3点” review — 2026-10-06
 
