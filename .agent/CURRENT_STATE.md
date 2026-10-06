@@ -1,3 +1,25 @@
+## Final K5 — PR #95 corrective PASS_CANDIDATE / mandatory H1 re-review — 2026-10-06
+
+- G5 corrective result: **PASS_CANDIDATE**, not final merge approval.
+- PR #95 exact corrected head: `dd065e16f64a37582f73d05f1ab57ff7d276a5f7`; GitHub open/unmerged and currently mergeable.
+- C1/H1 blockers R1-R5 are reported corrected and their former reproductions now PASS:
+  - R1: automatic start no longer reactivates ended; explicit reactivation is version-bound and separate;
+  - R2: re-enrollment intent is one-use and pinned to current user/session;
+  - R3: Kabumori push/notification/signed-in side effects require positive ready for the current session;
+  - R4: request Authorization is bound to the captured initiating session, not mutable singleton current credentials;
+  - R5: malformed RPC payloads fail closed.
+- new forward migration candidate: `20261006230000_common_account_service_start_intent.sql`; already-applied Phase 1 migration was not edited.
+- reported regression evidence: disposable PostgreSQL behavior/races PASS; Phase 1 20/20; Kabumori 387/387; real AuthProvider 4/4; X 207/207; X tsc/lint PASS; both web exports PASS; migration invariants 10/10; diff/secret scan clean.
+- PR #94 is already on main and its root news-detail registration is preserved alongside the Auth/service gate.
+- production mutation / migration apply / deploy / EAS / production access = **0**.
+- remaining release order is safety-sensitive: corrected source review first; only after PASS may a separate production migration-apply gate be considered; native build/release remains later.
+- because this corrective changes Auth/session transport plus lifecycle RPC semantics and adds a forward migration, **mandatory H1 re-review assigned**.
+- H1 task: `common-account-v1-phase2-service-enrollment-corrective-rereview-20261006`.
+- H1 exact target: `dd065e16f64a37582f73d05f1ab57ff7d276a5f7`.
+- H1 recommended model: **Sol（高）**.
+- G5 remains review_required / next_owner codex; PR #95 merge and production apply remain HOLD.
+- AI Lab diary: 追加更新なし — 同日の共通アカウント作業について既に公開安全な候補があり、今回の内容は主にセキュリティ境界の修正・再検証で重複するため。
+
 ## G4 assigned — POSTONA multi-social Phase 1 architecture inventory — 2026-10-06
 
 - G4 is now `ready` on `postona-multisocial-phase1-architecture-inventory-20261006`.
