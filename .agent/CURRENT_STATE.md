@@ -1,3 +1,32 @@
+## Final K4 — PR #76 production rollout PASS / G3 PR81 resumed
+
+- Final verdict: **PASS**. No further PR76 source or production review is required.
+- G4 report records production_mutation_window **CLOSED** at 2026-10-06 14:11 JST.
+- Production independently re-read at K4:
+  - migration ledger `20261003090000 / social_mobile_publish_permission_boundary` = exact 1 row; stray same-name history = 0;
+  - exact two target RPCs present;
+  - both owner postgres / SECURITY DEFINER / expected empty search_path configuration;
+  - effective EXECUTE exact: anon none; authenticated toggle only; service_role pre-send only;
+  - `x-test-post` ACTIVE v136 / verify_jwt=false; version increment after secret update did not change code according to G4 byte read-back;
+  - `social-mobile-publish-setting` ACTIVE v1 / verify_jwt=true;
+  - running scheduled work = 0; overdue pending = 0.
+- G4 exact rollout report:
+  - S1 guarded x-test-post deploy/read-back complete;
+  - S2 drain complete;
+  - S3 migration schema apply + Stage B exact + one exact history insert complete;
+  - S4 exact RPC/ACL/history read-back complete;
+  - S5 publish-setting deploy/read-back complete;
+  - S6 publish toggle/use = 0.
+- PR82 AI Lab runtime is active as approved. Natural AI Lab posts/claims observed healthy during rollout.
+- One unrelated pre-existing Kabumori `morning_greeting` failure stream predates this rollout and should be handled separately; it is not a PR76 blocker.
+- DB password was reset during the rollout; future direct psql/operator runs must use the new password.
+- additional Codex review: **not required**; source security review had already passed and production read-back is exact.
+- G4 done/free.
+- PR76 prerequisite now unblocks PR81.
+- fresh G3 task assigned: `x-social-mobile-pr81-production-apply-continuation-20261006`, recommended **Opus5.5（高）**.
+- G3 must first rerun read-only Gate A/B, freeze the exact already-reviewed PR81 two-file atomic package, then STOP for fresh explicit production approval. No production write is authorized by allocation alone.
+- G3 production apply must not overlap G2/G5 or any other production mutation.
+
 ## Final K4 + G5 continuation — 2026-10-06
 
 - G4 PR76 production rollout is **PASS / complete**; production_mutation_window CLOSED at 14:11 JST.
