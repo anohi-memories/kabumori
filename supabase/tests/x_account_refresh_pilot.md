@@ -22,7 +22,7 @@ Exactly one second Vault-backed X account exists:
 
 Verdict: **technically eligible, operator/user-gated.** Not ready to activate because:
 1. The owner must confirm this account is intended for the pilot and consent to automatic posting.
-2. The user-consent store (`social_mobile_content_settings`, candidate migration `20260922045046`) is **not deployed in production**; without it the new path always refuses (`SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED`).
+2. The user-consent store (`social_mobile_content_settings`, PR81 candidate `20260922045046` + hardening `20261003120000`) must be live in production before this path can do anything; the Stage 3B migrations refuse to apply without it. It is read only through `read_social_mobile_publish_settings` (below).
 3. Brand/account/windows are intentionally disabled today (admin-owned).
 
 ## 2. Architecture used for the second account
@@ -41,19 +41,25 @@ claim_due_post (legacy, brand-scoped row)          ← unchanged
                  → user consent: brand's own content settings approvalMode = 'auto_post_preference'
                → generate with the user's settings, publish length policy 140 code points (fits X's weighted limit)
                → NG words, cross-brand duplicate → one X create via the exact-account port (rollout authority in DB)
-               → complete_vault_account_brand_post(post, account, x id, sha)   ← NEW migration 20260927101423
+               → complete_vault_account_brand_post(post, account, x id, sha)   ← NEW migration 20261006160000
 ```
 
 - Refresh/rollout authority stays in the database (Stage 3A predicate before any Vault read). The global env gate is only a kill switch.
 - **Publish authority (separate, §2a)** is checked by `check_x_account_publish_authority` before generation and again immediately before the one X create.
 
-## 2a. Publish authority (P1 fix) — `20260927124300_x_account_publish_authority.sql`
+## 2a0. Publish settings reader — `20261006160100_social_mobile_publish_settings_reader.sql`
+
+- `read_social_mobile_publish_settings(p_scheduled_post_id, p_brand_id)` — the only service-side read of a user's settings. SECURITY DEFINER owned by the settings table owner, `search_path=''`, STABLE, EXECUTE for service_role only (PUBLIC/anon/authenticated none). Answers only for a **running brand_post of exactly that brand** (brand-bound row) whose brand profile is `social_mobile_user_v1`; returns only `settings` + persona columns (no user id, email, token or Vault data), zero rows when nothing is saved. Kabumori, AI Lab and any other profile → `SOCIAL_MOBILE_PUBLISH_SETTINGS_BRAND_NOT_ELIGIBLE`; other post/brand/state → `SOCIAL_MOBILE_PUBLISH_SETTINGS_POST_NOT_RUNNING`.
+- `social_mobile_content_settings` keeps **no** service_role privilege (PR81 hardening); the migration's post-condition refuses if it ever had one.
+- Both the Edge loader (`loadSocialMobileContentSettingsForPublish`, RPC) and the consent step of `check_x_account_publish_authority` read through it.
+
+## 2a. Publish authority (P1 fix) — `20261006160200_x_account_publish_authority.sql`
 
 Stage 3A rollout (`off`/`pilot`/`enabled`) only decides whether a token may be **refreshed**; a still-valid token could otherwise keep posting. The generic path therefore has its own gate:
 
 - `x_account_publish_authority(social_account_id PK, state enabled|off|revoked, starts_at, expires_at ≤ starts_at + 30 days, reason_code)` — **no row = no publishing**; RLS on; service_role SELECT only.
 - `set_x_account_publish_authority(account, state, reason, starts_at, expires_at)` — the only mutation path (SECURITY DEFINER, service_role); `enabled` needs an unexpired window ≤ 30 days; `off`/`revoked` always allowed and keep the last window for audit; `kabumori` / `ai_salaryman_lab` accounts refused.
-- `check_x_account_publish_authority(post, account, brand)` — SECURITY INVOKER (service_role), returns `allowed` or a fixed code: specialised brand → `VAULT_PUBLISH_BRAND_NOT_ELIGIBLE`; post not running/not brand_post/wrong brand → `VAULT_PUBLISH_POST_NOT_RUNNING`; not the brand's one account → `X_CLAIM_ACCOUNT_MISMATCH`; brand not active+live → `VAULT_PUBLISH_BRAND_DISABLED`; account unverified/publish off → `X_ACCOUNT_NOT_VERIFIED`/`X_ACCOUNT_PUBLISH_DISABLED`; brand_post not in brand_settings → `VAULT_PUBLISH_POST_TYPE_NOT_ENABLED`; authority missing/off/revoked/not started/expired → `VAULT_PUBLISH_AUTHORITY_*`; consent store absent, no row or not `auto_post_preference` → `SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED`. Never reads Vault or the refresh rollout.
+- `check_x_account_publish_authority(post, account, brand)` — SECURITY INVOKER (service_role), returns `allowed` or a fixed code: specialised brand → `VAULT_PUBLISH_BRAND_NOT_ELIGIBLE`; post not running/not brand_post/wrong brand → `VAULT_PUBLISH_POST_NOT_RUNNING`; not the brand's one account → `X_CLAIM_ACCOUNT_MISMATCH`; brand not active+live → `VAULT_PUBLISH_BRAND_DISABLED`; account unverified/publish off → `X_ACCOUNT_NOT_VERIFIED`/`X_ACCOUNT_PUBLISH_DISABLED`; brand_post not in brand_settings → `VAULT_PUBLISH_POST_TYPE_NOT_ENABLED`; authority missing/off/revoked/not started/expired → `VAULT_PUBLISH_AUTHORITY_*`; no settings row or not `auto_post_preference` (read through the reader) → `SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED`; non-user profile → `SOCIAL_MOBILE_PUBLISH_SETTINGS_BRAND_NOT_ELIGIBLE`. Never reads Vault or the refresh rollout.
 - Edge: `dispatchVaultAccountScheduledBrandPost` calls it (1) before loading settings/generation and (2) right before the X create. Expiry, revocation, consent withdrawal or any admin disable committed before the second check stops the create even with a valid token.
 - Atomicity (proven by `PUBLISH_RACE_PASS`): a revocation takes effect at its commit; a check running while the revocation is uncommitted sees the last committed state. With the pre-create re-check, only a create already past that check when the revocation commits can still happen — at most that single in-flight request per running post; no later post.
 - Refresh ceiling vs publish: they are independent. With publish authority valid and the refresh ceiling exhausted, posting continues while the token is valid; when it expires the refresh is refused (`X_REFRESH_PILOT_LIMIT_REACHED`, zero token requests) and the post fails. Conversely refresh `enabled` never grants publishing.
@@ -64,7 +70,7 @@ Stage 3A rollout (`off`/`pilot`/`enabled`) only decides whether a token may be *
 
 ## 3. Schema change (source only)
 
-`20260927101423_vault_account_brand_post_completion.sql` (via `supabase migration new`): `complete_vault_account_brand_post(p_scheduled_post_id, p_social_account_id, p_x_post_id, p_normalized_text_sha256)` — SECURITY DEFINER, `search_path=''`, service_role only. Completes only a running `brand_post` row whose brand's one X account is the named account (`X_CLAIM_ACCOUNT_MISMATCH` otherwise), never Kabumori, **never AI Lab (P2: even its own row + `ai_salaryman_lab_x` → `VAULT_BRAND_POST_NOT_FOUND`, nothing written)** or Phase1B-bound rows; fingerprint written for that brand/account only (unique `(social_account_id, x_post_id)`); idempotent re-report; pending/finished rows refused. Requires Stage 3A; refuses to run twice; creates nothing else.
+`20261006160000_vault_account_brand_post_completion.sql` (renumbered 2026-10-06 from the never-applied `20260927101423`): `complete_vault_account_brand_post(p_scheduled_post_id, p_social_account_id, p_x_post_id, p_normalized_text_sha256)` — SECURITY DEFINER, `search_path=''`, service_role only. Completes only a running `brand_post` row whose brand's one X account is the named account (`X_CLAIM_ACCOUNT_MISMATCH` otherwise), never Kabumori, **never AI Lab (P2: even its own row + `ai_salaryman_lab_x` → `VAULT_BRAND_POST_NOT_FOUND`, nothing written)** or Phase1B-bound rows; fingerprint written for that brand/account only (unique `(social_account_id, x_post_id)`); idempotent re-report; pending/finished rows refused. Requires Stage 3A; refuses to run twice; creates nothing else.
 
 ## 4. Pilot policy (Stage 3A `pilot` mode, unchanged)
 
@@ -80,7 +86,7 @@ Stage 3A rollout (`off`/`pilot`/`enabled`) only decides whether a token may be *
 ### Gates before the TASK
 - G-A (owner): confirm `@yumeyoasobi` / `sa_bfdab0e0696ec8e56ed2dd83` is the intended pilot account; consent to automatic posting for the pilot window; choose the daily slot.
 - G-B (product): apply/review the content-settings migration `20260922045046` (or its successor) and let the owner set `approvalMode = 'auto_post_preference'` for brand `u_ae343f5caedb67d4af33fc7a`.
-- G-C (source): PR for this Stage 3B merged; `20260927101423` applied alone (`supabase db query --linked -f`, no push/repair) with read-back (md5 vs disposable, ACL, advisors); x-test-post deployed from merged main with byte-verify, `--no-verify-jwt`.
+- G-C (source): PR for this Stage 3B merged; `20261006160000`, `20261006160100`, `20261006160200` applied in that order, each alone (`supabase db query --linked -f`, no push/repair) with read-back (md5 vs disposable, ACL, advisors); x-test-post deployed from merged main with byte-verify, `--no-verify-jwt`.
 
 ### Preflight (read-only)
 - account row unchanged (identity_verified, refs present/distinct/unshared, no error), no refresh lease, rollout rows = AI Lab `enabled` only;
@@ -89,7 +95,7 @@ Stage 3A rollout (`off`/`pilot`/`enabled`) only decides whether a token may be *
 - `complete_vault_account_brand_post` present and service_role-only.
 
 ### Enablement (exact, one account, in this order)
-0. (both migrations `20260927101423` and `20260927124300` applied alone, read back)
+0. (the three Stage 3B migrations `20261006160000` → `20261006160100` → `20261006160200` applied alone, in order, read back)
 1. `select public.set_x_account_refresh_rollout('sa_bfdab0e0696ec8e56ed2dd83', 'pilot', 'PILOT_STAGE3B', now() + interval '7 days', 3);`
 2. `insert into public.brand_settings (brand_id, enabled_post_types) values ('u_ae343f5caedb67d4af33fc7a', '["brand_post"]'::jsonb);`
 3. `insert into public.posting_windows (brand_id, post_type, slot_no, start_time, end_time, timezone, is_active) values ('u_ae343f5caedb67d4af33fc7a', 'brand_post', 1, '<start>', '<end>', 'Asia/Tokyo', true);` (one slot per day)
@@ -117,12 +123,13 @@ account mismatch · shared refs · unexpected eligible account · duplicate clai
 
 ## 7. Migration-history implications
 
-`20260927101423` joins the local-only set (history not normalized; `db push` still forbidden). It refuses to run twice and depends only on live objects (Stage 3A + production tables), so a mistaken re-run fails closed. The content-settings candidate `20260922045046` is also local-only/unapplied; applying it is a separate product decision (G-B).
+The three Stage 3B versions (renumbered from the never-applied `20260927101423` / `20260927124300`; those old versions are retired in `migration_source_invariants_test.ts`) sort after the PR81 settings hardening they depend on. Each refuses to run twice and checks its preconditions, so a mistaken or out-of-order run fails closed. `db push` stays forbidden.
 
 ## 8. Remaining risks
 
 - User consent contract (`approvalMode = 'auto_post_preference'` + admin enablement) is a product decision to confirm; the content-settings table is not live.
-- Consent withdrawal is read from `social_mobile_content_settings.settings.approvalMode`; that store's grants must give service_role SELECT when it is deployed (the check is SECURITY INVOKER).
+- Consent withdrawal is read from `settings.approvalMode` through `read_social_mobile_publish_settings`; service_role gets no table privilege on the settings store.
+- Common account (G5): before any authority window is enabled for a real user, G5 Phase 3 must require an active `x_autopost` entitlement in `check_x_account_publish_authority`, in `set_x_account_publish_authority('enabled')` and at claim time (see `vault_account_brand_post.ts` header). Not enforced in this source.
 - The 140-code-point publish limit is conservative (X weighted counting); AI Lab keeps its own 280 policy.
 - The pilot account's refresh token is 4+ days old and unused; `invalid_grant` on the first refresh is possible → hard stop + owner reconnect.
 - Generation cost per pilot post uses the shared OpenAI key.

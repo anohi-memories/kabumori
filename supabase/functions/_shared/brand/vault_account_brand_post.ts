@@ -23,6 +23,27 @@
  * policy, checked against the user's NG words and cross-brand duplicates, then
  * sent once through the caller's exact-account X port and completed by
  * complete_vault_account_brand_post (this account, this post only).
+ *
+ * Settings and consent are read only through read_social_mobile_publish_settings
+ * (running brand_post of this brand, social_mobile_user_v1 only); the settings
+ * table itself stays closed to service_role.
+ *
+ * Dormant by construction: nothing publishes here until an operator creates an
+ * 'enabled' x_account_publish_authority window (<= 30 days) for the account, the
+ * brand is live, brand_post is enabled, the account is publish-enabled and
+ * verified, and the user chose auto_post_preference.
+ *
+ * Common-account (G5) boundary -- NOT enforced here. G5 Phase 3 owns the
+ * policy; before any authority window is enabled for a real user it must add
+ * an active `x_autopost` service_entitlements requirement for the brand's owner
+ * at exactly these points:
+ *   1. check_x_account_publish_authority (SQL) -- the single publish predicate,
+ *      evaluated before generation and again immediately before the X create;
+ *   2. set_x_account_publish_authority 'enabled' (SQL) -- granting or
+ *      re-authorizing a live window;
+ *   3. the claim of a user's scheduled brand_post (claim_due_post planner), so a
+ *      post is never claimed/generated for an ended service.
+ * Service-only deletion (G5) must also end or revoke the account's authority row.
  */
 import { type BrandContext, BrandContextError } from "./brand_context.ts";
 import { assertBrandPublishAllowed } from "./publish_guard.ts";
@@ -190,30 +211,31 @@ function serviceHeaders(serviceRoleKey: string): Record<string, string> {
 }
 
 /**
- * The brand's own content settings, read server-side. Returns null (= no
- * consent) when the table is not deployed or the brand has no row.
+ * The brand's own content settings for the post being published, read server-side through the one
+ * narrow RPC read_social_mobile_publish_settings (running brand_post of this brand, social_mobile_user_v1
+ * only; the settings table itself is closed to service_role). Returns null (= no consent) when the user
+ * saved nothing; any refusal or failure fails closed.
  */
 export async function loadSocialMobileContentSettingsForPublish({
   supabaseUrl,
   serviceRoleKey,
+  scheduledPostId,
   brandId,
   fetchImpl = fetch,
 }: {
   supabaseUrl: string;
   serviceRoleKey: string;
+  scheduledPostId: string;
   brandId: string;
   fetchImpl?: typeof fetch;
 }): Promise<SocialMobileContentSettings | null> {
-  const params = new URLSearchParams({
-    select: "brand_id,settings,persona_profile,persona_provenance,persona_confirmed,persona_last_analyzed_at,persona_last_analyzed_count",
-    brand_id: `eq.${brandId}`,
-    limit: "1",
-  });
   let response: Response;
   try {
-    response = await fetchImpl(`${supabaseUrl.replace(/\/$/u, "")}/rest/v1/social_mobile_content_settings?${params}`, {
-      headers: serviceHeaders(serviceRoleKey),
+    response = await fetchImpl(`${supabaseUrl.replace(/\/$/u, "")}/rest/v1/rpc/read_social_mobile_publish_settings`, {
+      method: "POST",
+      headers: { ...serviceHeaders(serviceRoleKey), "Content-Type": "application/json" },
       redirect: "manual",
+      body: JSON.stringify({ p_scheduled_post_id: scheduledPostId, p_brand_id: brandId }),
     });
   } catch {
     throw new BrandContextError("CONTENT_SETTINGS_READ_FAILED");
@@ -222,14 +244,12 @@ export async function loadSocialMobileContentSettingsForPublish({
   try {
     body = await response.json();
   } catch { /* classified below */ }
-  if (!response.ok) {
-    const message = String((body as { message?: unknown } | null)?.message ?? "");
-    if (response.status === 404 || (response.status === 400 && /relation|does not exist/iu.test(message))) return null;
+  if (!response.ok || !Array.isArray(body) || body.length > 1) {
     throw new BrandContextError("CONTENT_SETTINGS_READ_FAILED");
   }
-  const row = Array.isArray(body) ? body[0] as Record<string, unknown> | undefined : undefined;
+  const row = body[0] as Record<string, unknown> | undefined;
   if (!row) return null;
-  if (row.brand_id !== brandId) throw new BrandContextError("CONTENT_SETTINGS_READ_FAILED");
+  if (typeof row !== "object" || row === null || Array.isArray(row)) throw new BrandContextError("CONTENT_SETTINGS_READ_FAILED");
   const settings = normalizeSocialMobileContentSettings(row.settings);
   const persona = materializeSocialMobilePersonaProfile(row.persona_profile, {
     provenance: row.persona_provenance,

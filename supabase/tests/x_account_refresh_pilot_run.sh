@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Disposable-only Stage 3B proof runner: production-shaped core fixture plus a
 # second Vault-backed account ('sa_pilot'), the production fingerprint/log
-# tables and a copy of the live claim step -> refresh core -> Stage 3A ->
-# Stage 3B, as a non-superuser owner. Runs the pilot behavior proof and races
+# tables, the PR81 settings store (candidate + hardening) and a copy of the live
+# claim step -> refresh core -> Stage 3A -> Stage 3B (completion, settings
+# reader, publish authority), as a non-superuser owner. Runs the pilot behavior proof and races
 # (account-local leases, single claim), then drops the database. Never production.
 # Usage: PILOT_PGHOST=/private/tmp/<socket-dir> PILOT_PGPORT=<port> \
 #        PILOT_PGSUPER=<local superuser> supabase/tests/x_account_refresh_pilot_run.sh
@@ -115,22 +116,60 @@ values
    '00000000-0000-4000-8000-00000000e1e1', '00000000-0000-4000-8000-00000000e1e2'),
   ('sa_norefs', 'u_norefs', 'x', 'norefs', 'x_norefs', 'identity_verified', true, 'default', null, null);
 SQL
+# PR81 settings store, exactly as main ships it (candidate + hardening), on the production-shaped
+# auth/membership pieces it depends on; brands carry their code profile (production column).
+"${as_owner[@]}" <<'SQL'
+create schema auth;
+create table auth.users (id uuid primary key);
+create function auth.uid() returns uuid language sql stable
+as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+grant usage on schema auth to anon, authenticated, service_role;
+grant execute on function auth.uid() to anon, authenticated, service_role;
+alter table public.brands add column code_profile_key text not null default 'kabumori_v1';
+update public.brands set code_profile_key = 'ai_salaryman_lab_v1' where id = 'ai_salaryman_lab';
+update public.brands set code_profile_key = 'social_mobile_user_v1' where id in ('u_pilot', 'u_norefs');
+-- A second user workspace (cross-brand isolation) and a workspace on another, internal profile.
+insert into public.brands (id, code_profile_key) values ('u_other', 'social_mobile_user_v1'), ('u_internal', 'internal_ops_v1');
+create table public.brand_memberships (
+  brand_id text not null references public.brands (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  role text not null check (role in ('owner', 'admin', 'member', 'viewer')),
+  primary key (brand_id, user_id)
+);
+alter table public.brand_memberships enable row level security;
+create policy brand_memberships_self_select on public.brand_memberships
+  for select to authenticated using (user_id = (select auth.uid()));
+revoke all on table public.brand_memberships from anon, authenticated, service_role;
+grant select on table public.brand_memberships to authenticated;
+SQL
+"${as_owner[@]}" -1 -f "$migrations/20260922045046_social_mobile_content_settings_candidate.sql" \
+  -f "$migrations/20261003120000_social_mobile_content_settings_hardening.sql" > /dev/null
 "${as_owner[@]}" -f "$migrations/20260925140000_x_account_credential_refresh_core.sql"
 # Production-like history: AI Lab has a clean committed refresh (grandfathered).
 "${as_owner[@]}" -c "insert into public.x_account_refresh_state_v2 (social_account_id, status, generation, last_refreshed_at) values ('ai_salaryman_lab_x', 'idle', 1, now() - interval '1 hour')"
 "${as_owner[@]}" -f "$migrations/20260926032054_x_account_refresh_rollout_authority.sql"
-"${as_owner[@]}" -f "$migrations/20260927101423_vault_account_brand_post_completion.sql"
-if "${as_owner[@]}" -f "$migrations/20260927101423_vault_account_brand_post_completion.sql" > /dev/null 2>&1; then
+# The authority migration refuses to run before the settings reader exists.
+if "${as_owner[@]}" -f "$migrations/20261006160200_x_account_publish_authority.sql" > /dev/null 2>&1; then
+  echo "FAIL publish authority applied without its preconditions" >&2; exit 1
+fi
+"${as_owner[@]}" -f "$migrations/20261006160000_vault_account_brand_post_completion.sql"
+if "${as_owner[@]}" -f "$migrations/20261006160000_vault_account_brand_post_completion.sql" > /dev/null 2>&1; then
   echo "FAIL Stage 3B re-apply was not refused" >&2; exit 1
 fi
-"${as_owner[@]}" -f "$migrations/20260927124300_x_account_publish_authority.sql"
-if "${as_owner[@]}" -f "$migrations/20260927124300_x_account_publish_authority.sql" > /dev/null 2>&1; then
+"${as_owner[@]}" -f "$migrations/20261006160100_social_mobile_publish_settings_reader.sql"
+if "${as_owner[@]}" -f "$migrations/20261006160100_social_mobile_publish_settings_reader.sql" > /dev/null 2>&1; then
+  echo "FAIL settings reader re-apply was not refused" >&2; exit 1
+fi
+"${as_owner[@]}" -f "$migrations/20261006160200_x_account_publish_authority.sql"
+if "${as_owner[@]}" -f "$migrations/20261006160200_x_account_publish_authority.sql" > /dev/null 2>&1; then
   echo "FAIL publish authority re-apply was not refused" >&2; exit 1
 fi
 "${as_owner[@]}" -f "$here/x_account_refresh_pilot_behavior.sql" | grep -q PILOT_BEHAVIOR_PASS || { echo "FAIL behavior" >&2; exit 1; }
 echo "PILOT_BEHAVIOR_PASS"
 "${as_owner[@]}" -f "$here/x_account_publish_authority_behavior.sql" | grep -q PUBLISH_AUTHORITY_BEHAVIOR_PASS || { echo "FAIL publish authority behavior" >&2; exit 1; }
 echo "PUBLISH_AUTHORITY_BEHAVIOR_PASS"
+"${as_owner[@]}" -f "$here/social_mobile_publish_settings_reader_behavior.sql" | grep -q PUBLISH_SETTINGS_READER_BEHAVIOR_PASS || { echo "FAIL settings reader behavior" >&2; exit 1; }
+echo "PUBLISH_SETTINGS_READER_BEHAVIOR_PASS"
 
 tmp="$(mktemp -d /private/tmp/kabumori-refresh-pilot-race.XXXXXX)"
 trap 'rm -rf "$tmp"; cleanup' EXIT

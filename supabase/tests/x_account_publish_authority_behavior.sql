@@ -1,6 +1,8 @@
 -- Fake-only Stage 3B publish-authority proof (valid token != permission to
 -- publish). Run by x_account_refresh_pilot_run.sh after the pilot behavior,
--- with 20260927124300 applied. Never production.
+-- with the Stage 3B set (20261006160000 completion, 20261006160100 settings
+-- reader, 20261006160200 publish authority) applied on top of the PR81
+-- settings store. Never production.
 \set ON_ERROR_STOP on
 set timezone = 'Asia/Tokyo';
 
@@ -72,24 +74,28 @@ begin
   perform pg_temp.expect_error($q$select public.set_x_account_publish_authority('kabumori_x', 'enabled', 'OPS', now(), now() + interval '1 day')$q$, 'VAULT_PUBLISH_BRAND_NOT_ELIGIBLE');
   perform pg_temp.expect_error($q$update public.x_account_publish_authority set state = 'enabled'$q$, '42501');
   perform pg_temp.check(public.set_x_account_publish_authority('sa_pilot', 'enabled', 'PILOT_STAGE3B', now() - interval '1 minute', now() + interval '7 days') = 'enabled', 'enable');
-  -- 5. Consent store not deployed = no consent.
+  -- 5. The user saved no settings = no consent (read through the narrow reader).
   perform pg_temp.expect_error(pg_temp.chk(p, 'sa_pilot', 'u_pilot'), 'SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED');
+  -- service_role itself still cannot read the settings table (the reader is the only way in).
+  perform pg_temp.expect_error('select count(*) from public.social_mobile_content_settings', '42501');
 end $$;
 reset role;
-create table public.social_mobile_content_settings (brand_id text primary key references public.brands (id), settings jsonb not null);
-grant select on public.social_mobile_content_settings to service_role;
-set role service_role;
-do $$ begin
-  perform pg_temp.expect_error(pg_temp.chk(current_setting('pa.p')::uuid, 'sa_pilot', 'u_pilot'), 'SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED');  -- no row
-end $$;
-reset role;
-insert into public.social_mobile_content_settings values ('u_pilot', '{"approvalMode": "manual_review"}');
+-- A complete, contract-valid settings document (the hardened table refuses anything else).
+insert into public.social_mobile_content_settings (brand_id, settings) values ('u_pilot', jsonb_build_object(
+  'locale', 'ja-JP', 'preferredTone', '自然で親しみやすく', 'themes', jsonb_build_array('日々の工夫'),
+  'objective', '気づきを届ける', 'frequencyTargetPerWeek', 3, 'approvalMode', 'manual_review',
+  'generationWindow', jsonb_build_object('timezone', 'Asia/Tokyo', 'startLocal', '09:00', 'endLocal', '24:00',
+    'defaultGenerationLocal', '17:00', 'generationDayOffset', -1),
+  'optionalNgWords', jsonb_build_array(), 'notes', ''));
 set role service_role;
 do $$ begin
   perform pg_temp.expect_error(pg_temp.chk(current_setting('pa.p')::uuid, 'sa_pilot', 'u_pilot'), 'SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED');  -- manual review
 end $$;
 reset role;
-update public.social_mobile_content_settings set settings = '{"approvalMode": "auto_post_preference"}' where brand_id = 'u_pilot';
+update public.social_mobile_content_settings set settings = jsonb_set(settings, '{approvalMode}', '"auto_post_preference"') where brand_id = 'u_pilot';
+-- Another user's consent never counts for this brand.
+insert into public.social_mobile_content_settings (brand_id, settings)
+select 'u_other', settings from public.social_mobile_content_settings where brand_id = 'u_pilot';
 set role service_role;
 do $$ begin
   perform pg_temp.check(public.check_x_account_publish_authority(current_setting('pa.p')::uuid, 'sa_pilot', 'u_pilot') = 'allowed', 'all gates open');
@@ -149,8 +155,12 @@ update public.x_account_publish_authority set state = 'enabled' where social_acc
 -- 5/6/7. Consent revoked, brand disabled/dry-run, account disabled/unverified, post type off.
 create temporary table gate_cases (label text, breaker text, fixer text, code text);
 insert into gate_cases values
-  ('consent', $m$update public.social_mobile_content_settings set settings = '{"approvalMode": "manual_review"}' where brand_id = 'u_pilot'$m$,
-              $m$update public.social_mobile_content_settings set settings = '{"approvalMode": "auto_post_preference"}' where brand_id = 'u_pilot'$m$, 'SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED'),
+  ('consent', $m$update public.social_mobile_content_settings set settings = jsonb_set(settings, '{approvalMode}', '"manual_review"') where brand_id = 'u_pilot'$m$,
+              $m$update public.social_mobile_content_settings set settings = jsonb_set(settings, '{approvalMode}', '"auto_post_preference"') where brand_id = 'u_pilot'$m$, 'SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED'),
+  ('consent_row_deleted', $m$delete from public.social_mobile_content_settings where brand_id = 'u_pilot'$m$,
+              $m$insert into public.social_mobile_content_settings (brand_id, settings) select 'u_pilot', settings from public.social_mobile_content_settings where brand_id = 'u_other'$m$, 'SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED'),
+  ('profile_not_user', $m$update public.brands set code_profile_key = 'internal_ops_v1' where id = 'u_pilot'$m$,
+              $m$update public.brands set code_profile_key = 'social_mobile_user_v1' where id = 'u_pilot'$m$, 'SOCIAL_MOBILE_PUBLISH_SETTINGS_BRAND_NOT_ELIGIBLE'),
   ('brand_inactive', $m$update public.brands set is_active = false where id = 'u_pilot'$m$, $m$update public.brands set is_active = true where id = 'u_pilot'$m$, 'VAULT_PUBLISH_BRAND_DISABLED'),
   ('brand_dry_run', $m$update public.brands set publish_mode = 'dry_run' where id = 'u_pilot'$m$, $m$update public.brands set publish_mode = 'live' where id = 'u_pilot'$m$, 'VAULT_PUBLISH_BRAND_DISABLED'),
   ('account_publish', $m$update public.social_accounts set publish_enabled = false where id = 'sa_pilot'$m$, $m$update public.social_accounts set publish_enabled = true where id = 'sa_pilot'$m$, 'X_ACCOUNT_PUBLISH_DISABLED'),

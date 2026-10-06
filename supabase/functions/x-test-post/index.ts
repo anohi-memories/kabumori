@@ -4051,6 +4051,7 @@ Deno.serve(async (req) => {
             loadContentSettings: () => loadSocialMobileContentSettingsForPublish({
               supabaseUrl,
               serviceRoleKey,
+              scheduledPostId: scheduledPost.id,
               brandId: vaultBrandPostBrandId,
             }),
             loadRecentFingerprints: () => loadAiLabRecentDedupeFingerprints({

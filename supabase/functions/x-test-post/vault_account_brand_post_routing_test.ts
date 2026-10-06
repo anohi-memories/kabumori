@@ -3,10 +3,13 @@ import test from "node:test";
 
 const dispatcher = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
 const migration = (await Deno.readTextFile(
-  new URL("../../migrations/20260927101423_vault_account_brand_post_completion.sql", import.meta.url),
+  new URL("../../migrations/20261006160000_vault_account_brand_post_completion.sql", import.meta.url),
 )).replace(/--.*$/gmu, "");
 const authority = (await Deno.readTextFile(
-  new URL("../../migrations/20260927124300_x_account_publish_authority.sql", import.meta.url),
+  new URL("../../migrations/20261006160200_x_account_publish_authority.sql", import.meta.url),
+)).replace(/--.*$/gmu, "");
+const reader = (await Deno.readTextFile(
+  new URL("../../migrations/20261006160100_social_mobile_publish_settings_reader.sql", import.meta.url),
 )).replace(/--.*$/gmu, "");
 
 function brandPostRoute(): string {
@@ -29,6 +32,8 @@ test("brand_post routing: AI Lab keeps its dispatcher; every other Vault-backed 
   assert.match(genericBlock, /socialAccountId: vaultAccountId/u);
   assert.match(genericBlock, /const checkGenericPublishAuthority = \(\) => checkVaultAccountPublishAuthority\(\{\s+supabaseUrl,\s+serviceRoleKey,\s+scheduledPostId: scheduledPost\.id,\s+socialAccountId: vaultAccountId,\s+brandId: vaultBrandPostBrandId,/u);
   assert.match(genericBlock, /checkPublishAuthority: checkGenericPublishAuthority/u);
+  // Settings are read only through the narrow RPC, bound to this running post and brand.
+  assert.match(genericBlock, /loadContentSettings: \(\) => loadSocialMobileContentSettingsForPublish\(\{\s+supabaseUrl,\s+serviceRoleKey,\s+scheduledPostId: scheduledPost\.id,\s+brandId: vaultBrandPostBrandId,/u);
   assert.match(genericBlock, /completeVaultAccountBrandPost\(/u);
   assert.match(genericBlock, /publishText: \(text\) => postToX\(xAuth, text, undefined, undefined, checkGenericPublishAuthority\)/u);
   const postToX = dispatcher.slice(dispatcher.indexOf("async function postToX("), dispatcher.indexOf("async function postThreadToX("));
@@ -81,8 +86,30 @@ test("publish authority migration: explicit per-account window/state, single pre
     assert.match(check, new RegExp(`'${code}'`, "u"), code);
   }
   assert.doesNotMatch(check, /x_account_refresh_rollout|decrypted_secrets|vault\./u, "refresh rollout is not a publish gate; no Vault");
+  // Consent only through the narrow reader: no direct (or dynamic) read of the settings table.
+  assert.match(check, /from public\.read_social_mobile_publish_settings\(p_scheduled_post_id, p_brand_id\) r;/u);
+  assert.doesNotMatch(check, /from public\.social_mobile_content_settings|execute /iu);
+  assert.doesNotMatch(authority, /grant [^;]*on (table )?public\.social_mobile_content_settings/iu);
   const setter = authority.slice(authority.indexOf("create function public.set_x_account_publish_authority"));
   assert.match(setter, /security definer set search_path = ''/u);
   assert.match(setter, /VAULT_PUBLISH_BRAND_NOT_ELIGIBLE/u);
   assert.match(authority, /from public, anon, authenticated, service_role;\s+grant execute on function public\.check_x_account_publish_authority\(uuid, text, text\),\s+public\.set_x_account_publish_authority\(text, text, text, timestamptz, timestamptz\)\s+to service_role;/u);
+});
+
+test("publish settings reader: running post of the exact brand, social_mobile_user_v1 only, definer owned by the table owner, service_role only", () => {
+  assert.match(reader, /^\s*begin;/u);
+  assert.match(reader, /commit;\s*$/u);
+  for (const pre of ["PUBLISH_SETTINGS_READER_PRECONDITION_MISSING", "PUBLISH_SETTINGS_READER_PRECONDITION_ALREADY_APPLIED", "PUBLISH_SETTINGS_READER_POSTCONDITION_FAILED"]) {
+    assert.match(reader, new RegExp(pre, "u"));
+  }
+  assert.doesNotMatch(reader, /create or replace|\bdrop\s|alter table|insert into|update public|delete from|grant [^;]*on (table )?public\.social_mobile_content_settings/iu);
+  const fn = reader.slice(reader.indexOf("create function public.read_social_mobile_publish_settings"), reader.indexOf("$$;", reader.indexOf("create function public.read_social_mobile_publish_settings")));
+  assert.match(fn, /language plpgsql stable security definer set search_path = ''/u);
+  assert.match(fn, /v_post\.status is distinct from 'running' or v_post\.post_type is distinct from 'brand_post'\s+or v_post\.brand_id is distinct from p_brand_id/u);
+  assert.match(fn, /v_profile is distinct from 'social_mobile_user_v1'/u);
+  // Only the settings/persona columns; no identity, email, token or Vault data.
+  assert.match(fn, /select s\.settings, s\.persona_profile, s\.persona_provenance, s\.persona_confirmed,\s+s\.persona_last_analyzed_at, s\.persona_last_analyzed_count/u);
+  assert.doesNotMatch(fn, /user_id|email|token|vault|auth\./iu);
+  assert.match(reader, /owner to %I/u);
+  assert.match(reader, /from public, anon, authenticated, service_role;\s+grant execute on function public\.read_social_mobile_publish_settings\(uuid, text\) to service_role;/u);
 });

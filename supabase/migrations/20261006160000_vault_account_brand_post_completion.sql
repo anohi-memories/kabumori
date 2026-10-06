@@ -12,6 +12,9 @@
 --
 -- Requires the Stage 3A rollout authority (20260926032054, live) and the
 -- production published_content_fingerprints / post_execution_logs tables.
+-- (Renumbered from the unapplied candidate 20260927101423 so that the Stage 3B
+-- set -- completion, publish settings reader, publish authority -- sorts after
+-- the PR81 settings hardening it depends on. Body unchanged.)
 -- Transaction: one explicit transaction; apply alone; not re-runnable.
 begin;
 

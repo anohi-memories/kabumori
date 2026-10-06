@@ -18,7 +18,16 @@
 -- not identity-verified, wrong account/brand, post not running.
 -- The refresh generation ceiling stays a refresh control only.
 --
--- Requires Stage 3A (live) and the Stage 3B completion RPC (20260927101423).
+-- Owner consent (approvalMode) is read only through the narrow publish-time
+-- reader read_social_mobile_publish_settings (20261006160100); the settings
+-- table itself stays closed to service_role. Only social_mobile_user_v1 brands
+-- are eligible (the reader enforces the profile; internal brands are also
+-- refused by id here and in the setter).
+--
+-- Requires Stage 3A (live), the Stage 3B completion RPC (20261006160000) and
+-- the publish settings reader (20261006160100). (Renumbered from the unapplied
+-- candidate 20260927124300 so that a clean bootstrap creates it after the PR81
+-- settings hardening it depends on.)
 -- Transaction: one explicit transaction; apply alone; not re-runnable.
 begin;
 
@@ -26,6 +35,7 @@ do $$
 begin
   if to_regclass('public.x_account_refresh_rollout') is null
      or to_regprocedure('public.complete_vault_account_brand_post(uuid,text,text,text)') is null
+     or to_regprocedure('public.read_social_mobile_publish_settings(uuid,text)') is null
      or to_regclass('public.brand_settings') is null then
     raise exception 'STAGE3B_PUBLISH_PRECONDITION_MISSING';
   end if;
@@ -109,12 +119,11 @@ begin
   if pg_catalog.now() >= v_authority.expires_at then
     raise exception 'VAULT_PUBLISH_AUTHORITY_EXPIRED' using errcode = 'P0001';
   end if;
-  -- Owner consent lives in the brand's own content settings; an undeployed store is no consent.
-  if pg_catalog.to_regclass('public.social_mobile_content_settings') is null then
-    raise exception 'SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED' using errcode = 'P0001';
-  end if;
-  execute 'select settings ->> ''approvalMode'' from public.social_mobile_content_settings where brand_id = $1'
-    into v_approval using p_brand_id;
+  -- Owner consent lives in the brand's own content settings, read only through the narrow
+  -- publish-time reader (same running post, social_mobile_user_v1 only). No row = no consent;
+  -- a non-eligible brand is refused by the reader itself.
+  select r.settings ->> 'approvalMode' into v_approval
+  from public.read_social_mobile_publish_settings(p_scheduled_post_id, p_brand_id) r;
   if v_approval is distinct from 'auto_post_preference' then
     raise exception 'SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED' using errcode = 'P0001';
   end if;

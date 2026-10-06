@@ -9,6 +9,7 @@ import {
   SOCIAL_MOBILE_USER_CODE_PROFILE,
 } from "./brand_profiles.ts";
 import { fingerprintText } from "./cross_brand_dedupe.ts";
+import { generateBrandPost } from "./brand_post_generator.ts";
 import { SOCIAL_MOBILE_USER_DEFAULTS, type SocialMobileContentSettings } from "./social_mobile_content_settings.ts";
 import {
   checkVaultAccountPublishAuthority,
@@ -177,22 +178,110 @@ test("confirmed X post whose completion fails is never reported as a plain failu
   assert.ok(!noId.calls.includes("complete"));
 });
 
-test("content settings loader: own brand row only; undeployed table or no row = no consent; other errors fail closed", async () => {
-  const seen: Array<{ url: string; redirect: RequestRedirect | undefined }> = [];
+test("content settings loader: only the narrow publish-time RPC; no row = no consent; any refusal fails closed", async () => {
+  const seen: Array<{ url: string; method?: string; body: unknown; redirect: RequestRedirect | undefined }> = [];
   const load = (reply: Response) => loadSocialMobileContentSettingsForPublish({
-    supabaseUrl: "https://e.supabase.co/", serviceRoleKey: "srk", brandId: "u_pilot",
-    fetchImpl: async (input, init) => { seen.push({ url: String(input), redirect: init?.redirect }); return reply; },
+    supabaseUrl: "https://e.supabase.co/", serviceRoleKey: "srk", scheduledPostId: "post_1", brandId: "u_pilot",
+    fetchImpl: async (input, init) => {
+      seen.push({ url: String(input), method: init?.method, body: JSON.parse(String(init?.body)), redirect: init?.redirect });
+      return reply;
+    },
   });
-  const row = { brand_id: "u_pilot", settings: { ...AUTO }, persona_profile: {}, persona_provenance: "conversation", persona_confirmed: false };
+  const row = { settings: { ...AUTO }, persona_profile: {}, persona_provenance: "conversation", persona_confirmed: false,
+    persona_last_analyzed_at: null, persona_last_analyzed_count: null };
   assert.equal((await load(Response.json([row])))?.approvalMode, "auto_post_preference");
   assert.equal(await load(Response.json([])), null);
-  assert.equal(await load(Response.json({ message: 'relation "public.social_mobile_content_settings" does not exist' }, { status: 400 })), null);
-  assert.equal(await load(new Response(null, { status: 404 })), null);
+  // The reader refuses a non-running post, a foreign/internal profile or a bad request: fail closed, never "no consent".
+  for (const message of ["SOCIAL_MOBILE_PUBLISH_SETTINGS_BRAND_NOT_ELIGIBLE", "SOCIAL_MOBILE_PUBLISH_SETTINGS_POST_NOT_RUNNING"]) {
+    await rejects(load(Response.json({ message }, { status: 400 })), "CONTENT_SETTINGS_READ_FAILED");
+  }
+  await rejects(load(new Response(null, { status: 404 })), "CONTENT_SETTINGS_READ_FAILED");
   await rejects(load(Response.json({ message: "boom" }, { status: 500 })), "CONTENT_SETTINGS_READ_FAILED");
-  await rejects(load(Response.json([{ ...row, brand_id: "ai_salaryman_lab" }])), "CONTENT_SETTINGS_READ_FAILED");
+  await rejects(load(Response.json([row, row])), "CONTENT_SETTINGS_READ_FAILED");
+  await rejects(load(Response.json({ settings: AUTO })), "CONTENT_SETTINGS_READ_FAILED");
   // Malformed settings normalize to the defaults (manual_review) -> no consent.
   assert.equal((await load(Response.json([{ ...row, settings: { approvalMode: "auto_post_preference" } }])))?.approvalMode, "manual_review");
-  assert.ok(seen.every((s) => s.url.includes("/rest/v1/social_mobile_content_settings?") && s.url.includes("brand_id=eq.u_pilot") && s.redirect === "manual"));
+  // Exactly one endpoint: the RPC, POST, the running post + brand, manual redirect. Never the table.
+  assert.ok(seen.every((s) =>
+    s.url === "https://e.supabase.co/rest/v1/rpc/read_social_mobile_publish_settings" && s.method === "POST" && s.redirect === "manual"
+    && JSON.stringify(s.body) === JSON.stringify({ p_scheduled_post_id: "post_1", p_brand_id: "u_pilot" })));
+});
+
+test("remembered AI-consult settings and every confirmed persona signal reach the live generation prompt", async () => {
+  const remembered: SocialMobileContentSettings = {
+    ...AUTO,
+    preferredTone: "落ち着いて、ていねいに",
+    themes: ["個人開発", "仕事の小さな工夫"],
+    objective: "試せるヒントをひとつ届ける",
+    optionalNgWords: ["絶対儲かる"],
+    notes: "読者は忙しい会社員。家族の話は書かない。",
+    personaProfile: {
+      source: "conversation", confirmed: true,
+      toneSignals: ["淡々"], sentenceLength: "short", punctuationEmoji: "絵文字は使わない",
+      recurringVocabulary: ["小さな工夫", "試してみる"], topicSignals: ["仕事の効率化"],
+      hashtagHabits: "ハッシュタグは1つだけ、本文の最後に付ける", ctaStyle: "最後に軽く問いかける",
+      openingClosingPatterns: ["最初に結論", "最後は一言で締める"],
+    },
+  };
+  const prompts: string[] = [];
+  const h = harness({ settings: remembered });
+  await dispatchVaultAccountScheduledBrandPost({
+    context: pilotContext(),
+    ...h.deps,
+    // The real generator (as x-test-post uses it), with only the OpenAI request stubbed.
+    generate: (args) => generateBrandPost({
+      ...args,
+      fetchImpl: async (_input, init) => {
+        prompts.push(String(JSON.parse(String(init?.body)).instructions));
+        return Response.json({
+          output: [{ content: [{ type: "output_text", text: "毎朝5分だけ机を片付けると、仕事の始まりが少し軽くなります。" }] }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        });
+      },
+    }),
+  });
+  assert.equal(prompts.length, 1);
+  const prompt = prompts[0];
+  for (const line of [
+    "希望するトーン: 落ち着いて、ていねいに",
+    "投稿の目的: 試せるヒントをひとつ届ける",
+    "扱うテーマ候補: 個人開発、仕事の小さな工夫",
+    "避ける語句: 絶対儲かる",
+    "読者は忙しい会社員。家族の話は書かない。",
+    "確認済みの口調の特徴: 淡々",
+    "確認済みの文体傾向: 短めの文を中心にする",
+    "確認済みの記号・絵文字傾向: 絵文字は使わない",
+    "確認済みの語彙傾向: 小さな工夫、試してみる",
+    "確認済みの話題の傾向: 仕事の効率化",
+    "確認済みの呼びかけ方: 最後に軽く問いかける",
+    "確認済みの書き出し・締めの型: 最初に結論、最後は一言で締める",
+    "ハッシュタグは1つだけ、本文の最後に付ける",
+  ]) assert.ok(prompt.includes(line), `missing in live prompt: ${line}`);
+  assert.ok(!prompt.includes("ハッシュタグは付けないでください"));
+  // The live path keeps its 140-character publish bound in the same prompt.
+  assert.match(prompt, /140/u);
+  assert.equal(h.published.length, 1);
+
+  // An unconfirmed persona adds nothing to the live prompt, and the default no-hashtag rule stays.
+  const unconfirmedPrompts: string[] = [];
+  const u = harness({ settings: { ...remembered, personaProfile: { ...remembered.personaProfile!, confirmed: false } } });
+  await dispatchVaultAccountScheduledBrandPost({
+    context: pilotContext(),
+    ...u.deps,
+    generate: (args) => generateBrandPost({
+      ...args,
+      fetchImpl: async (_input, init) => {
+        unconfirmedPrompts.push(String(JSON.parse(String(init?.body)).instructions));
+        return Response.json({
+          output: [{ content: [{ type: "output_text", text: "毎朝5分だけ机を片付けると、仕事の始まりが少し軽くなります。" }] }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        });
+      },
+    }),
+  });
+  assert.doesNotMatch(unconfirmedPrompts[0], /確認済み/u);
+  assert.ok(unconfirmedPrompts[0].includes("ハッシュタグは付けないでください"));
+  assert.ok(unconfirmedPrompts[0].includes("希望するトーン: 落ち着いて、ていねいに"));
 });
 
 test("completion RPC adapter: exact post/account parameters, manual redirect, strict response", async () => {
