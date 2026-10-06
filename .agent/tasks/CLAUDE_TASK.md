@@ -3,9 +3,9 @@
 - task_id: kabumori-pr99-controlled-analysis-deploy-20261007
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
-- production_mutation_window: **ACTIVE** — 2026-10-07 01:15 JST〜。G2 deploys `market-report-analysis` only (PR #99). No other slot performs a production write until G2 records CLOSED.
+- status: review_required
+- next_owner: chatgpt
+- production_mutation_window: **CLOSED** — 2026-10-07 01:08 JST（ACTIVE 01:05〜）。G2 performs no further production write. Deployed `market-report-analysis` only (v25, PR #99).
 - priority: high
 - recommended_model: Opus5.5（中）
 - type: controlled production deploy / exact-source read-back
@@ -117,7 +117,61 @@ Recommended model: **Opus5.5（中）**.
 
 ## Report
 
-Pending.
+### task_id / result
+- task_id: kabumori-pr99-controlled-analysis-deploy-20261007
+- result: **PASS** — production `market-report-analysis` を PR #99（merged `e3379f80`）のsourceへ1回でdeploy。11ファイルすべてfresh mainとbyte一致。他Function・verify_jwt・gates・cronは不変。manual generation/retry = 0。`personalized-reports` は deploy していない（TASK指示どおり）。
+
+### fresh main / isolation
+- deploy HEAD: `2f3b1ea9becc7cc14b73699f907ccbbd2fd1eb48`（origin/main、detached）。merge `e3379f8066877b5b64fede2dc84cbdb995c85b8e`（PR #99、reviewed head `cd33b1f2…`）を含む。`e3379f80..2f3b1ea9` の `supabase/functions/**` 変更なし。
+- worktree: 既存のG2専用 `/Users/yuya/Developer/kabumori-g2-market-report-reliability`（独立、toplevel assert、`supabase/config.toml` なし、未commit変更なし）。
+- production mutation mutex：G3（PR41 ACL corrective、`production_mutation_allowed: false`）・G4（done）・G5（Phase 2 source-only、本番変更禁止）・H1/H2（done）に本番writeのACTIVE/approved windowなし。G2は `production_mutation_window: ACTIVE`（01:05〜）を記録してからdeploy。
+
+### baseline before
+- `market-report-analysis`: v24 ACTIVE、verify_jwt=false、ezbr `ed2db6d57e13…`、updated 2026-10-06 14:33:15 JST。本番read-back 11ファイルが main `74e4dbff`（PR #87 merge）と全byte一致 → mainとの差は PR #99 の `analysis_logic.ts`（+88/−8）のみ。
+- `personalized-reports`: v40 ACTIVE（9/25のまま、deploy対象外）。
+- app_enabled=false / x_enabled=false（updated 2026-09-17 10:47:14 UTC）。cron 8件 active（schedule・md5(command) 記録）。
+- pre-deploy test（2f3b1ea9）：market-report-analysis 160/160、personalized-reports 129/129、X shared consumer 8/8、data-packet 42/42、`deno check market-report-analysis/index.ts` PASS。
+
+### exact deploy target / command
+- `supabase functions deploy market-report-analysis --workdir /Users/yuya/Developer/kabumori-g2-market-report-reliability --project-ref wsmznyzcvmuitkglfeuj --no-verify-jwt --use-api`
+- 2026-10-07 01:06:57〜01:07:03 JST（1回目はauto mode classifierで拒否 → ユーザーの許可（「こか」＝「きょか」と解釈）で実行）
+- uploaded: market-report-analysis 6本、`_shared` 4本、`market-report-data-packet/packet_schema.ts`・`session_logic.ts`。deployされたFunctionは1本のみ。
+
+### after / read-back
+- `market-report-analysis`: **v25** ACTIVE、verify_jwt=false、ezbr `addbb0a61338…`、updated 2026-10-07 01:07:01 JST
+- `supabase functions download --use-api` の11ファイルを `git show 2f3b1ea9:<path>` とbyte比較 → **11/11 same**
+- PR #99 logic present（deployed `analysis_logic.ts`）：`isGenericPoint`、`X_POST_REWRITE_BELOW_CHARS`、`rejectionCodes`、`X_POINTS_GENERIC`
+- `personalized-reports`: v40 / ezbr `2fe1b50edf59…` / updated 2026-09-25 → **不変**
+
+### gates / cron / unrelated functions
+- app_enabled=false / x_enabled=false：before/after 完全一致
+- cron 8件：schedule・active・md5(command) before/after 完全一致
+- 全21 Function の version / updated_at / verify_jwt / ezbr / status / entrypoint_path を比較：変化は `market-report-analysis` のみ（20本不変）
+
+### production mutations
+- **1件**：Edge Function `market-report-analysis` v24→v25
+- manual generation / retry = 0（deploy後 `market_report_packets` の新規0件、10/7 00:00 JST以降）
+- X / notification / EAS = 0、DB/RPC/migration/cron/gate/secrets/Vault/Auth = 0
+
+### rollback
+- rollback source = main `74e4dbff`（PR #87）の market-report-analysis graph（本番v24とbyte一致を確認済み）。不要のため未実施。
+
+### remaining risks / notes
+1. **プロンプトの効果は未検証**：モデルが実際に具体的な見出しを書くかは、自然サイクルでしか分からない。今日の朝刊（analysis 07:55 / retry 08:05 JST）が v25 の最初の自然サイクル。
+2. PR #99 でも変わらない点：アプリ本文700字未満の書き直し（PR #77）は残る。アプリ本文が各項目の下限を2割ほど下回る日は書き直しが1回走る。
+3. `personalized-reports` は PR #43/#67/#87 が未deployのまま（別判断）。
+4. 1回目の分析失敗（10/5大引け・10/6朝刊で約36秒）の理由は、今回の `rejection_reasons` では**Fact/local不合格のときだけ**残る。transport・OpenAI 側の失敗（429等）は従来どおり `report_last_error` を参照。
+
+### next natural observation recommendation
+- 10/7 朝刊（analysis 07:55 / retry 08:05 JST）を read-only で観測：
+  - `x_post.points_ja` の3つが具体的か（出来事・固有名詞、節目の数値、汎用でない見る点）、例文の丸写しが無いか
+  - `X_POINTS_GENERIC` / `X_POINTS_METRIC_RECAP` / `X_POINTS_NEAR_DUPLICATE` の有無、`quality_warnings`
+  - calls（4回に戻っていないか。`X_POST_SHORTER_THAN_TARGET` だけで書き直していないか）、`quality_rewrite`、`rejection_reasons`（不合格があれば固定コード）
+  - 数値・日付・因果の事実確認、Hard false reject 0
+- 汎用の見出しが続く場合の次の手：入力に「今日の見出し候補」（節目・最大の動き・最重要ニュースの要旨）をコードで用意する案、または `X_POINTS_GENERIC` を書き直し対象にする案（K2判断）。
+- manual generation はしない。
+
+---
 
 ---
 
