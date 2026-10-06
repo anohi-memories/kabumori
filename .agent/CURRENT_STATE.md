@@ -1,3 +1,36 @@
+## Final C1 — PR #95 CHANGES REQUIRED / PR #94 merged / G5 corrective assigned — 2026-10-06
+
+- H1 exact review target: PR #95 head `c06fac6492708331b6ba816122c9852cdcea73e7`.
+- C1 verdict: **CHANGES REQUIRED accepted**. PR #95 remains open/unmerged/undeployed.
+- accepted blockers:
+  - R1 P1: stale automatic start can reactivate a now-ended service;
+  - R2 P1: X re-enrollment consent can carry across user switch;
+  - R3 P2: Kabumori push/notification side effects can run while retry enrollment is unresolved;
+  - R4 P1: stale A enrollment flow can dispatch with mutable singleton client's B credential;
+  - R5 P2: malformed active RPC payload can be accepted ready.
+- H1 independently proved PR #94 / PR #95 source compatibility:
+  - only `src/app/_layout.tsx` overlapped;
+  - both merge orders produced the same tree;
+  - combined Kabumori app tests 392/392 passed.
+- therefore completed G1 PR #94 was landed first:
+  - accepted head `97d374b48886ad33b61cd2288188d4b690e27a5c`;
+  - squash merge `d30a518731e976ab1c0e4e19e26f461a174a3c1c`;
+  - G1 done/free.
+- G5 is now ready on the same Phase 2 task / existing PR #95 with a focused security corrective:
+  - fresh-integrate on main containing PR #94;
+  - preserve root `news-detail`;
+  - add a new forward migration candidate if needed; never edit the applied migration;
+  - automatic bootstrap must never reactivate ended;
+  - explicit reactivation must use a separate atomic, current-user action boundary;
+  - re-enrollment intent must be one-use and user/session scoped;
+  - request authorization must be bound to immutable captured session credentials;
+  - Kabumori side effects require positive current-session service-ready state;
+  - RPC active payload must be structurally validated fail-closed.
+- production mutation/deploy/EAS/enforcement = 0.
+- H1 is done/free now; a **new H1 Sol（高） re-review is mandatory** after corrected PR #95 head.
+- G5 recommended model: **Opus5.5（極高）**.
+- current main after control sync at record time: `8dc0ec67aaa341a74ace79d8b00cbcd4891ed19f`.
+
 ## Final K1 — PR #94 PASS / merge HOLD for PR #95 overlap coordination
 
 - verdict: **PASS** for G1 implementation and final 375pt visual gate.
