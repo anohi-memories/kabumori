@@ -3,8 +3,8 @@
 - task_id: kabumori-portfolio-canonical-ui-v1-20261006
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: ユーザー承認済み「ポートフォリオ正本」デザインを、既存の保有銘柄・保存済み大引けレポート・検索/監視機能に接続した実用画面として実装する。
@@ -514,6 +514,71 @@ Then:
 - STOP for K1.
 
 Recommended model: **Sonnet5（高）**.
+
+## Report — G1: portfolio canonical UI v1 (task kabumori-portfolio-canonical-ui-v1-20261006)
+
+- task_id: `kabumori-portfolio-canonical-ui-v1-20261006`
+- result: implemented; Simulator-verified at 402pt and 375pt (real taps/swipes). PR open, **not merged**.
+- fresh main SHA (clone at start): `06335b3` (allocation `676ce44b`; main only advanced with agent/ops commits). Open-PR overlap re-checked (all 8 open PRs): none on the portfolio/search/stock files.
+- PR: https://github.com/anohi-memories/kabumori/pull/100 — branch `claude/g1-portfolio-canonical-ui-v1-20261006`, head `5a9735c80e3dbc01b25911a0aabc83fce3d56bc9` (1 commit).
+- **EAS build created: no (0).** backend/DB/RPC/API/AI/Auth/Edge/production mutation: **0**. `src/app/_layout.tsx`, Auth/common-account, migrations, G5/PR95 files untouched.
+- Reference image: the user's canonical portfolio mock was visible in this session; the TASK text was followed for everything the image cannot show.
+
+### worktree isolation
+Independent clone of `origin/main` in the session scratchpad (own branch, `.env` copy, `node_modules` symlink; one Metro at a time). `kabumori-fresh`, old worktrees and other slots' servers/branches untouched.
+
+### changed_files
+`src/app/(tabs)/explore.tsx` (rewritten: portfolio dashboard + Watchlist subview), `src/app/search.tsx` (redirect → real screen), `src/lib/stock-search.ts` (extracted search semantics), new `src/lib/portfolio-view.ts` (pure view model), new `src/components/portfolio/{portfolio-sections,holdings-section,stock-avatar,sparkline,portfolio-theme}`; removed `src/components/portfolio-summary.tsx` (replaced by the dashboard; sector weights remain on the report detail); tests `portfolio-view_test.ts`, `portfolio-screen_test.ts`; 5 screenshots.
+
+### portfolio data-source mapping
+All figures: latest saved CLOSE report (`fetchRecentReports(20)` + existing `latestCloseReport`) → `portfolio_snapshot`. Asset value = `totals.market_value`; 評価損益 = `totals.unrealized_pl`; day change = `totals.day_pl` / `day_change_percent`; 評価損益% = `unrealized_pl / (market_value − unrealized_pl)` only when the cost is finite and > 0 (else `—`, pinned by tests; no rounded strings are ever summed). Sparkline = `totals.market_value` of recent close reports (oldest first, one per trading date, finite only, ≤12 points; < 2 points ⇒ no line). Holdings come from the user's `tracked_stocks` (current registrations), prices/P&L from the snapshot row with the same ticker.
+
+### stale / realtime honesty
+No realtime wording anywhere (`現在値` is never used; `終値`, `10/6 終値ベース（保存済み大引け）`, and `リアルタイム価格ではありません` on the watchlist). The basis date is the **price date** (`price_basis_date`): only when it equals today (JST) are `今日のポートフォリオ / 今日のポイントを見る / 今日の資産への影響 / 今日の増減` used; otherwise `最新のポートフォリオ / 詳しいポイントを見る / 10/6の資産への影響 / 10/6の増減` (a test asserts no label contains 今日 when stale, including a report written today on yesterday's prices). Missing values render `—`, never 0; the stored overview text is shown verbatim (a stored sentence that itself says 今日 is not rewritten).
+
+### current-tracked vs snapshot join
+Join key = ticker code (`stocks_master.ticker_code` ↔ `ReportStock.ticker_code`). Every currently registered holding is shown; one the latest report does not contain is flagged `最新レポート未反映` with `—` values (never dropped, never invented); with no report at all the flag is not shown (nothing to be "未反映" from). Order: market value descending, rows without one after, ties by ticker. Watch records stay separate (`tracking_type='watch'`).
+
+### impact ranking
+Holdings with a finite `day_pl`, sorted by `|day_pl|` descending (ties by ticker), at most 3; row = fallback avatar, company, ticker, signed ¥ impact, change %. No numeric holding ⇒ the whole section is omitted. No medals/rank styling.
+
+### AI card source
+Only the stored, Fact-passed `body.overview_ja` (trimmed, clamped to 4 lines by presentation only); no card when absent. Material tag/line per holding only from stored data: linked news ⇒ `ニュース`; report stance tailwind/headwind ⇒ `追い風/逆風`; text = `holding_impacts[].fact_ja` else `stock_notes`; nothing guessed from names. No display-time AI call (pinned: no AI/RPC/fetch in the screen or the view model).
+
+### search extraction
+`/search` is now a real root-stack screen (already registered; root navigator untouched) with a Back button. Behaviour unchanged and pinned: 350 ms debounce, `sanitizeStockSearchTerm` (`, % ( )` blanked), `ticker_code`/`company_name` ilike, `is_listed`, limit 30, request-id guard against stale responses, registered check, registered row not tappable/duplicated, unregistered → `TrackedStockEditor`. The portfolio search icon opens it.
+
+### interim Watchlist behaviour
+`★ ウォッチリスト` toggles a Watchlist subview of the same 銘柄 tab (no new route, no `_layout.tsx` change): `‹ ポートフォリオ` back, `＋ 追加` → /search, watch rows (avatar, company, ticker・market, 買いたい/売りたい prices, saved 終値/前日比 when the report has them), tap → the existing editor (change/delete verified), honest empty state. No tags / schema (explicitly deferred).
+
+### logo fallback behaviour
+No logo field exists, so every company gets `StockAvatar`: a soft neutral circle with one deterministic short label (first character of a Japanese name, ≤2 Latin letters/digits otherwise, legal-form words stripped, ticker as last resort); the accessibility label carries the full company name. It is the single place a licensed logo can replace later; no logo URLs or company-specific assets are hard-coded.
+
+### 402 / 375 findings
+- 402pt: header (title + ★ ウォッチリスト + search) on one line; asset value ¥3,248,500 and sparkline do not collide; two metric columns; AI card; impact card with 2-line long names and vertically centred % pills; holdings in two-line cards (identity + 終値 + 評価損益 above, tag + one-line note below), long company names readable on up to 3 lines (e.g. 三菱ＵＦＪフィナンシャル・グループ); CTA ends ≈27 pt above the tab bar (not hidden).
+- 375pt: card 343 wide; name column ≈80–85 pt (price 58, P/L 86 — `+¥142,500` fits); all figures uncropped; watchlist target prices on two lines; search row (avatar, code, name, badge) fits; CTA ≈27 pt above the tab bar.
+- Earlier first pass found: a 57 pt name column (3–4 characters per line), misaligned % pills, a 110 pt gap above the tab bar, pull-to-refresh spinner showing on tab refocus, clipped watchlist target prices — all fixed and re-verified.
+- Observations, accepted: the AI card text can wrap inside 「ＵＦＪ」 at 375pt (data text, Japanese wrapping); sparkline vertices keep ~0.5 pt bumps at 3× zoom; AI-card/「詳しく見る ›」 open the report detail whose `‹ 一覧` returns to the report list (existing behaviour).
+
+### tests / checks (head `5a9735c8`)
+`deno test tests/app/` **404 passed / 0 failed**; tsc(src) no diagnostics; `expo config` OK; `expo export --platform web` PASS; `git diff --check` clean.
+
+### screenshots (`docs/ui-review/`)
+`portfolio_canonical_402pt.webp`, `portfolio_canonical_375pt.webp`, `portfolio_holdings_375pt.webp`, `portfolio_watchlist_375pt.webp`, `portfolio_search_375pt.webp`.
+
+### remaining issues
+- Verification used a scratchpad auth-bypass/fixture rig (not committed); the real iPhone with real data/touch has not been used yet.
+- `src/lib/stock-sections.ts` (partition helpers + tests) is no longer used by a screen but kept (the watch/holding partition contract is still pinned).
+- The 銘柄 → report detail back path returns to the reports list, not the portfolio (existing tab-stack behaviour).
+- Not exercised: more than 6 holdings/very long scroll performance, dark mode, VoiceOver reading.
+
+### safety_checks
+No DB/RPC/RLS/Auth/Edge/AI/news/report generation/native/config/EAS/production change; no new dependency; no logo scraping; the root navigator and Settings/common-account code untouched; `.env`/`node_modules` not committed; PR not merged. Production mutation: 0.
+
+### next_recommendation
+K1 reviews PR #100 (UI/local only, no Codex review needed). The user can try it on the iPhone (server on request) with real saved close reports.
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 
 ---
 
