@@ -1,3 +1,16 @@
+## Final K4 — POSTONA multi-social Phase 1 PASS — 2026-10-06
+
+- verdict: **PASS**.
+- accepted deliverable: `docs/postona/multi-social-phase1.md` (docs-only, 354 lines).
+- accepted candidate had exactly one changed file and both Netlify Preview / Vercel checks passed.
+- fresh-main advanced while K4 was merging. GitHub rejected the immediate PR merge because the base changed; the exact accepted document was integrated unchanged to main as `25fd6aeec85528a06f78995f4306aaeba98f9d75`, and PR #96 was closed as superseded.
+- no runtime/app/migration/RPC/Edge/workflow/OAuth/Vault/secret/production/provider-call changes.
+- architecture direction accepted: provider-neutral posting model; keep login / entitlement / SNS connection / publish authorization separate; Threads first; Instagram after media/material-library design; target-level retry/idempotency.
+- Codex review: **not required** for this docs-only phase.
+- dependency gate: G3 PR #41 and G5 PR #95 remain open/review_required. G4 Phase 2a is intentionally not assigned until those boundaries are accepted/merged and fresh overlap is rechecked.
+- G4 is **done / free**.
+- AI Lab diary: 記録不要 — 設計整理のみで、ユーザー向け機能や実動作はまだ追加していない。
+
 ## Final K5 — PR #95 corrective PASS_CANDIDATE / mandatory H1 re-review — 2026-10-06
 
 - G5 corrective result: **PASS_CANDIDATE**, not final merge approval.
