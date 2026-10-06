@@ -95,7 +95,7 @@ export default function ImportantNewsScreen() {
             const categories = categoryLabels(item.coverage_categories);
             return (
               <Pressable
-                onPress={() => router.push({ pathname: '/news/[id]', params: { id: item.news_id, from: 'news' } })}
+                onPress={() => router.push({ pathname: '/news-detail', params: { id: item.news_id, from: 'news' } })}
                 style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
                 accessibilityRole="button"
                 accessibilityHint="ニュースの詳細を開きます">

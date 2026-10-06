@@ -4,11 +4,9 @@ import test from "node:test";
 import {
   backFromNewsDetail,
   backFromTopicDetail,
-  decideDetailRemoval,
   goNewsList,
   goTopicList,
-  isNativeBackAction,
-  NATIVE_BACK_ACTION_TYPES,
+  newsDetailRedirectPath,
   type DismissHref,
 } from "../../src/lib/detail-navigation.ts";
 
@@ -16,61 +14,60 @@ const repoRoot = new URL("../../", import.meta.url);
 const read = (path: string) => Deno.readTextFile(new URL(path, repoRoot));
 const code = async (path: string) => (await read(path)).replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/^\s*\/\/.*$/gm, "");
 
-// A recording router for the news detail (it also needs the Home-tab pieces).
 function recorder() {
   const calls: string[] = [];
   const router = {
     dismissTo: (href: DismissHref) => calls.push(`dismissTo:${typeof href === "string" ? href : href.pathname}`),
-    navigate: (href: string) => calls.push(`navigate:${href}`),
+    back: () => calls.push("back"),
   };
-  const reset = () => calls.push("reset");
-  return { calls, router, reset };
+  return { calls, router };
 }
 
-test("a swipe / back action is redirected to the explicit back; the screen's own navigation passes through", () => {
-  assert.deepEqual([...NATIVE_BACK_ACTION_TYPES].sort(), ["GO_BACK", "POP"]);
-  for (const type of ["POP", "GO_BACK"]) {
-    assert.equal(isNativeBackAction(type), true, type);
-    assert.equal(decideDetailRemoval(type), "redirect-to-back", type);
-  }
-  // Everything the detail itself dispatches must pass, or a redirect would be redirected again.
-  for (const type of ["POP_TO", "POP_TO_TOP", "NAVIGATE", "REPLACE", "RESET", "PUSH", undefined, null, 3]) {
-    assert.equal(decideDetailRemoval(type), "allow", String(type));
-  }
+// Both details are ROOT-stack routes, so the native edge swipe pops exactly one root screen: the screen the
+// detail was opened from. These tests pin that model; the Simulator proves the real swipes.
+
+test("the news detail is a root-stack screen, exactly like the topic detail", async () => {
+  const root = await read("src/app/_layout.tsx");
+  assert.ok(root.includes('<Stack.Screen name="topic-detail" />') && root.includes('<Stack.Screen name="news-detail" />'));
+  assert.ok(root.includes('<Stack.Screen name="(tabs)" />'));
+  const nested = await Deno.stat(new URL("src/app/(tabs)/news/[id].tsx", repoRoot)).catch(() => null);
+  assert.equal(nested, null, "no nested news-tab detail between the swipe and its origin");
 });
 
-test("news Home origin: the button target and the swipe target are the same function and the same result (Home)", () => {
-  const button = recorder();
-  backFromNewsDetail(button.router, "home", button.reset); // 戻る button
-  const swipe = recorder();
-  // The swipe is redirected by the screen through the very same function with the same origin.
-  assert.equal(decideDetailRemoval("POP"), "redirect-to-back");
-  backFromNewsDetail(swipe.router, "home", swipe.reset);
-  assert.deepEqual(swipe.calls, button.calls);
-  assert.deepEqual(button.calls, ["navigate:/", "reset"]);
-});
-
-test("news news-list origin: button == swipe == the news list", () => {
-  const button = recorder();
-  backFromNewsDetail(button.router, "news");
-  const swipe = recorder();
-  backFromNewsDetail(swipe.router, "news");
-  assert.deepEqual(button.calls, ["dismissTo:/news"]);
-  assert.deepEqual(swipe.calls, button.calls);
-});
-
-test("news unknown / cold deep link: the swipe and the button both fall back to Home", () => {
-  for (const from of [undefined, "", "garbage", "topics"]) {
-    const button = recorder();
-    backFromNewsDetail(button.router, from, button.reset);
-    const swipe = recorder();
-    backFromNewsDetail(swipe.router, from, swipe.reset);
-    assert.deepEqual(swipe.calls, ["navigate:/", "reset"], String(from));
-    assert.deepEqual(swipe.calls, button.calls);
+test("no gesture interception is needed (and none is left): nothing prevents or redirects a native pop", async () => {
+  for (const path of ["src/app/news-detail.tsx", "src/app/topic-detail.tsx", "src/app/(tabs)/news/_layout.tsx"]) {
+    const text = await code(path);
+    assert.ok(!/usePreventRemove|beforeRemove|gestureEnabled|expo-router\/build/.test(text), path);
   }
 });
 
-test("topic: Home origin => Home, topics origin => topics, unknown => Home (button model; native pop matches it)", () => {
+test("news Home origin: 戻る goes Home, which is where the root-stack swipe pops to", () => {
+  const { calls, router } = recorder();
+  backFromNewsDetail(router, "home");
+  assert.deepEqual(calls, ["dismissTo:/"]);
+});
+
+test("news list origin: 戻る goes to the news list, which is where the swipe pops to", () => {
+  const { calls, router } = recorder();
+  backFromNewsDetail(router, "news");
+  assert.deepEqual(calls, ["dismissTo:/news"]);
+});
+
+test("report origin: 戻る pops to the report, which is where the swipe pops to (no contradiction)", () => {
+  const { calls, router } = recorder();
+  backFromNewsDetail(router, "reports");
+  assert.deepEqual(calls, ["back"]);
+});
+
+test("unknown / cold deep link: 戻る falls back to Home (a deep-linked root screen has nothing to swipe back to)", () => {
+  for (const from of [undefined, "", "garbage"]) {
+    const { calls, router } = recorder();
+    backFromNewsDetail(router, from);
+    assert.deepEqual(calls, ["dismissTo:/"], String(from));
+  }
+});
+
+test("topic: Home origin => Home, topics origin => topics, unknown => Home", () => {
   const cases: Array<[unknown, string]> = [["home", "dismissTo:/"], ["topics", "dismissTo:/topics"], [undefined, "dismissTo:/"], ["news", "dismissTo:/"]];
   for (const [from, expected] of cases) {
     const { calls, router } = recorder();
@@ -79,8 +76,8 @@ test("topic: Home origin => Home, topics origin => topics, unknown => Home (butt
   }
 });
 
-test("the right-hand list action stays independent of the origin and of the swipe redirect", () => {
-  for (const from of ["home", "news", undefined]) {
+test("the right-hand list actions stay independent of the origin", () => {
+  for (const from of ["home", "news", "reports", undefined]) {
     const { calls, router } = recorder();
     goNewsList(router);
     assert.deepEqual(calls, ["dismissTo:/news"], String(from));
@@ -90,30 +87,12 @@ test("the right-hand list action stays independent of the origin and of the swip
   assert.deepEqual(topics.calls, ["dismissTo:/topics"]);
 });
 
-test("news detail screen: it prevents native removal and redirects only a back gesture, with a re-entry guard", async () => {
-  const screen = await code("src/app/(tabs)/news/[id].tsx");
-  assert.ok(screen.includes("usePreventRemove(true, ({ data }) => {"));
-  assert.ok(screen.includes("decideDetailRemoval(data.action.type) === 'redirect-to-back' && Date.now() >= redirectingUntil.current"));
-  assert.ok(screen.includes("backFromNewsDetail(router, from, () => resetStackWhenHidden(navigation));"), "the same function the header button calls");
-  assert.ok(screen.includes("navigation.dispatch(data.action);"), "anything else is let through");
-  assert.ok(screen.includes("redirectingUntil.current = Date.now() + 1000;"));
-  assert.ok(screen.includes("useLocalSearchParams<{ id: string; from?: string }>()"));
-  assert.ok(!/router\.(back|canGoBack)\(|gestureEnabled/.test(screen), "swipe is redirected, not disabled, and no history is used");
-  // usePreventRemove is part of the bundled react-navigation core (not re-exported from the package root).
-  assert.ok(screen.includes("from 'expo-router/build/react-navigation/core'"));
-  const core = await Deno.stat(new URL("node_modules/expo-router/build/react-navigation/core/usePreventRemove.js", repoRoot)).catch(() => null);
-  if (core) assert.ok(core.isFile, "the deep import resolves in the installed expo-router");
-});
-
-test("the header 戻る calls the same origin function as the swipe redirect, from the same `from` param", async () => {
-  const layout = await code("src/app/(tabs)/news/_layout.tsx");
-  assert.ok(layout.includes("backFromNewsDetail(router, (route.params as { from?: unknown } | undefined)?.from, () => resetStackWhenHidden(navigation))"));
-  assert.ok(layout.includes("‹ 戻る") && layout.includes("ニュース一覧 ›") && layout.includes("headerBackVisible: false"));
-});
-
-test("topic detail does not need a swipe override: a root-stack pop already lands on the origin (verified in the Simulator)", async () => {
-  const screen = await code("src/app/topic-detail.tsx");
-  assert.ok(!/usePreventRemove|beforeRemove/.test(screen));
-  const root = await read("src/app/_layout.tsx");
-  assert.ok(root.includes('<Stack.Screen name="topic-detail" />') && root.includes('<Stack.Screen name="topics" />'));
+test("a news/<id> link is rewritten to the root-stack detail; the list and unrelated links are untouched", () => {
+  assert.equal(newsDetailRedirectPath("kabumori://news/abc-123"), "/news-detail?id=abc-123");
+  assert.equal(newsDetailRedirectPath("/news/abc-123"), "/news-detail?id=abc-123");
+  assert.equal(newsDetailRedirectPath("news/abc-123"), "/news-detail?id=abc-123");
+  assert.equal(newsDetailRedirectPath("kabumori://news/abc-123?x=1"), "/news-detail?id=abc-123");
+  for (const path of ["kabumori://news", "/news", "/news/", "kabumori://reports/abc", "/topics", "/", "kabumori://news/a/b"]) {
+    assert.equal(newsDetailRedirectPath(path), null, path);
+  }
 });

@@ -17,25 +17,24 @@ import { topicDetailRouteParams } from "../../src/lib/topic-detail-switch.ts";
 // can assert it is never used: origin routing is asserted, not stack accident.
 function recorder() {
   const calls: string[] = [];
-  const reset = () => calls.push("reset");
   const router = {
     dismissTo: (href: string) => calls.push(`dismissTo:${href}`),
-    navigate: (href: string) => calls.push(`navigate:${href}`),
     back: () => calls.push("back"),
     canGoBack: () => {
       calls.push("canGoBack");
       return false;
     },
   };
-  return { calls, router, reset };
+  return { calls, router };
 }
 
-test("parseDetailOrigin accepts exactly home / topics / news (a string or the first of an array)", () => {
+test("parseDetailOrigin accepts exactly home / topics / news / reports (a string or the first of an array)", () => {
   assert.equal(parseDetailOrigin("home"), "home");
   assert.equal(parseDetailOrigin("topics"), "topics");
   assert.equal(parseDetailOrigin("news"), "news");
+  assert.equal(parseDetailOrigin("reports"), "reports");
   assert.equal(parseDetailOrigin(["topics", "home"]), "topics");
-  for (const bad of [undefined, null, "", "Home", "reports", "/topics", 3, {}, []]) {
+  for (const bad of [undefined, null, "", "Home", "report", "/topics", 3, {}, []]) {
     assert.equal(parseDetailOrigin(bad), null, String(bad));
   }
 });
@@ -77,10 +76,10 @@ test("topic: a level switch keeps the origin in the route params (and adds none 
   assert.ok(!("from" in topicDetailRouteParams(topic, "2026-10-01", null)));
 });
 
-test("news: Home card / holding row -> detail -> 戻る selects Home FIRST, then empties the news stack", () => {
-  const { calls, router, reset } = recorder();
-  backFromNewsDetail(router, "home", reset);
-  assert.deepEqual(calls, ["navigate:/", "reset"], "Home first: the news list never flashes on the way");
+test("news: Home card / holding row -> detail -> 戻る goes to Home", () => {
+  const { calls, router } = recorder();
+  backFromNewsDetail(router, "home");
+  assert.deepEqual(calls, ["dismissTo:/"]);
 });
 
 test("news: news list -> detail -> 戻る goes to the news list", () => {
@@ -89,11 +88,18 @@ test("news: news list -> detail -> 戻る goes to the news list", () => {
   assert.deepEqual(calls, ["dismissTo:/news"]);
 });
 
+test("news: report -> detail -> 戻る pops back to that report (explicit origin, root-stack predecessor)", () => {
+  const { calls, router } = recorder();
+  backFromNewsDetail(router, "reports");
+  assert.deepEqual(calls, ["back"]);
+  assert.equal(newsBackTarget("reports"), "report");
+});
+
 test("news: a cold deep link / unknown / foreign origin -> 戻る falls back to Home", () => {
-  for (const from of [undefined, null, "", "garbage", "topics", "reports"]) {
-    const { calls, router, reset } = recorder();
-    backFromNewsDetail(router, from, reset);
-    assert.deepEqual(calls, ["navigate:/", "reset"], String(from));
+  for (const from of [undefined, null, "", "garbage", "topics"]) {
+    const { calls, router } = recorder();
+    backFromNewsDetail(router, from);
+    assert.deepEqual(calls, ["dismissTo:/"], String(from));
     assert.equal(newsBackTarget(from), "home");
   }
 });
@@ -106,7 +112,7 @@ test("news: the right 「ニュース一覧」 opens the news list from every or
   }
 });
 
-test("neither Back nor the list action ever uses back() / canGoBack()", () => {
+test("apart from the explicit reports origin, neither Back nor the list action uses back() / canGoBack()", () => {
   const all = recorder();
   for (const from of ["home", "topics", "news", undefined]) {
     backFromTopicDetail(all.router, from);

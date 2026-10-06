@@ -130,7 +130,7 @@ test("the rebuilt sections keep their navigation targets", async () => {
   const topic = await read("src/components/home/home-topic-feature.tsx");
   const ask = await read("src/components/home/home-ask-ai-entry.tsx");
   const header = await read("src/components/home/home-section-header.tsx");
-  assert.ok(market.includes("pathname: '/news/[id]'") && holding.includes("pathname: '/news/[id]'"));
+  assert.ok(market.includes("pathname: '/news-detail'") && holding.includes("pathname: '/news-detail'"));
   assert.ok(header.includes("href = '/news'") && topic.includes('href="/topics"'));
   assert.ok(ask.includes("router.push('/ai')"));
   assert.ok(topic.includes("topicCardStatus(!!topic, loading, error)"));

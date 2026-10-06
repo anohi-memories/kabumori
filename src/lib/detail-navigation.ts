@@ -2,11 +2,15 @@
 //
 // Left = a contextual 「‹ 戻る」, right = an always-available list (トピック一覧 / ニュース一覧).
 //
-// Back is resolved from an EXPLICIT origin that the entry point passes as the `from` route param
-// (home | topics | news), not from whatever the navigation stack happens to contain -- the nested news
-// stack makes the visual origin differ from the real predecessor. A missing or unknown origin (a cold deep
-// link, a report, anything else) falls back safely to Home. The list action ignores the origin entirely.
-// The origin lives only in the route params: nothing is stored, nothing touches the backend.
+// Both details (topic and news) are routes of the ROOT stack, above the tabs. That is what makes the native
+// edge swipe and the 戻る button agree: popping a root screen reveals exactly the screen it was opened from
+// (Home, the topic list, the news tab's list, a report) with no screen in between, so a swipe can never
+// reveal a list that 戻る would skip.
+//
+// 戻る is still resolved from an EXPLICIT origin that the entry point passes as the `from` route param
+// (home | topics | news | reports), never from stack inspection. A missing or unknown origin (a cold deep
+// link) falls back safely to Home. The list action ignores the origin entirely. The origin lives only in the
+// route params: nothing is stored, nothing touches the backend.
 //
 // dismissTo(href) is expo-router's POP_TO: if the target already sits below in the current stack it pops
 // straight back to it (no stacked copies, no Home <-> detail <-> list loop); if it does not (a deep link,
@@ -17,8 +21,9 @@ import type { TopicLevel } from './home-topic';
 export const HOME_ROUTE = '/';
 export const TOPICS_ROUTE = '/topics';
 export const NEWS_LIST_ROUTE = '/news';
+export const NEWS_DETAIL_ROUTE = '/news-detail';
 
-export type DetailOrigin = 'home' | 'topics' | 'news';
+export type DetailOrigin = 'home' | 'topics' | 'news' | 'reports';
 
 /** Name of the route param carrying the origin. */
 export const DETAIL_ORIGIN_PARAM = 'from';
@@ -26,7 +31,7 @@ export const DETAIL_ORIGIN_PARAM = 'from';
 /** Reads the `from` param (a string, or the first of an array); null for anything that is not a known origin. */
 export function parseDetailOrigin(value: unknown): DetailOrigin | null {
   const raw = Array.isArray(value) ? value[0] : value;
-  return raw === 'home' || raw === 'topics' || raw === 'news' ? raw : null;
+  return raw === 'home' || raw === 'topics' || raw === 'news' || raw === 'reports' ? raw : null;
 }
 
 /** Where the topic detail's 「戻る」 goes: the topic list only when it was opened from it, otherwise Home. */
@@ -34,9 +39,15 @@ export function topicBackTarget(from: unknown): 'home' | 'topics' {
   return parseDetailOrigin(from) === 'topics' ? 'topics' : 'home';
 }
 
-/** Where the news detail's 「戻る」 goes: the news list only when it was opened from it, otherwise Home. */
-export function newsBackTarget(from: unknown): 'home' | 'news' {
-  return parseDetailOrigin(from) === 'news' ? 'news' : 'home';
+/**
+ * Where the news detail's 「戻る」 goes: the news list when it was opened from it, the report when it was
+ * opened from a report, otherwise Home (Home cards, an unknown origin, a cold deep link).
+ */
+export function newsBackTarget(from: unknown): 'home' | 'news' | 'report' {
+  const origin = parseDetailOrigin(from);
+  if (origin === 'news') return 'news';
+  if (origin === 'reports') return 'report';
+  return 'home';
 }
 
 /**
@@ -51,38 +62,6 @@ export type DismissRouter = { dismissTo(href: DismissHref): void };
 
 export function topicListRouteParams(level: TopicLevel, now: number = Date.now()): TopicListHref['params'] {
   return { level, req: String(now) };
-}
-
-export type NewsHomeRouter = {
-  navigate(href: '/'): void;
-};
-
-/** The news tab's own stack navigation (the screen's `navigation` prop), as far as the reset needs it. */
-export type NewsStackNavigation = {
-  addListener(type: 'blur', callback: () => void): () => void;
-  popToTop(): void;
-};
-
-/**
- * Empties the news tab's stack back to its list, but only once the news tab is no longer on screen (its
- * screen got `blur`). Popping while the tab is still visible would play the pop animation and show the news
- * list for a moment on the way Home. If the blur never comes (the Home navigation did not happen) the
- * listener is just dropped, so a detail that is still on screen is never popped from under the user.
- */
-export function resetStackWhenHidden(navigation: NewsStackNavigation, fallbackMs = 2000): void {
-  let finished = false;
-  let unsubscribe: () => void = () => {};
-  const timer = setTimeout(() => {
-    finished = true;
-    unsubscribe();
-  }, fallbackMs);
-  unsubscribe = navigation.addListener('blur', () => {
-    if (finished) return;
-    finished = true;
-    clearTimeout(timer);
-    unsubscribe();
-    navigation.popToTop();
-  });
 }
 
 export function goHome(router: DismissRouter): void {
@@ -103,44 +82,33 @@ export function goNewsList(router: DismissRouter): void {
   router.dismissTo(NEWS_LIST_ROUTE);
 }
 
-// The news detail lives in the news tab's own nested stack, so dismissTo('/') cannot reach the Home tab from
-// there (Simulator-verified: it does nothing). The Home tab is selected FIRST, straight from the detail, so
-// the news list never flashes on the way Home (popping the stack first played the pop animation over the
-// list). Only then is the news stack emptied back to its list (`resetStack`, see resetStackWhenHidden), out
-// of sight, so no detail is left behind when the news tab is opened later.
-// replace('/') would stack a second (tabs) copy.
-export function goHomeFromNews(router: NewsHomeRouter, resetStack?: () => void): void {
-  router.navigate(HOME_ROUTE);
-  resetStack?.();
-}
-
 /** Topic detail 「‹ 戻る」: the origin's screen (Home, or the topic list); Home when the origin is unknown. */
 export function backFromTopicDetail(router: DismissRouter, from: unknown): void {
   if (topicBackTarget(from) === 'topics') goTopicList(router);
   else goHome(router);
 }
 
-/** News detail 「‹ 戻る」: the origin's screen (Home, or the news list); Home when the origin is unknown. */
-export function backFromNewsDetail(router: DismissRouter & NewsHomeRouter, from: unknown, resetStack?: () => void): void {
-  if (newsBackTarget(from) === 'news') goNewsList(router);
-  else goHomeFromNews(router, resetStack);
+/**
+ * News detail 「‹ 戻る」: the origin's screen -- Home, the news list, or the report it was opened from; Home
+ * when the origin is unknown. A report is a dynamic route that the origin param does not identify, so for it
+ * the one root screen above the report is popped: the origin is explicit (`from=reports`) and, with the
+ * detail on the root stack, the predecessor is the report by construction.
+ */
+export function backFromNewsDetail(router: DismissRouter & { back(): void }, from: unknown): void {
+  const target = newsBackTarget(from);
+  if (target === 'news') goNewsList(router);
+  else if (target === 'report') router.back();
+  else goHome(router);
 }
 
-// ---- native back gesture parity -------------------------------------------------------------------------
-// The iOS edge swipe pops the screen natively, so on its own it goes to whatever sits below in the stack
-// (the news list for a Home-origin news detail), which can differ from 「‹ 戻る」. The detail therefore
-// prevents the native removal and re-resolves it through the same origin-based function the button uses.
-// Only a back gesture / back action is redirected; the screen's own explicit navigation (POP_TO, POP_TO_TOP,
-// NAVIGATE, REPLACE ...) must pass through untouched or it would be caught in a loop.
+// ---- deep links ---------------------------------------------------------------------------------------------
+// `kabumori://news/<id>` (and a bare `/news/<id>`) used to land on a nested news-tab route. The detail now
+// lives on the root stack, so incoming links are rewritten to it; the news list (`/news`) is untouched.
+const NEWS_DETAIL_LINK = /^(?:[a-z][a-z0-9+.-]*:\/\/)?\/?news\/([^/?#]+)(?:[?#].*)?$/i;
 
-/** Navigation action types produced by an edge swipe (POP) or a back action (GO_BACK). */
-export const NATIVE_BACK_ACTION_TYPES: readonly string[] = ['POP', 'GO_BACK'];
-
-export function isNativeBackAction(actionType: unknown): boolean {
-  return typeof actionType === 'string' && NATIVE_BACK_ACTION_TYPES.includes(actionType);
-}
-
-/** What the detail does with a removal it was asked to allow: redirect a back gesture, let anything else pass. */
-export function decideDetailRemoval(actionType: unknown): 'redirect-to-back' | 'allow' {
-  return isNativeBackAction(actionType) ? 'redirect-to-back' : 'allow';
+/** The root-stack route for a `news/<id>` link, or null when the link is anything else. */
+export function newsDetailRedirectPath(path: string): string | null {
+  const match = NEWS_DETAIL_LINK.exec(path);
+  if (!match) return null;
+  return `${NEWS_DETAIL_ROUTE}?id=${match[1]}`;
 }
