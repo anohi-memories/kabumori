@@ -32,14 +32,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: kabumori-pr99-editorial-specificity-focused-review-20261007
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: PR #99 focused review。10/6大引けのeditorial regression修正について、prompt specificity、WARN-only generic telemetry、X短文rewrite閾値430→300のruntime semantics、bounded rejection_reasons、Hard境界不変を確認。source fix/merge/deploy/production mutation禁止。
+- allocation: Final C1 accepts PASS-WITH-NONBLOCKING-NOTES on PR #99 exact head cd33b1f22f532be9273d63f0f42f0a0d9c1de156. Prompt specificity/WARN-only telemetry/X rewrite 300-char threshold/bounded rejection diagnostics/Hard-call boundaries all accepted. PR #99 squash-merged as e3379f8066877b5b64fede2dc84cbdb995c85b8e. H1 free after fresh allocation.
 - recommended_model: Luna（高）
 
 ## Codex H2
@@ -70,14 +70,14 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: kabumori-editorial-points-specificity-corrective-20261006
+- status: ready
+- task_id: kabumori-pr99-controlled-analysis-deploy-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 PASS_CANDIDATE。PR #99 head cd33b1f22f532be9273d63f0f42f0a0d9c1de156。完成例文除去、具体性条件、節目数値例外、WARN-only generic telemetry、bounded rejection diagnosticsを実装。Hard/call ceiling不変。ただしX短文rewrite閾値を430→300へ変更したため、focused H1 reviewを1回実施。production mutation 0。
-- recommended_model: Sonnet5（高）
+- allocation: PR #99 merge済み。market-report-analysis のみをexact fresh mainからcontrolled production deployしてbyte/source read-back。personalized-reportsは触らない。manual generation/retry、DB/RPC/migration、Cron/gate、X/通知、EASは禁止。production mutex必須。
+- recommended_model: Opus5.5（中）
 
 ## Claude G3
 - owner: claude
