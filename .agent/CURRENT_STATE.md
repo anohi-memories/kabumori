@@ -1,3 +1,30 @@
+## Final K3 — AI consultation fresh integration PASS / persona-generation follow-up assigned
+
+- verdict: **PASS (source-only)** for `x-social-mobile-ai-consult-v1-fresh-integration-20261006`.
+- PR #78 fresh-integrated onto current main with no textual conflicts and no weakening of PR81 validation.
+- accepted current PR #78 head: `d1f131c56b082d2af57660b5bd3d83ff8c619c7d`; GitHub reports mergeable.
+- memory contract proven:
+  - AI reply alone writes 0;
+  - only explicit 「これで覚えて」 enters save path;
+  - latest row is reread before save;
+  - stale proposal/CAS conflict fails closed and requires reconfirmation;
+  - confirmed settings/persona become next consultation context.
+- tenant/auth/model-output contract preserved; endpoint remains user-JWT only, no service-role shortcut, one Luna model call, store:false, no web/tools/X, dangerous mutation keys refused.
+- memory-to-generation round trip is proven for settings and the already-consumed persona subset.
+- native Simulator verification covered question/proposal/loading/retry/stale/reconfirm/save/continue conversation at 402pt using a temporary reverted rig; no EAS.
+- tests reported PASS: app 193/193; relevant Deno 52/52; brand generator 13/13; tsc/lint/diff/secret scan clean.
+- production mutation/deploy/merge/real X/OpenAI = 0.
+- additional Codex review: **not required**; integration did not materially change auth/tenant/CAS/model-output boundaries.
+- PR #78 remains open intentionally; do not merge yet.
+- V1 blocker discovered: confirmed persona fields `toneSignals`, `topicSignals`, `hashtagHabits`, `ctaStyle`, `openingClosingPatterns` are persisted/re-read but not yet consumed by generation. Also current default no-hashtag instruction can contradict a remembered hashtag habit.
+- fresh G3 task assigned: `x-social-mobile-ai-consult-persona-generation-guidance-20261006`, recommended **Sonnet5（高）**.
+- follow-up is source-only and limited to generation guidance / focused tests. It must not touch PR41 live routing, G5 common-account, Auth/Vault/OAuth/DB/production or G4 work.
+- separate later blockers remain:
+  1. PR81 production schema apply after G5 permits;
+  2. live general-user dispatch via PR #41;
+  3. reviewed service-role read boundary for `social_mobile_content_settings` because final PR81 currently grants service_role no table access;
+  4. real model quality/rate-limit/release QA before V1.
+
 ## G3 assigned — AI consultation V1 fresh integration
 
 - User product decision: **AI相談はV1必須**。利用者とAIが会話しながら投稿内容・口調を覚えさせる体験をX自動投稿アプリの中核として扱う。
