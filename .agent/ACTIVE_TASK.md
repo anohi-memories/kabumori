@@ -45,14 +45,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: x-social-mobile-pr76-final-security-rereview-20261005
+- status: ready
+- task_id: x-social-mobile-pr41-live-generation-security-review-20261007
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Final C2 PASS on PR #76 exact head 5448e545f4a88bbf6597a981c0bcbe4c01043c30. F1/F2/F3 closed, availability tradeoff accepted, no extra review required. PR #76 squash-merged as 3c5f80a61d114d2936b761fc05ee3b3d69e85f63. H2 free after fresh allocation.
+- allocation: One focused independent review of PR #41 exact head 280aa0f83d4f039ba3e43f32da202a91fd2333f2. Review the new service_role-only SECURITY DEFINER settings reader, exact/effective ACL including adverse default/inheritance cases, consent completeness, renumbered 3-migration chain, live scheduled-user X path, PR76/PR82/Kabumori regressions, and G5 dormant/enforcement handoff. No merge/deploy/production mutation. If PASS, no routine rereview. Recommended Sol（高）.
 
 ## Claude G1
 - owner: claude
@@ -85,9 +85,9 @@
 - task_id: x-social-mobile-pr41-live-generation-fresh-integration-20261006
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: Final K3 PASS on AI persona-generation guidance. PR #78 head 1f33c58ca82a9d33d8c5c7282e0ac5c2fbb4aca9 squash-merged as 60dff4e28a763e3c182495dfc41cadf94671952f; Netlify preview success, Vercel failure was build-rate-limit and non-blocking. Next source-only task fresh-integrates stale PR #41 live general-user auto-post path. Replace direct service_role SELECT on social_mobile_content_settings with a narrow service-only brand-scoped read boundary; preserve AI Lab/Kabumori/PR76 and document, but do not implement, G5 entitlement enforcement. No production/merge/deploy. Recommended Opus5.5（高）.
+- allocation: K3 accepts PASS_CANDIDATE only on PR #41 exact head 280aa0f83d4f039ba3e43f32da202a91fd2333f2. Source integration/tests/CI are green, but the candidate introduces a SECURITY DEFINER/service_role/live-publish boundary, so merge remains HOLD pending the single focused H2 security review. Production/deploy/real X/OpenAI remain 0. Recommended reviewer Sol（高）.
 - recommended_model: Opus5.5（高）
 
 ## Claude G4
