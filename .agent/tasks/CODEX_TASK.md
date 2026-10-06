@@ -1,5 +1,148 @@
 # Codex Task — CURRENT TASK
 
+- task_id: kabumori-pr99-editorial-specificity-focused-review-20261007
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: high
+- recommended_model: Luna（高）
+- type: focused runtime-delivery review / prompt specificity / WARN-only telemetry
+- target_pr: 99
+- target_head: cd33b1f22f532be9273d63f0f42f0a0d9c1de156
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Focused independent review of PR #99 after the 2026-10-06 natural close observation showed PR #87's three points were factually safe but too generic.
+
+This review is intentionally narrow. Do not re-review unrelated market-report architecture.
+
+## Freshness / isolation
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / G2 latest Report / this TASK.
+2. Use a fresh independent H1 worktree/checkout from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #99.
+4. Require exact head `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`; moved head => STOP.
+5. Allocation-time check: PR open/unmerged; main is 3 commits ahead of PR base and changed-file overlap with the 10 PR files = 0. Re-check before verdict.
+6. H2 owns PR #41 security review. Do not touch H2 files/worktree.
+
+## Focus A — prompt specificity
+
+Verify:
+- copyable finished example sentences were removed from the model prompt;
+- morning/close roles remain correct without rigid templating;
+- day-specific concrete entities/events are required;
+- generic headlines such as "ニュースを確認" are discouraged without creating a Hard delivery block;
+- safely evidenced milestones/thresholds may appear in headlines;
+- unsupported claims such as "史上最高" / "初めて" are not encouraged unless actually supported;
+- morning does not assert completed Tokyo-session movement;
+- close does not assert future outcomes.
+
+## Focus B — WARN-only specificity telemetry
+
+Verify:
+- `X_POINTS_GENERIC:<n>` and existing `X_POINTS_*` remain telemetry/WARN only;
+- generic detection does not become a Hard reject;
+- generic detection does not itself trigger quality rewrite;
+- concrete headlines with real entities/events/milestones are not obviously overflagged;
+- the 10/6 observed generic three points are detected;
+- metric-recap logic still treats normal value recaps as recap while allowing genuine milestone language.
+
+## Focus C — rewrite threshold runtime semantics
+
+This is the main reason for independent review.
+
+PR #99 changes X-only shortness rewrite behavior so:
+- `X_POST_SHORTER_THAN_TARGET` remains recorded below the target;
+- only X output below 300 chars triggers rewrite based on X-shortness;
+- omission/other quality conditions remain unchanged;
+- App-story shortness behavior remains unchanged.
+
+Independently verify:
+- this reduces unnecessary calls rather than creating a new call path;
+- a safe ~387-char X report can deliver without rewrite if App/other conditions are good;
+- <300-char X still rewrites;
+- missing required sections still rewrites;
+- call ceiling remains generation 2 + Fact 2 = max 4;
+- safe-original fallback remains intact;
+- no condition accidentally turns short but materially incomplete X into accepted output when omission guards should catch it.
+
+Treat this as a bounded delivery-policy change, not a reason to reopen Hard Fact design.
+
+## Focus D — rejection diagnostics
+
+Verify:
+- `rejection_reasons` stores bounded fixed classifications only;
+- no raw model body, quoted issue text, user content, secret/token, or unbounded strings are persisted;
+- local/Fact rejection classifications are deterministic enough for false-reject diagnosis;
+- schema migration is not required for the existing diagnostics jsonb;
+- adding diagnostics does not alter accept/reject decisions.
+
+## Focus E — Hard boundary / regressions
+
+Confirm no Hard semantics changed:
+- date/session/value/sign/stale;
+- 1306 identity;
+- refs;
+- unsupported causality;
+- false broad absence;
+- exactly 3 points;
+- safe-original fallback.
+
+Run/inspect enough evidence for:
+- new editorial specificity tests;
+- editorial points/session-date/presentation/causal/quality regressions;
+- market-report-analysis full suite;
+- personalized/X shared/data-packet/shared regressions as appropriate;
+- Deno check/lint on changed runtime;
+- git diff --check.
+
+Document pre-existing lint separately.
+
+## Safety
+
+Review only. No product-source fixes in H1.
+Forbidden:
+- PR merge;
+- Edge deploy;
+- manual report/retry;
+- DB/RPC/migration/Cron/gate mutation;
+- Auth/Vault/secret access;
+- X/app notification;
+- production access/mutation.
+
+If a concrete blocker exists, return CHANGES REQUIRED to ChatGPT/G2.
+
+## Completion / C1
+
+Prepend to `.agent/CODEX_REPORT.md`:
+- verdict PASS / CHANGES REQUIRED;
+- exact reviewed head;
+- freshness/no-overlap result;
+- findings A-E;
+- focused tests;
+- rewrite-threshold judgment;
+- diagnostics privacy/boundedness judgment;
+- source changes by H1 = 0;
+- production mutation = 0;
+- merge recommendation;
+- deploy recommendation;
+- next recommendation.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C1.
+
+Recommended model: **Luna（高）**.
+
+---
+
+# Codex Task — CURRENT TASK
+
 - task_id: common-account-v1-phase2-service-enrollment-corrective-rereview-20261006
 - owner: codex
 - slot: codex-1
