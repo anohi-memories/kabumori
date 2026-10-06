@@ -1,3 +1,17 @@
+## K1 — PR #94 topic learning access PARTIAL PASS / structural swipe corrective
+
+- verdict: **HOLD before merge**.
+- PR #94 current accepted head: `c15ea73a2694bdecb35c095bbacb7017ed32a45c`.
+- accepted: topic-list 3-level switcher, Settings/Home separation, per-level cache/pagination/race handling, local learned/read state, focus refresh, stable `topic.id` progress identity, topic-detail learned marking.
+- not final: Home-origin news native swipe currently flashes the nested news list for ~1 frame before redirecting Home; user asked swipe to behave like the visible Back action.
+- not final: current swipe fix imports `usePreventRemove` from internal `expo-router/build/react-navigation/core`; K1 requires a supported/public structural navigation solution instead.
+- not final: 375pt explicit visual acceptance evidence still missing.
+- G1 returned to ready. Preferred correction: root-level shared news detail so native pop/swipe naturally returns the actual underlying Home or News list, while explicit `from` remains for deterministic button/deep-link fallback.
+- update existing PR #94 only; no second PR.
+- no Codex review allocated yet; re-evaluate after corrected K1.
+- EAS 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation 0.
+- recommended model: **Sonnet5（高）**.
+
 ## Final K3 — AI consultation fresh integration PASS / persona-generation follow-up assigned
 
 - verdict: **PASS (source-only)** for `x-social-mobile-ai-consult-v1-fresh-integration-20261006`.
