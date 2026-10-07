@@ -3,8 +3,8 @@
 - task_id: postona-multisocial-phase2a1-provider-domain-foundation-20261007
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - type: source-only provider-neutral domain foundation / behavior-preserving
@@ -227,6 +227,90 @@ This is a behavior-preserving source/domain foundation with no DB/Auth/OAuth/run
 Default: no Codex review if K4 confirms scope stayed pure and tests pass.
 
 推薦モデル：**Sonnet5（高）**
+
+## Report — postona-multisocial-phase2a1-provider-domain-foundation-20261007 (2026-10-07)
+
+- task_id: postona-multisocial-phase2a1-provider-domain-foundation-20261007
+- result: **PASS（source のみ・挙動変更なし）**。PR [#103](https://github.com/anohi-memories/kabumori/pull/103) を作成した。head は `2b2f1c1f`、未 merge（merge_allowed=false）。
+- model_used: Opus 5.5（TASK 推奨は Sonnet5（高）。このセッションのモデルは Opus 5.5）
+- fresh main:
+  - 作業は `d648ec02` から始めた。PR #41 の merge `b90ee326` を含むことを確認済み。
+  - 作業中に PR #95 が merge された（`d5bea735`）。その main に rebase してから全テストをやり直した。
+- workspace: `kabumori-fresh` から作った G4 専用 worktree `/Users/yuya/Developer/kabumori-g4-phase2a1`（branch `claude/g4-postona-phase2a1-provider-domain-20261007`）。
+- changed_files（すべて新規、5ファイル）:
+  - `apps/social-mobile/src/domain/provider-domain.ts`
+  - `apps/social-mobile/tests/provider-domain.test.mjs`
+  - `supabase/functions/_shared/social/provider_domain.ts`
+  - `supabase/functions/_shared/social/provider_domain_test.ts`
+  - `supabase/functions/_shared/social/provider_domain_parity_test.ts`
+  - 既存ファイルの変更は 0。依存関係・lockfile の変更も 0。
+
+### 置き場所と同一性の保ち方
+- 正本は1つにせず、import のない同じ内容のモジュールをアプリとサーバーに1つずつ置いた。アプリ（Expo/Metro）から `supabase/functions` を読み込むにはバンドラー設定の変更が要り、TASK の「ツールチェーンを結合しない」に反するため。
+- 同一性テスト `provider_domain_parity_test.ts`（Deno）で、次の4点が一致することを確認する:
+  - 公開している名前
+  - 全定数の値
+  - 全関数の結果（入力の組み合わせで比較）
+  - 公開している全21個の型（型チェック時に、型が等しいことを検査）
+- 作業用のコピーにわざと4種類のずれを入れて検出を確認した。結果は「型のずれ → 型エラー」「値・余分な公開・挙動のずれ → テスト失敗」で、何も変えないコピーは通過した。
+
+### プロバイダの機能モデル（構造のみ）
+- `ProviderId = 'x' | 'threads' | 'instagram'`。`parseProviderId` は厳密に一致したものだけを受け付ける。大文字小文字の違い、前後の空白、別名、`__proto__` などはすべて `null` になり、拒否される。
+- `CredentialProfile`: X は `oauth2_rotating_refresh`、Threads と IG は `long_lived_access`。
+- `PublishFlow`: X は `single_call`、Threads と IG は `container_then_publish`。
+- 機能の項目: `textOnly`、`mediaRequired`、`optionalMedia`、`providerPostId`、`providerPermalink`。X のパーマリンクは API の項目ではないので false。
+- 定数はすべて freeze して、実行中に書き換えられないようにした。
+- 料金・投稿上限・文字数上限は**入れていない**（TASK の指示どおり。実行時の判定にしない）。
+
+### 配信先・結果・アダプタの型
+- `ConnectedAccountIdentity`: トークンの項目はない。
+- `CredentialRef`: 参照だけを持つ。`refreshRef` は回転型のときだけ値が入り、それ以外は null。
+- `PublicationTarget`: `targetId` が冪等性のキー。作成時に確定した `renderedText` を持ち、メディアの参照と予約時刻は任意。
+- `checkTargetShape`: 配信先の形だけを判定する。未知のプロバイダ、IG へのテキストだけの投稿、空の投稿を拒否する。
+- `PreparedPublish`: 1回で投稿する流れか、入れ物（コンテナ）id を持つ流れか。
+- `ContainerState` と `publishStepsFor`。
+- `PublishOutcome`: `published`、`rejected`、`uncertain` のいずれか。`mayRetryTarget` は rejected のときだけ再試行を許す。
+- `ConnectAdapter`、`CredentialAdapter`、`PublishAdapter`、`DisconnectAdapter` はインターフェースの定義だけで、実装はない。テストの中では偽のアダプタを使い、両方の投稿の流れを最後まで表現できることを確認した。
+
+### tests
+- Deno:
+  - 新しいテスト 13件（ドメイン 10件、同一性 3件）が型チェックありで PASS
+  - `_shared` 全体 449件 PASS（`--no-check --allow-run`）
+  - `deno check` と `deno lint` PASS
+- アプリ:
+  - `npm test` 226件 PASS（新しい `provider-domain.test.mjs` 5件を含む。rebase 前は 198件）
+  - `tsc --noEmit` と `expo lint` PASS
+- `git diff --check` 問題なし。秘密情報パターン 0。
+
+### 挙動が変わらないことの証明
+- アプリの src に、新しいモジュールを読み込んでいるファイルは 0（テストで固定）。サーバー側も、自分自身のテストと同一性テスト以外から参照されていない（grep で確認）。両モジュールとも import はない（テストで固定）。
+- 次のいずれも変更していない:
+  - `x-test-post`
+  - X の OAuth 用 Edge Function と RPC、Vault と refresh、退会・revoke
+  - `social_accounts` と予約投稿のスキーマ、publish authority
+  - Auth、オンボーディング、サービス利用権
+  - migration、ワークフロー、本番
+- プロバイダへの呼び出し、外部への通信、本番の読み書き・deploy、アプリや認証情報の作成も 0。
+- PR #95 とのファイルの重なりは 0（最新の PR #95 のファイル一覧で `grep -x` して確認）。
+
+### CI
+- Netlify は通過（Web の変更がないので preview は自動キャンセル）。
+- **Vercel は失敗しているが、原因は「Deployment rate limited — retry in 24 hours」**（Vercel アカウントの deploy 上限）。今回の変更とは無関係で、main の最新コミット `d5bea735` でも同じ失敗が出ている。コードの修正では直せない。
+
+### Threads を実際に接続するまでに残る障害
+1. **Meta 側の準備（2-0）**: Meta アプリ（Threads ユースケース）の登録、プライバシーポリシーとデータ削除・連携解除コールバック、テスター登録、App Review の計画。リダイレクト URI でカスタムスキームが使えるかの確認（要検証）。
+2. **DB の拡張（G5 との合意が必要）**:
+   - `social_accounts` の `CHECK (platform='x')` を広げる
+   - 資格情報の型ごとの規則を入れる（アクセストークンだけの資格情報を許す）
+   - アカウント id の接尾辞を中立にする
+3. **接続経路**: Threads 用の OAuth（短期トークンから長期トークンへの交換、本人情報の取得）。資格情報ライフサイクルの持ち主である G5 と調整する。
+4. **送信層**: PR #41 の経路に `PublishAdapter` を挿す。投稿をアカウントに紐付ける。
+
+### next_recommendation
+- K4 で確認する。範囲は純粋なドメインだけに収まり、テストも全て通っているので、Codex レビューは不要（TASK の方針どおり）。
+- 次の G4 は「Phase 2a2 — `social_accounts` のプラットフォーム拡張と資格情報の型を入れる migration 候補（未適用・使い捨て DB で証明）＋Threads 接続の設計」を提案する。PR #95 は merge 済みなので、G5 と資格情報の型を合意してから始める。
+- 並行して、ユーザーに Meta アプリの登録（2-0）を進めてもらう。
+- status: review_required / next_owner: chatgpt。STOP for K4。
 
 ---
 
