@@ -1,3 +1,104 @@
+# Codex Task H1 — CURRENT TASK
+
+- task_id: common-account-v1-phase2-q1-final-rereview-20261007
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: critical
+- recommended_model: Sol（高）
+- target_pr: 95
+- target_head: ba35b642d30ce423a8683feffcd26aec325b45ee
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Perform the final focused exact-head rereview of PR #95 after G5's round-4 Q1 correction.
+
+Do not repeat the whole common-account review. Focus on the remaining queued-preparation cancellation boundary and verify previously accepted invariants did not regress.
+
+## Freshness / isolation
+
+1. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, ACTIVE_TASK, latest G5 Report, previous H1 Report, and this TASK.
+2. Use an independent H1 worktree/check-out from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #95.
+4. Require exact head `ba35b642d30ce423a8683feffcd26aec325b45ee`; if moved, STOP and report.
+5. K5 fresh main: `6717083c21300fe247736296430089cec8a6a397`; changed-file overlap with PR #95 was 0. Re-check at review time.
+6. No production access/write, migration apply, deploy, EAS, Auth/Storage/OAuth/Vault/Cron/X/provider mutation.
+
+## Q1 — must close
+
+Independently verify on actual candidate source:
+
+- a deferred auth task captures intended owner/login;
+- immediately before it advances generation/loading or enters acceptSession/prepareSession/transport, it confirms that owner/login is still the synchronously announced current owner;
+- if superseded, it returns before any automatic enrollment request can dispatch;
+- synchronous auth callback still performs no awaited Auth/Data/network work.
+
+Reproduce at minimum:
+1. A1 established -> SIGNED_IN(A2) queued -> SIGNED_OUT before A2 deferred dispatch -> **0 A2 automatic requests**, readiness remains null.
+2. A1 -> SIGNED_IN(A2) queued -> different user B before A2 deferred dispatch -> **0 A2 requests**, B only its own current preparation.
+3. A1 -> A2 queued -> same user fresh A3 before A2 dispatch -> **0 A2 requests**, A3 only its own.
+4. current A2 with no superseding event -> exactly one preparation.
+5. same-session TOKEN_REFRESHED -> no unnecessary duplicate start and intended single-flight preserved.
+
+Use the prior reviewer reproduction without weakening assertions where possible.
+
+## Regression boundary
+
+Confirm no concrete regression in:
+- original S1-T synchronous stale-readiness fence;
+- stable `userId + session_id` context;
+- S2 X queued pre-dispatch cancellation;
+- immutable captured-token Authorization;
+- strict response validation;
+- R1 automatic start never reactivates ended / explicit reactivation separation;
+- Kabumori positive-ready push/notification gate;
+- PR #94 root news-detail route in final merged tree compatibility;
+- X enrollment remains separate from X OAuth/workspace/credentials/publish authority.
+
+Do not reopen accepted areas without concrete evidence.
+
+## Evidence
+
+Run enough to independently support the verdict:
+- targeted actual AuthProvider tests and reviewer Q1/S1-T probes;
+- Kabumori app suite or focused + broad regression sufficient to catch provider/root regressions;
+- relevant X regression if shared code is implicated;
+- migration/source invariants only as needed to prove unchanged R1-R5;
+- diff/secret/log scan;
+- fresh merge-tree/overlap read-only check against current main.
+
+## Report
+
+Write `.agent/CODEX_REPORT.md` with:
+- exact reviewed head;
+- PASS or CHANGES REQUIRED;
+- Q1 disposition;
+- S1-T / TOKEN_REFRESHED disposition;
+- prior-boundary regression disposition;
+- independent test evidence;
+- fresh-main overlap/merge-tree result;
+- changed_files (review only);
+- production mutation/deploy/EAS = 0;
+- next recommendation.
+
+If PASS:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C1.
+
+If finding remains:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+---
+
 # Codex Task — CURRENT TASK
 
 - task_id: common-account-v1-phase2-q1-final-rereview-20261007
