@@ -1,3 +1,20 @@
+## C2 — PR #110 residual CHANGES REQUIRED / G2 corrective ready — 2026-10-08
+
+- H2 rereviewed exact PR #110 head `d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8`.
+- C2 fresh fetch: PR remains open/unmerged, head unchanged, mergeable=true / clean.
+- verdict: **CHANGES REQUIRED**, but scope is now only 3 residual safety cases.
+- **B4 is closed** and must not be reopened unnecessarily.
+- residual blockers:
+  1. **B1-R1:** multi-unit objective Fact quote can be marked fully mapped after removing only one long unit, leaving a short explicitly rejected unit such as 「調査なし。」 in final output.
+  2. **B2-R1:** incomplete date/subject fragments and repeated emoji can still split metric/date/value binding and let wrong-date text escape.
+  3. **B3-R1:** no-comma conjunctions such as 「ましたが今後…可能性」 can still let a later hedge license an earlier unsupported definite causal clause.
+- original B1/B2/B3 reproductions are improved/closed; 10/7 intended valid controls remain accepted.
+- H2 source changes = 0; production access/mutation/deploy/merge = 0.
+- G2 corrective assigned on existing PR #110 only; recommended model **Opus5.5（高）**.
+- H2 now done/free.
+- merge/deploy remain HOLD.
+- next action: send `G2`; finish with `K2`.
+
 ## Final K5 — production real-account smoke PASS / READY_FOR_EAS — 2026-10-08
 
 - G5 real-account smoke verdict: **PASS / READY_FOR_EAS**.
