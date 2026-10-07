@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase2-s1t-final-rereview-20261007
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - target_pr: 95
@@ -64,6 +64,16 @@ A PASS only authorizes C1 source merge/readiness judgment. Production migration 
 Write the result to `.agent/CODEX_REPORT.md`, set status `review_required`, next_owner `chatgpt`, and STOP for C1.
 
 Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-07
+
+- Exact reviewed head: `13f4281f9514742bdee43ffc08834fea67449bf2`, PR95 OPEN/unmerged.
+- Verdict: **CHANGES REQUIRED**, one P2 queued-preparation cancellation gap. Original S1-T stale-readiness window is corrected: previous unchanged 3 timing cases + refresh control all PASS; former S1/S2 probes 4/4 PASS.
+- Two auth notifications before deferred preparation runs still dispatch the superseded login's automatic start after sign-out/new-user notification. Readiness stays fail-closed; this is not recurrence of old A1-ready or R1 silent reactivation.
+- Minimum correction: check synchronously announced current owner before the deferred task advances generation or calls prepareSession; add SIGNED_IN(A2) -> SIGNED_OUT/B-before-task tests requiring zero A2 requests, retain refresh/current-owner controls.
+- Shipped suites 390/17/221 PASS; X tsc/lint and both web exports PASS; local DB start-intent 10 / Phase1 20 PASS markers; migration invariants 11 PASS. Added actual-source probes 8 PASS / 2 FAIL (one cause); reviewer-only in-memory pre-dispatch guard makes both failures PASS. No product patch.
+- H1 changed only its TASK/Report. Production access/mutation, migration apply, merge, deploy, EAS/native release = 0.
+- STOP for C1. Focused corrective/re-review recommendation: **Sol（高）**; detail and reproducible evidence in `.agent/CODEX_REPORT.md`.
 
 ---
 
