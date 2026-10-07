@@ -52,7 +52,7 @@
 - next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: User explicitly chose to skip the focused PR #108 rollout-runner review to preserve the same-day GPT-6.1 Sol close-cycle window. PR #108 was squash-merged as 3e54200bcbeecc3d8786b6fe7667da7f1bf1a27a after exact-head/no-overlap freshness check. This does not authorize production M1/M2.
+- allocation: User explicitly waived the focused PR #108 review to prioritize today's natural close-cycle rollout. No Codex PASS is claimed. PR #108 is merged and the production rollout completed with direct bounded read-backs. H2 free.
 - recommended_model: Sol（高）
 
 ## Claude G1
@@ -70,13 +70,13 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: done
 - task_id: kabumori-market-report-gpt61-production-preflight-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: user
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Final K2 PASS. Production preflight READY; PR #108 rollout runner/runbook merged as 3e54200bcbeecc3d8786b6fe7667da7f1bf1a27a after user chose to skip H2 for same-day timing. Production remains unchanged. Explicit user approval is still required for M1 trace migration and separately for M2 market-report-analysis GPT-6.1 Sol deploy.
+- allocation: Final production rollout APPLIED_PASS at 16:11 JST after explicit user approval. Trace migration 20261007120000 applied and verified with one exact history row; market-report-analysis alone deployed as v28 ACTIVE from accepted GPT-6.1 Sol source; app/x consumer gates remain OFF; no manual report/replay; natural close cron remains active for 16:20 JST. G2 free pending observation.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
