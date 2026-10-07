@@ -33,26 +33,27 @@
 - owner: codex
 - slot: codex-1
 - status: done
-- task_id: common-account-v1-phase2-service-enrollment-corrective-rereview-20261006
+- task_id: common-account-v1-phase2-q1-final-rereview-20261007
 - start_code: H1
 - finish_code: C1
 - next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #95 exact head dd065e16. Prior R1 and R5 are closed; original cross-user/retry-Push defects are materially improved. Remaining focused blockers are S1 same-user fresh-session reuse and S2 X queued auto-start after cleanup/sign-out. H1 free; corrected exact head will require focused Sol（高） re-review.
+- allocation: Final C1 accepts H1 PASS on PR #95 exact head ba35b642d30ce423a8683feffcd26aec325b45ee. Q1 is closed; prior S1-T/S2/session_id/R1-R5 remain PASS. PR #95 source was squash-merged as d5bea735937b53095b110b4bed1f20442e56b089. H1 free. No production migration apply/deploy/EAS.
 - recommended_model: Sol（高）
 
 ## Codex H2
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: x-social-mobile-pr41-live-generation-security-review-20261007
+- task_id: kabumori-pr101-f1-f3-final-rereview-20261007
 - start_code: H2
 - finish_code: C2
 - next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: One focused independent review of PR #41 exact head 280aa0f83d4f039ba3e43f32da202a91fd2333f2. Review the new service_role-only SECURITY DEFINER settings reader, exact/effective ACL including adverse default/inheritance cases, consent completeness, renumbered 3-migration chain, live scheduled-user X path, PR76/PR82/Kabumori regressions, and G5 dormant/enforcement handoff. No merge/deploy/production mutation. If PASS, no routine rereview. Recommended Sol（高）.
+- allocation: corrected PR #101 exact head fddd274863b08aefed60795d678a298a1160d599 のF1-F3だけを最終再レビュー。effective ACL/owner/inheritance、free-text secret redaction/backstop、full candidate/local/Fact retentionを独立再現。Hard/PR99/300字rewrite/call/fallback不変も確認。production access/apply/deploy禁止。
+- recommended_model: Sol（中）
 
 ## Claude G1
 - owner: claude
@@ -63,56 +64,56 @@
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: ユーザー承認済みポートフォリオ正本を実装。銘柄タブdefaultを資産評価額→保存済みFact-passedポート総括→資産への影響top3→保有銘柄→AI CTAへ再構築。最新大引け/ tracked_stocks実データのみ、stale basis明示、企業ロゴは未実装でfallback avatar。検索を独立実画面化、Watchlistはタグ未確定のため既存監視銘柄を安全なinterim subviewへ。src/app/_layout.tsx/Auth/migration/RPC/G5境界禁止。375/402 Simulator、EAS 0、backend/production mutation 0。
-- recommended_model: Sonnet5（高）
+- allocation: K1 corrective only on existing PR #100. PR #95/common-account source is merged, so root navigation is unblocked. Integrate fresh main, then make Portfolio-origin report detail a root Stack route so visible Back/native swipe return Portfolio; keep Reports-list-origin on nested /reports/[id] so it returns Reports list. Preserve PR95 Auth/serviceSession, root news-detail, all accepted portfolio UI/data/search/watch behavior. No internal router interception, no backend/DB/Auth/EAS changes.
+- recommended_model: Sonnet5（中）
 
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
-- task_id: kabumori-editorial-points-specificity-corrective-20261006
+- status: review_required
+- task_id: kabumori-pr101-debug-trace-security-corrective-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: 10/6大引けの自然観測でfactual safetyはPASSしたが、3ポイントが「主要指数上昇／国際情勢を確認／米国株と為替を見る」と抽象化しすぎてeditorial未達。具体例文のprompt除去、generic見出し抑制、節目数値の例外、WARN-only specificity telemetry、不要rewrite/call増の見直しをsource/test onlyで実施。Hard境界・call ceilingは維持。production mutation禁止。
-- recommended_model: Sonnet5（高）
+- allocation: K2 PASS_CANDIDATE。PR #101 corrected head fddd274863b08aefed60795d678a298a1160d599。H2 F1-F3再現ケースを閉鎖し、full failed-output retention方針維持。migration/deploy/production mutation 0。最終H2 exact-head rereviewへ。
+- recommended_model: Opus5.5（高）
 
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
-- task_id: x-social-mobile-pr41-live-generation-fresh-integration-20261006
+- status: in_progress
+- task_id: x-social-ai-model-policy-gpt6-upgrade-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: K3 accepts PASS_CANDIDATE only on PR #41 exact head 280aa0f83d4f039ba3e43f32da202a91fd2333f2. Source integration/tests/CI are green, but the candidate introduces a SECURITY DEFINER/service_role/live-publish boundary, so merge remains HOLD pending the single focused H2 security review. Production/deploy/real X/OpenAI remain 0. Recommended reviewer Sol（高）.
+- allocation: Source-only GPT-6 model migration for X/social auto-post AI only: POSTONA, AI Lab, and Kabumori X. Centralize social text model ids/pricing/workload mapping in one shared policy; routine 5.6 Luna -> gpt-6-luna, existing 5.6 Sol escalations -> gpt-6.1-sol; preserve gpt-image-2. Add invariant preventing future raw model-id drift outside policy. Do not touch G2 app/report/news/MIC model ownership. No production/deploy/merge. Recommended Opus5.5（高）.
 - recommended_model: Opus5.5（高）
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: postona-multisocial-phase1-architecture-inventory-20261006
+- status: ready
+- task_id: postona-multisocial-phase2a2-account-schema-candidate-20261007
 - start_code: G4
 - finish_code: K4
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Final K4 PASS. POSTONA multi-social Phase 1 docs-only architecture accepted. Exact one-file design document from former PR #96 was integrated unchanged directly to fresh main as 25fd6aeec85528a06f78995f4306aaeba98f9d75 after the PR merge raced a moving base; PR #96 closed as superseded. Runtime/DB/Edge/OAuth/Vault/production/provider calls 0. No Codex review. G4 free, but Phase 2a waits for G3 PR #41 and G5 PR #95 acceptance/merge.
+- allocation: Phase 2a-1 PASS and exact five provider-domain blobs integrated to main; former PR #103 closed as superseded after stale-base merge race. New Phase 2a-2 is source-only: reconstruct social_accounts contract, create a forward provider/account credential-shape migration candidate only if repository evidence is sufficient, prove it in disposable PostgreSQL, and document next Threads OAuth slice. No production apply/deploy/OAuth/Vault/provider call. Avoid active G2/G5 files and shared migration reservation if occupied.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
 - slot: claude-5
 - status: ready
-- task_id: common-account-v1-phase2-service-enrollment-integration-20261006
+- task_id: common-account-v1-phase2-production-migration-preflight-20261007
 - start_code: G5
 - finish_code: K5
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: C1 corrective round 2 on existing PR #95. Fix only H1 S1/S2: bind cache/view/consent/positive-ready to stable login-session identity (e.g. validated JWT session_id) so same-user fresh login invalidates old explicit request/result while ordinary same-session token refresh preserves single-flight; and prevent queued X automatic enrollment from dispatching after cleanup/sign-out/unmount by checking cancellation/current generation before ensure/transport dispatch. Preserve already-passed R1-R5 corrections and PR94 navigation. No production migration apply/deploy/EAS/Phase3. Mandatory exact-head H1 re-review after correction.
-- recommended_model: Opus5.5（極高）
+- allocation: PR #95 source is merged as d5bea735937b53095b110b4bed1f20442e56b089. Next step is read-only production preflight for migration 20261006230000_common_account_service_start_intent.sql only: verify migration history/current RPC/ACL/state, ordering with already-merged PR41 candidates, old-binary/client compatibility, and exact apply/read-back plan. Production writes/migration apply/deploy/EAS are forbidden until explicit user approval after K5.
+- recommended_model: Opus5.5（高）
 
 ## Deferred
 

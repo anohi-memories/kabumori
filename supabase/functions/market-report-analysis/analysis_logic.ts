@@ -54,7 +54,7 @@ const COMMON = [
   "ニュースには「範囲」（市場全体 / 業種・テーマ / 個別企業）が付いています。市場全体の話（x_post・market_summary_ja・app_story）では、範囲が「市場全体」のニュース（金融政策、通商・規制、地政学、エネルギー、災害など）を先に扱い、次に「業種・テーマ」、最後に「個別企業」の順にします。「個別企業」の開示は、「市場全体」「業種・テーマ」のニュースが無いときか、それらを書いたうえで触れます。key_news もこの順に選びます。",
   "「東京市場の方向」と「米国市場の方向」は、それぞれの日付の値動きとしてコードが決めたものです。朝刊では、前営業日の東京市場と前夜の米国市場を別々に書き、「市場の方向」のひとこと（まちまち等）だけで両方をまとめません。今日の値動きは予想せず、今日見る点として書きます。",
   "x_post はX投稿用の約500字の読み物です。次の6つを書きます。lead_ja: 60字以内の導入1文。points_ja: ちょうど3つ、各40字以内の見出し（下の「3つのポイント」の決まりに従う）。context_ja: 90〜130字の背景の段落（値動きを日付つきでつなぐ。理由は確認できた場合だけ）。news_ja: 70〜110字の重要ニュースの段落（範囲が市場全体のものを優先。書けるニュースが無ければ空文字）。watch_ja: 50〜80字の次に見る点。closing_ja: 40〜60字の一言。見出し・小見出し（📌 📰 👀 💬）とハッシュタグはコードが付けるので書きません。",
-  "3つのポイント（x_post.points_ja）は、本文を読む前にその日の要点が一目で分かる見出しです。アプリの「今日のポイント」にも同じ3つが出ます。数値（指数の値・前日比・価格）を見出しの主役にしません。「日経平均は69,946.86（前日比+2.40%）」「NYダウ +0.42%」のような指標名と数値だけの見出しは書かず、値は context_ja と app_story に書きます（数値そのものがニュースの核心である場合、例えば政策金利の決定だけは例外）。3つは役割を分け、同じ指数や同じニュースを言い換えて2回使いません。煽りや釣りの言い方はしません。見出しも本文と同じ決まりに従います（入力と逆の方向を書かない、根拠の無い理由を見出しにしない、日付の違う市場を混ぜない、TOPIX連動ETF（1306）をTOPIXと書かない）。",
+  "3つのポイント（x_post.points_ja）は、本文を読む前にその日の市場の中身が分かる見出しです。アプリの「今日のポイント」にも同じ3つが出ます。各見出しは次を守ります。(1) その日の入力にある具体的な語（国・地域、企業・業種、指標、出来事の名前）を最低1つ入れます。「ニュースを確認」「動きを見る」「情勢に注目」「材料を確認」「今後の動向に注意」のように、どの日にも当てはまる見出しは書きません。材料を見出しにするときは、どこの何の出来事かを書きます。(2) 指標名と値・前日比を並べただけの見出しは書かず、値は context_ja と app_story に書きます。ただし、節目を超えた、大幅に上昇・下落した、急変した、政策金利が決まったなど、数値そのものがその日の出来事である場合は、数値を入れた見出しにしてかまいません。そのときも、入力の値と前日比から確かめられる範囲（前日の終値を上回った等）で書き、「初めて」「史上最高」「〜年ぶり」のように入力だけでは確かめられない記録の言葉は使いません。(3) 3つは、その日にもっとも重要な別々のテーマを選びます。同じ指数や同じニュースの言い換えを2回使いません。材料が薄い日は、理由が確認できないことを正直に1つ書いてかまいませんが、3つすべてを抽象的にしません。(4) 煽りや釣りの言い方はしません。(5) 見出しも本文と同じ決まりに従います（入力と逆の方向を書かない、根拠の無い理由を見出しにしない、日付の違う市場を混ぜない、TOPIX連動ETF（1306）をTOPIXと書かない）。",
   "app_story はアプリの「市場全体」の読み物で、x_post より詳しく書きます。見出し・絵文字・指標の数値の一覧はコードが付けるので、各項目には説明の文章だけを書きます（数値を書く場合は上の日付のルールに従う）。summary_ja: 60〜110字で全体をひとこと。overseas_ja: 100〜170字で米国市場の値動き。japan_ja: 120〜200字で東京市場（朝刊は前営業日の結果と今日見る点、大引けは今日の結果）。cross_asset_ja: 80〜150字で為替・金利・半導体・原油。news_ja: 120〜220字で重要ニュースと市場との関係（関係が確認できなければそう書く）。strong_ja: 強い・注目テーマ（根拠が無ければ空文字）。caution_ja: 60〜130字で注意点・リスク。watch_ja: 60〜130字で次に見る点。根拠が足りない項目は無理に埋めず、空文字か短く「確認できません」と書きます。",
 ];
 
@@ -67,13 +67,13 @@ const X_VOICE = [
 const MORNING = [
   "これは朝刊です。前夜の米国市場と、東京市場の前営業日の終値、前回の引け以降に確認できたニュースから、今日の日本株で見る点を整理します。",
   "overseas_to_japan の観点は claims の scope=overnight で表し、日本株への影響は断定せず consistent_with か watch_point にします。",
-  "朝刊の3つのポイントは、今日の「注目点」「注意点」「相場を見る軸」です（例: 「前夜の米株高を日本株が引き継げるか」「半導体株の強さが続くかに注目」「為替の動きには要注意」）。今日の東京市場はまだ動いていないので、上昇した・下落したと言い切りません。前夜や前営業日の値動きに触れるときは入力の方向どおりに書き（下落した米国株を「米株高」と書かない）、値は本文に回します。",
+  "朝刊の3つのポイントは、今日の「注目点」「注意点」「相場を見る軸」を、入力にある前夜・前営業日の値動きとニュースに結びつけて書きます。今日の東京市場はまだ動いていないので、上昇した・下落したと言い切りません。前夜や前営業日の値動きに触れるときは入力の方向どおりに書き（下落した市場を「高」と書かない）、値は本文に回します。",
 ];
 
 const CLOSE = [
   "これは大引けです。今日の東京市場の終値と、今日確認できたニュースから「今日の値動きと、確認できる範囲の理由」を整理します。",
   "指数の羅列にせず、その日の重要な出来事と値動きを読者が一度で分かるようにまとめます。理由を確認できたものは causal、確認できないものは insufficient_evidence にします。",
-  "大引けの3つのポイントは、「今日何が起きたか」「重要だった材料・相場を動かしたもの」「次に何を見るか」です（例: 「主要指数がそろって上昇、主因は絞れず」「（入力の重要ニュース）が最大の材料に」「次は米国株と為替の反応を確認」）。相場を動かした理由を見出しにできるのは、ニュースが理由として明記している（causal の claim がある）場合だけです。無いときは「上昇したが、主因は一つに絞れず」「大型株中心に上昇、材料は分散」のように、見えている事実と不確実性を書きます。明日以降の値動きは断定しません。業種や個別株の値動き（「半導体株が主導」「内需はまちまち」など）は、入力のニュースや指標に根拠があるときだけ書きます。",
+  "大引けの3つのポイントは、その日の「何が起きたか」「何が重要だったか（根拠のある材料）」「次に何を見るか」から、もっとも重要な3つを選びます。相場を動かした理由を見出しにできるのは、ニュースが理由として明記している（causal の claim がある）場合だけです。無いときは、見えている事実（動いた市場・指標・節目）と、理由が確認できないことを正直に書きます。明日以降の値動きは断定しません。業種や個別株の値動きは、入力のニュースや指標に根拠があるときだけ書きます。",
 ];
 
 const GENERATION_SCHEMA = {
@@ -803,6 +803,23 @@ const POINT_FILLER = /[\s、。・,()+\-−±▲▼%]|前日比|終値|取引終
 export const POINTS_METRIC_RECAP_WARN_AT = 2;
 /** Character-bigram overlap from which two points say the same thing. */
 export const POINTS_NEAR_DUPLICATE_AT = 0.5;
+/** From this many generic points (the watch point may be one) the points are recorded as generic. */
+export const POINTS_GENERIC_WARN_AT = 2;
+/** A point left with this many content characters (kanji, katakana, Latin) or fewer says nothing particular to the day. */
+const POINT_GENERIC_RESIDUAL_MAX = 1;
+
+/** Numbers that are the event itself (a threshold crossed, a big move, a rate decision): not a recap. */
+const POINT_MILESTONE = /節目|超え|上回|下回|突破|到達|割れ|大幅|急(?:騰|落|変|上昇|低下)|万円台|政策金利|利上げ|利下げ|据え置き/u;
+/**
+ * Words that carry no news of their own: placeholders for "the news", "the situation", "the move" and the
+ * verbs of watching. A headline made only of these (and market names) could be written on any day.
+ */
+const POINT_GENERIC_WORDS = [
+  "ニュース", "情勢", "情報", "材料", "動向", "動き", "状況", "展開", "続報", "報道", "出来事", "影響", "変化", "方向",
+  "市場", "相場", "今後", "引き続き", "全体", "主要", "指数", "上昇", "下落", "主因", "理由", "一つ", "絞れず", "絞れない",
+  "断定", "不明", "反応", "確認", "注目", "注意", "要注意", "警戒", "見る", "見守る", "見ていく", "チェック",
+  "国際", "世界", "海外", "国内", "各国", "次", "今日", "明日", "本日", "日本株", "東京", "米国", "日本",
+].sort((a, b) => b.length - a.length);
 
 /**
  * A point that only reports where a metric ended: a name with its value or change (「日経平均は69,946.86
@@ -811,10 +828,27 @@ export const POINTS_NEAR_DUPLICATE_AT = 0.5;
  */
 export function isMetricRecapPoint(point: string): boolean {
   const text = point.normalize("NFKC").replace(/\d{1,2}月\d{1,2}日/gu, "").replace(/\p{Extended_Pictographic}/gu, "");
+  if (POINT_MILESTONE.test(text)) return false;
   if (POINT_VALUE.test(text)) return true;
   let rest = text;
   for (const name of MARKET_NAMES) rest = rest.split(name.normalize("NFKC")).join("");
   return Array.from(rest.replace(POINT_FILLER, "")).length <= 1;
+}
+
+/**
+ * A headline that names nothing of the day: after the market names, dates, particles and the placeholder
+ * words are taken out, at most a couple of characters are left (「国際情勢のニュースを確認」「今後の動向に
+ * 注意」). A number or a named event / place / company keeps a point specific. Fixed vocabulary only, so a
+ * specific headline is never matched; a watch point such as 「次は米国株と為替の動きを見る」 is generic by
+ * this measure, which is why one is allowed (POINTS_GENERIC_WARN_AT).
+ */
+export function isGenericPoint(point: string): boolean {
+  let text = point.normalize("NFKC").replace(/\d{1,2}月\d{1,2}日/gu, "").replace(/\p{Extended_Pictographic}/gu, "");
+  if (/\d/u.test(text)) return false;
+  for (const name of MARKET_NAMES) text = text.split(name.normalize("NFKC")).join("");
+  for (const word of POINT_GENERIC_WORDS) text = text.split(word).join("");
+  const residual = text.match(/[一-龠々ァ-ヶーA-Za-z]/gu) ?? [];
+  return residual.length <= POINT_GENERIC_RESIDUAL_MAX;
 }
 
 function pointGrams(point: string): Set<string> {
@@ -831,6 +865,8 @@ export function pointsEditorialWarnings(points: string[]): string[] {
   const warnings: string[] = [];
   const recaps = points.filter(isMetricRecapPoint).length;
   if (recaps >= POINTS_METRIC_RECAP_WARN_AT) warnings.push(`X_POINTS_METRIC_RECAP:${recaps}`);
+  const generic = points.filter(isGenericPoint).length;
+  if (generic >= POINTS_GENERIC_WARN_AT) warnings.push(`X_POINTS_GENERIC:${generic}`);
   const grams = points.map(pointGrams);
   const overlapping = grams.some((left, i) =>
     grams.slice(i + 1).some((right) => {
@@ -903,11 +939,38 @@ export function lunaCostUsd(inputTokens: number, outputTokens: number): number {
  * What happened inside one run, kept apart from transport retries (429 / 5xx / network, counted in
  * transport_retry.ts) and from the scheduled cron retry (report_attempt_count on the cycle).
  */
+/**
+ * What a rejected draft was rejected for, as fixed codes only: never the model's text or the quoted
+ * sentence. Local issues carry their own fixed prefixes; the Fact check's free-text issues are matched to
+ * the same families. Anything unmatched is "other".
+ */
+const REJECTION_FAMILIES: Array<[string, RegExp]> = [
+  ["1306", /1306|TOPIX/u],
+  ["date", /日付|セッション|時点|古い値/u],
+  ["number", /数値|値と前日比|入力に無い数字|計算/u],
+  ["direction", /方向|符号|逆転|絵文字/u],
+  ["causal", /因果|理由|原因|推測|可能性/u],
+  ["ref", /入力に無い|存在しない|ref/u],
+  ["absence", /材料がない|ニュースがない|無いと言い切|範囲を示さず/u],
+  ["format", /形式|POINTS|3つ/u],
+];
+export function rejectionCodes(issues: readonly string[]): string {
+  const found = new Set<string>();
+  for (const issue of issues) {
+    // Local issues quote the offending sentence after the first colon: classify the label only.
+    const label = issue.split(/[:：]/u)[0];
+    found.add(REJECTION_FAMILIES.find(([, pattern]) => pattern.test(label))?.[0] ?? "other");
+  }
+  return [...found].join("+") || "none";
+}
+
 export type GenerationTrace = {
   /** Model generations in this run (1 or 2). */
   generations: number;
   /** Why a draft was rejected, in order: "invalid_output" | "local" | "fact". */
   hardRejections: string[];
+  /** Per rejected draft, fixed issue-family codes ("date+causal"), in the same order. No text is kept. */
+  rejectionReasons: string[];
   /** A hard-fact-safe draft was rewritten once for quality. */
   qualityRewrite: boolean;
   /** Which generation was delivered (0 when none). */
@@ -934,18 +997,31 @@ export type AnalysisOutcome =
  */
 export const APP_STORY_REWRITE_BELOW_CHARS = 700;
 
+/**
+ * Below this the X body is materially thin and worth one rewrite; from here up to the preferred 430 it is
+ * only recorded. 2026-10-06 close: 387 characters, complete (every paragraph written) and fact-safe, still
+ * spent a model call on a rewrite. The points are now short headlines (PR #87), so a body that follows the
+ * prompt's own paragraph minimums (context 90 + news 70 + watch 50 + closing 40 = 250 characters of prose,
+ * plus the lead, three headlines, section titles and the header) lands near 390, and never reaches the
+ * 430 target without padding. A body under 300 has a paragraph missing or cut short.
+ */
+export const X_POST_REWRITE_BELOW_CHARS = 300;
+
 /** Warnings that are recorded but never worth a generation. */
 const COSMETIC_WARNING = /^X_POST_EMOJI_COUNT|LONGER_THAN_TARGET|が長すぎる$|^X_POST_NEWS_OMITTED$|^X_POINTS_/;
 
 /**
- * Worth one rewrite: everything that is not cosmetic, and an app story only when it is materially thin.
- * The points' editorial warnings are telemetry: the prompt asks for headlines, and a metric recap is safe
- * text, so it is recorded rather than paid for with two more calls (PR #77's delivery-first budget).
+ * Worth one rewrite: everything that is not cosmetic, and an app story or an X body only when it is
+ * materially thin. The points' editorial warnings (X_POINTS_*) are telemetry: the prompt asks for specific
+ * headlines, and a recap or a generic headline is safe text, so it is recorded rather than paid for with
+ * two more calls (PR #77's delivery-first budget).
  */
 function worthRewrite(warning: string): boolean {
   if (COSMETIC_WARNING.test(warning)) return false;
   const [code, value] = warning.split(":");
-  return code !== "APP_STORY_SHORTER_THAN_TARGET" || Number(value) < APP_STORY_REWRITE_BELOW_CHARS;
+  if (code === "APP_STORY_SHORTER_THAN_TARGET") return Number(value) < APP_STORY_REWRITE_BELOW_CHARS;
+  if (code === "X_POST_SHORTER_THAN_TARGET") return Number(value) < X_POST_REWRITE_BELOW_CHARS;
+  return true;
 }
 
 /** Rewrite instructions for quality warnings (codes are for diagnostics; the model gets plain text). */
@@ -975,7 +1051,7 @@ export async function generateSharedAnalysis(
   let outputTokens = 0;
   let issues: string[] = [];
   let lastError = "ANALYSIS_NOT_ATTEMPTED";
-  const trace: GenerationTrace = { generations: 0, hardRejections: [], qualityRewrite: false, deliveredGeneration: 0, warnings: [] };
+  const trace: GenerationTrace = { generations: 0, hardRejections: [], rejectionReasons: [], qualityRewrite: false, deliveredGeneration: 0, warnings: [] };
   const usage = (step: StepResult) => {
     calls += 1;
     inputTokens += step.inputTokens;
@@ -1006,6 +1082,7 @@ export async function generateSharedAnalysis(
       issues = ["出力の形式が不正"];
       lastError = "ANALYSIS_INVALID_OUTPUT";
       trace.hardRejections.push("invalid_output");
+      trace.rejectionReasons.push("format");
       continue;
     }
     const local = localAnalysisCheck(analysis, input);
@@ -1013,6 +1090,7 @@ export async function generateSharedAnalysis(
       issues = local.hard;
       lastError = "ANALYSIS_LOCAL_CHECK_FAILED";
       trace.hardRejections.push("local");
+      trace.rejectionReasons.push(rejectionCodes(local.hard));
       continue;
     }
     let verdict: StepResult;
@@ -1029,6 +1107,7 @@ export async function generateSharedAnalysis(
       issues = Array.isArray(fact?.issues) ? fact.issues.filter((issue): issue is string => typeof issue === "string").slice(0, 10) : [];
       lastError = "ANALYSIS_FACT_FAILED";
       trace.hardRejections.push("fact");
+      trace.rejectionReasons.push(`${rejectionCodes(issues)}:${issues.length}`);
       continue;
     }
     if (safe) {
@@ -1054,6 +1133,7 @@ export function generationDiagnostics(trace: GenerationTrace): Record<string, st
     generation_attempts: String(trace.generations),
     content_regenerations: String(Math.max(0, trace.generations - 1)),
     hard_rejections: trace.hardRejections.join(","),
+    rejection_reasons: trace.rejectionReasons.join(",").slice(0, 160),
     quality_rewrite: String(trace.qualityRewrite),
     quality_rewrite_request_failed: String(trace.rewriteRequestFailed ?? false),
     delivered_generation: String(trace.deliveredGeneration),

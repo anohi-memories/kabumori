@@ -1,3 +1,633 @@
+## AI model-management scope clarified — Kabumori only / POSTONA excluded — 2026-10-07
+
+- user clarification: the upcoming GPT-6-family migration and model-management foundation in G2 is **Kabumori scope only**.
+- G2 may change AI used for:
+  - Kabumori app market-report generation;
+  - Kabumori shared morning/close report text;
+  - Kabumori X morning/close report posting text generated from that shared market-report path;
+  - Kabumori-side Fact checking / report-quality checks that belong to the same market-report pipeline.
+- G2 must **not** change or centrally absorb AI owned by the POSTONA/X-auto-post application.
+- Explicitly excluded from this G2:
+  - POSTONA generic post generation;
+  - POSTONA AI consultation/persona-memory generation;
+  - POSTONA social-mobile/user-brand generation;
+  - POSTONA multi-social generation;
+  - company AI Lab / generic X-autopost model routing when owned by G3/G4;
+  - any G3-managed POSTONA model registry/configuration.
+- G3 remains the source of truth for POSTONA AI model management and its own migration work.
+- Therefore the first model registry/foundation created by G2 must be **Kabumori-namespaced**, not a repo-wide registry that takes ownership of POSTONA.
+- preferred initial shape:
+  - e.g. `supabase/functions/_shared/kabumori_ai_models.ts` or equivalent Kabumori-specific namespace;
+  - logical roles such as `kabumori.market_report.generate`, `kabumori.market_report.fact`, and other Kabumori-owned AI workloads only;
+  - static guard should prohibit new scattered raw model literals inside the Kabumori-owned scope, not fail POSTONA/G3-managed files merely because they use their own model registry.
+- first migration target remains:
+  - Kabumori market-report generation -> `gpt-6.1-sol`;
+  - Kabumori market-report Fact -> `gpt-6.1-sol`;
+  - other Kabumori-owned high-volume Luna workloads may move from 5.6 Luna to `gpt-6-luna` only after inventory/classification.
+- do not touch G3/G4 POSTONA files, TASKs, model IDs, registry, prompts, tests or deploy paths as part of the Kabumori G2 migration.
+- recommended Claude model for the later Kabumori model-management implementation: **Opus5.5（高）**.
+
+## AI model management decision — central registry required — 2026-10-07
+
+- user decision: OpenAI model generations/pricing are expected to change frequently, so future model upgrades must be much easier to inspect and change than today's per-function literal model IDs.
+- after PR #101 is accepted/merged, the next G2 must include **OpenAI model inventory + GPT-6 migration + central model-management foundation**.
+- target architecture:
+  - one canonical shared AI model registry/manifest under `supabase/functions/_shared/`;
+  - workload-level logical roles instead of scattered raw model literals (e.g. market_report.generate, market_report.fact, important_news.judge, x_autopost.generate, ai_consult.generate);
+  - each role records model id, reasoning effort, output budget and a config/version identifier;
+  - every OpenAI call resolves through the shared registry/helper;
+  - diagnostics record the resolved logical role + actual model id + config version so deployed behavior is auditable;
+  - add an inventory/audit script that prints all active roles/models and flags any raw `gpt-*` model literal outside the registry;
+  - add a regression/static guard so future contributors cannot silently hard-code model IDs in individual functions;
+  - Git history remains the authoritative change log for model changes.
+- initial migration policy:
+  - quality-critical, low-frequency market-report generation -> `gpt-6.1-sol`;
+  - market-report Fact check -> `gpt-6.1-sol`;
+  - high-volume focused Luna workloads -> evaluate/default to `gpt-6-luna`;
+  - each remaining AI workload is classified by quality sensitivity, frequency, token volume, and failure cost before assigning Sol vs Luna.
+- do not add a runtime database-controlled model switch in the first iteration unless there is a clear operational need; central source registry + one-change auditability is preferred because it keeps deployed behavior deterministic and easy to inspect.
+- future upgrade workflow goal:
+  1. update model catalog/registry in one place;
+  2. run inventory + affected-function tests;
+  3. benchmark representative traces/cost;
+  4. deploy only affected functions;
+  5. natural-observation validation;
+  6. rollback by reverting one registry change if needed.
+- recommended Claude model for this next implementation: **Opus5.5（高）**.
+- recommended Codex review: **Luna（高）** if only registry/model-routing/tests change; **Sol（中）** if runtime fallback/DB/config boundary is introduced.
+
+## Final K4 — POSTONA Phase 2a-1 PASS / Phase 2a-2 assigned — 2026-10-07
+
+- Phase 2a-1 verdict: **PASS**.
+- accepted source: former PR #103 exact head `2b2f1c1fb4a7188fad5dda3346e802f19bb30983`, five new provider-domain/test files only.
+- accepted behavior: canonical providers `x / threads / instagram`, structural capabilities, credential/publish-flow kinds, publication target/result contracts and adapter interfaces; no live adapter/runtime wiring.
+- reported verification accepted: Deno 13 new tests + 449 shared PASS; app 226 PASS; typecheck/lint/diff clean; PR #95 overlap 0.
+- runtime/DB/Auth/OAuth/Vault/production/provider-call changes: 0.
+- Netlify PASS; Vercel failure was build-rate-limit only and non-blocking.
+- fresh main advanced after the PR base with no overlap. GitHub rejected the stale-base merge, so K4 integrated the exact five accepted blobs directly to main and verified every main blob SHA equals the former PR #103 source blob. PR #103 closed as superseded.
+- Codex review not required for Phase 2a-1 because it remained pure domain/test code with no live boundary change.
+- AI Lab diary: 記録不要 — internal provider abstraction only; no user-facing/live SNS capability yet.
+- G4 next task assigned: `postona-multisocial-phase2a2-account-schema-candidate-20261007`.
+- Phase 2a-2 scope: source-only connected-account schema migration candidate + disposable PostgreSQL proof + Threads connection design note. Production apply/deploy/OAuth/Vault/provider calls remain forbidden.
+- Phase 2a-2 must avoid active G2/G5 files and must not touch the shared migration reservation file if another active task owns it.
+- Phase 2a-2 recommended model: **Opus5.5（高）**.
+- next action: send `G4` to Claude Code.
+
+## G1 resumed — PR #100 contextual report-detail navigation corrective — 2026-10-07
+
+- PR #95 common-account source is merged as `d5bea735937b53095b110b4bed1f20442e56b089`; root navigation source boundary is now unblocked.
+- fresh main at allocation: `29b8d00c4894e80fa57875c2e2772e59ab637139`.
+- fresh open-PR overlap check on `src/app/_layout.tsx`, report-detail routes and portfolio route links: only existing PR #100 overlaps its own portfolio files; no other open PR owns the root/report files.
+- G1 is now ready on the existing portfolio task/PR #100 for one bounded correction only.
+- required final behavior:
+  - Portfolio -> report detail -> Back/swipe = Portfolio;
+  - Reports list -> report detail -> Back/swipe = Reports list;
+  - report -> news-detail regression unchanged;
+  - no redirect flash/internal router API.
+- preferred structure: root `report-detail` for Portfolio origin, existing nested `/reports/[id]` for Reports origin, shared report-detail implementation.
+- integrate current main into PR #100 first and preserve PR95 Auth/serviceSession plus root news-detail exactly.
+- no portfolio redesign, backend/DB/Auth/migration/EAS change.
+- recommended model: **Sonnet5（中）**.
+- finish code: K1.
+
+## G3 assigned — X/social AI model policy + GPT-6 migration — 2026-10-07
+
+- task_id: `x-social-ai-model-policy-gpt6-upgrade-20261007`.
+- owner: Claude G3; status ready.
+- recommended model: **Opus5.5（高）**.
+- user scope is explicitly X/social-auto-post only:
+  - POSTONA;
+  - 会社員AIらぼ;
+  - かぶモリX automatic-post AI.
+- G2 owns Kabumori app/report model migration; important-news/MIC are out of this G3.
+- verified production/source baseline:
+  - x-test-post v136 contains 5.6 Luna/Sol text paths;
+  - social-mobile-brand-dry-run v14 uses shared 5.6 Luna brand generator;
+  - social-mobile-consult is not yet deployed and source is 5.6 Luna;
+  - history-learning uses no OpenAI model;
+  - publish-setting uses no OpenAI model.
+- target tiers:
+  - routine/high-volume text: `gpt-6-luna`;
+  - existing quality/Sol escalation: `gpt-6.1-sol`;
+  - `gpt-image-2` unchanged in this task.
+- official standard token rates verified 2026-10-07:
+  - GPT-6 Luna: $0.10/M input, $0.50/M output;
+  - GPT-6.1 Sol: $2/M input, $10/M output.
+- architecture requirement:
+  - one source-controlled shared social AI model policy owns ids + pricing + semantic workload mapping;
+  - runtime callers import semantic policy rather than raw model strings;
+  - focused invariant fails if target runtime reintroduces 5.6 or hard-codes new social text model ids outside policy;
+  - no unrestricted production env override that bypasses source review.
+- source-only. production mutation/deploy/real OpenAI/X/DB/secret change = forbidden.
+- G4 provider-domain foundation and G5 production migration work remain independently owned; fresh overlap check required before push.
+- K3 normally needs no Codex review if the final diff is only model policy/ids/cost/type/tests and does not change Auth/DB/publish/retry semantics.
+
+## Final K2 — corrected PR #101 PASS_CANDIDATE / final H2 F1-F3 rereview assigned — 2026-10-07
+
+- G2 corrective result: **PASS_CANDIDATE**, not final merge approval.
+- corrected PR #101 exact head: `fddd274863b08aefed60795d678a298a1160d599`; PR open/unmerged/mergeable=true.
+- fresh allocation check: main advanced 43 commits from PR base with **0 changed-file overlap** across PR #101 files.
+- Vercel failure is deployment rate limit only; Netlify preview status is success/canceled and no code failure is indicated.
+- reported F1 closure:
+  - migration now validates creator/owner, exact direct ACL, effective table/column privileges, inherited/PUBLIC/grant-option paths and unsafe owner/superuser membership;
+  - H2 original four adverse cases plus nine additional adverse graphs refuse atomically;
+  - clean and Supabase-like default graphs still allow intended service_role SELECT+INSERT only;
+  - anon/authenticated and update/delete/truncate/trigger widening remain denied.
+- reported F2 closure:
+  - free-text redaction covers quoted/escaped JSON assignments, case-insensitive auth schemes, PEM/private-key material, nested/multiple credential occurrences and documented token shapes;
+  - final writer scans the whole serialized row and drops any row with residual recognizable secret material;
+  - ordinary Japanese/financial/report text remains preserved.
+- reported F3 closure:
+  - silent 4K/700-char/10-item trace-storage truncation removed;
+  - full redacted candidate and full local/Fact issue arrays retained;
+  - existing retry/decision cap remains unchanged and separate;
+  - explicit 200K field bound records original/kept sizes, counts and truncation metadata instead of silently losing evidence.
+- base_prompt_hash / request_hash now distinguish base prompt identity from generation-specific retry request identity without extra AI calls.
+- regressions reported green: market-report-analysis 192/192; personalized 129/129; X shared 8/8; data-packet 42/42; _shared 436/436; migration invariants 20/20; disposable PG clean/Supabase-like/adverse 13-case matrices PASS.
+- Hard Fact semantics, exactly-3-points, PR #99 WARN-only telemetry, X 300-char rewrite, App rewrite, MAX_GENERATIONS=2/max 4 calls and safe-original fallback unchanged.
+- production mutation/migration apply/deploy/manual generation = 0.
+- final H2 exact-head rereview assigned: `kabumori-pr101-f1-f3-final-rereview-20261007`, recommended **Sol（中）**.
+- rereview scope is only original F1-F3 reproductions + bounded regressions; no broad repeat review.
+- if C2 PASS: merge PR #101 after final freshness gate, then proceed immediately to OpenAI model inventory/migration with market-report generation + Fact targeted to `gpt-6.1-sol` and remaining high-volume Luna workloads evaluated for `gpt-6-luna`.
+
+## Final C1 — PR #95 PASS / source merged / production migration preflight next — 2026-10-07
+
+- H1 exact reviewed PR #95 head: `ba35b642d30ce423a8683feffcd26aec325b45ee`.
+- verdict: **PASS**. Q1 is closed; no remaining blocker in the focused common-account Phase 2 source review.
+- accepted safety boundaries:
+  - obsolete deferred Kabumori auth preparation is suppressed before dispatch after SIGNED_OUT/new user/new same-user session;
+  - original S1-T synchronous stale-readiness fence remains PASS;
+  - stable `userId + session_id` context and same-session TOKEN_REFRESHED single-flight remain PASS;
+  - S2 X queued pre-dispatch cancellation remains PASS;
+  - R1-R5 remain PASS;
+  - PR #94 root news-detail and X OAuth separation remain preserved.
+- independent H1 evidence: AuthProvider 23/23; Kabumori app 390/390; X 221/221; reviewer positive probes 15/15; migration invariants 11/11; X tsc/lint and diff check PASS.
+- fresh main at H1 had zero product-file overlap with PR #95 and read-only merge-tree PASS.
+- PR #95 exact head remained unchanged and GitHub checks were green (Netlify/Vercel).
+- C1 source merge completed successfully:
+  - PR #95 squash merge commit: `d5bea735937b53095b110b4bed1f20442e56b089`.
+- source merge does **not** authorize production migration apply, deploy, EAS or native release.
+- new strict client/server service-start contract still requires separately approved production apply/read-back of `20261006230000_common_account_service_start_intent.sql` before app release.
+- next G5: **read-only production migration preflight only**, task `common-account-v1-phase2-production-migration-preflight-20261007`, recommended **Opus5.5（高）**.
+- preflight must verify production migration history/current RPC+ACL state, ordering with merged PR41 migration candidates, old-client compatibility, no concurrent production mutation window, and exact apply/read-back/rollback plan.
+- actual production write remains forbidden until the user gives explicit approval after K5.
+- H1 is done/free.
+- G1 root navigation boundary is now source-unblocked by the PR #95 merge; G1 may receive its own bounded correction separately after fresh overlap check.
+- AI Lab diary: no additional entry; this remains internal common-account security/integration work.
+
+## G4 — POSTONA Phase 2a-1 assigned — 2026-10-07
+
+- G4 is ready on `postona-multisocial-phase2a1-provider-domain-foundation-20261007`.
+- Scope is provider-neutral domain foundation only; current X behavior is unchanged.
+- G5-owned common-account files are excluded.
+- Recommended model: **Sonnet5（高）**.
+
+## Final K5 — PR #95 round-4 Q1 PASS_CANDIDATE / final H1 rereview assigned — 2026-10-07
+
+- exact PR #95 head: `ba35b642d30ce423a8683feffcd26aec325b45ee`.
+- K5 verdict: **PASS_CANDIDATE**, not merge approval.
+- Q1 is reported fixed by checking the captured user+login owner again at the start of deferred auth preparation, before any generation/loading change or enrollment dispatch.
+- reported adversarial cases:
+  - A2 queued -> SIGNED_OUT => 0 obsolete A2 requests;
+  - A2 queued -> user B => 0 obsolete A2 requests;
+  - A2 queued -> same-user fresh A3 => 0 obsolete A2 requests;
+  - current A2 => exactly one preparation;
+  - same-session TOKEN_REFRESHED => single-flight retained.
+- prior S1-T/S1/S2/R1-R5 reported preserved.
+- reported tests: Kabumori 390/390; AuthProvider 23/23; X 221/221; DB lifecycle/start-intent/invariants PASS; H1 reproduction probes 10/10.
+- K5 fresh main `6717083c21300fe247736296430089cec8a6a397`; changed-file overlap with PR #95 = 0.
+- production mutation / migration apply / deploy / EAS / real provider = 0.
+- mandatory final H1 task assigned: `common-account-v1-phase2-q1-final-rereview-20261007`, target exact head `ba35b642...`, recommended **Sol（高）**.
+- PR #95 remains open/unmerged.
+- portfolio PR #100 remains safely HOLD because PR #95 still owns `src/app/_layout.tsx`; once C1 clears/lands PR #95, G1 can perform the bounded root-level report-detail navigation correction.
+
+## Final K5 — PR #95 round-4 Q1 PASS_CANDIDATE / final H1 rereview assigned — 2026-10-07
+
+- G5 result: **PASS_CANDIDATE**, not final merge approval.
+- exact PR #95 head: `ba35b642d30ce423a8683feffcd26aec325b45ee`; PR open/unmerged and mergeable at K5.
+- sole prior blocker Q1 is reported closed:
+  - deferred Kabumori auth preparation checks its captured user+login owner against the synchronously announced current owner before generation/loading changes or `acceptSession/prepareSession`;
+  - superseded tasks return before automatic service enrollment dispatch;
+  - A2 -> SIGNED_OUT / newer B / same-user fresh A3 send zero obsolete A2 requests.
+- original S1-T synchronous readiness fence remains PASS; same-session TOKEN_REFRESHED retains single-flight; prior S2/session_id/R1-R5 remain green.
+- reported tests: Kabumori 390/390; AuthProvider 23/23; X 221/221; X tsc/lint PASS; both web exports PASS; start-intent DB runner 10 PASS markers; Phase1 20/20; migration invariants 11/11; unchanged H1 probes 10/10 PASS; mutation checks 11/11.
+- fresh-main comparison at allocation includes unrelated important-news-monitor product changes and .agent control changes, but has **zero overlap** with PR #95's 17 files.
+- production mutation / migration apply / deploy / EAS / real provider call = **0**.
+- H1 final focused rereview assigned: `common-account-v1-phase2-q1-final-rereview-20261007`, exact target `ba35b642d30ce423a8683feffcd26aec325b45ee`, recommended **Sol（高）**.
+- G5 remains review_required / next_owner codex. PR #95 merge and production migration apply remain HOLD.
+- after H1 PASS, C1 may decide source merge readiness; production migration apply/read-back and native release remain separate gates.
+- AI Lab diary: no additional entry; this is the same internal common-account security-hardening milestone.
+
+## Final C2 — PR #101 CHANGES REQUIRED / F1-F3 corrective / GPT-6 migration queued — 2026-10-07
+
+- H2 reviewed exact PR #101 head `2469e8a8be0125805551ba3e353c4ef6058b0150`.
+- verdict: **CHANGES REQUIRED accepted**. PR #101 remains open/unmerged/undeployed; migration remains unapplied.
+- accepted architecture remains valid:
+  - dedicated append-only generation-trace history;
+  - actual failed model output retained for QA;
+  - local/Fact issue evidence retained;
+  - invocation/attempt/generation identity;
+  - trace persistence after complete/fail and non-blocking;
+  - prompt hygiene correction;
+  - Hard/PR99/rewrite/call/fallback semantics unchanged.
+- blockers:
+  - **F1 P1** effective privilege/owner/default/inheritance drift can silently commit unsafe access or evidence-erasure paths;
+  - **F2 P1** quoted JSON credentials, case variants, PEM/private-key text and later secret matches inside free-text can evade current redaction/backstop;
+  - **F3 P2** current serializer silently truncates candidate fields, long issue tails and >10 Fact findings, contradicting the intended full-diagnostic QA contract.
+- G2 corrective assigned: `kabumori-pr101-debug-trace-security-corrective-20261007`, recommended **Opus5.5（高）**.
+- corrective scope is only F1-F3. Do not remove failed model output retention. Do not alter Hard Fact, PR #99 editorial warnings, X 300-char rewrite threshold, App rewrite policy, MAX_GENERATIONS=2/max-call ceiling or safe-original fallback.
+- after corrected K2, one exact-head H2 rereview is mandatory, recommended **Sol（中）**. No broad rereview.
+- production mutation/apply/deploy/manual generation = 0.
+- **Next product step is already decided** after PR #101 acceptance/merge:
+  - inventory all OpenAI model IDs/usages in the repository;
+  - migrate 5.6 Luna workloads to GPT-6 Luna where they remain high-volume/focused;
+  - migrate quality-critical low-frequency report generation to GPT-6.1 Sol;
+  - target market-report generation **and Fact check** to `gpt-6.1-sol`;
+  - benchmark reasoning effort/cost/output quality using the new trace system before widening to every AI path.
+- official current API identifiers/pricing verified 2026-10-07:
+  - `gpt-6.1-sol`: $2/MTok input, $10/MTok output;
+  - `gpt-6-luna`: $0.10/MTok input, $0.50/MTok output.
+- do not mix model migration into PR #101 security corrective; keeping them separate preserves causal attribution for failures and review clarity.
+
+## Final C1 — PR #95 fourth review CHANGES REQUIRED / single Q1 corrective — 2026-10-07
+
+- H1 exact reviewed PR #95 head: `13f4281f9514742bdee43ffc08834fea67449bf2`.
+- C1 verdict: **CHANGES REQUIRED accepted**. PR #95 remains open/unmerged/undeployed; production migration apply remains forbidden.
+- accepted as PASS:
+  - original S1-T stale-readiness window is closed;
+  - synchronous auth-owner/readiness fence works for same-user fresh login, different user, SIGNED_OUT;
+  - same-session TOKEN_REFRESHED single-flight remains correct;
+  - S2 X queued pre-dispatch cancellation remains PASS;
+  - stable `userId + session_id` context model remains PASS;
+  - R1-R5 remain PASS;
+  - PR #94 root news-detail and X OAuth separation remain preserved.
+- sole remaining blocker: **Q1 P2**, Kabumori queued deferred preparation after a newer auth notification.
+  - A2 SIGNED_IN can queue deferred preparation;
+  - before it runs, SIGNED_OUT or newer user B can become the synchronously announced owner;
+  - A2's older deferred task currently checks only component-active state, so it can still call `prepareSession(A2)` and dispatch obsolete automatic `start_kabumori_service`;
+  - readiness stays fail-closed, but unsent obsolete work must never be resurrected after a newer auth notification.
+- minimum G5 correction:
+  - before any deferred auth task advances generation/loading or enters `acceptSession/prepareSession`, compare its captured owner/login against the synchronously announced current owner (or equivalent event ticket);
+  - if no longer current, return before any enrollment transport dispatch;
+  - preserve same-login TOKEN_REFRESHED behavior and the current synchronous owner fence;
+  - do not add network/Auth/Data API work to the synchronous callback.
+- mandatory tests:
+  - SIGNED_IN(A2) -> SIGNED_OUT before A2 deferred task -> zero A2 enrollment requests;
+  - SIGNED_IN(A2) -> newer user B before A2 deferred task -> zero A2 requests, B only its own preparation;
+  - normal/current owner path still prepares once;
+  - same-session TOKEN_REFRESHED control remains PASS.
+- do not reopen S1-T/S2/session_id/R1-R5 without concrete regression evidence.
+- Phase3, production migration apply, deploy, EAS, Auth/Storage/OAuth/Vault/Cron/X mutation remain out of scope.
+- G5 status: ready; recommended model: **Opus5.5（極高）**.
+- H1 is done/free. After corrected PR #95 head, run one focused exact-head H1 rereview with **Sol（高）**.
+- AI Lab diary: no additional entry; this is another narrow internal auth-session cancellation correction of the same common-account milestone.
+
+## Final K2 — PR #101 debug-trace PASS_CANDIDATE / H2 review required — 2026-10-07
+
+- G2 result: **PASS_CANDIDATE**, not final merge approval.
+- PR #101 exact head: `2469e8a8be0125805551ba3e353c4ef6058b0150`; open/unmerged/mergeable clean; Netlify/Vercel statuses green.
+- current main is 1 commit ahead of PR base with **0 changed-file overlap** across PR #101's 10 files.
+- accepted design direction:
+  - dedicated append-only `market_report_generation_traces` table;
+  - one row per model generation;
+  - scheduled attempts separated by invocation_id + attempt so retry does not erase prior failures;
+  - actual structured candidate/model output is retained;
+  - full local and Fact issue details are retained;
+  - delivered/rejected/fallback outcome and call/token/cost metadata are retained;
+  - report/data/cycle references and prompt/model identity are retained.
+- generated report/model output retention during development/QA is intentional product policy. Authentication credentials/secrets remain excluded.
+- PR #101 also removes the pre-existing unsupported morning/close timing wording without adding copyable finished examples.
+- reported regression evidence:
+  - market-report-analysis 176/176;
+  - personalized-reports 129/129;
+  - X shared consumer 8/8;
+  - data-packet 42/42;
+  - _shared 436/436;
+  - Deno check/lint/diff clean.
+- Hard Fact semantics unchanged; PR #99 generic/metric/near-duplicate WARN policy unchanged; X 300-char rewrite threshold unchanged; max call ceiling unchanged; safe-original fallback unchanged.
+- trace persistence is designed as non-blocking: storage failure does not alter report delivery or add model calls/retries.
+- new migration candidate: `20261007120000_market_report_generation_traces.sql`; not applied to production.
+- production mutation/deploy/manual generation = 0.
+- because PR #101 adds a durable DB/RLS/service_role persistence boundary, one focused H2 review is mandatory before merge.
+- H2 task: `kabumori-pr101-debug-trace-security-review-20261007`; recommended **Sol（中）**.
+- H2 scope: append-only contract, effective RLS/ACL, full-output retention correctness, secret exclusion, non-blocking persistence, prompt hygiene and Hard/call/rewrite regressions.
+- PR #101 merge, migration apply and Edge deploy remain HOLD until C2.
+- H1 remains reserved for the active G5 common-account PR #95 rereview.
+- AI Lab diary: no duplicate entry; this is internal QA/debug infrastructure for the same market-report quality iteration.
+
+## Final K5 — PR #95 round-3 S1-T PASS_CANDIDATE / final H1 rereview assigned — 2026-10-07
+
+- G5 result: **PASS_CANDIDATE**, not final merge approval.
+- exact PR #95 head: `13f4281f9514742bdee43ffc08834fea67449bf2`; PR open/unmerged and mergeable at K5.
+- sole prior blocker S1-T is reported closed in Kabumori AuthProvider:
+  - SDK-notified auth owner/login is synchronously recorded;
+  - changed login/user/SIGNED_OUT immediately advances/fences generation, invalidates readiness and cancels obsolete enrollment;
+  - network/session preparation remains deferred;
+  - serviceSession/readiness references the synchronously current owner.
+- same-session TOKEN_REFRESHED retains single-flight and does not spuriously invalidate the current logical request.
+- previous H1 `provider-event-window.mjs` timing cases (same-user fresh login, different user, SIGNED_OUT) plus control are reported PASS unchanged.
+- former S1/S2 probes remain 4/4 PASS; S2 X queued cancellation and prior R1-R5 remain green.
+- reported tests: Kabumori 390/390; AuthProvider 17/17; X 221/221; X tsc/lint PASS; both web exports PASS; start-intent DB runner 10 PASS markers; Phase1 20/20; migration invariants 11/11; mutation checks 9/9 detected.
+- fresh main at G5 integration was fully merged into PR #95; allocation-time main advanced one additional commit changing only `.agent/tasks/CLAUDE_TASK_5.md`, with zero product overlap.
+- production mutation / migration apply / deploy / EAS / real provider call = **0**.
+- H1 final focused rereview assigned: `common-account-v1-phase2-s1t-final-rereview-20261007`, exact target `13f4281f9514742bdee43ffc08834fea67449bf2`, recommended **Sol（高）**.
+- G5 remains review_required / next_owner codex. PR #95 merge and production migration apply remain HOLD.
+- after a H1 PASS, C1 may decide source merge readiness; production migration apply/read-back and native release remain separate later gates.
+- AI Lab diary: no additional entry; this is the final narrow internal session-safety iteration of the same milestone.
+
+## G2 rebuilt — retain failed model outputs for test diagnostics — 2026-10-07
+
+- user decision: during development/test, **do not discard failed AI generations**. Root-cause analysis requires seeing what the model actually produced and what local/Fact guards rejected.
+- previous narrow G2 `kabumori-morning-fact-failure-diagnostics-corrective-20261007` is superseded before start.
+- new G2: `kabumori-market-report-debug-trace-corrective-20261007`, recommended **Opus5.5（高）**.
+- required diagnostic behavior:
+  - retain each generation's structured candidate/body;
+  - retain full local guard issue details;
+  - retain full Fact issue details;
+  - distinguish generation 1 / generation 2;
+  - distinguish scheduled attempt 07:55 / retry 08:05 so retry cannot erase the first failure;
+  - retain delivery/rejection outcome, warnings, call/token/cost metadata and packet/cycle references where available.
+- fixed rejection codes alone are explicitly insufficient for QA.
+- test-stage policy also anticipates future personalized reports: failed personalized output must be inspectable during QA when that feature is built. This task does not implement personalized report generation.
+- authentication credentials/secrets remain excluded from diagnostics, but generated report text itself is allowed and required.
+- if durable history needs a new append-only diagnostic table, G2 may create a migration candidate and tests, but **must not apply it to production**.
+- diagnostic-write failure must never block an otherwise safe report or add model calls/retries.
+- also sanitize the pre-existing morning prompt wording that asserted an unsupported timing relationship about supplied news.
+- Hard Fact semantics, PR #99 generic/metric/near-duplicate telemetry, X 300-char rewrite threshold, safe-original fallback and max model-call ceiling remain unchanged.
+- source/test only; Edge deploy, migration apply, DB write, Cron/gate, X/notification/EAS/Auth/Vault mutation remain forbidden.
+- because durable logging may add a DB/access boundary, K2 will decide one focused Codex review before merge/deploy if such a boundary is introduced.
+
+## Final K2 — 10/7 morning observation incomplete / G2 diagnostic corrective next — 2026-10-07
+
+- classification: **OBSERVATION_INCOMPLETE**. PR #99 editorial quality is not yet production-validated.
+- 10/7 morning data cycle completed, but analysis failed twice and produced 0 shared report packets.
+- final retry diagnostics: report_attempt_count=2; report_last_error=ANALYSIS_FACT_FAILED; generation_attempts=2; calls=3; quality_rewrite=false; delivered_generation=0; hard_rejections=local,fact; rejection_reasons=causal+date+ref+other,other:1.
+- the final Fact note says a timing relationship about the supplied news could not be confirmed from the input. The same timing wording already existed in the older morning prompt, so this single sample does not establish PR #99 as the cause.
+- no shared output was delivered. Legacy X/app morning paths completed while shared gates remain off.
+- transport/provider failure was not observed; this was an analysis/fact rejection path.
+- manual generation/retry/replay=0; production mutation=0.
+- decision: do not change Hard rules from this one sample, and do not change PR #99 specificity/rewrite policy yet.
+- new G2: `kabumori-morning-fact-failure-diagnostics-corrective-20261007`, recommended **Sonnet5（高）**.
+- scope: make the morning prompt timing wording input-grounded; preserve per-generation rejection categories with bounded fixed codes; keep Hard semantics, max calls, safe-original fallback, PR #99 telemetry and 300-char rewrite threshold unchanged.
+- after K2 source acceptance, consider controlled deploy of `market-report-analysis` only, then read-only natural close observation.
+- AI Lab diary: no duplicate entry; this is the same market-report iteration already represented.
+
+## Final C1 — PR #95 third review CHANGES REQUIRED / single S1-T corrective — 2026-10-07
+
+- H1 exact reviewed PR #95 head: `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`.
+- C1 verdict: **CHANGES REQUIRED accepted**. PR #95 remains open/unmerged/undeployed. Production migration apply remains forbidden.
+- materially accepted:
+  - S2 queued X pre-dispatch cancellation: PASS;
+  - stable `userId + session_id` cache/context model: PASS;
+  - same-session token refresh/single-flight: PASS;
+  - R1 automatic-vs-explicit server lifecycle semantics: PASS;
+  - R4 captured immutable Authorization: PASS;
+  - R5 strict response validation: PASS;
+  - PR #94 root news-detail and X OAuth separation preserved.
+- sole remaining blocker: **S1-T P2**, Kabumori AuthProvider event timing.
+  - after Supabase has synchronously notified a new login/different user/sign-out, owner/generation invalidation is deferred to `setTimeout(0)`;
+  - an old A1 reactivation response can settle before that timer and transiently restore old A1 service-ready;
+  - next timer clears it, but push/notification/app readiness must never become positive in that interim window.
+- G5 minimum correction:
+  - synchronously record the SDK-notified current auth owner/login on changed user/login/sign-out;
+  - immediately fence generation/readiness and cancel obsolete enrollment without awaiting Auth/Data API/network work;
+  - defer only network/session preparation work;
+  - result acceptance and `serviceSession` gating must reference the synchronously current owner, not only deferred local session state;
+  - preserve same-session TOKEN_REFRESHED behavior and existing single-flight.
+- mandatory tests:
+  - render after same-user fresh-login auth callback but before deferred task -> every `serviceSession` remains null;
+  - same test for different-user event;
+  - same test for SIGNED_OUT;
+  - same-session TOKEN_REFRESHED control remains PASS.
+- do not reopen S2/session_id/R1-R5 unless a concrete regression is introduced.
+- Phase 3, production migration apply, deploy, EAS, Auth/Storage/OAuth/Vault/Cron/X mutation remain out of scope.
+- G5 status: ready; recommended model: **Opus5.5（極高）**.
+- H1 is done/free. After corrected PR #95 head, run one focused exact-head H1 rereview with **Sol（高）**.
+- AI Lab diary: no additional entry; this is another narrow internal session-safety correction of the same common-account milestone.
+
+## Final C2 — PR #41 ACL rereview PASS / merged
+
+- H2 exact reviewed head: `c509117f8addf5a8687d60d9c18ae271b2c1777c`.
+- verdict: **PASS** for the bounded R1/R2 corrective; both previous privilege blockers are closed.
+- R1 closed:
+  - effective forbidden service_role table/column privileges are checked across all live columns;
+  - direct, inherited and PUBLIC-derived column privilege drift refuses atomically;
+  - authenticated PR81 privileges remain unchanged;
+  - clean graph keeps service_role unable to read the underlying settings table directly.
+- R2 closed:
+  - completion/reader/authority privileged routines enforce exact signature/kind/owner/search_path/direct ACL/effective EXECUTE boundaries;
+  - unknown default EXECUTE, inherited app-role access, grant option, overload/procedure and unsafe owner/creator states refuse atomically;
+  - authenticated cannot enable publish authority or call completion;
+  - intended service_role calls still work.
+- focused H2 review found no new blocker; no implementation edits were made by H2.
+- final merge gate:
+  - PR #41 head unchanged;
+  - GitHub mergeable=true;
+  - main advanced from PR base with **0 overlap** across PR #41's 16 changed files;
+  - Netlify Preview PASS;
+  - Vercel failure was `build-rate-limit`, treated as non-code/nonblocking per project Preview policy.
+- PR #41 squash-merged as:
+  `b90ee326600b075e3d0b23209b4eefc1b4cd9c16`.
+- source now on main:
+  - generic `social_mobile_user_v1` scheduled live-post dispatcher;
+  - remembered AI consultation settings/persona reach live generation;
+  - narrow service-only publish settings reader;
+  - completion / publish-authority Stage3B source candidates;
+  - PR76 guarded X sends preserved;
+  - AI Lab/Kabumori specialized paths preserved.
+- production migration/history apply = 0; Edge deploy = 0; publish-authority activation = 0; real X/OpenAI = 0; Auth/Vault/OAuth/Cron mutation = 0.
+- **No further routine PR #41 review is required.**
+- remaining release dependencies:
+  1. G5 common-account PR #95 source acceptance/merge and later entitlement-enforcement ordering;
+  2. PR81 production schema apply through its reviewed atomic procedure;
+  3. Stage3B production migration sequence + readback;
+  4. x-test-post/AI-consult production deployment;
+  5. no real-user publish-authority enablement until G5 `x_autopost` entitlement checks are in the required live-publish gates.
+- G3 and H2 are now done/free. Do not open the production mutation window from this C2.
+
+## K1 — PR #100 canonical portfolio PASS / report-origin navigation HOLD — 2026-10-07
+
+- PR #100 exact reviewed head: `5a9735c80e3dbc01b25911a0aabc83fce3d56bc9`.
+- portfolio implementation itself: **PASS**.
+- accepted 402pt/375pt canonical visuals: asset summary, stored Fact-passed AI overview, top-3 asset impact, holdings, fallback avatars, interim Watchlist, dedicated Search.
+- real-data contract accepted:
+  - latest saved close snapshot only;
+  - stale/non-realtime basis explicit;
+  - null => `—`, never fake zero;
+  - current tracked holdings remain visible even before next report;
+  - Fact-passed overview/holding-impact text only;
+  - no display-time AI.
+- tests/checks reported: 404/404 app tests; src tsc clean; Expo config PASS; web export PASS; diff clean.
+- fresh-main changed-file overlap across PR100's 17 files = 0.
+- no Codex review required; EAS 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation 0.
+- only blocker before merge: Portfolio -> nested report detail currently Back/swipes to Reports list. App-wide convention requires actual-origin return, so Portfolio origin must return Portfolio while Reports-list origin must return Reports list.
+- preferred fix is root-level report-detail mirroring root `news-detail`, with explicit origin and native swipe parity.
+- this correction is **temporarily blocked from implementation** because active G5/H1 currently owns the root `src/app/_layout.tsx` Auth/navigation boundary. Do not overlap.
+- PR #100 remains open/unmerged. Once C1 clears the root boundary, give G1 one bounded Sonnet5（中） correction; no portfolio redesign/data changes required.
+
+## Final K2 — PR #99 controlled production deploy PASS / morning observation next — 2026-10-07
+
+- verdict: **PASS** for controlled deploy.
+- production `market-report-analysis` deployed exactly once:
+  - v24 -> **v25**
+  - ACTIVE
+  - verify_jwt=false unchanged
+  - production download/import graph matched exact fresh main **11/11 byte-identical**.
+- deployed source includes PR #99 logic:
+  - generic-point detection;
+  - X shortness rewrite threshold below 300 chars;
+  - bounded rejection diagnostics;
+  - specific editorial prompt rules.
+- `personalized-reports` intentionally remains v40 and was not deployed.
+- app_enabled=false / x_enabled=false unchanged.
+- all 8 relevant market-report Cron entries unchanged in schedule/active/command hash.
+- across 21 Edge Functions, only `market-report-analysis` metadata/version changed; 20 unrelated Functions unchanged.
+- production mutation performed: exactly one Edge deploy, v24 -> v25.
+- manual generation/retry=0; X/notification/EAS=0; DB/RPC/migration/Cron/gate/secrets/Vault/Auth changes=0.
+- production mutation window CLOSED at 01:08 JST.
+- no further Codex review required for this deploy because deployed bytes exactly match the already reviewed/merged source.
+- next G2: `kabumori-pr99-morning-natural-observation-20261007`, recommended **Sonnet5（中）**.
+- target natural morning cycle: 07:55 analysis / 08:05 retry. First useful observation is after **08:10 JST**. Do not poll, sleep, or manually invoke before then.
+- observation must inspect exact 3 points, specificity/generic telemetry, metric recap, rewrite/calls, rejection_reasons and Hard Fact safety.
+- `personalized-reports` accumulated PR #43/#67/#87 deploy remains a separate task and is not part of this observation.
+- AI Lab diary: no duplicate entry; this is deployment/validation of the already-recorded market-report headline iteration.
+
+## K3 handoff — corrected PR #41 -> H2 focused ACL rereview
+
+- corrected PR #41 exact head: `c509117f8addf5a8687d60d9c18ae271b2c1777c`.
+- G3 result: PASS_CANDIDATE source-only for the bounded H2 R1/R2 corrective.
+- R1 report: effective table/column privilege checks now cover direct, inherited and PUBLIC paths; adverse direct/inherited/PUBLIC column SELECT plus INSERT/UPDATE/REFERENCES/table-DML cases refuse atomically.
+- R2 report: privileged completion/reader/authority routines now enforce exact signature/kind/owner/search_path/direct ACL/effective EXECUTE and reject unknown default ACL, inheritance, grant option, overload/procedure and unsafe creator/owner states.
+- reported adverse ACL runner: 35 refusal cases PASS; clean service_role path PASS.
+- bounded regressions: x-test-post 534/534; focused Deno 63/63; _shared 436/436; pilot reader/authority/race/cleanup PASS.
+- production read/write/apply = 0; deploy = 0; merge = 0; real X/OpenAI = 0.
+- latest-main freshness check after G3: main advanced, but overlap with all 16 PR41 changed files = 0; no fresh integration needed before review.
+- H2 rereview is now actually assigned in `.agent/tasks/CODEX_TASK_2.md`:
+  - task_id: `x-social-mobile-pr41-acl-focused-rereview-20261007`
+  - exact target: `c509117f8addf5a8687d60d9c18ae271b2c1777c`
+  - scope: R1/R2 only + bounded regression
+  - recommended model: **Sol（高）**.
+- merge remains HOLD until C2.
+
+## Final K5 — PR #95 round-2 PASS_CANDIDATE / focused H1 rereview assigned — 2026-10-07
+
+- G5 result: **PASS_CANDIDATE**, not final merge approval.
+- exact PR #95 head: `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`; PR is open/unmerged and was mergeable at K5.
+- S1 is reported fixed by binding runtime cache/view/readiness/explicit consent to `userId + stable login session_id`; same-user fresh login invalidates old pending/explicit work, while same-session token refresh preserves single-flight.
+- S2 is reported fixed by checking cancellation/current user+session+generation before X queued automatic enrollment enters ensure/transport; pre-dispatch unmount/sign-out/supersede sends zero obsolete requests.
+- former H1 S1-X / S1-Kabumori / S2 adversarial reproductions are reported PASS with valid fixtures.
+- prior R1-R5 corrections remain green; SQL was unchanged in this round.
+- reported tests: Kabumori 390/390; AuthProvider 10/10; X 221/221; X tsc/lint PASS; both web exports PASS; start-intent DB runner 10 PASS markers; Phase1 20/20; migration invariants 10/10; diff/secret/PII/log scan clean.
+- current main moved three commits past PR merge-base, but allocation-time comparison shows only .agent control-file changes and zero overlap with PR #95 product files; H1 must re-check freshness.
+- production mutation / migration apply / deploy / EAS / real provider call = **0**.
+- H1 focused rereview assigned: `common-account-v1-phase2-session-identity-final-rereview-20261007`, target exact head `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`, recommended **Sol（高）**.
+- G5 remains review_required / next_owner codex. PR #95 merge and production migration apply remain HOLD.
+- later gates only: source PASS -> separate production migration approval/apply/read-back -> native validation/build/release.
+- AI Lab diary: no additional entry; this is another internal security-hardening iteration of the same common-account milestone.
+
+## Final K5 — PR #95 round-2 PASS_CANDIDATE / final focused H1 re-review assigned — 2026-10-07
+
+- G5 result: **PASS_CANDIDATE**, not final merge approval.
+- exact PR #95 head: `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`; PR open/unmerged and GitHub mergeable at K5.
+- S1 reported closed:
+  - runtime context now distinguishes `userId + stable login session_id`;
+  - malformed/missing/foreign-sub/session-id token identity fails closed;
+  - same-user fresh login invalidates old pending/explicit work and old results cannot certify the new session;
+  - same-session token refresh preserves single-flight.
+- S2 reported closed:
+  - X queued automatic enrollment validates cancellation/current user+session+generation before entering ensure/transport;
+  - unmount/sign-out/superseded effect before microtask dispatch sends zero obsolete requests.
+- former H1 S1-X / S1-Kabumori / S2 adversarial probes are reported PASS with corrected valid fixtures.
+- prior R1-R5 security corrections are reported preserved; SQL itself was unchanged in this round.
+- reported test evidence: Kabumori 390/390; real AuthProvider 10/10; X 221/221; X tsc/lint PASS; both web exports PASS; service-start-intent DB runner 10 PASS markers; Phase1 20/20; migration invariants 10/10; diff/secret/PII/log scan clean.
+- current main moved 3 commits beyond PR merge-base `2f3b1ea9...`; allocation-time comparison shows those commits changed only `.agent/tasks/CLAUDE_TASK.md` and `.agent/tasks/CLAUDE_TASK_5.md`, so product overlap with PR #95's 17 files is **0**. H1 must re-check freshness.
+- production mutation / migration apply / deploy / EAS / real provider call = **0**.
+- remaining issues are later gates only: production migration apply requires separate explicit approval after source acceptance; native Simulator/iPhone and build/release are later; migration ordering with PR #41 must be coordinated before production.
+- mandatory H1 exact-head focused re-review assigned because this change still touches Auth/session readiness and cancellation boundaries.
+- H1 task: `common-account-v1-phase2-session-identity-final-rereview-20261007`.
+- H1 target: `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`.
+- H1 recommended model: **Sol（高）**.
+- G5 remains review_required / next_owner codex. PR #95 merge and production migration apply remain HOLD.
+- AI Lab diary: no additional entry; this is a repeated internal security-hardening iteration of the same common-account milestone.
+
+## Final C1 — PR #99 focused review PASS / merged / G2 controlled deploy next — 2026-10-07
+
+- H1 verdict: **PASS-WITH-NONBLOCKING-NOTES** on exact PR #99 head `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`.
+- focused review accepted:
+  - finished example sentences removed from prompt;
+  - day-specific entity/event specificity required;
+  - safe milestone/threshold headlines allowed;
+  - `X_POINTS_GENERIC` remains WARN-only and does not trigger Hard/rewrite;
+  - X shortness warning remains below target, but X-only shortness rewrite now occurs only below 300 chars;
+  - App-story rewrite rule, omission rules, max 4 calls and safe-original fallback remain unchanged;
+  - `rejection_reasons` stores bounded fixed classifications only and does not persist raw model/user text;
+  - Hard Fact semantics unchanged.
+- independent H1 evidence: market-report-analysis 160/160; relevant compatibility 22/22; changed TS Deno check PASS; diff clean; only pre-existing require-await lint remains.
+- final fresh merge gate: PR #99 head unchanged, open/unmerged, mergeable=true, main advanced with **0 changed-file overlap**. Vercel failure is build-rate-limit only ("retry in 24 hours"), not code/test failure; Netlify status success.
+- PR #99 squash-merged as `e3379f8066877b5b64fede2dc84cbdb995c85b8e`.
+- H1 source changes / production mutation / deploy / manual report = 0. H1 done/free.
+- next G2 task: `kabumori-pr99-controlled-analysis-deploy-20261007`, recommended **Opus5.5（中）**.
+- deploy scope: `market-report-analysis` only. `personalized-reports` remains separately held.
+- deploy must preserve app/x gates and Cron, perform exact source/import-graph read-back, and not overlap any other production mutation window.
+- manual generation/retry, DB/RPC/migration, Cron/gate, X/notification, Auth/Vault and EAS remain forbidden.
+- after K2 deploy verification, observe the first natural morning/close packet read-only. Do not manually generate.
+- AI Lab diary: no duplicate entry; the existing market-report headline-regression entry already covers this iteration.
+
+## Final C2 — PR #41 CHANGES REQUIRED accepted / bounded G3 ACL corrective
+
+- H2 reviewed exact PR #41 head `280aa0f83d4f039ba3e43f32da202a91fd2333f2`.
+- verdict: **CHANGES REQUIRED accepted**. PR #41 remains open/unmerged/undeployed.
+- blocker R1 P2:
+  - reader migration checks table-level service_role privilege but can miss effective column-level privileges;
+  - H2 reproduced a pre-existing column SELECT grant where migration COMMITed and service_role could directly read settings rows cross-brand;
+  - source must refuse any effective service_role column privilege drift, including inherited/PUBLIC cases, across all live columns, without repairing unrelated ACLs.
+- blocker R2 P1:
+  - completion and publish-authority migrations revoke only known roles and can retain unknown default/inherited EXECUTE;
+  - H2 reproduced authenticated ability to enable publish authority and to forge completion state under adverse default-ACL/inheritance fixtures;
+  - source must enforce exact signature/kind/owner/search_path/raw+effective EXECUTE/grant-option matrix and fail atomically on unsafe default ACL/role inheritance/overload drift.
+- clean-path review results remain accepted:
+  - narrow reader tenant binding is correct;
+  - both consent paths use the reader;
+  - missing row/manual_review fail closed;
+  - generic live dispatcher/PR76 guard/PR78 memory-to-live generation are correct;
+  - AI Lab/Kabumori paths unchanged;
+  - G5 enforcement intentionally deferred and candidate remains dormant without explicit authority activation.
+- independent H2 evidence:
+  - x-test-post 534/534;
+  - dispatcher/routing/invariants 30/30;
+  - PR76 focused 33/33;
+  - focused consult/dry-run/brand/AI Lab 85/85;
+  - app memory-generation/consult/settings 36/36;
+  - broad 3 failures reproduced on baseline and are unrelated.
+- production reads/writes = 0; migration/history apply = 0; deploy = 0; real X/OpenAI = 0; Auth/Vault/OAuth/Cron changes = 0.
+- H2 is closed after C2.
+- fresh G3 corrective assigned:
+  `x-social-mobile-pr41-acl-corrective-20261007`
+  recommended **Opus5.5（高）**.
+- corrective scope is only R1/R2 + bounded regressions. No G5 work, no runtime redesign, no production.
+- because H2 found concrete P1/P2 in the same high-risk boundary, one focused rereview of the corrected R1/R2 boundary is required after K3, recommended **Sol（高）**. Do not repeat a broad routine review.
+
+## Final K2 — PR #99 PASS_CANDIDATE / one focused H1 review required — 2026-10-07
+
+- G2 corrective result: **PASS_CANDIDATE**, not final merge approval.
+- PR #99 exact head: `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`; open/unmerged.
+- allocation-time freshness: current main is 3 commits ahead of PR base; changed-file overlap across PR #99's 10 files = **0**.
+- accepted corrective direction:
+  - remove copyable finished example sentences from the model prompt;
+  - require day-specific concrete entities/events;
+  - permit safely evidenced milestone/threshold numbers;
+  - add WARN-only `X_POINTS_GENERIC` specificity telemetry;
+  - keep generic/recap/duplicate quality signals non-Hard and non-rewrite;
+  - preserve all existing Hard Fact boundaries and max model-call ceiling;
+  - add bounded fixed-code `rejection_reasons` diagnostics without raw model/user text.
+- reported tests: market-report-analysis 160/160; personalized-reports 129/129; X shared 8/8; data-packet 42/42; _shared 422/422; relevant Deno check/lint/diff PASS aside from one documented pre-existing require-await warning.
+- no deploy/manual report/DB/Cron/gate/X/notification/Auth/Vault/EAS/production mutation.
+- one bounded runtime-delivery change requires independent review: X-only shortness rewrite threshold narrows from target 430 chars to **rewrite only below 300 chars**; omission and App-story conditions remain unchanged; call ceiling remains max 4 and safe-original fallback remains.
+- therefore one focused H1 review is assigned: `kabumori-pr99-editorial-specificity-focused-review-20261007`, recommended **Luna（高）**.
+- H1 review scope is limited to prompt specificity, WARN-only telemetry, 430→300 rewrite semantics, bounded diagnostics, and Hard/call-boundary regressions. No routine second review after PASS.
+- merge/deploy remain HOLD until C1.
+- AI Lab diary: existing 2026-10-06 market-report headline-regression entry already covers this work; no duplicate diary entry needed.
+
 ## G1 assigned — Canonical portfolio UI v1 — 2026-10-06
 
 - task_id: `kabumori-portfolio-canonical-ui-v1-20261006`.
@@ -1939,7 +2569,7 @@
 | --- | --- | --- | --- | --- |
 | H1 | `done` | `x-social-mobile-pr65-ephemeral-x-auth-session-review-20261001` | `none` | `.agent/tasks/CODEX_TASK.md` |
 | H2 | `done` | `x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930` | `none` | `.agent/tasks/CODEX_TASK_2.md` |
-| G1 | `review_required` | `kabumori-topic-learning-access-progress-and-swipe-20261006` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_1.md` |
+| G1 | `review_required` | `kabumori-portfolio-canonical-ui-v1-20261006` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_1.md` |
 | G2 | `in_progress` | `kabumori-shared-report-v2-rich-presentation-hard-facts-20261001` | `claude` | `.agent/tasks/CLAUDE_TASK.md` |
 | G3 | `review_required` | `x-social-mobile-e3-delete-revoke-residue-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_3.md` |
 | G4 | `review_required` | `x-social-mobile-x-account-switch-auth-session-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_4.md` |

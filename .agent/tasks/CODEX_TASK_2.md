@@ -1,10 +1,507 @@
 # Codex Task 2 — CURRENT TASK
 
+- task_id: kabumori-pr101-f1-f3-final-rereview-20261007
+- owner: codex
+- slot: codex-2
+- status: review_required
+- next_owner: chatgpt
+- h2_review_result: CHANGES REQUIRED
+- h2_reviewed_head: fddd274863b08aefed60795d678a298a1160d599
+- h2_review_completed_at: 2026-10-07 JST
+- h2_review_blockers: F2 escaped credential tails and alphabetic Basic; F3 original/kept-size metadata
+- h2_report_commit: 6fd833e98635824b5019da7f35b114b02c42c91b
+- priority: high
+- recommended_model: Sol（中）
+- type: exact-head focused rereview / F1 ACL / F2 secret redaction / F3 full retention
+- target_pr: 101
+- target_head: fddd274863b08aefed60795d678a298a1160d599
+- previous_reviewed_head: 2469e8a8be0125805551ba3e353c4ef6058b0150
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Re-review only the three concrete blockers from the previous H2 review of PR #101.
+
+Do not repeat the full design review. The product decision to retain failed model outputs during development/QA is accepted and must remain.
+
+## Freshness / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / G2 latest Report / this TASK.
+2. Use a fresh independent H2 worktree/checkout from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #101.
+4. Require exact head `fddd274863b08aefed60795d678a298a1160d599`; moved head => STOP.
+5. Allocation-time: PR OPEN/unmerged/mergeable=true; main is 43 commits ahead of PR base but changed-file overlap with PR #101 = 0. Re-check before verdict.
+6. Vercel is currently rate-limited, not a code failure; Netlify status is success/canceled preview. Do not treat rate limit as source blocker.
+7. H1/G5 remain separate. Do not touch H1/G5 files/worktrees.
+
+## F1 — effective ACL / owner / inheritance
+
+Verify the corrected migration now fails closed for:
+- unknown default table SELECT;
+- unknown default helper EXECUTE;
+- inherited TRIGGER reaching service_role;
+- authenticated inheriting table owner;
+- anon/service_role owner membership;
+- service_role superuser;
+- inherited superuser path;
+- pg_read_all_data / pg_write_all_data paths;
+- grant-option widening;
+- inherited unknown role widening.
+
+Required:
+- every adverse case refuses atomically;
+- no partial trace table/helper/trigger remains after refusal;
+- unrelated default ACL/membership/role attributes remain unchanged;
+- clean Supabase-like default graph still applies;
+- service_role effective privileges = SELECT + INSERT only;
+- anon/authenticated effective access = none;
+- UPDATE/DELETE/TRUNCATE/TRIGGER remain unavailable;
+- append-only behavior remains.
+
+Review the DO-block logic, not only the supplied tests.
+
+## F2 — secret redaction / writer backstop
+
+Verify corrected redaction handles:
+- quoted JSON and escaped JSON key/value pairs;
+- key=value forms;
+- case-insensitive Bearer / Basic;
+- PEM/private-key blocks, with/without END marker;
+- JWT and documented API-token shapes;
+- nested objects/arrays/issues;
+- multiple secret occurrences in one string;
+- a safe redacted occurrence followed later by an unredacted secret.
+
+Required:
+- all recognizable credentials are redacted or row is dropped;
+- final writer scans the whole serialized row, not first-match only;
+- forged rows containing residual secret material produce zero insert callback;
+- ordinary Japanese/financial/news content is preserved;
+- redaction/drop failure remains non-blocking to report result and does not add model calls.
+
+Do not require removal of generated report text.
+
+## F3 — full diagnostic retention
+
+Verify trace storage now preserves:
+- >4,500-char candidate-field tails when under declared total bound;
+- long local issue text;
+- long Fact issue text;
+- >10 Fact issues in trace storage;
+- deep/numerous structured fields within the declared bound.
+
+Verify existing decision behavior is still bounded independently:
+- retry/public-response hints may remain capped;
+- Fact/retry decision still uses its existing bounded list;
+- full trace storage must not reuse that cap.
+
+If a 200,000-char declared field bound is used:
+- truncation must be explicit;
+- original size/count + kept size/count must be recorded;
+- truncation flag/reason must be truthful;
+- no silent lower-level truncation may occur.
+
+Also verify prompt identity metadata:
+- base_prompt_hash meaning is truthful;
+- request_hash differs when retry instructions differ;
+- no extra AI calls.
+
+## Regression guard
+
+Confirm unchanged:
+- Hard Fact semantics;
+- exactly 3 points;
+- PR #99 generic/metric/near-duplicate WARN-only policy;
+- X 300-char rewrite threshold;
+- App rewrite policy;
+- MAX_GENERATIONS=2 / max 4 model calls;
+- safe-original fallback;
+- trace persistence after complete/fail and non-blocking behavior.
+
+## Required evidence
+
+Independently reproduce enough to support verdict:
+- adverse PG cases including original F1 reproductions;
+- writer-level secret probes including original F2 reproductions;
+- retention probes including original F3 reproductions;
+- market-report-analysis relevant/full suite;
+- migration/source invariants;
+- Deno check/lint;
+- git diff --check.
+
+No production read/write/apply/deploy/manual report/X/OpenAI/Auth/Vault/OAuth/Cron mutation.
+
+## Verdict
+
+Return:
+- PASS
+- PASS-WITH-NONBLOCKING-NOTES
+- CHANGES REQUIRED
+- BLOCKED
+
+PASS requires the original F1/F2/F3 reproductions to be closed.
+
+## Completion / C2
+
+Write/append to `.agent/CODEX_REPORT_2.md`:
+- exact reviewed head;
+- verdict;
+- F1 disposition;
+- F2 disposition;
+- F3 disposition;
+- regression evidence;
+- source changes by H2=0;
+- production access/mutation/apply/deploy=0;
+- merge recommendation;
+- exact next action.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C2.
+
+If PASS:
+- recommend PR #101 merge after final freshness/no-race check;
+- no further routine review;
+- production migration apply/deploy remain separate;
+- next product task after merge is OpenAI model inventory/migration to GPT-6 family.
+
+Recommended model: **Sol（中）**.
+
+---
+
+# Codex Task 2 — CURRENT TASK
+
+- task_id: kabumori-pr101-debug-trace-security-review-20261007
+- owner: codex
+- slot: codex-2
+- status: done
+- next_owner: none
+- h2_review_result: CHANGES REQUIRED
+- h2_reviewed_head: 2469e8a8be0125805551ba3e353c4ef6058b0150
+- h2_review_completed_at: 2026-10-07 JST
+- h2_review_blockers: F1 effective ACL/owner drift; F2 secret-shaped strings persist; F3 full body/Fact evidence truncation
+- h2_report_commit: abbae8c2efc318bf2195398ab9c04007ee8f1545
+- priority: high
+- recommended_model: Sol（中）
+- type: focused migration / RLS / append-only diagnostics / non-blocking persistence review
+- target_pr: 101
+- target_head: 2469e8a8be0125805551ba3e353c4ef6058b0150
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Independently review PR #101, which adds durable failed-generation debug traces for Kabumori market reports.
+
+The product/test decision is intentional:
+- during development/QA, preserve actual failed model outputs and validator issues so root causes can be diagnosed;
+- fixed rejection codes alone are insufficient;
+- generated report text is allowed to be stored for testing;
+- authentication credentials/secrets must not be persisted.
+
+This review is **not** asking whether failed model output should be retained. That product decision is accepted.
+Review whether the implementation safely and correctly provides that diagnostic capability without changing report delivery semantics.
+
+## Freshness / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / G2 latest Report / this TASK.
+2. Use an independent H2 worktree/checkout from fresh `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #101.
+4. Require exact head `2469e8a8be0125805551ba3e353c4ef6058b0150`; if moved, STOP.
+5. Allocation-time facts: PR open/unmerged/mergeable clean; CI statuses green; current main is 1 commit past PR base with **0 overlap** across PR #101 changed files. Re-check before verdict.
+6. H1 is reserved for active G5 PR #95 final rereview. Do not touch H1 files/worktree.
+7. Source/disposable-local review only. No production migration apply/read/write, deploy, manual report, real X/OpenAI, Auth/Vault/OAuth/Cron mutation.
+
+## Focus A — diagnostic table / append-only contract
+
+Review migration:
+`supabase/migrations/20261007120000_market_report_generation_traces.sql`
+
+Verify:
+- new table is additive only;
+- existing production tables/functions are not destructively changed;
+- one row can represent one model generation;
+- failed generations can have null report_packet_id;
+- scheduled attempts can be distinguished via invocation_id + attempt;
+- generation uniqueness cannot silently collapse distinct generations;
+- update/delete/truncate are actually refused, not just undocumented;
+- service_role has only intended read/write capabilities;
+- anon/authenticated have no unintended read/write capability;
+- RLS/default privileges/ownership do not expose the trace table through client roles;
+- indexes/constraints do not make failed-path insert fragile for normal valid records;
+- migration is safe to apply once and source invariants catch reuse/collision.
+
+Use disposable PostgreSQL behavior/adversarial tests, not string inspection only.
+
+## Focus B — effective privilege / RLS boundary
+
+Because the table contains full failed model outputs and validator issue text, verify effective privileges, not only direct ACL strings.
+
+At minimum check:
+- PUBLIC;
+- anon;
+- authenticated;
+- service_role;
+- owner;
+- inherited-role paths;
+- default ACL drift where practical;
+- EXECUTE on any helper function;
+- no UPDATE/DELETE/TRUNCATE path through helper function or role inheritance;
+- no SECURITY DEFINER helper accidentally widens access beyond intended service/internal diagnostics use.
+
+If an unsafe privilege state could commit silently, mark blocker.
+
+Do not require end-user access; this is an internal diagnostic table.
+
+## Focus C — candidate/body retention is real
+
+Verify the implementation truly retains diagnostic evidence requested by product policy:
+- actual structured candidate body;
+- local issue details;
+- Fact issue details;
+- generation 1 remains after generation 2;
+- attempt 1 remains after scheduled retry attempt 2;
+- delivered/safe candidate can be distinguished from rejected candidate;
+- report/data/cycle references are sufficient to correlate traces;
+- prompt/model/version identity is enough to understand which generation path produced the row.
+
+The review should not “fix” this by removing model output or issue text. Full output retention is intended.
+
+## Focus D — secret exclusion without destroying useful text
+
+Verify redaction/secret filtering:
+- access_token / refresh_token / Authorization / password / service keys / OAuth secrets / Vault values are excluded;
+- generated report content is not broadly erased just because it contains ordinary financial/news text;
+- false positives in redaction do not make the diagnostic useless;
+- obviously secret-shaped values inside nested JSON are handled;
+- rows that still contain secret-shaped values after redaction are refused rather than persisted;
+- redaction failure itself does not alter the user-facing report decision or add model calls.
+
+Use adversarial nested-object/array/string fixtures.
+
+Do **not** require personal-report text to be removed; retaining generated report text during QA is intentional.
+
+## Focus E — non-blocking persistence semantics
+
+This is critical.
+
+Independently prove:
+- trace persistence happens after the report result is already determined;
+- successful safe report delivery is not changed to failure when trace insert fails/404s/times out;
+- failed report status is not rewritten by trace failure;
+- no extra generation/fact/model call occurs because trace persistence fails;
+- no diagnostic retry loop creates cost or latency amplification;
+- timeout is bounded;
+- no exception escapes and changes delivery semantics;
+- safe-original fallback remains exactly as before.
+
+If trace persistence can become a new delivery blocker, mark CHANGES REQUIRED.
+
+## Focus F — prompt hygiene
+
+Verify morning/close wording no longer encourages unsupported collection-time claims such as:
+- 前回の引け以降に確認できたニュース
+- 今日確認できたニュース
+
+Ensure:
+- supplied input is referenced safely;
+- morning remains forward-looking;
+- no new copyable finished example sentence was introduced;
+- no Hard/Fact rule is weakened.
+
+## Focus G — regression boundaries
+
+Confirm unchanged:
+- PR #99 generic/metric/near-duplicate WARN-only behavior;
+- X shortness rewrite threshold 300 chars;
+- App rewrite policy;
+- max generations/model-call ceiling;
+- Hard Fact semantics;
+- exactly 3 points rule;
+- safe-original fallback.
+
+Review changed runtime path for any accidental report-packet/delivery behavior change.
+
+## Required evidence
+
+Independently run/inspect enough to support verdict:
+- disposable PG behavior/adverse migration tests;
+- new debug_trace tests;
+- full market-report-analysis suite;
+- relevant personalized shared consumer;
+- X shared consumer;
+- data-packet regression;
+- migration source invariants;
+- Deno check/lint on changed runtime;
+- git diff --check;
+- focused secret-pattern/adversarial serializer tests.
+
+G2 reports:
+- market-report-analysis 176/176;
+- personalized-reports 129/129;
+- X shared 8/8;
+- data-packet 42/42;
+- _shared 436/436.
+Do not merely trust counts; independently reproduce enough key paths.
+
+## Verdict
+
+Return:
+- PASS
+- PASS-WITH-NONBLOCKING-NOTES
+- CHANGES REQUIRED
+- BLOCKED
+
+A PASS means source/migration is safe for C2 merge-readiness judgment.
+It does **not** authorize production migration apply or Edge deploy.
+
+## Completion / C2
+
+Write/append to `.agent/CODEX_REPORT_2.md`:
+- exact reviewed head;
+- verdict;
+- migration/RLS/effective privilege findings;
+- append-only findings;
+- full-output retention findings;
+- redaction/secret-exclusion findings;
+- non-blocking delivery findings;
+- prompt-hygiene findings;
+- regression evidence;
+- source changes by H2=0;
+- production access/mutation/apply/deploy=0;
+- merge recommendation;
+- production rollout recommendation;
+- exact next action.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C2.
+
+Recommended model: **Sol（中）**.
+
+---
+
+# Codex Task 2 — CURRENT TASK
+
+- task_id: x-social-mobile-pr41-acl-focused-rereview-20261007
+- owner: codex
+- slot: codex-2
+- status: done
+- next_owner: none
+- h2_review_result: PASS
+- h2_reviewed_head: c509117f8addf5a8687d60d9c18ae271b2c1777c
+- h2_review_completed_at: 2026-10-07 JST
+- h2_report_commit: c620b8a9145fc72a0b558c00f511173d3f0ce7f4
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused corrective rereview / R1 effective column privileges / R2 effective RPC EXECUTE
+- target_pr: 41
+- target_head: c509117f8addf5a8687d60d9c18ae271b2c1777c
+- previous_reviewed_head: 280aa0f83d4f039ba3e43f32da202a91fd2333f2
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+G3 corrected only the two concrete H2 blockers. Review only those corrected privilege boundaries; do not repeat the full PR #41 review.
+
+## R1 — effective column privilege closure
+
+Verify `20261006160100_social_mobile_publish_settings_reader.sql` now fails closed for any effective forbidden service_role privilege on `social_mobile_content_settings`, including direct, inherited and PUBLIC-derived column privileges across all live columns.
+
+At minimum reproduce:
+- direct column SELECT;
+- inherited column SELECT;
+- PUBLIC column SELECT;
+- column INSERT / UPDATE / REFERENCES;
+- one table-level DML drift.
+
+Required:
+- refused migration rolls back completely;
+- reader remains absent;
+- unrelated ACL/default ACL/role membership is unchanged;
+- authenticated PR81 client privileges remain unchanged;
+- clean graph applies and service_role still cannot directly read the table/columns.
+
+## R2 — default/inherited EXECUTE closure
+
+Verify exact corrected migrations:
+- `20261006160000_vault_account_brand_post_completion.sql`
+- `20261006160200_x_account_publish_authority.sql`
+
+For privileged routines verify:
+- exact signature/kind and no overload/procedure collision;
+- safe owner/creator;
+- safe search_path;
+- exact direct ACL;
+- no unknown grantee/grant option;
+- PUBLIC/anon/authenticated effective EXECUTE = none;
+- service_role intended EXECUTE only;
+- unsafe default ACL/inheritance causes atomic refusal;
+- no global default-privilege or role-membership repair.
+
+Reproduce and prove closed:
+- unknown default EXECUTE inherited by authenticated;
+- authenticated cannot enable publish authority;
+- authenticated cannot call completion;
+- anon inheritance;
+- grant option;
+- unexpected direct grant;
+- unsafe owner/creator;
+- service_role clean-path calls still succeed.
+
+## Bounded regression only
+
+Run only enough regression to confirm unchanged accepted behavior:
+- reader exact-brand/tenant binding;
+- no row/manual_review = no publish;
+- authority/check/completion clean path;
+- PR76 guarded send;
+- PR78 memory-to-live generation;
+- AI Lab/Kabumori unaffected.
+
+G3 reports latest main corrections already integrated and changed-file overlap with current main = 0. Re-check freshness before verdict.
+
+## Safety
+
+No implementation fixes. No PR merge. No production read/write/apply/deploy. No real X/OpenAI/Auth/Vault/OAuth/Cron/publish activation. No G5 enforcement work.
+
+## Completion / C2
+
+Append to `.agent/CODEX_REPORT_2.md` with exact head, R1/R2 verdict and focused evidence.
+
+If PASS:
+- recommend PR #41 merge after final freshness/no-race check;
+- no further routine review;
+- production rollout remains separate.
+
+If blocker remains:
+- report only the still-failing R1/R2 boundary and minimal correction.
+
+Then status -> review_required / next_owner -> chatgpt and STOP for C2.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Previous H2 task — preserved history
+
 - task_id: x-social-mobile-pr41-live-generation-security-review-20261007
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: done
+- next_owner: none
+- h2_review_result: CHANGES REQUIRED
+- h2_reviewed_head: 280aa0f83d4f039ba3e43f32da202a91fd2333f2
+- h2_review_completed_at: 2026-10-07 JST
+- h2_review_blockers: R1 effective column privileges; R2 default/inherited RPC EXECUTE
+- h2_report_commit: d8fa25a2c5e1132f281a06e8751a09b09a3ac4ec
 - priority: highest
 - recommended_model: Sol（高）
 - type: one focused security review / SECURITY DEFINER reader / service_role ACL / live user auto-post boundary

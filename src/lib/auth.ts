@@ -3,34 +3,79 @@ import * as Linking from 'expo-linking';
 
 import { RECOVERY_PATH, resetEmailIssue } from '@/lib/password-recovery';
 import { removeThisDevicePushTokenBestEffort } from '@/lib/push-notifications';
-import { supabase } from '@/lib/supabase';
+import {
+  createEnrollmentGate,
+  createSessionBoundTransport,
+  EnrollmentCancelledError,
+  reactivateServiceExplicitly,
+  startServiceAutomatically,
+  type EnrollmentContext,
+  type EnrollmentOutcome,
+} from '@/lib/service-enrollment';
+import { supabase, supabasePublicConfig } from '@/lib/supabase';
 
-// The profile row is created by public.ensure_my_profile(), which derives the id from auth.uid()
-// inside one idempotent statement. The previous client-side select-then-insert could not be made
-// atomic and defined this invariant in app code; the RPC makes it a server-side guarantee that a
-// caller can only ever apply to their own account.
-export async function ensureProfile() {
-  const { error } = await supabase.rpc('ensure_my_profile');
-  if (error) throw new Error(`プロフィールを準備できませんでした。${error.message}`);
+// Every accepted session is enrolled in Kabumori through the common-account lifecycle RPC
+// public.start_kabumori_service(): for auth.uid() only, it ensures the common account, the active
+// `kabumori` entitlement and the profile row in one idempotent server transaction, and never restarts an
+// ended service. It replaces the former ensure_my_profile() call, so the profile is never created outside
+// the service start. Each request carries the access token of the session it was started for (never the
+// shared client's later token) and is cancelled if that session goes away first. Requests and answers
+// belong to one login (the token's session id): a refreshed token shares them, a new sign-in of the same
+// person never inherits them.
+function contextOf(session: Session): EnrollmentContext {
+  return { userId: session.user.id, accessToken: session.access_token };
 }
 
-export async function prepareSession(session: Session) {
-  await ensureProfile();
-  return session;
+function transportFor(context: EnrollmentContext) {
+  return createSessionBoundTransport({
+    url: supabasePublicConfig.url,
+    apiKey: supabasePublicConfig.publishableKey,
+    accessToken: context.accessToken,
+  });
+}
+
+const enrollmentGate = createEnrollmentGate((context, signal) =>
+  startServiceAutomatically(transportFor(context), 'kabumori', signal),
+);
+
+/** Enrolls the session's person in Kabumori (shared, one request per login). Throws only on a transient failure or a cancellation. */
+export function prepareSession(session: Session): Promise<EnrollmentOutcome> {
+  return enrollmentGate.ensure(contextOf(session));
+}
+
+/** The person's own click: restart Kabumori at the lifecycle version the server reported. Sent once, now. */
+export function reactivateKabumori(session: Session, lifecycleVersion: number): Promise<EnrollmentOutcome> {
+  return enrollmentGate.explicit(contextOf(session), (context, signal) =>
+    reactivateServiceExplicitly(transportFor(context), 'kabumori', lifecycleVersion, signal),
+  );
+}
+
+/** Forgets the remembered outcome and cancels pending work (sign-out, another person, an explicit retry). */
+export function resetServiceEnrollment() {
+  enrollmentGate.reset();
+}
+
+/** Shares the provider's enrollment so a sign-in reports a transient failure; a superseded request is not an error. */
+async function enrollAfterSignIn(session: Session) {
+  try {
+    await prepareSession(session);
+  } catch (failure) {
+    if (!(failure instanceof EnrollmentCancelledError)) throw failure;
+  }
 }
 
 export async function signInWithEmail(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
   if (!data.session) throw new Error('ログインセッションを開始できませんでした。');
-  await prepareSession(data.session);
+  await enrollAfterSignIn(data.session);
   return data.session;
 }
 
 export async function signUpWithEmail(email: string, password: string) {
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) throw error;
-  if (data.session) await prepareSession(data.session);
+  if (data.session) await enrollAfterSignIn(data.session);
   return data;
 }
 
@@ -40,6 +85,7 @@ export async function signOut() {
   await removeThisDevicePushTokenBestEffort();
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
+  resetServiceEnrollment();
 }
 
 /**

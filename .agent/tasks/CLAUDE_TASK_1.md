@@ -1,3 +1,179 @@
+# K1 CORRECTIVE — contextual report-detail return from Portfolio
+
+This is the newest canonical G1 instruction for the existing task / existing PR #100.
+
+- task_id remains: `kabumori-portfolio-canonical-ui-v1-20261006`
+- status: ready
+- next_owner: claude
+- target PR: **#100**, update the existing PR; do not open a second PR unless technically unavoidable and reported first.
+- previously accepted PR #100 head: `5a9735c80e3dbc01b25911a0aabc83fce3d56bc9`
+- current fresh main at allocation: `29b8d00c4894e80fa57875c2e2772e59ab637139`
+- PR #95 common-account source is now merged on main as `d5bea735937b53095b110b4bed1f20442e56b089`.
+- root navigation boundary is therefore source-unblocked for G1.
+- fresh open-PR overlap check on the intended correction files: **only PR #100 itself overlaps**; no other open PR currently owns `src/app/_layout.tsx` or the report-detail routes.
+- recommended model: **Sonnet5（中）**.
+- production mutation / backend / DB / RPC / Auth / Edge / EAS: **0**.
+
+## Purpose
+
+Fix the only remaining K1 blocker without redesigning the accepted portfolio UI:
+
+- Portfolio -> report detail -> visible Back => Portfolio.
+- Portfolio -> report detail -> native iOS edge swipe => Portfolio.
+- Reports list -> report detail -> visible Back/swipe => Reports list.
+- No transient wrong-screen flash.
+- No package-internal navigation interception.
+
+This should mirror the already accepted structural principle used for root `news-detail`.
+
+## Mandatory fresh integration first
+
+1. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, ACTIVE_TASK, this corrective, and the accepted PR #100 Report.
+2. Use the existing isolated G1 worktree only if still clean/safe; otherwise create a fresh independent G1 worktree from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch `origin/main`.
+4. Integrate current main into the existing PR #100 branch before editing so it includes the merged PR #95 root/Auth layout.
+5. Preserve all PR #95 Auth/service-access changes byte-for-byte except for the smallest root Stack screen registration needed here.
+6. Re-check all open PR overlaps before push.
+7. Do not touch G2/G3/G4/G5/H1/H2 worktrees/branches/servers.
+
+## Preferred minimal structure
+
+Use a root-level report detail route for Portfolio-origin navigation, while preserving the existing nested Reports-tab route for Reports-origin navigation.
+
+Recommended minimal implementation:
+
+1. Add a root route such as:
+   - `src/app/report-detail.tsx`
+2. Reuse the existing report-detail screen implementation rather than duplicating business/UI logic.
+   - Re-export/import the existing `src/app/(tabs)/reports/[id].tsx` component if that is safe in Expo Router, or extract one shared report-detail component if necessary.
+   - Do **not** maintain two drifting copies of the report content.
+3. Register the new root route in `SignedInNavigator` inside `src/app/_layout.tsx`.
+   - Keep PR #95 AuthGate/serviceSession logic intact.
+   - Give the root detail a native Stack header matching the Reports detail style where practical.
+   - Native interactive pop/swipe must remain enabled.
+4. Change only Portfolio-origin report links:
+   - `今日のポイントを見る`
+   - `詳しく見る`
+   to push the root report-detail route with the report id.
+5. Keep the Reports tab list opening its existing nested `/reports/[id]` route.
+   - Therefore native pop/swipe naturally exposes the Reports list.
+6. Do not use `usePreventRemove`, `expo-router/build/...`, custom full-screen pan gestures, or redirect-after-pop workarounds.
+
+If a smaller supported/public Expo Router structure achieves the same behavior, it is acceptable, but native swipe must naturally reveal the correct origin.
+
+## Deep-link / fallback safety
+
+- Existing `/reports/[id]` behavior must remain valid.
+- Root `report-detail` should fail safely if opened directly.
+- If there is no back stack, provide a safe navigation fallback to the Reports list or Home using supported public router APIs.
+- Do not break report-linked news navigation; report -> news-detail should continue passing `from=reports` as today.
+
+## Preserve the accepted PR #100 behavior
+
+Do not change unless required for the route integration:
+- canonical Portfolio visuals;
+- real saved-close data mapping;
+- stale/non-realtime wording;
+- top-3 impact;
+- holdings join;
+- Fact-passed AI overview/impact text;
+- Search;
+- interim Watchlist;
+- fallback avatars;
+- 375/402 layout.
+
+No portfolio redesign.
+
+## Required tests
+
+Add focused source/route tests that pin:
+
+- Portfolio AI card opens root report detail, not nested Reports route.
+- Portfolio impact "詳しく見る" opens root report detail.
+- Reports list still opens nested `/reports/[id]`.
+- Root `report-detail` reuses the same report-detail implementation/content.
+- Root Stack registers `report-detail`.
+- PR #95 root Auth/serviceSession contract remains present.
+- Existing root `news-detail` remains registered.
+- No `usePreventRemove` or `expo-router/build/` internal import.
+- Existing report -> news-detail navigation remains unchanged.
+- Existing portfolio/search/watch tests remain green.
+
+Run:
+- focused portfolio/report navigation tests;
+- full `deno test tests/app/`;
+- src/changed-scope tsc;
+- Expo config;
+- web export if supported;
+- `git diff --check`.
+
+## Simulator verification — mandatory
+
+On the final integrated PR #100 head:
+
+1. Portfolio -> `今日のポイントを見る` -> report detail -> native edge swipe:
+   - lands directly on Portfolio.
+2. Portfolio -> `詳しく見る` -> report detail -> visible Back:
+   - lands directly on Portfolio.
+3. Reports tab -> report detail -> native edge swipe:
+   - lands on Reports list.
+4. Reports tab -> report detail -> visible Back:
+   - lands on Reports list.
+5. Report detail -> linked news -> Back/swipe behavior remains correct.
+6. Reopen Reports and Portfolio tabs:
+   - no stale root report detail;
+   - no wrong tab selected;
+   - no header duplication/flash.
+7. Quick 375pt/402pt header sanity check.
+
+No new screenshot is required unless the visible report header changes materially; if it does, capture one focused 375pt screenshot under `docs/ui-review/`.
+
+## Scope / safety
+
+Allowed:
+- `src/app/_layout.tsx` — only the minimal root report-detail registration/header option.
+- new `src/app/report-detail.tsx` or equivalent.
+- `src/components/portfolio/portfolio-sections.tsx` — only route target change.
+- existing report detail file/component only if needed for safe reuse.
+- focused tests.
+
+Forbidden:
+- AuthProvider/service enrollment changes.
+- common-account migration/RPC changes.
+- report generation/backend changes.
+- DB/RLS/Edge changes.
+- new dependencies.
+- EAS/native config.
+- Watchlist tags/schema.
+- company-logo work.
+- unrelated portfolio redesign.
+
+## Completion / K1
+
+Update existing PR #100 to a new exact head.
+
+Report:
+- fresh main integrated SHA;
+- exact final PR head;
+- route structure;
+- proof PR #95 Auth/root changes preserved;
+- Portfolio-origin Back/swipe proof;
+- Reports-origin Back/swipe proof;
+- report->news regression;
+- tests/checks;
+- changed_files;
+- production/backend/EAS = 0;
+- remaining issues.
+
+Then:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+Recommended model: **Sonnet5（中）**.
+
+---
+
 # Claude Task 1 — CURRENT TASK
 
 - task_id: kabumori-portfolio-canonical-ui-v1-20261006
@@ -6,7 +182,7 @@
 - status: ready
 - next_owner: claude
 - priority: high
-- recommended_model: Sonnet5（高）
+- recommended_model: Sonnet5（中）
 - purpose: ユーザー承認済み「ポートフォリオ正本」デザインを、既存の保有銘柄・保存済み大引けレポート・検索/監視機能に接続した実用画面として実装する。
 
 ## Canonical product decision
@@ -514,6 +690,137 @@ Then:
 - STOP for K1.
 
 Recommended model: **Sonnet5（高）**.
+
+## K1 — PORTFOLIO PASS / merge HOLD for contextual report-detail navigation
+
+- verdict: **PASS for portfolio implementation / HOLD before merge for one navigation integration issue**.
+- exact reviewed PR #100 head: `5a9735c80e3dbc01b25911a0aabc83fce3d56bc9`.
+- fresh main at K1: `7c0c6565230096d77e339156b3977d2b1128062e`.
+- fresh-main changed-file overlap across all 17 PR files: **0**.
+- accepted:
+  - canonical portfolio composition closely matches the approved reference;
+  - 402pt and 375pt Simulator screenshots are visually acceptable;
+  - real saved-close data only; no fake realtime values;
+  - asset value / unrealized P&L / day P&L / day % mapping is deterministic;
+  - stale basis wording is honest;
+  - sparkline uses stored close history only;
+  - top-3 impact = absolute `day_pl`;
+  - current tracked holdings remain the registration source and unmatched rows remain visible as not-yet-reflected;
+  - Fact-passed stored overview/holding-impact text only; no display-time AI;
+  - real dedicated stock-search screen works;
+  - interim Watchlist subview preserves existing watch registrations/edit/delete;
+  - company-logo absence is handled by one deterministic fallback-avatar slot;
+  - tests/checks reported **404/404 app tests**, src tsc clean, Expo config PASS, web export PASS, diff clean;
+  - EAS 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation 0.
+- screenshots reviewed:
+  - `portfolio_canonical_402pt.webp`;
+  - `portfolio_canonical_375pt.webp`;
+  - `portfolio_holdings_375pt.webp`;
+  - `portfolio_watchlist_375pt.webp`;
+  - `portfolio_search_375pt.webp`.
+- Codex review: **not required** for this UI/read-only presentation/search extraction.
+
+### Remaining navigation blocker
+
+Portfolio AI summary and impact detail currently open the nested Reports-tab route `/reports/[id]`.
+
+Observed consequence:
+- Portfolio -> report detail -> Back / native edge swipe returns to the Reports list, not to the Portfolio origin.
+
+This conflicts with the app-wide navigation behavior already adopted for Topic and News:
+- **visible Back and native swipe should return to the actual origin screen**.
+
+Required final behavior:
+- Portfolio -> report detail -> visible Back = Portfolio;
+- Portfolio -> report detail -> native edge swipe = Portfolio;
+- Reports list -> report detail -> visible Back/swipe = Reports list;
+- deep-link/unknown origin has a safe fallback.
+
+Preferred structural solution:
+- mirror the accepted root-level `news-detail` pattern with a canonical root-level report-detail route;
+- preserve the Reports tab's existing list behavior/deep-link compatibility;
+- pass explicit origin for deterministic button/fallback semantics;
+- do not intercept native swipe with package-internal APIs.
+
+### Current coordination constraint
+
+Do **not** implement that structural navigation correction yet because active G5/H1 common-account work currently owns `src/app/_layout.tsx` / root Auth navigation boundary.
+
+- PR #100 itself has no current overlap and remains safe/open.
+- wait for H1/C1 to finish and the root layout boundary to become safe;
+- then assign one bounded G1 correction on existing PR #100 (or a fresh follow-up if rebasing is cleaner) to add contextual report-detail navigation;
+- no other portfolio UI/data changes are requested.
+
+- merge: **HOLD**.
+- status remains `review_required` / next_owner `chatgpt` until the root navigation boundary is clear.
+- recommended corrective model when unblocked: **Sonnet5（中）**.
+
+---
+
+## Report — G1: portfolio canonical UI v1 (task kabumori-portfolio-canonical-ui-v1-20261006)
+
+- task_id: `kabumori-portfolio-canonical-ui-v1-20261006`
+- result: implemented; Simulator-verified at 402pt and 375pt (real taps/swipes). PR open, **not merged**.
+- fresh main SHA (clone at start): `06335b3` (allocation `676ce44b`; main only advanced with agent/ops commits). Open-PR overlap re-checked (all 8 open PRs): none on the portfolio/search/stock files.
+- PR: https://github.com/anohi-memories/kabumori/pull/100 — branch `claude/g1-portfolio-canonical-ui-v1-20261006`, head `5a9735c80e3dbc01b25911a0aabc83fce3d56bc9` (1 commit).
+- **EAS build created: no (0).** backend/DB/RPC/API/AI/Auth/Edge/production mutation: **0**. `src/app/_layout.tsx`, Auth/common-account, migrations, G5/PR95 files untouched.
+- Reference image: the user's canonical portfolio mock was visible in this session; the TASK text was followed for everything the image cannot show.
+
+### worktree isolation
+Independent clone of `origin/main` in the session scratchpad (own branch, `.env` copy, `node_modules` symlink; one Metro at a time). `kabumori-fresh`, old worktrees and other slots' servers/branches untouched.
+
+### changed_files
+`src/app/(tabs)/explore.tsx` (rewritten: portfolio dashboard + Watchlist subview), `src/app/search.tsx` (redirect → real screen), `src/lib/stock-search.ts` (extracted search semantics), new `src/lib/portfolio-view.ts` (pure view model), new `src/components/portfolio/{portfolio-sections,holdings-section,stock-avatar,sparkline,portfolio-theme}`; removed `src/components/portfolio-summary.tsx` (replaced by the dashboard; sector weights remain on the report detail); tests `portfolio-view_test.ts`, `portfolio-screen_test.ts`; 5 screenshots.
+
+### portfolio data-source mapping
+All figures: latest saved CLOSE report (`fetchRecentReports(20)` + existing `latestCloseReport`) → `portfolio_snapshot`. Asset value = `totals.market_value`; 評価損益 = `totals.unrealized_pl`; day change = `totals.day_pl` / `day_change_percent`; 評価損益% = `unrealized_pl / (market_value − unrealized_pl)` only when the cost is finite and > 0 (else `—`, pinned by tests; no rounded strings are ever summed). Sparkline = `totals.market_value` of recent close reports (oldest first, one per trading date, finite only, ≤12 points; < 2 points ⇒ no line). Holdings come from the user's `tracked_stocks` (current registrations), prices/P&L from the snapshot row with the same ticker.
+
+### stale / realtime honesty
+No realtime wording anywhere (`現在値` is never used; `終値`, `10/6 終値ベース（保存済み大引け）`, and `リアルタイム価格ではありません` on the watchlist). The basis date is the **price date** (`price_basis_date`): only when it equals today (JST) are `今日のポートフォリオ / 今日のポイントを見る / 今日の資産への影響 / 今日の増減` used; otherwise `最新のポートフォリオ / 詳しいポイントを見る / 10/6の資産への影響 / 10/6の増減` (a test asserts no label contains 今日 when stale, including a report written today on yesterday's prices). Missing values render `—`, never 0; the stored overview text is shown verbatim (a stored sentence that itself says 今日 is not rewritten).
+
+### current-tracked vs snapshot join
+Join key = ticker code (`stocks_master.ticker_code` ↔ `ReportStock.ticker_code`). Every currently registered holding is shown; one the latest report does not contain is flagged `最新レポート未反映` with `—` values (never dropped, never invented); with no report at all the flag is not shown (nothing to be "未反映" from). Order: market value descending, rows without one after, ties by ticker. Watch records stay separate (`tracking_type='watch'`).
+
+### impact ranking
+Holdings with a finite `day_pl`, sorted by `|day_pl|` descending (ties by ticker), at most 3; row = fallback avatar, company, ticker, signed ¥ impact, change %. No numeric holding ⇒ the whole section is omitted. No medals/rank styling.
+
+### AI card source
+Only the stored, Fact-passed `body.overview_ja` (trimmed, clamped to 4 lines by presentation only); no card when absent. Material tag/line per holding only from stored data: linked news ⇒ `ニュース`; report stance tailwind/headwind ⇒ `追い風/逆風`; text = `holding_impacts[].fact_ja` else `stock_notes`; nothing guessed from names. No display-time AI call (pinned: no AI/RPC/fetch in the screen or the view model).
+
+### search extraction
+`/search` is now a real root-stack screen (already registered; root navigator untouched) with a Back button. Behaviour unchanged and pinned: 350 ms debounce, `sanitizeStockSearchTerm` (`, % ( )` blanked), `ticker_code`/`company_name` ilike, `is_listed`, limit 30, request-id guard against stale responses, registered check, registered row not tappable/duplicated, unregistered → `TrackedStockEditor`. The portfolio search icon opens it.
+
+### interim Watchlist behaviour
+`★ ウォッチリスト` toggles a Watchlist subview of the same 銘柄 tab (no new route, no `_layout.tsx` change): `‹ ポートフォリオ` back, `＋ 追加` → /search, watch rows (avatar, company, ticker・market, 買いたい/売りたい prices, saved 終値/前日比 when the report has them), tap → the existing editor (change/delete verified), honest empty state. No tags / schema (explicitly deferred).
+
+### logo fallback behaviour
+No logo field exists, so every company gets `StockAvatar`: a soft neutral circle with one deterministic short label (first character of a Japanese name, ≤2 Latin letters/digits otherwise, legal-form words stripped, ticker as last resort); the accessibility label carries the full company name. It is the single place a licensed logo can replace later; no logo URLs or company-specific assets are hard-coded.
+
+### 402 / 375 findings
+- 402pt: header (title + ★ ウォッチリスト + search) on one line; asset value ¥3,248,500 and sparkline do not collide; two metric columns; AI card; impact card with 2-line long names and vertically centred % pills; holdings in two-line cards (identity + 終値 + 評価損益 above, tag + one-line note below), long company names readable on up to 3 lines (e.g. 三菱ＵＦＪフィナンシャル・グループ); CTA ends ≈27 pt above the tab bar (not hidden).
+- 375pt: card 343 wide; name column ≈80–85 pt (price 58, P/L 86 — `+¥142,500` fits); all figures uncropped; watchlist target prices on two lines; search row (avatar, code, name, badge) fits; CTA ≈27 pt above the tab bar.
+- Earlier first pass found: a 57 pt name column (3–4 characters per line), misaligned % pills, a 110 pt gap above the tab bar, pull-to-refresh spinner showing on tab refocus, clipped watchlist target prices — all fixed and re-verified.
+- Observations, accepted: the AI card text can wrap inside 「ＵＦＪ」 at 375pt (data text, Japanese wrapping); sparkline vertices keep ~0.5 pt bumps at 3× zoom; AI-card/「詳しく見る ›」 open the report detail whose `‹ 一覧` returns to the report list (existing behaviour).
+
+### tests / checks (head `5a9735c8`)
+`deno test tests/app/` **404 passed / 0 failed**; tsc(src) no diagnostics; `expo config` OK; `expo export --platform web` PASS; `git diff --check` clean.
+
+### screenshots (`docs/ui-review/`)
+`portfolio_canonical_402pt.webp`, `portfolio_canonical_375pt.webp`, `portfolio_holdings_375pt.webp`, `portfolio_watchlist_375pt.webp`, `portfolio_search_375pt.webp`.
+
+### remaining issues
+- Verification used a scratchpad auth-bypass/fixture rig (not committed); the real iPhone with real data/touch has not been used yet.
+- `src/lib/stock-sections.ts` (partition helpers + tests) is no longer used by a screen but kept (the watch/holding partition contract is still pinned).
+- The 銘柄 → report detail back path returns to the reports list, not the portfolio (existing tab-stack behaviour).
+- Not exercised: more than 6 holdings/very long scroll performance, dark mode, VoiceOver reading.
+
+### safety_checks
+No DB/RPC/RLS/Auth/Edge/AI/news/report generation/native/config/EAS/production change; no new dependency; no logo scraping; the root navigator and Settings/common-account code untouched; `.env`/`node_modules` not committed; PR not merged. Production mutation: 0.
+
+### next_recommendation
+K1 reviews PR #100 (UI/local only, no Codex review needed). The user can try it on the iPhone (server on request) with real saved close reports.
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 
 ---
 

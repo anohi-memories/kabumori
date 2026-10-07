@@ -1,0 +1,293 @@
+-- SOURCE CANDIDATE ONLY. Do not apply until a separately reviewed activation.
+--
+-- Stage 3B publish authority for the generic Vault-backed brand_post path
+-- (_shared/brand/vault_account_brand_post.ts). Separate from Stage 3A's
+-- refresh rollout (which only gates token refresh) and never consulted by the
+-- AI Lab or Kabumori paths.
+--
+-- x_account_publish_authority: one row per X account; no row = no publishing.
+--   enabled  -> may publish only inside [starts_at, expires_at) (<= 30 days)
+--   off      -> operator pause
+--   revoked  -> consent/operator revocation
+-- check_x_account_publish_authority(post, account, brand) is the single
+-- publish predicate. The Edge path calls it before generation AND again
+-- immediately before the X create; any of these stops new posts even while
+-- the access token is still valid: authority missing/off/revoked/not started/
+-- expired, owner consent (approvalMode) withdrawn or the consent store absent,
+-- brand inactive/not live, brand_post not enabled, account publish disabled or
+-- not identity-verified, wrong account/brand, post not running.
+-- The refresh generation ceiling stays a refresh control only.
+--
+-- Owner consent (approvalMode) is read only through the narrow publish-time
+-- reader read_social_mobile_publish_settings (20261006160100); the settings
+-- table itself stays closed to service_role. Only social_mobile_user_v1 brands
+-- are eligible (the reader enforces the profile; internal brands are also
+-- refused by id here and in the setter).
+--
+-- Requires Stage 3A (live), the Stage 3B completion RPC (20261006160000) and
+-- the publish settings reader (20261006160100). ACL: the creator must be a
+-- non-superuser owner of social_accounts; the table and both routines end
+-- with exactly the intended owner/service_role privileges, and any other
+-- direct or effective grantee refuses the whole file. (Renumbered from the unapplied
+-- candidate 20260927124300 so that a clean bootstrap creates it after the PR81
+-- settings hardening it depends on.)
+-- Transaction: one explicit transaction; apply alone; not re-runnable.
+begin;
+
+do $$
+begin
+  if to_regclass('public.x_account_refresh_rollout') is null
+     or to_regprocedure('public.complete_vault_account_brand_post(uuid,text,text,text)') is null
+     or to_regprocedure('public.read_social_mobile_publish_settings(uuid,text)') is null
+     or to_regclass('public.brand_settings') is null then
+    raise exception 'STAGE3B_PUBLISH_PRECONDITION_MISSING';
+  end if;
+  if to_regclass('public.x_account_publish_authority') is not null
+     or exists (select 1 from pg_catalog.pg_proc p
+                where p.pronamespace = 'public'::regnamespace
+                  and p.proname in ('check_x_account_publish_authority', 'set_x_account_publish_authority')) then
+    raise exception 'STAGE3B_PUBLISH_PRECONDITION_ALREADY_APPLIED';
+  end if;
+  if to_regrole('anon') is null or to_regrole('authenticated') is null or to_regrole('service_role') is null then
+    raise exception 'STAGE3B_PUBLISH_PRECONDITION_ROLES';
+  end if;
+  -- Safe owner: the creator owns the SECURITY DEFINER setter and the authority table, so it must be a
+  -- non-superuser that owns the account table the setter writes against.
+  if (select r.rolsuper from pg_catalog.pg_roles r where r.rolname = current_user) is distinct from false
+     or (select c.relowner from pg_catalog.pg_class c where c.oid = 'public.social_accounts'::regclass)
+          is distinct from (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user) then
+    raise exception 'STAGE3B_PUBLISH_PRECONDITION_OWNER';
+  end if;
+  -- Application roles must not inherit the owner or service_role.
+  if pg_catalog.pg_has_role('anon', current_user, 'usage') or pg_catalog.pg_has_role('authenticated', current_user, 'usage')
+     or pg_catalog.pg_has_role('anon', 'service_role', 'usage') or pg_catalog.pg_has_role('authenticated', 'service_role', 'usage') then
+    raise exception 'STAGE3B_PUBLISH_PRECONDITION_ROLE_GRAPH';
+  end if;
+end $$;
+
+create table public.x_account_publish_authority (
+  social_account_id text primary key references public.social_accounts (id),
+  state text not null check (state in ('enabled', 'off', 'revoked')),
+  starts_at timestamptz,
+  expires_at timestamptz,
+  reason_code text not null check (reason_code ~ '^[A-Z][A-Z0-9_]{1,99}$'),
+  updated_at timestamptz not null default now(),
+  constraint x_account_publish_authority_window check (
+    (starts_at is null) = (expires_at is null)
+    and (expires_at is null or (expires_at > starts_at and expires_at <= starts_at + interval '30 days'))),
+  constraint x_account_publish_authority_enabled_window check (state <> 'enabled' or expires_at is not null)
+);
+alter table public.x_account_publish_authority enable row level security;
+revoke all on public.x_account_publish_authority from public, anon, authenticated, service_role;
+grant select on public.x_account_publish_authority to service_role;
+
+-- The single publish predicate. SECURITY INVOKER: service_role reads rows it
+-- may already read; it cannot write the authority table.
+create function public.check_x_account_publish_authority(
+  p_scheduled_post_id uuid, p_social_account_id text, p_brand_id text
+) returns text language plpgsql stable security invoker set search_path = '' as $$
+declare v_post public.scheduled_posts%rowtype;
+        v_account public.social_accounts%rowtype;
+        v_brand public.brands%rowtype;
+        v_authority public.x_account_publish_authority%rowtype;
+        v_approval text;
+begin
+  if p_scheduled_post_id is null or nullif(btrim(p_social_account_id), '') is null
+     or nullif(btrim(p_brand_id), '') is null then
+    raise exception 'VAULT_PUBLISH_REQUEST_INVALID' using errcode = 'P0001';
+  end if;
+  -- Specialised paths never publish through the generic route.
+  if p_brand_id in ('kabumori', 'ai_salaryman_lab') then
+    raise exception 'VAULT_PUBLISH_BRAND_NOT_ELIGIBLE' using errcode = 'P0001';
+  end if;
+  select sp.* into v_post from public.scheduled_posts sp where sp.id = p_scheduled_post_id;
+  if not found or v_post.status is distinct from 'running' or v_post.post_type is distinct from 'brand_post'
+     or v_post.brand_id is distinct from p_brand_id
+     or (pg_catalog.to_jsonb(v_post) ->> 'social_account_id') is not null then
+    raise exception 'VAULT_PUBLISH_POST_NOT_RUNNING' using errcode = 'P0001';
+  end if;
+  if (select count(*) from public.social_accounts sa where sa.brand_id = p_brand_id and sa.platform = 'x') <> 1 then
+    raise exception 'X_ACCOUNT_NOT_UNIQUE_FOR_BRAND' using errcode = 'P0001';
+  end if;
+  select sa.* into v_account from public.social_accounts sa where sa.brand_id = p_brand_id and sa.platform = 'x';
+  if v_account.id is distinct from p_social_account_id then
+    raise exception 'X_CLAIM_ACCOUNT_MISMATCH' using errcode = 'P0001';
+  end if;
+  select b.* into v_brand from public.brands b where b.id = p_brand_id;
+  if v_brand.is_active is distinct from true or v_brand.publish_mode is distinct from 'live' then
+    raise exception 'VAULT_PUBLISH_BRAND_DISABLED' using errcode = 'P0001';
+  end if;
+  if v_account.connection_status is distinct from 'identity_verified' then
+    raise exception 'X_ACCOUNT_NOT_VERIFIED' using errcode = 'P0001';
+  end if;
+  if v_account.publish_enabled is distinct from true then
+    raise exception 'X_ACCOUNT_PUBLISH_DISABLED' using errcode = 'P0001';
+  end if;
+  if not exists (select 1 from public.brand_settings bs
+                 where bs.brand_id = p_brand_id and bs.enabled_post_types ? 'brand_post') then
+    raise exception 'VAULT_PUBLISH_POST_TYPE_NOT_ENABLED' using errcode = 'P0001';
+  end if;
+  select pa.* into v_authority from public.x_account_publish_authority pa where pa.social_account_id = v_account.id;
+  if not found or v_authority.state = 'off' then
+    raise exception 'VAULT_PUBLISH_AUTHORITY_OFF' using errcode = 'P0001';
+  end if;
+  if v_authority.state = 'revoked' then
+    raise exception 'VAULT_PUBLISH_AUTHORITY_REVOKED' using errcode = 'P0001';
+  end if;
+  if pg_catalog.now() < v_authority.starts_at then
+    raise exception 'VAULT_PUBLISH_AUTHORITY_NOT_STARTED' using errcode = 'P0001';
+  end if;
+  if pg_catalog.now() >= v_authority.expires_at then
+    raise exception 'VAULT_PUBLISH_AUTHORITY_EXPIRED' using errcode = 'P0001';
+  end if;
+  -- Owner consent lives in the brand's own content settings, read only through the narrow
+  -- publish-time reader (same running post, social_mobile_user_v1 only). No row = no consent;
+  -- a non-eligible brand is refused by the reader itself.
+  select r.settings ->> 'approvalMode' into v_approval
+  from public.read_social_mobile_publish_settings(p_scheduled_post_id, p_brand_id) r;
+  if v_approval is distinct from 'auto_post_preference' then
+    raise exception 'SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED' using errcode = 'P0001';
+  end if;
+  return 'allowed';
+end;
+$$;
+
+-- The only mutation path (service side). 'enabled' needs a window that has
+-- not ended and lasts at most 30 days; 'off'/'revoked' are always allowed and
+-- keep the last window for audit. Specialised brands are refused.
+create function public.set_x_account_publish_authority(
+  p_social_account_id text, p_state text, p_reason_code text,
+  p_starts_at timestamptz default null, p_expires_at timestamptz default null
+) returns text language plpgsql security definer set search_path = '' as $$
+declare v_account public.social_accounts%rowtype;
+begin
+  if nullif(btrim(p_social_account_id), '') is null or p_state is null or p_state not in ('enabled', 'off', 'revoked')
+     or p_reason_code is null or p_reason_code !~ '^[A-Z][A-Z0-9_]{1,99}$'
+     or (p_state = 'enabled' and (p_starts_at is null or p_expires_at is null or p_expires_at <= pg_catalog.now()
+                                  or p_expires_at <= p_starts_at or p_expires_at > p_starts_at + interval '30 days'))
+     or (p_state <> 'enabled' and (p_starts_at is not null or p_expires_at is not null)) then
+    raise exception 'VAULT_PUBLISH_AUTHORITY_REQUEST_INVALID' using errcode = 'P0001';
+  end if;
+  select sa.* into v_account from public.social_accounts sa where sa.id = p_social_account_id for update;
+  if not found or v_account.platform is distinct from 'x' then
+    raise exception 'X_ACCOUNT_NOT_FOUND' using errcode = 'P0001';
+  end if;
+  if v_account.brand_id in ('kabumori', 'ai_salaryman_lab') then
+    raise exception 'VAULT_PUBLISH_BRAND_NOT_ELIGIBLE' using errcode = 'P0001';
+  end if;
+  if p_state = 'enabled' then
+    insert into public.x_account_publish_authority (social_account_id, state, starts_at, expires_at, reason_code, updated_at)
+    values (v_account.id, 'enabled', p_starts_at, p_expires_at, p_reason_code, pg_catalog.now())
+    on conflict (social_account_id) do update
+    set state = 'enabled', starts_at = excluded.starts_at, expires_at = excluded.expires_at,
+        reason_code = excluded.reason_code, updated_at = pg_catalog.now();
+  else
+    insert into public.x_account_publish_authority (social_account_id, state, reason_code, updated_at)
+    values (v_account.id, p_state, p_reason_code, pg_catalog.now())
+    on conflict (social_account_id) do update
+    set state = excluded.state, reason_code = excluded.reason_code, updated_at = pg_catalog.now();
+  end if;
+  return p_state;
+exception
+  when sqlstate 'P0001' then raise;
+  when others then raise exception 'VAULT_PUBLISH_AUTHORITY_UNAVAILABLE' using errcode = 'P0001';
+end;
+$$;
+
+revoke all on function public.check_x_account_publish_authority(uuid, text, text),
+  public.set_x_account_publish_authority(text, text, text, timestamptz, timestamptz)
+from public, anon, authenticated, service_role;
+grant execute on function public.check_x_account_publish_authority(uuid, text, text),
+  public.set_x_account_publish_authority(text, text, text, timestamptz, timestamptz)
+to service_role;
+
+-- Postcondition: exact definitions, exact direct ACLs and exact effective privileges for the authority
+-- table and both routines. Any other grantee (for example one the creator's default privileges added,
+-- with or without grant option) is NOT removed silently: it aborts the whole file.
+do $$
+declare v_check oid := 'public.check_x_account_publish_authority(uuid,text,text)'::regprocedure;
+        v_set oid := 'public.set_x_account_publish_authority(text,text,text,timestamptz,timestamptz)'::regprocedure;
+        v_table oid := 'public.x_account_publish_authority'::regclass;
+        v_owner oid := (select c.relowner from pg_catalog.pg_class c where c.oid = 'public.social_accounts'::regclass);
+        v_service oid := 'service_role'::regrole;
+        v_table_privs text := 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+          || case when pg_catalog.current_setting('server_version_num')::integer >= 170000 then ',MAINTAIN' else '' end;
+        v_write_privs text := 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+          || case when pg_catalog.current_setting('server_version_num')::integer >= 170000 then ',MAINTAIN' else '' end;
+begin
+  -- Routines: one of each name, plain functions, owned by the account-table owner, pinned search_path;
+  -- the predicate is SECURITY INVOKER, the setter SECURITY DEFINER.
+  if (select count(*) from pg_catalog.pg_proc p
+      where p.pronamespace = 'public'::regnamespace
+        and p.proname in ('check_x_account_publish_authority', 'set_x_account_publish_authority')) <> 2
+     or not exists (select 1 from pg_catalog.pg_proc p where p.oid = v_check and p.prokind = 'f' and not p.prosecdef
+                      and p.proowner = v_owner and p.proconfig = array['search_path=""'])
+     or not exists (select 1 from pg_catalog.pg_proc p where p.oid = v_set and p.prokind = 'f' and p.prosecdef
+                      and p.proowner = v_owner and p.proconfig = array['search_path=""']) then
+    raise exception 'STAGE3B_PUBLISH_EFFECTIVE_ACL:ROUTINE_DEFINITION';
+  end if;
+  -- Routine direct grants: besides the owner, exactly one plain EXECUTE for service_role each.
+  if exists (select 1 from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a
+             where p.oid in (v_check, v_set) and a.grantee <> p.proowner
+               and not (a.grantee = v_service and a.privilege_type = 'EXECUTE' and not a.is_grantable))
+     or (select count(*) from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a
+         where p.oid = v_check and a.grantee = v_service) <> 1
+     or (select count(*) from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a
+         where p.oid = v_set and a.grantee = v_service) <> 1 then
+    raise exception 'STAGE3B_PUBLISH_EFFECTIVE_ACL:ROUTINE_DIRECT_ACL';
+  end if;
+  -- Routine effective EXECUTE (inheritance included), and no other role except via owner/service_role.
+  if pg_catalog.has_function_privilege('anon', v_check, 'execute') or pg_catalog.has_function_privilege('anon', v_set, 'execute')
+     or pg_catalog.has_function_privilege('authenticated', v_check, 'execute')
+     or pg_catalog.has_function_privilege('authenticated', v_set, 'execute')
+     or not pg_catalog.has_function_privilege('service_role', v_check, 'execute')
+     or not pg_catalog.has_function_privilege('service_role', v_set, 'execute')
+     or exists (select 1 from pg_catalog.pg_roles r
+                where not r.rolsuper
+                  and (pg_catalog.has_function_privilege(r.oid, v_check, 'execute')
+                       or pg_catalog.has_function_privilege(r.oid, v_set, 'execute'))
+                  and not pg_catalog.pg_has_role(r.oid, v_owner, 'usage')
+                  and not pg_catalog.pg_has_role(r.oid, v_service, 'usage')) then
+    raise exception 'STAGE3B_PUBLISH_EFFECTIVE_ACL:ROUTINE_EFFECTIVE';
+  end if;
+  -- Authority table: owned by the same owner, RLS on; besides the owner exactly one plain SELECT for
+  -- service_role; no column-level grants at all.
+  if (select c.relowner from pg_catalog.pg_class c where c.oid = v_table) is distinct from v_owner
+     or not (select c.relrowsecurity from pg_catalog.pg_class c where c.oid = v_table)
+     or exists (select 1 from pg_catalog.pg_class c, pg_catalog.aclexplode(c.relacl) a
+                where c.oid = v_table and a.grantee <> c.relowner
+                  and not (a.grantee = v_service and a.privilege_type = 'SELECT' and not a.is_grantable))
+     or (select count(*) from pg_catalog.pg_class c, pg_catalog.aclexplode(c.relacl) a
+         where c.oid = v_table and a.grantee = v_service) <> 1
+     or exists (select 1 from pg_catalog.pg_attribute att
+                where att.attrelid = v_table and att.attnum > 0 and att.attacl is not null) then
+    raise exception 'STAGE3B_PUBLISH_EFFECTIVE_ACL:TABLE_DIRECT_ACL';
+  end if;
+  -- Authority table effective privileges: application roles none (table or any column, by any path,
+  -- predefined-role membership included); service_role SELECT only; any other role only via the owner
+  -- (any privilege) or service_role (SELECT only). PostgreSQL's predefined data-access roles
+  -- (pg_read_all_data / pg_write_all_data / pg_maintain) and their members are cluster-wide
+  -- administrative grants by design, not drift on this table, and are left out of that last scan only.
+  if pg_catalog.has_table_privilege('anon', v_table, v_table_privs)
+     or pg_catalog.has_any_column_privilege('anon', v_table, 'SELECT,INSERT,UPDATE,REFERENCES')
+     or pg_catalog.has_table_privilege('authenticated', v_table, v_table_privs)
+     or pg_catalog.has_any_column_privilege('authenticated', v_table, 'SELECT,INSERT,UPDATE,REFERENCES')
+     or not pg_catalog.has_table_privilege('service_role', v_table, 'SELECT')
+     or pg_catalog.has_table_privilege('service_role', v_table, v_write_privs)
+     or pg_catalog.has_any_column_privilege('service_role', v_table, 'INSERT,UPDATE,REFERENCES')
+     or exists (select 1 from pg_catalog.pg_roles r
+                where not r.rolsuper and not pg_catalog.pg_has_role(r.oid, v_owner, 'usage')
+                  and r.rolname !~ '^pg_'
+                  and not exists (select 1 from pg_catalog.pg_roles pr
+                                  where pr.rolname in ('pg_read_all_data', 'pg_write_all_data', 'pg_maintain')
+                                    and pg_catalog.pg_has_role(r.oid, pr.oid, 'usage'))
+                  and (pg_catalog.has_table_privilege(r.oid, v_table, v_write_privs)
+                       or pg_catalog.has_any_column_privilege(r.oid, v_table, 'INSERT,UPDATE,REFERENCES')
+                       or ((pg_catalog.has_table_privilege(r.oid, v_table, 'SELECT')
+                            or pg_catalog.has_any_column_privilege(r.oid, v_table, 'SELECT'))
+                           and not pg_catalog.pg_has_role(r.oid, v_service, 'usage')))) then
+    raise exception 'STAGE3B_PUBLISH_EFFECTIVE_ACL:TABLE_EFFECTIVE';
+  end if;
+end $$;
+
+commit;

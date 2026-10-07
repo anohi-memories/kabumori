@@ -1,5 +1,629 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: x-social-ai-model-policy-gpt6-upgrade-20261007
+- owner: claude
+- slot: claude-3
+- status: in_progress
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: source-only AI model upgrade / centralized social-post model policy / POSTONA + AI Lab + Kabumori X
+- production_mutation_allowed: false
+- deploy_allowed: false
+- merge_allowed: false
+
+## User decision
+
+This G3 owns **X auto-post AI only**.
+
+In scope:
+1. POSTONA / social-mobile
+2. 会社員AIらぼ / AI Lab automatic posts
+3. かぶモリ X automatic-post AI paths
+
+Out of scope:
+- Kabumori app market-report-analysis/personalized-report model migration owned by G2;
+- important-news-monitor / breaking-market model migration;
+- MIC;
+- unrelated app/backend AI;
+- image-generation model upgrades.
+
+Current user direction:
+- Luna current target = `gpt-6-luna`
+- Sol current target = `gpt-6.1-sol`
+- future model releases should be easy to adopt without searching dozens of runtime files.
+
+Official API pricing verified 2026-10-07:
+- `gpt-6-luna`: $0.10 / 1M input tokens, $0.50 / 1M output tokens
+- `gpt-6.1-sol`: $2.00 / 1M input tokens, $10.00 / 1M output tokens
+
+Do not use stale 5.6 pricing after the migration.
+
+## Current production/source inventory
+
+Production project: `stock-x-autopost`.
+
+Observed production:
+- `x-test-post` v136 contains `gpt-5.6-luna` and `gpt-5.6-sol`;
+- `social-mobile-brand-dry-run` v14 imports brand generator with `gpt-5.6-luna`;
+- `brand-post-dry-run` also uses the shared brand generator and therefore 5.6 Luna;
+- `social-mobile-consult` is **not deployed yet**; main source currently uses `gpt-5.6-luna`;
+- `social-mobile-history-learning` uses **no OpenAI text model**; it derives persona signals mechanically from bounded X history;
+- `social-mobile-publish-setting` uses no OpenAI model.
+
+Main source:
+- `supabase/functions/social-mobile-consult/logic.ts`: `gpt-5.6-luna`
+- `supabase/functions/_shared/brand/brand_post_generator.ts`: `gpt-5.6-luna`
+- `supabase/functions/x-test-post/index.ts`: many `gpt-5.6-luna` call sites plus selected `gpt-5.6-sol` escalation paths
+- `supabase/functions/x-test-post/report_voice_rewrite_logic.ts`: `gpt-5.6-luna`
+- `supabase/functions/x-test-post/useful_tip_generation_logic.ts`: 5.6 Luna/Sol model union
+- `supabase/functions/x-test-post/morning_greeting_logic.ts`: 5.6 Luna
+- `gpt-image-2` is image generation and is deliberately not part of this text-model migration.
+
+## Goal A — one source of truth
+
+Create a small shared X/social AI model policy module, preferred location:
+
+`supabase/functions/_shared/social_ai_model_policy.ts`
+
+A different nearby shared location is allowed only if import/tooling constraints make it materially safer.
+
+The purpose is that future model migration should normally require changing **one policy module**, not hunting literals throughout POSTONA / AI Lab / Kabumori X runtime.
+
+Design should separate:
+
+### Model catalog / tier
+
+At minimum:
+- FAST / routine text tier -> `gpt-6-luna`
+- QUALITY / Sol escalation tier -> `gpt-6.1-sol`
+
+Each text model entry should own:
+- API model id;
+- input price per 1M;
+- output price per 1M;
+- any capability metadata actually required by existing callers, but no speculative complexity.
+
+### Workload policy
+
+Use semantic workload names so callers do not know raw model ids.
+
+At minimum cover:
+- POSTONA consultation;
+- generic social-mobile/brand post generation;
+- AI Lab brand post generation;
+- Kabumori X default text generation;
+- Kabumori X web-search collection text model where part of x-test-post;
+- Kabumori X voice evaluation;
+- Kabumori X voice rewrite;
+- useful-tip base generation;
+- useful-tip quality escalation;
+- US premarket base/quality escalation or any equivalent existing Sol escalation.
+
+If multiple workloads intentionally share the same tier, map them explicitly.
+
+## Important policy constraint
+
+Do **not** introduce a silent unrestricted production environment-variable override that can change every live model without source review.
+
+The user's goal is easy future version upgrades, not an unaudited runtime switch.
+
+Preferred contract:
+- model ids/prices/workload mapping are centralized in one source-controlled policy;
+- future release changes the policy in one place and redeploys the relevant Edge Functions;
+- tests prove runtime files do not drift back to raw text-model literals.
+
+If there is already a project-standard reviewed config mechanism that is clearly safer, document before using it. Do not invent a broad dynamic override.
+
+## Goal B — actual model migration
+
+Within X/social-auto-post scope only:
+
+- every routine `gpt-5.6-luna` runtime call -> policy resolving to `gpt-6-luna`;
+- every existing `gpt-5.6-sol` quality/escalation runtime call -> policy resolving to `gpt-6.1-sol`;
+- if an X/social runtime path already uses a newer valid model, preserve it unless this policy should own it;
+- do not migrate non-X Kabumori app/report/news/MIC paths.
+
+### POSTONA
+
+Must cover:
+- `social-mobile-consult`;
+- generic `brand_post_generator`;
+- generic live scheduled-user generation added by merged PR #41;
+- social-mobile brand dry-run;
+- brand-post dry-run where it reuses the same generic brand generator.
+
+AI consultation should therefore launch for the first time on `gpt-6-luna`, never 5.6.
+
+### AI Lab
+
+AI Lab scheduled brand-post generation currently reaches the shared brand generator.
+Prove its generated text resolves to `gpt-6-luna`.
+
+Do not alter:
+- AI Lab topic claim/dedupe;
+- diary context;
+- X auth;
+- publish permission;
+- schedule/brand settings.
+
+### Kabumori X auto-post
+
+Update the **X auto-post AI calls in x-test-post and its direct shared helpers**, including:
+- normal text generation;
+- interaction posts;
+- useful tips;
+- morning/close/US-premarket legacy generator paths that remain inside x-test-post;
+- web-search collection model calls owned by x-test-post;
+- voice evaluation;
+- voice rewrite;
+- preview/test generation paths that use production text-model policy.
+
+Existing Luna->Sol escalation semantics remain the same; only the model tier target changes.
+
+Do not alter prompts, post schedules, X auth, publish gates, Fact/voice thresholds, retry count, call ceiling or output contract merely because the model id changed.
+
+## Goal C — cost/accounting correctness
+
+Replace 5.6-specific cost tables/types in X/social-auto-post scope with the shared policy/catalog.
+
+Requirements:
+- one cost helper reads the selected model's centralized token rates;
+- `gpt-6-luna` calculation uses 0.10 input / 0.50 output per 1M;
+- `gpt-6.1-sol` uses 2.00 / 10.00;
+- existing web-search per-tool-call fees remain separate and unchanged;
+- diagnostics/model_used fields must record the actual selected API id;
+- remove stale 5.6-only unions and comparisons;
+- do not silently report a 6-series call at 5.6 pricing.
+
+## Goal D — drift prevention
+
+Add a focused static/invariant test for the X/social-auto-post runtime scope.
+
+It should fail if:
+- `gpt-5.6-luna` or `gpt-5.6-sol` returns to targeted runtime source;
+- a raw social text model id such as `gpt-6-luna` / `gpt-6.1-sol` is newly hard-coded outside the central policy module, except a narrowly documented fixture/test case if unavoidable;
+- cost/type logic diverges from the policy.
+
+Do **not** scan unrelated G2/news/MIC source and fail on their separately-owned model decisions.
+
+`gpt-image-2` is not a violation.
+
+## Goal E — API compatibility
+
+Before changing source, confirm the current Responses API bodies used by these social/X paths are supported by:
+- `gpt-6-luna`;
+- `gpt-6.1-sol` for the paths that actually use Sol.
+
+Preserve current reasoning effort unless incompatible.
+If a 6.1 Sol request shape needs a mechanical compatibility adjustment, keep it minimal and add a test.
+
+No real OpenAI calls are allowed in this task.
+
+## Scope / likely files
+
+Allowed primary runtime:
+- `supabase/functions/_shared/social_ai_model_policy.ts` (new preferred)
+- `supabase/functions/social-mobile-consult/logic.ts`
+- `supabase/functions/_shared/brand/brand_post_generator.ts`
+- `supabase/functions/x-test-post/index.ts`
+- `supabase/functions/x-test-post/report_voice_rewrite_logic.ts`
+- `supabase/functions/x-test-post/useful_tip_generation_logic.ts`
+- `supabase/functions/x-test-post/morning_greeting_logic.ts`
+- directly related X/social model-policy tests
+
+Additional X/social runtime files may be changed only when fresh inventory proves they contain an actual text-model literal/type/cost dependency.
+
+Do not touch G2-owned market-report-analysis/personalized-reports model files.
+
+## Coordination / isolation
+
+1. Read ORCHESTRATION / ACTIVE_TASK / CURRENT_STATE / this TASK.
+2. Fresh-fetch `origin/main` from `/Users/yuya/Developer/kabumori-fresh`.
+3. Use a new independent G3 worktree.
+4. Read current G4 and G5 TASK/Report before editing.
+5. Current G4 provider-domain foundation must remain independent; do not edit its provider-domain files.
+6. G5 production migration work has project-wide production priority.
+7. This task is source-only: no production mutation window.
+8. Before push, fresh-fetch main and verify changed-file overlap with active G4/G5/G2.
+9. Any overlap with another slot's in-progress product file => STOP rather than overwriting.
+
+## Tests
+
+At minimum prove:
+
+### Central policy
+- POSTONA consult -> `gpt-6-luna`
+- generic/AI Lab brand generator -> `gpt-6-luna`
+- Kabumori X default/voice/rewrite -> `gpt-6-luna`
+- existing quality escalation -> `gpt-6.1-sol`
+- exact price calculation for both tiers
+- selected model id is emitted in diagnostics
+
+### POSTONA
+- consult request body model is policy-selected Luna
+- one call/send remains unchanged
+- brand generator request body model is policy-selected Luna
+- remembered content settings/persona flow unchanged
+- dry-run and live generic generator share the same policy
+
+### AI Lab
+- AI Lab scheduled generation still uses generic brand generator and therefore policy Luna
+- topic/dedupe/provider outcome behavior unchanged
+
+### Kabumori X
+- useful-tip Luna-first / Sol-escalation behavior unchanged semantically
+- US-premarket conditional Sol escalation unchanged semantically
+- voice evaluation/rewrite model updated via policy
+- morning/close/interaction/tip generation paths no longer embed old 5.6 ids
+- web-search collection behavior/call count unchanged
+- gpt-image-2 remains unchanged
+
+### Drift/static
+- no targeted runtime `gpt-5.6-luna` / `gpt-5.6-sol`
+- no social text-model literals outside policy
+- unrelated G2/news/MIC paths are not accidentally rewritten
+
+Run relevant:
+- social-mobile-consult tests;
+- brand_post_generator tests;
+- AI Lab scheduled brand post tests;
+- x-test-post focused/full feasible Deno suite;
+- static/invariant test;
+- deno check/lint on changed files;
+- git diff --check;
+- added-line secret scan.
+
+No real OpenAI, X, DB mutation or provider calls.
+
+## Production / deploy / merge
+
+Forbidden in this G3:
+- Edge deploy;
+- production DB read/write;
+- migration/history apply;
+- X post;
+- model/provider live smoke call;
+- secret/config mutation;
+- PR merge.
+
+Create/update a dedicated PR and stop for K3.
+
+At K3:
+- verify exact changed files and CI;
+- decide merge;
+- normally **no Codex review** is needed if changes are only centralized model policy/model ids/costs/types/tests and no Auth/DB/permission boundary changed;
+- if the implementation unexpectedly changes retry/security/publish behavior, K3 may allocate one focused review.
+
+## Completion report
+
+Include:
+- fresh main / branch / PR / head;
+- every targeted runtime model before -> after;
+- central policy design;
+- model-id literal drift test;
+- cost-rate proof;
+- POSTONA proof;
+- AI Lab proof;
+- Kabumori X proof;
+- G2/G4/G5 overlap check;
+- tests;
+- production mutation/deploy/real OpenAI/X = 0;
+- remaining deployment functions that must be updated later;
+- whether any review is actually needed.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+Recommended model: **Opus5.5（高）**.
+
+---
+
+# Previous G3 task — preserved history
+
+- task_id: x-social-mobile-pr41-acl-corrective-20261007
+- owner: claude
+- slot: claude-3
+- status: done
+- next_owner: none
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: bounded security corrective / effective column privileges / exact RPC ACL
+- target_pr: 41
+- previous_head: 280aa0f83d4f039ba3e43f32da202a91fd2333f2
+- h2_review: x-social-mobile-pr41-live-generation-security-review-20261007
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## C2 accepted findings
+
+H2 reviewed exact PR #41 head:
+`280aa0f83d4f039ba3e43f32da202a91fd2333f2`
+
+Verdict: **CHANGES REQUIRED**.
+
+Only two blocking findings are in scope for this corrective.
+
+### R1 — P2 effective column privilege drift
+
+Target migration:
+`supabase/migrations/20261006160100_social_mobile_publish_settings_reader.sql`
+
+Current postcondition checks table privilege but can miss column-level grants.
+
+Reproduced H2 case:
+- an effective column SELECT on `social_mobile_content_settings.settings` is granted to service_role before migration;
+- table-level SELECT remains false;
+- migration currently COMMITs;
+- service_role can directly read settings rows cross-brand, bypassing the narrow reader.
+
+Required correction:
+- migration must fail closed if service_role has **any effective column privilege that violates the intended table denial**, including privilege inherited through another role or PUBLIC;
+- inspect every live column, not only `settings`;
+- cover at least SELECT / INSERT / UPDATE / REFERENCES or the full set of column privileges PostgreSQL exposes for this relation;
+- preserve legitimate authenticated client privileges from PR81; do not globally revoke/repair unrelated ACLs;
+- do not silently normalize unknown column ACL drift;
+- refusal must roll back the migration completely;
+- reader must remain absent after refused apply.
+
+Required adverse fixtures:
+- direct service_role column SELECT;
+- inherited service_role column SELECT;
+- PUBLIC-derived column SELECT where effective for service_role;
+- at least one column UPDATE/DML drift case;
+- each must refuse atomically.
+
+### R2 — P1 unexpected default/inherited EXECUTE
+
+Target migrations:
+- `20261006160000_vault_account_brand_post_completion.sql`
+- `20261006160200_x_account_publish_authority.sql`
+
+Current source revokes only known roles.
+Unknown function default ACL grantees can survive CREATE FUNCTION.
+If authenticated inherits that role, it can effectively execute service/operator-only RPCs.
+
+H2 reproduced:
+- authenticated could call `set_x_account_publish_authority(...enabled...)`;
+- authenticated could call `complete_vault_account_brand_post(...)`;
+- both migrations COMMIT instead of refusing.
+
+Required correction for every privileged function created by these two migrations:
+- exact signature and routine kind;
+- no unexpected overload/procedure collision;
+- explicit safe owner;
+- fixed safe search_path;
+- exact direct ACL;
+- no unexpected grantee;
+- no grant option;
+- exact effective EXECUTE matrix;
+- PUBLIC/anon/authenticated must not gain effective EXECUTE;
+- service_role must have only the intended EXECUTE;
+- unsafe application-role inheritance must refuse;
+- unknown default EXECUTE grantee must cause atomic refusal;
+- do not change global ALTER DEFAULT PRIVILEGES;
+- do not change role memberships;
+- do not broadly grant/revoke unrelated objects.
+
+Prefer the already-reviewed robust ACL pattern used in the PR76/reader hardening where applicable, but do not copy assumptions blindly.
+
+Required adverse fixtures:
+- unknown default EXECUTE;
+- authenticated inherits unknown default grantee;
+- anon inherits unknown default grantee;
+- grant option;
+- unexpected direct grant;
+- unknown overload/procedure;
+- unsafe owner/creator;
+- verify failed migration leaves no partial table/function/ACL mutation.
+
+Behavioral proof must explicitly show:
+- authenticated setter call is refused;
+- authenticated completion call is refused;
+- service_role intended calls still work in the clean graph.
+
+## Preserve accepted PR41 behavior
+
+Do not redesign or reopen already-passed areas unless these ACL corrections affect them:
+
+- narrow reader tenant binding;
+- no direct settings-table read in runtime/authority paths;
+- missing row/manual_review = no publish;
+- `auto_post_preference` only;
+- generic `social_mobile_user_v1` dispatcher;
+- PR76 pre-send guard;
+- authority pre-generation + immediately pre-X;
+- PR78 remembered settings/persona -> live generation;
+- NG/length/duplicate gates;
+- exact account/brand binding;
+- terminal/non-replayable confirmed X completion;
+- AI Lab / Kabumori paths unchanged;
+- G5 entitlement enforcement still not implemented here.
+
+## Freshness / G4 / G5
+
+1. Read current ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK / H2 report.
+2. Fresh fetch current main and PR #41.
+3. Use a new independent G3 worktree based on `/Users/yuya/Developer/kabumori-fresh`.
+4. Preserve fresh-main corrections that landed after the prior PR41 integration, including test/static corrections.
+5. Read current G4 and G5 TASKs for conflict only.
+6. G4 is a separate chat-owned X slot; do not alter it.
+7. G5 owns common-account Auth/session/enforcement/deletion semantics. Do not touch its app/migration/RPC files.
+8. If current main now overlaps the PR41 source/migration files materially, STOP and report before editing.
+
+## Tests
+
+Rerun only what is needed plus bounded regressions:
+
+- new R1 column ACL adverse matrix;
+- new R2 function ACL/default/inheritance adverse matrix;
+- existing reader behavior;
+- existing publish authority behavior/race;
+- existing completion behavior;
+- x-test-post focused runtime;
+- PR76 guard regression;
+- PR78 memory-to-live generation;
+- AI Lab/Kabumori bounded regression;
+- migration invariants;
+- `git diff --check`;
+- added-line secret scan.
+
+No need to rerun unrelated broad suites unless a changed shared helper requires it.
+
+## Safety
+
+Forbidden:
+- production read/write;
+- migration/history apply;
+- Edge deploy;
+- PR merge;
+- real X/OpenAI;
+- Auth/Vault/OAuth/Cron mutation;
+- publish-authority activation;
+- G5 entitlement enforcement.
+
+## Completion
+
+Update PR #41 branch normally; no force-push.
+
+Report:
+- old/new head;
+- exact files changed;
+- R1 correction and direct/inherited/PUBLIC column ACL proofs;
+- R2 correction and effective EXECUTE/default ACL proofs;
+- clean-graph intended permissions;
+- atomic rollback proofs;
+- bounded runtime regression results;
+- G4/G5 overlap check;
+- production/deploy/merge/real X/OpenAI = 0.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+### Review policy
+
+Because H2 found concrete P1/P2 in the same security boundary, one **focused rereview of only R1/R2** is required after correction.
+
+Do not repeat the full PR41 review if unchanged live/runtime behavior is covered by bounded regression.
+
+Recommended reviewer after K3: **Sol（高）**.
+
+Recommended Claude model: **Opus5.5（高）**.
+
+## Report — x-social-mobile-pr41-acl-corrective-20261007
+
+- result: **PASS candidate (source-only)** — R1・R2 を修正。PR #41 は open のまま、GitHub: MERGEABLE。本番の読み書き 0 / migration・履歴の適用 0 / deploy 0 / merge 0 / 実 X・OpenAI 0 / 投稿権限の有効化 0。
+- PR41 head: 旧 `280aa0f83d4f039ba3e43f32da202a91fd2333f2` → 新 `c509117f8addf5a8687d60d9c18ae271b2c1777c`。内訳は、最新 main の通常 merge `f810d188`（PR97 のテスト・スナップショット修正を含む）+ 修正 1 コミット。rebase / force-push なし。
+- worktree: 新規 `/Users/yuya/Developer/kabumori-g3-pr41-acl`（kabumori-fresh 由来）。
+- G4 / G5: G4 は done（docs のみ）。G5 は PR #95（アプリの認証・登録ファイル）で、今回の変更ファイルとの重なりは 0（機械的に確認）。main 側でも PR41 の対象ファイル・migrations への変更なし。
+
+### 変更ファイル（修正コミット `c509117f`）
+- `supabase/migrations/20261006160000_vault_account_brand_post_completion.sql`（R2）
+- `supabase/migrations/20261006160100_social_mobile_publish_settings_reader.sql`（R1 + 関数 ACL の厳密化）
+- `supabase/migrations/20261006160200_x_account_publish_authority.sql`（R2、テーブルを含む）
+- `supabase/tests/x_account_stage3b_base_fixture.sql`（新規。pilot runner の共通の土台を切り出し、内容は同じ）
+- `supabase/tests/x_account_refresh_pilot_run.sh`（上の fixture を読み込むだけに変更）
+- `supabase/tests/x_account_stage3b_acl_adverse_run.sh`（新規。異常系一式）
+関数本体・TS ランタイム・x-test-post・PR76 / PR78 / AI Lab / Kabumori のコードは無変更。
+
+### R1 の修正（設定テーブルの列単位の権限）
+- reader migration の作成前と作成後の両方で、service_role が設定テーブルに対して実際に持つ権限を検査する。対象はテーブル単位（SELECT / INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER、PG17 以降は MAINTAIN も）と、**すべての列**の SELECT / INSERT / UPDATE / REFERENCES（`has_column_privilege`）。直接の付与、別ロールからの継承、PUBLIC 経由のいずれも含む。
+- 1 つでも見つかれば `PUBLISH_SETTINGS_READER_PRECONDITION_SERVICE_ACCESS` で全体を取り消す。見つけた付与を勝手に直すことはしない（テストで、付与が残っていることも確認）。authenticated の PR81 のクライアント権限には触れない。
+- 証明（それぞれ全体が取り消され、カタログは変化なし、reader は存在しない）:
+  - service_role への列 SELECT の直接付与（settings 列）
+  - 継承による列 SELECT（persona_profile 列を別ロールに付与し、そのロールを service_role に付与）
+  - PUBLIC への列 SELECT（brand_id 列）
+  - 列 UPDATE（persona_confirmed 列）
+  - 列 INSERT（brand_id, settings 列）
+  - 列 REFERENCES
+  - テーブル DELETE
+- 問題がない状態: 適用でき、authenticated の列ごとの S / I / U とテーブル ACL が適用前後で完全に同じ。
+
+### R2 の修正（デフォルト権限・継承による実行権限）
+3 本の migration の、権限を持つすべての関数に同じ型の検査を入れた（completion / reader / check / set）。
+- 作成前:
+  - 同じ名前の routine が、どの種類・どの引数でも存在しない（overload・procedure の衝突は拒否）
+  - anon / authenticated / service_role のロールが存在する
+  - **適用するロールは superuser ではなく**、対象テーブルの所有者である（completion: scheduled_posts と social_accounts、authority: social_accounts、reader: 設定テーブル）
+  - anon / authenticated が所有者や service_role を継承していない
+- 作成後:
+  - 関数は 1 つだけで、通常の関数（prokind f）
+  - SECURITY DEFINER / INVOKER の区別が想定どおり（check は INVOKER）
+  - 所有者が想定どおりで、`search_path=""`
+  - 直接の ACL が「所有者 + service_role の EXECUTE 1 件（再付与権なし）」だけ。PUBLIC やその他の付与先がない
+  - 実際の実行権限: anon / authenticated は不可、service_role は可
+  - それ以外の非 superuser ロールは、所有者か service_role を継承している場合しか実行できない
+- 投稿権限テーブル（`x_account_publish_authority`）:
+  - 所有者が同じで、RLS が有効
+  - 直接の ACL は「所有者 + service_role の SELECT 1 件（再付与権なし）」だけで、列単位の付与は 0
+  - 実際の権限: anon / authenticated はテーブル・列とも 0、service_role は SELECT だけで書き込みは 0
+  - その他のロールは、所有者経由（全権限）か service_role 経由（SELECT のみ）だけ
+  - PostgreSQL の組み込みの全データ用ロール（pg_read_all_data / pg_write_all_data / pg_maintain）とその継承者は、DB 全体の管理用の付与なので最後の走査からだけ外した。app ロールの検査は、組み込みロール経由も含めて別に行っている。
+- 知らない付与先は「黙って外す」のではなく、ファイル全体を取り消して拒否する。失敗理由はコードで区別した（`…:DIRECT_ACL` / `:EFFECTIVE` / `:TABLE_DIRECT_ACL` など）。
+- 既知のロール（service_role）に付いた再付与権は、明示的な revoke / grant で普通の EXECUTE に戻る（テストで、再付与権が残らないことを確認）。
+- グローバルな ALTER DEFAULT PRIVILEGES・ロールの membership・関係のないオブジェクトの権限は変更しない。
+
+### デフォルト権限・継承についての証明（`x_account_stage3b_acl_adverse_run.sh`）
+completion / authority / reader それぞれに、次を実行した（3 × 9 = 27 件）:
+- 知らないロールへのデフォルト EXECUTE
+- authenticated がそのロールを継承
+- anon がそのロールを継承
+- そのロールへの再付与権つき付与
+- 同じ名前の overload
+- 同じ名前の procedure
+- superuser が適用
+- 所有者でないロールが適用
+- authenticated が service_role を継承
+
+これに加えて、authority のテーブルについて「知らないロールへのデフォルトの INSERT / UPDATE を authenticated が継承」した場合の 1 件。どれも拒否され、カタログ全体の指紋（default ACL・public の関数とテーブルと列の ACL・app ロールの membership）が適用前と完全に同じで、テーブルも関数も残らない。
+- 修正前のファイルで同じテストを実行すると、R1 は「列単位の付与があるのに適用された」、R2 は「知らないデフォルト EXECUTE があるのに適用された」で失敗する。テストが H2 の再現を検知することを確認した。
+- 「authenticated が所有者を継承」は、fixture の所有者がすでに authenticated のメンバーで PostgreSQL が循環を拒むため作れない（migration 側の検査はある）。
+
+### 問題がない状態で意図どおりの権限
+anon と authenticated は、次の 5 つの操作がすべて 42501（permission denied）になる。投稿権限の行は 0 件のままで、投稿は running のまま。
+- setter で `enabled` にする
+- completion を呼ぶ
+- check を呼ぶ
+- reader を呼ぶ
+- 投稿権限テーブルに直接 INSERT する
+
+service_role の結果:
+- setter → `enabled`
+- completion → `fingerprint_persisted=true`
+- 投稿権限テーブルへの直接 UPDATE → 42501
+
+### 全体が取り消されることの証明
+27 + 8（R1）= **35 件の拒否すべて**で、カタログの指紋が一致し、Stage 3B の routine と権限テーブルが残っていないことを確認した。R1 では、見つけた付与を勝手に直していないことも確認した。
+
+### 範囲を絞った回帰テスト
+- 使い捨て PostgreSQL 17（UTF8）、既存の pilot runner: PILOT_BEHAVIOR / PUBLISH_AUTHORITY_BEHAVIOR / PUBLISH_SETTINGS_READER_BEHAVIOR / PILOT_RACE / PUBLISH_RACE / CLEANUP すべて PASS。completion・投稿権限・reader の挙動と競合テストを含む。
+- 異常系 runner: `STAGE3B_ACL_ADVERSE_PASS`（拒否 35 件 + 再付与権の正規化 + 問題がない状態）。
+- x-test-post 全体 534/534（PR76 の送信前ガード・Vault の更新の権限を含む）。
+- 範囲を絞った Deno テスト 63/63: PR41 の dispatcher（PR78 の記憶 → 本番生成の指示文を含む）、brand generator（AI Lab・Kabumori のハッシュタグ）、AI Lab の予約投稿、設定、phase15 の静的検査、migration の不変条件。
+- `_shared` 全体 436/436（最新 main の PR97 修正が入り、以前の既存の失敗 3 件も解消）。
+- `deno check` クリーン、shell の構文チェック OK、`git diff --check` クリーン、追加行の秘密情報スキャン 0 件。
+
+### 本番・ゲート
+本番の読み書き 0、migration・履歴の適用 0、Edge deploy 0、PR merge 0、実 X / OpenAI 0、Auth / Vault / OAuth / Cron の変更 0、投稿権限の有効化 0、G5 の entitlement の実装 0。
+
+### 残る課題・次の推奨
+- TASK のとおり、**R1 / R2 だけを対象に Sol（高）の集中再レビューを 1 回**。PR41 全体の再レビューは不要（ランタイムは無変更で、回帰テストで確認済み）。
+- 本番適用の前のライブ preflight で、次を本番で確認する必要がある（今回は本番を読んでいない）:
+  - 適用するロール（postgres の想定）が superuser ではなく、scheduled_posts と social_accounts と設定テーブルの所有者であること
+  - app ロールの継承関係
+  - service_role が設定テーブルの列に権限を持たないこと
+- 以前の作業として起動された「既存テスト 3 件の修正」タスクは、main の PR97 で同じ修正がすでに入っている。重複していないか確認が必要。
+- status → review_required / next_owner → chatgpt。STOP。
+
+---
+
+# Previous G3 task — preserved history
+
 - task_id: x-social-mobile-pr41-live-generation-fresh-integration-20261006
 - owner: claude
 - slot: claude-3

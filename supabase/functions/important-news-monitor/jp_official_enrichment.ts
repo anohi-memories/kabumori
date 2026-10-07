@@ -29,7 +29,33 @@ export type EnrichmentFailure =
 
 export type EnrichmentResult =
   | { ok: true; text: string; finalUrl: string }
-  | { ok: false; reason: EnrichmentFailure };
+  | { ok: false; reason: EnrichmentFailure; status?: number };
+
+/**
+ * temporary: worth retrying on the next fetch (timeouts, network errors, 5xx / 429, redirect loops that may be transient).
+ * permanent: retrying cannot help (bad / foreign URL, 404 / 410 / 403 and other 4xx, non-HTML or oversize content, no text).
+ */
+export function classifyEnrichmentFailure(failure: { reason: EnrichmentFailure; status?: number }): "temporary" | "permanent" {
+  switch (failure.reason) {
+    case "timeout":
+    case "network_error":
+      return "temporary";
+    case "http_error":
+      // Without a status (redirect without a location) the page is unusable as it stands.
+      return failure.status === undefined ? "permanent" : failure.status >= 500 || failure.status === 429 || failure.status === 408 ? "temporary" : "permanent";
+    default:
+      return "permanent";
+  }
+}
+
+/** URLs that can never be read as HTML (PDF / XML / spreadsheets): known permanent before any HTTP. */
+export function isUnreadableOfficialUrl(raw: string): boolean {
+  try {
+    return /\.(?:pdf|xml|xlsx?|csv|zip)$/iu.test(new URL(raw).pathname);
+  } catch {
+    return true;
+  }
+}
 
 export const ENRICHMENT_USER_AGENT = "Kabumori-important-news/0.1 (read-only; contact@kabumori.app)";
 
@@ -172,7 +198,7 @@ export async function fetchOfficialPageText(
       }
       if (!response.ok) {
         await response.body?.cancel();
-        return { ok: false, reason: "http_error" };
+        return { ok: false, reason: "http_error", status: response.status };
       }
       const contentType = response.headers.get("content-type");
       if (!/^(?:text\/html|application\/xhtml\+xml)/iu.test(contentType ?? "")) {

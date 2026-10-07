@@ -1,3 +1,601 @@
+# Codex Task H1 — CURRENT TASK
+
+- task_id: common-account-v1-phase2-q1-final-rereview-20261007
+- owner: codex
+- slot: codex-1
+- status: done
+- next_owner: none
+- priority: critical
+- recommended_model: Sol（高）
+- target_pr: 95
+- target_head: ba35b642d30ce423a8683feffcd26aec325b45ee
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Perform the final focused exact-head rereview of PR #95 after G5's round-4 Q1 correction.
+
+Do not repeat the whole common-account review. Focus on the remaining queued-preparation cancellation boundary and verify previously accepted invariants did not regress.
+
+## Freshness / isolation
+
+1. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, ACTIVE_TASK, latest G5 Report, previous H1 Report, and this TASK.
+2. Use an independent H1 worktree/check-out from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #95.
+4. Require exact head `ba35b642d30ce423a8683feffcd26aec325b45ee`; if moved, STOP and report.
+5. K5 fresh main: `6717083c21300fe247736296430089cec8a6a397`; changed-file overlap with PR #95 was 0. Re-check at review time.
+6. No production access/write, migration apply, deploy, EAS, Auth/Storage/OAuth/Vault/Cron/X/provider mutation.
+
+## Q1 — must close
+
+Independently verify on actual candidate source:
+
+- a deferred auth task captures intended owner/login;
+- immediately before it advances generation/loading or enters acceptSession/prepareSession/transport, it confirms that owner/login is still the synchronously announced current owner;
+- if superseded, it returns before any automatic enrollment request can dispatch;
+- synchronous auth callback still performs no awaited Auth/Data/network work.
+
+Reproduce at minimum:
+1. A1 established -> SIGNED_IN(A2) queued -> SIGNED_OUT before A2 deferred dispatch -> **0 A2 automatic requests**, readiness remains null.
+2. A1 -> SIGNED_IN(A2) queued -> different user B before A2 deferred dispatch -> **0 A2 requests**, B only its own current preparation.
+3. A1 -> A2 queued -> same user fresh A3 before A2 dispatch -> **0 A2 requests**, A3 only its own.
+4. current A2 with no superseding event -> exactly one preparation.
+5. same-session TOKEN_REFRESHED -> no unnecessary duplicate start and intended single-flight preserved.
+
+Use the prior reviewer reproduction without weakening assertions where possible.
+
+## Regression boundary
+
+Confirm no concrete regression in:
+- original S1-T synchronous stale-readiness fence;
+- stable `userId + session_id` context;
+- S2 X queued pre-dispatch cancellation;
+- immutable captured-token Authorization;
+- strict response validation;
+- R1 automatic start never reactivates ended / explicit reactivation separation;
+- Kabumori positive-ready push/notification gate;
+- PR #94 root news-detail route in final merged tree compatibility;
+- X enrollment remains separate from X OAuth/workspace/credentials/publish authority.
+
+Do not reopen accepted areas without concrete evidence.
+
+## Evidence
+
+Run enough to independently support the verdict:
+- targeted actual AuthProvider tests and reviewer Q1/S1-T probes;
+- Kabumori app suite or focused + broad regression sufficient to catch provider/root regressions;
+- relevant X regression if shared code is implicated;
+- migration/source invariants only as needed to prove unchanged R1-R5;
+- diff/secret/log scan;
+- fresh merge-tree/overlap read-only check against current main.
+
+## Report
+
+Write `.agent/CODEX_REPORT.md` with:
+- exact reviewed head;
+- PASS or CHANGES REQUIRED;
+- Q1 disposition;
+- S1-T / TOKEN_REFRESHED disposition;
+- prior-boundary regression disposition;
+- independent test evidence;
+- fresh-main overlap/merge-tree result;
+- changed_files (review only);
+- production mutation/deploy/EAS = 0;
+- next recommendation.
+
+If PASS:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C1.
+
+If finding remains:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-07
+
+- Exact reviewed PR95 head: `ba35b642d30ce423a8683feffcd26aec325b45ee`; verdict **PASS** for the focused Q1 source review. No remaining blocker in this scope.
+- Deferred current-owner check runs before generation/loading/acceptSession/transport. SIGNED_OUT, newer user B and same-user fresh A3 yield zero obsolete A2 requests; current A2 prepares once; same-login refresh preserves single-flight.
+- Previous H1 scripts unchanged: 10/10 PASS. Additional reviewer Q1 supersession/control cases: 5/5 PASS. Two in-memory adverse variants are detected as expected (remove guard: 3 failures; user-only guard: A3 failure). No product patch.
+- AuthProvider 23/23, Kabumori app 390/390, X 221/221, migration source invariants 11/11; X tsc/lint and diff check PASS. Accepted shared/X/SQL/root boundaries byte-unchanged; no repeated DB/production/native work.
+- Fresh main `d648ec02` has zero product-file overlap; read-only merge-tree PASS. H1 changed only TASK/Report; production access/mutation/apply/merge/deploy/EAS = 0.
+- C1 may judge source merge readiness. Production start-intent migration apply/read-back and native release are separate later approval gates. **STOP for C1**.
+
+---
+
+# Codex Task — CURRENT TASK
+
+- task_id: common-account-v1-phase2-q1-final-rereview-20261007
+- owner: codex
+- slot: codex-1
+- status: review_required
+- next_owner: chatgpt
+- priority: critical
+- recommended_model: Sol（高）
+- target_pr: 95
+- target_head: ba35b642d30ce423a8683feffcd26aec325b45ee
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Final focused rereview of PR #95 after G5 round 4. The only intended blocker is Q1: an obsolete Kabumori deferred auth-preparation task must not dispatch automatic service enrollment after a newer auth owner is announced.
+
+## Required checks
+
+- Fresh-fetch main and require exact PR #95 head `ba35b642d30ce423a8683feffcd26aec325b45ee`.
+- Use an isolated H1 worktree from `/Users/yuya/Developer/kabumori-fresh`.
+- Re-check fresh-main overlap. Allocation-time main has unrelated important-news-monitor changes plus .agent changes; overlap with PR #95's 17 files is zero.
+- Verify deferred preparation compares its captured user+login owner (or equivalent ticket) with the synchronously announced current owner **before** generation/loading mutation, acceptSession/prepareSession, or enrollment transport dispatch.
+- Reproduce:
+  1. SIGNED_IN(A2) then SIGNED_OUT before A2 deferred work -> zero A2 automatic enrollment requests.
+  2. SIGNED_IN(A2) then newer user B before A2 deferred work -> zero A2 requests; only B may prepare.
+  3. Same-user fresh A3 supersedes A2 before deferred work -> zero A2 requests; only A3 may prepare.
+  4. Normal current A2 -> exactly one preparation.
+  5. Same-session TOKEN_REFRESHED -> retain safe single-flight/no duplicate.
+- Re-run prior unchanged H1 probes for S1-T, S1/S2 and refresh control.
+- Verify the synchronous auth-owner/readiness fence remains intact and no old login becomes ready.
+- Verify R1-R5, PR94 root news-detail and X OAuth separation remain unchanged.
+- No production access/write, migration apply, deploy, EAS, Phase3, Auth/Storage/OAuth/Vault/Cron/X/provider mutation.
+
+## Evidence
+
+G5 reports: Kabumori 390/390; AuthProvider 23/23; X 221/221; X tsc/lint PASS; both web exports PASS; start-intent DB runner 10 PASS markers; Phase1 20/20; migration invariants 11/11; unchanged H1 probes 10/10 PASS; mutation checks 11/11 detected.
+
+Do not trust counts alone. Inspect the actual source and rerun the Q1 timing boundary.
+
+## Verdict / completion
+
+Return PASS, PASS-WITH-NONBLOCKING-NOTES, CHANGES REQUIRED, or BLOCKED.
+
+PASS authorizes only C1 source merge/readiness judgment. Production migration apply and native release remain separate gates.
+
+Write the result to `.agent/CODEX_REPORT.md`, set status `review_required`, next_owner `chatgpt`, and STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Previous H1 task history — preserved
+
+# Codex Task — CURRENT TASK
+
+- task_id: common-account-v1-phase2-s1t-final-rereview-20261007
+- owner: codex
+- slot: codex-1
+- status: done
+- next_owner: none
+- priority: critical
+- recommended_model: Sol（高）
+- target_pr: 95
+- target_head: 13f4281f9514742bdee43ffc08834fea67449bf2
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Perform one final focused re-review of the G5 round-3 correction on PR #95. The only intended blocker is S1-T: Kabumori AuthProvider must synchronously invalidate stale readiness when Supabase notifies a superseding login/user/sign-out, before deferred preparation runs.
+
+## Required checks
+
+- Fresh-fetch main and require exact PR #95 head `13f4281f9514742bdee43ffc08834fea67449bf2`.
+- Use an isolated H1 worktree from `/Users/yuya/Developer/kabumori-fresh`.
+- Re-check product-file overlap with fresh main. Allocation-time main is one commit past the PR base and that commit changes only `.agent/tasks/CLAUDE_TASK_5.md`.
+- Verify auth callback synchronously records/fences the SDK-notified owner/login before any deferred task.
+- Verify changed user/login/SIGNED_OUT immediately invalidates service-ready/generation and cancels obsolete enrollment without awaiting Auth/Data API/network calls.
+- Verify result acceptance and serviceSession readiness are fenced by the synchronously current owner.
+- Reproduce the prior H1 provider-event timing cases without weakening them:
+  1. same user, fresh A2 session;
+  2. different user B;
+  3. SIGNED_OUT;
+  release old A1 result before deferred work and require every serviceSession to stay null.
+- Verify same-session TOKEN_REFRESHED control keeps intended single-flight and does not spuriously abort/restart.
+- Verify old getSession results cannot override a newer synchronous auth notification.
+- Verify reenroll cannot proceed from an obsolete owner/view.
+- Preserve accepted boundaries: S2 X queued cancellation; userId+session_id context model; R1-R5; PR94 root news-detail; X OAuth separation.
+- Do not apply the migration or touch production/deploy/EAS/Phase3/Auth/Storage/OAuth/Vault/Cron/X/provider state.
+
+## Evidence to independently rerun
+
+G5 reports:
+- Kabumori app 390/390;
+- AuthProvider 17/17;
+- X 221/221;
+- X tsc/lint PASS;
+- both web exports PASS;
+- start-intent DB runner 10 PASS markers;
+- Phase1 lifecycle 20/20;
+- migration invariants 11/11;
+- previous H1 provider-event-window 3 cases + control PASS unchanged;
+- former-probes 4/4 PASS;
+- mutation checks 9/9 detected.
+
+Do not trust counts alone; inspect actual source and reproduce the timing boundary.
+
+## Verdict
+
+Return PASS, PASS-WITH-NONBLOCKING-NOTES, CHANGES REQUIRED, or BLOCKED.
+
+A PASS only authorizes C1 source merge/readiness judgment. Production migration apply and native release remain separate gates.
+
+## Completion
+
+Write the result to `.agent/CODEX_REPORT.md`, set status `review_required`, next_owner `chatgpt`, and STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-07
+
+- Exact reviewed head: `13f4281f9514742bdee43ffc08834fea67449bf2`, PR95 OPEN/unmerged.
+- Verdict: **CHANGES REQUIRED**, one P2 queued-preparation cancellation gap. Original S1-T stale-readiness window is corrected: previous unchanged 3 timing cases + refresh control all PASS; former S1/S2 probes 4/4 PASS.
+- Two auth notifications before deferred preparation runs still dispatch the superseded login's automatic start after sign-out/new-user notification. Readiness stays fail-closed; this is not recurrence of old A1-ready or R1 silent reactivation.
+- Minimum correction: check synchronously announced current owner before the deferred task advances generation or calls prepareSession; add SIGNED_IN(A2) -> SIGNED_OUT/B-before-task tests requiring zero A2 requests, retain refresh/current-owner controls.
+- Shipped suites 390/17/221 PASS; X tsc/lint and both web exports PASS; local DB start-intent 10 / Phase1 20 PASS markers; migration invariants 11 PASS. Added actual-source probes 8 PASS / 2 FAIL (one cause); reviewer-only in-memory pre-dispatch guard makes both failures PASS. No product patch.
+- H1 changed only its TASK/Report. Production access/mutation, migration apply, merge, deploy, EAS/native release = 0.
+- STOP for C1. Focused corrective/re-review recommendation: **Sol（高）**; detail and reproducible evidence in `.agent/CODEX_REPORT.md`.
+
+---
+
+# Previous H1 task history — preserved
+
+# Codex Task — CURRENT TASK
+
+- task_id: common-account-v1-phase2-session-identity-final-rereview-20261007
+- owner: codex
+- slot: codex-1
+- status: done
+- next_owner: none
+- priority: critical
+- recommended_model: Sol（高）
+- type: focused auth/session cancellation security re-review
+- target_pr: 95
+- target_head: 1e8119e12457d9f6fbb8aef86991f44bf46f9cd6
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Re-review the second G5 corrective on PR #95. The only intended blockers are S1 same-user fresh-session reuse and S2 queued X enrollment after cleanup.
+
+## Required checks
+
+- Fresh-fetch main and require exact PR #95 head `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`.
+- Use an isolated H1 worktree from `/Users/yuya/Developer/kabumori-fresh`.
+- Verify runtime identity is `userId + stable login session_id`, not userId alone.
+- Verify local token claim parsing is used only as an ephemeral session discriminator; malformed/missing/foreign-sub/session_id inputs fail closed, while the server still authenticates RPCs.
+- Reproduce A1 explicit reactivation pending -> same user fresh A2 -> release A1 in both apps; A2 must not inherit consent/result or become ready.
+- Verify same-login token refresh preserves safe single-flight.
+- Verify X unmount/sign-out/superseded effect before queued dispatch sends zero obsolete enrollment requests.
+- Verify normal X mount sends exactly once and existing in-flight stale-result suppression still works.
+- Re-run enough R1-R5 regressions to ensure the prior server/RPC, strict payload, immutable Authorization, push-gate and cross-user fixes remain intact.
+- Preserve PR #94 root news-detail and X OAuth separation.
+- Current allocation-time main is three commits past PR merge-base, with changes only in .agent control files and zero product overlap; re-check at review time.
+- No production access/write, migration apply, deploy, EAS, Phase3, Auth/Storage/OAuth/Vault/Cron/X/provider mutation.
+
+## Evidence
+
+Independently inspect/reproduce the reported G5 results: Kabumori 390/390, AuthProvider 10/10, X 221/221, DB start-intent runner 10 PASS markers, Phase1 20/20, migration invariants 10/10, and former S1/S2 adversarial probes now PASS.
+
+## Verdict / completion
+
+Return PASS, PASS-WITH-NONBLOCKING-NOTES, CHANGES REQUIRED, or BLOCKED.
+
+PASS authorizes only C1 source merge/readiness judgment. It does not authorize production migration apply or native release.
+
+Write the result to `.agent/CODEX_REPORT.md`, set H1 status `review_required`, next_owner `chatgpt`, and STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-07
+
+- Exact reviewed PR #95 head: `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`; OPEN/unmerged at fresh read-back.
+- Verdict: **CHANGES REQUIRED**. S1's old same-user cache reuse is corrected, but one P2 Kabumori auth-event/deferred-task window still admits stale A1 readiness after a changed-login/sign-out notification. S2 X queued cancellation is corrected/PASS.
+- Shipped tests: Kabumori 390, AuthProvider 10, X 221; local DB start-intent 10 / Phase1 20 PASS markers; migration invariants 10; both web exports and X typecheck/lint PASS.
+- Independent actual-source probes: former S1/S2 plus same-session controls 5 PASS; new timing variants 3 FAIL, one root cause. No product fix performed in H1.
+- H1 changed only this TASK and `.agent/CODEX_REPORT.md`; production access/mutation, merge, deploy and native release = 0.
+- C1: hold PR95; return the focused synchronous auth-owner/readiness fencing correction and the before-deferred-task regression to G5. Preserve same-login refresh single-flight and already-corrected S2. Recommended corrective re-review: **Sol（高）**.
+- STOP for C1; detailed evidence and minimum correction are in the current H1 Report.
+
+---
+
+# Previous H1 task history — preserved
+
+# Codex Task — CURRENT TASK
+
+- task_id: common-account-v1-phase2-session-identity-final-rereview-20261007
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: critical
+- recommended_model: Sol（高）
+- type: focused auth/session cancellation security re-review
+- target_pr: 95
+- target_head: 1e8119e12457d9f6fbb8aef86991f44bf46f9cd6
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Independently review the second G5 corrective on PR #95 after C1 narrowed the remaining blockers to S1/S2.
+
+Previously accepted and not to be reopened without concrete regression evidence:
+- R1 server automatic-vs-explicit lifecycle semantics;
+- R5 strict response validation;
+- immutable captured-token Authorization transport;
+- cross-user A -> B re-enrollment isolation;
+- original Kabumori retry/push positive-ready gate;
+- PR #94 root news-detail integration;
+- X login/service-enrollment separation from posting OAuth/workspace/credentials/publish authority.
+
+G5 reports S1 and S2 fixed on exact head `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`.
+
+## Freshness / isolation
+
+1. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, ACTIVE_TASK, latest G5 Report, previous H1 reports, and this TASK.
+2. Use a fresh independent H1 worktree/check-out from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #95.
+4. Require exact PR head `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`. If moved, STOP.
+5. Current allocation-time main is 3 commits past PR merge-base `2f3b1ea9...`; those commits changed only `.agent/tasks/CLAUDE_TASK.md` and `.agent/tasks/CLAUDE_TASK_5.md`, with zero product-file overlap. Re-check freshness/overlap at review time.
+6. No production access/write, migration apply, deploy, EAS, managed Auth/Storage/OAuth/Vault/Cron/X/provider mutation.
+
+## Focus S1 — stable login-session identity
+
+Verify the new session-context model is safe and actually closes the previous same-user fresh-login defect.
+
+Independently inspect/reproduce:
+- `loginSessionIdOf(userId, token)` derives only ephemeral local login identity and does not become an authorization source.
+- JWT parsing is bounded/fail-closed: three segments/base64url decode, exact `sub === userId`, valid UUID `session_id`; malformed/missing/foreign-sub/session id fails closed and sends no enrollment request.
+- Server still authenticates every actual RPC using the captured token; local unverified claim parsing must never substitute for server authentication.
+- cache/single-flight, explicit reactivation intent, view state, result acceptance, Kabumori serviceSession and X ready state are keyed/validated by stable login context, not merely userId.
+- A1 explicit ended reactivation held -> same Auth user fresh login A2 -> release A1: A2 must not become ready in either app and must not inherit A1 consent/result.
+- sign-out -> same-user login and PASSWORD_RECOVERY/new-session variants behave similarly.
+- already-sent A1 may finish under A1, but its result cannot certify A2.
+- same-login token refresh with the same session_id does not cause unnecessary extra enrollment/re-enrollment or break single-flight.
+- token/JWT/session identifiers are not logged or persisted.
+
+Be alert for a false sense of security from parsing an unverified JWT locally. It is acceptable only as a cache/session-generation discriminator while the server validates the captured JWT on RPC.
+
+## Focus S2 — queued X task cancellation before dispatch
+
+Independently reproduce actual ServiceEnrollmentGate timing:
+- mount/effect queued, then unmount before microtask flush -> zero enrollment request;
+- sign-out before dispatch -> zero;
+- same/different-user fresh-session supersedes effect before dispatch -> obsolete task sends zero, current task at most once;
+- obsolete queued task cannot recreate gate/singleton state after cleanup;
+- normal mount dispatches exactly once;
+- existing in-flight abort/stale-result suppression remains correct.
+
+Cancellation/current-context checks must happen **before** entering ensure/transport dispatch, not only after.
+
+## Regression gates
+
+Re-run enough existing evidence to ensure S1/S2 changes did not reopen earlier accepted boundaries:
+- R1 service-start-intent SQL behavior/lock races;
+- R2 cross-user and double-tap isolation;
+- R3 Kabumori retry/push positive-ready behavior;
+- R4 immutable Authorization/no mutable-current-token substitution;
+- R5 strict malformed payload rejection;
+- no `ensure_my_profile` active bootstrap bypass;
+- X enrollment does not create OAuth/workspace/credential/publish state;
+- PR #94 root news-detail remains preserved.
+
+Review the unchanged forward migration source but do not apply it.
+
+## Required evidence
+
+Independently rerun/reproduce as practical:
+- Kabumori app enrollment tests;
+- actual AuthProvider-focused Node tests;
+- X tests including actual ServiceEnrollmentGate;
+- H1 prior adversarial S1/S2 reproductions with corrected fixtures;
+- same-session refresh controls;
+- X typecheck/lint;
+- both web exports;
+- service-start-intent local PostgreSQL runner;
+- Phase 1 lifecycle regression;
+- migration source invariants;
+- git diff --check + secret/PII/log scan.
+
+G5 reports at head 1e8119:
+- Kabumori 390/390;
+- AuthProvider 10/10;
+- X 221/221;
+- service-start-intent runner 10 PASS markers;
+- Phase1 20/20;
+- migration invariants 10/10;
+- H1 former S1 X / S1 Kabumori / S2 probes now PASS.
+
+Do not accept counts alone; validate actual source behavior.
+
+## Verdict
+
+Return one of:
+- PASS
+- PASS-WITH-NONBLOCKING-NOTES
+- CHANGES REQUIRED
+- BLOCKED
+
+PASS means source is safe for C1 merge/readiness judgment only. It does **not** authorize production migration apply, native build/release, deploy, Phase 3, or production writes.
+
+If blocker remains, do not edit product source in H1; report minimum correction.
+
+## Completion / C1
+
+Write `.agent/CODEX_REPORT.md` with:
+- exact head;
+- verdict/findings;
+- S1 disposition;
+- S2 disposition;
+- local JWT/session-id parsing safety disposition;
+- same-session refresh disposition;
+- R1-R5 regression disposition;
+- current-main/PR compatibility;
+- tests/evidence;
+- production mutation=0;
+- merge recommendation;
+- exact next action.
+
+Then status -> review_required; next_owner -> chatgpt; STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Previous H1 task history — preserved
+
+# Codex Task — CURRENT TASK
+
+- task_id: kabumori-pr99-editorial-specificity-focused-review-20261007
+- owner: codex
+- slot: codex-1
+- status: done
+- next_owner: none
+- priority: high
+- recommended_model: Luna（高）
+- type: focused runtime-delivery review / prompt specificity / WARN-only telemetry
+- target_pr: 99
+- target_head: cd33b1f22f532be9273d63f0f42f0a0d9c1de156
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Focused independent review of PR #99 after the 2026-10-06 natural close observation showed PR #87's three points were factually safe but too generic.
+
+This review is intentionally narrow. Do not re-review unrelated market-report architecture.
+
+## Freshness / isolation
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / G2 latest Report / this TASK.
+2. Use a fresh independent H1 worktree/checkout from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #99.
+4. Require exact head `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`; moved head => STOP.
+5. Allocation-time check: PR open/unmerged; main is 3 commits ahead of PR base and changed-file overlap with the 10 PR files = 0. Re-check before verdict.
+6. H2 owns PR #41 security review. Do not touch H2 files/worktree.
+
+## Focus A — prompt specificity
+
+Verify:
+- copyable finished example sentences were removed from the model prompt;
+- morning/close roles remain correct without rigid templating;
+- day-specific concrete entities/events are required;
+- generic headlines such as "ニュースを確認" are discouraged without creating a Hard delivery block;
+- safely evidenced milestones/thresholds may appear in headlines;
+- unsupported claims such as "史上最高" / "初めて" are not encouraged unless actually supported;
+- morning does not assert completed Tokyo-session movement;
+- close does not assert future outcomes.
+
+## Focus B — WARN-only specificity telemetry
+
+Verify:
+- `X_POINTS_GENERIC:<n>` and existing `X_POINTS_*` remain telemetry/WARN only;
+- generic detection does not become a Hard reject;
+- generic detection does not itself trigger quality rewrite;
+- concrete headlines with real entities/events/milestones are not obviously overflagged;
+- the 10/6 observed generic three points are detected;
+- metric-recap logic still treats normal value recaps as recap while allowing genuine milestone language.
+
+## Focus C — rewrite threshold runtime semantics
+
+This is the main reason for independent review.
+
+PR #99 changes X-only shortness rewrite behavior so:
+- `X_POST_SHORTER_THAN_TARGET` remains recorded below the target;
+- only X output below 300 chars triggers rewrite based on X-shortness;
+- omission/other quality conditions remain unchanged;
+- App-story shortness behavior remains unchanged.
+
+Independently verify:
+- this reduces unnecessary calls rather than creating a new call path;
+- a safe ~387-char X report can deliver without rewrite if App/other conditions are good;
+- <300-char X still rewrites;
+- missing required sections still rewrites;
+- call ceiling remains generation 2 + Fact 2 = max 4;
+- safe-original fallback remains intact;
+- no condition accidentally turns short but materially incomplete X into accepted output when omission guards should catch it.
+
+Treat this as a bounded delivery-policy change, not a reason to reopen Hard Fact design.
+
+## Focus D — rejection diagnostics
+
+Verify:
+- `rejection_reasons` stores bounded fixed classifications only;
+- no raw model body, quoted issue text, user content, secret/token, or unbounded strings are persisted;
+- local/Fact rejection classifications are deterministic enough for false-reject diagnosis;
+- schema migration is not required for the existing diagnostics jsonb;
+- adding diagnostics does not alter accept/reject decisions.
+
+## Focus E — Hard boundary / regressions
+
+Confirm no Hard semantics changed:
+- date/session/value/sign/stale;
+- 1306 identity;
+- refs;
+- unsupported causality;
+- false broad absence;
+- exactly 3 points;
+- safe-original fallback.
+
+Run/inspect enough evidence for:
+- new editorial specificity tests;
+- editorial points/session-date/presentation/causal/quality regressions;
+- market-report-analysis full suite;
+- personalized/X shared/data-packet/shared regressions as appropriate;
+- Deno check/lint on changed runtime;
+- git diff --check.
+
+Document pre-existing lint separately.
+
+## Safety
+
+Review only. No product-source fixes in H1.
+Forbidden:
+- PR merge;
+- Edge deploy;
+- manual report/retry;
+- DB/RPC/migration/Cron/gate mutation;
+- Auth/Vault/secret access;
+- X/app notification;
+- production access/mutation.
+
+If a concrete blocker exists, return CHANGES REQUIRED to ChatGPT/G2.
+
+## Completion / C1
+
+Prepend to `.agent/CODEX_REPORT.md`:
+- verdict PASS / CHANGES REQUIRED;
+- exact reviewed head;
+- freshness/no-overlap result;
+- findings A-E;
+- focused tests;
+- rewrite-threshold judgment;
+- diagnostics privacy/boundedness judgment;
+- source changes by H1 = 0;
+- production mutation = 0;
+- merge recommendation;
+- deploy recommendation;
+- next recommendation.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C1.
+
+Recommended model: **Luna（高）**.
+
+---
+
 # Codex Task — CURRENT TASK
 
 - task_id: common-account-v1-phase2-service-enrollment-corrective-rereview-20261006
@@ -181,6 +779,17 @@ Recommended model: **Sol（高）**.
 - Next: STOP for C1; ChatGPT returns focused S1/S2 correction to G5 and requests exact-head re-review. Recommended model: **Sol（高）** for C1/re-review. Source acceptance is not production migration or native release approval.
 
 ---
+
+## H1 completion — 2026-10-07 JST
+
+- result / verdict: **PASS-WITH-NONBLOCKING-NOTES** for exact PR #99 head `cd33b1f22f532be9273d63f0f42f0a0d9c1de156`.
+- Freshness: final `origin/main` `e241c29feb27fefb8d4f58adc19ed5dee59b1d25`; target TASK still current; PR #99 OPEN/unmerged, exact head unchanged. Main/PR changed-file overlap: 0. `mergeable=UNKNOWN`, so do not claim GitHub mergeability.
+- Review findings A-E: prompt specificity and morning/close constraints are consistent; generic specificity and milestone/recap checks are non-Hard telemetry; 430→300 semantics follow the bounded rewrite/fallback path; new rejection diagnostics persist fixed categories/counts only; reviewed hard-fact boundaries remain covered and unchanged.
+- Tests: market-report-analysis **160/160 PASS**; personalized/X shared/data-packet regressions **22/22 PASS**; focused `deno check --no-config` on all six changed TS files **PASS**; `git diff --check` **PASS**. Lint passes with existing `require-await` excluded; default lint reports one pre-existing `analysis_test.ts:34` async-without-await warning, outside this PR's changed lines.
+- Runtime probe: a safe 387-character packet delivered in 2 calls when no other rewrite condition applied; a <300-character draft actually took generate → Fact → generate → Fact, delivered generation 2; existing tests cover missing-section rewrites and safe-original fallback.
+- Diagnostics/privacy: `rejection_reasons` labels are mapped to a fixed allowlist and capped at 160 characters; no raw rejected copy is retained. No schema migration required. Added public-market fixtures had no private-key/token/email-pattern matches.
+- H1 source edits: 0. Production/DB/RPC/migration/Cron/Edge/manual report or X operations: 0. Merge/deploy: 0.
+- Recommendation: **eligible for ChatGPT C1 merge-readiness decision only**. No merge/deploy recommendation beyond C1; a natural-cycle observation is still needed to assess model-output quality. STOP for C1.
 
 # Previous H1 task history — preserved
 
