@@ -25,6 +25,7 @@ import {
   reportContentHash,
 } from "./analysis_logic.ts";
 import { persistTraces, promptHash, traceRows } from "./debug_trace.ts";
+import { auditDiagnostics } from "../_shared/kabumori_ai_models.ts";
 import {
   fetchWithTransportRetry,
   newTransportStats,
@@ -95,10 +96,15 @@ export function openAiRequester(
       }), { stats: retry.stats, sleep: retry.sleep, policy: retry.policy });
     if (!response.ok) throw new Error(`ANALYSIS_OPENAI_${step.toUpperCase()}_FAILED:${response.status}`);
     const raw = await response.json();
+    // A response cut off by max_output_tokens (reasoning tokens count against it) is reported as such instead of
+    // as an empty / invalid body. Only a failing response is reclassified: nothing that parsed before changes.
+    const incomplete = (raw as { status?: unknown })?.status === "incomplete"
+      ? `_INCOMPLETE:${String((raw as { incomplete_details?: { reason?: unknown } }).incomplete_details?.reason ?? "unknown").replace(/[^a-z_]/g, "").slice(0, 40) || "unknown"}`
+      : null;
     const output = extractOutputText(raw);
-    if (!output) throw new Error(`ANALYSIS_OPENAI_${step.toUpperCase()}_EMPTY`);
+    if (!output) throw new Error(`ANALYSIS_OPENAI_${step.toUpperCase()}${incomplete ?? "_EMPTY"}`);
     let payload: unknown;
-    try { payload = JSON.parse(output); } catch { throw new Error(`ANALYSIS_OPENAI_${step.toUpperCase()}_INVALID_JSON`); }
+    try { payload = JSON.parse(output); } catch { throw new Error(`ANALYSIS_OPENAI_${step.toUpperCase()}${incomplete ?? "_INVALID_JSON"}`); }
     const usage = (raw as { usage?: { input_tokens?: number; output_tokens?: number } }).usage ?? {};
     return {
       payload,
@@ -200,7 +206,9 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
     return respond({ status: "skipped", reason: claim?.outcome ?? "CLAIM_EMPTY", reportType, tradingDate });
   }
 
-  const diagnostics: Record<string, string> = { model: ANALYSIS_MODEL };
+  // `model` is the generation model (kept for existing readers); the rest is the audit tuple of each role:
+  // logical role, actual model, reasoning and the registry configuration version.
+  const diagnostics: Record<string, string> = { model: ANALYSIS_MODEL, ...auditDiagnostics() };
   const transport = newTransportStats();
   // Test-phase debug evidence: every generation of this invocation, kept whole. Written best-effort after the
   // run is settled (success, failure or exception) and never in the way of delivery.

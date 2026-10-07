@@ -937,6 +937,23 @@ PR #87 の最初の自然サイクル（2026-10-06大引け）の3ポイント�
 - 同時に直した指示文：朝刊の「前回の引け以降に確認できたニュース」（2026-09-17から）は、モデルが本文に写し、Factが「入力で確認できない時間関係」として止めた。朝刊・大引けとも「ニュースがいつ取得・公表されたかには、入力に書かれた日時の範囲でしか触れません」に置き換えた（入力のニュースには日時の項目が無い）。完成した例文は足していない。
 - 変えていないもの：Hardの判定、PR #99の記録（`X_POINTS_*`）と書き直しの条件（X 300字、アプリ700字）、安全な最初の版へのフォールバック、生成2＋Fact2の上限、packet の schema、consumer gate。
 
+### 15.7 Kabumori AI モデル registry（2026-10-07）
+
+Kabumori の共有朝刊・大引け（アプリと、同じ本文を使う Kabumori の X 朝刊・大引け）の**生成**と **Fact チェック**が使う OpenAI モデルを、ソースで管理する1か所にまとめた。POSTONA / social-auto-post（`_shared/social_ai_model_policy.ts`）、important-news-monitor、MIC、個人向けレポートは対象外。
+
+- 場所：`supabase/functions/_shared/kabumori_ai_models.ts`。呼び出し側は**論理ロール**で引く（生のモデルIDを書かない）：
+  - `kabumori.market_report.generate` → `gpt-6.1-sol` / reasoning `medium` / `max_output_tokens` 16,000
+  - `kabumori.market_report.fact` → `gpt-6.1-sol` / reasoning `low` / `max_output_tokens` 4,000
+  - 設定の版 `KABUMORI_AI_CONFIG_VERSION`（モデルや設定を変えるたびに上げる）。環境変数・DBによる上書きは**無い**（レビューを通らずに本番のモデルが変わらない）。未知のロールは固定コードの例外で、既定のモデルに黙って落ちない。
+- 2026-10-07 に公式ドキュメントで確認した事項（`developers.openai.com/api/docs/models/gpt-6.1-sol`、`/api/docs/pricing`、`/api/docs/guides/reasoning`）：モデルID `gpt-6.1-sol`、Responses API と Structured Outputs に対応、コンテキスト 1,050,000・最大出力 128,000、reasoning は `"reasoning": {"effort": …}` で `low` / `medium`（既定）/ `high` / `xhigh` / `max`（`none` と `minimal` は非対応）、reasoning トークンは出力として課金され `max_output_tokens` に含まれる。料金（標準・100万トークンあたり）：入力 $2 / キャッシュ入力 $0.10 / 出力 $10。入力が272Kトークンを超えるリクエストは入力 $4 / $0.20 / 出力 $15。
+- 変更点：旧 `gpt-5.6-luna`（low、10,000 / 1,500）から、生成は medium・Fact は low に。**出力上限を広げた**のは、reasoning を上げると reasoning トークンが上限を先に使い切るおそれがあるため（上限は費用の天井で、費用を増やさない）。実モデルでの reasoning の使用量は未観測なので、最初の自然サイクルで `output_tokens` と失敗コードを見る。
+- 費用（`estimateCallCostUsd`）：**リクエストごと**に、そのモデルの公式料金で計算（入力が272K超のリクエストは長文料金）。キャッシュ入力の割引は数えない（上限側の見積り）。価格が無いモデルは例外（0円扱いにしない）。旧モデル（luna）の料金は削除。
+- 監査メタデータ：`report_diagnostics` に、`ai_config_version`、`ai_generate_role` / `ai_generate_model` / `ai_generate_reasoning`、`ai_fact_role` / `ai_fact_model` / `ai_fact_reasoning`（成功・失敗の両方、DB変更なし）。実際のモデルは従来どおり `market_report_packets.model`・trace の `model` にも入る。**trace の1行ごとの `logical_role` / `config_version` の列は無い**（追加には migration が必要。G4/G5 の本番変更窓が動いている間は作らない。必要になったら `market_report_generation_traces` に `logical_role text` と `ai_config_version text` を足す別 migration）。
+- 途中打ち切りの区別：応答が `status = incomplete`（`max_output_tokens` 到達など）で本文が空または不正だった場合、`ANALYSIS_OPENAI_<STEP>_INCOMPLETE:<理由>` で報告する（従来は `_EMPTY` / `_INVALID_JSON`）。成功する応答の扱いは変えていない。
+- 一覧：`npm run kabumori-ai-models`（または `deno run --no-config --no-prompt scripts/kabumori-ai-models.ts [--json]`）。ネットワーク・環境変数・ファイルを使わず、OpenAI にも本番にも触れない。
+- 生のモデルID対策：`market-report-analysis/model_literal_guard_test.ts` が、この共有朝刊・大引けの実行コード（`market-report-analysis/*.ts` のテスト以外、`_shared/market_report_*`、`kabumori_voice`、`absence_claims`、`market-report-data-packet/session_logic.ts`、`x-test-post/shared_market_report_consumer.ts`）に `gpt-…` が現れたら、ファイルと行とリテラルを示して失敗する。registry、テスト、fixture、文書、他のプロダクトは対象外。
+- 変えていないもの：プロンプトと編集方針、Hard の判定、ちょうど3つ、PR #99 の記録、X 300字・アプリ700字の書き直し条件、`MAX_GENERATIONS=2`・最大4呼び出し、安全な最初の版へのフォールバック、PR #101 の trace（全量保持・非ブロッキング）。
+
 ## 付録: 監査に使った主な場所
 
 - `supabase/functions/x-test-post/index.ts` — `selectMarketContext` 1146、`morningFactBasis` 1535、`generateMorningReport` 1548、`closeFactBasis` 1983、`generateCloseReport` 2069、`evaluateKabumoriVoice` 2755、morning 分岐 3939、close 分岐 4119、close 失敗保存 4230

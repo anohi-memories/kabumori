@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { type Deps, handleRequest } from "./handler.ts";
+import { ANALYSIS_MODEL } from "./analysis_logic.ts";
 import { buildAnalysisInput } from "./analysis_input.ts";
 import {
   type GenerationRecord,
@@ -200,7 +201,7 @@ test("4. a successful run records its trace: selected for delivery, linked to th
   assert.equal(traceRowsWritten.length, 1);
   const [row] = traceRowsWritten;
   assert.deepEqual([row.stage, row.selected_for_delivery, row.report_packet_id, row.local_passed, row.fact_ran, row.fact_passed], ["delivered", true, PACKET, true, true, true]);
-  assert.deepEqual([row.source, row.report_type, row.trading_date, row.subject_ref, row.model], ["shared_market_report", "close", "2026-09-17", null, "gpt-5.6-luna"]);
+  assert.deepEqual([row.source, row.report_type, row.trading_date, row.subject_ref, row.model], ["shared_market_report", "close", "2026-09-17", null, ANALYSIS_MODEL]);
   assert.match(String(row.base_prompt_hash), /^[0-9a-f]{16}$/);
   assert.match(String(row.request_hash), /^[0-9a-f]{16}$/);
   assert.equal(openAiCalls(calls), 2);
