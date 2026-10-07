@@ -1,5 +1,328 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: x-social-ai-model-policy-gpt6-upgrade-20261007
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: source-only AI model upgrade / centralized social-post model policy / POSTONA + AI Lab + Kabumori X
+- production_mutation_allowed: false
+- deploy_allowed: false
+- merge_allowed: false
+
+## User decision
+
+This G3 owns **X auto-post AI only**.
+
+In scope:
+1. POSTONA / social-mobile
+2. 会社員AIらぼ / AI Lab automatic posts
+3. かぶモリ X automatic-post AI paths
+
+Out of scope:
+- Kabumori app market-report-analysis/personalized-report model migration owned by G2;
+- important-news-monitor / breaking-market model migration;
+- MIC;
+- unrelated app/backend AI;
+- image-generation model upgrades.
+
+Current user direction:
+- Luna current target = `gpt-6-luna`
+- Sol current target = `gpt-6.1-sol`
+- future model releases should be easy to adopt without searching dozens of runtime files.
+
+Official API pricing verified 2026-10-07:
+- `gpt-6-luna`: $0.10 / 1M input tokens, $0.50 / 1M output tokens
+- `gpt-6.1-sol`: $2.00 / 1M input tokens, $10.00 / 1M output tokens
+
+Do not use stale 5.6 pricing after the migration.
+
+## Current production/source inventory
+
+Production project: `stock-x-autopost`.
+
+Observed production:
+- `x-test-post` v136 contains `gpt-5.6-luna` and `gpt-5.6-sol`;
+- `social-mobile-brand-dry-run` v14 imports brand generator with `gpt-5.6-luna`;
+- `brand-post-dry-run` also uses the shared brand generator and therefore 5.6 Luna;
+- `social-mobile-consult` is **not deployed yet**; main source currently uses `gpt-5.6-luna`;
+- `social-mobile-history-learning` uses **no OpenAI text model**; it derives persona signals mechanically from bounded X history;
+- `social-mobile-publish-setting` uses no OpenAI model.
+
+Main source:
+- `supabase/functions/social-mobile-consult/logic.ts`: `gpt-5.6-luna`
+- `supabase/functions/_shared/brand/brand_post_generator.ts`: `gpt-5.6-luna`
+- `supabase/functions/x-test-post/index.ts`: many `gpt-5.6-luna` call sites plus selected `gpt-5.6-sol` escalation paths
+- `supabase/functions/x-test-post/report_voice_rewrite_logic.ts`: `gpt-5.6-luna`
+- `supabase/functions/x-test-post/useful_tip_generation_logic.ts`: 5.6 Luna/Sol model union
+- `supabase/functions/x-test-post/morning_greeting_logic.ts`: 5.6 Luna
+- `gpt-image-2` is image generation and is deliberately not part of this text-model migration.
+
+## Goal A — one source of truth
+
+Create a small shared X/social AI model policy module, preferred location:
+
+`supabase/functions/_shared/social_ai_model_policy.ts`
+
+A different nearby shared location is allowed only if import/tooling constraints make it materially safer.
+
+The purpose is that future model migration should normally require changing **one policy module**, not hunting literals throughout POSTONA / AI Lab / Kabumori X runtime.
+
+Design should separate:
+
+### Model catalog / tier
+
+At minimum:
+- FAST / routine text tier -> `gpt-6-luna`
+- QUALITY / Sol escalation tier -> `gpt-6.1-sol`
+
+Each text model entry should own:
+- API model id;
+- input price per 1M;
+- output price per 1M;
+- any capability metadata actually required by existing callers, but no speculative complexity.
+
+### Workload policy
+
+Use semantic workload names so callers do not know raw model ids.
+
+At minimum cover:
+- POSTONA consultation;
+- generic social-mobile/brand post generation;
+- AI Lab brand post generation;
+- Kabumori X default text generation;
+- Kabumori X web-search collection text model where part of x-test-post;
+- Kabumori X voice evaluation;
+- Kabumori X voice rewrite;
+- useful-tip base generation;
+- useful-tip quality escalation;
+- US premarket base/quality escalation or any equivalent existing Sol escalation.
+
+If multiple workloads intentionally share the same tier, map them explicitly.
+
+## Important policy constraint
+
+Do **not** introduce a silent unrestricted production environment-variable override that can change every live model without source review.
+
+The user's goal is easy future version upgrades, not an unaudited runtime switch.
+
+Preferred contract:
+- model ids/prices/workload mapping are centralized in one source-controlled policy;
+- future release changes the policy in one place and redeploys the relevant Edge Functions;
+- tests prove runtime files do not drift back to raw text-model literals.
+
+If there is already a project-standard reviewed config mechanism that is clearly safer, document before using it. Do not invent a broad dynamic override.
+
+## Goal B — actual model migration
+
+Within X/social-auto-post scope only:
+
+- every routine `gpt-5.6-luna` runtime call -> policy resolving to `gpt-6-luna`;
+- every existing `gpt-5.6-sol` quality/escalation runtime call -> policy resolving to `gpt-6.1-sol`;
+- if an X/social runtime path already uses a newer valid model, preserve it unless this policy should own it;
+- do not migrate non-X Kabumori app/report/news/MIC paths.
+
+### POSTONA
+
+Must cover:
+- `social-mobile-consult`;
+- generic `brand_post_generator`;
+- generic live scheduled-user generation added by merged PR #41;
+- social-mobile brand dry-run;
+- brand-post dry-run where it reuses the same generic brand generator.
+
+AI consultation should therefore launch for the first time on `gpt-6-luna`, never 5.6.
+
+### AI Lab
+
+AI Lab scheduled brand-post generation currently reaches the shared brand generator.
+Prove its generated text resolves to `gpt-6-luna`.
+
+Do not alter:
+- AI Lab topic claim/dedupe;
+- diary context;
+- X auth;
+- publish permission;
+- schedule/brand settings.
+
+### Kabumori X auto-post
+
+Update the **X auto-post AI calls in x-test-post and its direct shared helpers**, including:
+- normal text generation;
+- interaction posts;
+- useful tips;
+- morning/close/US-premarket legacy generator paths that remain inside x-test-post;
+- web-search collection model calls owned by x-test-post;
+- voice evaluation;
+- voice rewrite;
+- preview/test generation paths that use production text-model policy.
+
+Existing Luna->Sol escalation semantics remain the same; only the model tier target changes.
+
+Do not alter prompts, post schedules, X auth, publish gates, Fact/voice thresholds, retry count, call ceiling or output contract merely because the model id changed.
+
+## Goal C — cost/accounting correctness
+
+Replace 5.6-specific cost tables/types in X/social-auto-post scope with the shared policy/catalog.
+
+Requirements:
+- one cost helper reads the selected model's centralized token rates;
+- `gpt-6-luna` calculation uses 0.10 input / 0.50 output per 1M;
+- `gpt-6.1-sol` uses 2.00 / 10.00;
+- existing web-search per-tool-call fees remain separate and unchanged;
+- diagnostics/model_used fields must record the actual selected API id;
+- remove stale 5.6-only unions and comparisons;
+- do not silently report a 6-series call at 5.6 pricing.
+
+## Goal D — drift prevention
+
+Add a focused static/invariant test for the X/social-auto-post runtime scope.
+
+It should fail if:
+- `gpt-5.6-luna` or `gpt-5.6-sol` returns to targeted runtime source;
+- a raw social text model id such as `gpt-6-luna` / `gpt-6.1-sol` is newly hard-coded outside the central policy module, except a narrowly documented fixture/test case if unavoidable;
+- cost/type logic diverges from the policy.
+
+Do **not** scan unrelated G2/news/MIC source and fail on their separately-owned model decisions.
+
+`gpt-image-2` is not a violation.
+
+## Goal E — API compatibility
+
+Before changing source, confirm the current Responses API bodies used by these social/X paths are supported by:
+- `gpt-6-luna`;
+- `gpt-6.1-sol` for the paths that actually use Sol.
+
+Preserve current reasoning effort unless incompatible.
+If a 6.1 Sol request shape needs a mechanical compatibility adjustment, keep it minimal and add a test.
+
+No real OpenAI calls are allowed in this task.
+
+## Scope / likely files
+
+Allowed primary runtime:
+- `supabase/functions/_shared/social_ai_model_policy.ts` (new preferred)
+- `supabase/functions/social-mobile-consult/logic.ts`
+- `supabase/functions/_shared/brand/brand_post_generator.ts`
+- `supabase/functions/x-test-post/index.ts`
+- `supabase/functions/x-test-post/report_voice_rewrite_logic.ts`
+- `supabase/functions/x-test-post/useful_tip_generation_logic.ts`
+- `supabase/functions/x-test-post/morning_greeting_logic.ts`
+- directly related X/social model-policy tests
+
+Additional X/social runtime files may be changed only when fresh inventory proves they contain an actual text-model literal/type/cost dependency.
+
+Do not touch G2-owned market-report-analysis/personalized-reports model files.
+
+## Coordination / isolation
+
+1. Read ORCHESTRATION / ACTIVE_TASK / CURRENT_STATE / this TASK.
+2. Fresh-fetch `origin/main` from `/Users/yuya/Developer/kabumori-fresh`.
+3. Use a new independent G3 worktree.
+4. Read current G4 and G5 TASK/Report before editing.
+5. Current G4 provider-domain foundation must remain independent; do not edit its provider-domain files.
+6. G5 production migration work has project-wide production priority.
+7. This task is source-only: no production mutation window.
+8. Before push, fresh-fetch main and verify changed-file overlap with active G4/G5/G2.
+9. Any overlap with another slot's in-progress product file => STOP rather than overwriting.
+
+## Tests
+
+At minimum prove:
+
+### Central policy
+- POSTONA consult -> `gpt-6-luna`
+- generic/AI Lab brand generator -> `gpt-6-luna`
+- Kabumori X default/voice/rewrite -> `gpt-6-luna`
+- existing quality escalation -> `gpt-6.1-sol`
+- exact price calculation for both tiers
+- selected model id is emitted in diagnostics
+
+### POSTONA
+- consult request body model is policy-selected Luna
+- one call/send remains unchanged
+- brand generator request body model is policy-selected Luna
+- remembered content settings/persona flow unchanged
+- dry-run and live generic generator share the same policy
+
+### AI Lab
+- AI Lab scheduled generation still uses generic brand generator and therefore policy Luna
+- topic/dedupe/provider outcome behavior unchanged
+
+### Kabumori X
+- useful-tip Luna-first / Sol-escalation behavior unchanged semantically
+- US-premarket conditional Sol escalation unchanged semantically
+- voice evaluation/rewrite model updated via policy
+- morning/close/interaction/tip generation paths no longer embed old 5.6 ids
+- web-search collection behavior/call count unchanged
+- gpt-image-2 remains unchanged
+
+### Drift/static
+- no targeted runtime `gpt-5.6-luna` / `gpt-5.6-sol`
+- no social text-model literals outside policy
+- unrelated G2/news/MIC paths are not accidentally rewritten
+
+Run relevant:
+- social-mobile-consult tests;
+- brand_post_generator tests;
+- AI Lab scheduled brand post tests;
+- x-test-post focused/full feasible Deno suite;
+- static/invariant test;
+- deno check/lint on changed files;
+- git diff --check;
+- added-line secret scan.
+
+No real OpenAI, X, DB mutation or provider calls.
+
+## Production / deploy / merge
+
+Forbidden in this G3:
+- Edge deploy;
+- production DB read/write;
+- migration/history apply;
+- X post;
+- model/provider live smoke call;
+- secret/config mutation;
+- PR merge.
+
+Create/update a dedicated PR and stop for K3.
+
+At K3:
+- verify exact changed files and CI;
+- decide merge;
+- normally **no Codex review** is needed if changes are only centralized model policy/model ids/costs/types/tests and no Auth/DB/permission boundary changed;
+- if the implementation unexpectedly changes retry/security/publish behavior, K3 may allocate one focused review.
+
+## Completion report
+
+Include:
+- fresh main / branch / PR / head;
+- every targeted runtime model before -> after;
+- central policy design;
+- model-id literal drift test;
+- cost-rate proof;
+- POSTONA proof;
+- AI Lab proof;
+- Kabumori X proof;
+- G2/G4/G5 overlap check;
+- tests;
+- production mutation/deploy/real OpenAI/X = 0;
+- remaining deployment functions that must be updated later;
+- whether any review is actually needed.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+Recommended model: **Opus5.5（高）**.
+
+---
+
+# Previous G3 task — preserved history
+
 - task_id: x-social-mobile-pr41-acl-corrective-20261007
 - owner: claude
 - slot: claude-3
