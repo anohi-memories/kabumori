@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-2
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: focused PR #101 corrective / ACL / secret redaction / full diagnostic retention
