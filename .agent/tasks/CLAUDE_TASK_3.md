@@ -1,5 +1,225 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: ai-lab-topic-continuity-fix-20261007
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: urgent
+- recommended_model: Opus5.5（高）
+- type: company AI Lab production-post continuity bugfix / topic-pool capacity / safe fallback
+- production_mutation_allowed: false
+- deploy_allowed: false
+- merge_allowed: false
+
+## User decision
+
+会社員AIラボは、開発日記の題材や通常のevergreen題材が不足しても、`AI_LAB_TOPIC_POOL_EXHAUSTED` だけを理由に投稿を止めない。
+
+優先順位:
+1. 実際の最近の開発日記
+2. 個人開発・AI活用についての多様なevergreen
+3. それでも通常題材が不足する場合は、当たり障りのない「個人開発」「AIを使って作るときの気づき」「AIの進歩を使う側から感じること」等の継続用safe topic
+
+ユーザーの要求は「題材がなければ投稿を止める」ではなく、「安全で無理のない一般話題へフォールバックして投稿を続ける」。
+
+## Confirmed production root cause — read-only evidence
+
+2026-10-07 15:50 JST時点のproduction read-only確認:
+- `ai_salaryman_lab` は active/live、brand_post enabled。
+- posting_windows は1日10枠、全枠 `daily_probability=1.0`。
+- 2026-10-06: 10件予定、9 succeeded、22:19 JSTの10件目が `AI_LAB_TOPIC_POOL_EXHAUSTED`。
+- 2026-10-07: 10件予定、15:50時点で実行済み5件がすべて `AI_LAB_TOPIC_POOL_EXHAUSTED`、残り5件pending。
+- 失敗はOpenAI/X送信前。X障害・API残高・OAuthが直接原因ではない。
+- current production bundleのevergreenは7件のみ。
+- DB claim policyは同じevergreen seedを72時間、重なるgeneric themeを48時間cooldown。
+- 10/6にfresh diary 3件 + evergreen 6件がpublishedとなり、残り候補もcooldown/既publishで塞がった。
+- 10/7の新しい開発日記snapshotはmainにはあるが、現在のproduction x-test-post bundleには未反映。
+
+この容量設計では10投稿/日を継続できない。偶発障害ではなくcapacity bugとして直す。
+
+## Goal A — 3段階topic policy
+
+### Tier 1 — recent dev diary
+- 既存どおり、公開安全な直近開発日記を最優先。
+- 1 event_id = 1 published event の既存event-level dedupeは維持。
+- future/stale/sanitizer fail-closedを弱めない。
+
+### Tier 2 — diverse evergreen
+- 現在7件しかない `EVERGREEN_TOPIC_SEEDS` を大幅に拡充する。
+- **最低60件**の安定したtopic seedを用意する。
+- 同じ意味の言い換えだけで水増ししない。
+- カテゴリ例:
+  - 本業と個人開発の両立
+  - 小さく作る / 直す / 試す
+  - 仕様決め・やり直し・バグ修正
+  - AIへの指示の出し方
+  - 複数AIの役割分担
+  - UI/UXを実機で見る重要性
+  - テスト・安全確認・失敗からの学び
+  - コードが書けなくても作れる側の気づき
+  - AIの進歩で以前より出来ることが増えた実感
+  - 新しいAIを試すときの期待と戸惑い
+  - 自動化しても最後は人が判断する話
+  - モデル更新・性能向上を利用者目線で感じる話
+
+### Tier 3 — continuity-safe fallback
+- Tier 1/2が通常選択できない状況でも、投稿継続用のsafe topicsを候補末尾に必ず持つ。
+- Tier 3は上記60件の中の明確な continuity reserve 区分でも、別の内部配列でもよいが、DB claimの安全性を迂回しない。
+- 内容例:
+  - 今日少しだけ進める個人開発
+  - AIとの試行錯誤
+  - 便利になっても指示や確認は必要
+  - 最近AIの進歩が速いと感じる、という利用者目線の一般的な感想
+  - 自分の作業が少し楽になった/やれることが増えた、という一般論
+- 「本日○○が発表された」「最新モデルが○○を達成した」等の具体的な最近のAI事実を、検索・根拠なしで捏造しない。
+- このfixでは新しいWeb Search依存を追加しない。外部ニュース取得失敗で投稿継続まで止まる設計にしない。
+
+## Goal B — capacity proof
+
+安全策を雑に無効化して直さない。
+
+原則維持:
+- same evergreen seed: 72h cooldown
+- generic theme overlap: 48h cooldown
+- event-level claim/fencing
+- provider_started / ambiguous safety
+- X送信前claim
+- cross-brand fingerprint duplicate guard
+- content diversity guard
+- no resend on ambiguous/confirmed provider outcome
+
+evergreen数を増やすため、DB側 `claim_ai_lab_topic` のcanonical evergreen key/tag mappingもsourceと一致させる必要がある。
+
+必要なら新しいforward migration candidateで `CREATE OR REPLACE FUNCTION public.claim_ai_lab_topic...` のcanonical mapだけを拡張する。
+- table schema変更は原則不要。
+- existing function security/grants/search_path/argument validation/fencing/cooldown semanticsを弱めない。
+- G4のsocial_accounts schema taskには触れない。
+- production applyは禁止。このTASKはsource/migration candidateまで。
+
+### Mandatory simulation test
+
+「60個あるから多分大丈夫」では不可。
+
+少なくとも以下を自動テストで証明:
+- diary候補0件
+- 1日10投稿
+- 72h seed cooldown
+- 48h theme cooldown
+- **連続14日以上**
+- 各slotで最低1件claimable topicが存在し、`TOPIC_POOL_EXHAUSTED`にならない
+
+必要なら候補数・theme tags配置を調整し、実際のpolicyで成立させる。
+rotationが偏っても同一seedへ集中しないことも確認する。
+
+## Goal C — regression boundaries
+
+必須:
+- recent diary remains preferred over evergreen/fallback
+- one diary event is never published twice
+- evergreen seed cooldown remains enforced
+- theme cooldown remains enforced where tagged
+- simultaneous claim cannot publish same event twice
+- provider_started/ambiguous remains non-reopenable
+- pre-X generation rejection releases safely
+- X no-post typed failure behavior unchanged
+- X ambiguous outcome does not auto-retry
+- exact/cross-brand duplicate gates remain
+- generic fallback still uses AI Lab voice/profile
+- schedule generation remains 10 slots/day unchanged
+- no change to X OAuth/token/Vault/Auth/common-account/POSTONA settings
+- no change to Kabumori report/important-news/MIC paths
+
+## Goal D — source/DB parity
+
+If DB canonical evergreen map is expanded:
+- TS `EVERGREEN_TOPIC_SEEDS` / `EVERGREEN_THEME_TAGS`
+- DB `c_evergreen_tags`
+must remain exactly aligned.
+
+Add an invariant/static test so a future seed addition cannot update only one side.
+
+## Scope candidates
+
+Expected:
+- `supabase/functions/_shared/brand/ai_lab_dev_diary_context.ts`
+- related AI Lab topic tests
+- one new migration replacing `claim_ai_lab_topic` canonical evergreen mapping if required
+- migration/static/disposable proof tests directly related to this function
+
+Possible only if necessary:
+- `supabase/functions/_shared/brand/ai_lab_brand_post_store.ts`
+- `supabase/functions/x-test-post/index.ts`
+
+Do not touch:
+- G4 social_accounts migration candidate/files
+- G5 common-account native/Auth files
+- G2 market-report rollout files
+- POSTONA multi-social provider schema
+- unrelated X report generation/model policy
+- important-news/MIC/Kabumori app model files
+- scheduler frequencies/posting windows unless a test proves they are broken.
+
+## Startup / isolation
+
+1. Read ORCHESTRATION / ACTIVE_TASK / CURRENT_STATE / this TASK.
+2. Use fresh `/Users/yuya/Developer/kabumori-fresh` as clean base.
+3. Fresh-fetch `origin/main`.
+4. Create a new independent G3 worktree/checkout; do not reuse the completed GPT-6 task worktree.
+5. Confirm G4/G5/G2 intended files have no overlap before editing.
+6. Before push, refresh `origin/main` again and re-check overlap.
+
+## Testing
+
+At minimum:
+- existing AI Lab dev diary/topic candidate tests
+- event dedupe/claim tests
+- scheduled AI Lab dispatch tests
+- provider outcome tests
+- new >=14-day 10-post/day exhaustion simulation
+- source/DB canonical mapping parity
+- migration SQL static/disposable proof if function changes
+- relevant x-test-post tests if runtime file changes
+- Deno check/lint for touched modules
+- git diff --check
+- added-line secret scan
+
+No real OpenAI/X call.
+No production DB write.
+No deploy.
+No scheduler invoke.
+
+## PR / completion
+
+Create a dedicated PR. Do not merge.
+
+Report:
+- exact root cause
+- before/after topic counts and categories
+- exact cooldown semantics retained/changed
+- 14-day simulation result
+- DB function/migration changes
+- changed_files
+- tests
+- branch/commit/PR/head
+- fresh-main overlap check
+- production mutation/deploy = 0
+- whether current production can still fail until migration+deploy are separately rolled out
+- recommended rollout order
+
+Then:
+- status: review_required
+- next_owner: chatgpt
+- STOP for `K3`.
+
+Because a SECURITY DEFINER claim function/migration may be changed, expect K3 to require one focused Codex review unless implementation proves no DB function change was necessary.
+
+---
+
+# Previous G3 task — preserved history
+
+# Claude Task 3 — CURRENT TASK
+
 - task_id: x-social-ai-model-policy-gpt6-upgrade-20261007
 - owner: claude
 - slot: claude-3
