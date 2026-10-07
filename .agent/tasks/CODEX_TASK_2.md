@@ -3,8 +3,8 @@
 - task_id: kabumori-pr110-delivery-first-focused-review-20261007
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol（高）
 - type: focused delivery-safety / Hard Fact boundary / fallback review
@@ -13,6 +13,9 @@
 - production_mutation_allowed: false
 - merge_allowed: false
 - deploy_allowed: false
+- review_verdict: CHANGES REQUIRED
+- review_completed_at: 2026-10-07 JST
+- review_report_commit: 76beae1924eb5d97fc9eb79b8c2b111169afed82
 
 ## Purpose
 
