@@ -13,7 +13,9 @@
 - source_changes_by_H2: **0**. No fix made; the adversarial harness and logs are outside the checkout.
 - changed_files / GitHub sync scope: only `.agent/CODEX_REPORT_2.md` and `.agent/tasks/CODEX_TASK_2.md`; preserve prior Report/TASK history.
 - implementation_commit: none (review only).
-- report_commit / push: pending control-file synchronization; receipt below will record confirmed commits.
+- report_commit: `76beae1924eb5d97fc9eb79b8c2b111169afed82` (GitHub main).
+- task_state_commit: `e74091099edb4164f11821ee234de811da7b901d` (GitHub main).
+- push / GitHub synchronization: **CONFIRMED** via GitHub Contents API CAS commits and direct fresh-fetch/read-back; both commits are ancestors of current main. Current TASK first section is `review_required / next_owner: chatgpt`; report first section is this task_id / **CHANGES REQUIRED**. Only own Report/TASK were changed. No source or PR branch push.
 - deploy / merge / production access: **0**.
 - merge_recommendation: **HOLD PR #110**; do not treat supplied green regressions as closure of B1–B4.
 
