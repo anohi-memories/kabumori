@@ -1,10 +1,166 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-morning-fact-failure-diagnostics-corrective-20261007
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- type: bounded diagnostics + prompt hygiene corrective
+- production_mutation_allowed: false
+
+## Purpose
+
+The first natural 2026-10-07 morning cycle after PR #99 deploy failed twice with no report packet.
+
+Observed final retry diagnostics:
+- report_last_error = ANALYSIS_FACT_FAILED
+- generation_attempts = 2
+- calls = 3
+- hard_rejections = local,fact
+- rejection_reasons = causal+date+ref+other,other:1
+- final Fact issue: 「前回の引け以降に確認できたニュース」とする時間関係は input で確認できない
+
+The delivered/shared report did not exist, so PR #99 editorial quality is still unvalidated.
+
+Do **not** weaken Hard Fact rules from this single sample.
+Do **not** change generic/metric telemetry or the 300-char rewrite policy in this task.
+
+## Goals
+
+1. Preserve bounded rejection diagnostics per generation/attempt so the first failure is not lost when retry/fallback occurs.
+2. Remove the known copy-risk in the morning instruction:
+   - current wording includes a temporal claim equivalent to 「前回の引け以降に確認できたニュース」;
+   - rewrite the instruction so it tells the model to use the supplied market/news input without asserting an unproven collection-time relationship.
+3. Keep all Hard/Fact acceptance semantics unchanged.
+4. Keep max model-call ceiling unchanged.
+5. No raw model body, quoted generated text, user content, secret/token, or unbounded error text may be persisted.
+
+## Scope
+
+Prefer only:
+- `supabase/functions/market-report-analysis/analysis_logic.ts`
+- focused tests / existing fixtures
+- DESIGN docs only if needed
+
+Do not touch:
+- hard_fact_guards.ts unless needed only for exporting a fixed existing label (no semantic change);
+- personalized-reports;
+- market-report-data-packet;
+- consumer functions;
+- DB schema/migrations.
+
+## Diagnostic contract
+
+Add a bounded attempt/generation diagnostic structure using fixed classifications only.
+
+Acceptable shape examples:
+- `rejection_reasons_by_generation: ["local:causal+date+ref+other", "fact:other:1"]`
+- or another compact fixed-code equivalent.
+
+Requirements:
+- max 2 generation entries;
+- fixed local categories only;
+- Fact categories + bounded count only;
+- no raw issue body;
+- no quoted generated text;
+- no arbitrary model text;
+- no emails/tokens/IDs/secrets;
+- total bounded size;
+- existing `hard_rejections` / `rejection_reasons` compatibility preserved if practical;
+- existing report_diagnostics JSON object means no DB migration.
+
+Also inspect why the first 07:55 scheduled failure details are overwritten at cycle level.
+If preserving cross-scheduled-attempt diagnostics requires schema/workflow/DB changes, **do not implement that here**. Record it as a separate follow-up. This task only needs per-generation diagnostics within one analysis invocation.
+
+## Morning prompt hygiene
+
+Replace the temporal wording that can be copied as:
+「前回の引け以降に確認できたニュース」
+
+with a safe instruction that:
+- references only the supplied input;
+- does not assert when a news item was collected/published unless the input proves it;
+- still tells the model to prepare the morning watch/focus using prior-session market data and supplied news.
+
+Do not insert new finished example sentences.
+
+## Regression requirements
+
+Add tests proving:
+- the unsafe temporal phrase is absent from the model prompt;
+- morning remains forward-looking and does not claim today's Tokyo session already moved;
+- supplied news can still be used without claiming unsupported timing;
+- per-generation rejection diagnostics preserve local then Fact fixed codes in order;
+- no raw issue/model text is persisted;
+- max diagnostic size is bounded;
+- existing Hard rules unchanged;
+- max calls unchanged;
+- PR #99 generic/metric/near-duplicate WARN behavior unchanged;
+- 300-char rewrite threshold unchanged;
+- safe-original fallback unchanged.
+
+Run:
+- full market-report-analysis suite;
+- relevant personalized/X shared/data-packet regressions;
+- Deno check/lint on changed runtime;
+- git diff --check.
+
+## Safety
+
+Source/test only.
+
+Forbidden:
+- Edge deploy
+- manual report/retry/replay
+- production DB read/write unless already-existing read-only evidence is strictly needed
+- RPC/migration/Cron/gate mutation
+- X send
+- app notification
+- Auth/Vault/secret access
+- EAS
+- production mutation
+
+## Completion / K2
+
+Report:
+- exact root cause evidence vs remaining uncertainty;
+- prompt hygiene change;
+- diagnostic structure and privacy/boundedness;
+- changed_files;
+- tests;
+- Hard semantics unchanged;
+- call ceiling unchanged;
+- rewrite policy unchanged;
+- commit / PR;
+- production mutation=0;
+- recommended deploy/read-back and next natural close observation.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+Review policy:
+- No Codex review by default if this stays diagnostics + prompt hygiene only and Hard/call/rewrite semantics are unchanged.
+- If any accept/reject, call, rewrite, retry, or production-delivery semantics change materially, flag for focused Luna（高） review.
+
+Recommended model: **Sonnet5（高）**.
+
+## Report
+
+Pending.
+
+---
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-pr99-morning-natural-observation-20261007
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（中）
 - type: read-only natural production observation
