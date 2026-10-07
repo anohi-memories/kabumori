@@ -1,3 +1,144 @@
+# C2 CORRECTIVE — PR #110 delivery-safety blockers from H2
+
+- c2_verdict: **CHANGES REQUIRED**
+- target_pr: 110
+- reviewed_head: 6612b3f1dee5055794137da71697ebe5e07d7419
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- recommended_model: Opus5.5（高）
+- production_mutation_allowed: false
+- deploy_allowed: false
+- merge_allowed: false
+- routing_rule: this workstream uses G2 only
+
+## Accepted areas — preserve
+
+Do not regress these already-accepted behaviors:
+- 10/7 legitimate false-positive cases pass:
+  - 「TOPIXそのものではなく」 distinction;
+  - 「10月7日の日経平均… 10月6日の米国市場…」;
+- objective ordinary wrong date/value/direction/stale/unknown-ref units are removed;
+- bare `TOPIXは437.0円` is not delivered as TOPIX;
+- X Premium old short-length target remains advisory;
+- X and app canonical disclaimer behavior remains;
+- app actual report-detail disclaimer is visible exactly once;
+- MAX_GENERATIONS=2 / MAX_MODEL_CALLS=4 / transport retry ceilings unchanged;
+- production/deploy/manual invoke remain 0.
+
+## B1 — objective Fact contradictions must not become advisory delivery
+
+Current failure:
+- Local deterministic guards can miss a plain-text contradiction that Fact correctly finds.
+- Example: packet says サッポロビール is under 公取委 investigation, generated text says:
+  **「公正取引委員会はサッポロビールへの調査を実施していません。」**
+- H2 reproduced local hard issues=[], then Fact rejects both generations, but final selected output is delivered as `ai_status=advisory` with the contradiction still present.
+
+Required:
+1. Keep soft/non-objective Fact warnings advisory.
+2. When Fact identifies an **objective supplied-packet contradiction**, do not merely downgrade it to advisory.
+3. Within the existing max 2 generations / 4 model calls:
+   - map the objective Fact finding to the smallest affected generated unit when safely possible;
+   - remove/neutralize that unit;
+   - deterministic re-check the sanitized candidate;
+   - otherwise choose another checked safe candidate.
+4. If no candidate can be reduced to a coherent objectively-safe report, fail/retry the cycle.
+5. Do not invent facts while correcting.
+6. Add tests where Fact catches an objective contradiction that local guards missed, including the exact サッポロビール negation reproduction.
+
+Do not make every Fact finding fatal.
+
+## B2 — inline emoji must not break date / subject / value binding
+
+Current failure:
+**「10月6日の日経平均は📉 70,035.71（前日比−0.92%）でした。」**
+
+With the real input date 10/7, splitting at pictograph+space separates:
+- metric/date in one unit;
+- numeric value in another;
+so the wrong-date value escapes local detection.
+
+Required:
+- decorative inline emoji must not split a metric/date/value clause unless the preceding text is already a complete sentence boundary;
+- preserve the legitimate fix for:
+  **「10月7日の日経平均…でした📉 10月6日の米国市場…」**
+  where the emoji follows a grammatically completed sentence and the next dated sentence is separate;
+- add exact positive and negative regression tests;
+- probe inline emoji before value, before percentage, between subject/date/value, and adjacent punctuation.
+
+Do not broadly remove emojis.
+
+## B3 — speculation hedge must apply to the causal clause, not the whole sentence
+
+Current failure:
+**「ウクライナ情勢を受けて東京市場は下落しましたが、今後の動きには不確実な可能性があります。」**
+
+The definite first clause is unsupported causality, but a later unrelated 「可能性」 makes the entire sentence speculative.
+
+Required:
+- qualify causality at the specific clause/link level;
+- a hedge in another clause must not license a definite unsupported causal assertion;
+- keep genuine qualified analysis allowed/advisory, e.g.
+  **「ウクライナ情勢が重しとなった可能性があります。」**
+- add exact regressions plus multi-clause controls using 「が」「一方」「ただし」「ため」「ので」 etc. as useful.
+- final delivery re-check must see the same corrected clause semantics.
+
+## B4 — X consumer must record actual Fact state
+
+Current failure:
+`x-test-post/shared_market_report_consumer.ts` records `fact_check_status: "passed"` even when upstream packet has:
+- `fact.ai_status = "advisory"`
+- `fact.ai_status = "not_run"`
+
+Required:
+- preserve delivery behavior;
+- propagate truthful actual Fact state to existing compatible run/log/diagnostic fields;
+- propagate useful removed-unit / warning evidence where an existing field supports it;
+- do not create a DB migration or widen schema just for this;
+- invalid-format path must not falsely write "passed" either;
+- add consumer tests for passed/advisory/not_run.
+
+## Required verification
+
+At minimum:
+- reproduce H2 B1–B4 failures first;
+- after fixes, all four close;
+- rerun the independent adversarial shapes from H2 or equivalent local tests;
+- 10/7 three real-generation fixtures still pass with 0 false-positive removals where previously expected;
+- original delivery-first 19 tests PASS;
+- app disclaimer 4 tests PASS;
+- full market-report-analysis regression;
+- _shared + X shared consumer tests;
+- relevant app tests;
+- personalized-reports + data-packet regressions as appropriate;
+- Deno check/lint changed source;
+- git diff --check.
+
+No `--allow-net` is needed for corrective tests.
+No production access/deploy/manual generation/X send.
+
+## Deliverable
+
+Update existing PR #110 only. Report:
+- new exact head;
+- exact fixes B1–B4;
+- adversarial reproduction before/after;
+- changed files;
+- full tests;
+- call/retry ceilings unchanged;
+- production/deploy = 0;
+- remaining risks.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for **K2**.
+
+Recommended model: **Opus5.5（高）**.
+
+---
+
 # K2 REVIEW ROUTING — PR #110 PASS_CANDIDATE
 
 - k2_verdict: PASS_CANDIDATE
