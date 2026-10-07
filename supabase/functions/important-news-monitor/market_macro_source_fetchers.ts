@@ -190,15 +190,32 @@ export function parseMarketMacroRss(
   return results;
 }
 
+/** Gateway errors are generic transient failures; a 404 is retried only for the Federal Reserve feed (key "fed"), where it was measured. */
+const TRANSIENT_GATEWAY_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
+const FED_SOURCE_KEY = "fed";
+
+function isTransientMacroFailure(source: MarketMacroSource, status: number): boolean {
+  return TRANSIENT_GATEWAY_STATUSES.has(status) || (status === 404 && source.key === FED_SOURCE_KEY);
+}
+
 export async function fetchMarketMacroSource(
   source: MarketMacroSource,
   fetcher: typeof fetch = fetch,
   now: Date = new Date(),
+  retryDelayMs = 1500,
 ): Promise<IncomingNewsCandidate[]> {
-  const result = await fetcher(source.feedUrl, {
+  const request = () => fetcher(source.feedUrl, {
     headers: { Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml" },
     signal: AbortSignal.timeout(15_000),
   });
+  let result = await request();
+  // One retry after a short pause for a gateway error, or for the Federal Reserve feed's transient 404 (6 of 451 runs,
+  // never two in a row); a persistent error still fails with its code. A 404 on any other source fails at once.
+  if (isTransientMacroFailure(source, result.status)) {
+    await result.body?.cancel();
+    if (retryDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    result = await request();
+  }
   if (!result.ok) throw new Error(`MARKET_MACRO_FETCH_FAILED:${result.status}`);
   return parseMarketMacroRss(source, await result.text(), now);
 }

@@ -127,3 +127,73 @@ test("Shift_JIS declared feeds are decoded", () => {
     0x68, 0x69, 0x66, 0x74, 0x5f, 0x4a, 0x49, 0x53, 0x22, 0x3f, 0x3e, 0x93, 0xfa, 0x8b, 0xe2]);
   assert.match(decodeBody(bytes, null), /日銀$/);
 });
+
+test("transient 404 on an official feed is retried once; a 200 on the retry succeeds (Federal Reserve press_all.xml)", async () => {
+  let calls = 0;
+  const impl = () => {
+    calls += 1;
+    return Promise.resolve(calls === 1 ? new Response("Not Found", { status: 404 }) : new Response(RSS, { status: 200, headers: { "content-type": "application/rss+xml" } }));
+  };
+  const result = await fetchSource(fed, { fetchImpl: impl, gate: noGapGate(), retryDelayMs: 0 });
+  assert.equal(calls, 2);
+  assert.equal(result.ok, true);
+});
+
+test("Fed 404 -> 404: two fetches, then HTTP_ERROR 404; gateway errors on the Fed feed are retried once too", async () => {
+  for (const status of [404, 502, 503, 504]) {
+    let calls = 0;
+    const impl = () => { calls += 1; return Promise.resolve(new Response("x", { status })); };
+    const result = await fetchSource(fed, { fetchImpl: impl, gate: noGapGate(), retryDelayMs: 0 });
+    assert.equal(calls, 2, String(status));
+    assert.deepEqual(!result.ok && [result.code, result.status], ["HTTP_ERROR", status]);
+  }
+});
+
+const nonFed = sourceById("jp_mof_news")!;
+
+test("a 404 on a non-Fed DIRECT source fails at once (one fetch)", async () => {
+  let calls = 0;
+  const impl = () => { calls += 1; return Promise.resolve(new Response("x", { status: 404 })); };
+  const result = await fetchSource(nonFed, { fetchImpl: impl, gate: noGapGate(), retryDelayMs: 0 });
+  assert.equal(calls, 1);
+  assert.deepEqual(!result.ok && [result.code, result.status], ["HTTP_ERROR", 404]);
+});
+
+test("502 / 503 / 504 on a non-Fed DIRECT source are retried once (two fetches), a recovery on the retry succeeds", async () => {
+  for (const status of [502, 503, 504]) {
+    let calls = 0;
+    const failing = () => { calls += 1; return Promise.resolve(new Response("x", { status })); };
+    const result = await fetchSource(nonFed, { fetchImpl: failing, gate: noGapGate(), retryDelayMs: 0 });
+    assert.equal(calls, 2, String(status));
+    assert.deepEqual(!result.ok && [result.code, result.status], ["HTTP_ERROR", status]);
+  }
+  let n = 0;
+  const recovering = () => { n += 1; return Promise.resolve(n === 1 ? new Response("x", { status: 503 }) : new Response(RSS, { status: 200 })); };
+  assert.equal((await fetchSource(nonFed, { fetchImpl: recovering, gate: noGapGate(), retryDelayMs: 0 })).ok, true);
+});
+
+test("429 / 403 / 500 and successes are not retried", async () => {
+  for (const status of [429, 403, 500, 200]) {
+    for (const source of [fed, nonFed]) {
+      let calls = 0;
+      const impl = () => { calls += 1; return Promise.resolve(new Response(status === 200 ? RSS : "x", { status })); };
+      await fetchSource(source, { fetchImpl: impl, gate: noGapGate(), retryDelayMs: 0 });
+      assert.equal(calls, 1, `${source.source_id} ${status}`);
+    }
+  }
+});
+
+test("the retry keeps the same URL, headers and per-host rate gate (one extra gated request)", async () => {
+  const seen: Array<{ url: string; ua: string | null }> = [];
+  let gateWaits = 0;
+  const gate = { wait: () => { gateWaits += 1; return Promise.resolve(0); } } as unknown as HostRateGate;
+  const impl = (url: string, init?: RequestInit) => {
+    seen.push({ url, ua: new Headers(init?.headers).get("user-agent") });
+    return Promise.resolve(seen.length === 1 ? new Response("", { status: 404 }) : new Response(RSS, { status: 200 }));
+  };
+  await fetchSource(fed, { fetchImpl: impl, gate, retryDelayMs: 0 });
+  assert.equal(seen.length, 2);
+  assert.equal(seen[0].url, seen[1].url);
+  assert.equal(seen[0].ua, seen[1].ua);
+  assert.equal(gateWaits, 2);
+});

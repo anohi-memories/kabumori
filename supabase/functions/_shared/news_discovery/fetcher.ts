@@ -41,7 +41,23 @@ export type FetchOptions = {
   validators?: ValidatorCache;
   /** Overrides the registry endpoint (GDELT query URLs). */
   url?: string;
+  /** Pause before the single retry of a transient 404 / 5xx (default 1500 ms; 0 in tests). */
+  retryDelayMs?: number;
 };
+
+/**
+ * Gateway errors (502 / 503 / 504) are generic transient failures: one retry for any DIRECT_SOURCE feed.
+ * A 404 is retried ONLY for the Federal Reserve press feed: its press_all.xml answers a brief 404 while the file is
+ * regenerated (6 of 451 important-news runs and 1 of 13 observer runs in 14 days, never two in a row). No other
+ * source has that evidence, so a 404 elsewhere fails at once instead of doubling a permanently dead URL's requests.
+ */
+export const TRANSIENT_GATEWAY_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
+export const FED_PRESS_SOURCE_ID = "us_fed_press";
+
+export function isTransientFeedFailure(source: Pick<SourceDefinition, "source_id" | "policy">, status: number): boolean {
+  if (source.policy !== "DIRECT_SOURCE") return false;
+  return TRANSIENT_GATEWAY_STATUSES.has(status) || (status === 404 && source.source_id === FED_PRESS_SOURCE_ID);
+}
 
 export type GdeltQuery = { key: string; query: string; timespan: string; maxrecords: number };
 
@@ -127,6 +143,13 @@ export async function fetchSource(source: SourceDefinition, options: FetchOption
   let response: Response;
   try {
     response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(timeoutMs), redirect: "follow" });
+    if (isTransientFeedFailure(source, response.status)) {
+      await response.body?.cancel();
+      const delay = options.retryDelayMs ?? 1500;
+      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+      await (options.gate ?? new HostRateGate()).wait(url, source.min_request_gap_ms);
+      response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(timeoutMs), redirect: "follow" });
+    }
   } catch (error) {
     return isTimeout(error)
       ? fail("TIMEOUT", null, `no response within ${timeoutMs} ms`)
