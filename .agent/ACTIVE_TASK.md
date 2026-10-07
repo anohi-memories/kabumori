@@ -104,14 +104,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: done
-- task_id: common-account-v1-phase2-native-client-validation-20261007
+- status: ready
+- task_id: common-account-v1-phase2-real-account-smoke-20261007
 - start_code: G5
 - finish_code: K5
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Final K5 PASS. Native client validation completed with no source fix. Current client matches the deployed Phase 2 service-enrollment response contract. Production access/deploy/EAS remained 0. Any later real-account smoke requires a separate explicit approval gate.
+- allocation: User explicitly approved one bounded production-authenticated smoke using exactly one existing active Kabumori account. Pre/post aggregate read-back is mandatory. Login -> existing active service-start path -> Home -> same-login token refresh -> sign-out -> same-account re-login -> sign-out. No new enrollment, reactivation, withdrawal/deletion, profile edits, Auth Admin, DB/schema/migration, deploy, EAS, OAuth/Vault/Cron/X/provider changes. Credentials are entered only by the user in the Simulator UI and must never be logged or pasted.
 - recommended_model: Opus5.5（高）
 
 ## Deferred
