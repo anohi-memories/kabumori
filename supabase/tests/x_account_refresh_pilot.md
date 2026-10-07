@@ -130,6 +130,6 @@ The three Stage 3B versions (renumbered from the never-applied `20260927101423` 
 - User consent contract (`approvalMode = 'auto_post_preference'` + admin enablement) is a product decision to confirm; the content-settings table is not live.
 - Consent withdrawal is read from `settings.approvalMode` through `read_social_mobile_publish_settings`; service_role gets no table privilege on the settings store.
 - Common account (G5): before any authority window is enabled for a real user, G5 Phase 3 must require an active `x_autopost` entitlement in `check_x_account_publish_authority`, in `set_x_account_publish_authority('enabled')` and at claim time (see `vault_account_brand_post.ts` header). Not enforced in this source.
-- The 140-code-point publish limit is conservative (X weighted counting); AI Lab keeps its own 280 policy.
+- The 140-code-point publish limit is conservative (X weighted counting); AI Lab (X Premium) uses the explicit unlimited length policy instead.
 - The pilot account's refresh token is 4+ days old and unused; `invalid_grant` on the first refresh is possible → hard stop + owner reconnect.
 - Generation cost per pilot post uses the shared OpenAI key.

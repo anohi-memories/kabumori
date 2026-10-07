@@ -371,12 +371,117 @@ test("live publish_mode is also allowed to generate (generation and the X-write 
   assert.equal(draft.brandId, "ai_salaryman_lab");
 });
 
-test("AI Lab generation prompts for 280 code points and fails closed when the model returns 281", async () => {
+test("AI Lab (X Premium) has no finite ceiling: a 641-code-point draft is accepted with its measured characterCount", async () => {
   let capturedInstructions = "";
+  // 640 BMP characters + 1 astral emoji = 641 Unicode code points (642 UTF-16 units).
+  const longText = "あ".repeat(640) + "😀";
+  const draft = await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context: aiLabContext(),
+    postType: "brand_post",
+    fetchImpl: (_input, init) => {
+      capturedInstructions = String(
+        JSON.parse(String(init?.body)).instructions,
+      );
+      return fixtureOpenAiResponse(longText)(
+        new Request("https://example.test"),
+      );
+    },
+  });
+  assert.equal(draft.characterCount, 641);
+  assert.equal(draft.text, longText);
+  assert.doesNotMatch(capturedInstructions, /280文字以内/u);
+  assert.doesNotMatch(capturedInstructions, /\d+文字以内/u);
+  assert.match(capturedInstructions, /投稿本文の文字数上限は設定されていません。/u);
+  assert.match(capturedInstructions, /140文字や280文字は目標でも上限でもありません/u);
+  assert.match(capturedInstructions, /題材が簡潔なら短くてかまいません/u);
+  assert.match(capturedInstructions, /280文字を超えてもかまいません/u);
+  assert.match(capturedInstructions, /水増し/u);
+});
+
+test("AI Lab accepts drafts just past the former 280 ceiling (281) and short drafts alike", async () => {
+  for (const [text, expected] of [["あ".repeat(281), 281], ["短い。", 3]] as const) {
+    const draft = await generateBrandPost({
+      openAiApiKey: "fixture-only",
+      context: aiLabContext(),
+      postType: "brand_post",
+      fetchImpl: fixtureOpenAiResponse(text),
+    });
+    assert.equal(draft.characterCount, expected);
+  }
+});
+
+test("AI Lab gets a larger generation budget; Kabumori and finite-mode profiles keep the prior 600", async () => {
+  const budgets: number[] = [];
+  const capture = (text: string): typeof fetch => (_input, init) => {
+    budgets.push(Number(JSON.parse(String(init?.body)).max_output_tokens));
+    return fixtureOpenAiResponse(text)(new Request("https://example.test"));
+  };
+  await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context: aiLabContext(),
+    postType: "brand_post",
+    fetchImpl: capture("本文。"),
+  });
+  await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context: kabumoriContext(),
+    postType: "tip",
+    fetchImpl: capture("株の話。"),
+  });
+  const finite = aiLabContext();
+  finite.codeProfile = {
+    ...finite.codeProfile,
+    postLengthPolicy: { mode: "limited", maxChars: 140 },
+  };
+  await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context: finite,
+    postType: "brand_post",
+    fetchImpl: capture("本文。"),
+  });
+  assert.deepEqual(budgets, [2000, 600, 600]);
+});
+
+test("AI Lab fails closed on a truncated (incomplete) response instead of returning a cut-off post", async () => {
+  const truncated: typeof fetch = () =>
+    Promise.resolve(Response.json({
+      status: "incomplete",
+      incomplete_details: { reason: "max_output_tokens" },
+      output: [{ content: [{ type: "output_text", text: "途中で切れた本文" }] }],
+      usage: { input_tokens: 120, output_tokens: 2000 },
+    }));
+  await assert.rejects(
+    () =>
+      generateBrandPost({
+        openAiApiKey: "fixture-only",
+        context: aiLabContext(),
+        postType: "brand_post",
+        fetchImpl: truncated,
+      }),
+    { message: "BRAND_POST_OUTPUT_INCOMPLETE" },
+  );
+  // Prior behavior for profiles without an unlimited policy is unchanged.
+  const kabumori = await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context: kabumoriContext(),
+    postType: "tip",
+    fetchImpl: truncated,
+  });
+  assert.equal(kabumori.text, "途中で切れた本文");
+});
+
+test("a profile that explicitly opts into a finite mode still prompts for and enforces it (generic mode unchanged)", async () => {
+  let capturedInstructions = "";
+  const context = aiLabContext();
+  context.codeProfile = {
+    ...context.codeProfile,
+    postLengthPolicy: { mode: "limited", maxChars: 280 },
+  };
   await assert.rejects(() =>
     generateBrandPost({
       openAiApiKey: "fixture-only",
-      context: aiLabContext(),
+      context,
       postType: "brand_post",
       fetchImpl: async (_input, init) => {
         capturedInstructions = String(

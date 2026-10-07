@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AI_SALARYMAN_LAB_CODE_PROFILE, KABUMORI_CODE_PROFILE } from "./brand_profiles.ts";
 import { SOCIAL_MOBILE_USER_CODE_PROFILE, resolveBrandCodeProfile } from "./brand_profiles.ts";
+import { UNLIMITED_POST_LENGTH } from "./post_length_policy.ts";
+import { VAULT_ACCOUNT_PUBLISH_LENGTH_POLICY } from "./vault_account_brand_post.ts";
 
 const aiLabInstructions = AI_SALARYMAN_LAB_CODE_PROFILE.voiceInstructions.join("\n");
 
@@ -84,4 +86,35 @@ test("general-user profile is neutral, isolated, and has no fixed hashtags or pu
   assert.match(instructions, /特定企業・既存ブランドの人格や固定タグを引き継がない/u);
   assert.doesNotMatch(instructions, /#日本株|#日経平均|#かぶモリ/u);
   assert.equal(resolveBrandCodeProfile("missing_profile"), null);
+});
+
+test("AI Lab (X Premium) explicitly uses the generic unlimited length policy with natural-length guidance", () => {
+  assert.equal(AI_SALARYMAN_LAB_CODE_PROFILE.postLengthPolicy, UNLIMITED_POST_LENGTH);
+  assert.deepEqual(AI_SALARYMAN_LAB_CODE_PROFILE.postLengthPolicy, { mode: "unlimited", maxChars: null });
+  assert.match(aiLabInstructions, /X Premiumで運用しているため、投稿本文の文字数に上限はありません/u);
+  assert.match(aiLabInstructions, /140文字や280文字は目標でも上限でもありません/u);
+  assert.match(aiLabInstructions, /題材が簡潔なら短くてかまいません/u);
+  assert.match(aiLabInstructions, /280文字を超えてもかまいません/u);
+  assert.match(aiLabInstructions, /水増しや繰り返しはしないでください/u);
+  assert.doesNotMatch(aiLabInstructions, /\d+文字以内/u);
+});
+
+test("AI Lab source no longer declares a finite 280 ceiling", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("./brand_profiles.ts", import.meta.url), "utf8");
+  const aiLabSection = source.slice(
+    source.indexOf("export const AI_SALARYMAN_LAB_CODE_PROFILE"),
+    source.indexOf("export const SOCIAL_MOBILE_USER_CODE_PROFILE"),
+  );
+  assert.match(aiLabSection, /postLengthPolicy: UNLIMITED_POST_LENGTH,/u);
+  assert.doesNotMatch(aiLabSection, /mode: "limited"/u);
+  assert.doesNotMatch(aiLabSection, /maxChars: \d/u);
+});
+
+test("Kabumori and POSTONA (social_mobile_user_v1) length behavior is unchanged", () => {
+  // Kabumori and the general-user profile carry no profile-level length policy (prior behavior).
+  assert.equal(KABUMORI_CODE_PROFILE.postLengthPolicy, undefined);
+  assert.equal(SOCIAL_MOBILE_USER_CODE_PROFILE.postLengthPolicy, undefined);
+  // POSTONA's Vault-account publish path keeps its own finite 140-code-point policy.
+  assert.deepEqual(VAULT_ACCOUNT_PUBLISH_LENGTH_POLICY, { mode: "limited", maxChars: 140 });
 });

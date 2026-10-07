@@ -1,5 +1,5 @@
 import { KABUMORI_VOICE } from "../kabumori_voice.ts";
-import type { PostLengthPolicy } from "./post_length_policy.ts";
+import { type PostLengthPolicy, UNLIMITED_POST_LENGTH } from "./post_length_policy.ts";
 
 export type BrandCodeProfile = {
   key: string;
@@ -66,6 +66,7 @@ export const AI_SALARYMAN_LAB_CODE_PROFILE: BrandCodeProfile = {
     "次のような投稿は避けてください: 毎回ツールの使い方を説明する投稿、汎用的なプロンプトのコツ、同じ構成・同じ結論の連投、成功者を演じるような誇張、エンジニアであるかのような表現、実際にはやっていない作業をやったかのように書くこと。",
     "先生やAIインフルエンサーのような目線ではなく、同じように試している一人の会社員目線で書いてください。成功談だけでなく、失敗・詰まったこと・やり直しも隠さず出します。断定的・権威的な言い切り口調や、AIが書いたテンプレのような構成（フック→説明→まとめ、のような定型)を避け、人が実際に体験を語るような自然な文章にしてください。過度なハイプ・煽り表現も避けます。",
     "書き出し・文のリズム・長さ・構成を投稿ごとに変えてください。箇条書きは使ってもかまいませんが、毎回使う必要はありません。ハッシュタグは基本的に「#個人開発」のみとし、ハッシュタグを連ねすぎないでください。",
+    "X Premiumで運用しているため、投稿本文の文字数に上限はありません。140文字や280文字は目標でも上限でもありません。題材が簡潔なら短くてかまいません。背景・具体的な手順・判断の理由などを書くと読み手の役に立つときは、280文字を超えてもかまいません。長くするための水増しや繰り返しはしないでください。",
     "note等の詳細記事への送客は、内容が深掘りする価値を持つ場合にだけ自然に触れてください。毎回のように送客を入れる必要はありません。",
     "未確認の人物像、実績、勤務先、投資経験、具体的な収益額・成果は作らないでください。一人称の体験談（「私は〜しました」「今日は〜した」等）は、事実として提供されていない限り使わないでください。今日の具体的な進捗が与えられていない場合は、体験に基づく普遍的な気づきとして書き、「今日〜した」と断定しないでください。",
     "株式投資・売買・銘柄・相場に関する内容は扱いません。かぶモリの話題・人格・文体・固定ハッシュタグ（#日本株 #日経平均 #株式投資 #かぶモリ 等）を一切使わないでください。テーマ・人格・文体はかぶモリと完全に分離します。",
@@ -74,7 +75,10 @@ export const AI_SALARYMAN_LAB_CODE_PROFILE: BrandCodeProfile = {
   dryRunPostTypes: ["profile_preview", "brand_post"],
   dryRunPromptPreamble:
     "会社員AIラボの独立した dry-run。事実を追加せず、公開用本文や投稿戦略を完成させない。",
-  postLengthPolicy: { mode: "limited", maxChars: 280 },
+  // X Premium account (user policy 2026-10-07): no finite ceiling. 140/280 are neither targets nor
+  // limits; length follows the topic (see the voice instruction above). characterCount is still
+  // measured and reported by the generator and the final dispatch guard.
+  postLengthPolicy: UNLIMITED_POST_LENGTH,
   // Explicit opt-in (see BrandCodeProfile.voiceControlsHashtags): only this profile's own
   // "#個人開発 as default, no stuffing" instruction above governs hashtag use when no fixed
   // hashtag is configured. Every other no-fixed-hashtag profile keeps the prior "never add a

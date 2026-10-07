@@ -36,12 +36,56 @@ function context() {
   );
 }
 
-test("independent final guard permits 279/280 and rejects 281 code points", () => {
+test("AI Lab final guard has no finite ceiling and returns the measured code-point count", () => {
   const brand = context();
+  assert.equal(brand.codeProfile.postLengthPolicy, UNLIMITED_POST_LENGTH);
+  for (const n of [1, 140, 279, 280, 281, 600]) {
+    assert.equal(
+      assertAiLabBrandPostDispatchAllowed(brand, "brand_post", "あ".repeat(n)),
+      n,
+    );
+  }
+  // 640 BMP characters + 1 astral emoji = 641 code points (642 UTF-16 units).
   assert.equal(
-    assertAiLabBrandPostDispatchAllowed(brand, "brand_post", "あ".repeat(279)),
-    279,
+    assertAiLabBrandPostDispatchAllowed(
+      brand,
+      "brand_post",
+      "あ".repeat(640) + "😀",
+    ),
+    641,
   );
+});
+
+test("unlimited length does not relax the post-type, enabled-type, or missing-policy checks", () => {
+  const brand = context();
+  const longText = "長文。".repeat(400);
+  assert.throws(
+    () => assertAiLabBrandPostDispatchAllowed(brand, "morning_report", longText),
+    { message: "AI_LAB_POST_TYPE_NOT_ENABLED" },
+  );
+  const disabled = context();
+  disabled.operationalSettings = {
+    ...disabled.operationalSettings,
+    enabled_post_types: [],
+  };
+  assert.throws(
+    () => assertAiLabBrandPostDispatchAllowed(disabled, "brand_post", longText),
+    { message: "AI_LAB_POST_TYPE_NOT_ENABLED" },
+  );
+  const noPolicy = context();
+  noPolicy.codeProfile = { ...noPolicy.codeProfile, postLengthPolicy: undefined };
+  assert.throws(
+    () => assertAiLabBrandPostDispatchAllowed(noPolicy, "brand_post", "本文"),
+    { message: "AI_LAB_LENGTH_POLICY_NOT_CONFIGURED" },
+  );
+});
+
+test("a finite mode, if explicitly configured, is still enforced by the generic guard", () => {
+  const brand = context();
+  brand.codeProfile = {
+    ...brand.codeProfile,
+    postLengthPolicy: { mode: "limited", maxChars: 280 },
+  };
   assert.equal(
     assertAiLabBrandPostDispatchAllowed(brand, "brand_post", "あ".repeat(280)),
     280,
@@ -57,26 +101,6 @@ test("independent final guard permits 279/280 and rejects 281 code points", () =
   );
 });
 
-test("generic explicit unlimited mode bypasses only the finite character ceiling", () => {
-  const brand = context();
-  brand.codeProfile = {
-    ...brand.codeProfile,
-    postLengthPolicy: UNLIMITED_POST_LENGTH,
-  };
-  assert.equal(
-    assertAiLabBrandPostDispatchAllowed(
-      brand,
-      "brand_post",
-      "長文。".repeat(400),
-    ),
-    1200,
-  );
-  assert.throws(
-    () => assertAiLabBrandPostDispatchAllowed(brand, "morning_report", "本文"),
-    { message: "AI_LAB_POST_TYPE_NOT_ENABLED" },
-  );
-});
-
 test("Kabumori account cannot enter the AI Lab brand_post boundary", () => {
   const brand = context();
   brand.socialAccount = {
@@ -89,4 +113,33 @@ test("Kabumori account cannot enter the AI Lab brand_post boundary", () => {
     () => assertAiLabBrandPostDispatchAllowed(brand, "brand_post", "本文"),
     { message: "AI_LAB_DISPATCH_ACCOUNT_MISMATCH" },
   );
+  assert.throws(
+    () =>
+      assertAiLabBrandPostDispatchAllowed(
+        brand,
+        "brand_post",
+        "長文。".repeat(400),
+      ),
+    { message: "AI_LAB_DISPATCH_ACCOUNT_MISMATCH" },
+  );
+});
+
+test("every AI Lab account-binding field is still checked independently of length", () => {
+  const longText = "長文。".repeat(400);
+  const variants: Array<(b: ReturnType<typeof context>) => void> = [
+    (b) => { b.brand = { ...b.brand, id: "kabumori" }; },
+    (b) => { b.socialAccount = { ...b.socialAccount!, id: "other_x" }; },
+    (b) => { b.socialAccount = { ...b.socialAccount!, brand_id: "kabumori" }; },
+    (b) => { b.socialAccount = { ...b.socialAccount!, platform: "threads" as unknown as "x" }; },
+    (b) => { b.socialAccount = { ...b.socialAccount!, handle: "yume_daka" }; },
+    (b) => { b.socialAccount = null; },
+  ];
+  for (const mutate of variants) {
+    const brand = context();
+    mutate(brand);
+    assert.throws(
+      () => assertAiLabBrandPostDispatchAllowed(brand, "brand_post", longText),
+      { message: "AI_LAB_DISPATCH_ACCOUNT_MISMATCH" },
+    );
+  }
 });
