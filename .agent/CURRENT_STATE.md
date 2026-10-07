@@ -1,3 +1,36 @@
+## Final C1 — PR #95 third review CHANGES REQUIRED / single S1-T corrective — 2026-10-07
+
+- H1 exact reviewed PR #95 head: `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`.
+- C1 verdict: **CHANGES REQUIRED accepted**. PR #95 remains open/unmerged/undeployed. Production migration apply remains forbidden.
+- materially accepted:
+  - S2 queued X pre-dispatch cancellation: PASS;
+  - stable `userId + session_id` cache/context model: PASS;
+  - same-session token refresh/single-flight: PASS;
+  - R1 automatic-vs-explicit server lifecycle semantics: PASS;
+  - R4 captured immutable Authorization: PASS;
+  - R5 strict response validation: PASS;
+  - PR #94 root news-detail and X OAuth separation preserved.
+- sole remaining blocker: **S1-T P2**, Kabumori AuthProvider event timing.
+  - after Supabase has synchronously notified a new login/different user/sign-out, owner/generation invalidation is deferred to `setTimeout(0)`;
+  - an old A1 reactivation response can settle before that timer and transiently restore old A1 service-ready;
+  - next timer clears it, but push/notification/app readiness must never become positive in that interim window.
+- G5 minimum correction:
+  - synchronously record the SDK-notified current auth owner/login on changed user/login/sign-out;
+  - immediately fence generation/readiness and cancel obsolete enrollment without awaiting Auth/Data API/network work;
+  - defer only network/session preparation work;
+  - result acceptance and `serviceSession` gating must reference the synchronously current owner, not only deferred local session state;
+  - preserve same-session TOKEN_REFRESHED behavior and existing single-flight.
+- mandatory tests:
+  - render after same-user fresh-login auth callback but before deferred task -> every `serviceSession` remains null;
+  - same test for different-user event;
+  - same test for SIGNED_OUT;
+  - same-session TOKEN_REFRESHED control remains PASS.
+- do not reopen S2/session_id/R1-R5 unless a concrete regression is introduced.
+- Phase 3, production migration apply, deploy, EAS, Auth/Storage/OAuth/Vault/Cron/X mutation remain out of scope.
+- G5 status: ready; recommended model: **Opus5.5（極高）**.
+- H1 is done/free. After corrected PR #95 head, run one focused exact-head H1 rereview with **Sol（高）**.
+- AI Lab diary: no additional entry; this is another narrow internal session-safety correction of the same common-account milestone.
+
 ## Final C2 — PR #41 ACL rereview PASS / merged
 
 - H2 exact reviewed head: `c509117f8addf5a8687d60d9c18ae271b2c1777c`.
