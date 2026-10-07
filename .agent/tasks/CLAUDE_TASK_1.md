@@ -28,9 +28,10 @@ The implementation must calibrate this boundary toward delivery-first behavior w
 
 Every shared morning/close report must carry an AI disclaimer.
 
-Use these canonical meanings:
-- X compact footer: **「※AIによる分析です。内容に誤りを含む可能性があります。投資判断はご自身で。」**
-- App/report footer: **「※本レポートはAIによる分析です。内容に誤り・不足を含む可能性があります。最終的な投資判断はご自身でお願いします。」**
+Use this canonical footer for both X and App/report:
+- **「※本レポートはAIによる分析です。内容に誤り・不足を含む可能性があります。最終的な投資判断はご自身でお願いします。」**
+
+The Kabumori X account is Premium, so this task must **not** treat the old short-post character target as a hard platform limit. Readability targets may remain advisory, but do not truncate useful safe content or the disclaimer merely to fit a legacy short length.
 
 Do **not** say 「AIが独自調査」 because the current generation runtime does not independently browse the web; it analyzes the supplied market/news packet.
 
@@ -38,24 +39,43 @@ Requirements:
 - footer is deterministic application text, not left to the model;
 - present exactly once in each final X/app rendering;
 - never let formatting/length trimming remove the disclaimer;
-- body may be shortened to preserve existing platform/output length rules;
+- X legacy length targets are WARN/editorial only, not a delivery blocker;
 - do not add the disclaimer inside every sub-section of the app report; once per final report is enough.
 
 ## Delivery-first safety model
 
-### A. Hard-stop only objective/fatal conditions
+### A. Progressive degradation first; whole-report hard-stop only as last resort
 
-A candidate may block final delivery only for an unambiguous fatal issue such as:
-1. invalid/unparseable structured output or missing required schema/required final fields;
-2. a numeric value that contradicts the input packet / wrong metric value;
-3. explicit sign/direction reversal against a known metric;
-4. an **explicitly wrong date attached to a metric/value in the same governed clause**;
-5. stale data asserted as current/latest without an explicit date/stale qualifier;
-6. explicit identity error that treats TOPIX-linked ETF 1306 as TOPIX itself;
-7. nonexistent / unknown evidence refs or fabricated referenced facts;
-8. another equally objective contradiction that can be proven deterministically from the supplied packet.
+An objective error in one sentence/field must **not automatically fail the whole report**.
 
-Do not broaden this list casually.
+For a provably wrong numeric/date/sign/stale/identity/ref claim:
+1. identify the smallest affected output unit (sentence, bullet, point, claim, news item, paragraph field);
+2. remove or neutralize only that affected unit deterministically where possible;
+3. continue delivery using the remaining hard-safe content;
+4. record exactly what was removed and why in diagnostics/traces;
+5. prefer omission over inventing a replacement fact.
+
+Examples:
+- wrong number in one X point -> drop that point, keep the other points/report;
+- wrong number in one App paragraph -> remove the sentence containing that number, keep the paragraph/report if still coherent;
+- wrong/unknown news ref -> omit that news item/claim only;
+- 1306 incorrectly called TOPIX in one sentence -> remove or rewrite to a deterministic safe label if the implementation can do so without model invention.
+
+Whole-report failure is allowed only when:
+- structured output cannot be parsed at all;
+- after sanitizing objective errors, there is not enough coherent safe content to construct the required final report shape;
+- all available generations are fatally unsafe/unusable.
+
+Objective issues that trigger sanitization include:
+1. numeric value contradicting the input packet;
+2. explicit sign/direction reversal against a known metric;
+3. explicitly wrong date attached to a metric/value in the same governed clause;
+4. stale data asserted as current/latest without date/stale qualifier;
+5. explicit identity error treating TOPIX-linked ETF 1306 as TOPIX itself;
+6. nonexistent / unknown evidence refs or fabricated referenced facts;
+7. another equally objective contradiction provable deterministically from the supplied packet.
+
+Do not broaden this list casually, and do not convert these into whole-report blockers when field-level removal can safely preserve delivery.
 
 ### B. Ambiguous checks become WARN / telemetry
 
@@ -78,9 +98,10 @@ Desired behavior:
 2. deterministic hard checks;
 3. Fact check;
 4. if Fact reports meaningful issues, one bounded regeneration is allowed within the existing generation/call ceiling;
-5. after the final generation, if at least one candidate passes all **objective hard checks**, deliver the best hard-safe candidate even when nonfatal Fact/advisory warnings remain;
-6. retain those warnings/issues in diagnostics and generation traces;
-7. only fail the cycle if **no generation is objectively hard-safe**.
+5. after the final generation, sanitize objective bad units from the best candidate where possible;
+6. if the sanitized candidate still has enough coherent safe content, deliver it even when nonfatal Fact/advisory warnings remain;
+7. retain warnings, removed units, reasons and fallback choice in diagnostics and generation traces;
+8. only fail the cycle when no generation can be reduced to a minimally coherent safe report.
 
 Do not add extra model calls beyond the current ceiling. Preserve transport retry limits.
 
@@ -131,14 +152,15 @@ Do not touch:
 At minimum prove:
 - exact 10/7 candidate shape with 「TOPIXそのものではなく」 does **not** hard reject;
 - exact 10/7 candidate shape 「10月7日の日経平均… 10月6日の米国市場…」 does **not** hard reject;
-- explicit wrong example like 「10月6日の日経平均は70,035.71」 still hard rejects when the input says 10/7;
-- explicit 「TOPIXは437.0円」 still hard rejects when the value is 1306 ETF;
-- reversed sign/direction still hard rejects;
-- stale-as-current remains hard;
-- unknown ref remains hard;
-- nonfatal Fact issue can regenerate once, then fallback-deliver a hard-safe candidate;
-- no hard-safe candidate => cycle still fails;
-- X disclaimer appears exactly once and survives length handling;
+- explicit wrong example like 「10月6日の日経平均は70,035.71」 is detected, but only the affected unit is removed when the rest of the report is safe;
+- explicit 「TOPIXは437.0円」 is detected and removed/corrected deterministically without killing the whole report;
+- reversed sign/direction is detected and the affected unit is omitted;
+- stale-as-current and unknown refs are detected and isolated to the smallest affected unit;
+- a report with one bad numeric point and multiple safe points still delivers without that bad point;
+- a report with one bad sentence in App story still delivers the remaining coherent story;
+- nonfatal Fact issue can regenerate once, then sanitize/fallback-deliver a safe-enough candidate;
+- cycle fails only when no candidate can be reduced to a minimally coherent safe report;
+- X disclaimer appears exactly once and is never shortened for a legacy character target;
 - app disclaimer appears exactly once;
 - model-call ceiling / retry semantics remain unchanged;
 - generation trace / diagnostics retain warning and fallback evidence.
