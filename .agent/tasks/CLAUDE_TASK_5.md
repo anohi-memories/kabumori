@@ -3,7 +3,7 @@
 - task_id: `common-account-v1-phase2-native-client-validation-20261007`
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - next_owner: claude
 - recommended_model: **Opus5.5（高）**
 - production_write_allowed: **false**
