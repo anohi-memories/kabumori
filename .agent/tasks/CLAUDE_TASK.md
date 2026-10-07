@@ -1,10 +1,176 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-market-report-gpt61-production-preflight-20261007
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Opus5.5（高）
+- type: production read-only preflight / trace migration + market-report GPT-6.1 rollout
+- production_mutation_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Source work is complete and merged:
+- generation-trace source/migration from PR #101;
+- Kabumori-only AI model registry + GPT-6.1 Sol source from PR #107, merge commit `8738a186628989ce6c797d61ea80f5b721664c95`.
+
+Prepare the exact production rollout safely, but **do not mutate production in this TASK**.
+
+The goal is to decide and prove the safe rollout order for:
+1. production application of the already-reviewed trace migration `20261007120000_market_report_generation_traces.sql`;
+2. controlled deployment of `market-report-analysis` using the merged GPT-6.1 Sol registry;
+3. first natural morning/closing cycle observation afterward.
+
+## Freshness / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK / prior G2 reports.
+2. Use a fresh independent G2 worktree/checkout from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and require merge commit `8738a186628989ce6c797d61ea80f5b721664c95` present.
+4. Confirm no other active slot owns the same migration, Edge Function, workflow, production setting or API boundary.
+5. Confirm no production mutation window is currently active. G5's previous window is recorded CLOSED.
+6. Read-only production inspection only. No DDL/DML, migration history write, Edge deploy, manual report, replay, X send, notification, OpenAI invocation, Cron/Auth/Vault/OAuth/settings mutation.
+
+## Required production read-only checks
+
+### A. Trace migration state
+
+For `20261007120000_market_report_generation_traces.sql`:
+- confirm whether it is already represented in production migration history;
+- confirm whether the target table / append-only trigger / grants / RLS / helper objects already exist or are absent;
+- run the existing read-only preflight SQL where safe;
+- inspect effective owner / ACL / inherited privileges using the accepted F1 checks;
+- do not "repair" history or infer applied state from history alone;
+- compare actual production object state and migration history separately.
+
+If production state is partially applied or inconsistent, STOP and report. Do not repair in place.
+
+### B. Current deployed market-report-analysis
+
+Read-only determine:
+- currently deployed function version / source identity if available;
+- current production model behavior/config evidence without invoking the function;
+- whether the deployed version predates PR #101 / PR #107;
+- any environment/config dependencies the new merged function requires;
+- whether deployment can be a single-function deploy with no unrelated functions.
+
+Do not call OpenAI and do not manually invoke a report.
+
+### C. Rollout ordering
+
+Prove or reject this proposed order:
+
+1. trace migration apply;
+2. post-migration read-back / ACL verification;
+3. deploy only `market-report-analysis` from the accepted merged source;
+4. deployment read-back/version verification;
+5. no manual report/replay;
+6. wait for the next **natural** morning/closing cycle;
+7. read-only observe report packet, generation traces, Fact/local result, selected generation, calls, token usage, estimated cost and output quality.
+
+Important:
+- migration and Edge deploy are two separate production mutations even if executed in one approved rollout window;
+- if either step needs an additional migration or another function deployment, STOP and report instead of widening scope.
+
+### D. GPT-6.1 runtime contract
+
+From merged source + current official OpenAI documentation confirm:
+- model = `gpt-6.1-sol`;
+- generate reasoning = medium;
+- Fact reasoning = low;
+- Responses API compatibility;
+- max output settings 16,000 / 4,000;
+- pricing metadata currently matches official Standard pricing;
+- no unsupported parameter is sent.
+
+Do not perform a real API call.
+
+### E. Cost / quality observation plan
+
+Prepare the fields to compare on the first natural cycle against the previous Luna baseline:
+- generated headline / market summary;
+- 3-points specificity / generic warnings;
+- app_story readability;
+- X body quality;
+- unsupported causality / Fact rejection;
+- regeneration count / delivered generation;
+- input/output tokens;
+- api_cost_usd;
+- incomplete/max_output_tokens errors;
+- generation trace candidate + local/fact issues.
+
+Do not weaken Hard Fact or other delivery rules before observing actual model output.
+
+## Required output / runbook
+
+Produce a precise rollout recommendation:
+- READY_FOR_APPROVAL or BLOCKED;
+- exact accepted source commit;
+- exact migration file/hash;
+- production before-state;
+- exact mutation steps, separately identified;
+- rollback/STOP rules;
+- exact postflight read-backs;
+- expected deploy target only;
+- first natural-cycle observation checklist;
+- anything requiring explicit user approval.
+
+If an operator script/runbook is necessary, source-only creation is allowed, but:
+- it must be fail-closed;
+- pin exact source/migration hash;
+- refuse rerun where appropriate;
+- never embed passwords/tokens/secrets;
+- do not execute it in this TASK.
+
+## Scope exclusions
+
+Do not touch:
+- POSTONA / G3 / G4 AI model policy;
+- important-news-monitor;
+- MIC;
+- personalized-reports;
+- common-account/G5;
+- unrelated DB migrations/RPC/Auth;
+- Cron;
+- X sends/notifications;
+- Expo/EAS.
+
+G4 may continue source-only work on its own files. Do not reserve or modify G4's migration candidate.
+
+## Completion / K2
+
+Report:
+- result: READY_FOR_APPROVAL or BLOCKED;
+- fresh main/head evidence;
+- current production trace migration state;
+- current deployed market-report-analysis state;
+- exact safe rollout order;
+- preflight/read-back results;
+- source/runbook changes if any;
+- production mutation/deploy = 0;
+- conflicts/remaining risks;
+- exact approval request if READY.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+Recommended model: **Opus5.5（高）**.
+
+---
+
+# Claude Task 2 — ARCHIVED TASK — AI model registry completed
+
 - task_id: kabumori-ai-model-registry-gpt61-sol-20261007
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
+- final_k2_result: PASS
+- merged_commit: 8738a186628989ce6c797d61ea80f5b721664c95
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: Kabumori-only AI model registry + market-report GPT-6.1 Sol migration
