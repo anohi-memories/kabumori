@@ -1,3 +1,19 @@
+## G1 assigned — delivery-first market-report guard calibration — 2026-10-07
+
+- user decision: prioritize successful daily morning/close delivery; only clear objective falsehoods should hard-stop a report.
+- first natural GPT-6.1 Sol close at 16:20 failed with `ANALYSIS_LOCAL_CHECK_FAILED` after two useful candidates were rejected by false-positive 1306/date guards.
+- G1 task: `kabumori-market-report-delivery-first-guard-calibration-20261007`.
+- required behavior: objective numeric/date/sign/stale/explicit-1306-identity/unknown-ref contradictions remain fatal; ambiguous parser checks, quality issues and non-objective Fact findings become WARN/advisory.
+- Fact may request one bounded regeneration, but if any candidate is deterministically hard-safe the cycle should deliver a best safe candidate instead of failing only because advisory Fact/local warnings remain.
+- deterministic disclaimer required on every shared report:
+  - X compact: 「※AIによる分析です。内容に誤りを含む可能性があります。投資判断はご自身で。」
+  - App: 「※本レポートはAIによる分析です。内容に誤り・不足を含む可能性があります。最終的な投資判断はご自身でお願いします。」
+- 「AIが独自調査」は使用しない; current runtime analyzes supplied packets and does not independently web-browse.
+- current open PR changed-file overlap with expected market-report files: 0.
+- source-only implementation; no production deploy/manual invoke/DB/Cron/gate mutation.
+- recommended Claude model: **Opus5.5（高）**.
+- next action: send `G1` to Claude Code; finish with `K1`.
+
 ## G4 corrective assigned — POSTONA PR #106 review CHANGES REQUIRED — 2026-10-07
 
 - direct independent review target: PR #106 exact head `dac01220ca600cc003b3dafa4b30a84340b29850`.
