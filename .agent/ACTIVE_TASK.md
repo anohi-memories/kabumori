@@ -94,13 +94,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: review_required
-- task_id: postona-multisocial-phase2a2-account-schema-candidate-20261007
+- status: ready
+- task_id: postona-multisocial-phase2a2-security-corrective-20261007
 - start_code: G4
 - finish_code: K4
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: K4 accepts PR #106 head dac01220 as PASS_CANDIDATE only. Six new source/test/docs files, CI green, no fresh-main overlap, production/deploy/provider mutations 0. Because the candidate changes social_accounts platform/credential/ACL schema boundaries, merge remains HOLD for one focused independent Codex review. Per this chat's routing, no H1/H2 slot is allocated here; use the direct-copy review instruction. Recommended reviewer Sol（高）.
+- allocation: Direct independent review of PR #106 head dac01220 returned CHANGES REQUIRED. G4 must update the existing PR only and close B1-B6: provider-identity unique-index precondition, provider immutability, PG16+ SET ROLE graph, explicit starting schema/ACL baseline, connected-Meta access-ref invariant, and provider-aware service_role Meta-write boundary. Also harden policy/trigger/index/check postconditions. No production/apply/deploy/OAuth/Vault/provider calls. After corrected K4, use a free H1/H2 for one Sol（高） exact-head rereview if available.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
