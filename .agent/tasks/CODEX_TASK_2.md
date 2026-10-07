@@ -19,6 +19,10 @@
 
 ## Purpose
 
+USER WAIVER: The user explicitly requested that this review be skipped to prioritize the 2026-10-07 natural close-cycle GPT-6.1 Sol rollout. No Codex source review was performed for this TASK. Do not interpret this as PASS.
+
+Original intended review scope was:
+
 Perform one bounded independent review of PR #108 before its source-only rollout tooling is merged.
 
 PR #108 adds only:
