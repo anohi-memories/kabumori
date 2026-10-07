@@ -1,10 +1,218 @@
 # Claude Task 4 — CURRENT TASK
 
+- task_id: postona-multisocial-phase2a2-account-schema-candidate-20261007
+- owner: claude
+- slot: claude-4
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Opus5.5（高）
+- type: source-only DB migration candidate / disposable PostgreSQL proof / Threads preparation
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Context
+
+Accepted foundations now on main:
+- POSTONA Phase 1 architecture: `docs/postona/multi-social-phase1.md`
+- POSTONA Phase 2a-1 provider domain for `x / threads / instagram`
+- G3 PR #41 live generic scheduled-user source is merged
+- G5 PR #95 common-account Phase 2 source is merged
+
+G5 currently owns a separate **read-only production preflight** for the common-account service-start migration. Do not alter or overtake that production gate.
+
+This task may develop a **source-only** candidate for POSTONA's connected-social-account schema. It must not apply anything to production and must not merge until K4 rechecks the G5 production gate.
+
+## Goal
+
+Prepare the smallest safe forward migration candidate that allows future Threads/Instagram connected accounts without weakening existing X account/credential safety.
+
+The migration is preparation only:
+- no Threads OAuth endpoint;
+- no Meta app credentials;
+- no real account connection;
+- no publish behavior change;
+- no production apply.
+
+## Mandatory startup / isolation
+
+1. Read ORCHESTRATION / ACTIVE_TASK / CURRENT_STATE / this TASK.
+2. Read accepted `docs/postona/multi-social-phase1.md` and the new provider-domain modules.
+3. Read current G5 TASK/Report for the production gate only.
+4. Fresh-fetch `origin/main` from `/Users/yuya/Developer/kabumori-fresh`.
+5. Create a new independent G4 worktree.
+6. Fresh-check G2/G3/G5 changed files and open PRs before selecting migration/test files.
+7. If any intended file is owned by another active slot, do not edit it; redesign or STOP.
+8. Do not use another slot's worktree/server/uncommitted changes.
+
+## Hard no-touch boundaries
+
+Do not modify:
+- G5 common-account migration/RPC/source files or production preflight tooling;
+- G2 PR #101 files while its corrective/review is active;
+- `migration_source_invariants_test.ts` if currently owned by another active PR/task;
+- x-test-post runtime routing;
+- current X OAuth Edge Functions/RPCs;
+- Vault/token refresh runtime;
+- account deletion/revoke runtime;
+- Auth/onboarding/service enrollment;
+- workflows/production config.
+
+No production read/write is required for this task unless K4 later authorizes a separate read-only gate.
+
+## Phase A — exact current schema inventory
+
+Before writing SQL, reconstruct the expected current `social_accounts` contract from repository source, migrations, fixtures, RPCs and tests.
+
+Inventory at least:
+- columns and types used by current source;
+- platform constraint;
+- unique keys/indexes;
+- connection status contract;
+- publish_enabled/default behavior;
+- Vault access/refresh reference columns and current X invariants;
+- functions/triggers/checks that assume both X credential references exist;
+- RLS / grants / ownership assumptions represented in source tests;
+- deletion/revoke and publish-toggle dependencies.
+
+Do not guess missing production DDL. If repository evidence is insufficient to write a fail-closed migration, STOP with the exact missing catalog facts instead of inventing them.
+
+## Phase B — migration design requirements
+
+If Phase A gives sufficient evidence, create one new forward migration candidate.
+
+Required semantics:
+
+### Platform
+- existing X rows remain valid unchanged;
+- permit canonical providers `x / threads / instagram`;
+- unknown providers remain rejected;
+- keep existing uniqueness semantics such as one account per brand/provider unless current evidence proves a different contract is required.
+
+### Credential shape
+Do not weaken X.
+
+The DB contract must be able to represent:
+- X: rotating access + refresh credential references, preserving current X safety invariants;
+- Threads/Instagram: long-lived access credential reference with no separate refresh credential.
+
+Prefer explicit provider/profile-specific invariants rather than globally making all credential columns optional.
+
+The migration must not store plaintext tokens.
+
+### Connection / publish safety
+- new Meta-provider accounts must not become publish-enabled by schema default or migration side effect;
+- existing X `publish_enabled` state must not be changed;
+- existing connection status semantics remain valid unless a provider-neutral extension is strictly necessary;
+- do not activate any publish authority;
+- do not change current X pre-send guards.
+
+### Security / ACL
+- no new broad table SELECT/UPDATE for service_role, authenticated, anon or PUBLIC;
+- preserve existing RLS/grants unless a narrowly justified provider-neutral adjustment is mandatory;
+- fail closed on unexpected schema/constraint/ACL drift rather than silently normalizing unknown production state.
+
+## Phase C — disposable PostgreSQL proof
+
+Build task-local tests/fixtures that do not collide with other active slots.
+
+Prove at minimum:
+- current valid X row survives migration unchanged;
+- new Threads row can represent long-lived-access credentials with refresh ref absent;
+- new Instagram row can represent the same credential profile;
+- X row missing required refresh credential is still rejected;
+- Meta row with an X-only credential shape that violates the chosen profile contract is rejected where applicable;
+- unknown provider rejected;
+- one-account-per-brand/provider uniqueness preserved;
+- migration does not toggle publish permission;
+- unsafe/unexpected starting constraint/ACL shape refuses atomically;
+- failed migration leaves no partial new object/constraint state;
+- no plaintext token field is introduced.
+
+Use real PostgreSQL behavior, not string inspection only.
+
+## Phase D — Threads connection design note
+
+Update or add a short POSTONA design note covering the **next** Phase 2b connection slice:
+- Meta/Threads authorization-code flow;
+- required provider identity result;
+- short-lived -> long-lived token exchange boundary;
+- Vault reference storage only;
+- initial `publish_enabled=false`;
+- redirect URI / callback questions still requiring official verification;
+- disconnect/revoke uncertainty;
+- exact places where G5 common-account entitlement must remain separate from SNS connection.
+
+Do not implement OAuth in this task.
+
+## Migration/version coordination
+
+Before choosing a migration version:
+- inspect fresh main and all open PR migration filenames;
+- avoid collision with G5 `20261006230000`, G2/PR101 and any current G3/G4 migrations;
+- do not renumber or edit an already-merged/applied migration.
+
+If the shared migration reservation file is owned by another active task, do not edit it in this phase. Record the chosen version and collision scan in the Report; K4 can integrate the shared reservation later when free.
+
+## Verification
+
+At minimum:
+- task-local disposable PostgreSQL apply/behavior/adverse-state tests;
+- relevant existing X credential/publish/account-deletion tests against the candidate where practical;
+- no runtime imports/wiring to Threads;
+- no migration apply to production;
+- no Edge deploy;
+- no Auth/OAuth/Vault/secret/provider mutation;
+- no real X/Threads/Instagram call;
+- `git diff --check`;
+- secret scan;
+- fresh main + active-slot overlap recheck before push.
+
+## Deliverable / PR
+
+Create a focused PR containing only:
+- the new migration candidate;
+- task-local fixtures/tests;
+- optional POSTONA Phase 2b connection design note.
+
+Do not merge.
+
+Report:
+- exact fresh main;
+- changed files;
+- reconstructed current schema assumptions;
+- exact migration semantics;
+- disposable PG evidence;
+- ACL/RLS drift handling;
+- migration version collision scan;
+- overlap with G2/G5 = 0;
+- production/deploy/provider mutations = 0;
+- any production catalog facts still unverified;
+- next recommendation for actual Threads OAuth connection.
+
+Then:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K4.
+
+## Review policy
+
+Because this task changes a DB migration/credential-shape boundary, K4 should normally request **one focused Codex review** before merge, preferably **Sol（高）** if the migration candidate is complete.
+
+推薦モデル：**Opus5.5（高）**
+
+---
+
+# Previous G4 task — finalized Phase 2a-1
+
+# Claude Task 4 — CURRENT TASK
+
 - task_id: postona-multisocial-phase2a1-provider-domain-foundation-20261007
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - type: source-only provider-neutral domain foundation / behavior-preserving
@@ -313,6 +521,28 @@ Default: no Codex review if K4 confirms scope stayed pure and tests pass.
 - status: review_required / next_owner: chatgpt。STOP for K4。
 
 ---
+
+## Final K4 — Phase 2a-1 PASS / provider-domain foundation accepted — 2026-10-07
+
+- verdict: **PASS**.
+- accepted source candidate: former PR #103 exact head `2b2f1c1fb4a7188fad5dda3346e802f19bb30983`.
+- scope: five new pure provider-domain/test files only; existing runtime/source files were not modified.
+- accepted architecture:
+  - canonical providers are exactly `x / threads / instagram`;
+  - X uses `oauth2_rotating_refresh` + single-call publishing;
+  - Threads/Instagram use `long_lived_access` + container-then-publish structure;
+  - publication targets carry provider/account/rendered content and are the future retry/idempotency boundary;
+  - `published / rejected / uncertain` outcomes preserve fail-closed reconciliation semantics;
+  - adapter contracts are definitions only; no provider implementation is wired.
+- parity: app/server copies are intentionally separate to avoid Expo/Deno toolchain coupling; parity tests cover exported names, values, behavior and types.
+- verification accepted: Deno new tests 13 PASS, shared suite 449 PASS, app suite 226 PASS, Deno/TS/lint/diff checks PASS.
+- behavior preservation: no app/runtime importer outside tests; no x-test-post, OAuth, Vault, refresh, deletion, DB schema, publish authority, Auth/onboarding/service-entitlement, workflow, deploy, production or real provider call change.
+- G5 PR #95 merged during the task; G4 rebased and reran the full relevant tests afterward. Changed-file overlap with PR #95 was 0.
+- CI: Netlify PASS. Vercel failure was deployment rate limiting and is non-blocking under the repository preview policy; no code failure was indicated.
+- merge handling: main advanced only in unrelated/control work after the candidate base, and GitHub rejected the stale-base PR merge. K4 therefore integrated the exact five accepted blobs directly to fresh main; each main blob SHA was read back equal to the PR #103 source blob. PR #103 was closed as superseded.
+- Codex review: **not required**. This task did not change a live security/runtime boundary.
+- AI Lab diary: **記録不要** — provider abstraction groundwork only; no user-facing capability or live provider behavior was added.
+- next: proceed to Phase 2a-2 as a source-only schema candidate / disposable-DB proof while keeping production apply and Threads OAuth disabled.
 
 # Previous G4 task history — preserved below
 
@@ -2763,5 +2993,6 @@ PR の merge が明朝に間に合わない場合に使う。OpenAI 1回と Stor
 - K4 → merge。merge 後は上記の read-only dispatch 2本で Storage list の実地確認をする。今夜 merge できない場合は、10/7 の手動 fallback の要否を判断する。
 - Plan A（Supabase pg_cron → GitHub `workflow_dispatch`）を別 TASK にする。このリポジトリの Actions 起動だけに絞った fine-grained token を Vault に保存する必要がある。Codex／Luna の security review を1回推奨。
 - status: review_required / next_owner: chatgpt。STOP for K4。
+
 
 
