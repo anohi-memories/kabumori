@@ -1,3 +1,30 @@
+## Final K1 — Portfolio canonical UI PASS / PR #100 merged — 2026-10-07
+
+- PR #100 accepted exact head: `3fd7c569efb6598202e71151dd2393f661f93b81`.
+- verdict: **PASS**.
+- final fresh-main overlap across PR #100 files: **0**.
+- contextual report-detail correction accepted:
+  - Portfolio origin -> Back/native swipe = Portfolio;
+  - Reports-list origin -> Back/native swipe = Reports list;
+  - report -> news return chain preserved;
+  - root report-detail uses the same underlying report-detail implementation.
+- PR #95 Auth/serviceSession/root-news behavior preserved.
+- portfolio product accepted as canonical:
+  - asset summary from saved close facts;
+  - Fact-passed AI overview;
+  - deterministic top-3 day-P/L impact;
+  - current holdings + unmatched not-yet-reflected handling;
+  - dedicated Search;
+  - interim Watchlist;
+  - logo-safe fallback avatars;
+  - stale/non-realtime wording.
+- reported evidence: app tests 426/426; src tsc clean; Expo config PASS; web export PASS; diff clean; 402pt/375pt Simulator Back/swipe checks PASS.
+- Codex review not required for this bounded UI/navigation correction.
+- backend/DB/RPC/Auth/Edge/production mutation/EAS = 0.
+- PR #100 squash-merged as `fe8090bab89824fc8c00147fb5fc92bb1afab82c`.
+- G1 is done/free.
+- nonblocking: Home-origin report detail still returns Reports list because Home continues to use the nested route. A later tiny source-only consistency task may switch the Home CTA to root `report-detail`.
+
 ## G5 production apply ACTIVE — user approved / operator pending — 2026-10-07
 
 - user explicitly approved production apply of `20261006230000_common_account_service_start_intent`.
