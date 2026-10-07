@@ -1,3 +1,141 @@
+# Codex Task 2 — CURRENT TASK
+
+- task_id: kabumori-pr110-b1-b4-rereview-20261008
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- priority: high
+- recommended_model: Sol（高）
+- type: narrow exact-head rereview / B1-B4 only
+- target_pr: 110
+- target_head: d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8
+- previous_reviewed_head: 6612b3f1dee5055794137da71697ebe5e07d7419
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Re-review only the four findings from the previous H2 review of PR #110.
+
+Do not broadly reopen the already accepted delivery-first implementation, app disclaimer work, GPT-6.1 registry, trace storage, or unrelated G2 behavior.
+
+## Freshness / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / latest G2 Report / prior H2 Report / this TASK.
+2. Use a fresh independent H2 checkout/worktree from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #110.
+4. Require exact PR head `d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8`; moved head => STOP.
+5. Allocation-time PR is open/unmerged, mergeable clean, 27 files, and current-main changes since PR base overlap reviewed PR files by **0**. Re-check before verdict.
+6. No production access/mutation/deploy/manual generation/OpenAI/X send/Cron/Auth/Vault/OAuth/settings/EAS.
+7. All probes local/mocked only; no `--allow-net`.
+
+## B1 rereview — objective Fact contradiction handling
+
+Reproduce the previous exact failure:
+- supplied packet says サッポロビール is under 公正取引委員会 investigation;
+- generated X/app/claim says **「公正取引委員会はサッポロビールへの調査を実施していません。」**;
+- local hard guards miss it;
+- Fact rejects it.
+
+Verify corrected head:
+- objective Fact finding is represented separately from soft/advisory findings;
+- exact objective quote maps to the smallest generated unit;
+- that unit is removed, then deterministic delivery re-check runs;
+- contradicted text never reaches final X/App payload;
+- unmapped/ambiguous objective quote makes that candidate undeliverable rather than silently advisory;
+- if no coherent safe candidate remains, cycle fails/retries;
+- genuine soft Fact warnings still remain advisory;
+- MAX_GENERATIONS=2 / MAX_MODEL_CALLS=4 unchanged.
+
+Probe one additional objective contradiction beyond the supplied サッポロビール case.
+
+## B2 rereview — inline emoji binding
+
+Reproduce:
+**「10月6日の日経平均は📉 70,035.71（前日比−0.92%）でした。」**
+
+Verify:
+- wrong-date metric/value is caught/removed;
+- emoji before value, before %, between subject/date/value, next to brackets/commas cannot detach governed facts;
+- legitimate:
+  **「10月7日の日経平均…でした📉 10月6日の米国市場…」**
+  remains accepted with no false rejection;
+- emoji behavior is not broadly disabled.
+
+## B3 rereview — clause-local speculation
+
+Reproduce:
+**「ウクライナ情勢を受けて東京市場は下落しましたが、今後の動きには不確実な可能性があります。」**
+
+Verify:
+- first definite unsupported causal clause remains hard/removable despite later unrelated hedge;
+- genuine qualified:
+  **「ウクライナ情勢が重しとなった可能性があります。」**
+  remains advisory/allowed;
+- clause segmentation controls with が／けれど／ものの／ので／ため／一方／ただし／しかし do not create obvious laundering;
+- delivery re-check uses the same corrected causality semantics.
+
+## B4 rereview — truthful X Fact status
+
+Verify `shared_market_report_consumer.ts` and tests:
+- upstream passed -> persisted/logged passed;
+- upstream advisory -> persisted/logged failed (within existing DB enum/constraint);
+- upstream not_run -> persisted/logged NULL;
+- notes/market_data truthfully carry fact_status and useful removed-unit/warning evidence where supported;
+- invalid-format path does not falsely claim passed;
+- posting behavior remains unchanged for passed/advisory/not_run;
+- no schema/migration added.
+
+## Preserve accepted behavior
+
+Confirm no regression in:
+- 10/7 three production fixture generations: intended valid text remains 0 false-positive removals;
+- ordinary wrong value/date/direction/stale/unknown-ref local removal;
+- 1306/TOPIX distinction;
+- progressive degradation / coherent remainder delivery;
+- X Premium length behavior;
+- canonical X/App disclaimer;
+- actual app report-detail disclaimer;
+- model-call and transport retry ceilings.
+
+## Required evidence
+
+At minimum:
+- exact correction diff inspection from previous head -> target head;
+- independently reproduce prior B1-B4 failures against previous logic or equivalent harness evidence;
+- run new `h2_corrective_test.ts`;
+- run delivery-first focused tests;
+- market-report-analysis full suite;
+- shared X consumer tests;
+- relevant app disclaimer tests;
+- Deno check/lint changed source where practical;
+- git diff --check.
+
+## Verdict
+
+Return:
+- PASS
+- PASS-WITH-NONBLOCKING-NOTES
+- CHANGES REQUIRED
+- BLOCKED
+
+PASS means the four previous blockers are closed and PR #110 can proceed to C2 final merge/no-race decision. It does not authorize deployment.
+
+## Completion
+
+Prepend/write `.agent/CODEX_REPORT_2.md` with exact head, B1-B4 results, independent probes/tests, source changes by H2, production access/mutation/deploy=0, and merge recommendation.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for **C2**.
+
+Recommended model: **Sol（高）**.
+
+---
+
 # Codex Task 2 — COMPLETION RECEIPT
 
 - task_id: kabumori-pr110-delivery-first-focused-review-20261007
