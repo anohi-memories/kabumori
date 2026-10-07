@@ -1,5 +1,187 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Opus5.5（高）
+- type: market-report reliability / delivery-first guard calibration / mandatory disclaimer
+- production_mutation_allowed: false
+- deploy_allowed: false
+- start_timing: DO NOT START until the user confirms the 2026-10-07 16:35 JST natural retry has finished.
+- routing_rule: This chat/workstream uses G2 only.
+
+## Product decision
+
+**毎日配信されることを最優先する。レポート全体停止は最後の手段。**
+
+2026-10-07の最初のGPT-6.1 Sol自然大引けでは、内容自体は有用だったが、1306/dateのfalse-positive local guardで2世代とも弾かれ、`ANALYSIS_LOCAL_CHECK_FAILED` で配信できなかった。
+
+今後は明確な誤りがあっても、可能な限り**該当部分だけ落として残りを配信**する。
+
+## Mandatory disclaimer
+
+X / Appとも、最終出力に次をapplication-sideで決定論的に1回だけ付与する。
+
+**「※本レポートはAIによる分析です。内容に誤り・不足を含む可能性があります。最終的な投資判断はご自身でお願いします。」**
+
+Rules:
+- モデル生成任せにしない。
+- 「AIが独自調査」は使わない。current runtimeは supplied market/news packetを分析しており、独立Web調査はしない。
+- 免責は長さ調整で削除しない。
+- KabumoriのXはPremium account。旧来の短文文字数目標はplatform hard limitではない。
+- Xの旧文字数目標はWARN/editorial guidelineのみ。安全な内容や免責を切る理由にしない。
+
+## Progressive degradation
+
+### Objective errors: detect, isolate, continue
+
+次の客観的誤りは検出を続けるが、1件だけでcycle全体をfailにしない。
+
+- packetと矛盾する数値
+- 明確な符号/方向逆転
+- 同一governed clauseで指標値に付いた明確な誤日付
+- stale値をcurrent/latestとして断定
+- 1306 ETFをTOPIXそのものとして断定
+- unknown/nonexistent evidence ref / fabricated referenced fact
+- supplied packetから決定論的に証明できる同等の客観矛盾
+
+When detected:
+1. smallest affected unitを特定（sentence / bullet / point / claim / news item / paragraph fragment）。
+2. そのunitだけ削除、または既知の決定論的情報だけでneutralize。
+3. 残りがcoherentならdelivery継続。
+4. removed unit / reasonをdiagnostics / generation tracesへ残す。
+5. replacement factを推測しない。迷ったら省略。
+
+Examples:
+- X 3ポイントのうち1つの数字が誤り -> その1ポイントだけ落として残りを配信。
+- App storyの1文だけ誤数値 -> その文だけ除外し、段落が成立すれば配信。
+- unknown news ref -> そのnews/claimだけ除外。
+- 「TOPIXは437.0円」 -> 該当文を除外、または安全に決定できる場合のみ `TOPIX連動ETF（1306）` に直す。
+
+### Whole-report failure is last resort
+
+Whole-cycle failureを許すのは以下だけ:
+- structured outputがparse不能;
+- required shapeが壊れ、決定論的再構成も不能;
+- bad unitsを落とした結果、最低限coherentなreportが残らない;
+- 全generationがsanitizeしても使用不能。
+
+「1箇所の数字ミス」「1つのunknown ref」だけで全体停止しない。
+
+## Ambiguous checks => WARN/advisory
+
+単独でdeliveryを止めない:
+- 隣接文/隣接clauseのparser ambiguity
+- 正しい「10/7日本」+「10/6米国」の対比
+- 「TOPIXそのものではなく」「TOPIX連動ETF」と明示的に区別する文章
+- genericity / ordering / near-target length / style
+- cautious inference: 「可能性」「意識された可能性」「一因として考えられる」「次に確認したい」
+- Fact findingsのうち、supplied packetとの客観矛盾として証明できないもの
+
+2026-10-07の実際の2 false-positive candidate形をfixture化して回帰テストする。
+
+## Fact behavior
+
+Factは残すが、otherwise-safe reportを永久に止めない。
+
+Desired flow:
+1. generation
+2. deterministic objective checks
+3. Fact
+4. meaningful issueなら、現行call ceiling内で最大1回bounded regeneration
+5. final generationからobjective bad unitsをsanitize
+6. coherent safe contentが残れば、nonfatal Fact/advisory warningがあってもdeliver
+7. warning / removed units / reasons / fallback choiceをdiagnosticsとtraceに保存
+8. no generation can be reduced to a minimally coherent safe report の場合だけfail
+
+Do not increase model-call ceiling or transport retry budgets.
+
+## Causality / analysis
+
+次は分析表現として許容し、単独でhard-stopしない:
+- 「〜の可能性があります」
+- 「〜が意識された可能性」
+- 「一因として考えられます」
+- 「次に確認したい点」
+
+ただし、unsupported inferenceをconfirmed factとして断定しない。明白な捏造因果はobjective errorとして扱ってよい。
+
+## Scope
+
+Expected primary files:
+- `supabase/functions/market-report-analysis/analysis_logic.ts`
+- `supabase/functions/market-report-analysis/hard_fact_guards.ts`
+- `supabase/functions/_shared/market_report_packet.ts`
+- `supabase/functions/_shared/market_report_story.ts`
+- focused tests
+
+`handler.ts` は diagnostics / selection semantics に必要な場合のみ。
+
+Do not touch:
+- DB schema/migrations/RLS/ACL
+- Auth/common-account
+- important-news-monitor
+- POSTONA/G3/G4
+- Cron/secrets/consumer gates
+- production deploy/manual invoke
+
+## Freshness / isolation
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK.
+2. User timing gate: **16:35 JST natural retryの完了確認前に実装開始しない。**
+3. After that, use a new isolated G2 worktree from fresh `/Users/yuya/Developer/kabumori-fresh`.
+4. Fresh-fetch `origin/main`.
+5. Re-check open PR changed-file overlap before editing.
+6. At assignment time, open PRs #109/#106/#33/#11/#10/#3 had no overlap with expected market-report files.
+7. Do not touch other slots' worktrees/branches/servers.
+
+## Required regressions
+
+At minimum prove:
+- exact 10/7 phrase with 「TOPIXそのものではなく」 does not hard reject;
+- exact 10/7 phrase 「10月7日の日経平均… 10月6日の米国市場…」 does not hard reject;
+- explicit wrong-date numeric sentence is detected, but only that unit is removed when the rest is safe;
+- explicit 「TOPIXは437.0円」 is detected and removed/safely neutralized without killing the report;
+- reversed sign/direction unit is omitted, rest delivers;
+- stale-as-current and unknown refs are isolated to smallest affected units;
+- one bad numeric point + multiple safe points still delivers;
+- one bad App sentence + coherent remainder still delivers;
+- nonfatal Fact issue can regenerate once then sanitize/fallback-deliver;
+- fail only when no candidate can be reduced to a minimally coherent report;
+- X disclaimer exactly once and not shortened for legacy length target;
+- App disclaimer exactly once;
+- call ceiling/retry semantics unchanged;
+- trace/diagnostics retain warning/removal/fallback evidence.
+
+Run relevant full market-report-analysis + shared report formatting regression suites.
+
+## Deliverable
+
+Open one focused source-only PR. Report:
+- changed_files
+- fatal vs advisory classification
+- progressive-degradation implementation
+- exact 10/7 regression results
+- Fact fallback behavior
+- disclaimer placement
+- X Premium length behavior
+- full tests
+- model-call ceiling
+- production mutation = 0
+- remaining risks
+- rollout/observation recommendation
+
+Do not merge or deploy. Stop for **K2**.
+
+Recommended model: **Opus5.5（高）**.
+
+---
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-market-report-gpt61-production-preflight-20261007
 - owner: claude
 - slot: claude-2
