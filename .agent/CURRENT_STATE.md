@@ -5655,3 +5655,13 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - required correction is bounded to migration guards + adversarial rollback tests. Topic content/capacity design should not be redesigned.
 - after K3, one focused exact-head Codex rereview is required, recommended **Sol（高）**.
 - AI Lab diary: 記録不要 — no completed user-visible development milestone yet; this is a security corrective in progress and same-day diary duplication is unnecessary.
+
+
+## K3 follow-up — AI Lab Premium length policy — 2026-10-07
+- prior PR #109 security corrective head `7c3c06d07c32910472185e1c94b04fa1aab794f5` is accepted as a PASS candidate for rereview: B1-B3 adverse guards reported closed, 13/13 rejected with rollback, healthy apply/reapply PASS, 140/140 capacity preserved, production mutation 0.
+- user clarified the AI Lab X account is Premium and posts may exceed 140 characters; short legacy limits should not constrain natural content.
+- fresh source inspection found AI Lab had no 140 limit but did have a hard `maxChars: 280` enforced both after generation and immediately before X dispatch.
+- K3 therefore defers Codex rereview one turn and returns a bounded product correction to G3: change AI Lab only to explicit unlimited length, permit >280 text, preserve character-count diagnostics, and add guidance not to pad content merely because longer posts are allowed.
+- POSTONA/general-user, Kabumori X, topic/capacity, scheduler, OAuth/Vault/Auth and PR #109 B1-B3 migration bytes must remain unchanged.
+- task: `ai-lab-premium-length-policy-unlimited-20261007`; recommended **Sonnet5（高）**.
+- production migration/deploy/merge remains HOLD.
