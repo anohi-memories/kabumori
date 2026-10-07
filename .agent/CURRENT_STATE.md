@@ -1,3 +1,42 @@
+## Final K5 — Phase 2 production migration APPLIED_PASS / window CLOSED — 2026-10-07
+
+- G5 production apply verdict: **APPLIED_PASS**.
+- exact production migration: `20261006230000_common_account_service_start_intent`.
+- user approval was explicit and recorded before the production mutation.
+- production mutation window:
+  - ACTIVE: 13:42 JST;
+  - Stage A COMMIT: 13:47:09 JST;
+  - migration-history row: 13:47:28 JST;
+  - CLOSED: 13:52 JST.
+- Stage A applied the exact reviewed migration once with the pinned SHA-256; psql transaction completed with exit 0.
+- Stage B read-back: **33/33 PASS**.
+- Stage C inserted exactly one history row for `20261006230000 / common_account_service_start_intent`.
+- final `after --history` read-back: **33/33 PASS**.
+- independent G5 Management API read-back at 13:50: **33/33 PASS**.
+- resulting RPC/helper state matches reviewed expectations:
+  - all 8 touched functions owned by postgres, SECURITY DEFINER, `search_path=""`;
+  - public start/reactivate RPCs expose only intended authenticated EXECUTE;
+  - private helpers have no API-role EXECUTE;
+  - no duplicate overloads;
+  - expected definitions/hashes match.
+- no unrelated schema/data drift detected by the production baseline/postflight fingerprints.
+- common-account data remained unchanged: 5 active common accounts; entitlements kabumori 2 / x_autopost 1, all active legacy_backfill; lifecycle operations 0; profiles 2.
+- production writes in this G5 window were exactly two:
+  1. one migration transaction;
+  2. one migration-history INSERT.
+- no backfill, entitlement enforcement, deletion, deploy, EAS, Auth Admin, Storage, OAuth, Vault, Cron, X/provider mutation.
+- preflight/runbook PR #104 was already squash-merged before apply as `944836d4938cb8d2600b3f5b469e6e93b551da0a`.
+- observation: migration history gained `20260929090000 news_discovery_observer` between 13:27 and 13:46 via another/unknown path. G5 did not add it. Function/table fingerprints were unchanged across that interval, so it did not affect this Phase 2 migration or its postflight. Track separately if attribution is needed.
+- no additional Codex review required for this apply: exact reviewed source was applied and bounded production read-back fully matched the reviewed expected state.
+- Phase 2 server-side start/reactivate contract is now production-ready.
+- later gates remain separate:
+  - native Simulator/iPhone validation of the Phase 2 client against the new response contract;
+  - any real-account/self-service enrollment test that mutates service state requires an explicit test plan/approval;
+  - EAS/TestFlight build/release remains a separate approval gate.
+- G5 is done/free.
+- recommended model for any later common-account native validation task: **Opus5.5（高）**.
+- AI Lab diary: no additional entry; this is internal production migration completion.
+
 ## Final C2 — PR #101 PASS / merged / next G2 AI model registry ready — 2026-10-07
 
 - H2 task `kabumori-pr101-f2-f3-final-rereview-20261007` verdict: **PASS**.
