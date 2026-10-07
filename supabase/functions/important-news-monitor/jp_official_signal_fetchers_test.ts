@@ -82,7 +82,7 @@ test("incoming candidate maps to the legacy market_macro shape under source_name
   const candidate = toJpOfficialIncomingCandidate(item, "本文");
   assert.equal(candidate.sourceType, "market_macro");
   assert.equal(candidate.sourceName, "jp_official");
-  assert.equal(candidate.entityKey, "jp_official:jp_mof_news");
+  assert.match(String(candidate.entityKey), /^jp_official:jp_mof_news:\d+$/);
   assert.equal(candidate.category, "fx");
   assert.equal(candidate.companyCode, null);
   assert.ok(JP_OFFICIAL_ALLOWED_DOMAINS.includes("mof.go.jp"));

@@ -120,7 +120,7 @@ test("oversized bodies are refused (declared length and streamed)", async () => 
 test("http errors, network errors, timeouts and empty pages map to reason codes", async () => {
   assert.deepEqual(
     await fetchOfficialPageText("https://www.mof.go.jp/a", MOF, { fetchImpl: () => Promise.resolve(new Response("x", { status: 503 })) }),
-    { ok: false, reason: "http_error" },
+    { ok: false, reason: "http_error", status: 503 },
   );
   assert.deepEqual(
     await fetchOfficialPageText("https://www.mof.go.jp/a", MOF, { fetchImpl: () => Promise.reject(new TypeError("boom")) }),

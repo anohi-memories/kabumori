@@ -53,11 +53,11 @@ import {
   planSourceFairCandidateBatch,
 } from "./fetch_resource_limit_logic.ts";
 import { fetchOfficialPageText } from "./jp_official_enrichment.ts";
+import { collapseSameEventItems, createPermanentFailureMemory, runJpOfficialFill } from "./jp_official_lane_logic.ts";
 import { JP_OFFICIAL_SOURCES } from "./jp_official_filters.ts";
 import {
   fetchJpOfficialSignalRows,
   JP_OFFICIAL_ALLOWED_DOMAINS,
-  jpOfficialBodySummary,
   type JpOfficialSelected,
   selectJpOfficialSignals,
   toJpOfficialIncomingCandidate,
@@ -144,6 +144,9 @@ import {
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
 const MAX_CANDIDATES_PER_REQUEST = 100;
 const UNPDF_EDGE_TEST_URL = "https://www.release.tdnet.info/inbs/140120260828528131.pdf";
+
+// JP official lane: URLs whose enrichment failed permanently (best effort while the isolate stays warm).
+const jpOfficialPermanentFailures = createPermanentFailureMemory();
 
 const SOURCE_POLICY: Record<string, { type: ImportantNewsSourceType; priority: 1; domains?: string[] }> = {
   tdnet: { type: "tdnet", priority: 1, domains: ["tdnet.info"] },
@@ -2172,9 +2175,6 @@ Deno.serve(async (req) => {
       skipped: {} as Record<string, number>,
       drops: {} as Record<string, number>,
     };
-    const jpOfficialSkip = (reason: string) => {
-      jpOfficial.skipped[reason] = (jpOfficial.skipped[reason] ?? 0) + 1;
-    };
     if (body.fetchSources === true && Deno.env.get("IMPORTANT_NEWS_JP_OFFICIAL_LANE") === "enabled") {
       jpOfficial.enabled = true;
       try {
@@ -2186,59 +2186,50 @@ Deno.serve(async (req) => {
         jpOfficial.drops = drops;
 
         // Releases already stored are dropped BEFORE any page is fetched (url / title+entity / hash checks).
-        const novelBySource = new Map<string, Array<{ item: JpOfficialSelected }>>();
-        for (const item of selected) {
+        const novelBySource = new Map<string, JpOfficialSelected[]>();
+        const { kept, collapsed } = collapseSameEventItems(selected);
+        if (collapsed > 0) jpOfficial.drops.same_event_in_batch = collapsed;
+        for (const item of kept) {
           try {
             const prepared = await prepareNewsCandidate(parseIncoming(toJpOfficialIncomingCandidate(item, null)));
             if (await findStoredDuplicate(supabaseUrl, serviceRoleKey, prepared, true)) {
               jpOfficial.alreadyKnown += 1;
               continue;
             }
-            novelBySource.set(item.sourceId, [...(novelBySource.get(item.sourceId) ?? []), { item }]);
+            novelBySource.set(item.sourceId, [...(novelBySource.get(item.sourceId) ?? []), item]);
           } catch (error) {
             sourceErrors.push(`jp_official:${item.sourceId}:${safeError(error)}`);
           }
         }
 
-        const batch = planSourceFairCandidateBatch(
-          [...novelBySource].map(([sourceKey, candidates]) => ({ sourceKey, candidates })),
+        // Hardening (B.1): fill the quota with STORED candidates. An item that cannot be enriched is skipped without
+        // using a slot, so it never blocks the items behind it; temporary failures are retried on the next fetch.
+        const outcome = await runJpOfficialFill(
+          novelBySource,
           MAX_JP_OFFICIAL_CANDIDATES_PER_FETCH,
+          25_000, // the page fetches of this lane never stretch the run
+          {
+            enrich: (item) => fetchOfficialPageText(item.sourceUrl, JP_OFFICIAL_SOURCES[item.sourceId].domains),
+            isStored: async (item, bodySummary) => {
+              const prepared = await prepareNewsCandidate(parseIncoming(toJpOfficialIncomingCandidate(item, bodySummary)));
+              return await findStoredDuplicate(supabaseUrl, serviceRoleKey, prepared) !== null;
+            },
+            insert: async (item, bodySummary) => {
+              const prepared = await prepareNewsCandidate(parseIncoming(toJpOfficialIncomingCandidate(item, bodySummary)));
+              return await insertCandidate(supabaseUrl, serviceRoleKey, prepared, null);
+            },
+            now: () => Date.now(),
+            memory: jpOfficialPermanentFailures,
+          },
+          safeError,
         );
-        jpOfficial.deferred = batch.deferredCandidateCount;
-        const budgetEnd = Date.now() + 25_000; // the page fetches of this lane never stretch the run
-        for (const { item } of batch.selectedCandidates) {
-          try {
-            if (Date.now() > budgetEnd) {
-              jpOfficialSkip("time_budget");
-              continue;
-            }
-            const config = JP_OFFICIAL_SOURCES[item.sourceId];
-            let enrichedText: string | null = null;
-            if (config.enrich) {
-              const page = await fetchOfficialPageText(item.sourceUrl, config.domains);
-              if (!page.ok) {
-                // Not stored: a title-only candidate could only end in "cannot confirm". It is retried on the
-                // next fetch while the release is still inside the freshness window.
-                jpOfficialSkip(`enrich_${page.reason}`);
-                continue;
-              }
-              enrichedText = page.text;
-              jpOfficial.enrichedPages += 1;
-            }
-            const bodySummary = jpOfficialBodySummary(item, enrichedText);
-            if (!bodySummary) {
-              jpOfficialSkip("no_body");
-              continue;
-            }
-            const prepared = await prepareNewsCandidate(parseIncoming(toJpOfficialIncomingCandidate(item, bodySummary)));
-            const saved = await insertCandidate(supabaseUrl, serviceRoleKey, prepared, null);
-            jpOfficialResults.push(saved);
-            if (saved.status === "duplicate") jpOfficial.alreadyKnown += 1;
-            else jpOfficial.inserted += 1;
-          } catch (error) {
-            sourceErrors.push(`jp_official:${item.sourceId}:${safeError(error)}`);
-          }
-        }
+        jpOfficial.inserted += outcome.inserted;
+        jpOfficial.alreadyKnown += outcome.alreadyKnown;
+        jpOfficial.enrichedPages += outcome.enrichedPages;
+        jpOfficial.deferred = outcome.deferred;
+        for (const [reason, count] of Object.entries(outcome.skipped)) jpOfficial.skipped[reason] = (jpOfficial.skipped[reason] ?? 0) + count;
+        jpOfficialResults.push(...outcome.results);
+        sourceErrors.push(...outcome.errors);
       } catch (error) {
         sourceErrors.push(`jp_official:${safeError(error)}`);
       }
