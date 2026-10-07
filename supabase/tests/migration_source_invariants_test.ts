@@ -141,14 +141,24 @@ Deno.test("[D] Phase 3A, the daily tip RPC and (when present) Phase 3C keep dist
 // out of band. A repo migration may use one of these only for the SAME name.
 // Extend this list when a new open PR adds a migration.
 const RESERVED: Record<string, string> = {
-  "20260927101423": "vault_account_brand_post_completion", // PR 41
-  "20260927124300": "x_account_publish_authority", // PR 41
+  // PR 41 (Stage 3B) renumbered 2026-10-06 from the never-applied 20260927101423 / 20260927124300 so that it
+  // sorts after the PR81 settings hardening its settings reader depends on.
+  "20261006160000": "vault_account_brand_post_completion", // PR 41
+  "20261006160100": "social_mobile_publish_settings_reader", // PR 41
+  "20261006160200": "x_account_publish_authority", // PR 41
   "20260921115317": "important_news_search_diagnostics", // PR 3 (already on main)
   "20260930090000": "mic_scenario_automation_cron_phase3c", // reserved for MIC Phase 3C
   "20261001150000": "common_account_lifecycle_foundation", // common account v1 Phase 1 (source candidate)
   "20261002090000": "mic_jgb_nikkei_observation_grace_stage0", // MIC State freshness Stage 0
   "20261003090000": "social_mobile_publish_permission_boundary", // PR 76 corrective (source candidate)
 };
+
+// Versions given up by open work: never reused by any migration.
+const RETIRED = new Set(["20260927101423", "20260927124300"]); // PR 41, renumbered 2026-10-06
+
+Deno.test("[E] retired versions are never reused", async () => {
+  for (const { version, file } of await load()) assert.ok(!RETIRED.has(version), `${file} reuses retired ${version}`);
+});
 
 Deno.test("[E] versions reserved by open work are never used by a different migration", async () => {
   for (const { version, name, file } of await load()) {

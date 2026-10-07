@@ -1,5 +1,109 @@
 # Codex Task 2 — CURRENT TASK
 
+- task_id: x-social-mobile-pr41-acl-focused-rereview-20261007
+- owner: codex
+- slot: codex-2
+- status: done
+- next_owner: none
+- h2_review_result: PASS
+- h2_reviewed_head: c509117f8addf5a8687d60d9c18ae271b2c1777c
+- h2_review_completed_at: 2026-10-07 JST
+- h2_report_commit: c620b8a9145fc72a0b558c00f511173d3f0ce7f4
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused corrective rereview / R1 effective column privileges / R2 effective RPC EXECUTE
+- target_pr: 41
+- target_head: c509117f8addf5a8687d60d9c18ae271b2c1777c
+- previous_reviewed_head: 280aa0f83d4f039ba3e43f32da202a91fd2333f2
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+G3 corrected only the two concrete H2 blockers. Review only those corrected privilege boundaries; do not repeat the full PR #41 review.
+
+## R1 — effective column privilege closure
+
+Verify `20261006160100_social_mobile_publish_settings_reader.sql` now fails closed for any effective forbidden service_role privilege on `social_mobile_content_settings`, including direct, inherited and PUBLIC-derived column privileges across all live columns.
+
+At minimum reproduce:
+- direct column SELECT;
+- inherited column SELECT;
+- PUBLIC column SELECT;
+- column INSERT / UPDATE / REFERENCES;
+- one table-level DML drift.
+
+Required:
+- refused migration rolls back completely;
+- reader remains absent;
+- unrelated ACL/default ACL/role membership is unchanged;
+- authenticated PR81 client privileges remain unchanged;
+- clean graph applies and service_role still cannot directly read the table/columns.
+
+## R2 — default/inherited EXECUTE closure
+
+Verify exact corrected migrations:
+- `20261006160000_vault_account_brand_post_completion.sql`
+- `20261006160200_x_account_publish_authority.sql`
+
+For privileged routines verify:
+- exact signature/kind and no overload/procedure collision;
+- safe owner/creator;
+- safe search_path;
+- exact direct ACL;
+- no unknown grantee/grant option;
+- PUBLIC/anon/authenticated effective EXECUTE = none;
+- service_role intended EXECUTE only;
+- unsafe default ACL/inheritance causes atomic refusal;
+- no global default-privilege or role-membership repair.
+
+Reproduce and prove closed:
+- unknown default EXECUTE inherited by authenticated;
+- authenticated cannot enable publish authority;
+- authenticated cannot call completion;
+- anon inheritance;
+- grant option;
+- unexpected direct grant;
+- unsafe owner/creator;
+- service_role clean-path calls still succeed.
+
+## Bounded regression only
+
+Run only enough regression to confirm unchanged accepted behavior:
+- reader exact-brand/tenant binding;
+- no row/manual_review = no publish;
+- authority/check/completion clean path;
+- PR76 guarded send;
+- PR78 memory-to-live generation;
+- AI Lab/Kabumori unaffected.
+
+G3 reports latest main corrections already integrated and changed-file overlap with current main = 0. Re-check freshness before verdict.
+
+## Safety
+
+No implementation fixes. No PR merge. No production read/write/apply/deploy. No real X/OpenAI/Auth/Vault/OAuth/Cron/publish activation. No G5 enforcement work.
+
+## Completion / C2
+
+Append to `.agent/CODEX_REPORT_2.md` with exact head, R1/R2 verdict and focused evidence.
+
+If PASS:
+- recommend PR #41 merge after final freshness/no-race check;
+- no further routine review;
+- production rollout remains separate.
+
+If blocker remains:
+- report only the still-failing R1/R2 boundary and minimal correction.
+
+Then status -> review_required / next_owner -> chatgpt and STOP for C2.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Previous H2 task — preserved history
+
 - task_id: x-social-mobile-pr41-live-generation-security-review-20261007
 - owner: codex
 - slot: codex-2

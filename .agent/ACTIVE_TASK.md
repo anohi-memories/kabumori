@@ -33,62 +33,62 @@
 - owner: codex
 - slot: codex-1
 - status: done
-- task_id: kabumori-pr99-editorial-specificity-focused-review-20261007
+- task_id: common-account-v1-phase2-session-identity-final-rereview-20261007
 - start_code: H1
 - finish_code: C1
 - next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts PASS-WITH-NONBLOCKING-NOTES on PR #99 exact head cd33b1f22f532be9273d63f0f42f0a0d9c1de156. Prompt specificity/WARN-only telemetry/X rewrite 300-char threshold/bounded rejection diagnostics/Hard-call boundaries all accepted. PR #99 squash-merged as e3379f8066877b5b64fede2dc84cbdb995c85b8e. H1 free after fresh allocation.
-- recommended_model: Luna（高）
+- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #95 exact head 1e8119e1. S2 queued-X cancellation is PASS; stable session_id cache/context design and same-session refresh are PASS. One remaining P2 S1-T exists only in Kabumori: after Supabase reports a superseding login/sign-out, AuthProvider defers owner/generation invalidation until setTimeout(0), allowing old A1 readiness to transiently reappear before deferred work runs. H1 free; exact corrected head requires focused Sol（高） rereview.
+- recommended_model: Sol（高）
 
 ## Codex H2
 - owner: codex
 - slot: codex-2
 - status: done
-- task_id: x-social-mobile-pr41-live-generation-security-review-20261007
+- task_id: x-social-mobile-pr41-acl-focused-rereview-20261007
 - start_code: H2
 - finish_code: C2
 - next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Final C2 accepted CHANGES REQUIRED on PR #41 exact head 280aa0f83d4f039ba3e43f32da202a91fd2333f2. Two blockers only: R1 effective column-level service_role privilege drift; R2 unexpected default/inherited EXECUTE on completion/authority RPCs. H2 closed; no merge/deploy/production mutation. Focused rereview only after bounded G3 corrective.
+- allocation: Final C2 PASS on corrected PR #41 exact head c509117f8addf5a8687d60d9c18ae271b2c1777c. R1 effective column privilege and R2 default/inherited EXECUTE blockers closed. PR #41 squash-merged as b90ee326600b075e3d0b23209b4eefc1b4cd9c16. No further routine review. Production rollout remains separate. H2 free.
 - recommended_model: Sol（高）
 
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
+- next_owner: chatgpt
+- status: review_required
 - task_id: kabumori-portfolio-canonical-ui-v1-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: ユーザー承認済みポートフォリオ正本を実装。銘柄タブdefaultを資産評価額→保存済みFact-passedポート総括→資産への影響top3→保有銘柄→AI CTAへ再構築。最新大引け/ tracked_stocks実データのみ、stale basis明示、企業ロゴは未実装でfallback avatar。検索を独立実画面化、Watchlistはタグ未確定のため既存監視銘柄を安全なinterim subviewへ。src/app/_layout.tsx/Auth/migration/RPC/G5境界禁止。375/402 Simulator、EAS 0、backend/production mutation 0。
-- recommended_model: Sonnet5（高）
+- allocation: K1 PASS on portfolio implementation / merge HOLD only for contextual report-detail navigation. PR #100 head 5a9735c80e3dbc01b25911a0aabc83fce3d56bc9; canonical 402/375 UI, real saved-close data, top3 impact, search, interim Watchlist, fallback avatar, 404/404 tests accepted. Remaining: Portfolio -> report detail must Back/swipe to Portfolio, while Reports-list origin returns Reports list. Preferred root-level report-detail structural fix, but active G5/H1 owns src/app/_layout.tsx; do not overlap. Wait for C1/root boundary clear, then bounded G1 correction. No merge yet.
+- recommended_model: Sonnet5（中）
 
 ## Claude G2
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-pr99-controlled-analysis-deploy-20261007
+- task_id: kabumori-market-report-debug-trace-corrective-20261007
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: PR #99 merge済み。market-report-analysis のみをexact fresh mainからcontrolled production deployしてbyte/source read-back。personalized-reportsは触らない。manual generation/retry、DB/RPC/migration、Cron/gate、X/通知、EASは禁止。production mutex必須。
-- recommended_model: Opus5.5（中）
+- allocation: 10/7朝刊の失敗原因を追えるよう、失敗generationの実際の生成本文・local/Fact指摘・generation/attempt履歴を保存するデバッグトレース基盤を実装。固定コードだけでなく本文を保持し、scheduled retryで前回失敗を上書きしない。必要ならappend-only診断table/migration候補を作るが本番適用は禁止。朝刊の未証明な時間関係promptも安全化。Hard/300字rewrite/call ceiling/PR99 telemetryは不変。
+- recommended_model: Opus5.5（高）
 
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
+- status: done
 - task_id: x-social-mobile-pr41-acl-corrective-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: Bounded corrective for H2/C2 PR #41 findings only. R1: fail closed on any effective service_role column privilege drift, including inherited/PUBLIC column grants, with atomic rollback. R2: exact/effective EXECUTE hardening for completion + publish-authority privileged RPCs against unknown default ACL, inheritance, grant option, overload/owner drift; no global ACL/role repair. Preserve already-passed live-generation/runtime behavior and G5 boundaries. Source-only; no production/merge/deploy. Recommended Opus5.5（高）.
+- allocation: Final C2 PASS and PR #41 merged. Live generic social-mobile scheduled-post source plus remembered AI settings/persona and hardened Stage3B ACL boundaries are now on main via squash b90ee326600b075e3d0b23209b4eefc1b4cd9c16. Production migrations/deploy/authority activation remain 0 and must wait for G5/common-account and separate rollout gates. G3 free.
 - recommended_model: Opus5.5（高）
 
 ## Claude G4
@@ -112,7 +112,7 @@
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: C1 corrective round 2 on existing PR #95. Fix only H1 S1/S2: bind cache/view/consent/positive-ready to stable login-session identity (e.g. validated JWT session_id) so same-user fresh login invalidates old explicit request/result while ordinary same-session token refresh preserves single-flight; and prevent queued X automatic enrollment from dispatching after cleanup/sign-out/unmount by checking cancellation/current generation before ensure/transport dispatch. Preserve already-passed R1-R5 corrections and PR94 navigation. No production migration apply/deploy/EAS/Phase3. Mandatory exact-head H1 re-review after correction.
+- allocation: C1 corrective round 3 on existing PR #95. Fix only S1-T in Kabumori AuthProvider: synchronously record/fence the SDK-notified current auth owner/login and invalidate/cancel obsolete enrollment/readiness immediately on changed login/user/sign-out before any deferred task can run. Defer network preparation only. Add render-before-deferred-task regressions for same-user fresh login, different user, and sign-out; every serviceSession must remain null. Preserve same-session refresh single-flight, S2 PASS, session_id cache design, R1-R5, PR94 navigation, and X behavior. No production migration apply/deploy/EAS/Phase3. Mandatory exact-head H1 rereview after correction.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
