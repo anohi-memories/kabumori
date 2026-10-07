@@ -3,8 +3,8 @@
 - task_id: kabumori-ai-model-registry-gpt61-sol-20261007
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: Kabumori-only AI model registry + market-report GPT-6.1 Sol migration
@@ -189,6 +189,86 @@ Review expectation:
 - if a migration/schema/security/runtime-fallback boundary appears, flag it explicitly for a focused H2 review.
 
 Recommended model: **Opus5.5（高）**.
+
+## Report
+
+### task_id / result
+- task_id: kabumori-ai-model-registry-gpt61-sol-20261007
+- result: **PASS candidate（source/tests のみ）**。公式ドキュメントの確認が TASK と一致したため STOP せず実装。
+- **branch / PR / head: `g2-ai-model-registry-20261007` / [PR #107](https://github.com/anohi-memories/kabumori/pull/107) / `fb3539d07392beb197d58c7740d09c843179a789`**（base origin/main `23bf5a64`、PR #101 merge `e49ecfcc2f6707f64b6282960f9eec61be2973d3` を含む）。通常push、PR OPEN。
+- 実装モデル：Sonnet 5.5（TASKの推奨は Opus 5.5（高））。
+
+### OpenAI model / API verification（実装時点、2026-10-07）
+- 参照（WebFetch、公式 `developers.openai.com`。platform.openai.com は 301 で同ドメインへ。`openai.com/api/pricing` は 403 で取得できず）：
+  - `/api/docs/models/gpt-6.1-sol`：モデルID **`gpt-6.1-sol`**、**Responses API 対応**、**Structured Outputs 対応**、コンテキスト 1,050,000、最大出力 128,000、**`reasoning.effort` は `low` / `medium`（既定）/ `high` / `xhigh` / `max`（`none` と `minimal` は非対応）**、標準料金 入力 $2 / キャッシュ入力 $0.10 / 出力 $10（100万トークンあたり）。
+  - `/api/docs/pricing`（上のモデルページと別ページで一致を確認）：標準 $2.00 / $0.10 / $10.00。**長文料金（入力が272Kトークン超）**：入力 $4.00 / キャッシュ $0.20 / 出力 $15.00。Batch / Flex はその半額。
+  - `/api/docs/guides/reasoning`：Responses API の書式は `"reasoning": {"effort": "low"}`。reasoning トークンは出力として課金され `max_output_tokens` に含まれる。上限到達時は `status = incomplete`（`incomplete_details.reason = max_output_tokens`）で、可視出力が無いまま課金されうる。
+  - 注意：WebFetch は要約モデルを経由するため、数値は**2つの別ページで一致**することで確認した。`temperature` 等の非対応パラメータは公式ページの抜粋に記載が無く、本パイプラインはもともと送っていない。
+- **TASKの記述（`gpt-6.1-sol`、generate=medium、fact=low）との食い違いは無い**。
+- 解決した設定：generate = `gpt-6.1-sol` / medium、fact = `gpt-6.1-sol` / low。
+
+### registry path / logical roles
+- `supabase/functions/_shared/kabumori_ai_models.ts`（凍結、環境変数・DBの上書きなし、未知のロールは `KABUMORI_AI_ROLE_UNKNOWN:<role>` の例外）
+- `kabumori.market_report.generate`：`gpt-6.1-sol` / reasoning medium / `max_output_tokens` **16,000**（旧 10,000）
+- `kabumori.market_report.fact`：`gpt-6.1-sol` / reasoning low / `max_output_tokens` **4,000**（旧 1,500）
+- 設定の版 `kabumori-ai-models/2026-10-07.1`、`MODEL_PRICING`（公式料金と確認日・出典を保持）
+- **出力上限を広げた理由**：reasoning を上げる（low → medium）と reasoning トークンが上限を先に使い切るおそれがある。上限は費用の天井で、費用を増やさない。**実モデルでの使用量は未観測**（下の「残る点」）。
+
+### migrated callers
+- `analysis_logic.ts`：`generationRequestBody`（generate ロール）と `factRequestBody`（fact ロール）が `responsesApiParams(role)` で model / reasoning / max_output_tokens を取る。`ANALYSIS_MODEL` は registry の generate ロールのモデルから導出（packet の `model` と `p_model` 用。生のリテラルなし）。費用計算（`lunaCostUsd`）を registry の `estimateCallCostUsd` に置換。
+- `handler.ts`：診断に registry の監査値を追加、`ANALYSIS_MODEL` は導出のまま。
+- 他にこの共有朝刊・大引けの実行コードにモデル literal は無い（`model_literal_guard_test.ts` で固定）。personalized-reports・x-test-post・important-news-monitor・MIC・POSTONA は**触っていない**。
+
+### inventory command
+- `npm run kabumori-ai-models`（`node --experimental-strip-types ./scripts/kabumori-ai-models.ts`）／`deno run --no-config --no-prompt scripts/kabumori-ai-models.ts [--json]`
+- 出力：`Kabumori AI models (config kabumori-ai-models/2026-10-07.1)` / `Market Report Generate: gpt-6.1-sol / reasoning medium / max output 16000 tokens [kabumori.market_report.generate]` / `Market Report Fact: gpt-6.1-sol / reasoning low / max output 4000 tokens [kabumori.market_report.fact]` / 価格行。**ネットワーク・環境変数・ファイルを使わず、権限なしで動く**（テストは子プロセスを空の環境で実行）。
+
+### drift guard behavior
+- `supabase/functions/market-report-analysis/model_literal_guard_test.ts`：この共有朝刊・大引けの実行コード（`market-report-analysis/*.ts` のテスト以外、`_shared/market_report_{packet,story}.ts`・`absence_claims.ts`・`kabumori_voice.ts`、`market-report-data-packet/session_logic.ts`、`x-test-post/shared_market_report_consumer.ts`）に `\bgpt-[0-9]…` が現れたら失敗し、**`<file>:<line> hard-codes model "<literal>" — resolve it by logical role …`** を出す。コメントの中も対象（文書のつもりでも registry を外れた記載を残さない）。
+- 対象外：registry 自体、テスト、fixture、文書、POSTONA / social、important-news-monitor、MIC、personalized-reports、x-test-post の本体（テストで「他プロダクトに触れない」ことも固定）。リテラルを足したコピーで失敗することもテスト済み。
+
+### audit metadata disposition
+- 実際のモデルは PR #101 の trace（`model`）と packet（`model`）に既にある。**今回追加**：`report_diagnostics`（cycle の jsonb、成功・失敗の両方）に `ai_config_version`、`ai_generate_role` / `ai_generate_model` / `ai_generate_reasoning`、`ai_fact_role` / `ai_fact_model` / `ai_fact_reasoning`。DB変更なし。
+- **trace の1行ごとの `logical_role` / `config_version` は入れていない**：PostgREST は未知の列を含む insert を丸ごと失敗させ、trace の書き込みが止まるため、列の追加には migration が必要。G4/G5 の本番変更窓が動いている間は作らない。**follow-up migration の必要内容**：`market_report_generation_traces` に `logical_role text`・`ai_config_version text` を追加（追記専用テーブルへの `add column` のみ、trace 書き込みコードは同時に更新）。必要性は低い（`report_diagnostics` と packet の `model` で監査タプルは取れる）。
+- 無関係な列に誤った値を入れていない。
+
+### cost / pricing disposition
+- 以前の見積り（`lunaCostUsd`：入力 $0.2 / 出力 $1.2）を、**公式料金（$2 / $10、272K超は $4 / $15）で、リクエストごと**に計算する `estimateCallCostUsd` に置換（長文料金の判定も各リクエストの入力サイズ基準）。キャッシュ入力の割引は数えない（**上限側の見積り**。実請求は低くなりうる）。価格が無いモデルは `KABUMORI_AI_PRICE_UNKNOWN` の例外（0円扱いにしない）。旧モデルの料金は削除。`social_ai_model_policy` の料金所有とは分離。
+- **費用の変化（見積り）**：同じトークン量なら入力・出力とも **約10倍／約8倍**（旧 $0.2/$1.2 → $2/$10）。10/6 朝刊（calls 2、入力 13,580・出力 2,631）の見積りは、旧 $0.005873 → 新 **$0.05347**。reasoning を medium にするので出力トークン自体も増えうる。1日2サイクル×最大4呼び出しの上限は不変。運用の費用の見立ては、最初の自然サイクルで実測してから。
+
+### 追加した小さな変更（TASKの範囲内で明示）
+- **`incomplete` 応答の区別**（`handler.ts` の `openAiRequester`）：`status = incomplete`（`max_output_tokens` 到達など）で本文が空または不正のときだけ、`ANALYSIS_OPENAI_<STEP>_INCOMPLETE:<理由>` を投げる（従来は `_EMPTY` / `_INVALID_JSON`）。**成功する応答の扱いは変えていない**。medium への引き上げで上限到達が起こりうるため、原因を失敗コードで見分けられるようにした。リトライやフォールバックの挙動は変えていない（失敗する応答の失敗コードが変わるだけ）。K2が「runtime のフォールバック境界に触れる」と見るなら、この部分だけ外せる。
+
+### test counts
+- 新規：`_shared/kabumori_ai_models_test.ts` 11、`model_registry_integration_test.ts` 7（リクエスト本体・HTTP本体・費用・監査・incomplete・上限不変）、`model_literal_guard_test.ts` 5、`scripts/kabumori-ai-models.test.ts` 4（子プロセスで実行）
+- market-report-analysis **222/222**（PR #101 の debug_trace / adversarial / final 計50件、PR #99 の editorial_specificity 13 を含む）、personalized-reports 129/129、X shared consumer 8/8、market-report-data-packet 42/42、`_shared` 466/466（`--no-check`）、migration 不変条件 20/20（F1 の migration は未変更）
+- `deno check`（両 index と変更ファイル）exit 0、`deno lint`（変更ファイル）は `analysis_test.ts:34` の既存1件（2026-09-17 `05a677f1e` 由来、今回の行ではない）のみ、`git diff --check` exit 0
+- 既存テストの更新は2か所のみ：`analysis_test.ts` の費用の期待値（0.00088 → 0.008、registry 料金）、`debug_trace_test.ts` の期待モデル（literal → `ANALYSIS_MODEL`）
+
+### changed_files（PR #107）
+- 新規：`supabase/functions/_shared/kabumori_ai_models.ts`、`_shared/kabumori_ai_models_test.ts`、`market-report-analysis/model_literal_guard_test.ts`、`market-report-analysis/model_registry_integration_test.ts`、`scripts/kabumori-ai-models.ts`、`scripts/kabumori-ai-models.test.ts`
+- 変更：`market-report-analysis/analysis_logic.ts`、`handler.ts`、`analysis_test.ts`、`debug_trace_test.ts`、`package.json`（script 1行）、`docs/market-report-shared-platform/DESIGN.md`（§15.7）
+- 触っていない：migration、personalized-reports、x-test-post、important-news-monitor、MIC、POSTONA / social、common-account/Auth、プロンプト本文・編集方針、`hard_fact_guards.ts`。
+
+### preserved behavior
+- Hard の判定、ちょうど3つ、PR #99 の `X_POINTS_*`（WARN のみ）、X 300字・アプリ700字の書き直し条件、`MAX_GENERATIONS=2`・最大4呼び出し（テストで `calls ≤ 4` と費用の合計を確認）、安全な最初の版へのフォールバック、PR #101 の trace（全量保持・非ブロッキング・1回だけ書く・秘密の除外）、プロンプト：すべて不変（既存・回帰テスト全緑）。
+
+### production deploy / mutation
+- **0**。deploy・migration 適用・手動生成/再試行/replay・実際の OpenAI 呼び出し・X・通知・Cron・Auth/Vault/OAuth なし。テストはネットワーク・OpenAI・本番を使わない。公式ドキュメントの確認は WebFetch（読み取りのみ）。
+
+### overlap / safety checks
+- origin/main は4コミット先行しているが、`market-report` / `kabumori_ai` / `package.json` / `scripts/` / DESIGN への変更は無い。オープン中の PR で同じファイルを触るものは無い（確認済み）。G5 の本番 DB/Auth/permission 変更窓には入っていない。
+
+### remaining issues（K2 / 次の観測へ）
+1. **実モデル未検証（最重要）**：medium の reasoning トークン量、出力上限 16,000 の十分さ、品質・速度・**実コスト**（見積りの約10倍）は、deploy 後の最初の自然サイクルでしか分からない。上限到達なら今回の `_INCOMPLETE:max_output_tokens` コードで原因が分かる。品質が落ちる／落ちない、`rejection_reasons`・trace の `candidate` で比較できる。
+2. **費用が約10倍**：モデル価格差による（上記）。日次の費用の天井（最大4呼び出し×2サイクル）は変わらないが、`api_cost_usd` の見積りは上限側。運用上の許容かは K2 / ユーザー判断。
+3. プロンプトは luna / low 向けに調整されたまま。medium・Sol での書き方の変化（長さ、引用、警告の出方）は観測後に判断（PR #99 の「具体的な見出し」の効果も、実際のモデルでは初めて観測できる）。
+4. trace の行ごとの role / version は未実装（上記 follow-up migration、優先度低）。
+5. 個人向けレポート（personalized-reports）の旧モデルは別タスク。
+
+### 推奨
+- **focused Codex review は不要の見立て**：registry・呼び出し側・費用・テストのみで、DB schema・Auth・publish/retry の意味・本番変更なし。ただし `_INCOMPLETE` のコード分類（失敗コードのみの変更）を「runtime のフォールバック境界」と見るなら、その部分だけ軽く確認してもらう。最終判断は K2。
+- 順序の案：PR #107 の K2 → merge → `market-report-analysis` のみ controlled deploy（PR #101 の trace migration の適用とは独立）→ 次の自然サイクルを read-only で観測（`ai_*` 診断、`output_tokens`、`cost_usd`、失敗コード、`candidate` の品質）。
 
 ---
 
