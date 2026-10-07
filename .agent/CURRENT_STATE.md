@@ -5288,3 +5288,17 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - AI Lab diary: 候補あり — 学習レベルごとに背景の色・教材モチーフ・植物の成長を変え、同じシリーズ感のまま難易度が一目で伝わるUIにした。2026-10-03 entryへ反映済み。snapshot sync workflow PASS.
 - next recommended product step: richer topic body / topic-detail UI and content depth.
 - G1 is free after fresh allocation.
+
+
+## Final K3 — GPT-6 social AI model policy — 2026-10-07
+- verdict: **PASS / MERGED / G3 CLOSED**.
+- PR #105 accepted exact head `78a43ae878205f726111dde1002bd28ea8e82b97`; squash merge `9e359b3e600196fa0602ccd4162d125d613ebbb9`.
+- source scope: POSTONA / AI Lab / Kabumori X text-AI only. Routine tier now resolves to `gpt-6-luna`; existing quality escalation resolves to `gpt-6.1-sol`; model ids/pricing/workload mapping are centralized with drift guards.
+- independent API verification: official OpenAI model documentation matched the selected IDs, prices and current `reasoning.effort: low` / Responses API compatibility.
+- tests accepted: policy 6/6, Deno social/X suite 1025/1025, social-mobile 226/226, lint/diff/secret checks clean; no new type regression beyond existing main diagnostics.
+- CI: Netlify PASS; Vercel build-rate-limit failure treated as infrastructure/account quota, not source failure.
+- Codex review: not required for this bounded model-policy/model-id/cost/type/test change; Auth/DB/RPC/permission/publish/retry/prompt boundaries were unchanged.
+- production mutation/read/deploy/real OpenAI/X call: 0.
+- runtime note: source is merged but production remains on existing deployed bundles until a separate gated Edge Function redeploy; no production model switch was authorized by this K3.
+- next: any production rollout must be a separate G3 task after G5 production-priority/gating is clear, with full x-test-post bundle graph diff before deploy.
+- AI Lab diary: 候補あり — AIモデルの世代更新を楽にするため、モデルと料金の設定を1か所にまとめ、古い設定の直書きが戻ったらテストで気づけるようにした。
