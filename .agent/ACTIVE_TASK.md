@@ -75,8 +75,8 @@
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Canonical delivery-first market-report calibration. X is Premium; legacy short length is advisory only. Objective errors should be removed at smallest-unit granularity and remaining coherent content delivered; whole-report failure is last resort. Deterministic AI disclaimer required on X/App. IMPORTANT: user will not start G2 until after the 16:35 JST natural retry is complete and checked.
-- recommended_model: Opus5.5（高）
+- allocation: K2 PASS_CANDIDATE for the delivery-first core, with one bounded corrective before review: PR #110 must make the agreed AI disclaimer actually visible once on the app report-detail screen, not only inside the backend app_story payload. Update existing PR #110 only; presentation/source tests only; no DB/Edge/Cron/gate/deploy/EAS/production mutation.
+- recommended_model: Sonnet5（中）
 
 ## Claude G3
 - owner: claude
