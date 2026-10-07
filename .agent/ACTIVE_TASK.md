@@ -82,13 +82,13 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-social-mobile-pr41-acl-corrective-20261007
+- status: ready
+- task_id: x-social-ai-model-policy-gpt6-upgrade-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: Final C2 PASS and PR #41 merged. Live generic social-mobile scheduled-post source plus remembered AI settings/persona and hardened Stage3B ACL boundaries are now on main via squash b90ee326600b075e3d0b23209b4eefc1b4cd9c16. Production migrations/deploy/authority activation remain 0 and must wait for G5/common-account and separate rollout gates. G3 free.
+- allocation: Source-only GPT-6 model migration for X/social auto-post AI only: POSTONA, AI Lab, and Kabumori X. Centralize social text model ids/pricing/workload mapping in one shared policy; routine 5.6 Luna -> gpt-6-luna, existing 5.6 Sol escalations -> gpt-6.1-sol; preserve gpt-image-2. Add invariant preventing future raw model-id drift outside policy. Do not touch G2 app/report/news/MIC model ownership. No production/deploy/merge. Recommended Opus5.5（高）.
 - recommended_model: Opus5.5（高）
 
 ## Claude G4
