@@ -1,3 +1,21 @@
+## K2 — PR #110 corrected PASS_CANDIDATE / narrow H2 rereview assigned — 2026-10-08
+
+- corrected PR #110 exact head: `d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8`.
+- PR is open/unmerged, GitHub reports mergeable=true / clean.
+- current-main changed files since PR base overlap the 27 PR files by **0**.
+- G2 reports all previous H2 findings corrected:
+  - B1: objective Fact findings now use structured objective_issues, map to exact generated units, remove them, re-check delivery, and fail closed on unmapped objective quotes;
+  - B2: inline emoji no longer splits governed metric/date/value clauses, while the valid completed-sentence 10/7 Japan -> 10/6 US boundary remains accepted;
+  - B3: speculation/negation applies to the causal clause rather than a whole multi-clause sentence;
+  - B4: X consumer records passed/advisory/not_run truthfully as passed/failed/NULL with compatible notes/market_data.
+- 10/7 real three-generation fixtures reportedly remain false-positive free; call ceiling remains 2 generations / 4 model calls; retry ceiling unchanged.
+- reported tests: market-report-analysis 252, X shared 10, personalized 129, data-packet 42, _shared 466, app 430; no production/deploy/manual generation/X send.
+- K2 verdict: **PASS_CANDIDATE**, not merge approval.
+- H2 task assigned: `kabumori-pr110-b1-b4-rereview-20261008`, exact head above.
+- H2 scope is only prior B1-B4 plus focused regression preservation; recommended model **Sol（高）**.
+- merge/deploy remain HOLD.
+- next action: send `H2`; finish with `C2`.
+
 ## K4 — POSTONA PR #106 final corrective PASS_CANDIDATE / H1 final rereview assigned — 2026-10-08
 
 - Claude's C1 corrective source head: `f5fb9306f99c27c62ae17070e2682dba42264bc8`.
