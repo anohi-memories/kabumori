@@ -3,7 +3,7 @@
 - task_id: ai-lab-topic-continuity-pr109-security-corrective-20261007
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: urgent
 - recommended_model: Opus5.5（高）

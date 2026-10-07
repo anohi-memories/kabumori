@@ -81,7 +81,7 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - task_id: ai-lab-topic-continuity-pr109-security-corrective-20261007
 - start_code: G3
 - finish_code: K3
