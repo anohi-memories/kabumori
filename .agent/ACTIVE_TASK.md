@@ -32,14 +32,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: common-account-v1-phase2-s1t-final-rereview-20261007
+- status: ready
+- task_id: common-account-v1-phase2-q1-final-rereview-20261007
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #95 exact head 13f4281f9514742bdee43ffc08834fea67449bf2. Original S1-T stale-readiness window is closed and prior S2/session_id/R1-R5 remain PASS. One remaining P2 Q1 exists in Kabumori: a previously queued deferred auth-preparation task can run after a newer SIGNED_OUT or different-user notification and still dispatch obsolete automatic start. Readiness stays closed, but obsolete unsent work must be suppressed before dispatch. H1 free; corrected exact head needs one focused Sol（高） rereview.
+- allocation: Final focused rereview of PR #95 exact head ba35b642d30ce423a8683feffcd26aec325b45ee. Verify Q1 deferred-task current-owner guard plus regressions of already-passed S1-T/S2/session_id/R1-R5. No merge/deploy/production migration apply.
 - recommended_model: Sol（高）
 
 ## Codex H2
@@ -105,14 +105,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: review_required
 - task_id: common-account-v1-phase2-service-enrollment-integration-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: C1 corrective round 4 on existing PR #95. Fix only Q1 queued-preparation cancellation in Kabumori AuthProvider: before a deferred auth task advances generation or calls prepareSession, require its captured owner/login to still equal the synchronously announced current owner (or equivalent current-event ticket). Superseded A2 -> SIGNED_OUT/B before deferred dispatch must send zero A2 automatic start requests. Preserve original S1-T fix, same-session refresh, S2, session_id design, R1-R5, PR94 navigation and X behavior. No production migration apply/deploy/EAS/Phase3. Mandatory exact-head H1 rereview after correction.
+- allocation: K5 accepts round-4 Q1 correction as PASS_CANDIDATE on PR #95 exact head ba35b642d30ce423a8683feffcd26aec325b45ee. G5 reports obsolete deferred preparation is suppressed before dispatch; prior S1-T/S2/session_id/R1-R5 remain green. Production migration apply/deploy/EAS remain 0. Merge HOLD pending H1.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
