@@ -3,8 +3,8 @@
 - task_id: postona-pr106-phase2a2-security-rereview-20261007
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused exact-head DB/security rereview
@@ -237,6 +237,19 @@ Then:
 推薦モデル：**Sol（高）**
 
 ---
+
+## Final C1 — CHANGES REQUIRED — 2026-10-07
+
+- C1 accepts the completed H1 verdict for PR #106 head `a8f313dc72b087ab86482781297848fe6e23bdcc`: **CHANGES REQUIRED**.
+- two remaining blockers only:
+  1. existing trigger-function owner/ACL drift is not fully fail-closed;
+  2. the new provider guard function body is not pinned by the postcondition.
+- existing X regressions and the 45/45 mutation suite remain green.
+- H1 source changes: 0.
+- production read/write/apply/deploy/provider operations: 0.
+- H1 is now closed/free; corrective returns to G4.
+- recommended G4 model: **Opus5.5（高）**.
+- corrected head must receive one focused exact-head rereview afterward, recommended **Sol（高）**.
 
 # Previous H1 task history
 
