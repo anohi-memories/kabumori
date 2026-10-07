@@ -1,3 +1,20 @@
+## Final K2 — GPT-6.1 Sol production rollout APPLIED_PASS before natural close — 2026-10-07
+
+- user explicitly approved M1 + M2 and requested fastest safe execution for today's close.
+- focused H2 review was explicitly waived by the user; no Codex PASS is claimed.
+- PR #108 is merged: head `b73e4053fc033d9c47235b68df4bca311dc6c8c4`, merge `3e54200bcbeecc3d8786b6fe7667da7f1bf1a27a`.
+- M1 applied exact trace migration `20261007120000_market_report_generation_traces.sql`.
+- M1 read-back: RLS ON, 0 policies, 3 enabled append-only triggers, anon/authenticated no SELECT, service_role SELECT+INSERT only; exact migration-history row exists once.
+- M2 deployed only `market-report-analysis` from accepted GPT-6.1 Sol source `8738a186628989ce6c797d61ea80f5b721664c95`.
+- deployed function: v28 ACTIVE, verify_jwt=false, EZBR `18a5dbf53d9383068cf1059c76b48c26fc1e26eb4fd143572918b4a4dfb013c2`.
+- deployed read-back confirms GPT-6.1 Sol registry, audit diagnostics and trace writer are present. Runtime files match accepted source; only the type-only packet schema is absent from the downloaded bundle, as allowed by the runbook.
+- app/x consumer gates remain OFF/OFF.
+- trace rows immediately after deployment = 0; no manual generation/replay/invoke was performed.
+- close analysis Cron remains active at 16:20 JST; close retry remains active at 16:35 JST.
+- expected first GPT-6.1 Sol natural close run: 2026-10-07 16:20 JST.
+- no unrelated function/Cron/Auth/Vault/OAuth/secret/settings mutation performed.
+- AI Lab diary: 記録不要 — internal production rollout, with no new public-safe topic beyond today's existing AI-model centralization entry.
+
 ## K2 timing override — PR #108 merged / H2 skipped by user / production approval pending — 2026-10-07
 
 - User explicitly chose to skip the focused H2 review of the rollout runner/runbook to preserve the possibility of observing GPT-6.1 Sol on today's close.
