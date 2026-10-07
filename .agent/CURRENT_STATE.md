@@ -1,3 +1,27 @@
+## Final K5 — production real-account smoke PASS / READY_FOR_EAS — 2026-10-08
+
+- G5 real-account smoke verdict: **PASS / READY_FOR_EAS**.
+- user-approved production-authenticated smoke used one existing active Kabumori account only.
+- observed sequence: signed-out -> login -> active service-start -> Home -> one real token refresh -> sign-out -> same-account re-login -> active service-start -> sign-out.
+- both service-start responses were active / started:false / shared_account:false; no new enrollment or reactivation occurred.
+- pre/post read-back matched exactly for common-account, entitlement, profile and lifecycle state; fingerprints were unchanged.
+- source changes = 0; EAS/deploy = 0.
+- G5 production window is CLOSED and G5 is done/free.
+- remaining release gap: physical-device push registration / notification navigation, to be checked in the later EAS/TestFlight stage.
+- no additional Codex review required for this smoke because no source change occurred and the bounded production read-back matched exactly.
+- AI Lab diary: 記録不要 — this was an internal production-authentication validation rather than a distinct user-facing development feature.
+
+## Production concurrency policy corrected — 2026-10-08
+
+- user clarified that common-account/G5 is highest priority only when there is an actual conflict; it must not delay unrelated development or production work.
+- project rule now uses **conflict-based production mutex**, not a G5-wide/global freeze.
+- non-conflicting implementation/test/commit/push/PR/merge may continue while G5 is active.
+- non-conflicting production deploy/write may also continue when mutation boundaries are clearly separated and each task's own approval/safety gate is satisfied.
+- G5 has priority only for overlapping files/resources or the same DB migration/table/RPC/function/Auth/RLS/permission/Edge/settings/workflow/API boundary.
+- same-Supabase-DB migration/DDL write sections are serialized only for the actual write/postflight interval; subsequent work refreshes its baseline.
+- production windows must be short: do not keep them ACTIVE while waiting for user input, overnight, review, or natural scheduled events.
+- the overlapping PR #109 rollout observed during this G5 smoke was on a non-overlapping AI Lab/X boundary and did not affect G5 fingerprints; under the new rule that overlap is acceptable.
+
 ## C1 — POSTONA PR #106 CHANGES REQUIRED / final bounded G4 corrective ready — 2026-10-08
 
 - H1 reviewed exact PR #106 head `4b6dc57966e0d55b2e901a7707446c35b25a1f00`.
