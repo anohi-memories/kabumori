@@ -74,7 +74,7 @@ Claudeの5時間制限時だけ、ChatGPTがH1/H2へ「臨時実装」と明記�
 
 固定条件ではない。軽微・低リスク変更では省略でき、高リスク変更では途中でもレビューを入れられる。
 
-レビューTASKには対象branch/commit/PR、目的、重点確認事項、安全制約、必要な検証、完了条件を記載する。既存TASKを上書きしてはならない。
+レビューTASKには対象branch/commit/PR、目的、重点確認事項、安全制約、必要な検証、完了条件を記載する。H1/H2のTASKには冒頭ヘッダーに `return_to` と `completion_code` も必ず記載する（「Codex完了後の返却先（2026-10-07〜）」参照）。既存TASKを上書きしてはならない。
 
 NaN## 作業開始コード
 
@@ -121,6 +121,8 @@ statusが`ready`または`in_progress`のTASKだけ開始する。`idle` / `done
 
 対象TASK、対応Codex Report、必要な範囲のCURRENT_STATEを確認し、レビュー内容、修正内容、テスト、commit/push/deploy、残課題、安全確認を評価する。他スロットを勝手に完了処理しない。
 
+`C1` / `C2` をどのちゃの部屋へ送るかは、H1/H2 TASKの `return_to` で決まる（「Codex完了後の返却先（2026-10-07〜）」参照）。
+
 ### K1 / K2 / K3 / K4 / K5 — Claude
 
 - `K1`: G1
@@ -164,6 +166,15 @@ K1 / K2 / K3 / K4 / K5 のどの完了確認でも、ChatGPT（ちゃ）は上�
 
 7枠の状態・競合・実際の空き状況・レビュー待ち・deploy待ちを整理する。別チャット担当の個別TASKを文脈なしに完了扱いしたり次工程へ進めたりしない。
 
+H1/H2については、可能な範囲で次も整理する。
+
+- task_id
+- status
+- return_to
+- completion_code
+- Codex作業中（`ready` / `in_progress`）か、完了して `C1` / `C2` の確認待ち（`review_required`）か
+- どのちゃへ返すべきか。`return_to` が欠落・不明・矛盾している場合や `completion_code` が不一致の場合は「返却先未確定」と表示し、推測で補わない。
+
 ## 完了報告のGitHub同期
 
 作業終了・停止時は自分のスロットのTASK/Reportだけを更新し、可能な場合はGitHubへ同期する。
@@ -172,9 +183,79 @@ K1 / K2 / K3 / K4 / K5 のどの完了確認でも、ChatGPT（ちゃ）は上�
 - H2: `.agent/tasks/CODEX_TASK_2.md` + `.agent/CODEX_REPORT_2.md`
 - G1〜G5: 各TASK末尾の`## Report`
 
-Reportにはtask_id、result、changed_files、tests、commit_hash、push、deploy、remaining_issues、safety_checks、next_recommendationを含める。
+Reportにはtask_id、result、changed_files、tests、commit_hash、push、deploy、remaining_issues、safety_checks、next_recommendationを含める。H1/H2のReportには、加えて `return_to` と `completion_code`（未確定の場合はその旨と理由）を含める。
 
 実装コードを安全にpushできない場合でも、他workstreamの変更を混ぜず、clean worktree等の安全な方法で自分の制御ファイルだけを同期できるか検討する。non-fast-forwardや同じ制御ファイルの競合があれば上書きせず停止する。
+
+## Codex完了後の返却先（2026-10-07〜）
+
+H1/H2の完了後に、ユーザーが `C1` / `C2` をどのちゃの部屋へ送ればよいか迷わないようにするための運用詳細。方針の正本は `PROJECT_RULES.md` の同名節。
+
+### TASK作成時（ChatGPT）
+
+- ChatGPTはH1/H2へ新しいTASK（レビュー・バグ修正・検証。臨時実装を含む）を作る時点で、TASK冒頭のヘッダーに必ず `return_to` と `completion_code` を記入する。空欄や後で埋める前提のプレースホルダのまま置かない。
+- `return_to`: ユーザーが実際に戻るチャットを判別できる人間向け名称。G番号だけ（例: `G1`）にしない。原則として、そのレビュー・バグ修正・検証を依頼した元チャット（結果を `C1` / `C2` で確認する部屋）を書く。
+  - 例: `かぶモリアプリG1のちゃ` / `かぶモリアプリG2のちゃ` / `X自動投稿アプリG3のちゃ` / `X自動投稿アプリG4のちゃ` / `共通アカウントG5のちゃ` / `MICのちゃ` / その他、実際にレビュー依頼を出した元チャットの名称
+- `completion_code`: H1は `C1`、H2は `C2` のみ。その他の値は使わない。
+- 未割当枠だけを使う・既存TASKを上書きしない・推薦モデル必須などの既存ルールは変わらない。
+
+ヘッダー記入例（H1）:
+
+```text
+# Codex Task H1 — CURRENT TASK
+
+- task_id: <task_id>
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- recommended_model: <推薦モデル>
+- return_to: かぶモリアプリG1のちゃ
+- completion_code: C1
+```
+
+H2では `slot: codex-2`、`completion_code: C2` とし、`return_to` には依頼元（例: `X自動投稿アプリG4のちゃ`）を書く。
+
+### 返却先の判定（Codex）
+
+- 返却先は推測しない。自分のTASKヘッダーの `return_to` / `completion_code` だけを正本とし、ACTIVE_TASK・CURRENT_STATE・PR内容・レビュー対象のG枠・過去TASKから補わない。
+- 次のいずれかに当たる場合は「返却先未確定」とする。
+  - `return_to` または `completion_code` が欠落・空欄・プレースホルダのまま
+  - `return_to` がG番号だけ等で、戻るチャットを特定できない
+  - TASK内に異なる返却先が複数ある等、記載が矛盾している
+  - `completion_code` が自分の枠と一致しない（H1なのに `C2`、H2なのに `C1`、その他の値）。これはエラーとして扱う。
+- 返却先未確定でも、レビュー・検証の結果自体は通常どおりReportへ記録してよい。ただし勝手に別の部屋へ返すよう案内せず、ChatGPT確認待ちにする。status `review_required` / next_owner `chatgpt` の通常フローは変えない。
+
+### 完了報告（Codex）
+
+- Report（`.agent/CODEX_REPORT.md` / `.agent/CODEX_REPORT_2.md`）には通常項目に加えて `return_to` と `completion_code` を記録する。未確定なら `return_to: 返却先未確定（<理由>）` と書く。
+- ユーザー向け最終報告（チャットへの最終返信）の末尾には、必ず「返却先」を置く。PASS等の完了時だけでなく、BLOCKED・STOP等で作業を終える場合も同じ。
+
+H1例:
+
+```text
+返却先
+かぶモリアプリG1のちゃへ `C1` を送ってください。
+```
+
+H2例:
+
+```text
+返却先
+X自動投稿アプリG4のちゃへ `C2` を送ってください。
+```
+
+返却先未確定の例:
+
+```text
+返却先
+返却先未確定：TASKの `return_to` が欠落しているため、送り先を案内できません。ChatGPT確認待ちです。
+```
+
+### 既存TASKの扱い
+
+- 本ルール導入前から割り当て済みのTASK（ready / in_progress / review_required等）へ `return_to` / `completion_code` を機械的に後付けしない。TASK本文・Reportを保護する。
+- そうしたTASKを完了するCodexも推測で補わず、上記の「返却先未確定」として報告する。
 
 ## 並行作業と競合防止
 
