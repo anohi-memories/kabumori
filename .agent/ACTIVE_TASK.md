@@ -71,13 +71,13 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-morning-fact-failure-diagnostics-corrective-20261007
+- task_id: kabumori-market-report-debug-trace-corrective-20261007
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: 10/7朝刊は自然analysisが2回とも不合格でpacket 0。朝刊prompt内の時間関係表現を見直し、generation別の固定コード診断をboundedで保持する。Hard判定・call上限・PR99のgeneric/metric telemetry・300字rewrite閾値は変更しない。source/test only、production mutation禁止。
-- recommended_model: Sonnet5（高）
+- allocation: 10/7朝刊の失敗原因を追えるよう、失敗generationの実際の生成本文・local/Fact指摘・generation/attempt履歴を保存するデバッグトレース基盤を実装。固定コードだけでなく本文を保持し、scheduled retryで前回失敗を上書きしない。必要ならappend-only診断table/migration候補を作るが本番適用は禁止。朝刊の未証明な時間関係promptも安全化。Hard/300字rewrite/call ceiling/PR99 telemetryは不変。
+- recommended_model: Opus5.5（高）
 
 ## Claude G3
 - owner: claude
