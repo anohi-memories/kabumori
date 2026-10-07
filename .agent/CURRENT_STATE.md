@@ -5695,3 +5695,15 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - POSTONA/general-user, Kabumori X, topic/capacity, scheduler, OAuth/Vault/Auth and PR #109 B1-B3 migration bytes must remain unchanged.
 - task: `ai-lab-premium-length-policy-unlimited-20261007`; recommended **Sonnet5（高）**.
 - production migration/deploy/merge remains HOLD.
+
+
+## Final K3 — PR #109 continuity/security/Premium-length candidate — 2026-10-07
+- verdict: **PASS_CANDIDATE / final exact-head Codex rereview pending**.
+- exact head: `fb4afb21d7ce808de3257bebc8062aed93353dec`.
+- Premium policy accepted for rereview: AI Lab only now uses explicit unlimited length; >280 is allowed, short content remains natural, padding is discouraged, and characterCount remains measured. 641-code-point generation/dispatch/scheduled handoff passed.
+- generic-generator change requiring review: explicit unlimited mode gets 2000 output-token budget and rejects `status=incomplete` to avoid posting a truncated response; ordinary/non-unlimited paths are reported unchanged.
+- prior B1/B2/B3 migration correction and 74-topic capacity files remain byte-stable from `7c3c06d0`; adversarial PG17 runner and capacity runner still pass, including 140/140.
+- test evidence reported: 1028/1028 relevant Deno tests PASS; Netlify SUCCESS; Vercel rate-limit only.
+- production mutation/apply/deploy/merge/OpenAI/X/scheduler: 0.
+- no Codex slot was overwritten: H1 currently owns G4 PR #106 rereview and H2 currently owns G2 PR #110 review.
+- next reviewer allocation: first free H1/H2, recommended **Sol（高）**, exact head fixed to `fb4afb21d7ce808de3257bebc8062aed93353dec`. Merge and production rollout remain HOLD until PASS.
