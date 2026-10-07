@@ -1,3 +1,22 @@
+# Final K5 — round 4 Q1 PASS_CANDIDATE / mandatory H1 rereview assigned
+
+- verdict: **PASS_CANDIDATE**, not final merge approval.
+- exact PR #95 head accepted for rereview: `ba35b642d30ce423a8683feffcd26aec325b45ee`.
+- fresh main at K5: `6717083c21300fe247736296430089cec8a6a397`.
+- current main has advanced beyond PR merge-base, but changed-file overlap with PR #95's 17 product files is **0**.
+- Q1 fix accepted as a candidate:
+  - deferred Kabumori auth preparation now checks captured owner/login against the synchronously announced current owner before generation/loading changes, prepareSession/acceptSession, or any enrollment transport;
+  - superseded A2 -> SIGNED_OUT / user B / same-user new login sends zero obsolete A2 automatic start requests;
+  - same-session TOKEN_REFRESHED preserves expected single-flight.
+- prior S1-T / S1 / S2 / R1-R5 are reported preserved.
+- reported regressions: Kabumori app 390/390, AuthProvider 23/23, X 221/221, DB runners/invariants PASS, H1 reproduction probes 10/10.
+- production mutation / migration apply / deploy / EAS / real provider call = 0.
+- merge remains HOLD.
+- mandatory final H1 exact-head focused rereview assigned on `ba35b642...`.
+- recommended reviewer: **Sol（高）**.
+
+---
+
 # C1 CORRECTIVE ROUND 4 — PR #95 Kabumori deferred-task current-owner guard
 
 This is the newest canonical G5 instruction and supersedes prior corrective sections only where it differs.
@@ -1431,7 +1450,7 @@ Recommended model: **Opus5.5（極高）**.
 - owner: claude
 - slot: claude-5
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - production_mutation_window: **CLOSED** — 2026-10-06 17:52 JST. G5 ran exactly the frozen private.account_lifecycle_backfill(true) transaction once (COMMITTED 16:55 JST; 5 common accounts, 3 legacy entitlements, 0 operations) and finished the read-only postflight; G5 performs no further production write.
 - priority: critical
 - start_code: G5
