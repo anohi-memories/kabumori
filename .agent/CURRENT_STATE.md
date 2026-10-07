@@ -1,3 +1,32 @@
+## AI model management decision — central registry required — 2026-10-07
+
+- user decision: OpenAI model generations/pricing are expected to change frequently, so future model upgrades must be much easier to inspect and change than today's per-function literal model IDs.
+- after PR #101 is accepted/merged, the next G2 must include **OpenAI model inventory + GPT-6 migration + central model-management foundation**.
+- target architecture:
+  - one canonical shared AI model registry/manifest under `supabase/functions/_shared/`;
+  - workload-level logical roles instead of scattered raw model literals (e.g. market_report.generate, market_report.fact, important_news.judge, x_autopost.generate, ai_consult.generate);
+  - each role records model id, reasoning effort, output budget and a config/version identifier;
+  - every OpenAI call resolves through the shared registry/helper;
+  - diagnostics record the resolved logical role + actual model id + config version so deployed behavior is auditable;
+  - add an inventory/audit script that prints all active roles/models and flags any raw `gpt-*` model literal outside the registry;
+  - add a regression/static guard so future contributors cannot silently hard-code model IDs in individual functions;
+  - Git history remains the authoritative change log for model changes.
+- initial migration policy:
+  - quality-critical, low-frequency market-report generation -> `gpt-6.1-sol`;
+  - market-report Fact check -> `gpt-6.1-sol`;
+  - high-volume focused Luna workloads -> evaluate/default to `gpt-6-luna`;
+  - each remaining AI workload is classified by quality sensitivity, frequency, token volume, and failure cost before assigning Sol vs Luna.
+- do not add a runtime database-controlled model switch in the first iteration unless there is a clear operational need; central source registry + one-change auditability is preferred because it keeps deployed behavior deterministic and easy to inspect.
+- future upgrade workflow goal:
+  1. update model catalog/registry in one place;
+  2. run inventory + affected-function tests;
+  3. benchmark representative traces/cost;
+  4. deploy only affected functions;
+  5. natural-observation validation;
+  6. rollback by reverting one registry change if needed.
+- recommended Claude model for this next implementation: **Opus5.5（高）**.
+- recommended Codex review: **Luna（高）** if only registry/model-routing/tests change; **Sol（中）** if runtime fallback/DB/config boundary is introduced.
+
 ## Final K4 — POSTONA Phase 2a-1 PASS / Phase 2a-2 assigned — 2026-10-07
 
 - Phase 2a-1 verdict: **PASS**.
