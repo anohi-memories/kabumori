@@ -70,13 +70,13 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-market-report-debug-trace-corrective-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: 10/7朝刊の失敗原因を追えるよう、失敗generationの実際の生成本文・local/Fact指摘・generation/attempt履歴を保存するデバッグトレース基盤を実装。固定コードだけでなく本文を保持し、scheduled retryで前回失敗を上書きしない。必要ならappend-only診断table/migration候補を作るが本番適用は禁止。朝刊の未証明な時間関係promptも安全化。Hard/300字rewrite/call ceiling/PR99 telemetryは不変。
+- allocation: K2 PASS_CANDIDATE。PR #101 head 2469e8a8be0125805551ba3e353c4ef6058b0150。失敗generation本文/local・Fact指摘・scheduled attempt履歴をappend-only診断tableへ保持。retry上書きを解消し、朝刊/大引けpromptの時間表現も安全化。Hard/PR99 telemetry/300字rewrite/call ceiling不変。migration/RLS境界追加のためH2 focused reviewへ。
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
