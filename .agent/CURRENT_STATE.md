@@ -1,3 +1,20 @@
+## G1 assigned — portfolio asset-card background + real sparkline polish — 2026-10-08
+
+- G1 task: `kabumori-portfolio-asset-card-background-polish-20261008`.
+- recommended model: **Sonnet5（中）**.
+- user-approved direction:
+  - preserve real saved-close portfolio sparkline;
+  - add the approved transparent botanical background behind the asset-summary upper area;
+  - decorative art must not encode a fixed rising market;
+  - sparkline must be green/up, muted red/down, neutral/flat according to the actual first-vs-last real series.
+- prepared asset: `portfolio_asset_card_growth_background.webp`, 1600×700 transparent WebP. User should save it to `/Users/yuya/Downloads/` before starting G1.
+- fresh main at allocation: `481eccc0c106caabde01081107b9b34029a06e3c`.
+- open-PR overlap across intended portfolio/UI/test/asset paths: **0**.
+- G1 is free; G5 is done/free and no production window is active.
+- scope is source/UI only; no DB/Auth/RPC/Edge/report-generation/EAS/dependency changes.
+- required Simulator screenshots: 402pt + 375pt; also verify a falling fixture is not shown in green.
+- finish code: K1.
+
 ## C2 — PR #110 residual CHANGES REQUIRED / G2 corrective ready — 2026-10-08
 
 - H2 rereviewed exact PR #110 head `d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8`.
