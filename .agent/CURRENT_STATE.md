@@ -1,3 +1,28 @@
+## Final C1 — PR #95 PASS / source merged / production migration preflight next — 2026-10-07
+
+- H1 exact reviewed PR #95 head: `ba35b642d30ce423a8683feffcd26aec325b45ee`.
+- verdict: **PASS**. Q1 is closed; no remaining blocker in the focused common-account Phase 2 source review.
+- accepted safety boundaries:
+  - obsolete deferred Kabumori auth preparation is suppressed before dispatch after SIGNED_OUT/new user/new same-user session;
+  - original S1-T synchronous stale-readiness fence remains PASS;
+  - stable `userId + session_id` context and same-session TOKEN_REFRESHED single-flight remain PASS;
+  - S2 X queued pre-dispatch cancellation remains PASS;
+  - R1-R5 remain PASS;
+  - PR #94 root news-detail and X OAuth separation remain preserved.
+- independent H1 evidence: AuthProvider 23/23; Kabumori app 390/390; X 221/221; reviewer positive probes 15/15; migration invariants 11/11; X tsc/lint and diff check PASS.
+- fresh main at H1 had zero product-file overlap with PR #95 and read-only merge-tree PASS.
+- PR #95 exact head remained unchanged and GitHub checks were green (Netlify/Vercel).
+- C1 source merge completed successfully:
+  - PR #95 squash merge commit: `d5bea735937b53095b110b4bed1f20442e56b089`.
+- source merge does **not** authorize production migration apply, deploy, EAS or native release.
+- new strict client/server service-start contract still requires separately approved production apply/read-back of `20261006230000_common_account_service_start_intent.sql` before app release.
+- next G5: **read-only production migration preflight only**, task `common-account-v1-phase2-production-migration-preflight-20261007`, recommended **Opus5.5（高）**.
+- preflight must verify production migration history/current RPC+ACL state, ordering with merged PR41 migration candidates, old-client compatibility, no concurrent production mutation window, and exact apply/read-back/rollback plan.
+- actual production write remains forbidden until the user gives explicit approval after K5.
+- H1 is done/free.
+- G1 root navigation boundary is now source-unblocked by the PR #95 merge; G1 may receive its own bounded correction separately after fresh overlap check.
+- AI Lab diary: no additional entry; this remains internal common-account security/integration work.
+
 ## G4 — POSTONA Phase 2a-1 assigned — 2026-10-07
 
 - G4 is ready on `postona-multisocial-phase2a1-provider-domain-foundation-20261007`.
