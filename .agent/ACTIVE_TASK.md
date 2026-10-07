@@ -87,7 +87,7 @@
 - finish_code: K3
 - next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: Final external direct Codex review PASS accepted for PR #109 exact head fb4afb21d7ce808de3257bebc8062aed93353dec. GitHub fresh check showed mergeable=true and head unchanged. PR #109 was squash-merged as d4f693128494d8e05b97563fb82b7db2871818c8. Source merge only; production migration/deploy remain unapplied and separately approval-gated. G3 is closed/free after fresh allocation.
+- allocation: PR #109 source merged and production rollout APPLIED_PASS. DB capacity migration applied and read back; x-test-post v139 ACTIVE / verify_jwt=false with only three intended AI Lab runtime files changed. Manual scheduler/X/OpenAI verification calls=0. 2026-10-08 ten AI Lab rows are pending; first natural slot 07:51 JST. Natural scheduled-post observation remains pending, but G3 implementation/rollout slot is closed/free.
 - recommended_model: Sonnet5（高）
 
 ## Claude G4
