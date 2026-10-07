@@ -20,7 +20,7 @@
 - Existing G1-G4 tasks are preserved. G5 priority is **conflict-based**, not a project-wide freeze: non-conflicting implementation/test/commit/push/PR/merge and non-conflicting production work may continue.
 - If a production boundary overlaps G5 (same DB migration/table/RPC/function, Auth/RLS/permission, Edge Function, secret/settings/Cron/workflow/API boundary, or a shared baseline/fingerprint), G5 has priority and the conflicting operation waits.
 - Same-Supabase-DB migration/DDL write sections are serialized only for the actual write/read-back window; waiting/review/user-input time must not keep a global lock active.
-- next shared milestone: production legacy backfill dry-run -> explicit backfill approval -> exact backfill -> Phase 2 integrations -> Phase 3 deletion/enforcement.
+- next shared milestone: Phase 3a source implementation -> focused security review -> production preflight/apply gates -> final EAS/TestFlight after the common-account feature set is complete.
 
 ## Deployment policy
 
@@ -105,15 +105,15 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: done
-- task_id: common-account-v1-phase2-real-account-smoke-20261007
+- status: ready
+- task_id: common-account-v1-phase3a-deletion-orchestrator-20261008
 - start_code: G5
 - finish_code: K5
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Final K5 PASS / READY_FOR_EAS. One approved production-authenticated smoke with an existing active Kabumori account passed: two logins, one real token refresh, two sign-outs, active/started:false service-start responses, and pre/post account/entitlement/profile/lifecycle fingerprints unchanged. Source changes 0; EAS/deploy 0. G5 window CLOSED and slot free. Future production concurrency follows conflict-based boundaries; G5 does not globally freeze unrelated slots.
-- recommended_model: Opus5.5（高）
+- allocation: Common Account Phase 2 is production-smoke PASS / READY_FOR_EAS. To avoid wasting an EAS build before the common-account feature set is complete, G5 now advances the critical path to Phase 3a source-only implementation: safe Kabumori service withdrawal, explicit common-account deletion orchestrator foundation, legacy direct Auth-delete containment, explicit settings UI choices, X deletion adapter boundary, and enforcement-readiness inventory. No production mutation/deploy/EAS. G4-owned POSTONA schema/migration files are protected; use adapter boundaries instead of overlapping them.
+- recommended_model: Opus5.5（極高）
 
 ## Deferred
 
