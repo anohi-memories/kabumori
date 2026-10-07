@@ -3,9 +3,12 @@
 - task_id: kabumori-trace-gpt61-rollout-runbook-review-20261007
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: done
+- next_owner: none
 - priority: high
+- review_skipped_by_user: true
+- skip_reason: time-sensitive same-day GPT-6.1 Sol close-cycle rollout
+- final_result: SKIPPED_BY_USER
 - recommended_model: Sol（高）
 - type: focused production-runner / rollout-runbook safety review
 - target_pr: 108

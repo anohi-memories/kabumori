@@ -45,14 +45,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: kabumori-trace-gpt61-rollout-runbook-review-20261007
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Focused exact-head review of PR #108 rollout runner/runbook only. Verify fail-closed M1 migration execution, Stage B/C partial-failure and rerun safety, credential handling, and that M2 stays a single market-report-analysis deploy. Do not reopen PR #101/107 broadly. Production access/mutation/deploy forbidden.
+- allocation: User explicitly chose to skip the focused PR #108 rollout-runner review to preserve the same-day GPT-6.1 Sol close-cycle window. PR #108 was squash-merged as 3e54200bcbeecc3d8786b6fe7667da7f1bf1a27a after exact-head/no-overlap freshness check. This does not authorize production M1/M2.
 - recommended_model: Sol（高）
 
 ## Claude G1
@@ -74,9 +74,9 @@
 - task_id: kabumori-market-report-gpt61-production-preflight-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: codex
+- next_owner: user
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 PASS_CANDIDATE / READY_FOR_APPROVAL preflight. Production trace migration is absent/clean; deployed market-report-analysis is still pre-PR101/107 Luna; safe M1->M2->natural-cycle sequence established. PR #108 adds only rollout runner/runbook and is held for one focused H2 production-safety review before merge. No production mutation/deploy yet.
+- allocation: Final K2 PASS. Production preflight READY; PR #108 rollout runner/runbook merged as 3e54200bcbeecc3d8786b6fe7667da7f1bf1a27a after user chose to skip H2 for same-day timing. Production remains unchanged. Explicit user approval is still required for M1 trace migration and separately for M2 market-report-analysis GPT-6.1 Sol deploy.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
