@@ -1,3 +1,15 @@
+# H1 — PR #95 Q1 final focused rereview — 2026-10-07
+
+- task_id: common-account-v1-phase2-q1-final-rereview-20261007
+- status: Pending.
+- target_pr: 95
+- target_head: ba35b642d30ce423a8683feffcd26aec325b45ee
+- recommended_model: Sol（高）
+
+---
+
+# Previous H1 report history — preserved
+
 # H1 — PR #95 S1-T final focused rereview — 2026-10-07
 
 - task_id: common-account-v1-phase2-s1t-final-rereview-20261007
