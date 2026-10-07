@@ -19,6 +19,7 @@ import {
 import { appStoryWarnings, buildAppMarketStory, orderKeyNews } from "../_shared/market_report_story.ts";
 import type { AnalysisInput } from "./analysis_input.ts";
 import { falseAbsenceClaims } from "../_shared/absence_claims.ts";
+import { promptHash } from "./debug_trace.ts";
 import { emojiDirectionIssues, MARKET_NAMES, mentionsMarketMetric, metricFactIssues } from "./hard_fact_guards.ts";
 
 export const ANALYSIS_MODEL = "gpt-5.6-luna";
@@ -987,6 +988,8 @@ export type GenerationRecord = {
   fallbackReason: string | null;
   /** Fixed error code of a failed request (never a response body). */
   errorCode: string | null;
+  /** Hash of the exact request this generation sent (instructions including a retry's issue note, plus the input). */
+  requestHash: string | null;
   /** Cumulative for the invocation when this generation finished. */
   calls: number;
   inputTokens: number;
@@ -1102,7 +1105,7 @@ export async function generateSharedAnalysis(
     const record: GenerationRecord = {
       generationIndex, stage: "request_failed", hardRejection: null, candidate: null, localPassed: null, localIssues: [],
       localWarnings: [], factRan: false, factPassed: null, factIssues: [], selectedForDelivery: false, fallbackReason: null,
-      errorCode: null, calls, inputTokens, outputTokens, costUsd: lunaCostUsd(inputTokens, outputTokens),
+      errorCode: null, requestHash: null, calls, inputTokens, outputTokens, costUsd: lunaCostUsd(inputTokens, outputTokens),
     };
     recordSink.push(record);
     return record;
@@ -1131,8 +1134,11 @@ export async function generateSharedAnalysis(
     let generated: StepResult;
     trace.generations = attempt;
     const record = open(attempt);
+    const body = generationRequestBody(input, issues);
+    // Local hashing of what is about to be sent: no model call, and a failure to hash never blocks the run.
+    record.requestHash = await promptHash(`${String(body.instructions)}\n${String(body.input)}`).catch(() => null);
     try {
-      generated = await request("generate", generationRequestBody(input, issues));
+      generated = await request("generate", body);
     } catch (error) {
       record.errorCode = requestErrorCode(error);
       if (!safe) throw error;
@@ -1182,9 +1188,10 @@ export async function generateSharedAnalysis(
     settle(record);
     const fact = verdict.payload as { passed?: unknown; issues?: unknown };
     record.factPassed = fact?.passed === true;
-    record.factIssues = Array.isArray(fact?.issues) ? fact.issues.filter((issue): issue is string => typeof issue === "string").slice(0, 10) : [];
+    // The trace keeps every finding the Fact check returned; only the decision and retry note keep the cap of 10.
+    record.factIssues = Array.isArray(fact?.issues) ? fact.issues.filter((issue): issue is string => typeof issue === "string") : [];
     if (fact?.passed !== true) {
-      issues = record.factIssues;
+      issues = record.factIssues.slice(0, 10);
       lastError = "ANALYSIS_FACT_FAILED";
       trace.hardRejections.push("fact");
       trace.rejectionReasons.push(`${rejectionCodes(issues)}:${issues.length}`);

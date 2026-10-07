@@ -206,14 +206,14 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
   // run is settled (success, failure or exception) and never in the way of delivery.
   const invocationId = crypto.randomUUID();
   const records: GenerationRecord[] = [];
-  let tracePromptHash: string | null = null;
+  let traceBasePromptHash: string | null = null;
   let traced = false;
   const writeTraces = async (reportPacketId: string | null) => {
     if (traced) return;
     traced = true;
     const rows = traceRows({
       reportType, tradingDate, cycleId: claim!.cycle_id, dataPacketId: claim!.data_packet_id, reportPacketId,
-      invocationId, attempt: claim!.attempt, model: ANALYSIS_MODEL, promptHash: tracePromptHash,
+      invocationId, attempt: claim!.attempt, model: ANALYSIS_MODEL, basePromptHash: traceBasePromptHash,
     }, records);
     await persistTraces((table, batch) => db.insert(table, batch), rows);
   };
@@ -252,7 +252,7 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
     diagnostics.news_items = String(input.news.length);
     diagnostics.metrics = String(input.majorMoves.length);
     diagnostics.direction = input.direction;
-    tracePromptHash = await promptHash(String(generationRequestBody(input, []).instructions)).catch(() => null);
+    traceBasePromptHash = await promptHash(String(generationRequestBody(input, []).instructions)).catch(() => null);
 
     const outcome = await generateSharedAnalysis(
       input,

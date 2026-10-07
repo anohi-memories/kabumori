@@ -40,16 +40,38 @@ Deno.test("access: RLS on, no policy, only service_role holds select + insert", 
 });
 
 Deno.test("a trace never blocks maintenance of what it describes: no foreign keys to cycles or packets", () => {
-  assert.doesNotMatch(code, /\breferences\b/i);
-  assert.doesNotMatch(code, /foreign key/i);
+  const tableDefinition = code.slice(code.indexOf("create table"), code.indexOf("do $$"));
+  assert.doesNotMatch(tableDefinition, /\breferences\s+(public\.)?[a-z_]+/i);
+  assert.doesNotMatch(tableDefinition, /foreign key/i);
 });
 
 Deno.test("the shape carries the evidence: per-generation identity, the candidate, both findings, the selection", () => {
-  for (const column of ["invocation_id", "attempt", "generation_index", "cycle_id", "data_packet_id", "report_packet_id", "candidate", "local_issues", "local_warnings", "fact_issues", "fact_passed", "selected_for_delivery", "fallback_reason", "stage", "prompt_hash", "source", "subject_ref"]) {
+  for (const column of ["invocation_id", "attempt", "generation_index", "cycle_id", "data_packet_id", "report_packet_id", "candidate", "local_issues", "local_warnings", "fact_issues", "fact_passed", "selected_for_delivery", "fallback_reason", "stage", "base_prompt_hash", "request_hash", "source", "subject_ref", "candidate_chars", "local_issue_count", "fact_issue_count", "truncated", "truncation"]) {
     assert.match(code, new RegExp(`\\b${column}\\b`), column);
   }
   assert.match(code, /unique \(invocation_id, generation_index\)/);
   assert.match(code, /source in \('shared_market_report', 'personalized_report'\)/);
+});
+
+Deno.test("access is verified, not assumed: the migration checks the table, the helper and the effective graph, and only raises", () => {
+  const verify = code.slice(code.indexOf("do $$"), code.lastIndexOf("commit;"));
+  assert.ok(verify.length > 500, "the verification block exists and runs inside the transaction");
+  for (const refusal of ["MARKET_REPORT_TRACE_ACL_UNSAFE_OWNER", "MARKET_REPORT_TRACE_ACL_UNSAFE_MEMBERSHIP", "MARKET_REPORT_TRACE_ACL_UNEXPECTED_TABLE_GRANT", "MARKET_REPORT_TRACE_ACL_UNEXPECTED_HELPER_GRANT", "MARKET_REPORT_TRACE_ACL_EFFECTIVE_PRIVILEGE", "MARKET_REPORT_TRACE_ACL_UNEXPECTED_COLUMN_GRANT"]) {
+    assert.ok(verify.includes(refusal), refusal);
+  }
+  for (const probe of ["has_table_privilege", "has_any_column_privilege", "has_function_privilege", "pg_has_role", "aclexplode", "WITH GRANT OPTION"]) {
+    assert.ok(verify.includes(probe), probe);
+  }
+  // It never repairs: no grant / revoke / alter / create / drop role or default-privilege statement inside the check.
+  const withoutStrings = verify.replace(/'(?:[^']|'')*'/g, "''");
+  assert.doesNotMatch(withoutStrings, /\b(grant|revoke)\s+\w|\balter\s+(default|role|table|function)\b|\bcreate\s+role\b|\bdrop\s+(role|table|function)\b/i);
+  // The whole migration is one transaction, so a raise rolls everything back.
+  assert.ok(code.indexOf("begin;") < code.indexOf("create table") && code.lastIndexOf("commit;") > code.indexOf("do $$"));
+});
+
+Deno.test("retention is declared: counts, original size and a consistent truncation flag, no hidden per-field cap", () => {
+  assert.match(code, /truncation_consistent check \(truncated = \(truncation is not null\)\)/);
+  assert.doesNotMatch(code, /char_length\(candidate|length\(local_issues|length\(fact_issues/i);
 });
 
 Deno.test("no column can hold a credential, and the migration names none", () => {

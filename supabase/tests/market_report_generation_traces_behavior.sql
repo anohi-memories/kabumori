@@ -19,15 +19,15 @@ $$;
 -- 1. service_role appends one row per generation, and a failed generation keeps its candidate.
 set role service_role;
 insert into public.market_report_generation_traces
-  (report_type, trading_date, cycle_id, data_packet_id, invocation_id, attempt, generation_index, model, prompt_hash,
+  (report_type, trading_date, cycle_id, data_packet_id, invocation_id, attempt, generation_index, model, base_prompt_hash, request_hash,
    stage, hard_rejection, local_passed, local_issues, fact_ran, candidate, calls, input_tokens, output_tokens, api_cost_usd)
 values
   ('morning', '2026-10-07', '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222',
-   '33333333-3333-4333-8333-333333333333', 1, 1, 'gpt-5.6-luna', '0123456789abcdef',
+   '33333333-3333-4333-8333-333333333333', 1, 1, 'gpt-5.6-luna', '0123456789abcdef', 'aaaaaaaaaaaaaaaa',
    'local', 'local', false, '["TOPIXと書いている"]'::jsonb, false,
    '{"headline_ja":"日経平均とTOPIXがそろって上昇","x_post":{"points_ja":["a","b","c"]}}'::jsonb, 1, 1000, 400, 0.00123),
   ('morning', '2026-10-07', '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222',
-   '33333333-3333-4333-8333-333333333333', 1, 2, 'gpt-5.6-luna', '0123456789abcdef',
+   '33333333-3333-4333-8333-333333333333', 1, 2, 'gpt-5.6-luna', '0123456789abcdef', 'bbbbbbbbbbbbbbbb',
    'fact', 'fact', true, '[]'::jsonb, true,
    '{"headline_ja":"第2世代"}'::jsonb, 3, 2000, 800, 0.0109);
 -- Fact issues recorded on the second generation (an insert, not an update).
@@ -71,8 +71,35 @@ select pg_temp.expect_error(
 select pg_temp.expect_error($$insert into public.market_report_generation_traces (report_type, trading_date, invocation_id, attempt, generation_index, stage) values ('weekly', '2026-10-07', gen_random_uuid(), 1, 1, 'local')$$, 'report_type');
 select pg_temp.expect_error($$insert into public.market_report_generation_traces (report_type, trading_date, invocation_id, attempt, generation_index, stage) values ('morning', '2026-10-07', gen_random_uuid(), 1, 1, 'bogus')$$, 'stage');
 select pg_temp.expect_error($$insert into public.market_report_generation_traces (report_type, trading_date, invocation_id, attempt, generation_index, stage, source) values ('morning', '2026-10-07', gen_random_uuid(), 1, 1, 'local', 'x_post')$$, 'source');
-select pg_temp.expect_error($$insert into public.market_report_generation_traces (report_type, trading_date, invocation_id, attempt, generation_index, stage, prompt_hash) values ('morning', '2026-10-07', gen_random_uuid(), 1, 1, 'local', 'not-a-hash')$$, 'prompt_hash');
+select pg_temp.expect_error($$insert into public.market_report_generation_traces (report_type, trading_date, invocation_id, attempt, generation_index, stage, base_prompt_hash) values ('morning', '2026-10-07', gen_random_uuid(), 1, 1, 'local', 'not-a-hash')$$, 'base_prompt_hash');
+select pg_temp.expect_error($$insert into public.market_report_generation_traces (report_type, trading_date, invocation_id, attempt, generation_index, stage, request_hash) values ('morning', '2026-10-07', gen_random_uuid(), 1, 1, 'local', 'ZZZZ')$$, 'request_hash');
+-- Truncation is declared or absent, never half-declared.
+select pg_temp.expect_error($$insert into public.market_report_generation_traces (report_type, trading_date, invocation_id, attempt, generation_index, stage, truncated) values ('morning', '2026-10-07', gen_random_uuid(), 1, 1, 'local', true)$$, 'truncation_consistent');
+select pg_temp.expect_error($$insert into public.market_report_generation_traces (report_type, trading_date, invocation_id, attempt, generation_index, stage, truncation) values ('morning', '2026-10-07', gen_random_uuid(), 1, 1, 'local', '{"candidate":{}}'::jsonb)$$, 'truncation_consistent');
 select pg_temp.expect_error($$insert into public.market_report_generation_traces (report_type, trading_date, invocation_id, attempt, generation_index, stage, local_issues) values ('morning', '2026-10-07', gen_random_uuid(), 1, 1, 'local', '{}'::jsonb)$$, 'local_issues');
+
+-- 6b. Full retention: a long candidate, a long issue and 13 findings are stored whole and counted.
+set role service_role;
+insert into public.market_report_generation_traces
+  (report_type, trading_date, invocation_id, attempt, generation_index, stage, candidate, candidate_chars, fact_issues, fact_issue_count, local_issues, local_issue_count)
+values ('morning', '2026-10-07', '55555555-5555-4555-8555-555555555555', 1, 1, 'fact',
+        jsonb_build_object('text', repeat('あ', 9000) || 'TAIL'), 9010,
+        (select jsonb_agg('finding ' || g || repeat('い', 800)) from generate_series(1, 13) g), 13,
+        jsonb_build_array(repeat('う', 800) || 'ISSUE-TAIL'), 1);
+reset role;
+select (candidate ->> 'text') like '%TAIL' and jsonb_array_length(fact_issues) = 13 and fact_issue_count = 13
+       and (local_issues ->> 0) like '%ISSUE-TAIL' and not truncated as ok_full
+  from public.market_report_generation_traces where invocation_id = '55555555-5555-4555-8555-555555555555' \gset
+\if :ok_full
+\else
+  \echo 'FAIL: full retention'
+  select 1/0;
+\endif
+-- A declared truncation is allowed and consistent.
+set role service_role;
+insert into public.market_report_generation_traces (report_type, trading_date, invocation_id, attempt, generation_index, stage, truncated, truncation)
+values ('morning', '2026-10-07', gen_random_uuid(), 1, 1, 'fact', true, '{"candidate":{"reason":"field_bound","original_chars":300000,"kept_chars":200000}}'::jsonb);
+reset role;
 
 -- 7. A future personalized report fits the same table without a cycle or a packet.
 set role service_role;

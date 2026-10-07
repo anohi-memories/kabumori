@@ -20,7 +20,6 @@ import {
 } from "./analysis_logic.ts";
 import {
   containsSecret,
-  MAX_CANDIDATE_CHARS,
   persistTraces,
   promptHash,
   redactValue,
@@ -202,7 +201,8 @@ test("4. a successful run records its trace: selected for delivery, linked to th
   const [row] = traceRowsWritten;
   assert.deepEqual([row.stage, row.selected_for_delivery, row.report_packet_id, row.local_passed, row.fact_ran, row.fact_passed], ["delivered", true, PACKET, true, true, true]);
   assert.deepEqual([row.source, row.report_type, row.trading_date, row.subject_ref, row.model], ["shared_market_report", "close", "2026-09-17", null, "gpt-5.6-luna"]);
-  assert.match(String(row.prompt_hash), /^[0-9a-f]{16}$/);
+  assert.match(String(row.base_prompt_hash), /^[0-9a-f]{16}$/);
+  assert.match(String(row.request_hash), /^[0-9a-f]{16}$/);
   assert.equal(openAiCalls(calls), 2);
   // The row is written after the packet is stored, never before.
   const urls = calls.map((call) => call.url.slice(`${SUPABASE}/rest/v1/`.length));
@@ -273,11 +273,11 @@ test("7. credentials are never written: keys and credential-shaped text are reda
 });
 
 test("7b. a row that still carries a credential after the serializer is dropped, not written", async () => {
-  const context = { reportType: "close" as const, tradingDate: "2026-09-17", cycleId: CYCLE, dataPacketId: dataFixture.id, invocationId: crypto.randomUUID(), attempt: 1, model: "m", promptHash: null };
+  const context = { reportType: "close" as const, tradingDate: "2026-09-17", cycleId: CYCLE, dataPacketId: dataFixture.id, invocationId: crypto.randomUUID(), attempt: 1, model: "m", basePromptHash: null };
   const record: GenerationRecord = {
     generationIndex: 1, stage: "local", hardRejection: "local", candidate: { x: "ok" }, localPassed: false,
     localIssues: ["指摘: Bearer abcdefghijklmnop1234"], localWarnings: [], factRan: false, factPassed: null, factIssues: [],
-    selectedForDelivery: false, fallbackReason: null, errorCode: null, calls: 1, inputTokens: 1, outputTokens: 1, costUsd: 0,
+    selectedForDelivery: false, fallbackReason: null, errorCode: null, requestHash: null, calls: 1, inputTokens: 1, outputTokens: 1, costUsd: 0,
   };
   const rows = traceRows(context, [record]);
   assert.equal(containsSecret(JSON.stringify(rows)), false, "redacted on the way out");
@@ -302,22 +302,10 @@ test("8. the generated report body itself is retained, structured, with every se
   assert.equal(candidate.claims.length, expected.claims.length);
 });
 
-test("a very large candidate is bounded and says how large it was; secrets never reach the cut", () => {
-  const huge = { x: "あ".repeat(MAX_CANDIDATE_CHARS), key: "Bearer abcdefghijklmnop1234" };
-  const [row] = traceRows(
-    { reportType: "morning", tradingDate: "2026-10-07", cycleId: null, dataPacketId: null, invocationId: crypto.randomUUID(), attempt: 1, model: "m", promptHash: null },
-    [{ generationIndex: 1, stage: "delivered", hardRejection: null, candidate: huge, localPassed: true, localIssues: [], localWarnings: [], factRan: true, factPassed: true, factIssues: [], selectedForDelivery: true, fallbackReason: null, errorCode: null, calls: 2, inputTokens: 1, outputTokens: 1, costUsd: 0 }],
-  );
-  const text = JSON.stringify(row.candidate);
-  assert.ok(text.length <= MAX_CANDIDATE_CHARS + 200);
-  assert.ok(text.includes("characters in total") || typeof row.candidate === "object");
-  assert.equal(containsSecret(JSON.stringify(row)), false);
-});
-
 test("future personalized reports fit the shape: source and subject_ref are carried, nothing else assumed", () => {
   const [row] = traceRows(
-    { source: "personalized_report", subjectRef: "report-123", reportType: "morning", tradingDate: "2026-10-07", cycleId: null, dataPacketId: null, invocationId: crypto.randomUUID(), attempt: 1, model: "m", promptHash: null },
-    [{ generationIndex: 1, stage: "delivered", hardRejection: null, candidate: { overview_ja: "個人向け本文" }, localPassed: true, localIssues: [], localWarnings: [], factRan: false, factPassed: null, factIssues: [], selectedForDelivery: true, fallbackReason: null, errorCode: null, calls: 1, inputTokens: 1, outputTokens: 1, costUsd: 0 }],
+    { source: "personalized_report", subjectRef: "report-123", reportType: "morning", tradingDate: "2026-10-07", cycleId: null, dataPacketId: null, invocationId: crypto.randomUUID(), attempt: 1, model: "m", basePromptHash: null },
+    [{ generationIndex: 1, stage: "delivered", hardRejection: null, candidate: { overview_ja: "個人向け本文" }, localPassed: true, localIssues: [], localWarnings: [], factRan: false, factPassed: null, factIssues: [], selectedForDelivery: true, fallbackReason: null, errorCode: null, requestHash: null, calls: 1, inputTokens: 1, outputTokens: 1, costUsd: 0 }],
   );
   assert.deepEqual([row.source, row.subject_ref], ["personalized_report", "report-123"]);
   assert.deepEqual(row.candidate, { overview_ja: "個人向け本文" }, "the generated text of a personal report is kept for QA");
