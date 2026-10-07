@@ -3,8 +3,8 @@
 - task_id: `common-account-v1-phase2-production-migration-preflight-20261007`
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - recommended_model: **Opus5.5（高）**
 - merged_source: `d5bea735937b53095b110b4bed1f20442e56b089`
 - target migration: `supabase/migrations/20261006230000_common_account_service_start_intent.sql`
@@ -90,6 +90,178 @@ Then:
 If READY_FOR_APPROVAL, do **not** apply. ChatGPT must obtain explicit user approval for the production migration write in a later turn.
 
 Recommended model: **Opus5.5（高）**.
+
+## Report
+
+### Phase 2 production migration の read-only preflight — 2026-10-07
+
+- task_id: common-account-v1-phase2-production-migration-preflight-20261007
+- result: **READY_FOR_APPROVAL**（読み取りのみ。本番の変更 0）
+- fresh main
+  - 開始時は `660283d2`。着手マーカーは `c0ed4553`。Report 時は `3ad5c364`。
+  - PR #95 の merge `d5bea735` は、main の祖先になっている。
+  - 開始後に main に入った product の変更は、G4 の provider-domain の 5 ファイルだけ。migration と、common-account の対象ファイルとの重なりは 0。
+- 作業場所：`/Users/yuya/Developer/kabumori-g5-p2prod`（`kabumori-fresh` の origin/main から作った G5 専用の worktree。branch `claude/g5-phase2-prod-preflight-20261007`）
+- 他スロットの本番書き込み：G1〜G4、H1、H2 に ACTIVE / 承認済みの window は無い（全 TASK の header を確認）。G3 の PR81 / PR41 の本番適用は、まだ行われていない。
+- 本番の読み取り：Claude が `supabase db query --linked --project-ref wsmznyzcvmuitkglfeuj`（Management API）で実行した。
+  - SELECT だけで、出力は catalog と集計だけ。PII、token、email、user id は出していない。
+  - 拒否はされなかった。実行 role は `postgres`。
+
+#### 本番の migration 履歴
+
+- 最新の履歴は `20261004090000`（総数 75）。
+- Phase 1 の `20261001150000` は `(version, name)` の形で記録済み。
+- 今回の `20261006230000` は**未記録**。対象の関数も無いので、未適用。
+- 履歴とリポジトリは、以前から 1 対 1 に揃っていない。
+  - 本番にだけある version が 6 件、リポジトリにだけあるファイルが 30 件。
+  - このため `supabase db push` は使わない（手順書に明記）。
+- 履歴テーブルの列：`version`（PK）、`statements`、`name`、`created_by`、`idempotency_key`（unique）、`rollback`。
+  - Phase 1 と PR76 の行は、どちらも version と name だけ。
+
+#### 今の RPC / ACL / owner の状態
+
+- 新しく作る 5 つの関数は**存在しない**：
+  - `private.account_lifecycle_service_refusal(text)`
+  - `private.account_lifecycle_active_answer(uuid,text,boolean)`
+  - `private.account_lifecycle_reactivate_service(uuid,text,bigint)`
+  - `public.reactivate_kabumori_service(bigint)`
+  - `public.reactivate_x_autopost_service(bigint)`
+- 置き換える 1 つと関係する 2 つ（`private.account_lifecycle_start_service(uuid,text)`、`public.start_kabumori_service()`、`public.start_x_autopost_service()`）の状態：
+  - 持ち主は postgres
+  - SECURITY DEFINER
+  - `search_path=""`
+  - 実行できるのは、public の 2 つが authenticated だけ、private の 1 つは誰もいない
+  - 同名の重複定義は無い
+- 依存先の `private.account_lifecycle_lock(uuid,boolean,boolean)` と `public.ensure_my_profile()` も変わっていない。
+- 上の 5 つの関数の定義のハッシュは、レビュー済みの Phase 1 のソースをローカルの PG17.11 に入れたものと**完全に一致**した。
+- 開始 helper の呼び出し元は、public の 2 つのラッパーだけ。Edge Function からの呼び出しは 0（リポジトリを検索）。
+- その他の権限：
+  - postgres が public に新しく作る関数の既定 ACL は postgres だけ。
+  - API の 3 つの role は、どの role のメンバーでもない。
+  - authenticated は schema `private` の USAGE を持つ（以前からの状態）。migration が private の関数の EXECUTE を剥がし、postflight で確かめる。
+- event trigger：
+  - `ensure_rls` は CREATE TABLE のときだけ動く。今回は該当しない。
+  - `pgrst_ddl_watch` で、適用後に PostgREST が新しい RPC を認識する。
+
+#### PR41 / Stage3B との順番
+
+- PR81 の `20261003120000` と、PR41 の `20261006160000` / `160100` / `160200` は、本番に**未適用**。
+- これらと今回の migration は、触る対象が重ならない。
+  - PR81 / PR41 は、common-account / profiles / auth に触れない。
+  - 今回の migration は、X / social / vault に触れない。
+  - したがって、どちらが先でも動作は変わらない。
+- 今回を先に適用すると、後で入る PR81 / PR41 の履歴は時刻順に並ばなくなる。単一ファイルずつ適用する手順なら問題ない。
+- ただし、それぞれの gate で、同じ日に基準値（fingerprint）を取り直す必要がある。基準値は public / private の全関数とテーブルを対象にしているため、G3 の適用を挟むと値が変わる。
+
+#### 古いアプリとの互換性
+
+- 古いアプリには影響しない。
+  - Kabumori の Phase 2 以前の binary は `ensure_my_profile()` を呼ぶ。この関数は変わらない（ローカルで、適用の前後のハッシュが同じことを確認）。
+  - X の binary は lifecycle の RPC を呼ばない。
+- 開始 RPC の応答は、次の 2 点が変わる。
+  - active の応答に `shared_account` が加わる。
+  - ended のときは `reenroll_required` を返す。
+- 今この応答を使っている呼び出し元は無い。
+  - `self_service` の entitlement は 0 件なので、開始 RPC から登録したアプリは、まだ無い。
+  - `track_functions = none` なので、呼び出しの統計は取れない。
+  - Phase 2 の build も、まだ存在しない。
+- ended の entitlement は 0 件なので、「自動では再開しない」変更が今すぐ誰かに影響することは無い。
+- 展開の順番：この migration を先に適用する → その後でアプリの build（EAS / TestFlight は別途承認）。Phase 2 のクライアントは新しい応答の形しか受け付けないため。
+
+#### 進行中の lifecycle の手続き（適用を止める理由になるもの）
+
+- **無し**。
+  - 手続き（operations）は 0 件。
+  - 設定は shadow / not_started / epoch 1。
+  - 長く開いたトランザクションは 0。
+- データ：ログイン 5、共通アカウント 5（すべて active）、共通アカウントの無いログイン 0。
+- entitlement：kabumori 2、x_autopost 1（すべて active / legacy_backfill）。profiles は 2。
+
+#### 本番の確認セット（PR [#104](https://github.com/anohi-memories/kabumori/pull/104)、head `36bea0ae`）
+
+- 置き場所：`supabase/tests/common_account_service_start_intent_preflight/`。
+- 中身：
+  - SQL 5 本（すべて SELECT 1 文）
+  - `run.sh`：Phase 1 と同じ keyword の検査をしてから実行する
+  - `check.py`：`expected.json` と完全一致で照合する
+  - `proof.sh`：ローカルの PG17 で検証する
+- `run.sh before` を本番で実行した結果：**ALL PASS（24 項目）**。
+- `proof.sh`：PASS する場合と、狙いどおり FAIL する場合の両方を確認し、`COMMON_ACCOUNT_START_INTENT_PREFLIGHT_PROOF_ALL_PASS`。
+
+  | 結果 | 場合 |
+  |---|---|
+  | PASS | 適用前 / 適用後 / 履歴の追加後 |
+  | 狙いどおり FAIL（7 種） | 適用後なのに before で照合 / 履歴が足りない / 履歴が余分 / 新しい private 関数への余分な EXECUTE / 余分な同名関数 / 無関係な関数の ACL の変更 / データ件数の変化 |
+
+- `expected.json` は、レビュー済みの migration をローカルに適用して作った。本番で読んだ値（触る 8 つと、依存する 2 つ）と全件一致。
+- その他：`migration_source_invariants_test.ts` 11 / 11、`bash -n` / `py_compile` / `git diff --check` は clean、秘密情報・PII の scan は 0。
+- PR の CI：Netlify は PASS。Vercel は `build-rate-limit`（24 時間の回数制限で、コードとは無関係。これまでと同じ扱いで、止める理由にしない）。
+- merge するかは K5 で判断してほしい。
+- 本番の結果の `out/` は、git の対象外。
+
+#### 適用の手順（提案。手順書：`docs/common-account/phase2-production-apply.md`）
+
+すべて G5 の production mutation window の中で行う。
+
+0. migration の SHA-256 を確かめる：`2c736e5aa70c61bf5563eee185d226fbde2c7f37f034c262f5e4b31f81888fa4`。
+   - main のファイルは、H1 がレビューした `ba35b642` と byte 一致。
+1. 同じ日に `run.sh before` を実行し、ALL PASS を確認する。その日の基準値が保存される。
+2. window を ACTIVE にする。
+3. **Stage A（スキーマへの唯一の書き込み）**：ユーザーのターミナルで次を実行する（DB の password を入力）。
+   - コマンド：`psql -X -v ON_ERROR_STOP=1 -f <migration>`
+   - 接続先：pooler `aws-0-ap-northeast-1.pooler.supabase.com:5432`、user `postgres.wsmznyzcvmuitkglfeuj`、sslmode=require
+   - 設定：`PGOPTIONS='-c lock_timeout=5s -c statement_timeout=120s'`
+   - psql にする理由：エラーが出たら session が終わり、ファイル内のトランザクションが確実に取り消されるため。
+   - 期待する出力：BEGIN → DO → CREATE FUNCTION ×6 → REVOKE ×6 → GRANT ×2 → DO → COMMIT、exit 0。
+
+#### 読み返しの手順（提案）
+
+4. **Stage B**：`run.sh after <baseline>` で ALL PASS を確認する。確認する内容は次のとおり。
+   - 触る 8 つの関数：定義のハッシュ / definer / search_path / ACL / 実際に実行できる role / 持ち主 postgres
+   - 同名の重複定義が無い
+   - それ以外の public / private の関数、テーブル、列、policy、trigger が基準値と同じ
+   - データ件数が同じ
+   - 動作確認（smoke）が完全一致：定数だけの helper と、存在しない人の読み取り
+5. **Stage C（2 つ目で最後の書き込み）**：Stage B が PASS のときだけ、履歴を 1 行追加する。
+   - SQL：`insert into supabase_migrations.schema_migrations (version, name) values ('20261006230000', 'common_account_service_start_intent')`
+6. `run.sh after <baseline> --history` で ALL PASS を確認する。
+7. window を CLOSED にする。
+
+#### 中止 / 取り消しの条件
+
+- **COMMIT の前**（Stage A が exit 0 以外で終わった）：何も確定していない。
+  - 主な原因：preflight / postflight の例外（FOUNDATION_MISSING / ALREADY_APPLIED / POSTFLIGHT_*）、lock や statement の timeout、接続エラー。
+  - `run.sh before` が同じ基準値で再び PASS することを確認して、window を閉じる。原因が分かるまで再実行しない。
+- **結果が分からない**（COMMIT の前後で接続が切れた）：読み取りだけで判定する。
+  - `run.sh before` が PASS → 未適用。
+  - `run.sh after` が PASS → 適用済み。Stage C へ進む。
+  - それ以外 → STOP。
+- **COMMIT の後で Stage B が失敗**：STOP し、履歴は追加しない。
+  - リポジトリに、レビュー済みの取り消し用 migration は無い。
+  - 元に戻すと「ended を自動で再開する」不具合（R1）が戻るため、戻さない。直すなら、新しい前方向の migration をレビューしてからにする。
+  - Phase 2 の build はまだ出ていないので、この関数に依存しているアプリは無い。
+- **Stage C が失敗**：Stage B をもう一度実行してから、Stage C だけを 1 回やり直す。
+- `migration repair` と `db push` は使わない。
+
+#### その他
+
+- production mutation：**0**（INSERT / UPDATE / DELETE / DDL、状態を変える RPC、Auth Admin はすべて 0）。deploy 0、EAS 0、provider への呼び出し 0。
+- changed_files（PR #104）：
+  - `supabase/tests/common_account_service_start_intent_preflight/` の 10 ファイル（`.gitignore`、`check.py`、`expected.json`、`proof.sh`、`run.sh`、`sql/01`〜`05`）
+  - `docs/common-account/phase2-production-apply.md`（新規）
+  - `docs/common-account/phase2-service-enrollment.md`（手順書へのリンク 1 か所）
+  - この Report：`.agent/tasks/CLAUDE_TASK_5.md` のみ。
+- remaining_issues：
+  - 本番の適用には、ユーザーの明示的な承認が必要。
+  - Stage A と Stage C は、DB の password が要るので、ユーザーのターミナルで実行する。
+    - 当日は、Phase 1 と同じ形の operator スクリプトを用意する：password を 1 回だけ隠して入力し、ファイルの SHA を固定する。
+  - 履歴とリポジトリのずれ（以前から）。`db push` を使わない運用を続ける。
+  - 呼び出しの統計が無い（`track_functions = none`）。古いアプリが開始 RPC を使っていないことは、`self_service` が 0 件であることと、ソースから判断した。
+  - PR81 / PR41 の本番適用とは、window を同時に開かないこと（排他）。それぞれの gate で、基準値を取り直すこと。
+- recommendation：**READY_FOR_APPROVAL**。
+  - ChatGPT は、後のターンでユーザーから明示的な承認を得てから、適用の TASK を G5 に割り当ててほしい。
+  - 適用の当日は、手順の 0〜7 をそのまま実行する。
+  - PR #104 は、適用より前に merge しておくのが望ましい。ただし PR の head（`36bea0ae`）を固定して使うこともできる。
 
 ---
 
