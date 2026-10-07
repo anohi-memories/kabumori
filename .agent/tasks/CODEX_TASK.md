@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase2-q1-final-rereview-20261007
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - target_pr: 95
@@ -97,6 +97,15 @@ If finding remains:
 
 Recommended model: **Sol（高）**.
 
+## H1 completion — 2026-10-07
+
+- Exact reviewed PR95 head: `ba35b642d30ce423a8683feffcd26aec325b45ee`; verdict **PASS** for the focused Q1 source review. No remaining blocker in this scope.
+- Deferred current-owner check runs before generation/loading/acceptSession/transport. SIGNED_OUT, newer user B and same-user fresh A3 yield zero obsolete A2 requests; current A2 prepares once; same-login refresh preserves single-flight.
+- Previous H1 scripts unchanged: 10/10 PASS. Additional reviewer Q1 supersession/control cases: 5/5 PASS. Two in-memory adverse variants are detected as expected (remove guard: 3 failures; user-only guard: A3 failure). No product patch.
+- AuthProvider 23/23, Kabumori app 390/390, X 221/221, migration source invariants 11/11; X tsc/lint and diff check PASS. Accepted shared/X/SQL/root boundaries byte-unchanged; no repeated DB/production/native work.
+- Fresh main `d648ec02` has zero product-file overlap; read-only merge-tree PASS. H1 changed only TASK/Report; production access/mutation/apply/merge/deploy/EAS = 0.
+- C1 may judge source merge readiness. Production start-intent migration apply/read-back and native release are separate later approval gates. **STOP for C1**.
+
 ---
 
 # Codex Task — CURRENT TASK
@@ -104,8 +113,8 @@ Recommended model: **Sol（高）**.
 - task_id: common-account-v1-phase2-q1-final-rereview-20261007
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - target_pr: 95

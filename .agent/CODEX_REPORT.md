@@ -1,10 +1,65 @@
 # H1 — PR #95 Q1 final focused rereview — 2026-10-07
 
 - task_id: common-account-v1-phase2-q1-final-rereview-20261007
-- status: Pending.
+- result / verdict: **PASS** for the focused exact-head source review. **Q1 is closed; no remaining blocker in this review scope.**
+- status: `review_required`; next_owner: `chatgpt`; **STOP for C1**.
 - target_pr: 95
 - target_head: ba35b642d30ce423a8683feffcd26aec325b45ee
 - recommended_model: Sol（高）
+- fresh main: startup `d5d16f5a1abc3290cc6815c593d314c5dca0acd0`; detailed final compatibility baseline `d648ec029895558f134f530e81fa1ab9eb171dfd`.
+- exact PR head unchanged at fresh read-back; OPEN/unmerged, mergeable `UNKNOWN`. No clean GitHub-check/merge claim.
+- changed_files (H1): `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md` only. Product edits/commits/source-branch push = **0**.
+- commit_hash: exact reviewed source `ba35b642d30ce423a8683feffcd26aec325b45ee`. H1 TASK/Report sync SHA/push success confirmed only after remote read-back, in the final response. No PR-head rewrite.
+- production access/mutation, migration apply, Auth/Storage/OAuth/Vault/Cron/X/provider mutation, actual merge, deploy and EAS/native release = **0**.
+
+## Q1 — corrected / PASS
+
+`src/providers/auth-provider.tsx:197-204` now checks `!active || announced.current() !== ownerOf(nextSession)` immediately on entering the deferred callback. It returns **before** incrementing generation, setting loading or entering acceptSession/prepareSession. The closure holds the notified session; ownerOf compares user **and stable login session_id**, not user alone.
+
+Independent actual-provider / actual lib/auth / shared gate / captured-token transport proof (fake sessions and intercepted endpoint; deferred preparation held):
+
+- A1 -> SIGNED_IN(A2) -> SIGNED_OUT before tasks: **zero A2 automatic requests**, all readiness renders null.
+- A1 -> A2 queued -> newer user B: **zero A2 requests**, exactly B's own preparation; ready only on B's own answer.
+- A1 -> A2 queued -> same-user fresh A3: **zero A2 requests**, exactly A3's own preparation; no user-only identity bypass.
+- Current A2, not superseded: callback sends nothing; deferred work sends **exactly one** automatic start, becomes ready on its own answer.
+- A2 + queued TOKEN_REFRESHED of that same login: **one logical A2 request**, captured initiating token retained, final ready session is the refreshed one. No spurious abort/restart or mutable-token substitution.
+
+The original reviewer `provider-queued-owner.mjs` runs **unchanged**, without its optional in-memory guard proof enabled: both former failures now PASS. Five additional reviewer cases above PASS, with final-owner-only request lists and all-render readiness checks. Shipped tests also cover a queued SIGNED_OUT superseded by A2, which must not later clear A2.
+
+Targeted adverse controls (reviewer-only in-memory source transforms, never written to product files): removing the guard fails all three superseding cases while normal/refresh controls pass; comparing only user fails the same-user A3 case while the other four pass. These demonstrate the assertions discriminate the actual fix rather than trivially passing. They are expected mutation failures, **not candidate failures**.
+
+## Prior accepted boundaries — preserved
+
+- **S1-T PASS:** synchronous SDK-notified owner/generation/reset remains before deferred preparation, with no awaited Auth/Data API/network call in the callback. Announced-owner serviceSession fence and obsolete-view click refusal remain intact. Previous three held-A1-result cases plus same-session refresh control pass unchanged: no old login becomes ready before the deferred task.
+- **Stable userId + session_id / S1 / S2 PASS:** previous same-user-fresh-login probes in both apps, X cleanup-before-microtask zero-dispatch proof, immutable credential and same-login controls all PASS. Invalid/missing/foreign-sub context and strict response tests remain green; claims are a memory-only discriminator, never server authentication.
+- **R1/R4/R5 unchanged:** shared enrollment parser/transport, auth facade, start-intent migration/runner and Phase1 foundation are byte-unchanged from prior reviewed `13f4281f`. Existing R2/R3 positive-ready/retry/cross-user/double-tap tests pass. No new evidence reopens already accepted SQL/RPC/ACL/lifecycle behavior.
+- **PR94 / root PASS:** root news-detail and serviceSession-only signed-in/push/notification consumers remain unchanged; app source-contract/navigation regressions PASS. No actual device gesture claim.
+- **X separation retained:** enrollment still precedes workspace data and does not supply OAuth/workspace/credentials/publishing authority. No direct common-account table write, ensure_my_profile bypass or email merge added.
+- This is the requested bounded Q1 re-review, not a repeat of the whole common-account review or a broader real-SDK/native sign-in E2E certification.
+
+## Independently rerun evidence
+
+- Actual AuthProvider Node suite: **23/23 PASS**; Kabumori app suite: **390/390 PASS** (`deno test --no-check --no-config --allow-read tests/app/`).
+- Original three H1 scripts copied/rerun unchanged: **10/10 PASS**, optional mutation/proof disabled. New actual-source Q1 supersession/current/refresh controls: **5/5 PASS**. Total positive reviewer probes: **15/15**.
+- X tests: **221/221 PASS**; X TypeScript and Expo lint: **PASS**.
+- Migration source invariants: **11/11 PASS**. `git diff --check`: PASS. Changed-source secret-pattern scan: **0 matches**; no added runtime token/PII/identity logging. All reviewer fixtures synthetic, observations boolean/count-only.
+- Product corrective `ccebf150` changes **four files** (provider guard/comment, two test files, docs). Relevant shared/X/SQL/root byte-comparison against prior exact head PASS. No dependency/package install; source tracked-file diff **0**, only own dependency symlinks untracked.
+- Per the current TASK's bounded-evidence instruction, full disposable SQL runners, web exports, Kabumori src-only tsc and G5's entire 11-variant mutation matrix were **not re-executed this turn**. Earlier accepted evidence remains in the preserved reports; this review does not claim new independent counts for those. Two focused Q1 adverse controls were independently executed as above. No local DB was started.
+- Evidence directory: `/private/tmp/kabumori-h1-pr95-q1-20261007.y6Osw2/`. Run `H1_FENCE_PROOF=0 node --test former-probes.mjs provider-event-window.mjs provider-queued-owner.mjs`, and `node --test q1-controls.mjs`. `H1_Q1_MUTATION=no_guard` / `user_only` on the latter reproduces the expected adverse failures, without any product edit.
+- Supabase skill informed synchronous owner/current-login versus server-authentication verification. Current public changelog plus [session docs](https://supabase.com/docs/guides/auth/sessions) and [auth callback docs](https://supabase.com/docs/reference/javascript/auth-onauthstatechange) checked; exact source/runtime evidence determines this verdict.
+
+## Fresh-main / compatibility
+
+- Merge-base with reviewed candidate: `0bdc82665fdad58227ca1e72478a39bb560ebefe`.
+- Fresh main `d648ec02` contains unrelated important-news-monitor code/tests plus .agent controls. Intersection with PR95's **17 changed files is zero**. H1 files remained unchanged while other controls advanced; own clean report worktree safely fast-forwarded before editing.
+- Read-only merge-tree: **PASS**, `73d55ce53b4551a36c43080c5e797b216097ec1b`. Temporary Git objects only; no actual merge/source branch update. Root news-detail is preserved in the conflict-free combined tree. This does not certify unrelated news changes or GitHub-required checks.
+- PR95 remains OPEN/unmerged at review; no branch-protection bypass, force push, deployment or release.
+
+## C1 recommendation / remaining gates
+
+- **PASS: C1 may judge source merge readiness for this exact head**, subject to a fresh PR/main/check read-back. No Q1/S1-T/S1/S2/R1-R5 corrective is requested by this review.
+- PASS does **not** authorize merge by H1, production migration apply, deployment or native release. New strict client/server contract still requires separately approved start-intent migration apply/read-back before app release; native/device/session/logout E2E remains a later gate.
+- No product patch/merge/deploy/native E2E by H1. Only its TASK/Report are updated; other slots/indexes/history preserved. **STOP for C1**.
 
 ---
 
