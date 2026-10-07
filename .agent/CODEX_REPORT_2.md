@@ -1,3 +1,81 @@
+## H2 — PR #101 final F2/F3 exact-head rereview — 2026-10-07 JST
+
+- task_id: kabumori-pr101-f2-f3-final-rereview-20261007
+- verdict / result: **PASS**. All remaining F2/F3 reproductions are closed; no blocker found in this bounded rereview. F1 was already accepted and was not reopened.
+- status: review_required
+- next_owner: chatgpt
+- exact_reviewed_head: `938567c049460ebfe78c4e08c71724d6e77ae71a` (fresh PR fetch and GitHub API: OPEN/unmerged, exact head unchanged).
+- previous_reviewed_head: `fddd274863b08aefed60795d678a298a1160d599`.
+- fresh_main: startup and final pre-sync `af64be8aef6ff224c57836ad0bb8b03b3d51374d`.
+- isolated_checkout: `/private/tmp/h2-pr101-f2f3-20261007.zzlbPd/review`, new independent clone of the clean formal `kabumori-fresh` base, detached exact PR head, clean tracked tree. Shared/dirty checkout and other-slot servers/databases untouched.
+- changed_files_by_H2: only `.agent/CODEX_REPORT_2.md` and `.agent/tasks/CODEX_TASK_2.md` completion synchronization. Source/migration changes by H2: **0**. Independent probe files/logs are outside the repository.
+- implementation_commit: reviewed G2 `938567c049460ebfe78c4e08c71724d6e77ae71a`; no H2 implementation commit.
+- commit_hash / push: completion synchronization in progress; exact GitHub read-back and commit inclusion receipt will be recorded below.
+- production access / mutation / migration apply / deploy / merge: **0**.
+
+### Scope, freshness and conflict boundary
+
+Correction delta from the previous reviewed head is exactly three files: `docs/market-report-shared-platform/DESIGN.md`, `supabase/functions/market-report-analysis/debug_trace.ts`, and `supabase/functions/market-report-analysis/debug_trace_final_test.ts`. No source fixes were made by H2.
+
+Fresh main is 97 commits ahead of the merge base with PR101 (`git rev-list --count upstream/pr101...upstream/main --right-only`); changed-file overlap between main-since-merge-base and PR101-since-merge-base is **0**. Latest active slots were checked; G5 has an exclusive production window, which this read-only/local review did not enter. No other TASK/Report/CURRENT_STATE/ACTIVE_TASK was changed.
+
+The PR API currently returns `mergeable=null / mergeable_state=unknown`; this is **not** evidence of a source conflict or a positive mergeability claim. A fresh head/main/no-race/mergeability check is required immediately before a separately authorized merge. No merge was attempted.
+
+### F2-A — alphabetic Basic credential: PASS
+
+Directly inspected `isBasicCredential`: the letters-only valid Base64 credential is decoded and checked for user:password syntax, instead of relying on the former digit/symbol heuristic. Exact `basic dXNlcjpwYXNz`, uppercase/lowercase/mixed case, normal `traceRows -> persistTraces`, and forged-row backstop were independently exercised. Normal rows redact the credential; forged residual rows invoke insert **0** times.
+
+Controls `basic income`, `basic materials`, `Basic Instinct`, ordinary Japanese/financial/news text remain unchanged. No blanket redaction of the word Basic was introduced.
+
+### F2-B — escaped quoted values: PASS
+
+The scanner honors quoted-value boundaries and escapes instead of ending redaction at the first backslash. Independent real serializer/writer probes cover escaped quote, backslash, newline, tab, Unicode and literal `\\u0061`, JSON-string-inside-string through four serialization levels, and an already-redacted occurrence followed by a live credential. Neither synthetic head nor tail reaches the insert callback. Forged residual rows are refused with callback **0**. Trailing ordinary Japanese prose remains when the quoted value is unambiguous.
+
+Unclosed/ambiguous values are conservatively redacted to the end, rather than retaining a tail. Persistence failure stays non-blocking, one insert attempt only, no retry/model/API call.
+
+### F3-A — depth metadata: PASS
+
+Independent depth66 fixtures confirm explicit `depth_limit`; `original_chars` equals the serialized fully redacted evidence **before** the depth cut; `kept_chars` equals `JSON.stringify(stored_candidate).length` for the depth-cut representation; lost evidence produces original > kept. Combined depth+field truncation records `depth_limit+field_bound` and the correct original redacted size.
+
+A cyclic/unmeasurable synthetic candidate confirms `truncation.candidate.original_chars=null`, rather than inventing a pre-cut size. The stored depth-cut representation and its kept size remain valid and the operation does not throw. The existing `candidate_chars` storage-size fallback is not misrepresented as a known original measurement. For field-bound wrapper mode, `kept_chars` continues its explicitly documented retained-head contract (200,000 chars), unchanged from the accepted policy.
+
+### F3-B — list metadata: PASS
+
+Retained lists exactly match `JSON.stringify(stored_list).length`; the first item has no phantom comma. Independently verified an exact 200,000-char list is untruncated, a first item filling the bound is retained even when a later item is deferred, a two-item one-char-over list cuts only the necessary second item, and an oversized single item yields `[]` with kept_chars=2 / kept_count=0. Original/kept counts are exact.
+
+### Regression and independently rerun tests
+
+All tests are local fixtures/mocks, with no network/API/production permissions:
+
+- Prior H2 exact independent reproductions: **20/20 PASS** (previous head: 13 PASS / 7 FAIL). Log `/private/tmp/h2-pr101-f2f3-20261007.zzlbPd/prior-exact.log`.
+- Additional independent boundary tests: **8/8 PASS**. Log `.../boundary.log`; scratch script `.../boundary_probe_test.ts`.
+- G2 `debug_trace_final_test.ts`: **18/18 PASS**, separately run and also included in the full suite. Log `.../final-test.log`.
+- `market-report-analysis` full suite: **210/210 PASS**. Log `.../analysis.log`.
+- Generation-trace migration/source invariants: **20/20 PASS**. Log `.../invariants.log`.
+- Deno check: **PASS** for actual `index.ts`, `handler.ts`, `analysis_logic.ts`, `debug_trace.ts`, `debug_trace_final_test.ts`.
+- Deno lint: **PASS**, same five files.
+- `git diff --check`: **PASS** for the correction delta and entire PR101 diff.
+- Tracked review checkout remains clean.
+
+Commands: `deno test --no-config --no-check --allow-read --allow-env supabase/functions/market-report-analysis`; same flags for `supabase/tests/market_report_generation_traces_source_test.ts supabase/tests/migration_source_invariants_test.ts`; `deno run --no-config --no-check --allow-read ../prior_exact_probe.ts`; `deno test --no-config --no-check ../boundary_probe_test.ts`; separate final-test invocation; `deno check --no-config` / `deno lint --no-config` on the five files above.
+
+One preliminary check command mistakenly named nonexistent `handler_logic.ts` and failed TS2307. This was a reviewer command-path typo, not a source defect; no source was changed, and checking the actual `handler.ts` plus all requested files passed.
+
+F1 migration ACL source and its tests are byte-unchanged relative to the accepted prior head. No new PostgreSQL proof or F1 reopening. Handler/index/analysis logic are byte-unchanged: accepted failed-output retention, Hard Fact semantics, exactly 3 points, PR99 WARN-only rules, X300/App rewrite policy, MAX_GENERATIONS=2 / max4 model calls, safe-original fallback, trace settlement timing/one insert/no retry, and base/request hash semantics are preserved. The full suite and independent >10 Fact issue / retry hash fixture corroborate these boundaries.
+
+### Safety / remaining issues / exact next action
+
+- H2 source edits 0; production access/write/apply/deploy 0; manual report/OpenAI/X/Push/Auth/OAuth/Vault operations 0.
+- DB/RPC/RLS/schema/Cron/settings/secrets changes 0; real AI calls/tokens 0; secret exposure 0.
+- Failed generated output retention remains the accepted QA policy; this review did not replace it with codes-only logging.
+- Shared existing uncommitted changes, other workstreams, apps/admin and HANDOFF untouched.
+- Remaining F2/F3 blockers: **none**. Production rollout is not performed or authorized by this review.
+- Recommendation: C2 may proceed to a separately authorized PR101 merge after final fresh head/main/no-race/mergeability verification. **No further PR101 review is required by this completed scope.**
+- Separate production migration apply/deploy requires its own approval/checks. The next G2 product task may be Kabumori-only AI model registry + GPT-6 migration; not started here.
+- TASK -> `review_required / next_owner: chatgpt`; STOP for C2.
+
+---
+
 ## H2 — PR #101 F1–F3 final exact-head rereview — 2026-10-07 JST
 
 - task_id: kabumori-pr101-f1-f3-final-rereview-20261007
