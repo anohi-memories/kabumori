@@ -3,8 +3,8 @@
 - task_id: `common-account-v1-phase2-production-migration-apply-20261007`
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - approval: the user approved the production apply directly in the G5 chat on 2026-10-07 (「承認」), in reply to the READY_FOR_APPROVAL preflight report below.
 - production_mutation_window: **CLOSED** — 2026-10-07 13:52 JST (ACTIVE 13:42〜). G5 applied exactly `20261006230000` once (Stage A COMMIT 13:47:09, history row 13:47:28) and finished the read-only read-backs (ALL PASS); G5 performs no further production write.
 - scope: exactly `docs/common-account/phase2-production-apply.md` (PR #104 head `36bea0ae`): read-only `run.sh before` -> Stage A (the single migration file, psql, lock_timeout 5s) -> Stage B read-back -> Stage C one `(version, name)` history row -> final read-back. Nothing else: no backfill, enforcement, deletion, deploy, EAS, Auth/Storage/OAuth/Vault/Cron change or X action.
