@@ -1,3 +1,13 @@
+## K2 timing override — PR #108 merged / H2 skipped by user / production approval pending — 2026-10-07
+
+- User explicitly chose to skip the focused H2 review of the rollout runner/runbook to preserve the possibility of observing GPT-6.1 Sol on today's close.
+- final PR #108 freshness check: exact head `b73e4053fc033d9c47235b68df4bca311dc6c8c4`, changed-file overlap with current main = 0.
+- PR #108 squash-merged as `3e54200bcbeecc3d8786b6fe7667da7f1bf1a27a`.
+- skipped review scope was only the rollout runner/runbook; previously accepted PR #101 migration and PR #107 model implementation were not reopened.
+- production mutation/deploy remains **0** at this point.
+- same-day target window: close analysis begins around 16:20 / retry 16:35; to observe GPT-6.1 Sol today, M1 and M2 must complete before the natural close analysis runs.
+- M1 trace migration and M2 single-function deploy remain separate production actions requiring explicit user approval. Review skip is not itself production approval.
+
 ## Final K2 — GPT-6.1 production preflight READY / PR #108 held for focused H2 — 2026-10-07
 
 - G2 task `kabumori-market-report-gpt61-production-preflight-20261007`: **PASS_CANDIDATE / READY_FOR_APPROVAL preflight**.
