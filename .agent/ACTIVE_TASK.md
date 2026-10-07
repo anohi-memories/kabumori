@@ -82,13 +82,13 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-social-ai-model-policy-gpt6-upgrade-20261007
+- status: ready
+- task_id: ai-lab-topic-continuity-fix-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: Final K3 PASS. PR #105 exact head 78a43ae878205f726111dde1002bd28ea8e82b97 was squash-merged as 9e359b3e600196fa0602ccd4162d125d613ebbb9. X/social source now centralizes GPT-6 text model ids/pricing/workloads with drift tests; no Codex review required. Production deploy/model switch is still pending and separately gated; G3 is free.
+- allocation: Urgent AI Lab continuity bugfix. Production evidence shows 10/day schedule is healthy but 7 evergreen seeds + 72h seed / 48h theme cooldown exhausted the topic pool, causing all 2026-10-07 executed slots to fail before OpenAI/X. Expand to a sufficiently large diverse safe topic reservoir with explicit continuity fallback, preserve claim/fencing/cooldowns/duplicate guards, and prove >=14 days x 10/day cannot exhaust. Source/migration candidate only; no production mutation/deploy/merge.
 - recommended_model: Opus5.5（高）
 
 ## Claude G4
