@@ -82,11 +82,11 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: ai-lab-topic-continuity-fix-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_3.md
 - allocation: Urgent AI Lab continuity bugfix. Production evidence shows 10/day schedule is healthy but 7 evergreen seeds + 72h seed / 48h theme cooldown exhausted the topic pool, causing all 2026-10-07 executed slots to fail before OpenAI/X. Expand to a sufficiently large diverse safe topic reservoir with explicit continuity fallback, preserve claim/fencing/cooldowns/duplicate guards, and prove >=14 days x 10/day cannot exhaust. Source/migration candidate only; no production mutation/deploy/merge.
 - recommended_model: Opus5.5（高）
