@@ -1,3 +1,35 @@
+## G3 assigned — X/social AI model policy + GPT-6 migration — 2026-10-07
+
+- task_id: `x-social-ai-model-policy-gpt6-upgrade-20261007`.
+- owner: Claude G3; status ready.
+- recommended model: **Opus5.5（高）**.
+- user scope is explicitly X/social-auto-post only:
+  - POSTONA;
+  - 会社員AIらぼ;
+  - かぶモリX automatic-post AI.
+- G2 owns Kabumori app/report model migration; important-news/MIC are out of this G3.
+- verified production/source baseline:
+  - x-test-post v136 contains 5.6 Luna/Sol text paths;
+  - social-mobile-brand-dry-run v14 uses shared 5.6 Luna brand generator;
+  - social-mobile-consult is not yet deployed and source is 5.6 Luna;
+  - history-learning uses no OpenAI model;
+  - publish-setting uses no OpenAI model.
+- target tiers:
+  - routine/high-volume text: `gpt-6-luna`;
+  - existing quality/Sol escalation: `gpt-6.1-sol`;
+  - `gpt-image-2` unchanged in this task.
+- official standard token rates verified 2026-10-07:
+  - GPT-6 Luna: $0.10/M input, $0.50/M output;
+  - GPT-6.1 Sol: $2/M input, $10/M output.
+- architecture requirement:
+  - one source-controlled shared social AI model policy owns ids + pricing + semantic workload mapping;
+  - runtime callers import semantic policy rather than raw model strings;
+  - focused invariant fails if target runtime reintroduces 5.6 or hard-codes new social text model ids outside policy;
+  - no unrestricted production env override that bypasses source review.
+- source-only. production mutation/deploy/real OpenAI/X/DB/secret change = forbidden.
+- G4 provider-domain foundation and G5 production migration work remain independently owned; fresh overlap check required before push.
+- K3 normally needs no Codex review if the final diff is only model policy/ids/cost/type/tests and does not change Auth/DB/publish/retry semantics.
+
 ## Final K2 — corrected PR #101 PASS_CANDIDATE / final H2 F1-F3 rereview assigned — 2026-10-07
 
 - G2 corrective result: **PASS_CANDIDATE**, not final merge approval.
