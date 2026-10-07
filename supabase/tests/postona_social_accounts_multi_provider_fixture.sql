@@ -46,7 +46,9 @@ create function postona_proof.catalog() returns jsonb language sql stable set ti
                                             || coalesce(pg_get_expr(p.polwithcheck, p.polrelid), ''), ',' order by p.polname), '')
                  from pg_policy p where p.polrelid = 'public.social_accounts'::regclass),
     'triggers', (select coalesce(string_agg(pg_get_triggerdef(t.oid) || ':' || t.tgenabled::text || ':' || md5(p.prosrc)
-                                            || ':' || p.prosecdef || ':' || coalesce(p.proconfig::text, ''), ',' order by t.tgname), '')
+                                            || ':' || p.prosecdef || ':' || coalesce(p.proconfig::text, '')
+                                            || ':' || p.proowner::regrole || ':' || coalesce(p.proacl::text, '')
+                                            || ':' || md5(pg_get_functiondef(p.oid)), ',' order by t.tgname), '')
                  from pg_trigger t join pg_proc p on p.oid = t.tgfoid
                  where t.tgrelid = 'public.social_accounts'::regclass and not t.tgisinternal),
     'functions', (select coalesce(string_agg(p.oid::regprocedure::text || ':' || coalesce(p.proacl::text, ''), ',' order by p.oid::regprocedure::text), '')

@@ -45,7 +45,10 @@
 --     no expression): one provider identity in at most one row, for every provider;
 --   * RLS on and not forced, with exactly the member read policy (permissive, SELECT, authenticated);
 --   * exactly the two existing triggers (full definition, enabled, function language, SECURITY DEFINER,
---     search_path and body md5);
+--     search_path and body md5), their functions exactly as the repository migrations define them
+--     (canonical pg_get_functiondef), owned by the table owner, with an ACL of exactly the owner's own
+--     EXECUTE (no other grantee, no grant option) and no EXECUTE reachable from PUBLIC, anon or
+--     authenticated by any membership path;
 --   * table ACL: owner; authenticated SELECT only; service_role at most SELECT / INSERT / UPDATE /
 --     DELETE / TRUNCATE / REFERENCES / MAINTAIN (never TRIGGER: a trigger it created would run as the
 --     owner inside the owner's SECURITY DEFINER functions); nothing grantable; nothing for PUBLIC, anon
@@ -60,8 +63,9 @@
 -- differs from this contract, the contract is corrected through review first.
 --
 -- Postcondition before COMMIT: the four CHECKs with exactly these definitions, validated; the guard
--- trigger and function exactly as above; and columns, constraints, indexes, policies, triggers, table
--- and column ACLs, the relevant role memberships and every row exactly as before.
+-- trigger and function exactly as above, the function's canonical definition (body included) pinned;
+-- and columns, constraints, indexes, policies, triggers and their functions (definition, owner, ACL),
+-- table and column ACLs, the relevant role memberships and every row exactly as before.
 --
 -- Transaction: one explicit transaction; apply alone with a tool that does NOT wrap the file in another
 -- transaction; not re-runnable (ALREADY_APPLIED). The ACCESS EXCLUSIVE lock is taken right after the
@@ -107,8 +111,9 @@ returns jsonb language sql stable as $$
                    from pg_catalog.pg_policy p where p.polrelid = 'public.social_accounts'::regclass) s),
     'triggers', (select pg_catalog.array_agg(x order by x) from (
                    select pg_catalog.concat_ws(' | ', pg_catalog.pg_get_triggerdef(t.oid), t.tgenabled::text,
-                            t.tgfoid::regprocedure::text, p.proowner::regrole::text, p.prosecdef::text,
-                            coalesce(p.proconfig::text, ''), coalesce(p.proacl::text, ''), pg_catalog.md5(p.prosrc)) as x
+                            t.tgfoid::regprocedure::text, p.prokind::text, p.proowner::regrole::text, p.prosecdef::text,
+                            coalesce(p.proconfig::text, ''), coalesce(p.proacl::text, ''), pg_catalog.md5(p.prosrc),
+                            pg_catalog.md5(pg_catalog.pg_get_functiondef(p.oid))) as x
                    from pg_catalog.pg_trigger t join pg_catalog.pg_proc p on p.oid = t.tgfoid
                    where t.tgrelid = 'public.social_accounts'::regclass and not t.tgisinternal
                      and t.tgname <> all (p_skip_triggers)) s),
@@ -304,6 +309,42 @@ begin
     raise exception 'POSTONA_ACCOUNTS_PRECONDITION_ROLE_GRAPH';
   end if;
 
+  -- The two trigger functions themselves (repository: created by 20260925140000 / 20260928160000,
+  -- which then revoke EXECUTE from PUBLIC, anon, authenticated and service_role; production S0: the
+  -- owner's default EXECUTE grants in public are owner-only). Exact canonical definition
+  -- (pg_get_functiondef: signature, return type, language, volatility, cost, SECURITY DEFINER,
+  -- search_path, body), a plain function owned by the table owner ...
+  if (select pg_catalog.array_agg(x order by x) from (
+        select pg_catalog.concat_ws(' | ', p.oid::regprocedure::text, p.prokind::text, (p.proowner = v_owner)::text,
+                 pg_catalog.md5(pg_catalog.pg_get_functiondef(p.oid))) as x
+        from pg_catalog.pg_trigger t join pg_catalog.pg_proc p on p.oid = t.tgfoid
+        where t.tgrelid = v_table and not t.tgisinternal) s)
+     is distinct from array[
+       'public.social_mobile_account_deletion_guard() | f | true | f1e297288b09647b4af78140c2d9d799',
+       'public.x_account_refresh_reset_on_reconnect() | f | true | fda71f31421d760b16d163e57e9836b2'] then
+    raise exception 'POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTIONS';
+  end if;
+  -- ... that neither PUBLIC, anon nor authenticated can execute, directly or through any role they
+  -- reach by inheritance or SET ROLE (MEMBER, PostgreSQL 16+; reaching the owner or a superuser is
+  -- already refused above) ...
+  if exists (select 1
+             from pg_catalog.pg_trigger t
+             cross join (values ('anon'::name), ('authenticated'::name)) a(app)
+             join pg_catalog.pg_roles r on pg_catalog.pg_has_role(a.app, r.oid, 'MEMBER')
+             where t.tgrelid = v_table and not t.tgisinternal
+               and pg_catalog.has_function_privilege(r.oid, t.tgfoid, 'EXECUTE')) then
+    raise exception 'POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_EXECUTE';
+  end if;
+  -- ... and whose ACL is exactly the owner's own EXECUTE: no other grantee, no grant option.
+  if exists (select 1
+             from pg_catalog.pg_trigger t
+             join pg_catalog.pg_proc p on p.oid = t.tgfoid
+             cross join lateral pg_catalog.aclexplode(coalesce(p.proacl, pg_catalog.acldefault('f', p.proowner))) a
+             where t.tgrelid = v_table and not t.tgisinternal
+               and not (a.grantee = v_owner and a.grantor = v_owner and a.privilege_type = 'EXECUTE' and not a.is_grantable)) then
+    raise exception 'POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_ACL';
+  end if;
+
   -- Snapshot of everything that must come out unchanged (compared before COMMIT).
   perform pg_catalog.set_config('postona.accounts_before',
     pg_temp.postona_accounts_state(array[v_old_check], array[]::text[])::text, true);
@@ -369,14 +410,16 @@ begin
                 where c.conrelid = v_table and c.contype = 'c' and v_platform = any (c.conkey) and not (c.conname = any (v_new))) then
     raise exception 'POSTONA_ACCOUNTS_POSTCONDITION_CONSTRAINTS';
   end if;
-  -- The guard: exactly this trigger, enabled, on exactly this function; the function owned by the
-  -- table owner, SECURITY INVOKER, plpgsql, empty search_path, EXECUTE for the owner only.
+  -- The guard: exactly this trigger, enabled, on exactly this function; the function exactly as
+  -- reviewed (pg_get_functiondef: signature, return type, language, volatility, SECURITY INVOKER,
+  -- empty search_path and body), a plain function owned by the table owner, EXECUTE for the owner only.
   if (select pg_catalog.array_agg(pg_catalog.pg_get_triggerdef(t.oid) || ' | ' || t.tgenabled::text)
       from pg_catalog.pg_trigger t where t.tgrelid = v_table and t.tgname = 'social_accounts_provider_guard')
      is distinct from array['CREATE TRIGGER social_accounts_provider_guard BEFORE INSERT OR UPDATE ON public.social_accounts FOR EACH ROW EXECUTE FUNCTION public.social_accounts_provider_guard() | O']
      or v_fn is null
-     or (select p.proowner = v_owner and not p.prosecdef and p.proconfig = array['search_path=""']
+     or (select p.proowner = v_owner and p.prokind = 'f' and not p.prosecdef and p.proconfig = array['search_path=""']
                 and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
+                and pg_catalog.md5(pg_catalog.pg_get_functiondef(p.oid)) = '3f0ee4a3b1adf64819ec97cce7a67808'
          from pg_catalog.pg_proc p where p.oid = v_fn) is not true
      or exists (select 1 from pg_catalog.pg_proc p,
                        pg_catalog.aclexplode(coalesce(p.proacl, pg_catalog.acldefault('f', p.proowner))) a

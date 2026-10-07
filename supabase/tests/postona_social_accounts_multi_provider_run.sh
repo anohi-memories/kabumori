@@ -17,7 +17,9 @@
 #      and provider-identity index drift (missing, X-only, wider, wrong key, expression, invalid, wrong
 #      predicate, NULLS NOT DISTINCT, operator class, collation, not unique); column, constraint,
 #      index, policy (incl. permissive/restrictive), trigger (definition, enabled, function body and
-#      security) and ACL (table, column, PUBLIC, unknown grantee, grant option, TRIGGER) drift; RLS off
+#      security), trigger-function contract (canonical definition, owner, ACL, EXECUTE reachable from
+#      PUBLIC / anon / authenticated directly, inherited, SET-only or transitive) and ACL (table,
+#      column, PUBLIC, unknown grantee, grant option, TRIGGER) drift; RLS off
 #      or forced; role graphs reachable by inheritance or SET ROLE only (PostgreSQL 16+ membership
 #      options), directly or transitively; another creator, a superuser, a superuser-owned table; a
 #      lock held by another session. A renamed but exact X-only CHECK is applied;
@@ -66,7 +68,7 @@ restore_roles() {
 revoke $owner from authenticated, anon, service_role, $mid;
 revoke service_role from authenticated, anon, $mid;
 revoke $mid from authenticated, anon;
-revoke $writer from authenticated, anon;
+revoke $writer from authenticated, anon, $mid;
 revoke pg_write_all_data from authenticated, anon;
 grant anon, authenticated, service_role to $owner;
 SQL
@@ -241,6 +243,7 @@ done
 as_owner "$db" -f "$here/postona_social_accounts_multi_provider_fixture.sql" > /dev/null
 as_owner "$db" -c "alter table public.social_accounts alter column publish_enabled set default false, alter column connection_status set default 'unconnected'" > /dev/null
 as_owner "$db" -f "$tmp/reset_on_reconnect.sql" > /dev/null
+as_owner "$db" -c "revoke all on function public.x_account_refresh_reset_on_reconnect() from public, anon, authenticated, service_role" > /dev/null
 as_owner "$db" -c "create trigger social_accounts_x_refresh_reset_on_reconnect after update of verified_at on public.social_accounts for each row when (new.connection_status = 'identity_verified' and new.verified_at is distinct from old.verified_at) execute function public.x_account_refresh_reset_on_reconnect()" > /dev/null
 expect_applied "deletion world" "$db"
 as_owner "$db" > /dev/null <<'SQL'
@@ -288,6 +291,7 @@ create unique index social_accounts_platform_user_id_key on public.social_accoun
 create table public.social_mobile_account_deletions (user_id uuid primary key, workspace_id text not null, lease_token uuid);
 SQL
 as_owner "$db" -f "$tmp/deletion_guard.sql" > /dev/null
+as_owner "$db" -c "revoke all on function public.social_mobile_account_deletion_guard() from public, anon, authenticated, service_role" > /dev/null
 as_owner "$db" -c "create trigger social_mobile_deletion_guard before insert or update on public.social_accounts for each row execute function public.social_mobile_account_deletion_guard()" > /dev/null
 expect_applied "Stage 3B world" "$db"
 as_owner "$db" > /dev/null <<'SQL'
@@ -418,6 +422,25 @@ refuse_after trigger_function_body POSTONA_ACCOUNTS_PRECONDITION_TRIGGERS \
      as \$\$ begin return new; end \$\$"
 refuse_after trigger_function_invoker POSTONA_ACCOUNTS_PRECONDITION_TRIGGERS \
   "alter function public.x_account_refresh_reset_on_reconnect() security invoker"
+refuse_after trigger_function_config POSTONA_ACCOUNTS_PRECONDITION_TRIGGERS \
+  "alter function public.social_mobile_account_deletion_guard() set search_path = public"
+# The trigger functions' canonical definition, owner and ACL (C1-R1).
+refuse_after trigger_function_owner POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTIONS \
+  "alter function public.x_account_refresh_reset_on_reconnect() owner to $other"
+refuse_after trigger_function_cost POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTIONS \
+  "alter function public.social_mobile_account_deletion_guard() cost 7"
+refuse_after trigger_function_public_execute POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_EXECUTE \
+  "grant execute on function public.social_mobile_account_deletion_guard() to public"
+refuse_after trigger_function_auth_execute POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_EXECUTE \
+  "grant execute on function public.x_account_refresh_reset_on_reconnect() to authenticated"
+refuse_after trigger_function_anon_execute POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_EXECUTE \
+  "grant execute on function public.social_mobile_account_deletion_guard() to anon"
+refuse_after trigger_function_service_execute POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_ACL \
+  "grant execute on function public.x_account_refresh_reset_on_reconnect() to service_role"
+refuse_after trigger_function_grant_option POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_ACL \
+  "grant execute on function public.social_mobile_account_deletion_guard() to service_role with grant option"
+refuse_after trigger_function_unknown_grantee POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_ACL \
+  "grant execute on function public.social_mobile_account_deletion_guard() to $writer"
 # Table and column ACL (B4).
 refuse_after acl_auth_update POSTONA_ACCOUNTS_PRECONDITION_ACL "grant update on public.social_accounts to authenticated"
 refuse_after acl_auth_references POSTONA_ACCOUNTS_PRECONDITION_ACL "grant references on public.social_accounts to authenticated"
@@ -467,6 +490,14 @@ graph_after auth_set_column_writer POSTONA_ACCOUNTS_PRECONDITION_ACL \
   "grant $writer to authenticated with inherit false, set true" "grant update (handle) on public.social_accounts to $writer"
 graph_after anon_inherits_table_writer POSTONA_ACCOUNTS_PRECONDITION_ACL \
   "grant $writer to anon" "grant insert on public.social_accounts to $writer"
+# EXECUTE on a trigger function reachable through a role (C1-R1): inherited, SET-only, transitive.
+graph_after trigger_function_inherited_execute POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_EXECUTE \
+  "grant $writer to authenticated" "grant execute on function public.social_mobile_account_deletion_guard() to $writer"
+graph_after trigger_function_set_execute POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_EXECUTE \
+  "grant $writer to anon with inherit false, set true" "grant execute on function public.social_mobile_account_deletion_guard() to $writer"
+graph_after trigger_function_set_chain_execute POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_EXECUTE \
+  "grant $writer to $mid with inherit false, set true; grant $mid to authenticated with inherit false, set true" \
+  "grant execute on function public.x_account_refresh_reset_on_reconnect() to $writer"
 
 # Creator / owner.
 db="$(copy other_creator)"
@@ -555,6 +586,11 @@ post_refuses guard_insert_only POSTONA_ACCOUNTS_POSTCONDITION_GUARD \
 post_refuses guard_definer POSTONA_ACCOUNTS_POSTCONDITION_GUARD "alter function public.social_accounts_provider_guard() security definer;"
 post_refuses guard_search_path POSTONA_ACCOUNTS_POSTCONDITION_GUARD "alter function public.social_accounts_provider_guard() set search_path = public;"
 post_refuses guard_execute_grant POSTONA_ACCOUNTS_POSTCONDITION_GUARD "grant execute on function public.social_accounts_provider_guard() to service_role;"
+# The guard replaced by a body that checks nothing, every other property kept (C1-R2).
+post_refuses guard_body_bypass POSTONA_ACCOUNTS_POSTCONDITION_GUARD \
+  "create or replace function public.social_accounts_provider_guard() returns trigger language plpgsql set search_path = '' as \$\$ begin return new; end; \$\$;"
+post_refuses trigger_function_grant POSTONA_ACCOUNTS_POSTCONDITION_UNCHANGED \
+  "grant execute on function public.social_mobile_account_deletion_guard() to service_role;"
 echo "POSTONA_ACCOUNTS_ATOMICITY_PASS"
 
 if grep -rq 'fake_' "$tmp"; then fail "token material in run output"; fi

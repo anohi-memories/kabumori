@@ -51,16 +51,36 @@ mutation "provider spelling is not exact" \
   "check (lower(btrim(platform)) in ('x', 'threads', 'instagram'));${S}'social_accounts_platform_supported | CHECK ((lower(btrim(platform)) = ANY" \
   "FAIL platform 'X' refused"
 # --- the provider guard ------------------------------------------------------------------------------
+# (Self-consistent: the postcondition's pinned guard definition is changed to the mutant's, so the
+# behavior proof has to catch the weakened body.)
 mutation "a row's provider may change" \
-  "  if tg_op = 'UPDATE' and new.platform is distinct from old.platform then" \
-  "  if false then" \
+  "  if tg_op = 'UPDATE' and new.platform is distinct from old.platform then${S}= '3f0ee4a3b1adf64819ec97cce7a67808'" \
+  "  if false then${S}= '72a01f03b9dc5c4ad5e9df270fa25d9b'" \
   "FAIL owner: sa_x_off -> threads refused"
 mutation "any role may write Meta rows" \
+  "  if new.platform is distinct from 'x'
+     and (select c.relowner${S}= '3f0ee4a3b1adf64819ec97cce7a67808'" \
+  "  if false
+     and (select c.relowner${S}= '588141d2a36e72cb8ff50709f9f8d062'" \
+  "FAIL service_role: relabel by upsert refused"
+# (Body only, every other property and the pinned definition kept: the postcondition must refuse.)
+mutation "guard body allows relabeling (postcondition)" \
+  "  if tg_op = 'UPDATE' and new.platform is distinct from old.platform then" \
+  "  if false then" \
+  "FAIL apply: refused (POSTONA_ACCOUNTS_POSTCONDITION_GUARD)"
+mutation "guard body skips the Meta write protection (postcondition)" \
   "  if new.platform is distinct from 'x'
      and (select c.relowner" \
   "  if false
      and (select c.relowner" \
-  "FAIL service_role: relabel by upsert refused"
+  "FAIL apply: refused (POSTONA_ACCOUNTS_POSTCONDITION_GUARD)"
+mutation "guard body returns NEW without any check (postcondition)" \
+  "begin
+  -- A row's provider never changes, whoever writes and whatever else the statement changes." \
+  "begin
+  return new;
+  -- A row's provider never changes, whoever writes and whatever else the statement changes." \
+  "FAIL apply: refused (POSTONA_ACCOUNTS_POSTCONDITION_GUARD)"
 mutation "the guard fires on INSERT only" \
   "  before insert or update on public.social_accounts${S}BEFORE INSERT OR UPDATE ON public.social_accounts FOR EACH ROW EXECUTE FUNCTION public.social_accounts_provider_guard() | O'" \
   "  before insert on public.social_accounts${S}BEFORE INSERT ON public.social_accounts FOR EACH ROW EXECUTE FUNCTION public.social_accounts_provider_guard() | O'" \
@@ -178,13 +198,40 @@ mutation "the role graph is not checked" \
   "    null;" \
   "FAIL auth_inherits_service: expected POSTONA_ACCOUNTS_PRECONDITION_ROLE_GRAPH"
 mutation "SET-only (non-inherited) memberships are missed" \
-  "pg_catalog.pg_has_role(a.app, r.oid, 'MEMBER')" \
-  "pg_catalog.pg_has_role(a.app, r.oid, 'USAGE')" \
+  "join pg_catalog.pg_roles r on pg_catalog.pg_has_role(a.app, r.oid, 'MEMBER')
+             where r.oid = v_owner" \
+  "join pg_catalog.pg_roles r on pg_catalog.pg_has_role(a.app, r.oid, 'USAGE')
+             where r.oid = v_owner" \
   "FAIL auth_set_service: expected POSTONA_ACCOUNTS_PRECONDITION_ROLE_GRAPH"
 mutation "only anon's reachable roles are checked" \
-  "(values ('anon'::name), ('authenticated'::name)) a(app)" \
-  "(values ('anon'::name)) a(app)" \
+  "from (values ('anon'::name), ('authenticated'::name)) a(app)" \
+  "from (values ('anon'::name)) a(app)" \
   "FAIL auth_inherits_service: expected POSTONA_ACCOUNTS_PRECONDITION_ROLE_GRAPH"
+# --- precondition: the existing trigger functions (C1-R1) -----------------------------------------
+mutation "a trigger function's owner is not checked" \
+  "p.prokind::text, (p.proowner = v_owner)::text," \
+  "p.prokind::text, 'true'," \
+  "FAIL trigger_function_owner: expected POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTIONS"
+mutation "trigger function definitions are not compared" \
+  "(p.proowner = v_owner)::text,
+                 pg_catalog.md5(pg_catalog.pg_get_functiondef(p.oid))) as x${S}| f1e297288b09647b4af78140c2d9d799'${S}| fda71f31421d760b16d163e57e9836b2'" \
+  "(p.proowner = v_owner)::text,
+                 'definition') as x${S}| definition'${S}| definition'" \
+  "FAIL trigger_function_cost: expected POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTIONS"
+mutation "EXECUTE reachable from app roles is not checked" \
+  "    raise exception 'POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_EXECUTE';" \
+  "    null;" \
+  "FAIL trigger_function_public_execute: expected POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_EXECUTE"
+mutation "EXECUTE reachable only by SET ROLE is missed" \
+  "join pg_catalog.pg_roles r on pg_catalog.pg_has_role(a.app, r.oid, 'MEMBER')
+             where t.tgrelid = v_table" \
+  "join pg_catalog.pg_roles r on pg_catalog.pg_has_role(a.app, r.oid, 'USAGE')
+             where t.tgrelid = v_table" \
+  "FAIL trigger_function_set_execute: expected POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_EXECUTE"
+mutation "a trigger function's direct ACL is not checked" \
+  "    raise exception 'POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_ACL';" \
+  "    null;" \
+  "FAIL trigger_function_service_execute: expected POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_ACL"
 mutation "service_role may reach the owner" \
   "     or pg_catalog.pg_has_role('service_role', v_owner, 'MEMBER')
 " \
@@ -209,9 +256,17 @@ mutation "the snapshot does not include rows" \
   "             from public.social_accounts sa where false))" \
   "FAIL postcondition: row_changed: expected POSTONA_ACCOUNTS_POSTCONDITION_UNCHANGED"
 mutation "the snapshot does not include trigger bodies" \
-  "coalesce(p.proconfig::text, ''), coalesce(p.proacl::text, ''), pg_catalog.md5(p.prosrc)) as x" \
-  "coalesce(p.proconfig::text, ''), coalesce(p.proacl::text, ''), 'body') as x" \
+  "coalesce(p.proconfig::text, ''), coalesce(p.proacl::text, ''), pg_catalog.md5(p.prosrc),
+                            pg_catalog.md5(pg_catalog.pg_get_functiondef(p.oid))) as x" \
+  "coalesce(p.proconfig::text, ''), coalesce(p.proacl::text, ''), 'body',
+                            'definition') as x" \
   "FAIL postcondition: trigger_body: expected POSTONA_ACCOUNTS_POSTCONDITION_UNCHANGED"
+mutation "the snapshot does not include trigger function ACLs" \
+  "p.proowner::regrole::text, p.prosecdef::text,
+                            coalesce(p.proconfig::text, ''), coalesce(p.proacl::text, '')," \
+  "p.proowner::regrole::text, p.prosecdef::text,
+                            coalesce(p.proconfig::text, ''), 'acl'," \
+  "FAIL postcondition: trigger_function_grant: expected POSTONA_ACCOUNTS_POSTCONDITION_UNCHANGED"
 mutation "the snapshot does not include the policy mode" \
   "
                    select pg_catalog.concat_ws(' | ', p.polname, p.polcmd::text, p.polpermissive::text," \
