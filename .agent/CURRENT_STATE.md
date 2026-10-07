@@ -1,3 +1,22 @@
+## Final C2 — PR #101 PASS / merged / next G2 AI model registry ready — 2026-10-07
+
+- H2 task `kabumori-pr101-f2-f3-final-rereview-20261007` verdict: **PASS**.
+- exact reviewed PR #101 head: `938567c049460ebfe78c4e08c71724d6e77ae71a`.
+- F2-A alphabetic-only Basic credential: PASS.
+- F2-B escaped quoted credential tails: PASS.
+- F3-A depth-limit original/kept metadata: PASS.
+- F3-B exact list kept_chars/boundary accounting: PASS.
+- F1 remained accepted/PASS and was not reopened.
+- independent evidence: prior exact 20/20, boundary 8/8, final 18/18, market-report-analysis 210/210, migration/source invariants 20/20, Deno check/lint and diff check PASS.
+- H2 source changes = 0; production access/mutation/apply/deploy = 0.
+- final freshness gate: PR head unchanged; main had advanced 97 commits from PR base with **0 changed-file overlap** across PR #101 files.
+- PR #101 squash-merged successfully as `e49ecfcc2f6707f64b6282960f9eec61be2973d3`.
+- PR #101 source review is closed; no further routine review required.
+- production trace migration apply and market-report-analysis deploy remain a separate gate and were **not** performed by C2.
+- G5 production DB/Auth/permission window remains independently owned; G2 must not enter it.
+- next G2 task is ready: `kabumori-ai-model-registry-gpt61-sol-20261007`, recommended **Opus5.5（高）**.
+- next G2 scope: Kabumori-only market-report model registry/inventory/drift guard and source migration of generate + Fact to the current officially verified GPT-6.1 Sol path; POSTONA/G3/G4, MIC, important-news and G5 excluded.
+
 ## Final K1 — Portfolio canonical UI PASS / PR #100 merged — 2026-10-07
 
 - PR #100 accepted exact head: `3fd7c569efb6598202e71151dd2393f661f93b81`.
