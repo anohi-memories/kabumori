@@ -32,14 +32,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: common-account-v1-phase2-q1-final-rereview-20261007
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final exact-head rereview of PR #95 head ba35b642d30ce423a8683feffcd26aec325b45ee. Verify Q1 deferred Kabumori auth preparation cannot dispatch after SIGNED_OUT/user-B/same-user-fresh-session supersedes it; current owner path and same-session TOKEN_REFRESHED remain single-flight; bounded S1-T/S2/R1-R5 regressions. No merge/deploy/production migration apply.
+- allocation: Final C1 accepts H1 PASS on PR #95 exact head ba35b642d30ce423a8683feffcd26aec325b45ee. Q1 is closed; prior S1-T/S2/session_id/R1-R5 remain PASS. PR #95 source was squash-merged as d5bea735937b53095b110b4bed1f20442e56b089. H1 free. No production migration apply/deploy/EAS.
 - recommended_model: Sol（高）
 
 ## Codex H2
@@ -105,15 +105,15 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: review_required
-- task_id: common-account-v1-phase2-service-enrollment-integration-20261006
+- status: ready
+- task_id: common-account-v1-phase2-production-migration-preflight-20261007
 - start_code: G5
 - finish_code: K5
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 accepts round-4 Q1 fix as PASS_CANDIDATE on PR #95 exact head ba35b642d30ce423a8683feffcd26aec325b45ee. Superseded deferred Kabumori auth preparation is reported fenced before dispatch; S1-T/S1/S2/R1-R5 remain green. Production mutation/deploy/EAS 0. Merge HOLD pending mandatory H1 exact-head rereview.
-- recommended_model: Opus5.5（極高）
+- allocation: PR #95 source is merged as d5bea735937b53095b110b4bed1f20442e56b089. Next step is read-only production preflight for migration 20261006230000_common_account_service_start_intent.sql only: verify migration history/current RPC/ACL/state, ordering with already-merged PR41 candidates, old-binary/client compatibility, and exact apply/read-back plan. Production writes/migration apply/deploy/EAS are forbidden until explicit user approval after K5.
+- recommended_model: Opus5.5（高）
 
 ## Deferred
 
