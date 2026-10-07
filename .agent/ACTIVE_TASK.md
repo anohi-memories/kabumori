@@ -45,14 +45,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: kabumori-pr101-f2-f3-final-rereview-20261007
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: PR #101 exact head 938567c049460ebfe78c4e08c71724d6e77ae71a の最終F2/F3再レビュー。alphabetic-only Basic、escaped credential tail、depth-limit original_chars、list kept_chars exactnessのみ確認。F1はPASS固定で再レビュー不要。production access/apply/deploy禁止。
+- allocation: Final C2 accepts H2 PASS on PR #101 exact head 938567c049460ebfe78c4e08c71724d6e77ae71a. PR #101 was squash-merged as e49ecfcc2f6707f64b6282960f9eec61be2973d3. F1/F2/F3 review is closed; no further PR #101 review required. Production migration/deploy remains separate. H2 free.
 - recommended_model: Sol（中）
 
 ## Claude G1
@@ -70,13 +70,13 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: kabumori-pr101-f2-f3-final-corrective-20261007
+- status: ready
+- task_id: kabumori-ai-model-registry-gpt61-sol-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 PASS_CANDIDATE。PR #101 corrected head 938567c049460ebfe78c4e08c71724d6e77ae71a。残存F2/F3の具体再現ケースを修正。F1/Hard/PR99/300字rewrite/max4 calls/full-output retention不変。最終H2 exact-head再レビューへ。
+- allocation: Source-only Kabumori market-report AI model registry + GPT-6.1 Sol migration. Scope is shared morning/closing report generation + Fact and the same Kabumori X report consumer only. Build semantic registry, inventory, raw-literal drift guard, migrate G2 callers after fresh official OpenAI API verification. POSTONA/G3/G4, MIC, important-news and G5/common-account excluded. No production deploy/migration/apply/real OpenAI call.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
