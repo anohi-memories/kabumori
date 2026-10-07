@@ -1,3 +1,25 @@
+## G2 rebuilt — retain failed model outputs for test diagnostics — 2026-10-07
+
+- user decision: during development/test, **do not discard failed AI generations**. Root-cause analysis requires seeing what the model actually produced and what local/Fact guards rejected.
+- previous narrow G2 `kabumori-morning-fact-failure-diagnostics-corrective-20261007` is superseded before start.
+- new G2: `kabumori-market-report-debug-trace-corrective-20261007`, recommended **Opus5.5（高）**.
+- required diagnostic behavior:
+  - retain each generation's structured candidate/body;
+  - retain full local guard issue details;
+  - retain full Fact issue details;
+  - distinguish generation 1 / generation 2;
+  - distinguish scheduled attempt 07:55 / retry 08:05 so retry cannot erase the first failure;
+  - retain delivery/rejection outcome, warnings, call/token/cost metadata and packet/cycle references where available.
+- fixed rejection codes alone are explicitly insufficient for QA.
+- test-stage policy also anticipates future personalized reports: failed personalized output must be inspectable during QA when that feature is built. This task does not implement personalized report generation.
+- authentication credentials/secrets remain excluded from diagnostics, but generated report text itself is allowed and required.
+- if durable history needs a new append-only diagnostic table, G2 may create a migration candidate and tests, but **must not apply it to production**.
+- diagnostic-write failure must never block an otherwise safe report or add model calls/retries.
+- also sanitize the pre-existing morning prompt wording that asserted an unsupported timing relationship about supplied news.
+- Hard Fact semantics, PR #99 generic/metric/near-duplicate telemetry, X 300-char rewrite threshold, safe-original fallback and max model-call ceiling remain unchanged.
+- source/test only; Edge deploy, migration apply, DB write, Cron/gate, X/notification/EAS/Auth/Vault mutation remain forbidden.
+- because durable logging may add a DB/access boundary, K2 will decide one focused Codex review before merge/deploy if such a boundary is introduced.
+
 ## Final K2 — 10/7 morning observation incomplete / G2 diagnostic corrective next — 2026-10-07
 
 - classification: **OBSERVATION_INCOMPLETE**. PR #99 editorial quality is not yet production-validated.
