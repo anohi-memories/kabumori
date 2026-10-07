@@ -104,14 +104,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: done
 - task_id: common-account-v1-phase2-native-client-validation-20261007
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Phase 2 server migration is APPLIED_PASS. Next validate the merged client on iOS Simulator/local app before any EAS/TestFlight or real self-service mutation. Re-run exact Auth/service-enrollment regressions, verify deployed response contract compatibility, and exercise signed-out/login/session-refresh/sign-out/serviceSession gating on native Simulator. Production service-state mutation, deploy and EAS forbidden.
+- allocation: Final K5 PASS. Native client validation completed with no source fix. Current client matches the deployed Phase 2 service-enrollment response contract. Production access/deploy/EAS remained 0. Any later real-account smoke requires a separate explicit approval gate.
 - recommended_model: Opus5.5（高）
 
 ## Deferred
