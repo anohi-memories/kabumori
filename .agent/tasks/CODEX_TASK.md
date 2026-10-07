@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase2-q1-final-rereview-20261007
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Sol（高）
 - target_pr: 95
