@@ -45,15 +45,15 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: x-social-mobile-pr41-acl-focused-rereview-20261007
+- status: ready
+- task_id: kabumori-pr101-debug-trace-security-review-20261007
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Final C2 PASS on corrected PR #41 exact head c509117f8addf5a8687d60d9c18ae271b2c1777c. R1 effective column privilege and R2 default/inherited EXECUTE blockers closed. PR #41 squash-merged as b90ee326600b075e3d0b23209b4eefc1b4cd9c16. No further routine review. Production rollout remains separate. H2 free.
-- recommended_model: Sol（高）
+- allocation: PR #101 focused review。append-only generation trace table、RLS/effective privilege、service_role最小権限、失敗本文の保持、secret除外、trace書込み失敗が配信を止めないこと、prompt hygiene、Hard/call/rewrite不変を確認。production access/apply/deploy禁止。
+- recommended_model: Sol（中）
 
 ## Claude G1
 - owner: claude
