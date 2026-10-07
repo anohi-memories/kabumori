@@ -1,3 +1,21 @@
+## G5 advanced — Common Account Phase 3a source implementation — 2026-10-08
+
+- user requested that G5/common-account work continue first.
+- Phase 2 is already production-smoke PASS / READY_FOR_EAS.
+- EAS/TestFlight is intentionally deferred until the common-account feature set is complete, to avoid consuming an additional native build before Phase 3 source work lands.
+- new G5 task: `common-account-v1-phase3a-deletion-orchestrator-20261008`, status ready.
+- Phase 3a source-only scope:
+  - safe “かぶモリの利用を終了” without deleting the shared login;
+  - explicit “共通アカウントを削除” whole-account flow;
+  - lifecycle-aware deletion orchestrator foundation with recent reauth, session revocation, Storage cleanup/re-list, Apple/X cleanup adapters, managed Auth Admin deletion and post-delete verification;
+  - contain/remove the legacy Kabumori direct Auth hard-delete bypass;
+  - explicit settings UI distinction;
+  - enforcement-readiness inventory, but no production enforcement switch.
+- current G4 POSTONA schema/security files are protected; X deletion integration must use an adapter boundary when live wiring would overlap G4.
+- production mutation/deploy/migration apply/EAS/real revoke/delete operations are forbidden in this slice.
+- recommended model: **Opus5.5（極高）**.
+- next action: send `G5`; finish with `K5`.
+
 ## G1 assigned — portfolio asset-card background + real sparkline polish — 2026-10-08
 
 - G1 task: `kabumori-portfolio-asset-card-background-polish-20261008`.
