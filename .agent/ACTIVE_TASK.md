@@ -32,14 +32,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: postona-pr106-phase2a2-security-rereview-20261007
+- status: ready
+- task_id: postona-pr106-function-contract-final-rereview-20261008
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts CHANGES REQUIRED on PR #106 head a8f313dc. Remaining blockers are limited to existing trigger-function owner/ACL baseline verification and exact-body verification of the new provider guard. Existing X regressions and 45/45 mutation suite remain green. H1 closed/free; corrective returned to G4.
+- allocation: Final focused exact-head rereview of POSTONA PR #106 head 4b6dc57966e0d55b2e901a7707446c35b25a1f00. Verify only C1-R1 existing trigger-function owner/ACL/effective-EXECUTE contract, C1-R2 exact provider-guard body/definition pinning, reservation bookkeeping, and bounded X regressions. No merge/apply/deploy/production/provider access.
 - recommended_model: Sol（高）
 ## Codex H2
 - owner: codex
@@ -93,13 +93,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: review_required
 - task_id: postona-multisocial-phase2a2-security-corrective-20261007
 - start_code: G4
 - finish_code: K4
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: C1 returned a bounded final corrective on existing PR #106 only. Preserve accepted B1-B6; fix two function-contract gaps: exact owner/ACL/effective EXECUTE baseline for the two existing trigger functions, and exact body/definition pinning for the new provider guard. Add adverse/mutation tests; no production/apply/deploy/provider operations. After K4, assign one free H1/H2 exact-head rereview.
+- allocation: K4 accepts final function-contract corrective as PASS_CANDIDATE only. K4 also added the deferred migration reservation, producing exact PR #106 head 4b6dc57966e0d55b2e901a7707446c35b25a1f00 with 7 changed files. Merge HOLD pending H1 final exact-head rereview. Production/apply/deploy/provider operations remain 0.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
