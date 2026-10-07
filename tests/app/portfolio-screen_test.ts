@@ -91,7 +91,7 @@ test("the header has no logout; logout stays reachable from Settings", async () 
 
 test("impact and AI cards link to the exact report, and are omitted rather than faked", async () => {
   const sections = await code("src/components/portfolio/portfolio-sections.tsx");
-  assert.ok(sections.includes("router.push({ pathname: '/reports/[id]', params: { id: reportId } })"));
+  assert.ok(sections.includes("router.push({ pathname: '/report-detail', params: { id: reportId } })"));
   assert.ok(sections.includes("onPress={() => openReport(summary.reportId)}") && sections.includes("onPress={() => openReport(reportId)}"));
   const screen = await code("src/app/(tabs)/explore.tsx");
   assert.ok(screen.includes("{overview ? <AiSummaryCard"), "no stored overview => no AI card");

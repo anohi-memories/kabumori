@@ -16,7 +16,9 @@ import {
   type PortfolioLabels,
 } from '@/lib/portfolio-view';
 
-const openReport = (reportId: string) => router.push({ pathname: '/reports/[id]', params: { id: reportId } });
+// The root-stack report detail: a swipe / back pops straight to the portfolio (the nested レポート-tab route
+// would reveal the reports list instead).
+const openReport = (reportId: string) => router.push({ pathname: '/report-detail', params: { id: reportId } });
 
 // ---- header ---------------------------------------------------------------------------------------------
 
