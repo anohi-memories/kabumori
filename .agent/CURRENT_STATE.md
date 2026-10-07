@@ -1,3 +1,20 @@
+## C2 — PR #110 CHANGES REQUIRED / G2 corrective ready — 2026-10-08
+
+- H2 reviewed exact PR #110 head `6612b3f1dee5055794137da71697ebe5e07d7419`.
+- verdict: **CHANGES REQUIRED**. PR remains open/unmerged; C2 fresh fetch confirms exact head unchanged and mergeable=true, but merge is HOLD.
+- source changes by H2: **0**; production access/mutation/deploy/manual generation/X send = **0**.
+- accepted areas remain: 10/7 intended false-positive fixes, progressive isolation for ordinary objective errors, X Premium length, X/App disclaimer including actual app UI, model-call/retry ceilings.
+- blocking findings:
+  1. **B1 P1:** local guards can miss an objective textual contradiction that Fact catches; after two Fact failures the contradicted text can still be delivered as `advisory`.
+  2. **B2 P1:** inline emoji can split metric/date from its value, allowing an explicit wrong-date value to escape local guards.
+  3. **B3 P1:** an unrelated later hedge such as 「可能性」 can make an earlier unsupported definite causal clause look speculative and deliverable.
+  4. **B4 P2:** X consumer logs upstream `advisory` / `not_run` packets as Fact `passed`.
+- G2 corrective assigned on existing PR #110 only; recommended model **Opus5.5（高）**.
+- H2 is now done/free.
+- after corrected K2, decide whether a narrow H2 exact-head rereview is needed; because B1-B3 are safety-boundary fixes, one focused rereview is expected.
+- merge/deploy remain HOLD.
+- next action: send `G2`; finish with `K2`.
+
 ## Final C1 — POSTONA PR #106 CHANGES REQUIRED / G4 corrective ready — 2026-10-07
 
 - H1 completed exact-head rereview of PR #106 `a8f313dc72b087ab86482781297848fe6e23bdcc`.
