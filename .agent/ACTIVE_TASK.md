@@ -58,13 +58,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: chatgpt
-- status: review_required
+- next_owner: claude
+- status: ready
 - task_id: kabumori-portfolio-canonical-ui-v1-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 PASS on portfolio implementation / merge HOLD only for contextual report-detail navigation. PR #100 head 5a9735c80e3dbc01b25911a0aabc83fce3d56bc9; canonical 402/375 UI, real saved-close data, top3 impact, search, interim Watchlist, fallback avatar, 404/404 tests accepted. Remaining: Portfolio -> report detail must Back/swipe to Portfolio, while Reports-list origin returns Reports list. Preferred root-level report-detail structural fix, but active G5/H1 owns src/app/_layout.tsx; do not overlap. Wait for C1/root boundary clear, then bounded G1 correction. No merge yet.
+- allocation: K1 corrective only on existing PR #100. PR #95/common-account source is merged, so root navigation is unblocked. Integrate fresh main, then make Portfolio-origin report detail a root Stack route so visible Back/native swipe return Portfolio; keep Reports-list-origin on nested /reports/[id] so it returns Reports list. Preserve PR95 Auth/serviceSession, root news-detail, all accepted portfolio UI/data/search/watch behavior. No internal router interception, no backend/DB/Auth/EAS changes.
 - recommended_model: Sonnet5（中）
 
 ## Claude G2
