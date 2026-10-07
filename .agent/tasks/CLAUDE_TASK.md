@@ -109,6 +109,21 @@ Do not increase model-call ceiling or transport retry budgets.
 
 ただし、unsupported inferenceをconfirmed factとして断定しない。明白な捏造因果はobjective errorとして扱ってよい。
 
+## Tone / presentation refinement
+
+The current GPT-6.1 Sol output is factually strong but slightly stiff. Improve presentation without weakening factual discipline.
+
+Desired tone:
+- a little softer and more conversational in Japanese;
+- use a small number of natural emojis where they help scanning or mood (for example 📉 📈 👀), but do not decorate every sentence;
+- avoid bureaucratic/repetitive phrasing such as repeated 「確認できません」「〜として整理します」 when a gentler equivalent can preserve the same meaning;
+- prefer friendly, readable transitions while keeping dates/numbers/uncertainty explicit;
+- do not make the tone childish, overly casual, or sensational;
+- never use emojis to imply an unsupported direction or causal interpretation;
+- factual/guarded language always wins over style.
+
+This is a quality refinement only. Tone/style issues are WARN/advisory and must never become a reason to suppress an otherwise safe report.
+
 ## Scope
 
 Expected primary files:
