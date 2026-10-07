@@ -1,3 +1,21 @@
+## G5 next — Phase 2 native client validation before EAS — 2026-10-07
+
+- Phase 2 production server migration is APPLIED_PASS and production window is closed.
+- next G5 task: `common-account-v1-phase2-native-client-validation-20261007`.
+- goal: validate the merged Phase 2 client on iOS Simulator/local app before spending an EAS/TestFlight build.
+- scope:
+  - rerun Phase 2 Auth/service-enrollment regressions on current main;
+  - verify the client exactly accepts the deployed active / shared_account / reenroll_required contract;
+  - native Simulator checks for signed-out, login/session restore, same-session refresh, sign-out and serviceSession gating.
+- production service-state mutation is forbidden in this task.
+- no real self-service enrollment/reactivation, no EAS, deploy, DB/Auth/profile/entitlement writes.
+- if a production-authenticated smoke would need a mutation-capable RPC, G5 must stop and return an explicit test plan for approval.
+- recommended model: **Opus5.5（高）**.
+- finish code: K5.
+- expected next gate after PASS:
+  - either a narrowly approved real-account smoke if still necessary;
+  - then EAS/TestFlight only after local/native confidence is established.
+
 ## Final K2 — Kabumori AI model registry + GPT-6.1 Sol PASS / merged / production preflight next — 2026-10-07
 
 - task `kabumori-ai-model-registry-gpt61-sol-20261007`: **PASS**.
