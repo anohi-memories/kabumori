@@ -1,3 +1,22 @@
+## Final K2 — Kabumori AI model registry + GPT-6.1 Sol PASS / merged / production preflight next — 2026-10-07
+
+- task `kabumori-ai-model-registry-gpt61-sol-20261007`: **PASS**.
+- accepted PR #107 exact head: `fb3539d07392beb197d58c7740d09c843179a789`.
+- PR #107 squash-merged as `8738a186628989ce6c797d61ea80f5b721664c95`.
+- final freshness: PR head unchanged, mergeable=true, current main advanced with **0 changed-file overlap** across the 12 PR files.
+- Codex review: **not required**. Final diff is source-controlled model registry/caller/cost/tests only; no DB schema/Auth/production mutation/retry-count/fallback semantics change. The new `incomplete` classification changes only the diagnostic error code; generation/Fact request failures still traverse the same existing catch/fallback path.
+- official OpenAI verification was consistent with implementation: `gpt-6.1-sol` supports Responses API and reasoning efforts low/medium/high/xhigh/max; generation uses medium and Fact uses low; Standard text pricing is $2 input / $0.10 cached input / $10 output per 1M tokens, with the documented long-context multiplier above 272K input tokens.
+- registry: `supabase/functions/_shared/kabumori_ai_models.ts`; semantic roles are generation and Fact, source-controlled with no DB/env override.
+- model switch in merged source: generation `gpt-6.1-sol` / medium / max_output_tokens 16000; Fact `gpt-6.1-sol` / low / max_output_tokens 4000.
+- inventory command and focused raw-model-literal drift guard added; POSTONA/G3/G4, important-news, MIC and personalized-report runtime were not migrated.
+- audit metadata adds config/role/model/reasoning into existing report diagnostics without a new DB migration. Per-generation trace role/config columns remain a possible low-priority future migration.
+- reported tests: market-report-analysis 222/222; personalized 129/129; X shared 8/8; data-packet 42/42; _shared 466/466; migration invariants 20/20; focused registry/inventory/drift tests PASS; Deno check PASS; diff check PASS. Existing lint issue is pre-existing and unrelated.
+- production deploy/migration/manual generation/OpenAI/X/Cron/Auth/Vault/OAuth mutation during K2 = **0**.
+- cost note: same token volume is materially more expensive than the old Luna configuration; first natural production cycle must measure actual reasoning/output token use and quality before any prompt or Hard-Fact adjustment.
+- AI Lab diary: 記録不要 — 同日のX自動投稿側ですでに「AIモデル設定を1か所へ集約し更新漏れを防ぐ」という同種の公開向け題材を記録済みで、今回は内容が重複するため追加しない。
+- next G2 task ready: `kabumori-market-report-gpt61-production-preflight-20261007`, recommended **Opus5.5（高）**.
+- next task is read-only production preflight only: verify the PR #101 trace migration state and prepare the exact single-function GPT-6.1 rollout/order. No production mutation/deploy until a later explicit approval gate.
+
 ## Final K5 — Phase 2 production migration APPLIED_PASS / window CLOSED — 2026-10-07
 
 - G5 production apply verdict: **APPLIED_PASS**.
