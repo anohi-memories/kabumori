@@ -1,3 +1,24 @@
+## G5 production apply ACTIVE — user approved / operator pending — 2026-10-07
+
+- user explicitly approved production apply of `20261006230000_common_account_service_start_intent`.
+- canonical G5 task is now `common-account-v1-phase2-production-migration-apply-20261007`, status **in_progress**.
+- production mutation window: **ACTIVE** from 2026-10-07 13:42 JST; G5 exclusively owns this DB/Auth/permission mutation boundary until CLOSED.
+- no other slot may open a production DB/Auth/permission mutation window meanwhile.
+- preflight/runbook is merged on main via PR #104 / `944836d4938cb8d2600b3f5b469e6e93b551da0a`.
+- exact scope only:
+  1. same-day read-only before-state;
+  2. Stage A exact reviewed migration in its transaction;
+  3. Stage B read-back;
+  4. only if Stage B PASS, Stage C one migration-history row;
+  5. final read-back and window close.
+- user terminal operator:
+  `bash /Users/yuya/Developer/kabumori-g5-p2prod/.g5-p2-apply/operator.sh apply`
+- operator asks DB password once with hidden input; password must not be pasted into chat or logs.
+- dry-run evidence already recorded: success path PASS; rerun refused before writes; lock-timeout path rolled back without commit.
+- deploy/EAS/backfill/enforcement/deletion/Auth Admin/Storage/OAuth/Vault/Cron/X/provider changes remain forbidden.
+- next owner is **user** only for running the operator. After execution, G5 must inspect the local result/log and close or STOP the production window according to the runbook.
+- recommended model for G5 verification: **Opus5.5（高）**.
+
 ## Final K2 — PR #101 final F2-F3 correction PASS_CANDIDATE / H2 final rereview assigned — 2026-10-07
 
 - G2 result: **PASS_CANDIDATE**, not final merge approval.
