@@ -5946,3 +5946,17 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - x-test-post Kabumori paths retain their prior 5.6 model configuration; POSTONA standalone functions were not redeployed.
 - manual scheduler/OpenAI/X calls = 0.
 - first natural AI Lab row remains pending at 07:51 JST. If that post succeeds, the combined topic-exhaustion repair + Premium-length change + GPT-6 Luna runtime rollout can be closed as end-to-end complete.
+
+## Kabumori X GPT-6 production rollout — 2026-10-08 JST
+- user explicitly requested production model change for Kabumori X.
+- source basis: merged PR #105 exact head `78a43ae878205f726111dde1002bd28ea8e82b97`.
+- x-test-post v140 -> **v141 ACTIVE**, verify_jwt=false, EZBR `804467c5f9b3887a7937001da70c74d0dc1bf2153dc806a5362eb450d1c29895`.
+- four Kabumori-X runtime modules changed; prompts, retry ceilings, Web Search call limits, X auth/publish authority and schedules were not changed.
+- routine Kabumori X: `gpt-6-luna`.
+- existing Sol escalation only: `gpt-6.1-sol`.
+- central model pricing now used by these paths.
+- post-deploy bundle read-back: old 5.6 text-model literals = 0 in x-test-post/index + greeting/rewrite/useful-tip helpers; all expected central workload references present.
+- preceding AI Lab v140 changes remain intact: GPT-6 Luna, Premium unlimited length, 2000 output-token budget for unlimited mode, incomplete-response fail-closed, 74-topic/128-candidate continuity.
+- POSTONA standalone Edge Functions were not redeployed.
+- DB/schema/migration/Auth/OAuth/Vault/Cron mutations = 0; manual scheduler/OpenAI/X verification calls = 0.
+- next: natural Kabumori X execution is sufficient for E2E confirmation.
