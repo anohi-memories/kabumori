@@ -17,8 +17,9 @@
 - priority: **CRITICAL / project-wide**
 - user decision: 共通アカウント完成を、かぶモリ・X自動投稿の次工程より最優先とする。
 - G5 owns the shared common-account critical path.
-- Existing G1-G4 tasks are preserved. Non-conflicting UI/source/read-only work may continue, but **no unrelated production DB/Auth/permission mutation may overtake an active/approved G5 production window**.
-- G3 PR81 production apply remains HOLD whenever G5 has an approved/active production write.
+- Existing G1-G4 tasks are preserved. G5 priority is **conflict-based**, not a project-wide freeze: non-conflicting implementation/test/commit/push/PR/merge and non-conflicting production work may continue.
+- If a production boundary overlaps G5 (same DB migration/table/RPC/function, Auth/RLS/permission, Edge Function, secret/settings/Cron/workflow/API boundary, or a shared baseline/fingerprint), G5 has priority and the conflicting operation waits.
+- Same-Supabase-DB migration/DDL write sections are serialized only for the actual write/read-back window; waiting/review/user-input time must not keep a global lock active.
 - next shared milestone: production legacy backfill dry-run -> explicit backfill approval -> exact backfill -> Phase 2 integrations -> Phase 3 deletion/enforcement.
 
 ## Deployment policy
@@ -104,14 +105,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: done
 - task_id: common-account-v1-phase2-real-account-smoke-20261007
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: User explicitly approved one bounded production-authenticated smoke using exactly one existing active Kabumori account. Pre/post aggregate read-back is mandatory. Login -> existing active service-start path -> Home -> same-login token refresh -> sign-out -> same-account re-login -> sign-out. No new enrollment, reactivation, withdrawal/deletion, profile edits, Auth Admin, DB/schema/migration, deploy, EAS, OAuth/Vault/Cron/X/provider changes. Credentials are entered only by the user in the Simulator UI and must never be logged or pasted.
+- allocation: Final K5 PASS / READY_FOR_EAS. One approved production-authenticated smoke with an existing active Kabumori account passed: two logins, one real token refresh, two sign-outs, active/started:false service-start responses, and pre/post account/entitlement/profile/lifecycle fingerprints unchanged. Source changes 0; EAS/deploy 0. G5 window CLOSED and slot free. Future production concurrency follows conflict-based boundaries; G5 does not globally freeze unrelated slots.
 - recommended_model: Opus5.5（高）
 
 ## Deferred
