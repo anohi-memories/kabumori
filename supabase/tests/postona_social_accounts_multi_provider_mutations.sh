@@ -228,6 +228,16 @@ mutation "EXECUTE reachable only by SET ROLE is missed" \
   "join pg_catalog.pg_roles r on pg_catalog.pg_has_role(a.app, r.oid, 'USAGE')
              where t.tgrelid = v_table" \
   "FAIL trigger_function_set_execute: expected POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_EXECUTE"
+mutation "an empty trigger-function ACL passes (bad entries rejected, the owner's entry not required)" \
+  "             where t.tgrelid = v_table and not t.tgisinternal
+               and (select pg_catalog.array_agg(pg_catalog.concat_ws(' | ', (a.grantor = v_owner)::text, (a.grantee = v_owner)::text,
+                                                                       a.privilege_type, a.is_grantable::text))
+                    from pg_catalog.aclexplode(coalesce(p.proacl, pg_catalog.acldefault('f', p.proowner))) a)
+                   is distinct from array['true | true | EXECUTE | false']) then" \
+  "             cross join lateral pg_catalog.aclexplode(coalesce(p.proacl, pg_catalog.acldefault('f', p.proowner))) a
+             where t.tgrelid = v_table and not t.tgisinternal
+               and not (a.grantee = v_owner and a.grantor = v_owner and a.privilege_type = 'EXECUTE' and not a.is_grantable)) then" \
+  "FAIL trigger_function_empty_acl_x_account_refresh_reset_on_reconnect: expected POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_ACL"
 mutation "a trigger function's direct ACL is not checked" \
   "    raise exception 'POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_ACL';" \
   "    null;" \

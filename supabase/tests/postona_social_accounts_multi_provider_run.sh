@@ -210,6 +210,10 @@ SQL
 
 # ---- 1. Apply, re-apply, behavior ----------------------------------------------------------------
 db="$(copy apply)"
+# The healthy control: both trigger functions carry exactly the owner's own EXECUTE.
+[[ "$(q "$db" "select string_agg(proacl::text, ' ' order by proname) from pg_proc
+               where oid in ('public.social_mobile_account_deletion_guard()'::regprocedure, 'public.x_account_refresh_reset_on_reconnect()'::regprocedure)")" \
+   == "{$owner=X/$owner} {$owner=X/$owner}" ]] || fail "apply: the trigger functions do not start with an owner-only ACL"
 expect_applied "apply" "$db"
 before="$(fingerprint "$db")"
 got="$(apply "$db" "$owner" "$candidate")"
@@ -441,6 +445,15 @@ refuse_after trigger_function_grant_option POSTONA_ACCOUNTS_PRECONDITION_TRIGGER
   "grant execute on function public.social_mobile_account_deletion_guard() to service_role with grant option"
 refuse_after trigger_function_unknown_grantee POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_ACL \
   "grant execute on function public.social_mobile_account_deletion_guard() to $writer"
+# The owner's own EXECUTE revoked: an empty explicit ACL ('{}') is not the reviewed one either.
+for fn in x_account_refresh_reset_on_reconnect social_mobile_account_deletion_guard; do
+  db="$(copy "trigger_function_empty_acl_$fn")"
+  q "$db" "revoke execute on function public.$fn() from $owner" > /dev/null
+  [[ "$(q "$db" "select proacl::text from pg_proc where oid = 'public.$fn()'::regprocedure")" == "{}" ]] \
+    || fail "trigger_function_empty_acl_$fn: setup did not leave an empty ACL"
+  expect_refused "trigger_function_empty_acl_$fn" "$db" POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_ACL
+  [[ "$(x_only_checks "$db")" == 1 ]] || fail "trigger_function_empty_acl_$fn: the X-only CHECK is gone"
+done
 # Table and column ACL (B4).
 refuse_after acl_auth_update POSTONA_ACCOUNTS_PRECONDITION_ACL "grant update on public.social_accounts to authenticated"
 refuse_after acl_auth_references POSTONA_ACCOUNTS_PRECONDITION_ACL "grant references on public.social_accounts to authenticated"

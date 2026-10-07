@@ -335,13 +335,17 @@ begin
                and pg_catalog.has_function_privilege(r.oid, t.tgfoid, 'EXECUTE')) then
     raise exception 'POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_EXECUTE';
   end if;
-  -- ... and whose ACL is exactly the owner's own EXECUTE: no other grantee, no grant option.
+  -- ... and whose ACL is exactly the owner's own EXECUTE: one entry, granted by the owner to the
+  -- owner, not grantable; nothing else. An empty ACL ('{}', the owner's own EXECUTE revoked) and the
+  -- default one (NULL, which includes PUBLIC) are both refused.
   if exists (select 1
              from pg_catalog.pg_trigger t
              join pg_catalog.pg_proc p on p.oid = t.tgfoid
-             cross join lateral pg_catalog.aclexplode(coalesce(p.proacl, pg_catalog.acldefault('f', p.proowner))) a
              where t.tgrelid = v_table and not t.tgisinternal
-               and not (a.grantee = v_owner and a.grantor = v_owner and a.privilege_type = 'EXECUTE' and not a.is_grantable)) then
+               and (select pg_catalog.array_agg(pg_catalog.concat_ws(' | ', (a.grantor = v_owner)::text, (a.grantee = v_owner)::text,
+                                                                       a.privilege_type, a.is_grantable::text))
+                    from pg_catalog.aclexplode(coalesce(p.proacl, pg_catalog.acldefault('f', p.proowner))) a)
+                   is distinct from array['true | true | EXECUTE | false']) then
     raise exception 'POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_ACL';
   end if;
 
