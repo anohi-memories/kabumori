@@ -39,7 +39,7 @@
 - next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final focused rereview of PR #95 exact head ba35b642d30ce423a8683feffcd26aec325b45ee. Verify Q1 deferred-task current-owner guard plus regressions of already-passed S1-T/S2/session_id/R1-R5. No merge/deploy/production migration apply.
+- allocation: Final exact-head rereview of PR #95 head ba35b642d30ce423a8683feffcd26aec325b45ee. Verify Q1 deferred Kabumori auth preparation cannot dispatch after SIGNED_OUT/user-B/same-user-fresh-session supersedes it; current owner path and same-session TOKEN_REFRESHED remain single-flight; bounded S1-T/S2/R1-R5 regressions. No merge/deploy/production migration apply.
 - recommended_model: Sol（高）
 
 ## Codex H2
@@ -112,7 +112,7 @@
 - next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 accepts round-4 Q1 correction as PASS_CANDIDATE on PR #95 exact head ba35b642d30ce423a8683feffcd26aec325b45ee. G5 reports obsolete deferred preparation is suppressed before dispatch; prior S1-T/S2/session_id/R1-R5 remain green. Production migration apply/deploy/EAS remain 0. Merge HOLD pending H1.
+- allocation: K5 accepts round-4 Q1 fix as PASS_CANDIDATE on PR #95 exact head ba35b642d30ce423a8683feffcd26aec325b45ee. Superseded deferred Kabumori auth preparation is reported fenced before dispatch; S1-T/S1/S2/R1-R5 remain green. Production mutation/deploy/EAS 0. Merge HOLD pending mandatory H1 exact-head rereview.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
