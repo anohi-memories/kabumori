@@ -58,25 +58,25 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
-- task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
+- next_owner: none
+- status: done
+- task_id: kabumori-portfolio-canonical-ui-v1-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Delivery-first market-report calibration after the first GPT-6.1 Sol natural close was blocked by two false-positive local guards. Keep only objective fatal blockers; make ambiguous/local/Fact findings advisory with one bounded regeneration and hard-safe fallback delivery; add deterministic AI disclaimers to X and app outputs. Source-only; no DB/Cron/gate/production deploy/manual invoke. Open PR overlap checked: current open PRs do not touch the expected market-report files.
-- recommended_model: Opus5.5（高）
+- allocation: G1 market-report allocation was a routing mistake and is cancelled. G1 remains free after the completed portfolio task; do not start the delivery-first report task from G1.
+- recommended_model: Sonnet5（中）
 
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: kabumori-market-report-gpt61-production-preflight-20261007
+- status: ready
+- task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Final production rollout APPLIED_PASS at 16:11 JST after explicit user approval. Trace migration 20261007120000 applied and verified with one exact history row; market-report-analysis alone deployed as v28 ACTIVE from accepted GPT-6.1 Sol source; app/x consumer gates remain OFF; no manual report/replay; natural close cron remains active for 16:20 JST. G2 free pending observation.
+- allocation: Canonical delivery-first market-report calibration. X is Premium; legacy short length is advisory only. Objective errors should be removed at smallest-unit granularity and remaining coherent content delivered; whole-report failure is last resort. Deterministic AI disclaimer required on X/App. IMPORTANT: user will not start G2 until after the 16:35 JST natural retry is complete and checked.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
