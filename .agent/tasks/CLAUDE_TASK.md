@@ -3,8 +3,8 @@
 - task_id: kabumori-pr101-debug-trace-security-corrective-20261007
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: focused PR #101 corrective / ACL / secret redaction / full diagnostic retention
@@ -213,7 +213,79 @@ Recommended model: **Opus5.5（高）**.
 
 ## Report
 
-Pending.
+### task_id / result
+- task_id: kabumori-pr101-debug-trace-security-corrective-20261007
+- result: **PASS candidate（source/tests/migration候補のみ）**。H2の3 blocker（F1・F2・F3）を閉じた。
+- **corrected PR #101 head: `fddd274863b08aefed60795d678a298a1160d599`**（reviewed head `2469e8a8be0125805551ba3e353c4ef6058b0150` の上に1コミット。通常push、force pushなし。PR #101 OPEN / MERGEABLE、本文に追記済み）
+- 実装モデル：Sonnet 5.5（TASKの推奨は Opus 5.5（高））。ACL・redactionの境界なので、H2再レビューで補ってほしい。
+
+### F1 (P1) effective ACL / owner drift — 閉じた
+- 原因：migration は自分の grant（`revoke all … from public, anon, authenticated, service_role` → `grant select, insert to service_role`）しか見ておらず、既定権限・所有者メンバーシップ・継承されたロールを検証していなかった。
+- 修正（`20261007120000_market_report_generation_traces.sql`、同じトランザクション内のDOブロック）：
+  1. 所有者が anon / authenticated / service_role でない、ヘルパーとテーブルの所有者が同じ
+  2. anon / authenticated / service_role が所有者や superuser のメンバーでない（`pg_has_role(…, 'MEMBER')`。service_role 自身が superuser の場合も拒否）
+  3. テーブルの**直接ACLの完全一致**：所有者を除き service_role の SELECT・INSERT（grant option なし）だけ。それ以外の grantee（未知ロール・PUBLIC・grant option）は拒否
+  4. ヘルパー関数の直接ACLが所有者のみ（`acldefault` を含め既定の EXECUTE が残らない）
+  5. **実効権限**：各 app role について全テーブル権限（PG17は MAINTAIN も）と grant option、列権限（SELECT/INSERT/UPDATE/REFERENCES）、ヘルパーの EXECUTE を `has_*_privilege` で確認。service_role = SELECT+INSERT のみ、anon/authenticated = なし。`pg_read_all_data` / `pg_write_all_data` のような**ACLに現れない経路**もここで拒否
+  6. 列に個別ACLが無い
+  - 違えば `MARKET_REPORT_TRACE_ACL_*` の例外 → **全体ロールバック**。**修復はしない**（既定権限・メンバーシップは触らない）。
+- 使い捨て PostgreSQL 17.11 での証明（`market_report_generation_traces_run.sh`）：
+  - **H2の4ケース**：(1) 未知ロールへの既定 SELECT → `UNEXPECTED_TABLE_GRANT`、(2) 未知ロールへの既定 EXECUTE → `UNEXPECTED_HELPER_GRANT`、(3) service_role が TRIGGER を継承 → `UNEXPECTED_TABLE_GRANT`、(4) authenticated が所有者のメンバー → `UNSAFE_MEMBERSHIP`。すべて**原子的に拒否**。
+  - 追加9ケース：anon／service_role が所有者のメンバー、service_role が superuser、authenticated が別の superuser を継承、`pg_read_all_data`（authenticated・anon）と `pg_write_all_data`（service_role）、grant option 付きの既定権限、未知ロールを authenticated が継承。合計**13通り**。
+  - 各拒否のあと：`market_report_generation_traces%` の class / proc / trigger が0件、既定ACL・メンバーシップ・ロール属性のダイジェストが拒否の前後で**一致**（unrelated state 不変）。
+  - 正常系：クリーンな cluster と、Supabase 風の既定権限（anon/authenticated/service_role に ALL）の2通りで適用でき、service_role は SELECT+INSERT のみ、anon/authenticated は拒否、UPDATE/DELETE/TRUNCATE/TRIGGER は広がらない、追記専用トリガは有効。
+  - **変異テスト**：検証のステップ2・3・4・5を1つずつ外す／最初の revoke を外す → いずれも失敗（検出）。ステップ5（実効権限）は、ACLに現れない `pg_*_all_data` のケースを足して初めて検出されるようになった（それ以前は他のステップと重複していて未検証だった）。
+  - 本番用の読み取り専用 preflight：`supabase/tests/market_report_generation_traces_preflight.sql`。
+
+### F2 (P1) secret-shaped strings — 閉じた
+- 原因：redaction のパターンが狭く（`Basic` は大文字のみ、引用符付きJSONキーは文字列の外のキーだけ、PEMなし）、`containsSecret` は**最初の1件**しか見ていなかった（「置換済みの1件＋後ろの生の秘密」を通した）。
+- 修正（`debug_trace.ts`）：引用符付き・エスケープ付き・単引用符のJSONキー（値は閉じ引用符まで）、`key=value`、`Authorization: [scheme] value`、**大文字小文字を問わない** Bearer / Basic（通常語の誤検知を避けるため数字・記号を含むトークン形のみ）、PEM秘密鍵（END が無ければ末尾まで）、JWT、`sk-` / `sk_live_` / `sb_secret_` / `ghp_` / `github_pat_` / `glpat-` / `xox` / `AIza` / `AKIA`。キー名の判定を拡張。`containsSecret(text) = redactText(text) !== text`（**全一致を走査**、置換が冪等なので置換済みは誤検知しない）。`persistTraces` は行全体を直列化して検査し、残る行は**捨てる**（insert の関数を呼ばない）。
+- 証明（`debug_trace_adversarial_test.ts`）：15種の秘密形式がすべて置換され残渣なし／周囲の文は保持（`token=[redacted] の後ろも読める`）／1文字列に複数あっても全部置換／入れ子・配列・issue リスト／通常の日本語・金融・ニュース（パスワード管理、Bearer bonds、token economics、input_tokens、URL 等）は不変／冪等／**偽造行9種**（引用符付きJSON、エスケープ、小文字 bearer・basic、PEM、PEM END なし、入れ子、**置換済み1件の後に生の秘密**、置換済み Bearer の後に生の Bearer）はすべて **callback 0回** で破棄／バッチは安全な行だけ1回書く／trace処理でモデル呼び出しは増えない／失敗しても配信に影響なし。
+
+### F3 (P2) silent truncation — 閉じた
+- 原因：`MAX_STRING 4,000`・`MAX_ISSUE 700`・`MAX_ISSUES 50`・`MAX_ARRAY 80`・`MAX_DEPTH 8`、さらに `record.factIssues` が Fact の10件上限で切られていた。「全量保持」と書きながら無言で失っていた。
+- 修正：上記の上限をすべて撤去。`record.factIssues` は全件、`issues = factIssues.slice(0, 10)` で**判定・再試行のメモは従来どおり10件**（挙動不変）。上限は**1つだけ・宣言済み**：`MAX_FIELD_CHARS = 200,000`（各フィールドの直列化長、置換後）。超えた場合のみ `truncated = true` と `truncation.<field> = {reason, original_chars, kept_chars, original_count, kept_count}`。candidate は `{truncated, reason, original_chars, kept_chars, head}`、リストは収まる先頭の件。列を追加：`candidate_chars`、`local_issue_count`、`fact_issue_count`、`truncated`、`truncation`（`truncated = (truncation is not null)` を制約で保証）。深さ上限は64に引き上げ、超えたら記録。
+- 証明：4,500字＋9,000字のフィールドの**末尾マーカーまで保持**／150要素の配列と深い入れ子を保持／800字の local・Fact issue の末尾を保持／**13件の Fact 指摘がtraceに全件残り、retryのメモと戻り値は10件のまま**／上限ちょうど手前（−100字）は切らず・フラグなし／上限超（+5,000字）は先頭を残し原本サイズとフラグを記録／issue リストが上限超なら収まる先頭を残して件数を記録／PG側：長い本文・800字のissue・13件の指摘を全文保存できる。
+
+### その他（TASKの Prompt identity note）
+- `prompt_hash` を `base_prompt_hash`（再試行の指摘メモを含まない指示文のハッシュ）と、**生成ごとの `request_hash`**（実際に送った指示文＋入力のハッシュ。書き直しは1回目と別の値）に分割。ローカルのSHA-256のみで**AI呼び出しなし**。
+
+### changed_files（PR #101 全体、`2469e8a8` → `fddd2748` の差分）
+- `supabase/migrations/20261007120000_market_report_generation_traces.sql`（検証ブロック・列追加・hash 列）
+- `supabase/functions/market-report-analysis/debug_trace.ts`（redaction・保持の全面更新）
+- `supabase/functions/market-report-analysis/debug_trace_adversarial_test.ts`（新規17件）、`debug_trace_test.ts`（更新）
+- `supabase/functions/market-report-analysis/analysis_logic.ts`（`requestHash`、`factIssues` 全件、`issues` は10件のまま）
+- `supabase/functions/market-report-analysis/handler.ts`（`basePromptHash` の名称のみ）
+- `supabase/tests/market_report_generation_traces_{run.sh,behavior.sql,source_test.ts,preflight.sql}`
+- `docs/market-report-shared-platform/DESIGN.md`（§15.6）
+- 触っていない：personalized-reports、x-test-post、common-account/Auth、`hard_fact_guards.ts`、他のmigration、OpenAIのモデルID。
+
+### regression counts
+- market-report-analysis **192/192**（debug_trace_adversarial 17、debug_trace 15、editorial_specificity 13、session-date 14、H1 boundary 9、causal 18、quality 9、h1_adversarial 13、content_guard 16、transport 14）
+- personalized-reports 129/129、X shared consumer 8/8、market-report-data-packet 42/42、`_shared` 436/436（`--no-check`）
+- migration 不変条件 20/20（`migration_source_invariants_test.ts` ＋ `market_report_generation_traces_source_test.ts`）
+- 使い捨て PG：通常経路 PASS、Supabase 風既定権限 PASS、敵対13ケース PASS
+- `deno check`（両 index と変更ファイル）exit 0、変更ファイルの `deno lint` 0件、`git diff --check` exit 0
+- 秘密の走査：非テストの新規コードに本物の秘密なし。テストの意図的な偽物のみ。`debug_trace.ts` は環境変数・ヘッダを読まない。
+
+### Hard / call / rewrite / fallback unchanged
+- Hard 判定（`hard_fact_guards.ts` 未変更、`localAnalysisCheck`・Fact）、ちょうど3つ、PR #99 の `X_POINTS_*`（WARN のみ）、X 300字・アプリ700字の書き直し条件、安全な最初の版へのフォールバック、`MAX_GENERATIONS=2`・最大4 calls：すべて不変（既存・回帰テスト全緑）。
+- 永続化：trace の insert は complete / fail の後に1回、5秒タイムアウト、再試行なし。404/500/例外でも配信結果・モデル呼び出し数は不変（`debug_trace_test.ts`）。generation 1 は generation 2 の後も残り、scheduled attempt 1 は attempt 2 の後も残る（既存テストで維持）。
+- ハッシュ計算は `await crypto.subtle`（ローカル）で、失敗しても `null` で続行（モデルは呼ばない）。
+
+### production mutation
+- **0**。migration 適用・deploy・手動生成/再試行・Cron・gate・X・通知・EAS・Auth/Vault なし。使い捨て Postgres はローカルで起動し、停止・削除済み（cluster-wide のロール変更も各ケースの後に復元）。
+
+### remaining notes
+1. ステップ5（実効権限）のうち、ACLに現れない経路は `pg_*_all_data` で証明した。他に現れない経路（`rolbypassrls` は権限判定に影響しない、superuser はステップ2）は思いつく限り閉じたが、**本番の実環境（Supabase のロール構成）に対する preflight 実行は別gate**で行う必要がある。拒否された場合は、原因ロールの特定が先（自動修復はしない）。
+2. 実行が強制終了したときは trace が書かれない（実行の最後に1回書く設計。変更なし）。
+3. 保持期間・整理は未定（追記専用）。
+
+### whether one focused H2 rereview is ready
+- **ready**。exact head `fddd274863b08aefed60795d678a298a1160d599`、focused は F1〜F3 のみ。見てほしい点：(F1) DOブロックの条件と拒否の網羅、`acldefault` の扱い、本番 Supabase のロールで誤って拒否しないか／(F2) 正規表現の取りこぼしと誤検知、全一致検査／(F3) 保持の宣言と上限、判定の10件が不変であること。
+- 推奨レビュー：**Sol（中）**（TASK指定）。PASSなら C2 が PR #101 をmerge可能。merge後は、migration 1本の別gate適用と `market-report-analysis` の deploy（順不同）。次のG2は OpenAI モデル棚卸しと GPT-6 系への移行（`gpt-6.1-sol`）。
+
+---
 
 
 ---
