@@ -117,7 +117,35 @@ export async function createImportantNewsContentHash(
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export async function prepareNewsCandidate(candidate: IncomingNewsCandidate): Promise<PreparedNewsCandidate> {
+/**
+ * U+0000 cannot be stored in PostgreSQL text / jsonb ("unsupported Unicode escape sequence", SQLSTATE 22P05) and PDF text
+ * extraction can produce it. Only U+0000 is removed: every other character (Japanese, digits, units, symbols, newlines,
+ * comparison marks) is kept as is.
+ */
+export function stripNul(value: string): string {
+  return value.includes("\u0000") ? value.replaceAll("\u0000", "") : value;
+}
+
+function stripNulOrNull(value: string | null | undefined): string | null | undefined {
+  return typeof value === "string" ? stripNul(value) : value;
+}
+
+/** Common storage-boundary sanitation of external text fields. Enum-like fields (source type / name, category) and the URL are untouched. */
+export function sanitizeIncomingCandidate(candidate: IncomingNewsCandidate): IncomingNewsCandidate {
+  return {
+    ...candidate,
+    title: stripNul(candidate.title),
+    bodySummary: stripNulOrNull(candidate.bodySummary),
+    companyName: stripNulOrNull(candidate.companyName),
+    companyCode: stripNulOrNull(candidate.companyCode),
+    entityKey: stripNulOrNull(candidate.entityKey),
+  };
+}
+
+// Order matters: sanitize -> normalized title -> content hash -> (caller) DB insert, so a candidate with and without
+// NUL characters gets the same stored text and the same hash.
+export async function prepareNewsCandidate(incoming: IncomingNewsCandidate): Promise<PreparedNewsCandidate> {
+  const candidate = sanitizeIncomingCandidate(incoming);
   return {
     ...candidate,
     sourceUrl: normalizeSourceUrl(candidate.sourceUrl),
