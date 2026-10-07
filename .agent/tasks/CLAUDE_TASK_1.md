@@ -1,3 +1,170 @@
+# Claude Task 1 — CURRENT TASK
+
+- task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Opus5.5（高）
+- type: market-report reliability / delivery-first guard calibration / mandatory disclaimer
+- production_mutation_allowed: false
+- deploy_allowed: false
+
+## User decision / product priority
+
+The product priority is now explicit:
+
+**毎日配信されることを優先する。明確な嘘だけ止め、曖昧なガード・Fact・品質警告でレポート全体を止めない。**
+
+The first natural GPT-6.1 Sol close run on 2026-10-07 showed why:
+- generation 1 was hard-rejected by the 1306 guard for text that explicitly said the ETF was **not TOPIX itself**;
+- generation 2 was hard-rejected by the date guard even though it separately stated the 2026-10-07 Nikkei result and the 2026-10-06 US session;
+- result: `ANALYSIS_LOCAL_CHECK_FAILED`, no report packet, despite both candidates being substantially useful and cautious.
+
+The implementation must calibrate this boundary toward delivery-first behavior without allowing clear objective falsification.
+
+## Mandatory user-facing disclaimer
+
+Every shared morning/close report must carry an AI disclaimer.
+
+Use these canonical meanings:
+- X compact footer: **「※AIによる分析です。内容に誤りを含む可能性があります。投資判断はご自身で。」**
+- App/report footer: **「※本レポートはAIによる分析です。内容に誤り・不足を含む可能性があります。最終的な投資判断はご自身でお願いします。」**
+
+Do **not** say 「AIが独自調査」 because the current generation runtime does not independently browse the web; it analyzes the supplied market/news packet.
+
+Requirements:
+- footer is deterministic application text, not left to the model;
+- present exactly once in each final X/app rendering;
+- never let formatting/length trimming remove the disclaimer;
+- body may be shortened to preserve existing platform/output length rules;
+- do not add the disclaimer inside every sub-section of the app report; once per final report is enough.
+
+## Delivery-first safety model
+
+### A. Hard-stop only objective/fatal conditions
+
+A candidate may block final delivery only for an unambiguous fatal issue such as:
+1. invalid/unparseable structured output or missing required schema/required final fields;
+2. a numeric value that contradicts the input packet / wrong metric value;
+3. explicit sign/direction reversal against a known metric;
+4. an **explicitly wrong date attached to a metric/value in the same governed clause**;
+5. stale data asserted as current/latest without an explicit date/stale qualifier;
+6. explicit identity error that treats TOPIX-linked ETF 1306 as TOPIX itself;
+7. nonexistent / unknown evidence refs or fabricated referenced facts;
+8. another equally objective contradiction that can be proven deterministically from the supplied packet.
+
+Do not broaden this list casually.
+
+### B. Ambiguous checks become WARN / telemetry
+
+The following must not, by themselves, prevent delivery:
+- parser ambiguity across adjacent Japanese clauses/sentences;
+- a sentence that correctly contrasts 10/7 Japan with 10/6 US;
+- wording such as 「TOPIXそのものではなく」「TOPIX連動ETF」 that explicitly distinguishes 1306 from TOPIX;
+- stylistic/genericity/ordering/length-near-target issues;
+- cautious analytical inference clearly framed as possibility/watch point rather than established fact;
+- Fact-check findings that are not an objective packet contradiction.
+
+For the two exact 2026-10-07 false-positive shapes above, add focused regression tests.
+
+### C. Fact check becomes advisory-to-delivery
+
+Keep Fact useful, but it must no longer be able to suppress an otherwise deterministically hard-safe report forever.
+
+Desired behavior:
+1. generate candidate;
+2. deterministic hard checks;
+3. Fact check;
+4. if Fact reports meaningful issues, one bounded regeneration is allowed within the existing generation/call ceiling;
+5. after the final generation, if at least one candidate passes all **objective hard checks**, deliver the best hard-safe candidate even when nonfatal Fact/advisory warnings remain;
+6. retain those warnings/issues in diagnostics and generation traces;
+7. only fail the cycle if **no generation is objectively hard-safe**.
+
+Do not add extra model calls beyond the current ceiling. Preserve transport retry limits.
+
+If selecting the best hard-safe candidate needs a deterministic rule, prefer the candidate with fewer objective issues, then fewer advisory warnings; keep behavior deterministic and tested.
+
+### D. Causality / analysis wording
+
+The report may provide analysis/inference from the supplied packet when clearly framed as analysis:
+- 「〜の可能性があります」
+- 「〜が意識された可能性」
+- 「次に確認したい点」
+- 「一因として考えられます」
+
+Do not present unsupported inference as a confirmed event/fact.
+A definitive invented causal statement can remain a hard issue when it conflicts with the evidence, but cautious inference should be WARN/advisory rather than delivery-blocking.
+
+## Scope
+
+Primary expected files:
+- `supabase/functions/market-report-analysis/analysis_logic.ts`
+- `supabase/functions/market-report-analysis/hard_fact_guards.ts`
+- `supabase/functions/_shared/market_report_packet.ts`
+- `supabase/functions/_shared/market_report_story.ts`
+- focused tests for these behaviors
+
+Touch `handler.ts` only if needed for diagnostics/selection semantics.
+
+Do not touch:
+- DB schema/migrations/RLS/ACL;
+- Auth/common-account;
+- important-news-monitor;
+- POSTONA/G3/G4;
+- personalized-reports behavior unless a shared helper requires a strictly backward-compatible compile adjustment;
+- Cron, secrets, consumer gates;
+- production deployment or manual report invocation.
+
+## Freshness / isolation
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK.
+2. Use a new isolated G1 worktree from fresh `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch `origin/main`; do not use old G1 worktrees from completed portfolio work.
+4. Re-check open PR changed-file overlap before editing.
+5. Current allocation check at assignment: open PRs #109/#106/#33/#11/#10/#3 have **no overlap** with the market-report files listed above.
+6. Do not touch another slot's worktree/branch/server.
+
+## Required regressions
+
+At minimum prove:
+- exact 10/7 candidate shape with 「TOPIXそのものではなく」 does **not** hard reject;
+- exact 10/7 candidate shape 「10月7日の日経平均… 10月6日の米国市場…」 does **not** hard reject;
+- explicit wrong example like 「10月6日の日経平均は70,035.71」 still hard rejects when the input says 10/7;
+- explicit 「TOPIXは437.0円」 still hard rejects when the value is 1306 ETF;
+- reversed sign/direction still hard rejects;
+- stale-as-current remains hard;
+- unknown ref remains hard;
+- nonfatal Fact issue can regenerate once, then fallback-deliver a hard-safe candidate;
+- no hard-safe candidate => cycle still fails;
+- X disclaimer appears exactly once and survives length handling;
+- app disclaimer appears exactly once;
+- model-call ceiling / retry semantics remain unchanged;
+- generation trace / diagnostics retain warning and fallback evidence.
+
+Run the relevant full regression suites for market-report-analysis and shared report formatting.
+
+## Deliverable
+
+Open one focused source-only PR. Report:
+- exact changed files;
+- fatal-vs-advisory classification implemented;
+- exact 10/7 regression results;
+- Fact fallback delivery behavior;
+- disclaimer placement and length behavior;
+- full tests;
+- model-call ceiling;
+- production mutation = 0;
+- remaining risks;
+- recommended rollout/observation plan.
+
+Do not merge or deploy. Stop for **K1**.
+
+Recommended model: **Opus5.5（高）**.
+
+---
+
 # Final K1 — Portfolio canonical UI PASS / PR #100 merged
 
 - verdict: **PASS**.
