@@ -3,8 +3,8 @@
 - task_id: x-social-ai-model-policy-gpt6-upgrade-20261007
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: source-only AI model upgrade / centralized social-post model policy / POSTONA + AI Lab + Kabumori X
@@ -424,6 +424,24 @@ x-test-post の deploy では、それまでに merge 済みでまだ deploy し
 - 変えたのはモデルの id、料金、型、テスト、中央のポリシーだけ。Auth / DB / 権限の境界、リトライ、送信のガード、プロンプトは変更していない。
 - このため、**追加のレビューは不要の見込み**（TASK の方針どおり）。
 - status → review_required / next_owner → chatgpt。STOP。
+
+
+## Final K3 — GPT-6 social AI model policy — 2026-10-07
+
+- verdict: **PASS / MERGED / G3 CLOSED**.
+- accepted PR head: `78a43ae878205f726111dde1002bd28ea8e82b97`.
+- squash merge: `9e359b3e600196fa0602ccd4162d125d613ebbb9`.
+- accepted scope: X/social auto-post AI only (POSTONA, AI Lab, Kabumori X); 11 runtime/test files. G2 app/report/news/MIC and image generation were not changed.
+- model policy: routine social text -> `gpt-6-luna`; existing quality escalation -> `gpt-6.1-sol`; model ids, token pricing and workload mapping are centralized with drift tests.
+- independent K3 check: OpenAI official model catalog confirms the selected model IDs, standard prices ($0.10/$0.50 for Luna and $2/$10 for Sol per 1M input/output tokens), Responses API support, and `reasoning.effort: low` compatibility.
+- tests accepted: policy 6/6, Deno social/X suite 1025/1025, social-mobile app 226/226, lint/diff/secret checks clean; only the reported pre-existing x-test-post type diagnostics remain unchanged from main.
+- CI: Netlify success. Vercel failure is the repository/account build-rate-limit condition and is not attributed to this source change.
+- Codex review: **not required**. Diff is limited to model selection, centralized pricing/types and drift tests; no Auth/DB/RPC/permission/publish/retry/prompt boundary changed.
+- production mutation/read/deploy/real OpenAI/X call: **0** during this task.
+- important runtime state: **source is merged, but production text models are not upgraded yet**. Existing deployed Edge Functions remain on their previously deployed bundles until a separately gated redeploy.
+- later redeploy set: `x-test-post`, `social-mobile-brand-dry-run`, production `brand-post-dry-run` if present, and first deploy of `social-mobile-consult`. Before `x-test-post` deploy, inspect the full bundled graph because other merged-but-not-deployed changes may ride along.
+- next step: production rollout is a separate G3 task only after current G5 production-priority/gating is clear; no deploy is authorized by this K3.
+- AI Lab diary: 候補あり — AIモデルの世代更新を楽にするため、モデルと料金の設定を1か所にまとめ、古い設定の直書きが戻ったらテストで気づけるようにした。
 
 ---
 
