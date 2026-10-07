@@ -5552,3 +5552,16 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - implementation gate: source + forward migration candidate + tests only; no production mutation/deploy/merge. Require >=14-day x 10-post/day capacity simulation and TS/DB canonical-map parity.
 - overlap check: G4 owns social_accounts schema candidate; G5 owns common-account native validation; G2 owns market-report GPT-6.1 rollout. G3 scope is isolated from those files.
 - recommended model: Opus5.5（高）.
+
+
+## K3 — AI Lab topic continuity PR #109 — 2026-10-07
+- verdict: **PASS_CANDIDATE / focused H1 review required / merge HOLD**.
+- exact candidate: PR #109 head `f83247ae1024d4220dfbfa5484c725381d63815d`, 5 changed files.
+- implementation accepted for review: evergreen pool 7 -> 74, Tier 3 continuity reserve, candidate cap 64 -> 128, recent diary remains first, no Web Search fallback, no fabricated specific recent-AI claims.
+- capacity evidence reported: real SQL 14 days x 10/day = 140/140 claimable with 0 exhaustion; TS model also passes normal/fixed/skewed rotation, 28 days and unresolved-outcome stress. Old 7-seed pool exhaustion is reproduced.
+- safety semantics reported unchanged: 72h same-seed cooldown, 48h tagged-theme cooldown, unresolved claim isolation, event-level dedupe/fencing, provider_started/ambiguous handling, cross-brand fingerprint/content guards.
+- production mutation/deploy/migration apply/OpenAI/X/scheduler invoke: 0.
+- blocking reason for review: new forward migration `20261007173000_ai_lab_topic_evergreen_capacity.sql` replaces SECURITY DEFINER `claim_ai_lab_topic`; exact ACL/ownership/search_path/canonical-map proof needs one independent review.
+- H1 assigned `ai-lab-topic-continuity-pr109-focused-review-20261007`, exact head fixed, recommended **Sol（高）**.
+- production rollout remains HOLD. Required order after review/merge and separate approval: migration first -> read-back -> x-test-post deploy second. Deploy-first is forbidden because the old DB function rejects the enlarged candidate set/new evergreen ids.
+- AI Lab diary: 記録不要 — this fix itself is internal posting-infrastructure maintenance and today already has a canonical AI Lab diary entry; do not create a duplicate same-day diary event merely from this K3.
