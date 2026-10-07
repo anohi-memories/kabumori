@@ -1,12 +1,188 @@
+# K1 CORRECTIVE — contextual report-detail return from Portfolio
+
+This is the newest canonical G1 instruction for the existing task / existing PR #100.
+
+- task_id remains: `kabumori-portfolio-canonical-ui-v1-20261006`
+- status: ready
+- next_owner: claude
+- target PR: **#100**, update the existing PR; do not open a second PR unless technically unavoidable and reported first.
+- previously accepted PR #100 head: `5a9735c80e3dbc01b25911a0aabc83fce3d56bc9`
+- current fresh main at allocation: `29b8d00c4894e80fa57875c2e2772e59ab637139`
+- PR #95 common-account source is now merged on main as `d5bea735937b53095b110b4bed1f20442e56b089`.
+- root navigation boundary is therefore source-unblocked for G1.
+- fresh open-PR overlap check on the intended correction files: **only PR #100 itself overlaps**; no other open PR currently owns `src/app/_layout.tsx` or the report-detail routes.
+- recommended model: **Sonnet5（中）**.
+- production mutation / backend / DB / RPC / Auth / Edge / EAS: **0**.
+
+## Purpose
+
+Fix the only remaining K1 blocker without redesigning the accepted portfolio UI:
+
+- Portfolio -> report detail -> visible Back => Portfolio.
+- Portfolio -> report detail -> native iOS edge swipe => Portfolio.
+- Reports list -> report detail -> visible Back/swipe => Reports list.
+- No transient wrong-screen flash.
+- No package-internal navigation interception.
+
+This should mirror the already accepted structural principle used for root `news-detail`.
+
+## Mandatory fresh integration first
+
+1. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, ACTIVE_TASK, this corrective, and the accepted PR #100 Report.
+2. Use the existing isolated G1 worktree only if still clean/safe; otherwise create a fresh independent G1 worktree from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch `origin/main`.
+4. Integrate current main into the existing PR #100 branch before editing so it includes the merged PR #95 root/Auth layout.
+5. Preserve all PR #95 Auth/service-access changes byte-for-byte except for the smallest root Stack screen registration needed here.
+6. Re-check all open PR overlaps before push.
+7. Do not touch G2/G3/G4/G5/H1/H2 worktrees/branches/servers.
+
+## Preferred minimal structure
+
+Use a root-level report detail route for Portfolio-origin navigation, while preserving the existing nested Reports-tab route for Reports-origin navigation.
+
+Recommended minimal implementation:
+
+1. Add a root route such as:
+   - `src/app/report-detail.tsx`
+2. Reuse the existing report-detail screen implementation rather than duplicating business/UI logic.
+   - Re-export/import the existing `src/app/(tabs)/reports/[id].tsx` component if that is safe in Expo Router, or extract one shared report-detail component if necessary.
+   - Do **not** maintain two drifting copies of the report content.
+3. Register the new root route in `SignedInNavigator` inside `src/app/_layout.tsx`.
+   - Keep PR #95 AuthGate/serviceSession logic intact.
+   - Give the root detail a native Stack header matching the Reports detail style where practical.
+   - Native interactive pop/swipe must remain enabled.
+4. Change only Portfolio-origin report links:
+   - `今日のポイントを見る`
+   - `詳しく見る`
+   to push the root report-detail route with the report id.
+5. Keep the Reports tab list opening its existing nested `/reports/[id]` route.
+   - Therefore native pop/swipe naturally exposes the Reports list.
+6. Do not use `usePreventRemove`, `expo-router/build/...`, custom full-screen pan gestures, or redirect-after-pop workarounds.
+
+If a smaller supported/public Expo Router structure achieves the same behavior, it is acceptable, but native swipe must naturally reveal the correct origin.
+
+## Deep-link / fallback safety
+
+- Existing `/reports/[id]` behavior must remain valid.
+- Root `report-detail` should fail safely if opened directly.
+- If there is no back stack, provide a safe navigation fallback to the Reports list or Home using supported public router APIs.
+- Do not break report-linked news navigation; report -> news-detail should continue passing `from=reports` as today.
+
+## Preserve the accepted PR #100 behavior
+
+Do not change unless required for the route integration:
+- canonical Portfolio visuals;
+- real saved-close data mapping;
+- stale/non-realtime wording;
+- top-3 impact;
+- holdings join;
+- Fact-passed AI overview/impact text;
+- Search;
+- interim Watchlist;
+- fallback avatars;
+- 375/402 layout.
+
+No portfolio redesign.
+
+## Required tests
+
+Add focused source/route tests that pin:
+
+- Portfolio AI card opens root report detail, not nested Reports route.
+- Portfolio impact "詳しく見る" opens root report detail.
+- Reports list still opens nested `/reports/[id]`.
+- Root `report-detail` reuses the same report-detail implementation/content.
+- Root Stack registers `report-detail`.
+- PR #95 root Auth/serviceSession contract remains present.
+- Existing root `news-detail` remains registered.
+- No `usePreventRemove` or `expo-router/build/` internal import.
+- Existing report -> news-detail navigation remains unchanged.
+- Existing portfolio/search/watch tests remain green.
+
+Run:
+- focused portfolio/report navigation tests;
+- full `deno test tests/app/`;
+- src/changed-scope tsc;
+- Expo config;
+- web export if supported;
+- `git diff --check`.
+
+## Simulator verification — mandatory
+
+On the final integrated PR #100 head:
+
+1. Portfolio -> `今日のポイントを見る` -> report detail -> native edge swipe:
+   - lands directly on Portfolio.
+2. Portfolio -> `詳しく見る` -> report detail -> visible Back:
+   - lands directly on Portfolio.
+3. Reports tab -> report detail -> native edge swipe:
+   - lands on Reports list.
+4. Reports tab -> report detail -> visible Back:
+   - lands on Reports list.
+5. Report detail -> linked news -> Back/swipe behavior remains correct.
+6. Reopen Reports and Portfolio tabs:
+   - no stale root report detail;
+   - no wrong tab selected;
+   - no header duplication/flash.
+7. Quick 375pt/402pt header sanity check.
+
+No new screenshot is required unless the visible report header changes materially; if it does, capture one focused 375pt screenshot under `docs/ui-review/`.
+
+## Scope / safety
+
+Allowed:
+- `src/app/_layout.tsx` — only the minimal root report-detail registration/header option.
+- new `src/app/report-detail.tsx` or equivalent.
+- `src/components/portfolio/portfolio-sections.tsx` — only route target change.
+- existing report detail file/component only if needed for safe reuse.
+- focused tests.
+
+Forbidden:
+- AuthProvider/service enrollment changes.
+- common-account migration/RPC changes.
+- report generation/backend changes.
+- DB/RLS/Edge changes.
+- new dependencies.
+- EAS/native config.
+- Watchlist tags/schema.
+- company-logo work.
+- unrelated portfolio redesign.
+
+## Completion / K1
+
+Update existing PR #100 to a new exact head.
+
+Report:
+- fresh main integrated SHA;
+- exact final PR head;
+- route structure;
+- proof PR #95 Auth/root changes preserved;
+- Portfolio-origin Back/swipe proof;
+- Reports-origin Back/swipe proof;
+- report->news regression;
+- tests/checks;
+- changed_files;
+- production/backend/EAS = 0;
+- remaining issues.
+
+Then:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+Recommended model: **Sonnet5（中）**.
+
+---
+
 # Claude Task 1 — CURRENT TASK
 
 - task_id: kabumori-portfolio-canonical-ui-v1-20261006
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
-- recommended_model: Sonnet5（高）
+- recommended_model: Sonnet5（中）
 - purpose: ユーザー承認済み「ポートフォリオ正本」デザインを、既存の保有銘柄・保存済み大引けレポート・検索/監視機能に接続した実用画面として実装する。
 
 ## Canonical product decision
