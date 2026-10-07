@@ -71,12 +71,12 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-ai-model-registry-gpt61-sol-20261007
+- task_id: kabumori-market-report-gpt61-production-preflight-20261007
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Source-only Kabumori market-report AI model registry + GPT-6.1 Sol migration. Scope is shared morning/closing report generation + Fact and the same Kabumori X report consumer only. Build semantic registry, inventory, raw-literal drift guard, migrate G2 callers after fresh official OpenAI API verification. POSTONA/G3/G4, MIC, important-news and G5/common-account excluded. No production deploy/migration/apply/real OpenAI call.
+- allocation: Final K2 accepted and merged the Kabumori-only AI model registry + GPT-6.1 Sol source as 8738a186628989ce6c797d61ea80f5b721664c95 without Codex review. Next G2 is read-only production preflight for the existing generation-trace migration plus single-target market-report-analysis deploy; no production mutation/deploy/manual report in this task. POSTONA/G3/G4, important-news, MIC, personalized reports and G5 excluded.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
