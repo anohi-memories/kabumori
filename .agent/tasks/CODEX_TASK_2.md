@@ -1,5 +1,160 @@
 # Codex Task 2 — CURRENT TASK
 
+- task_id: kabumori-pr101-f2-f3-final-rereview-20261007
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- priority: high
+- recommended_model: Sol（中）
+- type: final exact-head rereview / F2 credential tails / F3 truthful truncation metadata
+- target_pr: 101
+- target_head: 938567c049460ebfe78c4e08c71724d6e77ae71a
+- previous_reviewed_head: fddd274863b08aefed60795d678a298a1160d599
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Final bounded rereview of PR #101. Review only the remaining F2/F3 cases from the previous H2 report.
+
+F1 is already PASS and must not be reopened.
+The product policy to retain failed generated output during QA is accepted and must remain.
+
+## Freshness / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / latest G2 Report / this TASK.
+2. Use a fresh independent H2 checkout/worktree from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #101.
+4. Require exact head `938567c049460ebfe78c4e08c71724d6e77ae71a`; moved head => STOP.
+5. Allocation-time: PR open/unmerged/mergeable=true; main is 84 commits ahead of PR base, changed-file overlap with PR #101 = 0.
+6. Vercel failure is deployment rate-limit only; Netlify preview status is success/canceled. Do not treat rate limit as source blocker.
+7. No production access/apply/deploy/manual report/OpenAI/X/Auth/Vault/OAuth/Cron mutation.
+
+## F2-A — alphabetic-only Basic credential
+
+Reproduce and verify closure for:
+- `basic dXNlcjpwYXNz`
+- upper/lower/mixed-case Basic
+- normal traceRows -> persistTraces path
+- forged-row writer-backstop path
+
+Required:
+- credential is redacted or row dropped;
+- forged residual credential => insert callback 0;
+- ordinary prose controls such as `basic income`, `basic materials`, `Basic Instinct` remain unchanged;
+- detection is not broadened into destructive generic prose redaction.
+
+Inspect `isBasicCredential` logic directly, not only tests.
+
+## F2-B — escaped quoted credential values
+
+Reproduce through the normal serializer path:
+- escaped quote;
+- escaped backslash;
+- escaped newline;
+- escaped tab/unicode if covered;
+- nested JSON-string-inside-string case;
+- already-redacted occurrence followed later by live credential.
+
+Required:
+- no credential tail survives;
+- the whole quoted value is redacted safely, or row is dropped if ambiguous;
+- forged residual row => callback 0;
+- trailing nonsecret prose remains when parsing/redaction is unambiguous;
+- ordinary Japanese/financial/news text is preserved;
+- no extra model call/retry and trace failure remains non-blocking.
+
+## F3-A — depth-limit metadata truthfulness
+
+Use a depth66+ candidate and verify:
+- depth limit is explicit;
+- `original_chars` represents the redacted evidence before depth cut, not the already-cut representation;
+- `kept_chars` equals the actually stored representation;
+- original_chars > kept_chars when evidence was lost;
+- combined depth+field bound reason is truthful;
+- if original size cannot be safely measured, metadata explicitly says so rather than inventing a value.
+
+## F3-B — list-size exactness
+
+Verify:
+- retained-list size calculation exactly matches `JSON.stringify(stored_list).length`;
+- no comma is counted before the first item;
+- exact-boundary list that fits is not truncated;
+- one-char-over case truncates only as necessary;
+- `original_count` / `kept_count` are exact;
+- one oversized item can yield [] with truthful kept_chars/count.
+
+## Regression guard
+
+Confirm unchanged:
+- F1 migration ACL code and tests;
+- full failed-output retention policy;
+- Hard Fact semantics;
+- exactly 3 points;
+- PR #99 WARN-only generic/metric/near-duplicate behavior;
+- X 300-char rewrite threshold;
+- App rewrite policy;
+- MAX_GENERATIONS=2 / max 4 model calls;
+- safe-original fallback;
+- one trace insert after complete/fail, no trace retry;
+- base_prompt_hash / request_hash semantics.
+
+## Required evidence
+
+Independently run enough to support verdict:
+- exact F2/F3 reproductions above;
+- new `debug_trace_final_test.ts`;
+- market-report-analysis suite;
+- migration/source invariants as bounded regression;
+- Deno check/lint;
+- git diff --check.
+
+No need to repeat broad F1/PG security review unless the F2/F3 diff unexpectedly touches it.
+
+## Verdict
+
+Return:
+- PASS
+- PASS-WITH-NONBLOCKING-NOTES
+- CHANGES REQUIRED
+- BLOCKED
+
+PASS requires all remaining F2/F3 reproductions to be closed.
+
+## Completion / C2
+
+Write/append to `.agent/CODEX_REPORT_2.md`:
+- exact reviewed head;
+- verdict;
+- F2-A;
+- F2-B;
+- F3-A;
+- F3-B;
+- regression evidence;
+- source changes by H2=0;
+- production access/mutation/apply/deploy=0;
+- merge recommendation;
+- exact next action.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C2.
+
+If PASS:
+- recommend PR #101 merge after final freshness/no-race check;
+- no further PR #101 review;
+- production migration apply/deploy remain separate;
+- next G2 product task is Kabumori-only AI model registry + GPT-6 migration.
+
+Recommended model: **Sol（中）**.
+
+---
+
+# Codex Task 2 — CURRENT TASK
+
 - task_id: kabumori-pr101-f1-f3-final-rereview-20261007
 - owner: codex
 - slot: codex-2
