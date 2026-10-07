@@ -45,14 +45,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: kabumori-pr101-f1-f3-final-rereview-20261007
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: corrected PR #101 exact head fddd274863b08aefed60795d678a298a1160d599 のF1-F3だけを最終再レビュー。effective ACL/owner/inheritance、free-text secret redaction/backstop、full candidate/local/Fact retentionを独立再現。Hard/PR99/300字rewrite/call/fallback不変も確認。production access/apply/deploy禁止。
+- allocation: Final C2 accepts CHANGES REQUIRED. F1 ACL/owner/inheritance is fully PASS and frozen. Remaining only F2 escaped/alphabetic Basic credential residues and F3 truthful original/kept-size metadata. H2 free until one final F2/F3-only exact-head rereview.
 - recommended_model: Sol（中）
 
 ## Claude G1
@@ -70,13 +70,13 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: kabumori-pr101-debug-trace-security-corrective-20261007
+- status: ready
+- task_id: kabumori-pr101-f2-f3-final-corrective-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 PASS_CANDIDATE。PR #101 corrected head fddd274863b08aefed60795d678a298a1160d599。H2 F1-F3再現ケースを閉鎖し、full failed-output retention方針維持。migration/deploy/production mutation 0。最終H2 exact-head rereviewへ。
+- allocation: PR #101の残りF2/F3だけ最終修正。alphabetic-only Basic credentialとescaped quoted credential tailを確実にredact/dropし、depth-limit original_charsとlist kept_charsをtruthfulにする。F1はPASS固定で触らない。Hard/PR99/300字rewrite/max4 calls/full-output retention不変。POSTONA/G3範囲とOpenAIモデル更新は触れない。
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
