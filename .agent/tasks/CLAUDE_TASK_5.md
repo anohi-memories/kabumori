@@ -3,8 +3,8 @@
 - task_id: `common-account-v1-phase2-native-client-validation-20261007`
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - recommended_model: **Opus5.5（高）**
 - production_write_allowed: **false**
 - production_service_state_mutation_allowed: **false**
@@ -97,6 +97,140 @@ Report:
 If a source fix is needed, keep it bounded to Phase 2 client behavior and stop for K5 before merge if risk is nontrivial.
 
 Recommended model: **Opus5.5（高）**.
+
+## Report
+
+### Phase 2 のアプリ側の確認（Simulator、EAS の前）— 2026-10-07
+
+- task_id: common-account-v1-phase2-native-client-validation-20261007
+- result: **READY_FOR_REAL_ACCOUNT_SMOKE**
+  - 手元での確認は、すべて期待どおりだった。
+  - 本物のアカウントでの確認と、実機での push は、まだ行っていない（承認が要る / 実機が要る）。
+- main
+  - 検証の基点：`bdad4914`（PR #95 の merge `d5bea735` と、本番適用の記録を含む）
+  - Report 時：`6ddec97d`。基点からの変更は `.agent/` だけで、Phase 2 のファイルの変更は 0
+- 作業場所：`kabumori-fresh` から作った G5 専用の worktree（`kabumori-g5-native`、終了後に削除）
+- 他スロットとの関係：
+  - 動いていた G1 の Metro（8081）と、G1 の Simulator（iPhone 18 Pro）には触れていない。
+  - 自分用に、次のものを使った：
+    - Simulator：「G5 Native Validation iPhone 18 Pro」（iOS 27.0）を新しく作り、終了後に削除
+    - Metro：ポート 8091
+    - キャッシュ：専用の TMPDIR
+  - G1 の Metro は、最後まで動いたまま。
+  - Simulator の画面パネルを閉じたとき、G1 の端末のパネル表示も一緒に閉じた。閉じたのは表示だけで、端末は起動したまま。
+
+#### A. ソースとテストでの確認（最新の main）
+
+| 対象 | 結果 |
+|---|---|
+| Kabumori `deno test --no-check --allow-read tests/app/` | 426 / 426（うち service-enrollment 14） |
+| Kabumori `node --test tests/node/auth-provider-enrollment.test.mjs` | 23 / 23 |
+| X `node --test tests/service-enrollment.test.mjs` | 28 / 28 |
+| X `npm test` | 226 / 226 |
+| X `tsc` | PASS |
+| DB `common_account_service_start_intent_run.sh`（ローカル PG17.11） | PASS marker 10 個 |
+| 本番の応答の形との照合（両アプリ、30 項目） | すべて PASS |
+
+- 23 件のテストには、次の場合が含まれる：
+  - 同じ人の新しいログイン / 別の人 / サインアウト / TOKEN_REFRESHED
+  - S1-T、Q1
+- X の `npm test` について：最初は 224 / 226 だった。
+  - 失敗した 2 件は、X 専用の部品（`expo-web-browser`）が worktree に無かったことが原因で、Phase 2 とは無関係。
+  - X の node_modules をつないで実行し直したところ、226 / 226 になった。
+- 本番の応答の形との照合では、次の 2 種類の応答を両アプリの判定処理に入れた。
+  - 本番で実際に観測した応答（読み返し時の smoke）
+  - 本番の関数の定義（レビュー済みの migration と md5 一致）から決まる応答
+
+  確認した内容：
+  - active（`shared_account` 付き）→ ready
+  - ended → `reenroll_required`
+  - `lifecycle_changed` → 新しい version で聞き直す
+  - `not_registered` / 旧 Phase 1 の形（`shared_account` が無い）/ 別のサービスの応答 → fail closed
+  - blocked の各理由 → そのまま blocked
+
+**今のクライアントは、本番に入った応答の形と完全に一致している。**
+
+#### B. Simulator での確認（EAS なし、本番に接続しない）
+
+- 使ったもの：
+  - Simulator：iPhone 18 Pro、iOS 27.0（runtime 24A434）
+  - アプリ：10 月 5 日の dev client のビルドを複製したもの
+    - ネイティブ部分は、その後変わっていない（その後の `package.json` の変更は script 1 行だけ）
+    - iOS 27 で起動時に落ちる問題を避けるため、複製したものだけ SDK の表記を 26.0 に書き換え、ad-hoc で署名し直した。元のビルドとリポジトリには触れていない。
+  - JS：自分用の Metro（ポート 8091）から読み込んだ。
+- 接続先は、Mac の中だけで動かした「偽の Supabase」（127.0.0.1:54399）。
+  - Auth：ログイン / トークン更新 / ログアウト
+  - PostgREST：start / reactivate の応答を場合ごとに切り替えられる。保留もできる。
+  - アカウントは `example.invalid` のテスト用だけ。トークンは署名なしの合成 JWT（`sub` と `session_id` 入り）。
+  - 本番への接続は 0。`.env` も使っていない。
+- 操作：Simulator 操作ツールで、本当にタップ・スワイプ・文字入力をした（ハンドラを直接呼ぶ方法は使っていない）。
+- 判定の根拠：
+  - 画面の screenshot
+  - 偽の Supabase の通信記録（時刻 / 人 / ログイン ID の末尾 4 桁）
+
+| 必須の確認項目 | 結果 |
+|---|---|
+| 起動して、認証の入口が正しく出る | 初回の紹介画面 → ログイン画面。起動で落ちることは無かった |
+| サインインしていない状態は閉じたまま | 通信 0 件 |
+| 誤った入力 | アプリが入力を確認して止める（「正しいメールアドレスを…」「パスワードは 6 文字以上…」）。通信 0 件 |
+| ログインのときに、ready が一瞬でも見えない | 登録の応答を 24 秒止めた間は、くるくるだけで通信は 2 件（token・start）。応答を返した後に、初めて user / 銘柄 / レポート / 今日のひとこと / ニュースを読み、ホームが開いた。start はログイン操作と状態管理の両方から呼ばれても **1 件** |
+| 保存されたログインの復元（アプリを再起動）でも、ready が一瞬でも見えない | 応答を止めた間は読み込み画面で、通信は start 1 件だけ。応答の後に初めてデータを読み、ホームが開いた |
+| 同じログインの token 更新で、登録が二重にならない | 有効期限を 100 秒にして、自動更新を 4 回起こした。ログイン ID は 0003 のまま、start は **1 件のまま**、画面も ready のまま |
+| サインアウトで、すぐ ready でなくなる | 設定画面のログアウトと、拒否画面の「ログアウトする」の両方を確認。どちらも、通信は logout 1 件だけで、すぐログイン画面になり、その後のデータの読み込みは 0 件 |
+| 画面の遷移 / push / 通知が、今の serviceSession の後ろにある | データの読み込みと SignedInNavigator（タブ）は、どの場合も ready の応答の後だけだった。保留中 / 拒否 / エラー / 形の崩れた応答では 0 件 |
+| 落ちる / 読み込みが終わらない | 無し。エラー（500）では「アカウント情報を準備できませんでした」→「もう一度試す」→ start 1 件 → ホーム |
+
+- push / 通知について：Simulator では `Device.isDevice` が false なので、アプリはそもそも登録しない。そのため、実際の push の挙動はテスト（R3）と、遷移の順番で確認した。
+- 応答の種類ごとの画面（アプリを再起動して、復元で確認）：
+
+  | 応答 | 画面 | 結果 |
+  |---|---|---|
+  | `reenroll_required` | 「このサービスは退会済みです」＋「利用登録する」「ログアウトする」 | 素早く 2 回押しても、reactivate は **1 件**（`p_expected_lifecycle_version: 3`）。その応答の後にデータを読み、ホームが開いた |
+  | blocked `SERVICE_SUSPENDED` | 「このサービスは利用停止中です」＋「ログアウトする」 | 再試行のボタンは出ない。データの読み込みは 0 件 |
+  | 形の崩れた応答（旧 Phase 1 の形） | 「利用状態を確認できませんでした」＋「もう一度試す」 | ready にならない。データの読み込みは 0 件 |
+
+- 別の人（B）：サインアウトしてから B でログインした。
+  - start は B のログイン 0004 について 1 件で、それ以降の通信はすべて B のものだけ。
+  - shared_account の応答で、「利用登録が完了しました / 共通IDはお持ちです…」を 1 回表示した。
+- Metro の記録：ERROR は 0。WARN は、Supabase のライブラリの「`lock` オプションは非推奨」だけ。起動のたびに 1 回出る、以前からのもの。
+- 偽の Supabase で、有効期限を極端に短くしたため、自動更新が続けて 2 回出ることがあった。原因は、ライブラリの「期限が 90 秒以内なら更新する」という判断。本物の期限（通常 1 時間）では起きない。
+
+#### C. 本番での確認の範囲
+
+- 本番の認証を使う確認には、変更が起こりうる `start_kabumori_service()` を呼ぶ必要があるため、**行っていない**（TASK のとおり STOP）。
+- 本番の読み取りも、今回は 0。応答の形は、前の作業で読み返した関数の定義と smoke で確認済み。
+- 提案する本物のアカウントでの確認の手順（承認が必要）：
+  1. 使うのは、本番に既に active な Kabumori の entitlement と profile がある、ユーザー自身のアカウント 1 つ（legacy_backfill の 2 件のうちの 1 件）。
+  2. 同じ Simulator の dev client を、Metro だけ本番の公開 URL と publishable key で起動する。EAS は使わない。
+  3. 事前に、読み取りだけで件数を取っておく。確認セット `run.sh before` の 03 / 04 の state 部分（accounts / entitlements / operations / profiles）。
+  4. ログインして、ホームが開くことを確かめる。期待する応答は `{status:'active', service:'kabumori', started:false, shared_account:false}`。
+     - この場合、サーバーはロックを取るだけで、新しい行は作らない。profile の insert は `on conflict do nothing`。
+  5. 次の 3 つを確認する。
+     - token の更新で、start が増えないこと
+     - サインアウト
+     - 再ログイン
+  6. 事後に、同じ読み取りで件数が変わっていないことを確かめる。
+  7. reenroll / blocked は、本番では作らない。これらは手元の確認とテストで済ませる。
+- ended を作ること、削除、別のアカウントでの enrollment は、行わない。
+
+#### その他
+
+- source の修正：**無し**（不具合は見つからなかった）
+- production mutation：**0** / EAS：**0** / deploy：**0** / 本番への接続：**0**
+- changed_files：この Report だけ（`.agent/tasks/CLAUDE_TASK_5.md`）。アプリのコードは変更していない。
+- 一時的に使ったものは、すべて削除または停止した。
+  - 偽の Supabase / 中継 / Metro
+  - Simulator の端末
+  - 複製したアプリ（145 MB）
+  - worktree / branch
+- remaining_issues：
+  - 本物のアカウントでの確認（上の手順、要承認）
+  - 実機での push の登録と、通知からの遷移（TestFlight の工程で確認する）
+  - X アプリは、今回の TASK の対象外（Kabumori だけ）。X は 226 件のテストで確認した。Simulator での確認は、別に行うなら必要。
+  - Supabase のライブラリの `lock` オプションの非推奨のお知らせ（以前から。Phase 2 とは無関係）
+- recommendation：**READY_FOR_REAL_ACCOUNT_SMOKE**。
+  - 上の手順で本物のアカウントでの確認をしたあと、READY_FOR_EAS に進むのが安全。
+  - 手順は Simulator だけで済み、EAS の回数を使わない。
 
 ---
 
