@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-4
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: bounded DB/security corrective / existing PR #106
@@ -298,6 +298,24 @@ Then:
 After K4 accepts a corrected candidate, ChatGPT should use a truly free H1/H2 slot for one focused exact-head rereview whenever available.
 
 推薦モデル：**Opus5.5（高）**
+
+## K4 decision — corrected PR #106 PASS_CANDIDATE / H1 rereview assigned — 2026-10-07
+
+- verdict: **PASS_CANDIDATE / merge HOLD**.
+- exact corrected head: `a8f313dc72b087ab86482781297848fe6e23bdcc`.
+- PR #106 remains open/unmerged with exactly 6 changed files.
+- CI: Netlify PASS / Vercel PASS.
+- fresh-main overlap: 0 across the six PR files; main-only advancement since merge-base is control-file work.
+- G4 reports B1-B6 corrected with expanded disposable PostgreSQL evidence, 73 adverse start states, 21 postcondition drift cases, 45/45 mutation detection, B5 60-case matrix and B2 64-case matrix.
+- production DB/apply/deploy/Auth/OAuth/Vault/provider calls: 0.
+- because this remains a DB/ACL/credential/provider-authority boundary, one focused exact-head independent rereview is mandatory before merge.
+- H1 was verified done/free and is now assigned:
+  - task: `postona-pr106-phase2a2-security-rereview-20261007`;
+  - exact target: `a8f313dc72b087ab86482781297848fe6e23bdcc`;
+  - recommended model: **Sol（高）**.
+- H2 remains free and untouched.
+- no production preflight/apply is authorized by this K4.
+- next_owner: codex / H1.
 
 ## Report — postona-multisocial-phase2a2-security-corrective-20261007 (2026-10-07)
 
