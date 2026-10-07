@@ -1,3 +1,23 @@
+## G4 corrective assigned — POSTONA PR #106 review CHANGES REQUIRED — 2026-10-07
+
+- direct independent review target: PR #106 exact head `dac01220ca600cc003b3dafa4b30a84340b29850`.
+- verdict accepted: **CHANGES REQUIRED**.
+- blockers accepted:
+  1. provider identity unique-index precondition incomplete;
+  2. provider relabeling X <-> Meta is possible;
+  3. PG16+ INHERIT=false / SET=true role escalation path is missed;
+  4. unknown starting schema/credential/ACL/index/trigger/constraint drift is accepted as baseline;
+  5. connected Meta rows can lack an access credential reference;
+  6. existing service_role DML authority silently expands to Meta provider rows.
+- nonblocking snapshot gaps (policy permissive mode / full trigger identity / exact new CHECK expression) are included in the corrective.
+- G4 corrective task: `postona-multisocial-phase2a2-security-corrective-20261007`.
+- update existing PR #106 only; no new replacement PR unless unavoidable.
+- production DB/apply/deploy/Auth/OAuth/Vault/provider API remains forbidden.
+- G3 is separately in progress on AI Lab topic continuity; G5 is separately in progress on native common-account validation. G4 must not touch either workstream's files.
+- recommended Claude model: **Opus5.5（高）**.
+- after corrected K4, use a truly free H1/H2 slot for a single focused exact-head Codex rereview when available; recommended **Sol（高）**.
+- next action: send `G4` to Claude Code.
+
 ## Final K2 — GPT-6.1 Sol production rollout APPLIED_PASS before natural close — 2026-10-07
 
 - user explicitly approved M1 + M2 and requested fastest safe execution for today's close.
