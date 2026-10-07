@@ -1,157 +1,348 @@
 # Claude Task 2 — CURRENT TASK
 
-- task_id: kabumori-morning-fact-failure-diagnostics-corrective-20261007
+- task_id: kabumori-market-report-debug-trace-corrective-20261007
 - owner: claude
 - slot: claude-2
 - status: ready
 - next_owner: claude
 - priority: high
-- recommended_model: Sonnet5（高）
-- type: bounded diagnostics + prompt hygiene corrective
+- recommended_model: Opus5.5（高）
+- type: market-report debug trace / failed-generation persistence / prompt hygiene
 - production_mutation_allowed: false
+- supersedes: kabumori-morning-fact-failure-diagnostics-corrective-20261007
 
 ## Purpose
 
-The first natural 2026-10-07 morning cycle after PR #99 deploy failed twice with no report packet.
+10/7朝刊の自然分析は2回とも不合格となり、shared report packetが0件だった。
 
-Observed final retry diagnostics:
-- report_last_error = ANALYSIS_FACT_FAILED
-- generation_attempts = 2
-- calls = 3
-- hard_rejections = local,fact
-- rejection_reasons = causal+date+ref+other,other:1
-- final Fact issue: 「前回の引け以降に確認できたニュース」とする時間関係は input で確認できない
+現状は、不合格になった生成本文そのものが残っていないため、
+- モデルが本当に誤った本文を書いたのか
+- local/Fact guardが過剰に落としたのか
+- promptが悪いのか
+- generation 1 と generation 2 で何が変わったのか
+を後から正確に追えない。
 
-The delivered/shared report did not exist, so PR #99 editorial quality is still unvalidated.
+これはテスト段階の品質改善を妨げる。
 
-Do **not** weaken Hard Fact rules from this single sample.
-Do **not** change generic/metric telemetry or the 300-char rewrite policy in this task.
+**テスト期間中は診断性を優先し、失敗した生成本文・判定内容を追跡可能な形で保存する。**
+
+将来の個人向けレポートでも、配信前・検証段階では同じ考え方で失敗原因を追える設計を前提にする。
+ただし今回の実装対象は market-report-analysis を中心とし、personalized-reports 本体の機能実装は行わない。
+
+## Product / test policy
+
+### Canonical policy
+
+テスト・開発中のAI生成については、原因追求に必要なログを残す。
+
+最低限、失敗した各generationについて以下を後から確認できること:
+- generation number
+- scheduled attempt / invocation identity
+- generated candidate body / structured output
+- local guard result
+- local issue details
+- Fact result
+- Fact issue details
+- Hard / quality warnings
+- delivered or rejected
+- rejection stage
+- token / call / cost diagnostics if available
+- related data_packet / cycle / report ids
+- model / prompt or source version identifier if practical
+
+**固定コードだけでは不十分。実際にモデルが何を書いたかを追えることを必須とする。**
+
+### What may be stored during test phase
+
+今回の共有朝刊・大引けでは、市場データと公開ニュースを元にした生成本文・判定内容を保存してよい。
+
+将来の個人向けレポートでも、テスト/QA段階ではユーザー固有レポート本文を診断ログとして保持できる設計を妨げないこと。
+
+ただし、AI品質検証に不要な認証秘密情報は保存しない:
+- access token
+- refresh token
+- Authorization header
+- service role key
+- Vault secret
+- OAuth credential
+- password
+- raw secret environment values
+
+これは「本文を残さない」という意味ではない。
+**レポート本文・モデル出力・Fact/localの指摘は保存対象。認証秘密だけ除外する。**
+
+## Current evidence
+
+2026-10-07 morning:
+- data packet completed
+- analysis failed twice
+- report packet 0
+- final report_attempt_count=2
+- final error=ANALYSIS_FACT_FAILED
+- generation_attempts=2
+- calls=3
+- hard_rejections=local,fact
+- rejection_reasons=causal+date+ref+other,other:1
+- final Fact issue:
+  「前回の引け以降に確認できたニュース」とする時間関係はinputで確認できない
+
+Problem:
+- generation 1 body is unavailable
+- generation 1 local issue text/details are unavailable
+- generation 2 body is unavailable
+- Fact issueは一部だけ残る
+- 07:55のscheduled attempt detailは08:05 retryで上書きされる
 
 ## Goals
 
-1. Preserve bounded rejection diagnostics per generation/attempt so the first failure is not lost when retry/fallback occurs.
-2. Remove the known copy-risk in the morning instruction:
-   - current wording includes a temporal claim equivalent to 「前回の引け以降に確認できたニュース」;
-   - rewrite the instruction so it tells the model to use the supplied market/news input without asserting an unproven collection-time relationship.
-3. Keep all Hard/Fact acceptance semantics unchanged.
-4. Keep max model-call ceiling unchanged.
-5. No raw model body, quoted generated text, user content, secret/token, or unbounded error text may be persisted.
+### 1. Persist full failed-generation debug traces
 
-## Scope
+Design and implement a development/test diagnostic trace that preserves each generation separately.
 
-Prefer only:
-- `supabase/functions/market-report-analysis/analysis_logic.ts`
-- focused tests / existing fixtures
-- DESIGN docs only if needed
+At minimum, every generation should be reconstructable with:
+- invocation / scheduled attempt identity
+- generation_index
+- created_at
+- generated structured report payload/body
+- local_guard_passed
+- local_issues full diagnostic details
+- fact_guard_passed
+- fact_issues full diagnostic details
+- hard_rejection category
+- quality_warnings
+- selected_for_delivery
+- rejection/fallback reason
+- call/token/cost information available for that invocation
 
-Do not touch:
-- hard_fact_guards.ts unless needed only for exporting a fixed existing label (no semantic change);
-- personalized-reports;
-- market-report-data-packet;
-- consumer functions;
-- DB schema/migrations.
+Prefer structured JSON over flattened strings.
 
-## Diagnostic contract
+If the model output contains multiple report fields (X body, points_ja, app story, etc.), preserve the structured candidate, not only one concatenated text field.
 
-Add a bounded attempt/generation diagnostic structure using fixed classifications only.
+### 2. Preserve scheduled-attempt history
 
-Acceptable shape examples:
-- `rejection_reasons_by_generation: ["local:causal+date+ref+other", "fact:other:1"]`
-- or another compact fixed-code equivalent.
+07:55 failure must not disappear when 08:05 retry runs.
+
+Inspect the current cycle persistence and choose the smallest reliable design so each scheduled analysis attempt remains inspectable.
+
+Preferred order:
+1. existing suitable history/audit table if already present;
+2. dedicated append-only debug trace table;
+3. bounded history array only if it cannot be overwritten and is practical.
+
+Do not rely only on mutable cycle columns that are overwritten by retry.
+
+### 3. DB design if required
+
+If durable per-attempt/per-generation persistence requires schema work, create the migration candidate in source.
 
 Requirements:
-- max 2 generation entries;
-- fixed local categories only;
-- Fact categories + bounded count only;
-- no raw issue body;
-- no quoted generated text;
-- no arbitrary model text;
-- no emails/tokens/IDs/secrets;
-- total bounded size;
-- existing `hard_rejections` / `rejection_reasons` compatibility preserved if practical;
-- existing report_diagnostics JSON object means no DB migration.
+- append-only diagnostic rows preferred;
+- index by trading_date/session/cycle_id or equivalent;
+- link to data packet/report packet when available;
+- report packet may be null for failed generations;
+- model output JSON/text may be stored;
+- created_at required;
+- no destructive change to existing production tables;
+- no modification of already-applied migrations;
+- access should follow existing internal/service-role diagnostic patterns and not create a public client read path by accident.
 
-Also inspect why the first 07:55 scheduled failure details are overwritten at cycle level.
-If preserving cross-scheduled-attempt diagnostics requires schema/workflow/DB changes, **do not implement that here**. Record it as a separate follow-up. This task only needs per-generation diagnostics within one analysis invocation.
+**Do not apply the migration to production in this G2 task.**
+Implementation + tests + rollout plan only.
 
-## Morning prompt hygiene
+### 4. Logging failures must never block delivery
 
-Replace the temporal wording that can be copied as:
+Diagnostic persistence is secondary.
+
+If inserting a debug trace fails:
+- log the diagnostic write failure;
+- do not turn an otherwise safe report into a delivery failure solely because debug persistence failed;
+- do not increase generation/retry/model-call counts because logging failed.
+
+No recursive retry of diagnostic storage.
+
+### 5. Prompt hygiene correction
+
+Also fix the known morning prompt wording that can be copied into output as an unsupported timing claim.
+
+Remove/sanitize the instruction equivalent to:
 「前回の引け以降に確認できたニュース」
 
-with a safe instruction that:
-- references only the supplied input;
-- does not assert when a news item was collected/published unless the input proves it;
-- still tells the model to prepare the morning watch/focus using prior-session market data and supplied news.
+Replace it with an instruction that uses the supplied market/news input without asserting collection/publication timing unless the input itself proves it.
 
-Do not insert new finished example sentences.
+Do not add finished copyable example sentences.
 
-## Regression requirements
+### 6. Preserve PR #99 behavior
 
-Add tests proving:
-- the unsafe temporal phrase is absent from the model prompt;
-- morning remains forward-looking and does not claim today's Tokyo session already moved;
-- supplied news can still be used without claiming unsupported timing;
-- per-generation rejection diagnostics preserve local then Fact fixed codes in order;
-- no raw issue/model text is persisted;
-- max diagnostic size is bounded;
-- existing Hard rules unchanged;
-- max calls unchanged;
-- PR #99 generic/metric/near-duplicate WARN behavior unchanged;
-- 300-char rewrite threshold unchanged;
-- safe-original fallback unchanged.
+Do not change:
+- Hard Fact semantics
+- date/session/value/sign/stale checks
+- 1306 identity
+- refs
+- unsupported causality rule
+- false broad absence rule
+- exactly 3 points rule
+- X_POINTS_GENERIC WARN-only behavior
+- X_POINTS_METRIC_RECAP behavior
+- X_POINTS_NEAR_DUPLICATE behavior
+- X shortness rewrite threshold at 300 chars
+- App story rewrite condition
+- safe-original fallback
+- max generation/model-call ceiling
 
-Run:
-- full market-report-analysis suite;
-- relevant personalized/X shared/data-packet regressions;
-- Deno check/lint on changed runtime;
-- git diff --check.
+This task is **diagnostics + persistence + prompt hygiene**, not another editorial-policy rewrite.
 
-## Safety
+## Personal-report future compatibility
 
-Source/test only.
+Do not implement the future personalized report product here.
+
+But design the diagnostic trace so it does not assume all future reports are public-market-only.
+
+The storage shape should be able to distinguish:
+- report type/source
+- shared market report vs future personalized report
+- user/account/report identifiers when they exist
+
+Do not add speculative personal-report generation logic.
+
+The intent is simply: when personalized reports enter QA later, failed model outputs can also be inspected instead of being discarded.
+
+## Security boundary
+
+This is not a production privacy-hardening exercise; diagnostic usefulness is the priority during testing.
+
+Still, do not persist credentials/secrets.
+
+Allowed in test diagnostics:
+- full generated report text
+- structured model output
+- market/news context needed for diagnosis if appropriate
+- portfolio/personalized generated text in future QA design
+- local/Fact issue text
+- validation details
 
 Forbidden:
+- authentication tokens
+- passwords
+- service keys
+- OAuth secrets
+- Vault values
+- Authorization headers
+
+If source inputs are large, it is acceptable to store references/hashes plus the exact generated output. Prioritize keeping the output and rejection evidence.
+
+## Required tests
+
+Add or update tests proving:
+
+1. generation 1 local reject -> its candidate body + local issues remain queryable after generation 2 runs.
+2. generation 2 Fact reject -> candidate body + Fact issues remain queryable.
+3. two scheduled attempts for the same morning cycle remain distinguishable; second attempt does not erase the first.
+4. successful generation can also record a trace showing selected/delivered.
+5. trace insert failure does not fail or retry an otherwise safe report.
+6. trace insert failure does not cause extra model calls.
+7. secrets/tokens/Authorization fields are not written by the diagnostic serializer.
+8. generated report body itself is retained.
+9. PR #99 generic/metric/near-duplicate behavior unchanged.
+10. 300-char X rewrite threshold unchanged.
+11. Hard rules unchanged.
+12. max calls unchanged.
+13. safe-original fallback unchanged.
+14. unsafe morning temporal phrase absent from prompt.
+15. morning remains forward-looking.
+
+Run:
+- full market-report-analysis tests;
+- any new DB/migration disposable tests if schema added;
+- relevant personalized-reports shared-consumer regression;
+- X shared consumer regression;
+- market-report-data-packet regression;
+- Deno check/lint on changed runtime;
+- migration/source invariants if migration added;
+- git diff --check;
+- secret-pattern scan focused on newly persisted diagnostics code/tests.
+
+## Scope guidance
+
+Likely relevant:
+- supabase/functions/market-report-analysis/analysis_logic.ts
+- handler/index persistence path if needed
+- current cycle/report persistence helpers
+- new diagnostic helper/module if cleaner
+- migration candidate only if necessary
+- focused tests
+- DESIGN/runbook docs
+
+Avoid unrelated refactors.
+
+Do not modify:
+- personalized-reports runtime behavior
+- consumer gates
+- x-test-post
+- important-news-monitor
+- common-account/Auth
+- unrelated migrations/RPCs
+
+## Production / deploy safety
+
+This G2 is source/test only.
+
+Forbidden:
+- production migration apply
 - Edge deploy
 - manual report/retry/replay
-- production DB read/write unless already-existing read-only evidence is strictly needed
-- RPC/migration/Cron/gate mutation
+- production DB write
+- Cron change
+- gate change
 - X send
-- app notification
-- Auth/Vault/secret access
+- notification
 - EAS
-- production mutation
+- Auth/Vault/OAuth/secret mutation
+
+Read-only production inspection is allowed only if needed to understand current schema/runtime behavior.
 
 ## Completion / K2
 
 Report:
-- exact root cause evidence vs remaining uncertainty;
-- prompt hygiene change;
-- diagnostic structure and privacy/boundedness;
-- changed_files;
-- tests;
-- Hard semantics unchanged;
-- call ceiling unchanged;
-- rewrite policy unchanged;
-- commit / PR;
-- production mutation=0;
-- recommended deploy/read-back and next natural close observation.
+- root cause evidence and remaining uncertainty
+- chosen diagnostic storage architecture
+- exact fields retained
+- example of how generation 1 / generation 2 / scheduled retry can be inspected
+- secret-exclusion strategy
+- prompt hygiene change
+- migration candidate and rollout plan if any
+- changed_files
+- tests
+- Hard semantics unchanged
+- PR #99 behavior unchanged
+- call ceiling unchanged
+- logging failure is non-blocking
+- commit / PR
+- production mutation=0
+- recommended review/deploy sequence
 
 Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K2.
 
-Review policy:
-- No Codex review by default if this stays diagnostics + prompt hygiene only and Hard/call/rewrite semantics are unchanged.
-- If any accept/reject, call, rewrite, retry, or production-delivery semantics change materially, flag for focused Luna（高） review.
+## Review policy
 
-Recommended model: **Sonnet5（高）**.
+Because this may introduce durable debug storage and possibly a migration, K2 should decide on one focused Codex review before merge/deploy.
+
+If migration/access-control/persistence boundary is added:
+- recommend focused Codex review: **Sol（中）**.
+
+If implementation stays entirely inside existing internal diagnostics JSON with no schema/access change:
+- recommend focused Codex review: **Luna（高）** only if runtime delivery semantics changed; otherwise review may be skipped.
+
+Recommended Claude model: **Opus5.5（高）**.
 
 ## Report
 
 Pending.
 
+
+---
 ---
 
 # Claude Task 2 — CURRENT TASK
