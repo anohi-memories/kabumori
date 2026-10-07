@@ -7,6 +7,7 @@
 - next_owner: claude
 - recommended_model: **Opus5.5（高）**
 - approval: user explicitly approved this bounded production real-account smoke on 2026-10-07.
+- production_mutation_window: **ACTIVE** — 2026-10-07 21:02 JST. G5 real-account smoke in progress (one existing active Kabumori account; start_kabumori_service via a loopback guard that refuses reactivation/X/table writes/functions). No other slot may open a production DB/Auth/permission window until CLOSED.
 - production_authenticated_smoke_allowed: **true**
 - new_enrollment_allowed: **false**
 - reactivation_allowed: **false**
