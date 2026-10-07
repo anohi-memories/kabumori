@@ -94,14 +94,14 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: postona-multisocial-phase1-architecture-inventory-20261006
+- status: ready
+- task_id: postona-multisocial-phase2a1-provider-domain-foundation-20261007
 - start_code: G4
 - finish_code: K4
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Final K4 PASS. POSTONA multi-social Phase 1 docs-only architecture accepted. Exact one-file design document from former PR #96 was integrated unchanged directly to fresh main as 25fd6aeec85528a06f78995f4306aaeba98f9d75 after the PR merge raced a moving base; PR #96 closed as superseded. Runtime/DB/Edge/OAuth/Vault/production/provider calls 0. No Codex review. G4 free, but Phase 2a waits for G3 PR #41 and G5 PR #95 acceptance/merge.
-- recommended_model: Opus5.5（高）
+- allocation: POSTONA Phase 2a-1. Provider-neutral domain foundation only while G5 common-account review finishes. Add canonical provider ids/capabilities and pure publication target/outcome/adapter contracts. Current X behavior unchanged; no overlap with PR #95 and no database, auth, external-provider, production, or deployment changes.
+- recommended_model: Sonnet5（高）
 ## Claude G5
 - owner: claude
 - slot: claude-5
