@@ -3,8 +3,8 @@
 This is the newest canonical G1 instruction for the existing task / existing PR #100.
 
 - task_id remains: `kabumori-portfolio-canonical-ui-v1-20261006`
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - target PR: **#100**, update the existing PR; do not open a second PR unless technically unavoidable and reported first.
 - previously accepted PR #100 head: `5a9735c80e3dbc01b25911a0aabc83fce3d56bc9`
 - current fresh main at allocation: `29b8d00c4894e80fa57875c2e2772e59ab637139`
@@ -172,6 +172,53 @@ Then:
 
 Recommended model: **Sonnet5（中）**.
 
+## Report — G1: K1 corrective — contextual report-detail return from Portfolio (task kabumori-portfolio-canonical-ui-v1-20261006, PR #100)
+
+- result: implemented and Simulator-verified (402pt full, 375pt for the key cases). Existing PR #100 updated, **no second PR**, not merged.
+- PR: https://github.com/anohi-memories/kabumori/pull/100 — branch `claude/g1-portfolio-canonical-ui-v1-20261006`, **new exact head `3fd7c569efb6598202e71151dd2393f661f93b81`** (previous accepted head `5a9735c80e3dbc01b25911a0aabc83fce3d56bc9` is its ancestor → fast-forward).
+- fresh main integrated: `origin/main` at `3ad5c364` merged into the PR branch (merge commit `80d24bc9`, no conflicts) before editing; it contains PR #95 (`d5bea735`).
+- Open-PR overlap re-checked before push: only PR #100 itself touches `_layout.tsx` / report-detail / portfolio-sections; no other open PR owns them.
+- **EAS build: 0. Production / backend / DB / RPC / Auth / Edge mutation: 0.** No new dependency.
+
+### route structure
+- New root route `src/app/report-detail.tsx` — a 3-line re-export of the existing `(tabs)/reports/[id]` screen (`import ReportDetailScreen from './(tabs)/reports/[id]'; export default ReportDetailScreen;`): one implementation, no copy to drift.
+- `src/app/_layout.tsx`: one `<Stack.Screen name="report-detail" options={{ headerShown: true, title: 'レポート', headerBackTitle: '戻る', accent tint / text title / ivory background / no shadow }} />` — a native Stack header, so the back button and the interactive edge swipe are enabled (no `gestureEnabled` override).
+- `src/components/portfolio/portfolio-sections.tsx`: `openReport` now pushes `/report-detail` (AI card `今日のポイントを見る` / `詳しいポイントを見る`, impact `詳しく見る`).
+- Unchanged: the レポート tab list (and Home) still open the nested `/reports/[id]`; push-notification deep links stay `/reports/<id>`; report → news links still push `/news-detail` with `from=reports` (3 sites).
+- A direct open of `/report-detail` fails safely: an unknown id shows 「このレポートは表示できません。」 with 一覧へ戻る (`back()` when there is a back stack, else `replace('/reports')`).
+- No `usePreventRemove`, no `expo-router/build/...`, no pan gesture, no redirect-after-pop (pinned by a test).
+
+### proof PR #95 Auth/root changes preserved
+`_layout.tsx` diff vs main is only the added `Stack.Screen`; `serviceSession`, `ServiceAccessScreen`, `useRegisterPushToken(serviceSession)`, `usePushNotificationNavigation(serviceSession)`, `: serviceSession ? (<SignedInNavigator />` and the existing screens (`(tabs)`, `topic-detail`, `topics`, `news-detail`, `settings`, `ai`, `search`) are untouched and asserted by `report-detail-route_test.ts`.
+
+### Portfolio-origin Back / swipe proof (402pt iPhone 18 Pro, real taps/swipes, video at 0.05 s)
+- Portfolio → AI card → report detail → left-edge swipe (0.4 s and 1.0 s): lands directly on Portfolio (銘柄 tab stays selected); wrong-screen frames **0/21 and 0/31**; one motion segment (no double motion); while dragging, Portfolio is underneath.
+- Portfolio → 詳しく見る → report detail → header back button: Portfolio directly, **0/13**.
+- 375pt (iPhone SE): swipe 0/17, back button 0/11.
+
+### Reports-origin Back / swipe proof
+- レポート tab → list → report detail → swipe: reports list, tab stays, **0/25**; back button (「一覧」): reports list **0/20**. 375pt swipe **0/25**.
+
+### report → news regression
+Report detail → holding/market news (`news-detail`, `from=reports`) → 戻る / swipe → report detail → swipe/back → the original origin (Portfolio, or the reports list): all correct (0/18, 0/9, 0/28, 0/27, 0/18, 0/25 wrong-screen frames).
+
+### reopening tabs / header
+After returning, opening 銘柄 → レポート → ホーム: no stale root report detail, no wrong tab, no header duplication or flash (0/9, 0/11, 0/7); the nav tree shows `report-detail` entering and leaving the root stack while the reports tab stack stays `[index]`. Header: root version `‹ 戻る` + `レポート`, nested version `‹ 一覧` + `レポート`; identical height/background (`#f7f8f5`) and body (0-pixel diff outside the tab bar at 402 and 375); the only visible difference is that the root version has no tab bar. Bottom of the content clears the home indicator in both.
+
+### tests / checks (head `3fd7c569`)
+`deno test tests/app/` **426 passed / 0 failed** (new `report-detail-route_test.ts`: portfolio opens root route, impact link, tab list keeps nested route, thin re-export, root Stack registration + native header, PR #95 contract, no interception/internal import, report→news unchanged, safe direct-open fallback; root-navigator and portfolio tests updated for `report-detail`); tsc(src) no diagnostics; `expo config` OK; `expo export --platform web` PASS; `git diff --check` clean.
+
+### changed_files (this round)
+`src/app/report-detail.tsx` (new), `src/app/_layout.tsx` (one Stack.Screen), `src/components/portfolio/portfolio-sections.tsx` (route target only), tests `report-detail-route_test.ts` (new), `portfolio-screen_test.ts`, `root-navigator_test.ts`. No screenshot added (the report header did not change materially).
+
+### remaining issues
+1. **Home → 「レポートを見る」 still opens the nested `/reports/[id]`**, so its swipe/back returns to the reports list rather than Home (pre-existing, outside this corrective; pointing Home's CTA at `/report-detail` would fix it the same way).
+2. A cold external deep link to `/report-detail?id=<valid id>` with no back stack shows no back button / tab bar until the report fails to load (only the error state has 一覧へ戻る); in-app pushes and `/reports/<id>` notification links are unaffected.
+3. Observed on the nested reports list only (unrelated to this change): the large title settles a few dozen points after a pop / tab switch.
+4. 375pt checked for R1/R2/R3/R7 only (Portfolio search/watchlist/editor were re-verified at 402pt in this round, at 375pt in the earlier PR #100 pass). The verification used the scratchpad auth-bypass/fixture rig (uncommitted).
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
+
 ---
 
 # Claude Task 1 — CURRENT TASK
@@ -179,8 +226,8 @@ Recommended model: **Sonnet5（中）**.
 - task_id: kabumori-portfolio-canonical-ui-v1-20261006
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: ユーザー承認済み「ポートフォリオ正本」デザインを、既存の保有銘柄・保存済み大引けレポート・検索/監視機能に接続した実用画面として実装する。
