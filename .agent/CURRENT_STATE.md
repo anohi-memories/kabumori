@@ -1,3 +1,26 @@
+## Final C2 — PR #101 F1 PASS / remaining F2-F3 corrective only — 2026-10-07
+
+- H2 final rereview verdict on exact PR #101 head `fddd274863b08aefed60795d678a298a1160d599`: **CHANGES REQUIRED**.
+- **F1 is fully CLOSED / PASS** and must not be reopened:
+  - migration effective ACL/owner/default/inheritance checks passed independent review;
+  - candidate 13 adverse + H2 independent 7 adverse cases refused atomically;
+  - clean/Supabase-like graphs preserve service_role SELECT+INSERT only and deny app-role mutation/read paths.
+- remaining **F2 P1** only:
+  - standalone alphabetic-only unpadded Basic credential can bypass the current detector;
+  - escaped quoted JSON credential values can be only partially redacted at escaped quote/backslash/newline, leaving a credential tail that reaches insert.
+- remaining **F3 P2** only:
+  - depth-limit truncation metadata reports original_chars after depth cutting instead of the true pre-cut redacted evidence size;
+  - retained-list kept_chars estimator has an off-by-one first-comma error and may drop an exact-boundary item.
+- original F2 cases and original F3 body/issue retention are otherwise closed.
+- PR #101 remains open/unmerged/undeployed; production migration remains unapplied.
+- new G2 assigned: `kabumori-pr101-f2-f3-final-corrective-20261007`, recommended **Opus5.5（高）**.
+- G2 scope is strictly the four residual reproductions above. F1 frozen/PASS. Do not alter Hard/PR99/rewrite/call/fallback behavior or remove full failed-output retention.
+- after K2, run one final H2 exact-head F2/F3-only rereview, recommended **Sol（中）**.
+- if that H2 PASSes, C2 may merge PR #101 without another broad review.
+- Kabumori-only GPT-6/model-registry migration remains queued after PR #101 merge.
+- POSTONA/G3/G4 AI model management remains explicitly out of G2 scope.
+- production mutation/read/apply/deploy/manual generation remains 0.
+
 ## AI model-management scope clarified — Kabumori only / POSTONA excluded — 2026-10-07
 
 - user clarification: the upcoming GPT-6-family migration and model-management foundation in G2 is **Kabumori scope only**.
