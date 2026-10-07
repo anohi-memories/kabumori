@@ -1,3 +1,65 @@
+# H1 — POSTONA PR #106 corrected-head security rereview — 2026-10-07
+
+- task_id: `postona-pr106-phase2a2-security-rereview-20261007`
+- verdict / result: **CHANGES REQUIRED**.
+- exact reviewed head: `a8f313dc72b087ab86482781297848fe6e23bdcc`.
+- target PR: #106, open/unmerged at C1 freshness check.
+- review scope: focused exact-head rereview of the corrected Phase 2a-2 DB/security candidate.
+- synchronization note: the reviewer completed the review locally and saved the full report under its isolated review workspace, but its GitHub control-file sync was rejected because main advanced concurrently. ChatGPT recovered the completed verdict into the canonical report without overwriting other workstream control updates.
+- source correction by H1: **0**.
+- production read/write, migration apply, deploy, Auth/OAuth/Vault/secret/provider operation: **0**.
+
+## Blocking findings
+
+### R1 — existing trigger-function owner/ACL baseline is not verified
+
+The corrected migration verifies the two pre-existing `social_accounts` triggers' definitions and several function properties, but does not sufficiently fail closed when the **trigger function owner or function ACL** has drifted.
+
+Impact:
+- an unexpected owner or EXECUTE grant on the existing SECURITY DEFINER trigger functions can be accepted as part of the starting baseline;
+- this weakens the explicit reviewed-schema/security-contract claim.
+
+Required correction:
+- validate the exact approved owner and effective/direct ACL contract for both existing trigger functions before DDL;
+- include those properties in the postcondition/snapshot contract;
+- reject unknown owner, PUBLIC/API-role EXECUTE, grant-option or inherited/SET-reachable unsafe function authority;
+- do not normalize/revoke unexpected production drift automatically.
+
+### R2 — new provider-guard function body is not pinned by postcondition
+
+The new `public.social_accounts_provider_guard()` postcondition verifies trigger identity plus owner/security/search_path/language/ACL, but does not pin the actual function body.
+
+Impact:
+- a changed guard body can still satisfy the metadata checks, so provider immutability/provider-write protection is not guaranteed by the final migration postcondition itself.
+
+Required correction:
+- compare the exact reviewed function implementation at postcondition, using a stable approved definition/body identity (for example normalized `pg_get_functiondef` or an exact source hash/contract);
+- include return type and any other function metadata needed so a semantically altered body cannot pass;
+- add a mutation/adversarial test that changes only the body while preserving all other metadata and proves the migration/postcondition refuses atomically.
+
+## Accepted / still green
+
+- prior B1-B6 corrective work was not reopened except for the two function-contract gaps above.
+- existing X regression coverage passed.
+- G4 mutation suite remained **45/45 detected**.
+- no production operation was performed.
+
+## C1 recommendation
+
+- **Do not merge PR #106 at this head.**
+- Return a bounded corrective to G4 on the existing PR #106 only.
+- Preserve all accepted Phase 2a-2 behavior and tests.
+- Correct only:
+  1. existing trigger-function owner/ACL baseline verification;
+  2. new provider-guard exact body/definition verification;
+  3. focused adverse/mutation tests for those two gaps.
+- after correction, run one focused exact-head Codex rereview using whichever H1/H2 slot is genuinely free.
+- recommended corrective model: **Opus5.5（高）**.
+- recommended rereview model: **Sol（高）**.
+- production preflight/apply remains separately gated and unapproved.
+
+---
+
 # H1 — PR #109 AI Lab topic continuity focused review — 2026-10-07
 
 - task_id: ai-lab-topic-continuity-pr109-focused-review-20261007
