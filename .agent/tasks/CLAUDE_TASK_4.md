@@ -3,8 +3,8 @@
 - task_id: postona-multisocial-phase2a2-security-corrective-20261007
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: bounded DB/security corrective / existing PR #106
@@ -597,6 +597,97 @@ After K4 accepts a corrected candidate, ChatGPT should use a truly free H1/H2 sl
 1. K4 → 空いている H1 / H2 で、この head に絞った再レビューを 1 回行う。
 2. 承認されたら、上の 1〜11 を確認する同日の読み取り専用 preflight（G4 か、ユーザーが実行）を行う。違いがあれば、契約をレビューで直す。
 3. 本番適用（承認制）→ Phase 2b（Threads 接続）。2b の前に決めておくこと: 設計メモの T1 / T2 / T9 / T10。
+- status: review_required / next_owner: chatgpt。STOP for K4。
+
+## Report — C1 corrective (function-contract hardening) (2026-10-07)
+
+- task_id: postona-multisocial-phase2a2-security-corrective-20261007（C1 corrective round）
+- result: **C1-R1 と C1-R2 を修正し、既存の PR [#106](https://github.com/anohi-memories/kabumori/pull/106) を更新した（source のみ・本番適用なし）**。
+  - 新しい head は `f5fb9306`（C1 修正 `fdc55d26` ＋ main の merge）。H1 が見た head `a8f313dc` は履歴に残っている（force push なし）。未 merge。
+  - B1〜B6 の修正と、既存の回帰テストはすべてそのまま残した。
+- model_used: Opus 5.5（TASK の推奨どおり）
+- fresh main:
+  - 開始時の main は `cb07f202`。
+  - PR のブランチには、最新の main `38b45166` を通常の merge で取り込んだ。
+  - 取り込んだ変更は、ニュース取得（`news_discovery/fetcher*`、`market_macro_source_fetchers*`）と .agent で、PR のファイルやテストで使う migration の連鎖とは重ならない。
+- changed_files（PR #106 の既存ファイルのうち4つ。設計メモと挙動テストは変えていない）:
+  - `supabase/migrations/20261007150000_postona_social_accounts_multi_provider.sql`（SHA-256 `6bb1c243…50353`）
+  - `supabase/tests/postona_social_accounts_multi_provider_run.sh`
+  - `supabase/tests/postona_social_accounts_multi_provider_fixture.sql`
+  - `supabase/tests/postona_social_accounts_multi_provider_mutations.sh`
+
+### C1-R1 — 既存の2つのトリガー関数の所有者と ACL を固定した
+- **承認済みの契約の根拠**:
+  - repo: `20260925140000` と `20260928160000` は、`x_account_refresh_reset_on_reconnect()` と `social_mobile_account_deletion_guard()` を作ったあと、`revoke all ... from public, anon, authenticated, service_role` している。EXECUTE は所有者だけになる。
+  - 本番の読み取り専用 S0（10/06）: 所有者 `postgres` の、public スキーマでの関数の既定 ACL は `{postgres=X/postgres}`（所有者だけ）。
+- **DDL の前の確認**（ロール関係の確認の後。どれかを満たさなければ止まり、何も直さない）:
+  - `..._PRECONDITION_TRIGGER_FUNCTIONS`: 両関数について次がすべて一致すること
+    - 識別子（`public.x_account_refresh_reset_on_reconnect()` / `public.social_mobile_account_deletion_guard()`）
+    - 通常の関数であること（`prokind = 'f'`）
+    - 所有者がテーブル所有者であること
+    - 正規の定義 `md5(pg_get_functiondef)` が repo の migration どおりであること（`fda71f31…` / `f1e29728…`）。この定義には、引数、戻り値の型、言語、volatility、cost、SECURITY DEFINER、search_path、本体が含まれる
+  - `..._PRECONDITION_TRIGGER_FUNCTION_EXECUTE`: PUBLIC、anon、authenticated のどれも、両関数を実行できないこと。直接でも、継承や SET ROLE で到達できるロール経由でも、推移的でもだめ（`pg_has_role(..., 'MEMBER')`。PG16 以降の INHERIT / SET の扱い）
+  - `..._PRECONDITION_TRIGGER_FUNCTION_ACL`: 直接の ACL が、所有者自身の EXECUTE ちょうど1つであること。他の grantee も grant option もないこと（`proacl` が NULL の既定の状態は、PUBLIC の EXECUTE を含むので拒否される）
+- **スナップショットに追加した項目**: トリガー関数の `prokind` と `md5(pg_get_functiondef)`。所有者、ACL、本体の md5 は以前から含めている。migration の実行中に関数のセキュリティ属性が変われば、postcondition が拒否する。
+- **不正な出発状態を 12 通り追加した**。どれも固定のコードで拒否され、カタログ全体と全行は変わらず、X だけの CHECK が残り、ガードやヘルパーも残らない:
+  - 所有者の違い、cost の違い（定義の違い）、search_path の違い
+  - PUBLIC / authenticated / anon への直接の EXECUTE
+  - service_role への EXECUTE、grant option、未知のロールへの EXECUTE
+  - EXECUTE を持つロールへの経路: 継承、SET だけ、推移的（SET だけの chain）
+- 以前から受け入れられている本体・定義の確認（`trigger_function_body`、SECURITY INVOKER 化など）は、そのまま通っている。
+
+### C1-R2 — 新しいガード関数の本体を固定した
+- postcondition は、既存のメタデータの確認に加えて、次も確認する:
+  - `prokind = 'f'`
+  - `md5(pg_get_functiondef(public.social_accounts_provider_guard()))` が、レビュー済みの値 `3f0ee4a3b1adf64819ec97cce7a67808` と一致すること
+  - 既存のメタデータの確認: 所有者、SECURITY INVOKER、plpgsql、空の search_path、EXECUTE は所有者だけ
+- この定義には、引数、戻り値の型 `trigger`、言語、volatility、セキュリティ、search_path、本体が含まれる。PG17 の中では決定的に同じ出力になる。
+- メタデータを変えずに本体だけを変えると、apply 全体が `POSTONA_ACCOUNTS_POSTCONDITION_GUARD` で原子的に拒否される。次の2つで確認した:
+  - ミューテーション3件: 付け替えを許す、Meta 行の保護を外す、何も確認せずに `NEW` を返す
+  - postcondition の直前の注入: 何も確認しない本体に `create or replace`
+- 変えていない関数は通る（ランナーの APPLY）。
+
+### 使い捨て PostgreSQL での確認（Homebrew PG 17.11、ローカルソケットのみ）
+- ランナー: **ALL PASS**（APPLY / BEHAVIOR / 既存テスト3種 / ADVERSE / ATOMICITY / CLEANUP）
+  - B1〜B6 の不正な出発状態: 既存の 73 通りはすべて PASS のまま
+  - C1-R1 の 12 通り: PASS
+  - 合計 85 通り（固定のコードでの拒否が 84、ロック待ちのタイムアウトが 1）
+  - postcondition の直前に入れたずれ: 23 通り（ガード本体の差し替え、既存のトリガー関数への grant を追加）。途中失敗の 3 通りも PASS
+  - 既存の X の回帰テスト（投稿許可、退会、Stage 3B の pilot / publish authority / settings reader）: PASS
+  - 揃え直し: 退会用と Stage 3B 用の fixture で実物の関数を作るときは、実際の migration と同じ `revoke` もかけるようにした（C1-R1 の契約に合わせるため）
+- ミューテーション: **54/54 を検出**（変更していないコピーの対照実行は PASS）
+  - 追加した 9 件の内訳:
+    - C1-R2 の、本体だけを変えるもの 3 件
+    - C1-R1 の確認を外したり弱めたりするもの 5 件（所有者、定義、EXECUTE 経路、SET だけの経路、直接の ACL）
+    - スナップショットからトリガー関数の ACL を外すもの 1 件
+  - 既存の2件（付け替え、Meta 行の保護）は、postcondition の固定値も変異体のものに書き換えた。こうして自己整合させたうえで、挙動テストが検出することを確認した。
+- `migration_source_invariants_test.ts`: 11 件 PASS（編集していない）。
+- `git diff --check` 問題なし。秘密情報パターン 0。
+
+### migration の予約
+- バージョンは `20261007150000` のまま。main・作業中の PR と衝突しない。
+- `migration_source_invariants_test.ts` は、G3 の PR #109 がまだ作業中で変更しているため、予約は追加していない（前回と同じく K4 への依存）。
+
+### 他スロットとの重なり
+- 作業中の PR の変更ファイルとの重なりは 0。
+- G2 / G3 / G5 のファイルには触れていない。
+
+### CI
+- Netlify は PASS。Vercel は「Deployment rate limited — retry in 24 hours」（デプロイ回数の制限）で失敗した。コードの失敗ではない（Web の変更もない）。ポーリングはしていない。
+
+### 本番・deploy・プロバイダの変更: 0
+- 本番の DB・カタログへのアクセス、適用、deploy、Auth / OAuth / Vault / secrets、プロバイダの API 呼び出しは、すべてしていない。
+
+### 本番だけで確認できる事実（前回の一覧に追加）
+- 2つのトリガー関数について:
+  - 所有者
+  - `proacl`（所有者自身の EXECUTE だけであること）
+  - `md5(pg_get_functiondef)` が `fda71f31…`（refresh の reset）/ `f1e29728…`（退会のガード）と一致すること。本番の PG 17.6 で同じ出力になるかも、preflight で確認する
+  - PUBLIC / anon / authenticated から EXECUTE に到達できないこと
+- 違いがあれば、契約をレビューで直す（修復や revoke はしない）。
+
+### 次の推奨
+- K4 → 空いている H1 / H2 で、この head に絞った再レビューを 1 回行う。
 - status: review_required / next_owner: chatgpt。STOP for K4。
 
 ---
