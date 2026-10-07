@@ -58,14 +58,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: none
-- status: done
-- task_id: kabumori-portfolio-canonical-ui-v1-20261006
+- next_owner: claude
+- status: ready
+- task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS. PR #100 exact head 3fd7c569efb6598202e71151dd2393f661f93b81 squash-merged as fe8090bab89824fc8c00147fb5fc92bb1afab82c. Canonical portfolio UI, real saved-close data, Search, interim Watchlist, fallback avatars and contextual report navigation are complete. Portfolio-origin report Back/swipe returns Portfolio; Reports-list origin returns Reports list. 426/426 app tests; no backend/DB/Auth/EAS changes. G1 free.
-- recommended_model: Sonnet5（中）
+- allocation: Delivery-first market-report calibration after the first GPT-6.1 Sol natural close was blocked by two false-positive local guards. Keep only objective fatal blockers; make ambiguous/local/Fact findings advisory with one bounded regeneration and hard-safe fallback delivery; add deterministic AI disclaimers to X and app outputs. Source-only; no DB/Cron/gate/production deploy/manual invoke. Open PR overlap checked: current open PRs do not touch the expected market-report files.
+- recommended_model: Opus5.5（高）
 
 ## Claude G2
 - owner: claude
