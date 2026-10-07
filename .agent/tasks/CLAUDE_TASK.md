@@ -4,7 +4,9 @@
 - owner: claude
 - slot: claude-2
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
+- k2_result: PASS_CANDIDATE
+- h2_review_task: kabumori-trace-gpt61-rollout-runbook-review-20261007
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: production read-only preflight / trace migration + market-report GPT-6.1 rollout
