@@ -20,9 +20,17 @@ import { appStoryWarnings, buildAppMarketStory, orderKeyNews } from "../_shared/
 import type { AnalysisInput } from "./analysis_input.ts";
 import { falseAbsenceClaims } from "../_shared/absence_claims.ts";
 import { promptHash } from "./debug_trace.ts";
+import {
+  estimateCallCostUsd,
+  MARKET_REPORT_FACT_ROLE,
+  MARKET_REPORT_GENERATE_ROLE,
+  resolveKabumoriAiRole,
+  responsesApiParams,
+} from "../_shared/kabumori_ai_models.ts";
 import { emojiDirectionIssues, MARKET_NAMES, mentionsMarketMetric, metricFactIssues } from "./hard_fact_guards.ts";
 
-export const ANALYSIS_MODEL = "gpt-5.6-luna";
+/** The model of the generation role (its model id lives in the Kabumori AI model registry, not here). */
+export const ANALYSIS_MODEL = resolveKabumoriAiRole(MARKET_REPORT_GENERATE_ROLE).model;
 export const MAX_GENERATIONS = 2;
 
 export type StepResult = { payload: unknown; inputTokens: number; outputTokens: number };
@@ -171,10 +179,8 @@ export const FACT_INSTRUCTIONS = [
 
 export function generationRequestBody(input: AnalysisInput, previousIssues: string[]): Record<string, unknown> {
   return {
-    model: ANALYSIS_MODEL,
+    ...responsesApiParams(MARKET_REPORT_GENERATE_ROLE),
     store: false,
-    reasoning: { effort: "low" },
-    max_output_tokens: 10000,
     instructions: [
       ...COMMON,
       ...(input.reportType === "close" ? CLOSE : MORNING),
@@ -195,10 +201,8 @@ export function generationRequestBody(input: AnalysisInput, previousIssues: stri
 
 export function factRequestBody(input: AnalysisInput, analysis: GeneratedAnalysis): Record<string, unknown> {
   return {
-    model: ANALYSIS_MODEL,
+    ...responsesApiParams(MARKET_REPORT_FACT_ROLE),
     store: false,
-    reasoning: { effort: "low" },
-    max_output_tokens: 1500,
     instructions: FACT_INSTRUCTIONS,
     input: JSON.stringify({ input: input.modelInput, analysis }),
     text: { format: { type: "json_schema", name: "market_report_fact", strict: true, schema: FACT_SCHEMA } },
@@ -932,9 +936,6 @@ export function assemblePacket(
   };
 }
 
-export function lunaCostUsd(inputTokens: number, outputTokens: number): number {
-  return Number(((inputTokens * 0.2 + outputTokens * 1.2) / 1_000_000).toFixed(6));
-}
 
 /**
  * What happened inside one run, kept apart from transport retries (429 / 5xx / network, counted in
@@ -1092,20 +1093,23 @@ export async function generateSharedAnalysis(
   let calls = 0;
   let inputTokens = 0;
   let outputTokens = 0;
+  // Priced per request from the registry (a request's price tier depends on that request's own input size).
+  let costUsd = 0;
   let issues: string[] = [];
   let lastError = "ANALYSIS_NOT_ATTEMPTED";
   const trace: GenerationTrace = { generations: 0, hardRejections: [], rejectionReasons: [], qualityRewrite: false, deliveredGeneration: 0, warnings: [], records: recordSink };
-  const usage = (step: StepResult) => {
+  const usage = (step: StepResult, role: typeof MARKET_REPORT_GENERATE_ROLE | typeof MARKET_REPORT_FACT_ROLE) => {
     calls += 1;
     inputTokens += step.inputTokens;
     outputTokens += step.outputTokens;
+    costUsd = Number((costUsd + estimateCallCostUsd(role, step.inputTokens, step.outputTokens)).toFixed(6));
   };
-  const result = () => ({ calls, inputTokens, outputTokens, costUsd: lunaCostUsd(inputTokens, outputTokens), trace });
+  const result = () => ({ calls, inputTokens, outputTokens, costUsd, trace });
   const open = (generationIndex: number): GenerationRecord => {
     const record: GenerationRecord = {
       generationIndex, stage: "request_failed", hardRejection: null, candidate: null, localPassed: null, localIssues: [],
       localWarnings: [], factRan: false, factPassed: null, factIssues: [], selectedForDelivery: false, fallbackReason: null,
-      errorCode: null, requestHash: null, calls, inputTokens, outputTokens, costUsd: lunaCostUsd(inputTokens, outputTokens),
+      errorCode: null, requestHash: null, calls, inputTokens, outputTokens, costUsd,
     };
     recordSink.push(record);
     return record;
@@ -1114,7 +1118,7 @@ export async function generateSharedAnalysis(
     record.calls = calls;
     record.inputTokens = inputTokens;
     record.outputTokens = outputTokens;
-    record.costUsd = lunaCostUsd(inputTokens, outputTokens);
+    record.costUsd = costUsd;
   };
   const deliver = (analysis: GeneratedAnalysis, attempt: number, warnings: string[], fallbackReason: string | null = null) => {
     trace.deliveredGeneration = attempt;
@@ -1146,7 +1150,7 @@ export async function generateSharedAnalysis(
       record.fallbackReason = "rewrite_request_failed";
       return deliver(safe.analysis, safe.attempt, safe.warnings, "rewrite_request_failed");
     }
-    usage(generated);
+    usage(generated, MARKET_REPORT_GENERATE_ROLE);
     record.candidate = generated.payload ?? null;
     settle(record);
     const analysis = parseGeneratedAnalysis(generated.payload);
@@ -1184,7 +1188,7 @@ export async function generateSharedAnalysis(
       record.fallbackReason = "rewrite_request_failed";
       return deliver(safe.analysis, safe.attempt, safe.warnings, "rewrite_request_failed");
     }
-    usage(verdict);
+    usage(verdict, MARKET_REPORT_FACT_ROLE);
     settle(record);
     const fact = verdict.payload as { passed?: unknown; issues?: unknown };
     record.factPassed = fact?.passed === true;
