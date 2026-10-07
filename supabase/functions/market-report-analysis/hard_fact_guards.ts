@@ -224,8 +224,13 @@ function quote(sentence: string): string {
   return `「${characters.length > 44 ? `${characters.slice(0, 44).join("")}…` : trimmed}」`;
 }
 
+/**
+ * Sentences: split at 。!? and line breaks, and at a pictograph that ends a sentence (followed by a space or the end).
+ * 2026-10-07 close: 「10月7日の日経平均は70,035.71（前日比−0.92%）でした📉 10月6日の米国市場では…」 was read as one
+ * sentence, so the second sentence's date (10月6日) was taken as the Nikkei's date and a correct report was rejected.
+ */
 function sentences(text: string): string[] {
-  return normalize(text).split(/[。!?\n]/u).map((part) => part.trim()).filter(Boolean);
+  return normalize(text).split(/[。!?\n]|\p{Extended_Pictographic}\uFE0F?(?=\s|$)/u).map((part) => part.trim()).filter(Boolean);
 }
 
 export type GuardTexts = {

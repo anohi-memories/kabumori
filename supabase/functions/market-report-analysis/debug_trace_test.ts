@@ -156,29 +156,37 @@ test("2. generation 2 Fact reject: the candidate and the Fact issues are kept; t
   assert.equal(outcome.ok && outcome.trace.deliveredGeneration, 1);
 });
 
-test("2b. both generations rejected (the 10/7 shape): both bodies and both findings are readable", async () => {
+test("2b. both generations rejected (the 10/7 shape): both bodies and findings are readable, the better one is delivered", async () => {
   const sink: GenerationRecord[] = [];
   const outcome = await generateSharedAnalysis(
     analysisInput(),
     scripted([
       { step: "generate", payload: bad() },
       { step: "generate", payload: good() }, { step: "fact", payload: { passed: false, issues: ["本文に入力に無い時間関係がある"] } },
+      // Generation 1 (wrong headline removed) had no verdict: it gets the one remaining Fact call.
+      { step: "fact", payload: { passed: false, issues: ["見出しが一般的"] } },
     ]),
     now, sink,
   );
-  assert.equal(outcome.ok, false);
-  assert.deepEqual(sink.map((record) => [record.generationIndex, record.stage, record.hardRejection]), [[1, "local", "local"], [2, "fact", "fact"]]);
+  // Delivery first (2026-10-07): both have advisory Fact findings; generation 2 needed no removal, so it is delivered.
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.ok && outcome.packet.fact.ai_status, "advisory");
+  assert.deepEqual(sink.map((record) => [record.generationIndex, record.stage, record.hardRejection]), [[1, "local", "local"], [2, "delivered", "fact"]]);
   assert.ok(sink[0].localIssues.length > 0 && sink[0].candidate && sink[1].candidate);
   assert.deepEqual(sink[1].factIssues, ["本文に入力に無い時間関係がある"]);
-  assert.ok(sink.every((record) => !record.selectedForDelivery));
-  // Cumulative accounting per generation.
-  assert.deepEqual(sink.map((record) => record.calls), [1, 3]);
+  assert.deepEqual(sink[0].factIssues, ["見出しが一般的"]);
+  assert.ok(sink[0].localWarnings.some((warning) => warning.startsWith("UNIT_REMOVED:TOPIX_MISLABEL@headline_ja")), sink[0].localWarnings.join("\n"));
+  assert.deepEqual(sink.map((record) => record.selectedForDelivery), [false, true]);
+  assert.equal(sink[1].fallbackReason, "fact_advisory");
+  // Cumulative accounting: generation 1's record is settled again by its own (last) Fact call.
+  assert.deepEqual(sink.map((record) => record.calls), [4, 3]);
 });
 
 test("3. two scheduled attempts of one cycle stay distinguishable: the retry does not erase the first", async () => {
   const written: TraceRow[] = [];
   for (const attempt of [1, 2]) {
-    const { deps, traceRowsWritten } = harness({ attempt, generations: [bad(), good()], facts: [{ passed: false, issues: [`attempt ${attempt} fact issue`] }] });
+    // Unparsable output twice: nothing coherent is left, the attempt fails (the only way a cycle is retried now).
+    const { deps, traceRowsWritten } = harness({ attempt, generations: [{ broken: `attempt ${attempt} g1` }, { broken: `attempt ${attempt} g2` }] });
     const response = await handleRequest(request(), deps);
     assert.equal(((await response.json()) as { status: string }).status, "failed");
     written.push(...traceRowsWritten);
@@ -190,8 +198,8 @@ test("3. two scheduled attempts of one cycle stay distinguishable: the retry doe
   assert.notEqual(a1g1.invocation_id, a2g1.invocation_id, "each invocation has its own identity");
   assert.equal(a1g1.invocation_id, a1g2.invocation_id);
   assert.ok(written.every((row) => row.cycle_id === CYCLE && row.data_packet_id === dataFixture.id && row.report_packet_id === null));
-  assert.deepEqual(a1g2.fact_issues, ["attempt 1 fact issue"]);
-  assert.deepEqual(a2g2.fact_issues, ["attempt 2 fact issue"]);
+  assert.deepEqual(a1g2.candidate, { broken: "attempt 1 g2" });
+  assert.deepEqual(a2g2.candidate, { broken: "attempt 2 g2" });
 });
 
 test("4. a successful run records its trace: selected for delivery, linked to the stored packet", async () => {
@@ -233,15 +241,15 @@ test("5/6. a failed trace write never fails or retries the report and never cost
 });
 
 test("5b. the same holds when the run itself failed: the failure is recorded, the trace error does not replace it", async () => {
-  const { deps, calls } = harness({ generations: [bad(), good()], facts: [{ passed: false, issues: ["x"] }], traceStatus: 500 });
+  const { deps, calls } = harness({ generations: [{ broken: 1 }, { broken: 2 }], traceStatus: 500 });
   const original = console.error;
   console.error = () => {};
   try {
     const response = await handleRequest(request(), deps);
     const body = await response.json() as { status: string; error: string };
-    assert.deepEqual([body.status, body.error], ["failed", "ANALYSIS_FACT_FAILED"]);
+    assert.deepEqual([body.status, body.error], ["failed", "ANALYSIS_INVALID_OUTPUT"]);
     assert.equal(calls.filter((call) => call.url.endsWith("rpc/fail_market_report_analysis")).length, 1);
-    assert.equal(openAiCalls(calls), 3);
+    assert.equal(openAiCalls(calls), 2);
   } finally {
     console.error = original;
   }
@@ -278,7 +286,7 @@ test("7b. a row that still carries a credential after the serializer is dropped,
   const record: GenerationRecord = {
     generationIndex: 1, stage: "local", hardRejection: "local", candidate: { x: "ok" }, localPassed: false,
     localIssues: ["指摘: Bearer abcdefghijklmnop1234"], localWarnings: [], factRan: false, factPassed: null, factIssues: [],
-    selectedForDelivery: false, fallbackReason: null, errorCode: null, requestHash: null, calls: 1, inputTokens: 1, outputTokens: 1, costUsd: 0,
+    selectedForDelivery: false, fallbackReason: null, removedUnits: [], deliveryIssues: [], errorCode: null, requestHash: null, calls: 1, inputTokens: 1, outputTokens: 1, costUsd: 0,
   };
   const rows = traceRows(context, [record]);
   assert.equal(containsSecret(JSON.stringify(rows)), false, "redacted on the way out");
@@ -306,7 +314,7 @@ test("8. the generated report body itself is retained, structured, with every se
 test("future personalized reports fit the shape: source and subject_ref are carried, nothing else assumed", () => {
   const [row] = traceRows(
     { source: "personalized_report", subjectRef: "report-123", reportType: "morning", tradingDate: "2026-10-07", cycleId: null, dataPacketId: null, invocationId: crypto.randomUUID(), attempt: 1, model: "m", basePromptHash: null },
-    [{ generationIndex: 1, stage: "delivered", hardRejection: null, candidate: { overview_ja: "個人向け本文" }, localPassed: true, localIssues: [], localWarnings: [], factRan: false, factPassed: null, factIssues: [], selectedForDelivery: true, fallbackReason: null, errorCode: null, requestHash: null, calls: 1, inputTokens: 1, outputTokens: 1, costUsd: 0 }],
+    [{ generationIndex: 1, stage: "delivered", hardRejection: null, candidate: { overview_ja: "個人向け本文" }, localPassed: true, localIssues: [], localWarnings: [], factRan: false, factPassed: null, factIssues: [], selectedForDelivery: true, fallbackReason: null, removedUnits: [], deliveryIssues: [], errorCode: null, requestHash: null, calls: 1, inputTokens: 1, outputTokens: 1, costUsd: 0 }],
   );
   assert.deepEqual([row.source, row.subject_ref], ["personalized_report", "report-123"]);
   assert.deepEqual(row.candidate, { overview_ja: "個人向け本文" }, "the generated text of a personal report is kept for QA");
@@ -343,14 +351,15 @@ test("9-13. PR #99 and the guards are unchanged: warnings stay telemetry, thresh
   assert.equal(X_POST_REWRITE_BELOW_CHARS, 300);
   assert.deepEqual(qualityRewriteHints(["X_POST_SHORTER_THAN_TARGET:387"]), []);
   assert.equal(MAX_GENERATIONS, 2);
-  // Hard stays hard and a two-generation failure costs at most four calls.
+  // Hard stays hard (the wrong headline never reaches the packet) and two bad generations cost at most four calls.
   const calls: string[] = [];
   const outcome = await generateSharedAnalysis(analysisInput(), (step, _body) => {
     calls.push(step);
     return Promise.resolve({ payload: step === "fact" ? { passed: false, issues: ["x"] } : bad(), inputTokens: 1, outputTokens: 1 });
   }, now);
-  assert.equal(outcome.ok, false);
-  assert.ok(calls.length <= 4);
+  assert.ok(outcome.ok && !outcome.packet.headline_ja.includes("TOPIXがそろって"));
+  assert.equal(outcome.ok && outcome.packet.fact.ai_status, "advisory");
+  assert.deepEqual(calls, ["generate", "generate", "fact"]);
   // The safe original still wins over a rewrite the Fact check rejects, and says why.
   const sink: GenerationRecord[] = [];
   const thin = good();

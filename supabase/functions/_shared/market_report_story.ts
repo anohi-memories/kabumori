@@ -6,13 +6,14 @@
 // report on 2026-10-01 showed the 9/29 Nikkei close and the 9/30 1306 close as "9月30日"). The model
 // only contributes the prose in packet.app_story, which passed the same local and Fact checks as X.
 
-import type {
-  KeyNews,
-  MajorMove,
-  MarketDirection,
-  MarketReportPacket,
-  NewsScope,
-  ReportType,
+import {
+  type KeyNews,
+  type MajorMove,
+  type MarketDirection,
+  type MarketReportPacket,
+  type NewsScope,
+  REPORT_DISCLAIMER_JA,
+  type ReportType,
 } from "./market_report_packet.ts";
 
 export const APP_STORY_VERSION = "app_market_story.v2";
@@ -34,7 +35,10 @@ export type AppMarketStory = {
   trading_date: string;
   headline_ja: string;
   sections: AppStorySection[];
-  /** Narrative length: headline, headings and prose. The editorial target (900–1500) is measured on this. */
+  /**
+   * Narrative length: headline, headings and prose. The editorial target (900–1500) is measured on this; the
+   * closing disclaimer section is not part of it.
+   */
   char_count: number;
   /** Everything a reader sees, code-rendered fact lines included. */
   total_char_count: number;
@@ -120,9 +124,12 @@ function morningCheckLines(close: MarketReportPacket, morning: MarketReportPacke
   ];
 }
 
+/** The last section of every story: the fixed disclaimer, added by code (never model text, never measured). */
+export const DISCLAIMER_SECTION_KEY = "disclaimer";
+
 /**
  * The app's market story. A v1 packet (no app_story) still gets the headings and code-rendered lines,
- * with its market summary as the opening prose.
+ * with its market summary as the opening prose. It always ends with the disclaimer section, exactly once.
  */
 export function buildAppMarketStory(packet: MarketReportPacket, morningPacket: MarketReportPacket | null = null): AppMarketStory {
   const draft = packet.app_story;
@@ -130,7 +137,7 @@ export function buildAppMarketStory(packet: MarketReportPacket, morningPacket: M
   const themes = (items: MarketReportPacket["strong_themes"]) => items.map((theme) => `テーマ：${theme.name_ja}`);
   const sections = packet.report_type === "morning"
     ? [
-      section("summary", "☀️ 今日の市場をひとことで", draft?.summary_ja ?? packet.market_summary_ja, []),
+      section("summary", "☀️ 今日の市場をひとことで", draft?.summary_ja || packet.market_summary_ja, []),
       section("overseas", "🇺🇸 前夜の米国市場", draft?.overseas_ja, [
         ...sessionLines(moves, US_KEYS, "米国市場"),
         ...sessionDirectionLine(packet, "us", "米国市場"),
@@ -147,7 +154,7 @@ export function buildAppMarketStory(packet: MarketReportPacket, morningPacket: M
       section("gaps", "ℹ️ 確認できなかったデータ", "", packet.data_gaps_ja),
     ]
     : [
-      section("summary", "🌙 今日の市場をひとことで", draft?.summary_ja ?? packet.market_summary_ja, []),
+      section("summary", "🌙 今日の市場をひとことで", draft?.summary_ja || packet.market_summary_ja, []),
       section("japan", "🇯🇵 今日の日本株", draft?.japan_ja, [
         ...sessionLines(moves, TOKYO_KEYS, "東京市場"),
         ...sessionDirectionLine(packet, "tokyo", "東京市場"),
@@ -164,14 +171,16 @@ export function buildAppMarketStory(packet: MarketReportPacket, morningPacket: M
       section("gaps", "ℹ️ 確認できなかったデータ", "", packet.data_gaps_ja),
     ];
   const present = sections.filter((item): item is AppStorySection => item !== null);
+  const disclaimer: AppStorySection = { key: DISCLAIMER_SECTION_KEY, heading_ja: "", body_ja: REPORT_DISCLAIMER_JA, lines_ja: [] };
+  const all = [...present, disclaimer];
   return {
     version: APP_STORY_VERSION,
     report_type: packet.report_type,
     trading_date: packet.trading_date,
     headline_ja: packet.headline_ja,
-    sections: present,
+    sections: all,
     char_count: Array.from(appStoryText({ headline_ja: packet.headline_ja, sections: present }, false)).length,
-    total_char_count: Array.from(appStoryText({ headline_ja: packet.headline_ja, sections: present })).length,
+    total_char_count: Array.from(appStoryText({ headline_ja: packet.headline_ja, sections: all })).length,
   };
 }
 

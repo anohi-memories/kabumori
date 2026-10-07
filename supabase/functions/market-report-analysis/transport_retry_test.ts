@@ -251,17 +251,18 @@ test("non-retryable 4xx fails immediately with its existing code", async () => {
 test("Fact rejection is content, not transport: no transport retry, existing regeneration bound only", async () => {
   const h = harness({ generate: ["ok"], factPassed: false });
   const body = await (await handleRequest(request("close"), h.deps(CLOSE_NOW))).json();
-  assert.equal(body.error, "ANALYSIS_FACT_FAILED");
+  // Delivery first (2026-10-07): after the one regeneration the Fact findings are advisory and the packet is stored.
+  assert.equal(body.status, "completed");
   assert.equal(h.waits.length, 0);
   assert.equal(h.openaiCalls.length, MAX_GENERATIONS * 2, "2 generations + 2 Fact, unchanged");
-  assert.ok(!h.rpc.some((r) => r.name === "complete_market_report_analysis"), "no packet stored");
+  assert.equal(h.rpc.filter((r) => r.name === "complete_market_report_analysis").length, 1, "one packet stored");
 });
 
 test("worst-case call budget per run is bounded: 4 model calls + 3 transport retries", async () => {
   // Every call gets one 503 first, and Fact always rejects: the maximum number of requests in one run.
   const h = harness({ generate: [{ status: 503, body: {} }, "ok", { status: 503, body: {} }, "ok"], fact: [{ status: 503, body: {} }, "ok", { status: 503, body: {} }, "ok"], factPassed: false });
   const body = await (await handleRequest(request("close"), h.deps(CLOSE_NOW))).json();
-  assert.equal(body.status, "failed");
+  assert.equal(body.status, "completed", "delivered as advisory after the bounded regeneration");
   assert.ok(h.openaiCalls.length <= MAX_GENERATIONS * 2 + DEFAULT_TRANSPORT_RETRY.runRetryBudget, `requests: ${h.openaiCalls.length}`);
   assert.ok(h.waits.reduce((a, b) => a + b, 0) <= DEFAULT_TRANSPORT_RETRY.runWaitBudgetMs);
 });

@@ -25,7 +25,7 @@ const context = {
 };
 const record = (patch: Partial<GenerationRecord> = {}): GenerationRecord => ({
   generationIndex: 1, stage: "fact", hardRejection: "fact", candidate: { headline_ja: "見出し" }, localPassed: true, localIssues: [],
-  localWarnings: [], factRan: true, factPassed: false, factIssues: [], selectedForDelivery: false, fallbackReason: null, errorCode: null,
+  localWarnings: [], factRan: true, factPassed: false, factIssues: [], selectedForDelivery: false, fallbackReason: null, removedUnits: [], deliveryIssues: [], errorCode: null,
   requestHash: null, calls: 2, inputTokens: 1, outputTokens: 1, costUsd: 0, ...patch,
 });
 const rowOf = (patch: Partial<GenerationRecord> = {}) => traceRows(context, [record(patch)])[0];

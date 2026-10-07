@@ -8,6 +8,7 @@ import {
   type ClaimType,
   formatSharedXPost,
   type KeyNews,
+  type MarketReportFactStatus,
   type MarketReportPacket,
   PRESENTATION_VERSION,
   REPORT_SCHEMA_VERSION,
@@ -16,7 +17,7 @@ import {
   type Theme,
   type XPost,
 } from "../_shared/market_report_packet.ts";
-import { appStoryWarnings, buildAppMarketStory, orderKeyNews } from "../_shared/market_report_story.ts";
+import { appStoryWarnings, buildAppMarketStory, orderKeyNews, sessionLines } from "../_shared/market_report_story.ts";
 import type { AnalysisInput } from "./analysis_input.ts";
 import { falseAbsenceClaims } from "../_shared/absence_claims.ts";
 import { promptHash } from "./debug_trace.ts";
@@ -28,6 +29,17 @@ import {
   responsesApiParams,
 } from "../_shared/kabumori_ai_models.ts";
 import { emojiDirectionIssues, MARKET_NAMES, mentionsMarketMetric, metricFactIssues } from "./hard_fact_guards.ts";
+import {
+  type Fallbacks,
+  removalCodes,
+  type RemovedUnit,
+  sanitizeAnalysis,
+  type SanitizeResult,
+  type UnitCheck,
+  type UnitChecker,
+  type UnitFinding,
+  type UnitKind,
+} from "./unit_sanitizer.ts";
 
 /** The model of the generation role (its model id lives in the Kabumori AI model registry, not here). */
 export const ANALYSIS_MODEL = resolveKabumoriAiRole(MARKET_REPORT_GENERATE_ROLE).model;
@@ -47,12 +59,14 @@ const COMMON = [
   "本文は読者向けの自然な日本語です。入力のキー名、ref（metric:… / news:…）、英字の項目名や記号的な識別子を本文に書きません。例: 「日経平均は65,018.95（前日比+1.38%）」とは書くが、「change_pct」「session_date」のような語は書きません。",
   "「市場の方向」は入力で確定済みです。それと矛盾する方向（上昇/下落）を書きません。",
   "claims の claim_type は次の基準で付けます。observation: 指標の値動きそのもの。causal: 入力のニュース本文が理由として明記している場合だけ（evidence_refs に news の ref を必ず含める）。consistent_with: 同時期に確認できるが因果は確認できない組み合わせ。insufficient_evidence: 理由を確認できない値動き（理由を推測しない）。watch_point: 次に確認する点。",
-  "値動きの理由として書けるのは、入力のニュースが理由として明記しているもの（causal の claim）だけです。それが無い日は、headline_ja・market_summary_ja・x_post・claims のどこでも、同時期の別の値動き（米国株、半導体株、為替など）やニュースを値動きの理由として結びつけません（「〜を受けて」「〜につれて」「〜安で下落」「〜の影響で」「〜が重しとなり」「〜が原因」など）。「〜の可能性」「〜とみられる」を付けても理由の推測なので書きません。同時期の値動きは日付を付けた別々の事実として並べ、理由は確認できないと1回だけ書きます。",
+  "値動きの理由として書けるのは、入力のニュースが理由として明記しているもの（causal の claim）だけです。それが無い日は、headline_ja・market_summary_ja・x_post・claims のどこでも、同時期の別の値動き（米国株、半導体株、為替など）やニュースを値動きの理由として断定しません（「〜を受けて」「〜につれて」「〜安で下落」「〜の影響で」「〜が重しとなり」「〜が原因」など）。同時期の値動きは日付を付けた別々の事実として並べます。読者の役に立つときだけ、本文（x_post.context_ja や app_story）で1回まで、推測だと分かる言い方の見立てを添えてかまいません（例: 「〜が意識された可能性があります」「〜が一因として考えられます」）。見出し・3つのポイント・claims には書かず、事実のようには書きません。理由が確認できないことを書くのは1回だけにします。",
   "ニュースの中身を伝える文（x_post.news_ja、app_story.news_ja、key_news、observation の claim）では、そのニュース本文に書かれている原因と結果を、本文の言い方に沿ってそのまま書いてかまいません（例: 本文が「需要の拡大を背景に輸出が増加」なら「需要を背景に輸出が増えたと報じられました」）。本文に因果の表現が無いニュースには「〜を受けて」「〜を背景に」を足しません。ニュースの中の原因を、東京市場・米国市場・指数の値動きの理由にはしません（それを書けるのは、ニュースが市場の値動きの理由として明記している場合だけです）。",
   "日付の違う市場（例: 前日の米国市場と当日の東京市場）を並べるときは、それぞれの日付を明記します（例: 「9月17日の米国市場は上昇、9月18日の東京市場では…」）。「同じ日」「同日」とは書きません。入力の「日付の注意」に従います。",
   "evidence_refs には入力の ref（metric:… または news:…）だけを入れます。ref は evidence_refs の中だけに書き、本文には書きません。",
   "入力の「重要材料」が true のニュース（中央銀行の政策決定など）がある場合は、その出来事そのもの（何が決まったか）を market_summary_ja と x_post に必ず入れます。値動きとの因果は、ニュースが理由として書いていない限り断定しません（出来事は事実として伝え、因果の確度は別に一言添える）。",
-  "不確実性の注記は簡潔に、market_summary_ja と x_post ではそれぞれ多くても1回にします。「確認できません」「断定できません」を繰り返しません。insufficient_evidence の claim は最大1件にまとめます。",
+  "不確実性の注記は簡潔に、market_summary_ja と x_post ではそれぞれ多くても1回にします。「確認できません」「断定できません」「〜として整理します」を繰り返しません。insufficient_evidence の claim は最大1件にまとめます。",
+  "文体は落ち着いた、少しやわらかい話し言葉の「です・ます」です。読者に話しかけるように書き、硬い報告書の言い回しや幼い言い方、煽りは避けます。事実が文体より優先します。",
+  "「AIによる分析である」旨や「投資判断はご自身で」という注意書きはコードが末尾に付けるので、本文には書きません。「AIが独自調査」のような表現も使いません。",
   "strong_themes / weak_themes は、根拠のある業種・テーマ（例: 半導体、銀行、金利上昇の恩恵を受けやすい業種）だけです。指数名、指数どうしの方向の違い、ニュースの見出し、一般的な観察はテーマにしません。根拠が足りなければ空の配列にします。",
   "TOPIX連動ETF（1306）はTOPIX（指数）そのものではありません。必ず「TOPIX連動ETF（1306）」と書き、見出しや x_post で短くするときも「TOPIX」単独にしません（誤: 「日経平均とTOPIXがそろって下落」、正: 「日経平均とTOPIX連動ETF（1306）がそろって下落」）。1306の値や前日比をTOPIXの値として書きません。",
   "入力は1日分の値動き（前回値との比較）だけです。「続伸」「続落」「反発」「反落」「年初来」「最高値」「最安値」のような複数日の推移や記録を前提にする言葉は使いません。",
@@ -64,7 +78,7 @@ const COMMON = [
   "「東京市場の方向」と「米国市場の方向」は、それぞれの日付の値動きとしてコードが決めたものです。朝刊では、前営業日の東京市場と前夜の米国市場を別々に書き、「市場の方向」のひとこと（まちまち等）だけで両方をまとめません。今日の値動きは予想せず、今日見る点として書きます。",
   "x_post はX投稿用の約500字の読み物です。次の6つを書きます。lead_ja: 60字以内の導入1文。points_ja: ちょうど3つ、各40字以内の見出し（下の「3つのポイント」の決まりに従う）。context_ja: 90〜130字の背景の段落（値動きを日付つきでつなぐ。理由は確認できた場合だけ）。news_ja: 70〜110字の重要ニュースの段落（範囲が市場全体のものを優先。書けるニュースが無ければ空文字）。watch_ja: 50〜80字の次に見る点。closing_ja: 40〜60字の一言。見出し・小見出し（📌 📰 👀 💬）とハッシュタグはコードが付けるので書きません。",
   "3つのポイント（x_post.points_ja）は、本文を読む前にその日の市場の中身が分かる見出しです。アプリの「今日のポイント」にも同じ3つが出ます。各見出しは次を守ります。(1) その日の入力にある具体的な語（国・地域、企業・業種、指標、出来事の名前）を最低1つ入れます。「ニュースを確認」「動きを見る」「情勢に注目」「材料を確認」「今後の動向に注意」のように、どの日にも当てはまる見出しは書きません。材料を見出しにするときは、どこの何の出来事かを書きます。(2) 指標名と値・前日比を並べただけの見出しは書かず、値は context_ja と app_story に書きます。ただし、節目を超えた、大幅に上昇・下落した、急変した、政策金利が決まったなど、数値そのものがその日の出来事である場合は、数値を入れた見出しにしてかまいません。そのときも、入力の値と前日比から確かめられる範囲（前日の終値を上回った等）で書き、「初めて」「史上最高」「〜年ぶり」のように入力だけでは確かめられない記録の言葉は使いません。(3) 3つは、その日にもっとも重要な別々のテーマを選びます。同じ指数や同じニュースの言い換えを2回使いません。材料が薄い日は、理由が確認できないことを正直に1つ書いてかまいませんが、3つすべてを抽象的にしません。(4) 煽りや釣りの言い方はしません。(5) 見出しも本文と同じ決まりに従います（入力と逆の方向を書かない、根拠の無い理由を見出しにしない、日付の違う市場を混ぜない、TOPIX連動ETF（1306）をTOPIXと書かない）。",
-  "app_story はアプリの「市場全体」の読み物で、x_post より詳しく書きます。見出し・絵文字・指標の数値の一覧はコードが付けるので、各項目には説明の文章だけを書きます（数値を書く場合は上の日付のルールに従う）。summary_ja: 60〜110字で全体をひとこと。overseas_ja: 100〜170字で米国市場の値動き。japan_ja: 120〜200字で東京市場（朝刊は前営業日の結果と今日見る点、大引けは今日の結果）。cross_asset_ja: 80〜150字で為替・金利・半導体・原油。news_ja: 120〜220字で重要ニュースと市場との関係（関係が確認できなければそう書く）。strong_ja: 強い・注目テーマ（根拠が無ければ空文字）。caution_ja: 60〜130字で注意点・リスク。watch_ja: 60〜130字で次に見る点。根拠が足りない項目は無理に埋めず、空文字か短く「確認できません」と書きます。",
+  "app_story はアプリの「市場全体」の読み物で、x_post より詳しく書きます。見出し・絵文字・指標の数値の一覧はコードが付けるので、各項目には説明の文章だけを書きます（数値を書く場合は上の日付のルールに従う）。summary_ja: 60〜110字で全体をひとこと。overseas_ja: 100〜170字で米国市場の値動き。japan_ja: 120〜200字で東京市場（朝刊は前営業日の結果と今日見る点、大引けは今日の結果）。cross_asset_ja: 80〜150字で為替・金利・半導体・原油。news_ja: 120〜220字で重要ニュースと市場との関係（関係が確認できなければそう書く）。strong_ja: 強い・注目テーマ（根拠が無ければ空文字）。caution_ja: 60〜130字で注意点・リスク。watch_ja: 60〜130字で次に見る点。根拠が足りない項目は無理に埋めず、空文字にします（各項目で「確認できません」を繰り返しません）。app_story の文章には、内容に合う絵文字（📉📈👀など）を全体で2個まで使ってかまいません。📈は上昇、📉は下落した指標の文だけに使い、絵文字で方向や理由をほのめかしません。",
 ];
 
 const X_VOICE = [
@@ -173,7 +187,7 @@ const FACT_SCHEMA = {
 
 export const FACT_INSTRUCTIONS = [
   "あなたは市場レポートの厳格なFactチェッカーです。input（根拠）と analysis（生成結果）だけを照合します。Web検索や外部知識は使いません。",
-  "次を検出したら passed を false にします: input に無い数字・日付・固有名詞・事実、数値の書き換えや独自計算、market_direction と矛盾する方向、news に理由として書かれていない因果を causal や断定で書いたもの、consistent_with や insufficient_evidence なのに本文が因果を断定しているもの、理由を確認できない値動きに「〜の可能性」「〜とみられる」などの推測で理由を付けたもの、TOPIX連動ETF（1306）をTOPIXそのものとして書いたもの（「TOPIX連動型ETF」のような正確な言い換えは可）、古い値を最新のように書いたもの、将来の値動きの断定、売買推奨。",
+  "次を検出したら passed を false にします: input に無い数字・日付・固有名詞・事実、数値の書き換えや独自計算、market_direction と矛盾する方向、news に理由として書かれていない因果を causal や断定で書いたもの、consistent_with や insufficient_evidence なのに本文が因果を断定しているもの、理由を確認できない値動きの理由を推測なのに事実のように書いたもの（「〜の可能性があります」「一因として考えられます」のように推測と分かる見立てを1回添えるのは可）、TOPIX連動ETF（1306）をTOPIXそのものとして書いたもの（「TOPIX連動型ETF」のような正確な言い換えは可）、古い値を最新のように書いたもの、将来の値動きの断定、売買推奨。",
   "自然な言い換えや要約は許容します。x_post の口語的な文体は問題にしません。issues は短い日本語で返します。",
 ].join("\n");
 
@@ -379,6 +393,12 @@ function excerpt(value: string, index: number, length: number): string {
   return `${start > 0 ? "…" : ""}${value.slice(start, end)}${end < value.length ? "…" : ""}`;
 }
 
+/**
+ * Text right after a bare "TOPIX" that says the thing discussed is NOT the index itself (2026-10-07 close: 「後者は
+ * TOPIXそのものではなく、指数に連動するETFです」, a correct explanation, was rejected as a mislabel).
+ */
+const TOPIX_DISAMBIGUATION = /^(?:\s*\(?指数\)?)?\s*(?:そのもの|自体)?\s*(?:では(?:な|あり)|じゃな|とは(?:異な|別|違)|と同じではな|と同一ではな)/u;
+
 /** Places where 1306 is called "TOPIX", quoted so a regeneration can fix exactly that text. */
 export function topixMislabels(texts: string[]): string[] {
   const found: string[] = [];
@@ -386,7 +406,9 @@ export function topixMislabels(texts: string[]): string[] {
     const normalized = value.normalize("NFKC");
     for (const match of normalized.matchAll(/TOPIX/g)) {
       TOPIX_PROXY_AT.lastIndex = match.index;
-      if (!TOPIX_PROXY_AT.test(normalized)) found.push(excerpt(normalized, match.index, match[0].length));
+      if (TOPIX_PROXY_AT.test(normalized)) continue;
+      if (TOPIX_DISAMBIGUATION.test(normalized.slice(match.index + match[0].length))) continue;
+      found.push(excerpt(normalized, match.index, match[0].length));
     }
   }
   return found;
@@ -530,13 +552,47 @@ function newsStatesRelation(sentence: string, index: number, link: string, effec
  * - A sentence that restates a news item's own cause and effect is supported by that item's text,
  *   whatever the claim type (2026-10-01 close: such a sentence failed both scheduled attempts).
  */
-export function unsupportedCausalSentences(analysis: GeneratedAnalysis, input: AnalysisInput): string[] {
-  const supportRefs = new Set(analysis.claims
+/** The news a causal claim cites for a market move (the only support a market cause can have). */
+function causalNewsOf(claims: readonly Claim[], input: AnalysisInput): string[] {
+  const supportRefs = new Set(claims
     .filter((claim) => claim.claim_type === "causal" && !NEGATED.test(claim.text_ja))
     .flatMap((claim) => claim.evidence_refs.filter((ref) => input.newsRefs.has(ref))));
-  const causalNews = input.news
+  return input.news
     .filter((item) => supportRefs.has(item.ref))
     .map((item) => canonicalCause(`${item.headline_ja}\n${item.summary_ja ?? ""}`));
+}
+
+/**
+ * One sentence's causal wording: null when there is none or it is supported; "assertive" when it states a reason the
+ * input does not support (an objective error, the sentence is removed); "speculative" when it only offers one as a
+ * possibility (「〜の可能性があります」「一因として考えられます」: an analysis, recorded as advisory, delivered; 2026-10-07).
+ */
+function causalVerdict(sentence: string, causalNews: readonly string[], input: AnalysisInput): "assertive" | "speculative" | null {
+  const links = [...sentence.matchAll(CAUSAL_LINK)];
+  if (links.length === 0) return null;
+  if (NEGATED.test(sentence) && !SPECULATION.test(sentence)) return null;
+  const supported = links.every((link, index) => {
+    const effect = sentence.slice(link.index + link[0].length, index + 1 < links.length ? links[index + 1].index : sentence.length);
+    // 「前夜の米国株高を受け、日本株の反応を見る」 is a plan to observe, not a causal
+    // assertion that Japanese stocks rose. Facts in the cause still pass through metric/date guards.
+    const watchEffect = effect.trim().replace(/^、/u, "");
+    if ((/^(?:を受け、|を受けて)$/u.test(link[0]) && PURE_REACTION_WATCH.test(watchEffect)) ||
+        (link[0] === "を受けた" && PURE_RESULT_QUESTION.test(watchEffect))) return true;
+    // A market move needs a causal claim whose news is about a market; anything else must be what a
+    // news item itself says, whatever the claim type.
+    if (!isMarketEffect(effect, sentence.slice(0, link.index), input)) return newsStatesRelation(sentence, link.index, link[0], effect, input);
+    const parts = causeParts(sentence, link.index, link[0]);
+    return parts.length > 0 &&
+      parts.every((part) => causalNews.some((text) => NEWS_ABOUT_MARKET.test(text) && causeSupported(part, text)));
+  });
+  if (supported) return null;
+  return SPECULATION.test(sentence) ? "speculative" : "assertive";
+}
+
+const PAST_FACT_PROSE = /ました|でした|した(?:[、]|$)|だった/u;
+
+/** The sentences the causal check reads: every factual text, and the past-tense sentences of forward text. */
+function causalSentences(analysis: GeneratedAnalysis): string[] {
   const story = analysis.app_story;
   const texts = [
     analysis.headline_ja,
@@ -550,32 +606,30 @@ export function unsupportedCausalSentences(analysis: GeneratedAnalysis, input: A
     ...(story ? [story.summary_ja, story.overseas_ja, story.japan_ja, story.cross_asset_ja, story.news_ja, story.strong_ja] : []),
     // Watch/caution fields can contain historical prose too: their field name is no fact exemption.
     ...[analysis.x_post.watch_ja ?? "", ...(story ? [story.caution_ja, story.watch_ja] : []), ...analysis.next_watch_ja, ...analysis.risks_ja]
-      .flatMap((value) => value.split(/[。！？!?\n]/)).filter((value) => /ました|でした|した(?:[、]|$)|だった/u.test(value)),
+      .flatMap((value) => value.split(/[。！？!?\n]/)).filter((value) => PAST_FACT_PROSE.test(value)),
   ];
-  const found: string[] = [];
-  for (const sentence of texts.flatMap((value) => value.split(/[。！？!?\n]/))) {
-    const links = [...sentence.matchAll(CAUSAL_LINK)];
-    if (links.length === 0) continue;
-    if (NEGATED.test(sentence) && !SPECULATION.test(sentence)) continue;
-    const supported = links.every((link, index) => {
-      const effect = sentence.slice(link.index + link[0].length, index + 1 < links.length ? links[index + 1].index : sentence.length);
-      // 「前夜の米国株高を受け、日本株の反応を見る」 is a plan to observe, not a causal
-      // assertion that Japanese stocks rose. Facts in the cause still pass through metric/date guards.
-      const watchEffect = effect.trim().replace(/^、/u, "");
-      if ((/^(?:を受け、|を受けて)$/u.test(link[0]) && PURE_REACTION_WATCH.test(watchEffect)) ||
-          (link[0] === "を受けた" && PURE_RESULT_QUESTION.test(watchEffect))) return true;
-      // A market move needs a causal claim whose news is about a market; anything else must be what a
-      // news item itself says, whatever the claim type.
-      if (!isMarketEffect(effect, sentence.slice(0, link.index), input)) return newsStatesRelation(sentence, link.index, link[0], effect, input);
-      const parts = causeParts(sentence, link.index, link[0]);
-      return parts.length > 0 &&
-        parts.every((part) => causalNews.some((text) => NEWS_ABOUT_MARKET.test(text) && causeSupported(part, text)));
-    });
-    if (supported) continue;
-    const trimmed = sentence.trim();
-    found.push(Array.from(trimmed).length > 40 ? `${Array.from(trimmed).slice(0, 40).join("")}…` : trimmed);
-  }
-  return found;
+  return texts.flatMap((value) => value.split(/[。！？!?\n]/));
+}
+
+const shortQuote = (sentence: string) => {
+  const trimmed = sentence.trim();
+  return Array.from(trimmed).length > 40 ? `${Array.from(trimmed).slice(0, 40).join("")}…` : trimmed;
+};
+
+/**
+ * Sentences that ASSERT a reason the input does not support. Each causal link is checked on its own cause,
+ * and a reason for a market / index move needs a confirmed causal claim that cites market news.
+ * A reason offered only as a possibility is not here (speculativeCausalSentences): since 2026-10-07 it is advisory.
+ */
+export function unsupportedCausalSentences(analysis: GeneratedAnalysis, input: AnalysisInput): string[] {
+  const causalNews = causalNewsOf(analysis.claims, input);
+  return causalSentences(analysis).filter((sentence) => causalVerdict(sentence, causalNews, input) === "assertive").map(shortQuote);
+}
+
+/** Sentences that offer an unsupported reason as a possibility only: recorded, never a reason to withhold. */
+export function speculativeCausalSentences(analysis: GeneratedAnalysis, input: AnalysisInput): string[] {
+  const causalNews = causalNewsOf(analysis.claims, input);
+  return causalSentences(analysis).filter((sentence) => causalVerdict(sentence, causalNews, input) === "speculative").map(shortQuote);
 }
 
 export function analysisTexts(analysis: GeneratedAnalysis): string[] {
@@ -633,7 +687,27 @@ export function localAnalysisIssues(analysis: GeneratedAnalysis, input: Analysis
   return localAnalysisCheck(analysis, input).hard;
 }
 
-export function localAnalysisCheck(analysis: GeneratedAnalysis, input: AnalysisInput): LocalCheck {
+/** Numbers in a text that are not in the input (small counts without a unit are prose, not values). */
+function numbersNotInInput(value: string, allowed: Set<string>): string[] {
+  const found: string[] = [];
+  const normalized = toHalfWidth(value);
+  for (const match of normalized.matchAll(/\d+(?:,\d{3})*(?:\.\d+)?/g)) {
+    const token = match[0].replace(/,/g, "").replace(/^0+(?=\d)/, "");
+    if (allowed.has(token)) continue;
+    const rest = normalized.slice((match.index ?? 0) + match[0].length);
+    if (/^\d$|^10$/.test(token) && !UNIT_AFTER.test(rest)) continue;
+    found.push(match[0]);
+  }
+  return found;
+}
+
+/**
+ * `delivery: false` (default) checks a model's generation against the generation contract (exactly three points, a
+ * closing, at least one claim): an issue there is a reason to regenerate when the call budget allows.
+ * `delivery: true` checks what will actually be delivered after unit removal (unit_sanitizer): the same objective
+ * guards, but fewer points, an empty closing or no claim are not errors. A delivered packet must pass this mode.
+ */
+export function localAnalysisCheck(analysis: GeneratedAnalysis, input: AnalysisInput, options: { delivery?: boolean } = {}): LocalCheck {
   const issues: string[] = [];
   const warnings: string[] = [];
   const allowed = allowedNumbers(input);
@@ -641,14 +715,7 @@ export function localAnalysisCheck(analysis: GeneratedAnalysis, input: AnalysisI
   const joined = texts.join("\n");
 
   for (const value of texts) {
-    const normalized = toHalfWidth(value);
-    for (const match of normalized.matchAll(/\d+(?:,\d{3})*(?:\.\d+)?/g)) {
-      const token = match[0].replace(/,/g, "").replace(/^0+(?=\d)/, "");
-      if (allowed.has(token)) continue;
-      const rest = normalized.slice((match.index ?? 0) + match[0].length);
-      if (/^\d$|^10$/.test(token) && !UNIT_AFTER.test(rest)) continue;
-      issues.push(`入力に無い数値: ${match[0]}`);
-    }
+    for (const number of numbersNotInInput(value, allowed)) issues.push(`入力に無い数値: ${number}`);
   }
   if (/https?:\/\/|www\./i.test(joined)) issues.push("URLを含む");
   if (/[#＃]\S/.test(joined)) issues.push("ハッシュタグを含む");
@@ -663,6 +730,8 @@ export function localAnalysisCheck(analysis: GeneratedAnalysis, input: AnalysisI
   if (causal.length > 0) {
     issues.push(`根拠の無い因果の断定（ニュースに理由の記載なし）: ${causal.slice(0, 2).map((value) => `「${value}」`).join(" ")}`);
   }
+  const speculative = speculativeCausalSentences(analysis, input);
+  if (speculative.length > 0) warnings.push(`SPECULATIVE_CAUSALITY:${speculative.length}`);
   const leaked = texts.map((value) => value.match(INTERNAL_FIELD)?.[0]).filter(Boolean);
   if (leaked.length > 0) issues.push(`本文に内部の項目名や識別子: ${[...new Set(leaked)].slice(0, 3).join(",")}`);
   if (input.sessionsDiffer && SAME_DAY.test(joined)) {
@@ -695,7 +764,11 @@ export function localAnalysisCheck(analysis: GeneratedAnalysis, input: AnalysisI
   warnings.push(...pointsEditorialWarnings(analysis.x_post.points_ja));
   for (const word of MULTI_DAY_WORDS) if (joined.includes(word)) issues.push(`複数日を前提にする語: ${word}`);
 
-  if (analysis.claims.length < 1) issues.push("claims が空");
+  if (analysis.claims.length < 1) (options.delivery ? warnings : issues).push("claims が空");
+  // The generation contract asks for exactly three points; a delivered packet may carry fewer after unit removal.
+  // (More than three is broken output in either mode: sharedXPostIssues below.)
+  if (!options.delivery && analysis.x_post.points_ja.length < 3) issues.push("X_POST_POINTS_INVALID");
+  if (!options.delivery && !analysis.x_post.closing_ja.trim()) issues.push("X_POST_SECTION_EMPTY");
   const claimIds = new Set(analysis.claims.map((claim) => claim.claim_id));
   for (const claim of analysis.claims) {
     const unknown = claim.evidence_refs.filter((ref) => !input.allowedRefs.has(ref));
@@ -726,9 +799,95 @@ export function localAnalysisCheck(analysis: GeneratedAnalysis, input: AnalysisI
   const draft = assemblePacket(input, analysis, { generatedAt: new Date(0), attempts: 1 });
   const post = formatSharedXPost(draft);
   issues.push(...sharedXPostIssues(draft, post));
+  if (options.delivery && draft.x_post.points_ja.length < 3) warnings.push(`X_POINTS_REDUCED:${draft.x_post.points_ja.length}`);
   warnings.push(...sharedXPostWarnings(draft, post));
   if (draft.app_story) warnings.push(...appStoryWarnings(buildAppMarketStory(draft)));
   return { hard: [...new Set(issues)], warnings: [...new Set(warnings)] };
+}
+
+/** Wording of the code-added disclaimer (REPORT_DISCLAIMER_JA) or of 「AIが独自調査」, which the prompt rules out. */
+const MODEL_DISCLAIMER = /AIによる分析|AIが独自(?:に)?調査|投資判断は(?:ご自身|ご自分|自己責任)/u;
+
+/** Fixed codes for the metric guard's findings (the guard's own text stays in `detail`). */
+function metricCode(issue: string): string {
+  if (issue.startsWith("日付と指標の不一致")) return "WRONG_DATE";
+  if (issue.startsWith("指標と数値の不一致")) return "WRONG_VALUE";
+  if (issue.startsWith("方向の逆転")) return "WRONG_DIRECTION";
+  if (issue.startsWith("古い値")) return "STALE_AS_CURRENT";
+  return "METRIC_FACT";
+}
+
+/**
+ * The objective checks of localAnalysisCheck, applied to one unit (a sentence, a point, a claim, a list item).
+ * `keptClaims` are the claims that survived their own checks: they are the only support a causal sentence can cite.
+ * Deterministic repairs: a chart emoji pointing the wrong way is dropped; a bare 「TOPIX」 stating the 1306 ETF's own
+ * value is renamed 「TOPIX連動ETF（1306）」. A repair is kept only if the repaired text passes every check.
+ */
+export function unitChecker(input: AnalysisInput, keptClaims: readonly Claim[]): UnitChecker {
+  const allowed = allowedNumbers(input);
+  const causalNews = causalNewsOf(keptClaims, input);
+  const hasNews = input.news.length > 0;
+  const proxy = input.metricFacts.find((fact) => fact.key === "topix_proxy_1306");
+  const proxyTokens = new Set(proxy ? [...numericTokens(proxy.valueDisplay), ...numericTokens(proxy.changeDisplay ?? "")] : []);
+  const findings = (text: string, kind: UnitKind): UnitCheck => {
+    const remove: UnitFinding[] = [];
+    const advisory: UnitFinding[] = [];
+    const add = (code: string, detail: string) => remove.push({ code, detail });
+    for (const number of numbersNotInInput(text, allowed)) add("VALUE_NOT_IN_INPUT", `入力に無い数値: ${number}`);
+    if (/https?:\/\/|www\./i.test(text)) add("URL", "URLを含む");
+    if (/[#＃]\S/.test(text)) add("HASHTAG", "ハッシュタグを含む");
+    if (/<[a-zA-Z/!][^>]*>/.test(text)) add("HTML", "HTMLを含む");
+    if (/【(?:重大)?速報】/u.test(text)) add("BREAKING_LABEL", "速報ラベルを含む");
+    if (ADVICE.test(text)) add("ADVICE", "売買推奨・断定表現を含む");
+    // The disclaimer is added once by code; a model-written copy would repeat it.
+    if (MODEL_DISCLAIMER.test(text)) add("MODEL_DISCLAIMER", "注意書き（AIによる分析・投資判断）を本文に書いている");
+    for (const mislabel of topixMislabels([text])) add("TOPIX_MISLABEL", `TOPIX連動ETF（1306）をTOPIXと表記: 「${mislabel}」`);
+    const leaked = text.match(INTERNAL_FIELD)?.[0];
+    if (leaked) add("INTERNAL_FIELD", `本文に内部の項目名や識別子: ${leaked}`);
+    if (input.sessionsDiffer && SAME_DAY.test(text)) add("SAME_DAY", "日付の違う東京市場と米国市場を「同じ日」と表現");
+    const guardTexts = kind === "factual" ? { factual: [text], forward: [] } : { factual: [], forward: [text] };
+    for (const issue of metricFactIssues(guardTexts, input)) add(metricCode(issue), issue);
+    for (const issue of emojiDirectionIssues([text], input)) add("EMOJI_DIRECTION", issue);
+    for (const issue of falseAbsenceClaims([text], hasNews)) add("FALSE_ABSENCE", issue);
+    for (const word of MULTI_DAY_WORDS) if (text.includes(word)) add("MULTI_DAY_WORD", `複数日を前提にする語: ${word}`);
+    for (const sentence of text.split(/[。！？!?\n]/)) {
+      if (kind === "forward" && !PAST_FACT_PROSE.test(sentence)) continue;
+      const verdict = causalVerdict(sentence, causalNews, input);
+      if (verdict === "assertive") add("UNSUPPORTED_CAUSALITY", `根拠の無い因果の断定: 「${shortQuote(sentence)}」`);
+      else if (verdict === "speculative") advisory.push({ code: "SPECULATIVE_CAUSALITY", detail: `推測の因果: 「${shortQuote(sentence)}」` });
+    }
+    return { remove, advisory };
+  };
+  return (text, kind) => {
+    const first = findings(text, kind);
+    if (first.remove.length === 0) return first;
+    const codes = new Set(first.remove.map((finding) => finding.code));
+    let repaired: string | null = null;
+    if (codes.size === 1 && codes.has("EMOJI_DIRECTION")) repaired = text.replace(/[📈📉]\uFE0F?/gu, "");
+    if (codes.size === 1 && codes.has("TOPIX_MISLABEL") && proxyTokens.size > 0 && numericTokens(text).some((token) => proxyTokens.has(token))) {
+      // Only the bare word is renamed; the rest of the sentence keeps its own characters.
+      repaired = text.replace(/(?:TOPIX|ＴＯＰＩＸ)(?![連(（]|\s*(?:指数)?\s*(?:そのもの|自体)?\s*(?:では|じゃな|とは|と同))/gu, "TOPIX連動ETF（1306）");
+    }
+    if (repaired !== null && repaired.trim() && findings(repaired, kind).remove.length === 0) return { ...first, neutralized: repaired };
+    return first;
+  };
+}
+
+const FALLBACK_TOKYO_KEYS = ["nikkei225", "topix_proxy_1306"];
+const FALLBACK_US_KEYS = ["dow", "sp500", "nasdaq_composite"];
+
+/**
+ * Code-rendered headline and summary from the input alone, used only when the model's own were removed as wrong.
+ * Every value sits next to its own session date (the same rendering as the app's fact lines).
+ */
+export function codeFallbacks(input: AnalysisInput): Fallbacks {
+  const tokyo = sessionLines(input.majorMoves, FALLBACK_TOKYO_KEYS, "東京市場");
+  const us = sessionLines(input.majorMoves, FALLBACK_US_KEYS, "米国市場");
+  const lead = input.reportType === "close" ? [...tokyo, ...us] : [...us, ...tokyo];
+  const headline = (input.reportType === "close"
+    ? sessionLines(input.majorMoves, ["nikkei225"], "東京市場")[0]
+    : sessionLines(input.majorMoves, ["sp500"], "米国市場")[0]) ?? lead[0] ?? "市場の値動き";
+  return { headline, summary: lead.length > 0 ? `${lead.join("。")}。` : headline };
 }
 
 /** A theme needs sector evidence: a news item or the semiconductor index. */
@@ -891,7 +1050,7 @@ export function pointsEditorialWarnings(points: string[]): string[] {
 export function assemblePacket(
   input: AnalysisInput,
   analysis: GeneratedAnalysis,
-  meta: { generatedAt: Date; attempts: number; warnings?: string[] },
+  meta: { generatedAt: Date; attempts: number; warnings?: string[]; factStatus?: MarketReportFactStatus; removedUnits?: string[] },
 ): MarketReportPacket {
   // Broad-market items first, whatever order the model listed them in.
   const keyNews: KeyNews[] = orderKeyNews(analysis.key_news
@@ -929,9 +1088,10 @@ export function assemblePacket(
     session_views: input.sessionViews,
     fact: {
       local_issues: [],
-      ai_status: "passed",
+      ai_status: meta.factStatus ?? "passed",
       generation_attempts: meta.attempts,
       quality_warnings: meta.warnings ?? [],
+      ...(meta.removedUnits && meta.removedUnits.length > 0 ? { removed_units: meta.removedUnits } : {}),
     },
   };
 }
@@ -985,8 +1145,15 @@ export type GenerationRecord = {
   factPassed: boolean | null;
   factIssues: string[];
   selectedForDelivery: boolean;
-  /** Why a different generation than the newest was delivered. */
+  /**
+   * Why a different generation than the newest was delivered (rewrite_*), and how the delivered one was degraded:
+   * sanitized_units (wrong units removed), fact_advisory (Fact findings recorded, not withheld), fact_not_run.
+   */
   fallbackReason: string | null;
+  /** Units removed or neutralized from this generation before the delivery check (unit_sanitizer). */
+  removedUnits: RemovedUnit[];
+  /** Why the sanitized generation could not be a delivery candidate (incoherent / delivery check). Empty when it could. */
+  deliveryIssues: string[];
   /** Fixed error code of a failed request (never a response body). */
   errorCode: string | null;
   /** Hash of the exact request this generation sent (instructions including a retry's issue note, plus the input). */
@@ -1015,6 +1182,10 @@ export type GenerationTrace = {
   rewriteRequestFailed?: boolean;
   /** Every generation of this invocation, in order (the same array a caller may pass in as the sink). */
   records: GenerationRecord[];
+  /** Fixed codes of the units removed from the delivered packet. */
+  removedUnits: string[];
+  /** Fact status of the delivered packet ("" when nothing was delivered). */
+  factStatus: MarketReportFactStatus | "";
 };
 
 type Usage = { calls: number; inputTokens: number; outputTokens: number; costUsd: number; trace: GenerationTrace };
@@ -1043,8 +1214,8 @@ export const APP_STORY_REWRITE_BELOW_CHARS = 700;
  */
 export const X_POST_REWRITE_BELOW_CHARS = 300;
 
-/** Warnings that are recorded but never worth a generation. */
-const COSMETIC_WARNING = /^X_POST_EMOJI_COUNT|LONGER_THAN_TARGET|が長すぎる$|^X_POST_NEWS_OMITTED$|^X_POINTS_/;
+/** Warnings that are recorded but never worth a generation (a removed unit is already a delivered degradation). */
+const COSMETIC_WARNING = /^X_POST_EMOJI_COUNT|LONGER_THAN_TARGET|が長すぎる$|^X_POST_NEWS_OMITTED$|^X_POINTS_|^SPECULATIVE_CAUSALITY|^UNIT_|^FACT_/;
 
 /**
  * Worth one rewrite: everything that is not cosmetic, and an app story or an X body only when it is
@@ -1083,6 +1254,39 @@ function requestErrorCode(error: unknown): string {
   return /^[A-Za-z0-9_:.-]+$/.test(value) ? value.slice(0, 120) : "UNEXPECTED_ERROR";
 }
 
+/** At most two model calls per generation (generate + Fact): the ceiling every path below stays within. */
+export const MAX_MODEL_CALLS = MAX_GENERATIONS * 2;
+
+/** One generation, sanitized and delivery-checked: what may be delivered. */
+type Candidate = {
+  attempt: number;
+  analysis: GeneratedAnalysis;
+  removed: RemovedUnit[];
+  /** Delivery-mode quality warnings of the sanitized analysis. */
+  warnings: string[];
+  fact: "passed" | "failed" | "not_run";
+  factIssues: string[];
+  record: GenerationRecord;
+};
+
+const FACT_RANK: Record<Candidate["fact"], number> = { passed: 0, not_run: 1, failed: 2 };
+
+/** Fact passed over not checked over Fact findings; then fewer removed units; then fewer warnings; then the later one. */
+function bestCandidate(candidates: readonly Candidate[]): Candidate {
+  return [...candidates].sort((a, b) =>
+    FACT_RANK[a.fact] - FACT_RANK[b.fact] || a.removed.length - b.removed.length ||
+    a.warnings.length - b.warnings.length || b.attempt - a.attempt
+  )[0];
+}
+
+/**
+ * Delivery first (2026-10-07). A generation with an objective error (wrong number, sign, date, a stale value as
+ * current, 1306 as TOPIX, an unknown ref, an asserted unsupported cause) is regenerated once when the budget allows;
+ * whatever is delivered has every wrong unit removed or neutralized (unit_sanitizer) and passes the delivery check.
+ * A Fact finding regenerates once and is then advisory: the packet is delivered and the findings are recorded.
+ * The cycle fails only when no generation leaves a coherent, delivery-checked report.
+ * Calls never exceed MAX_MODEL_CALLS; transport retries are counted elsewhere (transport_retry.ts).
+ */
 export async function generateSharedAnalysis(
   input: AnalysisInput,
   request: Requester,
@@ -1097,7 +1301,10 @@ export async function generateSharedAnalysis(
   let costUsd = 0;
   let issues: string[] = [];
   let lastError = "ANALYSIS_NOT_ATTEMPTED";
-  const trace: GenerationTrace = { generations: 0, hardRejections: [], rejectionReasons: [], qualityRewrite: false, deliveredGeneration: 0, warnings: [], records: recordSink };
+  const trace: GenerationTrace = {
+    generations: 0, hardRejections: [], rejectionReasons: [], qualityRewrite: false, deliveredGeneration: 0, warnings: [],
+    records: recordSink, removedUnits: [], factStatus: "",
+  };
   const usage = (step: StepResult, role: typeof MARKET_REPORT_GENERATE_ROLE | typeof MARKET_REPORT_FACT_ROLE) => {
     calls += 1;
     inputTokens += step.inputTokens;
@@ -1109,7 +1316,7 @@ export async function generateSharedAnalysis(
     const record: GenerationRecord = {
       generationIndex, stage: "request_failed", hardRejection: null, candidate: null, localPassed: null, localIssues: [],
       localWarnings: [], factRan: false, factPassed: null, factIssues: [], selectedForDelivery: false, fallbackReason: null,
-      errorCode: null, requestHash: null, calls, inputTokens, outputTokens, costUsd,
+      removedUnits: [], deliveryIssues: [], errorCode: null, requestHash: null, calls, inputTokens, outputTokens, costUsd,
     };
     recordSink.push(record);
     return record;
@@ -1120,19 +1327,47 @@ export async function generateSharedAnalysis(
     record.outputTokens = outputTokens;
     record.costUsd = costUsd;
   };
-  const deliver = (analysis: GeneratedAnalysis, attempt: number, warnings: string[], fallbackReason: string | null = null) => {
-    trace.deliveredGeneration = attempt;
-    trace.warnings = warnings;
-    const delivered = recordSink.find((record) => record.generationIndex === attempt);
-    if (delivered) {
-      delivered.stage = "delivered";
-      delivered.selectedForDelivery = true;
-      delivered.fallbackReason = fallbackReason;
+  const fallbacks = codeFallbacks(input);
+  /** Remove the wrong units, then check what would be delivered. Null when nothing deliverable is left. */
+  const prepare = (analysis: GeneratedAnalysis, attempt: number, record: GenerationRecord): Candidate | null => {
+    const sanitized: SanitizeResult = sanitizeAnalysis(analysis, input, (kept) => unitChecker(input, kept), fallbacks);
+    record.removedUnits = sanitized.removed;
+    // The trace keeps where and why (the guard's text); the packet keeps the fixed codes only.
+    const codes = removalCodes(sanitized.removed);
+    record.localWarnings.push(
+      ...sanitized.removed.map((unit, index) => `${codes[index]} ${unit.detail}`),
+      ...sanitized.advisories.map((advisory) => `ADVISORY:${advisory}`),
+    );
+    if (!sanitized.coherent) {
+      record.deliveryIssues = [`INCOHERENT: ${sanitized.incoherentReason}`];
+      return null;
     }
-    return { ok: true as const, packet: assemblePacket(input, analysis, { generatedAt: now(), attempts: attempt, warnings }), ...result() };
+    const delivery = localAnalysisCheck(sanitized.analysis, input, { delivery: true });
+    if (delivery.hard.length > 0) {
+      record.deliveryIssues = delivery.hard;
+      return null;
+    }
+    return { attempt, analysis: sanitized.analysis, removed: sanitized.removed, warnings: delivery.warnings, fact: "not_run", factIssues: [], record };
   };
-  // A draft that passed every hard check and the Fact check: never thrown away for quality reasons.
-  let safe: { analysis: GeneratedAnalysis; attempt: number; warnings: string[] } | null = null;
+  const runFact = async (candidate: Candidate): Promise<boolean> => {
+    const record = candidate.record;
+    record.factRan = true;
+    const verdict = await request("fact", factRequestBody(input, candidate.analysis));
+    usage(verdict, MARKET_REPORT_FACT_ROLE);
+    settle(record);
+    const fact = verdict.payload as { passed?: unknown; issues?: unknown };
+    record.factPassed = fact?.passed === true;
+    // The trace keeps every finding the Fact check returned; only the decision and retry note keep the cap of 10.
+    record.factIssues = Array.isArray(fact?.issues) ? fact.issues.filter((issue): issue is string => typeof issue === "string") : [];
+    candidate.fact = record.factPassed ? "passed" : "failed";
+    candidate.factIssues = record.factIssues;
+    return record.factPassed;
+  };
+
+  const candidates: Candidate[] = [];
+  // A Fact-passed generation held while a quality rewrite runs: never thrown away for quality reasons.
+  let safe: Candidate | null = null;
+  let requestError: unknown = null;
 
   for (let attempt = 1; attempt <= MAX_GENERATIONS; attempt += 1) {
     let generated: StepResult;
@@ -1145,10 +1380,12 @@ export async function generateSharedAnalysis(
       generated = await request("generate", body);
     } catch (error) {
       record.errorCode = requestErrorCode(error);
-      if (!safe) throw error;
-      trace.rewriteRequestFailed = true;
-      record.fallbackReason = "rewrite_request_failed";
-      return deliver(safe.analysis, safe.attempt, safe.warnings, "rewrite_request_failed");
+      requestError = error;
+      if (safe) {
+        trace.rewriteRequestFailed = true;
+        record.fallbackReason = "rewrite_request_failed";
+      }
+      break;
     }
     usage(generated, MARKET_REPORT_GENERATE_ROLE);
     record.candidate = generated.payload ?? null;
@@ -1167,35 +1404,32 @@ export async function generateSharedAnalysis(
     const local = localAnalysisCheck(analysis, input);
     record.localPassed = local.hard.length === 0;
     record.localIssues = local.hard;
-    record.localWarnings = local.warnings;
-    if (local.hard.length > 0) {
-      issues = local.hard;
+    record.localWarnings = [...local.warnings];
+    const candidate = prepare(analysis, attempt, record);
+    if (candidate) candidates.push(candidate);
+    if (local.hard.length > 0 || !candidate) {
+      // An objective error: regenerate when the budget allows (no Fact call on a draft known to be wrong).
+      issues = local.hard.length > 0 ? local.hard : record.deliveryIssues;
       lastError = "ANALYSIS_LOCAL_CHECK_FAILED";
       trace.hardRejections.push("local");
-      trace.rejectionReasons.push(rejectionCodes(local.hard));
+      trace.rejectionReasons.push(rejectionCodes(issues));
       record.stage = "local";
       record.hardRejection = "local";
       continue;
     }
-    let verdict: StepResult;
-    record.factRan = true;
     try {
-      verdict = await request("fact", factRequestBody(input, analysis));
+      await runFact(candidate);
     } catch (error) {
       record.errorCode = requestErrorCode(error);
-      if (!safe) throw error;
-      trace.rewriteRequestFailed = true;
-      record.fallbackReason = "rewrite_request_failed";
-      return deliver(safe.analysis, safe.attempt, safe.warnings, "rewrite_request_failed");
+      requestError = error;
+      if (safe) {
+        trace.rewriteRequestFailed = true;
+        record.fallbackReason = "rewrite_request_failed";
+      }
+      break;
     }
-    usage(verdict, MARKET_REPORT_FACT_ROLE);
-    settle(record);
-    const fact = verdict.payload as { passed?: unknown; issues?: unknown };
-    record.factPassed = fact?.passed === true;
-    // The trace keeps every finding the Fact check returned; only the decision and retry note keep the cap of 10.
-    record.factIssues = Array.isArray(fact?.issues) ? fact.issues.filter((issue): issue is string => typeof issue === "string") : [];
-    if (fact?.passed !== true) {
-      issues = record.factIssues.slice(0, 10);
+    if (candidate.fact !== "passed") {
+      issues = candidate.factIssues.slice(0, 10);
       lastError = "ANALYSIS_FACT_FAILED";
       trace.hardRejections.push("fact");
       trace.rejectionReasons.push(`${rejectionCodes(issues)}:${issues.length}`);
@@ -1203,25 +1437,57 @@ export async function generateSharedAnalysis(
       record.hardRejection = "fact";
       continue;
     }
-    if (safe) {
-      // The quality rewrite is also hard-fact safe: keep whichever has fewer warnings (the rewrite on a tie).
-      if (local.warnings.length <= safe.warnings.length) return deliver(analysis, attempt, local.warnings);
-      record.fallbackReason = "rewrite_not_better";
-      return deliver(safe.analysis, safe.attempt, safe.warnings, "rewrite_not_better");
-    }
-    const hints = qualityRewriteHints(local.warnings);
-    if (hints.length === 0 || attempt === MAX_GENERATIONS) return deliver(analysis, attempt, local.warnings);
-    safe = { analysis, attempt, warnings: local.warnings };
+    if (safe) break;
+    const hints = qualityRewriteHints(candidate.warnings);
+    if (hints.length === 0 || attempt === MAX_GENERATIONS) break;
+    safe = candidate;
     record.stage = "safe_candidate";
     trace.qualityRewrite = true;
     issues = hints;
   }
-  // The rewrite failed a hard check: the safe original is delivered instead of suppressing the cycle.
-  if (safe) {
-    const rejected = recordSink.find((record) => record.generationIndex !== safe!.attempt && record.hardRejection);
-    return deliver(safe.analysis, safe.attempt, safe.warnings, `rewrite_rejected_${rejected?.hardRejection ?? "unknown"}`);
+
+  if (candidates.length === 0) {
+    if (requestError) throw requestError;
+    return { ok: false, error: lastError, issues, ...result() };
   }
-  return { ok: false, error: lastError, issues, ...result() };
+  let best = bestCandidate(candidates);
+  // A generation chosen without its own Fact verdict gets one Fact call when the ceiling allows it (never after a
+  // request failure). Once it has a verdict the choice is among checked generations only: an unchecked one is not
+  // preferred over one whose findings are known.
+  if (best.fact === "not_run" && !requestError && calls < MAX_MODEL_CALLS) {
+    const checked = await runFact(best).then(() => true, (error) => {
+      best.record.errorCode = requestErrorCode(error);
+      return false;
+    });
+    if (checked) best = bestCandidate(candidates.filter((candidate) => candidate.fact !== "not_run"));
+  }
+
+  const reasons: string[] = [];
+  if (safe && best === safe) {
+    const rewrite = recordSink.find((record) => record.generationIndex > safe!.attempt);
+    reasons.push(trace.rewriteRequestFailed ? "rewrite_request_failed" : rewrite?.hardRejection
+      ? `rewrite_rejected_${rewrite.hardRejection}`
+      : "rewrite_not_better");
+  }
+  if (best.removed.length > 0) reasons.push("sanitized_units");
+  if (best.fact === "failed") reasons.push("fact_advisory");
+  if (best.fact === "not_run") reasons.push("fact_not_run");
+  const factStatus: MarketReportFactStatus = best.fact === "passed" ? "passed" : best.fact === "failed" ? "advisory" : "not_run";
+  const removedUnits = removalCodes(best.removed);
+  const warnings = [
+    ...best.warnings,
+    ...(best.fact === "failed" ? [`FACT_ADVISORY:${best.factIssues.length}`] : []),
+    ...(best.fact === "not_run" ? ["FACT_NOT_RUN"] : []),
+  ];
+  trace.deliveredGeneration = best.attempt;
+  trace.warnings = warnings;
+  trace.removedUnits = removedUnits;
+  trace.factStatus = factStatus;
+  best.record.stage = "delivered";
+  best.record.selectedForDelivery = true;
+  best.record.fallbackReason = reasons.length > 0 ? reasons.join("+") : null;
+  const packet = assemblePacket(input, best.analysis, { generatedAt: now(), attempts: best.attempt, warnings, factStatus, removedUnits });
+  return { ok: true, packet, ...result() };
 }
 
 /** Flat, non-sensitive diagnostics: content regeneration is reported separately from transport retry. */
@@ -1235,6 +1501,9 @@ export function generationDiagnostics(trace: GenerationTrace): Record<string, st
     quality_rewrite_request_failed: String(trace.rewriteRequestFailed ?? false),
     delivered_generation: String(trace.deliveredGeneration),
     quality_warnings: trace.warnings.join(" / ").slice(0, 600),
+    fact_status: trace.factStatus,
+    removed_units: trace.removedUnits.join(",").slice(0, 600),
+    removed_unit_count: String(trace.removedUnits.length),
   };
 }
 
