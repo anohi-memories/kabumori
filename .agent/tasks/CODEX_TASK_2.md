@@ -3,8 +3,13 @@
 - task_id: kabumori-pr101-debug-trace-security-review-20261007
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
+- h2_review_result: CHANGES REQUIRED
+- h2_reviewed_head: 2469e8a8be0125805551ba3e353c4ef6058b0150
+- h2_review_completed_at: 2026-10-07 JST
+- h2_review_blockers: F1 effective ACL/owner drift; F2 secret-shaped strings persist; F3 full body/Fact evidence truncation
+- h2_report_commit: abbae8c2efc318bf2195398ab9c04007ee8f1545
 - priority: high
 - recommended_model: Sol（中）
 - type: focused migration / RLS / append-only diagnostics / non-blocking persistence review
