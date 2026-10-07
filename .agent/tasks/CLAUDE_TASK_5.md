@@ -3,12 +3,90 @@
 - task_id: `common-account-v1-phase2-production-migration-apply-20261007`
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: user
+- status: review_required
+- next_owner: chatgpt
 - approval: the user approved the production apply directly in the G5 chat on 2026-10-07 (「承認」), in reply to the READY_FOR_APPROVAL preflight report below.
-- production_mutation_window: **ACTIVE** — 2026-10-07 13:42 JST. G5 owns the production DB write for `20261006230000_common_account_service_start_intent` only. No other slot may open a production DB/Auth/permission window until this is CLOSED.
+- production_mutation_window: **CLOSED** — 2026-10-07 13:52 JST (ACTIVE 13:42〜). G5 applied exactly `20261006230000` once (Stage A COMMIT 13:47:09, history row 13:47:28) and finished the read-only read-backs (ALL PASS); G5 performs no further production write.
 - scope: exactly `docs/common-account/phase2-production-apply.md` (PR #104 head `36bea0ae`): read-only `run.sh before` -> Stage A (the single migration file, psql, lock_timeout 5s) -> Stage B read-back -> Stage C one `(version, name)` history row -> final read-back. Nothing else: no backfill, enforcement, deletion, deploy, EAS, Auth/Storage/OAuth/Vault/Cron change or X action.
 - operator: the user runs `bash /Users/yuya/Developer/kabumori-g5-p2prod/.g5-p2-apply/operator.sh apply` (untracked; pins checkout, migration and gate SHA-256; asks the DB password once, never stored or logged). Dry-run on local PostgreSQL: success path ALL PASS, rerun refused at preflight, lock timeout rolled back with nothing committed.
+
+## Report
+
+### Phase 2 production apply — 2026-10-07（APPLIED_PASS）
+
+- task_id: common-account-v1-phase2-production-migration-apply-20261007
+- result: **APPLIED_PASS**。`20261006230000_common_account_service_start_intent` を本番に適用し、すべての読み返しで一致した。
+- 承認：ユーザーが G5 の chat で「承認」した（READY_FOR_APPROVAL の Report への返事）。
+- 実行者：ユーザー。自分のターミナルで `.g5-p2-apply/operator.sh apply` を 1 回だけ実行し、DB の password を 1 回入力した。password は、どこにも保存も記録もしていない（log にも無いことを確認）。
+- 固定したもの：
+  - checkout：PR #104 の head `36bea0ae`
+  - migration の SHA-256：`2c736e5a…`（H1 がレビューした `ba35b642` と byte 一致）
+  - 確認セット：`run.sh` / `check.py` / `expected.json` / `sql/01`〜`05` の SHA-256
+
+#### 実行の記録（JST）
+
+| 時刻 | 段階 | 結果 |
+|---|---|---|
+| 13:42 | window を開く | ACTIVE。他スロットの ACTIVE は 0（再確認済み） |
+| 13:46:34 | 適用前の確認（`run.sh before`、読み取りのみ） | ALL PASS（24 項目）。基準値を保存。関数・テーブルの fingerprint は 13:27 の値と同じ |
+| 13:47:09 | **Stage A**：migration ファイルを 1 回だけ適用（psql、lock_timeout 5s） | `BEGIN → DO → CREATE FUNCTION ×6 → REVOKE ×6 → GRANT ×2 → DO → COMMIT`、exit 0 |
+| 13:47:11 | Stage B：読み返し（`run.sh after`） | ALL PASS（33 項目） |
+| 13:47:28 | **Stage C**：履歴を 1 行追加 `(version, name)` | `INSERT 0 1` |
+| 13:47:29 | 最後の読み返し（`run.sh after --history`） | ALL PASS（33 項目） |
+| 13:50 | G5 が自分で読み返し（Management API、読み取りのみ） | ALL PASS（33 項目） |
+
+#### 本番の読み返しの結果
+
+- 履歴：`20261006230000` は `common_account_service_start_intent` として記録された。最新の version は `20261006230000`。
+- 触った 8 つの関数（すべて postgres 所有、SECURITY DEFINER、`search_path=""`）：
+
+  | 関数 | 実行できる role | 定義の md5 |
+  |---|---|---|
+  | `public.start_kabumori_service()` | authenticated のみ（変化なし） | `29ee9115…`（変化なし） |
+  | `public.start_x_autopost_service()` | authenticated のみ（変化なし） | `0451f498…`（変化なし） |
+  | `private.account_lifecycle_start_service(uuid,text)` | 誰も無し | `1098afc9…`（新しい定義） |
+  | `public.reactivate_kabumori_service(bigint)` | authenticated のみ | `f74ce9dd…` |
+  | `public.reactivate_x_autopost_service(bigint)` | authenticated のみ | `f9a2454f…` |
+  | `private.account_lifecycle_reactivate_service(uuid,text,bigint)` | 誰も無し | `bcbb1f79…` |
+  | `private.account_lifecycle_service_refusal(text)` | 誰も無し | `e1b6deea…` |
+  | `private.account_lifecycle_active_answer(uuid,text,boolean)` | 誰も無し | `54426cba…` |
+
+  - どれもローカルで計算した期待値と一致した。同名の重複定義も無い。
+- それ以外は変わっていない：
+  - public / private の関数 154 個（fingerprint `dafb5703…`）
+  - テーブル・列・policy・trigger の fingerprint
+  - データ件数：共通アカウント 5（active）、entitlement は kabumori 2 / x_autopost 1（active / legacy_backfill）、手続き 0、設定 shadow / not_started / 1、profiles 2
+- 動作確認（smoke、書き込みなし）：
+  - refusal は `deleting` / `suspended` / その他で、それぞれ正しい理由を返した。
+  - 存在しない人の active の応答は `{status:'active', service:'kabumori', started:false, shared_account:false}`。
+
+#### 書き込みの回数と、それ以外の変更
+
+- 本番への書き込み：G5 の **2 回だけ**。
+  - Stage A：migration の 1 transaction
+  - Stage C：履歴の 1 行
+- 行っていないもの：backfill、enforcement、削除、deploy、EAS、Auth / Storage / OAuth / Vault / Cron、X。
+
+#### 観察（G5 の作業ではないもの）
+
+- 13:27 から 13:46 の間に、本番の履歴に `20260929090000`（`news_discovery_observer`）の行が追加された。
+  - G5 は追加していない。誰が追加したかは不明（他スロット、またはユーザーの手作業の可能性）。memory には、以前からこの行が欠けていたと記録がある。
+  - 関数とテーブルの fingerprint は、13:27 と 13:46 で同じ。したがって schema の変更は伴っておらず、今回の適用への影響は無い。
+  - window を開いた 13:42 との前後関係は分からない。C1 / K5 で、誰が追加したかを確認してほしい。
+
+#### その他
+
+- window：**CLOSED**（下の header）。
+- changed_files：
+  - この Report：`.agent/tasks/CLAUDE_TASK_5.md` のみ。
+  - PR #104 には、手順書の状態を「適用済み」に書き換える 1 行を追加する予定。適用で固定した head とは別の commit になる。
+- remaining_issues：
+  - PR #104（確認セットと手順書）を merge するかは、K5 で判断してほしい。
+  - Phase 1 の rollout runner の `status` は、これから functions の section で不一致を返す。今回 start helper を置き換えて、関数を追加したためで、想定どおり。Phase 1 の確認には、今回の確認セットを使う。
+  - 次に PR81 / PR41 を本番に適用するときは、その gate で基準値を取り直すこと。その後は履歴が時刻順に並ばなくなる。`db push` は使わない。
+- next_recommendation：
+  - Phase 2 のクライアントを含むアプリの build（EAS / TestFlight）に進める状態になった。build は別途承認が必要。
+  - 実機（Simulator / iPhone）で、新しい応答の形での登録を確かめる工程も、別途必要。
 
 ---
 
