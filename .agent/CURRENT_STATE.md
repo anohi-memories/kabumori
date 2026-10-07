@@ -5723,3 +5723,24 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - production mutation/apply/deploy/merge/OpenAI/X/scheduler: 0.
 - no Codex slot was overwritten: H1 currently owns G4 PR #106 rereview and H2 currently owns G2 PR #110 review.
 - next reviewer allocation: first free H1/H2, recommended **Sol（高）**, exact head fixed to `fb4afb21d7ce808de3257bebc8062aed93353dec`. Merge and production rollout remain HOLD until PASS.
+
+
+## Final PR #109 acceptance / source merge — 2026-10-08 JST
+- direct independent Codex review verdict: **PASS / blocking finding none**.
+- exact reviewed head: `fb4afb21d7ce808de3257bebc8062aed93353dec`.
+- accepted review:
+  - B1 dangerous direct/transitive SET ROLE / INHERIT paths rejected; healthy role graph accepted;
+  - B2 canonical table drift fixtures rejected, including index/RLS/CHECK/ACL plus reviewer-added ready/live/FORCE RLS/policy/trigger cases;
+  - B3 unsafe same-metadata lifecycle body and unknown claim body rejected; approved old/new bodies accepted;
+  - adverse rollback leaves catalog/function/table/ACL unchanged;
+  - 74-topic Tier ordering retained, 14d x 10/day = 140/140, 72h/48h violations zero;
+  - AI Lab Premium uses `UNLIMITED_POST_LENGTH`, accepts 281/641 code points and preserves natural short-post behavior;
+  - explicit unlimited mode uses 2000 output-token budget and fails closed on incomplete responses;
+  - POSTONA and Kabumori X behavior unchanged.
+- fresh GitHub pre-merge: PR open/unmerged, exact head unchanged, `mergeable=true`; Netlify success; Vercel failure is build-rate-limit status.
+- PR #109 squash-merged successfully as `d4f693128494d8e05b97563fb82b7db2871818c8`.
+- source is now on main, but **production is still unchanged**.
+- production mutation from acceptance/merge: 0; no DB apply, Edge deploy, scheduler/manual invocation, real OpenAI/X, OAuth/Vault/Auth/Cron/settings mutation.
+- production rollout remains a separate explicit approval gate with fixed order: read-only preflight -> migration `20261007173000_ai_lab_topic_evergreen_capacity` -> exact read-back -> `x-test-post` deploy -> bundle read-back -> natural scheduler observation.
+- deploy-first remains prohibited because the old DB function rejects the expanded evergreen/candidate set.
+- G3 closed/free.
