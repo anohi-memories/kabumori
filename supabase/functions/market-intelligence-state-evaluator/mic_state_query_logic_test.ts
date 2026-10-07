@@ -104,7 +104,24 @@ test("fetchSourceFetchStatuses: dedupes source keys in the in.() filter and buil
 test("fetchPriorState: no existing row -> narrativeIsNull true, baseline null", async () => {
   const fetchImpl = async () => new Response("[]", { status: 200 });
   const state = await fetchPriorState(ctx, "rates", fetchImpl as typeof fetch);
-  assert.deepEqual(state, { domain: "rates", narrativeIsNull: true, numericBaselineSnapshot: null, sourceEventIds: [], updatedAt: null, aiEvaluatedAt: null });
+  assert.deepEqual(state, {
+    domain: "rates", narrativeIsNull: true, numericBaselineSnapshot: null, sourceEventIds: [], updatedAt: null,
+    aiEvaluatedAt: null, sourceEvaluationRunId: null,
+  });
+});
+
+test("fetchPriorState: selects and reads the narrative identity (source_evaluation_run_id)", async () => {
+  let requested = "";
+  const fetchImpl = (url: string | URL) => {
+    requested = String(url);
+    return Promise.resolve(new Response(JSON.stringify([{
+      narrative: "existing", source_evaluation_run_id: "11111111-1111-4111-8111-111111111111",
+      ai_evaluated_at: "2026-10-05T21:15:08Z", updated_at: "2026-10-06T21:15:00Z",
+    }]), { status: 200 }));
+  };
+  const state = await fetchPriorState(ctx, "rates", fetchImpl as typeof fetch);
+  assert.match(requested, /select=domain,narrative,numeric_baseline_snapshot,source_event_ids,updated_at,ai_evaluated_at,source_evaluation_run_id&/);
+  assert.equal(state.sourceEvaluationRunId, "11111111-1111-4111-8111-111111111111");
 });
 
 test("fetchPriorState: existing row with a narrative -> narrativeIsNull false", async () => {

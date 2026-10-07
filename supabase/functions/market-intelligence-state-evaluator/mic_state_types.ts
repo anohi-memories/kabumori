@@ -71,6 +71,9 @@ export type PriorState = {
   sourceEventIds: string[];
   updatedAt: string | null;
   aiEvaluatedAt: string | null;
+  // Identity of the narrative on current (the run that wrote it). Read only
+  // to label shadow verification evidence; never fed to the decision.
+  sourceEvaluationRunId: string | null;
 };
 
 export type NewObservation = {

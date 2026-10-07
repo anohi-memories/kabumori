@@ -62,6 +62,7 @@ import {
   STATE_EVAL_LUNA_MODEL,
 } from "./mic_state_ai_logic.ts";
 import { recordStateAiUsageEvent } from "./mic_state_ai_usage_logic.ts";
+import { buildVerificationShadowSafe, type VerificationShadow } from "./mic_state_verification_shadow.ts";
 
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
 
@@ -120,6 +121,8 @@ export type DomainDecision = {
   dataConfidence: number;
   latestAsOf: string | null;
   priorUpdatedAt: string;
+  // Recorded on no_change runs only, as decision_detail.verification_shadow.
+  verificationShadow: VerificationShadow;
 };
 
 export type DomainDecisionOrError = { ok: true; decision: DomainDecision } | { ok: false; domain: Domain; error: string };
@@ -154,9 +157,8 @@ async function computeDomainDecision(ctx: RestContext, domain: Domain): Promise<
   // Events already recorded in the last material State remain available as
   // AI context/evidence, but they must not trigger another AI call on every
   // subsequent run window just because they are still in the recent-50 list.
-  const eventDecision = evaluateEventMaterialChange(
-    unseenEvents(recentEvents, prior.sourceEventIds, prior.aiEvaluatedAt),
-  );
+  const unseen = unseenEvents(recentEvents, prior.sourceEventIds, prior.aiEvaluatedAt);
+  const eventDecision = evaluateEventMaterialChange(unseen);
 
   const isMaterial = metricDecision.isMaterial || eventDecision.isMaterial ||
     (prior.narrativeIsNull && metrics.some((m) => m.currentValue !== null));
@@ -173,6 +175,22 @@ async function computeDomainDecision(ctx: RestContext, domain: Domain): Promise<
     .sort()
     .at(-1) ?? null;
 
+  // Shadow evidence only (Stage 1 Slice 0): computed from the values above,
+  // never feeds back into them, and never throws.
+  const verificationShadow = await buildVerificationShadowSafe({
+    domain,
+    prior,
+    metrics,
+    domainMap: domainMapRows,
+    metricDecision,
+    eventDecision,
+    unseenEvents: unseen,
+    coverageStatus,
+    fetchStatus,
+    observationStatus,
+    aiSuppressedByStaleGuard: isMaterial && shouldSkipAiForStaleness(metrics, eventDecision),
+  });
+
   return {
     domain,
     metrics,
@@ -186,6 +204,7 @@ async function computeDomainDecision(ctx: RestContext, domain: Domain): Promise<
     dataConfidence,
     latestAsOf,
     priorUpdatedAt: prior.updatedAt,
+    verificationShadow,
   };
 }
 
@@ -231,7 +250,11 @@ export async function evaluateDomain(
     if (!decision.isMaterial) {
       await applyNoChangeUpdate(ctx, domain, statusRefresh, {
         runId: claim.runId,
-        decisionDetail: { material: false, reason: decision.metricDecision.reason },
+        decisionDetail: {
+          material: false,
+          reason: decision.metricDecision.reason,
+          verification_shadow: decision.verificationShadow,
+        },
       });
       return { domain, status: "no_change", reason: decision.metricDecision.reason };
     }
@@ -252,6 +275,7 @@ export async function evaluateDomain(
           ai_skipped: true,
           skip_reason: "all_metrics_stale_or_unknown",
           reason: decision.metricDecision.reason,
+          verification_shadow: decision.verificationShadow,
         },
       });
       return { domain, status: "no_change", reason: "all_metrics_stale_or_unknown" };

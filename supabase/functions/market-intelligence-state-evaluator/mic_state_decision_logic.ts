@@ -134,6 +134,21 @@ function formatDecimal(digits: bigint, scale: number): string {
   return (digits < 0n ? "-" : "") + (fraction ? `${whole}.${fraction}` : whole);
 }
 
+// The decimal a number was written as, normalized ("5.240" -> "5.24",
+// 1e-7 -> "0.0000001"); null for NaN/Infinity. Audit/fingerprint text only.
+export function canonicalDecimal(value: number): string | null {
+  const d = toDecimal(value);
+  return d ? formatDecimal(d.digits, d.scale) : null;
+}
+
+// |current - baseline| as an exact decimal string; null when not comparable.
+export function exactAbsChange(current: number, baseline: number): string | null {
+  const [c, b] = [toDecimal(current), toDecimal(baseline)];
+  if (!c || !b) return null;
+  const scale = Math.max(c.scale, b.scale);
+  return formatDecimal(magnitude(rescale(c, scale) - rescale(b, scale)), scale);
+}
+
 export type ThresholdComparison = { reached: boolean; change: string };
 
 // |current - baseline| >= threshold, exactly. `change` is the exact difference.
