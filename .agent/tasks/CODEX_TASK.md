@@ -3,8 +3,8 @@
 - task_id: postona-pr106-function-contract-final-rereview-20261008
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - type: final focused exact-head DB/function-contract rereview
@@ -163,6 +163,28 @@ Then:
 - Full evidence appended to CODEX_REPORT.md. Control-only GitHub sync and actual commit are verified after push and reported in final response. **STOP for C1**; source merge HOLD; production preflight/apply remains separately unapproved.
 
 ---
+
+## Final C1 — CHANGES REQUIRED / bounded final corrective — 2026-10-08
+
+- reviewed exact head: `4b6dc57966e0d55b2e901a7707446c35b25a1f00`.
+- verdict: **CHANGES REQUIRED**.
+- prior unsafe owner/EXECUTE paths are closed; R2 exact provider-guard body pinning is closed.
+- remaining source blocker is narrow:
+  - the existing-trigger-function ACL precondition rejects disallowed entries but does not positively require the promised owner EXECUTE ACL entry;
+  - an empty owner ACL (`proacl={}`) is therefore accepted even though the canonical contract requires exactly one owner EXECUTE entry.
+- this is underprivilege, not privilege escalation, and no X regression was reproduced, but the TASK's exact prerequisite contract is not yet satisfied.
+- integration blocker:
+  - `supabase/tests/migration_source_invariants_test.ts` has a one-file merge conflict with fresh main despite semantically containing current main plus the POSTONA reservation.
+- accepted evidence preserved:
+  - R2 body-only mutants refused atomically;
+  - runner PASS;
+  - 54/54 mutation detection;
+  - existing X regressions PASS;
+  - production access/write/apply/deploy/provider operations 0.
+- C1 returns one bounded final corrective to G4 on existing PR #106 only.
+- recommended corrective model: **Opus5.5（高）**.
+- after corrected K4, one final focused exact-head rereview may use whichever H1/H2 is truly free; recommended **Sol（高）**.
+- H1 is closed/free.
 
 # Previous H1 task history
 
