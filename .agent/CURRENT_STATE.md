@@ -1,3 +1,23 @@
+## Final K5 — PR #95 round-3 S1-T PASS_CANDIDATE / final H1 rereview assigned — 2026-10-07
+
+- G5 result: **PASS_CANDIDATE**, not final merge approval.
+- exact PR #95 head: `13f4281f9514742bdee43ffc08834fea67449bf2`; PR open/unmerged and mergeable at K5.
+- sole prior blocker S1-T is reported closed in Kabumori AuthProvider:
+  - SDK-notified auth owner/login is synchronously recorded;
+  - changed login/user/SIGNED_OUT immediately advances/fences generation, invalidates readiness and cancels obsolete enrollment;
+  - network/session preparation remains deferred;
+  - serviceSession/readiness references the synchronously current owner.
+- same-session TOKEN_REFRESHED retains single-flight and does not spuriously invalidate the current logical request.
+- previous H1 `provider-event-window.mjs` timing cases (same-user fresh login, different user, SIGNED_OUT) plus control are reported PASS unchanged.
+- former S1/S2 probes remain 4/4 PASS; S2 X queued cancellation and prior R1-R5 remain green.
+- reported tests: Kabumori 390/390; AuthProvider 17/17; X 221/221; X tsc/lint PASS; both web exports PASS; start-intent DB runner 10 PASS markers; Phase1 20/20; migration invariants 11/11; mutation checks 9/9 detected.
+- fresh main at G5 integration was fully merged into PR #95; allocation-time main advanced one additional commit changing only `.agent/tasks/CLAUDE_TASK_5.md`, with zero product overlap.
+- production mutation / migration apply / deploy / EAS / real provider call = **0**.
+- H1 final focused rereview assigned: `common-account-v1-phase2-s1t-final-rereview-20261007`, exact target `13f4281f9514742bdee43ffc08834fea67449bf2`, recommended **Sol（高）**.
+- G5 remains review_required / next_owner codex. PR #95 merge and production migration apply remain HOLD.
+- after a H1 PASS, C1 may decide source merge readiness; production migration apply/read-back and native release remain separate later gates.
+- AI Lab diary: no additional entry; this is the final narrow internal session-safety iteration of the same milestone.
+
 ## G2 rebuilt — retain failed model outputs for test diagnostics — 2026-10-07
 
 - user decision: during development/test, **do not discard failed AI generations**. Root-cause analysis requires seeing what the model actually produced and what local/Fact guards rejected.
