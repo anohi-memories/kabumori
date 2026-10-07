@@ -3,8 +3,8 @@
 - task_id: kabumori-pr101-f2-f3-final-corrective-20261007
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: final bounded PR #101 corrective / F2 secret tails / F3 truthful retention metadata
@@ -193,7 +193,81 @@ Recommended model: **Opus5.5（高）**.
 
 ## Report
 
-Pending.
+### task_id / result
+- task_id: kabumori-pr101-f2-f3-final-corrective-20261007
+- result: **PASS candidate（source/tests のみ）**。H2 の残り2件（F2・F3）を閉じた。F1 は PASS のまま**変更なし**。
+- **corrected PR #101 head: `938567c049460ebfe78c4e08c71724d6e77ae71a`**（reviewed head `fddd274863b08aefed60795d678a298a1160d599` の上に1コミット。通常push、force pushなし。PR #101 OPEN / MERGEABLE、本文に追記済み）
+- 実装モデル：Sonnet 5.5（TASKの推奨は Opus 5.5（高））。
+
+### F2-A（英字だけ・パディングなしの Basic） — 閉じた
+- 原因：単独の `Basic` 検出は「数字・`+` `/` `=` を含む12字以上」を要求しており、`basic dXNlcjpwYXNz`（`user:pass`、英字12字、パディングなし）が通っていた。
+- 修正：`isBasicCredential(token)`。数字・記号を含む12字以上は従来どおり秘密。それ以外は**base64として復号して `user:password` の形（印字可能ASCII＋コロン、ユーザー部が空でない）になるか**で判定（パディング補完、長さ%4=1は不可、復号失敗は不可）。大文字小文字を問わない。置換は `Basic [redacted]`（冪等）。
+- 通常語は不変（テストで固定）：`basic income` / `basic materials sector` / `Basic Instinct` / `basic introduction to markets` / `the basic researchers said` / `Basic Information about the offering` / `basic fundamentals remain intact` / `Basic Materials stocks rose 1.2%` / `basic economics and basic accounting` / `基本的な basic principles を確認`。
+- 通常経路（`traceRows → persistTraces`）：文の前後は残し `Basic [redacted]` になる（`ヘッダに Basic [redacted] が含まれていた`）。偽造行（置換を通っていない行）：**insert の関数は0回呼ばれ、`GENERATION_TRACE_ROW_DROPPED` がログされる**。
+
+### F2-B（エスケープを含む引用符付きの値の尾） — 閉じた
+- 原因：引用符付き値のパターンが最初のバックスラッシュで止まり、`"syntheticPrefix123\"syntheticTail999"` のように値の途中にエスケープがあると後ろが残った。
+- 修正（`debug_trace.ts` の `QUOTED_OPEN` + `quotedValueEnd` + `redactQuotedValues`）：値を**パターンで推測せず、閉じ区切りまで読む**。
+  - 通常の `"…"` / `'…'`：`\` に続く1文字（`\"` `\\` `\n` `\t` `\uXXXX`）を値の一部として読み飛ばし、エスケープされていない閉じ引用符で終える。
+  - JSON文字列の中のJSON（エスケープが重なった形）：開いたときと**同じ数のバックスラッシュ**＋引用符で閉じる（1・3・7…）。値の中の引用符はそれより多い（2n+1）ので閉じと区別できる。
+  - 読めない・閉じが見つからない場合は、**そのテキストの末尾まで置換**（取りこぼすより多く隠す。「曖昧なら行を捨てる」のうち、行を捨てずに残りを隠す側を選んだ。行全体の検査は残してあるので、これでも秘密が残る行は捨てられる）。
+  - 裸の `key=value`：値に引用符・バックスラッシュが含まれても1つの値として置換（`token=abc"def-TAIL` の尾が残らない）。
+- 書き込み前の行全体検査：`containsSecret(text) = redactText(text) !== text`（変わるなら秘密が残っている）。深い階層の直列化でも置換済みの `[redacted]` は不変で、誤って行を捨てない（冪等）。
+- 通常経路のテスト（`traceRows → persistTraces`）：引用符・バックスラッシュ・改行・タブ＋`\u`・引用符とバックスラッシュの併用の5種を、**JSON文字列の中のJSON**（1段階）と**その一段深い形**（2段階）で、candidate・Fact指摘・ローカル指摘・警告に入れ、**値全体と尾の断片が書かれた結果に無い**こと、**後ろの文が残る**ことを確認（捨てる場合は callback 0 でも合格とするが、実際は置換されて1回書かれる）。
+- 偽造行：リークした値（`JSON.stringify` の生のまま）と、旧実装が残した形（`"password":"[redacted]\"syntheticTail999"`）はどちらも **callback 0**。
+- 複数の秘密＋置換済み1件の後に生の秘密：すべて置換（`TAIL-A` / `dXNlcjpwYXNz` / `zzzz` / `TAIL-B` が消え、間の語は残る）。偽造行は callback 0。
+- 通常の日本語・金融文の対照は不変（日経平均の文、パスワード管理アプリの報道、米国債利回り、引用符付きニュース見出し、`Bearer bonds … token economics: a basic summary` 等）。
+- trace の失敗はノンブロッキング（insert が失敗しても例外を出さず、callback は1回だけ、再試行なし）。モデル呼び出しなし。
+
+### F3-A（深さ切りの元サイズ） — 閉じた
+- 原因：深さ64を超えた部分を `[depth-limit]` に置き換えたあとの値で `original_chars` を測っていた。
+- 修正：`keepCandidate` が、深さを切っていれば**切る前の（置換後の）証拠**を `redactValue(…, Infinity)` で測る（測れなければ `original_chars = null` と理由を記録し、切った後の表現から推測しない）。`kept_chars` は保存した表現の長さ。理由は `depth_limit` / `field_bound` / `depth_limit+field_bound`。`candidate_chars` も切る前のサイズ。
+- テスト：深さ66の入れ子で `original_chars === JSON.stringify(元の候補).length`、`kept_chars === 保存した candidate の長さ`、`original > kept`、理由 `depth_limit`／深さ60は切らず・フラグなし、深さ70は切る／深さ切り＋上限超の併用は `depth_limit+field_bound` で元サイズが真／深い構造の中の秘密置換が元サイズの測定を歪めず、尾も残らない。
+
+### F3-B（保持リストの大きさのずれ） — 閉じた
+- 原因：保持リストの見積りが、最初の項目の前にもカンマを数えていた。
+- 修正：`used = 2`（`[]`）から、項目ごとに `JSON.stringify(item).length + (kept.length > 0 ? 1 : 0)`。**`JSON.stringify(kept).length` と完全に一致**。`kept_chars` はその値、`original_count` / `kept_count` は真。
+- テスト：30件の長い指摘で `kept_chars === JSON.stringify(保存したリスト).length` かつ ≤ 上限／**上限ちょうどのリストは切らない**（2項目、合計がちょうど200,000字）、**1字超えると2つ目だけが落ち**、`kept_chars` が1項目のリストの長さに一致、`kept_count=1` / `original_count=2`／1項目が収まらない場合は空リスト（2字）と `kept_count=0` を報告。
+- 旧実装（`fddd2748` の `debug_trace.ts` に `isBasicCredential` のスタブだけ足したもの）に新テストを当てると **18件中12件が失敗**（F2-A・F2-B・F3-A・F3-B の本題）、通常語・非ブロッキング・秘密置換の影響が無いことの対照は通る（テストが実際にバグを捕まえている）。
+
+### exact new adversarial tests
+- `supabase/functions/market-report-analysis/debug_trace_final_test.ts` 18件：
+  - F2-A：Basic の大小文字・英字のみ・パディングなし／通常語の不変／通常経路と偽造行
+  - F2-B：エスケープ5種（通常経路）／1段深い形／単引用符・閉じなし・裸の値／偽造行（旧実装の残渣）／複数＋置換済み後の生の秘密／通常の日本語・金融文の対照／非ブロッキング
+  - F3-A：深さ66／深さ境界／深さ＋上限／秘密置換との同時
+  - F3-B：`kept_chars` の完全一致／境界ちょうど／1字超え・単独項目
+
+### regression counts
+- market-report-analysis **210/210**（debug_trace_final 18、debug_trace_adversarial 17、debug_trace 15、editorial_specificity 13、session-date 14、H1 boundary 9、causal 18、quality 9、h1_adversarial 13、content_guard 16、transport 14）
+- personalized-reports 129/129、X shared consumer 8/8、market-report-data-packet 42/42、`_shared` 436/436（`--no-check`）
+- migration 不変条件 20/20（`migration_source_invariants_test.ts` ＋ `market_report_generation_traces_source_test.ts`。F1 はグリーン）
+- `deno check`（両 index と変更ファイル）exit 0、変更ファイルの `deno lint` 0件、`git diff --check` exit 0
+- 秘密の走査：非テストの新規コードに本物の秘密なし。
+
+### F1 unchanged / PASS
+- `supabase/migrations/20261007120000_market_report_generation_traces.sql` と `supabase/tests/market_report_generation_traces_{run.sh,behavior.sql,preflight.sql,source_test.ts}` は **このコミットで一切変更していない**（`git diff` が空）。使い捨て Postgres の敵対13ケースは今回の変更がmigrationに触れないため再実行していない（前回 `fddd2748` で全PASS・変異確認済み。必要ならH2側で再実行可能）。
+
+### Hard / call / rewrite / fallback unchanged
+- Hard の判定、ちょうど3つ、PR #99 の `X_POINTS_*`（WARN のみ）、X 300字・アプリ700字の書き直し条件、安全な最初の版へのフォールバック、`MAX_GENERATIONS=2`・最大4 calls、全量保持の方針、**200,000字の宣言済み上限**、Fact の判定・再試行のメモの10件上限、trace を complete / fail の後に1回だけ書く（再試行なし）、プロンプトの衛生、`base_prompt_hash` / `request_hash` の意味：すべて不変（既存・回帰テスト全緑）。変更したのは `debug_trace.ts` の redaction / 保持の計測だけ。
+
+### changed_files（`fddd2748` → `938567c0`）
+- `supabase/functions/market-report-analysis/debug_trace.ts`
+- `supabase/functions/market-report-analysis/debug_trace_final_test.ts`（新規18件）
+- `docs/market-report-shared-platform/DESIGN.md`（§15.6：エスケープの読み方、Basicの判定、`original_chars` / `kept_chars` / 理由の意味）
+- 触っていない：migration・PG テスト、personalized-reports、x-test-post、common-account/Auth、OpenAI モデルID、`hard_fact_guards.ts`、`analysis_logic.ts`、`handler.ts`。
+
+### production mutation
+- **0**。migration 適用・deploy・手動生成/再試行・Cron・gate・X・通知・EAS・Auth/Vault なし。読み取りのみ（なし）。
+
+### 注意点（残るもの）
+1. 引用符付きの値が読めない／閉じない場合は**末尾まで隠す**ので、そのテキストの後ろの診断情報も失われる（秘密を取りこぼさない側に倒した）。実際のモデル出力で起きる頻度は低いと見ている。
+2. `Basic` の「数字・記号を含む12字以上は秘密」という従来の規則は、通常の英単語＋数字（例 `Basic 2026Q4Report`）でも当たりうる。これは旧実装からの挙動で、今回は変えていない。
+3. 保持期間・整理は未定（追記専用）。
+
+### 次
+- 最終の H2 rereview（exact head `938567c049460ebfe78c4e08c71724d6e77ae71a`、F2/F3 のみ、Sol（中））→ PASS なら C2 が PR #101 を merge → その後、Kabumori 限定の AI モデル registry と GPT-6 移行（TASKの予告どおり）。
+
+---
 
 
 ---
