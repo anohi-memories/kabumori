@@ -3,8 +3,8 @@
 - task_id: postona-multisocial-phase2a2-security-corrective-20261007
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: codex
+- status: ready
+- next_owner: claude
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: bounded DB/security corrective / existing PR #106
@@ -13,6 +13,98 @@
 - production_mutation_allowed: false
 - merge_allowed: false
 - deploy_allowed: false
+
+## C1 corrective — function-contract hardening round — 2026-10-07
+
+H1 exact-head rereview of `a8f313dc72b087ab86482781297848fe6e23bdcc` returned **CHANGES REQUIRED** with two remaining blockers only.
+
+Preserve every previously accepted B1-B6 correction and existing regression behavior. Update the existing PR #106 only.
+
+### C1-R1 — pin owner/ACL of the two existing trigger functions
+
+The precondition currently hard-codes trigger definition/language/SECURITY DEFINER/search_path/body hash but does not fully pin the trigger functions' owner and ACL contract.
+
+Required:
+- derive the exact approved owner/ACL contract from repository migrations/fixtures and prior read-only production evidence;
+- before any DDL, require each existing trigger function to have the approved:
+  - function identity/signature;
+  - owner;
+  - SECURITY DEFINER state;
+  - language;
+  - search_path/config;
+  - body identity;
+  - direct ACL / grant-option state;
+  - no unsafe effective EXECUTE path from PUBLIC/anon/authenticated through membership or SET ROLE.
+- unknown owner/ACL drift must STOP; do not repair/revoke/reassign.
+- extend the before/after state snapshot so these function security properties cannot change during the migration.
+
+Required adverse tests:
+- wrong owner;
+- PUBLIC EXECUTE;
+- authenticated/anon direct EXECUTE;
+- grant option;
+- inherited EXECUTE;
+- PG16+ SET-only/transitive reachability to an EXECUTE-bearing role if relevant;
+- body/definition controls remain the previously accepted expected values.
+- every failure must leave the original X-only state and no new guard/helper residue.
+
+### C1-R2 — pin the new guard's exact body/definition
+
+The postcondition currently verifies metadata for `public.social_accounts_provider_guard()` but not its body.
+
+Required:
+- postcondition must verify the exact reviewed guard implementation, not merely owner/security/search_path/language/ACL;
+- use a stable canonical definition/body identity that catches semantic changes while remaining deterministic in the target PostgreSQL version;
+- also pin return type/signature and relevant function properties;
+- a body-only mutation preserving all metadata must fail the postcondition atomically.
+
+Required tests:
+- mutate only the guard body to:
+  - allow provider relabeling;
+  - skip Meta service_role protection;
+  - return NEW without guards;
+- keep owner/ACL/security/search_path/language unchanged;
+- each mutant must be detected;
+- unchanged reviewed function must pass.
+
+### Regression / scope
+
+Rerun:
+- the focused migration runner;
+- all existing B1-B6 adverse cases;
+- mutation suite, with new mutations added;
+- X publish / refresh / deletion / PR41 Stage3B regressions;
+- `git diff --check`;
+- secret scan.
+
+Do not reopen accepted product architecture without concrete evidence.
+
+Forbidden:
+- production DB/catalog access;
+- migration apply;
+- deploy;
+- Auth/OAuth/Vault/secrets;
+- real provider calls;
+- G2/G3/G5 files;
+- PR merge.
+
+Completion:
+- update existing PR #106;
+- report new exact head;
+- C1-R1/R2 disposition;
+- new adverse/mutation evidence;
+- changed files;
+- fresh-main overlap;
+- CI;
+- production/deploy/provider operations = 0;
+- status -> `review_required`;
+- next_owner -> `chatgpt`;
+- STOP for K4.
+
+After K4, use a genuinely free H1/H2 slot for one focused exact-head rereview.
+
+推薦モデル：**Opus5.5（高）**
+
 
 ## Review verdict
 
