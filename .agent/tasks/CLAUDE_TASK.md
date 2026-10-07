@@ -3,8 +3,8 @@
 - task_id: kabumori-pr99-morning-natural-observation-20261007
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（中）
 - type: read-only natural production observation
@@ -156,7 +156,60 @@ Recommended model: **Sonnet5（中）**.
 
 ## Report
 
-Pending.
+### classification
+- **OBSERVATION_INCOMPLETE（PR #99の編集効果は観測できず）／配信は FAIL**。2026-10-07の自然な朝刊は、分析が2回とも不合格で **report packetが0件**。3ポイントも編集の評価もできない。
+- 失敗の種類は **FAIL_FACTUAL（本物の不備をguardが正しく止めた）か FAIL_FALSE_REJECT（安全な本文を止めた）かを判定できない**。不合格になった本文は保存されておらず、残っているのは固定コードと、Factの最後の指摘文1件だけ。
+- **PR #99 は本番で検証済みとは言えない**。PR #99 が原因である証拠も、無関係である証拠もない（n=1、比較可能な診断コードは v25 以降にしか無い）。
+
+### observation time
+- 2026-10-07 09:03〜09:10 JST（08:10以降、read-only）
+
+### production baseline read-back
+- `market-report-analysis` v25 ACTIVE / ezbr `addbb0a61338…`（updated 2026-10-07 01:07:01 JST）。baseline一致。`personalized-reports` v40 不変。app_enabled=false / x_enabled=false。deploy後のmanual generation/retry = 0。
+
+### cycle / attempts（morning, trading_date 2026-10-07）
+- data：completed、attempt 1、07:50:01.0 → 07:50:01.7 JST、error なし、data packet `d0635c90-a3cc-413e-b7b6-afbb76d4bebb`
+- report：**failed**、`report_attempt_count=2`、最終 started 08:05:01.8 → failed **08:05:53.0** JST（約51秒）、`report_last_error=ANALYSIS_FACT_FAILED`、`current_report_packet_id=null`
+  - 07:55の1回目の失敗の理由・時刻は、08:05の再試行で上書きされて**残っていない**（attempt_count=2から、1回目も不成功だったと判断。同じ理由とは断定しない）。以下の診断は **08:05の再試行1回分**。
+- report packet：0件（`market_report_packets` の 10/7 は 0）。重複なし。cycle行は morning 10/7 の1行。
+
+### diagnostics（08:05の再試行）
+- generation_attempts=2、content_regenerations=1、**calls=3**（generate, generate, fact）、input 24,221 / output 5,080 tokens、cost **$0.01094**、transport_retries=0、quality_rewrite=false、delivered_generation=0
+- `hard_rejections = local,fact`
+- **`rejection_reasons = causal+date+ref+other,other:1`**（PR #99 の診断が初めて実データで出た）
+  - 1つ目の生成：**ローカルのHard不合格**。分類は 因果・日付・ref・その他 の**4種類**（件数・文面は残っていない）。
+  - 2つ目の生成：ローカルは通過し、**Fact不合格**（分類 other、1件）。
+- Factの最後の指摘文（既存の `issues` 診断キーに残っていた）：**「「前回の引け以降に確認できたニュース」とする時間関係はinputで確認できません。」**
+- quality_warnings=空（packetが無いため `X_POINTS_*` の記録は無し）。3ポイント・`X_POINTS_GENERIC` / `METRIC_RECAP` / `NEAR_DUPLICATE`・milestone の評価：**観測不能**。
+
+### 観察と仮説（事実と区別する）
+- **事実**：Factが指摘した言い回し「前回の引け以降に確認できたニュース」は、朝刊の指示文（`analysis_logic.ts` MORNING の1行目「…前回の引け以降に確認できたニュースから、今日の日本株で見る点を整理します」）にある文言そのもので、**2026-09-17（`05a677f1`）から変わっていない**。PR #99 が入れた文言ではない。
+- **仮説（未検証）**：モデルが指示文の言い回しを本文に写し、Factが「入力に時間関係の根拠が無い」と止めた。この指摘が正当（時間関係を作った）か過剰かは、本文が無いので判定不能。
+- **事実**：1つ目の生成は因果・日付・ref・その他の4種類で落ちており、軽い指摘ではない。PR #99 のプロンプト（具体的な出来事・節目・固有名詞を要求）がモデルを「より多くを書く」方向に動かした可能性は**排除できない**が、根拠もない。
+- 比較：PR #99 前の朝刊は、10/2（local rejection→retryで完了）、10/6（calls 2、無事）。10/1大引けは local で2回不合格（PR #71前）。診断コード `rejection_reasons` は v25 で追加されたため、PR #99 前との分類の比較はできない。
+- 訂正（会話での私の説明）：「直近で3種類以上で落ちた例はない」とユーザーに伝えたが、`rejection_reasons` が v25 以降にしか無いため**根拠が不足していた**。上の比較が正しい。
+
+### factual-safety / 他の経路
+- 事実の誤りが配信された事実なし（packetなし）。Hard/Factは意図どおり配信を止めた。safe-original fallback は、安全な最初の版が無かったため（1つ目がlocal不合格）働く余地がなかった。
+- 読者への影響：**なし**。旧X朝刊（08:20 JST）= succeeded、旧アプリ朝刊（08:35 JST）= completed（gate OFF の legacy経路）。新しい共有レポートは gate OFF で未配信。
+- OpenAI の 429 等の provider 障害ではない（`transport_*` = 0、`ANALYSIS_FACT_FAILED`）。
+
+### manual action / production mutation
+- manual generation / retry / replay = 0。**production mutation = 0**（read-only SELECT と `functions list` のみ）。X / 通知 / EAS / deploy / Cron / gate = 0。
+
+### whether PR #99 can be considered validated / further source correction
+- **validated ではない**。次の自然サイクル（今日の大引け 16:20 / 16:35、明日の朝刊）での再観測が必要。
+- **まだ source 修正を決める段階ではない**（n=1、本文が無い）。ただし K2 が検討する候補：
+  1. **診断の改善（低リスク・先にやる価値が高い）**：不合格のとき、**固定ラベルのリスト**（local issue の「ラベル」＝最初のコロンの前の固定文言。モデルの本文・引用は含まない）を `rejection_reasons` に併記する。今回のように「4種類で落ちた」だけでは、何が原因か判断できない。Factの指摘文は今も最後の1件が `issues` に残るが、1回目の失敗は上書きされる。
+  2. **朝刊の指示文の言い換え**：「前回の引け以降に確認できたニュース」を、本文に写されても Fact が根拠を要求しない言い方（例：入力のニュースの範囲を示さない表現）にする。今回の指摘の直接原因の可能性が高いが、**仮説**。
+  3. 1回目の失敗の理由を上書きしない（cycle診断に `attempt別` を残す）。
+  4. 再観測の結果次第で、PR #99 の具体性の指示の強さ（出来事・固有名詞の要求）が失敗を増やしていないかを判断。
+- 私の推奨：**1（診断）を先に小さなPRで入れ、再観測を2〜3サイクル（大引け・朝刊）続けてから、2・4を判断**。n=1で指示文を変えると、原因を取り違えるおそれがある。
+
+### recommendation（K2向け）
+- この結果を踏まえ、`kabumori-pr99-morning-natural-observation` を **PASSにしない**。PR #99 の validation は保留。
+- 新しいTASK案：「不合格診断の強化（固定ラベル列挙、1回目の失敗を保持）」＝ source/test のみ、Hard不変、呼び出し上限不変。
+- 次の観測：今日の大引け（analysis 16:20 / retry 16:35 JST）。朝刊は「不合格で packet なし」が続く場合に備え、10/8 朝刊でも read-only 観測。
 
 ---
 
