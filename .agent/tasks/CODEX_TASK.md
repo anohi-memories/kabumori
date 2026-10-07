@@ -3,8 +3,8 @@
 - task_id: postona-pr106-function-contract-final-rereview-20261008
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: final focused exact-head DB/function-contract rereview
@@ -149,6 +149,18 @@ Then:
 - STOP for C1.
 
 推薦モデル：**Sol（高）**
+
+## H1 completion — 2026-10-08
+
+- Verdict: **CHANGES REQUIRED**, bounded contract/integration corrections only; no new unsafe provider authority or X regression found.
+- Exact reviewed PR106 head: 4b6dc57966e0d55b2e901a7707446c35b25a1f00; OPEN/unmerged. Netlify/Vercel successful on this head.
+- R1 unsafe owner/direct/inherited/SET-only/transitive EXECUTE and definition drifts now fail atomically. One literal contract gap remains: an empty owner ACL is accepted even though the approved prerequisite requires exactly one owner EXECUTE entry. This is underprivilege only (P3), not an escalation; ordinary X UPDATE still passes. Minimum fix is a positive expected-owner ACL assertion plus a refusal fixture.
+- R2 CLOSED: each of the three body-only after-creation mutants fails the postcondition with full rollback; reviewed healthy hashes/owners/ACL match.
+- Reservation content is current main plus exactly the POSTONA line and preserves the AI Lab reservation. However actual merge-tree and GitHub both show a content conflict in migration_source_invariants_test.ts. Resolve this one-file integration mechanically while preserving both reservations; do not alter accepted product logic.
+- Local PostgreSQL runner 8/8 PASS markers; independent 38 atomic refusals plus 8 healthy controls; checked migration invariants 11/11; mutation suite 54/54 detected (exit 0). Both dedicated local DB servers stopped.
+- Only H1 TASK/Report changed. Production reads/writes, apply, merge, deploy, Auth/OAuth/Vault/provider operation: 0.
+- return_to: 返却先未確定（current TASK header has no return_to）; completion_code: 未記載（current header has no completion_code; slot expects C1）. No header value is inferred or backfilled; ChatGPT confirmation required.
+- Full evidence appended to CODEX_REPORT.md. Control-only GitHub sync and actual commit are verified after push and reported in final response. **STOP for C1**; source merge HOLD; production preflight/apply remains separately unapproved.
 
 ---
 
@@ -4895,5 +4907,3 @@ Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 - recommended Claude model: **Opus5.5（高）**.
 - corrected candidate requires fresh Codex rereview: **Sol（高）**.
 - H1 closed and reusable after fresh allocation.
-
-
