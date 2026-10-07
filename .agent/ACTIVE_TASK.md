@@ -105,14 +105,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: review_required
 - task_id: common-account-v1-phase2-production-migration-preflight-20261007
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: PR #95 source is merged as d5bea735937b53095b110b4bed1f20442e56b089. Next step is read-only production preflight for migration 20261006230000_common_account_service_start_intent.sql only: verify migration history/current RPC/ACL/state, ordering with already-merged PR41 candidates, old-binary/client compatibility, and exact apply/read-back plan. Production writes/migration apply/deploy/EAS are forbidden until explicit user approval after K5.
+- allocation: Final K5 accepts production preflight as READY_FOR_APPROVAL. PR #95 source is merged and production read-only checks passed: Phase1 present, 20261006230000 not applied, target RPC/ACL/owner state matches expectations, no lifecycle-operation blocker, old-client compatibility acceptable, PR81/PR41 migrations remain unapplied and non-overlapping. Preflight/runbook PR #104 was squash-merged as 944836d4938cb8d2600b3f5b469e6e93b551da0a. Production mutation remains 0. Do not start migration apply until explicit user approval; no G5 apply TASK is ready yet.
 - recommended_model: Opus5.5（高）
 
 ## Deferred
