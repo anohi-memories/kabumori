@@ -3,8 +3,8 @@
 - task_id: ai-lab-premium-length-policy-unlimited-20261007
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: user
 - priority: urgent
 - recommended_model: Sonnet5（高）
 - type: bounded AI Lab length-policy correction on existing PR #109
@@ -12,7 +12,7 @@
 - accepted_security_head: 7c3c06d07c32910472185e1c94b04fa1aab794f5
 - production_mutation_allowed: false
 - deploy_allowed: false
-- merge_allowed: false
+- merge_allowed: false  # historical task gate; source merge completed after external PASS
 
 ## Context / K3 disposition
 
@@ -5288,3 +5288,17 @@ Unexpected residue: **none**.
 - fresh slot check at K3: H1 is occupied by G4 PR #106 rereview; H2 is occupied by G2 PR #110 review. Do not overwrite either slot.
 - next: assign the first genuinely free H1/H2 to one exact-head rereview of `fb4afb21d7ce808de3257bebc8062aed93353dec`, recommended **Sol（高）**. Scope: prior B1-B3 closure + Premium unlimited-length delta + 2000-token/incomplete-response behavior only.
 - production rollout remains HOLD until that review passes and a later explicit migration/deploy gate is created.
+
+
+## Final ChatGPT acceptance — PR #109 merged — 2026-10-08 JST
+
+- external direct Codex review verdict accepted: **PASS**, no blocking finding.
+- exact reviewed head: `fb4afb21d7ce808de3257bebc8062aed93353dec`.
+- reviewer independently accepted B1/B2/B3, rollback/no-partial-mutation, 74-topic capacity (140/140), Premium unlimited length, 2000-token unlimited budget, incomplete-response fail-closed behavior, POSTONA non-regression and Kabumori X non-regression.
+- fresh GitHub check before merge: PR open/unmerged, exact head unchanged, `mergeable=true`; Netlify SUCCESS; Vercel FAILURE target was build-rate-limit.
+- source merge: **SUCCESS**, squash merge commit `d4f693128494d8e05b97563fb82b7db2871818c8`.
+- no production DB read/write, migration apply, Edge deploy, scheduler/manual invoke, real OpenAI/X call, OAuth/Vault/Auth/Cron/settings mutation was performed by this acceptance/merge.
+- production remains **NOT UPDATED** by source merge alone.
+- required production order remains: read-only preflight -> migration `20261007173000_ai_lab_topic_evergreen_capacity` first -> exact function/body/owner/ACL/role-graph/map read-back -> `x-test-post` deploy second -> bundle read-back -> natural scheduled-post observation.
+- production migration/deploy require a separate explicit rollout gate.
+- task status: done; next_owner: user/chatgpt rollout approval.
