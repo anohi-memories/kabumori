@@ -32,16 +32,15 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: ai-lab-topic-continuity-pr109-focused-review-20261007
+- status: ready
+- task_id: postona-pr106-phase2a2-security-rereview-20261007
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #109 head f83247ae1024d4220dfbfa5484c725381d63815d. Accepted topic/capacity design remains valid; blockers are migration guards only: SET ROLE role-graph escalation, canonical prerequisite table-shape validation, and exact companion lifecycle-function body verification. H1 closed/free. No production mutation/merge/deploy.
+- allocation: Focused exact-head rereview of corrected POSTONA PR #106 head a8f313dc72b087ab86482781297848fe6e23bdcc. Verify B1-B6 closure, defensive postconditions and X regressions only. No merge/apply/deploy/production/provider access.
 - recommended_model: Sol（高）
-
 ## Codex H2
 - owner: codex
 - slot: codex-2
@@ -94,13 +93,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: review_required
 - task_id: postona-multisocial-phase2a2-security-corrective-20261007
 - start_code: G4
 - finish_code: K4
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Direct independent review of PR #106 head dac01220 returned CHANGES REQUIRED. G4 must update the existing PR only and close B1-B6: provider-identity unique-index precondition, provider immutability, PG16+ SET ROLE graph, explicit starting schema/ACL baseline, connected-Meta access-ref invariant, and provider-aware service_role Meta-write boundary. Also harden policy/trigger/index/check postconditions. No production/apply/deploy/OAuth/Vault/provider calls. After corrected K4, use a free H1/H2 for one Sol（高） exact-head rereview if available.
+- allocation: K4 accepts corrected PR #106 head a8f313dc72b087ab86482781297848fe6e23bdcc as PASS_CANDIDATE only. B1-B6 are reported fixed with expanded PostgreSQL/adversarial/mutation coverage; CI green; fresh-main file overlap 0; production/deploy/provider mutations 0. Merge HOLD pending H1 exact-head security rereview.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
