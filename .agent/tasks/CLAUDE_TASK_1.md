@@ -1,10 +1,11 @@
-# Claude Task 1 — CURRENT TASK
+# Claude Task 1 — ROUTING CORRECTION / DO NOT START
 
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: done
+- next_owner: none
+- routing_correction: This task was assigned to G1 by mistake. The canonical implementation task has been moved to G2. Do not start this block from G1.
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: market-report reliability / delivery-first guard calibration / mandatory disclaimer
