@@ -1,10 +1,43 @@
+# Final K1 — Portfolio canonical UI PASS / PR #100 merged
+
+- verdict: **PASS**.
+- accepted exact PR #100 head: `3fd7c569efb6598202e71151dd2393f661f93b81`.
+- final fresh main before merge: `e0e49162d83dcb4eb9caae9e171b4a64c0294f19`.
+- fresh changed-file overlap between current main and PR #100: **0**.
+- GitHub mergeability at final gate: `mergeable=true`; `mergeable_state=unstable` only because Vercel was rate-limited. For Kabumori native/Expo, Vercel is not a normal merge gate; Netlify preview was non-code-failing/canceled and all app/source checks were independently green.
+- final accepted behavior:
+  - Portfolio -> report detail -> visible Back => Portfolio;
+  - Portfolio -> report detail -> native edge swipe => Portfolio;
+  - Reports list -> report detail -> visible Back/swipe => Reports list;
+  - report -> linked news -> return chain preserved;
+  - no redirect flash/internal router interception.
+- root `report-detail` reuses the existing report-detail implementation; no duplicate business/UI copy.
+- PR #95 Auth/serviceSession/root-news changes preserved.
+- canonical portfolio visuals/data/search/interim-watchlist/fallback-avatar behavior preserved.
+- reported tests/checks accepted:
+  - app tests **426/426 PASS**;
+  - src tsc clean;
+  - Expo config PASS;
+  - web export PASS;
+  - diff check clean;
+  - Simulator 402pt/375pt navigation proof PASS.
+- Codex review: **not required** for this bounded UI/native-navigation correction.
+- backend/DB/RPC/Auth/Edge/production mutation/EAS = **0**.
+- PR #100 squash-merged successfully:
+  - merge SHA `fe8090bab89824fc8c00147fb5fc92bb1afab82c`.
+- nonblocking remaining note:
+  - Home -> report detail still uses the nested Reports route, so its Back/swipe returns Reports list. This is pre-existing and outside PR #100's portfolio-origin corrective; if product consistency is desired, a later tiny source-only task can point that Home CTA at root `report-detail`.
+- G1 is now **done / free**.
+
+---
+
 # K1 CORRECTIVE — contextual report-detail return from Portfolio
 
 This is the newest canonical G1 instruction for the existing task / existing PR #100.
 
 - task_id remains: `kabumori-portfolio-canonical-ui-v1-20261006`
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - target PR: **#100**, update the existing PR; do not open a second PR unless technically unavoidable and reported first.
 - previously accepted PR #100 head: `5a9735c80e3dbc01b25911a0aabc83fce3d56bc9`
 - current fresh main at allocation: `29b8d00c4894e80fa57875c2e2772e59ab637139`
