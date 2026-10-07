@@ -1,5 +1,132 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: ai-lab-premium-length-policy-unlimited-20261007
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: urgent
+- recommended_model: Sonnet5（高）
+- type: bounded AI Lab length-policy correction on existing PR #109
+- target_pr: 109
+- accepted_security_head: 7c3c06d07c32910472185e1c94b04fa1aab794f5
+- production_mutation_allowed: false
+- deploy_allowed: false
+- merge_allowed: false
+
+## Context / K3 disposition
+
+The prior PR #109 migration-security corrective is a **PASS candidate for rereview**:
+- B1 SET ROLE graph guard added;
+- B2 canonical prerequisite table-shape proof added;
+- B3 exact companion lifecycle-function body proof added;
+- 13/13 adverse cases reject and rollback;
+- healthy apply/reapply passes;
+- real SQL capacity remains 140/140;
+- accepted 74-topic/Tier2/Tier3 design unchanged;
+- production mutation/deploy/merge remains 0.
+
+Before sending that head to Codex, the user clarified a product policy:
+
+> 会社員AIラボはX Premium運用なので、140文字を超えてよい。短文上限に縛らない。
+
+Fresh source inspection found the current AI Lab profile is not 140-limited, but **is hard-limited to 280 Unicode code points**:
+- `AI_SALARYMAN_LAB_CODE_PROFILE.postLengthPolicy = { mode: "limited", maxChars: 280 }`;
+- generator rejects 281 with `BRAND_POST_LENGTH_LIMIT_EXCEEDED`;
+- final pre-X dispatch guard rejects 281 again.
+
+This hard ceiling conflicts with the user's Premium-account policy.
+
+## Goal
+
+Remove the hard finite character ceiling **for company AI Lab only**.
+
+Required final behavior:
+- AI Lab `brand_post` uses the existing generic `UNLIMITED_POST_LENGTH` policy.
+- 281+ characters do not fail solely because of character count.
+- 140 characters is not a target or ceiling.
+- 280 characters is not a target or ceiling.
+- Do not force long posts either. Add/adjust AI Lab profile guidance so the model varies length naturally:
+  - concise topic -> concise post is fine;
+  - when the content benefits from context/detail, it may exceed 280;
+  - do not pad/fill merely because Premium permits longer posts.
+- Existing content safety, dedupe, topic, hashtag and account checks remain unchanged.
+- Character count should still be measured/reported for diagnostics; only the finite ceiling disappears.
+
+## Scope
+
+Expected files:
+- `supabase/functions/_shared/brand/brand_profiles.ts`
+- `supabase/functions/_shared/brand/brand_profiles_test.ts`
+- `supabase/functions/_shared/brand/brand_post_generator_test.ts`
+- `supabase/functions/_shared/brand/brand_post_dispatch_guard_test.ts`
+
+Do not change the generic length-policy implementation unless strictly necessary; it already supports `UNLIMITED_POST_LENGTH`.
+
+Do not change:
+- POSTONA / `social_mobile_user_v1` length behavior;
+- Kabumori X length behavior;
+- x-test-post report/morning/useful-tip length contracts;
+- PR #109 topic pool / 74 seeds / Tier ordering;
+- PR #109 B1/B2/B3 migration correction;
+- scheduler/posting windows;
+- X OAuth/Vault/Auth/common-account/provider logic.
+
+## Mandatory tests
+
+Update the old AI Lab 280-limit tests to prove the new user policy:
+1. AI Lab profile is explicitly `UNLIMITED_POST_LENGTH`.
+2. generation prompt no longer says `280文字以内`; it communicates no hard ceiling and natural-length guidance.
+3. generator accepts >280 text (use at least one 600+ code-point fixture) and returns correct `characterCount`.
+4. final AI Lab dispatch guard accepts >280 text and still returns the measured character count.
+5. account mismatch / wrong post type / other existing dispatch safety checks remain unchanged.
+6. POSTONA/general-user and Kabumori profile length behavior is unchanged.
+7. no source/test assertion anywhere in AI Lab path still requires max 280.
+
+Run:
+- focused profile/generator/dispatch tests;
+- relevant AI Lab/shared brand suite;
+- PR #109 existing topic/migration tests as a smoke regression (do not need to redo every expensive PostgreSQL adverse runner if source bytes of migration are unchanged, but verify migration files remain byte-identical to accepted security head);
+- deno check/lint;
+- git diff --check;
+- added-line secret scan.
+
+## PR / freshness
+
+- Keep using existing PR #109.
+- Require `7c3c06d07c32910472185e1c94b04fa1aab794f5` in PR history.
+- Fresh-fetch origin/main before editing and before push.
+- Re-check G2/G4/G5 overlap.
+- Do not alter migration/security files except for conflict-free merge resolution if absolutely necessary; if their bytes change, STOP and report before push.
+- No production access/write/apply/deploy/scheduler/OpenAI/X call.
+
+## Completion
+
+Update PR #109 and report:
+- new exact head;
+- exact files changed for length policy;
+- proof that prior B1/B2/B3 migration bytes are unchanged from `7c3c06d0`;
+- >280 generation + dispatch results;
+- focused/full relevant test counts;
+- fresh-main overlap;
+- production mutation/deploy/merge = 0.
+
+Then:
+- status: review_required
+- next_owner: chatgpt
+- STOP for K3.
+
+After this K3, assign one exact-head Codex rereview covering:
+- previously corrected B1/B2/B3 migration guards;
+- this small AI Lab unlimited-length policy delta only.
+
+
+---
+
+# Previous G3 task — preserved history
+
+# Claude Task 3 — CURRENT TASK
+
 - task_id: ai-lab-topic-continuity-pr109-security-corrective-20261007
 - owner: claude
 - slot: claude-3
