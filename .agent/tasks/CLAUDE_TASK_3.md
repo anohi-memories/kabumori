@@ -1,10 +1,209 @@
 # Claude Task 3 — CURRENT TASK
 
-- task_id: ai-lab-topic-continuity-fix-20261007
+- task_id: ai-lab-topic-continuity-pr109-security-corrective-20261007
 - owner: claude
 - slot: claude-3
 - status: in_progress
 - next_owner: claude
+- priority: urgent
+- recommended_model: Opus5.5（高）
+- type: bounded migration/security corrective on existing PR #109
+- target_pr: 109
+- reviewed_head: f83247ae1024d4220dfbfa5484c725381d63815d
+- production_mutation_allowed: false
+- deploy_allowed: false
+- merge_allowed: false
+
+## C1 disposition
+
+H1 exact-head review of PR #109 returned **CHANGES REQUIRED**.
+
+Preserve the accepted topic/capacity implementation. Correct **only** the three migration boundary findings B1-B3 and the tests necessary to prove them.
+
+Do not redesign the topic pool, cooldowns, scheduler, provider flow, X handling or AI model policy.
+
+## Accepted evidence — do not reopen without concrete regression
+
+The following is accepted and should remain byte/behavior stable except where a narrow test hook is unavoidable:
+- 74 total evergreen seeds.
+- evergreen-0..6 identities/text/tags preserved.
+- Tier 2 diverse evergreen + Tier 3 reserve ordering.
+- recent dev diary remains first.
+- Tier 3 remains last priority.
+- no Web Search dependency for fallback.
+- no fabricated specific current-AI/news claims.
+- same-seed 72h cooldown unchanged.
+- tagged-theme 48h cooldown unchanged.
+- unresolved claimed/provider_started/ambiguous blocking unchanged.
+- event-level dedupe/fencing unchanged.
+- cross-brand fingerprint/content guards unchanged.
+- provider outcome / ambiguous no-resend unchanged.
+- candidate limit target 128 is acceptable in principle.
+- exact TS/SQL 74-entry map parity is accepted.
+- real SQL 14 days x 10/day = 140/140, fixed/skewed rotation 140/140 accepted.
+- old seven-seed pool exhaustion reproduction accepted.
+- migration-first then x-test-post-deploy order accepted.
+
+## Blocking B1 — fail closed on SET ROLE paths to service_role
+
+Current reviewed migration checks direct/inherited effective privileges but misses role memberships that allow:
+- direct `anon -> service_role` with `INHERIT FALSE, SET TRUE`;
+- indirect `authenticated -> bridge -> service_role` with SET ROLE capability.
+
+Required correction:
+- before replacing the claim function, detect and reject **direct and transitive** API-role paths that can `SET ROLE` into `service_role` or another privileged target that would gain claim execution.
+- retain existing owner-membership checks.
+- support PostgreSQL 16+ per-edge membership semantics; where exact edge semantics are unavailable, fail conservatively rather than assuming safety.
+- do not auto-revoke or repair role membership.
+- transaction must rollback fully on detection; no function/body/ACL change may persist.
+
+Required adverse fixtures:
+1. anon -> service_role, INHERIT FALSE / SET TRUE.
+2. authenticated -> intermediate role -> service_role, SET TRUE path.
+3. existing ordinary INHERIT TRUE privilege path remains rejected.
+4. healthy role graph remains accepted.
+5. rollback/no-definition-change assertion for each rejected case.
+
+## Blocking B2 — prerequisite table canonical-shape proof
+
+Current preflight is too weak: object existence + substring CHECK can accept drift.
+
+Before `CREATE OR REPLACE FUNCTION`, validate the prerequisite `ai_lab_topic_claims` shape as canonical.
+
+At minimum prove:
+- expected columns, data types, nullability/defaults;
+- primary key;
+- event_key and other required CHECK semantics, not substring matching;
+- required unique/index definitions including key columns, predicates, uniqueness, validity/readiness;
+- RLS enabled/forced state as expected;
+- policies/triggers expected by the accepted base;
+- table owner;
+- explicit/effective table + column ACL boundary;
+- no unexpected conflicting object shape relevant to claim safety.
+
+Accepted states:
+- canonical pre-capacity base state from `20261004090000`;
+- canonical already-capacity state for idempotent reapply.
+
+Reject unknown drift. Do not mutate/repair the table, RLS, policies, indexes or ACLs in this migration.
+
+Required adverse fixtures against the **capacity migration itself**:
+- missing PK;
+- missing diary active unique index;
+- RLS disabled;
+- vacuous/replaced event-key CHECK that only contains matching text;
+- at least one wrong index predicate/key/validity fixture;
+- unexpected table/column ACL drift.
+All must fail before function replacement and rollback cleanly.
+
+## Blocking B3 — verify unchanged lifecycle function bodies, not metadata only
+
+The capacity migration replaces only `claim_ai_lab_topic`, but currently accepts body drift in companion functions such as `start_ai_lab_topic_provider`.
+
+Required correction:
+- preflight exact approved definitions/contracts for the four unchanged lifecycle functions:
+  - start provider
+  - release claim
+  - mark ambiguous
+  - settle published
+- check signature, argument names/order/types where contract-sensitive, language, return type, SECURITY DEFINER, search_path, owner/ACL **and normalized body definition**.
+- also recognize the approved old claim definition before first apply and approved new claim definition for idempotent reapply.
+- unknown body/contract drift must abort before replacement.
+- do **not** rewrite those four companion functions.
+
+Required adverse fixture:
+- replace `start_ai_lab_topic_provider` with same signature/owner/return/security/search_path/ACL but body `RETURN true` without state transition.
+- applying capacity migration must fail and rollback with claim function unchanged.
+- add one positive healthy companion-definition control.
+
+Use a deterministic normalization/fingerprint approach that is stable enough for the supported PostgreSQL versions and documented in tests. Do not trust only function metadata.
+
+## Scope
+
+Keep working on existing PR #109; do not open a replacement PR unless technically unavoidable.
+
+Expected changed files:
+- `supabase/migrations/20261007173000_ai_lab_topic_evergreen_capacity.sql`
+- `supabase/tests/ai_lab_topic_capacity_run.sh`
+- focused migration/adversarial/static tests as needed
+- existing invariant test only if required.
+
+Avoid changing:
+- `EVERGREEN_TOPIC_SEEDS` content/count/order unless a concrete regression forces it;
+- `EVERGREEN_THEME_TAGS`;
+- Tier ordering;
+- x-test-post runtime;
+- brand post store;
+- provider outcome;
+- scheduler/posting windows;
+- G2/G4/G5-owned files;
+- Auth/OAuth/Vault/X provider boundaries.
+
+## Mandatory verification
+
+Re-run:
+- all new B1/B2/B3 adverse fixtures;
+- healthy apply + reapply;
+- 74-entry TS/SQL parity;
+- 129-candidate/unknown-seed rejection;
+- old 7-seed exhaustion;
+- real SQL >=14 days x 10/day = 140/140;
+- fixed and skewed rotation capacity;
+- existing claim proof;
+- migration source invariants;
+- relevant Deno AI Lab suites;
+- explicit `deno check` / lint for changed TS tests;
+- `git diff --check`;
+- added-line secret scan.
+
+Mutation-style expectation:
+- each adverse drift must cause migration failure;
+- no partial definition/ACL/table mutation after failure.
+
+## Freshness / isolation
+
+1. Read ORCHESTRATION / ACTIVE_TASK / CURRENT_STATE / this TASK / H1 Report.
+2. Use the existing isolated G3 PR109 worktree only if still clean/safe; otherwise make a new independent G3 worktree from fresh `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #109.
+4. Require reviewed head `f83247ae1024d4220dfbfa5484c725381d63815d` in PR history.
+5. Re-check G2/G4/G5 overlap before editing and before push.
+6. No production access/write/apply/deploy/scheduler/OpenAI/X call.
+
+## Completion
+
+Update the existing PR #109.
+
+Report:
+- exact new PR head;
+- B1/B2/B3 fix summary;
+- adverse fixture results;
+- healthy apply/reapply;
+- capacity result still 140/140;
+- accepted topic files byte/semantic stability;
+- changed_files;
+- tests;
+- fresh-main overlap;
+- production mutation/deploy/merge = 0.
+
+Then:
+- status: review_required
+- next_owner: chatgpt
+- STOP for K3.
+
+A second focused exact-head Codex rereview is required after this correction.
+
+
+---
+
+# Previous G3 task — preserved history
+
+# Claude Task 3 — CURRENT TASK
+
+- task_id: ai-lab-topic-continuity-fix-20261007
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Opus5.5（高）
 - type: company AI Lab production-post continuity bugfix / topic-pool capacity / safe fallback
@@ -213,6 +412,115 @@ Then:
 - STOP for `K3`.
 
 Because a SECURITY DEFINER claim function/migration may be changed, expect K3 to require one focused Codex review unless implementation proves no DB function change was necessary.
+
+## Report — ai-lab-topic-continuity-fix-20261007
+
+- result: **PASS candidate (source + migration candidate)** — 題材切れで投稿が止まる問題を、題材の容量を増やすことで直した。PR #109 を作成して open のまま。本番の読み書き 0 / deploy 0 / migration 適用 0 / scheduler 実行 0 / 実際の OpenAI・X の呼び出し 0 / merge 0。
+- branch / commit / PR / head: `claude/g3-ai-lab-topic-continuity-20261007` / `f83247ae` / [anohi-memories/kabumori#109](https://github.com/anohi-memories/kabumori/pull/109) / `f83247ae`。
+- CI: Vercel だけ「Deployment rate limited — retry in 24 hours」（アカウント全体の制限で、他の PR も同じ）。コードとは無関係。
+- worktree: 新規 `/Users/yuya/Developer/kabumori-g3-ai-lab-continuity`（GPT-6 の作業の worktree は再利用していない）。
+
+### 原因
+- evergreen が **7件しかない** 状態で、「同じ seed は72時間」「同じテーマは48時間」のクールダウンをかけると、1日10投稿は続かない。
+- 10/6 は日記3件と evergreen 6件で枠を使い切り、10件目から `AI_LAB_TOPIC_POOL_EXHAUSTED` になった。10/7 も同様。OpenAI や X に送る前の段階で止まっている。
+- 偶然の障害ではなく、容量の設計不足。
+- TS のモデルでも、本物の SQL でも、「7件の題材だけでは同じルールで 1 日目のうちに尽きる」ことを再現した（SQL では 10 枠中 6 件確保、4 件が題材切れ）。
+
+### 題材の数とカテゴリ（前 → 後）
+- 前: 7 件（タグ付き 3、タグなし 4）。
+- 後: **74 件**（`evergreen-0`〜`evergreen-73`。テーブルの CHECK により上限は 99）。
+  - 0〜6: 既存の 7 件。文章も添字もタグも変えていない（DB の行は添字で題材を指すため）。
+  - 7〜61: **Tier 2 の多様な evergreen 55 件**（Tier 2 は既存と合わせて 62 件）。カテゴリと件数:
+    - 本業との両立 5
+    - 小さく作る・試す 5
+    - 仕様決め・やり直し・バグ修正 5
+    - AI への指示の出し方 5
+    - 複数 AI の役割分担 4
+    - 実機で UI を確かめる 5
+    - テスト・安全確認・失敗からの学び 5
+    - コードが書けなくても作れる 5
+    - AI の進歩で出来ることが増えた実感 4
+    - 新しい AI を試すときの期待と戸惑い 4
+    - 自動化しても最後は人が判断 4
+    - モデル更新を利用者目線で 4
+  - 62〜73: **Tier 3 の継続用の予備 12 件**（`AI_LAB_CONTINUITY_RESERVE_START = 62`）。当たり障りのない一般的な振り返りで、候補の一番最後に置く。
+- 追加した 67 件は、テーマ判定のパターン（地味・試行錯誤・手戻り・個人開発は大変・進んでいない・調べるだけ・コードを書かない）に当たらない言い回しにし、テーマタグも付けていない（72 時間の seed クールダウンだけで管理）。
+- 「本日」「発表」「達成」「最新モデル」、具体的なモデル名や年などの、根拠のない最近の事実は書いていない（テストで確認）。重複なし。
+- Web 検索への依存は増やしていない。
+
+### クールダウンの扱い（変更なし）
+次の安全策はどれも変えていない。
+- 同じ seed: published から 72 時間
+- 同じテーマ: published から 48 時間
+- 未解決（claimed / provider_started / ambiguous）の seed とテーマ: 時間に関係なく隔離
+- 日記イベントは一度きり
+- ブランド単位の advisory lock
+- 候補は全件を先に正規の形で検証する
+- lease の fencing
+- X の前に provider_started を確定する
+- ブランド横断の fingerprint、内容の多様性ガード
+- 結果不明・確定済みの X 投稿は再送しない
+
+変えたのは次の 2 点だけ。
+- 候補の順番: 新しい日記 → Tier 2（rotationIndex で回す）→ Tier 3（同じく回す。常に最後）
+- 1 回の呼び出しの候補数の上限: 64 → **128**。TS 側も 128 件で切り、切った分は `CLAIM_CANDIDATE_LIMIT` として除外ログに残す。日記が先頭にあるので、切れるのは優先度の低い evergreen だけ。今の題材数では切れることはない。
+
+### 14 日間のシミュレーション結果（日記 0 件、1 日 10 投稿）
+- 本物の SQL（`supabase/tests/ai_lab_topic_capacity_run.sh`）: 実際の `claim_ai_lab_topic` / start / settle を通し、毎枠の前にすべての時刻を 2.4 時間戻して時間の経過を再現した。候補は本番の TS の builder がそのまま作ったもの。
+  - **140/140 件を確保、題材切れ 0 件**
+  - 同じ seed を 72 時間以内に使い回した例は 0 件、同じテーマを 48 時間以内に重ねた例も 0 件
+  - 使われた seed は 61 種類
+- TS のモデル（SQL の写しの `ClaimDb`）:
+  - 14 日間を、ローテーションが本番どおり / 0 で固定 / ばらばら の 3 通りで回し、どれも題材切れ 0 件
+  - 各 seed の再利用は 72 時間以上空いていて、1 つの seed の使用回数は上限（5 回）以内。偏りはない
+  - 28 日間でも 0 件
+  - 7 件に 1 件 X の結果が不明（永久に隔離）になる場合の 14 日間でも 0 件
+  - 通常の運用では Tier 3 の使用は 0 件で、Tier 2 がすべてクールダウン中のときにだけ Tier 3 を確保する
+
+### DB の関数と migration の変更
+- 新しい migration `20261007173000_ai_lab_topic_evergreen_capacity.sql`（候補。未適用）。
+  - 当初は `20261007120000` にしたが、main 上の G2 の `20261007120000_market_report_generation_traces.sql` と番号が衝突したため変更した。G4 の PR #106 の `20261007150000` とも別の番号。
+  - `claim_ai_lab_topic` だけを `create or replace` する。正規の対応表を 74 件にし、候補の上限を 128 にした。
+  - **関数のそれ以外の部分は `20261004090000` と完全に同じ**（テストで、対応表と上限を除いた本体が一致することを確認）。
+  - preflight は元と同じ: owner の方針、API ロールの継承、overload の検査。加えて次を確認する: `20261004090000` が適用済みであること、event_key の CHECK が想定どおりであること。
+  - 事後条件は元と同じで、5 つの関数とテーブルの owner と実効権限（継承・PUBLIC・列単位の権限を含む）を検証する。テーブルの変更はなく、`create or replace` は 1 つだけ。
+- TS と SQL の対応表の一致: `EVERGREEN_TOPIC_SEEDS` / `EVERGREEN_THEME_TAGS` と、新しい migration の `c_evergreen_tags` が完全に一致し、元の 7 件の対応も残っていることをテストで確認。片方だけ更新すると失敗する。
+
+### 変更ファイル
+- `supabase/functions/_shared/brand/ai_lab_dev_diary_context.ts`（題材、Tier 3、候補の順番と上限）
+- `supabase/functions/_shared/brand/ai_lab_event_dedupe_test.ts`（DB の写しの上限、整合テスト、容量・優先順・品質・migration 差分のテストを追加。既存の 2 件は「7 件前提」の数値だけ直した）
+- `supabase/migrations/20261007173000_ai_lab_topic_evergreen_capacity.sql`（新規）
+- `supabase/tests/ai_lab_topic_capacity_run.sh`（新規）
+- `supabase/tests/migration_source_invariants_test.ts`（新しい番号を予約一覧に追加）
+
+`ai_lab_brand_post_store.ts`・`x-test-post/index.ts`・スケジュール・posting_windows・X 認証・POSTONA・G2 / G4 / G5 のファイルは変更していない。
+
+### テスト
+- Deno: x-test-post + _shared で 1007/1007（新しいテストを含む。`--allow-run` 付き）。
+- 本物の DB:
+  - 容量の実証はすべて PASS（前提なしでの適用拒否、適用と再適用、実効権限は変わらない、129 件以上の候補と対応表にない seed は拒否、14 日間で 140/140、旧 7 件は 1 日目で尽きる）
+  - 既存の claim の実証も 132 件すべて PASS
+- migration の不変条件 11/11。
+- `deno check` / `deno lint` クリーン、`git diff --check` クリーン、追加行の秘密情報スキャン 0。
+
+### 最新 main との重なりの確認
+push の直前に最新の main を取り込んだ。
+- 変更ファイルの重なりは 0。
+- migration の番号の衝突は上のとおり解消済み。
+- open な PR #106（G4）/ #33 / #11 / #10 / #3 とも変更ファイルの重なりは 0。
+
+### 本番がまだ失敗し得るか、適用の順番
+- **merge しただけでは本番は直らない。** 本番は 7 件の bundle のままなので、10 投稿 / 日の題材切れは、適用と deploy まで続く。
+- 推奨の順番:
+  1. 本番の preflight（読み取りのみ）: `20261004090000` が適用済みで関数の形が想定どおりであること、owner の方針、ai_lab_topic_claims の未解決の行の数を確認する。
+  2. migration `20261007173000` を単体で適用し、読み戻す（関数の本体の md5・ACL・対応表 74 件）。
+  3. `x-test-post` を deploy し直し、bytes を検証する。10/7 の開発日記の snapshot も一緒に入る。他の未 deploy の PR が bundle に入るかを事前に差分確認すること。
+- **逆の順番（deploy を先にする）は不可。** 新しい bundle が 65 件以上の候補や evergreen-7 以降を送ると、古い DB 関数が `INVALID_ARGUMENT` で全件を拒否し、すべての枠が失敗する。
+
+### レビュー
+SECURITY DEFINER の claim 関数を置き換えるので、TASK のとおり **集中レビュー 1 回** を想定している。差分は対応表と上限の 2 点だけで、テストで固定してある。
+
+- status → review_required / next_owner → chatgpt。STOP。
 
 ---
 

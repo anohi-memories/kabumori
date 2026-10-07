@@ -1,3 +1,68 @@
+## K4 — corrected POSTONA PR #106 PASS_CANDIDATE / H1 rereview assigned — 2026-10-07
+
+- corrected PR #106 exact head: `a8f313dc72b087ab86482781297848fe6e23bdcc`.
+- PR remains open/unmerged with exactly 6 changed files.
+- CI: Netlify PASS / Vercel PASS.
+- current main advanced after the PR merge-base only in unrelated control files; changed-file overlap with PR #106 = 0.
+- G4 reports all previous B1-B6 blockers corrected with expanded disposable PostgreSQL evidence:
+  - provider identity uniqueness precondition;
+  - provider immutability;
+  - PG16+ SET ROLE graph;
+  - explicit starting schema/security baseline;
+  - connected-Meta access-reference requirement;
+  - provider-aware service_role Meta-write boundary.
+- reported proof includes 73 adverse starts, 21 postcondition drift cases, 45/45 mutation detection, B5 60-case matrix, B2 64-case matrix, and existing X publish/refresh/deletion/PR41 Stage3B regressions.
+- production DB/apply/deploy/Auth/OAuth/Vault/provider calls = 0.
+- K4 verdict: **PASS_CANDIDATE / merge HOLD** pending one independent exact-head rereview.
+- H1 was checked as done/free and is now assigned `postona-pr106-phase2a2-security-rereview-20261007`.
+- H1 target: `a8f313dc72b087ab86482781297848fe6e23bdcc`.
+- H1 recommended model: **Sol（高）**.
+- H2 remains free and untouched.
+- no production preflight/apply is authorized by this K4.
+- next action: send `H1` to Codex; finish code `C1`.
+
+## Routing correction — delivery-first market-report task belongs to G2 — 2026-10-07
+
+- user corrected the routing: this chat/workstream uses **G2 only**.
+- the prior G1 allocation was a ChatGPT routing mistake; G1 is cancelled for this task and must not start it.
+- canonical task is now G2: `kabumori-market-report-delivery-first-guard-calibration-20261007`.
+- X is Premium; legacy short-post length is advisory only.
+- objective errors follow progressive degradation: remove the smallest bad sentence/point/claim/news item and deliver the remaining coherent content when possible.
+- full deterministic AI disclaimer is required on both X and App.
+- whole-report failure is last resort only.
+- timing gate: **do not start G2 before the 2026-10-07 16:35 JST natural close retry is complete and observed.**
+- recommended Claude model: **Opus5.5（高）**.
+- after retry observation, user can send `G2`; finish code is `K2`.
+
+## G1 delivery-first policy refinement — 2026-10-07
+
+- X account is Premium; legacy short-post character targets are no longer delivery constraints. Readability length remains advisory only.
+- AI disclaimer uses the full deterministic footer on both X and App; it must never be trimmed for length.
+- objective factual errors now follow **progressive degradation**:
+  - detect the smallest bad unit;
+  - omit/neutralize that sentence/point/claim/news item only;
+  - keep and deliver the remaining coherent safe content;
+  - record removed units/reasons in diagnostics/traces.
+- wrong number/date/sign/stale/1306 identity/unknown ref must not kill the whole report when local omission can preserve a coherent report.
+- whole-cycle failure is last resort only: unparseable output or no candidate can be reduced to a minimally coherent safe report.
+- G1 task updated in-place; recommended model remains **Opus5.5（高）**.
+
+## G1 assigned — delivery-first market-report guard calibration — 2026-10-07
+
+- user decision: prioritize successful daily morning/close delivery; only clear objective falsehoods should hard-stop a report.
+- first natural GPT-6.1 Sol close at 16:20 failed with `ANALYSIS_LOCAL_CHECK_FAILED` after two useful candidates were rejected by false-positive 1306/date guards.
+- G1 task: `kabumori-market-report-delivery-first-guard-calibration-20261007`.
+- required behavior: objective numeric/date/sign/stale/explicit-1306-identity/unknown-ref contradictions remain fatal; ambiguous parser checks, quality issues and non-objective Fact findings become WARN/advisory.
+- Fact may request one bounded regeneration, but if any candidate is deterministically hard-safe the cycle should deliver a best safe candidate instead of failing only because advisory Fact/local warnings remain.
+- deterministic disclaimer required on every shared report:
+  - X compact: 「※AIによる分析です。内容に誤りを含む可能性があります。投資判断はご自身で。」
+  - App: 「※本レポートはAIによる分析です。内容に誤り・不足を含む可能性があります。最終的な投資判断はご自身でお願いします。」
+- 「AIが独自調査」は使用しない; current runtime analyzes supplied packets and does not independently web-browse.
+- current open PR changed-file overlap with expected market-report files: 0.
+- source-only implementation; no production deploy/manual invoke/DB/Cron/gate mutation.
+- recommended Claude model: **Opus5.5（高）**.
+- next action: send `G1` to Claude Code; finish with `K1`.
+
 ## G4 corrective assigned — POSTONA PR #106 review CHANGES REQUIRED — 2026-10-07
 
 - direct independent review target: PR #106 exact head `dac01220ca600cc003b3dafa4b30a84340b29850`.
@@ -5552,3 +5617,30 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - implementation gate: source + forward migration candidate + tests only; no production mutation/deploy/merge. Require >=14-day x 10-post/day capacity simulation and TS/DB canonical-map parity.
 - overlap check: G4 owns social_accounts schema candidate; G5 owns common-account native validation; G2 owns market-report GPT-6.1 rollout. G3 scope is isolated from those files.
 - recommended model: Opus5.5（高）.
+
+
+## K3 — AI Lab topic continuity PR #109 — 2026-10-07
+- verdict: **PASS_CANDIDATE / focused H1 review required / merge HOLD**.
+- exact candidate: PR #109 head `f83247ae1024d4220dfbfa5484c725381d63815d`, 5 changed files.
+- implementation accepted for review: evergreen pool 7 -> 74, Tier 3 continuity reserve, candidate cap 64 -> 128, recent diary remains first, no Web Search fallback, no fabricated specific recent-AI claims.
+- capacity evidence reported: real SQL 14 days x 10/day = 140/140 claimable with 0 exhaustion; TS model also passes normal/fixed/skewed rotation, 28 days and unresolved-outcome stress. Old 7-seed pool exhaustion is reproduced.
+- safety semantics reported unchanged: 72h same-seed cooldown, 48h tagged-theme cooldown, unresolved claim isolation, event-level dedupe/fencing, provider_started/ambiguous handling, cross-brand fingerprint/content guards.
+- production mutation/deploy/migration apply/OpenAI/X/scheduler invoke: 0.
+- blocking reason for review: new forward migration `20261007173000_ai_lab_topic_evergreen_capacity.sql` replaces SECURITY DEFINER `claim_ai_lab_topic`; exact ACL/ownership/search_path/canonical-map proof needs one independent review.
+- H1 assigned `ai-lab-topic-continuity-pr109-focused-review-20261007`, exact head fixed, recommended **Sol（高）**.
+- production rollout remains HOLD. Required order after review/merge and separate approval: migration first -> read-back -> x-test-post deploy second. Deploy-first is forbidden because the old DB function rejects the enlarged candidate set/new evergreen ids.
+- AI Lab diary: 記録不要 — this fix itself is internal posting-infrastructure maintenance and today already has a canonical AI Lab diary entry; do not create a duplicate same-day diary event merely from this K3.
+
+
+## Final C1 — PR #109 AI Lab topic continuity focused review — 2026-10-07
+- verdict: **CHANGES REQUIRED accepted**.
+- exact reviewed head: `f83247ae1024d4220dfbfa5484c725381d63815d`; PR remains open/unmerged.
+- accepted and frozen unless regression: 74-topic design, diary -> Tier2 -> Tier3 order, 128 candidate target, TS/SQL map parity, no fabricated recent-AI claims/Web Search dependency, 72h/48h cooldowns, event/provider/fingerprint safety, real SQL 140/140 capacity, fixed/skewed rotation capacity, old-7 exhaustion reproduction, migration-first rollout order.
+- blocking B1: migration does not fail closed on direct/transitive INHERIT FALSE / SET TRUE role paths from API roles to service_role; reviewer reproduced successful SET ROLE + claim after migration.
+- blocking B2: prerequisite table canonical shape is not fully checked; missing PK/index, disabled RLS, and vacuous CHECK drift were accepted by the candidate.
+- blocking B3: unchanged companion lifecycle-function bodies are not verified; reviewer replaced start-provider with same metadata but unsafe body and migration still committed.
+- production access/mutation/migration apply/merge/deploy/scheduler/OpenAI/X/Auth/OAuth/Vault/Cron changes by H1/C1: 0.
+- G3 corrective assigned: `ai-lab-topic-continuity-pr109-security-corrective-20261007`, existing PR #109 only, recommended **Opus5.5（高）**.
+- required correction is bounded to migration guards + adversarial rollback tests. Topic content/capacity design should not be redesigned.
+- after K3, one focused exact-head Codex rereview is required, recommended **Sol（高）**.
+- AI Lab diary: 記録不要 — no completed user-visible development milestone yet; this is a security corrective in progress and same-day diary duplication is unnecessary.

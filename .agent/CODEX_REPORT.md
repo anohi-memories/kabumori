@@ -1,3 +1,102 @@
+# H1 — PR #109 AI Lab topic continuity focused review — 2026-10-07
+
+- task_id: ai-lab-topic-continuity-pr109-focused-review-20261007
+- result / verdict: **CHANGES REQUIRED**.
+- status: review_required; next_owner: chatgpt; **STOP for C1**.
+- target_pr: [#109](https://github.com/anohi-memories/kabumori/pull/109)
+- exact reviewed head: `f83247ae1024d4220dfbfa5484c725381d63815d`, OPEN/unmerged and unchanged at final source read-back.
+- recommended_model: Sol（高）.
+- fresh main: first `30c083793ca8ee525ba0c3e180c896b3b27c0367`; final review compatibility `36e928421cf02cd1780fb19f489927b995689dad` (including G5's control-only report update; overlap still zero).
+- changed_files (H1): `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md` only. No product patch or source-branch push.
+- commit_hash: reviewed source is the exact hash above. TASK/Report-only sync commit and push are confirmed after remote read-back and reported in the final response; this report does not claim an unperformed push/merge/deploy.
+- production access/mutation, production migration apply, merge, deploy, scheduler invoke, OpenAI/X/provider calls, Auth/OAuth/Vault/secret/Cron changes = **0**.
+
+## Blocking findings (all reproduced locally; no claim that production currently has this drift)
+
+### B1 [P2] EXECUTE audit omits non-inheriting SET ROLE paths to service_role
+
+File: `supabase/migrations/20261007173000_ai_lab_topic_evergreen_capacity.sql:379-384` (owner-membership checks at 25-31/365-368 do not cover this different role target).
+
+On PostgreSQL 17.11, after applying the base migration as a non-superuser owner:
+
+```sql
+GRANT service_role TO anon WITH INHERIT FALSE, SET TRUE;
+-- pg_has_role('anon','service_role','USAGE') = false
+-- pg_has_role('anon','service_role','SET') = true
+-- has_function_privilege('anon', claim_signature, 'EXECUTE') = false
+```
+
+Applying the exact capacity migration **commits successfully (exit 0)**. An anon session can then `SET ROLE service_role` and successfully claim `evergreen-73`. An indirect `authenticated -> reviewer_bridge -> service_role` path with INHERIT FALSE / SET TRUE also passes and successfully claims `evergreen-72`. A normal INHERIT TRUE control is correctly rejected, demonstrating why the current has_function_privilege check is insufficient. The explicit function ACL is still owner/service_role only, so aclexplode does not catch membership-based escalation.
+
+Impact: the stated effective service-role-only execution boundary is not fail-closed under API-role graph drift. This is a missing guard copied from the base ACL logic, not a new GRANT introduced by this PR. No production role graph was inspected or changed.
+
+Required bounded correction: validate effective INHERIT and SET ROLE paths, direct and transitive, from anon/authenticated to service_role and any privileged target; preserve the existing owner/member guard. Support the deployment's PostgreSQL versions (PG16+ per-edge SET/INHERIT; a safe conservative membership check where necessary). Add both direct and indirect INHERIT FALSE / SET TRUE fixtures against the **new migration**, with rollback/no-function-change assertions. Do not repair production roles automatically.
+
+### B2 [P2] New preflight no longer proves the prerequisite table's canonical shape
+
+File: `supabase/migrations/20261007173000_ai_lab_topic_evergreen_capacity.sql:70-82`.
+
+The prerequisite check only proves that a table and claim signature exist, and that one named CHECK contains a substring. Independently, each of these alterations to an otherwise healthy base DB is accepted by the exact new migration (exit 0):
+
+- drop `ai_lab_topic_claims_pkey`;
+- drop `ai_lab_topic_claims_diary_event_active_uidx`;
+- disable RLS;
+- replace `ai_lab_topic_claims_event_key_check` with `CHECK (true OR event_key ~ '^evergreen-[0-9]{1,2}$')` (a vacuous CHECK still containing the searched text).
+
+The base migration's temporary canonical-shape comparison rejects these kinds of drift, but the forward migration neither invokes nor reproduces that comparison. Running the existing 132-marker proof only tests the **base migration**, so its PASS does not prove the new migration's drift boundary. There is no actual verification of an applied base version beyond object existence.
+
+Required bounded correction: perform a read-only canonical table-shape prerequisite check before replacement, covering columns/defaults/nullability, PK/CHECKs, index semantics and validity/readiness, RLS/policies/triggers and ACLs; confirm approved prerequisite state without trusting migration history alone. Permit the canonical pre-capacity and canonical already-capacity state for idempotent reapply, reject unknown state. Reuse the accepted base shape definition/check where appropriate without table DDL or extra persistent objects. Add adverse tests specifically applying the capacity migration. Keep this a single-function forward migration; do not reapply unrelated migrations.
+
+### B3 [P2] Companion function body drift passes the five-function postcondition
+
+File: `supabase/migrations/20261007173000_ai_lab_topic_evergreen_capacity.sql:405-411` (and preflight 37-45/51-69).
+
+Replace `start_ai_lab_topic_provider(uuid,uuid,text)` in the disposable base DB with the **same argument names, owner, return type, SECURITY DEFINER, empty search_path and ACL**, but body `BEGIN RETURN true; END`. The new migration accepts this unchanged unsafe function (exit 0): metadata alone satisfies the five-entry-point check.
+
+SQL-only consequence reproduced after that accepted apply:
+
+1. Claim a diary event; start returns true but the row remains `claimed`, not `provider_started`.
+2. Settlement rejects with `AI_LAB_TOPIC_CLAIM_STATE_CONFLICT`.
+3. After lease expiry, the same diary event is claimable again.
+
+No X request was made. In the actual dispatcher, true from start permits X to proceed; durable pre-X ownership is therefore no longer guaranteed under this accepted drift, and a confirmed-post/settlement-failure path could reopen the topic.
+
+Required bounded correction: verify exact approved definitions and contract metadata of the four unchanged lifecycle functions (and approved old/new claim definition) before committing the one-function replacement. Reject unknown bodies/signatures/languages/return contracts rather than rewriting unrelated entry points. Add this adverse start-function fixture and verify transaction rollback. This does not reopen healthy lifecycle design or require provider changes.
+
+## Accepted topic/capacity/validation evidence
+
+- Exact PR diff is five files: diary context, event-dedupe tests, one new migration, capacity runner, migration-version reservation. Only claim_ai_lab_topic is replaced; no table DDL or new overload/table/column grants. Normal owner/ACL/search_path and apply/reapply PASS. Direct illegal table/function grants and inherited EXECUTE controls fail closed as intended.
+- The 74-entry TS seed/tag and SQL c_evergreen_tags maps match exactly. Old 0..6 identities/text/tags are preserved. The actual claim body is byte-identical to the base after removing map and maximum-candidate differences (64 -> 128).
+- All-or-nothing validation runs before lease expiry/mutation. Actual new SQL rejects 129 candidates, unknown evergreen-74, forged old tags, wrong unit/event pairs and extra keys. Additional probes place a valid new seed first and an invalid later candidate; all refuse with the complete existing table-row digest unchanged, including an expired claim.
+- Shipped real-SQL capacity runner: diary=0, 10/day x 14 days **140/140**, no exhaustion, 61 distinct seeds, no repeat within 72h and no tagged shared theme within 48h. Old seven: **6 claims / 4 exhausted slots** within day one.
+- Additional reviewer real-SQL runs using the actual production builder: fixed rotation=0 **140/140** and skewed `(slot*37+11)%97` **140/140**, with SQL cooldown assertions. Reserve is claimed only after every Tier2 seed is blocked. 30-day-old provider_started/ambiguous and still-live claimed reservations remain blocked; expired claimed leases are intentionally released, not permanently quarantined.
+- Shipped TS tests cover 14-day normal/fixed/skew rotation, 28 days, one ambiguous outcome in seven, fresh diary first, one-use diary event and reserve-last ordering.
+- Capacity reasoning under the actual SQL predicates: 71 of the 74 seeds are untagged (67 new + four old) and independently reusable after 72h. At 10 slots per calendar day, even an arbitrary 72h window intersects at most four calendar days / at most 40 scheduled publications; thus at least 31 untagged seeds remain without permanent quarantine. The tested uniform schedule has at most 30 recent slots. Shared-theme blocks affect only the three tagged old seeds. This is a topic-claim capacity result, **not** a guarantee of successful model generation/X delivery, or unlimited operation if unresolved seeds accumulate forever; preserving quarantine remains intentional.
+- New topics span work/time balance, small iterations, specifications/bugs, prompting/AI roles, real-device UX, testing, learning, new tools, human decisions and model changes. No concrete new AI release/news/date claims or Web Search dependency. Tier3 is generic reflection, not fabricated daily news. Existing theme/content-diversity, fingerprint, provider-outcome/fencing and confirmed/ambiguous no-resend code is unchanged.
+
+## Tests and limitations
+
+- Focused checked Deno suites: **118 passed / 0 failed**, including migration source invariants **11/11**.
+- Broad x-test-post + _shared runtime: **1007 passed / 0 failed** with `--no-check`.
+- Broad checked suite: **18 diagnostics**, identically reproduced on pre-PR parent `0bf4d7a1089bcbd0a4ef50b156dab696d3657a01`. Diagnostics occur in unchanged unrelated files; no new changed-file type error. Changed diary context / event tests / migration invariants explicit `deno check` and lint PASS.
+- Shipped local PostgreSQL capacity proof: **7 PASS markers**, all checks pass. Existing base claim proof: **132 PASS markers**. Reviewer capacity/validation proof: **11 PASS markers**.
+- Reviewer adverse proof: **seven unsafe fixtures accepted** (two SET ROLE paths; four table-shape drifts; one companion body drift). **Three negative controls rejected** (inherited EXECUTE, direct companion EXECUTE, direct table SELECT). These seven are failing candidate expectations, not positive release evidence.
+- `git diff --check`, exact five-file scope and added-line secret scan PASS. Product worktree remains clean.
+- Fresh-main product-file overlap **0**; G2/G4/G5 workstream overlap **0**; read-only `git merge-tree --write-tree` succeeds. No main merge or branch-protection bypass. Changes in main since the PR base are control files only.
+
+## Rollout / safety / next recommendation
+
+- G3's migration-first order is correct: read-only preflight -> single approved migration -> function/map/ACL read-back -> separately approved x-test-post deployment -> bundle byte read-back. Deploy-first is independently reproduced to return INVALID_ARGUMENT with zero claims against the old DB function.
+- **Do not merge/apply/deploy this exact head** while B1-B3 remain. Production migration/deploy are separately gated even after source correction. Do not change X auth/provider authorities, cron/posting windows, models, G2/G4/G5 or unrelated paths.
+- H1 used new dedicated source/report/baseline worktrees and Unix-socket-only disposable PostgreSQL 17.11, never production. Reviewer artifacts are under `/private/tmp/kabumori-h1-pr109-20261007.rpU3q5/`: `adverse.sh`, `adverse.log`, `unsafe-start-effect.sql/.log`, `capacity-extra.ts/.log`, capacity/base/focused/broad logs. DB server is stopped; files remain available for handoff, no active test service left.
+- Skills used: Supabase and Postgres best practices directed privilege-path and short transaction validation. Public current Supabase changelog/functions and [PostgreSQL 17 role membership](https://www.postgresql.org/docs/17/role-membership.html)/[privilege inquiry docs](https://www.postgresql.org/docs/17/functions-info.html) checked; no project connection/secret used.
+- remaining_issues: B1, B2, B3; unrelated baseline type debt documented only, not broadened into this task.
+- next_recommendation: C1 returns a bounded corrective to the existing G3 PR109; recommended **Opus5.5（高）**. One focused exact-head rereview afterward, recommended **Sol（高）**. Preserve the accepted topic/capacity implementation and regression evidence, fix migration prerequisite/role-path guards and tests only. **STOP for C1**.
+
+---
+
+# Previous H1 Report — preserved history
+
 # H1 — PR #95 Q1 final focused rereview — 2026-10-07
 
 - task_id: common-account-v1-phase2-q1-final-rereview-20261007

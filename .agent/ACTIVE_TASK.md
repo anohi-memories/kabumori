@@ -32,16 +32,15 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: common-account-v1-phase2-q1-final-rereview-20261007
+- status: ready
+- task_id: postona-pr106-phase2a2-security-rereview-20261007
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts H1 PASS on PR #95 exact head ba35b642d30ce423a8683feffcd26aec325b45ee. Q1 is closed; prior S1-T/S2/session_id/R1-R5 remain PASS. PR #95 source was squash-merged as d5bea735937b53095b110b4bed1f20442e56b089. H1 free. No production migration apply/deploy/EAS.
+- allocation: Focused exact-head rereview of corrected POSTONA PR #106 head a8f313dc72b087ab86482781297848fe6e23bdcc. Verify B1-B6 closure, defensive postconditions and X regressions only. No merge/apply/deploy/production/provider access.
 - recommended_model: Sol（高）
-
 ## Codex H2
 - owner: codex
 - slot: codex-2
@@ -64,43 +63,43 @@
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS. PR #100 exact head 3fd7c569efb6598202e71151dd2393f661f93b81 squash-merged as fe8090bab89824fc8c00147fb5fc92bb1afab82c. Canonical portfolio UI, real saved-close data, Search, interim Watchlist, fallback avatars and contextual report navigation are complete. Portfolio-origin report Back/swipe returns Portfolio; Reports-list origin returns Reports list. 426/426 app tests; no backend/DB/Auth/EAS changes. G1 free.
+- allocation: G1 market-report allocation was a routing mistake and is cancelled. G1 remains free after the completed portfolio task; do not start the delivery-first report task from G1.
 - recommended_model: Sonnet5（中）
 
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: kabumori-market-report-gpt61-production-preflight-20261007
+- status: ready
+- task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Final production rollout APPLIED_PASS at 16:11 JST after explicit user approval. Trace migration 20261007120000 applied and verified with one exact history row; market-report-analysis alone deployed as v28 ACTIVE from accepted GPT-6.1 Sol source; app/x consumer gates remain OFF; no manual report/replay; natural close cron remains active for 16:20 JST. G2 free pending observation.
+- allocation: Canonical delivery-first market-report calibration. X is Premium; legacy short length is advisory only. Objective errors should be removed at smallest-unit granularity and remaining coherent content delivered; whole-report failure is last resort. Deterministic AI disclaimer required on X/App. IMPORTANT: user will not start G2 until after the 16:35 JST natural retry is complete and checked.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
 - owner: claude
 - slot: claude-3
 - status: in_progress
-- task_id: ai-lab-topic-continuity-fix-20261007
+- task_id: ai-lab-topic-continuity-pr109-security-corrective-20261007
 - start_code: G3
 - finish_code: K3
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: Urgent AI Lab continuity bugfix. Production evidence shows 10/day schedule is healthy but 7 evergreen seeds + 72h seed / 48h theme cooldown exhausted the topic pool, causing all 2026-10-07 executed slots to fail before OpenAI/X. Expand to a sufficiently large diverse safe topic reservoir with explicit continuity fallback, preserve claim/fencing/cooldowns/duplicate guards, and prove >=14 days x 10/day cannot exhaust. Source/migration candidate only; no production mutation/deploy/merge.
+- allocation: C1 CHANGES REQUIRED corrective on existing PR #109 only. Preserve accepted 74-topic/Tier2+Tier3/cooldown/capacity behavior; fix migration B1 SET ROLE graph guard, B2 canonical prerequisite table-shape proof, B3 exact unchanged lifecycle-function body proof. Add adverse rollback fixtures. No production/apply/deploy/merge.
 - recommended_model: Opus5.5（高）
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: review_required
 - task_id: postona-multisocial-phase2a2-security-corrective-20261007
 - start_code: G4
 - finish_code: K4
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Direct independent review of PR #106 head dac01220 returned CHANGES REQUIRED. G4 must update the existing PR only and close B1-B6: provider-identity unique-index precondition, provider immutability, PG16+ SET ROLE graph, explicit starting schema/ACL baseline, connected-Meta access-ref invariant, and provider-aware service_role Meta-write boundary. Also harden policy/trigger/index/check postconditions. No production/apply/deploy/OAuth/Vault/provider calls. After corrected K4, use a free H1/H2 for one Sol（高） exact-head rereview if available.
+- allocation: K4 accepts corrected PR #106 head a8f313dc72b087ab86482781297848fe6e23bdcc as PASS_CANDIDATE only. B1-B6 are reported fixed with expanded PostgreSQL/adversarial/mutation coverage; CI green; fresh-main file overlap 0; production/deploy/provider mutations 0. Merge HOLD pending H1 exact-head security rereview.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
