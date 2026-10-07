@@ -5343,3 +5343,27 @@ Unexpected residue: **none**.
 - 2026-10-08 AI Lab schedule: 10 brand_post rows present and pending. First natural slot is 2026-10-08 07:51 JST.
 - rollout status: **APPLIED_PASS / natural scheduled-post observation pending**.
 - do not force a post merely for verification. Confirm the first natural slot later from scheduled_posts / execution logs.
+
+
+## Production model rollout receipt — AI Lab gpt-6-luna — 2026-10-08 JST
+
+- user requested the model change immediately after PR #109 rollout.
+- scope intentionally limited to the AI Lab scheduled-brand-post path inside `x-test-post`.
+- reviewed source basis: merged PR #105 exact head `78a43ae878205f726111dde1002bd28ea8e82b97`.
+- official OpenAI docs rechecked before deploy: `gpt-6-luna` supports Responses API and `reasoning.effort: low`; standard token pricing matches the reviewed policy ($0.10 input / $0.50 output per 1M).
+- production baseline: x-test-post v139.
+- deploy changed exactly two runtime modules:
+  1. `functions/_shared/brand/brand_post_generator.ts`
+  2. `functions/_shared/social_ai_model_policy.ts`
+- generator now resolves `brandPostGeneration` through the reviewed central policy -> `gpt-6-luna`; token cost uses the same policy.
+- PR #109 runtime behavior remains intact: AI Lab unlimited length, 2000 max-output-token budget for explicit unlimited mode, incomplete-response fail-closed, 74-topic/candidate source.
+- x-test-post production after deploy: **v140 ACTIVE**, verify_jwt=false, EZBR `fb79c7866b30339215c4f104d700f882a8ff17c864d061de0f83cf4c14dab1f4`.
+- post-deploy read-back:
+  - policy file present;
+  - `brandPostGeneration -> fast -> gpt-6-luna`;
+  - old hardcoded 5.6 Luna removed from shared brand generator;
+  - Kabumori x-test-post index still contains its existing 5.6 model configuration and was not migrated by this deploy;
+  - POSTONA standalone Edge Functions were not deployed or changed.
+- manual scheduler invoke / manual OpenAI call / manual X post: 0.
+- first natural AI Lab scheduled row remains pending for 2026-10-08 07:51 JST.
+- completion condition for the combined AI Lab repair + model rollout: first natural scheduled post succeeds through claim -> GPT-6 Luna generation -> X publish.
