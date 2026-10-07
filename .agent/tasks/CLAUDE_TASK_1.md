@@ -1,3 +1,220 @@
+# Claude Task 1 — CURRENT TASK
+
+- task_id: kabumori-portfolio-asset-card-background-polish-20261008
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: medium
+- recommended_model: Sonnet5（中）
+- type: source-only portfolio visual polish
+- production_mutation_allowed: false
+- deploy_allowed: false
+- EAS_allowed: false
+
+## User decision / canonical visual direction
+
+The user approved keeping the **real saved-data sparkline**, but wants the asset-summary card to feel less plain.
+
+Canonical decision:
+- preserve the sparkline as **real portfolio-value history**;
+- do **not** replace it with a decorative fixed rising chart;
+- add a subtle botanical/translucent background treatment behind the asset summary card;
+- the background is decorative only and must not encode financial direction;
+- the real sparkline remains visually above it and must remain readable whether rising, falling or flat.
+
+Approved source artwork from ChatGPT:
+- filename to use: `portfolio_asset_card_growth_background.webp`
+- prepared size: **1600 × 700**
+- transparent WebP
+- source composition: left ~60% mostly transparent; pale botanical leaves / glow / curved light trails on the right.
+- no text, numbers, currency, chart, arrows or fixed finance indicators.
+
+### Asset handoff
+
+Before starting, locate the user-supplied file:
+`/Users/yuya/Downloads/portfolio_asset_card_growth_background.webp`
+
+If it is not there, search only obvious user download locations for the **exact filename**.
+Do not substitute another image.
+If the file cannot be found, STOP before source edits and report that the approved asset must be placed locally.
+
+When found:
+- verify dimensions are 1600×700 or proportionally equivalent;
+- verify alpha/transparency is present;
+- copy it into a stable app asset path such as:
+  `assets/images/portfolio/portfolio_asset_card_growth_background.webp`
+- do not modify unrelated existing assets.
+
+## Freshness / safety
+
+1. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, `.agent/ACTIVE_TASK.md`, and this TASK.
+2. G1 is free at allocation.
+3. fresh main at allocation: `481eccc0c106caabde01081107b9b34029a06e3c`.
+4. Fresh open-PR overlap check at allocation found **0 overlap** on the intended portfolio/UI/test/asset paths.
+5. G5 production/auth work is done/free; no G5 production window is active.
+6. G2/G4 are active on unrelated market-report/POSTONA files. Do not touch their scopes.
+7. Create a new isolated G1 worktree from `/Users/yuya/Developer/kabumori-fresh` after fresh `origin/main`.
+8. Do not reuse/reset/prune protected old worktrees.
+
+Recommended branch:
+`claude/g1-portfolio-asset-card-background-polish-20261008`
+
+## Scope
+
+Expected files only:
+- `assets/images/portfolio/portfolio_asset_card_growth_background.webp` (new approved asset)
+- `src/components/portfolio/portfolio-sections.tsx`
+- `src/components/portfolio/sparkline.tsx`
+- `src/components/portfolio/portfolio-theme.ts` only if a small color token is useful
+- focused tests under `tests/app/`
+- UI-review screenshots
+
+Do not change:
+- `src/app/_layout.tsx`
+- Auth/service enrollment/common-account
+- DB / migrations / RLS / RPC / Edge
+- report generation / market-report logic
+- Search behavior
+- Watchlist behavior/schema
+- holding/portfolio data contracts
+- AI/report text source
+- root report-detail navigation
+- EAS/native config
+- dependencies/packages.
+
+## A. Asset-summary background — required
+
+Current card is a plain white card.
+
+Integrate the approved transparent WebP as **decorative background only**:
+
+- asset remains inside the same rounded card boundary;
+- clip decoration to the card radius;
+- primarily occupy the right 35–45% of the upper card;
+- allow some of the soft glow to extend toward center, but never compromise asset-value readability;
+- left-side value/labels remain the visual priority;
+- place decoration behind all text and the real sparkline;
+- use an implementation opacity starting around **0.35–0.50**, then tune by Simulator;
+- if the raw asset feels too strong, prefer lower opacity / position / scale changes in code rather than destructive image editing;
+- right edge may intentionally crop slightly for a polished compositional feel;
+- no animation required.
+
+The decorative artwork must remain visually neutral if the real portfolio is down.
+
+## B. Sparkline polish — keep real data
+
+Current sparkline is dependency-free native Views and uses real saved close-report `totals.market_value`.
+
+Preserve that contract exactly.
+
+Polish goals:
+- keep a thin line;
+- remove the visually busy intermediate joint dots if they make the line feel segmented;
+- retain one restrained endpoint dot;
+- make segment joins visually smoother where possible without a new dependency;
+- line should be clearly above the background art;
+- use trend-aware color:
+  - final value > first value -> calm portfolio green;
+  - final value < first value -> restrained muted red / down tone;
+  - effectively flat -> neutral muted tone;
+- do not color a declining real series green;
+- do not imply realtime;
+- do not fabricate extra points or smooth with invented financial values.
+
+Optional, only if clean and dependency-free:
+- a **very subtle** fade/soft area under the line using native elements.
+- If this requires fragile tricks or hurts performance/clarity, omit it. The polished line + endpoint is enough.
+
+Do not add a chart package.
+
+## C. Layering / responsive layout
+
+At both ~375pt and ~402pt:
+
+- asset value must remain fully legible;
+- basis label must remain legible;
+- decorative leaves must not sit directly behind the largest digits at distracting opacity;
+- sparkline must remain readable over the artwork;
+- no overflow outside the rounded card;
+- lower metric divider / P&L values remain unchanged;
+- card height should not grow materially unless required by clipping;
+- no NativeTabs overlap regression.
+
+Also test:
+- rising series;
+- falling series;
+- flat series;
+- only 0–1 usable spark points (sparkline remains absent as before).
+
+## D. Tests
+
+Add/pin focused tests or source contracts for:
+- approved background asset is referenced only by asset-summary UI;
+- decorative layer is behind content / clipped within the card;
+- sparkline trend color chooses up/down/flat from first vs last real value;
+- no fixed decorative chart values;
+- no fake points added;
+- 0–1 usable points still produce no sparkline;
+- existing portfolio data/stale/search/watch/report-route tests remain unchanged and green.
+
+Run:
+- focused portfolio tests;
+- full `deno test tests/app/`;
+- src/changed-scope TypeScript check;
+- `npx expo config --type public` or repo-standard equivalent;
+- web export if supported;
+- `git diff --check`.
+
+## E. Simulator verification — mandatory
+
+Capture final screenshots:
+
+- `docs/ui-review/portfolio_asset_card_polish_402pt.webp`
+- `docs/ui-review/portfolio_asset_card_polish_375pt.webp`
+
+Verify on Simulator:
+1. normal/rising fixture;
+2. falling fixture — line must not remain green;
+3. card background does not dominate;
+4. 375pt large value is uncropped;
+5. lower P/L metrics and next card spacing unchanged.
+
+If practical, include one focused close crop in the report, but do not add extra screenshots unless useful.
+
+## Completion
+
+Create one focused PR.
+Do not self-merge.
+No deploy / no EAS / no production mutation.
+
+Report:
+- task_id
+- fresh main SHA
+- worktree isolation
+- asset source path and final repo path
+- dimensions / transparency check
+- final background opacity / positioning
+- sparkline trend-color rule
+- whether fade was implemented or intentionally omitted
+- rising/falling/flat checks
+- 402/375 screenshots
+- changed_files
+- tests/checks
+- PR/head
+- backend/DB/Auth/Edge/EAS/production mutation = 0
+- remaining issues
+- next_recommendation
+
+Then:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+Recommended model: **Sonnet5（中）**.
+
+---
+
 # Claude Task 1 — ROUTING CORRECTION / DO NOT START
 
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
