@@ -102,7 +102,7 @@ export async function fetchPriorState(
 ): Promise<PriorState> {
   const result = await fetchImpl(
     `${ctx.supabaseUrl}/rest/v1/market_state_current?domain=eq.${encodeURIComponent(domain)}` +
-      `&select=domain,narrative,numeric_baseline_snapshot,source_event_ids,updated_at,ai_evaluated_at&limit=1`,
+      `&select=domain,narrative,numeric_baseline_snapshot,source_event_ids,updated_at,ai_evaluated_at,source_evaluation_run_id&limit=1`,
     { headers: restHeaders(ctx.secretKey) },
   );
   if (!result.ok) {
@@ -120,6 +120,7 @@ export async function fetchPriorState(
       : [],
     updatedAt: typeof row?.updated_at === "string" ? row.updated_at : null,
     aiEvaluatedAt: typeof row?.ai_evaluated_at === "string" ? row.ai_evaluated_at : null,
+    sourceEvaluationRunId: typeof row?.source_evaluation_run_id === "string" ? row.source_evaluation_run_id : null,
   };
 }
 

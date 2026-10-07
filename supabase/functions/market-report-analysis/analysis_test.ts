@@ -105,7 +105,7 @@ test("one generation + one Fact check produces the packet; usage and cost are co
   if (!outcome.ok) return;
   assert.equal(outcome.calls, 2);
   assert.equal(outcome.inputTokens, 2000);
-  assert.equal(outcome.costUsd, 0.00088);
+  assert.equal(outcome.costUsd, 0.008, "2 requests x (1,000 in x $2 + 200 out x $10) per 1M tokens, the registry price of the model");
   const packet = outcome.packet;
   assert.equal(packet.schema_version, "market_report_packet.v1");
   assert.equal(packet.data_packet_id, dataFixture.id);

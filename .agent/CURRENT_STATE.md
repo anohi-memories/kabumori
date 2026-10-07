@@ -1,3 +1,246 @@
+## Routing correction — delivery-first market-report task belongs to G2 — 2026-10-07
+
+- user corrected the routing: this chat/workstream uses **G2 only**.
+- the prior G1 allocation was a ChatGPT routing mistake; G1 is cancelled for this task and must not start it.
+- canonical task is now G2: `kabumori-market-report-delivery-first-guard-calibration-20261007`.
+- X is Premium; legacy short-post length is advisory only.
+- objective errors follow progressive degradation: remove the smallest bad sentence/point/claim/news item and deliver the remaining coherent content when possible.
+- full deterministic AI disclaimer is required on both X and App.
+- whole-report failure is last resort only.
+- timing gate: **do not start G2 before the 2026-10-07 16:35 JST natural close retry is complete and observed.**
+- recommended Claude model: **Opus5.5（高）**.
+- after retry observation, user can send `G2`; finish code is `K2`.
+
+## G1 delivery-first policy refinement — 2026-10-07
+
+- X account is Premium; legacy short-post character targets are no longer delivery constraints. Readability length remains advisory only.
+- AI disclaimer uses the full deterministic footer on both X and App; it must never be trimmed for length.
+- objective factual errors now follow **progressive degradation**:
+  - detect the smallest bad unit;
+  - omit/neutralize that sentence/point/claim/news item only;
+  - keep and deliver the remaining coherent safe content;
+  - record removed units/reasons in diagnostics/traces.
+- wrong number/date/sign/stale/1306 identity/unknown ref must not kill the whole report when local omission can preserve a coherent report.
+- whole-cycle failure is last resort only: unparseable output or no candidate can be reduced to a minimally coherent safe report.
+- G1 task updated in-place; recommended model remains **Opus5.5（高）**.
+
+## G1 assigned — delivery-first market-report guard calibration — 2026-10-07
+
+- user decision: prioritize successful daily morning/close delivery; only clear objective falsehoods should hard-stop a report.
+- first natural GPT-6.1 Sol close at 16:20 failed with `ANALYSIS_LOCAL_CHECK_FAILED` after two useful candidates were rejected by false-positive 1306/date guards.
+- G1 task: `kabumori-market-report-delivery-first-guard-calibration-20261007`.
+- required behavior: objective numeric/date/sign/stale/explicit-1306-identity/unknown-ref contradictions remain fatal; ambiguous parser checks, quality issues and non-objective Fact findings become WARN/advisory.
+- Fact may request one bounded regeneration, but if any candidate is deterministically hard-safe the cycle should deliver a best safe candidate instead of failing only because advisory Fact/local warnings remain.
+- deterministic disclaimer required on every shared report:
+  - X compact: 「※AIによる分析です。内容に誤りを含む可能性があります。投資判断はご自身で。」
+  - App: 「※本レポートはAIによる分析です。内容に誤り・不足を含む可能性があります。最終的な投資判断はご自身でお願いします。」
+- 「AIが独自調査」は使用しない; current runtime analyzes supplied packets and does not independently web-browse.
+- current open PR changed-file overlap with expected market-report files: 0.
+- source-only implementation; no production deploy/manual invoke/DB/Cron/gate mutation.
+- recommended Claude model: **Opus5.5（高）**.
+- next action: send `G1` to Claude Code; finish with `K1`.
+
+## G4 corrective assigned — POSTONA PR #106 review CHANGES REQUIRED — 2026-10-07
+
+- direct independent review target: PR #106 exact head `dac01220ca600cc003b3dafa4b30a84340b29850`.
+- verdict accepted: **CHANGES REQUIRED**.
+- blockers accepted:
+  1. provider identity unique-index precondition incomplete;
+  2. provider relabeling X <-> Meta is possible;
+  3. PG16+ INHERIT=false / SET=true role escalation path is missed;
+  4. unknown starting schema/credential/ACL/index/trigger/constraint drift is accepted as baseline;
+  5. connected Meta rows can lack an access credential reference;
+  6. existing service_role DML authority silently expands to Meta provider rows.
+- nonblocking snapshot gaps (policy permissive mode / full trigger identity / exact new CHECK expression) are included in the corrective.
+- G4 corrective task: `postona-multisocial-phase2a2-security-corrective-20261007`.
+- update existing PR #106 only; no new replacement PR unless unavoidable.
+- production DB/apply/deploy/Auth/OAuth/Vault/provider API remains forbidden.
+- G3 is separately in progress on AI Lab topic continuity; G5 is separately in progress on native common-account validation. G4 must not touch either workstream's files.
+- recommended Claude model: **Opus5.5（高）**.
+- after corrected K4, use a truly free H1/H2 slot for a single focused exact-head Codex rereview when available; recommended **Sol（高）**.
+- next action: send `G4` to Claude Code.
+
+## Final K2 — GPT-6.1 Sol production rollout APPLIED_PASS before natural close — 2026-10-07
+
+- user explicitly approved M1 + M2 and requested fastest safe execution for today's close.
+- focused H2 review was explicitly waived by the user; no Codex PASS is claimed.
+- PR #108 is merged: head `b73e4053fc033d9c47235b68df4bca311dc6c8c4`, merge `3e54200bcbeecc3d8786b6fe7667da7f1bf1a27a`.
+- M1 applied exact trace migration `20261007120000_market_report_generation_traces.sql`.
+- M1 read-back: RLS ON, 0 policies, 3 enabled append-only triggers, anon/authenticated no SELECT, service_role SELECT+INSERT only; exact migration-history row exists once.
+- M2 deployed only `market-report-analysis` from accepted GPT-6.1 Sol source `8738a186628989ce6c797d61ea80f5b721664c95`.
+- deployed function: v28 ACTIVE, verify_jwt=false, EZBR `18a5dbf53d9383068cf1059c76b48c26fc1e26eb4fd143572918b4a4dfb013c2`.
+- deployed read-back confirms GPT-6.1 Sol registry, audit diagnostics and trace writer are present. Runtime files match accepted source; only the type-only packet schema is absent from the downloaded bundle, as allowed by the runbook.
+- app/x consumer gates remain OFF/OFF.
+- trace rows immediately after deployment = 0; no manual generation/replay/invoke was performed.
+- close analysis Cron remains active at 16:20 JST; close retry remains active at 16:35 JST.
+- expected first GPT-6.1 Sol natural close run: 2026-10-07 16:20 JST.
+- no unrelated function/Cron/Auth/Vault/OAuth/secret/settings mutation performed.
+- AI Lab diary: 記録不要 — internal production rollout, with no new public-safe topic beyond today's existing AI-model centralization entry.
+
+## K2 timing override — PR #108 merged / H2 skipped by user / production approval pending — 2026-10-07
+
+- User explicitly chose to skip the focused H2 review of the rollout runner/runbook to preserve the possibility of observing GPT-6.1 Sol on today's close.
+- final PR #108 freshness check: exact head `b73e4053fc033d9c47235b68df4bca311dc6c8c4`, changed-file overlap with current main = 0.
+- PR #108 squash-merged as `3e54200bcbeecc3d8786b6fe7667da7f1bf1a27a`.
+- skipped review scope was only the rollout runner/runbook; previously accepted PR #101 migration and PR #107 model implementation were not reopened.
+- production mutation/deploy remains **0** at this point.
+- same-day target window: close analysis begins around 16:20 / retry 16:35; to observe GPT-6.1 Sol today, M1 and M2 must complete before the natural close analysis runs.
+- M1 trace migration and M2 single-function deploy remain separate production actions requiring explicit user approval. Review skip is not itself production approval.
+
+## Final K2 — GPT-6.1 production preflight READY / PR #108 held for focused H2 — 2026-10-07
+
+- G2 task `kabumori-market-report-gpt61-production-preflight-20261007`: **PASS_CANDIDATE / READY_FOR_APPROVAL preflight**.
+- production mutation/deploy/manual report/OpenAI/X/Cron/Auth/Vault/OAuth during preflight: **0**.
+- production trace migration `20261007120000_market_report_generation_traces.sql`: history absent and target objects absent; no partial-apply inconsistency found.
+- current deployed `market-report-analysis`: v26, source bytes match the pre-PR101/PR107 Luna generation; GPT-6.1 Sol source is not yet deployed.
+- no new secret/env dependency is required for the accepted GPT-6.1 source; single-function deployment is feasible.
+- proposed rollout order is accepted in principle: M1 exact trace migration -> fresh ACL/object postflight -> M2 only `market-report-analysis` -> source/version readback -> no manual generation/replay -> first natural cycle -> read-only quality/cost/trace observation.
+- M1 and M2 remain **separate explicit approval gates**. Neither is authorized by this K2.
+- PR #108 exact head `b73e4053fc033d9c47235b68df4bca311dc6c8c4` adds only the production rollout runner/runbook; current main changed-file overlap with those 2 files = 0.
+- because PR #108 contains a production migration operator path and deploy runbook, one focused H2 safety review is required before merge. Broad PR #101/107 rereview is not required.
+- H2 task assigned: `kabumori-trace-gpt61-rollout-runbook-review-20261007`, recommended **Sol（高）**.
+- H2 scope: fail-closed exact migration execution, Stage B/C partial-failure/rerun/history safety, credential handling, and single-target M2 deploy only. Production access/mutation/deploy forbidden during review.
+- after H2 PASS and C2 merge of PR #108, request explicit user approval for M1. After verified M1 completion, request separate explicit user approval for M2.
+- operational timing recommendation from G2: avoid scheduled report windows; if approved later, 17:30 JST以降 is the preferred rollout period, followed by the next natural morning/closing report observation.
+- AI Lab diary: 記録不要 — 本番反映前の内部preflight/runbook作成で、外部向け開発日記としては既存のAIモデル更新題材と重複するため。
+
+## K4 — POSTONA Phase 2a-2 PASS_CANDIDATE / direct focused review required — 2026-10-07
+
+- exact PR #106 head: `dac01220ca600cc003b3dafa4b30a84340b29850`.
+- six new files only: one forward migration candidate, four disposable-PG test/proof files, one Threads Phase 2b design note.
+- CI: Netlify PASS / Vercel PASS.
+- fresh main has advanced but changed-file overlap with PR #106 = 0.
+- reported local proof is strong: valid X preservation, Meta OFF/long-lived-access shape, unknown-provider refusal, 28 adverse start states, atomic rollback/postconditions and 26/26 mutation detections.
+- production read/write/apply/deploy/Auth/OAuth/Vault/real provider calls = 0.
+- verdict: **PASS_CANDIDATE, merge HOLD** because this is a DB/credential-shape/ACL boundary.
+- one focused independent Codex review is required, recommended **Sol（高）**.
+- per this chat's G4/direct-instruction routing, H1/H2 was not allocated; ChatGPT supplies a copy-ready review instruction.
+- review must probe platform-user uniqueness precondition, service_role/effective privilege graph, Supabase migration-owner assumptions, unexpected schema/plaintext-token drift, Meta access-ref invariant, provider relabeling, atomicity and X regressions.
+- migration reservation map entry for `20261007150000` remains housekeeping after review.
+- G4 remains review_required / next_owner codex.
+
+## G5 next — Phase 2 native client validation before EAS — 2026-10-07
+
+- Phase 2 production server migration is APPLIED_PASS and production window is closed.
+- next G5 task: `common-account-v1-phase2-native-client-validation-20261007`.
+- goal: validate the merged Phase 2 client on iOS Simulator/local app before spending an EAS/TestFlight build.
+- scope:
+  - rerun Phase 2 Auth/service-enrollment regressions on current main;
+  - verify the client exactly accepts the deployed active / shared_account / reenroll_required contract;
+  - native Simulator checks for signed-out, login/session restore, same-session refresh, sign-out and serviceSession gating.
+- production service-state mutation is forbidden in this task.
+- no real self-service enrollment/reactivation, no EAS, deploy, DB/Auth/profile/entitlement writes.
+- if a production-authenticated smoke would need a mutation-capable RPC, G5 must stop and return an explicit test plan for approval.
+- recommended model: **Opus5.5（高）**.
+- finish code: K5.
+- expected next gate after PASS:
+  - either a narrowly approved real-account smoke if still necessary;
+  - then EAS/TestFlight only after local/native confidence is established.
+
+## Final K2 — Kabumori AI model registry + GPT-6.1 Sol PASS / merged / production preflight next — 2026-10-07
+
+- task `kabumori-ai-model-registry-gpt61-sol-20261007`: **PASS**.
+- accepted PR #107 exact head: `fb3539d07392beb197d58c7740d09c843179a789`.
+- PR #107 squash-merged as `8738a186628989ce6c797d61ea80f5b721664c95`.
+- final freshness: PR head unchanged, mergeable=true, current main advanced with **0 changed-file overlap** across the 12 PR files.
+- Codex review: **not required**. Final diff is source-controlled model registry/caller/cost/tests only; no DB schema/Auth/production mutation/retry-count/fallback semantics change. The new `incomplete` classification changes only the diagnostic error code; generation/Fact request failures still traverse the same existing catch/fallback path.
+- official OpenAI verification was consistent with implementation: `gpt-6.1-sol` supports Responses API and reasoning efforts low/medium/high/xhigh/max; generation uses medium and Fact uses low; Standard text pricing is $2 input / $0.10 cached input / $10 output per 1M tokens, with the documented long-context multiplier above 272K input tokens.
+- registry: `supabase/functions/_shared/kabumori_ai_models.ts`; semantic roles are generation and Fact, source-controlled with no DB/env override.
+- model switch in merged source: generation `gpt-6.1-sol` / medium / max_output_tokens 16000; Fact `gpt-6.1-sol` / low / max_output_tokens 4000.
+- inventory command and focused raw-model-literal drift guard added; POSTONA/G3/G4, important-news, MIC and personalized-report runtime were not migrated.
+- audit metadata adds config/role/model/reasoning into existing report diagnostics without a new DB migration. Per-generation trace role/config columns remain a possible low-priority future migration.
+- reported tests: market-report-analysis 222/222; personalized 129/129; X shared 8/8; data-packet 42/42; _shared 466/466; migration invariants 20/20; focused registry/inventory/drift tests PASS; Deno check PASS; diff check PASS. Existing lint issue is pre-existing and unrelated.
+- production deploy/migration/manual generation/OpenAI/X/Cron/Auth/Vault/OAuth mutation during K2 = **0**.
+- cost note: same token volume is materially more expensive than the old Luna configuration; first natural production cycle must measure actual reasoning/output token use and quality before any prompt or Hard-Fact adjustment.
+- AI Lab diary: 記録不要 — 同日のX自動投稿側ですでに「AIモデル設定を1か所へ集約し更新漏れを防ぐ」という同種の公開向け題材を記録済みで、今回は内容が重複するため追加しない。
+- next G2 task ready: `kabumori-market-report-gpt61-production-preflight-20261007`, recommended **Opus5.5（高）**.
+- next task is read-only production preflight only: verify the PR #101 trace migration state and prepare the exact single-function GPT-6.1 rollout/order. No production mutation/deploy until a later explicit approval gate.
+
+## Final K5 — Phase 2 production migration APPLIED_PASS / window CLOSED — 2026-10-07
+
+- G5 production apply verdict: **APPLIED_PASS**.
+- exact production migration: `20261006230000_common_account_service_start_intent`.
+- user approval was explicit and recorded before the production mutation.
+- production mutation window:
+  - ACTIVE: 13:42 JST;
+  - Stage A COMMIT: 13:47:09 JST;
+  - migration-history row: 13:47:28 JST;
+  - CLOSED: 13:52 JST.
+- Stage A applied the exact reviewed migration once with the pinned SHA-256; psql transaction completed with exit 0.
+- Stage B read-back: **33/33 PASS**.
+- Stage C inserted exactly one history row for `20261006230000 / common_account_service_start_intent`.
+- final `after --history` read-back: **33/33 PASS**.
+- independent G5 Management API read-back at 13:50: **33/33 PASS**.
+- resulting RPC/helper state matches reviewed expectations:
+  - all 8 touched functions owned by postgres, SECURITY DEFINER, `search_path=""`;
+  - public start/reactivate RPCs expose only intended authenticated EXECUTE;
+  - private helpers have no API-role EXECUTE;
+  - no duplicate overloads;
+  - expected definitions/hashes match.
+- no unrelated schema/data drift detected by the production baseline/postflight fingerprints.
+- common-account data remained unchanged: 5 active common accounts; entitlements kabumori 2 / x_autopost 1, all active legacy_backfill; lifecycle operations 0; profiles 2.
+- production writes in this G5 window were exactly two:
+  1. one migration transaction;
+  2. one migration-history INSERT.
+- no backfill, entitlement enforcement, deletion, deploy, EAS, Auth Admin, Storage, OAuth, Vault, Cron, X/provider mutation.
+- preflight/runbook PR #104 was already squash-merged before apply as `944836d4938cb8d2600b3f5b469e6e93b551da0a`.
+- observation: migration history gained `20260929090000 news_discovery_observer` between 13:27 and 13:46 via another/unknown path. G5 did not add it. Function/table fingerprints were unchanged across that interval, so it did not affect this Phase 2 migration or its postflight. Track separately if attribution is needed.
+- no additional Codex review required for this apply: exact reviewed source was applied and bounded production read-back fully matched the reviewed expected state.
+- Phase 2 server-side start/reactivate contract is now production-ready.
+- later gates remain separate:
+  - native Simulator/iPhone validation of the Phase 2 client against the new response contract;
+  - any real-account/self-service enrollment test that mutates service state requires an explicit test plan/approval;
+  - EAS/TestFlight build/release remains a separate approval gate.
+- G5 is done/free.
+- recommended model for any later common-account native validation task: **Opus5.5（高）**.
+- AI Lab diary: no additional entry; this is internal production migration completion.
+
+## Final C2 — PR #101 PASS / merged / next G2 AI model registry ready — 2026-10-07
+
+- H2 task `kabumori-pr101-f2-f3-final-rereview-20261007` verdict: **PASS**.
+- exact reviewed PR #101 head: `938567c049460ebfe78c4e08c71724d6e77ae71a`.
+- F2-A alphabetic-only Basic credential: PASS.
+- F2-B escaped quoted credential tails: PASS.
+- F3-A depth-limit original/kept metadata: PASS.
+- F3-B exact list kept_chars/boundary accounting: PASS.
+- F1 remained accepted/PASS and was not reopened.
+- independent evidence: prior exact 20/20, boundary 8/8, final 18/18, market-report-analysis 210/210, migration/source invariants 20/20, Deno check/lint and diff check PASS.
+- H2 source changes = 0; production access/mutation/apply/deploy = 0.
+- final freshness gate: PR head unchanged; main had advanced 97 commits from PR base with **0 changed-file overlap** across PR #101 files.
+- PR #101 squash-merged successfully as `e49ecfcc2f6707f64b6282960f9eec61be2973d3`.
+- PR #101 source review is closed; no further routine review required.
+- production trace migration apply and market-report-analysis deploy remain a separate gate and were **not** performed by C2.
+- G5 production DB/Auth/permission window remains independently owned; G2 must not enter it.
+- next G2 task is ready: `kabumori-ai-model-registry-gpt61-sol-20261007`, recommended **Opus5.5（高）**.
+- next G2 scope: Kabumori-only market-report model registry/inventory/drift guard and source migration of generate + Fact to the current officially verified GPT-6.1 Sol path; POSTONA/G3/G4, MIC, important-news and G5 excluded.
+
+## Final K1 — Portfolio canonical UI PASS / PR #100 merged — 2026-10-07
+
+- PR #100 accepted exact head: `3fd7c569efb6598202e71151dd2393f661f93b81`.
+- verdict: **PASS**.
+- final fresh-main overlap across PR #100 files: **0**.
+- contextual report-detail correction accepted:
+  - Portfolio origin -> Back/native swipe = Portfolio;
+  - Reports-list origin -> Back/native swipe = Reports list;
+  - report -> news return chain preserved;
+  - root report-detail uses the same underlying report-detail implementation.
+- PR #95 Auth/serviceSession/root-news behavior preserved.
+- portfolio product accepted as canonical:
+  - asset summary from saved close facts;
+  - Fact-passed AI overview;
+  - deterministic top-3 day-P/L impact;
+  - current holdings + unmatched not-yet-reflected handling;
+  - dedicated Search;
+  - interim Watchlist;
+  - logo-safe fallback avatars;
+  - stale/non-realtime wording.
+- reported evidence: app tests 426/426; src tsc clean; Expo config PASS; web export PASS; diff clean; 402pt/375pt Simulator Back/swipe checks PASS.
+- Codex review not required for this bounded UI/navigation correction.
+- backend/DB/RPC/Auth/Edge/production mutation/EAS = 0.
+- PR #100 squash-merged as `fe8090bab89824fc8c00147fb5fc92bb1afab82c`.
+- G1 is done/free.
+- nonblocking: Home-origin report detail still returns Reports list because Home continues to use the nested route. A later tiny source-only consistency task may switch the Home CTA to root `report-detail`.
+
 ## G5 production apply ACTIVE — user approved / operator pending — 2026-10-07
 
 - user explicitly approved production apply of `20261006230000_common_account_service_start_intent`.
@@ -5342,3 +5585,25 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - runtime note: source is merged but production remains on existing deployed bundles until a separate gated Edge Function redeploy; no production model switch was authorized by this K3.
 - next: any production rollout must be a separate G3 task after G5 production-priority/gating is clear, with full x-test-post bundle graph diff before deploy.
 - AI Lab diary: 候補あり — AIモデルの世代更新を楽にするため、モデルと料金の設定を1か所にまとめ、古い設定の直書きが戻ったらテストで気づけるようにした。
+
+
+## G3 allocated — AI Lab topic continuity fix — 2026-10-07
+- production read-only diagnosis: company AI Lab schedule remains 10 posts/day, but the current 7 evergreen seeds are incompatible with the 72h per-seed and 48h generic-theme cooldowns; 2026-10-07 executed slots are failing pre-OpenAI/pre-X with topic-pool exhaustion.
+- user decision: keep the existing safety/duplicate protections, but never stop merely because normal topics run out. Prefer recent dev diary, then a large diverse evergreen pool, then safe continuity topics about personal development / using AI / general impressions of AI progress.
+- G3 task: `ai-lab-topic-continuity-fix-20261007`, status ready, next_owner claude.
+- implementation gate: source + forward migration candidate + tests only; no production mutation/deploy/merge. Require >=14-day x 10-post/day capacity simulation and TS/DB canonical-map parity.
+- overlap check: G4 owns social_accounts schema candidate; G5 owns common-account native validation; G2 owns market-report GPT-6.1 rollout. G3 scope is isolated from those files.
+- recommended model: Opus5.5（高）.
+
+
+## K3 — AI Lab topic continuity PR #109 — 2026-10-07
+- verdict: **PASS_CANDIDATE / focused H1 review required / merge HOLD**.
+- exact candidate: PR #109 head `f83247ae1024d4220dfbfa5484c725381d63815d`, 5 changed files.
+- implementation accepted for review: evergreen pool 7 -> 74, Tier 3 continuity reserve, candidate cap 64 -> 128, recent diary remains first, no Web Search fallback, no fabricated specific recent-AI claims.
+- capacity evidence reported: real SQL 14 days x 10/day = 140/140 claimable with 0 exhaustion; TS model also passes normal/fixed/skewed rotation, 28 days and unresolved-outcome stress. Old 7-seed pool exhaustion is reproduced.
+- safety semantics reported unchanged: 72h same-seed cooldown, 48h tagged-theme cooldown, unresolved claim isolation, event-level dedupe/fencing, provider_started/ambiguous handling, cross-brand fingerprint/content guards.
+- production mutation/deploy/migration apply/OpenAI/X/scheduler invoke: 0.
+- blocking reason for review: new forward migration `20261007173000_ai_lab_topic_evergreen_capacity.sql` replaces SECURITY DEFINER `claim_ai_lab_topic`; exact ACL/ownership/search_path/canonical-map proof needs one independent review.
+- H1 assigned `ai-lab-topic-continuity-pr109-focused-review-20261007`, exact head fixed, recommended **Sol（高）**.
+- production rollout remains HOLD. Required order after review/merge and separate approval: migration first -> read-back -> x-test-post deploy second. Deploy-first is forbidden because the old DB function rejects the enlarged candidate set/new evergreen ids.
+- AI Lab diary: 記録不要 — this fix itself is internal posting-infrastructure maintenance and today already has a canonical AI Lab diary entry; do not create a duplicate same-day diary event merely from this K3.

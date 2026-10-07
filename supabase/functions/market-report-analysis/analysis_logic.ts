@@ -19,9 +19,18 @@ import {
 import { appStoryWarnings, buildAppMarketStory, orderKeyNews } from "../_shared/market_report_story.ts";
 import type { AnalysisInput } from "./analysis_input.ts";
 import { falseAbsenceClaims } from "../_shared/absence_claims.ts";
+import { promptHash } from "./debug_trace.ts";
+import {
+  estimateCallCostUsd,
+  MARKET_REPORT_FACT_ROLE,
+  MARKET_REPORT_GENERATE_ROLE,
+  resolveKabumoriAiRole,
+  responsesApiParams,
+} from "../_shared/kabumori_ai_models.ts";
 import { emojiDirectionIssues, MARKET_NAMES, mentionsMarketMetric, metricFactIssues } from "./hard_fact_guards.ts";
 
-export const ANALYSIS_MODEL = "gpt-5.6-luna";
+/** The model of the generation role (its model id lives in the Kabumori AI model registry, not here). */
+export const ANALYSIS_MODEL = resolveKabumoriAiRole(MARKET_REPORT_GENERATE_ROLE).model;
 export const MAX_GENERATIONS = 2;
 
 export type StepResult = { payload: unknown; inputTokens: number; outputTokens: number };
@@ -65,13 +74,13 @@ const X_VOICE = [
 ];
 
 const MORNING = [
-  "これは朝刊です。前夜の米国市場と、東京市場の前営業日の終値、前回の引け以降に確認できたニュースから、今日の日本株で見る点を整理します。",
+  "これは朝刊です。入力の「指標」にある前夜の米国市場と東京市場の前営業日の終値、入力の「ニュース」から、今日の日本株で見る点を整理します。ニュースがいつ取得・公表されたかには、入力に書かれた日時の範囲でしか触れません（取得の区切りや経過時間を、入力に無いまま書きません）。",
   "overseas_to_japan の観点は claims の scope=overnight で表し、日本株への影響は断定せず consistent_with か watch_point にします。",
   "朝刊の3つのポイントは、今日の「注目点」「注意点」「相場を見る軸」を、入力にある前夜・前営業日の値動きとニュースに結びつけて書きます。今日の東京市場はまだ動いていないので、上昇した・下落したと言い切りません。前夜や前営業日の値動きに触れるときは入力の方向どおりに書き（下落した市場を「高」と書かない）、値は本文に回します。",
 ];
 
 const CLOSE = [
-  "これは大引けです。今日の東京市場の終値と、今日確認できたニュースから「今日の値動きと、確認できる範囲の理由」を整理します。",
+  "これは大引けです。入力の「指標」にある今日の東京市場の終値と、入力の「ニュース」から「今日の値動きと、確認できる範囲の理由」を整理します。ニュースがいつ取得・公表されたかには、入力に書かれた日時の範囲でしか触れません。",
   "指数の羅列にせず、その日の重要な出来事と値動きを読者が一度で分かるようにまとめます。理由を確認できたものは causal、確認できないものは insufficient_evidence にします。",
   "大引けの3つのポイントは、その日の「何が起きたか」「何が重要だったか（根拠のある材料）」「次に何を見るか」から、もっとも重要な3つを選びます。相場を動かした理由を見出しにできるのは、ニュースが理由として明記している（causal の claim がある）場合だけです。無いときは、見えている事実（動いた市場・指標・節目）と、理由が確認できないことを正直に書きます。明日以降の値動きは断定しません。業種や個別株の値動きは、入力のニュースや指標に根拠があるときだけ書きます。",
 ];
@@ -170,10 +179,8 @@ export const FACT_INSTRUCTIONS = [
 
 export function generationRequestBody(input: AnalysisInput, previousIssues: string[]): Record<string, unknown> {
   return {
-    model: ANALYSIS_MODEL,
+    ...responsesApiParams(MARKET_REPORT_GENERATE_ROLE),
     store: false,
-    reasoning: { effort: "low" },
-    max_output_tokens: 10000,
     instructions: [
       ...COMMON,
       ...(input.reportType === "close" ? CLOSE : MORNING),
@@ -194,10 +201,8 @@ export function generationRequestBody(input: AnalysisInput, previousIssues: stri
 
 export function factRequestBody(input: AnalysisInput, analysis: GeneratedAnalysis): Record<string, unknown> {
   return {
-    model: ANALYSIS_MODEL,
+    ...responsesApiParams(MARKET_REPORT_FACT_ROLE),
     store: false,
-    reasoning: { effort: "low" },
-    max_output_tokens: 1500,
     instructions: FACT_INSTRUCTIONS,
     input: JSON.stringify({ input: input.modelInput, analysis }),
     text: { format: { type: "json_schema", name: "market_report_fact", strict: true, schema: FACT_SCHEMA } },
@@ -931,9 +936,6 @@ export function assemblePacket(
   };
 }
 
-export function lunaCostUsd(inputTokens: number, outputTokens: number): number {
-  return Number(((inputTokens * 0.2 + outputTokens * 1.2) / 1_000_000).toFixed(6));
-}
 
 /**
  * What happened inside one run, kept apart from transport retries (429 / 5xx / network, counted in
@@ -964,6 +966,38 @@ export function rejectionCodes(issues: readonly string[]): string {
   return [...found].join("+") || "none";
 }
 
+/**
+ * One model generation, kept whole for debugging (test phase): the structured candidate the model returned
+ * and what every check said about it. Records are separate per generation, so the first generation's
+ * rejection stays readable after the second ran. Plain data; persisted by debug_trace.ts.
+ */
+export type GenerationRecord = {
+  generationIndex: number;
+  /** invalid_output | local | fact | safe_candidate (held while a quality rewrite ran) | delivered | request_failed */
+  stage: "invalid_output" | "local" | "fact" | "safe_candidate" | "delivered" | "request_failed";
+  hardRejection: "invalid_output" | "local" | "fact" | null;
+  /** The parsed JSON the model returned (null when the request failed or returned nothing). */
+  candidate: unknown;
+  localPassed: boolean | null;
+  localIssues: string[];
+  localWarnings: string[];
+  factRan: boolean;
+  factPassed: boolean | null;
+  factIssues: string[];
+  selectedForDelivery: boolean;
+  /** Why a different generation than the newest was delivered. */
+  fallbackReason: string | null;
+  /** Fixed error code of a failed request (never a response body). */
+  errorCode: string | null;
+  /** Hash of the exact request this generation sent (instructions including a retry's issue note, plus the input). */
+  requestHash: string | null;
+  /** Cumulative for the invocation when this generation finished. */
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+};
+
 export type GenerationTrace = {
   /** Model generations in this run (1 or 2). */
   generations: number;
@@ -979,6 +1013,8 @@ export type GenerationTrace = {
   warnings: string[];
   /** A quality-only request failed; no response body or exception message is retained. */
   rewriteRequestFailed?: boolean;
+  /** Every generation of this invocation, in order (the same array a caller may pass in as the sink). */
+  records: GenerationRecord[];
 };
 
 type Usage = { calls: number; inputTokens: number; outputTokens: number; costUsd: number; trace: GenerationTrace };
@@ -1041,26 +1077,58 @@ export function qualityRewriteHints(warnings: string[]): string[] {
   });
 }
 
+/** A request failure's code: only the fixed ANALYSIS_… / transport code, never a message or body. */
+function requestErrorCode(error: unknown): string {
+  const value = error instanceof Error ? error.message : "";
+  return /^[A-Za-z0-9_:.-]+$/.test(value) ? value.slice(0, 120) : "UNEXPECTED_ERROR";
+}
+
 export async function generateSharedAnalysis(
   input: AnalysisInput,
   request: Requester,
   now: () => Date,
+  /** Optional sink: generation records are pushed here as they happen, so they survive an exception. */
+  recordSink: GenerationRecord[] = [],
 ): Promise<AnalysisOutcome> {
   let calls = 0;
   let inputTokens = 0;
   let outputTokens = 0;
+  // Priced per request from the registry (a request's price tier depends on that request's own input size).
+  let costUsd = 0;
   let issues: string[] = [];
   let lastError = "ANALYSIS_NOT_ATTEMPTED";
-  const trace: GenerationTrace = { generations: 0, hardRejections: [], rejectionReasons: [], qualityRewrite: false, deliveredGeneration: 0, warnings: [] };
-  const usage = (step: StepResult) => {
+  const trace: GenerationTrace = { generations: 0, hardRejections: [], rejectionReasons: [], qualityRewrite: false, deliveredGeneration: 0, warnings: [], records: recordSink };
+  const usage = (step: StepResult, role: typeof MARKET_REPORT_GENERATE_ROLE | typeof MARKET_REPORT_FACT_ROLE) => {
     calls += 1;
     inputTokens += step.inputTokens;
     outputTokens += step.outputTokens;
+    costUsd = Number((costUsd + estimateCallCostUsd(role, step.inputTokens, step.outputTokens)).toFixed(6));
   };
-  const result = () => ({ calls, inputTokens, outputTokens, costUsd: lunaCostUsd(inputTokens, outputTokens), trace });
-  const deliver = (analysis: GeneratedAnalysis, attempt: number, warnings: string[]) => {
+  const result = () => ({ calls, inputTokens, outputTokens, costUsd, trace });
+  const open = (generationIndex: number): GenerationRecord => {
+    const record: GenerationRecord = {
+      generationIndex, stage: "request_failed", hardRejection: null, candidate: null, localPassed: null, localIssues: [],
+      localWarnings: [], factRan: false, factPassed: null, factIssues: [], selectedForDelivery: false, fallbackReason: null,
+      errorCode: null, requestHash: null, calls, inputTokens, outputTokens, costUsd,
+    };
+    recordSink.push(record);
+    return record;
+  };
+  const settle = (record: GenerationRecord) => {
+    record.calls = calls;
+    record.inputTokens = inputTokens;
+    record.outputTokens = outputTokens;
+    record.costUsd = costUsd;
+  };
+  const deliver = (analysis: GeneratedAnalysis, attempt: number, warnings: string[], fallbackReason: string | null = null) => {
     trace.deliveredGeneration = attempt;
     trace.warnings = warnings;
+    const delivered = recordSink.find((record) => record.generationIndex === attempt);
+    if (delivered) {
+      delivered.stage = "delivered";
+      delivered.selectedForDelivery = true;
+      delivered.fallbackReason = fallbackReason;
+    }
     return { ok: true as const, packet: assemblePacket(input, analysis, { generatedAt: now(), attempts: attempt, warnings }), ...result() };
   };
   // A draft that passed every hard check and the Fact check: never thrown away for quality reasons.
@@ -1069,61 +1137,90 @@ export async function generateSharedAnalysis(
   for (let attempt = 1; attempt <= MAX_GENERATIONS; attempt += 1) {
     let generated: StepResult;
     trace.generations = attempt;
+    const record = open(attempt);
+    const body = generationRequestBody(input, issues);
+    // Local hashing of what is about to be sent: no model call, and a failure to hash never blocks the run.
+    record.requestHash = await promptHash(`${String(body.instructions)}\n${String(body.input)}`).catch(() => null);
     try {
-      generated = await request("generate", generationRequestBody(input, issues));
+      generated = await request("generate", body);
     } catch (error) {
+      record.errorCode = requestErrorCode(error);
       if (!safe) throw error;
       trace.rewriteRequestFailed = true;
-      return deliver(safe.analysis, safe.attempt, safe.warnings);
+      record.fallbackReason = "rewrite_request_failed";
+      return deliver(safe.analysis, safe.attempt, safe.warnings, "rewrite_request_failed");
     }
-    usage(generated);
+    usage(generated, MARKET_REPORT_GENERATE_ROLE);
+    record.candidate = generated.payload ?? null;
+    settle(record);
     const analysis = parseGeneratedAnalysis(generated.payload);
     if (!analysis) {
       issues = ["出力の形式が不正"];
       lastError = "ANALYSIS_INVALID_OUTPUT";
       trace.hardRejections.push("invalid_output");
       trace.rejectionReasons.push("format");
+      record.stage = "invalid_output";
+      record.hardRejection = "invalid_output";
+      record.localIssues = issues;
       continue;
     }
     const local = localAnalysisCheck(analysis, input);
+    record.localPassed = local.hard.length === 0;
+    record.localIssues = local.hard;
+    record.localWarnings = local.warnings;
     if (local.hard.length > 0) {
       issues = local.hard;
       lastError = "ANALYSIS_LOCAL_CHECK_FAILED";
       trace.hardRejections.push("local");
       trace.rejectionReasons.push(rejectionCodes(local.hard));
+      record.stage = "local";
+      record.hardRejection = "local";
       continue;
     }
     let verdict: StepResult;
+    record.factRan = true;
     try {
       verdict = await request("fact", factRequestBody(input, analysis));
     } catch (error) {
+      record.errorCode = requestErrorCode(error);
       if (!safe) throw error;
       trace.rewriteRequestFailed = true;
-      return deliver(safe.analysis, safe.attempt, safe.warnings);
+      record.fallbackReason = "rewrite_request_failed";
+      return deliver(safe.analysis, safe.attempt, safe.warnings, "rewrite_request_failed");
     }
-    usage(verdict);
+    usage(verdict, MARKET_REPORT_FACT_ROLE);
+    settle(record);
     const fact = verdict.payload as { passed?: unknown; issues?: unknown };
+    record.factPassed = fact?.passed === true;
+    // The trace keeps every finding the Fact check returned; only the decision and retry note keep the cap of 10.
+    record.factIssues = Array.isArray(fact?.issues) ? fact.issues.filter((issue): issue is string => typeof issue === "string") : [];
     if (fact?.passed !== true) {
-      issues = Array.isArray(fact?.issues) ? fact.issues.filter((issue): issue is string => typeof issue === "string").slice(0, 10) : [];
+      issues = record.factIssues.slice(0, 10);
       lastError = "ANALYSIS_FACT_FAILED";
       trace.hardRejections.push("fact");
       trace.rejectionReasons.push(`${rejectionCodes(issues)}:${issues.length}`);
+      record.stage = "fact";
+      record.hardRejection = "fact";
       continue;
     }
     if (safe) {
       // The quality rewrite is also hard-fact safe: keep whichever has fewer warnings (the rewrite on a tie).
-      return local.warnings.length <= safe.warnings.length
-        ? deliver(analysis, attempt, local.warnings)
-        : deliver(safe.analysis, safe.attempt, safe.warnings);
+      if (local.warnings.length <= safe.warnings.length) return deliver(analysis, attempt, local.warnings);
+      record.fallbackReason = "rewrite_not_better";
+      return deliver(safe.analysis, safe.attempt, safe.warnings, "rewrite_not_better");
     }
     const hints = qualityRewriteHints(local.warnings);
     if (hints.length === 0 || attempt === MAX_GENERATIONS) return deliver(analysis, attempt, local.warnings);
     safe = { analysis, attempt, warnings: local.warnings };
+    record.stage = "safe_candidate";
     trace.qualityRewrite = true;
     issues = hints;
   }
   // The rewrite failed a hard check: the safe original is delivered instead of suppressing the cycle.
-  if (safe) return deliver(safe.analysis, safe.attempt, safe.warnings);
+  if (safe) {
+    const rejected = recordSink.find((record) => record.generationIndex !== safe!.attempt && record.hardRejection);
+    return deliver(safe.analysis, safe.attempt, safe.warnings, `rewrite_rejected_${rejected?.hardRejection ?? "unknown"}`);
+  }
   return { ok: false, error: lastError, issues, ...result() };
 }
 

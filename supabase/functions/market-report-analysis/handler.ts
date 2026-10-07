@@ -15,7 +15,17 @@
 import type { MarketDataPacket } from "../market-report-data-packet/packet_schema.ts";
 import { decideRunWindow, type ReportType } from "../market-report-data-packet/session_logic.ts";
 import { buildAnalysisInput, type NewsTextRow } from "./analysis_input.ts";
-import { ANALYSIS_MODEL, generateSharedAnalysis, generationDiagnostics, type Requester, reportContentHash } from "./analysis_logic.ts";
+import {
+  ANALYSIS_MODEL,
+  type GenerationRecord,
+  generateSharedAnalysis,
+  generationDiagnostics,
+  generationRequestBody,
+  type Requester,
+  reportContentHash,
+} from "./analysis_logic.ts";
+import { persistTraces, promptHash, traceRows } from "./debug_trace.ts";
+import { auditDiagnostics } from "../_shared/kabumori_ai_models.ts";
 import {
   fetchWithTransportRetry,
   newTransportStats,
@@ -86,10 +96,15 @@ export function openAiRequester(
       }), { stats: retry.stats, sleep: retry.sleep, policy: retry.policy });
     if (!response.ok) throw new Error(`ANALYSIS_OPENAI_${step.toUpperCase()}_FAILED:${response.status}`);
     const raw = await response.json();
+    // A response cut off by max_output_tokens (reasoning tokens count against it) is reported as such instead of
+    // as an empty / invalid body. Only a failing response is reclassified: nothing that parsed before changes.
+    const incomplete = (raw as { status?: unknown })?.status === "incomplete"
+      ? `_INCOMPLETE:${String((raw as { incomplete_details?: { reason?: unknown } }).incomplete_details?.reason ?? "unknown").replace(/[^a-z_]/g, "").slice(0, 40) || "unknown"}`
+      : null;
     const output = extractOutputText(raw);
-    if (!output) throw new Error(`ANALYSIS_OPENAI_${step.toUpperCase()}_EMPTY`);
+    if (!output) throw new Error(`ANALYSIS_OPENAI_${step.toUpperCase()}${incomplete ?? "_EMPTY"}`);
     let payload: unknown;
-    try { payload = JSON.parse(output); } catch { throw new Error(`ANALYSIS_OPENAI_${step.toUpperCase()}_INVALID_JSON`); }
+    try { payload = JSON.parse(output); } catch { throw new Error(`ANALYSIS_OPENAI_${step.toUpperCase()}${incomplete ?? "_INVALID_JSON"}`); }
     const usage = (raw as { usage?: { input_tokens?: number; output_tokens?: number } }).usage ?? {};
     return {
       payload,
@@ -102,7 +117,11 @@ export function openAiRequester(
 type Db = {
   get<T>(path: string): Promise<T>;
   rpc<T>(name: string, args: Record<string, unknown>): Promise<T>;
+  /** Diagnostic rows only (generation traces): minimal response, short timeout, no retry. */
+  insert(table: string, rows: unknown[]): Promise<void>;
 };
+
+const TRACE_TIMEOUT_MS = 5_000;
 
 function database(deps: Deps, supabaseUrl: string, key: string): Db {
   const headers = { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
@@ -119,6 +138,15 @@ function database(deps: Deps, supabaseUrl: string, key: string): Db {
       if (!result.ok) throw new Error(`RPC_FAILED:${name}:${result.status}`);
       const text = await result.text();
       return (text ? JSON.parse(text) : null) as T;
+    },
+    async insert(table: string, rows: unknown[]) {
+      const result = await deps.fetch(`${supabaseUrl}/rest/v1/${table}`, {
+        method: "POST",
+        headers: { ...headers, Prefer: "return=minimal" },
+        signal: AbortSignal.timeout(TRACE_TIMEOUT_MS),
+        body: JSON.stringify(rows),
+      });
+      if (!result.ok) throw new Error(`REST_INSERT_FAILED:${table}:${result.status}`);
     },
   };
 }
@@ -178,8 +206,25 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
     return respond({ status: "skipped", reason: claim?.outcome ?? "CLAIM_EMPTY", reportType, tradingDate });
   }
 
-  const diagnostics: Record<string, string> = { model: ANALYSIS_MODEL };
+  // `model` is the generation model (kept for existing readers); the rest is the audit tuple of each role:
+  // logical role, actual model, reasoning and the registry configuration version.
+  const diagnostics: Record<string, string> = { model: ANALYSIS_MODEL, ...auditDiagnostics() };
   const transport = newTransportStats();
+  // Test-phase debug evidence: every generation of this invocation, kept whole. Written best-effort after the
+  // run is settled (success, failure or exception) and never in the way of delivery.
+  const invocationId = crypto.randomUUID();
+  const records: GenerationRecord[] = [];
+  let traceBasePromptHash: string | null = null;
+  let traced = false;
+  const writeTraces = async (reportPacketId: string | null) => {
+    if (traced) return;
+    traced = true;
+    const rows = traceRows({
+      reportType, tradingDate, cycleId: claim!.cycle_id, dataPacketId: claim!.data_packet_id, reportPacketId,
+      invocationId, attempt: claim!.attempt, model: ANALYSIS_MODEL, basePromptHash: traceBasePromptHash,
+    }, records);
+    await persistTraces((table, batch) => db.insert(table, batch), rows);
+  };
   const fail = async (code: string, extra: Record<string, string> = {}) => {
     await db.rpc("fail_market_report_analysis", {
       p_cycle_id: claim!.cycle_id,
@@ -215,11 +260,13 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
     diagnostics.news_items = String(input.news.length);
     diagnostics.metrics = String(input.majorMoves.length);
     diagnostics.direction = input.direction;
+    traceBasePromptHash = await promptHash(String(generationRequestBody(input, []).instructions)).catch(() => null);
 
     const outcome = await generateSharedAnalysis(
       input,
       openAiRequester(openAiApiKey, deps.fetch, { stats: transport, sleep: deps.sleep ?? realSleep }),
       deps.now,
+      records,
     );
     Object.assign(diagnostics, transportDiagnostics(transport));
     // Content regeneration (local / Fact rejection, quality rewrite) is not a transport retry.
@@ -231,6 +278,7 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
 
     if (!outcome.ok) {
       await fail(outcome.error, { issues: outcome.issues.join(" / ").slice(0, 900) });
+      await writeTraces(null);
       return respond({ status: "failed", error: outcome.error, issues: outcome.issues, reportType, tradingDate, attempt: claim.attempt });
     }
 
@@ -247,6 +295,7 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
       p_api_cost_usd: outcome.costUsd,
       p_diagnostics: diagnostics,
     });
+    await writeTraces(packetId);
     return respond({
       status: "completed",
       reportType,
@@ -261,6 +310,7 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
   } catch (error) {
     const code = safeCode(error);
     await fail(code, transportDiagnostics(transport));
+    await writeTraces(null);
     return respond({ status: "failed", error: code, reportType, tradingDate, transportRetries: transport.retries }, 500);
   }
 }

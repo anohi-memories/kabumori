@@ -4,7 +4,13 @@
 // threshold was judged "no change". These tests pin the boundary.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { absChangeReaches, evaluateMaterialChange, pctChangeReaches } from "./mic_state_decision_logic.ts";
+import {
+  absChangeReaches,
+  canonicalDecimal,
+  evaluateMaterialChange,
+  exactAbsChange,
+  pctChangeReaches,
+} from "./mic_state_decision_logic.ts";
 import type { MetricDomainMapRow, NewObservation } from "./mic_state_types.ts";
 
 function mapRow(overrides: Partial<MetricDomainMapRow> = {}): MetricDomainMapRow {
@@ -191,4 +197,20 @@ test("Production snapshot 2026-10-01 (rates): the baseline the State was written
   const withJgb = evaluateMaterialChange([changed("JGB10Y", 2.943, 3.057), changed("JGB2Y", 1.743, 1.952)], rates);
   assert.deepEqual(withJgb.materialMetricKeys, ["JGB10Y", "JGB2Y"]);
   assert.match(withJgb.reason, /JGB10Y: abs_change 0\.114 >= 0\.05; JGB2Y: abs_change 0\.209 >= 0\.05/);
+});
+
+test("audit helpers: canonicalDecimal and exactAbsChange are exact and agree with absChangeReaches", () => {
+  assert.equal(canonicalDecimal(5.24), "5.24");
+  assert.equal(canonicalDecimal(Number("3.0970")), "3.097");
+  assert.equal(canonicalDecimal(1e-7), "0.0000001");
+  assert.equal(canonicalDecimal(-0.5), "-0.5");
+  assert.equal(canonicalDecimal(Number.NaN), null);
+  assert.equal(exactAbsChange(5.29, 5.24), "0.05");
+  assert.equal(exactAbsChange(5.289, 5.24), "0.049");
+  assert.equal(exactAbsChange(5.24, 5.29), "0.05");
+  assert.equal(exactAbsChange(4.12, 4.12), "0");
+  assert.equal(exactAbsChange(Number.POSITIVE_INFINITY, 1), null);
+  for (const [current, baseline] of [[5.29, 5.24], [3.097, 3.057], [1.919, 1.886]]) {
+    assert.equal(exactAbsChange(current, baseline), absChangeReaches(current, baseline, 0.05).change);
+  }
 });

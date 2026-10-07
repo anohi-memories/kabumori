@@ -1,5 +1,763 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Opus5.5（高）
+- type: market-report reliability / delivery-first guard calibration / mandatory disclaimer
+- production_mutation_allowed: false
+- deploy_allowed: false
+- start_timing: DO NOT START until the user confirms the 2026-10-07 16:35 JST natural retry has finished.
+- routing_rule: This chat/workstream uses G2 only.
+
+## Product decision
+
+**毎日配信されることを最優先する。レポート全体停止は最後の手段。**
+
+2026-10-07の最初のGPT-6.1 Sol自然大引けでは、内容自体は有用だったが、1306/dateのfalse-positive local guardで2世代とも弾かれ、`ANALYSIS_LOCAL_CHECK_FAILED` で配信できなかった。
+
+今後は明確な誤りがあっても、可能な限り**該当部分だけ落として残りを配信**する。
+
+## Mandatory disclaimer
+
+X / Appとも、最終出力に次をapplication-sideで決定論的に1回だけ付与する。
+
+**「※本レポートはAIによる分析です。内容に誤り・不足を含む可能性があります。最終的な投資判断はご自身でお願いします。」**
+
+Rules:
+- モデル生成任せにしない。
+- 「AIが独自調査」は使わない。current runtimeは supplied market/news packetを分析しており、独立Web調査はしない。
+- 免責は長さ調整で削除しない。
+- KabumoriのXはPremium account。旧来の短文文字数目標はplatform hard limitではない。
+- Xの旧文字数目標はWARN/editorial guidelineのみ。安全な内容や免責を切る理由にしない。
+
+## Progressive degradation
+
+### Objective errors: detect, isolate, continue
+
+次の客観的誤りは検出を続けるが、1件だけでcycle全体をfailにしない。
+
+- packetと矛盾する数値
+- 明確な符号/方向逆転
+- 同一governed clauseで指標値に付いた明確な誤日付
+- stale値をcurrent/latestとして断定
+- 1306 ETFをTOPIXそのものとして断定
+- unknown/nonexistent evidence ref / fabricated referenced fact
+- supplied packetから決定論的に証明できる同等の客観矛盾
+
+When detected:
+1. smallest affected unitを特定（sentence / bullet / point / claim / news item / paragraph fragment）。
+2. そのunitだけ削除、または既知の決定論的情報だけでneutralize。
+3. 残りがcoherentならdelivery継続。
+4. removed unit / reasonをdiagnostics / generation tracesへ残す。
+5. replacement factを推測しない。迷ったら省略。
+
+Examples:
+- X 3ポイントのうち1つの数字が誤り -> その1ポイントだけ落として残りを配信。
+- App storyの1文だけ誤数値 -> その文だけ除外し、段落が成立すれば配信。
+- unknown news ref -> そのnews/claimだけ除外。
+- 「TOPIXは437.0円」 -> 該当文を除外、または安全に決定できる場合のみ `TOPIX連動ETF（1306）` に直す。
+
+### Whole-report failure is last resort
+
+Whole-cycle failureを許すのは以下だけ:
+- structured outputがparse不能;
+- required shapeが壊れ、決定論的再構成も不能;
+- bad unitsを落とした結果、最低限coherentなreportが残らない;
+- 全generationがsanitizeしても使用不能。
+
+「1箇所の数字ミス」「1つのunknown ref」だけで全体停止しない。
+
+## Ambiguous checks => WARN/advisory
+
+単独でdeliveryを止めない:
+- 隣接文/隣接clauseのparser ambiguity
+- 正しい「10/7日本」+「10/6米国」の対比
+- 「TOPIXそのものではなく」「TOPIX連動ETF」と明示的に区別する文章
+- genericity / ordering / near-target length / style
+- cautious inference: 「可能性」「意識された可能性」「一因として考えられる」「次に確認したい」
+- Fact findingsのうち、supplied packetとの客観矛盾として証明できないもの
+
+2026-10-07の実際の2 false-positive candidate形をfixture化して回帰テストする。
+
+## Fact behavior
+
+Factは残すが、otherwise-safe reportを永久に止めない。
+
+Desired flow:
+1. generation
+2. deterministic objective checks
+3. Fact
+4. meaningful issueなら、現行call ceiling内で最大1回bounded regeneration
+5. final generationからobjective bad unitsをsanitize
+6. coherent safe contentが残れば、nonfatal Fact/advisory warningがあってもdeliver
+7. warning / removed units / reasons / fallback choiceをdiagnosticsとtraceに保存
+8. no generation can be reduced to a minimally coherent safe report の場合だけfail
+
+Do not increase model-call ceiling or transport retry budgets.
+
+## Causality / analysis
+
+次は分析表現として許容し、単独でhard-stopしない:
+- 「〜の可能性があります」
+- 「〜が意識された可能性」
+- 「一因として考えられます」
+- 「次に確認したい点」
+
+ただし、unsupported inferenceをconfirmed factとして断定しない。明白な捏造因果はobjective errorとして扱ってよい。
+
+## Scope
+
+Expected primary files:
+- `supabase/functions/market-report-analysis/analysis_logic.ts`
+- `supabase/functions/market-report-analysis/hard_fact_guards.ts`
+- `supabase/functions/_shared/market_report_packet.ts`
+- `supabase/functions/_shared/market_report_story.ts`
+- focused tests
+
+`handler.ts` は diagnostics / selection semantics に必要な場合のみ。
+
+Do not touch:
+- DB schema/migrations/RLS/ACL
+- Auth/common-account
+- important-news-monitor
+- POSTONA/G3/G4
+- Cron/secrets/consumer gates
+- production deploy/manual invoke
+
+## Freshness / isolation
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK.
+2. User timing gate: **16:35 JST natural retryの完了確認前に実装開始しない。**
+3. After that, use a new isolated G2 worktree from fresh `/Users/yuya/Developer/kabumori-fresh`.
+4. Fresh-fetch `origin/main`.
+5. Re-check open PR changed-file overlap before editing.
+6. At assignment time, open PRs #109/#106/#33/#11/#10/#3 had no overlap with expected market-report files.
+7. Do not touch other slots' worktrees/branches/servers.
+
+## Required regressions
+
+At minimum prove:
+- exact 10/7 phrase with 「TOPIXそのものではなく」 does not hard reject;
+- exact 10/7 phrase 「10月7日の日経平均… 10月6日の米国市場…」 does not hard reject;
+- explicit wrong-date numeric sentence is detected, but only that unit is removed when the rest is safe;
+- explicit 「TOPIXは437.0円」 is detected and removed/safely neutralized without killing the report;
+- reversed sign/direction unit is omitted, rest delivers;
+- stale-as-current and unknown refs are isolated to smallest affected units;
+- one bad numeric point + multiple safe points still delivers;
+- one bad App sentence + coherent remainder still delivers;
+- nonfatal Fact issue can regenerate once then sanitize/fallback-deliver;
+- fail only when no candidate can be reduced to a minimally coherent report;
+- X disclaimer exactly once and not shortened for legacy length target;
+- App disclaimer exactly once;
+- call ceiling/retry semantics unchanged;
+- trace/diagnostics retain warning/removal/fallback evidence.
+
+Run relevant full market-report-analysis + shared report formatting regression suites.
+
+## Deliverable
+
+Open one focused source-only PR. Report:
+- changed_files
+- fatal vs advisory classification
+- progressive-degradation implementation
+- exact 10/7 regression results
+- Fact fallback behavior
+- disclaimer placement
+- X Premium length behavior
+- full tests
+- model-call ceiling
+- production mutation = 0
+- remaining risks
+- rollout/observation recommendation
+
+Do not merge or deploy. Stop for **K2**.
+
+Recommended model: **Opus5.5（高）**.
+
+---
+
+# Claude Task 2 — CURRENT TASK
+
+- task_id: kabumori-market-report-gpt61-production-preflight-20261007
+- owner: claude
+- slot: claude-2
+- status: review_required
+- next_owner: user
+- k2_result: PASS
+- h2_review_task: skipped_by_user_for_same_day_rollout
+- rollout_runbook_merge_commit: 3e54200bcbeecc3d8786b6fe7667da7f1bf1a27a
+- awaiting_explicit_approval: M1_then_M2
+- priority: high
+- recommended_model: Opus5.5（高）
+- type: production read-only preflight / trace migration + market-report GPT-6.1 rollout
+- production_mutation_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Source work is complete and merged:
+- generation-trace source/migration from PR #101;
+- Kabumori-only AI model registry + GPT-6.1 Sol source from PR #107, merge commit `8738a186628989ce6c797d61ea80f5b721664c95`.
+
+Prepare the exact production rollout safely, but **do not mutate production in this TASK**.
+
+The goal is to decide and prove the safe rollout order for:
+1. production application of the already-reviewed trace migration `20261007120000_market_report_generation_traces.sql`;
+2. controlled deployment of `market-report-analysis` using the merged GPT-6.1 Sol registry;
+3. first natural morning/closing cycle observation afterward.
+
+## Freshness / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK / prior G2 reports.
+2. Use a fresh independent G2 worktree/checkout from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and require merge commit `8738a186628989ce6c797d61ea80f5b721664c95` present.
+4. Confirm no other active slot owns the same migration, Edge Function, workflow, production setting or API boundary.
+5. Confirm no production mutation window is currently active. G5's previous window is recorded CLOSED.
+6. Read-only production inspection only. No DDL/DML, migration history write, Edge deploy, manual report, replay, X send, notification, OpenAI invocation, Cron/Auth/Vault/OAuth/settings mutation.
+
+## Required production read-only checks
+
+### A. Trace migration state
+
+For `20261007120000_market_report_generation_traces.sql`:
+- confirm whether it is already represented in production migration history;
+- confirm whether the target table / append-only trigger / grants / RLS / helper objects already exist or are absent;
+- run the existing read-only preflight SQL where safe;
+- inspect effective owner / ACL / inherited privileges using the accepted F1 checks;
+- do not "repair" history or infer applied state from history alone;
+- compare actual production object state and migration history separately.
+
+If production state is partially applied or inconsistent, STOP and report. Do not repair in place.
+
+### B. Current deployed market-report-analysis
+
+Read-only determine:
+- currently deployed function version / source identity if available;
+- current production model behavior/config evidence without invoking the function;
+- whether the deployed version predates PR #101 / PR #107;
+- any environment/config dependencies the new merged function requires;
+- whether deployment can be a single-function deploy with no unrelated functions.
+
+Do not call OpenAI and do not manually invoke a report.
+
+### C. Rollout ordering
+
+Prove or reject this proposed order:
+
+1. trace migration apply;
+2. post-migration read-back / ACL verification;
+3. deploy only `market-report-analysis` from the accepted merged source;
+4. deployment read-back/version verification;
+5. no manual report/replay;
+6. wait for the next **natural** morning/closing cycle;
+7. read-only observe report packet, generation traces, Fact/local result, selected generation, calls, token usage, estimated cost and output quality.
+
+Important:
+- migration and Edge deploy are two separate production mutations even if executed in one approved rollout window;
+- if either step needs an additional migration or another function deployment, STOP and report instead of widening scope.
+
+### D. GPT-6.1 runtime contract
+
+From merged source + current official OpenAI documentation confirm:
+- model = `gpt-6.1-sol`;
+- generate reasoning = medium;
+- Fact reasoning = low;
+- Responses API compatibility;
+- max output settings 16,000 / 4,000;
+- pricing metadata currently matches official Standard pricing;
+- no unsupported parameter is sent.
+
+Do not perform a real API call.
+
+### E. Cost / quality observation plan
+
+Prepare the fields to compare on the first natural cycle against the previous Luna baseline:
+- generated headline / market summary;
+- 3-points specificity / generic warnings;
+- app_story readability;
+- X body quality;
+- unsupported causality / Fact rejection;
+- regeneration count / delivered generation;
+- input/output tokens;
+- api_cost_usd;
+- incomplete/max_output_tokens errors;
+- generation trace candidate + local/fact issues.
+
+Do not weaken Hard Fact or other delivery rules before observing actual model output.
+
+## Required output / runbook
+
+Produce a precise rollout recommendation:
+- READY_FOR_APPROVAL or BLOCKED;
+- exact accepted source commit;
+- exact migration file/hash;
+- production before-state;
+- exact mutation steps, separately identified;
+- rollback/STOP rules;
+- exact postflight read-backs;
+- expected deploy target only;
+- first natural-cycle observation checklist;
+- anything requiring explicit user approval.
+
+If an operator script/runbook is necessary, source-only creation is allowed, but:
+- it must be fail-closed;
+- pin exact source/migration hash;
+- refuse rerun where appropriate;
+- never embed passwords/tokens/secrets;
+- do not execute it in this TASK.
+
+## Scope exclusions
+
+Do not touch:
+- POSTONA / G3 / G4 AI model policy;
+- important-news-monitor;
+- MIC;
+- personalized-reports;
+- common-account/G5;
+- unrelated DB migrations/RPC/Auth;
+- Cron;
+- X sends/notifications;
+- Expo/EAS.
+
+G4 may continue source-only work on its own files. Do not reserve or modify G4's migration candidate.
+
+## Completion / K2
+
+Report:
+- result: READY_FOR_APPROVAL or BLOCKED;
+- fresh main/head evidence;
+- current production trace migration state;
+- current deployed market-report-analysis state;
+- exact safe rollout order;
+- preflight/read-back results;
+- source/runbook changes if any;
+- production mutation/deploy = 0;
+- conflicts/remaining risks;
+- exact approval request if READY.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+Recommended model: **Opus5.5（高）**.
+
+## Report
+
+### result
+- **READY_FOR_APPROVAL**（M1・M2 とも。別々の承認が必要）
+- 本番への変更・デプロイ：**0**（読み取りのみ）
+
+### fresh main / head evidence
+- 専用 G2 checkout `/Users/yuya/Developer/kabumori-g2-market-report-reliability`（独立、toplevel assert、`supabase/config.toml` なし）で fresh `origin/main` `f9d1830ed693491629e1e84f5665944e7782edc7`。PR #107 merge `8738a186628989ce6c797d61ea80f5b721664c95` と PR #101 merge `e49ecfcc2f6707f64b6282960f9eec61be2973d3` を含む。`market-report-analysis` の import graph 全体は `8738a186` とbyte一致。
+- source のみの成果：PR [#108](https://github.com/anohi-memories/kabumori/pull/108)、branch `g2-trace-gpt61-rollout-preflight-20261007`、head `b73e4053fc033d9c47235b68df4bca311dc6c8c4`（新規2ファイル：ランナーと手順書。runtime・migration は未変更）。
+- 他スロット：G1 done、G3 done、G4 review_required（source-only・本番変更なし）、G5 done（窓 CLOSED 13:52）、H1/H2 done。**ACTIVE な本番変更窓なし**。同じ migration / Function / workflow / 設定を持つ他スロットなし。
+
+### A. 本番の trace migration の状態（履歴と実オブジェクトを別々に確認）
+- `supabase_migrations.schema_migrations` の `20261007120000`：**0行**（最新は `20261006230000`）。
+- `public.market_report_generation_traces`・`…_reject_change()`・トリガ・ポリシー・関連 relation：**すべて無し**（count 0）。部分適用・不整合なし。
+- 適用ロール `postgres`：superuser ではない、`createrole`、`rolinherit`。
+- `anon` / `authenticated` / `service_role`：所属ロールなし。所有者（postgres）・superuser・`pg_read_all_data`・`pg_write_all_data` のどれにも属さない。どれも superuser ではない。
+- `postgres` の既定権限：
+  - `public` のテーブル：`anon` / `authenticated` / `service_role` に `Dxtm`（TRUNCATE / REFERENCES / TRIGGER / MAINTAIN）
+  - 関数：所有者のみ（PUBLIC の EXECUTE なし）
+  - シーケンス：所有者のみ
+  - 3つの API ロール以外の grantee はいない → マイグレーションの revoke で消え、**F1 の権限検証は通る**見込み
+- イベントトリガ：
+  - `ensure_rls`（`rls_auto_enable`、SECURITY DEFINER）：新しい public テーブルに `enable row level security` するだけ（中身を読んで確認）。マイグレーションも有効化するので同じ結果
+  - `pgrst_ddl_watch`：DDL で PostgREST のスキーマを再読み込み → 新テーブルへの REST insert に手動の reload は不要
+  - 他は extension 用
+- 既存の read-only preflight SQL の各項目は、上記のクエリで同じ内容を確認（`supabase db query --linked` の SELECT のみ）。
+- **本番と同じ形の再現検証**：使い捨て PostgreSQL 17 に、非 superuser の所有者、`Dxtm` の既定権限、所有者のみの関数既定、`ensure_rls` 相当のイベントトリガ、本番の履歴テーブルの形を作り、マイグレーションを所有者として適用 → 成功。最終ACLは `service_role INSERT f` / `service_role SELECT f` / 列ACL 0、関数ACLは所有者のみ（ピンのハッシュが、この期待内容のハッシュと一致）。既定の `Dxtm` は残らない。
+
+### B. 現在デプロイ中の market-report-analysis
+- v26 ACTIVE、`verify_jwt=false`、ezbr `addbb0a61338…`（10/7 01:07 の v25 と同じバイト。版番号だけ上がっている）。
+- ダウンロードした11ファイルが PR #99 merge `e3379f80` と**全一致** → PR #101・#107 より**前**（Luna・trace 書き込みなし・registry なし）。
+- main との差：`analysis_logic.ts`、`handler.ts` が変更、`debug_trace.ts`、`_shared/kabumori_ai_models.ts` が新規。`e3379f80` 以降にこの graph を触ったのは PR #101 と PR #107 だけ。
+- 環境変数：デプロイ済みと main は同じ4つ（`SUPABASE_URL`、`SUPABASE_SECRET_KEYS`、`SEND_PUSH_NOTIFICATIONS_CRON_SECRET`、`OPENAI_API_KEY`）。**新しい secret は不要**。
+- 単独デプロイ可能（他の Function・migration・設定は不要。trace のテーブルが無くても動く）。
+- 他の Function の現状：personalized-reports v41、market-report-data-packet v19、x-test-post v137（いずれも今回の対象外）。
+
+### C. 安全なロールアウト順序（提案どおりで成立）
+1. **M1**：ランナー `apply`（Stage A → B → C → postflight）
+2. M1 の読み戻し：`status` → `EXACT/EXACT`、ACL・RLS・トリガ・履歴1行を別セッションで確認
+3. **M2**：`market-report-analysis` のみ、受け入れ済みのクリーンな checkout（`config.toml` なし）から明示引数でデプロイ
+4. M2 の読み戻し：版+1・`verify_jwt=false`・14ファイルの SHA-256 照合（runbook に記載）・他 Function 不変・ゲート OFF/OFF・Cron 8件不変・新規 packet 0
+5. 手動生成・replay なし
+6. 次の**自然**サイクルを待つ
+7. 読み取りで観測
+- M1 を先にするのは、最初の Sol サイクルの trace を残すため。**安全上の依存はない**（Function はテーブルが無くても配信を止めない）。どちらかが STOP しても、もう片方は戻さなくてよい。
+- 追加の migration や他の Function のデプロイは**不要**（範囲は広がらない）。
+- **タイミング**：市況レポートの時間帯（データ 07:50 / 16:15、分析 07:55 / 08:05 / 16:20 / 16:35、アプリ 08:35 / 17:15）を避ける。推奨は**本日の大引け（Luna の最後の基準値）が終わった 17:30 JST 以降**。最初の Sol サイクルは 10/8 朝刊（07:55）。
+
+### D. GPT-6.1 の実行契約（merged source ＋ 公式ドキュメント、2026-10-07 に再確認）
+- registry（`8738a186`）：generate = `gpt-6.1-sol` / reasoning `medium` / `max_output_tokens` 16,000、fact = `gpt-6.1-sol` / `low` / 4,000。
+- 送るパラメータ：`model`、`reasoning.effort`、`max_output_tokens`、`store: false`、`instructions`、`input`、`text.format`（`json_schema`, strict）だけ。`temperature` などは送っていない。
+- 公式（`developers.openai.com/api/docs/models/gpt-6.1-sol`、`/api/docs/pricing`）：
+  - Responses API・Structured Outputs に対応
+  - effort は `low` / `medium`（既定）/ `high` / `xhigh` / `max`（`none`・`minimal` は非対応）
+  - 最大出力 128,000、コンテキスト 1,050,000
+  - 非対応として挙がっているのは fine-tuning と predicted outputs だけ
+  - Standard 料金 $2 / $0.10 / $10（入力 / キャッシュ入力 / 出力、100万トークンあたり）、272K超の入力は $4 / $0.20 / $15 → **registry の料金と一致**
+- 注意：料金表の行に、Standard の $2.50（長文では $5.00）という、registry が使わない列がある（キャッシュ書き込みなどの可能性があるが、ページの要約からは特定できない）。見積りには影響しない（入力・出力のみを使う）。
+- 実際の API 呼び出しはしていない。
+
+### E. コスト・品質の観測計画（最初の自然サイクル、Luna 基準との比較）
+- 基準：10/6 大引け（Luna、calls 4、$0.011845）、10/6 朝刊（calls 2、$0.005873）、可能なら本日 10/7 大引け
+- 見る項目：
+  - cycle の状態・試行回数・失敗コード（新しい `_INCOMPLETE:max_output_tokens` を含む）
+  - `report_diagnostics` の `ai_*`（model / reasoning / config_version）、`calls` / `input_tokens` / `output_tokens` / `cost_usd`、`generation_attempts` / `content_regenerations` / `quality_rewrite` / `delivered_generation` / `hard_rejections` / `rejection_reasons` / `quality_warnings`（`X_POINTS_*` を含む）
+  - trace の各行（`stage` / `candidate` / `local_issues` / `fact_issues` / `selected_for_delivery` / `fallback_reason` / `request_hash` / `truncated`）
+  - 本文：見出し・要約・3ポイントの具体性・X 本文・アプリ本文の読みやすさ、根拠の無い因果、全数値の事実照合
+  - `api_cost_usd`：上限側の見積り（キャッシュ割引なし）
+- Hard・配信ルールは観測前に一切緩めない。consumer は OFF のまま。
+
+### 手順書・ランナー（source のみ、PR #108）
+- `supabase/tests/market_report_generation_traces_rollout.sh`：AI Lab の本番適用（10/5）と同じ Stage A / B / C 方式。
+  - Stage A：SHA-256 `f7eb5707fb9695ee6a94c5e2bc9f9eaa3ad4660a67e94f1ad62cb5b07984622b` のバイトだけを単独で実行
+  - Stage B：新しいセッションで8区分を照合（columns / constraints / indexes / relation / **triggers（有効状態込み）** / table_acl / functions / function_acl）＋実効権限の検査
+  - Stage C：履歴1行
+  - 再試行・修復・削除なし
+  - 本番は ack 文・project ref・TLS・所有者 postgres・6543 禁止・テストフック禁止で守る
+  - パスワード・トークンは書かない／受け取らない／出力しない
+- **proof：93項目すべて PASS**（本番と同じ形のDB）。
+  - 正常系、適用後のドリフト8種の検出
+  - マイグレーション自身の権限拒否（`UNSAFE_MEMBERSHIP`、未知ロールの既定 SELECT）と遅い失敗での全ロールバック
+  - 応答喪失3種、Stage B の不一致6種、履歴の失敗と明示的な再開、履歴の名前・版の不一致、バイト改変
+  - 本番ガード12種
+- `supabase/tests/market_report_generation_traces_rollout.md`：M1 / M2 の手順・読み戻し・14ファイルの SHA-256・STOP 条件・タイミング・OpenAI 残高・観測チェックリスト・承認事項。
+- 既存の F1 の PG 検証（`market_report_generation_traces_run.sh`）・migration 不変条件 20/20 も再実行して PASS。秘密の走査：該当なし。
+
+### production mutation / deploy
+- **0**。DDL / DML、履歴の書き込み、Edge デプロイ、手動生成・replay、OpenAI 呼び出し、X / 通知、Cron / Auth / Vault / OAuth / 設定：なし。本番は `supabase db query --linked` の SELECT と `functions list` / `download`（読み取り）のみ。
+
+### conflicts / remaining risks
+1. **Sol の実際の挙動は未観測**：medium の reasoning トークン量（上限 16,000 で足りるか）、品質、速度、実コスト。
+2. **費用は Luna の約10倍**（同じトークン量で）。テスト期間は手動チャージなので、M2 の前に OpenAI の残高確認が必要。残高切れの 429 は再試行されず、サイクルが止まる。
+3. M1 で権限検証が拒否した場合（本番のロール構成が今日の読み取り後に変わった場合）は、STOP 11。自動修復はしない。
+4. 料金表の未使用の列（$2.50）の意味は未特定（見積りには不使用）。
+5. M1 / M2 の前に、同じ日のうちに読み取りのプリフライトをやり直すこと（runbook の手順）。
+
+### exact approval request（READY）
+- **M1**：本番に `20261007120000_market_report_generation_traces.sql`（SHA-256 `f7eb5707…22b`）を、ランナー `market_report_generation_traces_rollout.sh apply` で適用する（オペレーター＝ユーザーが DB の資格情報で実行。エージェントは資格情報を扱わない）。前提：同じ日の `status` が `ABSENT/NONE`、市況レポートの時間帯外。
+- **M2**：本番の `market-report-analysis` **のみ**を、受け入れ済みの main（`8738a186` の graph）から `--no-verify-jwt --use-api` でデプロイし、14ファイルの SHA-256 を照合する。前提：M1 が DONE（または M1 STOP 後のレビュー済み判断）、OpenAI の残高確認、時間帯外。
+- 推奨の実施時刻：本日の大引けが終わった **17:30 JST 以降**。最初の観測は 10/8 朝刊。
+
+
+## Final production apply receipt — 2026-10-07 16:11 JST
+
+- user approval: explicit approval for M1 + M2, with instruction to proceed as fast as possible for today's natural close cycle.
+- H2 review of PR #108: explicitly waived by user; no Codex PASS is claimed.
+- PR #108: merged, head `b73e4053fc033d9c47235b68df4bca311dc6c8c4`, merge commit `3e54200bcbeecc3d8786b6fe7667da7f1bf1a27a`.
+- production project: `stock-x-autopost` / project ref `wsmznyzcvmuitkglfeuj`.
+- M1 before-state: current_user postgres; PostgreSQL 17; trace table absent; migration history version `20261007120000` absent.
+- M1 migration: exact reviewed file `20261007120000_market_report_generation_traces.sql` from accepted source `8738a186628989ce6c797d61ea80f5b721664c95` executed in production.
+- M1 postflight before history:
+  - table exists;
+  - RLS enabled;
+  - policies = 0;
+  - enabled append-only triggers = 3;
+  - anon SELECT = false;
+  - authenticated SELECT = false;
+  - service_role SELECT/INSERT = true;
+  - service_role UPDATE/DELETE = false.
+- M1 history: exactly one row inserted/read back as `20261007120000 / market_report_generation_traces`.
+- M2 before-state: `market-report-analysis` v27 ACTIVE, `verify_jwt=false`, old Luna-era bundle.
+- M2 deploy: only `market-report-analysis`, using the 14-file accepted import graph from `8738a186628989ce6c797d61ea80f5b721664c95`; no other function was deployed.
+- M2 after-state: v28 ACTIVE, `verify_jwt=false`, EZBR `18a5dbf53d9383068cf1059c76b48c26fc1e26eb4fd143572918b4a4dfb013c2`.
+- deployed source read-back: all runtime files byte-match accepted source; the only missing downloaded file is the type-only `market-report-data-packet/packet_schema.ts`, which the rollout runbook explicitly allows to be absent from the downloaded bundle.
+- runtime read-back confirms deployed registry contains `gpt-6.1-sol`, handler contains audit diagnostics and generation-trace persistence.
+- consumer gates after deploy: app=false / x=false.
+- trace rows immediately after deploy: 0, confirming no manual report/invoke/replay was performed.
+- close Cron: `market-report-analysis-close` active at 16:20 JST; retry active at 16:35 JST.
+- production mutation scope: M1 exact trace schema + one migration-history row; M2 one Edge Function deploy. No manual report, replay, X send, notification, Cron/Auth/Vault/OAuth/secret/settings mutation.
+- expected first GPT-6.1 Sol natural close analysis: 2026-10-07 16:20 JST.
+- AI Lab diary: 記録不要 — internal rollout/production gate; no new public-facing development topic beyond the model-centralization entry already recorded.
+
+---
+
+# Claude Task 2 — ARCHIVED TASK — AI model registry completed
+
+- task_id: kabumori-ai-model-registry-gpt61-sol-20261007
+- owner: claude
+- slot: claude-2
+- status: done
+- next_owner: none
+- final_k2_result: PASS
+- merged_commit: 8738a186628989ce6c797d61ea80f5b721664c95
+- priority: high
+- recommended_model: Opus5.5（高）
+- type: Kabumori-only AI model registry + market-report GPT-6.1 Sol migration
+- production_mutation_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+PR #101 is accepted and merged. Build the next Kabumori G2 layer so future OpenAI model upgrades are easy, source-controlled, auditable and limited to the Kabumori shared market-report pipeline.
+
+This task covers only:
+- Kabumori app shared morning/closing market reports;
+- the same shared report content used for Kabumori X morning/closing posts;
+- the generation and Fact-check calls inside that same market-report pipeline.
+
+Do NOT absorb POSTONA/social-auto-post AI management. G3 owns that separately.
+
+## Freshness / isolation
+
+1. Read `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, `.agent/ACTIVE_TASK.md`, this TASK, and the latest G2 report.
+2. Use a fresh independent G2 worktree/checkout from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch `origin/main`; require PR #101 merge commit `e49ecfcc2f6707f64b6282960f9eec61be2973d3` to be present.
+4. Confirm no changed-file overlap with active G4/G5 work before editing/push.
+5. G5 currently owns the production DB/Auth/permission mutation window. Do not enter it.
+6. Source/test only: no production deploy, migration apply, manual report, replay, X send, notification, real OpenAI call, Auth/Vault/OAuth/Cron mutation.
+
+## OpenAI model verification gate
+
+Before changing model IDs or reasoning settings, verify current official OpenAI API documentation/pricing.
+
+ChatGPT pre-check on 2026-10-07 found official OpenAI pricing listing `gpt-6.1-sol`. Treat this as a starting point, not a substitute for your own fresh implementation-time check.
+
+Required:
+- confirm the exact model ID is available for the Responses API used here;
+- confirm supported reasoning configuration syntax/values;
+- confirm current token pricing used by any local cost estimator;
+- if official docs/API behavior conflicts with this TASK, STOP and report the exact conflict instead of guessing.
+
+Target product direction:
+- `kabumori.market_report.generate` -> `gpt-6.1-sol`
+- `kabumori.market_report.fact` -> `gpt-6.1-sol`
+- preferred reasoning: generate = medium, fact = low, only if officially supported by the actual API path.
+
+## 1. Kabumori-only central model registry
+
+Create a source-controlled registry under an appropriate Kabumori/shared path, for example:
+`supabase/functions/_shared/kabumori_ai_models.ts`
+
+Use repository naming/style if a better existing pattern exists.
+
+Registry must expose semantic/logical roles, not caller-specific raw literals.
+
+Minimum roles:
+- `kabumori.market_report.generate`
+- `kabumori.market_report.fact`
+
+Each role should resolve at least:
+- model ID;
+- reasoning effort/config;
+- max output setting used by the caller, if applicable;
+- config version;
+- semantic workload role.
+
+The registry is the source of truth. Do not add an unrestricted production env/DB override that can bypass code review.
+
+## 2. Migrate market-report callers
+
+Replace direct model literals in the G2-owned market-report generation and Fact paths with registry lookups.
+
+Preserve all accepted behavior from PR #101 / PR #99:
+- Hard Fact semantics;
+- exactly 3 points;
+- generic/metric/near-duplicate WARN-only telemetry;
+- X shortness rewrite only below 300 chars;
+- App rewrite behavior;
+- MAX_GENERATIONS=2;
+- max 4 model calls total;
+- safe-original fallback;
+- full failed-output retention during QA;
+- non-blocking generation-trace persistence;
+- no extra retry/model call caused by logging.
+
+Do not change prompt/editorial policy except where strictly required for API compatibility.
+
+## 3. Inventory command
+
+Add a simple developer inventory command/script that prints the current Kabumori model assignments in one shot.
+
+Expected human-readable output conceptually:
+- Market Report Generate: <model> / <reasoning>
+- Market Report Fact: <model> / <reasoning>
+- config version
+
+Use repository conventions for script location and execution.
+
+The inventory must not call OpenAI or production services.
+
+## 4. Raw model-literal drift guard
+
+Add a focused invariant/test that fails when G2-owned Kabumori market-report runtime code hard-codes new `gpt-*` model IDs outside the approved registry.
+
+Requirements:
+- do not scan/ban unrelated POSTONA/G3/G4 code;
+- allow the canonical registry and focused fixtures/tests/docs where appropriate;
+- make the failure message identify the offending file/literal;
+- avoid a brittle repo-wide false-positive rule.
+
+## 5. Audit metadata
+
+Existing PR #101 traces already record the actual model. Extend source-level diagnostics so the runtime can also identify the logical role and config version where this can be done without a new DB migration.
+
+Desired audit tuple:
+- logical_role
+- actual_model
+- config_version
+
+Important:
+- do not create or apply a new production migration merely to add these fields while G4/G5 are active;
+- if durable DB columns are genuinely required, document the exact follow-up migration need in the Report and keep this task source-only;
+- do not overload unrelated fields with misleading data.
+
+## 6. Cost accounting
+
+If the market-report pipeline has model-specific token cost estimation, update it from current official OpenAI pricing for the exact selected model/processing mode.
+
+Do not invent prices.
+Keep cost logic separate from POSTONA/social pricing ownership.
+
+## Scope exclusions
+
+Do not touch:
+- POSTONA / social-mobile AI registry or model IDs;
+- G3/G4 model policy;
+- important-news-monitor;
+- breaking/trigger/shadow news search;
+- MIC;
+- common-account/Auth/G5;
+- personalized-report model migration unless it is only a compile-safe shared type import and does not change runtime behavior;
+- unrelated migrations/RPCs;
+- production settings/secrets.
+
+## Required tests
+
+At minimum:
+- focused registry resolution tests;
+- inventory output test or deterministic check;
+- raw-literal drift invariant;
+- market-report-analysis full suite;
+- PR #101 debug trace/final/adversarial regressions;
+- relevant X shared consumer;
+- relevant data-packet/shared regressions;
+- Deno check/lint;
+- git diff --check.
+
+No real OpenAI/network/production calls in tests.
+
+## Completion / K2
+
+Report:
+- exact branch/PR/head;
+- official OpenAI model/API verification source/date and resolved IDs/settings;
+- registry path and logical roles;
+- all migrated callers;
+- inventory command;
+- drift guard behavior;
+- audit metadata disposition;
+- exact cost/pricing disposition;
+- test counts;
+- changed files;
+- commit/push;
+- production deploy/mutation = 0;
+- remaining issues;
+- overlap/safety checks.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+Review expectation:
+- if final diff is only source-controlled registry/caller/cost/tests with no DB schema, Auth, publish/retry semantics or production mutation, a broad Codex review is normally unnecessary; ChatGPT decides at K2.
+- if a migration/schema/security/runtime-fallback boundary appears, flag it explicitly for a focused H2 review.
+
+Recommended model: **Opus5.5（高）**.
+
+## Report
+
+### task_id / result
+- task_id: kabumori-ai-model-registry-gpt61-sol-20261007
+- result: **PASS candidate（source/tests のみ）**。公式ドキュメントの確認が TASK と一致したため STOP せず実装。
+- **branch / PR / head: `g2-ai-model-registry-20261007` / [PR #107](https://github.com/anohi-memories/kabumori/pull/107) / `fb3539d07392beb197d58c7740d09c843179a789`**（base origin/main `23bf5a64`、PR #101 merge `e49ecfcc2f6707f64b6282960f9eec61be2973d3` を含む）。通常push、PR OPEN。
+- 実装モデル：Sonnet 5.5（TASKの推奨は Opus 5.5（高））。
+
+### OpenAI model / API verification（実装時点、2026-10-07）
+- 参照（WebFetch、公式 `developers.openai.com`。platform.openai.com は 301 で同ドメインへ。`openai.com/api/pricing` は 403 で取得できず）：
+  - `/api/docs/models/gpt-6.1-sol`：モデルID **`gpt-6.1-sol`**、**Responses API 対応**、**Structured Outputs 対応**、コンテキスト 1,050,000、最大出力 128,000、**`reasoning.effort` は `low` / `medium`（既定）/ `high` / `xhigh` / `max`（`none` と `minimal` は非対応）**、標準料金 入力 $2 / キャッシュ入力 $0.10 / 出力 $10（100万トークンあたり）。
+  - `/api/docs/pricing`（上のモデルページと別ページで一致を確認）：標準 $2.00 / $0.10 / $10.00。**長文料金（入力が272Kトークン超）**：入力 $4.00 / キャッシュ $0.20 / 出力 $15.00。Batch / Flex はその半額。
+  - `/api/docs/guides/reasoning`：Responses API の書式は `"reasoning": {"effort": "low"}`。reasoning トークンは出力として課金され `max_output_tokens` に含まれる。上限到達時は `status = incomplete`（`incomplete_details.reason = max_output_tokens`）で、可視出力が無いまま課金されうる。
+  - 注意：WebFetch は要約モデルを経由するため、数値は**2つの別ページで一致**することで確認した。`temperature` 等の非対応パラメータは公式ページの抜粋に記載が無く、本パイプラインはもともと送っていない。
+- **TASKの記述（`gpt-6.1-sol`、generate=medium、fact=low）との食い違いは無い**。
+- 解決した設定：generate = `gpt-6.1-sol` / medium、fact = `gpt-6.1-sol` / low。
+
+### registry path / logical roles
+- `supabase/functions/_shared/kabumori_ai_models.ts`（凍結、環境変数・DBの上書きなし、未知のロールは `KABUMORI_AI_ROLE_UNKNOWN:<role>` の例外）
+- `kabumori.market_report.generate`：`gpt-6.1-sol` / reasoning medium / `max_output_tokens` **16,000**（旧 10,000）
+- `kabumori.market_report.fact`：`gpt-6.1-sol` / reasoning low / `max_output_tokens` **4,000**（旧 1,500）
+- 設定の版 `kabumori-ai-models/2026-10-07.1`、`MODEL_PRICING`（公式料金と確認日・出典を保持）
+- **出力上限を広げた理由**：reasoning を上げる（low → medium）と reasoning トークンが上限を先に使い切るおそれがある。上限は費用の天井で、費用を増やさない。**実モデルでの使用量は未観測**（下の「残る点」）。
+
+### migrated callers
+- `analysis_logic.ts`：`generationRequestBody`（generate ロール）と `factRequestBody`（fact ロール）が `responsesApiParams(role)` で model / reasoning / max_output_tokens を取る。`ANALYSIS_MODEL` は registry の generate ロールのモデルから導出（packet の `model` と `p_model` 用。生のリテラルなし）。費用計算（`lunaCostUsd`）を registry の `estimateCallCostUsd` に置換。
+- `handler.ts`：診断に registry の監査値を追加、`ANALYSIS_MODEL` は導出のまま。
+- 他にこの共有朝刊・大引けの実行コードにモデル literal は無い（`model_literal_guard_test.ts` で固定）。personalized-reports・x-test-post・important-news-monitor・MIC・POSTONA は**触っていない**。
+
+### inventory command
+- `npm run kabumori-ai-models`（`node --experimental-strip-types ./scripts/kabumori-ai-models.ts`）／`deno run --no-config --no-prompt scripts/kabumori-ai-models.ts [--json]`
+- 出力：`Kabumori AI models (config kabumori-ai-models/2026-10-07.1)` / `Market Report Generate: gpt-6.1-sol / reasoning medium / max output 16000 tokens [kabumori.market_report.generate]` / `Market Report Fact: gpt-6.1-sol / reasoning low / max output 4000 tokens [kabumori.market_report.fact]` / 価格行。**ネットワーク・環境変数・ファイルを使わず、権限なしで動く**（テストは子プロセスを空の環境で実行）。
+
+### drift guard behavior
+- `supabase/functions/market-report-analysis/model_literal_guard_test.ts`：この共有朝刊・大引けの実行コード（`market-report-analysis/*.ts` のテスト以外、`_shared/market_report_{packet,story}.ts`・`absence_claims.ts`・`kabumori_voice.ts`、`market-report-data-packet/session_logic.ts`、`x-test-post/shared_market_report_consumer.ts`）に `\bgpt-[0-9]…` が現れたら失敗し、**`<file>:<line> hard-codes model "<literal>" — resolve it by logical role …`** を出す。コメントの中も対象（文書のつもりでも registry を外れた記載を残さない）。
+- 対象外：registry 自体、テスト、fixture、文書、POSTONA / social、important-news-monitor、MIC、personalized-reports、x-test-post の本体（テストで「他プロダクトに触れない」ことも固定）。リテラルを足したコピーで失敗することもテスト済み。
+
+### audit metadata disposition
+- 実際のモデルは PR #101 の trace（`model`）と packet（`model`）に既にある。**今回追加**：`report_diagnostics`（cycle の jsonb、成功・失敗の両方）に `ai_config_version`、`ai_generate_role` / `ai_generate_model` / `ai_generate_reasoning`、`ai_fact_role` / `ai_fact_model` / `ai_fact_reasoning`。DB変更なし。
+- **trace の1行ごとの `logical_role` / `config_version` は入れていない**：PostgREST は未知の列を含む insert を丸ごと失敗させ、trace の書き込みが止まるため、列の追加には migration が必要。G4/G5 の本番変更窓が動いている間は作らない。**follow-up migration の必要内容**：`market_report_generation_traces` に `logical_role text`・`ai_config_version text` を追加（追記専用テーブルへの `add column` のみ、trace 書き込みコードは同時に更新）。必要性は低い（`report_diagnostics` と packet の `model` で監査タプルは取れる）。
+- 無関係な列に誤った値を入れていない。
+
+### cost / pricing disposition
+- 以前の見積り（`lunaCostUsd`：入力 $0.2 / 出力 $1.2）を、**公式料金（$2 / $10、272K超は $4 / $15）で、リクエストごと**に計算する `estimateCallCostUsd` に置換（長文料金の判定も各リクエストの入力サイズ基準）。キャッシュ入力の割引は数えない（**上限側の見積り**。実請求は低くなりうる）。価格が無いモデルは `KABUMORI_AI_PRICE_UNKNOWN` の例外（0円扱いにしない）。旧モデルの料金は削除。`social_ai_model_policy` の料金所有とは分離。
+- **費用の変化（見積り）**：同じトークン量なら入力・出力とも **約10倍／約8倍**（旧 $0.2/$1.2 → $2/$10）。10/6 朝刊（calls 2、入力 13,580・出力 2,631）の見積りは、旧 $0.005873 → 新 **$0.05347**。reasoning を medium にするので出力トークン自体も増えうる。1日2サイクル×最大4呼び出しの上限は不変。運用の費用の見立ては、最初の自然サイクルで実測してから。
+
+### 追加した小さな変更（TASKの範囲内で明示）
+- **`incomplete` 応答の区別**（`handler.ts` の `openAiRequester`）：`status = incomplete`（`max_output_tokens` 到達など）で本文が空または不正のときだけ、`ANALYSIS_OPENAI_<STEP>_INCOMPLETE:<理由>` を投げる（従来は `_EMPTY` / `_INVALID_JSON`）。**成功する応答の扱いは変えていない**。medium への引き上げで上限到達が起こりうるため、原因を失敗コードで見分けられるようにした。リトライやフォールバックの挙動は変えていない（失敗する応答の失敗コードが変わるだけ）。K2が「runtime のフォールバック境界に触れる」と見るなら、この部分だけ外せる。
+
+### test counts
+- 新規：`_shared/kabumori_ai_models_test.ts` 11、`model_registry_integration_test.ts` 7（リクエスト本体・HTTP本体・費用・監査・incomplete・上限不変）、`model_literal_guard_test.ts` 5、`scripts/kabumori-ai-models.test.ts` 4（子プロセスで実行）
+- market-report-analysis **222/222**（PR #101 の debug_trace / adversarial / final 計50件、PR #99 の editorial_specificity 13 を含む）、personalized-reports 129/129、X shared consumer 8/8、market-report-data-packet 42/42、`_shared` 466/466（`--no-check`）、migration 不変条件 20/20（F1 の migration は未変更）
+- `deno check`（両 index と変更ファイル）exit 0、`deno lint`（変更ファイル）は `analysis_test.ts:34` の既存1件（2026-09-17 `05a677f1e` 由来、今回の行ではない）のみ、`git diff --check` exit 0
+- 既存テストの更新は2か所のみ：`analysis_test.ts` の費用の期待値（0.00088 → 0.008、registry 料金）、`debug_trace_test.ts` の期待モデル（literal → `ANALYSIS_MODEL`）
+
+### changed_files（PR #107）
+- 新規：`supabase/functions/_shared/kabumori_ai_models.ts`、`_shared/kabumori_ai_models_test.ts`、`market-report-analysis/model_literal_guard_test.ts`、`market-report-analysis/model_registry_integration_test.ts`、`scripts/kabumori-ai-models.ts`、`scripts/kabumori-ai-models.test.ts`
+- 変更：`market-report-analysis/analysis_logic.ts`、`handler.ts`、`analysis_test.ts`、`debug_trace_test.ts`、`package.json`（script 1行）、`docs/market-report-shared-platform/DESIGN.md`（§15.7）
+- 触っていない：migration、personalized-reports、x-test-post、important-news-monitor、MIC、POSTONA / social、common-account/Auth、プロンプト本文・編集方針、`hard_fact_guards.ts`。
+
+### preserved behavior
+- Hard の判定、ちょうど3つ、PR #99 の `X_POINTS_*`（WARN のみ）、X 300字・アプリ700字の書き直し条件、`MAX_GENERATIONS=2`・最大4呼び出し（テストで `calls ≤ 4` と費用の合計を確認）、安全な最初の版へのフォールバック、PR #101 の trace（全量保持・非ブロッキング・1回だけ書く・秘密の除外）、プロンプト：すべて不変（既存・回帰テスト全緑）。
+
+### production deploy / mutation
+- **0**。deploy・migration 適用・手動生成/再試行/replay・実際の OpenAI 呼び出し・X・通知・Cron・Auth/Vault/OAuth なし。テストはネットワーク・OpenAI・本番を使わない。公式ドキュメントの確認は WebFetch（読み取りのみ）。
+
+### overlap / safety checks
+- origin/main は4コミット先行しているが、`market-report` / `kabumori_ai` / `package.json` / `scripts/` / DESIGN への変更は無い。オープン中の PR で同じファイルを触るものは無い（確認済み）。G5 の本番 DB/Auth/permission 変更窓には入っていない。
+
+### remaining issues（K2 / 次の観測へ）
+1. **実モデル未検証（最重要）**：medium の reasoning トークン量、出力上限 16,000 の十分さ、品質・速度・**実コスト**（見積りの約10倍）は、deploy 後の最初の自然サイクルでしか分からない。上限到達なら今回の `_INCOMPLETE:max_output_tokens` コードで原因が分かる。品質が落ちる／落ちない、`rejection_reasons`・trace の `candidate` で比較できる。
+2. **費用が約10倍**：モデル価格差による（上記）。日次の費用の天井（最大4呼び出し×2サイクル）は変わらないが、`api_cost_usd` の見積りは上限側。運用上の許容かは K2 / ユーザー判断。
+3. プロンプトは luna / low 向けに調整されたまま。medium・Sol での書き方の変化（長さ、引用、警告の出方）は観測後に判断（PR #99 の「具体的な見出し」の効果も、実際のモデルでは初めて観測できる）。
+4. trace の行ごとの role / version は未実装（上記 follow-up migration、優先度低）。
+5. 個人向けレポート（personalized-reports）の旧モデルは別タスク。
+
+### 推奨
+- **focused Codex review は不要の見立て**：registry・呼び出し側・費用・テストのみで、DB schema・Auth・publish/retry の意味・本番変更なし。ただし `_INCOMPLETE` のコード分類（失敗コードのみの変更）を「runtime のフォールバック境界」と見るなら、その部分だけ軽く確認してもらう。最終判断は K2。
+- 順序の案：PR #107 の K2 → merge → `market-report-analysis` のみ controlled deploy（PR #101 の trace migration の適用とは独立）→ 次の自然サイクルを read-only で観測（`ai_*` 診断、`output_tokens`、`cost_usd`、失敗コード、`candidate` の品質）。
+
+---
+
+# Claude Task 2 — ARCHIVED TASK — PR #101 corrective completed
+
 - task_id: kabumori-pr101-f2-f3-final-corrective-20261007
 - owner: claude
 - slot: claude-2

@@ -43,7 +43,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "verify-production-env": "node --experimental-strip-types ./scripts/verify-production-env.mjs"
+    "verify-production-env": "node --experimental-strip-types ./scripts/verify-production-env.mjs",
+    "kabumori-ai-models": "node --experimental-strip-types ./scripts/kabumori-ai-models.ts"
   },
   "private": true
 }

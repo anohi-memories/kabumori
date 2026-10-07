@@ -32,87 +32,87 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: common-account-v1-phase2-q1-final-rereview-20261007
+- status: ready
+- task_id: ai-lab-topic-continuity-pr109-focused-review-20261007
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts H1 PASS on PR #95 exact head ba35b642d30ce423a8683feffcd26aec325b45ee. Q1 is closed; prior S1-T/S2/session_id/R1-R5 remain PASS. PR #95 source was squash-merged as d5bea735937b53095b110b4bed1f20442e56b089. H1 free. No production migration apply/deploy/EAS.
+- allocation: Focused exact-head review of PR #109 f83247ae1024d4220dfbfa5484c725381d63815d only. Verify SECURITY DEFINER claim migration ACL/ownership/search_path, 74-entry TS/SQL canonical map, 128 candidate bound, 72h/48h cooldowns, >=14-day x 10/day capacity proof, continuity-reserve priority, and migration-before-deploy rollout order. No production access/mutation/deploy/merge.
 - recommended_model: Sol（高）
 
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
-- task_id: kabumori-pr101-f2-f3-final-rereview-20261007
+- status: done
+- task_id: kabumori-trace-gpt61-rollout-runbook-review-20261007
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: PR #101 exact head 938567c049460ebfe78c4e08c71724d6e77ae71a の最終F2/F3再レビュー。alphabetic-only Basic、escaped credential tail、depth-limit original_chars、list kept_chars exactnessのみ確認。F1はPASS固定で再レビュー不要。production access/apply/deploy禁止。
-- recommended_model: Sol（中）
+- allocation: User explicitly waived the focused PR #108 review to prioritize today's natural close-cycle rollout. No Codex PASS is claimed. PR #108 is merged and the production rollout completed with direct bounded read-backs. H2 free.
+- recommended_model: Sol（高）
 
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
+- next_owner: none
+- status: done
 - task_id: kabumori-portfolio-canonical-ui-v1-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 corrective only on existing PR #100. PR #95/common-account source is merged, so root navigation is unblocked. Integrate fresh main, then make Portfolio-origin report detail a root Stack route so visible Back/native swipe return Portfolio; keep Reports-list-origin on nested /reports/[id] so it returns Reports list. Preserve PR95 Auth/serviceSession, root news-detail, all accepted portfolio UI/data/search/watch behavior. No internal router interception, no backend/DB/Auth/EAS changes.
+- allocation: G1 market-report allocation was a routing mistake and is cancelled. G1 remains free after the completed portfolio task; do not start the delivery-first report task from G1.
 - recommended_model: Sonnet5（中）
 
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: kabumori-pr101-f2-f3-final-corrective-20261007
+- status: ready
+- task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 PASS_CANDIDATE。PR #101 corrected head 938567c049460ebfe78c4e08c71724d6e77ae71a。残存F2/F3の具体再現ケースを修正。F1/Hard/PR99/300字rewrite/max4 calls/full-output retention不変。最終H2 exact-head再レビューへ。
+- allocation: Canonical delivery-first market-report calibration. X is Premium; legacy short length is advisory only. Objective errors should be removed at smallest-unit granularity and remaining coherent content delivered; whole-report failure is last resort. Deterministic AI disclaimer required on X/App. IMPORTANT: user will not start G2 until after the 16:35 JST natural retry is complete and checked.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-social-ai-model-policy-gpt6-upgrade-20261007
+- status: review_required
+- task_id: ai-lab-topic-continuity-fix-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: Final K3 PASS. PR #105 exact head 78a43ae878205f726111dde1002bd28ea8e82b97 was squash-merged as 9e359b3e600196fa0602ccd4162d125d613ebbb9. X/social source now centralizes GPT-6 text model ids/pricing/workloads with drift tests; no Codex review required. Production deploy/model switch is still pending and separately gated; G3 is free.
+- allocation: K3 PASS_CANDIDATE. PR #109 exact head f83247ae1024d4220dfbfa5484c725381d63815d meets source/capacity goals, but merge is HOLD for one H1 focused Sol（高） review because it replaces a SECURITY DEFINER claim function. Production remains unchanged; migration must precede x-test-post deploy.
 - recommended_model: Opus5.5（高）
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
 - status: ready
-- task_id: postona-multisocial-phase2a2-account-schema-candidate-20261007
+- task_id: postona-multisocial-phase2a2-security-corrective-20261007
 - start_code: G4
 - finish_code: K4
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Phase 2a-1 PASS and exact five provider-domain blobs integrated to main; former PR #103 closed as superseded after stale-base merge race. New Phase 2a-2 is source-only: reconstruct social_accounts contract, create a forward provider/account credential-shape migration candidate only if repository evidence is sufficient, prove it in disposable PostgreSQL, and document next Threads OAuth slice. No production apply/deploy/OAuth/Vault/provider call. Avoid active G2/G5 files and shared migration reservation if occupied.
+- allocation: Direct independent review of PR #106 head dac01220 returned CHANGES REQUIRED. G4 must update the existing PR only and close B1-B6: provider-identity unique-index precondition, provider immutability, PG16+ SET ROLE graph, explicit starting schema/ACL baseline, connected-Meta access-ref invariant, and provider-aware service_role Meta-write boundary. Also harden policy/trigger/index/check postconditions. No production/apply/deploy/OAuth/Vault/provider calls. After corrected K4, use a free H1/H2 for one Sol（高） exact-head rereview if available.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- task_id: common-account-v1-phase2-production-migration-apply-20261007
+- status: ready
+- task_id: common-account-v1-phase2-native-client-validation-20261007
 - start_code: G5
 - finish_code: K5
-- next_owner: user
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: User explicitly approved production apply. Production mutation window ACTIVE from 2026-10-07 13:42 JST for G5 only. Scope is exactly migration 20261006230000_common_account_service_start_intent: same-day read-only preflight -> Stage A exact reviewed migration -> Stage B read-back -> Stage C one migration-history row -> final read-back. No other DB/Auth/permission mutation window may open until CLOSED. User operator command is the only pending action; no deploy/EAS/backfill/enforcement/deletion/OAuth/Vault/Cron/X changes.
+- allocation: Phase 2 server migration is APPLIED_PASS. Next validate the merged client on iOS Simulator/local app before any EAS/TestFlight or real self-service mutation. Re-run exact Auth/service-enrollment regressions, verify deployed response contract compatibility, and exercise signed-out/login/session-refresh/sign-out/serviceSession gating on native Simulator. Production service-state mutation, deploy and EAS forbidden.
 - recommended_model: Opus5.5（高）
 
 ## Deferred
