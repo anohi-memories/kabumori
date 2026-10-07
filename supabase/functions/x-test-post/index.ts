@@ -36,7 +36,15 @@ import {
   morningReportVoiceRewritePreservesFacts,
   morningReportVoiceRewriteSafetyIssues,
   parseMorningReportVoiceRewriteOutputText,
+  REPORT_VOICE_REWRITE_MODEL,
 } from "./report_voice_rewrite_logic.ts";
+import {
+  isSocialQualityTextModel,
+  socialTextModel,
+  socialTextModelCostUsd,
+  socialTextModelTokenCostUsd,
+  type SocialTextModelId,
+} from "../_shared/social_ai_model_policy.ts";
 import {
   evaluateUsPremarketFacts,
   normalizeUsPremarketMetric,
@@ -318,7 +326,7 @@ type MorningReportDraft = {
   marketDataTimestamp: string;
   factCheckStatus: "passed" | "failed";
   factCheckNotes: string[];
-  model: "gpt-5.6-luna";
+  model: SocialTextModelId;
   inputTokens: number;
   outputTokens: number;
   webSearchCalls: number;
@@ -398,7 +406,7 @@ type CloseReportDraft = {
   marketDataTimestamp: string;
   factCheckStatus: "passed" | "failed";
   factCheckNotes: string[];
-  model: "gpt-5.6-luna";
+  model: SocialTextModelId;
   inputTokens: number;
   outputTokens: number;
   webSearchCalls: number;
@@ -419,7 +427,7 @@ type UsPremarketReportDraft = {
   marketDataTimestamp: string;
   factCheckStatus: "passed" | "failed";
   factCheckNotes: string[];
-  model: "gpt-5.6-luna" | "gpt-5.6-sol";
+  model: SocialTextModelId;
   escalatedToSol: boolean;
   inputTokens: number;
   outputTokens: number;
@@ -737,17 +745,27 @@ export function isUsefulTipOutputTruncated(response: unknown): boolean {
     (details as { reason?: unknown }).reason === "max_output_tokens";
 }
 
-function modelCostUsd(model: UsefulTipDraft["model"], input: number, output: number): number {
-  const rates = model === "gpt-5.6-sol"
-    ? { input: 5, output: 30 }
-    : { input: 0.2, output: 1.2 };
-  return Number(((input * rates.input + output * rates.output) / 1_000_000).toFixed(6));
+// Token rates come only from the central policy (_shared/social_ai_model_policy.ts).
+function modelCostUsd(model: SocialTextModelId, input: number, output: number): number {
+  return socialTextModelCostUsd(model, input, output);
 }
 
-function morningApiCostUsd(input: number, output: number, webSearchCalls: number): number {
-  const tokenCost = (input * 0.2 + output * 1.2) / 1_000_000;
-  const searchCost = webSearchCalls * 0.01;
-  return Number((tokenCost + searchCost).toFixed(6));
+/**
+ * A web-search report: collection tokens at the collection model's rates plus the per-call web-search
+ * fee (unchanged, $0.01 per call), and writing tokens at the writing model's rates; rounded once.
+ */
+function reportApiCostUsd(cost: {
+  collectionModel: SocialTextModelId;
+  collection: { input: number; output: number };
+  webSearchCalls: number;
+  writingModel: SocialTextModelId;
+  writing: { input: number; output: number };
+}): number {
+  const searchCost = cost.webSearchCalls * 0.01;
+  return Number((
+    socialTextModelTokenCostUsd(cost.collectionModel, cost.collection.input, cost.collection.output) + searchCost +
+    socialTextModelTokenCostUsd(cost.writingModel, cost.writing.input, cost.writing.output)
+  ).toFixed(6));
 }
 
 async function fetchOpenAiWithSingleRetry(
@@ -922,7 +940,7 @@ async function createUsefulTipDraftAttempt(
       factCheckStatus: status,
       factCheckNotes: parsed.fact_check_notes,
       model,
-      escalatedToSol: model === "gpt-5.6-sol",
+      escalatedToSol: isSocialQualityTextModel(model),
       inputTokens: usage.input,
       outputTokens: usage.output,
       apiCostUsd: modelCostUsd(model, usage.input, usage.output),
@@ -971,8 +989,8 @@ async function saveUsefulTipFailureVerification(
       useful_tip_id: tip.id,
       source_urls: [],
       verified_at: new Date().toISOString(),
-      model: lastAttempt?.model ?? "gpt-5.6-luna",
-      escalated_to_sol: lastAttempt?.model === "gpt-5.6-sol",
+      model: lastAttempt?.model ?? socialTextModel("usefulTipBase"),
+      escalated_to_sol: lastAttempt ? isSocialQualityTextModel(lastAttempt.model) : false,
       input_tokens: null,
       output_tokens: null,
       api_cost_usd: null,
@@ -1010,7 +1028,7 @@ async function generateVerifiedUsefulTip(
   openAiApiKey: string, tip: UsefulTip,
 ): Promise<UsefulTipDraft> {
   const lunaResult = await runUsefulTipLunaWithTruncationRetry((maxOutputTokens, attempt) =>
-    createUsefulTipDraftAttempt(openAiApiKey, tip, "gpt-5.6-luna", maxOutputTokens, attempt)
+    createUsefulTipDraftAttempt(openAiApiKey, tip, socialTextModel("usefulTipBase"), maxOutputTokens, attempt)
   );
   const luna = { ...lunaResult.value, generationDiagnostics: lunaResult.diagnostics };
   if (!shouldEscalateUsefulTipToSol(luna.needsSol, luna.factCheckStatus)) return luna;
@@ -1018,7 +1036,7 @@ async function generateVerifiedUsefulTip(
   let solResult: UsefulTipAttemptSuccess<UsefulTipDraftAttempt>;
   const solAttempt = luna.generationDiagnostics.attemptCount + 1;
   try {
-    solResult = await createUsefulTipDraftAttempt(openAiApiKey, tip, "gpt-5.6-sol", 2400, solAttempt);
+    solResult = await createUsefulTipDraftAttempt(openAiApiKey, tip, socialTextModel("usefulTipQualityEscalation"), 2400, solAttempt);
   } catch (error) {
     if (error instanceof UsefulTipAttemptError) {
       throw new UsefulTipGenerationError(
@@ -1234,7 +1252,7 @@ async function generatePostParts(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-5.6-luna",
+      model: socialTextModel("kabumoriXText"),
       store: false,
       max_output_tokens: 700,
       instructions: [
@@ -1340,7 +1358,7 @@ async function generateInteractionPostOnce(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-5.6-luna",
+      model: socialTextModel("kabumoriXText"),
       store: false,
       max_output_tokens: 900,
       instructions: [
@@ -1620,7 +1638,7 @@ async function generateMorningReport(
       method: "POST",
       headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gpt-5.6-luna", store: false, reasoning: { effort: "low" },
+        model: socialTextModel("kabumoriXWebSearchCollection"), store: false, reasoning: { effort: "low" },
         max_output_tokens: 3000, max_tool_calls: 1,
         tools: [{
           type: "web_search", filters: { allowed_domains: MORNING_SOURCE_DOMAINS },
@@ -1918,7 +1936,7 @@ async function generateMorningReport(
       method: "POST",
       headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gpt-5.6-luna", store: false, reasoning: { effort: "low" }, max_output_tokens: 1500,
+        model: socialTextModel("kabumoriXText"), store: false, reasoning: { effort: "low" }, max_output_tokens: 1500,
         instructions: [
           ...kabumoriVoice("morning_report", `morning-report:${referenceTimeIso.slice(0, 10)}`),
           "入力の出典確認済み事実だけを使い、市場概況＋初心者にも分かる解説型の朝刊を1投稿で作成してください。数値・日時・固有名詞・因果関係を追加推測しません。",
@@ -1986,12 +2004,18 @@ async function generateMorningReport(
       ...collections.flatMap((collection) => collection.packet.fact_check_notes),
       ...factResult.notes,
     ],
-    model: "gpt-5.6-luna",
+    model: socialTextModel("kabumoriXText"),
     inputTokens: totalInput,
     outputTokens: totalOutput,
     webSearchCalls,
     retrievalDiagnostics,
-    apiCostUsd: morningApiCostUsd(totalInput, totalOutput, webSearchCalls),
+    apiCostUsd: reportApiCostUsd({
+      collectionModel: socialTextModel("kabumoriXWebSearchCollection"),
+      collection: { input: collectionInputTokens, output: collectionOutputTokens },
+      webSearchCalls,
+      writingModel: socialTextModel("kabumoriXText"),
+      writing: writingUsage,
+    }),
     runMode,
   };
 }
@@ -2142,7 +2166,7 @@ async function generateCloseReport(
     method: "POST",
     headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "gpt-5.6-luna", store: false, reasoning: { effort: "low" },
+      model: socialTextModel("kabumoriXWebSearchCollection"), store: false, reasoning: { effort: "low" },
       max_output_tokens: 2800, max_tool_calls: 4,
       tools: [{
         type: "web_search",
@@ -2373,7 +2397,7 @@ async function generateCloseReport(
       method: "POST",
       headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gpt-5.6-luna", store: false, reasoning: { effort: "low" }, max_output_tokens: 1600,
+        model: socialTextModel("kabumoriXText"), store: false, reasoning: { effort: "low" }, max_output_tokens: 1600,
         instructions: [
           ...kabumoriVoice("close_report", `close-report:${packet.trading_date}`),
           "入力の出典確認済み事実だけを使い、市場概況＋初心者にも分かる解説型の大引けレポートを1投稿で作成してください。数値・日時・因果関係を追加推測しません。",
@@ -2418,8 +2442,11 @@ async function generateCloseReport(
     nikkei, topix, growth250, strongThemes, weakThemes, nikkeiFutures1545,
     conditionalFactors, carryovers, sourceUrls, marketDataTimestamp: packet.market_data_timestamp,
     factCheckStatus: factResult.status, factCheckNotes: [...packet.fact_check_notes, ...factResult.notes],
-    model: "gpt-5.6-luna", inputTokens: totalInput, outputTokens: totalOutput,
-    webSearchCalls, apiCostUsd: morningApiCostUsd(totalInput, totalOutput, webSearchCalls), runMode,
+    model: socialTextModel("kabumoriXText"), inputTokens: totalInput, outputTokens: totalOutput,
+    webSearchCalls, apiCostUsd: reportApiCostUsd({
+      collectionModel: socialTextModel("kabumoriXWebSearchCollection"), collection: collectionUsage, webSearchCalls,
+      writingModel: socialTextModel("kabumoriXText"), writing: writingUsage,
+    }), runMode,
   };
 }
 
@@ -2462,7 +2489,7 @@ async function generateUsPremarketReport(
     method: "POST",
     headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "gpt-5.6-luna", store: false, reasoning: { effort: "low" },
+      model: socialTextModel("kabumoriXWebSearchCollection"), store: false, reasoning: { effort: "low" },
       max_output_tokens: 2800, max_tool_calls: 4,
       tools: [{
         type: "web_search",
@@ -2579,7 +2606,10 @@ async function generateUsPremarketReport(
   const webSearchCalls = countWebSearchCalls(collectionRaw);
   let text = "";
   let writingUsage = { input: 0, output: 0 };
-  const writingModel: UsPremarketReportDraft["model"] = packet.requires_sol ? "gpt-5.6-sol" : "gpt-5.6-luna";
+  // Existing condition, unchanged: the verified packet decides; the tiers come from the central policy.
+  const writingModel: SocialTextModelId = packet.requires_sol
+    ? socialTextModel("usPremarketQualityEscalation")
+    : socialTextModel("usPremarketBase");
   if (factResult.status === "passed") {
     const writingResponse = await fetch(OPENAI_RESPONSES_URL, {
       method: "POST",
@@ -2614,16 +2644,16 @@ async function generateUsPremarketReport(
   }
   const totalInput = collectionUsage.input + writingUsage.input;
   const totalOutput = collectionUsage.output + writingUsage.output;
-  const cost = Number((
-    morningApiCostUsd(collectionUsage.input, collectionUsage.output, webSearchCalls) +
-    modelCostUsd(writingModel, writingUsage.input, writingUsage.output)
-  ).toFixed(6));
+  const cost = reportApiCostUsd({
+    collectionModel: socialTextModel("kabumoriXWebSearchCollection"), collection: collectionUsage, webSearchCalls,
+    writingModel, writing: writingUsage,
+  });
   return {
     text, reportDate: packet.report_date, isUsMarketOpen: packet.is_us_market_open,
     importantPoints: packet.important_points, futures, semiconductorSignal, premarketMovers,
     conditionalFactors, sourceUrls, marketDataTimestamp: packet.market_data_timestamp,
     factCheckStatus: factResult.status, factCheckNotes: [...packet.fact_check_notes, ...factResult.notes],
-    model: writingModel, escalatedToSol: writingModel === "gpt-5.6-sol",
+    model: writingModel, escalatedToSol: isSocialQualityTextModel(writingModel),
     inputTokens: totalInput, outputTokens: totalOutput, webSearchCalls,
     apiCostUsd: cost, runMode,
   };
@@ -2642,7 +2672,7 @@ async function createMorningReportRun(
       scheduled_post_id: scheduledPostId,
       scheduled_at: scheduledAt,
       status: "generating",
-      model_used: "gpt-5.6-luna",
+      model_used: socialTextModel("kabumoriXText"),
     }),
   });
   if (!response.ok) throw new Error("MORNING_REPORT_LOG_CREATE_FAILED");
@@ -2678,7 +2708,7 @@ async function createCloseReportRun(
       scheduled_post_id: scheduledPostId,
       scheduled_at: scheduledAt,
       status: "generating",
-      model_used: "gpt-5.6-luna",
+      model_used: socialTextModel("kabumoriXText"),
     }),
   });
   if (!response.ok) throw new Error("CLOSE_REPORT_LOG_CREATE_FAILED");
@@ -2714,7 +2744,7 @@ async function createUsPremarketReportRun(
       scheduled_post_id: scheduledPostId,
       scheduled_at: scheduledAt,
       status: "generating",
-      model_used: "gpt-5.6-luna",
+      model_used: socialTextModel("usPremarketBase"),
     }),
   });
   if (!response.ok) throw new Error("US_PREMARKET_LOG_CREATE_FAILED");
@@ -2761,7 +2791,7 @@ async function generateFuturePostPreview(
     method: "POST",
     headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "gpt-5.6-luna",
+      model: socialTextModel("kabumoriXText"),
       store: false,
       max_output_tokens: 700,
       instructions: [
@@ -2804,7 +2834,7 @@ async function evaluateKabumoriVoice(
     method: "POST",
     headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "gpt-5.6-luna",
+      model: socialTextModel("kabumoriXVoiceEvaluation"),
       store: false,
       max_output_tokens: 650,
       instructions: [
@@ -2877,7 +2907,7 @@ async function evaluateKabumoriVoice(
     notes: value.notes,
     inputTokens: usage.input,
     outputTokens: usage.output,
-    apiCostUsd: modelCostUsd("gpt-5.6-luna", usage.input, usage.output),
+    apiCostUsd: modelCostUsd(socialTextModel("kabumoriXVoiceEvaluation"), usage.input, usage.output),
     responseDiagnostics,
   };
 }
@@ -2975,7 +3005,7 @@ async function attemptMorningReportVoiceRewrite(
       : cleaned;
     if (!validateMorningReportFormat(contextAwareText, usSessionContext)) return null;
     const usage = getUsage(raw);
-    return { text: contextAwareText, inputTokens: usage.input, outputTokens: usage.output, apiCostUsd: modelCostUsd("gpt-5.6-luna", usage.input, usage.output) };
+    return { text: contextAwareText, inputTokens: usage.input, outputTokens: usage.output, apiCostUsd: modelCostUsd(REPORT_VOICE_REWRITE_MODEL, usage.input, usage.output) };
   } catch {
     return null;
   }
@@ -3008,7 +3038,7 @@ async function attemptCloseReportVoiceRewrite(
     if (!validateCloseReportFormat(cleaned)) return null;
     if (localCloseReportSafetyIssues(cleaned).length > 0) return null;
     const usage = getUsage(raw);
-    return { text: cleaned, inputTokens: usage.input, outputTokens: usage.output, apiCostUsd: modelCostUsd("gpt-5.6-luna", usage.input, usage.output) };
+    return { text: cleaned, inputTokens: usage.input, outputTokens: usage.output, apiCostUsd: modelCostUsd(REPORT_VOICE_REWRITE_MODEL, usage.input, usage.output) };
   } catch {
     return null;
   }
