@@ -5,8 +5,9 @@
 - reviewed_head: 6612b3f1dee5055794137da71697ebe5e07d7419
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
+- corrected_head: d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8
 - recommended_model: Opus5.5（高）
 - production_mutation_allowed: false
 - deploy_allowed: false
@@ -136,6 +137,104 @@ Then:
 - STOP for **K2**.
 
 Recommended model: **Opus5.5（高）**.
+
+
+## Report
+
+- PR #110 を更新（新しいPRは作っていない）。新しい head: `d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8`（6612b3f1 の上に1コミット）。
+- 着手前の確認:
+  - PR #110 は open、head は 6612b3f1 で worktree と一致し、変更なし。
+  - 他の open PR（#106 / #33 / #11 / #10 / #3）とファイルの重なりなし。
+  - 既存の G2 worktree をそのまま使用。
+- changed_files:
+  - `market-report-analysis/analysis_logic.ts`
+  - `market-report-analysis/hard_fact_guards.ts`
+  - `market-report-analysis/unit_sanitizer.ts`
+  - `market-report-analysis/h2_corrective_test.ts`（新規）
+  - `x-test-post/shared_market_report_consumer.ts`
+  - `x-test-post/shared_market_report_consumer_test.ts`
+
+### 修正前の再現 → 修正後
+
+同じスクリプトで、10/7 の配信済み生成を使って確認した。
+
+| | 修正前 | 修正後 |
+|---|---|---|
+| B1 | ローカル検査 hard 0、Fact 2回とも不合格 → `advisory` で配信し、矛盾文がパケットに残る | 矛盾文を除外して `advisory` で配信、矛盾文なし |
+| B2 | 日付誤りの hard 0 | 1 |
+| B3 | 因果の断定 hard 0 | 1 |
+| B4 | passed / advisory / not_run がすべて 'passed' | 'passed' / 'failed' / NULL |
+
+- 新しいテスト10件のうち7件は修正前のソースで失敗する（ソースだけを戻して確認済み）。残り3件は修正前後どちらでも通るべき対照ケース。
+
+### B1　Factだけが見つけた入力との矛盾
+
+- Fact の JSON スキーマに `objective_issues: [{quote_ja, reason_ja}]` を追加した。対象は、input と違う数字・日付・方向、古い値を最新扱い、1306をTOPIX扱い、input に無い事実の断定、input の事実の否定・反転。引用は analysis の文をそのまま写すよう指示した。
+- 引用に一致する単位を `FACT_OBJECTIVE` として除外する（置き換え文は作らない）。照合は幅・空白・括弧・句点を揃えて行い、8字未満の引用は対応付けない。除外したあと、配信前の再検査をもう一度行う。
+- 次の場合、その候補は配信しない（`deliveryIssues` に理由を記録）:
+  - どの単位にも一致しない引用がある（`FACT_OBJECTIVE_UNMAPPED`）
+  - 除外するとまとまりが残らない
+  - 再検査で hard が出る
+- 選択の手順:
+  - 配信できない候補を除いたうえで、従来の順位で選ぶ。
+  - Fact 未実施の候補は、上限の範囲で1つずつ Fact にかける。判定が出た候補があれば、判定済みの中から選ぶ。
+  - 1つも残らなければ `ANALYSIS_FACT_FAILED` で全体を止める（スケジュールの再試行に回る）。
+- 口調などのソフトな指摘は従来どおり advisory（何も除外しない）。
+- trace の `local_warnings` に `FACT_OBJECTIVE:「引用」 理由` と、除外した単位ごとの理由を残す。
+
+### B2　節の途中の絵文字
+
+- `EMOJI_SENTENCE_END` を新設し、`hard_fact_guards` と `unit_sanitizer` の両方で使う。絵文字を文の区切りにするのは、次の2条件をどちらも満たすときだけ:
+  - 直前が助詞・読点・開き括弧ではない
+  - 直後が、空白＋新しい文（日付で始まってよい）か、テキストの終わり（値・符号・%・括弧・読点・助詞で始まるものは続きとみなす）
+- 確認した位置: 値の前、%の前、主語／日付／値の間、括弧・読点の隣。
+- 10/7 の正しい区切り（「…でした📉 10月6日の米国市場…」）はそのまま2文。
+
+### B3　推測・否定が効く範囲
+
+- 「可能性」などの推測と「確認できません」などの否定は、その因果リンクと同じ節にあるときだけ効くようにした。節の区切りは が／けれど／ものの／ので／ため／一方／ただし／しかし／なお／また＋読点。
+- 結果:
+  - 再現文 → 断定と判定
+  - 「重しとなった可能性があります」 → 推測（advisory）
+  - 対照9件 → すべて期待どおり
+- 配信前の再検査も、同じ節単位の判定を使う。
+
+### B4　X側の記録
+
+- `sharedFactCheck` を追加した。
+  - 列 `fact_check_status`: passed → 'passed'、advisory → 'failed'、not_run → NULL。本番の列制約（マイグレーション上 'passed'|'failed'、NULL 可）の範囲内で、マイグレーションはしていない。
+  - `fact_check_notes`: `fact_status:<状態>`、外した単位、FACT_* の警告。
+  - `market_data`: `fact_status` と `removed_units`。
+- 投稿の挙動は変えていない（3つのどの状態でも投稿する）。
+- 形式エラーで投稿しなかった場合も、実際の状態で記録する。
+- 管理画面の失敗一覧は run の `status` で絞り込んでいるので、'failed' を書いても失敗一覧には出ない（`apps/admin/src/lib/recent-failures.ts` で確認）。
+
+### テスト（すべて成功）
+
+- `market-report-analysis` 252（`h2_corrective_test` 10、`delivery_first_test` 19 を含む）
+- X共有消費側 10、`personalized-reports` 129、`market-report-data-packet` 42、`_shared` 466
+- `tests/app` 430（アプリの注意書き4件を含む）
+- 10/7 の本番3生成は、引き続き誤検知0・除外0。
+- deno check（変更ファイル）は0件。lint は既存の6件（消費側テストの古い補助関数の `require-await`）だけで、新しい指摘は0件。`git diff --check` は問題なし。
+- `--allow-net` を必要とするテストは無い。
+
+### 上限
+
+`MAX_GENERATIONS = 2`、`MAX_MODEL_CALLS = 4`、`DEFAULT_TRANSPORT_RETRY` は不変。B1 の Fact 呼び出しも、この上限の中で行う。
+
+### 本番操作・デプロイ・手動生成・X送信 = 0
+
+### 残るリスク
+
+1. B1 は、Fact が `objective_issues` に正しく分類し、引用を正確に写すことに依存している。
+   - 分類しなかった場合 → 従来どおり advisory として配信される。
+   - 引用が不正確な場合 → その候補は配信されない（安全側に倒れるが、止まる回数が増える可能性がある）。
+   - デプロイ後に `FACT_OBJECTIVE` と `FACT_OBJECTIVE_UNMAPPED` の件数を観察する必要がある。
+2. Fact のスキーマ変更でプロンプトのハッシュが変わる。Sol の strict schema でそのまま通ることは本番でしか確認できない。
+3. 本番の `close_report_runs` / `morning_report_runs` の制約がマイグレーションどおりであることは、読み取り専用でも未確認（本番の読み取りはユーザーの実行が必要）。デプロイ前に一度確認することを推奨する。
+4. X側の記録の変更は、x-test-post を次にデプロイしたときに反映される。
+
+Recommended next owner: **chatgpt（K2）**
 
 ---
 
