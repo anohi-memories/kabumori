@@ -1,3 +1,30 @@
+## C1 — POSTONA PR #106 CHANGES REQUIRED / final bounded G4 corrective ready — 2026-10-08
+
+- H1 reviewed exact PR #106 head `4b6dc57966e0d55b2e901a7707446c35b25a1f00`.
+- verdict: **CHANGES REQUIRED**, but the remaining scope is narrow.
+- closed/accepted:
+  - unsafe owner/direct/inherited/SET-only/transitive EXECUTE paths are refused;
+  - existing trigger-function definition/owner checks otherwise hold;
+  - new provider guard exact body/definition pinning is independently CLOSED;
+  - existing X regressions pass;
+  - mutation suite 54/54 detected;
+  - production access/write/apply/deploy/provider operations = 0.
+- remaining source gap:
+  - the ACL predicate rejects bad entries but does not positively require the promised explicit owner EXECUTE entry;
+  - an empty owner ACL therefore passes. This is underprivilege rather than escalation, but it violates the exact canonical prerequisite contract.
+- remaining integration gap:
+  - `supabase/tests/migration_source_invariants_test.ts` is semantically current main + the POSTONA reservation, but PR ancestry still conflicts with main in that one file.
+- G4 final corrective:
+  1. require exactly one owner EXECUTE ACL entry for each existing trigger function and reject empty-owner ACL atomically;
+  2. merge fresh main into the PR branch normally and resolve the reservation file to fresh main + POSTONA `20261007150000`, preserving AI Lab `20261007173000`;
+  3. rerun focused PG/invariant/regression checks and prove clean mergeability.
+- PR #106 remains open/unmerged; production preflight/apply remains unapproved.
+- G4 status: ready.
+- recommended G4 model: **Opus5.5（高）**.
+- H1 is done/free. H2 is currently occupied by the separate G2 review.
+- after corrected K4, use a genuinely free H1/H2 for one final narrow exact-head rereview if available; recommended **Sol（高）**.
+- next action: send `G4`; finish with `K4`.
+
 ## K2 — PR #110 corrected PASS_CANDIDATE / narrow H2 rereview assigned — 2026-10-08
 
 - corrected PR #110 exact head: `d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8`.
