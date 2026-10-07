@@ -3,7 +3,7 @@
 - task_id: `common-account-v1-phase2-production-migration-preflight-20261007`
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - next_owner: claude
 - recommended_model: **Opus5.5（高）**
 - merged_source: `d5bea735937b53095b110b4bed1f20442e56b089`
