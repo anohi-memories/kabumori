@@ -265,6 +265,37 @@ Recommended model: **Opus5.5（高）**.
 - **M2**：本番の `market-report-analysis` **のみ**を、受け入れ済みの main（`8738a186` の graph）から `--no-verify-jwt --use-api` でデプロイし、14ファイルの SHA-256 を照合する。前提：M1 が DONE（または M1 STOP 後のレビュー済み判断）、OpenAI の残高確認、時間帯外。
 - 推奨の実施時刻：本日の大引けが終わった **17:30 JST 以降**。最初の観測は 10/8 朝刊。
 
+
+## Final production apply receipt — 2026-10-07 16:11 JST
+
+- user approval: explicit approval for M1 + M2, with instruction to proceed as fast as possible for today's natural close cycle.
+- H2 review of PR #108: explicitly waived by user; no Codex PASS is claimed.
+- PR #108: merged, head `b73e4053fc033d9c47235b68df4bca311dc6c8c4`, merge commit `3e54200bcbeecc3d8786b6fe7667da7f1bf1a27a`.
+- production project: `stock-x-autopost` / project ref `wsmznyzcvmuitkglfeuj`.
+- M1 before-state: current_user postgres; PostgreSQL 17; trace table absent; migration history version `20261007120000` absent.
+- M1 migration: exact reviewed file `20261007120000_market_report_generation_traces.sql` from accepted source `8738a186628989ce6c797d61ea80f5b721664c95` executed in production.
+- M1 postflight before history:
+  - table exists;
+  - RLS enabled;
+  - policies = 0;
+  - enabled append-only triggers = 3;
+  - anon SELECT = false;
+  - authenticated SELECT = false;
+  - service_role SELECT/INSERT = true;
+  - service_role UPDATE/DELETE = false.
+- M1 history: exactly one row inserted/read back as `20261007120000 / market_report_generation_traces`.
+- M2 before-state: `market-report-analysis` v27 ACTIVE, `verify_jwt=false`, old Luna-era bundle.
+- M2 deploy: only `market-report-analysis`, using the 14-file accepted import graph from `8738a186628989ce6c797d61ea80f5b721664c95`; no other function was deployed.
+- M2 after-state: v28 ACTIVE, `verify_jwt=false`, EZBR `18a5dbf53d9383068cf1059c76b48c26fc1e26eb4fd143572918b4a4dfb013c2`.
+- deployed source read-back: all runtime files byte-match accepted source; the only missing downloaded file is the type-only `market-report-data-packet/packet_schema.ts`, which the rollout runbook explicitly allows to be absent from the downloaded bundle.
+- runtime read-back confirms deployed registry contains `gpt-6.1-sol`, handler contains audit diagnostics and generation-trace persistence.
+- consumer gates after deploy: app=false / x=false.
+- trace rows immediately after deploy: 0, confirming no manual report/invoke/replay was performed.
+- close Cron: `market-report-analysis-close` active at 16:20 JST; retry active at 16:35 JST.
+- production mutation scope: M1 exact trace schema + one migration-history row; M2 one Edge Function deploy. No manual report, replay, X send, notification, Cron/Auth/Vault/OAuth/secret/settings mutation.
+- expected first GPT-6.1 Sol natural close analysis: 2026-10-07 16:20 JST.
+- AI Lab diary: 記録不要 — internal rollout/production gate; no new public-facing development topic beyond the model-centralization entry already recorded.
+
 ---
 
 # Claude Task 2 — ARCHIVED TASK — AI model registry completed
