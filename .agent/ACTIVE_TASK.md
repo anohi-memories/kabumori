@@ -44,14 +44,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: kabumori-trace-gpt61-rollout-runbook-review-20261007
+- status: ready
+- task_id: kabumori-pr110-delivery-first-focused-review-20261007
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: User explicitly waived the focused PR #108 review to prioritize today's natural close-cycle rollout. No Codex PASS is claimed. PR #108 is merged and the production rollout completed with direct bounded read-backs. H2 free.
+- allocation: Focused exact-head review of PR #110 head 6612b3f1dee5055794137da71697ebe5e07d7419. Review progressive unit sanitization, Hard Fact preservation, Fact advisory/not_run fallback, 10/7 false-positive closure, X Premium/disclaimer behavior, and app-visible disclaimer. No merge/deploy/production access or mutation.
 - recommended_model: Sol（高）
 
 ## Claude G1
@@ -69,14 +69,14 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 PASS_CANDIDATE for the delivery-first core, with one bounded corrective before review: PR #110 must make the agreed AI disclaimer actually visible once on the app report-detail screen, not only inside the backend app_story payload. Update existing PR #110 only; presentation/source tests only; no DB/Edge/Cron/gate/deploy/EAS/production mutation.
-- recommended_model: Sonnet5（中）
+- allocation: K2 PASS_CANDIDATE at PR #110 head 6612b3f1dee5055794137da71697ebe5e07d7419. App-visible disclaimer blocker is closed. Merge/deploy HOLD pending one focused H2 Sol（高） review of delivery-safety boundaries.
+- recommended_model: Opus5.5（高）
 
 ## Claude G3
 - owner: claude
