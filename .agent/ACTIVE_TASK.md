@@ -32,14 +32,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: ai-lab-topic-continuity-pr109-focused-review-20261007
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Focused exact-head review of PR #109 f83247ae1024d4220dfbfa5484c725381d63815d only. Verify SECURITY DEFINER claim migration ACL/ownership/search_path, 74-entry TS/SQL canonical map, 128 candidate bound, 72h/48h cooldowns, >=14-day x 10/day capacity proof, continuity-reserve priority, and migration-before-deploy rollout order. No production access/mutation/deploy/merge.
+- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #109 head f83247ae1024d4220dfbfa5484c725381d63815d. Accepted topic/capacity design remains valid; blockers are migration guards only: SET ROLE role-graph escalation, canonical prerequisite table-shape validation, and exact companion lifecycle-function body verification. H1 closed/free. No production mutation/merge/deploy.
 - recommended_model: Sol（高）
 
 ## Codex H2
@@ -82,13 +82,13 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
-- task_id: ai-lab-topic-continuity-fix-20261007
+- status: ready
+- task_id: ai-lab-topic-continuity-pr109-security-corrective-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: K3 PASS_CANDIDATE. PR #109 exact head f83247ae1024d4220dfbfa5484c725381d63815d meets source/capacity goals, but merge is HOLD for one H1 focused Sol（高） review because it replaces a SECURITY DEFINER claim function. Production remains unchanged; migration must precede x-test-post deploy.
+- allocation: C1 CHANGES REQUIRED corrective on existing PR #109 only. Preserve accepted 74-topic/Tier2+Tier3/cooldown/capacity behavior; fix migration B1 SET ROLE graph guard, B2 canonical prerequisite table-shape proof, B3 exact unchanged lifecycle-function body proof. Add adverse rollback fixtures. No production/apply/deploy/merge.
 - recommended_model: Opus5.5（高）
 
 ## Claude G4
