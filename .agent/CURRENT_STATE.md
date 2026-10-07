@@ -1,3 +1,16 @@
+## G1 delivery-first policy refinement — 2026-10-07
+
+- X account is Premium; legacy short-post character targets are no longer delivery constraints. Readability length remains advisory only.
+- AI disclaimer uses the full deterministic footer on both X and App; it must never be trimmed for length.
+- objective factual errors now follow **progressive degradation**:
+  - detect the smallest bad unit;
+  - omit/neutralize that sentence/point/claim/news item only;
+  - keep and deliver the remaining coherent safe content;
+  - record removed units/reasons in diagnostics/traces.
+- wrong number/date/sign/stale/1306 identity/unknown ref must not kill the whole report when local omission can preserve a coherent report.
+- whole-cycle failure is last resort only: unparseable output or no candidate can be reduced to a minimally coherent safe report.
+- G1 task updated in-place; recommended model remains **Opus5.5（高）**.
+
 ## G1 assigned — delivery-first market-report guard calibration — 2026-10-07
 
 - user decision: prioritize successful daily morning/close delivery; only clear objective falsehoods should hard-stop a report.
