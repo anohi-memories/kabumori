@@ -88,6 +88,19 @@ Sonnet5で安全に処理できる作業はSonnet5を優先する。設計判断
 - G1/G2/G3/G4/G5/H1/H2/K1〜K5/C1/C2/Fの意味・開始条件・完了確認フローは従来どおりとする。
 - `.env` などの秘密情報はローカル専用として扱い、stage / commit / pushしない。
 
+## Production並行運用とG5優先度（2026-10-08〜）
+
+ユーザー方針：共通アカウント（G5）は完成に必要なcritical pathとして**優先**するが、G5がactive/approvedであること自体を理由に、非競合の他作業を停止してはならない。優先度は「競合した場合にG5を優先する」という意味であり、プロジェクト全体のfreezeを意味しない。
+
+- **Git上の非競合作業は継続可**：別ファイル・別機能・別migration/RPC/Edge Function/設定境界であれば、実装・テスト・commit・push・PR更新・mergeをG5待ちで止めない。
+- **production作業も競合判定で扱う**：G5と具体的なmutation boundaryが分離されている場合、別slotのproduction deploy/writeを一律禁止しない。各TASKの承認・安全ゲートは個別に満たすこと。
+- **G5優先で止める対象**：同じDB migration、同じtable/RPC/function、同じAuth/権限/RLS、同じEdge Function、同じsecret/settings/Cron/workflow、同じAPI境界、またはread-back/fingerprint基準を壊す可能性がある変更。競合時はG5を優先し、他方を待たせる。
+- **同一Supabase DBのmigration/DDL**：対象が論理的に別でも、migration history・catalog・preflight fingerprintを共有するため、実際のDDL/write区間は同時実行しない。片方が完了・read-backしたら、他方はfresh baselineを取り直して続行する。これは数分単位のwrite区間の直列化であり、G5 TASK全期間の停止ではない。
+- **mutation windowは短く保つ**：windowは実際のproduction write直前に開き、postflight/read-back完了後すぐ閉じる。ユーザー入力待ち、夜間待機、レビュー待ち、自然配信待ちなどの時間はwindowをACTIVEのまま保持しない。
+- **待機中はlockを解放**：作業がユーザー操作待ち等で止まる場合、実writeが無ければwindowをCLOSED/PAUSED相当に戻し、他の非競合作業を妨げない。再開時にfresh競合確認を行う。
+- **判断基準はslot名ではなく変更境界**：G5 vs G1〜G4/H1/H2という枠名だけで禁止しない。実際に触るファイル・DB object・Auth/RLS・Edge・settings・workflow・production resourceを比較して判断する。
+- scopeや競合が曖昧な場合だけ停止し、具体的に何が競合するかを報告する。
+
 ## 変更と合意
 
 - 全体方針、優先順位、共通ルール、恒久的な決定はこのファイルへ集約する。
