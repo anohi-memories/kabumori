@@ -1,3 +1,122 @@
+# C2 CORRECTIVE — PR #110 residual B1-R1 / B2-R1 / B3-R1 only
+
+- c2_verdict: **CHANGES REQUIRED**
+- target_pr: 110
+- reviewed_head: d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- recommended_model: Opus5.5（高）
+- production_mutation_allowed: false
+- deploy_allowed: false
+- merge_allowed: false
+- routing_rule: this workstream uses G2 only
+
+## Accepted / do not reopen
+
+B4 is **closed**. Preserve:
+- passed -> passed
+- advisory -> failed
+- not_run -> NULL
+- truthful notes/market_data
+- posting behavior unchanged
+- no DB migration
+
+Also preserve all previously accepted behavior:
+- original 10/7 false-positive fixes;
+- progressive degradation;
+- X Premium length policy;
+- X/App disclaimer;
+- actual app report-detail disclaimer;
+- MAX_GENERATIONS=2 / MAX_MODEL_CALLS=4 / transport retry limits;
+- no production/deploy/manual generation/X send.
+
+## Residual B1-R1 — partial multi-unit objective Fact quote
+
+Current failing shape:
+- generated X/App news:
+  **「公正取引委員会はサッポロビールへの調査を実施していません。調査なし。」**
+- Fact returns the exact full two-unit text as one objective quote.
+- current code removes the long first sentence, marks the quote as mapped, but leaves the short second rejected unit **「調査なし。」**.
+- final output still delivers that explicitly rejected text.
+
+Required:
+1. An objective Fact quote spanning multiple generated units is closed only when **all semantically covered units are accounted for**.
+2. Partial mapping must not mark the whole objective quote safe.
+3. Short fragments below the normal quote-specificity threshold must still be removed when they are unambiguously part of a longer already-mapped objective quote.
+4. If complete coverage cannot be established safely, mark the candidate undeliverable (FACT_OBJECTIVE_UNMAPPED or equivalent) rather than advisory-deliver it.
+5. Do not lower short-quote specificity globally; preserve fail-closed behavior for ambiguous standalone short quotes.
+6. Add exact regression for the two-unit text above plus one 3-unit objective quote.
+
+## Residual B2-R1 — incomplete fragments / repeated emoji still detach governed facts
+
+These wrong-date forms currently escape:
+1. **「10月6日📉 日経平均は70,035.71（前日比−0.92%）でした。」**
+2. **「日経平均📉 10月6日は70,035.71（前日比−0.92%）でした。」**
+3. **「10月6日の📉 📉 日経平均は70,035.71（前日比−0.92%）でした。」**
+
+Required:
+- emoji can be a sentence boundary only when the preceding lexical span is itself a completed sentence/statement, not merely a date fragment, subject fragment, particle-attached fragment, or pictograph chain;
+- preserve date/metric/value binding across incomplete fragments and repeated emoji;
+- keep valid completed-sentence boundary:
+  **「10月7日の日経平均…でした📉 10月6日の米国市場…」**
+- do not disable emoji generally;
+- add exact regressions for all 3 residual shapes plus controls.
+
+Prefer a positive completed-sentence criterion over an ever-growing blacklist of preceding/following tokens.
+
+## Residual B3-R1 — no-comma conjunctions still launder unrelated hedge
+
+These still escape:
+- **「ウクライナ情勢を受けて東京市場は下落しましたが今後の動きには不確実な可能性があります。」**
+- **「ウクライナ情勢を受けて東京市場は下落しましたけれど今後の動きには不確実な可能性があります。」**
+- **「ウクライナ情勢を受けて東京市場は下落しましたので今後の動きには不確実な可能性があります。」**
+
+Required:
+- causal hedge scope must follow grammatical clause/link boundaries even when Japanese comma is omitted;
+- later unrelated 「可能性」 must not legalize an earlier definite unsupported cause;
+- preserve genuine qualified causal wording:
+  **「ウクライナ情勢が重しとなった可能性があります。」**
+- avoid naive splitting on subject-particle 「が」;
+- add exact no-comma regressions for が／けれど／ので plus reasonable controls for ものの／ため／一方／ただし／しかし where applicable.
+
+## Verification
+
+At minimum:
+- reproduce the 7 failing residual H2 cases before fix:
+  - B1 partial quote x1
+  - B2 residual x3
+  - B3 residual x3
+- prove all 7 close after fix;
+- retain original B1-B4 exact reproductions as PASS;
+- 10/7 actual 3 generation fixtures: no new false-positive removal;
+- h2_corrective_test.ts, delivery_first_test.ts, app disclaimer tests;
+- full market-report-analysis;
+- shared X consumer;
+- relevant app / personalized / data-packet regressions;
+- Deno check/lint changed source;
+- git diff --check;
+- no network / production calls.
+
+## Deliverable
+
+Update existing PR #110 only. Report:
+- new exact head;
+- fixes for B1-R1/B2-R1/B3-R1;
+- before/after adversarial evidence;
+- changed files;
+- tests;
+- model-call/retry ceilings unchanged;
+- production/deploy/X send = 0;
+- remaining risk.
+
+Then status -> review_required, next_owner -> chatgpt, STOP for **K2**.
+
+Recommended model: **Opus5.5（高）**.
+
+---
+
 # K2 — PR #110 corrected PASS_CANDIDATE / H2 B1-B4 rereview
 
 - k2_verdict: PASS_CANDIDATE
