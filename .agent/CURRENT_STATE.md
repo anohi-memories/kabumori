@@ -1,3 +1,22 @@
+## Final K2 — PR #101 final F2-F3 correction PASS_CANDIDATE / H2 final rereview assigned — 2026-10-07
+
+- G2 result: **PASS_CANDIDATE**, not final merge approval.
+- corrected PR #101 exact head: `938567c049460ebfe78c4e08c71724d6e77ae71a`; PR open/unmerged/mergeable=true.
+- fresh check: main is 84 commits ahead of PR base with **0 changed-file overlap** across PR #101 files.
+- Vercel failure remains deployment rate-limit only; Netlify preview status is success/canceled.
+- reported F2-A closure: alphabetic-only unpadded Basic credentials are recognized via Base64 validation while ordinary prose controls remain unchanged.
+- reported F2-B closure: escaped quoted credential values are consumed/redacted through the full quoted value; ambiguous/unclosed cases redact to end; forged residual rows are dropped.
+- reported F3-A closure: depth-limit metadata now measures original redacted evidence before depth cutting and reports truthful original/kept sizes/reasons.
+- reported F3-B closure: retained-list JSON sizing now exactly matches stored JSON and exact-boundary items are not unnecessarily dropped.
+- new focused tests: `debug_trace_final_test.ts` 18 cases.
+- regressions reported green: market-report-analysis 210/210; personalized 129/129; X shared 8/8; data-packet 42/42; _shared 436/436; migration invariants 20/20.
+- F1 migration ACL boundary is unchanged/PASS.
+- Hard Fact, exactly-3-points, PR #99 WARN-only telemetry, X 300-char rewrite, App rewrite, MAX_GENERATIONS=2/max 4 calls, safe-original fallback and full failed-output retention remain unchanged.
+- production mutation/migration apply/deploy/manual generation = 0.
+- final H2 task assigned: `kabumori-pr101-f2-f3-final-rereview-20261007`, exact head `938567c049460ebfe78c4e08c71724d6e77ae71a`, recommended **Sol（中）**.
+- H2 scope is only the remaining F2/F3 reproductions; F1 must not be reopened.
+- if C2 PASS: merge PR #101, then start Kabumori-only AI model registry + GPT-6 migration. POSTONA/G3/G4 remains excluded.
+
 ## Final K5 — Phase 2 production preflight READY_FOR_APPROVAL / explicit approval required — 2026-10-07
 
 - G5 preflight verdict: **READY_FOR_APPROVAL**.
