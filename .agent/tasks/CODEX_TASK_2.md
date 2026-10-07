@@ -1,5 +1,162 @@
 # Codex Task 2 — CURRENT TASK
 
+- task_id: kabumori-trace-gpt61-rollout-runbook-review-20261007
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- priority: high
+- recommended_model: Sol（高）
+- type: focused production-runner / rollout-runbook safety review
+- target_pr: 108
+- target_head: b73e4053fc033d9c47235b68df4bca311dc6c8c4
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Perform one bounded independent review of PR #108 before its source-only rollout tooling is merged.
+
+PR #108 adds only:
+- `supabase/tests/market_report_generation_traces_rollout.sh`
+- `supabase/tests/market_report_generation_traces_rollout.md`
+
+Do NOT reopen the already accepted PR #101 migration implementation/F1/F2/F3 review, and do NOT re-review the PR #107 GPT-6.1 model-registry implementation broadly.
+
+The only question is whether the new production runbook/runner is fail-closed and safe enough to become the canonical operator path for a later explicitly approved rollout.
+
+## Freshness / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / latest G2 Report / this TASK.
+2. Use a fresh independent H2 checkout/worktree from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #108.
+4. Require exact PR head `b73e4053fc033d9c47235b68df4bca311dc6c8c4`; moved head => STOP.
+5. Allocation-time: PR open, exactly 2 changed files, current main is 4 commits ahead of PR base, changed-file overlap = 0. Re-check before verdict.
+6. No production DB access, mutation, migration apply, deploy, manual report, OpenAI/X/notification/Cron/Auth/Vault/OAuth/settings mutation.
+7. All execution tests must use disposable/local fixtures only.
+
+## Review focus A — M1 exact migration execution
+
+Inspect the actual shell, not only its tests.
+
+Verify:
+- only `20261007120000_market_report_generation_traces.sql` can be applied;
+- migration bytes are pinned by the expected SHA-256 before execution;
+- altered bytes, wrong path, wrong version/name, wrong project, wrong owner, unsafe connection/port/TLS or missing explicit production acknowledgement fail before writes;
+- no `supabase db push`, migration repair, blanket migration apply, delete/drop cleanup, or unrelated SQL can run;
+- credentials/passwords/tokens are never embedded, echoed, persisted to repo/logs, or passed in command arguments where avoidable;
+- transaction behavior is exactly understood: Stage A is the reviewed migration transaction, with no hidden extra mutation.
+
+## Review focus B — Stage B / C and partial-failure safety
+
+Verify independently:
+- Stage B uses a fresh connection/session after Stage A and checks the expected object shape, RLS, triggers including enabled state, direct/effective ACLs and accepted F1 privilege boundary;
+- Stage C migration-history INSERT is impossible unless Stage B fully passes;
+- if Stage A commits but Stage B fails, runner STOPs without writing history and without trying to roll back/repair production;
+- history retry/resume logic cannot duplicate or mislabel the migration row;
+- rerun after completed apply is refused or provably no-op before mutation;
+- response-loss / timeout / interrupted-shell cases do not silently produce a false DONE state;
+- unexpected partially applied production state is detected and not repaired automatically.
+
+Use the supplied disposable proof if valid, but add independent adversarial probes for any uncovered high-risk branch.
+
+## Review focus C — M2 single-function deploy runbook
+
+Review the documented M2 command/path and file-hash readback.
+
+Verify:
+- deployment target is only `market-report-analysis`;
+- source identity is pinned to accepted merged source containing PR #107 commit `8738a186628989ce6c797d61ea80f5b721664c95`;
+- command flags do not widen to other functions/config/migrations;
+- expected `verify_jwt=false` is intentional and unchanged;
+- required secrets/env names are pre-existing; no secret mutation is part of M2;
+- post-deploy readback can distinguish the intended 14-file source graph from stale/partial/unrelated deploy;
+- other Edge Functions, Cron, report consumer gates and DB state are checked as unchanged where claimed.
+
+Do not deploy anything.
+
+## Review focus D — rollout order / STOP rules
+
+Confirm the recommended sequence is safe:
+
+M1 trace migration
+-> independent postflight
+-> M2 single-function deploy
+-> independent deploy readback
+-> no manual generation/replay
+-> next natural report cycle only
+-> read-only quality/cost/trace observation.
+
+Check:
+- M1 before M2 is beneficial for retaining the first Sol trace but is not falsely described as a hard delivery dependency;
+- no automatic prompt/Hard-Fact relaxation is allowed before natural-cycle observation;
+- time-window guidance avoids scheduled report execution;
+- explicit user approval remains required before M1 and again before M2;
+- OpenAI balance check before M2 is operationally sensible and does not itself change production.
+
+## Preserve accepted boundaries
+
+Do not reopen:
+- PR #101 migration ACL design unless the runner misexecutes/bypasses it;
+- F2/F3 trace redaction/retention;
+- PR #107 registry/model/cost implementation;
+- POSTONA/G3/G4;
+- important-news, MIC, personalized reports, G5/common-account.
+
+## Required evidence
+
+At minimum:
+- exact-head diff inspection;
+- shell static/syntax checks;
+- supplied local/disposable runner proof;
+- targeted independent failure-path probes for apply gating / Stage B->C / rerun / history mismatch / byte mismatch;
+- secret-pattern/logging review;
+- runbook-vs-script consistency;
+- git diff --check.
+
+No production access is allowed.
+
+## Verdict
+
+Return one:
+- PASS
+- PASS-WITH-NONBLOCKING-NOTES
+- CHANGES REQUIRED
+- BLOCKED
+
+PASS means PR #108 can be merged as the source-only rollout tool/runbook, but **does not itself authorize M1 or M2**.
+
+## Completion / C2
+
+Append/write `.agent/CODEX_REPORT_2.md` with:
+- exact reviewed head;
+- verdict;
+- M1 runner findings;
+- Stage B/C partial-failure findings;
+- M2 single-function deploy findings;
+- independent tests/probes;
+- source changes by H2;
+- production access/mutation/deploy = 0;
+- merge recommendation;
+- exact next action.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C2.
+
+If PASS:
+- recommend PR #108 merge after final freshness/no-race check;
+- still require separate explicit user approval before M1;
+- after M1 completes and is verified, require separate explicit user approval before M2.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Codex Task 2 — ARCHIVED TASK — PR #101 final review completed
+
 - task_id: kabumori-pr101-f2-f3-final-rereview-20261007
 - owner: codex
 - slot: codex-2
