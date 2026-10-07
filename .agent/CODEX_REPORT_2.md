@@ -1,3 +1,82 @@
+## H2 — PR #101 F1–F3 final exact-head rereview — 2026-10-07 JST
+
+- task_id: kabumori-pr101-f1-f3-final-rereview-20261007
+- verdict / result: **CHANGES REQUIRED**. F1 is closed. The original F2/F3 reproduction inputs are also closed, but independent probes within the explicitly requested F2/F3 scope reveal remaining credential leaks and untruthful truncation metadata. Existing supplied regressions all pass; that is not sufficient for PASS.
+- status: review_required
+- next_owner: chatgpt
+- exact_reviewed_head: `fddd274863b08aefed60795d678a298a1160d599` (PR #101 OPEN/unmerged, head unchanged on final fetch/read-back).
+- previous_reviewed_head: `2469e8a8be0125805551ba3e353c4ef6058b0150`.
+- clean_base: `/Users/yuya/Developer/kabumori-fresh`; initial fresh origin/main `43065127b92dc1c8b31dd39e9ad8f9be32ac1df5`; final pre-report main `4e8e8c5cdd16af7f29418274fe7d0d2784002419`.
+- isolated review checkout: `/private/tmp/h2-pr101-final-20261007.1Cptfa/review`, detached exact PR head, clean before/after. No old/shared worktree reused.
+- review scope: ONLY original F1/F2/F3 corrective changes and the requested bounded regression. No new implementation, product/design reopening, model migration, merge, or production access.
+
+### F1 — CLOSED / PASS: effective ACL, owner and inheritance
+
+Reviewed the migration DO-block itself, not merely its tests. It rejects app-role ownership, membership (including SET ROLE/MEMBER paths) in the owner or a superuser, unexpected direct table/helper ACLs, grant options, unexpected effective table/column privileges, and helper EXECUTE. Exceptions occur inside the same BEGIN/COMMIT transaction; it does not repair global defaults/memberships.
+
+Independent execution on a NEW H2-only disposable PostgreSQL 17.11 cluster (private Unix socket, no TCP listener, no Supabase connection):
+
+- Candidate's full PG runner: clean path PASS; Supabase-like default table/function grants PASS; **13/13 adverse cases refused atomically**. Includes all four original reproductions, anon/service owner membership, service superuser, inherited superuser, pg_read_all_data/pg_write_all_data, grant-option widening, inherited unknown reader.
+- Additional independent harness: **7/7 PASS**: unknown default table SELECT (BYPASSRLS reader), unknown default helper EXECUTE, inherited service TRIGGER, authenticated owner membership, owner membership with INHERIT FALSE, two-hop anon owner membership, two-hop authenticated pg_read_all_data.
+- Each independently adverse case: no partial trace class/helper/trigger; full pg_default_acl / pg_auth_members / pg_roles snapshots hashed equal before/after. No unrelated role/default/membership repair.
+- Clean behavior includes service SELECT+INSERT only, app roles denied, forbidden mutation/TRIGGER unavailable, append-only triggers active, original generation/attempt evidence retained. This is fixture evidence, NOT a claim about production's privilege graph; production preflight remains separate.
+- Scratch databases and fixture roles removed; read-back only `postgres`, extra owner memberships=0; this H2-only cluster stopped. No other server stopped.
+
+### F2 — NOT CLOSED / P1: recognizable credential residue still reaches insert
+
+Location: `supabase/functions/market-report-analysis/debug_trace.ts:50` (QUOTED_KV), `:61-62` (standalone auth token lookahead), `:85-87` and `persistTraces` (backstop uses the same redaction detector).
+
+Original F2 inputs now pass: quoted JSON password, opaque access_token JSON in free text, lowercase `authorization: basic ...`, unlabelled PEM, and first-redacted/later-live assignment. Ordinary Japanese/financial control is preserved. Supplied adversarial suite passes.
+
+Remaining independent reproductions, using synthetic credentials ONLY:
+
+1. `basic dXNlcjpwYXNz` is valid unpadded Base64 for a synthetic `user:pass` credential. All characters happen to be letters. The lookahead requires a digit / `+` / `/` / `=`, so case-insensitive Basic still goes undetected when there is no `Authorization:` prefix. Both normal traceRows->persistTraces and a forged row reach insert (callback=1); forged-row requirement is callback=0. This is a credential, not the ordinary-text control `basic income`.
+2. A free-text JSON string created with `JSON.stringify({password: 'syntheticPrefix123"syntheticTail999'})` is only redacted up to the first escape backslash. The same occurs for an escaped literal backslash and escaped newline inside the password. The tail `syntheticTail999` remains in candidate and local issue text and reaches insert. The backstop sees the already-redacted first portion and does not detect the remaining value suffix. Forged *raw* quoted rows are dropped, but the actual normal redaction->writer path persists the partial credential; testing only forged rows misses this.
+
+Minimal correction recommendation (NOT implemented by H2): consume a complete escaped quoted value, or safely drop that diagnostic row if it cannot be redacted unambiguously; recognize valid Basic credentials even when encoded using letters only, while preserving normal prose. Extend writer-level tests through the actual traceRows->persistTraces path, checking that the entire synthetic value/tail disappears or callback is zero. Keep full nonsecret output; no extra model call or retry.
+
+### F3 — originals CLOSED, metadata NOT CLOSED / P2
+
+Location: `debug_trace.ts:96-98`, `:119-126` (depth limit then sizing), `:142-151` (list size accounting).
+
+Independent passing proofs: >4,500-char candidate tail; >800-char local/Fact issue tails; 150 array items and depth20 retained; 13 Fact issues retained in each generation's trace while decision/public/retry list stays 10; four model calls maximum; retry request hashes differ; 200,000-char field cap records explicit field_bound and original size for the ordinary large-field case. Base-prompt vs request hash plumbing is truthful and locally computed.
+
+Remaining failures within the TASK's explicit original/kept size truthfulness requirement:
+
+1. Depth64 is still an additional lower-level retention limit below 200,000 chars. A synthetic depth66 candidate with a tail is replaced by `[depth-limit]`; serialized original size=623, retained size=591, but `candidate_chars` and `truncation.candidate.original_chars` both say 591, and original_chars=kept_chars. The flag/reason is present, but the size describes the already-cut object, not the original redacted evidence. The claim of one size bound/no lower-level loss and truthful original sizing is not met. Normal shallow schema candidates are preserved; this finding does not change Fact/retry behavior.
+2. For 30 findings of 10,000 chars each, 19 are retained. `kept_chars=190059`, actual `JSON.stringify(fact_issues).length=190058`. The leading-item estimator adds a comma for the first item. It reports an inexact size and can discard an item that exactly fits the declared bound. Counts otherwise match (original=30, kept=19).
+
+Minimal correction recommendation (NOT implemented): keep defensive depth handling explicit and truthful, including original evidence size before depth cutting (or drop instead of claiming measured full retention); account for retained list JSON commas exactly and test exact boundary. Do not widen Fact/retry/public response caps.
+
+### Tests / bounded regression independently executed
+
+- `deno test --no-config --no-check --allow-read --allow-env supabase/functions/market-report-analysis/`: **192/192 PASS**.
+- Related batch: personalized-reports **129/129**, X shared consumer **8/8**, market-report-data-packet **42/42**, trace source + migration invariants **20/20**; batch **199/199 PASS**.
+- `_shared` with local `--allow-run=node`: **436/436 PASS**. No workflow or external API invoked.
+- Supplied total **827/827 PASS**. No claim these cover the new failures.
+- Independently authored local F2/F3 probe: **13 PASS / 7 FAIL**, process exit=1. Seven failed assertions correspond to Basic normal + forged paths (2), escaped quote/backslash/newline normal paths (3), retained-list size (1), depth-original size (1); not seven unrelated findings. Includes all original F2/F3 reproductions and hash/decision controls.
+- PG: candidate clean + Supabase-like + 13 adverse PASS; independent seven adverse PASS.
+- `deno check --no-config` index / analysis_logic / handler / debug_trace: PASS; changed six TypeScript files `deno lint --no-config`: PASS; runner `bash -n`: PASS; corrected diff and full PR `git diff --check`: PASS.
+- Hard Fact, exactly three points, PR99 generic/metric/near-duplicate WARN-only, X 300-char/App rewrite policy, MAX_GENERATIONS=2/max4 model calls, safe-original fallback unchanged. Correction runtime diff only adds hash and full Fact trace vs bounded decision separation; guard/rewrite logic remains unchanged. Existing trace tests confirm write after complete/fail, 404/500/throw nonblocking, no persistence retry/additional AI call. Prior real five-second timeout proof was accepted and timeout plumbing is unchanged; it was not repeated as a new design review.
+- Evidence files (local reviewer artifacts, NOT repo implementation): `/private/tmp/h2-pr101-final-20261007.1Cptfa/{independent_probe.ts,independent.log,independent_pg.sh,pg-independent.log,pg-proof.log,analysis.log,related.log,shared.log,check.log,lint.log}`. Reproduction steps/results are included here so C2 does not need access to the local artifacts.
+
+### Freshness / merge recommendation / remaining issues
+
+- PR #101 exact head remains `fddd274863b08aefed60795d678a298a1160d599`, OPEN/unmerged. API mergeability temporarily returns null (recalculation), not proof of a merge conflict; no merge attempted. Candidate source changed-file overlap with latest main remains zero. Main advances seen during review affected other slot control files only; H2 TASK remains this same task. No other slot/control state overwritten.
+- **Merge recommendation: HOLD for the specific remaining F2/P1 and F3/P2 corrections only. F1 must not be reopened.** Return to C2; request a bounded G2 correction for the listed cases with exact adversarial tests. No broader redesign or routine repeated review of accepted behavior.
+- Model inventory/registry/GPT-6 work remains a subsequent task, not mixed into this review. Production migration preflight/apply/deploy remain separate approval gates.
+
+### changed_files / commit / push / safety_checks
+
+- H2 source/code changes=0. Review evidence lives only in the new H2 private temporary directory. Supplied source checkout remains clean.
+- GitHub shared sync scope ONLY `.agent/CODEX_REPORT_2.md` (prepend this report, preserve history) and `.agent/tasks/CODEX_TASK_2.md` (current task review_required / next_owner chatgpt).
+- Report/TASK sync commit SHA and exact origin/main read-back receipt follow below after the actual successful writes. No implementation commit by H2.
+- Production reads/access=0; DB writes/apply/migration/RPC=0; deploy=0; manual report/generation/OpenAI/X/Push=0; Cron/settings/Auth/Vault/OAuth/secrets=0; merge=0.
+- H1/G1-G5/apps/admin/HANDOFF/old or formal repo uncommitted files/other worktrees untouched. Existing changes not staged, reset, stashed, discarded or committed. Secret exposure=0 (probes contain synthetic credentials only).
+- next_owner: chatgpt; status: review_required; STOP for C2.
+
+---
+
 ## H2 — PR #101 durable generation-trace security review — 2026-10-07 JST
 
 - task_id: kabumori-pr101-debug-trace-security-review-20261007
