@@ -1,3 +1,22 @@
+## K2 — PR #110 PASS_CANDIDATE / H2 focused review assigned — 2026-10-07
+
+- corrected PR #110 exact head: `6612b3f1dee5055794137da71697ebe5e07d7419`.
+- app-visible disclaimer blocker is **closed**:
+  - agreed disclaimer matches backend wording;
+  - actual report-detail screen renders it once at the final footnote block;
+  - both market_detail and legacy paths reach the same block;
+  - root report-detail reuses the same screen;
+  - backend story is not rendered, avoiding duplicate disclaimer.
+- corrective reported tests: disclaimer 4/4, app 430/430, diff check PASS; production/deploy/EAS = 0.
+- PR #110 remains open/unmerged. Current main changes since the PR base overlap the 25 PR files by **0**.
+- core delivery-first changes remain PASS_CANDIDATE: progressive bad-unit removal, Fact advisory/not_run fallback, 10/7 false-positive fixes, X Premium length behavior, deterministic X/App disclaimer, unchanged model-call/retry ceilings.
+- because this changes Hard Fact and delivery fallback boundaries, one focused H2 review is required before merge.
+- H2 task: `kabumori-pr110-delivery-first-focused-review-20261007`.
+- exact review head: `6612b3f1dee5055794137da71697ebe5e07d7419`.
+- recommended Codex model: **Sol（高）**.
+- merge/deploy/production mutation remain HOLD.
+- next action: send `H2`; finish with `C2`.
+
 ## G5 approved — production real-account smoke — 2026-10-07
 
 - user explicitly approved one bounded production-authenticated Kabumori smoke.
