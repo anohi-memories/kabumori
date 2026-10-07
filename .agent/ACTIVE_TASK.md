@@ -95,13 +95,13 @@
 - owner: claude
 - slot: claude-4
 - status: ready
-- task_id: postona-multisocial-phase2a1-provider-domain-foundation-20261007
+- task_id: postona-multisocial-phase2a2-account-schema-candidate-20261007
 - start_code: G4
 - finish_code: K4
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: POSTONA Phase 2a-1. Provider-neutral domain foundation only while G5 common-account review finishes. Add canonical provider ids/capabilities and pure publication target/outcome/adapter contracts. Current X behavior unchanged; no overlap with PR #95 and no database, auth, external-provider, production, or deployment changes.
-- recommended_model: Sonnet5（高）
+- allocation: Phase 2a-1 PASS and exact five provider-domain blobs integrated to main; former PR #103 closed as superseded after stale-base merge race. New Phase 2a-2 is source-only: reconstruct social_accounts contract, create a forward provider/account credential-shape migration candidate only if repository evidence is sufficient, prove it in disposable PostgreSQL, and document next Threads OAuth slice. No production apply/deploy/OAuth/Vault/provider call. Avoid active G2/G5 files and shared migration reservation if occupied.
+- recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
 - slot: claude-5
