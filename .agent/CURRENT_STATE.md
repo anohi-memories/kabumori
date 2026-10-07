@@ -1,3 +1,20 @@
+## Final K2 — GPT-6.1 production preflight READY / PR #108 held for focused H2 — 2026-10-07
+
+- G2 task `kabumori-market-report-gpt61-production-preflight-20261007`: **PASS_CANDIDATE / READY_FOR_APPROVAL preflight**.
+- production mutation/deploy/manual report/OpenAI/X/Cron/Auth/Vault/OAuth during preflight: **0**.
+- production trace migration `20261007120000_market_report_generation_traces.sql`: history absent and target objects absent; no partial-apply inconsistency found.
+- current deployed `market-report-analysis`: v26, source bytes match the pre-PR101/PR107 Luna generation; GPT-6.1 Sol source is not yet deployed.
+- no new secret/env dependency is required for the accepted GPT-6.1 source; single-function deployment is feasible.
+- proposed rollout order is accepted in principle: M1 exact trace migration -> fresh ACL/object postflight -> M2 only `market-report-analysis` -> source/version readback -> no manual generation/replay -> first natural cycle -> read-only quality/cost/trace observation.
+- M1 and M2 remain **separate explicit approval gates**. Neither is authorized by this K2.
+- PR #108 exact head `b73e4053fc033d9c47235b68df4bca311dc6c8c4` adds only the production rollout runner/runbook; current main changed-file overlap with those 2 files = 0.
+- because PR #108 contains a production migration operator path and deploy runbook, one focused H2 safety review is required before merge. Broad PR #101/107 rereview is not required.
+- H2 task assigned: `kabumori-trace-gpt61-rollout-runbook-review-20261007`, recommended **Sol（高）**.
+- H2 scope: fail-closed exact migration execution, Stage B/C partial-failure/rerun/history safety, credential handling, and single-target M2 deploy only. Production access/mutation/deploy forbidden during review.
+- after H2 PASS and C2 merge of PR #108, request explicit user approval for M1. After verified M1 completion, request separate explicit user approval for M2.
+- operational timing recommendation from G2: avoid scheduled report windows; if approved later, 17:30 JST以降 is the preferred rollout period, followed by the next natural morning/closing report observation.
+- AI Lab diary: 記録不要 — 本番反映前の内部preflight/runbook作成で、外部向け開発日記としては既存のAIモデル更新題材と重複するため。
+
 ## K4 — POSTONA Phase 2a-2 PASS_CANDIDATE / direct focused review required — 2026-10-07
 
 - exact PR #106 head: `dac01220ca600cc003b3dafa4b30a84340b29850`.
