@@ -1,3 +1,251 @@
+## H2 — PR #110 B1–B4 narrow exact-head rereview — 2026-10-08 JST
+
+- task_id: kabumori-pr110-b1-b4-rereview-20261008
+- verdict / result: **CHANGES REQUIRED** — exact original reproductions improved/closed, but independently reproduced residual B1/B2/B3 safety holes still reach delivery. B4 is closed.
+- status: review_required
+- next_owner: chatgpt
+- return_to: 返却先未確定（現在TASKヘッダーに return_to / completion_code が欠落。正本ルールに従い推測・後付けしない）
+- completion_code: TASKヘッダー未指定。本文の完了フローは C2。ChatGPT確認待ち。
+- exact_reviewed_head: `d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8`
+- previous_reviewed_head: `6612b3f1dee5055794137da71697ebe5e07d7419`
+- PR: https://github.com/anohi-memories/kabumori/pull/110
+- fresh_main: formal base startup `e76b96cd8a692fa8de2b1e0397f0f61f213ef24d`; verdict preflight `a36c581e3012ca9a62433ccf13722c2e998dec78`; final synchronization preflight `973e5c5800d114382eafb2af6fb488a2a8a750b4`.
+- freshness: direct fresh-fetch before start and verdict; PR remains open/unmerged at exact target; 27 total PR files, 6 corrective files. Current-main changed-file overlap with PR files **0**. Final GitHub API mergeable=null / mergeable_state=unknown, so clean mergeability is not independently claimed; C2 must fresh-check.
+- isolation: fresh independent checkout `/private/tmp/h2-pr110-rereview-20261008.mXiYaE/review`, detached exact target; previous-head proof in separate `/private/tmp/h2-pr110-rereview-20261008.mXiYaE/previous`. Existing/shared checkouts and other-slot worktrees/dev servers untouched.
+- source_changes_by_H2: **0**. Review-only scratch harness/logs are outside the repository.
+- changed_files_by_H2 / sync scope: only `.agent/CODEX_REPORT_2.md` and `.agent/tasks/CODEX_TASK_2.md`. Historical entries preserved. No G2/H1/other control files changed.
+- implementation_commit: none (source review only).
+- report_commit: `2034440ed57c162dd7bcee0f6625f6a3ce74e165` (GitHub main).
+- task_state_commit: `423a25e9689329543f7b89d1cbf47582089c8437` (GitHub main).
+- push / GitHub sync: **CONFIRMED** by GitHub Contents API CAS and direct fresh-fetch/read-back: both commits included in main, current TASK `review_required / next_owner: chatgpt`, current Report task_id and verdict visible. Only own Report/TASK synchronized; no source/PR branch push.
+- production access/mutation/deploy/merge: **0**.
+- merge_recommendation: **HOLD**, return only the residual B1–B3 cases for a bounded G2 corrective. Do not reopen accepted disclaimer, registry, trace-storage, Premium policy or unrelated implementation.
+
+### B1 — original exact contradiction removed; partial multi-unit mapping remains unsafe [P1]
+
+**Accepted independently:**
+- Fact schema/instructions add structured `objective_issues: [{quote_ja, reason_ja}]`, separate from soft `issues`.
+- Original サッポロビール negative assertion is now removed together from X news, app news and a valid-ref observation claim, within exactly 4 mocked requests / 2 generations. The coherent remainder is advisory, with removal diagnostics.
+- Additional objective contradiction **「ロシア軍によるウクライナへの攻撃は行われていません。」** is removed from X/App with structured objective Fact.
+- Fully unmapped quote and short ambiguous quote by itself make both candidates undeliverable, ending `ANALYSIS_FACT_FAILED` after 4 calls. A safe alternative candidate path and delivery re-check pass supplied corrective tests.
+- Genuine soft Fact warnings remain advisory.
+
+**Residual B1-R1: partial quote coverage is treated as fully mapped**
+- Location: `analysis_logic.ts:1317–1323`, `:1457–1464`.
+- `objectiveChecker` accepts any generated unit contained within a larger quote and marks the entire quote index matched after that single hit. Contained units shorter than `MIN_QUOTE_KEY_CHARS=8` do not hit. `unmapped` checks only this boolean/index, not full rejected-quote coverage.
+- Exact local fixture:
+  - generated X/app news: **「公正取引委員会はサッポロビールへの調査を実施していません。調査なし。」**;
+  - Fact fails and returns the exact full two-unit text as one `objective_issues.quote_ja`, with input investigation contradiction reason.
+- Result: the long first sentence is removed; quote marked mapped; short second rejected sentence **「調査なし。」** remains in final X/App news. Both generations produce `deliveryIssues=[]`; output `ok=true`, advisory, calls=4.
+- This is residual quoted-objective removal safety, not a request to broadly classify all soft Fact warnings as fatal.
+- Required correction: ensure every part of a multi-unit objective quote is safely accounted for, or treat partially/ambiguously mapped quote as undeliverable. Keep short-quote ambiguity fail-closed rather than lowering the specificity rule blindly.
+
+### B2 — exact before-value fix passes; incomplete fragments still split [P1]
+
+**Accepted independently:**
+- Original **「10月6日の日経平均は📉 70,035.71（前日比−0.92%）でした。」** is now one unit and removed as wrong date.
+- Supplied before-value/before-percent/subject/date/adjacent-bracket/comma variants pass.
+- All three actual 10/7 fixture generations remain local hard 0 / removed 0; legitimate completed Japan sentence + emoji + 10/6 US sentence stays accepted.
+
+**Residual B2-R1: heuristic does not establish a completed preceding sentence**
+- Location: `hard_fact_guards.ts:235–238`, reused by `unit_sanitizer.ts:64`.
+- The regex excludes selected adjacent particles and numeric continuation, but date-only or subject-only fragments, and repeated pictographs, still qualify as sentence endings.
+- Independently tested wrong-date variants, each delivered unchanged:
+  1. **「10月6日📉 日経平均は70,035.71（前日比−0.92%）でした。」**
+  2. **「日経平均📉 10月6日は70,035.71（前日比−0.92%）でした。」**
+  3. **「10月6日の📉 📉 日経平均は70,035.71（前日比−0.92%）でした。」**
+- Each splits date from metric/value, has local hard `[]`, removed 0, and reaches formatted X payload unchanged (`generate → fact`, pass mocked Fact isolates the local guard).
+- Required correction: preserve governed date/subject/value across incomplete-fragment / consecutive-emoji boundaries; retain valid completed-sentence emoji boundary and 10/7 controls. Do not disable emoji generally.
+
+### B3 — comma-separated exact fix passes; no-comma clauses still launder a hedge [P1]
+
+**Accepted independently:**
+- Original `…下落しましたが、今後…可能性があります。` is now hard/removable.
+- Genuine `ウクライナ情勢が重しとなった可能性があります。` remains allowed/advisory.
+- Independent comma-separated matrix が／けれど／ものの／ので／ため／一方／ただし／しかし passes; final delivery re-check uses the same corrected logic.
+
+**Residual B3-R1: clause boundaries require punctuation**
+- Location: `analysis_logic.ts:619` (`CLAUSE_BOUNDARY`), consumed by `clauseOf` and `causalVerdict`.
+- Natural grammatical conjunction without `、` is not segmented, so the later unrelated possibility keyword still qualifies the earlier definite unsupported causal assertion.
+- Independently delivered unchanged:
+  - **「ウクライナ情勢を受けて東京市場は下落しましたが今後の動きには不確実な可能性があります。」**
+  - **「ウクライナ情勢を受けて東京市場は下落しましたけれど今後の動きには不確実な可能性があります。」**
+  - **「ウクライナ情勢を受けて東京市場は下落しましたので今後の動きには不確実な可能性があります。」**
+- Each local hard `[]`, removed 0, final X retains the sentence. A separate exploratory `…下落したので今後も変動する可能性…` case also retained; committed-equivalent harness below uses the three explicit variants above.
+- Required correction: hedge scope must follow grammatical clause/link, not require a comma; retain genuinely qualified causality and avoid subject-particle が false splits.
+
+### B4 — PASS / closed
+
+- `shared_market_report_consumer.ts` now maps passed → `'passed'`, advisory → `'failed'`, not_run → `NULL`.
+- Independently captured mocked run writes in all three states: correct column, `fact_status:<state>` notes, removed-unit evidence, warning evidence and `market_data.fact_status`.
+- Each state still makes exactly one mocked post callback on valid payload; invalid-format path posts 0 and persists the true status. Real DB/X calls = 0.
+- No migration/schema widening. Production run column constraints not read during this forbidden-production task; mapping uses the existing contract. A later approved predeploy live schema check may confirm the recorded enum/NULL compatibility.
+- Do not reopen B4 source correction unnecessarily.
+
+### Independent tests / exact-head verification
+
+| Test group | Result |
+| --- | --- |
+| new `h2_corrective_test.ts` + delivery-first + app disclaimer | **33/33 PASS** (10 + 19 + 4) |
+| market-report-analysis full suite | **252/252 PASS** |
+| _shared + shared X consumer | **476/476 PASS** (466 + 10) |
+| app tests | **430/430 PASS** |
+| personalized-reports + market-report-data-packet | **171/171 PASS** (129 + 42) |
+| Independent 17-case same harness on previous head | **2 PASS / 15 FAIL** (proof of old failures; not a new-head regression) |
+| Independent 17-case same harness on corrected head | **10 PASS / 7 FAIL** (3 residual findings; B2/B3 each 3 fixtures) |
+| Deno check four changed source files | PASS |
+| Deno lint four changed source + new corrective test | PASS, 5 files |
+| Consumer test lint | existing require-await findings, compared with previous file; no new lint finding |
+| corrective diff check and full PR `git diff --check` | PASS |
+| H2 review checkout tracked status | clean |
+| Native Simulator / EAS / app package build / authenticated UI | NOT RUN; not necessary to reopen already accepted UI work |
+
+- Original B1–B4 reproductions were independently rerun against both exact old and corrected sources using the same fixtures/mocks.
+- Independent failed tests at corrected head are precisely: B1 partial multi-unit quote; B2 date-before-subject / subject-before-date / repeated emoji; B3 no-comma が / けれど / ので.
+- The supplied regressions passing do not close these additional allowed boundary shapes.
+- Model limits unchanged: `MAX_GENERATIONS=2`, `MAX_MODEL_CALLS=4`; transport retry source unchanged and regression passes. Each independent outcome asserts <=2 generations / <=4 mocked model requests.
+- Ordinary progressive isolation, 1306/TOPIX distinction, Premium length policy, coherent remainder, full X/App disclaimer remain green in required suites; no broader rereview opened.
+
+### Reproduction commands / evidence
+
+All commands use local fixtures only, no `--allow-net`:
+```sh
+deno test --no-config --no-check --allow-read --allow-env supabase/functions/market-report-analysis
+deno test --no-config --no-check --allow-read --allow-env --allow-run=node supabase/functions/_shared supabase/functions/x-test-post/shared_market_report_consumer_test.ts
+deno test --no-config --no-check --allow-read --allow-env tests/app
+deno test --no-config --no-check --allow-read --allow-env supabase/functions/personalized-reports supabase/functions/market-report-data-packet
+deno test --no-config --no-check --allow-read --allow-env supabase/functions/market-report-analysis/h2_corrective_test.ts supabase/functions/market-report-analysis/delivery_first_test.ts tests/app/report-disclaimer_test.ts
+deno test --no-config --no-check --allow-read ../independent_review_test.ts -- review
+deno test --no-config --no-check --allow-read ../independent_review_test.ts -- previous
+```
+
+Logs/harness: `/private/tmp/h2-pr110-rereview-20261008.mXiYaE/`. For C2 reproducibility without relying on a local-only attachment, the complete harness is included below. Place it beside `review/` (target exact head) and `previous/` (previous exact head) checkouts. Scratch harness has no real API implementation, keys or secret values.
+
+<details>
+<summary>17-case independent local/mocked before-after harness</summary>
+
+```typescript
+import assert from "node:assert/strict";
+const tree=Deno.args[0]??"review";
+const mod=(p:string)=>new URL("./"+tree+"/"+p,import.meta.url).href;
+const {generateSharedAnalysis,localAnalysisCheck,parseGeneratedAnalysis,unitChecker,codeFallbacks}=await import(mod("supabase/functions/market-report-analysis/analysis_logic.ts"));
+const {sanitizeAnalysis,splitUnits}=await import(mod("supabase/functions/market-report-analysis/unit_sanitizer.ts"));
+const {inputOf,loadFixture}=await import(mod("supabase/functions/market-report-analysis/test_support.ts"));
+const {formatSharedXPost,REPORT_DISCLAIMER_JA}=await import(mod("supabase/functions/_shared/market_report_packet.ts"));
+const {publishSharedMarketReport}=await import(mod("supabase/functions/x-test-post/shared_market_report_consumer.ts"));
+const input=inputOf(await loadFixture("close_2026-10-07"));
+const gs=JSON.parse(await Deno.readTextFile(new URL(mod("supabase/functions/market-report-analysis/fixtures/close_2026-10-07_generations.json"))));
+const good=()=>parseGeneratedAnalysis(structuredClone(gs.find((g:any)=>g.attempt===2).candidate))!;
+const now=()=>new Date("2026-10-07T07:20:00Z");
+const reduced=(a:any)=>sanitizeAnalysis(a,input,(k:any)=>unitChecker(input,k),codeFallbacks(input));
+async function outcome(a:any,fact:any={passed:true,issues:[],objective_issues:[]}){
+ const calls:string[]=[];const o=await generateSharedAnalysis(input,async(step:string)=>{calls.push(step);return {payload:structuredClone(step==="generate"?a:fact),inputTokens:1,outputTokens:1};},now);
+ assert.ok(calls.length<=4);assert.ok(calls.filter(s=>s==="generate").length<=2);return {o,calls};
+}
+const factOf=(quote:string)=>({passed:false,issues:["入力の事実を否定している"],objective_issues:[{quote_ja:quote,reason_ja:"入力にある事実と逆の断定"}]});
+const bad="公正取引委員会はサッポロビールへの調査を実施していません。";
+const textOf=(o:any)=>o.ok?formatSharedXPost(o.packet):"";
+Deno.test("B1 exact: one objective quote removes X/app/valid-ref claim together",async()=>{
+ const a=good();a.x_post.news_ja=bad;a.app_story.news_ja=bad;
+ const n=input.news.find((n:any)=>n.headline_ja.startsWith("サッポロビール"))!;
+ assert.ok(n.headline_ja.includes("調査を受けている"));
+ a.claims.push({claim_id:"contradicted",claim_type:"observation",evidence_refs:[n.ref],text_ja:bad,scope:"today"});
+ assert.deepEqual(localAnalysisCheck(a,input).hard,[]);
+ const {o,calls}=await outcome(a,factOf(bad));assert.ok(o.ok);
+ assert.ok(!JSON.stringify(o.packet).includes(bad));assert.equal(o.packet.fact.ai_status,"advisory");
+ assert.equal(calls.length,4);
+});
+Deno.test("B1 additional objective contradiction: Russia attack denial",async()=>{
+ const a=good(),s="ロシア軍によるウクライナへの攻撃は行われていません。";
+ assert.ok(input.news.some((n:any)=>/ロシア軍/.test(n.headline_ja)&&/攻撃/.test(n.headline_ja)));
+ a.x_post.news_ja=s;a.app_story.news_ja=s;
+ const {o}=await outcome(a,factOf(s));assert.ok(o.ok);assert.ok(!JSON.stringify(o.packet).includes(s));
+});
+Deno.test("B1 unmapped: both candidates excluded with no fifth call",async()=>{
+ const a=good();a.x_post.news_ja=bad;
+ const {o,calls}=await outcome(a,factOf("この引用は生成結果のどこにも存在しません。"));
+ assert.equal(o.ok,false);assert.equal(o.error,"ANALYSIS_FACT_FAILED");assert.equal(calls.length,4);
+ assert.ok(o.issues.some((s:string)=>s.includes("FACT_OBJECTIVE_UNMAPPED")));
+});
+Deno.test("B1 short ambiguous quote alone fails closed",async()=>{
+ const a=good();a.x_post.news_ja=bad;const {o}=await outcome(a,factOf("調査"));assert.equal(o.ok,false);
+});
+Deno.test("B1 residual: a multi-unit objective quote must not partially match and leave a short contradicted unit",async()=>{
+ const a=good(),s=bad+"調査なし。";a.x_post.news_ja=s;a.app_story.news_ja=s;
+ const {o,calls}=await outcome(a,factOf(s));
+ console.log(JSON.stringify({probe:"B1-partial",ok:o.ok,retained:textOf(o).includes("調査なし。"),calls,delivery:o.trace.records.map((r:any)=>r.deliveryIssues)}));
+ assert.ok(!textOf(o).includes("調査なし。"),"Partially matched objective quote leaves an explicitly rejected unit");
+});
+Deno.test("B2 exact: before-value emoji wrong date removed",async()=>{
+ const a=good(),s="10月6日の日経平均は📉 70,035.71（前日比−0.92%）でした。";
+ a.x_post.context_ja=s+a.x_post.context_ja;assert.deepEqual(splitUnits(s),[s]);
+ const {o}=await outcome(a);assert.ok(o.ok);assert.ok(!textOf(o).includes(s));
+});
+for(const [i,s]of [
+ "10月6日📉 日経平均は70,035.71（前日比−0.92%）でした。",
+ "日経平均📉 10月6日は70,035.71（前日比−0.92%）でした。",
+ "10月6日の📉 📉 日経平均は70,035.71（前日比−0.92%）でした。",
+].entries())Deno.test("B2 residual binding "+i,async()=>{
+ const a=good();a.x_post.context_ja=s+a.x_post.context_ja;const {o}=await outcome(a);
+ console.log(JSON.stringify({probe:"B2-"+i,units:splitUnits(s),hard:localAnalysisCheck(a,input).hard,retained:textOf(o).includes(s)}));
+ assert.ok(!textOf(o).includes(s),"Wrong date/value delivered after incomplete-fragment emoji split");
+});
+Deno.test("B2 controls: all three actual 10/7 generations remain no-false-removal",()=>{
+ for(const g of gs){const a=parseGeneratedAnalysis(g.candidate)!;assert.deepEqual(localAnalysisCheck(a,input).hard,[]);assert.deepEqual(reduced(a).removed,[]);}
+});
+Deno.test("B3 exact: unrelated hedge removed; genuine hedge stays",async()=>{
+ const s="ウクライナ情勢を受けて東京市場は下落しましたが、今後の動きには不確実な可能性があります。";
+ const a=good();a.x_post.context_ja=s+a.x_post.context_ja;const {o}=await outcome(a);assert.ok(o.ok);assert.ok(!textOf(o).includes(s));
+ const q=good();q.app_story.japan_ja+="ウクライナ情勢が重しとなった可能性があります。";
+ assert.ok(reduced(q).analysis.app_story.japan_ja.includes("重しとなった可能性"));
+});
+Deno.test("B3 controls: comma-qualified conjunction matrix remains hard",()=>{
+ for(const sep of ["が、","けれど、","ものの、","ので、","ため、","一方、","ただし、","しかし、"]){
+ const a=good();a.x_post.context_ja="ウクライナ情勢を受けて東京市場は下落しました"+sep+"今後の動きには不確実な可能性があります。";
+ assert.ok(localAnalysisCheck(a,input).hard.some((s:string)=>s.includes("根拠の無い因果の断定")),sep);
+ }
+});
+for(const sep of ["が","けれど","ので"])Deno.test("B3 residual: comma-free "+sep,async()=>{
+ const s="ウクライナ情勢を受けて東京市場は下落しました"+sep+"今後の動きには不確実な可能性があります。";
+ const a=good();a.x_post.context_ja=s+a.x_post.context_ja;const {o}=await outcome(a);
+ console.log(JSON.stringify({probe:"B3-"+sep,hard:localAnalysisCheck(a,input).hard,retained:textOf(o).includes(s)}));
+ assert.ok(!textOf(o).includes(s),"Unrelated hedge still licenses definite clause when comma is omitted");
+});
+Deno.test("B4: passed/advisory/not_run columns and evidence truthful; mock posts unchanged",async()=>{
+ const {o}=await outcome(good());assert.ok(o.ok);
+ for(const [state,column] of [["passed","passed"],["advisory","failed"],["not_run",null]]){
+ const report=structuredClone(o.packet);report.fact.ai_status=state;report.fact.removed_units=["UNIT_REMOVED:FACT_OBJECTIVE@x_post.news_ja#0"];report.fact.quality_warnings=["FACT_ADVISORY:1"];
+ const writes:any[]=[];let posts=0;
+ const deps={createRun:async()=>"synthetic",updateRun:async(_id:any,v:any)=>{writes.push(v);},postToX:async()=>{posts++;return "synthetic-id";},completePost:async()=>{},now};
+ const shared={enabled:true,status:"completed",report_packet_id:"synthetic",report_content_hash:"a".repeat(64),data_packet_id:"synthetic",data_content_hash:"b".repeat(64),report,data:{as_of:"2026-10-07T07:15:00Z",metrics:[]}};
+ await publishSharedMarketReport("close",shared,deps);assert.equal(posts,1);assert.equal(writes[0].fact_check_status,column);
+ assert.ok(writes[0].fact_check_notes.includes("fact_status:"+state));assert.equal(writes[0].market_data.fact_status,state);
+ report.x_post.lead_ja="";writes.length=0;posts=0;
+ await assert.rejects(()=>publishSharedMarketReport("close",shared,deps),/SHARED_MARKET_REPORT_FORMAT_INVALID/);
+ assert.equal(posts,0);assert.equal(writes[0].fact_check_status,column);
+ }
+});
+Deno.test("preserve: soft advisory, safe Fact transport failure, full X disclaimer",async()=>{
+ const {o,calls}=await outcome(good(),{passed:false,issues:["文体が硬い"],objective_issues:[]});
+ assert.ok(o.ok);assert.equal(o.packet.fact.ai_status,"advisory");assert.equal(calls.length,4);
+ assert.equal(textOf(o).split(REPORT_DISCLAIMER_JA).length,2);
+ let count=0;const x=await generateSharedAnalysis(input,async(step:string)=>{count++;if(step==="fact")throw new Error("ANALYSIS_REQUEST_FAILED:503");return {payload:good(),inputTokens:1,outputTokens:1};},now);
+ assert.ok(x.ok);assert.equal(x.packet.fact.ai_status,"not_run");assert.equal(count,2);
+});
+```
+</details>
+
+### Safety / remaining issues / next recommendation
+
+- safety_checks: H2 source edits 0; production DB/catalog read/write 0; schema/migration/RLS/RPC 0; deploy 0; merge 0; live OpenAI/X/Push/provider call 0; real X posts 0; Cron/settings/Auth/Vault/OAuth/EAS 0; secret exposure 0.
+- apps/admin, HANDOFF, GPT-6.1 registry, trace-storage source, AI Lab, POSTONA, other TASK/Report/workstreams unchanged by H2.
+- Existing formal/shared checkout changes remain untouched; no other-slot dev server operated.
+- remaining_issues: B1-R1 / B2-R1 / B3-R1 above. B4 and original exact cases accepted. TASK return_to/completion_code absent; ChatGPT determines human routing.
+- next_recommendation: C2 returns only these three residual shapes to G2 for bounded correction (**Opus5.5（高）**), adds focused regressions, then one narrow exact-head rereview (**Sol（高）**). No blanket Fact-fatal policy change, no broad redesign, no merge/deploy authorized.
+- status: review_required / next_owner: chatgpt. STOP for C2.
+
+---
+
 ## H2 — PR #110 delivery-first focused exact-head review — 2026-10-07 JST
 
 - task_id: kabumori-pr110-delivery-first-focused-review-20261007

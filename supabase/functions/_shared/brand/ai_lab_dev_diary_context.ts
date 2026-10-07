@@ -215,7 +215,81 @@ export const EVERGREEN_TOPIC_SEEDS: readonly string[] = [
   "コードを書けなくても「何が違うか」を言葉にできる力が個人開発では重要だという気づき",
   "仕様を決める・作ってもらう・確認する・直してもらう、というサイクルに時間がかかる実感",
   "小さく進める習慣が、結局いちばん長続きするという話",
+  // --- 2026-10-07: diverse evergreen (Tier 2). Appended only: existing indices keep their meaning, because
+  // DB claims refer to seeds by index (evergreen-N) and their cooldowns must keep applying to the same text.
+  "平日の夜に30分だけ触る時間を決めておくと、個人開発が生活の一部になるという話",
+  "本業で疲れている日は、新しい機能より小さな改善だけにすると続けやすいという実感",
+  "週末にまとめてやろうとするより、平日に少しずつ触るほうが前に進みやすいという話",
+  "本業の段取りの考え方が、個人開発の進め方にもそのまま役に立つという気づき",
+  "仕事のあとに頭を切り替えるため、最初の5分は前回のメモを読むだけにしている話",
+  "大きな機能を一度に作るより、画面1つ分ずつ完成させるほうが気持ちよく進むという話",
+  "まず動くものを作ってから整える順番にすると、迷う時間が減るという実感",
+  "小さな改善を積み重ねたアプリは、ある日ふと使いやすくなっていると気づく話",
+  "完璧を目指す前に一度使ってみると、本当に直すべき場所が見えてくるという話",
+  "思いついたことをすぐ試せるのが、AIと一緒に作る楽しさの一つだという話",
+  "仕様を言葉で書き出すだけで、作りたいものの輪郭がはっきりするという気づき",
+  "作ってみてから仕様を変えるのは失敗ではなく、自然な流れだと思えるようになった話",
+  "バグが見つかったとき、原因を一緒に考えてくれる相手がいる心強さ",
+  "一度直したはずの不具合がまた出てきたとき、確認の手順を見直すきっかけになった話",
+  "やり直しを前提に計画すると、気持ちに余裕が生まれるという実感",
+  "AIに頼むときは、完成形より先に「何を避けたいか」を伝えると伝わりやすいという話",
+  "同じお願いでも、背景を一言添えるだけでAIの答えが変わるという気づき",
+  "AIへの指示を短く区切って渡すと、確認もしやすくなるという話",
+  "AIに説明しているうちに、自分の考えが整理されていくという実感",
+  "指示がうまく伝わらないときは、例を1つ見せると一気に通じることがあるという話",
+  "設計する役と確認する役を別のAIに分けると、見落としが減るという話",
+  "AIどうしの意見が分かれたとき、最後に決めるのは人間の役目だという実感",
+  "役割を決めてAIに任せると、自分は全体の流れを見ることに集中できるという話",
+  "複数のAIに同じ質問をすると、考え方の違いが見えておもしろいという話",
+  "画面の見た目は、スマホの実機で触ってみて初めて分かることが多いという話",
+  "指で押しやすいかどうかは、実際に片手で操作してみないと気づけないという実感",
+  "文字の大きさや余白の少しの違いで、アプリの印象が大きく変わるという気づき",
+  "自分で毎日使ってみると、作っているときには気づかない不便さが見えてくる話",
+  "ボタンの言葉を少し変えるだけで、迷わず使えるようになることがあるという話",
+  "動いたと思っても、もう一度確認する習慣がトラブルを防いでくれるという話",
+  "失敗した経験が、次に作るときの確認リストになっていくという実感",
+  "公開前に一呼吸おいて見直す時間が、結果的にいちばんの近道だったという話",
+  "安全のための確認は面倒でも、あとで安心につながるという気づき",
+  "うまくいかなかった原因を書き残しておくと、同じつまずきを繰り返さずに済む話",
+  "専門用語が分からなくても、困っていることを自分の言葉で伝えれば前に進めるという話",
+  "作りたいものの使い方を具体的に説明できることが、いちばんの武器になるという実感",
+  "技術の細かいところより、誰が何に困っているかを考える時間が大事だという気づき",
+  "できあがった画面を見て「ここが違う」と言えることも、立派な開発の一部だという話",
+  "分からないことを分からないと言える相手がいると、学ぶのが楽しくなるという話",
+  "少し前なら諦めていたアイデアも、今は形にできるかもしれないと思えるようになった話",
+  "AIのおかげで、一人でも試せることの幅が広がったという実感",
+  "アイデアから動くものまでの距離が、以前よりずっと短くなったと感じる話",
+  "作れるものが増えた分、何を作るかを選ぶことの大切さが増したという気づき",
+  "新しいAIを使い始めるときは、まず小さなお願いから試して相性を見ているという話",
+  "新しい道具に慣れるまでの少しの戸惑いも、楽しみの一部だと思えるようになった話",
+  "新しいAIに期待しすぎず、得意なことを見つけていく姿勢が大事だという実感",
+  "使い慣れたやり方と新しいやり方を、無理なく組み合わせていく話",
+  "自動化できる部分が増えても、最後に公開するかどうかは自分で決めたいという話",
+  "AIが出した案をそのまま使わず、一度自分の目で確かめる習慣についての話",
+  "便利な仕組みほど、止め方や見直し方を先に決めておくと安心だという気づき",
+  "任せる部分と自分で判断する部分を分けておくと、気持ちが楽になるという話",
+  "使っているAIが更新されたあと、同じお願いでも答え方が変わることがあるという話",
+  "AIの性能が上がっても、何を頼むかを考えるのは自分だという実感",
+  "道具が良くなるほど、使う側の工夫で差が出ると感じる話",
+  "AIの進歩を追いかけるより、自分の作りたいものに合うかを大事にしたいという話",
+  // --- Tier 3: continuity reserve. Plain, safe, general reflections kept at the END of the candidate order
+  // so posting continues when diary and Tier 2 are all cooling down. No recent-AI facts, no "today" claims.
+  "少しだけでも手を動かすと、気持ちが前に向くという個人開発の小さな習慣",
+  "AIと相談しながら作ることで、一人でも心細くないと感じるという話",
+  "便利になっても、指示を出したり確かめたりするのは人の役目だという一般的な実感",
+  "AIの進歩が速いと感じる中で、自分のペースで使っていけばいいと思えるという話",
+  "自分の作業が少し楽になったことで、別のことに時間を使えるようになったという一般論",
+  "作りたいものがある日は、短い時間でも机に向かいたくなるという話",
+  "できることが少しずつ増えていく感覚が、続けるいちばんの理由になっているという話",
+  "誰かの役に立つかもしれないと思うと、小さな改善にも意味を感じられるという話",
+  "作る過程で迷ったときは、使う人の気持ちを想像すると答えが見えやすいという話",
+  "新しいことを学ぶとき、AIに質問できるだけで最初の一歩が軽くなるという話",
+  "昨日より少しだけ良くなったと感じられることを、大切にしているという話",
+  "焦らず一つずつ形にしていくことが、結局いちばんの近道だと感じている話",
 ];
+
+/** First index of the Tier 3 continuity reserve inside EVERGREEN_TOPIC_SEEDS (everything from here on). */
+export const AI_LAB_CONTINUITY_RESERVE_START = 62;
 
 export type AiLabTopicSeedSelection = { topic: string; source: "diary" | "evergreen" };
 
@@ -286,6 +360,9 @@ export const EVERGREEN_THEME_TAGS: ReadonlyArray<readonly AiLabGenericThemeId[]>
   [],
   ["rework_reduction", "unglamorous_work"],
   [],
+  // 2026-10-07 additions (Tier 2 and the Tier 3 continuity reserve): written to avoid every generic-theme
+  // pattern, so they carry no theme tag and are governed by the 72h per-seed cooldown alone.
+  ...Array.from({ length: 67 }, (): readonly AiLabGenericThemeId[] => []),
 ];
 
 /**
@@ -306,7 +383,7 @@ export function evergreenEventKey(index: number): string {
 export type AiLabTopicExclusion = {
   /** 非機密の識別子のみ（日付・eventKey・unitKey）。本文は入れない。 */
   candidate: string;
-  stage: "freshness" | "sanitize" | "theme_cooldown" | "recent_overlap";
+  stage: "freshness" | "sanitize" | "theme_cooldown" | "recent_overlap" | "capacity";
   reason: string;
 };
 
@@ -455,7 +532,13 @@ export function buildAiLabTopicCandidates({
   }
 
   const recentThemes = new Set(recentPostTexts.flatMap((text) => detectGenericThemes(text)));
-  const evergreenOrder = rotate(EVERGREEN_TOPIC_SEEDS.map((_, index) => index), rotationIndex);
+  // Tier 2 (diverse evergreen) rotates by rotationIndex; the Tier 3 continuity reserve always follows it,
+  // also rotated, so it is used only when diary and every Tier 2 seed are cooling down or unresolved.
+  const indices = EVERGREEN_TOPIC_SEEDS.map((_, index) => index);
+  const evergreenOrder = [
+    ...rotate(indices.slice(0, AI_LAB_CONTINUITY_RESERVE_START), rotationIndex),
+    ...rotate(indices.slice(AI_LAB_CONTINUITY_RESERVE_START), rotationIndex),
+  ];
   for (const index of evergreenOrder) {
     const key = evergreenEventKey(index);
     const tags = EVERGREEN_THEME_TAGS[index] ?? [];
@@ -466,8 +549,16 @@ export function buildAiLabTopicCandidates({
     }
     candidates.push({ kind: "evergreen", eventKey: key, unitKey: key, themeTags: tags, topic: EVERGREEN_TOPIC_SEEDS[index] });
   }
+  // The DB claim accepts at most AI_LAB_MAX_CLAIM_CANDIDATES per call. Diary candidates come first, so a
+  // trim only ever drops the lowest-priority evergreen entries (it never happens with today's pool).
+  for (const dropped of candidates.splice(AI_LAB_MAX_CLAIM_CANDIDATES)) {
+    exclusions.push({ candidate: dropped.eventKey, stage: "capacity", reason: "CLAIM_CANDIDATE_LIMIT" });
+  }
   return { candidates, exclusions };
 }
+
+/** Upper bound of candidates per claim call; equal to the DB claim_ai_lab_topic argument limit. */
+export const AI_LAB_MAX_CLAIM_CANDIDATES = 128;
 
 /**
  * Returns the bundled diary Markdown snapshot. This is a plain `import`-ed constant (see the

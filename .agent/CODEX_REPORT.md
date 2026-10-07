@@ -1,3 +1,12 @@
+# Current H1 result — 2026-10-08
+
+- task_id: postona-pr106-function-contract-final-rereview-20261008
+- verdict: **CHANGES REQUIRED** (bounded exact-ACL/integration only); review_required / next_owner: chatgpt; STOP for C1.
+- Exact PR106 head: 4b6dc57966e0d55b2e901a7707446c35b25a1f00. Full current report is appended at the end; the earlier reports below are preserved history.
+- return_to: 返却先未確定（current TASK header missing return_to）; completion_code: 未記載（current header missing completion_code; expected slot code C1）. ChatGPT confirmation required; no destination inferred.
+
+---
+
 # H1 — POSTONA PR #106 corrected-head security rereview — 2026-10-07
 
 - task_id: `postona-pr106-phase2a2-security-rereview-20261007`
@@ -2644,3 +2653,73 @@ Prepare's locks end when its request commits. Admin/membership/identity/Storage 
 - Supabase/Postgres skills informed explicit grants/effective privilege, managed ownership and stale-token review. Current changelog consulted (Markdown unsupported; HTML fallback); no unrelated version upgrade or schema change inferred.
 - remaining: exact future apply/history policy, full fresh production preflight/API parity, optional hosted rollback/other error mappings before reliance, backfill population approval, all future destructive/writer integration and stale-JWT enforcement proof. These are separated from foundation source acceptance, not falsely marked completed.
 - next_recommendation: **C1 — Sol（極高）**, accept/resolve conditions and, only if preflight/apply mechanism is pinned, request narrowly specified production migration approval. Backfill/enforcement/destructive orchestration remain HOLD. H1 `review_required` / `next_owner: chatgpt`; STOP after verified GitHub sync.
+
+---
+
+# H1 — PR106 final function-contract focused rereview — 2026-10-08
+
+- task_id: postona-pr106-function-contract-final-rereview-20261008
+- result / verdict: **CHANGES REQUIRED**. Remaining corrections are small and bounded: literal owner-ACL completeness and one-file integration conflict. The former unsafe owner/ACL/SET ROLE paths and new-guard body bypasses are closed; no new material provider-authority or X-runtime blocker found.
+- status: review_required; next_owner: chatgpt; **STOP for C1**.
+- target_pr: https://github.com/anohi-memories/kabumori/pull/106
+- exact reviewed head: 4b6dc57966e0d55b2e901a7707446c35b25a1f00 (OPEN/unmerged; seven changed files). Netlify and Vercel successful on exact head; neutral auxiliary Netlify checks are not failures.
+- previous reviewed head: a8f313dc72b087ab86482781297848fe6e23bdcc; product corrective inspected relative to that accepted/reviewed source, not a new architecture review.
+- fresh main: ffce40369418227b694e669a92e1dabe501ec6c6; PR merge-base 38b4516652dcc0d8e6e0c7bc9e0cfdb1dc145287.
+- recommended_model: Sol（高）.
+- changed_files (reviewer): .agent/tasks/CODEX_TASK.md and .agent/CODEX_REPORT.md only; source worktree/product files unchanged and clean.
+- commit_hash: exact source above; report-only sync commit and actual push status are reported in final response after remote read-back. No source-branch push, merge or deploy performed.
+- return_to: **返却先未確定**（current TASK header has no return_to）.
+- completion_code: **未記載**（current TASK header has no completion_code; H1 convention expects C1, but no authoritative header value is inferred）. ChatGPT confirmation required; no guessed destination or automatic header backfill.
+- production DB/catalog reads/writes, migration apply, merge, deploy, Auth/OAuth/Vault/secrets/Cron changes, real X/Threads/Instagram calls: **0**.
+
+## R1 — unsafe owner/ACL paths fixed; one exact-contract edge remains [P3]
+
+File: supabase/migrations/20261007150000_postona_social_accounts_multi_provider.sql:312-346, specifically 338-345.
+
+The new precondition correctly pins the existing two functions to ordinary zero-argument returns-trigger functions, table-owner ownership and exact pg_get_functiondef hashes. Source matches the real migrations, including SECURITY DEFINER, language, empty search_path, volatility/cost and reviewed body. The effective EXECUTE audit follows pg_has_role MEMBER paths conservatively, including PG16+/17 INHERIT FALSE / SET TRUE and transitive paths. Direct unexpected grantee/grantor/grant-option ACL entries are rejected; PUBLIC/default PUBLIC EXECUTE is rejected.
+
+Independent tests on BOTH public.social_mobile_account_deletion_guard() and public.x_account_refresh_reset_on_reconnect(): wrong non-owner/BYPASSRLS owner, service_role owner, PUBLIC/anon/authenticated grants, extra role, service_role grant option, owner's explicit grant option, NULL default ACL, inherited EXECUTE, SET-only EXECUTE, transitive SET-only EXECUTE, body/search_path/cost drift. All **30** refuse with the expected code and unchanged full object/row/function/membership fingerprints; original X-only CHECK remains and no new guard/check residue exists. Post-DDL mutation of existing function owner and ACL also fails the unchanged snapshot atomically.
+
+Remaining literal contract gap: the ACL test checks only for disallowed entries (NOT EXISTS-of-bad), not existence of the promised owner entry. In two additional source-derived clones, REVOKE ALL ON FUNCTION <each signature> FROM the owning role produces proacl={} and has_function_privilege(owner,fn,'EXECUTE')=false. The exact migration commits (exit 0) in both cases. Subsequent ordinary same-provider service_role X UPDATE still passes. Thus this is **authority narrowing, not privilege escalation or a demonstrated X regression**; it does not reopen the accepted provider architecture. Nevertheless the TASK explicitly requires direct ACL equal to exactly one owner EXECUTE entry, and the migration comment claims the same, so that exact prerequisite is not fully proven yet.
+
+Minimum correction: add a positive expected-owner/grantor EXECUTE-without-grant-option existence assertion (or exact normalized ACL-set comparison) for both existing functions; retain the current bad-entry/effective-membership checks. Add empty-owner-ACL refusal with complete rollback assertions. Do not grant/reassign/rewrite anything automatically. This is a short predicate/test correction, not a new security design.
+
+## R2 — CLOSED independently
+
+File: supabase/migrations/20261007150000_postona_social_accounts_multi_provider.sql:413-432.
+
+New guard postcondition pins prokind, owner, SECURITY INVOKER, plpgsql, empty config/search_path and reviewed canonical function-definition hash 3f0ee4a3b1adf64819ec97cce7a67808, covering signature/return trigger/metadata/body. The unchanged function passes.
+
+Independent reviewer injects CREATE OR REPLACE of the new function immediately BEFORE the postcondition in reviewer copies, preserving owner/language/security/config/ACL. Three body-only variants separately allow relabeling, skip the Meta write restriction, or return NEW before either guard. Each fails POSTONA_ACCOUNTS_POSTCONDITION_GUARD and restores the complete pre-apply catalog/rows/old functions; no new constraints or guard residue. This directly closes the previous after-creation body-drift reproduction, not merely a source-behavior mutation test.
+
+Healthy independently read hashes/ACLs on PG17.11:
+- social_mobile_account_deletion_guard(): f1e297288b09647b4af78140c2d9d799; owner-only EXECUTE.
+- x_account_refresh_reset_on_reconnect(): fda71f31421d760b16d163e57e9836b2; owner-only EXECUTE.
+- social_accounts_provider_guard(): 3f0ee4a3b1adf64819ec97cce7a67808; owner-only EXECUTE.
+All owned by the non-superuser fixture table owner. No secret/token value read.
+
+## Reservation correctness / actual integration conflict
+
+- Candidate invariant file equals fresh main plus exactly one line reserving 20261007150000 -> postona_social_accounts_multi_provider. Current-main 20261007173000 -> ai_lab_topic_evergreen_capacity reservation is preserved.
+- Main has no migration using 20261007150000. All current open PR migration paths checked: only PR106 owns that filename; no timestamp collision found. Seven-file candidate scope verified.
+- Checked migration invariant test: **11 passed / 0 failed**; diff check and added-line secret-pattern scan pass.
+- However git merge-tree --write-tree origin/main HEAD returns a **content conflict in supabase/tests/migration_source_invariants_test.ts** (only that file). GitHub independently reports mergeable=CONFLICTING / mergeStateStatus=DIRTY at this exact head. K4 copying the latest file content does not merge current-main ancestry; both branches changed the historical reservation hunk.
+- Minimum correction: owner of PR106 integrates fresh main and resolves that single reservation hunk to current main plus the one POSTONA reservation, preserving BOTH POSTONA and AI Lab reservations. Verify invariant test, diff check, candidate SQL/test/doc byte parity aside from the explicit R1 ACL assertion/fixture, exact new head, clean merge-tree and fresh CI. Do not force-push or change already accepted product logic; no merge is performed by H1.
+
+## Bounded regression / test evidence
+
+- Dedicated Unix-socket-only local PostgreSQL 17.11 clusters, non-superuser applying owner, real repository prerequisite migrations and fake fixture identities only. Standard runner and mutation runner share ONLY their own cluster sequentially; handwritten reviewer uses a second private cluster, so cluster-wide role fixtures cannot collide with other workstreams.
+- Unmodified corrected G4 runner: **8/8 PASS markers**, apply/behavior/X publish permission/account deletion/Stage3B/adverse/atomicity/cleanup. Shipped 85 adverse starts, 23 postcondition drift cases, previous B2/B5 matrices and X refresh pilot/authority/settings reader tests complete successfully. Existing B1–B6 healthy behavior remains accepted, not reopened.
+- Unmodified mutation suite: **54/54 detected**, POSTONA_ACCOUNTS_MUTATIONS_ALL_DETECTED marker and successful exit 0. Healthy control and self-consistent behavior mutants also pass/detect as expected. No pending run is treated as PASS.
+- Additional handwritten reviewer: **38 atomic refusals**, comprising 30 R1 checks, three R2 body-only after-creation mutants, two old-function snapshot drifts, and three bounded B1/B3 controls. **8 healthy controls**: apply, service_role Meta INSERT/UPDATE refusal, simultaneous X-to-Meta relabel refusal, owner relabel/UPSERT refusal, connected access-ref removal refusal, ordinary same-provider X UPDATE pass. Two accepted empty-owner-ACL cases are failing literal-contract expectations, NOT counted as release-positive evidence.
+- Initial reviewer instrumentation was corrected locally: JavaScript replacement-dollar escaping, ALTER OWNER fixture schema-CREATE prerequisite, and display-only ACL array cast. Final negative evidence is independent-final.log (38 refusal PASS lines plus apply), healthy completion is independent-healthy.log; earlier partial logs are not presented as complete test success. No product test/source modification by reviewer.
+- Source worktree clean; scope exactly seven allowed PR files; migration invariant reservation is the only main-overlap file relevant to this candidate. G2/G5 worktrees, files, Auth smoke and dev servers untouched; G3 merged AI Lab changes preserved.
+- Evidence directory: /private/tmp/kabumori-h1-pr106-final-20261008.GxFEQO/; runner.log, mutations.log, invariants.log, independent.ts, independent-final.log, independent-healthy.log, acl-edge.ts/.log. Both dedicated DB servers stopped and shutdown confirmed; fake catalog files/logs retained for handoff, no active local test service left.
+- Skills used: Supabase and Postgres best practices directed least-privilege/effective-role and short transaction checks. Public current Supabase changelog/PG17.11 notice, function security and official PG17 membership docs consulted; no production advisor/catalog/secret access.
+
+## Merge / production gates / next recommendation
+
+- Source merge recommendation: **HOLD exact head** until the one-file integration conflict is resolved and the literal positive-owner ACL assertion/test matches the TASK. No remaining unsafe owner/EXECUTE escalation or provider-body bypass reproduced; R2 is closed. Do not reopen the prior accepted B1–B6/runtime design without concrete evidence.
+- Production apply recommendation: **NOT APPROVED**. Source correction/reservation does not authorize preflight/apply/deploy; even a later PASS means source readiness only.
+- Future production-only facts: same-day canonical schema/rows/owners/ACL/membership/function definitions on actual PostgreSQL version; compare PG17.6/17.11 canonical hashes; exact apply owner/tool/transaction/history/timeout policy; T11 other owner-written table TRIGGER and schema CREATE authority; T12 unknown production SECURITY DEFINER writers. Current source fixture is not production inventory. Unknown drift must STOP, never automatic repair.
+- next_recommendation: C1/ChatGPT assesses the bounded ACL-assertion and reservation conflict corrective on existing G4 PR106. Recommended implementation **Opus5.5（高）** for the privilege assertion; limit any follow-up verification to changed predicate/fixture and mechanical integration parity, no broad architecture rereview. No new slot/task overwritten. Destination remains unspecified until ChatGPT fixes/confirms the authoritative TASK return fields.

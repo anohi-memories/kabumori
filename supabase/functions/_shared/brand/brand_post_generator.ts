@@ -26,6 +26,18 @@ import { socialTextModel, socialTextModelCostUsd } from "../social_ai_model_poli
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 // POSTONA preview/live, brand-post dry-run and AI Lab all generate here; the id comes from the central policy.
 const MODEL = socialTextModel("brandPostGeneration");
+/** Prior budget; still used by every profile without an explicit unlimited length policy. */
+const DEFAULT_MAX_OUTPUT_TOKENS = 600;
+/**
+ * Generation budget (not a post-length ceiling) for an explicit unlimited length policy. Reasoning
+ * tokens count against max_output_tokens, so 600 would cut a detailed Japanese post mid-sentence.
+ */
+const UNLIMITED_LENGTH_MAX_OUTPUT_TOKENS = 2000;
+
+function isResponseIncomplete(response: unknown): boolean {
+  return typeof response === "object" && response !== null &&
+    (response as { status?: unknown }).status === "incomplete";
+}
 
 export type BrandPostDraft = {
   brandId: string;
@@ -154,6 +166,8 @@ export async function generateBrandPost({
   const topic = topicSeed?.trim() || context.codeProfile.defaultTopicSeed ||
     DEFAULT_TOPIC_SEED;
 
+  const unlimitedLength = lengthPolicy?.mode === "unlimited";
+
   const response = await fetchImpl(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: {
@@ -164,7 +178,9 @@ export async function generateBrandPost({
       model: MODEL,
       store: false,
       reasoning: { effort: "low" },
-      max_output_tokens: 600,
+      max_output_tokens: unlimitedLength
+        ? UNLIMITED_LENGTH_MAX_OUTPUT_TOKENS
+        : DEFAULT_MAX_OUTPUT_TOKENS,
       instructions,
       input: `今日のテーマ: ${topic}`,
     }),
@@ -175,6 +191,11 @@ export async function generateBrandPost({
     );
   }
   const raw = await response.json();
+  // With no length ceiling, a truncated response is the only thing bounding the text; never return a
+  // post cut off mid-sentence. Profiles without an unlimited policy keep their prior behavior.
+  if (unlimitedLength && isResponseIncomplete(raw)) {
+    throw new BrandContextError("BRAND_POST_OUTPUT_INCOMPLETE");
+  }
   const text = extractOutputText(raw);
   if (!text) throw new BrandContextError("BRAND_POST_EMPTY_OUTPUT");
   let characterCount = postCharacterCount(text);

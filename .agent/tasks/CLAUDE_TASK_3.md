@@ -3,8 +3,8 @@
 - task_id: ai-lab-premium-length-policy-unlimited-20261007
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: user
 - priority: urgent
 - recommended_model: Sonnet5（高）
 - type: bounded AI Lab length-policy correction on existing PR #109
@@ -12,7 +12,7 @@
 - accepted_security_head: 7c3c06d07c32910472185e1c94b04fa1aab794f5
 - production_mutation_allowed: false
 - deploy_allowed: false
-- merge_allowed: false
+- merge_allowed: false  # historical task gate; source merge completed after external PASS
 
 ## Context / K3 disposition
 
@@ -5288,3 +5288,82 @@ Unexpected residue: **none**.
 - fresh slot check at K3: H1 is occupied by G4 PR #106 rereview; H2 is occupied by G2 PR #110 review. Do not overwrite either slot.
 - next: assign the first genuinely free H1/H2 to one exact-head rereview of `fb4afb21d7ce808de3257bebc8062aed93353dec`, recommended **Sol（高）**. Scope: prior B1-B3 closure + Premium unlimited-length delta + 2000-token/incomplete-response behavior only.
 - production rollout remains HOLD until that review passes and a later explicit migration/deploy gate is created.
+
+
+## Final ChatGPT acceptance — PR #109 merged — 2026-10-08 JST
+
+- external direct Codex review verdict accepted: **PASS**, no blocking finding.
+- exact reviewed head: `fb4afb21d7ce808de3257bebc8062aed93353dec`.
+- reviewer independently accepted B1/B2/B3, rollback/no-partial-mutation, 74-topic capacity (140/140), Premium unlimited length, 2000-token unlimited budget, incomplete-response fail-closed behavior, POSTONA non-regression and Kabumori X non-regression.
+- fresh GitHub check before merge: PR open/unmerged, exact head unchanged, `mergeable=true`; Netlify SUCCESS; Vercel FAILURE target was build-rate-limit.
+- source merge: **SUCCESS**, squash merge commit `d4f693128494d8e05b97563fb82b7db2871818c8`.
+- no production DB read/write, migration apply, Edge deploy, scheduler/manual invoke, real OpenAI/X call, OAuth/Vault/Auth/Cron/settings mutation was performed by this acceptance/merge.
+- production remains **NOT UPDATED** by source merge alone.
+- required production order remains: read-only preflight -> migration `20261007173000_ai_lab_topic_evergreen_capacity` first -> exact function/body/owner/ACL/role-graph/map read-back -> `x-test-post` deploy second -> bundle read-back -> natural scheduled-post observation.
+- production migration/deploy require a separate explicit rollout gate.
+- task status: done; next_owner: user/chatgpt rollout approval.
+
+
+## Production rollout receipt — PR #109 — 2026-10-08 JST
+
+- user approval: explicit approval received for PR #109 production rollout.
+- source already merged: `d4f693128494d8e05b97563fb82b7db2871818c8`.
+- target Supabase project: `wsmznyzcvmuitkglfeuj` / `stock-x-autopost`, ACTIVE_HEALTHY.
+- preflight:
+  - base migration `20261004090000_ai_lab_topic_claims` present;
+  - capacity migration not yet present;
+  - old claim body md5 `a3cbe66723878b209a84bbd32b2bdc21`;
+  - companion lifecycle body md5s all canonical;
+  - table owner postgres, RLS ON, FORCE RLS OFF, no policies/triggers, owner-only table ACL;
+  - anon/authenticated/service_role outgoing membership graph from these API roles: none;
+  - anon/authenticated claim EXECUTE false; service_role true;
+  - reviewed migration source on main exactly matched reviewed PR head.
+- migration apply: **SUCCESS**.
+  - MCP history entry: version `20261007214402`, name `20261007173000_ai_lab_topic_evergreen_capacity`.
+  - post-apply claim md5 `9aefd06d1ab537fbc6bde527997dace7`;
+  - SECURITY DEFINER true; `search_path=""`;
+  - ACL remains owner + service_role EXECUTE only;
+  - anon/authenticated EXECUTE false; service_role true;
+  - role membership paths remain none;
+  - evergreen-73 and 128-candidate contract present;
+  - four companion lifecycle function md5s unchanged.
+- Security Advisor before/after: existing baseline findings remain; no new PR109-specific security finding identified.
+- Edge deploy:
+  - previous `x-test-post`: v138, verify_jwt=false.
+  - deployed `x-test-post`: **v139 ACTIVE**, verify_jwt=false, EZBR `39eb22bc4584494aabc6f871e7623d74b86f57b00043a8bc219c0e4912cfb843`.
+  - deploy used current production v138 bundle as baseline to avoid bundling separately merged/unapproved social-model changes.
+  - changed runtime files were exactly:
+    1. `functions/_shared/brand/brand_profiles.ts`
+    2. `functions/_shared/brand/ai_lab_dev_diary_context.ts`
+    3. `functions/_shared/brand/brand_post_generator.ts`
+  - diary and profiles read back byte-equal to reviewed PR #109 head.
+  - generator intentionally preserves production `gpt-5.6-luna` model configuration while adding only PR109 Premium-length runtime behavior: unlimited output budget 2000 and incomplete-response fail-closed; no `social_ai_model_policy` import deployed.
+  - read-back confirms 74-topic/candidate source, reserve split, unlimited policy, 2000 budget, incomplete guard, default 600 budget for non-unlimited profiles.
+- manual scheduler invoke / manual X post / real test OpenAI call: **0**.
+- 2026-10-08 AI Lab schedule: 10 brand_post rows present and pending. First natural slot is 2026-10-08 07:51 JST.
+- rollout status: **APPLIED_PASS / natural scheduled-post observation pending**.
+- do not force a post merely for verification. Confirm the first natural slot later from scheduled_posts / execution logs.
+
+
+## Production model rollout receipt — AI Lab gpt-6-luna — 2026-10-08 JST
+
+- user requested the model change immediately after PR #109 rollout.
+- scope intentionally limited to the AI Lab scheduled-brand-post path inside `x-test-post`.
+- reviewed source basis: merged PR #105 exact head `78a43ae878205f726111dde1002bd28ea8e82b97`.
+- official OpenAI docs rechecked before deploy: `gpt-6-luna` supports Responses API and `reasoning.effort: low`; standard token pricing matches the reviewed policy ($0.10 input / $0.50 output per 1M).
+- production baseline: x-test-post v139.
+- deploy changed exactly two runtime modules:
+  1. `functions/_shared/brand/brand_post_generator.ts`
+  2. `functions/_shared/social_ai_model_policy.ts`
+- generator now resolves `brandPostGeneration` through the reviewed central policy -> `gpt-6-luna`; token cost uses the same policy.
+- PR #109 runtime behavior remains intact: AI Lab unlimited length, 2000 max-output-token budget for explicit unlimited mode, incomplete-response fail-closed, 74-topic/candidate source.
+- x-test-post production after deploy: **v140 ACTIVE**, verify_jwt=false, EZBR `fb79c7866b30339215c4f104d700f882a8ff17c864d061de0f83cf4c14dab1f4`.
+- post-deploy read-back:
+  - policy file present;
+  - `brandPostGeneration -> fast -> gpt-6-luna`;
+  - old hardcoded 5.6 Luna removed from shared brand generator;
+  - Kabumori x-test-post index still contains its existing 5.6 model configuration and was not migrated by this deploy;
+  - POSTONA standalone Edge Functions were not deployed or changed.
+- manual scheduler invoke / manual OpenAI call / manual X post: 0.
+- first natural AI Lab scheduled row remains pending for 2026-10-08 07:51 JST.
+- completion condition for the combined AI Lab repair + model rollout: first natural scheduled post succeeds through claim -> GPT-6 Luna generation -> X publish.

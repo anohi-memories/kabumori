@@ -125,20 +125,20 @@ test("dry_run never enters the scheduled X dispatcher", async () => {
   });
 });
 
-test("dispatch independently blocks 281 code points before the X callback", async () => {
-  let published = 0;
-  await assert.rejects(
-    () =>
-      dispatchAiLabScheduledBrandPost(baseArgs({
-        generate: () => Promise.resolve(draft("あ".repeat(281))),
-        publishText: () => {
-          published += 1;
-          return Promise.resolve({ data: { id: "should-not-post" } });
-        },
-      })),
-    { message: "BRAND_POST_LENGTH_LIMIT_EXCEEDED" },
-  );
-  assert.equal(published, 0);
+test("dispatch sends a >280-code-point AI Lab post unchanged and reports its measured characterCount", async () => {
+  // 640 BMP characters + 1 astral emoji = 641 code points (642 UTF-16 units).
+  const text = "あ".repeat(640) + "😀";
+  const sent: string[] = [];
+  const result = await dispatchAiLabScheduledBrandPost(baseArgs({
+    generate: () => Promise.resolve(draft(text)),
+    publishText: (sentText: string) => {
+      sent.push(sentText);
+      return Promise.resolve({ data: { id: "x-post-long" } });
+    },
+  }));
+  assert.deepEqual(sent, [text]);
+  assert.equal(result.characterCount, 641);
+  assert.equal(result.xPostId, "x-post-long");
 });
 
 test("a confirmed 280-code-point post completes once even when fingerprint persistence reports false", async () => {

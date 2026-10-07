@@ -3,11 +3,11 @@
 - task_id: `common-account-v1-phase2-real-account-smoke-20261007`
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: done
+- next_owner: none
 - recommended_model: **Opus5.5（高）**
 - approval: user explicitly approved this bounded production real-account smoke on 2026-10-07.
-- production_mutation_window: **ACTIVE** — 2026-10-07 21:02 JST. G5 real-account smoke in progress (one existing active Kabumori account; start_kabumori_service via a loopback guard that refuses reactivation/X/table writes/functions). No other slot may open a production DB/Auth/permission window until CLOSED.
+- production_mutation_window: **CLOSED** — 2026-10-08 06:54 JST (ACTIVE 2026-10-07 21:02〜). Smoke done (2 logins, 1 refresh, 2 sign-outs, 2 start answers active/started:false); post-smoke read-back identical to the baseline. G5 performs no further production action.
 - production_authenticated_smoke_allowed: **true**
 - new_enrollment_allowed: **false**
 - reactivation_allowed: **false**
@@ -124,6 +124,90 @@ Report:
 If anything unexpected occurs, STOP; do not retry a mutation-capable path until K5 review.
 
 Recommended model: **Opus5.5（高）**.
+
+## Report
+
+### Phase 2 の本物のアカウントでの確認（本番）— 2026-10-08
+
+- task_id: common-account-v1-phase2-real-account-smoke-20261007
+- result: **READY_FOR_EAS**
+  - 本番の登録関数は、既存のアカウントに「使える・新規作成なし」と答えた。
+  - 前後で、サービスの状態は 1 行も変わっていない。
+- main
+  - 開始時：`42bd0a4b`（PR #95 の merge `d5bea735` と、本番適用の記録を含む）
+  - Report 時：`a36c581e`。この間に main に入ったのは他スロットの変更だけで、Phase 2 のファイルの変更は 0
+- 作業場所：`kabumori-fresh` から作った G5 専用の worktree（`kabumori-g5-smoke`、終了後に削除）
+- 使ったもの：
+  - Simulator：「G5 Smoke iPhone 18 Pro」（iOS 27.0）を新しく作り、終了後に削除。G1 の端末と Metro には触れていない。
+  - アプリ：10 月 5 日の dev client を複製したもの（ネイティブ部分は変わっていない。iOS 27 向けに SDK の表記を書き換えて ad-hoc で署名し直した）
+  - JS：今の main の JS を、自分用の Metro（8091）から読み込んだ。EAS は使っていない。
+- 本番への接続：
+  - アプリ → Mac の中だけで動く「記録兼ガード役」の中継（127.0.0.1:54398）→ 本番の Supabase。
+  - 公開 URL / publishable key は `kabumori-fresh/.env` から読み込んだ。値は表示していない。
+  - 中継が記録したのは、時刻・通信の種類・結果の番号・start の応答・ログイン ID のハッシュ（8 文字）だけ。トークン・メールアドレス・パスワード・ID は記録していない。
+  - 禁止された操作は、本番に届く前に中継で止める設定にした（事前に 6 種で 403 になることを確認）：
+    - reactivate_*、start_x_autopost_service、それ以外の RPC
+    - テーブルへの書き込み
+    - functions / storage
+- ログイン：ユーザーが、Simulator の画面パネルで自分で入力した。認証情報は、chat / ファイル / log のどこにも出ていない。
+  - 入力中と設定画面（メールアドレスが表示される）は screenshot を撮らず、決まった位置をタップして操作した。
+
+#### 前後の比較（読み取りのみ。件数と、全行・全列の md5 の fingerprint だけで、PII は無し）
+
+| 項目 | 前（2026-10-07 21:03 JST） | 後（2026-10-08 06:53 JST） |
+|---|---|---|
+| common_accounts | active 5 | **同じ** |
+| service_entitlements | kabumori / active / legacy_backfill 2、x_autopost / active / legacy_backfill 1 | **同じ** |
+| profiles | 2 | **同じ** |
+| lifecycle operations | 0 | **同じ** |
+| settings | shadow / not_started / 1 | **同じ** |
+| auth.users の件数 | 5 | **同じ** |
+| fingerprint：common_accounts / entitlements / profiles / operations（全行・全列、updated_at を含む） | — | **4 つとも一致** |
+| 9 つの関数の定義の md5 と実行権限 / migration の履歴 | — | **一致** |
+
+- 前の値は、ログインの約 10 時間前に取ったもの。その 10 時間とテストの間を通して、上の項目は 1 つも変わっていない。
+
+#### 本番での結果（ログイン ID はハッシュだけで示す）
+
+| 段階 | 結果 |
+|---|---|
+| 1. サインインしていない状態 | 本番への通信は 0 |
+| 2. 1 回目のログイン（ログイン `36ea3513`） | password grant → **start 1 件**。応答は `{status:'active', service:'kabumori', started:false, shared_account:false}`（既存のものをそのまま確認しただけ。何も作っていない）。その応答の**後で**初めて user / tracked_stocks / 今日のひとこと / reports / ニュースを読み、ホームが開いた |
+| 3. 同じログインの token 更新 | 本物の refresh が 1 回あった（新しい token も同じログイン `36ea3513`）。**start は増えない**（1 件のまま）、ready のまま、他のログインや他の人の通信は無し |
+| 4. サインアウト | logout 204 → すぐ空のログイン画面になった。その後の本番への通信は 0（保護されたデータの読み込みも止まった） |
+| 5. 2 回目のログイン（新しいログイン `c1e218b5`） | **start 1 件**。応答は 1 回目と同じ active / started:false / shared_account:false。データはその応答の後に読み、ホームが開いた |
+| 6. サインアウト | logout 204。その後の通信は 0 |
+
+- token 更新の起こし方：中継は、1 回目のログインの応答の「有効期限」（`expires_in`）だけを 120 秒に書き換えてアプリに渡した。
+  - token そのものは変えていない。
+  - これでアプリが、本物の refresh をすぐに 1 回行った。
+- 合計：
+  - 本番に届いた通信：17 件。中継が止めたもの：0 件。
+  - start：2 件（ログイン 1 回につき 1 件）。reactivate：0 件。
+  - 別のアカウントでのログイン：0。
+
+#### その他
+
+- 確認によるサービスの状態の変化：**0**。
+  - 共通アカウント / 登録 / profile / 手続きの行は、更新も追加も無い（fingerprint が一致）。
+  - start は、既存のアカウントに対してロックを取るだけで、`on conflict do nothing` で何も書かなかった。
+- Supabase Auth は、普通のログインと同じように、自分でセッションと refresh token を記録・更新・失効させた（ログイン 2 回、更新 1 回、ログアウト 2 回）。
+  - これはサービスの状態ではない。auth.sessions は読んでおらず、測っていない。
+- source の変更：**0**（不具合は無かった）
+- EAS / deploy：**0 / 0**
+- 観察（G5 の作業ではないもの）：
+  - G5 の window が ACTIVE の間（10/07 21:02 〜 10/08 06:5x JST）に、PR #109 の本番 rollout（migration の適用と x-test-post v139 の deploy、記録は 06:49）が行われた。時間が重なっている。
+  - 中身は AI Lab / X の部分で、共通アカウントの対象とは重ならない。上の比較もすべて一致した。
+  - ただ、「G5 が ACTIVE の間は、他スロットは本番の window を開かない」という取り決めとは重なっているので、C1 / K5 で確認してほしい。
+  - G5 側も、ユーザーのログインを待つ間（夜間の約 10 時間）、window を ACTIVE のままにしていた。次回からは、待つ間は window を一度閉じるなど、短くすることを提案する。
+- remaining gaps：
+  - 実機での push の登録と、通知からの遷移（TestFlight で確認する）
+  - X アプリでの本物のアカウントでの確認は、今回の対象外（TASK は Kabumori だけ）
+  - Supabase のライブラリの `lock` オプションの非推奨のお知らせ（以前から）
+- recommendation：**READY_FOR_EAS**。
+  - Phase 2 のクライアントは、本番に適用済みの契約で、既存のユーザーに対して何も変えずに ready になる。
+  - token 更新 / サインアウト / 再ログインでも、正しく振る舞った。
+  - EAS / TestFlight の build は、別途承認を得てから進めてほしい。
 
 ---
 

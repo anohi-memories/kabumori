@@ -1,3 +1,129 @@
+## C2 — PR #110 residual CHANGES REQUIRED / G2 corrective ready — 2026-10-08
+
+- H2 rereviewed exact PR #110 head `d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8`.
+- C2 fresh fetch: PR remains open/unmerged, head unchanged, mergeable=true / clean.
+- verdict: **CHANGES REQUIRED**, but scope is now only 3 residual safety cases.
+- **B4 is closed** and must not be reopened unnecessarily.
+- residual blockers:
+  1. **B1-R1:** multi-unit objective Fact quote can be marked fully mapped after removing only one long unit, leaving a short explicitly rejected unit such as 「調査なし。」 in final output.
+  2. **B2-R1:** incomplete date/subject fragments and repeated emoji can still split metric/date/value binding and let wrong-date text escape.
+  3. **B3-R1:** no-comma conjunctions such as 「ましたが今後…可能性」 can still let a later hedge license an earlier unsupported definite causal clause.
+- original B1/B2/B3 reproductions are improved/closed; 10/7 intended valid controls remain accepted.
+- H2 source changes = 0; production access/mutation/deploy/merge = 0.
+- G2 corrective assigned on existing PR #110 only; recommended model **Opus5.5（高）**.
+- H2 now done/free.
+- merge/deploy remain HOLD.
+- next action: send `G2`; finish with `K2`.
+
+## Final K5 — production real-account smoke PASS / READY_FOR_EAS — 2026-10-08
+
+- G5 real-account smoke verdict: **PASS / READY_FOR_EAS**.
+- user-approved production-authenticated smoke used one existing active Kabumori account only.
+- observed sequence: signed-out -> login -> active service-start -> Home -> one real token refresh -> sign-out -> same-account re-login -> active service-start -> sign-out.
+- both service-start responses were active / started:false / shared_account:false; no new enrollment or reactivation occurred.
+- pre/post read-back matched exactly for common-account, entitlement, profile and lifecycle state; fingerprints were unchanged.
+- source changes = 0; EAS/deploy = 0.
+- G5 production window is CLOSED and G5 is done/free.
+- remaining release gap: physical-device push registration / notification navigation, to be checked in the later EAS/TestFlight stage.
+- no additional Codex review required for this smoke because no source change occurred and the bounded production read-back matched exactly.
+- AI Lab diary: 記録不要 — this was an internal production-authentication validation rather than a distinct user-facing development feature.
+
+## Production concurrency policy corrected — 2026-10-08
+
+- user clarified that common-account/G5 is highest priority only when there is an actual conflict; it must not delay unrelated development or production work.
+- project rule now uses **conflict-based production mutex**, not a G5-wide/global freeze.
+- non-conflicting implementation/test/commit/push/PR/merge may continue while G5 is active.
+- non-conflicting production deploy/write may also continue when mutation boundaries are clearly separated and each task's own approval/safety gate is satisfied.
+- G5 has priority only for overlapping files/resources or the same DB migration/table/RPC/function/Auth/RLS/permission/Edge/settings/workflow/API boundary.
+- same-Supabase-DB migration/DDL write sections are serialized only for the actual write/postflight interval; subsequent work refreshes its baseline.
+- production windows must be short: do not keep them ACTIVE while waiting for user input, overnight, review, or natural scheduled events.
+- the overlapping PR #109 rollout observed during this G5 smoke was on a non-overlapping AI Lab/X boundary and did not affect G5 fingerprints; under the new rule that overlap is acceptable.
+
+## C1 — POSTONA PR #106 CHANGES REQUIRED / final bounded G4 corrective ready — 2026-10-08
+
+- H1 reviewed exact PR #106 head `4b6dc57966e0d55b2e901a7707446c35b25a1f00`.
+- verdict: **CHANGES REQUIRED**, but the remaining scope is narrow.
+- closed/accepted:
+  - unsafe owner/direct/inherited/SET-only/transitive EXECUTE paths are refused;
+  - existing trigger-function definition/owner checks otherwise hold;
+  - new provider guard exact body/definition pinning is independently CLOSED;
+  - existing X regressions pass;
+  - mutation suite 54/54 detected;
+  - production access/write/apply/deploy/provider operations = 0.
+- remaining source gap:
+  - the ACL predicate rejects bad entries but does not positively require the promised explicit owner EXECUTE entry;
+  - an empty owner ACL therefore passes. This is underprivilege rather than escalation, but it violates the exact canonical prerequisite contract.
+- remaining integration gap:
+  - `supabase/tests/migration_source_invariants_test.ts` is semantically current main + the POSTONA reservation, but PR ancestry still conflicts with main in that one file.
+- G4 final corrective:
+  1. require exactly one owner EXECUTE ACL entry for each existing trigger function and reject empty-owner ACL atomically;
+  2. merge fresh main into the PR branch normally and resolve the reservation file to fresh main + POSTONA `20261007150000`, preserving AI Lab `20261007173000`;
+  3. rerun focused PG/invariant/regression checks and prove clean mergeability.
+- PR #106 remains open/unmerged; production preflight/apply remains unapproved.
+- G4 status: ready.
+- recommended G4 model: **Opus5.5（高）**.
+- H1 is done/free. H2 is currently occupied by the separate G2 review.
+- after corrected K4, use a genuinely free H1/H2 for one final narrow exact-head rereview if available; recommended **Sol（高）**.
+- next action: send `G4`; finish with `K4`.
+
+## K2 — PR #110 corrected PASS_CANDIDATE / narrow H2 rereview assigned — 2026-10-08
+
+- corrected PR #110 exact head: `d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8`.
+- PR is open/unmerged, GitHub reports mergeable=true / clean.
+- current-main changed files since PR base overlap the 27 PR files by **0**.
+- G2 reports all previous H2 findings corrected:
+  - B1: objective Fact findings now use structured objective_issues, map to exact generated units, remove them, re-check delivery, and fail closed on unmapped objective quotes;
+  - B2: inline emoji no longer splits governed metric/date/value clauses, while the valid completed-sentence 10/7 Japan -> 10/6 US boundary remains accepted;
+  - B3: speculation/negation applies to the causal clause rather than a whole multi-clause sentence;
+  - B4: X consumer records passed/advisory/not_run truthfully as passed/failed/NULL with compatible notes/market_data.
+- 10/7 real three-generation fixtures reportedly remain false-positive free; call ceiling remains 2 generations / 4 model calls; retry ceiling unchanged.
+- reported tests: market-report-analysis 252, X shared 10, personalized 129, data-packet 42, _shared 466, app 430; no production/deploy/manual generation/X send.
+- K2 verdict: **PASS_CANDIDATE**, not merge approval.
+- H2 task assigned: `kabumori-pr110-b1-b4-rereview-20261008`, exact head above.
+- H2 scope is only prior B1-B4 plus focused regression preservation; recommended model **Sol（高）**.
+- merge/deploy remain HOLD.
+- next action: send `H2`; finish with `C2`.
+
+## K4 — POSTONA PR #106 final corrective PASS_CANDIDATE / H1 final rereview assigned — 2026-10-08
+
+- Claude's C1 corrective source head: `f5fb9306f99c27c62ae17070e2682dba42264bc8`.
+- K4 completed deferred migration reservation bookkeeping after G3 PR #109 merged:
+  - added `20261007150000: postona_social_accounts_multi_provider`;
+  - preserved `20261007173000: ai_lab_topic_evergreen_capacity`;
+  - invariant file now matches current main plus exactly the one POSTONA reservation line.
+- exact PR #106 head after K4 bookkeeping: `4b6dc57966e0d55b2e901a7707446c35b25a1f00`.
+- PR remains open/unmerged; 7 changed files.
+- G4 reports C1-R1/C1-R2 fixed:
+  - existing trigger functions pin exact owner/ACL/effective EXECUTE and normalized definition;
+  - new provider guard pins exact normalized function body/definition;
+  - 85 adverse starting states, 23 postcondition drift cases, 54/54 mutations, and existing X regressions PASS.
+- production DB/catalog access, migration apply, deploy, Auth/OAuth/Vault/provider calls = 0.
+- exact-head CI at K4: Netlify PASS; Vercel pending after the reservation-only commit.
+- K4 verdict: **PASS_CANDIDATE / merge HOLD** pending one final independent exact-head rereview.
+- H1 and H2 were both genuinely free; H1 was selected for PR #106 review continuity.
+- H1 task: `postona-pr106-function-contract-final-rereview-20261008`.
+- H1 target: `4b6dc57966e0d55b2e901a7707446c35b25a1f00`.
+- recommended H1 model: **Sol（高）**.
+- no production preflight/apply is authorized yet.
+- next action: send `H1` to Codex; finish with `C1`.
+
+## C2 — PR #110 CHANGES REQUIRED / G2 corrective ready — 2026-10-08
+
+- H2 reviewed exact PR #110 head `6612b3f1dee5055794137da71697ebe5e07d7419`.
+- verdict: **CHANGES REQUIRED**. PR remains open/unmerged; C2 fresh fetch confirms exact head unchanged and mergeable=true, but merge is HOLD.
+- source changes by H2: **0**; production access/mutation/deploy/manual generation/X send = **0**.
+- accepted areas remain: 10/7 intended false-positive fixes, progressive isolation for ordinary objective errors, X Premium length, X/App disclaimer including actual app UI, model-call/retry ceilings.
+- blocking findings:
+  1. **B1 P1:** local guards can miss an objective textual contradiction that Fact catches; after two Fact failures the contradicted text can still be delivered as `advisory`.
+  2. **B2 P1:** inline emoji can split metric/date from its value, allowing an explicit wrong-date value to escape local guards.
+  3. **B3 P1:** an unrelated later hedge such as 「可能性」 can make an earlier unsupported definite causal clause look speculative and deliverable.
+  4. **B4 P2:** X consumer logs upstream `advisory` / `not_run` packets as Fact `passed`.
+- G2 corrective assigned on existing PR #110 only; recommended model **Opus5.5（高）**.
+- H2 is now done/free.
+- after corrected K2, decide whether a narrow H2 exact-head rereview is needed; because B1-B3 are safety-boundary fixes, one focused rereview is expected.
+- merge/deploy remain HOLD.
+- next action: send `G2`; finish with `K2`.
+
 ## Final C1 — POSTONA PR #106 CHANGES REQUIRED / G4 corrective ready — 2026-10-07
 
 - H1 completed exact-head rereview of PR #106 `a8f313dc72b087ab86482781297848fe6e23bdcc`.
@@ -5723,3 +5849,65 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - production mutation/apply/deploy/merge/OpenAI/X/scheduler: 0.
 - no Codex slot was overwritten: H1 currently owns G4 PR #106 rereview and H2 currently owns G2 PR #110 review.
 - next reviewer allocation: first free H1/H2, recommended **Sol（高）**, exact head fixed to `fb4afb21d7ce808de3257bebc8062aed93353dec`. Merge and production rollout remain HOLD until PASS.
+
+
+## Final PR #109 acceptance / source merge — 2026-10-08 JST
+- direct independent Codex review verdict: **PASS / blocking finding none**.
+- exact reviewed head: `fb4afb21d7ce808de3257bebc8062aed93353dec`.
+- accepted review:
+  - B1 dangerous direct/transitive SET ROLE / INHERIT paths rejected; healthy role graph accepted;
+  - B2 canonical table drift fixtures rejected, including index/RLS/CHECK/ACL plus reviewer-added ready/live/FORCE RLS/policy/trigger cases;
+  - B3 unsafe same-metadata lifecycle body and unknown claim body rejected; approved old/new bodies accepted;
+  - adverse rollback leaves catalog/function/table/ACL unchanged;
+  - 74-topic Tier ordering retained, 14d x 10/day = 140/140, 72h/48h violations zero;
+  - AI Lab Premium uses `UNLIMITED_POST_LENGTH`, accepts 281/641 code points and preserves natural short-post behavior;
+  - explicit unlimited mode uses 2000 output-token budget and fails closed on incomplete responses;
+  - POSTONA and Kabumori X behavior unchanged.
+- fresh GitHub pre-merge: PR open/unmerged, exact head unchanged, `mergeable=true`; Netlify success; Vercel failure is build-rate-limit status.
+- PR #109 squash-merged successfully as `d4f693128494d8e05b97563fb82b7db2871818c8`.
+- source is now on main, but **production is still unchanged**.
+- production mutation from acceptance/merge: 0; no DB apply, Edge deploy, scheduler/manual invocation, real OpenAI/X, OAuth/Vault/Auth/Cron/settings mutation.
+- production rollout remains a separate explicit approval gate with fixed order: read-only preflight -> migration `20261007173000_ai_lab_topic_evergreen_capacity` -> exact read-back -> `x-test-post` deploy -> bundle read-back -> natural scheduler observation.
+- deploy-first remains prohibited because the old DB function rejects the expanded evergreen/candidate set.
+- G3 closed/free.
+
+
+## PR #109 production rollout APPLIED_PASS — 2026-10-08 JST
+- user explicitly approved production rollout.
+- production preflight PASS on `stock-x-autopost` (`wsmznyzcvmuitkglfeuj`), ACTIVE_HEALTHY.
+- migration-first order respected.
+- capacity migration applied successfully; migration-history entry `20261007214402 / 20261007173000_ai_lab_topic_evergreen_capacity`.
+- DB read-back PASS:
+  - claim body md5 `9aefd06d1ab537fbc6bde527997dace7`;
+  - SECURITY DEFINER + empty search_path preserved;
+  - owner/service_role-only EXECUTE; anon/authenticated false;
+  - API role membership paths none;
+  - table owner/RLS/ACL unchanged;
+  - evergreen-73 + 128 candidate limit present;
+  - all four companion lifecycle body md5s unchanged.
+- then deployed only `x-test-post`.
+- x-test-post production: **v139 ACTIVE**, verify_jwt=false, EZBR `39eb22bc4584494aabc6f871e7623d74b86f57b00043a8bc219c0e4912cfb843`.
+- to avoid unintentionally rolling out the separately merged social-model policy, deploy used production v138 as baseline and changed exactly three runtime modules:
+  1. brand_profiles.ts — AI Lab Premium unlimited length;
+  2. ai_lab_dev_diary_context.ts — 74-topic/Tier2+Tier3/candidate-128 source;
+  3. brand_post_generator.ts — preserve deployed gpt-5.6-luna while adding explicit-unlimited 2000-token budget and incomplete-response fail-closed.
+- post-deploy read-back PASS: diary/profiles exact reviewed bytes; generator old production model retained; no social_ai_model_policy import; unlimited/2000/incomplete/default600 guards present.
+- manual scheduled invocation, manual X post, real test OpenAI/X call: 0.
+- 2026-10-08 AI Lab schedule has 10 pending brand_post rows; first natural slot 07:51 JST.
+- current rollout verdict: **APPLIED_PASS; natural end-to-end post observation pending**. Do not force a post for verification.
+- G3 closed/free.
+
+
+## AI Lab GPT-6 Luna production rollout — 2026-10-08 JST
+- user requested the model change after PR #109 production rollout.
+- rollout was deliberately scoped to the AI Lab scheduled brand-post generator inside `x-test-post`; no POSTONA standalone or Kabumori X broad model rollout.
+- reviewed policy source: PR #105 exact head `78a43ae878205f726111dde1002bd28ea8e82b97`, already merged.
+- OpenAI official docs were rechecked: `gpt-6-luna` supports Responses API / reasoning low and standard pricing $0.10 input / $0.50 output per 1M.
+- x-test-post v139 baseline -> **v140 ACTIVE**, verify_jwt=false, EZBR `fb79c7866b30339215c4f104d700f882a8ff17c864d061de0f83cf4c14dab1f4`.
+- changed runtime modules exactly:
+  - shared brand generator;
+  - central social AI model policy.
+- read-back PASS: AI Lab brandPostGeneration resolves to `gpt-6-luna`; model cost uses central policy; PR109 unlimited/2000/incomplete safeguards remain; old hardcoded 5.6 Luna is gone from the shared AI Lab generator.
+- x-test-post Kabumori paths retain their prior 5.6 model configuration; POSTONA standalone functions were not redeployed.
+- manual scheduler/OpenAI/X calls = 0.
+- first natural AI Lab row remains pending at 07:51 JST. If that post succeeds, the combined topic-exhaustion repair + Premium-length change + GPT-6 Luna runtime rollout can be closed as end-to-end complete.

@@ -17,8 +17,9 @@
 - priority: **CRITICAL / project-wide**
 - user decision: 共通アカウント完成を、かぶモリ・X自動投稿の次工程より最優先とする。
 - G5 owns the shared common-account critical path.
-- Existing G1-G4 tasks are preserved. Non-conflicting UI/source/read-only work may continue, but **no unrelated production DB/Auth/permission mutation may overtake an active/approved G5 production window**.
-- G3 PR81 production apply remains HOLD whenever G5 has an approved/active production write.
+- Existing G1-G4 tasks are preserved. G5 priority is **conflict-based**, not a project-wide freeze: non-conflicting implementation/test/commit/push/PR/merge and non-conflicting production work may continue.
+- If a production boundary overlaps G5 (same DB migration/table/RPC/function, Auth/RLS/permission, Edge Function, secret/settings/Cron/workflow/API boundary, or a shared baseline/fingerprint), G5 has priority and the conflicting operation waits.
+- Same-Supabase-DB migration/DDL write sections are serialized only for the actual write/read-back window; waiting/review/user-input time must not keep a global lock active.
 - next shared milestone: production legacy backfill dry-run -> explicit backfill approval -> exact backfill -> Phase 2 integrations -> Phase 3 deletion/enforcement.
 
 ## Deployment policy
@@ -33,25 +34,25 @@
 - owner: codex
 - slot: codex-1
 - status: done
-- task_id: postona-pr106-phase2a2-security-rereview-20261007
+- task_id: postona-pr106-function-contract-final-rereview-20261008
 - start_code: H1
 - finish_code: C1
 - next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts CHANGES REQUIRED on PR #106 head a8f313dc. Remaining blockers are limited to existing trigger-function owner/ACL baseline verification and exact-body verification of the new provider guard. Existing X regressions and 45/45 mutation suite remain green. H1 closed/free; corrective returned to G4.
+- allocation: Final C1 accepts CHANGES REQUIRED on PR #106 head 4b6dc57966e0d55b2e901a7707446c35b25a1f00. R2 exact provider-guard body is closed and unsafe EXECUTE paths are closed. Remaining blocker is a literal ACL exactness gap: empty owner ACL is accepted although canonical contract requires one owner EXECUTE entry; plus one migration-reservation file merge conflict. H1 closed/free; bounded corrective returned to G4.
 - recommended_model: Sol（高）
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
-- task_id: kabumori-pr110-delivery-first-focused-review-20261007
+- status: done
+- task_id: kabumori-pr110-b1-b4-rereview-20261008
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Focused exact-head review of PR #110 head 6612b3f1dee5055794137da71697ebe5e07d7419. Review progressive unit sanitization, Hard Fact preservation, Fact advisory/not_run fallback, 10/7 false-positive closure, X Premium/disclaimer behavior, and app-visible disclaimer. No merge/deploy/production access or mutation.
+- allocation: C2 accepted CHANGES REQUIRED. B4 is closed; residual B1-R1/B2-R1/B3-R1 were returned to G2. H2 free pending corrected-head rereview.
 - recommended_model: Sol（高）
 
 ## Claude G1
@@ -69,25 +70,25 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: ready
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 PASS_CANDIDATE at PR #110 head 6612b3f1dee5055794137da71697ebe5e07d7419. App-visible disclaimer blocker is closed. Merge/deploy HOLD pending one focused H2 Sol（高） review of delivery-safety boundaries.
+- allocation: C2 corrective on existing PR #110 only. Fix only residual B1-R1 partial multi-unit objective Fact quote coverage, B2-R1 incomplete/repeated-emoji fact binding, and B3-R1 no-comma clause hedge laundering. B4 is accepted closed. Preserve all other accepted behavior. No merge/deploy/production mutation.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
+- status: done
 - task_id: ai-lab-premium-length-policy-unlimited-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: Final K3 PASS_CANDIDATE on PR #109 exact head fb4afb21d7ce808de3257bebc8062aed93353dec. Topic continuity/capacity + B1-B3 migration corrective remain candidate-good, and AI Lab Premium policy now removes the 280 hard ceiling with >280 generation/dispatch coverage. Merge HOLD for one final Sol（高） exact-head Codex rereview. H1 and H2 are currently occupied by G4 and G2 reviews respectively; do not overwrite them. Production/apply/deploy remain 0.
+- allocation: PR #109 source merged and production rollout APPLIED_PASS. DB capacity migration applied and read back; x-test-post v139 ACTIVE / verify_jwt=false with only three intended AI Lab runtime files changed. Manual scheduler/X/OpenAI verification calls=0. 2026-10-08 ten AI Lab rows are pending; first natural slot 07:51 JST. Natural scheduled-post observation remains pending, but G3 implementation/rollout slot is closed/free.
 - recommended_model: Sonnet5（高）
 
 ## Claude G4
@@ -99,19 +100,19 @@
 - finish_code: K4
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: C1 returned a bounded final corrective on existing PR #106 only. Preserve accepted B1-B6; fix two function-contract gaps: exact owner/ACL/effective EXECUTE baseline for the two existing trigger functions, and exact body/definition pinning for the new provider guard. Add adverse/mutation tests; no production/apply/deploy/provider operations. After K4, assign one free H1/H2 exact-head rereview.
+- allocation: C1 returned one final bounded corrective on existing PR #106 only: positively require exact owner EXECUTE ACL for the two existing trigger functions (empty owner ACL must fail atomically), and mechanically integrate fresh main to resolve the migration_source_invariants reservation conflict while preserving both POSTONA 20261007150000 and AI Lab 20261007173000 reservations. Preserve all accepted B1-B6/C1-R2 logic. No production/apply/deploy/provider operations.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: done
 - task_id: common-account-v1-phase2-real-account-smoke-20261007
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: User explicitly approved one bounded production-authenticated smoke using exactly one existing active Kabumori account. Pre/post aggregate read-back is mandatory. Login -> existing active service-start path -> Home -> same-login token refresh -> sign-out -> same-account re-login -> sign-out. No new enrollment, reactivation, withdrawal/deletion, profile edits, Auth Admin, DB/schema/migration, deploy, EAS, OAuth/Vault/Cron/X/provider changes. Credentials are entered only by the user in the Simulator UI and must never be logged or pasted.
+- allocation: Final K5 PASS / READY_FOR_EAS. One approved production-authenticated smoke with an existing active Kabumori account passed: two logins, one real token refresh, two sign-outs, active/started:false service-start responses, and pre/post account/entitlement/profile/lifecycle fingerprints unchanged. Source changes 0; EAS/deploy 0. G5 window CLOSED and slot free. Future production concurrency follows conflict-based boundaries; G5 does not globally freeze unrelated slots.
 - recommended_model: Opus5.5（高）
 
 ## Deferred
