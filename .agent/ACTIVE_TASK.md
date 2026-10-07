@@ -81,14 +81,14 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
-- task_id: ai-lab-topic-continuity-pr109-security-corrective-20261007
+- status: ready
+- task_id: ai-lab-premium-length-policy-unlimited-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: C1 CHANGES REQUIRED corrective on existing PR #109 only. Preserve accepted 74-topic/Tier2+Tier3/cooldown/capacity behavior; fix migration B1 SET ROLE graph guard, B2 canonical prerequisite table-shape proof, B3 exact unchanged lifecycle-function body proof. Add adverse rollback fixtures. No production/apply/deploy/merge.
-- recommended_model: Opus5.5（高）
+- allocation: Prior PR #109 security corrective is PASS_CANDIDATE at 7c3c06d07c32910472185e1c94b04fa1aab794f5. Before Codex rereview, apply the user's Premium-account policy: AI Lab only must drop its current hard 280-code-point ceiling, use explicit unlimited length, allow >280 when useful, and avoid padding merely to be long. Preserve PR109 topic/capacity and B1-B3 migration bytes. No production/apply/deploy/merge.
+- recommended_model: Sonnet5（高）
 
 ## Claude G4
 - owner: claude
