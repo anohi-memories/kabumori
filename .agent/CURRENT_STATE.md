@@ -5896,3 +5896,18 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - 2026-10-08 AI Lab schedule has 10 pending brand_post rows; first natural slot 07:51 JST.
 - current rollout verdict: **APPLIED_PASS; natural end-to-end post observation pending**. Do not force a post for verification.
 - G3 closed/free.
+
+
+## AI Lab GPT-6 Luna production rollout — 2026-10-08 JST
+- user requested the model change after PR #109 production rollout.
+- rollout was deliberately scoped to the AI Lab scheduled brand-post generator inside `x-test-post`; no POSTONA standalone or Kabumori X broad model rollout.
+- reviewed policy source: PR #105 exact head `78a43ae878205f726111dde1002bd28ea8e82b97`, already merged.
+- OpenAI official docs were rechecked: `gpt-6-luna` supports Responses API / reasoning low and standard pricing $0.10 input / $0.50 output per 1M.
+- x-test-post v139 baseline -> **v140 ACTIVE**, verify_jwt=false, EZBR `fb79c7866b30339215c4f104d700f882a8ff17c864d061de0f83cf4c14dab1f4`.
+- changed runtime modules exactly:
+  - shared brand generator;
+  - central social AI model policy.
+- read-back PASS: AI Lab brandPostGeneration resolves to `gpt-6-luna`; model cost uses central policy; PR109 unlimited/2000/incomplete safeguards remain; old hardcoded 5.6 Luna is gone from the shared AI Lab generator.
+- x-test-post Kabumori paths retain their prior 5.6 model configuration; POSTONA standalone functions were not redeployed.
+- manual scheduler/OpenAI/X calls = 0.
+- first natural AI Lab row remains pending at 07:51 JST. If that post succeeds, the combined topic-exhaustion repair + Premium-length change + GPT-6 Luna runtime rollout can be closed as end-to-end complete.
