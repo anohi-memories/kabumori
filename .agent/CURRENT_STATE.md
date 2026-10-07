@@ -1,3 +1,19 @@
+## Final C1 — POSTONA PR #106 CHANGES REQUIRED / G4 corrective ready — 2026-10-07
+
+- H1 completed exact-head rereview of PR #106 `a8f313dc72b087ab86482781297848fe6e23bdcc`.
+- reviewer report could not originally sync because main advanced; C1 recovered the completed verdict into canonical `.agent/CODEX_REPORT.md` without overwriting concurrent work.
+- verdict: **CHANGES REQUIRED**.
+- remaining blockers are now only:
+  1. existing `social_accounts` trigger-function owner/ACL/effective-EXECUTE drift is not fully pinned;
+  2. new `social_accounts_provider_guard()` body/definition is not pinned by the postcondition.
+- accepted areas remain green: existing X regressions and 45/45 defect-detection mutation suite.
+- production read/write/migration apply/deploy/Auth/OAuth/Vault/provider operation = 0.
+- PR #106 remains open/unmerged; exact head unchanged at C1 freshness check.
+- C1 returned a bounded corrective to G4 on the existing PR #106.
+- G4 status: ready; recommended model **Opus5.5（高）**.
+- after corrected K4, use a truly free H1/H2 for one focused exact-head rereview, recommended **Sol（高）**.
+- next action: send `G4` to Claude Code.
+
 ## K2 — PR #110 PASS_CANDIDATE / H2 focused review assigned — 2026-10-07
 
 - corrected PR #110 exact head: `6612b3f1dee5055794137da71697ebe5e07d7419`.
