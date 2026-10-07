@@ -3,8 +3,9 @@
 - verdict: **CHANGES REQUIRED (one bounded blocker)**
 - target_pr: 110
 - reviewed_head: b507a3c5c9e340b5d07e09ef80146edc37f26d83
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
+- corrected_head: 6612b3f1dee5055794137da71697ebe5e07d7419
 - recommended_model: Sonnet5（中）
 - production_mutation_allowed: false
 - deploy_allowed: false
@@ -77,6 +78,30 @@ After correction:
 - STOP for **K2**.
 
 Recommended model: **Sonnet5（中）**.
+
+
+## Report
+
+- PR #110 を更新（新しいPRは作っていない）。head: `6612b3f1dee5055794137da71697ebe5e07d7419`（b507a3c5 の上に1コミット）。
+- 着手前の確認: PR #110 は open、head は b507a3c5 で worktree と一致。他の open PR（#109 / #106 / #33 / #11 / #10 / #3）とのファイルの重なりはなし。既存の G2 worktree `/Users/yuya/Developer/kabumori-g2-delivery-first` は clean だったので、そのまま使った。
+- changed_files:
+  - `src/lib/report-presentation.ts`: `REPORT_DISCLAIMER_JA`、`REPORT_SOURCE_NOTE_JA`、`reportFootnotes(gaps)` を追加
+  - `src/app/(tabs)/reports/[id].tsx`: 末尾の注記を `reportFootnotes(gaps)` に置き換え
+  - `tests/app/report-disclaimer_test.ts`: 新規
+- 画面に出るもの: 末尾に、データの欠け → 出所の説明「数値は株価データからアプリが計算しています。文章は、その数値と内容確認済みのニュースをもとにAIが作成しています。」 → 合意した注意書きを**1回**。
+  - 旧注記の「売買をすすめるものではありません」は注意書きと意味が重なり、「根拠データと照合しています」は「誤りを含む可能性」と食い違うので削除した。
+  - 「AIが独自調査」は使っていない。
+- 対象の経路: 末尾のブロックは market_detail と旧レイアウトのどちらの分岐の外にもある（ScrollView の最後の要素）。タブ内の `/reports/[id]` と、ルートの `/report-detail`（同じ画面を再エクスポート）の両方で表示される。
+- 二重表示の防止: 画面は backend の story（最後に注意書きセクションを持つ）を描画しない（`.story` を参照しないことをテストで固定）。データの欠けに同じ文が入っていても1回に揃える。
+- tests:
+  - `tests/app/report-disclaimer_test.ts` 4件すべて成功。backend の `REPORT_DISCLAIMER_JA` と文字列が一致すること、1回だけ・最後にあること、分岐の外の最後の要素であること、ルートが同じ画面であることを確認。
+  - `tests/app` 全体 430件成功（`--no-check`）。deno check で出る型エラーは、すべて変更していない既存ファイルのもので、変更ファイルと新テストは0件。
+  - `git diff --check` は問題なし。
+  - backend（`supabase/functions`）は変更していないので、PR #110 の市況レポートのテストの再実行は不要（前回 421 + `_shared` 466 が成功）。
+- 実行していないもの: Simulator での画面確認（表示文言だけの変更で、認証付きの実データ表示が必要なため）、expo lint・tsc（この worktree に node_modules が無い）。
+- 本番操作・デプロイ・マージ・EAS: 0。
+
+Recommended next owner: **chatgpt（K2）**
 
 ---
 
