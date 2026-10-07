@@ -1,3 +1,34 @@
+## Final C2 — PR #101 CHANGES REQUIRED / F1-F3 corrective / GPT-6 migration queued — 2026-10-07
+
+- H2 reviewed exact PR #101 head `2469e8a8be0125805551ba3e353c4ef6058b0150`.
+- verdict: **CHANGES REQUIRED accepted**. PR #101 remains open/unmerged/undeployed; migration remains unapplied.
+- accepted architecture remains valid:
+  - dedicated append-only generation-trace history;
+  - actual failed model output retained for QA;
+  - local/Fact issue evidence retained;
+  - invocation/attempt/generation identity;
+  - trace persistence after complete/fail and non-blocking;
+  - prompt hygiene correction;
+  - Hard/PR99/rewrite/call/fallback semantics unchanged.
+- blockers:
+  - **F1 P1** effective privilege/owner/default/inheritance drift can silently commit unsafe access or evidence-erasure paths;
+  - **F2 P1** quoted JSON credentials, case variants, PEM/private-key text and later secret matches inside free-text can evade current redaction/backstop;
+  - **F3 P2** current serializer silently truncates candidate fields, long issue tails and >10 Fact findings, contradicting the intended full-diagnostic QA contract.
+- G2 corrective assigned: `kabumori-pr101-debug-trace-security-corrective-20261007`, recommended **Opus5.5（高）**.
+- corrective scope is only F1-F3. Do not remove failed model output retention. Do not alter Hard Fact, PR #99 editorial warnings, X 300-char rewrite threshold, App rewrite policy, MAX_GENERATIONS=2/max-call ceiling or safe-original fallback.
+- after corrected K2, one exact-head H2 rereview is mandatory, recommended **Sol（中）**. No broad rereview.
+- production mutation/apply/deploy/manual generation = 0.
+- **Next product step is already decided** after PR #101 acceptance/merge:
+  - inventory all OpenAI model IDs/usages in the repository;
+  - migrate 5.6 Luna workloads to GPT-6 Luna where they remain high-volume/focused;
+  - migrate quality-critical low-frequency report generation to GPT-6.1 Sol;
+  - target market-report generation **and Fact check** to `gpt-6.1-sol`;
+  - benchmark reasoning effort/cost/output quality using the new trace system before widening to every AI path.
+- official current API identifiers/pricing verified 2026-10-07:
+  - `gpt-6.1-sol`: $2/MTok input, $10/MTok output;
+  - `gpt-6-luna`: $0.10/MTok input, $0.50/MTok output.
+- do not mix model migration into PR #101 security corrective; keeping them separate preserves causal attribution for failures and review clarity.
+
 ## Final C1 — PR #95 fourth review CHANGES REQUIRED / single Q1 corrective — 2026-10-07
 
 - H1 exact reviewed PR #95 head: `13f4281f9514742bdee43ffc08834fea67449bf2`.
