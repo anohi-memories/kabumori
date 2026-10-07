@@ -1,8 +1,12 @@
 # Common account Phase 2 — production apply runbook for `20261006230000` (not executed)
 
-Status: prepared by the read-only preflight of 2026-10-07 (`common-account-v1-phase2-production-migration-preflight-20261007`).
-Nothing in this file has been run against production except the read-only `run.sh before`. The apply needs the
-user's explicit approval and an open G5 production mutation window.
+Status: **applied to production on 2026-10-07** (user-approved; `common-account-v1-phase2-production-migration-apply-20261007`).
+The procedure below ran once, pinned to this bundle at `36bea0ae`:
+- Stage A committed at 13:47:09 JST.
+- The history row was recorded at 13:47:28.
+- Every read-back was ALL PASS: Stage B, the final one, and an independent re-read at 13:50.
+
+It stays as the record of the procedure and as the template for later single-file applies.
 
 ## What is applied
 
