@@ -1,3 +1,18 @@
+## Final K2 — 10/7 morning observation incomplete / G2 diagnostic corrective next — 2026-10-07
+
+- classification: **OBSERVATION_INCOMPLETE**. PR #99 editorial quality is not yet production-validated.
+- 10/7 morning data cycle completed, but analysis failed twice and produced 0 shared report packets.
+- final retry diagnostics: report_attempt_count=2; report_last_error=ANALYSIS_FACT_FAILED; generation_attempts=2; calls=3; quality_rewrite=false; delivered_generation=0; hard_rejections=local,fact; rejection_reasons=causal+date+ref+other,other:1.
+- the final Fact note says a timing relationship about the supplied news could not be confirmed from the input. The same timing wording already existed in the older morning prompt, so this single sample does not establish PR #99 as the cause.
+- no shared output was delivered. Legacy X/app morning paths completed while shared gates remain off.
+- transport/provider failure was not observed; this was an analysis/fact rejection path.
+- manual generation/retry/replay=0; production mutation=0.
+- decision: do not change Hard rules from this one sample, and do not change PR #99 specificity/rewrite policy yet.
+- new G2: `kabumori-morning-fact-failure-diagnostics-corrective-20261007`, recommended **Sonnet5（高）**.
+- scope: make the morning prompt timing wording input-grounded; preserve per-generation rejection categories with bounded fixed codes; keep Hard semantics, max calls, safe-original fallback, PR #99 telemetry and 300-char rewrite threshold unchanged.
+- after K2 source acceptance, consider controlled deploy of `market-report-analysis` only, then read-only natural close observation.
+- AI Lab diary: no duplicate entry; this is the same market-report iteration already represented.
+
 ## Final C1 — PR #95 third review CHANGES REQUIRED / single S1-T corrective — 2026-10-07
 
 - H1 exact reviewed PR #95 head: `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`.
