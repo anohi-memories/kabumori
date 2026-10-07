@@ -1,5 +1,174 @@
 # Codex Task 2 — CURRENT TASK
 
+- task_id: kabumori-pr101-f1-f3-final-rereview-20261007
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- priority: high
+- recommended_model: Sol（中）
+- type: exact-head focused rereview / F1 ACL / F2 secret redaction / F3 full retention
+- target_pr: 101
+- target_head: fddd274863b08aefed60795d678a298a1160d599
+- previous_reviewed_head: 2469e8a8be0125805551ba3e353c4ef6058b0150
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Re-review only the three concrete blockers from the previous H2 review of PR #101.
+
+Do not repeat the full design review. The product decision to retain failed model outputs during development/QA is accepted and must remain.
+
+## Freshness / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / G2 latest Report / this TASK.
+2. Use a fresh independent H2 worktree/checkout from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #101.
+4. Require exact head `fddd274863b08aefed60795d678a298a1160d599`; moved head => STOP.
+5. Allocation-time: PR OPEN/unmerged/mergeable=true; main is 43 commits ahead of PR base but changed-file overlap with PR #101 = 0. Re-check before verdict.
+6. Vercel is currently rate-limited, not a code failure; Netlify status is success/canceled preview. Do not treat rate limit as source blocker.
+7. H1/G5 remain separate. Do not touch H1/G5 files/worktrees.
+
+## F1 — effective ACL / owner / inheritance
+
+Verify the corrected migration now fails closed for:
+- unknown default table SELECT;
+- unknown default helper EXECUTE;
+- inherited TRIGGER reaching service_role;
+- authenticated inheriting table owner;
+- anon/service_role owner membership;
+- service_role superuser;
+- inherited superuser path;
+- pg_read_all_data / pg_write_all_data paths;
+- grant-option widening;
+- inherited unknown role widening.
+
+Required:
+- every adverse case refuses atomically;
+- no partial trace table/helper/trigger remains after refusal;
+- unrelated default ACL/membership/role attributes remain unchanged;
+- clean Supabase-like default graph still applies;
+- service_role effective privileges = SELECT + INSERT only;
+- anon/authenticated effective access = none;
+- UPDATE/DELETE/TRUNCATE/TRIGGER remain unavailable;
+- append-only behavior remains.
+
+Review the DO-block logic, not only the supplied tests.
+
+## F2 — secret redaction / writer backstop
+
+Verify corrected redaction handles:
+- quoted JSON and escaped JSON key/value pairs;
+- key=value forms;
+- case-insensitive Bearer / Basic;
+- PEM/private-key blocks, with/without END marker;
+- JWT and documented API-token shapes;
+- nested objects/arrays/issues;
+- multiple secret occurrences in one string;
+- a safe redacted occurrence followed later by an unredacted secret.
+
+Required:
+- all recognizable credentials are redacted or row is dropped;
+- final writer scans the whole serialized row, not first-match only;
+- forged rows containing residual secret material produce zero insert callback;
+- ordinary Japanese/financial/news content is preserved;
+- redaction/drop failure remains non-blocking to report result and does not add model calls.
+
+Do not require removal of generated report text.
+
+## F3 — full diagnostic retention
+
+Verify trace storage now preserves:
+- >4,500-char candidate-field tails when under declared total bound;
+- long local issue text;
+- long Fact issue text;
+- >10 Fact issues in trace storage;
+- deep/numerous structured fields within the declared bound.
+
+Verify existing decision behavior is still bounded independently:
+- retry/public-response hints may remain capped;
+- Fact/retry decision still uses its existing bounded list;
+- full trace storage must not reuse that cap.
+
+If a 200,000-char declared field bound is used:
+- truncation must be explicit;
+- original size/count + kept size/count must be recorded;
+- truncation flag/reason must be truthful;
+- no silent lower-level truncation may occur.
+
+Also verify prompt identity metadata:
+- base_prompt_hash meaning is truthful;
+- request_hash differs when retry instructions differ;
+- no extra AI calls.
+
+## Regression guard
+
+Confirm unchanged:
+- Hard Fact semantics;
+- exactly 3 points;
+- PR #99 generic/metric/near-duplicate WARN-only policy;
+- X 300-char rewrite threshold;
+- App rewrite policy;
+- MAX_GENERATIONS=2 / max 4 model calls;
+- safe-original fallback;
+- trace persistence after complete/fail and non-blocking behavior.
+
+## Required evidence
+
+Independently reproduce enough to support verdict:
+- adverse PG cases including original F1 reproductions;
+- writer-level secret probes including original F2 reproductions;
+- retention probes including original F3 reproductions;
+- market-report-analysis relevant/full suite;
+- migration/source invariants;
+- Deno check/lint;
+- git diff --check.
+
+No production read/write/apply/deploy/manual report/X/OpenAI/Auth/Vault/OAuth/Cron mutation.
+
+## Verdict
+
+Return:
+- PASS
+- PASS-WITH-NONBLOCKING-NOTES
+- CHANGES REQUIRED
+- BLOCKED
+
+PASS requires the original F1/F2/F3 reproductions to be closed.
+
+## Completion / C2
+
+Write/append to `.agent/CODEX_REPORT_2.md`:
+- exact reviewed head;
+- verdict;
+- F1 disposition;
+- F2 disposition;
+- F3 disposition;
+- regression evidence;
+- source changes by H2=0;
+- production access/mutation/apply/deploy=0;
+- merge recommendation;
+- exact next action.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C2.
+
+If PASS:
+- recommend PR #101 merge after final freshness/no-race check;
+- no further routine review;
+- production migration apply/deploy remain separate;
+- next product task after merge is OpenAI model inventory/migration to GPT-6 family.
+
+Recommended model: **Sol（中）**.
+
+---
+
+# Codex Task 2 — CURRENT TASK
+
 - task_id: kabumori-pr101-debug-trace-security-review-20261007
 - owner: codex
 - slot: codex-2
