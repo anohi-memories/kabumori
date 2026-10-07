@@ -12,6 +12,7 @@ import test from "node:test";
 import { evaluateDomain } from "./index.ts";
 import type { DomainDecision, DomainDecisionOrError } from "./index.ts";
 import type { RestContext } from "./mic_state_run_logic.ts";
+import type { VerificationShadow } from "./mic_state_verification_shadow.ts";
 
 const ctx: RestContext = { supabaseUrl: "https://example.supabase.co", secretKey: "secret-key" };
 
@@ -55,9 +56,32 @@ function baseDecision(overrides: Partial<DomainDecision> = {}): DomainDecision {
     dataConfidence: 0.9,
     latestAsOf: "2026-09-12T00:00:00.000Z",
     priorUpdatedAt: "2026-09-12T00:00:00.000Z",
+    verificationShadow: SAMPLE_SHADOW,
     ...overrides,
   };
 }
+
+// Opaque to evaluateDomain: it is passed through to decision_detail unchanged.
+const SAMPLE_SHADOW: VerificationShadow = {
+  version: 1,
+  status: "no_new_observation",
+  reason: "no_new_observation",
+  blocking_reasons: [],
+  narrative_identity: { source_evaluation_run_id: "prior-run", ai_evaluated_at: "2026-09-11T21:15:00.000Z" },
+  registered_metric_count: 1,
+  new_observation_count: 0,
+  checked_metric_count: 0,
+  observation_as_of: null,
+  gates: {
+    coverage_status: "full",
+    fetch_status: "fresh",
+    observation_status: "delayed_expected",
+    ai_suppressed_by_stale_guard: false,
+    unseen_event_ids: [],
+  },
+  facts_fingerprint: "sha256:" + "0".repeat(64),
+  metrics: [],
+};
 
 function decisionResult(overrides: Partial<DomainDecision> = {}): DomainDecisionOrError {
   return { ok: true, decision: baseDecision(overrides) };
@@ -171,6 +195,9 @@ test("[E] Luna-only evaluation records exactly one ai_usage_events row, referenc
   const rpcCall = calls.find((c) => c.url.includes("/rest/v1/rpc/apply_mic_state_material_update"));
   assert.equal(rpcCall?.body.p_ai_usage_event_id, 100, "run should reference the Luna usage event id (the only one)");
   assert.equal(calls.some((c) => c.url.includes("/rest/v1/mic_state_evaluation_runs") && c.method === "PATCH"), false);
+  // Slice 0 shadow evidence belongs to no_change runs only.
+  assert.equal("verification_shadow" in rpcCall?.body.p_decision_detail, false);
+  assert.deepEqual(Object.keys(rpcCall?.body.p_decision_detail).sort(), ["material", "reason"]);
 });
 
 test("[F] Luna -> Sol escalation records two ai_usage_events rows (one per actual API call)", async () => {
@@ -295,6 +322,7 @@ test("[I] all-stale guard still short-circuits before any AI call", async () => 
   assert.equal(noChangeRpc[0].body.p_run_id, "run-1");
   assert.equal(noChangeRpc[0].body.p_decision_detail.ai_skipped, true);
   assert.equal(noChangeRpc[0].body.p_decision_detail.skip_reason, "all_metrics_stale_or_unknown");
+  assert.deepEqual(noChangeRpc[0].body.p_decision_detail.verification_shadow, SAMPLE_SHADOW);
   assert.equal(calls.some((c) => c.url.includes("/rest/v1/mic_state_evaluation_runs") && c.method === "PATCH"), false);
 });
 
@@ -492,7 +520,12 @@ test("[M] no_change (not material) never calls mic_fed_statement_diffs or the ma
   assert.equal(noChangeRpc.length, 1);
   assert.equal(noChangeRpc[0].body.p_run_id, "run-1");
   assert.equal(noChangeRpc[0].body.p_expected_current_updated_at, "2026-09-12T00:00:00.000Z");
-  assert.deepEqual(noChangeRpc[0].body.p_decision_detail, { material: false, reason: "no change" });
+  // The pre-Slice-0 keys are unchanged; verification_shadow is the only addition.
+  assert.deepEqual(noChangeRpc[0].body.p_decision_detail, {
+    material: false,
+    reason: "no change",
+    verification_shadow: SAMPLE_SHADOW,
+  });
   assert.equal(calls.some((c) => c.url.includes("/rest/v1/mic_state_evaluation_runs") && c.method === "PATCH"), false);
 });
 
