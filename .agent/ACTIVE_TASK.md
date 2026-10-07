@@ -58,13 +58,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: none
-- status: done
-- task_id: kabumori-portfolio-canonical-ui-v1-20261006
+- next_owner: claude
+- status: ready
+- task_id: kabumori-portfolio-asset-card-background-polish-20261008
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: G1 market-report allocation was a routing mistake and is cancelled. G1 remains free after the completed portfolio task; do not start the delivery-first report task from G1.
+- allocation: Source-only portfolio asset-summary polish. Use the user-approved transparent 1600×700 botanical background, keep the sparkline based only on real saved close market_value history, place decoration behind content at restrained opacity, and make sparkline color trend-aware for up/down/flat. 375/402 Simulator screenshots required. No portfolio data/search/watch/navigation/backend/Auth/DB/EAS changes.
 - recommended_model: Sonnet5（中）
 
 ## Claude G2
