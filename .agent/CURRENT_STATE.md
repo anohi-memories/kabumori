@@ -1,3 +1,20 @@
+## Final K4 — POSTONA Phase 2a-1 PASS / Phase 2a-2 assigned — 2026-10-07
+
+- Phase 2a-1 verdict: **PASS**.
+- accepted source: former PR #103 exact head `2b2f1c1fb4a7188fad5dda3346e802f19bb30983`, five new provider-domain/test files only.
+- accepted behavior: canonical providers `x / threads / instagram`, structural capabilities, credential/publish-flow kinds, publication target/result contracts and adapter interfaces; no live adapter/runtime wiring.
+- reported verification accepted: Deno 13 new tests + 449 shared PASS; app 226 PASS; typecheck/lint/diff clean; PR #95 overlap 0.
+- runtime/DB/Auth/OAuth/Vault/production/provider-call changes: 0.
+- Netlify PASS; Vercel failure was build-rate-limit only and non-blocking.
+- fresh main advanced after the PR base with no overlap. GitHub rejected the stale-base merge, so K4 integrated the exact five accepted blobs directly to main and verified every main blob SHA equals the former PR #103 source blob. PR #103 closed as superseded.
+- Codex review not required for Phase 2a-1 because it remained pure domain/test code with no live boundary change.
+- AI Lab diary: 記録不要 — internal provider abstraction only; no user-facing/live SNS capability yet.
+- G4 next task assigned: `postona-multisocial-phase2a2-account-schema-candidate-20261007`.
+- Phase 2a-2 scope: source-only connected-account schema migration candidate + disposable PostgreSQL proof + Threads connection design note. Production apply/deploy/OAuth/Vault/provider calls remain forbidden.
+- Phase 2a-2 must avoid active G2/G5 files and must not touch the shared migration reservation file if another active task owns it.
+- Phase 2a-2 recommended model: **Opus5.5（高）**.
+- next action: send `G4` to Claude Code.
+
 ## G1 resumed — PR #100 contextual report-detail navigation corrective — 2026-10-07
 
 - PR #95 common-account source is merged as `d5bea735937b53095b110b4bed1f20442e56b089`; root navigation source boundary is now unblocked.
