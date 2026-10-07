@@ -58,13 +58,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
+- next_owner: none
+- status: done
 - task_id: kabumori-portfolio-canonical-ui-v1-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 corrective only on existing PR #100. PR #95/common-account source is merged, so root navigation is unblocked. Integrate fresh main, then make Portfolio-origin report detail a root Stack route so visible Back/native swipe return Portfolio; keep Reports-list-origin on nested /reports/[id] so it returns Reports list. Preserve PR95 Auth/serviceSession, root news-detail, all accepted portfolio UI/data/search/watch behavior. No internal router interception, no backend/DB/Auth/EAS changes.
+- allocation: Final K1 PASS. PR #100 exact head 3fd7c569efb6598202e71151dd2393f661f93b81 squash-merged as fe8090bab89824fc8c00147fb5fc92bb1afab82c. Canonical portfolio UI, real saved-close data, Search, interim Watchlist, fallback avatars and contextual report navigation are complete. Portfolio-origin report Back/swipe returns Portfolio; Reports-list origin returns Reports list. 426/426 app tests; no backend/DB/Auth/EAS changes. G1 free.
 - recommended_model: Sonnet5（中）
 
 ## Claude G2
