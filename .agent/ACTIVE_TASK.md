@@ -32,14 +32,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: postona-pr106-function-contract-final-rereview-20261008
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final focused exact-head rereview of POSTONA PR #106 head 4b6dc57966e0d55b2e901a7707446c35b25a1f00. Verify only C1-R1 existing trigger-function owner/ACL/effective-EXECUTE contract, C1-R2 exact provider-guard body/definition pinning, reservation bookkeeping, and bounded X regressions. No merge/apply/deploy/production/provider access.
+- allocation: Final C1 accepts CHANGES REQUIRED on PR #106 head 4b6dc57966e0d55b2e901a7707446c35b25a1f00. R2 exact provider-guard body is closed and unsafe EXECUTE paths are closed. Remaining blocker is a literal ACL exactness gap: empty owner ACL is accepted although canonical contract requires one owner EXECUTE entry; plus one migration-reservation file merge conflict. H1 closed/free; bounded corrective returned to G4.
 - recommended_model: Sol（高）
 ## Codex H2
 - owner: codex
@@ -93,13 +93,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: review_required
+- status: ready
 - task_id: postona-multisocial-phase2a2-security-corrective-20261007
 - start_code: G4
 - finish_code: K4
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: K4 accepts final function-contract corrective as PASS_CANDIDATE only. K4 also added the deferred migration reservation, producing exact PR #106 head 4b6dc57966e0d55b2e901a7707446c35b25a1f00 with 7 changed files. Merge HOLD pending H1 final exact-head rereview. Production/apply/deploy/provider operations remain 0.
+- allocation: C1 returned one final bounded corrective on existing PR #106 only: positively require exact owner EXECUTE ACL for the two existing trigger functions (empty owner ACL must fail atomically), and mechanically integrate fresh main to resolve the migration_source_invariants reservation conflict while preserving both POSTONA 20261007150000 and AI Lab 20261007173000 reservations. Preserve all accepted B1-B6/C1-R2 logic. No production/apply/deploy/provider operations.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
