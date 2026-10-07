@@ -1,3 +1,108 @@
+# C1 CORRECTIVE ROUND 3 — PR #95 Kabumori synchronous auth-owner/readiness fence
+
+This is the newest canonical G5 instruction and supersedes prior corrective sections only where it differs.
+
+- task_id: `common-account-v1-phase2-service-enrollment-integration-20261006`
+- status: ready
+- next_owner: claude
+- target PR: **#95**, continue the existing PR.
+- reviewed head requiring correction: `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`
+- recommended model: **Opus5.5（極高）**
+- production mutation / migration apply / deploy / EAS / Phase3: **forbidden**
+
+## Preserve accepted work
+
+Do not reopen or weaken without concrete regression evidence:
+- R1 automatic start never reactivates ended; explicit reactivation remains version-bound.
+- R4 captured immutable Authorization transport.
+- R5 strict canonical response validation.
+- stable runtime context keyed by userId + login session_id.
+- same-session TOKEN_REFRESHED single-flight behavior.
+- S2 X queued-work cancellation before dispatch.
+- cross-user/double-tap protections.
+- Kabumori retry/pending positive-ready gate.
+- PR #94 root news-detail behavior and X OAuth separation.
+
+## Sole remaining blocker — S1-T P2
+
+Current problem is only in Kabumori AuthProvider timing:
+
+- Supabase invokes an auth callback for a superseding same-user fresh login, different user, or SIGNED_OUT.
+- current owner/generation invalidation is deferred inside `setTimeout(0)`.
+- before that timer runs, an already-pending old A1 explicit reactivation may resolve.
+- because old generation/readiness is still accepted, old A1 can transiently become `serviceSession`/ready again.
+- the timer later clears it, but readiness must never become positive after the SDK has already announced a superseding identity.
+
+## Required correction
+
+1. In the auth callback, synchronously derive/record the newly notified owner/login identity from the event/session.
+2. On changed login/user or sign-out, synchronously:
+   - advance/fence the auth owner/generation used for result acceptance;
+   - invalidate positive service-ready state;
+   - cancel/reset obsolete enrollment work where possible;
+   - ensure consumers cannot receive old A1 as serviceSession.
+3. Do **not** await network/Auth/Data API work inside this synchronous fence.
+4. Keep deferred work only for subsequent session preparation/network operations.
+5. Result acceptance and serviceSession computation must reference the synchronously current owner/generation.
+6. Preserve same-login TOKEN_REFRESHED behavior:
+   - same user + same session_id should retain safe single-flight;
+   - do not abort/restart solely because access_token refreshed.
+7. Already-sent old A1 request may finish server-side under A1; its result must simply be unable to certify any state after a superseding auth notification.
+8. No token/JWT/session-id logging or persistence changes.
+
+## Mandatory regression tests
+
+Add an actual-provider timing test that renders **between the SDK auth callback and the deferred task**.
+
+For each variant:
+- A1 explicit reactivation pending;
+- deliver superseding auth event;
+- do not run deferred timer yet;
+- release A1 result and flush promises/render;
+- assert **every observed serviceSession is null** until the new/current session's own valid enrollment completes.
+
+Variants:
+1. same Auth user, fresh A2 session_id;
+2. different user B;
+3. SIGNED_OUT.
+
+Control:
+4. TOKEN_REFRESHED with same A1 session_id must keep the intended same-login single-flight behavior and must not spuriously drop/restart a valid logical request.
+
+Also rerun the prior S1/S2 and R1-R5 focused tests to prove no regression.
+
+## Scope / safety
+
+- Keep source change as narrow as possible, primarily AuthProvider/auth-owner readiness fencing and tests.
+- Do not alter server migration/RPC semantics unless a concrete regression requires it.
+- Do not touch X behavior except shared tests if necessary.
+- No production access/write, migration apply, deploy, EAS, Phase3, Auth hard-delete, Storage, OAuth, Vault, Cron, X publish or real provider calls.
+- Fresh-fetch main before completion and confirm no product overlap/conflict.
+
+## Completion / K5
+
+Report:
+- exact new PR #95 head;
+- S1-T disposition;
+- same-session refresh control;
+- S2/R1-R5 regression disposition;
+- changed_files;
+- tests;
+- production mutation/deploy/EAS = 0;
+- remaining issues;
+- next recommendation.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K5.
+
+A PASS_CANDIDATE still requires one focused exact-head H1 rereview before merge.
+
+Recommended model: **Opus5.5（極高）**.
+
+---
+
 # C1 CORRECTIVE ROUND 2 — PR #95 same-user session identity + queued-task cancellation
 
 This is the newest canonical instruction for G5 and supersedes the previous C1 corrective section only where it differs.
