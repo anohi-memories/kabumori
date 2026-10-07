@@ -1,3 +1,18 @@
+## K4 — POSTONA Phase 2a-2 PASS_CANDIDATE / direct focused review required — 2026-10-07
+
+- exact PR #106 head: `dac01220ca600cc003b3dafa4b30a84340b29850`.
+- six new files only: one forward migration candidate, four disposable-PG test/proof files, one Threads Phase 2b design note.
+- CI: Netlify PASS / Vercel PASS.
+- fresh main has advanced but changed-file overlap with PR #106 = 0.
+- reported local proof is strong: valid X preservation, Meta OFF/long-lived-access shape, unknown-provider refusal, 28 adverse start states, atomic rollback/postconditions and 26/26 mutation detections.
+- production read/write/apply/deploy/Auth/OAuth/Vault/real provider calls = 0.
+- verdict: **PASS_CANDIDATE, merge HOLD** because this is a DB/credential-shape/ACL boundary.
+- one focused independent Codex review is required, recommended **Sol（高）**.
+- per this chat's G4/direct-instruction routing, H1/H2 was not allocated; ChatGPT supplies a copy-ready review instruction.
+- review must probe platform-user uniqueness precondition, service_role/effective privilege graph, Supabase migration-owner assumptions, unexpected schema/plaintext-token drift, Meta access-ref invariant, provider relabeling, atomicity and X regressions.
+- migration reservation map entry for `20261007150000` remains housekeeping after review.
+- G4 remains review_required / next_owner codex.
+
 ## G5 next — Phase 2 native client validation before EAS — 2026-10-07
 
 - Phase 2 production server migration is APPLIED_PASS and production window is closed.
