@@ -5607,3 +5607,17 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - H1 assigned `ai-lab-topic-continuity-pr109-focused-review-20261007`, exact head fixed, recommended **Sol（高）**.
 - production rollout remains HOLD. Required order after review/merge and separate approval: migration first -> read-back -> x-test-post deploy second. Deploy-first is forbidden because the old DB function rejects the enlarged candidate set/new evergreen ids.
 - AI Lab diary: 記録不要 — this fix itself is internal posting-infrastructure maintenance and today already has a canonical AI Lab diary entry; do not create a duplicate same-day diary event merely from this K3.
+
+
+## Final C1 — PR #109 AI Lab topic continuity focused review — 2026-10-07
+- verdict: **CHANGES REQUIRED accepted**.
+- exact reviewed head: `f83247ae1024d4220dfbfa5484c725381d63815d`; PR remains open/unmerged.
+- accepted and frozen unless regression: 74-topic design, diary -> Tier2 -> Tier3 order, 128 candidate target, TS/SQL map parity, no fabricated recent-AI claims/Web Search dependency, 72h/48h cooldowns, event/provider/fingerprint safety, real SQL 140/140 capacity, fixed/skewed rotation capacity, old-7 exhaustion reproduction, migration-first rollout order.
+- blocking B1: migration does not fail closed on direct/transitive INHERIT FALSE / SET TRUE role paths from API roles to service_role; reviewer reproduced successful SET ROLE + claim after migration.
+- blocking B2: prerequisite table canonical shape is not fully checked; missing PK/index, disabled RLS, and vacuous CHECK drift were accepted by the candidate.
+- blocking B3: unchanged companion lifecycle-function bodies are not verified; reviewer replaced start-provider with same metadata but unsafe body and migration still committed.
+- production access/mutation/migration apply/merge/deploy/scheduler/OpenAI/X/Auth/OAuth/Vault/Cron changes by H1/C1: 0.
+- G3 corrective assigned: `ai-lab-topic-continuity-pr109-security-corrective-20261007`, existing PR #109 only, recommended **Opus5.5（高）**.
+- required correction is bounded to migration guards + adversarial rollback tests. Topic content/capacity design should not be redesigned.
+- after K3, one focused exact-head Codex rereview is required, recommended **Sol（高）**.
+- AI Lab diary: 記録不要 — no completed user-visible development milestone yet; this is a security corrective in progress and same-day diary duplication is unnecessary.
