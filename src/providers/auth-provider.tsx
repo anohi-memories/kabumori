@@ -1,5 +1,5 @@
 import { Session } from '@supabase/supabase-js';
-import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 import { prepareSession, reactivateKabumori, resetServiceEnrollment } from '@/lib/auth';
 import { ENROLLMENT_NOTICE, EnrollmentCancelledError, loginSessionIdOf, type EnrollmentOutcome } from '@/lib/service-enrollment';
@@ -53,6 +53,39 @@ function loginOf(session: Session) {
   return loginSessionIdOf(session.user.id, session.access_token);
 }
 
+/** Person + login of a session ('' when signed out). In memory only. */
+function ownerOf(session: Session | null) {
+  return session ? `${session.user.id}/${loginOf(session) ?? ''}` : '';
+}
+
+/**
+ * The owner the Supabase SDK announced last, recorded synchronously in its auth callback (undefined before
+ * the first announcement). Readiness is computed against it, so once another person or login (or a
+ * sign-out) is announced nothing of the previous owner can be ready -- even before the deferred handling
+ * of that event has run.
+ */
+function createAnnouncedOwner() {
+  let owner: string | undefined;
+  let listeners: (() => void)[] = [];
+  return {
+    current: () => owner,
+    subscribe: (listener: () => void) => {
+      listeners = [...listeners, listener];
+      return () => {
+        listeners = listeners.filter((other) => other !== listener);
+      };
+    },
+    /** Records the announced session's owner; true when it is another person or login, or a sign-out. */
+    announce(session: Session | null) {
+      const next = ownerOf(session);
+      if (next === owner) return false;
+      owner = next;
+      listeners.forEach((listener) => listener());
+      return true;
+    },
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,6 +101,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const noticeShownFor = useRef<string | null>(null);
   // One explicit restart at a time: a second tap before the first settles sends nothing.
   const explicitInFlight = useRef(false);
+  const [announced] = useState(createAnnouncedOwner);
+  const announcedOwner = useSyncExternalStore(announced.subscribe, announced.current);
 
   useEffect(() => {
     mounted.current = true;
@@ -144,10 +179,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
+      // The SDK's own announcements are newer than this read; it only fills the gap before the first one.
+      if (announced.current() === undefined) announced.announce(data.session);
+      if (announced.current() !== ownerOf(data.session)) return;
       acceptSession(data.session, ++generation.current);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      // Synchronously, before any pending answer can settle: another person or login, or a sign-out, fences
+      // every older request (generation) and cancels its unsent work. Nothing here calls Auth/Data APIs; a
+      // token refresh of the same login changes nothing here and keeps its pending request.
+      if (active && announced.announce(nextSession)) {
+        ++generation.current;
+        resetServiceEnrollment();
+      }
       // Supabaseの内部ロック中に別のAuth/Data APIをawaitしないよう、次のタスクで処理する。
       setTimeout(() => {
         if (!active) return;
@@ -171,7 +216,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error,
         profileError: serviceFailureOf(service),
         serviceAccess: serviceAccessOf(service),
-        serviceSession: serviceReadySession(session, session ? loginOf(session) : null, loading, service),
+        serviceSession:
+          session && announcedOwner === ownerOf(session)
+            ? serviceReadySession(session, loginOf(session), loading, service)
+            : null,
         enrollmentNotice,
         dismissEnrollmentNotice: () => setEnrollmentNotice(null),
         retry: () => {
@@ -188,11 +236,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         reenroll: () => {
           const current = session;
           const sessionId = current ? loginOf(current) : null;
-          // Only the login that was shown the restart screen may confirm it.
+          // Only the login that was shown the restart screen, while it is still the announced one, may confirm it.
           if (
             explicitInFlight.current ||
             !current ||
             sessionId === null ||
+            announced.current() !== ownerOf(current) ||
             service.phase !== 'refused' ||
             service.access.kind !== 'reenroll_required' ||
             service.userId !== current.user.id ||

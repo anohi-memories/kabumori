@@ -5,7 +5,9 @@
 //   R4: a late answer for A after sign-out / a switch to B never opens the app;
 //   S1: with the real lib/auth (and the real shared gate and transport over an intercepted fetch), a new login
 //       of the same person never adopts the old login's restart or its answer; a refreshed token of the same
-//       login keeps one logical enrollment.
+//       login keeps one logical enrollment;
+//   S1-T: the SDK's announcement of another login / person / sign-out fences the old login synchronously: a render
+//       between the auth callback and the provider's deferred task never shows the old login (or anyone) ready.
 // Run: node --test tests/node/auth-provider-enrollment.test.mjs   (needs the root node_modules for `typescript`)
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -71,7 +73,7 @@ async function realAuthModule(supabase) {
   return module.exports;
 }
 
-async function providerHarness({ initialSession, server = null }) {
+async function providerHarness({ initialSession, server = null, holdDeferred = false }) {
   const slots = [];
   let cursor = 0;
   let pending = [];
@@ -85,6 +87,8 @@ async function providerHarness({ initialSession, server = null }) {
       return [slot.value, (next) => { slot.value = typeof next === 'function' ? next(slot.value) : next; }];
     },
     useRef(initial) { const i = cursor++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; },
+    // Read at every render, as React does for an external store (the harness re-renders on every flush).
+    useSyncExternalStore(_subscribe, getSnapshot) { return getSnapshot(); },
     useEffect(effect, deps) {
       const i = cursor++;
       if (!slots[i] || !depsEqual(slots[i].deps, deps)) {
@@ -125,7 +129,11 @@ async function providerHarness({ initialSession, server = null }) {
   const source = await readFile(new URL('../../src/providers/auth-provider.tsx', import.meta.url), 'utf8');
   const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const module = { exports: {} };
-  vm.runInNewContext(js, { module, exports: module.exports, setTimeout,
+  // holdDeferred: the provider's deferred auth-event tasks wait until runDeferred(); promises, the real
+  // lib/auth, the gate and the transport keep running, so a render can land between callback and task.
+  const heldTasks = [];
+  const providerSetTimeout = holdDeferred ? (fn) => { heldTasks.push(fn); return heldTasks.length; } : setTimeout;
+  vm.runInNewContext(js, { module, exports: module.exports, setTimeout: providerSetTimeout,
     require: (name) => { assert.ok(Object.hasOwn(modules, name), `unexpected import ${name}`); return modules[name]; } });
 
   const seen = [];
@@ -156,6 +164,8 @@ async function providerHarness({ initialSession, server = null }) {
     value: () => value,
     emit: async (event, next) => { currentSession = next; subscriber?.(event, next); await settle(); },
     clearSeen: () => { seen.length = 0; },
+    deferredCount: () => heldTasks.length,
+    runDeferred: async () => { while (heldTasks.length) heldTasks.shift()(); await settle(); },
     restore: () => { realAuth?.resetServiceEnrollment(); globalThis.fetch = originalFetch; },
   };
 }
@@ -328,7 +338,7 @@ test('S1: A1\'s answer landing while A2\'s auth event is queued still never make
     await h.settle();
     assert.equal(h.value().session, A2);
     assert.equal(h.value().serviceSession, null);
-    assert.ok(h.seen.every((s) => s !== A2), 'no render exposed A2 to side effects');
+    assert.ok(h.seen.every((s) => s === null), 'no render exposed A2, nor the superseded A1, to side effects');
     assert.ok(startsOf(server).some((r) => r.token === A2.access_token), 'A2 got its own automatic start');
   } finally { h.restore(); }
 });
@@ -363,5 +373,126 @@ test('S1: a session whose login cannot be identified is never enrolled, never re
     assert.equal(server.requests.length, 0);
     assert.equal(h.value().serviceSession, null);
     assert.deepEqual(h.value().serviceAccess, { kind: 'blocked', reason: 'ACCOUNT_NOT_FOUND' });
+  } finally { h.restore(); }
+});
+
+// ---------------------------------------------------------------------------------------------
+// S1-T: between the SDK's auth callback and the provider's deferred task (only that task is held).
+const B_ENDED = { status: 'reenroll_required', service: 'kabumori', lifecycle_version: 8 };
+
+for (const [label, event, next] of [
+  ['a fresh login A2 of the same person', 'SIGNED_IN', sessionOf('A', 2)],
+  ['another person B', 'SIGNED_IN', sessionOf('B', 1)],
+  ['a sign-out', 'SIGNED_OUT', null],
+]) {
+  test(`S1-T: ${label} announced while A1's restart is pending: no render shows anyone ready before the new owner's own answer`, async () => {
+    let holdRestart = true;
+    const server = fakeServer((entry) => {
+      if (entry.fn === 'reactivate_kabumori_service') return holdRestart ? 'hold' : K_ACTIVE;
+      return entry.token === tokenOf('B') ? B_ENDED : K_ENDED;
+    });
+    const A1 = sessionOf('A', 1);
+    const h = await providerHarness({ initialSession: A1, server, holdDeferred: true });
+    try {
+      h.render();
+      await h.settle();
+      h.value().reenroll();
+      await h.settle();
+      const restart = restartsOf(server)[0];
+      assert.equal(restart.token, A1.access_token);
+      h.clearSeen();
+
+      await h.emit(event, next); // the SDK callback runs; the provider's deferred task is held
+      assert.equal(h.deferredCount(), 1, 'only the deferred handling is waiting');
+      assert.ok(restart.signal.aborted, 'A1\'s pending restart was cancelled in the callback itself');
+      server.held[0].release(K_ACTIVE); // A1's answer arrives anyway, before the deferred task
+      await h.settle();
+      assert.ok(h.seen.length > 0 && h.seen.every((s) => s === null), 'every render before the deferred task: no session');
+
+      await h.runDeferred();
+      assert.equal(h.value().session, next);
+      assert.ok(h.seen.every((s) => s === null), 'still nobody ready after the deferred task');
+      if (next) {
+        assert.equal(startsOf(server).at(-1).token, next.access_token, 'the new owner asked the server itself');
+        holdRestart = false;
+        h.value().reenroll(); // the new owner's own confirmation
+        await h.settle();
+        assert.equal(restartsOf(server).at(-1).token, next.access_token);
+        assert.equal(h.value().serviceSession, next, 'ready only on the new owner\'s own answer');
+        assert.ok(h.seen.slice(0, -1).every((s) => s === null || s === next));
+      } else {
+        assert.equal(h.value().serviceSession, null);
+      }
+      assert.equal(restartsOf(server).filter((r) => r.token === A1.access_token).length, 1, 'A1 was never sent again');
+    } finally { h.restore(); }
+  });
+}
+
+test('S1-T: an A1 that is already ready is withdrawn at the announcement of another login, before the deferred task', async () => {
+  const server = fakeServer((entry) => (entry.token === tokenOf('A', 1) ? K_ACTIVE : 'hold'));
+  const A1 = sessionOf('A', 1);
+  const h = await providerHarness({ initialSession: A1, server, holdDeferred: true });
+  try {
+    h.render();
+    await h.settle();
+    assert.equal(h.value().serviceSession, A1);
+    h.clearSeen();
+    await h.emit('SIGNED_IN', sessionOf('A', 2));
+    assert.ok(h.seen.length > 0 && h.seen.every((s) => s === null), 'A1 is no longer ready once A2 is announced');
+    await h.runDeferred();
+    assert.equal(h.value().serviceSession, null, 'A2 waits for its own answer');
+  } finally { h.restore(); }
+});
+
+test('S1-T: the restart screen of A1 cannot be confirmed after another login was announced', async () => {
+  const server = fakeServer((entry) => (entry.fn === 'reactivate_kabumori_service' ? K_ACTIVE : K_ENDED));
+  const A1 = sessionOf('A', 1);
+  const h = await providerHarness({ initialSession: A1, server, holdDeferred: true });
+  try {
+    h.render();
+    await h.settle();
+    assert.deepEqual(h.value().serviceAccess, { kind: 'reenroll_required', lifecycleVersion: 3 });
+    const click = h.value().reenroll; // A1's screen is still on display
+    await h.emit('SIGNED_IN', sessionOf('A', 2));
+    click();
+    h.value().reenroll();
+    await h.settle();
+    assert.equal(restartsOf(server).length, 0, 'no restart was sent for A1 after A2 was announced');
+  } finally { h.restore(); }
+});
+
+test('S1-T control: a refreshed token of the same login announced while its restart is pending keeps that request', async () => {
+  const server = fakeServer((entry) => (entry.fn === 'reactivate_kabumori_service' ? 'hold' : K_ENDED));
+  const A1 = sessionOf('A', 1);
+  const A1refreshed = sessionOf('A', 1, 1);
+  const h = await providerHarness({ initialSession: A1, server, holdDeferred: true });
+  try {
+    h.render();
+    await h.settle();
+    h.value().reenroll();
+    await h.settle();
+    const restart = restartsOf(server)[0];
+    await h.emit('TOKEN_REFRESHED', A1refreshed);
+    assert.equal(restart.signal.aborted, false, 'the same login is not fenced');
+    server.held[0].release(K_ACTIVE);
+    await h.settle();
+    assert.equal(h.value().serviceSession, A1, 'the clicking login is ready on its own answer');
+    await h.runDeferred();
+    assert.equal(h.value().serviceSession, A1refreshed);
+    assert.equal(server.requests.length, 2, 'one automatic start and the one restart; nothing restarted');
+  } finally { h.restore(); }
+});
+
+test('S1-T: a getSession answer older than the SDK\'s announcement is not accepted (nothing is sent for it)', async () => {
+  const server = fakeServer(() => K_ACTIVE);
+  const A1 = sessionOf('A', 1);
+  const B = sessionOf('B', 1);
+  const h = await providerHarness({ initialSession: A1, server, holdDeferred: true });
+  try {
+    h.render(); // getSession() was called for A1; the SDK announces B before it answers
+    await h.emit('SIGNED_IN', B);
+    await h.runDeferred();
+    assert.deepEqual(server.requests.map((r) => r.token), [B.access_token], 'A1 from the older read was never enrolled');
+    assert.equal(h.value().serviceSession, B);
   } finally { h.restore(); }
 });

@@ -1,7 +1,7 @@
 # Common account — Phase 2: service enrollment in both apps (source only)
 
-Status: source candidate after the H1/C1 corrective (R1–R5) and its round 2 (S1 login identity, S2 queued
-work cancelled before dispatch). Nothing is deployed and no production data was changed. Enforcement, RLS changes, producer filters, deletion routes and the deletion orchestrator are later
+Status: source candidate after the H1/C1 corrective (R1–R5), its round 2 (S1 login identity, S2 queued
+work cancelled before dispatch) and round 3 (S1-T: the SDK's announcement fences the previous login at once). Nothing is deployed and no production data was changed. Enforcement, RLS changes, producer filters, deletion routes and the deletion orchestrator are later
 phases.
 
 ## Server contract (new forward migration `20261006230000_common_account_service_start_intent.sql`)
@@ -70,6 +70,15 @@ ships — the client accepts only the new answer shapes and fails closed otherwi
 - `reenroll()` (R2, S1): sent at the click, once (a second tap while in flight sends nothing), only by the login
   that was shown the restart screen, with that session's token and the version the server reported; a newer
   request (another person, another login of the same person, sign-out) aborts it or makes its answer stale.
+- The SDK's announcement is the boundary (S1-T). The auth callback runs the session preparation in the next
+  task (no Auth/Data API inside the SDK's lock), but it records the announced owner (person + login, or
+  signed out) **synchronously**. When that owner changes, the callback itself advances the request generation
+  (no older answer can settle) and cancels the enrollment work (`resetServiceEnrollment()`; no network).
+  `serviceSession` is computed against that announced owner (`useSyncExternalStore`), so the previous owner
+  stops being ready at the announcement — before the deferred task runs — and `reenroll()` is refused for a
+  login that is no longer the announced one. A token refresh of the same login changes nothing there: its
+  pending request and answer are kept. A `getSession()` answer only fills the gap before the SDK's first
+  announcement and is ignored if it no longer matches it.
 - `src/app/_layout.tsx`: recovery link → onboarding → refusal screen → transient-failure screen →
   `SignedInNavigator` **only when `serviceSession`** → loading. Push registration and notification routing get
   `serviceSession`. PR #94's root `news-detail` registration is preserved.
@@ -108,6 +117,8 @@ ships — the client accepts only the new answer shapes and fails closed otherwi
   Should a refresh ever carry another `session_id`, the only effect is one more idempotent automatic start.
 - The login id is read from the token without verifying its signature; it is never used for authorization (the
   server decides everything from the verified token), only to keep this device's logins apart.
+- In the S1-T fence, advancing the generation is pinned by a source test only: cancelling the work already
+  rejects every answer that has not settled.
 - Defence-in-depth checks no test can reach separately (mutation-tested; they survive because another guard
   already decides): the X click-result owner re-check (any owner change re-runs the automatic start, which
   makes the click's request stale) and the X "ready needs an identified login" check (the gate never answers

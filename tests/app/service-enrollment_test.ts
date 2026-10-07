@@ -246,7 +246,7 @@ test("the X module is the same logic (only the 5-line header differs)", async ()
   assert.equal(body(x), body(kabumori));
 });
 
-test("the provider marks every accepted session pending before enrolling, and the explicit restart is one click, now", async () => {
+test("the provider marks every accepted session pending before enrolling, fences a superseded owner in the auth callback, and the explicit restart is one click, now", async () => {
   const provider = code(await source("src/providers/auth-provider.tsx"));
   const accept = provider.slice(provider.indexOf("function acceptSession"), provider.indexOf("supabase.auth.getSession()"));
   assert.ok(accept.indexOf("phase: 'pending'") > -1 && accept.indexOf("phase: 'pending'") < accept.indexOf("prepareSession(nextSession)"));
@@ -257,7 +257,13 @@ test("the provider marks every accepted session pending before enrolling, and th
   assert.match(reenroll, /service\.userId !== current\.user\.id/);
   assert.match(reenroll, /service\.sessionId !== sessionId/);
   assert.match(reenroll, /reactivateKabumori\(current, lifecycleVersion\)/);
-  assert.match(provider, /serviceSession: serviceReadySession\(session, session \? loginOf\(session\) : null, loading, service\)/);
+  assert.match(provider, /session && announcedOwner === ownerOf\(session\)\s*\?\s*serviceReadySession\(session, loginOf\(session\), loading, service\)\s*:\s*null/);
+  // S1-T: the SDK's announcement fences the previous owner in the callback itself, before the deferred task.
+  const callback = provider.slice(provider.indexOf("supabase.auth.onAuthStateChange("));
+  const fence = callback.indexOf("if (active && announced.announce(nextSession)) {");
+  assert.ok(fence > -1 && fence < callback.indexOf("setTimeout("), "the fence runs before the deferred task");
+  assert.match(callback.slice(fence, callback.indexOf("setTimeout(")), /\+\+generation\.current;\s*resetServiceEnrollment\(\);/);
+  assert.match(reenroll, /announced\.current\(\) !== ownerOf\(current\)/);
 });
 
 test("the root layout opens the app and its side effects only on serviceSession, and keeps PR #94's root news-detail", async () => {
