@@ -104,7 +104,8 @@ ships — the client accepts only the new answer shapes and fails closed otherwi
 
 ## Rollout plan (not executed)
 
-1. Apply `20261006230000` with the same single-file, read-back discipline as Phase 1 (separate approval).
+1. Apply `20261006230000` with the same single-file, read-back discipline as Phase 1 (separate approval); exact
+   procedure and read-only gate: `docs/common-account/phase2-production-apply.md`.
 2. Ship each app's next native build (EAS / TestFlight are separate, approved steps). The apps are independent.
 3. Old binaries are unaffected: Kabumori old builds call `ensure_my_profile()`, X old builds call nothing. People
    who sign up on an old build get no entitlement until a new build enrolls them; before any enforcement,
