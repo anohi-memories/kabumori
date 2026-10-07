@@ -1,3 +1,26 @@
+## K4 — POSTONA PR #106 final corrective PASS_CANDIDATE / H1 final rereview assigned — 2026-10-08
+
+- Claude's C1 corrective source head: `f5fb9306f99c27c62ae17070e2682dba42264bc8`.
+- K4 completed deferred migration reservation bookkeeping after G3 PR #109 merged:
+  - added `20261007150000: postona_social_accounts_multi_provider`;
+  - preserved `20261007173000: ai_lab_topic_evergreen_capacity`;
+  - invariant file now matches current main plus exactly the one POSTONA reservation line.
+- exact PR #106 head after K4 bookkeeping: `4b6dc57966e0d55b2e901a7707446c35b25a1f00`.
+- PR remains open/unmerged; 7 changed files.
+- G4 reports C1-R1/C1-R2 fixed:
+  - existing trigger functions pin exact owner/ACL/effective EXECUTE and normalized definition;
+  - new provider guard pins exact normalized function body/definition;
+  - 85 adverse starting states, 23 postcondition drift cases, 54/54 mutations, and existing X regressions PASS.
+- production DB/catalog access, migration apply, deploy, Auth/OAuth/Vault/provider calls = 0.
+- exact-head CI at K4: Netlify PASS; Vercel pending after the reservation-only commit.
+- K4 verdict: **PASS_CANDIDATE / merge HOLD** pending one final independent exact-head rereview.
+- H1 and H2 were both genuinely free; H1 was selected for PR #106 review continuity.
+- H1 task: `postona-pr106-function-contract-final-rereview-20261008`.
+- H1 target: `4b6dc57966e0d55b2e901a7707446c35b25a1f00`.
+- recommended H1 model: **Sol（高）**.
+- no production preflight/apply is authorized yet.
+- next action: send `H1` to Codex; finish with `C1`.
+
 ## C2 — PR #110 CHANGES REQUIRED / G2 corrective ready — 2026-10-08
 
 - H2 reviewed exact PR #110 head `6612b3f1dee5055794137da71697ebe5e07d7419`.
