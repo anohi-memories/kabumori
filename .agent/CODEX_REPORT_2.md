@@ -9,7 +9,7 @@
 - isolation: new H2-only independent checkout `/private/tmp/h2-pr101-20261007.GcKE97/review`, detached exact head and clean. Scratch probes/logs and a private PG17.11 cluster are outside that source checkout. No H1/G1–G5 checkout, server or existing local change was modified.
 - changed_files_by_H2: only this Report and `.agent/tasks/CODEX_TASK_2.md` for the shared handoff. Implementation edits = **0**.
 - implementation candidate: the single PR commit above, 10 files / +1069 -13; reviewed all changed runtime, new migration, SQL/serializer tests, presentation-test adaptation and DESIGN §15.6.
-- publication: pending; exact resulting control-file commits/read-back will be recorded in the final synchronization receipt.
+- publication: **SUCCESS** — Report commit `abbae8c2efc318bf2195398ab9c04007ee8f1545` and TASK commit `a4af0c8e783aaeb323ba3483d5da0196a3df3ba6` are included in fresh GitHub main `d569f3fc6fd0b98749ad70c2410b69e4c7af5c03`. Both complete file bodies were read back exactly; TASK is `review_required / next_owner: chatgpt`. This final receipt changes only the H2 Report. Source/prod operations remain 0; STOP for C2.
 
 ### F1 — P1: effective ACL / inherited ownership is not enforced
 
