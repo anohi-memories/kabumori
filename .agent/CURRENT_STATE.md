@@ -5802,3 +5802,29 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - production rollout remains a separate explicit approval gate with fixed order: read-only preflight -> migration `20261007173000_ai_lab_topic_evergreen_capacity` -> exact read-back -> `x-test-post` deploy -> bundle read-back -> natural scheduler observation.
 - deploy-first remains prohibited because the old DB function rejects the expanded evergreen/candidate set.
 - G3 closed/free.
+
+
+## PR #109 production rollout APPLIED_PASS — 2026-10-08 JST
+- user explicitly approved production rollout.
+- production preflight PASS on `stock-x-autopost` (`wsmznyzcvmuitkglfeuj`), ACTIVE_HEALTHY.
+- migration-first order respected.
+- capacity migration applied successfully; migration-history entry `20261007214402 / 20261007173000_ai_lab_topic_evergreen_capacity`.
+- DB read-back PASS:
+  - claim body md5 `9aefd06d1ab537fbc6bde527997dace7`;
+  - SECURITY DEFINER + empty search_path preserved;
+  - owner/service_role-only EXECUTE; anon/authenticated false;
+  - API role membership paths none;
+  - table owner/RLS/ACL unchanged;
+  - evergreen-73 + 128 candidate limit present;
+  - all four companion lifecycle body md5s unchanged.
+- then deployed only `x-test-post`.
+- x-test-post production: **v139 ACTIVE**, verify_jwt=false, EZBR `39eb22bc4584494aabc6f871e7623d74b86f57b00043a8bc219c0e4912cfb843`.
+- to avoid unintentionally rolling out the separately merged social-model policy, deploy used production v138 as baseline and changed exactly three runtime modules:
+  1. brand_profiles.ts — AI Lab Premium unlimited length;
+  2. ai_lab_dev_diary_context.ts — 74-topic/Tier2+Tier3/candidate-128 source;
+  3. brand_post_generator.ts — preserve deployed gpt-5.6-luna while adding explicit-unlimited 2000-token budget and incomplete-response fail-closed.
+- post-deploy read-back PASS: diary/profiles exact reviewed bytes; generator old production model retained; no social_ai_model_policy import; unlimited/2000/incomplete/default600 guards present.
+- manual scheduled invocation, manual X post, real test OpenAI/X call: 0.
+- 2026-10-08 AI Lab schedule has 10 pending brand_post rows; first natural slot 07:51 JST.
+- current rollout verdict: **APPLIED_PASS; natural end-to-end post observation pending**. Do not force a post for verification.
+- G3 closed/free.
