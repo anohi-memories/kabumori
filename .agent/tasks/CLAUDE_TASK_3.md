@@ -5302,3 +5302,44 @@ Unexpected residue: **none**.
 - required production order remains: read-only preflight -> migration `20261007173000_ai_lab_topic_evergreen_capacity` first -> exact function/body/owner/ACL/role-graph/map read-back -> `x-test-post` deploy second -> bundle read-back -> natural scheduled-post observation.
 - production migration/deploy require a separate explicit rollout gate.
 - task status: done; next_owner: user/chatgpt rollout approval.
+
+
+## Production rollout receipt — PR #109 — 2026-10-08 JST
+
+- user approval: explicit approval received for PR #109 production rollout.
+- source already merged: `d4f693128494d8e05b97563fb82b7db2871818c8`.
+- target Supabase project: `wsmznyzcvmuitkglfeuj` / `stock-x-autopost`, ACTIVE_HEALTHY.
+- preflight:
+  - base migration `20261004090000_ai_lab_topic_claims` present;
+  - capacity migration not yet present;
+  - old claim body md5 `a3cbe66723878b209a84bbd32b2bdc21`;
+  - companion lifecycle body md5s all canonical;
+  - table owner postgres, RLS ON, FORCE RLS OFF, no policies/triggers, owner-only table ACL;
+  - anon/authenticated/service_role outgoing membership graph from these API roles: none;
+  - anon/authenticated claim EXECUTE false; service_role true;
+  - reviewed migration source on main exactly matched reviewed PR head.
+- migration apply: **SUCCESS**.
+  - MCP history entry: version `20261007214402`, name `20261007173000_ai_lab_topic_evergreen_capacity`.
+  - post-apply claim md5 `9aefd06d1ab537fbc6bde527997dace7`;
+  - SECURITY DEFINER true; `search_path=""`;
+  - ACL remains owner + service_role EXECUTE only;
+  - anon/authenticated EXECUTE false; service_role true;
+  - role membership paths remain none;
+  - evergreen-73 and 128-candidate contract present;
+  - four companion lifecycle function md5s unchanged.
+- Security Advisor before/after: existing baseline findings remain; no new PR109-specific security finding identified.
+- Edge deploy:
+  - previous `x-test-post`: v138, verify_jwt=false.
+  - deployed `x-test-post`: **v139 ACTIVE**, verify_jwt=false, EZBR `39eb22bc4584494aabc6f871e7623d74b86f57b00043a8bc219c0e4912cfb843`.
+  - deploy used current production v138 bundle as baseline to avoid bundling separately merged/unapproved social-model changes.
+  - changed runtime files were exactly:
+    1. `functions/_shared/brand/brand_profiles.ts`
+    2. `functions/_shared/brand/ai_lab_dev_diary_context.ts`
+    3. `functions/_shared/brand/brand_post_generator.ts`
+  - diary and profiles read back byte-equal to reviewed PR #109 head.
+  - generator intentionally preserves production `gpt-5.6-luna` model configuration while adding only PR109 Premium-length runtime behavior: unlimited output budget 2000 and incomplete-response fail-closed; no `social_ai_model_policy` import deployed.
+  - read-back confirms 74-topic/candidate source, reserve split, unlimited policy, 2000 budget, incomplete guard, default 600 budget for non-unlimited profiles.
+- manual scheduler invoke / manual X post / real test OpenAI call: **0**.
+- 2026-10-08 AI Lab schedule: 10 brand_post rows present and pending. First natural slot is 2026-10-08 07:51 JST.
+- rollout status: **APPLIED_PASS / natural scheduled-post observation pending**.
+- do not force a post merely for verification. Confirm the first natural slot later from scheduled_posts / execution logs.
