@@ -1,5 +1,61 @@
 # Codex Task — CURRENT TASK
 
+- task_id: common-account-v1-phase2-q1-final-rereview-20261007
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: critical
+- recommended_model: Sol（高）
+- target_pr: 95
+- target_head: ba35b642d30ce423a8683feffcd26aec325b45ee
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Final focused rereview of PR #95 after G5 round 4. The only intended blocker is Q1: an obsolete Kabumori deferred auth-preparation task must not dispatch automatic service enrollment after a newer auth owner is announced.
+
+## Required checks
+
+- Fresh-fetch main and require exact PR #95 head `ba35b642d30ce423a8683feffcd26aec325b45ee`.
+- Use an isolated H1 worktree from `/Users/yuya/Developer/kabumori-fresh`.
+- Re-check fresh-main overlap. Allocation-time main has unrelated important-news-monitor changes plus .agent changes; overlap with PR #95's 17 files is zero.
+- Verify deferred preparation compares its captured user+login owner (or equivalent ticket) with the synchronously announced current owner **before** generation/loading mutation, acceptSession/prepareSession, or enrollment transport dispatch.
+- Reproduce:
+  1. SIGNED_IN(A2) then SIGNED_OUT before A2 deferred work -> zero A2 automatic enrollment requests.
+  2. SIGNED_IN(A2) then newer user B before A2 deferred work -> zero A2 requests; only B may prepare.
+  3. Same-user fresh A3 supersedes A2 before deferred work -> zero A2 requests; only A3 may prepare.
+  4. Normal current A2 -> exactly one preparation.
+  5. Same-session TOKEN_REFRESHED -> retain safe single-flight/no duplicate.
+- Re-run prior unchanged H1 probes for S1-T, S1/S2 and refresh control.
+- Verify the synchronous auth-owner/readiness fence remains intact and no old login becomes ready.
+- Verify R1-R5, PR94 root news-detail and X OAuth separation remain unchanged.
+- No production access/write, migration apply, deploy, EAS, Phase3, Auth/Storage/OAuth/Vault/Cron/X/provider mutation.
+
+## Evidence
+
+G5 reports: Kabumori 390/390; AuthProvider 23/23; X 221/221; X tsc/lint PASS; both web exports PASS; start-intent DB runner 10 PASS markers; Phase1 20/20; migration invariants 11/11; unchanged H1 probes 10/10 PASS; mutation checks 11/11 detected.
+
+Do not trust counts alone. Inspect the actual source and rerun the Q1 timing boundary.
+
+## Verdict / completion
+
+Return PASS, PASS-WITH-NONBLOCKING-NOTES, CHANGES REQUIRED, or BLOCKED.
+
+PASS authorizes only C1 source merge/readiness judgment. Production migration apply and native release remain separate gates.
+
+Write the result to `.agent/CODEX_REPORT.md`, set status `review_required`, next_owner `chatgpt`, and STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Previous H1 task history — preserved
+
+# Codex Task — CURRENT TASK
+
 - task_id: common-account-v1-phase2-s1t-final-rereview-20261007
 - owner: codex
 - slot: codex-1
