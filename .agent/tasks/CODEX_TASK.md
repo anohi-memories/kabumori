@@ -1,5 +1,146 @@
 # Codex Task H1 — CURRENT TASK
 
+- task_id: ai-lab-topic-continuity-pr109-focused-review-20261007
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: urgent
+- recommended_model: Sol（高）
+- target_pr: 109
+- target_head: f83247ae1024d4220dfbfa5484c725381d63815d
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Perform one focused independent exact-head review of PR #109, the AI Lab topic-pool continuity fix.
+
+Do not reopen unrelated X/social work. The target is narrow:
+- expand company AI Lab evergreen topics from 7 to 74;
+- preserve recent-diary priority;
+- add Tier 3 continuity reserve;
+- increase claim candidate limit 64 -> 128;
+- update the canonical evergreen mapping inside SECURITY DEFINER `claim_ai_lab_topic`;
+- prove 10 posts/day can run without topic exhaustion while existing dedupe/cooldown/provider safety remains intact.
+
+## Freshness / isolation
+
+1. Read ORCHESTRATION, ACTIVE_TASK, CURRENT_STATE, G3 TASK/Report, this TASK and PR #109.
+2. Use a fresh independent H1 worktree/checkout from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #109.
+4. Require exact head `f83247ae1024d4220dfbfa5484c725381d63815d`. If moved, STOP.
+5. Re-check changed-file overlap with G2/G4/G5 and current main.
+6. No production access/write, migration apply, deploy, scheduler invoke, OpenAI/X call, Vault/Auth/OAuth/provider mutation.
+
+## Review questions
+
+### 1. SECURITY DEFINER / ACL / ownership — blocking if wrong
+Independently verify migration `20261007173000_ai_lab_topic_evergreen_capacity.sql`:
+- replaces only the intended `claim_ai_lab_topic(uuid,jsonb,integer)`;
+- preserves SECURITY DEFINER and exact safe search_path behavior;
+- does not create a weaker overload;
+- preserves owner assumptions and rejects unsafe owner/API-role membership drift;
+- preserves effective EXECUTE scope: service_role only, no PUBLIC/anon/authenticated leakage including inherited/SET ROLE paths;
+- does not grant table/column privileges;
+- preflight/postcondition fail closed on unexpected schema/function/ACL drift;
+- reapply is safe/idempotent;
+- base migration prerequisite is correctly enforced.
+
+Run the disposable PostgreSQL proof and add adversarial fixtures only if needed.
+
+### 2. Canonical map / validation
+Verify:
+- TS seeds/tags and SQL `c_evergreen_tags` are exactly aligned for all 74 entries;
+- evergreen-0..6 retain prior identities/tags;
+- unknown evergreen ids are rejected;
+- 129+ candidates remain rejected;
+- candidate validation is still all-or-nothing before mutation;
+- increasing 64 -> 128 cannot bypass canonical theme tags or event/unit-key validation.
+
+### 3. Capacity semantics
+Independently reproduce:
+- current 7-seed baseline exhausts;
+- diary=0, 10 posts/day, >=14 days -> no exhaustion;
+- per-seed published cooldown >=72h;
+- tagged shared-theme cooldown >=48h;
+- unresolved claimed/provider_started/ambiguous seeds remain blocked;
+- rotation fixed/skewed cannot cause unexpected exhaustion;
+- continuity reserve is actually last priority after diary and Tier 2.
+
+Check whether 74 seeds is mathematically sufficient under the shipped claim semantics, not only the in-memory model.
+
+### 4. Product/content safety
+Verify new topics:
+- are materially varied enough for the intended account;
+- do not contain fabricated specific recent AI/news claims;
+- require no Web Search to remain truthful;
+- Tier 3 is generic and safe rather than fake "today" events;
+- existing content diversity/fingerprint/X outcome protections are unchanged.
+
+Do not turn this into editorial rewriting unless a concrete safety/duplication defect exists.
+
+### 5. Rollout order
+Confirm G3 Report's production order:
+1. read-only preflight;
+2. apply migration first;
+3. read-back ACL/function/map;
+4. deploy x-test-post second;
+5. read-back deployed bundle.
+
+Verify that deploy-first against the old DB function would indeed fail closed and therefore must remain forbidden.
+
+## Regression boundary
+
+Do not change or reopen:
+- G2 market-report GPT-6.1 rollout;
+- G4 social_accounts/Threads schema;
+- G5 common-account client;
+- POSTONA Auth/OAuth/Vault;
+- X token refresh/publish authority;
+- scheduler frequencies/posting windows;
+- unrelated AI model policy;
+- important-news/MIC/Kabumori app.
+
+## Expected evidence
+
+At minimum:
+- inspect exact 5-file PR diff;
+- run relevant Deno AI Lab suites;
+- run `supabase/tests/ai_lab_topic_capacity_run.sh` in disposable local PostgreSQL;
+- run existing claim SQL proof if practical;
+- run migration source invariant tests;
+- `git diff --check`;
+- secret/scope scan;
+- exact-head/fresh-main read-back.
+
+## Verdict
+
+Return exactly one:
+- PASS
+- CHANGES REQUIRED
+
+If PASS, explicitly state whether PR #109 may merge at the exact reviewed head but **production migration/deploy remain separately gated**.
+
+If CHANGES REQUIRED, list only concrete blocking findings with reproduction/evidence.
+
+## Completion
+
+Write H1 Report to `.agent/CODEX_REPORT.md`.
+Then set:
+- status: review_required
+- next_owner: chatgpt
+
+STOP for `C1`.
+
+
+---
+
+# Previous H1 task — preserved history
+
+# Codex Task H1 — CURRENT TASK
+
 - task_id: common-account-v1-phase2-q1-final-rereview-20261007
 - owner: codex
 - slot: codex-1
