@@ -1,3 +1,98 @@
+# G5 — Phase 2 production migration read-only preflight
+
+- task_id: `common-account-v1-phase2-production-migration-preflight-20261007`
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- recommended_model: **Opus5.5（高）**
+- merged_source: `d5bea735937b53095b110b4bed1f20442e56b089`
+- target migration: `supabase/migrations/20261006230000_common_account_service_start_intent.sql`
+- production_write_allowed: **false**
+- migration_apply_allowed: **false**
+- deploy_allowed: **false**
+- EAS_allowed: **false**
+
+## Purpose
+
+Prepare the production migration gate after PR #95 source acceptance. This task is **read-only production preflight only**. Do not apply any migration or mutate production.
+
+## Required startup
+
+1. Read ORCHESTRATION, CURRENT_STATE, ACTIVE_TASK and this TASK.
+2. Use an independent G5 worktree/check-out based on fresh `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch `origin/main` and confirm source merge `d5bea735937b53095b110b4bed1f20442e56b089` is an ancestor of current main.
+4. Confirm no other slot currently owns the same production DB/Auth/RPC mutation boundary.
+5. If mutation ownership is ambiguous, stop; do not touch production.
+
+## Read-only production checks
+
+Inspect production without writes and report exact observed state:
+
+- migration history:
+  - Phase 1 common-account foundation is present at the expected applied version;
+  - `20261006230000_common_account_service_start_intent.sql` is not already applied;
+  - identify whether PR #41/Stage3B migrations are applied or still source-only and determine required ordering.
+- current RPC/function state relevant to:
+  - `start_kabumori_service()`
+  - `start_x_autopost_service()`
+  - any Phase 1 lifecycle helpers this migration depends on.
+- current ownership, SECURITY DEFINER/search_path, EXECUTE grants/effective privileges and expected authenticated/service_role access for the functions the migration will replace/add.
+- current `common_accounts`, `service_entitlements`, lifecycle operation state needed to ensure additive migration safety.
+- confirm there is no in-progress lifecycle/deletion operation that would make an apply window unsafe.
+- old-client compatibility:
+  - current production binaries/clients that may still call existing service bootstrap;
+  - confirm migration does not break old clients before app rollout;
+  - identify any required rollout order.
+- migration ordering and interaction with already-merged PR #41 source candidates.
+- exact production apply command/procedure to use later, with expected migration version/read-back checks.
+- exact post-apply read-back:
+  - migration history row;
+  - function signatures/definitions/owner/search_path/ACL;
+  - no unexpected overloads;
+  - smoke/read-only behavior checks that do not create service state.
+- rollback/abort plan:
+  - define when to abort before COMMIT;
+  - do not promise rollback of already-committed production state unless the repository provides a reviewed forward rollback.
+
+## Safety constraints
+
+- **No production writes.**
+- **Do not apply the migration.**
+- No INSERT/UPDATE/DELETE/DDL, no RPC that mutates service state, no Auth Admin mutation.
+- No deploy, EAS, Edge deploy, X/OpenAI/provider call, OAuth/Vault/Cron change.
+- Do not manually create/delete users, entitlements, lifecycle operations or profiles.
+- Do not infer success from source alone; report only read-back facts.
+- Preserve all accepted PR #95 source/security boundaries.
+- Do not mix Phase 3 entitlement enforcement/deletion work into this task.
+
+## Completion / K5
+
+Report:
+- exact fresh main SHA;
+- production migration history state;
+- current RPC/ACL/owner state;
+- PR41/Stage3B ordering state;
+- old-client compatibility assessment;
+- any live lifecycle-operation blockers;
+- exact proposed apply sequence;
+- exact proposed read-back sequence;
+- abort/rollback constraints;
+- production mutation = **0**;
+- remaining issues;
+- explicit recommendation: READY_FOR_APPROVAL or BLOCKED.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K5.
+
+If READY_FOR_APPROVAL, do **not** apply. ChatGPT must obtain explicit user approval for the production migration write in a later turn.
+
+Recommended model: **Opus5.5（高）**.
+
+---
+
 # Final K5 — round 4 Q1 PASS_CANDIDATE / mandatory H1 rereview assigned
 
 - verdict: **PASS_CANDIDATE**, not final merge approval.
