@@ -3,8 +3,8 @@
 - task_id: postona-multisocial-phase2a2-account-schema-candidate-20261007
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: source-only DB migration candidate / disposable PostgreSQL proof / Threads preparation
@@ -201,6 +201,189 @@ Then:
 Because this task changes a DB migration/credential-shape boundary, K4 should normally request **one focused Codex review** before merge, preferably **Sol（高）** if the migration candidate is complete.
 
 推薦モデル：**Opus5.5（高）**
+
+## Report — postona-multisocial-phase2a2-account-schema-candidate-20261007 (2026-10-07)
+
+- task_id: postona-multisocial-phase2a2-account-schema-candidate-20261007
+- result: **PASS（source のみ・本番適用なし）**。
+  - PR [#106](https://github.com/anohi-memories/kabumori/pull/106) を作成した。head は `dac01220`、未 merge（merge_allowed=false）。
+- model_used: Opus 5.5（TASK の推奨どおり）
+- fresh main:
+  - 作業は `508e1b9e` から始めた。
+  - push の前に、最新の main `e0e49162` に fast-forward した。この間に main に入った変更（G5 Phase 2 の本番適用の記録、G3 のモデル方針、G1/G2 の .agent）は、このタスクのファイルや、テストで使う migration の連鎖と重ならないことを確認済み。
+- workspace: `kabumori-fresh` から作った G4 専用 worktree `/Users/yuya/Developer/kabumori-g4-phase2a2`（branch `claude/g4-postona-phase2a2-account-schema-20261007`）
+- changed_files（すべて新規、6ファイル。既存ファイルの変更は 0）:
+  - `supabase/migrations/20261007150000_postona_social_accounts_multi_provider.sql`（候補・未適用。SHA-256 `2e3bdf93…71edf4`）
+  - `supabase/tests/postona_social_accounts_multi_provider_run.sh`
+  - `supabase/tests/postona_social_accounts_multi_provider_fixture.sql`
+  - `supabase/tests/postona_social_accounts_multi_provider_behavior.sql`
+  - `supabase/tests/postona_social_accounts_multi_provider_mutations.sh`
+  - `docs/postona/threads-connection-phase2b.md`
+
+### Phase A — 現在の `social_accounts` の形（repo から組み立てたもの）
+- `social_accounts` の CREATE TABLE は repo にない。形の根拠は次の3つ:
+  - 2026-09-28 の本番の読み取り専用調査を写した fixture（`social_mobile_publish_permission_fixture.sql`、`social_mobile_account_deletion_fixture.sql`、`x_account_refresh_core_fixture.sql`）
+  - migration の参照
+  - 2026-10-06 の S0 の結果
+- 列:
+  - `id text`（CHECK `^[a-z][a-z0-9_]{1,80}$`）
+  - `brand_id text NOT NULL`（FK）
+  - `platform text NOT NULL`（CHECK `platform = 'x'`）
+  - `handle`、`platform_user_id`
+  - `publish_enabled boolean NOT NULL`
+  - `oauth_client_ref`、`created_at`、`updated_at`
+  - `vault_access_token_secret_id uuid`、`vault_refresh_token_secret_id uuid`
+  - `connection_status`（CHECK 5値）、`verified_at`、`last_connection_error_code`
+- 一意性:
+  - `UNIQUE (brand_id, platform)`
+  - `(platform, platform_user_id)` の一意インデックス（`20260919120000`）
+- RLS と権限:
+  - member の SELECT ポリシー（`20260918120000`）
+  - anon からの SELECT の revoke
+  - S0 で確認済み: authenticated に INSERT / UPDATE / DELETE はない
+- トリガー:
+  - `social_accounts_x_refresh_reset_on_reconnect`
+  - `social_mobile_deletion_guard`
+- 2つの参照を書くのは、X OAuth の complete RPC だけ（2つを同時に書く）。
+- X の不変条件（2つの参照が両方あり、別物で、共有されていない）は、次の関数が守っている。テーブルの CHECK ではない:
+  - `x_legacy_post_account`
+  - 投稿許可のスイッチと送信前の確認（`20261003090000`）
+  - refresh の core と rollout
+  - 退会
+  - どれも `platform = 'x'` で選ぶか、X 以外を拒否する。
+- 稼働中のコードで `social_accounts` を読む箇所は、すべて `platform=eq.x` で絞り込んでいる:
+  - Edge: `brand_context`、`ai_lab_vault_token_source`、dry-run、history
+  - アプリ: onboarding
+  - 例外はアプリの `supabase-repository.ts` だけで、これはすでに `threads` / `instagram` を表示用に受け付ける。
+- 退会: Threads の行（access だけ、接続済み）があると、`CREDENTIAL_MATERIAL_MISSING` で `operator_required` になる。Threads のトークンが X の revoke に渡ることはない。
+
+### migration の中身（CHECK を3つ入れ替えるだけ）
+- `social_accounts_platform_supported`: `platform in ('x','threads','instagram')`。X だけの CHECK と置き換える。
+  - 既存の CHECK は**名前ではなく定義で**見つける（`CHECK ((platform = 'x'::text))` と完全一致し、`NOT VALID` が付いていないもの）。
+- `social_accounts_provider_credential_profile`: `platform = 'x' or vault_refresh_token_secret_id is null`。
+  - Threads / IG は長期 access 1つの型で、refresh 参照を持てない。
+  - X には制約を足さない（X の行は今まで通り）。
+- `social_accounts_meta_publish_disabled`: `platform = 'x' or publish_enabled is false`。
+  - Threads / IG は ON にできない。列の既定値に関係なく効く（既定値に頼った行も拒否される）。
+- 変えないもの:
+  - 列、既定値、一意性、RLS、ポリシー、権限、トリガー、インデックス、他の制約、全行
+  - 平文のトークンを入れる列は作らない。
+- トランザクション:
+  - 1つの明示的なトランザクション。`lock_timeout` は 5 秒。
+  - 事前チェックの時点で ACCESS EXCLUSIVE を取る（途中でロックを強めない）。
+  - 事前チェックで取ったスナップショットと COMMIT 前の状態の一致を、postcondition で確かめる。
+  - 再適用は `ALREADY_APPLIED` で拒否する。
+- 戻し方（必要になった場合）: 3つの制約を drop し、`CHECK (platform = 'x')` を付け直す。X 以外の行がない場合に限る。
+
+### ACL・RLS がずれていた場合（固定コードで止まり、何も変えない）
+| 状態 | コード |
+| --- | --- |
+| テーブルがない | `POSTONA_ACCOUNTS_PRECONDITION_MISSING` |
+| 適用済み | `POSTONA_ACCOUNTS_PRECONDITION_ALREADY_APPLIED` |
+| app ロールがない | `POSTONA_ACCOUNTS_PRECONDITION_ROLES` |
+| 所有者でない、または superuser | `POSTONA_ACCOUNTS_PRECONDITION_OWNER` |
+| anon / authenticated が所有者か service_role を継承している | `POSTONA_ACCOUNTS_PRECONDITION_ROLE_GRAPH` |
+| 列の型や NOT NULL が違う、継承やパーティションがある | `POSTONA_ACCOUNTS_PRECONDITION_SHAPE` |
+| platform の CHECK が無い、広い、重複している、2列にまたがる、NOT VALID | `POSTONA_ACCOUNTS_PRECONDITION_PLATFORM_CHECK` |
+| `UNIQUE (brand_id, platform)` が無い、部分、広い | `POSTONA_ACCOUNTS_PRECONDITION_UNIQUE` |
+| RLS がオフ・FORCE。anon / authenticated に書き込み権限がある（INSERT / UPDATE は列単位も含む。DELETE / TRUNCATE。PUBLIC と継承を含む） | `POSTONA_ACCOUNTS_PRECONDITION_ACL` |
+| 適用後に権限・行・既定値・ポリシー・トリガー・インデックス・列・制約が変わった | `POSTONA_ACCOUNTS_POSTCONDITION_UNCHANGED` / `_CONSTRAINTS` |
+
+- 知らない状態は正規化しない（grant や revoke で直さない）。必ず止める。
+
+### 使い捨て PostgreSQL での確認（Homebrew PG 17.11、ローカルソケットのみ）
+- `postona_social_accounts_multi_provider_run.sh`: **ALL PASS**（最終版の候補で2つのクラスタで実行。DB とロールは後片付けで 0 になることを確認）
+  1. **適用と挙動**（seed した X の行の上に適用）:
+     - 既存の X の行は、`publish_enabled` を含めて全列が変わらない（ON の X の行も ON のまま）。列・権限・RLS・ポリシー・トリガー・インデックス・他の制約も変わらない。
+     - Threads と IG の行は、access だけで作れる。既定では OFF。未接続の行も作れる。
+     - Meta の行は、refresh 参照あり・refresh だけ・後から refresh を追加・ON で作成・後から ON、のいずれも拒否される。
+     - 接続済みの X の行を Threads に付け替えることはできない。
+     - 未知のプロバイダと表記揺れ（14通り）は拒否、NULL も拒否。
+     - 同じワークスペースに同じプロバイダの2行目は作れない（3プロバイダとも）。同じ Threads アカウントを2つのワークスペースに接続できない。id の文字列が同じでも、プロバイダが違えば作れる。
+     - X の関数は従来どおり動く:
+       - refresh のない X は、送信前の確認で `X_CREDENTIAL_NOT_CONFIGURED`、refresh の権限で `X_REFRESH_CREDENTIAL_NOT_CONFIGURED`、スイッチで `CREDENTIALS_MISSING`
+       - Threads / IG は、スイッチで `PLATFORM_NOT_SUPPORTED`、送信前の確認で `X_CLAIM_ACCOUNT_MISMATCH`、refresh で `X_ACCOUNT_NOT_X`
+       - 同じワークスペースの X は、ON にでき、送信も許可される
+       - Meta の行が X の secret を共有すると、X の送信は `X_REFRESH_SECRET_REF_SHARED` で止まる
+       - Threads だけのワークスペースは `X_ACCOUNT_NOT_UNIQUE_FOR_BRAND`
+     - 退会: X と Threads を持つワークスペースは `operator_required` / `CREDENTIAL_MATERIAL_MISSING` になり、トークンを渡さない。
+     - 3つの CHECK の定義が、文字列として完全に一致する。
+  2. **既存の X のテストを、候補の適用後に再実行**して PASS:
+     - `social_mobile_publish_permission_behavior.sql`
+     - `social_mobile_account_deletion_behavior.sql`（この fixture は `publish_enabled` の既定値が true。既定値に頼った Threads の行が拒否されることも確認）
+     - Stage 3B の `x_account_refresh_pilot_behavior` / `x_account_publish_authority_behavior` / `social_mobile_publish_settings_reader_behavior`（PR #41 の連鎖）
+  3. **異常な出発状態: 28 通り**（固定コードでの拒否が 27、ロック待ちのタイムアウトが 1）。どれも、テーブルの全情報（列、権限、RLS、ポリシー、トリガー、インデックス、制約、全行）が変わらないことを確認した:
+     - 別のセッションがロックを持っているときは、5 秒の `lock_timeout` で止まる
+     - これとは別に、次の2つも確認した:
+       - 名前が違っても、定義が完全に一致する X だけの CHECK なら適用される
+       - 適用中の書き込みは、事前チェックの時点から待たされる
+  4. **原子性と postcondition**:
+     - DROP と ADD の間、COMMIT の直前で失敗させても、何も残らない（X だけの CHECK が残る）
+     - postcondition の直前に12種類のずれを入れると、すべて拒否される（anon への SELECT、authenticated の SELECT の剥奪、行、既定値、ポリシー、FORCE RLS、トリガーの無効化、インデックス、列 `access_token text` の追加、一意制約の削除、platform の CHECK の追加、新しい CHECK の削除）
+- `postona_social_accounts_multi_provider_mutations.sh`: **26/26 を検出**（変更していないコピーの対照実行は PASS）
+  - 候補をわざと壊したコピーで、どの変異も、それを守るはずのチェックで失敗することを確認した。
+  - 途中で「検出されない」と出たものは2件あり、どちらも直した:
+    - `convalidated` の条件は二重の防御で冗長だった（`NOT VALID` が定義文字列に付くので、完全一致の比較だけで拒否される）→ 条件を削除し、比較を緩める変異に差し替えた
+    - ロックのテストの一時停止位置が DROP の後だったため、ロック取得の有無を区別できていなかった → 事前チェックの途中に移した
+  - 確かめようのない冗長な条件（検証済みの CHECK の下での行の確認、`conkey` の一致）は、変異テストの前に削った。
+- `migration_source_invariants_test.ts` は、新しいファイルを含めて 11件 PASS（このファイルは編集していない）。
+- `git diff --check` 問題なし。秘密情報パターン 0。依存関係・lockfile の変更 0。TS / ランタイムのファイル変更 0（Threads への import・接続も 0）。
+
+### migration のバージョン衝突の確認
+- 候補は `20261007150000`。
+- main:
+  - PR 作成の時点で、最新は `20261006230000`（G5、本番適用済み）。
+  - Report を書いている間に main が `23bf5a64` まで進み、PR #101（G2）の `20261007120000_market_report_generation_traces` と PR #100（G1、migration なし）が merge された。
+  - `20261007120000` は `social_accounts` に触れない（grep で 0）。並び順は `20261007120000` < `20261007150000`。
+- 作業中の PR の migration:
+  - #3: `20260921115317`（main 上にもある）
+  - #33 / #10 / #11 には migration がない。
+- 衝突 0。`RESERVED` の一覧にも当たらない。
+- 予約の一覧（`migration_source_invariants_test.ts`）は共有ファイルなので、編集していない。K4 が空いた時点で、`"20261007150000": "postona_social_accounts_multi_provider"` を追加してほしい。
+
+### 他スロットとの重なり
+- 確認した時点で作業中だった全 PR（#101 G2、#100 G1、#33、#10、#11、#3）の変更ファイルと比べて、重なり 0。#101 / #100 はその後 merge されたが、PR #106 の 6 ファイルとは重ならない。
+- G5（共通アカウント・利用権）のファイルには触れていない。G5 の本番ゲート（`20261006230000`）は APPLIED_PASS で、ウィンドウは CLOSED（main の G5 TASK で確認）。
+- G3 の x-test-post や PR41 / PR81 のファイルにも触れていない。
+
+### CI
+- PR 作成の直後、Vercel と Netlify のプレビューが処理中（このタスクに Web の変更はない）。前回の Vercel の失敗はデプロイ回数の制限で、コードの失敗ではなかった。結果は K4 で確認してほしい（ポーリングはしていない）。
+
+### 本番・deploy・プロバイダの変更: 0
+- 本番の読み書き、migration の適用、Edge の deploy はしていない。
+- Auth / OAuth / Vault / secrets / Meta アプリの作成・変更もしていない。
+- X / Threads / Instagram の API は呼んでいない。
+- 使ったのは、使い捨てのローカル PG クラスタ2つ（scratchpad、ソケットは `/private/tmp`）だけ。
+
+### 本番で未確認の事実（適用前に、同日の読み取り専用 preflight で確認が必要）
+1. platform の CHECK が、定義 `CHECK ((platform = 'x'::text))` でちょうど1つあり、検証済みで、platform に触れる CHECK が他にないこと。名前は問わない。
+2. 有効で部分でない `UNIQUE (brand_id, platform)` があること。
+3. `platform` / `brand_id`（text、NOT NULL）、`publish_enabled`（boolean、NOT NULL）、2つの参照（uuid）の型。継承とパーティションがないこと。
+4. RLS が有効で、FORCE されていないこと。
+5. 所有者（おそらく `postgres`）が superuser でなく、適用するロールと同じであること。
+6. anon の INSERT / UPDATE / DELETE / TRUNCATE と、authenticated の TRUNCATE がないこと（列単位の権限・PUBLIC・継承を含む）。S0 で確認できたのは「authenticated に INSERT / UPDATE / DELETE がない」ことだけ。
+7. anon / authenticated が所有者か service_role を継承していないこと。
+8. （参考）`publish_enabled` の既定値。2つの fixture が同じ 9/28 の調査を根拠にしながら、true と false で食い違っている。migration はどちらでも安全で、既定値には依存しない。
+9. 適用の順序: 本番では PR41 の `20261006160000`〜`160200` と PR81 の `20261003120000` がまだ適用されていない（G5 TASK の記録による）。この候補はそれらと独立しているが、履歴の順序を保つなら、それらの後に適用するのがよい（K4 の判断）。
+
+### Threads を実際に接続するための次の推奨
+- `docs/postona/threads-connection-phase2b.md` に設計をまとめた。要点:
+  - 認可コードの流れ
+  - `user_id` と `/me` の照合
+  - 短期トークンは保存せず、長期トークンだけを Vault に入れる
+  - `publish_enabled=false` で開始
+  - state の行がプロバイダと一致するかの確認
+  - G5 と分けておく6か所
+  - 要検証・要決定の10項目
+- 順序の提案:
+  1. **K4 / Codex（Sol 高）**: この候補の focused review。
+  2. **ユーザー（2-0）**: Meta アプリ（Threads ユースケース）を登録する。リダイレクト URI でカスタムスキームが通るかを確認する（T1）。
+  3. **同日の読み取り専用 preflight → 承認 → 本番適用**（上の1〜7の確認と、適用順序の判断）。
+  4. **G4 Phase 2b**: Threads の begin / consume / complete の RPC と Edge を実装する。テストは使い捨て DB と偽プロバイダの E2E。
+     - 前提 1: T2（A のユニバーサルリンクか、B の Edge のコールバックか）を決めておくこと。
+     - 前提 2: T9 / T10（ワークスペースを誰が作るか、退会をプロバイダ別にすること）について G5 と合意していること。
+  5. 2c: 長期トークンの延長と有効期限の保存、Threads の送信アダプタを入れて、ON を解禁する。
+- status: review_required / next_owner: chatgpt。STOP for K4。
 
 ---
 
