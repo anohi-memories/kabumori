@@ -196,3 +196,37 @@ test("a short packet is posted with its quality warnings recorded; only broken o
   await assert.rejects(() => publishSharedMarketReport("close", broken, second.deps), /SHARED_MARKET_REPORT_FORMAT_INVALID/);
   assert.ok(!second.log.some((entry) => entry.op === "postToX"));
 });
+
+// --- the run records the packet's actual Fact state (2026-10-08 H2 B4) ------------------------------------------
+
+test("the run's Fact columns follow the packet: passed / advisory / not_run, and the post goes out in each case", async () => {
+  const expected: Array<["passed" | "advisory" | "not_run", "passed" | "failed" | null]> = [["passed", "passed"], ["advisory", "failed"], ["not_run", null]];
+  for (const [state, column] of expected) {
+    const shared = v2Completed();
+    shared.report = {
+      ...shared.report,
+      fact: { ...shared.report.fact, ai_status: state, removed_units: ["UNIT_REMOVED:WRONG_DATE@app_story.japan_ja#0"], quality_warnings: state === "advisory" ? ["FACT_ADVISORY:2"] : [] },
+    };
+    const { log, deps } = recordingDeps();
+    await publishSharedMarketReport("close", shared, deps);
+    assert.deepEqual(log.map((entry) => entry.op), ["createRun", "updateRun", "postToX", "completePost"], `${state}: delivered`);
+    const values = log[1].args[1] as { fact_check_status: unknown; fact_check_notes: string[]; market_data: { fact_status: string; removed_units: string[] } };
+    assert.equal(values.fact_check_status, column, state);
+    assert.ok(values.fact_check_notes.includes(`fact_status:${state}`));
+    assert.ok(values.fact_check_notes.includes("UNIT_REMOVED:WRONG_DATE@app_story.japan_ja#0"));
+    if (state === "advisory") assert.ok(values.fact_check_notes.includes("FACT_ADVISORY:2"));
+    assert.deepEqual([values.market_data.fact_status, values.market_data.removed_units], [state, ["UNIT_REMOVED:WRONG_DATE@app_story.japan_ja#0"]]);
+  }
+});
+
+test("an invalid-format packet never records a Fact pass it did not have", async () => {
+  for (const [state, column] of [["advisory", "failed"], ["not_run", null], ["passed", "passed"]] as const) {
+    const broken = v2Completed();
+    broken.report = { ...broken.report, x_post: { ...broken.report.x_post, lead_ja: "" }, fact: { ...broken.report.fact, ai_status: state } };
+    const { log, deps } = recordingDeps();
+    await assert.rejects(() => publishSharedMarketReport("close", broken, deps), /SHARED_MARKET_REPORT_FORMAT_INVALID/);
+    const values = log[1].args[1] as { fact_check_status: unknown; fact_check_notes: string[] };
+    assert.equal(values.fact_check_status, column, state);
+    assert.ok(values.fact_check_notes.includes("X_POST_SECTION_EMPTY") && values.fact_check_notes.includes(`fact_status:${state}`));
+  }
+});

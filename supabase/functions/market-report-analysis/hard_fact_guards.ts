@@ -225,12 +225,22 @@ function quote(sentence: string): string {
 }
 
 /**
- * Sentences: split at 。!? and line breaks, and at a pictograph that ends a sentence (followed by a space or the end).
+ * A pictograph that ends a sentence: followed by a space and a new sentence, or by the end of the text.
  * 2026-10-07 close: 「10月7日の日経平均は70,035.71（前日比−0.92%）でした📉 10月6日の米国市場では…」 was read as one
  * sentence, so the second sentence's date (10月6日) was taken as the Nikkei's date and a correct report was rejected.
+ * A decorative pictograph inside a clause is no boundary: after a particle (「日経平均は📉 70,035.71」) or before what
+ * continues the clause (a value, sign, percentage, bracket, particle) the date, subject and value stay one sentence
+ * (2026-10-08 H2: 「10月6日の日経平均は📉 70,035.71」 escaped the date check). A next sentence may start with a date.
  */
+export const EMOJI_SENTENCE_END = new RegExp(
+  "(?<![はがもをのにでとへや、,(（])\\p{Extended_Pictographic}\\uFE0F?" +
+    "(?=\\s*$|\\s+(?:[0-9０-９]{1,2}月[0-9０-９]{1,2}日|[^\\s0-9０-９+\\-−＋±%％(（、。,.・はがもをのにでとへや円]))",
+  "u",
+);
+
+/** Sentences: split at 。!? and line breaks, and at a pictograph that ends a sentence (EMOJI_SENTENCE_END). */
 function sentences(text: string): string[] {
-  return normalize(text).split(/[。!?\n]|\p{Extended_Pictographic}\uFE0F?(?=\s|$)/u).map((part) => part.trim()).filter(Boolean);
+  return normalize(text).split(new RegExp(`[。!?\\n]|${EMOJI_SENTENCE_END.source}`, "u")).map((part) => part.trim()).filter(Boolean);
 }
 
 export type GuardTexts = {

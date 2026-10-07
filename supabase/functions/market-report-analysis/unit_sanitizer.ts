@@ -14,6 +14,7 @@
 
 import type { AnalysisInput } from "./analysis_input.ts";
 import type { GeneratedAnalysis } from "./analysis_logic.ts";
+import { EMOJI_SENTENCE_END } from "./hard_fact_guards.ts";
 
 export type UnitKind = "factual" | "forward";
 
@@ -55,12 +56,12 @@ export const MAX_POINTS = 3;
 
 /**
  * Sentences of a prose field with their terminators kept, so that `units.join("")` reproduces the text. A sentence
- * ends at 。！？!? or a line break, and at a pictograph followed by a space or the end ("…でした📉 10月6日の米国…" is
- * two sentences: 2026-10-07 the second sentence's date was read as the first one's).
+ * ends at 。！？!? or a line break, and at a pictograph that ends a sentence ("…でした📉 10月6日の米国…" is two
+ * sentences), never at one inside a clause ("10月6日の日経平均は📉 70,035.71" is one): EMOJI_SENTENCE_END.
  */
 export function splitUnits(text: string): string[] {
   const units: string[] = [];
-  const pattern = /[。！？!?]+[」』）)]*\s*|\n+|\p{Extended_Pictographic}(?:️)?(?=\s|$)\s*/gu;
+  const pattern = new RegExp(`[。！？!?]+[」』）)]*\\s*|\\n+|${EMOJI_SENTENCE_END.source}\\s*`, "gu");
   let start = 0;
   for (const match of text.matchAll(pattern)) {
     const end = match.index! + match[0].length;

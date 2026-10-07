@@ -181,14 +181,29 @@ const GENERATION_SCHEMA = {
 const FACT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["passed", "issues"],
-  properties: { passed: { type: "boolean" }, issues: { type: "array", items: { type: "string" } } },
+  required: ["passed", "issues", "objective_issues"],
+  properties: {
+    passed: { type: "boolean" },
+    issues: { type: "array", items: { type: "string" } },
+    // Contradictions of the supplied input, each with the analysis text it is in (verbatim): the delivered packet
+    // must not carry them (2026-10-08 H2). Everything else in `issues` is advisory.
+    objective_issues: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["quote_ja", "reason_ja"],
+        properties: { quote_ja: { type: "string" }, reason_ja: { type: "string" } },
+      },
+    },
+  },
 } as const;
 
 export const FACT_INSTRUCTIONS = [
   "あなたは市場レポートの厳格なFactチェッカーです。input（根拠）と analysis（生成結果）だけを照合します。Web検索や外部知識は使いません。",
   "次を検出したら passed を false にします: input に無い数字・日付・固有名詞・事実、数値の書き換えや独自計算、market_direction と矛盾する方向、news に理由として書かれていない因果を causal や断定で書いたもの、consistent_with や insufficient_evidence なのに本文が因果を断定しているもの、理由を確認できない値動きの理由を推測なのに事実のように書いたもの（「〜の可能性があります」「一因として考えられます」のように推測と分かる見立てを1回添えるのは可）、TOPIX連動ETF（1306）をTOPIXそのものとして書いたもの（「TOPIX連動型ETF」のような正確な言い換えは可）、古い値を最新のように書いたもの、将来の値動きの断定、売買推奨。",
   "自然な言い換えや要約は許容します。x_post の口語的な文体は問題にしません。issues は短い日本語で返します。",
+  "objective_issues には、input と客観的に矛盾するものだけを入れます: input と違う数字・日付・方向、古い値を最新とした記述、1306をTOPIXそのものとした記述、input に無い事実の断定、input にある事実を否定・反転した記述（例: input では調査を受けていると公表しているのに「調査を実施していません」）。quote_ja には analysis の該当する文を一字一句そのまま写し、reason_ja に input のどこと矛盾するかを書きます。言い回し・推測の程度・一般論・input から判断できない点は objective_issues に入れず issues にだけ書きます。objective_issues に入れたものも issues に書きます。",
 ].join("\n");
 
 export function generationRequestBody(input: AnalysisInput, previousIssues: string[]): Record<string, unknown> {
@@ -569,24 +584,53 @@ function causalNewsOf(claims: readonly Claim[], input: AnalysisInput): string[] 
  */
 function causalVerdict(sentence: string, causalNews: readonly string[], input: AnalysisInput): "assertive" | "speculative" | null {
   const links = [...sentence.matchAll(CAUSAL_LINK)];
-  if (links.length === 0) return null;
-  if (NEGATED.test(sentence) && !SPECULATION.test(sentence)) return null;
-  const supported = links.every((link, index) => {
-    const effect = sentence.slice(link.index + link[0].length, index + 1 < links.length ? links[index + 1].index : sentence.length);
-    // 「前夜の米国株高を受け、日本株の反応を見る」 is a plan to observe, not a causal
-    // assertion that Japanese stocks rose. Facts in the cause still pass through metric/date guards.
-    const watchEffect = effect.trim().replace(/^、/u, "");
-    if ((/^(?:を受け、|を受けて)$/u.test(link[0]) && PURE_REACTION_WATCH.test(watchEffect)) ||
-        (link[0] === "を受けた" && PURE_RESULT_QUESTION.test(watchEffect))) return true;
-    // A market move needs a causal claim whose news is about a market; anything else must be what a
-    // news item itself says, whatever the claim type.
-    if (!isMarketEffect(effect, sentence.slice(0, link.index), input)) return newsStatesRelation(sentence, link.index, link[0], effect, input);
-    const parts = causeParts(sentence, link.index, link[0]);
-    return parts.length > 0 &&
-      parts.every((part) => causalNews.some((text) => NEWS_ABOUT_MARKET.test(text) && causeSupported(part, text)));
-  });
-  if (supported) return null;
-  return SPECULATION.test(sentence) ? "speculative" : "assertive";
+  const unsupported = links.filter((_, index) => !linkSupported(sentence, links, index, causalNews, input));
+  if (unsupported.length === 0) return null;
+  // A qualifier only qualifies its own clause: 「Xを受けて下落しましたが、今後は不確実な可能性があります」 asserts the
+  // cause (2026-10-08 H2), 「Xが重しとなった可能性があります」 does not; the same holds for 「確認できません」.
+  let speculative = false;
+  for (const link of unsupported) {
+    const clause = clauseOf(sentence, link.index, link.index + link[0].length);
+    if (SPECULATION.test(clause)) speculative = true;
+    else if (!NEGATED.test(clause)) return "assertive";
+  }
+  return speculative ? "speculative" : null;
+}
+
+/** One causal link of a sentence is supported by the input (or is a plan to observe, not a claim). */
+function linkSupported(sentence: string, links: readonly RegExpMatchArray[], index: number, causalNews: readonly string[], input: AnalysisInput): boolean {
+  const link = links[index];
+  const at = link.index!;
+  const effect = sentence.slice(at + link[0].length, index + 1 < links.length ? links[index + 1].index : sentence.length);
+  // 「前夜の米国株高を受け、日本株の反応を見る」 is a plan to observe, not a causal
+  // assertion that Japanese stocks rose. Facts in the cause still pass through metric/date guards.
+  const watchEffect = effect.trim().replace(/^、/u, "");
+  if ((/^(?:を受け、|を受けて)$/u.test(link[0]) && PURE_REACTION_WATCH.test(watchEffect)) ||
+      (link[0] === "を受けた" && PURE_RESULT_QUESTION.test(watchEffect))) return true;
+  // A market move needs a causal claim whose news is about a market; anything else must be what a
+  // news item itself says, whatever the claim type.
+  if (!isMarketEffect(effect, sentence.slice(0, at), input)) return newsStatesRelation(sentence, at, link[0], effect, input);
+  const parts = causeParts(sentence, at, link[0]);
+  return parts.length > 0 &&
+    parts.every((part) => causalNews.some((text) => NEWS_ABOUT_MARKET.test(text) && causeSupported(part, text)));
+}
+
+/** Where one clause of a sentence ends: a conjunction that starts another statement (「〜が、」「一方、」「ため、」…). */
+const CLAUSE_BOUNDARY = /(?:が|けれど(?:も)?|けど|ものの|ので|ため|一方(?:で)?|ただし|しかし|なお|また|ただ)[、,]|[、,](?=(?:一方|ただし|しかし|なお|また|ただ)[、,]?)/gu;
+
+/** The clause of `sentence` that contains [start, end). */
+function clauseOf(sentence: string, start: number, end: number): string {
+  let from = 0;
+  let to = sentence.length;
+  for (const boundary of sentence.matchAll(CLAUSE_BOUNDARY)) {
+    const boundaryEnd = boundary.index! + boundary[0].length;
+    if (boundaryEnd <= start) from = boundaryEnd;
+    else if (boundary.index! >= end) {
+      to = boundary.index!;
+      break;
+    }
+  }
+  return sentence.slice(from, to);
 }
 
 const PAST_FACT_PROSE = /ました|でした|した(?:[、]|$)|だった/u;
@@ -1254,6 +1298,36 @@ function requestErrorCode(error: unknown): string {
   return /^[A-Za-z0-9_:.-]+$/.test(value) ? value.slice(0, 120) : "UNEXPECTED_ERROR";
 }
 
+export type FactObjectiveIssue = { quote_ja: string; reason_ja: string };
+
+/** Comparable form of a quote and a unit: width-folded, without spaces, quotes or sentence punctuation. */
+const quoteKey = (value: string) => value.normalize("NFKC").replace(/[\s「」『』"'。.!?！？]/gu, "");
+/** A shorter quote is too unspecific to map to one unit safely. */
+const MIN_QUOTE_KEY_CHARS = 8;
+
+/**
+ * A unit checker that also removes every unit the Fact check quoted as contradicting the input (FACT_OBJECTIVE):
+ * the unit contains the quote, or the unit lies inside a quote that spans several units. `matched` collects which
+ * quotes found a unit. No repair is attempted: the unit is dropped and no replacement fact is written.
+ */
+function objectiveChecker(base: UnitChecker, quotes: readonly string[], matched: Set<number>): UnitChecker {
+  return (text, kind) => {
+    const result = base(text, kind);
+    const unit = quoteKey(text);
+    const hits = quotes.flatMap((quote, index) =>
+      quote.length >= MIN_QUOTE_KEY_CHARS && unit.length > 0 && (unit.includes(quote) || (unit.length >= MIN_QUOTE_KEY_CHARS && quote.includes(unit)))
+        ? [index]
+        : []
+    );
+    if (hits.length === 0) return result;
+    for (const index of hits) matched.add(index);
+    return {
+      remove: [...result.remove, ...hits.map((index) => ({ code: "FACT_OBJECTIVE", detail: `Factが入力との矛盾を指摘: 「${quotes[index]}」` }))],
+      advisory: result.advisory,
+    };
+  };
+}
+
 /** At most two model calls per generation (generate + Fact): the ceiling every path below stays within. */
 export const MAX_MODEL_CALLS = MAX_GENERATIONS * 2;
 
@@ -1266,6 +1340,8 @@ type Candidate = {
   warnings: string[];
   fact: "passed" | "failed" | "not_run";
   factIssues: string[];
+  /** A Fact contradiction of the input could not be removed: never delivered. */
+  unsafe: boolean;
   record: GenerationRecord;
 };
 
@@ -1347,7 +1423,7 @@ export async function generateSharedAnalysis(
       record.deliveryIssues = delivery.hard;
       return null;
     }
-    return { attempt, analysis: sanitized.analysis, removed: sanitized.removed, warnings: delivery.warnings, fact: "not_run", factIssues: [], record };
+    return { attempt, analysis: sanitized.analysis, removed: sanitized.removed, warnings: delivery.warnings, fact: "not_run", factIssues: [], unsafe: false, record };
   };
   const runFact = async (candidate: Candidate): Promise<boolean> => {
     const record = candidate.record;
@@ -1361,7 +1437,41 @@ export async function generateSharedAnalysis(
     record.factIssues = Array.isArray(fact?.issues) ? fact.issues.filter((issue): issue is string => typeof issue === "string") : [];
     candidate.fact = record.factPassed ? "passed" : "failed";
     candidate.factIssues = record.factIssues;
+    const objective = Array.isArray((fact as { objective_issues?: unknown })?.objective_issues)
+      ? ((fact as { objective_issues: unknown[] }).objective_issues).filter((item): item is FactObjectiveIssue =>
+        !!item && typeof (item as FactObjectiveIssue).quote_ja === "string" && typeof (item as FactObjectiveIssue).reason_ja === "string"
+      )
+      : [];
+    if (objective.length > 0) removeObjective(candidate, objective);
     return record.factPassed;
+  };
+  /**
+   * Fact found contradictions of the input that the deterministic guards missed (2026-10-08 H2: 「公正取引委員会は
+   * サッポロビールへの調査を実施していません」). The quoted units are removed and the rest is checked again; when a
+   * quote matches no unit, or nothing coherent and delivery-checked is left, the candidate is never delivered.
+   */
+  const removeObjective = (candidate: Candidate, objective: readonly FactObjectiveIssue[]) => {
+    const record = candidate.record;
+    const quotes = objective.map((item) => quoteKey(item.quote_ja));
+    record.localWarnings.push(...objective.map((item) => `FACT_OBJECTIVE:「${item.quote_ja}」 ${item.reason_ja}`));
+    const matched = new Set<number>();
+    const reduced = sanitizeAnalysis(candidate.analysis, input, (kept) => objectiveChecker(unitChecker(input, kept), quotes, matched), fallbacks);
+    const codes = removalCodes(reduced.removed);
+    record.localWarnings.push(...reduced.removed.map((unit, index) => `${codes[index]} ${unit.detail}`));
+    record.removedUnits = [...record.removedUnits, ...reduced.removed];
+    const unmapped = objective.filter((_, index) => !matched.has(index));
+    const delivery = reduced.coherent ? localAnalysisCheck(reduced.analysis, input, { delivery: true }) : null;
+    if (unmapped.length > 0 || !delivery || delivery.hard.length > 0) {
+      candidate.unsafe = true;
+      record.deliveryIssues = [
+        ...unmapped.map((item) => `FACT_OBJECTIVE_UNMAPPED:「${item.quote_ja}」`),
+        ...(reduced.coherent ? delivery?.hard ?? [] : [`INCOHERENT: ${reduced.incoherentReason}`]),
+      ];
+      return;
+    }
+    candidate.analysis = reduced.analysis;
+    candidate.removed = [...candidate.removed, ...reduced.removed];
+    candidate.warnings = delivery.warnings;
   };
 
   const candidates: Candidate[] = [];
@@ -1450,16 +1560,31 @@ export async function generateSharedAnalysis(
     if (requestError) throw requestError;
     return { ok: false, error: lastError, issues, ...result() };
   }
-  let best = bestCandidate(candidates);
-  // A generation chosen without its own Fact verdict gets one Fact call when the ceiling allows it (never after a
-  // request failure). Once it has a verdict the choice is among checked generations only: an unchecked one is not
-  // preferred over one whose findings are known.
-  if (best.fact === "not_run" && !requestError && calls < MAX_MODEL_CALLS) {
-    const checked = await runFact(best).then(() => true, (error) => {
-      best.record.errorCode = requestErrorCode(error);
+  const deliverable = () => candidates.filter((candidate) => !candidate.unsafe);
+  let best: Candidate | null = deliverable().length > 0 ? bestCandidate(deliverable()) : null;
+  // A generation chosen without its own Fact verdict gets a Fact call while the ceiling allows it (never after a
+  // request failure). Once one has a verdict the choice is among checked generations only: an unchecked one is not
+  // preferred over one whose findings are known. A verdict that leaves it unsafe moves on to the next candidate.
+  while (best && best.fact === "not_run" && !requestError && calls < MAX_MODEL_CALLS) {
+    const current: Candidate = best;
+    const checked = await runFact(current).then(() => true, (error) => {
+      current.record.errorCode = requestErrorCode(error);
       return false;
     });
-    if (checked) best = bestCandidate(candidates.filter((candidate) => candidate.fact !== "not_run"));
+    if (!checked) break;
+    const pool = deliverable();
+    const verdicts = pool.filter((candidate) => candidate.fact !== "not_run");
+    best = verdicts.length > 0 ? bestCandidate(verdicts) : pool.length > 0 ? bestCandidate(pool) : null;
+  }
+  if (!best) {
+    // Every candidate carries a contradiction of the input that could not be removed: fail, so the cycle retries.
+    trace.factStatus = "";
+    return {
+      ok: false,
+      error: "ANALYSIS_FACT_FAILED",
+      issues: recordSink.flatMap((record) => record.deliveryIssues).slice(0, 10),
+      ...result(),
+    };
   }
 
   const reasons: string[] = [];
