@@ -81,13 +81,13 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
+- status: done
 - task_id: ai-lab-premium-length-policy-unlimited-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: Final K3 PASS_CANDIDATE on PR #109 exact head fb4afb21d7ce808de3257bebc8062aed93353dec. Topic continuity/capacity + B1-B3 migration corrective remain candidate-good, and AI Lab Premium policy now removes the 280 hard ceiling with >280 generation/dispatch coverage. Merge HOLD for one final Sol（高） exact-head Codex rereview. H1 and H2 are currently occupied by G4 and G2 reviews respectively; do not overwrite them. Production/apply/deploy remain 0.
+- allocation: Final external direct Codex review PASS accepted for PR #109 exact head fb4afb21d7ce808de3257bebc8062aed93353dec. GitHub fresh check showed mergeable=true and head unchanged. PR #109 was squash-merged as d4f693128494d8e05b97563fb82b7db2871818c8. Source merge only; production migration/deploy remain unapplied and separately approval-gated. G3 is closed/free after fresh allocation.
 - recommended_model: Sonnet5（高）
 
 ## Claude G4
