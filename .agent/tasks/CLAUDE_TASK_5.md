@@ -1,3 +1,102 @@
+# C1 CORRECTIVE ROUND 4 — PR #95 Kabumori deferred-task current-owner guard
+
+This is the newest canonical G5 instruction and supersedes prior corrective sections only where it differs.
+
+- task_id: `common-account-v1-phase2-service-enrollment-integration-20261006`
+- status: ready
+- next_owner: claude
+- target PR: **#95**, continue the existing PR.
+- reviewed head requiring correction: `13f4281f9514742bdee43ffc08834fea67449bf2`
+- recommended model: **Opus5.5（極高）**
+- production mutation / migration apply / deploy / EAS / Phase3: **forbidden**
+
+## Preserve accepted work
+
+Do not reopen or weaken without concrete regression evidence:
+- original S1-T synchronous auth-owner/readiness fence;
+- stable userId + session_id context model;
+- same-session TOKEN_REFRESHED single-flight;
+- S2 X queued pre-dispatch cancellation;
+- R1-R5;
+- PR #94 root news-detail behavior;
+- X login/service enrollment separation from posting OAuth/workspace/credentials/publish authority.
+
+## Sole remaining blocker — Q1 P2
+
+Current Kabumori AuthProvider issue:
+- SIGNED_IN for A2 can queue deferred preparation;
+- before A2's deferred task runs, a newer SIGNED_OUT or different-user B notification can synchronously replace the announced current owner;
+- A2's old deferred task currently checks only component-active state;
+- it can therefore still enter prepareSession(A2) and dispatch obsolete automatic start_kabumori_service with A2's captured token;
+- readiness remains closed, but this is still obsolete unsent write-capable work after a newer auth notification.
+
+## Required correction
+
+1. Capture the intended owner/login (or an equivalent event ticket) when scheduling the deferred preparation.
+2. Immediately before the deferred task:
+   - advances generation/loading;
+   - calls acceptSession/prepareSession;
+   - or performs any enrollment transport dispatch,
+   require that captured owner/ticket still matches the synchronously announced current owner.
+3. If superseded, return before any automatic enrollment request is issued.
+4. Preserve the existing synchronous auth callback fence:
+   - no awaited Auth/Data API/network work inside the SDK callback.
+5. Preserve same-login TOKEN_REFRESHED:
+   - same user + same session_id remains the same logical login;
+   - do not spuriously abort/restart a valid in-flight request solely because token refreshed.
+6. Preserve all prior result/readiness fencing even for already-sent old requests.
+7. Do not change server lifecycle RPC/migration semantics for this fix.
+
+## Mandatory regression tests
+
+Use the actual AuthProvider path and hold deferred preparation:
+
+1. A1 established; deliver SIGNED_IN(A2); before A2 deferred task runs deliver SIGNED_OUT; flush deferred work.
+   - obsolete A2 automatic enrollment request count = **0**;
+   - readiness remains null.
+2. Same setup, but replace SIGNED_OUT with different-user B.
+   - obsolete A2 request count = **0**;
+   - B may perform only B's own current preparation.
+3. Normal/current A2 with no superseding event:
+   - prepares exactly once.
+4. Same-session TOKEN_REFRESHED:
+   - preserves expected single-flight;
+   - no unnecessary duplicate automatic start.
+5. Re-run the previous S1-T three timing cases + refresh control unchanged.
+6. Re-run former S1/S2 probes and focused R1-R5 regressions.
+
+## Scope / safety
+
+- Keep source delta minimal, primarily `src/providers/auth-provider.tsx` plus focused tests/docs.
+- Do not touch X behavior unless a shared test requires no-op compatibility.
+- No production access/write, migration apply, deploy, EAS, Phase3, Auth hard-delete, Storage, OAuth, Vault, Cron, X publish or real provider calls.
+- Fresh-fetch main before completion and re-check overlap.
+
+## Completion / K5
+
+Report:
+- exact new PR #95 head;
+- Q1 disposition;
+- original S1-T disposition;
+- same-session refresh control;
+- S2/R1-R5 regression disposition;
+- changed_files;
+- tests;
+- production mutation/deploy/EAS = 0;
+- remaining issues;
+- next recommendation.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K5.
+
+A PASS_CANDIDATE requires one final exact-head H1 focused rereview before merge.
+
+Recommended model: **Opus5.5（極高）**.
+
+---
+
 # C1 CORRECTIVE ROUND 3 — PR #95 Kabumori synchronous auth-owner/readiness fence
 
 This is the newest canonical G5 instruction and supersedes prior corrective sections only where it differs.
