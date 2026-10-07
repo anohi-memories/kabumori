@@ -94,13 +94,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: review_required
 - task_id: postona-multisocial-phase2a2-account-schema-candidate-20261007
 - start_code: G4
 - finish_code: K4
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Phase 2a-1 PASS and exact five provider-domain blobs integrated to main; former PR #103 closed as superseded after stale-base merge race. New Phase 2a-2 is source-only: reconstruct social_accounts contract, create a forward provider/account credential-shape migration candidate only if repository evidence is sufficient, prove it in disposable PostgreSQL, and document next Threads OAuth slice. No production apply/deploy/OAuth/Vault/provider call. Avoid active G2/G5 files and shared migration reservation if occupied.
+- allocation: K4 accepts PR #106 head dac01220 as PASS_CANDIDATE only. Six new source/test/docs files, CI green, no fresh-main overlap, production/deploy/provider mutations 0. Because the candidate changes social_accounts platform/credential/ACL schema boundaries, merge remains HOLD for one focused independent Codex review. Per this chat's routing, no H1/H2 slot is allocated here; use the direct-copy review instruction. Recommended reviewer Sol（高）.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
