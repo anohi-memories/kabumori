@@ -219,7 +219,7 @@ test("RSS feed parsing extracts multiple market_macro items via the shared tag/l
 
 test("fetchMarketMacroSource surfaces a stable error code on HTTP failure", async () => {
   await assert.rejects(
-    () => fetchMarketMacroSource(source(), async () => new Response("", { status: 503 })),
+    () => fetchMarketMacroSource(source(), async () => new Response("", { status: 503 }), now, 0),
     /MARKET_MACRO_FETCH_FAILED:503/,
   );
 });
@@ -239,4 +239,61 @@ test("fetchMarketMacroSource returns normalized candidates from a live-shaped fe
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0].sourceUrl, "https://www.boj.or.jp/about/press/kk260904b.pdf");
   assert.equal(candidates[0].companyCode, null);
+});
+
+const FED_RSS = `<rss><channel><item>
+  <title>Federal Reserve issues FOMC statement</title>
+  <link>https://www.federalreserve.gov/newsevents/pressreleases/monetary20260917a.htm</link>
+  <pubDate>Fri, 04 Sep 2026 11:00:00 GMT</pubDate>
+  <description>The Committee decided to maintain the target range.</description>
+</item></channel></rss>`;
+const fedSource = () => source({ key: "fed", feedUrl: "https://www.federalreserve.gov/feeds/press_all.xml", defaultCategory: "frb", defaultTopicKey: "macro:fed" });
+
+test("Fed feed: a transient 404 is retried once and the second answer is used (2026-10 production 404s)", async () => {
+  let calls = 0;
+  const candidates = await fetchMarketMacroSource(fedSource(), () => {
+    calls += 1;
+    return Promise.resolve(calls === 1 ? new Response("Not Found", { status: 404 }) : new Response(FED_RSS, { status: 200, headers: { "content-type": "text/xml" } }));
+  }, now, 0);
+  assert.equal(calls, 2);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].category, "frb");
+});
+
+test("Fed feed: a persistent 404 / gateway error fails with its code after exactly one retry (no loop)", async () => {
+  for (const status of [404, 502, 503, 504]) {
+    let calls = 0;
+    await assert.rejects(
+      () => fetchMarketMacroSource(fedSource(), () => { calls += 1; return Promise.resolve(new Response("", { status })); }, now, 0),
+      new RegExp(`MARKET_MACRO_FETCH_FAILED:${status}`),
+    );
+    assert.equal(calls, 2, String(status));
+  }
+});
+
+test("non-Fed source: a 404 fails at once (one fetch); 502 / 503 / 504 are retried once", async () => {
+  let calls = 0;
+  await assert.rejects(
+    () => fetchMarketMacroSource(source(), () => { calls += 1; return Promise.resolve(new Response("", { status: 404 })); }, now, 0),
+    /MARKET_MACRO_FETCH_FAILED:404/,
+  );
+  assert.equal(calls, 1);
+  for (const status of [502, 503, 504]) {
+    calls = 0;
+    await assert.rejects(
+      () => fetchMarketMacroSource(source(), () => { calls += 1; return Promise.resolve(new Response("", { status })); }, now, 0),
+      new RegExp(`MARKET_MACRO_FETCH_FAILED:${status}`),
+    );
+    assert.equal(calls, 2, String(status));
+  }
+});
+
+test("other statuses and a healthy feed are not retried; a malformed feed is not retried either", async () => {
+  for (const status of [200, 403, 429, 500]) {
+    for (const candidate of [fedSource(), source()]) {
+      let calls = 0;
+      await fetchMarketMacroSource(candidate, () => { calls += 1; return Promise.resolve(new Response(status === 200 ? FED_RSS : "", { status })); }, now, 0).catch(() => {});
+      assert.equal(calls, 1, `${candidate.key} ${status}`);
+    }
+  }
 });

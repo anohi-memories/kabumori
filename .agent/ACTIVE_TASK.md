@@ -32,27 +32,26 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
-- task_id: ai-lab-topic-continuity-pr109-focused-review-20261007
+- status: done
+- task_id: postona-pr106-phase2a2-security-rereview-20261007
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Focused exact-head review of PR #109 f83247ae1024d4220dfbfa5484c725381d63815d only. Verify SECURITY DEFINER claim migration ACL/ownership/search_path, 74-entry TS/SQL canonical map, 128 candidate bound, 72h/48h cooldowns, >=14-day x 10/day capacity proof, continuity-reserve priority, and migration-before-deploy rollout order. No production access/mutation/deploy/merge.
+- allocation: Final C1 accepts CHANGES REQUIRED on PR #106 head a8f313dc. Remaining blockers are limited to existing trigger-function owner/ACL baseline verification and exact-body verification of the new provider guard. Existing X regressions and 45/45 mutation suite remain green. H1 closed/free; corrective returned to G4.
 - recommended_model: Sol（高）
-
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: kabumori-trace-gpt61-rollout-runbook-review-20261007
+- status: ready
+- task_id: kabumori-pr110-delivery-first-focused-review-20261007
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: User explicitly waived the focused PR #108 review to prioritize today's natural close-cycle rollout. No Codex PASS is claimed. PR #108 is merged and the production rollout completed with direct bounded read-backs. H2 free.
+- allocation: Focused exact-head review of PR #110 head 6612b3f1dee5055794137da71697ebe5e07d7419. Review progressive unit sanitization, Hard Fact preservation, Fact advisory/not_run fallback, 10/7 false-positive closure, X Premium/disclaimer behavior, and app-visible disclaimer. No merge/deploy/production access or mutation.
 - recommended_model: Sol（高）
 
 ## Claude G1
@@ -70,26 +69,26 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Canonical delivery-first market-report calibration. X is Premium; legacy short length is advisory only. Objective errors should be removed at smallest-unit granularity and remaining coherent content delivered; whole-report failure is last resort. Deterministic AI disclaimer required on X/App. IMPORTANT: user will not start G2 until after the 16:35 JST natural retry is complete and checked.
+- allocation: K2 PASS_CANDIDATE at PR #110 head 6612b3f1dee5055794137da71697ebe5e07d7419. App-visible disclaimer blocker is closed. Merge/deploy HOLD pending one focused H2 Sol（高） review of delivery-safety boundaries.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
 - owner: claude
 - slot: claude-3
 - status: review_required
-- task_id: ai-lab-topic-continuity-fix-20261007
+- task_id: ai-lab-premium-length-policy-unlimited-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: codex
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: K3 PASS_CANDIDATE. PR #109 exact head f83247ae1024d4220dfbfa5484c725381d63815d meets source/capacity goals, but merge is HOLD for one H1 focused Sol（高） review because it replaces a SECURITY DEFINER claim function. Production remains unchanged; migration must precede x-test-post deploy.
-- recommended_model: Opus5.5（高）
+- allocation: Final K3 PASS_CANDIDATE on PR #109 exact head fb4afb21d7ce808de3257bebc8062aed93353dec. Topic continuity/capacity + B1-B3 migration corrective remain candidate-good, and AI Lab Premium policy now removes the 280 hard ceiling with >280 generation/dispatch coverage. Merge HOLD for one final Sol（高） exact-head Codex rereview. H1 and H2 are currently occupied by G4 and G2 reviews respectively; do not overwrite them. Production/apply/deploy remain 0.
+- recommended_model: Sonnet5（高）
 
 ## Claude G4
 - owner: claude
@@ -100,19 +99,19 @@
 - finish_code: K4
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Direct independent review of PR #106 head dac01220 returned CHANGES REQUIRED. G4 must update the existing PR only and close B1-B6: provider-identity unique-index precondition, provider immutability, PG16+ SET ROLE graph, explicit starting schema/ACL baseline, connected-Meta access-ref invariant, and provider-aware service_role Meta-write boundary. Also harden policy/trigger/index/check postconditions. No production/apply/deploy/OAuth/Vault/provider calls. After corrected K4, use a free H1/H2 for one Sol（高） exact-head rereview if available.
+- allocation: C1 returned a bounded final corrective on existing PR #106 only. Preserve accepted B1-B6; fix two function-contract gaps: exact owner/ACL/effective EXECUTE baseline for the two existing trigger functions, and exact body/definition pinning for the new provider guard. Add adverse/mutation tests; no production/apply/deploy/provider operations. After K4, assign one free H1/H2 exact-head rereview.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
 - slot: claude-5
 - status: ready
-- task_id: common-account-v1-phase2-native-client-validation-20261007
+- task_id: common-account-v1-phase2-real-account-smoke-20261007
 - start_code: G5
 - finish_code: K5
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Phase 2 server migration is APPLIED_PASS. Next validate the merged client on iOS Simulator/local app before any EAS/TestFlight or real self-service mutation. Re-run exact Auth/service-enrollment regressions, verify deployed response contract compatibility, and exercise signed-out/login/session-refresh/sign-out/serviceSession gating on native Simulator. Production service-state mutation, deploy and EAS forbidden.
+- allocation: User explicitly approved one bounded production-authenticated smoke using exactly one existing active Kabumori account. Pre/post aggregate read-back is mandatory. Login -> existing active service-start path -> Home -> same-login token refresh -> sign-out -> same-account re-login -> sign-out. No new enrollment, reactivation, withdrawal/deletion, profile edits, Auth Admin, DB/schema/migration, deploy, EAS, OAuth/Vault/Cron/X/provider changes. Credentials are entered only by the user in the Simulator UI and must never be logged or pasted.
 - recommended_model: Opus5.5（高）
 
 ## Deferred

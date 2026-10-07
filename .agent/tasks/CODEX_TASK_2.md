@@ -1,5 +1,151 @@
 # Codex Task 2 — CURRENT TASK
 
+- task_id: kabumori-pr110-delivery-first-focused-review-20261007
+- owner: codex
+- slot: codex-2
+- status: review_required
+- next_owner: chatgpt
+- priority: high
+- recommended_model: Sol（高）
+- type: focused delivery-safety / Hard Fact boundary / fallback review
+- target_pr: 110
+- target_head: 6612b3f1dee5055794137da71697ebe5e07d7419
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+- review_verdict: CHANGES REQUIRED
+- review_completed_at: 2026-10-07 JST
+- review_report_commit: 76beae1924eb5d97fc9eb79b8c2b111169afed82
+
+## Purpose
+
+Perform one focused exact-head independent review of PR #110.
+
+This PR intentionally changes the market-report delivery policy from “one hard issue can suppress the whole report” to **progressive degradation**:
+- remove/neutralize the smallest objectively bad unit;
+- deliver the remaining coherent content when possible;
+- allow bounded Fact advisory/not_run fallback after deterministic local safety;
+- keep the existing generation/model-call/retry ceilings;
+- append the agreed AI disclaimer on X and the actual app report-detail UI.
+
+Do not reopen unrelated GPT-6.1 registry or trace-storage reviews.
+
+## Freshness / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / latest G2 Report / this TASK.
+2. Use a fresh independent H2 checkout/worktree from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #110.
+4. Require exact PR head `6612b3f1dee5055794137da71697ebe5e07d7419`; moved head => STOP.
+5. Allocation-time PR is open/unmerged, 25 files, and current main changes since PR base overlap the PR source files by **0**. Re-check before verdict.
+6. No production access/mutation/deploy/manual report/OpenAI/X send/Cron/Auth/Vault/OAuth/settings/EAS.
+7. All execution uses local fixtures/mocks only.
+
+## Review focus A — objective-error isolation safety
+
+Inspect `unit_sanitizer.ts`, `hard_fact_guards.ts`, and selection flow directly.
+
+Verify:
+- wrong value/date/direction/stale/unknown-ref/1306 mislabel/unsupported definite causality cannot survive into delivery;
+- sanitization actually removes the smallest unsafe unit rather than accidentally preserving part of it;
+- deterministic neutralization cannot convert an uncertain/wrong statement into an invented fact;
+- fallback headline/summary use only packet facts;
+- dropping claims/news does not leave dependent theme/causal text dangling;
+- delivery re-check after sanitization is real and cannot be bypassed by candidate ranking;
+- minimum-coherence rule cannot produce an obviously broken report.
+
+Probe adversarial multi-error cases, not only one-error fixtures.
+
+## Review focus B — Fact advisory / not_run boundary
+
+Verify:
+- Fact advisory occurs only after local deterministic safety;
+- a Fact finding that corresponds to an objective packet contradiction is not silently downgraded and delivered;
+- Fact communication failure can yield `not_run` only when a deterministically safe candidate exists;
+- fallback candidate selection cannot prefer un-Fact-checked unsafe content over a checked safe candidate;
+- two generations / four model-call ceiling stays exact;
+- transport retry behavior is unchanged;
+- diagnostics/trace truthfully distinguish passed / advisory / not_run and removed units.
+
+Pay special attention to cases where the Fact model catches something the deterministic guard misses.
+
+## Review focus C — 10/7 false-positive closure without over-permission
+
+Independently reproduce:
+- `TOPIXそのものではなく` explanation passes;
+- `10月7日の日経平均… 10月6日の米国市場…` passes;
+- explicit wrong `10月6日の日経平均は70,035.71` is still isolated/removed;
+- `TOPIXは437.0円` is never delivered as TOPIX;
+- wrong-direction emoji/text is removed or safely neutralized;
+- stale-as-current and unknown refs are not delivered.
+
+Check that sentence splitting around emoji does not create new laundering paths.
+
+## Review focus D — causality and softer tone
+
+Verify:
+- clearly speculative wording may remain advisory;
+- definitive unsupported causal claims still cannot reach delivery;
+- softer language/emoji changes never override factual guards;
+- style/length warnings stay nonblocking only.
+
+## Review focus E — X/app disclaimer and consumer contract
+
+Verify exact head shows:
+- X Premium legacy 430–560 target is advisory, not hard platform blocking;
+- the canonical disclaimer appears exactly once in final X output and cannot be trimmed away;
+- actual app report-detail UI shows the same agreed disclaimer once at the end for both market_detail and legacy layouts;
+- source note does not contradict the new “may contain errors” disclaimer;
+- backend story disclaimer is not double-rendered;
+- root report-detail route reuses the same screen;
+- points reduced from 3 to 0–2 after sanitization remain structurally postable without allowing an empty/broken post.
+
+## Required independent evidence
+
+At minimum:
+- exact-head diff inspection;
+- targeted adversarial probes for A/B/C above;
+- PR's delivery-first focused tests;
+- market-report-analysis regression suite;
+- shared X consumer tests;
+- relevant app disclaimer/report tests;
+- Deno check/lint on changed source where practical;
+- git diff --check.
+
+Do not trust only the PR description/report.
+
+## Verdict
+
+Return one:
+- PASS
+- PASS-WITH-NONBLOCKING-NOTES
+- CHANGES REQUIRED
+- BLOCKED
+
+PASS means PR #110 is safe to merge after fresh K2/C2 no-race verification. It does **not** authorize production deploy.
+
+## Completion / C2
+
+Write/prepend `.agent/CODEX_REPORT_2.md` with:
+- exact reviewed head;
+- verdict;
+- A–E findings;
+- independent tests/probes;
+- source changes by H2;
+- production access/mutation/deploy = 0;
+- merge recommendation;
+- exact next action.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for **C2**.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Codex Task 2 — CURRENT TASK
+
 - task_id: kabumori-trace-gpt61-rollout-runbook-review-20261007
 - owner: codex
 - slot: codex-2

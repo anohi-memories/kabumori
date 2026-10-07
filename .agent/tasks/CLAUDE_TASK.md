@@ -1,10 +1,142 @@
+# K2 REVIEW ROUTING — PR #110 PASS_CANDIDATE
+
+- k2_verdict: PASS_CANDIDATE
+- accepted_head_for_review: 6612b3f1dee5055794137da71697ebe5e07d7419
+- status: review_required
+- next_owner: codex
+- h2_task: kabumori-pr110-delivery-first-focused-review-20261007
+- h2_slot: H2
+- h2_recommended_model: Sol（高）
+- merge_allowed: false
+- deploy_allowed: false
+- production_mutation_allowed: false
+
+App-visible disclaimer corrective is accepted:
+- actual report-detail UI now renders the agreed disclaimer exactly once at the end;
+- both market_detail and legacy layouts reach the same closing block;
+- root report-detail reuses the same screen;
+- backend story is not separately rendered, preventing duplicate disclaimer;
+- focused 4/4 and app 430/430 reported PASS.
+
+Core delivery-first source remains PASS_CANDIDATE. One focused H2 review is required before merge because the PR changes Hard Fact / Fact advisory / not_run delivery boundaries.
+
+---
+
+# K2 CORRECTIVE — PR #110 app-visible disclaimer closure
+
+- verdict: **CHANGES REQUIRED (one bounded blocker)**
+- target_pr: 110
+- reviewed_head: b507a3c5c9e340b5d07e09ef80146edc37f26d83
+- status: review_required
+- next_owner: chatgpt
+- corrected_head: 6612b3f1dee5055794137da71697ebe5e07d7419
+- recommended_model: Sonnet5（中）
+- production_mutation_allowed: false
+- deploy_allowed: false
+
+## What is already accepted
+
+The core delivery-first implementation is accepted as a **PASS_CANDIDATE**:
+- 10/7 false-positive 1306/date guards are covered;
+- objective bad units are isolated/removed instead of automatically killing the whole report;
+- bounded regeneration/call ceilings remain unchanged;
+- Fact can become advisory/not_run only after deterministic local safety conditions;
+- X Premium legacy short-length target is advisory;
+- X formatter appends the canonical disclaimer exactly once;
+- reported regressions and full suites are green;
+- production mutation/deploy/manual invoke = 0.
+
+Do not redesign or broaden those parts in this corrective unless required by the single blocker below.
+
+## Single blocker
+
+The user requirement was that the AI disclaimer be shown on **both X and the app**.
+
+PR #110 currently adds the canonical disclaimer to the generated app story, but the actual report detail screen
+`src/app/(tabs)/reports/[id].tsx` does not render that story disclaimer. It still shows its older independent note:
+
+「数値は株価データからアプリが計算しています。文章は、その数値と内容確認済みのニュースだけをもとにAIが作成し、根拠データと照合しています。売買をすすめるものではありません。」
+
+Therefore the source packet contains the new disclaimer, but the user-facing app screen does not yet show the agreed wording/meaning.
+
+## Required correction
+
+Update the existing PR #110 only.
+
+On the actual app report detail screen:
+- show the agreed disclaimer once per report, visibly at the end of the report;
+- required meaning:
+  **「※本レポートはAIによる分析です。内容に誤り・不足を含む可能性があります。最終的な投資判断はご自身でお願いします。」**
+- preserve useful existing deterministic data/source explanation if desired, but avoid duplicate or contradictory disclaimers;
+- do not claim the AI independently browses/researches the web;
+- ensure both market_detail and legacy/non-detail report paths show the same disclaimer once;
+- keep it presentation-only; no DB/Auth/Edge/Cron/gate changes.
+
+Prefer the smallest source change plus focused app test(s). Do not create a new PR.
+
+## Freshness
+
+Before editing:
+- fresh-fetch origin/main;
+- require PR #110 still open;
+- re-check PR head and open-PR changed-file overlap;
+- update existing isolated G2 worktree only if still safe, otherwise create a fresh G2 worktree from `/Users/yuya/Developer/kabumori-fresh`.
+
+## Verification
+
+At minimum:
+- focused test proves the exact/accepted disclaimer meaning appears once in report detail;
+- both detail and legacy report rendering paths retain it;
+- no duplicate disclaimer when backend packet/story also contains it;
+- existing app/report navigation and report rendering regressions remain green;
+- rerun relevant PR #110 market-report tests if any shared file changes occur;
+- diff check clean.
+
+No deploy / merge / EAS / production mutation.
+
+After correction:
+- update PR #110;
+- Report exact new head, changed files, tests;
+- status -> review_required;
+- next_owner -> chatgpt;
+- STOP for **K2**.
+
+Recommended model: **Sonnet5（中）**.
+
+
+## Report
+
+- PR #110 を更新（新しいPRは作っていない）。head: `6612b3f1dee5055794137da71697ebe5e07d7419`（b507a3c5 の上に1コミット）。
+- 着手前の確認: PR #110 は open、head は b507a3c5 で worktree と一致。他の open PR（#109 / #106 / #33 / #11 / #10 / #3）とのファイルの重なりはなし。既存の G2 worktree `/Users/yuya/Developer/kabumori-g2-delivery-first` は clean だったので、そのまま使った。
+- changed_files:
+  - `src/lib/report-presentation.ts`: `REPORT_DISCLAIMER_JA`、`REPORT_SOURCE_NOTE_JA`、`reportFootnotes(gaps)` を追加
+  - `src/app/(tabs)/reports/[id].tsx`: 末尾の注記を `reportFootnotes(gaps)` に置き換え
+  - `tests/app/report-disclaimer_test.ts`: 新規
+- 画面に出るもの: 末尾に、データの欠け → 出所の説明「数値は株価データからアプリが計算しています。文章は、その数値と内容確認済みのニュースをもとにAIが作成しています。」 → 合意した注意書きを**1回**。
+  - 旧注記の「売買をすすめるものではありません」は注意書きと意味が重なり、「根拠データと照合しています」は「誤りを含む可能性」と食い違うので削除した。
+  - 「AIが独自調査」は使っていない。
+- 対象の経路: 末尾のブロックは market_detail と旧レイアウトのどちらの分岐の外にもある（ScrollView の最後の要素）。タブ内の `/reports/[id]` と、ルートの `/report-detail`（同じ画面を再エクスポート）の両方で表示される。
+- 二重表示の防止: 画面は backend の story（最後に注意書きセクションを持つ）を描画しない（`.story` を参照しないことをテストで固定）。データの欠けに同じ文が入っていても1回に揃える。
+- tests:
+  - `tests/app/report-disclaimer_test.ts` 4件すべて成功。backend の `REPORT_DISCLAIMER_JA` と文字列が一致すること、1回だけ・最後にあること、分岐の外の最後の要素であること、ルートが同じ画面であることを確認。
+  - `tests/app` 全体 430件成功（`--no-check`）。deno check で出る型エラーは、すべて変更していない既存ファイルのもので、変更ファイルと新テストは0件。
+  - `git diff --check` は問題なし。
+  - backend（`supabase/functions`）は変更していないので、PR #110 の市況レポートのテストの再実行は不要（前回 421 + `_shared` 466 が成功）。
+- 実行していないもの: Simulator での画面確認（表示文言だけの変更で、認証付きの実データ表示が必要なため）、expo lint・tsc（この worktree に node_modules が無い）。
+- 本番操作・デプロイ・マージ・EAS: 0。
+
+Recommended next owner: **chatgpt（K2）**
+
+---
+
 # Claude Task 2 — CURRENT TASK
 
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
+- pr: https://github.com/anohi-memories/kabumori/pull/110
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: market-report reliability / delivery-first guard calibration / mandatory disclaimer
@@ -109,6 +241,21 @@ Do not increase model-call ceiling or transport retry budgets.
 
 ただし、unsupported inferenceをconfirmed factとして断定しない。明白な捏造因果はobjective errorとして扱ってよい。
 
+## Tone / presentation refinement
+
+The current GPT-6.1 Sol output is factually strong but slightly stiff. Improve presentation without weakening factual discipline.
+
+Desired tone:
+- a little softer and more conversational in Japanese;
+- use a small number of natural emojis where they help scanning or mood (for example 📉 📈 👀), but do not decorate every sentence;
+- avoid bureaucratic/repetitive phrasing such as repeated 「確認できません」「〜として整理します」 when a gentler equivalent can preserve the same meaning;
+- prefer friendly, readable transitions while keeping dates/numbers/uncertainty explicit;
+- do not make the tone childish, overly casual, or sensational;
+- never use emojis to imply an unsupported direction or causal interpretation;
+- factual/guarded language always wins over style.
+
+This is a quality refinement only. Tone/style issues are WARN/advisory and must never become a reason to suppress an otherwise safe report.
+
 ## Scope
 
 Expected primary files:
@@ -177,6 +324,142 @@ Open one focused source-only PR. Report:
 Do not merge or deploy. Stop for **K2**.
 
 Recommended model: **Opus5.5（高）**.
+
+## Report
+
+- pr: https://github.com/anohi-memories/kabumori/pull/110 （branch `g2-delivery-first-guards-20261007`、head は PR を参照。base origin/main 07f08019。CI 2 passing）
+- worktree: `/Users/yuya/Developer/kabumori-g2-delivery-first`（fresh base から新規作成。他スロットの worktree・ブランチ・サーバーには触れていない）
+- open PR overlap: 着手前と commit 前に確認。#109 / #106 / #33 / #11 / #10 / #3 のどれとも、変更ファイルの重なりなし
+- merge / deploy: していない
+
+### changed_files
+
+- 新規:
+  - `market-report-analysis/unit_sanitizer.ts`（単位ごとの除去・中和、まとまりの判定）
+  - `delivery_first_test.ts`（19件）
+  - fixtures `close_2026-10-07_{data_packet,news_rows,generations}.json`（本番から読み取り専用で取得。秘密情報・メール・user_id は0件と確認）
+- 変更（ソース）:
+  - `market-report-analysis/analysis_logic.ts`
+  - `market-report-analysis/hard_fact_guards.ts`
+  - `_shared/market_report_packet.ts`
+  - `_shared/market_report_story.ts`
+  - `handler.ts` は変更なし
+- 変更（テスト。旧方針を前提にしたものを新方針へ）:
+  - analysis / causal_calibration / content_guard / debug_trace(_adversarial, _final) / h1_pr79_boundary / handler / model_registry_integration / presentation_v2 / quality_calibration / transport_retry の各 `_test.ts`
+  - `x-test-post/shared_market_report_consumer_test.ts`（テストのみ。x-test-post のソースは無変更）
+- 触っていないもの: DB / migration / RLS / ACL、Auth、important-news-monitor、POSTONA / G3 / G4 のソース、Cron / secrets / gate
+
+### fatal と advisory の分類
+
+- 除去（または中和）。単位は文・ポイント・claim・リスト項目:
+  - `VALUE_NOT_IN_INPUT`
+  - `WRONG_DATE` / `WRONG_VALUE` / `WRONG_DIRECTION` / `STALE_AS_CURRENT`
+  - `TOPIX_MISLABEL`
+  - `UNKNOWN_REF` / `CLAIM_WITHOUT_REF` / `CAUSAL_WITHOUT_NEWS` / `THEME_CLAIMS`
+  - `UNSUPPORTED_CAUSALITY`（断定）
+  - `EMOJI_DIRECTION`
+  - `SAME_DAY`、`MULTI_DAY_WORD`、`FALSE_ABSENCE`
+  - `URL` / `HASHTAG` / `HTML` / `BREAKING_LABEL` / `ADVICE` / `INTERNAL_FIELD`
+  - `MODEL_DISCLAIMER`（モデルが書いた注意書き・「AIが独自調査」）
+- 中和（直した文が全チェックを通ったときだけ採用）:
+  - 向きの誤った📈📉だけが問題のとき → 絵文字を外す
+  - 1306の値を含む文の単独「TOPIX」 → 「TOPIX連動ETF（1306）」に置き換える（語だけを置換）
+- コードで作る代替: 見出し・要約・Xの導入が空になったとき
+- 参考扱い（WARN）:
+  - `SPECULATIVE_CAUSALITY`（「可能性」「一因として考えられる」「とみられる」など推測と分かる因果）
+  - 区別の説明（「TOPIXそのものではなく」）、10/7日本＋10/6米国の対比 → どちらも誤検知を解消し、指摘なし
+  - 文体・長さ・並び順・一般的すぎる表現
+  - Fact の指摘（1回作り直したあと）
+  - `X_POINTS_REDUCED:n`、`FACT_ADVISORY:n`、`FACT_NOT_RUN`
+- 全体停止: 出力の形式が壊れている（`ANALYSIS_INVALID_OUTPUT`）、またはどの生成も、外したあとにまとまった本文が3単位未満しか残らないか配信前の再検査を通らない（`ANALYSIS_LOCAL_CHECK_FAILED`）
+
+### 段階的な縮退の実装
+
+1. 生成する。
+2. 生成時の約束（ポイント3つ・締めあり・claim 1件以上）を含むローカル検査をする。
+3. 客観的な誤りがあり、上限内なら Fact を使わずに1回作り直す。
+4. どの生成も、外したあとの本文を `localAnalysisCheck(..., { delivery: true })` で再検査し、通ったものを候補にする。
+5. ローカル検査を通った生成は、外したあとの本文で Fact を行う。
+6. Fact の指摘があれば1回作り直す。
+7. 品質による書き直しは従来どおり。
+8. 候補の選択: Fact合格 ＞ 未検査 ＞ 指摘あり → 外した単位が少ない → 警告が少ない → 新しいもの。
+9. 未検査の候補を選んだときは、上限内なら1回だけ Fact を行う。その結果が出たあとは、検査済みの候補だけから選ぶ。
+
+- 記録:
+  - パケットに `fact.ai_status`（passed / advisory / not_run）と `fact.removed_units`（`UNIT_<ACTION>:<CODE>@<path>`）
+  - 診断情報に `fact_status` / `removed_units` / `removed_unit_count`
+  - `fallback_reason` に `sanitized_units` / `fact_advisory` / `fact_not_run` を追加（旧来の `rewrite_*` は維持）
+  - GenerationRecord に `removedUnits`（パス・理由・元の文）と `deliveryIssues`
+  - trace の `local_warnings` に、外した単位ごとの理由を記録（trace テーブルの列は変更なし）
+
+### 10/7 の回帰結果（本番の3生成を fixture で再生）
+
+- 16:20 の1回目（TOPIXの区別の説明）・2回目（📉のあとの米国の日付）・16:35 の配信分のどれも、ローカル検査の hard が0、外した単位が0。3つとも generate＋fact の2呼び出しで配信。
+- X本文: 507 / 482 / 494字（注意書きを除く。含めると566 / 541 / 553字）。アプリの本文: 940 / 971 / 972字。警告は0。
+- 「10月7日のTOPIXは437.0円」「日経平均とTOPIXがそろって下落」は引き続き検出。前者は1306の表記に中和、後者は除去。
+
+### Fact の扱い
+
+- 2回とも指摘あり → 4呼び出しで「参考扱い」として配信し、指摘は全件 trace に残す。
+- 通信失敗:
+  - 安全な候補が無ければ、従来どおり例外（cron の再試行に回る）
+  - 決定的な検査を通った候補があれば `not_run` で配信（従来は全体停止）
+- Fact の指示も「推測と分かる見立てを1回添えるのは可。推測を事実のように書いたものは不可」に合わせた。
+
+### 注意書きの位置
+
+- X: `formatSharedXPost` が本文の末尾に空行を挟んで `REPORT_DISCLAIMER_JA` を1回だけ付ける。2回以上あれば `X_POST_DISCLAIMER_INVALID`。
+- アプリ: `buildAppMarketStory` の最後のセクション（key `disclaimer`）に1回。`char_count` と警告の計算からは除外し、`total_char_count` には含める。
+- モデルが書いた注意書きは単位ごと除去。プロンプトでも「書かない」と指示した。
+
+### X Premium の長さ
+
+- `X_POST_HARD_MAX_CHARS` を 900 から 12,500 に変更（CJK の重み2でも25,000以内）。
+- 430〜560字の目標は警告のみ。長さと最小長（80字）は注意書きを除いた本文で測る。
+- テスト: 2,000字超の投稿でも止まらず、注意書きも欠けないことを確認。
+
+### テスト（すべて成功）
+
+- `market-report-analysis` 242、`personalized-reports` 129、`market-report-data-packet` 42、`x-test-post/shared_market_report_consumer_test.ts` 8、`_shared` 466（`--no-check`）。
+- deno check（変更ファイル）は0件。
+- lint は既存の8件（テスト補助の `require-await`）だけで、新しい指摘は0件。
+- `git diff --check` は問題なし。
+
+### 呼び出しの上限
+
+- `MAX_GENERATIONS = 2`、`MAX_MODEL_CALLS = 4` は不変。
+- `DEFAULT_TRANSPORT_RETRY`（1呼び出しあたり2回・1回の実行で3回・30秒）は不変。どちらもテストで固定している。
+
+### 本番操作 = 0
+
+本番への DDL / DML・デプロイ・手動生成・OpenAI 呼び出し・Cron / gate / secret の変更は、すべて0。fixture の取得は以前の読み取り専用 SELECT によるもの。
+
+### 残るリスク
+
+1. DB の `market_report_packets.fact_status` は、完了RPCが常に `passed` を書く。参考扱いはパケット本体の `fact.ai_status` と診断情報でしか区別できない。
+   - 後続でマイグレーションの判断が必要。
+2. アプリ画面（`src/app/(tabs)/reports/[id].tsx`）は `market_detail.story` を表示せず、画面独自の注記を出している。
+   - アプリで注意書きを見せるには G1／アプリ側の作業が必要。
+3. x-test-post は次のデプロイで `_shared` の変更（注意書き・ポイント0〜3・Premium長）を取り込む。それまでの X 投稿には注意書きが付かない。
+   - x-test-post の deploy graph には、ほかの未デプロイPRも含まれ得るので、デプロイ前に差分の確認が必要。
+4. 推測の因果は、見出しやポイントに出ても WARN 扱い（TASK の分類どおり。プロンプトでは禁止している）。
+5. 「〜の流れで」は、以前から因果の言い回しとして検出していない（このPRで生じた穴ではない）。
+6. Fact の通信失敗時に `not_run` で配信する点は方針上の判断。止めたい場合は1行で戻せる。
+7. 単位ごとの検査が全体の検査より厳しく外す可能性がある。既存の良い生成5件では外したものが0件だったが、本番での観察が必要。
+
+### 公開と観察の推奨
+
+1. K2 の承認後にマージし、`market-report-analysis` を単独でデプロイする（明示の引数、承認を得てから。デプロイ後にバイトを照合）。
+2. 最初の2〜3サイクル（朝刊 07:55 / 大引け 16:20）は次の4つを見る。
+   - 診断情報の `fact_status` / `removed_units` / `fallback_reason`
+   - trace の `local_warnings` に入った `UNIT_*`
+   - 配信までの呼び出し数と費用
+   - 中和・代替の文面が自然か
+3. `removed_unit_count` が継続して多い、または `advisory` が続く場合は、プロンプトを調整する。
+4. x-test-post の再デプロイ（注意書きをXに出す）は、G3/G4 の deploy graph を確認したうえで別途承認を得て行う。
+5. アプリでの注意書きの表示は、G1 への依頼として起票を推奨する。
+
+Recommended next owner: **chatgpt（K2）**
 
 ---
 

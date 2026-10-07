@@ -1,3 +1,83 @@
+## Final C1 — POSTONA PR #106 CHANGES REQUIRED / G4 corrective ready — 2026-10-07
+
+- H1 completed exact-head rereview of PR #106 `a8f313dc72b087ab86482781297848fe6e23bdcc`.
+- reviewer report could not originally sync because main advanced; C1 recovered the completed verdict into canonical `.agent/CODEX_REPORT.md` without overwriting concurrent work.
+- verdict: **CHANGES REQUIRED**.
+- remaining blockers are now only:
+  1. existing `social_accounts` trigger-function owner/ACL/effective-EXECUTE drift is not fully pinned;
+  2. new `social_accounts_provider_guard()` body/definition is not pinned by the postcondition.
+- accepted areas remain green: existing X regressions and 45/45 defect-detection mutation suite.
+- production read/write/migration apply/deploy/Auth/OAuth/Vault/provider operation = 0.
+- PR #106 remains open/unmerged; exact head unchanged at C1 freshness check.
+- C1 returned a bounded corrective to G4 on the existing PR #106.
+- G4 status: ready; recommended model **Opus5.5（高）**.
+- after corrected K4, use a truly free H1/H2 for one focused exact-head rereview, recommended **Sol（高）**.
+- next action: send `G4` to Claude Code.
+
+## K2 — PR #110 PASS_CANDIDATE / H2 focused review assigned — 2026-10-07
+
+- corrected PR #110 exact head: `6612b3f1dee5055794137da71697ebe5e07d7419`.
+- app-visible disclaimer blocker is **closed**:
+  - agreed disclaimer matches backend wording;
+  - actual report-detail screen renders it once at the final footnote block;
+  - both market_detail and legacy paths reach the same block;
+  - root report-detail reuses the same screen;
+  - backend story is not rendered, avoiding duplicate disclaimer.
+- corrective reported tests: disclaimer 4/4, app 430/430, diff check PASS; production/deploy/EAS = 0.
+- PR #110 remains open/unmerged. Current main changes since the PR base overlap the 25 PR files by **0**.
+- core delivery-first changes remain PASS_CANDIDATE: progressive bad-unit removal, Fact advisory/not_run fallback, 10/7 false-positive fixes, X Premium length behavior, deterministic X/App disclaimer, unchanged model-call/retry ceilings.
+- because this changes Hard Fact and delivery fallback boundaries, one focused H2 review is required before merge.
+- H2 task: `kabumori-pr110-delivery-first-focused-review-20261007`.
+- exact review head: `6612b3f1dee5055794137da71697ebe5e07d7419`.
+- recommended Codex model: **Sol（高）**.
+- merge/deploy/production mutation remain HOLD.
+- next action: send `H2`; finish with `C2`.
+
+## G5 approved — production real-account smoke — 2026-10-07
+
+- user explicitly approved one bounded production-authenticated Kabumori smoke.
+- G5 task: `common-account-v1-phase2-real-account-smoke-20261007`, status ready.
+- scope: exactly one existing active Kabumori account; pre/post aggregate read-back; login -> active service-start path -> Home -> same-login token refresh -> sign-out -> same-account re-login -> sign-out.
+- no new enrollment, reactivation, withdrawal/deletion, profile edit, Auth Admin, DB/schema/migration, deploy or EAS.
+- credentials are entered only by the user in Simulator UI and must not be logged or pasted.
+- any unexpected state/count change is STOP; no corrective production writes.
+- recommended model: **Opus5.5（高）**.
+- finish code: K5.
+
+## K2 — PR #110 PASS_CANDIDATE / one app-visible disclaimer blocker — 2026-10-07
+
+- PR #110 exact reviewed head: `b507a3c5c9e340b5d07e09ef80146edc37f26d83`.
+- core delivery-first behavior is accepted as PASS_CANDIDATE: false-positive 1306/date cases are covered, bad factual units are isolated instead of killing the whole report, Fact advisory/not_run behavior stays within the existing call ceiling, and X Premium length is advisory.
+- reported verification is strong: market-report-analysis 242, personalized 129, data-packet 42, X shared 8, _shared 466; production mutation/deploy/manual invoke = 0.
+- blocker: the new canonical disclaimer exists in the backend app story, but the actual report-detail UI does not render that story. The app still shows its older independent note, so the user's requirement to show the new AI-error/investment-judgment disclaimer on the app is not fully satisfied.
+- corrective assigned back to G2 on the existing PR #110 only: make the agreed disclaimer visibly appear once at the end of the actual report-detail screen, covering both detail and legacy paths, with no duplicate/conflicting disclaimer.
+- recommended Claude model for this bounded UI corrective: **Sonnet5（中）**.
+- after corrected K2, because PR #110 changes Hard Fact / Fact fallback delivery boundaries, route one focused H2 review before merge; recommended Codex model **Sol（高）**.
+- no merge/deploy authorized yet.
+
+## K4 — corrected POSTONA PR #106 PASS_CANDIDATE / H1 rereview assigned — 2026-10-07
+
+- corrected PR #106 exact head: `a8f313dc72b087ab86482781297848fe6e23bdcc`.
+- PR remains open/unmerged with exactly 6 changed files.
+- CI: Netlify PASS / Vercel PASS.
+- current main advanced after the PR merge-base only in unrelated control files; changed-file overlap with PR #106 = 0.
+- G4 reports all previous B1-B6 blockers corrected with expanded disposable PostgreSQL evidence:
+  - provider identity uniqueness precondition;
+  - provider immutability;
+  - PG16+ SET ROLE graph;
+  - explicit starting schema/security baseline;
+  - connected-Meta access-reference requirement;
+  - provider-aware service_role Meta-write boundary.
+- reported proof includes 73 adverse starts, 21 postcondition drift cases, 45/45 mutation detection, B5 60-case matrix, B2 64-case matrix, and existing X publish/refresh/deletion/PR41 Stage3B regressions.
+- production DB/apply/deploy/Auth/OAuth/Vault/provider calls = 0.
+- K4 verdict: **PASS_CANDIDATE / merge HOLD** pending one independent exact-head rereview.
+- H1 was checked as done/free and is now assigned `postona-pr106-phase2a2-security-rereview-20261007`.
+- H1 target: `a8f313dc72b087ab86482781297848fe6e23bdcc`.
+- H1 recommended model: **Sol（高）**.
+- H2 remains free and untouched.
+- no production preflight/apply is authorized by this K4.
+- next action: send `H1` to Codex; finish code `C1`.
+
 ## Routing correction — delivery-first market-report task belongs to G2 — 2026-10-07
 
 - user corrected the routing: this chat/workstream uses **G2 only**.
@@ -5607,3 +5687,39 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - H1 assigned `ai-lab-topic-continuity-pr109-focused-review-20261007`, exact head fixed, recommended **Sol（高）**.
 - production rollout remains HOLD. Required order after review/merge and separate approval: migration first -> read-back -> x-test-post deploy second. Deploy-first is forbidden because the old DB function rejects the enlarged candidate set/new evergreen ids.
 - AI Lab diary: 記録不要 — this fix itself is internal posting-infrastructure maintenance and today already has a canonical AI Lab diary entry; do not create a duplicate same-day diary event merely from this K3.
+
+
+## Final C1 — PR #109 AI Lab topic continuity focused review — 2026-10-07
+- verdict: **CHANGES REQUIRED accepted**.
+- exact reviewed head: `f83247ae1024d4220dfbfa5484c725381d63815d`; PR remains open/unmerged.
+- accepted and frozen unless regression: 74-topic design, diary -> Tier2 -> Tier3 order, 128 candidate target, TS/SQL map parity, no fabricated recent-AI claims/Web Search dependency, 72h/48h cooldowns, event/provider/fingerprint safety, real SQL 140/140 capacity, fixed/skewed rotation capacity, old-7 exhaustion reproduction, migration-first rollout order.
+- blocking B1: migration does not fail closed on direct/transitive INHERIT FALSE / SET TRUE role paths from API roles to service_role; reviewer reproduced successful SET ROLE + claim after migration.
+- blocking B2: prerequisite table canonical shape is not fully checked; missing PK/index, disabled RLS, and vacuous CHECK drift were accepted by the candidate.
+- blocking B3: unchanged companion lifecycle-function bodies are not verified; reviewer replaced start-provider with same metadata but unsafe body and migration still committed.
+- production access/mutation/migration apply/merge/deploy/scheduler/OpenAI/X/Auth/OAuth/Vault/Cron changes by H1/C1: 0.
+- G3 corrective assigned: `ai-lab-topic-continuity-pr109-security-corrective-20261007`, existing PR #109 only, recommended **Opus5.5（高）**.
+- required correction is bounded to migration guards + adversarial rollback tests. Topic content/capacity design should not be redesigned.
+- after K3, one focused exact-head Codex rereview is required, recommended **Sol（高）**.
+- AI Lab diary: 記録不要 — no completed user-visible development milestone yet; this is a security corrective in progress and same-day diary duplication is unnecessary.
+
+
+## K3 follow-up — AI Lab Premium length policy — 2026-10-07
+- prior PR #109 security corrective head `7c3c06d07c32910472185e1c94b04fa1aab794f5` is accepted as a PASS candidate for rereview: B1-B3 adverse guards reported closed, 13/13 rejected with rollback, healthy apply/reapply PASS, 140/140 capacity preserved, production mutation 0.
+- user clarified the AI Lab X account is Premium and posts may exceed 140 characters; short legacy limits should not constrain natural content.
+- fresh source inspection found AI Lab had no 140 limit but did have a hard `maxChars: 280` enforced both after generation and immediately before X dispatch.
+- K3 therefore defers Codex rereview one turn and returns a bounded product correction to G3: change AI Lab only to explicit unlimited length, permit >280 text, preserve character-count diagnostics, and add guidance not to pad content merely because longer posts are allowed.
+- POSTONA/general-user, Kabumori X, topic/capacity, scheduler, OAuth/Vault/Auth and PR #109 B1-B3 migration bytes must remain unchanged.
+- task: `ai-lab-premium-length-policy-unlimited-20261007`; recommended **Sonnet5（高）**.
+- production migration/deploy/merge remains HOLD.
+
+
+## Final K3 — PR #109 continuity/security/Premium-length candidate — 2026-10-07
+- verdict: **PASS_CANDIDATE / final exact-head Codex rereview pending**.
+- exact head: `fb4afb21d7ce808de3257bebc8062aed93353dec`.
+- Premium policy accepted for rereview: AI Lab only now uses explicit unlimited length; >280 is allowed, short content remains natural, padding is discouraged, and characterCount remains measured. 641-code-point generation/dispatch/scheduled handoff passed.
+- generic-generator change requiring review: explicit unlimited mode gets 2000 output-token budget and rejects `status=incomplete` to avoid posting a truncated response; ordinary/non-unlimited paths are reported unchanged.
+- prior B1/B2/B3 migration correction and 74-topic capacity files remain byte-stable from `7c3c06d0`; adversarial PG17 runner and capacity runner still pass, including 140/140.
+- test evidence reported: 1028/1028 relevant Deno tests PASS; Netlify SUCCESS; Vercel rate-limit only.
+- production mutation/apply/deploy/merge/OpenAI/X/scheduler: 0.
+- no Codex slot was overwritten: H1 currently owns G4 PR #106 rereview and H2 currently owns G2 PR #110 review.
+- next reviewer allocation: first free H1/H2, recommended **Sol（高）**, exact head fixed to `fb4afb21d7ce808de3257bebc8062aed93353dec`. Merge and production rollout remain HOLD until PASS.

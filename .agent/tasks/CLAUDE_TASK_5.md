@@ -1,10 +1,139 @@
+# G5 — Phase 2 production real-account smoke (user-approved)
+
+- task_id: `common-account-v1-phase2-real-account-smoke-20261007`
+- owner: claude
+- slot: claude-5
+- status: in_progress
+- next_owner: claude
+- recommended_model: **Opus5.5（高）**
+- approval: user explicitly approved this bounded production real-account smoke on 2026-10-07.
+- production_mutation_window: **ACTIVE** — 2026-10-07 21:02 JST. G5 real-account smoke in progress (one existing active Kabumori account; start_kabumori_service via a loopback guard that refuses reactivation/X/table writes/functions). No other slot may open a production DB/Auth/permission window until CLOSED.
+- production_authenticated_smoke_allowed: **true**
+- new_enrollment_allowed: **false**
+- reactivation_allowed: **false**
+- withdrawal/deletion_allowed: **false**
+- deploy_allowed: **false**
+- EAS_allowed: **false**
+
+## Purpose
+
+Perform one narrowly bounded production smoke against the already-applied Phase 2 service-start contract, using exactly one existing Kabumori account that already has an active Kabumori entitlement/profile.
+
+This is the final production-authenticated validation before deciding EAS/TestFlight readiness.
+
+## Required startup / mutex
+
+1. Read ORCHESTRATION, CURRENT_STATE, ACTIVE_TASK and this TASK.
+2. Use a dedicated G5 worktree/checkout from fresh `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and confirm the accepted Phase 2 client and production migration records are present.
+4. Re-check all G/H task headers immediately before the smoke.
+5. No other slot may hold an active production DB/Auth/permission mutation window while this smoke runs.
+6. If another production window is active or ownership is ambiguous, STOP without authenticating.
+
+## Account boundary
+
+Use exactly one existing user-owned Kabumori account that already has:
+- an active common account;
+- an active Kabumori entitlement from the existing legacy backfill;
+- an existing profile.
+
+Do **not** identify the account by printing email, auth UID, access token, refresh token or other credentials into TASK/Report/logs.
+
+The user enters login credentials directly into the Simulator/app UI. Claude must not request that credentials be pasted into chat, shell history, files, screenshots or logs.
+
+## Pre-smoke read-only baseline
+
+Before login, collect only the minimum read-only production state needed to prove no net service-state change:
+- aggregate counts/statuses for common_accounts;
+- aggregate Kabumori/X entitlement counts/status/source;
+- profiles count;
+- lifecycle operations count/state;
+- relevant migration/function contract still present;
+- no in-progress lifecycle/deletion operation.
+
+Do not dump PII or tokens.
+
+## Smoke sequence
+
+Use local iOS Simulator/dev client + current-main JS, connected to production only for this test. No EAS build.
+
+1. Start signed out and confirm no service data is exposed.
+2. User manually signs in with the one approved existing active Kabumori account.
+3. Observe the real `start_kabumori_service()` path and require the already-active/idempotent response expected by the accepted client/server contract.
+   - It must not create a new entitlement/common account/profile.
+   - It must not reactivate an ended service.
+   - App must remain closed until the service response is accepted.
+4. Confirm Home opens and ordinary current-user reads work only after service-ready.
+5. Exercise one same-login token refresh/session refresh path.
+   - service-ready must remain correct;
+   - no duplicate enrollment/reactivation behavior;
+   - no cross-session/user leakage.
+6. Sign out.
+   - service-ready clears immediately;
+   - subsequent protected reads stop.
+7. Sign in again with the same account and confirm the same already-active/idempotent behavior.
+8. Sign out and end the smoke.
+
+Do not test a second account.
+
+## Post-smoke read-only proof
+
+Immediately repeat the same baseline queries and compare:
+- common_accounts counts/statuses unchanged;
+- service_entitlements counts/statuses/source unchanged;
+- profiles count unchanged;
+- lifecycle operations unchanged / no new operation;
+- no ended/reactivated/deleting state introduced;
+- no unexpected schema/RPC/ACL drift.
+
+A changed aggregate/state is a STOP condition and must be reported; do not attempt corrective writes.
+
+## Explicitly forbidden
+
+- new user/account creation;
+- new Kabumori entitlement creation;
+- X entitlement changes;
+- ended/blocked fixture creation;
+- explicit reactivation RPC;
+- withdrawal/deletion;
+- Auth Admin mutation;
+- profile edits;
+- DB/schema/migration changes;
+- Storage/OAuth/Vault/Cron/X/provider mutation;
+- Edge deploy;
+- EAS/TestFlight build or release;
+- Phase 3 enforcement/deletion work.
+
+## Completion / K5
+
+Report:
+- exact main SHA;
+- Simulator/runtime/dev-client basis;
+- pre/post aggregate read-back comparison;
+- observed production service-start disposition (without PII);
+- login -> ready -> token refresh -> sign-out -> re-login results;
+- whether any service/profile/account row or lifecycle state changed;
+- production mutation attributable to the smoke;
+- source changes = 0 unless a genuine bug is found;
+- EAS/deploy = 0;
+- remaining gaps;
+- recommendation:
+  - `READY_FOR_EAS`, or
+  - `CHANGES_REQUIRED`.
+
+If anything unexpected occurs, STOP; do not retry a mutation-capable path until K5 review.
+
+Recommended model: **Opus5.5（高）**.
+
+---
+
 # G5 — Phase 2 native client validation before EAS
 
 - task_id: `common-account-v1-phase2-native-client-validation-20261007`
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - recommended_model: **Opus5.5（高）**
 - production_write_allowed: **false**
 - production_service_state_mutation_allowed: **false**

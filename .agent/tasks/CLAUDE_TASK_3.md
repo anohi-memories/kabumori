@@ -1,5 +1,484 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: ai-lab-premium-length-policy-unlimited-20261007
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: chatgpt
+- priority: urgent
+- recommended_model: Sonnet5（高）
+- type: bounded AI Lab length-policy correction on existing PR #109
+- target_pr: 109
+- accepted_security_head: 7c3c06d07c32910472185e1c94b04fa1aab794f5
+- production_mutation_allowed: false
+- deploy_allowed: false
+- merge_allowed: false
+
+## Context / K3 disposition
+
+The prior PR #109 migration-security corrective is a **PASS candidate for rereview**:
+- B1 SET ROLE graph guard added;
+- B2 canonical prerequisite table-shape proof added;
+- B3 exact companion lifecycle-function body proof added;
+- 13/13 adverse cases reject and rollback;
+- healthy apply/reapply passes;
+- real SQL capacity remains 140/140;
+- accepted 74-topic/Tier2/Tier3 design unchanged;
+- production mutation/deploy/merge remains 0.
+
+Before sending that head to Codex, the user clarified a product policy:
+
+> 会社員AIラボはX Premium運用なので、140文字を超えてよい。短文上限に縛らない。
+
+Fresh source inspection found the current AI Lab profile is not 140-limited, but **is hard-limited to 280 Unicode code points**:
+- `AI_SALARYMAN_LAB_CODE_PROFILE.postLengthPolicy = { mode: "limited", maxChars: 280 }`;
+- generator rejects 281 with `BRAND_POST_LENGTH_LIMIT_EXCEEDED`;
+- final pre-X dispatch guard rejects 281 again.
+
+This hard ceiling conflicts with the user's Premium-account policy.
+
+## Goal
+
+Remove the hard finite character ceiling **for company AI Lab only**.
+
+Required final behavior:
+- AI Lab `brand_post` uses the existing generic `UNLIMITED_POST_LENGTH` policy.
+- 281+ characters do not fail solely because of character count.
+- 140 characters is not a target or ceiling.
+- 280 characters is not a target or ceiling.
+- Do not force long posts either. Add/adjust AI Lab profile guidance so the model varies length naturally:
+  - concise topic -> concise post is fine;
+  - when the content benefits from context/detail, it may exceed 280;
+  - do not pad/fill merely because Premium permits longer posts.
+- Existing content safety, dedupe, topic, hashtag and account checks remain unchanged.
+- Character count should still be measured/reported for diagnostics; only the finite ceiling disappears.
+
+## Scope
+
+Expected files:
+- `supabase/functions/_shared/brand/brand_profiles.ts`
+- `supabase/functions/_shared/brand/brand_profiles_test.ts`
+- `supabase/functions/_shared/brand/brand_post_generator_test.ts`
+- `supabase/functions/_shared/brand/brand_post_dispatch_guard_test.ts`
+
+Do not change the generic length-policy implementation unless strictly necessary; it already supports `UNLIMITED_POST_LENGTH`.
+
+Do not change:
+- POSTONA / `social_mobile_user_v1` length behavior;
+- Kabumori X length behavior;
+- x-test-post report/morning/useful-tip length contracts;
+- PR #109 topic pool / 74 seeds / Tier ordering;
+- PR #109 B1/B2/B3 migration correction;
+- scheduler/posting windows;
+- X OAuth/Vault/Auth/common-account/provider logic.
+
+## Mandatory tests
+
+Update the old AI Lab 280-limit tests to prove the new user policy:
+1. AI Lab profile is explicitly `UNLIMITED_POST_LENGTH`.
+2. generation prompt no longer says `280文字以内`; it communicates no hard ceiling and natural-length guidance.
+3. generator accepts >280 text (use at least one 600+ code-point fixture) and returns correct `characterCount`.
+4. final AI Lab dispatch guard accepts >280 text and still returns the measured character count.
+5. account mismatch / wrong post type / other existing dispatch safety checks remain unchanged.
+6. POSTONA/general-user and Kabumori profile length behavior is unchanged.
+7. no source/test assertion anywhere in AI Lab path still requires max 280.
+
+Run:
+- focused profile/generator/dispatch tests;
+- relevant AI Lab/shared brand suite;
+- PR #109 existing topic/migration tests as a smoke regression (do not need to redo every expensive PostgreSQL adverse runner if source bytes of migration are unchanged, but verify migration files remain byte-identical to accepted security head);
+- deno check/lint;
+- git diff --check;
+- added-line secret scan.
+
+## PR / freshness
+
+- Keep using existing PR #109.
+- Require `7c3c06d07c32910472185e1c94b04fa1aab794f5` in PR history.
+- Fresh-fetch origin/main before editing and before push.
+- Re-check G2/G4/G5 overlap.
+- Do not alter migration/security files except for conflict-free merge resolution if absolutely necessary; if their bytes change, STOP and report before push.
+- No production access/write/apply/deploy/scheduler/OpenAI/X call.
+
+## Completion
+
+Update PR #109 and report:
+- new exact head;
+- exact files changed for length policy;
+- proof that prior B1/B2/B3 migration bytes are unchanged from `7c3c06d0`;
+- >280 generation + dispatch results;
+- focused/full relevant test counts;
+- fresh-main overlap;
+- production mutation/deploy/merge = 0.
+
+Then:
+- status: review_required
+- next_owner: chatgpt
+- STOP for K3.
+
+After this K3, assign one exact-head Codex rereview covering:
+- previously corrected B1/B2/B3 migration guards;
+- this small AI Lab unlimited-length policy delta only.
+
+
+## Report — ai-lab-premium-length-policy-unlimited-20261007
+
+- result: **PASS candidate** — 会社員AIラボだけ、投稿本文の文字数上限をなくした（X Premium 運用）。PR #109 を更新し、open のまま（GitHub: MERGEABLE）。本番の読み書き 0 / migration 適用 0 / deploy 0 / merge 0 / scheduler 0 / OpenAI・X 0。
+- PR #109 head: `7c3c06d07c32910472185e1c94b04fa1aab794f5` → 最新 main の通常 merge `c6df5dfc` → **新 `fb4afb21d7ce808de3257bebc8062aed93353dec`**（修正コミット 1 つ）。rebase / force-push なし。`7c3c06d0` は履歴に含まれる。
+- CI: Vercel だけ「Deployment rate limited」（アカウント全体の制限で以前から同じ）。netlify は SUCCESS。
+- worktree: 既存の `/Users/yuya/Developer/kabumori-g3-ai-lab-continuity`（開始時 clean、`7c3c06d0` と一致を確認）。
+- 指定モデルは Sonnet5（高）だったが、ユーザーの選択で Opus 5.5 のまま実施。
+
+### 変更内容
+- `brand_profiles.ts`
+  - AI ラボの `postLengthPolicy` を `{ mode: "limited", maxChars: 280 }` → **`UNLIMITED_POST_LENGTH`**（既存の汎用の無制限モード）。
+  - 口調の指示に 1 行追加: 「X Premiumで運用しているため上限はない。140文字や280文字は目標でも上限でもない。題材が簡潔なら短くてよい。背景・具体的な手順・判断の理由が役立つときは280文字を超えてよい。水増しや繰り返しはしない。」
+- `brand_post_generator.ts`（汎用の生成処理。**無制限モードのときだけ**挙動が変わる。理由は下記）
+  - 出力トークンの上限: 無制限モードは 2000、それ以外は従来どおり 600。
+  - 無制限モードで応答が打ち切られた（`status: "incomplete"`）ときは、投稿せず `BRAND_POST_OUTPUT_INCOMPLETE` で失敗する。
+  - 理由: このモデルは推論ありで、推論分も 600 トークンに含まれる。日本語だと 300〜500 文字前後で打ち切られる可能性があり、しかも従来は打ち切りを検出していなかった。上限をなくすと「途中で切れた文章がそのまま投稿される」危険が出るため、最小限の対策を入れた。かぶモリ・POSTONA は無制限モードを使っていないので影響しない（テストで確認）。
+  - 文字数（`characterCount`）は従来どおり計測して返す。
+- 変えていないもの: 汎用の文字数ポリシー本体（`post_length_policy.ts`）、送信前ガード本体（`brand_post_dispatch_guard.ts`）、かぶモリと POSTONA の長さの扱い（POSTONA の 140 上限を含む）、x-test-post の各レポートの長さ、題材の 74 件・Tier の順番、B1/B2/B3 の migration、scheduler、OAuth / Vault / Auth / 共通アカウント / provider。
+- `supabase/tests/x_account_refresh_pilot.md` の古い一文（「AI Lab keeps its own 280 policy」）を現状に合わせて修正。
+
+### 280 文字を超える場合の結果
+- 生成: 641 コードポイント（「あ」640 文字＋絵文字 1 つ。UTF-16 では 642）の本文を受け付け、`characterCount = 641`、本文は変更なし。281 文字と 3 文字も受け付けた。
+- 生成時の指示文: `280文字以内` も「◯文字以内」も含まない。「投稿本文の文字数上限は設定されていません。」と、自然な長さの指示を含む。
+- 送信前ガード: 1 / 140 / 279 / 280 / 281 / 600 文字と、641 コードポイントの本文をすべて受け付け、計測した文字数を返す。
+- 予約投稿の実行: 641 コードポイントの本文が、そのまま X 送信処理に渡り、`characterCount = 641` が報告された。
+
+### 安全性の確認（変わっていないこと）
+- アカウント不一致: ブランド ID / アカウント ID / アカウントのブランド / プラットフォーム / ハンドル / アカウントなし の 6 通りで、長文でも `AI_LAB_DISPATCH_ACCOUNT_MISMATCH`。
+- 投稿種別の誤り、`brand_post` が無効、文字数ポリシーが未設定 → 従来どおり拒否。
+- 有限の上限を明示的に設定した場合は、汎用の処理として従来どおり 280 で拒否される。
+- かぶモリ・POSTONA のプロフィールには長さポリシーがないまま。POSTONA の送信は 140 上限のまま。
+- 内容の安全性・重複除外・題材・ハッシュタグの処理は変更なし。
+
+### 変異確認
+- AI ラボを一時的に 280 上限に戻すと、新しいテスト 8 件が失敗した。
+- 打ち切り検出を一時的に無効にすると、打ち切りのテストが失敗した。
+- どちらも確認後に元へ戻した。
+
+### テスト
+- 関連の重点テスト: 生成 20 件、プロフィール・送信前ガード・予約投稿・文字数ポリシー・POSTONA を含めてすべて成功。
+- x-test-post + `_shared` + migration の不変条件: **1028/1028** 成功。
+- PR109 のスモーク（ローカルの使い捨て PostgreSQL 17）: `ai_lab_topic_capacity_run.sh` と `ai_lab_topic_capacity_adverse_run.sh` の両方が ALL PASSED。
+- migration と題材のファイルは `7c3c06d0` と**バイト単位で同じ**（`git diff --quiet 7c3c06d0 --` が差分 0）: `20261007173000_ai_lab_topic_evergreen_capacity.sql`、`ai_lab_topic_capacity_run.sh`、`ai_lab_topic_capacity_adverse_run.sh`、`ai_lab_dev_diary_context.ts`。`supabase/migrations` 全体でも `7c3c06d0` からの差分なし。
+- `deno check`: 既存の 3 件（`brand_post_generator_test.ts` の今回触っていないテスト）だけで、変更前と同じ。`deno lint`: 13 件で変更前と同じ（すべて既存の `require-await`）。`git diff --check` クリーン。追加行の秘密情報スキャン 0。
+
+### 最新 main との重なり
+- 作業前と push 前に最新の main を取得した（main `c5f14378` は取り込み済み）。
+- open な PR（#110 G2 / #106 G4 / #33）と変更ファイルの重なりはない。G2 / G4 / G5 のファイルには触れていない。
+
+### 本番・ゲート
+本番へのアクセス・書き込み・適用・deploy・scheduler・OpenAI・X はすべて 0。merge 0。
+
+### 次
+- TASK のとおり、新しい head `fb4afb21` に対して Codex の再レビューを 1 回（B1/B2/B3 の migration の修正と、今回の文字数の変更）。
+- レビューで見てほしい点: 生成処理の「無制限モードのときだけ出力上限 2000・打ち切りは失敗」は TASK に明記されていない追加なので、この判断でよいか。
+- status → review_required / next_owner → chatgpt。STOP。
+
+---
+
+# Previous G3 task — preserved history
+
+# Claude Task 3 — CURRENT TASK
+
+- task_id: ai-lab-topic-continuity-pr109-security-corrective-20261007
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: chatgpt
+- priority: urgent
+- recommended_model: Opus5.5（高）
+- type: bounded migration/security corrective on existing PR #109
+- target_pr: 109
+- reviewed_head: f83247ae1024d4220dfbfa5484c725381d63815d
+- production_mutation_allowed: false
+- deploy_allowed: false
+- merge_allowed: false
+
+## C1 disposition
+
+H1 exact-head review of PR #109 returned **CHANGES REQUIRED**.
+
+Preserve the accepted topic/capacity implementation. Correct **only** the three migration boundary findings B1-B3 and the tests necessary to prove them.
+
+Do not redesign the topic pool, cooldowns, scheduler, provider flow, X handling or AI model policy.
+
+## Accepted evidence — do not reopen without concrete regression
+
+The following is accepted and should remain byte/behavior stable except where a narrow test hook is unavoidable:
+- 74 total evergreen seeds.
+- evergreen-0..6 identities/text/tags preserved.
+- Tier 2 diverse evergreen + Tier 3 reserve ordering.
+- recent dev diary remains first.
+- Tier 3 remains last priority.
+- no Web Search dependency for fallback.
+- no fabricated specific current-AI/news claims.
+- same-seed 72h cooldown unchanged.
+- tagged-theme 48h cooldown unchanged.
+- unresolved claimed/provider_started/ambiguous blocking unchanged.
+- event-level dedupe/fencing unchanged.
+- cross-brand fingerprint/content guards unchanged.
+- provider outcome / ambiguous no-resend unchanged.
+- candidate limit target 128 is acceptable in principle.
+- exact TS/SQL 74-entry map parity is accepted.
+- real SQL 14 days x 10/day = 140/140, fixed/skewed rotation 140/140 accepted.
+- old seven-seed pool exhaustion reproduction accepted.
+- migration-first then x-test-post-deploy order accepted.
+
+## Blocking B1 — fail closed on SET ROLE paths to service_role
+
+Current reviewed migration checks direct/inherited effective privileges but misses role memberships that allow:
+- direct `anon -> service_role` with `INHERIT FALSE, SET TRUE`;
+- indirect `authenticated -> bridge -> service_role` with SET ROLE capability.
+
+Required correction:
+- before replacing the claim function, detect and reject **direct and transitive** API-role paths that can `SET ROLE` into `service_role` or another privileged target that would gain claim execution.
+- retain existing owner-membership checks.
+- support PostgreSQL 16+ per-edge membership semantics; where exact edge semantics are unavailable, fail conservatively rather than assuming safety.
+- do not auto-revoke or repair role membership.
+- transaction must rollback fully on detection; no function/body/ACL change may persist.
+
+Required adverse fixtures:
+1. anon -> service_role, INHERIT FALSE / SET TRUE.
+2. authenticated -> intermediate role -> service_role, SET TRUE path.
+3. existing ordinary INHERIT TRUE privilege path remains rejected.
+4. healthy role graph remains accepted.
+5. rollback/no-definition-change assertion for each rejected case.
+
+## Blocking B2 — prerequisite table canonical-shape proof
+
+Current preflight is too weak: object existence + substring CHECK can accept drift.
+
+Before `CREATE OR REPLACE FUNCTION`, validate the prerequisite `ai_lab_topic_claims` shape as canonical.
+
+At minimum prove:
+- expected columns, data types, nullability/defaults;
+- primary key;
+- event_key and other required CHECK semantics, not substring matching;
+- required unique/index definitions including key columns, predicates, uniqueness, validity/readiness;
+- RLS enabled/forced state as expected;
+- policies/triggers expected by the accepted base;
+- table owner;
+- explicit/effective table + column ACL boundary;
+- no unexpected conflicting object shape relevant to claim safety.
+
+Accepted states:
+- canonical pre-capacity base state from `20261004090000`;
+- canonical already-capacity state for idempotent reapply.
+
+Reject unknown drift. Do not mutate/repair the table, RLS, policies, indexes or ACLs in this migration.
+
+Required adverse fixtures against the **capacity migration itself**:
+- missing PK;
+- missing diary active unique index;
+- RLS disabled;
+- vacuous/replaced event-key CHECK that only contains matching text;
+- at least one wrong index predicate/key/validity fixture;
+- unexpected table/column ACL drift.
+All must fail before function replacement and rollback cleanly.
+
+## Blocking B3 — verify unchanged lifecycle function bodies, not metadata only
+
+The capacity migration replaces only `claim_ai_lab_topic`, but currently accepts body drift in companion functions such as `start_ai_lab_topic_provider`.
+
+Required correction:
+- preflight exact approved definitions/contracts for the four unchanged lifecycle functions:
+  - start provider
+  - release claim
+  - mark ambiguous
+  - settle published
+- check signature, argument names/order/types where contract-sensitive, language, return type, SECURITY DEFINER, search_path, owner/ACL **and normalized body definition**.
+- also recognize the approved old claim definition before first apply and approved new claim definition for idempotent reapply.
+- unknown body/contract drift must abort before replacement.
+- do **not** rewrite those four companion functions.
+
+Required adverse fixture:
+- replace `start_ai_lab_topic_provider` with same signature/owner/return/security/search_path/ACL but body `RETURN true` without state transition.
+- applying capacity migration must fail and rollback with claim function unchanged.
+- add one positive healthy companion-definition control.
+
+Use a deterministic normalization/fingerprint approach that is stable enough for the supported PostgreSQL versions and documented in tests. Do not trust only function metadata.
+
+## Scope
+
+Keep working on existing PR #109; do not open a replacement PR unless technically unavoidable.
+
+Expected changed files:
+- `supabase/migrations/20261007173000_ai_lab_topic_evergreen_capacity.sql`
+- `supabase/tests/ai_lab_topic_capacity_run.sh`
+- focused migration/adversarial/static tests as needed
+- existing invariant test only if required.
+
+Avoid changing:
+- `EVERGREEN_TOPIC_SEEDS` content/count/order unless a concrete regression forces it;
+- `EVERGREEN_THEME_TAGS`;
+- Tier ordering;
+- x-test-post runtime;
+- brand post store;
+- provider outcome;
+- scheduler/posting windows;
+- G2/G4/G5-owned files;
+- Auth/OAuth/Vault/X provider boundaries.
+
+## Mandatory verification
+
+Re-run:
+- all new B1/B2/B3 adverse fixtures;
+- healthy apply + reapply;
+- 74-entry TS/SQL parity;
+- 129-candidate/unknown-seed rejection;
+- old 7-seed exhaustion;
+- real SQL >=14 days x 10/day = 140/140;
+- fixed and skewed rotation capacity;
+- existing claim proof;
+- migration source invariants;
+- relevant Deno AI Lab suites;
+- explicit `deno check` / lint for changed TS tests;
+- `git diff --check`;
+- added-line secret scan.
+
+Mutation-style expectation:
+- each adverse drift must cause migration failure;
+- no partial definition/ACL/table mutation after failure.
+
+## Freshness / isolation
+
+1. Read ORCHESTRATION / ACTIVE_TASK / CURRENT_STATE / this TASK / H1 Report.
+2. Use the existing isolated G3 PR109 worktree only if still clean/safe; otherwise make a new independent G3 worktree from fresh `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #109.
+4. Require reviewed head `f83247ae1024d4220dfbfa5484c725381d63815d` in PR history.
+5. Re-check G2/G4/G5 overlap before editing and before push.
+6. No production access/write/apply/deploy/scheduler/OpenAI/X call.
+
+## Completion
+
+Update the existing PR #109.
+
+Report:
+- exact new PR head;
+- B1/B2/B3 fix summary;
+- adverse fixture results;
+- healthy apply/reapply;
+- capacity result still 140/140;
+- accepted topic files byte/semantic stability;
+- changed_files;
+- tests;
+- fresh-main overlap;
+- production mutation/deploy/merge = 0.
+
+Then:
+- status: review_required
+- next_owner: chatgpt
+- STOP for K3.
+
+A second focused exact-head Codex rereview is required after this correction.
+
+
+## Report — ai-lab-topic-continuity-pr109-security-corrective-20261007
+
+- result: **PASS candidate** — B1・B2・B3 を capacity migration の preflight で fail closed にした。PR #109 を更新し、open のまま（GitHub: MERGEABLE）。本番の読み書き 0 / migration 適用 0 / deploy 0 / merge 0 / scheduler 0 / OpenAI・X 0。
+- PR #109 head: 旧（レビュー対象）`f83247ae1024d4220dfbfa5484c725381d63815d` → **新 `7c3c06d07c32910472185e1c94b04fa1aab794f5`**。内訳は最新 main の通常 merge `46b3ce5b` と修正コミット 1 つ。rebase / force-push はしていない。
+- CI: Vercel だけ「Deployment rate limited — retry in 24 hours」（アカウント全体の制限で、以前から同じ）。コードとは無関係。
+- worktree: 既存の `/Users/yuya/Developer/kabumori-g3-ai-lab-continuity`。作業開始時に clean で、レビュー対象の head と一致していることを確認した。
+
+### 修正の要約
+いずれも `claim_ai_lab_topic` を置き換える前に評価する。1 つでも外れればファイル全体を取り消し、何も直さない。
+
+- **B1（SET ROLE の経路）**
+  - `pg_auth_members` を、anon / authenticated / service_role から再帰的にたどる。
+  - 各辺の INHERIT / SET のオプションは問わず、「経路があれば届く」とみなす（PG16 以降の辺ごとの意味にも保守的に対応）。
+  - anon / authenticated から次のどれかに届けば拒否する: owner、superuser、service_role、5 つの lifecycle 関数のどれかを実行できるロール、表に何らかの権限（列単位を含む）を持つロール。
+  - service_role から owner / superuser に届く場合も拒否する。
+  - 既存の owner メンバーシップの検査は維持した。ロールの付け外しは一切しない。
+- **B2（前提の表の形）**
+  - 20261004090000 の正本の定義を作る関数と、形を比べる関数を **そのままの文字で写し**、pg_temp に正本を作って比較する。
+  - 比較の対象: 列・型・NOT NULL・既定値・PK・CHECK の全文・インデックス（キー・述語・一意性・valid / ready / live）・RLS / FORCE・ポリシー数・トリガー数・列 ACL の数。
+  - 加えて、表の明示 ACL は owner のみであること、API ロールが実効権限（列単位・継承・PUBLIC を含む）を持たないことも確認する。
+  - 以前の弱い部分一致の CHECK 検査は削除した。この migration は表を変えないので、「容量修正前の正しい形」と「再適用時の正しい形」は同じものになる。
+- **B3（変更しない 4 関数の中身）**
+  - start / release / mark ambiguous / settle の 4 関数について、次をすべて承認済みの値と照合する: 引数（名前・順序・型）、戻り値、plpgsql、SECURITY DEFINER、`search_path=""`、volatility、STRICT でないこと、owner、直接 ACL（owner と service_role の再付与なし EXECUTE 1 件だけ）、**`md5(prosrc)`**。
+  - `prosrc` は `$$`〜`$$` の間の文字列がそのまま保存されるので、PostgreSQL のバージョンで変わらない。
+  - claim は「容量修正前の本体 `a3cbe667…`」か「この migration の本体 `9aefd06d…`」（再適用時）だけを受け付ける。
+  - 置き換えた後の事後条件でも、新しい本体の md5 を固定した。4 関数は書き換えていない。
+  - Deno のテストが、期待する md5 を 2 つの migration のソースから計算し直して一致を確認する。
+
+### 異常系の結果（`supabase/tests/ai_lab_topic_capacity_adverse_run.sh`、PG 17）
+次の **13 件はすべて拒否** された。どの場合も、カタログの指紋（public の関数の本体と ACL、表の ACL / RLS、列 ACL、制約、インデックスの定義と valid / ready）が適用前と完全に同じで、claim の本体も容量修正前のままだった。
+
+- B1:
+  1. `anon -> service_role` を INHERIT FALSE / SET TRUE で付与（anon は直接 EXECUTE できないことも確認したうえで）
+  2. `authenticated -> bridge -> service_role` を、SET の経路で付与
+  3. 通常の INHERIT TRUE で `authenticated -> service_role`
+  - 健全なロール構成は受け付ける（下の健全な場合）。ロールの変更は各ケースの直後と終了時に元に戻し、残っていないことを確認した。
+- B2:
+  4. PK を削除
+  5. 日記の有効性を守る一意インデックスを削除
+  6. RLS を無効化
+  7. event_key の CHECK を、同じ文字列を含むが中身のない式（`… or true`）に置き換え
+  8. 一意インデックスの述語を変更
+  9. インデックスを invalid にする
+  10. 表への SELECT の付与
+  11. 列単位の SELECT の付与
+- B3:
+  12. `start_ai_lab_topic_provider` を、同じシグネチャ・owner・戻り値・security・search_path・ACL のまま、本体だけ `return true` にする
+  13. claim の本体が未知のもの
+- 修正前（`f83247ae`）の migration に同じ runner を当てると、最初のケース（B1）で「適用されてしまった」として失敗する。テストが指摘された問題を検出できることを確認した。
+
+### 健全な場合の適用と再適用
+- 健全な場合: 適用でき、claim の本体は `9aefd06d…` になる。再適用もできる。4 関数の本体は template と同じ（書き換えられていない）。
+- `ai_lab_topic_capacity_run.sh` もすべて PASS:
+  - 20261004090000 がない状態での適用は拒否され、何も作られない
+  - 適用と再適用ができる
+  - 実効 ACL は変わらない
+  - 129 件以上の候補と、対応表にない seed は拒否される
+
+### 容量の結果（変更なし）
+- 本物の SQL で 14 日 × 10 投稿 / 日 = **140/140**。72 時間・48 時間のクールダウンも守られ、61 種類の seed が使われた。
+- 旧来の 7 件は 1 日目で尽きる（10 枠中 6 件確保、4 件が題材切れ）。
+- TS のシミュレーションも合格: 本番どおり / 0 で固定 / 偏ったローテーション、28 日間、7 件に 1 件が結果不明になる場合。
+
+### 承認済みの題材ファイルの安定性
+- `ai_lab_dev_diary_context.ts` は `f83247ae` から **1 バイトも変えていない**（git diff 0）。
+- 次も変えていない: 74 件の seed、0〜6 番、タグ、Tier の順番、x-test-post、brand post store、provider outcome、scheduler。
+
+### 変更ファイル
+- `supabase/migrations/20261007173000_ai_lab_topic_evergreen_capacity.sql`（B1 / B2 / B3 の preflight と、claim 本体の事後条件。claim の本体は変更なし = md5 `9aefd06d…` のまま）
+- `supabase/tests/ai_lab_topic_capacity_adverse_run.sh`（新規）
+- `supabase/functions/_shared/brand/ai_lab_event_dedupe_test.ts`（B1〜B3 の静的テストを追加。既存の migration テストは、pg_temp で写した部分だけを除外して判定するように直した）
+
+### テスト
+- 異常系 13/13 の拒否と、健全な場合の適用・再適用。
+- 容量の実証はすべて PASS（140/140）。既存の claim の実証も 132 件すべて PASS。
+- Deno: x-test-post + _shared + migration の不変条件で 1019/1019（74 件の TS / SQL の対応表の一致、期待する md5 をソースから再計算した一致を含む）。
+- 変異確認:
+  - 期待する md5 を 1 文字変えると、Deno のテストが失敗する
+  - 修正前の migration だと、異常系の runner が失敗する
+- `deno check` / `deno lint` クリーン、shell の構文 OK、`git diff --check` クリーン、追加行の秘密情報スキャン 0。
+
+### 最新 main との重なり
+- 作業前と push 前に最新の main を取得した。
+- 変更ファイルは main 側で変更されていない。
+- open な PR（#106 G4 / #33 / #11 / #10 / #3）とも重なりはない。
+- G2 / G4 / G5 のファイルには触れていない。
+
+### 本番・ゲート
+本番へのアクセス・書き込み・適用・deploy・scheduler・OpenAI・X はすべて 0。merge 0。
+
+### 次
+- TASK のとおり、**この修正の head（`7c3c06d0`）に対して、Codex の集中再レビューを 1 回**。
+- 本番に適用する順番は前回と同じ（preflight → migration `20261007173000` を単体で適用して読み戻し → x-test-post の deploy）。
+- 本番の preflight では、本番のロール構成でこの B1 の検査が通ることも確認する（2026-10-05 の読み取りでは、anon / authenticated / service_role から外向きのメンバーシップは無かった）。
+- status → review_required / next_owner → chatgpt。STOP。
+
+---
+
+# Previous G3 task — preserved history
+
+# Claude Task 3 — CURRENT TASK
+
 - task_id: ai-lab-topic-continuity-fix-20261007
 - owner: claude
 - slot: claude-3
@@ -4779,3 +5258,33 @@ Unexpected residue: **none**.
 - production migration apply remains separately approval-gated.
 - PR #78 remains blocked until schema is independently accepted, applied with explicit approval, and read back.
 - next_owner: codex; wait for C2.
+
+
+## Final K3 — AI Lab topic continuity + Premium unlimited length — 2026-10-07
+
+- verdict: **PASS_CANDIDATE / final Codex rereview required / merge HOLD**.
+- exact candidate: PR #109 head `fb4afb21d7ce808de3257bebc8062aed93353dec`; PR remains open/unmerged.
+- accepted Premium-length delta:
+  - AI Lab profile changed from finite 280-code-point limit to explicit `UNLIMITED_POST_LENGTH`;
+  - 140/280 are neither target nor ceiling;
+  - natural short posts remain allowed; >280 is allowed when useful; no padding instruction;
+  - 641-code-point generation, dispatch guard and scheduled-post handoff all pass with exact characterCount;
+  - character-count diagnostics remain;
+  - account/post-type safety remains unchanged.
+- generator delta to rereview:
+  - explicit unlimited mode uses `max_output_tokens=2000` instead of 600;
+  - explicit unlimited mode rejects Responses API `status=incomplete` with `BRAND_POST_OUTPUT_INCOMPLETE` rather than returning a cut-off post;
+  - non-unlimited profiles retain prior 600-token behavior according to tests.
+- prior security/capacity delta remains accepted as candidate:
+  - B1 SET ROLE graph fail-closed guard;
+  - B2 canonical prerequisite table-shape proof;
+  - B3 exact unchanged lifecycle-function body proof;
+  - 13/13 adverse drift cases rejected with rollback;
+  - healthy migration apply/reapply PASS;
+  - real SQL 14 days x 10/day = 140/140;
+  - accepted 74-topic/Tier2/Tier3 source and migration/capacity/adverse files are byte-stable from security head `7c3c06d0`.
+- reported tests: x-test-post + _shared + migration invariants **1028/1028 PASS**; both PR109 disposable PG17 capacity/adverse runners ALL PASSED; Netlify SUCCESS; Vercel only account-wide deployment-rate-limit.
+- production access/write/migration apply/deploy/merge/scheduler/OpenAI/X: 0.
+- fresh slot check at K3: H1 is occupied by G4 PR #106 rereview; H2 is occupied by G2 PR #110 review. Do not overwrite either slot.
+- next: assign the first genuinely free H1/H2 to one exact-head rereview of `fb4afb21d7ce808de3257bebc8062aed93353dec`, recommended **Sol（高）**. Scope: prior B1-B3 closure + Premium unlimited-length delta + 2000-token/incomplete-response behavior only.
+- production rollout remains HOLD until that review passes and a later explicit migration/deploy gate is created.

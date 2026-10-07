@@ -1,5 +1,260 @@
 # Codex Task H1 — CURRENT TASK
 
+- task_id: postona-pr106-phase2a2-security-rereview-20261007
+- owner: codex
+- slot: codex-1
+- status: done
+- next_owner: none
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused exact-head DB/security rereview
+- target_pr: 106
+- target_head: a8f313dc72b087ab86482781297848fe6e23bdcc
+- previous_reviewed_head: dac01220ca600cc003b3dafa4b30a84340b29850
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Perform one focused independent rereview of POSTONA PR #106 after G4 corrected all six blockers from the prior direct review.
+
+Do not broaden this into a new architecture review.
+Do not merge or apply anything.
+
+The exact question is whether head `a8f313dc72b087ab86482781297848fe6e23bdcc` safely closes B1-B6 while preserving the already accepted X behavior and source-only scope.
+
+## Freshness / isolation
+
+1. Read:
+   - `.agent/ORCHESTRATION.md`
+   - `.agent/ACTIVE_TASK.md`
+   - `.agent/CURRENT_STATE.md`
+   - latest G4 TASK/Report
+   - this H1 TASK.
+2. Use a fresh independent H1 worktree/checkout from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #106.
+4. Require exact head `a8f313dc72b087ab86482781297848fe6e23bdcc`; moved head => STOP.
+5. Allocation-time facts:
+   - PR #106 open/unmerged;
+   - exactly 6 changed files;
+   - Netlify PASS / Vercel PASS;
+   - current main is 5 commits ahead of PR merge-base, all in `.agent/` files only;
+   - changed-file overlap with the six PR files = 0.
+6. G3 is separately active on AI Lab continuity; G5 is separately active on common-account native validation. Do not touch their files/worktrees/servers.
+7. No production DB/catalog read, migration apply, deploy, Auth/OAuth/Vault/secrets, real X/Threads/Instagram call, merge, or production mutation.
+
+## Review scope — B1 provider identity uniqueness
+
+Independently reproduce the former failures and confirm the corrected precondition refuses them atomically before DDL:
+
+- missing `(platform, platform_user_id)` unique index;
+- X-only predicate;
+- wrong/wider key;
+- expression index;
+- invalid/not-ready index;
+- wrong predicate;
+- NULLS NOT DISTINCT / non-default opclass/collation if supported by the fixture.
+
+Confirm the accepted healthy shape is semantically the existing unique btree on:
+- `platform, platform_user_id`
+- predicate covering every non-null canonical provider identity.
+
+Verify no silent repair/deduplication.
+
+## Review scope — B2 provider immutability
+
+Independently verify provider relabeling is impossible for all provider pairs and connection states, including simultaneous edits to:
+- access ref;
+- refresh ref;
+- connection_status;
+- publish_enabled.
+
+Probe:
+- X -> Threads / Instagram;
+- Threads / Instagram -> X;
+- Threads <-> Instagram;
+- service_role and owner paths;
+- multi-row UPDATE;
+- UPSERT/conflict update.
+
+Normal same-provider X publish/refresh/delete operations must remain green.
+
+## Review scope — B3 PG16+/17 SET ROLE graph
+
+Independently exercise:
+- `INHERIT FALSE, SET TRUE` authenticated -> service_role;
+- anon equivalent;
+- transitive SET-only chains;
+- SET path to owner;
+- SET path to superuser/BYPASSRLS/write-bearing role;
+- column-only INSERT/UPDATE role;
+- service_role -> owner/superuser path.
+
+Confirm unsafe graphs fail before DDL and the migration does not normalize memberships.
+
+Inspect the actual membership logic; do not rely only on tests.
+
+## Review scope — B4 explicit starting schema/security contract
+
+Verify the migration now fails closed on unknown starting drift rather than merely snapshotting it.
+
+Probe at least:
+- plaintext-credential-shaped column;
+- arbitrary unknown column;
+- unknown CHECK / UNIQUE / index / trigger / policy;
+- policy permissive/restrictive drift;
+- trigger event/function/security/search_path drift;
+- PUBLIC / anon / authenticated / unknown-role ACL drift;
+- column ACL drift;
+- unexpected grant option;
+- missing authenticated SELECT if that is part of the approved baseline.
+
+Confirm the healthy fixture's full expected:
+- 14 columns;
+- expected constraints/indexes;
+- RLS policy;
+- triggers;
+- table/column ACL;
+- role graph
+matches the migration's precondition exactly enough to justify fail-closed behavior.
+
+If a claimed baseline depends on facts only known from historical production inventory and not source, identify it explicitly as a **future production-preflight requirement**, not a source-review failure unless the migration invents the fact unsafely.
+
+## Review scope — B5 connected Meta access credential
+
+Verify the complete provider/status/ref matrix:
+- Threads + Instagram;
+- all allowed connection statuses;
+- access present/absent;
+- refresh present/absent.
+
+Required:
+- Meta refresh ref always null;
+- connected / identity_verified Meta requires access ref;
+- explicit pre-connect/disconnected states can remain without access ref when consistent with current status contract;
+- X DB acceptance is not unintentionally tightened.
+
+Probe updates that remove access while connected and valid disconnect transitions.
+
+## Review scope — B6 service_role provider authority
+
+This is security-critical.
+
+Verify:
+- direct service_role Meta INSERT is refused;
+- direct service_role Meta UPDATE is refused;
+- UPSERT cannot bypass the guard;
+- X writes required by current runtime still work;
+- anon/authenticated cannot write X or Meta;
+- provider guard is not bypassable by provider relabeling or simultaneous changes.
+
+Audit the actual existing SECURITY DEFINER functions that write `social_accounts`.
+Confirm none acts as a generic Meta writer under the corrected schema.
+
+Inspect the future intended narrow owner/SECURITY DEFINER Threads path only as a design boundary; do not implement it here.
+
+## Defensive postcondition review
+
+Verify the corrected migration/postcondition tracks:
+- exact new CHECK expressions;
+- policy `polpermissive`;
+- full trigger definition and trigger function identity;
+- trigger function owner/security/search_path/body identity;
+- index valid/ready/live/immediate state;
+- role memberships/options;
+- full relevant ACL/column ACL;
+- all rows.
+
+Check that precondition/DDL/postcondition failures all rollback to the original X-only state with no guard/helper residue.
+
+## Regression evidence
+
+Independently rerun enough to support the verdict:
+
+- corrected G4 runner;
+- mutation suite;
+- original direct-review reproductions for B1-B6;
+- X publish permission;
+- X refresh pilot/authority;
+- account deletion;
+- PR41 Stage3B/settings-reader boundary;
+- source/diff checks.
+
+The G4 report claims:
+- 73 adverse starting states;
+- 21 postcondition mutation states;
+- 45/45 mutation detection;
+- B5 60-case matrix;
+- B2 64-case matrix plus UPSERT/multi-row;
+- no production/provider operation.
+
+Do not assume these counts prove correctness; sample and independently reproduce the critical former blockers.
+
+## Verdict
+
+Return one of:
+
+### PASS
+Only if:
+- B1-B6 are independently closed;
+- no new P1/P2 blocker appears within the bounded scope;
+- X regressions are preserved;
+- no source/production boundary was exceeded.
+
+A PASS is **source merge readiness only**.
+It does not approve production preflight or migration apply.
+
+### CHANGES REQUIRED
+If any B1-B6 reproduction still succeeds, or a new material security/schema blocker is found.
+
+Provide:
+- exact file/line area;
+- independent reproduction;
+- minimum correction;
+- whether prior accepted areas remain intact.
+
+## Report
+
+Append to `.agent/CODEX_REPORT.md`:
+- task_id / verdict;
+- exact reviewed head;
+- B1-B6 disposition;
+- independent PostgreSQL evidence;
+- ACL/role/owner assessment;
+- X regression result;
+- changed files by reviewer;
+- production reads/writes = 0;
+- merge recommendation;
+- production apply recommendation;
+- remaining production-only facts.
+
+Then:
+- TASK status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for C1.
+
+推薦モデル：**Sol（高）**
+
+---
+
+## Final C1 — CHANGES REQUIRED — 2026-10-07
+
+- C1 accepts the completed H1 verdict for PR #106 head `a8f313dc72b087ab86482781297848fe6e23bdcc`: **CHANGES REQUIRED**.
+- two remaining blockers only:
+  1. existing trigger-function owner/ACL drift is not fully fail-closed;
+  2. the new provider guard function body is not pinned by the postcondition.
+- existing X regressions and the 45/45 mutation suite remain green.
+- H1 source changes: 0.
+- production read/write/apply/deploy/provider operations: 0.
+- H1 is now closed/free; corrective returns to G4.
+- recommended G4 model: **Opus5.5（高）**.
+- corrected head must receive one focused exact-head rereview afterward, recommended **Sol（高）**.
+
+# Previous H1 task history
+
+# Codex Task H1 — CURRENT TASK
+
 - task_id: ai-lab-topic-continuity-pr109-focused-review-20261007
 - owner: codex
 - slot: codex-1
@@ -4484,3 +4739,4 @@ Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 - recommended Claude model: **Opus5.5（高）**.
 - corrected candidate requires fresh Codex rereview: **Sol（高）**.
 - H1 closed and reusable after fresh allocation.
+

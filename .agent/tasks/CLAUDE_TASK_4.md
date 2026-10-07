@@ -14,6 +14,98 @@
 - merge_allowed: false
 - deploy_allowed: false
 
+## C1 corrective — function-contract hardening round — 2026-10-07
+
+H1 exact-head rereview of `a8f313dc72b087ab86482781297848fe6e23bdcc` returned **CHANGES REQUIRED** with two remaining blockers only.
+
+Preserve every previously accepted B1-B6 correction and existing regression behavior. Update the existing PR #106 only.
+
+### C1-R1 — pin owner/ACL of the two existing trigger functions
+
+The precondition currently hard-codes trigger definition/language/SECURITY DEFINER/search_path/body hash but does not fully pin the trigger functions' owner and ACL contract.
+
+Required:
+- derive the exact approved owner/ACL contract from repository migrations/fixtures and prior read-only production evidence;
+- before any DDL, require each existing trigger function to have the approved:
+  - function identity/signature;
+  - owner;
+  - SECURITY DEFINER state;
+  - language;
+  - search_path/config;
+  - body identity;
+  - direct ACL / grant-option state;
+  - no unsafe effective EXECUTE path from PUBLIC/anon/authenticated through membership or SET ROLE.
+- unknown owner/ACL drift must STOP; do not repair/revoke/reassign.
+- extend the before/after state snapshot so these function security properties cannot change during the migration.
+
+Required adverse tests:
+- wrong owner;
+- PUBLIC EXECUTE;
+- authenticated/anon direct EXECUTE;
+- grant option;
+- inherited EXECUTE;
+- PG16+ SET-only/transitive reachability to an EXECUTE-bearing role if relevant;
+- body/definition controls remain the previously accepted expected values.
+- every failure must leave the original X-only state and no new guard/helper residue.
+
+### C1-R2 — pin the new guard's exact body/definition
+
+The postcondition currently verifies metadata for `public.social_accounts_provider_guard()` but not its body.
+
+Required:
+- postcondition must verify the exact reviewed guard implementation, not merely owner/security/search_path/language/ACL;
+- use a stable canonical definition/body identity that catches semantic changes while remaining deterministic in the target PostgreSQL version;
+- also pin return type/signature and relevant function properties;
+- a body-only mutation preserving all metadata must fail the postcondition atomically.
+
+Required tests:
+- mutate only the guard body to:
+  - allow provider relabeling;
+  - skip Meta service_role protection;
+  - return NEW without guards;
+- keep owner/ACL/security/search_path/language unchanged;
+- each mutant must be detected;
+- unchanged reviewed function must pass.
+
+### Regression / scope
+
+Rerun:
+- the focused migration runner;
+- all existing B1-B6 adverse cases;
+- mutation suite, with new mutations added;
+- X publish / refresh / deletion / PR41 Stage3B regressions;
+- `git diff --check`;
+- secret scan.
+
+Do not reopen accepted product architecture without concrete evidence.
+
+Forbidden:
+- production DB/catalog access;
+- migration apply;
+- deploy;
+- Auth/OAuth/Vault/secrets;
+- real provider calls;
+- G2/G3/G5 files;
+- PR merge.
+
+Completion:
+- update existing PR #106;
+- report new exact head;
+- C1-R1/R2 disposition;
+- new adverse/mutation evidence;
+- changed files;
+- fresh-main overlap;
+- CI;
+- production/deploy/provider operations = 0;
+- status -> `review_required`;
+- next_owner -> `chatgpt`;
+- STOP for K4.
+
+After K4, use a genuinely free H1/H2 slot for one focused exact-head rereview.
+
+推薦モデル：**Opus5.5（高）**
+
+
 ## Review verdict
 
 Independent focused review of PR #106 returned **CHANGES REQUIRED**.
@@ -298,6 +390,214 @@ Then:
 After K4 accepts a corrected candidate, ChatGPT should use a truly free H1/H2 slot for one focused exact-head rereview whenever available.
 
 推薦モデル：**Opus5.5（高）**
+
+## K4 decision — corrected PR #106 PASS_CANDIDATE / H1 rereview assigned — 2026-10-07
+
+- verdict: **PASS_CANDIDATE / merge HOLD**.
+- exact corrected head: `a8f313dc72b087ab86482781297848fe6e23bdcc`.
+- PR #106 remains open/unmerged with exactly 6 changed files.
+- CI: Netlify PASS / Vercel PASS.
+- fresh-main overlap: 0 across the six PR files; main-only advancement since merge-base is control-file work.
+- G4 reports B1-B6 corrected with expanded disposable PostgreSQL evidence, 73 adverse start states, 21 postcondition drift cases, 45/45 mutation detection, B5 60-case matrix and B2 64-case matrix.
+- production DB/apply/deploy/Auth/OAuth/Vault/provider calls: 0.
+- because this remains a DB/ACL/credential/provider-authority boundary, one focused exact-head independent rereview is mandatory before merge.
+- H1 was verified done/free and is now assigned:
+  - task: `postona-pr106-phase2a2-security-rereview-20261007`;
+  - exact target: `a8f313dc72b087ab86482781297848fe6e23bdcc`;
+  - recommended model: **Sol（高）**.
+- H2 remains free and untouched.
+- no production preflight/apply is authorized by this K4.
+- next_owner: codex / H1.
+
+## Report — postona-multisocial-phase2a2-security-corrective-20261007 (2026-10-07)
+
+- task_id: postona-multisocial-phase2a2-security-corrective-20261007
+- result: **B1〜B6 と防御的な追加項目をすべて修正し、既存の PR [#106](https://github.com/anohi-memories/kabumori/pull/106) を更新した（source のみ・本番適用なし）**。
+  - 新しい head は `a8f313dc`（修正 `87280dde` ＋ main の merge）。レビューを受けた head `dac01220` は履歴に残っている（force push はしていない）。未 merge（merge_allowed=false）。
+- model_used: Opus 5.5（TASK の推奨どおり）
+- fresh main:
+  - 開始時の main は `5e31b346`。
+  - PR のブランチには、最新の main `55193e92` を通常の merge で取り込んだ。
+  - 取り込んだ変更（G1 のポートフォリオ、G2 の PR101、AI モデルの登録表、.agent）は、このタスクのファイルや、テストで使う migration の連鎖と重ならない。
+- workspace: 既存の G4 専用 worktree `/Users/yuya/Developer/kabumori-g4-phase2a2`（作業前に clean であることと、PR の head が `dac01220` であることを確認した）
+- changed_files（PR #106 の既存 6 ファイルだけ。新しいファイルは追加していない）:
+  - `supabase/migrations/20261007150000_postona_social_accounts_multi_provider.sql`（SHA-256 `9086cac4…ec3d7`）
+  - `supabase/tests/postona_social_accounts_multi_provider_run.sh`
+  - `supabase/tests/postona_social_accounts_multi_provider_fixture.sql`
+  - `supabase/tests/postona_social_accounts_multi_provider_behavior.sql`
+  - `supabase/tests/postona_social_accounts_multi_provider_mutations.sh`
+  - `docs/postona/threads-connection-phase2b.md`
+
+### B1〜B6 の対応
+
+**B1 — プロバイダの本人 id の一意性**
+- DDL の前に、`CREATE UNIQUE INDEX ON public.social_accounts USING btree (platform, platform_user_id) WHERE (platform_user_id IS NOT NULL)` が存在することを確認する。インデックス名は比較しない。条件:
+  - 有効・ready・live・immediate（遅延しない）であること
+  - 既定の演算子クラスと照合順序、NULLS DISTINCT、式なしであること（どれかが違えば定義文字列に現れる）
+- これがなければ `POSTONA_ACCOUNTS_PRECONDITION_IDENTITY_UNIQUE` で止まる。インデックスを作り直したり、重複を解消したりはしない。
+- 部分インデックスの条件 `platform_user_id IS NOT NULL` は、id を持つすべての行（全プロバイダ）を対象にする。
+- 不正な状態から始めると、11 通りすべてが拒否され、何も変わらない（X だけの CHECK も残る）:
+  - インデックスがない
+  - X だけの条件
+  - キーが広い
+  - キーが違う
+  - 式インデックス
+  - 失敗した `CREATE INDEX CONCURRENTLY` が残した無効なインデックス
+  - 条件が違う
+  - NULLS NOT DISTINCT
+  - text_pattern_ops
+  - COLLATE "C"
+  - 一意でない
+
+**B2 — プロバイダは変えられない**
+- 新しいトリガー `social_accounts_provider_guard`（BEFORE INSERT OR UPDATE、FOR EACH ROW）を追加した。`NEW.platform IS DISTINCT FROM OLD.platform` を、どのロールでも `SOCIAL_ACCOUNT_PROVIDER_IMMUTABLE` で拒否する。
+- 次の組み合わせをすべて確認し、どれも拒否された:
+  - 付け替え: X→Threads、X→IG、Threads→X、Threads→IG、IG→X、IG→Threads
+  - 行の状態: 接続済みの X と未接続の X、refresh 参照の有無
+  - 同じ文で一緒に変える内容: refresh / access / 状態 / 公開設定
+  - 実行するロール: 所有者と service_role
+  - 書き方: 複数行の UPDATE、upsert
+- X の通常の更新（投稿許可、refresh、退会）は、既存の回帰テストですべて通った。
+
+**B3 — SET ROLE で到達できる経路**
+- `pg_has_role(..., 'MEMBER')` を使うようにした。PG16 以降の、INHERIT=false / SET=true のものも含め、すべてのメンバーシップの経路を、直接・推移的にたどる。
+- anon / authenticated から、次のどれかに到達できれば `ROLE_GRAPH` で止まる:
+  - テーブルの所有者、superuser、BYPASSRLS のロール、service_role
+  - このテーブルを INSERT / UPDATE（列単位を含む）/ DELETE / TRUNCATE できる、またはトリガーを追加できるロール
+- service_role が所有者か superuser に到達できる場合も止まる（B6 の前提）。
+- ロールのつながりは正規化しない。revoke もしない。
+- 不正な状態から始めた 12 通りは、すべて拒否された:
+  - SET だけの経路: authenticated→service_role、anon→service_role、推移的な chain（authenticated / anon）、所有者への経路、anon から chain をたどって所有者へ、`pg_write_all_data` への経路、service_role→所有者
+  - 継承による経路: service_role、所有者
+  - 列単位の書き込み権限だけを持つロールへの SET 経路（ACL で先に拒否）
+  - 継承した書き込みロール（ACL で先に拒否）
+
+**B4 — レビュー済みの開始契約**
+- DDL の前に、`social_accounts` が次の契約と完全に一致することを確認する。一致しなければ固定のコードで止まり、何も変えない（不明なものを drop・revoke・正規化しない）:
+  - 列: 14列（名前、型、NULL 可否、既定値、identity / generated、照合順序）。それ以外の列はない
+  - 制約: 6つ（定義、検証済み、遅延しない。名前は比較しない）
+  - インデックス: 3つ（定義と、使える状態であること）
+  - RLS: 有効で FORCE なし。member の読み取りポリシーだけがある（permissive、SELECT、authenticated、式の文字列まで一致）
+  - トリガー: 既存の2つ（完全な定義、有効、関数の言語・SECURITY DEFINER・search_path・本体の md5）
+  - 表の ACL: authenticated は SELECT だけ。service_role は TRIGGER を除く DML などだけ。どれも grant option なし。PUBLIC・anon・その他のロールには何もない。列単位の ACL もない
+- 契約の根拠: 9/28 の本番調査に基づく fixture、識別子のインデックス・ポリシー・トリガーを作った migration、10/06 の S0（所有者は superuser でない `postgres`、トリガーはこの2つだけ、authenticated に INSERT / UPDATE / DELETE はない）。
+- 本番では未確認の値がある（下の「本番だけで確認できる事実」）。その確認は同日の読み取り専用 preflight で行い、違えば契約をレビューで直す。
+- 不正な状態から始めた 36 通りは、すべて拒否された:
+  - 列（平文トークン形の列、未知の列、既定値、NULL 可否、型、照合順序、継承）
+  - 制約（未知の CHECK、未知の UNIQUE）
+  - インデックス（未知のもの）
+  - RLS とポリシー（RLS オフ、FORCE、未知のポリシー、restrictive、ロールの違い）
+  - トリガー（未知のもの、イベントの違い、無効化、関数本体、SECURITY INVOKER 化）
+  - ACL（authenticated の UPDATE / REFERENCES / TRUNCATE、authenticated の SELECT がない、anon の SELECT / DELETE、PUBLIC の SELECT / INSERT、未知のロール、service_role の TRIGGER、grant option、列単位の4種）
+
+**B5 — 接続済みの Meta 行の access 参照**
+- 新しい CHECK `social_accounts_meta_connected_access` を追加した: `platform = 'x' or vault_access_token_secret_id is not null or connection_status in ('unconnected', 'authorization_pending', 'failed')`。
+- 状態の契約は、既存の CHECK にある 5 つの値。
+- 接続前の状態だけを許可リストにした。将来、状態が増えた場合は access が必須になる側（安全側）に倒れる。
+- refresh 参照は、従来どおり常に NULL（`social_accounts_provider_credential_profile`）。
+- X が DB で受け付けるものは変えていない。
+- 全組み合わせ 60 通りを確認した（プロバイダ3 × 状態5 × access の有無 × refresh の有無）。結果は期待どおりで、X はすべて受け付けられた。
+- あわせて次も確認した:
+  - 接続済みの行から access を外す更新は拒否される
+  - 切断（access を外して `unconnected` にする）は通る
+
+**B6 — service_role の権限が Meta 行に広がる問題**
+- 同じガードトリガーで扱う。Threads / IG の行の INSERT / UPDATE は、`current_user` がテーブル所有者のときだけ通る。それ以外は `SOCIAL_ACCOUNT_PROVIDER_WRITE_NOT_ALLOWED`:
+  - ガード関数は SECURITY INVOKER なので、`current_user` は文を実行しているロールになる。所有者が持つ SECURITY DEFINER 関数の中では所有者になる。
+  - X の行は対象外。DELETE も対象外。
+- 将来の Threads 接続は、所有者が持つ、レビュー済みの SECURITY DEFINER 関数として作る（EXECUTE は authenticated だけ）。こうすればガードを変えずに書ける。テーブルの広い DML をクライアントに開く必要はない。
+- 既存の監査:
+  - `social_accounts` を書く SECURITY DEFINER 関数は 7 つ。名前でテストに固定した。
+  - どれも汎用的な Meta 行の書き込み経路にならない: X の行を選ぶ、`'x'` だけを INSERT する、公開を止めるだけ、エラー状態にするだけ、Meta の ON を拒否する、削除する、のいずれか。
+  - 唯一、渡された行に資格情報を書く X の完了処理でも、Threads の行を指すように偽造した state では CHECK で拒否された。secret は作られず、state は消費されず、行も変わらなかった。
+  - Stage 3B の連鎖では、該当する関数は 2 つで、レビュー済みの一覧に含まれていた。
+- service_role は直接の操作で次ができない（すべて拒否された）:
+  - Threads / IG の行の作成
+  - 既存の Meta 行の 5 種類の更新
+  - upsert による変更
+- service_role の X の行の作成・更新は、従来どおり通る。
+- anon / authenticated は、X と Meta のどちらにも INSERT / UPDATE / DELETE できない（42501）。
+- 前提として、service_role がこのテーブルに TRIGGER 権限を持たないこと、所有者や superuser に到達できないことを、precondition で確認する（B3 / B4）。
+
+**防御的な追加項目**
+- postcondition で次を確認するようにした:
+  - 4 つの CHECK の定義が、文字列として完全に一致すること
+  - ガードのトリガーの完全な定義と有効状態、関数の性質（所有者、SECURITY INVOKER、plpgsql、空の search_path、EXECUTE は所有者だけ）
+- スナップショットに次を含めた: ポリシーの permissive、トリガーの完全な定義・関数の id・所有者・ACL・本体の md5、インデックスの valid / ready / live / immediate、関係するロールのメンバーシップ（INHERIT / SET / ADMIN を含む）、全行。
+- ロックについて明記した: ACCESS EXCLUSIVE のロック待ちは `lock_timeout` で区切られるが、ファイル全体の実行時間には上限がない。本番では `statement_timeout` と、止めるときの手順の承認が必要。migration のヘッダと設計メモ §10 に書いた。
+
+### 使い捨て PostgreSQL での確認（Homebrew PG 17.11、ローカルソケットのみ）
+- 修正版のランナー: **ALL PASS**（APPLY / BEHAVIOR / 既存テスト3種 / ADVERSE / ATOMICITY / CLEANUP）
+  1. 適用と挙動:
+     - X の行・列・権限・ポリシー・インデックス・メンバーシップは変わらない
+     - 既存のトリガー2つは、本体まで含めて変わらない
+     - B5 の 60 通り、B2 の 64 通りと upsert・複数行、B6 の service_role / anon / authenticated、書き込み関数の監査、偽造した state、未知のプロバイダと表記揺れ（14 通り）、一意性（3 プロバイダ）、X の関数による拒否、退会時の operator 回し
+     - CHECK とガードの定義が完全に一致すること
+  2. 既存の X テストを、候補の適用後に再実行して PASS:
+     - 投稿許可
+     - 退会
+     - Stage 3B の pilot / publish authority / settings reader
+     - 退会用と Stage 3B 用の fixture は、本番の契約と関係のない点（列の既定値、本番にあるトリガーやインデックスの不足）が違う。そこで次の順に処理した: 実物で契約の形に揃える（関数本体は実際の migration から取り出す）→ 候補を適用する → 揃えた分を戻す → 既存のテストを実行する。
+  3. 不正な出発状態: 73 通り（固定のコードでの拒否が 72、ロック待ちのタイムアウトが 1）。どれもカタログ全体と全行が変わらず、候補のオブジェクトが残らないことを確認した。名前を変えただけの X 専用 CHECK は適用される。適用中の書き込みは、precondition の時点から待たされる。
+  4. 原子性と postcondition:
+     - DROP と ADD の間、ガードを作った後、COMMIT の直前のどこで失敗しても、何も残らない
+     - postcondition の直前にずれを入れた 21 通りが、すべて拒否される
+- ミューテーション: **45/45 を検出**（変更していないコピーの対照実行は PASS）
+  - 元の 26 件はすべて新しいコードに合わせて残した。TRUNCATE の 1 件は「authenticated が任意の権限を持てる」に統合した。
+  - 新しいガード、B1 / B3 / B4 / B5、postcondition の比較項目について 20 件を追加した。
+  - CHECK を弱める変異は、postcondition の期待値も同時に書き換えた。postcondition ではなく挙動のテストが検出することを確かめるため。
+- `migration_source_invariants_test.ts`: 新しいファイルを含めて 11 件 PASS（このファイルは編集していない）。
+- `git diff --check` 問題なし。秘密情報パターン 0。依存関係・lockfile・TS・ランタイムの変更 0。
+
+### migration の予約
+- バージョンは `20261007150000` のまま。
+- main / 作業中の PR の migration と衝突しない:
+  - main の最新は `20261007120000`
+  - G3 PR #109: `20261007173000`
+  - #3: `20260921115317`（main 上にもある）
+- **`migration_source_invariants_test.ts` は G3 の作業中 PR #109 が変更している**ため、予約は追加していない。K4 で、#109 の後に `"20261007150000": "postona_social_accounts_multi_provider"` を追加してほしい。
+
+### 他スロットとの重なり
+- 作業中の PR（#109 G3、#33、#11、#10、#3）の変更ファイルとの重なりは 0。
+- G3 の AI Lab のファイル、G5 の共通アカウントと Auth のファイルには触れていない。
+
+### CI
+- push 直後の時点で、失敗 0・成功 2・実行中 1・スキップ 3（Web の変更はない）。ポーリングはしていない。結果は K4 で確認してほしい。
+
+### 本番・deploy・プロバイダの変更: 0
+- 本番の読み書き、適用、Edge の deploy、Auth / OAuth / Vault / secrets / Meta アプリの変更、プロバイダの API 呼び出しは、すべてしていない。
+- 使ったのは、ローカルの使い捨て PG クラスタだけ。
+
+### 本番だけで確認できる事実（同日の読み取り専用 preflight で確認する。このタスクでは実行していない）
+1. **テーブルの所有者**と、適用ツールで実行したときの `current_user` / `session_user`。所有者が superuser でないこと。
+2. **ロールのメンバーシップ**（INHERIT / SET / ADMIN を含む）:
+   - anon / authenticated が、所有者・superuser・BYPASSRLS・service_role・書き込みできるロールに到達できないこと
+   - service_role が、所有者・superuser に到達できないこと
+3. **列**: 14 列の型・NULL 可否・既定値。fixture 間で食い違いがあるもの:
+   - `publish_enabled`: false か true か
+   - `connection_status`: `'unconnected'` か `'identity_verified'` か
+   - `handle` / `oauth_client_ref` の NULL 可否
+   - 契約は publish-permission の fixture（false / unconnected / NOT NULL）に合わせた。
+4. **制約** 6 つの定義。特に `UNIQUE (brand_id, platform)` が制約として存在すること。
+5. **インデックス** 3 つ（本人 id のインデックスは `20260919120000` の `if not exists` で作られたので、既に同名のものがあった場合の定義を含めて確認する）。
+6. **ポリシー**: member の読み取りポリシーだけで、他に（管理者用などが）ないこと。RLS が有効で FORCE なし。
+7. **トリガー** 2 つの定義と、その関数本体の md5（`2d50233f…`、`dc371380…`）。
+8. **表と列の ACL**:
+   - authenticated が SELECT だけであること。Supabase の既定の付与が残っていれば REFERENCES / TRIGGER / MAINTAIN がある可能性がある
+   - anon に何もないこと
+   - service_role に TRIGGER も grant option もないこと
+   - 列単位の ACL がないこと
+9. **ガードの迂回の前提**（設計メモ T11 / T12）:
+   - 所有者の SECURITY DEFINER 関数が書く他のテーブルや、public スキーマに対して、service_role / anon / authenticated が TRIGGER / CREATE 権限を持たないこと
+   - repo にない SECURITY DEFINER 関数で `social_accounts` を書くものが本番にないこと
+10. **適用ツールがファイルをトランザクションで包むか**、`statement_timeout`、止めるときの手順。
+11. 適用の順序: PR41 / PR81 の migration が本番に入っていない間は、履歴の順序をどうするか（K4 が判断）。
+
+### 次の推奨
+1. K4 → 空いている H1 / H2 で、この head に絞った再レビューを 1 回行う。
+2. 承認されたら、上の 1〜11 を確認する同日の読み取り専用 preflight（G4 か、ユーザーが実行）を行う。違いがあれば、契約をレビューで直す。
+3. 本番適用（承認制）→ Phase 2b（Threads 接続）。2b の前に決めておくこと: 設計メモの T1 / T2 / T9 / T10。
+- status: review_required / next_owner: chatgpt。STOP for K4。
 
 ---
 
