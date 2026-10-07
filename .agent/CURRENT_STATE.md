@@ -1,3 +1,14 @@
+## G5 approved — production real-account smoke — 2026-10-07
+
+- user explicitly approved one bounded production-authenticated Kabumori smoke.
+- G5 task: `common-account-v1-phase2-real-account-smoke-20261007`, status ready.
+- scope: exactly one existing active Kabumori account; pre/post aggregate read-back; login -> active service-start path -> Home -> same-login token refresh -> sign-out -> same-account re-login -> sign-out.
+- no new enrollment, reactivation, withdrawal/deletion, profile edit, Auth Admin, DB/schema/migration, deploy or EAS.
+- credentials are entered only by the user in Simulator UI and must not be logged or pasted.
+- any unexpected state/count change is STOP; no corrective production writes.
+- recommended model: **Opus5.5（高）**.
+- finish code: K5.
+
 ## K2 — PR #110 PASS_CANDIDATE / one app-visible disclaimer blocker — 2026-10-07
 
 - PR #110 exact reviewed head: `b507a3c5c9e340b5d07e09ef80146edc37f26d83`.
