@@ -3,8 +3,8 @@
 - task_id: kabumori-pr110-b1-b4-rereview-20261008
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol（高）
 - type: narrow exact-head rereview / B1-B4 only
@@ -14,6 +14,9 @@
 - production_mutation_allowed: false
 - merge_allowed: false
 - deploy_allowed: false
+- review_verdict: CHANGES REQUIRED
+- review_completed_at: 2026-10-08 JST
+- review_report_commit: 2034440ed57c162dd7bcee0f6625f6a3ce74e165
 
 ## Purpose
 
