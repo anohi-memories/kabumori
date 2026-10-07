@@ -1,3 +1,20 @@
+## Final K5 — PR #95 round-4 Q1 PASS_CANDIDATE / final H1 rereview assigned — 2026-10-07
+
+- G5 result: **PASS_CANDIDATE**, not final merge approval.
+- exact PR #95 head: `ba35b642d30ce423a8683feffcd26aec325b45ee`; PR open/unmerged and mergeable at K5.
+- sole prior blocker Q1 is reported closed:
+  - deferred Kabumori auth preparation checks its captured user+login owner against the synchronously announced current owner before generation/loading changes or `acceptSession/prepareSession`;
+  - superseded tasks return before automatic service enrollment dispatch;
+  - A2 -> SIGNED_OUT / newer B / same-user fresh A3 send zero obsolete A2 requests.
+- original S1-T synchronous readiness fence remains PASS; same-session TOKEN_REFRESHED retains single-flight; prior S2/session_id/R1-R5 remain green.
+- reported tests: Kabumori 390/390; AuthProvider 23/23; X 221/221; X tsc/lint PASS; both web exports PASS; start-intent DB runner 10 PASS markers; Phase1 20/20; migration invariants 11/11; unchanged H1 probes 10/10 PASS; mutation checks 11/11.
+- fresh-main comparison at allocation includes unrelated important-news-monitor product changes and .agent control changes, but has **zero overlap** with PR #95's 17 files.
+- production mutation / migration apply / deploy / EAS / real provider call = **0**.
+- H1 final focused rereview assigned: `common-account-v1-phase2-q1-final-rereview-20261007`, exact target `ba35b642d30ce423a8683feffcd26aec325b45ee`, recommended **Sol（高）**.
+- G5 remains review_required / next_owner codex. PR #95 merge and production migration apply remain HOLD.
+- after H1 PASS, C1 may decide source merge readiness; production migration apply/read-back and native release remain separate gates.
+- AI Lab diary: no additional entry; this is the same internal common-account security-hardening milestone.
+
 ## Final C2 — PR #101 CHANGES REQUIRED / F1-F3 corrective / GPT-6 migration queued — 2026-10-07
 
 - H2 reviewed exact PR #101 head `2469e8a8be0125805551ba3e353c4ef6058b0150`.
