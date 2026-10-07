@@ -1,3 +1,26 @@
+## K4 — corrected POSTONA PR #106 PASS_CANDIDATE / H1 rereview assigned — 2026-10-07
+
+- corrected PR #106 exact head: `a8f313dc72b087ab86482781297848fe6e23bdcc`.
+- PR remains open/unmerged with exactly 6 changed files.
+- CI: Netlify PASS / Vercel PASS.
+- current main advanced after the PR merge-base only in unrelated control files; changed-file overlap with PR #106 = 0.
+- G4 reports all previous B1-B6 blockers corrected with expanded disposable PostgreSQL evidence:
+  - provider identity uniqueness precondition;
+  - provider immutability;
+  - PG16+ SET ROLE graph;
+  - explicit starting schema/security baseline;
+  - connected-Meta access-reference requirement;
+  - provider-aware service_role Meta-write boundary.
+- reported proof includes 73 adverse starts, 21 postcondition drift cases, 45/45 mutation detection, B5 60-case matrix, B2 64-case matrix, and existing X publish/refresh/deletion/PR41 Stage3B regressions.
+- production DB/apply/deploy/Auth/OAuth/Vault/provider calls = 0.
+- K4 verdict: **PASS_CANDIDATE / merge HOLD** pending one independent exact-head rereview.
+- H1 was checked as done/free and is now assigned `postona-pr106-phase2a2-security-rereview-20261007`.
+- H1 target: `a8f313dc72b087ab86482781297848fe6e23bdcc`.
+- H1 recommended model: **Sol（高）**.
+- H2 remains free and untouched.
+- no production preflight/apply is authorized by this K4.
+- next action: send `H1` to Codex; finish code `C1`.
+
 ## Routing correction — delivery-first market-report task belongs to G2 — 2026-10-07
 
 - user corrected the routing: this chat/workstream uses **G2 only**.
