@@ -918,6 +918,23 @@ PR #87 の最初の自然サイクル（2026-10-06大引け）の3ポイント�
 
 - 内容の作り直し（`generation_attempts` / `content_regenerations` / `hard_rejections` / `quality_rewrite`）、通信のretry（`transport_*`）、cronの再実行（`report_attempt_count`）は別々に記録する。
 
+### 15.6 生成トレース（テスト期間のデバッグ保存、2026-10-07）
+
+2026-10-07朝刊の分析は2回とも不合格で、残ったのは固定コードとFactの最後の指摘1件だけだった。生成された本文、1回目のローカル指摘、07:55の1回目の実行は、いずれも上書きされ（再試行が `market_report_cycles.report_diagnostics` を置き換える）、モデルが誤った本文を書いたのか、guardが安全な本文を止めたのかを、後から区別できなかった。テスト期間は診断性を優先し、**モデルの出力と判定内容を残す**。認証の秘密だけを除く。
+
+- 保存先：`market_report_generation_traces`（追記専用。migration候補 `20261007120000_market_report_generation_traces.sql`、本番未適用）。1回のモデル生成＝1行。1回の実行（スケジュールされた1回の分析）が複数の行を持つ。更新・削除・TRUNCATはトリガで拒否。RLS有効・policyなし・anon/authenticatedへの権限なし。service_roleだけが insert / select。
+- 1行の内容：`invocation_id`（実行の識別）、`attempt`（そのcycleの再試行番号。07:55=1、08:05=2）、`generation_index`、`cycle_id` / `data_packet_id` / `report_packet_id`（失敗した生成では null）、`model`、`prompt_hash`（その生成に使った指示文の短いハッシュ）、`stage`（invalid_output / local / fact / safe_candidate / delivered / request_failed）、`hard_rejection`、**`candidate`（モデルが返した構造化出力そのもの：headline・要約・claims・x_post・app_story など）**、`local_passed` / `local_issues` / `local_warnings`、`fact_ran` / `fact_passed` / `fact_issues`、`selected_for_delivery`、`fallback_reason`、`error_code`、実行内の累計の calls / tokens / cost。
+- 将来の個人向けレポート用：`source`（`shared_market_report` | `personalized_report`）と `subject_ref`（ユーザー・アカウント・レポートの識別子。共有分析では null）。個人向け生成の実装は含まない。QA段階で、個人向けの生成本文も同じ形で残せる。
+- 書き込み（`debug_trace.ts`）：生成が終わったあと（成功なら packet 保存の後、失敗なら fail 記録の後、例外でも）に、ベストエフォートで1回だけ insert する。**失敗しても配信は止めない・再試行しない・モデルを呼ばない**（ログに固定コードを1行出すだけ）。テーブルが未適用でも動く（insert が失敗してログに残るだけ）ので、Function のデプロイと migration の適用は順不同でよい。
+- 秘密の除外：キー名（authorization / token / api_key / secret / password / credential / cookie / vault …）の値は丸ごと `[redacted]`、本文中の Bearer / JWT / `sk-…` / `sb_secret_…` / `key=value` の形も置き換える。置き換えたあとでも秘密の形が残る行は書かず捨てる。入力のニュース本文や市場データは保存しない（`prompt_hash` と各 id で特定できる）。1行の candidate は6万字で切り、元の長さを残す。
+- 見方（SQL。service role か SQL editor）：
+  - ある日の朝刊の全生成：`select attempt, generation_index, stage, hard_rejection, local_issues, fact_issues, selected_for_delivery, fallback_reason, candidate from market_report_generation_traces where trading_date = '2026-10-07' and report_type = 'morning' order by created_at, generation_index;`
+  - 07:55 と 08:05 の比較：`attempt` と `invocation_id` で分かれる。1回目の失敗は再試行で消えない。
+  - 書き直しがFactで不合格になった本文：`stage = 'fact'` の行の `candidate` と `fact_issues`、配信された安全な最初の版は `selected_for_delivery = true` と `fallback_reason = 'rewrite_rejected_fact'`。
+- 検証と適用の順序：使い捨てPostgresで `TRC_PGHOST=/tmp/… TRC_PGPORT=… TRC_PGSUPER=… bash supabase/tests/market_report_generation_traces_run.sh`（追記専用・権限・一意性・形の制約を確認。トリガ・権限・一意キーを壊すと失敗することを変異で確認済み）と、`supabase/tests/market_report_generation_traces_source_test.ts`。**本番への適用は別のgate（承認後に migration 1本だけ）**。Function のデプロイと順不同でよい：テーブルが無い間は insert が失敗してログに1行残るだけ。適用後は、次の自然サイクルから行が入る。テスト期間が終わったら、保持期間を決めて整理する（追記専用なので、整理は管理者が別のmigrationで行う）。
+- 同時に直した指示文：朝刊の「前回の引け以降に確認できたニュース」（2026-09-17から）は、モデルが本文に写し、Factが「入力で確認できない時間関係」として止めた。朝刊・大引けとも「ニュースがいつ取得・公表されたかには、入力に書かれた日時の範囲でしか触れません」に置き換えた（入力のニュースには日時の項目が無い）。完成した例文は足していない。
+- 変えていないもの：Hardの判定、PR #99の記録（`X_POINTS_*`）と書き直しの条件（X 300字、アプリ700字）、安全な最初の版へのフォールバック、生成2＋Fact2の上限、packet の schema、consumer gate。
+
 ## 付録: 監査に使った主な場所
 
 - `supabase/functions/x-test-post/index.ts` — `selectMarketContext` 1146、`morningFactBasis` 1535、`generateMorningReport` 1548、`closeFactBasis` 1983、`generateCloseReport` 2069、`evaluateKabumoriVoice` 2755、morning 分岐 3939、close 分岐 4119、close 失敗保存 4230
