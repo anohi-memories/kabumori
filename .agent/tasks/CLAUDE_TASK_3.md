@@ -3,8 +3,8 @@
 - task_id: ai-lab-topic-continuity-pr109-security-corrective-20261007
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Opus5.5（高）
 - type: bounded migration/security corrective on existing PR #109
@@ -192,6 +192,102 @@ Then:
 
 A second focused exact-head Codex rereview is required after this correction.
 
+
+## Report — ai-lab-topic-continuity-pr109-security-corrective-20261007
+
+- result: **PASS candidate** — B1・B2・B3 を capacity migration の preflight で fail closed にした。PR #109 を更新し、open のまま（GitHub: MERGEABLE）。本番の読み書き 0 / migration 適用 0 / deploy 0 / merge 0 / scheduler 0 / OpenAI・X 0。
+- PR #109 head: 旧（レビュー対象）`f83247ae1024d4220dfbfa5484c725381d63815d` → **新 `7c3c06d07c32910472185e1c94b04fa1aab794f5`**。内訳は最新 main の通常 merge `46b3ce5b` と修正コミット 1 つ。rebase / force-push はしていない。
+- CI: Vercel だけ「Deployment rate limited — retry in 24 hours」（アカウント全体の制限で、以前から同じ）。コードとは無関係。
+- worktree: 既存の `/Users/yuya/Developer/kabumori-g3-ai-lab-continuity`。作業開始時に clean で、レビュー対象の head と一致していることを確認した。
+
+### 修正の要約
+いずれも `claim_ai_lab_topic` を置き換える前に評価する。1 つでも外れればファイル全体を取り消し、何も直さない。
+
+- **B1（SET ROLE の経路）**
+  - `pg_auth_members` を、anon / authenticated / service_role から再帰的にたどる。
+  - 各辺の INHERIT / SET のオプションは問わず、「経路があれば届く」とみなす（PG16 以降の辺ごとの意味にも保守的に対応）。
+  - anon / authenticated から次のどれかに届けば拒否する: owner、superuser、service_role、5 つの lifecycle 関数のどれかを実行できるロール、表に何らかの権限（列単位を含む）を持つロール。
+  - service_role から owner / superuser に届く場合も拒否する。
+  - 既存の owner メンバーシップの検査は維持した。ロールの付け外しは一切しない。
+- **B2（前提の表の形）**
+  - 20261004090000 の正本の定義を作る関数と、形を比べる関数を **そのままの文字で写し**、pg_temp に正本を作って比較する。
+  - 比較の対象: 列・型・NOT NULL・既定値・PK・CHECK の全文・インデックス（キー・述語・一意性・valid / ready / live）・RLS / FORCE・ポリシー数・トリガー数・列 ACL の数。
+  - 加えて、表の明示 ACL は owner のみであること、API ロールが実効権限（列単位・継承・PUBLIC を含む）を持たないことも確認する。
+  - 以前の弱い部分一致の CHECK 検査は削除した。この migration は表を変えないので、「容量修正前の正しい形」と「再適用時の正しい形」は同じものになる。
+- **B3（変更しない 4 関数の中身）**
+  - start / release / mark ambiguous / settle の 4 関数について、次をすべて承認済みの値と照合する: 引数（名前・順序・型）、戻り値、plpgsql、SECURITY DEFINER、`search_path=""`、volatility、STRICT でないこと、owner、直接 ACL（owner と service_role の再付与なし EXECUTE 1 件だけ）、**`md5(prosrc)`**。
+  - `prosrc` は `$$`〜`$$` の間の文字列がそのまま保存されるので、PostgreSQL のバージョンで変わらない。
+  - claim は「容量修正前の本体 `a3cbe667…`」か「この migration の本体 `9aefd06d…`」（再適用時）だけを受け付ける。
+  - 置き換えた後の事後条件でも、新しい本体の md5 を固定した。4 関数は書き換えていない。
+  - Deno のテストが、期待する md5 を 2 つの migration のソースから計算し直して一致を確認する。
+
+### 異常系の結果（`supabase/tests/ai_lab_topic_capacity_adverse_run.sh`、PG 17）
+次の **13 件はすべて拒否** された。どの場合も、カタログの指紋（public の関数の本体と ACL、表の ACL / RLS、列 ACL、制約、インデックスの定義と valid / ready）が適用前と完全に同じで、claim の本体も容量修正前のままだった。
+
+- B1:
+  1. `anon -> service_role` を INHERIT FALSE / SET TRUE で付与（anon は直接 EXECUTE できないことも確認したうえで）
+  2. `authenticated -> bridge -> service_role` を、SET の経路で付与
+  3. 通常の INHERIT TRUE で `authenticated -> service_role`
+  - 健全なロール構成は受け付ける（下の健全な場合）。ロールの変更は各ケースの直後と終了時に元に戻し、残っていないことを確認した。
+- B2:
+  4. PK を削除
+  5. 日記の有効性を守る一意インデックスを削除
+  6. RLS を無効化
+  7. event_key の CHECK を、同じ文字列を含むが中身のない式（`… or true`）に置き換え
+  8. 一意インデックスの述語を変更
+  9. インデックスを invalid にする
+  10. 表への SELECT の付与
+  11. 列単位の SELECT の付与
+- B3:
+  12. `start_ai_lab_topic_provider` を、同じシグネチャ・owner・戻り値・security・search_path・ACL のまま、本体だけ `return true` にする
+  13. claim の本体が未知のもの
+- 修正前（`f83247ae`）の migration に同じ runner を当てると、最初のケース（B1）で「適用されてしまった」として失敗する。テストが指摘された問題を検出できることを確認した。
+
+### 健全な場合の適用と再適用
+- 健全な場合: 適用でき、claim の本体は `9aefd06d…` になる。再適用もできる。4 関数の本体は template と同じ（書き換えられていない）。
+- `ai_lab_topic_capacity_run.sh` もすべて PASS:
+  - 20261004090000 がない状態での適用は拒否され、何も作られない
+  - 適用と再適用ができる
+  - 実効 ACL は変わらない
+  - 129 件以上の候補と、対応表にない seed は拒否される
+
+### 容量の結果（変更なし）
+- 本物の SQL で 14 日 × 10 投稿 / 日 = **140/140**。72 時間・48 時間のクールダウンも守られ、61 種類の seed が使われた。
+- 旧来の 7 件は 1 日目で尽きる（10 枠中 6 件確保、4 件が題材切れ）。
+- TS のシミュレーションも合格: 本番どおり / 0 で固定 / 偏ったローテーション、28 日間、7 件に 1 件が結果不明になる場合。
+
+### 承認済みの題材ファイルの安定性
+- `ai_lab_dev_diary_context.ts` は `f83247ae` から **1 バイトも変えていない**（git diff 0）。
+- 次も変えていない: 74 件の seed、0〜6 番、タグ、Tier の順番、x-test-post、brand post store、provider outcome、scheduler。
+
+### 変更ファイル
+- `supabase/migrations/20261007173000_ai_lab_topic_evergreen_capacity.sql`（B1 / B2 / B3 の preflight と、claim 本体の事後条件。claim の本体は変更なし = md5 `9aefd06d…` のまま）
+- `supabase/tests/ai_lab_topic_capacity_adverse_run.sh`（新規）
+- `supabase/functions/_shared/brand/ai_lab_event_dedupe_test.ts`（B1〜B3 の静的テストを追加。既存の migration テストは、pg_temp で写した部分だけを除外して判定するように直した）
+
+### テスト
+- 異常系 13/13 の拒否と、健全な場合の適用・再適用。
+- 容量の実証はすべて PASS（140/140）。既存の claim の実証も 132 件すべて PASS。
+- Deno: x-test-post + _shared + migration の不変条件で 1019/1019（74 件の TS / SQL の対応表の一致、期待する md5 をソースから再計算した一致を含む）。
+- 変異確認:
+  - 期待する md5 を 1 文字変えると、Deno のテストが失敗する
+  - 修正前の migration だと、異常系の runner が失敗する
+- `deno check` / `deno lint` クリーン、shell の構文 OK、`git diff --check` クリーン、追加行の秘密情報スキャン 0。
+
+### 最新 main との重なり
+- 作業前と push 前に最新の main を取得した。
+- 変更ファイルは main 側で変更されていない。
+- open な PR（#106 G4 / #33 / #11 / #10 / #3）とも重なりはない。
+- G2 / G4 / G5 のファイルには触れていない。
+
+### 本番・ゲート
+本番へのアクセス・書き込み・適用・deploy・scheduler・OpenAI・X はすべて 0。merge 0。
+
+### 次
+- TASK のとおり、**この修正の head（`7c3c06d0`）に対して、Codex の集中再レビューを 1 回**。
+- 本番に適用する順番は前回と同じ（preflight → migration `20261007173000` を単体で適用して読み戻し → x-test-post の deploy）。
+- 本番の preflight では、本番のロール構成でこの B1 の検査が通ることも確認する（2026-10-05 の読み取りでは、anon / authenticated / service_role から外向きのメンバーシップは無かった）。
+- status → review_required / next_owner → chatgpt。STOP。
 
 ---
 

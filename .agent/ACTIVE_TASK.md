@@ -81,11 +81,11 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: ai-lab-topic-continuity-pr109-security-corrective-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_3.md
 - allocation: C1 CHANGES REQUIRED corrective on existing PR #109 only. Preserve accepted 74-topic/Tier2+Tier3/cooldown/capacity behavior; fix migration B1 SET ROLE graph guard, B2 canonical prerequisite table-shape proof, B3 exact unchanged lifecycle-function body proof. Add adverse rollback fixtures. No production/apply/deploy/merge.
 - recommended_model: Opus5.5（高）
