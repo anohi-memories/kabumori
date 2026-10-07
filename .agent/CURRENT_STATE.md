@@ -1,3 +1,20 @@
+## G1 resumed — PR #100 contextual report-detail navigation corrective — 2026-10-07
+
+- PR #95 common-account source is merged as `d5bea735937b53095b110b4bed1f20442e56b089`; root navigation source boundary is now unblocked.
+- fresh main at allocation: `29b8d00c4894e80fa57875c2e2772e59ab637139`.
+- fresh open-PR overlap check on `src/app/_layout.tsx`, report-detail routes and portfolio route links: only existing PR #100 overlaps its own portfolio files; no other open PR owns the root/report files.
+- G1 is now ready on the existing portfolio task/PR #100 for one bounded correction only.
+- required final behavior:
+  - Portfolio -> report detail -> Back/swipe = Portfolio;
+  - Reports list -> report detail -> Back/swipe = Reports list;
+  - report -> news-detail regression unchanged;
+  - no redirect flash/internal router API.
+- preferred structure: root `report-detail` for Portfolio origin, existing nested `/reports/[id]` for Reports origin, shared report-detail implementation.
+- integrate current main into PR #100 first and preserve PR95 Auth/serviceSession plus root news-detail exactly.
+- no portfolio redesign, backend/DB/Auth/migration/EAS change.
+- recommended model: **Sonnet5（中）**.
+- finish code: K1.
+
 ## G3 assigned — X/social AI model policy + GPT-6 migration — 2026-10-07
 
 - task_id: `x-social-ai-model-policy-gpt6-upgrade-20261007`.
