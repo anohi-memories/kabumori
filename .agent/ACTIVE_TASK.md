@@ -82,7 +82,7 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - task_id: x-social-ai-model-policy-gpt6-upgrade-20261007
 - start_code: G3
 - finish_code: K3
