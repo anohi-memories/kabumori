@@ -1,3 +1,105 @@
+# G5 — Phase 2 native client validation before EAS
+
+- task_id: `common-account-v1-phase2-native-client-validation-20261007`
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- recommended_model: **Opus5.5（高）**
+- production_write_allowed: **false**
+- production_service_state_mutation_allowed: **false**
+- deploy_allowed: **false**
+- EAS_allowed: **false**
+
+## Purpose
+
+Validate the merged Phase 2 common-account client behavior on native Simulator/local app before spending an EAS/TestFlight build or attempting any real self-service enrollment mutation.
+
+The server migration `20261006230000_common_account_service_start_intent` is already production-applied and read back as APPLIED_PASS. This task validates the client boundary only.
+
+## Required startup
+
+1. Read ORCHESTRATION, CURRENT_STATE, ACTIVE_TASK and this TASK.
+2. Use an independent G5 worktree from fresh `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and confirm:
+   - PR #95 merge `d5bea735937b53095b110b4bed1f20442e56b089` is present;
+   - production apply completion is recorded;
+   - no other active slot owns the same Auth/client files.
+4. Do not reuse another slot's dev server, simulator process or worktree.
+
+## Validation scope
+
+### A. Source/local contract verification
+
+Re-run the accepted Phase 2 focused suites against current main:
+- Kabumori service-enrollment/AuthProvider tests;
+- shared enrollment parser/transport tests;
+- same-user fresh-login / different-user / sign-out / TOKEN_REFRESHED cases;
+- Q1 deferred-owner cancellation;
+- R1 automatic-start vs explicit reactivation contract;
+- strict response validation.
+
+Confirm current source still accepts exactly the production response contract now deployed:
+- active response including `shared_account`;
+- ended -> `reenroll_required`;
+- explicit reactivation remains lifecycle_version-bound;
+- malformed or stale session response fails closed.
+
+### B. Native Simulator validation
+
+Run Kabumori locally on iOS Simulator without EAS.
+
+Validate at minimum:
+- app boots and auth gate renders correctly;
+- signed-out state remains closed;
+- login/session restore does not transiently expose service-ready state;
+- same-session token refresh does not duplicate enrollment;
+- sign-out immediately clears service-ready;
+- navigation/push/notification consumers remain behind exact current serviceSession;
+- no crash or infinite loading around service enrollment.
+
+Use safe fixture/mock/local interception where necessary. Do **not** mutate production service state.
+
+### C. Production contract probe boundary
+
+No real production self-service enrollment/reactivation is authorized in this task.
+
+If a production-authenticated check would require invoking a mutation-capable start/reactivate RPC, STOP and describe the exact test plan needed. Do not create, reactivate, end, delete, backfill or change any production entitlement/profile/account.
+
+Read-only production catalog/status checks are allowed if needed.
+
+## Explicitly forbidden
+
+- EAS/TestFlight build;
+- production service enrollment/reactivation;
+- production DB/Auth/profile/entitlement writes;
+- migration/RPC/schema changes;
+- deploy/Edge/Cron/OAuth/Vault/X/provider mutation;
+- Phase 3 deletion/enforcement implementation.
+
+## Completion / K5
+
+Report:
+- exact main SHA;
+- exact tests rerun and results;
+- Simulator device/runtime used;
+- each required auth/service-session scenario and result;
+- whether current client exactly matches the deployed response contract;
+- any source patch made (only if a genuine client bug is found);
+- production mutation = 0;
+- EAS/deploy = 0;
+- remaining native/real-account gaps;
+- recommendation:
+  - `READY_FOR_REAL_ACCOUNT_SMOKE`, or
+  - `READY_FOR_EAS`, or
+  - `CHANGES_REQUIRED`.
+
+If a source fix is needed, keep it bounded to Phase 2 client behavior and stop for K5 before merge if risk is nontrivial.
+
+Recommended model: **Opus5.5（高）**.
+
+---
+
 # G5 — Phase 2 production apply of 20261006230000 (user-approved)
 
 - task_id: `common-account-v1-phase2-production-migration-apply-20261007`
