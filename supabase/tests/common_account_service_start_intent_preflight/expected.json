@@ -1,0 +1,265 @@
+{
+ "after": {
+  "callers": [
+   "public.reactivate_kabumori_service",
+   "public.reactivate_x_autopost_service",
+   "public.start_kabumori_service",
+   "public.start_x_autopost_service"
+  ],
+  "overloads": {
+   "private.account_lifecycle_active_answer": 1,
+   "private.account_lifecycle_reactivate_service": 1,
+   "private.account_lifecycle_service_refusal": 1,
+   "private.account_lifecycle_start_service": 1,
+   "public.reactivate_kabumori_service": 1,
+   "public.reactivate_x_autopost_service": 1,
+   "public.start_kabumori_service": 1,
+   "public.start_x_autopost_service": 1
+  },
+  "smoke": {
+   "active_answer_nobody": {
+    "service": "kabumori",
+    "shared_account": false,
+    "started": false,
+    "status": "active"
+   },
+   "refusal_deleting": {
+    "reason": "SERVICE_DELETION_IN_PROGRESS",
+    "status": "blocked"
+   },
+   "refusal_other": {
+    "reason": "SERVICE_NOT_READY",
+    "status": "blocked"
+   },
+   "refusal_suspended": {
+    "reason": "SERVICE_SUSPENDED",
+    "status": "blocked"
+   }
+  },
+  "touched": {
+   "private.account_lifecycle_active_answer(uuid,text,boolean)": {
+    "acl": "{OWNER=X/OWNER}",
+    "config": [
+     "search_path=\"\""
+    ],
+    "def_md5": "54426cba0d6b504660bef702ff0a9a4c",
+    "exec": {
+     "anon": false,
+     "authenticated": false,
+     "service_role": false
+    },
+    "exists": true,
+    "secdef": true,
+    "volatility": "s"
+   },
+   "private.account_lifecycle_reactivate_service(uuid,text,bigint)": {
+    "acl": "{OWNER=X/OWNER}",
+    "config": [
+     "search_path=\"\""
+    ],
+    "def_md5": "bcbb1f7910b93bee9678dbe45b04e903",
+    "exec": {
+     "anon": false,
+     "authenticated": false,
+     "service_role": false
+    },
+    "exists": true,
+    "secdef": true,
+    "volatility": "v"
+   },
+   "private.account_lifecycle_service_refusal(text)": {
+    "acl": "{OWNER=X/OWNER}",
+    "config": [
+     "search_path=\"\""
+    ],
+    "def_md5": "e1b6deeadc212fe0862269e3fecfdcda",
+    "exec": {
+     "anon": false,
+     "authenticated": false,
+     "service_role": false
+    },
+    "exists": true,
+    "secdef": true,
+    "volatility": "i"
+   },
+   "private.account_lifecycle_start_service(uuid,text)": {
+    "acl": "{OWNER=X/OWNER}",
+    "config": [
+     "search_path=\"\""
+    ],
+    "def_md5": "1098afc9e8af42c5e778f186e6441ced",
+    "exec": {
+     "anon": false,
+     "authenticated": false,
+     "service_role": false
+    },
+    "exists": true,
+    "secdef": true,
+    "volatility": "v"
+   },
+   "public.reactivate_kabumori_service(bigint)": {
+    "acl": "{OWNER=X/OWNER,authenticated=X/OWNER}",
+    "config": [
+     "search_path=\"\""
+    ],
+    "def_md5": "f74ce9dd3d055e82327b1b4e6eda5f40",
+    "exec": {
+     "anon": false,
+     "authenticated": true,
+     "service_role": false
+    },
+    "exists": true,
+    "secdef": true,
+    "volatility": "v"
+   },
+   "public.reactivate_x_autopost_service(bigint)": {
+    "acl": "{OWNER=X/OWNER,authenticated=X/OWNER}",
+    "config": [
+     "search_path=\"\""
+    ],
+    "def_md5": "f9a2454f24d2d1463e78910de80f78da",
+    "exec": {
+     "anon": false,
+     "authenticated": true,
+     "service_role": false
+    },
+    "exists": true,
+    "secdef": true,
+    "volatility": "v"
+   },
+   "public.start_kabumori_service()": {
+    "acl": "{OWNER=X/OWNER,authenticated=X/OWNER}",
+    "config": [
+     "search_path=\"\""
+    ],
+    "def_md5": "29ee91152c3ea79652edff63e7c1ae86",
+    "exec": {
+     "anon": false,
+     "authenticated": true,
+     "service_role": false
+    },
+    "exists": true,
+    "secdef": true,
+    "volatility": "v"
+   },
+   "public.start_x_autopost_service()": {
+    "acl": "{OWNER=X/OWNER,authenticated=X/OWNER}",
+    "config": [
+     "search_path=\"\""
+    ],
+    "def_md5": "0451f498121d41718221989c30f69030",
+    "exec": {
+     "anon": false,
+     "authenticated": true,
+     "service_role": false
+    },
+    "exists": true,
+    "secdef": true,
+    "volatility": "v"
+   }
+  }
+ },
+ "before": {
+  "callers": [
+   "public.start_kabumori_service",
+   "public.start_x_autopost_service"
+  ],
+  "overloads": {
+   "private.account_lifecycle_start_service": 1,
+   "public.start_kabumori_service": 1,
+   "public.start_x_autopost_service": 1
+  },
+  "touched": {
+   "private.account_lifecycle_active_answer(uuid,text,boolean)": {
+    "exists": false
+   },
+   "private.account_lifecycle_reactivate_service(uuid,text,bigint)": {
+    "exists": false
+   },
+   "private.account_lifecycle_service_refusal(text)": {
+    "exists": false
+   },
+   "private.account_lifecycle_start_service(uuid,text)": {
+    "acl": "{OWNER=X/OWNER}",
+    "config": [
+     "search_path=\"\""
+    ],
+    "def_md5": "8245c92e7a6d75f000c8b69cef061d2c",
+    "exec": {
+     "anon": false,
+     "authenticated": false,
+     "service_role": false
+    },
+    "exists": true,
+    "secdef": true,
+    "volatility": "v"
+   },
+   "public.reactivate_kabumori_service(bigint)": {
+    "exists": false
+   },
+   "public.reactivate_x_autopost_service(bigint)": {
+    "exists": false
+   },
+   "public.start_kabumori_service()": {
+    "acl": "{OWNER=X/OWNER,authenticated=X/OWNER}",
+    "config": [
+     "search_path=\"\""
+    ],
+    "def_md5": "29ee91152c3ea79652edff63e7c1ae86",
+    "exec": {
+     "anon": false,
+     "authenticated": true,
+     "service_role": false
+    },
+    "exists": true,
+    "secdef": true,
+    "volatility": "v"
+   },
+   "public.start_x_autopost_service()": {
+    "acl": "{OWNER=X/OWNER,authenticated=X/OWNER}",
+    "config": [
+     "search_path=\"\""
+    ],
+    "def_md5": "0451f498121d41718221989c30f69030",
+    "exec": {
+     "anon": false,
+     "authenticated": true,
+     "service_role": false
+    },
+    "exists": true,
+    "secdef": true,
+    "volatility": "v"
+   }
+  }
+ },
+ "dependencies": {
+  "private.account_lifecycle_lock(uuid,boolean,boolean)": {
+   "config": [
+    "search_path=\"\""
+   ],
+   "def_md5": "b016c1fe4a9a11cd16191125d8138f78",
+   "exec": {
+    "anon": false,
+    "authenticated": false,
+    "service_role": false
+   },
+   "secdef": true
+  },
+  "public.ensure_my_profile()": {
+   "config": [
+    "search_path=\"\""
+   ],
+   "def_md5": "1c3971c9edefcf34ee0e34e2b2916a1c",
+   "exec": {
+    "anon": false,
+    "authenticated": true,
+    "service_role": false
+   },
+   "secdef": false
+  }
+ },
+ "migration": {
+  "file": "20261006230000_common_account_service_start_intent.sql",
+  "sha256": "2c736e5aa70c61bf5563eee185d226fbde2c7f37f034c262f5e4b31f81888fa4"
+ }
+}
