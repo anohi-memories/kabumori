@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-4
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: source-only DB migration candidate / disposable PostgreSQL proof / Threads preparation
@@ -386,6 +386,35 @@ Because this task changes a DB migration/credential-shape boundary, K4 should no
 - status: review_required / next_owner: chatgpt。STOP for K4。
 
 ---
+
+## K4 decision — Phase 2a-2 PASS_CANDIDATE / focused DB review required — 2026-10-07
+
+- verdict: **PASS_CANDIDATE / merge HOLD**.
+- exact review target: PR #106 head `dac01220ca600cc003b3dafa4b30a84340b29850`.
+- changed files: exactly 6, all new; runtime/TS/Auth/OAuth/Vault/workflow files unchanged.
+- CI: Netlify PASS / Vercel PASS.
+- fresh-main check: main advanced after the PR base, but none of PR #106's 6 files overlap main-side changes.
+- source evidence accepted:
+  - current X behavior is preserved by the candidate tests;
+  - Threads/Instagram remain publish-disabled at the schema boundary;
+  - Meta credential shape permits no refresh secret while X remains governed by existing X-specific guards;
+  - migration uses bounded locking, fail-closed preconditions and atomic rollback;
+  - disposable PostgreSQL behavior/adverse/mutation proofs are substantial.
+- production apply/deploy/provider/Auth/OAuth/Vault mutation: **0**.
+- merge is not approved yet because this is a DB / credential-shape / ACL boundary.
+- one focused independent Codex review is required before merge.
+- room routing rule: do **not** allocate H1/H2 from this chat; use the direct-copy review instruction supplied by ChatGPT.
+- review should explicitly probe:
+  1. whether the migration must also fail closed if the expected unique `(platform, platform_user_id)` index is absent/drifted;
+  2. effective service_role/PUBLIC/inherited table+column privileges after widening `platform`;
+  3. creator/owner/superuser assumptions against the real Supabase migration role;
+  4. whether unexpected starting columns/schema drift (including plaintext-token-shaped columns) should block apply;
+  5. whether connected Meta rows need an access-reference invariant, while still allowing intentional disconnected rows;
+  6. provider relabeling (X -> Threads/Instagram) and whether identity immutability needs a guard;
+  7. atomicity, lock ordering, postcondition snapshots and rollback behavior;
+  8. regression of current X publish/refresh/deletion boundaries.
+- migration reservation bookkeeping (`20261007150000`) is still not added to the shared reservation map; this may be added after review when that shared file is free, without changing the reviewed migration semantics.
+- next_owner: codex (direct focused review), recommended **Sol（高）**.
 
 # Previous G4 task — finalized Phase 2a-1
 
