@@ -1,3 +1,22 @@
+# K2 — PR #110 corrected PASS_CANDIDATE / H2 B1-B4 rereview
+
+- k2_verdict: PASS_CANDIDATE
+- corrected_head: d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8
+- pr_state: open
+- mergeable: true / clean
+- main_changed_file_overlap: 0
+- status: review_required
+- next_owner: codex
+- h2_task: kabumori-pr110-b1-b4-rereview-20261008
+- h2_slot: H2
+- h2_recommended_model: Sol（高）
+- merge_allowed: false
+- deploy_allowed: false
+
+C2 findings B1-B4 are reported corrected with local/adversarial regression coverage. Because B1-B3 are delivery-safety boundary fixes, one narrow H2 exact-head rereview is required before final merge decision.
+
+---
+
 # C2 CORRECTIVE — PR #110 delivery-safety blockers from H2
 
 - c2_verdict: **CHANGES REQUIRED**
