@@ -1,3 +1,36 @@
+## Final K2 — PR #101 debug-trace PASS_CANDIDATE / H2 review required — 2026-10-07
+
+- G2 result: **PASS_CANDIDATE**, not final merge approval.
+- PR #101 exact head: `2469e8a8be0125805551ba3e353c4ef6058b0150`; open/unmerged/mergeable clean; Netlify/Vercel statuses green.
+- current main is 1 commit ahead of PR base with **0 changed-file overlap** across PR #101's 10 files.
+- accepted design direction:
+  - dedicated append-only `market_report_generation_traces` table;
+  - one row per model generation;
+  - scheduled attempts separated by invocation_id + attempt so retry does not erase prior failures;
+  - actual structured candidate/model output is retained;
+  - full local and Fact issue details are retained;
+  - delivered/rejected/fallback outcome and call/token/cost metadata are retained;
+  - report/data/cycle references and prompt/model identity are retained.
+- generated report/model output retention during development/QA is intentional product policy. Authentication credentials/secrets remain excluded.
+- PR #101 also removes the pre-existing unsupported morning/close timing wording without adding copyable finished examples.
+- reported regression evidence:
+  - market-report-analysis 176/176;
+  - personalized-reports 129/129;
+  - X shared consumer 8/8;
+  - data-packet 42/42;
+  - _shared 436/436;
+  - Deno check/lint/diff clean.
+- Hard Fact semantics unchanged; PR #99 generic/metric/near-duplicate WARN policy unchanged; X 300-char rewrite threshold unchanged; max call ceiling unchanged; safe-original fallback unchanged.
+- trace persistence is designed as non-blocking: storage failure does not alter report delivery or add model calls/retries.
+- new migration candidate: `20261007120000_market_report_generation_traces.sql`; not applied to production.
+- production mutation/deploy/manual generation = 0.
+- because PR #101 adds a durable DB/RLS/service_role persistence boundary, one focused H2 review is mandatory before merge.
+- H2 task: `kabumori-pr101-debug-trace-security-review-20261007`; recommended **Sol（中）**.
+- H2 scope: append-only contract, effective RLS/ACL, full-output retention correctness, secret exclusion, non-blocking persistence, prompt hygiene and Hard/call/rewrite regressions.
+- PR #101 merge, migration apply and Edge deploy remain HOLD until C2.
+- H1 remains reserved for the active G5 common-account PR #95 rereview.
+- AI Lab diary: no duplicate entry; this is internal QA/debug infrastructure for the same market-report quality iteration.
+
 ## Final K5 — PR #95 round-3 S1-T PASS_CANDIDATE / final H1 rereview assigned — 2026-10-07
 
 - G5 result: **PASS_CANDIDATE**, not final merge approval.
