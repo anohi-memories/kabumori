@@ -1,3 +1,34 @@
+## Final K5 — Phase 2 production preflight READY_FOR_APPROVAL / explicit approval required — 2026-10-07
+
+- G5 preflight verdict: **READY_FOR_APPROVAL**.
+- production mutation / DDL / migration apply / deploy / EAS / provider call during preflight: **0**.
+- PR #95 source is already merged as `d5bea735937b53095b110b4bed1f20442e56b089`.
+- production read-only facts:
+  - Phase 1 `20261001150000` is applied;
+  - target `20261006230000_common_account_service_start_intent.sql` is not applied;
+  - target new RPC/helper functions are absent as expected;
+  - current start RPCs are owned by postgres, SECURITY DEFINER, empty search_path, with expected authenticated/private EXECUTE boundaries;
+  - no duplicate overloads were found;
+  - lifecycle operations = 0, long transactions = 0, all current common accounts/entitlements are active;
+  - ended entitlements = 0;
+  - PR81 / PR41 production migrations are still unapplied and touch disjoint boundaries.
+- old-client compatibility is acceptable:
+  - pre-Phase2 Kabumori uses unchanged `ensure_my_profile()`;
+  - X old binary does not call lifecycle RPCs;
+  - no self_service enrollment has occurred yet and no Phase2 build is deployed.
+- production migration history is not repository-1:1; therefore **do not use db push or migration repair**.
+- preflight read-only suite: production before-state **24/24 PASS**; local proof covers expected PASS and 7 intended failure modes; source invariants 11/11.
+- approved future apply plan is two controlled writes only:
+  1. Stage A: exact reviewed migration file inside its transaction;
+  2. after Stage B read-back PASS, Stage C: insert one migration-history row.
+- if Stage B fails after COMMIT: STOP, do not add history, do not roll back to the old unsafe behavior; any repair must be a separately reviewed forward migration.
+- runbook/preflight PR #104 exact head `36bea0ae1029932f0ae5ed036e57ad2c389bb6ff` was accepted and squash-merged as `944836d4938cb8d2600b3f5b469e6e93b551da0a`.
+- G5 is intentionally **review_required / next_owner chatgpt**. No production-apply G5 TASK is ready.
+- explicit user approval is required before creating/starting the production apply task.
+- when approved, recommended execution model: **Opus5.5（高）**; same-day fresh preflight baseline and production mutation mutex are mandatory.
+- native build/TestFlight remains a later separate approval gate.
+- AI Lab diary: no additional entry; this is internal deployment-gate preparation.
+
 ## Final C2 — PR #101 F1 PASS / remaining F2-F3 corrective only — 2026-10-07
 
 - H2 final rereview verdict on exact PR #101 head `fddd274863b08aefed60795d678a298a1160d599`: **CHANGES REQUIRED**.
