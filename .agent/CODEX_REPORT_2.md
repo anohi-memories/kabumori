@@ -9,13 +9,15 @@
 - exact_reviewed_head: `d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8`
 - previous_reviewed_head: `6612b3f1dee5055794137da71697ebe5e07d7419`
 - PR: https://github.com/anohi-memories/kabumori/pull/110
-- fresh_main: formal base startup `e76b96cd8a692fa8de2b1e0397f0f61f213ef24d`; final pre-sync `a36c581e3012ca9a62433ccf13722c2e998dec78`.
+- fresh_main: formal base startup `e76b96cd8a692fa8de2b1e0397f0f61f213ef24d`; verdict preflight `a36c581e3012ca9a62433ccf13722c2e998dec78`; final synchronization preflight `973e5c5800d114382eafb2af6fb488a2a8a750b4`.
 - freshness: direct fresh-fetch before start and verdict; PR remains open/unmerged at exact target; 27 total PR files, 6 corrective files. Current-main changed-file overlap with PR files **0**. Final GitHub API mergeable=null / mergeable_state=unknown, so clean mergeability is not independently claimed; C2 must fresh-check.
 - isolation: fresh independent checkout `/private/tmp/h2-pr110-rereview-20261008.mXiYaE/review`, detached exact target; previous-head proof in separate `/private/tmp/h2-pr110-rereview-20261008.mXiYaE/previous`. Existing/shared checkouts and other-slot worktrees/dev servers untouched.
 - source_changes_by_H2: **0**. Review-only scratch harness/logs are outside the repository.
 - changed_files_by_H2 / sync scope: only `.agent/CODEX_REPORT_2.md` and `.agent/tasks/CODEX_TASK_2.md`. Historical entries preserved. No G2/H1/other control files changed.
 - implementation_commit: none (source review only).
-- report_commit / push: pending own control-file synchronization; confirmed receipt will replace this line.
+- report_commit: `2034440ed57c162dd7bcee0f6625f6a3ce74e165` (GitHub main).
+- task_state_commit: `423a25e9689329543f7b89d1cbf47582089c8437` (GitHub main).
+- push / GitHub sync: **CONFIRMED** by GitHub Contents API CAS and direct fresh-fetch/read-back: both commits included in main, current TASK `review_required / next_owner: chatgpt`, current Report task_id and verdict visible. Only own Report/TASK synchronized; no source/PR branch push.
 - production access/mutation/deploy/merge: **0**.
 - merge_recommendation: **HOLD**, return only the residual B1–B3 cases for a bounded G2 corrective. Do not reopen accepted disclaimer, registry, trace-storage, Premium policy or unrelated implementation.
 
