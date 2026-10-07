@@ -3,8 +3,8 @@
 - task_id: kabumori-market-report-gpt61-production-preflight-20261007
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: production read-only preflight / trace migration + market-report GPT-6.1 rollout
@@ -159,6 +159,107 @@ Then:
 - STOP for K2.
 
 Recommended model: **Opus5.5（高）**.
+
+## Report
+
+### result
+- **READY_FOR_APPROVAL**（M1・M2 とも。別々の承認が必要）
+- 本番への変更・デプロイ：**0**（読み取りのみ）
+
+### fresh main / head evidence
+- 専用 G2 checkout `/Users/yuya/Developer/kabumori-g2-market-report-reliability`（独立、toplevel assert、`supabase/config.toml` なし）で fresh `origin/main` `f9d1830ed693491629e1e84f5665944e7782edc7`。PR #107 merge `8738a186628989ce6c797d61ea80f5b721664c95` と PR #101 merge `e49ecfcc2f6707f64b6282960f9eec61be2973d3` を含む。`market-report-analysis` の import graph 全体は `8738a186` とbyte一致。
+- source のみの成果：PR [#108](https://github.com/anohi-memories/kabumori/pull/108)、branch `g2-trace-gpt61-rollout-preflight-20261007`、head `b73e4053fc033d9c47235b68df4bca311dc6c8c4`（新規2ファイル：ランナーと手順書。runtime・migration は未変更）。
+- 他スロット：G1 done、G3 done、G4 review_required（source-only・本番変更なし）、G5 done（窓 CLOSED 13:52）、H1/H2 done。**ACTIVE な本番変更窓なし**。同じ migration / Function / workflow / 設定を持つ他スロットなし。
+
+### A. 本番の trace migration の状態（履歴と実オブジェクトを別々に確認）
+- `supabase_migrations.schema_migrations` の `20261007120000`：**0行**（最新は `20261006230000`）。
+- `public.market_report_generation_traces`・`…_reject_change()`・トリガ・ポリシー・関連 relation：**すべて無し**（count 0）。部分適用・不整合なし。
+- 適用ロール `postgres`：superuser ではない、`createrole`、`rolinherit`。
+- `anon` / `authenticated` / `service_role`：所属ロールなし。所有者（postgres）・superuser・`pg_read_all_data`・`pg_write_all_data` のどれにも属さない。どれも superuser ではない。
+- `postgres` の既定権限：
+  - `public` のテーブル：`anon` / `authenticated` / `service_role` に `Dxtm`（TRUNCATE / REFERENCES / TRIGGER / MAINTAIN）
+  - 関数：所有者のみ（PUBLIC の EXECUTE なし）
+  - シーケンス：所有者のみ
+  - 3つの API ロール以外の grantee はいない → マイグレーションの revoke で消え、**F1 の権限検証は通る**見込み
+- イベントトリガ：
+  - `ensure_rls`（`rls_auto_enable`、SECURITY DEFINER）：新しい public テーブルに `enable row level security` するだけ（中身を読んで確認）。マイグレーションも有効化するので同じ結果
+  - `pgrst_ddl_watch`：DDL で PostgREST のスキーマを再読み込み → 新テーブルへの REST insert に手動の reload は不要
+  - 他は extension 用
+- 既存の read-only preflight SQL の各項目は、上記のクエリで同じ内容を確認（`supabase db query --linked` の SELECT のみ）。
+- **本番と同じ形の再現検証**：使い捨て PostgreSQL 17 に、非 superuser の所有者、`Dxtm` の既定権限、所有者のみの関数既定、`ensure_rls` 相当のイベントトリガ、本番の履歴テーブルの形を作り、マイグレーションを所有者として適用 → 成功。最終ACLは `service_role INSERT f` / `service_role SELECT f` / 列ACL 0、関数ACLは所有者のみ（ピンのハッシュが、この期待内容のハッシュと一致）。既定の `Dxtm` は残らない。
+
+### B. 現在デプロイ中の market-report-analysis
+- v26 ACTIVE、`verify_jwt=false`、ezbr `addbb0a61338…`（10/7 01:07 の v25 と同じバイト。版番号だけ上がっている）。
+- ダウンロードした11ファイルが PR #99 merge `e3379f80` と**全一致** → PR #101・#107 より**前**（Luna・trace 書き込みなし・registry なし）。
+- main との差：`analysis_logic.ts`、`handler.ts` が変更、`debug_trace.ts`、`_shared/kabumori_ai_models.ts` が新規。`e3379f80` 以降にこの graph を触ったのは PR #101 と PR #107 だけ。
+- 環境変数：デプロイ済みと main は同じ4つ（`SUPABASE_URL`、`SUPABASE_SECRET_KEYS`、`SEND_PUSH_NOTIFICATIONS_CRON_SECRET`、`OPENAI_API_KEY`）。**新しい secret は不要**。
+- 単独デプロイ可能（他の Function・migration・設定は不要。trace のテーブルが無くても動く）。
+- 他の Function の現状：personalized-reports v41、market-report-data-packet v19、x-test-post v137（いずれも今回の対象外）。
+
+### C. 安全なロールアウト順序（提案どおりで成立）
+1. **M1**：ランナー `apply`（Stage A → B → C → postflight）
+2. M1 の読み戻し：`status` → `EXACT/EXACT`、ACL・RLS・トリガ・履歴1行を別セッションで確認
+3. **M2**：`market-report-analysis` のみ、受け入れ済みのクリーンな checkout（`config.toml` なし）から明示引数でデプロイ
+4. M2 の読み戻し：版+1・`verify_jwt=false`・14ファイルの SHA-256 照合（runbook に記載）・他 Function 不変・ゲート OFF/OFF・Cron 8件不変・新規 packet 0
+5. 手動生成・replay なし
+6. 次の**自然**サイクルを待つ
+7. 読み取りで観測
+- M1 を先にするのは、最初の Sol サイクルの trace を残すため。**安全上の依存はない**（Function はテーブルが無くても配信を止めない）。どちらかが STOP しても、もう片方は戻さなくてよい。
+- 追加の migration や他の Function のデプロイは**不要**（範囲は広がらない）。
+- **タイミング**：市況レポートの時間帯（データ 07:50 / 16:15、分析 07:55 / 08:05 / 16:20 / 16:35、アプリ 08:35 / 17:15）を避ける。推奨は**本日の大引け（Luna の最後の基準値）が終わった 17:30 JST 以降**。最初の Sol サイクルは 10/8 朝刊（07:55）。
+
+### D. GPT-6.1 の実行契約（merged source ＋ 公式ドキュメント、2026-10-07 に再確認）
+- registry（`8738a186`）：generate = `gpt-6.1-sol` / reasoning `medium` / `max_output_tokens` 16,000、fact = `gpt-6.1-sol` / `low` / 4,000。
+- 送るパラメータ：`model`、`reasoning.effort`、`max_output_tokens`、`store: false`、`instructions`、`input`、`text.format`（`json_schema`, strict）だけ。`temperature` などは送っていない。
+- 公式（`developers.openai.com/api/docs/models/gpt-6.1-sol`、`/api/docs/pricing`）：
+  - Responses API・Structured Outputs に対応
+  - effort は `low` / `medium`（既定）/ `high` / `xhigh` / `max`（`none`・`minimal` は非対応）
+  - 最大出力 128,000、コンテキスト 1,050,000
+  - 非対応として挙がっているのは fine-tuning と predicted outputs だけ
+  - Standard 料金 $2 / $0.10 / $10（入力 / キャッシュ入力 / 出力、100万トークンあたり）、272K超の入力は $4 / $0.20 / $15 → **registry の料金と一致**
+- 注意：料金表の行に、Standard の $2.50（長文では $5.00）という、registry が使わない列がある（キャッシュ書き込みなどの可能性があるが、ページの要約からは特定できない）。見積りには影響しない（入力・出力のみを使う）。
+- 実際の API 呼び出しはしていない。
+
+### E. コスト・品質の観測計画（最初の自然サイクル、Luna 基準との比較）
+- 基準：10/6 大引け（Luna、calls 4、$0.011845）、10/6 朝刊（calls 2、$0.005873）、可能なら本日 10/7 大引け
+- 見る項目：
+  - cycle の状態・試行回数・失敗コード（新しい `_INCOMPLETE:max_output_tokens` を含む）
+  - `report_diagnostics` の `ai_*`（model / reasoning / config_version）、`calls` / `input_tokens` / `output_tokens` / `cost_usd`、`generation_attempts` / `content_regenerations` / `quality_rewrite` / `delivered_generation` / `hard_rejections` / `rejection_reasons` / `quality_warnings`（`X_POINTS_*` を含む）
+  - trace の各行（`stage` / `candidate` / `local_issues` / `fact_issues` / `selected_for_delivery` / `fallback_reason` / `request_hash` / `truncated`）
+  - 本文：見出し・要約・3ポイントの具体性・X 本文・アプリ本文の読みやすさ、根拠の無い因果、全数値の事実照合
+  - `api_cost_usd`：上限側の見積り（キャッシュ割引なし）
+- Hard・配信ルールは観測前に一切緩めない。consumer は OFF のまま。
+
+### 手順書・ランナー（source のみ、PR #108）
+- `supabase/tests/market_report_generation_traces_rollout.sh`：AI Lab の本番適用（10/5）と同じ Stage A / B / C 方式。
+  - Stage A：SHA-256 `f7eb5707fb9695ee6a94c5e2bc9f9eaa3ad4660a67e94f1ad62cb5b07984622b` のバイトだけを単独で実行
+  - Stage B：新しいセッションで8区分を照合（columns / constraints / indexes / relation / **triggers（有効状態込み）** / table_acl / functions / function_acl）＋実効権限の検査
+  - Stage C：履歴1行
+  - 再試行・修復・削除なし
+  - 本番は ack 文・project ref・TLS・所有者 postgres・6543 禁止・テストフック禁止で守る
+  - パスワード・トークンは書かない／受け取らない／出力しない
+- **proof：93項目すべて PASS**（本番と同じ形のDB）。
+  - 正常系、適用後のドリフト8種の検出
+  - マイグレーション自身の権限拒否（`UNSAFE_MEMBERSHIP`、未知ロールの既定 SELECT）と遅い失敗での全ロールバック
+  - 応答喪失3種、Stage B の不一致6種、履歴の失敗と明示的な再開、履歴の名前・版の不一致、バイト改変
+  - 本番ガード12種
+- `supabase/tests/market_report_generation_traces_rollout.md`：M1 / M2 の手順・読み戻し・14ファイルの SHA-256・STOP 条件・タイミング・OpenAI 残高・観測チェックリスト・承認事項。
+- 既存の F1 の PG 検証（`market_report_generation_traces_run.sh`）・migration 不変条件 20/20 も再実行して PASS。秘密の走査：該当なし。
+
+### production mutation / deploy
+- **0**。DDL / DML、履歴の書き込み、Edge デプロイ、手動生成・replay、OpenAI 呼び出し、X / 通知、Cron / Auth / Vault / OAuth / 設定：なし。本番は `supabase db query --linked` の SELECT と `functions list` / `download`（読み取り）のみ。
+
+### conflicts / remaining risks
+1. **Sol の実際の挙動は未観測**：medium の reasoning トークン量（上限 16,000 で足りるか）、品質、速度、実コスト。
+2. **費用は Luna の約10倍**（同じトークン量で）。テスト期間は手動チャージなので、M2 の前に OpenAI の残高確認が必要。残高切れの 429 は再試行されず、サイクルが止まる。
+3. M1 で権限検証が拒否した場合（本番のロール構成が今日の読み取り後に変わった場合）は、STOP 11。自動修復はしない。
+4. 料金表の未使用の列（$2.50）の意味は未特定（見積りには不使用）。
+5. M1 / M2 の前に、同じ日のうちに読み取りのプリフライトをやり直すこと（runbook の手順）。
+
+### exact approval request（READY）
+- **M1**：本番に `20261007120000_market_report_generation_traces.sql`（SHA-256 `f7eb5707…22b`）を、ランナー `market_report_generation_traces_rollout.sh apply` で適用する（オペレーター＝ユーザーが DB の資格情報で実行。エージェントは資格情報を扱わない）。前提：同じ日の `status` が `ABSENT/NONE`、市況レポートの時間帯外。
+- **M2**：本番の `market-report-analysis` **のみ**を、受け入れ済みの main（`8738a186` の graph）から `--no-verify-jwt --use-api` でデプロイし、14ファイルの SHA-256 を照合する。前提：M1 が DONE（または M1 STOP 後のレビュー済み判断）、OpenAI の残高確認、時間帯外。
+- 推奨の実施時刻：本日の大引けが終わった **17:30 JST 以降**。最初の観測は 10/8 朝刊。
 
 ---
 
