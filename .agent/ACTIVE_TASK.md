@@ -71,13 +71,13 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-pr99-morning-natural-observation-20261007
+- task_id: kabumori-morning-fact-failure-diagnostics-corrective-20261007
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: PR #99 correctiveをmarket-report-analysis v25へexact deploy済み。10/7朝刊07:55/08:05の最初の自然サイクルをread-only観測し、3ポイントの具体性、generic/metric telemetry、rewrite/calls、rejection_reasons、Hard Fact安全性を確認。08:10 JSTより前は待機せず停止。production mutation禁止。
-- recommended_model: Sonnet5（中）
+- allocation: 10/7朝刊は自然analysisが2回とも不合格でpacket 0。朝刊prompt内の時間関係表現を見直し、generation別の固定コード診断をboundedで保持する。Hard判定・call上限・PR99のgeneric/metric telemetry・300字rewrite閾値は変更しない。source/test only、production mutation禁止。
+- recommended_model: Sonnet5（高）
 
 ## Claude G3
 - owner: claude
