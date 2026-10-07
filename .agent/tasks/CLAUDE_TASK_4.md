@@ -3,8 +3,8 @@
 - task_id: postona-multisocial-phase2a2-security-corrective-20261007
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: codex
+- status: ready
+- next_owner: claude
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: bounded DB/security corrective / existing PR #106
@@ -13,6 +13,108 @@
 - production_mutation_allowed: false
 - merge_allowed: false
 - deploy_allowed: false
+
+## C1 corrective — final ACL exactness + mechanical main integration — 2026-10-08
+
+H1 exact-head rereview of `4b6dc57966e0d55b2e901a7707446c35b25a1f00` returned **CHANGES REQUIRED** with one narrow contract gap plus one mechanical integration conflict.
+
+Preserve every accepted B1-B6 fix and the accepted C1-R1/C1-R2 security design. Update the existing PR #106 only.
+
+### F1 — positively require the exact owner EXECUTE ACL
+
+Current code rejects bad ACL entries but accepts the underprivileged state where the owning role's explicit EXECUTE entry is absent (`proacl={}`).
+
+Required:
+- for each existing trigger function:
+  - `public.x_account_refresh_reset_on_reconnect()`
+  - `public.social_mobile_account_deletion_guard()`
+- require the direct normalized ACL to be **exactly**:
+  - one EXECUTE entry for the approved owner/grantor;
+  - not grantable;
+  - no other grantee/privilege/grant option.
+- keep all existing effective EXECUTE / membership / SET ROLE protections.
+- do not GRANT, REVOKE, reassign owner, or repair drift automatically.
+- empty owner ACL must fail before DDL with a stable precondition error and leave the original X-only state unchanged.
+
+Required test:
+- revoke the owner's own EXECUTE entry so the function has an empty explicit ACL;
+- migration must refuse atomically for each of the two trigger functions;
+- healthy exact owner-only ACL must still pass.
+
+### F2 — resolve the reservation-file integration conflict mechanically
+
+Fresh main and PR #106 both changed:
+- `supabase/tests/migration_source_invariants_test.ts`
+
+The desired final content is current main **plus exactly**:
+- `"20261007150000": "postona_social_accounts_multi_provider"`
+
+while preserving:
+- `"20261007173000": "ai_lab_topic_evergreen_capacity"`
+- every other current-main reservation/invariant unchanged.
+
+Required:
+1. fresh-fetch current `origin/main`;
+2. integrate/merge current main into the existing PR branch normally (no force push);
+3. resolve this one file mechanically;
+4. verify the resulting file equals fresh main except for the single POSTONA reservation line;
+5. verify PR merge-tree/GitHub becomes conflict-free;
+6. rerun migration invariants.
+
+Do not alter accepted migration/test/docs semantics merely to resolve the conflict.
+
+### Bounded verification
+
+At minimum:
+- focused empty-owner-ACL adverse test for both functions;
+- healthy owner-only ACL control;
+- existing C1-R1/R2 focused tests;
+- migration runner;
+- mutation suite;
+- X publish / refresh / deletion / Stage3B regressions;
+- migration source invariants;
+- `git diff --check`;
+- secret scan;
+- fresh-main changed-file overlap / mergeability check.
+
+If the source change is exactly the positive ACL assertion + fixture/mutation coverage and the rest is mechanical main integration, no broad architecture retest is needed beyond preserving the existing green suites.
+
+### Scope / safety
+
+Allowed:
+- existing PR #106 migration/test files;
+- migration reservation invariant file;
+- existing design note only if a wording update is strictly required.
+
+Forbidden:
+- production DB/catalog read/write;
+- migration apply;
+- deploy;
+- Auth/OAuth/Vault/secrets;
+- real provider calls;
+- G2/G3/G5 product files;
+- PR merge.
+
+### Completion
+
+Update existing PR #106 and report:
+- new exact head;
+- exact ACL assertion added;
+- empty-owner-ACL tests for both trigger functions;
+- reservation file parity with fresh main;
+- mergeability / merge-tree result;
+- relevant tests and mutation count;
+- exact changed files;
+- production/deploy/provider operations = 0.
+
+Then:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K4.
+
+After K4, use a genuinely free H1/H2 for one final exact-head focused rereview if available.
+
+推薦モデル：**Opus5.5（高）**
 
 ## C1 corrective — function-contract hardening round — 2026-10-07
 
