@@ -3,8 +3,8 @@
 - task_id: postona-multisocial-phase2a2-security-corrective-20261007
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: bounded DB/security corrective / existing PR #106
@@ -814,6 +814,79 @@ After K4 accepts a corrected candidate, ChatGPT should use a truly free H1/H2 sl
 
 ### 次の推奨
 - K4 → 空いている H1 / H2 で、この head に絞った再レビューを 1 回行う。
+- status: review_required / next_owner: chatgpt。STOP for K4。
+
+## Report — C1 corrective: final ACL exactness + main integration (2026-10-08)
+
+- task_id: postona-multisocial-phase2a2-security-corrective-20261007（2026-10-08 の C1 corrective）
+- result: **F1（ACL の厳密化）と F2（予約ファイルの競合解消）を完了し、既存の PR [#106](https://github.com/anohi-memories/kabumori/pull/106) を更新した（source のみ・本番適用なし）**。
+  - 新しい head: `c0b6c03c`。内訳は、F1 の修正 `fa294855` と、main `481eccc0` の通常の merge。
+  - H1 が見た `4b6dc579` は履歴に残っている（force push はしていない）。
+  - 未 merge。
+  - B1〜B6、C1-R1、C1-R2 の設計は変えていない。
+- model_used: Opus 5.5（TASK の推奨どおり）
+- workspace: 既存の G4 専用 worktree `/Users/yuya/Developer/kabumori-g4-phase2a2`。clean だった。K4 が PR に積んだ `3b4e4063` と `4b6dc579` まで fast-forward してから作業した。
+
+### F1 — 所有者自身の EXECUTE ちょうど1つを積極的に要求する
+- 2つのトリガー関数（`public.x_account_refresh_reset_on_reconnect()`、`public.social_mobile_account_deletion_guard()`）のそれぞれについて、確認方法を変えた:
+  - 変更前: 「悪いエントリがないこと」だけを見ていた。
+  - 変更後: 正規化した ACL がちょうど次の1件だけであることを要求する:
+    ```sql
+    (select array_agg(concat_ws(' | ', (a.grantor = v_owner)::text, (a.grantee = v_owner)::text,
+                                a.privilege_type, a.is_grantable::text))
+     from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a)
+      is distinct from array['true | true | EXECUTE | false']  →  POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_ACL
+    ```
+- この1件は、所有者が自分に与えた EXECUTE で、grant option なし。他の grantee・権限・grant option は一切ない。
+- 結果として、次の2つも拒否される:
+  - 空の ACL（`'{}'`。所有者の EXECUTE が revoke された状態。aclexplode が0行を返す）
+  - 既定の ACL（NULL。PUBLIC を含む）
+- 実効的な EXECUTE の確認（継承、SET ROLE、推移的な経路）は、そのまま残した。
+- GRANT、REVOKE、所有者の変更、修復はしない。
+
+### F1 のテスト
+- 空の ACL: 2つの関数それぞれについて、`revoke execute ... from <owner>` で `proacl = '{}'` になったことを確かめてから適用した。両方とも `POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_ACL` で拒否された。カタログ全体と全行は変わらず、X だけの CHECK が残り、候補のオブジェクトは何も残らなかった。
+- 正常な対照: 適用する DB で、両関数の ACL が `{owner=X/owner}` であることを確認してから適用し、通った（APPLY）。
+- ミューテーション: 確認を「悪いエントリの拒否だけ」の旧版に戻す変異を追加した。空の ACL のケースで検出された。
+
+### F2 — 予約ファイルの機械的な競合解消
+- 最新の main `481eccc0` を、PR のブランチに通常の merge で取り込んだ。
+- 競合は `supabase/tests/migration_source_invariants_test.ts` だけだった。main の内容をそのまま取り、POSTONA の1行（`"20261007150000": "postona_social_accounts_multi_provider"`）を足した。
+- 結果の確認:
+  - `git diff origin/main HEAD -- supabase/tests/migration_source_invariants_test.ts` は、その1行の追加だけ。`"20261007173000": "ai_lab_topic_evergreen_capacity"` をはじめ、main の他の予約や不変条件は変わっていない。
+  - blob は `78c97471` で、K4 が PR に入れた版と同じ。
+- `git merge-tree --write-tree origin/main HEAD` は競合なし（exit 0）。
+- main に対する PR の差分は 7 ファイル: PR の 6 ファイルと、予約ファイルの1行。
+
+### 確認（使い捨て PG 17.11、ローカルソケットのみ。merge 後の状態で実施）
+- ランナー: **ALL PASS**（APPLY / BEHAVIOR / 投稿許可・退会・Stage 3B の既存テスト / ADVERSE / ATOMICITY / CLEANUP）
+  - 不正な出発状態は 87 通り。固定のコードでの拒否が 86（空の ACL 2 通りを追加）、ロック待ちのタイムアウトが 1。
+  - postcondition の直前の注入 23 通り、途中失敗 3 通り。
+  - C1-R1 と C1-R2 の、以前からのテストはそのまま通った。
+- ミューテーション: **55/55 を検出**（変更していないコピーの対照実行は PASS。F1 の 1 件を追加）。
+- `migration_source_invariants_test.ts`: 11 件 PASS。
+- `git diff --check origin/main HEAD` 問題なし。秘密情報パターン 0。
+- 候補の SHA-256: `0eb64135…15a9c9`。
+
+### changed_files（このラウンド）
+- `supabase/migrations/20261007150000_postona_social_accounts_multi_provider.sql`（ACL の確認を「ちょうど1件」に変更）
+- `supabase/tests/postona_social_accounts_multi_provider_run.sh`（空の ACL 2件、正常な対照）
+- `supabase/tests/postona_social_accounts_multi_provider_mutations.sh`（F1 の変異 1件）
+- `supabase/tests/migration_source_invariants_test.ts`（merge の解消。main に1行を足しただけ）
+- 設計メモ、挙動テスト、fixture は変えていない。
+
+### 他スロットとの重なり・マージ可否
+- 作業中の PR（#110 G2、#33、#11、#10、#3）の変更ファイルとの重なりは 0。PR #109 は main にマージ済み。
+- GitHub での mergeable は `MERGEABLE`（競合なし。mergeStateStatus は Vercel の実行中のため `UNSTABLE`）。
+
+### CI
+- push 直後の時点で、Netlify と Vercel Preview Comments は PASS、Vercel は deploy 中（失敗 0）。Web の変更はない。ポーリングはしていない。
+
+### 本番・deploy・プロバイダの変更: 0
+- 本番の DB・カタログの読み書き、適用、deploy、Auth / OAuth / Vault / secrets、プロバイダの API 呼び出しは、すべてしていない。
+
+### 次の推奨
+- K4 → 空いている H1 / H2 で、この head に絞った最終の再レビューを 1 回行う。
 - status: review_required / next_owner: chatgpt。STOP for K4。
 
 ---
