@@ -3,8 +3,8 @@
 - task_id: `common-account-v1-phase2-real-account-smoke-20261007`
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - recommended_model: **Opus5.5（高）**
 - approval: user explicitly approved this bounded production real-account smoke on 2026-10-07.
 - production_mutation_window: **CLOSED** — 2026-10-08 06:54 JST (ACTIVE 2026-10-07 21:02〜). Smoke done (2 logins, 1 refresh, 2 sign-outs, 2 start answers active/started:false); post-smoke read-back identical to the baseline. G5 performs no further production action.
