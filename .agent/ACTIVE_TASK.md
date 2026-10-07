@@ -105,14 +105,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: in_progress
+- status: done
 - task_id: common-account-v1-phase2-production-migration-apply-20261007
 - start_code: G5
 - finish_code: K5
-- next_owner: user
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: User explicitly approved production apply. Production mutation window ACTIVE from 2026-10-07 13:42 JST for G5 only. Scope is exactly migration 20261006230000_common_account_service_start_intent: same-day read-only preflight -> Stage A exact reviewed migration -> Stage B read-back -> Stage C one migration-history row -> final read-back. No other DB/Auth/permission mutation window may open until CLOSED. User operator command is the only pending action; no deploy/EAS/backfill/enforcement/deletion/OAuth/Vault/Cron/X changes.
+- allocation: Final K5 APPLIED_PASS. Production migration 20261006230000_common_account_service_start_intent applied exactly once under the approved G5 mutation window; Stage A committed, Stage B 33/33 PASS, migration-history row inserted once, final postflight 33/33 PASS, independent Management API read-back PASS, window CLOSED at 13:52 JST. No backfill/enforcement/deletion/deploy/EAS/Auth/Storage/OAuth/Vault/Cron/X mutation. G5 free.
 - recommended_model: Opus5.5（高）
 
 ## Deferred
