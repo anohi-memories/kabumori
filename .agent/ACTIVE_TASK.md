@@ -32,14 +32,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: common-account-v1-phase2-q1-final-rereview-20261007
+- status: ready
+- task_id: ai-lab-topic-continuity-pr109-focused-review-20261007
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts H1 PASS on PR #95 exact head ba35b642d30ce423a8683feffcd26aec325b45ee. Q1 is closed; prior S1-T/S2/session_id/R1-R5 remain PASS. PR #95 source was squash-merged as d5bea735937b53095b110b4bed1f20442e56b089. H1 free. No production migration apply/deploy/EAS.
+- allocation: Focused exact-head review of PR #109 f83247ae1024d4220dfbfa5484c725381d63815d only. Verify SECURITY DEFINER claim migration ACL/ownership/search_path, 74-entry TS/SQL canonical map, 128 candidate bound, 72h/48h cooldowns, >=14-day x 10/day capacity proof, continuity-reserve priority, and migration-before-deploy rollout order. No production access/mutation/deploy/merge.
 - recommended_model: Sol（高）
 
 ## Codex H2
@@ -86,9 +86,9 @@
 - task_id: ai-lab-topic-continuity-fix-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: Urgent AI Lab continuity bugfix. Production evidence shows 10/day schedule is healthy but 7 evergreen seeds + 72h seed / 48h theme cooldown exhausted the topic pool, causing all 2026-10-07 executed slots to fail before OpenAI/X. Expand to a sufficiently large diverse safe topic reservoir with explicit continuity fallback, preserve claim/fencing/cooldowns/duplicate guards, and prove >=14 days x 10/day cannot exhaust. Source/migration candidate only; no production mutation/deploy/merge.
+- allocation: K3 PASS_CANDIDATE. PR #109 exact head f83247ae1024d4220dfbfa5484c725381d63815d meets source/capacity goals, but merge is HOLD for one H1 focused Sol（高） review because it replaces a SECURITY DEFINER claim function. Production remains unchanged; migration must precede x-test-post deploy.
 - recommended_model: Opus5.5（高）
 
 ## Claude G4
