@@ -1,6 +1,7 @@
 # POSTONA Phase 2b — Threads 接続の設計メモ（実装前）
 
 - 作成: 2026-10-07（G4、TASK `postona-multisocial-phase2a2-account-schema-candidate-20261007`）
+- 更新: 2026-10-07（G4、TASK `postona-multisocial-phase2a2-security-corrective-20261007`。§0.5 を追加し、§2・§5・§10・§11 を更新）
 - 前提:
   - Phase 1 の設計 `docs/postona/multi-social-phase1.md`（§3.2 接続アカウント、§5 段階計画）
   - Phase 2a-1 のプロバイダドメイン（`provider-domain.ts` / `_shared/social/provider_domain.ts`）
@@ -18,6 +19,24 @@
   - ユーザーのトークンを revoke する API があるか
   - API のホスト名（`threads.com` と `threads.net` が文書内で混在）
 - 共通アカウントとサービス利用権（G5）には触れない。接続は利用権を作らず、変えず、判定もしない。
+- 2a-2 の DB の境界（§0.5）により、Threads / Instagram の行を書けるのは**テーブル所有者として動くコードだけ**。つまり、レビュー済みの SECURITY DEFINER 関数か運用者。2b の接続 RPC がその「レビュー済みの関数」になる。service_role がテーブルを直接書く経路では、Meta の行は作れない。
+
+## 0.5 2a-2 で DB に入る境界（2b が前提にするもの）
+
+2a-2 の migration 候補（PR #106）は、2b の前に本番へ適用する前提。次の境界を DB に入れる。
+
+- **CHECK 制約**（Threads / Instagram の行だけに効き、X の行は今までどおり）:
+  - refresh 参照は常に NULL
+  - `connected` / `identity_verified` の行は access 参照が必須。access がなくてよいのは接続前の状態（`unconnected` / `authorization_pending` / `failed`）だけ
+  - `publish_enabled` は false
+- **プロバイダは変えられない**: 行の `platform` は、どのロールでも、同じ文で何を一緒に変えても変更できない。X から Threads に「付け替える」ことはできない。別のプロバイダは別の行（切断してから新しく接続）にする。
+- **Meta の行を書けるのは所有者だけ**: Threads / Instagram の行の INSERT / UPDATE は、テーブル所有者として動くとき（所有者が持つ SECURITY DEFINER 関数の中、または運用者の直接操作）だけ通る。
+  - service_role や他のロールが直接書くと `SOCIAL_ACCOUNT_PROVIDER_WRITE_NOT_ALLOWED` で拒否される。
+  - X の行は対象外。DELETE も対象外（削除で資格情報が増えることはない）。
+  - 2b の complete RPC は、所有者が持つ SECURITY DEFINER 関数として作る。EXECUTE は `authenticated` だけに付与する。そうすれば、このガードを変えずに Threads の行を書ける。
+  - 新しい SECURITY DEFINER 関数が `social_accounts` を書くと、レビュー済み一覧のテストが失敗する。その時点で必ずレビューを通す。
+- **前提**: service_role は所有者に到達できない（所有者のロールに入ったり、それとして実行したりできない）。また、`social_accounts` に TRIGGER 権限を持たない。持っていると、所有者の関数の中で自分のコードを走らせて、このガードを迂回できてしまう。2a-2 の precondition は、この2点を確認して、満たさなければ止まる。
+  - **ただし他のテーブルの TRIGGER 権限は 2a-2 の範囲外**。brands など、所有者の関数が書く他のテーブルに service_role が TRIGGER 権限を持っていても、同じ迂回が成り立つ。本番の読み取り専用 preflight で確認が必要（§11 T11）。
 
 ## 1. 2b でやること・やらないこと
 
@@ -72,6 +91,7 @@
    - Vault に書き込む（§5）
    - 行を更新する: `connection_status='identity_verified'`、`verified_at`、`platform_user_id`、`handle`、`publish_enabled=false`、`last_connection_error_code=null`
    - X と同じく、ユーザーの JWT（`authenticated`）で呼び、`service_role` では呼ばない。
+   - complete（と、Threads の行を作る begin）は、テーブル所有者が持つ SECURITY DEFINER 関数にする（§0.5）。2a-2 のガードは、所有者として動く書き込みだけを Meta の行に通す。
 
 ## 3. 本人情報の結果（必須）
 
@@ -108,7 +128,7 @@
 - **state の取り違えへの備え**:
   - `social_account_oauth_states` は X と Threads で共有する。
   - Threads の complete は、state の行が Threads であることを必ず確かめる。
-  - 逆に、Threads の state が X の complete に渡っても、X の complete は refresh 参照を書くので、2a-2 の CHECK に違反して失敗する（安全側に止まる）。
+  - 逆に、Threads の state が X の complete に渡っても、X の complete は refresh 参照を書くので、2a-2 の CHECK に違反して失敗する（安全側に止まる）。Threads の行を指すように偽造した state でも、secret は作られず、state も消費されず、行も変わらないことを、使い捨て DB で確認済み。
   - X の consume / complete に `platform='x'` の確認を足すかは、X OAuth の持ち主（G5）と相談する。
 
 ## 6. `publish_enabled=false` で開始
@@ -182,6 +202,8 @@
 
 - 本番の順序（どれも承認制）:
   1. 2a-2 の migration を適用する（同日の読み取り専用 preflight の後、ファイル単体で）
+     - preflight で、2a-2 の「開始時の契約」が本番と一致するかを確かめる。確かめる内容は、列、制約、インデックス、ポリシー、トリガーとその関数本体、表と列の ACL、ロールのつながり（INHERIT / SET を含む）、所有者、適用ツールでの current_user / session_user、ツールがトランザクションで包むかどうか。違いがあれば、契約をレビューで直してから適用する。
+     - 待ちは、ACCESS EXCLUSIVE のロック待ちだけが `lock_timeout`（5秒）で区切られる。ファイル全体の実行時間には上限がない（CHECK はテーブルを走査する）。本番では `statement_timeout` と、止めるときの手順を承認しておく。
   2. 2b の RPC の migration を適用する
   3. Edge を deploy する（`verify_jwt=true`）
   4. Supabase secrets に `THREADS_APP_ID` / `THREADS_APP_SECRET` を設定する（ユーザーの承認が必要。secrets の設定で全関数のバージョンが上がる点に注意）
@@ -213,3 +235,5 @@
 | T8 | 有効期限の保存場所（列か状態表か） | 要決定（2c） |
 | T9 | Threads だけのユーザーのワークスペースを誰が作るか | 要決定（G5 と） |
 | T10 | 退会をプロバイダ別に対応させる範囲と時期 | 要決定（G5 と） |
+| T11 | service_role（と anon / authenticated）が、所有者の SECURITY DEFINER 関数が書く他のテーブル（brands など）に TRIGGER 権限を持つか。持つ場合、所有者として自分のコードを走らせて Meta 行のガードを迂回できる。public スキーマへの CREATE 権限も含めて確認する | 要検証（本番 preflight） |
+| T12 | 本番に、repo にない SECURITY DEFINER 関数で `social_accounts` を書くものがないか（レビュー済み一覧は7つ） | 要検証（本番 preflight） |
