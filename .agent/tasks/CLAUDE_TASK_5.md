@@ -1,3 +1,202 @@
+# G5 — Common Account Phase 3a: safe withdrawal + deletion orchestrator foundation
+
+- task_id: `common-account-v1-phase3a-deletion-orchestrator-20261008`
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- recommended_model: **Opus5.5（極高）**
+- source_only: **true**
+- production_write_allowed: **false**
+- deploy_allowed: **false**
+- EAS_allowed: **false**
+
+## Goal
+
+Move the common-account critical path beyond Phase 2 by replacing the unsafe legacy deletion architecture in source with the first production-grade Phase 3 foundation.
+
+The current Kabumori `account-delete` source still hard-deletes the Auth user directly. That is incompatible with the shared identity model because one Auth user may own Kabumori and X entitlements.
+
+Phase 1 already defines the canonical lifecycle contract and prerequisites in `docs/common-account/phase1-lifecycle-foundation.md` section 10/14/15. Phase 3a must implement against that contract, not invent a parallel state machine.
+
+## Required startup
+
+1. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, `.agent/ACTIVE_TASK.md`, this TASK, and the Phase 1/Phase 2 common-account docs.
+2. Create a dedicated G5 worktree from fresh `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main.
+4. Confirm the completed Phase 2 migration/client work is present.
+5. Inspect current deletion surfaces before editing:
+   - `supabase/functions/account-delete/*`
+   - `src/lib/account-deletion*.ts`
+   - settings/account-deletion UI
+   - `supabase/functions/social-mobile-account-delete/*`
+   - Phase 1 lifecycle RPC contract.
+6. Re-check current G4 ownership. G4 is working on POSTONA/social_accounts schema/security. Do not edit G4-owned migration/schema files or any file G4 currently owns. If a specific file overlap appears, leave that integration behind an adapter/interface and report it instead of blocking unrelated Phase 3a work.
+
+## Product behavior to establish
+
+The app must distinguish three concepts:
+
+1. **かぶモリの利用を終了**
+   - ends only the Kabumori service entitlement/data scope;
+   - must not delete the shared Auth login;
+   - must not affect X entitlement/workspace/posting authorization.
+
+2. **X自動投稿の利用を終了**
+   - remains X-owned and uses the existing X deletion saga;
+   - G5 Phase 3a may define/integrate an adapter contract but must not rewrite G4-owned POSTONA schema work.
+
+3. **共通アカウントを削除**
+   - whole-person deletion only;
+   - requires explicit user intent and recent server-side reauthentication;
+   - all service entitlements must be safely ended first;
+   - then managed cleanup/checkpoints;
+   - only then Auth Admin deletion.
+
+Do not preserve a UI path where “アカウント削除” silently means “delete Auth user and cascade everything”.
+
+## Canonical whole-account deletion sequence
+
+Implement/source-wire the Phase 1 section 10 contract:
+
+1. recent reauthentication checked server-side;
+2. begin/serialize common-account deletion with lifecycle version binding;
+3. service cleanup:
+   - Kabumori via the existing lifecycle withdrawal/service-deletion contract;
+   - X through an adapter to its existing deletion saga when X entitlement exists;
+4. session revocation + stale-token policy/checkpoint;
+5. Apple grant revocation when required;
+6. Storage cleanup through Storage API, re-list until empty;
+7. `prepare_common_account_auth_delete`;
+8. immediately revalidate lifecycle + service state + Storage;
+9. managed Auth Admin delete — never SQL against `auth.users`;
+10. post-delete read-back/audit; never report completed before verified deletion.
+
+The implementation must be idempotent/retryable and fail closed on unknown state.
+
+## Phase 3a scope
+
+Implement as much of the production-quality source path as can be proven safely without production access.
+
+### A. Kabumori service withdrawal
+
+- Replace the legacy “Kabumori delete = hard delete login” behavior.
+- Add a source path for “かぶモリの利用を終了” using the Phase 1 service lifecycle RPCs.
+- Preserve the common login when another entitlement exists.
+- Clear/disable Kabumori client service readiness immediately after successful withdrawal.
+- Define exact client outcomes and retry/fail-closed behavior.
+
+### B. Common-account deletion orchestrator foundation
+
+Create/refactor a dedicated server-side orchestrator boundary rather than putting more logic into the old direct hard-delete helper.
+
+Requirements:
+- identity derives only from the verified caller token;
+- recent reauth is enforced server-side;
+- request cannot name another user;
+- explicit confirmation intent;
+- durable lifecycle operation/checkpoints;
+- dependency adapters for session revoke, Storage cleanup/re-list, Apple revoke, X-service cleanup, Auth Admin delete, post-delete verification;
+- no secrets/tokens/PII in errors or logs;
+- retries resume safely from durable state;
+- stale or superseded lifecycle version fails closed;
+- login deletion is impossible while any service/managed prerequisite remains.
+
+### C. Legacy route containment
+
+- The old `account-delete` direct Auth-delete path must no longer be reachable as a normal Kabumori self-service deletion path in the candidate source.
+- Prefer replacing/refactoring it into the lifecycle-aware boundary or making it an explicit compatibility wrapper that cannot bypass lifecycle checks.
+- Add a static/regression test proving no Kabumori client route invokes a direct Auth Admin delete without lifecycle authorization.
+
+### D. UI/source contract
+
+Update the Kabumori settings/account deletion source so the user-facing choices are explicit:
+- 「かぶモリの利用を終了」
+- 「共通アカウントを削除」
+
+The common-account option must clearly warn that it affects all participating services.
+Do not add misleading email-existence enumeration.
+
+### E. X integration boundary
+
+- Do not duplicate the X deletion saga.
+- Reuse it through a narrow adapter/interface.
+- Because G4 is active, do not edit overlapping G4-owned files. If live wiring would overlap, implement the adapter contract + tests and leave exact wiring as a named follow-up.
+- Preserve X OAuth/Vault/token revocation semantics.
+
+### F. Enforcement readiness inventory
+
+Do not switch enforcement on yet. Produce an exact inventory/proof of what still must be wired before an enforcing guard is safe:
+- every service creator;
+- every service-role producer;
+- legacy delete routes;
+- RLS/API/Edge boundaries;
+- stale-JWT writer paths;
+- entitlement checks required by Kabumori and X.
+
+If a forward migration is needed for durable “completed” audit state or enforcement prerequisites, create it as a **source candidate only**, with disposable PostgreSQL proof. Do not apply it.
+
+## Security / test requirements
+
+Add focused tests for at least:
+- Kabumori-only user withdraws Kabumori: login kept;
+- dual-service user withdraws Kabumori: X untouched, login kept;
+- whole-account delete blocked while X/Kabumori entitlement remains;
+- recent reauth missing/stale;
+- stale lifecycle version;
+- concurrent start vs delete;
+- retry after each external cleanup checkpoint;
+- Storage still non-empty after first pass;
+- Apple required/unavailable/failure;
+- X cleanup failure;
+- session revoke failure;
+- Auth Admin delete failure/404/idempotent retry;
+- stale access token cannot continue protected writes after deletion begins (inventory + source guard where possible);
+- post-delete verification failure never returns success;
+- no caller-supplied target user id;
+- no secret/token/PII logging;
+- legacy direct-delete bypass is impossible.
+
+Run relevant Kabumori app tests, account-delete tests, common-account lifecycle proofs, and any X deletion regressions touched by the adapter.
+
+## Explicitly forbidden
+
+- production DB/Auth/Storage/Vault/OAuth writes;
+- real session revocation;
+- real Apple/X revocation;
+- real Auth Admin user deletion;
+- migration apply;
+- Edge deploy;
+- EAS/TestFlight;
+- deleting or mutating any real account;
+- enabling the enforcement guard in production;
+- modifying G4-owned active schema/migration files.
+
+## Deliverable / K5
+
+Create/update source, tests and a Phase 3 design/runbook document.
+
+Report:
+- exact fresh main;
+- changed files;
+- implemented user flows;
+- which Phase 1 lifecycle RPCs are used;
+- orchestrator state/checkpoint behavior;
+- recent reauth/session/storage/Apple/X/Auth-delete handling;
+- legacy direct-delete containment proof;
+- tests/proofs and results;
+- G4 overlap check;
+- any migration candidate;
+- production mutation/deploy/EAS = 0;
+- remaining blockers before Phase 3 can be reviewed/deployed;
+- recommended next slice.
+
+This task crosses Auth, deletion, session, Storage and multi-service boundaries. Stop for K5 before any production action.
+
+Recommended model: **Opus5.5（極高）**.
+
+---
+
 # G5 — Phase 2 production real-account smoke (user-approved)
 
 - task_id: `common-account-v1-phase2-real-account-smoke-20261007`
