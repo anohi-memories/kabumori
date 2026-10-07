@@ -3,7 +3,7 @@
 - task_id: `common-account-v1-phase2-real-account-smoke-20261007`
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - next_owner: claude
 - recommended_model: **Opus5.5（高）**
 - approval: user explicitly approved this bounded production real-account smoke on 2026-10-07.
