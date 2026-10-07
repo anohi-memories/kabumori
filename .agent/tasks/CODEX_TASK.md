@@ -3,8 +3,8 @@
 - task_id: ai-lab-topic-continuity-pr109-focused-review-20261007
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol（高）
 - target_pr: 109
@@ -134,6 +134,14 @@ Then set:
 
 STOP for `C1`.
 
+## H1 completion — 2026-10-07
+
+- Exact PR109 head `f83247ae1024d4220dfbfa5484c725381d63815d`; verdict **CHANGES REQUIRED**. Three concrete P2 migration-boundary findings: non-inheriting SET ROLE paths to service_role pass; table-schema drift passes; unsafe companion-function body drift passes.
+- Independent local PG17 adverse fixtures: seven unsafe states accepted, three negative controls correctly rejected. Unsafe start-function fixture returns true without durable provider_started, settlement fails, and the same diary event is reclaimable after lease expiry. No real provider call.
+- Capacity/product change itself is verified: normal/fixed/skew SQL rotations each 140/140; original seven 6 claims / 4 exhausted slots on day one; 72h seed / 48h shared-theme cooldowns preserved; 74-entry TS/SQL parity, diary -> Tier2 -> reserve ordering, malformed payload all-or-nothing and unresolved quarantine PASS.
+- Focused checked tests 118/118; broad runtime tests 1007/1007 with --no-check; broad checked run has the same 18 diagnostics on candidate and pre-PR parent, not new debt. Changed-file check/lint, migration invariants 11/11 and diff check PASS; prior claim SQL proof 132 PASS markers.
+- H1 only changes TASK/Report; source patches, production access/mutation, migration apply, merge, deploy, scheduler, OpenAI/X/Auth/OAuth/Vault operations = 0. Dedicated disposable DB stopped.
+- Return PR109 to G3 for bounded corrective and a focused exact-head re-review; do not merge/apply/deploy this head. Production migration-before-deploy ordering remains separately gated. **STOP for C1**.
 
 ---
 
