@@ -82,11 +82,11 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: x-social-ai-model-policy-gpt6-upgrade-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_3.md
 - allocation: Source-only GPT-6 model migration for X/social auto-post AI only: POSTONA, AI Lab, and Kabumori X. Centralize social text model ids/pricing/workload mapping in one shared policy; routine 5.6 Luna -> gpt-6-luna, existing 5.6 Sol escalations -> gpt-6.1-sol; preserve gpt-image-2. Add invariant preventing future raw model-id drift outside policy. Do not touch G2 app/report/news/MIC model ownership. No production/deploy/merge. Recommended Opus5.5（高）.
 - recommended_model: Opus5.5（高）

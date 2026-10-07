@@ -3,8 +3,8 @@
 - task_id: x-social-ai-model-policy-gpt6-upgrade-20261007
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: source-only AI model upgrade / centralized social-post model policy / POSTONA + AI Lab + Kabumori X
@@ -318,6 +318,112 @@ Then:
 - STOP for K3.
 
 Recommended model: **Opus5.5（高）**.
+
+## Report — x-social-ai-model-policy-gpt6-upgrade-20261007
+
+- result: **PASS candidate (source-only)** — X / ソーシャル自動投稿の文章 AI を、中央のポリシーで `gpt-6-luna` / `gpt-6.1-sol` に切り替えた。PR を作成して open のまま。本番の読み書き 0 / deploy 0 / 実際の OpenAI・X の呼び出し 0 / merge 0。
+- fresh main: `4e8e8c5c`（この TASK の in_progress コミット）。push 前に最新 main を再取得し、同じファイルの変更がないことを確認した。
+- branch / PR / head: `claude/g3-social-ai-model-policy-20261007` / [anohi-memories/kabumori#105](https://github.com/anohi-memories/kabumori/pull/105) / `78a43ae8`。
+- CI: Vercel だけ「Deployment rate limited — retry in 24 hours」。直近の PR #99 / #100 / #101 も同じで、アカウント全体の回数制限によるもの。コードとは無関係。netlify は pass / skip。
+- worktree: 新規 `/Users/yuya/Developer/kabumori-g3-model-policy`。
+
+### 実行コードのモデル（変更前 → 変更後。すべて中央のポリシー経由）
+| 呼び出し箇所 | workload | 前 → 後 |
+|---|---|---|
+| `social-mobile-consult/logic.ts` `CONSULT_MODEL` | postonaConsult | 5.6-luna → gpt-6-luna |
+| `_shared/brand/brand_post_generator.ts` `MODEL`（POSTONA のプレビューと本番、brand dry-run、AI Lab） | brandPostGeneration | 5.6-luna → gpt-6-luna |
+| x-test-post: generatePostParts / 交流投稿 / 投稿予定のプレビュー / 朝・引けレポートの文章作成 / 作成ログの model_used / draft.model | kabumoriXText | 5.6-luna → gpt-6-luna |
+| x-test-post: 朝・引け・米国市場前の Web 検索による材料集め（3 か所） | kabumoriXWebSearchCollection | 5.6-luna → gpt-6-luna |
+| x-test-post: evaluateKabumoriVoice（呼び出しと料金） | kabumoriXVoiceEvaluation | 5.6-luna → gpt-6-luna |
+| `report_voice_rewrite_logic.ts` `REPORT_VOICE_REWRITE_MODEL`（と書き直しの料金） | kabumoriXVoiceRewrite | 5.6-luna → gpt-6-luna |
+| `morning_greeting_logic.ts` `MODEL` と結果の型 | kabumoriXMorningGreeting | 5.6-luna → gpt-6-luna |
+| 有用 tips: 最初の試行 / Sol への昇格 | usefulTipBase / usefulTipQualityEscalation | 5.6-luna → gpt-6-luna / 5.6-sol → gpt-6.1-sol |
+| 米国市場前の文章作成（`packet.requires_sol` の条件は変更なし）、作成ログの初期値 | usPremarketBase / usPremarketQualityEscalation | 5.6-luna → gpt-6-luna / 5.6-sol → gpt-6.1-sol |
+
+`gpt-image-2` は変更なし。G2（market-report-analysis / personalized-reports）、ニュース監視、MIC には触れていない。
+
+### 中央ポリシーの設計（`supabase/functions/_shared/social_ai_model_policy.ts`）
+- モデル表（catalog）: `fast` = gpt-6-luna（$0.10 / $0.50）、`quality` = gpt-6.1-sol（$2 / $10、100 万トークンあたり）。各モデルが API の id と料金を持つ。
+- 処理 → 層の対応表（workload → tier）: 11 個の処理名を明示的に割り当てた。同じ層を使う処理も、1 つずつ別に書いてある。呼び出し側はモデルの id を知らず、`socialTextModel(処理名)` を使う。
+- 補助関数: `isSocialQualityTextModel`（診断用の「Sol に昇格したか」）、`socialTextModelTokenCostUsd`（丸めない）、`socialTextModelCostUsd`（小数 6 桁に丸める）。表にないモデルを渡すとエラー。
+- 環境変数でモデルを切り替える仕組みは作っていない。今後のモデル更新は、このファイルを変えて関係する関数を deploy し直す。
+
+### モデル名の直書きを防ぐテスト（`social_ai_model_policy_test.ts`）
+- X / ソーシャルの実行コード（x-test-post、_shared/brand、social-mobile-consult / brand-dry-run / history-learning / publish-setting。テストは除く）を走査して、次があれば失敗する:
+  - `gpt-5.6-luna` / `gpt-5.6-sol`
+  - ポリシー以外での `gpt-…-luna` / `gpt-…-sol` の直書き
+  - ファイルごとの料金表（`/ 1_000_000` や `{ input: 0.2, output: 1.2 }` のような書き方）
+- 配線の確認:
+  - 相談・ブランド生成・書き直し・朝のあいさつがポリシーを使っている
+  - POSTONA のプレビューと本番、AI Lab は共通の生成部だけを通り、独自にモデルを選ばない
+  - Web 検索の材料集めは 3 か所のまま
+  - Sol への昇格条件は 2 つとも変わっていない
+  - `gpt-image-2` は変わっていない
+- 変異確認: 次の 4 通りに壊すと、いずれもテストが失敗する。
+  - 5.6 のモデル名を戻す
+  - 6 系のモデル名を直書きする
+  - 料金表を直書きする
+  - Sol への昇格先を変える
+- G2 / ニュース / MIC は走査しない（担当外のモデルの決定で失敗しないように）。
+
+### 料金の正しさ
+- Luna で入出力 100 万トークンずつ = $0.6、Sol = $12。150 / 90 トークンなら Luna $0.00006、Sol $0.0012。
+- 古い料金（1.4 / 35）にはならない。
+- `modelCostUsd` はポリシーの料金だけを読む。5.6 用の料金表（Luna 0.2/1.2、Sol 5/30）と、5.6 のモデル名に固定した型（union）・比較は削除した。
+- Web 検索を使うレポート（朝・引け・米国市場前）は、材料集めのモデル料金 + 検索料（1 回 $0.01、変更なし）+ 文章作成のモデル料金を合計して、最後に 1 回だけ丸める（新しい `reportApiCostUsd`）。
+- 診断の `model` / `model_used` / `escalatedToSol` には、実際に選んだ API の id が入る。
+
+### POSTONA の証明
+- 相談: リクエストの `body.model` は `CONSULT_MODEL`（ポリシーの Luna）。既存の logic_test で確認。1 回の送信で呼ぶのは 1 回のままで、テスト全体が合格。
+- ブランド生成: リクエストの model と `draft.model` がポリシーの Luna で、料金はその料金表から計算される。
+- プレビューと本番の利用者投稿は、同じ `generateBrandPost` を使う（配線テスト）。
+- 記憶した設定・文体の流れは変更なし（PR78 の memory-generation を含むアプリのテスト 226/226）。
+
+### AI Lab の証明
+- AI Lab の予約投稿は、共通のブランド生成を通る（配線テスト）。
+- `brand_post_generator_test` の AI Lab のテストで、`draft.model` = ポリシーの Luna、料金 = ポリシーの料金表で 150 / 90 トークン分であることを確認。
+- topic の claim・重複排除・provider outcome のテストはすべて合格（_shared 全体）。
+
+### かぶモリ X の証明
+- 有用 tips: 「Luna を先に試し、だめなら Sol に昇格」の順序と、昇格時の 2400 トークンは変更なし。昇格先だけがポリシーの quality。
+- 米国市場前: `packet.requires_sol` の条件で quality / base を選ぶ（変更なし）。
+- 声色の評価・書き直しはポリシー経由。朝・引け・交流・tips・プレビューに 5.6 の名前は残っていない（ドリフトのテスト）。
+- Web 検索の回数・設定（max_tool_calls / search_context_size / include）は変更なし。
+- x-test-post 全体のテストが合格。
+
+### API の互換性（公式ドキュメントのみで確認、実際の API 呼び出しはなし）
+- `gpt-6-luna`（[model page](https://developers.openai.com/api/docs/models/gpt-6-luna)）: reasoning.effort none / low / medium / high / xhigh / max。Responses API で `web_search` と構造化出力に対応。料金は $0.10 / $0.50。
+- `gpt-6.1-sol`（[model page](https://developers.openai.com/api/docs/models/gpt-6.1-sol)）: reasoning.effort low / medium / high / xhigh / max（none と minimal は非対応）。Responses API で `web_search` と構造化出力に対応。料金は $2 / $10。
+- 現在のリクエストは、Sol も含めてすべて `effort: "low"` なので、どちらも対応している。リクエストの形は変えていない。
+
+### G2 / G4 / G5 との重なり
+- 変更した 11 ファイルについて:
+  - main 側で同じファイルの変更はない
+  - open な PR（#101 / #100 / #33 / #11 / #10 / #3）とも重なりなし
+- G2 の report のモデル用ファイル、G4 の provider-domain のファイル、G5 の app / auth / migration には触れていない。
+
+### テスト
+- `social_ai_model_policy_test.ts` 6/6。
+- Deno: x-test-post + _shared + social-mobile-consult + brand-dry-run で 1025/1025（`--allow-run` を付けて実行）。
+- アプリ（social-mobile）226/226。
+- `deno check`: 変更したファイルに新しいエラーはない。x-test-post の既存の型エラー 6 件は main と同じ。
+- `deno lint` 7 ファイルともクリーン、`git diff --check` クリーン、追加行の秘密情報スキャン 0 件。
+
+### 本番・ゲート
+Edge deploy 0、本番 DB の読み書き 0、migration 0、X 投稿 0、モデルを実際に呼ぶ確認 0、secret・設定の変更 0、merge 0。
+
+### 後で deploy し直しが必要な Edge Function
+- `x-test-post`（かぶモリ X、AI Lab、POSTONA の本番利用者投稿）
+- `social-mobile-brand-dry-run`
+- 本番の `brand-post-dry-run`（repo には同名のフォルダがない。同じブランド生成部を bundle している場合は、同じく deploy し直す）
+- `social-mobile-consult`（まだ deploy していない。最初の deploy から gpt-6-luna で動く）
+
+x-test-post の deploy では、それまでに merge 済みでまだ deploy していない PR の変更もまとめて入るので、deploy の前に graph の差分を確認すること。
+
+### レビュー
+- 変えたのはモデルの id、料金、型、テスト、中央のポリシーだけ。Auth / DB / 権限の境界、リトライ、送信のガード、プロンプトは変更していない。
+- このため、**追加のレビューは不要の見込み**（TASK の方針どおり）。
+- status → review_required / next_owner → chatgpt。STOP。
 
 ---
 
