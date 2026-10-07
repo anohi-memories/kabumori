@@ -1,5 +1,86 @@
 # Codex Task — CURRENT TASK
 
+- task_id: common-account-v1-phase2-s1t-final-rereview-20261007
+- owner: codex
+- slot: codex-1
+- status: done
+- next_owner: none
+- priority: critical
+- recommended_model: Sol（高）
+- target_pr: 95
+- target_head: 13f4281f9514742bdee43ffc08834fea67449bf2
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Perform one final focused re-review of the G5 round-3 correction on PR #95. The only intended blocker is S1-T: Kabumori AuthProvider must synchronously invalidate stale readiness when Supabase notifies a superseding login/user/sign-out, before deferred preparation runs.
+
+## Required checks
+
+- Fresh-fetch main and require exact PR #95 head `13f4281f9514742bdee43ffc08834fea67449bf2`.
+- Use an isolated H1 worktree from `/Users/yuya/Developer/kabumori-fresh`.
+- Re-check product-file overlap with fresh main. Allocation-time main is one commit past the PR base and that commit changes only `.agent/tasks/CLAUDE_TASK_5.md`.
+- Verify auth callback synchronously records/fences the SDK-notified owner/login before any deferred task.
+- Verify changed user/login/SIGNED_OUT immediately invalidates service-ready/generation and cancels obsolete enrollment without awaiting Auth/Data API/network calls.
+- Verify result acceptance and serviceSession readiness are fenced by the synchronously current owner.
+- Reproduce the prior H1 provider-event timing cases without weakening them:
+  1. same user, fresh A2 session;
+  2. different user B;
+  3. SIGNED_OUT;
+  release old A1 result before deferred work and require every serviceSession to stay null.
+- Verify same-session TOKEN_REFRESHED control keeps intended single-flight and does not spuriously abort/restart.
+- Verify old getSession results cannot override a newer synchronous auth notification.
+- Verify reenroll cannot proceed from an obsolete owner/view.
+- Preserve accepted boundaries: S2 X queued cancellation; userId+session_id context model; R1-R5; PR94 root news-detail; X OAuth separation.
+- Do not apply the migration or touch production/deploy/EAS/Phase3/Auth/Storage/OAuth/Vault/Cron/X/provider state.
+
+## Evidence to independently rerun
+
+G5 reports:
+- Kabumori app 390/390;
+- AuthProvider 17/17;
+- X 221/221;
+- X tsc/lint PASS;
+- both web exports PASS;
+- start-intent DB runner 10 PASS markers;
+- Phase1 lifecycle 20/20;
+- migration invariants 11/11;
+- previous H1 provider-event-window 3 cases + control PASS unchanged;
+- former-probes 4/4 PASS;
+- mutation checks 9/9 detected.
+
+Do not trust counts alone; inspect actual source and reproduce the timing boundary.
+
+## Verdict
+
+Return PASS, PASS-WITH-NONBLOCKING-NOTES, CHANGES REQUIRED, or BLOCKED.
+
+A PASS only authorizes C1 source merge/readiness judgment. Production migration apply and native release remain separate gates.
+
+## Completion
+
+Write the result to `.agent/CODEX_REPORT.md`, set status `review_required`, next_owner `chatgpt`, and STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-07
+
+- Exact reviewed head: `13f4281f9514742bdee43ffc08834fea67449bf2`, PR95 OPEN/unmerged.
+- Verdict: **CHANGES REQUIRED**, one P2 queued-preparation cancellation gap. Original S1-T stale-readiness window is corrected: previous unchanged 3 timing cases + refresh control all PASS; former S1/S2 probes 4/4 PASS.
+- Two auth notifications before deferred preparation runs still dispatch the superseded login's automatic start after sign-out/new-user notification. Readiness stays fail-closed; this is not recurrence of old A1-ready or R1 silent reactivation.
+- Minimum correction: check synchronously announced current owner before the deferred task advances generation or calls prepareSession; add SIGNED_IN(A2) -> SIGNED_OUT/B-before-task tests requiring zero A2 requests, retain refresh/current-owner controls.
+- Shipped suites 390/17/221 PASS; X tsc/lint and both web exports PASS; local DB start-intent 10 / Phase1 20 PASS markers; migration invariants 11 PASS. Added actual-source probes 8 PASS / 2 FAIL (one cause); reviewer-only in-memory pre-dispatch guard makes both failures PASS. No product patch.
+- H1 changed only its TASK/Report. Production access/mutation, migration apply, merge, deploy, EAS/native release = 0.
+- STOP for C1. Focused corrective/re-review recommendation: **Sol（高）**; detail and reproducible evidence in `.agent/CODEX_REPORT.md`.
+
+---
+
+# Previous H1 task history — preserved
+
+# Codex Task — CURRENT TASK
+
 - task_id: common-account-v1-phase2-session-identity-final-rereview-20261007
 - owner: codex
 - slot: codex-1

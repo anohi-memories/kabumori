@@ -3,8 +3,8 @@
 - task_id: kabumori-market-report-debug-trace-corrective-20261007
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: codex
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: market-report debug trace / failed-generation persistence / prompt hygiene
@@ -339,7 +339,81 @@ Recommended Claude model: **Opus5.5（高）**.
 
 ## Report
 
-Pending.
+### task_id / result
+- task_id: kabumori-market-report-debug-trace-corrective-20261007
+- result: **PASS candidate（source/tests/migration候補のみ）**。PR [#101](https://github.com/anohi-memories/kabumori/pull/101)、branch `g2-market-report-debug-trace-20261007`、head `2469e8a8be0125805551ba3e353c4ef6058b0150`（base origin/main `cebdadf2`）。**migration は本番未適用、deploy なし**。
+- 実装モデル：Sonnet 5.5（TASKの推奨は Opus 5.5（高））。永続化境界と migration を含むため、レビューで補ってほしい。
+
+### root cause evidence and remaining uncertainty
+- 10/7 朝刊（08:05の再試行）：`hard_rejections=local,fact`、`rejection_reasons=causal+date+ref+other,other:1`、calls 3、cost $0.01094、最後のFact指摘は「「前回の引け以降に確認できたニュース」とする時間関係はinputで確認できません。」。
+- **事実**：その言い回しは朝刊の指示文（`analysis_logic.ts` MORNING）に 2026-09-17 から入っていた文言そのもの。PR #99 が入れたものではない。
+- **未確定（本文が無いため判定不能）**：(a) モデルが指示文を写して時間関係を作った本物の不備か、(b) Factの過剰判定か、(c) 1回目のローカル不合格（因果・日付・ref・その他の4種類）の中身、(d) 07:55 の1回目の失敗の理由。今回の実装は **次の失敗から**これらを追えるようにする（過去の分は復元できない）。
+
+### chosen diagnostic storage architecture
+- **専用の追記専用テーブル `market_report_generation_traces`**（TASKの優先順位2）。既存の history/audit テーブルは調べた範囲（`market_report_cycles` の `report_diagnostics` は再試行で置換、`market_report_packets` は成功のみ）に適するものが無く、可変の cycle 列は再試行で上書きされるため使わない。
+- 1行 = モデルの生成1回。1回の実行（スケジュールされた分析1回）が複数行を持つ。`invocation_id`（実行ごと）と cycle の `attempt`（07:55=1 / 08:05=2）で区別。unique (`invocation_id`, `generation_index`)。
+- 書き込みは handler が**実行を確定したあと**に1回だけ（成功：complete の後・report_packet_id 付き／失敗：fail の後／例外：catch の fail の後）。
+
+### exact fields retained
+`id`, `created_at`, `source`（shared_market_report | personalized_report）, `report_type`, `trading_date`, `cycle_id`, `data_packet_id`, `report_packet_id`（採用された生成だけ。失敗は null）, `subject_ref`, `invocation_id`, `attempt`, `generation_index`, `model`, `prompt_hash`（生成に使った指示文の SHA-256 先頭16桁）, `stage`（invalid_output / local / fact / safe_candidate / delivered / request_failed）, `hard_rejection`, `local_passed`, `local_issues`（jsonb 配列・全文）, `local_warnings`, `fact_ran`, `fact_passed`, `fact_issues`（jsonb 配列・全文）, `selected_for_delivery`, `fallback_reason`（`rewrite_rejected_fact` / `rewrite_rejected_local` / `rewrite_not_better` / `rewrite_request_failed`）, `error_code`（固定コードのみ）, **`candidate`（モデルが返した構造化出力そのもの：headline・要約・claims・key_news・x_post（points/context/news/watch/closing）・app_story）**, `calls` / `input_tokens` / `output_tokens` / `api_cost_usd`（その生成が終わった時点の実行内の累計）。
+
+### how to inspect（例）
+- 10/7 朝刊の全生成：`select attempt, generation_index, stage, hard_rejection, local_issues, fact_issues, selected_for_delivery, fallback_reason, candidate from market_report_generation_traces where trading_date='2026-10-07' and report_type='morning' order by created_at, generation_index;`
+- generation 1 の本文とローカル指摘：`generation_index=1` の `candidate` と `local_issues`。generation 2 の Fact 指摘：`generation_index=2` の `fact_issues`。
+- scheduled retry：同じ `cycle_id` で `attempt=1`（07:55）と `attempt=2`（08:05）が別の `invocation_id` で並ぶ。1回目は再試行で消えない。
+- 書き直しが Fact で不合格→安全な最初の版を配信：不合格行 `stage='fact'`、配信行 `selected_for_delivery=true` かつ `fallback_reason='rewrite_rejected_fact'`。
+
+### secret-exclusion strategy
+- テーブルに認証用の列が無い。書き込み前に `redactValue`：キー名（authorization / auth_header / access_token / refresh_token / id_token / api_key / secret / password / credential / cookie / private_key / service_role / bearer / client_secret / vault）の値は丸ごと `[redacted]`。文字列中の `Bearer …` / `Basic …` / JWT / `sk-…` / `sb_secret_…` / `ghp_…` / `AKIA…` / `access_token=…` 形式を置換。**置換後も秘密の形が残る行は書かず捨てる**（`persistTraces`）。`debug_trace.ts` は環境変数・ヘッダを一切読まない。candidate は6万字で切り元の長さを残す。モデル入力（ニュース本文・市場データ）は保存しない（`prompt_hash` と各 id で特定）。
+- 走査：新規コードに本物の秘密なし（`debug_trace_test.ts` の意図的な偽物のみ）。
+
+### prompt hygiene change
+- 朝刊：「…前回の引け以降に確認できたニュースから、今日の日本株で見る点を整理します」→「入力の「指標」にある前夜の米国市場と東京市場の前営業日の終値、入力の「ニュース」から、今日の日本株で見る点を整理します。ニュースがいつ取得・公表されたかには、入力に書かれた日時の範囲でしか触れません（取得の区切りや経過時間を、入力に無いまま書きません）。」
+- 大引け：同種の「今日確認できたニュース」を同じ形に（TASKの指定は朝刊のみ。同じ種類の言い回しなので一緒に直した。不要なら戻せる）。
+- 完成した例文は足していない。回帰テストで「前回の引け以降」「引け以降に確認」「確認できたニュース」「今日確認できたニュース」がプロンプトに無いこと、朝刊が「今日の東京市場はまだ動いていない…言い切りません」を維持していることを固定。入力のニュースには日時の項目が無いため、実質的に取得時点に触れない指示になる。
+
+### migration candidate and rollout plan
+- `supabase/migrations/20261007120000_market_report_generation_traces.sql`（新テーブル1・関数1・トリガ3・index 2・RLS。既存オブジェクト無変更、適用済みmigration無変更、他PRと版の衝突なし）。追記専用（update/delete/truncate はトリガで拒否）、RLS有効・policyなし、`service_role` に select + insert のみ、anon/authenticated 権限なし、外部キーなし。
+- 検証：使い捨て Postgres 17.11 で `supabase/tests/market_report_generation_traces_run.sh`（ローカルソケット `/tmp` 配下のみ許可）。書き込み・追記専用・一意キー・形の制約・anon/authenticated 拒否・service_role の最小権限・RLS を確認。**変異テスト**：update トリガ削除／service_role に update・delete 付与／anon に select 残し／一意キー削除、いずれも失敗（検出）。ソース不変条件 `market_report_generation_traces_source_test.ts` 7件、`migration_source_invariants_test.ts` も通過。
+- **本番適用はしていない（TASKで禁止）**。推奨手順：(1) PR #101 レビュー → merge、(2) `market-report-analysis` のみ controlled deploy（テーブル未適用でも安全。insert が失敗してログに `GENERATION_TRACE_WRITE_FAILED:…` が出るだけ）、(3) migration 1本の本番適用（別gate・ユーザー承認後、history 行の確認込み。適用後 `service_role` で select 可能なこと・anon が拒否されることを read-back）、(4) 次の自然サイクルで trace の行を read-only で確認。(2) と (3) は順不同。
+
+### changed_files（PR #101）
+- `supabase/functions/market-report-analysis/analysis_logic.ts`（`GenerationRecord`、`sink`、指示文）
+- `supabase/functions/market-report-analysis/debug_trace.ts`（新規）、`debug_trace_test.ts`（新規16件）
+- `supabase/functions/market-report-analysis/handler.ts`（`Db.insert`、`writeTraces`）
+- `supabase/functions/market-report-analysis/presentation_v2_test.ts`（トレース比較を records 分離に更新）
+- `supabase/migrations/20261007120000_market_report_generation_traces.sql`（新規、未適用）
+- `supabase/tests/market_report_generation_traces_{behavior.sql,run.sh,source_test.ts}`（新規）
+- `docs/market-report-shared-platform/DESIGN.md`（§15.6）
+- 触っていない：`hard_fact_guards.ts`、personalized-reports、x-test-post、important-news-monitor、common-account/Auth、他のmigration。
+
+### tests
+- 必須15項目：1（1回目ローカル不合格の本文＋指摘が2回目の後も残る）／2・2b（2回目 Fact 不合格の本文＋指摘、10/7の形）／3（2回のスケジュール実行が区別され後が先を消さない）／4（成功も trace、selected・packet id）／5・6・5b（insert 失敗＝404/500/例外でも配信成功・モデル呼び出し不変・insert は1回・失敗runの fail が置換されない）／7・7b（秘密の除外・偽造行の破棄）／8（本文が構造のまま残る）／9〜13（PR #99 の WARN のみ・300字・Hard・上限4・安全な最初の版のフォールバックが不変）／14・15（時間の言い回しが指示文に無い・朝刊は前向き）。加えて、リクエスト例外でも途中の生成が残る、巨大 candidate の切り詰め、個人向けの形（`source`/`subject_ref`）、prompt hash。
+- market-report-analysis **176/176**、personalized-reports 129/129、X shared consumer 8/8、market-report-data-packet 42/42、`_shared` 436/436（`--no-check`）。
+- `deno check`（両 index と変更ファイル）exit 0、変更ファイルの `deno lint` 0件、`git diff --check` exit 0。
+
+### Hard semantics / PR #99 / call ceiling / logging non-blocking
+- **Hard 不変**：`hard_fact_guards.ts` 未変更。`localAnalysisCheck`・Fact の判定・日付/値/符号/古い値/1306/ref/因果/false absence/ちょうど3つは同一（既存テスト全緑）。
+- **PR #99 不変**：`X_POINTS_GENERIC` / `METRIC_RECAP` / `NEAR_DUPLICATE` は WARN のみ（`qualityRewriteHints` が空）、X 300字、アプリ700字、安全な最初の版（`fallback_reason` が理由を追加で記録するだけ）。
+- **呼び出し上限不変**：`MAX_GENERATIONS=2`、最大4 calls。trace の insert はモデルを呼ばず、再試行もしない（テストで、insert 失敗時と成功時の OpenAI 呼び出し数が同一）。
+- **ログ失敗は配信を止めない**：insert は 5秒タイムアウト、例外は握りつぶして固定コード1行をログに出すだけ。complete / fail の RPC の後に実行される。
+
+### remaining uncertainty / notes
+1. **診断の実効性は migration 適用後**：適用前は行が入らない（ログのみ）。K2 が適用の gate を立てる必要がある。
+2. 実行中に Edge Function が強制終了した場合（タイムアウト等）、その実行の trace は書かれない（書き込みは実行の最後）。生成ごとの即時書き込みは、行数・遅延・失敗経路が増えるため採用しなかった。必要なら次の改善。
+3. 保持期間：追記専用で自動削除しない。テスト期間後に別migrationで整理。
+4. `rejection_reasons`（PR #99）は残してある。trace の `local_issues` / `fact_issues` が全文を持つので、将来は不要になるかもしれない。
+5. 7:55 の1回目の理由は、過去分は復元できない。
+
+### production mutation
+- **0**。deploy・migration適用・手動生成/再試行・Cron・gate・X・通知・EAS・Auth/Vault 変更なし。本番の読み取りは、直前の10/7観測（read-only SELECT）の再利用のみ。使い捨て Postgres はローカルで起動し、停止・削除済み。
+
+### recommended review / deploy sequence
+1. **focused Codex review：Sol（中）を推奨**（TASKの方針：migration / persistence 境界あり）。重点：RLS・権限（service_role が select+insert のみ）、追記専用、秘密の除外の穴、handler の書き込み位置と非ブロッキング、`GenerationRecord` が既存の配信判定を変えていないこと。
+2. merge → `market-report-analysis` のみ deploy → migration 1本の別gate 適用 → 次の自然サイクルで trace を read-only 確認。
+3. 並行して、10/7大引け（16:20）・10/8朝刊の自然サイクルを read-only で観測（trace が入る前は従来の診断のみ）。
+
+---
 
 
 ---

@@ -33,27 +33,27 @@
 - owner: codex
 - slot: codex-1
 - status: done
-- task_id: common-account-v1-phase2-session-identity-final-rereview-20261007
+- task_id: common-account-v1-phase2-s1t-final-rereview-20261007
 - start_code: H1
 - finish_code: C1
 - next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #95 exact head 1e8119e1. S2 queued-X cancellation is PASS; stable session_id cache/context design and same-session refresh are PASS. One remaining P2 S1-T exists only in Kabumori: after Supabase reports a superseding login/sign-out, AuthProvider defers owner/generation invalidation until setTimeout(0), allowing old A1 readiness to transiently reappear before deferred work runs. H1 free; exact corrected head requires focused Sol（高） rereview.
+- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #95 exact head 13f4281f9514742bdee43ffc08834fea67449bf2. Original S1-T stale-readiness window is closed and prior S2/session_id/R1-R5 remain PASS. One remaining P2 Q1 exists in Kabumori: a previously queued deferred auth-preparation task can run after a newer SIGNED_OUT or different-user notification and still dispatch obsolete automatic start. Readiness stays closed, but obsolete unsent work must be suppressed before dispatch. H1 free; corrected exact head needs one focused Sol（高） rereview.
 - recommended_model: Sol（高）
 
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: x-social-mobile-pr41-acl-focused-rereview-20261007
+- status: ready
+- task_id: kabumori-pr101-debug-trace-security-review-20261007
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Final C2 PASS on corrected PR #41 exact head c509117f8addf5a8687d60d9c18ae271b2c1777c. R1 effective column privilege and R2 default/inherited EXECUTE blockers closed. PR #41 squash-merged as b90ee326600b075e3d0b23209b4eefc1b4cd9c16. No further routine review. Production rollout remains separate. H2 free.
-- recommended_model: Sol（高）
+- allocation: PR #101 focused review。append-only generation trace table、RLS/effective privilege、service_role最小権限、失敗本文の保持、secret除外、trace書込み失敗が配信を止めないこと、prompt hygiene、Hard/call/rewrite不変を確認。production access/apply/deploy禁止。
+- recommended_model: Sol（中）
 
 ## Claude G1
 - owner: claude
@@ -70,13 +70,13 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-market-report-debug-trace-corrective-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: 10/7朝刊の失敗原因を追えるよう、失敗generationの実際の生成本文・local/Fact指摘・generation/attempt履歴を保存するデバッグトレース基盤を実装。固定コードだけでなく本文を保持し、scheduled retryで前回失敗を上書きしない。必要ならappend-only診断table/migration候補を作るが本番適用は禁止。朝刊の未証明な時間関係promptも安全化。Hard/300字rewrite/call ceiling/PR99 telemetryは不変。
+- allocation: K2 PASS_CANDIDATE。PR #101 head 2469e8a8be0125805551ba3e353c4ef6058b0150。失敗generation本文/local・Fact指摘・scheduled attempt履歴をappend-only診断tableへ保持。retry上書きを解消し、朝刊/大引けpromptの時間表現も安全化。Hard/PR99 telemetry/300字rewrite/call ceiling不変。migration/RLS境界追加のためH2 focused reviewへ。
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
@@ -112,7 +112,7 @@
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: C1 corrective round 3 on existing PR #95. Fix only S1-T in Kabumori AuthProvider: synchronously record/fence the SDK-notified current auth owner/login and invalidate/cancel obsolete enrollment/readiness immediately on changed login/user/sign-out before any deferred task can run. Defer network preparation only. Add render-before-deferred-task regressions for same-user fresh login, different user, and sign-out; every serviceSession must remain null. Preserve same-session refresh single-flight, S2 PASS, session_id cache design, R1-R5, PR94 navigation, and X behavior. No production migration apply/deploy/EAS/Phase3. Mandatory exact-head H1 rereview after correction.
+- allocation: C1 corrective round 4 on existing PR #95. Fix only Q1 queued-preparation cancellation in Kabumori AuthProvider: before a deferred auth task advances generation or calls prepareSession, require its captured owner/login to still equal the synchronously announced current owner (or equivalent current-event ticket). Superseded A2 -> SIGNED_OUT/B before deferred dispatch must send zero A2 automatic start requests. Preserve original S1-T fix, same-session refresh, S2, session_id design, R1-R5, PR94 navigation and X behavior. No production migration apply/deploy/EAS/Phase3. Mandatory exact-head H1 rereview after correction.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred

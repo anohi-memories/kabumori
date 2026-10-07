@@ -1,5 +1,219 @@
 # Codex Task 2 — CURRENT TASK
 
+- task_id: kabumori-pr101-debug-trace-security-review-20261007
+- owner: codex
+- slot: codex-2
+- status: review_required
+- next_owner: chatgpt
+- h2_review_result: CHANGES REQUIRED
+- h2_reviewed_head: 2469e8a8be0125805551ba3e353c4ef6058b0150
+- h2_review_completed_at: 2026-10-07 JST
+- h2_review_blockers: F1 effective ACL/owner drift; F2 secret-shaped strings persist; F3 full body/Fact evidence truncation
+- h2_report_commit: abbae8c2efc318bf2195398ab9c04007ee8f1545
+- priority: high
+- recommended_model: Sol（中）
+- type: focused migration / RLS / append-only diagnostics / non-blocking persistence review
+- target_pr: 101
+- target_head: 2469e8a8be0125805551ba3e353c4ef6058b0150
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Independently review PR #101, which adds durable failed-generation debug traces for Kabumori market reports.
+
+The product/test decision is intentional:
+- during development/QA, preserve actual failed model outputs and validator issues so root causes can be diagnosed;
+- fixed rejection codes alone are insufficient;
+- generated report text is allowed to be stored for testing;
+- authentication credentials/secrets must not be persisted.
+
+This review is **not** asking whether failed model output should be retained. That product decision is accepted.
+Review whether the implementation safely and correctly provides that diagnostic capability without changing report delivery semantics.
+
+## Freshness / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / G2 latest Report / this TASK.
+2. Use an independent H2 worktree/checkout from fresh `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #101.
+4. Require exact head `2469e8a8be0125805551ba3e353c4ef6058b0150`; if moved, STOP.
+5. Allocation-time facts: PR open/unmerged/mergeable clean; CI statuses green; current main is 1 commit past PR base with **0 overlap** across PR #101 changed files. Re-check before verdict.
+6. H1 is reserved for active G5 PR #95 final rereview. Do not touch H1 files/worktree.
+7. Source/disposable-local review only. No production migration apply/read/write, deploy, manual report, real X/OpenAI, Auth/Vault/OAuth/Cron mutation.
+
+## Focus A — diagnostic table / append-only contract
+
+Review migration:
+`supabase/migrations/20261007120000_market_report_generation_traces.sql`
+
+Verify:
+- new table is additive only;
+- existing production tables/functions are not destructively changed;
+- one row can represent one model generation;
+- failed generations can have null report_packet_id;
+- scheduled attempts can be distinguished via invocation_id + attempt;
+- generation uniqueness cannot silently collapse distinct generations;
+- update/delete/truncate are actually refused, not just undocumented;
+- service_role has only intended read/write capabilities;
+- anon/authenticated have no unintended read/write capability;
+- RLS/default privileges/ownership do not expose the trace table through client roles;
+- indexes/constraints do not make failed-path insert fragile for normal valid records;
+- migration is safe to apply once and source invariants catch reuse/collision.
+
+Use disposable PostgreSQL behavior/adversarial tests, not string inspection only.
+
+## Focus B — effective privilege / RLS boundary
+
+Because the table contains full failed model outputs and validator issue text, verify effective privileges, not only direct ACL strings.
+
+At minimum check:
+- PUBLIC;
+- anon;
+- authenticated;
+- service_role;
+- owner;
+- inherited-role paths;
+- default ACL drift where practical;
+- EXECUTE on any helper function;
+- no UPDATE/DELETE/TRUNCATE path through helper function or role inheritance;
+- no SECURITY DEFINER helper accidentally widens access beyond intended service/internal diagnostics use.
+
+If an unsafe privilege state could commit silently, mark blocker.
+
+Do not require end-user access; this is an internal diagnostic table.
+
+## Focus C — candidate/body retention is real
+
+Verify the implementation truly retains diagnostic evidence requested by product policy:
+- actual structured candidate body;
+- local issue details;
+- Fact issue details;
+- generation 1 remains after generation 2;
+- attempt 1 remains after scheduled retry attempt 2;
+- delivered/safe candidate can be distinguished from rejected candidate;
+- report/data/cycle references are sufficient to correlate traces;
+- prompt/model/version identity is enough to understand which generation path produced the row.
+
+The review should not “fix” this by removing model output or issue text. Full output retention is intended.
+
+## Focus D — secret exclusion without destroying useful text
+
+Verify redaction/secret filtering:
+- access_token / refresh_token / Authorization / password / service keys / OAuth secrets / Vault values are excluded;
+- generated report content is not broadly erased just because it contains ordinary financial/news text;
+- false positives in redaction do not make the diagnostic useless;
+- obviously secret-shaped values inside nested JSON are handled;
+- rows that still contain secret-shaped values after redaction are refused rather than persisted;
+- redaction failure itself does not alter the user-facing report decision or add model calls.
+
+Use adversarial nested-object/array/string fixtures.
+
+Do **not** require personal-report text to be removed; retaining generated report text during QA is intentional.
+
+## Focus E — non-blocking persistence semantics
+
+This is critical.
+
+Independently prove:
+- trace persistence happens after the report result is already determined;
+- successful safe report delivery is not changed to failure when trace insert fails/404s/times out;
+- failed report status is not rewritten by trace failure;
+- no extra generation/fact/model call occurs because trace persistence fails;
+- no diagnostic retry loop creates cost or latency amplification;
+- timeout is bounded;
+- no exception escapes and changes delivery semantics;
+- safe-original fallback remains exactly as before.
+
+If trace persistence can become a new delivery blocker, mark CHANGES REQUIRED.
+
+## Focus F — prompt hygiene
+
+Verify morning/close wording no longer encourages unsupported collection-time claims such as:
+- 前回の引け以降に確認できたニュース
+- 今日確認できたニュース
+
+Ensure:
+- supplied input is referenced safely;
+- morning remains forward-looking;
+- no new copyable finished example sentence was introduced;
+- no Hard/Fact rule is weakened.
+
+## Focus G — regression boundaries
+
+Confirm unchanged:
+- PR #99 generic/metric/near-duplicate WARN-only behavior;
+- X shortness rewrite threshold 300 chars;
+- App rewrite policy;
+- max generations/model-call ceiling;
+- Hard Fact semantics;
+- exactly 3 points rule;
+- safe-original fallback.
+
+Review changed runtime path for any accidental report-packet/delivery behavior change.
+
+## Required evidence
+
+Independently run/inspect enough to support verdict:
+- disposable PG behavior/adverse migration tests;
+- new debug_trace tests;
+- full market-report-analysis suite;
+- relevant personalized shared consumer;
+- X shared consumer;
+- data-packet regression;
+- migration source invariants;
+- Deno check/lint on changed runtime;
+- git diff --check;
+- focused secret-pattern/adversarial serializer tests.
+
+G2 reports:
+- market-report-analysis 176/176;
+- personalized-reports 129/129;
+- X shared 8/8;
+- data-packet 42/42;
+- _shared 436/436.
+Do not merely trust counts; independently reproduce enough key paths.
+
+## Verdict
+
+Return:
+- PASS
+- PASS-WITH-NONBLOCKING-NOTES
+- CHANGES REQUIRED
+- BLOCKED
+
+A PASS means source/migration is safe for C2 merge-readiness judgment.
+It does **not** authorize production migration apply or Edge deploy.
+
+## Completion / C2
+
+Write/append to `.agent/CODEX_REPORT_2.md`:
+- exact reviewed head;
+- verdict;
+- migration/RLS/effective privilege findings;
+- append-only findings;
+- full-output retention findings;
+- redaction/secret-exclusion findings;
+- non-blocking delivery findings;
+- prompt-hygiene findings;
+- regression evidence;
+- source changes by H2=0;
+- production access/mutation/apply/deploy=0;
+- merge recommendation;
+- production rollout recommendation;
+- exact next action.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C2.
+
+Recommended model: **Sol（中）**.
+
+---
+
+# Codex Task 2 — CURRENT TASK
+
 - task_id: x-social-mobile-pr41-acl-focused-rereview-20261007
 - owner: codex
 - slot: codex-2

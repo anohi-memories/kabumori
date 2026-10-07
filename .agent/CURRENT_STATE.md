@@ -1,3 +1,89 @@
+## Final C1 — PR #95 fourth review CHANGES REQUIRED / single Q1 corrective — 2026-10-07
+
+- H1 exact reviewed PR #95 head: `13f4281f9514742bdee43ffc08834fea67449bf2`.
+- C1 verdict: **CHANGES REQUIRED accepted**. PR #95 remains open/unmerged/undeployed; production migration apply remains forbidden.
+- accepted as PASS:
+  - original S1-T stale-readiness window is closed;
+  - synchronous auth-owner/readiness fence works for same-user fresh login, different user, SIGNED_OUT;
+  - same-session TOKEN_REFRESHED single-flight remains correct;
+  - S2 X queued pre-dispatch cancellation remains PASS;
+  - stable `userId + session_id` context model remains PASS;
+  - R1-R5 remain PASS;
+  - PR #94 root news-detail and X OAuth separation remain preserved.
+- sole remaining blocker: **Q1 P2**, Kabumori queued deferred preparation after a newer auth notification.
+  - A2 SIGNED_IN can queue deferred preparation;
+  - before it runs, SIGNED_OUT or newer user B can become the synchronously announced owner;
+  - A2's older deferred task currently checks only component-active state, so it can still call `prepareSession(A2)` and dispatch obsolete automatic `start_kabumori_service`;
+  - readiness stays fail-closed, but unsent obsolete work must never be resurrected after a newer auth notification.
+- minimum G5 correction:
+  - before any deferred auth task advances generation/loading or enters `acceptSession/prepareSession`, compare its captured owner/login against the synchronously announced current owner (or equivalent event ticket);
+  - if no longer current, return before any enrollment transport dispatch;
+  - preserve same-login TOKEN_REFRESHED behavior and the current synchronous owner fence;
+  - do not add network/Auth/Data API work to the synchronous callback.
+- mandatory tests:
+  - SIGNED_IN(A2) -> SIGNED_OUT before A2 deferred task -> zero A2 enrollment requests;
+  - SIGNED_IN(A2) -> newer user B before A2 deferred task -> zero A2 requests, B only its own preparation;
+  - normal/current owner path still prepares once;
+  - same-session TOKEN_REFRESHED control remains PASS.
+- do not reopen S1-T/S2/session_id/R1-R5 without concrete regression evidence.
+- Phase3, production migration apply, deploy, EAS, Auth/Storage/OAuth/Vault/Cron/X mutation remain out of scope.
+- G5 status: ready; recommended model: **Opus5.5（極高）**.
+- H1 is done/free. After corrected PR #95 head, run one focused exact-head H1 rereview with **Sol（高）**.
+- AI Lab diary: no additional entry; this is another narrow internal auth-session cancellation correction of the same common-account milestone.
+
+## Final K2 — PR #101 debug-trace PASS_CANDIDATE / H2 review required — 2026-10-07
+
+- G2 result: **PASS_CANDIDATE**, not final merge approval.
+- PR #101 exact head: `2469e8a8be0125805551ba3e353c4ef6058b0150`; open/unmerged/mergeable clean; Netlify/Vercel statuses green.
+- current main is 1 commit ahead of PR base with **0 changed-file overlap** across PR #101's 10 files.
+- accepted design direction:
+  - dedicated append-only `market_report_generation_traces` table;
+  - one row per model generation;
+  - scheduled attempts separated by invocation_id + attempt so retry does not erase prior failures;
+  - actual structured candidate/model output is retained;
+  - full local and Fact issue details are retained;
+  - delivered/rejected/fallback outcome and call/token/cost metadata are retained;
+  - report/data/cycle references and prompt/model identity are retained.
+- generated report/model output retention during development/QA is intentional product policy. Authentication credentials/secrets remain excluded.
+- PR #101 also removes the pre-existing unsupported morning/close timing wording without adding copyable finished examples.
+- reported regression evidence:
+  - market-report-analysis 176/176;
+  - personalized-reports 129/129;
+  - X shared consumer 8/8;
+  - data-packet 42/42;
+  - _shared 436/436;
+  - Deno check/lint/diff clean.
+- Hard Fact semantics unchanged; PR #99 generic/metric/near-duplicate WARN policy unchanged; X 300-char rewrite threshold unchanged; max call ceiling unchanged; safe-original fallback unchanged.
+- trace persistence is designed as non-blocking: storage failure does not alter report delivery or add model calls/retries.
+- new migration candidate: `20261007120000_market_report_generation_traces.sql`; not applied to production.
+- production mutation/deploy/manual generation = 0.
+- because PR #101 adds a durable DB/RLS/service_role persistence boundary, one focused H2 review is mandatory before merge.
+- H2 task: `kabumori-pr101-debug-trace-security-review-20261007`; recommended **Sol（中）**.
+- H2 scope: append-only contract, effective RLS/ACL, full-output retention correctness, secret exclusion, non-blocking persistence, prompt hygiene and Hard/call/rewrite regressions.
+- PR #101 merge, migration apply and Edge deploy remain HOLD until C2.
+- H1 remains reserved for the active G5 common-account PR #95 rereview.
+- AI Lab diary: no duplicate entry; this is internal QA/debug infrastructure for the same market-report quality iteration.
+
+## Final K5 — PR #95 round-3 S1-T PASS_CANDIDATE / final H1 rereview assigned — 2026-10-07
+
+- G5 result: **PASS_CANDIDATE**, not final merge approval.
+- exact PR #95 head: `13f4281f9514742bdee43ffc08834fea67449bf2`; PR open/unmerged and mergeable at K5.
+- sole prior blocker S1-T is reported closed in Kabumori AuthProvider:
+  - SDK-notified auth owner/login is synchronously recorded;
+  - changed login/user/SIGNED_OUT immediately advances/fences generation, invalidates readiness and cancels obsolete enrollment;
+  - network/session preparation remains deferred;
+  - serviceSession/readiness references the synchronously current owner.
+- same-session TOKEN_REFRESHED retains single-flight and does not spuriously invalidate the current logical request.
+- previous H1 `provider-event-window.mjs` timing cases (same-user fresh login, different user, SIGNED_OUT) plus control are reported PASS unchanged.
+- former S1/S2 probes remain 4/4 PASS; S2 X queued cancellation and prior R1-R5 remain green.
+- reported tests: Kabumori 390/390; AuthProvider 17/17; X 221/221; X tsc/lint PASS; both web exports PASS; start-intent DB runner 10 PASS markers; Phase1 20/20; migration invariants 11/11; mutation checks 9/9 detected.
+- fresh main at G5 integration was fully merged into PR #95; allocation-time main advanced one additional commit changing only `.agent/tasks/CLAUDE_TASK_5.md`, with zero product overlap.
+- production mutation / migration apply / deploy / EAS / real provider call = **0**.
+- H1 final focused rereview assigned: `common-account-v1-phase2-s1t-final-rereview-20261007`, exact target `13f4281f9514742bdee43ffc08834fea67449bf2`, recommended **Sol（高）**.
+- G5 remains review_required / next_owner codex. PR #95 merge and production migration apply remain HOLD.
+- after a H1 PASS, C1 may decide source merge readiness; production migration apply/read-back and native release remain separate later gates.
+- AI Lab diary: no additional entry; this is the final narrow internal session-safety iteration of the same milestone.
+
 ## G2 rebuilt — retain failed model outputs for test diagnostics — 2026-10-07
 
 - user decision: during development/test, **do not discard failed AI generations**. Root-cause analysis requires seeing what the model actually produced and what local/Fact guards rejected.

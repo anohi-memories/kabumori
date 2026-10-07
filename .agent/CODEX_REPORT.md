@@ -1,3 +1,80 @@
+# H1 — PR #95 S1-T final focused rereview — 2026-10-07
+
+- task_id: common-account-v1-phase2-s1t-final-rereview-20261007
+- result / verdict: **CHANGES REQUIRED** — one P2 queued-preparation cancellation gap; original stale-readiness S1-T is corrected.
+- status: `review_required`; next_owner: `chatgpt`; **STOP for C1**.
+- target_pr: 95
+- target_head: 13f4281f9514742bdee43ffc08834fea67449bf2
+- recommended_model: Sol（高）
+- fresh main: startup `f2a79ab1ce2821e018e1245ab3e4a97b2eca7cb7`; detailed compatibility baseline `7a70f75239ff4ecea296ce531f13bb1cfd179aa4`.
+- PR head unchanged at final fresh read-back; OPEN/unmerged, MERGEABLE at review (not a merge claim).
+- changed_files (H1): `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md` only. Product source edits/commits/push = 0.
+- commit_hash: reviewed source `13f4281f9514742bdee43ffc08834fea67449bf2`; H1 control-sync SHA/push success reported only after remote verification. No PR/source-branch rewrite.
+- production access/mutation, migration apply, managed Auth/Storage/OAuth/Vault/Cron/X/provider mutation, merge/deploy/EAS/native release = **0**.
+
+## Original S1-T correction: PASS
+
+- `src/providers/auth-provider.tsx:188-195` records the SDK-notified owner (user + stable login session_id) synchronously, advances generation and resets/aborts enrollment when the owner changes. Callback performs no awaited Auth/Data API/network call.
+- `useSyncExternalStore` reads the announced owner; `:219-222` gates serviceSession against it. Generation rejects previous results; the owner comparison independently prevents stale ready even before deferred preparation. Old ready/refused state may still exist locally in this gap, but does not grant serviceSession; `:244` rejects an old-view re-enrollment click.
+- Prior H1 `provider-event-window.mjs` ran **unchanged** against this exact source: same-user fresh A2, different-user B and SIGNED_OUT all show `{aborted:true, oldLoginReady:false}`. Same-session TOKEN_REFRESHED control retains the pending request and refreshed session: **4/4 PASS**.
+- Shipped strengthened queued-event/all-render assertions, already-ready invalidation and obsolete-view click refusal PASS. Old getSession(A1) differing from a newer notified B is ignored before enrollment. Same-login refresh is intentionally not a new identity/abort; same-login cache/single-flight remains intact.
+- Former S1 X / S1 Kabumori / S2 X / refresh control: **4/4 PASS**. Only the reviewer helper's current function-signature extraction marker was adapted; assertions were not weakened.
+
+## Remaining finding — Q1, P2: a superseded deferred auth task can recreate cancelled enrollment
+
+Location: `src/providers/auth-provider.tsx:197-201` (deferred task checks only active, not the current announced owner); it reaches `:164` prepareSession and the captured-token start transport.
+
+The synchronous reset cancels work that exists **at the announcement**, but a previously queued callback's timer can recreate that obsolete work afterwards. Two announcements arriving before their deferred tasks run reproduce it:
+
+1. Initialize A1 (automatic start settles refused).
+2. Deliver SIGNED_IN for fresh A2; hold only the provider's deferred preparation task.
+3. Before it runs, deliver SIGNED_OUT (or newer user B). The announced owner now correctly becomes signed-out/B; generation/reset execute synchronously.
+4. Flush deferred tasks. A2's older timer sees active=true, increments generation and calls prepareSession(A2) despite the newer announced owner. The real transport invokes fetch(start_kabumori_service) with A2's captured token.
+5. Independent fake endpoint records **one obsolete A2 automatic request**, expected zero, in both variants. The later signed-out/B timer resets/supersedes it; all observed serviceSession renders remain null.
+
+This is **not** renewed stale readiness, cross-user credential substitution, explicit reactivation, or a production incident. R1 prevents an automatic start from reviving an ended service. However, an automatic start is a potentially writing operation (common account/entitlement/profile creation for that token's owner). Unsent work should not be resurrected after the SDK's sign-out/superseding notification; a later abort/result fence is not a pre-dispatch guarantee. The reproduction proves a fetch invocation, not an actual production HTTP arrival or DB commit.
+
+It is the remaining portion of the TASK's cancellation/current-owner boundary, found while checking consecutive notifications; do not re-report the fixed three single-notification cases as failed. Shipped tests hold only one deferred auth event and do not exercise this sequence.
+
+Minimum correction: before the deferred callback changes generation/loading or invokes acceptSession/prepareSession, require its captured user/login owner to still match the synchronously announced current owner (or an equivalent current-event ticket). Keep same-login refresh single-flight and perform no network work in the SDK callback. Add A2 -> SIGNED_OUT and A2 -> B before deferred dispatch: zero A2 requests, signed-out remains closed, B gets only its own preparation; normal/current/refresh cases stay green.
+
+Reviewer-only **in-memory** proof of causality: adding `announced.current() !== ownerOf(nextSession)` to the deferred guard makes both added cases PASS (obsolete request count 0), without touching product files. This is a narrow correction proof, not a reviewed/shipped implementation or a substitute for the complete regression suite after G5's fix.
+
+## Accepted boundaries / compatibility
+
+- Round-3 product delta from its merged-main parent is **four files**: AuthProvider, two test files and enrollment docs. Shared gate/parser/transport, X gate and start-intent migration/runner are byte-unchanged from the accepted prior corrective; no scope expansion.
+- S2 X queued pre-dispatch cancellation remains PASS, including former actual-gate unmount-before-microtask proof and shipped cleanup/sign-out/supersede/normal-mount tests.
+- userId + session_id model, malformed/missing/foreign-sub claim contexts failing closed, immutable captured-token Authorization, strict canonical answer parser (R4/R5), explicit version-bound restart and prior R2/R3 tests PASS. Local claim parsing remains an ephemeral discriminator, not signature/auth validation; no new token/session-id persistence or logging.
+- R1 server automatic-vs-explicit semantics, ACLs, version guards and lock races PASS in disposable local regression. Phase1 foundation and forward migration are unchanged in round 3. No production catalog/apply/drift claim.
+- PR94 ancestor/root news-detail and positive-ready push/notification gate remain preserved; X enrollment is still separate from workspace/OAuth/credentials/publishing authority. No native/operator gesture claim.
+- PR merge-base with fresh main: `cebdadf22c1007f6ae4c64d2489a825d88a24291`. Subsequent main changes through `7a70f752` are .agent controls only. **Zero product-file overlap** with PR95's 17 files. Read-only merge-tree PASS: `e9aa199d3e58ccc4fa65b274367d40db16345d1b`; no actual merge/source-branch update.
+- PR41/#99/#94 source is already in this PR's merged-main ancestry. Neither this exact-head review nor file-level compatibility authorizes deploying/applying those other scopes.
+
+## Independently rerun evidence
+
+- Kabumori app suite: **390/390 PASS** (`deno test --no-check --no-config --allow-read tests/app/`).
+- Actual AuthProvider Node suite: **17/17 PASS**; X Node suite: **221/221 PASS**.
+- X TypeScript and Expo lint: **PASS**. Kabumori temporary src-only tsc: only the **two pre-existing CSS-resolution diagnostics**, animated-icon.web.tsx:5 / theme.ts:6; no changed-file diagnostic. Not a whole-repository clean tsc claim.
+- Both Expo web exports: **PASS**, dummy public config/temporary outputs, no deployment/native build.
+- Local PG17.11 start-intent runner: **10 PASS markers**; Phase1 lifecycle runner: **20 PASS markers**, including cleanup/rollback. Dedicated H1 Unix-socket-only cluster, TCP disabled, fixture databases cleaned, own server stopped.
+- Migration invariants: **11/11 PASS** (main-integrated PR41 addition included). `git diff --check`: PASS. Changed-source secret-pattern scan: **0 matches**; no real credentials/PII in reviewer output.
+- Original reviewer probes: **8/8 PASS** (prior timing three + control, former probes four). Added consecutive-auth probe: **0/2 PASS** (two variants of Q1). Combined actual-source result: **8 PASS / 2 FAIL**. In-memory guard proof: **2/2 PASS**, separate from candidate verdict.
+- G5's entire reported **9-variant mutation matrix was not independently re-executed**. The original counterexamples plus new targeted negative/guard proof were independently run; no claim of independently proving all nine.
+- Source tracked-file diff = **0**; reviewer-created dependency symlinks only are untracked. No dependency install/package change or other slot file/server operation.
+- Artifacts: `/private/tmp/kabumori-h1-pr95-s1t-20261007.ayRgUS/` contains exact source, tests/DB/export/tsc logs and reviewer scripts. Rerun `node --test former-probes.mjs provider-event-window.mjs provider-queued-owner.mjs`; optional `H1_FENCE_PROOF=1 node --test provider-queued-owner.mjs` demonstrates the reviewer-only guard. If temporary files expire, sequence and minimum correction remain above.
+- Supabase session/auth callback docs and public changelog checked; Supabase skill informed synchronous owner versus server authorization separation, and Postgres-best-practices informed unchanged privilege/lock regression checks. [Session docs](https://supabase.com/docs/guides/auth/sessions), [auth callback docs](https://supabase.com/docs/reference/javascript/auth-onauthstatechange). Runtime/source proofs determine this verdict.
+
+## C1 / remaining work
+
+- **HOLD / CHANGES REQUIRED**, sole remaining finding **Q1 P2**. Original S1-T stale readiness is closed; accepted S1/S2/R1-R5 should not be reopened without evidence.
+- C1 should return only the deferred-current-owner pre-dispatch check and two-event regression to G5, then exact-head focused re-review (**Sol〔高〕**). No migration/new schema/Phase3/provider scope is needed for this correction.
+- Production start-intent apply/read-back and native release remain separate approvals/gates. Native/production E2E not performed by H1.
+- H1 updates only its TASK/Report, preserves prior history/other indexes, and **STOPs for C1**. Actual control-sync success is confirmed only after remote read-back.
+
+---
+
+# Previous H1 report history — preserved
+
 # H1 — PR #95 session-identity / queued-cancellation final focused re-review — 2026-10-07
 
 - task_id: common-account-v1-phase2-session-identity-final-rereview-20261007

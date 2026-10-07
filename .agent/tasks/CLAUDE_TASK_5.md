@@ -1,10 +1,109 @@
-# C1 CORRECTIVE ROUND 3 — PR #95 Kabumori synchronous auth-owner/readiness fence
+# C1 CORRECTIVE ROUND 4 — PR #95 Kabumori deferred-task current-owner guard
 
 This is the newest canonical G5 instruction and supersedes prior corrective sections only where it differs.
 
 - task_id: `common-account-v1-phase2-service-enrollment-integration-20261006`
 - status: in_progress
 - next_owner: claude
+- target PR: **#95**, continue the existing PR.
+- reviewed head requiring correction: `13f4281f9514742bdee43ffc08834fea67449bf2`
+- recommended model: **Opus5.5（極高）**
+- production mutation / migration apply / deploy / EAS / Phase3: **forbidden**
+
+## Preserve accepted work
+
+Do not reopen or weaken without concrete regression evidence:
+- original S1-T synchronous auth-owner/readiness fence;
+- stable userId + session_id context model;
+- same-session TOKEN_REFRESHED single-flight;
+- S2 X queued pre-dispatch cancellation;
+- R1-R5;
+- PR #94 root news-detail behavior;
+- X login/service enrollment separation from posting OAuth/workspace/credentials/publish authority.
+
+## Sole remaining blocker — Q1 P2
+
+Current Kabumori AuthProvider issue:
+- SIGNED_IN for A2 can queue deferred preparation;
+- before A2's deferred task runs, a newer SIGNED_OUT or different-user B notification can synchronously replace the announced current owner;
+- A2's old deferred task currently checks only component-active state;
+- it can therefore still enter prepareSession(A2) and dispatch obsolete automatic start_kabumori_service with A2's captured token;
+- readiness remains closed, but this is still obsolete unsent write-capable work after a newer auth notification.
+
+## Required correction
+
+1. Capture the intended owner/login (or an equivalent event ticket) when scheduling the deferred preparation.
+2. Immediately before the deferred task:
+   - advances generation/loading;
+   - calls acceptSession/prepareSession;
+   - or performs any enrollment transport dispatch,
+   require that captured owner/ticket still matches the synchronously announced current owner.
+3. If superseded, return before any automatic enrollment request is issued.
+4. Preserve the existing synchronous auth callback fence:
+   - no awaited Auth/Data API/network work inside the SDK callback.
+5. Preserve same-login TOKEN_REFRESHED:
+   - same user + same session_id remains the same logical login;
+   - do not spuriously abort/restart a valid in-flight request solely because token refreshed.
+6. Preserve all prior result/readiness fencing even for already-sent old requests.
+7. Do not change server lifecycle RPC/migration semantics for this fix.
+
+## Mandatory regression tests
+
+Use the actual AuthProvider path and hold deferred preparation:
+
+1. A1 established; deliver SIGNED_IN(A2); before A2 deferred task runs deliver SIGNED_OUT; flush deferred work.
+   - obsolete A2 automatic enrollment request count = **0**;
+   - readiness remains null.
+2. Same setup, but replace SIGNED_OUT with different-user B.
+   - obsolete A2 request count = **0**;
+   - B may perform only B's own current preparation.
+3. Normal/current A2 with no superseding event:
+   - prepares exactly once.
+4. Same-session TOKEN_REFRESHED:
+   - preserves expected single-flight;
+   - no unnecessary duplicate automatic start.
+5. Re-run the previous S1-T three timing cases + refresh control unchanged.
+6. Re-run former S1/S2 probes and focused R1-R5 regressions.
+
+## Scope / safety
+
+- Keep source delta minimal, primarily `src/providers/auth-provider.tsx` plus focused tests/docs.
+- Do not touch X behavior unless a shared test requires no-op compatibility.
+- No production access/write, migration apply, deploy, EAS, Phase3, Auth hard-delete, Storage, OAuth, Vault, Cron, X publish or real provider calls.
+- Fresh-fetch main before completion and re-check overlap.
+
+## Completion / K5
+
+Report:
+- exact new PR #95 head;
+- Q1 disposition;
+- original S1-T disposition;
+- same-session refresh control;
+- S2/R1-R5 regression disposition;
+- changed_files;
+- tests;
+- production mutation/deploy/EAS = 0;
+- remaining issues;
+- next recommendation.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K5.
+
+A PASS_CANDIDATE requires one final exact-head H1 focused rereview before merge.
+
+Recommended model: **Opus5.5（極高）**.
+
+---
+
+# C1 CORRECTIVE ROUND 3 — PR #95 Kabumori synchronous auth-owner/readiness fence
+
+This is the newest canonical G5 instruction and supersedes prior corrective sections only where it differs.
+
+- task_id: `common-account-v1-phase2-service-enrollment-integration-20261006`
+- status: review_required
+- next_owner: codex
 - target PR: **#95**, continue the existing PR.
 - reviewed head requiring correction: `1e8119e12457d9f6fbb8aef86991f44bf46f9cd6`
 - recommended model: **Opus5.5（極高）**
@@ -665,7 +764,128 @@ Recommended model: **Opus5.5（極高）**.
 
 ## Report
 
-### C1 corrective round 2 — 2026-10-07（S1 / S2 の修正、最新）
+### C1 corrective round 3 — 2026-10-07（S1-T の修正、最新）
+
+- task_id: common-account-v1-phase2-service-enrollment-integration-20261006
+- result: **PASS_CANDIDATE（H1 指摘 S1-T を修正済み。R1〜R5 / S1 / S2 は維持）**。
+  - source のみ。新しい migration は**未適用**。
+  - 本番の変更 0、deploy 0、EAS 0、本番への接続 0。
+- PR：[#95](https://github.com/anohi-memories/kabumori/pull/95)
+  - 新しい head `13f4281f9514742bdee43ffc08834fea67449bf2`（レビュー済みの旧 head は `1e8119e1`）。
+  - force-push はしていない。commit は次の 2 つ。
+    - main の merge `0522e071`
+    - 修正 `13f4281f`
+  - GitHub 上の状態は MERGEABLE / OPEN。merge は HOLD。
+- fresh main：`origin/main` `cebdadf2` を merge した。この時点の main 全体が PR の祖先になっている。
+  - これには PR #41（G3、X 投稿まわり）、PR #99、PR #94 が含まれる。
+  - 衝突は 0。PR #95 の 17 ファイルとの重なりも 0。
+  - `src/app/_layout.tsx` の `<Stack.Screen name="news-detail" />` は残っている。
+  - PR #41 の migration（`20261006160000`〜`160200`）が main に入ったので、PR #95 の `20261006230000` は時刻順で後ろになった。
+
+#### S1-T の対応：SDK の通知の時点で、前のログインを締め出す
+
+- 変更は Kabumori の `src/providers/auth-provider.tsx` だけ。X、共通ロジック、SQL は変更していない。
+- auth callback の中で、SDK が通知した「持ち主」を**同期的に**記録する。持ち主は「人 + ログイン」で、サインアウトのときは「なし」。
+- 持ち主が変わったとき（同じ人の新しいログイン、別の人、サインアウト）は、callback の中ですぐに次の 2 つを行う。
+  - request の世代を進める。古い応答は確定できなくなる。
+  - enrollment の処理を取り消す（`resetServiceEnrollment()`）。
+  - どちらも Auth / Data API を呼ばず、await もしない。次の task に回すのは、セッションの準備（通信）だけ。
+- `serviceSession` は、この「通知された持ち主」と照らして計算する（`useSyncExternalStore`）。
+  - 通知の後は、遅れて動く処理より前であっても、前の持ち主が ready になることはない。
+  - 古い持ち主の再開画面からの `reenroll()` も拒否する。
+- `getSession()` の答えは、SDK の最初の通知より前の隙間を埋めるときだけ使う。通知と食い違えば無視する。
+- 同じログインの token 更新では持ち主が変わらない。送信中の request と、その応答はそのまま使う。
+
+#### 同じログインの token 更新
+
+- 締め出しは起きない。送信中の再開は取り消されず、その応答でクリックしたログインが ready になる。
+- 遅れて動く処理の後は、更新後の session になる。
+- request は、自動 start 1 件 + 再開 1 件のまま。
+
+#### S2 / R1〜R5 / S1 に後退が無いこと
+
+- X、共通ロジック、SQL は変更していない。
+- 既存のテストを全部再実行して PASS。
+  - S1 / S2 / R2 / R3 / R4 / R5 の既存テスト
+  - DB の runner 2 本
+- H1 が以前に作った再現テスト（S1 X / S1 Kabumori / S2 X / control）も PASS。
+
+#### テスト / 確認（head `13f4281f`）
+
+| 対象 | 結果 |
+|---|---|
+| Kabumori `deno test --no-check --allow-read tests/app/` | 390 / 390。source の固定テストで、締め出しが遅れて動く処理より前にあることを固定 |
+| Kabumori `node --test tests/node/auth-provider-enrollment.test.mjs` | 17 / 17（新規 7、既存 1 を強化） |
+| X `npm test` | 221 / 221 |
+| X `tsc` / `expo lint` | PASS |
+| Kabumori `tsc`（`src/`） | 以前からある CSS の 2 件だけ |
+| `expo export --platform web`（両アプリ、ダミーの公開 env） | 成功。bundle に start / reactivate があり、`ensure_my_profile` は無い |
+| DB `common_account_service_start_intent_run.sh`（ローカル PG17.11、偽データ） | PASS marker 10 個 |
+| DB `common_account_lifecycle_run.sh`（Phase 1） | 20 / 20 |
+| `migration_source_invariants_test.ts` | 11 / 11（PR #41 の分を含む） |
+| 意図的に壊した版（9 種） | 9 種すべて検出（下記） |
+| H1 の今回の再現テスト `provider-event-window.mjs`（**変更なし**で実行） | 3 つの場合 + control：すべて PASS |
+| H1 の以前の再現テスト `former-probes.mjs` | 4 / 4 PASS。テストの土台の関数の書き方が変わったため、その目印 1 行だけ合わせた |
+| `git diff --check` / 秘密情報・PII・log 出力の scan | clean / 0 |
+
+- 新しい必須テスト（実物の provider + 実物の lib/auth。provider の「遅れて動く処理」だけを止めて、callback と処理の間に画面を描く）：
+
+  | TASK の必須項目 | 結果 |
+  |---|---|
+  | 1. 同じ人の新しいログイン A2 | 3 つとも共通：A1 の送信中の再開は callback の中で取り消される。窓の中で A1 の応答を届けても、**すべての render で serviceSession が null**。新しい持ち主は自分で状態を確認し、自分の token で再開を押して、初めて ready になる |
+  | 2. 別の人 B | 同上 |
+  | 3. SIGNED_OUT | 同上（最後まで null） |
+  | 4. control：同じ `session_id` の TOKEN_REFRESHED | 取り消されず、request は増えない。A1 自身の応答で ready になり、遅れて動く処理の後は更新後の session になる |
+
+- 追加したテスト：
+  - 既に ready の A1 は、通知の時点で ready でなくなる
+  - 通知の後、A1 の再開画面からは送信されない
+  - 通知より古い `getSession()` の答えでは enrollment しない
+- 既存の「A2 の auth event がキューにある間に A1 の応答が届く」テストを強化した。H1 の指摘どおり、A2 だけでなく A1 も含めて「すべて null」を確認する。
+- 壊した版 9 種：
+  - 旧 head の provider：新しいテストのうち 6 件が失敗し、H1 の指摘を再現する。
+  - 次のどれを外しても検出した。
+    - 締め出し
+    - 取り消し
+    - 持ち主での ready の判定
+    - `reenroll` の持ち主の確認
+    - 古い `getSession()` の拒否
+    - 持ち主を人だけで判定する
+    - token 更新でも締め出す
+  - 「世代を進めない」だけは、source の固定テストでしか検出できない。取り消しが、まだ確定していない応答をすべて拒否するため（二重の防御。docs に明記した）。
+
+#### changed_files（今回、4 ファイル。PR 全体では 17 ファイルのまま）
+
+- `src/providers/auth-provider.tsx`
+- `tests/node/auth-provider-enrollment.test.mjs`、`tests/app/service-enrollment_test.ts`
+- `docs/common-account/phase2-service-enrollment.md`
+- この Report：`.agent/tasks/CLAUDE_TASK_5.md` のみ。
+
+#### その他
+
+- production mutation / deploy / EAS：**0 / 0 / 0**。migration の本番適用は 0。本物の provider への呼び出しは 0。
+- remaining_issues：
+  - 新しい migration の本番適用は、別途承認が必要（変更なし）。app を出す前に必要。
+  - 既に送信済みの A1 の再開は、サーバー側で A1 の token のまま完了することがある。ただしその応答は、通知の後のどの状態も ready にしない。
+  - SDK の callback より前に起きることは、この締め出しの対象外。例：SDK が通知する前に、アプリが別のログインを始めた場合。
+    - ただし、サインイン用の関数（`signInWithEmail` など）は、SDK の通知の後で enrollment を始める。
+  - X の gate は、今回の H1 の指摘の対象外なので変更していない。
+  - 実機（Simulator / iPhone）での確認はまだ。native build は承認が必要な別工程。
+- safety_checks：
+  - RLS / producer / 削除経路 / Auth / Storage / OAuth / Vault / X の publish 権限 / Cron / Edge / X の動作は変更していない。
+  - 持ち主（人 + ログイン）は実行中のメモリにだけ置き、log にも保存にも出さない。
+  - ローカル PG は停止し、作業用の DB は残っていない（0 件）。他スロットのファイルは編集していない。
+- next_recommendation：TASK のとおり、head `13f4281f` について H1 の focused re-review（Sol 高）が必須。
+  - 重点：
+    - callback の中の同期的な締め出し（Auth / Data API を呼ばないこと）
+    - `useSyncExternalStore` による ready の判定
+    - `getSession()` の扱い
+    - token 更新の control
+  - PASS の後で、migration の本番適用の gate → app の build、の順番で進める。
+
+---
+
+### C1 corrective round 2 — 2026-10-07（S1 / S2 の修正。round 3 の前の Report、履歴として保持）
 
 - task_id: common-account-v1-phase2-service-enrollment-integration-20261006
 - result: **PASS_CANDIDATE（H1 指摘 S1 / S2 を修正済み。R1〜R5 は維持）**。
