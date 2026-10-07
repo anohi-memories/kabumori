@@ -1,5 +1,161 @@
 # Codex Task H1 — CURRENT TASK
 
+- task_id: postona-pr106-function-contract-final-rereview-20261008
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- type: final focused exact-head DB/function-contract rereview
+- target_pr: 106
+- target_head: 4b6dc57966e0d55b2e901a7707446c35b25a1f00
+- previous_reviewed_head: a8f313dc72b087ab86482781297848fe6e23bdcc
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Final focused rereview of POSTONA PR #106 after G4 fixed the two remaining C1 blockers.
+
+Do not reopen already accepted B1-B6 without concrete regression evidence.
+
+Review the exact head `4b6dc57966e0d55b2e901a7707446c35b25a1f00`.
+
+K4 added only one housekeeping change after Claude's corrective:
+- `supabase/tests/migration_source_invariants_test.ts`
+- reservation `20261007150000: postona_social_accounts_multi_provider`
+- the branch copy was based on current main and differs from main only by that one reservation line.
+
+## Mandatory startup / freshness
+
+1. Read ORCHESTRATION / ACTIVE_TASK / CURRENT_STATE / latest G4 TASK+Report / prior H1 report / this TASK.
+2. Use an independent H1 worktree/checkout from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #106.
+4. Require exact head `4b6dc57966e0d55b2e901a7707446c35b25a1f00`; moved head => STOP.
+5. At allocation:
+   - PR open/unmerged;
+   - 7 changed files;
+   - Netlify PASS; Vercel pending on exact head;
+   - H1 and H2 were both genuinely free before this assignment;
+   - G3 is done/free; G2/G5 are separate workstreams.
+6. No production DB/catalog read, migration apply, deploy, Auth/OAuth/Vault/secrets, provider calls, merge, or production mutation.
+
+## Focus R1 — existing trigger-function owner/ACL contract
+
+Independently inspect and reproduce the correction for:
+- `public.x_account_refresh_reset_on_reconnect()`
+- `public.social_mobile_account_deletion_guard()`
+
+Require the migration to fail closed before DDL unless each function has the approved:
+- exact signature / ordinary function kind;
+- owner equal to the approved table owner;
+- exact normalized definition/body identity;
+- SECURITY DEFINER/language/search_path and relevant function metadata;
+- direct ACL = owner EXECUTE only, no grant option;
+- no PUBLIC / anon / authenticated effective EXECUTE;
+- no inherited or PG16+/17 SET ROLE/transitive path to EXECUTE-bearing authority.
+
+Independently probe at least:
+- wrong owner;
+- PUBLIC EXECUTE;
+- anon/authenticated direct EXECUTE;
+- extra role EXECUTE;
+- grant option;
+- inherited path;
+- INHERIT FALSE / SET TRUE path;
+- transitive SET-only path;
+- body/config/definition drift.
+
+Every refusal must be atomic and leave the original X-only state.
+
+## Focus R2 — new provider guard exact body
+
+Inspect `public.social_accounts_provider_guard()` postcondition.
+
+Verify it pins:
+- signature / return trigger;
+- owner;
+- SECURITY INVOKER;
+- language;
+- search_path/config;
+- ACL;
+- exact reviewed normalized definition/body identity.
+
+Independently mutate only the function body while keeping metadata unchanged:
+1. allow provider relabeling;
+2. skip Meta service_role protection;
+3. return NEW without either guard.
+
+All must be rejected atomically by the postcondition.
+
+The unchanged reviewed body must pass.
+
+## Reservation / migration invariant
+
+Verify the new reservation line:
+- `20261007150000 -> postona_social_accounts_multi_provider`
+- no timestamp collision with current main or open work;
+- current-main `20261007173000_ai_lab_topic_evergreen_capacity` reservation is preserved;
+- migration invariant test remains valid.
+
+This bookkeeping change does not authorize migration apply.
+
+## Bounded regression
+
+Rerun enough to prove no regression:
+- corrected POSTONA disposable-PG runner;
+- critical former B1-B6 reproductions as needed;
+- mutation suite;
+- existing X publish / refresh / deletion / PR41 Stage3B regressions;
+- migration source invariants;
+- git diff check / secret scan.
+
+G4 reports:
+- 85 adverse starts;
+- 23 postcondition drift cases;
+- 54/54 mutation detection;
+- all existing X regressions PASS.
+Independently sample the critical guards rather than trusting counts alone.
+
+## Verdict
+
+PASS only if R1/R2 are independently closed and no new material blocker exists in this bounded scope.
+
+A PASS means **source merge readiness only**.
+It does not approve production preflight or production migration apply.
+
+If CHANGES REQUIRED, give exact reproduction and minimum correction.
+
+## Report
+
+Append to `.agent/CODEX_REPORT.md`:
+- task_id / verdict;
+- exact reviewed head;
+- R1/R2 disposition;
+- reservation/invariant result;
+- independent PostgreSQL evidence;
+- X regression result;
+- changed files by reviewer;
+- production reads/writes = 0;
+- merge recommendation;
+- production apply recommendation;
+- remaining production-only facts.
+
+Then:
+- TASK status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for C1.
+
+推薦モデル：**Sol（高）**
+
+---
+
+# Previous H1 task history
+
+# Codex Task H1 — CURRENT TASK
+
 - task_id: postona-pr106-phase2a2-security-rereview-20261007
 - owner: codex
 - slot: codex-1
@@ -4739,4 +4895,5 @@ Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 - recommended Claude model: **Opus5.5（高）**.
 - corrected candidate requires fresh Codex rereview: **Sol（高）**.
 - H1 closed and reusable after fresh allocation.
+
 
