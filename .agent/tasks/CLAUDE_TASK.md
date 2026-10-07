@@ -1,5 +1,199 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-ai-model-registry-gpt61-sol-20261007
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Opus5.5（高）
+- type: Kabumori-only AI model registry + market-report GPT-6.1 Sol migration
+- production_mutation_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+PR #101 is accepted and merged. Build the next Kabumori G2 layer so future OpenAI model upgrades are easy, source-controlled, auditable and limited to the Kabumori shared market-report pipeline.
+
+This task covers only:
+- Kabumori app shared morning/closing market reports;
+- the same shared report content used for Kabumori X morning/closing posts;
+- the generation and Fact-check calls inside that same market-report pipeline.
+
+Do NOT absorb POSTONA/social-auto-post AI management. G3 owns that separately.
+
+## Freshness / isolation
+
+1. Read `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, `.agent/ACTIVE_TASK.md`, this TASK, and the latest G2 report.
+2. Use a fresh independent G2 worktree/checkout from `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch `origin/main`; require PR #101 merge commit `e49ecfcc2f6707f64b6282960f9eec61be2973d3` to be present.
+4. Confirm no changed-file overlap with active G4/G5 work before editing/push.
+5. G5 currently owns the production DB/Auth/permission mutation window. Do not enter it.
+6. Source/test only: no production deploy, migration apply, manual report, replay, X send, notification, real OpenAI call, Auth/Vault/OAuth/Cron mutation.
+
+## OpenAI model verification gate
+
+Before changing model IDs or reasoning settings, verify current official OpenAI API documentation/pricing.
+
+ChatGPT pre-check on 2026-10-07 found official OpenAI pricing listing `gpt-6.1-sol`. Treat this as a starting point, not a substitute for your own fresh implementation-time check.
+
+Required:
+- confirm the exact model ID is available for the Responses API used here;
+- confirm supported reasoning configuration syntax/values;
+- confirm current token pricing used by any local cost estimator;
+- if official docs/API behavior conflicts with this TASK, STOP and report the exact conflict instead of guessing.
+
+Target product direction:
+- `kabumori.market_report.generate` -> `gpt-6.1-sol`
+- `kabumori.market_report.fact` -> `gpt-6.1-sol`
+- preferred reasoning: generate = medium, fact = low, only if officially supported by the actual API path.
+
+## 1. Kabumori-only central model registry
+
+Create a source-controlled registry under an appropriate Kabumori/shared path, for example:
+`supabase/functions/_shared/kabumori_ai_models.ts`
+
+Use repository naming/style if a better existing pattern exists.
+
+Registry must expose semantic/logical roles, not caller-specific raw literals.
+
+Minimum roles:
+- `kabumori.market_report.generate`
+- `kabumori.market_report.fact`
+
+Each role should resolve at least:
+- model ID;
+- reasoning effort/config;
+- max output setting used by the caller, if applicable;
+- config version;
+- semantic workload role.
+
+The registry is the source of truth. Do not add an unrestricted production env/DB override that can bypass code review.
+
+## 2. Migrate market-report callers
+
+Replace direct model literals in the G2-owned market-report generation and Fact paths with registry lookups.
+
+Preserve all accepted behavior from PR #101 / PR #99:
+- Hard Fact semantics;
+- exactly 3 points;
+- generic/metric/near-duplicate WARN-only telemetry;
+- X shortness rewrite only below 300 chars;
+- App rewrite behavior;
+- MAX_GENERATIONS=2;
+- max 4 model calls total;
+- safe-original fallback;
+- full failed-output retention during QA;
+- non-blocking generation-trace persistence;
+- no extra retry/model call caused by logging.
+
+Do not change prompt/editorial policy except where strictly required for API compatibility.
+
+## 3. Inventory command
+
+Add a simple developer inventory command/script that prints the current Kabumori model assignments in one shot.
+
+Expected human-readable output conceptually:
+- Market Report Generate: <model> / <reasoning>
+- Market Report Fact: <model> / <reasoning>
+- config version
+
+Use repository conventions for script location and execution.
+
+The inventory must not call OpenAI or production services.
+
+## 4. Raw model-literal drift guard
+
+Add a focused invariant/test that fails when G2-owned Kabumori market-report runtime code hard-codes new `gpt-*` model IDs outside the approved registry.
+
+Requirements:
+- do not scan/ban unrelated POSTONA/G3/G4 code;
+- allow the canonical registry and focused fixtures/tests/docs where appropriate;
+- make the failure message identify the offending file/literal;
+- avoid a brittle repo-wide false-positive rule.
+
+## 5. Audit metadata
+
+Existing PR #101 traces already record the actual model. Extend source-level diagnostics so the runtime can also identify the logical role and config version where this can be done without a new DB migration.
+
+Desired audit tuple:
+- logical_role
+- actual_model
+- config_version
+
+Important:
+- do not create or apply a new production migration merely to add these fields while G4/G5 are active;
+- if durable DB columns are genuinely required, document the exact follow-up migration need in the Report and keep this task source-only;
+- do not overload unrelated fields with misleading data.
+
+## 6. Cost accounting
+
+If the market-report pipeline has model-specific token cost estimation, update it from current official OpenAI pricing for the exact selected model/processing mode.
+
+Do not invent prices.
+Keep cost logic separate from POSTONA/social pricing ownership.
+
+## Scope exclusions
+
+Do not touch:
+- POSTONA / social-mobile AI registry or model IDs;
+- G3/G4 model policy;
+- important-news-monitor;
+- breaking/trigger/shadow news search;
+- MIC;
+- common-account/Auth/G5;
+- personalized-report model migration unless it is only a compile-safe shared type import and does not change runtime behavior;
+- unrelated migrations/RPCs;
+- production settings/secrets.
+
+## Required tests
+
+At minimum:
+- focused registry resolution tests;
+- inventory output test or deterministic check;
+- raw-literal drift invariant;
+- market-report-analysis full suite;
+- PR #101 debug trace/final/adversarial regressions;
+- relevant X shared consumer;
+- relevant data-packet/shared regressions;
+- Deno check/lint;
+- git diff --check.
+
+No real OpenAI/network/production calls in tests.
+
+## Completion / K2
+
+Report:
+- exact branch/PR/head;
+- official OpenAI model/API verification source/date and resolved IDs/settings;
+- registry path and logical roles;
+- all migrated callers;
+- inventory command;
+- drift guard behavior;
+- audit metadata disposition;
+- exact cost/pricing disposition;
+- test counts;
+- changed files;
+- commit/push;
+- production deploy/mutation = 0;
+- remaining issues;
+- overlap/safety checks.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+Review expectation:
+- if final diff is only source-controlled registry/caller/cost/tests with no DB schema, Auth, publish/retry semantics or production mutation, a broad Codex review is normally unnecessary; ChatGPT decides at K2.
+- if a migration/schema/security/runtime-fallback boundary appears, flag it explicitly for a focused H2 review.
+
+Recommended model: **Opus5.5（高）**.
+
+---
+
+# Claude Task 2 — ARCHIVED TASK — PR #101 corrective completed
+
 - task_id: kabumori-pr101-f2-f3-final-corrective-20261007
 - owner: claude
 - slot: claude-2
