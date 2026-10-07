@@ -45,14 +45,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: kabumori-pr101-debug-trace-security-review-20261007
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: PR #101 focused review。append-only generation trace table、RLS/effective privilege、service_role最小権限、失敗本文の保持、secret除外、trace書込み失敗が配信を止めないこと、prompt hygiene、Hard/call/rewrite不変を確認。production access/apply/deploy禁止。
+- allocation: Final C2 accepts CHANGES REQUIRED on PR #101 exact head 2469e8a8. Blockers are F1 effective ACL/owner/default/inheritance drift, F2 free-text secret-shape redaction gaps, F3 silent loss of full candidate/Fact evidence. Clean append-only/non-blocking delivery/prompt hygiene/Hard-call boundaries remain accepted. H2 free until corrected exact-head rereview.
 - recommended_model: Sol（中）
 
 ## Claude G1
@@ -70,13 +70,13 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: kabumori-market-report-debug-trace-corrective-20261007
+- status: ready
+- task_id: kabumori-pr101-debug-trace-security-corrective-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 PASS_CANDIDATE。PR #101 head 2469e8a8be0125805551ba3e353c4ef6058b0150。失敗generation本文/local・Fact指摘・scheduled attempt履歴をappend-only診断tableへ保持。retry上書きを解消し、朝刊/大引けpromptの時間表現も安全化。Hard/PR99 telemetry/300字rewrite/call ceiling不変。migration/RLS境界追加のためH2 focused reviewへ。
+- allocation: PR #101のH2 F1-F3だけを修正。effective ACL/owner/default/inheritanceをfail-closed、free-text内credential redaction/detectorを強化、candidate/local/Fact evidenceのsilent truncationを解消。本文保存方針・append-only・非ブロッキング・Hard/PR99/300字rewrite/call ceilingは維持。OpenAIモデル更新は混ぜず、PR101 merge直後の次G2でGPT-6系へ移行する。
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
