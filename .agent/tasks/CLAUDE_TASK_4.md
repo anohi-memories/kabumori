@@ -1,304 +1,219 @@
 # Claude Task 4 — CURRENT TASK
 
-- task_id: postona-multisocial-phase1-architecture-inventory-20261006
+- task_id: postona-multisocial-phase2a1-provider-domain-foundation-20261007
 - owner: claude
 - slot: claude-4
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: claude
 - priority: high
-- recommended_model: Opus5.5（高）
-- type: architecture inventory / provider-neutral design / docs-only
+- recommended_model: Sonnet5（高）
+- type: source-only provider-neutral domain foundation / behavior-preserving
 - production_mutation_allowed: false
 - merge_allowed: false
 - deploy_allowed: false
 
-## Product decision
+## Context
 
-The X auto-post app is now provisionally named **POSTONA（ポストナ）**.
+POSTONA multi-social Phase 1 architecture is accepted and on main:
+- `docs/postona/multi-social-phase1.md`
 
-Brand meaning:
-- POST + PERSONA.
-- Core product: talk with AI, let it learn the user's confirmed tone/preferences, then help create, schedule and auto-publish posts in that user's style.
+G3 PR #41 is now merged to main, so the live scheduled-user source foundation no longer blocks G4 architecture work.
 
-Current product direction changed:
-- do **not** spend this G4 task on final UI implementation;
-- first make POSTONA safely multi-social;
-- target order is **X -> Threads -> Instagram**;
-- UI will be finalized after the multi-social architecture and platform constraints are concrete.
+G5 PR #95 is still under final common-account/Auth/session review and remains unmerged. Therefore this task deliberately advances only the **non-Auth / non-OAuth / non-credential / non-DB** part of Phase 2a.
 
-Current product assumptions for this task:
-- X remains supported but has comparatively high per-post API cost, so POSTONA must not make X the architectural center forever.
-- Threads should be the first additional network because it is text-first and closest to current POSTONA behavior.
-- Instagram follows; media/material-library concerns become first-class there.
-- Current X-only phase is text-first. Images are optional user-provided/material-library assets. AI image generation is not a core baseline feature.
-- Future plans may gate X, URL-post, image-generation and other higher-cost features separately. Do not implement billing in this task.
+This is a safe, behavior-preserving foundation task. It must not change live publishing behavior.
 
-## Purpose
+## Goal
 
-Phase 1 is **inventory + architecture only**.
+Create the provider-neutral domain foundation that later Threads and Instagram work can build on, without touching G5-owned boundaries or current live X routing.
 
-Produce a concrete, implementation-ready plan for converting the current X-centric social-mobile system into a provider-neutral POSTONA posting platform without disturbing active G3/G5 work.
+The output should establish canonical concepts for:
 
-Do not implement Threads/Instagram runtime yet.
-Do not change app/runtime behavior.
-Do not create migrations, RPCs, Edge Functions, OAuth credentials, provider apps, secrets, production settings or UI in this task.
+- provider id: `x | threads | instagram`
+- structural provider capabilities
+- credential profile kind
+- publish flow kind
+- provider-neutral publish target/result contracts
+- provider adapter interfaces/types only
 
-The goal is to answer, from the current codebase:
+This task does **not** connect Threads, does **not** publish anything, and does **not** change DB schema.
 
-1. What is genuinely X-specific today?
-2. Which parts are already generic enough to reuse?
-3. What provider-neutral model should replace X-as-the-root assumptions?
-4. What is the smallest safe sequence to add Threads first, then Instagram?
-5. Which current G3/G5 work must finish or be integrated before runtime changes begin?
-
-## Mandatory startup / isolation
+## Mandatory startup / coordination
 
 1. Read:
    - `.agent/ORCHESTRATION.md`
    - `.agent/ACTIVE_TASK.md`
    - `.agent/CURRENT_STATE.md`
-   - this G4 TASK
-   - current G3 and G5 TASK/Report for conflict only.
-2. Fresh-fetch `origin/main` from clean base `/Users/yuya/Developer/kabumori-fresh`.
-3. Use an independent G4 worktree / checkout if any repository file is changed.
-4. Do not share another slot's worktree, branch, uncommitted files or dev server.
-5. Before push, fresh-check `origin/main` again.
-6. If G3/G5 changes overlap a candidate runtime boundary, document the dependency and STOP before editing that runtime boundary.
+   - this TASK
+   - accepted `docs/postona/multi-social-phase1.md`
+   - current G3/G5 TASK/Report for conflict only.
+2. Fresh-fetch `origin/main` from `/Users/yuya/Developer/kabumori-fresh`.
+3. Create a new independent G4 worktree/checkout.
+4. Confirm PR #41 is merged in fresh main before proceeding.
+5. Fresh-check current PR #95 changed files. If any proposed G4 file overlaps PR #95, do not edit that file; redesign scope or STOP.
+6. Do not touch another slot's worktree, branch, uncommitted files or dev server.
 
-## Current slot coordination
+## Hard no-touch boundaries
 
-### G3
+Do not modify any current G5/PR #95 file, including but not limited to:
+- `apps/social-mobile/src/app/_layout.tsx`
+- `apps/social-mobile/src/domain/service-enrollment.ts`
+- `apps/social-mobile/src/features/service-enrollment/*`
+- common-account/service-enrollment migrations/tests/docs
+- Kabumori auth/session/provider files owned by G5.
 
-Current G3 owns live scheduled-user generation / PR #41 fresh integration and a narrow service-only content-settings read boundary.
+Also do not modify:
+- `x-test-post` runtime routing;
+- current X OAuth Edge Functions/RPCs;
+- Vault/token refresh implementation;
+- account deletion/revoke flows;
+- `social_accounts` schema;
+- scheduled-post schema;
+- publish-authority DB/RPCs;
+- any production workflow or setting.
 
-G4 must not edit or integrate G3's runtime work.
+## Phase A — canonical provider domain
 
-Treat at least these areas as G3-owned for this phase:
-- current `x-test-post` / scheduled live-generation routing;
-- publish-authority changes tied to PR #41;
-- social-mobile content-settings/persona publish-time read boundary;
-- PR #41 migrations and backend integration.
+Add the smallest pure domain representation needed for future X / Threads / Instagram support.
 
-Read them to understand architecture only.
+Required concepts:
 
-### G5
+```ts
+type ProviderId = 'x' | 'threads' | 'instagram';
 
-G5 owns the project-wide common-account critical path and current Phase 2 service-enrollment/Auth/session hardening.
+type CredentialProfile =
+  | 'oauth2_rotating_refresh'
+  | 'long_lived_access';
 
-G4 must not edit:
-- common-account lifecycle/enrollment migrations or RPCs;
-- app auth/session/AuthGate/service-enrollment behavior;
-- account deletion/enforcement;
-- OAuth/Vault/provider credential lifecycle owned by G5.
+type PublishFlow =
+  | 'single_call'
+  | 'container_then_publish';
+```
 
-The multi-social design must preserve the distinction between:
-- shared login/common account;
-- service entitlement;
-- social provider account connection;
-- publish authorization.
+Define structural capabilities only, for example:
+- text-only supported?
+- media required?
+- publish flow kind
+- credential profile kind
+- supports optional media?
+- supports provider-side permalink/id concept?
 
-Do not collapse these concepts.
+Do **not** use this task to hard-code unstable commercial pricing or enforcement quotas.
+Do **not** make uncertain provider limits runtime gates.
 
-## Phase A — repository inventory
+Unknown provider id must fail closed.
 
-Map the current social-mobile architecture end-to-end, with exact file/module references:
+## Phase B — provider-neutral contracts
 
-- account connection / provider OAuth entry points;
-- workspace and membership model;
-- `social_accounts` or equivalent provider-account representation;
-- Vault-backed access/refresh token references;
-- scheduled post / queue representation;
-- post content/settings/persona flow;
-- AI consultation -> confirmed memory -> generation flow;
-- publish permission / consent;
-- dispatcher / scheduled execution;
-- manual/test posting path;
-- history/status/error recording;
-- account deletion / provider disconnect boundary;
-- UI/domain types that hard-code X names, handles, logos or assumptions.
+Define pure interfaces/types for future adapters, without wiring them into runtime yet.
 
-Classify each item:
-- provider-neutral already;
-- X-specific but easy to wrap;
-- X-specific structural dependency;
-- blocked by active G3/G5 work;
-- must remain X-specific by design.
+At minimum cover:
 
-## Phase B — provider-neutral target model
+### Connected account identity
+Provider-neutral identity fields such as:
+- provider
+- providerAccountId
+- handle/displayName where available
 
-Design the minimum provider-neutral model needed for:
+No token/plain credential fields.
 
-- X
-- Threads
-- Instagram
+### Publication target
+A target must be able to represent:
+- logical target id
+- provider
+- connected account id
+- rendered text
+- optional media references
+- scheduled timestamp where relevant
 
-At minimum define:
+No DB implementation in this task.
 
-### Connected social account
+### Publish outcome
+Represent:
+- published with provider post id/permalink if available
+- rejected with stable code
+- uncertain / requires reconciliation
 
-A provider account must be distinguishable from the POSTONA/common login.
+The model must support target-level retry/idempotency later.
 
-Define:
-- provider enum / identifier;
-- provider account id;
-- display handle/name;
-- connection status;
-- publish capability state;
-- token/credential reference boundary;
-- provider-specific metadata without polluting common fields.
+### Adapter contracts
+Type/interface only for future:
+- ConnectAdapter
+- CredentialAdapter
+- PublishAdapter
+- DisconnectAdapter
 
-Do not expose secrets or copy tokens into generic tables.
+Do not instantiate real adapters or call external APIs.
 
-### Post / publication model
+## Phase C — canonical location / app-server parity
 
-Do not model the root object as an "X post".
+Prefer one canonical pure TypeScript source if the repository/tooling can safely import it from both:
+- `apps/social-mobile`
+- Supabase/Deno shared code
 
-Design a provider-neutral concept such as:
-- logical post/draft;
-- one or more publication targets;
-- provider-specific rendered content;
-- scheduled time;
-- media attachments;
-- publication status/result/error;
-- remote provider post id.
+If one shared import path is impractical or would create toolchain coupling:
+- use separate app/server modules;
+- add a focused parity test that proves provider ids and structural capabilities cannot silently drift.
 
-Explicitly decide whether:
-- one logical POSTONA post may target multiple SNS;
-- provider-specific text variants are stored separately or rendered just-in-time;
-- retries/idempotency operate per target, not per logical post.
+Do not introduce a new package/workspace dependency unless clearly necessary.
 
-### Content adaptation
+## Phase D — X behavior preservation proof
 
-Define how the same user intent/persona can produce:
-- X-optimized text;
-- Threads-optimized text;
-- Instagram caption/media-aware output.
+This task must not change current X behavior.
 
-Persona/memory should be shared where appropriate, but provider-specific learned behavior must remain possible later.
+Verification must prove:
+- no current X runtime path imports the new adapter implementation in a way that changes execution;
+- no DB/migration/RPC/Edge behavior changed;
+- no publish enablement semantics changed;
+- no auth/onboarding/service-enrollment behavior changed;
+- no provider call is added.
 
-### Media
+If you need to touch an existing file solely to export/reuse a type, keep it minimal and prove no runtime delta.
 
-For current X phase:
-- text is primary;
-- media optional;
-- user-selected upload/material-library assets are the normal path;
-- AI image generation is not a baseline dependency.
+## Suggested files
 
-For Instagram design:
-- media becomes first-class;
-- define where a future material library attaches to a logical post;
-- do not implement storage/schema yet.
+Claude should first inspect repository conventions and choose the smallest compatible placement.
 
-## Phase C — provider capability matrix
+A safe shape may be:
+- one new pure provider-domain module;
+- one or two focused test files;
+- optional short design note under `docs/postona/`.
 
-Create a capability matrix for X / Threads / Instagram covering at least:
-
-- text-only publish;
-- media requirement/optionality;
-- URL/link behavior;
-- scheduling via POSTONA;
-- API/account prerequisites;
-- auth/OAuth model;
-- rate/quota constraints;
-- provider-side post id;
-- delete/revoke/disconnect implications;
-- webhook/polling needs if applicable;
-- likely review/app-registration requirements.
-
-Use official provider documentation where practical.
-Clearly mark anything not verified from official docs as "needs verification".
-Do not create provider apps or credentials.
-
-## Phase D — Threads-first implementation plan
-
-Define the smallest safe Phase 2 runtime slice for Threads.
-
-Prefer:
-1. provider abstraction and data/domain seams;
-2. Threads account connect/readiness;
-3. manual test publish;
-4. scheduled publish;
-5. AI/persona generation adaptation;
-6. history/status;
-7. multi-target post only after single-provider Threads is stable, unless repository evidence strongly supports doing it earlier.
-
-For each step identify:
-- exact likely files/components;
-- DB/migration/RPC/Edge changes, if any;
-- test strategy;
-- dependency on G3/G5;
-- production gate needed or not;
-- rollback/fail-closed behavior.
-
-Do not implement the plan here.
-
-## Phase E — Instagram follow-on plan
-
-Define what must be different for Instagram:
-
-- Professional-account prerequisite and exact verification needed;
-- media/material-library model;
-- caption generation;
-- image/video/Reels considerations;
-- provider-specific publish constraints;
-- what can reuse Threads/X abstractions;
-- what must wait until media UX is designed.
-
-Again: design only.
-
-## Deliverable
-
-Create one new architecture document only:
-
-`docs/postona/multi-social-phase1.md`
-
-It must contain:
-- current-state inventory;
-- X-specific seam map;
-- target provider-neutral architecture;
-- proposed entities/interfaces;
-- provider capability matrix;
-- Threads-first phased implementation;
-- Instagram follow-on;
-- G3/G5 dependency/conflict table;
-- explicit "do not change yet" list;
-- open questions requiring product decision;
-- recommended next G4 task.
-
-No runtime/source file edits other than this new docs file.
-No migration file.
-No lockfile/package change.
+Avoid editing existing runtime files unless necessary.
 
 ## Verification
 
 At minimum:
+- provider ids exactly `x / threads / instagram`;
+- unknown provider rejected;
+- X capability profile matches accepted architecture;
+- Threads/Instagram structural differences represented without runtime calls;
+- target/outcome contracts can represent single-call and container-then-publish flows;
+- app/server parity test if definitions are duplicated;
+- existing social-mobile tests relevant to touched modules;
+- TypeScript/Deno check as applicable;
 - `git diff --check`;
-- changed files must be exactly:
-  - `docs/postona/multi-social-phase1.md`
-  - this G4 TASK/report/control files only as required by orchestration;
-- verify no runtime/app/migration/Edge/workflow file changed;
-- fresh `origin/main` conflict check before push;
-- production mutation 0;
-- deploy 0;
-- provider app/credential/OAuth/Vault/secret change 0;
-- real X/Threads/Instagram call 0.
+- changed-file overlap check against current PR #95 = 0;
+- runtime/migration/RPC/Edge/workflow/Auth/OAuth/Vault/production/provider-call changes = 0.
 
-## Completion
+## Deliverable / PR
+
+Create a focused PR for this source-only foundation.
+
+Do not merge.
 
 Report:
-- task_id / result;
-- fresh main used;
-- changed_files;
-- architecture conclusions;
-- main X-specific blockers;
-- proposed provider-neutral boundaries;
-- Threads Phase 2 slice;
-- Instagram follow-on;
-- G3/G5 dependencies;
-- tests/checks;
-- production/deploy/provider-call mutations = 0;
-- remaining open product decisions;
-- next_recommendation.
+- fresh main;
+- exact changed files;
+- canonical provider-domain placement;
+- provider capability model;
+- target/outcome/adapter contracts;
+- parity strategy;
+- tests;
+- proof of zero overlap with PR #95;
+- proof of zero runtime/DB/Auth/OAuth/Vault/production/provider-call change;
+- remaining blockers for actual Threads connection;
+- next recommendation.
 
 Then:
 - status -> `review_required`
@@ -307,109 +222,13 @@ Then:
 
 ## Review policy
 
-This phase is docs-only architecture inventory and does not change runtime/security boundaries.
+This is a behavior-preserving source/domain foundation with no DB/Auth/OAuth/runtime wiring.
 
-Default: **no Codex review** if K4 confirms the deliverable is accurate and scope stayed docs-only.
-If a specific architecture/security concern is discovered, at most one focused review later.
+Default: no Codex review if K4 confirms scope stayed pure and tests pass.
 
-推薦モデル：**Opus5.5（高）**
-
-## Report — postona-multisocial-phase1-architecture-inventory-20261006 (2026-10-06)
-
-- task_id: postona-multisocial-phase1-architecture-inventory-20261006
-- result: **PASS（ドキュメントのみ）**。成果物 `docs/postona/multi-social-phase1.md`（354行）。PR [#96](https://github.com/anohi-memories/kabumori/pull/96) を作成済み・未 merge（merge_allowed=false）。
-- model_used: Opus 5.5
-- fresh main used: 調査の基準は `e7da97d4`。push 前に再確認した main（`48ef27cc` 以降）と衝突しないことを merge-tree で確認した。
-- workspace: `kabumori-fresh` から作った G4 専用 worktree `/Users/yuya/Developer/kabumori-g4-postona`（branch `claude/g4-postona-multisocial-phase1-20261006`、commit `df718397`）。
-- changed_files: `docs/postona/multi-social-phase1.md` のみ（PR）。このほかに、この TASK ファイルの status と Report を更新した（main）。
-- 調査の方法: 読み取り専用で3つを並行して調べた。
-  - バックエンドの12領域
-  - アプリの X 結合53か所
-  - 公式ドキュメント（X / Threads / Instagram）の比較
-
-  主な結論はソースで実際に確認した:
-  - `x-test-post/index.ts:4018-4021` の AI Lab 限定分岐
-  - `scheduled_posts` にアカウントがないこと（`supabase-repository.ts:54-56`）
-  - `PLATFORM_NOT_SUPPORTED`（`20261003090000:225`）
-  - アプリの型 `SocialPlatform` に threads と instagram があること
-
-### architecture conclusions
-- すでに中立なもの: ワークスペース（brands）とメンバー権限、内容設定・ペルソナ、生成器、アプリの `SocialPlatform` 型。
-- 構造的な X 依存は5つ:
-  - A. 投稿キューにアカウント・プラットフォームがない（`x_post_id` もある）。
-  - B. `social_accounts` の本番 DDL が `CHECK (platform='x')` で、RPC も `'x'` で絞っている。
-  - C. X の2トークン前提（2つの参照が存在・別物・非共有であることを送信・ON・削除で要求）。Meta の長期トークン1本の方式と合わない。
-  - D. 送信経路が `x-test-post`／`postToX`／`VaultAccountXAuth` だけ。しかも main では user ワークスペースの `brand_post` が AI Lab 以外送られない。
-  - E. 接続経路が `x-oauth-connect-user`／X 用 RPC だけで、アカウント id に `':x'` が埋め込まれている。
-- プロバイダ中立の境界の案:
-  - 4層（ログイン／サービス利用権／SNS 接続／投稿許可）は分けたままにする。
-  - `social_accounts` は新しい表を作らずに広げる。
-  - 資格情報はプロバイダごとの型にする（`oauth2_rotating_refresh` と `long_lived_access`）。
-  - 論理投稿と配信先を分け、本文は配信先ごとに作成時に保存し、再試行は配信先単位にする。
-  - Connect／Credential／Publish／Disconnect の各アダプタを用意する。X 版は既存コードを包むだけにする。
-- 名前の衝突: コード内の "thread" は X の返信の連なりを指す。新しい識別子では Meta のプロバイダを `threads` と書く。
-
-### Threads Phase 2 slice / Instagram
-- 2-0（コードなし）: Meta アプリ、審査の計画、データ削除・連携解除コールバック、リダイレクト URI の確認（カスタムスキームが使えるかは要検証）。
-- 2a: 中立化の継ぎ目。挙動は変えない。`platform` の CHECK を広げ資格情報の型を入れる migration 候補を作る。
-- 2b: Threads の接続と準備状態。
-- 2c: 手動テスト投稿（テスターアカウントのみ）。
-- 2d: 定期投稿。**PR #41 の merge が必須**。
-- 2e: 生成の出し分け。
-- 2f: 履歴。
-- 2g: 複数配信は後回し。
-- Instagram: プロアカウントが前提で、メディアが必須。IG Login と FB Login のどちらにするか決める（削除できるのは FB Login のみ）。公開 URL で渡す素材ライブラリ、上限 50 か 100／24時間（要検証）、Advanced Access と Business Verification。
-
-### G3/G5 dependencies
-- G3: PR #41（review_required、head `280aa0f8`）が定期送信の土台になる。merge まで `x-test-post` には触らない。PR81 は本番未適用で保留中。
-- G5: PR #95（共通アカウント Phase 2）、サービスキー `x_autopost`、オンボーディングと AuthGate、OAuth・Vault・資格情報ライフサイクル、退会。Threads の接続と資格情報の型は G5 と合意してから進める。
-
-### tests / checks
-- `git diff --check` 問題なし。main との差分は docs 1ファイルのみ。runtime・app・migration・Edge・workflow の変更なし。秘密情報パターン 0。
-- 本番への書き込み・deploy・プロバイダアプリや認証情報の作成・OAuth・Vault・secret の変更・実際の X／Threads／Instagram の呼び出し = **0**。本番読み取りもなし（この TASK では不要だった）。
-
-### remaining open product decisions（設計書 §9 に11項目）
-主なもの:
-- 複数 SNS へ同時に配信するか
-- SNS ごとに本文を生成して保存するか
-- 同意の単位（アカウントかワークスペースか）
-- X の URL 付き投稿のコスト（$0.20／件）の扱い
-- Threads の最初の範囲
-- IG Login か FB Login か
-- サービスキー `x_autopost` と、アプリ名・scheme の変更時期
-- Meta の Business Verification の名義
-
-### next_recommendation
-- K4 で確認する。範囲がドキュメントのみに収まっているので、Codex レビューは不要（TASK の方針どおり）。
-- 次の G4 は「POSTONA Phase 2a — 中立化の継ぎ目と Threads 接続の準備（挙動変更なし）」を提案する。PR #41 と PR #95 の merge 状況を確認してから始める。
-- 並行して、ユーザーに Meta アプリの登録と審査の計画（2-0）、および §9 の判断をお願いする。
-- status: review_required / next_owner: chatgpt。STOP for K4。
+推薦モデル：**Sonnet5（高）**
 
 ---
-
-## Final K4 — PASS / architecture accepted — 2026-10-06
-
-- verdict: **PASS**.
-- scope accepted: docs-only architecture inventory / provider-neutral multi-social design.
-- runtime/app/migration/RPC/Edge/workflow/OAuth/Vault/secret/production/provider-call changes: **0**.
-- deliverable accepted: `docs/postona/multi-social-phase1.md` (354 lines).
-- exact source candidate: former PR #96 head `df718397d015f76f91684f0b4ed3bdd9e43f539d`, one changed file only.
-- CI on the candidate: Netlify Preview PASS / Vercel PASS.
-- fresh-main note: main advanced during K4 and GitHub rejected the immediate PR merge because the base changed. The accepted one-file document was therefore written unchanged to fresh main as commit `25fd6aeec85528a06f78995f4306aaeba98f9d75`; PR #96 was then closed as superseded by that exact main integration.
-- architecture accepted:
-  - keep common login / service entitlement / social-provider connection / publish authorization as separate layers;
-  - keep X-specific credential and publish internals behind provider adapters rather than generalizing by weakening existing X safety rules;
-  - split logical post intent from publication target so retries/idempotency can operate per SNS target;
-  - Threads first, Instagram second;
-  - Instagram media/material-library requirements remain a later dedicated slice.
-- no Codex review required: this K4 changed no runtime/security boundary and the task remained docs-only.
-- coordination:
-  - G3 PR #41 is still open and `review_required`; its live scheduled-user/publish path must be resolved before G4 touches that runtime seam.
-  - G5 PR #95 is still open and `review_required`; H1 focused rereview is active. Common-account/Auth/session/provider-credential lifecycle remains G5-owned.
-  - therefore Phase 2a runtime work is **not assigned yet**.
-- AI Lab diary: **記録不要** — 今回は将来のマルチSNS化に向けた設計整理のみで、ユーザー向け機能や実動作の追加はまだない。
-- next recommendation: after G3 PR #41 and G5 PR #95 are accepted/merged, create the next G4 task for POSTONA Phase 2a (provider-neutral seams + Threads preparation), with fresh overlap checks first.
-- G4: **done / free**.
 
 # Previous G4 task history — preserved below
 
@@ -2860,4 +2679,5 @@ PR の merge が明朝に間に合わない場合に使う。OpenAI 1回と Stor
 - K4 → merge。merge 後は上記の read-only dispatch 2本で Storage list の実地確認をする。今夜 merge できない場合は、10/7 の手動 fallback の要否を判断する。
 - Plan A（Supabase pg_cron → GitHub `workflow_dispatch`）を別 TASK にする。このリポジトリの Actions 起動だけに絞った fine-grained token を Vault に保存する必要がある。Codex／Luna の security review を1回推奨。
 - status: review_required / next_owner: chatgpt。STOP for K4。
+
 
