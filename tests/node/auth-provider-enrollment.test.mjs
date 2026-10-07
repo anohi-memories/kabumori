@@ -7,7 +7,8 @@
 //       of the same person never adopts the old login's restart or its answer; a refreshed token of the same
 //       login keeps one logical enrollment;
 //   S1-T: the SDK's announcement of another login / person / sign-out fences the old login synchronously: a render
-//       between the auth callback and the provider's deferred task never shows the old login (or anyone) ready.
+//       between the auth callback and the provider's deferred task never shows the old login (or anyone) ready;
+//   Q1: a deferred task whose owner was superseded by a newer announcement before it ran sends nothing.
 // Run: node --test tests/node/auth-provider-enrollment.test.mjs   (needs the root node_modules for `typescript`)
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -494,5 +495,91 @@ test('S1-T: a getSession answer older than the SDK\'s announcement is not accept
     await h.runDeferred();
     assert.deepEqual(server.requests.map((r) => r.token), [B.access_token], 'A1 from the older read was never enrolled');
     assert.equal(h.value().serviceSession, B);
+  } finally { h.restore(); }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Q1: two announcements before their deferred tasks run: only the owner announced last is prepared.
+for (const [label, event, last] of [
+  ['a sign-out', 'SIGNED_OUT', null],
+  ['another person B', 'SIGNED_IN', sessionOf('B', 1)],
+  ['another login A3 of the same person', 'SIGNED_IN', sessionOf('A', 3)],
+]) {
+  test(`Q1: A2 announced, then ${label} before A2's deferred task: zero requests for A2, only the last owner is prepared`, async () => {
+    const server = fakeServer((entry) => ([tokenOf('B'), tokenOf('A', 3)].includes(entry.token) ? K_ACTIVE : K_ENDED));
+    const A1 = sessionOf('A', 1);
+    const A2 = sessionOf('A', 2);
+    const h = await providerHarness({ initialSession: A1, server, holdDeferred: true });
+    try {
+      h.render();
+      await h.settle();
+      assert.deepEqual(server.requests.map((r) => r.token), [A1.access_token]);
+      h.clearSeen();
+      await h.emit('SIGNED_IN', A2);
+      await h.emit(event, last);
+      assert.equal(h.deferredCount(), 2, 'both deferred tasks are still waiting');
+      await h.runDeferred();
+      assert.equal(server.requests.filter((r) => r.token === A2.access_token).length, 0, 'the obsolete A2 task sent nothing');
+      assert.equal(h.value().session, last);
+      if (last) {
+        assert.deepEqual(server.requests.map((r) => r.token), [A1.access_token, last.access_token], 'the last owner got only its own preparation');
+        assert.equal(h.value().serviceSession, last, 'the last owner is ready on its own answer');
+        assert.ok(h.seen.slice(0, -1).every((s) => s === null || s === last));
+      } else {
+        assert.deepEqual(server.requests.map((r) => r.token), [A1.access_token]);
+        assert.ok(h.seen.every((s) => s === null), 'signed out: closed at every render');
+      }
+    } finally { h.restore(); }
+  });
+}
+
+test('Q1: a sign-out superseded by a new login A2 before its deferred task does not clear A2', async () => {
+  const server = fakeServer(() => K_ACTIVE);
+  const A1 = sessionOf('A', 1);
+  const A2 = sessionOf('A', 2);
+  const h = await providerHarness({ initialSession: A1, server, holdDeferred: true });
+  try {
+    h.render();
+    await h.settle();
+    await h.emit('SIGNED_OUT', null);
+    await h.emit('SIGNED_IN', A2);
+    await h.runDeferred();
+    assert.deepEqual(server.requests.map((r) => r.token), [A1.access_token, A2.access_token]);
+    assert.equal(h.value().session, A2);
+    assert.equal(h.value().serviceSession, A2);
+  } finally { h.restore(); }
+});
+
+test('Q1 control: the current A2 with no newer announcement is prepared exactly once', async () => {
+  const server = fakeServer(() => K_ACTIVE);
+  const A1 = sessionOf('A', 1);
+  const A2 = sessionOf('A', 2);
+  const h = await providerHarness({ initialSession: A1, server, holdDeferred: true });
+  try {
+    h.render();
+    await h.settle();
+    await h.emit('SIGNED_IN', A2);
+    assert.equal(server.requests.filter((r) => r.token === A2.access_token).length, 0, 'nothing is sent from the callback itself');
+    await h.runDeferred();
+    assert.equal(server.requests.filter((r) => r.token === A2.access_token).length, 1);
+    assert.equal(h.value().serviceSession, A2);
+  } finally { h.restore(); }
+});
+
+test('Q1 control: A2 and a refreshed token of A2 both queued: one logical request, ready on the refreshed session', async () => {
+  const server = fakeServer(() => K_ACTIVE);
+  const A1 = sessionOf('A', 1);
+  const A2 = sessionOf('A', 2);
+  const A2refreshed = sessionOf('A', 2, 1);
+  const h = await providerHarness({ initialSession: A1, server, holdDeferred: true });
+  try {
+    h.render();
+    await h.settle();
+    await h.emit('SIGNED_IN', A2);
+    await h.emit('TOKEN_REFRESHED', A2refreshed);
+    assert.equal(h.deferredCount(), 2);
+    await h.runDeferred();
+    assert.equal(startsOf(server).length, 2, 'A1 once and the A2 login once; the refresh shares A2\'s request');
+    assert.equal(h.value().serviceSession, A2refreshed);
   } finally { h.restore(); }
 });

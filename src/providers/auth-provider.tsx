@@ -195,7 +195,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       // Supabaseの内部ロック中に別のAuth/Data APIをawaitしないよう、次のタスクで処理する。
       setTimeout(() => {
-        if (!active) return;
+        // Only the owner announced last is prepared: a newer announcement (sign-out, another person or
+        // login) made this task obsolete before it ran, so it changes nothing and sends nothing. A token
+        // refresh of the same login is the same owner and proceeds (sharing that login's request).
+        if (!active || announced.current() !== ownerOf(nextSession)) return;
         const request = ++generation.current;
         setLoading(!!nextSession);
         acceptSession(nextSession, request);

@@ -263,6 +263,10 @@ test("the provider marks every accepted session pending before enrolling, fences
   const fence = callback.indexOf("if (active && announced.announce(nextSession)) {");
   assert.ok(fence > -1 && fence < callback.indexOf("setTimeout("), "the fence runs before the deferred task");
   assert.match(callback.slice(fence, callback.indexOf("setTimeout(")), /\+\+generation\.current;\s*resetServiceEnrollment\(\);/);
+  // Q1: the deferred task prepares only the owner announced last, checked before it changes or sends anything.
+  const task = callback.slice(callback.indexOf("setTimeout("));
+  const guard = task.indexOf("if (!active || announced.current() !== ownerOf(nextSession)) return;");
+  assert.ok(guard > -1 && guard < task.indexOf("++generation.current") && guard < task.indexOf("acceptSession(nextSession"));
   assert.match(reenroll, /announced\.current\(\) !== ownerOf\(current\)/);
 });
 

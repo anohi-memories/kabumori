@@ -1,7 +1,8 @@
 # Common account — Phase 2: service enrollment in both apps (source only)
 
 Status: source candidate after the H1/C1 corrective (R1–R5), its round 2 (S1 login identity, S2 queued
-work cancelled before dispatch) and round 3 (S1-T: the SDK's announcement fences the previous login at once). Nothing is deployed and no production data was changed. Enforcement, RLS changes, producer filters, deletion routes and the deletion orchestrator are later
+work cancelled before dispatch), round 3 (S1-T: the SDK's announcement fences the previous login at once) and
+round 4 (Q1: a deferred task of a superseded owner sends nothing). Nothing is deployed and no production data was changed. Enforcement, RLS changes, producer filters, deletion routes and the deletion orchestrator are later
 phases.
 
 ## Server contract (new forward migration `20261006230000_common_account_service_start_intent.sql`)
@@ -79,6 +80,11 @@ ships — the client accepts only the new answer shapes and fails closed otherwi
   login that is no longer the announced one. A token refresh of the same login changes nothing there: its
   pending request and answer are kept. A `getSession()` answer only fills the gap before the SDK's first
   announcement and is ignored if it no longer matches it.
+- The deferred task is checked as well (Q1): before it changes the generation or loading state, or prepares
+  anything, it requires that its session's owner is still the one announced last. When two announcements
+  arrive before their tasks run (e.g. A2, then a sign-out or another person or login), the superseded task
+  returns without sending a request; only the last owner is prepared. Queued tasks of the same login (a
+  token refresh) proceed and share that login's request.
 - `src/app/_layout.tsx`: recovery link → onboarding → refusal screen → transient-failure screen →
   `SignedInNavigator` **only when `serviceSession`** → loading. Push registration and notification routing get
   `serviceSession`. PR #94's root `news-detail` registration is preserved.
