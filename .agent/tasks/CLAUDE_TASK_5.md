@@ -3,8 +3,8 @@
 This is the newest canonical G5 instruction and supersedes prior corrective sections only where it differs.
 
 - task_id: `common-account-v1-phase2-service-enrollment-integration-20261006`
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - target PR: **#95**, continue the existing PR.
 - reviewed head requiring correction: `13f4281f9514742bdee43ffc08834fea67449bf2`
 - recommended model: **Opus5.5（極高）**
@@ -764,7 +764,121 @@ Recommended model: **Opus5.5（極高）**.
 
 ## Report
 
-### C1 corrective round 3 — 2026-10-07（S1-T の修正、最新）
+### C1 corrective round 4 — 2026-10-07（Q1 の修正、最新）
+
+- task_id: common-account-v1-phase2-service-enrollment-integration-20261006
+- result: **PASS_CANDIDATE（H1 指摘 Q1 を修正済み。S1-T / S1 / S2 / R1〜R5 は維持）**。
+  - source のみ。新しい migration は**未適用**。
+  - 本番の変更 0、deploy 0、EAS 0、本番への接続 0。
+- PR：[#95](https://github.com/anohi-memories/kabumori/pull/95)
+  - 新しい head `ba35b642d30ce423a8683feffcd26aec325b45ee`（レビュー済みの旧 head は `13f4281f`）。
+  - force-push はしていない。commit は次の 3 つ。
+    - main の merge `f506d314`
+    - 修正 `ccebf150`
+    - 最新 main の merge `ba35b642`（増えたのは `.agent/CODEX_REPORT_2.md` だけ）
+  - GitHub 上の状態は MERGEABLE / OPEN。merge は HOLD。
+- fresh main：`origin/main` `0bdc8266` まで merge 済みで、main 全体が PR の祖先。
+  - その間に main で増えたのは `.agent/` の連絡用ファイルだけで、アプリのコードの変更は 0。
+  - PR #95 の 17 ファイルとの重なりも 0。`news-detail` は残っている。
+
+#### Q1 の対応：持ち主が替わった後の「後回しの処理」は何も送らない
+
+- 変更は `src/providers/auth-provider.tsx` の 1 か所だけ。
+  - 後回しの処理（`setTimeout`）の先頭で、その session の持ち主（人 + ログイン）が、最後に通知された持ち主と同じかを確認する。
+  - 確認は、request の世代や loading を変える前、`acceptSession` / `prepareSession` を呼ぶ前に行う。
+  - 違えば何もせずに終わる。自動 start は送らない。
+- 例：A2 の通知 → A2 の処理が動く前にサインアウト（または別の人 / 同じ人の別のログイン）。
+  - A2 の処理は何も送らない。
+  - 最後の持ち主の処理だけが動く。
+- 同じログインの token 更新は同じ持ち主なので、その処理はそのまま動き、そのログインの request を共有する。
+- callback の中の同期的な締め出し（round 3）は変えていない。callback では通信も await もしない。
+- X、共通ロジック、SQL は変更していない。
+
+#### round 3 の S1-T、同じログインの token 更新
+
+- S1-T：H1 の `provider-event-window.mjs` を**変更なし**で実行し、3 つの場合（同じ人の新しいログイン / 別の人 / サインアウト）と control がすべて PASS。同梱の S1-T テストもすべて PASS。
+- token 更新：次の 2 つの場合とも、締め出しも二重の request も起きない。
+  - A2 と、その token 更新が一緒にキューに入った場合：A2 のログインの request は 1 件で、最後は更新後の session で ready。
+  - 送信中の再開がある場合（round 3 の control）：取り消されず、自身の応答で ready。
+
+#### S2 / R1〜R5 / S1 に後退が無いこと
+
+- X、共通ロジック、SQL は変更していない。
+- 既存のテストと DB の runner 2 本を、すべて再実行して PASS。
+- H1 の以前の再現テスト（S1 X / S1 Kabumori / S2 X / control）も、変更なしで PASS。
+
+#### テスト / 確認（product の内容は `ccebf150` と同一。head は `ba35b642`）
+
+| 対象 | 結果 |
+|---|---|
+| Kabumori `deno test --no-check --allow-read tests/app/` | 390 / 390。source の固定テストで、後回しの処理の確認が、変更・送信より前にあることを固定 |
+| Kabumori `node --test tests/node/auth-provider-enrollment.test.mjs` | 23 / 23（新規 6） |
+| X `npm test` | 221 / 221 |
+| X `tsc` / `expo lint` | PASS |
+| Kabumori `tsc`（`src/`） | 以前からある CSS の 2 件だけ |
+| `expo export --platform web`（両アプリ、ダミーの公開 env） | 成功。bundle に start / reactivate があり、`ensure_my_profile` は無い |
+| DB `common_account_service_start_intent_run.sh`（ローカル PG17.11、偽データ） | PASS marker 10 個 |
+| DB `common_account_lifecycle_run.sh`（Phase 1） | 20 / 20 |
+| `migration_source_invariants_test.ts` | 11 / 11 |
+| 意図的に壊した版（11 種） | 11 種すべて検出（下記） |
+| H1 の再現テスト（**3 ファイルとも変更なし**） | 10 / 10 PASS |
+| `git diff --check` / 秘密情報・PII・log 出力の scan | clean / 0 |
+
+- H1 の再現テスト 3 ファイルの内訳：
+  - `provider-queued-owner.mjs`（Q1）：サインアウト / 新しい人の両方で、古い A2 の request が 0 件。
+  - `provider-event-window.mjs`（S1-T）：4 / 4。
+  - `former-probes.mjs`：4 / 4。
+- TASK の必須テスト（実物の provider + 実物の lib/auth。後回しの処理を止めておき、通知を 2 回送ってから流す）：
+
+  | 必須項目 | 結果 |
+  |---|---|
+  | 1. A1 → SIGNED_IN(A2) → A2 の処理の前に SIGNED_OUT | A2 の request **0 件**。すべての render で serviceSession は null。最後はサインアウト状態 |
+  | 2. 1 の SIGNED_OUT を別の人 B に替える | A2 の request **0 件**。B の処理だけが動き、B 自身の応答で ready |
+  | （追加）同じ人の別のログイン A3 に替える | A2 の request **0 件**。A3 の処理だけが動く |
+  | 3. 置き換わらない A2 | ちょうど 1 回だけ準備する。callback の中では何も送らない |
+  | 4. 同じログインの TOKEN_REFRESHED | A2 とその token 更新が一緒にキューに入っても、request は 1 件。最後は更新後の session で ready |
+  | 5. round 3 の S1-T の 3 つの場合 + control | 変更なしで PASS |
+  | 6. 以前の S1 / S2 と R1〜R5 | PASS |
+
+- 追加したテスト：A2 に置き換わったサインアウトの処理は、A2 を消さない。
+- 壊した版 11 種（round 3 の 9 種 + 今回の 2 種）：
+  - 今回の 2 種：
+    - 後回しの処理が持ち主を確認しない：Q1 のテスト 3 件で検出。
+    - 人だけで確認する：同じ人の A3 の場合で検出。
+  - round 3 の 9 種：すべて引き続き検出。
+    - 旧 head の provider では、新しいテストのうち 8 件が失敗する。
+    - 「世代を進めない」だけは、引き続き source の固定テストでの検出。
+
+#### changed_files（今回、4 ファイル。PR 全体では 17 ファイルのまま）
+
+- `src/providers/auth-provider.tsx`（後回しの処理の確認 1 行 + コメント）
+- `tests/node/auth-provider-enrollment.test.mjs`、`tests/app/service-enrollment_test.ts`
+- `docs/common-account/phase2-service-enrollment.md`
+- この Report：`.agent/tasks/CLAUDE_TASK_5.md` のみ。
+
+#### その他
+
+- production mutation / deploy / EAS：**0 / 0 / 0**。migration の本番適用は 0。本物の provider への呼び出しは 0。
+- remaining_issues：
+  - 新しい migration の本番適用は、別途承認が必要（変更なし）。app を出す前に必要。
+  - 既に送信済みの request は取り消せない。ただしその応答は、通知の後のどの状態も ready にしない（変更なし）。
+  - サインイン用の関数（`signInWithEmail` など）は、SDK の通知の後に、その場で自分の session の enrollment を始める。
+    - 通知とその処理の間に、さらに別の通知が来る経路は、今回の対象外。
+    - ふつうの操作の流れでは起きない。
+  - 実機（Simulator / iPhone）での確認はまだ。native build は承認が必要な別工程。
+- safety_checks：
+  - RLS / producer / 削除経路 / Auth / Storage / OAuth / Vault / X の publish 権限 / Cron / Edge / X の動作は変更していない。
+  - 持ち主（人 + ログイン）は実行中のメモリにだけ置き、log にも保存にも出さない。
+  - ローカル PG は停止し、作業用の DB は 0 件。他スロットのファイルは編集していない。
+- next_recommendation：TASK のとおり、head `ba35b642` について H1 の最終 focused re-review（Sol 高）が必須。
+  - 重点：
+    - 後回しの処理の確認（持ち主の比較が、変更・送信の前にあること）
+    - 同じログインの token 更新の control
+  - PASS の後で、migration の本番適用の gate → app の build、の順番で進める。
+
+---
+
+### C1 corrective round 3 — 2026-10-07（S1-T の修正。round 4 の前の Report、履歴として保持）
 
 - task_id: common-account-v1-phase2-service-enrollment-integration-20261006
 - result: **PASS_CANDIDATE（H1 指摘 S1-T を修正済み。R1〜R5 / S1 / S2 は維持）**。
