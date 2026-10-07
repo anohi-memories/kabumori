@@ -87,7 +87,7 @@
 - finish_code: K3
 - next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: Prior PR #109 security corrective is PASS_CANDIDATE at 7c3c06d07c32910472185e1c94b04fa1aab794f5. Before Codex rereview, apply the user's Premium-account policy: AI Lab only must drop its current hard 280-code-point ceiling, use explicit unlimited length, allow >280 when useful, and avoid padding merely to be long. Preserve PR109 topic/capacity and B1-B3 migration bytes. No production/apply/deploy/merge.
+- allocation: Final K3 PASS_CANDIDATE on PR #109 exact head fb4afb21d7ce808de3257bebc8062aed93353dec. Topic continuity/capacity + B1-B3 migration corrective remain candidate-good, and AI Lab Premium policy now removes the 280 hard ceiling with >280 generation/dispatch coverage. Merge HOLD for one final Sol（高） exact-head Codex rereview. H1 and H2 are currently occupied by G4 and G2 reviews respectively; do not overwrite them. Production/apply/deploy remain 0.
 - recommended_model: Sonnet5（高）
 
 ## Claude G4
