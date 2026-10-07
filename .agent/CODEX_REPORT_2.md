@@ -70,7 +70,7 @@ Minimal correction recommendation (NOT implemented): keep defensive depth handli
 
 - H2 source/code changes=0. Review evidence lives only in the new H2 private temporary directory. Supplied source checkout remains clean.
 - GitHub shared sync scope ONLY `.agent/CODEX_REPORT_2.md` (prepend this report, preserve history) and `.agent/tasks/CODEX_TASK_2.md` (current task review_required / next_owner chatgpt).
-- Report/TASK sync commit SHA and exact origin/main read-back receipt follow below after the actual successful writes. No implementation commit by H2.
+- push/shared-sync: SUCCESS. Report-only commit `6fd833e98635824b5019da7f35b114b02c42c91b`; TASK-only commit `493d2425429965509867b9a5608078e478d23465`. Fresh Git fetch proves both are contained in origin/main and their committed paths are only the respective H2 file. GitHub file read-back matches the full intended Report and TASK bytes; current task_id is visible at the Report top, TASK is review_required / next_owner chatgpt. This final receipt is another Report-only control update, not an implementation commit. No source changes by H2.
 - Production reads/access=0; DB writes/apply/migration/RPC=0; deploy=0; manual report/generation/OpenAI/X/Push=0; Cron/settings/Auth/Vault/OAuth/secrets=0; merge=0.
 - H1/G1-G5/apps/admin/HANDOFF/old or formal repo uncommitted files/other worktrees untouched. Existing changes not staged, reset, stashed, discarded or committed. Secret exposure=0 (probes contain synthetic credentials only).
 - next_owner: chatgpt; status: review_required; STOP for C2.
