@@ -1,5 +1,24 @@
 ## Final K5 — PR #95 round-4 Q1 PASS_CANDIDATE / final H1 rereview assigned — 2026-10-07
 
+- exact PR #95 head: `ba35b642d30ce423a8683feffcd26aec325b45ee`.
+- K5 verdict: **PASS_CANDIDATE**, not merge approval.
+- Q1 is reported fixed by checking the captured user+login owner again at the start of deferred auth preparation, before any generation/loading change or enrollment dispatch.
+- reported adversarial cases:
+  - A2 queued -> SIGNED_OUT => 0 obsolete A2 requests;
+  - A2 queued -> user B => 0 obsolete A2 requests;
+  - A2 queued -> same-user fresh A3 => 0 obsolete A2 requests;
+  - current A2 => exactly one preparation;
+  - same-session TOKEN_REFRESHED => single-flight retained.
+- prior S1-T/S1/S2/R1-R5 reported preserved.
+- reported tests: Kabumori 390/390; AuthProvider 23/23; X 221/221; DB lifecycle/start-intent/invariants PASS; H1 reproduction probes 10/10.
+- K5 fresh main `6717083c21300fe247736296430089cec8a6a397`; changed-file overlap with PR #95 = 0.
+- production mutation / migration apply / deploy / EAS / real provider = 0.
+- mandatory final H1 task assigned: `common-account-v1-phase2-q1-final-rereview-20261007`, target exact head `ba35b642...`, recommended **Sol（高）**.
+- PR #95 remains open/unmerged.
+- portfolio PR #100 remains safely HOLD because PR #95 still owns `src/app/_layout.tsx`; once C1 clears/lands PR #95, G1 can perform the bounded root-level report-detail navigation correction.
+
+## Final K5 — PR #95 round-4 Q1 PASS_CANDIDATE / final H1 rereview assigned — 2026-10-07
+
 - G5 result: **PASS_CANDIDATE**, not final merge approval.
 - exact PR #95 head: `ba35b642d30ce423a8683feffcd26aec325b45ee`; PR open/unmerged and mergeable at K5.
 - sole prior blocker Q1 is reported closed:
