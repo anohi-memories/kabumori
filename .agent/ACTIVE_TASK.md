@@ -81,11 +81,11 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: ai-lab-premium-length-policy-unlimited-20261007
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_3.md
 - allocation: Prior PR #109 security corrective is PASS_CANDIDATE at 7c3c06d07c32910472185e1c94b04fa1aab794f5. Before Codex rereview, apply the user's Premium-account policy: AI Lab only must drop its current hard 280-code-point ceiling, use explicit unlimited length, allow >280 when useful, and avoid padding merely to be long. Preserve PR109 topic/capacity and B1-B3 migration bytes. No production/apply/deploy/merge.
 - recommended_model: Sonnet5（高）

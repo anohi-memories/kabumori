@@ -3,8 +3,8 @@
 - task_id: ai-lab-premium-length-policy-unlimited-20261007
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sonnet5（高）
 - type: bounded AI Lab length-policy correction on existing PR #109
@@ -120,6 +120,63 @@ After this K3, assign one exact-head Codex rereview covering:
 - previously corrected B1/B2/B3 migration guards;
 - this small AI Lab unlimited-length policy delta only.
 
+
+## Report — ai-lab-premium-length-policy-unlimited-20261007
+
+- result: **PASS candidate** — 会社員AIラボだけ、投稿本文の文字数上限をなくした（X Premium 運用）。PR #109 を更新し、open のまま（GitHub: MERGEABLE）。本番の読み書き 0 / migration 適用 0 / deploy 0 / merge 0 / scheduler 0 / OpenAI・X 0。
+- PR #109 head: `7c3c06d07c32910472185e1c94b04fa1aab794f5` → 最新 main の通常 merge `c6df5dfc` → **新 `fb4afb21d7ce808de3257bebc8062aed93353dec`**（修正コミット 1 つ）。rebase / force-push なし。`7c3c06d0` は履歴に含まれる。
+- CI: Vercel だけ「Deployment rate limited」（アカウント全体の制限で以前から同じ）。netlify は SUCCESS。
+- worktree: 既存の `/Users/yuya/Developer/kabumori-g3-ai-lab-continuity`（開始時 clean、`7c3c06d0` と一致を確認）。
+- 指定モデルは Sonnet5（高）だったが、ユーザーの選択で Opus 5.5 のまま実施。
+
+### 変更内容
+- `brand_profiles.ts`
+  - AI ラボの `postLengthPolicy` を `{ mode: "limited", maxChars: 280 }` → **`UNLIMITED_POST_LENGTH`**（既存の汎用の無制限モード）。
+  - 口調の指示に 1 行追加: 「X Premiumで運用しているため上限はない。140文字や280文字は目標でも上限でもない。題材が簡潔なら短くてよい。背景・具体的な手順・判断の理由が役立つときは280文字を超えてよい。水増しや繰り返しはしない。」
+- `brand_post_generator.ts`（汎用の生成処理。**無制限モードのときだけ**挙動が変わる。理由は下記）
+  - 出力トークンの上限: 無制限モードは 2000、それ以外は従来どおり 600。
+  - 無制限モードで応答が打ち切られた（`status: "incomplete"`）ときは、投稿せず `BRAND_POST_OUTPUT_INCOMPLETE` で失敗する。
+  - 理由: このモデルは推論ありで、推論分も 600 トークンに含まれる。日本語だと 300〜500 文字前後で打ち切られる可能性があり、しかも従来は打ち切りを検出していなかった。上限をなくすと「途中で切れた文章がそのまま投稿される」危険が出るため、最小限の対策を入れた。かぶモリ・POSTONA は無制限モードを使っていないので影響しない（テストで確認）。
+  - 文字数（`characterCount`）は従来どおり計測して返す。
+- 変えていないもの: 汎用の文字数ポリシー本体（`post_length_policy.ts`）、送信前ガード本体（`brand_post_dispatch_guard.ts`）、かぶモリと POSTONA の長さの扱い（POSTONA の 140 上限を含む）、x-test-post の各レポートの長さ、題材の 74 件・Tier の順番、B1/B2/B3 の migration、scheduler、OAuth / Vault / Auth / 共通アカウント / provider。
+- `supabase/tests/x_account_refresh_pilot.md` の古い一文（「AI Lab keeps its own 280 policy」）を現状に合わせて修正。
+
+### 280 文字を超える場合の結果
+- 生成: 641 コードポイント（「あ」640 文字＋絵文字 1 つ。UTF-16 では 642）の本文を受け付け、`characterCount = 641`、本文は変更なし。281 文字と 3 文字も受け付けた。
+- 生成時の指示文: `280文字以内` も「◯文字以内」も含まない。「投稿本文の文字数上限は設定されていません。」と、自然な長さの指示を含む。
+- 送信前ガード: 1 / 140 / 279 / 280 / 281 / 600 文字と、641 コードポイントの本文をすべて受け付け、計測した文字数を返す。
+- 予約投稿の実行: 641 コードポイントの本文が、そのまま X 送信処理に渡り、`characterCount = 641` が報告された。
+
+### 安全性の確認（変わっていないこと）
+- アカウント不一致: ブランド ID / アカウント ID / アカウントのブランド / プラットフォーム / ハンドル / アカウントなし の 6 通りで、長文でも `AI_LAB_DISPATCH_ACCOUNT_MISMATCH`。
+- 投稿種別の誤り、`brand_post` が無効、文字数ポリシーが未設定 → 従来どおり拒否。
+- 有限の上限を明示的に設定した場合は、汎用の処理として従来どおり 280 で拒否される。
+- かぶモリ・POSTONA のプロフィールには長さポリシーがないまま。POSTONA の送信は 140 上限のまま。
+- 内容の安全性・重複除外・題材・ハッシュタグの処理は変更なし。
+
+### 変異確認
+- AI ラボを一時的に 280 上限に戻すと、新しいテスト 8 件が失敗した。
+- 打ち切り検出を一時的に無効にすると、打ち切りのテストが失敗した。
+- どちらも確認後に元へ戻した。
+
+### テスト
+- 関連の重点テスト: 生成 20 件、プロフィール・送信前ガード・予約投稿・文字数ポリシー・POSTONA を含めてすべて成功。
+- x-test-post + `_shared` + migration の不変条件: **1028/1028** 成功。
+- PR109 のスモーク（ローカルの使い捨て PostgreSQL 17）: `ai_lab_topic_capacity_run.sh` と `ai_lab_topic_capacity_adverse_run.sh` の両方が ALL PASSED。
+- migration と題材のファイルは `7c3c06d0` と**バイト単位で同じ**（`git diff --quiet 7c3c06d0 --` が差分 0）: `20261007173000_ai_lab_topic_evergreen_capacity.sql`、`ai_lab_topic_capacity_run.sh`、`ai_lab_topic_capacity_adverse_run.sh`、`ai_lab_dev_diary_context.ts`。`supabase/migrations` 全体でも `7c3c06d0` からの差分なし。
+- `deno check`: 既存の 3 件（`brand_post_generator_test.ts` の今回触っていないテスト）だけで、変更前と同じ。`deno lint`: 13 件で変更前と同じ（すべて既存の `require-await`）。`git diff --check` クリーン。追加行の秘密情報スキャン 0。
+
+### 最新 main との重なり
+- 作業前と push 前に最新の main を取得した（main `c5f14378` は取り込み済み）。
+- open な PR（#110 G2 / #106 G4 / #33）と変更ファイルの重なりはない。G2 / G4 / G5 のファイルには触れていない。
+
+### 本番・ゲート
+本番へのアクセス・書き込み・適用・deploy・scheduler・OpenAI・X はすべて 0。merge 0。
+
+### 次
+- TASK のとおり、新しい head `fb4afb21` に対して Codex の再レビューを 1 回（B1/B2/B3 の migration の修正と、今回の文字数の変更）。
+- レビューで見てほしい点: 生成処理の「無制限モードのときだけ出力上限 2000・打ち切りは失敗」は TASK に明記されていない追加なので、この判断でよいか。
+- status → review_required / next_owner → chatgpt。STOP。
 
 ---
 
