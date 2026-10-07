@@ -45,15 +45,15 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: kabumori-pr101-f2-f3-final-rereview-20261007
+- status: ready
+- task_id: kabumori-trace-gpt61-rollout-runbook-review-20261007
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Final C2 accepts H2 PASS on PR #101 exact head 938567c049460ebfe78c4e08c71724d6e77ae71a. PR #101 was squash-merged as e49ecfcc2f6707f64b6282960f9eec61be2973d3. F1/F2/F3 review is closed; no further PR #101 review required. Production migration/deploy remains separate. H2 free.
-- recommended_model: Sol（中）
+- allocation: Focused exact-head review of PR #108 rollout runner/runbook only. Verify fail-closed M1 migration execution, Stage B/C partial-failure and rerun safety, credential handling, and that M2 stays a single market-report-analysis deploy. Do not reopen PR #101/107 broadly. Production access/mutation/deploy forbidden.
+- recommended_model: Sol（高）
 
 ## Claude G1
 - owner: claude
@@ -70,13 +70,13 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-market-report-gpt61-production-preflight-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Final K2 accepted and merged the Kabumori-only AI model registry + GPT-6.1 Sol source as 8738a186628989ce6c797d61ea80f5b721664c95 without Codex review. Next G2 is read-only production preflight for the existing generation-trace migration plus single-target market-report-analysis deploy; no production mutation/deploy/manual report in this task. POSTONA/G3/G4, important-news, MIC, personalized reports and G5 excluded.
+- allocation: K2 PASS_CANDIDATE / READY_FOR_APPROVAL preflight. Production trace migration is absent/clean; deployed market-report-analysis is still pre-PR101/107 Luna; safe M1->M2->natural-cycle sequence established. PR #108 adds only rollout runner/runbook and is held for one focused H2 production-safety review before merge. No production mutation/deploy yet.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
