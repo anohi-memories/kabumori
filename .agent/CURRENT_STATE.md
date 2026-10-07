@@ -1,3 +1,36 @@
+## Final C1 — PR #95 fourth review CHANGES REQUIRED / single Q1 corrective — 2026-10-07
+
+- H1 exact reviewed PR #95 head: `13f4281f9514742bdee43ffc08834fea67449bf2`.
+- C1 verdict: **CHANGES REQUIRED accepted**. PR #95 remains open/unmerged/undeployed; production migration apply remains forbidden.
+- accepted as PASS:
+  - original S1-T stale-readiness window is closed;
+  - synchronous auth-owner/readiness fence works for same-user fresh login, different user, SIGNED_OUT;
+  - same-session TOKEN_REFRESHED single-flight remains correct;
+  - S2 X queued pre-dispatch cancellation remains PASS;
+  - stable `userId + session_id` context model remains PASS;
+  - R1-R5 remain PASS;
+  - PR #94 root news-detail and X OAuth separation remain preserved.
+- sole remaining blocker: **Q1 P2**, Kabumori queued deferred preparation after a newer auth notification.
+  - A2 SIGNED_IN can queue deferred preparation;
+  - before it runs, SIGNED_OUT or newer user B can become the synchronously announced owner;
+  - A2's older deferred task currently checks only component-active state, so it can still call `prepareSession(A2)` and dispatch obsolete automatic `start_kabumori_service`;
+  - readiness stays fail-closed, but unsent obsolete work must never be resurrected after a newer auth notification.
+- minimum G5 correction:
+  - before any deferred auth task advances generation/loading or enters `acceptSession/prepareSession`, compare its captured owner/login against the synchronously announced current owner (or equivalent event ticket);
+  - if no longer current, return before any enrollment transport dispatch;
+  - preserve same-login TOKEN_REFRESHED behavior and the current synchronous owner fence;
+  - do not add network/Auth/Data API work to the synchronous callback.
+- mandatory tests:
+  - SIGNED_IN(A2) -> SIGNED_OUT before A2 deferred task -> zero A2 enrollment requests;
+  - SIGNED_IN(A2) -> newer user B before A2 deferred task -> zero A2 requests, B only its own preparation;
+  - normal/current owner path still prepares once;
+  - same-session TOKEN_REFRESHED control remains PASS.
+- do not reopen S1-T/S2/session_id/R1-R5 without concrete regression evidence.
+- Phase3, production migration apply, deploy, EAS, Auth/Storage/OAuth/Vault/Cron/X mutation remain out of scope.
+- G5 status: ready; recommended model: **Opus5.5（極高）**.
+- H1 is done/free. After corrected PR #95 head, run one focused exact-head H1 rereview with **Sol（高）**.
+- AI Lab diary: no additional entry; this is another narrow internal auth-session cancellation correction of the same common-account milestone.
+
 ## Final K2 — PR #101 debug-trace PASS_CANDIDATE / H2 review required — 2026-10-07
 
 - G2 result: **PASS_CANDIDATE**, not final merge approval.
