@@ -3,8 +3,13 @@
 - task_id: kabumori-pr101-f1-f3-final-rereview-20261007
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
+- h2_review_result: CHANGES REQUIRED
+- h2_reviewed_head: fddd274863b08aefed60795d678a298a1160d599
+- h2_review_completed_at: 2026-10-07 JST
+- h2_review_blockers: F2 escaped credential tails and alphabetic Basic; F3 original/kept-size metadata
+- h2_report_commit: 6fd833e98635824b5019da7f35b114b02c42c91b
 - priority: high
 - recommended_model: Sol（中）
 - type: exact-head focused rereview / F1 ACL / F2 secret redaction / F3 full retention
