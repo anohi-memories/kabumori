@@ -1,3 +1,31 @@
+## Final K2 — corrected PR #101 PASS_CANDIDATE / final H2 F1-F3 rereview assigned — 2026-10-07
+
+- G2 corrective result: **PASS_CANDIDATE**, not final merge approval.
+- corrected PR #101 exact head: `fddd274863b08aefed60795d678a298a1160d599`; PR open/unmerged/mergeable=true.
+- fresh allocation check: main advanced 43 commits from PR base with **0 changed-file overlap** across PR #101 files.
+- Vercel failure is deployment rate limit only; Netlify preview status is success/canceled and no code failure is indicated.
+- reported F1 closure:
+  - migration now validates creator/owner, exact direct ACL, effective table/column privileges, inherited/PUBLIC/grant-option paths and unsafe owner/superuser membership;
+  - H2 original four adverse cases plus nine additional adverse graphs refuse atomically;
+  - clean and Supabase-like default graphs still allow intended service_role SELECT+INSERT only;
+  - anon/authenticated and update/delete/truncate/trigger widening remain denied.
+- reported F2 closure:
+  - free-text redaction covers quoted/escaped JSON assignments, case-insensitive auth schemes, PEM/private-key material, nested/multiple credential occurrences and documented token shapes;
+  - final writer scans the whole serialized row and drops any row with residual recognizable secret material;
+  - ordinary Japanese/financial/report text remains preserved.
+- reported F3 closure:
+  - silent 4K/700-char/10-item trace-storage truncation removed;
+  - full redacted candidate and full local/Fact issue arrays retained;
+  - existing retry/decision cap remains unchanged and separate;
+  - explicit 200K field bound records original/kept sizes, counts and truncation metadata instead of silently losing evidence.
+- base_prompt_hash / request_hash now distinguish base prompt identity from generation-specific retry request identity without extra AI calls.
+- regressions reported green: market-report-analysis 192/192; personalized 129/129; X shared 8/8; data-packet 42/42; _shared 436/436; migration invariants 20/20; disposable PG clean/Supabase-like/adverse 13-case matrices PASS.
+- Hard Fact semantics, exactly-3-points, PR #99 WARN-only telemetry, X 300-char rewrite, App rewrite, MAX_GENERATIONS=2/max 4 calls and safe-original fallback unchanged.
+- production mutation/migration apply/deploy/manual generation = 0.
+- final H2 exact-head rereview assigned: `kabumori-pr101-f1-f3-final-rereview-20261007`, recommended **Sol（中）**.
+- rereview scope is only original F1-F3 reproductions + bounded regressions; no broad repeat review.
+- if C2 PASS: merge PR #101 after final freshness gate, then proceed immediately to OpenAI model inventory/migration with market-report generation + Fact targeted to `gpt-6.1-sol` and remaining high-volume Luna workloads evaluated for `gpt-6-luna`.
+
 ## Final C1 — PR #95 PASS / source merged / production migration preflight next — 2026-10-07
 
 - H1 exact reviewed PR #95 head: `ba35b642d30ce423a8683feffcd26aec325b45ee`.
