@@ -5258,3 +5258,33 @@ Unexpected residue: **none**.
 - production migration apply remains separately approval-gated.
 - PR #78 remains blocked until schema is independently accepted, applied with explicit approval, and read back.
 - next_owner: codex; wait for C2.
+
+
+## Final K3 — AI Lab topic continuity + Premium unlimited length — 2026-10-07
+
+- verdict: **PASS_CANDIDATE / final Codex rereview required / merge HOLD**.
+- exact candidate: PR #109 head `fb4afb21d7ce808de3257bebc8062aed93353dec`; PR remains open/unmerged.
+- accepted Premium-length delta:
+  - AI Lab profile changed from finite 280-code-point limit to explicit `UNLIMITED_POST_LENGTH`;
+  - 140/280 are neither target nor ceiling;
+  - natural short posts remain allowed; >280 is allowed when useful; no padding instruction;
+  - 641-code-point generation, dispatch guard and scheduled-post handoff all pass with exact characterCount;
+  - character-count diagnostics remain;
+  - account/post-type safety remains unchanged.
+- generator delta to rereview:
+  - explicit unlimited mode uses `max_output_tokens=2000` instead of 600;
+  - explicit unlimited mode rejects Responses API `status=incomplete` with `BRAND_POST_OUTPUT_INCOMPLETE` rather than returning a cut-off post;
+  - non-unlimited profiles retain prior 600-token behavior according to tests.
+- prior security/capacity delta remains accepted as candidate:
+  - B1 SET ROLE graph fail-closed guard;
+  - B2 canonical prerequisite table-shape proof;
+  - B3 exact unchanged lifecycle-function body proof;
+  - 13/13 adverse drift cases rejected with rollback;
+  - healthy migration apply/reapply PASS;
+  - real SQL 14 days x 10/day = 140/140;
+  - accepted 74-topic/Tier2/Tier3 source and migration/capacity/adverse files are byte-stable from security head `7c3c06d0`.
+- reported tests: x-test-post + _shared + migration invariants **1028/1028 PASS**; both PR109 disposable PG17 capacity/adverse runners ALL PASSED; Netlify SUCCESS; Vercel only account-wide deployment-rate-limit.
+- production access/write/migration apply/deploy/merge/scheduler/OpenAI/X: 0.
+- fresh slot check at K3: H1 is occupied by G4 PR #106 rereview; H2 is occupied by G2 PR #110 review. Do not overwrite either slot.
+- next: assign the first genuinely free H1/H2 to one exact-head rereview of `fb4afb21d7ce808de3257bebc8062aed93353dec`, recommended **Sol（高）**. Scope: prior B1-B3 closure + Premium unlimited-length delta + 2000-token/incomplete-response behavior only.
+- production rollout remains HOLD until that review passes and a later explicit migration/deploy gate is created.
