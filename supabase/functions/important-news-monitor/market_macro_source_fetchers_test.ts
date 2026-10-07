@@ -260,7 +260,7 @@ test("Fed feed: a transient 404 is retried once and the second answer is used (2
   assert.equal(candidates[0].category, "frb");
 });
 
-test("Fed feed: a persistent 404 / 5xx fails with its code after exactly one retry (no loop)", async () => {
+test("Fed feed: a persistent 404 / gateway error fails with its code after exactly one retry (no loop)", async () => {
   for (const status of [404, 502, 503, 504]) {
     let calls = 0;
     await assert.rejects(
@@ -271,10 +271,29 @@ test("Fed feed: a persistent 404 / 5xx fails with its code after exactly one ret
   }
 });
 
+test("non-Fed source: a 404 fails at once (one fetch); 502 / 503 / 504 are retried once", async () => {
+  let calls = 0;
+  await assert.rejects(
+    () => fetchMarketMacroSource(source(), () => { calls += 1; return Promise.resolve(new Response("", { status: 404 })); }, now, 0),
+    /MARKET_MACRO_FETCH_FAILED:404/,
+  );
+  assert.equal(calls, 1);
+  for (const status of [502, 503, 504]) {
+    calls = 0;
+    await assert.rejects(
+      () => fetchMarketMacroSource(source(), () => { calls += 1; return Promise.resolve(new Response("", { status })); }, now, 0),
+      new RegExp(`MARKET_MACRO_FETCH_FAILED:${status}`),
+    );
+    assert.equal(calls, 2, String(status));
+  }
+});
+
 test("other statuses and a healthy feed are not retried; a malformed feed is not retried either", async () => {
   for (const status of [200, 403, 429, 500]) {
-    let calls = 0;
-    await fetchMarketMacroSource(fedSource(), () => { calls += 1; return Promise.resolve(new Response(status === 200 ? FED_RSS : "", { status })); }, now, 0).catch(() => {});
-    assert.equal(calls, 1, String(status));
+    for (const candidate of [fedSource(), source()]) {
+      let calls = 0;
+      await fetchMarketMacroSource(candidate, () => { calls += 1; return Promise.resolve(new Response(status === 200 ? FED_RSS : "", { status })); }, now, 0).catch(() => {});
+      assert.equal(calls, 1, `${candidate.key} ${status}`);
+    }
   }
 });

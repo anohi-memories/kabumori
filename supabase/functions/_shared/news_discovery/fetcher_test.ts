@@ -139,7 +139,7 @@ test("transient 404 on an official feed is retried once; a 200 on the retry succ
   assert.equal(result.ok, true);
 });
 
-test("a persistent 404 / gateway error is retried once and then reported as before (HTTP_ERROR with the status)", async () => {
+test("Fed 404 -> 404: two fetches, then HTTP_ERROR 404; gateway errors on the Fed feed are retried once too", async () => {
   for (const status of [404, 502, 503, 504]) {
     let calls = 0;
     const impl = () => { calls += 1; return Promise.resolve(new Response("x", { status })); };
@@ -149,12 +149,37 @@ test("a persistent 404 / gateway error is retried once and then reported as befo
   }
 });
 
+const nonFed = sourceById("jp_mof_news")!;
+
+test("a 404 on a non-Fed DIRECT source fails at once (one fetch)", async () => {
+  let calls = 0;
+  const impl = () => { calls += 1; return Promise.resolve(new Response("x", { status: 404 })); };
+  const result = await fetchSource(nonFed, { fetchImpl: impl, gate: noGapGate(), retryDelayMs: 0 });
+  assert.equal(calls, 1);
+  assert.deepEqual(!result.ok && [result.code, result.status], ["HTTP_ERROR", 404]);
+});
+
+test("502 / 503 / 504 on a non-Fed DIRECT source are retried once (two fetches), a recovery on the retry succeeds", async () => {
+  for (const status of [502, 503, 504]) {
+    let calls = 0;
+    const failing = () => { calls += 1; return Promise.resolve(new Response("x", { status })); };
+    const result = await fetchSource(nonFed, { fetchImpl: failing, gate: noGapGate(), retryDelayMs: 0 });
+    assert.equal(calls, 2, String(status));
+    assert.deepEqual(!result.ok && [result.code, result.status], ["HTTP_ERROR", status]);
+  }
+  let n = 0;
+  const recovering = () => { n += 1; return Promise.resolve(n === 1 ? new Response("x", { status: 503 }) : new Response(RSS, { status: 200 })); };
+  assert.equal((await fetchSource(nonFed, { fetchImpl: recovering, gate: noGapGate(), retryDelayMs: 0 })).ok, true);
+});
+
 test("429 / 403 / 500 and successes are not retried", async () => {
   for (const status of [429, 403, 500, 200]) {
-    let calls = 0;
-    const impl = () => { calls += 1; return Promise.resolve(new Response(status === 200 ? RSS : "x", { status })); };
-    await fetchSource(fed, { fetchImpl: impl, gate: noGapGate(), retryDelayMs: 0 });
-    assert.equal(calls, 1, String(status));
+    for (const source of [fed, nonFed]) {
+      let calls = 0;
+      const impl = () => { calls += 1; return Promise.resolve(new Response(status === 200 ? RSS : "x", { status })); };
+      await fetchSource(source, { fetchImpl: impl, gate: noGapGate(), retryDelayMs: 0 });
+      assert.equal(calls, 1, `${source.source_id} ${status}`);
+    }
   }
 });
 
