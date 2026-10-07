@@ -3,8 +3,8 @@
 - task_id: `common-account-v1-phase2-native-client-validation-20261007`
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - recommended_model: **Opus5.5（高）**
 - production_write_allowed: **false**
 - production_service_state_mutation_allowed: **false**
