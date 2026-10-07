@@ -1,3 +1,129 @@
+## H2 — PR #101 durable generation-trace security review — 2026-10-07 JST
+
+- task_id: kabumori-pr101-debug-trace-security-review-20261007
+- result / verdict: **CHANGES REQUIRED**. Three concrete blockers: F1 effective privilege drift commits silently; F2 recognizable credentials inside strings can persist; F3 the promised full diagnostic evidence is truncated before the advertised candidate budget.
+- status: review_required
+- next_owner: chatgpt
+- exact_reviewed_head: `2469e8a8be0125805551ba3e353c4ef6058b0150` (PR #101, OPEN/unmerged; unchanged at final GitHub read-back).
+- fresh_main: startup `7a70f75239ff4ecea296ce531f13bb1cfd179aa4`; final pre-publication `11331eda53b1881b5850e3a7b13a4e8bc6c65f41`. Main changes since PR merge-base are .agent control files only; overlap with the 10 PR source/test/docs files = **0**.
+- isolation: new H2-only independent checkout `/private/tmp/h2-pr101-20261007.GcKE97/review`, detached exact head and clean. Scratch probes/logs and a private PG17.11 cluster are outside that source checkout. No H1/G1–G5 checkout, server or existing local change was modified.
+- changed_files_by_H2: only this Report and `.agent/tasks/CODEX_TASK_2.md` for the shared handoff. Implementation edits = **0**.
+- implementation candidate: the single PR commit above, 10 files / +1069 -13; reviewed all changed runtime, new migration, SQL/serializer tests, presentation-test adaptation and DESIGN §15.6.
+- publication: pending; exact resulting control-file commits/read-back will be recorded in the final synchronization receipt.
+
+### F1 — P1: effective ACL / inherited ownership is not enforced
+
+Location: `supabase/migrations/20261007120000_market_report_generation_traces.sql:99–103` (table creation/ownership also relevant).
+
+The migration revokes direct grants from PUBLIC/anon/authenticated/service_role, grants service_role SELECT+INSERT, and revokes helper EXECUTE from those same four named principals. It does **not** inspect/refuse unknown default grantees, inherited effective table privileges or app-role membership in the table owner. RLS with no policies and invoker-only triggers is a good clean baseline, but does not close those adverse graphs.
+
+Independent PG proof (synthetic fixtures, H2-owned cluster only):
+1. Before apply, an unknown NOLOGIN BYPASSRLS diagnostic role receives default table SELECT. Migration **COMMIT succeeds**, then SET ROLE that role reads the synthetic failed candidate (`unknown_default_reader_leaked=t`).
+2. Unknown default EXECUTE on functions survives the helper revoke (`unknown_default_helper_execute=t`). The helper is SECURITY INVOKER/returns trigger, so this particular surviving EXECUTE is not itself a SECURITY DEFINER exfiltration primitive; it still disproves the stated exact service/internal helper ACL.
+3. Unknown default table TRIGGER grantee inherited by service_role remains effective (`service_inherited_trigger=t`). That role creates a BEFORE INSERT trigger returning NULL; the next service insert succeeds as INSERT 0 0 and drops evidence (`inherited_trigger_silently_discards=t`). Clean SELECT+INSERT-only is therefore not an effective least-privilege invariant.
+4. A graph where authenticated inherits the migration/table owner is accepted without refusal. authenticated reads the full candidate, disables the immutability triggers and deletes it (`inherited_owner_reads_trace=t`, `inherited_owner_can_erase_trace=t`). Membership itself was established as an adverse fixture, not by the migration; source currently never rejects it.
+
+These do **not** assert that production has such memberships/default grants: production was not accessed. They prove that the required adverse-state safety is absent and the migration can silently commit unsafe privilege graphs.
+
+Minimum corrective:
+- explicitly validate safe creator/owner, exact expected table/helper direct ACL and effective privilege graph (including inherited roles; forbidden table and column capabilities / grant options);
+- refuse unknown/default/inherited widening atomically rather than changing global default privileges or role memberships;
+- keep the intended service SELECT+INSERT path and anon/authenticated denial, invoker helper and empty search_path;
+- add real PG adverse fixtures that require rollback/no partially created objects and preservation of unrelated ACL/default-ACL/membership.
+Normal DDL superuser authority is not being claimed universally preventable; the blocker is accepting app/service inheritance of that authority rather than failing closed.
+
+### F2 — P1: secret redaction/detection misses obvious credential forms
+
+Location: `debug_trace.ts:26–35,45–76,80–93,190–207`.
+
+Object-key redaction works for actual nested keys, and ordinary Japanese report content is preserved. But free-text fields and Fact/local issue strings are also persisted. Current key-value regex does not recognize quoted JSON keys because a quote occurs between the key and colon. The Basic pattern is case-sensitive; PEM/private-key text is not recognized. The final detector repeats these gaps.
+
+Independent actual `traceRows -> persistTraces` fake-insert proofs:
+- a Fact issue string containing JSON `{"password":"<synthetic value>"}`;
+- a candidate report string containing JSON `{"access_token":"<synthetic opaque value>"}`;
+- lowercase `authorization: basic <synthetic base64>`;
+- `-----BEGIN PRIVATE KEY-----...-----END PRIVATE KEY-----` inside an ordinary-named nested string.
+All four: accepted=true, fake insert called=true, original synthetic credential survives=true, post-redaction containsSecret=false. No real key/token was used or printed.
+
+Additional detector proof: a forged row string `password=[redacted] password=<later synthetic secret>` passes the final writer. `containsSecret` examines only the first regexp match and treats that safe match as sufficient; it does not scan later occurrences. This is a writer backstop defect (the ordinary serializer would redact the plain assignment too).
+
+Minimum corrective:
+- handle quoted/escaped JSON-style assignments and case-insensitive auth schemes, PEM/private-key blocks and the documented credential shapes inside nested strings/arrays/issues;
+- scan **all** matches in the final detector, not only first matches;
+- keep ordinary financial/report text intact, and safely drop a row if recognizable credentials still remain;
+- add actual writer-level adversarial tests with callback-zero for unredacted forged rows, and non-blocking failure assertions.
+Do not replace this with removal of generated report bodies: QA output retention remains the accepted product policy.
+
+### F3 — P2: promised full body / full Fact findings are silently lost
+
+Location: `debug_trace.ts:37–41,52–59,80–93`; `analysis_logic.ts:1183–1187`.
+
+Independent retention proof:
+- a structured candidate of only **4,537 serialized characters** (well below MAX_CANDIDATE_CHARS=60,000) becomes 4,044 characters; the tail of a 4,500-character `app_story.news_ja` is gone because MAX_STRING=4,000 runs first;
+- an ~800-character Fact issue loses its meaningful tail at MAX_ISSUE=700;
+- a valid mocked Fact response with **11 issues** produces only **10 stored issues** for each generation. FACT_SCHEMA has no maxItems=10; the record reuses the existing retry/response cap.
+Arrays beyond 80 are also clipped by the generic serializer. This matters specifically for bad/overlong outputs—the cases this diagnostic task is meant to reconstruct. Current large-candidate test explicitly allows an object result and never checks the retained tail, so it does not catch the premature per-field loss.
+
+Minimum corrective:
+- preserve full redacted candidate and full local/Fact issue arrays separately from existing bounded retry hints/public-response summaries;
+- keep existing Fact/retry decision behavior unchanged (do not remove the old cap from the decision path merely to obtain full diagnostic storage);
+- if an explicit total-row/candidate bound is truly necessary, make that distinct and truthful (original sizes/counts and truncation flag), and do not silently impose lower field/issue limits while claiming full retention;
+- prove failed overlong bodies, long issue tails and 11+ Fact findings remain inspectable.
+
+### Accepted / nonblocking findings
+
+- **Additive schema / clean append-only:** new table+indexes+invoker trigger helper only, no alteration/destruction of existing objects, no FK maintenance coupling. Nullable report_packet_id supports failures. Unique(invocation_id,generation_index) distinguishes generations; invocation UUID and attempt distinguish scheduled retries. Reapply fails rather than replacing existing objects.
+- **Clean ACL/RLS baseline:** service_role SELECT+INSERT; anon/authenticated SELECT/INSERT denied; service UPDATE/DELETE/TRUNCATE denied. UPDATE/DELETE/TRUNCATE triggers reject normal table operations, including ordinary owner/superuser operations while triggers remain enabled. Not a universal guarantee against an administrative owner deliberately disabling triggers; F1 addresses unsafe role inheritance.
+- **Full-output retention is genuinely implemented for normal-size structured candidates:** actual raw parsed candidate, not assembled/sanitized final report only; first local rejection survives second generation, subsequent scheduled invocation does not replace prior rows; Fact findings and selected packet linkage persist; tests exercise the handler with fake model/DB. F3 covers the remaining length/cardinality loss, not rejection of the product policy.
+- **Non-blocking delivery:** trace write follows complete/fail RPC, one insert, no diagnostic retry/model call. Existing HTTP404/500/throw tests PASS. H2 additionally waited for the real AbortSignal 5-second expiry against a mocked trace sink: ~5018ms, status=completed, modelCalls=2, traceCalls=1, completeCalls=1, failCalls=0. No real network/model/storage/X request. Safe-original fallback and failed report code preserved.
+- **Prompt hygiene:** unsupported “前回の引け以降に確認できたニュース” / “今日確認できたニュース” removed; supplied inputs and forward-looking morning semantics retained; no newly added finished output examples. Existing Hard/Fact guards remain unchanged.
+- **Regression invariants:** exactly-3-points, Hard date/value/sign/1306/ref/causality checks; PR99 generic/metric/near-duplicate WARN-only; X300-char rewrite/App policy; MAX_GENERATIONS=2/call ceiling; safe-original fallback remain unchanged by inspected diff and regression.
+- **Diagnostic identity note:** handler hashes the initial generation instructions once and applies that hash to every row; retry instructions include prior issues, so this is a base-prompt identifier, not an exact per-generation request hash. Clarify metadata meaning or compute per-generation identity without extra AI calls.
+- **Known limitations, not silently treated as success:** no trace write after Edge hard-kill before settlement; raw unparseable JSON request failures carry null candidate, not raw invalid output; no retention/cleanup policy activation here. These are separate from the reproduced F1–F3 blockers.
+- Supabase / Postgres skills informed effective-grant-versus-RLS and least-privilege tests. Official RLS guide checked: https://supabase.com/docs/guides/database/postgres/row-level-security . Changelog markdown fetch returned unsupported content-type; no implementation was based on an unverified API change.
+
+### Independently reproduced tests
+
+- market-report-analysis: **176/176 PASS**, including new debug_trace **16/16**.
+- personalized-reports: **129/129 PASS**.
+- X shared market consumer: **8/8 PASS**.
+- market-report-data-packet: **42/42 PASS**.
+- trace migration source tests: **7/7 PASS**.
+- migration source invariants: **11/11 PASS**.
+- _shared: **436/436 PASS**.
+- Combined existing automated suites: **809/809 PASS**. Passing current suites does not override the independent counterexamples above.
+- Initial _shared invocation without --allow-run=node had 435 pass/1 failure in the unchanged diary workflow-validator subprocess test. Re-running with the required narrow local Node execution permission produced 436/436. No source workaround/fix, no workflow run or push occurred.
+- Deno check: market-report-analysis index + changed runtime modules PASS.
+- Deno lint: changed six TS files PASS; bash -n runner PASS; git diff --check PASS; source checkout remains clean.
+- Provided isolated PG17.11 clean apply/behavior/reapply runner: **PASS**.
+- H2 PG adverse proof: the four unsafe outcomes above independently reproduced; source incorrectly accepted them (these are expected counterexamples, not claimed passing safety tests).
+- H2 secret probe: four serializer leaks + one final-detector masking bypass reproduced; ordinary report control preserved.
+- H2 retention probe: all three evidence-loss cases reproduced.
+- H2 timeout/non-blocking probe: **PASS**.
+- PG cleanup: runner scratch DB dropped; H2 adverse DB dropped; H2-only unknown roles/memberships removed; only postgres remained before private server STOP. No existing cluster/server touched.
+
+### Evidence / minimal next action
+
+Scratch evidence retained locally at `/private/tmp/h2-pr101-20261007.GcKE97`:
+`analysis.log`, `related.log`, `shared-run.log`, `check.log`, `lint.log`, `pg-behavior.log`, `adverse.sql`/`adverse.log`, `secret_probe.ts`/`secrets.log`, `retention_probe.ts`/`retention.log`, `timeout_probe.ts`/`timeout.log`. The important reproductions are included above, so C2 does not require access to local files.
+
+- merge_recommendation: **HOLD / CHANGES REQUIRED** for exact head above.
+- production_rollout: **HOLD**; no apply/deploy authorization is inferred from passing regressions.
+- exact_next_action: C2 return F1/F2/F3 to G2 for one bounded corrective in the new trace migration/serializer/diagnostic record plus focused adverse tests. Do not weaken Hard/Fact, remove allowed QA output retention, or alter consumer behavior. Then one targeted corrective rereview. Recommended G2 model **Opus5.5（高）**, H2 corrective review **Sol（中）**.
+- H2 makes no fixes in this review; do not re-review PR41 or G5/Auth paths.
+
+### Safety
+
+- source edits / source commits = **0** (scratch-only probes, shared Report/TASK synchronization excepted).
+- production access/read/write/schema/RPC/migration/apply/deploy = **0**.
+- real OpenAI/X/Push/Auth/Vault/OAuth/Storage/API calls = **0**.
+- Cron/scheduler/settings/secrets/user setting changes = **0**.
+- merge = **0**; G1–G5/H1 files/worktrees and existing local uncommitted changes untouched.
+- secret exposure = **0**; all credential-shaped probe strings were synthetic; no .env/token/password read.
+- completion: `review_required / next_owner: chatgpt`; **STOP for C2**.
+
+---
+
 ## H2 — PR #41 focused R1/R2 ACL rereview — 2026-10-07 JST
 
 - task_id: x-social-mobile-pr41-acl-focused-rereview-20261007
