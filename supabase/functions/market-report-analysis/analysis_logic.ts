@@ -615,8 +615,17 @@ function linkSupported(sentence: string, links: readonly RegExpMatchArray[], ind
     parts.every((part) => causalNews.some((text) => NEWS_ABOUT_MARKET.test(text) && causeSupported(part, text)));
 }
 
-/** Where one clause of a sentence ends: a conjunction that starts another statement (「〜が、」「一方、」「ため、」…). */
-const CLAUSE_BOUNDARY = /(?:が|けれど(?:も)?|けど|ものの|ので|ため|一方(?:で)?|ただし|しかし|なお|また|ただ)[、,]|[、,](?=(?:一方|ただし|しかし|なお|また|ただ)[、,]?)/gu;
+/**
+ * Where one clause of a sentence ends and another statement starts: a conjunction after a predicate, with or without a
+ * comma (「下落しましたが今後は…」「下落したので…」: 2026-10-08 H2 B3-R1); any of them before a comma; and 一方 / ただし /
+ * しかし. A subject が (「ウクライナ情勢が重しとなった」) follows a noun, not a predicate, and is no boundary.
+ */
+const CLAUSE_BOUNDARY = new RegExp([
+  "(?<=(?:[たすだんるい]))(?:が|けれど(?:も)?|けど|ものの|ので|ため|から)(?![らっ])[、,]?",
+  "(?:が|けれど(?:も)?|けど|ものの|ので|ため|一方(?:で)?|ただし|しかし|なお|また|ただ)[、,]",
+  "[、,](?=(?:一方|ただし|しかし|なお|また|ただ)[、,]?)",
+  "一方(?!的)(?:で)?|ただし|しかし",
+].join("|"), "gu");
 
 /** The clause of `sentence` that contains [start, end). */
 function clauseOf(sentence: string, start: number, end: number): string {
@@ -1301,30 +1310,62 @@ function requestErrorCode(error: unknown): string {
 export type FactObjectiveIssue = { quote_ja: string; reason_ja: string };
 
 /** Comparable form of a quote and a unit: width-folded, without spaces, quotes or sentence punctuation. */
-const quoteKey = (value: string) => value.normalize("NFKC").replace(/[\s「」『』"'。.!?！？]/gu, "");
-/** A shorter quote is too unspecific to map to one unit safely. */
+const quoteKey = (value: string) =>
+  value.normalize("NFKC").replace(/[\s「」『』"'。.!?！？]|\p{Extended_Pictographic}|\uFE0F/gu, "");
+/** A shorter quote (or a shorter overlap at a unit's edge) is too unspecific to map safely on its own. */
 const MIN_QUOTE_KEY_CHARS = 8;
 
 /**
- * A unit checker that also removes every unit the Fact check quoted as contradicting the input (FACT_OBJECTIVE):
- * the unit contains the quote, or the unit lies inside a quote that spans several units. `matched` collects which
- * quotes found a unit. No repair is attempted: the unit is dropped and no replacement fact is written.
+ * Which units an objective Fact quote covers. A quote is mapped only when every character of it lies in units that
+ * are removed (2026-10-08 H2 B1-R1: 「…実施していません。調査なし。」 left 「調査なし。」 behind):
+ * - a unit that contains the whole quote;
+ * - units that lie inside the quote, a short one (「調査なし」) only when the quote also covers a unit of at least
+ *   MIN_QUOTE_KEY_CHARS (it is then unambiguously part of that quote);
+ * - a unit whose end or start overlaps the quote's start or end by at least MIN_QUOTE_KEY_CHARS.
+ * A standalone short quote, or a quote not fully covered, maps nothing: the candidate is then never delivered.
  */
-function objectiveChecker(base: UnitChecker, quotes: readonly string[], matched: Set<number>): UnitChecker {
+export function objectiveCoverage(quote: string, unitKeys: readonly string[]): Set<string> | null {
+  if (quote.length < MIN_QUOTE_KEY_CHARS) return null;
+  const containing = unitKeys.find((unit) => unit.includes(quote));
+  if (containing) return new Set([containing]);
+  const covered = new Array<boolean>(quote.length).fill(false);
+  const mark = (from: number, length: number) => covered.fill(true, from, from + length);
+  const units = new Set<string>();
+  let anchored = false;
+  for (const unit of new Set(unitKeys)) {
+    if (!unit) continue;
+    let at = quote.indexOf(unit);
+    if (at >= 0) {
+      units.add(unit);
+      if (unit.length >= MIN_QUOTE_KEY_CHARS) anchored = true;
+      for (; at >= 0; at = quote.indexOf(unit, at + 1)) mark(at, unit.length);
+      continue;
+    }
+    for (let length = Math.min(unit.length, quote.length) - 1; length >= MIN_QUOTE_KEY_CHARS; length -= 1) {
+      if (unit.endsWith(quote.slice(0, length))) {
+        units.add(unit);
+        anchored = true;
+        mark(0, length);
+        break;
+      }
+      if (unit.startsWith(quote.slice(quote.length - length))) {
+        units.add(unit);
+        anchored = true;
+        mark(quote.length - length, length);
+        break;
+      }
+    }
+  }
+  return anchored && covered.every(Boolean) ? units : null;
+}
+
+/** A unit checker that also removes the units the mapped objective quotes cover (FACT_OBJECTIVE). No repair. */
+function objectiveChecker(base: UnitChecker, removals: ReadonlyMap<string, string>): UnitChecker {
   return (text, kind) => {
     const result = base(text, kind);
-    const unit = quoteKey(text);
-    const hits = quotes.flatMap((quote, index) =>
-      quote.length >= MIN_QUOTE_KEY_CHARS && unit.length > 0 && (unit.includes(quote) || (unit.length >= MIN_QUOTE_KEY_CHARS && quote.includes(unit)))
-        ? [index]
-        : []
-    );
-    if (hits.length === 0) return result;
-    for (const index of hits) matched.add(index);
-    return {
-      remove: [...result.remove, ...hits.map((index) => ({ code: "FACT_OBJECTIVE", detail: `Factが入力との矛盾を指摘: 「${quotes[index]}」` }))],
-      advisory: result.advisory,
-    };
+    const quote = removals.get(quoteKey(text));
+    if (quote === undefined) return result;
+    return { remove: [...result.remove, { code: "FACT_OBJECTIVE", detail: `Factが入力との矛盾を指摘: 「${quote}」` }], advisory: result.advisory };
   };
 }
 
@@ -1452,14 +1493,21 @@ export async function generateSharedAnalysis(
    */
   const removeObjective = (candidate: Candidate, objective: readonly FactObjectiveIssue[]) => {
     const record = candidate.record;
-    const quotes = objective.map((item) => quoteKey(item.quote_ja));
     record.localWarnings.push(...objective.map((item) => `FACT_OBJECTIVE:「${item.quote_ja}」 ${item.reason_ja}`));
-    const matched = new Set<number>();
-    const reduced = sanitizeAnalysis(candidate.analysis, input, (kept) => objectiveChecker(unitChecker(input, kept), quotes, matched), fallbacks);
+    // Every unit of the candidate as the sanitizer sees it, then the units each quote covers (null: not covered).
+    const unitKeys: string[] = [];
+    sanitizeAnalysis(candidate.analysis, input, () => (text) => {
+      unitKeys.push(quoteKey(text));
+      return { remove: [], advisory: [] };
+    }, fallbacks);
+    const coverage = objective.map((item) => objectiveCoverage(quoteKey(item.quote_ja), unitKeys));
+    const removals = new Map<string, string>();
+    coverage.forEach((units, index) => units?.forEach((unit) => removals.set(unit, objective[index].quote_ja)));
+    const reduced = sanitizeAnalysis(candidate.analysis, input, (kept) => objectiveChecker(unitChecker(input, kept), removals), fallbacks);
     const codes = removalCodes(reduced.removed);
     record.localWarnings.push(...reduced.removed.map((unit, index) => `${codes[index]} ${unit.detail}`));
     record.removedUnits = [...record.removedUnits, ...reduced.removed];
-    const unmapped = objective.filter((_, index) => !matched.has(index));
+    const unmapped = objective.filter((_, index) => coverage[index] === null);
     const delivery = reduced.coherent ? localAnalysisCheck(reduced.analysis, input, { delivery: true }) : null;
     if (unmapped.length > 0 || !delivery || delivery.hard.length > 0) {
       candidate.unsafe = true;

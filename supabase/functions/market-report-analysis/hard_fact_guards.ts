@@ -225,15 +225,18 @@ function quote(sentence: string): string {
 }
 
 /**
- * A pictograph that ends a sentence: followed by a space and a new sentence, or by the end of the text.
- * 2026-10-07 close: 「10月7日の日経平均は70,035.71（前日比−0.92%）でした📉 10月6日の米国市場では…」 was read as one
- * sentence, so the second sentence's date (10月6日) was taken as the Nikkei's date and a correct report was rejected.
- * A decorative pictograph inside a clause is no boundary: after a particle (「日経平均は📉 70,035.71」) or before what
- * continues the clause (a value, sign, percentage, bracket, particle) the date, subject and value stay one sentence
- * (2026-10-08 H2: 「10月6日の日経平均は📉 70,035.71」 escaped the date check). A next sentence may start with a date.
+ * A pictograph that ends a sentence: it follows a completed statement and is followed by a space and a new sentence,
+ * or by the end of the text. 2026-10-07 close: 「10月7日の日経平均は70,035.71（前日比−0.92%）でした📉 10月6日の米国
+ * 市場では…」 was read as one sentence, so the second sentence's date was taken as the Nikkei's and a correct report
+ * was rejected.
+ * "Completed" is positive: the text before the pictograph ends with a predicate (a verb, adjective or polite ending:
+ * 〜た／〜だ／〜す／〜ん／〜る／〜い) or a move noun used as one (〜上昇／〜下落 …). A date, a subject, a particle or
+ * another pictograph is no statement, so 「10月6日📉 日経平均は…」「日経平均📉 10月6日は…」「10月6日の📉 📉 日経平均は…」
+ * and 「10月6日の日経平均は📉 70,035.71」 keep date, subject and value in one sentence (2026-10-08 H2 B2, B2-R1).
+ * What follows must start a new sentence (it may start with a date), not continue a value or a clause.
  */
 export const EMOJI_SENTENCE_END = new RegExp(
-  "(?<![はがもをのにでとへや、,(（])\\p{Extended_Pictographic}\\uFE0F?" +
+  "(?<=(?:[たすだんるい]|上昇|下落|反発|反落|横ばい|まちまち))\\p{Extended_Pictographic}\\uFE0F?" +
     "(?=\\s*$|\\s+(?:[0-9０-９]{1,2}月[0-9０-９]{1,2}日|[^\\s0-9０-９+\\-−＋±%％(（、。,.・はがもをのにでとへや円]))",
   "u",
 );

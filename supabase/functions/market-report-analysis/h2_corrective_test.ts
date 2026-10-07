@@ -9,6 +9,7 @@ import {
   generateSharedAnalysis,
   localAnalysisCheck,
   MAX_MODEL_CALLS,
+  objectiveCoverage,
   parseGeneratedAnalysis,
   type Requester,
   unitChecker,
@@ -211,3 +212,107 @@ function packetLike(analysis: GeneratedAnalysis) {
     x_post: analysis.x_post, presentation_version: "market_presentation.v2",
   } as unknown as Parameters<typeof formatSharedXPost>[0];
 }
+
+// ---------------------------------------------------------------------------------------------
+// Residuals after the B1-B4 rereview (2026-10-08): B1-R1, B2-R1, B3-R1
+// ---------------------------------------------------------------------------------------------
+
+const withNews = (text: string) => {
+  const analysis = delivered();
+  analysis.app_story!.news_ja = `${analysis.app_story!.news_ja}${text}`;
+  analysis.x_post.news_ja = `${analysis.x_post.news_ja}${text}`;
+  return analysis;
+};
+const quoted = (quote: string) => ({ passed: false, issues: ["入力と矛盾"], objective_issues: [{ quote_ja: quote, reason_ja: "入力と矛盾" }] });
+
+test("B1-R1: a quote over two units removes both, the short one included (exact reproduction)", async () => {
+  const text = "公正取引委員会はサッポロビールへの調査を実施していません。調査なし。";
+  const outcome = await generateSharedAnalysis(input, scripted([
+    { step: "generate", payload: withNews(text) }, { step: "fact", payload: quoted(text) },
+    { step: "generate", payload: withNews(text) }, { step: "fact", payload: quoted(text) },
+  ], []), NOW);
+  assert.ok(outcome.ok);
+  const json = outcome.ok ? JSON.stringify(outcome.packet) : "";
+  assert.ok(!json.includes("調査なし") && !json.includes("実施していません"), "nothing of the quote is delivered");
+  assert.equal(outcome.ok && outcome.packet.app_story!.news_ja, delivered().app_story!.news_ja);
+  assert.equal(outcome.ok && outcome.packet.x_post.news_ja, delivered().x_post.news_ja);
+});
+
+test("B1-R1: a quote over three units removes all three", async () => {
+  const text = "公正取引委員会はサッポロビールへの調査を実施していません。調査なし。問題なし。";
+  const outcome = await generateSharedAnalysis(input, scripted([
+    { step: "generate", payload: withNews(text) }, { step: "fact", payload: quoted(text) },
+    { step: "generate", payload: withNews(text) }, { step: "fact", payload: quoted(text) },
+  ], []), NOW);
+  assert.ok(outcome.ok);
+  const json = outcome.ok ? JSON.stringify(outcome.packet) : "";
+  for (const part of ["実施していません", "調査なし", "問題なし"]) assert.ok(!json.includes(part), part);
+});
+
+test("B1-R1: coverage must be complete and anchored; a standalone short quote stays fail-closed", () => {
+  const units = ["公正取引委員会はサッポロビールへの調査を実施していません", "調査なし", "問題なし", "サッポロビールは調査を公表"];
+  assert.deepEqual([...objectiveCoverage("公正取引委員会はサッポロビールへの調査を実施していません調査なし", units)!], [units[0], units[1]]);
+  assert.equal(objectiveCoverage("調査なし", units), null, "short and standalone: never mapped");
+  assert.equal(objectiveCoverage("調査なし問題なし", units), null, "only short units: not anchored");
+  assert.equal(objectiveCoverage("公正取引委員会はサッポロビールへの調査を実施していません追加の文", units), null, "a part not in any unit: not covered");
+  // A quote that starts inside a unit and runs into the next one covers both.
+  assert.deepEqual([...objectiveCoverage("サッポロビールへの調査を実施していません調査なし", units)!].sort(), [units[0], units[1]].sort());
+});
+
+test("B1-R1: an objective quote that cannot be fully covered leaves the candidate undeliverable", async () => {
+  const text = "公正取引委員会はサッポロビールへの調査を実施していません。調査なし。";
+  const partial = quoted(`${text}業績への影響もありません。`);
+  const failed = await generateSharedAnalysis(input, scripted([
+    { step: "generate", payload: withNews(text) }, { step: "fact", payload: partial },
+    { step: "generate", payload: withNews(text) }, { step: "fact", payload: partial },
+  ], []), NOW);
+  assert.deepEqual([failed.ok, !failed.ok && failed.error], [false, "ANALYSIS_FACT_FAILED"]);
+  assert.ok(!failed.ok && has(failed.issues, "FACT_OBJECTIVE_UNMAPPED"));
+});
+
+test("B2-R1: a date or subject fragment, or a chain of emoji, is no sentence: the wrong date is caught (exact shapes)", () => {
+  for (const text of [
+    "10月6日📉 日経平均は70,035.71（前日比−0.92%）でした。",
+    "日経平均📉 10月6日は70,035.71（前日比−0.92%）でした。",
+    "10月6日の📉 📉 日経平均は70,035.71（前日比−0.92%）でした。",
+  ]) {
+    assert.equal(splitUnits(text).length, 1, text);
+    const analysis = delivered();
+    analysis.x_post.context_ja = text;
+    assert.ok(has(localAnalysisCheck(analysis, input).hard, "日付と指標の不一致"), text);
+  }
+});
+
+test("B2-R1 controls: a completed statement before the emoji still ends the sentence", () => {
+  for (const [text, parts] of [
+    ["10月7日の日経平均は70,035.71（前日比−0.92%）でした📉 10月6日の米国市場では主要株価指数がそろって上昇。", 2],
+    ["東京市場は下落📉 米国市場は上昇しました。", 2],
+    ["10月7日の東京市場は下落しました📉 📈 10月6日の米国市場は上昇しました。", 2],
+    ["東京市場は下落しました📉", 1],
+    ["日経平均は下落📉 70,035.71でした。", 1],
+  ] as const) assert.equal(splitUnits(text).length, parts, text);
+  const analysis = delivered();
+  analysis.x_post.context_ja = "10月7日の日経平均は70,035.71（前日比−0.92%）でした📉 10月6日の米国市場では主要株価指数がそろって上昇。";
+  assert.deepEqual(localAnalysisCheck(analysis, input).hard, []);
+});
+
+test("B3-R1: a conjunction without a comma still closes the causal clause (exact が / けれど / ので)", () => {
+  for (const conjunction of ["が", "けれど", "ので"]) {
+    assert.equal(verdictOf(`ウクライナ情勢を受けて東京市場は下落しました${conjunction}今後の動きには不確実な可能性があります。`), "assertive", conjunction);
+  }
+});
+
+test("B3-R1 controls: ものの / ため / 一方 / ただし / しかし without a comma, and genuine hedges", () => {
+  const cases: Array<[string, string]> = [
+    ["ウクライナ情勢を受けて東京市場は下落したものの今後は不確実な可能性があります。", "assertive"],
+    ["ウクライナ情勢を受けて東京市場は下落したため今後は慎重な見方が出る可能性があります。", "assertive"],
+    ["ウクライナ情勢を受けて東京市場は下落した一方今後は反発する可能性があります。", "assertive"],
+    ["ウクライナ情勢を受けて東京市場は下落しましたただし今後は不確実な可能性があります。", "assertive"],
+    ["ウクライナ情勢を受けて東京市場は下落ししかし今後は戻す可能性があります。", "assertive"],
+    ["ウクライナ情勢が重しとなった可能性があります。", "speculative"],
+    ["ウクライナ情勢が重しとなった可能性があるので続報を確認します。", "speculative"],
+    ["東京市場は下落しましたがウクライナ情勢が重しとなった可能性があります。", "speculative"],
+    ["ウクライナ情勢の影響で一方的に下落した可能性があります。", "speculative"],
+  ];
+  for (const [sentence, expected] of cases) assert.equal(verdictOf(sentence), expected, sentence);
+});
