@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-4
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: bounded DB/security corrective / existing PR #106
@@ -598,6 +598,30 @@ After K4 accepts a corrected candidate, ChatGPT should use a truly free H1/H2 sl
 2. 承認されたら、上の 1〜11 を確認する同日の読み取り専用 preflight（G4 か、ユーザーが実行）を行う。違いがあれば、契約をレビューで直す。
 3. 本番適用（承認制）→ Phase 2b（Threads 接続）。2b の前に決めておくこと: 設計メモの T1 / T2 / T9 / T10。
 - status: review_required / next_owner: chatgpt。STOP for K4。
+
+## K4 decision — final function-contract corrective PASS_CANDIDATE / H1 final rereview assigned — 2026-10-08
+
+- verdict: **PASS_CANDIDATE / merge HOLD**.
+- Claude corrective source head before K4 housekeeping: `f5fb9306f99c27c62ae17070e2682dba42264bc8`.
+- K4 completed the deferred migration reservation bookkeeping now that G3 PR #109 is merged/free:
+  - added `20261007150000: postona_social_accounts_multi_provider` to `supabase/tests/migration_source_invariants_test.ts`;
+  - preserved current-main reservation `20261007173000: ai_lab_topic_evergreen_capacity`;
+  - the branch copy of the invariant file equals current main except for the single POSTONA reservation line.
+- exact PR #106 head after K4 bookkeeping: `4b6dc57966e0d55b2e901a7707446c35b25a1f00`.
+- PR remains open/unmerged; changed files now 7.
+- product/source corrective remains limited to the existing migration/tests/docs plus the reservation map.
+- G4 reports C1-R1/C1-R2 closed:
+  - existing trigger functions now pin owner/ACL/effective EXECUTE plus exact normalized definition;
+  - new provider guard postcondition pins exact normalized body/definition;
+  - 85 adverse starts, 23 postcondition drift cases, 54/54 mutation detection, X publish/refresh/deletion/PR41 Stage3B regressions PASS.
+- production DB/catalog access, apply, deploy, Auth/OAuth/Vault/provider calls: 0.
+- exact-head CI at K4: Netlify PASS; Vercel pending after reservation-only commit. Prior product head had no code CI failure; review may proceed while Vercel settles.
+- H1/H2 were both fresh-checked as done/free. H1 chosen for continuity with prior PR #106 review.
+- H1 task: `postona-pr106-function-contract-final-rereview-20261008`.
+- H1 exact target: `4b6dc57966e0d55b2e901a7707446c35b25a1f00`.
+- recommended reviewer model: **Sol（高）**.
+- no merge or production preflight/apply is authorized by this K4.
+- next_owner: codex / H1.
 
 ## Report — C1 corrective (function-contract hardening) (2026-10-07)
 
