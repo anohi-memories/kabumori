@@ -3,8 +3,9 @@
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
+- pr: https://github.com/anohi-memories/kabumori/pull/110
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: market-report reliability / delivery-first guard calibration / mandatory disclaimer
@@ -192,6 +193,142 @@ Open one focused source-only PR. Report:
 Do not merge or deploy. Stop for **K2**.
 
 Recommended model: **Opus5.5（高）**.
+
+## Report
+
+- pr: https://github.com/anohi-memories/kabumori/pull/110 （branch `g2-delivery-first-guards-20261007`、head は PR を参照。base origin/main 07f08019。CI 2 passing）
+- worktree: `/Users/yuya/Developer/kabumori-g2-delivery-first`（fresh base から新規作成。他スロットの worktree・ブランチ・サーバーには触れていない）
+- open PR overlap: 着手前と commit 前に確認。#109 / #106 / #33 / #11 / #10 / #3 のどれとも、変更ファイルの重なりなし
+- merge / deploy: していない
+
+### changed_files
+
+- 新規:
+  - `market-report-analysis/unit_sanitizer.ts`（単位ごとの除去・中和、まとまりの判定）
+  - `delivery_first_test.ts`（19件）
+  - fixtures `close_2026-10-07_{data_packet,news_rows,generations}.json`（本番から読み取り専用で取得。秘密情報・メール・user_id は0件と確認）
+- 変更（ソース）:
+  - `market-report-analysis/analysis_logic.ts`
+  - `market-report-analysis/hard_fact_guards.ts`
+  - `_shared/market_report_packet.ts`
+  - `_shared/market_report_story.ts`
+  - `handler.ts` は変更なし
+- 変更（テスト。旧方針を前提にしたものを新方針へ）:
+  - analysis / causal_calibration / content_guard / debug_trace(_adversarial, _final) / h1_pr79_boundary / handler / model_registry_integration / presentation_v2 / quality_calibration / transport_retry の各 `_test.ts`
+  - `x-test-post/shared_market_report_consumer_test.ts`（テストのみ。x-test-post のソースは無変更）
+- 触っていないもの: DB / migration / RLS / ACL、Auth、important-news-monitor、POSTONA / G3 / G4 のソース、Cron / secrets / gate
+
+### fatal と advisory の分類
+
+- 除去（または中和）。単位は文・ポイント・claim・リスト項目:
+  - `VALUE_NOT_IN_INPUT`
+  - `WRONG_DATE` / `WRONG_VALUE` / `WRONG_DIRECTION` / `STALE_AS_CURRENT`
+  - `TOPIX_MISLABEL`
+  - `UNKNOWN_REF` / `CLAIM_WITHOUT_REF` / `CAUSAL_WITHOUT_NEWS` / `THEME_CLAIMS`
+  - `UNSUPPORTED_CAUSALITY`（断定）
+  - `EMOJI_DIRECTION`
+  - `SAME_DAY`、`MULTI_DAY_WORD`、`FALSE_ABSENCE`
+  - `URL` / `HASHTAG` / `HTML` / `BREAKING_LABEL` / `ADVICE` / `INTERNAL_FIELD`
+  - `MODEL_DISCLAIMER`（モデルが書いた注意書き・「AIが独自調査」）
+- 中和（直した文が全チェックを通ったときだけ採用）:
+  - 向きの誤った📈📉だけが問題のとき → 絵文字を外す
+  - 1306の値を含む文の単独「TOPIX」 → 「TOPIX連動ETF（1306）」に置き換える（語だけを置換）
+- コードで作る代替: 見出し・要約・Xの導入が空になったとき
+- 参考扱い（WARN）:
+  - `SPECULATIVE_CAUSALITY`（「可能性」「一因として考えられる」「とみられる」など推測と分かる因果）
+  - 区別の説明（「TOPIXそのものではなく」）、10/7日本＋10/6米国の対比 → どちらも誤検知を解消し、指摘なし
+  - 文体・長さ・並び順・一般的すぎる表現
+  - Fact の指摘（1回作り直したあと）
+  - `X_POINTS_REDUCED:n`、`FACT_ADVISORY:n`、`FACT_NOT_RUN`
+- 全体停止: 出力の形式が壊れている（`ANALYSIS_INVALID_OUTPUT`）、またはどの生成も、外したあとにまとまった本文が3単位未満しか残らないか配信前の再検査を通らない（`ANALYSIS_LOCAL_CHECK_FAILED`）
+
+### 段階的な縮退の実装
+
+1. 生成する。
+2. 生成時の約束（ポイント3つ・締めあり・claim 1件以上）を含むローカル検査をする。
+3. 客観的な誤りがあり、上限内なら Fact を使わずに1回作り直す。
+4. どの生成も、外したあとの本文を `localAnalysisCheck(..., { delivery: true })` で再検査し、通ったものを候補にする。
+5. ローカル検査を通った生成は、外したあとの本文で Fact を行う。
+6. Fact の指摘があれば1回作り直す。
+7. 品質による書き直しは従来どおり。
+8. 候補の選択: Fact合格 ＞ 未検査 ＞ 指摘あり → 外した単位が少ない → 警告が少ない → 新しいもの。
+9. 未検査の候補を選んだときは、上限内なら1回だけ Fact を行う。その結果が出たあとは、検査済みの候補だけから選ぶ。
+
+- 記録:
+  - パケットに `fact.ai_status`（passed / advisory / not_run）と `fact.removed_units`（`UNIT_<ACTION>:<CODE>@<path>`）
+  - 診断情報に `fact_status` / `removed_units` / `removed_unit_count`
+  - `fallback_reason` に `sanitized_units` / `fact_advisory` / `fact_not_run` を追加（旧来の `rewrite_*` は維持）
+  - GenerationRecord に `removedUnits`（パス・理由・元の文）と `deliveryIssues`
+  - trace の `local_warnings` に、外した単位ごとの理由を記録（trace テーブルの列は変更なし）
+
+### 10/7 の回帰結果（本番の3生成を fixture で再生）
+
+- 16:20 の1回目（TOPIXの区別の説明）・2回目（📉のあとの米国の日付）・16:35 の配信分のどれも、ローカル検査の hard が0、外した単位が0。3つとも generate＋fact の2呼び出しで配信。
+- X本文: 507 / 482 / 494字（注意書きを除く。含めると566 / 541 / 553字）。アプリの本文: 940 / 971 / 972字。警告は0。
+- 「10月7日のTOPIXは437.0円」「日経平均とTOPIXがそろって下落」は引き続き検出。前者は1306の表記に中和、後者は除去。
+
+### Fact の扱い
+
+- 2回とも指摘あり → 4呼び出しで「参考扱い」として配信し、指摘は全件 trace に残す。
+- 通信失敗:
+  - 安全な候補が無ければ、従来どおり例外（cron の再試行に回る）
+  - 決定的な検査を通った候補があれば `not_run` で配信（従来は全体停止）
+- Fact の指示も「推測と分かる見立てを1回添えるのは可。推測を事実のように書いたものは不可」に合わせた。
+
+### 注意書きの位置
+
+- X: `formatSharedXPost` が本文の末尾に空行を挟んで `REPORT_DISCLAIMER_JA` を1回だけ付ける。2回以上あれば `X_POST_DISCLAIMER_INVALID`。
+- アプリ: `buildAppMarketStory` の最後のセクション（key `disclaimer`）に1回。`char_count` と警告の計算からは除外し、`total_char_count` には含める。
+- モデルが書いた注意書きは単位ごと除去。プロンプトでも「書かない」と指示した。
+
+### X Premium の長さ
+
+- `X_POST_HARD_MAX_CHARS` を 900 から 12,500 に変更（CJK の重み2でも25,000以内）。
+- 430〜560字の目標は警告のみ。長さと最小長（80字）は注意書きを除いた本文で測る。
+- テスト: 2,000字超の投稿でも止まらず、注意書きも欠けないことを確認。
+
+### テスト（すべて成功）
+
+- `market-report-analysis` 242、`personalized-reports` 129、`market-report-data-packet` 42、`x-test-post/shared_market_report_consumer_test.ts` 8、`_shared` 466（`--no-check`）。
+- deno check（変更ファイル）は0件。
+- lint は既存の8件（テスト補助の `require-await`）だけで、新しい指摘は0件。
+- `git diff --check` は問題なし。
+
+### 呼び出しの上限
+
+- `MAX_GENERATIONS = 2`、`MAX_MODEL_CALLS = 4` は不変。
+- `DEFAULT_TRANSPORT_RETRY`（1呼び出しあたり2回・1回の実行で3回・30秒）は不変。どちらもテストで固定している。
+
+### 本番操作 = 0
+
+本番への DDL / DML・デプロイ・手動生成・OpenAI 呼び出し・Cron / gate / secret の変更は、すべて0。fixture の取得は以前の読み取り専用 SELECT によるもの。
+
+### 残るリスク
+
+1. DB の `market_report_packets.fact_status` は、完了RPCが常に `passed` を書く。参考扱いはパケット本体の `fact.ai_status` と診断情報でしか区別できない。
+   - 後続でマイグレーションの判断が必要。
+2. アプリ画面（`src/app/(tabs)/reports/[id].tsx`）は `market_detail.story` を表示せず、画面独自の注記を出している。
+   - アプリで注意書きを見せるには G1／アプリ側の作業が必要。
+3. x-test-post は次のデプロイで `_shared` の変更（注意書き・ポイント0〜3・Premium長）を取り込む。それまでの X 投稿には注意書きが付かない。
+   - x-test-post の deploy graph には、ほかの未デプロイPRも含まれ得るので、デプロイ前に差分の確認が必要。
+4. 推測の因果は、見出しやポイントに出ても WARN 扱い（TASK の分類どおり。プロンプトでは禁止している）。
+5. 「〜の流れで」は、以前から因果の言い回しとして検出していない（このPRで生じた穴ではない）。
+6. Fact の通信失敗時に `not_run` で配信する点は方針上の判断。止めたい場合は1行で戻せる。
+7. 単位ごとの検査が全体の検査より厳しく外す可能性がある。既存の良い生成5件では外したものが0件だったが、本番での観察が必要。
+
+### 公開と観察の推奨
+
+1. K2 の承認後にマージし、`market-report-analysis` を単独でデプロイする（明示の引数、承認を得てから。デプロイ後にバイトを照合）。
+2. 最初の2〜3サイクル（朝刊 07:55 / 大引け 16:20）は次の4つを見る。
+   - 診断情報の `fact_status` / `removed_units` / `fallback_reason`
+   - trace の `local_warnings` に入った `UNIT_*`
+   - 配信までの呼び出し数と費用
+   - 中和・代替の文面が自然か
+3. `removed_unit_count` が継続して多い、または `advisory` が続く場合は、プロンプトを調整する。
+4. x-test-post の再デプロイ（注意書きをXに出す）は、G3/G4 の deploy graph を確認したうえで別途承認を得て行う。
+5. アプリでの注意書きの表示は、G1 への依頼として起票を推奨する。
+
+Recommended next owner: **chatgpt（K2）**
 
 ---
 
