@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { socialTextModel } from "../_shared/social_ai_model_policy.ts";
 
 import {
   UsefulTipAttemptError,
@@ -13,7 +14,7 @@ import {
 
 function diagnostic(overrides: Partial<UsefulTipAttemptDiagnostic> = {}): UsefulTipAttemptDiagnostic {
   return {
-    model: "gpt-5.6-luna",
+    model: socialTextModel("usefulTipBase"),
     attempt: 1,
     maxOutputTokens: 2400,
     responseStatus: "completed",

@@ -6,6 +6,7 @@ import {
 } from "./brand_context.ts";
 import { generateBrandPost } from "./brand_post_generator.ts";
 import { UNLIMITED_POST_LENGTH } from "./post_length_policy.ts";
+import { socialTextModel, socialTextModelCostUsd } from "../social_ai_model_policy.ts";
 
 const aiLabSettings: BrandOperationalSettings = {
   brand_id: "ai_salaryman_lab",
@@ -98,10 +99,12 @@ test("generates real AI Lab content using only its own voice instructions, and r
   assert.equal(draft.brandId, "ai_salaryman_lab");
   assert.equal(draft.postType, "brand_post");
   assert.match(draft.text, /議事録/u);
-  assert.equal(draft.model, "gpt-5.6-luna");
+  // AI Lab generates through the shared brand generator: the central policy's routine (Luna) tier.
+  assert.equal(draft.model, socialTextModel("brandPostGeneration"));
   assert.equal(draft.inputTokens, 150);
   assert.equal(draft.outputTokens, 90);
-  assert.ok(draft.apiCostUsd > 0);
+  // Cost comes from the selected model's own centralized rates (150 in, 90 out).
+  assert.equal(draft.apiCostUsd, socialTextModelCostUsd(draft.model as Parameters<typeof socialTextModelCostUsd>[0], 150, 90));
   assert.match(
     capturedInstructions,
     /未確認の人物像、実績、勤務先、投資経験、具体的な収益額・成果は作らないでください/u,

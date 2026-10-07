@@ -21,9 +21,11 @@ import {
   postCharacterCount,
   postLengthInstruction,
 } from "./post_length_policy.ts";
+import { socialTextModel, socialTextModelCostUsd } from "../social_ai_model_policy.ts";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const MODEL = "gpt-5.6-luna";
+// POSTONA preview/live, brand-post dry-run and AI Lab all generate here; the id comes from the central policy.
+const MODEL = socialTextModel("brandPostGeneration");
 
 export type BrandPostDraft = {
   brandId: string;
@@ -72,9 +74,9 @@ function getUsage(response: unknown): { input: number; output: number } {
   };
 }
 
-// Same per-token rates x-test-post/index.ts uses for its default (non-Sol) model tier.
+// The selected model's own centralized token rates.
 function costUsd(input: number, output: number): number {
-  return Number(((input * 0.2 + output * 1.2) / 1_000_000).toFixed(6));
+  return socialTextModelCostUsd(MODEL, input, output);
 }
 
 const DEFAULT_TOPIC_SEED = "AIツールを使った日々のちょっとした工夫";

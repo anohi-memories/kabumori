@@ -1,4 +1,7 @@
-export type UsefulTipModel = "gpt-5.6-luna" | "gpt-5.6-sol";
+import type { SocialTextModelId } from "../_shared/social_ai_model_policy.ts";
+
+/** A useful-tip attempt runs on the policy's base (Luna) or escalation (Sol) model. */
+export type UsefulTipModel = SocialTextModelId;
 
 export type UsefulTipAttemptDiagnostic = {
   model: UsefulTipModel;

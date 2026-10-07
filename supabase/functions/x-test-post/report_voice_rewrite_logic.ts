@@ -10,7 +10,9 @@
 // already-deployed morning_report wiring) and are reused as-is by close_report. Only the request builder
 // differs per report, since each report has its own fixed heading/structure to preserve.
 
-export const REPORT_VOICE_REWRITE_MODEL = "gpt-5.6-luna" as const;
+import { socialTextModel } from "../_shared/social_ai_model_policy.ts";
+
+export const REPORT_VOICE_REWRITE_MODEL = socialTextModel("kabumoriXVoiceRewrite");
 
 export function buildMorningReportVoiceRewriteRequestBody(
   originalText: string,

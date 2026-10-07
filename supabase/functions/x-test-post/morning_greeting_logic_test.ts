@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { socialTextModel } from "../_shared/social_ai_model_policy.ts";
 import {
   MORNING_GREETING_MAX_CHARACTERS,
   MORNING_GREETING_MIN_CHARACTERS,
@@ -107,10 +108,10 @@ test("Luna request uses strict structured output without web tools", async () =>
     }), { status: 200, headers: { "Content-Type": "application/json" } });
   };
   const result = await generateMorningGreeting("test-key", "2026-09-02", mockFetch);
-  assert.equal(result.model, "gpt-5.6-luna");
+  assert.equal(result.model, socialTextModel("kabumoriXMorningGreeting"));
   assert.equal(result.input_tokens, 321);
   assert.equal(result.output_tokens, 123);
-  assert.equal(requestBody?.model, "gpt-5.6-luna");
+  assert.equal(requestBody?.model, socialTextModel("kabumoriXMorningGreeting"));
   assert.equal(requestBody?.tools, undefined);
   const format = (requestBody?.text as { format?: { strict?: unknown } }).format;
   assert.equal(format?.strict, true);

@@ -1,3 +1,4 @@
+import { socialTextModel, type SocialTextModelId } from "../_shared/social_ai_model_policy.ts";
 import { KABUMORI_VOICE } from "../_shared/kabumori_voice.ts";
 import {
   buildMorningGreetingScenePlan,
@@ -18,7 +19,7 @@ export type MorningGreetingTheme = {
 
 export type MorningGreetingResult = MorningGreetingTheme & {
   generated_text: string;
-  model: "gpt-5.6-luna";
+  model: SocialTextModelId;
   input_tokens: number;
   output_tokens: number;
   retry_count: number;
@@ -29,7 +30,7 @@ type MajorThemeDefinition = {
   visualTheme: string;
 };
 
-const MODEL = "gpt-5.6-luna" as const;
+const MODEL = socialTextModel("kabumoriXMorningGreeting");
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 // Morning greeting is intentionally shorter than reports. The validator measures the generated body
 // before the fixed hashtag line is appended, so a natural 60-140 character greeting remains easy to

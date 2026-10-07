@@ -20,11 +20,12 @@ import {
   type SocialMobileContentSettings,
   type SocialMobilePersonaProfile,
 } from "../_shared/brand/social_mobile_content_settings.ts";
+import { socialTextModel } from "../_shared/social_ai_model_policy.ts";
 
 const PROFILE_KEY = "social_mobile_user_v1";
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-/** Same default (least expensive) tier the brand post generator uses; no premium model for chat. */
-export const CONSULT_MODEL = "gpt-5.6-luna";
+/** The routine (least expensive) tier from the central policy; no premium model for chat. */
+export const CONSULT_MODEL = socialTextModel("postonaConsult");
 
 export const CONSULT_LIMITS = {
   requestBytes: 32_000,
