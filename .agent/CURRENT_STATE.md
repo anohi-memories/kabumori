@@ -1,3 +1,16 @@
+## Routing correction — delivery-first market-report task belongs to G2 — 2026-10-07
+
+- user corrected the routing: this chat/workstream uses **G2 only**.
+- the prior G1 allocation was a ChatGPT routing mistake; G1 is cancelled for this task and must not start it.
+- canonical task is now G2: `kabumori-market-report-delivery-first-guard-calibration-20261007`.
+- X is Premium; legacy short-post length is advisory only.
+- objective errors follow progressive degradation: remove the smallest bad sentence/point/claim/news item and deliver the remaining coherent content when possible.
+- full deterministic AI disclaimer is required on both X and App.
+- whole-report failure is last resort only.
+- timing gate: **do not start G2 before the 2026-10-07 16:35 JST natural close retry is complete and observed.**
+- recommended Claude model: **Opus5.5（高）**.
+- after retry observation, user can send `G2`; finish code is `K2`.
+
 ## G1 delivery-first policy refinement — 2026-10-07
 
 - X account is Premium; legacy short-post character targets are no longer delivery constraints. Readability length remains advisory only.
