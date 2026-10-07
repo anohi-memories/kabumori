@@ -5506,3 +5506,12 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - runtime note: source is merged but production remains on existing deployed bundles until a separate gated Edge Function redeploy; no production model switch was authorized by this K3.
 - next: any production rollout must be a separate G3 task after G5 production-priority/gating is clear, with full x-test-post bundle graph diff before deploy.
 - AI Lab diary: 候補あり — AIモデルの世代更新を楽にするため、モデルと料金の設定を1か所にまとめ、古い設定の直書きが戻ったらテストで気づけるようにした。
+
+
+## G3 allocated — AI Lab topic continuity fix — 2026-10-07
+- production read-only diagnosis: company AI Lab schedule remains 10 posts/day, but the current 7 evergreen seeds are incompatible with the 72h per-seed and 48h generic-theme cooldowns; 2026-10-07 executed slots are failing pre-OpenAI/pre-X with topic-pool exhaustion.
+- user decision: keep the existing safety/duplicate protections, but never stop merely because normal topics run out. Prefer recent dev diary, then a large diverse evergreen pool, then safe continuity topics about personal development / using AI / general impressions of AI progress.
+- G3 task: `ai-lab-topic-continuity-fix-20261007`, status ready, next_owner claude.
+- implementation gate: source + forward migration candidate + tests only; no production mutation/deploy/merge. Require >=14-day x 10-post/day capacity simulation and TS/DB canonical-map parity.
+- overlap check: G4 owns social_accounts schema candidate; G5 owns common-account native validation; G2 owns market-report GPT-6.1 rollout. G3 scope is isolated from those files.
+- recommended model: Opus5.5（高）.
