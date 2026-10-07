@@ -1,3 +1,85 @@
+# K2 CORRECTIVE — PR #110 app-visible disclaimer closure
+
+- verdict: **CHANGES REQUIRED (one bounded blocker)**
+- target_pr: 110
+- reviewed_head: b507a3c5c9e340b5d07e09ef80146edc37f26d83
+- status: ready
+- next_owner: claude
+- recommended_model: Sonnet5（中）
+- production_mutation_allowed: false
+- deploy_allowed: false
+
+## What is already accepted
+
+The core delivery-first implementation is accepted as a **PASS_CANDIDATE**:
+- 10/7 false-positive 1306/date guards are covered;
+- objective bad units are isolated/removed instead of automatically killing the whole report;
+- bounded regeneration/call ceilings remain unchanged;
+- Fact can become advisory/not_run only after deterministic local safety conditions;
+- X Premium legacy short-length target is advisory;
+- X formatter appends the canonical disclaimer exactly once;
+- reported regressions and full suites are green;
+- production mutation/deploy/manual invoke = 0.
+
+Do not redesign or broaden those parts in this corrective unless required by the single blocker below.
+
+## Single blocker
+
+The user requirement was that the AI disclaimer be shown on **both X and the app**.
+
+PR #110 currently adds the canonical disclaimer to the generated app story, but the actual report detail screen
+`src/app/(tabs)/reports/[id].tsx` does not render that story disclaimer. It still shows its older independent note:
+
+「数値は株価データからアプリが計算しています。文章は、その数値と内容確認済みのニュースだけをもとにAIが作成し、根拠データと照合しています。売買をすすめるものではありません。」
+
+Therefore the source packet contains the new disclaimer, but the user-facing app screen does not yet show the agreed wording/meaning.
+
+## Required correction
+
+Update the existing PR #110 only.
+
+On the actual app report detail screen:
+- show the agreed disclaimer once per report, visibly at the end of the report;
+- required meaning:
+  **「※本レポートはAIによる分析です。内容に誤り・不足を含む可能性があります。最終的な投資判断はご自身でお願いします。」**
+- preserve useful existing deterministic data/source explanation if desired, but avoid duplicate or contradictory disclaimers;
+- do not claim the AI independently browses/researches the web;
+- ensure both market_detail and legacy/non-detail report paths show the same disclaimer once;
+- keep it presentation-only; no DB/Auth/Edge/Cron/gate changes.
+
+Prefer the smallest source change plus focused app test(s). Do not create a new PR.
+
+## Freshness
+
+Before editing:
+- fresh-fetch origin/main;
+- require PR #110 still open;
+- re-check PR head and open-PR changed-file overlap;
+- update existing isolated G2 worktree only if still safe, otherwise create a fresh G2 worktree from `/Users/yuya/Developer/kabumori-fresh`.
+
+## Verification
+
+At minimum:
+- focused test proves the exact/accepted disclaimer meaning appears once in report detail;
+- both detail and legacy report rendering paths retain it;
+- no duplicate disclaimer when backend packet/story also contains it;
+- existing app/report navigation and report rendering regressions remain green;
+- rerun relevant PR #110 market-report tests if any shared file changes occur;
+- diff check clean.
+
+No deploy / merge / EAS / production mutation.
+
+After correction:
+- update PR #110;
+- Report exact new head, changed files, tests;
+- status -> review_required;
+- next_owner -> chatgpt;
+- STOP for **K2**.
+
+Recommended model: **Sonnet5（中）**.
+
+---
+
 # Claude Task 2 — CURRENT TASK
 
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
