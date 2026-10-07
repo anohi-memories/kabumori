@@ -1262,5 +1262,48 @@ test("migration: the new claim_ai_lab_topic differs from 20261004090000 only in 
   assert.equal((sql.match(/create or replace function/gu) ?? []).length, 1);
   assert.match(sql, /grant execute on function public\.claim_ai_lab_topic\(uuid, jsonb, integer\) to service_role;/u);
   assert.ok(sql.includes("AI_LAB_TOPIC_CLAIMS_ACL") && sql.includes("AI_LAB_TOPIC_CLAIMS_PREFLIGHT"));
-  assert.doesNotMatch(sql, /create table|alter table|drop /iu);
+  // Only pg_temp scaffolding is created/dropped (the canonical-shape comparison, whose DDL runs against
+  // pg_temp only); outside that copied block the real table, its indexes and the other functions are never touched.
+  const outsideCanonical = sql.replace(/create function pg_temp\.ai_lab_topic_claims_create\(p_schema text\)[\s\S]*?\$create\$;/u, "");
+  assert.doesNotMatch(outsideCanonical, /alter table|create table|drop table public\.|drop index|drop function public\./iu);
+  assert.doesNotMatch(sql.replace(/create function pg_temp\.[a-z_]+/gu, ""), /create function public\./iu);
+});
+
+test("PR109 B1-B3: the capacity migration's preflight pins role paths, the canonical table shape and approved bodies", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { createHash } = await import("node:crypto");
+  const dir = new URL("../../../migrations/", import.meta.url);
+  const base = await readFile(new URL("20261004090000_ai_lab_topic_claims.sql", dir), "utf8");
+  const capacity = await readFile(new URL("20261007173000_ai_lab_topic_evergreen_capacity.sql", dir), "utf8");
+  // prosrc is the text between the $$ delimiters exactly as written; PostgreSQL stores it verbatim.
+  const bodyMd5 = (sql: string, name: string) => {
+    const head = sql.indexOf(`create or replace function public.${name}(`);
+    assert.ok(head >= 0, name);
+    const open = sql.indexOf("as $$", head) + "as $$".length;
+    return createHash("md5").update(sql.slice(open, sql.indexOf("$$;", open))).digest("hex");
+  };
+  const expected = (name: string) => {
+    const row = new RegExp(`\\('${name}', '[^']*', '[a-z]+',\\s*array\\[([^\\]]*)\\]\\)`, "u").exec(capacity);
+    assert.ok(row, `${name} is pinned`);
+    return [...row![1].matchAll(/'([0-9a-f]{32})'/gu)].map((m) => m[1]);
+  };
+  for (const name of ["start_ai_lab_topic_provider", "release_ai_lab_topic_claim", "mark_ai_lab_topic_claim_ambiguous", "settle_ai_lab_topic_claim_published"]) {
+    assert.deepEqual(expected(name), [bodyMd5(base, name)], `${name}: pinned body = approved 20261004090000 body`);
+    assert.ok(!capacity.includes(`create or replace function public.${name}(`), `${name} is not rewritten`);
+  }
+  // claim: the pre-capacity body (first apply) or this migration's own body (reapply), and nothing else.
+  assert.deepEqual(expected("claim_ai_lab_topic"), [bodyMd5(base, "claim_ai_lab_topic"), bodyMd5(capacity, "claim_ai_lab_topic")]);
+  assert.ok(capacity.includes(`is distinct from '${bodyMd5(capacity, "claim_ai_lab_topic")}'`), "postcondition pins the new body");
+  // B2: the canonical table definition and shape functions are copied verbatim from 20261004090000.
+  const block = (sql: string, start: string, end: string) => sql.slice(sql.indexOf(start), sql.indexOf(end, sql.indexOf(start)) + end.length);
+  for (const [start, end] of [["create function pg_temp.ai_lab_topic_claims_create(p_schema text)", "$create$;"], ["create function pg_temp.ai_lab_topic_claims_shape(p_rel regclass)", "$shape$;"]]) {
+    assert.equal(block(capacity, start, end), block(base, start, end), start);
+  }
+  assert.ok(capacity.includes("AI_LAB_TOPIC_CLAIMS_SCHEMA_DRIFT: public.ai_lab_topic_claims differs from the canonical definition"));
+  // B1: transitive membership walk over pg_auth_members, independent of INHERIT/SET options.
+  assert.match(capacity, /with recursive reach\(api, role_oid\)[\s\S]*join pg_catalog\.pg_auth_members m on m\.member = reach\.role_oid/u);
+  assert.doesNotMatch(capacity.slice(capacity.indexOf("do $roles$"), capacity.indexOf("$roles$;")), /inherit_option|set_option/u);
+  // Order: every check runs before the claim function is replaced.
+  const replaced = capacity.indexOf("create or replace function public.claim_ai_lab_topic(");
+  for (const marker of ["do $roles$", "do $table$", "do $functions$"]) assert.ok(capacity.indexOf(marker) < replaced, marker);
 });
