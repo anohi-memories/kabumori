@@ -1,3 +1,25 @@
+## G5 approved — production real-account smoke — 2026-10-07
+
+- user explicitly approved one bounded production-authenticated Kabumori smoke.
+- G5 task: `common-account-v1-phase2-real-account-smoke-20261007`, status ready.
+- scope: exactly one existing active Kabumori account; pre/post aggregate read-back; login -> active service-start path -> Home -> same-login token refresh -> sign-out -> same-account re-login -> sign-out.
+- no new enrollment, reactivation, withdrawal/deletion, profile edit, Auth Admin, DB/schema/migration, deploy or EAS.
+- credentials are entered only by the user in Simulator UI and must not be logged or pasted.
+- any unexpected state/count change is STOP; no corrective production writes.
+- recommended model: **Opus5.5（高）**.
+- finish code: K5.
+
+## K2 — PR #110 PASS_CANDIDATE / one app-visible disclaimer blocker — 2026-10-07
+
+- PR #110 exact reviewed head: `b507a3c5c9e340b5d07e09ef80146edc37f26d83`.
+- core delivery-first behavior is accepted as PASS_CANDIDATE: false-positive 1306/date cases are covered, bad factual units are isolated instead of killing the whole report, Fact advisory/not_run behavior stays within the existing call ceiling, and X Premium length is advisory.
+- reported verification is strong: market-report-analysis 242, personalized 129, data-packet 42, X shared 8, _shared 466; production mutation/deploy/manual invoke = 0.
+- blocker: the new canonical disclaimer exists in the backend app story, but the actual report-detail UI does not render that story. The app still shows its older independent note, so the user's requirement to show the new AI-error/investment-judgment disclaimer on the app is not fully satisfied.
+- corrective assigned back to G2 on the existing PR #110 only: make the agreed disclaimer visibly appear once at the end of the actual report-detail screen, covering both detail and legacy paths, with no duplicate/conflicting disclaimer.
+- recommended Claude model for this bounded UI corrective: **Sonnet5（中）**.
+- after corrected K2, because PR #110 changes Hard Fact / Fact fallback delivery boundaries, route one focused H2 review before merge; recommended Codex model **Sol（高）**.
+- no merge/deploy authorized yet.
+
 ## K4 — corrected POSTONA PR #106 PASS_CANDIDATE / H1 rereview assigned — 2026-10-07
 
 - corrected PR #106 exact head: `a8f313dc72b087ab86482781297848fe6e23bdcc`.
@@ -5644,3 +5666,13 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - required correction is bounded to migration guards + adversarial rollback tests. Topic content/capacity design should not be redesigned.
 - after K3, one focused exact-head Codex rereview is required, recommended **Sol（高）**.
 - AI Lab diary: 記録不要 — no completed user-visible development milestone yet; this is a security corrective in progress and same-day diary duplication is unnecessary.
+
+
+## K3 follow-up — AI Lab Premium length policy — 2026-10-07
+- prior PR #109 security corrective head `7c3c06d07c32910472185e1c94b04fa1aab794f5` is accepted as a PASS candidate for rereview: B1-B3 adverse guards reported closed, 13/13 rejected with rollback, healthy apply/reapply PASS, 140/140 capacity preserved, production mutation 0.
+- user clarified the AI Lab X account is Premium and posts may exceed 140 characters; short legacy limits should not constrain natural content.
+- fresh source inspection found AI Lab had no 140 limit but did have a hard `maxChars: 280` enforced both after generation and immediately before X dispatch.
+- K3 therefore defers Codex rereview one turn and returns a bounded product correction to G3: change AI Lab only to explicit unlimited length, permit >280 text, preserve character-count diagnostics, and add guidance not to pad content merely because longer posts are allowed.
+- POSTONA/general-user, Kabumori X, topic/capacity, scheduler, OAuth/Vault/Auth and PR #109 B1-B3 migration bytes must remain unchanged.
+- task: `ai-lab-premium-length-policy-unlimited-20261007`; recommended **Sonnet5（高）**.
+- production migration/deploy/merge remains HOLD.

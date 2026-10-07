@@ -1,10 +1,137 @@
 # Claude Task 3 — CURRENT TASK
 
-- task_id: ai-lab-topic-continuity-pr109-security-corrective-20261007
+- task_id: ai-lab-premium-length-policy-unlimited-20261007
 - owner: claude
 - slot: claude-3
 - status: in_progress
 - next_owner: claude
+- priority: urgent
+- recommended_model: Sonnet5（高）
+- type: bounded AI Lab length-policy correction on existing PR #109
+- target_pr: 109
+- accepted_security_head: 7c3c06d07c32910472185e1c94b04fa1aab794f5
+- production_mutation_allowed: false
+- deploy_allowed: false
+- merge_allowed: false
+
+## Context / K3 disposition
+
+The prior PR #109 migration-security corrective is a **PASS candidate for rereview**:
+- B1 SET ROLE graph guard added;
+- B2 canonical prerequisite table-shape proof added;
+- B3 exact companion lifecycle-function body proof added;
+- 13/13 adverse cases reject and rollback;
+- healthy apply/reapply passes;
+- real SQL capacity remains 140/140;
+- accepted 74-topic/Tier2/Tier3 design unchanged;
+- production mutation/deploy/merge remains 0.
+
+Before sending that head to Codex, the user clarified a product policy:
+
+> 会社員AIラボはX Premium運用なので、140文字を超えてよい。短文上限に縛らない。
+
+Fresh source inspection found the current AI Lab profile is not 140-limited, but **is hard-limited to 280 Unicode code points**:
+- `AI_SALARYMAN_LAB_CODE_PROFILE.postLengthPolicy = { mode: "limited", maxChars: 280 }`;
+- generator rejects 281 with `BRAND_POST_LENGTH_LIMIT_EXCEEDED`;
+- final pre-X dispatch guard rejects 281 again.
+
+This hard ceiling conflicts with the user's Premium-account policy.
+
+## Goal
+
+Remove the hard finite character ceiling **for company AI Lab only**.
+
+Required final behavior:
+- AI Lab `brand_post` uses the existing generic `UNLIMITED_POST_LENGTH` policy.
+- 281+ characters do not fail solely because of character count.
+- 140 characters is not a target or ceiling.
+- 280 characters is not a target or ceiling.
+- Do not force long posts either. Add/adjust AI Lab profile guidance so the model varies length naturally:
+  - concise topic -> concise post is fine;
+  - when the content benefits from context/detail, it may exceed 280;
+  - do not pad/fill merely because Premium permits longer posts.
+- Existing content safety, dedupe, topic, hashtag and account checks remain unchanged.
+- Character count should still be measured/reported for diagnostics; only the finite ceiling disappears.
+
+## Scope
+
+Expected files:
+- `supabase/functions/_shared/brand/brand_profiles.ts`
+- `supabase/functions/_shared/brand/brand_profiles_test.ts`
+- `supabase/functions/_shared/brand/brand_post_generator_test.ts`
+- `supabase/functions/_shared/brand/brand_post_dispatch_guard_test.ts`
+
+Do not change the generic length-policy implementation unless strictly necessary; it already supports `UNLIMITED_POST_LENGTH`.
+
+Do not change:
+- POSTONA / `social_mobile_user_v1` length behavior;
+- Kabumori X length behavior;
+- x-test-post report/morning/useful-tip length contracts;
+- PR #109 topic pool / 74 seeds / Tier ordering;
+- PR #109 B1/B2/B3 migration correction;
+- scheduler/posting windows;
+- X OAuth/Vault/Auth/common-account/provider logic.
+
+## Mandatory tests
+
+Update the old AI Lab 280-limit tests to prove the new user policy:
+1. AI Lab profile is explicitly `UNLIMITED_POST_LENGTH`.
+2. generation prompt no longer says `280文字以内`; it communicates no hard ceiling and natural-length guidance.
+3. generator accepts >280 text (use at least one 600+ code-point fixture) and returns correct `characterCount`.
+4. final AI Lab dispatch guard accepts >280 text and still returns the measured character count.
+5. account mismatch / wrong post type / other existing dispatch safety checks remain unchanged.
+6. POSTONA/general-user and Kabumori profile length behavior is unchanged.
+7. no source/test assertion anywhere in AI Lab path still requires max 280.
+
+Run:
+- focused profile/generator/dispatch tests;
+- relevant AI Lab/shared brand suite;
+- PR #109 existing topic/migration tests as a smoke regression (do not need to redo every expensive PostgreSQL adverse runner if source bytes of migration are unchanged, but verify migration files remain byte-identical to accepted security head);
+- deno check/lint;
+- git diff --check;
+- added-line secret scan.
+
+## PR / freshness
+
+- Keep using existing PR #109.
+- Require `7c3c06d07c32910472185e1c94b04fa1aab794f5` in PR history.
+- Fresh-fetch origin/main before editing and before push.
+- Re-check G2/G4/G5 overlap.
+- Do not alter migration/security files except for conflict-free merge resolution if absolutely necessary; if their bytes change, STOP and report before push.
+- No production access/write/apply/deploy/scheduler/OpenAI/X call.
+
+## Completion
+
+Update PR #109 and report:
+- new exact head;
+- exact files changed for length policy;
+- proof that prior B1/B2/B3 migration bytes are unchanged from `7c3c06d0`;
+- >280 generation + dispatch results;
+- focused/full relevant test counts;
+- fresh-main overlap;
+- production mutation/deploy/merge = 0.
+
+Then:
+- status: review_required
+- next_owner: chatgpt
+- STOP for K3.
+
+After this K3, assign one exact-head Codex rereview covering:
+- previously corrected B1/B2/B3 migration guards;
+- this small AI Lab unlimited-length policy delta only.
+
+
+---
+
+# Previous G3 task — preserved history
+
+# Claude Task 3 — CURRENT TASK
+
+- task_id: ai-lab-topic-continuity-pr109-security-corrective-20261007
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Opus5.5（高）
 - type: bounded migration/security corrective on existing PR #109
@@ -192,6 +319,102 @@ Then:
 
 A second focused exact-head Codex rereview is required after this correction.
 
+
+## Report — ai-lab-topic-continuity-pr109-security-corrective-20261007
+
+- result: **PASS candidate** — B1・B2・B3 を capacity migration の preflight で fail closed にした。PR #109 を更新し、open のまま（GitHub: MERGEABLE）。本番の読み書き 0 / migration 適用 0 / deploy 0 / merge 0 / scheduler 0 / OpenAI・X 0。
+- PR #109 head: 旧（レビュー対象）`f83247ae1024d4220dfbfa5484c725381d63815d` → **新 `7c3c06d07c32910472185e1c94b04fa1aab794f5`**。内訳は最新 main の通常 merge `46b3ce5b` と修正コミット 1 つ。rebase / force-push はしていない。
+- CI: Vercel だけ「Deployment rate limited — retry in 24 hours」（アカウント全体の制限で、以前から同じ）。コードとは無関係。
+- worktree: 既存の `/Users/yuya/Developer/kabumori-g3-ai-lab-continuity`。作業開始時に clean で、レビュー対象の head と一致していることを確認した。
+
+### 修正の要約
+いずれも `claim_ai_lab_topic` を置き換える前に評価する。1 つでも外れればファイル全体を取り消し、何も直さない。
+
+- **B1（SET ROLE の経路）**
+  - `pg_auth_members` を、anon / authenticated / service_role から再帰的にたどる。
+  - 各辺の INHERIT / SET のオプションは問わず、「経路があれば届く」とみなす（PG16 以降の辺ごとの意味にも保守的に対応）。
+  - anon / authenticated から次のどれかに届けば拒否する: owner、superuser、service_role、5 つの lifecycle 関数のどれかを実行できるロール、表に何らかの権限（列単位を含む）を持つロール。
+  - service_role から owner / superuser に届く場合も拒否する。
+  - 既存の owner メンバーシップの検査は維持した。ロールの付け外しは一切しない。
+- **B2（前提の表の形）**
+  - 20261004090000 の正本の定義を作る関数と、形を比べる関数を **そのままの文字で写し**、pg_temp に正本を作って比較する。
+  - 比較の対象: 列・型・NOT NULL・既定値・PK・CHECK の全文・インデックス（キー・述語・一意性・valid / ready / live）・RLS / FORCE・ポリシー数・トリガー数・列 ACL の数。
+  - 加えて、表の明示 ACL は owner のみであること、API ロールが実効権限（列単位・継承・PUBLIC を含む）を持たないことも確認する。
+  - 以前の弱い部分一致の CHECK 検査は削除した。この migration は表を変えないので、「容量修正前の正しい形」と「再適用時の正しい形」は同じものになる。
+- **B3（変更しない 4 関数の中身）**
+  - start / release / mark ambiguous / settle の 4 関数について、次をすべて承認済みの値と照合する: 引数（名前・順序・型）、戻り値、plpgsql、SECURITY DEFINER、`search_path=""`、volatility、STRICT でないこと、owner、直接 ACL（owner と service_role の再付与なし EXECUTE 1 件だけ）、**`md5(prosrc)`**。
+  - `prosrc` は `$$`〜`$$` の間の文字列がそのまま保存されるので、PostgreSQL のバージョンで変わらない。
+  - claim は「容量修正前の本体 `a3cbe667…`」か「この migration の本体 `9aefd06d…`」（再適用時）だけを受け付ける。
+  - 置き換えた後の事後条件でも、新しい本体の md5 を固定した。4 関数は書き換えていない。
+  - Deno のテストが、期待する md5 を 2 つの migration のソースから計算し直して一致を確認する。
+
+### 異常系の結果（`supabase/tests/ai_lab_topic_capacity_adverse_run.sh`、PG 17）
+次の **13 件はすべて拒否** された。どの場合も、カタログの指紋（public の関数の本体と ACL、表の ACL / RLS、列 ACL、制約、インデックスの定義と valid / ready）が適用前と完全に同じで、claim の本体も容量修正前のままだった。
+
+- B1:
+  1. `anon -> service_role` を INHERIT FALSE / SET TRUE で付与（anon は直接 EXECUTE できないことも確認したうえで）
+  2. `authenticated -> bridge -> service_role` を、SET の経路で付与
+  3. 通常の INHERIT TRUE で `authenticated -> service_role`
+  - 健全なロール構成は受け付ける（下の健全な場合）。ロールの変更は各ケースの直後と終了時に元に戻し、残っていないことを確認した。
+- B2:
+  4. PK を削除
+  5. 日記の有効性を守る一意インデックスを削除
+  6. RLS を無効化
+  7. event_key の CHECK を、同じ文字列を含むが中身のない式（`… or true`）に置き換え
+  8. 一意インデックスの述語を変更
+  9. インデックスを invalid にする
+  10. 表への SELECT の付与
+  11. 列単位の SELECT の付与
+- B3:
+  12. `start_ai_lab_topic_provider` を、同じシグネチャ・owner・戻り値・security・search_path・ACL のまま、本体だけ `return true` にする
+  13. claim の本体が未知のもの
+- 修正前（`f83247ae`）の migration に同じ runner を当てると、最初のケース（B1）で「適用されてしまった」として失敗する。テストが指摘された問題を検出できることを確認した。
+
+### 健全な場合の適用と再適用
+- 健全な場合: 適用でき、claim の本体は `9aefd06d…` になる。再適用もできる。4 関数の本体は template と同じ（書き換えられていない）。
+- `ai_lab_topic_capacity_run.sh` もすべて PASS:
+  - 20261004090000 がない状態での適用は拒否され、何も作られない
+  - 適用と再適用ができる
+  - 実効 ACL は変わらない
+  - 129 件以上の候補と、対応表にない seed は拒否される
+
+### 容量の結果（変更なし）
+- 本物の SQL で 14 日 × 10 投稿 / 日 = **140/140**。72 時間・48 時間のクールダウンも守られ、61 種類の seed が使われた。
+- 旧来の 7 件は 1 日目で尽きる（10 枠中 6 件確保、4 件が題材切れ）。
+- TS のシミュレーションも合格: 本番どおり / 0 で固定 / 偏ったローテーション、28 日間、7 件に 1 件が結果不明になる場合。
+
+### 承認済みの題材ファイルの安定性
+- `ai_lab_dev_diary_context.ts` は `f83247ae` から **1 バイトも変えていない**（git diff 0）。
+- 次も変えていない: 74 件の seed、0〜6 番、タグ、Tier の順番、x-test-post、brand post store、provider outcome、scheduler。
+
+### 変更ファイル
+- `supabase/migrations/20261007173000_ai_lab_topic_evergreen_capacity.sql`（B1 / B2 / B3 の preflight と、claim 本体の事後条件。claim の本体は変更なし = md5 `9aefd06d…` のまま）
+- `supabase/tests/ai_lab_topic_capacity_adverse_run.sh`（新規）
+- `supabase/functions/_shared/brand/ai_lab_event_dedupe_test.ts`（B1〜B3 の静的テストを追加。既存の migration テストは、pg_temp で写した部分だけを除外して判定するように直した）
+
+### テスト
+- 異常系 13/13 の拒否と、健全な場合の適用・再適用。
+- 容量の実証はすべて PASS（140/140）。既存の claim の実証も 132 件すべて PASS。
+- Deno: x-test-post + _shared + migration の不変条件で 1019/1019（74 件の TS / SQL の対応表の一致、期待する md5 をソースから再計算した一致を含む）。
+- 変異確認:
+  - 期待する md5 を 1 文字変えると、Deno のテストが失敗する
+  - 修正前の migration だと、異常系の runner が失敗する
+- `deno check` / `deno lint` クリーン、shell の構文 OK、`git diff --check` クリーン、追加行の秘密情報スキャン 0。
+
+### 最新 main との重なり
+- 作業前と push 前に最新の main を取得した。
+- 変更ファイルは main 側で変更されていない。
+- open な PR（#106 G4 / #33 / #11 / #10 / #3）とも重なりはない。
+- G2 / G4 / G5 のファイルには触れていない。
+
+### 本番・ゲート
+本番へのアクセス・書き込み・適用・deploy・scheduler・OpenAI・X はすべて 0。merge 0。
+
+### 次
+- TASK のとおり、**この修正の head（`7c3c06d0`）に対して、Codex の集中再レビューを 1 回**。
+- 本番に適用する順番は前回と同じ（preflight → migration `20261007173000` を単体で適用して読み戻し → x-test-post の deploy）。
+- 本番の preflight では、本番のロール構成でこの B1 の検査が通ることも確認する（2026-10-05 の読み取りでは、anon / authenticated / service_role から外向きのメンバーシップは無かった）。
+- status → review_required / next_owner → chatgpt。STOP。
 
 ---
 

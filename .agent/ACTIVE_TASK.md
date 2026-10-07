@@ -75,20 +75,20 @@
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Canonical delivery-first market-report calibration. X is Premium; legacy short length is advisory only. Objective errors should be removed at smallest-unit granularity and remaining coherent content delivered; whole-report failure is last resort. Deterministic AI disclaimer required on X/App. IMPORTANT: user will not start G2 until after the 16:35 JST natural retry is complete and checked.
-- recommended_model: Opus5.5（高）
+- allocation: K2 PASS_CANDIDATE for the delivery-first core, with one bounded corrective before review: PR #110 must make the agreed AI disclaimer actually visible once on the app report-detail screen, not only inside the backend app_story payload. Update existing PR #110 only; presentation/source tests only; no DB/Edge/Cron/gate/deploy/EAS/production mutation.
+- recommended_model: Sonnet5（中）
 
 ## Claude G3
 - owner: claude
 - slot: claude-3
 - status: in_progress
-- task_id: ai-lab-topic-continuity-pr109-security-corrective-20261007
+- task_id: ai-lab-premium-length-policy-unlimited-20261007
 - start_code: G3
 - finish_code: K3
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: C1 CHANGES REQUIRED corrective on existing PR #109 only. Preserve accepted 74-topic/Tier2+Tier3/cooldown/capacity behavior; fix migration B1 SET ROLE graph guard, B2 canonical prerequisite table-shape proof, B3 exact unchanged lifecycle-function body proof. Add adverse rollback fixtures. No production/apply/deploy/merge.
-- recommended_model: Opus5.5（高）
+- allocation: Prior PR #109 security corrective is PASS_CANDIDATE at 7c3c06d07c32910472185e1c94b04fa1aab794f5. Before Codex rereview, apply the user's Premium-account policy: AI Lab only must drop its current hard 280-code-point ceiling, use explicit unlimited length, allow >280 when useful, and avoid padding merely to be long. Preserve PR109 topic/capacity and B1-B3 migration bytes. No production/apply/deploy/merge.
+- recommended_model: Sonnet5（高）
 
 ## Claude G4
 - owner: claude
@@ -105,13 +105,13 @@
 - owner: claude
 - slot: claude-5
 - status: ready
-- task_id: common-account-v1-phase2-native-client-validation-20261007
+- task_id: common-account-v1-phase2-real-account-smoke-20261007
 - start_code: G5
 - finish_code: K5
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Phase 2 server migration is APPLIED_PASS. Next validate the merged client on iOS Simulator/local app before any EAS/TestFlight or real self-service mutation. Re-run exact Auth/service-enrollment regressions, verify deployed response contract compatibility, and exercise signed-out/login/session-refresh/sign-out/serviceSession gating on native Simulator. Production service-state mutation, deploy and EAS forbidden.
+- allocation: User explicitly approved one bounded production-authenticated smoke using exactly one existing active Kabumori account. Pre/post aggregate read-back is mandatory. Login -> existing active service-start path -> Home -> same-login token refresh -> sign-out -> same-account re-login -> sign-out. No new enrollment, reactivation, withdrawal/deletion, profile edits, Auth Admin, DB/schema/migration, deploy, EAS, OAuth/Vault/Cron/X/provider changes. Credentials are entered only by the user in the Simulator UI and must never be logged or pasted.
 - recommended_model: Opus5.5（高）
 
 ## Deferred
