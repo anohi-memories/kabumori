@@ -1,3 +1,14 @@
+## K2 — PR #110 PASS_CANDIDATE / one app-visible disclaimer blocker — 2026-10-07
+
+- PR #110 exact reviewed head: `b507a3c5c9e340b5d07e09ef80146edc37f26d83`.
+- core delivery-first behavior is accepted as PASS_CANDIDATE: false-positive 1306/date cases are covered, bad factual units are isolated instead of killing the whole report, Fact advisory/not_run behavior stays within the existing call ceiling, and X Premium length is advisory.
+- reported verification is strong: market-report-analysis 242, personalized 129, data-packet 42, X shared 8, _shared 466; production mutation/deploy/manual invoke = 0.
+- blocker: the new canonical disclaimer exists in the backend app story, but the actual report-detail UI does not render that story. The app still shows its older independent note, so the user's requirement to show the new AI-error/investment-judgment disclaimer on the app is not fully satisfied.
+- corrective assigned back to G2 on the existing PR #110 only: make the agreed disclaimer visibly appear once at the end of the actual report-detail screen, covering both detail and legacy paths, with no duplicate/conflicting disclaimer.
+- recommended Claude model for this bounded UI corrective: **Sonnet5（中）**.
+- after corrected K2, because PR #110 changes Hard Fact / Fact fallback delivery boundaries, route one focused H2 review before merge; recommended Codex model **Sol（高）**.
+- no merge/deploy authorized yet.
+
 ## K4 — corrected POSTONA PR #106 PASS_CANDIDATE / H1 rereview assigned — 2026-10-07
 
 - corrected PR #106 exact head: `a8f313dc72b087ab86482781297848fe6e23bdcc`.
