@@ -1,7 +1,8 @@
 // 会社員AIラボ: 同じ開発イベントを切り口だけ変えて連投しないための「X送信前の確保（claim）」のテスト。
 // 実X投稿・DB・OpenAI呼び出しは一切なし（generate / publish / fetch は全てスタブ）。
 //
-// DB の確保規則（migration 20261004090000_ai_lab_topic_claims.sql）は、下の ClaimDb がそのまま写した
+// DB の確保規則（migration 20261004090000_ai_lab_topic_claims.sql。evergreen 対応表と候補数の上限は
+// 20261007173000_ai_lab_topic_evergreen_capacity.sql で更新）は、下の ClaimDb がそのまま写した
 // インメモリ実装で再現する（RPC へ実際に送られる JSON をそのまま検証する）。実 SQL そのもの（ロック・部分UNIQUE・
 // 正規ペイロード・隔離・publish 時刻起点のクールダウン・ACL/owner/継承・ドリフト拒否・2セッション同時実行）は
 // supabase/tests/ai_lab_topic_claims_run.sh が使い捨ての PostgreSQL で検証する。
@@ -11,7 +12,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  AI_LAB_CONTINUITY_RESERVE_START,
   AI_LAB_EVENT_KEY_PATTERN,
+  AI_LAB_MAX_CLAIM_CANDIDATES,
   type AiLabTopicCandidate,
   buildAiLabTopicCandidates,
   EVERGREEN_THEME_TAGS,
@@ -29,6 +32,7 @@ import {
   createAiLabTopicPort,
 } from "./ai_lab_brand_post_store.ts";
 import { AiLabProviderNoPostError, type AiLabXRequestResult, sendAiLabXPost } from "./ai_lab_provider_outcome.ts";
+import { detectGenericThemes } from "./ai_lab_theme_guard.ts";
 import { fingerprintText } from "./cross_brand_dedupe.ts";
 import { type BrandOperationalSettings, resolveBrandContext } from "./brand_context.ts";
 import { VaultAccountXAuth } from "../../x-test-post/vault_account_auth.ts";
@@ -66,7 +70,7 @@ class ClaimDb {
   /** DB と同じ正規形の検証（全件を先に。1件でも不正なら何も変えずに INVALID_ARGUMENT）。 */
   private validate(candidates: unknown) {
     const invalid = () => new Error("AI_LAB_TOPIC_CLAIM_INVALID_ARGUMENT");
-    if (!Array.isArray(candidates) || candidates.length > 64) throw invalid();
+    if (!Array.isArray(candidates) || candidates.length > 128) throw invalid();
     const seen = new Set<string>();
     for (const c of candidates as Record<string, unknown>[]) {
       if (typeof c !== "object" || c === null || sorted(Object.keys(c)) !== "event_key,kind,theme_tags,unit_key") throw invalid();
@@ -889,7 +893,8 @@ test("(16) evergreen end to end: same seed waits 72h after publish, same theme t
 
 test("(17) H1: evergreen pool exhausted -> the slot is skipped (no claim, no generation, no X); cooldown is never broken", async () => {
   const db = new ClaimDb();
-  EVERGREEN_TOPIC_SEEDS.forEach((_, i) => seedEvergreen(db, i, "published", { claimed: i + 1, published: i + 1 }));
+  // Every seed published within its 72h cooldown (the pool is larger than 72 since 2026-10-07).
+  EVERGREEN_TOPIC_SEEDS.forEach((_, i) => seedEvergreen(db, i, "published", { claimed: (i % 70) + 1, published: (i % 70) + 1 }));
   const d = dispatch(db, 99, candidatesFor("", 0));
   await assert.rejects(d.run, /AI_LAB_TOPIC_POOL_EXHAUSTED/u);
   assert.equal(d.counter.x, 0);
@@ -905,10 +910,10 @@ test("(14)-(17) canonical candidate payloads: forged tags, extra keys, out-of-po
   const bad: Array<[string, unknown]> = [
     ["evergreen-5 with forged empty tags", wire({ kind: "evergreen", event_key: "evergreen-5", unit_key: "evergreen-5", theme_tags: [] })],
     ["extra JSON key", wire({ kind: "evergreen", event_key: "evergreen-2", unit_key: "evergreen-2", theme_tags: [], body: "x" })],
-    ["evergreen outside the pool", wire({ kind: "evergreen", event_key: "evergreen-9", unit_key: "evergreen-9", theme_tags: [] })],
+    ["evergreen outside the pool", wire({ kind: "evergreen", event_key: "evergreen-99", unit_key: "evergreen-99", theme_tags: [] })],
     ["diary unit of another event", wire({ kind: "diary", event_key: OTHER_KEY, unit_key: `${INCIDENT_KEY}#changed`, theme_tags: [] })],
     ["diary with tags", wire({ kind: "diary", event_key: OTHER_KEY, unit_key: `${OTHER_KEY}#changed`, theme_tags: ["ai_trial_error"] })],
-    ["valid then invalid", [{ kind: "evergreen", event_key: "evergreen-2", unit_key: "evergreen-2", theme_tags: [] }, { kind: "evergreen", event_key: "evergreen-9", unit_key: "evergreen-9", theme_tags: [] }]],
+    ["valid then invalid", [{ kind: "evergreen", event_key: "evergreen-2", unit_key: "evergreen-2", theme_tags: [] }, { kind: "evergreen", event_key: "evergreen-99", unit_key: "evergreen-99", theme_tags: [] }]],
   ];
   for (const [label, payload] of bad) {
     assert.throws(() => db.claim(sid(1), payload), /AI_LAB_TOPIC_CLAIM_INVALID_ARGUMENT/u, label);
@@ -918,8 +923,13 @@ test("(14)-(17) canonical candidate payloads: forged tags, extra keys, out-of-po
 
 test("the TS evergreen theme map, the candidate builder and the SQL canonical map are identical", async () => {
   const { readFile } = await import("node:fs/promises");
-  const sql = await readFile(new URL("../../../migrations/20261004090000_ai_lab_topic_claims.sql", import.meta.url), "utf8");
+  // The latest migration that defines the canonical map is the one the DB runs.
+  const sql = await readFile(new URL("../../../migrations/20261007173000_ai_lab_topic_evergreen_capacity.sql", import.meta.url), "utf8");
   const map = JSON.parse(/c_evergreen_tags constant jsonb := '(\{[\s\S]*?\})'::jsonb;/u.exec(sql)![1]) as Record<string, string[]>;
+  // The original seeds keep their index and tags (DB rows refer to seeds by index).
+  const original = await readFile(new URL("../../../migrations/20261004090000_ai_lab_topic_claims.sql", import.meta.url), "utf8");
+  const originalMap = JSON.parse(/c_evergreen_tags constant jsonb := '(\{[\s\S]*?\})'::jsonb;/u.exec(original)![1]) as Record<string, string[]>;
+  for (const [key, tags] of Object.entries(originalMap)) assert.deepEqual(map[key], tags, `${key} kept`);
   assert.deepEqual(Object.keys(map).sort(), EVERGREEN_TOPIC_SEEDS.map((_, i) => `evergreen-${i}`).sort());
   EVERGREEN_TOPIC_SEEDS.forEach((_, i) => {
     assert.deepEqual([...map[`evergreen-${i}`]].sort(), [...EVERGREEN_THEME_TAGS[i]].sort(), `evergreen-${i}`);
@@ -1101,4 +1111,156 @@ test("the real bundled diary: simulated posts over a day use each fresh event at
   }
   assert.equal(new Set(used).size, used.length, used.join(","));
   assert.ok(used.filter((k) => k.startsWith("diary:")).length >= 2);
+});
+
+// ---------------------------------------------------------------------------------------------------
+// 題材プールの容量（2026-10-07 の AI_LAB_TOPIC_POOL_EXHAUSTED 対策）。DB の規則は上の ClaimDb（SQL の写し）。
+// 実 SQL での同じシミュレーションは supabase/tests/ai_lab_topic_claims_run.sh。
+// ---------------------------------------------------------------------------------------------------
+const POSTS_PER_DAY = 10;
+const SLOT_MS = (24 * HOUR) / POSTS_PER_DAY;
+
+/** 日記ゼロで days 日 × 10 投稿/日を回す。ambiguousEvery>0 なら、その間隔で X の結果不明（永久隔離）を混ぜる。 */
+function simulatePool({ days, rotation, ambiguousEvery = 0, markdown = "" }: {
+  days: number;
+  rotation: (slot: number) => number;
+  ambiguousEvery?: number;
+  markdown?: string;
+}) {
+  const db = new ClaimDb();
+  const start = Date.parse("2026-10-08T00:00:00Z");
+  const uses = new Map<string, number[]>();
+  const exhausted: number[] = [];
+  let reserveUses = 0;
+  for (let slot = 0; slot < days * POSTS_PER_DAY; slot += 1) {
+    db.now = start + slot * SLOT_MS;
+    const { candidates } = buildAiLabTopicCandidates({ markdown, now: new Date(db.now), rotationIndex: rotation(slot) });
+    assert.ok(candidates.length <= AI_LAB_MAX_CLAIM_CANDIDATES);
+    const post = sid(500000 + slot);
+    const result = db.claimCandidates(post, candidates);
+    if (!result.claim) {
+      exhausted.push(slot);
+      continue;
+    }
+    const { claimId, eventKey, unitKey } = result.claim;
+    assert.equal(db.start(claimId, post, eventKey), true);
+    if (ambiguousEvery > 0 && slot % ambiguousEvery === ambiguousEvery - 1) {
+      db.ambiguous(claimId, post, eventKey, "X_OUTCOME_UNKNOWN");
+    } else {
+      db.settle(claimId, post, eventKey, unitKey, String(7_000_000 + slot));
+    }
+    uses.set(eventKey, [...(uses.get(eventKey) ?? []), db.now]);
+    if (eventKey.startsWith("evergreen-") && Number(eventKey.split("-")[1]) >= AI_LAB_CONTINUITY_RESERVE_START) reserveUses += 1;
+  }
+  return { exhausted, uses, reserveUses };
+}
+
+test("capacity: no diary, 10 posts/day for 14 days -> every slot claims a topic under the 72h seed / 48h theme cooldowns", () => {
+  for (const [label, rotation] of [
+    ["production-like rotation", (slot: number) => slot],
+    ["rotation stuck at 0", () => 0],
+    ["random-ish rotation", (slot: number) => (slot * 37 + 11) % 97],
+  ] as const) {
+    const { exhausted, uses } = simulatePool({ days: 14, rotation });
+    assert.deepEqual(exhausted, [], `${label}: AI_LAB_TOPIC_POOL_EXHAUSTED at slots ${exhausted.join(",")}`);
+    // Cooldowns really held: no seed twice within 72h, and the load is spread (no seed beyond its cooldown cap).
+    for (const [key, times] of uses) {
+      for (let i = 1; i < times.length; i += 1) assert.ok(times[i] - times[i - 1] >= 72 * HOUR, `${label}: ${key} reused within 72h`);
+      assert.ok(times.length <= Math.ceil((14 * 24) / 72), `${label}: ${key} used ${times.length} times`);
+    }
+    assert.ok(uses.size >= 30, `${label}: only ${uses.size} distinct seeds used`);
+  }
+});
+
+test("capacity: holds for 28 days, and even when 1 in 7 X outcomes stays ambiguous (quarantined for good)", () => {
+  assert.deepEqual(simulatePool({ days: 28, rotation: (slot) => slot }).exhausted, []);
+  assert.deepEqual(simulatePool({ days: 14, rotation: (slot) => slot, ambiguousEvery: 7 }).exhausted, []);
+});
+
+test("capacity: the old 7-seed pool reproduces the production failure (so the simulation measures the real limit)", () => {
+  // With only the seven original seeds the same policy runs dry inside the first day -- the 2026-10-06/07 incident.
+  const original = (rotationIndex: number, now: Date) =>
+    buildAiLabTopicCandidates({ markdown: "", now, rotationIndex }).candidates.filter((c) => Number(c.eventKey.split("-")[1]) < 7);
+  const db = new ClaimDb();
+  const start = Date.parse("2026-10-08T00:00:00Z");
+  let firstExhausted = -1;
+  for (let slot = 0; slot < POSTS_PER_DAY && firstExhausted < 0; slot += 1) {
+    db.now = start + slot * SLOT_MS;
+    const post = sid(600000 + slot);
+    const result = db.claimCandidates(post, original(slot, new Date(db.now)));
+    if (!result.claim) { firstExhausted = slot; break; }
+    db.start(result.claim.claimId, post, result.claim.eventKey);
+    db.settle(result.claim.claimId, post, result.claim.eventKey, result.claim.unitKey, String(8_000_000 + slot));
+  }
+  assert.ok(firstExhausted >= 0 && firstExhausted < POSTS_PER_DAY, `old pool exhausted at slot ${firstExhausted}`);
+});
+
+test("priority: fresh diary first, Tier 2 evergreen next, the Tier 3 continuity reserve always last", () => {
+  for (const rotationIndex of [0, 5, 61, 62, 73, 999]) {
+    const { candidates } = buildAiLabTopicCandidates({ markdown: INCIDENT_EVENT + OTHER_EVENT, now: NOW, rotationIndex });
+    const kinds = candidates.map((c) => (c.kind === "diary" ? "D" : Number(c.eventKey.split("-")[1]) >= AI_LAB_CONTINUITY_RESERVE_START ? "R" : "E"));
+    assert.match(kinds.join(""), /^D+E+R+$/u, `rotation ${rotationIndex}`);
+    assert.equal(kinds.filter((k) => k === "E").length, AI_LAB_CONTINUITY_RESERVE_START);
+    assert.equal(kinds.filter((k) => k === "R").length, EVERGREEN_TOPIC_SEEDS.length - AI_LAB_CONTINUITY_RESERVE_START);
+  }
+  // A diary event is still preferred and still claimable once only.
+  const db = new ClaimDb();
+  const first = db.claimCandidates(sid(700001), candidatesFor(INCIDENT_EVENT));
+  assert.equal(first.claim?.eventKey, INCIDENT_KEY);
+  db.start(first.claim!.claimId, sid(700001), INCIDENT_KEY);
+  db.settle(first.claim!.claimId, sid(700001), INCIDENT_KEY, first.claim!.unitKey, "7000001");
+  const second = db.claimCandidates(sid(700002), candidatesFor(INCIDENT_EVENT));
+  assert.notEqual(second.claim?.eventKey, INCIDENT_KEY);
+  assert.equal(second.claim?.kind, "evergreen");
+});
+
+test("priority: the continuity reserve is used only when every Tier 2 seed is cooling down", () => {
+  const { reserveUses } = simulatePool({ days: 14, rotation: (slot) => slot });
+  assert.equal(reserveUses, 0, "62 Tier 2 seeds cover 10 posts/day on their own");
+  const db = new ClaimDb();
+  for (let i = 0; i < AI_LAB_CONTINUITY_RESERVE_START; i += 1) seedEvergreen(db, i, "published", { claimed: 2, published: 1 });
+  const result = db.claimCandidates(sid(710000), candidatesFor(""));
+  assert.ok(Number(result.claim?.eventKey.split("-")[1]) >= AI_LAB_CONTINUITY_RESERVE_START, "falls back to the reserve");
+});
+
+test("pool: >=60 distinct seeds plus a continuity reserve; new seeds are safe, untagged and never claim recent AI facts", () => {
+  assert.ok(AI_LAB_CONTINUITY_RESERVE_START >= 60, "at least 60 Tier 2 seeds");
+  assert.ok(EVERGREEN_TOPIC_SEEDS.length - AI_LAB_CONTINUITY_RESERVE_START >= 10, "a real continuity reserve");
+  assert.ok(EVERGREEN_TOPIC_SEEDS.length <= 100, "keys stay inside evergreen-0..evergreen-99 (table CHECK)");
+  assert.equal(new Set(EVERGREEN_TOPIC_SEEDS).size, EVERGREEN_TOPIC_SEEDS.length, "no duplicate seed");
+  assert.equal(EVERGREEN_THEME_TAGS.length, EVERGREEN_TOPIC_SEEDS.length);
+  EVERGREEN_TOPIC_SEEDS.forEach((seed, index) => {
+    // Every generic theme a seed's own text implies is tagged, so the DB theme cooldown applies to it.
+    for (const theme of detectGenericThemes(seed)) assert.ok(EVERGREEN_THEME_TAGS[index].includes(theme), `evergreen-${index} implies ${theme}`);
+    if (index < 7) return;
+    assert.deepEqual([...EVERGREEN_THEME_TAGS[index]], [], `evergreen-${index} is untagged`);
+    assert.doesNotMatch(seed, /本日|今日[^少]|発表|リリースされ|達成|最新モデル|ニュース|速報|GPT|Claude|Gemini|\d{4}年/u, `evergreen-${index} claims a concrete fact`);
+    assert.ok(seed.length >= 15 && seed.length <= 60, `evergreen-${index} length`);
+  });
+  // The original seven keep their text and position (DB rows refer to them by index).
+  assert.equal(EVERGREEN_TOPIC_SEEDS[0], "個人開発は「作る」より「直す」時間のほうが長い日が普通にあるという実感");
+  assert.equal(EVERGREEN_TOPIC_SEEDS[6], "小さく進める習慣が、結局いちばん長続きするという話");
+});
+
+test("migration: the new claim_ai_lab_topic differs from 20261004090000 only in the evergreen map and the candidate limit", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const dir = new URL("../../../migrations/", import.meta.url);
+  const body = (file: string) =>
+    readFile(new URL(file, dir), "utf8").then((sql) => {
+      const start = sql.indexOf("create or replace function public.claim_ai_lab_topic(");
+      return sql.slice(start, sql.indexOf("$$;", start) + 3);
+    });
+  const strip = (fn: string) =>
+    fn.replace(/c_evergreen_tags constant jsonb := '\{[\s\S]*?\}'::jsonb;/u, "MAP").replace(/jsonb_array_length\(p_candidates\) > \d+/u, "LIMIT");
+  const before = await body("20261004090000_ai_lab_topic_claims.sql");
+  const after = await body("20261007173000_ai_lab_topic_evergreen_capacity.sql");
+  assert.equal(strip(after), strip(before));
+  assert.match(after, /jsonb_array_length\(p_candidates\) > 128/u);
+  assert.equal(AI_LAB_MAX_CLAIM_CANDIDATES, 128);
+  const sql = await readFile(new URL("20261007173000_ai_lab_topic_evergreen_capacity.sql", dir), "utf8");
+  // Only the claim function is replaced; the ACL postcondition still verifies all five entry points.
+  assert.equal((sql.match(/create or replace function/gu) ?? []).length, 1);
+  assert.match(sql, /grant execute on function public\.claim_ai_lab_topic\(uuid, jsonb, integer\) to service_role;/u);
+  assert.ok(sql.includes("AI_LAB_TOPIC_CLAIMS_ACL") && sql.includes("AI_LAB_TOPIC_CLAIMS_PREFLIGHT"));
+  assert.doesNotMatch(sql, /create table|alter table|drop /iu);
 });
