@@ -1,3 +1,17 @@
+# G5 — Phase 2 production apply of 20261006230000 (user-approved)
+
+- task_id: `common-account-v1-phase2-production-migration-apply-20261007`
+- owner: claude
+- slot: claude-5
+- status: in_progress
+- next_owner: user
+- approval: the user approved the production apply directly in the G5 chat on 2026-10-07 (「承認」), in reply to the READY_FOR_APPROVAL preflight report below.
+- production_mutation_window: **ACTIVE** — 2026-10-07 13:42 JST. G5 owns the production DB write for `20261006230000_common_account_service_start_intent` only. No other slot may open a production DB/Auth/permission window until this is CLOSED.
+- scope: exactly `docs/common-account/phase2-production-apply.md` (PR #104 head `36bea0ae`): read-only `run.sh before` -> Stage A (the single migration file, psql, lock_timeout 5s) -> Stage B read-back -> Stage C one `(version, name)` history row -> final read-back. Nothing else: no backfill, enforcement, deletion, deploy, EAS, Auth/Storage/OAuth/Vault/Cron change or X action.
+- operator: the user runs `bash /Users/yuya/Developer/kabumori-g5-p2prod/.g5-p2-apply/operator.sh apply` (untracked; pins checkout, migration and gate SHA-256; asks the DB password once, never stored or logged). Dry-run on local PostgreSQL: success path ALL PASS, rerun refused at preflight, lock timeout rolled back with nothing committed.
+
+---
+
 # G5 — Phase 2 production migration read-only preflight
 
 - task_id: `common-account-v1-phase2-production-migration-preflight-20261007`
