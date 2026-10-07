@@ -32,14 +32,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: common-account-v1-phase2-session-identity-final-rereview-20261007
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Focused exact-head rereview of PR #95 head 1e8119e1. Verify same-user fresh-session isolation, stable session_id runtime identity, same-session refresh behavior, queued X pre-dispatch cancellation, and R1-R5 regressions. No merge/deploy/production migration apply.
+- allocation: Final C1 accepts H1 CHANGES REQUIRED on PR #95 exact head 1e8119e1. S2 queued-X cancellation is PASS; stable session_id cache/context design and same-session refresh are PASS. One remaining P2 S1-T exists only in Kabumori: after Supabase reports a superseding login/sign-out, AuthProvider defers owner/generation invalidation until setTimeout(0), allowing old A1 readiness to transiently reappear before deferred work runs. H1 free; exact corrected head requires focused Sol（高） rereview.
 - recommended_model: Sol（高）
 
 ## Codex H2
@@ -105,14 +105,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: review_required
+- status: ready
 - task_id: common-account-v1-phase2-service-enrollment-integration-20261006
 - start_code: G5
 - finish_code: K5
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 accepts round-2 corrective as PASS_CANDIDATE on PR #95 exact head 1e8119e12457d9f6fbb8aef86991f44bf46f9cd6. S1/S2 are reported fixed, prior R1-R5 remain green, and product overlap with current main is zero at allocation. Production migration apply/deploy/EAS remain 0. Merge HOLD pending mandatory H1 rereview.
+- allocation: C1 corrective round 3 on existing PR #95. Fix only S1-T in Kabumori AuthProvider: synchronously record/fence the SDK-notified current auth owner/login and invalidate/cancel obsolete enrollment/readiness immediately on changed login/user/sign-out before any deferred task can run. Defer network preparation only. Add render-before-deferred-task regressions for same-user fresh login, different user, and sign-out; every serviceSession must remain null. Preserve same-session refresh single-flight, S2 PASS, session_id cache design, R1-R5, PR94 navigation, and X behavior. No production migration apply/deploy/EAS/Phase3. Mandatory exact-head H1 rereview after correction.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
