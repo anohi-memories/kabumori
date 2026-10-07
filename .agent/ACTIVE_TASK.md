@@ -44,14 +44,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: kabumori-pr110-delivery-first-focused-review-20261007
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Focused exact-head review of PR #110 head 6612b3f1dee5055794137da71697ebe5e07d7419. Review progressive unit sanitization, Hard Fact preservation, Fact advisory/not_run fallback, 10/7 false-positive closure, X Premium/disclaimer behavior, and app-visible disclaimer. No merge/deploy/production access or mutation.
+- allocation: C2 accepted CHANGES REQUIRED on PR #110 head 6612b3f1dee5055794137da71697ebe5e07d7419. B1-B3 are delivery-safety blockers; B4 is Fact-status truthfulness. Returned to G2. H2 free pending a fresh corrected-head review.
 - recommended_model: Sol（高）
 
 ## Claude G1
@@ -69,13 +69,13 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: ready
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 PASS_CANDIDATE at PR #110 head 6612b3f1dee5055794137da71697ebe5e07d7419. App-visible disclaimer blocker is closed. Merge/deploy HOLD pending one focused H2 Sol（高） review of delivery-safety boundaries.
+- allocation: C2 CHANGES REQUIRED corrective on existing PR #110 only. Fix B1 objective Fact contradictions being downgraded to advisory, B2 inline-emoji date/value split, B3 unrelated speculation hedge licensing definite causality, and B4 X consumer falsely recording advisory/not_run as passed. Preserve accepted delivery-first behavior, X Premium/disclaimer, and call/retry ceilings. No merge/deploy/production mutation.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
