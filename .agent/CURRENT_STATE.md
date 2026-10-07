@@ -1,3 +1,10 @@
+## G4 — POSTONA Phase 2a-1 assigned — 2026-10-07
+
+- G4 is ready on `postona-multisocial-phase2a1-provider-domain-foundation-20261007`.
+- Scope is provider-neutral domain foundation only; current X behavior is unchanged.
+- G5-owned common-account files are excluded.
+- Recommended model: **Sonnet5（高）**.
+
 ## Final K5 — PR #95 round-4 Q1 PASS_CANDIDATE / final H1 rereview assigned — 2026-10-07
 
 - exact PR #95 head: `ba35b642d30ce423a8683feffcd26aec325b45ee`.
