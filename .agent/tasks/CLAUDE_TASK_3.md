@@ -1,5 +1,204 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: ai-lab-topic-continuity-pr109-security-corrective-20261007
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: urgent
+- recommended_model: Opus5.5（高）
+- type: bounded migration/security corrective on existing PR #109
+- target_pr: 109
+- reviewed_head: f83247ae1024d4220dfbfa5484c725381d63815d
+- production_mutation_allowed: false
+- deploy_allowed: false
+- merge_allowed: false
+
+## C1 disposition
+
+H1 exact-head review of PR #109 returned **CHANGES REQUIRED**.
+
+Preserve the accepted topic/capacity implementation. Correct **only** the three migration boundary findings B1-B3 and the tests necessary to prove them.
+
+Do not redesign the topic pool, cooldowns, scheduler, provider flow, X handling or AI model policy.
+
+## Accepted evidence — do not reopen without concrete regression
+
+The following is accepted and should remain byte/behavior stable except where a narrow test hook is unavoidable:
+- 74 total evergreen seeds.
+- evergreen-0..6 identities/text/tags preserved.
+- Tier 2 diverse evergreen + Tier 3 reserve ordering.
+- recent dev diary remains first.
+- Tier 3 remains last priority.
+- no Web Search dependency for fallback.
+- no fabricated specific current-AI/news claims.
+- same-seed 72h cooldown unchanged.
+- tagged-theme 48h cooldown unchanged.
+- unresolved claimed/provider_started/ambiguous blocking unchanged.
+- event-level dedupe/fencing unchanged.
+- cross-brand fingerprint/content guards unchanged.
+- provider outcome / ambiguous no-resend unchanged.
+- candidate limit target 128 is acceptable in principle.
+- exact TS/SQL 74-entry map parity is accepted.
+- real SQL 14 days x 10/day = 140/140, fixed/skewed rotation 140/140 accepted.
+- old seven-seed pool exhaustion reproduction accepted.
+- migration-first then x-test-post-deploy order accepted.
+
+## Blocking B1 — fail closed on SET ROLE paths to service_role
+
+Current reviewed migration checks direct/inherited effective privileges but misses role memberships that allow:
+- direct `anon -> service_role` with `INHERIT FALSE, SET TRUE`;
+- indirect `authenticated -> bridge -> service_role` with SET ROLE capability.
+
+Required correction:
+- before replacing the claim function, detect and reject **direct and transitive** API-role paths that can `SET ROLE` into `service_role` or another privileged target that would gain claim execution.
+- retain existing owner-membership checks.
+- support PostgreSQL 16+ per-edge membership semantics; where exact edge semantics are unavailable, fail conservatively rather than assuming safety.
+- do not auto-revoke or repair role membership.
+- transaction must rollback fully on detection; no function/body/ACL change may persist.
+
+Required adverse fixtures:
+1. anon -> service_role, INHERIT FALSE / SET TRUE.
+2. authenticated -> intermediate role -> service_role, SET TRUE path.
+3. existing ordinary INHERIT TRUE privilege path remains rejected.
+4. healthy role graph remains accepted.
+5. rollback/no-definition-change assertion for each rejected case.
+
+## Blocking B2 — prerequisite table canonical-shape proof
+
+Current preflight is too weak: object existence + substring CHECK can accept drift.
+
+Before `CREATE OR REPLACE FUNCTION`, validate the prerequisite `ai_lab_topic_claims` shape as canonical.
+
+At minimum prove:
+- expected columns, data types, nullability/defaults;
+- primary key;
+- event_key and other required CHECK semantics, not substring matching;
+- required unique/index definitions including key columns, predicates, uniqueness, validity/readiness;
+- RLS enabled/forced state as expected;
+- policies/triggers expected by the accepted base;
+- table owner;
+- explicit/effective table + column ACL boundary;
+- no unexpected conflicting object shape relevant to claim safety.
+
+Accepted states:
+- canonical pre-capacity base state from `20261004090000`;
+- canonical already-capacity state for idempotent reapply.
+
+Reject unknown drift. Do not mutate/repair the table, RLS, policies, indexes or ACLs in this migration.
+
+Required adverse fixtures against the **capacity migration itself**:
+- missing PK;
+- missing diary active unique index;
+- RLS disabled;
+- vacuous/replaced event-key CHECK that only contains matching text;
+- at least one wrong index predicate/key/validity fixture;
+- unexpected table/column ACL drift.
+All must fail before function replacement and rollback cleanly.
+
+## Blocking B3 — verify unchanged lifecycle function bodies, not metadata only
+
+The capacity migration replaces only `claim_ai_lab_topic`, but currently accepts body drift in companion functions such as `start_ai_lab_topic_provider`.
+
+Required correction:
+- preflight exact approved definitions/contracts for the four unchanged lifecycle functions:
+  - start provider
+  - release claim
+  - mark ambiguous
+  - settle published
+- check signature, argument names/order/types where contract-sensitive, language, return type, SECURITY DEFINER, search_path, owner/ACL **and normalized body definition**.
+- also recognize the approved old claim definition before first apply and approved new claim definition for idempotent reapply.
+- unknown body/contract drift must abort before replacement.
+- do **not** rewrite those four companion functions.
+
+Required adverse fixture:
+- replace `start_ai_lab_topic_provider` with same signature/owner/return/security/search_path/ACL but body `RETURN true` without state transition.
+- applying capacity migration must fail and rollback with claim function unchanged.
+- add one positive healthy companion-definition control.
+
+Use a deterministic normalization/fingerprint approach that is stable enough for the supported PostgreSQL versions and documented in tests. Do not trust only function metadata.
+
+## Scope
+
+Keep working on existing PR #109; do not open a replacement PR unless technically unavoidable.
+
+Expected changed files:
+- `supabase/migrations/20261007173000_ai_lab_topic_evergreen_capacity.sql`
+- `supabase/tests/ai_lab_topic_capacity_run.sh`
+- focused migration/adversarial/static tests as needed
+- existing invariant test only if required.
+
+Avoid changing:
+- `EVERGREEN_TOPIC_SEEDS` content/count/order unless a concrete regression forces it;
+- `EVERGREEN_THEME_TAGS`;
+- Tier ordering;
+- x-test-post runtime;
+- brand post store;
+- provider outcome;
+- scheduler/posting windows;
+- G2/G4/G5-owned files;
+- Auth/OAuth/Vault/X provider boundaries.
+
+## Mandatory verification
+
+Re-run:
+- all new B1/B2/B3 adverse fixtures;
+- healthy apply + reapply;
+- 74-entry TS/SQL parity;
+- 129-candidate/unknown-seed rejection;
+- old 7-seed exhaustion;
+- real SQL >=14 days x 10/day = 140/140;
+- fixed and skewed rotation capacity;
+- existing claim proof;
+- migration source invariants;
+- relevant Deno AI Lab suites;
+- explicit `deno check` / lint for changed TS tests;
+- `git diff --check`;
+- added-line secret scan.
+
+Mutation-style expectation:
+- each adverse drift must cause migration failure;
+- no partial definition/ACL/table mutation after failure.
+
+## Freshness / isolation
+
+1. Read ORCHESTRATION / ACTIVE_TASK / CURRENT_STATE / this TASK / H1 Report.
+2. Use the existing isolated G3 PR109 worktree only if still clean/safe; otherwise make a new independent G3 worktree from fresh `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #109.
+4. Require reviewed head `f83247ae1024d4220dfbfa5484c725381d63815d` in PR history.
+5. Re-check G2/G4/G5 overlap before editing and before push.
+6. No production access/write/apply/deploy/scheduler/OpenAI/X call.
+
+## Completion
+
+Update the existing PR #109.
+
+Report:
+- exact new PR head;
+- B1/B2/B3 fix summary;
+- adverse fixture results;
+- healthy apply/reapply;
+- capacity result still 140/140;
+- accepted topic files byte/semantic stability;
+- changed_files;
+- tests;
+- fresh-main overlap;
+- production mutation/deploy/merge = 0.
+
+Then:
+- status: review_required
+- next_owner: chatgpt
+- STOP for K3.
+
+A second focused exact-head Codex rereview is required after this correction.
+
+
+---
+
+# Previous G3 task — preserved history
+
+# Claude Task 3 — CURRENT TASK
+
 - task_id: ai-lab-topic-continuity-fix-20261007
 - owner: claude
 - slot: claude-3
