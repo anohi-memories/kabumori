@@ -1,3 +1,32 @@
+## AI model-management scope clarified — Kabumori only / POSTONA excluded — 2026-10-07
+
+- user clarification: the upcoming GPT-6-family migration and model-management foundation in G2 is **Kabumori scope only**.
+- G2 may change AI used for:
+  - Kabumori app market-report generation;
+  - Kabumori shared morning/close report text;
+  - Kabumori X morning/close report posting text generated from that shared market-report path;
+  - Kabumori-side Fact checking / report-quality checks that belong to the same market-report pipeline.
+- G2 must **not** change or centrally absorb AI owned by the POSTONA/X-auto-post application.
+- Explicitly excluded from this G2:
+  - POSTONA generic post generation;
+  - POSTONA AI consultation/persona-memory generation;
+  - POSTONA social-mobile/user-brand generation;
+  - POSTONA multi-social generation;
+  - company AI Lab / generic X-autopost model routing when owned by G3/G4;
+  - any G3-managed POSTONA model registry/configuration.
+- G3 remains the source of truth for POSTONA AI model management and its own migration work.
+- Therefore the first model registry/foundation created by G2 must be **Kabumori-namespaced**, not a repo-wide registry that takes ownership of POSTONA.
+- preferred initial shape:
+  - e.g. `supabase/functions/_shared/kabumori_ai_models.ts` or equivalent Kabumori-specific namespace;
+  - logical roles such as `kabumori.market_report.generate`, `kabumori.market_report.fact`, and other Kabumori-owned AI workloads only;
+  - static guard should prohibit new scattered raw model literals inside the Kabumori-owned scope, not fail POSTONA/G3-managed files merely because they use their own model registry.
+- first migration target remains:
+  - Kabumori market-report generation -> `gpt-6.1-sol`;
+  - Kabumori market-report Fact -> `gpt-6.1-sol`;
+  - other Kabumori-owned high-volume Luna workloads may move from 5.6 Luna to `gpt-6-luna` only after inventory/classification.
+- do not touch G3/G4 POSTONA files, TASKs, model IDs, registry, prompts, tests or deploy paths as part of the Kabumori G2 migration.
+- recommended Claude model for the later Kabumori model-management implementation: **Opus5.5（高）**.
+
 ## AI model management decision — central registry required — 2026-10-07
 
 - user decision: OpenAI model generations/pricing are expected to change frequently, so future model upgrades must be much easier to inspect and change than today's per-function literal model IDs.
