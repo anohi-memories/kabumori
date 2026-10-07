@@ -35,6 +35,18 @@ function SignedInNavigator() {
       <Stack.Screen name="topic-detail" />
       <Stack.Screen name="topics" />
       <Stack.Screen name="news-detail" />
+      <Stack.Screen name="report-detail"
+        options={{
+          headerShown: true,
+          title: 'レポート',
+          headerBackTitle: '戻る',
+          headerTintColor: KABUMORI_COLORS.light.accent,
+          headerTitleStyle: { color: KABUMORI_COLORS.light.text, fontWeight: '800' },
+          headerStyle: { backgroundColor: KABUMORI_COLORS.light.background },
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: KABUMORI_COLORS.light.background },
+        }}
+      />
       <Stack.Screen name="settings" />
       <Stack.Screen name="ai" />
       <Stack.Screen name="search" />

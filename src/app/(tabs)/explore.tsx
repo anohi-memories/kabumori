@@ -1,332 +1,241 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { HoldingsHeader, HoldingsList } from '@/components/portfolio/holdings-section';
+import {
+  AiSummaryCard,
+  AskAiCta,
+  AssetSummaryCard,
+  ImpactCard,
+  PortfolioHeader,
+} from '@/components/portfolio/portfolio-sections';
+import { PF, toneColor } from '@/components/portfolio/portfolio-theme';
+import { StockAvatar } from '@/components/portfolio/stock-avatar';
 import { TrackedStockEditor } from '@/components/tracked-stock-editor';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
-import { authErrorMessage, signOut } from '@/lib/auth';
-import { StockMaster, TrackedStock } from '@/lib/stocks';
-import { PortfolioSummary } from '@/components/portfolio-summary';
-import { stockScreenMode } from '@/lib/stock-search';
+import { todayJst } from '@/lib/dashboard';
+import { fetchRecentReports } from '@/lib/personalized-reports';
 import {
-  defaultStockSection,
-  partitionTrackedStocks,
-  stockSectionEmptyMessage,
-  stockSectionLabel,
-  type StockSection,
-} from '@/lib/stock-sections';
+  aiSummary,
+  assetSummary,
+  buildHoldingRows,
+  buildWatchRows,
+  formatPriceYen,
+  formatSignedPercent,
+  portfolioBasis,
+  portfolioLabels,
+  sparklineValues,
+  tone,
+  topImpacts,
+} from '@/lib/portfolio-view';
+import { dataGapNotes, latestCloseReport, type PersonalizedReport } from '@/lib/report-presentation';
+import type { TrackedStock } from '@/lib/stocks';
 import { supabase } from '@/lib/supabase';
 
 const colors = KABUMORI_COLORS.light;
-const positionLabels = { cash: '現物', margin: '信用', long: '買い', short: '売り' } as const;
+// The tab bar already sits below this scroll area, so only a calm gap is needed under the last block.
+const BOTTOM_SPACE = 28;
 
-export default function TrackedStocksScreen() {
-  const { focus } = useLocalSearchParams<{ focus?: string }>();
-  const searchInput = useRef<TextInput>(null);
-  const requestId = useRef(0);
+// The 銘柄 tab: the canonical portfolio dashboard (summary, AI overview, impact top 3, holdings) with a
+// Watchlist subview. Every figure comes from the latest SAVED close report -- no live quotes -- joined to the
+// user's CURRENT registrations (tracked_stocks), which stay editable through the existing editor. Search is its
+// own screen (/search). Holdings, watch stocks and the report load independently, so a failed report never
+// hides the registrations (and vice versa).
+export default function PortfolioScreen() {
+  const [view, setView] = useState<'portfolio' | 'watchlist'>('portfolio');
   const [items, setItems] = useState<TrackedStock[]>([]);
-  const [selectedStock, setSelectedStock] = useState<StockMaster | null>(null);
-  const [selectedTracked, setSelectedTracked] = useState<TrackedStock | null>(null);
-  const [section, setSection] = useState<StockSection>('holding');
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<StockMaster[]>([]);
-  const [registeredIds, setRegisteredIds] = useState<Set<string>>(new Set());
+  const [reports, setReports] = useState<PersonalizedReport[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchLoading, setSearchLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const [searchMessage, setSearchMessage] = useState('銘柄コードまたは会社名を入力してください。');
+  const [reportError, setReportError] = useState(false);
+  const [selected, setSelected] = useState<TrackedStock | null>(null);
+  // The pull-to-refresh spinner follows a pull only, not the reload on tab focus.
+  const [pulling, setPulling] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setMessage('');
+    const reportsPromise = fetchRecentReports(20)
+      .then((next) => {
+        setReports(next);
+        setReportError(false);
+      })
+      .catch(() => setReportError(true));
     const { data: authData, error: authError } = await supabase.auth.getUser();
     if (authError || !authData.user) {
       setItems([]);
-      setLoading(false);
       setMessage('一覧を見るにはログインが必要です。');
-      return;
-    }
-    const { data, error } = await supabase
-      .from('tracked_stocks')
-      .select('id,user_id,stock_id,tracking_type,quantity,average_price,position_type,side,target_buy_price,target_sell_price,memo,stocks_master!inner(id,ticker_code,company_name,market)')
-      .eq('user_id', authData.user.id)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
-    if (error) {
-      setItems([]);
-      setMessage('一覧を読み込めませんでした。');
     } else {
-      const nextItems = (data ?? []) as unknown as TrackedStock[];
-      setItems(nextItems);
-      setSection((current) => nextItems.length === 0 ? 'holding' : current === 'holding' && nextItems.some((item) => item.tracking_type === 'holding')
-        ? current
-        : current === 'watch' && nextItems.some((item) => item.tracking_type === 'watch')
-        ? current
-        : defaultStockSection(nextItems));
-      setMessage('');
+      const { data, error } = await supabase
+        .from('tracked_stocks')
+        .select('id,user_id,stock_id,tracking_type,quantity,average_price,position_type,side,target_buy_price,target_sell_price,memo,stocks_master!inner(id,ticker_code,company_name,market)')
+        .eq('user_id', authData.user.id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+      if (error) {
+        setItems([]);
+        setMessage('一覧を読み込めませんでした。');
+      } else {
+        setItems((data ?? []) as unknown as TrackedStock[]);
+      }
     }
+    await reportsPromise;
     setLoading(false);
   }, []);
 
-  async function search(term: string) {
-    const currentRequest = ++requestId.current;
-    setSearchLoading(true);
-    setSearchMessage('');
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (currentRequest !== requestId.current) return;
-    if (authError || !authData.user) {
-      setResults([]);
-      setSearchLoading(false);
-      setSearchMessage('検索するにはログインが必要です。');
-      return;
-    }
-
-    const escaped = term.replace(/[,%()]/g, ' ').trim();
-    const { data, error } = await supabase
-      .from('stocks_master')
-      .select('id,ticker_code,company_name,market')
-      .eq('is_listed', true)
-      .or(`ticker_code.ilike.%${escaped}%,company_name.ilike.%${escaped}%`)
-      .order('ticker_code')
-      .limit(30);
-    if (currentRequest !== requestId.current) return;
-    if (error) {
-      setResults([]);
-      setSearchLoading(false);
-      setSearchMessage('検索できませんでした。');
-      return;
-    }
-
-    const stocks = (data ?? []) as StockMaster[];
-    setResults(stocks);
-    if (stocks.length) {
-      const { data: tracked, error: trackedError } = await supabase
-        .from('tracked_stocks')
-        .select('stock_id')
-        .eq('user_id', authData.user.id)
-        .in('stock_id', stocks.map((stock) => stock.id));
-      if (currentRequest !== requestId.current) return;
-      setRegisteredIds(new Set((tracked ?? []).map((item) => item.stock_id as string)));
-      if (trackedError) setSearchMessage('登録状況を確認できませんでした。');
-    } else {
-      setRegisteredIds(new Set());
-    }
-    setSearchLoading(false);
-    if (!stocks.length) setSearchMessage('該当する銘柄が見つかりませんでした。');
-  }
-
-  useEffect(() => {
-    const term = query.trim();
-    if (!term) {
-      requestId.current += 1;
-      setResults([]);
-      setRegisteredIds(new Set());
-      setSearchLoading(false);
-      setSearchMessage('銘柄コードまたは会社名を入力してください。');
-      return;
-    }
-    const timer = setTimeout(() => void search(term), 350);
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  useEffect(() => {
-    if (focus !== 'search') return undefined;
-    const timer = setTimeout(() => searchInput.current?.focus(), 120);
-    return () => clearTimeout(timer);
-  }, [focus]);
-
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
-  async function logOut() {
-    try {
-      await signOut();
-    } catch (error) {
-      Alert.alert('ログアウト失敗', authErrorMessage(error));
-    }
-  }
+  const today = todayJst();
+  const report = useMemo(() => latestCloseReport(reports), [reports]);
+  const basis = useMemo(() => portfolioBasis(report, today), [report, today]);
+  const labels = portfolioLabels(basis);
+  const summary = assetSummary(basis?.snapshot ?? null);
+  const spark = useMemo(() => sparklineValues(reports), [reports]);
+  const impacts = useMemo(() => topImpacts(basis?.snapshot ?? null), [basis]);
+  const overview = aiSummary(basis);
+  const holdings = useMemo(() => buildHoldingRows(items, report), [items, report]);
+  const watch = useMemo(() => buildWatchRows(items, report), [items, report]);
+  const notes = dataGapNotes(basis?.snapshot ?? null);
 
-  const searchMode = stockScreenMode(query) === 'search';
-  const selected = selectedTracked ?? selectedStock;
-  const sections = partitionTrackedStocks(items);
-  const sectionItems = sections[section];
+  const openTracked = (trackedId: string) => setSelected(items.find((item) => item.id === trackedId) ?? null);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.container}>
-        <View style={styles.headingRow}>
-          <View>
-            <Text style={styles.eyebrow}>MY STOCKS</Text>
-            <Text style={styles.title}>銘柄</Text>
-          </View>
-          <Pressable onPress={() => void logOut()} style={styles.logoutButton} accessibilityRole="button">
-            <Text style={styles.logoutText}>ログアウト</Text>
-          </Pressable>
-        </View>
-        <Text style={styles.description}>ポートフォリオ・ウォッチリストの確認と、銘柄の検索・追加ができます。</Text>
-        <TextInput
-          ref={searchInput}
-          value={query}
-          onChangeText={setQuery}
-          placeholder="銘柄コードまたは会社名（例：8136、サンリオ）"
-          placeholderTextColor={colors.muted}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-          style={styles.searchInput}
-          accessibilityLabel="銘柄コードまたは会社名で検索"
-        />
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={pulling} onRefresh={() => { setPulling(true); void load().finally(() => setPulling(false)); }} tintColor={colors.accent} />}>
+        {view === 'portfolio' ? (
+          <View style={styles.stack}>
+            <PortfolioHeader onWatchlist={() => setView('watchlist')} onSearch={() => router.push('/search')} />
 
-        {searchMode ? (
-          <View style={styles.listArea}>
-            {searchLoading ? <ActivityIndicator color={colors.accent} style={styles.status} /> : null}
-            {!searchLoading && !!searchMessage ? <Text style={styles.message}>{searchMessage}</Text> : null}
-            <FlatList
-              data={results}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.list}
-              keyboardShouldPersistTaps="handled"
-              renderItem={({ item }) => {
-                const registered = registeredIds.has(item.id);
-                return (
-                  <Pressable
-                    onPress={() => { if (!registered) setSelectedStock(item); }}
-                    style={({ pressed }) => [styles.card, pressed && !registered && styles.pressed]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${item.ticker_code} ${item.company_name}`}
-                    accessibilityHint={registered ? '登録済みです' : '保有または監視に登録します'}>
-                    <View style={styles.cardMain}>
-                      <Text style={styles.ticker}>{item.ticker_code}</Text>
-                      <Text style={styles.company}>{item.company_name}</Text>
-                      <Text style={styles.market}>{item.market}</Text>
-                    </View>
-                    <View style={[styles.badge, registered && styles.registeredBadge]}>
-                      <Text style={[styles.badgeText, registered && styles.registeredText]}>{registered ? '登録済み' : '登録する'}</Text>
-                    </View>
+            {loading && !items.length && !reports.length ? <ActivityIndicator color={colors.accent} style={styles.status} /> : null}
+            {!loading && !!message ? <Text style={styles.message}>{message}</Text> : null}
+
+            <AssetSummaryCard summary={summary} labels={labels} spark={spark} hasReport={!!basis} notes={notes} />
+            {reportError ? <Text style={styles.reportError}>レポートのデータを読み込めませんでした。引っ張って更新できます。</Text> : null}
+
+            {overview ? <AiSummaryCard summary={overview} labels={labels} /> : null}
+            {basis && impacts.length > 0 ? <ImpactCard items={impacts} labels={labels} reportId={basis.report.id} /> : null}
+
+            <View style={styles.holdings}>
+              <HoldingsHeader count={holdings.length} />
+              {holdings.length > 0 ? (
+                <HoldingsList rows={holdings} labels={labels} hasReport={!!basis} onOpen={openTracked} />
+              ) : !loading && !message ? (
+                <View style={styles.empty}>
+                  <Text style={styles.emptyText}>保有銘柄はまだありません。検索から銘柄を登録できます。</Text>
+                  <Pressable onPress={() => router.push('/search')} accessibilityRole="button" style={styles.emptyButton}>
+                    <Text style={styles.emptyButtonText}>銘柄を探す</Text>
                   </Pressable>
-                );
-              }}
-            />
+                </View>
+              ) : null}
+            </View>
+
+            <AskAiCta />
           </View>
         ) : (
-          <View style={styles.listArea}>
-            {loading && !items.length ? <ActivityIndicator color={colors.accent} style={styles.status} /> : null}
+          <View style={styles.stack}>
+            <Pressable onPress={() => setView('portfolio')} accessibilityRole="button" accessibilityLabel="ポートフォリオへ戻る" hitSlop={8} style={styles.backLink}>
+              <Text style={styles.backText}>‹ ポートフォリオ</Text>
+            </Pressable>
+            <View style={styles.watchHead}>
+              <View style={styles.watchTitles}>
+                <Text style={styles.eyebrow}>WATCHLIST</Text>
+                <Text style={styles.title}>ウォッチリスト</Text>
+              </View>
+              <Pressable onPress={() => router.push('/search')} accessibilityRole="button" accessibilityLabel="銘柄を検索" style={styles.addButton}>
+                <Text style={styles.addText}>＋ 追加</Text>
+              </Pressable>
+            </View>
             {!loading && !!message ? <Text style={styles.message}>{message}</Text> : null}
-            {!loading && !message ? (
-              <View style={styles.sectionSwitch} accessibilityRole="tablist">
-                {(['holding', 'watch'] as const).map((candidate) => (
-                  <Pressable
-                    key={candidate}
-                    onPress={() => setSection(candidate)}
-                    style={[styles.sectionButton, section === candidate && styles.sectionButtonActive]}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: section === candidate }}>
-                    <Text style={[styles.sectionButtonText, section === candidate && styles.sectionButtonTextActive]}>
-                      {stockSectionLabel(candidate)} {sections[candidate].length}
-                    </Text>
-                  </Pressable>
-                ))}
+            {watch.length === 0 && !loading && !message ? (
+              <View style={styles.empty}>
+                <Text style={styles.emptyText}>監視銘柄はまだありません。気になる銘柄を検索から登録できます。</Text>
+                <Pressable onPress={() => router.push('/search')} accessibilityRole="button" style={styles.emptyButton}>
+                  <Text style={styles.emptyButtonText}>銘柄を探す</Text>
+                </Pressable>
               </View>
             ) : null}
-            <FlatList
-              data={sectionItems}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.list}
-              ListHeaderComponent={section === 'holding' && !loading && !message ? <PortfolioSummary /> : null}
-              refreshControl={<RefreshControl refreshing={loading && !!items.length} onRefresh={load} tintColor={colors.accent} />}
-              ListEmptyComponent={!loading && !message ? <Text style={styles.message}>{stockSectionEmptyMessage(section)}</Text> : null}
-              renderItem={({ item }) => {
-                const holding = item.tracking_type === 'holding';
+            <View style={styles.watchList}>
+              {watch.map((row) => {
+                const change = tone(row.changePercent);
+                const { target_buy_price: buy, target_sell_price: sell } = row.tracked;
                 return (
-                  <Pressable onPress={() => setSelectedTracked(item)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
-                    <View style={styles.topRow}>
-                      <View style={[styles.typeBadge, holding ? styles.holdingBadge : styles.watchBadge]}>
-                        <Text style={[styles.typeText, holding ? styles.holdingText : styles.watchText]}>{holding ? '保有' : '監視'}</Text>
-                      </View>
-                      <Text style={styles.ticker}>{item.stocks_master.ticker_code}</Text>
-                      <Text style={styles.market}>{item.stocks_master.market}</Text>
+                  <Pressable
+                    key={row.tracked.id}
+                    onPress={() => setSelected(row.tracked)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${row.company} ${row.ticker}`}
+                    accessibilityHint="この監視銘柄の情報を編集または削除します"
+                    style={({ pressed }) => [styles.watchCard, pressed && styles.pressed]}>
+                    <StockAvatar label={row.avatar} name={row.company} size={48} />
+                    <View style={styles.watchMain}>
+                      <Text style={styles.watchCompany} numberOfLines={2}>{row.company}</Text>
+                      <Text style={styles.watchTicker}>{row.ticker} ・ {row.tracked.stocks_master.market}</Text>
+                      {buy != null ? <Text style={styles.watchTarget}>買いたい {formatPriceYen(buy)}</Text> : null}
+                      {sell != null ? <Text style={styles.watchTarget}>売りたい {formatPriceYen(sell)}</Text> : null}
                     </View>
-                    <Text style={styles.company}>{item.stocks_master.company_name}</Text>
-                    <View style={styles.details}>
-                      {holding && item.quantity != null && <Text style={styles.detail}>保有株数 {item.quantity.toLocaleString()}</Text>}
-                      {holding && item.average_price != null && <Text style={styles.detail}>平均取得価格 ¥{item.average_price.toLocaleString()}</Text>}
-                      {holding && item.position_type && <Text style={styles.detail}>{positionLabels[item.position_type]}</Text>}
-                      {holding && item.side && <Text style={styles.detail}>{positionLabels[item.side]}</Text>}
-                      {!holding && item.target_buy_price != null && <Text style={styles.detail}>買いたい ¥{item.target_buy_price.toLocaleString()}</Text>}
-                      {!holding && item.target_sell_price != null && <Text style={styles.detail}>売りたい ¥{item.target_sell_price.toLocaleString()}</Text>}
+                    <View style={styles.watchPrice}>
+                      <Text style={styles.watchPriceLabel}>終値</Text>
+                      <Text style={styles.watchPriceValue}>{formatPriceYen(row.close)}</Text>
+                      <Text style={[styles.watchChange, { color: toneColor(change) }]}>{formatSignedPercent(row.changePercent, 1)}</Text>
                     </View>
-                    <Text style={styles.editHint}>タップして編集</Text>
+                    <Text style={styles.chevron}>›</Text>
                   </Pressable>
                 );
-              }}
-            />
+              })}
+            </View>
+            {watch.length > 0 ? <Text style={styles.watchNote}>終値は{labels.basis}（保存済み大引け）です。リアルタイム価格ではありません。</Text> : null}
           </View>
         )}
-      </View>
+      </ScrollView>
+
       <TrackedStockEditor
-        stock={selectedTracked?.stocks_master ?? selectedStock}
-        existing={selectedTracked}
+        stock={selected?.stocks_master ?? null}
+        existing={selected}
         visible={!!selected}
-        onClose={() => { setSelectedTracked(null); setSelectedStock(null); }}
-        onSaved={() => {
-          if (selectedStock) setRegisteredIds((ids) => new Set(ids).add(selectedStock.id));
-          setSelectedTracked(null);
-          setSelectedStock(null);
-          void load();
-        }}
-        onDeleted={() => { setSelectedTracked(null); setSelectedStock(null); void load(); }}
+        onClose={() => setSelected(null)}
+        onSaved={() => { setSelected(null); void load(); }}
+        onDeleted={() => { setSelected(null); void load(); }}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.background },
-  container: { flex: 1, width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 20 },
-  headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  eyebrow: { color: colors.accent, fontWeight: '900', letterSpacing: 2, fontSize: 12 },
-  title: { color: colors.text, fontSize: 30, fontWeight: '900', marginTop: 6 },
-  logoutButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: colors.accentSoft },
-  logoutText: { color: colors.muted, fontSize: 12, fontWeight: '800' },
-  description: { color: colors.muted, fontSize: 15, lineHeight: 22, marginTop: 8, marginBottom: 14 },
-  searchInput: { minHeight: 52, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.inputBorder, borderRadius: 16, paddingHorizontal: 17, fontSize: 16, color: colors.text },
-  listArea: { flex: 1 },
-  status: { marginTop: 28 },
-  message: { color: colors.muted, textAlign: 'center', marginTop: 22, lineHeight: 22 },
-  sectionSwitch: { flexDirection: 'row', backgroundColor: colors.soft, borderRadius: 12, padding: 4, marginTop: 14 },
-  sectionButton: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 9 },
-  sectionButtonActive: { backgroundColor: colors.card, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
-  sectionButtonText: { color: colors.muted, fontWeight: '800', fontSize: 13 },
-  sectionButtonTextActive: { color: colors.accent },
-  list: { paddingTop: 14, paddingBottom: 100, gap: 12 },
-  card: { backgroundColor: colors.card, borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 17 },
-  pressed: { opacity: 0.65 },
-  cardMain: { flex: 1, gap: 3 },
-  topRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  typeBadge: { borderRadius: 99, paddingHorizontal: 10, paddingVertical: 5 },
-  holdingBadge: { backgroundColor: colors.accentSoft },
-  watchBadge: { backgroundColor: colors.warningSoft },
-  typeText: { fontSize: 12, fontWeight: '900' },
-  holdingText: { color: colors.accent },
-  watchText: { color: colors.warningText },
-  ticker: { color: colors.accent, fontWeight: '900', fontSize: 14 },
-  market: { color: colors.muted, fontSize: 13 },
-  company: { color: colors.text, fontWeight: '800', fontSize: 18, marginTop: 8 },
-  details: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 12 },
-  detail: { color: colors.muted, backgroundColor: colors.accentSoft, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 6, fontSize: 13 },
-  editHint: { color: colors.muted, fontSize: 12, marginTop: 14, textAlign: 'right' },
-  badge: { backgroundColor: colors.accentSoft, borderRadius: 99, paddingHorizontal: 12, paddingVertical: 8 },
-  badgeText: { color: colors.accent, fontWeight: '800', fontSize: 12 },
-  registeredBadge: { backgroundColor: colors.border },
-  registeredText: { color: colors.muted },
+  safeArea: { flex: 1, backgroundColor: PF.page },
+  content: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: PF.gutter, paddingTop: 10, paddingBottom: BOTTOM_SPACE },
+  stack: { gap: 12 },
+  status: { marginTop: 8 },
+  message: { color: PF.muted, textAlign: 'center', lineHeight: 22 },
+  reportError: { color: colors.errorText, backgroundColor: colors.errorSoft, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, fontSize: 12.5, lineHeight: 18 },
+  holdings: { marginTop: 6 },
+  empty: { backgroundColor: PF.card, borderRadius: PF.radius, borderWidth: 1, borderColor: PF.cardBorder, padding: 18, gap: 12, alignItems: 'center' },
+  emptyText: { color: PF.muted, fontSize: 14, lineHeight: 21, textAlign: 'center' },
+  emptyButton: { backgroundColor: PF.cta, borderRadius: 99, paddingHorizontal: 20, paddingVertical: 10 },
+  emptyButtonText: { color: '#ffffff', fontWeight: '800', fontSize: 14 },
+  pressed: { opacity: 0.75 },
+
+  backLink: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
+  backText: { color: colors.accent, fontWeight: '800', fontSize: 15 },
+  watchHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  watchTitles: { flex: 1 },
+  eyebrow: { color: PF.muted, fontWeight: '800', letterSpacing: 3, fontSize: 11 },
+  title: { color: PF.ink, fontSize: 30, fontWeight: '900', marginTop: 2 },
+  addButton: { minHeight: 44, borderRadius: 22, paddingHorizontal: 16, justifyContent: 'center', backgroundColor: PF.aiBackground, borderWidth: 1, borderColor: PF.aiBorder },
+  addText: { color: PF.up, fontWeight: '800', fontSize: 13 },
+  watchList: { gap: 8 },
+  watchCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: PF.card, borderRadius: PF.radius, borderWidth: 1, borderColor: PF.cardBorder, paddingVertical: 12, paddingLeft: 12, paddingRight: 10 },
+  watchMain: { flex: 1, minWidth: 0, gap: 2 },
+  watchCompany: { color: PF.ink, fontSize: 15.5, lineHeight: 20, fontWeight: '900' },
+  watchTicker: { color: PF.muted, fontSize: 12 },
+  watchTarget: { color: PF.muted, fontSize: 12 },
+  watchPrice: { alignItems: 'flex-end', gap: 2 },
+  watchPriceLabel: { color: PF.muted, fontSize: 11 },
+  watchPriceValue: { color: PF.ink, fontSize: 15, fontWeight: '900' },
+  watchChange: { fontSize: 12, fontWeight: '700' },
+  chevron: { color: PF.muted, fontSize: 22, lineHeight: 24 },
+  watchNote: { color: PF.muted, fontSize: 11.5, lineHeight: 17 },
 });
