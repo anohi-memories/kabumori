@@ -1,3 +1,27 @@
+# K2 REVIEW ROUTING — PR #110 PASS_CANDIDATE
+
+- k2_verdict: PASS_CANDIDATE
+- accepted_head_for_review: 6612b3f1dee5055794137da71697ebe5e07d7419
+- status: review_required
+- next_owner: codex
+- h2_task: kabumori-pr110-delivery-first-focused-review-20261007
+- h2_slot: H2
+- h2_recommended_model: Sol（高）
+- merge_allowed: false
+- deploy_allowed: false
+- production_mutation_allowed: false
+
+App-visible disclaimer corrective is accepted:
+- actual report-detail UI now renders the agreed disclaimer exactly once at the end;
+- both market_detail and legacy layouts reach the same closing block;
+- root report-detail reuses the same screen;
+- backend story is not separately rendered, preventing duplicate disclaimer;
+- focused 4/4 and app 430/430 reported PASS.
+
+Core delivery-first source remains PASS_CANDIDATE. One focused H2 review is required before merge because the PR changes Hard Fact / Fact advisory / not_run delivery boundaries.
+
+---
+
 # K2 CORRECTIVE — PR #110 app-visible disclaimer closure
 
 - verdict: **CHANGES REQUIRED (one bounded blocker)**
