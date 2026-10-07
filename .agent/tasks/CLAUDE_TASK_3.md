@@ -5367,3 +5367,28 @@ Unexpected residue: **none**.
 - manual scheduler invoke / manual OpenAI call / manual X post: 0.
 - first natural AI Lab scheduled row remains pending for 2026-10-08 07:51 JST.
 - completion condition for the combined AI Lab repair + model rollout: first natural scheduled post succeeds through claim -> GPT-6 Luna generation -> X publish.
+
+## Production rollout receipt — Kabumori X GPT-6 models — 2026-10-08 JST
+
+- user explicitly requested the Kabumori X model rollout after AI Lab GPT-6 Luna went live.
+- source basis: already-merged/reviewed PR #105 exact head `78a43ae878205f726111dde1002bd28ea8e82b97`.
+- production baseline: `x-test-post` v140.
+- scope: Kabumori X model IDs + centralized token-cost accounting only. No prompt/retry/web-search-count/authorization/schedule changes.
+- routine Kabumori X workloads now resolve to `gpt-6-luna`.
+- existing quality escalation paths (Useful Tips and US premarket only under their pre-existing conditions) resolve to `gpt-6.1-sol`.
+- deployed runtime files changed exactly:
+  1. `functions/x-test-post/index.ts`
+  2. `functions/x-test-post/morning_greeting_logic.ts`
+  3. `functions/x-test-post/report_voice_rewrite_logic.ts`
+  4. `functions/x-test-post/useful_tip_generation_logic.ts`
+- central policy module was already present from the preceding AI Lab v140 rollout and was unchanged.
+- production result: **x-test-post v141 ACTIVE**, verify_jwt=false, EZBR `804467c5f9b3887a7937001da70c74d0dc1bf2153dc806a5362eb450d1c29895`.
+- read-back:
+  - no `gpt-5.6-luna` / `gpt-5.6-sol` literals remain in x-test-post index or the three model helper modules;
+  - policy catalog resolves routine to `gpt-6-luna`, quality to `gpt-6.1-sol`;
+  - normal text, search collection, voice evaluation/rewrite, greeting and useful-tip/us-premarket escalation paths all reference central workloads;
+  - AI Lab GPT-6 Luna + unlimited/2000/incomplete/74-topic fixes remain intact.
+- POSTONA standalone Edge Functions were not deployed/changed by this rollout.
+- DB/schema/migration/Auth/OAuth/Vault/Cron changes: 0.
+- manual OpenAI call/manual X post/manual scheduler invoke: 0.
+- next verification: observe the next natural Kabumori X scheduled generation/post; no forced post is required.
