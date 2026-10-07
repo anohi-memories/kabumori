@@ -41,7 +41,16 @@ export type FetchOptions = {
   validators?: ValidatorCache;
   /** Overrides the registry endpoint (GDELT query URLs). */
   url?: string;
+  /** Pause before the single retry of a transient 404 / 5xx (default 1500 ms; 0 in tests). */
+  retryDelayMs?: number;
 };
+
+/**
+ * Official feeds (the Federal Reserve's press_all.xml, 2026-10) answer a transient 404 / gateway error while the file is
+ * being regenerated, then 200 again within seconds (6 of 451 important-news runs, 1 of 13 observer runs). One retry
+ * is enough; a persistent 404 still ends as HTTP_ERROR after the second answer.
+ */
+export const TRANSIENT_FEED_STATUSES: ReadonlySet<number> = new Set([404, 502, 503, 504]);
 
 export type GdeltQuery = { key: string; query: string; timespan: string; maxrecords: number };
 
@@ -127,6 +136,13 @@ export async function fetchSource(source: SourceDefinition, options: FetchOption
   let response: Response;
   try {
     response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(timeoutMs), redirect: "follow" });
+    if (TRANSIENT_FEED_STATUSES.has(response.status) && source.policy === "DIRECT_SOURCE") {
+      await response.body?.cancel();
+      const delay = options.retryDelayMs ?? 1500;
+      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+      await (options.gate ?? new HostRateGate()).wait(url, source.min_request_gap_ms);
+      response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(timeoutMs), redirect: "follow" });
+    }
   } catch (error) {
     return isTimeout(error)
       ? fail("TIMEOUT", null, `no response within ${timeoutMs} ms`)
