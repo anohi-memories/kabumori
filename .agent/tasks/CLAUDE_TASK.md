@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-2
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: market-report debug trace / failed-generation persistence / prompt hygiene
