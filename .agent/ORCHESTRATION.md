@@ -272,6 +272,18 @@ X自動投稿アプリG4のちゃへ `C2` を送ってください。
 - scope、所有者、競合可能性を安全に判断できない場合は作業を開始せず、具体的な競合箇所を報告する。
 - 未実施を成功扱いにしない。push / merge / deployは実際に確認できた場合だけ完了として報告する。
 
+### Production並行運用（2026-10-08〜）
+
+- G5のcritical-path優先は、**競合時にG5を優先する**という意味であり、G5のTASK期間中に他slotを全面停止する意味ではない。
+- 別ファイル・別機能・別production resourceで変更境界が分離されていれば、実装・テスト・commit・push・PR更新・mergeは通常どおり並行してよい。
+- production write/deployも、G5と具体的なmutation boundaryが分離され、各TASK固有の承認・安全ゲートを満たすなら一律停止しない。
+- ただし同じDB migration/table/RPC/function、Auth/RLS/権限、Edge Function、secret/settings/Cron/workflow、API境界などが重なる場合は同時実行しない。競合時はG5を優先する。
+- 同一Supabase DBのmigration/DDLは、論理対象が別でもmigration history/catalog/preflight fingerprintを共有するため、**実際のDDL/write区間だけ**直列化する。先行側のpostflight後、後続側はfresh baselineを取り直して続行する。
+- production mutation windowは実write直前に開き、postflight/read-back完了直後に閉じる。ユーザー入力待ち・夜間待機・レビュー待ち・自然配信待ちを理由に長時間ACTIVEを保持しない。
+- 待機が発生したら、実writeが無い限りwindowを閉じ、再開時にfreshな競合確認を行う。
+- slot名だけで競合判定しない。実際に触るファイル・DB object・Auth/RLS・Edge・settings・workflow・production resourceを比較する。
+- scope/所有者/競合可能性が曖昧な場合だけ停止し、具体的な競合箇所を報告する。
+
 ## 基本フロー
 
 原則:
