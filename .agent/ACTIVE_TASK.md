@@ -45,14 +45,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: kabumori-pr110-b1-b4-rereview-20261008
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Narrow exact-head rereview of PR #110 head d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8. Verify only prior findings B1 objective Fact contradiction handling, B2 inline emoji binding, B3 clause-local speculation, and B4 truthful X Fact status, plus focused regressions. No merge/deploy/production access.
+- allocation: C2 accepted CHANGES REQUIRED. B4 is closed; residual B1-R1/B2-R1/B3-R1 were returned to G2. H2 free pending corrected-head rereview.
 - recommended_model: Sol（高）
 
 ## Claude G1
@@ -70,13 +70,13 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: ready
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Corrected PR #110 head d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8 is K2 PASS_CANDIDATE. B1-B4 reported fixed; tests green; PR open/clean with main file overlap 0. Merge/deploy HOLD pending narrow H2 rereview.
+- allocation: C2 corrective on existing PR #110 only. Fix only residual B1-R1 partial multi-unit objective Fact quote coverage, B2-R1 incomplete/repeated-emoji fact binding, and B3-R1 no-comma clause hedge laundering. B4 is accepted closed. Preserve all other accepted behavior. No merge/deploy/production mutation.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
