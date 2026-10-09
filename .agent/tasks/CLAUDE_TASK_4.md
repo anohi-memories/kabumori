@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-4
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: bounded DB/security corrective / existing PR #106
@@ -815,6 +815,24 @@ After K4 accepts a corrected candidate, ChatGPT should use a truly free H1/H2 sl
 ### 次の推奨
 - K4 → 空いている H1 / H2 で、この head に絞った再レビューを 1 回行う。
 - status: review_required / next_owner: chatgpt。STOP for K4。
+
+## K4 decision — final ACL/merge corrective PASS_CANDIDATE; H1 narrow rereview assigned — 2026-10-09
+
+- verdict: **PASS_CANDIDATE / merge HOLD**.
+- exact G4 corrective PR #106 head: `c0b6c03cb909d91f72b58424d64c6dfae1b8f14f`; PR open/unmerged, 7 files, mergeable=true.
+- last remaining F1: `proacl={}` for either existing trigger function now fails before DDL. SQL checks exactly one owner->owner EXECUTE without grant option and refuses NULL/default PUBLIC grants or additional grants.
+- F2: G4 normally merged fresh main and mechanically resolved the migration reservation. POSTONA `20261007150000` and AI Lab `20261007173000` preserved. Candidate reservation file equals current main plus one POSTONA reservation line.
+- G4 reports 87 adverse starts, 23 postcondition drift cases, 55/55 mutation detection, source invariants 11/11, and X publish/refresh/deletion/PR41 Stage3B regressions PASS.
+- K4 verified exact SQL ACL predicate, reservation single-line diff, GitHub mergeability and main-side non-overlap. Netlify and Vercel both SUCCESS on exact head.
+- production DB/catalog access, migration apply, deploy, Auth/OAuth/Vault/provider calls: **0**.
+- accepted earlier B1-B6 and C1-R2 source remain unchanged.
+- H1 and H2 were both verified done/free via status/task_id/TASK/Report/ACTIVE/CURRENT_STATE. H1 chosen for prior PR #106 review continuity.
+- H1 review task: `postona-pr106-f1-acl-final-rereview-20261009`.
+- H1 exact target: `c0b6c03cb909d91f72b58424d64c6dfae1b8f14f`.
+- recommended reviewer model: **Sol（高）**.
+- H1 review scope: positive owner EXECUTE exact-ACL, migration reservation conflict resolution, narrow PG/mutation/X regressions only.
+- no PR merge or production preflight/apply authorized by this K4.
+- next_owner: codex; finish code C1.
 
 ## Report — C1 corrective: final ACL exactness + main integration (2026-10-08)
 
