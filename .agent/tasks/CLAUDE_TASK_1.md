@@ -1,10 +1,29 @@
+# Final K1 — Portfolio asset-card botanical polish PASS / PR #113 merged — 2026-10-09
+
+- task_id: `kabumori-portfolio-asset-card-background-polish-20261008`.
+- verdict: **PASS**, visual/source-only, Codex independent review omitted as low risk.
+- accepted PR #113 head: `bc54e91c7b72186fa03c35b7d3be157453651cb6`.
+- PR #113 squash-merged: `28d9c61e6dc52fe71ee8bbcd3521b24ad7addc3e`.
+- Fresh main immediately before merge: `107169293fa59911fbb87b9d421ef1c45fd4d7c7`; GitHub mergeability true/clean.
+- Changed-file overlap with fresh main and other open PRs: **0**.
+- Actual user-approved 1600x700 transparent botanical artwork present; card is subtly layered at opacity 0.45 behind all text and the real sparkline.
+- Rising/declining/flat trends use green / muted red / neutral grey based on saved-close value history, no fixed rising graphics or invented market data.
+- 402pt/375pt Simulator screenshots visually reviewed; digits/basis labels legible, background does not cover amounts, falling red sparkline readable, layout/tab spacing preserved.
+- G1 reported tests: **433/433 PASS**, src-only tsc PASS, Expo config PASS, web export PASS, diff check clean; not independently rerun by ChatGPT.
+- No backend, DB, RPC, Auth, Edge, production mutation, dependency or EAS build.
+- Nonblocking remaining: no live-user physical iPhone verification yet; flat-series min-max normalized wobble pre-existing; VoiceOver/dark-mode not separately checked.
+- G1 **done / free**.
+- AI Lab diary: 候補あり — 株アプリの資産カードに淡い植物の背景を重ねつつ、実際の資産推移に合わせて線の色を変え、数字の読みやすさを損なわないデザインへ改善した。
+
+---
+
 # Claude Task 1 — CURRENT TASK
 
 - task_id: kabumori-portfolio-asset-card-background-polish-20261008
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: medium
 - recommended_model: Sonnet5（中）
 - type: source-only portfolio visual polish
