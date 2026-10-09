@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { DeleteCommonAccountView, WithdrawKabumoriView } from '@/components/account-lifecycle-views';
 import { BackButton } from '@/components/back-button';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
-import { deleteSignedInAccount } from '@/lib/account-deletion-client';
-import { deleteConfirmationIssue } from '@/lib/account-deletion';
 import { authErrorMessage, requestPasswordReset, signOut } from '@/lib/auth';
 import { legalLinks } from '@/lib/legal-links';
 import { settingsEntries, type SettingsEntry } from '@/lib/settings-menu';
@@ -23,7 +22,7 @@ const palette = KABUMORI_COLORS.light;
 // unreliable inside RN's own Modal, which renders into a separate native
 // window) -- a real screen inside the normal navigation tree does not have
 // that problem, so no manual useSafeAreaInsets() patch is needed here.
-type View_ = 'menu' | 'delete' | 'topic-level';
+type View_ = 'menu' | 'withdraw' | 'delete' | 'topic-level';
 
 export default function SettingsScreen() {
   const { session } = useAuth();
@@ -42,8 +41,8 @@ export default function SettingsScreen() {
   }, []);
 
   // Reset to the menu whenever Settings regains focus (e.g. returning from
-  // the delete-account sub-flow via the tab bar rather than its own back
-  // button), so the tab never reopens mid-flow unexpectedly.
+  // an account sub-flow via the tab bar rather than its own back button),
+  // so the tab never reopens mid-flow unexpectedly.
   useFocusEffect(useCallback(() => {
     return () => setView('menu');
   }, []));
@@ -60,11 +59,14 @@ export default function SettingsScreen() {
         <SettingsMenu
           email={email}
           topicLevel={topicLevel}
-          onDeleteAccount={() => setView('delete')}
+          onWithdrawKabumori={() => setView('withdraw')}
+          onDeleteCommonAccount={() => setView('delete')}
           onOpenTopicLevel={() => setView('topic-level')}
         />
+      ) : view === 'withdraw' ? (
+        <WithdrawKabumoriView onBack={() => setView('menu')} />
       ) : view === 'delete' ? (
-        <DeleteAccountView email={email} onBack={() => setView('menu')} />
+        <DeleteCommonAccountView onBack={() => setView('menu')} />
       ) : (
         <TopicLevelView current={topicLevel} onChange={handleTopicLevelChange} onBack={() => setView('menu')} />
       )}
@@ -75,12 +77,14 @@ export default function SettingsScreen() {
 function SettingsMenu({
   email,
   topicLevel,
-  onDeleteAccount,
+  onWithdrawKabumori,
+  onDeleteCommonAccount,
   onOpenTopicLevel,
 }: {
   email: string | null;
   topicLevel: TopicLevel;
-  onDeleteAccount: () => void;
+  onWithdrawKabumori: () => void;
+  onDeleteCommonAccount: () => void;
   onOpenTopicLevel: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -137,7 +141,8 @@ function SettingsMenu({
     if (entry.kind === 'link') return void openLink(entry);
     if (entry.id === 'password') return void sendPasswordReset();
     if (entry.id === 'logout') return void logOut();
-    if (entry.id === 'delete-account') return onDeleteAccount();
+    if (entry.id === 'withdraw-kabumori') return onWithdrawKabumori();
+    if (entry.id === 'delete-common-account') return onDeleteCommonAccount();
     if (entry.id === 'topic-level') return onOpenTopicLevel();
   }
 
@@ -177,83 +182,6 @@ function SettingsMenu({
         {busy ? <ActivityIndicator color={palette.accent} style={styles.busy} /> : null}
       </ScrollView>
     </>
-  );
-}
-
-function DeleteAccountView({ email, onBack }: { email: string | null; onBack: () => void }) {
-  const [typed, setTyped] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
-
-  async function confirmAndDelete() {
-    if (deleting) return;
-    const issue = deleteConfirmationIssue(typed, email ?? '');
-    if (issue) {
-      setMessage(issue);
-      return;
-    }
-    setMessage(null);
-    setDeleting(true);
-    const outcome = await deleteSignedInAccount();
-    if (!outcome.ok) {
-      // The server did not confirm the deletion, so nothing here claims it happened.
-      setMessage(outcome.message);
-      setDeleting(false);
-      return;
-    }
-    // The account is gone; the local session is now meaningless, so it is cleared before the UI
-    // returns. signOut() is best-effort: its server call can fail precisely because the user no
-    // longer exists, and that must not turn a completed deletion into an error.
-    await signOut().catch(() => undefined);
-  }
-
-  return (
-    <ScrollView contentContainerStyle={styles.deleteContainer}>
-      <Pressable onPress={onBack} disabled={deleting} accessibilityRole="button" style={styles.backButton}>
-        <Text style={styles.backText}>‹ 設定にもどる</Text>
-      </Pressable>
-      <Text style={styles.title}>アカウントを削除</Text>
-      <Text style={styles.deleteLead}>
-        削除すると、登録した銘柄、通知、レポート、プッシュ通知の設定がすべて消えます。元に戻すことはできません。
-      </Text>
-      <View style={styles.noticeBox}>
-        <Text style={styles.noticeText}>削除されるもの</Text>
-        <Text style={styles.noticeItem}>・保有／監視している銘柄</Text>
-        <Text style={styles.noticeItem}>・通知と通知の設定</Text>
-        <Text style={styles.noticeItem}>・あなた向けのレポート</Text>
-        <Text style={styles.noticeItem}>・ログイン用のアカウント</Text>
-      </View>
-      <Text style={styles.label}>確認のため、登録しているメールアドレスを入力してください</Text>
-      <TextInput
-        value={typed}
-        onChangeText={setTyped}
-        placeholder={email ?? 'mail@example.com'}
-        placeholderTextColor={palette.muted}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        autoCorrect={false}
-        editable={!deleting}
-        style={styles.input}
-        accessibilityLabel="確認用のメールアドレス"
-      />
-      {!!message && (
-        <View style={styles.messageBox}>
-          <Text style={styles.messageText}>{message}</Text>
-        </View>
-      )}
-      <Pressable
-        onPress={() => void confirmAndDelete()}
-        disabled={deleting}
-        style={[styles.deleteButton, deleting && styles.disabled]}
-        accessibilityRole="button"
-        accessibilityLabel="アカウントを完全に削除する">
-        {deleting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.deleteButtonText}>アカウントを完全に削除する</Text>
-        )}
-      </Pressable>
-    </ScrollView>
   );
 }
 
@@ -342,20 +270,10 @@ const styles = StyleSheet.create({
   chevron: { color: palette.muted, fontSize: 22, marginLeft: 10 },
   pressed: { opacity: 0.7 },
   busy: { marginTop: 14 },
-  deleteContainer: { padding: 20, gap: 12 },
   backButton: { minHeight: 44, justifyContent: 'center' },
   backText: { color: palette.accent, fontWeight: '800' },
-  deleteLead: { color: palette.text, fontSize: 15, lineHeight: 23 },
-  noticeBox: { backgroundColor: palette.soft, borderRadius: 14, padding: 16, gap: 4 },
-  noticeText: { color: palette.text, fontWeight: '800', marginBottom: 4 },
-  noticeItem: { color: palette.muted, fontSize: 14, lineHeight: 21 },
-  label: { color: palette.text, fontWeight: '700', marginTop: 8 },
-  input: { minHeight: 52, borderWidth: 1, borderColor: palette.border, borderRadius: 13, backgroundColor: palette.card, paddingHorizontal: 15, color: palette.text, fontSize: 16 },
   messageBox: { backgroundColor: '#fff2f1', borderRadius: 12, padding: 13 },
   messageText: { color: '#9a3631', lineHeight: 20 },
-  deleteButton: { minHeight: 52, marginTop: 8, borderRadius: 14, backgroundColor: '#9a3631', alignItems: 'center', justifyContent: 'center' },
-  deleteButtonText: { color: '#fff', fontSize: 16, fontWeight: '900' },
-  disabled: { opacity: 0.55 },
   topicContainer: { padding: 20, gap: 12 },
   topicLead: { color: palette.muted, fontSize: 14, lineHeight: 20, marginTop: 2, marginBottom: 4 },
   topicOptions: { gap: 10 },

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { DeleteCommonAccountView } from '@/components/account-lifecycle-views';
 import { authErrorMessage, signOut } from '@/lib/auth';
 import { enrollmentBlockedCopy, REENROLL_COPY } from '@/lib/service-enrollment';
 import type { ServiceAccess } from '@/providers/auth-provider';
@@ -10,6 +11,8 @@ import type { ServiceAccess } from '@/providers/auth-provider';
  * Shown when the session is valid but the common-account lifecycle did not open Kabumori for it:
  * a refusal (deletion in progress, locked, ...) or a Kabumori use the person ended earlier. The app
  * stays closed -- there is no profile-only fallback -- and the person gets the actions that apply.
+ * A common-account deletion that was interrupted is continued from here (the app itself stays closed
+ * while it is in progress), and a person who ended Kabumori can still delete the whole common account.
  */
 export function ServiceAccessScreen({
   access,
@@ -21,6 +24,8 @@ export function ServiceAccessScreen({
   onReenroll: () => void;
 }) {
   const [signingOut, setSigningOut] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const deletionInProgress = access.kind === 'blocked' && access.reason === 'ACCOUNT_DELETION_IN_PROGRESS';
   const copy =
     access.kind === 'reenroll_required'
       ? { title: REENROLL_COPY.title, description: REENROLL_COPY.description, canRetry: false }
@@ -38,6 +43,14 @@ export function ServiceAccessScreen({
     }
   }
 
+  if (deleting) {
+    return (
+      <SafeAreaView style={styles.flowArea}>
+        <DeleteCommonAccountView onBack={() => setDeleting(false)} backLabel="‹ もどる" />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.card}>
@@ -48,9 +61,18 @@ export function ServiceAccessScreen({
           <Pressable onPress={onReenroll} style={styles.primaryButton} accessibilityRole="button">
             <Text style={styles.primaryText}>{REENROLL_COPY.action}</Text>
           </Pressable>
+        ) : deletionInProgress ? (
+          <Pressable onPress={() => setDeleting(true)} style={styles.primaryButton} accessibilityRole="button">
+            <Text style={styles.primaryText}>削除手続きを続ける</Text>
+          </Pressable>
         ) : copy.canRetry ? (
           <Pressable onPress={onRetry} style={styles.primaryButton} accessibilityRole="button">
             <Text style={styles.primaryText}>もう一度試す</Text>
+          </Pressable>
+        ) : null}
+        {access.kind === 'reenroll_required' ? (
+          <Pressable onPress={() => setDeleting(true)} style={styles.switchButton} accessibilityRole="button">
+            <Text style={styles.deleteText}>共通アカウントを削除する</Text>
           </Pressable>
         ) : null}
         <Pressable
@@ -71,6 +93,7 @@ export function ServiceAccessScreen({
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#eef3ed', justifyContent: 'center', padding: 22 },
+  flowArea: { flex: 1, backgroundColor: '#f7f8f5' },
   card: { width: '100%', maxWidth: 480, alignSelf: 'center', backgroundColor: '#fff', borderRadius: 24, padding: 24, borderWidth: 1, borderColor: '#dfe6df' },
   brand: { color: '#548161', fontWeight: '900', letterSpacing: 2.5, fontSize: 13 },
   title: { color: '#17211a', fontSize: 24, fontWeight: '900', marginTop: 10 },
@@ -79,4 +102,5 @@ const styles = StyleSheet.create({
   primaryText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   switchButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
   switchText: { color: '#477554', fontWeight: '700', textAlign: 'center' },
+  deleteText: { color: '#9a3631', fontWeight: '700', textAlign: 'center' },
 });
