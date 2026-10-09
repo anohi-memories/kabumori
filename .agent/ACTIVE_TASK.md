@@ -61,13 +61,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
+- next_owner: none
+- status: done
 - task_id: kabumori-portfolio-asset-card-background-polish-20261008
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Source-only portfolio asset-summary polish. Use the user-approved transparent 1600×700 botanical background, keep the sparkline based only on real saved close market_value history, place decoration behind content at restrained opacity, and make sparkline color trend-aware for up/down/flat. 375/402 Simulator screenshots required. No portfolio data/search/watch/navigation/backend/Auth/DB/EAS changes.
+- allocation: Final K1 PASS. PR #113 exact reviewed head bc54e91c7b72186fa03c35b7d3be157453651cb6 squash-merged as 28d9c61e6dc52fe71ee8bbcd3521b24ad7addc3e. Approved 1600x700 transparent botanical art at 0.45 opacity is behind the real asset-history sparkline, which is now up green/down red/flat grey, with thin segments and one endpoint. 375/402 Simulator review PASS, 433/433 app tests reported PASS; backend/DB/Auth/Edge/EAS/production mutation 0. G1 done/free.
 - recommended_model: Sonnet5（中）
 
 ## Claude G2
