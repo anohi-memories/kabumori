@@ -1,3 +1,99 @@
+# Codex H2 — Common Account Phase 3a independent security review
+
+- task_id: common-account-v1-phase3a-pr112-security-review-20261009
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- priority: critical
+- type: independent exact-head security and functional review
+- return_to: 共通アカウントG5のちゃ
+- completion_code: C2
+- recommended_model: **Sol（極高）**
+- target_pr: 112
+- target_head: c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d
+- production_access_allowed: false
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+- EAS_allowed: false
+
+## Mission / context
+
+Review the complete Phase 3a common-account source candidate. This is a critical shared-identity deletion boundary affecting Kabumori and POSTONA. Independent scrutiny is required before source merge. Do not merge, deploy or mutate a real account.
+
+The intended product contract is:
+- Kabumori service withdrawal ends Kabumori only; shared Auth and X rights survive.
+- Whole-account deletion requires explicit verified recent authorization and lifecycle state; all services, sessions, Apple/X grants and Storage must be safely cleaned before managed Auth Admin delete.
+- The old bodyless Kabumori direct Auth deletion endpoint must fail closed.
+- Existing X-only or after-Kabumori-ended cases currently report unsupported and must be assessed as release blockers, not falsely counted as complete.
+
+## Startup / isolation
+
+1. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, ACTIVE_TASK, G5 Phase3a TASK+Report, Phase1 and Phase2 docs, and the previous H2 Report. Check this H2 task and its history.
+2. Use a distinct H2 worktree/checkout created from fresh `/Users/yuya/Developer/kabumori-fresh`; do not alter other slots' branches/worktrees/dev servers.
+3. Fresh-fetch origin/main and PR112. Require exact head **c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d**, open, unmerged and exactly 24 changed files. If moved, STOP and request retargeting.
+4. At assignment, PR112 Netlify and Vercel checks are PASS; GitHub mergeability was intermittently unknown then true. Main advanced since PR base only in `.agent/` files, no changed-file overlap. Independently refresh and verify.
+5. Protect G4/POSTONA PR106 schema/migration work and G2 PR110 work. Review-only, no source changes.
+
+## Mandatory independent review areas
+
+**A. Caller and scope authorization**
+- Caller identity must be server-verified and never client-selected; malicious user ID, wrong token, revoked session, duplicate/outdated request, cross-service access.
+- Recent reauth and lifecycle version both fail closed on stale/absent/future values.
+- Service-only withdrawal must leave common Auth and X workspace/entitlement/posting OAuth strictly untouched. Verify data/profile cascading effects, retry behavior and signed-in state.
+
+**B. Cross-service lifecycle and concurrency**
+- Against the exact Phase1 SQL RPC semantics and actual outputs/ACLs, verify begin/withdraw/finish/checkpoint/prepare ordering, transactional locks, stale versions and race with another service start/workspace creation.
+- No Auth Admin delete until every required entitlement and managed cleanup is complete and freshly revalidated.
+- Verify X adapter `social_only` actual implementation and whether X-only or Kabumori-already-ended paths are truly stopped BEFORE any destructive side effect.
+- Ensure independent concurrent delete requests and retry-after-crash cannot duplicate irreversible external operations.
+
+**C. Auth/session and stale JWT**
+- Review /auth/v1/logout?scope=global semantics, usability/retry after revocation, stale access tokens continuing for token lifetime and all producer/writer paths; explicitly classify whether stale-token windows permit recreating data or a false-positive completion.
+- Check auth.admin.deleteUser 404/failure/unconfirmed post-delete readback; never say deleted without positive proof.
+
+**D. Managed external cleanup**
+- Apple reauth/one-time code, correct provider availability, absence/failure, checkpoint idempotency.
+- Storage API enumeration/owner/bucket scope/pagination/delete/relist/race/late-write; no direct Storage SQL deletion.
+- Existing X saga integration reuses revocation/fingerprint/Vault semantics; no unapproved overwrite of POSTONA-owned source.
+- Secrets/PII/tokens never appear in response/log/errors.
+
+**E. Database migration**
+- Inspect `20261009120000_common_account_deletion_completion.sql` exact prerequisites, function signatures/bodies/owners/SECURITY DEFINER/search_path/privilege graph/RLS/DDL/postconditions, migration reservations and catalog assumptions.
+- Verify only genuinely completed deletion can be marked completed, durable checkpoint/error states, impossible transitions, missing/duplicate/extraneous rows and rollback or retry safety.
+- Run disposable PostgreSQL proofs and independent adversarial/mutation probes, not just accept reported 19/19/24/24.
+
+**F. Compatibility / UI / rollout**
+- Review two distinct settings options, password confirmation isolated from main client, resume state, clear warnings, no accidental direct Auth delete, no enumeration; test stale client and old Edge behavior.
+- Check old deployed `account-delete` remains unsafe until separate approved deploy; safe migration/Edge/client release ordering.
+- Verify enforcement inventory gaps: `ensure_my_profile`, direct `profiles` insert, X workspace onboarding, X legacy direct Auth-delete, entitlement checks in RLS/producers, and missing real Supabase test.
+- Identify any release blockers versus post-merge future work, including public Web account-deletion disclosure mismatch.
+
+## Independent evidence
+
+- Inspect all 24 changed files, especially `account-delete` runtime, client auth and SQL.
+- Re-run focused account-delete/app/AuthProvider/X deletion tests and Phase1/Phase2/Phase3a disposable PG tests. Add review-only scratch/adversarial cases if necessary; do not stage review harness into another slot's PR.
+- Provide reproducible counterexamples for blocking findings. Distinguish confirmed code defects from hypothetical product limitations and unimplemented future gates.
+- No real Supabase, user deletion, Auth, Apple, X, Storage, migration, deploy, EAS, provider calls or production read/write.
+
+## Completion
+
+Write `.agent/CODEX_REPORT_2.md` and a completion receipt to the top of this H2 TASK while preserving existing report/TASK history. Include:
+- reviewed exact head and fresh main;
+- verdict **PASS** / **CHANGES REQUIRED** / **BLOCKED**;
+- findings ordered by severity, location, reproducer, impact and minimal corrective scope;
+- tests/CI/mergeability, files reviewed, compatibility assessment;
+- source changes by H2 0; prod mutation/deploy/EAS 0;
+- whether PR is safe to merge, separately what remains before production;
+- `return_to: 共通アカウントG5のちゃ`, `completion_code: C2`.
+
+STOP after reporting. Tell user to send **C2 to 共通アカウントG5のちゃ**. Do not merge or deploy.
+
+Recommended model: **Sol（極高）**.
+
+---
+
 # Codex Task 2 — COMPLETION RECEIPT
 
 - task_id: kabumori-pr110-b1-b4-rereview-20261008
