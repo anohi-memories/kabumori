@@ -1,3 +1,14 @@
+## C2 FINAL — G5 Phase3a PR112 H2 CHANGES REQUIRED / G5 corrective READY — 2026-10-09
+
+- Confirmed original H2 independent report and completion receipt for `common-account-v1-phase3a-pr112-security-review-20261009` at exact PR112 head `c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d`. Report: **CHANGES REQUIRED**, reviewed 24/24 files, original suites green but independently reproduced five issues.
+- **Four P1**: R1 parallel requests duplicate Apple/managed Auth calls; R2 Apple success followed by checkpoint failure incorrectly reuses one-time code; R3 Apple requirement changes after prepare yet completion falsely succeeds; R4 completed fast path ignores late Storage residue. **P2 C1**: future recent-auth timestamps +30 sec accepted, contrary to spec. These are mock/disposable PostgreSQL proofs; do not misstate them as production incidents.
+- C2 accepted reviewer findings, NOT source merge. PR112 is open/unmerged at its exact head. Production release readiness NO; migration apply, Edge deploy, EAS/TestFlight and production Auth/Storage/Apple/X operations all HOLD.
+- G5 original Phase3a source candidate is historical review_required; its old TASK/Report are preserved under the **new G5 current corrective** `common-account-v1-phase3a-pr112-h2-r1-r4-c1-corrective-20261009` in `.agent/tasks/CLAUDE_TASK_5.md`. G5 **ready / next_owner claude**, recommended **Opus5.5（極高）**, same PR112, source-only with explicit fail-closed behavior for any unsolved shadow writer/enforcement gap. Return K5 to 共通アカウントG5のちゃ.
+- H2 review is complete/closed: TASK header **done / next_owner none** with old H2 report/receipt preserved. H2 availability for future G2 or G5 rereview must be re-checked and is **not reserved**. H1 still owns POSTONA PR106. Do not overwrite G1–G4 tasks or other worktrees.
+- G5 next K5 must verify actual new head, independent R1–R4/C1 safety regressions and SQL/TS mutation, source overlap, and remaining X-only/stale-JWT/real-Supabase gates; allocate independent Codex exact-head rereview only to a genuinely free H slot. Keep G5 priority **conflict-based**, not global freeze.
+- C2/source side effects: TASK and .agent index/state orchestration only. No implementation source modifications, no PR merge or production mutation; H2 review itself reported no production calls or source changes.
+- AI Lab diary: 記録不要。既存の公開安全なG5 Phase3a試作記録があり、今回のC2はセキュリティ上の内部是正確認で重複記録を作らない。
+
 ## Final K1 — Portfolio asset-card botanical polish PASS / PR #113 merged — 2026-10-09
 
 - G1 `kabumori-portfolio-asset-card-background-polish-20261008` complete.
