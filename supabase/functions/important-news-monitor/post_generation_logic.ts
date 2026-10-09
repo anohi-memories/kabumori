@@ -752,14 +752,8 @@ function parseRetryText(value: unknown): { text: string } {
   return parseRevisionText(value, "NEWS_GENERATION_VOICE_RETRY_INVALID_OUTPUT");
 }
 
-// "不明瞭" (unclear wording, e.g. a proposal not marked as pending approval) is a wording problem, unlike "不明"
-// (the fact is unknown): the lookahead keeps only the latter non-retryable.
 const NON_RETRYABLE_FACT_ISSUE_PATTERNS: RegExp[] = [
-  /数字|数値|金額|割合|コード|証券|日時|時刻|発生|規模|対象範囲|条件|出典|URL|source|情報不足|不明(?!瞭)|取り違え|同一性|別企業/iu,
-  // An issue that quotes an amount, share count or rate ("155億円ではなく155億5,000万円", "24億9,990万円") is a numeric
-  // precision error, never a wording fix — even when it also mentions a year ("2031年8月期の売上高…"), which would
-  // otherwise route it into the year-restoration retry below.
-  /\d[\d,.]*\s*(?:億|万円|百万円|千円|円|％|%|株|倍)/u,
+  /数字|数値|金額|割合|コード|証券|日時|時刻|発生|規模|対象範囲|条件|出典|URL|source|情報不足|不明|取り違え|同一性|別企業/iu,
 ];
 
 // An over-assertion: the post states as settled what the source only hedges ("とみられる", "疑い",
@@ -767,12 +761,79 @@ const NON_RETRYABLE_FACT_ISSUE_PATTERNS: RegExp[] = [
 // allowed (2026-09-29: South Korea DMZ blast, Iowa steel mill). The issue must name both the assertion
 // and the hedge, and must not also report a wrong number, person, company, date or event.
 const OVER_ASSERTION_ISSUE = /断定|言い切|確定(?:した|事実|的|とは|して(?:いない|おらず))/u;
-const SOURCE_HEDGE_ISSUE = /とみられ|見られ|疑い|意向|可能性|暫定|推定|見込み|予定|計画|方針|検討|とされ|承認前|議案|付議|上程/u;
+const SOURCE_HEDGE_ISSUE = /とみられ|見られ|疑い|意向|可能性|暫定|推定|見込み|予定|計画|方針|検討|とされ/u;
 const HARD_FACT_ERROR_ISSUE =
   /誤り|誤認|誤記|取り違え|異な(?:る|っ)|捏造|存在しない|別(?:の|人|企業)|改変|数字|数値|金額|日付|日時|人物名|企業名|社名|証券|市場|影響|因果|解釈/u;
 
+// ---- Fail-closed guards shared by the over-assertion retries (2026-10-10 review of PR #116) ----------------------
+// A retry only restores a hedge the source itself carries. It must never be reachable when the issue reports that
+// the text got the OUTCOME or the KIND of the event wrong, or that a number is wrong: those change what happened.
+
+// Quantities after NFKC (full-width digits, 万株 / 千株 / 万ドル / 億ドル / 1株当たり…): "50億円", "150億ドル", "30%", "1株".
+const QUANTITY_IN_ISSUE = /\d+(?:\.\d+)?\s*(?:兆|億|百万|千万|万|千)?\s*(?:円|ドル|ユーロ|元|株|口|％|%|倍|ポイント|bp|人|件|社)/gu;
+// An issue that says the number itself is wrong, rounded, below a cap, in another unit, or on another basis.
+const NUMERIC_DISCREPANCY_MARKER =
+  /ではなく|でなく|ではありません|とは?(?:異な|違|相違|不一致)|正しくは|正確には|不正確|切り捨|切り上|丸め|端数|桁|単位(?:が|の|を)?(?:違|異|誤|不一致|取り違)|下回|上回|届いて|達して(?:い|お)|満たな|誤り|誤記|相違|不一致|過大|過小|水増/u;
+const NUMERIC_BASIS_ISSUE =
+  /算定(?:基準|対象|根拠)|(?:自己株式を除|親会社株主に帰属|希薄化後|潜在株式|連結|単体|通期|累計|四半期)(?:.{0,20})(?:欠落|省略|落と|抜け|不明|異な|違)/u;
+
+/** True when the issue reports a wrong / rounded / unreached / re-based number. Ambiguity resolves to true (fail-closed). */
+export function isNumericDiscrepancyIssue(issue: string): boolean {
+  const text = issue.normalize("NFKC").replace(/(?<=\d),(?=\d)/gu, "");
+  if (NUMERIC_BASIS_ISSUE.test(text)) return true;
+  const quantities = text.match(QUANTITY_IN_ISSUE) ?? [];
+  return NUMERIC_DISCREPANCY_MARKER.test(text) && (quantities.length > 0 || /数値|数字|金額|株数|割合|比率|累計|上限|下限|目標/u.test(text));
+}
+
+const EVENT_OUTCOME_ISSUE =
+  /否決|可決|承認(?:済|され(?:た|ました|て(?:い|お))|を得)|決議(?:済|され(?:た|ました))|議決(?:済|され)|採択|不成立|成立|却下|撤回|中止|延期|廃案/u;
+// Kinds of corporate action / meeting. Two different kinds named in one issue is a mix-up, not a hedge.
+const EVENT_KIND_GROUPS: ReadonlyArray<readonly [string, RegExp]> = [
+  ["appointment", /選任|解任|再任|退任/u],
+  ["articles", /定款(?:の)?変更/u],
+  ["consolidation", /株式(?:の)?併合/u],
+  ["split", /株式(?:の)?分割/u],
+  ["extraordinary_meeting", /臨時株主総会|臨時総会/u],
+  ["ordinary_meeting", /定時株主総会|定時総会/u],
+  ["merger", /合併|株式交換|株式移転|吸収分割|会社分割/u],
+  ["offer", /公開買付|ＴＯＢ|TOB/u],
+  ["financing", /第三者割当|増資|減資|新株予約権|社債/u],
+  ["dividend", /配当|剰余金/u],
+  ["buyback", /自己株式/u],
+  ["pay", /役員報酬|報酬/u],
+];
+const CONTRAST_OR_SUBSTITUTION_ISSUE = /ではなく|でなく|ではありません|とは?異な|と取り違|と混同|と誤|と誤認|逆に|反対に/u;
+
+/** True when the issue concerns the outcome / kind of an event (a different fact, not a different wording). */
+export function isCriticalEventFactIssue(issue: string): boolean {
+  const text = issue.normalize("NFKC");
+  if (EVENT_OUTCOME_ISSUE.test(text) || CONTRAST_OR_SUBSTITUTION_ISSUE.test(text)) return true;
+  return EVENT_KIND_GROUPS.filter(([, pattern]) => pattern.test(text)).length >= 2;
+}
+
+// An explicit "not yet approved / pending" qualifier. The bare nouns 議案 / 付議 / 上程 are NOT one: they only name
+// an item and appear in mix-ups ("選任議案を定款変更議案と断定").
+const PENDING_APPROVAL_HEDGE =
+  /承認前|決議前|議決前|可決前|未承認|未決議|未確定|承認(?:を)?(?:前提|必要|待ち|予定)|(?:総会|取締役会)(?:での|の)?(?:承認|決議|議決)(?:を|が|は)?(?:前提|必要|待っ|経て|予定)|付議予定|上程予定|(?:承認|決議)されて(?:いない|おらず)/u;
+
+function passesRetryGuards(issue: string): boolean {
+  return !HARD_FACT_ERROR_ISSUE.test(issue) && !isNumericDiscrepancyIssue(issue) && !isCriticalEventFactIssue(issue);
+}
+
 export function isOverAssertionFactIssue(issue: string): boolean {
-  return OVER_ASSERTION_ISSUE.test(issue) && SOURCE_HEDGE_ISSUE.test(issue) && !HARD_FACT_ERROR_ISSUE.test(issue);
+  return OVER_ASSERTION_ISSUE.test(issue) && SOURCE_HEDGE_ISSUE.test(issue) && passesRetryGuards(issue);
+}
+
+/**
+ * A proposal that still needs approval was written as settled ("増額します"). Restoring the source's own "承認前 /
+ * 付議予定" changes no fact. Evaluated BEFORE the generic word list, because such issues often say "不明瞭" (unclear),
+ * which is a wording complaint — unlike "不明" (the fact is unknown), which stays non-retryable. Every guard of the
+ * generic path applies, and outcome / kind / number discrepancies are refused.
+ */
+export function isPendingApprovalOverAssertion(issue: string): boolean {
+  if (!OVER_ASSERTION_ISSUE.test(issue) || !PENDING_APPROVAL_HEDGE.test(issue)) return false;
+  if (NON_RETRYABLE_FACT_ISSUE_PATTERNS.some((pattern) => pattern.test(issue.replace(/不明瞭/gu, "")))) return false;
+  return passesRetryGuards(issue);
 }
 
 function isRetryableFactIssue(
@@ -790,6 +851,7 @@ function isRetryableFactIssue(
   ) {
     return true;
   }
+  if (isPendingApprovalOverAssertion(issue)) return true;
   if (NON_RETRYABLE_FACT_ISSUE_PATTERNS.some((pattern) => pattern.test(issue))) return false;
   if (isOverAssertionFactIssue(issue)) return true;
   if (issue === "MISSING_EXPLICIT_YEAR" || /年|日付|年月日.*(?:欠落|不足|抜け|記載)/u.test(issue)) {
@@ -1207,6 +1269,7 @@ export async function requestGenerationStep(
     "あなたは重要ニュース投稿の限定Fact修正担当です。入力候補・一次情報・judgementにある事実を変えず、指摘された軽微なFact不整合だけを機械的に修正してください。",
     "許可される修正は、入力に明示された年・日付を本文へ戻すこと、根拠のない市場解釈・影響解釈・因果表現を削除すること、確認済み同一企業の安全な正式表記へ統一すること、軽微なラベル/表記整合、そして元情報が『とみられる』『疑い』『意向』『可能性』『暫定』等の留保付きで伝えている内容を本文が確定事実として言い切っている箇所を、元情報と同じ留保表現に戻すことだけです。",
     "数値、企業・証券コードの同一性、日付や出来事の発生時刻、因果関係・規模・対象範囲・条件、元情報、source URLに疑義がある場合は推測で直しません。新しい事実・解釈・市場影響・因果関係を追加しません。",
+    "承認前の議案・提案を確定として書いているという指摘は、元情報にある『承認前』『付議予定』『予定』などの留保表現に戻すだけです。可決・否決・承認の結果、議案の種類、株式併合と株式分割の別、株主総会の種別（臨時・定時）、金額・株数は変更しません。",
     "fact_issuesに指摘のない箇所は極力そのまま維持し、修正後の本文だけをtextとして返してください。見出しラベルやURL、『出典』表記はtextに含めず、プログラム側で処理します。",
   ].join("\n") : isVoiceRetry ? [
     "あなたは重要ニュース投稿の限定修正担当です。事実・数字・固有名詞・意味・出典を一切変えず、指摘された文章品質の問題（重複表現、同義反復、同内容の連続説明、冗長、不自然な接続・締め、不自然な英単語・和英混在、助詞や単複などの軽微な文法）だけを修正してください。",
@@ -1224,8 +1287,8 @@ export async function requestGenerationStep(
     // 2026-10-09 TDnet generation failures (Fact catches of the draft): rounded amounts (155.5億円 -> 155億円,
     // 32億8,300万円 -> 32億円), "上限に達した" for a cumulative amount just below the cap, a dropped calculation
     // base or profit definition, and a proposal written as settled before shareholder approval.
-    "金額・株数・割合は元情報の桁・単位・端数のまま書き、丸め・切り捨て・言い換えをしません。累計取得額などが上限・目標に満たない場合は『上限に達した』『完了した』と書かず、元情報の数値と状況をそのまま伝えます。",
-    "割合や利益の算定基準（『自己株式を除く発行済株式総数』『親会社株主に帰属する当期純利益』など）は、元情報の範囲を保って書き、省略・一般化しません。株主総会などの承認前の議案・提案は『提案』『付議予定』と書き、確定した事項として書きません。",
+    "金額・株数・割合は、値を変えずに読みやすい単位へ換算して構いません（例：15,550百万円は155億5,000万円）。端数の丸め・切り捨て・桁落ちはしません。累計取得額などが上限・目標に満たない場合は『上限に達した』『完了した』と書かず、元情報の数値と状況をそのまま伝えます。",
+    "割合や利益の算定基準（『自己株式を除く発行済株式総数』『親会社株主に帰属する当期純利益』など）は、元情報の範囲を保って書き、省略・一般化しません。取締役会の決議と株主総会の承認は区別し、承認前の議案・提案は『提案』『付議予定』と書き、承認・可決された事項として書きません。",
     "元情報の不確実性・留保表現（『とみられる』『疑い』『意向』『可能性』『暫定』『予定』『計画』『〜と主張』等）は必ず維持し、確定した事実として言い切りません。",
     "『入力情報からは確認できません』『入力データでは〜』『提供された情報では〜』など、入力や情報源の扱いについて説明する文は書きません。",
     "日本株への影響、影響を受けそうな対象、市場反応は、元情報または確定済みjudgementに直接の根拠がない場合、締めにも本文にも追加しません。『日本株への影響は確認できません』のような締めの一文も不要です。確認できた事実で自然に終えてください。",

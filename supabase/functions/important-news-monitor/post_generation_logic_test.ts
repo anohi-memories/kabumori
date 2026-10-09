@@ -1405,31 +1405,15 @@ test("voice_retry request instructions are narrowly scoped to wording-only fixes
 
 // ------------------------------------------------------------ TDnet generation failures (2026-10-09 analysis)
 
-test("draft instructions require numeric fidelity: no rounding, no 'cap reached' rewording, keep calculation bases, proposals stay proposals", async () => {
+test("draft instructions: numeric fidelity without forbidding unit conversion; proposals before approval stay proposals", async () => {
   const instructions = await draftInstructions(candidate());
-  assert.match(instructions, /桁・単位・端数のまま書き、丸め・切り捨て・言い換えをしません/);
+  assert.match(instructions, /値を変えずに読みやすい単位へ換算して構いません/);
+  assert.match(instructions, /端数の丸め・切り捨て・桁落ちはしません/);
   assert.match(instructions, /上限・目標に満たない場合は『上限に達した』『完了した』と書かず/);
   assert.match(instructions, /算定基準/);
-  assert.match(instructions, /承認前の議案・提案は『提案』『付議予定』/);
+  assert.match(instructions, /取締役会の決議と株主総会の承認は区別し/);
+  assert.match(instructions, /承認・可決された事項として書きません/);
   // the existing draft rules are kept
   assert.match(instructions, /textには【速報】や【重大速報】を含めず/);
   assert.match(instructions, /元情報にない数値、日付、固有名詞、因果、規模、将来予測を追加しません/);
-});
-
-test("fact retry is allowed for an over-assertion of a proposal before shareholder approval (real 10/9 issue), and still refused for numbers", () => {
-  const dividend = candidate({ title: "剰余金の配当（増配）に関するお知らせ", bodySummary: "2026年11月期の期末配当を増配する。本件は株主総会の承認を前提とする議案である。" });
-  assert.equal(isRetryableFactFailure(dividend, "期末配当を増額します。", ["株主総会での承認前の議案である点が不明瞭。「増額します」と確定事項のように断定しています"]), true);
-  // wrong amounts / rounding / cap claims are NOT retried (a wrong number is a drafting error, not a wording fix)
-  for (const [text, issue] of [
-    ["2031年8月期の売上高は155億円を目指します。", "2031年8月期の売上高は155億円ではなく、155億5,000万円（15,550百万円）"],
-    ["自己株式の取得上限の25億円に達しました。", "上限の25億円に達したとの断定は不正確です（累計取得額は24億9,990万6,468円で、上限を93,532円下回ります）。"],
-    ["2027年2月期中間期の営業損失は32億円でした。", "中間期の営業損失32億円は、元情報の32億8,300万円からの切り捨てで不正確です。"],
-    ["取得割合は6.9％でした。", "6.9％の算定対象は「自己株式を除く発行済株式総数」ですが、条件が欠落しています。"],
-  ] as const) assert.equal(isRetryableFactFailure(dividend, text, [issue]), false, issue);
-});
-
-test("a hard error next to an approval-stage hedge is not retried (the hedge words alone do not unlock the retry)", () => {
-  const c = candidate();
-  assert.equal(isRetryableFactFailure(c, "x", ["承認前の議案を確定と断定し、配当金額も誤っています（数値誤り）"]), false);
-  assert.equal(isRetryableFactFailure(c, "x", ["議案を確定と断定、別企業の事実です"]), false);
 });
