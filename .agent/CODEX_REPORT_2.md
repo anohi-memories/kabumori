@@ -22,6 +22,16 @@
 - push: own two control files synchronized through GitHub Contents API, blob-SHA compare-and-swap; final receipt below records actual result
 - deploy: 0
 
+## GitHub synchronization receipt
+
+- report_commit: bb2fc1ea2c97d3b1ed8628e0ae23b9db2eaf8ac7
+- task_receipt_commit: a8a50d8f8471fa35eec142a8cddd370a173d43eb
+- push_result: SUCCESS — both commits included in freshly fetched GitHub main; individual commits changed only their own Report or TASK.
+- GitHub read-back: matching task_id / reviewed head / CHANGES REQUIRED / review_required / next_owner chatgpt verified for both files; complete older Report contents preserved byte-for-byte as suffix; older TASK history preserved, only current assignment header status/owner updated plus receipt prepended.
+- PR112 exact head remains c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d, open/unmerged/24 files.
+- Concurrent unrelated main updates to index/state/AI Lab diary were observed, not edited or reverted; no overlap with reviewed source or H2 control paths.
+- Source/production/deploy/EAS/merge/provider calls by H2: 0. C2 pending; return_to 共通アカウントG5のちゃ.
+
 ## Executive verdict
 
 既存テスト/隔離DB proof/既存mutationはすべて再実行してPASS。ただし、独立した真の並行呼び出し・Apple成功後checkpoint失敗・prepare後identity変更・completed後Storage残存の反例を確認した。単一call-siteや逐次retry試験だけでは不可逆な外部処理の重複を防げない。現headはsource mergeを推奨しない。以下R1–R4の契約/実装を直し、C1のfuture-auth条件をTASKと整合させたexact-head再レビューが必要。
