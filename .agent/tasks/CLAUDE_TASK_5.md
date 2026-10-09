@@ -3,7 +3,7 @@
 - task_id: `common-account-v1-phase3a-deletion-orchestrator-20261008`
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - next_owner: claude
 - recommended_model: **Opus5.5（極高）**
 - source_only: **true**
