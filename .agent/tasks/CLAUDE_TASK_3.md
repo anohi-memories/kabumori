@@ -1,5 +1,106 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: postona-ai-consult-pr114-session-epoch-corrective-20261009
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- start_code: G3
+- finish_code: K3
+- project: POSTONA / AI consultation
+- target_pr: 114
+- reviewed_candidate_head: f24c8efe84c433d0e7ca3e16b640a80d9c984a51
+- type: one bounded K3 async-workspace isolation corrective
+- source_only: true
+- merge_allowed: false
+- deploy_allowed: false
+- production_mutation_allowed: false
+
+## K3 disposition / accepted evidence
+
+Prior G3 task `postona-ai-consult-v1-release-readiness-20261009` is a **PASS_CANDIDATE with one correctable UI/session guard gap**. Keep its Report below as canonical history; do not rework the whole V1.
+
+Existing PR #114 fixes genuine cases:
+- workspace A -> B clears pending proposals/chat and ignores old A responses;
+- a double press of 「これで覚えて」 sends one write;
+- four red-before/green-after tests;
+- app 230/230, Edge 90/90, local disposable PG 48 PASS;
+- tests/type/lint/diff/secret scan clean, production mutation/deploy/OpenAI/X=0.
+PR #114 is open/unmerged and exact candidate head is `f24c8efe84c433d0e7ca3e16b640a80d9c984a51`. Vercel/Netlify statuses have been successful. Latest GitHub mergeability is not reliably settled (REST UNKNOWN), so require fresh-main integration proof before K3.
+
+**Only remaining source finding (P2): repeated workspace IDs (ABA) can accept obsolete asynchronous results.**
+
+Code at `apps/social-mobile/src/app/(tabs)/consult.tsx` uses:
+- `sessionBrand = useRef(brandId)`
+- `ask()`: `if (sessionBrand.current !== forBrand) return` after async work;
+- `confirmProposal()`: `stillSameWorkspace() => sessionBrand.current === forBrand` after async reads/saves.
+
+This distinguishes A->B but not A->B->A:
+1. Start consult request in A and keep response in flight.
+2. Switch to B (reset), then back to A (another reset).
+3. Complete original request from the first A session.
+4. Because only brand string equality is checked, old response can be dispatched into the new A session, despite the intervening reset. The same risk applies to stale save completion/rebase after the workspace cycles back.
+This is a source-visible race proof; do not silently claim the previous A->B test covers it.
+
+A second related isolation check is needed for `savedRef.current` fallback in `ask()`: when the new workspace's re-read is unavailable, stale previous-workspace settings must never be presented as the new workspace's saved settings/proposal basis. Do not invent an unrelated redesign if current guards already prevent it; add a deterministic test and minimally fix if reproduced.
+
+## Required bounded correction
+
+- Preserve the exact current UX, explicit 「これで覚えて」 confirmation, versioned CAS, tenancy/RLS, proposal validators and 8 persona signals.
+- Introduce a **monotonically increasing consultation session generation / epoch** on each workspace switch, including a return to the previous workspace ID. Async tasks must capture both workspace ID and epoch and check both before any post-await local state write, dispatch or latest-settings adoption.
+- Make sure a repeated-brand A->B->A renders a new clean conversation and *does not* accept a response/save outcome begun in the first A session.
+- Guard pre-existing workspace-independent cancellation/session-signout behavior; do not use raw access tokens as epoch keys, persist them, or log them.
+- Keep the existing single-flight saving guard. New resets must not accidentally allow an old save's completion to alter the new workspace's state.
+- Distinguish **ignoring a result** from **canceling a network-side write already sent**. Never claim an in-flight persistent RPC was canceled if only its UI completion was ignored. Do not add unsafe compensating writes.
+- Preserve normal same-workspace in-flight reply/save success and repeat-confirm behavior.
+
+## Tests / freshness
+
+Use dedicated clean G3 worktree, fresh origin/main, and recheck file overlap against G1/G2/G4/G5. Rebase/merge safely within own PR branch only; no main reset or other slots' branches/worktrees.
+
+Deterministic focused tests:
+1. A -> B -> A during pending AI response: original A response never displayed/accepted, current A greeting remains.
+2. A -> B -> A during pending read/save completion: obsolete pending result never rehydrates proposal, saved state or success notice in the new A session.
+3. If read fails on new B, cannot display/use savedRef settings from old A.
+4. A -> B ordinary switch, double confirm, valid same-workspace same-epoch response and CAS successful path remain PASS.
+5. Session/signout behavior remains safe; no X publish, scheduled-post write or account crossing.
+6. Focused + full app consult tests; relevant Edge/test smoke unchanged, tsc, eslint, git diff --check, added-line secret scan. List exact test counts.
+
+Changed files restricted to current PR #114:
+- `apps/social-mobile/src/app/(tabs)/consult.tsx`
+- `apps/social-mobile/src/domain/consult-session.ts` only if needed
+- `apps/social-mobile/tests/consult-screen.test.mjs`
+Any new file requires prior STOP/report rationale. Do not change auth provider, DataProvider, server-side code, DB/RPC/migrations, G4/5, G2 reports, AI Lab, X publisher/scheduler.
+
+## Completion
+
+Update existing **PR #114** only, push source/test changes to its own branch. Preserve all previous accepted content. No merge, no production mutation/deploy, no real AI or X call.
+
+In this TASK's Report write: task_id, exact new PR head, changed_files, tests, source review evidence, A->B->A red-before/green-after and fallback test, fresh-main integration status, commit/push, production mutation=0, remaining issues, safety checks, next recommendation.
+
+Set status `review_required`, next_owner `chatgpt`; stop for **K3**. ChatGPT will assess whether one focused independent review is appropriate for the resulting session/tenant boundary, recommendation **Sol（高）**.
+
+## Report
+
+- task_id: postona-ai-consult-pr114-session-epoch-corrective-20261009
+- result: pending
+- changed_files: pending
+- tests: pending
+- commit_hash: pending
+- push: pending
+- deploy: not authorized
+- remaining_issues: pending
+- safety_checks: pending
+- next_recommendation: pending
+
+---
+
+# Previous G3 tasks and reports — preserved history
+
+# Claude Task 3 — CURRENT TASK
+
 - task_id: postona-ai-consult-v1-release-readiness-20261009
 - owner: claude
 - slot: claude-3
