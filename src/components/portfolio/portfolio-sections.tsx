@@ -1,7 +1,8 @@
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { PF, toneColor, toneSoft } from '@/components/portfolio/portfolio-theme';
+import { PF, sparkColor, toneColor, toneSoft } from '@/components/portfolio/portfolio-theme';
 import { Sparkline } from '@/components/portfolio/sparkline';
 import { StockAvatar } from '@/components/portfolio/stock-avatar';
 import {
@@ -9,6 +10,7 @@ import {
   formatAmount,
   formatSignedAmount,
   formatSignedPercent,
+  sparklineTrend,
   tone,
   type AiSummary,
   type AssetSummary,
@@ -18,6 +20,10 @@ import {
 
 // The root-stack report detail: a swipe / back pops straight to the portfolio (the nested レポート-tab route
 // would reveal the reports list instead).
+// Decorative artwork of the asset-summary card only (transparent WebP, 1600x700): pale leaves and a soft glow on the
+// right, no text, numbers, chart or arrows. It is never used anywhere else.
+const ASSET_CARD_BACKGROUND = require('@/assets/images/portfolio/portfolio_asset_card_growth_background.webp');
+
 const openReport = (reportId: string) => router.push({ pathname: '/report-detail', params: { id: reportId } });
 
 // ---- header ---------------------------------------------------------------------------------------------
@@ -92,7 +98,16 @@ export function AssetSummaryCard({
   notes: readonly string[];
 }) {
   return (
-    <View style={styles.card} accessibilityLabel={`資産評価額 ${formatAmount(summary.assetValue)}`}>
+    <View style={[styles.card, styles.assetCard]} accessibilityLabel={`資産評価額 ${formatAmount(summary.assetValue)}`}>
+      {/* Decorative botanical background: first child (behind every text and the sparkline), clipped to the card's
+          rounded corners, takes no touches and is hidden from accessibility. It carries no financial meaning. */}
+      <Image
+        source={ASSET_CARD_BACKGROUND}
+        style={styles.assetBackground}
+        contentFit="cover"
+        pointerEvents="none"
+        accessible={false}
+      />
       <View style={styles.assetTop}>
         <View style={styles.assetMain}>
           <Text style={styles.assetLabel}>資産評価額</Text>
@@ -103,7 +118,7 @@ export function AssetSummaryCard({
         </View>
         {spark.length >= 2 ? (
           <View style={styles.sparkWrap}>
-            <Sparkline values={spark} width={104} height={56} color={PF.up} />
+            <Sparkline values={spark} width={104} height={56} color={sparkColor(sparklineTrend(spark))} />
           </View>
         ) : null}
       </View>
@@ -225,6 +240,10 @@ const styles = StyleSheet.create({
   searchHandle: { position: 'absolute', left: 10, top: 14, width: 8, height: 2.5, borderRadius: 2, backgroundColor: PF.ink, transform: [{ rotate: '45deg' }] },
 
   card: { backgroundColor: PF.card, borderRadius: PF.radius, borderWidth: 1, borderColor: PF.cardBorder, padding: 16 },
+  assetCard: { overflow: 'hidden' },
+  // The art's leaves sit in the right ~35% of the image; the image spans the card width at its own 1600:700 ratio,
+  // anchored top-right and cropped slightly at the right edge, softly translucent so the value stays the priority.
+  assetBackground: { position: 'absolute', top: 0, right: -8, width: '102%', aspectRatio: 1600 / 700, opacity: 0.45 },
   assetTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   assetMain: { flex: 1, minWidth: 0 },
   assetLabel: { color: PF.muted, fontSize: 13, fontWeight: '700' },

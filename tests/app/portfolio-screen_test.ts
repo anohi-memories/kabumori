@@ -114,7 +114,8 @@ test("fallback avatar slot: one place renders it, no logo URL or company logo is
   const avatar = await code("src/components/portfolio/stock-avatar.tsx");
   assert.ok(avatar.includes("accessibilityLabel={`${name}のアイコン`}"), "the full company name is in the accessibility label");
   for (const path of ["src/components/portfolio/stock-avatar.tsx", "src/components/portfolio/holdings-section.tsx", "src/components/portfolio/portfolio-sections.tsx", "src/lib/portfolio-view.ts"]) {
-    const text = await code(path);
+    // The one allowed asset is the approved decorative background of the asset-summary card (not a company logo).
+    const text = (await code(path)).replace(/const ASSET_CARD_BACKGROUND = require\('@\/assets\/images\/portfolio\/portfolio_asset_card_growth_background\.webp'\);/, "");
     assert.ok(!/https?:\/\/|logo_url|require\('@\/assets/.test(text), path);
     assert.ok(!/トヨタ|三菱UFJ|ニッスイ|Toyota|MUFG|Nissui/i.test(text), `${path} hard-codes no company`);
   }
