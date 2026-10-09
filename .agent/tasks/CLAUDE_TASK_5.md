@@ -3,8 +3,8 @@
 - task_id: `common-account-v1-phase3a-deletion-orchestrator-20261008`
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - recommended_model: **Opus5.5（極高）**
 - source_only: **true**
 - production_write_allowed: **false**
@@ -194,6 +194,191 @@ Report:
 This task crosses Auth, deletion, session, Storage and multi-service boundaries. Stop for K5 before any production action.
 
 Recommended model: **Opus5.5（極高）**.
+
+## Report
+
+### Phase 3a：かぶモリの利用終了と、共通アカウント削除の土台（ソースのみ）— 2026-10-09 15:10 JST
+
+- task_id: common-account-v1-phase3a-deletion-orchestrator-20261008
+- result: **SOURCE_CANDIDATE_READY_FOR_REVIEW**（本番での操作は 0）
+- PR: https://github.com/anohi-memories/kabumori/pull/112
+  - branch：`claude/g5-phase3a-deletion-orchestrator-20261009`
+  - commit_hash：`c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d`
+- main
+  - 開始時・Report 時とも：`ac4b20c9`（Phase 2 の migration・クライアント・本番適用の記録をすべて含む）
+- 作業場所：`kabumori-fresh` から作った G5 専用の worktree（`kabumori-g5-phase3a`）
+- push：PR の branch と、この TASK ファイル（control）だけ。main にソースは入れていない。
+- deploy / migration 適用 / EAS：**0 / 0 / 0**
+
+#### 1. 変わったこと（ユーザーから見て）
+
+旧「アカウントを削除」（1 回押すと、共通のログインごと消えてしまう）を、2 つの選択に分けた。
+
+| 選択 | 消えるもの | 残るもの |
+|---|---|---|
+| **かぶモリの利用を終了** | かぶモリのデータ（銘柄・通知・レポート・プッシュ登録）と、かぶモリの権利 | 共通ID（ログイン）、X自動投稿の権利・ワークスペース・投稿の許可 |
+| **共通アカウントを削除** | このIDで使うすべてのサービス、すべての端末のログイン、Apple の連携、保存ファイル、最後にログインそのもの | なし（画面で「すべてのサービスに影響します」と警告） |
+
+- どちらも、ログイン中のアカウントのパスワードをもう一度入力する（サーバー側で「10 分以内にログインしたか」を確認）。
+  - メールアドレスは入力させない（ログイン中のものを使う）。登録の有無が分かる画面は無い。
+  - パスワードの確認は、アプリ本体とは別の「保存しない」接続で行う。アプリ本体のログインや、Phase 2 の利用開始のしくみには影響しない。
+- 共通アカウントの削除は、さらに「削除」と入力して、確認ダイアログを押したときだけ進む。
+- 終わったら、この端末だけログアウトする（他のアプリのログインは切らない）。
+- 削除の途中で止まった場合は、「削除手続き中」の画面に「削除手続きを続ける」ボタンを追加した。
+- かぶモリを終了した人の画面（利用登録のやり直し）にも、「共通アカウントを削除する」を追加した。
+
+#### 2. 使った Phase 1 の関数（サーバーからだけ呼ぶ。利用者の ID は、サーバーが token から確認したものだけ）
+
+- かぶモリの終了：`withdraw_kabumori_service`（と、状態の確認に `common_account_deletion_eligibility`）
+- 共通アカウントの削除：
+  - `common_account_deletion_eligibility`
+  - `begin_common_account_deletion`（確認画面で見せた版数に結び付ける）
+  - `begin_service_deletion` / `finish_service_deletion`（X を包む）
+  - `withdraw_kabumori_service`
+  - `record_common_account_deletion_checkpoint` / `clear_common_account_deletion_checkpoint`
+  - `prepare_common_account_auth_delete`（2 回）
+  - 新しい候補 migration の 3 つ（下の 6.）
+
+#### 3. 削除の順番と、やり直しのしかた
+
+1. 本人確認（token・確認の言葉・10 分以内のログイン・見せた版数）
+2. 先に読むだけの確認：Apple の条件、X の削除がログインを消さない形（`social_only`）で行えるか。ダメなら、ここで何も変えずに止まる。
+3. 開始（版数が違えば `LIFECYCLE_CHANGED` で止まる）
+4. X（既存の X 削除サガをそのまま呼ぶ）→ かぶモリ。必ず X が先（かぶモリが残っている間だけ、X はログインを消さない）。
+5. すべての端末のログアウト → 記録（やり直しのときは毎回もう一度行う）
+6. Apple の連携解除（Apple の ID がある人だけ）→ 記録（1 回だけ。やり直しでは繰り返さない）
+7. 保存ファイルを Storage API で削除し、空になるまで一覧し直す → 記録
+8. prepare → 直前の再確認（ファイルをもう一度一覧し、prepare をもう一度）
+9. Auth Admin でログインを削除（SQL では消さない）
+10. 削除後の読み戻し。**確認が取れたときだけ「削除しました」と返す**
+
+- 失敗したら、その理由（決まった英字のコード）を手続きの行に残す。名前・メール・token は残さない。
+- やり直しは、残っている記録から続ける。同じ手続き（同じ行）を使い続ける。
+- ログアウト（5.）の後に失敗した場合は、アプリに「ログアウト済み」と伝え、もう一度ログインして続けてもらう。
+
+#### 4. それぞれの扱い
+
+- 本人確認：X サガと同じ規則（token の中の最新のログイン時刻が 10 分以内、かつ本人）。
+- セッション：`/auth/v1/logout?scope=global`。すでに発行された token は期限（既定 1 時間）まで有効なので、次のように止める。
+  - サービスの開始・再開は、削除が始まった時点で拒否される（Phase 1/2）。
+  - かぶモリの書き込みは、かぶモリが終わると profile が無いので失敗する。
+  - 保存ファイルの後からのアップロードは、直前の再確認か、削除後の読み戻しで見つけて消す。
+  - X のワークスペースを後から作られた場合は、読み戻しで見つかり、「確認中」で止まる（成功とは言わない）。
+  - まだ止められない経路（下の 7.）は、設計書 §5・§9 に一覧を書いた。
+- Storage：所有者で一覧できる読み取り専用の関数を追加し、削除は Storage API だけで行う。持ち主のバケットがある人は、運営対応で止まる。
+- Apple：かぶモリには Apple でのサインインが無いので、Apple の ID がある人は、何も変えずに「お問い合わせください」で止まる。サーバー側は、コードを送れるアプリ（今後の X アプリ）向けに用意済み。
+- X：既存の `social-mobile-account-delete` を、X アプリと同じ呼び方で呼ぶだけ（コピーしていない）。X の OAuth / Vault / token 失効のしくみはそのまま。
+- Auth の削除：失敗したら、ログインがまだあるかを読み直す。
+  - ある → `AUTH_DELETE_FAILED`（やり直せる）
+  - 分からない → `AUTH_DELETE_UNCONFIRMED`
+  - 404 → 削除済みとして、読み戻しで確認する（確認なしで成功にはしない）
+
+#### 5. 旧経路の封じ込め
+
+- 旧 `delete_logic.ts`（Auth の直接削除）を削除した。本文の無い旧呼び出しは、外部への通信をする前に `ACTION_REQUIRED` で拒否する。
+- 静的テストで固定したこと：
+  - Edge Functions の中で Auth Admin の削除に触れるのは `account-delete/http.ts` の 1 か所だけ（読み戻し用と合わせて 2 つの adapter）。
+  - その削除の呼び出しは 1 か所だけで、開始・X・かぶモリ・ログアウト・保存ファイル・prepare 2 回の後にある。
+  - アプリ（`src/`、Web ページ）に管理者用の経路や service role は無い。
+  - SQL で `auth.users` を消すのは、X サガの古い finalize（`social_and_login`）1 か所だけ。新しいものが増えるとテストが落ちる。
+- 注意：本番には今も旧 `account-delete` が動いている（X の資料の記録による。今回は本番を読んでいない）。封じ込めが本番で効くのは、デプロイ後。
+
+#### 6. migration 候補（**未適用**）：`20261009120000_common_account_deletion_completion.sql`
+
+- 共通アカウントの削除を「完了」と記録できるのは、確認時刻があり、ログインが消え、消えたときに準備完了だった場合だけ（表の制約でも守る）。
+- `complete_common_account_deletion`：削除後の読み戻し。本人の手続きだけ（ID とハッシュの両方で照合）。何か残っていれば「未確認」と理由を残し、完了にはしない。
+- `common_account_deletion_storage_objects`：保存ファイルの一覧（読むだけ）。形が想定外・読めないときは「空」と言わない。
+- `record_common_account_deletion_error`：決まったコードだけを残す（メールなどの自由な文字は拒否）。
+- service_role だけが実行できる。auth / storage / vault には書かない。ガードは shadow のまま。
+
+#### 7. 強制ガードを有効にする前に必要なこと（棚卸し。何も有効にしていない）
+
+設計書 `docs/common-account/phase3a-deletion-orchestrator.md` §9 に表でまとめた。主なもの：
+
+- まだ止められていない「作る」経路：
+  - `ensure_my_profile()`（今のアプリは使っていないが、誰でも呼べる）
+  - profiles への直接の insert（RLS の `profiles_insert_own` が許している）
+  - X のオンボーディング（`x-oauth-connect-user` 経由のワークスペース作成）
+- まだ止められていない「ログインを消す」経路：
+  - 本番の旧 `account-delete`（デプロイで置き換え）
+  - X サガの finalize（`social_and_login` のとき SQL で消す。X 側の担当）
+- RLS・バックエンドの処理・X の Edge Functions に、権利（entitlement）の確認がまだ無い。
+- 発見：かぶモリの通常の「ログアウト」は既定で全端末（global）なので、同じログインの X アプリもログアウトされる。今回の 2 つの流れでは「この端末だけ」にした。通常のログアウトを変えるかは、製品として決めてほしい。
+
+#### 8. テスト・証明（すべて手元。本番は使っていない）
+
+| 対象 | 結果 |
+|---|---|
+| account-delete（挙動 29・HTTP 6・封じ込め 7） | **42 PASS** |
+| アプリ `tests/app`（新しい削除・設定メニューのテストを含む） | **430 PASS** |
+| AuthProvider ハーネス（`tests/node/auth-provider-enrollment.test.mjs`） | **23 PASS** |
+| X 削除サガ（`social-mobile-account-delete`） | **17 PASS** |
+| X アプリの削除まわり（account-deletion / auth-boundary） | **10 + 9 PASS** |
+| 使い捨て PostgreSQL 17：Phase 3a ランナー | **ALL PASS**（事前チェック 3 種・変更範囲の完全一致・再適用の拒否・静的ルール・Phase 2 の挙動に影響なし・挙動 A〜H・2 セッションの競合 3 種） |
+| DB ミューテーション（安全性を 1 つずつ壊して検出されるか） | **19/19 検出** |
+| TypeScript ミューテーション | **24/24 検出**（壊していない複製は PASS） |
+| Phase 1 ランナー / Phase 2 ランナー（回帰） | **20 PASS / ALL PASS** |
+| 型チェック（`deno check`・`tsc`） | 変更ファイルのエラー 0（`tsc` の残り 2 件は main と同じ CSS の宣言の既存エラー） |
+| deno lint | テスト内の偽関数の `require-await` だけ（X サガのテストと同じ種類） |
+
+TASK が求めたケースとの対応：
+
+- かぶモリだけの人の終了 → ログインは残る ✅
+- 両方使う人の終了 → X は変わらず、ログインも残る ✅
+- 権利が残っている間は、ログインを消さない ✅
+- 本人確認が無い・古い ✅
+- 版数が古い（やり直しのときも） ✅
+- 開始と削除の同時実行（関数のテストと、DB の 2 セッション競合） ✅
+- 各段階で失敗したあとのやり直し（6 段階。終わった外部の操作は繰り返さない） ✅
+- 1 回目で保存ファイルが空にならない ✅
+- Apple：必要・設定なし・失敗 ✅
+- X の失敗 ✅
+- セッション失効の失敗 ✅
+- Auth 削除の失敗・404・やり直し ✅
+- 古い token での書き込み（棚卸し＋読み戻しでの検出） ✅
+- 削除後の確認が失敗したら、成功を返さない ✅
+- 呼び出し側から利用者 ID を指定できない ✅
+- token・ID・メール・コード・ファイル名を、ログにも応答にも出さない ✅
+- 旧経路の直接削除ができない ✅
+
+#### 9. G4 との重複
+
+- 無し。
+- G4 の PR #106 のファイル（POSTONA の migration・そのテスト・`migration_source_invariants_test.ts`・資料）と、X のスキーマ・migration・関数は編集していない。
+- X のモジュールからは、純粋な関数 2 つと `apple_revoke.ts` を import しているだけ。
+
+#### 10. safety_checks
+
+- 本番の DB / Auth / Storage / Vault / OAuth への書き込み：**0**。本番の読み取りも 0。
+- 本当のセッション失効・Apple / X の失効・Auth の削除：**0**（すべて偽物の相手でテスト）
+- migration の適用・Edge のデプロイ・EAS / TestFlight：**0**
+- 本物のアカウントの削除・変更：**0**
+- 強制ガード：有効にしていない（shadow のまま）
+- G4 のファイル：編集していない
+- 公開 Web ページ（`apps/kabumori-web/pages/account-deletion.html`）：main から公開される可能性があるので、未リリースの手順を先に出さないよう**変更していない**。アプリのリリースと同時に更新が必要。
+- Simulator での画面の確認：今回は行っていない（ソースのみの TASK。型チェックとロジックのテストで確認）。
+
+#### 11. remaining_issues（Phase 3 のレビュー・デプロイ前に残っていること）
+
+1. X だけ使う人、または先にかぶモリを終了した人は、まだこの流れで削除できない（何も変えずに `X_CLEANUP_UNSUPPORTED` で止まる）。X サガの scope の変更か、X 自身のログイン削除の廃止が必要（X 側・G3/G4 と調整）。
+2. `social-mobile-account-delete` は未デプロイ。デプロイするまで、X を使う人の削除は止まる（安全側）。
+3. 「作る」経路のゲート（`ensure_my_profile`・profiles の直接 insert・X のオンボーディング）。
+4. 実際の Supabase（使い捨てプロジェクト）での確認：global ログアウト、失効後の `/user`、Admin の削除・読み取り、Storage の削除。今回は仕様どおりと仮定して、偽物でテストした。
+5. 削除の途中で応答が失われた場合（ログインは消えたが未確認）に、運営が確認する仕組み。
+6. 削除の取り消し（自分で取り消す画面）は今回は無い（運営は `abort_common_account_deletion` を使える）。
+7. 通常のログアウトを「この端末だけ」にするかの判断。
+8. 公開 Web ページの更新（アプリのリリースと同時）。
+9. Simulator での 2 画面の見た目の確認。
+
+#### 12. next_recommendation
+
+- PR #112 のレビュー（DB・RPC・Auth・削除の境界なので、Codex レビュー対象）。
+- 次の slice の提案：
+  1. G3/G4 と、X サガの scope の変更（上の 1.）と、X アプリからこの削除を呼ぶ形（Apple のコードを送る）を決める。
+  2. 「作る」経路のゲートを、1 つの migration にまとめる。
+  3. 使い捨ての本物の Supabase プロジェクトで、全体の流れを確認する。
+  4. そのあとで、本番の preflight → 適用 → デプロイ（それぞれ K5 の承認を得てから）。
+- 本番での操作の前に、K5 で止まる。
 
 ---
 
