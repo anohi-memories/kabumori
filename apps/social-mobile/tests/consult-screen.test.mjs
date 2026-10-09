@@ -43,10 +43,12 @@ async function consultHarness({ status = 'ready', script, stored } = {}) {
     useEffect: (effect) => { if (first) effects.push(effect); else effect(); },
   };
   // In-memory stand-in for the settings table: versioned rows, every write recorded.
-  const store = { row: stored === undefined ? { settings: { ...SOCIAL_MOBILE_CONTENT_DEFAULTS }, persona: null, version: 1 } : stored, writes: [], reads: 0 };
+  const store = { row: stored === undefined ? { settings: { ...SOCIAL_MOBILE_CONTENT_DEFAULTS }, persona: null, version: 1 } : stored, writes: [], reads: 0, afterRead: null };
   class Repository {
     async read() {
       store.reads += 1;
+      // Lets a test change the world (e.g. the workspace) while a read is in flight.
+      if (store.afterRead) { const hook = store.afterRead; store.afterRead = null; hook(); }
       if (!store.row) return { state: 'ready', data: SOCIAL_MOBILE_CONTENT_DEFAULTS, persona: null, updatedAt: null };
       return { state: 'ready', data: store.row.settings, persona: store.row.persona, updatedAt: `v${store.row.version}` };
     }
@@ -76,10 +78,10 @@ async function consultHarness({ status = 'ready', script, stored } = {}) {
     '@/domain/content-settings-conversation': conversation,
     '@/domain/consult-session': session,
     '@/providers/auth-provider': { useAuth: () => ({ session: status === 'mock_preview' ? null : { access_token: 'jwt-1' } }) },
-    '@/providers/data-provider': { useDataStatus: () => ({ status: live.status, snapshot: { workspace: { id: 'u_1' } } }) },
+    '@/providers/data-provider': { useDataStatus: () => ({ status: live.status, snapshot: { workspace: { id: live.workspaceId } } }) },
   };
   // The data status can change while the screen is open (e.g. the workspace becomes unreachable).
-  const live = { status };
+  const live = { status, workspaceId: 'u_1' };
   const source = await readFile(new URL('../src/app/(tabs)/consult.tsx', import.meta.url), 'utf8');
   const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const module = { exports: {} };
@@ -285,4 +287,67 @@ test('the sample-data preview never calls the endpoint and never writes', async 
   assert.equal(h.ai.calls.length, 0);
   assert.equal(h.store.writes.length, 0);
   assert.equal(h.store.reads, 0);
+});
+
+test('a workspace switch ends the consultation: the old conversation and proposal are gone and nothing is saved', async () => {
+  const h = await consultHarness({ script: () => ({ ok: true, result: result({ kind: 'proposal', assistantReply: 'この内容で覚えてよいか確認してください。', proposedSettingsDelta: { frequencyTargetPerWeek: 5 } }) }) });
+  let tree = await h.say('週5回くらい');
+  assert.ok(button(tree, 'これで覚えて'));
+  h.live.workspaceId = 'u_2';
+  h.render();
+  await settle();
+  tree = h.render();
+  assert.equal(button(tree, 'これで覚えて'), undefined);
+  assert.ok(!texts(tree).includes('週5回くらい'));
+  assert.ok(!texts(tree).some((t) => t.startsWith('週あたり')));
+  assert.ok(texts(tree).some((t) => t.includes('気軽に話しかけてください')));
+  assert.equal(h.store.writes.length, 0);
+  // The next message is a fresh consultation for the new workspace: no turns from the old one.
+  await h.say('こんにちは');
+  assert.equal(JSON.stringify(h.ai.calls[1].request.priorTurns.map((t) => t.role)), '["assistant"]');
+  assert.equal(h.ai.calls[1].request.brandId, 'u_2');
+});
+
+test('an answer that arrives after a workspace switch is dropped, never shown as a proposal for the new workspace', async () => {
+  let release;
+  const h = await consultHarness({
+    script: () => new Promise((resolve) => { release = () => resolve({ ok: true, result: result({ kind: 'proposal', assistantReply: '古い提案', proposedSettingsDelta: { frequencyTargetPerWeek: 6 } }) }); }),
+  });
+  input(h.render()).onChangeText('週6回');
+  button(h.render(), '送信').onPress();
+  await settle();
+  h.live.workspaceId = 'u_2';
+  h.render();
+  await settle();
+  release();
+  await settle();
+  const tree = h.render();
+  assert.ok(!texts(tree).includes('古い提案'));
+  assert.equal(button(tree, 'これで覚えて'), undefined);
+  assert.equal(button(tree, '送信').label, '送信');
+  assert.equal(h.store.writes.length, 0);
+});
+
+test('a confirmation is abandoned if the workspace changes before the write is sent', async () => {
+  const h = await consultHarness({ script: () => ({ ok: true, result: result({ kind: 'proposal', proposedSettingsDelta: { frequencyTargetPerWeek: 5 } }) }) });
+  const tree = await h.say('週5回くらい');
+  h.store.afterRead = () => { h.live.workspaceId = 'u_2'; h.render(); };
+  button(tree, 'これで覚えて').onPress();
+  await settle();
+  assert.equal(h.store.writes.length, 0);
+  assert.ok(!texts(h.render()).some((t) => t.includes('保存しました')));
+});
+
+test('pressing 「これで覚えて」 twice in a row sends exactly one write', async () => {
+  const h = await consultHarness({ script: () => ({ ok: true, result: result({ kind: 'proposal', proposedSettingsDelta: { frequencyTargetPerWeek: 5 } }) }) });
+  const tree = await h.say('週5回くらい');
+  const confirm = button(tree, 'これで覚えて');
+  confirm.onPress();
+  confirm.onPress();
+  await settle();
+  assert.equal(h.store.writes.length, 1);
+  assert.equal(h.store.row.settings.frequencyTargetPerWeek, 5);
+  const shown = texts(h.render());
+  assert.ok(shown.some((t) => t.includes('確認した内容を保存しました')));
+  assert.ok(!shown.some((t) => t.includes('もう一度「これで覚えて」')));
 });

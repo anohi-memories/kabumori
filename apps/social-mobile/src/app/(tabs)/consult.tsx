@@ -50,6 +50,21 @@ export default function ConsultScreen() {
   useEffect(() => {
     savedRef.current = saved;
   }, [saved]);
+  // A consultation belongs to one workspace. When the workspace changes, it starts over: the old
+  // conversation and proposal are dropped, and an answer or save still in flight for the old
+  // workspace is discarded instead of landing in the new one.
+  const sessionBrand = useRef(brandId);
+  const savingRef = useRef(false);
+  useEffect(() => {
+    if (sessionBrand.current === brandId) return;
+    sessionBrand.current = brandId;
+    savingRef.current = false;
+    dispatch({ type: "reset", greeting: GREETING });
+    setMessage("");
+    setHistoryConfirmation(false);
+    setSaving(false);
+    setSaved({ settings: SOCIAL_MOBILE_CONTENT_DEFAULTS, persona: null, updatedAt: null });
+  }, [brandId]);
 
   useEffect(() => {
     if (status !== "ready" || !brandId || !repository) return;
@@ -74,10 +89,12 @@ export default function ConsultScreen() {
       dispatch({ type: "failed", error: consultFailure("CONSULT_CONFIGURATION_UNAVAILABLE") });
       return;
     }
+    const forBrand = brandId;
     const [outcome, fresh]: [ConsultOutcome, Awaited<ReturnType<typeof repository.read>>] = await Promise.all([
       requestConsult(supabase, accessToken, { brandId, message: text, priorTurns: prior }),
       repository.read(brandId),
     ]);
+    if (sessionBrand.current !== forBrand) return;
     const base: Saved = fresh.state === "ready" ? { settings: fresh.data, persona: fresh.persona, updatedAt: fresh.updatedAt } : savedRef.current;
     if (fresh.state === "ready") setSaved(base);
     if (outcome.ok) dispatch({ type: "reply", result: outcome.result, shownAgainst: { settings: base.settings, persona: base.persona } });
@@ -104,7 +121,8 @@ export default function ConsultScreen() {
   /** The only path that saves: the user pressed 「これで覚えて」 on a visible proposal. */
   async function confirmProposal() {
     const pending = state.pending;
-    if (!pending || saving) return;
+    // Single flight: a second press before the first save finishes does nothing.
+    if (!pending || savingRef.current) return;
     if (preview) {
       const applied = applyConfirmedConversationProposal(saved.settings, saved.persona, pending.result);
       setSaved({ settings: applied.settings, persona: applied.persona, updatedAt: null });
@@ -117,9 +135,13 @@ export default function ConsultScreen() {
       dispatch({ type: "save_failed", text: "いまは保存できません。時間をおいて、もう一度お試しください。" });
       return;
     }
+    const forBrand = brandId;
+    const stillSameWorkspace = () => sessionBrand.current === forBrand;
+    savingRef.current = true;
     setSaving(true);
     try {
       const latest = await repository.read(brandId);
+      if (!stillSameWorkspace()) return;
       if (latest.state !== "ready") {
         dispatch({ type: "save_failed", text: latest.reason });
         return;
@@ -136,12 +158,15 @@ export default function ConsultScreen() {
         return;
       }
       const result = await repository.saveConfirmedIfUnchanged(brandId, plan.settings, plan.personaChanged ? plan.persona : null, latest.updatedAt);
+      if (!stillSameWorkspace()) return;
       if (result.ok) {
         const after = await repository.read(brandId);
+        if (!stillSameWorkspace()) return;
         setSaved(after.state === "ready" ? { settings: after.data, persona: after.persona, updatedAt: after.updatedAt } : { settings: plan.settings, persona: plan.persona, updatedAt: null });
         dispatch({ type: "saved", text: SAVED_TEXT });
       } else if (result.stale) {
         const again = await repository.read(brandId);
+        if (!stillSameWorkspace()) return;
         if (again.state === "ready") {
           setSaved({ settings: again.data, persona: again.persona, updatedAt: again.updatedAt });
           dispatch({ type: "rebase_proposal", shownAgainst: { settings: again.data, persona: again.persona }, text: REBASE_TEXT });
@@ -150,7 +175,10 @@ export default function ConsultScreen() {
         dispatch({ type: "save_failed", text: result.reason });
       }
     } finally {
-      setSaving(false);
+      if (stillSameWorkspace()) {
+        savingRef.current = false;
+        setSaving(false);
+      }
     }
   }
 

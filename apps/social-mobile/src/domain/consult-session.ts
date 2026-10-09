@@ -188,7 +188,9 @@ export type ConsultEvent =
   | { type: 'dismiss_proposal' }
   | { type: 'rebase_proposal'; shownAgainst: SavedSnapshot; text: string }
   | { type: 'saved'; text: string }
-  | { type: 'save_failed'; text: string };
+  | { type: 'save_failed'; text: string }
+  /** The workspace changed: the consultation starts over and nothing from the old one is kept. */
+  | { type: 'reset'; greeting: readonly { role: 'assistant' | 'user'; text: string }[] };
 
 export function initialConsultState(greeting: readonly { role: 'assistant' | 'user'; text: string }[]): ConsultState {
   return {
@@ -250,6 +252,8 @@ export function consultReducer(state: ConsultState, event: ConsultEvent): Consul
       return { ...state, pending: null, notice: { tone: 'success', text: event.text } };
     case 'save_failed':
       return { ...state, notice: { tone: 'warning', text: event.text } };
+    case 'reset':
+      return initialConsultState(event.greeting);
     default:
       return state;
   }
