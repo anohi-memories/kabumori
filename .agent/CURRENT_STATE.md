@@ -1,3 +1,13 @@
+## K5 FINAL slot reconciliation — G5 H2 security review READY — 2026-10-09
+
+- IMPORTANT: this supersedes the immediately preceding temporary H2 collision/waiting note below.
+- The G2 chat reconciled the collision and preserved the canonical H2 assignment to G5 PR112; it withdrew its concurrent PR110 H2 allocation to avoid overwriting G5. GitHub main commit `6f41373973794d3d6b99dd305cab70bbc98d309e` records the reconciliation.
+- H2 canonical TASK and ACTIVE_TASK now both target `common-account-v1-phase3a-pr112-security-review-20261009`, exact PR112 head `c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d`, status ready, return_to 共通アカウントG5のちゃ, completion_code C2, recommended model **Sol（極高）**.
+- H1 remains exclusively assigned POSTONA PR106; do not overwrite.
+- G5 Phase3a = PASS_CANDIDATE, review_required, next_owner codex. Source PR112 remains unmerged; no production/deploy/EAS; independent H2 security review must PASS before merge consideration.
+- Next action: send `H2` to Codex, then return `C2` to 共通アカウントG5のちゃ. No additional G5 implementation start yet.
+- AI Lab diary: 2026-10-09 publicly safe shared-account withdrawal prototype note was appended to the canonical markdown; snapshot workflow is separate and must not be conflated with a production deploy.
+
 ## K2 — G2 PR #110 corrected PASS_CANDIDATE / H2 slot occupied — 2026-10-09
 
 - PR #110 exact latest head `cb3d77d50e848d043f5427df363769b75d3c7764`: open/unmerged, changed-file overlap with current main 0; mergeability API null/unknown, so no positive mergeability claim.
