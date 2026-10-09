@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-5
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: critical
 - type: bounded corrective of independent H2 CHANGES REQUIRED
 - target_pr: 112
@@ -81,6 +81,18 @@ Forbidden: changing G4 social_accounts schema, X saga/POSTONA source, production
 - If R3 cannot be made safe under shadow enforcement, fail closed, document BLOCKED state; never manufacture green completion.
 
 推薦モデル：**Opus5.5（極高）**
+
+## K5 source candidate gate — 2026-10-10 JST
+
+- verdict: **PASS_CANDIDATE for independent H2 rereview only**; does not authorize merge or deploy.
+- exact PR112 head: `b60272c433b57bac1acb00c13d4fda7ff96f1f2f`, OPEN, unmerged, 25 changed files, reported 14-file corrective since `c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d`.
+- G5 reported R1/R2/R4/C1 corrections, R3 whole-account delete fail-closed behind schema-immutable blocked release gate; feature activation remains **BLOCKED** until Auth-side identity-change fencing and later approved migration.
+- report tests: account-delete 53, app 430, AuthProvider 23, X saga 17, X app 19, SQL mutations 43/43, TS mutations 38/38, disposable PG Phase1/2/3a all pass; evidence is G5-reported pending independent verification.
+- K5 source spot-check: in `lifecycle_logic.ts` managed-delete gate check precedes mutable lifecycle RPC, and in unapplied SQL release gate state has CHECK only 'blocked'; future reauth requires timestamp <= now; post-completed path rechecks live residue. Not a full independent security proof.
+- PR old-to-new compare: one commit, 14 files, all in G5 scope. PR base-to-main comparison: 42 commits, zero changed-file overlap at K5. GitHub mergeability was true at K5; recheck on H2 and before any merge.
+- H1 remains occupied with POSTONA PR106; H2 assigned `common-account-v1-phase3a-pr112-r1-r4-c1-final-rereview-20261010`, recommended **Sol（極高）**, return_to 共通アカウントG5のちゃ, completion_code C2. G2 PR110 awaits a genuinely free slot. Do not modify other workstreams.
+- Source merge: **HOLD** pending independent H2 PASS. Production migration, Edge deploy, EAS, provider/Auth/Storage mutation: **NOT AUTHORIZED**. No K5 production access or mutation.
+- next_owner: codex; G5 review_required; next user action: H2 then C2.
 
 ## Report — current corrective
 
