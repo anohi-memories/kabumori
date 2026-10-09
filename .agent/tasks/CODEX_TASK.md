@@ -1,5 +1,122 @@
 # Codex Task H1 — CURRENT TASK
 
+- task_id: postona-pr106-f1-acl-final-rereview-20261009
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- return_to: chatgpt
+- start_code: H1
+- completion_code: C1
+- priority: high
+- recommended_model: Sol（高）
+- type: one final bounded exact-head DB/security + integration rereview
+- target_pr: 106
+- target_head: c0b6c03cb909d91f72b58424d64c6dfae1b8f14f
+- previous_reviewed_head: 4b6dc57966e0d55b2e901a7707446c35b25a1f00
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Goal
+
+Decide if the two remaining C1 blockers are closed in POSTONA PR #106. This is a **narrow final rereview**, not a request to restart B1-B6, architecture, or unrelated security review without specific new evidence.
+
+H1 previously independently accepted:
+- B1-B6 and X regressions;
+- existing trigger function owner, body and unauthorized EXECUTE protections;
+- new provider guard exact body/definition R2;
+- previous 54/54 mutations.
+
+Prior residual:
+1. `proacl={}` (missing **owner's own EXECUTE**) passed despite the exact one-owner-EXECUTE prerequisite.
+2. PR was content-conflicted with main in `supabase/tests/migration_source_invariants_test.ts`.
+
+## Mandatory start/freshness
+
+1. Read `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, `.agent/ACTIVE_TASK.md`, this TASK, latest G4 TASK/Report and previous H1 Report.
+2. Fresh-fetch origin/main and PR #106 head. **Require exact** `c0b6c03cb909d91f72b58424d64c6dfae1b8f14f`; STOP if head changed.
+3. Use own isolated H1 worktree based on fresh `/Users/yuya/Developer/kabumori-fresh`, never share any G/H checkout/dev server.
+4. Allocation check: PR #106 OPEN/unmerged, 7 changed files, GitHub mergeable=true, Netlify and Vercel SUCCESS. Main advanced beyond PR base only in `.agent/` files; PR source-file overlap is 0. Recheck before final verdict.
+5. G2 and G5 may work concurrently in other scopes. Do not edit their files, worktrees or server.
+
+## Focus F1 — exact trigger function ACL precondition
+
+Inspect the SQL's actual owner ACL predicate for both:
+- `public.x_account_refresh_reset_on_reconnect()`;
+- `public.social_mobile_account_deletion_guard()`.
+
+For each require **exactly one** normalized direct ACL item:
+- grantor = approved owner;
+- grantee = approved owner;
+- privilege = EXECUTE;
+- is_grantable = false.
+
+Independently exercise:
+- `proacl={}` (owner EXECUTE revoked), must refuse **before DDL** with `POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_ACL`;
+- `proacl=NULL` (default PUBLIC EXECUTE), must refuse;
+- owner-only EXECUTE exact control must PASS;
+- unsafe direct/extra/grant-option, inherited, PG16+ SET ROLE/transitive paths remain refused.
+
+Refusal must leave the original X-only platform CHECK and complete object/row/security state unchanged, with no new guard/helper residue.
+
+Verify this really proves exact ACL, not simply no bad ACL items. Do not change production rights.
+
+## Focus F2 — migration reservation integration
+
+Verify in exact candidate:
+- `20261007150000 -> postona_social_accounts_multi_provider`;
+- `20261007173000 -> ai_lab_topic_evergreen_capacity` preserved;
+- reservation/invariant file matches current main except for the single POSTONA line;
+- no migration version collision in main/open work;
+- a read-only merge-tree and GitHub fresh mergeability are conflict-free.
+
+A moved main with a new conflict is an integration blocker; report the exact overlap, do not edit unrelated streams.
+
+## Bounded regression
+
+Check:
+- focused disposable PostgreSQL runner (including the newly added 2 empty-owner-ACL adverse cases and healthy control);
+- focused mutation suite (G4 reports 55/55);
+- critical earlier B1-B6 and C1-R2 protections stay intact;
+- X publish, refresh, deletion and PR41 Stage3B regressions;
+- `migration_source_invariants_test.ts` (G4 reports 11/11);
+- `git diff --check`, no secrets, no unexpected product file scope.
+
+G4's report is supporting evidence, not a substitute for independent verification.
+
+## Source, deployment and review boundaries
+
+- Reviewer edits to product source: **0**.
+- Do not merge PR #106.
+- No production DB/catalog read/write or migration apply.
+- No deploy/EAS, Auth/OAuth/Vault/secret changes or real X/Threads/Instagram calls.
+- No other workstream mutations.
+
+## Verdict and report
+
+- `PASS` only if F1 and F2 are independently closed and accepted regressions preserved.
+- `CHANGES REQUIRED` only for a concrete remaining blocker, with minimal reproduction. Do not expand scope mechanically.
+- PASS would authorize **source merge consideration only**, never production migration apply.
+
+Append a new completion report to `.agent/CODEX_REPORT.md` retaining all prior reports:
+- task_id, verdict, exact reviewed head;
+- F1/F2 disposition, independent PG proof, 55-mutation results;
+- CI/mergeability, relevant X regressions;
+- reviewer changed files, commit/push/sync;
+- production read/write/deploy/provider calls = 0;
+- source merge recommendation, separate production gate and residual facts.
+
+Set this TASK to `review_required`, `next_owner: chatgpt`, return_to `chatgpt`, completion_code `C1`, then STOP.
+
+推薦モデル：**Sol（高）**
+
+---
+
+# Previous H1 task history — protected
+
+# Codex Task H1 — CURRENT TASK
+
 - task_id: postona-pr106-function-contract-final-rereview-20261008
 - owner: codex
 - slot: codex-1
