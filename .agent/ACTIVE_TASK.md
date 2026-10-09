@@ -47,16 +47,16 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: kabumori-pr110-residual-b1-b3-final-review-20261009
+- task_id: common-account-v1-phase3a-pr112-security-review-20261009
 - start_code: H2
 - finish_code: C2
 - next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- return_to: かぶモリアプリG2のちゃ
+- return_to: 共通アカウントG5のちゃ
 - completion_code: C2
-- allocation: New G2 review TASK superseded concurrent G5 H2 allocation. Preserve the latest canonical H2 TASK: exact-head PR #110 residual B1-R1/B2-R1/B3-R1 review on cb3d77d50e848d043f5427df363769b75d3c7764. Do not overwrite; G5 review remains unassigned pending a truly available H slot.
-- recommended_model: Sol（高）
+- allocation: Preserve existing G5 critical security review of PR #112 at exact head c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d. A G2 PR #110 review allocation attempted concurrently but was withdrawn to protect this canonical H2 TASK. Do not start G2 review from H2 without later explicit reassignment after G5 C2.
+- recommended_model: Sol（極高）
 
 ## Claude G1
 - owner: claude
@@ -73,13 +73,13 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: C2 corrective on existing PR #110 only. Fix only residual B1-R1 partial multi-unit objective Fact quote coverage, B2-R1 incomplete/repeated-emoji fact binding, and B3-R1 no-comma clause hedge laundering. B4 is accepted closed. Preserve all other accepted behavior. No merge/deploy/production mutation.
+- allocation: Latest G2 report PR #110 head cb3d77d50e848d043f5427df363769b75d3c7764. K2 PASS_CANDIDATE: original seven B1-R1/B2-R1/B3-R1 failures reportedly closed; local Sol/Claude comparison completed separately. Await truly free H1/H2 for final exact-head review; never overwrite H1 POSTONA or H2 G5 TASK. Merge/deploy HOLD.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
