@@ -33,14 +33,15 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: postona-pr106-function-contract-final-rereview-20261008
+- status: ready
+- task_id: postona-pr106-f1-acl-final-rereview-20261009
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
+- return_to: chatgpt
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepts CHANGES REQUIRED on PR #106 head 4b6dc57966e0d55b2e901a7707446c35b25a1f00. R2 exact provider-guard body is closed and unsafe EXECUTE paths are closed. Remaining blocker is a literal ACL exactness gap: empty owner ACL is accepted although canonical contract requires one owner EXECUTE entry; plus one migration-reservation file merge conflict. H1 closed/free; bounded corrective returned to G4.
+- allocation: One final narrow exact-head PR #106 rereview of c0b6c03cb909d91f72b58424d64c6dfae1b8f14f. Confirm existing trigger functions positively require owner-only EXECUTE (empty owner ACL rejected), mechanical migration reservation/main conflict resolution, and focused PG/mutation/X regressions. No product edits, PR merge, production apply or deploy.
 - recommended_model: Sol（高）
 ## Codex H2
 - owner: codex
@@ -94,13 +95,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: review_required
 - task_id: postona-multisocial-phase2a2-security-corrective-20261007
 - start_code: G4
 - finish_code: K4
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: C1 returned one final bounded corrective on existing PR #106 only: positively require exact owner EXECUTE ACL for the two existing trigger functions (empty owner ACL must fail atomically), and mechanically integrate fresh main to resolve the migration_source_invariants reservation conflict while preserving both POSTONA 20261007150000 and AI Lab 20261007173000 reservations. Preserve all accepted B1-B6/C1-R2 logic. No production/apply/deploy/provider operations.
+- allocation: K4 confirmed PR #106 head c0b6c03cb909d91f72b58424d64c6dfae1b8f14f OPEN, conflict-free, Netlify/Vercel green. G4 corrected empty-owner-ACL positive assertion and mechanically reconciled main reservation. Reports 87 adverse states, 55/55 mutations, X regressions PASS; production/apply/deploy 0. PASS_CANDIDATE only; merge HOLD for H1 narrow exact-head rereview.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
