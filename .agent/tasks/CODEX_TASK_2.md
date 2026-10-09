@@ -1,3 +1,70 @@
+# Codex H2 — CURRENT TASK — PR #110 residual safety final rereview
+
+- task_id: kabumori-pr110-residual-b1-b3-final-review-20261009
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- return_to: かぶモリアプリG2のちゃ
+- completion_code: C2
+- priority: high
+- recommended_model: Sol（高）
+- type: exact-head bounded independent rereview
+- target_pr: 110
+- target_head: cb3d77d50e848d043f5427df363769b75d3c7764
+- previous_reviewed_head: d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8
+- production_access_allowed: false
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Objective
+Independently verify closure of **only** H2 residual safety findings B1-R1 / B2-R1 / B3-R1 on existing PR #110. Earlier B4, app disclaimer, Premium policy and model registry are accepted and must not be reopened without new direct evidence.
+
+## Freshness and worktree
+1. Read PROJECT_RULES, .agent/ORCHESTRATION.md, .agent/CURRENT_STATE.md, .agent/ACTIVE_TASK.md, prior H2 Report and latest G2 Report.
+2. Use a fresh independent H2 checkout/worktree from /Users/yuya/Developer/kabumori-fresh after fresh origin/main fetch. Never share or modify G2 or other slot worktrees.
+3. Require PR #110 open/unmerged and exact head cb3d77d50e848d043f5427df363769b75d3c7764; if moved STOP. Allocation-time 27 PR files, and main-since-base changed-file overlap zero. Recheck before verdict. GitHub mergeability API currently unknown; do not treat as clean.
+4. Diff from previously reviewed head is **only** analysis_logic.ts, hard_fact_guards.ts, h2_corrective_test.ts. Avoid broad new feature requests or unrelated news/Claude API migration work.
+5. No real API calls, Supabase operations, DB writes, deploy, Cron, X sending, EAS, Auth, secret/environment changes, or production read. All test probes isolated and mocked; no --allow-net.
+
+## B1-R1: objective Fact quote coverage
+- Reproduce previously surviving short tail: Fact objective quote 「公正取引委員会はサッポロビールへの調査を実施していません。調査なし。」 spanning two generated units.
+- Verify every objectively rejected segment including 「調査なし。」 is removed from final X and app, or candidate fails closed. Test 3-unit quotes, partial overlaps, ambiguous short standalone quote, longer quote whose middle/tail is not mapped, repeated / overlapping units, and normalization without accidental acceptance of uncovered characters.
+- Never mark a whole objective quote mapped after only a partial match. Preserve coherent safe delivery when full coverage is provable, without adding AI calls.
+
+## B2-R1: incomplete fragments and inline/repeated emoji
+Independently reproduce wrong dated facts with:
+1. 「10月6日📉 日経平均は70,035.71（前日比−0.92%）でした。」
+2. 「日経平均📉 10月6日は70,035.71（前日比−0.92%）でした。」
+3. 「10月6日の📉 📉 日経平均は70,035.71（前日比−0.92%）でした。」
+Verify sentence boundary requires a completed proposition, not a mere date/subject fragment. Check emoji chains and contrasting legitimate complete clauses 「…でした📉 10月6日の米国市場…」 and market direction statements. Preserve the 10/7 real fixtures.
+
+## B3-R1: comma-free hedge laundering
+Independently reproduce unsupported definite causal statement + unrelated later hedge:
+- 「ウクライナ情勢を受けて東京市場は下落しましたが今後の動きには不確実な可能性があります。」
+- same with 「ましたけれど今後」 and 「ましたので今後」.
+Verify clause-local qualification without comma; reasonable ものの/ため/一方/ただし/しかし controls; do not split simple subject-particle が or genuine 「重しとなった可能性」. Re-check final delivery path.
+
+## Preserve accepted contracts
+- Original B1-B4 regressions remain PASS. B4 passed/advisory/not_run => passed/failed/NULL stays closed.
+- Existing progressive unit removal, objective fact proof, unknown-ref and stale/numeric/date/TOPIX checks, 10/7 correct Japan/US date distinction, X Premium length advisory only, X/App exact disclaimer once, model-call ceiling two generations/four requests, no retry budget increase.
+- Claude API/model comparison is a **separate read-only evaluation**, not part of this PR review or permission to migrate the live model.
+
+## Evidence / verdict
+Run corrected h2_corrective_test, delivery_first_test, full market-report-analysis, shared X consumer, app disclaimer test, Deno check/lint on modified files, git diff --check, and independent adverse probes for the 7 residual cases and neighboring bypasses. The G2 Report claims analysis 260/260, X consumer 10, shared 466, app 430, personalized 129, data packet 42. These are reported, not yet independently certified.
+
+Give PASS / PASS-WITH-NONBLOCKING-NOTES / CHANGES REQUIRED / BLOCKED with exact-head evidence. A PASS permits **C2 merge decision only**, never deployment.
+
+## Report / completion
+Prepend .agent/CODEX_REPORT_2.md with exact reviewed head, B1-R1/B2-R1/B3-R1 results, independent reproductions, tests, conflicts, changed_files, commit/push, production_access/mutation/deploy=0, remaining risks and merge recommendation.
+Mark this TASK status review_required and next_owner chatgpt. Preserve prior reports and TASK history.
+STOP; user sends **C2** in **かぶモリアプリG2のちゃ**.
+
+Recommended model: **Sol（高）**.
+
+---
+
 # Codex H2 — Common Account Phase 3a independent security review
 
 - task_id: common-account-v1-phase3a-pr112-security-review-20261009
