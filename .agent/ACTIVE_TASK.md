@@ -46,15 +46,17 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: kabumori-pr110-b1-b4-rereview-20261008
+- status: ready
+- task_id: common-account-v1-phase3a-pr112-security-review-20261009
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: C2 accepted CHANGES REQUIRED. B4 is closed; residual B1-R1/B2-R1/B3-R1 were returned to G2. H2 free pending corrected-head rereview.
-- recommended_model: Sol（高）
+- return_to: 共通アカウントG5のちゃ
+- completion_code: C2
+- allocation: Independent exact-head security review of G5 common-account Phase3a PR #112 head c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d. Review Auth/reauth/session/stale-JWT, Kabumori-only withdrawal, X/Apple/Storage deletion saga, SQL candidate, old-client/bypass, RLS and real Supabase rollout gaps. Review-only; PR merge, production migration, deploy and EAS all HOLD. H1 was concurrently reserved for POSTONA PR #106 and must not be overwritten.
+- recommended_model: Sol（極高）
 
 ## Claude G1
 - owner: claude
@@ -106,14 +108,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: review_required
 - task_id: common-account-v1-phase3a-deletion-orchestrator-20261008
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Common Account Phase 2 is production-smoke PASS / READY_FOR_EAS. To avoid wasting an EAS build before the common-account feature set is complete, G5 now advances the critical path to Phase 3a source-only implementation: safe Kabumori service withdrawal, explicit common-account deletion orchestrator foundation, legacy direct Auth-delete containment, explicit settings UI choices, X deletion adapter boundary, and enforcement-readiness inventory. No production mutation/deploy/EAS. G4-owned POSTONA schema/migration files are protected; use adapter boundaries instead of overlapping them.
+- allocation: K5 PASS_CANDIDATE for Phase3a source completion. PR #112 head c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d is open/unmerged, 24 files, CI Netlify/Vercel PASS, no production mutation/deploy/EAS. Intended Kabumori service-only withdrawal vs whole common-account deletion flows, migration candidate and tests are reported complete, but high-risk shared Auth/deletion boundary requires H2 independent exact-head review before merge. Known gaps: X-only/after-Kabumori-ended deletion, X deletion deploy, stale-JWT creator/enforcement writers, real Supabase validation, legacy deployed delete route and public disclosure. Merge/apply/deploy/EAS HOLD. G5 remains review_required pending C2; non-conflicting slots continue.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
