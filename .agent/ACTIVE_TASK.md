@@ -46,16 +46,16 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: common-account-v1-phase3a-pr112-security-review-20261009
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
 - return_to: 共通アカウントG5のちゃ
 - completion_code: C2
-- allocation: Preserve existing G5 critical security review of PR #112 at exact head c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d. A G2 PR #110 review allocation attempted concurrently but was withdrawn to protect this canonical H2 TASK. Do not start G2 review from H2 without later explicit reassignment after G5 C2.
+- allocation: C2 accepted independent PR112 exact-head H2 verdict CHANGES REQUIRED (R1–R4 P1, future-auth C1 P2). Review is CLOSED and H2 is not reserved for rereview. Any next assignment requires fresh TASK/Report/index/PR conflict check; preserve history and coordinate with G2 PR110 waiting for a slot.
 - recommended_model: Sol（極高）
 
 ## Claude G1
@@ -108,14 +108,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: review_required
-- task_id: common-account-v1-phase3a-deletion-orchestrator-20261008
+- status: ready
+- task_id: common-account-v1-phase3a-pr112-h2-r1-r4-c1-corrective-20261009
 - start_code: G5
 - finish_code: K5
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 PASS_CANDIDATE for Phase3a source PR112 exact head c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d, 24 files and local tests reported PASS; production/deploy/EAS 0. H2 is now canonically assigned the independent critical security review, after a resolved collision with G2 PR110. PR112 stays OPEN/UNMERGED; merge/deploy/migration/EAS HOLD until C2 PASS and separate later production gates. G5 review_required / next_owner codex. G2 and other non-conflicting work may continue.
+- allocation: C2 CHANGES REQUIRED for G5 Phase3a PR112 head c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d. Correct verified R1 concurrent external duplicates; R2 Apple one-time success/checkpoint crash; R3 late Apple requirement false completion; R4 late Storage residue false completed; C1 future recent-auth +30s mismatch. Same existing PR, strict source-only, no cross-owner X changes. True-overlap/disposable PG regression and fail-closed release blockers required. Merge, production apply/deploy and EAS HOLD. H2 review done/closed; next K5.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
