@@ -1,3 +1,15 @@
+## K2 — G2 PR #110 corrected PASS_CANDIDATE / H2 slot occupied — 2026-10-09
+
+- PR #110 exact latest head `cb3d77d50e848d043f5427df363769b75d3c7764`: open/unmerged, changed-file overlap with current main 0; mergeability API null/unknown, so no positive mergeability claim.
+- From the previous reviewed head `d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8`, only 3 corrective files changed: market-report-analysis/analysis_logic.ts, hard_fact_guards.ts, h2_corrective_test.ts.
+- G2 Report says all 7 residual adverse B1-R1/B2-R1/B3-R1 cases are closed; original B1-B4 controls and intended 10/7 generation remain green. Reported suites: market-report-analysis 260, shared X consumer 10, _shared 466, app 430, personalized 129, market data packet 42, Deno check/lint and diff check passed. Source changes by Codex reviewer 0; production deploy/manual generation/X posting 0.
+- **K2 verdict: PASS_CANDIDATE**, pending one focused independent exact-head review of only residual B1-R1/B2-R1/B3-R1 before merge. Neither merge nor deploy is authorized.
+- **Concurrent slot collision resolved conservatively:** H1 has an active POSTONA review, H2 canonical TASK is the pre-existing G5 Phase3a PR112 security review (`common-account-v1-phase3a-pr112-security-review-20261009`). During K2, a G2 review TASK was briefly prepended to the H2 file but promptly withdrawn without running it; the G5 H2 TASK and Report are preserved. ACTIVE H2 was reconciled to canonical G5 assignment. Do not start G2 PR110 review from H2 until the slot genuinely becomes free. No separate G2 Codex slot is allocated now.
+- **Separate model comparison (not in PR #110):** G2 used four local/read-only market-report inputs (10/7 close, 10/8 morning/close, 10/9 morning). Reported improved Sol mean ~$0.077/report, Opus5.5 mean ~$0.269/report, with Opus prose quality preferred; Claude Max $100/month API credits can make Opus economically feasible but must share budget with all products. No live model switch/Claude deploy/secret write.
+- New false-positive guard issues identified in comparison (TOPIX index adoption phrase, reported ship incident vs market causal statement, current-date watch points, Japan/US cross-day narrative) are for a separate task **after** PR110 acceptance; avoid scope creep and preserve production delivery reliability.
+- AI Lab diary: 記録不要 — 公開向けの新しい機能リリースではなく、安全性と生成品質の検証段階。比較結果の公開題材化はモデル移行の実装後に判断する。
+- Next: complete existing H1/H2 reviews in their originating chats; after a genuinely free H1/H2 slot is verified, assign a narrow PR110 exact-head review (recommended Codex **Sol（高）**), then C1/C2 and separate merge/deploy gates.
+
 ## K5 coordination correction — H2 concurrent allocation conflict, G5 review WAITING — 2026-10-09
 
 - After K5 source PASS_CANDIDATE, H1 was taken by POSTONA PR106 review. A G5 review task was briefly written to H2, but the G2 chat concurrently assigned H2 to PR110 and its newer canonical TASK is `kabumori-pr110-residual-b1-b3-final-review-20261009`.
