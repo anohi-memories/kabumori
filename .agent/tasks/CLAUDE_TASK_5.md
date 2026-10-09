@@ -3,7 +3,7 @@
 - task_id: common-account-v1-phase3a-pr112-h2-r1-r4-c1-corrective-20261009
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: critical
 - type: bounded corrective of independent H2 CHANGES REQUIRED
