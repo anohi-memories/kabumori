@@ -1,3 +1,18 @@
+## K4 — POSTONA Phase 2a-2 final bounded corrective PASS_CANDIDATE / H1 assigned — 2026-10-09
+
+- PR #106 exact head: `c0b6c03cb909d91f72b58424d64c6dfae1b8f14f`, OPEN/unmerged, 7 changed files; GitHub mergeable=true, Netlify SUCCESS / Vercel SUCCESS.
+- G4 closed previous narrow source blocker: existing trigger functions now require exactly one positive owner->owner EXECUTE grant without grant option; empty owner ACL refuses before DDL.
+- G4 also normally merged fresh main to close the one migration reservation conflict. Candidate reservation file equals current main plus POSTONA `20261007150000` only; AI Lab `20261007173000` preserved.
+- reported G4 tests: 87 adverse starting states, 23 postcondition drift cases, 55/55 mutations detected, migration invariants 11/11, existing X publish/refresh/deletion/PR41 Stage3B regression PASS.
+- K4 verified exact ACL SQL predicate, reservation one-line diff, absence of product-file overlap with fresh main and exact-head CI green.
+- G3 done; G5 Phase 3a source work is distinct. H1/H2 were truly done/free on fresh TASK, Report, ACTIVE and CURRENT_STATE inspection; H1 assigned for historical review continuity.
+- verdict: **PASS_CANDIDATE**, merge HOLD pending one final narrow exact-head rereview.
+- H1 task: `postona-pr106-f1-acl-final-rereview-20261009`.
+- H1 reviewed target: `c0b6c03cb909d91f72b58424d64c6dfae1b8f14f`.
+- recommended H1 model: **Sol（高）**.
+- PR merge, production DB read/apply, deployment, OAuth/Vault/provider calls are not authorized by K4.
+- next action: send `H1`, then `C1`.
+
 ## G5 advanced — Common Account Phase 3a source implementation — 2026-10-08
 
 - user requested that G5/common-account work continue first.
