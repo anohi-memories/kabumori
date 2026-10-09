@@ -6021,3 +6021,15 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - POSTONA standalone Edge Functions were not redeployed.
 - DB/schema/migration/Auth/OAuth/Vault/Cron mutations = 0; manual scheduler/OpenAI/X verification calls = 0.
 - next: natural Kabumori X execution is sufficient for E2E confirmation.
+
+
+## G3 next — POSTONA AI consultation V1 release readiness — 2026-10-09
+- user decision: Kabumori X morning/close report fixes explicitly deferred until the separate Kabumori-app shared-report integration completes; do not mix them into G3.
+- postflight AI Lab natural outcome verified: 2026-10-08 10/10 succeeded; 2026-10-09 first 6/6 succeeded; published claim and X post IDs present. AI Lab continuity repair considered complete.
+- Kabumori X v141 GPT-6 model policy is live and other post types succeed. Morning report 10/08 and 10/09 both failed `MORNING_REPORT_SEARCH_BUDGET_EXCEEDED`, close report's existing `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE` predates the model switch, and 10/09 useful-tip voice-check failed. Keep these distinct and deferred; no new X morning corrective was assigned.
+- next product priority: **POSTONA AI consultation V1**.
+- PR #78 conversation/explicit-save/persona integration is merged; PR #81 content-settings source is merged; PR #41 prior live-routing source is merged.
+- production read-only metadata on `stock-x-autopost`: expected `social_mobile_content_settings` table and relevant migration history not present; `social-mobile-consult` Edge not deployed. Do not claim V1 is live.
+- G3 task `postona-ai-consult-v1-release-readiness-20261009` assigned ready, recommended **Opus5.5（高）**.
+- G3 source-only goal: confirm explicit-save/CAS -> reread -> next conversation -> all 8 persona signals -> preview/generator round trip, fix bounded G3-specific integration defects, prepare dependency-ordered schema/Edge go-live runbook; preserve G4 provider PR106 and G5 common-account/Auth/entitlement boundaries.
+- no production schema writes, Edge deploy, real AI/X, X posting, merge or scheduler changes authorized. Next checkpoint K3.
