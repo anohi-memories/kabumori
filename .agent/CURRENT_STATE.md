@@ -1,3 +1,17 @@
+## Final K1 — Portfolio asset-card botanical polish PASS / PR #113 merged — 2026-10-09
+
+- G1 `kabumori-portfolio-asset-card-background-polish-20261008` complete.
+- PR #113 exact accepted head `bc54e91c7b72186fa03c35b7d3be157453651cb6`, squash-merged successfully as `28d9c61e6dc52fe71ee8bbcd3521b24ad7addc3e`.
+- Fresh main at final merge check `107169293fa59911fbb87b9d421ef1c45fd4d7c7`, GitHub mergeability true/clean; overlap with current main and other open PR file scopes **0**.
+- Accepted asset-card polish: user-approved transparent 1600x700 botanical WebP, opacity 0.45, right of upper card behind digits and sparkline, clipped to card.
+- Real saved-close `market_value` sparkline remains truthful: up green, down muted red, flat neutral; thin line, one end-dot, no fixed chart or invented points. Optional area fade omitted.
+- 402pt and 375pt Simulator screenshots visually reviewed by ChatGPT; falling crop also checked. Numbers/labels clear, tab and lower metrics unaffected.
+- G1 reported test/check evidence: 433/433 Deno app tests, src-only tsc, Expo config, web export and diff-check PASS; ChatGPT did not run them independently.
+- Codex review omitted for UI-only low-risk change. Production/DB/Auth/Edge/EAS change 0.
+- Remaining nonblocking: physical iPhone test with live saved reports not yet performed; original flat min-max normalization still makes gentle wobble; dark-mode/VoiceOver not independently tested.
+- G1 done/free.
+- AI Lab diary: 候補あり — 株アプリの資産カードに淡い植物の背景を重ねつつ、実際の資産推移に合わせて線の色を変え、数字の読みやすさを損なわないデザインへ改善した。
+
 ## K5 FINAL slot reconciliation — G5 H2 security review READY — 2026-10-09
 
 - IMPORTANT: this supersedes the immediately preceding temporary H2 collision/waiting note below.
