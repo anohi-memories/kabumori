@@ -3,8 +3,8 @@
 - task_id: kabumori-portfolio-asset-card-background-polish-20261008
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: medium
 - recommended_model: Sonnet5（中）
 - type: source-only portfolio visual polish
@@ -212,6 +212,62 @@ Then:
 - STOP for K1.
 
 Recommended model: **Sonnet5（中）**.
+
+## Report — G1: portfolio asset-card background polish (task kabumori-portfolio-asset-card-background-polish-20261008)
+
+- task_id: `kabumori-portfolio-asset-card-background-polish-20261008`
+- result: implemented; Simulator-verified at 402pt and 375pt. PR open, **not merged**.
+- fresh main SHA at start: `fc94ca0` (allocation `481eccc0`; main only advanced with agent/ops commits). Open-PR overlap on portfolio/asset/test paths (PR #112/#110/#106/#33/#11/#10/#3): **none**.
+- PR: https://github.com/anohi-memories/kabumori/pull/113 — branch `claude/g1-portfolio-asset-card-background-polish-20261008`, head `bc54e91c7b72186fa03c35b7d3be157453651cb6` (1 commit).
+- **EAS build: 0.** backend/DB/Auth/Edge/production mutation: **0**. No dependency added; `_layout.tsx`, Auth/common-account, search/watchlist, report generation, root report-detail navigation untouched.
+
+### worktree isolation
+Independent clone of `origin/main` in the session scratchpad (own branch, `.env` copy, `node_modules` symlink; one Metro at a time). `kabumori-fresh`, old worktrees and other slots' servers/branches untouched.
+
+### asset source path and final repo path
+Source: `/Users/yuya/Downloads/portfolio_asset_card_growth_background.webp` (exact filename found there; no substitute). Final: `assets/images/portfolio/portfolio_asset_card_growth_background.webp` (byte-copy, 114,178 bytes, nothing else added next to it).
+
+### dimensions / transparency check
+1600 × 700 px, WebP VP8X with the alpha flag set (RGBA). Alpha range 0–255; ~79% of pixels fully transparent; mean alpha of the left 50% ≈ 0.0005 (empty), right 40% ≈ 27 (leaves/glow). Visually: pale green leaves, soft glow and curved light trails on the right; no text, numbers, currency, chart, arrows. A test re-checks signature, alpha flag and dimensions.
+
+### final background opacity / positioning
+`Image` (expo-image, `contentFit="cover"`, its own 1600:700 ratio) as the **first child** of the asset card: `position: absolute; top: 0; right: -8; width: 102%; aspectRatio: 1600/700; opacity: 0.45`, clipped by the card (`overflow: hidden`, radius 18); `pointerEvents="none"`, `accessible={false}`. The leaves occupy the right ~27–35% of the upper card, the nearest leaf stays ≈35 pt away from the right edge of the value digits (402pt) so no leaf sits behind the large number. 0.7 was tried temporarily in the Simulator and rejected (busier, no readability gain); 0.45 kept (upper bound ≈ 0.55).
+
+### sparkline trend-colour rule
+`sparklineTrend(values)`: `last − first` against a band of max(¥1, 0.05% of the first value) → `up` (calm portfolio green `PF.up`), `down` (restrained red `PF.down`), `flat` (neutral muted `PF.flat`), fewer than two finite points → `none` (no sparkline). The colour comes only from this rule (no hard-coded green any more); a declining real series is never green. Pinned by tests.
+
+### fade
+**Intentionally omitted**: a soft area under the line would need many absolutely-positioned strips (fragile, costly, hard to keep calm on a falling series); the polished thin line + one end dot is enough. Intermediate joint dots removed; segments are drawn `+ thickness` longer with round caps so joins overlap smoothly (thickness 2, end dot 7 pt).
+
+### rising / falling / flat checks (rig fixtures, real taps)
+Rising: green line over the art, value and basis label fully legible. Falling: line and end dot are muted red, background unchanged and neutral. Flat (¥400 apart, band ≈ ¥1,624): neutral grey. One usable point and zero usable points: no sparkline, background only (value `—` in the zero case comes from the fixture). Real saved values only — no fixed decorative chart, no invented/smoothed points (tests).
+
+### 402 / 375 findings
+- 402pt: card 370 × 212.7 pt; value text 224 pt wide; sparkline area 104 × 66. 375pt: card 343 × 213.5; value shrinks via `adjustsFontSizeToFit` to ≈33 pt (88%) and is uncropped (same behaviour as before the change).
+- Against the old implementation (same fixture, 402pt) the screenshot diff is **0 below the card's bottom edge**; the lower metrics (評価損益 / 増減 values, labels, divider) and the spacing to the AI card are unchanged (max 3/255 on the left half); differences only in the background and sparkline area. No NativeTabs overlap change.
+- Observed, accepted: at 3× zoom the sparkline joins show a ≈0.5 pt unevenness on a near-straight falling line (not visible at 1×; thickness 2.25 or `+ thickness * 1.2` would reduce it if wanted); the flat fixture draws a level-normalised wobble in grey (existing min–max normalisation, colour now correctly neutral).
+
+### screenshots (`docs/ui-review/`)
+`portfolio_asset_card_polish_402pt.webp`, `portfolio_asset_card_polish_375pt.webp`, plus one focused crop `portfolio_asset_card_falling_crop_402pt.webp` (falling series, red line over the artwork).
+
+### changed_files
+`assets/images/portfolio/portfolio_asset_card_growth_background.webp` (new), `src/components/portfolio/portfolio-sections.tsx` (asset card only), `src/components/portfolio/sparkline.tsx`, `src/components/portfolio/portfolio-theme.ts` (`sparkColor`), `src/lib/portfolio-view.ts` (`sparklineTrend`, pure), tests `portfolio-asset-card_test.ts` (new) and `portfolio-screen_test.ts` (one assertion adjusted: the "no company logo / asset require" check now exempts exactly the approved decorative background require, which is not a logo), 3 screenshots.
+
+### tests / checks (head `bc54e91c`)
+`deno test tests/app/` **433 passed / 0 failed**; tsc(src) no diagnostics; `expo config --type public` OK; `expo export --platform web` PASS; `git diff --check` clean.
+
+### remaining issues
+- Verification used the scratchpad auth-bypass/fixture rig (uncommitted); not yet seen on the real iPhone with real saved reports.
+- Flat history still renders min–max-normalised (a visible wobble) with a neutral colour — pre-existing behaviour, unchanged.
+- Dark mode / VoiceOver of the card not exercised.
+
+### safety_checks
+No DB/RPC/RLS/Auth/Edge/AI/report-generation/native/config/EAS/production change; no new dependency; `.env`/`node_modules` not committed; PR not merged. Production mutation: 0.
+
+### next_recommendation
+K1 reviews PR #113 (visual/source-only, no Codex review needed). The user may check it on the iPhone (server on request).
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 
 ---
 
