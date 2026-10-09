@@ -1,5 +1,122 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: postona-ai-consult-v1-release-readiness-20261009
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: high
+- start_code: G3
+- finish_code: K3
+- recommended_model: Opus5.5（高）
+- project: POSTONA / X auto-posting
+- type: AI consultation V1 release readiness + bounded source-only integration
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## User decision
+
+User explicitly defers the Kabumori X **morning/close reports** while a separate team unifies them with the Kabumori app. Do NOT start/fix the morning search-budget incident, close market data issue, or any market report sharing in this task. Do not reopen the completed AI Lab topic-exhaustion fix.
+
+Next product priority: **POSTONA AI consultation V1**.
+
+Core user experience:
+1. Have a natural chat about posts, preferred topics, wording and style.
+2. AI presents a reviewable proposal for structured settings/persona.
+3. **Only** when the user explicitly confirms (e.g. 「これで覚えて」), persist the approved settings/persona.
+4. On subsequent consultation, retrieve confirmed memory and reflect it in the conversation.
+5. Apply confirmed memory to preview and later live post generation, never unconfirmed suggestions.
+6. No implicit publishing, schedule edits, OAuth/permissions, account deletion or service entitlement side effects from consultation.
+
+## Verified baseline (2026-10-09 JST)
+
+- PR #78 AI consultation V1 source core **merged**: `60dff4e28a763e3c182495dfc41cadf94671952f`.
+- PR #81 content-settings schema source **merged**: `686f23a7094389b793470503fceb2f47a71f8fbf`, but live prerequisite remains unproven.
+- PR #41 older live brand-post route **merged**: `b90ee326600b075e3d0b23209b4eefc1b4cd9c16`. Do not assume its old merged source alone is a fully authorized general-user live rollout; review actual current source/DB gating.
+- Previous K3 confirmed 8 persona fields are consumed by brand generation when explicitly confirmed: toneSignals, sentenceLength, punctuationEmoji, recurringVocabulary, topicSignals, hashtagHabits, ctaStyle, openingClosingPatterns.
+- Current production `stock-x-autopost` (`wsmznyzcvmuitkglfeuj`) read-only inspection: no `public.social_mobile_content_settings` table, no corresponding migration history entry and no deployed `social-mobile-consult` function shown. Existing `social-mobile-brand-dry-run` is ACTIVE v16.
+- Shared G4: PR #106 multi-provider social-account migration candidate is `review_required`; do not edit G4 files.
+- G5 common-account critical path owns Auth/service entitlement/deletion and must not be obstructed.
+- Kabumori X morning/close remains owned by its app/common-report workstream, expressly deferred by user.
+
+## Task scope / required work
+
+**A. Fresh source + production read-only readiness audit**
+- Read `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this TASK and previous Report.
+- Use separate clean G3 worktree from fresh `/Users/yuya/Developer/kabumori-fresh`; do not share working directory, branch, server or uncommitted changes with other slots.
+- Inspect actual current main AI consultation UI, app client/repository, Edge handler, settings/persona validators, preview/brand generation, and existing related migrations.
+- Read only the necessary production metadata (schema/migrations/functions/config); do not access secrets/tokens or user content.
+- Explicitly determine whether PR #81 depends on PR #76 or other unapplied earlier migrations, and identify the correct non-destructive order. Do not skip any security/dependency gate.
+- Identify all release blockers by owner: G3 vs G4 vs G5 vs user production approval.
+
+**B. Full V1 source-only round trip**
+- Reproduce (mock/test environment) consultation -> proposal -> **explicit confirmation** -> optimistic CAS save -> reread -> next consultation -> preview/generator guidance.
+- Verify all 8 confirmed persona fields influence generation; unconfirmed fields do not. Maintain brand-specific hashtag precedence and no user-generated instructions masquerading as system instructions.
+- Handle stale proposal/CAS conflicts, sign-out/session switch, lost network, repeated confirmations and malformed model responses safely.
+- Ensure UI communicates what will be saved, confirmation and retry/errors naturally in Japanese.
+- No transcript-as-durable-memory migration. No personal/other tenant leakage.
+- Where a narrow missing link exists in G3-owned consultation files, implement the minimum source-only fix + tests. Do not redesign already-merged flows without reproducible reason.
+
+**C. Production release package (not execution)**
+- Prepare exact future gates: prerequisite schema migration(s) in dependency order -> verified RLS/owner/ACL/CAS -> consult Edge deploy (JWT/tenant/authorization) -> real AI API smoke limited to **no-publish** consultation -> confirm/save/remember -> preview/brand generation no-publish -> separate live posting consent/entitlement gate.
+- Do NOT deploy/activate anything without a separate ChatGPT/user-reviewed production task and direct authorization.
+- No forced scheduled post, real X API or any publish action.
+- If integration requires changing G5 Auth/entitlement or G4 provider schema, report a dependency and STOP on that boundary; coordinate rather than edit.
+
+## Out of scope / must not change
+
+- Kabumori X morning report / close report / shared market report; news monitor/API cost optimization; Kabumori app G1/G2 features.
+- AI Lab topic claims/security migration/74 topics/publishing/model selection.
+- G4 Threads/Instagram/provider migration schema/identity indexes/triggers.
+- G5 common-account Auth, service provisioning, entitlement, deletion and shared identity gates.
+- OAuth/token/Vault, X provider publish/credential, scheduler/Cron, existing live POSTONA publication controls.
+- Production schema/RPC/ACL/DB writes, migration apply, Edge deploy, real OpenAI/X calls, publish settings, EAS/TestFlight, PR merge.
+
+## Validation
+
+- Focused Deno + Expo/app tests for consult/auth mock/response parsing/persona/repository CAS/generator/preview.
+- Multi-tenant isolation, explicit-save-only, cancel/session-switch, stale-reconfirm and malformed-output adversarial tests.
+- Current source vs deployed edge/relevant migrations invariant check.
+- `deno check`, lint/typecheck for changed files, `git diff --check`, added-line secret scan.
+- Source-only, isolated branch and PR if changes are needed; do not directly merge or deploy.
+- Do not create a no-op PR: if fully ready except production prerequisites, deliver a clear, exact deployment/approval runbook and STOP.
+
+## Completion / Report
+
+Fill the new task's `## Report` with:
+- task_id, verdict/result;
+- live/prerequisite readiness matrix;
+- confirmed source vs pending production separation;
+- proposed exact migration/deploy sequence and safety gates;
+- changed_files, tests, commit_hash, push/PR exact head (or no source change);
+- prod_reads metadata only / prod_mutations 0 / deploy 0 / real AI/X 0;
+- remaining blockers grouped by G3/G4/G5/user approval;
+- safety_checks and next_recommendation.
+
+Set `status: review_required`, `next_owner: chatgpt`, STOP for K3.
+If a material security/DB/API authorization boundary changes, ChatGPT will decide one focused Codex review (suggest **Sol（高）**). Do not automatically allocate H1/H2 or overwrite other TASK files.
+
+## Report
+
+- task_id: postona-ai-consult-v1-release-readiness-20261009
+- result: pending
+- changed_files: pending
+- tests: pending
+- commit_hash: pending
+- push: pending
+- deploy: not authorized
+- remaining_issues: pending
+- safety_checks: pending
+- next_recommendation: pending
+
+
+---
+
+# Preserved previous G3 TASK / Reports — historical only
+
+# Claude Task 3 — CURRENT TASK
+
 - task_id: ai-lab-premium-length-policy-unlimited-20261007
 - owner: claude
 - slot: claude-3
