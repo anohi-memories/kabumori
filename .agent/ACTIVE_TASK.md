@@ -85,14 +85,14 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: ai-lab-premium-length-policy-unlimited-20261007
+- status: ready
+- task_id: postona-ai-consult-v1-release-readiness-20261009
 - start_code: G3
 - finish_code: K3
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: PR #109 source merged and production rollout APPLIED_PASS. DB capacity migration applied and read back; x-test-post v139 ACTIVE / verify_jwt=false with only three intended AI Lab runtime files changed. Manual scheduler/X/OpenAI verification calls=0. 2026-10-08 ten AI Lab rows are pending; first natural slot 07:51 JST. Natural scheduled-post observation remains pending, but G3 implementation/rollout slot is closed/free.
-- recommended_model: Sonnet5（高）
+- allocation: User explicitly deferred Kabumori X morning/close report investigation until app-shared reporting work is finished. Next POSTONA priority is AI相談 V1 release readiness. Review merged PR78 consultation V1 and PR81 schema source against actual production (content-settings table/migrations and social-mobile-consult Edge absent), prove explicit-save -> memory -> preview/generation source-only flow, identify dependency/security/approval gates, and implement only G3-owned bounded fixes. Protect G4 PR106 multi-provider and G5 Auth/entitlement work. No production apply/deploy/X/real OpenAI.
+- recommended_model: Opus5.5（高）
 
 ## Claude G4
 - owner: claude
