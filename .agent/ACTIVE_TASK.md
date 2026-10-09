@@ -85,14 +85,14 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
-- task_id: postona-ai-consult-v1-release-readiness-20261009
+- status: ready
+- task_id: postona-ai-consult-pr114-session-epoch-corrective-20261009
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: User explicitly deferred Kabumori X morning/close report investigation until app-shared reporting work is finished. Next POSTONA priority is AI相談 V1 release readiness. Review merged PR78 consultation V1 and PR81 schema source against actual production (content-settings table/migrations and social-mobile-consult Edge absent), prove explicit-save -> memory -> preview/generation source-only flow, identify dependency/security/approval gates, and implement only G3-owned bounded fixes. Protect G4 PR106 multi-provider and G5 Auth/entitlement work. No production apply/deploy/X/real OpenAI.
-- recommended_model: Opus5.5（高）
+- allocation: K3 accepts prior POSTONA AI consultation V1 readiness as PASS_CANDIDATE, but PR #114 head f24c8efe84c433d0e7ca3e16b640a80d9c984a51 needs one bounded A->B->A (ABA) async session-epoch correction: brand-ID-only freshness checks can re-admit an old A AI/save result after switching A->B->A; also prove stale savedRef is never adopted for a new workspace. Preserve all accepted explicit-save/CAS/persona tests and no-live rollout. PR #114 remains OPEN, unmerged; latest REST mergeability UNKNOWN. New G3 task limited to same PR and its three existing files. No production writes/deploy/OpenAI/X.
+- recommended_model: Sonnet5（高）
 
 ## Claude G4
 - owner: claude
