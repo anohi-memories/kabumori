@@ -6047,3 +6047,21 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - G3 task `postona-ai-consult-v1-release-readiness-20261009` assigned ready, recommended **Opus5.5（高）**.
 - G3 source-only goal: confirm explicit-save/CAS -> reread -> next conversation -> all 8 persona signals -> preview/generator round trip, fix bounded G3-specific integration defects, prepare dependency-ordered schema/Edge go-live runbook; preserve G4 provider PR106 and G5 common-account/Auth/entitlement boundaries.
 - no production schema writes, Edge deploy, real AI/X, X posting, merge or scheduler changes authorized. Next checkpoint K3.
+
+
+## K3 — POSTONA AI consultation V1 / PR #114 — 2026-10-09 JST
+- verdict: **CHANGES REQUIRED — one bounded UI/session isolation corrective; PR #114 merge HOLD**.
+- prior G3 TASK `postona-ai-consult-v1-release-readiness-20261009` report accepted as a product release-readiness audit and PASS_CANDIDATE:
+  - source consultation -> proposal -> explicit confirm -> CAS save -> reread -> next consult -> preview/generator round trip reported PASS;
+  - 8 confirmed persona dimensions are consumed; unconfirmed values excluded;
+  - current production still lacks `social_mobile_content_settings` table/5 functions/2 migration versions, `social-mobile-consult` Edge function, and updated settings-aware dry-run preview bundle;
+  - planned migration-first, verification-first rollout is a **separate explicit approval gate**, with live posting/entitlement S7 still separate.
+- PR #114 exact inspected head `f24c8efe84c433d0e7ca3e16b640a80d9c984a51`, open/unmerged; three modified files: consult screen, consult-session reducer, screen tests.
+- G3 reports app 230/230, related Edge 90/90, disposable PostgreSQL 48 PASS; production write/deploy/real AI/X/merge=0.
+- accepted existing PR114 fixes: A->B resets consultation and ignores stale old-workspace response; repeated `これで覚えて` click does not duplicate a write; 4 red-before/green-after fixtures.
+- **P2 residual code-visible ABA race**: `sessionBrand.current===forBrand` checks only the workspace ID. When workspace A->B->A while an old A request/save is in flight, the old result may be accepted in the newer A conversation. Add monotonic epoch invalidation and A->B->A adversarial tests. Also prove the stale savedRef fallback cannot inject previous-workspace settings into a new consultation when new-workspace read fails.
+- G3 bounded corrective task assigned: `postona-ai-consult-pr114-session-epoch-corrective-20261009` on same PR #114, recommended **Sonnet5（高）**.
+- latest GitHub PR mergeable status inconsistent across lookups/REST UNKNOWN; fresh-main integration required at next K3.
+- H1 owns G4 PR106 and H2 owns G5 PR112 security reviews. Neither is overwritten. Decide focused exact-head reviewer once G3 corrects the race.
+- do not work on Kabumori X morning/close reports; user explicitly deferred them until Kabumori-app shared report integration finishes.
+- production migration/apply, Edge deploy, EAS, real OpenAI/X, publishing, merge: **HOLD**.
