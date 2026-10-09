@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase3a-pr112-h2-r1-r4-c1-corrective-20261009
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - type: bounded corrective of independent H2 CHANGES REQUIRED
 - target_pr: 112
@@ -84,9 +84,118 @@ Forbidden: changing G4 social_accounts schema, X saga/POSTONA source, production
 
 ## Report — current corrective
 
-- status: pending
-- result: awaiting G5
-- production_change: 0 (task permission; confirm actual outcome in Report)
+- status: review_required
+- task_id: common-account-v1-phase3a-pr112-h2-r1-r4-c1-corrective-20261009
+- result: **R1・R2・R4・C1 は修正して閉じた。R3 は「安全側で止める（release-blocked）」で閉じた**
+  - 共通アカウント削除（ログインの削除）は、DB の公開ゲートで止めている。ゲートが閉じている間は、何も変えずに開始前に断る。
+  - かぶモリの利用終了は、今まで通り使える（ソース候補として）。
+- production_change: **0**（本番の読み取り・書き込み・適用・デプロイ・EAS はすべて 0）
+- PR: https://github.com/anohi-memories/kabumori/pull/112
+  - 開始時の head：`c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d`（作業前に、変わっていないことを確認した）
+  - 新しい head：`b60272c433b57bac1acb00c13d4fda7ff96f1f2f`
+  - push：PR の branch に fast-forward で push（force push なし）。merge はしていない。
+- main：開始時 `9e2130fa` → in_progress の記録 `5e75545c`。PR の変更ファイルと、その後に main に入った変更の重なり：**0**
+- 作業場所：`kabumori-fresh` から作った新しい G5 専用 worktree（`kabumori-g5-pr112c`、branch `claude/g5-pr112-corrective-20261009` → PR の branch へ push）。古い worktree には触れていない。
+
+### 1. 指摘ごとの修正
+
+| 指摘 | 直したこと | 前の失敗が今は起きないことの確認 |
+|---|---|---|
+| **R1** 並行した 2 つの要求が、Apple の解除とログイン削除を 2 回ずつ実行した | 削除手続き全体に、DB に残る「担当権」を追加した（推測できない token・期限・世代番号）。開始直後、外部への操作の前に取る。各段階で、同じ transaction の中で担当権を確かめる（続行の確認、チェックポイント、準備確認、外部手順の記録と結果）。2 本目の要求には `DELETION_IN_PROGRESS` を返し、外部には何も呼ばない。期限切れや引き継ぎで担当を失った要求は、次の段階で止まり、成功とは言わない。 | 本物の並行実行（バリアで同時に走らせる）を 5 種：かぶモリだけの人／両方の人（X 実行中）／Storage 削除中／Apple 解除中／Auth 削除中。どれも 2 本目は `DELETION_IN_PROGRESS`、Apple 1 回・ログイン削除 1 回・X 1 回・セッション失効 1 回。停止した担当の引き継ぎ（期限内は「進行中」、期限後は新しい担当が完了、古い担当は `DELETION_IN_PROGRESS` で止まる、ログイン削除は計 1 回）。DB でも：2 つの同時の担当取得は必ず 1 つだけ成功（2 セッションの競合）、古い担当はすべての段階で `lease_lost`。 |
+| **R2** Apple の解除が成功した後、記録に失敗すると、使い捨てのコードをもう一度使って止まった | Apple の解除は、呼ぶ前に「実行中」を DB に記録し、呼んだ後に結果を記録する（成功なら、チェックポイントの記録と「実行中」の解除を 1 つの transaction で）。結果が分からない（通信が途中で切れた）／分かったが記録できない場合は、再実行せず `RECONCILIATION_REQUIRED`（運営の確認待ち）。Apple がはっきり断った場合だけ、新しいコードで再試行できる。運営用の確認 RPC（`resolve_…_external_step`）を追加した。Edge Function からは呼ばない。 | H2 の反例：Apple 成功＋記録失敗 → 1 回目 `RECONCILIATION_REQUIRED`、すぐの再試行は `DELETION_IN_PROGRESS`、900 秒後も `RECONCILIATION_REQUIRED`、**Apple の呼び出しは 1 回だけ**、ログイン削除は 0 回。運営が「解除済み」と記録すると、Apple を呼ばずに完了する。通信切れ（結果不明）でも同様。DB でも：引き継ぎは Apple を再実行せず確認待ちになる。担当を失った記録は何も書かない。 |
+| **R3** 最後の準備確認の後に Apple の ID が追加されると、解除しないまま「完了」になった | (1) ログイン削除の直前に「これから削除する」を記録する。その時、ログインを排他ロックした状態で全条件を再評価する（Apple の ID が追加されていれば拒否）。(2) 何に基づいて決めたか（必要なチェックポイント、ID の種類）を、ログインが消えた後も残す。(3) 完了の確認は、この記録がある手続きだけを完了にする。(4) それでも「記録の後、Auth の削除が終わるまで」の間の ID 追加は、後から見えない。そのため、ログイン削除を **DB の公開ゲート（`blocked` 固定）で止めた**。開けるには、足りない前提を一緒に入れる、レビュー済みの migration が必要。 | H2 の反例を、出荷時のスキーマのまま再現 → **`LOGIN_REMOVED_WITHOUT_MANAGED_INTENT` で未確認**（完了にならない）。ゲートは `blocked` で、設定では開けない（CHECK 制約）。ID の追加中に削除の判断が来ると、判断は待ってから拒否する（2 セッションの競合）。記録の後の ID 追加という残りの穴は、テストで明示した。そのテストは、テスト専用の DDL でゲートを開けたときだけ通る。 |
+| **R4** 完了済みの手続きを再確認すると、後から残ったファイルを見ずに「完了」と答えた | 完了済みでも、聞かれるたびに「今」の残りを確認する（アカウント、権利、かぶモリ／X／管理者のデータ、Storage。読めない Storage も「残りあり」）。残っていれば `residue_found`。過去の確認時刻（`verified_at`）は書き換えない。 | H2 の反例（完了後に、古い token でアップロード）→ **`residue_found / MANAGED_STORAGE_OWNED`**。過去の確認時刻は変わらない。消した後は再び `completed`。X の残りも検出する。Storage の形が想定外なら、完了と言わない。 |
+| **C1** 未来の時刻（+30 秒）のログイン時刻を受け入れた | 時刻を 1 回だけ読み、`[今−600 秒, 今]` だけを受け入れる。ずれの許容は無し（仕様の変更をしていない）。 | +1・+30・+60・+3600 秒は拒否。今・今−600 秒は受け入れ、今−601 秒は拒否。かぶモリの利用終了と共通アカウント削除の両方で、何も変わらないことを確認した。 |
+
+### 2. 変更ファイル（すべて TASK の許可範囲）
+
+- `supabase/functions/account-delete/{lifecycle_logic,http,lifecycle_logic_test,http_test,wiring_test}.ts`
+- `supabase/migrations/20261009120000_common_account_deletion_completion.sql`（未適用の候補）
+- `supabase/tests/common_account_deletion_completion_{run.sh,behavior.sql,mutations.sh}`
+- `supabase/tests/common_account_deletion_completion_expected_catalog.txt`（新規）
+- `supabase/tests/common_account_phase3a_ts_mutations.py`
+- `docs/common-account/phase3a-deletion-orchestrator.md`
+- `src/lib/account-deletion.ts`、`tests/app/account-deletion_test.ts`
+  - アプリに、正直な状態を出すために必要な最小の変更だけを入れた：「準備中（ゲートが閉じている）」「別の手続きが進行中」「運営の確認待ち」。
+- X の saga・POSTONA・G4 のファイル、適用済みの Phase 1/2 の migration、本番の設定：**変更なし**
+
+### 3. SQL・カタログ・権限の証明（使い捨て PostgreSQL 17 のみ）
+
+- 変更範囲：Phase 1 のルールを 1 つだけ置き換えた。カタログ全体を差分で比べ、増えたのは期待した 44 行だけ（列 10、新しいルール 7、ゲート表とその列・制約・index、関数 16）。それ以外の削除・変更は 0。
+- 権限：public の関数 12 個は「所有者＋service_role」だけ。private の補助関数 4 個は所有者だけ。ゲート表は所有者だけで、RLS は有効。anon／authenticated は全関数で permission denied。service_role も、private の補助関数とゲート表は permission denied。
+- 静的ルール：
+  - auth／storage／vault への書き込み 0
+  - 行の削除 0。insert はゲートの `blocked` 行だけ
+  - ゲートを開ける文 0
+  - 16 個の関数すべてが SECURITY DEFINER＋空の search_path
+  - e-mail は扱わない。強制ガードは無し
+- 結果：
+  - Phase 3a ランナー：ALL PASS（事前チェック 3 種・変更範囲の完全一致・ACL・再適用の拒否・静的ルール・Phase 2 の挙動に影響なし・挙動 G0/A〜H/C5〜C6/R1〜R4・2 セッションの競合 5 種）
+  - Phase 2 の挙動スイート：この候補を入れた後も PASS
+  - Phase 1 ランナー：20 PASS。Phase 2 ランナー：ALL PASS
+  - SQL ミューテーション：**43/43 検出**。安全性を 1 つずつ壊し、名前を指定した失敗で検出されることを確認した。R1〜R4 のミューテーションを含む。
+
+### 4. テスト（すべて今回再実行）
+
+| 対象 | 結果 |
+|---|---|
+| account-delete（挙動 38・HTTP 7・封じ込め／静的 8） | **53 PASS**（前回 42 から増やした） |
+| アプリ `tests/app` | **430 PASS** |
+| AuthProvider ハーネス | **23 PASS** |
+| X 削除サガ | **17 PASS** |
+| X アプリ（account-deletion 10＋auth-boundary 9） | **19 PASS** |
+| TypeScript ミューテーション | **38/38 検出**（壊していない複製は PASS） |
+| 型チェック（deno check・tsc） | 変更ファイルのエラー 0（tsc の 2 件は main と同じ既存の CSS 宣言） |
+| `git diff --check` | PASS |
+
+- TS ミューテーションから外したものが 1 件ある：「セッションのチェックポイントで担当を失っても無視する」。
+  - 理由：次の段階の担当確認で必ず止まり、外部への操作は起きない（多重防御で同じ結果）。
+
+### 5. source merge の推奨
+
+- **source merge：PASS_CANDIDATE**（同じ head での独立した再レビューが前提）。
+  - merge しても本番は何も変わらない。共通アカウント削除は、ゲートで閉じたまま。
+- **共通アカウント削除の機能の有効化：BLOCKED**（下の 1.）
+
+### 6. 本番の前に残っていること（PASS とは呼ばない）
+
+1. Auth 側で「ID の変更を止める仕組み」が必要。ログイン削除の判断から、Auth の削除が終わるまでの間に効くもので、使い捨ての本物の Supabase で証明する。ゲートを開けるのは、それを入れるレビュー済みの migration だけ。
+2. X だけを使う人、または先にかぶモリを終了した人は、まだ削除できない（X 側・G3/G4）。
+3. 本番の旧 `account-delete`（ハード削除）は、デプロイまで動いたまま。
+4. 作る経路・権利・古い token での書き込みを止める仕組み（`ensure_my_profile`、profiles への直接の insert、X のオンボーディング）。
+5. 公開 Web のアカウント削除ページ。
+6. 本物の Auth／Storage／Apple／X での検証。Simulator／実機での画面確認。
+7. 運営の手順の整備：応答が失われた場合の確認と、Apple の確認待ち（RPC はあるが、手順は無い）。
+8. 削除を自分で取り消す画面（今は運営だけ）。
+
+- 公開の順番は、設計書 §12 に統一した。この順番から外れない。
+  1. source のレビュー
+  2. 使い捨ての本物のプロジェクトでの E2E と、その独立レビュー
+  3. 本番の preflight
+  4. migration
+  5. Edge のデプロイ
+  6. アプリのリリース
+  7. 機能の有効化（別の migration）
+- 巻き戻すときも、旧ハード削除の bundle は再デプロイしない。
+
+### 7. safety_checks
+
+- 本番 DB／Auth／Storage／Vault／OAuth の読み書き：**0**
+- 本物の provider（Apple／X）・本物のログイン削除・本物のセッション失効：**0**
+- migration の適用・デプロイ・EAS・merge・force push：**0**
+- G4 PR106、G3 PR114、G2 PR110 のファイルとの重なり：**0**
+  - PR106：POSTONA の migration・テスト・資料
+  - PR114：social-mobile の consult
+  - PR110：market report
+- 他のスロットの worktree・branch・server：触れていない
+- 秘密情報・token・PII：ログ・応答・レポートに無し（応答の漏れは自動テストで確認）
+- H1/H2 の TASK・Report：編集していない
+
+### 8. 次の推奨
+
+- PR #112 の新しい head を、同じ head で独立再レビューしてもらう（R1〜R4・C1 の反例と、並行・停止の境界）。
+- そのあとで、G3/G4 と次の 2 つを決める：Auth 側の ID 変更を止める仕組みの候補（上の 1.）と、X の scope。
+- 本番の操作は、それぞれ K5 の承認を得てから行う。
 
 ---
 
