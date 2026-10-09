@@ -1,3 +1,15 @@
+## K5 FINAL — G5 PR112 corrective PASS_CANDIDATE / H2 exact-head rereview READY — 2026-10-10
+
+- G5 TASK `common-account-v1-phase3a-pr112-h2-r1-r4-c1-corrective-20261009` latest Report is complete; status **review_required**, next_owner **codex**. G5 recommends source-only PASS_CANDIDATE, **not** whole-account deletion feature completion or production enablement.
+- PR #112 `https://github.com/anohi-memories/kabumori/pull/112` exact head `b60272c433b57bac1acb00c13d4fda7ff96f1f2f`, OPEN / unmerged, 25 files, GitHub mergeable=true at K5 read. Compare since H2's previously rejected head `c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d`: 1 commit / 14 files, G5-controlled paths only. PR base to latest main: 42 commits, PR-file overlap 0 (reconfirm before review/merge).
+- G5 reported R1 durable lease/fencing and concurrent ownership, R2 single-use Apple in-flight/uncertain outcome reconciliation, R4 fresh completed residue read-back, C1 future AMR timestamps strictly rejected; R3 managed Auth deletion remains blocked by DB enforced `state='blocked'` gate until separate reviewed Auth-side identity-change fence. K5 spot-checked the gate-before-mutating call, strict AMR condition, blocked-gate SQL and completed residue path in exact new head; these are not substitutes for independent security tests.
+- Claimed G5 tests: account-delete 53 PASS, app 430, AuthProvider 23, X saga 17, X app 19, PG Phase1/2/3a PASS, SQL mutations 43/43 detected, TS mutations 38/38 detected, check/lint/diff PASS. G5 reports source push fast-forward; production read/write, migration apply, Edge deploy, provider operations, EAS and merge 0.
+- **K5 verdict: PASS_CANDIDATE to focused independent Codex security rereview. Source merge HOLD**; live whole-account deletion activation **BLOCKED**; production changes unapproved. Real disposable Supabase/identity-fence and old endpoint safety, stale JWT/creator checks, X-only path, operator reconciliation, Web disclosure and Simulator remain future gates.
+- H1 stays assigned POSTONA PR106. H2 previous PR112 C2 task was done/closed with old receipt preserved; K5 confirms true free task/index slot then assigned **H2** `common-account-v1-phase3a-pr112-r1-r4-c1-final-rereview-20261010`, exact head as above, recommended **Sol（極高）**, return_to **共通アカウントG5のちゃ**, completion_code **C2**. G2 PR110 remains waiting for another review opportunity and was not overwritten.
+- Next user action: send **H2** to Codex, then **C2** to 共通アカウントG5のちゃ. H2 must not merge/apply/deploy/EAS.
+- Preserve G5 conflict-based priority; other nonoverlapping slot work, commits, pushes, PR merges and separately approved production operations may continue. No global freeze.
+- AI Lab diary: 記録不要。前日の安全な開発日記エントリと重複し、今回のゲート・lease/ACL詳細は公開向きではない。
+
 ## C2 FINAL — G5 Phase3a PR112 H2 CHANGES REQUIRED / G5 corrective READY — 2026-10-09
 
 - Confirmed original H2 independent report and completion receipt for `common-account-v1-phase3a-pr112-security-review-20261009` at exact PR112 head `c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d`. Report: **CHANGES REQUIRED**, reviewed 24/24 files, original suites green but independently reproduced five issues.
