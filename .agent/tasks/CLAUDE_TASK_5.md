@@ -1,3 +1,97 @@
+# G5 — CURRENT TASK — PR112 H2 R1–R4 / C1 security corrective
+
+- task_id: common-account-v1-phase3a-pr112-h2-r1-r4-c1-corrective-20261009
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- priority: critical
+- type: bounded corrective of independent H2 CHANGES REQUIRED
+- target_pr: 112
+- previous_exact_head: c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d
+- recommended_model: **Opus5.5（極高）**
+- source_only: true
+- production_access_allowed: false
+- production_write_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+- EAS_allowed: false
+- completion_code: K5
+- return_to: 共通アカウントG5のちゃ
+
+## Mission
+
+Correct the confirmed findings of H2's independent security review for PR #112. Read the exact authoritative report at the **TOP** of `.agent/CODEX_REPORT_2.md` and preserve all previous G5 TASK/Report history below this current task. The H2 verdict is **CHANGES REQUIRED**, not permission to merge or deploy. This task is a limited PR112 corrective, not a new Phase 3 rollout.
+
+The user's common-account priority is **only conflict-based**; non-overlapping G1–G4 operations continue. G4 owns POSTONA PR106 and X schema/provider; G2 PR110 and G3 PR114 are separate. Protect every other task/worktree/source boundary.
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES.md, .agent/ORCHESTRATION.md, .agent/ACTIVE_TASK.md, .agent/CURRENT_STATE.md, current G5 TASK and the full H2 Report, plus docs/common-account/phase1-lifecycle-foundation.md, Phase2 docs and Phase3a design.
+2. Confirm the exact PR112 starting head `c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d`, open/unmerged. Check fresh origin/main and changed-file intersection. If another contributor has changed the PR head, STOP and report rather than overwrite.
+3. Use an **independent G5 worktree/checkout**. New clean base: `/Users/yuya/Developer/kabumori-fresh`. Do not reset/rebase/remove old worktrees or touch another slot's branch, server, uncommitted changes or lock.
+4. Confirm only G5-owned account-delete / common-account candidate migration / scoped tests / Phase3a docs are changed. Cross-owner X source, applied Phase1/Phase2 migration files, unrelated UI/analytics and production configuration are out of scope. If a writer gate requires G3/G4, record an interface/dependency and fail closed; do not silently edit other owned files.
+
+## Required corrections — independently reproduced, MUST close all
+
+**R1 P1 — duplicate concurrent irreversible side effects.**
+- H2: `supabase/functions/account-delete/lifecycle_logic.ts` parallel fresh-token requests used same common deletion operation and both invoked Apple twice and managed Auth delete twice (`appleCalls=2, deleteCalls=2`).
+- Add durable operation ownership/lease + monotonic fencing / atomic phase ownership across the **whole** common-account deletion, not merely X saga or a single HTTP request. Acquire before external actions, re-check owner/fence and operation state before each step and checkpoint, return truthful in-progress to a second request. Address expired leases and crash/unknown external outcomes WITHOUT replaying uncertain irreversible operations. Do not rewrite X-owned saga.
+- Add real overlap tests (barrier controlled, not sequential) for Kabumori-only, dual service, Apple and Auth delete; fresh token/second caller for same subject; owner crash/takeover; optimistic version and stale owner refusal. No double invocations and no early false-success.
+
+**R2 P1 — Apple one-time success followed by checkpoint write failure.**
+- H2: successful Apple revoke/consumed single-use code then checkpoint failure; retry calls Apple again and is stuck.
+- Represent intent/in-flight/outcome durably or halt at an explicit `unknown/reconciliation required` state. Do not claim exactly-once from a post-success checkpoint; do not blindly retry consumed codes.
+- Test checkpoint failure, process crash at success boundary, retry, and operator/user outcomes. Any unknown state blocks managed Auth deletion pending safe reconciliation. No plaintext code/token/log leakage.
+
+**R3 P1 — Apple requirement changes between final prepare and Auth deletion.**
+- H2 disposable PG: Apple identity added after readiness/prepare; Auth-delete stand-in removes identity; completion RPC still returns completed without apple_revocation checkpoint.
+- Prevent a newly required grant from being erased by Auth cascade before its requirement is durably captured and satisfied. Add effective invalidate/fence and final pre-destructive-commit guarantee for identity/required checkpoint changes, plus negative adversarial real-SQL test. Preserve historical requirement evidence.
+- Because the Phase1 guard is shadow and not all creators are enforced, do NOT assert complete production safety on finite re-read alone. If proof is impossible within this corrective without cross-owner writer gating, make whole-account Auth deletion **fail-closed / release-blocked**, document the precise missing prerequisite, and do not falsely mark full deletion feature safe. Do not turn on broad production enforcement.
+
+**R4 P1 — completed fast path skips fresh Storage residue check.**
+- H2 disposable PG: after completed, late storage object inserted; repeated completion returns completed without inventory verification.
+- Separate historical completed/audit from a **fresh verified** read-back. Repeated completion/readiness must detect current user-owned Storage (and other relevant footprint), fail closed on unknown inventory, and never claim current cleanup success with residue. Retain historical verified_at/evidence. Address late stale-JWT writes with an explicit writer/enforcement prerequisite; add R4 regression with late Storage object after initial success.
+
+**C1 P2 — future recent-auth +30s accepted.**
+- H2: `lifecycle_logic.ts:124-126` accepts verified AMR timestamp now+30 due to 60-second tolerance despite TASK requirement that future timestamps are refused.
+- Reject future timestamps strictly (capture server now once) and add +1, +30, +60, 600-second boundary tests. If a skew allowance is essential, STOP for explicit product/spec approval rather than silently weakening requirement.
+
+## Required contract, test and rollout checks
+
+- Re-run 42 account-delete, 430 app, 23 AuthProvider, 17 X saga, 19 X app and Phase1/2/3a disposable PG suites; SQL 19/19 and TS24/24 mutations plus new adversarial tests. Existing counts are historical baselines, not substitutes for reruns.
+- Test independent R1/R2/C1 TS and R3/R4 PG reproductions with **safety assertions** (old failure must now be impossible or explicitly blocked), including rollback, owner/fence ACL, idempotency, invalid token, stale session, X unaffected on Kabumori-only withdrawal, and no fake completion.
+- Migration `20261009120000_common_account_deletion_completion.sql` is **not applied**; scoped corrections/source-only new versioned migration candidate are permitted only with full ownership/RLS/ACL/SECURITY DEFINER/search_path/lock/adversarial rollback proof. Never rewrite already applied Phase1/2 migration history. If a local reproduction requires SQL Auth delete, use *disposable fixtures only*, never real Supabase.
+- Clearly separate **source merge candidate**, **feature activation**, **production preflight**, **production migration**, **Edge deploy**, **client release**. Explicitly reconcile contradictory rollout ordering in Phase3a docs: real disposable Supabase E2E and independent review BEFORE any production release, with separately authorized steps later.
+- Existing gaps remain named blockers: X-only or Kabumori-ended deletion, live legacy `account-delete`, missing creator/entitlement/stale-JWT enforcement, public web disclosure, real provider proof, simulator/native testing and lost-response operator recovery. Do not relabel unimplemented gaps as PASS or expand this narrow corrective into uncontrolled changes.
+- Validate G4 PR106 and G3 PR114 / G2 PR110 scope changes don't overlap. On concurrent push refresh fresh main before changing/committing.
+
+## Changed files / forbidden operations
+
+Allowed scope: `supabase/functions/account-delete/**`; `supabase/migrations/20261009120000_common_account_deletion_completion.sql` (unapplied candidate only); `supabase/tests/common_account_deletion_completion_*`; `supabase/tests/common_account_phase3a_ts_mutations.py`; `docs/common-account/phase3a-deletion-orchestrator.md`; directly related G5-only tests, client UI only if required to convey truthful in-progress/reconciliation state; this current G5 TASK/Report.
+
+Forbidden: changing G4 social_accounts schema, X saga/POSTONA source, production DB/Auth/Storage/Apple/X, secrets, configuration, live login/user deletion, production queries, migration apply, deploy, EAS/TestFlight, PR source merge; no changes to H1/H2 TASK/Report or other G slots.
+
+## Completion / handoff
+
+- Do NOT merge PR112. Push bounded source changes to the existing PR112 branch only after exact-head ownership/fresh ancestry/overlap checks; do not force push.
+- Append/replace ONLY the current-task `## Report` immediately below while preserving the old G5 TASK/Report history byte-for-byte.
+- Report: task_id; result; changed_files; tests including R1-R4/C1 counterexample closure; SQL/catalog/ACL proof; exact new PR head; commit/push; source merge recommendation (PASS_CANDIDATE or BLOCKED); remaining production prerequisites; safety_checks; next recommendation.
+- Set status `review_required`, next_owner `chatgpt` when work is complete and tell user: **共通アカウントG5のちゃへ `K5`**. Subsequent independent exact-head Codex rereview will be scheduled by ChatGPT only after fresh availability checks.
+- If R3 cannot be made safe under shadow enforcement, fail closed, document BLOCKED state; never manufacture green completion.
+
+推薦モデル：**Opus5.5（極高）**
+
+## Report — current corrective
+
+- status: pending
+- result: awaiting G5
+- production_change: 0 (task permission; confirm actual outcome in Report)
+
+---
+
+# Preserved previous G5 TASK and Report history (read-only unless correcting current status through authorized C/K flow)
+
 # G5 — Common Account Phase 3a: safe withdrawal + deletion orchestrator foundation
 
 - task_id: `common-account-v1-phase3a-deletion-orchestrator-20261008`
