@@ -752,8 +752,14 @@ function parseRetryText(value: unknown): { text: string } {
   return parseRevisionText(value, "NEWS_GENERATION_VOICE_RETRY_INVALID_OUTPUT");
 }
 
+// "不明瞭" (unclear wording, e.g. a proposal not marked as pending approval) is a wording problem, unlike "不明"
+// (the fact is unknown): the lookahead keeps only the latter non-retryable.
 const NON_RETRYABLE_FACT_ISSUE_PATTERNS: RegExp[] = [
-  /数字|数値|金額|割合|コード|証券|日時|時刻|発生|規模|対象範囲|条件|出典|URL|source|情報不足|不明|取り違え|同一性|別企業/iu,
+  /数字|数値|金額|割合|コード|証券|日時|時刻|発生|規模|対象範囲|条件|出典|URL|source|情報不足|不明(?!瞭)|取り違え|同一性|別企業/iu,
+  // An issue that quotes an amount, share count or rate ("155億円ではなく155億5,000万円", "24億9,990万円") is a numeric
+  // precision error, never a wording fix — even when it also mentions a year ("2031年8月期の売上高…"), which would
+  // otherwise route it into the year-restoration retry below.
+  /\d[\d,.]*\s*(?:億|万円|百万円|千円|円|％|%|株|倍)/u,
 ];
 
 // An over-assertion: the post states as settled what the source only hedges ("とみられる", "疑い",
@@ -761,7 +767,7 @@ const NON_RETRYABLE_FACT_ISSUE_PATTERNS: RegExp[] = [
 // allowed (2026-09-29: South Korea DMZ blast, Iowa steel mill). The issue must name both the assertion
 // and the hedge, and must not also report a wrong number, person, company, date or event.
 const OVER_ASSERTION_ISSUE = /断定|言い切|確定(?:した|事実|的|とは|して(?:いない|おらず))/u;
-const SOURCE_HEDGE_ISSUE = /とみられ|見られ|疑い|意向|可能性|暫定|推定|見込み|予定|計画|方針|検討|とされ/u;
+const SOURCE_HEDGE_ISSUE = /とみられ|見られ|疑い|意向|可能性|暫定|推定|見込み|予定|計画|方針|検討|とされ|承認前|議案|付議|上程/u;
 const HARD_FACT_ERROR_ISSUE =
   /誤り|誤認|誤記|取り違え|異な(?:る|っ)|捏造|存在しない|別(?:の|人|企業)|改変|数字|数値|金額|日付|日時|人物名|企業名|社名|証券|市場|影響|因果|解釈/u;
 
@@ -1215,6 +1221,11 @@ export async function requestGenerationStep(
     "決算、業績予想修正、配当修正などでは、結論を変える重要事実を落としません。一次情報またはjudgementReasonに予想比の上振れ・下振れ、修正方向、赤字転落、黒字転換、通期予想や配当の変更有無が明記されていれば、最重要なものを本文に含めます。すべての数値を詰め込む必要はありません。",
     "書き終える前にtitle、bodySummary、judgementReasonを照合し、ニュースの結論となる重要事実を本文が反映しているか確認してください。",
     "元情報にない数値、日付、固有名詞、因果、規模、将来予測を追加しません。",
+    // 2026-10-09 TDnet generation failures (Fact catches of the draft): rounded amounts (155.5億円 -> 155億円,
+    // 32億8,300万円 -> 32億円), "上限に達した" for a cumulative amount just below the cap, a dropped calculation
+    // base or profit definition, and a proposal written as settled before shareholder approval.
+    "金額・株数・割合は元情報の桁・単位・端数のまま書き、丸め・切り捨て・言い換えをしません。累計取得額などが上限・目標に満たない場合は『上限に達した』『完了した』と書かず、元情報の数値と状況をそのまま伝えます。",
+    "割合や利益の算定基準（『自己株式を除く発行済株式総数』『親会社株主に帰属する当期純利益』など）は、元情報の範囲を保って書き、省略・一般化しません。株主総会などの承認前の議案・提案は『提案』『付議予定』と書き、確定した事項として書きません。",
     "元情報の不確実性・留保表現（『とみられる』『疑い』『意向』『可能性』『暫定』『予定』『計画』『〜と主張』等）は必ず維持し、確定した事実として言い切りません。",
     "『入力情報からは確認できません』『入力データでは〜』『提供された情報では〜』など、入力や情報源の扱いについて説明する文は書きません。",
     "日本株への影響、影響を受けそうな対象、市場反応は、元情報または確定済みjudgementに直接の根拠がない場合、締めにも本文にも追加しません。『日本株への影響は確認できません』のような締めの一文も不要です。確認できた事実で自然に終えてください。",
