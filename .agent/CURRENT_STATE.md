@@ -1,3 +1,17 @@
+## K5 — Phase 3a source PASS_CANDIDATE / independent H2 security review — 2026-10-09
+
+- G5 TASK `common-account-v1-phase3a-deletion-orchestrator-20261008`: source implementation report received, status review_required.
+- PR #112 source candidate: OPEN, UNMERGED; exact head `c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d`; 24 changed files; reported + independently confirmed Netlify and Vercel statuses success. GitHub mergeability initially unknown, then true; recheck before any later merge.
+- Main advances since PR base observed only in control TASK files with 0 implementation-file overlap, but fresh check still required at C2.
+- Reported source scope: explicit Kabumori service withdrawal preserving shared Auth/X, separate whole common-account deletion flow, recent reauth, session revocation, Apple/X/Storage adapters, post-delete verification, legacy direct-delete source containment; new unapplied migration `20261009120000_common_account_deletion_completion.sql`.
+- Reported local results: account-delete 42 PASS, app 430 PASS, AuthProvider 23 PASS, X saga 17 PASS and X app 19 PASS, disposable-PG proof PASS with 19/19 mutations detected, TypeScript 24/24 mutations detected, Phase1/2 regressions PASS. These are Claude report claims, not yet an independent security PASS.
+- Production DB/Auth/Storage/provider mutation, migration apply, Edge deploy, EAS/TestFlight = 0 according to Report.
+- Known release blockers/gaps: X-only / after Kabumori ended case unsupported; X deletion endpoint not deployed; old production account-delete endpoint remains until separately approved replacement; direct profile creator/X onboarding/stale-JWT writers not fully enforced; real disposable Supabase proof, public web disclosure and Simulator UI validation remain.
+- K5 decision: **PASS_CANDIDATE only**, do not merge or deploy. Mandatory independent cross-system security review on PR #112 before merging.
+- H1 was concurrently assigned to POSTONA PR #106; preserve it. H2 was confirmed done/free and assigned `common-account-v1-phase3a-pr112-security-review-20261009`, recommended **Sol（極高）**; return_to 共通アカウントG5のちゃ; finish code C2.
+- G5 remains review_required / next_owner codex; all other nonconflicting work remains allowed under conflict-based priority.
+- AI Lab diary: 候補あり — 複数アプリで同じログインを使えるようにする開発で、1つのアプリだけ利用を終了する場合と、共通アカウントを削除する場合を分ける仕組みを試作。誤って別サービスまで消さないよう安全性テストを重ね、正式公開前の確認を進めている。
+
 ## K4 — POSTONA Phase 2a-2 final bounded corrective PASS_CANDIDATE / H1 assigned — 2026-10-09
 
 - PR #106 exact head: `c0b6c03cb909d91f72b58424d64c6dfae1b8f14f`, OPEN/unmerged, 7 changed files; GitHub mergeable=true, Netlify SUCCESS / Vercel SUCCESS.
