@@ -38,6 +38,8 @@ export type DeletionPreview = {
   services: ServiceName[];
   blockers: string[];
   deletionInProgress: boolean;
+  /** False while the server's release gate keeps whole-account deletion closed (fail closed). */
+  deletionAvailable: boolean;
   apple: { required: boolean; supported: boolean; codeRequired: boolean };
   xCleanup: 'not_needed' | 'supported' | 'unsupported';
 };
@@ -50,7 +52,7 @@ export type DeleteOutcome =
       message: string;
       /** The server already revoked every session: the app must sign out and the person sign in again to continue. */
       signedOut: boolean;
-      /** The login may already be gone but the deletion is not verified yet (an operator follows up). */
+      /** The outcome needs an operator (the login may be gone, or an external step is unconfirmed). */
       pending: boolean;
       /** The state changed since the preview: show the new preview before asking again. */
       refreshPreview: boolean;
@@ -70,6 +72,9 @@ export const REAUTH_MESSAGES = {
   other_person: 'ログイン中のアカウントと一致しません。一度ログインし直してからお試しください。',
 } as const;
 
+export const DELETION_UNAVAILABLE_MESSAGE =
+  '共通アカウントの削除は、現在準備中です。お手数ですが' + CONTACT + '（かぶモリの利用を終了することはできます）';
+
 export const APPLE_UNSUPPORTED_MESSAGE =
   'Appleでサインインしたことのある共通アカウントは、現在かぶモリアプリから削除できません。' + CONTACT;
 
@@ -85,6 +90,9 @@ const DELETE_MESSAGES: Record<string, string> = {
   CONFIRMATION_REQUIRED: GENERIC_DELETE,
   LIFECYCLE_VERSION_REQUIRED: GENERIC_DELETE,
   LIFECYCLE_CHANGED: 'ご利用状況が変わりました。内容を確認して、もう一度お試しください。',
+  COMMON_ACCOUNT_DELETION_UNAVAILABLE: DELETION_UNAVAILABLE_MESSAGE,
+  DELETION_IN_PROGRESS: '別の端末または画面で削除手続きが進行中です。しばらく待ってから、もう一度お試しください。',
+  RECONCILIATION_REQUIRED: '削除手続きの一部の結果を確認する必要があります。運営で確認しますので、しばらくお待ちください。',
   DELETION_BLOCKED: '現在の状態では、アプリから共通アカウントを削除できません。' + CONTACT,
   APPLE_REAUTH_REQUIRED: APPLE_UNSUPPORTED_MESSAGE,
   APPLE_REVOCATION_UNAVAILABLE: APPLE_UNSUPPORTED_MESSAGE,
@@ -120,6 +128,7 @@ export function parsePreview(result: InvokeResult): { ok: true; preview: Deletio
   if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 0 || !services || !blockers
       || !services.every((s) => isService(s.service) && typeof s.status === 'string')
       || typeof body.account_status !== 'string' || typeof body.deletion_in_progress !== 'boolean'
+      || typeof body.deletion_available !== 'boolean'
       || typeof apple.required !== 'boolean' || typeof apple.supported !== 'boolean' || typeof apple.code_required !== 'boolean'
       || (body.x_cleanup !== 'not_needed' && body.x_cleanup !== 'supported' && body.x_cleanup !== 'unsupported')) {
     return { ok: false, message: GENERIC_PREVIEW };
@@ -132,6 +141,7 @@ export function parsePreview(result: InvokeResult): { ok: true; preview: Deletio
       services: services.filter((s) => s.status !== 'ended').map((s) => s.service as ServiceName),
       blockers,
       deletionInProgress: body.deletion_in_progress,
+      deletionAvailable: body.deletion_available,
       apple: { required: apple.required, supported: apple.supported, codeRequired: apple.code_required },
       xCleanup: body.x_cleanup,
     },
@@ -140,6 +150,7 @@ export function parsePreview(result: InvokeResult): { ok: true; preview: Deletio
 
 /** Whether this app can carry out the deletion the preview describes; if not, why (fail closed). */
 export function deletionAvailability(preview: DeletionPreview): { available: true } | { available: false; message: string } {
+  if (!preview.deletionAvailable) return { available: false, message: DELETION_UNAVAILABLE_MESSAGE };
   if (preview.blockers.length > 0) {
     return { available: false, message: BLOCKER_MESSAGES[preview.blockers[0]] ?? DELETE_MESSAGES.DELETION_BLOCKED };
   }
@@ -182,7 +193,7 @@ export function deleteOutcome(result: InvokeResult): DeleteOutcome {
   if (result.status === 200 && body.ok === true && body.outcome === 'deleted') return { ok: true };
   const code = typeof body.error === 'string' ? body.error : '';
   const signedOut = body.sessions_revoked === true;
-  const pending = code === 'DELETION_VERIFICATION_PENDING' || code === 'AUTH_DELETE_UNCONFIRMED';
+  const pending = code === 'DELETION_VERIFICATION_PENDING' || code === 'AUTH_DELETE_UNCONFIRMED' || code === 'RECONCILIATION_REQUIRED';
   let message = Object.prototype.hasOwnProperty.call(DELETE_MESSAGES, code) ? DELETE_MESSAGES[code] : GENERIC_DELETE;
   const firstReason = Array.isArray(body.reasons) && typeof body.reasons[0] === 'string' ? body.reasons[0] : '';
   if (code === 'DELETION_BLOCKED' && Object.prototype.hasOwnProperty.call(BLOCKER_MESSAGES, firstReason)) message = BLOCKER_MESSAGES[firstReason];

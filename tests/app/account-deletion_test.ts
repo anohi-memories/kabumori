@@ -5,6 +5,7 @@ import {
   ACCOUNT_LIFECYCLE_FUNCTION,
   APPLE_UNSUPPORTED_MESSAGE,
   DELETE_CONFIRMATION,
+  DELETION_UNAVAILABLE_MESSAGE,
   DELETE_TYPED_PHRASE,
   deleteCommonAccount,
   deleteOutcome,
@@ -26,12 +27,12 @@ const PERSON = { email: "person@example.invalid", userId: "11111111-1111-4111-81
 const PREVIEW_BODY = {
   ok: true, account_status: "active", lifecycle_version: 7,
   services: [{ service: "kabumori", status: "active" }, { service: "x_autopost", status: "active" }],
-  blockers: [], deletion_in_progress: false,
+  blockers: [], deletion_in_progress: false, deletion_available: true,
   apple: { required: false, supported: true, code_required: false }, x_cleanup: "supported",
 };
 const preview = (overrides: Partial<DeletionPreview> = {}): DeletionPreview => ({
   accountStatus: "active", lifecycleVersion: 7, services: ["kabumori", "x_autopost"], blockers: [],
-  deletionInProgress: false, apple: { required: false, supported: true, codeRequired: false }, xCleanup: "supported",
+  deletionInProgress: false, deletionAvailable: true, apple: { required: false, supported: true, codeRequired: false }, xCleanup: "supported",
   ...overrides,
 });
 
@@ -115,6 +116,7 @@ test("the preview is parsed strictly; anything malformed is an error", () => {
   for (const broken of [
     { ...PREVIEW_BODY, lifecycle_version: "7" }, { ...PREVIEW_BODY, lifecycle_version: -1 }, { ...PREVIEW_BODY, services: [{ service: "other", status: "active" }] },
     { ...PREVIEW_BODY, apple: {} }, { ...PREVIEW_BODY, x_cleanup: "maybe" }, { ...PREVIEW_BODY, blockers: [1] }, { ...PREVIEW_BODY, ok: false },
+    { ...PREVIEW_BODY, deletion_available: undefined }, { ...PREVIEW_BODY, deletion_available: "true" },
   ]) {
     assert.equal(parsePreview({ status: 200, body: broken }).ok, false, JSON.stringify(broken));
   }
@@ -131,8 +133,10 @@ test("the preview is read with the app's own session and needs one", async () =>
   assert.deepEqual(none.calls, []);
 });
 
-test("deletion availability fails closed: blockers, Apple (no code in this app), X that cannot keep the login", () => {
+test("deletion availability fails closed: release gate, blockers, Apple (no code in this app), X that cannot keep the login", () => {
   assert.deepEqual(deletionAvailability(preview()), { available: true });
+  assert.deepEqual(deletionAvailability(preview({ deletionAvailable: false })), { available: false, message: DELETION_UNAVAILABLE_MESSAGE },
+    "the server's release gate (H2 R3) is shown, no button");
   assert.deepEqual(deletionAvailability(preview({ accountStatus: "deleting", deletionInProgress: true })), { available: true }, "resume");
   assert.equal(deletionAvailability(preview({ blockers: ["ADMIN_ACCOUNT"] })).available, false);
   assert.equal(deletionAvailability(preview({ blockers: ["SOMETHING_NEW"] })).available, false);
@@ -172,6 +176,12 @@ test("deletion outcomes: only a verified deletion is success; sessions revoked, 
   assert.ok(!unconfirmed.ok && unconfirmed.pending);
   const storage = deleteOutcome({ status: 503, body: { ok: false, error: "STORAGE_NOT_EMPTY", sessions_revoked: true } });
   assert.ok(!storage.ok && storage.signedOut && !storage.pending && storage.message.includes("もう一度ログイン"));
+  const reconcile = deleteOutcome({ status: 500, body: { ok: false, error: "RECONCILIATION_REQUIRED", sessions_revoked: true } });
+  assert.ok(!reconcile.ok && reconcile.pending && reconcile.signedOut && reconcile.message.includes("運営で確認"));
+  const busy = deleteOutcome({ status: 409, body: { ok: false, error: "DELETION_IN_PROGRESS" } });
+  assert.ok(!busy.ok && !busy.pending && busy.message.includes("進行中"));
+  const closed = deleteOutcome({ status: 409, body: { ok: false, error: "COMMON_ACCOUNT_DELETION_UNAVAILABLE" } });
+  assert.ok(!closed.ok && closed.message === DELETION_UNAVAILABLE_MESSAGE);
   const changed = deleteOutcome({ status: 409, body: { ok: false, error: "LIFECYCLE_CHANGED" } });
   assert.ok(!changed.ok && changed.refreshPreview && !changed.signedOut);
   const admin = deleteOutcome({ status: 409, body: { ok: false, error: "DELETION_BLOCKED", reasons: ["ADMIN_ACCOUNT"] } });

@@ -24,14 +24,19 @@ import {
 } from './lifecycle_logic.ts';
 
 const RPC_NAMES: Record<LifecycleRpcName, string> = {
+  release_gate: 'common_account_deletion_release_gate',
   eligibility: 'common_account_deletion_eligibility',
   withdraw_kabumori: 'withdraw_kabumori_service',
   begin_service_deletion: 'begin_service_deletion',
   finish_service_deletion: 'finish_service_deletion',
   begin_account_deletion: 'begin_common_account_deletion',
-  record_checkpoint: 'record_common_account_deletion_checkpoint',
-  clear_checkpoint: 'clear_common_account_deletion_checkpoint',
-  prepare: 'prepare_common_account_auth_delete',
+  claim: 'claim_common_account_deletion',
+  renew: 'renew_common_account_deletion_claim',
+  release: 'release_common_account_deletion_claim',
+  owned_checkpoint: 'set_owned_common_account_deletion_checkpoint',
+  owned_prepare: 'prepare_owned_common_account_auth_delete',
+  begin_external_step: 'begin_common_account_deletion_external_step',
+  settle_external_step: 'settle_common_account_deletion_external_step',
   storage_objects: 'common_account_deletion_storage_objects',
   complete: 'complete_common_account_deletion',
   record_error: 'record_common_account_deletion_error',

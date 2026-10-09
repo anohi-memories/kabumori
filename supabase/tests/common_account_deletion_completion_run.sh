@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Disposable-only proof runner for 20261009120000_common_account_deletion_completion (common account
-# Phase 3a). Builds the lifecycle suites' production-shaped baseline (fixtures, the real onboarding and
-# social-mobile deletion migrations, Phase 1, Phase 2) on a LOCAL Unix-socket PostgreSQL, applies the
-# candidate as a non-superuser owner, then proves: preflight refusals, the exact schema change (one
-# Phase 1 rule replaced, one column, two rules, four functions), refused re-apply, static source rules,
-# the Phase 2 behavior suite still passing, this candidate's behavior, and two-session races between the
-# login removal and the post-delete read-back. Fake data only; never production.
+# Phase 3a with the PR112 H2 R1-R4 corrective). Builds the lifecycle suites' production-shaped baseline
+# (fixtures, the real onboarding and social-mobile deletion migrations, Phase 1, Phase 2) on a LOCAL
+# Unix-socket PostgreSQL, applies the candidate as a non-superuser owner, then proves: preflight
+# refusals, the exact schema change (one Phase 1 rule replaced; the listed columns, rules, gate table and
+# functions with their exact ACLs), refused re-apply, static source rules, the Phase 2 behavior suite
+# still passing, this candidate's behavior (including the H2 R3/R4 reproductions, which must now fail),
+# and two-session races (login removal vs read-back, start vs begin, two owners, an identity link vs the
+# managed delete decision). Fake data only; never production.
 #
 # Wherever the behavior file runs "delete from auth.users" it is the TEST standing in for the managed
 # Auth Admin delete; the candidate itself never removes a login.
@@ -55,7 +57,10 @@ SQL
 has_new_objects() {
   "${Q[@]}" -c "select to_regprocedure('public.complete_common_account_deletion(uuid,uuid)') is not null
     or to_regprocedure('public.common_account_deletion_storage_objects(uuid,integer)') is not null
-    or exists (select 1 from pg_attribute where attrelid = 'private.account_lifecycle_operations'::regclass and attname = 'verified_at' and not attisdropped)"
+    or to_regprocedure('public.claim_common_account_deletion(uuid,uuid,integer)') is not null
+    or to_regclass('private.account_lifecycle_release_gates') is not null
+    or exists (select 1 from pg_attribute where attrelid = 'private.account_lifecycle_operations'::regclass
+                and attname in ('verified_at', 'owner_lease', 'external_step') and not attisdropped)"
 }
 
 # 1. Preflight. Without Phase 2 it refuses and creates nothing.
@@ -114,22 +119,32 @@ removed="$(comm -23 "$tmp/before" "$tmp/after")"
 added="$(comm -13 "$tmp/before" "$tmp/after" | sed -E 's/^(fn [^ ]+) .*/\1/' | sort)"
 want_removed="con private.account_lifecycle_operations $rule_name CHECK (((status <> 'completed'::text) OR (operation_type = 'service_deletion'::text)))"
 [[ "$removed" == "$want_removed" ]] || { echo "FAIL change: unexpected removal/alteration: $removed" >&2; exit 1; }
-want_added="$(sort <<'EOF'
-col private.account_lifecycle_operations.verified_at timestamp with time zone -
-con private.account_lifecycle_operations account_lifecycle_operations_completed_shape CHECK (((status <> 'completed'::text) OR (operation_type = 'service_deletion'::text) OR ((user_id IS NULL) AND (verified_at IS NOT NULL) AND (current_step = 'ready_for_managed_auth_delete'::text))))
-con private.account_lifecycle_operations account_lifecycle_operations_verified_shape CHECK (((verified_at IS NULL) OR ((operation_type = 'account_deletion'::text) AND (status = 'completed'::text))))
-fn common_account_deletion_storage_objects(uuid,integer)
-fn complete_common_account_deletion(uuid,uuid)
-fn private.account_lifecycle_storage_inventory(uuid,integer)
-fn record_common_account_deletion_error(uuid,uuid,text)
-EOF
-)"
+want_added="$(sort "$here/common_account_deletion_completion_expected_catalog.txt")"
 [[ "$added" == "$want_added" ]] || { echo "FAIL change: unexpected additions:" >&2; diff <(echo "$want_added") <(echo "$added") >&2 || true; exit 1; }
-# Exact ACLs of the new functions: owner + service_role only (private helper: owner only).
-acl="$("${Q[@]}" -c "select string_agg(p.proname || '=' || array_to_string(array(select split_part(a, '=', 1) from unnest(p.proacl::text[]) a order by 1), ','), ' ' order by p.proname)
-  from pg_proc p where p.proname in ('complete_common_account_deletion', 'common_account_deletion_storage_objects', 'record_common_account_deletion_error', 'account_lifecycle_storage_inventory')")"
-[[ "$acl" == "account_lifecycle_storage_inventory=$owner common_account_deletion_storage_objects=$owner,service_role complete_common_account_deletion=$owner,service_role record_common_account_deletion_error=$owner,service_role" ]] \
-  || { echo "FAIL ACL: $acl" >&2; exit 1; }
+# Exact ACLs of the new functions: owner + service_role for the public ones, owner only for the private
+# helpers; the gate table has no grant at all.
+acl="$("${Q[@]}" -c "select string_agg(p.proname || '=' || coalesce(array_to_string(array(select split_part(a, '=', 1) from unnest(p.proacl::text[]) a order by 1), ','), 'NULL'), ' ' order by p.proname)
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where (n.nspname = 'public' and p.proname in ('common_account_deletion_release_gate', 'claim_common_account_deletion',
+          'renew_common_account_deletion_claim', 'release_common_account_deletion_claim', 'set_owned_common_account_deletion_checkpoint',
+          'prepare_owned_common_account_auth_delete', 'begin_common_account_deletion_external_step',
+          'settle_common_account_deletion_external_step', 'resolve_common_account_deletion_external_step',
+          'complete_common_account_deletion', 'common_account_deletion_storage_objects', 'record_common_account_deletion_error'))
+    or (n.nspname = 'private' and p.proname in ('account_lifecycle_gate_open', 'account_lifecycle_owned_operation',
+          'account_lifecycle_residue', 'account_lifecycle_storage_inventory'))")"
+want_acl="account_lifecycle_gate_open=$owner account_lifecycle_owned_operation=$owner account_lifecycle_residue=$owner account_lifecycle_storage_inventory=$owner"
+for f in begin_common_account_deletion_external_step claim_common_account_deletion common_account_deletion_release_gate common_account_deletion_storage_objects \
+         complete_common_account_deletion prepare_owned_common_account_auth_delete record_common_account_deletion_error release_common_account_deletion_claim \
+         renew_common_account_deletion_claim resolve_common_account_deletion_external_step set_owned_common_account_deletion_checkpoint settle_common_account_deletion_external_step; do
+  want_acl="$want_acl $f=$owner,service_role"
+done
+want_acl="$(tr ' ' '\n' <<<"$want_acl" | sort | tr '\n' ' ' | sed 's/ $//')"
+acl="$(tr ' ' '\n' <<<"$acl" | sort | tr '\n' ' ' | sed 's/ $//')"
+[[ "$acl" == "$want_acl" ]] || { echo "FAIL ACL: $acl" >&2; exit 1; }
+[[ "$("${Q[@]}" -c "select coalesce(array_to_string(relacl::text[], ','), 'NULL') || '/' || relrowsecurity from pg_class where oid = 'private.account_lifecycle_release_gates'::regclass")" == "$owner=arwdDxtm/$owner/true" ]] \
+  || { echo "FAIL gate table ACL/RLS" >&2; exit 1; }
+[[ "$("${Q[@]}" -c "select gate || '/' || state || '/' || reason from private.account_lifecycle_release_gates")" == managed_auth_delete/blocked/IDENTITY_CHANGE_FENCE_MISSING ]] \
+  || { echo "FAIL gate row" >&2; exit 1; }
 echo "COMMON_ACCOUNT_DELETION_COMPLETION_EXACT_CHANGE_PASS"
 
 if out="$("${O[@]}" -f "$candidate" 2>&1)"; then echo "FAIL re-apply accepted" >&2; exit 1; fi
@@ -142,7 +157,17 @@ flat="$(tr '\n' ' ' <<<"$code" | tr ';' '\n')"
 if grep -qiE '(delete[[:space:]]+from|update|insert[[:space:]]+into|truncate)[[:space:]]+(only[[:space:]]+)?(auth|storage|vault)\.' <<<"$flat"; then
   echo "FAIL the candidate writes to a managed schema (auth / storage / vault)" >&2; exit 1
 fi
-if grep -qiE 'delete[[:space:]]+from|insert[[:space:]]+into|truncate' <<<"$flat"; then echo "FAIL the candidate deletes or inserts rows" >&2; exit 1; fi
+if grep -qiE 'delete[[:space:]]+from|truncate' <<<"$flat"; then echo "FAIL the candidate deletes rows" >&2; exit 1; fi
+# The only insert is the gate's own 'blocked' row.
+if grep -iE 'insert[[:space:]]+into' <<<"$flat" | grep -qvE "insert into private\.account_lifecycle_release_gates \(gate, state, reason\)[[:space:]]+values \('managed_auth_delete', 'blocked', 'IDENTITY_CHANGE_FENCE_MISSING'\)"; then
+  echo "FAIL the candidate inserts rows other than the blocked gate" >&2; exit 1
+fi
+# The gate can only ever be created blocked; nothing in the file opens it.
+grep -qE "state text not null constraint account_lifecycle_release_gates_blocked_only check \(state = 'blocked'\)" <<<"$code" \
+  || { echo "FAIL the release gate is not schema-locked to blocked" >&2; exit 1; }
+if grep -iE "update[[:space:]]+private\.account_lifecycle_release_gates|state[[:space:]]*=[[:space:]]*'open'" <<<"$flat" | grep -qvE "g\.state = 'open'"; then
+  echo "FAIL the candidate opens the release gate" >&2; exit 1
+fi
 if grep -iE '(^|[^a-z_])update[[:space:]]+[a-z_]+\.' <<<"$flat" | grep -qvE 'update[[:space:]]+private\.account_lifecycle_operations[[:space:]]'; then
   echo "FAIL the candidate updates a table other than the lifecycle operations" >&2; exit 1
 fi
@@ -156,7 +181,7 @@ fi
 if grep -iE '^[[:space:]]*grant ' <<<"$flat" | grep -qvE 'to service_role$'; then echo "FAIL a grant to a role other than service_role" >&2; exit 1; fi
 fns="$(grep -ciE '^create function' <<<"$code")"
 safe="$(grep -ciE 'security definer set search_path = '"''" <<<"$code")"
-[[ "$fns" == 4 && "$safe" == 4 ]] || { echo "FAIL every function must be SECURITY DEFINER with an empty search_path ($fns/$safe)" >&2; exit 1; }
+[[ "$fns" == 16 && "$safe" == 16 ]] || { echo "FAIL every function must be SECURITY DEFINER with an empty search_path ($fns/$safe)" >&2; exit 1; }
 echo "COMMON_ACCOUNT_DELETION_COMPLETION_STATIC_PASS"
 
 # 4. Behavior: the Phase 2 suite is unaffected, then this candidate's own suite.
@@ -167,7 +192,9 @@ echo "COMMON_ACCOUNT_DELETION_COMPLETION_PHASE2_UNCHANGED_PASS"
   || { echo "FAIL behavior" >&2; "${Q[@]}" -f "$here/common_account_deletion_completion_behavior.sql" >&2 || true; exit 1; }
 echo "COMMON_ACCOUNT_DELETION_COMPLETION_BEHAVIOR_PASS"
 
-# 5. Two-session races between the login removal (stand-in for the managed Auth delete) and the read-back.
+# 5. Two-session races. The behavior suite opened the release gate in this database (test-only DDL),
+#    so the managed-delete intent can be recorded here.
+[[ "$("${Q[@]}" -c "select state from private.account_lifecycle_release_gates")" == open ]] || { echo "FAIL race setup: gate" >&2; exit 1; }
 uid() { printf '00000000-0000-4000-8000-%012d' "$1"; }
 svc() { "${Q[@]}" -c "begin; set local role service_role; $1; commit;"; }
 ready_person() {  # uid -> operation id of a ready Kabumori-only deletion
@@ -183,11 +210,17 @@ ready_person() {  # uid -> operation id of a ready Kabumori-only deletion
     || { echo "FAIL race fixture not ready" >&2; exit 1; }
   echo "$op"
 }
+owned_intent() {  # uid op -> records the managed delete intent as the owner
+  local lease
+  lease="$(svc "select public.claim_common_account_deletion('$1'::uuid, '$2'::uuid, 600) ->> 'lease'")"
+  [[ "$(svc "select public.begin_common_account_deletion_external_step('$1'::uuid, '$2'::uuid, '$lease'::uuid, 'managed_auth_delete') ->> 'status'")" == owned ]] \
+    || { echo "FAIL race fixture intent" >&2; exit 1; }
+}
 op_status() { "${Q[@]}" -c "select status || '/' || coalesce(last_error_code, '-') from private.account_lifecycle_operations where id = '$1'"; }
 
 # 5a. The removal is uncommitted (its guard holds the operation row) when the read-back arrives. The
 #     read-back waits, then sees the committed removal and completes.
-u="$(uid 601)"; op="$(ready_person "$u")"
+u="$(uid 601)"; op="$(ready_person "$u")"; owned_intent "$u" "$op"
 ( "${Q[@]}" -c "begin; delete from auth.users where id = '$u'; select pg_sleep(1.5); commit;" >/dev/null ) &
 holder=$!
 sleep 0.4
@@ -198,7 +231,7 @@ echo "COMMON_ACCOUNT_DELETION_COMPLETION_RACE_REMOVAL_THEN_READBACK_PASS"
 
 # 5b. The read-back holds its transaction (login still present) when the removal arrives. The removal
 #     waits for the operation row, then closes it as an unverified removal; nothing was completed early.
-u="$(uid 602)"; op="$(ready_person "$u")"
+u="$(uid 602)"; op="$(ready_person "$u")"; owned_intent "$u" "$op"
 ( "${Q[@]}" -c "begin; set local role service_role; select public.complete_common_account_deletion('$u'::uuid, '$op'::uuid); reset role; select pg_sleep(1.5); commit;" > "$tmp/r5b" ) &
 holder=$!
 sleep 0.4
@@ -228,5 +261,33 @@ r="$("${Q[@]}" -c "begin; set local request.jwt.claim.sub = '$u'; set local role
 wait "$holder"
 [[ "$r" == *ACCOUNT_DELETION_IN_PROGRESS* ]] || { echo "FAIL race begin-then-start: $r" >&2; exit 1; }
 echo "COMMON_ACCOUNT_DELETION_COMPLETION_RACE_START_VS_BEGIN_PASS"
+
+# 5d. R1: two requests claim the same deletion at the same moment. The first holds its transaction; the
+#     second waits on the account lock, then sees the committed lease: exactly one owner.
+u="$(uid 604)"; op="$(ready_person "$u")"
+( "${Q[@]}" -c "begin; set local role service_role; select public.claim_common_account_deletion('$u'::uuid, '$op'::uuid, 600); reset role; select pg_sleep(1.5); commit;" > "$tmp/r5d" ) &
+holder=$!
+sleep 0.4
+r="$(svc "select public.claim_common_account_deletion('$u'::uuid, '$op'::uuid, 600)::text")"
+wait "$holder"
+grep -q '"status": "acquired"' "$tmp/r5d" && [[ "$r" == '{"status": "in_progress"}' ]] \
+  && [[ "$("${Q[@]}" -c "select owner_fence from private.account_lifecycle_operations where id = '$op'")" == 1 ]] \
+  || { echo "FAIL race two owners: $(cat "$tmp/r5d") / $r" >&2; exit 1; }
+echo "COMMON_ACCOUNT_DELETION_COMPLETION_RACE_ONE_OWNER_PASS"
+
+# 5e. R3: an Apple identity link is in flight (uncommitted, holding the login's key-share lock) when the
+#     managed delete is decided. The decision takes the exclusive login lock, so it waits, then sees the
+#     new requirement and refuses; the readiness is dropped and nothing is recorded as intended.
+u="$(uid 605)"; op="$(ready_person "$u")"
+lease="$(svc "select public.claim_common_account_deletion('$u'::uuid, '$op'::uuid, 600) ->> 'lease'")"
+( "${Q[@]}" -c "begin; insert into auth.identities (user_id, provider) values ('$u', 'apple'); select pg_sleep(1.5); commit;" >/dev/null ) &
+holder=$!
+sleep 0.4
+r="$(svc "select public.begin_common_account_deletion_external_step('$u'::uuid, '$op'::uuid, '$lease'::uuid, 'managed_auth_delete')::text")"
+wait "$holder"
+[[ "$r" == *'"status": "not_ready"'* && "$r" == *REQUIRED_CHECKPOINTS_CHANGED* ]] \
+  && [[ "$("${Q[@]}" -c "select current_step || '/' || coalesce(external_step, '-') || '/' || (managed_delete_intent_at is null) from private.account_lifecycle_operations where id = '$op'")" == cleanup/-/true ]] \
+  || { echo "FAIL race identity-link-then-intent: $r" >&2; exit 1; }
+echo "COMMON_ACCOUNT_DELETION_COMPLETION_RACE_IDENTITY_LINK_THEN_INTENT_PASS"
 
 echo "COMMON_ACCOUNT_DELETION_COMPLETION_ALL_PASS"

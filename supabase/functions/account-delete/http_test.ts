@@ -13,6 +13,7 @@ const SERVICE = 'fixture-service-role-key';
 const USER = '11111111-1111-4111-8111-111111111111';
 const OP = '00000000-0000-4000-8000-000000000001';
 const XOP = '00000000-0000-4000-8000-000000000002';
+const LEASE = '00000000-0000-4000-8000-000000000003';
 const b64 = (value: unknown) => btoa(JSON.stringify(value)).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/u, '');
 const TOKEN = `${b64({ alg: 'HS256' })}.${b64({ sub: USER, amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 30 }] })}.sig`;
 const env = (values: Record<string, string> = { SUPABASE_URL: URL_, SUPABASE_ANON_KEY: ANON, SUPABASE_SERVICE_ROLE_KEY: SERVICE }) =>
@@ -33,12 +34,17 @@ function network(overrides: Record<string, (seen: Seen) => Response> = {}) {
     begin_service_deletion: () => ({ status: 'started', operation_id: XOP }),
     finish_service_deletion: () => ({ status: 'ended' }),
     withdraw_kabumori_service: () => ({ status: 'ended' }),
-    record_common_account_deletion_checkpoint: () => ({ status: 'recorded' }),
-    clear_common_account_deletion_checkpoint: () => ({ status: 'cleared' }),
+    common_account_deletion_release_gate: () => ({ managed_auth_delete: { state: 'open', reason: 'TEST' } }),
+    claim_common_account_deletion: () => ({ status: 'acquired', lease: LEASE, fence: 1, recorded_checkpoints: [] }),
+    renew_common_account_deletion_claim: () => ({ status: 'owned', fence: 1 }),
+    release_common_account_deletion_claim: () => ({ status: 'released' }),
+    set_owned_common_account_deletion_checkpoint: () => ({ status: 'recorded' }),
+    begin_common_account_deletion_external_step: () => ({ status: 'owned', fence: 1 }),
+    settle_common_account_deletion_external_step: () => ({ status: 'cleared' }),
     common_account_deletion_storage_objects: () => (++storageCalls === 1
       ? { status: 'ok', objects: [{ bucket_id: 'avatars', name: 'p/a.png' }], more: false, buckets_owned: false }
       : { status: 'ok', objects: [], more: false, buckets_owned: false }),
-    prepare_common_account_auth_delete: () => ({ status: 'ready_for_managed_auth_delete', operation_id: OP, login_deleted: false }),
+    prepare_owned_common_account_auth_delete: () => ({ status: 'ready_for_managed_auth_delete', operation_id: OP, login_deleted: false }),
     complete_common_account_deletion: () => ({ status: 'completed', operation_id: OP, login_deleted: true }),
     record_common_account_deletion_error: () => ({ status: 'recorded' }),
   };
@@ -115,10 +121,22 @@ test('delete over the network: each credential goes only where it belongs, and t
   const admin = seen.filter((s) => path(s).startsWith('/auth/v1/admin/users/'));
   assert.deepEqual(admin.map((s) => [s.method, path(s)]), [['DELETE', `/auth/v1/admin/users/${USER}`]]);
   const adminAt = seen.indexOf(admin[0]);
-  const prepares = seen.map((s, i) => (path(s) === '/rest/v1/rpc/prepare_common_account_auth_delete' ? i : -1)).filter((i) => i >= 0);
+  const prepares = seen.map((s, i) => (path(s) === '/rest/v1/rpc/prepare_owned_common_account_auth_delete' ? i : -1)).filter((i) => i >= 0);
   assert.equal(prepares.length, 2);
-  assert.ok(prepares.every((i) => i < adminAt), 'two ready answers precede the managed delete');
-  assert.equal(path(seen.at(-1)!), '/rest/v1/rpc/complete_common_account_deletion', 'the read-back is the last step');
+  const intentAt = seen.findIndex((s) => path(s) === '/rest/v1/rpc/begin_common_account_deletion_external_step'
+    && (s.body as Record<string, unknown>).p_step === 'managed_auth_delete');
+  assert.ok(prepares.every((i) => i < intentAt) && intentAt < adminAt, 'two ready answers, then the recorded intent, precede the managed delete');
+  const owned = seen.filter((s) => (s.body as Record<string, unknown> | null)?.p_lease !== undefined);
+  assert.ok(owned.length >= 8 && owned.every((s) => (s.body as Record<string, unknown>).p_lease === LEASE), 'every owned step carries the lease');
+  assert.ok(seen.findIndex((s) => path(s) === '/rest/v1/rpc/claim_common_account_deletion') < seen.findIndex((s) => path(s).startsWith(`/functions/v1/`) && (s.body as Record<string, unknown>)?.action === 'delete'),
+    'owned before the first external action');
+  assert.equal(path(seen.at(-2)!), '/rest/v1/rpc/complete_common_account_deletion', 'the read-back is the last step');
+  assert.equal(path(seen.at(-1)!), '/rest/v1/rpc/release_common_account_deletion_claim', 'then ownership is given back');
+  // The unowned Phase 1 checkpoint / readiness calls and the operator reconciliation are never used here.
+  for (const unowned of ['record_common_account_deletion_checkpoint', 'clear_common_account_deletion_checkpoint',
+    'prepare_common_account_auth_delete', 'resolve_common_account_deletion_external_step']) {
+    assert.ok(!seen.some((s) => path(s) === `/rest/v1/rpc/${unowned}`), unowned);
+  }
   const logoutAt = seen.findIndex((s) => path(s) === '/auth/v1/logout?scope=global');
   const xRunAt = seen.indexOf(xRun!);
   assert.ok(xRunAt < logoutAt, 'the X saga still has the person\'s session when it runs');
@@ -140,6 +158,8 @@ test('an Auth Admin failure is checked by reading the login back; a 404 is verif
   const failed = await createHandler(env(), failing.fetchImpl)(post({ action: 'delete_common_account', confirmation: DELETE_CONFIRMATION, expected_lifecycle_version: 5 }));
   assert.deepEqual([failed.status, await failed.json()], [502, { ok: false, error: 'AUTH_DELETE_FAILED', sessions_revoked: true }]);
   assert.deepEqual(failing.seen.filter((s) => s.url.includes('/admin/users/')).map((s) => s.method), ['DELETE', 'GET']);
+  const settled = failing.seen.find((s) => s.url.endsWith('/rpc/settle_common_account_deletion_external_step'));
+  assert.deepEqual([(settled?.body as Record<string, unknown>)?.p_step, (settled?.body as Record<string, unknown>)?.p_outcome], ['managed_auth_delete', 'failed']);
   const gone = network({ '/auth/v1/admin/users/': () => new Response('{}', { status: 404 }) });
   const deleted = await createHandler(env(), gone.fetchImpl)(post({ action: 'delete_common_account', confirmation: DELETE_CONFIRMATION, expected_lifecycle_version: 5 }));
   assert.deepEqual(await deleted.json(), { ok: true, outcome: 'deleted' });
@@ -160,6 +180,13 @@ test('the X saga adapter maps only the saga\'s fixed answers, and anything unkno
     assert.equal(xOutcomeOf(500, { ok: false, error }), 'failed', error);
   }
   assert.equal(xOutcomeOf(404, null), 'failed', 'the X function is not deployed');
+});
+
+test('a blocked release gate refuses a deletion before any write, over the network too', async () => {
+  const { seen, fetchImpl } = network({ '/rest/v1/rpc/common_account_deletion_release_gate': () => Response.json({ managed_auth_delete: { state: 'blocked', reason: 'IDENTITY_CHANGE_FENCE_MISSING' } }) });
+  const response = await createHandler(env(), fetchImpl)(post({ action: 'delete_common_account', confirmation: DELETE_CONFIRMATION, expected_lifecycle_version: 5 }));
+  assert.deepEqual([response.status, await response.json()], [409, { ok: false, error: 'COMMON_ACCOUNT_DELETION_UNAVAILABLE' }]);
+  assert.deepEqual(seen.map((s) => s.url.slice(URL_.length)), ['/auth/v1/user', '/rest/v1/rpc/common_account_deletion_release_gate']);
 });
 
 test('withdraw over the network touches only the Kabumori withdrawal', async () => {

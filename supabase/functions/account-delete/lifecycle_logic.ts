@@ -6,17 +6,24 @@
 //   * The person is whoever the caller's own bearer token belongs to (GET /auth/v1/user). The request body
 //     never names a user; every RPC receives the verified id only.
 //   * Withdrawal and deletion need a recent authentication (the X saga's rule: newest `amr` timestamp at
-//     most RECENT_AUTH_SECONDS old, `sub` == verified user) and an explicit confirmation constant. A
-//     deletion is also bound to the lifecycle_version the person was shown; any change refuses it.
+//     most RECENT_AUTH_SECONDS old, `sub` == verified user; a timestamp in the future is refused) and an
+//     explicit confirmation constant. A deletion is also bound to the lifecycle_version the person was
+//     shown; any change refuses it.
 //   * Whole-account deletion is the Phase 1 section 10 sequence, every step behind the lifecycle RPCs:
-//     begin (version-bound) -> X through its existing saga (scope social_only, so the saga never removes
-//     the login) -> Kabumori withdrawal -> session revocation -> Apple grant revocation -> Storage through
-//     its API, re-listed until empty -> prepare -> revalidate (Storage again + prepare again) -> managed
-//     Auth Admin delete -> post-delete read-back. The login is removed only after prepare answered
-//     ready twice; success is reported only after the read-back verified the deletion.
-//   * Retries resume from the durable state: the lifecycle operation, its checkpoints and the X saga's own
-//     tombstone. An external step that cannot be repeated (Apple's single-use code) is skipped once its
-//     checkpoint exists; repeatable ones (session revocation, Storage) run again.
+//     release-gate pre-check -> begin (version-bound) -> claim the durable ownership -> X through its
+//     existing saga (scope social_only, so the saga never removes the login) -> Kabumori withdrawal ->
+//     session revocation -> Apple grant revocation -> Storage through its API, re-listed until empty ->
+//     prepare -> revalidate (Storage again + prepare again) -> managed delete intent (release gate, full
+//     re-evaluation under the exclusive login lock) -> managed Auth Admin delete -> post-delete read-back.
+//     Success is reported only after the read-back verified the deletion.
+//   * One owner (H2 R1): after `begin`, a durable lease with a fence is taken before any external action;
+//     every step re-checks it in the database (renew, owned checkpoint, owned prepare, step intent). A
+//     second request is told 'in progress'; an owner that lost its lease stops before acting.
+//   * Steps that must not be repeated blindly (H2 R1/R2) -- the Apple revocation (single-use code) and the
+//     managed Auth delete -- are recorded as in flight before the call and settled after it. An outcome
+//     that cannot be recorded or is unknown is never replayed: it waits for reconciliation.
+//   * The managed Auth delete is release-blocked by a database gate (H2 R3): until it opens, a deletion
+//     is refused before anything changes (COMMON_ACCOUNT_DELETION_UNAVAILABLE).
 //   * Every failure is a fixed code. Tokens, keys, ids, e-mail addresses, object names and server messages
 //     are never returned or logged.
 import { lastAuthenticatedAt, RECENT_AUTH_SECONDS } from '../social-mobile-account-delete/delete_logic.ts';
@@ -27,12 +34,14 @@ export const WITHDRAW_CONFIRMATION = 'END_KABUMORI_SERVICE';
 export const DELETE_CONFIRMATION = 'DELETE_COMMON_ACCOUNT';
 /** Storage list -> remove passes per request before the request gives up (and a retry continues). */
 export const STORAGE_PASSES = 3;
+/** Ownership lease (seconds). Longer than any Edge request; the database also refuses a stale owner. */
+export const LEASE_SECONDS = 600;
 const STORAGE_REMOVE_CHUNK = 100;
 
 export type LifecycleRpcName =
-  | 'eligibility' | 'withdraw_kabumori' | 'begin_service_deletion' | 'finish_service_deletion'
-  | 'begin_account_deletion' | 'record_checkpoint' | 'clear_checkpoint' | 'prepare'
-  | 'storage_objects' | 'complete' | 'record_error';
+  | 'release_gate' | 'eligibility' | 'withdraw_kabumori' | 'begin_service_deletion' | 'finish_service_deletion'
+  | 'begin_account_deletion' | 'claim' | 'renew' | 'release' | 'owned_checkpoint' | 'owned_prepare'
+  | 'begin_external_step' | 'settle_external_step' | 'storage_objects' | 'complete' | 'record_error';
 export type RpcResult = { ok: true; data: unknown } | { ok: false };
 
 /** providers and Apple subjects come from the server's view of the person's identities. */
@@ -69,7 +78,8 @@ export type LifecycleDeps = {
 
 export type LifecycleErrorCode =
   | 'AUTH_REQUIRED' | 'ACTION_REQUIRED' | 'CONFIRMATION_REQUIRED' | 'REAUTH_REQUIRED'
-  | 'LIFECYCLE_VERSION_REQUIRED' | 'LIFECYCLE_CHANGED' | 'DELETION_BLOCKED'
+  | 'LIFECYCLE_VERSION_REQUIRED' | 'LIFECYCLE_CHANGED' | 'DELETION_BLOCKED' | 'COMMON_ACCOUNT_DELETION_UNAVAILABLE'
+  | 'DELETION_IN_PROGRESS' | 'RECONCILIATION_REQUIRED'
   | 'APPLE_REAUTH_REQUIRED' | 'APPLE_REVOCATION_UNAVAILABLE' | 'APPLE_REVOKE_FAILED'
   | 'X_CLEANUP_UNSUPPORTED' | 'X_CLEANUP_IN_PROGRESS' | 'X_CLEANUP_BLOCKED' | 'X_CLEANUP_FAILED'
   | 'SERVICE_CLEANUP_INCOMPLETE' | 'SESSION_REVOKE_FAILED'
@@ -86,7 +96,8 @@ export const REASON_CODES = [
   'ADMIN_ACCOUNT', 'ACCOUNT_LOCKED', 'X_WORKSPACE_NOT_SELF_SERVICE', 'UNREGISTERED_SERVICE_FOOTPRINT',
   'SERVICE_NOT_DELETABLE', 'LIFECYCLE_STATE_INCONSISTENT', 'ACCOUNT_DELETION_IN_PROGRESS',
   'SERVICES_REMAIN', 'LIFECYCLE_SETTINGS_INVALID', 'MANAGED_CHECKPOINT_REGISTRY_INVALID',
-  'MANAGED_CHECKPOINTS_MISSING', 'MANAGED_OWNERSHIP_REMAINS', 'ACCOUNT_DELETION_NOT_IN_PROGRESS', 'UNKNOWN',
+  'MANAGED_CHECKPOINTS_MISSING', 'MANAGED_OWNERSHIP_REMAINS', 'ACCOUNT_DELETION_NOT_IN_PROGRESS',
+  'REQUIRED_CHECKPOINTS_CHANGED', 'LIFECYCLE_VERSION_CHANGED', 'REQUIREMENT_EPOCH_CHANGED', 'NOT_READY', 'UNKNOWN',
 ] as const;
 const reasonCode = (value: unknown) => ((REASON_CODES as readonly unknown[]).includes(value) ? value as string : 'UNKNOWN');
 const reasonCodes = (value: unknown) => [...new Set((Array.isArray(value) && value.length ? value : ['UNKNOWN']).map(reasonCode))];
@@ -121,10 +132,11 @@ async function verifiedCaller(authorization: string | null, deps: LifecycleDeps)
   }
 }
 
-const recentlyAuthenticated = (token: string, user: VerifiedUser, deps: LifecycleDeps) => {
-  const at = lastAuthenticatedAt(token, user.id);
-  return at !== null && deps.nowSeconds() - at <= RECENT_AUTH_SECONDS && at <= deps.nowSeconds() + 60;
-};
+/** H2 C1: the newest authentication must be in [now - RECENT_AUTH_SECONDS, now]; the clock is read once. */
+export function recentlyAuthenticated(token: string, userId: string, nowSeconds: number): boolean {
+  const at = lastAuthenticatedAt(token, userId);
+  return at !== null && at <= nowSeconds && nowSeconds - at <= RECENT_AUTH_SECONDS;
+}
 
 async function call(deps: LifecycleDeps, name: LifecycleRpcName, args: Record<string, unknown>): Promise<Record<string, unknown> | null> {
   try {
@@ -173,6 +185,12 @@ async function eligibility(deps: LifecycleDeps, userId: string): Promise<Eligibi
   };
 }
 
+/** Whether the managed Auth delete is released (H2 R3). Anything unreadable is blocked. */
+async function managedDeleteReleased(deps: LifecycleDeps): Promise<boolean> {
+  const gate = await call(deps, 'release_gate', {});
+  return record(gate?.managed_auth_delete).state === 'open';
+}
+
 const appleNeeded = (user: VerifiedUser, state: Eligibility) =>
   state.requiredCheckpoints.includes('apple_revocation') || user.providers.includes('apple');
 const remaining = (state: Eligibility, service: ServiceState['service']) => {
@@ -211,6 +229,7 @@ export async function handlePreview(input: { authorization: string | null }, dep
       services: state.services.map((s) => ({ service: s.service, status: s.status })),
       blockers: state.blockers.length ? reasonCodes(state.blockers) : [],
       deletion_in_progress: state.operation !== null,
+      deletion_available: await managedDeleteReleased(deps),
       apple: {
         required: apple,
         supported: !apple || deps.revokeApple !== null,
@@ -230,7 +249,7 @@ export async function handleWithdrawKabumori(input: { authorization: string | nu
   if (!caller) return fail(401, 'AUTH_REQUIRED');
   const { token, user } = caller;
   if (record(input.body).confirmation !== WITHDRAW_CONFIRMATION) return fail(400, 'CONFIRMATION_REQUIRED');
-  if (!recentlyAuthenticated(token, user, deps)) return fail(403, 'REAUTH_REQUIRED');
+  if (!recentlyAuthenticated(token, user.id, deps.nowSeconds())) return fail(403, 'REAUTH_REQUIRED');
   // A whole-account deletion ends Kabumori itself, after X: ending it here first would change the X
   // saga's scope underneath that deletion.
   const state = await eligibility(deps, user.id);
@@ -307,17 +326,17 @@ export async function handleDeleteCommonAccount(input: { authorization: string |
   const userId = user.id;
   const body = record(input.body);
   if (body.confirmation !== DELETE_CONFIRMATION) return fail(400, 'CONFIRMATION_REQUIRED');
-  if (!recentlyAuthenticated(token, user, deps)) return fail(403, 'REAUTH_REQUIRED');
+  if (!recentlyAuthenticated(token, userId, deps.nowSeconds())) return fail(403, 'REAUTH_REQUIRED');
   const expected = body.expected_lifecycle_version;
   if (typeof expected !== 'number' || !Number.isSafeInteger(expected) || expected < 0) return fail(400, 'LIFECYCLE_VERSION_REQUIRED');
   const appleCode = typeof body.apple_authorization_code === 'string' && body.apple_authorization_code.length > 0 ? body.apple_authorization_code : null;
 
   // 1. Read-only pre-checks: nothing changes when a requirement of a later step is already unmet.
+  if (!(await managedDeleteReleased(deps))) return fail(409, 'COMMON_ACCOUNT_DELETION_UNAVAILABLE');
   const before = await eligibility(deps, userId);
   if (!before) return fail(500, 'FAILED');
   const apple = appleNeeded(user, before);
-  const appleDone = before.operation?.recordedCheckpoints.includes('apple_revocation') ?? false;
-  if (apple && !appleDone) {
+  if (apple && !(before.operation?.recordedCheckpoints.includes('apple_revocation') ?? false)) {
     if (!deps.revokeApple) return fail(409, 'APPLE_REVOCATION_UNAVAILABLE');
     if (!appleCode) return fail(400, 'APPLE_REAUTH_REQUIRED');
   }
@@ -339,6 +358,37 @@ export async function handleDeleteCommonAccount(input: { authorization: string |
   const operationId = begun.operation_id;
   if (typeof operationId !== 'string' || !UUID.test(operationId)) return fail(500, 'FAILED');
 
+  // 3. One owner (H2 R1): before any external action. A second request is told the truth.
+  const claimed = await call(deps, 'claim', { p_user_id: userId, p_operation_id: operationId, p_lease_seconds: LEASE_SECONDS });
+  if (!claimed) return fail(500, 'FAILED');
+  if (claimed.status === 'in_progress') return fail(409, 'DELETION_IN_PROGRESS');
+  if (claimed.status === 'reconciliation_required') return fail(409, 'RECONCILIATION_REQUIRED');
+  const lease = claimed.lease;
+  const recorded = strings(claimed.recorded_checkpoints);
+  if (claimed.status !== 'acquired' || typeof lease !== 'string' || !UUID.test(lease) || !recorded) return fail(500, 'FAILED');
+  const owner = { p_user_id: userId, p_operation_id: operationId, p_lease: lease };
+  try {
+    return await ownedDeletion({ deps, token, user, operationId, owner, appleCode, apple, appleDone: recorded.includes('apple_revocation') });
+  } finally {
+    // Gives ownership back whatever happened (a no-op when it was lost or the read-back closed it). An
+    // unsettled external step stays recorded.
+    await call(deps, 'release', owner);
+  }
+}
+
+type Owned = {
+  deps: LifecycleDeps;
+  token: string;
+  user: VerifiedUser;
+  operationId: string;
+  owner: { p_user_id: string; p_operation_id: string; p_lease: string };
+  appleCode: string | null;
+  apple: boolean;
+  appleDone: boolean;
+};
+
+async function ownedDeletion({ deps, token, user, operationId, owner, appleCode, apple, appleDone }: Owned): Promise<LifecycleResponse> {
+  const userId = user.id;
   let sessionsRevoked = false;
   // Every failure from here on is kept on the operation as a fixed code for an operator (best effort).
   const stop = async (response: LifecycleResponse): Promise<LifecycleResponse> => {
@@ -347,12 +397,15 @@ export async function handleDeleteCommonAccount(input: { authorization: string |
     }
     return response;
   };
-  const checkpoint = async (key: 'session_revocation' | 'apple_revocation' | 'storage_cleanup') =>
-    (await call(deps, 'record_checkpoint', { p_user_id: userId, p_operation_id: operationId, p_checkpoint: key }))?.status === 'recorded';
-  const withdrawStorageCheckpoint = () =>
-    call(deps, 'clear_checkpoint', { p_user_id: userId, p_operation_id: operationId, p_checkpoint: 'storage_cleanup' });
+  // Another request owns the deletion now: stop without acting and say so.
+  const lost = () => fail(409, 'DELETION_IN_PROGRESS', { sessionsRevoked });
+  const owned = async () => (await call(deps, 'renew', { ...owner, p_lease_seconds: LEASE_SECONDS }))?.status === 'owned';
+  const ownedCheckpoint = async (key: 'session_revocation' | 'storage_cleanup', present: boolean) =>
+    (await call(deps, 'owned_checkpoint', { ...owner, p_checkpoint: key, p_recorded: present }))?.status;
+  const recordStorage = async (present: boolean) => ownedCheckpoint('storage_cleanup', present);
 
-  // 3a. X first, through its own saga, wrapped by the lifecycle service deletion.
+  // 4a. X first, through its own saga, wrapped by the lifecycle service deletion.
+  if (!(await owned())) return lost();
   const xBegun = await call(deps, 'begin_service_deletion', { p_user_id: userId, p_service_key: 'x_autopost' });
   if (!xBegun) return stop(fail(500, 'FAILED'));
   if (xBegun.status === 'blocked') return stop(fail(409, 'DELETION_BLOCKED', { reasons: [reasonCode(xBegun.reason)] }));
@@ -377,7 +430,8 @@ export async function handleDeleteCommonAccount(input: { authorization: string |
     return stop(fail(500, 'FAILED'));
   }
 
-  // 3b. Kabumori (one transaction: entitlement deleting -> profile cascade -> ended).
+  // 4b. Kabumori (one transaction: entitlement deleting -> profile cascade -> ended).
+  if (!(await owned())) return lost();
   const kabumori = await call(deps, 'withdraw_kabumori', { p_user_id: userId });
   if (!kabumori) return stop(fail(500, 'FAILED'));
   if (kabumori.status === 'blocked') return stop(fail(409, 'DELETION_BLOCKED', { reasons: [reasonCode(kabumori.reason)] }));
@@ -388,9 +442,10 @@ export async function handleDeleteCommonAccount(input: { authorization: string |
   if (!afterServices) return stop(fail(500, 'FAILED'));
   if (afterServices.services.some((s) => s.status !== 'ended')) return stop(fail(500, 'SERVICE_CLEANUP_INCOMPLETE'));
 
-  // 4. Sessions: every refresh token of the login. Repeated on a retry (a retry needed a new sign-in).
+  // 5. Sessions: every refresh token of the login. Repeated on a retry (a retry needed a new sign-in).
   //    Access tokens already issued stay valid until they expire; the lifecycle state, the revalidation
   //    and the post-delete read-back are what stop them (see the stale-token policy in the design doc).
+  if (!(await owned())) return lost();
   let revoked = false;
   try {
     revoked = await deps.revokeSessions(token);
@@ -399,48 +454,80 @@ export async function handleDeleteCommonAccount(input: { authorization: string |
   }
   if (!revoked) return stop(fail(502, 'SESSION_REVOKE_FAILED'));
   sessionsRevoked = true;
-  if (!(await checkpoint('session_revocation'))) return stop(fail(500, 'FAILED', { sessionsRevoked }));
+  const sessionCheckpoint = await ownedCheckpoint('session_revocation', true);
+  if (sessionCheckpoint === 'lease_lost') return lost();
+  if (sessionCheckpoint !== 'recorded') return stop(fail(500, 'FAILED', { sessionsRevoked }));
 
-  // 5. Apple: once. The code is single-use; the checkpoint makes a retry skip this step.
+  // 6. Apple (H2 R2): the intent is recorded before the call and settled after it. An outcome that is
+  //    unknown, or known but not recorded, is never replayed: it waits for reconciliation.
   if (apple && !appleDone) {
-    let ok = false;
-    try {
-      ok = deps.revokeApple !== null && appleCode !== null && await deps.revokeApple(appleCode, user.appleSubjects);
-    } catch {
-      ok = false;
+    // Checked before anything is recorded: an intent is only ever written right before the call.
+    if (!deps.revokeApple || !appleCode) return stop(fail(400, 'APPLE_REAUTH_REQUIRED', { sessionsRevoked }));
+    const intent = await call(deps, 'begin_external_step', { ...owner, p_step: 'apple_revocation' });
+    if (intent?.status === 'lease_lost') return lost();
+    if (intent?.status === 'step_in_flight') return stop(fail(409, 'RECONCILIATION_REQUIRED', { sessionsRevoked }));
+    if (intent?.status !== 'already_recorded') {
+      if (intent?.status !== 'owned') return stop(fail(500, 'FAILED', { sessionsRevoked }));
+      let outcome: 'succeeded' | 'failed' | 'unknown' = 'unknown';
+      try {
+        outcome = (await deps.revokeApple(appleCode, user.appleSubjects)) ? 'succeeded' : 'failed';
+      } catch {
+        outcome = 'unknown';
+      }
+      // Unknown (the call broke off): the code may be consumed and the grant revoked or not. Not replayed.
+      if (outcome === 'unknown') return stop(fail(500, 'RECONCILIATION_REQUIRED', { sessionsRevoked }));
+      const settled = await call(deps, 'settle_external_step', { ...owner, p_step: 'apple_revocation', p_outcome: outcome });
+      // Known but not recorded (lease lost, database failure): the intent stays; never replayed.
+      if (settled?.status !== (outcome === 'succeeded' ? 'recorded' : 'cleared')) {
+        return stop(fail(500, 'RECONCILIATION_REQUIRED', { sessionsRevoked }));
+      }
+      if (outcome === 'failed') return stop(fail(502, 'APPLE_REVOKE_FAILED', { sessionsRevoked }));
     }
-    if (!ok) return stop(fail(502, 'APPLE_REVOKE_FAILED', { sessionsRevoked }));
-    if (!(await checkpoint('apple_revocation'))) return stop(fail(500, 'FAILED', { sessionsRevoked }));
   }
 
-  // 6. Storage through its API, re-listed until empty.
+  // 7. Storage through its API, re-listed until empty.
+  if (!(await owned())) return lost();
   const storage = await cleanStorage(deps, userId);
   if (storage !== 'clean') {
-    await withdrawStorageCheckpoint();
+    if ((await recordStorage(false)) === 'lease_lost') return lost();
     return stop(storageFailure(storage, sessionsRevoked));
   }
-  if (!(await checkpoint('storage_cleanup'))) return stop(fail(500, 'FAILED', { sessionsRevoked }));
+  const storageCheckpoint = await recordStorage(true);
+  if (storageCheckpoint === 'lease_lost') return lost();
+  if (storageCheckpoint !== 'recorded') return stop(fail(500, 'FAILED', { sessionsRevoked }));
 
-  // 7. prepare, then 8. revalidate immediately before the delete: Storage listed again, prepare again.
-  const prepare = async (): Promise<LifecycleResponse | null> => {
-    const answer = await call(deps, 'prepare', { p_user_id: userId, p_operation_id: operationId });
+  // 8. prepare, then revalidate immediately before the delete: Storage listed again, prepare again.
+  const prepare = async (): Promise<LifecycleResponse | 'lost' | null> => {
+    const answer = await call(deps, 'owned_prepare', owner);
     if (!answer) return fail(500, 'FAILED', { sessionsRevoked });
+    if (answer.status === 'lease_lost') return 'lost';
     if (answer.status === 'ready_for_managed_auth_delete' && answer.operation_id === operationId && answer.login_deleted === false) return null;
     if (answer.status === 'not_ready') return fail(409, 'NOT_READY', { reasons: [reasonCode(answer.reason)], sessionsRevoked });
     if (answer.status === 'blocked') return fail(409, 'DELETION_BLOCKED', { reasons: reasonCodes(answer.reasons), sessionsRevoked });
     return fail(500, 'FAILED', { sessionsRevoked });
   };
   const notReady = await prepare();
+  if (notReady === 'lost') return lost();
   if (notReady) return stop(notReady);
   const recheck = await storageInventory(deps, userId);
   if (!recheck || recheck.bucketsOwned || recheck.objects.length > 0 || recheck.more) {
-    await withdrawStorageCheckpoint();
+    if ((await recordStorage(false)) === 'lease_lost') return lost();
     return stop(!recheck ? storageFailure('failed', true) : recheck.bucketsOwned ? storageFailure('bucket_owned', true) : storageFailure('not_empty', true));
   }
   const stale = await prepare();
+  if (stale === 'lost') return lost();
   if (stale) return stop(stale);
 
-  // 9. Managed Auth Admin delete -- never SQL against auth.users.
+  // 9. The managed delete intent (H2 R1/R3): the release gate and a full re-evaluation under the
+  //    exclusive login lock, recorded before the call.
+  const intent = await call(deps, 'begin_external_step', { ...owner, p_step: 'managed_auth_delete' });
+  if (intent?.status === 'lease_lost') return lost();
+  if (intent?.status === 'release_blocked') return stop(fail(409, 'COMMON_ACCOUNT_DELETION_UNAVAILABLE', { sessionsRevoked }));
+  if (intent?.status === 'not_ready') return stop(fail(409, 'NOT_READY', { reasons: reasonCodes(intent.reasons), sessionsRevoked }));
+  if (intent?.status === 'step_in_flight') return fail(409, 'RECONCILIATION_REQUIRED', { sessionsRevoked });
+  if (intent?.status !== 'owned') return stop(fail(500, 'FAILED', { sessionsRevoked }));
+
+  // 10. Managed Auth Admin delete -- never SQL against auth.users.
   let deleted: 'deleted' | 'not_found' | 'failed' = 'failed';
   try {
     deleted = await deps.deleteLogin(userId);
@@ -454,11 +541,15 @@ export async function handleDeleteCommonAccount(input: { authorization: string |
     } catch {
       state = 'unknown';
     }
-    if (state === 'present') return stop(fail(502, 'AUTH_DELETE_FAILED', { sessionsRevoked }));
+    if (state === 'present') {
+      // The login is still there: this delete did not happen. Settled so a later owner may try again.
+      await call(deps, 'settle_external_step', { ...owner, p_step: 'managed_auth_delete', p_outcome: 'failed' });
+      return stop(fail(502, 'AUTH_DELETE_FAILED', { sessionsRevoked }));
+    }
     if (state !== 'absent') return fail(500, 'AUTH_DELETE_UNCONFIRMED', { sessionsRevoked });
   }
 
-  // 10. Post-delete read-back. Only a verified completion is reported as success. A Storage object a
+  // 11. Post-delete read-back. Only a verified completion is reported as success. A Storage object a
   //     still-valid token uploaded after the revalidation is removed once more and verified again.
   for (let attempt = 0; attempt < 2; attempt++) {
     const done = await call(deps, 'complete', { p_user_id: userId, p_operation_id: operationId });
@@ -466,7 +557,7 @@ export async function handleDeleteCommonAccount(input: { authorization: string |
       return { status: 200, body: { ok: true, outcome: 'deleted' } };
     }
     if (done?.status === 'login_present') return fail(500, 'AUTH_DELETE_UNCONFIRMED', { sessionsRevoked });
-    if (attempt === 0 && done?.status === 'not_verified' && done.reason === 'MANAGED_STORAGE_OWNED'
+    if (attempt === 0 && (done?.status === 'not_verified' || done?.status === 'residue_found') && done.reason === 'MANAGED_STORAGE_OWNED'
         && (await cleanStorage(deps, userId)) === 'clean') {
       continue;
     }

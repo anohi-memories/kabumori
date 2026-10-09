@@ -1,9 +1,15 @@
 # Common account — Phase 3a: safe withdrawal and the deletion orchestrator (source only)
 
-Status: source candidate. Nothing is deployed, no migration is applied, no production data, session,
-Storage object, provider grant or login was touched. The Auth-delete guard stays `shadow`; no enforcement
-is switched on. Built against the Phase 1 contract (`phase1-lifecycle-foundation.md` §10/§14/§15) and the
-Phase 2 start/restart contract (`phase2-service-enrollment.md`), not a parallel state machine.
+Status: source candidate, **with the PR112 H2 R1–R4/C1 corrective**. Nothing is deployed, no migration is
+applied, no production data, session, Storage object, provider grant or login was touched. The Auth-delete
+guard stays `shadow`; no enforcement is switched on. Built against the Phase 1 contract
+(`phase1-lifecycle-foundation.md` §10/§14/§15) and the Phase 2 start/restart contract
+(`phase2-service-enrollment.md`), not a parallel state machine.
+
+**Release state.** 「かぶモリの利用を終了」 is complete as a source candidate. 「共通アカウントを削除」 is
+**release-blocked**: the managed Auth delete sits behind a database gate that the candidate can only create
+as `blocked` (H2 R3, §8). While it is blocked, a whole-account deletion is refused **before anything
+changes** and the app says so. The full deletion feature is not claimed safe.
 
 ## 1. Three things the app now keeps apart
 
@@ -11,7 +17,7 @@ Phase 2 start/restart contract (`phase2-service-enrollment.md`), not a parallel 
 | --- | --- | --- | --- |
 | **かぶモリの利用を終了** | the `kabumori` entitlement and every Kabumori row (the `profiles` row, cascading to stocks, alerts, notifications, push tokens, reports) | the login (共通ID), the X entitlement, the X workspace and its posting authorization | `account-delete` action `withdraw_kabumori` → `withdraw_kabumori_service` |
 | **X自動投稿の利用を終了** | X only | — | unchanged: the X app's own `social-mobile-account-delete` saga (X-owned; not edited here) |
-| **共通アカウントを削除** | every service (X first, then Kabumori), every session, the Apple grant, Storage, then the login itself | nothing | `account-delete` action `delete_common_account` → the orchestrator (§4) |
+| **共通アカウントを削除** | every service (X first, then Kabumori), every session, the Apple grant, Storage, then the login itself | nothing | `account-delete` action `delete_common_account` → the orchestrator (§4); **release-blocked** (§8) |
 
 The old Kabumori entry "アカウントを削除" (one tap that hard-deleted the shared login with whatever other
 service hung off it) no longer exists, in the UI or on the server.
@@ -23,8 +29,8 @@ service hung off it) no longer exists, in the UI or on the server.
 | Orchestrator (server) | `supabase/functions/account-delete/lifecycle_logic.ts` (flows, injected dependencies), `http.ts` (routing, real adapters), `index.ts` (entry) |
 | Removed | `supabase/functions/account-delete/delete_logic.ts` + its test (the direct Auth Admin hard delete) |
 | Database candidate | `supabase/migrations/20261009120000_common_account_deletion_completion.sql` (not applied) |
-| Database proof | `supabase/tests/common_account_deletion_completion_{run.sh,behavior.sql,mutations.sh}` |
-| Server tests | `supabase/functions/account-delete/{lifecycle_logic_test,http_test,wiring_test}.ts` |
+| Database proof | `supabase/tests/common_account_deletion_completion_{run.sh,behavior.sql,mutations.sh,expected_catalog.txt}` |
+| Server tests | `supabase/functions/account-delete/{lifecycle_logic_test,http_test,wiring_test}.ts`; TS mutations `supabase/tests/common_account_phase3a_ts_mutations.py` |
 | Client | `src/lib/account-deletion.ts` (pure logic), `src/lib/account-deletion-client.ts` (network, fresh sign-in), `src/components/account-lifecycle-views.tsx` (both screens), `src/app/settings.tsx`, `src/lib/settings-menu.ts`, `src/components/service-access-screen.tsx` (resume), `src/lib/auth.ts` (`signOutThisDevice`) |
 | Client tests | `tests/app/account-deletion_test.ts`, `tests/app/settings-menu_test.ts` |
 
@@ -36,236 +42,225 @@ with fixed codes only. Nothing is logged.
 
 | `action` | Needs | Success | Notes |
 | --- | --- | --- | --- |
-| `preview` | a valid token | `account_status`, `lifecycle_version`, `services[{service,status}]`, `blockers` (fixed codes), `deletion_in_progress`, `apple{required,supported,code_required}`, `x_cleanup` (`not_needed`/`supported`/`unsupported`) | read-only; the confirmation screen and the resume path |
-| `withdraw_kabumori` | `confirmation:"END_KABUMORI_SERVICE"`, recent sign-in | `outcome: ended / already_ended / not_registered` | refused (`WITHDRAW_BLOCKED` + `ACCOUNT_DELETION_IN_PROGRESS`) while a whole-account deletion is open: that flow ends Kabumori itself, after X |
-| `delete_common_account` | `confirmation:"DELETE_COMMON_ACCOUNT"`, recent sign-in, `expected_lifecycle_version` (from the preview), `apple_authorization_code` when Apple applies | `outcome: deleted` — only after the post-delete read-back verified it | §4 |
-| anything else, **including the legacy call with no body** | — | `400 ACTION_REQUIRED` | decided before any environment read or network request: the legacy call deletes nothing |
+| `preview` | a valid token | `account_status`, `lifecycle_version`, `services[{service,status}]`, `blockers` (fixed codes), `deletion_in_progress`, `deletion_available` (the release gate), `apple{required,supported,code_required}`, `x_cleanup` | read-only; the confirmation screen and the resume path |
+| `withdraw_kabumori` | `confirmation:"END_KABUMORI_SERVICE"`, recent sign-in | `outcome: ended / already_ended / not_registered` | refused (`WITHDRAW_BLOCKED` + `ACCOUNT_DELETION_IN_PROGRESS`) while a whole-account deletion is open |
+| `delete_common_account` | `confirmation:"DELETE_COMMON_ACCOUNT"`, recent sign-in, `expected_lifecycle_version` (from the preview), `apple_authorization_code` when Apple applies | `outcome: deleted` — only after the post-delete read-back verified it | §4; `COMMON_ACCOUNT_DELETION_UNAVAILABLE` while the gate is blocked |
+| anything else, **including the legacy call with no body** | — | `400 ACTION_REQUIRED` | decided before any environment read or network request |
 
-**Recent sign-in** = the X saga's rule, reused from its module: the newest `amr[].timestamp` of the
-server-verified token is at most 600 s old (and not in the future), and `sub` is the verified user.
-Kabumori obtains it by a password sign-in in a **separate, memory-only Supabase client** (own storage key,
-no refresh timer): the app's own session, its auth events and its Phase 2 service gate are untouched. The
-address used is the signed-in one; nothing is typed or looked up, so the screens enumerate nothing. A
-fresh sign-in that resolves to another person is refused locally and ended.
+**Recent sign-in (H2 C1)** = the newest `amr[].timestamp` of the server-verified token lies in
+`[now − 600 s, now]` (the clock is read once; any future value, even +1 s, is refused; no skew allowance) and
+`sub` is the verified user. Kabumori obtains it by a password sign-in in a **separate, memory-only Supabase
+client**: the app's own session, its auth events and its Phase 2 service gate are untouched. The address
+used is the signed-in one; nothing is typed or looked up. A fresh sign-in of another person is refused.
 
 Error codes: `AUTH_REQUIRED`, `ACTION_REQUIRED`, `CONFIRMATION_REQUIRED`, `REAUTH_REQUIRED`,
-`LIFECYCLE_VERSION_REQUIRED`, `LIFECYCLE_CHANGED`, `DELETION_BLOCKED`(+reasons), `APPLE_REAUTH_REQUIRED`,
-`APPLE_REVOCATION_UNAVAILABLE`, `APPLE_REVOKE_FAILED`, `X_CLEANUP_UNSUPPORTED`, `X_CLEANUP_IN_PROGRESS`,
-`X_CLEANUP_BLOCKED`, `X_CLEANUP_FAILED`, `SERVICE_CLEANUP_INCOMPLETE`, `SESSION_REVOKE_FAILED`,
-`STORAGE_CLEANUP_FAILED`, `STORAGE_NOT_EMPTY`, `STORAGE_BUCKET_OWNED`, `NOT_READY`(+reason),
-`AUTH_DELETE_FAILED`, `AUTH_DELETE_UNCONFIRMED`, `DELETION_VERIFICATION_PENDING`, `WITHDRAW_BLOCKED`,
-`WITHDRAW_INTERRUPTED`, `WITHDRAW_INCOMPLETE`, `FAILED`. Reasons are drawn from a fixed list; anything
-else is `UNKNOWN`. `sessions_revoked:true` on a failure means every session is already gone: the app
-signs out and the person signs in again to resume.
+`LIFECYCLE_VERSION_REQUIRED`, `LIFECYCLE_CHANGED`, `DELETION_BLOCKED`(+reasons),
+`COMMON_ACCOUNT_DELETION_UNAVAILABLE`, `DELETION_IN_PROGRESS`, `RECONCILIATION_REQUIRED`,
+`APPLE_REAUTH_REQUIRED`, `APPLE_REVOCATION_UNAVAILABLE`, `APPLE_REVOKE_FAILED`, `X_CLEANUP_UNSUPPORTED`,
+`X_CLEANUP_IN_PROGRESS`, `X_CLEANUP_BLOCKED`, `X_CLEANUP_FAILED`, `SERVICE_CLEANUP_INCOMPLETE`,
+`SESSION_REVOKE_FAILED`, `STORAGE_CLEANUP_FAILED`, `STORAGE_NOT_EMPTY`, `STORAGE_BUCKET_OWNED`,
+`NOT_READY`(+reasons), `AUTH_DELETE_FAILED`, `AUTH_DELETE_UNCONFIRMED`, `DELETION_VERIFICATION_PENDING`,
+`WITHDRAW_BLOCKED`, `WITHDRAW_INTERRUPTED`, `WITHDRAW_INCOMPLETE`, `FAILED`. `sessions_revoked:true` means
+every session is already gone: the app signs out and the person signs in again to resume.
 
 ## 4. Whole-account deletion: the orchestrator
 
-| # | Step (Phase 1 §10) | Call | Durable state | Repeated on retry? | Failure |
+| # | Step (Phase 1 §10) | Call | Durable state | On a retry | Failure |
 | --- | --- | --- | --- | --- | --- |
-| 0 | verify caller, confirmation, recent sign-in, version present | `GET /auth/v1/user` | — | yes | 401 / 400 / 403 |
-| 1 | read-only pre-checks: Apple code/config; X saga scope is `social_only` | `common_account_deletion_eligibility`, X `preview` | — | yes | `APPLE_*`, `X_CLEANUP_UNSUPPORTED` — before anything changes |
-| 2 | begin, bound to the version shown | `begin_common_account_deletion(user, expected)` | account `deleting`; operation `in_progress` | resumes the same operation, **only at the version shown now** | `LIFECYCLE_CHANGED`, `DELETION_BLOCKED` |
-| 3a | X service | `begin_service_deletion(x_autopost)` → X saga `delete` (scope `social_only`) → `finish_service_deletion` | X entitlement `deleting` → `ended`; the saga's own tombstone/lease | resumes from the X tombstone; skipped once `already_ended` | `X_CLEANUP_*`, `SERVICE_CLEANUP_INCOMPLETE` |
-| 3b | Kabumori service | `withdraw_kabumori_service` | entitlement `ended`, profile removed (cascade) | idempotent (`already_ended`) | `DELETION_BLOCKED`, `SERVICE_CLEANUP_INCOMPLETE` |
-| 3c | every entitlement ended (read back) | eligibility | — | yes | `SERVICE_CLEANUP_INCOMPLETE` |
-| 4 | sessions | `POST /auth/v1/logout?scope=global` (person's token) → checkpoint `session_revocation` | checkpoint | **yes** (a retry needed a new sign-in, i.e. a new session) | `SESSION_REVOKE_FAILED` (no checkpoint) |
-| 5 | Apple (identity present) | `revokeAppleGrant` (X module, reused) → checkpoint `apple_revocation` | checkpoint | **no** — the code is single-use; skipped once recorded | `APPLE_REVOKE_FAILED` (no checkpoint) |
-| 6 | Storage | `common_account_deletion_storage_objects` → Storage API `DELETE /storage/v1/object/{bucket}` → list again (≤ 3 removal passes per request) → checkpoint `storage_cleanup` | checkpoint | yes (idempotent) | `STORAGE_NOT_EMPTY` / `STORAGE_CLEANUP_FAILED` / `STORAGE_BUCKET_OWNED`; the checkpoint is withdrawn (`clear_common_account_deletion_checkpoint`) |
-| 7 | prepare | `prepare_common_account_auth_delete` | step `ready_for_managed_auth_delete` bound to version/epoch/checkpoints | yes | `NOT_READY`, `DELETION_BLOCKED` |
-| 8 | revalidate immediately before the delete | Storage listed again (must be empty) + `prepare` again (must be ready for this operation) | — | yes | `STORAGE_NOT_EMPTY` (checkpoint withdrawn), `NOT_READY` |
-| 9 | managed Auth delete | `DELETE /auth/v1/admin/users/{id}` (service role) — never SQL | the guard closes the operation as `login_removed` (`LOGIN_REMOVED_WHILE_READY_UNVERIFIED`) | — | non-2xx/non-404 → `GET /auth/v1/admin/users/{id}`: present → `AUTH_DELETE_FAILED` (retryable); unknown → `AUTH_DELETE_UNCONFIRMED`; absent → continue |
-| 10 | post-delete read-back | `complete_common_account_deletion` (new) | operation `completed` + `verified_at` | — | Storage residue (a still-valid token uploaded after step 8) is removed once more and verified again; anything else → `DELETION_VERIFICATION_PENDING`. **Success is only ever a verified completion.** |
+| 0 | caller, confirmation, recent sign-in, version | `GET /auth/v1/user` | — | — | 401 / 400 / 403 |
+| 1 | read-only pre-checks: **release gate**, Apple code/config, X saga scope `social_only` | `common_account_deletion_release_gate`, eligibility, X `preview` | — | — | `COMMON_ACCOUNT_DELETION_UNAVAILABLE`, `APPLE_*`, `X_CLEANUP_UNSUPPORTED` — before anything changes |
+| 2 | begin, bound to the version shown | `begin_common_account_deletion` | account `deleting`, operation `in_progress` | same operation, only at the version shown now | `LIFECYCLE_CHANGED`, `DELETION_BLOCKED` |
+| 3 | **claim ownership** (R1) | `claim_common_account_deletion` (lease 600 s, fence +1) | `owner_lease`, `owner_fence` | a new claim after release / expiry | `DELETION_IN_PROGRESS`, `RECONCILIATION_REQUIRED` |
+| 4a | X service (owned) | renew → `begin_service_deletion` → X saga `delete` (`social_only`) → `finish_service_deletion` | X entitlement → `ended`; the saga's tombstone | resumes from the X tombstone; skipped once ended | `X_CLEANUP_*`, `SERVICE_CLEANUP_INCOMPLETE` |
+| 4b | Kabumori (owned) | renew → `withdraw_kabumori_service` | entitlement `ended`, profile gone | idempotent | `DELETION_BLOCKED`, `SERVICE_CLEANUP_INCOMPLETE` |
+| 5 | sessions (owned) | renew → `logout?scope=global` → owned checkpoint `session_revocation` | checkpoint | repeated (a retry needed a new sign-in) | `SESSION_REVOKE_FAILED` |
+| 6 | Apple (identity present; R2) | **intent** `begin_…_external_step(apple_revocation)` → `revokeAppleGrant` → **settle** (`succeeded` writes the checkpoint) | intent, then checkpoint | never replayed (§5) | `APPLE_REVOKE_FAILED` (definitive no), `RECONCILIATION_REQUIRED` (unknown / not recorded) |
+| 7 | Storage (owned) | renew → inventory → Storage API `DELETE /object/{bucket}` → re-list (≤ 3 passes) → owned checkpoint `storage_cleanup` | checkpoint | repeated (idempotent) | `STORAGE_*`; the checkpoint is withdrawn |
+| 8 | prepare + revalidate (owned) | `prepare_owned_…` → re-list Storage → `prepare_owned_…` | ready, bound to version/epoch/checkpoints | repeated | `NOT_READY`, `DELETION_BLOCKED` |
+| 9 | **managed delete intent** (R1/R3) | `begin_…_external_step(managed_auth_delete)`: release gate, full re-evaluation under the **exclusive login lock**, evidence snapshot | intent + `managed_delete_required_checkpoints` / `managed_delete_identity_providers` | a crashed attempt is cleared after the settle window while the login is still there | `COMMON_ACCOUNT_DELETION_UNAVAILABLE` (gate), `NOT_READY` (any change since prepare) |
+| 10 | managed Auth delete | `DELETE /auth/v1/admin/users/{id}` (service role, never SQL) | guard closes the operation `login_removed` | — | non-2xx → read back: present → settle `failed` → `AUTH_DELETE_FAILED`; unknown → `AUTH_DELETE_UNCONFIRMED` (intent stays) |
+| 11 | post-delete read-back (R3/R4) | `complete_common_account_deletion` | `completed` + `verified_at` | re-asked: residue checked **now** | `DELETION_VERIFICATION_PENDING`; **success only for a verified completion** |
 
-Only two consecutive `ready_for_managed_auth_delete` answers for this operation (step 7 and step 8)
-reach step 9; the static and behavior tests pin that there is exactly one call site for the managed
-delete and that every precondition precedes it. A 404 from Auth Admin is verified like any other delete,
-never assumed. Every failure after step 2 stores its fixed code on the operation
-(`record_common_account_deletion_error`) for an operator.
+Ownership is given back (`release_…_claim`) on every path out of steps 4–11; an unsettled external step
+stays recorded.
 
-**Concurrency.** Two requests for one person share the one durable operation (`begin` answers
-`in_progress`); the X saga's lease turns a concurrent X step into `X_CLEANUP_IN_PROGRESS`; withdrawal,
-checkpoints, Storage removal and `prepare` are idempotent; `prepare` decides under the exclusive login
-lock; a second managed delete gets 404 and is verified. A service start that commits after the preview
-moves the version, so the confirmation is stale (`LIFECYCLE_CHANGED`); once `begin` committed, every
-start answers `ACCOUNT_DELETION_IN_PROGRESS` (Phase 1 races 1/2/7, re-run here as race 5c).
+## 5. Ownership and external steps (H2 R1/R2)
 
-## 5. Session revocation and the stale-token policy
+- **One owner.** `begin` only creates or returns the open operation; its row lock ends with the RPC.
+  Ownership is a durable lease (unguessable token, expiry, monotonic fence) taken by `claim` **before the
+  first external action**. Every later step re-checks it in the database in the same transaction as its
+  write: `renew` before X / Kabumori / sessions / Storage, owned checkpoints, owned prepare, step intents
+  and settles. A second request (any token of the same person) gets `in_progress` → `DELETION_IN_PROGRESS`
+  and calls nothing external. An owner whose lease expired or was taken over is refused at its next step
+  and stops (`DELETION_IN_PROGRESS`), never reporting success. The lease (600 s) is longer than any Edge
+  request; correctness does not rely on that: every write re-checks the token.
+- **External steps that must not be repeated blindly** are recorded as in flight before the call and
+  settled after it: `apple_revocation` (single-use code) and `managed_auth_delete`. Only one can be in
+  flight. A takeover waits while one may still be running (900 s settle window, longer than any Edge
+  request), then: an **unsettled Apple step is never replayed** — the operation answers
+  `reconciliation_required` until an operator checks with Apple and records it as revoked or not
+  (`resolve_common_account_deletion_external_step`, service role, never called by the function); an
+  unsettled managed delete with the login still present did not happen and is cleared.
+- **Apple outcomes:** `true` → settle `succeeded` (the checkpoint and the end of the intent in one
+  transaction); `false` (definitive refusal) → settle `failed`, a new code may be used; the call broke off,
+  or a known outcome could not be recorded → `RECONCILIATION_REQUIRED` with the intent left in place. The
+  apple_revocation checkpoint cannot be written any other way (the owned-checkpoint RPC refuses it).
 
-Step 4 revokes every session (refresh token) of the login. Access tokens already issued are signed JWTs
-that PostgREST and Storage accept until they expire (the project's JWT expiry, 1 h by default). What stops
-them:
+## 6. Session revocation and the stale-token policy
 
-| A still-valid token tries to … | After `begin` (step 2) | After the managed delete (step 9) |
+Step 5 revokes every session (refresh token) of the login. Access tokens already issued are signed JWTs
+that PostgREST and Storage accept until they expire (the project's JWT expiry, 1 h by default).
+
+| A still-valid token tries to … | After `begin` | After the managed delete |
 | --- | --- | --- |
 | start or restart a service (`start_*`, `reactivate_*`) | refused `ACCOUNT_DELETION_IN_PROGRESS` | refused (no login row) |
-| write Kabumori rows (stocks, alerts, push tokens, …) | fails once Kabumori ended: every table references `profiles`, which is gone | same |
-| re-create a profile (`ensure_my_profile()`, or a direct `insert` allowed by `profiles_insert_own`) | **not gated** (legacy creator) — `prepare` then refuses (`UNREGISTERED_SERVICE_FOOTPRINT`) | the row would reference a missing login: refused by its foreign key |
-| create an X workspace (onboarding RPC / `x-oauth-connect-user`) | **not gated**; the X saga's tombstone guard only covers the saga's own window — `prepare` refuses afterwards | `brands` survives a login delete: the read-back answers `RESIDUAL_SERVICE_DATA` → `DELETION_VERIFICATION_PENDING` (operator) |
-| upload to Storage | the revalidation (step 8) catches it before the delete | `owner_id` is plain text, so the object survives: the read-back finds it, the orchestrator removes it through the API and verifies again |
-| call this function again | needs a recent sign-in; a revoked session cannot refresh, and Auth's `GET /auth/v1/user` is expected to refuse a token whose session was removed (to be confirmed in runbook step 6) | the login is gone |
+| write Kabumori rows | fails once Kabumori ended (every table references `profiles`) | same |
+| re-create a profile (`ensure_my_profile()`, or a direct insert allowed by `profiles_insert_own`) | **not gated** — the owned prepare and the managed intent refuse (`UNREGISTERED_SERVICE_FOOTPRINT`) | refused by the foreign key |
+| create an X workspace (onboarding RPC / `x-oauth-connect-user`) | **not gated** — caught by the prepare / intent | `brands` survives: the read-back answers `RESIDUAL_SERVICE_DATA` (never completed) |
+| upload to Storage | caught by the revalidation or the intent's re-evaluation | `owner_id` is plain text: the read-back finds it, the orchestrator removes it and verifies again; a later re-ask answers `residue_found` (R4) |
+| link an Apple identity (GoTrue) | caught by the intent's re-evaluation **up to its commit** (race 5e) | **not observable** — the reason the gate stays blocked (§8) |
+| call this function again | needs a fresh recent sign-in; Auth's `GET /user` is expected to refuse a token whose session was removed (to confirm on a real project) | the login is gone |
 
-The two "not gated" rows are enforcement prerequisites (§9), not Phase 3a defects: they are caught by
-evaluation (step 7/8) or by the read-back (step 10), never reported as a completed deletion.
+Finite re-reads narrow every window; they do not close the last one. The "not gated" rows and the
+identity link are enforcement prerequisites (§9).
 
-## 6. Storage
+## 7. Storage
 
-The Storage API cannot list by owner, so the candidate adds a read-only, `service_role`-only inventory
-(`common_account_deletion_storage_objects`): `(bucket_id, name)` of objects whose `owner_id` (or the
-deprecated `owner`) is the person, at most 1000 per call with `more`, and `buckets_owned`. An unexpected
-shape or any read failure is `unknown_shape` / `probe_failed`, never "empty". Removal happens **only**
-through `DELETE /storage/v1/object/{bucket}` with the service role; the list is read again until it is
-empty. A bucket owned by the person is refused (`STORAGE_BUCKET_OWNED`, operator). Kabumori and X store
-no user-owned objects today (repository inventory: only `x-test-post` uses Storage, with the service
-role), so this is normally one empty list.
+A read-only, `service_role`-only inventory (`common_account_deletion_storage_objects`) lists
+`(bucket_id, name)` owned by the person (`owner_id` or the deprecated `owner`), ≤ 1000 per call with
+`more`, plus `buckets_owned`. Unknown shape / read failure is `unknown_shape` / `probe_failed`, never
+"empty". Removal only through `DELETE /storage/v1/object/{bucket}` with the service role, listed again
+until empty; an owned bucket is refused (operator).
 
-## 7. Apple
+## 8. The managed delete and the release gate (H2 R3)
 
-The Kabumori app has no Sign in with Apple and therefore cannot obtain the authorization code a
-revocation needs. A person with an Apple identity (from the X app) gets, before anything changes,
-`APPLE_REAUTH_REQUIRED` (no code) or `APPLE_REVOCATION_UNAVAILABLE` (server not configured); the preview
-says so and the screen shows a "contact us" message instead of a delete button. The server side is
-complete for a client that can send the code (the X app later): it reuses the X module's
-`revokeAppleGrant` (code exchanged, subject checked against the person's Apple identities, grant revoked),
-records `apple_revocation` once, and never repeats it.
+H2 reproduced: an Apple identity linked after the final prepare, then the login removed (the identity
+cascades away), and the old read-back still answered `completed`. Corrected:
 
-## 8. X boundary (no X file edited)
-
-- Adapter: `XServiceCleaner { preview(token), run(token) }`, implemented in `http.ts` as two calls to the
-  existing `social-mobile-account-delete` function with the person's own token — exactly what the X app
-  sends (`{action:'preview'}`, `{action:'delete', confirmation:'DELETE_MY_ACCOUNT', expected_scope:'social_only'}`).
-  The saga keeps all of its semantics: X OAuth token revocation of exactly the bound credential set,
-  SHA-256 fingerprint check, Vault purge, posting authority off first, operator states, lease.
-- Order: X **before** Kabumori. The saga's scope is `social_only` only while a Kabumori `profiles` row
-  exists; in `social_and_login` its `finalize` deletes `auth.users` by SQL (a legacy route, §9). The
-  orchestrator refuses (`X_CLEANUP_UNSUPPORTED`) whenever the saga would not keep the login, and treats a
-  saga answer `login_deleted:true` as unverifiable (`DELETION_VERIFICATION_PENDING`, no further step).
-- Wrapping: `begin_service_deletion('x_autopost')` before, `finish_service_deletion` after (the latter
-  ends the entitlement only when no X footprint remains).
-- G4 overlap: none. G4's PR #106 touches `20261007150000_postona_social_accounts_multi_provider.sql`, its
-  tests, `migration_source_invariants_test.ts` and a POSTONA doc, and pins the owner/ACL of
-  `social_mobile_account_deletion_guard()`. This slice edits none of those and no X schema, migration or
-  function; it only imports two pure exports of the X module (`lastAuthenticatedAt`/`RECENT_AUTH_SECONDS`,
-  `CONFIRMATION`) and `apple_revoke.ts`.
-- Named follow-ups (X-owned, need G3/G4 coordination): (X1) make the saga's scope lifecycle-aware or drop
-  its own login delete (Phase 1 §14) — then X-only people and a person who ended Kabumori first can be
-  deleted through the orchestrator; (X2) the X app's own "delete" calls this orchestrator for the
-  whole-account case and sends the Apple code; (X3) deploy `social-mobile-account-delete` (still
-  undeployed) — until then the X adapter answers `failed` and a person with an X entitlement gets
-  `X_CLEANUP_UNSUPPORTED` at the preview, before anything changes.
+1. **Final decision under the exclusive login lock.** The managed delete intent re-runs the full Phase 1
+   authorization (`private.account_lifecycle_authorization_problems`, including `REQUIRED_CHECKPOINTS_CHANGED`)
+   while holding the `auth.users` row `FOR UPDATE`; an identity insert in flight holds `FOR KEY SHARE` on
+   that row, so the decision waits for it and then refuses (race 5e). Any problem drops the readiness.
+2. **Evidence.** The intent stores what the delete was decided against: the required checkpoints and the
+   identity providers (names only). They survive the login removal (no foreign key).
+3. **Verification needs the intent.** The read-back completes only an operation whose managed delete
+   intent was recorded, whose readiness binding equals the intent's requirement, and whose every required
+   checkpoint is recorded. A login removed by any other route is `LOGIN_REMOVED_WITHOUT_MANAGED_INTENT` —
+   the H2 R3 reproduction now fails.
+4. **Residual window → release gate.** An identity linked **after** the intent commits and before Auth's
+   delete commits is erased by the cascade and is invisible to every later check (documented as a test,
+   with the gate opened only by test-only DDL). Phase 1's guard is shadow and does not (cannot reliably)
+   look at identity rows inside the cascade. So `private.account_lifecycle_release_gates` holds one row,
+   `managed_auth_delete = blocked (IDENTITY_CHANGE_FENCE_MISSING)`, under a CHECK that allows only
+   `blocked`. The intent RPC refuses while it is blocked, the Edge Function refuses before `begin`, and the
+   app shows 「共通アカウントの削除は、現在準備中です」. No setting opens it; opening it is a reviewed
+   migration that ships the missing prerequisite.
+5. **Missing prerequisite (precise).** An identity-change fence for the window between the managed delete
+   decision and Auth's delete commit, proven on a disposable real Supabase project — one of: (a) Auth
+   refusing identity linking/sign-in for the login during the deletion (e.g. an Admin-API ban applied before
+   the final decision, if and only if a real-project proof shows GoTrue refuses to create or link an identity
+   for a banned user), (b) an Auth hook under our control that refuses it, or (c) an enforcing guard that
+   can see identities inside the Auth cascade with a proven cascade order. Plus the §9 writer gates.
 
 ## 9. Enforcement readiness inventory (nothing switched on)
 
-An enforcing Auth-delete guard is safe only when **every** row below is wired. Status after Phase 3a:
+**Service creators** — gated: `start_*_service()`, `reactivate_*_service(v)` (Phase 1/2). **Not gated:**
+`ensure_my_profile()` (still granted to `authenticated`), direct `insert into profiles`
+(`profiles_insert_own` + `grant insert`), X workspace creation via `begin_social_mobile_x_oauth_connection`
+(`x-oauth-connect-user`). Operator: `private.account_lifecycle_backfill` (takes the lifecycle locks).
 
-**Service creators**
+**Login delete routes** — Kabumori `account-delete` **as deployed in production** (recorded as live in
+`apps/social-mobile/docs/account-deletion-rollout-runbook.md`; not re-read here): no body →
+`DELETE /auth/v1/admin/users/{id}` — **unsafe until this source is deployed**. This source: lifecycle only,
+legacy call → `ACTION_REQUIRED`. X saga `social_mobile_account_deletion_finalize` in scope
+`social_and_login` (`delete from auth.users` in SQL): not lifecycle-gated (X-owned; pinned by
+`wiring_test.ts` as the only SQL login delete). Dashboard / operator deletes: the shadow guard only observes
+(and the read-back never completes them).
 
-| Creator | Gated by the lifecycle? |
-| --- | --- |
-| `start_kabumori_service()` / `start_x_autopost_service()` / `reactivate_*_service(v)` | yes (Phase 1/2) |
-| `ensure_my_profile()` (authenticated, still granted) | **no** — Kabumori no longer calls it (Phase 2), any token can |
-| direct `insert into profiles` (`profiles_insert_own` policy + `grant insert … to authenticated`) | **no** |
-| X workspace: `begin_social_mobile_x_oauth_connection` via `x-oauth-connect-user` | **no** (Phase 1 §17: needs a lifecycle assertion first) |
-| `private.account_lifecycle_backfill` | operator only; takes the lifecycle locks |
-
-**Login delete routes**
-
-| Route | Status |
-| --- | --- |
-| Kabumori `account-delete` **as deployed in production** (recorded as live in `apps/social-mobile/docs/account-deletion-rollout-runbook.md`; not re-read here) — no body → `DELETE /auth/v1/admin/users/{id}` | **unsafe until this source is deployed**; confirm the deployed bundle read-only in runbook step 2 |
-| Kabumori `account-delete` (this source) | lifecycle orchestrator only; legacy call → `ACTION_REQUIRED` |
-| X saga `social_mobile_account_deletion_finalize`, scope `social_and_login` (`delete from auth.users` in SQL) | **not lifecycle-gated** (X-owned, follow-up X1); pinned by `wiring_test.ts` as the only SQL login delete |
-| Supabase Dashboard / operator `auth.admin.deleteUser` | outside the app; the shadow guard only observes |
-
-**Service-role producers (bypass RLS; no entitlement predicate yet)** — `claim_pending_push_notifications`,
+**Service-role producers without an entitlement predicate** — `claim_pending_push_notifications`,
 `enqueue_important_news_notifications`, `enqueue_personalized_report_notification`,
 `personalized_report_news_inputs`, `important_news_app_copy_targets`, `personalized-reports`,
 `send-push-notifications`, `x-test-post`, `important-news-*`, `news-discovery-observer`,
-`market-intelligence-ingest`, `social-mobile-history-learning`. Kabumori producers read rows that cascade
-from `profiles`, so a withdrawn person has none; an entitlement predicate is still required before
-enforcement (Phase 1 §15 step 7).
+`market-intelligence-ingest`, `social-mobile-history-learning`.
 
-**RLS / API / Edge boundaries** — Kabumori tables: own-row RLS (`auth.uid()`) + foreign key to `profiles`,
-no entitlement predicate. X tables: membership-based, no entitlement predicate. Edge Functions that act
-on a person's token: `account-delete`, `social-mobile-account-delete`, `x-oauth-connect-user`,
-`x-test-post`, `social-mobile-consult`, `social-mobile-publish-setting`, `social-mobile-brand-dry-run`,
-`social-mobile-history-learning` — none checks an entitlement yet.
+**RLS / API / Edge boundaries** — Kabumori tables: own-row RLS + foreign key to `profiles`, no entitlement
+predicate. X tables: membership-based. Edge Functions on a person's token: `account-delete`,
+`social-mobile-account-delete`, `x-oauth-connect-user`, `x-test-post`, `social-mobile-consult`,
+`social-mobile-publish-setting`, `social-mobile-brand-dry-run`, `social-mobile-history-learning` — none
+checks an entitlement.
 
-**Stale-JWT writer paths** — §5 table. Required before enforcement: gate `ensure_my_profile` and the
-direct profile insert (revoke, or route through `start_kabumori_service`), add the lifecycle assertion to
-the X onboarding RPC, and decide a short access-token lifetime or a server-side session check for writers.
+**Stale-JWT writer paths** — §6. **Identity-change fence** — §8.5. **Entitlement checks required** —
+Kabumori RLS + producers; X onboarding RPC, posting producers and Edge Functions.
 
-**Entitlement checks required** — Kabumori: today only the client gate (`serviceSession`); needed in RLS
-for user tables and in every producer above. X: today only the X client gate; needed in the onboarding
-RPC, the posting producers and the X Edge Functions.
-
-**Readiness invalidators (Phase 1 §6 rows 9–14)** — still evaluation-only. Rows 13–14 (Apple identity,
-Storage) are now handled by the orchestrator (checkpoint + re-list + read-back), but not by a durable
-version move.
-
-**Cross-service session effect (finding)** — Kabumori's normal `signOut()` uses the SDK default
-`scope: 'global'`, which also signs the person out of the X app on the same login. Phase 3a uses
-`scope: 'local'` after a withdrawal/deletion; changing the normal logout is a product decision (reported).
+**Cross-service session effect (finding, unchanged)** — Kabumori's normal `signOut()` uses the SDK default
+`scope: 'global'` (also signs out the X app). The two Phase 3a flows use `scope: 'local'`; changing the
+normal logout is a product decision.
 
 ## 10. Database candidate `20261009120000_common_account_deletion_completion.sql`
 
-- Replaces exactly one Phase 1 rule (an account deletion could never be `completed`) with: `completed` is
-  allowed for an account deletion only with `verified_at`, a cleared `user_id` and a standing readiness
-  (`current_step = ready_for_managed_auth_delete`); `verified_at` only on a completed account deletion.
-- `complete_common_account_deletion(user, operation)`: finds the operation by id **and** the subject hash
-  of the verified person; `login_present` while the login exists; completes only a `login_removed`
-  operation that was ready when the login disappeared, with no account/entitlement row, no Kabumori/X/admin
-  footprint and no Storage ownership left; otherwise `not_verified` + fixed reason kept on the operation.
-  READ COMMITTED only; it waits for an uncommitted login removal (operation row lock).
-- `common_account_deletion_storage_objects(user, limit)` (§6) and `record_common_account_deletion_error`.
-- `service_role` only; SECURITY DEFINER, empty `search_path`; no write to auth/storage/vault, no e-mail,
-  guard stays `shadow`, nothing else altered (the runner diffs the whole catalog).
-- Proof (disposable PostgreSQL 17 only): preflight refusals (no Phase 2, changed rule, no settings row),
-  exact change, refused re-apply, static rules, Phase 2 behavior suite unchanged, behavior A–H
-  (Kabumori-only and dual-service flows with the real X saga, paged Storage inventory and re-list, four
-  post-delete residues never completed, identity, table-level shape, grants), races (removal vs read-back
-  in both orders; start vs begin in both orders). Mutation suite: 19 single-property breaks, all detected
-  by name.
+- Replaces exactly one Phase 1 rule (an account deletion could never be `completed`). Adds to the
+  operations table: `verified_at`; the owner lease/fence; the external-step intent; the managed delete
+  evidence; seven CHECK rules (lease shape, step shape, intent shape, owner scope, completed shape incl.
+  intent + closed step + no owner, verified shape). Adds the release-gate table (RLS on, no grant, one
+  `blocked` row, CHECK `state = 'blocked'`).
+- Functions (all SECURITY DEFINER, empty `search_path`; public ones `service_role` only, private ones owner
+  only): `common_account_deletion_release_gate`, `claim_…`, `renew_…_claim`, `release_…_claim`,
+  `set_owned_…_checkpoint`, `prepare_owned_…_auth_delete`, `begin_…_external_step`, `settle_…_external_step`,
+  `resolve_…_external_step` (operator), `complete_common_account_deletion` (fresh residue on every call;
+  historical `verified_at` kept), `common_account_deletion_storage_objects`,
+  `record_common_account_deletion_error`; helpers `account_lifecycle_gate_open`, `…_owned_operation`,
+  `…_residue`, `…_storage_inventory`.
+- No write to auth/storage/vault, no e-mail, guard stays `shadow`; the only insert is the gate row; nothing
+  else altered (the runner diffs the whole catalog against `…_expected_catalog.txt`, 44 exact lines).
+- Proof (disposable PostgreSQL 17 only): preflight refusals; exact change and ACLs; refused re-apply;
+  static rules; Phase 2 behavior unchanged; behavior G0 (shipped gate) and A–H, C5–C6, R1–R4 (including the
+  two H2 reproductions, which now fail as intended, and the documented R3 residual); races: removal vs
+  read-back (both orders), start vs begin (both orders), two owners, identity link vs managed decision.
+  SQL mutation suite: 43 single-property breaks, all detected by name.
 
 ## 11. Client behavior (exact outcomes)
 
-- **Settings**: two destructive entries, 「かぶモリの利用を終了」 (keeps the login and other services) and
-  「共通アカウントを削除」 (warns that every service on the ID is affected).
-- **Withdrawal screen**: lists what is deleted and what stays, asks for the password, confirms in a dialog.
-  Success → dialog, then **this device only** signs out (`signOutThisDevice`, scope `local`): readiness is
-  cleared at once; the next sign-in answers `reenroll_required` (Phase 2) and nothing restarts by itself.
-  Failure → message, nothing claimed.
-- **Deletion screen**: loads the preview with the app's own session; shows the services that will end,
-  the X authorization revoke, the login and all sessions; refuses up front (message, no button) for
-  blockers, Apple, or an X cleanup that cannot keep the login. Requires the password and typing 「削除」,
-  then a dialog. Success (verified) → dialog, sign out. `sessions_revoked` or pending verification →
-  dialog with the honest message, sign out. `LIFECYCLE_CHANGED` → the preview is reloaded and the person
-  confirms again. Other failures → message; retry is possible.
-- **Resume**: while a deletion is open the app stays closed (`ACCOUNT_DELETION_IN_PROGRESS`); that screen
-  now offers 「削除手続きを続ける」, and the `reenroll_required` screen offers 「共通アカウントを削除する」.
-- Not changed: the public page `apps/kabumori-web/pages/account-deletion.html` still describes the old
-  single entry. It must be updated **together with the app release** that ships these screens (it is
-  published from `main`), not before.
+- **Settings**: 「かぶモリの利用を終了」 (keeps the login and other services) and 「共通アカウントを削除」
+  (warns that every service on the ID is affected).
+- **Withdrawal**: lists what is deleted and what stays, password, confirmation dialog. Success → this device
+  only signs out; the next sign-in answers `reenroll_required` (Phase 2). Failure → message.
+- **Deletion**: loads the preview; refuses up front (message, no button) while the release gate is blocked
+  (the current state), for blockers, Apple, or an X cleanup that cannot keep the login. Otherwise password
+  + typing 「削除」 + dialog. Verified success → dialog, sign out. `DELETION_IN_PROGRESS` → "進行中" message.
+  `RECONCILIATION_REQUIRED` / verification pending → honest "運営で確認します" dialog, sign out.
+  `LIFECYCLE_CHANGED` → preview reloaded.
+- **Resume**: the deletion-in-progress screen offers 「削除手続きを続ける」; the `reenroll_required` screen
+  offers 「共通アカウントを削除する」 (both show the gate message while blocked).
+- Not changed: the public page `apps/kabumori-web/pages/account-deletion.html` — update it together with the
+  client release that ships these screens, not before.
 
-## 12. Rollout runbook (not executed; every step needs K5 / explicit approval)
+## 12. Rollout — separate, individually approved steps (none executed)
 
-1. Independent review of this source (DB/RPC/Auth/deletion boundary).
-2. Read-only production preflight: Phase 1 + Phase 2 objects and ACLs as reviewed, the Phase 1
-   "completed" rule present exactly once, guard `shadow`, no `verified_at` column, no open
-   `account_deletion` operation.
-3. Apply `20261009120000` as a single reviewed file (never `db push`); read back columns, the two rules,
-   the four functions and their exact ACLs.
-4. Deploy `social-mobile-account-delete` (X-owned decision) or accept that X people get
-   `X_CLEANUP_UNSUPPORTED` until it is.
-5. Deploy `account-delete` from a checkout that has `supabase/config.toml` (byte-verify the deployed
-   bundle). From this moment the legacy hard delete is gone; an old app build gets `ACTION_REQUIRED` and
-   shows its generic failure — it can no longer delete anything.
-6. Disposable real-project proof (Phase 1 §10 prerequisite): one throwaway login per flow — withdrawal,
-   Kabumori-only deletion, dual-service deletion with a fake X grant, a Storage object, Auth delete failure
-   injection; read back every table, Storage, Auth.
-7. App release with these screens; update the public deletion page at the same time.
-8. Rollback: redeploy the previous function bundle only if the migration is not yet relied upon; the
-   migration is additive except the replaced rule, and a rollback must refuse while any
-   `completed` account deletion exists.
+Order is binding; each step needs its own K5 / explicit approval. Real disposable-project proof and an
+independent review come **before any production release**.
+
+1. **Source merge candidate** — exact-head independent rereview of this corrective (DB/RPC/Auth/deletion).
+   Merging source changes nothing in production.
+2. **Disposable real Supabase project E2E** (never production): apply Phase 1 → Phase 2 → this candidate;
+   deploy the functions there; prove `logout?scope=global`, `GET /user` with a revoked session, Admin
+   delete/read incl. 404 and broken transport, Storage owner/`DELETE prefixes`, Apple identity shape and
+   single-use code behaviour, the lease/takeover and reconciliation paths, and the §8.5 identity fence
+   candidate. Independent review of that evidence.
+3. **Production preflight** (read-only, same day): Phase 1 + Phase 2 objects/bodies/ACLs as reviewed, the
+   "completed" rule present exactly once, guard `shadow`, none of this candidate's objects, no open
+   `account_deletion` operation, the deployed `account-delete` bundle byte-identified.
+4. **Production migration** — the single reviewed file (never `db push`), then read-back of the 44 catalog
+   lines, ACLs and the `blocked` gate row.
+5. **Edge deploy** of `account-delete` (from a checkout with `supabase/config.toml`; byte-verify). From then
+   the legacy hard delete is gone; old app builds get `ACTION_REQUIRED`. `social-mobile-account-delete`
+   deployment is X-owned.
+6. **Client release** with these screens and the public page update.
+7. **Feature activation** of whole-account deletion — only by a later reviewed migration that adds the §8.5
+   prerequisite and opens the gate, after its own disposable-project proof.
+
+**Rollback** never redeploys the pre-Phase-3 bodyless hard-delete bundle, even if the migration is unused:
+the shutdown is a reviewed fail-closed function (every action refused) or this function with the gate
+blocked; the migration is rolled forward, not dropped, once any lease/intent/completion exists.
 
 ## 13. Running the proofs
 
@@ -280,20 +275,15 @@ CAL_PGHOST=... CAL_PGPORT=... CAL_PGSUPER=... bash supabase/tests/common_account
 python3 supabase/tests/common_account_phase3a_ts_mutations.py .
 ```
 
-## 14. Known limits and next slice
+## 14. Named blockers (not relabelled as PASS)
 
-- X-only people and a person whose Kabumori ended before X cannot be deleted through the orchestrator
-  until follow-up X1 (fail closed: `X_CLEANUP_UNSUPPORTED`, nothing changes).
-- A person stuck in `deleting` (X saga in an operator state, Storage that keeps refilling) can resume or
-  contact support; there is no self-service cancel in this slice (`abort_common_account_deletion` exists
-  for operators).
-- A lost response after a successful managed delete leaves the operation `login_removed` / ready /
-  unverified; the person can no longer call. An operator sweep (verify by subject hash) is a follow-up.
-- Shadow guard only: a concurrent operator abort between the revalidation and the managed delete cannot be
-  prevented (it is detected: the read-back answers `not_found`, never success).
-- Not exercised on real Supabase: Auth `logout?scope=global`, `GET /user` with a revoked session, Admin
-  delete/read, Storage `DELETE /object/{bucket}` with `prefixes` — all assumed from the documented APIs and
-  only faked here; runbook step 6 must confirm each before deploy.
-- Recommended next slice: X1 + X2 with G3/G4, then the creator gates of §9 (profile insert,
-  `ensure_my_profile`, X onboarding assertion) as one reviewed migration, then the disposable real-project
-  proof, then deploy.
+1. Whole-account deletion is release-blocked until the §8.5 identity-change fence exists and is proven.
+2. X-only people and a person whose Kabumori ended before X cannot be deleted through the orchestrator
+   (X saga scope / its own SQL login delete — X-owned, G3/G4).
+3. The legacy `account-delete` hard delete stays live in production until step 5.
+4. Creator / entitlement / stale-JWT writer gates (§9) are not implemented.
+5. The public web deletion page still describes the old flow.
+6. No real-provider proof (Auth, Storage, Apple, X) and no Simulator / native test of the screens.
+7. Lost response after a managed delete (operation `login_removed`, unverified, the person cannot call
+   again) and Apple reconciliation need an operator runbook/tooling; the RPCs exist, the process does not.
+8. No self-service cancel of an open deletion (`abort_common_account_deletion` is operator-only).

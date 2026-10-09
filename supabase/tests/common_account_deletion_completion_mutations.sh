@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Defect-detection proof for common_account_deletion_completion_run.sh. Each mutation breaks exactly one
+# Defect-detection proof for common_account_deletion_completion_run.sh (with the PR112 H2 R1-R4 corrective). Each mutation breaks exactly one
 # safety property in a COPY of the candidate, runs the full runner against that copy, and requires the
 # runner to fail with the named message that guards that property. The real file is never edited.
 # Disposable local PostgreSQL only; same environment as the runner, plus python3. Runs one mutation at a
@@ -23,20 +23,28 @@ mutation "completion does not check that the login is gone" \
   "" \
   "FAIL A: completion while the login exists says so and changes nothing"
 mutation "completion ignores residual Storage ownership" \
-  $'      v_managed := private.account_lifecycle_managed_ownership(p_user_id);' \
-  $'      v_managed := \'{}\';' \
+  $'  v_managed := private.account_lifecycle_managed_ownership(p_user_id);' \
+  $'  v_managed := \'{}\';' \
   "FAIL C1: residual Storage is not verified"
 mutation "completion ignores residual service data" \
-  $'    if (v_footprint ->> \'kabumori\')::boolean or (v_footprint ->> \'x_autopost\')::boolean\n       or (v_footprint ->> \'x_foreign\')::boolean or (v_footprint ->> \'admin\')::boolean then' \
-  "    if false then" \
+  $'  if (v_footprint ->> \'kabumori\')::boolean or (v_footprint ->> \'x_autopost\')::boolean\n     or (v_footprint ->> \'x_foreign\')::boolean or (v_footprint ->> \'admin\')::boolean then' \
+  "  if false then" \
   "FAIL C2: residual X workspace is not verified"
-mutation "completion accepts a login removed before readiness (function)" \
+mutation "completion accepts a login removed after the readiness was withdrawn" \
   $'  elsif v_operation.current_step <> \'ready_for_managed_auth_delete\' then' \
   "  elsif false then" \
-  "account_lifecycle_operations_completed_shape"
-mutation "the table accepts a completion without readiness" \
-  $'    or (user_id is null and verified_at is not null and current_step = \'ready_for_managed_auth_delete\')),' \
-  "    or (user_id is null and verified_at is not null))," \
+  "FAIL C5: a readiness withdrawn after the intent is not verified"
+mutation "completion ignores a required checkpoint dropped after the intent" \
+  $'  elsif exists (select 1 from unnest(v_operation.managed_delete_required_checkpoints) k where not v_operation.checkpoints ? k) then' \
+  "  elsif false then" \
+  "FAIL C6: a required checkpoint dropped after the intent"
+mutation "completion ignores an intent decided against other requirements" \
+  $'  elsif v_operation.ready_required_checkpoints is distinct from v_operation.managed_delete_required_checkpoints then' \
+  "  elsif false then" \
+  "FAIL C6: an intent decided against other requirements"
+mutation "the table accepts a completion without a recorded managed intent" \
+  $'        and managed_delete_intent_at is not null and external_step is null and owner_lease is null)),' \
+  $'        and external_step is null and owner_lease is null)),' \
   "FAIL change: unexpected additions"
 mutation "an aborted deletion can be completed" \
   $'  if not found or v_operation.status = \'aborted\' then' \
@@ -46,14 +54,98 @@ mutation "completion writes to auth" \
   $'  update private.account_lifecycle_operations\n     set status = \'completed\', verified_at = now()' \
   $'  delete from auth.users where id = p_user_id;\n  update private.account_lifecycle_operations\n     set status = \'completed\', verified_at = now()' \
   "FAIL the candidate writes to a managed schema"
+# --- R3: the managed delete -----------------------------------------------------------------------------
+mutation "completion accepts a login removed without the managed delete intent (H2 R3)" \
+  $'  elsif v_operation.managed_delete_intent_at is null or v_operation.external_step is distinct from \'managed_auth_delete\' then' \
+  "  elsif false then" \
+  "FAIL G0/R3: H2_R3_LATE_APPLE_COMPLETED_WITHOUT_REVOCATION is now impossible"
+mutation "the managed delete intent ignores the release gate" \
+  $'    if not private.account_lifecycle_gate_open(\'managed_auth_delete\') then' \
+  "    if false then" \
+  "FAIL G0: no managed delete intent can be recorded while the gate is blocked"
+mutation "the release gate can be opened by a setting" \
+  $'  state text not null constraint account_lifecycle_release_gates_blocked_only check (state = \'blocked\'),' \
+  $'  state text not null constraint account_lifecycle_release_gates_blocked_only check (state in (\'blocked\', \'open\')),' \
+  "FAIL change: unexpected additions"
+mutation "the managed delete intent does not re-evaluate the readiness" \
+  $'    v_problems := private.account_lifecycle_authorization_problems(p_user_id, p_operation_id);' \
+  $'    v_problems := \'{}\';' \
+  "FAIL C2: a workspace seen at the intent drops the readiness"
+mutation "the managed delete intent is decided without the exclusive login lock" \
+  $'  v_account := private.account_lifecycle_lock(p_user_id, false, p_step = \'managed_auth_delete\');' \
+  $'  v_account := private.account_lifecycle_lock(p_user_id, false);' \
+  "FAIL race identity-link-then-intent"
+# --- R4: a completed deletion asked again --------------------------------------------------------------
+mutation "a completed deletion is reported without a fresh residue check (H2 R4)" \
+  $'    v_reason := private.account_lifecycle_residue(p_user_id);\n    if v_reason is null then' \
+  $'    v_reason := null;\n    if v_reason is null then' \
+  "FAIL R4: H2_R4_LATE_STORAGE_STILL_COMPLETED is now impossible"
+mutation "a later residue rewrites the historical verification" \
+  $'       set last_error_code = v_reason, updated_at = now()\n     where id = v_operation.id;\n    return jsonb_build_object(\'status\', \'residue_found\'' \
+  $'       set last_error_code = v_reason, verified_at = now(), updated_at = now()\n     where id = v_operation.id;\n    return jsonb_build_object(\'status\', \'residue_found\'' \
+  "FAIL R4: H2_R4_LATE_STORAGE_STILL_COMPLETED is now impossible"
+# --- R1: one owner -------------------------------------------------------------------------------------
+mutation "a live lease does not stop a second owner" \
+  $'  if v_operation.owner_lease is not null and v_operation.owner_lease_expires_at > now() then\n    return jsonb_build_object(\'status\', \'in_progress\');\n  end if;\n  if v_operation.external_step is not null then' \
+  $'  if v_operation.external_step is not null then' \
+  "FAIL R1: a second request"
+mutation "ownership is not checked against the lease token" \
+  $'  if not found or p_lease is null or v_operation.owner_lease is distinct from p_lease\n     or v_operation.owner_lease_expires_at <= now() then' \
+  $'  if not found or v_operation.owner_lease_expires_at <= now() then' \
+  "FAIL R1: a guessed lease owns nothing"
+mutation "an expired lease still owns the deletion" \
+  $'     or v_operation.owner_lease_expires_at <= now() then' \
+  "     or false then" \
+  "FAIL R1: an expired lease owns nothing"
+mutation "the fence does not move on a new owner" \
+  "         owner_fence = owner_fence + 1, updated_at = now()" \
+  "         owner_fence = owner_fence, updated_at = now()" \
+  "FAIL A: ownership taken (fence 1)"
+mutation "an owned checkpoint does not check ownership" \
+  $'  v_account := private.account_lifecycle_lock(p_user_id, false);\n  v_operation := private.account_lifecycle_owned_operation(p_user_id, p_operation_id, p_lease);\n  if v_operation.id is null or v_account.user_id is null then\n    return jsonb_build_object(\'status\', \'lease_lost\');\n  end if;\n  if p_recorded then' \
+  $'  v_account := private.account_lifecycle_lock(p_user_id, false);\n  if p_recorded then' \
+  "FAIL R1: the stale owner is refused"
+mutation "an owned readiness does not check ownership" \
+  $'  v_operation := private.account_lifecycle_owned_operation(p_user_id, p_operation_id, p_lease);\n  if v_operation.id is null or v_account.user_id is null then\n    return jsonb_build_object(\'status\', \'lease_lost\');\n  end if;\n  return public.prepare_common_account_auth_delete' \
+  $'  return public.prepare_common_account_auth_delete' \
+  "FAIL R1: the stale owner is refused"
+mutation "the Apple checkpoint can be written as a plain checkpoint" \
+  $'  if p_checkpoint is null or p_checkpoint not in (\'session_revocation\', \'storage_cleanup\') or p_recorded is null then' \
+  $'  if p_checkpoint is null or p_checkpoint not in (\'session_revocation\', \'storage_cleanup\', \'apple_revocation\') or p_recorded is null then' \
+  "FAIL R1: the Apple checkpoint is never written as a plain checkpoint"
+# --- R2: the Apple step ---------------------------------------------------------------------------------
+mutation "an unsettled Apple step is cleared (replayed) on takeover" \
+  $'    if v_operation.external_step = \'apple_revocation\' then' \
+  "    if false then" \
+  "FAIL R2: afterwards: reconciliation"
+mutation "a possibly running external step is not waited for" \
+  $'    if v_operation.external_step_started_at > now() - interval \'900 seconds\' then' \
+  "    if false then" \
+  "FAIL R2: within the settle window a takeover waits"
+mutation "a second external step may start while one is unsettled" \
+  $'  if v_operation.external_step is not null then\n    return jsonb_build_object(\'status\', \'step_in_flight\', \'step\', v_operation.external_step);\n  end if;\n' \
+  "" \
+  "FAIL R2: one in flight at a time"
+mutation "a recorded Apple revocation can be started again" \
+  $'    if v_operation.checkpoints ? \'apple_revocation\' then' \
+  "    if false then" \
+  "FAIL R2: a recorded revocation is never repeated"
+mutation "a settle without ownership is accepted" \
+  $'  v_account := private.account_lifecycle_lock(p_user_id, false);\n  v_operation := private.account_lifecycle_owned_operation(p_user_id, p_operation_id, p_lease);\n  if v_operation.id is null or v_account.user_id is null then\n    return jsonb_build_object(\'status\', \'lease_lost\');\n  end if;\n  if v_operation.external_step is distinct from p_step then' \
+  $'  v_account := private.account_lifecycle_lock(p_user_id, false);\n  select * into v_operation from private.account_lifecycle_operations where id = p_operation_id;\n  if v_operation.external_step is distinct from p_step then' \
+  "FAIL R2: a settle without ownership records nothing"
+mutation "an operator may reconcile while an owner holds the deletion" \
+  $'  if v_operation.owner_lease is not null and v_operation.owner_lease_expires_at > now() then\n    return jsonb_build_object(\'status\', \'in_progress\');\n  end if;\n  if v_operation.external_step is distinct from \'apple_revocation\' then' \
+  $'  if v_operation.external_step is distinct from \'apple_revocation\' then' \
+  "FAIL R2: no reconciliation while an owner holds the deletion"
 # --- identity: the verified person only -------------------------------------------------------------
 mutation "completion finds the operation by its id alone" \
   $'   where id = p_operation_id and operation_type = \'account_deletion\'\n     and subject_sha256 = public.social_mobile_account_deletion_subject(p_user_id)\n   for update;' \
   $'   where id = p_operation_id and operation_type = \'account_deletion\'\n   for update;' \
   "FAIL D: another person cannot complete this operation by naming its id"
 mutation "an error code can be written on another person's operation" \
-  $'   where id = p_operation_id and user_id = p_user_id\n     and operation_type = \'account_deletion\' and status = \'in_progress\';' \
-  $'   where id = p_operation_id\n     and operation_type = \'account_deletion\' and status = \'in_progress\';' \
+  $'   where id = p_operation_id and user_id = p_user_id\n     and operation_type = \'account_deletion\' and status = \'in_progress\';\n  if not found or v_account.user_id is null then\n    return jsonb_build_object(\'status\', \'not_found\');\n  end if;\n  return jsonb_build_object(\'status\', \'recorded\');' \
+  $'   where id = p_operation_id\n     and operation_type = \'account_deletion\' and status = \'in_progress\';\n  if not found or v_account.user_id is null then\n    return jsonb_build_object(\'status\', \'not_found\');\n  end if;\n  return jsonb_build_object(\'status\', \'recorded\');' \
   "FAIL G: not on another person's operation"
 mutation "free text is accepted as an error code" \
   $'  if p_error_code is null or p_error_code !~ \'^[A-Z][A-Z0-9_]{1,63}$\' then' \
@@ -94,10 +186,18 @@ mutation "a client role may complete a deletion" \
   "grant execute on function public.complete_common_account_deletion(uuid, uuid) to service_role;" \
   "grant execute on function public.complete_common_account_deletion(uuid, uuid) to service_role, authenticated;" \
   "FAIL ACL"
+mutation "a client role may claim a deletion" \
+  "grant execute on function public.claim_common_account_deletion(uuid, uuid, integer) to service_role;" \
+  "grant execute on function public.claim_common_account_deletion(uuid, uuid, integer) to service_role, authenticated;" \
+  "FAIL ACL"
 mutation "the private Storage helper keeps default privileges" \
   "revoke all on function private.account_lifecycle_storage_inventory(uuid, integer) from public, anon, authenticated, service_role;" \
   "" \
   "FAIL ACL"
+mutation "the gate table keeps default privileges" \
+  "revoke all on table private.account_lifecycle_release_gates from public, anon, authenticated, service_role;" \
+  "" \
+  "FAIL change: unexpected additions"
 
 total="${#labels[@]}"
 run_one() {

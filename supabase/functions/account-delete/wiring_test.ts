@@ -50,16 +50,20 @@ test('the legacy direct delete is gone: no module deletes a login outside the li
   assert.equal(logic.match(/deps\.deleteLogin\(/gu)?.length, 1, 'one call site');
   const deleteAt = logic.indexOf('deps.deleteLogin(');
   for (const precondition of [
+    "managedDeleteReleased(deps)",
     "call(deps, 'begin_account_deletion'",
+    "call(deps, 'claim'",
     "call(deps, 'begin_service_deletion'",
     "call(deps, 'withdraw_kabumori'",
     'deps.revokeSessions(token)',
-    "checkpoint('session_revocation')",
+    "ownedCheckpoint('session_revocation', true)",
+    "call(deps, 'begin_external_step', { ...owner, p_step: 'apple_revocation' })",
     'cleanStorage(deps, userId)',
-    "checkpoint('storage_cleanup')",
+    'recordStorage(true)',
     'const notReady = await prepare();',
     'const recheck = await storageInventory(deps, userId);',
     'const stale = await prepare();',
+    "call(deps, 'begin_external_step', { ...owner, p_step: 'managed_auth_delete' })",
   ]) {
     const at = logic.indexOf(precondition);
     assert.ok(at > 0 && at < deleteAt, `${precondition} precedes the managed delete`);
@@ -68,6 +72,24 @@ test('the legacy direct delete is gone: no module deletes a login outside the li
   // Success is only ever the verified read-back.
   assert.equal(logic.match(/outcome: 'deleted'/gu)?.length, 1);
   assert.match(logic, /if \(done\?\.status === 'completed' && done\.login_deleted === true\) \{\n\s+return \{ status: 200, body: \{ ok: true, outcome: 'deleted' \} \};/u);
+});
+
+test('the function uses only owned lifecycle calls and never the operator reconciliation', async () => {
+  const http = code(await read('supabase/functions/account-delete/http.ts'));
+  for (const name of ['record_common_account_deletion_checkpoint', 'clear_common_account_deletion_checkpoint',
+    "'prepare_common_account_auth_delete'", 'resolve_common_account_deletion_external_step', 'abort_common_account_deletion']) {
+    assert.ok(!http.includes(name), `${name} is not reachable from the Edge Function`);
+  }
+  for (const name of ['claim_common_account_deletion', 'renew_common_account_deletion_claim', 'release_common_account_deletion_claim',
+    'set_owned_common_account_deletion_checkpoint', 'prepare_owned_common_account_auth_delete', 'begin_common_account_deletion_external_step',
+    'settle_common_account_deletion_external_step', 'common_account_deletion_release_gate']) {
+    assert.ok(http.includes(`'${name}'`), name);
+  }
+  const logic = code(await read('supabase/functions/account-delete/lifecycle_logic.ts'));
+  // Ownership is released on every path out of the owned part.
+  assert.match(logic, /try \{\n\s+return await ownedDeletion\(\{[^\n]*\}\);\n\s+\} finally \{\n\s+await call\(deps, 'release', owner\);\n\s+\}/u);
+  // The recent sign-in is never in the future (H2 C1).
+  assert.match(logic, /return at !== null && at <= nowSeconds && nowSeconds - at <= RECENT_AUTH_SECONDS;/u);
 });
 
 test('routing refuses everything but the three lifecycle actions before any request', async () => {
