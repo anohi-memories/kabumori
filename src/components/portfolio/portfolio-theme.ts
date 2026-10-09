@@ -1,5 +1,5 @@
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
-import type { Tone } from '@/lib/portfolio-view';
+import type { SparkTrend, Tone } from '@/lib/portfolio-view';
 
 const palette = KABUMORI_COLORS.light;
 
@@ -23,6 +23,11 @@ export const PF = {
   radius: 18,
   gutter: 16,
 } as const;
+
+/** The sparkline's colour for the real history's direction: calm green up, restrained red down, neutral flat. */
+export function sparkColor(trend: SparkTrend): string {
+  return trend === 'up' ? PF.up : trend === 'down' ? PF.down : PF.flat;
+}
 
 export function toneColor(value: Tone): string {
   return value === 'up' ? PF.up : value === 'down' ? PF.down : PF.flat;
