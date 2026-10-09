@@ -1,3 +1,13 @@
+## K5 coordination correction — H2 concurrent allocation conflict, G5 review WAITING — 2026-10-09
+
+- After K5 source PASS_CANDIDATE, H1 was taken by POSTONA PR106 review. A G5 review task was briefly written to H2, but the G2 chat concurrently assigned H2 to PR110 and its newer canonical TASK is `kabumori-pr110-residual-b1-b3-final-review-20261009`.
+- No H2 review of G5 has started or completed; do not send H2 for PR112.
+- H1/H2 are both committed to existing independent reviews; neither TASK/Report may be overwritten. ACTIVE_TASK has been reconciled to match the current H2 canonical TASK.
+- G5 Phase3a remains review_required / next_owner chatgpt, `WAITING_FOR_REVIEW_SLOT`. Its PR112 head `c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d` remains open/unmerged. Merge, migration apply, deploy and EAS are HOLD until an independent security PASS.
+- The PR112 risk checklist previously drafted for H2 may be used when a real H slot becomes free; any eventual new assignment must fresh-read all slot TASKs, reports, active state and PR exact head.
+- This is a **slot scheduling conflict only**, not a finding that PR112 tests failed or that G5's implementation was overwritten.
+- All other non-overlapping implementations, push, merge and production tasks may proceed under conflict-based priority.
+
 ## K5 — Phase 3a source PASS_CANDIDATE / independent H2 security review — 2026-10-09
 
 - G5 TASK `common-account-v1-phase3a-deletion-orchestrator-20261008`: source implementation report received, status review_required.
