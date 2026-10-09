@@ -3,7 +3,7 @@
 - task_id: postona-ai-consult-v1-release-readiness-20261009
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - start_code: G3
