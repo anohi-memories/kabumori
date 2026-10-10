@@ -1,3 +1,22 @@
+# C2 — PR112 R1/R2 residual accepted / H2 closed — 2026-10-10
+
+- task_id: common-account-v1-phase3a-pr112-r1-r4-c1-final-rereview-20261010
+- owner: codex
+- slot: codex-2
+- status: done
+- next_owner: none
+- return_to: 共通アカウントG5のちゃ
+- completion_code: C2
+- verdict: **CHANGES REQUIRED** — independent R1 P1 effective legacy checkpoint/clear/prepare service_role lease bypass and R2 P1 actual Apple helper ambiguous HTTP502 boolean false causing replay.
+- reviewed_exact_head: b60272c433b57bac1acb00c13d4fda7ff96f1f2f
+- source_merge: HOLD; shared Auth deletion feature: BLOCKED; production/EAS: not authorized.
+- accepted: R1 new Edge lease/fencing, R3 schema-locked blocked release gate, R4 residue read-back, C1 future-reauth refusal; reviewer suite 542/542, PG 1/2/3a, SQL 43/43, TS 38/38 PASS. New strict lint require-await is minor additional fix.
+- G5 corrective assigned: `common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010` on same PR112, recommended **Opus5.5（極高）**; next code G5 then K5.
+- H2 is no longer allocated; any future H2 review requires fresh explicit assignment, including G2 PR110 waiting; no auto-reservation.
+- safety: control files only, no PR source edits/merge, production access/mutation/deploy/EAS 0. This top C2 receipt overrides historical current statuses while preserving all earlier TASK history below.
+
+---
+
 # H2 completion receipt — PR112 exact-head rereview — 2026-10-10 JST
 
 - task_id: common-account-v1-phase3a-pr112-r1-r4-c1-final-rereview-20261010
