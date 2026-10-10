@@ -111,15 +111,15 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: done
-- task_id: common-account-phase3b-identity-writer-fence-source-20261010
+- status: ready
+- task_id: common-account-phase3c-disposable-supabase-proof-readiness-20261010
 - start_code: G5
 - finish_code: K5
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 accepted Phase3b isolated source-only T13 writer guard PR121 exact 76b50e1e03f82faaa3460bab1603afa8fef3ce44, Draft/unmerged. Report PASS_SOURCE_CANDIDATE_ONLY with real Supabase identity-fence proof BLOCKED; BAN alone has manual identity-link timing counterexample. Current TASK closed, no production apply / deploy / Auth deletion. Other slots unchanged; new G5 task requires fresh explicit allocation.
+- allocation: K5 accepted G5 Phase3b source-only T13 candidate Draft PR121 exact 76b50e1e03f82faaa3460bab1603afa8fef3ce44; independently unreviewed and unmerged, and BAN is NOT an Auth identity-link fence. Phase3c is OFFLINE-ONLY readiness of disposable managed Supabase E1-E12 evidence protocol and deny-by-default fake harness in NEW G5 isolated worktree; no actual Supabase project/calls, no Auth/DB/Edge/Apple/X/Meta secrets or provider operations, no PR121 edits/merge, no changing G3/G4 work. Real disposable project creation/use and destructive test scenarios require separate explicit user authorization. Phase3a Auth deletion remains schema blocked. H1 shared AI review reserved elsewhere, H2 protected, no premature Codex assignment. Return K5.
 - recommended_model: Opus5.5（高）
 
 ## Deferred
