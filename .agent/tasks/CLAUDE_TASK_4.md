@@ -1,3 +1,72 @@
+# Claude Task 4 — CURRENT TASK
+
+- task_id: postona-threads-phase2b-workspace-oauth-candidate-20261010
+- owner: claude
+- slot: claude-4
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: **Opus5.5（高）**
+- start_code: G4
+- finish_code: K4
+- return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
+- type: bounded source-only Phase2b provider-neutral workspace + Threads OAuth candidate (no activation)
+- source_only: true
+- live_supabase_access_allowed: false
+- production_migration_allowed: false
+- production_deploy_allowed: false
+- live_meta_api_or_token_allowed: false
+- actual_threads_connection_allowed: false
+- merge_allowed: false
+
+## Goal and authoritative agreement
+
+G4's Phase2b pure Threads provider contract was merged via PR #118 (`b49306c0d7486adb9afdb9ae4e42defa33ace07f`) but is intentionally unimported and inactive. T9/T10/T13 ownership and interface design have now been agreed in:
+`docs/postona/threads-g5-t9-t10-t13-shared-contract-20261010.md` (2026-10-10).
+
+Treat that document plus `docs/postona/threads-connection-phase2b.md` as source of truth. **Design agreement is not a deployed or verified G5 guard**. G5 is currently running `common-account-phase3b-identity-writer-fence-source-20261010`, which owns the shared-account Auth/writer fence feasibility; G3 is separately running AI consultation production activation. Do NOT change either task/worktree or their code/config. Phase2a2 migration is merged to source but **not applied in production**.
+
+The next G4 contribution is a verifiable, independent **source-only candidate** for T9 provider-neutral personal workspace provisioning and the G4-owned Threads begin/complete OAuth DB/adapter interfaces, with a hard dependency on G5 T13 that remains fail-closed. Do not build a production path that bypasses or pretends to implement T13. Do not enable Threads, X publishing changes, or change common-account deletion.
+
+## Mandatory start / ownership
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this TASK and prior G4 Report, both POSTONA Phase2b docs, and the applicable G3/G5 TASK headers. Confirm fresh origin/main and PR/branch overlaps.
+2. Create a clean independent G4 worktree/checkout from fresh `/Users/yuya/Developer/kabumori-fresh`; don't reuse G3/G5 or old G4 sessions, touch their uncommitted files/branches, or stop their servers. If isolation cannot be established: STOP with BLOCKED report.
+3. Inventory the concrete existing X workspace creation, owner membership, OAuth state and credential-storage writers. Identify currently deployed versus source-only migrations and the ownership/ACL/lock order. Do not infer that the G5 T13 candidate helper already exists.
+4. Verify conflicts with G5's present source targets and G3's actual production DB/Edge window. If the same file, migration version, security boundary or worktree would be touched: STOP or narrow scope before editing, documenting exactly what must be coordinated.
+
+## Implementation scope (bounded, two stages)
+
+**Stage A — required, independently safe:**
+- Map exact G4-owned T9 workspace provisioner responsibilities: canonical deterministic personal workspace, owner membership, code profile, idempotency, concurrent X/Threads creation, no foreign/shared workspace takeover, no entitlement mutations. Design how existing X begin can later delegate to it without changing live X behavior in this task.
+- Design Threads begin/complete contract boundaries: user JWT/state hash, same owner/workspace, provider='threads' binding, state TTL/single use, verified provider id, reconnect mismatch, safe Vault reference-only write, `publish_enabled=false`, unchanged current X functionality.
+- Specify **exact call ordering** from shared agreement: on each begin and complete, T13 under one READ COMMITTED transaction before any workspace/owner/state/social-account/Vault mutation, preserving the prescribed lock order. OAuth provider calls are outside DB transaction; never retry a possibly-consumed code automatically.
+- T10 in this task is **contract mapping only** (G4 provider cleanup adapter result codes and truthful remote_unverified). G5 owns lifecycle orchestration; do not implement account deletion or claim remote revoke availability.
+
+**Stage B — only where proven safe without G5-owned changes:**
+- Implement isolated, inactive **G4-owned candidate code/tests** for deterministic personal workspace and Threads OAuth begin/complete contracts; use fresh files/new migrations only if full prerequisite ownership, migration reservation and overlap checks pass. Prefer local disposable PostgreSQL and fake providers.
+- Any candidate RPC referencing not-yet-implemented G5 T13 **must remain unapplied and unreachable**, and may not be represented as runnable/secure against real Auth until the genuine G5 fence and effective ACL contracts exist. If candidate SQL cannot be kept safely isolated from existing migrations, provide design, typed adapters and negative-contract tests instead of an unsafe runnable migration.
+- Preserve `THREADS_CONNECT_PREREQUISITES_MET=false` and the existing static no-import guarantee for `threads_connect_contract.ts` until all reviewed prerequisites are real. Do not add runtime imports, production Edge Functions or UI entry points, create/connect real accounts, write real credentials, enable Threads posting, or mutate G3/G5-owned sources.
+- **Do not refactor existing X begin in this TASK** unless a separate explicit approved migration/compatibility handoff establishes the safety scope. Describe necessary X delegation as a next task.
+
+## Minimum adversarial verification
+
+- Disposable PG: idempotent repeated ensure, concurrent X/Threads ensure, workspace spoofing/shared/foreign memberships, duplicate owner/brand, unexpected ACL/role/trigger/SET ROLE path, fail-closed missing or mock T13, begin vs deletion and complete vs entitlement-ended, stale JWT, state expiry/replay/cross-platform injection, reconnect identity mismatch, malformed token/secret references, atomic rollback on failure.
+- Clearly mark tests using a stubbed G5 contract as `MOCK_ONLY`, never security proof for real shared-account Auth/RLS.
+- Existing X OAuth/refresh/publish + relevant _shared/social regressions; focused Deno check/lint, SQL migration invariant checks if applicable, diff/secret scan, fresh-main/open-PR overlap, no cross-slot changes.
+- Report precisely what was independently tested versus only designed; if blocked by G5 Stage A or Meta app configuration, a docs/test-only PASS_CANDIDATE is valid. **No live Supabase/Meta call, production write, deploy or merge.**
+
+## Completion / review gate
+
+- Push a separate G4 branch and Draft PR for the bounded source-only result **if a safe change was made**, without merging. Include the exact head/changed files/tests/commit/push/remaining blockers in the Report. Record `status: review_required` / `next_owner: chatgpt` and stop for K4.
+- One **consolidated** independent Codex security review is planned later when G5's real writer guard and G4's intended RPC/Vault/cleanup boundaries are in place. Do not request a standalone repeat of PR118 or a new security review purely for mock-only design.
+- At K4, assess public-safe AI Lab diary value separately and preserve any existing same-day entry (do not overwrite another event).
+- **Return results specifically to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ — send K4.**
+
+---
+
+# Previous G4 task/report — preserved history
+
 # K4 FINAL — POSTONA Threads Phase2b isolated contract PASS / PR118 merged — 2026-10-10
 
 - task_id: postona-threads-phase2b-source-preparation-20261010
