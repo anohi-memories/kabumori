@@ -3,7 +3,7 @@
 - task_id: postona-x-autopost-production-readiness-20261010
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - project: POSTONA / X automatic posting and AI-consult confirmed settings
