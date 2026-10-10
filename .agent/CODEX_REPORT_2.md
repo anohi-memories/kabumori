@@ -20,6 +20,18 @@
 - source_edits: 0
 - deploy / PR merge / production changes / EAS / paid actions: 0
 
+## Publication receipt — origin/main read-back
+
+- Report commit: ddac1661d357221696fe4e75eec6af7b03d12fe6
+- TASK commit: c3fe12fbef9b0d1e28368f3ec17153f99b8ab00c
+- H2 index commit: 91692f34b87797a422d607a06b7e8b6170b6bf39
+- push / delivery: **SUCCESS — GitHub Contents API CAS commits directly on main**, not an unpushed local commit.
+- Fresh origin/main at read-back: 91692f34b87797a422d607a06b7e8b6170b6bf39, all three commits ancestor-confirmed.
+- GitHub main三ファイルの全文が送信内容に一致。現在TASK/indexはreview_required / next_owner:chatgpt。
+- Former Report全文とPreserved previous TASK履歴がbyte-for-byte一致。index diffはH2のstatus/next_ownerだけ。H1/G1–G5/CURRENT_STATE/実装sourceに変更なし。
+- Published diff paths: own H2 Report/TASK/ACTIVE_TASK only; git diff --check PASS.
+- このreceipt追加もReportだけ。追加source/deploy/remote Supabase操作なし。
+
 ## 結論と承認境界
 
 既存35テストと31 mutationの成功は、**オフラインの計画器・入力検証・秘匿化・集計器が意図どおり動く**証拠であり、E11実行の安全性やmanaged Supabaseの削除挙動の証拠ではない。現在executorが無いこと、実行不可を明記していることは安全な設計である。
