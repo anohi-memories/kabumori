@@ -3,8 +3,8 @@
 - task_id: postona-ai-consult-v1-production-activation-20261010
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - type: bounded production activation of already merged/reviewed AI consultation V1
 - recommended_model: **Opus5.5（高）**
@@ -15,7 +15,7 @@
 - baseline_pr: #114 (**MERGED** as `952db5b18e2a4464fb076ccfc32af31063a6bb7e`; do not reopen/re-review)
 - target_supabase_project_id: `wsmznyzcvmuitkglfeuj` (`stock-x-autopost`)
 - production_access: **APPROVED ONLY FOR S0–S5 BELOW by user on 2026-10-10**
-- production_mutation_window: **ACTIVE** — 2026-10-10 18:30 JST〜 (G3 S1–S4: social_mobile_content_settings 2 migrations + social-mobile-consult / social-mobile-brand-dry-run deploy). S0 read-only PASS just before.
+- production_mutation_window: **CLOSED** — 2026-10-10 18:59 JST (ACTIVE 2026-10-10 18:30 JST〜). S0–S5 PASS and read back; G3 performs no further production action.
 - real_X_publish: prohibited
 - scheduler_or_Cron_change: prohibited
 - EAS_TestFlight: prohibited
@@ -91,6 +91,137 @@ Keep costs bounded; no broad live test batch or unbounded retries.
 When S0–S5 fully pass: record true applied versions, ownership/RLS/ACL proof, Edge deployed versions and exact bundle source, scoped real smoke result, confirmed published=0, scheduled=0, changes to existing X automation=0, cost/call count, changed files, tests, branch/commit/push, remaining issues, safety checks. `deploy` only marked success if independently read back. Update only this G3 TASK's **current** Report/status to `review_required` (or `done` only per established protocol) and `next_owner: chatgpt` while preserving all past task/Report history byte-for-byte. Return **K3** to **POSTONA G3のちゃ**.
 
 If preflight/transaction/permissions/Edge authentication/tenant smoke does not pass, immediately STOP subsequent mutation steps and report **BLOCKED/PARTIAL** with exact last completed gate and safe next action. Do not run unreviewed corrective SQL or silently expand the approval. **Avoid unnecessary additional Codex review**; if unexpected high-risk drift arises, first assess bounded evidence and whether a focused separate review is truly required.
+
+## Report — postona-ai-consult-v1-production-activation-20261010
+
+- result: **PASS — S0〜S5 完了。すべての段階を独立に読み戻して確認した。**
+- 本番で、次の流れが使える状態になった: AI 相談 → 変更の提案 → 利用者の「これで覚えて」→ DB 保存 → 次の相談での記憶 → プレビューへの反映。
+- 投稿 0 / 予約 0 / 投稿権限の変更 0 / 既存の X 自動投稿（かぶモリ・会社員AIラボ）への変更 0。
+- モデルは推奨の Opus 5.5（高）で実施。
+- 本番の操作は、自動モードが Claude からの本番の読み書き・配備を拒否したため、すべてユーザーがターミナルで実行した。Claude が作った実行バンドルを使い、パスワードはその場で入力（保存・表示なし）。各段階の結果は、Claude が出力ファイルから読み戻して再判定した。
+- production_mutation_window: ACTIVE 18:30 JST 〜 **CLOSED**（S5 の確認後）。G5 など他スロットで、本番 DB に書き込む作業が並行していないことを開始前と適用直前に確認した。
+
+### 実行バンドル（記録用 PR）
+- PR: https://github.com/anohi-memories/kabumori/pull/123 （open、merge していない）
+- ブランチ `claude/g3-consult-v1-activation-20261010`、コミット `9349fc79`
+- 中身: `supabase/tests/social_mobile_content_settings_activation/` — `preflight.sql`, `readback.sql`, `snapshot.sql`, `apply_guard_pre.sql`, `apply_guard_post.sql`, `check.py`, `run.sh`, `smoke.py`, `expected_readback.json`
+- アプリ・Edge・migration のソースは変更していない。配備したのは、レビュー済みの PR #114 の merge（`952db5b`）と同じバイト列。2 本の migration の SHA-256 も固定して照合した。
+
+### 予行演習（本番の前、使い捨てのローカル PostgreSQL 17.11 + 偽の CLI）
+- `run.sh proof`: 適用・読み戻しの一致、適用済みなら S0 が拒否すること、途中で失敗したら全部取り消されること（表・関数・履歴が残らない）→ PROOF_ALL_PASS
+- `activate` の通し 7 場面がすべて期待どおり:
+  - 正常 → 最後まで通る
+  - 相談の関数が既にある → S0 で停止
+  - OpenAI のキーが無い → S0 で停止
+  - S1 の途中で失敗 → 取り消されたことを確認して停止
+  - 配備に失敗 → 停止
+  - 配備されたソースが違う → 停止
+  - 他の関数が変わった → 停止
+- `smoke.py` の 5 場面（偽の本番）がすべて期待どおり。異常があれば保存前に止まること、メールアドレス・パスワード・トークン・キーが結果に残らないことも確認した。
+
+### S0 事前確認（読み取り専用。18:33 JST に適用直前にも再実行）
+- 適用するロールは postgres（superuser ではない。`public.brands` の owner）。Postgres 17.6。
+- 対象の表・関数（`social_mobile_content_settings_*`）・履歴 2 行は、どれも無い。
+- 前提:
+  - `brands.id`（text、主キー）
+  - `brand_memberships`（brand_id の FK は ON DELETE CASCADE、role の CHECK）
+  - `auth.uid()`
+- ロール: anon / authenticated / service_role から postgres や service_role へ届く経路は無い。
+- postgres の既定権限: 表は anon / authenticated / service_role だけ（強化 migration がすべて取り消す）、関数は owner だけ。
+- イベントトリガーは既知の 7 個だけ（`ensure_rls` は RLS を有効にするだけ）。前提の表への他セッションの強いロックは 0。
+- Edge: `social-mobile-consult` は無い。`social-mobile-brand-dry-run` は v16、ACTIVE、verify_jwt=true（21 関数）。
+- 秘密情報: `OPENAI_API_KEY` がある（名前だけを確認し、値は読んでいない）。
+- 履歴は 79 行、最大の version は `20261007214402`。
+
+### S1 適用（18:33 JST）
+- `psql --single-transaction -v ON_ERROR_STOP=1` で、次を **1 つのトランザクション** で実行して commit した:
+  1. 最初の検査
+  2. candidate → hardening
+  3. 履歴 2 行
+  4. 最後の検査
+- `db push` や migration up は使っていない。他の migration も、追加の SQL もない。
+
+### S2 読み戻し（18:33 JST）— ローカルで適用した結果と完全一致
+- 履歴: `20260922045046 social_mobile_content_settings_candidate`、`20261003120000 social_mobile_content_settings_hardening` の 2 行。
+- 表: owner は postgres、RLS は有効（FORCE はなし）、通常の表。
+- ポリシー: owner 用の 3 つ（select / insert / update、authenticated、permissive）。
+- 実効権限: authenticated は INSERT / SELECT / UPDATE だけ。anon・service_role・PUBLIC は何もない。列単位の付与は 0。
+- 関数 5 個:
+  - いずれも owner は表と同じ、SECURITY DEFINER ではない、`search_path=pg_catalog`。
+  - 本体の md5 は、ローカルで適用したものと一致。
+  - EXECUTE は、検証用の 4 個に authenticated だけ。version トリガーの関数は owner だけ。
+- 制約・インデックス・トリガーの定義も一致: 主キー、ON DELETE CASCADE の FK、settings / persona の形の検査、provenance、件数、有限の日時、トリガー `social_mobile_content_settings_version`。
+
+### S3 / S4 Edge の配備（18:33 JST）
+- `social-mobile-consult`: **v1** ACTIVE、verify_jwt=true（新規）。
+- `social-mobile-brand-dry-run`: v16 → **v17** ACTIVE、verify_jwt=true。v16 は保存設定を読まない古い実装だった。
+- 配備後にダウンロードしたソースは、レビュー済みのものとバイト単位で一致した（相談 4 ファイル、プレビュー 10 ファイル）。
+- 他の 19 関数は、version / updated_at / ezbr / verify_jwt のすべてが不変（x-test-post を含む）。
+- モデルは中央の方針のまま（相談・プレビューとも `gpt-6-luna`）。Claude への切り替えはしていない。
+
+### S5 本物の AI での確認（18:56〜18:57 JST、投稿なし）
+- 使ったもの: テスト用アカウント 1 件（POSTONA のワークスペース `u_ae343f5caedb67d4af33fc7a` を 1 つ所有し、本人確認済みの X アカウントを接続済み）。
+- 結果: **19/19 PASS**。AI の呼び出しは 3 回（相談 2 回 + プレビュー 1 回）、再試行なし。
+
+拒否の確認（どれも AI を呼ぶ前に止まる）:
+- ログインなしの相談・プレビュー → 401
+- 他人のワークスペース（`kabumori`）への相談・プレビュー → 404 `OWNED_WORKSPACE_NOT_FOUND`
+- 他人の設定の読み取り → 空
+- 他人の設定への書き込み → 403 `42501`
+- ログインなしの書き込み → 401 `42501`
+
+相談と保存:
+1. 相談で提案を受けた（設定: 投稿頻度・トーン、ペルソナ: 呼びかけ方・記号/絵文字・口調）。この時点では DB に何も書かれていない。
+2. 明示の確認として、アプリと同じ「版数つき保存」で書き込んだ。1 行で、新規作成だった。読み戻しは保存した内容と一致し、ペルソナは確認済み・会話由来になった。
+3. 古い版数での上書きは 0 行、同じ行の二重作成は 409 `23505` で拒否され、行は変わらなかった。
+4. 会話履歴なしで新しく相談すると、保存した内容（週 4 回・やわらかいトーン・絵文字控えめ・問いかけで締める）を説明した。書き込みは無し。
+5. プレビュー（v17）は 200。保存した頻度 4 を使い、184 文字の下書きを `gpt-6-luna` で生成した。投稿・X の呼び出し・予約の作成は、いずれも false。書き込みは無し。
+6. 最後にログアウトした（204）。
+
+前後比較（読み取り専用の件数と指紋）:
+- POSTONA のワークスペースの予約 0→0、実行ログ 0→0、投稿済み記録 0→0
+- 全体の予約 565→565、全体の実行ログ 1609→1609
+- 投稿権限（`social_accounts.publish_enabled` を含む指紋）、ブランド、ブランド設定は不変
+- Edge 関数は S4 のあとから不変
+- 設定の行は 0→1（テスト用アカウントの 1 行だけ）
+
+画面の切り替え（A → B → A）やワークスペースの分離は、アプリの画面テスト（PR #114、234/234）で確認済み。本番では、他人のワークスペースが拒否されることと、古い版数での保存が拒否されることを確認した。
+
+### 補足
+- S5 用のアカウントを探すため、ユーザーの依頼で、POSTONA アプリの Metro（Web 版、本番接続）をこの作業フォルダで起動している。
+  - 最初は、環境ファイルに `EXPO_PUBLIC_DATA_SOURCE=supabase` が無く、見本データ（「かぶモリ公式」）が表示された。Claude の設定漏れで、指定を足して直した。
+  - Web 版では、X の接続（OAuth）は仕様上できない（アプリ専用の戻り先が必要）。今回の範囲外でもあるので、触っていない。
+- 1 つ目のアカウントには、G5 の「利用登録が終了しました」が表示された。再登録は G5 の担当範囲で、S0〜S5 の範囲外のため、していない。
+- 作業フォルダにある、コミットしないもの:
+  - `apps/social-mobile/.env`（公開用の値だけ、600）
+  - `node_modules` へのリンク
+  - `supabase/config.toml`（verify_jwt=true）と `supabase/.temp/`
+  - Expo が `.gitignore` に足した行
+
+### 変更したファイル / テスト
+- 追加: PR #123 の 9 ファイル（実行バンドル）。既存のファイルは変更していない。
+- テスト:
+  - ローカルの proof は ALL_PASS、activate の通し 7/7、smoke の偽本番 5/5
+  - 本番: S0 PASS、S1 commit、S2 完全一致、S3/S4 のバイト照合 PASS、S5 19/19 PASS、前後比較 PASS
+- `git diff --check` クリーン、秘密情報スキャン 0。
+
+### remaining_issues
+- 本番の投稿経路（PR #41 の migration 3 本、`x_account_publish_authority`、G5 の利用権ゲート）は、未適用のまま（今回の範囲外）。
+  - 保存した設定を本番の自動投稿で使うのは、その作業のあと。
+- アプリの配布（EAS / TestFlight）は禁止範囲のため、していない。iPhone の今のビルドは Metro に接続できない（開発用ランチャーと IP の埋め込みがない）。
+- テスト用アカウントの設定 1 行（週 4 回など）は、そのまま残している。
+
+### safety_checks
+- DB パスワード・テスト用アカウントの認証情報・トークン・キーは、表示・保存・記録していない（結果ファイルにも無いことを予行演習で確認）。
+- 本番の操作は S0〜S5 の範囲だけ。
+  - x-test-post、Cron、scheduler、OAuth / Vault、G4（PR #118）、G5 の Auth・利用権・削除、Vercel / Netlify、EAS は触っていない。
+  - Claude API への切り替え（PR #117）もしていない。
+- 追加の Codex レビューはしていない（レビュー済みと同じバイト列を配備し、すべての検査と読み戻しに合格したため）。
+
+### next_recommendation
+1. K3 で受け入れ → status を done へ。PR #123（記録用のバンドル）を merge するかどうか判断する。
+2. 次の POSTONA の段階: 本番投稿の経路（PR #41 の 3 本 + G5 の利用権ゲート）を別の TASK で。
+3. 実機で確かめる場合は、IP を埋め込んだ開発用ビルドを Mac で作り直す（EAS を使わない方法）か、EAS の節目で配布する。
 
 ---
 

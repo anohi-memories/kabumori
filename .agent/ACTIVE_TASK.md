@@ -87,11 +87,11 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: postona-ai-consult-v1-production-activation-20261010
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: POSTONA G3のちゃ（AI相談V1本番接続担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
 - allocation: User explicitly approved S0–S5 bounded activation on 2026-10-10; PR114 merged (952db5b); prior G3 TASK/Report archived intact in same file. Activate only reviewed settings candidate+hardening atomic single-transaction chain, immediate RLS/ACL read-back, consult and dry-run Edge JWT deployments, no-post smoke. On G5 overlapping DB write critical section STOP/serialize. G4 PR118/Threads and G5 PR112/Auth untouched. No X publish/schedule, EAS, provider switch, other migrations, PR114 rereview, or automatic added Codex review. Independent fresh G3 worktree is a mandatory startup gate.
