@@ -54,4 +54,13 @@ mutant no_rls behaviour 's/alter table ai_ledger\.usage_events enable row level 
 # Append-only: without the trigger the owner can rewrite history.
 mutant no_append_only behaviour 's/create trigger usage_events_append_only before update or delete on ai_ledger\.usage_events\n  for each row execute function ai_ledger\.reject_change\(\);\n//'
 
+# R1: mark_sent must give the send permit only on the reserved -> sent transition, never again for a sent row.
+mutant mark_sent_reissues_permit "behaviour concurrency" "s/return jsonb_build_object\('status', v_res\.status, 'may_send', false\);/return jsonb_build_object('status', v_res.status, 'may_send', v_res.status = 'sent');/"
+# R1: reserve must not hand a sent attempt back as allowed.
+mutant reserve_reuses_sent_attempt behaviour "s/    if v_existing\.status = 'reserved' then\n      return jsonb_build_object\('allowed', true/    if v_existing.status in ('reserved', 'sent') then\n      return jsonb_build_object('allowed', true/"
+# R2: without the reachable-role (SET ROLE) check, NOINHERIT SET-enabled paths are accepted.
+mutant no_role_path_check adverse 's/  -- 5b\. Roles an application role can REACH.*?\n  -- 6\. Row level security/  -- 6. Row level security/s'
+# R2: following inheritance only (not SET ROLE) misses NOINHERIT paths.
+mutant role_path_inherit_only adverse 's/ or pg_has_role\(v_role, r\.oid, v_set_check\)\)/)/'
+
 echo "ALL $killed MUTANTS KILLED"

@@ -57,7 +57,7 @@ test("reserve: exact RPC payload, service-key headers, user subject with brand",
 });
 
 test("reserve: denials map to the guard's reasons; missing call id is refused before any RPC", async () => {
-  for (const [db, mapped] of [["NO_MATCHING_POLICY", "NO_MATCHING_LIMIT"], ["CALL_LIMIT", "CALL_LIMIT"], ["COST_LIMIT", "COST_LIMIT"], ["PER_CALL_LIMIT", "PER_CALL_LIMIT"], ["ATTEMPT_FINALIZED", "ATTEMPT_FINALIZED"], ["SOMETHING_NEW", "GUARD_UNAVAILABLE"]]) {
+  for (const [db, mapped] of [["NO_MATCHING_POLICY", "NO_MATCHING_LIMIT"], ["CALL_LIMIT", "CALL_LIMIT"], ["COST_LIMIT", "COST_LIMIT"], ["PER_CALL_LIMIT", "PER_CALL_LIMIT"], ["ATTEMPT_FINALIZED", "ATTEMPT_FINALIZED"], ["ATTEMPT_IN_FLIGHT", "SEND_NOT_CONFIRMED"], ["SOMETHING_NEW", "GUARD_UNAVAILABLE"]]) {
     const { guard } = ledger(() => jsonResponse(200, { allowed: false, reason: db, policy_key: "postona.per_brand" }));
     const decision = await guard.reserve({ provider: "openai", model: "m", application: "a", feature: "f", logicalRole: "r", callId: "c", attempt: 1 }, 0.1);
     assert.deepEqual(decision, { allowed: false, reason: mapped, limitId: "postona.per_brand" });

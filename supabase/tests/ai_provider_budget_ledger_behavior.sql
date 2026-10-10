@@ -243,6 +243,42 @@ begin
 end;
 $$;
 
+\echo '[R1] a send permit is issued exactly once, only by the reserved -> sent transition'
+do $$
+declare r jsonb; again jsonb; m1 jsonb; m2 jsonb; v jsonb; held_before numeric;
+begin
+  r := ail_test.reserve('req-r1', 1, 'openai', 'gpt-6-luna', 'kabumori', 'news', 'system', null, null, 0.01);
+  again := ail_test.reserve('req-r1', 1, 'openai', 'gpt-6-luna', 'kabumori', 'news', 'system', null, null, 0.01);
+  perform ail_test.check(again ->> 'allowed' = 'true' and again ->> 'reused' = 'true' and again ->> 'status' = 'reserved',
+    'an unsent reservation can be picked up again (it still has to win mark_sent)');
+  m1 := ail_test.mark_sent(r);
+  m2 := ail_test.mark_sent(again);
+  perform ail_test.check(m1 = '{"status": "sent", "may_send": true}'::jsonb, 'the first mark_sent permits the send');
+  perform ail_test.check(m2 = '{"status": "sent", "may_send": false}'::jsonb, 'a second mark_sent on a sent reservation never permits another send');
+  again := ail_test.reserve('req-r1', 1, 'openai', 'gpt-6-luna', 'kabumori', 'news', 'system', null, null, 0.01);
+  perform ail_test.check(again ->> 'allowed' = 'false' and again ->> 'reason' = 'ATTEMPT_IN_FLIGHT' and again ->> 'status' = 'sent',
+    'a replay of a sent attempt is refused before any mark_sent');
+  perform ail_test.settle_unknown(r, 0.01, 'TIMEOUT');
+  m2 := ail_test.mark_sent(r);
+  perform ail_test.check(m2 ->> 'may_send' = 'false', 'a finalised attempt never permits a send');
+
+  -- release first, then mark_sent: no permit
+  r := ail_test.reserve('req-r1-rel-1', 1, 'openai', 'gpt-6-luna', 'kabumori', 'news', 'system', null, null, 0.01);
+  v := ail_test.rpc('ai_ledger_release', jsonb_build_object('reservation_id', r ->> 'reservation_id'));
+  m1 := ail_test.mark_sent(r);
+  perform ail_test.check(v ->> 'status' = 'released' and m1 = '{"status": "released", "may_send": false}'::jsonb, 'released hold cannot be sent');
+
+  -- mark_sent first, then release: the sent hold stays counted
+  r := ail_test.reserve('req-r1-rel-2', 1, 'openai', 'gpt-6-luna', 'kabumori', 'news', 'system', null, null, 0.01);
+  m1 := ail_test.mark_sent(r);
+  held_before := (ail_test.bucket('global')).held_usd;
+  v := ail_test.rpc('ai_ledger_release', jsonb_build_object('reservation_id', r ->> 'reservation_id'));
+  perform ail_test.check(m1 ->> 'may_send' = 'true' and v ->> 'status' = 'sent' and (ail_test.bucket('global')).held_usd = held_before,
+    'release after send changes nothing');
+  perform ail_test.settle_measured(r, 0.001, 10, 1);
+end;
+$$;
+
 \echo '[17] credit exhaustion: a rejected, unbilled attempt is recorded at zero and its hold is returned'
 do $$
 declare r jsonb; e ai_ledger.usage_events; held_before numeric;

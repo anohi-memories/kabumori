@@ -92,8 +92,8 @@ values ('postona.consult.user.daily_calls', 'postona', 'consult', 'user', true, 
 
 | RPC | 入力 | 出力・効果 |
 |---|---|---|
-| `ai_ledger_reserve` | request_id, attempt, provider, model, application, feature, logical_role, subject_kind, user_id?, brand_id?, amount_usd, hold_seconds? | `{allowed, reservation_id, status, reused, reason?, policy_key?, level}`。同じ (request_id, attempt) をもう一度送ると同じ予約を返します（二重計上なし）。内容が違えば `AI_LEDGER_ATTEMPT_CONFLICT`。確定済みなら `ATTEMPT_FINALIZED` で拒否します |
-| `ai_ledger_mark_sent` | reservation_id | `{status, may_send}`。期限切れの未送信予約はここで解放し、`may_send:false` を返します |
+| `ai_ledger_reserve` | request_id, attempt, provider, model, application, feature, logical_role, subject_kind, user_id?, brand_id?, amount_usd, hold_seconds? | `{allowed, reservation_id, status, reused, reason?, policy_key?, level}`。同じ (request_id, attempt) をもう一度送ると同じ予約を返します（二重計上なし）。内容が違えば `AI_LEDGER_ATTEMPT_CONFLICT`。**未送信（reserved）のときだけ allowed を返します。送信済みなら `ATTEMPT_IN_FLIGHT`、確定済みなら `ATTEMPT_FINALIZED` で拒否します**（C1 R1 の修正） |
+| `ai_ledger_mark_sent` | reservation_id | `{status, may_send}`。**送信許可は1回だけです。** `may_send:true` を返すのは、その呼び出しで reserved → sent に遷移させたときだけで、送信済みなどへの2回目以降は常に `false` です（C1 R1 の修正）。期限切れの未送信予約はここで解放し、`may_send:false` を返します |
 | `ai_ledger_settle` | reservation_id, outcome, cost_basis, estimated_cost_usd, トークン数, actual_model?, error_code?, provider_request_id?, http_status?, latency_ms?, price_catalog_version | `{status, usage_event_id, duplicate}`。同じ確定の再送は最初の結果を返し、内容が違えば `AI_LEDGER_SETTLEMENT_CONFLICT`。上限額での確定は予約額を下回りません |
 | `ai_ledger_release` | reservation_id | 未送信（reserved）のときだけ解放します。送信済みは変更せずに返します |
 | `ai_ledger_recover_stale` | sent_grace_seconds?, limit? | クラッシュからの回復: 期限切れの reserved は解放し、猶予時間を過ぎた sent は**上限額の unknown として確定**します（解放しない） |
@@ -120,6 +120,15 @@ TypeScript 側は `SupabaseLedgerBudgetGuard`（`ledger_guard.ts`）がこれら
   - HTTP は mark_sent が `may_send:true` を返したあとにしか送りません。
   - mark_sent は期限切れの予約を解放して `false` を返します。
   - このため「reserved のまま期限切れ」は送信していないことの証明になり、回復処理で安全に解放できます。
+- **1つの予約からの送信は最大1回（C1 R1 の修正）:**
+  - 予約の冪等性と、送信の冪等性は別のものとして扱います。
+  - 送信許可は、mark_sent が行ロックのもとで reserved → sent に遷移させた1回だけです。
+  - 同じ callId を同時に実行した場合（別の Guard インスタンスでも）や、送信済みの試行を再実行した場合は、2回目の送信許可を出しません。
+  - mark_sent の応答がタイムアウトした場合も、許可が出たとは推測しません。何も送らず、送信済みかもしれない予約はそのまま計上しておきます（release では解放されず、回復処理で上限額の unknown になります）。
+  - 通常の再試行は別の attempt として、予約から計上まで別々に扱います。
+  - 確認済みのテスト:
+    - 実SQL: 同じ予約への60並行の mark_sent で送信許可は1件、mark_sent と release／recover_stale の競合
+    - TS＋実SQL＋偽 API の E2E: 同じ callId の同時実行（上限1回・10回）で API 通信1回・計上1回、mark_sent のタイムアウト後の再実行、送信後に通信が切れたあとの再実行、通常の再試行
 - **クラッシュ後の回復:**
   - `ai_ledger_recover_stale` を定期的に実行します（例: 5〜15分ごと）。**Cron の設定は今回していません**（Phase 2 の本番ゲートで行う）。
   - 確定のRPCが失敗した試行は sent のまま残り、回復処理で上限額の unknown になります（保守的に扱う）。
@@ -134,6 +143,14 @@ TypeScript 側は `SupabaseLedgerBudgetGuard`（`ledger_guard.ts`）がこれら
 - **事後検証（既存 migration と同じ方式）:** 作成の最後に、次を確認します。条件を満たさなければ migration 全体をロールバックします（何も補修しない）。
   - 所有者、ロールの所属関係、直接付与された権限（ACL）
   - **継承を含む実効権限**（`has_*_privilege`）
+  - **到達できるロールの権限（C1 R2 の修正）**
+    - anon / authenticated / service_role から、継承（USAGE）または SET ROLE（直接、または SET が有効な付与を何段もたどる経路）で到達できるロールを調べます。
+    - そのロールにも、次の同じ規則を課します。
+      - anon / authenticated から service_role・所有者・superuser に到達できない
+      - 台帳の schema・テーブル・列・シーケンス・補助関数・RPC に権限を持つロールに到達できない
+    - 継承しない（NOINHERIT）で SET ROLE だけができる経路も拒否します。
+    - PostgreSQL 16 未満では、より厳しい「所属しているか」で判定します。
+    - 危険な構成を GRANT / REVOKE で補修することはしません。
   - 列単位の権限、RPC の形（DEFINER と search_path）
   - RLS が有効か
 - **危険な構成での拒否（テスト済み）:**
@@ -142,7 +159,16 @@ TypeScript 側は `SupabaseLedgerBudgetGuard`（`ledger_guard.ts`）がこれら
     - service_role が pg_read_all_data を持つ
     - anon が pg_write_all_data を持つ
     - anon が superuser
-  - 個々の安全機構を壊した12種類の mutation も、すべてテストが検出しました。
+    - （C1 R2）SET ROLE 経由の経路:
+      - authenticated → service_role（継承なし・SET あり）
+      - anon → service_role（継承なし・SET あり）
+      - 2段の SET 経路
+      - SET → 継承の混合経路
+      - SET で pg_read_all_data へ到達
+      - 非superuserの所有者で適用した場合の SET 経路
+  - 安全な対照ケースは拒否しません。継承も SET もない所属や、継承はできるが SET ができない中継などです。実際に `SET ROLE service_role` ができないことも確認しています。
+  - 個々の安全機構を壊した16種類の mutation（R1・R2 用の4種を含む）も、すべてテストが検出しました。
+  - **修正前の migration では**、SET ROLE 経由の6種がすべて適用されてしまい、R1 の再現テスト（同時実行で API 通信2回、送信許可60件中60件）も失敗することを確認しています。
 - **ID の信頼境界:**
   - RPC は service_role 専用のため、`user_id` / `brand_id` を検証するのは**呼び出し側（サーバー）の責任**です。
   - Phase 4/5 で接続するときは、次の値だけを渡します。
@@ -228,10 +254,10 @@ TypeScript 側は `SupabaseLedgerBudgetGuard`（`ledger_guard.ts`）がこれら
 
 | 項目 | 結果 |
 |---|---|
-| `supabase/tests/ai_provider_budget_ledger_run.sh`（使い捨て PG17 で実SQL） | behaviour / supabase / concurrency / adverse / rollback / e2e のすべて PASS |
-| `supabase/tests/ai_provider_budget_ledger_mutations.sh` | 12 mutants すべて検出 |
+| `supabase/tests/ai_provider_budget_ledger_run.sh`（使い捨て PG17 で実SQL） | behaviour / supabase / nonsuper（非superuserの所有者で適用）/ concurrency（R1 の3件を含む）/ adverse（R2 の8件と安全な対照2件を含む）/ rollback / e2e のすべて PASS |
+| `supabase/tests/ai_provider_budget_ledger_mutations.sh` | 16 mutants すべて検出（R1・R2 用の4種を含む） |
 | `deno test --no-config -A supabase/functions/_shared/ai_provider` | 94 passed（Phase 1a の85件 + ledger guard 9件） |
-| e2e（TS → PostgREST shim → PostgreSQL、provider は偽物） | 5 passed |
+| e2e（TS → PostgREST shim → PostgreSQL、provider は偽物） | 10 passed（R1 の5件を含む） |
 | `deno check` / `deno lint`（ai_provider と新しいテスト TS） | PASS |
 | 既存の回帰（migration_source_invariants・mic_scenario_phase3c_cron・モデルガード3本） | 17 + 22 passed |
 
@@ -277,3 +303,12 @@ TypeScript 側は `SupabaseLedgerBudgetGuard`（`ledger_guard.ts`）がこれら
 - `migration_source_invariants_test.ts` の予約一覧（RESERVED）に、今回の version `20261010050613` を加えるか。共有の管理ファイルなので**編集しておらず、調整待ち**
 - `billing_observations` を記録する手段（今は運用者の SQL だけ。RPC は未作成）
 - 回復処理の定期実行の設定（Cron。本番ゲート）
+- 通常の `deno lint`（`--no-config` を付けない場合）で `no-import-prefix` が1件出る
+  - 対象: Anthropic SDK のインライン固定 `npm:@anthropic-ai/sdk@0.132.1`
+  - 既存の本番コード（重要ニュースの `npm:unpdf@1.8.1`）でも同じ指摘が出る、リポジトリにもともとある慣行です。セキュリティ上の問題ではありません。
+  - 対応案:
+    - (a) 固定版のインライン指定（既存方針）を維持し、lint は `--no-config` または `--rules-exclude=no-import-prefix` で運用する
+    - (b) 該当行に理由付きで `// deno-lint-ignore no-import-prefix` を書く（PR #117 のファイルを変えることになるため、今回は未実施）
+    - (c) `supabase/functions` に import map（deno.json）を導入する（全関数の bundle と deploy に影響するため、別タスク）
+  - 推奨は (a)。専用のちゃの判断を待ちます。
+- `ai_ledger_mark_sent` の応答が失われた試行は sent のまま計上が続き、回復処理で上限額の unknown になります（実際には送っていなくても、保守的に計上する）。同じ callId での再実行はできないため、呼び出し元は新しい callId でやり直します。

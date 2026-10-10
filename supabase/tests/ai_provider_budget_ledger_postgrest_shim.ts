@@ -34,11 +34,19 @@ function dollarQuote(value: string): string {
   return `$${tag}$${value}$${tag}$`;
 }
 
+// Test-only fault: after the RPC has COMMITTED, hold the response longer than the client waits (a lost / timed-out
+// response). Set with POST /__test/fault {"rpc": "...", "hangMs": n, "count": n}; same key check as the RPCs.
+let fault: { rpc: string; hangMs: number; count: number } | null = null;
+
 Deno.serve({ hostname: "127.0.0.1", port: Number(Deno.env.get("SHIM_PORT") ?? "54398") }, async (request) => {
   if (request.headers.get("apikey") !== key || request.headers.get("authorization") !== `Bearer ${key}`) {
     return new Response(JSON.stringify({ code: "PGRST301" }), { status: 401 });
   }
   const url = new URL(request.url);
+  if (request.method === "POST" && url.pathname === "/__test/fault") {
+    fault = await request.json() as { rpc: string; hangMs: number; count: number };
+    return new Response("{}", { headers: { "Content-Type": "application/json" } });
+  }
   const rpc = url.pathname.match(/^\/rest\/v1\/rpc\/([a-z_]+)$/);
   if (request.method !== "POST" || !rpc || !ALLOWED_RPC.test(rpc[1])) {
     return new Response(JSON.stringify({ code: "PGRST404" }), { status: 404 });
@@ -49,6 +57,11 @@ Deno.serve({ hostname: "127.0.0.1", port: Number(Deno.env.get("SHIM_PORT") ?? "5
     const code = result.err.match(/ERROR:\s+([0-9A-Z]{5})/)?.[1] ?? "XX000";
     const status = code === "42501" ? 403 : code.startsWith("22") || code.startsWith("P0") ? 400 : 500;
     return new Response(JSON.stringify({ code }), { status, headers: { "Content-Type": "application/json" } });
+  }
+  if (fault && fault.rpc === rpc[1] && fault.count > 0) {
+    fault.count -= 1;
+    await new Promise((resolve) => setTimeout(resolve, fault!.hangMs));
+    return new Response(JSON.stringify({ code: "504" }), { status: 504 });
   }
   return new Response(result.out || "null", { headers: { "Content-Type": "application/json" } });
 });

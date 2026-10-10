@@ -32,7 +32,7 @@ esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 MIGRATION="${AIL_MIGRATION:-$HERE/../migrations/20261010050613_ai_provider_budget_ledger.sql}"
-PARTS="${AIL_PARTS:-behaviour supabase concurrency adverse rollback e2e}"
+PARTS="${AIL_PARTS:-behaviour supabase nonsuper concurrency adverse rollback e2e}"
 PREFIX="ail_proof_$$"
 DBS=()
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ail_proof.XXXXXX")"
@@ -57,10 +57,20 @@ begin
       execute format('alter role %I nosuperuser', r);
     end if;
   end loop;
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    foreach r in array array['anon', 'authenticated'] loop
+      if exists (select 1 from pg_roles where rolname = r) then execute format('revoke service_role from %I', r); end if;
+    end loop;
+  end if;
+  -- extra roles of the SET ROLE path cases (their scratch databases are dropped before this runs)
+  foreach r in array array['ail_hop1', 'ail_hop2', 'ail_reader', 'ail_owner'] loop
+    if exists (select 1 from pg_roles where rolname = r) then execute format('drop role %I', r); end if;
+  end loop;
 end
 \$\$;
 SQL
 }
+drop_db() { psql_super -d postgres -c "drop database if exists $1" >/dev/null; }
 cleanup() {
   if [ -f "$SHIM_PID_FILE" ]; then kill "$(cat "$SHIM_PID_FILE")" 2>/dev/null || true; fi
   for db in ${DBS[@]+"${DBS[@]}"}; do psql_super -d postgres -c "drop database if exists $db" >/dev/null 2>&1 || true; done
@@ -188,20 +198,90 @@ if has_part concurrency; then
   want "$(count_lines settle true)" 59 "duplicate settlement: the rest are duplicates"
   want "$(query "$DB" "select (select count(*) from ai_ledger.usage_events) || '/' || settled_usd || '/' || held_usd from ai_ledger.budget_buckets")" "1/0.00300000/0.00000000" "duplicate settlement: charged once"
   echo "PASS concurrency: 60 identical settlements -> one event"
+
+  # R1. one reservation marked sent by 60 sessions: exactly ONE send permit (the reserved -> sent transition)
+  DB="$(fresh_db conc_mark)"; apply "$DB"
+  query "$DB" "insert into ai_ledger.budget_policies (policy_key, period, max_calls) values ('conc.mark', 'month', 1000)" >/dev/null
+  reserve_one() {
+    query "$1" "set role service_role; select public.ai_ledger_reserve(jsonb_build_object('request_id', '$2', 'attempt', 1, 'provider', 'openai', 'model', 'gpt-6-luna', 'application', 'kabumori', 'feature', 'news', 'logical_role', 'k.n', 'subject_kind', 'system', 'amount_usd', 0.01)) ->> 'reservation_id'"
+  }
+  RID="$(reserve_one "$DB" mark)"
+  run_parallel "$DB" 60 "select public.ai_ledger_mark_sent('{\"reservation_id\": \"$RID\"}'::jsonb) ->> 'may_send'" mark
+  want "$(count_lines mark true)" 1 "R1: send permits for one reservation"
+  want "$(count_lines mark false)" 59 "R1: refused duplicate permits"
+  want "$(query "$DB" "select status from ai_ledger.reservations where id = '$RID'")" sent "R1: reservation sent once"
+  echo "PASS concurrency R1: 60 concurrent mark_sent on one reservation -> exactly one send permit"
+
+  # R1. mark_sent racing release on an unsent reservation: at most one permit, and the final state agrees with it
+  run_mixed() {
+    local db="$1" count="$2" a="$3" b="$4" prefix="$5" i pids=()
+    for i in $(seq 1 "$count"); do
+      ( psql -X -h "$HOST" -p "$PORT" -U "$SUPER" -d "$db" -Atq -v ON_ERROR_STOP=1 -c "set role service_role" -c "$a" \
+          >"$WORK/${prefix}_a.$i" 2>&1 || echo "ERROR" >>"$WORK/${prefix}_a.$i" ) &
+      pids+=("$!")
+      ( psql -X -h "$HOST" -p "$PORT" -U "$SUPER" -d "$db" -Atq -v ON_ERROR_STOP=1 -c "set role service_role" -c "$b" \
+          >"$WORK/${prefix}_b.$i" 2>&1 || echo "ERROR" >>"$WORK/${prefix}_b.$i" ) &
+      pids+=("$!")
+    done
+    wait "${pids[@]}"
+  }
+  RID="$(reserve_one "$DB" race-release)"
+  run_mixed "$DB" 30 "select public.ai_ledger_mark_sent('{\"reservation_id\": \"$RID\"}'::jsonb) ->> 'may_send'" \
+    "select public.ai_ledger_release('{\"reservation_id\": \"$RID\"}'::jsonb) ->> 'status'" relrace
+  PERMITS="$(count_lines relrace_a true)"
+  STATUS="$(query "$DB" "select status from ai_ledger.reservations where id = '$RID'")"
+  want "$(count_lines relrace_a ERROR)$(count_lines relrace_b ERROR)" 00 "R1 release race: errors"
+  case "$PERMITS/$STATUS" in 1/sent|0/released) ;; *) fail "R1 release race: $PERMITS permits with final status $STATUS" ;; esac
+  echo "PASS concurrency R1: mark_sent vs release -> $PERMITS permit(s), final status $STATUS (consistent)"
+
+  # R1. mark_sent racing recovery on an EXPIRED unsent reservation: no permit, released exactly once
+  RID="$(reserve_one "$DB" race-recover)"
+  CALLS_BEFORE="$(query "$DB" "select calls from ai_ledger.budget_buckets")"
+  query "$DB" "set session_replication_role = replica; update ai_ledger.reservations set expires_at = now() - interval '1 minute' where id = '$RID'" >/dev/null
+  run_mixed "$DB" 30 "select public.ai_ledger_mark_sent('{\"reservation_id\": \"$RID\"}'::jsonb) ->> 'may_send'" \
+    "select public.ai_ledger_recover_stale('{}'::jsonb) ->> 'released'" recrace
+  want "$(count_lines recrace_a true)" 0 "R1 recovery race: no permit for an expired hold"
+  want "$(query "$DB" "select status from ai_ledger.reservations where id = '$RID'")" released "R1 recovery race: released"
+  want "$(query "$DB" "select calls from ai_ledger.budget_buckets")" "$((CALLS_BEFORE - 1))" "R1 recovery race: call returned once"
+  echo "PASS concurrency R1: mark_sent vs recover_stale on an expired hold -> no permit, released once"
 fi
 
 # ---- adverse role graphs: the migration refuses, atomically --------------------------------------------------------
-# refuse <name> <expected message fragment> <setup sql>
+# A non-superuser migration owner, like the production `postgres` role (created per case, dropped by the reset).
+make_owner() {
+  psql_super -d "$1" >/dev/null <<SQL
+do \$\$ begin if not exists (select 1 from pg_roles where rolname = 'ail_owner') then create role ail_owner nologin; end if; end \$\$;
+grant create on database $1 to ail_owner;
+grant create on schema public to ail_owner;
+SQL
+}
+apply_as_owner() { psql_super -d "$1" -c "set role ail_owner" -f "$MIGRATION" >/dev/null; }
+
+# refuse <name> <expected message fragment> <setup sql> [owner]: the migration must refuse, atomically, with the
+# whole catalog (objects, ACLs, default ACLs, roles, memberships) exactly as before. owner=nonsuper applies it as
+# the non-superuser owner.
 refuse() {
-  local name="$1" expect="$2" setup="$3" db before after out
+  local name="$1" expect="$2" setup="$3" owner="${4:-super}" db before after out
   db="$(fresh_db "$name")"
+  [ "$owner" = nonsuper ] && make_owner "$db"
   psql_super -d "$db" -c "$setup" >/dev/null
   before="$(digest "$db")"
-  if out="$(psql_super -d "$db" -f "$MIGRATION" 2>&1)"; then fail "$name: migration applied on an unsafe role graph"; fi
+  local applied=no
+  if [ "$owner" = nonsuper ]; then
+    if out="$(psql_super -d "$db" -c "set role ail_owner" -f "$MIGRATION" 2>&1)"; then applied=yes; fi
+  else
+    if out="$(psql_super -d "$db" -f "$MIGRATION" 2>&1)"; then applied=yes; fi
+  fi
+  if [ "$applied" = yes ]; then
+    # AIL_REPORT_ONLY=1 (used to show a pre-fix migration's gaps): report and continue instead of failing.
+    if [ "${AIL_REPORT_ONLY:-}" = 1 ]; then echo "NOT REFUSED: $name"; drop_db "$db"; reset_cluster_roles; return 0; fi
+    fail "$name: migration applied on an unsafe role graph"
+  fi
   case "$out" in *"$expect"*) ;; *) fail "$name: wrong refusal: $out" ;; esac
   want "$(ledger_objects "$db")" 0 "$name: nothing left behind"
   after="$(digest "$db")"
   want "$after" "$before" "$name: catalog unchanged"
+  drop_db "$db"
   reset_cluster_roles
   echo "PASS adverse: $name refused ($expect)"
 }
@@ -210,6 +290,45 @@ if has_part adverse; then
   refuse read_all_data AI_LEDGER_ACL_EFFECTIVE_PRIVILEGE "grant pg_read_all_data to service_role"
   refuse write_all_data AI_LEDGER_ACL_EFFECTIVE_PRIVILEGE "grant pg_write_all_data to anon"
   refuse superuser_role AI_LEDGER_ACL_UNSAFE_MEMBERSHIP "alter role anon superuser"
+  # R2: SET ROLE paths (NOINHERIT memberships that still allow SET ROLE), direct and transitive.
+  refuse r2_set_direct_authenticated AI_LEDGER_ACL_UNSAFE_ROLE_PATH "grant service_role to authenticated with inherit false, set true"
+  refuse r2_set_direct_anon AI_LEDGER_ACL_UNSAFE_ROLE_PATH "grant service_role to anon with inherit false, set true"
+  refuse r2_set_transitive AI_LEDGER_ACL_UNSAFE_ROLE_PATH "create role ail_hop1 nologin; create role ail_hop2 nologin; grant ail_hop1 to authenticated with inherit false, set true; grant ail_hop2 to ail_hop1 with inherit false, set true; grant service_role to ail_hop2 with inherit false, set true"
+  refuse r2_set_mixed_hops AI_LEDGER_ACL_UNSAFE_ROLE_PATH "create role ail_hop1 nologin; grant ail_hop1 to anon with inherit false, set true; grant service_role to ail_hop1 with inherit true, set false"
+  refuse r2_inherit_direct AI_LEDGER_ACL_EFFECTIVE_PRIVILEGE "grant service_role to authenticated"
+  refuse r2_set_into_read_all_data AI_LEDGER_ACL_UNSAFE_ROLE_PATH "grant pg_read_all_data to anon with inherit false, set true"
+  refuse r2_set_existing_acl_anomaly AI_LEDGER_ACL_UNEXPECTED_RELATION_GRANT "create role ail_reader nologin; alter default privileges grant select on tables to ail_reader; grant ail_reader to authenticated with inherit false, set true"
+  refuse r2_set_direct_nonsuper_owner AI_LEDGER_ACL_UNSAFE_ROLE_PATH "grant service_role to authenticated with inherit false, set true" nonsuper
+
+  # R2 safe controls: memberships that confer neither privileges nor SET ROLE must NOT be refused.
+  for setup in \
+    "grant service_role to authenticated with inherit false, set false" \
+    "create role ail_hop1 nologin; grant ail_hop1 to anon with inherit true, set false; grant service_role to ail_hop1 with inherit false, set true"; do
+    DB="$(fresh_db r2_control)"
+    psql_super -d "$DB" -c "$setup" >/dev/null
+    apply "$DB" || fail "R2 control refused: $setup"
+    for app in anon authenticated; do
+      if psql_super -d "$DB" -c "set session authorization $app" -c "set role service_role" >/dev/null 2>&1; then
+        fail "R2 control: $app could SET ROLE service_role ($setup)"
+      fi
+    done
+    drop_db "$DB"
+    reset_cluster_roles
+    echo "PASS adverse R2 control accepted: $setup"
+  done
+fi
+
+# ---- non-superuser owner (as the production migration role): apply and behave ----------------------------------------
+if has_part nonsuper; then
+  DB="$(fresh_db nonsuper supabase)"
+  make_owner "$DB"
+  apply_as_owner "$DB"
+  want "$(query "$DB" "select pg_get_userbyid(nspowner) from pg_namespace where nspname = 'ai_ledger'")" ail_owner "nonsuper: owner"
+  psql_super -d "$DB" -f "$HERE/ai_provider_budget_ledger_fixture.sql" >/dev/null
+  psql_super -d "$DB" -f "$HERE/ai_provider_budget_ledger_behavior.sql" >/dev/null
+  drop_db "$DB"
+  reset_cluster_roles
+  echo "PASS nonsuper: applied by a non-superuser owner; behaviour holds"
 fi
 
 # ---- rollback and impact on existing structure ---------------------------------------------------------------------
@@ -240,7 +359,7 @@ fi
 # ---- end to end: TypeScript provider + ledger guard -> PostgREST shim -> this migration ---------------------------
 if has_part e2e; then
   DB="$(fresh_db e2e supabase)"; apply "$DB"
-  query "$DB" "insert into ai_ledger.budget_policies (policy_key, period, max_estimated_usd, max_calls) values ('e2e.global', 'month', 5, 1000); insert into ai_ledger.budget_policies (policy_key, scope_application, scope_feature, scope_subject_kind, per_user, period, max_calls) values ('e2e.consult.per_user', 'postona', 'consult', 'user', true, 'day', 2)" >/dev/null
+  query "$DB" "insert into ai_ledger.budget_policies (policy_key, period, max_estimated_usd, max_calls) values ('e2e.global', 'month', 5, 1000); insert into ai_ledger.budget_policies (policy_key, scope_application, scope_feature, scope_subject_kind, per_user, period, max_calls) values ('e2e.consult.per_user', 'postona', 'consult', 'user', true, 'day', 2); insert into ai_ledger.budget_policies (policy_key, scope_application, scope_feature, period, max_calls) values ('e2e.r1.r1_cap1', 'kabumori', 'r1_cap1', 'month', 1), ('e2e.r1.r1_cap10', 'kabumori', 'r1_cap10', 'month', 10), ('e2e.r1.r1_timeout', 'kabumori', 'r1_timeout', 'month', 5)" >/dev/null
   SHIM_PORT="${AIL_SHIM_PORT:-54398}"
   SHIM_KEY="local-shim-key-$$-not-a-secret"
   ( AIL_PGHOST="$HOST" AIL_PGPORT="$PORT" AIL_PGSUPER="$SUPER" AIL_DB="$DB" SHIM_PORT="$SHIM_PORT" SHIM_KEY="$SHIM_KEY" \

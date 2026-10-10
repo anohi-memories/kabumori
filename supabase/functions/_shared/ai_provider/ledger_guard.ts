@@ -4,6 +4,10 @@
 //
 // Per attempt:  reserve (atomic check-and-hold in the database) -> markSent (only then is the HTTP request allowed)
 //               -> settle (cost + usage + outcome become one append-only ledger row).
+// The send permit is one-time: only the markSent call that moves the reservation from reserved to sent gets
+// may_send true. A duplicate or concurrent call with the same (callId, attempt), or a replay of a sent attempt, is
+// refused, and a markSent whose response is lost (timeout) is treated as "not permitted": nothing is sent and the
+// possibly-sent hold stays counted.
 // Any RPC failure throws: executeAiRequest then refuses to send (reserve / markSent) or leaves the hold for the
 // ledger's recovery (settle), which finalises a sent attempt at its upper bound and never releases it.
 //
@@ -59,6 +63,9 @@ function denyReason(reason: unknown): BudgetDenyReason {
     case "PER_CALL_LIMIT":
     case "ATTEMPT_FINALIZED":
       return reason;
+    // The same attempt is already sent (a concurrent duplicate or a replay): the ledger gives no second permit.
+    case "ATTEMPT_IN_FLIGHT":
+      return "SEND_NOT_CONFIRMED";
     default:
       return "GUARD_UNAVAILABLE";
   }

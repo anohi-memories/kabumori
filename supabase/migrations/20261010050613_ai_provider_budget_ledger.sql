@@ -401,7 +401,9 @@ create trigger reservations_transition before update on ai_ledger.reservations
 --   p: request_id, attempt, provider, model, application, feature, logical_role, subject_kind ('system' | 'user'),
 --      user_id?, brand_id?, amount_usd, hold_seconds? (30..3600, default 900)
 --   -> {allowed, reservation_id?, status?, reused, reason?, policy_key?, level}
--- Idempotent per (request_id, attempt): a repeat returns the same reservation and counts nothing again.
+-- Idempotent per (request_id, attempt): a repeat returns the same reservation and counts nothing again. Only a
+-- still-unsent hold is returned as allowed; a sent attempt is refused (ATTEMPT_IN_FLIGHT), a finalised one too
+-- (ATTEMPT_FINALIZED). The send itself is permitted only by mark_sent's reserved -> sent transition.
 -- ---------------------------------------------------------------------------------------------------------
 create function public.ai_ledger_reserve(p jsonb)
 returns jsonb
@@ -462,12 +464,16 @@ begin
        is distinct from (v_provider, v_model, v_application, v_feature, v_role, v_subject, v_user, v_brand, v_amount) then
       raise exception 'AI_LEDGER_ATTEMPT_CONFLICT' using errcode = 'P0001';
     end if;
-    if v_existing.status in ('reserved', 'sent') then
+    -- Reservation idempotency is NOT a send permit: an unsent hold may be picked up again (whoever then wins
+    -- mark_sent sends), but an attempt that was already sent, or finalised, can never authorise another send.
+    if v_existing.status = 'reserved' then
       return jsonb_build_object('allowed', true, 'reservation_id', v_existing.id, 'status', v_existing.status,
                                 'reused', true, 'level', 'ok');
     end if;
     return jsonb_build_object('allowed', false, 'reservation_id', v_existing.id, 'status', v_existing.status,
-                              'reused', true, 'reason', 'ATTEMPT_FINALIZED', 'level', 'ok');
+                              'reused', true,
+                              'reason', case when v_existing.status = 'sent' then 'ATTEMPT_IN_FLIGHT' else 'ATTEMPT_FINALIZED' end,
+                              'level', 'ok');
   end if;
 
   v_month := ai_ledger.jst_month_start(now());
@@ -636,8 +642,11 @@ $$;
 
 -- ---------------------------------------------------------------------------------------------------------
 -- RPC: mark_sent  p: {reservation_id} -> {status, may_send}
--- The caller sends the HTTP request only when may_send is true. An expired, never-sent reservation is released
--- here instead, so a late caller can never send on a hold that recovery already returned.
+-- The send permit is ONE-TIME: may_send is true only for the call that moves the row from reserved to sent (under
+-- the row lock). A repeated or concurrent call, or any call on a sent / finalised / released row, gets
+-- may_send false, so one reservation can never authorise two HTTP requests. A caller whose mark_sent response is
+-- lost must therefore not send (the row may already be sent and is kept counted). An expired, never-sent
+-- reservation is released here instead, so a late caller can never send on a hold that recovery already returned.
 -- ---------------------------------------------------------------------------------------------------------
 create function public.ai_ledger_mark_sent(p jsonb)
 returns jsonb
@@ -664,7 +673,7 @@ begin
     update ai_ledger.reservations r set status = 'sent', sent_at = now() where r.id = v_id;
     return jsonb_build_object('status', 'sent', 'may_send', true);
   end if;
-  return jsonb_build_object('status', v_res.status, 'may_send', v_res.status = 'sent');
+  return jsonb_build_object('status', v_res.status, 'may_send', false);
 end;
 $$;
 
@@ -978,6 +987,8 @@ declare
   v_fn record;
   v_rpc regprocedure;
   v_extra text;
+  v_set_check text;
+  v_reach record;
 begin
   if current_setting('server_version_num')::int >= 170000 then
     v_table_privs := array_append(v_table_privs, 'MAINTAIN');
@@ -1093,6 +1104,53 @@ begin
       end if;
       if has_function_privilege(v_role, v_rpc, 'EXECUTE WITH GRANT OPTION') then
         raise exception 'AI_LEDGER_ACL_EFFECTIVE_PRIVILEGE: % may grant %', v_role, v_rpc using errcode = 'P0001';
+      end if;
+    end loop;
+  end loop;
+
+  -- 5b. Roles an application role can REACH: by inheritance (USAGE) or by SET ROLE, directly or through a chain of
+  --     SET-enabled grants (PostgreSQL 16+ records INHERIT and SET per grant; an older server falls back to plain
+  --     membership, which is stricter). A NOINHERIT membership confers no privilege by itself, so the checks in 5
+  --     cannot see it, but SET ROLE still lands in the target: the reached role is held to the same rules.
+  --     anon / authenticated must not reach service_role, the owner or a superuser; no application role may reach
+  --     any role that holds authority on the ledger (schema, tables, columns, sequences, helpers, RPC EXECUTE).
+  --     Nothing is granted or revoked to repair a dangerous graph: the migration refuses it.
+  v_set_check := case when current_setting('server_version_num')::int >= 160000 then 'SET' else 'MEMBER' end;
+  foreach v_role in array v_roles loop
+    continue when to_regrole(v_role) is null;
+    for v_reach in
+      select r.oid, r.rolname, r.rolsuper,
+             case when pg_has_role(v_role, r.oid, 'USAGE') then 'inheritance' else 'SET ROLE' end as path
+        from pg_roles r
+       where r.rolname <> v_role
+         and (pg_has_role(v_role, r.oid, 'USAGE') or pg_has_role(v_role, r.oid, v_set_check))
+       order by r.rolname
+    loop
+      if v_reach.rolsuper or v_reach.oid = v_owner then
+        raise exception 'AI_LEDGER_ACL_UNSAFE_ROLE_PATH: % reaches % (owner or superuser) by %', v_role, v_reach.rolname, v_reach.path
+          using errcode = 'P0001';
+      end if;
+      if v_role in ('anon', 'authenticated') and v_reach.rolname = 'service_role' then
+        raise exception 'AI_LEDGER_ACL_UNSAFE_ROLE_PATH: % reaches service_role by %', v_role, v_reach.path using errcode = 'P0001';
+      end if;
+      if has_schema_privilege(v_reach.oid, v_schema, 'USAGE') or has_schema_privilege(v_reach.oid, v_schema, 'CREATE') then
+        raise exception 'AI_LEDGER_ACL_UNSAFE_ROLE_PATH: % reaches % by %, which can use the ai_ledger schema', v_role, v_reach.rolname, v_reach.path
+          using errcode = 'P0001';
+      end if;
+      for v_rel in select c.oid, c.relname, c.relkind from pg_class c where c.relnamespace = v_schema and c.relkind in ('r', 'S', 'v', 'm') loop
+        if (v_rel.relkind = 'S' and (has_sequence_privilege(v_reach.oid, v_rel.oid, 'USAGE') or has_sequence_privilege(v_reach.oid, v_rel.oid, 'SELECT')
+                                     or has_sequence_privilege(v_reach.oid, v_rel.oid, 'UPDATE')))
+           or (v_rel.relkind <> 'S' and (exists (select 1 from unnest(v_table_privs) x(p) where has_table_privilege(v_reach.oid, v_rel.oid, x.p))
+                                          or exists (select 1 from unnest(array['SELECT', 'INSERT', 'UPDATE', 'REFERENCES']) y(p)
+                                                      where has_any_column_privilege(v_reach.oid, v_rel.oid, y.p)))) then
+          raise exception 'AI_LEDGER_ACL_UNSAFE_ROLE_PATH: % reaches % by %, which holds privileges on %', v_role, v_reach.rolname, v_reach.path, v_rel.relname
+            using errcode = 'P0001';
+        end if;
+      end loop;
+      if exists (select 1 from pg_proc f where f.pronamespace = v_schema and has_function_privilege(v_reach.oid, f.oid, 'EXECUTE'))
+         or exists (select 1 from unnest(v_rpcs) x(oid) where has_function_privilege(v_reach.oid, x.oid, 'EXECUTE')) then
+        raise exception 'AI_LEDGER_ACL_UNSAFE_ROLE_PATH: % reaches % by %, which can execute ledger functions', v_role, v_reach.rolname, v_reach.path
+          using errcode = 'P0001';
       end if;
     end loop;
   end loop;
