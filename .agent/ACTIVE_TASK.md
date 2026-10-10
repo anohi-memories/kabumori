@@ -33,18 +33,17 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: common-ai-provider-pr119-c1-r1-r2-narrow-rereview-20261010
+- status: ready
+- task_id: postona-g4-x-oauth-containment-defensive-assessment-20261010
 - start_code: H1
 - finish_code: C1
 - completion_code: C1
-- next_owner: none
-- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- next_owner: codex
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: C1 PASS accepted PR119 R1 P1 one-time send and R2 P2 SET ROLE authority-path correction at exact head 8ef3843f; PR117 protected 2ddae0dc. H1 done/no current assignment. Source merges PR117 then PR119 need separate preflight, no production DB migration/API/deploy authorized; no more broad re-review.
-- recommended_model: Sol（高） (completed)
-
+- allocation: Previous common-AI H1 R1/R2 C1 PASS is completed/preserved. User approved G4→H1 single-task handoff after Claude Opus5.5 cyber safeguard stopped current G4 session. H1 performs NORMAL Codex defensive investigation/review (NOT 臨時実装): source-derived function ACL/exposure + containment impact matrix, operator read-only preflight proposal, optional benign fake-PG permission-denial proof. No exploitation reproduction, actual product implementation, real auth/provider/token/live Supabase, production reads/writes, RPC/Edge/deploy/merge, or connection pause. G4 BLOCKED pending H1 C1. Keep H2 G5 E11 review untouched. Return C1 to explicitly named POSTONA G4 chat.
+- recommended_model: Sol（高）
 ## Codex H2
 - owner: codex
 - slot: codex-2
@@ -99,15 +98,15 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: blocked
 - task_id: postona-x-oauth-preclaim-containment-readiness-20261010
 - start_code: G4
 - finish_code: K4
-- next_owner: claude
+- next_owner: codex-1
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: K4 accepted previous X OAuth v2 source-only PR126 exact 65f49f98dab39b974e6e4b450f376a37f99ef1ac PASS_CANDIDATE, Draft OPEN/UNMERGED, mergeable=false, no production. G4 local PG reproduced possible authenticated direct-RPC X ID preclaim and denial of legitimate X connection; no verified live exploit and not proven token theft/posting. New G4 task is isolated source-only early existing-X containment/permission/read-only production-preflight DESIGN; assess outage/rollout/rollback, fake-DB proof, no G5 PR121/T9 PR124 dependency or production reads/writes/changes, no PR126 modifications. Security review and user approval required before any live grant, RPC, Edge or connection pause. G3/G5/H unchanged. Return K4 to named G4 chat.
-- recommended_model: Opus5.5（高）
+- allocation: Claude Opus5.5 cyber safeguard interrupted this exact defensive containment readiness task; no current matching G4 Report, K4 NOT completed. User approved temporary delegation of narrowed defensive risk/permission/impact assessment to H1. H1 task postona-g4-x-oauth-containment-defensive-assessment-20261010 ready, ordinary security investigation only, not 臨時実装. STOP new G4 work until POSTONA G4 ChatGPT receives H1 C1 and determines next gate. Existing PR126/124/121/122, G3/X operation and G5 unchanged; no runtime change.
+- recommended_model: Opus5.5（高） (on hold, no start)
 ## Claude G5
 - owner: claude
 - slot: claude-5
