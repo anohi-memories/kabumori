@@ -1,3 +1,78 @@
+# G5 — CURRENT TASK — Common account Phase 3b identity/write fence feasibility and source candidate
+
+- task_id: common-account-phase3b-identity-writer-fence-source-20261010
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- priority: critical
+- type: staged feasibility + bounded source-only implementation, fail closed
+- return_to: 共通アカウントG5のちゃ
+- start_code: G5
+- finish_code: K5
+- recommended_model: **Opus5.5（高）**
+- initial_base: fresh origin/main (post-PR112 squash merge `a7c71b037617aba93cf99db3def5d1eb6ea02973`; reverify branch head at startup)
+- source_only: true
+- production_read_or_write_allowed: false
+- production_migration_allowed: false
+- production_edge_deploy_allowed: false
+- actual_supabase_auth_storage_provider_calls_allowed: false
+- feature_activation_allowed: false
+- PR_merge_allowed: false
+- EAS_allowed: false
+
+## Context / goal
+
+PR #112 Phase3a source was independently H2-reviewed PASS and user-authorized squash-merged to main as `a7c71b0`, **without applying migrations or deploying its Edge Function**. Whole-account managed Supabase Auth deletion remains **UNAVAILABLE** behind schema-enforced release gate `state='blocked'`. Review evidence: `.agent/CODEX_REPORT_2.md` top PASS for exact old PR112 head `54b9435b0dcc0d0e79ae6eba4340eee44508141c`. That approval applies to the merged Phase3a code, NOT to opening the release gate.
+
+The next technical blocker is the **GoTrue/Supabase Auth identity-change race after managed-delete intent commits and before Auth Admin deletion**, plus stale-JWT / service writer entrypoints that can recreate service footprints during deletion. A finite re-read or `FOR UPDATE` lock held only during the decision RPC cannot prove safety after RPC commit. Design a true enforceable fence, or clearly prove that available Supabase mechanisms are insufficient and keep the feature blocked. Prioritize safe real-world behavior over an attractive but unproven architecture.
+
+## Startup / ownership / independent worktree (hard stop)
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this TASK and its protected historical Report, `docs/common-account/phase1-lifecycle-foundation.md`, `phase2-service-enrollment.md`, `phase3a-deletion-orchestrator.md` especially §8.5/§9/§12–14, and latest H2 Report.
+2. Use fresh `/Users/yuya/Developer/kabumori-fresh` `origin/main` and create a *new, isolated* G5 worktree/branch. Never reuse or reset G5's old PR112 worktree or other slots' checkout, branch, uncommitted edits or servers; STOP and report if proper isolation cannot be demonstrated.
+3. Fresh-check open PRs and actual changed-file intersection, migration/version reservations and other owners before any source changes. G3 currently owns POSTONA AI-consult production activation including social_mobile_content_settings DB DDL / Edge; it may operate on the **same Supabase project**. Do not conflict with its DB write window, source, production config, or migrations. G1 watchlist, G2 report, G4 Threads/X and H1/H2 Report/TASK remain protected. Never modify them.
+
+## Stage A — feasibility and authoritative contract (required before code)
+
+- Verify **current** official Supabase/GoTrue docs and release changelog covering Admin ban/disable vs OAuth identity linking/sign-in, Auth hooks, identity create/link, transactional behavior, auth.users/auth.identities cascade and session/JWT semantics. Note version/config dependence and any unsupported feature. Do not claim a ban prevents identity additions without independently reproducible real managed-Supabase evidence.
+- Map the exact race: identity mutation before intent, after intent RPC commits, overlapping service-role deletion and Auth Admin delete; old refresh/access tokens; login deletion by the **old deployed** Kabumori endpoint, G4/X `social_and_login` path and operator/direct Auth Admin calls.
+- Inventory concrete writer surfaces (docs §9) by **file/function/role/transaction**: Kabumori `ensure_my_profile` + direct profiles INSERT/RLS; X onboarding `begin_social_mobile_x_oauth_connection` / `x-oauth-connect-user` (cross-owner, DO NOT EDIT); providers, entitlement gates, Storage, session revocation, X and Kabumori producers. Explicitly separate (i) G5-owned guardable writes, (ii) G3/G4-owned work requiring interface handoff, and (iii) managed GoTrue mechanisms requiring disposable real-Supabase proof.
+- Produce a threat/race matrix with old unsafe counterexamples, exact invariants, required writer ordering, DB/GoTrue contracts, guard ownership and fail-closed behavior. Evaluate options: admin ban with proof, supported Auth hook with proof, or managed Auth-side fencing only if safe by real E2E. Unreviewed triggers/functions inside `auth` schema or unverifiable cascade assumptions are NOT acceptable default solutions.
+- Establish what can be proven in a disposable *local* PostgreSQL fixture and what **cannot** be proven without a *real disposable managed Supabase project*. Real project access / creation / calls are NOT authorized by this TASK; leave those tests pending rather than substituting mocks as evidence.
+
+## Stage B — only if Stage A proves a safe, bounded source slice
+
+- Implement **source-only and fail-closed** G5-owned writer guard/proof scaffolding in a new isolated PR or draft PR. If new migration is needed, follow documented `supabase migration new` command after consulting its `--help`; do not edit already applied Phase1/Phase2 SQL or the merged Phase3a migration history in place.
+- Candidate may add guard functions/tests/docs in G5-owned paths (e.g., `supabase/tests/common_account_*`, `docs/common-account/*`, clearly G5-owned RPCs) but **must NOT switch on enforcement**, alter existing production behavior, open `managed_auth_delete` release gate, or modify `auth`-schema-managed objects without proof of compatibility. If a safe guard necessarily modifies app-owned `profiles` policy, X onboarding or X OAuth/Auth code, STOP on that boundary and document a precise separate interface TASK for its owner rather than touching others' changes.
+- Stage B source code must be meaningfully testable in local disposable PostgreSQL + fake auth/session tools. Adversarial concurrent race tests required, including pre-intent identity changes and post-intent identity link, fresh/stale sessions, missing roles, privileged owner roles, RLS effective grants and emergency rollback.
+- If **no practical strong identity fence can be proven without real managed Supabase**, **DO NOT fabricate an incomplete 'ready' solution**. End with a thoroughly bounded feasibility/contract PR (docs + tests/mock harness only) and a written exact real disposable Supabase experiment plan; report `BLOCKED_PENDING_DISPOSABLE_SUPABASE_PROOF` and keep the gate disabled. This is a legitimate task completion.
+
+## Preserved release blockers and safety constraints
+
+- PR112's closed gate and old review safety invariants R1–R4/C1 must stay intact. Nothing here authorizes users' shared account Auth delete. No `ALTER TABLE auth.identities`/Auth triggers, production migrations, real Supabase queries, service-role auth calls, session revoke, Apple/X/Storage provider request, live user data or real credential access.
+- Existing old production `account-delete` hard-delete endpoint remains dangerous until a separately reviewed **fail-closed replacement rollout**. Document that independently. Do not treat merging PR112 as replacing live deployed behavior.
+- X-only / already-ended Kabumori, stale JWT producers, public Web deletion page, operator reconciliation audit and UI, real Supabase E2E, Simulator and EAS remain later release gates. Avoid unbounded changes to G1–G4 apps and separate common AI Provider.
+- Do not touch any active production write window for G3; only local scratch DB, no remote project or provider use. If a source overlap is discovered, stop and provide owner-specific coordination request. Do not create automatic Codex review tasks or use H1/H2; K5 will decide whether one focused security review is justified after bounded implementation.
+
+## Verification and report
+
+- Include exact own changed_files, source HEAD, branch/PR/draft, fresh main and other PR overlap, docs versions and verified vs unverified hypotheses, concurrency/security tests with negative reproductions, SQL/RLS/ACL ownership checks, rollback and `git diff --check`. Preserve relevant Phase1/2/3a unit and disposable SQL suites; rerun what is relevant. Do not claim a real Supabase test, safe Auth identity fence, source merge or production deploy unless actually verified.
+- Commit/push only to new G5-owned branch after freshness/ownership and secret checks; never force push and never self-merge. Update this TASK `## Report` and status `review_required` / next_owner `chatgpt` upon completion, preserving the entire history below.
+- Explicit conclusion: `FEASIBLE_CANDIDATE` (with proof limits), `BLOCKED_PENDING_DISPOSABLE_SUPABASE_PROOF`, or `BLOCKED_CROSS_OWNER`; **never `FEATURE_READY`**. Record remaining blockers, next owner-specific actions and any need for a separate real disposable Supabase authorization. Return to **共通アカウントG5のちゃへ `K5`**.
+
+推薦モデル：**Opus5.5（高）**
+
+## Report — current Phase 3b
+
+- task_id: common-account-phase3b-identity-writer-fence-source-20261010
+- result: pending
+- production_mutation: forbidden
+
+---
+
+# Preserved previous G5 TASK / Report history (immutable below)
+
 # C2 source acceptance receipt — G5 PR112 security review complete — 2026-10-10
 
 - accepted_task_id: common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010
