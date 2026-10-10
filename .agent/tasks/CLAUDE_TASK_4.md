@@ -3,8 +3,8 @@
 - task_id: postona-threads-phase2b-workspace-oauth-candidate-20261010
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: **Opus5.5（高）**
 - start_code: G4
@@ -62,6 +62,149 @@ The next G4 contribution is a verifiable, independent **source-only candidate** 
 - One **consolidated** independent Codex security review is planned later when G5's real writer guard and G4's intended RPC/Vault/cleanup boundaries are in place. Do not request a standalone repeat of PR118 or a new security review purely for mock-only design.
 - At K4, assess public-safe AI Lab diary value separately and preserve any existing same-day entry (do not overwrite another event).
 - **Return results specifically to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ — send K4.**
+
+## Report — postona-threads-phase2b-workspace-oauth-candidate-20261010 (2026-10-10)
+
+- task_id: postona-threads-phase2b-workspace-oauth-candidate-20261010
+- result: **PASS_CANDIDATE（Stage A と Stage B。ソースだけで、適用も到達もできない状態）**
+  - T9 の provisioner と、Threads の begin / consume / complete の候補 SQL を作った。
+  - 型付きの RPC 契約（TS）と、使い捨て DB での証明を作った。
+  - 設計メモを更新した。
+  - 本番、deploy、Supabase / Meta への呼び出し、本物のトークン、merge は、どれも 0。
+- model_used: Opus 5.5（TASK の推奨どおり）
+- workspace: `kabumori-fresh` の新しい `origin/main`（`fc1a1c11`）から作った G4 専用 worktree `/Users/yuya/Developer/kabumori-g4-phase2b-oauth`（branch `claude/g4-postona-threads-workspace-oauth-20261010`）。
+  - G3 / G5 の worktree やブランチには触れていない。
+  - push の前に `origin/main`（`5ef03b71`）を取り直した。関係するパス（migrations、`_shared/social`、x-oauth、`docs/postona`、使った fixture）は基点から変わっていない。
+- PR / head: [#124](https://github.com/anohi-memories/kabumori/pull/124)（Draft）、head `c30f2464`、未 merge。
+- commit_hash: `c30f246409a77080cbc03aef6c4cb72b5481e125`（1 commit）
+- push: 新しいブランチへの通常の push。force push はしていない。
+- deploy / migration apply / production: **0**
+
+### changed_files（8つ）
+- `supabase/candidates/postona_threads_oauth_workspace_candidate.sql`（新規）
+  - **migration ではない**。`supabase/migrations` の外にあるので、どのツールも適用しない。
+  - 前提条件が G5 の T13 関数の実在なので、T13 がない DB には適用できない。
+  - 作る関数は4つで、EXECUTE は所有者だけ。API ロールへの付与は 0。
+- `supabase/functions/_shared/social/threads_connect_rpc_contract.ts`（新規）と `_test.ts`（新規、10件）
+  - どこからも import されない（テストで固定）。このモジュール自体も何も import しない。
+- `supabase/tests/postona_threads_oauth_run.sh` / `_behavior.sql` / `_test_fixture.sql` / `_mock_t13_fixture.sql`（新規）
+  - `_mock_t13_fixture.sql` は **MOCK_ONLY**。
+- `docs/postona/threads-connection-phase2b.md`
+  - §0.9（候補の仕様と検証の範囲）と §0.10（X 側の所見と次の TASK）を追加した。
+  - §0.8・§9・§11（T9 / T10 / T13 は決定済み、T14 / T15 を追加）を更新した。
+
+### Stage A（設計）— 実装した候補の仕様（詳細は設計メモ §0.9）
+- **T9** `private.social_mobile_ensure_personal_workspace(uuid)`:
+  - SECURITY INVOKER で、実行は所有者だけ。最初に自分でも T13 を呼ぶ。
+  - 決定論的な自分用ワークスペース（X や退会と同じ id）を、冪等に作るか検証する。
+  - 次の場合は拒否する（引き取りも移動もしない）: 別のワークスペースを所有、共有、他人のもの、self-service でない、owner でない、退会の tombstone がある。
+  - 利用権と common account は変えない。
+- **呼び出しの順序**（begin / consume / complete で共通）:
+  - ① 入力の形だけを見る（ロックも書き込みもなし）
+  - ② T13 `(auth.uid(), 'x_autopost')`。READ COMMITTED で、ロック（auth.users KEY SHARE → common_accounts → entitlement）は commit まで持つ
+  - ③ ワークスペース → state → `social_accounts` → Vault
+  - provider（Threads）の HTTP は、consume と complete の間で、DB のトランザクションの外。code は再試行しない（PR #118）。
+- **Threads への結び付け**:
+  - state は、本人・ワークスペース・その Threads 行に結び付く。有効期限は10分以内で、消費は1文で1回だけ。
+  - 再接続で別の id なら `THREADS_IDENTITY_ACCOUNT_MISMATCH`。
+  - Vault は参照だけを書く（作成、または同じ参照の上書き）。共有・参照先なし・同名の secret の残りは拒否する。
+  - `publish_enabled=false`、refresh の参照は NULL。
+- **attestation（新しく入れたもの）**:
+  - complete は、Edge のコード交換だけが持つ鍵（Vault の `postona_threads_connect_attestation_v1`）での HMAC-SHA256 を必須にした。対象は state id、provider id、handle、トークンの SHA-256。
+  - これで、authenticated に EXECUTE を与えたあとも、本人が他人の Threads id を結び付ける（squatting）ことができない。
+  - SQL と TS が同じ既知解を出すことを固定した。
+- **T10**: `PROVIDER_CLEANUP_RESULTS`（4種類）と `classifyThreadsCleanup` の、対応付けだけ。
+  - `THREADS_REMOTE_REVOKE_AVAILABLE=false` の間は `confirmed_remote_revoked` を返さない。
+  - 削除の処理と状態機械は実装していない（G5 の所有）。
+- **X の委譲**: 次の TASK として設計した（§0.10）。今回は X の RPC を変えていない。適用前後で X の3つの RPC の定義が同じであることも、runner で確認した。
+
+### tests（独立に実行したもの）
+- 使い捨ての PostgreSQL 17.11（ローカルの Unix ソケット、実行ごとに作る非 superuser の所有者）。
+  - 環境: 本物の migration で作る G5 の世界（X オンボーディング、退会、Phase 1 / service start / Phase 3a）＋ 2a-2 の整合＋ 2a-2。
+  - 同じ runner を2つのモードで実行し、**どちらも PASS**:
+    - `POSTONA_T13=mock`: **MOCK_ONLY**
+    - `POSTONA_T13=g5`: G5 の Draft PR #121 の head `76b50e1e` にある本物の guard 候補と、その fixture（作業用にコピーしたもの。sha256 の先頭 `d6db1c13` / `6573a291`）
+  - 適用の拒否16件。それぞれ固定コードで拒否され、関数は1つも残らないことも確認した:
+    - T13 がない
+    - T13 を API ロールが実行できる（authenticated / anon / service_role / PUBLIC / 所属経由）
+    - T13 の所有者や形が違う
+    - 2a-2 のトリガーや CHECK がない
+    - 別の作成者、superuser、別の所有者の brands
+    - pgcrypto がない、Vault に名前がない、`UNIQUE (state_hash)` がない
+    - 再適用
+  - 挙動（assert 111件）:
+    - API ロール、owner、claims から届くかどうか
+    - T13 の全拒否コード × 3つの RPC。拒否のときは書き込み 0
+    - READ COMMITTED 以外の拒否
+    - g5 モードだけ: ログアウト済みのセッションを拒否する
+    - 退会の tombstone
+    - ワークスペースが冪等であること、X と共有すること（どちらの順序でも）
+    - 他人のもの、共有、self-service でない、owner でない、旧ワークスペース
+    - begin の入力（16種類）と、10分の上限
+    - consume の結び付け（他人、X の state、他の人が始めた state、他のワークスペース、期限切れ、形の不正）
+    - complete:
+      - 入力（15種類）
+      - attestation（7種類）、鍵がない・短い
+      - 再利用、再接続（同じ id / 別の id）、二重接続、Vault の障害の取り消し
+      - 資格情報の形（同名の残り、共有、参照先なし）
+      - owner でなくなった場合
+    - begin と complete の間に、POSTONA のみの終了・利用権の終了・全削除が起きた場合
+    - X との並存
+    - lifecycle の行が変わらないこと
+    - `social_accounts` を書く SECURITY DEFINER 関数のうち新しいものが、ちょうど begin と complete の2つであること
+  - 2セッションの競合7種:
+    - begin どうし
+    - X begin と Threads begin（両方の順序、デッドロックなし）
+    - **ロック順**: T13 で待っている間はワークスペースのロックを持たない。ワークスペースで待っている間はアカウントと利用権を持ったまま
+    - begin と全削除（両方の順序）
+    - complete と POSTONA のみの終了（両方の順序）
+    - 同じ state への complete どうし
+    - 同じ Threads id を2人が同時に complete
+  - 適用したあとに T13 を消すと、3つの RPC はすべて 42883 で失敗し、書き込みは 0。
+- 変異テスト（作業用、コミットしない）: **33/33 を検出**。どれも狙った assert で検出されたことを確認した（guard、T9、結び付け、attestation、資格情報、前提条件、ACL）。
+- TS:
+  - 新しい10件 PASS。PR #118 の14件 PASS。
+  - `_shared/social` と `x-oauth-connect-user` で66件 PASS。
+  - `migration_source_invariants_test` は11件 PASS。
+  - deno check / lint は問題なし。`git diff --check` も問題なし。
+  - secret スキャン: 一致 0 件。テストの値はすべて `fake…`。
+
+### 設計だけで、証明していないもの
+- 本物の Supabase Auth / GoTrue のセッション、PostgREST の claims、本番の ACL（T11 / T12）、本物の Vault（pgsodium。テストは簡易版、T15）、Meta の API、Edge Function（未作成）。
+- **MOCK_ONLY**: 「T13 が最初の書き込みより前に動く」の記録による確認は、mock モードだけ。G5 の guard や共有アカウントの安全性の証明ではない。
+  - ロック順は、競合テストで両方のモードで確認している。
+
+### 見つけたこと（X 側。今回は変更なし。設計メモ §0.10）
+1. X begin は T9 と違う方法でワークスペースを作る（「owner の brand がちょうど1つならそれ」を使い、T13 を呼ばない）。委譲は次の TASK。
+2. **X complete は、本人なら任意の X id とトークンで直接呼べる**（attestation がない）。他人の X id を先に結び付けると、本当の持ち主の接続が `X_ACCOUNT_ALREADY_CONNECTED` で止まる。投稿はできないが、可用性の問題。
+3. X の consume / complete は provider を確かめない。Threads の state を渡しても、全体が失敗して何も残らない（2a-2 の CHECK または本人確認による。テストで確認）。ただし `platform='x'` の条件は入れるべき。
+4. X complete の `failed` の記録は、例外で取り消されて残らない。
+
+### remaining_issues / blockers
+- G5 の T13 は Draft PR #121 のままで、main にも本番にもない。候補は意図どおり、T13 がない DB には適用できない。
+- 2a-2 は本番に未適用。T11 / T12 / T15 の本番の読み取り専用 preflight は未実施。
+- 有効化の migration（3つの RPC を authenticated に付与し、2a-2 のレビュー済み一覧に2つを追加）は、未作成でレビューも必要。
+- attestation の鍵の作成と保管（T14、ユーザーの承認）は未実施。
+- Edge Function、X の委譲、provider-aware cleanup（T10 の DB と G5 の状態機械）、Meta アプリの設定も未実施。
+- `THREADS_CONNECT_PREREQUISITES_MET=false` のまま（変更なし）。
+
+### safety_checks
+- 本番の DB、Auth、Vault、Edge、secrets、Meta への読み書きは 0。
+- 実行したのは、ローカルの使い捨て cluster だけ（終了後に停止して削除する）。
+- G3 / G5 の TASK、worktree、ファイルは変えていない。重なりの確認:
+  - PR #121 / #122（G5）、#123（G3）、#117 / #119（AI provider）と、同じファイルはない。
+  - PR #121 のファイルは、作業用にコピーして読んだだけ。
+- 既存の X の RPC、`threads_connect_contract.ts`、静的なゲートは変えていない。
+- 本物のトークンや secret は使っていない。ステージは明示したパスだけ。
+
+### next_recommendation
+- K4 の判断を経たうえで、次の順序を提案する:
+  1. G5 の T13 を main に入れる（G5 の TASK）
+  2. X の委譲の source-only 候補（§0.10: T13 → provisioner、`platform='x'`、attestation）
+  3. 有効化の migration、Edge、T14 の鍵
+  4. 統合の Codex セキュリティレビューを1回（G5 の本物の guard と、今回の RPC / Vault / cleanup の境界が揃ったとき）
+- mock だけの設計について、単独のレビューは依頼しない（TASK のとおり）。
+- AI Lab 日記の価値は、K4 で別に判断してほしい。
 
 ---
 
