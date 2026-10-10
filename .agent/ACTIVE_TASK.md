@@ -110,15 +110,15 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: done
-- task_id: common-account-phase3d-disposable-proof-pause-restore-preflight-20261010
+- status: ready
+- task_id: common-account-phase3e-e11-offline-review-r1-r5-corrective-20261011
 - start_code: G5
 - finish_code: K5
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 accepted Phase3d two-document offline STOP/TEST/RESTORE plan and risk review, Draft PR128 exact e9244d29ea944156cf1479c0976053d433469e06, source-only and unmerged. Verdict PASS_OFFLINE_DOCS_ONLY / PREPAUSE_BLOCKED. Missing verified dummy OAuth/OIDC identities, E11 independent review and consent, operator/window, Free active slot/cost recheck, photo app pre-pause baseline/backup and restoration process verification. Do NOT pause `anohi-memories` yet, never pause production stock-x-autopost; no live Supabase or feature changes; PR121/122/128 stay Draft. This task completed, next owner none. New work requires new safe TASK.
+- allocation: C2 accepted H2 E11 independent security review CHANGES_REQUIRED, R1 P1 and R2–R5 P2. G5 Phase3e corrects ONLY PR122-owned OFFLINE dry-run runbook/catalog/evidence/checklist/tests, addressing Admin-vs-SQL negative case matrix, lock-probe limits, E4 flow expiry upper-bound proof, actual project/fake-user/consent witness plan, full role/RLS/trigger/Storage evidence. New independent worktree and **new Draft stacked PR onto protected exact PR122 head**, no original PR121/122/128 branch modifications or source merges. Existing family photo app stays active, NO Supabase remote calls, project creation, Auth DELETE, migration, provider, deploy, EAS or feature activation. Return K5; optional ONE narrow Sol（高） H2 corrective rereview after completion if slot available.
 - recommended_model: Opus5.5（高）
 
 ## Deferred
