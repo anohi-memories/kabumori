@@ -1,3 +1,11 @@
+## K1 G1 FINAL — PR120 source PASS / merge HOLD (GitHub mergeability unknown) — 2026-10-10 JST
+
+- **K1 source/UI PASS**, exact PR #120 head `7bf19faf9cf7e7c67fbab987e4f57188518e77d0`, task `kabumori-watchlist-highlight-hybrid-ui-20261010`. Count corrective independently inspected: `remainingGroup` show iff restCount>0, badge count=restCount. Confirmed GitHub Simulator images: 2 featured + 5 remaining shows `5銘柄`, all 3 featured shows NO phantom remainder. Bottom 5 NativeTabs unchanged.
+- Corrective is one fast-forward commit, no new PR (6 screenshots + `watchlist-section.tsx`, pure `portfolio-view.ts` helper and `watchlist-layout_test.ts`). Claude reports **457/457** Deno app tests PASS, src tsc/Expo public config/web export/diff check PASS; simulator 375pt and 402pt fixture captures. ChatGPT did not rerun tests but read PR diff and screenshots. No extra Codex review (isolated low-risk UI).
+- PR #120 remains OPEN / source NOT merged. At final merge gate, REST reported `mergeable=null`, `mergeable_state=unknown` repeatedly despite one prior true response; latest main changed but changed-file overlap on PR UI/test paths is 0 and commit status is success. Preserve user safety: do not force merge without definite fresh readiness; check auto-Vercel Web deploy side effects and explicit gate before next merge attempt. PR head pinned for future expected-SHA squash merge.
+- G1 remains `review_required` / `next_owner: chatgpt` **only for pending merge gate**; code acceptance done, no further G1 code changes requested, do not reassign overlapping G1 source until merge settled. The exact TASK has Final K1 Report; index synchronized. No EAS/TestFlight/manual deploy, paid AI, production DB/Auth/API/Edge changes.
+- Nonblocking later real-iPhone/real-report check; domestic-news feed improvements remain another workstream.
+
 ## K3 FINAL — POSTONA AI consultation V1 production activation PASS — 2026-10-10 JST
 
 - G3 task `postona-ai-consult-v1-production-activation-20261010` ACCEPTED **PASS**, status `done`, next_owner `none`; G3 Report remains authoritative and historical TASK/Reports are preserved verbatim. No new G3 work scheduled yet.
