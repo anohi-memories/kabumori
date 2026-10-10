@@ -1,3 +1,74 @@
+# G1 — CURRENT TASK — Watchlist hybrid UI + in-tab segmented switch (2026-10-10)
+
+- task_id: kabumori-watchlist-highlight-hybrid-ui-20261010
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: normal
+- type: Kabumori native app source-only UI / deterministic view-model
+- recommended_model: **Sonnet5（高）**
+- start_code: G1
+- finish_code: K1
+- return_to: かぶモリアプリG1のちゃ
+- production_mutation_allowed: false
+- db_migration_allowed: false
+- backend_change_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+- EAS_allowed: false
+- allocation_main_sha_reference: 582f40feea7f8a0a80cfa7c10d5e6c7b373a049a (2026-10-10; MUST refresh before work)
+- proposed_branch: claude/g1-watchlist-highlight-hybrid-ui-20261010
+
+## Mission / confirmed user decisions
+Implement the user-approved Kabumori watchlist final visual direction as a **hybrid watchlist within the existing 銘柄 tab**, preserving the canonical portfolio content. The reference is the 2026-10-10 final user-supplied vertical screenshot in the かぶモリアプリG1 ChatGPT conversation (ivory background; segmented ポートフォリオ / ウォッチリスト control; muted coral fall and blue-green news featured cards; compact flat stock rows; varied round fallback avatars). The screenshot is **not a statement of actual data** and is **not currently committed as a source asset**. The detailed requirements below are authoritative if the screenshot is unavailable to Claude. Do NOT fabricate logos, prices, article text or bottom navigation to mimic it.
+
+**CRITICAL, user explicitly emphasized: BOTTOM NATIVE MENU MUST NOT BE TOUCHED.**
+Current real NativeTabs in `src/app/(tabs)/_layout.tsx`: **ホーム / 銘柄 / ニュース / レポート / メニュー** (exact labels, order, icons, styling, selected behavior). Screenshot's bottom menu differs and must be COMPLETELY IGNORED. Do not edit `src/app/(tabs)/_layout.tsx`, tab icon assets, native tab routes, `src/app/_layout.tsx`, or native/navigation configuration. Never create a sixth tab or standalone watchlist tab. Both portfolio and watchlist are subviews in `src/app/(tabs)/explore.tsx`, and bottom selected NativeTab stays 銘柄 in either subview. Do not add "ウォッチリスト" as a bottom menu entry.
+
+## Startup / worktree isolation / collision
+1. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, `.agent/ACTIVE_TASK.md`, this full *current* TASK and existing relevant G1 Report; inspect Git state.
+2. Confirm G1 current status ready and this exact task_id. Start from **fresh** `origin/main` in `/Users/yuya/Developer/kabumori-fresh`; create a dedicated G1 worktree/independent checkout and branch. NEVER reuse/reset/prune/rename/delete another worktree, change another person's unstaged files, branch, process or dev server.
+3. At allocation, fresh open PRs #117 (shared AI Provider), #116 (important-news), #115 (comparison), #112 (G5 common account), #110 (G2 report), #33 (admin), #11/#10/#3 had no overlap with intended G1 UI/view-model/tests. Recheck open PRs, active TASK bodies and fresh main at start and before push. If concrete overlap or unsafe worktree ownership appears, STOP, report, and do not overwrite.
+4. G5/common-account controls Auth/RLS/account deletion; G2 controls report/news generation, newsroom controls domestic-source improvements. This task touches neither. Production and EAS are expressly out of scope.
+
+## UI requirements — exact boundaries
+A. **Shared subview switch:** Existing `explore.tsx` already uses `useState<'portfolio' | 'watchlist'>('portfolio')`, with an interim watchlist. Upgrade it, do not invent a new route. Provide an accessible iOS-style two-segment control [ポートフォリオ | ウォッチリスト] in the 銘柄 screen, with clearly selected state, keyboard/VoiceOver labels, functional switching **in both directions**. Initial selected view stays portfolio. Shared search control opens existing `/search`. Shared header may say 銘柄 as in screenshot, but avoid duplicate competing titles/buttons; keep the portfolio's existing visual hierarchy and asset card/AI card/impact/holdings/CTA content and order intact. Replace obsolete internal ★ウォッチリスト header action or back-link only as needed for the segment pattern, not lower tab layout.
+B. **Featured watch cards:** Above normal rows, show only high-signal tracked watch stocks. 0–3 cards automatically per available latest SAVED close report, NOT fixed 2; no filler cards. Use price-change candidate rule **abs(changePercent) >= 5.0** as initial deterministic threshold (inclusive), no live feed or speculative relative volatility. Sort qualifying candidates deterministically: descending absolute changePercent, tie by ticker; cap 3, with other qualifying watch names retained in compact list and a small 注目 marker if a source-valid reason exists. Muted coral/pink for downward, muted mint for upward. No fabricated price history: screenshot's decorative falling line can be replaced by pure subtle background styling without conveying a fake measured series. A single stock appears exactly once.
+C. **News / event featured card:** Design a distinct muted blue-green news variant, but display it **only if existing saved, verified, correctly stock-linked data contains a genuinely usable news fact/title/link with date**, and only when the UI can open a genuine supported destination. Do not assume `news_ids.length>0` alone proves a headline, cause, impact or article URL. No invented '企業の重要発表', '決算', causal text, direct article link, or placeholder examples in live UI. Prioritize a true verified high-impact material when evidence suffices; otherwise safely display price-only cards (or zero cards). Do not add new news scraping/search, DB joins, paid AI calls or backend API. If the existing source cannot substantiate an actionable news card without boundary changes, implement/test a dormant supported card visual component for later integration and explicitly record news enhancement as deferred, not an active fabricated feature. Only show 'ニュースを見る' when tapping reaches a real relevant item; otherwise omit CTA or route to truthful existing view.
+D. **Compact remaining list:** White/ivory list with soft separators, ~60–66pt rows when possible, round differentiated existing `StockAvatar` deterministic fallbacks (NOT five identical sprouts; NOT invented company trademarks or hand-coded company-specific artwork). Company, ticker, saved close, signed % pill, chevron; correct positive/negative/flat and — for missing. All tracked `tracking_type='watch'` remain visible even when not reflected in a report. Tapping a row still opens the existing `TrackedStockEditor` with edit/delete; existing `/search` registration path works. Don't silently replace row behavior with a non-existent stock detail route. Target buy/sell editing stays available via editor; if list density hides hints, data/function remains intact.
+E. **Date semantics / truthfulness:** Prices and % from saved report's `portfolio_snapshot.watch[].price` (existing `buildWatchRows`), date from `portfolioBasis/portfolioLabels`. Never show design screenshot sample prices, news, percentages, 'LIVE', or claim '今日' unless actual saved basis date equals JST today. On stale report show an explicit basis label such as '10/9 終値ベース', and use date-neutral '注目銘柄' or dated title. If report/stock price missing, fail honest (—; no promotion based on missing percentage), remain editable. No API call on subview switch beyond existing data loading behavior; no realtime quote fetch; no AI generation on rendering.
+F. **UI fit:** Responsive 375pt/402pt widths, warm ivory/soft white, deep-green type, legible contrast, gentle rounding/shadows, generous but compact vertical hierarchy. Clear news vs fall vs rise styles using color + textual badge. Any sorting icon/control visible must actually work (e.g. local stable sort) or be removed; avoid dead UI. If featured count 0, remove featured section entirely and show list. At >3 candidates do not hide remaining names. Use safe area and existing bottom padding; no overlap with existing floating NativeTabs.
+G. **Existing scope preservation:** Do not change logo/ゆめちゃん, portfolio asset botanical WebP, genuine history sparkline, report root navigation, holdings semantics, settings, onboarding, topic views, menu, existing NativeTabs or their tab icons. Avoid dependency additions and avoid feature creep such as watch-tag schema or true stock-detail screen.
+
+## Expected source / test scope
+Preferred: `src/app/(tabs)/explore.tsx`, `src/lib/portfolio-view.ts` (pure deterministic selection helper), focused `src/components/portfolio/*` UI components/styles only as needed, `tests/app/portfolio-screen_test.ts`, `tests/app/portfolio-view_test.ts`, new focused view-model/featured-card tests and `docs/ui-review/` simulator screenshots. `src/app/search.tsx` and `src/components/tracked-stock-editor.tsx` should remain functionally unchanged. No changes to `src/app/(tabs)/_layout.tsx` / `src/app/_layout.tsx` / DB/Auth/RLS/RPC/Edge/migrations/G2/G3/G4/G5 source.
+
+## Acceptance tests / evidence
+- Source/test guard: Git diff of both navigator layout files = **zero**; bottom 5 tabs exact labels/icons/order/selection unchanged; no sixth tab or root watchlist route.
+- Both-segment onPress + accessibility + return transitions, default portfolio, existing PortfolioHeader / canonical portfolio section order/value rules preserved; search/editor paths and pull-refresh still work.
+- Pure deterministic tests: 0/1/2/3/4+ featured, positive/negative, exact ±5%, tie stability, news unavailable/mismatched/stale link withheld, stock never duplicated or lost; no cross-user data, missing current report, stale report, unknown price, price-null and empty watch states.
+- Ensure no arbitrary snapshot news prose inferred from `news_ids` and no sample names/numbers hard-coded in production; screenshot only illustrates appearance.
+- Test at 375pt and 402pt iPhone Simulator with screenshots for portfolio selected, watchlist 0 featured, watchlist 2 featured, 4+ featured (can use separate fixture/debug rig; do not commit production mock); confirm list density, date, NativeTabs and tap targets. If Simulator unavailable, report limitation honestly, provide exact tests run.
+- Run applicable app Deno suite, view-model tests, src TS check, Expo config/static validations and diff check; distinguish pre-existing failures from regressions; never self-certify unrun tests.
+- Do not use EAS build quota, TestFlight, real paid API calls or production writes.
+
+## Completion / handoff
+Create **one** G1 branch/PR (source-only; no self-merge). Preserve existing G1 TASK/Report history below this current task. Add current `## Report` fields task_id, result, changed_files, tests, 375/402 screenshots, exact PR/head, commit_hash, push, deploy=0, remaining_issues (especially news feed constraints), safety_checks (including bottom menu unchanged, cross-slot overlap), next_recommendation. At completion set `status: review_required` / `next_owner: chatgpt`, keep history; report to **かぶモリアプリG1のちゃへ `K1`**. ChatGPT decides independent review: normally not required for isolated low-risk visual work if tests+Simulator PASS, escalate if data/security/navigation boundaries actually changed.
+
+推薦モデル：**Sonnet5（高）**
+
+## Report — current G1 watchlist task
+
+- status: pending
+- result: awaiting G1 implementation
+- merge: NOT AUTHORIZED
+- deploy/EAS: NOT AUTHORIZED
+
+---
+
+# Preserved previous G1 TASK / Report history (read-only; do not rewrite historical text)
+
 # Final K1 — Portfolio asset-card botanical polish PASS / PR #113 merged — 2026-10-09
 
 - task_id: `kabumori-portfolio-asset-card-background-polish-20261008`.
