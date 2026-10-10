@@ -1,3 +1,178 @@
+# H2 — E11 Option D disposable実験前・独立セキュリティレビュー — 2026-10-10 JST
+
+- task_id: common-account-phase3d-e11-optiond-disposable-security-review-20261010
+- result / verdict: **CHANGES_REQUIRED — 実験前の手順・証拠定義をG5で補正する必要あり**
+- real_managed_proof: **BLOCKED_NEEDS_REAL_DISPOSABLE_PROOF / NOT_RUN**
+- status: review_required
+- next_owner: chatgpt
+- completion_code: C2
+- return_to: **共通アカウントG5のちゃ**
+- recommended_model: Sol（高）
+- reviewed_at: 2026-10-10 23:26 JST
+- fresh_main_start: 52e0b6a2116d9bc8ce4b695ebd2b0f3c2b8c5cdd
+- fresh_main_prepublication: 77a627daf03a981d65d3b6d04aa1995866a49451
+- independently_verified_PRs: PR121 76b50e1e03f82faaa3460bab1603afa8fef3ce44; PR122 f17a47e36632fff4a1f4cfb0b860df200e1c99e1; PR128 e9244d29ea944156cf1479c0976053d433469e06. GitHub APIで開始・終了前ともOPEN/DRAFT/UNMERGED、head一致。
+- implementation_commit_by_H2: none
+- changed_files_by_H2: .agent/CODEX_REPORT_2.md; .agent/tasks/CODEX_TASK_2.md; .agent/ACTIVE_TASK.md のH2 status/next_ownerだけ
+- publication: own control files only, GitHub Contents API SHA compare-and-swap; exact returned commit/read-back結果をpublication receiptに記載
+- remote_calls: **0 — Supabase project / Auth / Admin / GoTrue / Storage / providerに対するアクセス数**。Git fetch、GitHub source/metadata/control同期、公開一次資料閲覧は含めない。全ネットワーク0という意味ではない。
+- Auth_DELETE_EXECUTION_ALLOWED: false / executed: 0
+- source_edits: 0
+- deploy / PR merge / production changes / EAS / paid actions: 0
+
+## Publication receipt — origin/main read-back
+
+- Report commit: ddac1661d357221696fe4e75eec6af7b03d12fe6
+- TASK commit: c3fe12fbef9b0d1e28368f3ec17153f99b8ab00c
+- H2 index commit: 91692f34b87797a422d607a06b7e8b6170b6bf39
+- push / delivery: **SUCCESS — GitHub Contents API CAS commits directly on main**, not an unpushed local commit.
+- Fresh origin/main at read-back: 91692f34b87797a422d607a06b7e8b6170b6bf39, all three commits ancestor-confirmed.
+- GitHub main三ファイルの全文が送信内容に一致。現在TASK/indexはreview_required / next_owner:chatgpt。
+- Former Report全文とPreserved previous TASK履歴がbyte-for-byte一致。index diffはH2のstatus/next_ownerだけ。H1/G1–G5/CURRENT_STATE/実装sourceに変更なし。
+- Published diff paths: own H2 Report/TASK/ACTIVE_TASK only; git diff --check PASS.
+- このreceipt追加もReportだけ。追加source/deploy/remote Supabase操作なし。
+
+## 結論と承認境界
+
+既存35テストと31 mutationの成功は、**オフラインの計画器・入力検証・秘匿化・集計器が意図どおり動く**証拠であり、E11実行の安全性やmanaged Supabaseの削除挙動の証拠ではない。現在executorが無いこと、実行不可を明記していることは安全な設計である。
+
+E11現行手順には下記 **P1 1件 / P2 4件** がある。G5に限定した手順・証拠定義の修正と再レビューが必要。今回のレビューをE11のindependent security approval参照にして実行を開始してはいけない。新規使い捨てproject、偽ユーザーごとの破壊同意、ユーザーのE11承認、補正版の独立レビューは別々に必要。
+
+**家族写真アプリは止めない。PREPAUSE_BLOCKED維持。Option D本番採用・managed_auth_delete gate開放は不承認のまま。** 以前のPR112 PASSは再審査しておらず、今回のE11に流用できない。
+
+## 指摘（実装修正なし、担当G5のみ）
+
+参照は以下の固定head上のrepository-relative path/line。mainの行番号や変動するPR headに読み替えない。
+
+### R1 [P1] E11の成功系だけでは、Adminとの安全上重要な差を判定できない
+
+PR122 `docs/common-account/phase3c-disposable-supabase-proof-runbook.md:273–283`、`supabase/tests/common_account_disposable_e2e/catalog.ts:184–197`。
+E11はDELETE権限、成功後のtable count、refresh拒否、GET /user、automatic-link latchのみ。E10は **Admin削除後のidentity_linked保存**だけ、E9も **Admin削除後**のstale-token replayで、SQL削除側のaudit/Storage/PostgRESTとの比較になっていない。E9は期限切れtokenをUNKNOWNにして再取得するため、期限切れJWT拒否の対照例もない。
+
+実験前に、同じschema/configで独立した偽ユーザーを用いる次の比較行とPASS/FAIL/UNKNOWN基準を定義する必要がある。
+
+- Admin hard-delete vs SQL-delete: deletion auditの有無、既存identity auditの存続、subjectが消えた後も相関を確認できる証拠。SQLでGoTrueのuser_deletedを自動生成すると仮定しない。
+- Storage所有objectあり / なし、FK/trigger拒否、権限拒否、lock/statement timeout、commit前rollback、commit応答喪失を分ける。失敗は全変更rollbackと元ユーザー・関連行不変をread-back。commit成否不明は停止・照合し、盲目的な再DELETE禁止。
+- SQL削除後にも、期限内のold JWT、明示的なexpired JWT対照、persisted refresh、guarded/unguarded PostgREST、Storage upload/read-backを比較する。GET /user拒否はStorage拒否の証拠ではない。
+- 各relationは前もって非ゼロの偽fixtureを作る。削除後に空のsession JOINからrefresh=0と判断しない。必要な対象識別子/分母を削除前に確定し、証跡には秘匿化したcountsだけを保存。
+- 欠落・読取不能・予期しないcascadeはUNKNOWN/FAIL。単にusersが消えたことやcatalogが不変なことから全cleanup成功としない。
+
+これは実プロジェクトで削除不具合を再現したとの主張ではなく、**独立承認前の必須比較ケース欠落**である。
+
+### R2 [P2] 現行E11のrow-lock probeを、lifecycle決定と削除がatomicである証拠として使えない
+
+PR122 runbook:279–282はauth.users FOR UPDATE→DELETEで、Phase3aのfull authorization/required checkpoint/provider snapshot/lease検証を同じtransactionに組み込んでいない。`catalog.ts:188`は「under the lifecycle lock」と説明するが、実際の操作はlogin row latchだけである。
+
+対照: main `20261001150000_common_account_lifecycle_foundation.sql:364–393` は login KEY SHARE/UPDATE→common_accounts UPDATEの固定順。main `20261009120000_common_account_deletion_completion.sql:367–428` はmanaged stepでexclusive login lock→settings SHARE→owned operation→gate→full authorization→provider/checkpoint snapshot。しかしRPC終了時にlockが解放される。PR121 guard `20261010051938_common_account_service_write_guard.sql:121–157` はlogin→account→entitlement→fresh session read、SQL deleteやGoTrueをfenceしない。
+
+G5はE11の結果名を「platform permission/cascade/row-latch probe」と限定し、Option Dの完全性証明とは分離すること。将来の追加fake-only proof案には、先にidentityがcommitした場合とDELETE側が先の場合、manual/automatic/PKCE未完了callback、PostgREST writerの両順序、cross-role実行、full decision後にlockを解放しないことの証拠が必要。gateは本番・通常candidateでblockedを維持し、proof専用の解除DDLを無断で追加しない。
+
+### R3 [P2] E4の「最後に成功した待機時間」は安全なsettle上限にならない
+
+PR122 runbook:187–189、`catalog.ts:109–110`。
+240/310/600秒のうち最長の成功例はflow寿命の**下限**である。例:真の期限が900秒でも600秒成功という同じ結果になる。600秒に少し足して待つだけでは残存flowをfenceできない。`evidence.ts:16,55–57` はmitigationラベルの存在でpending reviewへ進むが、上限の測定値自体は検証しない（releaseを開くコードではない）。
+
+A+Bを提案する前に、対象versionの実expiry設定/ソースによる上限＋境界を越えたcallbackの期限切れ確認＋request-duration/clock-skew余裕を証拠化すること。不明ならA+BはBLOCKED。「manual linkingをoffにした」という値だけで、既に開始済みのflowが取消されると仮定しない。revoke sessions→ban→既存flow/in-flightのdrain→exclusive recheckという順を維持する。
+
+### R4 [P2] validate成功は実行先・偽ユーザー・前提実験の実証ではない
+
+PR122 `guard.ts:71–115,118–161`, `guard_test.ts:150–173`。
+固定production ref拒否、外部marker、台帳、typed confirmation、E11の二つの承認参照を確認する点は良い。一方、new/fake-only/clone=falseと承認参照は**入力された宣言**で、作成日/実接続先/DB user id/fixture provenanceの検証はしない。fake user idはrequestに無く、E1/E8/E9/E10結果も入力に無い。独立probeでE11単独＋FAKE承認文字列がallowed=trueとなることを確認。必ずexecution=NOT_AVAILABLE_IN_THIS_STAGEなので現行の実行経路漏れではない。
+
+G5の将来manual checklistに、作成した新規projectと実接続先の照合、family/historical/productionを含む保護対象との不一致、偽ユーザーのrun別allowlist・作成記録、DELETE対象が1行のこと、承認が実在し今回run/scenarioを含むこと、E11 prerequisite完了の人間による確認を明記する。将来executorを作るなら同じ検証を再レビューする。今回marker/台帳/承認を偽造して実サービスへ接続していない。
+
+### R5 [P2] catalog指紋だけではcross-role/trigger/Storageの復元や同一性を確認できない
+
+PR122 `catalog_fingerprint.sql:23–36,49–61`。
+triggerは名前/有効状態/関数名だけ、関数body hashはG5/Auth helper群のみ。managed trigger関数body、RLS policy、schema/table/column grant、Storage構造/権限/物理object、default privilegesが比較対象外。current_userのSELECT/DELETE可否だけではGoTrue/Auth admin/Storage adminやAPI child roleの挙動を代表できない。
+
+指紋は有用な**限定catalog read**として保持し、E11前後の必要オブジェクト定義・owner・SECURITY DEFINER/search_path・実効/継承ACL・RLS・Storage残存・関連row countsを別read-backで補う。rollback後のcatalog一致だけを「全サービス/全Auth元通り」としない。実FK/cascadeについてunknownなら試験を停止する。managed schemaを望む結果に合わせて書き換えない。
+
+## TASK質問1 — SQLとAdmin、どこまで証明できるか
+
+| 項目 | sourceで確認できること | 新規managed disposableで必要なこと |
+| --- | --- | --- |
+| Admin hard-delete / SQL | pinned GoTrue admin.go:551–610はaudit→hard deleteを同一transactionで行う。SQL DELETEはDB側FK/triggerを実行するが、GoTrue呼出し/audit生成そのものを経由しない。soft deleteとは比較しない | managed version/config、Auth所有者/privileges/全cascade/trigger、失敗時実rollback、SQLとAdminの差 |
+| provider revoke | pinned Admin hard-deleteに外部provider revokeは無い。SQL cascadeも外部grant失効ではない。Phase3aはAppleを別owned step/checkpointで処理 | fake provider cleanup/revokeの別契約・証拠。今回実provider callなし |
+| sessions / refresh | issued JWTとsession/refreshは別。FKがcascadeならrows消失はDBでmodel可能 | managed refresh拒否、session row shape、revocation/logging、期限内/期限切れJWTと各サービスの差 |
+| Storage | users DELETE/row cascadeと画像の物理削除は別。公式資料はowned Storage objectsがAuth削除を阻むと記載。repoはAPI inventory/remove/postflight方式 | managed owned-object制約/Storage policy/API、旧JWT upload、物理object cleanupと復元 |
+| lifecycle/cross-service | Phase1 common_accounts→auth.users CASCADE、entitlements→common_accounts CASCADE、operationsはraw idを消して残すshadow trigger。Phase3a completedにはintent+checkpointsが必要 | managed cascade順・cross-service orphan、role権限。削除された新identityのrevoke証拠を後から復元できると仮定しない |
+
+ローカルPGで証明可能なのは、選んだfake schemaのtransaction/row lock/FK/ACL/rollbackのみ。GoTrue/Storage/JWT provider挙動やmanaged運用契約は証明不能。**今回新たにPGを起動したりauth.usersをDELETEしていない**。既存local proofはG5/過去H2報告と明確に区別する。新規managed project未作成、E1–E12実験結果は全てNOT_RUN。
+
+一次資料（公開文書/公開sourceのみ、プロジェクト接続0）:
+- [Supabase Managing user data](https://supabase.com/docs/guides/auth/managing-user-data): issued JWTがexpiryまで有効、owned Storage objects時の削除制約、sensitive operationsでsession_id実在確認。
+- [Admin deleteUser](https://supabase.com/docs/reference/javascript/auth-admin-deleteuser): 管理APIの契約。SQL権限があることから同等の管理API契約があるとは言えない。
+- [GoTrue pinned admin.go](https://github.com/supabase/auth/blob/ce9a8ee/internal/api/admin.go#L551-L610): auditとhard-delete。実deployment versionとの一致は未確認。
+- [GoTrue pinned identity.go](https://github.com/supabase/auth/blob/ce9a8ee/internal/api/identity.go): linkIdentityToUserにban check無し。公開sourceを独立取得して確認。
+- [GoTrue pinned external.go](https://github.com/supabase/auth/blob/ce9a8ee/internal/api/external.go#L152-L239): provider exchange→DB transaction、manual/automatic分岐、PKCE flow更新。外部provider側の副作用はDB rollbackで巻き戻らない。
+- [GoTrue pinned auth.go](https://github.com/supabase/auth/blob/ce9a8ee/internal/api/auth.go): requireAuthenticationのbanとuser/session存在確認。
+- [GoTrue pinned flow_state.go](https://github.com/supabase/auth/blob/ce9a8ee/internal/models/flow_state.go): user_id/linking_target_id、provider tokenとexpiry基準。
+- [GoTrue audit model](https://github.com/supabase/auth/blob/ce9a8ee/internal/models/audit_log_entry.go): DB auditはtransaction内、外部log emissionとは別。失敗リクエストのlogをcommit証拠にしない。
+- [PostgreSQL row locks](https://www.postgresql.org/docs/current/explicit-locking.html): UPDATEとKEY SHAREの競合。fake DBの議論をmanaged runtime保証に拡張しない。
+
+公開sourceはce9a8eeだけを固定確認。PR121にある古いGoTrue複数version比較や「現在latest」の全件再検証はしていない。source以外のmanaged Auth schema/version/support stanceはUNKNOWN。
+
+## TASK質問2 — lock/OAuth/privilege境界
+
+FOR UPDATEを保持した同一transaction内なら、同じ既存loginへのFK identity insertとの競合をDBモデルで説明できる。ただし「待つこと」だけでは十分でなく、**wait後の新snapshotで全checkpoint/providerを再評価すること**が必要。先にlinkがcommitしたidentityを確認せずSQL削除すると、DBでは跡がcascadeし、provider側grantだけ残る。callbackはprovider exchangeをDB transactionの前に行えるため、DB側link失敗でも外部grantの不存在は証明できない。
+
+PKCE callbackとcode exchangeは別transaction。token発行拒否hookだけで既にcommit済みのidentityは戻らない。pending flow/target id/token/期限のread-backを追加し、old targetの拒否と、新規signupが別user idを作る可能性を区別する。同一row fenceを「全将来signup停止」と解釈しない。
+
+PostgRESTはauth row KEY SHARE→account UPDATE→entitlement UPDATEの固定順を維持。managed GoTrue自身のuser/identity/session/flow-state lock順は別で、deadlock/timeout/role visibilityを新規managed projectで観測しなければ未証明。RLS-bypass/owner privilegeとAPI ACLは別。postgresが操作できてもauthenticatedやservice_roleへ同じDELETE権限を与える提案にはならない。T13はowner-only、empty search_path、READ COMMITTED、session read失敗時fail-closed、まだunwired。managed_auth_deleteはCHECKでblockedのみ。
+
+## TASK質問3/4 — 前提と実験順序（提案、実行許可ではない）
+
+現行35testsはdefault deny/missing marker/consent/approval/overrideとUNKNOWN処理を確認する。ただしR1–R5を埋めるまでE11 user consentを実行可能として要求しない。
+
+推奨するG5の補正版順序:
+1. 停止前にオフライン補正・独立レビュー・operator/fixture/復旧準備を完了。
+2. 別承認で作成するNEW projectの同一性とfake-only provenanceを照合。E1 baseline（version/config/roles）を確認。実expiry/auditが未確認ならE1を暫定/UNKNOWNのまま保つ。
+3. E8 Admin baseline、E10 durable auditを先に証拠化。未知cascade/owned-storageエラーは先に分類・停止。必要なfake fixtureを分離。
+4. E12のguard/test-writer setupとpositive casesを先に行い、E9を実行可能にする。E9はE12に依存しており単純E1→E12番号順では進めない。E12のgateを一時開けるnegative 6fは別承認/別fake user/DDL復元証拠で隔離し、通常gateはblockedを維持。
+5. E1/E8/E9/E10の必要結果とschema/ACL確認をoperatorがread-backしてから、R1/R2を補ったE11専用同意で試験。E11 SQL側のJWT/Storage/audit対照を追加。失敗は先へ進めずUNKNOWN/FAIL。
+6. A+Bは別branchのE2–E7。E4 preban開始/postban callbackを避けず確認。E1 expiryは成功delayだけでは埋めない。revoke→ban→確実な上限drain→exclusive final decision→Adminを評価。Dが自動的に優位とは結論しない。
+7. 失敗/timeout/接続切断はtransaction rollbackまたはcommit成否のreadonly照合、target/user/objects/operation/session/policy/hookのpostcondition記録。既に削除したfake loginや外部grantはDB rollbackだけで復活しない。cleanupは各fake fixtureの所有範囲のみ、再実行には新run/scenario同意。証跡保存後、復旧優先。
+
+## TASK質問5 — 家族写真の停止/撤収/復旧
+
+PR128のP1–P9/R1–R8凍結、別々のpause/create/destructive/E7/E11同意、T0+60h新規実験禁止/T0+66h未復旧通知、早期FAIL/UNKNOWNで撤収という設計は妥当。E11の準備未完了を停止中に解決しようとしない。
+
+新規project作成前に写真projectの実identity、無料枠/費用0、pause/resumeが可能、担当者/連絡先、login→写真一覧→表示→upload→再表示と基準枚数、バックアップ選択をユーザーが確認。今回は実状態未確認で「ACTIVE実読取済」とは記録しない。
+
+撤収は新試験停止→安全なrollback/不明結果記録→秘匿化証跡確保→exact new disposable identity再照合→削除またはpauseでfree slotを確実に空ける→family Resume/healthy→**本人の**実機login/表示/upload/read-back/枚数比較。DBのみのbackupを物理写真backupと同一視しない。live/家庭projectを取り違えない。teardown失敗やslot空き不明は停止・連絡、勝手な課金やproduction pauseで回避しない。未復旧を「完了」にしない。今回はpause/create/delete/resumeすべて0。
+
+## 独立テストと限定probe
+
+PR122 exact checkoutで実行:
+- `deno test --no-config --allow-read supabase/tests/common_account_disposable_e2e/` → **35/35 PASS、型checkあり**。net/env/run permissionsなし。
+- `python3 supabase/tests/common_account_disposable_e2e/harness_mutations.py` → **CONTROL PASS / 31/31 detected**。提供scriptがscratch copyのみ変更、Denoはnetwork denied。
+- reviewer-only `offline-review-probes.ts`（repo外）→ **3/3 PASS**:
+  1. E11単独＋FAKE参照文字列でallowed=true、executionはNOT_AVAILABLE_IN_THIS_STAGE。
+  2. E4 LINKED＋settle mitigationラベルだけでpending independent reviewとなる。実上限の検証をしたわけではない。
+  3. E11節にrollback/SQL-side audit/Storage-owned rejection branchが明記されていないことを確認。
+- 全review checkoutのproduct git status clean / git diff --check PASS。report publication以外のtracked source変更0。
+- 新規PG実行0、managed Supabase実験0。過去35tests/G5 PG proofを今回runtime再現と呼ばない。
+- retained reviewer scratch: /private/tmp/h2-e11-offline-20261010.ppqZMt （固定head checkoutsとprobe、秘密値なし）。
+
+## 競合・履歴・安全
+
+Fresh mainは途中でPR117共通AI source mergeに進んだが、本task/Report/該当schema/固定headの変更なし。H1防御監査、G1〜G5、G2 PR110修正、PR112は変更/再審査していない。元formal repoの未追跡supabase/.temp/はそのまま、checkout/reset/stash/stage/既存worktree/server操作なし。
+
+- prior Report history: このsectionより下をbyte-for-byte保持。
+- prior TASK history: Preserved previous以下をbyte-for-byte保持。
+- control index: H2のstatus/next_owner以外はbyte-for-byte保持。
+- product code / SQL migration / policy / OAuth / Vault / secrets / settings / Cron / Storage changes: 0
+- real Auth deletion / project operations / provider APIs / paid billing / X / Push / OpenAI / EAS / Edge deploy / PR merge: 0
+- apps/admin / HANDOFF / other workstream changes: 0
+- secret exposure: 0
+
+## next_recommendation
+
+**共通アカウントG5のちゃでC2**。G5の未割当確認後にR1–R5のrunbook/catalog/checklist/evidence限定補正を別TASKとして判断し、補正版E11を再レビューする。H2は独断でG5 TASKを割り当てず、sourceを書き換えず、実行承認を出さない。写真projectを停止せず、PREPAUSE_BLOCKEDとmanaged Auth gate BLOCKEDを維持する。
+
+---
+
 # H2 — PR #110 B1-R1/B2-R1/B3-R1 final exact-head review — 2026-10-10 JST
 
 - task_id: kabumori-market-report-pr110-b1r1-b2r1-b3r1-final-review-20261010
