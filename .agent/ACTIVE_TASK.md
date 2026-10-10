@@ -97,14 +97,14 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: postona-threads-phase2b-source-preparation-20261010
+- status: ready
+- task_id: postona-threads-phase2b-workspace-oauth-candidate-20261010
 - start_code: G4
 - finish_code: K4
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: K4 PASS: PR #118 3-file standalone Threads connection contract and docs, accepted exact head 9b71757068271cce38cedda12f6d74e705ac13ca, squash merged b49306c0d7486adb9afdb9ae4e42defa33ace07f; no runtime imports, static disabled gate. No Codex rereview now (defer to security-critical live RPC/OAuth integration). G5 T13/T9/T10 coordination and Meta app verification needed before next G4 task. Production Phase2a2 migration not applied; no connect/deploy.
+- allocation: T9/T10/T13 shared design agreed at docs/postona/threads-g5-t9-t10-t13-shared-contract-20261010.md. G4 prepares independently isolated, disabled source-only provider-neutral personal workspace and Threads begin/complete OAuth candidates/tests. T13 real guard remains G5-owned/in-progress; T10 lifecycle remains G5-owned. No G3/G5 changes, live Threads, migration apply, production/provider calls, merge or deploy. Protect static gate=false and X behavior. Return K4 to explicit G4 chat.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
