@@ -1,3 +1,78 @@
+# G5 — CURRENT TASK — Phase 3d offline E1–E12 execution-window and photo-app restore preflight
+
+- task_id: common-account-phase3d-disposable-proof-pause-restore-preflight-20261010
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- priority: critical
+- type: final offline operating preflight, NO live calls, NO service outage
+- recommended_model: **Opus5.5（高）**
+- start_code: G5
+- finish_code: K5
+- return_to: 共通アカウントG5のちゃ
+- no_paid_plan: true
+- source_only: true
+- remote_supabase_reads_writes: forbidden
+- pause_restore_any_project: forbidden
+- create_delete_any_project: forbidden
+- delete_ban_any_real_or_disposable_auth_user: forbidden
+- deploy_merge_feature_activation: forbidden
+
+## Purpose, user decision and existing proof
+
+User approved a **FREE-tier-only** approach and explicitly accepts **up to roughly 2–3 days of family photo-sharing app downtime**, but wants the app fully restored as soon as tests complete. No Pro subscription. Do not consume the potential downtime during task preparation.
+
+Snapshot verified in orchestration: same Free organization has two active projects, POSTONA/Kabumori production (`stock-x-autopost`) and family photo sharing (`anohi-memories`), plus an **INACTIVE historical `common-account-gateb-20261005`** project. This snapshot may change: read authoritative statuses and cost again only as a later separately authorized operational step. The inactive historical project is NOT the fresh, clean disposable experiment required by PR121/PR122; do not restore, alter or reuse it. None of these projects is available to G5 for testing in this task.
+
+G5 Phase3b Draft PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44` contains an **unwired** source-only T13 write guard and an identity race counterexample. Phase3c Draft PR122 `f17a47e36632fff4a1f4cfb0b860df200e1c99e1` contains 12 E-tests, dry-run-only guard, evidence model and exact runbook `docs/common-account/phase3c-disposable-supabase-proof-runbook.md`. Both remain DRAFT, unmerged, unapplied, and original Phase3a managed Auth deletion remains `blocked`.
+
+## Required first checks
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, own current G5 TASK and all its Reports, recent H review, G4/G5 Threads T9/T10/T13 contract. Fetch immutable PR121/PR122 heads above to read (not edit) `docs/common-account/phase3b-identity-writer-fence-feasibility.md`, `docs/common-account/phase3c-disposable-supabase-proof-runbook.md`, operator checklist and `supabase/tests/common_account_disposable_e2e/` CLI tests. Do not accidentally assume PR121/PR122 code is on main.
+2. Use `/Users/yuya/Developer/kabumori-fresh` fresh origin/main and create a NEW isolated worktree/branch. Never touch prior G5 PR121/122 worktrees, other slots' branches, uncommitted files or servers. Check fresh open PR scopes, migrations and actual changed-file ownership. STOP on overlap.
+3. Do not call live Supabase or provider APIs even read-only, do not pause a running app, create projects, use service-role keys, set secrets, Auth Admin, Meta/Apple/X calls, Edge/migration/EAS, billing or feature activation. No user data or photos. No automatic timer/automation claim of restoration.
+
+## Deliverable A — one precise STOP / TEST / RESTORE operator checklist
+
+Add **only new G5-owned docs**, e.g. `docs/common-account/phase3d-family-photo-pause-restore-execution-window.md`. Do not edit PR121, PR122, G4/G3/G1/G2/H1/H2, `docs/postona/*`, SQL migrations or runtime. Write an operational schedule **separate from PR122's experiment details**:
+
+- BEFORE pause: user-visible confirmation of the exact family-photo project identity and availability impact; check last good app login + view + upload/read-back, documented backup/recovery limitations, active-state and subscription/free active-slot cap, current monthly project cost, any project-pause/restore limitations, and saved restore path. These checks happen in a future authorized window, not during this task. Never assume screenshot/upload works without testing it.
+- A short, frozen readiness checklist: G5 E1–E12 protocol executable by a named future operator, dev/test dummy provider account & OIDC prerequisites, secrets handling, manual consent strings for each destructive E-test, E7 config and E11 SQL Auth-delete review separately gated. Identify tests that cannot realistically complete within a ~72-hour downtime without provisioned identity providers, rate-limit headroom or managed GoTrue behavior.
+- Decision tree: **GO** only after all offline prerequisites and real-operator availability are present; explicitly approve pause then check `anohi-memories` is PAUSED; verify capacity/cost before create a NEW disposable project. No paid plan. Abort if no free slot or any uncertainty about project identification, cost or restore availability. Never pause production Kabumori/POSTONA. Never activate old `common-account-gateb` for proof.
+- During tests: collect only redacted evidence and catalog fingerprints per PR122, ALL identity/Storage/DB operations only in the disposable project's dummy fixtures, never family project. E1 observation first and E2–E12 only on separately user-consented runs; E11 additionally needs independent security review and explicit policy authorization for the experimental SQL DELETE (does not approve production Option D). Unknown/failed result halts unsafe advancement, not falsified PASS.
+- RESTORE is the HIGHER priority: as soon as useful tests finish OR there is a blocking test or approaching 72 hours, terminate all new experiments; decommission disposable project (subject to safe id/evidence/teardown confirmation) to free the slot, initiate restore of the exact family photo project, verify ACTIVE_HEALTHY plus actual family app login/photo list/view/upload and that no photos were deleted; record a clear failed/blocked report if app is not healthy, and prioritize its recovery. Do not promise unattended timer-based recovery or 2–3-day definite completion.
+- If project deletion or slot release is not timely, STOP and show user the blocker promptly; no free-slot assumptions, no upgrading to paid tier. Plan fallback with explicit user decision rather than suspending production or paying.
+- Enumerate what can be independently observed by GitHub and Supabase connector vs what requires the user to test the actual app; no fabricated device test.
+
+## Deliverable B — offline dry-run and practical proof-readiness assessment
+
+- Use fake fixtures with PR122 CLI `plan`/`validate` and 35-test suite if accessible without editing PR122. Verify expected denial without the external marker/consent; no remote/network permissions. Do not implement a live executor.
+- Produce a concise risks / prerequisite / `ready|not_ready|unknown` matrix, with real provider test-account availability, user manual timing, project billing, free slot, pause/restore limitations, and GoTrue identity-link race. If any required provider/setup is unknown, report it clearly and do **not** recommend pausing the photo app yet.
+- Record a separate precise "operator handoff" that future ChatGPT/Claude can follow, explicitly separating (i) current offline readiness, (ii) approval to pause photo project, (iii) approval to create/test project, (iv) per-scenario destructive user consent, (v) immediate restore commitment at end. The prior user approval of the general free-tier plan is NOT an unlimited permission to conduct E2–E12 deletions.
+- Keep dates in JST and the historical photo-app project name only, avoid printing reusable production project refs, URLs, tokens or account details.
+- Run `git diff --check`, new doc consistency review and existing dry-run Deno checks where available; do not claim to have run tests you could only inspect. Keep changes to **new docs, maximum 2 files**; no dependencies and no changed runtime/SQL/security objects.
+
+## Report / completion
+
+- Push one new isolated Draft PR only if source changes, do NOT merge. Preserve original historic G5 TASK/Report and PR121/122.
+- Report `task_id`, result `PREPAUSE_READY` or `PREPAUSE_BLOCKED`, all missing external prerequisites, changed files, actual tests, commit SHA, PR draft head, ownership/overlap, and `remote_calls:0`, `photo_app_paused:false`, `projects_created:0`, `production_mutation:0`.
+- Set this task `review_required` next_owner `chatgpt` and return `K5` to 共通アカウントG5のちゃ. No H1/H2 review for pure offline prep. Any real approval action becomes a new user-visible bounded step.
+
+推薦モデル：**Opus5.5（高）**
+
+## Report — Phase 3d
+
+- task_id: common-account-phase3d-disposable-proof-pause-restore-preflight-20261010
+- result: pending
+- remote_calls: 0
+- photo_app_paused: false
+- projects_created: 0
+
+---
+
+# Preserved complete G5 prior K5/Phase3c/Phase3b/Phase3a TASK and Report history (immutable below)
+
 # K5 Phase 3c — offline proof readiness accepted, real-project validation NOT authorized — 2026-10-10 JST
 
 - task_id: common-account-phase3c-disposable-supabase-proof-readiness-20261010
