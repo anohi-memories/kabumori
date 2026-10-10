@@ -87,14 +87,14 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
+- status: done
 - task_id: postona-x-autopost-production-readiness-20261010
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA G3のちゃ（AI相談V1本番接続担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: After accepted G3 AI-consult V1 K3 PASS, assign separate source-only Stage3B X autopost production readiness. Live DB lacks PR41's 20261006160000/160100/160200 migrations. G3 offline prerequisite/ACL/RLS/tenant test, publish-consent policy, G5 x_autopost entitlement gap and G4 X OAuth/T9 dependency matrix, migration rollout plan only. NEW independent G3 worktree. No production writes, actual X posts, publish enable, scheduler, OAuth/Edge deploy, EAS, PR merge or touching G4/G5/PR123. G5 draft T13/Auth/managed deletion remain blocked and require own separate approval. K3 after local proof; then decide G5 handoff/security review and independently approved real X pilot.
+- allocation: K3 accepted G3 Stage3B X autopost rollout readiness as PASS_PREPARATION_ONLY / PREPARED_BLOCKED_ON_G5. Draft PR127 exact 4b0278228e726b65d782e9b231eb6fe84d9173ad contains only 5 new docs/offline-test and read-only inventory files; no source/SQL migrations/Edge changed or PR merged. G3-reported local PG O1/A1-A3/R1-R4, six existing pilot parts, ACL adverse, Deno 808/808; live read-only Supabase independently confirms 160000/160100/160200 not applied, publish authority/reader/check absent, AI consultation table and Stage3A refresh table present; x-test-post v141 unchanged. NO live write/deploy/X post/enable/EAS. Blocking G5 active x_autopost entitlement (claim/check/set), service deletion FK cleanup/T13; G4 real X OAuth account identity/T9 and current preclaim containment; G3 future booking generation and four-file deployed-bundle ownership diff. No Codex rereview of offline candidate; one integrated Sol（高） security review before actual production publish authorization. PR127 OPEN DRAFT UNMERGED, no new G3 task; next work driven by G5/G4 owner handoff with separate approval gates.
 - recommended_model: Opus5.5（高）
 ## Claude G4
 - owner: claude
