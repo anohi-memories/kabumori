@@ -3,7 +3,7 @@
 - task_id: common-account-phase3c-disposable-supabase-proof-readiness-20261010
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: critical
 - type: offline proof plan, safe test harness and exact go/no-go criteria ONLY
