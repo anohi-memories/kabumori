@@ -1,3 +1,13 @@
+## Common AI Phase1a/1b SOURCE MERGED — PR117 → PR119 — 2026-10-11 JST
+
+- User approved combined common-AI source integration and clarified Netlify is the project development/preview platform, while Vercel is the final-production platform. Vercel PR119 failing status was build-rate-limit, NOT a demonstrated product regression; Vercel status alone is not a reason to consume Codex reviews or indefinitely block a source-only backend PR. Netlify checks are not falsely claimed to have run for PR119.
+- PR117 exact head `2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226` MERGED to main via merge commit `77a627daf03a981d65d3b6d04aa1995866a49451`. GitHub PR state `closed/merged=true` and main head were read back.
+- PR119 exact head `8ef3843f51e771088dfe58e2e5a262db0b62644a` retargeted to main, 18 Phase1b-only changed files, no overlap with main changes; merge approved following prior source review including R1/R2 PASS. PR119 MERGED to main via merge commit `e6a8bdbb0f0d85a64617bcb077c6f4febaf97e96`, verified PR `closed/merged=true` and main ref exactly matching that SHA.
+- Neither action applied the `20261010050613_ai_provider_budget_ledger.sql` migration to any DB, executed paid provider traffic, modified Secrets/Cron/Auth, manually deployed Edge functions, changed active model/provider, or authorized production rollout. Git-triggered Vercel/Netlify automatic deployments may occur; actual live deployment impact needs separate check and is NOT claimed absent.
+- Next: coordinated PRODUCTION READINESS gate only, honoring G5 common account priority and serialization of shared Supabase DDL; live/read-only Supabase role/default-privilege/PostgREST exposure review; migration registry RESERVED ownership; user-approved budget policies and credit/expiry confirmation; recovery Cron and account-retention/privacy alignment; shared market report integration after G2 dependencies. Do not auto-deploy/apply DB or enable Anthropic personal-data requests. H1/H2 and G1–G5 tasks/Reports untouched by source merges.
+
+---
+
 ## K2 FINAL — G2 PR110 P2 noun-subject corrective source accepted, targeted review/merge HOLD — 2026-10-11 JST
 
 - PR110 exact head `2c876b0bafee31844b9854c4a7d34ba69660d4cf` OPEN/UNMERGED, one commit beyond H2's `cb3d77d5` head, three G2 files only: `analysis_logic.ts`, `hard_fact_guards.ts`, `h2_corrective_test.ts`. G2 TASK/Report correctly `review_required`/`next_owner:chatgpt`; existing historical TASK/Report preserved.
