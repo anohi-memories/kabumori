@@ -100,13 +100,13 @@
 - owner: claude
 - slot: claude-4
 - status: ready
-- task_id: postona-threads-phase2b-workspace-oauth-candidate-20261010
+- task_id: postona-x-oauth-provider-hardening-candidate-20261010
 - start_code: G4
 - finish_code: K4
 - next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: T9/T10/T13 shared design agreed at docs/postona/threads-g5-t9-t10-t13-shared-contract-20261010.md. G4 prepares independently isolated, disabled source-only provider-neutral personal workspace and Threads begin/complete OAuth candidates/tests. T13 real guard remains G5-owned/in-progress; T10 lifecycle remains G5-owned. No G3/G5 changes, live Threads, migration apply, production/provider calls, merge or deploy. Protect static gate=false and X behavior. Return K4 to explicit G4 chat.
+- allocation: Final K4 accepted preceding Threads T9/OAuth PR124 exact c30f246409a77080cbc03aef6c4cb72b5481e125 as OFFLINE SOURCE PASS_CANDIDATE; Draft PR124 remains OPEN/UNMERGED/HOLD with GitHub mergeable=false, no current main file overlap. Production Phase2a2/Phase3b still unapplied, Threads static gate=false. New G4 task is an isolated new worktree/source-only candidate for existing X OAuth provider identity preclaim/attestation, explicit platform='x', T13→T9 future workspace delegation and rolled-back error-status issue. No existing live X migration/Edge edit, no PR124/G5/G3 changes, no merge/deploy or production. Consolidate security review later at full G5+G4 integration. Return K4 to named G4 chat.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude

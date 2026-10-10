@@ -1,5 +1,82 @@
 # Claude Task 4 — CURRENT TASK
 
+- task_id: postona-x-oauth-provider-hardening-candidate-20261010
+- owner: claude
+- slot: claude-4
+- status: ready
+- next_owner: claude
+- start_code: G4
+- finish_code: K4
+- priority: high
+- recommended_model: **Opus5.5（高）**
+- return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
+- type: bounded source-only existing X OAuth identity/provenance + workspace delegation feasibility/candidate (no rollout)
+- source_only: true
+- PR_merge_allowed: false
+- real_DB_or_Auth_or_Vault_or_X_or_Meta_access_allowed: false
+- production_migration_or_Edge_deploy_allowed: false
+- live_connection_or_posts_allowed: false
+
+## Source of truth and current state
+
+Final K4 accepted prior G4 `postona-threads-phase2b-workspace-oauth-candidate-20261010` as **PASS_CANDIDATE for OFFLINE SOURCE ONLY**, not security/release PASS. Its Draft [PR #124](https://github.com/anohi-memories/kabumori/pull/124) exact `c30f246409a77080cbc03aef6c4cb72b5481e125` stays **OPEN, DRAFT, UNMERGED / HOLD**. Eight changed files are isolated source candidates, docs and tests; new SQL is under `supabase/candidates/`, NOT `supabase/migrations/`. GitHub reported mergeable=false at K4 despite main-side changed-file overlap=0; no forced/unguarded merge. Preserve PR124 intact and do not push to its branch in this TASK. No live Threads availability: `THREADS_CONNECT_PREREQUISITES_MET=false`.
+
+Read `docs/postona/threads-connection-phase2b.md` §0.9–0.10 at PR124 exact head plus `docs/postona/threads-g5-t9-t10-t13-shared-contract-20261010.md`. G5 T13 guard candidate is **Draft PR121 `76b50e1e...`**, not live or in main; G5's whole-account deletion gate remains blocked. G5 proof PR122 is also separate. G3 owns AI consultation activation and must remain untouched. A single consolidated Codex security review is planned at the actual G5 guard + G4 RPC/X/Threads/cleanup integration boundary; no H slot is allocated by this task.
+
+## Mission
+
+Investigation during G4 PR124 identified the following **source-level candidate issues**, which require independent proof before claiming impact to live users:
+1. Existing X begin uses a provider-specific workspace creation path and does not call T13. The agreed T9 provisioner should eventually serve both X and Threads with G5's locked T13 guard first.
+2. Existing X complete may accept authenticated caller-supplied provider identity/credential without trusted server-side attestation, allowing a potential account-ID preclaim and denial of legitimate connection. Establish the exact exploitability and safe mitigation in disposable tests.
+3. X consume/complete do not explicitly require `platform='x'`; source candidate tests show Threads state is currently rejected indirectly, but preserve explicit provider binding.
+4. X complete's `failed` update on unique_violation may be rolled back by rethrown SQL exception. Document accurate durable error semantics.
+
+Objective: produce an **isolated source-only X OAuth hardening candidate and tests**, or a precise BLOCKED proof/design handoff if G5 or an existing live contract prevents safe source. **Do not modify any deployed/applied X migration or Edge Function and do not turn on the candidate.**
+
+## Mandatory startup and conflict gate
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, current G4 TASK + preserved prior reports, current G3/G5 TASK headers, PR124 exact code/docs and existing X onboarding/complete + Vault/identity contracts.
+2. Fresh origin/main from `/Users/yuya/Developer/kabumori-fresh`; create a **new dedicated independent G4 worktree**. Do not reuse prior G4 worktree, touch other slots' branches/uncommitted changes or stop their servers.
+3. Verify fresh open PRs, exact owned source paths, migration reservations, G5 T13 phase and current G3/G5 production windows. STOP before changing any same file/DB writer/owner boundary. Do not overwrite or rewrite PR124 / PR121 / PR122; check fresh-main overlap before push.
+
+## Bounded work
+
+- Stage A: reproduce or disprove X `complete` preclaim risk using a disposable local PG database and fake provider only. Confirm exact authenticated EXECUTE/identity and X provider flow, compare source vs known live-applied migration versions without live DB access. Document severity/conditions and no real exploit test. For the known unique_violation status issue, show transaction behavior and choose truthful error semantics.
+- Stage B (only if isolated and safe): author **new candidate-only** SQL/typed contract/test files in distinct G4-owned paths (not `supabase/migrations`, no modification to any existing applied migration, PR124 files or G5 Auth/RLS/entitlement/deletion objects). Include X begin → G5 T13 at transaction start → agreed T9 provisioner; X `platform='x'`-bound consume/complete; trusted provider-code-exchange attestation or an equally rigorously proven Edge-only mechanism, never a caller-forgeable identity; OAuth state single-use/expiry, correct owner/brand and stable reconnect checks. Fail closed if G5 T13/PR124 source candidates unavailable; do not fake the guard as real.
+- A temporary mock T13 and mock workspace provisioner may be used **only inside clearly labeled disposable PG test fixtures**, never production reachable. Do not import PR124's unmerged files into runtime or accidentally activate Threads.
+- Build an explicit *future* upgrade/rollback plan preserving currently working X connections and OAuth token handling. The true migration/deploy changes, new live credential/key and grants are a separate reviewed and user-authorized rollout.
+- T10 provider-aware cleanup remains G5+G4 future integrated work; no real X revoke, Threads remote revoke assumption, entitlement modification or deletion-state-machine edit here.
+
+## Test and completion contract
+
+- Adversarial local PG: arbitrary provider ID claim, wrong/foreign account and workspace, stolen/replayed/mismatched state, X-vs-Threads state, forged attestation, duplicate identity, concurrent begin/complete, expired/consumed code, zero writes on failed precondition, same-owner successful controls, G5 guard missing/drift/ended-service, race with deletion, previous X regressions and unchanged live-path fingerprint.
+- Mutation tests, deterministic negative tests, Deno check/lint, source invariants, secret scan, `git diff --check`. Clearly distinguish MOCK_ONLY from reviewed real database/AUTH proof; failures and untested gates reported.
+- Create a **separate Draft PR** with only the new G4-owned candidate/docs/tests if a safe change exists, never merge/deploy. If unsafe due to G5 or incomplete source dependency, stop with a precise written blockers/owner handoff, no makeshift implementation.
+- Report task_id/result/changed_files/tests/commit/push/exact PR head/merge/deploy/remaining issues/safety, set `status: review_required` and `next_owner: chatgpt` then STOP for K4.
+- Return specifically to **POSTONA｜マルチSNS化・開発統括（G4）のちゃ** via **K4**.
+
+---
+
+# Final K4 — previous G4 Threads T9/OAuth candidate — 2026-10-10
+
+- task_id: postona-threads-phase2b-workspace-oauth-candidate-20261010
+- result: **PASS_CANDIDATE (OFFLINE SOURCE ONLY)** — no independent security/release approval.
+- branch_pr: Draft PR #124; accepted candidate head `c30f246409a77080cbc03aef6c4cb72b5481e125`; **OPEN / UNMERGED**.
+- reviewed_scope: 8 files (SQL outside migrations, unimported TS contract/tests, local-PG harness and docs). Existing X/Threads production code unchanged and Threads activation false.
+- tests: G4 reported disposable PG 111 assertions, 7 races, 16 atomic prerequisite refusals, MOCK_ONLY + Draft G5 PR121 guard modes, 33/33 mutation catches, TS 10 + existing 14 + _shared/social/X 66, invariants 11, check/lint/secret/diff clean. ChatGPT inspected report and candidate code; **did not rerun these suites**.
+- integration_status: current G5 T13 Draft PR121 only; real GoTrue/PostgREST/Vault/Meta/prod ACL unproven; attestation secret not provisioned; T10 deletion integration and X hardening pending.
+- GitHub_pr_merge_gate: current GitHub `mergeable=false` although base-to-main comparison (8 commits) showed **no changed-file overlap**; treat as HOLD until reverified, never force merge or assume conflict-free.
+- independent_Codex_review: **deferred** to one consolidated G5 guard + X/Threads OAuth/Vault/cleanup integration review before activation. No H slot assigned.
+- production_apply_deploy_meta_x_auth_db_actions: **0**.
+- AI Lab diary: **記録不要** — 2026-10-10の既存AI相談日記が正本にあり、違う作業を同じevent_idへ混在させない。
+- next: G4 source-only X identity/preclaim and provider-neutral workspace hardening candidate; preserve Draft PR124/G5 PR121 and static inactive Threads gate.
+
+---
+
+# Previous G4 task/report — preserved history
+
+# Claude Task 4 — CURRENT TASK
+
 - task_id: postona-threads-phase2b-workspace-oauth-candidate-20261010
 - owner: claude
 - slot: claude-4
