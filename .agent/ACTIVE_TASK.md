@@ -91,7 +91,7 @@
 - finish_code: K3
 - next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: K3 accepts prior POSTONA AI consultation V1 readiness as PASS_CANDIDATE, but PR #114 head f24c8efe84c433d0e7ca3e16b640a80d9c984a51 needs one bounded A->B->A (ABA) async session-epoch correction: brand-ID-only freshness checks can re-admit an old A AI/save result after switching A->B->A; also prove stale savedRef is never adopted for a new workspace. Preserve all accepted explicit-save/CAS/persona tests and no-live rollout. PR #114 remains OPEN, unmerged; latest REST mergeability UNKNOWN. New G3 task limited to same PR and its three existing files. No production writes/deploy/OpenAI/X.
+- allocation: K3 2026-10-10 accepted bounded ABA session-epoch corrective on PR #114 exact head 98d3cb727a967c2a921da6afee3faafa85cb9de6 as PASS_CANDIDATE. Source-visible guards cover A->B->A stale consultation replies, confirmation read/save completion, and epoch-tagged saved settings. G3 reports 4 focused red/green cases, app 234/234, Edge 90/90, TS/lint/diff/secret scan PASS. GitHub PR OPEN/unmerged, mergeable=true/CLEAN, Netlify + Vercel status SUCCESS. Requires ONE independent narrow tenant/session boundary review before source merge. H1 currently reviewing/completion-pending PR106; H2 allocated G5 PR112; neither is free, do not overwrite. Direct separate-room review recommended Sol（高）. Source merge/deploy/DB/EAS/real AI/X HOLD.
 - recommended_model: Sonnet5（高）
 
 ## Claude G4
