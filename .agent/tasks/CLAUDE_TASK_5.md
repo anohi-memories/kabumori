@@ -3,7 +3,7 @@
 - task_id: common-account-phase3b-identity-writer-fence-source-20261010
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: critical
 - type: staged feasibility + bounded source-only implementation, fail closed
