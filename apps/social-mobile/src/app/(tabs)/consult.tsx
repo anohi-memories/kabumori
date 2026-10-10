@@ -27,7 +27,15 @@ const GREETING = [{ role: "assistant" as const, text: "こんにちは。投稿�
 const SAVED_TEXT = "確認した内容を保存しました。投稿権限や投稿実行は変更していません。";
 const REBASE_TEXT = "保存されている設定が、この提案のあとに変わっていました。内容を確認して、もう一度「これで覚えて」を押してください。";
 
-type Saved = SavedSnapshot & { updatedAt: string | null };
+/** `epoch` is the consultation session the snapshot was read in; it is never used across sessions. */
+type Saved = SavedSnapshot & { updatedAt: string | null; epoch: number };
+const emptySaved = (epoch: number): Saved => ({ settings: SOCIAL_MOBILE_CONTENT_DEFAULTS, persona: null, updatedAt: null, epoch });
+
+/** Captured when async work starts; `isCurrent` is true only while that same workspace session is shown. */
+function captureSession(sessionBrand: { current: string | undefined }, sessionEpoch: { current: number }, brandId: string | undefined) {
+  const epoch = sessionEpoch.current;
+  return { epoch, isCurrent: () => sessionBrand.current === brandId && sessionEpoch.current === epoch };
+}
 
 export default function ConsultScreen() {
   const { status, snapshot } = useDataStatus();
@@ -45,17 +53,38 @@ export default function ConsultScreen() {
   const [saving, setSaving] = useState(false);
   // What is saved right now, as far as this screen knows. A proposal is always
   // applied onto a fresh re-read of this, never onto hardcoded defaults.
-  const [saved, setSaved] = useState<Saved>({ settings: SOCIAL_MOBILE_CONTENT_DEFAULTS, persona: null, updatedAt: null });
+  const [saved, setSaved] = useState<Saved>(() => emptySaved(0));
   const savedRef = useRef(saved);
   useEffect(() => {
     savedRef.current = saved;
   }, [saved]);
+  // A consultation belongs to one workspace session. Every workspace change starts a new session
+  // with a new epoch -- also a return to a workspace shown before (A -> B -> A) -- and drops the old
+  // conversation and proposal. An async task captures the workspace and the epoch it started in and
+  // checks both after every await, so an answer, a read or a save completion from an earlier session
+  // never changes this one. Ignoring a completion does not cancel a request already sent: a save that
+  // reached the server stays saved; only its result is not shown.
+  const sessionBrand = useRef(brandId);
+  const sessionEpoch = useRef(0);
+  const savingRef = useRef(false);
+  useEffect(() => {
+    if (sessionBrand.current === brandId) return;
+    sessionBrand.current = brandId;
+    sessionEpoch.current += 1;
+    savingRef.current = false;
+    dispatch({ type: "reset", greeting: GREETING });
+    setMessage("");
+    setHistoryConfirmation(false);
+    setSaving(false);
+    setSaved(emptySaved(sessionEpoch.current));
+  }, [brandId]);
 
   useEffect(() => {
     if (status !== "ready" || !brandId || !repository) return;
     let cancelled = false;
+    const session = captureSession(sessionBrand, sessionEpoch, brandId);
     void repository.read(brandId).then((result) => {
-      if (!cancelled && result.state === "ready") setSaved({ settings: result.data, persona: result.persona, updatedAt: result.updatedAt });
+      if (!cancelled && session.isCurrent() && result.state === "ready") setSaved({ settings: result.data, persona: result.persona, updatedAt: result.updatedAt, epoch: session.epoch });
     });
     return () => {
       cancelled = true;
@@ -74,11 +103,16 @@ export default function ConsultScreen() {
       dispatch({ type: "failed", error: consultFailure("CONSULT_CONFIGURATION_UNAVAILABLE") });
       return;
     }
+    const session = captureSession(sessionBrand, sessionEpoch, brandId);
     const [outcome, fresh]: [ConsultOutcome, Awaited<ReturnType<typeof repository.read>>] = await Promise.all([
       requestConsult(supabase, accessToken, { brandId, message: text, priorTurns: prior }),
       repository.read(brandId),
     ]);
-    const base: Saved = fresh.state === "ready" ? { settings: fresh.data, persona: fresh.persona, updatedAt: fresh.updatedAt } : savedRef.current;
+    if (!session.isCurrent()) return;
+    // If this workspace could not be re-read, fall back only to what was read in this same session;
+    // never to another session's (possibly another workspace's) saved settings.
+    const known = savedRef.current.epoch === session.epoch ? savedRef.current : emptySaved(session.epoch);
+    const base: Saved = fresh.state === "ready" ? { settings: fresh.data, persona: fresh.persona, updatedAt: fresh.updatedAt, epoch: session.epoch } : known;
     if (fresh.state === "ready") setSaved(base);
     if (outcome.ok) dispatch({ type: "reply", result: outcome.result, shownAgainst: { settings: base.settings, persona: base.persona } });
     else dispatch({ type: "failed", error: outcome.error });
@@ -104,10 +138,11 @@ export default function ConsultScreen() {
   /** The only path that saves: the user pressed 「これで覚えて」 on a visible proposal. */
   async function confirmProposal() {
     const pending = state.pending;
-    if (!pending || saving) return;
+    // Single flight: a second press before the first save finishes does nothing.
+    if (!pending || savingRef.current) return;
     if (preview) {
       const applied = applyConfirmedConversationProposal(saved.settings, saved.persona, pending.result);
-      setSaved({ settings: applied.settings, persona: applied.persona, updatedAt: null });
+      setSaved({ settings: applied.settings, persona: applied.persona, updatedAt: null, epoch: sessionEpoch.current });
       dispatch({ type: "saved", text: "ローカルプレビューとして確認しました。実データへはまだ保存していません。" });
       return;
     }
@@ -117,15 +152,19 @@ export default function ConsultScreen() {
       dispatch({ type: "save_failed", text: "いまは保存できません。時間をおいて、もう一度お試しください。" });
       return;
     }
+    const session = captureSession(sessionBrand, sessionEpoch, brandId);
+    const stillSameWorkspace = session.isCurrent;
+    savingRef.current = true;
     setSaving(true);
     try {
       const latest = await repository.read(brandId);
+      if (!stillSameWorkspace()) return;
       if (latest.state !== "ready") {
         dispatch({ type: "save_failed", text: latest.reason });
         return;
       }
       const latestSnapshot = { settings: latest.data, persona: latest.persona };
-      setSaved({ ...latestSnapshot, updatedAt: latest.updatedAt });
+      setSaved({ ...latestSnapshot, updatedAt: latest.updatedAt, epoch: session.epoch });
       const plan = planConfirmedSave({ shownAgainst: pending.shownAgainst, latest: latestSnapshot, proposal: pending.result });
       if (plan.kind === "nothing") {
         dispatch({ type: "save_failed", text: "保存できる変更がありませんでした。" });
@@ -136,21 +175,27 @@ export default function ConsultScreen() {
         return;
       }
       const result = await repository.saveConfirmedIfUnchanged(brandId, plan.settings, plan.personaChanged ? plan.persona : null, latest.updatedAt);
+      if (!stillSameWorkspace()) return;
       if (result.ok) {
         const after = await repository.read(brandId);
-        setSaved(after.state === "ready" ? { settings: after.data, persona: after.persona, updatedAt: after.updatedAt } : { settings: plan.settings, persona: plan.persona, updatedAt: null });
+        if (!stillSameWorkspace()) return;
+        setSaved(after.state === "ready" ? { settings: after.data, persona: after.persona, updatedAt: after.updatedAt, epoch: session.epoch } : { settings: plan.settings, persona: plan.persona, updatedAt: null, epoch: session.epoch });
         dispatch({ type: "saved", text: SAVED_TEXT });
       } else if (result.stale) {
         const again = await repository.read(brandId);
+        if (!stillSameWorkspace()) return;
         if (again.state === "ready") {
-          setSaved({ settings: again.data, persona: again.persona, updatedAt: again.updatedAt });
+          setSaved({ settings: again.data, persona: again.persona, updatedAt: again.updatedAt, epoch: session.epoch });
           dispatch({ type: "rebase_proposal", shownAgainst: { settings: again.data, persona: again.persona }, text: REBASE_TEXT });
         } else dispatch({ type: "save_failed", text: result.reason });
       } else {
         dispatch({ type: "save_failed", text: result.reason });
       }
     } finally {
-      setSaving(false);
+      if (stillSameWorkspace()) {
+        savingRef.current = false;
+        setSaving(false);
+      }
     }
   }
 
