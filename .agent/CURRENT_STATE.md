@@ -6111,3 +6111,14 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - H1 owns G4 PR106 and H2 owns G5 PR112 security reviews. Neither is overwritten. Decide focused exact-head reviewer once G3 corrects the race.
 - do not work on Kabumori X morning/close reports; user explicitly deferred them until Kabumori-app shared report integration finishes.
 - production migration/apply, Edge deploy, EAS, real OpenAI/X, publishing, merge: **HOLD**.
+
+
+## K3 PASS_CANDIDATE — POSTONA PR #114 epoch corrective — 2026-10-10
+- task: `postona-ai-consult-pr114-session-epoch-corrective-20261009`, Claude G3. Result: **PASS_CANDIDATE**, no further known implementation changes; HOLD source merge pending one independent narrow review.
+- exact PR #114 reviewed head: `98d3cb727a967c2a921da6afee3faafa85cb9de6`; GitHub OPEN/unmerged, mergeable=true/clean, Netlify and Vercel statuses success. Main advanced in agent/other code while PR remains conflict-free by GitHub calculation.
+- G3 corrective `ead54249` plus normal main integration (no force/rebase), 3 total PR paths: consult.tsx, consult-session.ts, consult-screen.test.mjs. New bounded delta since prior head: consult.tsx and consult-screen tests, without backend/DB/tenant/RLS migration changes.
+- source inspection confirms monotonically increasing epoch + workspace ID guards for asynchronous consult, initial settings read, confirmation/read/save completion; epoch-tagged saved settings fallback. Sent persistent writes cannot be undone; only obsolete UI response is ignored.
+- G3 reports A->B->A response/read/post-save tests fail on old head and pass on new; fallback case PASS incl mutation probe; app 234/234, related Edge 90/90, targeted TypeScript/ESLint/diff/secret scan PASS. Product PR pushed; production mutations/deploy/EAS/real OpenAI/X=0.
+- review decision: one independent focused tenant/session boundary code review is warranted before source merge. Recommended **Codex Sol（高）**. H1 task PR106 review_required/C1 pending, H2 task G5 PR112 ready, so **neither H slot is safely free**; neither TASK/Report overwritten. Direct separate-room Codex review may be used; do not claim H assignment.
+- focus external review on ABA epoch invalidation, request/save and cancellation vs ignored UI, stale savedRef, session/token freshness, proper CAS/reconfirmation, no cross-brand writes, tests and PR exact head; no product edits or production changes.
+- after independent PASS and fresh PR checks, source merge separately; V1 production content-settings schema/consult Edge and settings-aware dry-run remain unapplied and require a separate production gate. Kabumori X morning/close remains expressly deferred.
