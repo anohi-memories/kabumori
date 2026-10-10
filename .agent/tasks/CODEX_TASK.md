@@ -1,3 +1,25 @@
+# C1 FINAL — POSTONA G4 existing-X OAuth defensive assessment accepted — 2026-10-11 JST
+
+- task_id: postona-g4-x-oauth-containment-defensive-assessment-20261010
+- owner: codex
+- slot: codex-1
+- status: done
+- next_owner: none
+- completion_code: C1
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
+- recommended_model: Sol（高） (completed)
+- verdict: **PASS_DEFENSIVE_ASSESSMENT_ONLY** — accepted source and benign local-PG access-denial assessment; **not** a production vulnerability remediation, exploit confirmation, security release gate or guarantee of uninterrupted existing X posting.
+- report_synced: `.agent/CODEX_REPORT.md` current top two sections; H1 status/report published on main after user-approved H1-only report synchronization. Earlier local NOT_PUSHED note is historical, not current.
+- reviewed_evidence: repo source for legacy X begin/consume/complete grants and Edge path, separate publish/refresh/account-delete call graphs, conditional containment A/B/C impact matrix and fake-PG 42501 permission-denial test. H1 did not reproduce account ID preclaim or run real production/Meta/X/Auth/GoTrue/Vault/API calls; production effective ACL, live exposure, in-flight callbacks and continuity UNKNOWN.
+- outcome: A narrowly removing API authority for old completion would stop **new X connection and reconnection**, including refresh recovery requiring reconnect. Structurally separate post/refresh should remain unchanged by ACL-only work but **no live no-outage guarantee**. B requires reviewed server-trusted provenance; C awaits G5 T13 and G4 T9 plus v2, with legacy authority revoked. No immediate proven non-disruptive fix.
+- next_gate: Obtain **separate user approval** for *strictly read-only live catalog / aggregate metadata preflight*, specifying exact Supabase project, safe output and independent owner availability. This C1 does NOT authorize even the preflight, production grant/RPC/Edge change, new/reconnect pause, token/secrets lookup or PR merge/deploy.
+- G4: prior TASK remains **blocked pending ChatGPT/user approval**; do not restart original Claude security task or mark its unsubmitted report as complete. No new G4 task assigned in this C1. Keep H2/G5/G3 and independent worktrees intact.
+- prior_review_history: all previous H1 TASK and Report sections preserved below without rewriting.
+
+---
+
+# Preserved H1 reviewed TASK and completion history
+
 # Codex H1 — CURRENT TASK — POSTONA既存X接続の防御的封じ込め評価（G4代行調査）
 
 - task_id: postona-g4-x-oauth-containment-defensive-assessment-20261010
