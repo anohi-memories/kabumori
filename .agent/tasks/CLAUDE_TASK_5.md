@@ -3,7 +3,7 @@
 - task_id: common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: critical
 - type: narrow independent-H2-findings security corrective, existing PR
