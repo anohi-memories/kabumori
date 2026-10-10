@@ -3,8 +3,8 @@
 - task_id: common-account-phase3c-disposable-supabase-proof-readiness-20261010
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - type: offline proof plan, safe test harness and exact go/no-go criteria ONLY
 - start_code: G5
@@ -62,9 +62,165 @@ User requests continued progress **without activating production**. Focus on pre
 ## Report — Phase 3c
 
 - task_id: common-account-phase3c-disposable-supabase-proof-readiness-20261010
-- result: pending
-- remote_calls: 0
+- reported_at: 2026-10-10 18:52 JST
+- result: **`OFFLINE_READY_NOT_EXECUTED`**。機能としては引き続き **`BLOCKED`**。
+  - 共通アカウント全削除は利用不可。Phase 3a の gate `managed_auth_delete` は `blocked` のまま。
+  - 選択肢 A+B と D は、どちらも選択・承認していない。
+- remote_calls: 0（Supabase プロジェクト、Management API、GoTrue、Storage、プロバイダ、ネットワーク通信、いずれもなし）
 - production_mutation: 0
+- 実行したのは公開資料の閲覧だけ: supabase/auth のソースと migration、Management API の公開 OpenAPI（認証なしの公開文書）。
+
+### ブランチ / PR / HEAD
+- 作業場所: 新規の独立 worktree `/Users/yuya/Developer/kabumori-g5-phase3c`
+  - ブランチ `claude/g5-phase3c-disposable-proof-readiness-20261010`（fresh origin/main `98f50802` から作成）
+  - PR112 / PR121 の旧 worktree や、G1〜G4 / H1 / H2 の checkout には触れていない。
+- **Draft PR #122**: https://github.com/anohi-memories/kabumori/pull/122
+  - head `f17a47e36632fff4a1f4cfb0b860df200e1c99e1`（commit 1件、force push なし、マージなし）
+  - 報告時点の CI: 成功 1 / 実行中 1
+- PR121 への依存（変更なし）: Draft PR #121 の head `76b50e1e03f82faaa3460bab1603afa8fef3ce44`
+  - PR121 は OPEN / Draft で、head は変わっていないことを確認した。
+  - §8 の E1〜E12 の 12 行を、そのまま `pr121_e1_e12_rows.md` に固定した（sha256 `8678d45539fa25e3373a29318770e0313999c411949d719e8b7cdbc2679f7b66`）。
+  - PR121 のファイル、migration、PR121 の文書、`docs/postona/*` は変更していない。
+- 他の open PR（#3, #10, #11, #33, #110, #115, #117, #119, #120, #121）と変更ファイルの重なり: **なし**（すべて新しいパス）。main 側にも、私の対象パスへの変更はない。
+
+### changed_files（21件、すべて G5 の新しいパス）
+- `docs/common-account/phase3c-disposable-supabase-proof-runbook.md`（手順書。Deliverable A と C）
+- `supabase/tests/common_account_disposable_e2e/`（Deliverable B）
+  - 本体: `catalog.ts`, `guard.ts`, `redact.ts`, `evidence.ts`, `plan.ts`, `cli.ts`
+  - テスト: `catalog_test.ts`, `guard_test.ts`, `redact_test.ts`, `evidence_test.ts`, `cli_test.ts`, `static_test.ts`, `harness_mutations.py`
+  - SQL とローカル検証: `catalog_fingerprint.sql`, `fingerprint_local_run.sh`
+  - 固定データとひな形: `pr121_e1_e12_rows.md`, `operator_checklist.md`, `fixtures/{run_request,project_marker,used_projects}.sample.json`（偽の ref のみ）
+
+### Deliverable A — 手順書（E1〜E12）
+- **実行前の承認条件**（2 系統。すべて満たさないと実行できない）
+  - (a) 利用者がその使い捨てプロジェクトを承認していること。
+  - (b) 実行ごと・実験ごとの破壊的操作への同意（`DESTROY-<E#>-<ref>-<run_id>`）。
+  - 加えて次がすべて必要:
+    - リポジトリ外にある独立したマーカーファイル
+    - ref が全箇所で完全一致していること
+    - 確認文の入力
+    - 使用済みプロジェクトの台帳（無ければ拒否）
+    - E7 は設定変更の承認、E11 は利用者の承認と独立セキュリティレビューの両方
+  - `--force` はない。既定の ref はなく、Supabase CLI の link も使わない。
+  - `supabase link` / `db push` / `migration up` / `deploy` / `secrets`、Supabase MCP は使用禁止。
+- **実験の分類**
+  - 読み取りだけなのは E1 のみ。E2〜E12 は使い捨てプロジェクト内で破壊的。
+  - 何を壊すか（ユーザー作成・BAN・セッション失効・本人確認方法の追加・削除・設定変更・スキーマ適用）を実験ごとに明記した。
+- **実験ごとの記載内容**: 手順、PR121 の合格条件（原文のまま）、確認のための SQL、PASS / FAIL / UNKNOWN の条件。
+- **主な検証シナリオ**
+  - BAN 前に始めた手動連携が BAN 後に完了するか（E4、操作を止めて順序を確定させる）
+  - セッション失効を BAN より前に行う必要性（E5）
+  - 新しい / 古い token（E5、E9）
+  - フローの有効期限の測定（E4）
+  - 監査ログが残るか（E10）
+  - `postgres` ロールの権限（E1 / E9 / E11 の指紋で確認）
+  - 管理削除と D 方式の比較、cascade（E8 / E11）
+  - Storage の所有者とポリシー（E9）
+  - intent のコミット後から削除までの競合（E12 の 6f-real、E11 のロック保持パターン）
+- **強制できないもの**
+  - E6（GoTrue のリクエスト内部の時間窓）は外部から強制できない。重なりが観測されなければ UNKNOWN になり、合格にはならない。
+  - `pg_stat_activity` から GoTrue の処理が見えない場合も UNKNOWN。
+- **証跡のルール**
+  - 相関 ID は `<run_id>.<E#>.<seq>`。UTC と JST を記録し、時計のずれ（skew）の上限を測る。
+  - カタログ指紋の sha256 を、実験の前後で取る。
+  - ファイルに書く前に必ず秘匿化する。
+  - 生データは書かない。秘匿化済みの証跡はリポジトリ外に置き、レビュー後 14 日以内に削除する。
+  - 終了後はプロジェクトの削除を依頼し、ref を台帳に追加する。
+- **A+B と D の比較**: 表で比較した（選択はしない）。
+  - D は Phase 1/3a の安全モデルの変更になるため、利用者の承認と独立セキュリティレビューが無い限り禁止。
+  - A+B は、E4 で「連携された」場合、軽減策の証拠が無い限り不可。
+
+### Deliverable B — オフラインの検証ツール
+- **`guard.ts`**（既定で拒否する。ファイル・ネットワーク・環境変数へのアクセスなし）
+  - 次を拒否する:
+    - 本番の ref、使用済みの ref、形式違い
+    - マーカーがリポジトリ内にある、CLI の link ファイルである、相対パス、`..` を含む、symlink
+    - マーカーの内容不備（環境が disposable でない、本番データ・クローンあり、名前が本番らしい、期限切れ、TASK 不一致）
+    - ref の不一致、確認文の違い
+    - 上書きを意図するようなフィールドや未知のフィールド
+    - 未知・重複・空のシナリオ
+    - 同意の不足・不一致、未要求のシナリオへの同意
+    - E11・E7 の追加承認の不足
+  - 許可された場合でも結果は `execution: NOT_AVAILABLE_IN_THIS_STAGE` で、実行はできない。
+- **`redact.ts`**
+  - JWT、Bearer/Basic、APIキーや Cookie のヘッダー、code/state/token などのパラメータ、秘密っぽい名前の JSON 値、メール、プロジェクトのホスト、UUID、IP、PEM を置換する。
+  - 同じ実行の中では同じ値が同じ置換になり、別の実行とは突き合わせられない。2回かけても結果は変わらない。
+  - E1 の設定は許可リスト方式で取り込む（項目名は公開 OpenAPI の `AuthConfigResponse` と照合済み）。フローの有効期限と監査ログの設定は API に無いため、E4 / E10 で実測する。
+- **`evidence.ts`**
+  - 合格になるのは PASS だけで、FAIL / UNKNOWN / NOT_RUN / 欠落はすべてブロックする。
+  - 証拠の無い PASS と、E4 の結果が未確定のものは UNKNOWN 扱い。
+  - E4 で「連携された」場合、軽減策の証拠が無ければ A+B はブロック。
+  - 最良でも `EVIDENCE_COMPLETE_PENDING_INDEPENDENT_REVIEW` までで、READY やリリースにはならない。候補の選択もしない。
+- **CLI**
+  - `plan` と `validate` だけ。実行コマンドは無い。
+  - 上書き系のフラグ（`--force` / `-y` / `--execute` / `--apply` など）は終了コード 2 で拒否する。
+  - ref やマーカーのパスは出力しない。
+- **`catalog_fingerprint.sql`**
+  - 読み取り専用。auth のテーブルと権限、外部キーと cascade、トリガー、lifecycle 関数の所有者・ACL・本体のハッシュ、ロールを出す。
+  - ローカルでは 78 行、sha256 `423c0d486abc752d531371d6c897efffe200b567ceab45a0599565575ccf3833`（2回実行して決定的、カタログ不変）。
+- **`operator_checklist.md`**: 実行時のチェックリストのひな形（未使用）。
+
+### Deliverable C — G4 との依存表と次の承認（手順書 §9 / §10）
+- 依存表の各行:
+  - T13 ガード（PR121 の候補のみ。本番には無い）
+  - G4 の Threads begin / complete と T9 provisioner（先頭でガードを呼ぶ）
+  - 既存の X の begin / consume / complete（G4 の別 TASK）
+  - G1/G2 の `ensure_my_profile` と profiles への insert
+  - producer 群
+  - T10 の後始末（G4 のアダプタと、G5 の lifecycle 集約）
+  - GoTrue の本人確認方法の fence（未証明）
+  - gate の開放
+- 他の担当者のコードは実装していない。
+- 次に必要な承認（正確な一覧）:
+  1. 使い捨て Supabase プロジェクト 1件（新規作成、本番データ・コピーなし。課金は利用者の判断）
+  2. 実行ごと・実験ごとの破壊的操作への同意
+  3. E7 の設定変更の承認
+  4. E11 の利用者承認と独立セキュリティレビュー（E11 を実行しても D の採用にはならない）
+  5. 任意: ダミーのプロバイダ / OIDC / Meta・Apple のテスターアカウント（別途承認）
+  6. G5 と G4 を統合した後の、独立セキュリティレビュー 1回
+  7. その後の本番承認（それぞれ個別）
+
+### テスト（オフラインのみ）
+- `deno test --no-config --allow-read supabase/tests/common_account_disposable_e2e/`: **35/35**
+  - 型チェックあり。ネットワーク・環境変数・実行の権限なしで動くことを static_test で確認。
+- `deno check` と `deno lint`: OK（12 ファイル）
+- `harness_mutations.py`: **31/31 検出**（control PASS）
+  - 対象: ガード 15、CLI 3、秘匿化 5、判定 4、カタログ 3、ネットワーク呼び出しの追加 1。
+- `fingerprint_local_run.sh`（ローカル PostgreSQL 17.11）: PASS
+  - 読み取り専用トランザクションで、書き込みが拒否されることを確認。
+  - 決定的であること、カタログが変わらないこと、必要な行が出ていることを確認。
+- 既存スイートの再実行（すべて PASS）: Phase 1、Phase 2、Phase 3a の各 runner、account-delete の Deno 66/66。
+- CLI の実行確認: `plan` は終了コード 0、`validate`（サンプル。マーカーなし）は 3、`--force` は 2。
+- `git diff --check`: OK。
+- シークレットの走査:
+  - JWT、各種キー、PEM、DB 接続文字列、メールは 0件。
+  - テスト内の偽の秘密情報は、実行時に組み立てる方式にした。
+  - 本番 ref の 5件は、拒否リストと説明のための記載（main の既存 29 ファイルにある公開済みの識別子）。
+
+### 限界（このオフライン準備では証明していないこと）
+- GoTrue / PostgREST / Storage / Management API の実際の挙動、基盤の権限と cascade、PR121 の V / H の各項目。
+- ローカルの mock は証拠として扱っていない。
+- 指紋の値はローカルの fixture のもので、実プロジェクトの値ではない。
+
+### 次のアクション
+- **K5 / ChatGPT**:
+  - 手順書とツールが実行に使えるかを判定する。
+  - 利用者に、使い捨てプロジェクト 1件の承認を求めるかどうか、またその時期を判断する（上記の承認 1〜5）。
+  - 実プロジェクトでのテストは、G5 が独断で始めない。
+- **G4**: T13 ガードの名前と契約は PR121 の候補の段階。統合と本番での利用は、統合セキュリティレビューの後。
+- **G5**: 承認が出たら、手順書に沿って E1 から実施する。それまで PR121 / PR122 は Draft のまま。
+
+### 安全確認
+- 実施しなかったこと（いずれも 0 件）:
+  - 本番の読み書き
+  - 実 / 使い捨てプロジェクトの作成・利用
+  - Supabase の CLI link / remote や MCP
+  - Auth / Storage / プロバイダへの呼び出し
+  - 認証情報・secrets の操作
+  - migration の適用（ローカルの使い捨て PostgreSQL を除く）
+  - deploy、マージ、EAS、課金、有効化
+  - H1/H2 の割り当て
+- G1〜G4 と H1/H2 の担当範囲、PR121、`docs/postona` は変更していない。
 
 ---
 
