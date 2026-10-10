@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { scanJson } from "./secret_scan.ts";
 
 // The comparison harness must be unable to touch production news delivery. This suite proves it statically:
 //   1. no production code, config or workflow refers to the harness (nothing can import or run it);
@@ -104,11 +105,16 @@ test("the only SQL shipped is a read-only SELECT", async () => {
 test("no API key is embedded, and keys are only ever obtained through keys.ts", async () => {
   const offenders: string[] = [];
   for (const file of await harnessFiles()) {
-    // Fixture files carry real article URLs; a slug such as "...kramatorsk-as-russia-targets..." contains "sk-" and 20 more
-    // URL characters. eval_set_test.ts scans the free text of the expansion (title, body, facts) for credential shapes instead.
-    if (isTest(file) || !TEXT_EXT.test(file.pathname) || file.pathname.endsWith("cases.json") || file.pathname.endsWith("eval_expansion.json")) continue;
+    if (isTest(file) || !TEXT_EXT.test(file.pathname)) continue;
     const text = await Deno.readTextFile(file);
-    if (/sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}/.test(text)) offenders.push(`${rel(file)}: key-shaped string`);
+    if (file.pathname.endsWith(".json")) {
+      // Fixture files carry real article URLs, where a slug such as "...kramatorsk-as-russia-targets..." contains "sk-" and 20
+      // more URL characters. JSON is therefore scanned string by string (src/secret_scan.ts): free text with the full set of
+      // credential shapes, URLs with the shapes a credential can take inside a URL. No fixture file is excluded.
+      for (const finding of scanJson(JSON.parse(text))) offenders.push(`${rel(file)}: ${finding.kind} at ${finding.path}`);
+    } else if (/sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}/.test(text)) {
+      offenders.push(`${rel(file)}: key-shaped string`);
+    }
     if (text.includes("Deno.env.get(")) offenders.push(`${rel(file)}: reads the environment directly`);
     if (!file.pathname.endsWith("/keys.ts") && /(?:OPENAI|ANTHROPIC)_API_KEY/.test(text) && !file.pathname.endsWith("cli.ts") && !file.pathname.endsWith("README.md")) {
       offenders.push(`${rel(file)}: names an API key variable outside keys.ts`);

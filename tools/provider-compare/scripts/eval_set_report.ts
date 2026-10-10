@@ -24,7 +24,9 @@ export function hazardCoverage(cases: readonly EvalCase[]): Record<string, { cas
   };
   for (const item of cases.filter(isHeadline)) {
     const post = item.recorded.generation?.text ?? "";
-    const text = [item.candidate.title, item.candidate.bodySummary ?? "", post].join("\n").normalize("NFKC");
+    // Bodies are not stored for most sources (src/body_policy.ts), so the labeller's key facts are scanned as well. With the
+    // bodies re-attached from production the same function sees the full text.
+    const text = [item.candidate.title, item.candidate.bodySummary ?? "", post, ...item.label.keyFacts].join("\n").normalize("NFKC");
     for (const hazard of hazardsOf(text)) add(hazard, item);
     if (CONSOLIDATED_STANDALONE.test(text)) add("consolidated_vs_standalone", item);
   }

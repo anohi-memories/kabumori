@@ -1,20 +1,17 @@
 // Builds fixtures/eval_expansion.json from the read-only exports (export_eval_rows.sql, export_eval_sample.sql), the
 // selection (fixtures/eval_selection.json) and the labels (fixtures/eval_labels.json).
 //   deno run --no-config --allow-read --allow-write tools/provider-compare/scripts/build_eval_set.ts <rows.jsonl> <sample.jsonl> [out.json]
-// Deterministic: the same inputs give the same file. Bodies are sanitised (contact details removed, 1,800 characters at most)
-// and the wire-service bodies (BBC, Al Jazeera) are cut to a short lead so no article text is republished.
+// Deterministic: the same inputs give the same file. Bodies are stored only for hosts listed in src/body_policy.ts
+// (sanitised, 1,800 characters at most); for every other source the body stays in production and is re-read at run time.
 import type { ImportantNewsCategory } from "../../../supabase/functions/important-news-monitor/news_candidate_logic.ts";
 import type { Importance } from "../src/fixtures.ts";
 import { sanitizeBody } from "../src/sanitize.ts";
+import { bodyMayBeStored } from "../src/body_policy.ts";
 import type { EvalCase, EvalSetFile, LabelRecord, LabelsFile } from "../src/eval_set.ts";
 import { sha256Hex } from "./eval_manifest.ts";
 
 type Row = Record<string, unknown>;
 type Selection = { window: string; seed: string; hard: string[]; sample: string[] };
-
-/** Wire-service article text is not ours to republish; keep a short lead only. */
-export const COPYRIGHT_SOURCES = new Set(["bbc_world", "al_jazeera"]);
-export const COPYRIGHT_LEAD_CHARS = 300;
 
 const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
 const list = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
@@ -61,9 +58,10 @@ export async function buildEvalCase(
   if (!entry) throw new Error(`NO_LABEL:${id8}`);
   const sourceName = String(row.source_name);
   const category = String(row.category) as ImportantNewsCategory;
-  const full = sanitizeBody(text(row.body_summary));
-  const truncate = COPYRIGHT_SOURCES.has(sourceName) && full !== null && full.length > COPYRIGHT_LEAD_CHARS;
-  const body = truncate ? sanitizeBody(full, COPYRIGHT_LEAD_CHARS) : full;
+  // Bodies are committed only for hosts whose terms allow reuse (src/body_policy.ts); otherwise the body is re-read from
+  // production at run time and checked against bodySha256.
+  const stored = bodyMayBeStored(String(row.source_url));
+  const body = stored ? sanitizeBody(text(row.body_summary)) : null;
   const importance = row.importance as Importance;
   const generated = text(row.generated_text);
   const hasGeneration = generated !== null || text(row.generation_error) !== null;
@@ -100,7 +98,7 @@ export async function buildEvalCase(
       entityKey: text(row.entity_key),
       category,
       publishedAt: new Date(String(row.published_at)).toISOString(),
-      ...(truncate ? { bodyTruncatedForCopyright: true } : {}),
+      bodyStored: stored,
       bodyCharsOriginal: (text(row.body_summary) ?? "").length,
       bodySha256: await sha256Hex(text(row.body_summary) ?? ""),
     },

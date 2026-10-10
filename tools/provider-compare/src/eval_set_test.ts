@@ -14,7 +14,9 @@ import {
 import { containsContactDetails } from "./sanitize.ts";
 import { productionCodeStamp } from "../scripts/eval_manifest.ts";
 import { buildReport, TARGET_AREAS } from "../scripts/eval_set_report.ts";
-import { COPYRIGHT_LEAD_CHARS, COPYRIGHT_SOURCES, domainOf } from "../scripts/build_eval_set.ts";
+import { domainOf } from "../scripts/build_eval_set.ts";
+import { bodyMayBeStored } from "./body_policy.ts";
+import { scanJson } from "./secret_scan.ts";
 
 const [labels, expansion, evalSet, original] = await Promise.all([loadLabels(), loadExpansion(), loadEvalSet(), loadCases()]);
 const normalise = (title: string) => title.normalize("NFKC").toLowerCase().replace(/[\s\p{P}\p{S}]/gu, "");
@@ -152,7 +154,8 @@ test("the sample is a separate population: hand-picked cases are not presented a
   assert.equal(estimate.used + estimate.nonResponse, sampleMembers);
 });
 
-test("bodies are sanitised, bounded and fingerprinted; wire-service text is cut to a short lead", () => {
+test("bodies are stored only where the terms allow it; the rest is represented by length and SHA-256", () => {
+  let stored = 0;
   for (const item of expansion.cases) {
     const body = item.candidate.bodySummary ?? "";
     // The sanitiser works line by line (a phone number sits on one line); a table of years can look like a number across lines.
@@ -160,11 +163,17 @@ test("bodies are sanitised, bounded and fingerprinted; wire-service text is cut 
     assert.ok(body.length <= 1800, `${item.caseId}: body too long`);
     assert.match(item.candidate.bodySha256 ?? "", /^[0-9a-f]{64}$/, item.caseId);
     assert.ok((item.candidate.bodyCharsOriginal ?? 0) >= body.length, item.caseId);
-    if (COPYRIGHT_SOURCES.has(item.candidate.sourceName)) assert.ok(body.length <= COPYRIGHT_LEAD_CHARS, `${item.caseId}: wire text not cut`);
-    for (const text of [item.candidate.title, body, ...item.label.keyFacts, item.label.rationale]) {
-      assert.ok(!/sk-[A-Za-z0-9_-]{16,}|Bearer\s+[A-Za-z0-9._-]{16,}/.test(text), `${item.caseId}: looks like a credential`);
-    }
+    const allowed = bodyMayBeStored(item.candidate.sourceUrl);
+    assert.equal(item.candidate.bodyStored, allowed, `${item.caseId}: bodyStored flag disagrees with the body policy`);
+    if (!allowed) assert.equal(item.candidate.bodySummary, null, `${item.caseId}: a body was stored although its host is not allowed`);
+    if (allowed && item.candidate.bodySummary !== null) stored += 1;
   }
+  assert.ok(stored > 0, "some official-source bodies are expected to be stored");
+});
+
+test("no fixture string looks like a credential, including URLs", () => {
+  assert.deepEqual(scanJson(expansion), []);
+  assert.deepEqual(scanJson(labels), []);
 });
 
 test("every SQL file in the harness is a read-only SELECT", async () => {

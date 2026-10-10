@@ -37,7 +37,11 @@ export type EvalCase = {
   /** Full production candidate id (null for the 22 original fixtures, which only carry an 8-character prefix in caseId). */
   candidateId: string | null;
   sets: Array<"existing" | "hard" | "sample">;
-  candidate: CaseFixture["candidate"] & { bodyTruncatedForCopyright?: boolean; bodyCharsOriginal?: number; bodySha256?: string };
+  /**
+   * bodyStored is false when the body is deliberately not in the repository (src/body_policy.ts): bodySummary is then null and
+   * the body is re-read from production by candidateId and checked against bodySha256 (see attachBodies).
+   */
+  candidate: CaseFixture["candidate"] & { bodyStored?: boolean; bodyCharsOriginal?: number; bodySha256?: string };
   recorded: CaseFixture["recorded"];
   label: LabelRecord;
   /** Present for members of the representative sample. Weight = stratumN / stratumSampled. */

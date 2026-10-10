@@ -473,40 +473,40 @@
   ],
   "hazardCoverage": {
     "approval_state": {
-      "cases": 41,
-      "independent": 27
+      "cases": 17,
+      "independent": 10
     },
     "consolidated_vs_standalone": {
-      "cases": 5,
-      "independent": 5
+      "cases": 2,
+      "independent": 2
     },
     "foreign_currency": {
-      "cases": 7,
+      "cases": 6,
       "independent": 1
     },
     "hedge": {
-      "cases": 57,
-      "independent": 34
-    },
-    "multiple_amounts": {
-      "cases": 26,
-      "independent": 13
-    },
-    "negative_or_loss": {
-      "cases": 7,
-      "independent": 3
-    },
-    "subject_pair": {
-      "cases": 28,
+      "cases": 39,
       "independent": 20
     },
+    "multiple_amounts": {
+      "cases": 25,
+      "independent": 11
+    },
+    "negative_or_loss": {
+      "cases": 5,
+      "independent": 2
+    },
+    "subject_pair": {
+      "cases": 21,
+      "independent": 14
+    },
     "unit_conversion": {
-      "cases": 35,
-      "independent": 21
+      "cases": 25,
+      "independent": 13
     },
     "withdraw_or_cancel": {
-      "cases": 6,
-      "independent": 3
+      "cases": 4,
+      "independent": 1
     }
   }
 }
