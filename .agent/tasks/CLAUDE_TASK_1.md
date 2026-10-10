@@ -3,8 +3,8 @@
 - task_id: kabumori-watchlist-real-data-simulator-qa-20261010
 - slot: claude-1
 - owner: claude
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - type: **READ-ONLY / QA-ONLY**, not a feature implementation or deployment
 - priority: normal
 - recommended_model: **Sonnet5（中）**
@@ -70,13 +70,79 @@ On completion send **`K1`** to **かぶモリアプリG1のちゃ**.
 ## Report — current simulator QA task
 
 - task_id: kabumori-watchlist-real-data-simulator-qa-20261010
-- result: NOT_RUN
-- status: ready
-- changed_files: no app source changes authorized
-- deploy: prohibited
-- EAS: prohibited
-- next_owner: claude
+- result: **BLOCKED_AUTH** — the local iOS Simulator holds no authenticated user session, so no genuine saved account data (watch registrations / saved close reports) could be observed. Phase B was **not run**; nothing is claimed PASS from real data. No bug was found or fixed (no UI was exercised).
+- status: `review_required` / next_owner `chatgpt` (return to かぶモリアプリG1のちゃ for `K1`)
+- date: 2026-10-10 JST (checked 19:21 JST)
+- base: fresh `origin/main` `585de5a` (contains PR #120 squash `53678a2f`); independent clone, no source touched
 
+### Phase A — launch feasibility (what was actually checked)
+
+| check | result |
+|---|---|
+| Xcode / Simulator runtime | Xcode 27.0 (27A266a); iOS 27.0 runtime present, iOS 26.5 runtime unavailable |
+| Simulator devices | one device booted (iPhone 18 Pro, 402pt class, the device this G1 workstream has used since 2026-10-05); no other device booted; no other slot's app running on it (foreground services: system apps only) |
+| Installed build | `com.anohimemories.kabumori` v1.0.0 (1) dev-client, installed 2026-10-05 by this G1 workstream for fixture QA. It is **not** a signed-in production install |
+| Port / servers | 8081 is owned by another slot's social-mobile Metro (left untouched). No g1 dev server was started — nothing to load |
+| Session store | the app persists the Supabase session in AsyncStorage (`persistSession: true`, `src/lib/supabase.ts`). The install's AsyncStorage manifest was inspected **by key name and value length only**: it contains only `kabumori:topic-level:v1` and `kabumori:topic-read:v1`. There is **no `sb-*-auth-token` key** → no signed-in session exists. Values were not read or printed |
+| Sign-in | not attempted. Per TASK: no credentials were requested, retrieved or entered; no account was created |
+| Reset / uninstall / keychain | none performed |
+
+Conclusion: the only data the existing install can show is the fixture/auth-bypass rig that was already covered. Reaching genuine data would require the user to sign in themselves on the Simulator (or a user-assisted step below).
+
+### Real-data vs fixture vs physical (explicit distinction)
+
+- (a) **Fixture / harness checks already completed**: G1 tests 457/457 (PR #120 head), 402pt + 375pt Simulator passes with the fixture rig (two-segment view, featured rules, `remainingGroup`, `—` for missing rows). Still valid; **not** re-run here.
+- (b) **Genuine saved-session UI data actually observed**: **none** (BLOCKED_AUTH).
+- (c) **Physical iPhone**: **not tested** (outside this TASK).
+
+### Findings matrix (anonymized)
+
+| check | result | note |
+|---|---|---|
+| Genuine session available on Simulator | BLOCKED_AUTH | no `sb-*` auth key in app storage |
+| Initial = ポートフォリオ / segment switch keeps 銘柄 selected | NOT_OBSERVED (real data) | covered by fixtures only |
+| NativeTabs = ホーム/銘柄/ニュース/レポート/メニュー | NOT_OBSERVED (real data) | frozen in source, unchanged; verified on fixture rig earlier |
+| Watch count / identity vs registered `tracking_type=watch` | BLOCKED_AUTH | |
+| Each stock once, `—` for missing report rows | BLOCKED_AUTH | fixture-only |
+| Saved close / two-decimal % / stale `M/D 終値ベース` | BLOCKED_AUTH | |
+| Featured rules (\|%\|>=5.0, verified news card) on real data | BLOCKED_AUTH | not claimed; synthetic coverage only |
+| Remaining-list count = rest only / no phantom group | BLOCKED_AUTH | fixture-only (K1 corrective `remainingGroup`) |
+| Search opens (no registration) | NOT_OBSERVED (real data) | |
+| Editor opened without saving / read-only refresh | NOT_OBSERVED | |
+| 375pt | NOT_RUN | no data to inspect; temporary SE device not recreated |
+
+### changed_files
+
+- `.agent/tasks/CLAUDE_TASK_1.md` (this Report + status) and `.agent/CURRENT_STATE.md` (G1 row) only. No app source, config, dependency, asset, or native change.
+
+### commit_hash / push
+
+- This report commit on `main` (`agent: G1 watchlist real-data simulator QA report - BLOCKED_AUTH`); no PR (QA-only, no source diff). Hash is in the push log / `git log` of `.agent/tasks/CLAUDE_TASK_1.md`.
+
+### deploy / EAS
+
+- deploy = 0, EAS build = 0, TestFlight / App Store Connect = 0, `expo prebuild` = 0, production SQL / Supabase write / Edge deploy = 0, AI / paid smoke = 0.
+
+### remaining_issues
+
+- Genuine-data verification of the watchlist is still **not done**. Fixture coverage cannot confirm: real `tracked_stocks` identity/count, real saved close basis dates, the real frequency of verified-news featured cards, long corporate names from real data.
+- Physical iPhone verification still pending (separate from this TASK).
+
+### safety_checks
+
+- No credentials solicited / entered / logged; no account created; no keychain or Simulator reset; no uninstall.
+- AsyncStorage inspected as key names + lengths only; no values, tokens, emails, holdings or watch data read or recorded. No screenshots containing user data were taken or stored (one home-screen screenshot of the empty Simulator only, not saved to the repo).
+- No other slot's process, server (8081), device, branch or worktree was touched. Scratch clone only; `git status` of the repo shows nothing outside this Report + CURRENT_STATE row.
+
+### next_recommendation (K1 decision; minimal user-assisted steps, no secrets in chat)
+
+1. **Option A (Simulator, free):** the user signs in themselves once on the Simulator's kabumori dev-client (auth is persisted in the install; no reset needed). Then ask G1 to re-run Phase B read-only against that session. G1 will start a dedicated Metro on an unused port and will not request or see credentials.
+2. **Option B (physical iPhone, preferred for real-account truth):** the user opens the existing signed-in iPhone build, switches 銘柄 → ウォッチリスト, and reports counts/blocks seen (no screenshots of holdings required to GitHub). Does not consume an EAS build if the current installed build already includes PR #120; otherwise this needs a milestone build decision (K1/user).
+3. Do not mark the real-data gate PASS until (1) or (2) happens. Fixture acceptance (457/457 + Simulator 402/375pt) remains the current evidence.
+
+### return_to
+
+- かぶモリアプリG1のちゃ — send `K1`.
 
 ---
 
