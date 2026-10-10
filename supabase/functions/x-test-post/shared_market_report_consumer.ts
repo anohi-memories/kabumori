@@ -14,6 +14,7 @@
 import {
   formatSharedXPost,
   parseSharedMarketReportResult,
+  type MarketReportPacket,
   type ReportType,
   type SharedMarketReportResult,
   sharedXPostIssues,
@@ -86,6 +87,21 @@ function closeMetricColumn(data: { metrics?: Metric[] }, key: string): Record<st
 }
 
 /**
+ * The run's Fact columns from the packet's own Fact state (2026-10-08). The column allows 'passed' | 'failed' | null:
+ * "passed" → passed; "advisory" (Fact findings recorded, delivered anyway) → failed; "not_run" (no verdict) → null.
+ * A packet from before 2026-10-07 has no state but "passed". Removed units and Fact warnings go to the notes.
+ */
+export function sharedFactCheck(report: MarketReportPacket): { status: "passed" | "failed" | null; state: string; notes: string[] } {
+  const state = typeof report.fact?.ai_status === "string" ? report.fact.ai_status : "passed";
+  const status = state === "passed" ? "passed" : state === "advisory" ? "failed" : null;
+  const evidence = [
+    ...(report.fact?.removed_units ?? []),
+    ...(report.fact?.quality_warnings ?? []).filter((warning) => warning.startsWith("FACT_")),
+  ];
+  return { status, state, notes: [`fact_status:${state}`, ...evidence] };
+}
+
+/**
  * Publishes the shared packet as the X post. The run row is always created
  * first so a failure is recorded; the caller's outer handler marks the
  * scheduled post failed when this throws.
@@ -127,10 +143,11 @@ export async function publishSharedMarketReport(
 
   const body = formatSharedXPost(shared.report);
   const issues = sharedXPostIssues(shared.report, body);
+  const fact = sharedFactCheck(shared.report);
   if (issues.length > 0) {
     await deps.updateRun(runId, {
       status: "failed", error: "SHARED_MARKET_REPORT_FORMAT_INVALID", model_used: SHARED_MODEL_LABEL,
-      fact_check_status: "passed", fact_check_notes: issues, generated_text: body,
+      fact_check_status: fact.status, fact_check_notes: [...issues, ...fact.notes], generated_text: body,
       character_count: Array.from(body).length, market_data: baseMarketData,
     });
     throw new Error("SHARED_MARKET_REPORT_FORMAT_INVALID");
@@ -149,9 +166,14 @@ export async function publishSharedMarketReport(
     api_cost_usd: 0,
     generated_text: body,
     character_count: Array.from(body).length,
-    fact_check_status: "passed",
-    fact_check_notes: [`shared market_report_packet ${shared.report_packet_id}`],
-    market_data: { ...baseMarketData, quality_warnings: sharedXPostWarnings(shared.report, body) },
+    fact_check_status: fact.status,
+    fact_check_notes: [`shared market_report_packet ${shared.report_packet_id}`, ...fact.notes],
+    market_data: {
+      ...baseMarketData,
+      quality_warnings: sharedXPostWarnings(shared.report, body),
+      fact_status: fact.state,
+      removed_units: shared.report.fact?.removed_units ?? [],
+    },
     ...(reportType === "close"
       ? { nikkei_data: closeMetricColumn(shared.data, "nikkei225"), topix_data: closeMetricColumn(shared.data, "topix_proxy_1306") }
       : {}),

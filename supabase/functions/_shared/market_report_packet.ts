@@ -90,9 +90,23 @@ export type MarketReportPacket = {
   presentation_version?: typeof PRESENTATION_VERSION;
   app_story?: AppStoryDraft;
   session_views?: SessionView[];
-  /** quality_warnings never block delivery; they are recorded for observation. */
-  fact: { local_issues: string[]; ai_status: "passed"; generation_attempts: number; quality_warnings?: string[] };
+  /**
+   * quality_warnings never block delivery; they are recorded for observation.
+   * ai_status: "passed" when the delivered text passed the Fact check; "advisory" when the Fact check reported
+   * findings the deterministic guards could not confirm (delivered, findings recorded); "not_run" when no Fact verdict
+   * was obtained for it. Packets before 2026-10-07 are always "passed".
+   */
+  fact: {
+    local_issues: string[];
+    ai_status: MarketReportFactStatus;
+    generation_attempts: number;
+    quality_warnings?: string[];
+    /** Fixed codes of the units removed or neutralized before delivery (UNIT_<ACTION>:<CODE>@<path>). */
+    removed_units?: string[];
+  };
 };
+
+export type MarketReportFactStatus = "passed" | "advisory" | "not_run";
 
 export function isPresentationV2(packet: MarketReportPacket): boolean {
   return packet.presentation_version === PRESENTATION_VERSION && typeof packet.x_post.context_ja === "string";
@@ -107,9 +121,9 @@ export const X_HEADERS: Record<ReportType, string> = {
   close: "【大引け】きょうの日本株まとめ🌙",
 };
 
-const X_POINTS_TITLE: Record<ReportType, string> = {
-  morning: "📌 今日の注目ポイント",
-  close: "📌 今日の3ポイント",
+const X_POINTS_TITLE: Record<ReportType, (count: number) => string> = {
+  morning: () => "📌 今日の注目ポイント",
+  close: (count) => `📌 今日の${count}ポイント`,
 };
 
 const X_WATCH_TITLE: Record<ReportType, string> = {
@@ -118,28 +132,49 @@ const X_WATCH_TITLE: Record<ReportType, string> = {
 };
 const X_CLOSING_TITLE = "💬 今日のひとこと";
 
-/** Below this a body is broken output, not a short digest. */
+/**
+ * Added by code, once, at the end of every X post and every app story (2026-10-07). The model never writes it, no
+ * length rule measures or shortens it.
+ */
+export const REPORT_DISCLAIMER_JA = "※本レポートはAIによる分析です。内容に誤り・不足を含む可能性があります。最終的な投資判断はご自身でお願いします。";
+
+/** Below this a body is broken output, not a short digest (measured without the disclaimer). */
 export const X_POST_HARD_MIN_CHARS = 80;
-/** Above this the body is not safely postable. Length inside the hard bounds is a quality matter. */
-export const X_POST_HARD_MAX_CHARS = 900;
+/**
+ * Above this the body is not postable. The Kabumori X account is Premium (long posts up to 25,000 weighted
+ * characters; a CJK character weighs 2), so 12,500 characters fit whatever the script. The editorial targets below
+ * are warnings only.
+ */
+export const X_POST_HARD_MAX_CHARS = 12_500;
 /** Editorial target for the formatted body (header included, fixed hashtags excluded). */
 export const X_POST_TARGET_MIN_CHARS = 430;
 export const X_POST_TARGET_MAX_CHARS = 560;
 export const X_POST_EMOJI_MIN = 3;
 export const X_POST_EMOJI_MAX = 8;
 
+/** The formatted X body ends with the disclaimer exactly once. */
 export function formatSharedXPost(packet: MarketReportPacket): string {
-  const points = packet.x_post.points_ja.map((point) => `・${point.trim()}`).join("\n");
+  return `${formatXBody(packet)}\n\n${REPORT_DISCLAIMER_JA}`;
+}
+
+/** The body without the disclaimer: what the length and shape rules measure. */
+function xBodyOf(text: string): string {
+  return text.endsWith(REPORT_DISCLAIMER_JA) ? text.slice(0, -REPORT_DISCLAIMER_JA.length).trimEnd() : text;
+}
+
+function formatXBody(packet: MarketReportPacket): string {
+  // Points or a closing removed as factually wrong before delivery are left out with their heading.
+  const pointList = packet.x_post.points_ja.map((point) => point.trim()).filter(Boolean);
+  const points = pointList.length > 0
+    ? [X_POINTS_TITLE[packet.report_type](pointList.length), ...pointList.map((point) => `・${point}`)].join("\n")
+    : "";
+  const closing = packet.x_post.closing_ja.trim();
   if (!isPresentationV2(packet)) {
     return [
-      X_HEADERS[packet.report_type],
-      packet.x_post.lead_ja.trim(),
-      "",
-      X_POINTS_TITLE[packet.report_type],
+      [X_HEADERS[packet.report_type], packet.x_post.lead_ja.trim()].join("\n"),
       points,
-      "",
-      `💬 ${packet.x_post.closing_ja.trim()}`,
-    ].join("\n");
+      closing ? `💬 ${closing}` : "",
+    ].filter(Boolean).join("\n\n");
   }
   const context = (packet.x_post.context_ja ?? "").trim();
   const news = (packet.x_post.news_ja ?? "").trim();
@@ -147,11 +182,11 @@ export function formatSharedXPost(packet: MarketReportPacket): string {
   // Optional paragraphs are dropped when the evidence did not support them.
   return [
     [X_HEADERS[packet.report_type], packet.x_post.lead_ja.trim()].join("\n"),
-    [X_POINTS_TITLE[packet.report_type], points].join("\n"),
+    points,
     context,
     news ? `📰 ${news}` : "",
     watch ? [X_WATCH_TITLE[packet.report_type], watch].join("\n") : "",
-    [X_CLOSING_TITLE, packet.x_post.closing_ja.trim()].join("\n"),
+    closing ? [X_CLOSING_TITLE, closing].join("\n") : "",
   ].filter(Boolean).join("\n\n");
 }
 
@@ -159,16 +194,20 @@ export function emojiCount(text: string): number {
   return (text.match(/\p{Extended_Pictographic}/gu) ?? []).length;
 }
 
-/** Codes for a formatted X body that must not be posted (broken or platform-unsafe output only). */
+/**
+ * Codes for a formatted X body that must not be posted (broken or platform-unsafe output only). Up to three points
+ * and an empty closing are postable: a point or sentence removed as wrong is left out (2026-10-07, delivery first).
+ */
 export function sharedXPostIssues(packet: MarketReportPacket, text: string): string[] {
   const issues: string[] = [];
-  const length = Array.from(text).length;
+  const length = Array.from(xBodyOf(text)).length;
   if (length < X_POST_HARD_MIN_CHARS) issues.push("X_POST_TOO_SHORT");
-  if (length > X_POST_HARD_MAX_CHARS) issues.push("X_POST_TOO_LONG");
-  if (packet.x_post.points_ja.length !== 3 || packet.x_post.points_ja.some((point) => !point.trim())) {
+  if (Array.from(text).length > X_POST_HARD_MAX_CHARS) issues.push("X_POST_TOO_LONG");
+  if (packet.x_post.points_ja.length > 3 || packet.x_post.points_ja.some((point) => !point.trim())) {
     issues.push("X_POST_POINTS_INVALID");
   }
-  if (!packet.x_post.lead_ja.trim() || !packet.x_post.closing_ja.trim()) issues.push("X_POST_SECTION_EMPTY");
+  if (!packet.x_post.lead_ja.trim()) issues.push("X_POST_SECTION_EMPTY");
+  if (text.split(REPORT_DISCLAIMER_JA).length !== 2) issues.push("X_POST_DISCLAIMER_INVALID");
   if (/https?:\/\/|www\./i.test(text)) issues.push("X_POST_URL");
   if (/[#＃]\S/.test(text)) issues.push("X_POST_HASHTAG");
   if (/\n{3,}/.test(text)) issues.push("X_POST_BLANK_LINES");
@@ -178,7 +217,7 @@ export function sharedXPostIssues(packet: MarketReportPacket, text: string): str
 /** Editorial shortfalls of a postable X body. These are recorded and never suppress the post. */
 export function sharedXPostWarnings(packet: MarketReportPacket, text: string): string[] {
   const warnings: string[] = [];
-  const length = Array.from(text).length;
+  const length = Array.from(xBodyOf(text)).length;
   if (length < X_POST_TARGET_MIN_CHARS) warnings.push(`X_POST_SHORTER_THAN_TARGET:${length}`);
   if (length > X_POST_TARGET_MAX_CHARS) warnings.push(`X_POST_LONGER_THAN_TARGET:${length}`);
   const emoji = emojiCount(text);

@@ -327,6 +327,22 @@ export function dataGapNotes(snapshot: ReportSnapshot | null): string[] {
   return notes;
 }
 
+/**
+ * Shown once at the end of every report, on the market-detail and the legacy layout alike (2026-10-07). Same wording
+ * as the backend's REPORT_DISCLAIMER_JA (supabase/functions/_shared/market_report_packet.ts), which X carries.
+ */
+export const REPORT_DISCLAIMER_JA =
+  '※本レポートはAIによる分析です。内容に誤り・不足を含む可能性があります。最終的な投資判断はご自身でお願いします。';
+
+/** Where the numbers and the text come from; the investment caution is the disclaimer's alone. */
+export const REPORT_SOURCE_NOTE_JA =
+  '数値は株価データからアプリが計算しています。文章は、その数値と内容確認済みのニュースをもとにAIが作成しています。';
+
+/** The report's closing notes: data gaps, the source note, then the disclaimer exactly once. */
+export function reportFootnotes(gaps: readonly string[]): string[] {
+  return [...gaps.filter((note) => note !== REPORT_DISCLAIMER_JA), REPORT_SOURCE_NOTE_JA, REPORT_DISCLAIMER_JA];
+}
+
 /** Deep link target for a tapped push; only report pushes are routed here. */
 export function reportRouteForPush(data: { source_type?: unknown; source_id?: unknown } | null | undefined): string | null {
   if (data?.source_type !== 'personalized_report') return null;

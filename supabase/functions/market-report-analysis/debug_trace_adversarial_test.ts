@@ -35,7 +35,7 @@ const context = {
 };
 const record = (patch: Partial<GenerationRecord> = {}): GenerationRecord => ({
   generationIndex: 1, stage: "fact", hardRejection: "fact", candidate: { headline_ja: "見出し" }, localPassed: true, localIssues: [],
-  localWarnings: [], factRan: true, factPassed: false, factIssues: [], selectedForDelivery: false, fallbackReason: null, errorCode: null,
+  localWarnings: [], factRan: true, factPassed: false, factIssues: [], selectedForDelivery: false, fallbackReason: null, removedUnits: [], deliveryIssues: [], errorCode: null,
   requestHash: null, calls: 2, inputTokens: 1, outputTokens: 1, costUsd: 0, ...patch,
 });
 const row = (patch: Partial<GenerationRecord> = {}) => traceRows(context, [record(patch)])[0];
@@ -228,14 +228,16 @@ test("F3: 11 or more Fact findings are all kept in the trace while the decision 
     return Promise.resolve({ payload: { passed: false, issues: findings }, inputTokens: 1, outputTokens: 1 });
   };
   const outcome = await generateSharedAnalysis(input(), request, () => new Date("2026-09-17T07:20:30Z"), sink);
-  assert.equal(outcome.ok, false);
+  // Delivery first (2026-10-07): Fact findings the guards do not confirm are advisory after one regeneration.
+  assert.equal(outcome.ok, true);
   assert.deepEqual(sink[0].factIssues, findings, "the record keeps all 13");
   const [r] = traceRows(context, [sink[0]]);
   assert.deepEqual(r.fact_issues, findings);
   assert.equal(r.fact_issue_count, 13);
   // The retry note and the returned issues keep the existing cap of 10: the decision did not change.
   assert.ok(retryNotes[1].includes("指摘10") && !retryNotes[1].includes("指摘11"));
-  assert.deepEqual(!outcome.ok && outcome.issues, findings.slice(0, 10));
+  assert.ok(outcome.ok && outcome.packet.fact.quality_warnings?.includes("FACT_ADVISORY:13"), "the packet counts every finding");
+  assert.deepEqual(sink[1].factIssues, findings);
 });
 
 test("F3: the only bound is declared, and a field above it says so with its original size", () => {

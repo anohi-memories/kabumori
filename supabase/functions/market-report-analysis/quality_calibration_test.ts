@@ -6,7 +6,7 @@
 // Inputs: the real 10/2 morning packets (fixtures/morning_2026-10-02_*).
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatSharedXPost, type MarketReportPacket, sharedXPostWarnings } from "../_shared/market_report_packet.ts";
+import { formatSharedXPost, type MarketReportPacket, REPORT_DISCLAIMER_JA, sharedXPostWarnings } from "../_shared/market_report_packet.ts";
 import { buildAppMarketStory } from "../_shared/market_report_story.ts";
 import {
   APP_STORY_REWRITE_BELOW_CHARS,
@@ -87,7 +87,8 @@ test("10/2 live draft: delivered in one generation and one Fact call (was three 
 test("the 486-character X body is inside the target: no length warning", () => {
   const packet = assemblePacket(input, live(), { generatedAt: NOW(), attempts: 1 });
   const post = formatSharedXPost(packet);
-  assert.equal(Array.from(post).length, 486);
+  // The disclaimer is appended by code and not measured: the body is still 486.
+  assert.equal(Array.from(post).length, 486 + 2 + Array.from(REPORT_DISCLAIMER_JA).length);
   assert.deepEqual(sharedXPostWarnings(packet, post), []);
 });
 
@@ -205,7 +206,8 @@ test("fallback: a thin but safe draft survives a rewrite that breaks a hard fact
   ], failedRequest), NOW);
   assert.deepEqual([second.ok, second.trace.deliveredGeneration, second.trace.rewriteRequestFailed], [true, 1, true]);
 
-  // A hard-fact failure with no safe draft still fails closed, and transport stays a separate matter.
-  const closed = await generateSharedAnalysis(input, requester([{ step: "generate", payload: broken }, { step: "generate", payload: broken }]), NOW);
-  assert.deepEqual([closed.ok, !closed.ok && closed.error], [false, "ANALYSIS_LOCAL_CHECK_FAILED"]);
+  // With no safe draft, the wrong lead is replaced (never delivered) and the rest goes out after one Fact call.
+  const closed = await generateSharedAnalysis(input, requester([{ step: "generate", payload: broken }, { step: "generate", payload: broken }, PASSED]), NOW);
+  assert.ok(closed.ok && !formatSharedXPost(closed.packet).includes("TOPIXも"));
+  assert.equal(closed.ok && closed.packet.fact.ai_status, "passed");
 });

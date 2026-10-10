@@ -1,0 +1,556 @@
+[
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "572A0",
+  "company_name": "ｉＳ日本国債三七",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 05:20:09.284487+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "04ce739e-04ab-479c-84ef-914d6ce3d0ea",
+  "published_at": "2026-10-07 02:45:00+00",
+  "source_type": "tdnet",
+  "title": "ＥＴＦの収益分配金見込額のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "31810",
+  "company_name": "買取王国",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 06:20:09.357563+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "0e2497a9-bfd3-4aca-b224-a910af75880e",
+  "published_at": "2026-10-07 05:30:00+00",
+  "source_type": "tdnet",
+  "title": "２０２６年９月 月次売上概況"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "236A0",
+  "company_name": "ｉＳ日本国債七十",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 04:00:20.029263+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "184b6d6f-820b-41de-b3e1-574751630406",
+  "published_at": "2026-10-07 02:45:00+00",
+  "source_type": "tdnet",
+  "title": "ＥＴＦの収益分配金見込額のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "25010",
+  "company_name": "サッポロビール",
+  "coverage_categories": [
+   "regulation_policy",
+   "corporate"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-07 05:40:09.33334+00",
+  "generated_text": "【速報】サッポロビールは、公正取引委員会から、酒類などの取引をめぐる独占禁止法違反の疑いで調査を受けていると公表しました。現時点で業績への影響は不明としています。\n\n出典: https://www.release.tdnet.info/inbs/140120261007547218.pdf",
+  "generation_fact_status": "passed",
+  "id": "1cbeaa20-7e1a-4402-a799-5dc488b69f57",
+  "published_at": "2026-10-07 03:45:00+00",
+  "source_type": "tdnet",
+  "title": "当社に対する公正取引委員会の調査について"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "573A0",
+  "company_name": "ｉＳ日本国債二十超",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 05:30:16.032024+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "1cdebd30-96d3-4f7b-9e1b-4bf3b7d990e1",
+  "published_at": "2026-10-07 02:45:00+00",
+  "source_type": "tdnet",
+  "title": "ＥＴＦの収益分配金見込額のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "81660",
+  "company_name": "タカキュー",
+  "coverage_categories": [
+   "fx",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-07 06:50:13.392088+00",
+  "generated_text": "【速報】タカキュー、中間期は赤字転落📉\n\n2027年2月期中間期の売上高は前年同期比10.0％減の38億5,100万円。営業損益は前年同期の315万円の黒字から2億3,956万円の赤字に、純損益も194万円の黒字から2億8,327万円の赤字になりました。\n\n通期業績予想は、4月10日に公表した内容から変更ありません。\n\n出典: https://www.release.tdnet.info/inbs/140120261002545176.pdf",
+  "generation_fact_status": "passed",
+  "id": "243f36ca-36bc-4fb7-a8f4-cdbdc597ae3c",
+  "published_at": "2026-10-07 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2027年2月期 第2四半期(中間期)決算短信〔日本基準〕（非連結）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "22570",
+  "company_name": "ｉＳ＄ＩＧ社債",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 03:50:09.579142+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "2e682959-01a6-4d4d-9f52-9091fbe578ba",
+  "published_at": "2026-10-07 02:45:00+00",
+  "source_type": "tdnet",
+  "title": "ＥＴＦの収益分配金見込額のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "98460",
+  "company_name": "天満屋ス",
+  "coverage_categories": [
+   "fx",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 07:00:31.878632+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "3cb0b6cf-b56f-40b6-9288-d2ecaf4d9fa4",
+  "published_at": "2026-10-07 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2027年2月期 第2四半期（中間期）決算短信〔日本基準〕（連結）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "570A0",
+  "company_name": "ｉＳ日本国債〇一",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 05:10:13.642814+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "44027136-c4e5-4e0e-9888-861622cf1661",
+  "published_at": "2026-10-07 02:45:00+00",
+  "source_type": "tdnet",
+  "title": "ＥＴＦの収益分配金見込額のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "69810",
+  "company_name": "村田製",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 06:00:11.71682+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "58d03255-6cb9-48b0-9ba6-c9239b4f7421",
+  "published_at": "2026-10-07 05:00:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式の取得状況に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "52520",
+  "company_name": "Ｇ－日本ナレッジ",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 06:30:10.412294+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "5aaa0b73-de6c-4aa2-b308-4af103b11443",
+  "published_at": "2026-10-07 06:00:00+00",
+  "source_type": "tdnet",
+  "title": "（訂正）株式会社ビジネスブレイン太田昭和との資本提携契約の締結、第三者割当による新株式発行及び株式の売出し並びに主要株主等の異動に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "28560",
+  "company_name": "ｉＳ米国債三七ヘジ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 04:50:09.916127+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "6cfe20b5-e1ba-48fe-b975-d75e383933a6",
+  "published_at": "2026-10-07 02:45:00+00",
+  "source_type": "tdnet",
+  "title": "ＥＴＦの収益分配金見込額のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "38170",
+  "company_name": "ＳＲＡＨＤ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 06:40:16.260236+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "70c99eac-16dc-463e-980a-2a0b5fa862d6",
+  "published_at": "2026-10-07 06:00:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式の取得状況に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "42120",
+  "company_name": "積水樹脂",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 06:10:13.505217+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "885fe94b-075c-4e74-a0cc-42012512646a",
+  "published_at": "2026-10-07 05:00:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式の取得状況に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "16560",
+  "company_name": "ｉＳ米国債七十",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 03:30:12.475482+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "9691e969-d113-4ec6-acb8-f153f3bf6aa9",
+  "published_at": "2026-10-07 02:45:00+00",
+  "source_type": "tdnet",
+  "title": "ＥＴＦの収益分配金見込額のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "238A0",
+  "company_name": "ｉＳ米国債二十五ヘジ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 04:10:08.634631+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "98c98736-0545-4f1d-8103-31026c6d1499",
+  "published_at": "2026-10-07 02:45:00+00",
+  "source_type": "tdnet",
+  "title": "ＥＴＦの収益分配金見込額のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "20120",
+  "company_name": "ｉＳ米国債０３月",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 03:30:12.661304+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "a15f9c43-319e-4570-90a5-c1af2ffcce3a",
+  "published_at": "2026-10-07 02:45:00+00",
+  "source_type": "tdnet",
+  "title": "ＥＴＦの収益分配金見込額のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "22590",
+  "company_name": "ｉＳフランス国債ヘジ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 04:00:19.802373+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "a5696e15-0406-4e73-8b41-98be8a6aae4c",
+  "published_at": "2026-10-07 02:45:00+00",
+  "source_type": "tdnet",
+  "title": "ＥＴＦの収益分配金見込額のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "26230",
+  "company_name": "ｉＳユロＩＧ社債ヘジ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 04:40:09.911996+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "a5b8d4b7-fa8f-4c38-80fa-9cf6055a52b7",
+  "published_at": "2026-10-07 02:45:00+00",
+  "source_type": "tdnet",
+  "title": "ＥＴＦの収益分配金見込額のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "29980",
+  "company_name": "Ｇ－クリアル",
+  "coverage_categories": [
+   "rates",
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 06:10:13.326105+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "ad0bb8b5-eb84-48a2-a940-556990880447",
+  "published_at": "2026-10-07 05:00:00+00",
+  "source_type": "tdnet",
+  "title": "当社主要ＫＰＩ（2026年９月度）に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "26490",
+  "company_name": "ｉＳＧＮＭＡ債ヘジ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 04:40:10.099856+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "ad263d75-81cb-4a2d-b5dc-16f3b8b334b7",
+  "published_at": "2026-10-07 02:45:00+00",
+  "source_type": "tdnet",
+  "title": "ＥＴＦの収益分配金見込額のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "76360",
+  "company_name": "ハンズマン",
+  "coverage_categories": [
+   "disaster",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 05:50:09.301872+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "bfa29043-96b5-4664-81a8-e22551f883ca",
+  "published_at": "2026-10-07 04:30:00+00",
+  "source_type": "tdnet",
+  "title": "2026年9月度 売上高の状況（2026年7月1日～2026年9月30日）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "237A0",
+  "company_name": "ｉＳ米国債二十五",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 04:10:08.465579+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "c23538dd-c204-4ee8-8956-a523e84bb071",
+  "published_at": "2026-10-07 02:45:00+00",
+  "source_type": "tdnet",
+  "title": "ＥＴＦの収益分配金見込額のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "16050",
+  "company_name": "ＩＮＰＥＸ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 05:50:09.101948+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "c5a0cd2b-a6f3-48c3-a8e7-40597cd0b254",
+  "published_at": "2026-10-07 04:00:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式の取得状況に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "59320",
+  "company_name": "三協立山",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-07 07:00:31.291948+00",
+  "generated_text": "【速報】三協立山、1Qは営業黒字に転換。📊\n\n2027年5月期第1四半期は、売上高が前年同期比13.3％増の972億円、営業利益は26億円でした。前年同期は11億円の営業赤字。親会社株主に帰属する四半期純利益も15億円の黒字です。\n\n通期業績予想と配当予想は、いずれも据え置きです。\n\n出典: https://www.release.tdnet.info/inbs/140120261006546363.pdf",
+  "generation_fact_status": "passed",
+  "id": "dea97ff1-f131-449a-9a25-abc33dd0660f",
+  "published_at": "2026-10-07 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2027年5月期 第1四半期決算短信〔日本基準〕(連結)"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "68500",
+  "company_name": "チノー",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 06:50:13.623707+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "e3e3b7af-b09b-4721-8615-0039bee66e5f",
+  "published_at": "2026-10-07 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式の取得状況に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "30660",
+  "company_name": "ＪＢイレブン",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 06:20:09.50943+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "e7b33fa8-f1ec-46b5-b48d-3af70d4ae801",
+  "published_at": "2026-10-07 06:00:00+00",
+  "source_type": "tdnet",
+  "title": "2027年３月期 ９月度 店舗月次売上・店舗数のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "59320",
+  "company_name": "三協立山",
+  "coverage_categories": [
+   "fx",
+   "commodities",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-10-07 07:00:32.165443+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "e7b42352-a286-4101-8a66-903472ecdbe6",
+  "published_at": "2026-10-07 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2027年5月期 第1四半期 決算説明資料"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "19290",
+  "company_name": "日特建",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-07 06:50:12.995343+00",
+  "generated_text": "【速報】日特建設が、地研テクノの発行済み株式をすべて取得し、完全子会社化する契約を締結しました。株式譲渡の実行は2026年11月30日を予定していますが、組織再編の完了などが前提で、日程が変わる可能性もあります。📝\n\n地研テクノは住宅・低層建築向けの地盤調査、設計、地盤補強工事を手がけ、従業員は97名。取得価額は非開示で、2027年3月期の連結業績への影響は精査中です。\n\n出典: https://www.release.tdnet.info/inbs/140120261005545871.pdf",
+  "generation_fact_status": "passed",
+  "id": "f5a83a1f-caf3-4a1a-880f-f0e54dedaf9d",
+  "published_at": "2026-10-07 06:01:00+00",
+  "source_type": "tdnet",
+  "title": "地研テクノ株式会社の株式取得（完全子会社化）に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": null,
+  "company_name": null,
+  "coverage_categories": [
+   "geopolitics"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-10-07 06:40:07.576649+00",
+  "generated_text": "【速報】ロシア軍のウクライナ各地への攻撃で、キーウでは少なくとも2人が死亡しました。市長によると、ダルニツキー地区で攻撃後に起きた火災の消火中、救助された2人とは別に、死亡した2人が見つかったとのことです。ロシア国防省は、キーウや他の地域への「大規模攻撃」を実施したと発表しています。\n\n出典: https://www.aljazeera.com/news/2026/10/7/at-least-two-killed-in-kyiv-as-russia-launches-massive-attack-on-ukraine",
+  "generation_fact_status": "passed",
+  "id": "fd69fe1b-40a7-41d8-aeaf-8626488aafe7",
+  "published_at": "2026-10-07 06:19:26+00",
+  "source_type": "breaking_market",
+  "title": "At least two killed in Kyiv as Russia launches ‘massive’ attack on Ukraine"
+ }
+]
