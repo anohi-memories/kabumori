@@ -1,3 +1,42 @@
+# Codex H2 CURRENT TASK — G2 PR #110 P2 Hard-Fact final boundary review
+
+- task_id: kabumori-pr110-p2-final-narrow-review-20261011
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- start_code: H2
+- completion_code: C2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Sol（高）**
+- type: ONE narrow independent source-only final review
+- target_pr: https://github.com/anohi-memories/kabumori/pull/110
+- exact_head: 2c876b0bafee31844b9854c4a7d34ba69660d4cf
+- earlier_H2_head: cb3d77d50e848d043f5427df363769b75d3c7764
+- merge_allowed: false
+- paid_api_or_production_allowed: false
+- product_edits_allowed: false
+
+## Purpose / focus
+
+G2 K2 PASS_CANDIDATE; this is the LAST focused gate for ONE P2 corrective commit with only THREE changed files: `market-report-analysis/analysis_logic.ts`, `hard_fact_guards.ts`, `h2_corrective_test.ts`. Old H2 independently reviewed B1-R1/B2-R1/B3-R1 and confirmed seven original residuals closed. Do NOT reopen or broadly rerun 1,340 tests; use only focused independent adversarial probes and the narrow relevant suites.
+
+G2 fixed mistaken noun+subject `勢いが` as a clause boundary using shared `PREDICATE_END`, also applied to `EMOJI_SENTENCE_END`. G2 reported 1,340/1,340 regression tests PASS and 3 new fail-before/pass-after tests. **Key remaining risk (acknowledged in G2 Report):** a real adjective omitted from `PREDICATE_END` may make an unsupported assertive market-cause clause and an unrelated later `可能性` one clause, yielding an unsafe false negative. Carefully test `緩い` and at least a few plausible unseen predicates with no comma as well as known safe tests. Return CHANGES_REQUIRED if a genuine unsupported cause can pass; do not accept passing baseline tests as disproof. Avoid speculative or irrelevant blockers.
+
+### Required work
+
+1. Read PROJECT_RULES.md, .agent/ORCHESTRATION.md, ACTIVE_TASK, CURRENT_STATE, this H2 TASK and prior H2 PR110 finding/report. Confirm status ready and exact task_id. Fresh-fetch main and PR110; require OPEN UNMERGED exact pinned head. Use physically independent NEW H2 checkout based on `/Users/yuya/Developer/kabumori-fresh`; do not use other G/H/B checkout/branch/dev server or overwrite existing uncommitted changes. If not isolatable, STOP.
+2. Independently inspect ONLY delta `cb3d77d5..2c876b0b`: predicate regex, clause and emoji behavior. Test genuine qualified speculation containing `勢いが` and nearby noun+subject cases (`思いが`, `狙いが`, `違いが`, `戻りが`), and ensure the sentence survives mocked X delivery with generate+Fact (no unnecessary regeneration).
+3. Test true factual unsafe cause plus a **later unrelated qualifier** across comma-free `が／けれど／ので／ため／ものの` and recognized/adversarial adjectives. Explicitly test unrecognized adjectives in the G2 risk note, especially `緩いが`, to verify fail-closed behavior. An actual unsafe false negative is a blocking finding. Preserve previous 7 accepted controls.
+4. Test emoji between noun-in-`い` and wrong-dated market metric cannot break date-binding; confirm a complete predicate + emoji + different date still splits correctly. Preserve MAX_GENERATIONS=2 / MAX_MODEL_CALLS=4 and transport retry ceilings. Optional full suites only if narrow probes reveal regression. Source scope and main/PR overlap check.
+5. Run no paid API or real X/Supabase, no production DB/Secrets/Edge/migration, no code modifications, no PR merge/deploy or user-data access. Keep historical H2 TASK/Report verbatim.
+6. At end prepend current independent Report to `.agent/CODEX_REPORT_2.md` without modifying historical suffix; update ONLY H2 TASK `status: review_required / next_owner: chatgpt` and H2 section of ACTIVE_TASK via guarded fetch/CAS, preserving all other work.
+7. Return to **かぶモリアプリG2のちゃ** with **C2**. Report PASS or CHANGES_REQUIRED, reviewed exact head, genuine reproducible findings, tests actually executed, unchanged product source, commits/push/deploy facts. PASS permits separate merge consideration, not automatic merge or production release.
+
+---
+
+## Previous H2 TASK history follows unchanged
+
 # C2 — E11 independent security review accepted; corrective G5 required — 2026-10-11 JST
 
 - task_id: common-account-phase3d-e11-optiond-disposable-security-review-20261010
