@@ -3,8 +3,8 @@
 - task_id: kabumori-watchlist-highlight-hybrid-ui-20261010
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: normal
 - type: Kabumori native app source-only UI / deterministic view-model
 - recommended_model: **Sonnet5（高）**
@@ -60,10 +60,47 @@ Create **one** G1 branch/PR (source-only; no self-merge). Preserve existing G1 T
 
 ## Report — current G1 watchlist task
 
-- status: pending
-- result: awaiting G1 implementation
-- merge: NOT AUTHORIZED
-- deploy/EAS: NOT AUTHORIZED
+- task_id: `kabumori-watchlist-highlight-hybrid-ui-20261010`
+- status: `review_required` / next_owner `chatgpt` (return to かぶモリアプリG1のちゃ for `K1`)
+- result: implemented; Simulator-verified at 402pt and 375pt (real taps/swipes). PR open, **not merged**.
+- PR: https://github.com/anohi-memories/kabumori/pull/120 — branch `claude/g1-watchlist-highlight-hybrid-ui-20261010`, head / commit_hash `404b26f722335af97f095177664c7b89ca8df140` (1 commit), pushed. Deploy = 0, EAS = 0, merge not performed.
+- fresh main at start: `e46170d` (allocation reference `582f40fe` refreshed). Open-PR overlap on the intended paths (#117/#116/#115/#112/#110/#33/#11/#10/#3): **none**.
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation: **0**. No dependency added.
+
+### Bottom menu unchanged (user-emphasised)
+`git diff origin/main -- 'src/app/(tabs)/_layout.tsx' src/app/_layout.tsx` is **empty**. A test pins the five NativeTabs: labels `ホーム / 銘柄 / ニュース / レポート / メニュー` in that order, triggers `index / explore / news / reports / menu`, no `watchlist` string in either layout, no watchlist route file under `src/app/`. Both subviews are local state in `src/app/(tabs)/explore.tsx`; the bottom tab stays 銘柄 in either subview (verified by real taps).
+
+### changed_files
+`src/app/(tabs)/explore.tsx`, `src/lib/portfolio-view.ts` (pure helpers), `src/components/portfolio/watchlist-section.tsx` (new), `src/components/portfolio/portfolio-sections.tsx` (shared header + switch), `src/components/portfolio/stock-avatar.tsx` (optional deterministic `seed` tint), `src/lib/detail-navigation.ts` (a `stocks` origin so 戻る from a watchlist news card returns to the 銘柄 tab), tests `watchlist-layout_test.ts` (new), `portfolio-screen_test.ts` (updated for the switch), 10 screenshots. Untouched: `search.tsx`, `tracked-stock-editor.tsx`, both layouts, asset/botanical card, sparkline, report root navigation.
+
+### behaviour (acceptance mapping)
+- **A switch**: shared header (`PORTFOLIO|WATCHLIST` eyebrow, 「銘柄」, search → `/search`) + accessible two-segment control (`tablist` / `tab`, selected state, hint) switching both directions, default portfolio; ★ pill and in-view back link removed; portfolio content/order unchanged.
+- **B featured cards**: 0–3, no filler. Candidate = saved |changePercent| ≥ **5.0** (inclusive, raw value) or a verified news fact; order: news (severity, newest), then price by |%| desc, tie by ticker; cap 3; extra qualifying names stay in the list with a small 注目 marker; fall = muted coral, rise = muted mint, text badge 大きく下落/大きく上昇; no fake history line; each stock exactly once; 0 cards ⇒ no section.
+- **C news card**: only when the saved report really holds the item: id in the stock's `news_ids` AND present in `snapshot.news` with the same ticker, non-blank `headline_ja`, parseable `news_time`, severity emergency/critical/high. `news_ids` alone never produces a card (no headline/cause/URL is inferred; tests cover id-without-item, other-ticker item, not-linked item, blank headline, bad date, low/medium severity). CTA 「ニュースを見る ›」 opens `/news-detail?id=…&from=stocks` (a real supported destination; the item opened in the Simulator); 戻る/swipe returns to the watchlist. No news scraping/search/DB join/AI call. In the verified fixture the news card showed headline (≤2 lines), date and the price/% of the stock. **News enhancement is therefore active but conditional on report data**; if reports rarely carry high-severity stock news for watch stocks the card will rarely appear (see remaining issues).
+- **D compact list**: ~64 pt rows (3-line rows with target prices ≈71 pt), deterministic varied round fallback avatars (6 muted tints by ticker hash; no logos, no company artwork), company / ticker (+注目) / `買 ¥x / 売 ¥y` on its own line (never cut mid-number), saved close, signed % pill, chevron. All `tracking_type='watch'` stay visible (— when not reflected); tap ⇒ existing editor (edit/delete verified); registration via `/search`.
+- **E date/truthfulness**: close/% only from `portfolio_snapshot.watch[].price` via `buildWatchRows`; basis via `portfolioBasis/portfolioLabels`; 「今日の注目銘柄」 only when the saved basis date equals JST today, otherwise `注目銘柄` + `M/D 終値ベース`; missing price ⇒ — and never promoted; no realtime wording (the footnote says the values are saved close, not realtime; with no report: 「価格はまだありません。…」); no API call on switching, no AI at render. Percentages are shown with two decimals so a −4.99% stock never reads −5.0% yet unfeatured.
+- **F fit**: 375/402 verified; safe area + existing 28 pt bottom space, no NativeTabs overlap; no dead sort control (none shown). On <390 pt featured cards use a 22 pt % and 15 pt company name so long names do not orphan a character.
+- **G scope**: logo/ゆめちゃん, asset card background, sparkline, report root navigation, holdings, settings, topics, menu, NativeTabs untouched.
+
+### tests / checks (head `404b26f7`)
+`deno test tests/app/` **451 passed / 0 failed** (new `watchlist-layout_test.ts`: threshold constants; 0/1/2/3/4+ featured; exactly ±5.0 / 4.99; ranking and ties; flagged extras; single appearance; null price; empty/no-report/stale; verified-news matrix; strongest-newest news; news-first ordering; no sample data in production code; stocks origin; no dead controls; avatar tint determinism; **bottom menu guard**; search/editor unchanged); tsc(src) no diagnostics; `expo config --type public` OK; `expo export --platform web` PASS; `git diff --check` clean. No pre-existing failures observed.
+
+### 375 / 402 screenshots (`docs/ui-review/watchlist_hybrid_*`)
+`portfolio_{402,375}pt`, `0_featured_{402,375}pt`, `2_featured_{402,375}pt`, `5_featured_{402,375}pt` (3 cards + 注目-marked list rows), `news_{402,375}pt`. Fixture/debug rig only (scratchpad; no production mock committed).
+- Findings: switch segments ≈ 38–40 pt high; featured card ≈ 88 pt (price) / ≈ 210 pt (news with headline); list rows ≈ 64 / 71 pt; at 375 pt long company names truncate with … only in the list row (e.g. 三菱ＵＦＪフィナンシャル・グループ), not in cards; footnote and last row clear the floating tab bar.
+
+### remaining_issues
+- **News feed constraint**: the saved report's `snapshot.news` carries stock-linked items only for what the report generator selected; a watch stock's `news_ids` frequently has no matching item with severity high+, in which case only price cards appear (by design). Whether real reports contain such items for watch stocks has not been observed on real data.
+- Real-iPhone / real-report verification not done (fixture rig only); Dynamic Type, dark mode and VoiceOver reading not exercised.
+- The segmented switch scrolls with the content (not sticky); with a deep scroll the user returns to the top to switch.
+- A very long list of featured candidates is capped at 3 by design; a −10%+ move shows 2 decimals and still fits at 375 pt (checked up to ±9.2%).
+- 375 pt: the empty-report footnote wraps in two lines by an explicit line break.
+
+### safety_checks
+No change to `(tabs)/_layout.tsx`, `src/app/_layout.tsx`, native/navigation config, tab icons, DB/Auth/RLS/RPC/Edge/migrations or other slots' code; no EAS/TestFlight/paid API; no production write; `.env`/`node_modules` not committed; PR not merged; cross-slot overlap re-checked before push (none).
+
+### next_recommendation
+K1 reviews PR #120 (isolated low-risk visual/view-model; no navigation or data boundary changed beyond the `stocks` back-origin, so an independent Codex review is not needed). The user can check it on the iPhone with real saved reports (server on request).
 
 ---
 
