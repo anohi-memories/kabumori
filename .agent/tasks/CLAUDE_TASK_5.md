@@ -1,10 +1,27 @@
+# C2 source acceptance receipt — G5 PR112 security review complete — 2026-10-10
+
+- accepted_task_id: common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010
+- final_review: H2 `common-account-pr112-r1l-r2-apple-boundary-exact-head-rereview-20261010`
+- reviewed_head: 54b9435b0dcc0d0e79ae6eba4340eee44508141c
+- result: **source implementation and independent H2 security review PASS**
+- R1L: old service_role RPC lease/fence bypass closed; 75 new SQL probes denied with proper owned calls working.
+- R2: uncertain Apple HTTP outcome cannot replay consumed code; actual handler 21/21 adverse variants, durable reconciliation semantics.
+- tests: 555/555 unit, Phase1/2/3a PostgreSQL PASS, SQL 48/48 and TS 45/45 mutation detection, strict runtime lint/check PASS; 2 app CSS baseline tsc errors remain unchanged.
+- current G5 implementation task: **done**, next_owner none. Its protected task history and Reports remain below.
+- PR source merge: independently PASS to **consider**, but **NOT merged/authorized** by C2; separate ChatGPT merge gate and user authorization needed. After any future source change, independent acceptance must be re-evaluated.
+- whole shared Auth deletion remains **UNAVAILABLE/BLOCKED** behind schema-immutable closed gate pending Auth-side identity/write fencing, real disposable Supabase proof and other release prerequisites.
+- real Supabase/provider/production read/write, migration apply, Edge deploy, EAS/TestFlight, real deletion and PR merge by C2: **0**.
+- do not auto-assign G5 another task until its previous scope/branch/PR ownership and worktree isolation are rechecked.
+
+---
+
 # G5 — CURRENT TASK — PR112 R1/R2 residual security corrective (C2 2026-10-10)
 
 - task_id: common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: codex
+- status: done
+- next_owner: none
 - priority: critical
 - type: narrow independent-H2-findings security corrective, existing PR
 - target_pr: 112
