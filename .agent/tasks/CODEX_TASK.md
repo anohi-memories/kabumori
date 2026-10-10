@@ -3,8 +3,8 @@
 - task_id: common-ai-provider-pr117-pr119-integrated-security-review-20261010
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - start_code: H1
 - completion_code: C1
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -65,6 +65,15 @@ Report `task_id, verdict, reviewed_exact_heads, PR state & stacking, tested comm
 
 Explicitly print: `返却先：共通AI基盤のちゃ（OpenAI・Claude API専用チャット）へ C1`.
 Recommend narrow fixes only for blocking findings. If PASS, source-merge of PR117 then PR119 and later production planning remain **separately gated**; no auto-merge or live rollout. Future obligations remain: verify Claude credit in Console, Anthropic privacy policy before personal data, user/brand feature caps, no automatic provider fallback, shared market report before individual reports, G5-controlled account deletion/retention plan. The user's minimum-review policy remains in force.
+
+## H1 completion — 2026-10-10 JST
+
+- verdict: **CHANGES_REQUIRED**, one combined exact-head review; PR117/119 heads unchanged, both OPEN/DRAFT/UNMERGED.
+- R1 [P1]: identical in-flight callId dispatches two HTTP requests for one reserved/charged attempt; real local SQL + mock-provider executor reproduction confirmed.
+- R2 [P2]: migration accepts NOINHERIT / SET-enabled authenticated→service_role privilege path; non-superuser-owner PG17 reproduction confirmed.
+- Independently: unit94/94, source invariants11/11, PG behavior/default ACL/concurrency/adverse/rollback and shim E2E5/5 PASS. Default lint has one pinned-import rule failure; explicit exclusion PASS. Original12 mutations and unrelated broad suites NOT_RUN, not falsely credited.
+- Full details/reproducers/limitations: `.agent/CODEX_REPORT.md` current header. Product source edits and production/API/merge/deploy actions:0. Only own control-file completion synchronization permitted.
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）; completion_code: C1; next_owner: chatgpt. STOP for narrow corrective assignment, not an automatic new review.
 
 ---
 

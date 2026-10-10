@@ -1,4 +1,71 @@
-# Current H1 completion — 2026-10-10
+# Current H1 result — common AI Phase 1a + 1b — 2026-10-10 JST
+
+- task_id: common-ai-provider-pr117-pr119-integrated-security-review-20261010
+- result / verdict: **CHANGES_REQUIRED** — one consolidated, bounded source-only review; two independently reproduced blockers in PR119. No separate repeated Phase1a review.
+- reviewed_exact_heads: PR117 `2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226`; stacked PR119 `c7d0f6e099cddd8a21c870cc38f5cf0030d773b2`.
+- PR state: both OPEN / DRAFT / UNMERGED at start and final check; PR117 27 files; PR119 18 files with one new migration, base `claude/common-ai-provider-core-20261010`; PR117 is an ancestor of PR119.
+- fresh main: startup `5ef03b7131b3991d8c2d721dd6401b7c185e6314`, completion preparation `45d32927571c81d9e6f8c9aa5878b28204537def`; canonical H1 TASK/REPORT unchanged between them. Other slots' changes retained.
+- isolated workspaces: `/private/tmp/kabumori-h1-ai-20261010.fNittG/report` (own control-file branch); `/private/tmp/kabumori-h1-ai-20261010.fNittG/source` (detached exact PR119). Implementer/G1–G5/H2 worktrees, changes and servers untouched.
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- completion_code: C1; status: review_required; next_owner: chatgpt.
+- source corrections: 0; source PR merge / deploy: NOT PERFORMED / NOT AUTHORIZED.
+- production/staging DB access, migration apply, real provider/paid API, credentials lookup, Auth/OAuth/Vault/Cron/budget-policy writes: **0**. All SQL and fake policy data below are disposable LOCAL proof only.
+
+## Blocking findings
+
+### R1 [P1] A duplicate in-flight call receives a second send permit without a second reservation
+
+- Primary location: `supabase/migrations/20261010050613_ai_provider_budget_ledger.sql:667`; related reserve reuse at lines 465–467, `ledger_guard.ts:139–148`, `execute.ts:217–238`.
+- `reserve` returns the same reservation with `allowed:true` for both reserved and sent states. `mark_sent` returns `may_send:true` AGAIN for an already-sent row. The TypeScript guard interprets that as permission to send another HTTP request; the unique settlement then records only one event. Reservation idempotency is not dispatch idempotency.
+- Independent reproducer: two concurrent `executeAiRequest` calls, same `callId='h1-identical-concurrent'`, separate real `SupabaseLedgerBudgetGuard` instances, LOCAL PostgREST shim and actual candidate SQL, fake OpenAI responses delayed 300ms. The one matching policy had `max_calls=1`.
+- Observed: **2 mock provider HTTP requests**, both results `ok:true / transportAttempts:1`, but bucket `calls=1`, `held_usd=0`, `settled_usd=0.000035` (one response's estimated charge). This bypasses the call cap and undercounts cost during concurrent duplicate delivery or replay of a still-sent attempt. No real provider contacted.
+- Local evidence: `duplicate_probe.ts`, `duplicate-probe.log`, `probe.sql`, `independent-sql.log` under the isolated root above; reproduction command: `deno run --no-config --cached-only --allow-net=127.0.0.1 --allow-env <root>/duplicate_probe.ts` while the candidate shim binds 127.0.0.1:54939 to the LOCAL probe database. Keys in the probe are fake, not credentials.
+- Narrow correction: issue a one-time atomic dispatch permit only to the winning reserved→sent transition. An existing sent/unknown/finalized attempt must not authorize another HTTP send. Treat ambiguous mark_sent responses conservatively; do not restore send permission merely for replay/idempotency. Preserve one event/cost per ACTUAL dispatch and keep sent holds counted.
+- Required regression: concurrent same-callId calls (and in-flight crash replay) through the guard AND executor, max_calls=1, must yield at most one provider HTTP request and one charged attempt. Include mark_sent timeout-after-commit, release/recover race and ordinary retries with distinct attempt IDs. The existing 60 duplicate-reserve and 60 duplicate-settle tests do not exercise duplicate HTTP dispatch.
+
+### R2 [P2] ACL verification accepts a NOINHERIT role that can SET ROLE into the authorized RPC role
+
+- Location: `supabase/migrations/20261010050613_ai_provider_budget_ledger.sql:1060–1063`; related membership check lines 999–1009. Checks consider the application role's inherited privileges, owner/superuser membership, but not SET-reachable non-owner roles such as service_role.
+- Independent PG17 reproducer, before migration: `GRANT service_role TO authenticated WITH INHERIT FALSE, SET TRUE;`. Apply the exact migration as a distinct **non-superuser owner** (`h1_ai_owner`). It **commits successfully**.
+- Afterward `has_function_privilege('authenticated','public.ai_ledger_budget_status(jsonb)','EXECUTE') = false`, while `pg_has_role('authenticated','service_role','SET') = true`. Under `SET SESSION AUTHORIZATION authenticated; SET ROLE service_role;`, `public.ai_ledger_budget_status('{}')` succeeds and returns `[]`. The catalog's claimed service-only boundary is not fail-closed against the specified unsafe SET-role graph.
+- This is a demonstrated SQL/catalog privilege-path defect under an adverse role configuration, **not a claim that a browser JWT can execute SET ROLE through standard PostgREST**; live exposure/prod role graphs were not inspected. The requirement is to refuse unsafe direct/transitive/SET-reachable baselines rather than silently accept them.
+- Evidence/reproducer: `<root>/probe.sql` and `independent-sql.log`, using own Unix-socket PG17 cluster and a fresh owner-owned database. No prod connection.
+- Narrow correction: inspect effective authority of all SET-reachable roles as well as inherited roles (including transitive paths), rejecting anon/authenticated paths into service_role/RPC privilege and any application's paths into unauthorized schema/table/sequence/helper or granting authority. Do not normalize a dangerous production role graph by automatic GRANT/REVOKE.
+- Required regression: NOINHERIT SET-enabled direct AND transitive paths, safe SET-disabled negative control, and exact pre/post catalog equality on refusal. Retain existing owner/superuser/pg_read_all_data/pg_write_all_data and column/grant-option proofs.
+
+## Independently executed evidence (not just Claude-reported green results)
+
+- Runtime: Deno 2.9.6 / TypeScript 6.0.3; disposable Homebrew PostgreSQL17, private Unix socket only (listen_addresses empty), max_connections=180. No shared cluster/port/server was used.
+- `AIL_PARTS='behaviour supabase concurrency adverse rollback e2e' ... bash supabase/tests/ai_provider_budget_ledger_run.sh`: exit 0, **all six requested parts PASS**. Test runner was inspected before invocation; its destructive cleanup only targets scratch databases inside the H1-owned cluster.
+- Runner evidence: behavior/state/unknown-cost floor/expiry/release-after-sent/mismatch/append-only/RLS; Supabase-like default ACL neutralization; **150 sessions vs call cap50 ->50**, **150 vs USD0.5 at0.02 ->25**; simultaneous global/brand caps; 60 duplicate reservations ->one; 60 settlements ->one event; four unsafe inherited/owner/superuser role baselines refused; rollback restores outside catalog; fake-provider TypeScript→PostgREST-shim→real PG SQL E2E **5 passed /0 failed**. A shim is NOT live Supabase/PostgREST proof.
+- Unit suite: `deno test --no-config --cached-only --allow-env --allow-read supabase/functions/_shared/ai_provider/`: **94 passed /0 failed**. No network permission for provider calls; dependency downloads disabled. Initial invocation omitted `--allow-read` and produced 91 passed/3 permission failures in isolation checks; corrected permission-scoped invocation passed. Those initial errors are not source defects.
+- `deno check --no-config --cached-only .../mod.ts`: **PASS**.
+- Default `deno lint .../ai_provider/`: **1 failure** (`no-import-prefix` for the explicitly pinned npm SDK at anthropic_adapter.ts:15). `deno lint --rules-exclude=no-import-prefix .../ai_provider/`: **PASS, 28 files**. Record this tool/config discrepancy honestly; do not claim unqualified default lint PASS. Non-security follow-up: agree lint policy for pinned inline dependencies or provide a reviewed import map; no source edit in H1.
+- `deno test --no-config --cached-only --allow-read supabase/tests/migration_source_invariants_test.ts`: **11 passed /0 failed**. PR119 diff whitespace check PASS; exact source checkout clean.
+- Adversarial probes R1/R2: both independently **REPRODUCED** against actual exact migration, not model mocks of DB logic. Non-superuser owner used for the additional SQL proof.
+- NOT_RUN: the original 12-mutant runner (quota-conscious: healthy paths plus new consequential independent probes sufficient for this CHANGES_REQUIRED verdict); unrelated broad G1–G5 / model-guard / Cron suites (Claude's 17+22 not relabelled as H1 results); paid/live provider, managed Supabase/PostgREST integration, real crash/power-loss durability and production baseline proof. No claims beyond local SQL/TS evidence.
+- Logs: `<root>/pg-runner.log`, `deno-unit-corrected.log`, `deno-check.log`, `deno-lint.log`, `deno-lint-pinned.log`, `invariants.log`, `independent-sql.log`, `duplicate-probe.log`. Own mock shim terminated; own PG17 server stopped normally. Evidence files preserved locally.
+
+## Other reviewed boundaries / integration and release gates
+
+- Seven explicit `public.ai_ledger_*(p jsonb)` SECURITY DEFINER RPCs; empty search_path, schema-qualified private references, owner-only helpers, RLS on five tables and direct table/sequence privileges revoked even for service_role. Default ACL and basic effective privilege refusal are green locally, but R2 prevents accepting the complete SET-role claim.
+- Reserve/settle/release/recover use row/advisory locks and consistent bucket order. Sent/unknown reservations remain counted after settlement failure or stale recovery; unknown usage has a numeric upper-bound floor, not zero. Existing successful amount/identity mismatch and rollback tests do not cure R1.
+- Executor validates ORIGINAL JSON Schema after parsing/conversion, counts retry attempts independently, no provider fallback/refusal retry, fixed official provider URLs, Anthropic SDK pinned with maxRetries:0/logging off, explicit key/authToken/baseURL. Unit/isolation tests confirm existing business/runtime/apps do not import this new module. No server key is put into SQL rows/results/telemetry by the reviewed implementation; server-controlled Supabase URL/subject identity is a future caller trust boundary, not user input.
+- Known documented SDK risk retained: ANTHROPIC_CUSTOM_HEADERS may be read implicitly by the SDK; keep absent or isolate it before rollout. No environment secrets inspected to confirm production absence. Catalog arithmetic/unit tests are not invoices, provider credit confirmation, or paid/live API validation.
+- Migration `20261010050613_ai_provider_budget_ledger.sql`: absent on main; only PR119 owns this version across **13 current open PRs** at check; PR121's new G5 migration is distinct `20261010051938`. PR119 changed source files have zero overlap with source changes on main since its ancestor. Reservation list omits 20261010050613 by design: **integration coordination gap**, left untouched for owner-controlled later registration; not another new security review.
+- Only opaque user/brand IDs and counts/model/status/cost enter RPC-generated rows; prompt/output/auth inputs not persisted. Retention/pseudonymisation/account deletion are explicitly FUTURE and require G5 coordination; append-only rows currently have no deletion integration. Privacy update before personal-data Anthropic usage, exact live roles/default ACL/exposure/version, production apply/history/rollback plan, approved user/brand/feature caps, Console credit checks, and recovery scheduling remain later separate gates. Automatic fallback stays OFF; first adoption remains shared market reports, not per-user reports.
+- Official docs consulted for semantics, not live-service proof: [Supabase database functions](https://supabase.com/docs/guides/database/functions), [OpenAI structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs). Supabase changelog markdown fetch failed; HTML changelog fetched. OpenAI Responses reference fetch was too large; structured-output official page fetched instead. No docs fetch required real API keys.
+
+## Completion / next recommendation
+
+- changed_files (repository/control only): `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`, H1 status/next_owner fields only in `.agent/ACTIVE_TASK.md`. `.agent/CURRENT_STATE.md`, other slot TASK/Report and all PR117/119 product files untouched. Local disposable probes are outside Git and not source changes.
+- commit_hash / push: report-only commit and normal push/read-back recorded in the final user receipt **after actual verification**. No force/rebase, product merge, PR writes, or deployment. Preserve all earlier H1 history below.
+- next_recommendation: return narrow R1/R2 fixes with reproductions to the originating common-AI chat/implementation owner; keep both draft source merge and production rollout gated. Follow-up Codex should focus these two corrections and their new regression tests, not restart exhaustive Phase1a or unrelated G work. Recommended bounded follow-up: Sol（高）; task allocation remains ChatGPT's responsibility.
+- 返却先：共通AI基盤のちゃ（OpenAI・Claude API専用チャット）へ C1
+
+---
+
+# Historical H1 completion — PR106 — 2026-10-10 (preserved)
 
 - task_id: postona-pr106-f1-acl-final-rereview-20261009
 - result: **PASS**, completed-review report synchronization recovery, not a new broad review.

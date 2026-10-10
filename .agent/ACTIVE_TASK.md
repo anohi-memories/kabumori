@@ -33,12 +33,12 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: common-ai-provider-pr117-pr119-integrated-security-review-20261010
 - start_code: H1
 - finish_code: C1
 - completion_code: C1
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
