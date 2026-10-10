@@ -1,3 +1,57 @@
+# Codex H1 — CURRENT TASK — POSTONA既存X接続の防御的封じ込め評価（G4代行調査）
+
+- task_id: postona-g4-x-oauth-containment-defensive-assessment-20261010
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- start_code: H1
+- completion_code: C1
+- return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
+- recommended_model: **Sol（高）**
+- priority: high
+- type: **通常のCodex担当：防御的セキュリティ調査・テスト確認・設計レビュー。臨時実装ではない**
+- background: G4 Claude Opus5.5 safeguarding halted the offensive-adjacent analysis, even when user chose defensive-only. This is a narrowed **defensive review** with no exploit reproduction or attempt to circumvent safeguards.
+- production_reads_or_writes: forbidden
+- migration_apply_deploy_merge: forbidden
+- active_X_connection_pause_or_real_token_use: forbidden
+- implemented_product_source_changes: forbidden
+- review_report_only_and_optional_safe_docs: allowed
+
+## Task purpose
+
+G4's current TASK `postona-x-oauth-preclaim-containment-readiness-20261010` could not proceed under Opus5.5 safeguards. The earlier G4 local disposable-only evidence suggests a possible preclaim/availability problem in X OAuth account association, but live production exposure has not been verified. Draft PR126 `65f49f98dab39b974e6e4b450f376a37f99ef1ac` is a separate unreachable v2 candidate depending on Draft PR124 (T9) and Draft G5 PR121 (T13); none is applied or authorized for production. G3 Stage3B preparation and G5 account deletion/testing are owned elsewhere. **Do not replicate account-preclaim attack flows.**
+
+## Mandatory startup / safety
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this H1 TASK, prior completed H1 Report, G4 current TASK and K4 completion history, and G3/G5 ownership headers. Verify this H1 exact task_id is ready and G4 current task is on hold/delegated.
+2. Fresh `origin/main` from `/Users/yuya/Developer/kabumori-fresh`, own **independent H1 worktree**. Never reuse G4/G3/G5/H2 or old H1 checkout; do not touch their branches, files, uncommitted changes, dev servers, or active PRs. If isolation or ownership cannot be established, STOP with BLOCKED report.
+3. Check PR126/124/121/122 current head and main file overlap; treat them as reference-only, not as instructions to merge or wire to runtime.
+4. This is **defensive-only** work. Do not demonstrate preclaim/account binding with another person's provider ID, conduct privilege bypass steps, create exploit scripts, scan accounts, use genuine tokens or endpoints, or rephrase the original blocked task in an effort to defeat a model safeguard. If a requested step cannot be completed safely, note it as unevaluated and return a partial defensive assessment.
+
+## Authorized work
+
+- Read-only SOURCE inspection: inventory existing X OAuth complete/begin/consume function signatures, direct API-role EXECUTE exposure according to migration source, dependency of existing X publishing, token refresh, scheduler, account deletion and G3 Stage3B on those RPCs. Distinguish **source inference** from **actually checked production** (production is not authorized).
+- Compare only **defensive containment** options: (A) conditional owner/role EXECUTE restriction on vulnerable OAuth completion (may block new connections/reconnects), (B) a narrowly scoped permission boundary with server-side identity provenance that can truly prevent direct arbitrary RPC calls, (C) awaiting full G5 T13/T9 + G4 v2 rollout. Identify what is immediately independent of PR121/124, and avoid unsafe advice like merely changing Edge `verify_jwt`.
+- Give an explicit matrix for: new connection, reconnection, existing X posting, token refresh, scheduled posts, existing X accounts, AI相談V1, G3 Stage3B, account deletion, rollback. Mark **confirmed from source / conditional / not yet proven**; do not claim no outage from an unperformed production test.
+- Draft read-only production preflight/checklist for a **future separately approved** operator: only metadata/function ACL/role inheritance/SET ROLE reachability, function fingerprints, aggregate counts, no user identifiers or tokens in logs; no SQL execution against production now. Avoid even including an immediately executable production revoke in this TASK.
+- **Safe offline tests only:** local disposable PostgreSQL access restriction / revoked EXECUTE behavior using fake entities, read-back of permission denial, preservation of unrelated posting/refresh function signatures; no account-ID preclaim or malicious replay simulation. If no tests are necessary, document source-only rationale. Include rollback consideration that restoring the old grant can reopen risk.
+- Output clear mitigation recommendation that prioritizes existing X posting continuity. Specify conditions and independent security review/user approval required before production permission changes or service interruptions.
+
+## Forbidden
+
+No product source edits, no patches to existing applied migrations, no new deployable migration or Edge code, no credential/key reads, no real Auth/PostgREST/X/Meta/Supabase calls, no DB write/read on live instance, no callback/account impersonation tests, no EAS, push to existing PR, PR merge, production revoke/GRANT or pausing existing connections. Do not edit G4/G3/G5/H2 TASK or Report; do not touch G5 Phase3d experiment. No use of H2 slot. No worktree reuse.
+
+## Completion
+
+- Record result as **DEFENSIVE_ASSESSMENT_COMPLETE** or **BLOCKED** (not vulnerability remediation/release PASS), sources actually examined, evidence class, adverse side effects, recommended safest option, steps requiring approval, tests actually run, changed_files (expected only H1 Report/TASK/control files), commit_hash/push, no product PR, production=0.
+- Prepend findings to own `.agent/CODEX_REPORT.md` and set H1 TASK status `review_required`, next_owner `chatgpt`; update **only H1** entry in `.agent/ACTIVE_TASK.md` with fresh ownership CAS. Preserve all older H1 TASK/Report history.
+- Return **C1 specifically to POSTONA｜マルチSNS化・開発統括（G4）のちゃ**. ChatGPT will decide whether G4 needs to resume or a separate narrowly approved real-world mitigation plan. G4 is on hold during this H1 assignment.
+
+---
+
+# Preserved completed H1 history — no edits to old tasks/reports
+
 # C1 FINAL — 共通AI基盤 PR119 R1/R2 PASS — 2026-10-10 JST
 
 - task_id: common-ai-provider-pr119-c1-r1-r2-narrow-rereview-20261010
