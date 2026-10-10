@@ -63,14 +63,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: review_required
 - task_id: kabumori-watchlist-highlight-hybrid-ui-20261010
 - start_code: G1
 - finish_code: K1
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 independent screenshot/source review of PR #120 exact head 404b26f722335af97f095177664c7b89ca8df140 found ONE limited remainder-count defect: other-list badge counts featured+rest (2 featured+5 rest misleadingly shows 7) and an empty 'その他' group appears if all watches are featured. G1 focused corrective READY on SAME PR #120: show group only when rest.length>0, count=rest.length; cover all-featured/partial/no-featured tests. NativeTabs five entries unchanged and must remain completely untouched. No new PR, merge/deploy/EAS/DB/Auth/production. Return K1 to かぶモリアプリG1のちゃ. No Codex review needed for count-only fix.
+- allocation: FINAL K1 source/UI PASS at exact PR #120 head 7bf19faf9cf7e7c67fbab987e4f57188518e77d0; one-display-defect correction independently inspected (2 featured + 5 rest => badge 5, all 3 featured => no empty remainder), 457/457 app tests reported PASS, 375/402pt screenshots viewed, 5 NativeTabs untouched. GitHub final mergeability read returned null/unknown despite zero file overlap with fresh main: PR remains OPEN, merge HOLD for a refreshed affirmative clean merge gate and potential auto-Web-deploy side-effect check. G1 no further implementation required; next_owner chatgpt for merge gate; DO NOT reassign overlapping G1 UI files. No Codex extra review; no EAS/DB/Edge/production changes.
 - recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
