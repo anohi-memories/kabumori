@@ -111,15 +111,15 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: done
 - task_id: common-account-phase3d-disposable-proof-pause-restore-preflight-20261010
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: none
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: User chose FREE-only 2–3d family-photo Supabase pause if needed; existing photo app is NOT paused. G5 Phase3d OFFLINE ONLY prepare accurate stop/test/restore checklist, 72h stop condition, dummy-provider readiness, PR121/122 E1–E12 operator gate, project free capacity and cost decision checks, practical restore confirmation. Existing FREE organization: 2 active app projects plus one INACTIVE prior test project; NEVER touch any project, including inactive prior project, during this TASK. Preserve PR121/122 Draft, G3/G4 and H ownership. No live Supabase calls, project creation, photo pause, Auth deletion, schema deploy, secrets, paid tier, merge, EAS. Report K5, status review_required upon completion.
+- allocation: K5 accepted Phase3d two-document offline STOP/TEST/RESTORE plan and risk review, Draft PR128 exact e9244d29ea944156cf1479c0976053d433469e06, source-only and unmerged. Verdict PASS_OFFLINE_DOCS_ONLY / PREPAUSE_BLOCKED. Missing verified dummy OAuth/OIDC identities, E11 independent review and consent, operator/window, Free active slot/cost recheck, photo app pre-pause baseline/backup and restoration process verification. Do NOT pause `anohi-memories` yet, never pause production stock-x-autopost; no live Supabase or feature changes; PR121/122/128 stay Draft. This task completed, next owner none. New work requires new safe TASK.
 - recommended_model: Opus5.5（高）
 
 ## Deferred
