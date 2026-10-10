@@ -11,6 +11,7 @@ import {
   FEATURED_MAX,
   layoutWatchlist,
   portfolioBasis,
+  remainingGroup,
   verifiedWatchNews,
   watchlistLabels,
 } from "../../src/lib/portfolio-view.ts";
@@ -246,4 +247,69 @@ test("rows keep numbers whole: targets get their own line, the 注目 marker sit
   assert.ok(/rowSub: \{ flexDirection: 'row'/.test(section) && section.includes("numberOfLines={1}>{row.company}"), "company on its own line");
   assert.ok(section.includes("買 ${formatPriceYen(buy)}") && section.includes("売 ${formatPriceYen(sell)}"));
   assert.ok(!section.includes("{formatNewsTime(news.newsTime)}　{basisLabel}"), "the news date is not repeated with the basis label");
+});
+
+// ---- K1 corrective: the compact list's group and its count --------------------------------------------------------
+
+function groupFor(stocks: ReportStock[], extraTracked: string[] = []) {
+  const { result, rows } = layout(stocks, [], extraTracked);
+  return { group: remainingGroup(result.featured.length, result.rest.length), result, rows };
+}
+
+test("all watch stocks featured (1/2/3): no remaining group and no '0銘柄' placeholder", () => {
+  for (const featuredCount of [1, 2, 3]) {
+    const stocks = Array.from({ length: featuredCount }, (_, index) => watchStock(`F${index}`, 6 + index));
+    const { group, result } = groupFor(stocks);
+    assert.equal(result.featured.length, featuredCount);
+    assert.equal(result.rest.length, 0);
+    assert.deepEqual(group, { show: false, title: "その他の監視銘柄", count: 0 }, `${featuredCount} featured`);
+  }
+});
+
+test("partly featured 2 + 5: the badge counts only the 5 listed rows, never the featured stocks", () => {
+  const stocks = [
+    watchStock("A", -7.8), watchStock("B", 6.4),
+    ...["C", "D", "E", "F", "G"].map((ticker, index) => watchStock(ticker, [1.2, -0.8, 0.3, -2.4, 3.9][index])),
+  ];
+  const { group, result, rows } = groupFor(stocks);
+  assert.equal(rows.length, 7);
+  assert.equal(result.featured.length, 2);
+  assert.deepEqual(group, { show: true, title: "その他の監視銘柄", count: 5 });
+  assert.equal(group.count, result.rest.length, "the badge equals the rows shown");
+});
+
+test("more than 3 candidates: 3 featured and the badge is exactly the remainder, flagged extras included", () => {
+  const stocks = [
+    watchStock("A", 9), watchStock("B", -8), watchStock("C", 7), watchStock("D", 6), watchStock("E", -5.5), watchStock("F", 1),
+  ];
+  const { group, result } = groupFor(stocks);
+  assert.equal(result.featured.length, 3);
+  assert.deepEqual(result.rest.map((row) => row.ticker), ["D", "E", "F"]);
+  assert.deepEqual([...result.flagged].sort(), ["D", "E"]);
+  assert.deepEqual(group, { show: true, title: "その他の監視銘柄", count: 3 });
+});
+
+test("none featured: the group is 監視銘柄 and counts every listed row", () => {
+  const { group, result } = groupFor([watchStock("A", 1), watchStock("B", -2), watchStock("C", 4.99), watchStock("D", null)]);
+  assert.equal(result.featured.length, 0);
+  assert.deepEqual(group, { show: true, title: "監視銘柄", count: 4 });
+});
+
+test("no watch registrations at all: no group (the screen shows its existing empty state instead)", () => {
+  const { group } = groupFor([]);
+  assert.deepEqual(group, { show: false, title: "監視銘柄", count: 0 });
+  assert.deepEqual(remainingGroup(0, 0), { show: false, title: "監視銘柄", count: 0 });
+});
+
+test("the component renders the group only when rows remain and uses the helper's count (not featured + rest)", async () => {
+  const section = await code("src/components/portfolio/watchlist-section.tsx");
+  assert.ok(section.includes("const group = remainingGroup(featured.length, rest.length);"));
+  assert.ok(section.includes("{group.show ? (") && section.includes("{group.count}銘柄") && section.includes("{group.title}"));
+  assert.ok(!/featured\.length \+ rest\.length/.test(section), "the old combined count is gone");
+  assert.ok(!/\{count\}/.test(section));
+  assert.ok(section.includes("{rest.map((row, index) => ("), "the listed rows are exactly `rest`");
+  const view = await code("src/lib/portfolio-view.ts");
+  assert.ok(view.includes("show: restCount > 0,") && view.includes("count: restCount,"));
+  // The featured stocks are still all rendered (cards), so no stock is lost when the group is hidden.
+  assert.ok(section.includes("{featured.map((entry) => ("));
 });

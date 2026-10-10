@@ -6,6 +6,7 @@ import { formatNewsTime } from '@/lib/news-labels';
 import {
   formatPriceYen,
   featuredMoveLabel,
+  remainingGroup,
   formatSignedPercent,
   tone,
   type FeaturedKind,
@@ -155,7 +156,7 @@ export function WatchlistSection({
   onEdit: (trackedId: string) => void;
   onOpenNews: (newsId: string) => void;
 }) {
-  const count = featured.length + rest.length;
+  const group = remainingGroup(featured.length, rest.length);
   return (
     <View style={styles.wrap}>
       {featured.length > 0 ? (
@@ -170,21 +171,19 @@ export function WatchlistSection({
         </View>
       ) : null}
 
-      {count > 0 ? (
+      {group.show ? (
         <View style={styles.block}>
           <View style={styles.blockHead}>
-            <Text style={styles.blockTitle}>{featured.length > 0 ? 'その他の監視銘柄' : '監視銘柄'}</Text>
+            <Text style={styles.blockTitle}>{group.title}</Text>
             <View style={styles.countBadge}>
-              <Text style={styles.countText}>{count}銘柄</Text>
+              <Text style={styles.countText}>{group.count}銘柄</Text>
             </View>
           </View>
-          {rest.length > 0 ? (
-            <View style={styles.listCard}>
-              {rest.map((row, index) => (
-                <WatchListRow key={row.tracked.id} row={row} flagged={flagged.has(row.ticker)} last={index === rest.length - 1} onEdit={onEdit} />
-              ))}
-            </View>
-          ) : null}
+          <View style={styles.listCard}>
+            {rest.map((row, index) => (
+              <WatchListRow key={row.tracked.id} row={row} flagged={flagged.has(row.ticker)} last={index === rest.length - 1} onEdit={onEdit} />
+            ))}
+          </View>
         </View>
       ) : null}
     </View>

@@ -401,6 +401,19 @@ export function layoutWatchlist(rows: readonly WatchRow[], snapshot: ReportSnaps
   return { featured, rest: rows.filter((row) => !featuredIds.has(row.tracked.id)), flagged };
 }
 
+/**
+ * The compact list under the featured cards. It exists only when there is something left to list, and its count
+ * is exactly the number of rows shown there -- never the featured stocks, which are listed in their cards.
+ * All featured => no group at all (no "0銘柄" placeholder); none featured => 監視銘柄; otherwise その他の監視銘柄.
+ */
+export function remainingGroup(featuredCount: number, restCount: number): { show: boolean; title: string; count: number } {
+  return {
+    show: restCount > 0,
+    title: featuredCount > 0 ? 'その他の監視銘柄' : '監視銘柄',
+    count: restCount,
+  };
+}
+
 /** Section wording: 「今日の」 only when the saved prices are today's; otherwise date-neutral with the dated basis. */
 export function watchlistLabels(basis: PortfolioBasis | null): { featuredTitle: string; basis: string } {
   const labels = portfolioLabels(basis);
