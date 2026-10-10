@@ -109,15 +109,16 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: done
-- task_id: common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010
+- status: ready
+- task_id: common-account-phase3b-identity-writer-fence-source-20261010
 - start_code: G5
 - finish_code: K5
-- next_owner: none
+- next_owner: claude
+- return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: C2 accepted G5 PR112 source corrected exact head 54b9435b0dcc0d0e79ae6eba4340eee44508141c as independently PASS (H2). Source merge candidate only, PR OPEN/UNMERGED; separate authorization/fresh merge checks required. Whole common-account Auth deletion release gate blocked, production preflight/provider E2E and identity writer-fence missing. G5 task closed; preserve its PR/worktree before reassignment. No production/migration/Edge deploy/EAS.
-- recommended_model: Opus5.5（極高）
+- allocation: PR112 Phase3a source-only independently H2 PASS and user-approved squash merged as a7c71b037617aba93cf99db3def5d1eb6ea02973. Next G5 Phase3b Stage A authoritative managed GoTrue identity-change fence feasibility and stale-JWT/service-writer inventory; Stage B only if provably safe, G5-only source/draft PR, closed gate retained; otherwise BLOCKED_PENDING_DISPOSABLE_SUPABASE_PROOF. Source only, no real Supabase/production access, migration apply, X/Auth provider operations, Edge deploy, EAS or opening Auth deletion. G3 owns separate live POSTONA AI consultation deployment: no overlapping DB/Edge changes or worktree. Other slots protected; return K5.
+- recommended_model: Opus5.5（高）
 
 ## Deferred
 
