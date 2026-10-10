@@ -15,6 +15,7 @@
 - baseline_pr: #114 (**MERGED** as `952db5b18e2a4464fb076ccfc32af31063a6bb7e`; do not reopen/re-review)
 - target_supabase_project_id: `wsmznyzcvmuitkglfeuj` (`stock-x-autopost`)
 - production_access: **APPROVED ONLY FOR S0–S5 BELOW by user on 2026-10-10**
+- production_mutation_window: **ACTIVE** — 2026-10-10 18:30 JST〜 (G3 S1–S4: social_mobile_content_settings 2 migrations + social-mobile-consult / social-mobile-brand-dry-run deploy). S0 read-only PASS just before.
 - real_X_publish: prohibited
 - scheduler_or_Cron_change: prohibited
 - EAS_TestFlight: prohibited
