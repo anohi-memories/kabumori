@@ -75,13 +75,13 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: ready
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: chatgpt
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: H2 C2 PR110 exact head cb3d77d50e848d043f5427df363769b75d3c7764 returned CHANGES_REQUIRED: one P2 noun-subject 勢いが false positive; prior seven residuals closed. NARROW G2 corrective needed, not yet assigned in canonical TASK (large history-preserving TASK update blocked by tool safety). Preserve review_required / next_owner chatgpt; G2 must NOT start until explicit ready TASK safely published. PR110 merge/deploy HOLD.
+- allocation: PR110 C2 P2 corrective READY (same task_id): fix only the noun-subject 「勢いが」 clause-boundary false positive at exact head cb3d77d50e848d043f5427df363769b75d3c7764 (H2 C2 CHANGES_REQUIRED; prior seven residuals CLOSED). Canonical instruction is the top section of .agent/tasks/CLAUDE_TASK.md; all prior TASK/Report text preserved. Update existing PR110 only, then review_required / chatgpt for K2. Source fix only by G2; merge/deploy HOLD.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3

@@ -1,3 +1,9 @@
+## G2 NEXT — PR #110 P2 「勢いが」 corrective assigned / source-only — 2026-10-10 JST
+
+- H2 final review of exact PR #110 head `cb3d77d50e848d043f5427df363769b75d3c7764` returned **C2 CHANGES_REQUIRED**: the seven former B1-R1/B2-R1/B3-R1 residuals are CLOSED; one P2 remains — noun + subject が (「売りの勢いが強まって…可能性があります」) is read as a clause boundary, so a genuine hedged sentence is removed as an asserted cause.
+- G2 TASK `kabumori-market-report-delivery-first-guard-calibration-20261007` (same task_id) has the narrow corrective prepended as its top section: status **ready**, next_owner **claude**, recommended **Opus5.5（高）**, finish **K2**. All prior G2 TASK/Report text preserved byte-for-byte below it.
+- Scope: this one false positive only, with exact regression + noun-subject controls; keep all accepted B1–B4 / residual closures, ceilings and disclaimer behavior. Update existing PR110 only. Merge/deploy/production HOLD.
+
 ## H1 R1/R2 LIMITED REREVIEW ASSIGNED — 共通AI基盤 — 2026-10-10 JST
 
 - New H1 TASK `common-ai-provider-pr119-c1-r1-r2-narrow-rereview-20261010` `ready`, return_to 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）, completion C1, model Sol（高）. Scope strictly old R1 P1 one-time send permit and R2 P2 SET ROLE privilege graph. PR119 corrected exact head `8ef3843f51e771088dfe58e2e5a262db0b62644a`, PR117 protected `2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226`, both Draft/unmerged; source merge, production DB/migration apply, secrets, API traffic, deploy are NOT approved.
