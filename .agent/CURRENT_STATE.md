@@ -1,3 +1,14 @@
+## G3 ASSIGNED — AI consultation V1 production activation — 2026-10-10 JST
+
+- G3 TASK `postona-ai-consult-v1-production-activation-20261010` now **ready**, `next_owner:claude`; start `G3`, finish `K3`, return to **POSTONA G3のちゃ**. Recommended **Opus5.5（高）**. Previous G3 PR114 TASK/Report preserved verbatim in archived section; PR114 already merged `952db5b`.
+- User expressly approved bounded S0–S5 production activation (DB setting candidate+hardening, read-back, consult/dry-run Edge, no-post real AI smoke). A new approval for the same safe exact steps is unnecessary; STOP on drift/overlap.
+- 2026-10-10 remote read-only snapshot: target Supabase `wsmznyzcvmuitkglfeuj` ACTIVE_HEALTHY; `public.social_mobile_content_settings` absent, target history versions absent, matching named functions 0; `social-mobile-consult` not listed and `social-mobile-brand-dry-run` deployed v16. Re-verify same-role production preflight before any write.
+- G5 common account PR112 is open and source-only; highest priority for conflicting live Auth/DB/privileges boundary. Serialize **actual** same-production-DB DDL and read-back window. G4 Threads Phase2b is on PR118 and its source only; do not modify.
+- Never apply the candidate migration alone. **Both exact files and migration history rows within ONE psql outer transaction**; no `supabase db push`. No real X posts, X schedules, Cron, EAS, G4/G5 shared changes or Claude/provider switch. No repeated PR114 review; limit further independent reviews to genuine new high-risk issues.
+- New G3 independent worktree rooted from fresh `/Users/yuya/Developer/kabumori-fresh` must be established by Claude at startup. GitHub TASK allocation itself is not evidence of local worktree isolation or completion.
+
+---
+
 ## K4 FINAL — POSTONA Threads Phase2b source contract PASS / PR118 merged — 2026-10-10
 
 - G4 TASK `postona-threads-phase2b-source-preparation-20261010` reviewed and accepted for *source-only* scope. PR #118 exact head `9b71757068271cce38cedda12f6d74e705ac13ca` was squash-merged to main as `b49306c0d7486adb9afdb9ae4e42defa33ace07f`; PR closed/merged.

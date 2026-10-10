@@ -85,15 +85,15 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: postona-ai-consult-pr114-session-epoch-corrective-20261009
+- status: ready
+- task_id: postona-ai-consult-v1-production-activation-20261010
 - start_code: G3
 - finish_code: K3
-- next_owner: none
+- next_owner: claude
+- return_to: POSTONA G3のちゃ（AI相談V1本番接続担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: PR #114 accepted without additional review per user priority. Exact reviewed head 98d3cb727a967c2a921da6afee3faafa85cb9de6 squash-merged as 952db5b18e2a4464fb076ccfc32af31063a6bb7e. Workspace/epoch ABA guard, CAS confirmation, savedRef same-session isolation and app 234/234 + related Edge 90/90 accepted. G3 source slot closed/free. Read-only production S0 on 2026-10-10: content-settings table/functions absent, consult Edge absent, dry-run preview v16 outdated; live DB/Edge/memory feature NOT active. Separate user approval required before DB/Edge/real AI smoke/EAS; G5 priority for overlapping production boundaries. No real OpenAI/X, production mutation, deploy or EAS done.
-- recommended_model: Sonnet5（高）
-
+- allocation: User explicitly approved S0–S5 bounded activation on 2026-10-10; PR114 merged (952db5b); prior G3 TASK/Report archived intact in same file. Activate only reviewed settings candidate+hardening atomic single-transaction chain, immediate RLS/ACL read-back, consult and dry-run Edge JWT deployments, no-post smoke. On G5 overlapping DB write critical section STOP/serialize. G4 PR118/Threads and G5 PR112/Auth untouched. No X publish/schedule, EAS, provider switch, other migrations, PR114 rereview, or automatic added Codex review. Independent fresh G3 worktree is a mandatory startup gate.
+- recommended_model: Opus5.5（高）
 ## Claude G4
 - owner: claude
 - slot: claude-4

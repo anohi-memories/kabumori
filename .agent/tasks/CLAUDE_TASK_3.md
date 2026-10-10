@@ -1,3 +1,100 @@
+# Claude Task 3 — CURRENT TASK / POSTONA AI相談V1 本番接続
+
+- task_id: postona-ai-consult-v1-production-activation-20261010
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: high
+- type: bounded production activation of already merged/reviewed AI consultation V1
+- recommended_model: **Opus5.5（高）**
+- start_code: G3
+- finish_code: K3
+- return_to: **POSTONA G3のちゃ（AI相談V1本番接続担当チャット）**
+- project: POSTONA / AI consultation
+- baseline_pr: #114 (**MERGED** as `952db5b18e2a4464fb076ccfc32af31063a6bb7e`; do not reopen/re-review)
+- target_supabase_project_id: `wsmznyzcvmuitkglfeuj` (`stock-x-autopost`)
+- production_access: **APPROVED ONLY FOR S0–S5 BELOW by user on 2026-10-10**
+- real_X_publish: prohibited
+- scheduler_or_Cron_change: prohibited
+- EAS_TestFlight: prohibited
+- unrelated_Auth_entitlement_Threads: prohibited
+- extra_independent_Codex_review: **not required if deploying exact previously reviewed source and all preflight/read-back/smoke gates pass**
+- production_priority: G5 common-account owns overlapping Auth/DB/permissions operations; serialize actual shared-DB migration/DDL write and read-back windows.
+
+## Mission
+
+Bring already implemented AI相談V1 into a usable production state: **相談 → 変更提案 → 利用者が「これで覚えて」を明示確認 → DB保存 → 次回相談への記憶 → プレビュー反映**. This is an activation task, NOT a new feature or a source redesign. AI相談 must never autonomously enable publish, change posting permissions, create scheduled posts or send real X posts.
+
+## Mandatory startup / conflict gate
+
+1. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, THIS TASK and its archived previous task/report, `supabase/tests/social_mobile_content_settings_rollout.md`, both exact migrations, and `AGENTS.md` / `CLAUDE.md`. Read G4 and G5 current TASK/Reports and PR #112/#118 as needed.
+2. Use **your own independent G3 worktree** rooted from fresh `/Users/yuya/Developer/kabumori-fresh` and fresh `origin/main`. Verify unique worktree/checkout and branch, git status, no other's uncommitted changes; never reset/prune/checkout/rebase another slot, or stop another server. The old `/Users/yuya/Developer/kabumori` checkout is protected.
+3. Reconfirm PR #114 merged, current G3 source unchanged from reviewed version, production project identity, current production migration/Edge state, and no actual overlapping G5 production DB/Auth write window. G4 PR #118 source-only Threads changes are out of scope.
+4. If any ambiguity in ownership, schema/migration history, permission/default privilege, local worktree or concurrent DB writer exists: **STOP before production writes**, report exact blocker. Do not infer safety from `done` alone.
+5. The user ALREADY approved the bounded S0–S5 production activation. Do **not** ask to re-approve the exact same safe steps individually, but approval never overrides fail-closed safety gates.
+
+## S0 — fresh read-only production preflight (mandatory before writes)
+
+Use the SAME intended apply role inside read-only transactions and follow the reviewed rollout plan. Confirm:
+- Supabase project `stock-x-autopost`, id `wsmznyzcvmuitkglfeuj`.
+- `public.social_mobile_content_settings` absent; same-prefix functions absent; both target migration history rows absent.
+- Existing prerequisite brand/ownership schema, functions, current owner, RLS, role memberships/inheritance and default ACLs match documented source assumptions exactly; no unknown pre-existing drift.
+- No G5 or other workstream is writing migration/DDL to the same production DB during the critical S1/S2 window.
+- `social-mobile-consult` absent and `social-mobile-brand-dry-run` still production v16/old implementation (or STOP if drift).
+- Secrets/keys existence can be verified securely; **never output secret values** to logs, commits or chat.
+A preliminary remote read on 2026-10-10 found the table/history absent; do not substitute it for the immediate same-role S0 gate.
+
+## S1 — EXACTLY two reviewed migrations atomically
+
+Only these source files:
+- `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql`
+- `supabase/migrations/20261003120000_social_mobile_content_settings_hardening.sql`
+
+Follow `supabase/tests/social_mobile_content_settings_rollout.md` exactly. **Both SQL files AND their two history rows must commit in ONE OUTER TRANSACTION**, with `psql --single-transaction -v ON_ERROR_STOP=1` or the precisely rehearsed documented equivalent. Do not run ordinary `supabase db push`, individual migration up/apply calls, or two separate commits. A standalone candidate can expose a weak-ACL state. Verify the exact production migration history schema, invocation and rollback/failure behavior before executing. No other pending migrations, no ad hoc SQL repair or unrelated DDL. If any guard fails, rollback/STOP and report.
+
+## S2 — immediate production read-back gate
+
+Verify exactly two target history versions, settings table/owner, RLS enabled, expected owner-only policies (3), authenticated least-privilege table ACL, absence of unintended `anon`/`service_role`/`PUBLIC` grants (including effective inherited privileges), expected five functions and function EXECUTE ACL, trigger/version invariants, strict JSON/persona constraints and CAS stale-write rejection. Cross-check against rollout docs and actual catalog. Any mismatch => STOP **without** deploying Edge, and do not blindly GRANT/REVOKE to patch it. Capture evidence without private rows/tokens.
+
+## S3 — AI相談 Edge deploy
+
+Deploy ONLY current reviewed `supabase/functions/social-mobile-consult/` and its exact shared dependencies; keep `verify_jwt=true`, verified user identity, per-brand/tenant isolation, server-side `OPENAI_API_KEY`, no exposed credentials or elevated unauthorized DB writes, explicit confirmation before saving. Do not switch Claude/shared provider here. Verify deployed version, source/bundle identity and logs (no secrets); STOP on mismatch.
+
+## S4 — dry-run preview Edge update
+
+Update ONLY `supabase/functions/social-mobile-brand-dry-run/` from current reviewed source (currently production v16 old implementation). Preserve JWT, tenant ownership, verified saved settings, eight persona fields (`toneSignals`, `sentenceLength`, `punctuationEmoji`, `recurringVocabulary`, `topicSignals`, `hashtagHabits`, `ctaStyle`, `openingClosingPatterns`), confirmed-only inclusion and fixed brand safety constraints. Verify approved GPT-6 Luna central model policy without changing it. Read back deployed version/bundle. Preview MUST NOT publish, schedule, or alter authorization.
+
+## S5 — narrow real-AI smoke with NO posts
+
+Use ONE dedicated valid test account/brand/owned workspace, minimal necessary paid OpenAI calls:
+1. Consult and request a preference change; verify mere proposal does NOT write DB.
+2. Confirm only via user-like explicit `これで覚えて` action; verify one saved CAS write, read-back, and correct tenant.
+3. Start a fresh consultation and verify previously confirmed preference is reflected.
+4. Generate dry-run preview and verify confirmed eight-field persona/settings, no unconfirmed change.
+5. Verify wrong-tenant / unauthorized access is denied using controlled test identities/fixtures; verify A→B→A, workspace isolation and no unwanted stale save.
+6. Check X actual publish count **0**, newly scheduled posts **0**, publish permission changes **0**, existing company AI Lab / Kabumori X automation has NOT been changed or disabled.
+Keep costs bounded; no broad live test batch or unbounded retries.
+
+## Strict exclusions and handoff boundaries
+
+- **G4** owns Threads/Instagram Phase 2b; do not change its OAuth, Vault, provider database contracts or PR #118.
+- **G5** owns shared Auth, entitlement, deletion and DB/API authority boundaries; PR #112 source is separate and not a permit to co-apply its migration. Serialize actual DB write window if shared.
+- **G2** owns Kabumori morning/close report unification. Do not modify morning `SEARCH_BUDGET_EXCEEDED`/close report, shared market report Fact checks or API.
+- Separate shared AI Provider PR #117 is NOT part of activation. Keep reviewed OpenAI path; do not migrate to Claude API simultaneously.
+- DO NOT change `x-test-post`, scheduled X posting, Cron, real social posts, shared account deletion, Vercel/Netlify production, EAS/TestFlight/native builds, or any other production migration.
+- Preserve existing user-data, live schedulers and postings. Never invent a successful deploy/read-back/test if unverified.
+
+## Completion / report / STOP behavior
+
+When S0–S5 fully pass: record true applied versions, ownership/RLS/ACL proof, Edge deployed versions and exact bundle source, scoped real smoke result, confirmed published=0, scheduled=0, changes to existing X automation=0, cost/call count, changed files, tests, branch/commit/push, remaining issues, safety checks. `deploy` only marked success if independently read back. Update only this G3 TASK's **current** Report/status to `review_required` (or `done` only per established protocol) and `next_owner: chatgpt` while preserving all past task/Report history byte-for-byte. Return **K3** to **POSTONA G3のちゃ**.
+
+If preflight/transaction/permissions/Edge authentication/tenant smoke does not pass, immediately STOP subsequent mutation steps and report **BLOCKED/PARTIAL** with exact last completed gate and safe next action. Do not run unreviewed corrective SQL or silently expand the approval. **Avoid unnecessary additional Codex review**; if unexpected high-risk drift arises, first assess bounded evidence and whether a focused separate review is truly required.
+
+---
+
+# ARCHIVED PREVIOUS G3 TASK AND REPORT — preserve verbatim
+
 # Claude Task 3 — CURRENT TASK
 
 - task_id: postona-ai-consult-pr114-session-epoch-corrective-20261009
