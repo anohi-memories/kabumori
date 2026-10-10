@@ -33,15 +33,16 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: postona-pr106-f1-acl-final-rereview-20261009
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
-- return_to: chatgpt
+- next_owner: none
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
+- completion_code: C1
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: One final narrow exact-head PR #106 rereview of c0b6c03cb909d91f72b58424d64c6dfae1b8f14f. Confirm existing trigger functions positively require owner-only EXECUTE (empty owner ACL rejected), mechanical migration reservation/main conflict resolution, and focused PG/mutation/X regressions. No product edits, PR merge, production apply or deploy.
+- allocation: C1 PASS; PR106 exact c0b6c03cb909d91f72b58424d64c6dfae1b8f14f merged as 68aaf3e547c09d54bd9682d357a12743d0ded7f2. Source only; migration unapplied. H1 closed; next task requires fresh allocation.
 - recommended_model: Sol（高）
 ## Codex H2
 - owner: codex
@@ -97,13 +98,14 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: review_required
-- task_id: postona-multisocial-phase2a2-security-corrective-20261007
+- status: ready
+- task_id: postona-threads-phase2b-source-preparation-20261010
 - start_code: G4
 - finish_code: K4
-- next_owner: codex
+- next_owner: claude
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: K4 confirmed PR #106 head c0b6c03cb909d91f72b58424d64c6dfae1b8f14f OPEN, conflict-free, Netlify/Vercel green. G4 corrected empty-owner-ACL positive assertion and mechanically reconciled main reservation. Reports 87 adverse states, 55/55 mutations, X regressions PASS; production/apply/deploy 0. PASS_CANDIDATE only; merge HOLD for H1 narrow exact-head rereview.
+- allocation: PR106 Phase2a2 source merged as 68aaf3e; production migration not applied. Phase2b source-only, verify latest official Threads OAuth and isolate G5 Auth/OAuth/Vault boundaries. No live connect, merge or deploy.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
