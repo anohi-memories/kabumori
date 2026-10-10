@@ -3,8 +3,9 @@
 - task_id: kabumori-market-report-pr110-b1r1-b2r1-b3r1-final-review-20261010
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
+- c2_result: CHANGES_REQUIRED — seven prior residuals CLOSED; one P2 normal subject-particle false positive returned to G2
 - start_code: H2
 - completion_code: C2
 - return_to: かぶモリアプリG2のちゃ
