@@ -3,8 +3,8 @@
 - task_id: kabumori-market-report-pr110-b1r1-b2r1-b3r1-final-review-20261010
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - start_code: H2
 - completion_code: C2
 - return_to: かぶモリアプリG2のちゃ
