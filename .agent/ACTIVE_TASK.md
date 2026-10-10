@@ -47,16 +47,16 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: review_required
+- status: done
 - task_id: common-account-pr112-r1l-r2-apple-boundary-exact-head-rereview-20261010
 - start_code: H2
 - finish_code: C2
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
 - return_to: 共通アカウントG5のちゃ
 - completion_code: C2
-- allocation: New K5 exact-head independent security rereview of PR112 54b9435b0dcc0d0e79ae6eba4340eee44508141c, 30 files; focus R1 legacy service_role RPC bypass and R2 ambiguous Apple HTTP response; check old R3/R4/C1 and lint. Other slots untouched; no merge/deploy.
+- allocation: C2 accepted independent R1L/R2 exact-head source-only PASS for PR112 54b9435b0dcc0d0e79ae6eba4340eee44508141c. Old RPC bypass closed/new 75 denied SQL calls, Apple uncertain HTTP response safe/new 21 variants; 555/555 tests, PG1/2/3a, SQL48/48 TS45/45, lint/check PASS. Review CLOSED; H2 not reserved for G2/G3; new task requires fresh allocation. PR merge, production apply/deploy/EAS HOLD; whole deletion schema gate BLOCKED.
 - recommended_model: Sol（極高）
 
 ## Claude G1
@@ -110,14 +110,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: review_required
+- status: done
 - task_id: common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010
 - start_code: G5
 - finish_code: K5
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 PASS_CANDIDATE source-only PR112 head 54b9435b0dcc0d0e79ae6eba4340eee44508141c; 16 G5 paths, previous head b60272c. R1 legacy RPC ACL and R2 Apple unknown-state repair reported; H2 focused security rereview assigned; full deletion gate remains blocked; merge/deploy/EAS HOLD.
+- allocation: C2 accepted G5 PR112 source corrected exact head 54b9435b0dcc0d0e79ae6eba4340eee44508141c as independently PASS (H2). Source merge candidate only, PR OPEN/UNMERGED; separate authorization/fresh merge checks required. Whole common-account Auth deletion release gate blocked, production preflight/provider E2E and identity writer-fence missing. G5 task closed; preserve its PR/worktree before reassignment. No production/migration/Edge deploy/EAS.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
