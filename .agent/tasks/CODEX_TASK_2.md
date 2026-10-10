@@ -1,3 +1,63 @@
+# Codex H2 — CURRENT TASK — disposable-only Auth SQL DELETE E11 pre-execution security review
+
+- task_id: common-account-phase3d-e11-optiond-disposable-security-review-20261010
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- priority: critical
+- type: narrow, independent, **source-only** high-risk pre-experiment security review
+- start_code: H2
+- completion_code: C2
+- return_to: **共通アカウントG5のちゃ**
+- recommended_model: **Sol（高）**
+- PR_merge_allowed: false
+- production_or_disposable_Supabase_remote_access: false
+- Auth_DELETE_EXECUTION_ALLOWED: false
+- feature_activation_or_paid_actions_allowed: false
+- implementation_changes_allowed: false
+
+## Background and exact scope
+
+G5 Phase 3d K5 verified a Free-only ~2–3-day proposed temporary family photo-project downtime, but the project MUST NOT be paused yet: operational runbook returned **PREPAUSE_BLOCKED**. The highest-risk preparatory blocker that does NOT require downtime is **E11**, a future disposable test of Option D: direct SQL `DELETE FROM auth.users` under a held account-lifecycle lock, contrasted with supported managed GoTrue/Admin deletion. Phase1/Phase3a currently assumes SQL-managed Auth deletion is NOT safe; any exception to it requires separate user approval and review. Review feasibility and safety *only*, do not approve performing E11 or choosing Option D for production. The final user-decision gate and future fake-user destructive consent remain external.
+
+Read exact protected open DRAFT/unmerged:
+- PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44` — G5 T13 guard migration and `docs/common-account/phase3b-identity-writer-fence-feasibility.md`, especially threat/races T1–T17 and §8 E1–E12.
+- PR122 `f17a47e36632fff4a1f4cfb0b860df200e1c99e1` — `docs/common-account/phase3c-disposable-supabase-proof-runbook.md`, `supabase/tests/common_account_disposable_e2e/catalog.ts` E11 and `guard.ts` + associated offline consent/evidence tests.
+- PR128 `e9244d29ea944156cf1479c0976053d433469e06` — `docs/common-account/phase3d-family-photo-pause-restore-execution-window.md` and `phase3d-proof-readiness-assessment.md`; K5 accepted docs-only, no test or family pause.
+- Phase1/Phase2/Phase3a migrations and `docs/common-account/phase3a-deletion-orchestrator.md` from fresh main or PR121 references; old H2 independent PR112 approval history is context, NOT E11 review.
+
+## Security review questions (answer all with code/evidence references)
+
+1. Distinguish SQL direct delete vs Supabase Admin `deleteUser` actions, GoTrue audit evidence, identity-provider revocation, sessions/refresh tokens, managed trigger behavior and cascade, attached `storage.objects`, cross-service foreign keys, and any managed auth changes version-dependent. Inventory which invariants can be proven in local disposable PG and which require a NEW real managed disposable Supabase project (NOT current production and NOT inactive older project).
+2. Review Option D same-transaction lifecycle lock ordering relative to PostgREST, GoTrue identity linking/PKCE callback, pending OAuth state and expiry, direct `auth.users` delete eligibility, SQL privileges, AUTH managed schema ownership/triggers, RLS/ACL/security-definer/cross-role postconditions. Look for counterexamples that leave external OAuth provider tokens or leave an identity linked without the mandated revoke/audit.
+3. Confirm E11 as written actually tests the meaningful difference from E8/Admin deletion, including failed/partial/blocked operations, audit durability, expired stale JWT and persisted refresh/Storage state. Does the E11 scenario preserve the requirement of ONLY fake users and a NEW throwaway project? Does source guard fail closed or rely merely on declarative approval fields? Identify any P1/P2 blocker to conducting the disposable E11 safely.
+4. Inspect candidate A+B BAN+settle alternative and GoTrue manual link started pre-ban callback post-ban counterexample. Do not propose SQL deletion as inherently superior absent proof; state a precise test-order strategy if E11 must be gated until E1/E8/E9/E10, and any idempotent rollback evidence needed in case of failed experiments.
+5. Evaluate the operational stop/test/restore sequencing for E11: how to avoid extending family-photo outage and what to check before free project destruction/pausing and restoring photos. No real billing/project action.
+
+## Required work discipline
+
+- Read `PROJECT_RULES.md`, `AGENTS.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, `.agent/ACTIVE_TASK.md`, own H2 TASK and H2 Report. Confirm actual slot is `ready`, source refs exact and prior H2 completed/accepted C2; if any concurrent owner conflict, STOP.
+- New isolated H2 worktree/checkout from fresh `/Users/yuya/Developer/kabumori-fresh`, NEVER previous G2/H2 or G1–G5/H1 worktree; never reset/check out/rebase/commit others' paths. Treat uncommitted files as someone else's.
+- **Offline only**: do not call Supabase MCP or CLI remote (including reads), no real managed/disposable project creation or access, no Auth/Admin/Storage/GoTrue requests, no real dummy or family user changes, no `auth.users` SQL DELETE except entirely fake local scratch PostgreSQL model if indispensable, no paid providers, no production queries, no secrets, no Edge deploy, no EAS, no PR merge, no source edits.
+- Prefer static code+catalog/migration review and local scratch fake-only SQL invariants, with a clear list of unproven assumptions. The 35-test dry-run suite is previous G5-reported, not E11 real proof.
+- Output a **narrow** verdict `E11_OFFLINE_REVIEW_PASS_CANDIDATE` or `CHANGES_REQUIRED` or `BLOCKED_NEEDS_REAL_DISPOSABLE_PROOF` (can distinguish candidate source-design pass from real-project unknown). The review can authorize **proposing** an E11 user consent question, NEVER its execution.
+- Report precise risk/severity, file/line/source references, practical corrective prerequisites assigned to G5 only, what independently ran, remote_calls=0, changed_files limited to own H2 task/Report/control index, PR heads immutable, commit/push/deploy status; preserve Report history verbatim. On finishing set H2 TASK `review_required`/next_owner `chatgpt`, return `C2` to **共通アカウントG5のちゃ**. Never alter G5 task, PR121/122/128 source or any other slot.
+- This is **not** the later G4+G5 integrated Auth/OAuth runtime security review. Do not re-review unrelated prior G2 tasks or reopen PR112 review.
+
+推薦モデル：**Sol（高）**
+
+## Report — E11 pre-execution review
+
+- task_id: common-account-phase3d-e11-optiond-disposable-security-review-20261010
+- result: pending
+- remote_calls: 0
+- source_edits: 0
+
+---
+
+# Preserved previous H2 TASK + C2 report reference (immutable below)
+
 # Codex H2 — CURRENT TASK — G2 PR #110 focused final safety review
 
 - task_id: kabumori-market-report-pr110-b1r1-b2r1-b3r1-final-review-20261010
