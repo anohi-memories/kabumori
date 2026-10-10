@@ -3,8 +3,8 @@
 - task_id: common-account-phase3d-e11-optiond-disposable-security-review-20261010
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - type: narrow, independent, **source-only** high-risk pre-experiment security review
 - start_code: H2
@@ -50,9 +50,13 @@ Read exact protected open DRAFT/unmerged:
 ## Report — E11 pre-execution review
 
 - task_id: common-account-phase3d-e11-optiond-disposable-security-review-20261010
-- result: pending
+- result: CHANGES_REQUIRED — E11 pre-execution P1 1 / P2 4; real managed proof NOT_RUN
 - remote_calls: 0
 - source_edits: 0
+- tests: Deno typed 35/35; mutation 31/31; independent offline probes 3/3
+- report: .agent/CODEX_REPORT_2.md (current first section)
+- E11_execution_approved: false
+- family_photo_pause: 0 / PREPAUSE_BLOCKED maintained
 
 ---
 
