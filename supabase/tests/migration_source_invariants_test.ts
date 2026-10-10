@@ -151,6 +151,7 @@ const RESERVED: Record<string, string> = {
   "20261001150000": "common_account_lifecycle_foundation", // common account v1 Phase 1 (source candidate)
   "20261002090000": "mic_jgb_nikkei_observation_grace_stage0", // MIC State freshness Stage 0
   "20261003090000": "social_mobile_publish_permission_boundary", // PR 76 corrective (source candidate)
+  "20261007150000": "postona_social_accounts_multi_provider", // POSTONA multi-provider account schema candidate
   "20261007173000": "ai_lab_topic_evergreen_capacity", // AI Lab topic-pool capacity fix (source candidate)
 };
 
