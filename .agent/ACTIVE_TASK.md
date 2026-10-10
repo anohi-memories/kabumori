@@ -85,7 +85,7 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - task_id: postona-ai-consult-v1-production-activation-20261010
 - start_code: G3
 - finish_code: K3

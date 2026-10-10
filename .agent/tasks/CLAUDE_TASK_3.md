@@ -3,7 +3,7 @@
 - task_id: postona-ai-consult-v1-production-activation-20261010
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - type: bounded production activation of already merged/reviewed AI consultation V1
