@@ -20,7 +20,16 @@
 - implementation_commit_by_H2: none; reviewed G5 corrective implementation is b60272c
 - changed_files_by_H2: .agent/CODEX_REPORT_2.md; .agent/tasks/CODEX_TASK_2.md; own H2 status/next_owner fields only in .agent/ACTIVE_TASK.md.
 - scope_note: TASK requests Report/TASK-only review changes and explicitly requests updating the H2 index on completion. No product source was changed; the sole additional control edit is those two own-slot index fields. Other slot fields and all previous Report/TASK history are preserved verbatim.
-- commit_push: GitHub main control-file publication/read-back receipt will be recorded below after actual completion.
+- commit_push: **SUCCESS / main**, published using GitHub Contents API compare-and-swap (no shared checkout staging).
+- initial_report_commit: 69df39171bd03e937de82905c6cfd5e321953054
+- TASK_completion_commit: 04116d013393a71db30a8453435aa4fdfdb1f1a4
+- own_H2_index_commit: 14fb19d1a7420cf34d99efb2c60761090755e20e
+- origin_readback_before_receipt: 14fb19d1a7420cf34d99efb2c60761090755e20e contains all three commits; exact PR112 head unchanged.
+- remote_changed_paths: only own Report/TASK and the two H2 status/next_owner index fields; Git diff confirms no other paths.
+- prior_report_history_verification: byte-exact original 660418-character Report retained as suffix.
+- prior_task_history_verification: preserved; current task header status/next_owner only changed, completion receipt prepended.
+- index_preservation: all other H1/G1–G5/routing/policy content byte-identical.
+- source_merge/deploy/production: no operation; **C2 decision required**.
 
 ## Executive disposition
 
