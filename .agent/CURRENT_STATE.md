@@ -1,3 +1,14 @@
+## K4 FINAL — POSTONA Threads Phase2b source contract PASS / PR118 merged — 2026-10-10
+
+- G4 TASK `postona-threads-phase2b-source-preparation-20261010` reviewed and accepted for *source-only* scope. PR #118 exact head `9b71757068271cce38cedda12f6d74e705ac13ca` was squash-merged to main as `b49306c0d7486adb9afdb9ae4e42defa33ace07f`; PR closed/merged.
+- Change set is limited to new unimported `threads_connect_contract.ts` plus test and Phase2b design docs (3 files). Static prerequisite gate remains false, no Edge/RPC/Vault/Auth/UI/runtime or X code changed. It does not activate Threads.
+- G4 reported contract 14 tests PASS, 19/19 mutations detected, _shared 503, X OAuth 29, Deno check/social lint and diff clean; ChatGPT inspected module and PR scope, but did not independently run test suites. Netlify and Vercel statuses SUCCESS at PR head.
+- **Review decision: no Codex review at this disconnected, disabled source slice** to preserve quota; consolidate focused independent security review for actual G5 writer fencing + Threads begin/complete RPC, OAuth state, provider identity/Vault boundaries before any runtime enablement. Previously accepted PR106 security is not being reopened.
+- **Blockers**: G5 T13 same-transaction writer authorization/lifecycle fence, T9 workspace ownership, T10 Threads-aware account deletion policy; Meta app tester/setup and HTTPS redirect choice; production Phase2a2 migration still unapplied. No production read/write, migration, deploy, external Meta tokens/API or Threads posting.
+- G4 old TASK and Report preserved; G4 status done / next_owner none; no new G4 work overwritten or assigned while cross-workstream contract is unresolved.
+- AI Lab diary: 記録不要 — 2026-10-10の別件AI相談エントリが既に存在し、Threads接続準備を同じevent_idに混在させない。
+- Return to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ.
+
 ## H1 DEFERRED — PR117 source-only review not run — 2026-10-10 JST
 
 - User prioritizes fewer Codex reviews and has limited 5-hour capacity. PR #117 Phase 1a is 27 new isolated provider files, with no existing imports, DB/secret/production change. Earlier H1 task `common-ai-provider-pr117-phase1a-independent-review-20261010` was withdrawn while still `ready`, before any report of starting; verdict **NOT_RUN**, NOT PASS.
