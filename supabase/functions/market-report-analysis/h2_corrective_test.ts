@@ -316,3 +316,46 @@ test("B3-R1 controls: ものの / ため / 一方 / ただし / しかし withou
   ];
   for (const [sentence, expected] of cases) assert.equal(verdictOf(sentence), expected, sentence);
 });
+
+// ---------------------------------------------------------------------------------------------
+// C2 P2 (2026-10-10): a noun ending in い followed by the subject が is not a clause boundary
+// ---------------------------------------------------------------------------------------------
+
+const P2_SENTENCE = "ウクライナ情勢の影響で売りの勢いが強まって東京市場は下落した可能性があります。";
+
+test("P2: 「売りの勢いが強まって…可能性があります」 stays speculative and is never removed (exact H2 sentence)", async () => {
+  assert.equal(verdictOf(P2_SENTENCE), "speculative");
+  const analysis = delivered();
+  analysis.x_post.context_ja = `${analysis.x_post.context_ja}${P2_SENTENCE}`;
+  assert.deepEqual(sanitize(analysis).removed, [], "the sanitizer removes nothing");
+  const calls: string[] = [];
+  const outcome = await generateSharedAnalysis(input, scripted([
+    { step: "generate", payload: analysis }, { step: "fact", payload: { passed: true, issues: [], objective_issues: [] } },
+  ], calls), NOW);
+  assert.deepEqual(calls, ["generate", "fact"], "no regeneration is caused by it");
+  assert.ok(outcome.ok && formatSharedXPost(outcome.packet).includes(P2_SENTENCE), "the sentence is delivered in X");
+});
+
+test("P2 controls: other nouns ending in い (思い／狙い／違い) are subjects; a definite cause in another clause stays assertive", () => {
+  const cases: Array<[string, string]> = [
+    ["ウクライナ情勢の影響で投資家の思いが揺れて東京市場は下落した可能性があります。", "speculative"],
+    ["ウクライナ情勢の影響で売りの狙いが変わって東京市場は下落した可能性があります。", "speculative"],
+    ["ウクライナ情勢の影響で見方の違いが広がって東京市場は下落した可能性があります。", "speculative"],
+    ["ウクライナ情勢を受けて東京市場は下落しましたが売りの勢いが弱まる可能性があります。", "assertive"],
+    ["ウクライナ情勢を受けて東京市場は下落したが今後は不確実な可能性があります。", "assertive"],
+    ["ウクライナ情勢を受けて東京市場の下げ幅が大きいが今後は戻す可能性があります。", "assertive"],
+    ["ウクライナ情勢を受けて東京市場の下げは激しいけれど今後は戻す可能性があります。", "assertive"],
+    ["ウクライナ情勢を受けて東京市場は下落したので今後も変動する可能性があります。", "assertive"],
+  ];
+  for (const [sentence, expected] of cases) assert.equal(verdictOf(sentence), expected, sentence);
+});
+
+test("P2: the same predicate rule binds an emoji after a noun ending in い (date and value stay one sentence)", () => {
+  const text = "10月6日の売りの勢い📉 日経平均は70,035.71（前日比−0.92%）でした。";
+  assert.equal(splitUnits(text).length, 1, text);
+  const analysis = delivered();
+  analysis.x_post.context_ja = text;
+  assert.ok(has(localAnalysisCheck(analysis, input).hard, "日付と指標の不一致"), "the wrong date is caught");
+  // A completed adjective predicate still ends the sentence before a new dated one.
+  assert.deepEqual(splitUnits("東京市場の下げは大きい📉 10月6日の米国市場は上昇しました。").length, 2);
+});

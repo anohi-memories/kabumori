@@ -28,7 +28,7 @@ import {
   resolveKabumoriAiRole,
   responsesApiParams,
 } from "../_shared/kabumori_ai_models.ts";
-import { emojiDirectionIssues, MARKET_NAMES, mentionsMarketMetric, metricFactIssues } from "./hard_fact_guards.ts";
+import { emojiDirectionIssues, MARKET_NAMES, mentionsMarketMetric, metricFactIssues, PREDICATE_END } from "./hard_fact_guards.ts";
 import {
   type Fallbacks,
   removalCodes,
@@ -618,10 +618,11 @@ function linkSupported(sentence: string, links: readonly RegExpMatchArray[], ind
 /**
  * Where one clause of a sentence ends and another statement starts: a conjunction after a predicate, with or without a
  * comma (「下落しましたが今後は…」「下落したので…」: 2026-10-08 H2 B3-R1); any of them before a comma; and 一方 / ただし /
- * しかし. A subject が (「ウクライナ情勢が重しとなった」) follows a noun, not a predicate, and is no boundary.
+ * しかし. A subject が (「ウクライナ情勢が重しとなった」「売りの勢いが強まって」) follows a noun, not a predicate
+ * (PREDICATE_END), and is no boundary.
  */
 const CLAUSE_BOUNDARY = new RegExp([
-  "(?<=(?:[たすだんるい]))(?:が|けれど(?:も)?|けど|ものの|ので|ため|から)(?![らっ])[、,]?",
+  `(?<=${PREDICATE_END})(?:が|けれど(?:も)?|けど|ものの|ので|ため|から)(?![らっ])[、,]?`,
   "(?:が|けれど(?:も)?|けど|ものの|ので|ため|一方(?:で)?|ただし|しかし|なお|また|ただ)[、,]",
   "[、,](?=(?:一方|ただし|しかし|なお|また|ただ)[、,]?)",
   "一方(?!的)(?:で)?|ただし|しかし",
