@@ -3,8 +3,8 @@
 - task_id: kabumori-watchlist-highlight-hybrid-ui-20261010
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: normal
 - type: Kabumori native app source-only UI / deterministic view-model
 - recommended_model: **Sonnet5（中）**
@@ -19,6 +19,22 @@
 - EAS_allowed: false
 - allocation_main_sha_reference: 582f40feea7f8a0a80cfa7c10d5e6c7b373a049a (2026-10-10; MUST refresh before work)
 - proposed_branch: claude/g1-watchlist-highlight-hybrid-ui-20261010
+
+## G1 FINAL CLOSE — PR #120 MERGED / 2026-10-10 JST
+
+- task_id: `kabumori-watchlist-highlight-hybrid-ui-20261010`
+- result: **PASS / MERGED / DONE** — full screenshot-reviewed, source-only hybrid watchlist within 銘柄; prior K1 targeted count fix accepted and present in merged head.
+- PR: `https://github.com/anohi-memories/kabumori/pull/120`; exact approved head `7bf19faf9cf7e7c67fbab987e4f57188518e77d0`.
+- Actual protected SHA-pinned GitHub squash merge succeeded; GitHub read-back: PR `closed`, `merged=true`, `merged_at=2026-10-10T10:11:26Z`; merge SHA `53678a2f1fe5e01ecde4e9988abcbd0ed573da66`. Fresh `main` branch was exactly that merge SHA in independent read-back.
+- Checks: last known PR head Vercel/Netlify status SUCCESS; head's Github REST `mergeable` repeatedly null/unknown, but server-side GitHub accepted atomic expected-head-SHA merge after preflight showing no changed-file overlap and head/check integrity. No force push/rebase. GitHub merge itself guarantees its server-side merge conditions.
+- changed_files: 20 (8 app source/test + 12 UI WebP screenshots), exactly the verified PR120 scope. **No NativeTabs/layout/menu changes**; user-constrained original 5 native bottom tabs remain.
+- tests: G1 Claude reported 457/457 app tests PASS, tsc(src), Expo public config, web export, `git diff --check` PASS, 375/402pt fixture Simulator; ChatGPT independently reviewed diff/screenshot, **did not rerun tests**.
+- push: G1 head pushed; GitHub merge confirmed. deploy: **no manual app/Edge/DB deploy, no EAS**. GitHub-to-Vercel automatic CI may run on main; do not equate it with app binary delivery or independently confirmed production runtime deployment.
+- remaining_issues: physical iPhone and genuine saved-report validation not yet run; news-card frequency depends on domestic/stock-linked news feed improvements by separate workstream. Neither blocks this source merge.
+- safety_checks: changed-file comparison with fresh main zero overlap, protected head match, no code change outside PR scope, no extra Codex security review for low-risk UI. Concurrent workstreams protected.
+- next_recommendation: G1 can be allocated a **new independently scoped TASK** only after fresh index/worktree checks; next user-visible step is iPhone real-data spot check when convenient, without spending EAS quota prematurely.
+- status: **done**; next_owner: **none**. No more G1 work is assigned by this closure.
+- AI Lab diary candidate: ウォッチリストで注目したい値動きの銘柄だけをカードで表示し、それ以外を見やすい一覧に整理。既存ナビゲーションは変更せず、銘柄画面内で切り替えられるようにした。
 
 ## Final K1 2026-10-10 — PR120 source PASS / merge HOLD pending GitHub readiness
 
