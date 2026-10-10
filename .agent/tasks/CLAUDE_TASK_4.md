@@ -1,5 +1,62 @@
 # Claude Task 4 — CURRENT TASK
 
+- task_id: postona-threads-phase2b-source-preparation-20261010
+- owner: claude
+- slot: claude-4
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Opus5.5（高）
+- type: source-only Threads OAuth Phase 2b implementation preparation, security bounded
+- completion_code: K4
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Context
+PR #106 / Phase 2a-2 passed final independent H1 review and was merged to main as 68aaf3e547c09d54bd9682d357a12743d0ded7f2. The source migration is **NOT applied to production**. Never treat source merge as a production schema change. Preserve the G4 old task and Report below.
+
+## Objective
+Advance Threads account connection Phase 2b using docs/postona/threads-connection-phase2b.md, beginning with fresh official Meta Threads API verification and bounded source-only implementation that remains disabled until all prerequisites pass. Do not enable user-facing connection, send posts, write live tokens, or change production.
+
+## Mandatory first actions
+1. Read PROJECT_RULES.md, .agent/ORCHESTRATION.md, .agent/ACTIVE_TASK.md, .agent/CURRENT_STATE.md, this TASK, existing G4 Report, the Phase 1 and Phase 2b docs.
+2. Confirm your own clean independent G4 worktree, fresh origin/main including merge 68aaf3e, and actual G3/G5/H1/H2 changes and overlapping Auth/OAuth/Vault/migration boundaries.
+3. Verify current official Threads OAuth API endpoints, permissions, app review, callback URI capabilities, token exchange/lifetime, revocation, and disconnect callback contract. Flag unresolved items explicitly; fail closed rather than guessing.
+4. Before modifying an overlapping G5-owned Auth, entitlement, account deletion, OAuth, Vault, RLS or RPC boundary, STOP and report the exact contract/owner conflict. Do not modify G5-owned files in this TASK.
+
+## Source scope
+- Confirm the safest implementation slice for Threads begin/callback/complete with state binding, replay prevention, verified provider identity, owner-only writes, Vault reference-only storage, and publish_enabled=false.
+- Only implement independently isolated files/contracts/tests if official contract and ownership are established and no G5 conflict exists. Unresolved Meta app credentials/redirect or database baseline must keep implementation behind inactive guards.
+- Existing X posting, refresh, OAuth, workspace/persona, and POSTONA AI consultation must remain unchanged.
+- Do not silently apply Phase 2a-2 migration to production, start Threads publishing, or open provider connections with real tokens.
+- If the safe slice is only design/spec/test scaffolding, deliver that rather than bypassing open constraints.
+
+## Verification
+- Focused unit/contract regression for source edits, X provider regressions, malformed or reused state, workspace/auth mismatch, unknown provider identity, vault/ref safety, and explicit publish-disabled behavior.
+- Run relevant Deno/type/lint/diff checks and secret scans; identify preexisting failures separately.
+- Fresh PR/main overlap check before any push. Use an independent G4 branch and PR; do not merge or deploy.
+- No real Meta/Supabase production API calls, DB migration apply, scheduler, OAuth secret writes or account lifecycle changes.
+
+## Completion
+- Update the Report for this task with task_id, result, changed_files, tests, commit_hash, push, PR/head, deploy, remaining_issues, safety_checks and next_recommendation.
+- Set status review_required / next_owner chatgpt and STOP for K4. Identify precisely which portions require an independent security review (do not request a repeat full PR106 review).
+- Return to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**, completion code **K4**.
+
+---
+
+# Previous G4 task — final C1 disposition (preserved)
+- task_id: postona-multisocial-phase2a2-security-corrective-20261007
+- final_verdict: PASS (independent H1 exact c0b6c03cb909d91f72b58424d64c6dfae1b8f14f)
+- source_merge: PR #106 merged 68aaf3e547c09d54bd9682d357a12743d0ded7f2
+- production_migration_apply: NOT PERFORMED / NOT AUTHORIZED
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
+
+---
+
+# Claude Task 4 — CURRENT TASK
+
 - task_id: postona-multisocial-phase2a2-security-corrective-20261007
 - owner: claude
 - slot: claude-4
