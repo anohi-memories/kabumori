@@ -1,0 +1,18 @@
+{
+  "schema": "kabumori.common-account.disposable-e2e.run-request.v1",
+  "task_id": "common-account-phase3c-disposable-supabase-proof-readiness-20261010",
+  "run_id": "p3c-run-20261011-01",
+  "project_ref": "fakedisposableaaaaaa",
+  "project_marker_path": "/private/tmp/kabumori-disposable-proof/project-marker.json",
+  "typed_confirmation": "I CONFIRM fakedisposableaaaaaa IS A DISPOSABLE PROJECT WITHOUT PRODUCTION DATA FOR RUN p3c-run-20261011-01",
+  "user_approval": {
+    "approved_project_ref": "fakedisposableaaaaaa",
+    "approval_reference": "FAKE-APPROVAL-REFERENCE-FOR-OFFLINE-TESTS",
+    "approved_at": "2026-10-11T09:00:00+09:00"
+  },
+  "scenarios": ["E1", "E2"],
+  "destructive_consents": {
+    "E2": "DESTROY-E2-fakedisposableaaaaaa-p3c-run-20261011-01"
+  },
+  "extra_approvals": {}
+}
