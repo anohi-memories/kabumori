@@ -3,8 +3,8 @@
 - task_id: kabumori-watchlist-highlight-hybrid-ui-20261010
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: normal
 - type: Kabumori native app source-only UI / deterministic view-model
 - recommended_model: **Sonnet5（高）**
@@ -19,6 +19,20 @@
 - EAS_allowed: false
 - allocation_main_sha_reference: 582f40feea7f8a0a80cfa7c10d5e6c7b373a049a (2026-10-10; MUST refresh before work)
 - proposed_branch: claude/g1-watchlist-highlight-hybrid-ui-20261010
+
+## K1 focused corrective — other-list count & empty-group visibility (2026-10-10)
+
+- **K1 verdict: CHANGES_REQUIRED (ONE bounded presentation issue), NOT a source/design rejection.**
+- The accepted PR #120 candidate at exact head `404b26f722335af97f095177664c7b89ca8df140` was independently inspected by ChatGPT at K1. Its changed-file scope is 18 files (10 simulator WebP screenshots + 8 sources/tests); neither NativeTabs layout nor root layout changes. Verified source: `src/components/portfolio/watchlist-section.tsx`.
+- **Confirmed UI bug**: `const count = featured.length + rest.length` is used for the count pill under `その他の監視銘柄`. This wrongly counts highlighted featured stocks even though the list intentionally omits them. The currently reviewed 2-featured screenshot shows `その他の監視銘柄 7銘柄` when the list has only 5 rest rows. Also `count > 0` keeps a blank `その他の監視銘柄` section visible if all stocks are featured (e.g. 1-3 saved watch stocks all pass threshold).
+- **Required minimal change**: show a remaining-list section iff `rest.length > 0`. Its visible count badge must be exactly `rest.length`. When `featured.length===0`, title `監視銘柄` and count is still all listed `rest.length`. When `featured.length>0` and `rest.length>0`, title `その他の監視銘柄` and count is `rest.length`. When `featured.length>0` and `rest.length===0`, omit this group entirely (do NOT show '0銘柄' placeholder). When all watch registrations absent, preserve the existing empty-state behavior (no phantom group).
+- **Required regression tests** in `tests/app/watchlist-layout_test.ts` or closest focused view test: all-featured 1/2/3 (no remainder group), partially-featured 2+5 (badge 5), >3 featured candidates (3 featured and exact remaining badge incl flagged extras), none-featured count all, no watch registrations count none. Source-level render assertion or component-specific test may be used, alongside pure helper tests. Never hardcode demo names/prices in production.
+- **Scope strictly LIMITED** to `src/components/portfolio/watchlist-section.tsx`, focused tests and optional refreshed screenshot evidence; update this G1 Report accordingly. Preserve current UI, exact 5 NativeTabs, root navigator, news origin, all data rules; don't refactor unrelated code. No G2/G3/G4/G5/H changes.
+- Continue on existing **PR #120** and G1's same isolated worktree/branch only; check fresh origin/main and exact PR head before changes, do not force push or create a second PR. If head diverged unexpectedly, stop. Test focused regressions, app suite, src TypeScript check and `git diff --check`. If capture infrastructure readily available, refresh 2-featured and all-featured 375/402 screenshots; otherwise document code/test evidence and previous fixture screenshots rather than claiming recaptured screenshots.
+- Update current TASK `## Report` (preserve previous implementation evidence in the historical section or append a new dated corrective subsection). Set status `review_required` / next_owner `chatgpt` on completion. Return **K1 to かぶモリアプリG1のちゃ** with exact new head, tests, file list and no deploy.
+- **No Codex review necessary for this isolated count-only correction** if tested and source-verified. Merge remains HOLD until subsequent K1 PASS. Deployment/EAS/production operations remain prohibited.
+
+推薦モデル：**Sonnet5（中）**
 
 ## Mission / confirmed user decisions
 Implement the user-approved Kabumori watchlist final visual direction as a **hybrid watchlist within the existing 銘柄 tab**, preserving the canonical portfolio content. The reference is the 2026-10-10 final user-supplied vertical screenshot in the かぶモリアプリG1 ChatGPT conversation (ivory background; segmented ポートフォリオ / ウォッチリスト control; muted coral fall and blue-green news featured cards; compact flat stock rows; varied round fallback avatars). The screenshot is **not a statement of actual data** and is **not currently committed as a source asset**. The detailed requirements below are authoritative if the screenshot is unavailable to Claude. Do NOT fabricate logos, prices, article text or bottom navigation to mimic it.
