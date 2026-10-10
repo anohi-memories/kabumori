@@ -7,7 +7,7 @@
 - next_owner: claude
 - priority: normal
 - type: Kabumori native app source-only UI / deterministic view-model
-- recommended_model: **Sonnet5（高）**
+- recommended_model: **Sonnet5（中）**
 - start_code: G1
 - finish_code: K1
 - return_to: かぶモリアプリG1のちゃ
