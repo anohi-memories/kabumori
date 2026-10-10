@@ -3,8 +3,8 @@
 - task_id: common-ai-provider-pr119-c1-r1-r2-narrow-rereview-20261010
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - start_code: H1
 - completion_code: C1
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -58,6 +58,17 @@ Inspect migration postcondition 5b and independent local PG17 run as a NON-super
 Only your H1 TASK, H1 REPORT and H1 portion of ACTIVE_TASK may be updated, preserving histories exactly and checking fresh origin/main before safe publication. Do not modify G1–G5, H2, PR117/119, or production. Report task_id, exact heads, verdict per R1/R2, independent repro/tests, reviewed files/lines, security and concurrency findings, unexpected blockers, pending gates, report commit/push/read-back, no paid provider calls and next recommendation. For PASS, recommend **source-only merge consideration** of PR117 before PR119, not live migration apply. If CHANGES_REQUIRED, return only concrete blocking evidence; no broad rereview.
 
 返却先：共通AI基盤のちゃ（OpenAI・Claude API専用チャット）へ C1
+
+## H1 narrow rereview completion — 2026-10-10 JST
+
+- verdict: **PASS**, limited to R1 P1 / R2 P2 closure on exact PR119 `8ef3843f51e771088dfe58e2e5a262db0b62644a`; protected PR117 `2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226` unchanged. Both OPEN/DRAFT/UNMERGED at final head check.
+- R1: independent prior same-callId/separate-guard executor reproduction now sends **1** mock HTTP request (previously 2), one successful caller, one fail-closed caller, one event/call, USD0.000035. Sixty concurrent mark_sent calls yield exactly one permit; post-commit response timeout, replay, release/recovery races and separate-attempt retry tests pass.
+- R2: independent original NOINHERIT/SET TRUE graph applied as non-superuser now refuses atomically; catalog digest AND full pg_auth_members row digest unchanged, zero ledger objects remain. Direct/transitive/mixed paths and pg_read_all_data refusal tests pass; two SET-disabled safe controls pass.
+- tests actually rerun: selected local PG parts `concurrency adverse nonsuper e2e` PASS (10 E2E); ledger guard unit9 PASS; changed-TS check/lint with approved no-import-prefix exclusion PASS; diff check PASS. Full94 provider suite and16 mutants NOT_RERUN; prior evidence not relabelled as current tests.
+- changed repository files: H1 TASK, H1 REPORT, H1 status/next_owner only in ACTIVE_TASK. No product-source changes, source PR merge/deploy, production/staging access, paid/real provider calls or secrets operations.
+- publication: **NOT_PUSHED**. The safety reviewer rejected the proposed combined commit/push command BEFORE execution because explicit authorization for this report-only shared-main push was required. No workaround/retry; local report preserved, user approval requested. Other slots and historical reports preserved. Local commit SHA is given in the final receipt if saved successfully.
+- recommendation: C1 may consider source-only merge of PR117 BEFORE PR119; this is not source merge execution or production authorization. RESERVED registration and all documented live release gates remain separate owner work.
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）へ C1; recommended_model: Sol（高）.
 
 ---
 

@@ -1,3 +1,51 @@
+# Current H1 result — PR119 R1/R2 narrow rereview — 2026-10-10 JST
+
+- task_id: common-ai-provider-pr119-c1-r1-r2-narrow-rereview-20261010
+- result / verdict: **PASS — R1 P1 and R2 P2 CLOSED**, limited to the two corrective findings; not a repeated broad release audit.
+- exact reviewed PR119 head: `8ef3843f51e771088dfe58e2e5a262db0b62644a`; protected PR117 head: `2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226`. Both freshly checked OPEN/DRAFT/UNMERGED; PR119 still based on `claude/common-ai-provider-core-20261010`, PR117 ancestor retained. Corrective delta from c7d0f6e0: nine files, 387 additions/20 deletions.
+- main: startup `7fa16c471eb744813ea646c78a0094646b0c3e85`; preparation `69df917550fd2697a4dc241a0d39aa48d14134de`. H1 TASK/REPORT and governing instructions unchanged; intervening G2 control changes retained. Combined provider/ledger source filenames have zero overlap with main source changes since their common ancestor at preparation check.
+- isolation: own control branch `codex/h1-ai-r1r2-rereview-20261010`, `<root>/report`; own detached exact-head checkout `<root>/source`; root `/private/tmp/kabumori-h1-ai-r1r2-20261010.xVNu47`. Implementer/G/H worktrees and servers untouched. PostgreSQL17 Unix socket only, listen_addresses empty, port54941; own mock shim loopback54943. Both reviewer-owned processes stopped after tests; local evidence retained.
+- status: review_required; next_owner: chatgpt; completion_code: C1.
+- return_to: **共通AI基盤のちゃ（OpenAI・Claude API専用チャット）**.
+
+## R1 P1 — CLOSED, one-time dispatch permission
+
+- Reviewed migration lines405–480 (reserve reuse), 644–677 (mark_sent); `ledger_guard.ts` denyReason/markSent and unchanged executor pre-send ordering. Only the row-lock winning reserved→sent transition returns may_send:true. Existing sent/unknown/settled/released rows return false. Reserve only reauthorizes still-reserved unsent reuse; sent is ATTEMPT_IN_FLIGHT, terminal state ATTEMPT_FINALIZED. The guard maps in-flight refusal to SEND_NOT_CONFIRMED.
+- Independently adapted the previous H1 reproducer, not merely implementer assertions: same callId `h1-identical-concurrent`, two separate real guard instances, executeAiRequest, exact candidate SQL applied as non-superuser h1_ai_owner, mock OpenAI response delayed300ms, max_calls=1. Now **one mock-provider HTTP request**, results [{ok:true,transportAttempts:1},{ok:false,transportAttempts:0}], bucket calls=1/held_usd=0/settled_usd=0.000035; SQL independently returned usage_events count1/sum0.00003500. Previously this exact pattern sent two requests while counting once.
+- Selected PG concurrency part: 60 mark_sent calls -> exactly1 true/59 false; mark_sent vs release -> one permit/sent consistent in this run; expired mark_sent vs recover_stale -> zero permits/released once. Existing selected-part cap/idempotency controls also pass (150 call-cap50, 150 cost-cap25, global/brand caps, 60 reserve/settle).
+- Actual TS→shim→PG E2E **10 passed/0 failed**, including duplicate separate guards under caps1 and10; mark_sent COMMITTED but response delayed past timeout -> no HTTP, sent hold not released, replay denied; lost provider response -> one unknown upper-bound event, no replay; normal retry reserves distinct attempt2. Inspected shim fault ordering: psql process completes/commits BEFORE delayed504, so this is not only a pre-commit mock exception.
+- Ambiguous sent holds remain counted and stale recovery settles upper-bound unknown rather than refunding. No fallback/refusal-retry behavior change. These tests demonstrate local concurrency/response-loss behavior, not real power-loss durability or managed provider proof.
+
+## R2 P2 — CLOSED, reachable role authority checked
+
+- Reviewed migration postcondition5b lines1111–1156. PG16+ uses pg_has_role(...,'SET') in addition to inheritance USAGE, traversing only SET-enabled chains; each reachable role's own effective schema/table/column/sequence/helper/RPC authority is checked. This also catches a SET-first/INHERIT-second mixed path. Owner/superuser and anon/authenticated→service_role paths reject; no automatic role repair. PG<16 MEMBER fallback is conservatively stricter and was source-reviewed only, NOT executed here.
+- Independently repeated the original R2 adverse graph: `GRANT service_role TO authenticated WITH INHERIT FALSE, SET TRUE`. Before apply inherited=false/can_set=true. Applying exact SQL with `SET ROLE h1_ai_owner` (non-superuser, owner distinct from service_role) now fails AI_LEDGER_ACL_UNSAFE_ROLE_PATH at line1163. Zero ledger schema/RPC objects remain.
+- Independent atomicity: outside-catalog digest before=after `9e1438a794527f661d9edbaaa84e391d`; additional digest of ALL pg_auth_members row fields, including PG17 inherit_option/set_option, before=after `2ddb09acdeef6dde938c34159828b4b5`. This supplements the runner's older membership digest (admin_option only); no role attributes/ACL were repaired.
+- Selected adverse part: original four unsafe-role controls plus eight corrective cases PASS (direct authenticated/anon SET→service_role, transitive chain, SET→INHERIT mixed chain, direct inheritance, SET→pg_read_all_data, anomalous default table ACL, non-superuser owner). Each refusal compares before/after outside catalog and requires zero ledger objects. Two safe controls accepted: both INHERIT/SET false, and INHERIT-only first leg with SET-disabled chain; actual authenticated/anon SET ROLE service_role denied. Additional nonsuper part applies safe SQL under distinct non-superuser owner and passes behavioral checks.
+- Privileged schema/table/column/sequence/helper checks inspected in source; no claim that every possible synthetic ACL variant was separately rerun. The finding concerns migration fail-closed authority graphs, not a claim that browser JWTs can issue SET ROLE through ordinary PostgREST. No live role graph or production exposure inspected.
+- Semantics reference: [PostgreSQL17 role membership](https://www.postgresql.org/docs/17/role-membership.html), separate INHERIT/SET grant options and original-login SET chain requirement.
+
+## Bounded verification actually executed
+
+- `AIL_PARTS='concurrency adverse nonsuper e2e' AIL_SHIM_PORT=54942 ... bash supabase/tests/ai_provider_budget_ledger_run.sh`: exit0, ALL REQUESTED PARTS PASSED. Evidence `<root>/focused-pg.log`. Only these four selected parts; not all seven. Local-only host safety/cleanup inspected before invocation.
+- `deno test --no-config --cached-only --allow-env --allow-read supabase/functions/_shared/ai_provider/ledger_guard_test.ts`: **9 passed/0 failed**.
+- `deno check --no-config` on ledger_guard.ts, ai_provider_budget_ledger_e2e_test.ts, ai_provider_budget_ledger_postgrest_shim.ts: PASS.
+- `deno lint --no-config --rules-exclude=no-import-prefix` on ledger_guard.ts, ledger_guard_test.ts and the two changed test/shim TS files: PASS (4files). Approved scoped pin-lint exclusion used; no unqualified default-lint claim and no PR117 lint/source edit.
+- `git diff --check c7d0f6e0 8ef3843f`: PASS; detached source checkout clean. Independent probes: `<root>/duplicate_probe.ts`, probe_setup.sql, unsafe_setup.sql, independent-unsafe.log plus tool transcript for duplicate output and digest receipt.
+- NOT_RERUN: full94 provider suite, all seven PG parts,16-mutant runner, RESERVED invariants and unrelated G/H suites; prior accepted evidence preserved below, not relabelled as fresh corrective coverage. No managed Supabase/PostgREST, real provider/paid API or production/staging operations.
+- Supabase and Postgres skills guided the fail-closed privilege review, isolated local DB, row-lock/dispatch and rollback checks. No source change was required.
+
+## Completion / next recommendation
+
+- changed_files (repository): `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`, only H1 status/next_owner fields of `.agent/ACTIVE_TASK.md`. Preserve every prior TASK/Report section. CURRENT_STATE, G1–G5/H2 and all product files unmodified by H1.
+- commit_hash / push / read-back: **NOT_PUSHED / NOT_VERIFIED**. The safety reviewer rejected the proposed combined commit/push command BEFORE execution, requiring explicit authorization for a report-only push to shared main. No indirect execution, workaround or push retry. Local result preserved and user approval requested; local-only commit SHA is given in the final receipt if successfully saved. Remote canonical H1 remains ready until synchronization, NOT reported as review_required remotely.
+- unexpected R1/R2 blockers: none. Source-only merge consideration **PR117 BEFORE PR119**, conditional on C1/current-head/integration checks; H1 has neither merged either PR nor approved/applied production SQL.
+- Remaining separate release gates: source-owner RESERVED registration; managed PostgREST exposure/version/roles/default ACL baseline; caller user/brand identity trust; G5 retention/account deletion; policy seed/credit/privacy; apply/history/rollback and recovery Cron planning. Do not convert these previously scoped gates into renewed R1/R2 blockers.
+- source corrections / source PR merge / deployment / production or staging DB read-write / Vault/Auth/OAuth/secrets / actual provider or paid API: **0**.
+- 返却先：**共通AI基盤のちゃ（OpenAI・Claude API専用チャット）へ C1**。推薦モデル：Sol（高）。Stop after verified control-file sync; do not start another review.
+
+---
+
 # Current H1 result — common AI Phase 1a + 1b — 2026-10-10 JST
 
 - task_id: common-ai-provider-pr117-pr119-integrated-security-review-20261010
