@@ -20,6 +20,18 @@
 - allocation_main_sha_reference: 582f40feea7f8a0a80cfa7c10d5e6c7b373a049a (2026-10-10; MUST refresh before work)
 - proposed_branch: claude/g1-watchlist-highlight-hybrid-ui-20261010
 
+## Final K1 2026-10-10 — PR120 source PASS / merge HOLD pending GitHub readiness
+
+- Verdict: **PASS (source/UI and targeted corrective)**, exact PR #120 head `7bf19faf9cf7e7c67fbab987e4f57188518e77d0`; **NOT MERGED / NOT DEPLOYED**.
+- Independently inspected: PR changed-file list (20 paths), prior head → corrected head single fast-forward commit (9 paths = 6 screenshot assets, `watchlist-section.tsx`, pure `portfolio-view.ts` helper, `watchlist-layout_test.ts`), correction render path using `remainingGroup(featured.length, rest.length)` / `group.show` / `group.count`, and both corrected 402pt screenshots (2 featured+5 rest badge=5; 3 all-featured with no empty group). Confirmed normal portfolio/other watchlist UI unchanged and no changes to `src/app/(tabs)/_layout.tsx`, `src/app/_layout.tsx`, or tab icons. Native five menu labels/order preserved.
+- Corrected logic: `show=restCount>0`, `count=restCount`, `featured>0 ? 'その他の監視銘柄' : '監視銘柄'`. Covers all-featured 1/2/3, partial 2+5, >3 candidates, no featured, empty list. Screenshot visuals support corrected UI.
+- Claude reports `deno test tests/app/` **457/457 PASS**, src TypeScript no diagnostics, Expo config / web export PASS, diff check clean, 375pt and 402pt real-tap fixture Simulator checks. **These commands and device operations were not independently rerun by ChatGPT.** Tests added cover source render and deterministic helper behavior.
+- Diff vs fresh main from PR's recorded base: 19 then 20 main commits; at last check zero file overlap on PR source/test/UI paths, code change risk low, no independent Codex review required. Existing 5 NativeTabs and native routes unchanged. Backend/DB/Edge/Auth/paid-AI/EAS/production mutation=0.
+- Merge gate: multiple just-in-time GitHub REST PR reads returned `mergeable=null`, `mergeable_state=unknown` despite one earlier positive response. Thus **merge not performed**, because GitHub could not affirm current clean mergeability at the final gate. PR #120 remains OPEN, source head is pinned. Normal source merge may proceed at a *new* final check if exact head unchanged, fresh main file overlap still zero and GitHub returns true/clean; use expected-head-SHA squash merge, verify read-back. Do not authorize EAS or manual production deploy. Check Vercel automatic-main-deploy side effect before merging if production Web effect is relevant.
+- G1 current slot: `review_required`, `next_owner: chatgpt` **only for pending final merge gate**; implementation is accepted and no more G1 code changes requested. Protect PR branch and G1 task history until final gate. Do not treat as free for a conflicting new G1 assignment.
+- Remaining nonblocking: real physical iPhone with real saved user data not exercised; news card depends on actual domestic-source/stock-linked saved news quality, outside G1 scope.
+- AI Lab diary: 候補あり after final merge — ウォッチリストを重要な値動きだけカードで強調し、残りを見やすい一覧に整理した。ログは実際の公開可能な開発成果だけに限定。
+
 ## K1 focused corrective — other-list count & empty-group visibility (2026-10-10)
 
 - **K1 verdict: CHANGES_REQUIRED (ONE bounded presentation issue), NOT a source/design rejection.**
