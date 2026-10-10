@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-5
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: critical
 - type: narrow independent-H2-findings security corrective, existing PR
 - target_pr: 112
@@ -64,7 +64,18 @@ Work on same PR112 branch, use source-only fast-forward push after fresh main/PR
 
 推薦モデル：**Opus5.5（極高）**
 
-## Report — current bounded residual corrective
+#### K5 — Source-only final corrective candidate review — 2026-10-10 JST
+
+- verdict: **PASS_CANDIDATE to independent exact-head H2 security rereview only**. No source merge/deploy or permission to open the whole-account deletion gate.
+- target_pr: 112; exact head `54b9435b0dcc0d0e79ae6eba4340eee44508141c` OPEN/UNMERGED, 30 PR files.
+- previous review head `b60272c433b57bac1acb00c13d4fda7ff96f1f2f` -> new: one commit, 16 G5-only files, zero changed-file overlap with current main at K5 (58 main commits since PR base). Other G2/G3/G4 source files untouched.
+- R1 previous P1: G5 reports Phase3a unapplied migration preflight+revoke+postconditions on three legacy checkpoint/clear/prepare EXECUTE pathways; spot-check located owner/ACL preflight and revokes. R2 previous P1: account-delete-owned Apple three-way outcome and real-wiring integration added; spot-check confirmed `http.ts` uses new adapter and runtime retains unknown in-flight intent. R3 blocked release gate, R4 fresh residue checks, C1 future reauth all preserved per G5 Report. These remain subject to H2 independent security proof.
+- G5-reported test evidence: account-delete 66 PASS, app 430 PASS, AuthProvider 23, X saga 17, X app 19, Phase1/2/3a disposable PostgreSQL runners PASS, SQL mutation 48/48 and TS mutation 45/45 detected, `deno check` clean and strict production-runtime Deno lint clean; scoped app tsc same historical CSS declaration errors as main. These are reported, not separately rerun by ChatGPT.
+- Whole-account Auth deletion remains **BLOCKED / UNAVAILABLE** behind schema-enforced closed gate pending future Auth identity-write fence and separately reviewed release. Existing production hard-delete deployment and E2E/provider/writer/entitlement/Storage/Apple/X dependencies still unresolved; do not equate source review with rollout.
+- H2 reviewed previous head then marked done after C2; H1 remains assigned PR106. K5 assigned **H2** `common-account-pr112-r1l-r2-apple-boundary-exact-head-rereview-20261010` with recommended **Sol（極高）**, return_to **共通アカウントG5のちゃ**, finish **C2**. G2 PR110 remains waiting; all other slots preserved. Review first, no merge/migration/Edge deploy/EAS.
+- G5 remains review_required, next_owner codex. Production read/write, provider/API calls, migration apply, deploy, EAS and PR merge by K5: 0.
+
+ Report — current bounded residual corrective
 
 - status: review_required
 - task_id: common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010
