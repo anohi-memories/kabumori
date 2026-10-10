@@ -48,17 +48,17 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: common-account-pr112-r1l-r2-apple-boundary-exact-head-rereview-20261010
+- status: ready
+- task_id: kabumori-market-report-pr110-b1r1-b2r1-b3r1-final-review-20261010
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- completion_code: C2
+- next_owner: codex
+- return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- return_to: 共通アカウントG5のちゃ
-- completion_code: C2
-- allocation: C2 accepted independent R1L/R2 exact-head source-only PASS for PR112 54b9435b0dcc0d0e79ae6eba4340eee44508141c. Old RPC bypass closed/new 75 denied SQL calls, Apple uncertain HTTP response safe/new 21 variants; 555/555 tests, PG1/2/3a, SQL48/48 TS45/45, lint/check PASS. Review CLOSED; H2 not reserved for G2/G3; new task requires fresh allocation. PR merge, production apply/deploy/EAS HOLD; whole deletion schema gate BLOCKED.
-- recommended_model: Sol（極高）
+- allocation: G2 PR #110 exact head cb3d77d50e848d043f5427df363769b75d3c7764: focused independent final review of B1-R1/B2-R1/B3-R1 seven residual cases, maintain prior B1-B4, normal 10/7 fixtures, MAX_GENERATIONS=2 and MAX_MODEL_CALLS=4. Source-only, no product edits, paid API, PR merge or deploy. Previous H2 PR112 done/C2 closed; all history and release block preserved. Return C2 to G2 chat.
+- recommended_model: Sol（高）
 
 ## Claude G1
 - owner: claude
