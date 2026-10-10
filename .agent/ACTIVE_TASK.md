@@ -70,7 +70,7 @@
 - next_owner: claude
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: User-approved hybrid watchlist within existing 銘柄 tab: [ポートフォリオ|ウォッチリスト] segmented switch, 0–3 evidence-based auto-highlight cards, remaining compact watch rows, no fake current data/news. CRITICAL: do not modify existing NativeTabs, their five labels/order/icons/style or tab routes; screenshot's bottom menu is not canonical. Source-only, PR without self-merge, DB/Auth/API/Edge/EAS/production 0. Independent G1 worktree and fresh main/open-PR overlap check mandatory at startup. return K1 to かぶモリアプリG1のちゃ.
+- allocation: K1 independent screenshot/source review of PR #120 exact head 404b26f722335af97f095177664c7b89ca8df140 found ONE limited remainder-count defect: other-list badge counts featured+rest (2 featured+5 rest misleadingly shows 7) and an empty 'その他' group appears if all watches are featured. G1 focused corrective READY on SAME PR #120: show group only when rest.length>0, count=rest.length; cover all-featured/partial/no-featured tests. NativeTabs five entries unchanged and must remain completely untouched. No new PR, merge/deploy/EAS/DB/Auth/production. Return K1 to かぶモリアプリG1のちゃ. No Codex review needed for count-only fix.
 - recommended_model: Sonnet5（高）
 ## Claude G2
 - owner: claude
