@@ -1,3 +1,71 @@
+# H1 — 共通AI基盤 Phase 1a / PR #117 独立レビュー — CURRENT TASK
+
+- task_id: common-ai-provider-pr117-phase1a-independent-review-20261010
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- start_code: H1
+- completion_code: C1
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- recommended_model: Sol（高）
+- priority: high
+- type: bounded independent API/security/budget review, source-only
+- target_pr: 117
+- target_head: 2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226
+- source_merge_allowed: false
+- production_mutation_allowed: false
+- deploy_allowed: false
+- paid_provider_calls_allowed: false
+
+## Mission
+
+Evaluate the isolated OpenAI/Anthropic provider implementation at PR #117, EXACT commit 2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226, for safe later adoption in Kabumori and POSTONA. This is ONE focused independent review of the 27 new files, not a request to restart other G/H reviews or to review future DB/production work. Return PASS or CHANGES REQUIRED with reproductions, severity, focused evidence, and exact reviewed head. A passing source-only review does NOT authorize merge, paid probes, deployment or any product migration.
+
+## Start and isolation
+
+1. Read PROJECT_RULES.md, .agent/ORCHESTRATION.md, .agent/ACTIVE_TASK.md, .agent/CURRENT_STATE.md, THIS TASK, and previous H1 report history as necessary. Confirm current H1 task_id/status/return_to and ensure this H1 allocation remains exclusive.
+2. Fresh fetch origin/main, PR #117 and its 27 files. Require OPEN/Draft/UNMERGED and EXACT head 2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226. If changed, STOP and return to the dedicated common-AI chat; do not silently review another head.
+3. Use a NEW independent H1 worktree/checkout based on fresh /Users/yuya/Developer/kabumori-fresh. Never use the implementer's /Users/yuya/Developer/kabumori-common-ai-provider, B's /Users/yuya/Developer/kabumori-b-claude-api or any G/H-owned worktree, branch, uncommitted changes or server. If isolation cannot be ensured, STOP.
+4. Confirm PR #117 contains ONLY new files in supabase/functions/_shared/ai_provider/ and docs/ai-provider/PROVIDER_CONTRACT.md. Compare overlap with fresh main and other open PRs; GitHub mergeability was unconfirmed on allocation and must not be assumed.
+
+## Focused review requirements (prioritize concrete P1/P2 findings)
+
+A. Provider contract and adapters:
+- Ensure configuredModel vs actualModel, refusal, incomplete output, absent/unreadable usage, cache usage and actual HTTP attempts are preserved truthfully on BOTH success and failure.
+- Inspect OpenAI Responses handling and Anthropic SDK maxRetries:0 / timeout / base URL. Check the SDK's potential ANTHROPIC_CUSTOM_HEADERS environment influence, request/response leakage and SDK-internal hidden retries.
+- Ensure no automatic cross-provider fallback and no retry of provider safety refusal.
+
+B. Original JSON Schema:
+- Verify no JSON.parse-only acceptance. Validate original schema after conversion; unsupported syntax must fail before HTTP. Check required, additionalProperties, union/null, refs, nested constraints, arrays/strings/numeric ranges; no schema loophole that returns ok:true with rejected data.
+- Confirm error details/telemetry reveal neither unexpected input fields nor model output.
+
+C. Retry, cancellation and deadline:
+- Independently test per-attempt reservation and charging across 429/529/5xx, network, timeout (opt-in only), Retry-After, early deadlines, SDK errors, and transport limits 1–3.
+- Avoid double retry with existing G2 transport_retry.ts when later integrated; verify documented integration contract and MAX_GENERATIONS=2 / MAX_MODEL_CALLS=4 compatibility. Do NOT edit G2.
+
+D. Budget and pricing:
+- Check no negative/cross-tenant reserve, double settlement, concurrent overspend within one InMemoryBudgetGuard instance, unknown usage undercharging, missed/failed/ambiguous HTTP attempts, price tier and 1h/5m cache classification, unknown model/cost fail-closed.
+- Confirm that a single-process guard is NEVER represented as a global monthly budget; Phase 1b DB reservations remain mandatory before real rollout. Distinguish estimated USD, Console bills, credit balance and actual out-of-pocket.
+
+E. Secrets/isolation:
+- Audit API key sourcing, Admin-key rejection, redaction, URL/header injection risk, error logs and onAttempt telemetry. Examine ANTHROPIC_CUSTOM_HEADERS risk and official SDK behavior using source/fixtures without paid API.
+- Confirm that no existing functions import this new provider and that no Auth, DB, migration, RLS, RPC, POSTONA, market reports, important news, model policy, secrets, workflow, G/H task or report was changed by PR #117.
+
+## Tests
+
+Independently run targeted Deno test/check/lint and diff checks; 85 unit tests and 22 model-guard tests were reported by Claude, not yet independently rerun. Add small mock-only adversarial reproductions as disposable local test probes if useful; do not push production/source edits. Explicitly separate reproduced results from the implementer's claims. Avoid broad repeat-review loops; only actionable regressions/security or interface blockers.
+
+## Constraints and completion
+
+- READ-ONLY review of PR source. Only own H1 TASK/Report and H1-only status/next_owner in .agent/ACTIVE_TASK.md may be updated for completion, preserving all previous history. Do not modify other slot reports, tasks or ownership.
+- No real OpenAI/Anthropic API calls, paid usage/probes, secrets scanning, DB changes, production writes, merges, deploys, model switches or EAS.
+- The unpushed Phase 0 design in the implementer's separate worktree remains protected.
+- On completion write .agent/CODEX_REPORT.md and H1 TASK receipt; update the H1 index only, with safe fresh-main checks. Include task_id, verdict, reviewed_exact_head, findings with severity/evidence, test commands/results, changed_files, commit/push, safety, remaining_issues, next_recommendation. Explicitly show: **返却先：共通AI基盤のちゃ（OpenAI・Claude API専用チャット）へ C1**.
+- If PASS, recommend source-only merge gate separately; then the originating chat decides Phase 1b DB ledger/RPC with G5 conflict gate and agreed seven policies (Opus priority conditional, $100 credit unverified, Anthropic privacy update, per-user/brand quotas, fallback OFF, shared market report first, dedicated return_to). Never start Phase 1b within this H1 task.
+
+---
+
 # C1 FINAL — POSTONA PR106 PASS / H1 closed — 2026-10-10
 
 - task_id: postona-pr106-f1-acl-final-rereview-20261009

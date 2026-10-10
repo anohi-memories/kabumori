@@ -33,17 +33,18 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: postona-pr106-f1-acl-final-rereview-20261009
+- status: ready
+- task_id: common-ai-provider-pr117-phase1a-independent-review-20261010
 - start_code: H1
 - finish_code: C1
-- next_owner: none
-- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: C1
+- next_owner: codex
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: C1 PASS; PR106 exact c0b6c03cb909d91f72b58424d64c6dfae1b8f14f merged as 68aaf3e547c09d54bd9682d357a12743d0ded7f2. Source only; migration unapplied. H1 closed; next task requires fresh allocation.
+- allocation: H1 assigned one bounded independent source-only review of Draft PR #117 exact 2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226, 27 new provider/doc files; external API/secret/budget/retry/schema focus. No provider calls, production, merge or deploy. Return C1 to the dedicated common AI chat. Existing G2 PR110 review remains waiting; H2 remains unreserved.
 - recommended_model: Sol（高）
+
 ## Codex H2
 - owner: codex
 - slot: codex-2

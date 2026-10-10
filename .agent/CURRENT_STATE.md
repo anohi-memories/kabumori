@@ -1,3 +1,12 @@
+## H1 ASSIGNED — 共通AI基盤 Phase 1a PR117 独立レビュー — 2026-10-10 JST
+
+- H1 task_id: `common-ai-provider-pr117-phase1a-independent-review-20261010`; status `ready`; exact PR117 head `2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226`; Draft OPEN / unmerged, source-only 27 added files, current GitHub mergeability unconfirmed.
+- Return to **共通AI基盤のちゃ（OpenAI・Claude API専用チャット）** with `C1`; recommended **Sol（高）**. This is one bounded high-risk API/credentials/budget review; previous H1 TASK/Report history preserved.
+- H2 remains `done` and **not reserved**; G2 PR110 still awaits its own slot allocation. G1–G5 existing tasks/PRs untouched. PR117 no merge, real paid API, DB, secret, production or deploy authorized.
+- Next after source review: decide Phase 1b persistent usage ledger/atomic budget RPC separately, under G5 DB/Auth conflict gate and seven prior AI-provider decisions.
+
+---
+
 ## G1 ALLOCATION — Watchlist hybrid cards + segmented stock screen / source-only READY — 2026-10-10
 
 - The user approved the reference watchlist screenshot's body design: an in-tab [ポートフォリオ | ウォッチリスト] segmented switch within 銘柄, 0–3 dynamically featured major-move/verified-news cards, compact remaining watch rows, warm ivory/coral/blue-green. Illustration prices/articles are sample-only, never actual data.
