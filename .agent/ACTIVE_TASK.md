@@ -81,7 +81,7 @@
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: PR110 C2 P2 corrective READY (same task_id): fix only the noun-subject 「勢いが」 clause-boundary false positive at exact head cb3d77d50e848d043f5427df363769b75d3c7764 (H2 C2 CHANGES_REQUIRED; prior seven residuals CLOSED). Canonical instruction is the top section of .agent/tasks/CLAUDE_TASK.md; all prior TASK/Report text preserved. Update existing PR110 only, then review_required / chatgpt for K2. Source fix only by G2; merge/deploy HOLD.
+- allocation: PR110 の C2 差し戻し（P2 1件）を ready で割当（同じ task_id）。head cb3d77d50e848d043f5427df363769b75d3c7764 で、名詞＋主語の「が」（「勢いが」）を節の区切りと誤認する問題だけを直す（H2 の C2 は CHANGES_REQUIRED、前回の7ケースは解消済み）。正本は .agent/tasks/CLAUDE_TASK.md の先頭の節で、過去の TASK・Report はすべて保存。既存の PR110 だけを更新し、終わったら review_required / chatgpt で K2 へ。ソース修正は G2 のみ、マージ・デプロイは保留。
 - recommended_model: Opus5.5（高）
 
 ## Claude G3

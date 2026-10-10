@@ -1,7 +1,7 @@
-# C2 CORRECTIVE — PR #110 P2 only: noun-subject 「勢いが」 mistaken for a clause boundary
+# C2 差し戻し — PR #110 の P2 1件のみ：名詞＋主語の「が」（「勢いが」）を節の区切りと誤認する問題
 
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
-- c2_verdict: **CHANGES REQUIRED (one bounded P2)**
+- c2_verdict: **CHANGES REQUIRED（P2 1件のみ）**
 - target_pr: 110
 - reviewed_head: cb3d77d50e848d043f5427df363769b75d3c7764
 - owner: claude
@@ -15,65 +15,67 @@
 - production_mutation_allowed: false
 - deploy_allowed: false
 - merge_allowed: false
-- routing_rule: this workstream uses G2 only
-- review_source: `.agent/CODEX_REPORT_2.md`（H2 final review of exact head cb3d77d5, completion_code C2）
+- routing_rule: この作業は G2 だけで行う
+- review_source: `.agent/CODEX_REPORT_2.md`（H2 による head cb3d77d5 の最終レビュー、completion_code C2）
 
-## Accepted / do not reopen
+## 受け入れ済み：触らないこと
 
-H2 independently confirmed these as **CLOSED**. Preserve them; do not redesign:
-- B1–B4 and residuals B1-R1 / B2-R1 / B3-R1 (the original 7 residual cases);
-- 10/7 false-positive fixes; the three real 10/7 generation fixtures stay local hard 0 / removed 0;
-- progressive degradation, unit removal + re-check, Fact objective-quote coverage, advisory policy;
-- X shared consumer Fact-state truthfulness (passed→passed, advisory→failed, not_run→NULL);
-- X/App canonical disclaimer exactly once, app report-detail disclaimer, X Premium length policy;
-- MAX_GENERATIONS=2 / MAX_MODEL_CALLS=4 / transport retry limits;
-- production / deploy / manual generation / X send = 0.
+H2 が独立に「解消済み」と確認したもの。そのまま維持し、作り直さない。
+- B1〜B4 と、残課題 B1-R1 / B2-R1 / B3-R1（前回の7ケース）
+- 10/7 の誤検知の修正。本番の 10/7 の3生成は、引き続きローカル検査 hard 0・除外 0 であること
+- 段階的な縮退（誤った単位だけ外して再検査）、Fact の客観的な指摘の引用の照合、参考扱いの方針
+- X 側の Fact 状態の記録（passed→passed、advisory→failed、not_run→NULL）
+- X とアプリの注意書き（それぞれ1回）、アプリのレポート詳細画面の注意書き、X Premium の文字数方針
+- MAX_GENERATIONS=2 / MAX_MODEL_CALLS=4 / 通信の再試行の上限
+- 本番操作・デプロイ・手動生成・X 送信 = 0
 
-## The single remaining finding (P2)
+## 残っている指摘（P2 1件）
 
-- Location: `supabase/functions/market-report-analysis/analysis_logic.ts`, `CLAUSE_BOUNDARY` (regex `(?<=(?:[たすだんるい]))(?:が|けれど(?:も)?|けど|ものの|ので|ため|から)…`, around lines 623–642 at cb3d77d5).
-- Exact normal speculative sentence that is now wrongly removed:
+- 場所: `supabase/functions/market-report-analysis/analysis_logic.ts` の `CLAUSE_BOUNDARY`（正規表現 `(?<=(?:[たすだんるい]))(?:が|けれど(?:も)?|けど|ものの|ので|ため|から)…`、cb3d77d5 の 623〜642 行付近）
+- 今、誤って削除されてしまう正常な推測の文:
   **「ウクライナ情勢の影響で売りの勢いが強まって東京市場は下落した可能性があります。」**
-- 「勢いが」 is noun + subject particle が, not a concessive conjunction. The suffix-only predicate test sees the final い and splits there, so `clauseOf` cuts the cause-containing clause before 「可能性があります」 and `causalVerdict` returns assertive.
-- H2 evidence (local fixture + mocked full generation, no live API): previous head d56b1a9b → speculative, removed=[], sentence kept, 2 calls; cb3d77d5 → assertive, UNSUPPORTED_CAUSALITY removed at `x_post.context_ja#3` in both candidates, sentence lost, 3 calls.
-- Severity: conservative content suppression + an extra regeneration. It is **not** delivery of a factual contradiction.
+- 「勢いが」は「名詞＋主語の『が』」で、逆接の接続ではない。ところが今の判定は、直前の1文字が「い」で終わることだけを見て、そこを節の区切りにしてしまう。そのため `clauseOf` が「可能性があります」の手前で節を切り、`causalVerdict` が「断定」と判定する。
+- H2 の確認結果（手元のデータと擬似的な生成のみ、実際の API 呼び出しなし）:
+  - 前の head（d56b1a9b）: 推測と判定、除外なし、文はそのまま残る、呼び出し2回
+  - 今の head（cb3d77d5）: 断定と判定、両方の候補で `x_post.context_ja#3` が UNSUPPORTED_CAUSALITY として除外され、文が消える、呼び出し3回
+- 深刻度: 正しい文を余計に消すことと、作り直しが1回増えること。事実と矛盾する内容を配信してしまう問題ではない。
 
-## Required correction (this one issue only)
+## 求める修正（この1件だけ）
 
-1. Refine how a comma-free conjunction is recognized as following a **predicate**, so that a noun ending in い / る / etc. followed by the subject particle が (「勢いが」「狙いが」「戻りが」「思いが」…) is not a clause boundary. Apply the same check to the other suffix-only comma-free matches (けれど / けど / ものの / ので / ため / から) where the same misreading is possible.
-2. Keep every currently accepted rejection: comma-free 「〜しましたが／けれど／けれども／けど／ので／ため／ものの」 and 一方 / ただし / しかし still close the causal clause, so a later unrelated 「可能性」 never launders a definite unsupported cause. All existing B3 / B3-R1 controls must stay green.
-3. Do not broadly disable the causal check, lower Fact criteria, change objective-quote specificity, or add model calls.
-4. The final delivery re-check must see the same clause semantics as the local check.
+1. 読点の無い接続を「述語のあと」と判定する条件を見直し、「い」「る」などで終わる名詞のあとの主語の「が」（「勢いが」「狙いが」「戻りが」「思いが」など）を節の区切りにしないようにする。同じ誤読が起こり得る他の接続（けれど／けど／ものの／ので／ため／から）にも、同じ考え方を当てはめる。
+2. 今受け入れられている判定はすべて維持する。読点の無い「〜しましたが／けれど／けれども／けど／ので／ため／ものの」と、一方／ただし／しかし は引き続き因果の節を区切り、後ろの関係のない「可能性」が、前の根拠の無い断定を見逃させないこと。既存の B3 / B3-R1 の比較用テストはすべて通ること。
+3. 因果のチェックを広く無効にしない。Fact の基準を下げない。引用の照合の厳しさを変えない。モデルの呼び出しを増やさない。
+4. 配信前の再検査でも、ローカル検査と同じ節の判定になること。
 
-## Required tests
+## 必要なテスト
 
-- Exact regression for the sentence above: local verdict `speculative`; sanitizer removes nothing; mocked generated delivery keeps the sentence in X (no extra regeneration caused by it).
-- Additional noun-subject controls (e.g. 「狙いが」「戻りが」 or similar) staying speculative when hedged in the same clause, and still assertive when the definite cause is in another clause.
-- Re-run and keep green: `h2_corrective_test.ts`, `delivery_first_test.ts`, app disclaimer tests, full `market-report-analysis`, `_shared` + shared X consumer, `tests/app`, `personalized-reports`, `market-report-data-packet`.
-- Mutation check: the new regression fails on cb3d77d5 and passes after the fix.
-- Deno check / lint on changed source; `git diff --check`. No network, production or paid API calls.
+- 上の文そのものの回帰テスト: ローカル判定が「推測」、単位除去で何も外れない、擬似的な生成で X にその文が残る（この文が原因の作り直しが起きない）。
+- 名詞＋主語の「が」の追加の比較用テスト（「狙いが」「戻りが」など）: 同じ節に推測の言い方があれば「推測」のまま。根拠の無い断定が別の節にあれば、引き続き「断定」。
+- 次を再実行して、すべて通ること: `h2_corrective_test.ts`、`delivery_first_test.ts`、アプリの注意書きのテスト、`market-report-analysis` 全体、`_shared` と X 側の共有消費、`tests/app`、`personalized-reports`、`market-report-data-packet`。
+- 修正前（cb3d77d5）では新しい回帰テストが失敗し、修正後に通ることを確認する。
+- 変更したソースの deno check / lint、`git diff --check`。ネットワーク・本番・有料 API の呼び出しはしない。
 
-## Freshness / isolation
+## 着手前の確認と作業場所
 
-- Fresh-fetch `origin/main`; confirm PR #110 is OPEN and its head is still cb3d77d5 before editing.
-- Re-check open-PR changed-file overlap.
-- Use the existing isolated G2 worktree only if clean and on the PR head; otherwise create a fresh G2 worktree from `/Users/yuya/Developer/kabumori-fresh`. Do not touch other slots' worktrees, branches or servers.
+- `origin/main` を取得し直し、PR #110 が open で head がまだ cb3d77d5 であることを確認してから編集する。
+- 他の open PR と変更ファイルが重なっていないか確認する。
+- 既存の G2 の worktree が clean で PR の head 上にある場合だけそれを使う。そうでなければ `/Users/yuya/Developer/kabumori-fresh` から新しい G2 の worktree を作る。他スロットの worktree・ブランチ・サーバーには触れない。
 
-## Deliverable
+## 成果物
 
-Update the existing PR #110 only (no new PR). Report:
-- new exact head;
-- the fix and why it no longer misreads noun + subject が;
-- before/after evidence for the exact sentence and the controls;
-- changed files;
-- full test results;
-- model-call / retry ceilings unchanged;
-- production / deploy / X send = 0;
-- remaining risk.
+既存の PR #110 だけを更新する（新しい PR は作らない）。Report に書くこと:
+- 新しい head
+- 修正内容と、名詞＋主語の「が」を誤読しなくなった理由
+- 問題の文と比較用テストの、修正前・修正後の結果
+- 変更したファイル
+- テスト結果の全体
+- 呼び出し上限・再試行の上限が変わっていないこと
+- 本番操作・デプロイ・X 送信 = 0
+- 残るリスク
 
-Then set status → review_required, next_owner → chatgpt, and STOP for **K2**.
+そのあと status を review_required、next_owner を chatgpt にして、**K2** を待って止まる。
 
-Recommended model: **Opus5.5（高）**.
+推奨モデル: **Opus5.5（高）**
 
 ## Report
 

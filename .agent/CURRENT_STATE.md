@@ -7,11 +7,11 @@
 - Avoid repeated reviews of inert candidates; **one focused independent security review before any actual existing-X production ACL/RPC/Edge containment**, and later one consolidated G5 guard + G4 X/Threads OAuth/Vault/cleanup integration review as appropriate. Explicit user approval needed before production disruption. Existing X scheduler/posts should remain untouched.
 - AI Lab diary: no new entry for 2026-10-10 — unrelated AI相談 episode already occupies the day's public-safe report; never blend an internal security finding into that event.
 
-## G2 NEXT — PR #110 P2 「勢いが」 corrective assigned / source-only — 2026-10-10 JST
+## G2 次 — PR #110 の P2「勢いが」の差し戻しを割当（ソースのみ）— 2026-10-10 JST
 
-- H2 final review of exact PR #110 head `cb3d77d50e848d043f5427df363769b75d3c7764` returned **C2 CHANGES_REQUIRED**: the seven former B1-R1/B2-R1/B3-R1 residuals are CLOSED; one P2 remains — noun + subject が (「売りの勢いが強まって…可能性があります」) is read as a clause boundary, so a genuine hedged sentence is removed as an asserted cause.
-- G2 TASK `kabumori-market-report-delivery-first-guard-calibration-20261007` (same task_id) has the narrow corrective prepended as its top section: status **ready**, next_owner **claude**, recommended **Opus5.5（高）**, finish **K2**. All prior G2 TASK/Report text preserved byte-for-byte below it.
-- Scope: this one false positive only, with exact regression + noun-subject controls; keep all accepted B1–B4 / residual closures, ceilings and disclaimer behavior. Update existing PR110 only. Merge/deploy/production HOLD.
+- H2 による PR #110 の head `cb3d77d50e848d043f5427df363769b75d3c7764` の最終レビューは **C2 CHANGES_REQUIRED**。前回の B1-R1 / B2-R1 / B3-R1 の7ケースは解消済み。残りは P2 の1件で、名詞＋主語の「が」（「売りの勢いが強まって…可能性があります」）を節の区切りと読み、正しい推測の文を「根拠の無い断定」として消してしまう。
+- G2 の TASK `kabumori-market-report-delivery-first-guard-calibration-20261007`（同じ task_id）の先頭に、この1件だけの修正指示を追加した。status **ready**、next_owner **claude**、推奨 **Opus5.5（高）**、完了コード **K2**。過去の G2 の TASK・Report は、その下にすべてそのまま保存。
+- 範囲はこの誤検知1件だけ。問題の文の回帰テストと、名詞＋主語の「が」の比較用テストを追加する。受け入れ済みの B1〜B4・残課題の解消、呼び出し上限、注意書きの挙動は維持する。既存の PR110 だけを更新する。マージ・デプロイ・本番操作は保留。
 
 ## H1 R1/R2 LIMITED REREVIEW ASSIGNED — 共通AI基盤 — 2026-10-10 JST
 
