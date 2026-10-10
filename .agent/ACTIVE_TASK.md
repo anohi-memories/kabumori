@@ -80,7 +80,7 @@
 - finish_code: K2
 - next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: PR110 の C2 差し戻し（P2 1件：名詞＋主語の「が」）を修正し、新しい head 2c876b0bafee31844b9854c4a7d34ba69660d4cf を push 済み。Report は .agent/tasks/CLAUDE_TASK.md の先頭の節。全テスト成功、本番操作・デプロイ 0。K2 の判断待ち。マージ・デプロイは保留。
+- allocation: Final K2 PASS_CANDIDATE for PR110 exact head 2c876b0bafee31844b9854c4a7d34ba69660d4cf (one added commit/three allowed G2 source+test paths); G2 reported 1340/1340 regression tests PASS, normal subject-が controls and mocked delivery fixed, no API/production writes. Source reviewed; NEW PREDICATE_END regex is a HARD Fact boundary shared by clause and emoji splitting, acknowledged unknown-adjective fail-open residual risk. Before merge require ONE focused independent exact-head boundary review (Sol（高）) when genuinely free H1/H2; both currently other-owner allocated. No new H TASK reserved, no source merge/deploy. main vs PR path intersection=0, GitHub mergeable inconsistent/false in latest snapshot; do not force. AI Lab diary: 記録不要 — 10/10の限定是正、11日付へ振り替えない。
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
