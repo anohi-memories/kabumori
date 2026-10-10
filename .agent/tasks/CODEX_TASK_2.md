@@ -1,3 +1,61 @@
+# Codex H2 — CURRENT TASK — G2 PR #110 focused final safety review
+
+- task_id: kabumori-market-report-pr110-b1r1-b2r1-b3r1-final-review-20261010
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- start_code: H2
+- completion_code: C2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: Sol（高）
+- priority: high
+- type: bounded independent source-only final review
+- target_pr: https://github.com/anohi-memories/kabumori/pull/110
+- target_branch: g2-delivery-first-guards-20261007
+- target_exact_head: cb3d77d50e848d043f5427df363769b75d3c7764
+- previous_H2_reviewed_head: d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8
+- implementation_changes_allowed: false
+- source_merge_allowed: false
+- production_or_paid_API_access_allowed: false
+- deployment_or_posting_allowed: false
+
+## Mission
+
+Independently determine whether the 7 previously reproduced residual regressions B1-R1/B2-R1/B3-R1 are actually closed in PR #110 at the pinned exact head, while preserving the previously accepted B1–B4, 10/7 normal fixtures, delivery-first safety and call ceilings. Return **PASS** or **CHANGES_REQUIRED** with concrete reproducible evidence. This is the pending G2 final review; do not reopen unrelated code without a demonstrable regression, and do not duplicate broad reviews unnecessarily.
+
+## Required startup / isolation
+
+1. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, `.agent/ACTIVE_TASK.md`, this H2 TASK, and H2 Report history as relevant. Confirm exact task_id, status ready and ownership.
+2. Fresh-fetch `origin/main`; verify PR #110 is OPEN/UNMERGED with EXACT `cb3d77d50e848d043f5427df363769b75d3c7764`. If changed, STOP and report to G2; never silently review a different head.
+3. Use a fresh independent H2 worktree/checkout based on the clean `/Users/yuya/Developer/kabumori-fresh` environment. Do not share G1–G5/H1, common-AI, B, or other checkout; do not reset, rebase, modify, stage or commit another owner's work. No server interference.
+4. Historical H2 PR #112 task and report below remain immutable history. Do not act on PR #112 or its release gates; this review belongs to G2 alone.
+
+## Focused review checks
+
+- **B1-R1**: Fact `objective_issues` spans multiple units/sentences. Verify complete quoted-span coverage; do not leave a short tail such as 「調査なし。」 when the earlier contradictory unit is removed. If quote mapping is incomplete, fail closed for that candidate. Check 2- and 3-unit cases, short quoted fragments and safe counterexamples.
+- **B2-R1**: Emoji inside a sentence, consecutive emoji and between dates/subjects/numeric values must NOT conceal wrong-date or wrong-value statements. An emoji following a true sentence ending must still separate independent sentences correctly.
+- **B3-R1**: Concessive/causal connections without commas (が／けれど／ので／ため／ものの／一方／ただし／しかし) must not let a later speculative clause excuse an earlier ungrounded causal assertion. Ensure subject-particle が and non-causal phrases are not incorrectly split.
+- Preserve earlier **B1–B4** acceptance, including truthful X-side Fact status records (passed/advisory/not_run), old valid 10/7 fixtures, TOPIX/1306 distinction, X+app disclaimer exactly once, correct removal/revalidation, and no false reporting of a verified Fact pass.
+- Maintain `MAX_GENERATIONS = 2`, `MAX_MODEL_CALLS = 4` and existing transport retry limits; separate network attempts from business regeneration. No new paid API calls or live generation for this review.
+- Reproduce prior seven negative/control cases where feasible, rerun focused `h2_corrective_test.ts` and relevant market-report tests locally, and inspect regression impact. Other suites may be used where necessary; report executed results distinctly from G2 self-report.
+- Verify no scope contamination: no unrelated Auth/DB/migration, G1 UI, G3/G4 POSTONA or shared-AI Provider changes. Document changed paths and any concrete cross-consumer risk.
+
+## Deliverables and completion gate
+
+1. Record PR exact head, verdict, severity, repro/fix suggestions if any, tests independently run, changed_files (expected product source 0), safety_checks, remaining_issues, commit/push/deploy truthfully.
+2. Append this H2 run's **new current result at the top** of `.agent/CODEX_REPORT_2.md` while preserving the entire older report text byte-for-byte; do not rewrite historical findings.
+3. Change only own H2 TASK status to `review_required` / next_owner `chatgpt` and H2 entry in `.agent/ACTIVE_TASK.md`; synchronize control files only after guarding remote freshness and concurrent edits. Do not change G2 TASK/Report or other slots.
+4. If complete: return_to **かぶモリアプリG2のちゃ**, completion_code **C2**. PASS means consideration for separate merge gate, NOT permission to merge, deploy, switch providers or publish. If blocked, stop without forcing or overriding concurrent changes.
+
+## Forbidden
+
+PR/source edits, PR merge, migration apply, production queries/writes, secrets access/setting, paid API calls, manual X post, Edge deploy, EAS/TestFlight, changes to H1 or other G slots, and forced Git operations are prohibited.
+
+---
+
+## Historical H2 completed tasks and reports (preserved unchanged below)
+
 # C2 final — H2 PR112 exact-head security review accepted / H2 CLOSED — 2026-10-10 JST
 
 - task_id: common-account-pr112-r1l-r2-apple-boundary-exact-head-rereview-20261010
