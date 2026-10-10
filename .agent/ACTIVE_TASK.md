@@ -46,16 +46,16 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: review_required
+- status: done
 - task_id: common-account-v1-phase3a-pr112-r1-r4-c1-final-rereview-20261010
 - start_code: H2
 - finish_code: C2
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
 - return_to: 共通アカウントG5のちゃ
 - completion_code: C2
-- allocation: K5 assigned independent exact-head rereview of PR112 b60272c433b57bac1acb00c13d4fda7ff96f1f2f; test R1/R2/R4/C1 fixes and R3 fail-closed locked release gate, SQL/ACL/lease/fencing/unknown-outcome; 25 PR files, 14-file correction, source-only. H1 remains POSTONA PR106; G2 PR110 waits for next truly free slot. Do not merge/apply/deploy/EAS.
+- allocation: C2 accepted independent PR112 exact b60272c R1/R2 residual CHANGES REQUIRED; old Phase1 service_role RPC bypasses lease/fence, actual Apple HTTP502 ambiguity maps false and permits one-time replay; source merge/deploy HOLD. H2 review completed/closed, not reserved. A new review requires new free-slot verification; G2 PR110 still waiting.
 - recommended_model: Sol（極高）
 
 ## Claude G1
@@ -108,14 +108,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: review_required
-- task_id: common-account-v1-phase3a-pr112-h2-r1-r4-c1-corrective-20261009
+- status: ready
+- task_id: common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010
 - start_code: G5
 - finish_code: K5
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 PASS_CANDIDATE for source review only. G5 report PR112 head b60272c433b57bac1acb00c13d4fda7ff96f1f2f, OPEN/UNMERGED, GitHub mergeable=true at K5, 25 PR files; 14-file corrective vs prior head, current-main file overlap 0. Reported R1/R2/R4/C1 corrected and R3 release-blocked by immutable SQL gate; whole shared-account Auth deletion still UNAVAILABLE, not production-ready. H2 assigned exact-head Sol（極高） rereview; no merge, production migration, Edge deploy or EAS.
+- allocation: C2 accepted H2 CHANGES REQUIRED on PR112 head b60272c433b57bac1acb00c13d4fda7ff96f1f2f. Bounded fixes to R1 P1 legacy checkpoint/clear/prepare RPC service_role lease/fence bypass, R2 P1 Apple real-adapter ambiguous HTTP502 replay, strict Deno require-await lint. Preserve R3 blocked release gate, R4 fresh read-back, C1 strict reauth; exact PR112 only, source-only. H1 POSTONA PR106 remains preserved. No merge, production migration, deploy or EAS. Next K5.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
