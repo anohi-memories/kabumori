@@ -1,3 +1,83 @@
+# Claude Task 3 — CURRENT TASK / POSTONA X自動投稿 本番接続準備（ソース・検証のみ）
+
+- task_id: postona-x-autopost-production-readiness-20261010
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: high
+- project: POSTONA / X automatic posting and AI-consult confirmed settings
+- type: **source-only rollout-readiness and offline proof; NOT production activation**
+- recommended_model: **Opus5.5（高）**
+- start_code: G3
+- finish_code: K3
+- return_to: **POSTONA G3のちゃ（AI相談V1本番接続担当チャット）**
+- clean_base: /Users/yuya/Developer/kabumori-fresh (fresh origin/main)
+- target_supabase_project: stock-x-autopost / wsmznyzcvmuitkglfeuj (**read-only catalog checks only**)
+- source_baseline: PR #41 merged (b90ee326600b075e3d0b23209b4eefc1b4cd9c16); AI相談V1 PR #114 merged and S0–S5 prod PASS at K3
+- production_db_write: **FORBIDDEN**
+- edge_deploy_or_x_post_or_scheduler_change: **FORBIDDEN**
+- live_x_test_or_provider_calls: **FORBIDDEN**
+- PR_merge_or_eas: **FORBIDDEN**
+- security_boundary_owner: **G5 for Auth/entitlements/T13; G4 for X/Threads OAuth and workspace creation**
+- acceptance_gate: **K3; separately authorized rollout and limited real X pilot are FUTURE TASKS**
+
+## Goal and important real-world state
+
+AI相談V1 is live and K3 accepted: consult → explicit 「これで覚えて」 → versioned settings save → memory → dry-run preview; live Edge `social-mobile-consult` v1 / `social-mobile-brand-dry-run` v17. Source PR #41 contains account-bound `brand_post` dispatch and G3-owned publishing gates, but is **source-merged only** for the Stage 3B activation. On 2026-10-10 the following three versions are NOT in live Supabase migration history:
+
+1. `supabase/migrations/20261006160000_vault_account_brand_post_completion.sql`
+2. `supabase/migrations/20261006160100_social_mobile_publish_settings_reader.sql`
+3. `supabase/migrations/20261006160200_x_account_publish_authority.sql`
+
+**Never apply them in this TASK.** More fundamentally, the approved Stage 3B design explicitly needs G5 active `x_autopost` entitlement checks in both publish authority read/check and authority-setter before any real user's auto-publishing is enabled. G5 candidate T13 `private.account_lifecycle_assert_active_service_write` is Draft PR #121, not deployed, not an authority to assume that the boundary is finished. G4's Threads T9/OAuth source Draft PR #124 and latest G4 X OAuth hardening TASK own X/Threads connection and workspace paths. Source presence is NOT evidence of production readiness.
+
+This task is the **fastest safe independent G3 preparation**, not a request to reactivate or deploy an already-tested AI consultation function and not an authorization to turn on X posting.
+
+## Start-up and collision gate
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this TASK and its archived K3 PASS/Report, `supabase/tests/x_account_refresh_pilot.md`, the three exact SQL migration sources, PR #41 source, and the latest G4/G5 TASK/Report and related shared contract. Check current source/pending PR differences.
+2. Create a **NEW clean, independent G3 worktree/checkout** from fresh `origin/main` in `/Users/yuya/Developer/kabumori-fresh`. Do not reuse or disturb previous G3 activation worktree `/Users/yuya/Developer/kabumori-g3-consult-activation`, the old checkout, G4/G5 branches, uncommitted files or dev servers. If impossible, STOP with BLOCKED. Do not force-push or reset/rebase another slot.
+3. Confirm fresh remote status for G3 TASK (must be `ready` / `in_progress`), G4 current X OAuth scope, G5 current blockers and shared DB usage; no file, migration, RPC, Edge or Auth collisions. Ownership ambiguity => report and STOP conflicting edits, not all independent investigation.
+4. Read production Supabase **catalogs only** (if network/auth available) to verify exactly which Stage 3B migrations/functions/tables/Edge versions are active and whether AI-consult settings are available. Do not make credential-bearing dumps, update secrets, sign in as real users, or query private contents. A missing or drifted prerequisite is a **HOLD**, never silently corrected.
+
+## Stage A — exact integration inventory and missing-gate list
+
+- Map `supabase/functions/_shared/brand/vault_account_brand_post.ts`, `x-test-post` dispatch, `social_mobile_content_settings` settings/persona read path, `read_social_mobile_publish_settings`, `check_x_account_publish_authority`, `set_x_account_publish_authority`, scheduled `brand_post` claim/finish and Stage 3A refresh authority. Trace execution order **before both generation and real X create**; show existing fail-closed gates.
+- Resolve migration prerequisites and versions/owners/EXECUTE privileges for the **three exact Stage 3B SQL migrations** and source-vs-live drift. Check that target names, migration history version uniqueness, G5 / G4 reserved migration versions and any current production DDL writer do not overlap.
+- Distinguish user `approvalMode='auto_post_preference'` from AI相談V1 explicit `これで覚えて`: setting save/preview must **never grant auto-post consent or publish permission**. Map legitimate opt-in, opt-out, 30-day authority expiry, admin enablement, and brand/account exact identity.
+- Identify **all missing G5 entitlement/T13 guards** at authority enable/check and related POSTONA service-withdrawal/deletion and stale JWT pathways; do not assume Draft PR121 (or future PR) is live. Specify precise G5-owned contract/entrypoints and one shared handoff to G5; flag G4-owned OAuth/workspace changes without implementing them.
+- Preserve Kabumori / AI Lab existing X autopost paths, their Cron schedules, X/Vault secrets, current brands/accounts and provider configuration.
+
+## Stage B — local-only proof / safe artifacts
+
+- Work primarily in **NEW G3-owned documents and isolated test/verification files**, e.g. `docs/postona/x-autopost-stage3b-production-readiness-20261010.md` and `supabase/tests/postona_x_autopost_readiness/*`, after checking no PR/file ownership collision. Existing PR #123 activation-runner files are historical records and are OFF LIMITS.
+- For a **disposable local PostgreSQL** matching prerequisites, rehearse the exact three source migrations, same-owner effective ACL/RLS/SECURITY DEFINER and function behavior; include absence/partial application/rollback/drift failure cases. This is an offline rehearsal only: never use a real Supabase project or `supabase db push`. No command or script may accidentally default to remote production.
+- Focused regression tests and negative scenarios: no content-settings/opt-in; non-owner/cross-tenant; disabled/expired/revoked authority; stale/absent G5 entitlement; bad/duplicated account IDs; brand mismatch; claimed post replay; concurrent claim/complete; exact-account token/refresh constraints; preservation of Kabumori/AI Lab paths. If G5 guard is unavailable, mock-boundary tests must be labeled `MOCK_ONLY` and **not** counted as real permission security evidence.
+- Only if source/tests reveal a self-contained low-risk defect wholly G3-owned, isolate and report before change; do not extend into G4 OAuth, G5 Auth/entitlement, published Edge files, existing migrations or current production configuration. Prefer documenting required follow-up over changing shared live-path code in this preparatory task.
+- No AI paid API calls, actual X posts, live OAuth, X/Meta tokens, actual scheduling, account mutation, Supabase remote writes, Edge deployment or EAS.
+
+## Stage C — decision-quality rollout plan
+
+Prepare a precise go/no-go matrix and next TASK proposal covering:
+1. Preconditions to apply the **three existing Stage 3B migrations** in safe order, including production role ACL/owner/drift check, transaction/history plan, immediate read-back, and rollback/STOP.
+2. The **G5-owned** effective `x_autopost` service entitlement guards for `check_x_account_publish_authority`, `set_x_account_publish_authority`, account deletion/withdrawal and any writer boundary; include G4 X provider identity proof and T9 shared-workspace prerequisites. List the required owner-specific implementation/review gates and blocked unknowns.
+3. Proposed limited eventual X pilot (ONE approved dedicated test account, explicit user opt-in, finite short-lived publish window, zero unexpected posts, hard stop and rollback), with expected spend/counts, rate/expiry constraints and independent high-risk security review **before** any actual enablement. **Proposal only; no pilot execution, no permission changes.**
+4. Reconcile AI consultation confirmed settings/persona to the actual post-generation path and explain why preview ≠ published output until the gate is live; no autonomous enable from remembered settings.
+5. Exact current source-only tests and deploy-preflight evidence versus absent live Auth/entitlement evidence; keep G5 managed-auth-delete release gate `blocked`.
+
+## Completion and reporting
+
+- Deliver a compact, actionable G3 readiness document + offline test/evidence (if safe), commit/push to a new **G3-only branch**, optionally create a **Draft PR**; never self-merge. If the work remains design/proof only, a Draft PR plus explicit HOLD gates is a valid PASS_CANDIDATE.
+- Run relevant focused Deno, local PostgreSQL, SQL invariant, secret, `git diff --check`, source-vs-origin checks and any required existing X routing regressions; list exact totals, what was locally rerun and what stayed unverified.
+- Report `task_id`, verdict `PREPARED_BLOCKED_ON_G5` or `BLOCKED` or `READY_FOR_GATED_ROLLOUT_REVIEW` (never `LIVE_PUBLISH_READY`), changed_files, test counts, branch, commit hash, push, PR, production reads/writes/deploy/posts (must be 0 mutations), remaining blockers, next owner-specific recommendations and safety checks.
+- Update **only current G3 TASK/Report** to `review_required` / `next_owner: chatgpt`; preserve ALL previous G3 tasks/Reports verbatim, and leave G4/G5/H1/H2/G1/G2 intact. Return `K3` to this G3 ChatGPT chat.
+- **Recommended model: Opus5.5（高）.** Extra H1/H2 review is not automatically needed for offline docs/tests; decide **Sol（高）** targeted integrated security review later when G5+G4 authority implementation is available and before production rollout.
+
+---
+
+# ARCHIVED PREVIOUS G3 TASK / K3 ACCEPTANCE AND ALL REPORT HISTORY (preserve verbatim)
+
 # Claude Task 3 — CURRENT TASK / POSTONA AI相談V1 本番接続
 
 - task_id: postona-ai-consult-v1-production-activation-20261010

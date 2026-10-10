@@ -87,14 +87,14 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: postona-ai-consult-v1-production-activation-20261010
+- status: ready
+- task_id: postona-x-autopost-production-readiness-20261010
 - start_code: G3
 - finish_code: K3
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA G3のちゃ（AI相談V1本番接続担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: K3 PASS on 2026-10-10 after G3 reported S0–S5 production activation PASS and independent read-only Supabase verification of both applied migration versions, owner+RLS+three authenticated owner policies, least-privilege grants, five functions and source constraints, and consulted Edge v1 / preview Edge v17 ACTIVE verify_jwt=true; one confirmed settings row. G3 real AI smoke 19/19 PASS (reported, not re-run by ChatGPT), 3 paid calls, X posts/scheduled changes/publish permissions 0 per G3 before/after evidence. Existing X automation unaffected per report. PR123 nine-file operational execution bundle remains OPEN/UNMERGED, no main-source merge requested. Production write window CLOSED. No added Codex review; no new G3 task assigned. G4/G5 ownership unchanged.
+- allocation: After accepted G3 AI-consult V1 K3 PASS, assign separate source-only Stage3B X autopost production readiness. Live DB lacks PR41's 20261006160000/160100/160200 migrations. G3 offline prerequisite/ACL/RLS/tenant test, publish-consent policy, G5 x_autopost entitlement gap and G4 X OAuth/T9 dependency matrix, migration rollout plan only. NEW independent G3 worktree. No production writes, actual X posts, publish enable, scheduler, OAuth/Edge deploy, EAS, PR merge or touching G4/G5/PR123. G5 draft T13/Auth/managed deletion remain blocked and require own separate approval. K3 after local proof; then decide G5 handoff/security review and independently approved real X pilot.
 - recommended_model: Opus5.5（高）
 ## Claude G4
 - owner: claude

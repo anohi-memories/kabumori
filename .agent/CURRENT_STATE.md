@@ -1,3 +1,14 @@
+## G3 NEXT — POSTONA X自動投稿 Stage3B production readiness SOURCE ONLY assigned — 2026-10-10 JST
+
+- User approved proceeding in order: **(1)** G3 source-only Stage3B X publish readiness and local test → **(2)** G5 shared-account entitlement/writer proof and required separate managed-disposable-Supabase approval → **(3)** separately authorized and security-reviewed limited real X pilot only after gates pass.
+- G3 new TASK `postona-x-autopost-production-readiness-20261010` status **ready**, next_owner **claude**, recommended **Opus5.5（高）**. Previous G3 `postona-ai-consult-v1-production-activation-20261010` K3 PASS/done and full historical Report kept byte-for-byte in G3 TASK after archive separator. Return_to POSTONA G3 ChatGPT, start `G3`, finish `K3`.
+- Verified live Supabase migration history lacks precisely three merged PR41 Stage3B versions: `20261006160000` completion, `20261006160100` settings reader, `20261006160200` X publish authority. AI consultation content-settings candidate/hardening are already applied. PR41 was merged; source is **not** proof of posting activation. G3 must inventory prerequisite ACL/RLS/tenant and G5 entitlement; no actual stage3b production mutation, Edge deployment, X publish, schedule/permission change, EAS, paid API, new migrations, PR merge allowed in this TASK.
+- G4 independently owns current `postona-x-oauth-provider-hardening-candidate-20261010` X provider identity/T9 workspace source TASK and Threads PR124; G5 owns Auth, `x_autopost` service entitlement, T13 writer fence and whole-account deletion blockers. Both TASKs and Report/worktrees preserved. G5 draft PR121 helper is **not** live; separate user approval is still required before disposable managed-Supabase experiments or production Auth writes.
+- New G3 task isolates source-only docs/offline PostgreSQL tests/runbook in new G3-owned paths, requires fresh independent worktree from `kabumori-fresh`, avoids previous PR123 and G4/G5 shared paths and any live production/other developer tools.
+- At K3 decide if any focused integrated Codex security review is needed (prefer **Sol（高）** only before the actual G5/G4/G3 production publishing boundary). Real pilot is a later separate explicitly gated TASK, not approved by this source-only assignment.
+
+---
+
 ## G1 NEXT — iOS Simulator genuine-saved-data read-only QA allocated — 2026-10-10 JST
 
 - User requested next instruction after successful G1 watchlist PR #120 source merge. G1 previous TASK `kabumori-watchlist-highlight-hybrid-ui-20261010` was `done / next_owner:none` with preserved final report and PR120 merge SHA `53678a2f1fe5e01ecde4e9988abcbd0ed573da66`. Fresh main at allocation was `231c15470f6563f5b2e6887aaaa5cc6e41efc630`; user approval is for testing, not further code/API changes.
