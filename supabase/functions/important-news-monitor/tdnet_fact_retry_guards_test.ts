@@ -12,6 +12,7 @@ import {
   isNumericDiscrepancyIssue,
   isPendingApprovalOverAssertion,
   isRetryableFactFailure,
+  retryIntroducedCriticalFact,
   sourceTextConflicts,
 } from "./post_generation_logic.ts";
 
@@ -309,14 +310,20 @@ test("source-vs-text conflicts: rounding and truncation, unit conversion is not 
   const c = tdnet({ title: "x", bodySummary: "売上高は155億5,000万円（15,550百万円）です。" });
   assert.deepEqual(sourceTextConflicts(c, "売上高は155億5,000万円です。"), []);
   assert.deepEqual(sourceTextConflicts(c, "売上高は15,550百万円です。"), []);
-  assert.deepEqual(sourceTextConflicts(c, "売上高は155億円です。"), ["AMOUNT_NOT_IN_SOURCE:yen"]);
+  assert.deepEqual(sourceTextConflicts(c, "売上高は155億円です。"), ["AMOUNT_NOT_IN_SOURCE:yen", "METRIC_VALUE_MISMATCH:sales"]);
   assert.deepEqual(sourceTextConflicts(tdnet({ title: "x", bodySummary: "Revenue rose." }), "売上高は155億円です。"), []);
 });
 
-test("canonical quantities: NFKC, commas, composite units, shares, per-share amount kept apart", () => {
-  assert.deepEqual(canonicalQuantities("１５５億５，０００万円"), [{ cls: "yen", value: 15550000000 }]);
-  assert.deepEqual(canonicalQuantities("5万株と1株当たり50円"), [{ cls: "per_share_yen", value: 50 }, { cls: "shares", value: 50000 }]);
-  assert.deepEqual(canonicalQuantities("150億ドル"), [{ cls: "usd", value: 15000000000 }]);
+test("canonical quantities: NFKC, commas, composite units, shares, per-share amount kept apart, sign", () => {
+  const plain = (text: string) => canonicalQuantities(text).map(({ cls, value }) => ({ cls, value }));
+  assert.deepEqual(plain("１５５億５，０００万円"), [{ cls: "yen", value: 15550000000 }]);
+  assert.deepEqual(plain("5万株と1株当たり50円"), [{ cls: "per_share_yen", value: 50 }, { cls: "shares", value: 50000 }]);
+  assert.deepEqual(plain("150億ドル"), [{ cls: "usd", value: 15000000000 }]);
+  assert.deepEqual(plain("純利益 -50億円"), [{ cls: "yen", value: -5000000000 }]);
+  assert.deepEqual(plain("純利益 －５０億円"), [{ cls: "yen", value: -5000000000 }], "full-width minus");
+  assert.deepEqual(plain("純利益 ▲50億円"), [{ cls: "yen", value: -5000000000 }]);
+  assert.deepEqual(plain("営業損失32億円"), [{ cls: "yen", value: -3200000000 }], "loss label is negative");
+  assert.deepEqual(plain("10-20円"), [{ cls: "yen", value: 20 }], "a hyphen between digits is a range, not a sign");
 });
 
 test("flow N1: a wrong per-share amount with 承認前 stops at Fact — no retry, nothing published", async () => {
@@ -352,4 +359,163 @@ test("flow safety: invalid Fact JSON / API error on the re-check leaves the post
   const b = await generateImportantNewsPost(tdnet(), failing);
   assert.notEqual(b.status, "ready_for_publish");
   assert.equal(b.fact.status, "failed");
+});
+
+// ------------------------------------------------------------ 7. PR #116 re-review F1-F6 (2026-10-11)
+
+const fin = (body: string, title = "決算短信") => tdnet({ title, bodySummary: body });
+const ok = (c: GenerationCandidate, text: string, issue = "見込みを確定と断定しています") => isRetryableFactFailure(c, text, [issue]);
+
+test("F1: currency swap (150億ドル -> 150億円) is refused even though the source has no yen amount", () => {
+  const c = fin("投資額は150億ドルの意向です。");
+  assert.equal(ok(c, "投資額は150億円の意向です。"), false);
+  assert.equal(sourceTextConflicts(c, "投資額は150億円です。")[0], "CURRENCY_SWAPPED:yen");
+  // a correct dollar amount, and amounts in two currencies that BOTH exist in the source, are fine
+  assert.equal(ok(c, "投資額は150億ドルの意向です。"), true);
+  const both = fin("投資額は150億ドル、売上高は2,000億円の見込みです。");
+  assert.equal(ok(both, "投資額は150億ドル、売上高は2,000億円の見込みです。"), true);
+});
+
+test("F2: sign flip is refused (-50億円 -> +50億円), incl. full-width and 損失 wording", () => {
+  const loss = fin("純利益は-50億円の見込みです。");
+  assert.equal(ok(loss, "純利益は50億円の見込みです。"), false);
+  assert.equal(ok(loss, "純利益は-50億円の見込みです。"), true);
+  assert.equal(ok(fin("純利益は－５０億円の見込みです。"), "純利益は50億円の見込みです。"), false);
+  assert.equal(ok(fin("純利益は▲50億円の見込みです。"), "純利益は50億円の見込みです。"), false);
+  assert.equal(ok(fin("営業損失は32億円の見込みです。"), "営業利益は32億円の見込みです。"), false, "loss became profit");
+  assert.equal(ok(fin("営業損失は32億円の見込みです。"), "営業損失は32億円の見込みです。"), true);
+});
+
+test("F3: metric <-> amount binding (売上高 / 純利益 swap) is refused; the correct pairing and reorderings are kept", () => {
+  const c = fin("売上高100億円、純利益50億円の見込みです。");
+  assert.equal(ok(c, "売上高50億円、純利益100億円の見込みです。"), false);
+  assert.equal(ok(c, "売上高100億円、純利益50億円の見込みです。"), true);
+  assert.equal(ok(c, "純利益は50億円、売上高は100億円の見込みです。"), true);
+  assert.equal(ok(c, "50億円の純利益と、100億円の売上高を見込みます。"), true);
+  assert.equal(ok(fin("配当は1株当たり50円、純利益は50億円です。"), "配当は1株当たり50円、純利益は50億円です。"), true, "same number, different metrics, both correct");
+});
+
+test("F3 (retry invariant): a rewrite may not move an amount to another metric or change sign / currency", () => {
+  const original = "売上高100億円、純利益50億円と断定します。";
+  assert.equal(retryIntroducedCriticalFact(original, "売上高50億円、純利益100億円の見込みです。"), true);
+  assert.equal(retryIntroducedCriticalFact(original, "純利益-50億円の見込みです。"), true);
+  assert.equal(retryIntroducedCriticalFact("純利益50億円と断定します。", "純利益50億ドルの見込みです。"), true);
+  assert.equal(retryIntroducedCriticalFact(original, "売上高100億円、純利益50億円の見込みです。"), false);
+});
+
+test("F4: 非連結 is not 連結 (no partial match), 未承認 is not 承認済み, 撤回済み is not 付議予定", () => {
+  const nonConsolidated = fin("非連結ベースの売上高は100億円の見込みです。");
+  assert.equal(ok(nonConsolidated, "連結ベースの売上高は100億円の見込みです。"), false);
+  assert.equal(ok(nonConsolidated, "非連結ベースの売上高は100億円の見込みです。"), true);
+  const unapproved = fin("本議案は株主総会で未承認です。承認を前提に付議予定です。");
+  assert.equal(ok(unapproved, "本議案は承認済みです。"), false);
+  assert.equal(ok(unapproved, "本議案は承認されていません。付議予定です。"), true);
+  const withdrawn = fin("第2号議案は撤回されました。");
+  assert.equal(ok(withdrawn, "第2号議案は付議予定です。"), false);
+  assert.equal(ok(withdrawn, "第2号議案は撤回されました。"), true);
+  // dropping the withdrawal in a rewrite changes the fact too
+  assert.equal(retryIntroducedCriticalFact("第2号議案は撤回されました。議案を確定と断定します。", "第2号議案を付議予定です。", withdrawn), true);
+  assert.equal(retryIntroducedCriticalFact("第2号議案は撤回されました。", "第2号議案は撤回されました。", withdrawn), false);
+  // rejected vs passed
+  const rejected = fin("本議案は否決されました。");
+  assert.equal(ok(rejected, "本議案は可決されました。"), false);
+});
+
+test("F4 (negation): 承認されていない / 承認されなかった count as pending-or-not-approved, never approved", () => {
+  const c = fin("本議案は承認前です。");
+  assert.equal(ok(c, "本議案は承認されていません。"), true);
+  assert.equal(ok(c, "本議案は承認されました。"), false);
+});
+
+test("F5: an unclear party is refused whatever the distance, and wording-only 不明瞭 is still allowed", () => {
+  const c = fin("本議案は承認前です。");
+  for (const issue of [
+    "対象企業についての記述が不明瞭で、承認前の議案を確定と断定しています",
+    "対象会社についての説明がやや長いが曖昧で、承認前の議案を確定と断定しています",
+    "主体が不明瞭で、承認前の議案を確定と断定しています",
+    "発行者についての言及が判然とせず、承認前の議案を確定と断定しています",
+    "当事者が明確でなく、どの会社が承認するのか特定できない状態で、承認前の議案を確定と断定しています",
+  ]) assert.equal(isRetryableFactFailure(c, "本文です。", [issue]), false, issue);
+  assert.equal(isRetryableFactFailure(c, "本文です。", ["承認前であることが不明瞭で、増額と確定事項のように断定しています"]), true);
+});
+
+test("F6: equivalent unit conversions are one canonical value (not a numeric discrepancy)", () => {
+  assert.equal(isNumericDiscrepancyIssue("売上高は155億5,000万円（15,550百万円）と記載すべきところ、見込みを断定しています"), false);
+  assert.equal(isRetryableFactFailure(fin("売上高は15,550百万円の見込みです。"), "売上高は155億5,000万円の見込みです。", [
+    "売上高155億5,000万円（15,550百万円）の見込みを確定と断定しています",
+  ]), true);
+  // several correct, different amounts are fine
+  assert.equal(ok(fin("売上高100億円、営業利益20億円、純利益10億円の見込みです。"), "売上高100億円、営業利益20億円、純利益10億円です。",
+    "売上高100億円、営業利益20億円、純利益10億円の見込みを確定と断定しています"), true);
+  // but a rounded value is still a conflict
+  assert.equal(ok(fin("売上高は155億5,000万円の見込みです。"), "売上高は155億円の見込みです。"), false);
+});
+
+// ---- flows: the seven dangerous scenarios of the independent review, through generateImportantNewsPost -------------
+
+type FlowCase = { name: string; body: string; draft: string; issue: string; revised: string };
+const FLOWS: FlowCase[] = [
+  { name: "currency swap", body: "投資額は150億ドルの意向です。", draft: "投資額は150億円です。", issue: "意向を確定と断定しています", revised: "投資額は150億円の意向です。" },
+  { name: "sign flip", body: "純利益は-50億円の見込みです。", draft: "純利益は-50億円です。", issue: "見込みを確定と断定しています", revised: "純利益は50億円の見込みです。" },
+  { name: "metric swap", body: "売上高100億円、純利益50億円の見込みです。", draft: "売上高100億円、純利益50億円です。", issue: "見込みを確定と断定しています", revised: "売上高50億円、純利益100億円の見込みです。" },
+  { name: "non-consolidated as consolidated", body: "非連結ベースの売上高は100億円の見込みです。", draft: "連結ベースの売上高は100億円です。", issue: "見込みを確定と断定しています", revised: "連結ベースの売上高は100億円の見込みです。" },
+  { name: "unapproved as approved", body: "本議案は未承認で、承認を前提に付議予定です。", draft: "本議案は承認済みです。", issue: "予定を確定と断定しています", revised: "本議案は承認済みの予定です。" },
+  { name: "withdrawn as scheduled", body: "第2号議案は撤回されました。", draft: "第2号議案は付議します。", issue: "予定を確定と断定しています", revised: "第2号議案は付議予定です。" },
+  { name: "unclear party", body: "本議案は承認前です。", draft: "議案は承認されます。", issue: "対象企業についての記述が不明瞭で、承認前の議案を確定と断定しています", revised: "議案は承認前です。" },
+];
+
+for (const flow of FLOWS) {
+  test(`flow F: ${flow.name} never reaches a publishable post through the Fact retry`, async () => {
+    const { runner, calls } = scripted([
+      { step: "draft", payload: { text: flow.draft, sufficient_information: true, notes: [] } },
+      { step: "fact", payload: { passed: false, issues: [flow.issue] } },
+      { step: "fact_retry", payload: { text: flow.revised } },
+      { step: "fact", payload: { passed: true, issues: [] } }, // even a (wrongly) passing re-check must not matter
+      { step: "voice", payload: { passed: true, issues: [] } },
+    ]);
+    const result = await generateImportantNewsPost(fin(flow.body), runner).catch((error: Error) => error);
+    if (result instanceof Error) return; // an unexpected step means the retry was (correctly) not attempted
+    assert.notEqual(result.status, "ready_for_publish", `${flow.name}: ${calls.join(">")}`);
+    assert.equal(result.fact.status === "passed" && result.voice.status === "passed", false);
+  });
+}
+
+test("flow: a correct hedge restoration with an amount still goes Fact retry -> re-Fact -> Voice -> publishable", async () => {
+  const c = fin("純利益は50億円の見込みです。");
+  const { runner, calls } = scripted([
+    { step: "draft", payload: { text: "純利益は50億円です。", sufficient_information: true, notes: [] } },
+    { step: "fact", payload: { passed: false, issues: ["見込みを確定と断定しています"] } },
+    { step: "fact_retry", payload: { text: "純利益は50億円の見込みです。" } },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: true, issues: [] } },
+  ]);
+  const result = await generateImportantNewsPost(c, runner);
+  assert.deepEqual(calls, ["draft", "fact", "fact_retry", "fact", "voice"]);
+  assert.equal(result.status, "ready_for_publish");
+});
+
+test("flow: Voice failure after a retry keeps the post unpublished; Fact keeps being re-run", async () => {
+  const c = fin("純利益は50億円の見込みです。");
+  const { runner, calls } = scripted([
+    { step: "draft", payload: { text: "純利益は50億円です。", sufficient_information: true, notes: [] } },
+    { step: "fact", payload: { passed: false, issues: ["見込みを確定と断定しています"] } },
+    { step: "fact_retry", payload: { text: "純利益は50億円の見込みです。" } },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: false, issues: ["証券レポート調で不自然です"] } },
+  ]);
+  const result = await generateImportantNewsPost(c, runner).catch((error: Error) => error);
+  if (!(result instanceof Error)) assert.notEqual(result.status, "ready_for_publish");
+  assert.ok(calls.includes("voice"));
+});
+
+test("F4 (state preservation): a rewrite that merely DROPS a withdrawal / outcome / basis changes the fact", () => {
+  assert.equal(retryIntroducedCriticalFact("第2号議案は撤回されました。議案を確定と断定します。", "第2号議案について説明します。"), true);
+  assert.equal(retryIntroducedCriticalFact("本議案は否決されました。", "本議案について説明します。"), true);
+  assert.equal(retryIntroducedCriticalFact("非連結ベースの売上高は100億円です。", "売上高は100億円です。"), true);
+  assert.equal(retryIntroducedCriticalFact("臨時株主総会で決議します。", "株主総会で決議します。"), true);
+  // restoring a pending qualifier that the SOURCE carries is allowed; inventing one the source lacks is not
+  const pending = tdnet({ title: "t", bodySummary: "本議案は株主総会の承認を前提に付議予定です。" });
+  assert.equal(retryIntroducedCriticalFact("配当を増額します。", "承認前の議案として配当を増額する予定です。", pending), false);
+  const silent = tdnet({ title: "t", bodySummary: "配当を増額します。" });
+  assert.equal(retryIntroducedCriticalFact("配当を増額します。", "承認前の議案として配当を増額する予定です。", silent), true);
 });
