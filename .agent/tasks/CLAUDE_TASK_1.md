@@ -3,8 +3,8 @@
 - task_id: kabumori-watchlist-highlight-hybrid-ui-20261010
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: normal
 - type: Kabumori native app source-only UI / deterministic view-model
 - recommended_model: **Sonnet5（中）**
@@ -115,6 +115,23 @@ No change to `(tabs)/_layout.tsx`, `src/app/_layout.tsx`, native/navigation conf
 
 ### next_recommendation
 K1 reviews PR #120 (isolated low-risk visual/view-model; no navigation or data boundary changed beyond the `stocks` back-origin, so an independent Codex review is not needed). The user can check it on the iPhone with real saved reports (server on request).
+
+### K1 corrective result — other-list count & empty-group visibility (2026-10-10), PR #120
+
+- result: **fixed and verified**; existing PR #120 updated, no second PR, not merged.
+- accepted head before: `404b26f722335af97f095177664c7b89ca8df140` (confirmed unchanged on GitHub before editing). **New exact head: `7bf19faf9cf7e7c67fbab987e4f57188518e77d0`** (fast-forward; no force push). Pushed. Deploy = 0, EAS = 0, backend/DB/Auth/Edge/production mutation = 0.
+- fresh main / overlap: re-checked at start and before push; no open PR touches `watchlist-section.tsx` / `explore.tsx` / `portfolio-view.ts` except PR #120 itself.
+- bug: `count = featured.length + rest.length` fed the 「その他の監視銘柄」 badge (2 featured + 5 listed showed 7) and `count > 0` kept an empty group when every stock was featured.
+- fix: the group is rendered **iff `rest.length > 0`**; its badge is exactly `rest.length`. No featured ⇒ title `監視銘柄` with all listed rows counted; featured and rows remain ⇒ `その他の監視銘柄` with the remainder; all featured ⇒ no group, no `0銘柄`; no watch registrations ⇒ the existing empty state, no phantom group. Implemented in `watchlist-section.tsx` through a pure `remainingGroup(featuredCount, restCount)` (≈10 lines, in `portfolio-view.ts` next to the other watchlist helpers so it can be tested behaviourally).
+- **scope note**: the TASK limited the change to `watchlist-section.tsx` and tests; the only line outside that is the pure helper `remainingGroup` in `src/lib/portfolio-view.ts`. It adds no screen behaviour; if K1 prefers, it can be inlined back into the component with source-level tests only.
+- regression tests (`tests/app/watchlist-layout_test.ts`, +6): all-featured 1/2/3 ⇒ no group; 2 featured + 5 listed ⇒ badge 5 (equals listed rows); >3 candidates ⇒ 3 cards, badge = remainder incl. flagged extras; none featured ⇒ `監視銘柄` + all rows; no watch stocks ⇒ no group; component renders the group only via `group.show`, uses `group.count`, old `featured + rest` and `{count}` are gone, every featured stock still rendered as a card.
+- checks (head `7bf19faf`): `deno test tests/app/` **457 passed / 0 failed**; tsc(src) no diagnostics; `expo config --type public` OK; web export PASS; `git diff --check` clean; `(tabs)/_layout.tsx` and `src/app/_layout.tsx` diff vs main empty; five NativeTabs guard test still green.
+- screenshots refreshed (Simulator, fixture rig, real taps, 402pt iPhone 18 Pro + 375pt iPhone SE 3rd): `docs/ui-review/watchlist_hybrid_2_featured_{402,375}pt.webp` (2 cards + `その他の監視銘柄` badge **5**), `…_5_featured_{402,375}pt.webp` (3 cards + badge **4**), new `…_all3_featured_{402,375}pt.webp` (3 cards, no remaining group, no empty frame). Also observed (not committed as extra images): all-2 and single-featured show no empty group; none-featured shows `監視銘柄` + `7銘柄` with 7 rows; empty watch shows the existing empty state; the bottom tab stays 銘柄 and the switch round-trip restores the same group and count.
+- unchanged: UI/visual design, five NativeTabs, root navigator, `stocks` news origin, all data rules (5.0% threshold, verified-news rule, saved-close dates).
+- remaining: real-iPhone/real-report check still pending (fixture rig only); other earlier remaining items unchanged.
+
+Status: `review_required` / next_owner `chatgpt`. Return K1 to かぶモリアプリG1のちゃ.
+
 
 ---
 
