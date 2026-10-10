@@ -19,7 +19,8 @@ const exists = (path: string) => Deno.stat(new URL(path, repoRoot)).then(() => t
 test("the 銘柄 tab opens on the canonical portfolio dashboard, in the canonical order", async () => {
   const screen = await read("src/app/(tabs)/explore.tsx");
   const order = [
-    "<PortfolioHeader",
+    "<StocksHeader",
+    "<StocksSwitch",
     "<AssetSummaryCard",
     "<AiSummaryCard",
     "<ImpactCard",
@@ -28,8 +29,8 @@ test("the 銘柄 tab opens on the canonical portfolio dashboard, in the canonica
     "<AskAiCta />",
   ].map((needle) => screen.indexOf(needle));
   assert.ok(order.every((position) => position >= 0), order.join(","));
-  assert.deepEqual([...order].sort((a, b) => a - b), order, "header, summary, AI, impact, holdings, CTA");
-  assert.ok(screen.includes("useState<'portfolio' | 'watchlist'>('portfolio')"), "portfolio is the default view");
+  assert.deepEqual([...order].sort((a, b) => a - b), order, "header, switch, summary, AI, impact, holdings, CTA");
+  assert.ok(screen.includes("useState<StocksView>('portfolio')"), "portfolio is the default view");
   const sections = await read("src/components/portfolio/portfolio-sections.tsx");
   assert.ok(sections.includes("PORTFOLIO") && sections.includes("ポートフォリオ") && sections.includes("ウォッチリスト"));
   assert.ok(sections.includes("このポートフォリオについてAIに聞く ›") && sections.includes("なぜ上がった？ リスクは？ 業種のバランスは？"));
@@ -146,15 +147,21 @@ test("search semantics are preserved: debounce, sanitizing, limit 30, registered
   assert.ok(search.includes("registered ? '登録済み' : '登録する'"));
 });
 
-test("Watchlist is a working interim subview of the same tab (no new root route, no tags yet)", async () => {
+test("Watchlist is a subview of the SAME 銘柄 tab behind a two-segment switch (no new route, no sixth tab, no tags)", async () => {
   const screen = await code("src/app/(tabs)/explore.tsx");
-  assert.ok(screen.includes("onWatchlist={() => setView('watchlist')}"));
-  assert.ok(screen.includes("‹ ポートフォリオ") && screen.includes("onPress={() => setView('portfolio')}"), "a clear way back");
+  assert.ok(screen.includes("<StocksSwitch view={view} onChange={setView} />"), "one shared switch, both directions");
+  assert.ok(screen.includes("{view === 'portfolio' ? ("), "the two subviews render under the same header");
+  assert.ok(!/ウォッチリスト.*router\.push|router\.push\([^)]*watch/i.test(screen), "switching is local state, not navigation");
   assert.ok(screen.includes("監視銘柄はまだありません。気になる銘柄を検索から登録できます。"), "honest empty state");
-  assert.ok(screen.includes("onPress={() => setSelected(row.tracked)}") && screen.includes("この監視銘柄の情報を編集または削除します"), "watch records stay editable / deletable");
+  assert.ok(screen.includes("onEdit={openTracked}"), "watch records stay editable / deletable through the existing editor");
+  assert.ok(screen.includes("<TrackedStockEditor"));
   assert.ok(!/\btags?\b|タグ|label_ids|category_id/i.test(screen), "no tag UI or schema is invented");
   const root = await read("src/app/_layout.tsx");
   assert.ok(!root.includes("watchlist"), "the root navigator is untouched");
+  const switcher = await code("src/components/portfolio/portfolio-sections.tsx");
+  assert.ok(switcher.includes('accessibilityRole="tablist"') && switcher.includes('accessibilityRole="tab"'));
+  assert.ok(switcher.includes("accessibilityState={{ selected }}") && switcher.includes("onPress={() => onChange(item.view)}"));
+  assert.ok(switcher.includes("{ view: 'portfolio', label: 'ポートフォリオ' }") && switcher.includes("{ view: 'watchlist', label: 'ウォッチリスト' }"));
 });
 
 test("watch records stay partitioned from holdings (existing helper unchanged)", () => {

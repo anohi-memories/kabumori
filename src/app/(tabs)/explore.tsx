@@ -9,10 +9,12 @@ import {
   AskAiCta,
   AssetSummaryCard,
   ImpactCard,
-  PortfolioHeader,
+  StocksHeader,
+  StocksSwitch,
+  type StocksView,
 } from '@/components/portfolio/portfolio-sections';
-import { PF, toneColor } from '@/components/portfolio/portfolio-theme';
-import { StockAvatar } from '@/components/portfolio/stock-avatar';
+import { PF } from '@/components/portfolio/portfolio-theme';
+import { WatchlistSection } from '@/components/portfolio/watchlist-section';
 import { TrackedStockEditor } from '@/components/tracked-stock-editor';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import { todayJst } from '@/lib/dashboard';
@@ -22,13 +24,12 @@ import {
   assetSummary,
   buildHoldingRows,
   buildWatchRows,
-  formatPriceYen,
-  formatSignedPercent,
+  layoutWatchlist,
   portfolioBasis,
   portfolioLabels,
   sparklineValues,
-  tone,
   topImpacts,
+  watchlistLabels,
 } from '@/lib/portfolio-view';
 import { dataGapNotes, latestCloseReport, type PersonalizedReport } from '@/lib/report-presentation';
 import type { TrackedStock } from '@/lib/stocks';
@@ -44,7 +45,7 @@ const BOTTOM_SPACE = 28;
 // own screen (/search). Holdings, watch stocks and the report load independently, so a failed report never
 // hides the registrations (and vice versa).
 export default function PortfolioScreen() {
-  const [view, setView] = useState<'portfolio' | 'watchlist'>('portfolio');
+  const [view, setView] = useState<StocksView>('portfolio');
   const [items, setItems] = useState<TrackedStock[]>([]);
   const [reports, setReports] = useState<PersonalizedReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,6 +98,8 @@ export default function PortfolioScreen() {
   const overview = aiSummary(basis);
   const holdings = useMemo(() => buildHoldingRows(items, report), [items, report]);
   const watch = useMemo(() => buildWatchRows(items, report), [items, report]);
+  const watchLayout = useMemo(() => layoutWatchlist(watch, basis?.snapshot ?? null), [watch, basis]);
+  const watchLabels = watchlistLabels(basis);
   const notes = dataGapNotes(basis?.snapshot ?? null);
 
   const openTracked = (trackedId: string) => setSelected(items.find((item) => item.id === trackedId) ?? null);
@@ -106,90 +109,67 @@ export default function PortfolioScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={pulling} onRefresh={() => { setPulling(true); void load().finally(() => setPulling(false)); }} tintColor={colors.accent} />}>
-        {view === 'portfolio' ? (
-          <View style={styles.stack}>
-            <PortfolioHeader onWatchlist={() => setView('watchlist')} onSearch={() => router.push('/search')} />
+        <View style={styles.stack}>
+          <StocksHeader view={view} onSearch={() => router.push('/search')} />
+          <StocksSwitch view={view} onChange={setView} />
 
-            {loading && !items.length && !reports.length ? <ActivityIndicator color={colors.accent} style={styles.status} /> : null}
-            {!loading && !!message ? <Text style={styles.message}>{message}</Text> : null}
+          {loading && !items.length && !reports.length ? <ActivityIndicator color={colors.accent} style={styles.status} /> : null}
+          {!loading && !!message ? <Text style={styles.message}>{message}</Text> : null}
 
-            <AssetSummaryCard summary={summary} labels={labels} spark={spark} hasReport={!!basis} notes={notes} />
-            {reportError ? <Text style={styles.reportError}>レポートのデータを読み込めませんでした。引っ張って更新できます。</Text> : null}
+          {view === 'portfolio' ? (
+            <>
+              <AssetSummaryCard summary={summary} labels={labels} spark={spark} hasReport={!!basis} notes={notes} />
+              {reportError ? <Text style={styles.reportError}>レポートのデータを読み込めませんでした。引っ張って更新できます。</Text> : null}
 
-            {overview ? <AiSummaryCard summary={overview} labels={labels} /> : null}
-            {basis && impacts.length > 0 ? <ImpactCard items={impacts} labels={labels} reportId={basis.report.id} /> : null}
+              {overview ? <AiSummaryCard summary={overview} labels={labels} /> : null}
+              {basis && impacts.length > 0 ? <ImpactCard items={impacts} labels={labels} reportId={basis.report.id} /> : null}
 
-            <View style={styles.holdings}>
-              <HoldingsHeader count={holdings.length} />
-              {holdings.length > 0 ? (
-                <HoldingsList rows={holdings} labels={labels} hasReport={!!basis} onOpen={openTracked} />
-              ) : !loading && !message ? (
+              <View style={styles.holdings}>
+                <HoldingsHeader count={holdings.length} />
+                {holdings.length > 0 ? (
+                  <HoldingsList rows={holdings} labels={labels} hasReport={!!basis} onOpen={openTracked} />
+                ) : !loading && !message ? (
+                  <View style={styles.empty}>
+                    <Text style={styles.emptyText}>保有銘柄はまだありません。検索から銘柄を登録できます。</Text>
+                    <Pressable onPress={() => router.push('/search')} accessibilityRole="button" style={styles.emptyButton}>
+                      <Text style={styles.emptyButtonText}>銘柄を探す</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+
+              <AskAiCta />
+            </>
+          ) : (
+            <>
+              {reportError ? <Text style={styles.reportError}>レポートのデータを読み込めませんでした。引っ張って更新できます。</Text> : null}
+              {watch.length === 0 && !loading && !message ? (
                 <View style={styles.empty}>
-                  <Text style={styles.emptyText}>保有銘柄はまだありません。検索から銘柄を登録できます。</Text>
+                  <Text style={styles.emptyText}>監視銘柄はまだありません。気になる銘柄を検索から登録できます。</Text>
                   <Pressable onPress={() => router.push('/search')} accessibilityRole="button" style={styles.emptyButton}>
                     <Text style={styles.emptyButtonText}>銘柄を探す</Text>
                   </Pressable>
                 </View>
               ) : null}
-            </View>
-
-            <AskAiCta />
-          </View>
-        ) : (
-          <View style={styles.stack}>
-            <Pressable onPress={() => setView('portfolio')} accessibilityRole="button" accessibilityLabel="ポートフォリオへ戻る" hitSlop={8} style={styles.backLink}>
-              <Text style={styles.backText}>‹ ポートフォリオ</Text>
-            </Pressable>
-            <View style={styles.watchHead}>
-              <View style={styles.watchTitles}>
-                <Text style={styles.eyebrow}>WATCHLIST</Text>
-                <Text style={styles.title}>ウォッチリスト</Text>
-              </View>
-              <Pressable onPress={() => router.push('/search')} accessibilityRole="button" accessibilityLabel="銘柄を検索" style={styles.addButton}>
-                <Text style={styles.addText}>＋ 追加</Text>
-              </Pressable>
-            </View>
-            {!loading && !!message ? <Text style={styles.message}>{message}</Text> : null}
-            {watch.length === 0 && !loading && !message ? (
-              <View style={styles.empty}>
-                <Text style={styles.emptyText}>監視銘柄はまだありません。気になる銘柄を検索から登録できます。</Text>
-                <Pressable onPress={() => router.push('/search')} accessibilityRole="button" style={styles.emptyButton}>
-                  <Text style={styles.emptyButtonText}>銘柄を探す</Text>
-                </Pressable>
-              </View>
-            ) : null}
-            <View style={styles.watchList}>
-              {watch.map((row) => {
-                const change = tone(row.changePercent);
-                const { target_buy_price: buy, target_sell_price: sell } = row.tracked;
-                return (
-                  <Pressable
-                    key={row.tracked.id}
-                    onPress={() => setSelected(row.tracked)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${row.company} ${row.ticker}`}
-                    accessibilityHint="この監視銘柄の情報を編集または削除します"
-                    style={({ pressed }) => [styles.watchCard, pressed && styles.pressed]}>
-                    <StockAvatar label={row.avatar} name={row.company} size={48} />
-                    <View style={styles.watchMain}>
-                      <Text style={styles.watchCompany} numberOfLines={2}>{row.company}</Text>
-                      <Text style={styles.watchTicker}>{row.ticker} ・ {row.tracked.stocks_master.market}</Text>
-                      {buy != null ? <Text style={styles.watchTarget}>買いたい {formatPriceYen(buy)}</Text> : null}
-                      {sell != null ? <Text style={styles.watchTarget}>売りたい {formatPriceYen(sell)}</Text> : null}
-                    </View>
-                    <View style={styles.watchPrice}>
-                      <Text style={styles.watchPriceLabel}>終値</Text>
-                      <Text style={styles.watchPriceValue}>{formatPriceYen(row.close)}</Text>
-                      <Text style={[styles.watchChange, { color: toneColor(change) }]}>{formatSignedPercent(row.changePercent, 1)}</Text>
-                    </View>
-                    <Text style={styles.chevron}>›</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            {watch.length > 0 ? <Text style={styles.watchNote}>終値は{labels.basis}（保存済み大引け）です。リアルタイム価格ではありません。</Text> : null}
-          </View>
-        )}
+              <WatchlistSection
+                featured={watchLayout.featured}
+                rest={watchLayout.rest}
+                flagged={watchLayout.flagged}
+                featuredTitle={watchLabels.featuredTitle}
+                basisLabel={watchLabels.basis}
+                onEdit={openTracked}
+                onOpenNews={(newsId) => router.push({ pathname: '/news-detail', params: { id: newsId, from: 'stocks' } })}
+              />
+              {watch.length > 0 ? (
+                <Text style={styles.watchNote}>
+                  {basis
+                    ? `表示は${watchLabels.basis}（保存済み大引け）の値で、リアルタイム価格ではありません。`
+                    : '価格はまだありません。\n大引けレポートが作成されると、終値と前日比が表示されます。'}
+                </Text>
+              ) : null}
+            </>
+          )}
+        </View>
       </ScrollView>
 
       <TrackedStockEditor
@@ -218,24 +198,5 @@ const styles = StyleSheet.create({
   emptyButtonText: { color: '#ffffff', fontWeight: '800', fontSize: 14 },
   pressed: { opacity: 0.75 },
 
-  backLink: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
-  backText: { color: colors.accent, fontWeight: '800', fontSize: 15 },
-  watchHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  watchTitles: { flex: 1 },
-  eyebrow: { color: PF.muted, fontWeight: '800', letterSpacing: 3, fontSize: 11 },
-  title: { color: PF.ink, fontSize: 30, fontWeight: '900', marginTop: 2 },
-  addButton: { minHeight: 44, borderRadius: 22, paddingHorizontal: 16, justifyContent: 'center', backgroundColor: PF.aiBackground, borderWidth: 1, borderColor: PF.aiBorder },
-  addText: { color: PF.up, fontWeight: '800', fontSize: 13 },
-  watchList: { gap: 8 },
-  watchCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: PF.card, borderRadius: PF.radius, borderWidth: 1, borderColor: PF.cardBorder, paddingVertical: 12, paddingLeft: 12, paddingRight: 10 },
-  watchMain: { flex: 1, minWidth: 0, gap: 2 },
-  watchCompany: { color: PF.ink, fontSize: 15.5, lineHeight: 20, fontWeight: '900' },
-  watchTicker: { color: PF.muted, fontSize: 12 },
-  watchTarget: { color: PF.muted, fontSize: 12 },
-  watchPrice: { alignItems: 'flex-end', gap: 2 },
-  watchPriceLabel: { color: PF.muted, fontSize: 11 },
-  watchPriceValue: { color: PF.ink, fontSize: 15, fontWeight: '900' },
-  watchChange: { fontSize: 12, fontWeight: '700' },
-  chevron: { color: PF.muted, fontSize: 22, lineHeight: 24 },
   watchNote: { color: PF.muted, fontSize: 11.5, lineHeight: 17 },
 });
