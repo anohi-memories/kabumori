@@ -1,10 +1,25 @@
+# K5 Phase 3c — offline proof readiness accepted, real-project validation NOT authorized — 2026-10-10 JST
+
+- task_id: common-account-phase3c-disposable-supabase-proof-readiness-20261010
+- K5 verdict: **PASS_OFFLINE_PREPARATION_ONLY / OFFLINE_READY_NOT_EXECUTED**. This is **not** a pass for Auth deletion, a real GoTrue identity fence, production migration or release.
+- PR under review: [Draft #122](https://github.com/anohi-memories/kabumori/pull/122), **OPEN / DRAFT / UNMERGED**, exact head `f17a47e36632fff4a1f4cfb0b860df200e1c99e1`, 21 files, all in new G5-owned paths: 1 runbook and 20 local harness/fixture/test artifacts. Changed-file comparison since PR base `98f50802`: **zero overlap** with latest main-side changes. GitHub check statuses for PR122 head Netlify=success and Vercel=success; GitHub UI statuses do NOT mean any E1–E12 real Supabase tests were run.
+- PR121 dependency remained Draft, OPEN, exact `76b50e1e03f82faaa3460bab1603afa8fef3ce44`, and was not changed/merged. E1–E12 original text pinned according to G5's report. G4 T9/T10/T13 source contract preserved.
+- Source inspected by ChatGPT: `guard.ts` deny-by-default validates approved project ref, off-repo marker, used-ref ledger, typed confirmation, per-scenario destructive consent and E7/E11 extra approvals; `cli.ts` only `plan`/`validate`, no executor/network call; `evidence.ts` only accepts evidenced PASS, UNKNOWN/FAIL/NOT_RUN block, candidate verdict never release READY; `static_test.ts` guards against remote API/command introduction. `catalog.ts` contains E1–E12; runbook explicitly distinguishes observations from disposable-project destructive procedures. These checks are **source inspection**, not execution proof. Small future review note: evidence file names/approval references are declarations, not cryptographically verified evidence or external user approval; operators/independent reviewers must validate their provenance before accepting a real-run verdict.
+- Tests: G5 reported Deno 35/35, mutations 31/31, local PostgreSQL fingerprint read-only deterministic PASS, local Phase1/2/3a and account-delete 66/66 PASS, deno check/lint/diff/secret checks clean. ChatGPT DID NOT independently rerun commands.
+- Explicit safety: no Supabase remote project created/read/written; no real identities, provider calls, Auth ban/delete, migration apply on real project, production deploy, API secrets, EAS or paid resources. `managed_auth_delete` remains schema-locked `blocked`. Option A+B (BAN flow) versus Option D (transactional direct SQL auth.users deletion) **UNDECIDED**, and BAN alone has a documented manual-link timing counterexample.
+- No independent Codex review now for isolated no-network runner. Preserve one focused Sol（高） (or higher if evidence justifies) security review at actual G5 T13/G4 OAuth/provider cleanup integration and **before** any production Auth/DB activation. H1 already assigned shared AI review; do not overwrite H1/H2.
+- **Next permission gate**: obtain user's separate approval for a NEW, dedicated, disposable Supabase project containing only fake data, possibly incurring charges. Creation/connection and any E2–E12 destructive experiments are NOT authorized here; individual run/experiment approvals and E7/E11 extra approvals remain separate. Until permitted, G5 has no authorized remote test task. No implicit Option D approval.
+- Slot decision: Phase3c G5 is **done**, next_owner **none**, preserve full old TASK/Report below and leave slot unassigned rather than assigning unsafe live actions. Other G1–G4/H1/H2 untouched.
+
+---
+
 # G5 — CURRENT TASK — Phase 3c disposable Supabase proof readiness (OFFLINE ONLY)
 
 - task_id: common-account-phase3c-disposable-supabase-proof-readiness-20261010
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - type: offline proof plan, safe test harness and exact go/no-go criteria ONLY
 - start_code: G5
