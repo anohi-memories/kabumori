@@ -1,3 +1,16 @@
+# Current H1 — completed R1/R2 result synchronization recovery — 2026-10-10 JST
+
+- task_id: common-ai-provider-pr119-c1-r1-r2-narrow-rereview-20261010
+- result: **PASS — R1 P1 / R2 P2 CLOSED**; recovered completed review from immutable local commit `f7835275f1f6a75338c2ff380af565cc79aafe4b`, not a new review.
+- exact reviewed heads: PR119 `8ef3843f51e771088dfe58e2e5a262db0b62644a`; protected PR117 `2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226`. Full findings and executed evidence are preserved verbatim below.
+- evidence checked on this resume: existing focused PG log ends ALL REQUESTED PARTS PASSED / E2E10 passed; completed report records unit9, independent duplicate-send/role-path probes and check/lint PASS. **No review, SQL, unit/E2E or provider tests rerun.**
+- fresh main at recovery: `69df917550fd2697a4dc241a0d39aa48d14134de`; canonical H1 TASK/REPORT/index unchanged since completion. User now explicitly requested safe synchronization of H1 TASK, REPORT and necessary H1 index information only. Prior safety-review rejection below is historical, not a current review blocker.
+- publication method: guarded normal report-only push with GitHub read-back; actual commit SHA/result supplied in final user receipt only after verification. No force/rebase or other-slot overwrite. Preserve all previous TASK/Report text.
+- status: review_required; next_owner: chatgpt; completion_code: C1; return_to: 共通AI基盤のちゃ.
+- changes: only H1 TASK, REPORT, H1 status/next_owner in ACTIVE_TASK; no CURRENT_STATE or product-source changes, source PR merge/deploy, production/staging/secrets/provider operation. Separate production gates remain unchanged.
+
+---
+
 # Current H1 result — PR119 R1/R2 narrow rereview — 2026-10-10 JST
 
 - task_id: common-ai-provider-pr119-c1-r1-r2-narrow-rereview-20261010
