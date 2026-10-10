@@ -3,8 +3,8 @@
 - task_id: kabumori-watchlist-real-data-simulator-qa-20261010
 - slot: claude-1
 - owner: claude
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - type: **READ-ONLY / QA-ONLY**, not a feature implementation or deployment
 - priority: normal
 - recommended_model: **Sonnet5（中）**
@@ -19,6 +19,18 @@
 - app_store_upload_allowed: **false**
 - review_policy: first return QA findings with evidence; if bugs, ChatGPT creates separately scoped fix TASK
 - scope_owner: かぶモリアプリ UI (does not modify G2/G3/G4/G5/H task ownership)
+
+## K1 FINAL — real-data QA BLOCKED_AUTH acknowledged / safe-stop completed (2026-10-10)
+
+- task_id: `kabumori-watchlist-real-data-simulator-qa-20261010`
+- verdict: **PASS_SAFE_STOP / REAL_DATA_QA_BLOCKED_AUTH**. QA preflight and non-mutating halt correctly followed TASK. No genuine user-scoped saved account records were displayed; hence **NOT a functional/real-data PASS** and no conclusion that real watchlist data works.
+- Evidence: Claude's current G1 Report says Xcode 27.0 / iOS 27.0, installed Kabumori dev-client but no signed-in session. Existing local app AsyncStorage key-name inspection found no Supabase auth-token key. No user login attempted, no Metro server started because actual data could not be loaded. This is **Claude-reported local observation**, not independently rerun on the user's Mac.
+- Fixture-only previous PR #120 G1 test result **457/457 PASS** and 375/402 Simulator snapshots remain separate from this QA; neither those nor an installed build establish an actual authenticated real-data test.
+- No app UI was exercised in Phase B; all saved-close, featured-card distribution, news CTA, target-price editor, row counts, real account, and physical iPhone checks remain **NOT_OBSERVED/BLOCKED_AUTH**. Thus no confirmed new bug and no evidence that there are zero real-data bugs.
+- Reviewed task/report ownership and verified Report main commit `e3e0a1a2bcb1dedd8e1b0482005b0c5a1ee09d02` modified G1 Report and CURRENT_STATE only. G1 reported EAS=0, deploy=0, writes=0, no other slot's dev server interrupted, no tokens or financial data exposed in report. No other PR/new source changes.
+- Close current *preflight* task as `done` / `next_owner:none` (**NOT** marking the real-data QA gate PASS). Do not create another runnable G1 task until user manually establishes an authenticated Simulator session or explicitly chooses another validation method.
+- If the user wishes to complete read-only Simulator Phase B: coordinate launch of existing dev-client with a dedicated Metro port not 8081, user enters sign-in credentials THEMSELVES on the Simulator UI (never in chat or logs), then allocate a distinct scoped G1 continuation from fresh main and verify in app only. If an existing iPhone installation has not been rebuilt since PR #120, it cannot be assumed to contain the new UI; do not promise a physical-phone QA of PR #120 without checking its binary version.
+- Codex additional review unnecessary for a blocked read-only preflight. No merge/deploy/EAS or production mutation authorized. Return_to: **かぶモリアプリG1のちゃ**.
 
 ## Purpose
 
@@ -71,7 +83,7 @@ On completion send **`K1`** to **かぶモリアプリG1のちゃ**.
 
 - task_id: kabumori-watchlist-real-data-simulator-qa-20261010
 - result: **BLOCKED_AUTH** — the local iOS Simulator holds no authenticated user session, so no genuine saved account data (watch registrations / saved close reports) could be observed. Phase B was **not run**; nothing is claimed PASS from real data. No bug was found or fixed (no UI was exercised).
-- status: `review_required` / next_owner `chatgpt` (return to かぶモリアプリG1のちゃ for `K1`)
+- status: `done` / next_owner `none` after K1 safe-stop acceptance; real-data QA remains BLOCKED_AUTH
 - date: 2026-10-10 JST (checked 19:21 JST)
 - base: fresh `origin/main` `585de5a` (contains PR #120 squash `53678a2f`); independent clone, no source touched
 
