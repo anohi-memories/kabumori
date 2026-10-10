@@ -6,7 +6,7 @@
 - Review decision: defer separate Codex review now; require ONE focused consolidated independent security review when actual G5 guard and G4 X/Threads credential/RPC/cleanup/activation boundary are assembled. No H slot overwritten/reserved by this K4.
 - Existing X complete provider-identity source path was reported to permit potential preclaim/availability failure; not independently proven against production. X begin is not T13/T9-based, provider filter implicit and failed-state update may roll back. Prepare separate G4 **source-only** hardening candidate without touching live X code or G5 tasks.
 - Next G4 task `postona-x-oauth-provider-hardening-candidate-20261010` **ready**, recommended **Opus5.5（高）**, own fresh isolated worktree, no existing applied migration/Edge changes, no live testing or PR124 modifications. Completion K4 goes to **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**.
-- AI Lab diary: 記録不要 — 2026-10-10已有別件のAI相談エントリを維持し、別のThreads進捗を同一event_idへ混ぜない。
+- AI Lab diary: 記録不要 — 2026-10-10には既に別件のAI相談エントリを維持し、別のThreads進捗を同一event_idへ混ぜない。
 
 ## K1 G1 FINAL — PR120 source PASS / merge HOLD (GitHub mergeability unknown) — 2026-10-10 JST
 
