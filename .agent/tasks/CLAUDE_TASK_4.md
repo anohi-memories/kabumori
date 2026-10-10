@@ -1,5 +1,77 @@
 # Claude Task 4 — CURRENT TASK
 
+- task_id: postona-x-oauth-preclaim-containment-readiness-20261010
+- owner: claude
+- slot: claude-4
+- status: ready
+- next_owner: claude
+- start_code: G4
+- finish_code: K4
+- return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
+- recommended_model: **Opus5.5（高）**
+- priority: high
+- type: existing-X OAuth preclaim risk containment feasibility, bounded SOURCE/TEST ONLY
+- production_reads_or_writes_allowed: false
+- migration_apply_or_Edge_deploy_allowed: false
+- X_provider_or_real_token_calls_allowed: false
+- PR_merge_allowed: false
+- user_connection_disruption_allowed: false
+
+## Context / precise risk
+
+Latest G4 K4 accepted predecessor `postona-x-oauth-provider-hardening-candidate-20261010` as **PASS_CANDIDATE for disconnected offline source only**, not a release/security approval. [Draft PR #126](https://github.com/anohi-memories/kabumori/pull/126) exact head `65f49f98dab39b974e6e4b450f376a37f99ef1ac` remains OPEN/UNMERGED/HOLD, 7 new files in `supabase/candidates/`, `_shared/social/`, tests and docs; baseline X RPC/Edge/source not changed. GitHub mergeable=false at K4 despite changed-file intersection with latest main of zero; no merger may assume safety from this comparison. PR124 Threads T9 is also Draft, as is G5 T13 PR121; neither is live.
+
+G4's disposable PG reproduction shows a potential **existing X OAuth complete account ID preclaim**: authenticated direct RPC can attach another public X user ID to a fake token in the caller's own account; the legitimate owner subsequently receives X_ACCOUNT_ALREADY_CONNECTED. This can deny account connection and make claimed handle inaccurate; it does **not** establish token theft, posting as victim, or confirmed exploitation on production. Live PostgREST access and ACL have NOT been independently observed in this task; treat as **credible P2 potential production vulnerability** pending validation. Do not publish a live exploit recipe or test against another user's account.
+
+Current PR126 replacement v2 depends on the unmerged/unapplied G5 T13 and G4 T9; it cannot be considered an immediate standalone containment. The next objective is **time-bounded and narrow preparation for a proportionate existing-X preclaim containment** without changing existing posting/refresh or production and without waiting for unrelated Threads publication.
+
+## Startup and isolation (hard rules)
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this TASK, prior G4 Report, PR126 design §1–3, PR124 and G5 PR121 dependency notes, current G3 Stage3B TASK. Fresh-fetch latest main and all relevant PRs.
+2. Create a **NEW** independent G4 worktree from fresh `/Users/yuya/Developer/kabumori-fresh`; never reuse previous G4/other slot checkouts, rebase/delete/commit their files, or interfere with their servers. If independent isolation fails, STOP.
+3. Confirm paths and overlap with G3 PR123/Stage3B, G5 PR121/122 and open PR124/126. No modification to their files or branches, old migrations, current Edge, `.agent/` of other slot.
+
+## Work scope: offline containment evidence and operator decision package
+
+- Independently reproduce G4's claimed **source-level preclaim risk** using the existing X RPC as actually defined in the repository, a local disposable PG database and fake accounts/tokens. Determine what PostgREST exposure, effective EXECUTE grant and session requirements would make it reachable; do not claim live production exposure without authoritative read-only proof.
+- Evaluate smallest immediate containment options **independent of G5 T13/T9**: e.g., temporarily deny public authenticated EXECUTE on vulnerable `complete` while preserving existing posted/scheduled X sends, an RPC wrapper/Edge-only authenticated binding whose caller permissions can truly be restricted, or a rigorously proven isolated replacement. **Never claim changing `verify_jwt` on Edge alone secures a directly callable RPC.**
+- For each option give a concrete *safe-mode* matrix: does it break NEW X connections, reconnects, existing X refresh, X posting, POSTONA AI consultation, X scheduler, G3 Stage3B, deletion flow? Estimate safe downtime windows, user-facing messaging and rollback without making unauthorized production claims.
+- Determine whether non-disruptive standalone containment is feasible. If not, explicitly recommend controlled temporary connection pause or waiting for reviewed full v2 rollout as a user approval choice. Do not silently take either action.
+- Produce a **read-only production preflight** proposal (no execution): effective function EXECUTE/SET-role graph and ABI/source fingerprint; registered/verified X account counts, deterministic vs legacy workspaces, inactive entitlements, suspected preclaims as aggregate-only signals, recent OAuth failures. Sensitive account ids, token material, emails, raw logs and portfolio data must not be copied into TASK/PR or output. Suspicion cannot justify automatic identity deletion.
+- Specify reviewed staged rollback, exact expected privileges (API roles, owner, DEFAULT grants, role-inheritance/SET ROLE), zero-unauthorized-write postconditions, provider token/callback constraints and required rollout approvals. If an early patch is possible, prepare ONLY a new isolated candidate/proof and typed operator runbook, **NOT runnable in production by default**, with static fail-closed gates and no runtime wiring.
+- Preserve all source/prerequisite reservations. Don't rewrite previous applied migration, G5 Auth/RLS/entitlement, PR124/126 or X deployed OAuth Edge. Don't insert unauthorized new migration with pending grant.
+- Explicitly call out which claims come from copied fixtures vs live proof; production read-only operations themselves need a separately approved plan (this TASK grants none).
+
+## Validation and completion
+
+- Local disposable PG regression: before/after preclaim, exact AUTH/ACL grant deny/readback, legitimate old X connected posting and credential shape untouched, new connection pause effect, race with an in-flight callback, existing X state/refresh/publish behavior, idempotence, rollback re-exposure warning, unexpected role inheritance and SET ROLE. Fake only.
+- If a source candidate is created, focused tests + mutation variants, Deno check/lint, SQL scope fingerprint, diff + secret scan. Do not edit G3/G5 owned source or deployment config.
+- Separate Draft PR for safe and **novel** G4-owned docs/tests/candidate paths only if necessary; do not produce another nearly identical PR126 or merge. If only risk assessment is justified, report it with exact evidence and minimal unchanged-file result.
+- Report `task_id`, outcome, changed_files, tests, PR/hash, commit/push/deploy truth, remaining real-world blockers, safety_checks, options and recommendation; set `status: review_required` and `next_owner: chatgpt`, STOP for K4.
+- Schedule ONE focused independent security review **before any actual existing-X containment or rollout**, or reuse a consolidated review if ready; do not perform a second redundant full PR126 review now. Never deploy or pause X connection/posting without separately explicit user approval.
+- Return to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ — K4**.
+
+---
+
+# K4 FINAL — previous X OAuth v2 candidate / source only — 2026-10-10
+
+- task_id: postona-x-oauth-provider-hardening-candidate-20261010
+- result: **PASS_CANDIDATE (OFFLINE SOURCE ONLY)**. Source-based risk reproduced by G4 on fake local PG; live exposure and any real-world exploitation unconfirmed.
+- PR: [#126](https://github.com/anohi-memories/kabumori/pull/126), exact `65f49f98dab39b974e6e4b450f376a37f99ef1ac`, OPEN/DRAFT/UNMERGED. Changed 7 new paths, no applied migrations or Edge wiring.
+- G4-reported tests: PG 115 assertions, 8 race scenarios, 15 negative preconditions, 35/35 mutation detections, TypeScript 8, existing shared/X 64, invariants 11, Deno check/lint and secret/diff clean; ChatGPT inspected report/source and verified PR filenames/CI, did not rerun tests.
+- Security: legacy X complete may accept arbitrary provider identity and fake token for an authenticated caller; a legitimate owner could be blocked. Does not prove victim account takeover/real posting. v2 uses server-owned attestation and G5 T13/T9 but remains disabled, dependency PR121/124 not applied.
+- Merge HOLD: GitHub mergeable=false as of K4 despite two main-side new agent-only commits and changed-file overlap 0; don't override or infer harmless. Existing X posting/refresh untouched, Threads gate false.
+- No G4 production DB, Auth, X, Vault, Edge, Meta, secrets or provider calls, no PR merge/deploy.
+- Review: no duplicate Codex review of isolated source candidate; arrange independent focused review before any actual live RPC permission/Edge change, and consolidated guard+OAuth/Vault/cleanup review prior Threads activation.
+- AI Lab diary: 記録不要 — unrelated existing 2026-10-10 AI相談 entry should not be altered or conflated with this internal X security finding.
+- Next: bounded offline containment feasibility, read-only preflight design, and safe user approval choices without actual production intervention.
+
+---
+
+# Previous G4 TASK + Report — preserved verbatim
+
+# Claude Task 4 — CURRENT TASK
+
 - task_id: postona-x-oauth-provider-hardening-candidate-20261010
 - owner: claude
 - slot: claude-4
