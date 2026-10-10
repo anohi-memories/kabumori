@@ -1,3 +1,9 @@
+## G2 PR110 FINAL REVIEW — H2 assigned / source-only — 2026-10-10 JST
+
+- H2 is assigned **ready** for exact PR #110 head `cb3d77d50e848d043f5427df363769b75d3c7764`: bounded independent B1-R1/B2-R1/B3-R1 final review, recommended **Sol（高）**. Return_to **かぶモリアプリG2のちゃ**, completion_code **C2**.
+- H1 remains assigned to separate common-AI PR117+PR119 review; H2 former G5 PR112 review was formally done/closed and history is preserved.
+- G2 PR110 merge/deploy HOLD. No source modifications or production work authorized. H2 may begin only from its own isolated checkout and verified exact head.
+
 ## K4 FINAL — POSTONA Threads T9/Phase2b OAuth candidate source-only accepted; G4 X hardening ready — 2026-10-10 JST
 
 - Prior G4 `postona-threads-phase2b-workspace-oauth-candidate-20261010` reported **PASS_CANDIDATE source-only**; ChatGPT inspected the G4 Report, eight PR124 files, schema candidate/TS contracts/tests and G5 dependency. Draft PR124 exact head `c30f246409a77080cbc03aef6c4cb72b5481e125` OPEN/UNMERGED. No changed-file overlap with 8 main-side commits since PR base; GitHub REST mergeable=false at repeated checks, so **PR merge HOLD**, no force or assumed clean integration.
