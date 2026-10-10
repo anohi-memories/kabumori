@@ -1,3 +1,75 @@
+# G5 — CURRENT TASK — Phase 3c disposable Supabase proof readiness (OFFLINE ONLY)
+
+- task_id: common-account-phase3c-disposable-supabase-proof-readiness-20261010
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- priority: critical
+- type: offline proof plan, safe test harness and exact go/no-go criteria ONLY
+- start_code: G5
+- finish_code: K5
+- return_to: 共通アカウントG5のちゃ
+- recommended_model: **Opus5.5（高）**
+- allowed: isolated local files, fake/local disposable PostgreSQL (no remote network or live Supabase), new independent branch and Draft PR for proof-runner/readiness docs
+- forbidden: ALL real Supabase projects/prod/test APIs, new Supabase project creation, real Auth/Admin/GoTrue/Storage/Apple/X/Meta/network requests, real identities/data, migrations apply outside local scratch, GitHub merge, deployment, EAS, Vault/secrets changes, billing/paid resource creation, and feature activation
+- production access: NONE; no read/write
+- real disposable project execution: REQUIRES SEPARATE EXPRESS USER APPROVAL
+- architecture decision Option D (direct SQL auth.users deletion) vs Option A+B (BAN etc): UNDECIDED, do not implement or approve either
+
+## Purpose and current verified status
+
+G5 Phase3b Draft PR [#121](https://github.com/anohi-memories/kabumori/pull/121) exact `76b50e1e03f82faaa3460bab1603afa8fef3ce44` is K5-accepted **SOURCE CANDIDATE ONLY**, not merged, reviewed independently or applied, and not wired into any runtime. Its source adds only the owner-only unconnected `private.account_lifecycle_assert_active_service_write(uuid,text)` guard. Phase3a PR112 was squash merged as `a7c71b0`; real whole-account Auth deletion stays schema `blocked`. Source-level GoTrue research identifies a **negative BAN counterexample**: manual identity linking started before BAN can complete afterward without rechecking ban. Nothing authorizes unblocking managed Auth delete.
+
+User requests continued progress **without activating production**. Focus on preparing the documented E1–E12 safe real-disposable-Supabase proof experiment so an explicitly approved isolated test environment can later be used efficiently and reproducibly, without accidental targeting of production or leaking credentials. Offline readiness is a separate stage; passing mocked or local tests is NOT proof of GoTrue behavior.
+
+## Mandatory startup / conflict prevention
+
+1. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, own G5 TASK+all Reports and H2 relevant Report; docs `phase1-lifecycle-foundation.md`, `phase2-service-enrollment.md`, `phase3a-deletion-orchestrator.md`, and **`docs/common-account/phase3b-identity-writer-fence-feasibility.md` at exact Draft PR121 head**. Read agreed G4/G5 T9/T10/T13 `docs/postona/threads-g5-t9-t10-t13-shared-contract-20261010.md` and relevant G4 TASK for overlap only.
+2. Fresh-fetch `origin/main` via clean `/Users/yuya/Developer/kabumori-fresh`; create a **new private G5 Phase3c worktree**, distinct from PR112/PR121 G5 old worktrees, and all G1–G4/H1/H2. Verify other active Git operations and paths. No checkout/reset/rebase/staging of other work. Do not modify PR121 branch/head, its migration file, its 8 changed files, or any existing Phase1/2/3a migration. STOP if overlapping changes or safe isolation impossible.
+3. Current G4 has separate Phase2b T9/T13-aware workspace/Threads OAuth TASK, G3 AI consultation production activation, G1 watchlist, G2 report, H1 shared AI review. Scope strictly NEW G5 proof-readiness docs/offline helpers; don't modify their apps, migration, RPC, Vault, OAuth, Auth, Edge, task or Report.
+4. Do not use Supabase MCP connected projects or Supabase CLI `link`/remote commands. CLI `--help` offline allowed. Never enumerate secrets or real user/account identifiers. Inspect Supabase docs and version constraints as READ-ONLY public documentation only.
+
+## Deliverable A — exact E1–E12 runbook and go/no-go controls
+
+- Read PR121 feasibility report §8 E1–E12 **verbatim** and preserve all experiment names/coverage; don't invent that any passed. Create `docs/common-account/phase3c-disposable-supabase-proof-runbook.md` with preconditions, exact commands/pseudocode, fixtures, expected observables and pass/fail/unknown for each E1–E12, source links, SQL catalog fingerprints, timestamps and correlation ID forms, and evidence/artifact retention rules free of secrets.
+- Required key scenarios: GoTrue version + configuration; OAuth automatic/manual linking (including **pre-ban manual link finishing post-ban**); session revoke BEFORE ban; after-ban new access/refresh tokens and stale JWT; provider/link/in-flight expiry; user audit log persistence; `postgres` effective ownership and access on `auth.sessions`, `auth.identities`, `auth.users`; managed Admin delete vs candidate Option D transactional SQL DELETE; Auth cascade/managed cleanup order; Storage object owner/policy and read-back; race between intent commit and deletion; reconciliation evidence.
+- Exactly identify which E-tests are harmless observations vs **destructive in a disposable-only project** (user identity deletion, ban, session revoke, OAuth grants). All test identities, provider test accounts, storage and data must be **new fake-only**. No production clone, import or copies.
+- Real test execution must be gated behind BOTH: (a) an explicit user-approved disposable project id/ref and (b) explicit per-run consent for destructive test identity operations. The harness must refuse without a standalone project-marker, exact ref match and type confirmation, never accept a mere `--force` override. Do NOT set up credentials; provide input spec only. No default ref or inherited Supabase local link.
+- Instrument cross-layer proof of actual races (e.g. barrier/latch where possible, reproducible timestamps and database read-back), and state where external/GoTrue transactions cannot be forced and evidence would remain inconclusive; unknown = fail closed, no release.
+- Compare candidate A/B and D without choosing either. SQL DELETE in Auth is a change to the established lifecycle safety model, and is prohibited without separate user and independent security approval. Even if candidate A/B passes, the observed GoTrue bug needs a proven mitigated path.
+
+## Deliverable B — reusable OFFLINE validation artifacts
+
+- Under NEW G5-only path `supabase/tests/common_account_disposable_e2e/` or `scripts/common-account-disposable-e2e/`, implement **dry-run-only** static preflight validator / plan printer from fixture/sample configuration, a deny-by-default project-ID guard with unit tests, deterministic request/evidence redaction, and an operator checklist template.
+- Offline tests must verify: default deny; missing/ambiguous/production-like or reused project ID deny; no URLs/credentials/token/code logged; every destructive experiment requires explicit project-marker and scenario-specific approval; E1–E12 are represented, no scenario silently skipped, unknown ≠ PASS; no automatic `supabase db push`, Auth DELETE, application migration or provider call. If a network execution code path is added, it MUST be disabled at compile/run time and unreachable in this stage; prefer NO network code at all.
+- Use only fake local state; relevant unit tests and safe source/check diff, secret scan. If compiling a harness would introduce new dependencies or require online package downloads, avoid: use existing repo language/runtime.
+- Don't alter `docs/common-account/phase3b-identity-writer-fence-feasibility.md`, PR121 code/migration/test fixture or `docs/postona/*` G4-owned docs; cross-reference those files as immutable inputs.
+
+## Deliverable C — G4 integration contract and next approvals
+
+- Add a short dependency matrix mapping real T13 provider writer guard into both G4 Threads begin/complete & T9 workspace; which later G1/G2 writes require analogous guards; G4-owned provider-aware T10 cleanup; and GoTrue identity-link fence from real disposable proof. Do not implement any G4-owned code or claim the optional unpublished helper is already available in production.
+- List **exactly** what user approval is required next (1 fresh disposable Supabase project and no production data/copies; per-run approval for destructive operations; optional Meta/Apple tester credentials with dummy account only, separate; independent security review of real G5+G4 integration; later distinct production approval). No user billing/project creation now.
+- Preserve PR121 Draft and defer one consolidated independent security review to material integrated SQL/ACL/OAuth/credential/cleanup boundary. No H1/H2 allocation now, H1 is assigned to shared-AI work. Phase3a blocked gate never opens.
+
+## Completion
+
+- New isolated Draft PR only, no merge/deploy; preserve other slot ownership. Update current `## Report` with task_id, exact head, files, versioned PR121 dependency, unit tests, limits, project/device/network operations 0, diff/secret checks, ownership, next recommendation, and clear `OFFLINE_READY_NOT_EXECUTED` / `BLOCKED` verdict. Status `review_required` / next_owner `chatgpt`; return to 共通アカウントG5のちゃ with **K5**.
+- K5 decides whether the proof runner is actionable and whether/when separate user approval for disposable test project is needed. Do not move on to live tests unilaterally.
+
+推薦モデル：**Opus5.5（高）**
+
+## Report — Phase 3c
+
+- task_id: common-account-phase3c-disposable-supabase-proof-readiness-20261010
+- result: pending
+- remote_calls: 0
+- production_mutation: 0
+
+---
+
+# Preserved G5 Phase 3b K5 + all historical TASK / Report content (immutable below)
+
 # K5 Phase 3b — source candidate accepted / real Supabase proof BLOCKED — 2026-10-10 JST
 
 - task_id: common-account-phase3b-identity-writer-fence-source-20261010
