@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "decidedOn": "2026-10-10",
+  "scope": "Evaluation only. These are provisional criteria for labelling the evaluation set. They are NOT a change to the production delivery rules and need no production approval; the product owner's approval is still required before any of them is applied to delivery.",
+  "criteria": {
+    "1": "決算補足資料: 新しい重大事実が確認できた場合のみ重要。",
+    "2": "金額非公表の不動産売却: 実際の重大な業績影響が確認できれば重要。開示基準への言及だけでは重要と断定しない。",
+    "3": "個人情報漏えい: 大規模漏えい、重大な情報の流出、実害や重要な事業影響が確認できれば重要。規模不明なら確認待ち。",
+    "4": "臨床試験・承認申請: 主要試験の成功、重要な承認取得、主力製品の重要な開発進展は重要。通常の手続きのみなら原則対象外。",
+    "5": "一部報道について: 重大事実を企業が確認・肯定した場合は重要。否定・確認中・情報不足は原則確認待ち。",
+    "6": "情報十分性ゲート: 公開安全性のため維持する。重要候補を『確認待ち』として観測する設計を検討する（本番変更ではない）。"
+  },
+  "decisions": {
+    "58bacb3b": { "criterion": 1, "outcome": "pending", "basis": "決算補足説明資料。決算短信との差分となる新しい重大事実が保存本文から確認できない" },
+    "855e3cf3": { "criterion": 1, "outcome": "pending", "basis": "決算説明資料。新しい重大事実が確認できない" },
+    "38449d14": { "criterion": 1, "outcome": "pending", "basis": "通期決算説明資料。『通期予想を上回って着地』とあるが、短信との差分と規模が確認できない" },
+    "1eb1c3a3": { "criterion": 1, "outcome": "pending", "basis": "期末決算説明会資料。新しい重大事実が確認できない" },
+    "6fb822d9": { "criterion": 1, "outcome": "pending", "basis": "第2四半期決算説明資料。新しい重大事実が確認できない" },
+    "20dfa7bd": { "criterion": 2, "outcome": "pending", "basis": "売却価格・利益額は非公表で、開示基準（売上高10%以上・利益30%以上）への言及のみ。業績予想に織り込み済み" },
+    "9193e7a9": { "criterion": 2, "outcome": "pending", "basis": "同上。売却利益は経常利益の30%以上の見込みとあるが金額は非公表" },
+    "d830d203": { "criterion": 3, "outcome": "important", "basis": "対象者数が最大約445万人と本文に明記された大規模な漏えい（Phase 3 から AI暫定で important）" },
+    "cc12ca5d": { "criterion": 3, "outcome": "pending", "basis": "会員情報の取得は確認されたが、件数・実害・事業影響が本文から確認できない" },
+    "13417351": { "criterion": 3, "outcome": "pending", "basis": "契約書とシステム認証情報の漏えい。顧客数・二次被害は未確認で、規模が確認できない" },
+    "cf8b5ed1": { "criterion": 3, "outcome": "pending", "basis": "個人情報の漏洩。件数・影響が本文から確認できない" },
+    "f66f2c20": { "criterion": 3, "outcome": "pending", "basis": "予約情報の閲覧・流出。対象者数が本文の範囲では不明" },
+    "434cc413": { "criterion": 4, "outcome": "important", "basis": "第III相試験で主要評価項目を達成（無増悪生存期間の中央値を6カ月延長）。主要試験の成功" },
+    "077310bc": { "criterion": 4, "outcome": "no_post", "basis": "FDAのRTORプログラム下での承認申請の開始。通常の手続きで、業績予想の変更もない" },
+    "16a0eec4": { "criterion": 4, "outcome": "no_post", "basis": "sBLAの段階的提出の完了。通常の手続きの進行で、承認取得ではない" },
+    "622f46d2": { "criterion": 5, "outcome": "pending", "basis": "秋田銀の統合検討の報道。本文が途中で切れており、企業が確認・肯定したか否定したかが読み取れない" },
+    "d0fd4e00": { "criterion": 5, "outcome": "pending", "basis": "東邦HDは『当社が公表したものではありません』とのみ記載。買収協議の確認も肯定も無い（確認待ち）" }
+  }
+}

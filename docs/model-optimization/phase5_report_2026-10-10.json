@@ -1,0 +1,534 @@
+{
+  "window": "2026-09-10 .. 2026-10-09 (created, JST)",
+  "gate": {
+    "outcomes": {
+      "gate_after_sol": 402,
+      "model_no_post": 1406,
+      "final_positive": 405
+    },
+    "noPost": 1808,
+    "gateShareOfNoPost": 0.222,
+    "solEscalated": 636,
+    "gateShareOfSolEscalated": 0.632,
+    "gateAfterSolByEscalationReasons": {
+      "(not recorded)": 99,
+      "FACT_NEEDS_REVIEW": 92,
+      "LOW_CONFIDENCE+FACT_NEEDS_REVIEW": 1,
+      "MODEL_REQUESTED_REVIEW+FACT_NEEDS_REVIEW": 164,
+      "MODEL_REQUESTED_REVIEW+LOW_CONFIDENCE+FACT_NEEDS_REVIEW": 32,
+      "MODEL_REQUESTED_REVIEW+MOST_IMPORTANT_CANDIDATE": 2,
+      "MODEL_REQUESTED_REVIEW+MOST_IMPORTANT_CANDIDATE+FACT_NEEDS_REVIEW": 12
+    },
+    "gateAfterSolByModel": {
+      "gpt-5.6-sol": 99,
+      "gpt-6-sol": 303
+    },
+    "gatedReasonWording": {
+      "total": 402,
+      "material": 44,
+      "mixed": 9,
+      "not_material": 147,
+      "unclear": 202
+    }
+  },
+  "generation": {
+    "failed": 196,
+    "byPrimaryCause": {
+      "year_missing": 81,
+      "hedge_unsupported": 19,
+      "voice": 26,
+      "identity": 36,
+      "numeric_other": 12,
+      "approval_state": 4,
+      "api": 2,
+      "factual_detail": 5,
+      "other": 1,
+      "omission": 6,
+      "rounding": 4
+    },
+    "anyCause": {
+      "year_missing": 81,
+      "hedge_unsupported": 36,
+      "omission": 19,
+      "source_url": 3,
+      "voice": 26,
+      "identity": 37,
+      "numeric_other": 19,
+      "factual_detail": 18,
+      "approval_state": 4,
+      "api": 2,
+      "other": 1,
+      "rounding": 4
+    },
+    "byPeriod": {
+      "A 09-10..09-18": {
+        "year_missing": 63,
+        "hedge_unsupported": 11,
+        "voice": 8,
+        "identity": 21,
+        "numeric_other": 2,
+        "approval_state": 1,
+        "api": 1
+      },
+      "B 09-19..10-02": {
+        "voice": 10,
+        "year_missing": 16,
+        "identity": 11,
+        "api": 1,
+        "hedge_unsupported": 6,
+        "approval_state": 1,
+        "numeric_other": 2,
+        "factual_detail": 1,
+        "other": 1,
+        "omission": 1
+      },
+      "C 10-03..10-09": {
+        "factual_detail": 4,
+        "numeric_other": 8,
+        "identity": 4,
+        "approval_state": 2,
+        "omission": 5,
+        "rounding": 4,
+        "voice": 8,
+        "year_missing": 2,
+        "hedge_unsupported": 2
+      }
+    },
+    "byStage": {
+      "api": 2,
+      "fact": 168,
+      "local": 1,
+      "voice": 25
+    },
+    "pr116Outlook": {
+      "expected_to_improve": 7,
+      "not_addressed": 167,
+      "partly": 22
+    },
+    "pr116OutlookBySource": {
+      "tdnet": {
+        "not_addressed": 136,
+        "partly": 22,
+        "expected_to_improve": 7
+      },
+      "market_macro": {
+        "not_addressed": 6
+      },
+      "breaking_market": {
+        "not_addressed": 1
+      },
+      "al_jazeera": {
+        "not_addressed": 17
+      },
+      "bbc_world": {
+        "not_addressed": 7
+      }
+    },
+    "bySource": {
+      "al_jazeera": 17,
+      "bbc_world": 7,
+      "breaking_market": 1,
+      "market_macro": 6,
+      "tdnet": 165
+    }
+  },
+  "failureRates": [
+    {
+      "name": "A all important+ in window",
+      "window": "2026-09-10..2026-10-09",
+      "rule": "importance <> no_post; every status; duplicates kept",
+      "numerator": 196,
+      "denominator": 405,
+      "rate": 0.484
+    },
+    {
+      "name": "B published + failed only",
+      "window": "2026-09-10..2026-10-09",
+      "rule": "importance <> no_post; status in (published, generation_failed)",
+      "numerator": 196,
+      "denominator": 404,
+      "rate": 0.485
+    },
+    {
+      "name": "C duplicates removed",
+      "window": "2026-09-10..2026-10-09",
+      "rule": "importance <> no_post; duplicate_of is null",
+      "numerator": 196,
+      "denominator": 405,
+      "rate": 0.484
+    },
+    {
+      "name": "D evaluation cases removed (Phase 4)",
+      "window": "2026-09-10..2026-10-09",
+      "rule": "importance <> no_post; the 212 evaluation cases removed",
+      "numerator": 155,
+      "denominator": 329,
+      "rate": 0.471
+    },
+    {
+      "name": "E all judged, no_post included",
+      "window": "2026-09-10..2026-10-09",
+      "rule": "denominator is every AI-judged candidate",
+      "numerator": 196,
+      "denominator": 2213,
+      "rate": 0.089
+    },
+    {
+      "name": "F last 7 days, important+",
+      "window": "2026-10-03..2026-10-09",
+      "rule": "as A, last 7 created days",
+      "numerator": 39,
+      "denominator": 169,
+      "rate": 0.231
+    },
+    {
+      "name": "G last 7 days, TDnet",
+      "window": "2026-10-03..2026-10-09",
+      "rule": "as F, source_type = tdnet",
+      "numerator": 28,
+      "denominator": 115,
+      "rate": 0.243
+    },
+    {
+      "name": "H last 7 days, not TDnet",
+      "window": "2026-10-03..2026-10-09",
+      "rule": "as F, source_type <> tdnet",
+      "numerator": 11,
+      "denominator": 54,
+      "rate": 0.204
+    },
+    {
+      "name": "I last 7 days, all judged",
+      "window": "2026-10-03..2026-10-09",
+      "rule": "as E, last 7 created days",
+      "numerator": 39,
+      "denominator": 858,
+      "rate": 0.045
+    },
+    {
+      "name": "J last 3 days, important+",
+      "window": "2026-10-07..2026-10-09",
+      "rule": "as A, last 3 created days",
+      "numerator": 28,
+      "denominator": 133,
+      "rate": 0.211
+    }
+  ],
+  "channels": {
+    "importantPlusAll": {
+      "candidates": 405,
+      "events": 388,
+      "x": {
+        "candidates": 208,
+        "events": 205
+      },
+      "appListed": {
+        "candidates": 349,
+        "events": 340
+      },
+      "appText": {
+        "candidates": 249,
+        "events": 245
+      },
+      "pushable": {
+        "candidates": 235,
+        "events": 231
+      },
+      "notified": {
+        "candidates": 94,
+        "events": 93
+      },
+      "none": {
+        "candidates": 45,
+        "events": 37
+      },
+      "xOnly": 11,
+      "appOnly": 152,
+      "severityUnknown": 56
+    },
+    "importantPlusFailedOnX": {
+      "candidates": 196,
+      "events": 184,
+      "x": {
+        "candidates": 0,
+        "events": 0
+      },
+      "appListed": {
+        "candidates": 152,
+        "events": 148
+      },
+      "appText": {
+        "candidates": 40,
+        "events": 40
+      },
+      "pushable": {
+        "candidates": 38,
+        "events": 38
+      },
+      "notified": {
+        "candidates": 24,
+        "events": 24
+      },
+      "none": {
+        "candidates": 44,
+        "events": 36
+      },
+      "xOnly": 0,
+      "appOnly": 152,
+      "severityUnknown": 44
+    },
+    "importantPlusLast7Days": {
+      "candidates": 169,
+      "events": 165,
+      "x": {
+        "candidates": 130,
+        "events": 127
+      },
+      "appListed": {
+        "candidates": 169,
+        "events": 165
+      },
+      "appText": {
+        "candidates": 146,
+        "events": 142
+      },
+      "pushable": {
+        "candidates": 146,
+        "events": 142
+      },
+      "notified": {
+        "candidates": 52,
+        "events": 51
+      },
+      "none": {
+        "candidates": 0,
+        "events": 0
+      },
+      "xOnly": 0,
+      "appOnly": 39,
+      "severityUnknown": 0
+    },
+    "importantPlusLast7DaysFailed": {
+      "candidates": 39,
+      "events": 39,
+      "x": {
+        "candidates": 0,
+        "events": 0
+      },
+      "appListed": {
+        "candidates": 39,
+        "events": 39
+      },
+      "appText": {
+        "candidates": 16,
+        "events": 16
+      },
+      "pushable": {
+        "candidates": 16,
+        "events": 16
+      },
+      "notified": {
+        "candidates": 10,
+        "events": 10
+      },
+      "none": {
+        "candidates": 0,
+        "events": 0
+      },
+      "xOnly": 0,
+      "appOnly": 39,
+      "severityUnknown": 0
+    },
+    "noPostSeverityMediumOrHigher": {
+      "candidates": 596,
+      "events": 553,
+      "x": {
+        "candidates": 0,
+        "events": 0
+      },
+      "appListed": {
+        "candidates": 577,
+        "events": 534
+      },
+      "appText": {
+        "candidates": 6,
+        "events": 6
+      },
+      "pushable": {
+        "candidates": 6,
+        "events": 6
+      },
+      "notified": {
+        "candidates": 6,
+        "events": 6
+      },
+      "none": {
+        "candidates": 13,
+        "events": 13
+      },
+      "xOnly": 0,
+      "appOnly": 577,
+      "severityUnknown": 0
+    }
+  },
+  "ingestion": {
+    "earningsReports": {
+      "operatingCompanyReports": 211,
+      "excludedFundsAndReits": 18,
+      "byCurrentRowStatus": {
+        "current_row_present": 15,
+        "no_table": 47,
+        "prior_period_only": 128,
+        "unclear": 21
+      },
+      "priorPeriodOnlyShareOfDeterminable": 0.895,
+      "priorPeriodOnlyByOutcome": {
+        "generation_failed": 16,
+        "no_post_gated": 34,
+        "no_post_model": 62,
+        "published": 16
+      }
+    },
+    "emptyBodiesByHost": [
+      {
+        "candidates": 1628,
+        "empty_body": 16,
+        "gate_suppressed": 198,
+        "host": "www.release.tdnet.info",
+        "important_plus": 296,
+        "source_name": "tdnet",
+        "title_only": 29
+      },
+      {
+        "candidates": 293,
+        "empty_body": 0,
+        "gate_suppressed": 148,
+        "host": "www.aljazeera.com",
+        "important_plus": 62,
+        "source_name": "al_jazeera",
+        "title_only": 0
+      },
+      {
+        "candidates": 71,
+        "empty_body": 71,
+        "gate_suppressed": 33,
+        "host": "www.boj.or.jp",
+        "important_plus": 0,
+        "source_name": "market_macro",
+        "title_only": 0
+      },
+      {
+        "candidates": 69,
+        "empty_body": 0,
+        "gate_suppressed": 11,
+        "host": "www.bbc.co.uk",
+        "important_plus": 22,
+        "source_name": "bbc_world",
+        "title_only": 0
+      },
+      {
+        "candidates": 67,
+        "empty_body": 0,
+        "gate_suppressed": 2,
+        "host": "news.un.org",
+        "important_plus": 9,
+        "source_name": "market_macro",
+        "title_only": 0
+      },
+      {
+        "candidates": 25,
+        "empty_body": 0,
+        "gate_suppressed": 4,
+        "host": "apnews.com",
+        "important_plus": 10,
+        "source_name": "breaking_market",
+        "title_only": 0
+      },
+      {
+        "candidates": 23,
+        "empty_body": 0,
+        "gate_suppressed": 2,
+        "host": "ustr.gov",
+        "important_plus": 3,
+        "source_name": "market_macro",
+        "title_only": 0
+      },
+      {
+        "candidates": 19,
+        "empty_body": 0,
+        "gate_suppressed": 3,
+        "host": "www.federalreserve.gov",
+        "important_plus": 0,
+        "source_name": "market_macro",
+        "title_only": 1
+      }
+    ]
+  },
+  "missCandidates": [
+    {
+      "id8": "bff661cc",
+      "source": "tdnet",
+      "severity": "medium",
+      "status": "rejected",
+      "x": false,
+      "appListed": true,
+      "appText": false,
+      "pushable": false,
+      "notified": false,
+      "sent": false,
+      "severityUnknown": false
+    },
+    {
+      "id8": "ca38bae4",
+      "source": "tdnet",
+      "severity": "medium",
+      "status": "rejected",
+      "x": false,
+      "appListed": true,
+      "appText": false,
+      "pushable": false,
+      "notified": false,
+      "sent": false,
+      "severityUnknown": false
+    },
+    {
+      "id8": "8648e274",
+      "source": "tdnet",
+      "severity": "medium",
+      "status": "rejected",
+      "x": false,
+      "appListed": true,
+      "appText": false,
+      "pushable": false,
+      "notified": false,
+      "sent": false,
+      "severityUnknown": false
+    },
+    {
+      "id8": "0720532f",
+      "source": "market_macro",
+      "severity": "low",
+      "status": "rejected",
+      "x": false,
+      "appListed": false,
+      "appText": false,
+      "pushable": false,
+      "notified": false,
+      "sent": false,
+      "severityUnknown": false
+    },
+    {
+      "id8": "a989d1f3",
+      "source": "market_macro",
+      "severity": "medium",
+      "status": "rejected",
+      "x": false,
+      "appListed": false,
+      "appText": false,
+      "pushable": false,
+      "notified": false,
+      "sent": false,
+      "severityUnknown": false
+    }
+  ]
+}
