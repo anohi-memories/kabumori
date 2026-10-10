@@ -1,3 +1,78 @@
+# Codex H2 — CURRENT TASK — PR112 bounded independent R1L/R2 final security rereview
+
+- task_id: common-account-pr112-r1l-r2-apple-boundary-exact-head-rereview-20261010
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- priority: critical
+- type: independently verify previously reproduced P1 residuals, exact-head source review
+- target_pr: 112
+- target_head: 54b9435b0dcc0d0e79ae6eba4340eee44508141c
+- previous_reviewed_head: b60272c433b57bac1acb00c13d4fda7ff96f1f2f
+- return_to: 共通アカウントG5のちゃ
+- completion_code: C2
+- recommended_model: **Sol（極高）**
+- production_access_allowed: false
+- production_mutation_allowed: false
+- source_edits_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+- EAS_allowed: false
+
+## Mission and boundaries
+
+The preceding H2 review at `b60272c` found two **reproduced P1 residuals** despite passing baseline tests. G5 reports both corrected on exact PR112 head `54b9435b0dcc0d0e79ae6eba4340eee44508141c`. Independently decide whether that source **with the whole-account managed Auth delete release gate fixed at blocked** is safe to consider merging. A source merge is **NOT** feature activation, production approval, or merge permission. Whole shared-account Auth deletion remains BLOCKED until future Auth-side identity/write fencing, real disposable Supabase E2E and separately approved rollout. DO NOT turn the gate on. Keep previous R3/R4/C1/security accepted behavior in the regression set.
+
+Read `.agent/CODEX_REPORT_2.md` at the top for exact previous H2 evidence:
+- R1 marker `H2_R1_LEGACY_UNOWNED_APPLE_CHECKPOINT_BYPASS`: Phase1 unowned record/clear checkpoint and prepare remained directly callable by service_role while lease expired, allowing forged Apple checkpoint during external in-flight.
+- R2 marker `H2_R2_ADAPTER_AMBIGUOUS_502_CLEARED_AND_REPLAYED`: actual reused Apple helper returned false after revocation + ambiguous 502, cleared durable intent, then retried a consumed one-time code (exchange calls=2).
+- Minor lint: `lifecycle_logic.ts` prior recordStorage wrapper require-await.
+
+This rereview is **bounded** to those reproduced defects and their regression/compatibility boundary, not another expansive re-opening of Phase1–3 architecture without concrete new evidence.
+
+## Isolation / freshness / shared ownership
+
+1. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, `.agent/ACTIVE_TASK.md`, this H2 TASK+previous report, latest `.agent/tasks/CLAUDE_TASK_5.md` Report and common-account Phase1/2/3a docs.
+2. Fresh `origin/main` plus PR112 head **exact** `54b9435b0dcc0d0e79ae6eba4340eee44508141c`, OPEN/UNMERGED, **30** PR files. Prior vs new `b60272c`: 1 commit / 16 modified/new G5-only paths. At K5 main is 58 commits ahead of PR base with 0 changed-file overlap; independently refresh and verify merge-tree, true changed-file overlap, CI state and relevant other PRs before verdict. If target head changes STOP, no silent retargeting.
+3. Use independent H2 worktree based on fresh `/Users/yuya/Developer/kabumori-fresh`; never share worktree, branch or dev server, change anyone else's uncommitted data, or reset/checkout another slot's branch. H1 POSTONA PR106 is assigned/occupied, G2 PR110 waits for a review slot, G3 PR114 separate. G5 source PR112 must not be modified by H2. Preserve all TASK/Report histories.
+
+## R1L P1 — legacy effective grants / checkpoint ownership (MUST PROVE)
+
+- Inspect Phase1 exact function signatures / source (historical applied migration for evidence ONLY):
+  `public.record_common_account_deletion_checkpoint(uuid,uuid,text)`,
+  `public.clear_common_account_deletion_checkpoint(uuid,uuid,text)`,
+  `public.prepare_common_account_auth_delete(uuid,uuid)`.
+- Inspect **unapplied Phase3a candidate only** `supabase/migrations/20261009120000_common_account_deletion_completion.sql`: preflight expected owner/ACL/other grants, explicit revoke, exact postconditions and catalog snapshot. Cross-check current Phase1/2 internal callsites and external service-role callers; default PUBLIC, role inheritance, SET ROLE, grant option, owner privileges and SECURITY DEFINER wrappers. Ensure old direct service-role/inherited credential cannot write or clear apple_revocation, mark other irreversible checkpoints, or prepare without current lease/fence. No unintended liveness regression for service-only withdrawal or authorized owned RPC.
+- Recreate **exact previous H2 disposable PostgreSQL R1 SQL counterexample** against new migration: Apple external_step in-flight, unexpired/expired/lost ownership, legacy record/clear/prepare invoked as service_role, inherited service_role, authenticated, inherited authenticated, anon, wrong subject/operation. All unauthorized/effective bypasses must fail atomically; owned correct path works and preserves requirement evidence. Test ACL drift/missing owner/grant-option/public grant, transaction rollback and full catalog diff; fail-closed on unknown baseline, no mutation before refusal. Verify **behavior before and after candidate** so test proves regression, not merely mock permission denial.
+- Check entire Phase1/2 behavioral compatibility (including Phase2 permission transitions) and whether new revoke unintentionally disables legitimate existing production integration. No production verification or edits.
+
+## R2 P1 — real Apple HTTP/wiring one-time uncertainty (MUST PROVE)
+
+- Inspect new **G5-owned** `supabase/functions/account-delete/apple_outcome.ts`, its test/wiring `http.ts`, `http_apple_test.ts`, `fake_apple.ts`, `fake_lifecycle.ts`, `lifecycle_logic.ts`. Confirm unchanged G4-shared `social-mobile-account-delete/apple_revoke.ts` remains untouched. Ensure real `createHandler` uses the new typed adapter in its actual dependency injection, not a test-only stub.
+- Independent test with ephemeral fake EC key, mocked HTTPS/no network, and consumed single-use code: token exchange accepted, Apple revoke applied, revoke HTTP returns 502/429/timeout/lost response => account-delete response `RECONCILIATION_REQUIRED` with in-flight intent intact, later retry (including after lease expiry) NEVER exchanges code again; no premature managed Auth deletion. Repeat prior exact `H2_R2_ADAPTER_AMBIGUOUS_502_CLEARED_AND_REPLAYED` and prove safety inverse (1 exchange, 1 revoke, delete=0).
+- Probe token exchange 400/401 OAuth error bodies and error classification (e.g. invalid_grant, invalid_client), 5xx, invalid/empty JSON, token accepted but wrong subject/missing ID token, revocation HTTP failures, thrown/AbortSignal timeout, status 2xx and non-2xx. A definitive_failed classification must have independent concrete evidence that the **token request was refused** and no consumed code could be replayed. Ambiguous token/revoke state always remains durable UNKNOWN, not settled false; strict fail-closed on unknown/out-of-range adapter response. Check no PII/secret/JWT/Apple credential logging or leakage and no real provider calls. Guard against security issue in JWT token-subject extraction/validation; report evidence.
+- Recheck previously accepted owner/lease/fencing, session/X, R3 immutable `blocked` Auth delete release gate, R4 repeated completed current residue check, C1 strict recent-reauth. Test-only DDL opening gate is not release authorization.
+
+## Tests / exact evidence / quality
+
+- Independently rerun G5-reported suites: account-delete **66**, app **430**, AuthProvider **23**, X saga **17**, X app **19** (sum **555** baseline), local isolated PostgreSQL Phase1 **20** / Phase2 / Phase3a ALL PASS; SQL mutations **48/48**, TS mutations **45/45** detection, unchanged controls, checks for effective EXECUTE/ACL and known residual safety probes. Interpret mutation/reproduced counterexample correctly: detecting a bug is not a safety PASS.
+- Independent security scratch/fake provider/DB only; use no provider network, no real project or account operations. Verify the specific old negative cases fail with an unsafe candidate and pass with new implementation. Check `deno check` account-delete, **strict `deno lint` on changed runtime** (never disable rules), scoped app TypeScript versus fresh-main known CSS baseline, `git diff --check`, source/CI artifacts, PR file overlap. If a test cannot run, state honestly.
+- Test migration preflight complete exact expected catalogs/grants and postconditions; SQL apply/rollback no persistent changes to disposable DB after transaction.
+- Previous production gaps must remain explicitly documented: whole-account Auth delete blocked pending identity-fence, legacy deployed bodyless hard-delete until separately approved replacement, X-only or Kabumori already ended, stale JWT/creators, real disposable Supabase/provider/Storage/Auth testing, Web deletion page, operator issuer/audit/reconciliation and native UI. Do NOT inflate phase3a source PASS into production approval.
+
+## Read-only review; finish reporting; no merge or deploy
+
+- Source changes by H2: **0**. No real Supabase/production access (read or write), Auth, Apple/X/Storage/Vault/OAuth/provider calls, migration apply, production DDL, Edge deploy, EAS/TestFlight, PR merge, secrets, Cron/settings or production data.
+- Completion to `.agent/CODEX_REPORT_2.md` and this H2 TASK **without deleting or reordering previous history**, record exact new head and fresh main, explicit PASS / CHANGES REQUIRED / BLOCKED, independently reproduced R1/R2, SQL/ACL proofs, regression suites, evidence, remaining gaps, files touched (H2 own control only), commit/push/readback, source merge vs feature activation vs production separate, next_owner, return_to and completion_code.
+- Mark H2 `review_required`, next_owner `chatgpt` after completing review. Protect other slots; update own H2 index status/next_owner only when safe; STOP. Tell user to return **C2 to 共通アカウントG5のちゃ**.
+
+推薦モデル：**Sol（極高）**
+
+---
+
+# Preserved historical H2 TASKs and completion records (no edits)
+
 # C2 — PR112 R1/R2 residual accepted / H2 closed — 2026-10-10
 
 - task_id: common-account-v1-phase3a-pr112-r1-r4-c1-final-rereview-20261010
