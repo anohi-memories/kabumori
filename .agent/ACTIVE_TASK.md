@@ -62,15 +62,15 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: none
-- status: done
-- task_id: kabumori-portfolio-asset-card-background-polish-20261008
+- status: ready
+- task_id: kabumori-watchlist-highlight-hybrid-ui-20261010
 - start_code: G1
 - finish_code: K1
+- next_owner: claude
+- return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS. PR #113 exact reviewed head bc54e91c7b72186fa03c35b7d3be157453651cb6 squash-merged as 28d9c61e6dc52fe71ee8bbcd3521b24ad7addc3e. Approved 1600x700 transparent botanical art at 0.45 opacity is behind the real asset-history sparkline, which is now up green/down red/flat grey, with thin segments and one endpoint. 375/402 Simulator review PASS, 433/433 app tests reported PASS; backend/DB/Auth/Edge/EAS/production mutation 0. G1 done/free.
-- recommended_model: Sonnet5（中）
-
+- allocation: User-approved hybrid watchlist within existing 銘柄 tab: [ポートフォリオ|ウォッチリスト] segmented switch, 0–3 evidence-based auto-highlight cards, remaining compact watch rows, no fake current data/news. CRITICAL: do not modify existing NativeTabs, their five labels/order/icons/style or tab routes; screenshot's bottom menu is not canonical. Source-only, PR without self-merge, DB/Auth/API/Edge/EAS/production 0. Independent G1 worktree and fresh main/open-PR overlap check mandatory at startup. return K1 to かぶモリアプリG1のちゃ.
+- recommended_model: Sonnet5（高）
 ## Claude G2
 - owner: claude
 - slot: claude-2
