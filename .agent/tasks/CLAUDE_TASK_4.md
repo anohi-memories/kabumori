@@ -3,8 +3,8 @@
 - task_id: postona-x-oauth-preclaim-containment-readiness-20261010
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: blocked
+- next_owner: codex-1
 - start_code: G4
 - finish_code: K4
 - return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
@@ -16,6 +16,9 @@
 - X_provider_or_real_token_calls_allowed: false
 - PR_merge_allowed: false
 - user_connection_disruption_allowed: false
+- blocked_reason: Opus5.5 cyber safeguard stops this session; user approved a narrowed defensive-only Codex H1 assessment; **do not resume G4 or treat this as task completion until C1**.
+- delegated_task: postona-g4-x-oauth-containment-defensive-assessment-20261010
+- return_trigger: C1 to POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 
 ## Context / precise risk
 
