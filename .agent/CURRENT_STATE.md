@@ -1,3 +1,9 @@
+## H2 ASSIGNED — final narrow G2 PR110 P2 Hard-Fact review — 2026-10-11 JST
+
+- After K2 PASS_CANDIDATE, fresh H1/H2 exact TASK/Report/index showed both previous reviews `done/next_owner none`; H2 previous G5 E11 C2 completed and historical security gate unchanged. H2 assigned NEW current TASK `kabumori-pr110-p2-final-narrow-review-20261011` status `ready`, recommended **Sol（高）**, `return_to=かぶモリアプリG2のちゃ`, completion `C2`.
+- Pin PR110 OPEN/UNMERGED exact head `2c876b0bafee31844b9854c4a7d34ba69660d4cf`. ONE narrow independent source-only proof of noun-が vs actual predicate/adjective fail-open on comma-free conjunction, and emoji/date binding. Previous accepted cases and all historical H2 TASK/Report protected. No full suite repetition absent evidence. H1 remains unallocated.
+- PR110 merge/Edge production deploy remains HOLD pending C2 and independent fresh affirmative merge gate. No live account/photo/X, paid API, migration, Secret, provider or production changes authorized.
+
 ## C2 G5 E11 security review CHANGES_REQUIRED; G5 Phase3e corrective READY — 2026-10-11 JST
 
 - H2 `common-account-phase3d-e11-optiond-disposable-security-review-20261010` current Report reviewed, outcome **CHANGES_REQUIRED**: **R1 P1 + R2–R5 P2**. Reviewer independently reported typed Deno 35/35, mutation 31/31 and targeted negative probes 3/3, no Supabase/GoTrue/Auth/provider remote calls, no real user/fake project deletion, no code/migration/Edge changes. C2 accepted findings, H2 prior TASK/Report preserved, H2 slot changed to **done / next_owner none**.
