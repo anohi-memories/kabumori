@@ -3,8 +3,8 @@
 - task_id: postona-x-autopost-production-readiness-20261010
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - project: POSTONA / X automatic posting and AI-consult confirmed settings
 - type: **source-only rollout-readiness and offline proof; NOT production activation**
@@ -73,6 +73,92 @@ Prepare a precise go/no-go matrix and next TASK proposal covering:
 - Report `task_id`, verdict `PREPARED_BLOCKED_ON_G5` or `BLOCKED` or `READY_FOR_GATED_ROLLOUT_REVIEW` (never `LIVE_PUBLISH_READY`), changed_files, test counts, branch, commit hash, push, PR, production reads/writes/deploy/posts (must be 0 mutations), remaining blockers, next owner-specific recommendations and safety checks.
 - Update **only current G3 TASK/Report** to `review_required` / `next_owner: chatgpt`; preserve ALL previous G3 tasks/Reports verbatim, and leave G4/G5/H1/H2/G1/G2 intact. Return `K3` to this G3 ChatGPT chat.
 - **Recommended model: Opus5.5（高）.** Extra H1/H2 review is not automatically needed for offline docs/tests; decide **Sol（高）** targeted integrated security review later when G5+G4 authority implementation is available and before production rollout.
+
+## Report — postona-x-autopost-production-readiness-20261010
+
+- verdict: **PREPARED_BLOCKED_ON_G5**
+  - Stage 3B のソース・順番・取り消し・権限は、ローカルで確認済み。
+  - 本番の前提（owner・インデックス・型・ロール）は、読み取りで一致した。
+  - 本番で有効にする前に、次が必要: G5 の利用権の確認（3 か所）、削除順の契約、T13 の書き込みガード、G4 の X の本人証明、POSTONA の予約を作る仕組み。
+- モデル: Opus 5.5（高）
+- worktree: 新しく作った `/Users/yuya/Developer/kabumori-g3-x-autopost-readiness`（kabumori-fresh の origin/main から）。前回の作業フォルダ、元の checkout、G4 / G5 のブランチには触れていない。
+- branch: `claude/g3-postona-x-autopost-readiness-20261010` / commit `4b027822` / push 済み
+- PR: https://github.com/anohi-memories/kabumori/pull/127 （**下書き**、merge しない）
+- changed_files（すべて新規。既存のファイル、PR #123 のファイル、migration、Edge は変更なし）:
+  - `docs/postona/x-autopost-stage3b-production-readiness-20261010.md`
+  - `supabase/tests/postona_x_autopost_readiness/run.sh`
+  - `supabase/tests/postona_x_autopost_readiness/readiness_behavior.sql`
+  - `supabase/tests/postona_x_autopost_readiness/prod_catalog.sh`
+  - `supabase/tests/postona_x_autopost_readiness/prod_catalog.sql`
+- 本番:
+  - 読み取り: 2026-10-10 に 1 回。ユーザーが `prod_catalog.sh --production-read-only` を実行した。
+    - 内容: カタログ（読み取り専用のトランザクション）、Edge 関数の一覧、本番の x-test-post のダウンロード照合、秘密情報の名前だけ。
+    - 利用者の内容・トークン・Cron の実行内容は読んでいない。
+  - 書き込み 0 / 適用 0 / 配備 0 / X への投稿 0 / 権限の変更 0 / 有料の AI 呼び出し 0 / merge 0 / EAS 0
+
+### 本番の現状（読み取り結果の要点）
+- Stage 3B（`20261006160000` / `160100` / `160200`）: **未適用**（関数・`x_account_publish_authority`・履歴のどれも無い）。
+- AI 相談の設定テーブル: 適用済み。行は 1 行で、`auto_post_preference` は 0。
+- Stage 3A: 関数と表あり。`x_account_refresh_rollout` は 1 行。
+- G5: `service_entitlements` / `common_accounts` / `private.account_lifecycle_*` / `start/reactivate_x_autopost_service` がある。T13（PR #121 の `20261010051938`）は未適用。
+- 前提:
+  - `scheduled_posts` / `social_accounts` / `brands` / `brand_settings` / 設定テーブルの owner は、どれも postgres（superuser ではない）
+  - 投稿済み記録に `(social_account_id, x_post_id)` の部分一意インデックスがある
+  - `brand_settings.enabled_post_types` は jsonb
+  - API ロールから postgres や service_role への経路は無い
+- 本番の x-test-post（v141）: **POSTONA 向けの汎用経路は入っていない。** main とは 4 ファイル違う（index.ts、brand_post_generator.ts、social_mobile_content_settings.ts、ai_lab_dev_diary_context.snapshot.ts）。
+- POSTONA のワークスペース:
+  - 2 件。live 0、X 接続 2（本人確認済み 1）、`publish_enabled` 0、brand_post 有効 0、予約 0
+  - brand_post の予約を作る DB 関数は無い（Cron の `dispatch-scheduled-posts` は、既にある予約を実行するだけ）
+
+### 見つかった抜け
+- **G5**:
+  1. `check_x_account_publish_authority` に、利用権（`x_autopost` が active）の確認が無い（R3、MOCK_ONLY）
+  2. `set_x_account_publish_authority('enabled')` にも無い（R3）
+  3. 予約の取得にも無い
+  4. 権限の表の外部キーが NO ACTION のため、`revoked` でも X アカウントを削除できない（R4）。本番では、ほかにも 4 つの表が同じく NO ACTION で参照している。
+  5. T13 は下書き・未適用
+  - G5 への 1 つにまとめた契約案を文書の §5 に書いた（3 か所で同じトランザクションの中で確認する + 削除順か外部キーのカスケードを決める）。
+- **G4**: 接続した X アカウントの本人証明と、ワークスペースの作り方（`identity_verified` を誰がどう付けるか）。G3 は実装していない。
+- **G3**（文書化のみ）:
+  - POSTONA の予約を作る仕組みが無い（scheduler は今回の禁止範囲）。
+  - 投稿権限の確認より前に、Vault の読み込みとトークン更新が走る（Stage 3A で制御されている）。
+  - x-test-post を配備すると、merge 済み・未配備の 4 ファイルが一緒に出るので、事前に変更の持ち主ごとの確認が必要。
+
+### AI 相談の記憶と同意
+- 相談は `approvalMode` を変えられない（アプリとサーバーの両方の許可リスト）。
+- 確認済みのペルソナ + `manual_review` は `SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED` になる（R1）。
+- 同意は、本人が設定画面で `auto_post_preference` を選ぶことだけ。取り消しは `manual_review` に戻す。運用側の許可は最長 30 日の期間で、`off` / `revoked` ですぐ止まる。
+- プレビューは文字数の上限なし（10/10 は 184 文字）。実際の投稿は 140 文字の上限・NG 語・重複の確認があるので、同じ文章にはならない。今は投稿の経路が本番に無いので、覚えた設定から自動で投稿が始まることはない。
+
+### テスト（ローカルで再実行したもの）
+- `postona_x_autopost_readiness/run.sh`（新規、使い捨ての PostgreSQL 17.11）: `POSTONA_X_AUTOPOST_READINESS_ALL_PASS`
+  - O1: 逆順の拒否
+  - A1〜A3: 3 本それぞれ、COMMIT 直前の失敗で全部取り消し
+  - R1、R2
+  - R3 / R4: 抜けの実証
+- 既存の `x_account_refresh_pilot_run.sh`: PILOT_BEHAVIOR / PUBLISH_AUTHORITY_BEHAVIOR / PUBLISH_SETTINGS_READER_BEHAVIOR / PILOT_RACE / PUBLISH_RACE / PILOT_CLEANUP の 6 項目 PASS
+- 既存の `x_account_stage3b_acl_adverse_run.sh`: STAGE3B_ACL_ADVERSE_PASS
+- Deno（`_shared/brand`、x-test-post、相談、プレビュー、migration の不変条件）: 808/808
+- `prod_catalog.sql` は、適用前と適用後の両方の模擬 DB で形を確認した（Cron の実行内容が出ないことも）。`prod_catalog.sh` は、フラグや出力先が無いと拒否することを確認した。
+- `git diff --check` クリーン、秘密情報スキャン 0。
+- 確認していないもの:
+  - G5 の利用権の本物の確認（無いため。R3 は MOCK_ONLY で、セキュリティの証拠には数えない）
+  - G4 の本人証明
+  - 本物の X / OpenAI
+
+### safety_checks
+- 本番は読み取りだけ（ユーザーが実行）。書き込み・適用・配備・投稿・権限の変更・Cron の変更は 0。
+- パスワードはその場で入力し、保存・表示していない。秘密情報は名前だけを見た。
+- ローカルの runner は `/tmp` のソケット以外を拒否する。本番の読み取りスクリプトは、`--production-read-only` を明示しないと動かない。
+- G4 / G5 / PR #123 / 既存の migration・Edge・x-test-post は変更していない。
+
+### next_recommendation
+1. **G5**: 文書 §5 の契約を実装する（利用権の確認を 3 か所に + 削除順か外部キーのカスケード）。T13 も含めて、本番に出す前の条件にする。
+2. **G4**: X の本人証明とワークスペースの作り方の候補。
+3. **G3**（その後）: G5 の確認を入れた置き換え用の migration と、3 本の適用 runner（スキーマ → 読み戻し → 履歴）。POSTONA の予約を作る仕組みの設計は、別の TASK で。
+4. G3 + G4 + G5 がそろったら、一度だけ独立レビュー（Sol 高）→ 本番への適用（別の承認）→ 限定パイロット（案は文書 §8、別の承認）。
+5. G5 の managed auth delete の公開ゲートは `blocked` のまま。
 
 ---
 

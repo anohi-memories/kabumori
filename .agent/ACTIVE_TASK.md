@@ -87,11 +87,11 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: postona-x-autopost-production-readiness-20261010
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: POSTONA G3のちゃ（AI相談V1本番接続担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
 - allocation: After accepted G3 AI-consult V1 K3 PASS, assign separate source-only Stage3B X autopost production readiness. Live DB lacks PR41's 20261006160000/160100/160200 migrations. G3 offline prerequisite/ACL/RLS/tenant test, publish-consent policy, G5 x_autopost entitlement gap and G4 X OAuth/T9 dependency matrix, migration rollout plan only. NEW independent G3 worktree. No production writes, actual X posts, publish enable, scheduler, OAuth/Edge deploy, EAS, PR merge or touching G4/G5/PR123. G5 draft T13/Auth/managed deletion remain blocked and require own separate approval. K3 after local proof; then decide G5 handoff/security review and independently approved real X pilot.
