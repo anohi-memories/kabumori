@@ -3,8 +3,8 @@
 - task_id: postona-ai-consult-pr114-session-epoch-corrective-20261009
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: user
 - priority: high
 - recommended_model: Sonnet5（高）
 - start_code: G3
@@ -168,6 +168,19 @@ Set status `review_required`, next_owner `chatgpt`; stop for **K3**. ChatGPT wil
 ### next_recommendation
 1. K3 で、新しい head `98d3cb72` に対して、セッションとテナントの境界に絞った独立レビューを 1 回（Sol（高）を推奨）。
 2. PASS したら PR #114 を merge。そのあとは前回の Report の本番手順（S0 → S6）に進む。各ステップの直前にユーザーの承認をもらう。
+
+
+## Final K3 acceptance / PR #114 source merge — 2026-10-10 JST
+
+- verdict: **PASS / source merge completed**. Per explicit user request, no further Codex/Claude review; user prioritizes saving 5h review capacity. The bounded epoch/ABA guard and tests were evaluated by ChatGPT directly.
+- exact accepted PR #114 head: `98d3cb727a967c2a921da6afee3faafa85cb9de6`; GitHub OPEN/CLEAN and Netlify/Vercel statuses SUCCESS before merge.
+- PR #114 squash merge: **SUCCESS**, merge commit `952db5b18e2a4464fb076ccfc32af31063a6bb7e`, read-back `merged=true`.
+- accepted source: consult.tsx workspace+epoch async checks, epoch-tagged same-session saved settings and fallback, consult-session reset, screen tests. G3 reports app 234/234, Edge 90/90, tsc/ESLint/diff/secret scan PASS, A→B→A 3 red-before/green-after scenarios and fallback mutation probe.
+- H1 and H2 remained occupied by independent existing tasks and were **not** overwritten.
+- source merge did not apply schema migration, deploy any Edge Function, build EAS, mutate production DB, invoke real OpenAI/X, create scheduled posts or publish X.
+- fresh read-only production S0 (2026-10-10 JST): `public.social_mobile_content_settings` absent, related `social_mobile_content_settings%` functions absent; both schema migration versions absent; `social-mobile-consult` Edge absent; `social-mobile-brand-dry-run` v16 ACTIVE `verify_jwt=true`. Existing `brand_memberships` and `brands` present; API role-membership paths from anon/authenticated/service_role = none.
+- G3 scope is closed after source merge. Next step is a separate production rollout gate, with explicit user approval before any live DB migration, RLS/grants/RPC mutation, Edge deploy, real AI smoke or EAS build.
+- AI Lab diary: 候補あり — AIとの相談機能を作り、利用先を素早く切り替えたときに以前の会話や設定が混ざらないよう見直した。保存ボタンの連打についてもテストした。
 
 ---
 
