@@ -1,0 +1,10 @@
+{
+  "schema": "kabumori.common-account.disposable-e2e.project-marker.v1",
+  "project_ref": "fakedisposableaaaaaa",
+  "project_name": "kabumori-disposable-proof-20261011-01",
+  "environment": "disposable",
+  "created_for_task": "common-account-phase3c-disposable-supabase-proof-readiness-20261010",
+  "contains_production_data": false,
+  "production_clone": false,
+  "expires_at": "2026-10-18T00:00:00+09:00"
+}
