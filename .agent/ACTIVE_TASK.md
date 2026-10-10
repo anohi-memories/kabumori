@@ -63,14 +63,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-watchlist-highlight-hybrid-ui-20261010
+- status: ready
+- task_id: kabumori-watchlist-real-data-simulator-qa-20261010
 - start_code: G1
 - finish_code: K1
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS and protected expected-head-SHA squash MERGED PR #120 exact approved head 7bf19faf9cf7e7c67fbab987e4f57188518e77d0 as main merge commit 53678a2f1fe5e01ecde4e9988abcbd0ed573da66 (GitHub PR closed/merged=true and main read-back verified). Hybrid watchlist / 2-segment 銘柄 switch, 0-3 featured and correct remainder count; 457/457 app tests reported by Claude; 375/402pt Simulator screenshots source reviewed; original bottom 5 NativeTabs never modified. No EAS/DB/Edge/manual deploy. G1 current task closed and slot is free only after new fresh-state/worktree check; other tasks/PRs protected.
+- allocation: READ-ONLY/QA-ONLY follow-up to merged PR #120. Use new G1 independent fresh-main worktree and dedicated non-colliding iOS Simulator/dev server; inspect approved [ポートフォリオ|ウォッチリスト] UI against genuine user-scoped saved reports/tracked_stocks ONLY if an already authorized Simulator session safely exists. Do not request/use/extract user credentials or dump private portfolio/watch screenshots to GitHub; if auth missing or environment unavailable, stop with clear user-assisted blocker. Inspect native bottom five menu unchanged, saved basis/date, feature cards, remaining counts, safe area/navigation, no user record mutations. EAS=0, code changes=0, production writes=0, deploy=0; no PR/merge. Return K1 with anonymized QA Report.
 - recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
