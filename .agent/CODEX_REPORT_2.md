@@ -1,3 +1,124 @@
+# H2 — PR #110 B1-R1/B2-R1/B3-R1 final exact-head review — 2026-10-10 JST
+
+- task_id: kabumori-market-report-pr110-b1r1-b2r1-b3r1-final-review-20261010
+- result / verdict: **CHANGES_REQUIRED** — all seven prior residual cases CLOSED; one independently reproduced **P2 B3 normal-subject false-positive regression** remains within this TASK's explicit normal-control requirement. No new unsafe delivery bypass was found.
+- status: review_required
+- next_owner: chatgpt
+- return_to: かぶモリアプリG2のちゃ
+- completion_code: C2
+- recommended_model: Sol（高）
+- PR: https://github.com/anohi-memories/kabumori/pull/110
+- exact_reviewed_head: `cb3d77d50e848d043f5427df363769b75d3c7764`
+- previous_head_negative_control: `d56b1a9ba8a4d8e1d1e2ee3ecbe87da26e5358e8`
+- fresh_main: startup `8a07934148c3a018615c6d3b22ddf33e068f402a`; isolated fetch `8ca9d494`; verdict preflight `e2d93b93174a7ac400913fe6aa8652e292507f5c`.
+- freshness: direct fresh main + PR110 fetch before start and verdict; GitHub read-back OPEN/UNMERGED and pinned head unchanged, 27 PR paths. PR metadata base.sha is `25dc6a3a`, while actual main/PR merge-base is `07f08019e30ebc45804fe75d5985ae52669a8ef8`; use true merge-base/API files for overlap, NOT direct base-tip diff which adds other-slot control changes.
+- collision_check: API 27 PR paths vs main changed paths since true merge-base: **0 overlap**. Local merge-tree returned clean tree `a8abdab275d796dfd5d256ac3767e338b37fcf59` / exit 0. GitHub mergeable=null/unknown, so do not claim GitHub merge gate green. Latest commit statuses: Netlify preview success; Vercel failure. Failure cause not investigated outside this bounded review.
+- isolation: `/private/tmp/h2-pr110-final-20261010.2PFH60/review`, detached exact head; `previous/`, detached negative-control head in this own clone. Both tracked checkouts clean. Formal base stays main with pre-existing `?? supabase/.temp/` untouched. No old/other worktree, branch, server or uncommitted data operated.
+- changed_files_by_H2: own `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md`, H2-only status/next_owner fields of `.agent/ACTIVE_TASK.md`. **Product source changes 0**.
+- corrective_source_diff_reviewed: only `analysis_logic.ts`, `hard_fact_guards.ts`, `h2_corrective_test.ts` since previous head. No corrective Auth/DB/migration/UI/provider/POSTONA contamination; shared X consumer unchanged by residual corrective.
+- implementation_commit: none by H2 (source review only).
+- publication_preflight_main: `e3e0a1a2bcb1dedd8e1b0482005b0c5a1ee09d02`; pinned PR head and H2 ready/codex reconfirmed immediately before CAS synchronization.
+- control_sync: pending read-back; no source/PR branch push, merge or deploy.
+
+## Closed prior residuals / preserved accepted behavior
+
+1. **B1-R1 CLOSED:** exact two-unit contradiction ending 「調査なし。」 and three-unit version ending 「問題なし。」 are completely removed from both X/app. Full quote coverage is required; incomplete/unmapped/standalone short quote makes candidate undeliverable with FACT_OBJECTIVE_UNMAPPED and no fifth model call. Two-unit partial-edge overlap controls also safe. No objective quote specificity weakening.
+2. **B2-R1 CLOSED:** all three old date/subject/consecutive-emoji wrong-date shapes removed, plus adjacent inline emoji variations. Legitimate completed sentence + emoji + separate US-date statement preserved. All three real 10/7 generated fixtures remain local hard 0 / removed 0.
+3. **B3-R1 original three CLOSED:** comma-free が / けれど / ので no longer launders later unrelated hedge. Expanded 10-conjunction delivery matrix (が, けれど, けれども, けど, ので, ため, ものの, 一方, ただし, しかし) rejects/removes unsupported definite cause. Genuine 「ウクライナ情勢が重しとなった可能性」 and 「一方的に…可能性」 controls survive.
+4. **B4 still CLOSED:** independently mocked publishSharedMarketReport writes passed→passed, advisory→failed, not_run→NULL, truthful notes and market_data; invalid-format posts 0, valid state posts one mocked callback. No real DB or X use.
+5. MAX_GENERATIONS=2 / MAX_MODEL_CALLS=4 preserved. Transport source byte-unchanged from previous head; defaults 2 extra attempts per call, total retry budget3, wait30s, Retry-After cap20s. Independent probes assert <=4 business calls, <=2 generations; transport tests pass. No paid calls.
+6. Existing TOPIX/1306, coherent remainder, unit removal/revalidation, advisory policy, fixed disclaimer once on X/app and Premium limits remain passing. Do not reopen unrelated accepted work.
+
+## Remaining finding: [P2] subject-particle が after a noun ending い is mistaken for a clause boundary
+
+- Location: `supabase/functions/market-report-analysis/analysis_logic.ts:623–642`, specifically regex `(?<=(?:[たすだんるい]))(?:が|...)` at line624.
+- Exact reproducible normal speculative sentence:
+  **「ウクライナ情勢の影響で売りの勢いが強まって東京市場は下落した可能性があります。」**
+- 「勢いが」 is noun + SUBJECT が, not a concessive connection. Yet suffix-only predicate test sees い and splits there. clauseOf truncates the cause-containing clause before the actual 「可能性があります」 qualifier; causalVerdict becomes assertive.
+- Same local fixture/mocked full generation, no live API:
+  - previous d56b1: speculative, sanitizer removed=[], final X contains sentence, ok=true, model calls2;
+  - new cb3d77: assertive, UNSUPPORTED_CAUSALITY removed at x_post.context_ja#3 in both candidates, final X loses sentence, ok=true, model calls3.
+- Two failed independent assertions below are **one defect**, tested both as local classification and actual generated delivery. This is conservative content suppression / extra business regeneration, **not delivery of a factual contradiction**, not actual extra paid calls in this review.
+- G2 self-report already named noun-ending heuristics as a risk; independent proof now shows a concrete regression violating current TASK's “subject-particle が ... not incorrectly split” requirement. Baseline tests only cover noun ending 勢, not 勢い.
+- Minimal requested G2 correction: refine grammatical-boundary predicate identification for が (and analogous suffix-only conjunction matches) rather than treating every preceding い/る/etc as a predicate. Preserve truly concessive 「下落しましたが…」 and all no-comma rejection controls. Add this noun-subject normal control; do not broadly disable the safety check, lower Fact criteria or add model calls.
+- H2 did not implement the correction (TASK explicitly prohibits product edits). Merge/deploy HOLD pending C2 judgment of this bounded P2 and any separate merge checks.
+
+## Independently executed tests
+
+| Suite | Result |
+| --- | --- |
+| market-report-analysis full exact-head | **260/260 PASS** |
+| _shared + shared X consumer | **476/476 PASS** (466+10) |
+| tests/app | **430/430 PASS** |
+| personalized-reports + market-report-data-packet | **171/171 PASS** (129+42) |
+| unique baseline total | **1,337/1,337 PASS** |
+| focused corrective + delivery_first + app disclaimer (overlaps total) | **41/41 PASS** (18+19+4) |
+| old Report's exact same independent 17-case harness, previous head | 10 PASS / **7 expected failures** |
+| same 17-case harness, new head | **17/17 PASS** |
+| additional boundary/control harness, previous head | 6 PASS / 4 expected old failures; subject-particle local+delivery controls both PASS |
+| same additional harness, new head | 8 PASS / **2 FAIL (one P2 defect above)** |
+| Deno check analysis/hard guards/sanitizer/X consumer | PASS, 4 files |
+| strict Deno lint 3 corrective files | PASS |
+| full actual PR merge-base diff check / own tracked status | PASS / clean |
+
+Baseline suites are H2 reruns, not repetitions of G2's self-report. A passing standard suite does not erase the independently failing normal control. Package/native/EAS/Simulator/build and production schema/provider verification not run; unrelated to this bounded source review.
+
+## Reproduction and C2-readable evidence
+
+All Deno commands are without --allow-net. Requester/post callbacks are local mocks.
+Scratch logs and harness files in `/private/tmp/h2-pr110-final-20261010.2PFH60/`.
+The older 17-case harness is already preserved verbatim under previous 2026-10-08 Report below; same bytes were extracted and run against both heads.
+
+Commands from review/:
+```sh
+deno test --no-config --no-check --allow-read --allow-env supabase/functions/market-report-analysis
+deno test --no-config --no-check --allow-read --allow-env --allow-run=node supabase/functions/_shared supabase/functions/x-test-post/shared_market_report_consumer_test.ts
+deno test --no-config --no-check --allow-read --allow-env tests/app
+deno test --no-config --no-check --allow-read --allow-env supabase/functions/personalized-reports supabase/functions/market-report-data-packet
+deno test --no-config --no-check --allow-read --allow-env supabase/functions/market-report-analysis/h2_corrective_test.ts supabase/functions/market-report-analysis/delivery_first_test.ts tests/app/report-disclaimer_test.ts
+deno test --no-config --no-check --allow-read ../independent_review_test.ts -- previous
+deno test --no-config --no-check --allow-read ../independent_review_test.ts -- review
+deno test --no-config --no-check --allow-read ../boundary_controls_test.ts -- previous
+deno test --no-config --no-check --allow-read ../boundary_controls_test.ts -- review
+```
+
+<details>
+<summary>Additional independent 10-test control harness (two failures identify one subject-particle regression)</summary>
+
+```typescript
+import assert from "node:assert/strict";
+const tree=Deno.args[0]??"review";
+const mod=(p:string)=>new URL("./"+tree+"/"+p,import.meta.url).href;
+const {generateSharedAnalysis,localAnalysisCheck,parseGeneratedAnalysis,unitChecker,codeFallbacks}=await import(mod("supabase/functions/market-report-analysis/analysis_logic.ts"));
+const {sanitizeAnalysis,splitUnits}=await import(mod("supabase/functions/market-report-analysis/unit_sanitizer.ts"));
+const {inputOf,loadFixture}=await import(mod("supabase/functions/market-report-analysis/test_support.ts"));
+const {formatSharedXPost}=await import(mod("supabase/functions/_shared/market_report_packet.ts"));
+const input=inputOf(await loadFixture("close_2026-10-07"));
+const gs=JSON.parse(await Deno.readTextFile(new URL(mod("supabase/functions/market-report-analysis/fixtures/close_2026-10-07_generations.json"))));
+const good=()=>parseGeneratedAnalysis(structuredClone(gs.find((g:any)=>g.attempt===2).candidate))!;
+async function run(a:any,quote?:string){let calls=0;const o=await generateSharedAnalysis(input,async(step:string)=>{calls++;return {payload:structuredClone(step==="generate"?a:{passed:!quote,issues:quote?["input contradiction"]:[],objective_issues:quote?[{quote_ja:quote,reason_ja:"input contradiction"}]:[]}),inputTokens:1,outputTokens:1};},()=>new Date("2026-10-07T07:20:00Z"));assert.ok(calls<=4);return {o,calls};}
+function verdict(s:string){const a=good();a.x_post.context_ja=s;const c=localAnalysisCheck(a,input);return c.hard.some((s:string)=>s.includes("根拠の無い因果の断定"))?"assertive":c.warnings.some((s:string)=>s.startsWith("SPECULATIVE_CAUSALITY"))?"speculative":"none";}
+Deno.test("B1 three-unit objective span removes all tails",async()=>{const a=good(),s="公正取引委員会はサッポロビールへの調査を実施していません。調査なし。問題なし。";a.x_post.news_ja=s;a.app_story.news_ja=s;const {o}=await run(a,s);assert.ok(o.ok);for(const t of ["調査なし","問題なし","実施していません"])assert.ok(!JSON.stringify(o.packet).includes(t));});
+Deno.test("B1 incomplete three-unit objective span is undeliverable",async()=>{const a=good(),s="公正取引委員会はサッポロビールへの調査を実施していません。調査なし。";a.x_post.news_ja=s;a.app_story.news_ja=s;const {o,calls}=await run(a,s+"業績の影響はありません。");assert.equal(o.ok,false);assert.equal(calls,4);});
+Deno.test("B1 quote overlapping two long units removes both",async()=>{const a=good(),s="公正取引委員会はサッポロビールへの調査を実施していません。サッポロビールは無関係だと確認されました。";a.x_post.news_ja=s;a.app_story.news_ja=s;const {o}=await run(a,"サッポロビールへの調査を実施していません。サッポロビールは無関係");assert.ok(!o.ok||!JSON.stringify(o.packet).includes("無関係"));});
+Deno.test("B2 adjacent inline emoji preserves the wrong-date span",async()=>{for(const s of ["10月6日📉📉 日経平均は70,035.71でした。","10月6日の日経平均は📉📉 70,035.71でした。","10月6日の📉 📉 日経平均は70,035.71でした。"]){assert.equal(splitUnits(s).length,1);const a=good();a.x_post.context_ja=s+a.x_post.context_ja;const {o}=await run(a);assert.ok(!o.ok||!formatSharedXPost(o.packet).includes(s));}});
+Deno.test("B3 complete no-comma conjunction matrix drops unqualified cause",async()=>{for(const sep of ["が","けれど","けれども","けど","ので","ため","ものの","一方","ただし","しかし"]){const s="ウクライナ情勢を受けて東京市場は下落しました"+sep+"今後の動きには不確実な可能性があります。";assert.equal(verdict(s),"assertive",sep);const a=good();a.x_post.context_ja=s+a.x_post.context_ja;const {o}=await run(a);assert.ok(!o.ok||!formatSharedXPost(o.packet).includes(s));}});
+for(const s of ["ウクライナ情勢が重しとなった可能性があります。","ウクライナ情勢が重しとなった可能性があるので続報を確認します。","ウクライナ情勢の影響で一方的に下落した可能性があります。","ウクライナ情勢の影響で売りの勢いが強まって東京市場は下落した可能性があります。"]){Deno.test("B3 genuine speculation control: "+s,()=>{const a=good();a.x_post.context_ja=s;const r=sanitizeAnalysis(a,input,(k:any)=>unitChecker(input,k),codeFallbacks(input));console.log(JSON.stringify({sentence:s,verdict:verdict(s),removed:r.removed}));assert.equal(verdict(s),"speculative");assert.ok(r.analysis.x_post.context_ja.includes(s));});}
+ Deno.test("B3 subject-particle regression reaches generated delivery",async()=>{const a=good(),s="ウクライナ情勢の影響で売りの勢いが強まって東京市場は下落した可能性があります。";a.x_post.context_ja+=s;const {o,calls}=await run(a);assert.ok(o.ok);const present=formatSharedXPost(o.packet).includes(s);console.log(JSON.stringify({probe:"H2_B3_SUBJECT_GA_REGRESSION",ok:o.ok,present,calls,removed:o.trace.records.map((r:any)=>r.removedUnits)}));assert.ok(present,"Genuine speculative statement is removed after mistaking subject-particle が for a clause boundary");});
+```
+</details>
+
+## Safety / next recommendation
+
+- source/code changes0; PR source push0; merge0; deploy0; production access/query/write0; Supabase schema/migration/RLS/RPC0; OpenAI/X/Push/provider real API0; X posts0; Cron/settings/secrets/Auth/OAuth/Vault/EAS0.
+- H1, G1–G5 TASK/Report/source, apps/admin, HANDOFF, AI Lab, POSTONA and existing uncommitted data unchanged by H2. Concurrent main updates by other owners are not H2 changes.
+- Historical Report/TASK entire suffix preserved byte-for-byte; own H2 control state only updated by CAS and read-back.
+- remaining_issues: one P2 noun-subject false-positive, GitHub Vercel status failure not investigated / mergeable unknown; separate production schema/native/provider proof outside scope.
+- next_recommendation: return **C2 to かぶモリアプリG2のちゃ**, request only the bounded B3 subject-particle corrective (**Opus5.5（高）**) and focused normal/unsafe control proof. If corrected, one narrow exact-head review (**Sol（高）**); no new broad review. PASS later is not merge/deploy permission.
+- status: review_required / next_owner: chatgpt. STOP for C2.
+
+---
+
 # H2 independent bounded security rereview — PR112 R1L/R2 — PASS (source only, release gate BLOCKED)
 
 - task_id: common-account-pr112-r1l-r2-apple-boundary-exact-head-rereview-20261010
