@@ -75,13 +75,13 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: PR110 の C2 差し戻し（P2 1件）を ready で割当（同じ task_id）。head cb3d77d50e848d043f5427df363769b75d3c7764 で、名詞＋主語の「が」（「勢いが」）を節の区切りと誤認する問題だけを直す（H2 の C2 は CHANGES_REQUIRED、前回の7ケースは解消済み）。正本は .agent/tasks/CLAUDE_TASK.md の先頭の節で、過去の TASK・Report はすべて保存。既存の PR110 だけを更新し、終わったら review_required / chatgpt で K2 へ。ソース修正は G2 のみ、マージ・デプロイは保留。
+- allocation: PR110 の C2 差し戻し（P2 1件：名詞＋主語の「が」）を修正し、新しい head 2c876b0bafee31844b9854c4a7d34ba69660d4cf を push 済み。Report は .agent/tasks/CLAUDE_TASK.md の先頭の節。全テスト成功、本番操作・デプロイ 0。K2 の判断待ち。マージ・デプロイは保留。
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
