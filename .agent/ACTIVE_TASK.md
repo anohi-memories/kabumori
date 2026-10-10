@@ -33,17 +33,17 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: common-ai-provider-pr117-pr119-integrated-security-review-20261010
+- status: ready
+- task_id: common-ai-provider-pr119-c1-r1-r2-narrow-rereview-20261010
 - start_code: H1
 - finish_code: C1
 - completion_code: C1
-- next_owner: none
+- next_owner: codex
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: C1 accepts independently reproduced CHANGES_REQUIRED on PR117 head 2ddae0dc and PR119 head c7d0f6e0. R1 P1 duplicate dispatch on one ledger reservation; R2 P2 unsafe SET ROLE chain ACL preflight. H1 review closed, not reserved. Narrow corrective assigned to separate common-AI Claude workstream in originating chat; source merge/prod DB/paid APIs HOLD. H2/G slots protected.
-- recommended_model: Sol（高） (completed review; no current assignment)
+- allocation: Narrow one-time PR119 exact-head 8ef3843f51e771088dfe58e2e5a262db0b62644a review for previously reproduced R1 P1 duplicate HTTP dispatch and R2 P2 SET ROLE privilege-path only; prior full Phase1a+1b H1 review complete. Verify with local disposable SQL and fake-provider focused reproductions, no repeat comprehensive review; PR117 exact head 2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226 protected. No production, actual provider calls, Secrets, merge or deploy. Return C1 here. H2 and G1-G5 untouched.
+- recommended_model: Sol（高）
 
 ## Codex H2
 - owner: codex

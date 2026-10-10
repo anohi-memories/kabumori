@@ -1,3 +1,66 @@
+# H1 CURRENT TASK — 共通AI基盤 PR #119 C1 R1/R2 限定再確認
+
+- task_id: common-ai-provider-pr119-c1-r1-r2-narrow-rereview-20261010
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- start_code: H1
+- completion_code: C1
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- recommended_model: Sol（高）
+- type: **one narrow final rereview of two previously independently reproduced findings only**
+- target_pr: 119
+- target_exact_head: 8ef3843f51e771088dfe58e2e5a262db0b62644a
+- stacked_base_pr: 117
+- protected_exact_pr117_head: 2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226
+- source_review_only: true
+- production_database_or_secrets_or_provider_calls: forbidden
+- source_merge_or_deploy: forbidden
+
+## Goal
+
+Prior integrated H1 review found R1 P1 (same callId duplicate dispatch on one reservation) and R2 P2 (NOINHERIT/SET TRUE SET ROLE graph bypassing ledger privilege preflight). Dedicated common-AI Claude corrected **only PR119** on commit 8ef3843f51e771088dfe58e2e5a262db0b62644a, 9 changed files, and reported red-before/green-after tests. Decide whether **those two exact findings are closed**, with focused independent SQL + mocked adapter evidence. Do **NOT** restart all Phase1a/1b tests, previous accepted boundaries or unrelated G/H tasks. Preserve limited five-hour Codex quota. Verdict PASS or CHANGES_REQUIRED for this narrow corrective only; do not assert deployed or source-merged.
+
+## Safety and startup
+
+1. Read PROJECT_RULES.md, .agent/ORCHESTRATION.md, .agent/ACTIVE_TASK.md, .agent/CURRENT_STATE.md, this H1 TASK and the FIRST (latest previous combined) section of .agent/CODEX_REPORT.md. Confirm this new task_id is `ready`.
+2. Refresh origin/main, PR119 and PR117. Require PR119 OPEN/Draft/UNMERGED at EXACT 8ef3843f51e771088dfe58e2e5a262db0b62644a and still stacked on PR117 EXACT 2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226. On drift STOP; no silent rebase, reset, new PR or changing base.
+3. Use your own new isolated H1 worktree/checkout from fresh `/Users/yuya/Developer/kabumori-fresh`. Never share/modify/reset implementer `kabumori-common-ai-budget-ledger` or `kabumori-common-ai-provider`, B worktree, other G/H worktrees, uncommitted changes or servers. Check no source-file overlap with moving main before any merge recommendation.
+4. No production/staging Supabase/project access, no live PostgREST or Anthropic/OpenAI calls, secrets, external paid probes, DB writes, migration apply, cron, deployment, API model switch, main merge, G/H product writes. SQL only disposable own local PostgreSQL17 with private socket and isolated data.
+
+## R1 P1 targeted check — dispatch permit
+
+Inspect source migration `20261010050613_ai_provider_budget_ledger.sql`, `ledger_guard.ts`, TS->shim->real local PG mock E2E. Require:
+- `mark_sent` returns `may_send:true` only once, on atomic reserved→sent winner, never when already sent/unknown/settled/released; reserve rejects in-flight or finalised duplicate attempt and distinguishes reserved unsent reuse.
+- Two concurrent `executeAiRequest` with same callId and **separate guards** under maxCalls=1 must result in **at most one mock-provider HTTP request, one ledger event, one charged attempt**.
+- Verify 60 concurrent send-permit requests yield exactly one winner; mark_sent timeout **after DB commit** cannot grant replay send; released and recover_stale race cannot spuriously reauthorize; ordinary retry with separate attempt IDs works.
+- Billing of ambiguous already-marked-sent attempts stays conservatively held/unknown, not silently freed. No automatic provider fallback or safety-refusal retries.
+- Run the focused local R1 probes; if original reviewer probe files unavailable, reproduce independently with small scratch tests. Avoid unrelated broad suites.
+
+## R2 P2 targeted check — SET ROLE authority graph
+
+Inspect migration postcondition 5b and independent local PG17 run as a NON-superuser owner. Require:
+- Must refuse direct and transitive NOINHERIT/SET TRUE paths from anon/authenticated to service_role, owner/superuser or any privileged ledger role; distinguish INHERIT and SET paths accurately.
+- Check mixed direct/transitive graphs and `pg_read_all_data` path; ensure dangerous schema/table/column/sequence/helper/RPC authority paths are refused, regardless of effective inherited privileges.
+- Verify safe SET FALSE controls pass while no unsafe SET ROLE succeeds, and refusal is atomic with exact before/after catalog/ACL equality. No auto-repair of roles.
+- Run only the new adverse/positive tests and relevant rollback/effective privilege checks, not another unrelated full release audit.
+
+## Secondary source integration notes (do not block R1/R2 without a newly demonstrated P1/P2)
+
+- Provider previously passed baseline 94 Deno and PG SQL six parts; these are *prior evidence* and need not all be rerun.
+- Standard `deno lint` complains about pinned `npm:@anthropic-ai/sdk@0.132.1` via `no-import-prefix`, a pre-existing repository convention. Current project decision: retain explicit pin, treat a scoped `deno lint --no-config` or equivalent approved no-import-prefix exclusion as valid for this review; report exact commands honestly.
+- Unapplied migration version must later be reconciled with `migration_source_invariants_test.ts` RESERVED listing by the source owner. No edits here.
+- Live managed PostgREST RPC exposure, user/brand authentication caller trust, G5 account deletion retention, budget policy seed, provider-credit balance, Anthropic privacy text and recovery Cron are separate production release gates, NOT evidence that R1/R2 remain open.
+
+## Completion
+
+Only your H1 TASK, H1 REPORT and H1 portion of ACTIVE_TASK may be updated, preserving histories exactly and checking fresh origin/main before safe publication. Do not modify G1–G5, H2, PR117/119, or production. Report task_id, exact heads, verdict per R1/R2, independent repro/tests, reviewed files/lines, security and concurrency findings, unexpected blockers, pending gates, report commit/push/read-back, no paid provider calls and next recommendation. For PASS, recommend **source-only merge consideration** of PR117 before PR119, not live migration apply. If CHANGES_REQUIRED, return only concrete blocking evidence; no broad rereview.
+
+返却先：共通AI基盤のちゃ（OpenAI・Claude API専用チャット）へ C1
+
+---
+
 # C1 FINAL — 共通AI基盤 Phase1a+1b H1 review accepted — 2026-10-10 JST
 
 - task_id: common-ai-provider-pr117-pr119-integrated-security-review-20261010

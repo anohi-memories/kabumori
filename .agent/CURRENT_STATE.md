@@ -1,3 +1,11 @@
+## H1 R1/R2 LIMITED REREVIEW ASSIGNED — 共通AI基盤 — 2026-10-10 JST
+
+- New H1 TASK `common-ai-provider-pr119-c1-r1-r2-narrow-rereview-20261010` `ready`, return_to 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）, completion C1, model Sol（高）. Scope strictly old R1 P1 one-time send permit and R2 P2 SET ROLE privilege graph. PR119 corrected exact head `8ef3843f51e771088dfe58e2e5a262db0b62644a`, PR117 protected `2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226`, both Draft/unmerged; source merge, production DB/migration apply, secrets, API traffic, deploy are NOT approved.
+- Dedicated Claude correction was reported 9 PR119-owned files, mock/local PG regressions 94 Deno, 16/16 mutants; these are **Claude-reported**, not an independent PASS. Narrow H1 check before release; user requests minimum Codex quota consumption. H2 closed G2 review and other slots remain unchanged.
+- Std Deno lint no-import-prefix pinned SDK is repository convention; accept --no-config or scoped exclusion, report precisely. RESERVED migration list, live PostgREST, credit balance, privacy, retention, policy values, Cron remain future separate gates, not reasons for repeating whole code review.
+
+---
+
 ## K1 G1 Simulator QA — BLOCKED_AUTH safe-stop accepted / 2026-10-10 JST
 
 - K1 reviewed G1 TASK `kabumori-watchlist-real-data-simulator-qa-20261010` and Claude's completion Report from main commit `e3e0a1a2bcb1dedd8e1b0482005b0c5a1ee09d02`. **Verdict: PASS_SAFE_STOP for Phase A preflight, NOT real-data QA PASS**. Claude found local Xcode/iOS 27.0 and installed Kabumori dev-client but **no signed-in user session**; without authentication it intentionally did not start Metro, enter user credentials, use workarounds, or exercise real-data Phase B. App navigation/real watchlist, real saved close, news cards, count and editor remain BLOCKED_AUTH / NOT_OBSERVED. Simulator findings are Claude-reported only, not remotely verified by ChatGPT.
