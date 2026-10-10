@@ -3,8 +3,8 @@
 - task_id: postona-g4-x-oauth-containment-defensive-assessment-20261010
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - start_code: H1
 - completion_code: C1
 - return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
@@ -47,6 +47,18 @@ No product source edits, no patches to existing applied migrations, no new deplo
 - Record result as **DEFENSIVE_ASSESSMENT_COMPLETE** or **BLOCKED** (not vulnerability remediation/release PASS), sources actually examined, evidence class, adverse side effects, recommended safest option, steps requiring approval, tests actually run, changed_files (expected only H1 Report/TASK/control files), commit_hash/push, no product PR, production=0.
 - Prepend findings to own `.agent/CODEX_REPORT.md` and set H1 TASK status `review_required`, next_owner `chatgpt`; update **only H1** entry in `.agent/ACTIVE_TASK.md` with fresh ownership CAS. Preserve all older H1 TASK/Report history.
 - Return **C1 specifically to POSTONA｜マルチSNS化・開発統括（G4）のちゃ**. ChatGPT will decide whether G4 needs to resume or a separate narrowly approved real-world mitigation plan. G4 is on hold during this H1 assignment.
+
+## H1 completion — defensive assessment only / 2026-10-10 JST
+
+- result: **DEFENSIVE_ASSESSMENT_COMPLETE**, NOT remediation/security-release PASS. Source-level concern remains conditional on live exposure; no attack/preclaim/impersonation reproduced by H1.
+- reviewed baseline: fresh main `52e0b6a2116d9bc8ce4b695ebd2b0f3c2b8c5cdd`; independent new workspace `/private/tmp/kabumori-h1-x-defensive-20261010.knAH8r/review`. PR126/124/121/122 exact reference heads unchanged, OPEN/DRAFT/UNMERGED, zero source-path overlap with main at check.
+- findings: old completion RPC is authenticated-executable according to migration source; Edge uses the same caller JWT. Edge-only authentication tightening cannot restrict direct RPC authority. Existing publish/refresh uses different service-role RPCs, but a connection pause can prevent required reauthorization; no unconditional continuity guarantee.
+- recommendation: separately approved metadata-only production preflight first. Conditional narrow owner/role completion restriction is independent of T13/T9 but pauses new/reconnections; no turnkey service-role proxy on the unchanged RPC (auth.uid() required). Continuous connect requires reviewed server-provenance boundary; full v2 also needs G5 T13 / G4 T9 and integrated review. Nothing applied.
+- evidence: benign own-PG fake no-argument function access denied with42501 after narrow fixture restriction; mock posting/refresh functions, definitions/ACL and fake state preserved; local restoration reopens access. No real product RPC, provider ID/token or preclaim tests. Own cluster stopped.
+- changed_files: H1 TASK/REPORT and only H1 status/next_owner in ACTIVE_TASK. Impact matrix, approval/preflight/rollback gates in Report; older history preserved. Product/source changes, actual provider/Auth/PostgREST/Supabase calls, production reads/writes, migration apply, deploy/PR merge/connection pause =0.
+- commit_hash/push/read-back: actual report-only SHA and outcome provided in final receipt after verification; no force/rebase or other-slot overwrite.
+- remaining: production definition/ACL/exposure/owner/role and deployed bundle inventory not observed; no runtime no-outage proof, no cleanup of existing disputed associations, no v2/T13/T9 rollout authorization. G4/G3/G5/H2 unchanged.
+- return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**; completion_code: C1; recommended_model: Sol（高）. Stop for C1.
 
 ---
 
