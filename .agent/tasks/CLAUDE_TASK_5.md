@@ -1,10 +1,25 @@
+# K5 Phase 3b — source candidate accepted / real Supabase proof BLOCKED — 2026-10-10 JST
+
+- task_id: common-account-phase3b-identity-writer-fence-source-20261010
+- K5_verdict: **PASS_SOURCE_CANDIDATE_ONLY; BLOCKED_PENDING_DISPOSABLE_SUPABASE_PROOF**
+- current_slot_status: **done**; next_owner: **none**; original task+Report preserved below.
+- reviewed_pr: Draft [#121](https://github.com/anohi-memories/kabumori/pull/121), exact `76b50e1e03f82faaa3460bab1603afa8fef3ce44`, OPEN / unmerged / draft, eight changed files; no overlap with 3 main-side changed `.agent/` files since `c2a9c0d6`. Reported local disposable PG 17.11 suite ALL PASS, 28/28 mutations, Phase1/2/3a regressions, account-delete 66, app437, AuthProvider23, X saga17, X app19; ChatGPT verified source content and GitHub PR metadata, **did not independently execute tests**.
+- accepted: G5-owned, owner-only, unconnected `private.account_lifecycle_assert_active_service_write(uuid,text)` candidate; the T13 interface can be referenced in G4's separate source TASK but is not an applied guard or user-facing authorization. Phase 3a blocked managed-delete gate unchanged; existing G3/G4 source, live Supabase, Vercel, Auth schema and production remain untouched.
+- critical negative proof: GoTrue manual identity link begun before BAN may finish after BAN; source-level BAN by itself **NOT** a safe Auth identity-change fence. Neither Option A (BAN+wait+verify) nor Option D (SQL managed login delete under held lock) has real disposable Supabase validation or authority to change Phase1/3a deletion design. No feature activation or source merge from this acceptance.
+- remaining blockers: real disposable managed Supabase E1–E12 protocol, effective Auth/PostgREST/Storage grants and behavior, G1/G2 and G3/G4 unguarded writer integration, legacy production hard-delete retirement, X-only/ended users, operator evidence/audit, provider and client deploy gates. **No real project was used.**
+- security review: new SECURITY DEFINER/RPC/ACL migration merits one independent Sol（高） review at the actual G5-T13 + G4 Threads/X integration boundary and **before** any production apply; avoid separate repetitive review of disconnected draft candidate.
+- next: prepare a separately owned G5 follow-up, preserving this exact Draft PR #121 and original report; user approval separately required for disposable Supabase project creation/calls (and any option-D architecture exception), NO assumed production permissions. G3 production work and G4 source task must not be modified.
+- safety: no deploy, no migration apply, no Auth/Storage/Apple/X/Meta writes, no Vercel action, no EAS. This is K5 source assessment only.
+
+---
+
 # G5 — CURRENT TASK — Common account Phase 3b identity/write fence feasibility and source candidate
 
 - task_id: common-account-phase3b-identity-writer-fence-source-20261010
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - type: staged feasibility + bounded source-only implementation, fail closed
 - return_to: 共通アカウントG5のちゃ
