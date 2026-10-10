@@ -111,15 +111,15 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: done
 - task_id: common-account-phase3c-disposable-supabase-proof-readiness-20261010
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: none
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 accepted G5 Phase3b source-only T13 candidate Draft PR121 exact 76b50e1e03f82faaa3460bab1603afa8fef3ce44; independently unreviewed and unmerged, and BAN is NOT an Auth identity-link fence. Phase3c is OFFLINE-ONLY readiness of disposable managed Supabase E1-E12 evidence protocol and deny-by-default fake harness in NEW G5 isolated worktree; no actual Supabase project/calls, no Auth/DB/Edge/Apple/X/Meta secrets or provider operations, no PR121 edits/merge, no changing G3/G4 work. Real disposable project creation/use and destructive test scenarios require separate explicit user authorization. Phase3a Auth deletion remains schema blocked. H1 shared AI review reserved elsewhere, H2 protected, no premature Codex assignment. Return K5.
+- allocation: K5 accepted G5 Phase3c OFFLINE ONLY readiness of disposable managed-Supabase E1–E12 proof runbook and deny-by-default harness. Draft PR122 exact f17a47e36632fff4a1f4cfb0b860df200e1c99e1 OPEN/UNMERGED, 21 G5-only files, no main/PR overlap. G5 reported 35/35 Deno, 31/31 mutations, local PG fingerprint and existing Phase1/2/3a PASS; ChatGPT checked GitHub/source but did not run tests. Live Supabase project creation/use, real Auth/Storage/Apple/X/Meta tests, destructive user operations, Option-D architecture, production deploy/migration/feature activation NOT APPROVED. Whole-account deletion gate remains blocked; PR121 remains Draft. G5 slot done, next_owner none pending user decision on new disposable project, preserve other slots.
 - recommended_model: Opus5.5（高）
 
 ## Deferred
