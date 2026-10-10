@@ -6,6 +6,7 @@
 - recovered completed report from own immutable commits a7aecd98 / 9ddfd724; previous sync rejection preserved below as history, not the current outcome.
 - tests: 2026-10-09 independent PG runner 8 markers, mutations 55/55, 24 refusal + 8 healthy controls reused on identical source; 2026-10-10 source invariants freshly rerun 11/11. No fresh PG/mutation run claimed.
 - status: review_required; next_owner / return_to: chatgpt; completion_code: C1.
+- Current sync outcome: **REJECTED / incomplete**. Local recovery commit 4ac057dafc8096a15cb78456338459ccd17ae0af was rejected as non-fast-forward. Remote main 49c9810b743b490e65c5219a24701a5f31edcfab added only G5 TASK; H1 files remained unchanged, remote H1 still ready. STOP, no retry/merge/rebase/force performed.
 - sync: normal report-only push/read-back; actual recovery commit SHA/result reported in final response after remote verification. No force/rebase or product-source push.
 - production read/write / migration apply / merge / deploy / provider calls: 0.
 
@@ -2819,3 +2820,11 @@ Next: ChatGPT C1（推薦モデル：Sol〈高〉） assesses this bounded resul
 - Remaining: C1/source merge decision and all separate production gates previously stated. Historical sync blocker is resolved only by successful new normal push and remote verification, never by local file status alone. If new non-fast-forward or same-file conflict occurs, STOP again; do not force or overwrite.
 - next_recommendation: return to ChatGPT for C1（推薦モデル：Sol〈高〉）after verified GitHub sync; current TASK review_required / next_owner chatgpt. No merge/deploy follows automatically.
 - Push preflight: fresh main d299a72f94ab22e94d7d5d438a32d42e44ec8dec adds only G3 TASK/index updates relative to ad9a1f48; H1 canonical files unchanged, candidate source overlap still 0. New merge-tree exits 0 (67b7898b0e7dbba9761583002ab789722f58f59c). Exact PR106 remains OPEN at c0b6c03c; GitHub returned UNKNOWN while recalculating after this control-only main movement. Earlier fresh-start MERGEABLE/CLEAN is the positive API evidence, not an UNKNOWN-as-PASS claim. Before any actual PR merge, C1 must recheck that live metadata; this report-only sync does not perform or authorize merge.
+
+## Recovery sync receipt / STOP — 2026-10-10
+
+- Review result PASS remains complete; only canonical GitHub control synchronization is unfinished.
+- Report-only commit 4ac057dafc8096a15cb78456338459ccd17ae0af, exactly H1 TASK/REPORT, normal HEAD:main push rejected non-fast-forward.
+- Subsequent read-only fetch confirms main 49c9810b743b490e65c5219a24701a5f31edcfab advanced only .agent/tasks/CLAUDE_TASK_5.md. No H1 same-file conflict found; no attempt to overwrite G5 or repeat push.
+- Remote H1 ready / next_owner codex; review_required is LOCAL completion, not yet canonical. Recovery report retained in own branch for explicit bounded synchronization retry authority.
+- No production/local DB/provider/merge/deploy operation. Return to ChatGPT for C1 with this completed local result and explicit sync limitation, or approve report-only non-conflicting retry.
