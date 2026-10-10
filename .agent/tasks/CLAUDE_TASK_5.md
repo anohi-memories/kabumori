@@ -3,7 +3,7 @@
 - task_id: common-account-phase3d-disposable-proof-pause-restore-preflight-20261010
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: critical
 - type: final offline operating preflight, NO live calls, NO service outage
