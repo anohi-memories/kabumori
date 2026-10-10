@@ -87,14 +87,14 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
+- status: done
 - task_id: postona-ai-consult-v1-production-activation-20261010
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA G3のちゃ（AI相談V1本番接続担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: User explicitly approved S0–S5 bounded activation on 2026-10-10; PR114 merged (952db5b); prior G3 TASK/Report archived intact in same file. Activate only reviewed settings candidate+hardening atomic single-transaction chain, immediate RLS/ACL read-back, consult and dry-run Edge JWT deployments, no-post smoke. On G5 overlapping DB write critical section STOP/serialize. G4 PR118/Threads and G5 PR112/Auth untouched. No X publish/schedule, EAS, provider switch, other migrations, PR114 rereview, or automatic added Codex review. Independent fresh G3 worktree is a mandatory startup gate.
+- allocation: K3 PASS on 2026-10-10 after G3 reported S0–S5 production activation PASS and independent read-only Supabase verification of both applied migration versions, owner+RLS+three authenticated owner policies, least-privilege grants, five functions and source constraints, and consulted Edge v1 / preview Edge v17 ACTIVE verify_jwt=true; one confirmed settings row. G3 real AI smoke 19/19 PASS (reported, not re-run by ChatGPT), 3 paid calls, X posts/scheduled changes/publish permissions 0 per G3 before/after evidence. Existing X automation unaffected per report. PR123 nine-file operational execution bundle remains OPEN/UNMERGED, no main-source merge requested. Production write window CLOSED. No added Codex review; no new G3 task assigned. G4/G5 ownership unchanged.
 - recommended_model: Opus5.5（高）
 ## Claude G4
 - owner: claude
