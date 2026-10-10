@@ -1,3 +1,12 @@
+## H1 DEFERRED — PR117 source-only review not run — 2026-10-10 JST
+
+- User prioritizes fewer Codex reviews and has limited 5-hour capacity. PR #117 Phase 1a is 27 new isolated provider files, with no existing imports, DB/secret/production change. Earlier H1 task `common-ai-provider-pr117-phase1a-independent-review-20261010` was withdrawn while still `ready`, before any report of starting; verdict **NOT_RUN**, NOT PASS.
+- H1 now `idle`, `task_id:none`, `next_owner:none`; prior assignment and historical H1 reviews preserved in TASK. H2 remains as previously recorded. Do not send H1 for PR #117. No source/PR/production/paid provider action authorized.
+- Quality approach: allow next planning/source-only progression, but independently review critical API key/budget/schema/retry/cross-process and Phase 1b DB/RPC changes as one consolidated gate before any live provider traffic or production switch; G5 conflict priority still applies.
+- Follow-up decisions held: $100 Claude credits must be Console-verified; Opus market report priority provisional; privacy policy before sharing personal data with Anthropic; per-user/brand/feature limits; automatic fallback OFF; shared market report only in initial Phase2; `return_to` dedicated AI chat for future review.
+
+---
+
 ## H1 ASSIGNED — 共通AI基盤 Phase 1a PR117 独立レビュー — 2026-10-10 JST
 
 - H1 task_id: `common-ai-provider-pr117-phase1a-independent-review-20261010`; status `ready`; exact PR117 head `2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226`; Draft OPEN / unmerged, source-only 27 added files, current GitHub mergeability unconfirmed.
