@@ -43,12 +43,13 @@ async function consultHarness({ status = 'ready', script, stored } = {}) {
     useEffect: (effect) => { if (first) effects.push(effect); else effect(); },
   };
   // In-memory stand-in for the settings table: versioned rows, every write recorded.
-  const store = { row: stored === undefined ? { settings: { ...SOCIAL_MOBILE_CONTENT_DEFAULTS }, persona: null, version: 1 } : stored, writes: [], reads: 0, afterRead: null };
+  const store = { row: stored === undefined ? { settings: { ...SOCIAL_MOBILE_CONTENT_DEFAULTS }, persona: null, version: 1 } : stored, writes: [], reads: 0, afterRead: null, afterSave: null, unavailableFor: new Set() };
   class Repository {
-    async read() {
+    async read(brandId) {
       store.reads += 1;
       // Lets a test change the world (e.g. the workspace) while a read is in flight.
       if (store.afterRead) { const hook = store.afterRead; store.afterRead = null; hook(); }
+      if (store.unavailableFor.has(brandId)) return { state: 'unavailable', data: SOCIAL_MOBILE_CONTENT_DEFAULTS, persona: null, reason: '設定を取得できません。' };
       if (!store.row) return { state: 'ready', data: SOCIAL_MOBILE_CONTENT_DEFAULTS, persona: null, updatedAt: null };
       return { state: 'ready', data: store.row.settings, persona: store.row.persona, updatedAt: `v${store.row.version}` };
     }
@@ -58,6 +59,8 @@ async function consultHarness({ status = 'ready', script, stored } = {}) {
       if (current !== expectedUpdatedAt) return { ok: false, stale: true, reason: 'stale' };
       assert.equal(validateSocialMobileContentSettings(settings).ok, true);
       store.row = { settings, persona: persona ?? store.row?.persona ?? null, version: (store.row?.version ?? 0) + 1 };
+      // The write has reached the store; a hook here models the workspace changing while the answer is in flight.
+      if (store.afterSave) { const hook = store.afterSave; store.afterSave = null; hook(); }
       return { ok: true };
     }
     async upsert() { throw new Error('upsert must not be used by the consult screen'); }
@@ -350,4 +353,100 @@ test('pressing 「これで覚えて」 twice in a row sends exactly one write',
   const shown = texts(h.render());
   assert.ok(shown.some((t) => t.includes('確認した内容を保存しました')));
   assert.ok(!shown.some((t) => t.includes('もう一度「これで覚えて」')));
+});
+
+// --- Session epoch: a return to a workspace shown before (A -> B -> A) is a new consultation ---
+
+const switchTo = (h, id) => { h.live.workspaceId = id; h.render(); };
+
+test('A -> B -> A while an answer is in flight: the first A session\'s answer never reaches the new A session', async () => {
+  const pending = [];
+  const h = await consultHarness({
+    script: (message) => new Promise((resolve) => pending.push({ message, resolve })),
+  });
+  input(h.render()).onChangeText('週6回');
+  button(h.render(), '送信').onPress();
+  await settle();
+  switchTo(h, 'u_2');
+  await settle();
+  switchTo(h, 'u_1');
+  await settle();
+  // The user starts talking in the new A session; that answer is still in flight too.
+  input(h.render()).onChangeText('こんにちは');
+  button(h.render(), '送信').onPress();
+  await settle();
+  // The obsolete first-A answer arrives first.
+  pending[0].resolve({ ok: true, result: result({ kind: 'proposal', assistantReply: '古いAの提案', proposedSettingsDelta: { frequencyTargetPerWeek: 6 } }) });
+  await settle();
+  let tree = h.render();
+  assert.ok(!texts(tree).includes('古いAの提案'));
+  assert.equal(button(tree, 'これで覚えて'), undefined);
+  // The new A session's own question is still waiting for its answer.
+  assert.ok(button(tree, '送信中…'));
+  pending[1].resolve({ ok: true, result: result({ assistantReply: '新しいAの返事' }) });
+  await settle();
+  tree = h.render();
+  assert.ok(texts(tree).includes('新しいAの返事'));
+  assert.ok(!texts(tree).includes('古いAの提案'));
+  assert.ok(!texts(tree).includes('週6回'));
+  assert.equal(button(tree, 'これで覚えて'), undefined);
+  assert.equal(h.store.writes.length, 0);
+});
+
+test('A -> B -> A while a confirmation is reading: the obsolete confirmation writes nothing and shows nothing', async () => {
+  const h = await consultHarness({ script: () => ({ ok: true, result: result({ kind: 'proposal', proposedSettingsDelta: { frequencyTargetPerWeek: 5 } }) }) });
+  const tree = await h.say('週5回くらい');
+  h.store.afterRead = () => { switchTo(h, 'u_2'); switchTo(h, 'u_1'); };
+  button(tree, 'これで覚えて').onPress();
+  await settle();
+  const after = h.render();
+  assert.equal(h.store.writes.length, 0);
+  assert.ok(!texts(after).some((t) => t.includes('保存しました') || t.includes('もう一度「これで覚えて」')));
+  assert.equal(button(after, 'これで覚えて'), undefined);
+  assert.ok(!texts(after).includes('週5回くらい'));
+});
+
+test('A -> B -> A after the write was sent: the write is not undone, but its completion never reaches the new A session', async () => {
+  const h = await consultHarness({ script: (message) => ({ ok: true, result: result({ kind: 'proposal', proposedSettingsDelta: { frequencyTargetPerWeek: message.includes('2') ? 2 : 5 } }) }) });
+  let tree = await h.say('週5回くらい');
+  h.store.afterSave = () => { switchTo(h, 'u_2'); switchTo(h, 'u_1'); };
+  button(tree, 'これで覚えて').onPress();
+  await settle();
+  // The request had already been sent: it was applied (ignoring its answer does not cancel it).
+  assert.equal(h.store.writes.length, 1);
+  assert.equal(h.store.writes[0].applied, true);
+  tree = h.render();
+  assert.ok(!texts(tree).some((t) => t.includes('保存しました')));
+  assert.equal(button(tree, 'これで覚えて'), undefined);
+  assert.equal(button(tree, '送信').disabled, true);
+  // The new A session is not blocked by the obsolete save: it can propose and save on its own.
+  tree = await h.say('週2回で');
+  assert.equal(button(tree, 'これで覚えて').disabled, false);
+  button(tree, 'これで覚えて').onPress();
+  await settle();
+  assert.equal(h.store.writes.length, 2);
+  assert.equal(h.store.writes[1].applied, true);
+  assert.equal(h.store.row.settings.frequencyTargetPerWeek, 2);
+  // Both writes went to workspace A only; nothing was written while B was shown.
+  assert.deepEqual(h.store.writes.map((w) => w.brandId), ['u_1', 'u_1']);
+  assert.ok(texts(h.render()).some((t) => t.includes('確認した内容を保存しました')));
+});
+
+test('when the new workspace cannot be read, the previous workspace\'s saved settings are never used as the proposal basis', async () => {
+  // Workspace A has saved settings; a proposal for B is made while B cannot be read.
+  const h = await consultHarness({
+    stored: { settings: { ...SOCIAL_MOBILE_CONTENT_DEFAULTS, frequencyTargetPerWeek: 7, preferredTone: 'Aのトーン' }, persona: null, version: 4 },
+    script: () => ({ ok: true, result: result({ kind: 'proposal', proposedSettingsDelta: { frequencyTargetPerWeek: 5 } }) }),
+  });
+  h.store.unavailableFor.add('u_2');
+  switchTo(h, 'u_2');
+  await settle();
+  const tree = await h.say('週5回くらい');
+  // B becomes readable; its real saved row happens to equal A's. A proposal shown against A's
+  // settings would look unchanged and be saved at once; shown against "unknown" it must be confirmed again.
+  h.store.unavailableFor.delete('u_2');
+  button(tree, 'これで覚えて').onPress();
+  await settle();
+  assert.equal(h.store.writes.length, 0);
+  assert.ok(texts(h.render()).some((t) => t.includes('もう一度「これで覚えて」')));
 });
