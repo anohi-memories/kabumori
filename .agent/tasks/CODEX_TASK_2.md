@@ -1,10 +1,26 @@
+# C2 — E11 independent security review accepted; corrective G5 required — 2026-10-11 JST
+
+- task_id: common-account-phase3d-e11-optiond-disposable-security-review-20261010
+- C2 verdict: **CHANGES_REQUIRED / H2 REVIEW COMPLETED**, findings accepted: **R1 P1 (incomplete independent Admin-vs-SQL safety matrix) + R2–R5 P2**. E11 **NOT APPROVED**, `real_managed_proof=NOT_RUN`, no choice of Option D and no opening of `managed_auth_delete=blocked`.
+- Fixed protected Draft heads independently read at C2: PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`; PR122 `f17a47e36632fff4a1f4cfb0b860df200e1c99e1`; PR128 `e9244d29ea944156cf1479c0976053d433469e06`. All OPEN / DRAFT / UNMERGED. No source merge, deployment, migration apply, project creation, Auth DELETE, any Supabase/prod/storage/provider test or family photo pause.
+- Independent H2 Report published on GitHub: current section of `.agent/CODEX_REPORT_2.md`; reported Report/TASK/H2 index commits `ddac1661`/`c3fe12fb`/`91692f34`. H2 reports offline typed Deno 35/35 PASS, harness mutations 31/31 detected, targeted negative probes 3/3, source edits 0, `remote_calls=0` to Supabase/provider, no PR merge, no deploy. ChatGPT read Report / verified protected PR heads; did NOT rerun tests.
+- Fix R1: predeclare real separate dummy-fixture success/failure/rollback/audit/Storage/refresh/JWT/PostgREST/Admin-vs-SQL negative comparisons; pre/post counts include nonzero populations and recorded denominators; unknown commit must not retry.
+- Fix R2: rename single login-row lock probe as narrowly proving DB lock/permission/cascade, NOT atomic Phase3a full eligibility/checkpoints/provider snapshot/end-to-end deletion. Future exact full-decision same-transaction proof remains unimplemented/unapproved, schema gate stays blocked.
+- Fix R3: successful last callback timeout is lower bound, NOT proven upper bound; require version/config-derived upper bound, expired-callback negative proof plus drain and clock skew; `e4Mitigation` string by itself cannot establish safety.
+- Fix R4: offline `validate` examines self-declared approvals/marker, not signed approvals, exact remote destination, fake-user provenance or completed earlier E1/E8/E9/E10. Require manual witnessed read-backs and deny-by-default actual operator checklist before any future E11. NEVER treat a dry-run guard boolean as consent to execute.
+- Fix R5: catalog fingerprint is incomplete for managed trigger bodies, inherited ACL/RLS, Storage schema/object/owner evidence; add separate catalog/read-back evidence, preserve source-only no-network constraints; avoid promising rollback restores external effects.
+- H2 current review is **done / next_owner none**, history preserved. A new separate G5-focused corrective task may be placed after actual idle confirmation. **One narrowly scoped Sol（高） H2 follow-up** to review exact corrective diff only after K5 if needed, not another broad repetitive security audit.
+- Family photo project `anohi-memories` continues operating, `PREPAUSE_BLOCKED`. Pro tier forbidden under user's preference; proof also blocked by missing fake OAuth/OIDC/test IDPs, real free slot, operator window, photo baseline/restore confirmation and extra user permissions.
+
+---
+
 # Codex H2 — CURRENT TASK — disposable-only Auth SQL DELETE E11 pre-execution security review
 
 - task_id: common-account-phase3d-e11-optiond-disposable-security-review-20261010
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - type: narrow, independent, **source-only** high-risk pre-experiment security review
 - start_code: H2
