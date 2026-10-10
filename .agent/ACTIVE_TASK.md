@@ -71,7 +71,7 @@
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
 - allocation: K1 independent screenshot/source review of PR #120 exact head 404b26f722335af97f095177664c7b89ca8df140 found ONE limited remainder-count defect: other-list badge counts featured+rest (2 featured+5 rest misleadingly shows 7) and an empty 'その他' group appears if all watches are featured. G1 focused corrective READY on SAME PR #120: show group only when rest.length>0, count=rest.length; cover all-featured/partial/no-featured tests. NativeTabs five entries unchanged and must remain completely untouched. No new PR, merge/deploy/EAS/DB/Auth/production. Return K1 to かぶモリアプリG1のちゃ. No Codex review needed for count-only fix.
-- recommended_model: Sonnet5（高）
+- recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
 - slot: claude-2
