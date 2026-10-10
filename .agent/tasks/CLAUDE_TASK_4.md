@@ -3,8 +3,8 @@
 - task_id: postona-threads-phase2b-source-preparation-20261010
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: source-only Threads OAuth Phase 2b implementation preparation, security bounded
@@ -43,6 +43,142 @@ Advance Threads account connection Phase 2b using docs/postona/threads-connectio
 - Update the Report for this task with task_id, result, changed_files, tests, commit_hash, push, PR/head, deploy, remaining_issues, safety_checks and next_recommendation.
 - Set status review_required / next_owner chatgpt and STOP for K4. Identify precisely which portions require an independent security review (do not request a repeat full PR106 review).
 - Return to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**, completion code **K4**.
+
+## Report — postona-threads-phase2b-source-preparation-20261010 (2026-10-10)
+
+- task_id: postona-threads-phase2b-source-preparation-20261010
+- result: **PASS（source の準備のみ・配線なし・無効のまま）**
+  - 公式契約を再確認した。
+  - プロバイダ側の契約モジュールとテストを追加した。
+  - 設計メモを更新した。
+  - **DB の begin / complete の RPC と migration は、G5 の境界に重なるため作らず、契約の不足として報告する**（下の「G5 との境界」）。
+- model_used: Opus 5.5（TASK の推奨どおり）
+- workspace: `kabumori-fresh` から新しく作った G4 専用 worktree `/Users/yuya/Developer/kabumori-g4-phase2b`（branch `claude/g4-postona-threads-phase2b-prep-20261010`）。
+  - 開始時の main は `75d724ab`（PR106 の merge `68aaf3e5` を含む）。push 前に最新の main `e46170d1` へ rebase した。
+- PR / head: [#118](https://github.com/anohi-memories/kabumori/pull/118)、head `9b717570`、未 merge。
+- commit_hash: `9b717570`（1 commit）
+- push: 新しいブランチへの通常の push。force push はしていない。
+- deploy: **0**
+
+### changed_files（3つ）
+- `supabase/functions/_shared/social/threads_connect_contract.ts`（新規）
+- `supabase/functions/_shared/social/threads_connect_contract_test.ts`（新規）
+- `docs/postona/threads-connection-phase2b.md`（§0.6〜§0.8 を追加、§11 を更新）
+
+### 公式契約の再確認（2026-10-10、読み取りだけ）
+- エンドポイント:
+  - 認可: `https://threads.com/oauth/authorize`
+  - 短期トークン: `POST https://graph.threads.com/oauth/access_token`
+  - 長期トークン: `GET https://graph.threads.net/access_token`（`th_exchange_token`）
+  - 延長: `refresh_access_token`（`th_refresh_token`）
+  - 本人情報: `GET https://graph.threads.net/v1.0/me`
+  - ホスト名の混在（T3）は公式でも続いているので、文書どおりに固定した。
+- 権限: `threads_basic` が必須。`threads_content_publish` は投稿用。
+- code は1時間有効で、1回限り。戻り先に `#_` が付く。拒否は `error=access_denied`。
+- **新たに分かった危険**:
+  - 短期トークンの応答の `user_id` は、2^53 を超える JSON の数値。数値として読むと別人の id に丸められうる。モジュールで対応した。
+  - `token_type` は 2026-08-12 から返る。
+  - `debug_token` は Threads のテスターのトークンが必要で、本番の本人確認には使えない。
+- 未解決のまま:
+  - T1: カスタムスキームの記載なし。https 以外は拒否する。
+  - T4: PKCE の記載なし。使わない前提。2a-1 の `ConnectAdapter` は PKCE の引数を前提にしているので、配線時に任意にする必要がある。
+  - T5: ユーザートークンの revoke の記載なし。
+  - T6: Meta 共通の `signed_request` の形式は確認できた。Threads 固有の形は未確認。
+  - T7: 延長でトークンが変わるかの記載なし。
+
+### 実装した範囲（安全に切り出せた部分だけ）
+- `threads_connect_contract.ts` は、外部への通信を差し替えられる純粋なモジュール。
+  - 認可 URL、コールバックの解析、2つのトークン交換、本人情報の読み取りと照合（`THREADS_IDENTITY_MISMATCH`）。
+  - 1回だけ送り、code では再試行しない。リダイレクトは追わない。10秒で打ち切る。
+  - エラーは固定コードだけ。
+  - JSON の数値は元の文字列のまま読む。
+  - 短期トークンは戻り値に含めない。
+- **静的なゲート** `THREADS_CONNECT_PREREQUISITES_MET = false`。環境変数だけでは有効にならない。前提は5つ:
+  1. 2a-2 の本番適用
+  2. G5 の書き込み fence
+  3. RPC のレビュー
+  4. 退会のプロバイダ別対応
+  5. Meta アプリの設定
+- このモジュールを読み込むものは 0 件で、テストで固定した。import は provider-domain の型だけ。
+- Edge Function、RPC、migration、Vault、Auth、アプリ、X のコードは変えていない。
+
+### G5 との境界（TASK の「重なる前に止めて報告」）
+- **重なっている箇所**:
+  - Threads の行は、G5 の `private.account_lifecycle_footprint` が数える POSTONA（`x_autopost`）の足跡になる。
+  - G5 は、足跡を作る書き込み経路に利用権の fence をかける作業を、PR112 の時点で未解決の release blocker として持っている。
+  - Threads の begin / complete の RPC を今作ると、fence のない書き込み経路が増える。
+- **G5 に必要な契約**（T13）: 足跡を作る書き込みの前に、同じトランザクションで呼ぶ判定。内容は、利用権が有効か、ライフサイクルが削除中・終了でないか、削除とのロックによる直列化。名前・引数・ロック順・拒否コードは G5 が決める。
+- あわせて決める必要があるもの:
+  - T9: Threads だけを使う人のワークスペースを誰が作るか
+  - T10: 退会で Threads の行をどう処理するか
+- RPC の仕様と、必要な使い捨て DB テストの一覧は、設計メモ §0.8 に書いた。
+
+### tests
+- 新しい契約テスト: **14件 PASS**（型チェックあり）。内訳:
+  - 公式の値に固定していること
+  - 静的なゲート（環境変数をすべて揃えても無効のまま）
+  - 無効のときは通信しないこと
+  - 環境変数の検査（secret を出さない）
+  - redirect が https で完全一致であること（http、カスタムスキーム、フラグメント、認証情報付き、ワイルドカードは拒否）
+  - 認可 URL の引数がちょうど文書どおりで、secret を含まないこと
+  - state の形とハッシュ
+  - コールバックの13通り（`#_`、拒否、state なし・不正、code なし・不正、重複）
+  - 短期トークンの交換: 要求の形、奇数の大きい id がそのまま残ること、4xx・5xx・302・通信失敗・非 JSON・トークンを含むフォーム本文・token_type の欠落と相違・id の欠落、数字以外、負数、指数表記。すべて1回だけ送ることを確認
+  - 長期トークンの交換: 要求の形、有効期限の上限、文字列の期限を拒否、4xx・5xx・通信失敗
+  - 本人情報: 要求の形、大きい id、username の形、4xx・5xx
+  - 全体の流れ: 成功、丸めた id は別人として拒否、途中で止まる
+  - エラーコードの閉集合
+  - 誰も読み込んでいないこと
+- 変異テスト（作業用スクリプト、コミットはしていない）: 安全上の要所を壊す **19件をすべて検出**。対照の実行は PASS。対象は次のとおり:
+  - ゲートを開ける、本人の不一致を受け入れる、id を数値で読む
+  - `#_` を残す、http やカスタムスキームを許す
+  - token_type や期限を確認しない、文字列の期限を受け入れる
+  - state を確認しない、重複を許す
+  - 4xx を再試行扱いにする、リダイレクトを追う
+  - URL に secret を入れる、無効なのに通信する
+  - 本文をエラーに含める、短期トークンを返す
+  - 環境変数だけでゲートを開ける
+  - 途中で検出できなかった3件は、冗長なコードを1か所削り、テストを1件足して解消した。
+- 既存の回帰テスト（rebase 後）:
+  - `_shared/social` 27件、`_shared` 全体 **503件**、`x-oauth-connect-user` **29件**、すべて PASS
+  - rebase 前の main では、`_shared` で AI Lab の日記スナップショットのテストが1件失敗していた。これは既存の失敗で、今回のファイルとは無関係。新しい main で解消している。
+- `deno check`、`deno lint`（`_shared/social`）が PASS。`git diff --check` は問題なし。
+  - `deno fmt` はリポジトリの既存ファイルも揃っていないため、適用していない。
+
+### safety_checks
+- 本番の DB・Auth・Storage・Vault・OAuth の読み書き、migration の適用、Edge の deploy、secrets の設定、Meta / Supabase の本番 API 呼び出し、実トークンの扱い: すべて **0**。
+- 公式ドキュメントの取得は、Markdown 版の読み取りだけ。
+- 秘密情報のパターン: 0（`url.password` の比較が1件ひっかかったが、誤検知）。テスト内の値はすべて偽物。
+- 作業中の PR（#117、#116、#115、#112、#110、#33、#11、#10、#3）とのファイルの重なりは 0。最新の main との merge-tree は競合なし。
+- G2 / G3 / G5 のファイルは変えていない。X の送信・refresh・OAuth、ワークスペース・ペルソナ、POSTONA の AI 相談は変えていない。
+
+### 独立したセキュリティレビューが必要な部分（PR106 の全体の再レビューは不要）
+1. `threads_connect_contract.ts` の次の点:
+   - 大きい id を元の文字列で読む処理（reviver）
+   - 本人の照合
+   - code を再試行しないことと、エラーの分類（拒否・不明・不正）
+   - エラーやログにトークン・secret が出ないこと
+   - redirect URI の検査
+   - 静的なゲートが環境変数で開かないこと
+2. 設計メモ §0.8 の RPC 仕様（実装前の設計として）:
+   - state を消費する条件（本人、未使用、期限内、`platform='threads'`）
+   - G5 の判定を呼ぶ位置
+   - 2a-2 のガードとの関係（所有者が持つ SECURITY DEFINER 関数だけが Meta 行を書けること）
+- RPC を実装したら、その migration と使い捨て DB のテストは、改めて独立レビューの対象になる。
+
+### remaining_issues
+- G5 の契約（T13）と、T9 / T10 の合意。
+- Meta アプリの登録（ユーザー）と、T1（カスタムスキーム）/ T2（リダイレクトの受け方）の決定。テスターで T3 / T5 / T6 / T7 を確認すること。
+- 2a-2 の本番適用（同日の読み取り専用 preflight と承認が必要）。
+- 2a-1 の `ConnectAdapter` で、PKCE の引数を任意にすること（配線時）。
+- 有効期限の保存（T8、2c）。
+
+### next_recommendation
+1. K4 で確認する。必要に応じて、上の「独立したセキュリティレビューが必要な部分」に絞ったレビューを1回行う。
+2. G5 の部屋に T13 / T9 / T10 の契約を依頼する（G5 の優先度は、競合がある箇所に限ったもの）。
+3. 並行して、ユーザーが Meta アプリを登録し（テスター）、redirect を決める。
+4. 契約が揃ったら、G4 で begin / complete の RPC の migration 候補を作り、使い捨て DB で証明する。その後に本番の preflight を行う。
+- status: review_required / next_owner: chatgpt。STOP for K4。返却先: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**、完了コード **K4**。
 
 ---
 
