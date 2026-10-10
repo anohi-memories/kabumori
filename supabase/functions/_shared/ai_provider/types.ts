@@ -13,12 +13,24 @@ export type AiReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "
 /** A JSON Schema object (the subset documented in schema.ts). */
 export type JsonSchema = { readonly [key: string]: unknown };
 
+/**
+ * On whose behalf the call runs (Phase 1b). System work (market report, news) carries no user or brand; user work
+ * carries the user id and, when it is about one brand, the brand id. Both ids must come from the server's own
+ * verification (the authenticated user, the brand's ownership checked in the database), never from a request
+ * body alone.
+ */
+export type AiSubject =
+  | { readonly kind: "system" }
+  | { readonly kind: "user"; readonly userId: string; readonly brandId?: string | null };
+
 /** Who used the call, for usage and budget attribution. Free text identifiers, never personal data. */
 export type AiUsageContext = {
   /** The product, e.g. "kabumori" or "postona". */
   readonly application: string;
   /** The feature inside the product, e.g. "market_report". */
   readonly feature: string;
+  /** Default: { kind: "system" }. */
+  readonly subject?: AiSubject;
 };
 
 /**
@@ -52,6 +64,12 @@ export type AiRequest = {
   readonly timeoutMs: number;
   readonly transport: AiTransportPolicy;
   readonly usageContext: AiUsageContext;
+  /**
+   * Idempotency key of this logical call (Phase 1b). The ledger keys every attempt by (callId, attempt), so a caller
+   * that may repeat the same call after a crash passes a stable id (for example derived from its run id). Default:
+   * a fresh random UUID.
+   */
+  readonly callId?: string;
 };
 
 export type AiErrorCode =
@@ -142,6 +160,8 @@ export type AiUsageKey = {
 export type AiUsageTotals = AiTokenUsage & { readonly unknownUsageAttempts: number };
 
 type AiResultCommon = {
+  /** The logical call id the attempts were reserved and recorded under (see AiRequest.callId). */
+  readonly callId: string;
   readonly provider: AiProvider;
   readonly configuredModel: string;
   /** From the last response that named its model; null when none did (never the configured model). */

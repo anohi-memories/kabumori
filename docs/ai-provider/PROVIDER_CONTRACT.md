@@ -149,6 +149,11 @@ if (result.ok) {
 - **拒否される場合:** 該当する上限が1つもない呼び出しは `NO_MATCHING_LIMIT` で拒否する。ガードが例外を投げた場合も Claude は呼ばない（fail-closed）。
 - **同時実行:** 同じプロセス内では、確認と確保を await を挟まずに行うため、並行呼び出しで上限を超えない（テスト済み）。状態はインスタンスごとに持ち、モジュール全体で共有する状態はない。
 - **限界（重要）:** `InMemoryBudgetGuard` は1つのインスタンス（1回の Edge 実行や1回の run）の中だけで効く。**複数の Edge Function・複数のプロセスをまたぐ月額予算（Claude の月 $100 枠）は保証しない。** DB に予約と台帳を持つガードは Phase 1b で、同じ `BudgetGuard` interface の別実装として作る。
+- **Phase 1b（追記）:** `SupabaseLedgerBudgetGuard`（`ledger_guard.ts`）が DB の台帳を使うガードになる。仕様は `docs/ai-provider/PHASE1B_LEDGER_DESIGN.md`。
+  - interface には任意の項目だけを追加した: `markSent?`、`release?`、`settle` の第3引数（台帳に残す明細）。
+  - request には `callId?`（呼び出しを再実行しても重複しないためのID）と `usageContext.subject?`（system か、user＋brand か）を追加した。
+  - result には `callId` を追加した。既存の呼び出し方はそのまま動く。
+  - 台帳ガードを使うと、HTTP は台帳が「送ってよい」と確認したあとにしか送らない。
 
 ## 7. Secrets・ログ
 
