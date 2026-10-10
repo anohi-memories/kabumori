@@ -765,8 +765,307 @@ const SOURCE_HEDGE_ISSUE = /とみられ|見られ|疑い|意向|可能性|暫�
 const HARD_FACT_ERROR_ISSUE =
   /誤り|誤認|誤記|取り違え|異な(?:る|っ)|捏造|存在しない|別(?:の|人|企業)|改変|数字|数値|金額|日付|日時|人物名|企業名|社名|証券|市場|影響|因果|解釈/u;
 
+// ---- Fail-closed guards for the Fact retries (PR #116 reviews, 2026-10-10 / 10-11) -------------------------------
+// A retry only restores a hedge the source itself carries. It must never be reachable when the text got the OUTCOME,
+// KIND, DIRECTION, BASIS or a NUMBER of the event wrong. These guards are deliberately independent of how a model
+// words its Fact issue (OpenAI today, possibly Claude later): the primary guards compare the generated text with the
+// source (deterministic); the issue-text checks below are a second line of defence only.
+
+type QuantityClass = "yen" | "usd" | "eur" | "shares" | "pct" | "per_share_yen";
+export type Quantity = { cls: QuantityClass; value: number; metric?: string | null };
+const CURRENCY_CLASSES: ReadonlySet<QuantityClass> = new Set(["yen", "usd", "eur"]);
+const MULTIPLIER: Record<string, number> = { "兆": 1e12, "億": 1e8, "千万": 1e7, "百万": 1e6, "万": 1e4, "千": 1e3 };
+const UNIT_CLASS: Record<string, QuantityClass> = { "円": "yen", "ドル": "usd", "ユーロ": "eur", "株": "shares", "％": "pct", "%": "pct" };
+const PER_SHARE_AMOUNT = /1株(?:当たり|あたり)(?:の)?[^\d。、]{0,10}?(\d+(?:\.\d+)?)円/gu;
+const COMPOSITE_QUANTITY = /((?:\d+(?:\.\d+)?(?:兆|億|千万|百万|万|千)?)+)(円|ドル|ユーロ|株|％|%)/gu;
+// A sign right before the number. A hyphen between two digits is a range ("10-20円"), not a sign.
+const NEGATIVE_PREFIX = /(?:(?<![\d])[-−―ー]|[▲△]|マイナス)\s*$/u;
+
+// Metric labels a quantity can be bound to. Longest first; the group is what is compared. A loss label flips the sign
+// so that 営業損失32億円 and 営業利益 -32億円 are the same fact, and 営業利益32億円 is a different one.
+const METRIC_LABELS: ReadonlyArray<readonly [RegExp, string, boolean]> = [
+  [/親会社株主に帰属する(?:当期|四半期|中間期)?純利益|(?:当期|四半期|中間期)?純利益|純損益|最終利益|最終損益/u, "net_profit", false],
+  [/(?:当期|四半期|中間期)?純損失|最終損失/u, "net_profit", true],
+  [/営業利益|営業損益/u, "operating_profit", false],
+  [/営業損失/u, "operating_profit", true],
+  [/経常利益|経常損益/u, "ordinary_profit", false],
+  [/経常損失/u, "ordinary_profit", true],
+  [/売上高|売上収益|営業収益|売上/u, "sales", false],
+  [/配当性向/u, "payout_ratio", false],
+  [/配当金?(?:予想)?|1株当たり配当/u, "dividend", false],
+  [/取得(?:総額|上限)|取得価額の総額|上限額?/u, "cap", false],
+  [/取得株式数|取得する株式の総数|取得株数/u, "share_count", false],
+  [/投資額|投資規模|投資/u, "investment", false],
+  [/売出価格|発行価格|買付価格|公開買付価格|譲渡価格|譲渡価額/u, "price", false],
+  [/損失|赤字/u, "loss", true],
+];
+
+function nearestMetric(text: string, start: number, end: number): { metric: string; negate: boolean } | null {
+  // "100億円の売上高": a label directly after the number (optionally via の / 前期比 / 見込み) belongs to that number.
+  const after = text.slice(end, end + 14);
+  for (const [pattern, metric, negate] of METRIC_LABELS) {
+    const match = new RegExp(`^の?(?:前期比|見込み|予想)?(?:${pattern.source})`, pattern.flags.replace("g", "")).exec(after);
+    if (match) return { metric, negate };
+  }
+  // "売上高は前期比10％増の100億円": the nearest label before the number, within the same sentence
+  const before = text.slice(Math.max(0, start - 30), start);
+  const window = before.slice(Math.max(before.lastIndexOf("。"), before.lastIndexOf("\n")) + 1);
+  let best: { metric: string; negate: boolean; at: number } | null = null;
+  for (const [pattern, metric, negate] of METRIC_LABELS) {
+    const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+    for (const match of window.matchAll(new RegExp(pattern.source, flags))) {
+      const at = (match.index ?? 0) + match[0].length;
+      if (!best || at > best.at) best = { metric, negate, at };
+    }
+  }
+  return best && window.length - best.at <= 18 ? { metric: best.metric, negate: best.negate } : null;
+}
+
+/** Amounts of a text as comparable numbers: NFKC, commas removed, signed, 155億5,000万円 = 15,550百万円, 1株当たり kept apart, metric-bound. */
+export function canonicalQuantities(raw: string): Quantity[] {
+  let text = raw.normalize("NFKC").replace(/(?<=\d),(?=\d)/gu, "");
+  const quantities: Quantity[] = [];
+  for (const match of text.matchAll(PER_SHARE_AMOUNT)) quantities.push({ cls: "per_share_yen", value: Number(match[1]), metric: "dividend" });
+  text = text.replace(PER_SHARE_AMOUNT, (whole) => " ".repeat(whole.length));
+  for (const match of text.matchAll(COMPOSITE_QUANTITY)) {
+    const index = match.index ?? 0;
+    let value = 0;
+    for (const part of match[1].matchAll(/(\d+(?:\.\d+)?)(兆|億|千万|百万|万|千)?/gu)) {
+      value += Number(part[1]) * (part[2] ? MULTIPLIER[part[2]] : 1);
+    }
+    value = Math.round(value * 1e4) / 1e4;
+    const negative = NEGATIVE_PREFIX.test(text.slice(Math.max(0, index - 6), index));
+    const bound = nearestMetric(text, index, index + match[0].length);
+    // a loss label carries a negative meaning on its own; an explicit sign on top of it is not doubled
+    const signedNegative = negative || bound?.negate === true;
+    quantities.push({
+      cls: UNIT_CLASS[match[2]],
+      value: signedNegative && CURRENCY_CLASSES.has(UNIT_CLASS[match[2]]) ? -value : value,
+      metric: bound?.metric ?? null,
+    });
+  }
+  return quantities;
+}
+
+const quantityKey = (quantity: Quantity) => `${quantity.cls}:${quantity.value}`;
+const pairKey = (quantity: Quantity) => `${quantity.metric}|${quantityKey(quantity)}`;
+
+// Mutually exclusive alternatives of one kind of fact. A text that names a member the source does not, while the
+// source names another member of the same group, has swapped the fact (増配 for 減配, 消却 for 取得, 連結 for 非連結…).
+// Approval state (pending / approved / rejected / withdrawn) is one group, evaluated on negation-stripped text so that
+// 未承認 / 承認されていない are PENDING, never "approved".
+const NEGATED_APPROVAL = /(?:承認|可決|決議|採択)(?:され(?:て)?(?:い)?(?:ない|ません|ず|なかった)|されておらず)/gu;
+const EXCLUSIVE_FACT_GROUPS: ReadonlyArray<readonly [string, ReadonlyArray<readonly [string, RegExp]>]> = [
+  ["dividend_direction", [["up", /増配/u], ["down", /減配/u], ["none", /無配/u], ["resume", /復配/u]]],
+  ["revision_direction", [["up", /上方修正|上振れ/u], ["down", /下方修正|下振れ/u]]],
+  ["amount_direction", [["up", /増額/u], ["down", /減額/u]]],
+  ["profit_direction", [["up", /増益|黒字転換|黒字化/u], ["down", /減益|赤字転落|赤字化/u]]],
+  ["buyback_action", [["acquire", /自己株式(?:の)?取得/u], ["cancel", /自己株式(?:の)?消却|消却/u], ["dispose", /自己株式(?:の)?処分|処分/u]]],
+  ["share_change", [["consolidation", /株式(?:の)?併合/u], ["split", /株式(?:の)?分割/u]]],
+  ["basis", [["consolidated", /(?<!非)連結/u], ["standalone", /単体|個別|非連結/u]]],
+  ["meeting", [["extraordinary", /臨時株主総会|臨時総会/u], ["ordinary", /定時株主総会|定時総会/u]]],
+  ["appointment", [["appoint", /選任/u], ["dismiss", /解任/u]]],
+  ["capital", [["increase", /増資/u], ["reduce", /減資/u]]],
+  ["listing", [["list", /新規上場|上場承認/u], ["delist", /上場廃止/u]]],
+  ["approval_state", [
+    ["pending", /未承認|未決議|未可決|承認前|決議前|議決前|可決前|承認を(?:前提|条件)|承認(?:が)?必要|承認待ち|承認予定|付議予定|上程予定|付議(?:する|いた)予定/u],
+    ["approved", /承認(?:済|され(?:た|ました|て(?:い|お|き)))|承認を得|決議(?:済|され(?:た|ました))|可決|採択/u],
+    ["rejected", /否決|不承認|否認|却下|廃案/u],
+    ["withdrawn", /撤回|取り?下げ|取消/u],
+  ]],
+];
+// Groups whose stated member must survive a retry (dropping a withdrawal / an outcome / the basis changes the fact).
+const STATE_PRESERVING_GROUPS: ReadonlySet<string> = new Set(["approval_state", "basis", "meeting"]);
+const APPROVAL_STATE_FIXED: ReadonlySet<string> = new Set(["approved", "rejected", "withdrawn"]);
+
+function exclusiveMembers(raw: string): Map<string, Set<string>> {
+  const text = raw.normalize("NFKC");
+  const negated = text.replace(NEGATED_APPROVAL, " 未承認 ");
+  const found = new Map<string, Set<string>>();
+  for (const [group, members] of EXCLUSIVE_FACT_GROUPS) {
+    const present = new Set(
+      members.filter(([, pattern]) => pattern.test(group === "approval_state" ? negated : text)).map(([name]) => name),
+    );
+    if (present.size > 0) found.set(group, present);
+  }
+  return found;
+}
+
+/**
+ * Deterministic text-vs-source conflicts (provider independent): a currency amount that is not one of the source's
+ * currency amounts (wrong value, rounding, wrong CURRENCY, wrong SIGN), an amount bound to a metric (売上高 / 純利益 /
+ * 配当 …) whose source value for that metric is different (swapped metrics), a fact-group member the source does not
+ * state while it states a different member (増配/減配, 連結/非連結, 未承認/承認済み, 撤回…). Short codes; empty when
+ * nothing conflicts or the source has nothing to compare.
+ */
+export function sourceTextConflicts(candidate: GenerationCandidate, generatedText: string): string[] {
+  const source = `${candidate.title}\n${candidate.bodySummary ?? ""}`;
+  const conflicts: string[] = [];
+  const sourceQuantities = canonicalQuantities(source);
+  const sourceKeys = new Set(sourceQuantities.map(quantityKey));
+  const sourceCurrency = sourceQuantities.filter((item) => CURRENCY_CLASSES.has(item.cls));
+  for (const quantity of canonicalQuantities(generatedText)) {
+    if (CURRENCY_CLASSES.has(quantity.cls)) {
+      if (sourceCurrency.length > 0 && !sourceKeys.has(quantityKey(quantity))) {
+        const sameValueOtherCurrency = sourceCurrency.some((item) => item.cls !== quantity.cls && Math.abs(item.value) === Math.abs(quantity.value));
+        const sameMagnitudeOtherSign = sourceKeys.has(quantityKey({ ...quantity, value: -quantity.value }));
+        conflicts.push(sameValueOtherCurrency ? `CURRENCY_SWAPPED:${quantity.cls}` : sameMagnitudeOtherSign ? "SIGN_SWAPPED" : `AMOUNT_NOT_IN_SOURCE:${quantity.cls}`);
+        break;
+      }
+    } else {
+      const sameClass = sourceQuantities.filter((item) => item.cls === quantity.cls);
+      if (sameClass.length > 0 && !sourceKeys.has(quantityKey(quantity))) {
+        conflicts.push(`AMOUNT_NOT_IN_SOURCE:${quantity.cls}`);
+        break;
+      }
+    }
+  }
+  // metric <-> value binding (売上高 100億 / 純利益 50億 must not be swapped)
+  const sourcePairs = sourceQuantities.filter((item) => item.metric);
+  for (const quantity of canonicalQuantities(generatedText)) {
+    if (!quantity.metric) continue;
+    const sameMetric = sourcePairs.filter((item) => item.metric === quantity.metric);
+    if (sameMetric.length > 0 && !sameMetric.some((item) => pairKey(item) === pairKey(quantity))) {
+      conflicts.push(`METRIC_VALUE_MISMATCH:${quantity.metric}`);
+      break;
+    }
+  }
+  const sourceMembers = exclusiveMembers(source);
+  for (const [group, members] of exclusiveMembers(generatedText)) {
+    const inSource = sourceMembers.get(group);
+    if (inSource && [...members].some((member) => !inSource.has(member))) conflicts.push(`FACT_KIND_SWAPPED:${group}`);
+  }
+  return conflicts;
+}
+
+/**
+ * A retry may only restore hedges. It must not introduce an amount (value, currency, sign) or move an amount to another
+ * metric, must not introduce a fact-group member the original lacked (a "pending" qualifier is allowed when the SOURCE
+ * itself says the item is pending), and must keep a stated approval state / withdrawal / basis.
+ */
+export function retryIntroducedCriticalFact(originalText: string, revisedText: string, candidate?: GenerationCandidate): boolean {
+  const original = canonicalQuantities(originalText);
+  const originalKeys = new Set(original.map(quantityKey));
+  const originalPairs = original.filter((item) => item.metric);
+  for (const quantity of canonicalQuantities(revisedText)) {
+    if (!originalKeys.has(quantityKey(quantity))) return true;
+    if (quantity.metric) {
+      const sameMetric = originalPairs.filter((item) => item.metric === quantity.metric);
+      if (sameMetric.length > 0 && !sameMetric.some((item) => pairKey(item) === pairKey(quantity))) return true;
+    }
+  }
+  const sourceMembers = candidate ? exclusiveMembers(`${candidate.title}\n${candidate.bodySummary ?? ""}`) : new Map<string, Set<string>>();
+  const originalMembers = exclusiveMembers(originalText);
+  const revisedMembers = exclusiveMembers(revisedText);
+  for (const [group, members] of revisedMembers) {
+    const before = originalMembers.get(group);
+    for (const member of members) {
+      if (before?.has(member)) continue;
+      if (group === "approval_state" && member === "pending" && sourceMembers.get(group)?.has("pending")) continue;
+      return true;
+    }
+  }
+  for (const [group, members] of originalMembers) {
+    if (!STATE_PRESERVING_GROUPS.has(group)) continue;
+    const after = revisedMembers.get(group);
+    for (const member of members) {
+      if (group === "approval_state" && !APPROVAL_STATE_FIXED.has(member)) continue;
+      if (!after?.has(member)) return true;
+    }
+  }
+  return false;
+}
+
+// ---- Issue-wording checks (second line of defence; the text-vs-source guards above do not depend on wording) -----
+// An issue that says the number itself is wrong, rounded, below a cap, in another unit / currency / sign, swapped
+// between metrics, or on another basis.
+const NUMERIC_DISCREPANCY_MARKER =
+  /ではなく|でなく|ではありません|とは?(?:異な|違|相違|不一致)|正しくは|正確には|実際は|実際には|本来は|原文では?|開示(?:資料)?では|資料では|不正確|切り捨|切り上|丸め|端数|桁|単位(?:が|の|を)?(?:違|異|誤|不一致|取り違)|下回|上回|届いて|達して(?:い|お)|満たな|誤り|誤記|相違|不一致|過大|過小|水増|元情報(?:は|では|に)|入れ替|取り違|混同|逆(?:転|に)|反転|符号|通貨/u;
+const NUMERIC_BASIS_ISSUE =
+  /算定(?:基準|対象|根拠)|(?:自己株式を除|親会社株主に帰属|希薄化後|潜在株式|連結|単体|通期|累計|四半期)(?:.{0,20})(?:欠落|省略|落と|抜け|不明|異な|違)/u;
+const PER_SHARE_PREFIX = /1株(?:当たり|あたり)(?:の)?/gu;
+
+/** True when the issue reports a wrong / rounded / unreached / re-based / re-signed number. Ambiguity resolves to true. */
+export function isNumericDiscrepancyIssue(issue: string): boolean {
+  const text = issue.normalize("NFKC").replace(/(?<=\d),(?=\d)/gu, "").replace(PER_SHARE_PREFIX, "");
+  if (NUMERIC_BASIS_ISSUE.test(text)) return true;
+  // Equivalent amounts (155億5,000万円 = 15,550百万円) are one canonical value: not a discrepancy by themselves.
+  const quantities = canonicalQuantities(text);
+  return NUMERIC_DISCREPANCY_MARKER.test(text) &&
+    (quantities.length > 0 || /数値|数字|金額|株数|割合|比率|累計|上限|下限|目標|通貨|符号|プラス|マイナス|売上|利益|損失/u.test(text));
+}
+
+const EVENT_OUTCOME_ISSUE =
+  /否決|可決|承認(?:済|され(?:た|ました|て(?:い|お))|を得)|決議(?:済|され(?:た|ました))|議決(?:済|され)|採択|不成立|成立|却下|撤回|取り?下げ|取消|廃案|中止|延期/u;
+// Kinds of corporate action / meeting. Two different kinds named in one issue is a mix-up, not a hedge.
+const EVENT_KIND_GROUPS: ReadonlyArray<readonly [string, RegExp]> = [
+  ["appointment", /選任|解任|再任|退任/u],
+  ["articles", /定款(?:の)?変更/u],
+  ["consolidation", /株式(?:の)?併合/u],
+  ["split", /株式(?:の)?分割/u],
+  ["extraordinary_meeting", /臨時株主総会|臨時総会/u],
+  ["ordinary_meeting", /定時株主総会|定時総会/u],
+  ["merger", /合併|株式交換|株式移転|吸収分割|会社分割/u],
+  ["offer", /公開買付|ＴＯＢ|TOB/u],
+  ["financing", /第三者割当|増資|減資|新株予約権|社債/u],
+  ["dividend", /配当|剰余金/u],
+  ["buyback", /自己株式/u],
+  ["pay", /役員報酬|報酬/u],
+];
+const CONTRAST_OR_SUBSTITUTION_ISSUE = /ではなく|でなく|ではありません|とは?異な|と取り違|と混同|と誤|と誤認|逆に|反対に/u;
+// "確定ではなく意向" restores a hedge; the contrast target is a hedge word, not another fact.
+const CONTRAST_TO_HEDGE = /(?:ではなく|でなく)[、,]?(?:あくまで)?(?:意向|予定|見込み|見通し|計画|方針|提案|案|可能性|検討)/gu;
+// Unclear WHO does WHAT. Judged per clause (split on 。、；，): a party noun and an uncertainty word in the SAME clause,
+// whatever the characters between them ("対象企業についての記述が不明瞭で").
+const PARTY_NOUN =
+  /主体|主語|当事者|発行者|提出者|買付者|対象会社|対象企業|対象者|相手方|譲渡先|譲受先|取得者|当社|親会社|子会社|企業|会社|法人/u;
+const UNCERTAINTY_WORD = /不明瞭|不明|曖昧|あいまい|不一致|特定(?:でき|されて)(?:ない|いない)|判然|はっきりしない|確認できない|区別(?:でき|されて)(?:ない|いない)/u;
+const UNCLEAR_PARTY_QUESTION = /誰が|どの(?:会社|企業)|どちらの/u;
+// Wording complaints about a name ("会社名の表記が不明瞭") are not a party problem; the name branch decides those.
+const NAME_WORDING_CLAUSE = /(?:会社名|企業名|法人名|社名|略称|正式名称)(?:の)?表記/u;
+
+export function isUnclearPartyIssue(issue: string): boolean {
+  const text = issue.normalize("NFKC");
+  if (UNCLEAR_PARTY_QUESTION.test(text)) return true;
+  return text.split(/[。、；;，,\n]/u).some((clause) =>
+    PARTY_NOUN.test(clause) && UNCERTAINTY_WORD.test(clause) && !NAME_WORDING_CLAUSE.test(clause)
+  );
+}
+
+/** True when the issue concerns the outcome / kind / direction of an event or an unclear party (a different fact). */
+export function isCriticalEventFactIssue(issue: string): boolean {
+  const text = issue.normalize("NFKC");
+  if (EVENT_OUTCOME_ISSUE.test(text) || isUnclearPartyIssue(text)) return true;
+  if (CONTRAST_OR_SUBSTITUTION_ISSUE.test(text.replace(CONTRAST_TO_HEDGE, " "))) return true;
+  if (EVENT_KIND_GROUPS.filter(([, pattern]) => pattern.test(text)).length >= 2) return true;
+  return [...exclusiveMembers(text).values()].some((members) => members.size >= 2);
+}
+
+// An explicit "not yet approved / pending" qualifier. The bare nouns 議案 / 付議 / 上程 are NOT one: they only name
+// an item and appear in mix-ups ("選任議案を定款変更議案と断定").
+const PENDING_APPROVAL_HEDGE =
+  /承認前|決議前|議決前|可決前|未承認|未決議|未確定|承認(?:を)?(?:前提|必要|待ち|予定)|(?:総会|取締役会)(?:での|の)?(?:承認|決議|議決)(?:を|が|は)?(?:前提|必要|待っ|経て|予定)|付議予定|上程予定|(?:承認|決議)されて(?:いない|おらず)/u;
+
+function passesRetryGuards(issue: string): boolean {
+  return !HARD_FACT_ERROR_ISSUE.test(issue) && !isNumericDiscrepancyIssue(issue) && !isCriticalEventFactIssue(issue);
+}
+
 export function isOverAssertionFactIssue(issue: string): boolean {
-  return OVER_ASSERTION_ISSUE.test(issue) && SOURCE_HEDGE_ISSUE.test(issue) && !HARD_FACT_ERROR_ISSUE.test(issue);
+  return OVER_ASSERTION_ISSUE.test(issue) && SOURCE_HEDGE_ISSUE.test(issue) && passesRetryGuards(issue);
+}
+
+/**
+ * A proposal that still needs approval was written as settled ("増額します"). Restoring the source's own "承認前 /
+ * 付議予定" changes no fact. Evaluated BEFORE the generic word list, because such issues often say "不明瞭" (unclear),
+ * which is a wording complaint — unlike "不明" (the fact is unknown), which stays non-retryable. Every guard of the
+ * generic path applies, and outcome / kind / number discrepancies are refused.
+ */
+export function isPendingApprovalOverAssertion(issue: string): boolean {
+  if (!OVER_ASSERTION_ISSUE.test(issue) || !PENDING_APPROVAL_HEDGE.test(issue)) return false;
+  // 不明瞭 on the wording is fine; 不明瞭 on the party / subject is a fact about who does what.
+  if (isUnclearPartyIssue(issue)) return false;
+  if (NON_RETRYABLE_FACT_ISSUE_PATTERNS.some((pattern) => pattern.test(issue.replace(/不明瞭/gu, "")))) return false;
+  return passesRetryGuards(issue);
 }
 
 function isRetryableFactIssue(
@@ -775,6 +1074,11 @@ function isRetryableFactIssue(
   issue: string,
   deterministicIssues: string[],
 ): boolean {
+  // Fail closed first, for every branch below (including the company-name "表記" branch and the market shortcut):
+  // an outcome / kind / direction / party / number problem is a different fact, never a wording fix — and a text that
+  // conflicts with its source on amounts or fact kinds is not retried whatever the issue says.
+  if (isCriticalEventFactIssue(issue) || isNumericDiscrepancyIssue(issue)) return false;
+  if (sourceTextConflicts(candidate, generatedText).length > 0) return false;
   // A local deterministic hit means this is specifically an unsupported assertion in the generated
   // text; removing that assertion is safe even when the model phrases the issue as "根拠のない因果".
   if (
@@ -784,6 +1088,7 @@ function isRetryableFactIssue(
   ) {
     return true;
   }
+  if (isPendingApprovalOverAssertion(issue)) return true;
   if (NON_RETRYABLE_FACT_ISSUE_PATTERNS.some((pattern) => pattern.test(issue))) return false;
   if (isOverAssertionFactIssue(issue)) return true;
   if (issue === "MISSING_EXPLICIT_YEAR" || /年|日付|年月日.*(?:欠落|不足|抜け|記載)/u.test(issue)) {
@@ -792,7 +1097,7 @@ function isRetryableFactIssue(
   if (issue === "UNSUPPORTED_MARKET_INTERPRETATION" || /市場|影響|因果|解釈/u.test(issue)) {
     return deterministicIssues.includes("UNSUPPORTED_MARKET_INTERPRETATION");
   }
-  if (/会社名|企業名|法人名|略称|正式名称|表記/u.test(issue)) {
+  if (/会社名|企業名|法人名|社名|略称|正式名称/u.test(issue)) {
     return companyIdentityEvidence(candidate).sameCompanyConfirmed;
   }
   if (/ラベル|軽微な表記|表記整合|スペル|綴り/u.test(issue)) {
@@ -853,6 +1158,19 @@ async function attemptFactRetry(
       diagnostics: {
         attempted: true, usedModel: retryStep.model, initialFactIssues,
         localFactStatus: "failed", localFactIssues: localIssues,
+        retryFactStatus: null, retryFactIssues: [], error: null,
+      },
+    };
+  }
+  // The retry may restore hedges only. A revision that introduces an amount or an event-kind / direction / outcome /
+  // basis the original text did not contain has changed a fact: refuse it without relying on any model's judgement.
+  if (retryIntroducedCriticalFact(originalText, revisedText, candidate)) {
+    return {
+      text: revisedText,
+      fact: { status: "failed", issues: ["FACT_RETRY_CHANGED_CRITICAL_FACT"] },
+      diagnostics: {
+        attempted: true, usedModel: retryStep.model, initialFactIssues,
+        localFactStatus: "failed", localFactIssues: ["FACT_RETRY_CHANGED_CRITICAL_FACT"],
         retryFactStatus: null, retryFactIssues: [], error: null,
       },
     };
@@ -1201,6 +1519,7 @@ export async function requestGenerationStep(
     "あなたは重要ニュース投稿の限定Fact修正担当です。入力候補・一次情報・judgementにある事実を変えず、指摘された軽微なFact不整合だけを機械的に修正してください。",
     "許可される修正は、入力に明示された年・日付を本文へ戻すこと、根拠のない市場解釈・影響解釈・因果表現を削除すること、確認済み同一企業の安全な正式表記へ統一すること、軽微なラベル/表記整合、そして元情報が『とみられる』『疑い』『意向』『可能性』『暫定』等の留保付きで伝えている内容を本文が確定事実として言い切っている箇所を、元情報と同じ留保表現に戻すことだけです。",
     "数値、企業・証券コードの同一性、日付や出来事の発生時刻、因果関係・規模・対象範囲・条件、元情報、source URLに疑義がある場合は推測で直しません。新しい事実・解釈・市場影響・因果関係を追加しません。",
+    "承認前の議案・提案を確定として書いているという指摘は、元情報にある『承認前』『付議予定』『予定』などの留保表現に戻すだけです。可決・否決・承認の結果、議案の種類、株式併合と株式分割の別、株主総会の種別（臨時・定時）、金額・株数は変更しません。",
     "fact_issuesに指摘のない箇所は極力そのまま維持し、修正後の本文だけをtextとして返してください。見出しラベルやURL、『出典』表記はtextに含めず、プログラム側で処理します。",
   ].join("\n") : isVoiceRetry ? [
     "あなたは重要ニュース投稿の限定修正担当です。事実・数字・固有名詞・意味・出典を一切変えず、指摘された文章品質の問題（重複表現、同義反復、同内容の連続説明、冗長、不自然な接続・締め、不自然な英単語・和英混在、助詞や単複などの軽微な文法）だけを修正してください。",
@@ -1215,6 +1534,11 @@ export async function requestGenerationStep(
     "決算、業績予想修正、配当修正などでは、結論を変える重要事実を落としません。一次情報またはjudgementReasonに予想比の上振れ・下振れ、修正方向、赤字転落、黒字転換、通期予想や配当の変更有無が明記されていれば、最重要なものを本文に含めます。すべての数値を詰め込む必要はありません。",
     "書き終える前にtitle、bodySummary、judgementReasonを照合し、ニュースの結論となる重要事実を本文が反映しているか確認してください。",
     "元情報にない数値、日付、固有名詞、因果、規模、将来予測を追加しません。",
+    // 2026-10-09 TDnet generation failures (Fact catches of the draft): rounded amounts (155.5億円 -> 155億円,
+    // 32億8,300万円 -> 32億円), "上限に達した" for a cumulative amount just below the cap, a dropped calculation
+    // base or profit definition, and a proposal written as settled before shareholder approval.
+    "金額・株数・割合は、値を変えずに読みやすい単位へ換算して構いません（例：15,550百万円は155億5,000万円）。端数の丸め・切り捨て・桁落ちはしません。累計取得額などが上限・目標に満たない場合は『上限に達した』『完了した』と書かず、元情報の数値と状況をそのまま伝えます。",
+    "割合や利益の算定基準（『自己株式を除く発行済株式総数』『親会社株主に帰属する当期純利益』など）は、元情報の範囲を保って書き、省略・一般化しません。取締役会の決議と株主総会の承認は区別し、承認前の議案・提案は『提案』『付議予定』と書き、承認・可決された事項として書きません。",
     "元情報の不確実性・留保表現（『とみられる』『疑い』『意向』『可能性』『暫定』『予定』『計画』『〜と主張』等）は必ず維持し、確定した事実として言い切りません。",
     "『入力情報からは確認できません』『入力データでは〜』『提供された情報では〜』など、入力や情報源の扱いについて説明する文は書きません。",
     "日本株への影響、影響を受けそうな対象、市場反応は、元情報または確定済みjudgementに直接の根拠がない場合、締めにも本文にも追加しません。『日本株への影響は確認できません』のような締めの一文も不要です。確認できた事実で自然に終えてください。",

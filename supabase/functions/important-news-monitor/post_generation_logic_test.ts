@@ -1402,3 +1402,18 @@ test("voice_retry request instructions are narrowly scoped to wording-only fixes
   assert.match(instructions, /新しい事実、解釈、市場影響、因果関係を追加しません/);
   assert.match(input, /"voice_issues":\["重複表現がある"\]/);
 });
+
+// ------------------------------------------------------------ TDnet generation failures (2026-10-09 analysis)
+
+test("draft instructions: numeric fidelity without forbidding unit conversion; proposals before approval stay proposals", async () => {
+  const instructions = await draftInstructions(candidate());
+  assert.match(instructions, /値を変えずに読みやすい単位へ換算して構いません/);
+  assert.match(instructions, /端数の丸め・切り捨て・桁落ちはしません/);
+  assert.match(instructions, /上限・目標に満たない場合は『上限に達した』『完了した』と書かず/);
+  assert.match(instructions, /算定基準/);
+  assert.match(instructions, /取締役会の決議と株主総会の承認は区別し/);
+  assert.match(instructions, /承認・可決された事項として書きません/);
+  // the existing draft rules are kept
+  assert.match(instructions, /textには【速報】や【重大速報】を含めず/);
+  assert.match(instructions, /元情報にない数値、日付、固有名詞、因果、規模、将来予測を追加しません/);
+});
