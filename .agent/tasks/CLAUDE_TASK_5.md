@@ -1,3 +1,70 @@
+# G5 — CURRENT TASK — Phase 3e E11 independent-review corrective (offline only)
+
+- task_id: common-account-phase3e-e11-offline-review-r1-r5-corrective-20261011
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- priority: critical
+- start_code: G5
+- finish_code: K5
+- return_to: 共通アカウントG5のちゃ
+- recommended_model: **Opus5.5（高）**
+- source_only: true
+- production_supabase_auth_storage_provider_remote_calls_allowed: false
+- disposable_supabase_remote_calls_allowed: false
+- any_project_create_pause_restore_delete_allowed: false
+- real_or_disposable_Auth_DELETE_allowed: false
+- migration_apply_feature_activation_merge_deploy_eas_allowed: false
+
+## Goal / C2 source of truth
+
+Codex H2 `.agent/CODEX_REPORT_2.md` current first section reviewed E11 and concluded **CHANGES_REQUIRED**: **R1 P1** and **R2–R5 P2**. Fix the E11 test methodology, evidence semantics, catalog/read-only plan and dry-run tests, NOT the actual account-deletion implementation. Family photo app `anohi-memories` MUST remain active: G5 Phase3d PREPAUSE_BLOCKED. Do not select Option D, approve SQL Auth deletion, release `managed_auth_delete` from blocked, or start real managed Supabase testing.
+
+Protected exact OPEN/DRAFT/UNMERGED heads; verify again:
+- G5 PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`: service-write guard and GoTrue analysis; NEVER edit.
+- G5 PR122 `f17a47e36632fff4a1f4cfb0b860df200e1c99e1`: E1–E12 offline documentation, `supabase/tests/common_account_disposable_e2e/` catalog/guard/evidence; source for corrective.
+- G5 PR128 `e9244d29ea944156cf1479c0976053d433469e06`: STOP/TEST/RESTORE operator documents, maintain untouched.
+- All G1–G4/H1/H2 tasks, reports, branches, migrations, production code and dev servers protected.
+
+## Setup, branch and ownership
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, `.agent/ACTIVE_TASK.md`, this task with immutable prior history, complete current first-section H2 review report **R1–R5**, PR121 GoTrue research, PR122 runbook/catalog/evidence/static tests, PR128 checklist, and G4/G5 T9/T10/T13 contract.
+2. Fetch fresh `origin/main` from `/Users/yuya/Developer/kabumori-fresh`. Create a NEW G5 Phase3e isolated worktree, separated from prior G5 PR121/122/128 and all G/H worktrees; confirm open PR/file overlap and uncommitted ownership. Since PR122's 21 source paths are unmerged, base an entirely **NEW branch** on the exact PR122 commit snapshot, never checkout/rebase/reset/push/modify the protected original PR122 branch/worktree. Create a **NEW Draft PR stacked onto the protected PR122 branch** containing only the Phase3e corrective delta. Abort if the PR122 branch/head or stacking/base comparison is unsafe. No `git push --force`.
+3. Scope: PR122-owned `docs/common-account/phase3c-disposable-supabase-proof-runbook.md`, `supabase/tests/common_account_disposable_e2e/` catalog/evidence/guard/tests/read-only probes/checklist and if essential, NEW G5-only doc. Do not touch SQL migrations/auth schema/security definer functions, GoTrue, X/Threads, live/deployed code, original PR121/122/128 heads, API/prod, family photos/users, provider credentials or Supabase projects. Absolutely no executor or network capability in tests.
+
+## Required corrections: ALL FIVE H2 findings
+
+**R1 [P1] — Admin-vs-SQL independent deletion evidence matrix**: Define both separate fake-user control and test cohorts under identical schema/config with positive nonzero before-state fixtures/denominators and masked correlation. Explicitly compare (a) GoTrue Admin delete audit `user_deleted`, existing `identity_linked` retention vs SQL direct-delete behavior (do not assume GoTrue audit is auto-created); (b) owned/unowned Storage object and actual physical blob/read-back; (c) denied FK/trigger/role/ACL paths, lock and statement timeouts, pre-commit rollback, lost/ambiguous commit response with read-back and **NO blind retry**; (d) sessions/refresh rows with pre-deletion target identifiers (not vacuous empty after-JOIN); (e) *valid old* and *explicitly expired old* JWT, guarded+unguarded PostgREST and Storage upload read-backs. Define PASS/FAIL/UNKNOWN and no automatic provider revoke, no inference of full cleanup from `auth.users` disappearance or catalog hash.
+
+**R2 [P2] — Label the SQL row-latch probe precisely**: current E11 `auth.users FOR UPDATE; DELETE` probes platform permission, FK/cascade and row-latch, **NOT** a complete lifecycle authorization+required checkpoint/provider snapshot/lease within same transaction. Separate future OPTION D full-decision proof (manual/automatic/PKCE inflight identity link, cross-role writers, lock order both directions, no lock release between decision and deletion). No feature implementation or unblocking.
+
+**R3 [P2] — OAuth E4 expiry bounds**: last successful callback delay is a **LOWER**, not upper bound. Require matching GoTrue version/config maximum, attempted callback after verified expiry, request processing maximum, clock-skew margins, in-flight drain and exclusive recheck for A+B; missing proof = BLOCKED. Modify `evidence.ts` and focused tests so a mere string `e4Mitigation` (e.g. `settle_exceeds_measured_flow_expiry`) with no bounded evidence CANNOT qualify for `EVIDENCE_COMPLETE_PENDING_INDEPENDENT_REVIEW`. Disabling fresh links does not cancel already-started callbacks.
+
+**R4 [P2] — Static declarations are NOT verified consent or destination**: PR122 `guard.ts validate` is only dry-run plan eligibility; a fake approval ref/marker cannot attest to real reviewer, actual project, exact connection target, fake-only test users or required prior E1/E8/E9/E10/E12 readbacks. Add explicit operator fail-closed manual witness checks for exact newly created **disposable** project, exclusion of the two running app projects and inactive historical project, fake-user run-scoped provenance and one-row DELETE target, separate actual approval provenance and prior evidence. No remote verification, no live connection, no executor; do not mislabel self-declaration PASS.
+
+**R5 [P2] — Fingerprint limitations**: original `catalog_fingerprint.sql` is LIMITED catalog read; it does not capture all managed trigger function bodies, inherited role ACL, RLS policies, schema/column/default grants, Storage metadata/ownership and physical blob, actual before/after user/child counts. Add bounded separate read-only future verification SQL/procedure/expected fields or manual checklist; denied access => UNKNOWN. No write SQL, no privilege elevation, no claim that catalog match undoes external provider effects.
+
+## Tests, acceptance and reporting
+
+- Source-only local tests, at minimum `deno test --no-config --allow-read supabase/tests/common_account_disposable_e2e/`, relevant `deno check`/`lint`, static no-network safety and focused R1–R5 negative cases (especially E4 mitigation label alone cannot PASS), mutation suite if feasible, `git diff --check`, secret scan, branch/main and other PR overlap readback. No actual Auth deletion or network permission. Clearly distinguish simulated proof from real managed Supabase evidence.
+- Produce new Draft PR (stacked against unchanged PR122 head) and a thorough Report here: task_id, findings R1–R5 closure table, changed_files, exact new PR head/base, tests executed (or NOT_RUN), commit/push, deploy=NO, photo_app_paused=false, projects_created=0, real_remote_calls=0, remaining OAuth/OIDC/demo IDP and E11 proof blockers, safety_checks, next_recommendation.
+- On completion status `review_required`/next_owner `chatgpt`, return K5. ChatGPT will decide one **narrow Sol（高） Codex H2 exact-head rereview** only if actually unallocated and necessary. Code review PASS NEVER itself grants E11 execution, option-D architecture, user consent, production Auth deletion or permission to stop photos.
+
+推薦モデル：**Opus5.5（高）**
+
+## Report — Phase 3e
+
+- task_id: common-account-phase3e-e11-offline-review-r1-r5-corrective-20261011
+- result: pending
+- remote_calls: 0
+- family_photo_paused: false
+- actual_Auth_DELETE: 0
+
+---
+
+# Preserved previous G5 K5/TASK/Report history (immutable below)
+
 # K5 Phase 3d — documentation accepted / DO NOT PAUSE family photo app — 2026-10-10 JST
 
 - task_id: common-account-phase3d-disposable-proof-pause-restore-preflight-20261010
