@@ -33,17 +33,17 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: postona-g4-x-oauth-containment-defensive-assessment-20261010
 - start_code: H1
 - finish_code: C1
 - completion_code: C1
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Previous common-AI H1 R1/R2 C1 PASS is completed/preserved. User approved G4→H1 single-task handoff after Claude Opus5.5 cyber safeguard stopped current G4 session. H1 performs NORMAL Codex defensive investigation/review (NOT 臨時実装): source-derived function ACL/exposure + containment impact matrix, operator read-only preflight proposal, optional benign fake-PG permission-denial proof. No exploitation reproduction, actual product implementation, real auth/provider/token/live Supabase, production reads/writes, RPC/Edge/deploy/merge, or connection pause. G4 BLOCKED pending H1 C1. Keep H2 G5 E11 review untouched. Return C1 to explicitly named POSTONA G4 chat.
-- recommended_model: Sol（高）
+- allocation: C1 accepted H1's published DEFENSIVE_ASSESSMENT_COMPLETE source-only evaluation and benign mock-PG 42501 deny proof; no exploitation/real production proof. Narrow legacy X OAuth completion restriction is conditional and would block new/reconnections; posting/refresh structurally separate but live continuity unknown. Report/history retained, H1 done and unreserved. No live preflight or ACL change authorized. G4 blocked awaiting ChatGPT/user next decision; H2/G5 untouched.
+- recommended_model: Sol（高） (completed)
 ## Codex H2
 - owner: codex
 - slot: codex-2
@@ -102,11 +102,11 @@
 - task_id: postona-x-oauth-preclaim-containment-readiness-20261010
 - start_code: G4
 - finish_code: K4
-- next_owner: codex-1
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Claude Opus5.5 cyber safeguard interrupted this exact defensive containment readiness task; no current matching G4 Report, K4 NOT completed. User approved temporary delegation of narrowed defensive risk/permission/impact assessment to H1. H1 task postona-g4-x-oauth-containment-defensive-assessment-20261010 ready, ordinary security investigation only, not 臨時実装. STOP new G4 work until POSTONA G4 ChatGPT receives H1 C1 and determines next gate. Existing PR126/124/121/122, G3/X operation and G5 unchanged; no runtime change.
-- recommended_model: Opus5.5（高） (on hold, no start)
+- allocation: Prior G4 Opus5.5 safeguard-stopped TASK has no matching Claude completion Report and is NOT K4-done. H1 delegated DEFENSIVE_ASSESSMENT_COMPLETE was accepted at C1 and H1 is released; original G4 remains blocked pending a separate user decision on strictly read-only production metadata preflight vs maintained pause/fully reviewed future v2. No G4 task restart, production inventory/ACL/RPC/Edge write, connection suspension, real API calls, or PR121/124/126 merge is approved. G3/G5 and H2 separately preserved.
+- recommended_model: Opus5.5（高） (on hold)
 ## Claude G5
 - owner: claude
 - slot: claude-5
