@@ -64,7 +64,7 @@ Work on same PR112 branch, use source-only fast-forward push after fresh main/PR
 
 推薦モデル：**Opus5.5（極高）**
 
-#### K5 — Source-only final corrective candidate review — 2026-10-10 JST
+## K5 — Source-only final corrective candidate review — 2026-10-10 JST
 
 - verdict: **PASS_CANDIDATE to independent exact-head H2 security rereview only**. No source merge/deploy or permission to open the whole-account deletion gate.
 - target_pr: 112; exact head `54b9435b0dcc0d0e79ae6eba4340eee44508141c` OPEN/UNMERGED, 30 PR files.
@@ -75,7 +75,7 @@ Work on same PR112 branch, use source-only fast-forward push after fresh main/PR
 - H2 reviewed previous head then marked done after C2; H1 remains assigned PR106. K5 assigned **H2** `common-account-pr112-r1l-r2-apple-boundary-exact-head-rereview-20261010` with recommended **Sol（極高）**, return_to **共通アカウントG5のちゃ**, finish **C2**. G2 PR110 remains waiting; all other slots preserved. Review first, no merge/migration/Edge deploy/EAS.
 - G5 remains review_required, next_owner codex. Production read/write, provider/API calls, migration apply, deploy, EAS and PR merge by K5: 0.
 
- Report — current bounded residual corrective
+## Report — current bounded residual corrective
 
 - status: review_required
 - task_id: common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010
