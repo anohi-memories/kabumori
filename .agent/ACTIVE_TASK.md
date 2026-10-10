@@ -33,17 +33,17 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: common-ai-provider-pr119-c1-r1-r2-narrow-rereview-20261010
 - start_code: H1
 - finish_code: C1
 - completion_code: C1
-- next_owner: chatgpt
+- next_owner: none
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Narrow one-time PR119 exact-head 8ef3843f51e771088dfe58e2e5a262db0b62644a review for previously reproduced R1 P1 duplicate HTTP dispatch and R2 P2 SET ROLE privilege-path only; prior full Phase1a+1b H1 review complete. Verify with local disposable SQL and fake-provider focused reproductions, no repeat comprehensive review; PR117 exact head 2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226 protected. No production, actual provider calls, Secrets, merge or deploy. Return C1 here. H2 and G1-G5 untouched.
-- recommended_model: Sol（高）
+- allocation: C1 PASS accepted PR119 R1 P1 one-time send and R2 P2 SET ROLE authority-path correction at exact head 8ef3843f; PR117 protected 2ddae0dc. H1 done/no current assignment. Source merges PR117 then PR119 need separate preflight, no production DB migration/API/deploy authorized; no more broad re-review.
+- recommended_model: Sol（高） (completed)
 
 ## Codex H2
 - owner: codex
