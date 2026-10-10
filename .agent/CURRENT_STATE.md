@@ -1,3 +1,53 @@
+## C2 FINAL — PR112 R1/R2 residual CHANGES REQUIRED / G5 corrective READY — 2026-10-10
+
+- H2 independent security rereview of PR112 exact `b60272c433b57bac1acb00c13d4fda7ff96f1f2f`, 25 files: **CHANGES REQUIRED**, source merge **HOLD**, PR OPEN/UNMERGED. `.agent/CODEX_REPORT_2.md` full report and TASK receipt were pushed/read back. Last GitHub mergeability snapshot varied; not a security approval.
+- **R1 P1**: old Phase1 service_role EXECUTE on `record_common_account_deletion_checkpoint` / `clear_common_account_deletion_checkpoint` (+unowned prepare) can write Apple checkpoint during external in-flight after lease expires, bypassing new owned/fenced interfaces. Disposable real SQL counterexample H2_R1_LEGACY_UNOWNED_APPLE_CHECKPOINT_BYPASS.
+- **R2 P1**: real shared Apple HTTP helper returns `false` on ambiguous 502 following one-time exchange+provider revoke. Account-delete adapter erroneously settles as definitive failed and clears intent, then next attempt exchanges consumed code again; reviewer mock had exchanges=2/revocations=1. No actual Apple calls or production incident.
+- Passed/accepted independent: current Edge-level concurrency/lease behavior, schema-enforced R3 blocked release gate, R4 completed fresh Storage residue, C1 future timestamps refused. Standard tests 542/542, Phase1/2/3a PG ALL PASS, SQL mutations 43/43, TS mutations 38/38; reviewer additional adverse R1/R2 reproduced (this means finding confirmed, not safety PASS). Minor new strict Deno lint `require-await` at `lifecycle_logic.ts:405`, root/toolchain existing tsc gaps recorded in H2 Report.
+- H2 completed and C2 closed it: TASK status done, next_owner none; no new H review assigned or automatically reserved. H1 still assigned POSTONA PR106. G2 PR110 independently awaits a review opening. All other G1-G4 TASKs preserved.
+- New narrow G5 TASK in `.agent/tasks/CLAUDE_TASK_5.md`: `common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010`, status **ready**, next_owner **claude**, recommended **Opus5.5（極高）**, same PR112; old G5 TASK/Report preserved. Must safely fence/revoke legacy *effective* service_role checkpoint/clear/prepare pathway **in unapplied Phase3a migration only**, preserve necessary Phase1/2 behavior; make real Apple account-delete adapter fail closed for ambiguous non-OK/502 without editing G4's shared X helper; add actual adapter and SQL adverse regressions; fix changed-runtime strict require-await lint. No scope expansion without explicit owner coordination.
+- **Whole common-account Auth deletion remains UNAVAILABLE/BLOCKED** behind SQL `blocked` release gate; actual Auth identity write fencing, stale-JWT/creator guards, X-only/ended Kabumori path, old live hard-delete endpoint and disposable real Supabase proof remain separate prerequisites. Do not conflate a future source merge with activation.
+- PR merge, production DB/Auth/Storage/provider read/write, migration apply, Edge deploy, EAS/TestFlight and real user deletion: **NOT AUTHORIZED**; C2 changed only `.agent` orchestration files. G5 next K5 must independently confirm new exact head, fixes, run regressions and ask for a fresh H review slot before any merge.
+- User next: send **G5** to Claude Code with **Opus5.5（極高）**, then **K5** in 共通アカウントG5のちゃ. Non-overlapping other workstreams are not frozen.
+- AI Lab diary: 記録不要 — internal security corrective, earlier safe shared-account development record already exists.
+
+## K5 FINAL — G5 PR112 corrective PASS_CANDIDATE / H2 exact-head rereview READY — 2026-10-10
+
+- G5 TASK `common-account-v1-phase3a-pr112-h2-r1-r4-c1-corrective-20261009` latest Report is complete; status **review_required**, next_owner **codex**. G5 recommends source-only PASS_CANDIDATE, **not** whole-account deletion feature completion or production enablement.
+- PR #112 `https://github.com/anohi-memories/kabumori/pull/112` exact head `b60272c433b57bac1acb00c13d4fda7ff96f1f2f`, OPEN / unmerged, 25 files, GitHub mergeable=true at K5 read. Compare since H2's previously rejected head `c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d`: 1 commit / 14 files, G5-controlled paths only. PR base to latest main: 42 commits, PR-file overlap 0 (reconfirm before review/merge).
+- G5 reported R1 durable lease/fencing and concurrent ownership, R2 single-use Apple in-flight/uncertain outcome reconciliation, R4 fresh completed residue read-back, C1 future AMR timestamps strictly rejected; R3 managed Auth deletion remains blocked by DB enforced `state='blocked'` gate until separate reviewed Auth-side identity-change fence. K5 spot-checked the gate-before-mutating call, strict AMR condition, blocked-gate SQL and completed residue path in exact new head; these are not substitutes for independent security tests.
+- Claimed G5 tests: account-delete 53 PASS, app 430, AuthProvider 23, X saga 17, X app 19, PG Phase1/2/3a PASS, SQL mutations 43/43 detected, TS mutations 38/38 detected, check/lint/diff PASS. G5 reports source push fast-forward; production read/write, migration apply, Edge deploy, provider operations, EAS and merge 0.
+- **K5 verdict: PASS_CANDIDATE to focused independent Codex security rereview. Source merge HOLD**; live whole-account deletion activation **BLOCKED**; production changes unapproved. Real disposable Supabase/identity-fence and old endpoint safety, stale JWT/creator checks, X-only path, operator reconciliation, Web disclosure and Simulator remain future gates.
+- H1 stays assigned POSTONA PR106. H2 previous PR112 C2 task was done/closed with old receipt preserved; K5 confirms true free task/index slot then assigned **H2** `common-account-v1-phase3a-pr112-r1-r4-c1-final-rereview-20261010`, exact head as above, recommended **Sol（極高）**, return_to **共通アカウントG5のちゃ**, completion_code **C2**. G2 PR110 remains waiting for another review opportunity and was not overwritten.
+- Next user action: send **H2** to Codex, then **C2** to 共通アカウントG5のちゃ. H2 must not merge/apply/deploy/EAS.
+- Preserve G5 conflict-based priority; other nonoverlapping slot work, commits, pushes, PR merges and separately approved production operations may continue. No global freeze.
+- AI Lab diary: 記録不要。前日の安全な開発日記エントリと重複し、今回のゲート・lease/ACL詳細は公開向きではない。
+
+## C2 FINAL — G5 Phase3a PR112 H2 CHANGES REQUIRED / G5 corrective READY — 2026-10-09
+
+- Confirmed original H2 independent report and completion receipt for `common-account-v1-phase3a-pr112-security-review-20261009` at exact PR112 head `c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d`. Report: **CHANGES REQUIRED**, reviewed 24/24 files, original suites green but independently reproduced five issues.
+- **Four P1**: R1 parallel requests duplicate Apple/managed Auth calls; R2 Apple success followed by checkpoint failure incorrectly reuses one-time code; R3 Apple requirement changes after prepare yet completion falsely succeeds; R4 completed fast path ignores late Storage residue. **P2 C1**: future recent-auth timestamps +30 sec accepted, contrary to spec. These are mock/disposable PostgreSQL proofs; do not misstate them as production incidents.
+- C2 accepted reviewer findings, NOT source merge. PR112 is open/unmerged at its exact head. Production release readiness NO; migration apply, Edge deploy, EAS/TestFlight and production Auth/Storage/Apple/X operations all HOLD.
+- G5 original Phase3a source candidate is historical review_required; its old TASK/Report are preserved under the **new G5 current corrective** `common-account-v1-phase3a-pr112-h2-r1-r4-c1-corrective-20261009` in `.agent/tasks/CLAUDE_TASK_5.md`. G5 **ready / next_owner claude**, recommended **Opus5.5（極高）**, same PR112, source-only with explicit fail-closed behavior for any unsolved shadow writer/enforcement gap. Return K5 to 共通アカウントG5のちゃ.
+- H2 review is complete/closed: TASK header **done / next_owner none** with old H2 report/receipt preserved. H2 availability for future G2 or G5 rereview must be re-checked and is **not reserved**. H1 still owns POSTONA PR106. Do not overwrite G1–G4 tasks or other worktrees.
+- G5 next K5 must verify actual new head, independent R1–R4/C1 safety regressions and SQL/TS mutation, source overlap, and remaining X-only/stale-JWT/real-Supabase gates; allocate independent Codex exact-head rereview only to a genuinely free H slot. Keep G5 priority **conflict-based**, not global freeze.
+- C2/source side effects: TASK and .agent index/state orchestration only. No implementation source modifications, no PR merge or production mutation; H2 review itself reported no production calls or source changes.
+- AI Lab diary: 記録不要。既存の公開安全なG5 Phase3a試作記録があり、今回のC2はセキュリティ上の内部是正確認で重複記録を作らない。
+
+## Final K1 — Portfolio asset-card botanical polish PASS / PR #113 merged — 2026-10-09
+
+- G1 `kabumori-portfolio-asset-card-background-polish-20261008` complete.
+- PR #113 exact accepted head `bc54e91c7b72186fa03c35b7d3be157453651cb6`, squash-merged successfully as `28d9c61e6dc52fe71ee8bbcd3521b24ad7addc3e`.
+- Fresh main at final merge check `107169293fa59911fbb87b9d421ef1c45fd4d7c7`, GitHub mergeability true/clean; overlap with current main and other open PR file scopes **0**.
+- Accepted asset-card polish: user-approved transparent 1600x700 botanical WebP, opacity 0.45, right of upper card behind digits and sparkline, clipped to card.
+- Real saved-close `market_value` sparkline remains truthful: up green, down muted red, flat neutral; thin line, one end-dot, no fixed chart or invented points. Optional area fade omitted.
+- 402pt and 375pt Simulator screenshots visually reviewed by ChatGPT; falling crop also checked. Numbers/labels clear, tab and lower metrics unaffected.
+- G1 reported test/check evidence: 433/433 Deno app tests, src-only tsc, Expo config, web export and diff-check PASS; ChatGPT did not run them independently.
+- Codex review omitted for UI-only low-risk change. Production/DB/Auth/Edge/EAS change 0.
+- Remaining nonblocking: physical iPhone test with live saved reports not yet performed; original flat min-max normalization still makes gentle wobble; dark-mode/VoiceOver not independently tested.
+- G1 done/free.
+- AI Lab diary: 候補あり — 株アプリの資産カードに淡い植物の背景を重ねつつ、実際の資産推移に合わせて線の色を変え、数字の読みやすさを損なわないデザインへ改善した。
+
 ## K5 FINAL slot reconciliation — G5 H2 security review READY — 2026-10-09
 
 - IMPORTANT: this supersedes the immediately preceding temporary H2 collision/waiting note below.
@@ -6033,3 +6083,21 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - G3 task `postona-ai-consult-v1-release-readiness-20261009` assigned ready, recommended **Opus5.5（高）**.
 - G3 source-only goal: confirm explicit-save/CAS -> reread -> next conversation -> all 8 persona signals -> preview/generator round trip, fix bounded G3-specific integration defects, prepare dependency-ordered schema/Edge go-live runbook; preserve G4 provider PR106 and G5 common-account/Auth/entitlement boundaries.
 - no production schema writes, Edge deploy, real AI/X, X posting, merge or scheduler changes authorized. Next checkpoint K3.
+
+
+## K3 — POSTONA AI consultation V1 / PR #114 — 2026-10-09 JST
+- verdict: **CHANGES REQUIRED — one bounded UI/session isolation corrective; PR #114 merge HOLD**.
+- prior G3 TASK `postona-ai-consult-v1-release-readiness-20261009` report accepted as a product release-readiness audit and PASS_CANDIDATE:
+  - source consultation -> proposal -> explicit confirm -> CAS save -> reread -> next consult -> preview/generator round trip reported PASS;
+  - 8 confirmed persona dimensions are consumed; unconfirmed values excluded;
+  - current production still lacks `social_mobile_content_settings` table/5 functions/2 migration versions, `social-mobile-consult` Edge function, and updated settings-aware dry-run preview bundle;
+  - planned migration-first, verification-first rollout is a **separate explicit approval gate**, with live posting/entitlement S7 still separate.
+- PR #114 exact inspected head `f24c8efe84c433d0e7ca3e16b640a80d9c984a51`, open/unmerged; three modified files: consult screen, consult-session reducer, screen tests.
+- G3 reports app 230/230, related Edge 90/90, disposable PostgreSQL 48 PASS; production write/deploy/real AI/X/merge=0.
+- accepted existing PR114 fixes: A->B resets consultation and ignores stale old-workspace response; repeated `これで覚えて` click does not duplicate a write; 4 red-before/green-after fixtures.
+- **P2 residual code-visible ABA race**: `sessionBrand.current===forBrand` checks only the workspace ID. When workspace A->B->A while an old A request/save is in flight, the old result may be accepted in the newer A conversation. Add monotonic epoch invalidation and A->B->A adversarial tests. Also prove the stale savedRef fallback cannot inject previous-workspace settings into a new consultation when new-workspace read fails.
+- G3 bounded corrective task assigned: `postona-ai-consult-pr114-session-epoch-corrective-20261009` on same PR #114, recommended **Sonnet5（高）**.
+- latest GitHub PR mergeable status inconsistent across lookups/REST UNKNOWN; fresh-main integration required at next K3.
+- H1 owns G4 PR106 and H2 owns G5 PR112 security reviews. Neither is overwritten. Decide focused exact-head reviewer once G3 corrects the race.
+- do not work on Kabumori X morning/close reports; user explicitly deferred them until Kabumori-app shared report integration finishes.
+- production migration/apply, Edge deploy, EAS, real OpenAI/X, publishing, merge: **HOLD**.

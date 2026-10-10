@@ -132,6 +132,23 @@ export function sparklineValues(reports: readonly PersonalizedReport[], maxPoint
     .slice(-maxPoints);
 }
 
+/**
+ * The real direction of the saved asset history: the last value against the first. "Flat" means no more than
+ * 0.05% (at least ¥1) apart, so a tiny wobble is not dressed up as growth or decline. Fewer than two points
+ * has no trend. The sparkline colour follows this and nothing else (a falling history is never green).
+ */
+export type SparkTrend = 'up' | 'down' | 'flat' | 'none';
+
+export function sparklineTrend(values: readonly number[]): SparkTrend {
+  if (values.length < 2) return 'none';
+  const first = values[0];
+  const last = values[values.length - 1];
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return 'none';
+  const change = last - first;
+  if (Math.abs(change) <= Math.max(1, Math.abs(first) * 0.0005)) return 'flat';
+  return change > 0 ? 'up' : 'down';
+}
+
 // ---- impact top 3 -------------------------------------------------------------------------------------------------
 
 export type ImpactItem = {

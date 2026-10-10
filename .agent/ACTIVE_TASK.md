@@ -46,28 +46,28 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
-- task_id: common-account-v1-phase3a-pr112-security-review-20261009
+- status: done
+- task_id: common-account-v1-phase3a-pr112-r1-r4-c1-final-rereview-20261010
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
 - return_to: 共通アカウントG5のちゃ
 - completion_code: C2
-- allocation: Preserve existing G5 critical security review of PR #112 at exact head c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d. A G2 PR #110 review allocation attempted concurrently but was withdrawn to protect this canonical H2 TASK. Do not start G2 review from H2 without later explicit reassignment after G5 C2.
+- allocation: C2 accepted independent PR112 exact b60272c R1/R2 residual CHANGES REQUIRED; old Phase1 service_role RPC bypasses lease/fence, actual Apple HTTP502 ambiguity maps false and permits one-time replay; source merge/deploy HOLD. H2 review completed/closed, not reserved. A new review requires new free-slot verification; G2 PR110 still waiting.
 - recommended_model: Sol（極高）
 
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
+- next_owner: none
+- status: done
 - task_id: kabumori-portfolio-asset-card-background-polish-20261008
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Source-only portfolio asset-summary polish. Use the user-approved transparent 1600×700 botanical background, keep the sparkline based only on real saved close market_value history, place decoration behind content at restrained opacity, and make sparkline color trend-aware for up/down/flat. 375/402 Simulator screenshots required. No portfolio data/search/watch/navigation/backend/Auth/DB/EAS changes.
+- allocation: Final K1 PASS. PR #113 exact reviewed head bc54e91c7b72186fa03c35b7d3be157453651cb6 squash-merged as 28d9c61e6dc52fe71ee8bbcd3521b24ad7addc3e. Approved 1600x700 transparent botanical art at 0.45 opacity is behind the real asset-history sparkline, which is now up green/down red/flat grey, with thin segments and one endpoint. 375/402 Simulator review PASS, 433/433 app tests reported PASS; backend/DB/Auth/Edge/EAS/production mutation 0. G1 done/free.
 - recommended_model: Sonnet5（中）
 
 ## Claude G2
@@ -86,13 +86,13 @@
 - owner: claude
 - slot: claude-3
 - status: in_progress
-- task_id: postona-ai-consult-v1-release-readiness-20261009
+- task_id: postona-ai-consult-pr114-session-epoch-corrective-20261009
 - start_code: G3
 - finish_code: K3
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: User explicitly deferred Kabumori X morning/close report investigation until app-shared reporting work is finished. Next POSTONA priority is AI相談 V1 release readiness. Review merged PR78 consultation V1 and PR81 schema source against actual production (content-settings table/migrations and social-mobile-consult Edge absent), prove explicit-save -> memory -> preview/generation source-only flow, identify dependency/security/approval gates, and implement only G3-owned bounded fixes. Protect G4 PR106 multi-provider and G5 Auth/entitlement work. No production apply/deploy/X/real OpenAI.
-- recommended_model: Opus5.5（高）
+- allocation: K3 accepts prior POSTONA AI consultation V1 readiness as PASS_CANDIDATE, but PR #114 head f24c8efe84c433d0e7ca3e16b640a80d9c984a51 needs one bounded A->B->A (ABA) async session-epoch correction: brand-ID-only freshness checks can re-admit an old A AI/save result after switching A->B->A; also prove stale savedRef is never adopted for a new workspace. Preserve all accepted explicit-save/CAS/persona tests and no-live rollout. PR #114 remains OPEN, unmerged; latest REST mergeability UNKNOWN. New G3 task limited to same PR and its three existing files. No production writes/deploy/OpenAI/X.
+- recommended_model: Sonnet5（高）
 
 ## Claude G4
 - owner: claude
@@ -108,14 +108,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: review_required
-- task_id: common-account-v1-phase3a-deletion-orchestrator-20261008
+- status: ready
+- task_id: common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010
 - start_code: G5
 - finish_code: K5
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 PASS_CANDIDATE for Phase3a source PR112 exact head c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d, 24 files and local tests reported PASS; production/deploy/EAS 0. H2 is now canonically assigned the independent critical security review, after a resolved collision with G2 PR110. PR112 stays OPEN/UNMERGED; merge/deploy/migration/EAS HOLD until C2 PASS and separate later production gates. G5 review_required / next_owner codex. G2 and other non-conflicting work may continue.
+- allocation: C2 accepted H2 CHANGES REQUIRED on PR112 head b60272c433b57bac1acb00c13d4fda7ff96f1f2f. Bounded fixes to R1 P1 legacy checkpoint/clear/prepare RPC service_role lease/fence bypass, R2 P1 Apple real-adapter ambiguous HTTP502 replay, strict Deno require-await lint. Preserve R3 blocked release gate, R4 fresh read-back, C1 strict reauth; exact PR112 only, source-only. H1 POSTONA PR106 remains preserved. No merge, production migration, deploy or EAS. Next K5.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred

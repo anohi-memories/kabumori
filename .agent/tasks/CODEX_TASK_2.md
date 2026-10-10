@@ -1,10 +1,186 @@
+# C2 — PR112 R1/R2 residual accepted / H2 closed — 2026-10-10
+
+- task_id: common-account-v1-phase3a-pr112-r1-r4-c1-final-rereview-20261010
+- owner: codex
+- slot: codex-2
+- status: done
+- next_owner: none
+- return_to: 共通アカウントG5のちゃ
+- completion_code: C2
+- verdict: **CHANGES REQUIRED** — independent R1 P1 effective legacy checkpoint/clear/prepare service_role lease bypass and R2 P1 actual Apple helper ambiguous HTTP502 boolean false causing replay.
+- reviewed_exact_head: b60272c433b57bac1acb00c13d4fda7ff96f1f2f
+- source_merge: HOLD; shared Auth deletion feature: BLOCKED; production/EAS: not authorized.
+- accepted: R1 new Edge lease/fencing, R3 schema-locked blocked release gate, R4 residue read-back, C1 future-reauth refusal; reviewer suite 542/542, PG 1/2/3a, SQL 43/43, TS 38/38 PASS. New strict lint require-await is minor additional fix.
+- G5 corrective assigned: `common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010` on same PR112, recommended **Opus5.5（極高）**; next code G5 then K5.
+- H2 is no longer allocated; any future H2 review requires fresh explicit assignment, including G2 PR110 waiting; no auto-reservation.
+- safety: control files only, no PR source edits/merge, production access/mutation/deploy/EAS 0. This top C2 receipt overrides historical current statuses while preserving all earlier TASK history below.
+
+---
+
+# H2 completion receipt — PR112 exact-head rereview — 2026-10-10 JST
+
+- task_id: common-account-v1-phase3a-pr112-r1-r4-c1-final-rereview-20261010
+- owner: codex
+- slot: codex-2
+- status: review_required
+- next_owner: chatgpt
+- result: CHANGES REQUIRED
+- reviewed_exact_head: b60272c433b57bac1acb00c13d4fda7ff96f1f2f
+- target_pr: 112 (open/unmerged, 25 files)
+- report_publication_commit: 69df39171bd03e937de82905c6cfd5e321953054
+- report_readback: confirmed current task_id, full current Report and verbatim previous Report history on GitHub main
+- findings: R1 legacy service-role checkpoint RPC bypasses lease/fence; R2 actual Apple boolean HTTP adapter clears ambiguous outcome and permits consumed-code replay
+- accepted: new Edge owner concurrency, schema-locked blocked gate, fresh residue read-back, strict future-reauth refusal; other details in current Report
+- tests: baseline 542/542; PG Phase1/2/3a ALL PASS; SQL43/43 and TS38/38 mutations; reviewer adversarial TS4/4 assertions incl defect reproduction and PG probes; diff-check PASS
+- quality_gaps: new require-await lint at lifecycle_logic.ts:405; same 2 src-only CSS type errors on fresh main; root ESLint unavailable; full root TypeScript not clean
+- source_merge_recommendation: HOLD
+- whole_shared_account_Auth_delete: BLOCKED / UNAVAILABLE
+- product_code_change: 0
+- production_access_mutation_deploy_EAS_provider_API: 0
+- changed_files: own Report/TASK plus explicit completion-only H2 status/next_owner index fields; no other slot edits
+- previous_history: preserved verbatim; only current TASK status/next_owner fields updated
+- return_to: 共通アカウントG5のちゃ
+- completion_code: C2
+- recommendation: bounded G5 fixes then fresh exact-head H2 rereview; no merge/deploy permission
+- recommended_model: Sol（極高）
+
+---
+
+# Codex H2 — CURRENT TASK — G5 PR112 exact-head security corrective rereview
+
+- task_id: common-account-v1-phase3a-pr112-r1-r4-c1-final-rereview-20261010
+- owner: codex
+- slot: codex-2
+- status: review_required
+- next_owner: chatgpt
+- priority: critical
+- type: independent exact-head bounded security rereview
+- return_to: 共通アカウントG5のちゃ
+- completion_code: C2
+- target_pr: 112
+- target_head: b60272c433b57bac1acb00c13d4fda7ff96f1f2f
+- previous_reviewed_head: c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d
+- recommended_model: **Sol（極高）**
+- production_access_allowed: false
+- production_mutation_allowed: false
+- source_merge_allowed: false
+- deploy_allowed: false
+- EAS_allowed: false
+
+## Mission
+
+Review G5's corrections to the independent H2 findings R1–R4 (P1) and C1 (P2) in PR #112. This is a **fresh independent verification**, not automatic acceptance of G5's PASS_CANDIDATE. The current source deliberately blocks **whole common-account Auth deletion** behind a schema-enforced `blocked` release gate because the later Auth identity-change fencing prerequisite is missing. Do **not** mark that product capability completed or production-ready. Verify that the source-only PR is safe to **consider merging with the gate closed**. Do not merge.
+
+Review the previous H2 report at the top of `.agent/CODEX_REPORT_2.md`, its independent reproduction steps, and the current G5 Report at the top of `.agent/tasks/CLAUDE_TASK_5.md`. G5 reports 14 corrected/new files since previous head, 25 PR files overall, 53 account-delete tests, app 430, AuthProvider 23, X saga 17, X app 19, SQL mutations 43/43, TS mutations 38/38, and disposable PG proof. Treat these as **claims requiring independent validation**.
+
+## Required startup, preservation, conflicts
+
+1. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, current G5 TASK+Report, previous H2 Report, `docs/common-account/phase1-lifecycle-foundation.md`, relevant Phase2 material, Phase3a doc and own historical H2 TASK/Report.
+2. Fresh fetch `origin/main` and PR112. Require exact head `b60272c433b57bac1acb00c13d4fda7ff96f1f2f`, OPEN/UNMERGED and 25 PR files. Any head change => STOP and request retargeting; do not review an old head as current.
+3. Use a dedicated H2 worktree/checkout from fresh `/Users/yuya/Developer/kabumori-fresh`; never share another slot's checkout, branch, dev server, or uncommitted files. H1 remains assigned POSTONA PR #106; G2 PR #110 awaits review, G3 PR #114 is separate. Never change H1/G1–G5 workstreams.
+4. K5's read-only compare: old to new = 1 commit/14 files; PR base-to-fresh-main = 42 ahead and **0 PR-file overlap** at K5; GitHub PR mergeability varied between checks. Recheck independently using fresh exact commits/merge-tree/CI. No stale green claims.
+
+## Independent must-pass gates
+
+**R1 — durable single-owner deletion and fencing.**
+- Review SQL `claim/renew/release`, owned checkpoint, owned prepare, external-step begin/settle, lease expiry/takeover, lock order, subject-bound operation and cross-user authorization. Owner lease must be unguessable and tenant-bound; cannot permit privileged RPC bypass under existing EXECUTE grants or SECURITY DEFINER owner privileges.
+- Repeat prior H2 concurrent barrier repro (two fresh sessions, same user) and real overlap in Kabumori-only, dual-service/X, Storage, Apple, Auth stages. Confirm only one Apple/Auth/X external call, loser `DELETION_IN_PROGRESS`, stale owner `lease_lost`, and no false success after timeout/crash. Independently probe fencing and locks, not only normal sequential tests.
+
+**R2 — Apple one-time code and uncertain outcome.**
+- Repeat prior H2 Apple-success/DB checkpoint-write failure and crash-window cases. Verify durable in-flight intent BEFORE external call, atomic settle+checkpoint, unknown result/revocation succeeded but DB failed => no replay after lease timeout; `RECONCILIATION_REQUIRED` honest. Test operator resolution procedure and RPC authorization/ACL/idempotency including unauthorized caller and cross-subject attempt; never make reviewer-only operator writes against real systems.
+
+**R3 — Auth provider change race, release gate immutability and readiness.**
+- Independently confirm `private.account_lifecycle_release_gates` gate row is forcibly 'blocked' by checked SQL constraint, no legitimate or accidental open route, gate read/response fail-closed, all whole-account delete requests refused **before any service withdrawal, session revoke, Apple/X action, Storage delete, Auth admin action, or mutable lifecycle RPC**.
+- Repeat previous H2 late-Apple-identity/managed-delete/no-Apple-checkpoint real-SQL stand-in and the declared unsolved post-intent identity change. Verify no **false completed** under source's blocked gate; any test-only gate override must be marked outside production schema and never considered release evidence. The missing Auth-side identity creation/write fence stays a RELEASE BLOCKER and is not silently solved by a finite final read, DDL toggle, or UI wording.
+- Verify recorded intent/reference snapshots, status/rollback guards, migration preconditions and safe unapplied behavior. Avoid solving with changes to G4-owned X schema or Phase1/2 applied migration.
+
+**R4 — fresh verified residue after completed.**
+- Repeat previous H2 completed-then-late-Storage object reproduction. Re-query must report `residue_found` with exact stable reason and preserve historical `verified_at`; verify new clean state and cross-service remnants. Check missing/unreadable Storage schema, API-vs-DB inventory divergence, stale JWT/producers not fully enforced. Never claim current cleanliness from historical completion only.
+
+**C1 — strict recent reauth timestamp.**
+- +1/+30/+60/+3600 future timestamps rejected; `now` and `now-600` accepted; `now-601` rejected for withdrawal and whole-account flow, no mutations on refusal. Verify a single captured server-now, caller identity and token binding; no permissive skew introduced.
+
+**SQL/ACL and compatibility gates.**
+- Inspect all added/changed SQL functions/constraints/new blocked-gate table and catalog snapshot. Independently test RLS, exact direct/effective EXECUTE, owner/role inheritance, fixed `search_path`, SECURITY DEFINER, privilege escalation, missing/unknown objects, migration reapply and complete rollback. Confirm only the intended Phase1 prerequisite constraint replacement and additive source-only candidate; no changes to applied Phase1/2 files, no hidden auth/storage/vault mutation, no method to flip gate from blocked via exposed API.
+- Verify the semantics of `service_role` versus `authenticated` for operator-only resolution; do not assume service_role EXECUTE of an exposed RPC makes it safe without guarding the issuer and audit/reconciliation conditions.
+- Rerun G5's tests independently: 53 account-delete (behavior/HTTP/wiring), app 430, AuthProvider 23, X deletion 17+19, PostgreSQL Phase1/2/3a, 43 SQL mutations and 38 TS mutations, TS check/lint and diff/secret safety. Additional adversarial cases should run in reviewer-only scratch. Explain any test counts/gaps rather than claiming PASS by assertion.
+- Check exact PR 25-file scope and latest main/other PR overlap; also compatibility of old deployed bodyless account-delete and staged migration/Edge/app rollout.
+
+## Release classification
+
+Distinguish:
+A. *Source merge candidate* only: may be PASS only if independent regressions and deny-by-default gate are sound.
+B. *Whole shared-account deletion enabled*: **BLOCKED** until the Auth-side identity-change fence is implemented, real disposable Supabase proof and later independent review; no actual enablement in this TASK.
+C. *Production/apply/deploy/EAS*: **NOT AUTHORIZED**. The old production hard-delete endpoint is still a separate rollout risk; do not confuse a source merge with deployment.
+D. X-only/Kabumori-ended deletion, creator/onboarding bypass, stale JWT writers, Web disclosure, simulator/native UI and operator reconciliation remain honest named prerequisites.
+
+No real Supabase access, user deletion, Auth/Apple/X/Storage/OAuth/Vault reads or writes, provider calls, migration apply, PR merge, deploy, EAS or production secret handling. No product-source modifications by H2. If any concrete residual blocker, report CHANGES REQUIRED with minimal reproduction; do not broaden architecture work without evidence.
+
+## Completion, reporting and return
+
+Append a new current H2 review Report at the top of `.agent/CODEX_REPORT_2.md` and a completion receipt above this H2 TASK, preserving old history verbatim. Include task_id, exact head/mergeability, fresh main overlap, PASS / CHANGES REQUIRED / BLOCKED verdict, R1-R4/C1 evidence and reprobing, exact SQL catalog/ACL, suite results, changed_files by H2 = Report/TASK only, commit/push read-back, source-merge recommendation vs whole-delete activation gate, production/source/EAS=0, remaining issues, safety checks, return_to=共通アカウントG5のちゃ, completion_code=C2.
+Set status `review_required` and next_owner `chatgpt` for the TASK and index only after actual review completion; then STOP. Tell user **共通アカウントG5のちゃへ `C2`**. Never merge PR112.
+
+推薦モデル：**Sol（極高）**
+
+---
+
+# Protected previous H2 TASK and completion history (read-only)
+
+# C2 — G5 PR112 review accepted / H2 task closed — 2026-10-09 JST
+
+- task_id: common-account-v1-phase3a-pr112-security-review-20261009
+- owner: codex
+- slot: codex-2
+- status: done
+- next_owner: none
+- return_to: 共通アカウントG5のちゃ
+- completion_code: C2
+- result: **CHANGES REQUIRED** — accepted H2 findings R1–R4 (P1) and future-auth C1 (P2).
+- reviewed_exact_head: c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d
+- decision: PR112 source merge HOLD; production migration/deploy/EAS HOLD.
+- corrective_owner: G5
+- corrective_task_id: common-account-v1-phase3a-pr112-h2-r1-r4-c1-corrective-20261009
+- next_recommendation: G5 / Opus5.5（極高）; then K5; independent exact-new-head rereview after fresh H1/H2 availability.
+- safety: control/task orchestration only; no source changes by C2, no production changes.
+- note: H2 completed review is now closed; this does not pre-allocate its next task. Preserve all original reviewer reports/receipt below.
+
+---
+
+# Codex H2 — COMPLETION RECEIPT — PR112 independent security review
+
+- task_id: common-account-v1-phase3a-pr112-security-review-20261009
+- owner: codex
+- slot: codex-2
+- status: review_required
+- next_owner: chatgpt
+- final_result: CHANGES REQUIRED
+- reviewed_head: c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d
+- target_pr: 112
+- reviewed_files: 24
+- return_to: 共通アカウントG5のちゃ
+- completion_code: C2
+- recommended_model: Sol（極高）
+- report_commit: bb2fc1ea2c97d3b1ed8628e0ae23b9db2eaf8ac7
+- source_merge_safe: NO
+- production_release_ready: NO
+- confirmed_findings: R1 parallel irreversible external operations; R2 Apple success/checkpoint crash gap; R3 late Apple requirement false completion; R4 completed read-back skips residue; C1 future-auth specification mismatch
+- tests: account-delete 42 + app430; AuthProvider23; X saga17; X app19 PASS; Phase1/2/3a PG ALL PASS; SQL19/19 and TS24/24 mutations detected; independent adverse TS3 and PG2 reproduced; diff-check PASS
+- source_changes_by_H2: 0
+- production_access_mutation_deploy_EAS: 0
+- PR_merge: 0
+- control_sync: own Report/TASK only; original histories preserved
+- next_action: C2 to 共通アカウントG5のちゃ; bounded G5 corrective assignment, then exact-head rereview; no merge/deploy authorization
+
+---
+
 # Codex H2 — Common Account Phase 3a independent security review
 
 - task_id: common-account-v1-phase3a-pr112-security-review-20261009
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - type: independent exact-head security and functional review
 - return_to: 共通アカウントG5のちゃ

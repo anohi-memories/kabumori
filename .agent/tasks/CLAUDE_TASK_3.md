@@ -1,10 +1,111 @@
 # Claude Task 3 — CURRENT TASK
 
-- task_id: postona-ai-consult-v1-release-readiness-20261009
+- task_id: postona-ai-consult-pr114-session-epoch-corrective-20261009
 - owner: claude
 - slot: claude-3
 - status: in_progress
 - next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- start_code: G3
+- finish_code: K3
+- project: POSTONA / AI consultation
+- target_pr: 114
+- reviewed_candidate_head: f24c8efe84c433d0e7ca3e16b640a80d9c984a51
+- type: one bounded K3 async-workspace isolation corrective
+- source_only: true
+- merge_allowed: false
+- deploy_allowed: false
+- production_mutation_allowed: false
+
+## K3 disposition / accepted evidence
+
+Prior G3 task `postona-ai-consult-v1-release-readiness-20261009` is a **PASS_CANDIDATE with one correctable UI/session guard gap**. Keep its Report below as canonical history; do not rework the whole V1.
+
+Existing PR #114 fixes genuine cases:
+- workspace A -> B clears pending proposals/chat and ignores old A responses;
+- a double press of 「これで覚えて」 sends one write;
+- four red-before/green-after tests;
+- app 230/230, Edge 90/90, local disposable PG 48 PASS;
+- tests/type/lint/diff/secret scan clean, production mutation/deploy/OpenAI/X=0.
+PR #114 is open/unmerged and exact candidate head is `f24c8efe84c433d0e7ca3e16b640a80d9c984a51`. Vercel/Netlify statuses have been successful. Latest GitHub mergeability is not reliably settled (REST UNKNOWN), so require fresh-main integration proof before K3.
+
+**Only remaining source finding (P2): repeated workspace IDs (ABA) can accept obsolete asynchronous results.**
+
+Code at `apps/social-mobile/src/app/(tabs)/consult.tsx` uses:
+- `sessionBrand = useRef(brandId)`
+- `ask()`: `if (sessionBrand.current !== forBrand) return` after async work;
+- `confirmProposal()`: `stillSameWorkspace() => sessionBrand.current === forBrand` after async reads/saves.
+
+This distinguishes A->B but not A->B->A:
+1. Start consult request in A and keep response in flight.
+2. Switch to B (reset), then back to A (another reset).
+3. Complete original request from the first A session.
+4. Because only brand string equality is checked, old response can be dispatched into the new A session, despite the intervening reset. The same risk applies to stale save completion/rebase after the workspace cycles back.
+This is a source-visible race proof; do not silently claim the previous A->B test covers it.
+
+A second related isolation check is needed for `savedRef.current` fallback in `ask()`: when the new workspace's re-read is unavailable, stale previous-workspace settings must never be presented as the new workspace's saved settings/proposal basis. Do not invent an unrelated redesign if current guards already prevent it; add a deterministic test and minimally fix if reproduced.
+
+## Required bounded correction
+
+- Preserve the exact current UX, explicit 「これで覚えて」 confirmation, versioned CAS, tenancy/RLS, proposal validators and 8 persona signals.
+- Introduce a **monotonically increasing consultation session generation / epoch** on each workspace switch, including a return to the previous workspace ID. Async tasks must capture both workspace ID and epoch and check both before any post-await local state write, dispatch or latest-settings adoption.
+- Make sure a repeated-brand A->B->A renders a new clean conversation and *does not* accept a response/save outcome begun in the first A session.
+- Guard pre-existing workspace-independent cancellation/session-signout behavior; do not use raw access tokens as epoch keys, persist them, or log them.
+- Keep the existing single-flight saving guard. New resets must not accidentally allow an old save's completion to alter the new workspace's state.
+- Distinguish **ignoring a result** from **canceling a network-side write already sent**. Never claim an in-flight persistent RPC was canceled if only its UI completion was ignored. Do not add unsafe compensating writes.
+- Preserve normal same-workspace in-flight reply/save success and repeat-confirm behavior.
+
+## Tests / freshness
+
+Use dedicated clean G3 worktree, fresh origin/main, and recheck file overlap against G1/G2/G4/G5. Rebase/merge safely within own PR branch only; no main reset or other slots' branches/worktrees.
+
+Deterministic focused tests:
+1. A -> B -> A during pending AI response: original A response never displayed/accepted, current A greeting remains.
+2. A -> B -> A during pending read/save completion: obsolete pending result never rehydrates proposal, saved state or success notice in the new A session.
+3. If read fails on new B, cannot display/use savedRef settings from old A.
+4. A -> B ordinary switch, double confirm, valid same-workspace same-epoch response and CAS successful path remain PASS.
+5. Session/signout behavior remains safe; no X publish, scheduled-post write or account crossing.
+6. Focused + full app consult tests; relevant Edge/test smoke unchanged, tsc, eslint, git diff --check, added-line secret scan. List exact test counts.
+
+Changed files restricted to current PR #114:
+- `apps/social-mobile/src/app/(tabs)/consult.tsx`
+- `apps/social-mobile/src/domain/consult-session.ts` only if needed
+- `apps/social-mobile/tests/consult-screen.test.mjs`
+Any new file requires prior STOP/report rationale. Do not change auth provider, DataProvider, server-side code, DB/RPC/migrations, G4/5, G2 reports, AI Lab, X publisher/scheduler.
+
+## Completion
+
+Update existing **PR #114** only, push source/test changes to its own branch. Preserve all previous accepted content. No merge, no production mutation/deploy, no real AI or X call.
+
+In this TASK's Report write: task_id, exact new PR head, changed_files, tests, source review evidence, A->B->A red-before/green-after and fallback test, fresh-main integration status, commit/push, production mutation=0, remaining issues, safety checks, next recommendation.
+
+Set status `review_required`, next_owner `chatgpt`; stop for **K3**. ChatGPT will assess whether one focused independent review is appropriate for the resulting session/tenant boundary, recommendation **Sol（高）**.
+
+## Report
+
+- task_id: postona-ai-consult-pr114-session-epoch-corrective-20261009
+- result: pending
+- changed_files: pending
+- tests: pending
+- commit_hash: pending
+- push: pending
+- deploy: not authorized
+- remaining_issues: pending
+- safety_checks: pending
+- next_recommendation: pending
+
+---
+
+# Previous G3 tasks and reports — preserved history
+
+# Claude Task 3 — CURRENT TASK
+
+- task_id: postona-ai-consult-v1-release-readiness-20261009
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - start_code: G3
 - finish_code: K3
@@ -100,16 +201,128 @@ If a material security/DB/API authorization boundary changes, ChatGPT will decid
 ## Report
 
 - task_id: postona-ai-consult-v1-release-readiness-20261009
-- result: pending
-- changed_files: pending
-- tests: pending
-- commit_hash: pending
-- push: pending
-- deploy: not authorized
-- remaining_issues: pending
-- safety_checks: pending
-- next_recommendation: pending
+- result: **SOURCE READY（PR #114 のレビュー後）／本番は未準備**
+  - ソースの流れ（相談 → 提案 → 明示の確認 → 版数つき保存 → 再読込 → 次の相談 → プレビュー・生成）は main でそろっている。
+  - 抜けていた 2 点（ワークスペース切り替え・確認の二重押し）は PR #114 で修正した。
+  - 本番には、設定テーブル・相談の Edge 関数・設定を読むプレビューの**どれもまだ無い**。
+- changed_files（PR #114 のみ）:
+  - `apps/social-mobile/src/app/(tabs)/consult.tsx`
+  - `apps/social-mobile/src/domain/consult-session.ts`
+  - `apps/social-mobile/tests/consult-screen.test.mjs`
+- commit_hash / push: `f24c8efe`（最新 main `f133974b` の上）。ブランチ `claude/g3-postona-ai-consult-v1-readiness-20261009`。
+  - PR: https://github.com/anohi-memories/kabumori/pull/114 （open、merge していない）
+- deploy: not authorized（0）
+- prod_reads: メタデータのみ。自動モードが Claude からの本番読み取りを拒否したため、読み取り専用スクリプトをユーザーが実行した（2026-10-09 16:59 JST）。
+  - 読んだもの: 表・関数の有無、migration 履歴、権限の構成、Edge 関数の一覧、配備済みプレビュー関数のソース。
+  - 秘密情報・利用者の内容は読んでいない。
+- prod_mutations: 0 / real AI: 0 / real X: 0 / merge: 0
 
+### 1. 本番の状態（読み取り結果）
+| 項目 | 本番 | V1 に必要か |
+|---|---|---|
+| `public.social_mobile_content_settings` 表 | **無い** | 必要（保存と記憶の土台） |
+| `social_mobile_content_settings_*` 関数（5 個） | **無い** | 必要 |
+| 履歴 `20260922045046` / `20261003120000` | **無い** | 必要（2 本を 1 つのトランザクションで適用） |
+| 前提 `brands.code_profile_key` / `brand_memberships`（owner の CHECK・FK）/ `auth.uid()` | ある | 前提を満たす |
+| PR #76 の `20261003090000`（投稿権限の境界） | **適用済み**（履歴あり） | 依存はない（下記） |
+| Edge `social-mobile-consult` | **配備されていない** | 必要 |
+| Edge `social-mobile-brand-dry-run` | v16（2026-09-21 12:41 JST）、`verify_jwt=true` | **配備し直しが必要**（下記） |
+| 投稿の本番経路の migration（`20261006160000` / `160100` / `160200`、`x_account_publish_authority`） | 無い | V1（投稿しない相談）には不要。投稿は別のゲート |
+
+その他の構成:
+- Postgres 17.6。`current_user` は postgres で、`public.brands` の owner も postgres。
+- anon / authenticated から postgres や service_role へ届くメンバーシップは無い（4 方向とも false）。
+- postgres の既定権限（public の新しい表）: anon / authenticated / service_role に `Dxtm`（TRUNCATE・REFERENCES・TRIGGER・MAINTAIN）が付く。この 3 つのロール以外は出てこないので、強化 migration の検査は通る想定。また強化 migration が 3 つとも取り消す。
+- event trigger `ensure_rls`: 新しい表に RLS を自動で有効にするだけ。migration 側でも有効にしているので衝突しない。
+- 履歴表には `version`, `statements`, `name` のほかに、NULL 可の列が 3 つ増えている（`created_by` / `idempotency_key` / `rollback`）。手順書の `(version, name)` の挿入はそのまま使える。
+- `social_mobile_user_v1` のワークスペースは 2 件（件数のみ）。
+
+### 2. 依存関係と順番
+- **PR #81 は PR #76 に依存しない。**
+  - 設定テーブルの 2 本（候補 + 強化）の前提は、`brands` / `brand_memberships` / `auth.uid()` / ロール構成だけ。PR #76 の関数や表は参照していない。
+  - PR #76 の `20261003090000` はすでに本番にあるので、手順書にある「G4 の 20261003090000 を先に調整」はもう済んでいる。
+- 2 本はどちらも、本番の履歴の最大値（`20261007214402`）より古い version になる。そのため `db push` は使わず、手順書（`supabase/tests/social_mobile_content_settings_rollout.md`）のとおり、psql の `--single-transaction` で 2 本と履歴 2 行を 1 回で適用する。
+  - 本番の履歴は repo と 1 対 1 ではないので、「適用済みかどうか」は catalog で判断する。
+- 投稿の本番経路（`20261006160000` → `160100` → `160200`）は設定テーブルに依存する。順番は「設定テーブル → 160000 → 160100 → 160200」。
+  - V1（投稿しない相談）の範囲外で、G5 の利用権（entitlement）のゲートとあわせて別の作業にする。
+
+### 3. 本番に出す手順案（実行はしていない。各ステップに別途の承認が必要）
+1. **S0 事前確認（読み取りのみ・当日）**: 今回の読み取りスクリプトと、手順書の Preflight（表と関数が無い、2 つの version が無い、既定権限、owner、ロール）。
+2. **S1 設定テーブルの適用**（ユーザー承認・DB パスワードはユーザーが入力）: 手順書の psql コマンドで、2 本 + 履歴 2 行を 1 つのトランザクションで適用する。失敗したら全部取り消される。
+3. **S2 読み戻し**: 履歴 2 行、RLS 有効、owner のポリシー 3 つ。実効権限は authenticated の SELECT / INSERT / UPDATE だけ（anon / service_role / PUBLIC は無し）。関数 5 個と EXECUTE の付与先、トリガー 1 個。
+4. **S3 Edge `social-mobile-consult` の配備**（未配備 → 新規）:
+   - レビュー済みのクリーンな checkout から配備する。`supabase/config.toml` が無いので、JWT 検証は既定の有効のまま。
+   - 必要な環境変数は `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `OPENAI_API_KEY` だけで、新しい秘密は無い。
+   - 配備後に、ダウンロードしたソースとバイト単位で一致することを確認する（worktree から配備すると別の checkout が配備される事故があったため）。
+5. **S4 Edge `social-mobile-brand-dry-run` の配備し直し**:
+   - 配備済みの v16 は、保存した設定を**読まず**に常にコードの既定値で生成し、ペルソナの処理も無い（`persona` の出現 0 件。`logic.ts` は main と 59 行の差）。このままでは、相談で覚えさせた内容がプレビューに出ない。
+   - モデルも、v16 の固定 `gpt-5.6-luna` から、main の方針の `gpt-6-luna`（x-test-post v141 で本番稼働中）に変わる。
+6. **S5 投稿しないスモーク（本物の AI・テスト用アカウント 1 件）**:
+   - 雑談 → 提案 → 「これで覚えて」→ 再読込 → 次の相談で内容を説明できる → プレビューに反映、の順に確認する。
+   - X 呼び出し 0、予約作成 0、投稿権限の変化 0 を確認する。
+7. **S6 アプリの配布**: PR #114 を含むビルド（EAS は節目でのみ。ユーザー承認）。
+8. **S7（別のゲート）本番投稿**: PR #41 の migration 3 本 + G5 の利用権ゲート + 投稿の同意。V1 には含めない。
+
+### 4. ソース確認の結果
+- 既存の往復の流れは main のテストで確認できており、今回も実行してすべて成功した:
+  - アプリ側の相談関連 48 件
+  - Edge 側（相談・プレビュー・設定・本番投稿経路・生成）90 件
+- 確認済みペルソナの 8 項目は生成の指示に入り、未確認のペルソナは生成にも次の相談にも使われない（既存テスト）。
+- ハッシュタグの優先順位: 固定タグ・AI ラボ自身の方針が、利用者の確認済みの習慣より優先される（既存テスト）。
+- 利用者の文章が system 指示にならないこと:
+  - 生成側では、保存した自由入力を 1 行に詰め、上限を付けてから指示に入れる。
+  - 相談側では、保存済みの内容を「データ」と明記して渡し、モデルの出力は許可リストで検証する。
+- 保存は「これで覚えて」からだけ、差分だけを、版数（updated_at）が変わっていないときだけ書き込む。
+  - 他で同じ項目が変わっていたら上書きせずに再確認を求め、関係のない新しい値は残す。
+  - DB 側の、2 接続で同時に保存したときに勝つのは 1 つだけ、という検証も今回ローカルで再実行して成功した。
+- 壊れた応答・通信の失敗・時間切れは、保存せずに再試行できるエラーになる。ログアウトすると画面ごと破棄され、会話も提案も残らない。
+- **今回直した抜け（PR #114）**:
+  1. 表示中のワークスペースは「所属ブランドの先頭」で決まり、所属が複数あると切り替わりうる。切り替え後も会話と提案が残っていたため、前のワークスペース向けの提案を、再確認のうえで別のワークスペースに保存できた。送信中だった応答が新しい相談に表示されることもあった。
+     → 切り替えで相談をリセットし、前のワークスペース向けに処理中だった応答や保存は捨てる。
+  2. 「これで覚えて」の二重押しで、書き込みが 2 回送られていた（版数チェックで二重保存にはならないが、「変わっていました」と誤表示されることがあった）。→ 1 回目が終わるまで、2 回目は何もしない。
+  - 再現テスト 4 件は、修正前の画面ですべて失敗し、修正後に成功した。
+- DB を永続的な会話記録にする変更は無い。会話は端末のその場の会話の中だけ。
+
+### 5. テスト
+- アプリ: 全 230/230 成功（PR #114 のテスト 4 件を含む）。`tsc --noEmit` エラーなし、eslint（変更ファイル）エラーなし。
+- Edge: 相談・プレビュー・設定・本番投稿経路・生成の 90/90 成功（Edge は変更なし）。
+- DB（ローカルの使い捨て PostgreSQL 17）: `social_mobile_content_settings_run.sh` が `SOCIAL_MOBILE_CONTENT_SETTINGS_ALL_PASS`（PASS 48 件）。
+  - 内容: 1 トランザクションでの適用と再実行、ファイルごとに適用した場合は弱い候補が残ることの確認、同時保存で勝つのは 1 つ、前提のずれの拒否など。
+- 本番の読み取りクエリは、先にローカルの模擬スキーマで構文を確認した。
+- `git diff --check` クリーン、追加行の秘密情報スキャン 0。
+
+### 6. 最新 main との重なり
+- 最新 main `f133974b` の上に作成した。
+- open な PR（#113 G1 / #112 G5 / #110 G2 / #106 G4 / #33）は、相談・設定のファイルに触れていない。
+- G4 / G5 のファイルは編集していない。
+
+### 7. 残っている課題（担当別）
+- **G3**
+  - PR #114 のレビューと merge。
+  - 本番作業の TASK が出たら、S0〜S5 を実行（読み取りスクリプトと手順書は用意済み）。
+  - 本番投稿の S7 は、PR #41 の 3 本を別の作業として扱う。
+- **G4**: V1 への依存は無い（PR #106 の provider スキーマとは独立）。
+- **G5**
+  - V1（投稿しない相談）には依存なし。
+  - 本番投稿（S7）の前に、`check_x_account_publish_authority` などで `x_autopost` の利用権を必須にする必要がある（既知の申し送り）。
+  - 退会処理: 設定テーブルはブランドの削除で自動的に消える（FK の ON DELETE CASCADE）。G5 の削除処理（PR #112）で対象の表を一覧にしている場合は、この表を追加するか確認が必要。
+- **ユーザー承認**
+  - S1 の本番適用（DB パスワードの入力が必要）
+  - S3 / S4 の Edge 配備
+  - S5 の本物の AI を使ったスモーク
+  - S6 の EAS ビルド
+
+### safety_checks
+- 本番の書き込み・適用・deploy・merge は 0。本物の OpenAI / X の呼び出しは 0。
+- 秘密情報・トークン・メールアドレスの表示や記録は無い。
+- 相談 Edge には service_role もトークンの読み書きも無い。本人の JWT と RLS でワークスペースの所有を確認し、クライアントが送る brand_id は選択値としてだけ使う。
+- テナントの境界（owner だけの RLS）は変えていない。
+- `node_modules` は既存 worktree へのリンクで、コミットしていない。
+
+### next_recommendation
+1. PR #114 のレビュー（変更は画面のみで小さいので、Codex のレビューは任意。必要なら Sol（高）で 1 回）。
+2. 承認されたら、本番 TASK を作り、S0 → S1 → S2 → S3 → S4 → S5 の順に実施する。それぞれの直前にユーザーの明示承認をもらう。
+3. S7（本番投稿）は、G5 の利用権ゲートが入るまで保留。
 
 ---
 
