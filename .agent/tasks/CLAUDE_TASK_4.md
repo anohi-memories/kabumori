@@ -3,8 +3,8 @@
 - task_id: postona-x-oauth-provider-hardening-candidate-20261010
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G4
 - finish_code: K4
 - priority: high
@@ -54,6 +54,164 @@ Objective: produce an **isolated source-only X OAuth hardening candidate and tes
 - Create a **separate Draft PR** with only the new G4-owned candidate/docs/tests if a safe change exists, never merge/deploy. If unsafe due to G5 or incomplete source dependency, stop with a precise written blockers/owner handoff, no makeshift implementation.
 - Report task_id/result/changed_files/tests/commit/push/exact PR head/merge/deploy/remaining issues/safety, set `status: review_required` and `next_owner: chatgpt` then STOP for K4.
 - Return specifically to **POSTONA｜マルチSNS化・開発統括（G4）のちゃ** via **K4**.
+
+## Report — postona-x-oauth-provider-hardening-candidate-20261010 (2026-10-10)
+
+- task_id: postona-x-oauth-provider-hardening-candidate-20261010
+- result: **PASS_CANDIDATE（Stage A で再現、Stage B の候補。ソースだけで、適用も到達もできない）**
+  - Stage A: 今の X の complete に「他人の X ID を先取りできる」問題があることを、使い捨て DB で再現した（本物では試していない）。
+  - Stage B: 既存の X RPC を変えない v2 の候補、型付きの契約、使い捨て DB での証明、切り替えとロールバックの計画を作った。
+  - 本番、deploy、Supabase / X / Meta への呼び出し、本物のトークン、merge は、どれも 0。
+- model_used: Opus 5.5（TASK の推奨どおり）
+- workspace: `kabumori-fresh` の新しい `origin/main`（`90f7ed51`）から作った G4 専用 worktree `/Users/yuya/Developer/kabumori-g4-x-oauth-hardening`（branch `claude/g4-postona-x-oauth-hardening-20261010`）。
+  - 前の G4 worktree、G3 / G5 のブランチやファイルには触れていない。
+  - PR #124 / #121 / #122 も変えていない。
+- PR / head: [#126](https://github.com/anohi-memories/kabumori/pull/126)（Draft）、head `65f49f98dab39b974e6e4b450f376a37f99ef1ac`、未 merge。
+- commit_hash: `65f49f98`（1 commit）
+- push: 新しいブランチへの通常の push。force push はしていない。
+- merge / deploy / migration apply / production: **0**
+
+### changed_files（7つ、すべて新規）
+- `supabase/candidates/postona_x_oauth_hardening_candidate.sql`
+  - migration ではない（`supabase/migrations` の外）。
+  - `_v2` の3関数を所有者専用で作る。API ロールへの付与は 0 で、既存の X RPC の定義と付与は変えない。
+  - 前提条件として、G5 の T13 と PR #124 の T9 provisioner の実在と形を要求する。
+- `supabase/functions/_shared/social/x_connect_rpc_contract.ts` と `_test.ts`（8件）
+  - v2 の引数と attestation の型付きの境界。どこからも import されない。
+- `supabase/tests/postona_x_oauth_hardening_run.sh` / `_behavior.sql` / `_test_fixture.sql`
+  - PR #124 の3つのファイル（`c30f2464` のもの）は `POSTONA_PR124_DIR` から読む。PR #124 のファイルは変えていない。
+- `docs/postona/x-oauth-hardening-candidate-20261010.md`
+  - PR #124 が変更する `threads-connection-phase2b.md` とぶつからないよう、新しいファイルにした。
+
+### Stage A — 結果（詳細はドキュメント §1）
+- 本番の版（repo の記録だけで確認。本番 DB は読んでいない）:
+  - `20260919120000` は適用済み（`20260919222101`）
+  - `20260922003101` は適用済み（`20260922024844`。読み直しで `authenticated` の EXECUTE は true）
+  - Edge `x-oauth-connect-user` は ACTIVE（`verify_jwt=false`、ユーザー本人の JWT で RPC を呼ぶ）
+  - complete を置き換える migration は、ほかにない。
+- **先取り（preclaim）を再現した**:
+  - ログインした人が、Edge を通さずに begin / consume / complete を直接呼ぶ。complete には、他人の X ID と作った文字列のトークンを渡す。
+  - 結果:
+    - 受け付けられ、呼んだ人の行が、他人の ID で `identity_verified` になる。handle も自由に決められる。
+    - 本当の持ち主の接続は `X_ACCOUNT_ALREADY_CONNECTED` で拒否され続ける。
+    - POSTONA に未登録の人でもできる。
+  - 条件: PostgREST の RPC を直接呼べること（Supabase の標準。本番の公開設定は未確認）。X の ID は公開情報。
+  - できないこと: 投稿、他人のトークンの取得、他人の行の書き換え。
+  - 重大度: **中**（可用性と表示の信頼性）。本番で起きているかは未確認。
+- **`failed` の記録は残らない**: ハンドラーが `failed` にしてから例外を投げ直すため、取り消される。再現でも、行は `authorization_pending` のまま、state は未消費、secret もなかった。
+  - v2 では「全体を取り消し、記録しない」を仕様にした。
+- その他:
+  - begin に T13 がない（終了したサービスでも接続できる）。
+  - begin が T9 と違う（別の brand の owner なら、その brand に X の行を付ける）。
+  - provider を確かめない。
+  - redirect の形と期限の上限を見ない（`http://` で1年先の期限でも受け付けた）。
+
+### Stage B — 候補の仕様（詳細はドキュメント §2）
+- begin / consume / complete の v2:
+  - 先頭で T13（READ COMMITTED、共有契約のロック順）
+  - T9 provisioner
+  - state を、本人・本人のワークスペース・X の行（`platform='x'`）に結び付ける。有効期限は10分以内で、消費は1回だけ
+- complete v2 は、Edge のコード交換だけが持つ鍵（Vault の `postona_x_connect_attestation_v1`。Threads の鍵とは別）での HMAC-SHA256 を必須にした。
+  - 対象: state id、X の ID、username、access と refresh のトークンの SHA-256
+  - SQL と TS が同じ既知解を出すことを固定した。
+- 資格情報:
+  - 2つの参照を作るか、同じ id のまま上書きする。
+  - 共有、参照先なし、2つが同じ secret、同名の secret の残りは、全体を取り消す。
+- その他:
+  - 二重接続は全体を取り消す（記録しない）。
+  - 再接続は確認済みの ID を保つ。別の ID は拒否する。
+  - `publish_enabled=false`。
+  - エラーは、意味が同じものは今と同じコード名にした。
+
+### tests（独立に実行したもの）
+- 使い捨ての PostgreSQL 17.11。runner を2つのモードで実行し、**どちらも PASS**:
+  - `POSTONA_T13=mock`: **MOCK_ONLY**（PR #124 の T13 の代わり）
+  - `POSTONA_T13=g5`: G5 の PR #121（`76b50e1e`）
+  - どちらも PR #124 の T9（`c30f2464`）の上で実行した。
+- 適用の拒否15件。固定コードで拒否され、何も作られないことを確認した:
+  - T13 がない、authenticated / PUBLIC / 所属経由で届く、別の所有者
+  - provisioner がない、SECURITY DEFINER、service_role から届く、別の所有者
+  - 別の作成者、superuser
+  - pgcrypto がない、本人 ID のインデックスがない・広い、Vault に名前がない
+  - 再適用
+- 適用したあとも、旧の3つの RPC と PR #124 の関数の定義と付与が同じであること（今の経路の fingerprint）を確認した。
+- 挙動（assert 115件）:
+  - Stage A の再現
+  - 到達できるもの（anon / service_role / claims、provisioner と T13 には届かないこと、新しい SECURITY DEFINER の書き込み関数がちょうど4つであること）
+  - T13 の全拒否コード × 3つの RPC（拒否のときは書き込み 0）。REPEATABLE READ。g5 モードだけ: ログアウト済みのセッション。tombstone
+  - ワークスペース: 今の begin が作ったものの再利用、Threads との共有、他人のもの・共有・旧 brand・別の X 行の拒否
+  - begin の入力（19種類）
+  - consume の結び付け: Threads の state、他人の state、他の人が始めた state、他のワークスペース、期限切れ、旧 brand
+  - complete:
+    - 入力（17種類）
+    - 先取りの試み（作った値、推測した鍵、別の ID の署名）
+    - attestation の改ざん（5種類）、鍵がない・短い、Threads の鍵
+    - 再利用、再接続（同じ ID / 別の ID）、二重接続
+    - **すでにある先取りは v2 でも残り、運用者が外すと正しい持ち主が接続できる**
+    - Vault の障害、資格情報の形（4種類）、owner でなくなった場合
+    - 今の経路で接続した行の、v2 での再接続（同じ参照のまま）
+  - begin と complete の間に、POSTONA のみの終了・利用権の終了・全削除が起きた場合
+  - **切り替えの模擬**: 旧の付与を外すと先取りの経路は permission denied になり、X 行は変わらず、v2 は動く
+  - lifecycle の行が変わらないこと、何も投稿しないこと
+- 2セッションの競合8種:
+  - v2 の begin どうし
+  - v2 と Threads の begin、今の begin と v2 の begin（それぞれ両方の順序）
+  - ロック順
+  - v2 の begin と全削除（両方の順序）
+  - v2 の complete と POSTONA のみの終了（両方の順序）
+  - 同じ state への complete どうし
+  - 同じ X ID を2人が同時に complete
+  - **切り替えの間の、旧の経路の先取りと v2 の正しい接続**（旧の付与を外すまで穴が残ることを確認）
+- 適用したあとに provisioner を消すと v2 の begin が失敗し、さらに T13 を消すと3つとも失敗する。どちらも書き込みは 0。
+- 変異テスト（作業用、コミットしない）: **35/35 を検出**。どれも狙った assert や前提条件で検出されたことを確認した（変異を作るときに曖昧な参照を入れてしまった1件は、作り直して再確認した）。
+- TS:
+  - 新しい8件 PASS。`_shared/social` と `x-oauth-connect-user` で64件 PASS。
+  - `migration_source_invariants_test` は11件 PASS。
+  - deno check / lint は問題なし。`git diff --check` も問題なし。
+  - secret スキャン: 一致 0 件（本番の project ref も含めて検索）。
+
+### 設計だけで、証明していないもの
+- 本物の Supabase Auth / GoTrue / PostgREST（公開設定を含む）、本番の ACL、本物の Vault（pgsodium）、X の API（トークンの文字種と長さを含む）、新しい Edge（作っていない）。
+- **MOCK_ONLY**: mock モードの「T13 が最初」の確認は、G5 の guard の安全性の証明ではない。ロック順は、両方のモードの競合テストで確認している。
+
+### remaining_issues / blockers
+- 依存がまだ揃っていない:
+  - G5 の T13 は Draft PR #121
+  - PR #124（T9）は Draft
+  - 2a-2 は本番に未適用
+  - 候補は、これらがない DB には適用できない。
+- 切り替え（ドキュメント §3）は別の TASK で、レビューとユーザーの承認が必要。内容:
+  - 本番の読み取り専用 preflight。次の数を確認する:
+    - 決定論的なワークスペース以外にある X 行
+    - 利用権がないのに接続済みの人
+    - 先取りの疑いがある行
+  - 候補の適用
+  - 鍵（Vault と Edge の secrets）
+  - v2 の付与と、2a-2 のレビュー済み一覧の更新
+  - Edge v2 の deploy
+  - テスターでの確認
+  - 旧の付与を外す
+- すでにある先取りを外す、運用者の手順と窓口は未決定。
+- X のトークンの形（文字種と長さ）の、公式での確認。
+- T10、X の revoke、利用権、退会の状態機械には触れていない。
+
+### safety_checks
+- 本番の DB、Auth、Vault、Edge、secrets、X / Meta への読み書きは 0。先取りの再現は、使い捨て DB の偽のデータだけ。
+- 使い捨て cluster は、終了後に停止して削除した。
+- 既存の migration、Edge、PR #124 のファイル、G5 の Auth / RLS / 利用権 / 削除のオブジェクト、G3 のファイルは、どれも変えていない。
+- 重なりの確認:
+  - 開いている PR（#117、#119、#121〜#125）と、同じファイルはない。
+  - G3 の Stage3B の予定パス（`docs/postona/x-autopost-stage3b-production-readiness-20261010.md`、`supabase/tests/postona_x_autopost_readiness/*`）とも重ならない。
+  - push の前に main を取り直した。新しいコミットは `.agent` だけだった。
+- ステージは明示したパスだけ。
+
+### next_recommendation
+- K4 の判断を経たうえで、次の順序を提案する:
+  1. G5 の T13 と PR #124 を main に入れる（それぞれの TASK）
+  2. 切り替えの TASK（Edge v2 の実装を含む。preflight と各段階でユーザーの承認）
+  3. 統合の Codex セキュリティレビューを1回（G5 の本物の guard と、G4 の X / Threads の RPC・Vault・後始末の境界が揃ったとき）
+- 先取りが本番ですでに起きていないかの読み取り専用の確認は、早めに行う価値がある（ユーザーが実行する）。
+- AI Lab 日記の価値は、K4 で別に判断してほしい。
 
 ---
 
