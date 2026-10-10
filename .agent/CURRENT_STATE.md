@@ -1,3 +1,12 @@
+## G4 NEXT — Threads Phase2b T9/T13-aware source-only candidate assigned — 2026-10-10 JST
+
+- Shared G4/G5 T9/T10/T13 design agreement verified in `docs/postona/threads-g5-t9-t10-t13-shared-contract-20261010.md`. This is a source/design contract only, not a deployed G5 guard or Auth deletion authorization.
+- G4 TASK `postona-threads-phase2b-workspace-oauth-candidate-20261010` now ready; recommended **Opus5.5（高）**. Independent G4 worktree from fresh kabumori-fresh origin/main required; no new H review allocated.
+- G4 owns provider-neutral personal workspace and Threads begin/complete contract candidates, offline/disposable-DB tests only. G5 owns real T13 shared-account same-transaction writer fence and deletion lifecycle T10 and remains on existing Phase3b TASK. G3 owns AI consultation production activation. Do not overlap their files/DB write windows.
+- Phase2a2 production migration remains unapplied, Meta setup pending, `THREADS_CONNECT_PREREQUISITES_MET=false`; no Threads runtime import, live provider token/connection, production access, migration apply, merge or deploy allowed. Stubbed security guard is mock-only, not rollout evidence.
+- Preserve previous G4 K4 PASS/PR118 merge and all other slot reports; K4 return_to **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**. Plan one consolidated independent Codex security review for actual G5 guard + G4 RPC/credential/cleanup before runtime enablement; avoid premature repeat review.
+- AI Lab diary: no new public-safe entry from **TASK allocation/spec reconciliation alone**; next K4 evaluates actual implementation.
+
 ## G4/G5 Threads T9/T10/T13 specification alignment — 2026-10-10 JST
 
 - User requested **specification coordination only** and no overwrite of active G5 work. Independent new design memo created at `docs/postona/threads-g5-t9-t10-t13-shared-contract-20261010.md` on main. Source implementation, migrations, runtime, deployment, G5/G4 TASK+Reports, `.agent/ACTIVE_TASK.md` and the static Threads gate remain UNCHANGED by this coordination.
