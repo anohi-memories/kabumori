@@ -3,8 +3,8 @@
 - task_id: postona-pr106-f1-acl-final-rereview-20261009
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - return_to: chatgpt
 - start_code: H1
 - completion_code: C1
@@ -110,6 +110,24 @@ Append a new completion report to `.agent/CODEX_REPORT.md` retaining all prior r
 Set this TASK to `review_required`, `next_owner: chatgpt`, return_to `chatgpt`, completion_code `C1`, then STOP.
 
 推薦モデル：**Sol（高）**
+
+## Completion — 2026-10-09
+
+- result: **PASS**, source merge consideration only; production apply/deploy NOT approved.
+- exact reviewed head: c0b6c03cb909d91f72b58424d64c6dfae1b8f14f; OPEN/unmerged, seven files.
+- F1: both empty-owner ACLs and NULL/default ACLs refused atomically; exact owner-only EXECUTE control passes; direct/inherited/SET-only/transitive protections preserved.
+- F2: latest-main invariant parity plus one POSTONA reservation, no timestamp collision, clean merge-tree / GitHub mergeable=true/clean; Netlify/Vercel SUCCESS.
+- tests: runner 8/8 markers; mutations 55/55 detected, exit 0; independent 24 refusals + 8 healthy controls; invariants 11/11; diff/credential scan clean.
+- product edits / production reads or writes / merge / deploy / provider calls: 0. Both own disposable PG servers stopped.
+- report: .agent/CODEX_REPORT.md, completion appended; prior history and other slot updates preserved.
+- return_to: chatgpt; completion_code: C1. **STOP for C1** after verified report-only GitHub sync.
+
+## Report-only recovery — 2026-10-10
+
+- Same TASK/exact source head. Restore completed 2026-10-09 review from own Git commits a7aecd98 / 9ddfd724 onto fresh independent main worktree; old sync rejection remains history.
+- Fresh head/CI/merge-tree/reservation/diff checks valid; fresh source invariants 11/11. Previous 55/55 PG mutation and X evidence reused, NOT rerun today; prior temporary raw logs no longer available, explicitly noted in Report.
+- Only H1 TASK/REPORT modified; normal push/read-back required for synchronization completion. No force, product change, production operation, merge or deploy.
+- return_to chatgpt / completion_code C1 / review_required preserved; STOP after successful sync or any new conflict.
 
 ---
 

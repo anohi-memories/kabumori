@@ -1,4 +1,29 @@
-# Current H1 result — 2026-10-08
+# Current H1 completion — 2026-10-10
+
+- task_id: postona-pr106-f1-acl-final-rereview-20261009
+- result: **PASS**, completed-review report synchronization recovery, not a new broad review.
+- exact PR106 head: c0b6c03cb909d91f72b58424d64c6dfae1b8f14f, unchanged, OPEN/unmerged, seven files; source merge consideration only, production apply/deploy NOT approved.
+- recovered completed report from own immutable commits a7aecd98 / 9ddfd724; previous sync rejection preserved below as history, not the current outcome.
+- tests: 2026-10-09 independent PG runner 8 markers, mutations 55/55, 24 refusal + 8 healthy controls reused on identical source; 2026-10-10 source invariants freshly rerun 11/11. No fresh PG/mutation run claimed.
+- status: review_required; next_owner / return_to: chatgpt; completion_code: C1.
+- sync: normal report-only push/read-back; actual recovery commit SHA/result reported in final response after remote verification. No force/rebase or product-source push.
+- production read/write / migration apply / merge / deploy / provider calls: 0.
+
+---
+
+# Historical local H1 result — 2026-10-09 (preserved)
+
+- task_id: postona-pr106-f1-acl-final-rereview-20261009
+- verdict: **PASS** — F1 exact-owner ACL / F2 integration closed; source merge consideration only, not production approval.
+- GitHub sync: **NOT COMPLETE**. Normal push of report commit a7aecd98 was rejected (fetch first). Read-only fetch confirmed remote 4e05f8d45e33b95d6bfce37ec5258260c115d2af advanced only .agent/CODEX_REPORT_2.md; H1 TASK/REPORT unchanged remotely, current H1 still ready. Per orchestration STOP rule no retry/rebase/force/overwrite performed. Local completion preserved for sync-only recovery.
+- Exact PR106 head: c0b6c03cb909d91f72b58424d64c6dfae1b8f14f. New completion appended at EOF; earlier history below preserved.
+- tests: runner 8/8 markers; mutations 55/55, exit 0; independent 24 atomic refusals + 8 healthy controls; invariants 11/11.
+- status: review_required; next_owner / return_to: chatgpt; completion_code: C1. STOP after verified report-only sync.
+- production reads/writes / migration apply / merge / deploy / provider calls: 0.
+
+---
+
+# Current H1 result — 2026-10-08 (preserved history)
 
 - task_id: postona-pr106-function-contract-final-rereview-20261008
 - verdict: **CHANGES REQUIRED** (bounded exact-ACL/integration only); review_required / next_owner: chatgpt; STOP for C1.
@@ -2723,3 +2748,74 @@ All owned by the non-superuser fixture table owner. No secret/token value read.
 - Production apply recommendation: **NOT APPROVED**. Source correction/reservation does not authorize preflight/apply/deploy; even a later PASS means source readiness only.
 - Future production-only facts: same-day canonical schema/rows/owners/ACL/membership/function definitions on actual PostgreSQL version; compare PG17.6/17.11 canonical hashes; exact apply owner/tool/transaction/history/timeout policy; T11 other owner-written table TRIGGER and schema CREATE authority; T12 unknown production SECURITY DEFINER writers. Current source fixture is not production inventory. Unknown drift must STOP, never automatic repair.
 - next_recommendation: C1/ChatGPT assesses the bounded ACL-assertion and reservation conflict corrective on existing G4 PR106. Recommended implementation **Opus5.5（高）** for the privilege assertion; limit any follow-up verification to changed predicate/fixture and mechanical integration parity, no broad architecture rereview. No new slot/task overwritten. Destination remains unspecified until ChatGPT fixes/confirms the authoritative TASK return fields.
+
+---
+
+# H1 — PR106 F1 exact-owner-ACL final rereview — 2026-10-09
+
+- task_id: postona-pr106-f1-acl-final-rereview-20261009
+- result / verdict: **PASS**, F1/F2 closed independently; source merge consideration only, NOT production approval.
+- target_pr: https://github.com/anohi-memories/kabumori/pull/106
+- exact reviewed head: c0b6c03cb909d91f72b58424d64c6dfae1b8f14f; prior reviewed head 4b6dc57966e0d55b2e901a7707446c35b25a1f00 remains an ancestor. Corrective fa294855 followed by normal main merge c0b6c03c; no force push.
+- migration SHA256: 0eb641350199ff1f5d0d34b899861127430db2671964b4a34747cea84015a9c9.
+- recommendation: Sol（高）; return_to / next_owner: chatgpt; completion_code: C1; status: review_required.
+- commit_hash (reviewed source): c0b6c03cb909d91f72b58424d64c6dfae1b8f14f. Report-only sync SHA/push result is reported in final response after actual remote verification.
+
+## F1 — CLOSED independently
+
+The predicate now compares each old trigger function's expanded normalized ACL to exactly one item: approved table owner is both grantor and grantee, EXECUTE, no grant option. A zero-row expansion produces NULL and IS DISTINCT FROM the one-item array, so the former empty-ACL hole is closed. NULL ACL expands through acldefault and is refused by the existing PUBLIC/effective EXECUTE audit. The new predicate precedes the DROP of the X-only CHECK; it never grants, revokes, reassigns or repairs the baseline.
+
+Independent handwritten tests, on BOTH public.social_mobile_account_deletion_guard() and public.x_account_refresh_reset_on_reconnect(): revoke owner EXECUTE and assert actual proacl={} plus has_function_privilege(owner,fn,'EXECUTE')=false; require POSTONA_ACCOUNTS_PRECONDITION_TRIGGER_FUNCTION_ACL. Both refuse with unchanged complete table object/row/security, function definition/owner/ACL and membership fingerprints; original X-only CHECK retained, zero new guard/function/check residue. NULL default ACL, PUBLIC/anon/authenticated direct grants, unknown extra grantee, owner/service grant options, INHERIT TRUE/SET FALSE, INHERIT FALSE/SET TRUE and transitive SET-only EXECUTE all refuse. These cover the changed contract, not a renewed architecture review.
+
+Exactly owner-only non-grantable EXECUTE control applies under a non-superuser table owner. Old function canonical hashes remain f1e297288b09647b4af78140c2d9d799 and fda71f31421d760b16d163e57e9836b2. New provider guard remains 3f0ee4a3b1adf64819ec97cce7a67808 with owner-only ACL. A body-only no-op injected after guard creation is refused by POSTCONDITION_GUARD, and an injected old-function ACL change is refused by POSTCONDITION_UNCHANGED, both atomically.
+
+Handwritten total: **24 atomic refusals + 8 healthy/behavior controls**. Healthy controls preserve direct service_role Meta INSERT/UPDATE refusal, immutable provider on service/owner UPDATE and owner UPSERT, connected Meta access-reference requirement, and ordinary same-provider X UPDATE success.
+
+## F2 — CLOSED against fresh main
+
+Candidate invariant file equals fresh main plus exactly the POSTONA 20261007150000 reservation. AI Lab 20261007173000 and every other current-main invariant are unchanged. Prior head ancestry is retained; read-only merge-tree exits 0 against checked main 1f9bc8d3b77801904a7cd942ef9270d3e18ba0ca (tree ee031479d4d7aa7c2c604da2fbab765f17a55c18). Fresh GitHub REST read-back mergeable=true/clean on exact head; earlier GraphQL MERGEABLE/CLEAN also confirmed. OPEN/unmerged, seven allowed files, Netlify/Vercel SUCCESS. Main updates briefly returned UNKNOWN while GitHub recalculated; no UNKNOWN state is presented as a final PASS.
+
+- Final push preflight: main a8a50d8f8471fa35eec142a8cddd370a173d43eb; candidate-source overlap still 0, invariant parity unchanged. Read-only merge-tree exits 0 (tree 3ec65d5ee81e301552b509291c6a374c3f1389da). Fresh GitHub read-back again confirms exact c0b6c03c, OPEN/unmerged, seven files, mergeable=true/clean after recalculation. Other slot/H2 report/control and AI Lab diary updates preserved.
+
+At allocation main 072a670e, later cd8e069d: no candidate-source overlap. Contrary to the TASK's abbreviated '.agent only' description, main since PR base also includes the unrelated AI Lab diary context .md/.snapshot.ts; these are preserved and have no overlap with the seven PR files. Later cd8e069d/f133974b control updates and 1f9bc8d3 G1 portfolio UI/assets/tests also preserved. Final candidate-source overlap remains zero. No other slot file edited. All current open PR migration filenames inspected: no 20261007150000 collision (PR112 reserves 20261009120000, PR3 uses 20260921115317; other open PRs add no conflicting migration).
+
+## Bounded regression / safety
+
+- Shipped unmodified PostgreSQL runner: **8/8 PASS markers** and successful execution before the mutation suite, successful behavior, X publish permission, deletion, refresh pilot/publish authority/settings reader Stage3B, adverse states, atomic postconditions and cleanup.
+- Unmodified mutation suite: **55/55 detected**, POSTONA_ACCOUNTS_MUTATIONS_ALL_DETECTED 55/55 and exit 0. New revert-to-bad-entry-only predicate explicitly detected at the expected empty-owner-ACL case. No pending, invalid, wrong-reason or survived case counted as PASS.
+- Checked source invariants: **11 passed / 0 failed**. git diff --check and added-line credential-pattern scan pass; source worktree clean. No new product source edits by H1.
+- Relative to previous reviewed head, substantive diff is only positive ACL assertion (7 added/3 removed lines), runner coverage (13 added lines), mutation coverage (10 added lines); docs, behavior, fixture and reservation content identical. Mechanical main integration changes ancestry without broadening product logic.
+- Dedicated local PostgreSQL 17.11 Unix-socket clusters, fake identities only. Applying role has no SUPERUSER/CREATEDB/CREATEROLE. Standard/mutation runners use one cluster sequentially; handwritten checks use the other. Standard runner, mutation healthy control and handwritten checks completed at default durability settings. After 36 detected mutants, the disposable mutation cluster alone was reloaded with fsync/synchronous_commit off to reduce clone/drop overhead; no role/catalog/test/source semantic changed. SQL-error atomic rollback is verified; crash durability/recovery is NOT claimed. No external provider/token material used. Main runner fake DBs / roles remaining = **0 / 0**. Both H1-only servers stopped and shutdown confirmed; independent fake catalog files/logs retained, no active test service. No other server stopped. [PG17 durability-setting guidance](https://www.postgresql.org/docs/17/runtime-config-wal.html) distinguishes this discardable fixture from durable production data.
+- Evidence: /private/tmp/kabumori-h1-pr106-acl-20261009.iq76v8/{runner.log,mutations.log,invariants.log,independent.ts,independent.log}. Supabase/Postgres skills directed effective privilege and atomic rollback checks; official changelog (Markdown unsupported, HTML fallback), PG17 privileges/ACL/membership docs consulted. No advisor/catalog production call.
+- Reviewer repository changed files: .agent/tasks/CODEX_TASK.md and .agent/CODEX_REPORT.md only. Prior history preserved. No ACTIVE_TASK/CURRENT_STATE/G4/H2 edits; other worktree/server state untouched. Report-only normal push/read-back must complete before final handoff; actual SHA/result recorded in final response, never inferred from a local commit.
+- Production DB/catalog read/write, migration apply, PR merge, deploy/EAS, Auth/OAuth/Vault/secrets/Cron changes, real X/Threads/Instagram calls: **0**.
+
+## Recommendation / separate production gate
+
+**PASS recommends source merge consideration only**, not merge execution or production apply. No new concrete blocker found; accepted B1-B6 and R1/R2 design not reopened.
+
+Future production authority remains separate: same-day canonical schema/row/owner/ACL/membership/function inventory and PostgreSQL-version hash parity; exact apply owner/tool/transaction/history/timeout policy; T11 other owner-written table TRIGGER/schema CREATE paths and T12 untracked SECURITY DEFINER writers. This local fixture is not production inventory. Unexpected drift must STOP, never auto-repair.
+
+Next: ChatGPT C1（推薦モデル：Sol〈高〉） assesses this bounded result and source merge route. No production gate automatically passes. Upon verified report sync: H1 review_required / next_owner chatgpt; STOP. Return destination is explicitly chatgpt, not inferred G4.
+
+## Sync receipt / STOP — 2026-10-09
+
+- Local report commit: a7aecd98, two H1 control files only, clean committed worktree before push.
+- Normal push HEAD:main rejected as non-fast-forward/fetch first; **push=false, GitHub sync incomplete**. Do not present local review_required as the remote status.
+- Read-only follow-up fetch: main 4e05f8d45e33b95d6bfce37ec5258260c115d2af, advanced only H2 Report. H1 TASK/REPORT did not change remotely and remote H1 remains ready.
+- No automatic merge/rebase/cherry-pick/retry/force push. Reviewer stops with the completed local PASS and evidence preserved; no new source review is needed merely for this report-only race.
+- Return to ChatGPT for C1 with this local result plus sync failure, or obtain a new instruction for safe report-only synchronization. Production/source-merge execution remains unapproved.
+
+---
+
+## H1 report-only recovery — 2026-10-10
+
+- User resumed with H1. Fresh main e940d054e832bca2ba884db43695d85ff64fabfe, then observed non-conflicting local origin/main advance to ad9a1f48b8037278e8c0cb4d97954166752ef94c. Current canonical H1 TASK is the same ready task/exact head; remote H1 TASK/REPORT have not changed since the failed 2026-10-09 sync.
+- Completed local commits survive in the Git object database. Previous /private/tmp/kabumori-h1-pr106-acl-20261009.iq76v8 directory is no longer present; original raw logs/probe scripts/catalog files are currently unavailable. Recover the actual prior completion report, not fictitious fresh test logs. Earlier PASS is supported by the recorded firsthand 2026-10-09 execution and immutable exact source. This limitation is explicit.
+- Fresh own isolated worktrees: /private/tmp/kabumori-h1-sync-20261010.woYfF8/report (fresh main) and /source (detached exact c0b6c03c). Restore only the two H1 control-file changes from 9ddfd724 via apply_patch; protect every other slot, report and previous H1 history. No automatic retry of the prior rejected push; this is the newly requested recovery turn.
+- Fresh source checks: exact migration SHA256 still 0eb641350199ff1f5d0d34b899861127430db2671964b4a34747cea84015a9c9; candidate-source main overlap 0; reservation invariant still main plus the sole POSTONA line, AI Lab reservation preserved; git merge-tree exit 0 (tree 8f56f56c60ad5cec68ac8c95015283907b49c636 against ad9a1f48); git diff --check clean. Netlify/Vercel SUCCESS and GitHub MERGEABLE/CLEAN on unchanged exact head.
+- Fresh Deno source invariants: **11 passed / 0 failed**, log /private/tmp/kabumori-h1-sync-20261010.woYfF8/invariants-20261010.log. Prior 55/55 mutation/PG/X evidence is not rerun or described as today's execution; no new source discrepancy calls for reopening accepted B1-B6/R1/R2.
+- Reviewer changed_files: .agent/tasks/CODEX_TASK.md, .agent/CODEX_REPORT.md only. Source commit_hash c0b6c03c; report-only recovery commit/push actual receipt is reported after read-back. Production DB/catalog read/write, apply, PR merge, deploy, Auth/OAuth/Vault/secrets/provider actions = 0. No local DB/cluster created or started today.
+- Remaining: C1/source merge decision and all separate production gates previously stated. Historical sync blocker is resolved only by successful new normal push and remote verification, never by local file status alone. If new non-fast-forward or same-file conflict occurs, STOP again; do not force or overwrite.
+- next_recommendation: return to ChatGPT for C1（推薦モデル：Sol〈高〉）after verified GitHub sync; current TASK review_required / next_owner chatgpt. No merge/deploy follows automatically.
+- Push preflight: fresh main d299a72f94ab22e94d7d5d438a32d42e44ec8dec adds only G3 TASK/index updates relative to ad9a1f48; H1 canonical files unchanged, candidate source overlap still 0. New merge-tree exits 0 (67b7898b0e7dbba9761583002ab789722f58f59c). Exact PR106 remains OPEN at c0b6c03c; GitHub returned UNKNOWN while recalculating after this control-only main movement. Earlier fresh-start MERGEABLE/CLEAN is the positive API evidence, not an UNKNOWN-as-PASS claim. Before any actual PR merge, C1 must recheck that live metadata; this report-only sync does not perform or authorize merge.
