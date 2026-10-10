@@ -3,8 +3,8 @@
 - task_id: common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: codex
 - priority: critical
 - type: narrow independent-H2-findings security corrective, existing PR
 - target_pr: 112
@@ -64,11 +64,155 @@ Work on same PR112 branch, use source-only fast-forward push after fresh main/PR
 
 推薦モデル：**Opus5.5（極高）**
 
+## K5 — Source-only final corrective candidate review — 2026-10-10 JST
+
+- verdict: **PASS_CANDIDATE to independent exact-head H2 security rereview only**. No source merge/deploy or permission to open the whole-account deletion gate.
+- target_pr: 112; exact head `54b9435b0dcc0d0e79ae6eba4340eee44508141c` OPEN/UNMERGED, 30 PR files.
+- previous review head `b60272c433b57bac1acb00c13d4fda7ff96f1f2f` -> new: one commit, 16 G5-only files, zero changed-file overlap with current main at K5 (58 main commits since PR base). Other G2/G3/G4 source files untouched.
+- R1 previous P1: G5 reports Phase3a unapplied migration preflight+revoke+postconditions on three legacy checkpoint/clear/prepare EXECUTE pathways; spot-check located owner/ACL preflight and revokes. R2 previous P1: account-delete-owned Apple three-way outcome and real-wiring integration added; spot-check confirmed `http.ts` uses new adapter and runtime retains unknown in-flight intent. R3 blocked release gate, R4 fresh residue checks, C1 future reauth all preserved per G5 Report. These remain subject to H2 independent security proof.
+- G5-reported test evidence: account-delete 66 PASS, app 430 PASS, AuthProvider 23, X saga 17, X app 19, Phase1/2/3a disposable PostgreSQL runners PASS, SQL mutation 48/48 and TS mutation 45/45 detected, `deno check` clean and strict production-runtime Deno lint clean; scoped app tsc same historical CSS declaration errors as main. These are reported, not separately rerun by ChatGPT.
+- Whole-account Auth deletion remains **BLOCKED / UNAVAILABLE** behind schema-enforced closed gate pending future Auth identity-write fence and separately reviewed release. Existing production hard-delete deployment and E2E/provider/writer/entitlement/Storage/Apple/X dependencies still unresolved; do not equate source review with rollout.
+- H2 reviewed previous head then marked done after C2; H1 remains assigned PR106. K5 assigned **H2** `common-account-pr112-r1l-r2-apple-boundary-exact-head-rereview-20261010` with recommended **Sol（極高）**, return_to **共通アカウントG5のちゃ**, finish **C2**. G2 PR110 remains waiting; all other slots preserved. Review first, no merge/migration/Edge deploy/EAS.
+- G5 remains review_required, next_owner codex. Production read/write, provider/API calls, migration apply, deploy, EAS and PR merge by K5: 0.
+
 ## Report — current bounded residual corrective
 
-- status: pending
-- result: awaiting G5
-- production_mutation: prohibited
+- status: review_required
+- task_id: common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010
+- result: **R1・R2 の残り（P1）と strict lint の 1 件を直した。source merge：PASS_CANDIDATE（同じ head での独立再レビューが前提）**
+  - 共通アカウント削除の機能（ログインの削除）は、引き続き **BLOCKED**。公開ゲートは `blocked` 固定のまま、開けていない。
+- production_mutation：**0**
+  - 本番の読み取り・書き込み・問い合わせ・適用・デプロイ・EAS：すべて 0
+  - 本物の Supabase／Auth／Apple／X／Storage にも、一切つないでいない。
+- PR：https://github.com/anohi-memories/kabumori/pull/112
+  - 開始時の head：`b60272c433b57bac1acb00c13d4fda7ff96f1f2f`（OPEN・未 merge・変わっていないことを、作業前と push 直前に確認した）
+  - **新しい head：`54b9435b0dcc0d0e79ae6eba4340eee44508141c`**（fast-forward で push、force push なし、merge なし）
+  - push 後に GitHub から読み返した：head が一致、OPEN、変更ファイル 30。
+- main：開始時 `031fb14c` → in_progress の記録 `e940d054`
+  - PR の全ファイルと、PR の起点以降に main で変わったファイルの重なり：**0**
+  - G4 PR106／G2 PR110／G3 PR114 のファイルとの重なり：**0**
+- 作業場所：`kabumori-fresh` から作った新しい G5 専用 worktree（`kabumori-g5-pr112d`、branch `claude/g5-pr112-r1r2-20261010` → PR の branch へ push）。他スロットと古い worktree には触れていない。
+
+### 1. R1（P1）：古い RPC を使えば、担当権なしで書き込めた
+
+- 調べたこと：
+  - 対象は Phase 1 の次の 3 つ。所有者は migration を適用したロールで、`service_role` に EXECUTE が付いていた。
+    - `record_common_account_deletion_checkpoint(uuid,uuid,text)`
+    - `clear_common_account_deletion_checkpoint(uuid,uuid,text)`
+    - `prepare_common_account_auth_delete(uuid,uuid)`
+  - repository 全体を探した。実行時にこれらを呼ぶものは無かった。あるのは、Phase 1 自身のテストと rollout 用の道具（この候補を入れずに動く）、それに G5 の「呼ばないことを確かめる」テストだけ。Kabumori の利用終了（`withdraw_kabumori_service`）はこの 3 つを使わない。
+- 直したこと：**未適用の候補 migration** の中だけで直した。適用済みの Phase 1/2 のファイルは編集していない。
+  - 事前チェック：3 つの所有者が「適用するロール」と一致すること、ACL が「所有者＋`service_role` の EXECUTE だけ」であること。PUBLIC（null ACL）、他の付与先、grant option があれば、それも「ずれ」とみなす。ずれていたら、全体の適用を止める（`…_PREFLIGHT_LEGACY_ACL_CHANGED`／`…_LEGACY_OWNER_MISMATCH`）。
+  - API ロールからの付与を全部取り消した。関数の中身は変えていない。
+  - 事後チェック：`anon`／`authenticated`／`service_role` が EXECUTE できないことを確かめる（`…_POSTCONDITION_LEGACY_ACL`）。
+  - 担当権を確かめる SECURITY DEFINER の wrapper（同じ所有者）だけが、引き続き呼べる。Apple のチェックポイントは、外部手順の「実行中」を閉じる処理（settle）でしか書けない。
+- 証明（使い捨て PostgreSQL 17。偽のデータだけ）：
+  - H2 の反例をそのまま再現した：Apple の「実行中」が残り、担当権は期限切れ、担当権を確かめる経路は `lease_lost`。この状態で、古い 3 関数の 4 種類の呼び方をすべて試した。
+    - 試したロール：`service_role`、それを継承するロール、`authenticated`、それを継承するロール、`anon`。
+    - 結果：すべて permission denied。Apple のチェックポイントは書かれず、取り消しも、準備確認のやり直しも起きていない（**`H2_R1_LEGACY_UNOWNED_APPLE_CHECKPOINT_BYPASS` は起きなくなった**）。
+  - 他の人・他の手続きを指定しても、同じく拒否される。継承したロールも、実効権限なし。
+  - 担当権のある正しい経路（記録・取り消し・準備確認）は動く。未決着の Apple 手順は、引き継ぎも止める。Kabumori だけの利用終了は影響なし（ログインも残る）。
+  - 新しいテストを、**修正前の候補（b60272c4）に対して実行すると `FAIL R1L` で落ちる**（反例を確かに捕まえる）。修正後は PASS。
+  - 事前チェックのずれ 3 種（他の付与先／grant option／service_role 無し）と、所有者の不一致：いずれも適用を拒否し、何も作らない。
+  - カタログの差分は、期待どおりの 47 行だけ。古い 3 関数は、中身（md5）が同じで、ACL が「所有者のみ」に変わっただけ。
+  - 候補全体を transaction の中で適用して rollback すると、カタログは完全に元どおり。
+
+### 2. R2（P1）：Apple の HTTP 応答が「どちらか分からない」のに「失敗」扱いになり、コードをもう一度使えた
+
+- 直したこと：account-delete 専用の Apple アダプタ（`apple_outcome.ts`）を新しく作った。
+  - G4/X の `apple_revoke.ts` は編集していない。そこから使うのは、client secret の署名だけ。
+  - 結果を 3 つに分ける：
+    - `succeeded`：Apple が解除を確認した（2xx）。
+    - `definitively_failed`：何も送っていない（署名できなかった）、または Apple が token 要求そのものを OAuth のエラー（`invalid_grant` など、RFC 6749 §5.2）で断った。
+    - `unknown`：送った後のそれ以外すべて。通信の失敗・時間切れ、5xx／429／分からない応答、そして Apple がコードを受け付けた後の失敗すべて（id_token が無い、別の Apple ID だった、token が無い、解除の失敗や 502 など）。
+  - 判定はアダプタの外でもう一度確かめる：`unknown`・例外・想定外の値は、すべて「確認待ち」として扱う。オーケストレーターは「実行中」を残したまま `RECONCILIATION_REQUIRED` を返し、使い終わったコードを二度と送らない。確実な失敗のときだけ「実行中」を消し、新しいコードでの再試行を許す。
+- 証明：**実際の本番配線**で確かめた（`createHandler` と本物のアダプタ。偽の Apple、使い捨ての EC 鍵、偽のライフサイクル DB を使い、ネットワークにはつないでいない）。
+  - H2 の反例（Apple が解除を適用した後に 502）：
+    - 1 回目は `RECONCILIATION_REQUIRED`。「実行中」は残る。
+    - すぐの再試行は `DELETION_IN_PROGRESS`。担当権の期限と待ち時間が過ぎた後も `RECONCILIATION_REQUIRED`。
+    - **コードの交換は 1 回だけ**、解除は 1 回、ログイン削除は 0 回（**`H2_R2_ADAPTER_AMBIGUOUS_502_CLEARED_AND_REPLAYED` は起きなくなった**）。
+  - 次の場合も、すべて「実行中」を残し、交換は 1 回だけ：token 側の 500／通信失敗／429、解除側の通信失敗、コード受付後の 400、別の Apple ID。
+  - 時間切れ：`AbortSignal` を使った単体テストで `unknown`。
+  - DB への記録の失敗：交換 1 回のまま。運営が「解除済み」と記録すれば、Apple を呼ばずに完了する。
+  - 担当権の喪失：Apple の応答中に担当権が期限切れになっても、何も書かず、再実行もしない。
+  - 確実な拒否（`invalid_grant`）：「実行中」を消し、新しいコードで完了する（コードごとに交換は 1 回）。
+  - 正常な流れ：交換 1 回 → 解除 1 回 → 確認済みの削除。
+  - アダプタの単体テスト：14 の分類と時間切れ・署名失敗。リクエストの中身（ES256 の client secret、コードは 1 回）も確かめた。ログ出力は 0 で、返すのは決まった語だけ。
+
+### 3. strict lint
+
+- `lifecycle_logic.ts` の `require-await`（`recordStorage`）を、動作を変えずに直した。
+- 実行時ファイル（`index.ts`、`http.ts`、`lifecycle_logic.ts`、`apple_outcome.ts`）の strict `deno lint`：**0 件**。
+- テスト用ファイルには、偽物の `async` 関数の `require-await` が 19 件ある。以前からある種類と同じで、ルールは無効にしていない。
+
+### 4. 変更ファイル（すべて許可範囲）
+
+- `supabase/functions/account-delete/`：
+  - 新規：`apple_outcome.ts`、`apple_outcome_test.ts`、`fake_apple.ts`、`fake_lifecycle.ts`、`http_apple_test.ts`
+  - 変更：`http.ts`、`lifecycle_logic.ts`、`lifecycle_logic_test.ts`、`wiring_test.ts`
+- `supabase/migrations/20261009120000_common_account_deletion_completion.sql`（未適用の候補）
+- `supabase/tests/common_account_deletion_completion_{run.sh,behavior.sql,mutations.sh,expected_catalog.txt}`
+- `supabase/tests/common_account_phase3a_ts_mutations.py`
+- `docs/common-account/phase3a-deletion-orchestrator.md`
+- 変更なし：
+  - G4/X の `social-mobile-account-delete/*`（`apple_revoke.ts` を含む）
+  - 適用済みの Phase 1/2 の migration
+  - アプリのクライアント
+  - 本番の設定・秘密情報
+
+### 5. テスト（すべてこの作業の最終状態で再実行）
+
+| 対象 | 結果 |
+|---|---|
+| account-delete（オーケストレーター 39、HTTP 7、封じ込め／静的 9、Apple アダプタ 5、本番配線の Apple 6） | **66 PASS**（前回 53） |
+| アプリ `tests/app` | **430 PASS** |
+| AuthProvider | **23 PASS** |
+| X 削除サガ | **17 PASS** |
+| X アプリ | **19 PASS**（10＋9） |
+| Phase 1 ランナー／Phase 2 ランナー | **20 PASS／ALL PASS** |
+| Phase 3a ランナー | **ALL PASS**（事前チェック、新しい ACL のずれ・所有者の不一致、transaction の rollback で完全一致、変更範囲の完全一致、ACL、再適用の拒否、静的ルール、Phase 2 への影響なし、挙動 G0/A〜H/C5〜C6/R1/R1L/R2〜R4、2 セッションの競合 5 種） |
+| SQL ミューテーション | **48/48 検出**（R1 の新しい 5 種を含む） |
+| TS ミューテーション | **45/45 検出**（R2 の新しい 7 種を含む。壊していない複製は PASS） |
+| `deno check`（account-delete の全 .ts） | エラー 0 |
+| tsc（アプリの `src`） | main と同じ既存の CSS 宣言 2 件だけ |
+| `git diff --check` | PASS |
+
+- 前回までに通ったものは、壊していない：
+  - R3：ゲートは `blocked` 固定で、開始前に断る
+  - R4：完了後に遅れて現れたファイルを検出する
+  - C1：未来の時刻を厳密に拒否する
+  - Kabumori だけの利用終了と、共通 Auth／X の保持
+
+### 6. source merge と、残っていること
+
+- **source merge：PASS_CANDIDATE**（同じ head `54b9435b` での独立再レビューが前提。merge しても本番は何も変わらない）。
+- **共通アカウント削除の機能：BLOCKED**（ゲートは閉じたまま）。
+- 本番の前に残っていること（PASS とは呼ばない）：
+  1. Auth 側で、削除中の ID の追加・書き込みを止める仕組み。使い捨ての本物の Supabase での証明も必要。
+  2. X だけを使う人、先にかぶモリを終了した人の削除（X 側・G3/G4）。
+  3. 本番の旧 `account-delete`（ハード削除）。デプロイまで動いたまま。
+  4. 作る経路・権利・古い token での書き込みを止める仕組み。
+  5. 公開 Web の削除ページ。
+  6. 本物の provider（Auth／Storage／Apple／X）での検証。Simulator／実機での確認。
+  7. 応答が失われたときと、Apple の確認待ちの、運営の手順。確認用の RPC は `service_role` で守っているだけ。誰が・何を根拠に・どう記録するかは、まだ無い。
+  8. 削除を自分で取り消す画面。
+
+### 7. safety_checks
+
+- 本番の読み取り・書き込み・問い合わせ、migration の適用、デプロイ、EAS、merge、force push：**0**
+- 本物の Supabase／Auth／Apple／X／Storage／Vault／OAuth・秘密情報・本物の削除：**0**
+- 使ったのは、ローカルの使い捨て PostgreSQL（Unix socket のみ）と偽物だけ。ネットワークを使うテストは無い。
+- 他スロットのファイル・branch・worktree・server、H1/H2 の TASK・Report、ACTIVE／CURRENT：触れていない
+- token・コード・ID・メール・秘密情報：ログにも応答にもレポートにも無い（自動テストで確認）
+
+### 8. 次の推奨
+
+- PR #112 の新しい head `54b9435b` を、同じ head で独立再レビューしてもらう。
+  - 特に見てほしいもの：R1L（古い 3 関数の実効権限、事前／事後チェック、rollback）と、本番配線での Apple の 3 種類の結果。
+- そのあと：
+  - G3/G4 と、Auth 側の ID 変更を止める仕組みの候補、X の scope を決める。
+  - 運営の確認手順（誰が・何を根拠に・どう記録するか）を設計する。
+- 本番の操作は、それぞれ K5 の承認を得てから行う。
 
 ---
 

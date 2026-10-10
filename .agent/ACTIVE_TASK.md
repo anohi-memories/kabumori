@@ -46,16 +46,16 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: common-account-v1-phase3a-pr112-r1-r4-c1-final-rereview-20261010
+- status: ready
+- task_id: common-account-pr112-r1l-r2-apple-boundary-exact-head-rereview-20261010
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
 - return_to: 共通アカウントG5のちゃ
 - completion_code: C2
-- allocation: C2 accepted independent PR112 exact b60272c R1/R2 residual CHANGES REQUIRED; old Phase1 service_role RPC bypasses lease/fence, actual Apple HTTP502 ambiguity maps false and permits one-time replay; source merge/deploy HOLD. H2 review completed/closed, not reserved. A new review requires new free-slot verification; G2 PR110 still waiting.
+- allocation: New K5 exact-head independent security rereview of PR112 54b9435b0dcc0d0e79ae6eba4340eee44508141c, 30 files; focus R1 legacy service_role RPC bypass and R2 ambiguous Apple HTTP response; check old R3/R4/C1 and lint. Other slots untouched; no merge/deploy.
 - recommended_model: Sol（極高）
 
 ## Claude G1
@@ -108,14 +108,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: review_required
 - task_id: common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: C2 accepted H2 CHANGES REQUIRED on PR112 head b60272c433b57bac1acb00c13d4fda7ff96f1f2f. Bounded fixes to R1 P1 legacy checkpoint/clear/prepare RPC service_role lease/fence bypass, R2 P1 Apple real-adapter ambiguous HTTP502 replay, strict Deno require-await lint. Preserve R3 blocked release gate, R4 fresh read-back, C1 strict reauth; exact PR112 only, source-only. H1 POSTONA PR106 remains preserved. No merge, production migration, deploy or EAS. Next K5.
+- allocation: K5 PASS_CANDIDATE source-only PR112 head 54b9435b0dcc0d0e79ae6eba4340eee44508141c; 16 G5 paths, previous head b60272c. R1 legacy RPC ACL and R2 Apple unknown-state repair reported; H2 focused security rereview assigned; full deletion gate remains blocked; merge/deploy/EAS HOLD.
 - recommended_model: Opus5.5（極高）
 
 ## Deferred
