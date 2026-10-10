@@ -18,7 +18,7 @@
 - corrective_source_diff_reviewed: only `analysis_logic.ts`, `hard_fact_guards.ts`, `h2_corrective_test.ts` since previous head. No corrective Auth/DB/migration/UI/provider/POSTONA contamination; shared X consumer unchanged by residual corrective.
 - implementation_commit: none by H2 (source review only).
 - publication_preflight_main: `e3e0a1a2bcb1dedd8e1b0482005b0c5a1ee09d02`; pinned PR head and H2 ready/codex reconfirmed immediately before CAS synchronization.
-- control_sync: pending read-back; no source/PR branch push, merge or deploy.
+- control_sync / push: **CONFIRMED on GitHub origin/main**, exact Contents read-back and direct fresh-fetch ancestry. Report commit `90f7ed51687264a54656f2c61a1c59fd45abbbd7`; TASK state commit `22993474118e83899bc3321c3749b47fd3804a0a`; H2 index-only state commit `e77354bd0eb60b1c8ba7561a2582328d54cd2897`. Each own commit contains only its single authorized control path. TASK/index review_required / next_owner chatgpt confirmed. Full original 701536-character Report history remains exactly unchanged; no source/PR branch push, merge or deploy.
 
 ## Closed prior residuals / preserved accepted behavior
 
