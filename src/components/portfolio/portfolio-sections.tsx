@@ -38,23 +38,17 @@ function SearchIcon() {
   );
 }
 
-export function PortfolioHeader({ onWatchlist, onSearch }: { onWatchlist: () => void; onSearch: () => void }) {
+export type StocksView = 'portfolio' | 'watchlist';
+
+// The 銘柄 tab's shared header: one title and one search button for both subviews (the old per-view title and
+// the ★ウォッチリスト pill are replaced by the segmented switch below it).
+export function StocksHeader({ view, onSearch }: { view: StocksView; onSearch: () => void }) {
   return (
     <View style={styles.headerRow}>
       <View style={styles.headerTitles}>
-        <Text style={styles.eyebrow}>PORTFOLIO</Text>
-        <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit>ポートフォリオ</Text>
+        <Text style={styles.eyebrow}>{view === 'portfolio' ? 'PORTFOLIO' : 'WATCHLIST'}</Text>
+        <Text style={styles.title} numberOfLines={1} accessibilityRole="header">銘柄</Text>
       </View>
-      <Pressable
-        onPress={onWatchlist}
-        accessibilityRole="button"
-        accessibilityLabel="ウォッチリスト"
-        accessibilityHint="監視している銘柄の一覧を開きます"
-        hitSlop={6}
-        style={({ pressed }) => [styles.watchButton, pressed && styles.pressed]}>
-        <Text style={styles.watchStar}>★</Text>
-        <Text style={styles.watchText}>ウォッチリスト</Text>
-      </Pressable>
       <Pressable
         onPress={onSearch}
         accessibilityRole="button"
@@ -63,6 +57,34 @@ export function PortfolioHeader({ onWatchlist, onSearch }: { onWatchlist: () => 
         style={({ pressed }) => [styles.searchButton, pressed && styles.pressed]}>
         <SearchIcon />
       </Pressable>
+    </View>
+  );
+}
+
+const SWITCH_ITEMS: ReadonlyArray<{ view: StocksView; label: string }> = [
+  { view: 'portfolio', label: 'ポートフォリオ' },
+  { view: 'watchlist', label: 'ウォッチリスト' },
+];
+
+/** An iOS-style two-segment switch between the two subviews of the 銘柄 tab (no new route, no new tab). */
+export function StocksSwitch({ view, onChange }: { view: StocksView; onChange: (next: StocksView) => void }) {
+  return (
+    <View style={styles.switchTrack} accessibilityRole="tablist">
+      {SWITCH_ITEMS.map((item) => {
+        const selected = item.view === view;
+        return (
+          <Pressable
+            key={item.view}
+            onPress={() => onChange(item.view)}
+            accessibilityRole="tab"
+            accessibilityLabel={item.label}
+            accessibilityState={{ selected }}
+            accessibilityHint={selected ? undefined : `${item.label}の表示に切り替えます`}
+            style={[styles.switchSegment, selected && styles.switchSegmentOn]}>
+            <Text style={[styles.switchText, selected && styles.switchTextOn]}>{item.label}</Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -231,9 +253,11 @@ const styles = StyleSheet.create({
   headerTitles: { flex: 1, minWidth: 0 },
   eyebrow: { color: PF.muted, fontWeight: '800', letterSpacing: 3, fontSize: 11 },
   title: { color: PF.ink, fontSize: 32, fontWeight: '900', marginTop: 2 },
-  watchButton: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 44, borderRadius: 22, paddingHorizontal: 14, backgroundColor: PF.aiBackground, borderWidth: 1, borderColor: PF.aiBorder },
-  watchStar: { color: PF.up, fontSize: 14 },
-  watchText: { color: PF.ink, fontSize: 13, fontWeight: '800' },
+  switchTrack: { flexDirection: 'row', backgroundColor: '#e9eee9', borderRadius: 14, padding: 3, gap: 3 },
+  switchSegment: { flex: 1, minHeight: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  switchSegmentOn: { backgroundColor: '#ffffff', borderWidth: 1, borderColor: PF.cardBorder },
+  switchText: { color: PF.muted, fontSize: 14.5, fontWeight: '800' },
+  switchTextOn: { color: PF.ink, fontWeight: '900' },
   searchButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: PF.aiBackground, borderWidth: 1, borderColor: PF.aiBorder },
   searchIcon: { width: 20, height: 20 },
   searchRing: { position: 'absolute', left: 1, top: 1, width: 13, height: 13, borderRadius: 7, borderWidth: 2.5, borderColor: PF.ink },

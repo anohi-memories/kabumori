@@ -307,6 +307,106 @@ export function buildWatchRows(tracked: readonly TrackedStock[], report: Persona
     });
 }
 
+// ---- watchlist highlights ----------------------------------------------------------------------------------------------
+
+/** A saved close move of at least this many percent (either way, inclusive) makes a watch stock a candidate. */
+export const FEATURED_CHANGE_THRESHOLD = 5.0;
+
+/** At most this many featured cards; every other watch stock stays in the compact list. */
+export const FEATURED_MAX = 3;
+
+// Only the report's own high-signal severities count as a "verified high-impact" news fact.
+const NEWS_SEVERITY_RANK: Record<string, number> = { emergency: 3, critical: 2, high: 1 };
+
+/** A stock-linked news item that the saved report really contains (headline, date, id) -- never inferred. */
+export type VerifiedNews = { newsId: string; headline: string; newsTime: string; severity: string };
+
+/**
+ * The strongest news fact for a watch stock, or null. A news card is only allowed when the saved report holds a
+ * real item for this ticker: its id is in the stock's own news_ids AND it has a non-empty headline, a parseable
+ * date and a high-signal severity. `news_ids` alone proves nothing (no headline, no date, no destination).
+ */
+export function verifiedWatchNews(snapshot: ReportSnapshot | null, ticker: string): VerifiedNews | null {
+  if (!snapshot) return null;
+  const stock = snapshot.watch.find((entry) => entry.ticker_code === ticker);
+  if (!stock) return null;
+  const linked = new Set(stock.news_ids);
+  const usable = snapshot.news
+    .filter((item) =>
+      item.ticker_code === ticker
+      && linked.has(item.news_id)
+      && typeof item.news_id === 'string' && item.news_id.trim() !== ''
+      && typeof item.headline_ja === 'string' && item.headline_ja.trim() !== ''
+      && Number.isFinite(Date.parse(item.news_time))
+      && (NEWS_SEVERITY_RANK[item.severity] ?? 0) > 0)
+    .sort((left, right) =>
+      (NEWS_SEVERITY_RANK[right.severity] ?? 0) - (NEWS_SEVERITY_RANK[left.severity] ?? 0)
+      || Date.parse(right.news_time) - Date.parse(left.news_time)
+      || left.news_id.localeCompare(right.news_id));
+  const best = usable[0];
+  return best ? { newsId: best.news_id, headline: best.headline_ja.trim(), newsTime: best.news_time, severity: best.severity } : null;
+}
+
+/** 「大きく下落/上昇」 for a move that meets the featured threshold; null otherwise (including a missing %). */
+export function featuredMoveLabel(changePercent: number | null): string | null {
+  if (changePercent === null || !Number.isFinite(changePercent) || Math.abs(changePercent) < FEATURED_CHANGE_THRESHOLD) return null;
+  return changePercent > 0 ? '大きく上昇' : '大きく下落';
+}
+
+export type FeaturedKind = 'news' | 'rise' | 'fall';
+
+export type FeaturedWatch = { row: WatchRow; kind: FeaturedKind; news: VerifiedNews | null };
+
+export type WatchLayout = {
+  /** 0-3 cards. Empty means the featured section is not rendered at all. */
+  featured: FeaturedWatch[];
+  /** Every other watch record, in the given order (a featured stock is never repeated here, none is dropped). */
+  rest: WatchRow[];
+  /** Tickers in `rest` that also qualified but did not fit the cap: they get a small 注目 marker. */
+  flagged: ReadonlySet<string>;
+};
+
+/**
+ * Splits the watch records into featured cards and the compact list, deterministically from the saved report.
+ * Candidates: a verified high-impact news fact, or |change| >= 5.0%. News candidates come first (severity, then
+ * newest, then ticker), then price candidates (largest |change|, then ticker). A stock appears exactly once.
+ * A missing price/percent never qualifies a stock; a stock stays listed and editable regardless.
+ */
+export function layoutWatchlist(rows: readonly WatchRow[], snapshot: ReportSnapshot | null): WatchLayout {
+  const candidates = rows.flatMap((row): Array<{ featured: FeaturedWatch; rank: [number, number, number, string] }> => {
+    const news = verifiedWatchNews(snapshot, row.ticker);
+    if (news) {
+      return [{
+        featured: { row, kind: 'news', news },
+        rank: [0, -(NEWS_SEVERITY_RANK[news.severity] ?? 0), -Date.parse(news.newsTime), row.ticker],
+      }];
+    }
+    const change = row.changePercent;
+    if (change !== null && Number.isFinite(change) && Math.abs(change) >= FEATURED_CHANGE_THRESHOLD) {
+      return [{
+        featured: { row, kind: change > 0 ? 'rise' : 'fall', news: null },
+        rank: [1, -Math.abs(change), 0, row.ticker],
+      }];
+    }
+    return [];
+  });
+  candidates.sort((left, right) =>
+    left.rank[0] - right.rank[0]
+    || left.rank[1] - right.rank[1]
+    || left.rank[2] - right.rank[2]
+    || left.rank[3].localeCompare(right.rank[3]));
+  const featured = candidates.slice(0, FEATURED_MAX).map((entry) => entry.featured);
+  const featuredIds = new Set(featured.map((entry) => entry.row.tracked.id));
+  const flagged = new Set(candidates.slice(FEATURED_MAX).map((entry) => entry.featured.row.ticker));
+  return { featured, rest: rows.filter((row) => !featuredIds.has(row.tracked.id)), flagged };
+}
+
+/** Section wording: 「今日の」 only when the saved prices are today's; otherwise date-neutral with the dated basis. */
+export function watchlistLabels(basis: PortfolioBasis | null): { featuredTitle: string; basis: string } {
+  const labels = portfolioLabels(basis);
+  return { featuredTitle: basis?.isToday ? '今日の注目銘柄' : '注目銘柄', basis: labels.basis };
+}
+
 // ---- AI summary card ---------------------------------------------------------------------------------------------------
 
 export type AiSummary = { text: string; reportId: string };

@@ -23,7 +23,7 @@ export const TOPICS_ROUTE = '/topics';
 export const NEWS_LIST_ROUTE = '/news';
 export const NEWS_DETAIL_ROUTE = '/news-detail';
 
-export type DetailOrigin = 'home' | 'topics' | 'news' | 'reports';
+export type DetailOrigin = 'home' | 'topics' | 'news' | 'reports' | 'stocks';
 
 /** Name of the route param carrying the origin. */
 export const DETAIL_ORIGIN_PARAM = 'from';
@@ -31,7 +31,7 @@ export const DETAIL_ORIGIN_PARAM = 'from';
 /** Reads the `from` param (a string, or the first of an array); null for anything that is not a known origin. */
 export function parseDetailOrigin(value: unknown): DetailOrigin | null {
   const raw = Array.isArray(value) ? value[0] : value;
-  return raw === 'home' || raw === 'topics' || raw === 'news' || raw === 'reports' ? raw : null;
+  return raw === 'home' || raw === 'topics' || raw === 'news' || raw === 'reports' || raw === 'stocks' ? raw : null;
 }
 
 /** Where the topic detail's 「戻る」 goes: the topic list only when it was opened from it, otherwise Home. */
@@ -46,7 +46,8 @@ export function topicBackTarget(from: unknown): 'home' | 'topics' {
 export function newsBackTarget(from: unknown): 'home' | 'news' | 'report' {
   const origin = parseDetailOrigin(from);
   if (origin === 'news') return 'news';
-  if (origin === 'reports') return 'report';
+  // A report, or the 銘柄 tab (the watchlist's news card): the screen it was opened from is the root-stack predecessor.
+  if (origin === 'reports' || origin === 'stocks') return 'report';
   return 'home';
 }
 
