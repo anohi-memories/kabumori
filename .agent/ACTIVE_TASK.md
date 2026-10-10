@@ -48,17 +48,17 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: review_required
+- status: done
 - task_id: kabumori-market-report-pr110-b1r1-b2r1-b3r1-final-review-20261010
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: G2 PR #110 exact head cb3d77d50e848d043f5427df363769b75d3c7764: focused independent final review of B1-R1/B2-R1/B3-R1 seven residual cases, maintain prior B1-B4, normal 10/7 fixtures, MAX_GENERATIONS=2 and MAX_MODEL_CALLS=4. Source-only, no product edits, paid API, PR merge or deploy. Previous H2 PR112 done/C2 closed; all history and release block preserved. Return C2 to G2 chat.
-- recommended_model: Sol（高）
+- allocation: C2 reviewed exact PR110 head cb3d77d50e848d043f5427df363769b75d3c7764: CHANGES_REQUIRED, seven former B1-R1/B2-R1/B3-R1 residuals CLOSED; one P2 normal subject-particle が false-positive needs narrow G2 correction. H2 closed. 1337/1337 baseline PASS, 10-control additional test 8 PASS 2 FAIL (one issue). Source edits 0; merge/deploy HOLD. G2 corrective TASK publication not yet confirmed; do not start until canonical G2 TASK status is ready.
+- recommended_model: Sol（高） (completed)
 
 ## Claude G1
 - owner: claude
@@ -81,7 +81,7 @@
 - finish_code: K2
 - next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Latest G2 report PR #110 head cb3d77d50e848d043f5427df363769b75d3c7764. K2 PASS_CANDIDATE: original seven B1-R1/B2-R1/B3-R1 failures reportedly closed; local Sol/Claude comparison completed separately. Await truly free H1/H2 for final exact-head review; never overwrite H1 POSTONA or H2 G5 TASK. Merge/deploy HOLD.
+- allocation: H2 C2 PR110 exact head cb3d77d50e848d043f5427df363769b75d3c7764 returned CHANGES_REQUIRED: one P2 noun-subject 勢いが false positive; prior seven residuals closed. NARROW G2 corrective needed, not yet assigned in canonical TASK (large history-preserving TASK update blocked by tool safety). Preserve review_required / next_owner chatgpt; G2 must NOT start until explicit ready TASK safely published. PR110 merge/deploy HOLD.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
