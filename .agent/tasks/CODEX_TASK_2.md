@@ -1,10 +1,39 @@
+# H2 completion receipt — PR112 exact-head rereview — 2026-10-10 JST
+
+- task_id: common-account-v1-phase3a-pr112-r1-r4-c1-final-rereview-20261010
+- owner: codex
+- slot: codex-2
+- status: review_required
+- next_owner: chatgpt
+- result: CHANGES REQUIRED
+- reviewed_exact_head: b60272c433b57bac1acb00c13d4fda7ff96f1f2f
+- target_pr: 112 (open/unmerged, 25 files)
+- report_publication_commit: 69df39171bd03e937de82905c6cfd5e321953054
+- report_readback: confirmed current task_id, full current Report and verbatim previous Report history on GitHub main
+- findings: R1 legacy service-role checkpoint RPC bypasses lease/fence; R2 actual Apple boolean HTTP adapter clears ambiguous outcome and permits consumed-code replay
+- accepted: new Edge owner concurrency, schema-locked blocked gate, fresh residue read-back, strict future-reauth refusal; other details in current Report
+- tests: baseline 542/542; PG Phase1/2/3a ALL PASS; SQL43/43 and TS38/38 mutations; reviewer adversarial TS4/4 assertions incl defect reproduction and PG probes; diff-check PASS
+- quality_gaps: new require-await lint at lifecycle_logic.ts:405; same 2 src-only CSS type errors on fresh main; root ESLint unavailable; full root TypeScript not clean
+- source_merge_recommendation: HOLD
+- whole_shared_account_Auth_delete: BLOCKED / UNAVAILABLE
+- product_code_change: 0
+- production_access_mutation_deploy_EAS_provider_API: 0
+- changed_files: own Report/TASK plus explicit completion-only H2 status/next_owner index fields; no other slot edits
+- previous_history: preserved verbatim; only current TASK status/next_owner fields updated
+- return_to: 共通アカウントG5のちゃ
+- completion_code: C2
+- recommendation: bounded G5 fixes then fresh exact-head H2 rereview; no merge/deploy permission
+- recommended_model: Sol（極高）
+
+---
+
 # Codex H2 — CURRENT TASK — G5 PR112 exact-head security corrective rereview
 
 - task_id: common-account-v1-phase3a-pr112-r1-r4-c1-final-rereview-20261010
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - type: independent exact-head bounded security rereview
 - return_to: 共通アカウントG5のちゃ
