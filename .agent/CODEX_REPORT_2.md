@@ -197,8 +197,8 @@ Own local PostgreSQL cluster was stopped successfully after all proof; no other 
 - TASK_completion_commit: aae5e36b47448b536a66ee35b9e1473b1b66e8c6
 - own_H2_index_commit: eba7edf827448113fbc26ff23f3e46d3be766255
 - Fresh fetched origin read-back at eba7edf827448113fbc26ff23f3e46d3be766255 contains all three commits; PR112 head remains exactly 54b9435b0dcc0d0e79ae6eba4340eee44508141c.
-- Remote changed paths versus prepublication main: only .agent/CODEX_REPORT_2.md, .agent/tasks/CODEX_TASK_2.md, .agent/ACTIVE_TASK.md.
-- Index diff: only own H2 status ready -> review_required and next_owner codex -> chatgpt; every other slot/routing/policy field unchanged.
+- H2-authored publication commits change only .agent/CODEX_REPORT_2.md, .agent/tasks/CODEX_TASK_2.md, .agent/ACTIVE_TASK.md. Aggregate main advanced concurrently with a separate G3/C2 control update (including .agent/CURRENT_STATE.md and G3 allocation); those are NOT H2 changes and were preserved.
+- Own index commit diff against its parent: only H2 status ready -> review_required and next_owner codex -> chatgpt. The latest index, including the concurrent G3/C2 allocation update, was reread before CAS; every other slot/routing/policy field in that latest input is byte-identical.
 - GitHub API read-back: Report exact new contents and original historical suffix, TASK exact expected completion with prior history preserved, index exact expected contents.
 - Original Report history: 680583 characters retained verbatim as suffix; original TASK historical suffix beyond the current task separator retained verbatim. No reorder/deletion.
 - Current TASK and own index are review_required / next_owner chatgpt. Return C2 to 共通アカウントG5のちゃ.
