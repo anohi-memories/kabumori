@@ -1,3 +1,12 @@
+## G1 ALLOCATION — Watchlist hybrid cards + segmented stock screen / source-only READY — 2026-10-10
+
+- The user approved the reference watchlist screenshot's body design: an in-tab [ポートフォリオ | ウォッチリスト] segmented switch within 銘柄, 0–3 dynamically featured major-move/verified-news cards, compact remaining watch rows, warm ivory/coral/blue-green. Illustration prices/articles are sample-only, never actual data.
+- **ABSOLUTE USER CONSTRAINT:** The screenshot's bottom navigation is NOT the real app's tab bar. Existing native bottom menu ホーム / 銘柄 / ニュース / レポート / メニュー is frozen: no changes to `src/app/(tabs)/_layout.tsx`, icon assets, tab routes, root `src/app/_layout.tsx`, or NativeTabs settings. Both modes are existing `explore.tsx` subviews; existing 銘柄 stays selected.
+- G1 now has current TASK `kabumori-watchlist-highlight-hybrid-ui-20261010`, status **ready**, next_owner **claude**, recommended **Sonnet5（高）**, `return_to=かぶモリアプリG1のちゃ`, completion code **K1**. The current TASK is prepended in `.agent/tasks/CLAUDE_TASK_1.md` and earlier G1 TASK/Report history is preserved as its suffix.
+- Fresh allocation reference main `582f40feea7f8a0a80cfa7c10d5e6c7b373a049a`; checked currently open PR #117/#116/#115/#112/#110/#33/#11/#10/#3 scopes, no intended G1 UI/view-model source overlap observed. Other active slots unchanged. Claude must independently confirm its worktree isolation and fresh origin/main/PR overlaps before working.
+- Source-only, no new paid AI/news crawl, backend, DB, Auth, API, Edge, migration, production write, EAS or deploy; **no self-merge**. Real prices only from saved close snapshots, no fabricated news or cause, stale basis clearly labeled. Empty/missing/0/1/2/3/4+ highlights and 375/402 Simulator evidence required.
+- Next: send `G1` to Claude Code; after implementation return `K1` to **かぶモリアプリG1のちゃ**. Codex review decision deferred to K1; isolated low-risk visual work may be exempted with solid tests and screenshots.
+
 ## PR112 source merge HOLD — Vercel main auto deployment unverified — 2026-10-10 JST
 
 - User continuation after C2 interpreted as permission to pursue **source-only PR112 merge**, without any live database/Edge/Auth/Storage/Apple/X production change or Vercel production deploy.
