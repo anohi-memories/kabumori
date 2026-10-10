@@ -1,3 +1,12 @@
+## G1 MERGED — Watchlist PR120 complete / K1 PASS / 2026-10-10 JST
+
+- User explicitly instructed merge. Final K1 source/UI accepted for task `kabumori-watchlist-highlight-hybrid-ui-20261010`. GitHub PR [#120](https://github.com/anohi-memories/kabumori/pull/120) exact approved head `7bf19faf9cf7e7c67fbab987e4f57188518e77d0` was **squash merged** with expected-head-SHA guard to main as `53678a2f1fe5e01ecde4e9988abcbd0ed573da66`. Independently read back PR `closed`/`merged=true`/`merged_at 2026-10-10T10:11:26Z` and fresh `main` SHA exactly matched that squash commit. 20 changed paths = 8 source/tests + 12 iOS screenshots. Existing five NativeTabs are entirely untouched; no new bottom tab.
+- Premerge PR head pinned, CI statuses SUCCESS, no PR changed-file overlap versus fresh main (10 main-changed paths since PR base). GitHub REST `mergeable=null/unknown` intermittently, but GitHub server **accepted** the protected atomic expected-head merge; do not mistake REST transient status for a rejected merge. No force push or conflict override.
+- Targeted correction of remaining-list badge (2 featured+5 rest ⇒ 5) and all-featured hiding the empty group accepted in previous K1. 457/457 Deno app tests and TS/Expo config/web export/diff check reported PASS by Claude, iPhone Simulator 375/402pt screenshots reviewed by ChatGPT; tests were not independently rerun. No separate Codex review deemed needed for narrow UI/view-model source.
+- TASK `.agent/tasks/CLAUDE_TASK_1.md` Final Close report set `done`/`next_owner:none`, preserving historical tasks/Reports. `.agent/ACTIVE_TASK.md` G1 index also `done`/`next_owner:none`; other slots/PRs not changed. Next G1 allocation requires fresh checking of Report, status, branch ownership and dedicated worktree.
+- This is a **source merge only**: no EAS/TestFlight/app binary update, manual production/DB/RPC/Edge/Auth/API deploy or new paid AI action. Vercel Git integration can automatically process a main push; check real status separately if relevant and do not claim native production delivery.
+- Remaining: real iPhone with user's actual watchlist/report data not exercised, and stock-linked domestic-news completeness remains another news workstream. These do not block source merge.
+
 ## G2 PR110 FINAL REVIEW — H2 assigned / source-only — 2026-10-10 JST
 
 - H2 is assigned **ready** for exact PR #110 head `cb3d77d50e848d043f5427df363769b75d3c7764`: bounded independent B1-R1/B2-R1/B3-R1 final review, recommended **Sol（高）**. Return_to **かぶモリアプリG2のちゃ**, completion_code **C2**.
