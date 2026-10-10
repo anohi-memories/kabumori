@@ -1,3 +1,10 @@
+## POSTONA G4 C1 FINAL / PR106 source merged / Threads Phase2b G4 ready — 2026-10-10
+
+- H1 exact-head independent review PASS on PR106 c0b6c03cb909d91f72b58424d64c6dfae1b8f14f. Local PostgreSQL 8 runner markers, mutation 55/55, 24 adverse refusals + 8 healthy, migration invariants 11/11 reported; final review sync recovered.
+- PR106 merged to main as 68aaf3e547c09d54bd9682d357a12743d0ded7f2, source ONLY. **Production Phase2a2 migration NOT applied**, no production DB mutation or deployment.
+- G4 next TASK postona-threads-phase2b-source-preparation-20261010, ready, recommended Opus5.5（高）. First verify latest Meta Threads OAuth contracts and G5 overlap. No real tokens, OAuth connect, publishing, merge or deploy. K4 returns to POSTONA｜マルチSNS化・開発統括（G4）のちゃ.
+- H1 previous TASK done, no new H1 review reserved. C1 return_to corrected to explicit G4 chat name. Preserve other slots and reports.
+
 ## K5 FINAL — PR112 R1L/R2 narrowed corrective PASS_CANDIDATE / H2 ready — 2026-10-10
 
 - G5 corrective TASK `common-account-pr112-h2-r1-r2-effective-boundary-corrective-20261010` finished; reviewed G5 Report and PR112 fresh exact head `54b9435b0dcc0d0e79ae6eba4340eee44508141c` OPEN/UNMERGED, 30 files. From prior H2-rejected `b60272c433b57bac1acb00c13d4fda7ff96f1f2f`: exactly one PR commit and 16 G5-scope changed files. PR base-to-main = 58 main commits, changed-file intersection with all 30 PR files = 0. PR106/110/114 remain separate. GitHub mergeability=true at check; no security approval implied and refresh before any merge.
