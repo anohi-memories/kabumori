@@ -63,14 +63,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: review_required
+- status: done
 - task_id: kabumori-watchlist-highlight-hybrid-ui-20261010
 - start_code: G1
 - finish_code: K1
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: FINAL K1 source/UI PASS at exact PR #120 head 7bf19faf9cf7e7c67fbab987e4f57188518e77d0; one-display-defect correction independently inspected (2 featured + 5 rest => badge 5, all 3 featured => no empty remainder), 457/457 app tests reported PASS, 375/402pt screenshots viewed, 5 NativeTabs untouched. GitHub final mergeability read returned null/unknown despite zero file overlap with fresh main: PR remains OPEN, merge HOLD for a refreshed affirmative clean merge gate and potential auto-Web-deploy side-effect check. G1 no further implementation required; next_owner chatgpt for merge gate; DO NOT reassign overlapping G1 UI files. No Codex extra review; no EAS/DB/Edge/production changes.
+- allocation: Final K1 PASS and protected expected-head-SHA squash MERGED PR #120 exact approved head 7bf19faf9cf7e7c67fbab987e4f57188518e77d0 as main merge commit 53678a2f1fe5e01ecde4e9988abcbd0ed573da66 (GitHub PR closed/merged=true and main read-back verified). Hybrid watchlist / 2-segment 銘柄 switch, 0-3 featured and correct remainder count; 457/457 app tests reported by Claude; 375/402pt Simulator screenshots source reviewed; original bottom 5 NativeTabs never modified. No EAS/DB/Edge/manual deploy. G1 current task closed and slot is free only after new fresh-state/worktree check; other tasks/PRs protected.
 - recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
