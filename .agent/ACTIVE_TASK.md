@@ -47,16 +47,16 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: common-account-phase3d-e11-optiond-disposable-security-review-20261010
+- status: ready
+- task_id: kabumori-pr110-p2-final-narrow-review-20261011
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
-- next_owner: none
-- return_to: 共通アカウントG5のちゃ
+- next_owner: codex
+- return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: C2 accepted independent E11 disposable Option D pre-execution safety review as CHANGES_REQUIRED: R1 P1 missing genuine Admin-vs-SQL deletion safety comparison, R2–R5 P2 DB lock scope, OAuth flow expiry upper bound, unverifiable self-declared approvals/targets and incomplete managed trigger/RLS/Storage read-back. H2 source changes 0; reported Deno 35/35, mutations 31/31 and probes 3/3 PASS. E11 NOT APPROVED, real Supabase proof NOT_RUN, photo project must NOT be paused. H2 prior TASK/Report history preserved; task done, next owner none. G5 corrective owner only, later focused independent rereview required. Other slots untouched.
+- allocation: ONE narrow exact-head PR110 Hard-Fact review at 2c876b0bafee31844b9854c4a7d34ba69660d4cf following G2 K2. Check novel PREDICATE_END false-negative risk on unlisted adjectives, correct subject-が/emoji/date binding, preserving accepted old H2 B1/B2/B3 cases. Only focused fake-input tests, no broad repeat; no source edits, paid API, source merge or production deploy. Previous H2 G5 E11 review completed C2/done, all historical TASK and Report retained. Return C2 to G2.
 - recommended_model: Sol（高）
 
 ## Claude G1
