@@ -1,3 +1,11 @@
+## C1 FINAL — 共通AI基盤 R1/R2 独立レビュー PASS — 2026-10-10 JST
+
+- H1 `common-ai-provider-pr119-c1-r1-r2-narrow-rereview-20261010` final `PASS` accepted. Independent verification closed R1 P1 one-time dispatch and R2 P2 SET ROLE path on PR119 exact `8ef3843f51e771088dfe58e2e5a262db0b62644a` (stacked on PR117 `2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226`).
+- H1 TASK/Report/index now synchronized `done / next_owner:none`; prior report and TASK histories preserved, G/H others protected. PG17 selected concurrency/adverse/nonsuper/e2e PASS, mock-provider 10/10 and targeted Deno 9/9 as documented; full review not repeated. No paid/live provider, production database, deploy, source PR merge or secrets changes.
+- Next: distinct PR117 then PR119 source-only merge gate after current main/CI/mergeability/auto-deploy check; current GitHub mergeable for PR117 may fluctuate with main changes and is not pre-approved. Production migration requires separately coordinated DB safety gates, Supabase live PostgREST+role preflight, G5 priority, budget policy/credit, recovery Cron, identity deletion/retention and privacy checks. No further Codex review on unchanged source absent new P1/P2 defect.
+
+---
+
 ## G5 Phase3d OFFLINE photo-project pause/restore preflight assigned — 2026-10-10 JST
 
 - User confirmed preference: no paid Supabase subscription; allow temporary stop of family photo-sharing app for roughly 2–3 days **only during actual disposable project tests**, then restore as soon as test ends. This is a user-approved high-level plan, not an order to pause right now. The photo app remains running; no project has been created for Phase3d.
