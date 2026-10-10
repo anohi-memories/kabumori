@@ -180,6 +180,9 @@ cascades away), and the old read-back still answered `completed`. Corrected:
    the final decision, if and only if a real-project proof shows GoTrue refuses to create or link an identity
    for a banned user), (b) an Auth hook under our control that refuses it, or (c) an enforcing guard that
    can see identities inside the Auth cascade with a proven cascade order. Plus the §9 writer gates.
+   Phase 3b feasibility (`phase3b-identity-writer-fence-feasibility.md`): (a) alone does not hold at GoTrue
+   source level (a manual link begun before a ban completes after it), (b) has no identity-link hook; the
+   gate stays blocked pending a disposable real-project proof. The §9 writer gate exists as an unwired guard.
 
 ## 9. Enforcement readiness inventory (nothing switched on)
 
