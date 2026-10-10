@@ -100,13 +100,13 @@
 - owner: claude
 - slot: claude-4
 - status: ready
-- task_id: postona-x-oauth-provider-hardening-candidate-20261010
+- task_id: postona-x-oauth-preclaim-containment-readiness-20261010
 - start_code: G4
 - finish_code: K4
 - next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Final K4 accepted preceding Threads T9/OAuth PR124 exact c30f246409a77080cbc03aef6c4cb72b5481e125 as OFFLINE SOURCE PASS_CANDIDATE; Draft PR124 remains OPEN/UNMERGED/HOLD with GitHub mergeable=false, no current main file overlap. Production Phase2a2/Phase3b still unapplied, Threads static gate=false. New G4 task is an isolated new worktree/source-only candidate for existing X OAuth provider identity preclaim/attestation, explicit platform='x', T13→T9 future workspace delegation and rolled-back error-status issue. No existing live X migration/Edge edit, no PR124/G5/G3 changes, no merge/deploy or production. Consolidate security review later at full G5+G4 integration. Return K4 to named G4 chat.
+- allocation: K4 accepted previous X OAuth v2 source-only PR126 exact 65f49f98dab39b974e6e4b450f376a37f99ef1ac PASS_CANDIDATE, Draft OPEN/UNMERGED, mergeable=false, no production. G4 local PG reproduced possible authenticated direct-RPC X ID preclaim and denial of legitimate X connection; no verified live exploit and not proven token theft/posting. New G4 task is isolated source-only early existing-X containment/permission/read-only production-preflight DESIGN; assess outage/rollout/rollback, fake-DB proof, no G5 PR121/T9 PR124 dependency or production reads/writes/changes, no PR126 modifications. Security review and user approval required before any live grant, RPC, Edge or connection pause. G3/G5/H unchanged. Return K4 to named G4 chat.
 - recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
