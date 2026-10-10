@@ -1,3 +1,27 @@
+# K4 FINAL — POSTONA Threads Phase2b isolated contract PASS / PR118 merged — 2026-10-10
+
+- task_id: postona-threads-phase2b-source-preparation-20261010
+- owner: claude
+- slot: claude-4
+- status: done
+- next_owner: none
+- verdict: **PASS (source-only, no runtime connection)** — independently inspected PR118 scope and static prerequisite gate; accepted G4 reported tests.
+- accepted_pr: 118
+- exact_accepted_head: 9b71757068271cce38cedda12f6d74e705ac13ca
+- source_merge: **squash merged** as b49306c0d7486adb9afdb9ae4e42defa33ace07f
+- files: `supabase/functions/_shared/social/threads_connect_contract.ts`, `supabase/functions/_shared/social/threads_connect_contract_test.ts`, `docs/postona/threads-connection-phase2b.md`
+- reported_tests: contract 14 PASS; 19/19 mutation detects; shared 503 PASS; X OAuth 29 PASS; deno check/lint/diff PASS; reviewers did not independently rerun these suites.
+- GitHub check statuses: Netlify SUCCESS, Vercel SUCCESS at accepted head.
+- independent_Codex_review: **omitted intentionally** while module remains unimported and `THREADS_CONNECT_PREREQUISITES_MET=false`. Review once at real Auth/DB/RPC/Vault and runtime wiring boundary, not repeated PR106 review.
+- outstanding_blockers: G5 T13 same-transaction writer fence and T9 workspace / T10 provider-aware deletion contracts; production Phase2a2 migration not applied; Meta app, exact HTTPS redirect and callbacks not configured; Threads is not connected or enabled.
+- security: no production migration/DB/Auth/Vault/token/API/deploy; PR118 source merge only. G3/G5 existing work preserved.
+- AI Lab diary: 記録不要 — 2026-10-10の日記は別のAI相談改善が正本に登録済み。独立したThreads接続準備を同一event_idへ混在させない。
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
+- completion_code: K4
+- next_recommendation: Coordinate G5 T13/T9/T10 and Meta app setup; after contracts are agreed, create new isolated G4 task for provider-aware begin/complete RPC design/implementation with disposable-DB proofs and one consolidated Codex security review before live wiring.
+
+---
+
 # Claude Task 4 — CURRENT TASK
 
 - task_id: postona-threads-phase2b-source-preparation-20261010
