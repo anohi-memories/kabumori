@@ -85,11 +85,11 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: postona-ai-consult-pr114-session-epoch-corrective-20261009
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_3.md
 - allocation: K3 accepts prior POSTONA AI consultation V1 readiness as PASS_CANDIDATE, but PR #114 head f24c8efe84c433d0e7ca3e16b640a80d9c984a51 needs one bounded A->B->A (ABA) async session-epoch correction: brand-ID-only freshness checks can re-admit an old A AI/save result after switching A->B->A; also prove stale savedRef is never adopted for a new workspace. Preserve all accepted explicit-save/CAS/persona tests and no-live rollout. PR #114 remains OPEN, unmerged; latest REST mergeability UNKNOWN. New G3 task limited to same PR and its three existing files. No production writes/deploy/OpenAI/X.
 - recommended_model: Sonnet5（高）
