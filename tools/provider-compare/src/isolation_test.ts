@@ -104,7 +104,9 @@ test("the only SQL shipped is a read-only SELECT", async () => {
 test("no API key is embedded, and keys are only ever obtained through keys.ts", async () => {
   const offenders: string[] = [];
   for (const file of await harnessFiles()) {
-    if (isTest(file) || !TEXT_EXT.test(file.pathname) || file.pathname.endsWith("cases.json")) continue;
+    // Fixture files carry real article URLs; a slug such as "...kramatorsk-as-russia-targets..." contains "sk-" and 20 more
+    // URL characters. eval_set_test.ts scans the free text of the expansion (title, body, facts) for credential shapes instead.
+    if (isTest(file) || !TEXT_EXT.test(file.pathname) || file.pathname.endsWith("cases.json") || file.pathname.endsWith("eval_expansion.json")) continue;
     const text = await Deno.readTextFile(file);
     if (/sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}/.test(text)) offenders.push(`${rel(file)}: key-shaped string`);
     if (text.includes("Deno.env.get(")) offenders.push(`${rel(file)}: reads the environment directly`);

@@ -1,0 +1,512 @@
+{
+  "summary": {
+    "total": 212,
+    "bySet": {
+      "existing": 22,
+      "hard": 155,
+      "sample": 41
+    },
+    "byStatus": {
+      "ai_provisional": 99,
+      "human_review_pending": 13,
+      "independent_confirmed": 79,
+      "insufficient_evidence": 21
+    },
+    "byExpected": {
+      "important": 67,
+      "most_important": 3,
+      "no_post": 108,
+      "null": 34
+    },
+    "bySource": {
+      "al_jazeera": 27,
+      "bbc_world": 12,
+      "breaking_market": 13,
+      "jp_official": 8,
+      "market_macro": 28,
+      "tdnet": 124
+    },
+    "byDomain": {
+      "ai_semiconductor": 5,
+      "disaster": 5,
+      "geopolitics": 35,
+      "macro_fx_rates": 10,
+      "official_boj_frb": 11,
+      "official_jp": 8,
+      "tdnet_earnings_capital": 30,
+      "tdnet_listing_exchange": 2,
+      "tdnet_ma_tob": 15,
+      "tdnet_misconduct_regulatory": 22,
+      "tdnet_other": 20,
+      "tdnet_routine_followup": 35,
+      "us_policy_trade_sanctions": 14
+    },
+    "byRule": {
+      "R-BUYBACK": 2,
+      "R-DISASTER": 3,
+      "R-DIVIDEND": 2,
+      "R-EXCHANGE": 2,
+      "R-FEATURE": 8,
+      "R-FISCAL": 1,
+      "R-FOLLOWUP": 15,
+      "R-INVESTIGATION": 8,
+      "R-LITIGATION": 2,
+      "R-MACRO-RELEASE": 7,
+      "R-MISSILE": 1,
+      "R-NO-SCALE": 16,
+      "R-REGULATOR": 5,
+      "R-REVISION": 13,
+      "R-ROUTINE": 29,
+      "R-TOB": 6
+    },
+    "headline": {
+      "cases": 140,
+      "positives": 52,
+      "negatives": 88,
+      "independentPositives": 28,
+      "independentNegatives": 41,
+      "provisionalPositives": 24,
+      "provisionalNegatives": 47
+    },
+    "humanReview": {
+      "cases": 13,
+      "questions": [
+        {
+          "family": "clinical-milestone-policy",
+          "cases": 2,
+          "reason": "大手製薬の臨床試験の成功・承認申請の開始（業績予想の変更なし）を配信対象とするかという製品方針の問い。"
+        },
+        {
+          "family": "data-breach-policy",
+          "cases": 4,
+          "reason": "同上（個人情報漏えい）"
+        },
+        {
+          "family": "earnings-materials-policy",
+          "cases": 4,
+          "reason": "同上（決算説明会資料）。本番は most_important と判定。"
+        },
+        {
+          "family": "press-report-policy",
+          "cases": 1,
+          "reason": "『一部報道について』（企業が自社の統合検討報道に言及する開示）を配信対象にするかという方針の問い。本文は途中で切れており、報道を認めたか否定したかが読み取れない。"
+        },
+        {
+          "family": "property-sale-policy",
+          "cases": 2,
+          "reason": "金額非公表の販売用不動産の売却（売上高の10%以上・利益の30%以上という開示基準のみ記載）を配信対象にするかという製品方針の問い。"
+        }
+      ]
+    },
+    "insufficientEvidence": 21,
+    "humanConfirmed": 0
+  },
+  "hardHeadlineCases": 111,
+  "positives": 52,
+  "independentPositives": 28,
+  "missRateUpperBound95IfNoMiss": 0.101,
+  "positivesNeededFor5pct": 59,
+  "positivesNeededFor10pct": 29,
+  "productionDisagreements": {
+    "total": 33,
+    "misses": 10,
+    "overcalls": 23,
+    "independentMisses": 5,
+    "list": [
+      {
+        "caseId": "al-jazeera-38ae9115",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": null
+      },
+      {
+        "caseId": "al-jazeera-8ff7b5c3",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": null
+      },
+      {
+        "caseId": "al-jazeera-925e3458",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": "R-FEATURE"
+      },
+      {
+        "caseId": "al-jazeera-bf5202d3",
+        "kind": "production_miss",
+        "label": "important",
+        "production": "no_post",
+        "status": "ai_provisional",
+        "rule": null
+      },
+      {
+        "caseId": "al-jazeera-d22b7322",
+        "kind": "production_miss",
+        "label": "important",
+        "production": "no_post",
+        "status": "ai_provisional",
+        "rule": "R-LITIGATION"
+      },
+      {
+        "caseId": "al-jazeera-f57bf1b2",
+        "kind": "production_miss",
+        "label": "important",
+        "production": "no_post",
+        "status": "ai_provisional",
+        "rule": null
+      },
+      {
+        "caseId": "bbc-world-21c46678",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": "R-FEATURE"
+      },
+      {
+        "caseId": "boj-official-policy-change-notice-a989d1f3",
+        "kind": "production_miss",
+        "label": "important",
+        "production": "no_post",
+        "status": "independent_confirmed",
+        "rule": "R-MACRO-RELEASE"
+      },
+      {
+        "caseId": "breaking-market-e89c58b5",
+        "kind": "production_miss",
+        "label": "important",
+        "production": "no_post",
+        "status": "ai_provisional",
+        "rule": null
+      },
+      {
+        "caseId": "market-macro-0720532f",
+        "kind": "production_miss",
+        "label": "important",
+        "production": "no_post",
+        "status": "independent_confirmed",
+        "rule": "R-MACRO-RELEASE"
+      },
+      {
+        "caseId": "market-macro-4b27f740",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": null
+      },
+      {
+        "caseId": "market-macro-60d07123",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "independent_confirmed",
+        "rule": "R-DISASTER"
+      },
+      {
+        "caseId": "market-macro-ba538b87",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "most_important",
+        "status": "ai_provisional",
+        "rule": null
+      },
+      {
+        "caseId": "market-macro-c2859db6",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": null
+      },
+      {
+        "caseId": "tdnet-31548d9c",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "independent_confirmed",
+        "rule": "R-ROUTINE"
+      },
+      {
+        "caseId": "tdnet-33326e77",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": "R-NO-SCALE"
+      },
+      {
+        "caseId": "tdnet-4c75b45f",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "independent_confirmed",
+        "rule": "R-REVISION"
+      },
+      {
+        "caseId": "tdnet-5177332d",
+        "kind": "production_miss",
+        "label": "important",
+        "production": "no_post",
+        "status": "ai_provisional",
+        "rule": null
+      },
+      {
+        "caseId": "tdnet-64f275df",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": "R-FOLLOWUP"
+      },
+      {
+        "caseId": "tdnet-7a1f8980",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": "R-NO-SCALE"
+      },
+      {
+        "caseId": "tdnet-7bb323e1",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": "R-NO-SCALE"
+      },
+      {
+        "caseId": "tdnet-8648e274",
+        "kind": "production_miss",
+        "label": "important",
+        "production": "no_post",
+        "status": "independent_confirmed",
+        "rule": "R-INVESTIGATION"
+      },
+      {
+        "caseId": "tdnet-87f28b51",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": "R-DIVIDEND"
+      },
+      {
+        "caseId": "tdnet-90895fbc",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "independent_confirmed",
+        "rule": "R-FOLLOWUP"
+      },
+      {
+        "caseId": "tdnet-adf169b7",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "independent_confirmed",
+        "rule": "R-FOLLOWUP"
+      },
+      {
+        "caseId": "tdnet-bff661cc",
+        "kind": "production_miss",
+        "label": "important",
+        "production": "no_post",
+        "status": "independent_confirmed",
+        "rule": "R-REGULATOR"
+      },
+      {
+        "caseId": "tdnet-c0a82fa9",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": "R-FOLLOWUP"
+      },
+      {
+        "caseId": "tdnet-c358bfa3",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": "R-NO-SCALE"
+      },
+      {
+        "caseId": "tdnet-ca38bae4",
+        "kind": "production_miss",
+        "label": "important",
+        "production": "no_post",
+        "status": "independent_confirmed",
+        "rule": "R-REVISION"
+      },
+      {
+        "caseId": "tdnet-cfbab494",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "independent_confirmed",
+        "rule": "R-ROUTINE"
+      },
+      {
+        "caseId": "tdnet-dbdf5a17",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": "R-FOLLOWUP"
+      },
+      {
+        "caseId": "tdnet-faefab96",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": "R-FOLLOWUP"
+      },
+      {
+        "caseId": "tdnet-fe063010",
+        "kind": "production_overcall",
+        "label": "no_post",
+        "production": "important",
+        "status": "ai_provisional",
+        "rule": "R-ROUTINE"
+      }
+    ]
+  },
+  "representativeSample": {
+    "used": 35,
+    "nonResponse": 6,
+    "unweighted": {
+      "tp": 1,
+      "fn": 1,
+      "fp": 5,
+      "tn": 28
+    },
+    "weighted": {
+      "tp": 8,
+      "fn": 101.1,
+      "fp": 349.2,
+      "tn": 1313.5
+    },
+    "recall": 0.073,
+    "precision": 0.022,
+    "missRateUpperBound95": 0.975,
+    "populationSize": 2192
+  },
+  "coverage": [
+    {
+      "area": "国内企業の重要IR・TDnet（決算・配当・自社株買い）",
+      "want": 8,
+      "headlineCases": 16,
+      "positives": 13,
+      "independent": 6
+    },
+    {
+      "area": "訴訟・行政処分・不祥事",
+      "want": 8,
+      "headlineCases": 11,
+      "positives": 11,
+      "independent": 9
+    },
+    {
+      "area": "大型M&A・TOB",
+      "want": 6,
+      "headlineCases": 11,
+      "positives": 4,
+      "independent": 8
+    },
+    {
+      "area": "金融システム・上場（取引所措置）",
+      "want": 4,
+      "headlineCases": 2,
+      "positives": 2,
+      "independent": 2
+    },
+    {
+      "area": "日銀・金融庁・公的機関",
+      "want": 6,
+      "headlineCases": 14,
+      "positives": 5,
+      "independent": 10
+    },
+    {
+      "area": "地政学",
+      "want": 8,
+      "headlineCases": 24,
+      "positives": 7,
+      "independent": 2
+    },
+    {
+      "area": "米国政策・関税・制裁",
+      "want": 6,
+      "headlineCases": 5,
+      "positives": 0,
+      "independent": 0
+    },
+    {
+      "area": "国内災害・インフラ・災害",
+      "want": 4,
+      "headlineCases": 5,
+      "positives": 3,
+      "independent": 3
+    },
+    {
+      "area": "AI・半導体",
+      "want": 3,
+      "headlineCases": 4,
+      "positives": 2,
+      "independent": 0
+    },
+    {
+      "area": "為替・金利・マクロ",
+      "want": 3,
+      "headlineCases": 7,
+      "positives": 4,
+      "independent": 1
+    }
+  ],
+  "hazardCoverage": {
+    "approval_state": {
+      "cases": 41,
+      "independent": 27
+    },
+    "consolidated_vs_standalone": {
+      "cases": 5,
+      "independent": 5
+    },
+    "foreign_currency": {
+      "cases": 7,
+      "independent": 1
+    },
+    "hedge": {
+      "cases": 57,
+      "independent": 34
+    },
+    "multiple_amounts": {
+      "cases": 26,
+      "independent": 13
+    },
+    "negative_or_loss": {
+      "cases": 7,
+      "independent": 3
+    },
+    "subject_pair": {
+      "cases": 28,
+      "independent": 20
+    },
+    "unit_conversion": {
+      "cases": 35,
+      "independent": 21
+    },
+    "withdraw_or_cancel": {
+      "cases": 6,
+      "independent": 3
+    }
+  }
+}
