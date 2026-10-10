@@ -1,3 +1,22 @@
+# C1 FINAL — 共通AI基盤 PR119 R1/R2 PASS — 2026-10-10 JST
+
+- task_id: common-ai-provider-pr119-c1-r1-r2-narrow-rereview-20261010
+- owner: codex
+- slot: codex-1
+- status: done
+- next_owner: none
+- completion_code: C1
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- verdict: PASS — R1 P1 and R2 P2 CLOSED (limited final re-review)
+- reviewed_head_PR119: 8ef3843f51e771088dfe58e2e5a262db0b62644a
+- reviewed_head_PR117: 2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226
+- evidence: .agent/CODEX_REPORT.md top two current entries, independent focused SQL/PG17 and fake API E2E10, Deno9 PASS.
+- H1_source_changes: none; PR merges, production DB apply, secrets, real provider APIs and deploy: NOT_DONE.
+- next: source-only PR117 then PR119 merge gate separately; production readiness checks separately; no redundant whole-code rereview.
+- history: previous H1 TASK preserved below without modification.
+
+---
+
 # H1 CURRENT TASK — 共通AI基盤 PR #119 C1 R1/R2 限定再確認
 
 - task_id: common-ai-provider-pr119-c1-r1-r2-narrow-rereview-20261010
