@@ -121,7 +121,7 @@ mutation "an unsettled Apple step is cleared (replayed) on takeover" \
 mutation "a possibly running external step is not waited for" \
   $'    if v_operation.external_step_started_at > now() - interval \'900 seconds\' then' \
   "    if false then" \
-  "FAIL R2: within the settle window a takeover waits"
+  "FAIL R1L: the unsettled Apple step still blocks a takeover"
 mutation "a second external step may start while one is unsettled" \
   $'  if v_operation.external_step is not null then\n    return jsonb_build_object(\'status\', \'step_in_flight\', \'step\', v_operation.external_step);\n  end if;\n' \
   "" \
@@ -198,6 +198,28 @@ mutation "the gate table keeps default privileges" \
   "revoke all on table private.account_lifecycle_release_gates from public, anon, authenticated, service_role;" \
   "" \
   "FAIL change: unexpected additions"
+
+# --- H2 rereview R1: the legacy unowned writers ----------------------------------------------------
+mutation "the legacy checkpoint writer keeps service_role EXECUTE" \
+  "revoke all on function public.record_common_account_deletion_checkpoint(uuid, uuid, text) from public, anon, authenticated, service_role;" \
+  "" \
+  "COMMON_ACCOUNT_DELETION_COMPLETION_POSTCONDITION_LEGACY_ACL"
+mutation "the legacy checkpoint withdrawal keeps service_role EXECUTE" \
+  "revoke all on function public.clear_common_account_deletion_checkpoint(uuid, uuid, text) from public, anon, authenticated, service_role;" \
+  "" \
+  "COMMON_ACCOUNT_DELETION_COMPLETION_POSTCONDITION_LEGACY_ACL"
+mutation "the legacy readiness keeps service_role EXECUTE" \
+  "revoke all on function public.prepare_common_account_auth_delete(uuid, uuid) from public, anon, authenticated, service_role;" \
+  "" \
+  "COMMON_ACCOUNT_DELETION_COMPLETION_POSTCONDITION_LEGACY_ACL"
+mutation "preflight accepts a drifted legacy ACL" \
+  "      raise exception 'COMMON_ACCOUNT_DELETION_COMPLETION_PREFLIGHT_LEGACY_ACL_CHANGED';" \
+  "      null;" \
+  "FAIL preflight accepted legacy ACL drift"
+mutation "preflight accepts another owner of the legacy writers" \
+  "      raise exception 'COMMON_ACCOUNT_DELETION_COMPLETION_PREFLIGHT_LEGACY_OWNER_MISMATCH';" \
+  "      null;" \
+  "FAIL preflight accepted a legacy owner mismatch"
 
 total="${#labels[@]}"
 run_one() {

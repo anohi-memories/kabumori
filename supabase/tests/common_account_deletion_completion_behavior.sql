@@ -9,6 +9,8 @@
 -- auth.identities" is GoTrue linking an identity; moving owner_lease_expires_at / external_step_started_at
 -- into the past is time passing. Section G0 runs on the schema exactly as shipped (release gate
 -- blocked); from section A on, the gate is opened by TEST-ONLY DDL so the paths behind it can be proven.
+-- Fixture SETUP calls Phase 1's checkpoint / readiness functions as their OWNER (pg_temp.checkpoint,
+-- pg_temp.prepare): after the candidate no API role can call them (section R1L proves that).
 \set ON_ERROR_STOP 1
 set timezone = 'UTC';
 
@@ -64,10 +66,10 @@ create function pg_temp.begin_deletion(p_user uuid, p_version bigint default nul
   select pg_temp.svc(format('select public.begin_common_account_deletion(%L::uuid, %s)', p_user, coalesce(p_version, pg_temp.version(p_user))))
 $$;
 create function pg_temp.prepare(p_user uuid, p_operation text) returns jsonb language sql as $$
-  select pg_temp.svc(format('select public.prepare_common_account_auth_delete(%L::uuid, %L::uuid)', p_user, p_operation))
+  select public.prepare_common_account_auth_delete(p_user, p_operation::uuid)
 $$;
 create function pg_temp.checkpoint(p_user uuid, p_operation text, p_checkpoint text) returns jsonb language sql as $$
-  select pg_temp.svc(format('select public.record_common_account_deletion_checkpoint(%L::uuid, %L::uuid, %L)', p_user, p_operation, p_checkpoint))
+  select public.record_common_account_deletion_checkpoint(p_user, p_operation::uuid, p_checkpoint)
 $$;
 create function pg_temp.complete(p_user uuid, p_operation text) returns jsonb language sql as $$
   select pg_temp.svc(format('select public.complete_common_account_deletion(%L::uuid, %L::uuid)', p_user, p_operation))
@@ -364,7 +366,7 @@ select pg_temp.expect(:'r'::jsonb ->> 'reason' = 'LIFECYCLE_STATE_INCONSISTENT' 
 select pg_temp.ready_kabumori_person(pg_temp.uid(515)) as op515 \gset
 select pg_temp.claim(pg_temp.uid(515), :'op515') ->> 'lease' as lease515 \gset
 select pg_temp.intent(pg_temp.uid(515), :'op515', :'lease515', 'managed_auth_delete') as r \gset
-select pg_temp.svc(format('select public.clear_common_account_deletion_checkpoint(%L::uuid, %L::uuid, ''storage_cleanup'')', pg_temp.uid(515), :'op515')) as r \gset
+select public.clear_common_account_deletion_checkpoint(pg_temp.uid(515), :'op515'::uuid, 'storage_cleanup') as r \gset
 delete from auth.users where id = pg_temp.uid(515);
 select pg_temp.complete(pg_temp.uid(515), :'op515') as r \gset
 select pg_temp.expect(:'r'::jsonb ->> 'reason' = 'LOGIN_REMOVED_BEFORE_READY', 'C5: a readiness withdrawn after the intent is not verified');
@@ -513,6 +515,50 @@ select pg_temp.expect(pg_temp.error_as('service_role', format('select public.set
   'R1: the Apple checkpoint is never written as a plain checkpoint (only by settling its intent)');
 select pg_temp.claim(pg_temp.uid(521), :'op520') as r \gset
 select pg_temp.expect(:'r'::jsonb = '{"status":"not_found"}'::jsonb, 'R1: another person cannot own it');
+
+-- R1L. The legacy unowned writers (H2 rereview R1): no API role reaches them any more --------------------
+-- H2's reproduction: an Apple intent in flight, the owner's lease expired (its owned checkpoint answers
+-- lease_lost), then the old Phase 1 writer called directly as service_role without any lease.
+select pg_temp.ready_kabumori_person(pg_temp.uid(525)) as op525 \gset
+insert into auth.identities (user_id, provider) values (pg_temp.uid(525), 'apple');
+select pg_temp.claim(pg_temp.uid(525), :'op525') ->> 'lease' as lease525 \gset
+select pg_temp.intent(pg_temp.uid(525), :'op525', :'lease525', 'apple_revocation') as r \gset
+select pg_temp.expire_lease(:'op525');
+select pg_temp.expect(pg_temp.owned_checkpoint(pg_temp.uid(525), :'op525', :'lease525', 'session_revocation') = '{"status":"lease_lost"}'::jsonb,
+  'R1L: the expired owner is refused by the owned path');
+select pg_temp.expect(pg_temp.error_as(r, format(s, pg_temp.uid(525), :'op525')) like '%permission denied%', format('R1L: %s cannot call %s', r, s))
+  from unnest(array['service_role', 'kb_cal_svc_child', 'authenticated', 'kb_cal_auth_child', 'anon']) r,
+       unnest(array['select public.record_common_account_deletion_checkpoint(%L::uuid, %L::uuid, ''apple_revocation'')',
+                    'select public.record_common_account_deletion_checkpoint(%L::uuid, %L::uuid, ''session_revocation'')',
+                    'select public.clear_common_account_deletion_checkpoint(%L::uuid, %L::uuid, ''storage_cleanup'')',
+                    'select public.prepare_common_account_auth_delete(%L::uuid, %L::uuid)']) s;
+select pg_temp.expect(not (pg_temp.op(:'op525')).checkpoints ? 'apple_revocation'
+  and (pg_temp.op(:'op525')).checkpoints ? 'storage_cleanup' and (pg_temp.op(:'op525')).external_step = 'apple_revocation'
+  and (pg_temp.op(:'op525')).current_step = 'ready_for_managed_auth_delete',
+  'R1L: H2_R1_LEGACY_UNOWNED_APPLE_CHECKPOINT_BYPASS is now impossible: nothing written, cleared or re-decided');
+-- Another person's operation through the old writer: refused the same way (by privilege, before any lookup).
+select pg_temp.expect(pg_temp.error_as('service_role', format('select public.record_common_account_deletion_checkpoint(%L::uuid, %L::uuid, ''storage_cleanup'')',
+  pg_temp.uid(526), :'op525')) like '%permission denied%', 'R1L: a wrong person / operation is refused too');
+select pg_temp.expect(not has_function_privilege(r, f, 'EXECUTE'), format('R1L: %s has no EXECUTE on %s (direct or inherited)', r, f))
+  from unnest(array['anon', 'authenticated', 'service_role', 'kb_cal_svc_child', 'kb_cal_auth_child']) r,
+       unnest(array['public.record_common_account_deletion_checkpoint(uuid,uuid,text)',
+                    'public.clear_common_account_deletion_checkpoint(uuid,uuid,text)',
+                    'public.prepare_common_account_auth_delete(uuid,uuid)']) f;
+-- The owned path still works for the current owner, and the Apple checkpoint only through its settle.
+select pg_temp.claim(pg_temp.uid(525), :'op525') as r \gset
+select pg_temp.expect(:'r'::jsonb = '{"status":"in_progress","step":"apple_revocation"}'::jsonb, 'R1L: the unsettled Apple step still blocks a takeover');
+select pg_temp.ready_kabumori_person(pg_temp.uid(527)) as op527 \gset
+select pg_temp.claim(pg_temp.uid(527), :'op527') ->> 'lease' as lease527 \gset
+select pg_temp.expect(pg_temp.owned_checkpoint(pg_temp.uid(527), :'op527', :'lease527', 'storage_cleanup', false) ->> 'status' = 'cleared'
+  and pg_temp.owned_checkpoint(pg_temp.uid(527), :'op527', :'lease527', 'storage_cleanup') ->> 'status' = 'recorded'
+  and pg_temp.owned_prepare(pg_temp.uid(527), :'op527', :'lease527') ->> 'status' = 'ready_for_managed_auth_delete',
+  'R1L: the owner records, clears and decides through the owned wrappers');
+-- Kabumori-only withdrawal (the service path) is not affected by the revocation.
+select public.fixture_login(pg_temp.uid(528));
+select pg_temp.start(pg_temp.uid(528), 'kabumori') as r \gset
+select pg_temp.svc(format('select public.withdraw_kabumori_service(%L::uuid)', pg_temp.uid(528))) as r \gset
+select pg_temp.expect(:'r'::jsonb = '{"status":"ended"}'::jsonb and exists (select 1 from auth.users where id = pg_temp.uid(528)),
+  'R1L: service-only withdrawal still works for the backend role and keeps the login');
 
 -- R2. The Apple step: recorded before the call, never replayed when its outcome is unknown --------------
 select pg_temp.ready_kabumori_person(pg_temp.uid(530)) as op530 \gset

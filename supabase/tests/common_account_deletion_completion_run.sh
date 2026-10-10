@@ -43,8 +43,13 @@ do \$\$ begin
   if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
   if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role nologin bypassrls; end if;
+  -- Roles that inherit an API role (effective-privilege checks of the legacy writers).
+  if not exists (select 1 from pg_roles where rolname = 'kb_cal_svc_child') then create role kb_cal_svc_child nologin inherit; end if;
+  if not exists (select 1 from pg_roles where rolname = 'kb_cal_auth_child') then create role kb_cal_auth_child nologin inherit; end if;
 end \$\$;
-grant anon, authenticated, service_role to $owner;
+grant service_role to kb_cal_svc_child;
+grant authenticated to kb_cal_auth_child;
+grant anon, authenticated, service_role, kb_cal_svc_child, kb_cal_auth_child to $owner;
 create database $db owner $owner;
 SQL
 "${O[@]}" -f "$here/social_mobile_account_deletion_fixture.sql" >/dev/null
@@ -86,6 +91,29 @@ if out="$("${O[@]}" -f "$candidate" 2>&1)"; then echo "FAIL preflight accepted a
 grep -q 'COMMON_ACCOUNT_DELETION_COMPLETION_PREFLIGHT_FOUNDATION_MISSING' <<<"$out" || { echo "FAIL preflight reason: $out" >&2; exit 1; }
 [[ "$(has_new_objects)" == f ]] || { echo "FAIL preflight left objects" >&2; exit 1; }
 "${Q[@]}" -c "insert into private.account_lifecycle_settings default values; alter table private.account_lifecycle_settings enable trigger user;" >/dev/null
+# The legacy unowned writers must be exactly as Phase 1 left them (H2 rereview R1): an extra grantee,
+# a grant option or another owner refuses the whole apply.
+for drift in "grant execute on function public.record_common_account_deletion_checkpoint(uuid,uuid,text) to authenticated" \
+             "grant execute on function public.prepare_common_account_auth_delete(uuid,uuid) to service_role with grant option" \
+             "revoke execute on function public.clear_common_account_deletion_checkpoint(uuid,uuid,text) from service_role"; do
+  "${S[@]}" -d "$db" -c "$drift" >/dev/null
+  if out="$("${O[@]}" -f "$candidate" 2>&1)"; then echo "FAIL preflight accepted legacy ACL drift: $drift" >&2; exit 1; fi
+  grep -q 'COMMON_ACCOUNT_DELETION_COMPLETION_PREFLIGHT_LEGACY_ACL_CHANGED' <<<"$out" || { echo "FAIL preflight reason for $drift: $out" >&2; exit 1; }
+  [[ "$(has_new_objects)" == f ]] || { echo "FAIL preflight left objects" >&2; exit 1; }
+  "${S[@]}" -d "$db" >/dev/null <<SQL
+revoke all on function public.record_common_account_deletion_checkpoint(uuid,uuid,text) from public, anon, authenticated, service_role;
+revoke all on function public.clear_common_account_deletion_checkpoint(uuid,uuid,text) from public, anon, authenticated, service_role;
+revoke all on function public.prepare_common_account_auth_delete(uuid,uuid) from public, anon, authenticated, service_role;
+grant execute on function public.record_common_account_deletion_checkpoint(uuid,uuid,text) to service_role;
+grant execute on function public.clear_common_account_deletion_checkpoint(uuid,uuid,text) to service_role;
+grant execute on function public.prepare_common_account_auth_delete(uuid,uuid) to service_role;
+SQL
+done
+"${S[@]}" -d "$db" -c "alter function public.prepare_common_account_auth_delete(uuid,uuid) owner to kb_cal_svc_child" >/dev/null
+if out="$("${O[@]}" -f "$candidate" 2>&1)"; then echo "FAIL preflight accepted a legacy owner mismatch" >&2; exit 1; fi
+grep -q 'COMMON_ACCOUNT_DELETION_COMPLETION_PREFLIGHT_LEGACY_OWNER_MISMATCH' <<<"$out" || { echo "FAIL preflight reason: $out" >&2; exit 1; }
+[[ "$(has_new_objects)" == f ]] || { echo "FAIL preflight left objects" >&2; exit 1; }
+"${S[@]}" -d "$db" -c "alter function public.prepare_common_account_auth_delete(uuid,uuid) owner to $owner" >/dev/null
 echo "COMMON_ACCOUNT_DELETION_COMPLETION_PREFLIGHT_PASS"
 
 # 2. Exactly this change: one Phase 1 rule replaced, nothing else removed or altered.
@@ -113,12 +141,32 @@ order by 1;
 SQL
 }
 catalog > "$tmp/before"
+# The whole candidate inside its transaction, rolled back: the catalog is byte-identical afterwards.
+sed -e 's/^commit;$/rollback;/' "$candidate" > "$tmp/rolled_back.sql"
+[[ "$(grep -c '^rollback;$' "$tmp/rolled_back.sql")" == 1 ]] || { echo "FAIL rollback copy" >&2; exit 1; }
+"${O[@]}" -f "$tmp/rolled_back.sql" >/dev/null
+catalog > "$tmp/rolled_back"
+cmp -s "$tmp/before" "$tmp/rolled_back" || { echo "FAIL rollback: the catalog changed" >&2; diff "$tmp/before" "$tmp/rolled_back" >&2 || true; exit 1; }
 "${O[@]}" -f "$candidate" >/dev/null
 catalog > "$tmp/after"
 removed="$(comm -23 "$tmp/before" "$tmp/after")"
 added="$(comm -13 "$tmp/before" "$tmp/after" | sed -E 's/^(fn [^ ]+) .*/\1/' | sort)"
-want_removed="con private.account_lifecycle_operations $rule_name CHECK (((status <> 'completed'::text) OR (operation_type = 'service_deletion'::text)))"
-[[ "$removed" == "$want_removed" ]] || { echo "FAIL change: unexpected removal/alteration: $removed" >&2; exit 1; }
+removed="$(sed -E 's/^(fn [^ ]+) .*/\1/' <<<"$removed" | sort)"
+want_removed="$(sort <<EOF
+con private.account_lifecycle_operations $rule_name CHECK (((status <> 'completed'::text) OR (operation_type = 'service_deletion'::text)))
+fn clear_common_account_deletion_checkpoint(uuid,uuid,text)
+fn prepare_common_account_auth_delete(uuid,uuid)
+fn record_common_account_deletion_checkpoint(uuid,uuid,text)
+EOF
+)"
+[[ "$removed" == "$want_removed" ]] || { echo "FAIL change: unexpected removal/alteration:" >&2; diff <(echo "$want_removed") <(echo "$removed") >&2 || true; exit 1; }
+# The three legacy writers changed only their ACL (same body): owner only now.
+for f in 'record_common_account_deletion_checkpoint(uuid,uuid,text)' 'clear_common_account_deletion_checkpoint(uuid,uuid,text)' 'prepare_common_account_auth_delete(uuid,uuid)'; do
+  before_line="$(grep -F "fn $f " "$tmp/before")"; after_line="$(grep -F "fn $f " "$tmp/after")"
+  [[ "$(cut -d' ' -f3 <<<"$before_line")" == "$(cut -d' ' -f3 <<<"$after_line")" ]] || { echo "FAIL legacy body changed: $f" >&2; exit 1; }
+  [[ "$(cut -d' ' -f4 <<<"$before_line")" == "$owner=X/$owner,service_role=X/$owner" && "$(cut -d' ' -f4 <<<"$after_line")" == "$owner=X/$owner" ]] \
+    || { echo "FAIL legacy ACL: $f: $before_line -> $after_line" >&2; exit 1; }
+done
 want_added="$(sort "$here/common_account_deletion_completion_expected_catalog.txt")"
 [[ "$added" == "$want_added" ]] || { echo "FAIL change: unexpected additions:" >&2; diff <(echo "$want_added") <(echo "$added") >&2 || true; exit 1; }
 # Exact ACLs of the new functions: owner + service_role for the public ones, owner only for the private
@@ -204,9 +252,10 @@ ready_person() {  # uid -> operation id of a ready Kabumori-only deletion
   v="$("${Q[@]}" -c "select lifecycle_version from public.common_accounts where user_id = '$u'")"
   op="$(svc "select public.begin_common_account_deletion('$u'::uuid, $v) ->> 'operation_id'")"
   svc "select public.withdraw_kabumori_service('$u'::uuid)" >/dev/null
-  svc "select public.record_common_account_deletion_checkpoint('$u'::uuid, '$op'::uuid, 'session_revocation')" >/dev/null
-  svc "select public.record_common_account_deletion_checkpoint('$u'::uuid, '$op'::uuid, 'storage_cleanup')" >/dev/null
-  [[ "$(svc "select public.prepare_common_account_auth_delete('$u'::uuid, '$op'::uuid) ->> 'status'")" == ready_for_managed_auth_delete ]] \
+  # Setup as the functions' owner: no API role may call these Phase 1 writers after the candidate.
+  "${Q[@]}" -c "select public.record_common_account_deletion_checkpoint('$u'::uuid, '$op'::uuid, 'session_revocation')" >/dev/null
+  "${Q[@]}" -c "select public.record_common_account_deletion_checkpoint('$u'::uuid, '$op'::uuid, 'storage_cleanup')" >/dev/null
+  [[ "$("${Q[@]}" -c "select public.prepare_common_account_auth_delete('$u'::uuid, '$op'::uuid) ->> 'status'")" == ready_for_managed_auth_delete ]] \
     || { echo "FAIL race fixture not ready" >&2; exit 1; }
   echo "$op"
 }

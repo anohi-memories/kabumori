@@ -92,6 +92,19 @@ test('the function uses only owned lifecycle calls and never the operator reconc
   assert.match(logic, /return at !== null && at <= nowSeconds && nowSeconds - at <= RECENT_AUTH_SECONDS;/u);
 });
 
+test('the Apple step uses the typed account-delete adapter, never the boolean X helper (H2 rereview R2)', async () => {
+  const http = code(await read('supabase/functions/account-delete/http.ts'));
+  assert.ok(!/\brevokeAppleGrant\b/u.test(http), 'the boolean helper cannot tell "refused" from "unknown"');
+  assert.match(http, /revokeApple: apple \? \(code, subjects\) => revokeAppleGrantOutcome\(apple, code, subjects,/u);
+  const logic = code(await read('supabase/functions/account-delete/lifecycle_logic.ts'));
+  assert.match(logic, /outcome = answer === 'succeeded' \|\| answer === 'definitively_failed' \? answer : 'unknown';/u);
+  assert.match(logic, /if \(outcome === 'unknown'\) return stop\(fail\(500, 'RECONCILIATION_REQUIRED'/u);
+  // Runtime modules never import the test fakes.
+  for (const file of ['index.ts', 'http.ts', 'lifecycle_logic.ts', 'apple_outcome.ts']) {
+    assert.ok(!/from '\.\/fake_/u.test(await read(`supabase/functions/account-delete/${file}`)), file);
+  }
+});
+
 test('routing refuses everything but the three lifecycle actions before any request', async () => {
   const http = code(await read('supabase/functions/account-delete/http.ts'));
   const guard = http.indexOf("return json({ ok: false, error: 'ACTION_REQUIRED' }, 400);");

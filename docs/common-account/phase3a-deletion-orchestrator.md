@@ -1,6 +1,7 @@
 # Common account — Phase 3a: safe withdrawal and the deletion orchestrator (source only)
 
-Status: source candidate, **with the PR112 H2 R1–R4/C1 corrective**. Nothing is deployed, no migration is
+Status: source candidate, **with the PR112 H2 R1–R4/C1 corrective and its rereview R1/R2 residual
+corrective** (legacy unowned writers revoked; typed Apple outcome). Nothing is deployed, no migration is
 applied, no production data, session, Storage object, provider grant or login was touched. The Auth-delete
 guard stays `shadow`; no enforcement is switched on. Built against the Phase 1 contract
 (`phase1-lifecycle-foundation.md` §10/§14/§15) and the Phase 2 start/restart contract
@@ -101,10 +102,28 @@ stays recorded.
   `reconciliation_required` until an operator checks with Apple and records it as revoked or not
   (`resolve_common_account_deletion_external_step`, service role, never called by the function); an
   unsettled managed delete with the login still present did not happen and is cleared.
-- **Apple outcomes:** `true` → settle `succeeded` (the checkpoint and the end of the intent in one
-  transaction); `false` (definitive refusal) → settle `failed`, a new code may be used; the call broke off,
-  or a known outcome could not be recorded → `RECONCILIATION_REQUIRED` with the intent left in place. The
-  apple_revocation checkpoint cannot be written any other way (the owned-checkpoint RPC refuses it).
+- **Apple outcomes (typed; H2 rereview R2).** The function uses its own adapter
+  (`account-delete/apple_outcome.ts`; the X module's boolean `revokeAppleGrant` is not used and not edited:
+  only its client-secret signing is reused). It answers:
+  - `succeeded` — Apple confirmed the revocation (2xx) → settle `succeeded` (the checkpoint and the end of
+    the intent in one transaction);
+  - `definitively_failed` — nothing reached Apple (the client secret could not be signed), or Apple refused
+    the token request itself with an RFC 6749 §5.2 error (`invalid_grant`, `invalid_client`, …) → settle
+    `failed`; the code was not exchanged by this call and a new code may be used;
+  - `unknown` — everything else once a request was sent: transport failure or timeout, 5xx / 429 / an
+    unrecognised answer, and **any** failure after Apple accepted the code (no id_token, another Apple
+    identity, no grant token, a revoke that failed or answered non-2xx — e.g. the grant revoked and a
+    gateway 502). The intent stays and the answer is `RECONCILIATION_REQUIRED`; the consumed code is never
+    sent again. A throw, or any other value from the adapter, is also `unknown`.
+  A known outcome that could not be recorded (lease lost, database failure) is also `RECONCILIATION_REQUIRED`.
+- **Only owned writers (H2 rereview R1).** Phase 1's `record_common_account_deletion_checkpoint`,
+  `clear_common_account_deletion_checkpoint` and `prepare_common_account_auth_delete` no longer have any
+  API grant (§10). A checkpoint, its withdrawal and a readiness are reachable only through the owned
+  wrappers, and the `apple_revocation` checkpoint only through settling its intent — so a stale owner or
+  an old backend path cannot write it while the Apple step is in flight.
+- **Reconciliation is an operator act** (`resolve_common_account_deletion_external_step`, service role,
+  never called by the function). It has no issuer/evidence/audit inputs of its own: a human workflow with
+  an issuer and a durable audit record is a prerequisite before enablement (§14).
 
 ## 6. Session revocation and the stale-token policy
 
@@ -169,6 +188,11 @@ cascades away), and the old read-back still answered `completed`. Corrected:
 (`profiles_insert_own` + `grant insert`), X workspace creation via `begin_social_mobile_x_oauth_connection`
 (`x-oauth-connect-user`). Operator: `private.account_lifecycle_backfill` (takes the lifecycle locks).
 
+**Legacy unowned lifecycle writers** — Phase 1's checkpoint record / clear and readiness RPCs kept
+`service_role` EXECUTE; the candidate revokes it (after an exact-ACL/owner preflight) so they are
+reachable only through the owned wrappers. No runtime caller existed (repository inventory: only Phase 1's
+own tests and rollout tooling, which run without this candidate).
+
 **Login delete routes** — Kabumori `account-delete` **as deployed in production** (recorded as live in
 `apps/social-mobile/docs/account-deletion-rollout-runbook.md`; not re-read here): no body →
 `DELETE /auth/v1/admin/users/{id}` — **unsafe until this source is deployed**. This source: lifecycle only,
@@ -210,13 +234,26 @@ normal logout is a product decision.
   historical `verified_at` kept), `common_account_deletion_storage_objects`,
   `record_common_account_deletion_error`; helpers `account_lifecycle_gate_open`, `…_owned_operation`,
   `…_residue`, `…_storage_inventory`.
+- **Legacy unowned writers (H2 rereview R1):** preflight requires `record_…_checkpoint`,
+  `clear_…_checkpoint` and `prepare_common_account_auth_delete` to be owned by the applying role (so the
+  SECURITY DEFINER wrappers keep reaching them) and executable by exactly `service_role` (no null/PUBLIC
+  ACL, no other grantee, no grant option) — any drift refuses the apply
+  (`…_PREFLIGHT_LEGACY_ACL_CHANGED` / `…_LEGACY_OWNER_MISMATCH`). The apply then revokes every API grant
+  (bodies unchanged) and a postcondition proves `anon` / `authenticated` / `service_role` (and roles
+  inheriting them) have no EXECUTE (`…_POSTCONDITION_LEGACY_ACL`).
 - No write to auth/storage/vault, no e-mail, guard stays `shadow`; the only insert is the gate row; nothing
-  else altered (the runner diffs the whole catalog against `…_expected_catalog.txt`, 44 exact lines).
+  else altered (the runner diffs the whole catalog against `…_expected_catalog.txt`, 47 exact lines; the
+  three legacy writers change only their ACL). The whole file applied inside its transaction and rolled
+  back leaves the catalog byte-identical.
 - Proof (disposable PostgreSQL 17 only): preflight refusals; exact change and ACLs; refused re-apply;
   static rules; Phase 2 behavior unchanged; behavior G0 (shipped gate) and A–H, C5–C6, R1–R4 (including the
   two H2 reproductions, which now fail as intended, and the documented R3 residual); races: removal vs
-  read-back (both orders), start vs begin (both orders), two owners, identity link vs managed decision.
-  SQL mutation suite: 43 single-property breaks, all detected by name.
+  read-back (both orders), start vs begin (both orders), two owners, identity link vs managed decision;
+  R1L (rereview): the H2 legacy-writer reproduction with an expired owner and an Apple intent in flight,
+  each legacy writer as `service_role`, an inherited `service_role`, `authenticated`, an inherited
+  `authenticated` and `anon` — all `permission denied`, nothing written; owned paths and Kabumori-only
+  withdrawal unaffected. The same suite against the pre-rereview candidate fails at R1L. SQL mutation
+  suite: every single-property break detected by name (count in the Report).
 
 ## 11. Client behavior (exact outcomes)
 
@@ -265,7 +302,8 @@ blocked; the migration is rolled forward, not dropped, once any lease/intent/com
 ## 13. Running the proofs
 
 ```bash
-deno test --no-config --no-check --allow-read supabase/functions/account-delete/
+deno test --no-config --no-check --allow-read supabase/functions/account-delete/   # incl. apple_outcome_test, http_apple_test (real wiring, mock HTTP, fake EC key)
+deno lint --no-config supabase/functions/account-delete/{index,http,lifecycle_logic,apple_outcome}.ts
 deno test --no-config --no-check --no-lock --allow-read supabase/functions/social-mobile-account-delete/
 deno test --no-config --no-check --allow-read --allow-env tests/app/
 node --test tests/node/auth-provider-enrollment.test.mjs
@@ -287,3 +325,5 @@ python3 supabase/tests/common_account_phase3a_ts_mutations.py .
 7. Lost response after a managed delete (operation `login_removed`, unverified, the person cannot call
    again) and Apple reconciliation need an operator runbook/tooling; the RPCs exist, the process does not.
 8. No self-service cancel of an open deletion (`abort_common_account_deletion` is operator-only).
+9. The operator reconciliation RPC is authorized only by trusted `service_role`; an issuer, evidence and a
+   durable audit record for each resolution are a prerequisite before enablement.

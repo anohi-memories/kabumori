@@ -24,6 +24,12 @@
 --      delete intent, a standing readiness, every required checkpoint and a fresh residue check. Asking
 --      again re-checks the residue now ('residue_found'), keeping the historical verification.
 --   5. Storage inventory for removal through the Storage API, and 6. an operator error-code recorder.
+--   7. The legacy unowned writers (H2 rereview R1). Phase 1's record / clear checkpoint and prepare RPCs
+--      kept service_role EXECUTE, so a stale owner (or any old backend path) could write the Apple
+--      checkpoint, withdraw a checkpoint or obtain a readiness without holding the lease. Their direct
+--      EXECUTE is revoked here (Phase 1's applied file is not edited); only this file's owned wrappers,
+--      SECURITY DEFINER under the same owner, still reach them. Preflight requires their ACL and owner to
+--      be exactly what Phase 1 left; any drift refuses the whole apply.
 --
 -- Every function is SECURITY DEFINER with an empty search_path; the public ones are executable by
 -- service_role only, and p_user_id is the id the Edge Function verified from the person's own token.
@@ -84,6 +90,32 @@ begin
   if not exists (select 1 from private.account_lifecycle_settings where auth_delete_guard = 'shadow') then
     raise exception 'COMMON_ACCOUNT_DELETION_COMPLETION_PREFLIGHT_FOUNDATION_MISSING';
   end if;
+end;
+$$;
+
+-- The legacy unowned writers (section 9) must be exactly as Phase 1 left them: owned by the role applying
+-- this file (so the owned wrappers, SECURITY DEFINER under that role, keep reaching them) and executable
+-- by service_role only -- no PUBLIC default (a null ACL), no other grantee, no grant option.
+do $$
+declare
+  v_function regprocedure;
+begin
+  foreach v_function in array array[
+    'public.record_common_account_deletion_checkpoint(uuid,uuid,text)'::regprocedure,
+    'public.clear_common_account_deletion_checkpoint(uuid,uuid,text)'::regprocedure,
+    'public.prepare_common_account_auth_delete(uuid,uuid)'::regprocedure] loop
+    if (select p.proowner from pg_proc p where p.oid = v_function) is distinct from (select r.oid from pg_roles r where r.rolname = current_user) then
+      raise exception 'COMMON_ACCOUNT_DELETION_COMPLETION_PREFLIGHT_LEGACY_OWNER_MISMATCH';
+    end if;
+    if (select p.proacl is null from pg_proc p where p.oid = v_function)
+       or exists (select 1 from pg_proc p, aclexplode(p.proacl) a
+                   where p.oid = v_function and a.grantee <> p.proowner
+                     and (a.grantee <> 'service_role'::regrole or a.privilege_type <> 'EXECUTE' or a.is_grantable))
+       or not exists (select 1 from pg_proc p, aclexplode(p.proacl) a
+                       where p.oid = v_function and a.grantee = 'service_role'::regrole and a.privilege_type = 'EXECUTE') then
+      raise exception 'COMMON_ACCOUNT_DELETION_COMPLETION_PREFLIGHT_LEGACY_ACL_CHANGED';
+    end if;
+  end loop;
 end;
 $$;
 
@@ -692,5 +724,36 @@ grant execute on function public.resolve_common_account_deletion_external_step(u
 grant execute on function public.complete_common_account_deletion(uuid, uuid) to service_role;
 grant execute on function public.common_account_deletion_storage_objects(uuid, integer) to service_role;
 grant execute on function public.record_common_account_deletion_error(uuid, uuid, text) to service_role;
+
+-- 9. The legacy unowned writers (H2 rereview R1) --------------------------------------------------------
+
+-- No role but their owner may call these directly any more. A checkpoint, its withdrawal and a readiness
+-- are obtained only through set_owned_common_account_deletion_checkpoint (never the Apple checkpoint),
+-- prepare_owned_common_account_auth_delete and settle_common_account_deletion_external_step, which hold
+-- the lease in the same transaction.
+revoke all on function public.record_common_account_deletion_checkpoint(uuid, uuid, text) from public, anon, authenticated, service_role;
+revoke all on function public.clear_common_account_deletion_checkpoint(uuid, uuid, text) from public, anon, authenticated, service_role;
+revoke all on function public.prepare_common_account_auth_delete(uuid, uuid) from public, anon, authenticated, service_role;
+
+do $$
+declare
+  v_function regprocedure;
+  v_role text;
+begin
+  foreach v_function in array array[
+    'public.record_common_account_deletion_checkpoint(uuid,uuid,text)'::regprocedure,
+    'public.clear_common_account_deletion_checkpoint(uuid,uuid,text)'::regprocedure,
+    'public.prepare_common_account_auth_delete(uuid,uuid)'::regprocedure] loop
+    if exists (select 1 from pg_proc p, aclexplode(p.proacl) a where p.oid = v_function and a.grantee <> p.proowner) then
+      raise exception 'COMMON_ACCOUNT_DELETION_COMPLETION_POSTCONDITION_LEGACY_ACL';
+    end if;
+    foreach v_role in array array['anon', 'authenticated', 'service_role'] loop
+      if has_function_privilege(v_role, v_function, 'EXECUTE') then
+        raise exception 'COMMON_ACCOUNT_DELETION_COMPLETION_POSTCONDITION_LEGACY_ACL';
+      end if;
+    end loop;
+  end loop;
+end;
+$$;
 
 commit;

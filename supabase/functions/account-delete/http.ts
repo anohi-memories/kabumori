@@ -11,7 +11,7 @@
 // Who sees what: the person's own token goes only to Auth's /user and /logout and to the X saga's own
 // function (which re-verifies it). The service role key goes only to PostgREST RPCs, the Storage API and
 // the Auth Admin API. Nothing is logged.
-import { appleConfigFrom, revokeAppleGrant } from '../social-mobile-account-delete/apple_revoke.ts';
+import { appleConfigFrom } from '../social-mobile-account-delete/apple_revoke.ts';
 import { CONFIRMATION as X_DELETE_CONFIRMATION } from '../social-mobile-account-delete/delete_logic.ts';
 import {
   handleDeleteCommonAccount,
@@ -22,8 +22,9 @@ import {
   type RpcResult,
   type XCleanupOutcome,
 } from './lifecycle_logic.ts';
+import { revokeAppleGrantOutcome } from './apple_outcome.ts';
 
-const RPC_NAMES: Record<LifecycleRpcName, string> = {
+export const RPC_NAMES: Record<LifecycleRpcName, string> = {
   release_gate: 'common_account_deletion_release_gate',
   eligibility: 'common_account_deletion_eligibility',
   withdraw_kabumori: 'withdraw_kabumori_service',
@@ -124,7 +125,8 @@ export function createHandler(env: { get: (name: string) => string | undefined }
         // The caller lists again: this only has to say whether Storage accepted the request.
         return response.ok;
       },
-      revokeApple: apple ? (code, subjects) => revokeAppleGrant(apple, code, subjects, Math.floor(Date.now() / 1000), fetchImpl) : null,
+      // A typed outcome (H2 rereview R2): an ambiguous answer is 'unknown', never a failure.
+      revokeApple: apple ? (code, subjects) => revokeAppleGrantOutcome(apple, code, subjects, Math.floor(Date.now() / 1000), fetchImpl) : null,
       x: {
         preview: async (token) => {
           const { status, body: answer } = await callX(token, { action: 'preview' });

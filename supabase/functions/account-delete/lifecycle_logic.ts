@@ -27,6 +27,7 @@
 //   * Every failure is a fixed code. Tokens, keys, ids, e-mail addresses, object names and server messages
 //     are never returned or logged.
 import { lastAuthenticatedAt, RECENT_AUTH_SECONDS } from '../social-mobile-account-delete/delete_logic.ts';
+import type { AppleRevocationOutcome } from './apple_outcome.ts';
 
 export { RECENT_AUTH_SECONDS };
 
@@ -66,8 +67,11 @@ export type LifecycleDeps = {
   revokeSessions(token: string): Promise<boolean>;
   /** Removes objects through the Storage API. true only when Storage confirmed. */
   removeStorageObjects(bucketId: string, names: readonly string[]): Promise<boolean>;
-  /** null when Sign in with Apple revocation is not configured on the server. */
-  revokeApple: ((authorizationCode: string, expectedSubjects: readonly string[]) => Promise<boolean>) | null;
+  /**
+   * null when Sign in with Apple revocation is not configured on the server. 'unknown' (also any other
+   * answer, or a throw) is never treated as a failure: the code may already be consumed (H2 rereview R2).
+   */
+  revokeApple: ((authorizationCode: string, expectedSubjects: readonly string[]) => Promise<AppleRevocationOutcome>) | null;
   x: XServiceCleaner;
   /** Managed Auth Admin delete of the verified login. */
   deleteLogin(userId: string): Promise<'deleted' | 'not_found' | 'failed'>;
@@ -402,7 +406,7 @@ async function ownedDeletion({ deps, token, user, operationId, owner, appleCode,
   const owned = async () => (await call(deps, 'renew', { ...owner, p_lease_seconds: LEASE_SECONDS }))?.status === 'owned';
   const ownedCheckpoint = async (key: 'session_revocation' | 'storage_cleanup', present: boolean) =>
     (await call(deps, 'owned_checkpoint', { ...owner, p_checkpoint: key, p_recorded: present }))?.status;
-  const recordStorage = async (present: boolean) => ownedCheckpoint('storage_cleanup', present);
+  const recordStorage = (present: boolean) => ownedCheckpoint('storage_cleanup', present);
 
   // 4a. X first, through its own saga, wrapped by the lifecycle service deletion.
   if (!(await owned())) return lost();
@@ -468,20 +472,25 @@ async function ownedDeletion({ deps, token, user, operationId, owner, appleCode,
     if (intent?.status === 'step_in_flight') return stop(fail(409, 'RECONCILIATION_REQUIRED', { sessionsRevoked }));
     if (intent?.status !== 'already_recorded') {
       if (intent?.status !== 'owned') return stop(fail(500, 'FAILED', { sessionsRevoked }));
-      let outcome: 'succeeded' | 'failed' | 'unknown' = 'unknown';
+      let outcome: AppleRevocationOutcome = 'unknown';
       try {
-        outcome = (await deps.revokeApple(appleCode, user.appleSubjects)) ? 'succeeded' : 'failed';
+        const answer = await deps.revokeApple(appleCode, user.appleSubjects);
+        outcome = answer === 'succeeded' || answer === 'definitively_failed' ? answer : 'unknown';
       } catch {
         outcome = 'unknown';
       }
-      // Unknown (the call broke off): the code may be consumed and the grant revoked or not. Not replayed.
+      // Unknown (sent, then broke off, a gateway or 5xx answer, or anything after Apple accepted the code):
+      // the code may be consumed and the grant revoked or not. The intent stays; never replayed.
       if (outcome === 'unknown') return stop(fail(500, 'RECONCILIATION_REQUIRED', { sessionsRevoked }));
-      const settled = await call(deps, 'settle_external_step', { ...owner, p_step: 'apple_revocation', p_outcome: outcome });
+      const settled = await call(deps, 'settle_external_step', {
+        ...owner, p_step: 'apple_revocation', p_outcome: outcome === 'succeeded' ? 'succeeded' : 'failed',
+      });
       // Known but not recorded (lease lost, database failure): the intent stays; never replayed.
       if (settled?.status !== (outcome === 'succeeded' ? 'recorded' : 'cleared')) {
         return stop(fail(500, 'RECONCILIATION_REQUIRED', { sessionsRevoked }));
       }
-      if (outcome === 'failed') return stop(fail(502, 'APPLE_REVOKE_FAILED', { sessionsRevoked }));
+      // Apple refused the token request itself: the code was not exchanged; a new code may be used.
+      if (outcome === 'definitively_failed') return stop(fail(502, 'APPLE_REVOKE_FAILED', { sessionsRevoked }));
     }
   }
 

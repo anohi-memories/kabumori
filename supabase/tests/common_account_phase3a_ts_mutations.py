@@ -10,6 +10,7 @@ SUITES = ['supabase/functions/account-delete/', 'tests/app/account-deletion_test
 L = 'supabase/functions/account-delete/lifecycle_logic.ts'
 H = 'supabase/functions/account-delete/http.ts'
 C = 'src/lib/account-deletion.ts'
+A = 'supabase/functions/account-delete/apple_outcome.ts'
 M = [
     ('another function reaches the Auth Admin API', 'NEW:supabase/functions/legacy-probe/index.ts',
      None, "await fetch(`${url}/auth/v1/admin/users/${id}`, { method: 'DELETE' });\n"),
@@ -82,6 +83,24 @@ M = [
      "  if (!preview.deletionAvailable) return { available: false, message: DELETION_UNAVAILABLE_MESSAGE };\n", ""),
     ('R2: the client does not treat a reconciliation as an operator follow-up', C,
      " || code === 'RECONCILIATION_REQUIRED';", ";"),
+    # --- H2 rereview R2: the Apple outcome must never call an ambiguous answer a failure ---------------
+    ('R2b: the production adapter reverts to the boolean X helper', H,
+     "      revokeApple: apple ? (code, subjects) => revokeAppleGrantOutcome(apple, code, subjects, Math.floor(Date.now() / 1000), fetchImpl) : null,",
+     "      revokeApple: apple ? async (code, subjects) => ((await import('../social-mobile-account-delete/apple_revoke.ts')).revokeAppleGrant(apple, code, subjects, Math.floor(Date.now() / 1000), fetchImpl).then((ok) => (ok ? 'succeeded' : 'definitively_failed'))) : null,"),
+    ('R2b: a gateway error after the revocation is called a failure', A,
+     "  return revoked.ok ? 'succeeded' : 'unknown';", "  return revoked.ok ? 'succeeded' : 'definitively_failed';"),
+    ('R2b: a lost token-endpoint answer is called a failure', A,
+     "    return 'unknown'; // sent, answer lost: the code may have been consumed", "    return 'definitively_failed';"),
+    ('R2b: any non-2xx token answer is called a failure', A,
+     "    await discard(exchanged);\n    return 'unknown';", "    await discard(exchanged);\n    return 'definitively_failed';"),
+    ('R2b: an unrecognised 400 is called a failure', A,
+     "      if (typeof refusal?.error === 'string' && REFUSED_TOKEN_REQUEST.has(refusal.error)) return 'definitively_failed';\n      return 'unknown';",
+     "      return 'definitively_failed';"),
+    ('R2b: an unexpected identity after consumption is called a failure', A,
+     "  if (!subject || !expectedSubjects.includes(subject)) return 'unknown';", "  if (!subject || !expectedSubjects.includes(subject)) return 'definitively_failed';"),
+    ('R2b: the orchestrator maps any non-success to a failure', L,
+     "        outcome = answer === 'succeeded' || answer === 'definitively_failed' ? answer : 'unknown';",
+     "        outcome = answer === 'succeeded' ? 'succeeded' : 'definitively_failed';"),
 ]
 
 def run(root):
