@@ -1,10 +1,39 @@
+# H2 completion receipt — PR112 bounded R1L/R2 exact-head review — 2026-10-10 JST
+
+- task_id: common-account-pr112-r1l-r2-apple-boundary-exact-head-rereview-20261010
+- owner: codex
+- slot: codex-2
+- status: review_required
+- next_owner: chatgpt
+- result: PASS (source only, immutable whole-account delete gate BLOCKED)
+- reviewed_exact_head: 54b9435b0dcc0d0e79ae6eba4340eee44508141c
+- fresh_main_at_review: d49d899629d7194514067ca253a90d8f4359b6b3
+- target_pr: 112; OPEN / UNMERGED / 30 files / exact head unchanged
+- R1L: CLOSED — old SQL bypass reproduced; new 75 calls denied atomically; owned path works; 6 ACL/owner preflight drifts refuse; full schema+ACL rollback byte-identical
+- R2: CLOSED — old real-handler exchange2/revoke1 replay reproduced; new unknown-response matrix 21/21 retains intent and never re-exchanges; real Apple wiring and timeout/definitive refusal tests PASS
+- tests: account-delete66 + app430 + AuthProvider23 + X17 + X app19 = 555/555 PASS; Phase1/2/3a PG ALL PASS; SQL48/48 and TS45/45 mutation detection/control PASS
+- strict_runtime_lint: PASS; deno_check: PASS; diff_check: PASS; merge_tree: clean; source overlap main/PR106/PR110/PR114: 0
+- app_tsc: same 2 historical CSS declaration errors as fresh main, incremental errors 0; root ESLint unavailable; release build/EAS not claimed
+- initial_report_commit: 4b681fc54a64c30753291c7b7e436f047ce714fb
+- report_readback: exact new current report + original 680583-character history suffix confirmed on GitHub main
+- source_merge: safe to consider at C2 with blocked gate retained, not merged/authorized by H2
+- whole_account_Auth_deletion: BLOCKED / UNAVAILABLE; production/migration/deploy/EAS not authorized
+- source_edits_by_H2: 0
+- production_access_mutation_provider_API_deploy_merge_EAS: 0
+- own_local_PG: stopped after isolated proof; no other server changed
+- changed_files: own Report/TASK and explicit completion-only H2 status/next_owner index fields
+- return_to: 共通アカウントG5のちゃ
+- completion_code: C2
+
+---
+
 # Codex H2 — CURRENT TASK — PR112 bounded independent R1L/R2 final security rereview
 
 - task_id: common-account-pr112-r1l-r2-apple-boundary-exact-head-rereview-20261010
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - type: independently verify previously reproduced P1 residuals, exact-head source review
 - target_pr: 112
