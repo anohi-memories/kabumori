@@ -765,28 +765,126 @@ const SOURCE_HEDGE_ISSUE = /とみられ|見られ|疑い|意向|可能性|暫�
 const HARD_FACT_ERROR_ISSUE =
   /誤り|誤認|誤記|取り違え|異な(?:る|っ)|捏造|存在しない|別(?:の|人|企業)|改変|数字|数値|金額|日付|日時|人物名|企業名|社名|証券|市場|影響|因果|解釈/u;
 
-// ---- Fail-closed guards shared by the over-assertion retries (2026-10-10 review of PR #116) ----------------------
-// A retry only restores a hedge the source itself carries. It must never be reachable when the issue reports that
-// the text got the OUTCOME or the KIND of the event wrong, or that a number is wrong: those change what happened.
+// ---- Fail-closed guards for the Fact retries (PR #116 reviews, 2026-10-10 / 10-11) -------------------------------
+// A retry only restores a hedge the source itself carries. It must never be reachable when the text got the OUTCOME,
+// KIND, DIRECTION, BASIS or a NUMBER of the event wrong. These guards are deliberately independent of how a model
+// words its Fact issue (OpenAI today, possibly Claude later): the primary guards compare the generated text with the
+// source (deterministic); the issue-text checks below are a second line of defence only.
 
-// Quantities after NFKC (full-width digits, 万株 / 千株 / 万ドル / 億ドル / 1株当たり…): "50億円", "150億ドル", "30%", "1株".
-const QUANTITY_IN_ISSUE = /\d+(?:\.\d+)?\s*(?:兆|億|百万|千万|万|千)?\s*(?:円|ドル|ユーロ|元|株|口|％|%|倍|ポイント|bp|人|件|社)/gu;
+type Quantity = { cls: "yen" | "usd" | "eur" | "shares" | "pct" | "per_share_yen"; value: number };
+const MULTIPLIER: Record<string, number> = { "兆": 1e12, "億": 1e8, "千万": 1e7, "百万": 1e6, "万": 1e4, "千": 1e3 };
+const UNIT_CLASS: Record<string, Quantity["cls"]> = { "円": "yen", "ドル": "usd", "ユーロ": "eur", "株": "shares", "％": "pct", "%": "pct" };
+const PER_SHARE_AMOUNT = /1株(?:当たり|あたり)(?:の)?[^\d。、]{0,10}?(\d+(?:\.\d+)?)円/gu;
+const COMPOSITE_QUANTITY = /((?:\d+(?:\.\d+)?(?:兆|億|千万|百万|万|千)?)+)(円|ドル|ユーロ|株|％|%)/gu;
+
+/** Amounts in a text as comparable numbers: NFKC, commas removed, 155億5,000万円 = 15,550百万円, 1株当たり kept apart. */
+export function canonicalQuantities(raw: string): Quantity[] {
+  let text = raw.normalize("NFKC").replace(/(?<=\d),(?=\d)/gu, "");
+  const quantities: Quantity[] = [];
+  for (const match of text.matchAll(PER_SHARE_AMOUNT)) quantities.push({ cls: "per_share_yen", value: Number(match[1]) });
+  text = text.replace(PER_SHARE_AMOUNT, " ");
+  for (const match of text.matchAll(COMPOSITE_QUANTITY)) {
+    let value = 0;
+    for (const part of match[1].matchAll(/(\d+(?:\.\d+)?)(兆|億|千万|百万|万|千)?/gu)) {
+      value += Number(part[1]) * (part[2] ? MULTIPLIER[part[2]] : 1);
+    }
+    quantities.push({ cls: UNIT_CLASS[match[2]], value: Math.round(value * 1e4) / 1e4 });
+  }
+  return quantities;
+}
+
+const quantityKey = (quantity: Quantity) => `${quantity.cls}:${quantity.value}`;
+
+// Mutually exclusive alternatives of one kind of fact. A text that names a member the source does not, while the
+// source names another member of the same group, has swapped the fact (増配 for 減配, 消却 for 取得, …).
+const EXCLUSIVE_FACT_GROUPS: ReadonlyArray<readonly [string, ReadonlyArray<readonly [string, RegExp]>]> = [
+  ["dividend_direction", [["up", /増配/u], ["down", /減配/u], ["none", /無配/u], ["resume", /復配/u]]],
+  ["revision_direction", [["up", /上方修正|上振れ/u], ["down", /下方修正|下振れ/u]]],
+  ["amount_direction", [["up", /増額/u], ["down", /減額/u]]],
+  ["profit_direction", [["up", /増益|黒字転換|黒字化/u], ["down", /減益|赤字転落|赤字化/u]]],
+  ["buyback_action", [["acquire", /自己株式(?:の)?取得/u], ["cancel", /自己株式(?:の)?消却|消却/u], ["dispose", /自己株式(?:の)?処分|処分/u]]],
+  ["share_change", [["consolidation", /株式(?:の)?併合/u], ["split", /株式(?:の)?分割/u]]],
+  ["basis", [["consolidated", /連結/u], ["standalone", /単体|個別|非連結/u]]],
+  ["meeting", [["extraordinary", /臨時株主総会|臨時総会/u], ["ordinary", /定時株主総会|定時総会/u]]],
+  ["appointment", [["appoint", /選任/u], ["dismiss", /解任/u]]],
+  ["capital", [["increase", /増資/u], ["reduce", /減資/u]]],
+  ["listing", [["list", /新規上場|上場承認/u], ["delist", /上場廃止/u]]],
+  ["resolution", [["pass", /可決|承認(?:済|され)|採択/u], ["reject", /否決|不承認|否認|却下/u], ["withdraw", /撤回|取り?下げ/u]]],
+];
+
+function exclusiveMembers(text: string): Map<string, Set<string>> {
+  const found = new Map<string, Set<string>>();
+  for (const [group, members] of EXCLUSIVE_FACT_GROUPS) {
+    const present = new Set(members.filter(([, pattern]) => pattern.test(text)).map(([name]) => name));
+    if (present.size > 0) found.set(group, present);
+  }
+  return found;
+}
+
+/**
+ * Deterministic text-vs-source conflicts (provider independent): an amount that is not one of the source's amounts of
+ * the same kind (this also catches rounding and truncation), or a fact-group member the source does not state while it
+ * states a different member. Returns short codes; empty when nothing conflicts or the source has nothing to compare.
+ */
+export function sourceTextConflicts(candidate: GenerationCandidate, generatedText: string): string[] {
+  const source = `${candidate.title}\n${candidate.bodySummary ?? ""}`.normalize("NFKC");
+  const text = generatedText.normalize("NFKC");
+  const conflicts: string[] = [];
+  const sourceQuantities = canonicalQuantities(source);
+  for (const quantity of canonicalQuantities(text)) {
+    const sameClass = sourceQuantities.filter((item) => item.cls === quantity.cls);
+    if (sameClass.length > 0 && !sameClass.some((item) => quantityKey(item) === quantityKey(quantity))) {
+      conflicts.push(`AMOUNT_NOT_IN_SOURCE:${quantity.cls}`);
+      break;
+    }
+  }
+  const sourceMembers = exclusiveMembers(source);
+  for (const [group, members] of exclusiveMembers(text)) {
+    const inSource = sourceMembers.get(group);
+    if (inSource && [...members].some((member) => !inSource.has(member))) conflicts.push(`FACT_KIND_SWAPPED:${group}`);
+  }
+  return conflicts;
+}
+
+/** A retry may only restore hedges: it must not introduce an amount or a fact-group member the original did not have. */
+export function retryIntroducedCriticalFact(originalText: string, revisedText: string): boolean {
+  const original = new Set(canonicalQuantities(originalText).map(quantityKey));
+  if (canonicalQuantities(revisedText).some((quantity) => !original.has(quantityKey(quantity)))) return true;
+  const originalMembers = exclusiveMembers(originalText.normalize("NFKC"));
+  for (const [group, members] of exclusiveMembers(revisedText.normalize("NFKC"))) {
+    const before = originalMembers.get(group);
+    if ([...members].some((member) => !before?.has(member))) return true;
+  }
+  return false;
+}
+
+// Issue-wording checks (second line of defence).
+const QUANTITY_FOR_ISSUE = COMPOSITE_QUANTITY;
 // An issue that says the number itself is wrong, rounded, below a cap, in another unit, or on another basis.
 const NUMERIC_DISCREPANCY_MARKER =
-  /ではなく|でなく|ではありません|とは?(?:異な|違|相違|不一致)|正しくは|正確には|不正確|切り捨|切り上|丸め|端数|桁|単位(?:が|の|を)?(?:違|異|誤|不一致|取り違)|下回|上回|届いて|達して(?:い|お)|満たな|誤り|誤記|相違|不一致|過大|過小|水増/u;
+  /ではなく|でなく|ではありません|とは?(?:異な|違|相違|不一致)|正しくは|正確には|不正確|切り捨|切り上|丸め|端数|桁|単位(?:が|の|を)?(?:違|異|誤|不一致|取り違)|下回|上回|届いて|達して(?:い|お)|満たな|誤り|誤記|相違|不一致|過大|過小|水増|元情報(?:は|では|に)/u;
 const NUMERIC_BASIS_ISSUE =
   /算定(?:基準|対象|根拠)|(?:自己株式を除|親会社株主に帰属|希薄化後|潜在株式|連結|単体|通期|累計|四半期)(?:.{0,20})(?:欠落|省略|落と|抜け|不明|異な|違)/u;
 
 /** True when the issue reports a wrong / rounded / unreached / re-based number. Ambiguity resolves to true (fail-closed). */
 export function isNumericDiscrepancyIssue(issue: string): boolean {
-  const text = issue.normalize("NFKC").replace(/(?<=\d),(?=\d)/gu, "");
+  const text = issue.normalize("NFKC").replace(/(?<=\d),(?=\d)/gu, "").replace(PER_SHARE_PREFIX, "");
   if (NUMERIC_BASIS_ISSUE.test(text)) return true;
-  const quantities = text.match(QUANTITY_IN_ISSUE) ?? [];
-  return NUMERIC_DISCREPANCY_MARKER.test(text) && (quantities.length > 0 || /数値|数字|金額|株数|割合|比率|累計|上限|下限|目標/u.test(text));
+  const quantities = [...text.matchAll(QUANTITY_FOR_ISSUE)].map((match) => `${UNIT_CLASS[match[2]]}:${match[1]}`);
+  // Two different amounts of one kind in one issue ("…50円と断定していますが、元情報は45円")
+  const perClass = new Map<string, Set<string>>();
+  for (const key of quantities) {
+    const [cls] = key.split(":");
+    perClass.set(cls, (perClass.get(cls) ?? new Set()).add(key));
+  }
+  if ([...perClass.values()].some((values) => values.size >= 2)) return true;
+  return NUMERIC_DISCREPANCY_MARKER.test(text) &&
+    (quantities.length > 0 || /数値|数字|金額|株数|割合|比率|累計|上限|下限|目標/u.test(text));
 }
+const PER_SHARE_PREFIX = /1株(?:当たり|あたり)(?:の)?/gu;
 
 const EVENT_OUTCOME_ISSUE =
-  /否決|可決|承認(?:済|され(?:た|ました|て(?:い|お))|を得)|決議(?:済|され(?:た|ました))|議決(?:済|され)|採択|不成立|成立|却下|撤回|中止|延期|廃案/u;
+  /否決|可決|承認(?:済|され(?:た|ました|て(?:い|お))|を得)|決議(?:済|され(?:た|ました))|議決(?:済|され)|採択|不成立|成立|却下|撤回|取り?下げ|廃案|中止|延期/u;
 // Kinds of corporate action / meeting. Two different kinds named in one issue is a mix-up, not a hedge.
 const EVENT_KIND_GROUPS: ReadonlyArray<readonly [string, RegExp]> = [
   ["appointment", /選任|解任|再任|退任/u],
@@ -803,12 +901,19 @@ const EVENT_KIND_GROUPS: ReadonlyArray<readonly [string, RegExp]> = [
   ["pay", /役員報酬|報酬/u],
 ];
 const CONTRAST_OR_SUBSTITUTION_ISSUE = /ではなく|でなく|ではありません|とは?異な|と取り違|と混同|と誤|と誤認|逆に|反対に/u;
+// "確定ではなく意向" restores a hedge; the contrast target is a hedge word, not another fact.
+const CONTRAST_TO_HEDGE = /(?:ではなく|でなく)[、,]?(?:あくまで)?(?:意向|予定|見込み|見通し|計画|方針|提案|案|可能性|検討)/gu;
+// Unclear WHO does WHAT (subject / issuer / counterparty): a fact about the parties, never a wording fix.
+const UNCLEAR_SUBJECT_ISSUE =
+  /(?:主体|主語|当事者|発行者|買付者|対象会社|対象企業|相手方)(?:[^。、]{0,6})(?:不明|曖昧|あいまい|不一致|特定(?:でき|されて)(?:ない|いない))|誰が|どの会社/u;
 
-/** True when the issue concerns the outcome / kind of an event (a different fact, not a different wording). */
+/** True when the issue concerns the outcome / kind / direction of an event or an unclear party (a different fact). */
 export function isCriticalEventFactIssue(issue: string): boolean {
   const text = issue.normalize("NFKC");
-  if (EVENT_OUTCOME_ISSUE.test(text) || CONTRAST_OR_SUBSTITUTION_ISSUE.test(text)) return true;
-  return EVENT_KIND_GROUPS.filter(([, pattern]) => pattern.test(text)).length >= 2;
+  if (EVENT_OUTCOME_ISSUE.test(text) || UNCLEAR_SUBJECT_ISSUE.test(text)) return true;
+  if (CONTRAST_OR_SUBSTITUTION_ISSUE.test(text.replace(CONTRAST_TO_HEDGE, " "))) return true;
+  if (EVENT_KIND_GROUPS.filter(([, pattern]) => pattern.test(text)).length >= 2) return true;
+  return [...exclusiveMembers(text).values()].some((members) => members.size >= 2);
 }
 
 // An explicit "not yet approved / pending" qualifier. The bare nouns 議案 / 付議 / 上程 are NOT one: they only name
@@ -832,6 +937,8 @@ export function isOverAssertionFactIssue(issue: string): boolean {
  */
 export function isPendingApprovalOverAssertion(issue: string): boolean {
   if (!OVER_ASSERTION_ISSUE.test(issue) || !PENDING_APPROVAL_HEDGE.test(issue)) return false;
+  // 不明瞭 on the wording is fine; 不明瞭 on the party / subject is a fact about who does what.
+  if (UNCLEAR_SUBJECT_ISSUE.test(issue)) return false;
   if (NON_RETRYABLE_FACT_ISSUE_PATTERNS.some((pattern) => pattern.test(issue.replace(/不明瞭/gu, "")))) return false;
   return passesRetryGuards(issue);
 }
@@ -842,6 +949,11 @@ function isRetryableFactIssue(
   issue: string,
   deterministicIssues: string[],
 ): boolean {
+  // Fail closed first, for every branch below (including the company-name "表記" branch and the market shortcut):
+  // an outcome / kind / direction / party / number problem is a different fact, never a wording fix — and a text that
+  // conflicts with its source on amounts or fact kinds is not retried whatever the issue says.
+  if (isCriticalEventFactIssue(issue) || isNumericDiscrepancyIssue(issue)) return false;
+  if (sourceTextConflicts(candidate, generatedText).length > 0) return false;
   // A local deterministic hit means this is specifically an unsupported assertion in the generated
   // text; removing that assertion is safe even when the model phrases the issue as "根拠のない因果".
   if (
@@ -860,7 +972,7 @@ function isRetryableFactIssue(
   if (issue === "UNSUPPORTED_MARKET_INTERPRETATION" || /市場|影響|因果|解釈/u.test(issue)) {
     return deterministicIssues.includes("UNSUPPORTED_MARKET_INTERPRETATION");
   }
-  if (/会社名|企業名|法人名|略称|正式名称|表記/u.test(issue)) {
+  if (/会社名|企業名|法人名|社名|略称|正式名称/u.test(issue)) {
     return companyIdentityEvidence(candidate).sameCompanyConfirmed;
   }
   if (/ラベル|軽微な表記|表記整合|スペル|綴り/u.test(issue)) {
@@ -921,6 +1033,19 @@ async function attemptFactRetry(
       diagnostics: {
         attempted: true, usedModel: retryStep.model, initialFactIssues,
         localFactStatus: "failed", localFactIssues: localIssues,
+        retryFactStatus: null, retryFactIssues: [], error: null,
+      },
+    };
+  }
+  // The retry may restore hedges only. A revision that introduces an amount or an event-kind / direction / outcome /
+  // basis the original text did not contain has changed a fact: refuse it without relying on any model's judgement.
+  if (retryIntroducedCriticalFact(originalText, revisedText)) {
+    return {
+      text: revisedText,
+      fact: { status: "failed", issues: ["FACT_RETRY_CHANGED_CRITICAL_FACT"] },
+      diagnostics: {
+        attempted: true, usedModel: retryStep.model, initialFactIssues,
+        localFactStatus: "failed", localFactIssues: ["FACT_RETRY_CHANGED_CRITICAL_FACT"],
         retryFactStatus: null, retryFactIssues: [], error: null,
       },
     };

@@ -7,10 +7,12 @@ import {
   type GenerationCandidate,
   type GenerationRunner,
   type GenerationStep,
+  canonicalQuantities,
   isCriticalEventFactIssue,
   isNumericDiscrepancyIssue,
   isPendingApprovalOverAssertion,
   isRetryableFactFailure,
+  sourceTextConflicts,
 } from "./post_generation_logic.ts";
 
 const tdnet = (overrides: Partial<GenerationCandidate> = {}): GenerationCandidate => ({
@@ -165,7 +167,7 @@ test("flow: a pre-approval over-assertion is retried once and the rewrite is ful
   const { runner, calls } = scripted([
     { step: "draft", payload: DRAFT },
     { step: "fact", payload: { passed: false, issues: ["株主総会での承認前の議案である点が不明瞭。「増額します」と確定事項のように断定しています"] } },
-    { step: "fact_retry", payload: { text: "株主総会の承認を前提に、剰余金の配当を1株当たり50円とする議案を付議予定です。" } },
+    { step: "fact_retry", payload: { text: "株主総会の承認を前提に、剰余金の配当を増額する議案を付議予定です。" } },
     { step: "fact", payload: { passed: true, issues: [] } },
     { step: "voice", payload: { passed: true, issues: [] } },
   ]);
@@ -179,13 +181,25 @@ test("flow: when the re-check fails after the retry, nothing is published", asyn
   const { runner, calls } = scripted([
     { step: "draft", payload: DRAFT },
     { step: "fact", payload: { passed: false, issues: ["承認前の議案を「増額します」と確定として断定しています"] } },
-    { step: "fact_retry", payload: { text: "株主総会で配当を1株当たり80円に増額することが決まりました。" } },
-    { step: "fact", payload: { passed: false, issues: ["1株当たり50円ではなく80円と記載しており誤りです"] } },
+    { step: "fact_retry", payload: { text: "株主総会で配当を増額することが決まりました。" } },
+    { step: "fact", payload: { passed: false, issues: ["承認前の議案を決まったと断定しています"] } },
   ]);
   const result = await generateImportantNewsPost(tdnet(), runner);
   assert.deepEqual(calls, ["draft", "fact", "fact_retry", "fact"]);
   assert.equal(result.fact.status, "failed");
   assert.equal(result.stoppedReason, "NEWS_GENERATION_FACT_RETRY_FAILED");
+  assert.equal(result.status, "generation_failed");
+});
+
+test("flow: a retry that changes an amount is refused before any re-check (provider-independent invariant)", async () => {
+  const { runner, calls } = scripted([
+    { step: "draft", payload: DRAFT },
+    { step: "fact", payload: { passed: false, issues: ["承認前の議案を「増額します」と確定として断定しています"] } },
+    { step: "fact_retry", payload: { text: "株主総会の承認を前提に、配当を1株当たり80円とする議案を付議予定です。" } },
+  ]);
+  const result = await generateImportantNewsPost(tdnet(), runner);
+  assert.deepEqual(calls, ["draft", "fact", "fact_retry"]);
+  assert.deepEqual(result.fact.issues, ["FACT_RETRY_CHANGED_CRITICAL_FACT"]);
   assert.equal(result.status, "generation_failed");
 });
 
@@ -210,4 +224,132 @@ test("flow: a mixed issue list is refused as a whole — a safe hedge issue cann
   const result = await generateImportantNewsPost(tdnet(), runner);
   assert.deepEqual(calls, ["draft", "fact"]);
   assert.equal(result.status, "generation_failed");
+});
+
+// ------------------------------------------------------------ 6. 2026-10-11 re-review (N1 / N4 / N5 / N6)
+
+const nameSource = (over: Partial<GenerationCandidate> = {}) =>
+  tdnet({
+    title: "剰余金の配当に関するお知らせ",
+    bodySummary: "当社は株主総会の承認を前提に、1株当たり45円の配当を実施する議案を付議予定です。連結ベースの当期純利益は50億円の見込みです。",
+    ...over,
+  });
+
+test("N1: a wrong amount / direction / kind is refused although the issue says 承認前 (issue wording AND text-vs-source)", () => {
+  const c = nameSource();
+  // amount: source 45円, text 50円
+  assert.equal(isRetryableFactFailure(c, "承認前の議案として1株当たり50円の配当を実施します。", [
+    "承認前の議案で1株当たり50円と断定していますが、元情報は45円です",
+  ]), false);
+  // the same text is refused even when the issue is phrased as a plain hedge complaint (provider independent)
+  assert.equal(isRetryableFactFailure(c, "1株当たり50円の配当を実施します。", ["承認前の議案を確定と断定しています"]), false);
+  // direction: source 減配, text 増配
+  const down = nameSource({ title: "減配に関するお知らせ", bodySummary: "当社は期末配当を減配する議案を株主総会の承認を前提に付議予定です。" });
+  assert.equal(isRetryableFactFailure(down, "期末配当を増配します。", ["承認前の議案を増配と断定していますが、元情報は減配です"]), false);
+  assert.equal(isRetryableFactFailure(down, "期末配当を増配します。", ["承認前の議案を確定と断定しています"]), false);
+  // kind: source 取得, text 消却
+  const buyback = nameSource({ title: "自己株式取得に係る事項の決定", bodySummary: "自己株式の取得を決議しました。取締役会決議であり、株主総会の承認前の議案ではありません。" });
+  assert.equal(isRetryableFactFailure(buyback, "自己株式の消却を実施します。", ["承認前の議案ではなく取得です。消却と断定しています"]), false);
+  assert.equal(isRetryableFactFailure(buyback, "自己株式の消却を決定しました。", ["予定を確定と断定しています"]), false);
+});
+
+test("N4: the company-name branch cannot be used to smuggle an outcome / kind error ('表記')", () => {
+  const c = nameSource();
+  for (const issue of [
+    "否決を可決と表記しています",
+    "株式併合を株式分割と表記しています",
+    "連結を単体と表記しています",
+    "臨時株主総会を定時株主総会と表記しています",
+    "配当の増額を減額と表記しています",
+  ]) assert.equal(isRetryableFactFailure(c, "本文です。", [issue]), false, issue);
+  // a genuine name-spelling issue on a confirmed company is still retryable
+  assert.equal(isRetryableFactFailure(c, "テスト株式会社は…", ["会社名の表記が略称になっています（正式名称は株式会社テスト）"]), true);
+});
+
+test("N5: consolidated / standalone, withdrawn proposal, approval state, resolution result, split / consolidation", () => {
+  const c = nameSource();
+  for (const issue of [
+    "連結業績を単体業績と断定しています。予定です",
+    "単体の数値を連結と断定しています。見込みです",
+    "取り下げられた議案を有効と断定しています。承認前です",
+    "撤回された議案を予定どおり付議されるとしています",
+    "承認済みの議案を承認前と断定しています",
+    "未承認の議案を承認済みと断定しています",
+    "決議結果を取り違えて可決と断定しています",
+    "株式分割を株式併合と断定しています。予定です",
+  ]) assert.equal(isRetryableFactFailure(c, "本文です。", [issue]), false, issue);
+});
+
+test("N5 (text vs source): consolidated / standalone and split / consolidation swaps are caught without the issue wording", () => {
+  const consolidated = nameSource({ bodySummary: "連結ベースの当期純利益は50億円の見込みです。" });
+  assert.equal(isRetryableFactFailure(consolidated, "単体の当期純利益は50億円の見込みです。", ["見込みを確定と断定しています"]), false);
+  const merge = nameSource({ title: "株式併合のお知らせ", bodySummary: "株式併合を実施する予定です。" });
+  assert.equal(isRetryableFactFailure(merge, "株式分割を実施します。", ["予定を確定と断定しています"]), false);
+});
+
+test("N6: an unclear subject is refused even with an approval qualifier; plain wording 不明瞭 stays allowed", () => {
+  const c = nameSource();
+  assert.equal(isRetryableFactFailure(c, "本文です。", ["主体が不明瞭で、承認前の議案を確定と断定しています"]), false);
+  assert.equal(isRetryableFactFailure(c, "本文です。", ["当事者が曖昧なまま、承認前の議案を確定と断定しています"]), false);
+  assert.equal(isRetryableFactFailure(c, "本文です。", ["誰が承認するのかが不明で、承認前の議案を確定と断定しています"]), false);
+  assert.equal(isRetryableFactFailure(c, "本文です。", ["承認前の議案である点が不明瞭。「増額します」と確定事項のように断定しています"]), true);
+});
+
+test("normal retries are kept: hedge words with an amount, existing DMZ / steel-mill style issues", () => {
+  const c = nameSource();
+  // source amount 45円 / 50億円 present in the text -> no conflict
+  assert.equal(isRetryableFactFailure(c, "1株当たり45円の配当を実施します。", ["承認前の議案を確定と断定しています"]), true);
+  assert.equal(isRetryableFactFailure(c, "連結ベースの当期純利益は50億円です。", ["50億円の見込みを確定と断定しています"]), true);
+  assert.equal(isRetryableFactFailure(c, "連結ベースの当期純利益は50億円です。", ["確定ではなく意向です。見込みを断定しています"]), true);
+  const dmz = tdnet({ sourceType: "breaking_market", sourceName: "al_jazeera", title: "t", bodySummary: "mines believed to have been recently planted by North Korean troops" });
+  assert.equal(isRetryableFactFailure(dmz, "【速報】本文", ["「北朝鮮が最近設置した」と断定。元情報では北朝鮮軍が最近設置したとみられる地雷との説明にとどまる"]), true);
+});
+
+test("source-vs-text conflicts: rounding and truncation, unit conversion is not a conflict, no source amount = nothing to compare", () => {
+  const c = tdnet({ title: "x", bodySummary: "売上高は155億5,000万円（15,550百万円）です。" });
+  assert.deepEqual(sourceTextConflicts(c, "売上高は155億5,000万円です。"), []);
+  assert.deepEqual(sourceTextConflicts(c, "売上高は15,550百万円です。"), []);
+  assert.deepEqual(sourceTextConflicts(c, "売上高は155億円です。"), ["AMOUNT_NOT_IN_SOURCE:yen"]);
+  assert.deepEqual(sourceTextConflicts(tdnet({ title: "x", bodySummary: "Revenue rose." }), "売上高は155億円です。"), []);
+});
+
+test("canonical quantities: NFKC, commas, composite units, shares, per-share amount kept apart", () => {
+  assert.deepEqual(canonicalQuantities("１５５億５，０００万円"), [{ cls: "yen", value: 15550000000 }]);
+  assert.deepEqual(canonicalQuantities("5万株と1株当たり50円"), [{ cls: "per_share_yen", value: 50 }, { cls: "shares", value: 50000 }]);
+  assert.deepEqual(canonicalQuantities("150億ドル"), [{ cls: "usd", value: 15000000000 }]);
+});
+
+test("flow N1: a wrong per-share amount with 承認前 stops at Fact — no retry, nothing published", async () => {
+  const c = nameSource();
+  const { runner, calls } = scripted([
+    { step: "draft", payload: { text: "承認前の議案として1株当たり50円の配当を実施します。", sufficient_information: true, notes: [] } },
+    { step: "fact", payload: { passed: false, issues: ["承認前の議案で1株当たり50円と断定していますが、元情報は45円です"] } },
+  ]);
+  const result = await generateImportantNewsPost(c, runner);
+  assert.deepEqual(calls, ["draft", "fact"]);
+  assert.equal(result.status, "generation_failed");
+  assert.equal(result.factRetry.attempted, false);
+});
+
+test("flow safety: invalid Fact JSON / API error on the re-check leaves the post unpublished", async () => {
+  const hedge = { step: "fact" as GenerationStep, payload: { passed: false, issues: ["承認前の議案を「増額します」と確定として断定しています"] } };
+  const revised = { step: "fact_retry" as GenerationStep, payload: { text: "株主総会の承認を前提に、配当を増額する議案を付議予定です。" } };
+  const invalid = scripted([{ step: "draft", payload: DRAFT }, hedge, revised, { step: "fact", payload: { oops: true } }]);
+  const a = await generateImportantNewsPost(tdnet(), invalid.runner).catch((error: Error) => error);
+  // either a failed result or a thrown INVALID_OUTPUT — never a publishable post
+  if (a instanceof Error) assert.match(a.message, /INVALID_OUTPUT/);
+  else {
+    assert.notEqual(a.status, "ready_for_publish");
+    assert.equal(a.fact.status, "failed");
+  }
+  let step = 0;
+  const failing: GenerationRunner = (name) => {
+    step += 1;
+    if (name === "fact" && step > 3) return Promise.reject(new Error("OPENAI_503"));
+    const payloads: Record<string, unknown> = { draft: DRAFT, fact: hedge.payload, fact_retry: revised.payload };
+    return Promise.resolve({ payload: payloads[name], model: "gpt-6-luna" as const, inputTokens: 1, outputTokens: 1, estimatedCost: 0 });
+  };
+  const b = await generateImportantNewsPost(tdnet(), failing);
+  assert.notEqual(b.status, "ready_for_publish");
+  assert.equal(b.fact.status, "failed");
 });
