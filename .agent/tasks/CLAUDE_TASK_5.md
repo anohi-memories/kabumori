@@ -1,10 +1,24 @@
+# K5 Phase 3d — documentation accepted / DO NOT PAUSE family photo app — 2026-10-10 JST
+
+- task_id: common-account-phase3d-disposable-proof-pause-restore-preflight-20261010
+- K5 decision: **PASS_OFFLINE_DOCS_ONLY / PREPAUSE_BLOCKED**; current G5 TASK `done`, next_owner `none`. The docs/runbook are accepted as a safe preparation artifact; prerequisites to actually stop the photo-sharing service are NOT met.
+- PR reviewed: Draft [#128](https://github.com/anohi-memories/kabumori/pull/128), OPEN/UNMERGED, exact head `e9244d29ea944156cf1479c0976053d433469e06`, two new docs only; zero changed-file overlap with latest main since PR base `aa801dd8`. Netlify/Vercel checks SUCCESS for PR commit (not runtime deploy verification). Historical PR121 exact `76b50e1e03f82faaa3460bab1603afa8fef3ce44` and PR122 exact `f17a47e36632fff4a1f4cfb0b860df200e1c99e1` remain OPEN/DRAFT/UNMERGED, unmodified.
+- ChatGPT reviewed both Phase3d documents and GitHub diffs/status. Scope contains STOP/TEST/RESTORE operator checklist and concrete 15-item readiness matrix. Reported tests: PR122 Deno 35/35, plan/validate denial on missing marker, `--force` deny, E2 missing consent deny, E11 independent-review missing deny, fake-marker validation dry run only, diff/secret scan PASS. These are G5 **reported** results; ChatGPT did not execute tests.
+- **Known blockers:** no named human operator/continuous JST window; fake verified OAuth provider account and test OIDC issuer for E2–E6 (E6 high-concurrency setup) NOT READY; E11 direct Auth SQL-delete experiment lacks independent security review and separate user approval; unknown OAuth rate limit, free-plan hook support, IPv4 DB access, free slot/cost at time of actual test, manual photo project pause/restore behavior, app pre-pause login/photo-count/upload baseline, backup choice, designated restoration owner and contact. These are NOT optional evidence for a complete A+B or D verdict. Do not pause family photo until explicit GO checklist can be satisfied.
+- Time protection: T0+60h stop launching experiments, T0+66h escalate to user if still not restored, stop early when proof blocked, prioritize disposal/pausing test project to free Free active slot then family `anohi-memories` restore and user-run actual photo-app functional test. **No unattended timed restoration is offered or guaranteed.** No upgrade to Pro or pausing of Kabumori/POSTONA.
+- No photo pause/restore, Supabase project creation/deletion, live Auth/PostgREST/Storage/provider/secret/migration/deploy, EAS, feature gate changes, or source merge. Phase3a managed Auth deletion stays schema `blocked`; Phase3b T13 guard remains unapplied/unwired.
+- Security review need: Phase3d's two docs do NOT require redundant H1/H2 review. An **independent Sol（高）** review of **proposed Option D disposable-only Auth DELETE experiment E11** can be prepared on a separate, genuinely available H slot before it becomes eligible for execution; it does **not** imply user consent or prod approval. Integration review of actual G5 T13 + G4 X/Threads Auth writer boundary remains later and distinct.
+- End state: Phase3d accepted as documentation, `PREPAUSE_BLOCKED` persists, G5 slot closed. Preserve old TASK/Report and all other workstreams. Next solve independent proof prerequisites **offline before any photo downtime**.
+
+---
+
 # G5 — CURRENT TASK — Phase 3d offline E1–E12 execution-window and photo-app restore preflight
 
 - task_id: common-account-phase3d-disposable-proof-pause-restore-preflight-20261010
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - type: final offline operating preflight, NO live calls, NO service outage
 - recommended_model: **Opus5.5（高）**
