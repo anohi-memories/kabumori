@@ -1,3 +1,11 @@
+## H1 ASSIGNED — 共通AI基盤 Phase 1a+1b 合同レビュー — 2026-10-10 JST
+
+- H1 assigned `common-ai-provider-pr117-pr119-integrated-security-review-20261010` ready, return_to **共通AI基盤のちゃ（OpenAI・Claude API専用チャット）**, completion C1, Sol（高）. One bounded review combined PR117 exact `2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226` + PR119 exact `c7d0f6e099cddd8a21c870cc38f5cf0030d773b2` (stacked on PR117), without duplicate per-phase reviews; previous PR117 H1-only review was NOT_RUN and remains historical.
+- G1–G5 and H2 allocations unchanged. G2 PR110 review still pending. PR117/119 source merge, production database, paid provider APIs, secrets, deploy, budget policy seed/activation prohibited pending distinct later gates. Phase1b test results are Claude-reported only until independently rerun.
+- Seven agreed provider decisions retained: Opus market reports only conditional pending quality; monthly Claude credits pending Console validation; privacy updates before personal data to Anthropic; quotas per user/brand/feature; automatic fallback OFF; first Phase2 only shared market reports; precise return_to on future H TASKs.
+
+---
+
 ## G4 NEXT — Threads Phase2b T9/T13-aware source-only candidate assigned — 2026-10-10 JST
 
 - Shared G4/G5 T9/T10/T13 design agreement verified in `docs/postona/threads-g5-t9-t10-t13-shared-contract-20261010.md`. This is a source/design contract only, not a deployed G5 guard or Auth deletion authorization.

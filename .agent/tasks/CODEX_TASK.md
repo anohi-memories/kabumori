@@ -1,3 +1,73 @@
+# H1 CURRENT TASK — 共通AI基盤 Phase 1a + 1b 合同セキュリティレビュー
+
+- task_id: common-ai-provider-pr117-pr119-integrated-security-review-20261010
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- start_code: H1
+- completion_code: C1
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- recommended_model: Sol（高）
+- priority: high
+- type: single consolidated API-provider / database-budget security review, **read-only/source-only**
+- target_prs: 117;119
+- pr117_exact_head: 2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226
+- pr119_exact_head: c7d0f6e099cddd8a21c870cc38f5cf0030d773b2
+- pr119_base: claude/common-ai-provider-core-20261010 (PR117 head)
+- allowed_source_merge: false
+- allowed_production_db_access_or_mutation: false
+- allowed_api_calls_or_paid_probes: false
+- allowed_deploy: false
+
+## Mission — ONE review, not two
+
+The user prioritises conserving Codex five-hour quota. Phase 1a's isolated PR117 reviewer task was explicitly deferred (NOT_RUN). Now Phase 1b PR119 adds a private DB ledger and seven SECURITY DEFINER public RPCs. Perform **one bounded independent review of the combined effective source**: PR117 exact 2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226 plus stacked PR119 exact c7d0f6e099cddd8a21c870cc38f5cf0030d773b2. Do not conduct separate exhaustive reviews of each PR, duplicate existing green suites mechanically, or revisit unrelated G1–G5 work. Return PASS, PASS_WITH_NONBLOCKING_FOLLOWUPS, or CHANGES_REQUIRED, with reproducible P1/P2 findings and precise scope. Review decision is SOURCE-ONLY, never a deploy or source-merge authorization.
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES.md, .agent/ORCHESTRATION.md, .agent/CURRENT_STATE.md, .agent/ACTIVE_TASK.md, this H1 TASK, and own H1 Report only as needed to preserve its history. Confirm status ready and this exact task_id before starting.
+2. Fresh-fetch origin/main; PR117 and PR119. Require both OPEN, DRAFT, UNMERGED, and EXACT heads listed above; PR119 must still be stacked on PR117 with 18 Phase1b files (one new migration) and PR117 27 Phase1a files. STOP and return to originating chat if refs or ownership differ. GitHub mergeability snapshots are not review proof.
+3. Create a new independent H1 checkout/worktree from the fresh `/Users/yuya/Developer/kabumori-fresh`; do not use the common-AI implementation worktrees `kabumori-common-ai-provider`, `kabumori-common-ai-budget-ledger`, the B comparison worktree, or G/H worktrees. Never reset/rebase/checkout/delete other owners' branches or modify their local changes/servers.
+4. Check migration identifier `20261010050613_ai_provider_budget_ledger.sql` vs current main and active PRs. Existing `migration_source_invariants_test.ts` RESERVED list is intentionally not modified; record integration gap, but do not edit it in review.
+5. G3 has live POSTONA consultation DB work, G5 has common account/identity tasks. No shared prod DB, no migrations applied; read only, isolate and use disposable local PG17 if running real SQL.
+
+## Risk-targeted review focus
+
+A. **P1: effective privileges, ACL, RLS, SECURITY DEFINER**
+- `ai_ledger` schema/table/sequence/helper functions must be unavailable to PUBLIC/anon/authenticated/service_role except the explicitly authorized seven `public.ai_ledger_* (p jsonb)` RPC EXECUTEs to service_role. Examine owners, default privileges, role inheritance, `pg_*_all_data`, SET ROLE paths, per-column grants and function signature/schema search_path. Check fail-closed preflight/rollback and verify migration creates no effective bypass or unintended Data API exposure. Distinguish service_role bypass RLS vs enforced RPC path.
+- Determine whether privileged maintenance/recovery/status RPCs, input JSON and idempotency keys can be misused through any indirect exposed boundary. Caller must authenticate user/brand ownership when later wired in; do not confuse service_role caller with user identity.
+- Compare main/G5/G3 schema/migration security boundaries; protect preexisting app/Auth code.
+
+B. **P1: atomic money reservations and sent-state safety**
+- Independent bounded adverse probes: 150 parallel reserve against call cap 50 and USD cap 0.5, duplicate reservation/settlement (including mismatched parameters), overlapping global/brand/user scopes, retry attempts, crashes, stale recovery and unsigned/unknown usage. Confirm no overbooking or undercounting, no release after mark_sent and no HTTP before persisted mark_sent success.
+- Check settlement failure and recovery when DB RPC partially fails/timeouts; conservatively account attempted calls, never double bill, never count unknown usage as zero. Ensure race between `recover_stale`, `mark_sent`, `settle`, `release` cannot lose an already-dispatched request. Examine fail-closed defaults and absence of hardcoded $100 budget or phantom credit.
+
+C. **Provider integration and secrets**
+- Read combined `executeAiRequest` and `SupabaseLedgerBudgetGuard` with Phase1a adapters, JSON schema original validation, model catalog/pricing, error classification and SDK retry/timeout. Check `callId`/attempt uniqueness, ledger callback throw handling, `markSent` optional versus required for persistent guard, unknown usage conservatism and duplicate retries.
+- Verify service key never reaches client, error logs, telemetry, SQL rows, provider outputs or external destinations. Check URL validation, potential injected custom Anthropic headers, and that neither supplier is actually contacted by tests.
+- Ensure existing business logic (G2 news/market, POSTONA), model policies and provider policies remain untouched/unimported. Fallback OFF and refusal is not retried.
+
+D. **Contract/completeness, bounded evidence**
+- Check actual migration SQL independently vs Phase1b docs, call-guard contract and PostgREST JSON payload `{p: ...}`, including function owner/GRANT semantics. Include any structural incompatibility that would defeat budget protection.
+- Validate privacy and data minimisation: no prompt/output/auth credentials in persistent rows; pending retention and account-deletion sync remain **future design**, not falsely claimed implemented. PostgREST live exposure is *UNTESTED* until a separately approved pre-prod gate.
+- Original Claude reports: PG17 run.sh concurrency and rollback, 12 mutation kills, 94 Deno tests, 5 local PostgREST shim E2E, existing 17+22. Re-run only the targeted suites necessary to validate consequential claims; do not burn quota on unrelated broad testing. Any skipped test is explicitly labelled NOT_RUN.
+
+## Constraints
+
+- Review source only; no PR merge, no production/staging Supabase DB access, DDL, RPC invoke, deployments, EAS, actual provider communication, paid API tests, secret lookup, Cron, budget policy data mutation, or modifying provider/G1–G5 source.
+- Do not change PR117 or PR119. No new review-induced feature scope.
+- Preserve all previous H1 TASK and Report history. Completion may update only own .agent/tasks/CODEX_TASK.md, .agent/CODEX_REPORT.md, and H1 index fields in .agent/ACTIVE_TASK.md, using fresh-origin/main CAS/fail-closed synchronization. Do not modify H2 or any G TASK/Report. Avoid modifying .agent/CURRENT_STATE.md unless required by current orchestration and safe conflict isolation.
+
+## Completion / return
+
+Report `task_id, verdict, reviewed_exact_heads, PR state & stacking, tested commands and true outcomes, findings(severity/reproducer/file/line), regression evidence, migration SQL security checks, cost/concurrency checks, residual release blockers, changed_files, commit/push verification, safety_checks, and next_recommendation`.
+
+Explicitly print: `返却先：共通AI基盤のちゃ（OpenAI・Claude API専用チャット）へ C1`.
+Recommend narrow fixes only for blocking findings. If PASS, source-merge of PR117 then PR119 and later production planning remain **separately gated**; no auto-merge or live rollout. Future obligations remain: verify Claude credit in Console, Anthropic privacy policy before personal data, user/brand feature caps, no automatic provider fallback, shared market report before individual reports, G5-controlled account deletion/retention plan. The user's minimum-review policy remains in force.
+
+---
+
 # H1 — PR117 レビュー保留・未開始 — 2026-10-10 JST
 
 - status: idle

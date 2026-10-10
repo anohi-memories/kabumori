@@ -33,15 +33,17 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: idle
-- task_id: none
-- next_owner: none
-- return_to: none
-- completion_code: none
+- status: ready
+- task_id: common-ai-provider-pr117-pr119-integrated-security-review-20261010
+- start_code: H1
+- finish_code: C1
+- completion_code: C1
+- next_owner: codex
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: PR #117 source-only H1 review was deferred BEFORE execution at user request to preserve Codex 5-hour quota. Prior allocation common-ai-provider-pr117-phase1a-independent-review-20261010 is historical, NOT_RUN; no review PASS asserted. Do not invoke H1 unless a new ready task is explicitly allocated. Plan one focused review at integration/production boundary instead. G2 PR110 remains independently queued; H2 unchanged.
-- recommended_model: none (no current task)
+- allocation: One quota-conscious consolidated independent security review of PR117 exact 2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226 (27 source-only files) + stacked PR119 exact c7d0f6e099cddd8a21c870cc38f5cf0030d773b2 (18 files incl seven SECURITY DEFINER RPCs/migration). Focus actual SQL effective ACL, atomic budget reservations, crash/recovery, keys, fail-closed. No real API/production/merge/deploy. Earlier isolated PR117 review NOT_RUN as history. H2 untouched; G2 PR110 pending separately.
+- recommended_model: Sol（高）
 
 ## Codex H2
 - owner: codex
