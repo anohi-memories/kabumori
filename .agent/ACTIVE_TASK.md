@@ -33,17 +33,17 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: common-ai-provider-pr117-pr119-integrated-security-review-20261010
 - start_code: H1
 - finish_code: C1
 - completion_code: C1
-- next_owner: chatgpt
+- next_owner: none
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: One quota-conscious consolidated independent security review of PR117 exact 2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226 (27 source-only files) + stacked PR119 exact c7d0f6e099cddd8a21c870cc38f5cf0030d773b2 (18 files incl seven SECURITY DEFINER RPCs/migration). Focus actual SQL effective ACL, atomic budget reservations, crash/recovery, keys, fail-closed. No real API/production/merge/deploy. Earlier isolated PR117 review NOT_RUN as history. H2 untouched; G2 PR110 pending separately.
-- recommended_model: Sol（高）
+- allocation: C1 accepts independently reproduced CHANGES_REQUIRED on PR117 head 2ddae0dc and PR119 head c7d0f6e0. R1 P1 duplicate dispatch on one ledger reservation; R2 P2 unsafe SET ROLE chain ACL preflight. H1 review closed, not reserved. Narrow corrective assigned to separate common-AI Claude workstream in originating chat; source merge/prod DB/paid APIs HOLD. H2/G slots protected.
+- recommended_model: Sol（高） (completed review; no current assignment)
 
 ## Codex H2
 - owner: codex

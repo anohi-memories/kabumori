@@ -1,3 +1,26 @@
+# C1 FINAL — 共通AI基盤 Phase1a+1b H1 review accepted — 2026-10-10 JST
+
+- task_id: common-ai-provider-pr117-pr119-integrated-security-review-20261010
+- owner: codex
+- slot: codex-1
+- status: done
+- next_owner: none
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- completion_code: C1
+- result: CHANGES_REQUIRED (review accepted; source NOT approved)
+- reviewed_PR117_head: 2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226
+- reviewed_PR119_head: c7d0f6e099cddd8a21c870cc38f5cf0030d773b2
+- findings: R1 P1 duplicate in-flight request receives second may_send and dispatches twice while ledger counts once; R2 P2 unsafe NOINHERIT/SET ROLE chain to service_role passes migration privilege preflight.
+- independent_tests: Deno94 PASS, PG17 six parts PASS, E2E5 PASS, Deno check PASS; default Deno lint 1 no-import-prefix warning, lint excluding that rule PASS; adversarial R1/R2 independent repro. Original 12 mutant suite NOT_RUN by H1.
+- review_report_commit: 9d4f97bf9068e437a3fa64b40ea9380ea838d9b1 (GitHub record)
+- source_corrections: none
+- merge_deploy_paid_API_production_DB: NONE / HOLD
+- next_owner_for_source_fix: dedicated common-AI Claude (NOT G1–G5); maintain PR117 exact head and fix only PR119-owned code/tests; coordinate no H slot until later justified.
+- next_review: do not allocate automatically; only narrow R1/R2 recheck if needed at source release gate, preserve Codex quota.
+- historic_task_and_report: preserved verbatim below.
+
+---
+
 # H1 CURRENT TASK — 共通AI基盤 Phase 1a + 1b 合同セキュリティレビュー
 
 - task_id: common-ai-provider-pr117-pr119-integrated-security-review-20261010

@@ -1,3 +1,14 @@
+## C1 FINAL — 共通AI基盤 Phase1a+1b 重要2件差し戻し — 2026-10-10 JST
+
+- H1 `common-ai-provider-pr117-pr119-integrated-security-review-20261010` completed independent consolidated source-only review with **CHANGES_REQUIRED** on exact PR117 `2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226` and PR119 `c7d0f6e099cddd8a21c870cc38f5cf0030d773b2`. H1 findings and tested evidence in .agent/CODEX_REPORT.md top. H1 marked **done / next_owner none**, report/history protected.
+- R1 **P1**: repeat in-flight same callId can dispatch twice although ledger reserves/costs once (mock provider 2 HTTP vs count1). Fix one-time send permit on reserved->sent, no repeat permit for sent/unknown/final, fail closed on ambiguous send confirmation.
+- R2 **P2**: migration privilege guard accepts authenticated -> service_role through NOINHERIT but SET TRUE; refuse direct/transitive SET-reachable unsafe paths before DDL and prove rollback equality.
+- Dedicated common-AI Claude (outside G1–G5) owns narrow PR119 correction; PR117 branch unchanged. No automatic Codex rereview yet; source PR117/119 merge, production migration, provider API, Secrets, deploy HOLD.
+- Independent H1 proof: PG17 six parts and 94 Deno tests PASS, R1/R2 repro; default deno lint failed `no-import-prefix` for pinned npm SDK while focused lint with excluded rule passed; align policy nonblocking.
+- G2 H2 PR110 assignment and all other slots untouched; user wants minimum necessary reviews. Complete latest Phase1a/b release safeguards (credit console, privacy before Anthropic personal data, user/brand quotas, fallback OFF, shared market-report first) before any production adoption.
+
+---
+
 ## G1 MERGED — Watchlist PR120 complete / K1 PASS / 2026-10-10 JST
 
 - User explicitly instructed merge. Final K1 source/UI accepted for task `kabumori-watchlist-highlight-hybrid-ui-20261010`. GitHub PR [#120](https://github.com/anohi-memories/kabumori/pull/120) exact approved head `7bf19faf9cf7e7c67fbab987e4f57188518e77d0` was **squash merged** with expected-head-SHA guard to main as `53678a2f1fe5e01ecde4e9988abcbd0ed573da66`. Independently read back PR `closed`/`merged=true`/`merged_at 2026-10-10T10:11:26Z` and fresh `main` SHA exactly matched that squash commit. 20 changed paths = 8 source/tests + 12 iOS screenshots. Existing five NativeTabs are entirely untouched; no new bottom tab.
