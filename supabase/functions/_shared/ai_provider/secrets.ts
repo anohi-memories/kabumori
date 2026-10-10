@@ -17,16 +17,17 @@ export type EnvReader = (name: string) => string | undefined;
 
 const REDACTED = "[REDACTED]";
 
-export class ProviderApiKey {
+/** Any secret (an API key, the Supabase service key): string, JSON and inspect forms are redacted. */
+export class SecretValue {
   readonly #value: string;
-  readonly provider: AiProvider;
+  readonly label: string;
 
-  constructor(provider: AiProvider, value: string) {
-    this.provider = provider;
+  constructor(label: string, value: string) {
+    this.label = label;
     this.#value = value;
   }
 
-  /** The raw key, for the request header only. Never log or return it. */
+  /** The raw value, for a request header only. Never log or return it. */
   reveal(): string {
     return this.#value;
   }
@@ -40,12 +41,42 @@ export class ProviderApiKey {
   }
 
   [Symbol.for("Deno.customInspect")](): string {
-    return `ProviderApiKey(${this.provider}, ${REDACTED})`;
+    return `SecretValue(${this.label}, ${REDACTED})`;
   }
 
   [Symbol.for("nodejs.util.inspect.custom")](): string {
-    return `ProviderApiKey(${this.provider}, ${REDACTED})`;
+    return `SecretValue(${this.label}, ${REDACTED})`;
   }
+}
+
+export class ProviderApiKey extends SecretValue {
+  readonly provider: AiProvider;
+
+  constructor(provider: AiProvider, value: string) {
+    super(provider, value);
+    this.provider = provider;
+  }
+}
+
+/**
+ * A secret from the environment reader (for example the Supabase service key for the ledger guard). The reason
+ * never contains the value. Only whitespace / control characters and emptiness are checked: the format is the
+ * owner's business.
+ */
+export function resolveSecret(envName: string, readEnv: EnvReader):
+  | { readonly ok: true; readonly value: SecretValue }
+  | { readonly ok: false; readonly code: "KEY_MISSING" | "KEY_INVALID"; readonly envName: string } {
+  let raw: string | undefined;
+  try {
+    raw = readEnv(envName);
+  } catch {
+    return { ok: false, code: "KEY_MISSING", envName };
+  }
+  if (raw === undefined || raw.trim() === "") return { ok: false, code: "KEY_MISSING", envName };
+  if (/\s/u.test(raw) || [...raw].some((char) => (char.codePointAt(0) ?? 0) < 0x20 || char.codePointAt(0) === 0x7f)) {
+    return { ok: false, code: "KEY_INVALID", envName };
+  }
+  return { ok: true, value: new SecretValue(envName, raw) };
 }
 
 export type KeyResolution =

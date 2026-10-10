@@ -3,25 +3,27 @@
 // Order of operations (nothing is sent until every local check passed):
 //   1. validate the request against the catalog (model, provider, effort, output cap) and the schema policy;
 //   2. resolve the provider key from the caller's environment reader;
-//   3. per attempt: reserve the attempt's upper-bound cost in the budget guard, send ONE HTTP request through the
-//      provider's adapter, price its usage (or charge the upper bound when usage is unknown), settle the guard;
+//   3. per attempt: reserve the attempt's upper-bound cost in the budget guard, confirm the send with the guard
+//      (markSent, when the guard has it: the database ledger), send ONE HTTP request through the provider's adapter,
+//      price its usage (or charge the upper bound when usage is unknown);
 //   4. a response is a result only if its text parses as JSON AND passes the ORIGINAL schema;
-//   5. retry only transient transport failures, within the request's transport policy and the deadline.
+//   5. settle the guard with the cost and what happened (for the ledger row);
+//   6. retry only transient transport failures, within the request's transport policy and the deadline.
 //
 // There is no fallback: the request's provider is the only provider called. A refusal is returned as a failure and
 // never retried. Business regeneration (rewriting after a content rejection) belongs to the caller.
 
 import type { AdapterCall, AdapterOutcome, FetchLike } from "./adapter.ts";
 import { callAnthropic } from "./anthropic_adapter.ts";
-import type { BudgetDecision, BudgetGuard } from "./budget.ts";
+import type { BudgetCallContext, BudgetDecision, BudgetGuard, BudgetSettlement } from "./budget.ts";
 import { attemptCostUsd, costBasisOf, sumCostUsd, sumUsage, upperBoundAttemptCostUsd, usageMonthJst } from "./cost.ts";
 import { type ClassifiedError, messageFor } from "./errors.ts";
-import { findModelSpec, type ModelSpec } from "./model_catalog.ts";
+import { AI_PROVIDER_CATALOG_VERSION, findModelSpec, type ModelSpec } from "./model_catalog.ts";
 import { callOpenAi } from "./openai_adapter.ts";
 import { DEFAULT_RETRY_TIMING, isValidTransportPolicy, nextRetryDelayMs, type RetryTiming } from "./retry.ts";
 import { isValidSchemaName, SchemaUnsupportedError, toProviderSchema } from "./schema.ts";
 import { type EnvReader, resolveProviderApiKey } from "./secrets.ts";
-import type { AiAttemptRecord, AiErrorCode, AiFailure, AiRequest, AiResult, AiSuccess, AiUsageKey, JsonSchema } from "./types.ts";
+import type { AiAttemptRecord, AiErrorCode, AiFailure, AiRequest, AiResult, AiSubject, AiSuccess, AiUsageKey, JsonSchema } from "./types.ts";
 import { validateAgainstSchema } from "./validate.ts";
 
 export const MIN_TIMEOUT_MS = 1_000;
@@ -49,6 +51,15 @@ export type ExecuteDeps = {
 };
 
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+function validSubject(subject: AiSubject | undefined): boolean {
+  if (subject === undefined) return true;
+  if (subject === null || typeof subject !== "object") return false;
+  if (subject.kind === "system") return !("userId" in subject) && !("brandId" in subject);
+  if (subject.kind !== "user" || typeof subject.userId !== "string" || !UUID.test(subject.userId)) return false;
+  return subject.brandId === undefined || subject.brandId === null || (typeof subject.brandId === "string" && UUID.test(subject.brandId));
+}
 
 type Validated = { readonly spec: ModelSpec; readonly providerSchema: JsonSchema };
 type Rejection = { readonly code: AiErrorCode; readonly detail: string };
@@ -60,6 +71,10 @@ export function validateAiRequest(request: AiRequest): Validated | Rejection {
   const context = request.usageContext;
   if (!context || typeof context.application !== "string" || !IDENTIFIER.test(context.application)) return { code: "REQUEST_INVALID", detail: "usageContext.application" };
   if (typeof context.feature !== "string" || !IDENTIFIER.test(context.feature)) return { code: "REQUEST_INVALID", detail: "usageContext.feature" };
+  if (!validSubject(context.subject)) return { code: "REQUEST_INVALID", detail: "usageContext.subject" };
+  if (request.callId !== undefined && (typeof request.callId !== "string" || !IDENTIFIER.test(request.callId))) {
+    return { code: "REQUEST_INVALID", detail: "callId" };
+  }
   if (request.provider !== "openai" && request.provider !== "anthropic") return { code: "REQUEST_INVALID", detail: "provider" };
   if (typeof request.model !== "string") return { code: "REQUEST_INVALID", detail: "model" };
   const spec = findModelSpec(request.model);
@@ -111,6 +126,7 @@ function lastActualModel(attempts: readonly AiAttemptRecord[]): string | null {
 
 function failureResult(
   request: AiRequest,
+  callId: string,
   usageKey: AiUsageKey,
   attempts: readonly AiAttemptRecord[],
   latencyMs: number,
@@ -121,6 +137,7 @@ function failureResult(
 ): AiFailure {
   return {
     ok: false,
+    callId,
     errorCode: code,
     retryable,
     httpStatus,
@@ -146,13 +163,16 @@ export async function executeAiRequest(request: AiRequest, deps: ExecuteDeps): P
   const usageKey = usageKeyOf(request, startedAt);
   const attempts: AiAttemptRecord[] = [];
   const elapsed = () => Math.max(0, now() - startedAt);
+  const callId = typeof request?.callId === "string" ? request.callId : crypto.randomUUID();
+  const fail = (code: AiErrorCode, retryable: boolean, httpStatus: number | null, detail: string | null) =>
+    failureResult(request, callId, usageKey, attempts, elapsed(), code, retryable, httpStatus, detail);
 
   const validated = validateAiRequest(request);
-  if ("code" in validated) return failureResult(request, usageKey, attempts, elapsed(), validated.code, false, null, validated.detail);
+  if ("code" in validated) return fail(validated.code, false, null, validated.detail);
   const { spec, providerSchema } = validated;
 
   const key = resolveProviderApiKey(spec.provider, deps.readEnv);
-  if (!key.ok) return failureResult(request, usageKey, attempts, elapsed(), key.code, false, null, key.envName);
+  if (!key.ok) return fail(key.code, false, null, key.envName);
 
   const timing = deps.retryTiming ?? DEFAULT_RETRY_TIMING;
   const sleep = deps.sleep ?? defaultSleep;
@@ -161,21 +181,25 @@ export async function executeAiRequest(request: AiRequest, deps: ExecuteDeps): P
   const deadline = deps.deadlineAtMs ??
     startedAt + request.timeoutMs * request.transport.maxAttempts + timing.maxRetryAfterMs * (request.transport.maxAttempts - 1);
   const upperBoundUsd = upperBoundAttemptCostUsd(spec, request);
-  const budgetContext = {
-    provider: spec.provider,
-    model: spec.id,
-    application: request.usageContext.application,
-    feature: request.usageContext.feature,
-    logicalRole: request.logicalRole,
-  };
+  const subject: AiSubject = request.usageContext.subject ?? { kind: "system" };
   const adapter = adapterFor(spec);
 
   for (let attempt = 1;; attempt += 1) {
     const remaining = deadline - now();
     if (remaining < Math.min(timing.minAttemptMs, request.timeoutMs)) {
-      return failureResult(request, usageKey, attempts, elapsed(), "DEADLINE_EXCEEDED", true, null, "deadline");
+      return fail("DEADLINE_EXCEEDED", true, null, "deadline");
     }
 
+    const budgetContext: BudgetCallContext = {
+      provider: spec.provider,
+      model: spec.id,
+      application: request.usageContext.application,
+      feature: request.usageContext.feature,
+      logicalRole: request.logicalRole,
+      callId,
+      attempt,
+      subject,
+    };
     let decision: BudgetDecision;
     try {
       decision = await deps.budget.reserve(budgetContext, upperBoundUsd);
@@ -183,7 +207,23 @@ export async function executeAiRequest(request: AiRequest, deps: ExecuteDeps): P
       decision = { allowed: false, reason: "GUARD_UNAVAILABLE", limitId: null };
     }
     if (!decision.allowed) {
-      return failureResult(request, usageKey, attempts, elapsed(), "BUDGET_DENIED", false, null, decision.reason);
+      return fail("BUDGET_DENIED", false, null, decision.reason);
+    }
+    const reservation = decision.reservation;
+
+    // A recording guard must confirm the send first: without that confirmation nothing is sent, and the
+    // reservation (never marked sent) is returned or left for recovery to release.
+    if (deps.budget.markSent) {
+      try {
+        await deps.budget.markSent(reservation);
+      } catch {
+        try {
+          await deps.budget.release?.(reservation);
+        } catch {
+          // Recovery releases an unsent reservation after it expires.
+        }
+        return fail("BUDGET_DENIED", false, null, "SEND_NOT_CONFIRMED");
+      }
     }
 
     const attemptStart = now();
@@ -200,11 +240,6 @@ export async function executeAiRequest(request: AiRequest, deps: ExecuteDeps): P
     // Unknown usage on a request that may have been processed is charged at its upper bound, never at zero.
     const costIsUpperBound = usage === null;
     const estimatedCostUsd = usage ? attemptCostUsd(spec, usage) : upperBoundUsd;
-    try {
-      await deps.budget.settle(decision.reservation, estimatedCostUsd);
-    } catch {
-      // The reservation stays counted at its upper bound: the safe side.
-    }
 
     let errorCode: AiErrorCode | null = outcome.ok ? null : outcome.error.code;
     let parsed: unknown = undefined;
@@ -237,6 +272,22 @@ export async function executeAiRequest(request: AiRequest, deps: ExecuteDeps): P
       latencyMs: Math.max(0, now() - attemptStart),
     };
     attempts.push(record);
+    const settlement: BudgetSettlement = {
+      outcome: errorCode === null ? "succeeded" : usage === null && !outcome.ok ? "unknown" : "failed",
+      costBasis: costIsUpperBound ? "upper_bound" : "measured",
+      usage,
+      errorCode,
+      actualModel: record.actualModel,
+      providerRequestId: record.requestId,
+      httpStatus: record.httpStatus,
+      latencyMs: record.latencyMs,
+      catalogVersion: AI_PROVIDER_CATALOG_VERSION,
+    };
+    try {
+      await deps.budget.settle(reservation, estimatedCostUsd, settlement);
+    } catch {
+      // The reservation stays counted at its upper bound (and the ledger's recovery finalises it as unknown).
+    }
     try {
       deps.onAttempt?.({ ...record, usageKey });
     } catch {
@@ -245,11 +296,12 @@ export async function executeAiRequest(request: AiRequest, deps: ExecuteDeps): P
 
     if (outcome.ok) {
       if (errorCode !== null) {
-        return failureResult(request, usageKey, attempts, elapsed(), errorCode, false, outcome.httpStatus, invalidDetail ?? "json_parse");
+        return fail(errorCode, false, outcome.httpStatus, invalidDetail ?? "json_parse");
       }
       const totals = sumUsage(attempts.map((item) => item.usage));
       const success: AiSuccess = {
         ok: true,
+        callId,
         parsedPayload: parsed,
         provider: request.provider,
         configuredModel: spec.id,
@@ -278,7 +330,7 @@ export async function executeAiRequest(request: AiRequest, deps: ExecuteDeps): P
     const error: ClassifiedError = outcome.error;
     const delay = nextRetryDelayMs(request.transport, timing, attempt, error, random);
     if (delay === null || now() + delay + Math.min(timing.minAttemptMs, request.timeoutMs) > deadline) {
-      return failureResult(request, usageKey, attempts, elapsed(), error.code, error.retryable, error.httpStatus, error.detail);
+      return fail(error.code, error.retryable, error.httpStatus, error.detail);
     }
     await sleep(delay);
   }

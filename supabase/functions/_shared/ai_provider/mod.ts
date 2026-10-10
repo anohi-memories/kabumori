@@ -1,5 +1,5 @@
-// Public entry point of the shared AI provider (Phase 1a). Import from here, not from the individual files.
-// Contract: docs/ai-provider/PROVIDER_CONTRACT.md.
+// Public entry point of the shared AI provider (Phase 1a + 1b). Import from here, not from the individual files.
+// Contracts: docs/ai-provider/PROVIDER_CONTRACT.md, docs/ai-provider/PHASE1B_LEDGER_DESIGN.md.
 
 export type {
   AiAttemptRecord,
@@ -11,6 +11,7 @@ export type {
   AiReasoningEffort,
   AiRequest,
   AiResult,
+  AiSubject,
   AiSuccess,
   AiTokenUsage,
   AiTransportPolicy,
@@ -29,12 +30,14 @@ export {
   type BudgetLimitState,
   type BudgetReservation,
   type BudgetScope,
+  type BudgetSettlement,
   InMemoryBudgetGuard,
 } from "./budget.ts";
+export { LedgerRpcError, type LedgerGuardOptions, SupabaseLedgerBudgetGuard } from "./ledger_guard.ts";
 export { AI_PROVIDER_CATALOG_VERSION, findModelSpec, listModelSpecs, type ModelSpec, type PriceTier } from "./model_catalog.ts";
 export { attemptCostUsd, upperBoundAttemptCostUsd, upperBoundInputTokens, usageMonthJst } from "./cost.ts";
 export { assertSchemaSupported, SchemaUnsupportedError, toProviderSchema } from "./schema.ts";
 export { type SchemaIssue, validateAgainstSchema } from "./validate.ts";
-export { type EnvReader, PROVIDER_API_KEY_ENV, type ProviderApiKey, resolveProviderApiKey } from "./secrets.ts";
+export { type EnvReader, PROVIDER_API_KEY_ENV, type ProviderApiKey, resolveProviderApiKey, resolveSecret, type SecretValue } from "./secrets.ts";
 export { DEFAULT_RETRY_TIMING, MAX_TRANSPORT_ATTEMPTS, type RetryTiming } from "./retry.ts";
 export { messageFor } from "./errors.ts";

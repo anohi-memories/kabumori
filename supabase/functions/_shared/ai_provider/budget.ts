@@ -9,8 +9,12 @@
 // Concurrency inside one process: reserve() checks and commits in one synchronous step (no await in between), so
 // concurrent calls on the same instance can never both take the last unit of a limit. There is no module-level
 // state: each guard owns its counters.
+//
+// Phase 1b (ledger_guard.ts) implements the same interface on the database ledger. It uses the optional parts:
+// markSent() before the HTTP request (a reservation never marked sent is provably unsent and may be released),
+// release() when the request will not be sent, and the settlement details (usage, outcome) for the ledger row.
 
-import type { AiProvider } from "./types.ts";
+import type { AiProvider, AiSubject, AiTokenUsage } from "./types.ts";
 
 /** Which calls a limit applies to. An omitted field matches every value. */
 export type BudgetScope = {
@@ -37,6 +41,25 @@ export type BudgetCallContext = {
   readonly application: string;
   readonly feature: string;
   readonly logicalRole: string;
+  /** The logical call and attempt (always set by executeAiRequest; the ledger guard requires them). */
+  readonly callId?: string;
+  readonly attempt?: number;
+  readonly subject?: AiSubject;
+};
+
+/** What happened to an attempt, for a guard that records it (the ledger). Counts and identifiers only. */
+export type BudgetSettlement = {
+  /** unknown = no usage and no result is known (timeout, lost connection). */
+  readonly outcome: "succeeded" | "failed" | "unknown";
+  /** measured = priced from reported usage; upper_bound = usage unknown, charged at no less than the hold. */
+  readonly costBasis: "measured" | "upper_bound";
+  readonly usage: AiTokenUsage | null;
+  readonly errorCode: string | null;
+  readonly actualModel: string | null;
+  readonly providerRequestId: string | null;
+  readonly httpStatus: number | null;
+  readonly latencyMs: number;
+  readonly catalogVersion: string;
 };
 
 export type BudgetReservation = {
@@ -51,7 +74,11 @@ export type BudgetDenyReason =
   | "COST_LIMIT"
   | "PER_CALL_LIMIT"
   | "INVALID_AMOUNT"
-  | "GUARD_UNAVAILABLE";
+  | "GUARD_UNAVAILABLE"
+  /** The ledger already finalised this (callId, attempt): it must never be sent again. */
+  | "ATTEMPT_FINALIZED"
+  /** The guard did not confirm the send (markSent refused or failed): nothing was sent. */
+  | "SEND_NOT_CONFIRMED";
 
 export type BudgetDecision =
   | { readonly allowed: true; readonly reservation: BudgetReservation }
@@ -61,8 +88,15 @@ export type BudgetDecision =
 export interface BudgetGuard {
   /** Reserve one attempt costing at most `upperBoundUsd`. Must not have side effects when it denies. */
   reserve(context: BudgetCallContext, upperBoundUsd: number): Promise<BudgetDecision>;
-  /** Replace the reservation with the attempt's estimated cost (the upper bound again when usage is unknown). */
-  settle(reservation: BudgetReservation, costUsd: number): Promise<void>;
+  /**
+   * Replace the reservation with the attempt's estimated cost (the upper bound again when usage is unknown).
+   * `settlement` carries the details a recording guard stores; a guard that only counts may ignore it.
+   */
+  settle(reservation: BudgetReservation, costUsd: number, settlement?: BudgetSettlement): Promise<void>;
+  /** Optional: confirm, just before sending, that this reservation may be sent. Throws when it may not. */
+  markSent?(reservation: BudgetReservation): Promise<void>;
+  /** Optional: return a reservation that will not be sent. Never releases one that was marked sent. */
+  release?(reservation: BudgetReservation): Promise<void>;
 }
 
 export type BudgetLimitState = {
