@@ -1,3 +1,179 @@
+# H2 independent exact-head rereview — PR112 R1–R4/C1 — CHANGES REQUIRED
+
+- task_id: common-account-v1-phase3a-pr112-r1-r4-c1-final-rereview-20261010
+- reviewed_at: 2026-10-10 JST
+- result: **CHANGES REQUIRED**
+- status: review_required
+- next_owner: chatgpt
+- return_to: 共通アカウントG5のちゃ
+- completion_code: C2
+- recommended_model: Sol（極高）
+- target_pr: https://github.com/anohi-memories/kabumori/pull/112
+- reviewed_exact_head: b60272c433b57bac1acb00c13d4fda7ff96f1f2f
+- previous_reviewed_head: c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d
+- PR_base: ac4b20c9c3ba4f2c15351453200a060a81fd7997
+- fresh_main_at_start_and_prepublication_check: 920daec7a94d548f91381526e9060ca0f9fe8608
+- PR_state: OPEN / UNMERGED / exact head unchanged / 25 files
+- source_merge_recommendation: **HOLD — residual R1/R2 contract failures; no merge performed**
+- whole_shared_account_Auth_deletion: **BLOCKED / UNAVAILABLE — Auth-side identity-change/write fence remains missing**
+- production_apply_deploy_EAS: **NOT AUTHORIZED / 0**
+- implementation_commit_by_H2: none; reviewed G5 corrective implementation is b60272c
+- changed_files_by_H2: .agent/CODEX_REPORT_2.md; .agent/tasks/CODEX_TASK_2.md; own H2 status/next_owner fields only in .agent/ACTIVE_TASK.md.
+- scope_note: TASK requests Report/TASK-only review changes and explicitly requests updating the H2 index on completion. No product source was changed; the sole additional control edit is those two own-slot index fields. Other slot fields and all previous Report/TASK history are preserved verbatim.
+- commit_push: GitHub main control-file publication/read-back receipt will be recorded below after actual completion.
+
+## Executive disposition
+
+The corrective work substantially improves the new Edge path: concurrent owners are refused, unknown thrown Apple outcomes and DB-settle failures retain an intent, historical completion now rechecks residue, and future reauth timestamps are rejected. Independent standard suites reproduce G5's reported counts.
+
+However, two remaining counterexamples prevent accepting R1/R2 as closed:
+1. **P1 / R1 residual:** the unchanged Phase1 service-role EXECUTE grants still expose unowned checkpoint writers. An expired owner can bypass the new fencing through the old RPC and write an Apple completion checkpoint while the owned Apple intent is still in flight.
+2. **P1 / R2 residual:** the actual reused Apple HTTP helper collapses an ambiguous provider/gateway failure into boolean false. The new orchestrator treats that as definitive failure and clears the durable intent, permitting a second exchange of the already-consumed one-time code.
+
+These are mock/disposable reproductions, not evidence of a production incident. The shipped schema-enforced closed gate currently stops the whole-delete Edge flow before mutable cleanup; neither counterexample proves that a normal authenticated client can open that gate. Nevertheless, the TASK explicitly requires legacy privileged-RPC bypass and uncertain Apple outcome correctness, so source acceptance is HOLD pending bounded G5 correction.
+
+## R1 — new-owner path PASS; effective legacy RPC surface CHANGES REQUIRED
+
+Reviewed candidate: supabase/migrations/20261009120000_common_account_deletion_completion.sql, especially owned checkpoint/prepare at approximately 268–332 and ACL section 647–696.
+Underlying unchanged Phase1: supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql:
+- public.record_common_account_deletion_checkpoint at 1156–1177;
+- public.clear_common_account_deletion_checkpoint at 1181–1203;
+- service_role EXECUTE grants at 1499–1502, also retaining unowned prepare.
+New Edge RPC mapping uses owned names correctly. New SQL checks tenant-bound operation + unguessable lease + expiry/fence. New lease default is 600 seconds, bounded 60–900, external uncertainty guard 900 seconds. Supplied SQL race and reviewer 3-caller overlap tests pass for sessions, X, Storage, Apple and Auth barriers under the mocked reachable gate; losers get DELETION_IN_PROGRESS. Real SQL expired-owner guarded checkpoint returns lease_lost.
+
+**Independent real SQL counterexample, with shipped blocked gate unchanged:**
+1. In the disposable fixture, create a fake Apple-linked Kabumori account; begin deletion and obtain lease via service-role RPCs.
+2. Begin the owned apple_revocation external step; confirm checkpoint absent and external_step=apple_revocation.
+3. Advance the fixture lease to expired (a time-passage stand-in); the owned session checkpoint correctly returns lease_lost.
+4. As the same service_role, call the still-granted legacy function without a lease:
+
+```sql
+select public.record_common_account_deletion_checkpoint(
+  :fake_user_id, :operation_id, 'apple_revocation'
+);
+```
+
+Result **recorded**; Apple checkpoint exists while external_step is still apple_revocation. Legacy clear succeeds too without ownership. No test-only open-gate DDL was used in this counterexample. Tenant matching still works and authenticated EXECUTE is denied: this is an effective trusted-backend/old-adapter bypass, not an anonymous exploit. It falsifies the documented claim that Apple completion is writable only through atomic owned settlement.
+
+Evidence marker: H2_R1_LEGACY_UNOWNED_APPLE_CHECKPOINT_BYPASS in adversarial-pg3.log.
+
+**Minimal G5 next correction:** normalize the effective legacy RPC surface in the new unapplied candidate, rather than editing applied Phase1/2 migration history. Revoke or equivalently fence the legacy external checkpoint/prepare entrypoints so an old backend/stale owner cannot bypass ownership; internal SECURITY DEFINER wrappers can continue calling owner-authorized helpers. Verify legitimate service callers before selecting the exact change, then add real-SQL tests of all surviving old EXECUTE grants (record/clear/prepare), expired lease, live intent and valid owned paths. Do not broaden into another slot's X schema.
+
+## R2 — thrown uncertainty/DB crash PASS; real helper boolean adapter CHANGES REQUIRED
+
+Relevant unchanged shared helper: supabase/functions/social-mobile-account-delete/apple_revoke.ts:56–75; actual new account-delete adapter: http.ts:127; outcome mapping and settle: lifecycle_logic.ts:465–484.
+The helper returns false on non-OK exchange and returns revoked.ok on revoke. The orchestrator maps false to failed, then settle clears the in-flight intent. A thrown error maps to unknown and correctly preserves intent; that test does not cover the boolean non-OK HTTP case.
+
+**Independent adapter-level counterexample:**
+- Use the actual revokeAppleGrant implementation and the same adapter signature, ephemeral fake EC key and mock HTTP only. No real Apple call or credential.
+- Mock token exchange consumes the one-time code and returns a valid fixture subject plus grant token.
+- Mock revoke applies the provider-side revocation, then returns HTTP502 (gateway/unknown acknowledgement).
+- Helper returns false. Orchestrator returns APPLE_REVOKE_FAILED and clears external_step.
+- Second request with the same code now reaches Apple exchange again; mock returns invalid_grant.
+- Observed exchange HTTP calls=2 across the two review requests, revoke HTTP calls=1, both APPLE_REVOKE_FAILED, durable intent=null, Auth delete=0.
+
+Evidence: H2_R2_ADAPTER_AMBIGUOUS_502_CLEARED_AND_REPLAYED, with exact summary {"exchanges":2,"revocations":1,"errors":["APPLE_REVOKE_FAILED","APPLE_REVOKE_FAILED"]} in adversarial-ts.log. The open/readiness state here is a TS test dependency, not the shipped schema's release evidence. Uncertainty is intentionally modeled; a non-2xx acknowledgement does not prove the provider applied nothing.
+
+**Minimal G5 next correction:** use an account-delete-owned adapter/typed outcome that preserves ambiguity for transport/gateway/5xx/uncertain responses after dispatch and consumed-code uncertainty. Only a proven definitive refusal may settle failed. Unknown must retain the durable intent and require reconciliation, not repeat a one-time exchange. Add tests through the actual HTTP helper boundary, not only a stub that throws. Do not silently edit the G4-owned shared X helper without coordination.
+
+### Operator reconciliation boundary
+
+Real disposable SQL confirms authenticated and an inherited authenticated role cannot invoke resolver; wrong user+operation returns not_found; service_role and an inherited service_role can resolve an expired Apple intent; a contradictory second resolution is nothing_to_resolve and preserves checkpoint.
+The resolver has no independent human issuer/evidence/audit/idempotency-key inputs or durable resolution audit record. Its actual authorization is **trusted service_role EXECUTE**, not a verified human admin workflow. No Edge callsite exposes it here. This is not reported as a client privilege escalation, but an operational issuer/audit/runbook prerequisite remains before enablement. Do not claim “operator reconciliation fully proved” solely from service_role ACL.
+
+## R3 — locked closed gate PASS; actual Auth identity fencing BLOCKED
+
+- Candidate private.account_lifecycle_release_gates has state='blocked' CHECK; service_role cannot UPDATE it, and even ordinary owner UPDATE to open is rejected by the CHECK. Owner/superuser DDL can always change schema: no claim of protection against authorized DDL.
+- Malformed/missing/null gate data and non-exact values fail closed in reviewer tests. Whole-delete returns COMMON_ACCOUNT_DELETION_UNAVAILABLE before withdrawal, session revoke, Apple/X call, Storage delete, Auth Admin delete or any mutable lifecycle RPC.
+- Disposable late-Apple identity + simulated login removal without a managed intent returns not_verified / LOGIN_REMOVED_WITHOUT_MANAGED_INTENT, not completed.
+- Supplied identity-link vs intent SQL race passes. Supplied test-only post-intent identity-write counterexample remains explicitly unsolved; the closed gate, not a complete Auth-side write fence, contains it.
+- Test-only DDL removal of the blocked-only constraint is used ONLY to inspect otherwise unreachable completion/residue behavior. It is outside the shipped contract, not evidence authorizing a release.
+- UI does not offer unavailable whole-delete; missing migration/unknown response/bodyless legacy client calls fail closed at the new endpoint. No production runtime source was queried.
+- X-only/Kabumori-ended support, onboarding/creator bypass, stale JWT writers, real Supabase managed proof and old deployed hard-delete endpoint rollout remain named blockers, not implicitly repaired.
+
+## R4 — fresh residue PASS within the modeled schema
+
+Reviewer disposable proof reaches completed in a **test-only altered gate**, saves historical verified_at, inserts a late fake Storage object, then rechecks:
+- residue_found / MANAGED_STORAGE_OWNED;
+- historical verified_at unchanged;
+- after removing residue, clean completion returns;
+- after renaming an ownership column, residue_found / MANAGED_STORAGE_SHAPE_UNKNOWN.
+Supplied suite also covers late X/service residue and query failures. DB/API inventory divergence, unknown real Storage shape, stale producer writes and actual managed Supabase behavior remain unproved production prerequisites. Historical completion is no longer used alone as proof of present cleanliness.
+
+## C1 — strict recent reauth PASS
+
+Independent tests for service withdrawal and whole-delete reject now+1,+30,+60,+3600 without mutation; accept now and now-600; reject now-601. One server-now capture per flow. User identity remains server-validated and not caller-body-selected. No permissive future skew was restored.
+
+## SQL/security/compatibility evidence
+
+- Candidate inspected completely: 696 lines; ten additive operation columns; seven new CHECKs plus replaced completed-state CHECK (eight operation-table CHECK entries after apply); blocked-gate table with RLS.
+- Sixteen new/replaced functions have SECURITY DEFINER and empty search_path; qualified object references; twelve public functions owner+service_role only, four private helpers owner only. Catalog expected snapshot (44 lines) matches independently.
+- Direct/effective authenticated denial and service-role inheritance verified. New helper/table grants do not accidentally expose them to client roles. The surviving old Phase1 grants are the distinct R1 gap above.
+- Required Phase1/2 signatures, shadow state and exact prerequisite completed constraint are checked; missing prerequisites/duplicate apply refused. Preflight is not a complete live production owner/body/ACL drift fingerprint: that later production proof was not authorized.
+- Candidate itself has no Auth user deletion, Storage SQL cleanup, Vault/provider mutation. Applied Phase1/2 files and existing X deletion saga unchanged byte-for-byte vs latest main.
+- Complete candidate transaction apply -> inspect -> rollback: before/after normalized pg_dump schema+ACL **byte-identical**. Only pg_dump nonce restrict/unrestrict lines removed for deterministic comparison.
+- No real Supabase project involved. Owner kb_cal_completion_owner is a disposable nosuperuser/nocreatedb/nocreaterole fixture owner. Unix-socket-only isolated PG at local port55440; review-owned cluster stopped after proofs.
+- Legacy deployed bodyless account-delete compatibility: new endpoint rejects unknown/bodyless action before external work; source merge must not be conflated with replacing that existing deployment.
+
+## Independently rerun tests and honest gaps
+
+| Verification | Result |
+|---|---|
+| account-delete behavior + HTTP + wiring | **53/53 PASS** |
+| tests/app | **430/430 PASS** |
+| AuthProvider | **23/23 PASS** |
+| X deletion saga | **17/17 PASS** |
+| X app deletion/auth boundary | **19/19 PASS** |
+| Total of these baseline unit suites | **542/542 PASS** |
+| Phase1 local PostgreSQL runner | ALL PASS |
+| Phase2 service-start local PostgreSQL runner | ALL PASS |
+| Phase3a preflight/catalog/ACL/reapply/static/behavior/Phase2 compatibility/races | ALL PASS |
+| SQL mutations | **43/43 DETECTED** |
+| TS mutations + unchanged control | **38/38 DETECTED / control PASS** |
+| Reviewer-only TS assertions | **4/4 PASS**, including the assertion reproducing the R2 defect; NOT “all safety gates passed” |
+| Reviewer-only SQL probes | R1 defect reproduced; R3/R4, effective inheritance, resolver subject/role/idempotence, full DDL rollback assertions PASS |
+| changed Edge lifecycle_logic/http deno check | PASS |
+| git diff --check upstream/main...HEAD | PASS |
+| strict changed-runtime Deno lint | **FAIL: 1 require-await at lifecycle_logic.ts:405** |
+| lint excluding require-await (diagnostic only) | PASS, **not** a strict lint pass |
+| root ESLint | NOT RUN: existing dependency tree has no eslint executable; no install |
+| app src-only TypeScript | **2 pre-existing CSS module declarations missing**, same two at fresh main |
+| full root TypeScript | NOT CLEAN: root config includes monorepo/Edge/tests; many existing configuration/type errors; not reported PASS |
+| native/real login/real Supabase/EAS | NOT RUN / not authorized |
+
+Strict lint residual: const recordStorage = async (...) => ownedCheckpoint(...) has no await (line405). This is a small G5-owned quality-gate correction, not a security finding. No H2 fix or rule weakening made. Main comparison uses a second detached fresh-main checkout; src-only tsc errors match exactly for animated-icon.module.css and @/global.css. Reviewer harness initially needed scratch-only helper completion/role setup corrections; final results above are from final reruns, not the failed preliminary harness setup.
+
+Representative reproducible commands (only isolated fixtures/mock, no provider permission): deno test for supabase/functions/account-delete and tests/app; repository Phase1/Phase2/Phase3a shell runners with CAL_PGHOST pointing to the reviewer Unix socket; common_account_deletion_completion_mutations.sh; common_account_phase3a_ts_mutations.py; deno check/lint lifecycle_logic.ts/http.ts; git diff --check. Exact runner usage is in the source scripts.
+Reviewer retained local evidence root: /private/tmp/h2-pr112-rereview-20261010.lzH56Y (adversarial_test.ts, adversarial.sql, probe-db3.sh, adversarial-ts.log, adversarial-pg3.log, before-schema.sql, after-rollback-schema.sql and suite logs). Findings and reproduction semantics are fully stated above so C2 need not access local files. No scratch files are pushed.
+
+## Fresh main / conflict / CI
+
+- Fresh main at start and final prepublication check: 920daec7a94d548f91381526e9060ca0f9fe8608, **46** commits beyond PR base. Across the exact PR112 25 files, main changed-file overlap **0**.
+- Old->new PR correction: one commit / fourteen files; PR remains exact b60272c, open/unmerged, 25 files.
+- Independently checked PR106 (7 files), PR110 (27), PR114 (3): PR112 file overlap **0**. No other slot state/files altered.
+- Latest GitHub mergeable=true, mergeable_state=clean; local merge-tree clean, tree 6c3632a07c28390fe51b00885ad8c67649b64cd4. Mechanical mergeability does not override security HOLD.
+- Vercel commit status success (“Deployment has completed”); Vercel preview-comment check success. Netlify status is success with **“Deploy Preview canceled.”** and auxiliary neutral checks — **not proof of a completed Netlify preview build**. No H2 deployment or preview trigger.
+- Formal /Users/yuya/Developer/kabumori-fresh stays on main with clean status; no pull/checkout/stash/reset/add or existing-file modification there.
+- Reviewer detached checkout has only its own untracked node_modules dependency symlink; no tracked product source diff. No dependencies installed or package changes.
+
+## Remaining issues / next recommendation / safety
+
+**G5 bounded follow-up (推薦モデル：Opus5.5（極高）):** close the effective legacy RPC bypass, preserve actual HTTP unknown Apple outcome/consumed-code uncertainty, add real-boundary counterexample regressions and fix the one new strict-lint diagnostic. Preserve the schema-locked blocked gate and all accepted safety tests. K5 then fresh exact-head independent H2 rereview (推薦モデル：Sol（極高）). No automatic assignment/other-slot overwrite by this reviewer.
+
+Release gates remain separate:
+A. Source merge candidate: **CHANGES REQUIRED / HOLD**.
+B. Whole common-account Auth deletion enabled: **BLOCKED** until Auth identity/write fencing, real managed Supabase proof and later independent review.
+C. Production apply/deploy/EAS: **not authorized**, independent of source merge.
+D. Legacy hard-delete deployment, operator issuer/audit, X-only/ended-Kabumori support, stale JWT/onboarding writers, actual Storage/provider boundary, Web disclosure and native UI remain honest follow-ups.
+
+safety_checks: product_code_change=0; PR_source_commit=0; PR_merge=0; production_access=0; production_DB_write=0; production_migration=0; Edge_deploy=0; EAS=0; real_Auth/Apple/X/Storage/Vault/OAuth/OpenAI/Push_API=0; real_account_deletion=0; Cron/settings/secrets_change=0; H1/G1–G5_TASK_change=0; apps/admin_change=0; HANDOFF_change=0; existing_uncommitted_change_operation=0; secret/PII_disclosure=0. Local disposable fixture writes/stand-in deletions occurred only in isolated PG and mock code; those are not production changes.
+
+Return **共通アカウントG5のちゃへ C2**. Stop after actual own-slot control publication and read-back. Do not merge/deploy/open the gate.
+
+---
+
+# Protected previous H2 reports — preserved verbatim below
+
 # H2 independent security review — PR #112 Phase 3a — CHANGES REQUIRED
 
 - task_id: common-account-v1-phase3a-pr112-security-review-20261009
