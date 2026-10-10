@@ -48,17 +48,17 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: kabumori-market-report-pr110-b1r1-b2r1-b3r1-final-review-20261010
+- status: ready
+- task_id: common-account-phase3d-e11-optiond-disposable-security-review-20261010
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
-- next_owner: none
-- return_to: かぶモリアプリG2のちゃ
+- next_owner: codex
+- return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: C2 reviewed exact PR110 head cb3d77d50e848d043f5427df363769b75d3c7764: CHANGES_REQUIRED, seven former B1-R1/B2-R1/B3-R1 residuals CLOSED; one P2 normal subject-particle が false-positive needs narrow G2 correction. H2 closed. 1337/1337 baseline PASS, 10-control additional test 8 PASS 2 FAIL (one issue). Source edits 0; merge/deploy HOLD. G2 corrective TASK publication not yet confirmed; do not start until canonical G2 TASK status is ready.
-- recommended_model: Sol（高） (completed)
+- allocation: Focused independent OFFLINE Sol（高） safety review of proposed G5 E11 **disposable-only** direct SQL auth.users DELETE Option D proof before any permission to run it. Scope PR121 guard/identity-fence, PR122 E11 runbook/consent, PR128 photo stop/test/restore docs, Phase1/3a and actual GoTrue/SQL/Audit/Storage/race contracts. Do not choose Option D, run any real Supabase, modify app/source, pause photo, create/delete projects, approve fake destructive tests, migrate/deploy/merge, or touch other slots. Prior H2 G2 review C2 accepted and historical report protected. Return C2 to G5 chat.
+- recommended_model: Sol（高）
 
 ## Claude G1
 - owner: claude
