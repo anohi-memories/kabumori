@@ -1,4 +1,5 @@
 import type { IncomingNewsCandidate } from "./news_candidate_logic.ts";
+import { assessKessanBody } from "../_shared/news_body_extraction/kessan_tanshin_facts.ts";
 
 export type CompanyIrSource = {
   id: string;
@@ -125,7 +126,34 @@ export async function fetchTdnetPdfBodySummary(
   const text = await (options.extractor ?? extractPdfTextWithUnpdf)(bytes);
   const summary = buildTdnetBodySummary(text);
   if (!summary) throw new Error("TDNET_PDF_TEXT_EMPTY");
-  return summary;
+  return composeTdnetPdfBody(text, summary).body;
+}
+
+export type TdnetPdfBodyKind = "generic" | "kessan_facts" | "kessan_prose" | "kessan_table_unreadable";
+
+const KESSAN_UNREADABLE_NOTE =
+  "【注意：決算短信の数値表を機械的に読み取れませんでした。当期・前期の数値は以下の抜粋に含まれない場合があり、含まれる数値の期は断定できません】";
+
+/**
+ * Phase 7: for a 決算短信 the results / forecast tables are read as tables (current and prior period kept apart) and put
+ * in front of the keyword-line summary; when the table cannot be read with certainty the body says so instead of
+ * silently presenting a keyword excerpt as if it held the figures. Every other disclosure keeps the generic summary.
+ */
+export function composeTdnetPdfBody(
+  pdfText: string,
+  genericSummary: string,
+  maxChars = MAX_TDNET_BODY_SUMMARY_CHARS,
+): { body: string; kind: TdnetPdfBodyKind; issues: string[] } {
+  const isKessan = /決算短信/u.test(pdfText.normalize("NFKC").slice(0, 400));
+  if (!isKessan) return { body: genericSummary, kind: "generic", issues: [] };
+  const assessed = assessKessanBody(pdfText, genericSummary, maxChars);
+  if (assessed.status === "complete" && assessed.body) return { body: assessed.body, kind: "kessan_facts", issues: assessed.issues };
+  if (assessed.status === "prose_only" && assessed.body) return { body: assessed.body, kind: "kessan_prose", issues: assessed.issues };
+  return {
+    body: `${KESSAN_UNREADABLE_NOTE}\n${genericSummary}`.slice(0, maxChars),
+    kind: "kessan_table_unreadable",
+    issues: assessed.issues,
+  };
 }
 
 export async function enrichTdnetCandidatesWithPdfSummaries(

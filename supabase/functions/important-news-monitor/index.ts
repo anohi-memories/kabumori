@@ -52,6 +52,7 @@ import {
   planImportantNewsFetchGroups,
   planSourceFairCandidateBatch,
 } from "./fetch_resource_limit_logic.ts";
+import { enrichFedStatementCandidates } from "./fed_statement_enrichment.ts";
 import { fetchOfficialPageText } from "./jp_official_enrichment.ts";
 import { collapseSameEventItems, createPermanentFailureMemory, runJpOfficialFill } from "./jp_official_lane_logic.ts";
 import { JP_OFFICIAL_SOURCES } from "./jp_official_filters.ts";
@@ -2098,7 +2099,14 @@ Deno.serve(async (req) => {
       const fetchedBySource: Array<{ sourceKey: string; candidates: IncomingNewsCandidate[] }> = [];
       for (const source of MARKET_MACRO_SOURCES) {
         try {
-          const candidates = await fetchMarketMacroSource(source);
+          let candidates = await fetchMarketMacroSource(source);
+          if (source.key === "fed") {
+            // Phase 7: FOMC statement items carry no description; read the official statement page. Statement items whose
+            // facts cannot be read are withheld (retried while fresh) instead of being judged on the headline alone.
+            const enrichment = await enrichFedStatementCandidates(candidates);
+            candidates = enrichment.candidates;
+            sourceErrors.push(...enrichment.errors.map((error) => `market_macro:fed:${error}`));
+          }
           marketMacroFetchedCount += candidates.length;
           fetchedBySource.push({ sourceKey: source.key, candidates });
           marketMacroProviderDiagnostics.push({
