@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-4
 - status: blocked
-- next_owner: codex-1
+- next_owner: chatgpt
 - start_code: G4
 - finish_code: K4
 - return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
@@ -18,7 +18,8 @@
 - user_connection_disruption_allowed: false
 - blocked_reason: Opus5.5 cyber safeguard stops this session; user approved a narrowed defensive-only Codex H1 assessment; **do not resume G4 or treat this as task completion until C1**.
 - delegated_task: postona-g4-x-oauth-containment-defensive-assessment-20261010
-- return_trigger: C1 to POSTONA｜マルチSNS化・開発統括（G4）のちゃ
+- return_trigger: C1 completed 2026-10-11; defensive H1 assessment accepted, H1 now done. G4 remains blocked; ask user to approve a separate read-only live metadata/aggregate preflight before any next implementation. No G4 restart without new safe TASK.
+- h1_verdict: PASS_DEFENSIVE_ASSESSMENT_ONLY, not vulnerability remediation or production approval.
 
 ## Context / precise risk
 
