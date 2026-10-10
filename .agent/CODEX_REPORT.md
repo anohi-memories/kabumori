@@ -6,9 +6,17 @@
 - recovered completed report from own immutable commits a7aecd98 / 9ddfd724; previous sync rejection preserved below as history, not the current outcome.
 - tests: 2026-10-09 independent PG runner 8 markers, mutations 55/55, 24 refusal + 8 healthy controls reused on identical source; 2026-10-10 source invariants freshly rerun 11/11. No fresh PG/mutation run claimed.
 - status: review_required; next_owner / return_to: chatgpt; completion_code: C1.
-- Current sync outcome: **REJECTED / incomplete**. Local recovery commit 4ac057dafc8096a15cb78456338459ccd17ae0af was rejected as non-fast-forward. Remote main 49c9810b743b490e65c5219a24701a5f31edcfab added only G5 TASK; H1 files remained unchanged, remote H1 still ready. STOP, no retry/merge/rebase/force performed.
+- Previous recovery sync (historical): local commit 4ac057dafc8096a15cb78456338459ccd17ae0af was rejected as non-fast-forward. Remote main 49c9810b743b490e65c5219a24701a5f31edcfab added only G5 TASK; H1 files remained unchanged. That run stopped without retry/merge/rebase/force. The subsequent user H1 resumes report-only synchronization; this is not a new source review or production authorization.
 - sync: normal report-only push/read-back; actual recovery commit SHA/result reported in final response after remote verification. No force/rebase or product-source push.
 - production read/write / migration apply / merge / deploy / provider calls: 0.
+
+## Subsequent H1 resume — 2026-10-10
+
+- Fresh origin/main: 203ac8ae8a99606c6f3cdecf5692a75ea3b2de6c; canonical H1 TASK/REPORT and governing instructions unchanged from the previous checked main. H1 remains assigned ready to this same task remotely before synchronization.
+- PR106 remains OPEN at exact c0b6c03cb909d91f72b58424d64c6dfae1b8f14f. GitHub mergeability currently UNKNOWN (recomputation), not claimed CLEAN; C1 must recheck live mergeability before any separately authorized source merge.
+- Completed PASS review and preserved test evidence are unchanged. No additional PG/mutation tests claimed in this synchronization-only resume.
+- Only the isolated H1 report branch may integrate fresh main ancestry for a normal, non-force control-file push. Guard the canonical H1 files against concurrent edits; verify the final delta contains exactly the H1 TASK and REPORT; stop on conflict or rejected push. No PR/product-source merge, production operation, or other slot change is authorized.
+- Final push result and remote read-back are reported only after actual verification. Return to ChatGPT via C1; review_required / next_owner: chatgpt.
 
 ---
 
