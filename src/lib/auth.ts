@@ -89,6 +89,21 @@ export async function signOut() {
 }
 
 /**
+ * Signs out this device only (scope 'local'), after かぶモリの利用を終了 or 共通アカウントを削除. The other apps
+ * of a shared login keep their sessions (withdrawal) or already lost them on the server (deletion). The
+ * push token row is already gone with the Kabumori data, so nothing is removed here. Never throws: the
+ * SDK clears the local session even when its server call fails.
+ */
+export async function signOutThisDevice() {
+  try {
+    await supabase.auth.signOut({ scope: 'local' });
+  } catch {
+    // The local session is removed regardless; a failed revocation of an already revoked session is expected.
+  }
+  resetServiceEnrollment();
+}
+
+/**
  * Sends the password reset email. The deep link it returns to is built from the app's own scheme,
  * so the same code works in development and in a release build without a hardcoded URL.
  *

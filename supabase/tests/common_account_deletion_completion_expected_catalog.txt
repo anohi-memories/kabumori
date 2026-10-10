@@ -1,0 +1,47 @@
+col private.account_lifecycle_operations.external_step text -
+col private.account_lifecycle_operations.external_step_fence bigint -
+col private.account_lifecycle_operations.external_step_started_at timestamp with time zone -
+col private.account_lifecycle_operations.managed_delete_identity_providers text[] -
+col private.account_lifecycle_operations.managed_delete_intent_at timestamp with time zone -
+col private.account_lifecycle_operations.managed_delete_required_checkpoints text[] -
+col private.account_lifecycle_operations.owner_fence bigint -
+col private.account_lifecycle_operations.owner_lease uuid -
+col private.account_lifecycle_operations.owner_lease_expires_at timestamp with time zone -
+col private.account_lifecycle_operations.verified_at timestamp with time zone -
+col private.account_lifecycle_release_gates.gate text -
+col private.account_lifecycle_release_gates.reason text -
+col private.account_lifecycle_release_gates.state text -
+col private.account_lifecycle_release_gates_pkey.gate text -
+con private.account_lifecycle_operations account_lifecycle_operations_completed_shape CHECK (((status <> 'completed'::text) OR (operation_type = 'service_deletion'::text) OR ((user_id IS NULL) AND (verified_at IS NOT NULL) AND (current_step = 'ready_for_managed_auth_delete'::text) AND (managed_delete_intent_at IS NOT NULL) AND (external_step IS NULL) AND (owner_lease IS NULL))))
+con private.account_lifecycle_operations account_lifecycle_operations_external_step_check CHECK ((external_step = ANY (ARRAY['apple_revocation'::text, 'managed_auth_delete'::text])))
+con private.account_lifecycle_operations account_lifecycle_operations_external_step_shape CHECK ((((external_step IS NULL) = (external_step_started_at IS NULL)) AND ((external_step IS NULL) = (external_step_fence IS NULL))))
+con private.account_lifecycle_operations account_lifecycle_operations_intent_shape CHECK ((((managed_delete_intent_at IS NULL) = (managed_delete_required_checkpoints IS NULL)) AND ((managed_delete_intent_at IS NULL) = (managed_delete_identity_providers IS NULL))))
+con private.account_lifecycle_operations account_lifecycle_operations_lease_shape CHECK (((owner_lease IS NULL) = (owner_lease_expires_at IS NULL)))
+con private.account_lifecycle_operations account_lifecycle_operations_owner_fence_check CHECK ((owner_fence >= 0))
+con private.account_lifecycle_operations account_lifecycle_operations_owner_scope CHECK (((operation_type = 'account_deletion'::text) OR ((owner_lease IS NULL) AND (owner_fence = 0) AND (external_step IS NULL) AND (managed_delete_intent_at IS NULL))))
+con private.account_lifecycle_operations account_lifecycle_operations_verified_shape CHECK (((verified_at IS NULL) OR ((operation_type = 'account_deletion'::text) AND (status = 'completed'::text))))
+con private.account_lifecycle_release_gates account_lifecycle_release_gates_blocked_only CHECK ((state = 'blocked'::text))
+con private.account_lifecycle_release_gates account_lifecycle_release_gates_gate_check CHECK ((gate = 'managed_auth_delete'::text))
+con private.account_lifecycle_release_gates account_lifecycle_release_gates_pkey PRIMARY KEY (gate)
+con private.account_lifecycle_release_gates account_lifecycle_release_gates_reason_check CHECK ((reason ~ '^[A-Z][A-Z0-9_]{1,63}$'::text))
+fn begin_common_account_deletion_external_step(uuid,uuid,uuid,text)
+fn claim_common_account_deletion(uuid,uuid,integer)
+fn clear_common_account_deletion_checkpoint(uuid,uuid,text)
+fn common_account_deletion_release_gate()
+fn common_account_deletion_storage_objects(uuid,integer)
+fn complete_common_account_deletion(uuid,uuid)
+fn prepare_common_account_auth_delete(uuid,uuid)
+fn prepare_owned_common_account_auth_delete(uuid,uuid,uuid)
+fn private.account_lifecycle_gate_open(text)
+fn private.account_lifecycle_owned_operation(uuid,uuid,uuid)
+fn private.account_lifecycle_residue(uuid)
+fn private.account_lifecycle_storage_inventory(uuid,integer)
+fn record_common_account_deletion_checkpoint(uuid,uuid,text)
+fn record_common_account_deletion_error(uuid,uuid,text)
+fn release_common_account_deletion_claim(uuid,uuid,uuid)
+fn renew_common_account_deletion_claim(uuid,uuid,uuid,integer)
+fn resolve_common_account_deletion_external_step(uuid,uuid,text)
+fn set_owned_common_account_deletion_checkpoint(uuid,uuid,uuid,text,boolean)
+fn settle_common_account_deletion_external_step(uuid,uuid,uuid,text,text)
+rel private.account_lifecycle_release_gates r true kb_cal_completion_owner=arwdDxtm/kb_cal_completion_owner
+rel private.account_lifecycle_release_gates_pkey i false -

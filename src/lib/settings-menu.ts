@@ -61,10 +61,18 @@ export function settingsEntries(
     },
     ...legalEntries,
     { id: 'logout', label: 'ログアウト', description: '', kind: 'action' },
+    // Two separate choices (common account): ending Kabumori keeps the login and every other service;
+    // deleting the common account removes every service and the login itself.
     {
-      id: 'delete-account',
-      label: 'アカウントを削除',
-      description: '登録した銘柄・通知・レポートもすべて削除されます',
+      id: 'withdraw-kabumori',
+      label: 'かぶモリの利用を終了',
+      description: 'かぶモリのデータを削除します。共通IDとほかのサービスは残ります',
+      kind: 'destructive',
+    },
+    {
+      id: 'delete-common-account',
+      label: '共通アカウントを削除',
+      description: 'X自動投稿など、このIDで使うすべてのサービスとログインが削除されます',
       kind: 'destructive',
     },
   ];

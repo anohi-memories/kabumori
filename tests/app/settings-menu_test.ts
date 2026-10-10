@@ -19,16 +19,24 @@ test("every release-blocking entry is present and in a predictable order", () =>
     "terms",
     "support",
     "logout",
-    "delete-account",
+    "withdraw-kabumori",
+    "delete-common-account",
   ]);
 });
 
-test("deleting the account is the last entry and is marked destructive", () => {
+test("ending Kabumori and deleting the common account are two separate, explicit, destructive entries", () => {
   const entries = settingsEntries(configured, { email: "mail@example.com" }, "初心者向け");
-  const last = entries[entries.length - 1];
-  assert.equal(last.id, "delete-account");
-  assert.equal(last.kind, "destructive");
-  assert.ok(last.description.includes("削除されます"));
+  const [withdraw, deleteAll] = entries.slice(-2);
+  assert.equal(withdraw.id, "withdraw-kabumori");
+  assert.equal(withdraw.label, "かぶモリの利用を終了");
+  assert.equal(withdraw.kind, "destructive");
+  assert.ok(withdraw.description.includes("残ります"), "says the login and other services stay");
+  assert.equal(deleteAll.id, "delete-common-account");
+  assert.equal(deleteAll.label, "共通アカウントを削除");
+  assert.equal(deleteAll.kind, "destructive");
+  assert.ok(deleteAll.description.includes("すべてのサービス"), "warns that every service is affected");
+  // No entry is the old ambiguous "アカウントを削除" any more.
+  assert.ok(!entries.some((entry) => entry.label === "アカウントを削除" || entry.id === "delete-account"));
 });
 
 test("no entry can dead-end: a link either has a destination or explains why not", () => {

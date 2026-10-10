@@ -110,38 +110,16 @@ same message.
 
 ## 4. Account deletion architecture
 
-```
-設定 → アカウントを削除
-  → user retypes their registered address (typed confirmation, not a single tap)
-  → POST /functions/v1/account-delete   Authorization: Bearer <user JWT>, no body
-  → GET /auth/v1/user with that token          ← the only source of the user id
-  → DELETE /auth/v1/admin/users/{verified id}  ← service role, hard delete
-  → cascade removes every row listed in §1
-  → client signs out (best effort; its failure cannot un-delete the account)
-```
-
-Security boundary:
-
-- The function **never reads the request body**, so no client-supplied id exists to trust. A test
-  pins this against the source.
-- The service role key is used for exactly one call, is never returned, never logged, and never
-  appears in an error. Every client-visible error is one of two fixed codes.
-- Already deleted (`404`) counts as success — the requested end state holds.
-- Every other non-2xx is a failure, so the UI can never show a "deleted" state the server did not
-  confirm.
-- The mobile client never receives the service role key.
-
-Data removed for the deleted user: `profiles`, `tracked_stocks`, `alert_settings`,
-`alert_category_settings`, `notifications`, `device_push_tokens`, `personalized_reports`, plus
-`admin_users` / `brand_memberships` / `social_account_oauth_states` rows keyed to that auth user.
-
-### Known limitation, deliberately not handled here
-
-If a user ever connected X through the social-mobile flow, deleting their auth user removes their
-`brand_memberships` row but leaves the `brands` / `social_accounts` rows that flow created. Those
-tables belong to the social-mobile workstream, so this candidate does not touch them. It should be
-owned as a follow-up by that workstream. Consumer Kabumori accounts do not go through that flow
-today.
+**Superseded by common account Phase 3a** — see
+[`docs/common-account/phase3a-deletion-orchestrator.md`](../common-account/phase3a-deletion-orchestrator.md).
+The single "アカウントを削除" path described here (POST with no body → a direct `DELETE
+/auth/v1/admin/users/{id}` hard delete of the shared login) no longer exists in source: a request without an
+action is refused with `ACTION_REQUIRED`, and the app offers two explicit choices instead —
+「かぶモリの利用を終了」 (Kabumori only; the login and other services stay) and 「共通アカウントを削除」 (every
+service, sessions, Apple, Storage, then a managed Auth delete that is reported only after a verified
+read-back). Until the new function is deployed, production keeps whatever `account-delete` is deployed there —
+recorded as the old hard delete (`apps/social-mobile/docs/account-deletion-rollout-runbook.md`); confirm it
+read-only before the rollout.
 
 ## 5. Settings / legal / support map
 
@@ -159,7 +137,7 @@ Entry point: 設定 button in the ホーム screen header → settings sheet.
 | 利用規約 | opens `<EXPO_PUBLIC_KABUMORI_WEB_URL>/terms`, or says 準備中 |
 | お問い合わせ・サポート | opens `<EXPO_PUBLIC_KABUMORI_WEB_URL>/support`, or says 準備中 |
 | ログアウト | signs out |
-| アカウントを削除 | deletion screen with typed confirmation |
+| かぶモリの利用を終了 / 共通アカウントを削除 | two separate flows (common account Phase 3a), password re-entry |
 
 Settings is presented as a sheet over the current tab, not as `app/settings`. The app's navigator is
 expo-router's `NativeTabs`, where **every** top-level route becomes a visible tab and `hidden` tabs
