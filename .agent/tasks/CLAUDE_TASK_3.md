@@ -3,7 +3,7 @@
 - task_id: postona-ai-consult-pr114-session-epoch-corrective-20261009
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
