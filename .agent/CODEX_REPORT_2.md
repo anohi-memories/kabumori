@@ -162,7 +162,7 @@ The two tsc errors are animated-icon.module.css and @/global.css declarations; e
 Reproduction entrypoints:
 - deno test --allow-read supabase/functions/account-delete and tests/app (no --allow-net);
 - existing AuthProvider Node and apps/social-mobile deletion/auth-boundary Node tests;
-- supabase/tests/common_account_lifecycle_run.sh, common_account_service_start_run.sh, common_account_deletion_completion_run.sh with CAL_PGHOST=/private/tmp/h2-pr112-boundary-20261010.l9br2h/socket, CAL_PGPORT=55441, CAL_PGSUPER=yuya;
+- supabase/tests/common_account_lifecycle_run.sh, common_account_service_start_intent_run.sh, common_account_deletion_completion_run.sh with CAL_PGHOST=/private/tmp/h2-pr112-boundary-20261010.l9br2h/socket, CAL_PGPORT=55441, CAL_PGSUPER=yuya;
 - common_account_deletion_completion_mutations.sh; common_account_phase3a_ts_mutations.py;
 - deno check account-delete/*.ts and strict deno lint --no-config index.ts http.ts lifecycle_logic.ts apple_outcome.ts;
 - reviewer-only /private/tmp/h2-pr112-boundary-20261010.l9br2h/boundary.sh + boundary.sql, preflight-independent.sh, apple-boundary-probe.ts. These scratch files are NOT product changes or committed source.
@@ -189,6 +189,20 @@ Own local PostgreSQL cluster was stopped successfully after all proof; no other 
 - Local fake PostgreSQL apply/rollback/behavior is the only database activity; no real project.
 - Previous H2 Report/TASK history preserved verbatim; index edit constrained to own H2 status/next_owner.
 - Return **C2 to 共通アカウントG5のちゃ**, status review_required / next_owner chatgpt. C2 may consider the exact source with blocked gate retained; no automatic merge, rollout or enabling. Stop here.
+
+## GitHub publication receipt / origin read-back
+
+- commit_push: SUCCESS / main, own control files only, via GitHub Contents API CAS.
+- initial_Report_commit: 4b681fc54a64c30753291c7b7e436f047ce714fb
+- TASK_completion_commit: aae5e36b47448b536a66ee35b9e1473b1b66e8c6
+- own_H2_index_commit: eba7edf827448113fbc26ff23f3e46d3be766255
+- Fresh fetched origin read-back at eba7edf827448113fbc26ff23f3e46d3be766255 contains all three commits; PR112 head remains exactly 54b9435b0dcc0d0e79ae6eba4340eee44508141c.
+- Remote changed paths versus prepublication main: only .agent/CODEX_REPORT_2.md, .agent/tasks/CODEX_TASK_2.md, .agent/ACTIVE_TASK.md.
+- Index diff: only own H2 status ready -> review_required and next_owner codex -> chatgpt; every other slot/routing/policy field unchanged.
+- GitHub API read-back: Report exact new contents and original historical suffix, TASK exact expected completion with prior history preserved, index exact expected contents.
+- Original Report history: 680583 characters retained verbatim as suffix; original TASK historical suffix beyond the current task separator retained verbatim. No reorder/deletion.
+- Current TASK and own index are review_required / next_owner chatgpt. Return C2 to 共通アカウントG5のちゃ.
+- This receipt update adds no source/product/production action; no merge/deploy/real API run.
 
 ---
 
