@@ -3,8 +3,8 @@
 - task_id: common-account-phase3b-identity-writer-fence-source-20261010
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - type: staged feasibility + bounded source-only implementation, fail closed
 - return_to: 共通アカウントG5のちゃ
@@ -66,8 +66,215 @@ The next technical blocker is the **GoTrue/Supabase Auth identity-change race af
 ## Report — current Phase 3b
 
 - task_id: common-account-phase3b-identity-writer-fence-source-20261010
-- result: pending
-- production_mutation: forbidden
+- reported_at: 2026-10-10 14:42 JST
+- result: **`BLOCKED_PENDING_DISPOSABLE_SUPABASE_PROOF`**（`FEATURE_READY` ではない）
+  - 共通アカウント全削除（管理 Auth 削除）は引き続き利用不可。release gate `managed_auth_delete` は `blocked` のまま（変更なし）。
+  - G5 所有の「サービス書き込みガード」（T13）は、ローカル検証済みの候補として作成。**未接続・未適用・未有効化**。他スロットの書き込み口への接続は、各所有者の別 TASK が必要。
+- production_mutation: 0（禁止を遵守）
+
+### ブランチ / PR / HEAD
+- 作業場所: 新規の独立 worktree `/Users/yuya/Developer/kabumori-g5-phase3b`
+  - ブランチ `claude/g5-phase3b-identity-writer-fence-20261010`（新規。fresh origin/main から作成し、作業前に `c2a9c0d6` へ fast-forward）
+  - 旧 PR112 worktree や他スロットの checkout・ブランチ・サーバーには触れていない。
+- **Draft PR #121**: https://github.com/anohi-memories/kabumori/pull/121
+  - head `76b50e1e03f82faaa3460bab1603afa8fef3ce44`（commit 1件、force push なし、マージなし）
+  - 報告時点の CI: 成功 1 / 実行中 1
+- fresh main（報告時点）は `951775c0`。base 以降に main 側で私の対象パスや migration の変更はなし。
+- 他の open PR（#3, #10, #11, #33, #110, #115, #116, #117, #119, #120）と変更ファイルの重なり: **なし**
+  - #119 は migration `20261010050613_ai_provider_budget_ledger.sql` を予約している。私の `20261010051938` とは別の版で、対象も無関係。
+
+### changed_files（8件、すべて G5 所有パス）
+- `supabase/migrations/20261010051938_common_account_service_write_guard.sql`（新規。`supabase migration new --help` を確認してから `supabase migration new` で作成）
+- `supabase/tests/common_account_write_guard_fixture.sql`（新規）
+- `supabase/tests/common_account_write_guard_behavior.sql`（新規）
+- `supabase/tests/common_account_write_guard_run.sh`（新規）
+- `supabase/tests/common_account_write_guard_mutations.py`（新規）
+- `supabase/tests/common_account_write_guard_rollback.sql`（新規）
+- `docs/common-account/phase3b-identity-writer-fence-feasibility.md`（新規。Stage A の本体）
+- `docs/common-account/phase3a-deletion-orchestrator.md`（§8.5 に 3行の参照を追記）
+- 変更していないもの:
+  - 適用済みの Phase 1/2 SQL、マージ済みの Phase 3a migration
+  - auth スキーマ、profiles のポリシー、X のオンボーディング・OAuth・Auth のコード
+  - G1〜G4 と H1/H2 のファイル、ACTIVE/CURRENT
+
+### Stage A — 確認した資料（2026-10-10 に閲覧、データとしてのみ利用）
+- GoTrue（`supabase/auth`）
+  - master `ce9a8ee`（2026-09-22）。最新リリースは v2.197.0（2026-09-09）。
+  - external.go の旧版 v2.150.0 / v2.170.0 / v2.185.0。
+  - auth の migration（identities / sessions / one_time_tokens の外部キーと cascade、`auth.uid()` の定義）。
+- `supabase/postgres` の init script。
+- Supabase docs（Auth hooks、Admin の ban_duration、本人確認方法の追加）。
+- **本番の GoTrue の版と設定は未確認**（本番読み取り禁止のため）。
+
+### ソースで確認できたこと（V）— いずれもソース上の挙動で、実プロジェクトでは未証明
+- **V1 OAuth コールバックの自動連携**
+  - 同一トランザクション内で、本人確認方法の追加 → 監査記録 → **その後に** BAN 判定、の順。BAN ならロールバックされる。
+  - v2.150 / v2.170 / v2.185 / master で同じ順序。
+- **V3 BAN 済みの access token の拒否**
+  - `requireAuthentication` が拒否するのは v2.195.0（PR #2642）以降。それより前は、BAN 済みでも access token で連携や `/user` が使えた。
+  - master では、セッション行が無い token も拒否する。
+- **V4・V5 BAN とトークン・セッション**
+  - refresh token と password grant は、BAN 済みを拒否する。
+  - Admin の ban は `banned_until` を設定するだけで、セッションは失効しない。
+  - BAN 済みは `/logout` を呼べない。したがって **セッション失効を BAN より前に**行う必要がある。
+- **V6 Admin のハード削除** = 監査記録 1件と `DELETE FROM auth.users`。残りは外部キーの cascade。
+- **V9 / V10 Auth hook**
+  - 既存ユーザーへの本人確認方法の追加を止める hook は存在しない。
+  - Custom Access Token hook は、PKCE の連携（token より先にコミットされる）を取り消せない。
+- **V11（反例）手動連携のコールバック（`linkIdentityToUser`）は BAN を確認しない**
+  - BAN の確認は連携開始時だけ。flow state の有効期限は最低 300 秒。
+  - つまり **BAN 前に開始した手動連携は、BAN 後に完了できる**。BAN 単独では fence にならない。
+- V12 リクエスト上限は既定 10 秒。V13 監査ログは同じトランザクションで記録され、users への外部キーは無い。
+
+### 未検証の仮説（H1〜H7）— 使い捨ての実プロジェクトでのみ検証可能
+- H1 版が v2.195.0 以上か
+- H2 V11 以外の追加経路がすべて BAN を拒否するか
+- H3 処理中ウィンドウの上限
+- H4 監査ログが保存され、読めるか
+- H5 `postgres` ロールの auth.* に対する SELECT / DELETE 権限
+- H6 古い access token が有効期限まで受理されるか
+- H7 Storage のポリシー
+
+### 競合・脅威の表（T1〜T17）の要点（詳細は文書 §3）
+- **T1 / T2**（intent より前、または処理中の本人確認方法の追加）: Phase 3a の race 5e で止まる。証明済み。
+- **T3 / T4 / T5 / T17**（intent のコミット後、Auth 削除前の追加。自動連携、手動連携、BAN 前に読み込んだ処理を含む）
+  - DB では止められない（**6f で再現**）。
+  - BAN の候補手順: セッション失効 → BAN → 待機 → intent → Admin GET で照合 → 削除 → 監査ログ確認。
+  - この手順でも V11 のため、手動連携を無効化するか、待機を flow の有効期限より長くする必要がある。
+- **T6**（失効後の古い access token）: ガードを通る書き込みは拒否（B7、6d）。ガードを通らない書き込み口は所有者側で対応が必要。
+- **T8**: ログイン削除後の古い token は ACCOUNT_NOT_FOUND（C1、6e）。
+- **T9 / T10 / T11**: 本番の旧 `account-delete`、X saga の SQL 削除、運用者による削除は、いずれも別途の対応が必要。
+- **T13〜T16**: ガードで直列化・拒否される（6a〜6c、6g、G0）。
+
+### 書き込み口の一覧（文書 §4）
+- **(i) G5**: start/reactivate（既にゲート済み）、backfill、Phase 3a の所有権付き RPC、新しいガード（未接続）。
+- **(ii) G1/G2**: `ensure_my_profile()`（authenticated・INVOKER）、`profiles_insert_own`、`grant insert on profiles`、service_role の producer 群 — いずれもゲートなし。
+- **(ii) G3/G4**: X の begin / consume / complete RPC（Vault に書く。`x-oauth-connect-user` 経由）、今後の Threads と T9 provisioner、X saga の `social_and_login` SQL 削除、POSTONA の Edge — いずれもゲートなし。
+- **(iii) 管理サービス**: GoTrue の本人確認方法の追加、セッション、BAN、削除、Storage へのアップロード（`owner_id` は text で外部キーなし）、監査ログ。
+
+### 選択肢の評価（文書 §5）
+- **A. BAN ＋ 待機 ＋ 照合 ＋ Admin 削除**: V11 と版への依存があるため、E2〜E7 を通るまで不可。
+- **B. hook**: 本人確認方法の追加は止められない。新しい token の発行を止める補助としてのみ有効（E7）。
+- **C. auth スキーマへのトリガー**: TASK で不可。
+- **D. intent のロックを保持したまま同一トランザクションで SQL によりログインを削除**（X saga と同じ方式）
+  - DB 上は T3〜T5・T17 を閉じられる。最有力の候補。
+  - ただし、Phase 1/3a の「SQL でログインを消さない」という方針の変更になり、H5 と cascade の実証（E8、E11）が必要。**ChatGPT / ユーザーの判断が必要。未実装。**
+- **E. 監査ログによる事後検知**: 予防にはならない。
+- **推奨**: gate は閉じたまま。使い捨てプロジェクト 1件での E1〜E12 の承認を得て、その結果で D か A+B を選ぶ。どちらの場合も、先にガードを (ii) の書き込み口へ接続する。
+
+### Stage B — ガードの候補 `private.account_lifecycle_assert_active_service_write(uuid,text) returns void`
+- **呼び方と分離レベル**
+  - reviewed な SECURITY DEFINER の書き込み関数が、トランザクションの**最初に**呼ぶ。
+  - READ COMMITTED 以外は `ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE`。
+- **呼び出し元の確認**（ロックより前に行う）
+  - JWT の claim は `auth.uid()` と同じ 1つの取得元から読み、混在させない。
+  - role が authenticated、subject が `p_user_id` および `auth.uid()` と一致、`session_id` が uuid であること。
+- **ロック順 I1**
+  - `account_lifecycle_lock(p_user_id,false)`（auth.users を KEY SHARE → common_accounts を FOR UPDATE）→ entitlement を FOR UPDATE。
+  - 行は何も作成しない。
+- **状態の判定**
+  - アカウントが active で、開いている全削除が無いこと。
+  - entitlement が active で、開いているサービス削除が無いこと。
+- **セッション確認**
+  - **ロック待ちの後で** `auth.sessions` を読み、生きているセッションか確認する（ロックはかけない）。
+- **拒否時の返し方**
+  - 固定コードを SQLSTATE 42501 で返す: AUTH_REQUIRED / ACCOUNT_NOT_FOUND / ACCOUNT_DELETION_IN_PROGRESS / ACCOUNT_LOCKED / SERVICE_NOT_REGISTERED / SERVICE_DELETION_IN_PROGRESS / SERVICE_NOT_ACTIVE / SERVICE_INVALID / WRITER_FENCE_UNAVAILABLE。
+- **EXECUTE 権限**: 所有者だけ。public / anon / authenticated / service_role から revoke 済み。
+- **適用時の後条件**: ACL が厳密に `owner=X/owner` であること、API ロールに直接にも継承でも EXECUTE が無いこと。
+- **呼び出し元の条件**
+  - 書き込み関数は SECURITY DEFINER で、ガードと同じ所有者である必要がある。それ以外は `permission denied` となり、安全側に止まる。
+- **T13 メモからの差分**（K5 で確認をお願いします）
+  1. `auth.sessions` で生きているセッションかを確認する処理を追加した。
+  2. 未知の service key は、Phase 1 と同じ `ACCOUNT_LIFECYCLE_SERVICE_INVALID` を返す。
+  3. 拒否は例外メッセージと 42501 で返す。
+  4. entitlement の FOR UPDATE は、一貫性のために残した。Phase 1 のトリガーで account 行のロックも取られるため、多重の防御になる。
+- **ガードの限界**
+  - ガードを呼ばない書き込み口（GoTrue、Storage、RLS 経由の直接書き込み、service_role の producer）は守らない。
+  - セッション確認は stale を除くためのもので、ロックではない。
+
+### テスト（すべてローカルの使い捨て PostgreSQL 17.11。偽データのみ）
+- **新規 `common_account_write_guard_run.sh`: ALL_PASS**
+  - **適用前チェック**（拒否後に何も残らないことも確認）
+    - `auth.sessions` が無い、または形が違う
+    - `auth.sessions` が読めない
+    - ロック関数に authenticated / service_role / PUBLIC の EXECUTE がある
+    - 基盤が無い
+  - **変更内容の厳密一致**
+    - ロールバックした適用ではカタログが完全一致。
+    - 追加は関数 1つと所有者のみの ACL だけ。削除・変更はなし。
+    - 再適用は拒否される。
+  - **静的ルール**
+    - 行の書き込み・grant・置換・削除・トリガー・ポリシーなし。
+    - gate や Vault の参照なし、`auth.sessions` の行ロックなし。
+  - **挙動 G0〜E**
+    - 権限: 継承した子ロール、INVOKER の書き込み関数、別所有者の関数。
+    - JWT: 旧形式と JSON の claim、不正な値、anon / service_role の claim、他人の id とセッション。
+    - セッション: 失効、期限切れ。
+    - 状態: アカウントと entitlement の全状態、不整合な状態。
+    - 拒否のときは何も書かれない。
+  - **安全側に止まる環境**: repeatable read / serializable、実行時に sessions が読めない場合。
+  - **2セッション競合 7本**
+    - 6a 削除開始 → 書き込み
+    - 6b 書き込み → 削除開始（削除開始がロック待ちすることを観測）
+    - 6c POSTONA のみの削除
+    - 6d 待機中のセッション失効
+    - 6e ログイン削除が処理中
+    - 6g 他人の id はロックに並ばず即拒否
+    - **6f 否定的な再現**: intent のコミット後の本人確認方法の追加と新しいセッションを、DB は受け入れてしまう。それでも書き込みはすべて拒否される。
+  - **緊急ロールバック**
+    - カタログは適用前と一致。呼び出し元は安全側に止まる（does not exist、何も書かれない）。
+    - その後の再適用も可能。
+- **新規ミューテーション `common_account_write_guard_mutations.py`: 28/28 検出**
+  - 多重の防御のため単独では欠陥にならない 3点は、理由を明記して対象外にした。
+- **既存スイートの再実行（すべて PASS）**
+  - Phase 1 `common_account_lifecycle_run.sh` / Phase 2 `common_account_service_start_intent_run.sh` / Phase 3a `common_account_deletion_completion_run.sh`（race 5e を含む）
+  - Phase 3a の SQL ミューテーション 48/48、TS ミューテーション 45/45
+  - account-delete の Deno 66/66、tests/app 437/437、AuthProvider 23/23、X saga 17/17、X app 19/19
+- **静的確認**
+  - `git diff --check`: OK。bash -n と py_compile: OK。
+  - シークレットの走査: 該当なし。project ref の 1件は、main の既存 29ファイルにある公開済みの識別子。
+- **未実施**
+  - 実 Supabase、実プロバイダ、Simulator のテストは未実施（TASK で禁止）。
+  - mock は証拠として扱っていない。
+
+### SQL / RLS / ACL と所有権
+- 関数は 1つ: SECURITY DEFINER、VOLATILE、`search_path=''`、private スキーマ、所有者だけが EXECUTE できる。
+- テーブル・ポリシー・grant・トリガーに変更はない（カタログの差分で証明）。
+- Phase 1 のロック関数の ACL は、適用前チェックで固定している。
+
+### ロールバック
+- 未接続の間は `common_account_write_guard_rollback.sql` で関数だけを削除できる。
+- 接続した後にガードを削除すると、呼び出し元は「開く」のではなく「止まる」側になる（テストで証明）。
+
+### 残っているブロッカー
+1. 本人確認方法の追加に対する fence は未証明。V11 のため BAN 単独では不可。E1〜E8 と E10〜E11 が必要。
+2. ガードが未接続（G1/G2、G3/G4 の別 TASK が必要）。
+3. Phase 3a の §14 のまま残る項目:
+   - 本番の旧 `account-delete` のハード削除
+   - X saga の SQL 削除
+   - X のみの利用者と、かぶモリを既に終了した利用者
+   - 公開の削除ページ
+   - 運用者による照合の監査
+   - Simulator と EAS
+4. Storage のポリシーが不明（E9）。
+
+### 次のアクション（所有者別。どれも割り当てではない）
+- **ユーザー / ChatGPT**
+  - **使い捨ての実 Supabase プロジェクト 1件での E1〜E12 の実施を、別途承認するかの判断**。本番プロジェクトは使わない。G3 と同じプロジェクトでの作業は禁止。
+  - 選択肢 D（SQL でログインを削除する方式）を原則として認めるかの判断。
+  - PR #121（Draft）を独立レビューに回すかの判断。高リスクのガードなので、G4 の RPC と合わせた 1回の統合レビューを推奨。
+- **G1/G2**（interface TASK 案）: `ensure_my_profile` の EXECUTE、`profiles_insert_own`、insert grant を撤去するか、ガード付きの DEFINER の書き込み関数へ置き換える。producer に述語を追加する。
+- **G3/G4**（interface TASK 案）: X の begin / consume / complete、Threads の begin / complete、T9 の先頭でガードを呼ぶ。関数の所有者をガードと揃える。固定コードを変換する。`social_and_login` の SQL 削除を lifecycle に通すか拒否する。本番の ACL を読み戻す（T11/T12）。
+  - G4 の新しい TASK（Threads workspace/OAuth の候補）は、このガード名をそのまま参照できる。ただし未適用の候補で、mock 扱い。
+- **G5**: 実プロジェクトでの証明の後に、D か A+B の実装、unban と補償の実装、reviewed migration による gate の開放を行う。それぞれ個別に承認を得る。
+
+### 安全確認
+- 実施しなかったこと（いずれも 0 件）:
+  - 本番の読み書き、migration の適用、Edge の deploy、secrets の操作
+  - 実 Supabase / Auth / Storage / Apple / X の呼び出し
+  - auth スキーマの変更、セッション失効、実データ・実認証情報の利用
+  - 有効化、マージ、EAS、H1/H2 の利用、自動の Codex タスク作成
+- ローカルの PostgreSQL は scratchpad 内の使い捨て cluster（unix socket のみ）。
 
 ---
 
