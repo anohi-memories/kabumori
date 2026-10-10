@@ -1,3 +1,87 @@
+# G1 — CURRENT TASK — Simulator real-data watchlist acceptance QA (2026-10-10)
+
+- task_id: kabumori-watchlist-real-data-simulator-qa-20261010
+- slot: claude-1
+- owner: claude
+- status: ready
+- next_owner: claude
+- type: **READ-ONLY / QA-ONLY**, not a feature implementation or deployment
+- priority: normal
+- recommended_model: **Sonnet5（中）**
+- start_code: G1
+- finish_code: K1
+- return_to: かぶモリアプリG1のちゃ
+- source_merge_base: PR #120 squash merged at `53678a2f1fe5e01ecde4e9988abcbd0ed573da66` (reference only; refresh fresh origin/main)
+- source_changes_allowed: **false** (no app/code/config changes)
+- production_mutation_allowed: **false**
+- cloud_deploy_allowed: **false**
+- EAS_build_allowed: **false**
+- app_store_upload_allowed: **false**
+- review_policy: first return QA findings with evidence; if bugs, ChatGPT creates separately scoped fix TASK
+- scope_owner: かぶモリアプリ UI (does not modify G2/G3/G4/G5/H task ownership)
+
+## Purpose
+
+After successful PR #120 source merge and K1 PASS, confirm that the approved **ウォッチリスト / ポートフォリオ two-segment view** behaves truthfully with **genuine saved account data if already safely accessible on the local iOS Simulator**, rather than only with synthetic fixture snapshots. Verify the original five NativeTabs, selected-state behavior, saved price/report basis, watch registrations, highlight cards and edit/search/news navigation *without changing stored data*. User requested proceeding to Simulator now to avoid consuming EAS build quota.
+
+**This is NOT a physical iPhone test, new production feature, or permission to log in as the user without their interaction.** Never claim genuine data was tested merely because fixture screenshots exist. If the simulator has no authenticated user session, app cannot load, or read-only access is impossible, report BLOCKED with exact minimal user-assisted next steps; do not workaround via private secrets, account creation, service_role or database changes.
+
+## Preflight and isolation
+
+1. Follow `PROJECT_RULES.md`, `AGENTS.md` / `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this complete TASK and previous K1 report.
+2. G1 TASK must be `ready` with matching task_id and `next_owner=claude`; if not, STOP. Check `git status`, fresh `origin/main`, open PRs and active TASKs, including other slots. Do not treat status alone as a free slot.
+3. Use **new independent G1 worktree / checkout** based on fresh `/Users/yuya/Developer/kabumori-fresh` `origin/main`, separate from G1 previous worktrees and G2/G3/G4/G5/H1/H2. Do not reset/prune/rename/delete legacy trees, alter another branch, commit another user's changes, or stop/restart any other slot's dev server. Verify current simulator device and owner before modifying its state; prefer a dedicated Simulator device/port rather than reusing another slot's running app/process.
+4. Primary app view: `src/app/(tabs)/explore.tsx`; existing `fetchRecentReports(20)` + `tracked_stocks` query use user-scoped reads and derive `portfolio_snapshot.watch[].price`. No backend changes are required. Reference merged PR #120 and approved visual design as implementation baseline.
+5. NativeTabs frozen exactly: **ホーム / 銘柄 / ニュース / レポート / メニュー**. Never change `src/app/(tabs)/_layout.tsx` / `src/app/_layout.tsx`, native tab icon files, routing, dependencies, app config, or app source.
+6. Safety: DO NOT run EAS, TestFlight, App Store Connect, `expo prebuild`, production SQL, Supabase writes/migrations/Edge deploy, AI or paid service smoke, registration edits, data deletion, real trades, or any deployment; no auth token, email, password, profile, watchlist, private portfolio amounts, screenshots with unmasked financial data, or raw response payload may enter GitHub/PR/Report/chat. No user-provided credentials may be solicited or copied to a log.
+
+## Execution — realistic QA, read-only
+
+**Phase A: local launch feasibility**
+- Inspect installed Xcode/iOS Simulator status, available dev-client / Expo local-run path and configs. Prefer an existing compatible installed build on an **unowned/dedicated** Simulator. If native rebuild is needed, use only local Xcode/Expo build if it does not conflict with another worktree/dev-server and has no cloud/EAS cost. Avoid reset, uninstall or clearing Simulator keychain/session; stop and ask if necessary.
+- Launch a local dedicated dev server on an unused port only; don't disturb currently running servers. Do not install dependencies indiscriminately or change package-lock; use existing commands/scripts from repository.
+- If Simulator currently has an authenticated, authorized existing test/user session and `tracked_stocks` / saved report are readable via the app's ordinary user-scoped UI, test through UI only. No service-role bypass. No command-line dumping of private records. If sign-in is required, **do not attempt to retrieve or enter the user's login credentials**. Stop that live-data part and report precisely what the user must do manually. Do not create a test account or add stocks to production merely for coverage. Existing authentication/session refresh side effects should be identified and not confused with user-directed DB writes.
+
+**Phase B: visual + interaction checks** (only when data/state exists)
+- On a 402pt Simulator and, if feasible without disturbing existing setup, 375pt Simulator, inspect both segments [ポートフォリオ | ウォッチリスト]. Initial screen stays ポートフォリオ. Changing segments changes only internal view; NativeTabs selected stays 銘柄. Search button exists and opens existing search; navigate back with proper state, don't register a stock.
+- Real watch list: count and identity of registered `tracking_type=watch` stocks agree with app UI; a stock appears **once** (either featured or list), none silently omitted; missing report rows show `—` but still appear; portfolio holdings are not mislabelled as watch entries.
+- Real saved close snapshot: displayed saved close, signed percent (two decimals), positive/negative colors, stale `M/D 終値ベース` date vs genuine today, no fake live data. Prefer comparisons only against the already-loaded app's trustworthy report detail/read-only view. Do not expose raw financial values externally.
+- Featured condition: existing stock-linked verified news, if actually present, gets blue-green; abs(changePercent)>=5.0 goes into mint/coral price card; 0-3 featured; remaining list count shows only rest; when all featured, no phantom group. Do **not** force today's market conditions or add fake items to user data to obtain 0/2/3 cases; previous synthetic fixture coverage is still valid separately. No claim the exact 0/1/2/3/4+ cases happened in real data unless observed.
+- Visual review: alignment/legibility of long corporate names, ticker, watch avatars, price+percent pills, empty/missing/scroll states, safe-area and native menu overlap, narrow devices, actual assets preserved. News CTA, if present, must lead to the real relevant news item and back to watchlist; if absent, mark unobserved rather than pretend covered.
+- Open the tracked-stock editor **without saving or deleting anything**. If even opening might trigger a write, do not. Check search opens, but do not register/update/delete stocks or target-price edits. Check manual UI refresh only when it is read-only. When uncertain about any implicit mutation, STOP and report, do not force it.
+
+**Phase C: evidence / privacy**
+- Record a concise anonymized findings matrix: check, PASS/FAIL/NOT_OBSERVED/BLOCKED, supporting observable UI behavior. Screenshot evidence may be saved in a LOCAL private non-repo directory after checking private-data masking and Simulator ownership. **Do not commit/push/screenshare unredacted real holdings/watch data or screenshots to GitHub.** In GitHub Report use only a redacted description and local-only evidence paths without username/identifying information; do not paste raw API responses.
+- Distinguish a) fixture-only check already completed with 457/457 G1 tests reported, b) genuine saved session UI data actually observed, c) physical iPhone not tested. If no session/data, give clear minimal user setup instructions with no secrets in chat.
+- If a genuine bug is found, classify severity and provide exact repro, expected/actual (redacted), files likely involved, and whether it's UI-only or data boundary; **do not implement a fix under this QA-only TASK**, even if simple. New source fix / PR / Codex review is a separate K1 decision.
+
+## Required verification and done conditions
+
+- Before any simulator launch, ensure no processes/dev servers/Simulator/branches of other slots are disturbed.
+- Read-only scope only; no code/dependency/native layout edits, no new PR. `git status --short` should show no changes outside authorized G1 TASK Report; never stage/commit/push user session artifacts.
+- EAS build count consumed **0**, production writes/deploy **0**. No exposed private data.
+- Real data PASS only if the app actually loaded nonfixture user-scoped saved records; if not, explicit `BLOCKED_AUTH`, `BLOCKED_ENVIRONMENT`, `BLOCKED_NO_DATA` or `NOT_OBSERVED`, not a fabricated PASS.
+- Finish by appending `## Report` for this task with: task_id, result, test/environment/device widths, real-data-or-fixture distinction, anonymized findings, changed_files (expected task/report only), commit_hash (if any), push, deploy=0/EAS=0, remaining_issues, safety_checks, next_recommendation, and return_to. Do not overwrite historical TASK/Report. If the app test cannot proceed pending user action, mark `review_required` / `next_owner:chatgpt` and return blocker; otherwise also `review_required` / `next_owner:chatgpt` for K1 review. Do NOT merge/deploy from QA slot.
+
+On completion send **`K1`** to **かぶモリアプリG1のちゃ**.
+
+推薦モデル：**Sonnet5（中）**
+
+## Report — current simulator QA task
+
+- task_id: kabumori-watchlist-real-data-simulator-qa-20261010
+- result: NOT_RUN
+- status: ready
+- changed_files: no app source changes authorized
+- deploy: prohibited
+- EAS: prohibited
+- next_owner: claude
+
+
+---
+
+# Preserved prior G1 TASKs and Reports — do not modify historical sections
+
 # G1 — CURRENT TASK — Watchlist hybrid UI + in-tab segmented switch (2026-10-10)
 
 - task_id: kabumori-watchlist-highlight-hybrid-ui-20261010
