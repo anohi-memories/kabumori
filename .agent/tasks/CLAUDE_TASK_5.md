@@ -3,8 +3,8 @@
 - task_id: common-account-phase3d-disposable-proof-pause-restore-preflight-20261010
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - type: final offline operating preflight, NO live calls, NO service outage
 - recommended_model: **Opus5.5（高）**
@@ -64,10 +64,125 @@ Add **only new G5-owned docs**, e.g. `docs/common-account/phase3d-family-photo-p
 ## Report — Phase 3d
 
 - task_id: common-account-phase3d-disposable-proof-pause-restore-preflight-20261010
-- result: pending
+- reported_at: 2026-10-10 22:44 JST
+- result: **`PREPAUSE_BLOCKED`**
+  - 外部の前提条件が揃っていない。家族写真アプリの一時停止は、まだ推奨しない。
 - remote_calls: 0
+  - Supabase・プロバイダの API は、読み取りも含めて呼んでいない。
+  - 見たのは公開ドキュメントだけ: supabase.com の Pricing と Project Pausing の文書を Web 検索・閲覧した。
 - photo_app_paused: false
 - projects_created: 0
+- production_mutation: 0
+
+### ブランチ / PR / HEAD
+- 作業場所: 新規の独立 worktree `/Users/yuya/Developer/kabumori-g5-phase3d`
+  - ブランチ `claude/g5-phase3d-pause-restore-preflight-20261010`（fresh origin/main `aa801dd8` から作成）
+- **Draft PR #128**: https://github.com/anohi-memories/kabumori/pull/128
+  - head `e9244d29ea944156cf1479c0976053d433469e06`（commit 1件、マージなし）
+  - 報告時点の CI: 成功 1 / 実行中 1
+- 依存（読み取りのみ、変更なし）: Draft PR121 `76b50e1e…`、Draft PR122 `f17a47e3…`
+  - どちらも OPEN / Draft で、head は変わっていない。
+  - PR122 の head は scratchpad の一時コピー（detached、編集なし）で読み・実行し、終了後に削除した。旧 G5 の PR121 / PR122 の worktree には触れていない。
+- 他の open PR（#3, #10, #11, #33, #110, #115, #117, #119, #121〜#127）と変更ファイルの重なり: **なし**。main 側にも、common-account のパスへの変更はない。
+
+### changed_files（新しい文書 2件だけ。runtime・SQL・依存関係の変更なし）
+- `docs/common-account/phase3d-family-photo-pause-restore-execution-window.md`（Deliverable A）
+- `docs/common-account/phase3d-proof-readiness-assessment.md`（Deliverable B）
+
+### Deliverable A — 一時停止・検証・復旧の運用チェックリスト
+- **前提**
+  - 無料プランのみ。費用が 0 でなければ中止する。
+  - 本番の `stock-x-autopost` は停止しない。過去の `common-account-gateb-20261005` は再開も流用もしない。
+  - 自動のタイマーによる無人復旧や、「2〜3 日で必ず戻る」とは約束しない。
+- **公開文書で確認したこと**（窓の時点で再確認する）
+  - 無料プランで active にできるのは 2 件まで。一時停止中・削除済みは数に入らない。
+  - 「Resume project」で、データと設定が戻るとされる。再開できる期間は現行の文書で 1 年（以前は 90 日）。
+  - 再開の所要時間、写真（Storage）やユーザーが保持されるか、無料プランでの手動停止の方法は、文書に書かれていない。
+- **停止前の確認 P1〜P9**: プロジェクトの取り違え防止、家族への影響の説明、利用者による実機での基準確認（写真の枚数）、バックアップの判断（利用者）、空き枠、費用 0、停止と再開の手順、復旧担当者、窓の日程。
+- **実施直前の凍結チェック R1〜R8**: 担当者、ダミーのプロバイダ、秘密情報の扱い、同意の文字列、E7、E11（利用者の承認と独立セキュリティレビュー）、外部マーカーと台帳、DB 接続。
+- **進めるかどうかの判断**
+  - 停止の承認 → 停止中になったことの確認 → 空き枠と費用 0 の確認 → 作成の承認、の順で進む。
+  - 不確かなことがあれば中止し、復旧へ進む。
+- **検証中**
+  - 使い捨てプロジェクトのダミーだけを使い、家族写真のプロジェクトには触れない。
+  - E1 から始め、E2 以降は実行ごと・実験ごとの同意があるものだけ。
+  - UNKNOWN / FAIL が出たら、その系統の先には進まない。
+  - **T0+60h** 以降は新しい実験を始めない。**T0+66h** に未復旧ならすぐ利用者に知らせる。
+- **復旧（最優先）**
+  1. 証跡を保存する。
+  2. 使い捨てプロジェクトを削除して枠を空ける（証跡が未確定なら、先に**一時停止**して枠を空け、削除は後に回す）。
+  3. `anohi-memories` を再開する。
+  4. 状態が正常か確認する。
+  5. 利用者が実機で確認する: ログイン、一覧、表示、アップロード、写真の枚数が基準値以上であること。
+  6. 正常でなければ、失敗として報告し、写真アプリの回復を最優先にする。
+  - 有料化や本番の停止で回避しない。
+- **誰が何を確認できるか**（GitHub / Supabase 接続 / 利用者の実機）を表にした。実機での確認は利用者だけができる。
+
+### Deliverable B — オフラインでの事前練習と準備状況
+- **実際に実行したもの**（PR122 head の一時コピーで）
+  - `deno test --no-config --allow-read` が **35/35**
+  - `plan` は終了コード 0（E1 は observation、E2〜E12 は destructive）
+  - 外部マーカーなしの `validate` は 3（`MARKER_MISSING`）
+  - `--force` は 2（`OVERRIDE_NOT_SUPPORTED`）
+  - 偽の外部マーカーと偽の ref では 0（`REQUEST_VALID_DRY_RUN_ONLY`。表示だけ）
+  - E2 の同意を外すと 3（`CONSENT_MISSING:E2`）
+  - E11 をレビューなしで要求すると 3（`EXTRA_APPROVAL_MISSING:E11:option_d_security_approval`）
+  - 実プロジェクト・ネットワーク・認証情報は使っていない。実行する機能（executor）は無い。
+  - 注記: CLI の `plan` を、1回だけ `--allow-net` を付けて実行した。CLI にはネットワークのコードがなく、通信は発生していない。証拠としては扱っていない。
+- **準備状況の表（15項目）**
+  - ready: 1件（手順書とツール）
+  - not_ready: 5件
+    - ダミー OAuth（E2〜E4）
+    - テスト OIDC 発行元（E5 の後半・E6）
+    - E11 の事前レビュー
+    - 実機での基準確認
+    - 72 時間で終わる見込み
+  - unknown: 9件
+    - 担当者と日程
+    - レート制限の余裕
+    - 無料プランでの E7 の hook
+    - DB 接続（IPv4 から使える接続経路）
+    - 秘密情報を扱う担当者
+    - 費用と空き枠
+    - 一時停止・再開の制約
+    - 写真のバックアップの判断
+    - GoTrue の競合（V11）
+- **72 時間の見積もり**
+  - 前提がそろえば、検証は 1〜2 日の見込み。
+  - しかし前提 3・4・7（ダミー OAuth、OIDC 発行元、E11 のレビュー）が無いまま止めると、E6 と E11 が UNKNOWN / NOT_RUN になる。A+B も D も BLOCKED のままで窓が終わる。つまり、**止めても判定できない**。
+- **引き継ぎ 5段階**
+  - (i) オフラインの準備は完了。
+  - (ii) 写真アプリの一時停止、(iii) プロジェクトの作成・検証、(iv) 実験ごとの破壊的同意は、いずれも未承認。
+  - (v) 終了後すぐの復旧は約束として文書化した。
+  - 無料プランの一般的な了承は、E2〜E12 の無制限の許可ではない。
+
+### 足りない外部の前提条件（これが揃うまで `PREPAUSE_BLOCKED`）
+1. 名前のある検証担当者と、連続して対応できる日程（JST）。
+2. ダミー OAuth アカウント（メール確認済み）と、作成後の OAuth アプリの設定手順。
+3. テスト OIDC 発行元（同じメールの識別子を約 200 個）。無ければ E5 の後半と E6 は UNKNOWN になることを受け入れるか。
+4. E11 の利用者承認と独立セキュリティレビュー（D を検証する場合）。
+5. 窓の直前の再確認: プロジェクトの状態、空き枠、費用 0、無料プランでの一時停止・再開の手順と制約、E7 の hook が使えるか。
+6. 利用者による写真アプリの実機での基準確認と、バックアップの判断。
+7. 復旧担当者と連絡手段。
+
+### テストと確認
+- 文書の整合性: 2つの文書の相互参照と、PR122 の手順書との分担を確認した。本番の ref、プロジェクトの URL、鍵、アカウント情報は含めていない（文書内の URL は supabase.com の公開ドキュメント 2件だけ）。
+- `git diff --check`: OK。シークレットの走査: 該当なし。
+- PR122 の Deno テストと CLI は、上記のとおり実際に実行した。ほかのテストは、文書のみの変更のため実行していない。
+
+### 次のアクション
+- **K5 / ChatGPT**: 上の 1〜7 を利用者と一緒に埋めるかどうか、その順番と時期を決める。それまで写真アプリは止めない。
+- **G5**: 承認が出たら、運用の文書の §1 → §2 → 判断 → §4 → §5 の順に、担当者と一緒に進める。PR121 / PR122 / PR128 は Draft のまま。
+
+### 安全確認
+- 実施しなかったこと（いずれも 0 件）:
+  - 実 / 使い捨てプロジェクトの読み書き、作成、削除、一時停止、再開
+  - Auth の Admin 操作、BAN、削除
+  - プロバイダや Meta / Apple / X の呼び出し
+  - service role、secrets、課金、deploy、migration、EAS、マージ、有効化
+  - 家族の写真データへのアクセス
+  - H1/H2 の割り当て
+- G1〜G4 と H1/H2 の担当範囲、PR121 / PR122、`docs/postona` は変更していない。
 
 ---
 
