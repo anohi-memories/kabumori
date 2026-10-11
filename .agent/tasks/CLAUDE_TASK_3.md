@@ -3,12 +3,12 @@
 - task_id: postona-unified-ai-manual-schedule-planner-v1-20261011
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
 - project: POSTONA / X posting scheduling
 - type: **SOURCE/LOCAL UI + pure planner only; NO live posting or DB write**
-- recommended_model: **Opus5.5（高）**
+- recommended_model: **Sonnet5（高）**
 - start_code: G3
 - finish_code: K3
 - return_to: POSTONA G3のちゃ（AI相談・X投稿予約担当チャット）
@@ -17,6 +17,35 @@
 - DB_migration_Auth_RLS_RPC_Edge_Cron_Vault_secrets_or_traffic_switch: FORBIDDEN
 - production_deploy_PR_merge_EAS_TestFlight: FORBIDDEN
 - protect: previous G3 Report/PR127, H1 Threads OAuth, G4 X OAuth Issue131, G5 shared account/Auth, G1/G2/H2, existing X/Kabumori/AI Lab posting
+
+## K3 focused correction — R1/R2/R3 P2, exact Draft PR138 source ONLY — 2026-10-11 JST
+
+**Verdict: CHANGES_REQUIRED (3 narrow UI/state correctness defects); original implementation/tests accepted as a candidate, NOT merged or deployable.** This correction block OVERRIDES broad V1 implementation scope below. Correct ONLY the following reproducible issues on existing Draft PR #138 head `b244400ac710bdb6cd576631aacdb0b219bf73fd`. Keep the SAME task_id, only change current G3 status and Report, protect all old Report/TASK history and other slots. No independent Codex review for local-only fixes.
+
+### R1 P2 — 「再抽選」で編集/並び替え/取り消しが巻き戻る
+- Cause: `schedule.tsx` `reroll` replaces all batch drafts with `rerollBatch(batch,...)`, which regenerates every text from the original `batch.request.texts` and recreates cancelled draft IDs. Preview text edits (`editDraftText`) and post-content reorder (`moveDraftText`) live only in current `drafts`; a subsequent `再抽選` discards them. Worse, a partly cancelled random batch resurrects the cancelled post. This violates terminal `cancelled` and the user's expectation that re-roll only changes flexible times.
+- Fix `schedule-planner.ts` + `schedule.tsx` minimally, preserving the current ACTIVE draft identities, edited/reordered texts, original per-account ownership, and CANCELLED terminal records on reroll. Only times of active flexible drafts may change; cancelled drafts must NEVER be reintroduced. The new preview must still obey per-day/min gap/date-window constraints; infeasible placement must fail with NO partial edits. Explicit `shuffleContent` at initial planning must not override subsequent user edits on reroll. Exact/interval times must not be rerolled.
+- Add fail-before/pass-after focused tests: random 3 items → edit text B, move texts, cancel A → reroll → exactly 2 ACTIVE items with same edited/reordered content and no resurrected A; repeated reroll, no lost account ownership; exact/manual_interval unaffected; test shuffleContent true too.
+
+### R2 P2 — stale AI settings after switching workspace/account
+- Cause: `schedule.tsx` local `ai` state is only assigned on `repository.read(brandId)` `ready`. When workspace changes, the previous brand's frequency/approvalMode stays visible until a new read returns, and stays indefinitely if the new read is blocked/unavailable. This can display brand A's consent/frequency for brand B and plan B slots with A's setting.
+- Bind cached AI settings to the **exact authorized current brand/workspace**; clear/reset to explicit unloaded/default/unavailable state immediately on brand/session/status changes and non-ready read, prevent stale async results after change/unmount. If settings unavailable, do not claim a remembered frequency or owner opt-in; label the actual status. Auth and G5 ownership code must remain untouched. Where multiple accounts share the same brand, brand-scoped settings are intentional.
+- Add controlled rapid A→B and B-error/no-row transitions tests; ensure B's preview never inherits A's `auto_post_preference` / frequency.
+
+### R3 P2 — server brand-level posts falsely attributed to selected X account
+- Cause: existing `supabase-repository.ts` returns real `scheduled_posts` with `accountId:'unknown'` because DB has no social_account_id; `schedule.tsx` lines 68–70 maps **all unknown rows to whatever activeAccount is selected**. Switching to a different X or Threads account falsely labels the same brand-level plans as its posts and brings them into that account's conflict solver. Existing read-only display must not claim verified account ownership.
+- Do NOT invent account ownership. Preserve remote rows in a distinct read-only `投稿先アカウント未特定／ブランド単位` display (and origin uncertainty if appropriate), without applying X-specific per-account conflict shifts/consent to them; maintain navigation to `/posts/[id]`, real/mock/loading/unavailable semantics, and prevent cross-brand attribution where multi-brand membership exists. If needed, add the minimal **read-only** brandId metadata from the existing RLS-protected scheduled_posts read, avoiding any new DB/Edge/RLS or write contract. Display unknowns conservatively rather than hiding them, and make active-account switching accurate. In mock preview, explicit known account posts still filter normally.
+- Add focused regressions with two accounts including Threads and multiple owned brands; no relabeling of unbound server posts as X-account rows.
+
+### Non-negotiable safety, scope and gates
+- **SAME exact Draft PR #138 branch**, only the current G3-owned planner/screen/data-view or tiny read-only types/tests files necessary for R1–R3. No unrelated feature expansion or new PR, no change to historical PR127/123, no change to current bottom tab count.
+- Before editing, read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, current TASK/Report/ACTIVE_TASK/CURRENT_STATE, fresh `origin/main`, worktree and open PR changed paths; use only G3 isolated worktree, do not disturb H1/G4/G5/G1/G2 or development servers. Do not force-push/rebase another slot; update same PR safely after HEAD verification.
+- Run focused R1–R3 regressions plus full 250/250 app suite, 22/22 domain suite, TypeScript/lint/diff/secret checks (report updated totals truthfully), test no Supabase write/posting, and read-back new exact PR HEAD. Any inability to reproduce must be documented with evidence; don't invent a fix or introduce a new flow.
+- NO production Supabase reads or writes, new migration/RPC/Edge/OAuth/X/Meta/AI calls, Cron, PR merge, release/deploy/EAS or real posts. Vercel status on old PR head was quota rate-limit, not evidence of app test failure; report separately. Keep `プレビュー／未予約・投稿されません` and no server save.
+- Update ONLY G3 TASK Report/status to `review_required`/`next_owner:chatgpt` when complete, preserving previous G3 Report history verbatim. Return `K3` to this G3 chat.
+- **推薦モデル：Sonnet5（高）**; no separate Codex review for these UI/state-only corrections. One **Sol（高）** independent review later before real DB/RLS/publish writes.
+
+---
 
 ## Mission — user product requirement
 

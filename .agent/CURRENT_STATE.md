@@ -1,3 +1,14 @@
+## K3 R1–R3 NARROW CORRECTION — POSTONA G3 unified scheduler Draft PR138 — 2026-10-11 JST
+
+- K3 initial verdict for G3 `postona-unified-ai-manual-schedule-planner-v1-20261011`: **CHANGES_REQUIRED / 3 local-only P2 correctness gaps**, not a blanket failure. Source-only planner/composer/UI accepted as strong candidate at exact [Draft PR138](https://github.com/anohi-memories/kabumori/pull/138) head `b244400ac710bdb6cd576631aacdb0b219bf73fd`, OPEN/DRAFT/UNMERGED. Changed files exactly five G3-owned app UI/domain/test/docs, no live DB/Edge/X/A.I./Cron/EAS/PR merge. G3 reports 250/250 app, 22/22 domain, TS/lint PASS; tests **not** independently rerun by ChatGPT. PR head Vercel failure was build-rate-limit (not established code defect), Netlify preview cancelled; GitHub mergeable=false at this head, **merge HOLD**. Other slots protected.
+- R1: `rerollBatch(batch,...)` regenerates all drafts from `batch.request.texts`, losing current manual preview edits/reorder and reintroducing any cancelled post. Must preserve current active draft IDs/content, cancelled terminal state, and alter times ONLY on explicit reroll, including shuffle cases.
+- R2: `schedule.tsx` retains prior brand `ai` frequency/approvalMode while new brand settings load or fail; avoid false cross-brand opt-in/frequency. Bind AI settings to exact brand and show accurate unavailable/initial state; no stale async leakage.
+- R3: real scheduled_posts' `accountId:'unknown'` means no social account binding; `schedule.tsx` currently rewrites these as activeAccount.id, falsely attributing brand-level rows to another X or Threads account and including them in per-account conflicts. Preserve read-only rows with truthful unbound/brand-level labeling, account + brand boundaries and detail navigation.
+- Same G3 TASK status returned to **ready / next_owner claude** for a limited same-PR correction, recommended **Sonnet5（高）**, start `G3` finish `K3`. Detailed exact tests and safe scope prepended to TASK. Preserve previous Report/history verbatim; no new independent Codex review until actual G3/G5/H1/G4 Auth/RLS/publish integration. No real data writes, schema, Edge, OAuth or live posts.
+- PR127 previous Stage3B rollout docs remain Draft; G5 shared account and H1 Threads work, G4 Issue131, G1/G2/H other tasks unchanged; actual cloud schedule and X publishing remain BLOCKED.
+
+---
+
 ## C1 FINAL — H1 POSTONA Threads OAuth offline candidate PASS / H1 FREE — 2026-10-11 JST
 
 - **C1 accepted:** `postona-h1-threads-oauth-edge-offline-implementation-20261011` is **PASS_OFFLINE_CANDIDATE / RELEASE_HOLD**, task **done/next_owner none**. H1 TASK and H1-only ACTIVE_TASK status/ownership updated; existing H1 Report was independently confirmed synced before C1. H1 is free; do not hold H1 as a reminder or assign new TASK without fresh slot checks. No additional H1 Report/re-test request required.
