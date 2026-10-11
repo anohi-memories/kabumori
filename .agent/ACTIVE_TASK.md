@@ -129,11 +129,11 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: postona-x-reservation-store-offline-v1-g3-20261011
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
 - allocation: User accepted next POSTONA milestone after PR138 local planner was squash-merged. G3 owns isolated **X-only AI/manual reservation durable backend candidate**: new offline SQL candidate/store/RPC or trustworthy port, new reservation claim/lease/finish boundary, save/read/edit/cancel client adapter with explicit disabled-by-default gate, disposable PG17/18 safety tests + app regressions and docs. Source-only Draft PR, never apply SQL/create live posts/X provider calls/migrate/Edge/Cron/EAS/merge. Manual per-post explicit consent vs unattended AI auto_post_preference; G5 active x_autopost entitlement and lifecycle guard, G4 verified X OAuth Issue131 and signed owner permission are hard blocked dependencies, never fake authorize. Stage3B PR127 docs and main 2026100616 migrations are read-only reference, not live. G4 current Threads integration PR140/PR124/PR135/PR139 and G5 local OSS/Auth/T13 PR121 protected; no G4/G5/H5 code overlap. Live activation only after Sol（高） independent integrated Auth/RLS/DB/API review and separate user authorization. At K3 return to this G3 chat.
