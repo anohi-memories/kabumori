@@ -27,12 +27,12 @@ const KIND = {
 function FeaturedCard({
   entry,
   basisLabel,
-  onEdit,
+  onOpen,
   onOpenNews,
 }: {
   entry: FeaturedWatch;
   basisLabel: string;
-  onEdit: (trackedId: string) => void;
+  onOpen: (trackedId: string) => void;
   onOpenNews: (newsId: string) => void;
 }) {
   const { row, kind, news } = entry;
@@ -53,10 +53,10 @@ function FeaturedCard({
   return (
     <View style={[styles.featured, { backgroundColor: style.background, borderColor: style.border }]}>
       <Pressable
-        onPress={() => onEdit(row.tracked.id)}
+        onPress={() => onOpen(row.tracked.id)}
         accessibilityRole="button"
         accessibilityLabel={summary}
-        accessibilityHint="この監視銘柄の情報を編集または削除します"
+        accessibilityHint="この監視銘柄の詳細を開きます"
         style={({ pressed }) => [styles.featuredMain, pressed && styles.pressed]}>
         <View style={styles.featuredTop}>
           <StockAvatar label={row.avatar} name={row.company} size={44} seed={row.ticker} />
@@ -97,15 +97,15 @@ function FeaturedCard({
   );
 }
 
-function WatchListRow({ row, flagged, last, onEdit }: { row: WatchRow; flagged: boolean; last: boolean; onEdit: (trackedId: string) => void }) {
+function WatchListRow({ row, flagged, last, onOpen }: { row: WatchRow; flagged: boolean; last: boolean; onOpen: (trackedId: string) => void }) {
   const change = tone(row.changePercent);
   const { target_buy_price: buy, target_sell_price: sell } = row.tracked;
   return (
     <Pressable
-      onPress={() => onEdit(row.tracked.id)}
+      onPress={() => onOpen(row.tracked.id)}
       accessibilityRole="button"
       accessibilityLabel={`${row.company} ${row.ticker} 終値 ${formatPriceYen(row.close)} ${formatSignedPercent(row.changePercent, 2)}${flagged ? ' 注目' : ''}`}
-      accessibilityHint="この監視銘柄の情報を編集または削除します"
+      accessibilityHint="この監視銘柄の詳細を開きます"
       style={({ pressed }) => [styles.row, !last && styles.rowBorder, pressed && styles.pressed]}>
       <StockAvatar label={row.avatar} name={row.company} size={40} seed={row.ticker} />
       <View style={styles.rowName}>
@@ -145,7 +145,7 @@ export function WatchlistSection({
   flagged,
   featuredTitle,
   basisLabel,
-  onEdit,
+  onOpen,
   onOpenNews,
 }: {
   featured: readonly FeaturedWatch[];
@@ -153,7 +153,7 @@ export function WatchlistSection({
   flagged: ReadonlySet<string>;
   featuredTitle: string;
   basisLabel: string;
-  onEdit: (trackedId: string) => void;
+  onOpen: (trackedId: string) => void;
   onOpenNews: (newsId: string) => void;
 }) {
   const group = remainingGroup(featured.length, rest.length);
@@ -166,7 +166,7 @@ export function WatchlistSection({
             <Text style={styles.blockNote}>{basisLabel}</Text>
           </View>
           {featured.map((entry) => (
-            <FeaturedCard key={entry.row.tracked.id} entry={entry} basisLabel={basisLabel} onEdit={onEdit} onOpenNews={onOpenNews} />
+            <FeaturedCard key={entry.row.tracked.id} entry={entry} basisLabel={basisLabel} onOpen={onOpen} onOpenNews={onOpenNews} />
           ))}
         </View>
       ) : null}
@@ -181,7 +181,7 @@ export function WatchlistSection({
           </View>
           <View style={styles.listCard}>
             {rest.map((row, index) => (
-              <WatchListRow key={row.tracked.id} row={row} flagged={flagged.has(row.ticker)} last={index === rest.length - 1} onEdit={onEdit} />
+              <WatchListRow key={row.tracked.id} row={row} flagged={flagged.has(row.ticker)} last={index === rest.length - 1} onOpen={onOpen} />
             ))}
           </View>
         </View>
