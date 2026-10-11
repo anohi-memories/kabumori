@@ -63,17 +63,17 @@
 ## Codex H3
 - owner: codex
 - slot: codex-3
-- status: idle
-- task_id: none
+- status: ready
+- task_id: kabumori-pr143-ondemand-queue-auth-security-review-20261011
 - start_code: H3
 - finish_code: C3
 - completion_code: C3
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: codex
+- return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CODEX_TASK_3.md
 - report: .agent/CODEX_REPORT_3.md
-- allocation: 未割当（2026-10-11追加）。固定プロジェクト専用にしないCodex枠。割当時に return_to / completion_code C3 / 推薦モデルを必ず記入する。
-- recommended_model: none
+- allocation: K2 G2 source candidate Draft PR143 1d0529bb; high-risk independent Sol（高） code/security review of new user/RLS/SECURITY DEFINER queue RPC + DB fences/late worker, completed result/push dedupe, financial market Fact/freshness, old Cron gate/rollback, missing all-user shared broadcast. Read-only/new dedicated H3 worktree; no product source edits, PR merge/deploy/production/real AI/Expo/X. Return C3 to かぶモリアプリG2のちゃ; preserve prior H3 template/report and all other slots.
+- recommended_model: Sol（高）
 ## Codex H4
 - owner: codex
 - slot: codex-4
@@ -117,15 +117,15 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: done
 - task_id: kabumori-personalized-ondemand-background-push-v1-20261011
 - start_code: G2
 - finish_code: K2
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: USER PRODUCT DIRECTION 2026-10-11: shared morning/close/news automated, personalized AI **only on explicit authenticated user request**, persistent server queue/worker after app exits, private stored result and once-only completion push. K2-queued prior auto-batch P1 PR141 exact 4bc5c017 is protected OPEN/Draft/unmerged and superseded as roadmap; old Report preserved, no K2 code acceptance. G2 source-only cross-layer Draft PR + offline tests, off-by-default, no live DB/Edge/Cron/API/X/push/payment/model switch or production release. No other slot changes. Return K2 here; focused independent Sol（高） review at source-ready gate.
-- recommended_model: Opus5.5（高）
+- allocation: K2 2026-10-11 accepted [Draft PR143] exact 1d0529bb68b0e60b32ce0a2cb0002872b1671177 as PASS_SOURCE_CANDIDATE_WITH_BROADCAST_BLOCKER / PRODUCTION_NO_GO. G2 reported 1,616/1,616 offline Deno/app plus disposable PG17 ACL/RLS/concurrency/13 mutations PASS; ChatGPT source-inspected but did not rerun. 30 files: authenticated request, DB persisted queue, fenced worker, private results, completion push, common market reader, OFF by default. Missing shared morning/close everyone-broadcast push is blocker; real Edge/Cron/DB/Expo/provider/native NOT_RUN. Separate H3 Sol（高） independent security review allocated; do not merge/apply PR143 before C3. Prior Draft PR141 superseded/protected; other slots untouched. G2 source task finished and released.
+- recommended_model: Opus5.5（高） (completed)
 ## Claude G3
 - owner: claude
 - slot: claude-3
