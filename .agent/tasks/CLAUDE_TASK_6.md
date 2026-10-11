@@ -11,7 +11,7 @@
 - recommended_model: **Opus5.5（高）**
 - priority: high
 - user_authorization: **2026-10-11「じゃあ進めて」** — 直前に「Phase1g: Claude APIを1回呼び出し、予算管理DBに利用量を正しく記録する。見積費用上限約$0.04。テスト認証情報の準備が必要。G6で実施してよいか」と説明し承認取得。**固定の合成文で有料Claude Opus5.5リクエストちょうど1回のみ**を許可。無制限/再試行/本番配信・モデル切替は許可していない。
-- production_mutation_window: **ACTIVE** (2026-10-11T14:43Z (23:43 JST), one live smoke; recorded in .agent/CURRENT_STATE.md) — was RESERVED_NOT_ACTIVE。実際の`--ledger=supabase` smokeは共有本番DBのRPC書込みを伴う。実行直前にfreshの全15枠/G5/STATEを確認し、他のACTIVE窓がなければ自枠の短い `ACTIVE` 窓（対象：このsmoke1件のai_ledger reserve→mark_sent→settleだけ）を`.agent/CURRENT_STATE.md`へCAS記録。完了/失敗/STOPで必ずCLOSED。窓記録不可なら実APIを呼ばない。
+- production_mutation_window: **CLOSED** (ACTIVE 2026-10-11T14:43Z / 23:43 JST → CLOSED 14:44Z / 23:44 JST after read-back; one live smoke) — was RESERVED_NOT_ACTIVE。実際の`--ledger=supabase` smokeは共有本番DBのRPC書込みを伴う。実行直前にfreshの全15枠/G5/STATEを確認し、他のACTIVE窓がなければ自枠の短い `ACTIVE` 窓（対象：このsmoke1件のai_ledger reserve→mark_sent→settleだけ）を`.agent/CURRENT_STATE.md`へCAS記録。完了/失敗/STOPで必ずCLOSED。窓記録不可なら実APIを呼ばない。
 - source_version: fresh origin/main の固定 `supabase/tests/ai_provider_claude_smoke.ts`、`docs/ai-provider/PHASE1D_ACTIVATION_RUNBOOK.md` §2手順1–3・7、Phase1a provider / Phase1b ledger。既存コードの修正や再デプロイは本TASK不要・禁止。
 
 ## K6 INTERIM VERDICT — CONDITIONAL HOLD RELEASE / Phase1g CONTINUE (2026-10-11)

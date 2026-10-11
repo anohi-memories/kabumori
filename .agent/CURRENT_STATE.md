@@ -4,9 +4,17 @@
 - C3 accepted and H3 TASK/ACTIVE marked `done/next_owner:none`; slot unreserved. No product source edits or PR merge/deploy/DB/Cron/real posts/push. New G2 `kabumori-pr143-fail-lease-expiry-fence-r1-20261011` `ready/next_owner:claude` recommended **Sonnet5（高）**: update only Draft PR143's fail lease expiry predicate + SQL/worker mock regression, preserving all previous G2 work. Return K2. No blanket H-review loop for surgical correction; ChatGPT checks exact diff at K2.
 - **Distinct release blocker remains** common all-users morning/close PUSH fanout and notification preferences/priority. Existing dispatcher max 200 rows per run is not instant broadcast; aim scalable fanout independent of individually requested analysis. PR143 OPEN/Draft, legacy Cron live configuration unchanged; on-demand app/source off, production cutover NO_GO. Next dedicated G2 assignment after K2 will address scalable shared push separately; no G5/G6/G8/G9/POSTONA/H other slot changes.
 
-## G6 production_mutation_window: ACTIVE — 共通AI基盤 Phase1g one paid Claude call through the ledger — 2026-10-11 JST
+## G6 production_mutation_window: CLOSED — 共通AI基盤 Phase1g one paid Claude call through the ledger (PASS) — 2026-10-11 JST
 
-- production_mutation_window: **ACTIVE** — owner **G6**, task_id `common-ai-provider-g6-phase1g-one-paid-call-ledger-smoke-20261011`, opened 2026-10-11T14:43Z (23:43 JST).
+- **CLOSED 2026-10-11T14:44Z (23:44 JST) after read-back.**
+  - The fixed smoke ran exactly once (23:43 JST): ONE Anthropic request (Claude Opus 5.5, synthetic text, measured cost $0.001448) and ONE ledger row (system / kabumori / market_report / connection_smoke).
+  - Ledger now: 1 reservation, 1 usage event, 0 open holds; the 2 trial policies are unchanged.
+  - No schema, policy, grant, Secret, Edge or Cron change.
+  - The temporary Supabase secret key will be revoked by the user (pending).
+- G5 / other slots: nothing structural changed. One usage row was recorded under the system market-report identity.
+
+
+- production_mutation_window (as opened): **ACTIVE** — owner **G6**, task_id `common-ai-provider-g6-phase1g-one-paid-call-ledger-smoke-20261011`, opened 2026-10-11T14:43Z (23:43 JST).
 - target: Supabase project `wsmznyzcvmuitkglfeuj`, ledger RPCs only.
   - Scope: the fixed smoke `supabase/tests/ai_provider_claude_smoke.ts --mode=live --ledger=supabase`, run exactly once. It makes ONE ledger reservation (reserve → mark_sent → settle) for logical role `kabumori.market_report.connection_smoke` and ONE Anthropic request (Opus 5.5, fixed synthetic text, cost upper bound $0.040164).
   - No schema, policy, grant, Secret, Edge, Cron or other change.
