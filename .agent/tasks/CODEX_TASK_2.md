@@ -3,8 +3,8 @@
 - task_id: kabumori-fact-v2-pr132-final-integrated-review-20261011
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
@@ -39,6 +39,18 @@ PR132 is stacked Draft on intact PR110: **exact ONE delta commit, FOUR market-re
 - implementation/product_changed_files: zero
 - Report: task_id, reviewed_head, outcome, finding controls, actual tests, source/prod write 0, commit/push of own Report/TASK/index only with exact readback, deploy/merge=false, return_to=G2, next=C2.
 - Recommended model: **Sol（高）**.
+
+
+## H2 completion — 2026-10-11 JST
+
+- outcome: **CHANGES_REQUIRED**; exact PR132 `bd424616a135e7bf71592c2ac41acb3e03f8568d` on protected PR110 `319a442edcd61c07274e3409d8864234f9d77cd4`, both OPEN/UNMERGED; PR132 DRAFT.
+- findings: three **P2** objective-guard regressions, not inference-policy objections: R1 same-sentence negation launders another affirmative same-day assertion (analysis_logic.ts:355); R2 TOPIX context `算出値/ウエート` exempts fake ETF/index value (analysis_logic.ts:429-440); R3 blanket trailing-date removal hides incorrect postposed US-session date (hard_fact_guards.ts:340). Before/after exact fixture evidence and minimal scoped corrections are in the Report.
+- actual tests: focused typed Deno **55/55 PASS** (Fact V2 11, H2 corrective26, causal18); independent scratch **10/14 PASS, 4 expected safety assertions FAIL** representing the three groups; SAME four unsafe strings blocked/removed in X+app on exact PR110 baseline. Four-file check/lint/diff-check PASS. G2's 1356 remains reported only, not rerun.
+- CI: Vercel status actual reason **Deployment rate limited — retry in 24 hours.**; no native code/build failure inferred.
+- report publication commit: `950dd827daa0ca92406f9a9af33c3f3bb2132a66`, guarded Contents API update to origin/main, exact full Report content read-back verified; prior entire Report suffix preserved byte-for-byte.
+- own bookkeeping only: this H2 TASK current header/completion, H2 Report prepend, H2 ACTIVE index section; preserved prior TASK/Report and all other slots. No H2 product source commit.
+- source edits0, PR merge0, deploy0, live Supabase reads/writes0, paid AI/API0, X/Push0, DB/RPC/migration/Cron/settings/flags/Auth/Storage/Vault/OAuth0, HANDOFF/apps/admin0; fresh base untracked supabase/.temp remains protected.
+- status: review_required / next_owner: chatgpt; return **C2 to かぶモリアプリG2のちゃ**. Single bounded G2 correction/ChatGPT source decision; production/cutover is a separately authorized task.
 
 ---
 
