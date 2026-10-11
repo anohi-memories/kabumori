@@ -112,8 +112,8 @@
 - next_owner: claude
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: User-authorized G1 source-only portfolio stale valuation consistency. Reuse five-field holding snapshot match from merged PR136; withhold mismatched per-row P/L, suppress invalid impact top3 and aggregate totals if even one current vs saved holding mismatch, preserve saved close/date and canonical bottom five NativeTabs. Distinguish loading/error from verified empty; fail-before/pass-after tests; no production/DB/API/EAS/manual deploy, no G2 old-method report fix, no other slot interference. One separate G1 worktree and PR, no self-merge; return K1.
-- recommended_model: Sonnet5（高）
+- allocation: K1 PR142 async refresh correction REQUIRED, one bounded stale-P&L flash defect. Existing PR #142 head 5fe4a6e37d6899e9731bd4ca6bc2c4e8e825ed38 core five-field alignment, rows/impact/totals and 375pt images reviewed positive; Deno app 512/512 PASS reported by Claude. In src/app/(tabs)/explore.tsx useFocusEffect load() sets loading=true but keeps registrationsKnown=true and cached items; the current registrations variable ignores loading, allowing previous holding valuation/P&L to remain visible while latest tracked_stocks fetch is pending after user edit or user switch, and asynchronous report responses may pair different generations. Fix ONLY this screen and focused portfolio-screen tests so valuation eligibility becomes unknown from start of any reload and cannot reopen from out-of-order earlier fetches, then shows settled values only after latest read; fail-before/pass-after coverage. Continue SAME G1 isolated worktree PR142, no new PR/merge/EAS/production DB/paid API. Preserve five NativeTabs, all financial pure helpers, G2 report cutover and old delivery gap. Return K1 to かぶモリアプリG1のちゃ.
+- recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
 - slot: claude-2
