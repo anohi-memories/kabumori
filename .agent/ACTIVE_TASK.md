@@ -174,6 +174,7 @@
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
 - report: .agent/tasks/CLAUDE_TASK_6.md#report
+- live_smoke_gate: HOLD_SB_SECRET_COMPAT — NEW sb_secret key with Authorization Bearer in ledger_guard.ts may fail JWT verification; user key creation and live smoke WAIT pending G6 offline compatibility check / narrow fix. User can complete Claude Console workspace setup. See G6 TASK safety hold.
 - production_mutation_window: RESERVED_NOT_ACTIVE (one paid Claude smoke with only ai_ledger RPC reserve/mark_sent/settle. G5-first and other-writer ACTIVE windows block; CAS open immediately prior, CLOSED immediately after)
 - user_authorization: 2026-10-11 「じゃあ進めて」 — approved ONE real Anthropic Opus 5.5 paid test with fixed synthetic payload and live Supabase budget ledger verification; not a broader production provider/cutover authorization.
 - allocation: prior Phase1f source/DB PASS, K6 accepted, now G6 Phase1g. Verify dedicated Claude Console workspace $10/month cap + scoped key, ephemeral user-managed Supabase secret test key, no secrets logged; plan=PASS then strictly ONE `--mode=live --ledger=supabase --confirm=ONE_PAID_CALL`, allowed hosts only and <$0.05 upper-bound, no retry or fallback. Independently read-back usage/cost delta and revoke ephemeral key; unexpected provider/safety/auth/conflict => STOP, no workaround. No Supabase Edge Secret/Edge/Cron/other migration/G2 release/PR merge. Past G6 TASK + Report preserved in own TASK. Return K6 only to this common-AI chat.
