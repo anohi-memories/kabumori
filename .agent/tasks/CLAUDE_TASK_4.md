@@ -3,8 +3,8 @@
 - task_id: postona-threads-manual-text-publish-v1-20261011
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G4
 - finish_code: K4
 - return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
@@ -19,6 +19,22 @@
 - shared_G5_Auth_schema_deletion_or_G3_scheduler_edits: **FORBIDDEN**
 - source_owner: **Threads publication adapter, manual publish backend endpoint, scoped POSTONA manual publisher UI; NOT Threads OAuth**
 - worktree: independent fresh G4 checkout; no H5/G3/G5 checkout sharing
+
+## K4 FINAL — ChatGPT verification / 2026-10-11 JST
+
+- task_id: postona-threads-manual-text-publish-v1-20261011
+- verdict: **PASS_SOURCE_CANDIDATE / RELEASE_HOLD / NOT_LIVE_READY**. All requested pure source candidates exist. G4 Report verified below, separate real activation not approved.
+- PR: [#140](https://github.com/anohi-memories/kabumori/pull/140), exactly `2e75a6a842e70f3de78558681803b60935fb4251`, OPEN/DRAFT/NOT_MERGED, 1 commit, 20 G4-scoped paths against main. ChatGPT inspected proposed Threads API transport, manual orchestration, HTTP/Edge static gate, G4 source-only SQL/role boundaries, mobile account UI, PR metadata and task Report. Source file overlap with protected PR135/#139 and G3 Draft PR138 absent in listed changed paths. Actual Mac worktree not independently inspected.
+- G4 Report test evidence: Deno 86 PASS (transport+steps+Edge/provider), app 252 PASS, Postgres17 disposable DB ACL/role/concurrency negative tests PASS; lint/TS/diff checks PASS. **Tests are G4-reported, not rerun by ChatGPT; managed Supabase/PostgREST/Auth/Vault/Meta/native device untested.** Vercel build-rate-limit is not evidence of product test failure; do not claim CI green without new confirmation.
+- Features accepted: TEXT-only two-step Meta publish builder (no `auto_publish_text`), one-attempt/one-account preview+manual consent UI, SQL source candidate with step claims/idempotency and account permission, read-only confirmation/reconciliation, explicit uncertainty without retry. New Edge `THREADS_MANUAL_PUBLISH_PREREQUISITES_MET=false` / mobile `THREADS_MANUAL_PUBLISH_UI_ENABLED=false`, client cannot make a real Threads write.
+- **Risk / P1 integrated review required before any production activation:** new server service_role `redeem_threads_manual_publish_step` checks current account status, token and per-account permission, but **does not itself rerun G5 T13 lifecycle/entitlement and owner/admin membership checks** after caller-side `claim`; grant lasts up to 60 seconds. Need a reviewed end-to-end solution for entitlement ended/deletion/membership revoked between claim, redeem and actual Meta POST. Do not silently call an owner-only helper under service_role or widen grants; coordinate with G5 and H5 verified transport. Also G4 depends on an unimplemented owner-only `public.threads_account_credential_expires_at(text)` with exact long-token expiry semantics, and G5 T10 custody/deletion updates for G4's two new tables. No guaranteed live-ready per-post fresh-auth boundary until resolved.
+- Further gates: source-only PR124/#135/#139 OAuth chain not production-active, real G5 T13, Phase2a-2 migration preflight/apply, owner+Vault authority, verified Meta app/tester/HTTPS mobile callback and 1 approved public test post, target-specific schema/source/release/security review **Sol（高）**. PR140 must remain Draft until these prerequisites and scoped user approval. Existing X code Issue131 deferred independently, not remediated.
+- status: **done / next_owner none** (K4 accepts candidate, G4 freed and NOT parked for pending integration). Do not treat release HOLD as reason to occupy G4. Future integration/activation requires a new explicitly allocated TASK after fresh slot/PR/worktree checks.
+- production: **no G4-caused migration/apply/GRANT/Vault/Meta/Supabase writes, PR merge, deploy, EAS or post**. Separately, `.agent/CURRENT_STATE.md` has an ACTIVE G6 production mutation window on same shared target, so new DB writes must wait for its closure and independent authorization.
+- AI Lab development diary: safe to note mock-only connector/publisher design and test milestones without sharing secrets, private user or vulnerability procedure; not production-launch announcement.
+- recommendation_for_integrated_boundary_review: **Sol（高）**, allocate free H1–H4 only once actual G4/G5/H5 compatible authority boundaries are assembled.
+
+---
 
 ## Authority and boundaries
 
