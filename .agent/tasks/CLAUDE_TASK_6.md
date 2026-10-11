@@ -1,3 +1,77 @@
+# G6 CURRENT TASK — 共通AI基盤 Phase 1g / Claude API 1回だけ台帳込み実接続テスト
+
+- task_id: common-ai-provider-g6-phase1g-one-paid-call-ledger-smoke-20261011
+- owner: claude
+- slot: claude-6
+- status: ready
+- next_owner: claude
+- start_code: G6
+- finish_code: K6
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- recommended_model: **Opus5.5（高）**
+- priority: high
+- user_authorization: **2026-10-11「じゃあ進めて」** — 直前に「Phase1g: Claude APIを1回呼び出し、予算管理DBに利用量を正しく記録する。見積費用上限約$0.04。テスト認証情報の準備が必要。G6で実施してよいか」と説明し承認取得。**固定の合成文で有料Claude Opus5.5リクエストちょうど1回のみ**を許可。無制限/再試行/本番配信・モデル切替は許可していない。
+- production_mutation_window: **RESERVED_NOT_ACTIVE**。実際の`--ledger=supabase` smokeは共有本番DBのRPC書込みを伴う。実行直前にfreshの全15枠/G5/STATEを確認し、他のACTIVE窓がなければ自枠の短い `ACTIVE` 窓（対象：このsmoke1件のai_ledger reserve→mark_sent→settleだけ）を`.agent/CURRENT_STATE.md`へCAS記録。完了/失敗/STOPで必ずCLOSED。窓記録不可なら実APIを呼ばない。
+- source_version: fresh origin/main の固定 `supabase/tests/ai_provider_claude_smoke.ts`、`docs/ai-provider/PHASE1D_ACTIVATION_RUNBOOK.md` §2手順1–3・7、Phase1a provider / Phase1b ledger。既存コードの修正や再デプロイは本TASK不要・禁止。
+
+## 背景・現在の本番状態
+
+- G6 Phase1f K6独立検証済み：本番 Supabase `wsmznyzcvmuitkglfeuj`に `ai_ledger`5表、`public.ai_ledger_*`7 RPC（service_role-only）、migration `20261010050613`、試験system-onlyポリシー **2件**あり。2026-10-11 21:55 JST、ChatGPT read-only readback 17/17 TRUE、history1、2 enabled、利用予約/利用/請求観測0。G6のPhase1f本番DB窓はCLOSED。
+- テストの唯一の許可範囲: Anthropic / `claude-opus-5-5` / `kabumori` / `market_report` / `system` / 固定合成文 / 一つのcallId、**1 transport attempt**、出力最大1536 tokens、`effort=low`、料金上限試算 `$0.040164`（`SMOKE_MAX_USD=$0.05`）。1日$2・6回、月$5・40回、1回$1の既存ポリシーを変更しない。
+- ユーザーはClaude Consoleクレジット付与・他用途での実テスト利用を確認済み。**専用workspace（月上限$10、通知50%/80%）が設定済みか、workspace-scoped keyが準備できたかは未確認**。設定が無ければユーザーだけが行う操作を案内し、秘密値を要求せず準備完了までWAIT。
+- G2かぶモリの個別AIは「ユーザー明示依頼→永続ジョブ→閉じても通知」の別開発に移行。G6はG2の個別データ・G5 Auth・G8/G9ニュース、POSTONA/MICに触れない。株式の個人/保有銘柄情報・実ニュース本文はAnthropicへ送信しない。
+
+## 実行前の必須ゲート（順番固定）
+
+1. `PROJECT_RULES.md`、`HANDOFF.md`、`.agent/ORCHESTRATION.md`、`.agent/ACTIVE_TASK.md`、`.agent/CURRENT_STATE.md`、本TASK、runbook §2手順1-3・7、`ai_provider_claude_smoke.ts`、既存G6 Reportをfresh read。G6専用の独立クリーンworktreeを使用。前回G6 worktree本人のものならクリーン確認後利用可。G1–G5/G7–G10/H1–H5のbranch、worktree、TASK/Report/dev serverへ干渉禁止。
+2. fresh main、同じ実装のsmoke/台帳ポリシーを照合。本番Supabaseへ**read-only SELECT**でmigration、RPC権限、scope限定の月/日policy2件 enabled、台帳現存の使用量/予約、見積り上限と空き上限を再確認。G5および全15枠の本番窓がACTIVEなら待機/STOP、枠/スキーマ更新が変わっていたら再判定する。台帳へINSERT等はまだしない。
+3. Anthropic Consoleの正しい組織・**Dedicated Workspace**・残りクレジットと**workspace月$10 spending limit**を、ユーザー操作で設定・確認（値/秘密をチャットに求めない）。既存Default Workspaceの無制限キー/管理者APIキーでのテストは禁止。本人が設定できない場合は`WAIT_USER_SETUP`とし、試験は未実行と報告。
+4. ユーザーがworkspace限定のClaudeキーを既に保存しているなら**流用可能**。なければ本人が発行し、Mac上の`0600`のローカル `~/.kabumori-secrets/anthropic.env` に安全に保存。G6はキーをダンプ/表示/収集/コミット/push/Report・CIログへ記録しない。Supabase Edge Secrets `ANTHROPIC_API_KEY` を`secrets set`してはいけない（Phase2aの別ゲート）。
+5. **台帳RPC用の認証情報**: `--ledger=supabase` は`SUPABASE_URL`とservice_role権限相当の`AI_LEDGER_SERVICE_KEY`が必要。ユーザーがSupabase Dashboard上で**一時的な新しいsb_secret等のsecret API keyを作り、試験専用に持ち、直後に削除**する方法のみ原則許可。既存のservice_role keyの閲覧/コピー/変更や他アプリの秘密の流用禁止。これは高権限キーなのでG6は値に一切アクセスせずユーザー本人がMac上の`0600`の`~/.kabumori-secrets/ledger.env`へ保存する。API keyの新規作成・削除に安全装置/手順上のブロックやユーザー側の追加操作が必要なら**回避せずSTOP/WAIT**。決してチャット/GitHub/画面共有へキーを貼らせない。
+6. 固定smokeを**`--mode=plan --ledger=supabase`**で先に確認（外部接続・課金なし）。環境変数ホワイトリスト、`ANTHROPIC_CUSTOM_HEADERS`/`BASE_URL`/`AUTH_TOKEN`禁止、モデル・合成入力・見積り`<= $0.05`、ledger URLが正しいprojectのみ、試験用キーのみ、Deno `--allow-net`は`api.anthropic.com`と指定1プロジェクトに限定。planがFAILならliveへ進まない。
+7. liveの実行**直前**にCURRENT_STATE全体/G5/他writerをfresh再検査し、対象と期間を限定した短い本番`production_mutation_window: ACTIVE`をCURRENT_STATEへCASで記録。CAS競合なら再チェックするまでSTOP。G5优先。ロックを長時間保持しない。予算ポリシーを編集・広げない。
+8. **実API呼び出しは厳密に1回**：runbook §2手順7の**既存のコマンド**で `--mode=live --ledger=supabase --confirm=ONE_PAID_CALL` を実行（ユーザー承認済）。Claude Codeの安全装置が実行を拒否した場合はコード改変・別ツール経由による回避をしない。必要ならユーザー本人が自分の端末で実行する手順を案内する。**Anthropic送信が発生した/不明なら二度と実行しない**。拒否/429/5xx/timeout/台帳不整合でも自動/手動再送禁止、後続操作STOP・K6に返す。
+9. 1回の実API通過後、request ID, workspace ID, model, token usage、独立料金計算、台帳usage_summaryの**前後差分**（attempt +1/success +1/usage token/cost一致）を個人情報/secret値なしでread-back。台帳にUNKNOWN/未settledが残る場合、手動補修/rollback/台帳policy解除はせずK6へエスカレーション。必要最小限の識別子だけReport。成功/失敗いずれも実際のprovider HTTP実行回数と課金有無の事実を記す。
+10. **終了時**: ユーザー操作で試験用Supabase secret keyを**破棄・無効化**し、Macの`ledger.env`を削除（中身は一度も表示しない）。Claudeキーについては継続利用に必要ならuser-owned `anthropic.env` のみ保持可、不要なら本人が削除。Consoleのコスト/ログで該当request IDを照合。キーを確実に失効できない場合`SECURITY_CLEANUP_PENDING`で完了PASSにしない。本番窓をCASで`CLOSED`にし（STOP/失敗含む）、G5と他ownerへ「system市場レポート名義で1回だけ台帳記録」という構造的事実のみ共有。
+11. G6 TASK `## Report — Phase1g` と `.agent/ACTIVE_TASK.md` の**G6セクションだけ**を更新し、`status: review_required / next_owner: chatgpt`。CURRENT_STATEにはG6窓/結果の公開安全な最小情報だけをCAS追記。他スロットのTASK/Report/STATE内容は上書き・並べ替え禁止。コード・migration・policy・smokeの仕様変更は行わない。
+
+## 完了条件 / fail-closed
+
+- PASS: 既定スクリプトで**Claudeへのリクエスト1回**、応答のmodel・provider usage・費用の独立一致、**本番台帳で1件の予約→sent→settleとusage summary増分一致**、予算ガードPASS、試験一時Supabaseキー破棄・Macローカルファイル削除確認、窓CLOSED。Console実請求額は後から反映されうるので、即時の観測不能は`BILLING_PENDING`と区別し、実費ゼロとは言わない。
+- WAIT/STOP: Workspace/月$10上限未設定、workspace限定キー不足、secret key発行/削除の不備、本番対象の不一致、予算残不足、他writer ACTIVE、実行安全装置拒否、live送信回数/結果の不確定、API失敗、台帳差分不一致。**台帳なし`--ledger=memory`へのすり替えは不可**。未実行のときは絶対に「実API成功」と記録しない。
+- **禁止**: 2回目の有料実呼び出し、レポート実生成・朝刊/大引けのモデル変更、個人保有情報/他人のコンテンツ送信、G5 Auth/削除、source/migration/policy/GRANT・RLS変更、Edge/Cron/Secrets設定、本番デプロイ・GitHub PR merge、ユーザーデータ変更、他用途のAPIアクセス、追加課金契約。
+- **別ゲート**: `ANTHROPIC_API_KEY`の本番Supabase Edge Secret登録、再試行/回復Cron、Phase2a G2との実レポートシャドー接続、個別課金・プラン・利用上限更新はすべて別TASK/承認。
+- **レビュー**: ソースに変更なし、従来Provider/ledger/runnerのPhase1b独立C1レビューとPhase1d/E2E fakeテストを確認済。通常の追加Codex枠使用不要。Auth/課金/権限/Secret境界に新たな高リスク問題を観察した場合に限り、K6でH1–H4レビュー要否を判断（H5は臨時実装専用）。
+- **AI Lab日記**: 実際の動作事実だけ公開安全に、secret・プロジェクトURL/identifier・内部認証構造・請求関連識別子を含めない。
+
+## Report — Phase1g（G6記入）
+
+- task_id: common-ai-provider-g6-phase1g-one-paid-call-ledger-smoke-20261011
+- result: NOT_STARTED
+- timestamp: pending
+- source_head / worktree: pending
+- setup: dedicated_workspace_cap=unverified, claude_key=unverified, temporary_supabase_key=unverified
+- plan_result: NOT_RUN
+- live_result: NOT_RUN
+- paid_provider_call_count: 0 (not started)
+- ledger_before_after_delta: NOT_RUN
+- cost_estimate_vs_usage: NOT_RUN
+- budget_policy_gate: NOT_RUN
+- temporary_supabase_key_revocation: NOT_DONE
+- window: NOT_ACTIVE
+- changed_files: none
+- tests: not_run
+- commit_hash: none
+- push: not_performed
+- merge: not_performed
+- deploy: not_performed
+- remaining_issues: verification and single smoke execution pending
+- next_recommendation: G6 START then K6 RETURN after PASS or safe STOP.
+
+---
+
+# PRESERVED G6 PRIOR TASKS / REPORTS — immutable history below
+
 # G6 CURRENT TASK — 共通AI基盤 Phase 1f / 本番 AI Ledger 限定適用＋試験ポリシー
 
 - task_id: common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011
