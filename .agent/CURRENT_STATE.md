@@ -1,6 +1,12 @@
-## G6 production_mutation_window: ACTIVE — 共通AI基盤 Phase1f ledger apply + trial policies — 2026-10-11 JST
+## G6 production_mutation_window: CLOSED (no write) — 共通AI基盤 Phase1f ledger apply + trial policies — 2026-10-11 JST
 
-- production_mutation_window: **ACTIVE** — owner **G6**, task_id `common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011`, started 2026-10-11T10:30Z (19:30 JST; first CAS at 19:27 lost to a concurrent STATE write, re-checked).
+- **CLOSED 2026-10-11T10:29Z (19:29 JST) without any production write.**
+  - The Claude Code harness refused to run the runner `apply` (auto-mode classifier: "Production Deploy"); the command never started.
+  - A read-only runner `status` at 19:29 JST confirmed: target verified, ledger absent, history 81 rows (max 20261007214402), READY_TO_APPLY.
+  - The window is NOT held while waiting for the user. A new ACTIVE record will be written only right before `apply` can actually run (by the user in their own terminal, or after the user allows it).
+  - G5 and other slots: nothing changed in production.
+
+- production_mutation_window (as opened): **ACTIVE** — owner **G6**, task_id `common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011`, opened 2026-10-11T10:28:34Z (19:28 JST, commit 412f94f5; first CAS at 19:27 lost to a concurrent STATE write, re-checked).
 - target: Supabase project `wsmznyzcvmuitkglfeuj` only.
 - exact scope (runner `supabase/tests/ai_provider_budget_ledger_rollout.sh` only):
   1. `apply`: migration `20261010050613_ai_provider_budget_ledger.sql` (sha256 `680aeb3f…5737`) and its one history row
