@@ -3,8 +3,8 @@
 - task_id: postona-unified-ai-manual-schedule-planner-v1-20261011
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - project: POSTONA / X posting scheduling
 - type: **SOURCE/LOCAL UI + pure planner only; NO live posting or DB write**
@@ -17,6 +17,20 @@
 - DB_migration_Auth_RLS_RPC_Edge_Cron_Vault_secrets_or_traffic_switch: FORBIDDEN
 - production_deploy_PR_merge_EAS_TestFlight: FORBIDDEN
 - protect: previous G3 Report/PR127, H1 Threads OAuth, G4 X OAuth Issue131, G5 shared account/Auth, G1/G2/H2, existing X/Kabumori/AI Lab posting
+
+## K3 FINAL ACCEPTANCE — Unified AI + manual local schedule planner V1 / PR #138
+
+- task_id: `postona-unified-ai-manual-schedule-planner-v1-20261011`
+- **verdict: PASS_SOURCE_PREVIEW_ONLY / G3 DONE / MERGE_HOLD.** All original K3 R1, R2, R2b, R3 local-preview concerns accepted on source inspection. Acceptance does NOT authorize PR merge, real cloud-saved reservations, scheduler/migration/Edge, any X/Threads post, deployment or EAS.
+- PR: [#138](https://github.com/anohi-memories/kabumori/pull/138), **OPEN/DRAFT/UNMERGED**, inspected exact source head `f6b8f866b449cd432f649c132bbaa2e70a9f2ace`. Latest compare against main: branch ahead 5, behind 13. GitHub direct REST `mergeable=null, mergeable_state=unknown` at this time; do not assert conflict or mergeability from a boolean projection. Vercel check fails with **Deployment rate limited — retry in 24 hours**, Netlify preview was cancelled; neither proves app test failure. Recheck fresh base/conflicts/checks and user authorization separately before any source merge. G4 explicitly owns separate Threads manual publishing and protects G3 schedule paths.
+- R1: `rerollBatch` now takes current drafts, preserves identity/text/manual edits/reorder/ownership/cancelled terminal state, changes only remaining flexible timestamps with window/gap/capacity checks and no partial mutation on failure; UI updates matching IDs only.
+- R2/R2b: `effectiveBrandId({status,activeAccount})` now chooses the selected authorized account's brand, NOT first `snapshot.workspace.id`. Same brand feeds settings `repository.read`, `aiPlanningFor` and the preview owner; unknown/not-ready/mock cannot fetch or display another brand's opt-in. Existing brand/read request generation guards late results; actual transformed `schedule.tsx` mock execution exercises A-workspace/B-selected account and captures composer props, including delayed A↔B, missing/blocked defaults.
+- R3: real `scheduled_posts` accountId unknown kept as unbound brand-level read-only with RLS-provided brandId, never silently assigned to selected account or per-account conflict planner; mock known-account rows still filtered.
+- G3-reported tests **277/277** `apps/social-mobile/tests/*.test.mjs`, **22/22** domain TS, `tsc --noEmit` clean, eslint/diff/secret checks PASS; mock screen simulated, production no access; ChatGPT independently inspected current PR source/Report but DID NOT rerun test suites or Mac worktree. Changed files 10 G3-owned `apps/social-mobile` source/tests and `docs/postona` only; earlier PR127, G4, H5, G5 and other slots protected.
+- Verified no live operations by G3's reported scope: live DB reads/writes, production scheduled row writes, migrations, RPC, Edge deploy, Cron, Auth/OAuth, Meta/X/AI API calls, real posting, merge, EAS = **0**. Pure local memory plans display `プレビュー／未予約・投稿されません`, do not survive reload, and have `publishable:false`; manual per-post consent and AI unattended authorization remain separate.
+- **G3 current task done / next_owner none.** NO new G3 task automatically assigned, and NO unnecessary Codex review for inert local UI. Later runtime reservation + real posting still requires G5 active `x_autopost` entitlement/withdrawal guards, G4 proven identity + X OAuth Issue131 and H5 Threads contracts, new tenant-isolated reservation store/RPC and verified idempotent claim, one integrated **Sol（高）** security review and separate explicit production/pilot approval. Recommendation: reconcile PR138 with latest main and decide source-only merge separately, then sequence runtime backend once G5/G4 dependencies are ready.
+
+---
 
 ## K3 selected-brand binding — SINGLE remaining P2 on Draft PR138
 
