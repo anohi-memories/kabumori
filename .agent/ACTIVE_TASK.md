@@ -47,16 +47,16 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: common-account-pr130-e11-r1-r5-narrow-security-rereview-20261011
+- status: ready
+- task_id: kabumori-fact-v2-pr132-final-integrated-review-20261011
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
-- next_owner: none
-- return_to: 共通アカウントG5のちゃ
+- next_owner: codex
+- return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: C2 accepted H2 independent PR130 R1-R5 E11 source security rereview as CHANGES_REQUIRED, three narrow P2 residual groups R1 non-token residues / invalid NOT_RUN token / ambiguous COMMIT, R4 missing self_declared flag, R5 RLS-hidden rows miscount zero. R2 and R3 CLOSED at offline methodology. Independent reported 56/56 typed Deno, 58/58 mutations, 4/4 defect reproduction and fakePG RLS proof; source edits0, real Supabase E11 NOT_RUN. H2 completed done/next_owner none; preserved old TASK/Report. Photo app PREPAUSE_BLOCKED.
+- allocation: ONE independent bounded Fact V2 final review of G2 Draft stacked PR132 exact head bd424616a135e7bf71592c2ac41acb3e03f8568d on protected PR110 head 319a442edcd61c07274e3409d8864234f9d77cd4. Check grounded independent interpretation permissiveness plus strict objective facts/dates/TOPIX and no laundering false historical cause, especially combined negated/affirmed same-day and new guard exceptions. Four changed market-report-analysis paths, G2 reported 1356/1356 mocked local suite PASS. Focused fake-input probes only, not recurring broad reviews. Product source edits0; no paid API, production Supabase/Edge, X, migration, PR merge/deploy. Previous H2 G5 C2 completed, prior TASK/Report history preserved; return C2 to G2. PR110 and PR132 remain protected OPEN/UNMERGED, consumer flags unchanged.
 - recommended_model: Sol（高）
 
 ## Claude G1
