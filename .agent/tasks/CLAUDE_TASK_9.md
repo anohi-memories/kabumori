@@ -3,8 +3,8 @@
 - task_id: api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011
 - owner: claude
 - slot: claude-9
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G9
 - finish_code: K9
 - return_to: ニュース改善API最適化のちゃ
@@ -28,6 +28,16 @@
 5. **作業境界**: 事前に `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`、G9 TASK末尾の過去Report、fresh origin/main、G9 branch最新headと他slotの所有/競合/worktreeを確認。G9専用の独立worktreeから `b6020dbb` の継続を安全に扱い、他slotのbranch/checkout/未commit/サーバを操作しない。対象変更は `tools/provider-compare/` と `docs/model-optimization/` のみ。G8 PR129、PR116、PR115、監視Edge Function/本番DB/Secrets/Cron/モデル/Providerは不干渉。
 6. **成果**: 安全な場合に限りG9 branchへcommit/push、Draft PR作成は別のユーザー指示/所有確認が必要なら作らない。PR115の所有者が未確認の場合、PR115を編集しない。古い `cases.json` とGit履歴が残るという未完了課題を隠さず、別オーナーへの推奨移行手順をまとめる。
 7. **完了報告**: K9で本チャットへ。TASK末尾 `## Report` にresult/外部送信ゲートの実装証拠/changed_files/tests/commit_hash/push/PR/権利の残件/safety_checks/remaining_issues/next_recommendationを書き、merge/deploy本番実行したと誤称しない。
+
+## K9 evaluation — ChatGPT（2026-10-11 JST）
+
+- verdict: PASS_OFFLINE / EXTERNAL_CALLS_RELEASE_HOLD
+- verified_commit: 65c95589564845e7b343fe9d0acc7d293bebf783 （GitHub remote branch exact match; 親b6020dbbからfast-forward、B専用12ファイル）
+- inspected: external_send_gate.ts、cli.ts、probe_cli.ts、fixture_loader.ts、許諾台帳（entries=[]）、PR115 OPEN/Draft/未変更。
+- evaluated: 権利未確認18件はハッシュ一致やruntimeBodies指定だけでは外部送信できず、probeのlegacy明示指定はキー探索前に拒否。通常CLIはrights_safeが既定。安全ゲートとテスト実装あり。
+- verification_limit: 299テストPASS・実キー0・有料API0・ネットワーク0はG9報告であり、ChatGPTが独立実行した結果ではない。
+- remaining_hold: PR115/旧cases.json/Git履歴に未許諾の第三者本文が残る。録音/見出し/recorded_textの引用リスク、許諾の実証、実際の外部送信は未検証・未許可。PR115の所有判断前にbranchや歴史を改変しない。
+- final_action: 今回のTASKはdone/next_owner:noneで終了。**G9の専任ルーティングは維持**するが、新しい具体的なB TASKを自動投入しない。G8その他枠には触れない。
 
 ## Report
 
