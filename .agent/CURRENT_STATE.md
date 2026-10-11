@@ -1,3 +1,13 @@
+## K5 FINAL — common account Phase3g free IdP feasibility / 2026-10-11 JST
+
+- G5 `common-account-phase3g-free-auth-provider-test-readiness-20261011` accepted **PASS_SOURCE_FEASIBILITY / IDP_PREPAUSE_BLOCKED**, marked done/next_owner:none (no next TASK allocated). GitHub [Draft PR137](https://github.com/anohi-memories/kabumori/pull/137) exact `eba0ba5abc56f8188a03d567d319754e4ac8ea4c`, 1 commit/1 new documentation file, OPEN/DRAFT/UNMERGED; independent source review, no local test rerun. Protected PR121/122/128/130/134 all retain exact earlier HEAD and Draft/unmerged. G5 reported 12 docs URLs HTTP200, diff check/secret scan PASS; not independently rerun.
+- Supabase official docs corroborate Free 3 custom OAuth/OIDC providers, Before User Created/Custom Access Token hooks and default auth rate limit; Free Auth0 candidate, 2–3 fake users, actual project/settings, managed authorization, cost/free slot, photo restore all NOT_CONFIGURED/NOT_VERIFIED. E6 complete ~200 concurrent managed proof NO_GO; smaller pilots only PARTIAL. Local Supabase OSS/Keycloak could give `LOCAL_OSS_EVIDENCE`, NOT managed proof.
+- User next choices: (1) authorize optional local OSS pilot without family photo downtime (Podman 8GiB/image downloads; separate G5 TASK, Claude Sonnet5（高）); (2) user-only Auth0 Free tenant/test identities; (3) only later choose E1 managed pilot operator/time after full baseline/free slot/restore and separate consent. Do not stop photo app now.
+- Real E1–E12 NOT_RUN; no project/provider API calls, real users, paid actions, photo pause, Auth delete, merge or deploy. `managed_auth_delete`/Option D/E11/production remain BLOCKED. No repeated H1–H4 review for source-only research; require independent security review for actual destructive E11 authorization.
+- AI Lab diary: 記録不要 — 内部認証検証前提の調査で公開向け機能実装ではない。 Other slots unchanged.
+
+---
+
 ## MIC G7 K7 FINAL — PR125 Stage 1 DESIGN v2 PASS; implementation HOLD — 2026-10-11 JST
 
 - **K7 judgment: PASS_DESIGN_ONLY / TASK_COMPLETE** — G7 task `mic-stage1-formal-verification-design-finalization-g7-20261011` completed. Exact [Draft PR125](https://github.com/anohi-memories/kabumori/pull/125) head `aa47e40d2a3ba7ec8bfc7d1d30c8eb51d53f2c48`; one fast-forward doc-only design commit (+352/-163), PR OPEN/Draft/UNMERGED. GitHub confirms one markdown file only, no source/migration/production/merge. G7 reported local static checks and isolation; ChatGPT read GitHub diff, did not rerun tests or inspect Mac.
