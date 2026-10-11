@@ -3,8 +3,8 @@
 - task_id: mic-stage1-formal-verification-design-finalization-g7-20261011
 - owner: claude
 - slot: claude-7
-- status: ready
-- next_owner: claude
+- status: done
+- next_owner: none
 - start_code: G7
 - finish_code: K7
 - completion_code: K7
@@ -104,3 +104,17 @@
 - next_recommendation: MICのちゃが PR #125 v2（`aa47e40d`）を確認し K7 判定。10/14 以降に自然 shadow 観測を集計して GO 条件 1〜3 を判定し、ChatGPT が許可した場合のみ S1-A/S1-B を実装（実装後に Codex Sol（高）でまとめてレビュー）
 - return_to: MICのちゃ（Market Intelligence Core専用チャット）
 - completion_code: K7
+
+## K7 Review — ChatGPT completion adjudication (2026-10-11 JST)
+
+- review_target: G7 `mic-stage1-formal-verification-design-finalization-g7-20261011`
+- decision: **PASS_DESIGN_ONLY / TASK_COMPLETE**
+- exact_reviewed_pr: Draft [#125](https://github.com/anohi-memories/kabumori/pull/125) head `aa47e40d2a3ba7ec8bfc7d1d30c8eb51d53f2c48`
+- independent_readback: GitHub PR OPEN / Draft / UNMERGED, 2 commits, latest G7 commit fast-forward one commit above `7e548b9f`, changed file exactly `docs/mic/stage1-formal-verification-design-20261010.md` (+352/-163). No source/migration/code changes in G7 PR commit. G7-reported `git diff --check` and code-fact static verification were not independently rerun by ChatGPT.
+- design_acceptance: U2/U3/U6/U9 resolutions documented; one-statement fact snapshot removes false `FOR SHARE` protection claim; Edge event 50-limit/tie/stale revisions and SQL parity covered; previous verified pointer clears on negative while neutral retains pointer; A1 mismatch recorded as not_verified rather than raise; verified_at clock/rollback/test additions/Stage2 boundary documented.
+- implementation_review_gates: U12 (event scan limit + outside-window revision performance/correctness), U13 (DB status rederivation vs Edge status write), concrete SQL transaction/snapshot/race tests, no accidental locks/permissions regression, and Stage2 pointer invalidation are **not accepted as proven** by DESIGN ONLY. Validate during S1-A/S1-B implementation and review. The supplied SQL 42 test items/mutation cases are plans only, not executed.
+- remaining_issues: U1 equity no_new_observation sample, 2026-10-14 onward read-only shadow recheck and GO decision; U10 migration version reservation at implementation; Stage2-only items U4/U5/U7/U8/U11. This acceptance **is not authorization to implement, migrate, merge or deploy**.
+- safety: Production read/write/Edge/Cron/API none by G7 report; ChatGPT independently verified PR change scope and unmerged Draft state; local worktree isolation and local tests are G7-reported, not independently observed. Other slot allocations left unchanged.
+- review_needed_now: **No Codex review for docs-only design finalization**; after actual DB/RPC/Edge S1-A/S1-B source implementation obtain focused Codex Sol（高） review before main merge or production.
+- routing: MIC future Claude work remains G7 only, subject to fresh allocation and actual slot/worktree checks; current TASK closed with `next_owner: none` (do not reserve G7 as a memo).
+- next_action: On/after 2026-10-14, user-initiated natural shadow observation read-only summary and GO gate. If GO, register a *new* G7 implementation TASK with recommended Opus5.5（高）; until then do not start S1-A/S1-B.
