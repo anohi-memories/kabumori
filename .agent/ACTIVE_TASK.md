@@ -209,14 +209,14 @@
 - owner: claude
 - slot: claude-9
 - status: ready
-- task_id: api-optimization-b-phase5-followup-fixture-rights-and-cost-eval-g9-20261011
+- task_id: api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011
 - start_code: G9
 - finish_code: K9
 - next_owner: claude
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_9.md
 - report: .agent/tasks/CLAUDE_TASK_9.md#report
-- allocation: USER EXPLICIT 2026-10-11 — このチャットのAPI最適化 B のみをG9に固定。初回TASKはPhase5成果からPR115 fixture権利18件の安全な改善準備、API費用・取りこぼし・生成失敗の評価設計（オフライン、無有料API、無production）。他のG/H枠・別案件、AのPR129を引き継がない。G9作業はK9でこのチャットへ返却。
+- allocation: USER EXPLICIT G9=API最適化B専任。前K9のbranch b6020dbbオフライン評価基盤の実装成果はPASS_OFFLINE_PARTIAL。しかしrights_unconfirmedの第三者本文がlocal runtimeBodiesハッシュ一致でlive送信可能、probe_cli明示legacyでも外部count_tokens送信可能なためRELEASE_HOLD。限定R2で外部送信前の権利ゲートをfail-closed化。PR115の既存fixture/履歴は所有者判断待ち、PR115/G8 PR129/他slotは変更禁止。K9でこのチャットへ。
 - recommended_model: Sonnet5（高）
 ## Claude G10
 - owner: claude
