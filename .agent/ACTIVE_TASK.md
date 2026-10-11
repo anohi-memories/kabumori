@@ -117,15 +117,15 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: kabumori-pr143-fail-lease-expiry-fence-r1-20261011
+- status: ready
+- task_id: kabumori-market-report-scalable-broadcast-push-v1-20261012
 - start_code: G2
 - finish_code: K2
-- next_owner: chatgpt
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: C3 2026-10-11 accepted H3 PR143 focused code review CHANGES_REQUIRED only P2 lease expiry fail RPC missing timeout fence. G2 R1 permitted narrow PR143 source fix of fail_personalized_analysis_job expiry, SQL expired-unreclaimed regression and mirrored worker mock fail branch; exact old head 1d0529bb, PR remains Draft/unmerged. No production, no other slot work. Main Auth/RLS/queue core otherwise reviewer found no P0/P1. Shared all-users morning/close broadcast is separate still open. After K2 target narrow security review only if new risk; then broadcast design/source task separately.
-- recommended_model: Sonnet5（高）
+- allocation: K2 2026-10-12 PASS_SOURCE_FIX for C3 P2: PR143 head 889ca1b44cf82bd3ecb913818dca568456849feb verified 1 commit after H3 old head, exact 5 files, SQL fail expires_at fence + MemStore mock + worker 3 regressions/SQL 2 regressions/mutation. G2 reported PG17 14 mutants PASS, worker34, personalized134, market283, data42, app508, X shared10 PASS; ChatGPT reviewed exact patch but did not run tests. PR143 OPEN/DRAFT/unmerged, no production. New G2: shared market morning/close broadcast push for opted-in users at 10k+ scale, dedicated/priority-safe producer+dispatch/queue, unique once-per-user, Expo unknown delivery handling, no important-news starvation, performance model, runbook, offline-only new Draft PR; PR143/PR141 protected. No DB/Cron/Edge/app deployment/real Expo/X/paid model/merge. Return K2.
+- recommended_model: Opus5.5（高）
 ## Claude G3
 - owner: claude
 - slot: claude-3
