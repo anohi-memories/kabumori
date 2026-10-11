@@ -3,12 +3,12 @@
 - task_id: postona-unified-ai-manual-schedule-planner-v1-20261011
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
 - project: POSTONA / X posting scheduling
 - type: **SOURCE/LOCAL UI + pure planner only; NO live posting or DB write**
-- recommended_model: **Sonnet5（高）**
+- recommended_model: **Sonnet5（中）**
 - start_code: G3
 - finish_code: K3
 - return_to: POSTONA G3のちゃ（AI相談・X投稿予約担当チャット）
@@ -17,6 +17,16 @@
 - DB_migration_Auth_RLS_RPC_Edge_Cron_Vault_secrets_or_traffic_switch: FORBIDDEN
 - production_deploy_PR_merge_EAS_TestFlight: FORBIDDEN
 - protect: previous G3 Report/PR127, H1 Threads OAuth, G4 X OAuth Issue131, G5 shared account/Auth, G1/G2/H2, existing X/Kabumori/AI Lab posting
+
+## K3 selected-brand binding — SINGLE remaining P2 on Draft PR138
+
+- Verdict: **CHANGES_REQUIRED (R2b only)** at PR138 head `48f070cc6a8472990dc07760e61ce255e5d21c91`. Prior R1 (reroll edited/cancelled content) and R3 (unbound brand-level server rows) accepted from source inspection. G3 reports 269/269 app tests, 22/22 domain and TS/lint PASS. Not independently rerun. Draft unmerged, no live schedule/posting.
+- **Root cause still in actual screen:** `schedule.tsx` `const brandId = snapshot?.workspace?.id` refers to the FIRST brand from `SupabaseSocialRepository.readSnapshot()`, but `activeAccount` may be an X account from ANOTHER authorized brand. The screen passes that first brand to `repository.read(brandId)`, `aiPlanningFor(aiState,brandId)` and AI composer, so B's preview can show A's saved weekly frequency and `auto_post_preference`. Existing `schedule-view.ts` helper tests only prove safety if the screen supplies the correct brand.
+- **ONLY fix:** for `status === 'ready'` compute effective brand from the **currently selected activeAccount.brandId**, never from arbitrary first `snapshot.workspace.id` when real selected account's brand missing; use SAME effective brand for read, AI planning and owner. Missing verified brand, blocked or loading must show safe default/unloaded and consent off; mock_preview may show explicit demo defaults but must never fetch production brand setting. Keep async loadId rejection for rapid A→B→A. Same-brand account switching may share brand-scoped settings.
+- **Fail-before/pass-after UI-wiring regression:** snapshot.workspace='A', authorized accounts X_A brand A, X_B brand B; selected X_B must load brand B (not A) and display B frequency 2/manual_review even when A had frequency7/auto_post_preference. Cover failed/blocked B read, missing brand, mock-only and rapid switching. Include a test that asserts **actual schedule.tsx wiring**, not only idealized pure helper arguments.
+- Modify only this same G3 Draft PR138's screen, optional `schedule-view.ts`, narrowly relevant tests. Do NOT edit accepted R1/R3, G4/H1/G5, Auth/RLS, migration, Edge, Cron, live posting, PR127 or tabs. Work in isolated G3 worktree, verify PR head before push; no force-push, merge, production writes/deploy/EAS. Re-run local suite and Report, return K3. Recommended **Sonnet5（中）**; no new Codex review for local UI. Later real publishing still requires one Sol（高） integrated security review.
+
+---
 
 ## K3 focused correction — R1/R2/R3 P2, exact Draft PR138 source ONLY — 2026-10-11 JST
 
