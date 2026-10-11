@@ -62,14 +62,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-watchlist-real-data-simulator-qa-20261010
+- status: ready
+- task_id: kabumori-watchlist-simulator-user-login-realdata-qa-20261011
 - start_code: G1
 - finish_code: K1
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 final PASS_SAFE_STOP for Simulator PRE-FLIGHT ONLY. Claude reported Xcode/iOS Simulator and dev-client present but no authorized signed-in Supabase session; genuine data, watch registrations, saved report basis, highlighted cards and real navigation tests therefore BLOCKED_AUTH / NOT_OBSERVED. Earlier PR120 fixture tests 457/457 reported PASS are NOT equivalent to real account tests. No source/UI changes, EAS=0, DB/user writes=0, deployment=0, credentials exposure=0; other slots and Metro 8081 untouched. No new G1 TASK assigned: wait for user-assisted sign-in on a dedicated Simulator before separate real-data QA continuation. G1 task complete and free, but real-data QA gate NOT PASS.
+- allocation: User approved iOS Simulator now. G1 read-only interactive QA: use separate fresh-main worktree and an unused Metro port (8081 was POSTONA), launch existing Kabumori dev-client with genuine PR120 merged source; stop on login screen, ask user to personally sign in on Simulator (never request/log password/token). WAIT_FOR_USER_LOGIN and continue same G1 task after user's confirmation, check real saved watch/report display in UI without any user-data edits. Protect 5 NativeTabs, no source changes/new PR, no cross-slot worktree/process effects, private financial data never to GitHub, EAS/build/deploy/DB writes = 0. K1 only after real-data QA or genuine environment blocker. Previous BLOCKED_AUTH preflight completed and preserved.
 - recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
