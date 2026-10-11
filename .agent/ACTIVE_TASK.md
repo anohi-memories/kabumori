@@ -77,17 +77,17 @@
 ## Codex H4
 - owner: codex
 - slot: codex-4
-- status: idle
-- task_id: none
+- status: ready
+- task_id: news-improvement-a-pr129-phase7-r2-final-focused-review-h4-20261012
 - start_code: H4
 - finish_code: C4
 - completion_code: C4
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: codex
+- return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CODEX_TASK_4.md
 - report: .agent/CODEX_REPORT_4.md
-- allocation: 未割当（2026-10-11追加）。固定プロジェクト専用にしないCodex枠。割当時に return_to / completion_code C4 / 推薦モデルを必ず記入する。
-- recommended_model: none
+- allocation: G8/K8によりPR129 R2 head `7bf9b8a0` の実装は完了したが、F7の公平性とF9のguarded PATCH（DB書込み）・同時判定・既存F1-F9のP1/P2回帰を一度限りのsource-only独立安全レビューで確認。H4はレビュー専用、他worktree/PR/他G/H/本番に触れない。PR129 Draft継続、merge/deploy禁止。C4をこのチャットへ返す。
+- recommended_model: Sol（高）
 ## Codex H5
 - owner: codex
 - slot: codex-5
@@ -198,16 +198,16 @@
 ## Claude G8
 - owner: claude
 - slot: claude-8
-- status: ready
+- status: done
 - task_id: news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011
 - start_code: G8
 - finish_code: K8
-- next_owner: claude
+- next_owner: codex-4
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_8.md
 - report: .agent/tasks/CLAUDE_TASK_8.md#report
-- allocation: USER EXPLICIT G8はニュース改善A専任。前TASK `news-improvement-a-pr129-f1-f9-remediation-g8-20261011` K8はCHANGES_REQUIRED：PR129修正984eeb41を確認、F1〜F6/F8の修正あり。F7の10分単位rotationは毎時起動3候補では同じ2候補に固定されるため、G8へ狭いR2是正を再割当。F9 guarded PATCHのstatus/content_hash/判定競合と残留no_post等の方針を確認。PR129 Draft、PR116固定本番と他slotを保護。K8で本チャットへ返却。G9/API-Bは不干渉。
-- recommended_model: Opus5.5（高）
+- allocation: K8 2026-10-12 ACCEPTED_IMPLEMENTATION / INDEPENDENT_REVIEW_REQUIRED。PR129 R2 head `7bf9b8a0` OPEN/Draft/未merge、5ファイル差分、G8報告 important-news-monitor757 PASS, extraction29, discovery162, shadow20。F7旧毎時取りこぼしは成功枠上限2+最大4試行/20秒チェック・確率tie-breakへ改修、ただし4件超とRSS消失には厳密保証なし。F9はpending_judgement+market_macro+本文空だけに条件付きPATCH、状態/本文read-back、no_post等の更新は未実装。DB並行判定・content_hash整合・F7負荷の独立レビューをH4へ割当。**G8はニュース改善A専任を維持**。H4 C4で要修正なら同じG8へ個別TASK再割当、それまでは他案件を入れない。G9/API-Bは保護。
+- recommended_model: Opus5.5（高） (completed)
 ## Claude G9
 - owner: claude
 - slot: claude-9
