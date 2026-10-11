@@ -1,3 +1,12 @@
+## G5 Phase3i assignment — 2026-10-12 JST
+
+- User 「おk すすめて」 requested next step after G5 Phase3h K5 (`LOCAL_OSS_FAIL`). G5 is now assigned `common-account-phase3i-local-findings-safe-lifecycle-plan-20261012`, **ready / next_owner: claude**, recommended **Opus5.5（高）**, start G5 / return K5 to 共通アカウントG5のちゃ. Prior G5 Phase3h K5 report and older history retained.
+- Scope: tightly bounded source-only design and synthetic fail-closed tests against F1/F2/F3/F4/F6/F7 local OSS findings (in-flight identity linking, sessions, token-enabled writes, Storage residue, hook blast radius). New independent G5 worktree / new docs/tests / independent Draft PR only. Verify cross-slot Auth boundary with G4/H3 and other users before files are touched.
+- No managed or production auth/DB/Storage/Edge changes, real provider calls, family-photo pause, project actions, paid requests, E11 Option D experiment, deployment or merge. `IDP_PREPAUSE_BLOCKED` and `managed_auth_delete BLOCKED` remain. Other slots and previously open G5 Draft PRs unchanged.
+- Next: Claude G5 runs the TASK and returns K5 with real changed_files/tests/evidence; ChatGPT decides review gate. No generic H1–H4 review pre-assigned.
+
+---
+
 ## K9 FINAL — API最適化B/G9 R3 clean replacement source complete, Draft PR not created — 2026-10-12 JST
 
 - 返却先 `ニュース改善API最適化のちゃ`、K9受信。G9ユーザー専任TASK `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011`（Opus5.5高） Report status review_required 確認。
