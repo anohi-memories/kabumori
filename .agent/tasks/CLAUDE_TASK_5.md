@@ -3,8 +3,8 @@
 - task_id: common-account-phase3f-pr130-r1-r4-r5-offline-logic-fix-20261011
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G5
 - finish_code: K5
 - return_to: 共通アカウントG5のちゃ
@@ -51,9 +51,89 @@ H2 independent C2 `common-account-pr130-e11-r1-r5-narrow-security-rereview-20261
 ## Report — Phase 3f
 
 - task_id: common-account-phase3f-pr130-r1-r4-r5-offline-logic-fix-20261011
-- result: pending
-- remote_calls: 0
+- reported_at: 2026-10-11 13:42 JST
+- result: **`OFFLINE_NARROW_FIX_READY`**（H2 再レビューの残件 R1・R4・R5 をオフラインで修正。R2・R3 は変更していない）
+  - 機能としては引き続き BLOCKED。写真アプリの一時停止は **PREPAUSE_BLOCKED** のまま。
+  - 実際の E1〜E12 は NOT_RUN。
+- remote_calls: 0（Supabase のプロジェクト・Auth・Storage・プロバイダへのアクセスは 0。git fetch と GitHub の操作は除く）
 - family_photo_paused: false
+- projects_created: 0
+- actual_Auth_DELETE: 0（ローカルの偽 DB での模擬削除は除く）
+- deploy: NO / merge: NO / paid_actions: 0 / production_mutation: 0
+
+### ブランチ / PR / HEAD
+- 作業場所: 新規の独立 worktree `/Users/yuya/Developer/kabumori-g5-phase3f`
+  - ブランチ `claude/g5-phase3f-e11-r1-r4-r5-fix-20261011` は、**PR130 の head `5943fad5f724191f6ae77f3baf826a4c7698d542` から作成**した。
+- **Draft PR #134**: https://github.com/anohi-memories/kabumori/pull/134
+  - base は PR130 のブランチ `claude/g5-phase3e-e11-review-corrective-20261011`（積み重ね）。
+  - head は `1d4de2c73c42221ad4b2f9b1f231c271aa084907`（commit 1件、force push なし）。差分は 11 ファイル。
+- 保護対象（開始時と push 前に再確認）:
+  - PR121 `76b50e1e…`、PR122 `f17a47e3…`、PR128 `e9244d29…`、PR130 `5943fad5…` はいずれも OPEN / Draft / 未マージで、head は変わっていない。
+  - 元のブランチや worktree は変更していない。
+- 他の open PR と変更ファイルの重なり: なし。
+
+### changed_files（11件。すべて `supabase/tests/common_account_disposable_e2e/` 内）
+- 本体 5件: `e11_matrix.ts`, `evidence.ts`, `witness.ts`, `target_readback.sql`, `catalog_extended_readback.sql`
+- テスト・検証 6件: `e11_matrix_test.ts`, `evidence_test.ts`, `test_support.ts`, `phase3f_regression_test.ts`（新規）, `readback_local_run.sh`, `harness_mutations.py`
+- 手順書（runbook）・migration・Auth・runtime は変更していない。
+  - 手順書の §3 には「ABSENT / UNKNOWN_DENIED、決して 0 にしない」とある。新しい `UNKNOWN_RLS` は SQL のヘッダーに説明を書いた。手順書への追記は、指示（必要不可欠でない限り変更しない）に従い見送った。
+
+### 3点の修正と、修正前の再現
+| 指摘 | 修正 | 修正前（PR130）→ 修正後 |
+| --- | --- | --- |
+| R1-1 トークン以外の残留物 | グループごとに `afterState` を追加した。<br>・対象: sessions、refresh_tokens、identities、Storage のメタデータ、**実ファイル（Storage サービスでの読み戻しだけを根拠にする）**、ガード付き / ガードなしのサービス行<br>・それぞれに `remaining` と根拠（provenance）と証拠ファイルを持たせた<br>・残りが 1 件でもあれば、行が PASS でも D をブロック（`E11:NON_TOKEN_RESIDUE_RECORDED:<グループ>:<種類>`）<br>・欠落、型の不正、根拠の違い、削除前より多い値は UNKNOWN<br>・`identity_linked` の監査記録は、残るのが正しい履歴なので残留物として扱わない | PR130 では D が「判定待ち」のまま → **ブロック**（14 通りすべて） |
+| R1-2 想定外のトークン値 | 認める値を REFUSED / ACCEPTED_RESIDUE_RECORDED / ACCEPTED_UNRECORDED / UNKNOWN の 4 つに限定。NOT_RUN、MAYBE、'refused'、''、null、42、true は `E11_TOKEN_INVALID`（UNKNOWN） | PR130 では PASS → **UNKNOWN（D はブロック）** |
+| R1-3 応答が失われた COMMIT | 失敗分岐（変化なしが必須）から切り離した。<br>・`resolution` を APPLIED / NOT_APPLIED / UNKNOWN の 3 つにし、独立した読み戻しと証拠を必須にした<br>・UNKNOWN と形の崩れた値は `E11_AMBIGUOUS_COMMIT_UNRESOLVED`<br>・どの resolution でも再実行は FAIL | PR130 では、反映済みと確定しても FAIL → **PASS（確定済みの場合）**。UNKNOWN と再実行は従来どおり止まる |
+| R4 `self_declared` | `self_declared === false` のときだけ受け付ける（true は SELF_DECLARED、欠落・null・文字列・数値は MALFORMED）。役割・結果・時刻・証拠の型も確認し、配列でない入力や文字列のレコードも拒否する。`verdict()` まで通しても拒否されることを確認 | PR130 では、欠落していると受理された → **拒否** |
+| R5 RLS で隠れる行 | どちらの SQL も、テーブルが ABSENT → ACL の拒否は UNKNOWN_DENIED → RLS で行が絞られうる場合は **UNKNOWN_RLS** の順に判定する。<br>・RLS 有効で、superuser でも BYPASSRLS でもなく、所有者でもない（または所有者でも FORCE RLS）の場合が UNKNOWN_RLS<br>・件数を出すのは、その役割が行を絞られずに見られるときだけ<br>・権限の昇格はしない。実ファイルは `storage_blob_readback|NOT_OBSERVABLE_BY_SQL|future_storage_service_readback` と明記 | PR130 の SQL では、SELECT だけを持つ読み取り役で `target|storage_objects_by_id|0` → **`UNKNOWN_RLS`** |
+
+### テスト（すべてオフライン。模擬検証であり、managed Supabase の証拠ではない）
+- `deno test --no-config --allow-read supabase/tests/common_account_disposable_e2e/`: **63/63**
+  - 型チェックあり。ネットワーク・環境変数・実行の権限なし。以前の 56 件に、新しい回帰テスト 7 件を加えた。
+- **修正前の確認**: 新しい回帰テスト 7 件を PR130 のコードに当てた（scratchpad 内のコピー。足したのは export の定数と、古い形式の項目だけ）。
+  - **7/7 が失敗**した。うち 6 件は H2 の再現（トークン以外の残留物、想定外のトークン値、反映済み COMMIT の誤判定、`self_declared` の欠落、形の崩れた記録、after-state の欠落）。
+  - 残り 1 件（正常系の対照）は、residue の戻り値を boolean から配列に変えたことによる失敗。
+- `deno check`（20 ファイル）と `deno lint`: OK
+- `harness_mutations.py`: **68/68 検出**（control PASS）
+  - 内訳: PR130 時代の 58 件（位置が変わった 9 件は新しいコードに向け直した）と、Phase 3f 用に追加した 10 件。
+- SQL のミューテーション（scratchpad で臨時に実施）: target_readback.sql と catalog_extended_readback.sql から RLS の判定を外すと、どちらも `readback_local_run.sh` が FAIL。**2/2 検出**。
+- `fingerprint_local_run.sh`: PASS。
+- `readback_local_run.sh`: ALL PASS。新しい §2b で次を確認した:
+  - 実在する 1 行に対して、SELECT だけを持つ読み取り役 → UNKNOWN_RLS
+  - 拡張読み戻し → objects は UNKNOWN_RLS、buckets は UNKNOWN_DENIED
+  - FORCE なしの所有者 → 1、FORCE ありの所有者 → UNKNOWN_RLS、BYPASSRLS の役割 → 1（FORCE ありでも）
+  - 終了後に元の状態へ戻ったこと
+- 同じスクリプトを PR130 の SQL に当てると `...|0` で FAIL（修正前の再現）。
+- `bash -n`、`git diff --check`: OK。シークレット・本番 ref・URL・メールの走査: 0件。
+- **NOT_RUN**: 実際の GoTrue / PostgREST / Storage の挙動、実プロジェクトでの役割の権限（postgres が BYPASSRLS かどうか等）、E1〜E12 のすべての実験。
+
+### 残っている前提と限界
+- 立会い記録は、形が正しくても「人が実際に確認した」ことの証明にはならない。あくまで本人の証言の記録。
+- `UNKNOWN_RLS` が出た場合は、今後、行を絞られずに見られる役割であることを別途証明した運用者による読み戻しが必要（今回は手順として定義しただけ）。
+- 実ファイルの確認は、今後 Storage サービスで読み戻す外部観測。
+- 実プロジェクトでの E11 の実施には、別々に次がすべて必要:
+  - 承認
+  - 新しい使い捨てプロジェクト
+  - 実験ごとの同意
+  - W1〜W7 の実施
+  - `option_d_full_decision_proof`
+  - 独立レビュー
+- ダミーの OAuth / OIDC、担当者と日程、空き枠と費用、写真アプリの実機での基準確認は未整備（PREPAUSE_BLOCKED）。
+
+### 次のおすすめ
+- **K5**: 新しい回帰テスト 7 件と RLS の §2b を確認する。実プロジェクトでの実験を提案する前に、必要なら 1回だけ、絞り込んだ独立の最終確認を行う。広範な再レビューを繰り返すことは推奨しない。
+- このレビューや PASS は、E11 の実行・D 方式・本番での削除・写真アプリの一時停止の承認にはならない。
+
+### 安全確認
+- 実施しなかったこと（いずれも 0 件）:
+  - 実 / 使い捨てプロジェクトの操作
+  - Auth の DELETE や BAN
+  - プロバイダの呼び出し
+  - secrets、課金、deploy、migration の適用、EAS、マージ
+  - 家族写真データへのアクセス
+  - H1/H2 の割り当て
+- PR121 / PR122 / PR128 / PR130 と、他スロットの担当範囲は変更していない。
+- ローカルの偽 DB は scratchpad 内で、unix socket のみ。
 
 ---
 
