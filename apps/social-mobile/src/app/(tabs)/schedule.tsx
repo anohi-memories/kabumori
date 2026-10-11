@@ -12,6 +12,7 @@ import {
   aiPlanningFor,
   applyAiSettingsResult,
   classifyServerPosts,
+  effectiveBrandId,
   startAiSettingsLoad,
   type AiSettingsState,
 } from '@/domain/schedule-view';
@@ -46,7 +47,9 @@ export default function ScheduleScreen() {
   const { status, reason, snapshot } = useDataStatus();
   const mockPosts = mockRepository.getPlannedPosts().filter((post) => post.accountId === activeAccount?.id);
   const view = resolvePostsView(status, reason, snapshot?.plannedPosts, mockPosts);
-  const brandId = snapshot?.workspace?.id;
+  // The brand the whole screen plans for is the SELECTED account's brand -- never the snapshot's first
+  // workspace, which may belong to a different brand than the account the user picked.
+  const brandId = effectiveBrandId({ status, activeAccount });
   const repository = useMemo(() => (supabase ? new SupabaseContentSettingsRepository(supabase) : null), []);
 
   const [filter, setFilter] = useState<UnifiedFilter>('all');
@@ -64,7 +67,7 @@ export default function ScheduleScreen() {
   useEffect(() => {
     // Not ready / no brand: nothing to load. aiPlanningFor() already returns the unloaded default for any
     // brand the state was not read for, so a previous brand's values are never shown here.
-    if (status !== 'ready' || !brandId || !repository) return;
+    if (!brandId || !repository) return;
     loadCounter.current += 1;
     const loadId = loadCounter.current;
     setAiState((current) => startAiSettingsLoad(current, brandId, loadId));
@@ -79,11 +82,17 @@ export default function ScheduleScreen() {
     return () => {
       cancelled = true;
     };
-  }, [brandId, repository, status]);
+  }, [brandId, repository]);
   const ai: AiPlanningInput = aiPlanningFor(aiState, brandId);
 
   const accountId = activeAccount?.id ?? null;
-  const owner = activeAccount && activeAccount.platform === 'x' ? { accountId: activeAccount.id, brandId: activeAccount.brandId ?? brandId ?? 'preview', platform: 'x' as const } : null;
+  // Planning is offered for an X account whose own brand is known. In the sample-data preview there is no
+  // production brand (and nothing is read), so the demo account's brand -- or 'preview' -- is used.
+  // A real account without a known brand cannot plan: the first workspace is never a fallback.
+  const ownerBrandId = status === 'mock_preview' ? (activeAccount?.brandId ?? 'preview') : brandId;
+  const owner = activeAccount && activeAccount.platform === 'x' && ownerBrandId
+    ? { accountId: activeAccount.id, brandId: ownerBrandId, platform: 'x' as const }
+    : null;
   // Server rows are read-only. Production rows have no account binding: they are listed as brand-level and
   // never relabelled as the selected account's posts, so only account-bound rows reach the per-account solver.
   const classified = classifyServerPosts({
@@ -164,7 +173,9 @@ export default function ScheduleScreen() {
         ) : (
           <ActionButton label="投稿を作成" onPress={() => { setNotice(null); setComposing(true); }} disabled={!owner} />
         )}
-        {!owner ? <Text style={styles.muted}>X のアカウントを選ぶと、投稿のプレビューを作れます。</Text> : null}
+        {!owner ? <Text style={styles.muted}>{activeAccount && activeAccount.platform === 'x' && status !== 'mock_preview'
+          ? 'このアカウントのワークスペースを確認できないため、投稿のプレビューは作れません。'
+          : 'X のアカウントを選ぶと、投稿のプレビューを作れます。'}</Text> : null}
 
         {myDrafts.length ? (
           <Card>

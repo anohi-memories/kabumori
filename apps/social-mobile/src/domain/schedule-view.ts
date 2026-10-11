@@ -72,6 +72,30 @@ export function aiPlanningFor(state: AiSettingsState, brandId: string | null | u
 }
 
 // ---------------------------------------------------------------------------------------------------
+// R2b: which brand the screen plans for
+// ---------------------------------------------------------------------------------------------------
+
+/**
+ * The brand every AI input of the screen is bound to: the brand of the SELECTED account, and nothing else.
+ *
+ * `snapshot.workspace` is merely the first brand the user belongs to; a user who owns several brands can
+ * select an account of another one, and the first brand's frequency / approvalMode must never be read,
+ * shown or planned for that account. An account without a known brand therefore has no brand at all
+ * (planning is not offered) -- the first workspace is never a fallback.
+ *
+ * Only a connected, real (non-preview) workspace reads a brand setting: in the sample-data preview nothing
+ * is fetched from production, and while data is loading / blocked / unavailable there is no brand.
+ */
+export function effectiveBrandId(input: {
+  status: string;
+  activeAccount: { brandId?: string | null } | null | undefined;
+}): string | null {
+  if (input.status !== 'ready') return null;
+  const brandId = input.activeAccount?.brandId;
+  return typeof brandId === 'string' && brandId.trim() ? brandId : null;
+}
+
+// ---------------------------------------------------------------------------------------------------
 // R3: attributing server rows
 // ---------------------------------------------------------------------------------------------------
 

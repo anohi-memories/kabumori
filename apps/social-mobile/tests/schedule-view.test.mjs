@@ -6,6 +6,7 @@ import {
   aiPlanningFor,
   applyAiSettingsResult,
   classifyServerPosts,
+  effectiveBrandId,
   startAiSettingsLoad,
 } from '../src/domain/schedule-view.ts';
 import { buildUnifiedSchedule, detectConflicts, resolveConflicts } from '../src/domain/schedule-planner.ts';
@@ -174,5 +175,18 @@ test('R2: a ready read for brand A does not leak through a "not ready" window of
     assert.equal(planning.source, 'default');
     assert.equal(planning.approvalMode, 'manual_review');
     assert.equal(planning.status, 'unloaded');
+  }
+});
+
+// ---- R2b: the brand the screen plans for -----------------------------------------------------------
+
+
+test('R2b: the effective brand is the selected account\'s brand; the first workspace is never a fallback', () => {
+  assert.equal(effectiveBrandId({ status: 'ready', activeAccount: { brandId: 'brand_b' } }), 'brand_b');
+  assert.equal(effectiveBrandId({ status: 'ready', activeAccount: { brandId: undefined } }), null);
+  assert.equal(effectiveBrandId({ status: 'ready', activeAccount: { brandId: '  ' } }), null);
+  assert.equal(effectiveBrandId({ status: 'ready', activeAccount: null }), null);
+  for (const status of ['loading', 'blocked', 'unavailable', 'mock_preview']) {
+    assert.equal(effectiveBrandId({ status, activeAccount: { brandId: 'brand_b' } }), null, status);
   }
 });
