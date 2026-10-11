@@ -8,6 +8,7 @@
 - X自動投稿・複数ブランドX実装は G3 / G4 を使用する。
 - `G5`〜`G10`: 予備のClaude実装スロット。用途は固定せず、ユーザーまたはChatGPTが明示割当した場合のみ使用する。既存の基本ルーティングの自動fallbackにはしない。idleだからという理由だけで自動使用しない。
 - 各ペア内の割当は空き状況・競合・依存関係を見てChatGPTが決める。
+- `G7` はMIC専用チャットの「Market Intelligence Core」作業担当（ユーザー明示指定2026-10-11）。MICの作業を他G枠へ勝手に割り当てない。各TASKはG7の真の空き・競合確認後のみ割り当てる。
 - `G8` はこのチャットの「ニュース改善 A」専用、`G9` はこのチャットの「API最適化 B」専用（ユーザー明示指定2026-10-11）。ほかのG枠や別案件への自動引継ぎ・再割当禁止。各新TASKは対象枠の真の空き・競合を確認してから割り当てる。
 - H1〜H4はCodexのレビュー・バグ修正・検証枠（固定プロジェクト専用にしない）。H5はCodex臨時実装専用で原則空けておき、レビュー・検証には使わない。割当時は `return_to` / `completion_code` / 推薦モデルを必ず記入する。
 - ユーザーの個別指定がある場合はその指定を優先する。
@@ -179,15 +180,17 @@
 ## Claude G7
 - owner: claude
 - slot: claude-7
-- status: idle
-- task_id: none
+- status: ready
+- task_id: mic-stage1-formal-verification-design-finalization-g7-20261011
 - start_code: G7
 - finish_code: K7
-- next_owner: none
+- completion_code: K7
+- next_owner: claude
+- return_to: MICのちゃ（Market Intelligence Core専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_7.md
 - report: .agent/tasks/CLAUDE_TASK_7.md#report
-- allocation: 未割当（2026-10-11追加）。用途を固定しない予備枠。ユーザーまたはChatGPTの明示割当時だけ使用し、idleだけで作業開始・自動投入しない。
-- recommended_model: none
+- allocation: ユーザー明示指定2026-10-11でMIC作業をG7専任化。初回はDraft PR125のStage1正式Verification DESIGN ONLY最終補強（U2/U3/U6/U9決定反映、phantom INSERT / read snapshot / events parity / pointer整合性 / A1不一致 / SQL競合テスト計画）。PR125既存設計worktreeを共有せずG7専用独立worktreeから安全確認し、docs1ファイルだけを更新。PRはDraft、main merge・production・migration・Edge・Cron・ソース変更禁止。10/14以降の自然観測と正式実装GO判定は別工程。完了はK7でMICのちゃへ返却。他G/H枠のTASK/Report/branchを保護。
+- recommended_model: Opus5.5（高）
 ## Claude G8
 - owner: claude
 - slot: claude-8
