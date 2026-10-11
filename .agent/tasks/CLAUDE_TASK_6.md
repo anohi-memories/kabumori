@@ -1,10 +1,10 @@
-# G6 CURRENT TASK — 共通AI基盤 Phase 1e / production runner READ-ONLY check
+# K6 FINAL — 共通AI基盤 Phase 1e / production runner READ-ONLY check
 
 - task_id: common-ai-provider-g6-phase1e-readonly-runner-preflight-20261011
 - owner: claude
 - slot: claude-6
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -13,6 +13,9 @@
 - user_routing_decision: 2026-10-11 ユーザー明示。**この部屋の共通AI基盤は今後G6のくろちゃん経由で実施する。直接コピー用開発指示方式を終了。** 各完了K6後も、次の共通AI TASKはこのちゃが競合確認してG6へ再割当する。doneをメモとして居座らせない。
 - production_mutation_window: CLOSED (this task never opens one)
 - phase: 1e / prerequisite verification only — NOT migration/apply, policies insertion or live provider activation.
+- k6_final_verdict: **PASS_READONLY_CHECK_ACCEPTED / G6 RELEASED** (2026-10-11 JST)
+- verified_by_chatgpt: GitHub commit `9071e76cef20c942c2e87bfbff96940e391ceacc` only changed own TASK and ACTIVE G6 block; Mac runner output/time/results rely on Claude's submitted Report. Independently preflight SQL was checked earlier; live `ensure_rls` trigger body read-only verified it only acts on `public` table creation, not new `ai_ledger` tables. No application migration, budget policies, secret, paid Anthropic smoke or actual report cutover approved.
+- next_owner_gate: ChatGPT awaits explicit user approval of actual production `apply` and Phase1d trial policies before a NEW G6 task; do not start writes solely due to READY. User's dedicated G6 routing remains in force; no other slot assigned.
 
 ## 起点・既知の事実
 
