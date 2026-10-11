@@ -1,3 +1,52 @@
+# G2 CURRENT TASK — 新方式の朝刊・大引け X／アプリ配信切替：本番前 READ-ONLY 監査
+
+- task_id: kabumori-shared-report-x-app-cutover-preflight-20261011
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- start_code: G2
+- finish_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Opus5.5（高）**
+- classification: read-only/source-only release preflight / NO production cutover
+- prerequisite_merged_PR110: https://github.com/anohi-memories/kabumori/pull/110
+- exact_PR110_merge_commit: 650e5183441ccb3b3356cfc087d43230628b0d78
+- prerequisite_merged_PR132: https://github.com/anohi-memories/kabumori/pull/132
+- exact_PR132_merge_commit: d2e9b03a3715f34512a451278a61929aa54a31b9
+- production_x_enabled_app_enabled: NOT AUTHORIZED TO CHANGE
+- user_priority: 事実は厳格に / AIの合理的な経済分析を積極的に許可 / 配信安定 / 無駄なAPI削減 / レビュー無限ループ回避
+
+## Why / outcome
+
+PR110（Delivery First）とPR132（Fact V2）のSOURCEはmainへ順番にマージ済み。生成成功と実配信成功は異なる。本TASKは新方式を正式な朝刊・大引けの唯一の配信元にする前に、全経路を証拠付きで検証し、事故が起きない限定切替手順を作ること。今回のTASKに本番切替の承認は無い。**このTASKだけではX実投稿、consumer settings変更、旧方式停止、Edge/Cron deploy、DB/RPC/migration、Auth/secret/provider/模型変更を一切実行しない。**
+
+## Scope / concrete checkpoints
+
+1. Fresh origin/mainとPR110/132のマージ実体を検証し、PROJECT_RULES.md / AGENTS.md / .agent/ORCHESTRATION.md / ACTIVE_TASK / CURRENT_STATE / 自TASK過去Reportを読む。G2専用独立worktree/checkoutのみ。G1/G3/G4/G5/G6/G7/G8/G9/G10/H1〜H5のTASK・Report・branch・worktree・dev serverは変更禁止。G5優先の共通DB/Auth・G6 AI Provider本番切替・G8 news / G9 API最適化も触れない。
+2. 朝刊と大引けの新方式の生成周期、saved `market_report_cycles` / `market_report_packets` / `market_report_generation_traces`、旧方式の配信writer・Cron・投稿実行箇所を**ソースコード・履歴・fixture**から特定。新方式X向け `market_report_consumer_settings.x_enabled`、アプリ向け `app_enabled` を読み、切替順・権威あるwriter・同日同種の二重投稿/二重保存を避けるキーとゲートを明示する。
+3. X投稿の取り込み経路（`x-test-post`等の共有consumer）とアプリ市場レポート表示／保存経路を追跡。正しい対象・朝刊/大引け・X/アプリで本文整合、注意書き1回、Fact objectively false removed、MAX_GENERATIONS=2、MAX_MODEL_CALLS=4保持をコードと既存テストから検証。G3/G4 POSTONAの投稿・OAuthや他ブランドへの機能変更は厳禁。
+4. **個別レポート**は共通市場レポートとは別。10/7〜9の共通closeはcompleted/passed/保存済、旧方式close failed、`public.personalized_reports` の当日closeはfailedだったという旧read-only観測を事前情報として扱い、現在のソース上の「共通パケット→ユーザー保有/ウォッチ情報→個別close生成・DB保存→アプリ画面の表示→push通知」の経路・失敗点・権限を分けて確認。新方式切替で自動解決すると断定禁止。古い個別レポートを当日データと偽らない。
+5. 通知の多重送信防止、再試行/idempotency、空候補やAPI失敗時の縮退、故障時のロールバック、監視とread-back項目を列挙。事故時に安全な復旧が可能な**具体的なgate ON/OFF順序**、切替日・朝夕の実行タイミング、確認SQL/ログIDと期待値、旧方式停止条件を設計。ただし今回適用はしない。10/7〜9の旧方式はユーザー方針で修正/再生成/再配信/backfill不要。
+6. 既存のオフラインテストは必要範囲だけ実行できる（有料API、実X、実Supabase write、実通知不可）。本番SupabaseはこのTASKでは原則アクセスしない。read-only本番接続が不可欠なら接続前に独立した明示承認が必要か安全ポリシーを確認し、必要な場合は NOT_RUN と報告（本人のuser権限を勝手に使用しない）。本番設定・secret・OAuth・Cron・providerの実確認結果を推測しない。
+7. Reportは次を証拠付きで明示: source_trace（trigger/old/new/consumer）、X gate、app gate、personalized close、notification、duplicate prevention、rollback、blocking gaps（P0/P1/P2）、GO/NO_GO（本番切替可能か）、限定本番適用の具体的な**別工程TASK案**、実測オフラインtests、changed_files、commit/push/merge/deploy/prod truth。単純なread-only監査で済むなら製品ソース変更・PR作成不要。推奨として切替前の一回だけ重点Codexレビューの必要性も判断（初期からH枠を予約しない）。
+
+## Acceptance / return
+
+- OFFLINE / READ-ONLY findings only; no source refactor, no business logic / DB / API / RPC / Edge edits; no PR merged/deployed, no production toggle and no real posting.
+- 主要消費者経路を検証して未確認は「未確認」と明記。共通close成功を個別close成功と混同しない。
+- 無許可production操作を禁止したまま、切替に必要な手順・権限・ロールバック・未解決ブロッカーを報告する。
+- `## Report — current cutover preflight` へ記入し status=review_required / next_owner=chatgpt に変更。対象ACTIVE_TASKとCURRENT_STATEのG2部分のみ更新、全履歴保護。
+- 完了したら **かぶモリアプリG2のちゃへ K2** を返す。次の本番切替はChatGPTがReport確認後、別途ユーザー承認を得ること。
+
+## Report — current cutover preflight
+
+PENDING G2.
+
+---
+
+## Previous G2 TASK/Report history — preserved verbatim below
+
 # G2 CURRENT TASK — Fact V2 PR132: C2 3件の客観事実ガードのみ限定是正
 
 - task_id: kabumori-fact-v2-pr132-three-objective-guards-correction-20261011
