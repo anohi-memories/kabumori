@@ -129,15 +129,15 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: postona-unified-ai-manual-schedule-planner-v1-20261011
+- status: ready
+- task_id: postona-x-reservation-store-offline-v1-g3-20261011
 - start_code: G3
 - finish_code: K3
-- next_owner: none
-- return_to: POSTONA G3のちゃ（AI相談・X投稿予約担当チャット）
+- next_owner: claude
+- return_to: POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: K3 FINAL PASS_SOURCE_PREVIEW_ONLY. Accepted unified manual exact/random/interval and AI flexible local preview Draft PR138 exact f6b8f866b449cd432f649c132bbaa2e70a9f2ace OPEN/DRAFT/UNMERGED. R1 reroll preserves edited/reordered/cancelled, R2 and R2b safely bind AI frequency/opt-in to currently selected activeAccount.brandId (not first snapshot.workspace), R3 legacy unknown posts remain brand-level read-only and not attributed. G3 reports 277/277 app and 22/22 domain tests PASS; source/Report inspected by ChatGPT but tests not independently rerun. No live saved reservations, Supabase writes, RPC/migration/Edge/Cron, real X/Meta/AI posting, merge/deploy/EAS. PR branch behind main, GitHub mergeability unknown; source merge requires separate checks/authorization. G3 closed with no successor TASK. G4/H5/G5/G6 and all other slots protected; one Sol（高） security review only for future actual Auth/RLS/publisher rollout.
-- recommended_model: Sonnet5（中）
+- allocation: User accepted next POSTONA milestone after PR138 local planner was squash-merged. G3 owns isolated **X-only AI/manual reservation durable backend candidate**: new offline SQL candidate/store/RPC or trustworthy port, new reservation claim/lease/finish boundary, save/read/edit/cancel client adapter with explicit disabled-by-default gate, disposable PG17/18 safety tests + app regressions and docs. Source-only Draft PR, never apply SQL/create live posts/X provider calls/migrate/Edge/Cron/EAS/merge. Manual per-post explicit consent vs unattended AI auto_post_preference; G5 active x_autopost entitlement and lifecycle guard, G4 verified X OAuth Issue131 and signed owner permission are hard blocked dependencies, never fake authorize. Stage3B PR127 docs and main 2026100616 migrations are read-only reference, not live. G4 current Threads integration PR140/PR124/PR135/PR139 and G5 local OSS/Auth/T13 PR121 protected; no G4/G5/H5 code overlap. Live activation only after Sol（高） independent integrated Auth/RLS/DB/API review and separate user authorization. At K3 return to this G3 chat.
+- recommended_model: Opus5.5（高）
 ## Claude G4
 - owner: claude
 - slot: claude-4
