@@ -3,8 +3,8 @@
 - task_id: news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011
 - owner: claude
 - slot: claude-8
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: codex-4
 - start_code: G8
 - finish_code: K8
 - return_to: ニュース改善API最適化のちゃ
@@ -31,6 +31,14 @@
 4. **PR/安全境界**: PR129だけ更新。G8専用独立worktree/checkoutをfresh origin/mainから確立。旧G8/他slot/G9/API-B/PR116のbranch・worktree・TASKを一切変更しない。PR116は2026-10-13予定の固定コミット専用、PR129混入禁止。BOJ取得未接続、著作権に注意。本番DB読み書き・実Edge呼出・有料AI使用なし。GitHubに先行したPR129更新や対象変更の競合があれば停止。
 5. **テスト**: F7の本番想定固定時刻テストは修正前FAIL→修正後PASS。F9 mockの保存状態（pending/no_post/published/generation_failed）・競合・ハッシュ対応・監査保全のテスト。important-news-monitor全体、Phase6/7/R1、news_discovery/observer等既存suiteをオフライン再実行。実測未実施は未実施と記録。typecheck/lint既存baselineとの比較。
 6. **完了**: 必要な変更だけPR129 branch `claude/news-body-integration-phase7-20261011` にcommit/push、Draft維持、merge/deployせず、F7/F9の残余リスクと再レビューの対象/判定を報告。F9の保留部分をPASS扱いしない。新しいコミットがあればその正確なSHAを記載し、`K8` をこのチャットに返却。追加レビュー担当を勝手に使わない。
+
+## K8 evaluation — ChatGPT, 2026-10-12 JST
+
+- verdict: ACCEPTED_IMPLEMENTATION / INDEPENDENT_REVIEW_REQUIRED / MERGE_HOLD
+- verified_PR: PR129 OPEN/Draft/unmerged, head `7bf9b8a0a014ebe9a613e9ebeb0082d0b7834c54`, R1 `984eeb41` より1 commit/5 source+test files。Netlify/Vercel GitHub checks success、production検証・deployは未実施。
+- source_review: `fed_statement_enrichment.ts` のF7を時刻剰余によらない順序へ変更、`candidate_body_fill.ts` のF9 conditional PATCH/結果read-backを確認。事実検証・実ネットワーク/DBを伴うend-to-end証明は未完了。G8報告757件などのDenoテストをChatGPT自身は再実行していない。
+- remaining: F7 4件超/cold start/RSS消失のcoverage guarantee、上限20秒のhard timeoutではないこと。F9はpendingのみ、no_post/generation_failed/published等は歴史保護のため未更新、判定SELECTとの並行、content_hash据置が重複/出典監査に与える影響。
+- next_action: 高リスクEdge/DB/FactsのためH4に**一度限りの重点Codex独立レビュー**（Sol（高）、`H4`開始→`C4`をこのチャットへ）を登録。G8のR2実装TASKはdoneとし枠を別案件の保留に使わない。A専任はG8維持、要修正ならC4後にG8へ戻す。マージ・デプロイは禁止。PR116とG9は別工程。
 
 ## Report
 
