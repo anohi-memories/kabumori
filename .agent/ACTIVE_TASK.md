@@ -166,7 +166,7 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: ready
+- status: in_progress
 - task_id: common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011
 - start_code: G6
 - finish_code: K6

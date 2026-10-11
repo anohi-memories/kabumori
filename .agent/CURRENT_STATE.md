@@ -1,3 +1,16 @@
+## G6 production_mutation_window: ACTIVE — 共通AI基盤 Phase1f ledger apply + trial policies — 2026-10-11 JST
+
+- production_mutation_window: **ACTIVE** — owner **G6**, task_id `common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011`, started 2026-10-11T10:30Z (19:30 JST; first CAS at 19:27 lost to a concurrent STATE write, re-checked).
+- target: Supabase project `wsmznyzcvmuitkglfeuj` only.
+- exact scope (runner `supabase/tests/ai_provider_budget_ledger_rollout.sh` only):
+  1. `apply`: migration `20261010050613_ai_provider_budget_ledger.sql` (sha256 `680aeb3f…5737`) and its one history row
+  2. `policies`: then, only if apply fully passes, the 2 system-only trial policies
+  - Nothing else: no G5 `20261009120000`, no existing table/function/Auth/RLS change, no Secrets, no provider/API calls.
+- precheck: runner `check` 19:26 JST TARGET_VERIFIED / READY_TO_APPLY / predicted_refusals 4/4 no; existing-object fingerprint unchanged since 19:05 JST; all 15 slots fresh: no other ACTIVE window, G5 `review_required`.
+- Other slots: do not start production DDL on this project until this window is CLOSED (G6 closes it right after read-back, PASS or STOP).
+
+---
+
 ## K8 FINAL — G8 PR129 R1 correction: CHANGES_REQUIRED / NARROW R2 ASSIGNED — 2026-10-11 JST
 
 - 対象は**ニュース改善A/G8のみ**、G9（API最適化B）・他のG/H・別案件は非干渉。G8旧TASK `news-improvement-a-pr129-f1-f9-remediation-g8-20261011` が `review_required` でK8を受信。GitHub PR129 head `984eeb41f14257be56ecfc00e9a55fa01d1ee136` は前回 `61dd33d7` の直系+1 commit、6 filesのみ。OPEN/Draft/未merge、production deploy未実施（実際の本番read-backは行っていない）。

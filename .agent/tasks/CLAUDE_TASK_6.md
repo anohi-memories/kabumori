@@ -3,7 +3,7 @@
 - task_id: common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011
 - owner: claude
 - slot: claude-6
-- status: ready
+- status: in_progress
 - next_owner: claude
 - start_code: G6
 - finish_code: K6
@@ -11,7 +11,7 @@
 - recommended_model: **Opus5.5（高）**
 - priority: high
 - user_explicit_approval: **YES — 2026-10-11 このチャットで「おk」**（直前の説明：「本番Supabaseに予算管理DBを作成し、試験用の月$5・日$2の上限を登録する」への承認）
-- production_mutation_window: **RESERVED_NOT_ACTIVE**。待機中はDBロックを占有しない。実行直前のfresh全15枠確認でG5/他writerにACTIVEが無い場合のみ、`.agent/CURRENT_STATE.md`へG6唯一の対象/操作とwindow ACTIVEをCAS追記してからapply。書込・readbackの完了/STOPでCLOSEDを記録。CAS競合または他writer ACTIVEなら**DB変更を開始しない**。
+- production_mutation_window: **ACTIVE** (2026-10-11T10:30Z / 19:30 JST, recorded in .agent/CURRENT_STATE.md; was RESERVED_NOT_ACTIVE) — rule。待機中はDBロックを占有しない。実行直前のfresh全15枠確認でG5/他writerにACTIVEが無い場合のみ、`.agent/CURRENT_STATE.md`へG6唯一の対象/操作とwindow ACTIVEをCAS追記してからapply。書込・readbackの完了/STOPでCLOSEDを記録。CAS競合または他writer ACTIVEなら**DB変更を開始しない**。
 - mutation_scope: target Supabase project `wsmznyzcvmuitkglfeuj` の **exact migration `20261010050613_ai_provider_budget_ledger.sql`**、適用履歴、同一 Ledger の初期system-only予算ポリシー **2件のみ**。これ以外一切不可。
 - original Phase1e K6/Report and earlier unassigned G6 template are preserved unchanged below. This Phase1f task is separate, with new `K6` on completion.
 
