@@ -3,8 +3,8 @@
 - task_id: news-improvement-a-pr129-phase7-r2-final-focused-review-h4-20261012
 - owner: codex
 - slot: codex-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: H4
 - finish_code: C4
 - completion_code: C4
@@ -63,6 +63,15 @@ PR129は現在OPEN/Draft/unmerged。Netlify/Vercel commit checks success（画�
 - `.agent/CODEX_REPORT_4.md` に `task_id/result/reviewed_head/changed_files(レビュー作業の編集なし)/tests/remaining_issues/safety_checks/next_recommendation/return_to/completion_code` を記載し、H4自身のTASK status`review_required`・next_owner`chatgpt`で返す。自分で最終merge/deployを決めない。
 - 末尾に正確に `ニュース改善API最適化のちゃ へ C4 を送ってください。` と書く。返却先を推測しない。
 
+
+## C4 evaluation — ChatGPT 2026-10-12 JST
+
+- verdict: CHANGES_REQUIRED / PR129_MERGE_HOLD, completion_report_accepted
+- report: `.agent/CODEX_REPORT_4.md` reviewed at `7bf9b8a0a014ebe9a613e9ebeb0082d0b7834c54`, independent 968 existing PASS and 12 probes=9 PASS/3 FAIL, P1×1/P2×2.
+- findings: H4-R1 wrapping interleaved amount/% table emits false profit facts (P1); H4-R2 pending judgement saves stale headline verdict after official body fill (P2); H4-R3 correct Fed statement with historical raise preceding current maintain is rendered as current raise (P2).
+- separate tasks: Only G8=ニュース改善A is assigned targeted remediation `news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012` (Opus5.5高). G9 remains API最適化B, other H/G slots unaffected.
+- accepted: old F7 modulo starvation removed (probabilistic fairness limits remain), conditional PATCH safe status/lane guards, prior F1–F6/F8 checks largely green. Old no_post/failed backlog and Fed TTL limits remain explicit restrictions.
+- release_state: PR129 OPEN/Draft/unmerged; no production deploy. H4 report itself has no product edits; H4 is now done/none, review-slot released. Do not auto-run another full H4 review.
 
 ## H4 Completion — 2026-10-12 JST
 
