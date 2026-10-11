@@ -105,7 +105,7 @@ Expected: assertion fails at 2c876b0b, passes at cb3d77d5. No --allow-net; callb
 - H1/G1–G5 source/TASK/Report, apps/admin, HANDOFF, existing uncommitted changes and all other servers/worktrees untouched.
 - remaining_issues: **one blocking R1/P1 safety regression**. Normal-noun P2 fixed; standard passing tests do not erase the unsafe negative proof. No production occurrence inferred.
 - next_recommendation: C2 to **かぶモリアプリG2のちゃ**. G2 makes only a bounded predicate/clause safety correction (recommended **Opus5.5（高）**) with these controls; later ONE focused **Sol（高）** exact-head review. No merge or production release authorized.
-- control_sync: publication attempted via fresh guarded Contents CAS; exact commits and origin/main read-back recorded in receipt when confirmed.
+- control_sync / push: CONFIRMED on GitHub origin/main by exact Contents read-back and fresh Git ancestry. Report commit `2bb3ba4ff90cc928122ccb23d7ed19649872510e`; TASK state commit `b22511a1444fb43900a91ce1416283e8f6104e1c`; H2-only index state commit `cc84995f89b782e737ed7a3727c1f7371b902bc0`. Only three authorized control paths changed; diff --check PASS. Current TASK/index review_required / next_owner chatgpt. Full pre-existing Report history and previous TASK history byte-for-byte preserved. Initial Report write had a transport error; exact read-back confirmed no write before one successful same-CAS retry. No source branch push, merge or deploy.
 
 ---
 
