@@ -1,0 +1,258 @@
+{
+  "summary": {
+    "cases": 22,
+    "bodiesStored": 20,
+    "allowedByPolicy": 2,
+    "toReplaceWithRuntimeFetch": 18,
+    "charsToRemove": 16252,
+    "bySource": {
+      "al_jazeera": {
+        "stored": 3,
+        "mustReplace": 3,
+        "chars": 2894
+      },
+      "bbc_world": {
+        "stored": 2,
+        "mustReplace": 2,
+        "chars": 2069
+      },
+      "breaking_market": {
+        "stored": 3,
+        "mustReplace": 2,
+        "chars": 814
+      },
+      "jp_official": {
+        "stored": 1,
+        "mustReplace": 0,
+        "chars": 708
+      },
+      "tdnet": {
+        "stored": 11,
+        "mustReplace": 11,
+        "chars": 10831
+      }
+    }
+  },
+  "cases": [
+    {
+      "caseId": "aj-flydubai-attack-e956ae92",
+      "sourceName": "al_jazeera",
+      "host": "www.aljazeera.com",
+      "bodyChars": 879,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "dd6984af95aece4b110d7f1a6db4c948afc217e656109a7d3c7b3bc02267c533",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "aj-hurricane-fact-failure-8792253b",
+      "sourceName": "al_jazeera",
+      "host": "www.aljazeera.com",
+      "bodyChars": 1038,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "5e203a19c065c329fbbcfe48c6c253efe3311ac4947ac60a9da338ed9c4e8bba",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "aj-qatar-tanker-3a1fe802",
+      "sourceName": "al_jazeera",
+      "host": "www.aljazeera.com",
+      "bodyChars": 977,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "152bbdd9cdd5af0e86970fc9638665c4772b4b1e5a47f768375d262f1ab5d8bb",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "bbc-flydubai-attack-fact-failure-f4a8a7cc",
+      "sourceName": "bbc_world",
+      "host": "www.bbc.co.uk",
+      "bodyChars": 1086,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "7f3945f15406ecdb6ff7d9a09dcee36d4d69073d3e614a8655f6bb2b41095fc3",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "bbc-nepal-floods-1533a3fd",
+      "sourceName": "bbc_world",
+      "host": "www.bbc.co.uk",
+      "bodyChars": 983,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "2750f2e83fd34564ba5226007cc0692cb332591e01218c4061e7f8553d129384",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "boj-governor-speech-a3dac612",
+      "sourceName": "market_macro",
+      "host": "www.boj.or.jp",
+      "bodyChars": 0,
+      "bodyStored": false,
+      "allowedByPolicy": true,
+      "sha256": null,
+      "action": "keep"
+    },
+    {
+      "caseId": "boj-official-policy-change-notice-a989d1f3",
+      "sourceName": "market_macro",
+      "host": "www.boj.or.jp",
+      "bodyChars": 0,
+      "bodyStored": false,
+      "allowedByPolicy": true,
+      "sha256": null,
+      "action": "keep"
+    },
+    {
+      "caseId": "boj-rate-hike-news-cafc0f82",
+      "sourceName": "breaking_market",
+      "host": "apnews.com",
+      "bodyChars": 172,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "9e195d777772c7b4a64640df0507d198e9774d475e77969462538c82dc9c94e8",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "fsa-insurer-administrative-action-b5a10bac",
+      "sourceName": "jp_official",
+      "host": "www.fsa.go.jp",
+      "bodyChars": 708,
+      "bodyStored": true,
+      "allowedByPolicy": true,
+      "sha256": "81e3d11a16d015533611be100e5c811d8f34ddd8f798c84e399fdec6f456f2b7",
+      "action": "keep"
+    },
+    {
+      "caseId": "fx-finance-minister-remarks-25c28b26",
+      "sourceName": "breaking_market",
+      "host": "www.mof.go.jp",
+      "bodyChars": 356,
+      "bodyStored": true,
+      "allowedByPolicy": true,
+      "sha256": "b3867e9592ea4556f3e354358cd0e43592c986e2e7e201bbaf5229c6974958eb",
+      "action": "keep"
+    },
+    {
+      "caseId": "north-korea-projectile-090e8d18",
+      "sourceName": "breaking_market",
+      "host": "apnews.com",
+      "bodyChars": 286,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "65d1a0220751a76254eb870e4d2d04a814d091b9eb58ffba582000e362819643",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "tdnet-buyback-fact-failure-4887f2b0",
+      "sourceName": "tdnet",
+      "host": "www.release.tdnet.info",
+      "bodyChars": 1397,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "34df1229a3d944db1a9c4c3ea8805ee63fd769dedf69fa9377ceacb186ce0c22",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "tdnet-dividend-increase-7207a56d",
+      "sourceName": "tdnet",
+      "host": "www.release.tdnet.info",
+      "bodyChars": 839,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "b304f026e12530ad354d3b3b5c7c573a955ecf334addedc708314d642750d591",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "tdnet-earnings-revision-contract-loss-91569af5",
+      "sourceName": "tdnet",
+      "host": "www.release.tdnet.info",
+      "bodyChars": 1796,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "927b659df2dd9e5175e6450f21299b79c32c2c9d14518314847a6838076753f7",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "tdnet-etf-daily-disclosure-201cf3c7",
+      "sourceName": "tdnet",
+      "host": "www.release.tdnet.info",
+      "bodyChars": 748,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "783f380af95482756f8c577c422ca9396271b912efcd163b591fda376b1f9ef6",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "tdnet-jftc-raid-0b73ef94",
+      "sourceName": "tdnet",
+      "host": "www.release.tdnet.info",
+      "bodyChars": 208,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "3400787ad6530ffdc4707400558939af69148009fcc4b30c8a5fe90b022b38de",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "tdnet-large-order-fact-failure-2f881cde",
+      "sourceName": "tdnet",
+      "host": "www.release.tdnet.info",
+      "bodyChars": 370,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "c365cb23405318d03e82a6d20b68260a79b30e28dc3887a9bcde5312c95768c8",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "tdnet-press-report-denial-fact-failure-26648baf",
+      "sourceName": "tdnet",
+      "host": "www.release.tdnet.info",
+      "bodyChars": 232,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "b325cb88613cf87e4ed879748fe6505f9f8134e84ef83d915e2ec313daafc302",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "tdnet-sbi-merger-fact-failure-84832da2",
+      "sourceName": "tdnet",
+      "host": "www.release.tdnet.info",
+      "bodyChars": 1785,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "857e68ce1a930b11dd7ce68493d6f9c0d802879a58d235519d87aac55a96b527",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "tdnet-share-consolidation-voice-failure-44df218f",
+      "sourceName": "tdnet",
+      "host": "www.release.tdnet.info",
+      "bodyChars": 1769,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "e4e445033e83798cbc1cd3f4e03f5605ef27d0402dada168a66640b36bfc1bd7",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "tdnet-small-acquisition-d09c88ce",
+      "sourceName": "tdnet",
+      "host": "www.release.tdnet.info",
+      "bodyChars": 1086,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "04e3f4c6f91a0a244cc851b37f925f0778e707168e6e8ba12ea71ee3c1381b15",
+      "action": "replace_with_runtime_fetch"
+    },
+    {
+      "caseId": "tdnet-third-party-committee-60d9954a",
+      "sourceName": "tdnet",
+      "host": "www.release.tdnet.info",
+      "bodyChars": 601,
+      "bodyStored": true,
+      "allowedByPolicy": false,
+      "sha256": "47d19891db41df6260c0120f72c50a335d31a3c935250ac387e9c40e1850a845",
+      "action": "replace_with_runtime_fetch"
+    }
+  ]
+}
