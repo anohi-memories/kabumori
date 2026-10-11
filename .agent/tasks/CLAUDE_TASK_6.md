@@ -3,8 +3,8 @@
 - task_id: common-ai-provider-g6-phase1e-readonly-runner-preflight-20261011
 - owner: claude
 - slot: claude-6
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -42,24 +42,88 @@
 ## Report（G6のくろちゃんが実績を記載）
 
 - task_id: common-ai-provider-g6-phase1e-readonly-runner-preflight-20261011
-- result: not_started
-- changed_files: none
-- runner_check: NOT_RUN
-- target_verdict: UNKNOWN
-- preflight_verdict: UNKNOWN
-- predicted_refusals: UNKNOWN
-- fingerprints: NOT_RUN
-- CLI_version: unverified_for_this_run
-- tests: NOT_RUN
-- commit_hash: none
-- push: not_performed
+- result: **PASS_READONLY_CHECK**
+  - 2026-10-11 19:05 JST に、本番で `TARGET_VERIFIED` と `READY_TO_APPLY` を観察した
+  - **READY は台帳の適用承認ではない**。apply / policies / 実 API smoke は、それぞれ別の承認が必要
+- changed_files: `.agent/tasks/CLAUDE_TASK_6.md`（この Report とヘッダー）、`.agent/ACTIVE_TASK.md`（G6 の索引だけ）
+- work_env:
+  - 独立 worktree `/Users/yuya/Developer/kabumori-g6-common-ai`
+  - branch `claude/g6-phase1e-readonly-runner-check-20261011`
+  - 作成元: fresh `origin/main` `7e049021`。Report の前に `52da07b5` へ rebase した
+- pre_checks:
+  - main にある runner・gate・target_identity・preflight・fingerprint・migration・runbook は、PR133 の head `61be0dfb` と差分 0。merge `570cc45f` は main に含まれる
+  - migration の sha256 `680aeb3f…5737` は runner の固定値と一致
+  - 全15枠の TASK に、開いている `production_mutation_window` は無い（残っているのは 10/6〜10/7 の過去の記録だけ）
+  - G5 は `review_required / next_owner chatgpt`（Phase3g。offline の文書作業で、本番に触れない）
+  - G3 は in_progress だが本番は FORBIDDEN。H5 は ready だが本番は FORBIDDEN
+  - 10/11 に main へ追加された migration は無い
+  - `SUPABASE_PROJECT_ID` は未設定。CLI は自前のログイン情報を使う（値は表示していない）
+- runner_check: **実行1回のみ**
+  - command: `AIL_ROLLOUT_REF=wsmznyzcvmuitkglfeuj bash supabase/tests/ai_provider_budget_ledger_rollout.sh check`（runbook §2 手順4）
+  - runner の終了コード 0。SQL 3本（identity / preflight / fingerprint）の CLI 終了コードはいずれも 0
+  - 出力: `/Users/yuya/.kabumori-ai-ledger-rollout/20261011-190543-check/`
+- target_verdict: **TARGET_VERIFIED**
+  - `cron_jobs=42`
+  - `cron_project_refs=[wsmznyzcvmuitkglfeuj]`（期待の ref と完全一致、1種類だけ）
+  - product_markers 6/6 true: profiles / brands / social_accounts / common_accounts / service_entitlements / private.account_lifecycle_operations
+  - history_markers 2/2 true: 20261001150000 / 20261006230000
+- preflight_verdict: **READY_TO_APPLY**（checked_at_jst 2026-10-11 19:05:50）
+  - DB: postgres、superuser=False、server 170006
+  - 履歴: 81行、max `20261007214402`。台帳の行は false、G5 deletion completion の行も false、台帳より新しい version 0
+  - 対象: `ai_ledger` 無し、`public.ai_ledger_*` 0件、同名オブジェクト 0
+  - G5: lifecycle foundation あり、deletion completion は未適用、public/private の関数 168（適用で +7 の予定）
+- predicted_refusals: 4項目すべて **no**
+  - app_role_reaches_all_data_role
+  - app_role_reaches_owner_or_superuser
+  - app_role_reaches_service_role_privileges
+  - default_acl_grantees_not_revoked
+- postgrest:
+  - ddl_watch / drop_watch true
+  - authenticator が service_role に SET ROLE できる: true
+  - service_role の public USAGE: true
+  - authenticator の設定: `statement_timeout=8s`、`lock_timeout=8s`、`session_preload_libraries=supautils, safeupdate`
+- event_triggers: ensure_rls(ddl_command_end) / issue_graphql_placeholder / issue_pg_cron_access / issue_pg_graphql_access / issue_pg_net_access / pgrst_ddl_watch / pgrst_drop_watch
+- extensions: pg_cron 1.6.4、pg_net 0.20.4、supabase_vault 0.3.1
+- default_acl: 24 entries
+- fingerprints: 12カテゴリ（checked_at_jst 19:05:53）。apply の「適用前の指紋」はこの値ではなく、apply 実行時にその場で取り直す
+  - columns 1486 / constraints 639 / default_acl 27 / event_triggers 7 / functions 168 / indexes 211
+  - memberships 25 / policies 66 / relations 303 / roles 17 / schemas 2 / triggers 60
+  - ai_ledger_rpcs 0
+- CLI_version: **2.116.0**
+  - `db query` が `--linked` / `--project-ref` / `--file` / `--output-format` / `--agent` / `--workdir` を持つことを、runner が確認した
+  - 呼び出し: `--workdir <空のディレクトリ> --linked --project-ref wsmznyzcvmuitkglfeuj --output-format json --agent no`
+- cli_side_effects（既知のもの。TASK で許容されている）:
+  - 3回の呼び出しそれぞれで、CLI が `Initialising login role...` を表示した（一時ログインロールの作成）
+  - CLI が分離した作業ディレクトリに `supabase/.temp/linked-project.json` と `cli-latest` を書いた（仕様どおり。`project-ref` は作られない）
+  - runner のバージョン確認で、worktree に `supabase/.temp/cli-latest` ができた。未追跡で、削除済み
+  - これ以外の本番書き込みは無い（SQL は SELECT 3本だけ）
+- tests:
+  - 本番での実行で観察した範囲だけを PASS とする: 出力の形（素の配列・1行・項目の集合が一致）、対象 ref、終了コード、事前条件
+  - Phase1d の fake CLI 74経路は、今回は反復していない
+- commit_hash: この Report の commit（K6 で GitHub 上の値を確認）
+- push: main へ fast-forward（push の前に fresh `origin/main` を再確認）
 - merge: not_performed
 - deploy: not_performed
-- production_db_mutations: 0 by assignment
-- secrets_or_paid_provider_calls: 0 by assignment
-- remaining_issues: actual runner check, future apply/policies/secret/smoke separate gates
-- safety_checks: task not yet started
-- next_recommendation: run G6; return K6 here after evidence recorded.
+- production_db_mutations: 0。SELECT だけで、例外は CLI の一時ログインロール（既知の副作用）
+- secrets_or_paid_provider_calls: 0。Secrets・API キーの取得や表示、Anthropic / OpenAI への呼び出しは無い
+- remaining_issues:
+  1. **READY は適用承認ではない。** `apply`（G5 の窓が無いことの確認と、窓の記録が必要）、試験用 `policies`、実 API smoke、`ANTHROPIC_API_KEY` の登録、回復 Cron は、それぞれ別の承認が必要
+  2. `ensure_rls`（ddl_command_end）の event trigger がある。Stage A に影響しうるが、どちらでも安全側
+     - 新しい表の RLS を有効にするだけなら無害（台帳の表は自分でも RLS を有効にする）
+     - もしエラーを出すなら、migration は BEGIN/COMMIT の中なのでロールバックされ、STOP[11] で何も残らない
+     - 関数の本体は今回読んでいない（apply 前に読み取り確認するかは ChatGPT の判断）
+  3. CLI 2.116 で、複数文の migration を `--linked`（Management API）で流すのは未実測。失敗しても、STOP[11] で何も残らない
+  4. authenticator の `statement_timeout=8s` は、PostgREST 経由の台帳 RPC の上限になる。台帳 RPC は短いので問題ない見込みだが、Phase 2a の smoke で実測する
+  5. 履歴の max は `20261007214402`。台帳（20261010050613）を先に入れると、G5 の 20261009120000 は後から古い version として入る（runbook §5 のとおり G5 へ共有する）
+- safety_checks:
+  - 実行したのは `check` だけで、1回だけ。`apply` / `policies` / `stop` / `rollback` は実行していない
+  - migration・履歴・SQL の書き込み、Secrets、一時サービスキー、Edge deploy、Cron、モデル切替、PR merge、photo project の操作: すべて 0
+  - 他スロットの TASK・Report・branch・worktree には触れていない
+- next_recommendation: K6 で、ChatGPT がこの観察結果を評価する。進める場合は、承認を別々に判断する
+  1. `apply` の実施日時と窓の記録（G5 と調整。apply 時に runner がその場で事前チェックと適用前の指紋を取り直す）
+  2. 試験用 `policies`
+  3. 実 API smoke（台帳込みにするか、台帳なしにするか）
+  4. `ANTHROPIC_API_KEY` の登録時期（Phase 2a の直前）
 
 ---
 

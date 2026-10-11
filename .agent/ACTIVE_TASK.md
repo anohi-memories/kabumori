@@ -166,11 +166,12 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: ready
+- status: review_required
 - task_id: common-ai-provider-g6-phase1e-readonly-runner-preflight-20261011
 - start_code: G6
 - finish_code: K6
-- next_owner: claude
+- next_owner: chatgpt
+- latest_result: PASS_READONLY_CHECK — production runner `check` run once 2026-10-11 19:05 JST: TARGET_VERIFIED (cron refs = wsmznyzcvmuitkglfeuj only, markers 6/6, history 2/2), READY_TO_APPLY, predicted_refusals 4/4 no, fingerprint 12 categories / 168 functions; CLI 2.116.0 temp login role x3 (known). READY is not apply approval. Report: .agent/tasks/CLAUDE_TASK_6.md#report
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
 - report: .agent/tasks/CLAUDE_TASK_6.md#report
