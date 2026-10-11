@@ -225,10 +225,11 @@ function quote(sentence: string): string {
 }
 
 /**
- * The end of a predicate: a verb, auxiliary or polite ending (〜た／〜だ／〜です・ます／〜ません／〜る), or an adjective.
- * A final い counts only in adjective form (〜しい／〜ない／〜たい／大きい／高い／強い …): a noun made from a verb ends
- * in い too (勢い／思い／狙い／違い／買い), and 「売りの勢いが強まって…」 is a subject が, not the end of a clause
- * (2026-10-10 H2 C2 P2). Used wherever a suffix decides that a statement is complete.
+ * The end of a predicate, for the pictograph sentence break only: a verb, auxiliary or polite ending (〜た／〜だ／
+ * 〜です・ます／〜ません／〜る), or an adjective from this list (〜しい／〜ない／〜たい／大きい／高い／強い …).
+ * Here a missing adjective fails safe: the text is not split, so a date and the value after it stay in one sentence
+ * (「10月6日の売りの勢い📉 日経平均は…」). The clause check works the other way round (CLAUSE_PREDICATE_END in
+ * analysis_logic.ts): there an unknown ending must count as a boundary, so it does not use this list.
  */
 export const PREDICATE_END =
   "(?:[たすだんる]|(?:しい|ない|たい|よい|いい|きい|さい|かい|るい|ろい|[高安強弱多早遅鈍重軽狭広薄厚長短低良悪近遠深浅鋭速堅固硬甘辛熱寒暑太細濃淡丸若古痛偉]い))";

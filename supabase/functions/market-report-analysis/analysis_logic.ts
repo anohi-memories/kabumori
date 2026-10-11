@@ -28,7 +28,7 @@ import {
   resolveKabumoriAiRole,
   responsesApiParams,
 } from "../_shared/kabumori_ai_models.ts";
-import { emojiDirectionIssues, MARKET_NAMES, mentionsMarketMetric, metricFactIssues, PREDICATE_END } from "./hard_fact_guards.ts";
+import { emojiDirectionIssues, MARKET_NAMES, mentionsMarketMetric, metricFactIssues } from "./hard_fact_guards.ts";
 import {
   type Fallbacks,
   removalCodes,
@@ -616,13 +616,28 @@ function linkSupported(sentence: string, links: readonly RegExpMatchArray[], ind
 }
 
 /**
+ * Stems of nouns made from a verb that end in い (勢い／思い／狙い／違い／買い …). Before が they are a subject, not
+ * the end of a clause (「売りの勢いが強まって…可能性があります」: 2026-10-10 H2 C2 P2).
+ */
+const I_NOUN_STEMS = "勢思狙違買扱争払伺戦願祝疑迷誘救補商行構合装潤類揃憩災舞";
+
+/**
+ * What a comma-free conjunction must follow to end a clause. Any final い counts unless it ends a known noun above:
+ * an adjective, listed or not (緩い／脆い／きつい／しつこい …), always ends its clause, so a later unrelated hedge can never
+ * qualify an asserted cause before it (2026-10-11 H2 C2 R1 P1: a finite adjective list let those through). An unknown
+ * noun in い fails safe the other way: its sentence is read as two clauses and a genuine hedge may be removed, never
+ * an assertion delivered.
+ */
+const CLAUSE_PREDICATE_END = `(?:[たすだんる]|(?<![${I_NOUN_STEMS}])い)`;
+
+/**
  * Where one clause of a sentence ends and another statement starts: a conjunction after a predicate, with or without a
  * comma (「下落しましたが今後は…」「下落したので…」: 2026-10-08 H2 B3-R1); any of them before a comma; and 一方 / ただし /
  * しかし. A subject が (「ウクライナ情勢が重しとなった」「売りの勢いが強まって」) follows a noun, not a predicate
- * (PREDICATE_END), and is no boundary.
+ * (CLAUSE_PREDICATE_END), and is no boundary.
  */
 const CLAUSE_BOUNDARY = new RegExp([
-  `(?<=${PREDICATE_END})(?:が|けれど(?:も)?|けど|ものの|ので|ため|から)(?![らっ])[、,]?`,
+  `(?<=${CLAUSE_PREDICATE_END})(?:が|けれど(?:も)?|けど|ものの|ので|ため|から)(?![らっ])[、,]?`,
   "(?:が|けれど(?:も)?|けど|ものの|ので|ため|一方(?:で)?|ただし|しかし|なお|また|ただ)[、,]",
   "[、,](?=(?:一方|ただし|しかし|なお|また|ただ)[、,]?)",
   "一方(?!的)(?:で)?|ただし|しかし",

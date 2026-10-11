@@ -359,3 +359,84 @@ test("P2: the same predicate rule binds an emoji after a noun ending in い (dat
   // A completed adjective predicate still ends the sentence before a new dated one.
   assert.deepEqual(splitUnits("東京市場の下げは大きい📉 10月6日の米国市場は上昇しました。").length, 2);
 });
+
+// ---------------------------------------------------------------------------------------------
+// C2 R1 P1 (2026-10-11): any adjective before a comma-free conjunction ends its clause (no finite list fail-open)
+// ---------------------------------------------------------------------------------------------
+
+const H2_ADJECTIVES = ["緩い", "脆い", "きつい", "しつこい"];
+const UNLISTED_ADJECTIVES = ["渋い", "ぬるい", "心細い", "か細い"];
+const COMMA_FREE = ["が", "けれど", "ので", "ため", "ものの"];
+const assertedWithLaterHedge = (adjective: string, conjunction: string) =>
+  `ウクライナ情勢の影響で東京市場の戻りは${adjective}${conjunction}今後の企業業績は改善する可能性があります。`;
+const NOUN_SUBJECTS = ["勢いが強まって", "思いが揺れて", "狙いが変わって", "違いが広がって", "戻りが鈍く"];
+const hedgedNounSubject = (noun: string) => `ウクライナ情勢の影響で売りの${noun}東京市場は下落した可能性があります。`;
+const withStory = (text: string) => {
+  const analysis = delivered();
+  analysis.x_post.context_ja = `${analysis.x_post.context_ja}${text}`;
+  analysis.app_story!.japan_ja = `${analysis.app_story!.japan_ja}${text}`;
+  return analysis;
+};
+
+test("R1 P1: 4 observed adjectives × 5 comma-free conjunctions — the asserted cause is rejected despite a later hedge (exact H2 shape)", () => {
+  for (const adjective of [...H2_ADJECTIVES, ...UNLISTED_ADJECTIVES]) {
+    for (const conjunction of COMMA_FREE) {
+      const sentence = assertedWithLaterHedge(adjective, conjunction);
+      assert.equal(verdictOf(sentence), "assertive", sentence);
+    }
+  }
+});
+
+test("R1 P1: the sanitizer removes those sentences from both X and the app story", () => {
+  for (const adjective of H2_ADJECTIVES) {
+    for (const conjunction of COMMA_FREE) {
+      const sentence = assertedWithLaterHedge(adjective, conjunction);
+      const result = sanitize(withStory(sentence));
+      const paths = result.removed.filter((unit) => unit.code === "UNSUPPORTED_CAUSALITY").map((unit) => unit.path.split("#")[0]);
+      assert.deepEqual([...new Set(paths)].sort(), ["app_story.japan_ja", "x_post.context_ja"], sentence);
+      assert.ok(!result.analysis.x_post.context_ja!.includes(sentence) && !result.analysis.app_story!.japan_ja.includes(sentence), sentence);
+    }
+  }
+});
+
+test("R1 P1: generated delivery never carries them to X or the app (20 cases, within the call ceiling)", async () => {
+  for (const adjective of H2_ADJECTIVES) {
+    for (const conjunction of COMMA_FREE) {
+      const sentence = assertedWithLaterHedge(adjective, conjunction);
+      const calls: string[] = [];
+      const outcome = await generateSharedAnalysis(input, scripted([
+        { step: "generate", payload: withStory(sentence) }, { step: "generate", payload: withStory(sentence) },
+        { step: "fact", payload: { passed: true, issues: [], objective_issues: [] } },
+      ], calls), NOW);
+      assert.ok(outcome.ok, sentence);
+      assert.ok(calls.length <= 4, `${sentence}: ${calls.join(",")}`);
+      const packet = outcome.ok ? outcome.packet : null!;
+      assert.ok(!formatSharedXPost(packet).includes(sentence), `X: ${sentence}`);
+      assert.ok(!JSON.stringify(packet.app_story).includes(sentence), `app: ${sentence}`);
+    }
+  }
+});
+
+test("R1 P1: the five noun subjects stay genuine hedges and are delivered in X and the app without a regeneration", async () => {
+  for (const noun of NOUN_SUBJECTS) {
+    const sentence = hedgedNounSubject(noun);
+    assert.equal(verdictOf(sentence), "speculative", sentence);
+    assert.deepEqual(sanitize(withStory(sentence)).removed, [], sentence);
+    const calls: string[] = [];
+    const outcome = await generateSharedAnalysis(input, scripted([
+      { step: "generate", payload: withStory(sentence) }, { step: "fact", payload: { passed: true, issues: [], objective_issues: [] } },
+    ], calls), NOW);
+    assert.deepEqual(calls, ["generate", "fact"], sentence);
+    assert.ok(outcome.ok && formatSharedXPost(outcome.packet).includes(sentence), `X: ${sentence}`);
+    assert.ok(outcome.ok && outcome.packet.app_story!.japan_ja.includes(sentence), `app: ${sentence}`);
+  }
+});
+
+test("R1 P1: the original 〜しましたが cases and the emoji date binding are unchanged", () => {
+  for (const conjunction of ["が", "けれど", "ので"]) {
+    assert.equal(verdictOf(`ウクライナ情勢を受けて東京市場は下落しました${conjunction}今後の動きには不確実な可能性があります。`), "assertive");
+  }
+  assert.equal(verdictOf("ウクライナ情勢が重しとなった可能性があります。"), "speculative");
+  assert.equal(splitUnits("10月6日の売りの勢い📉 日経平均は70,035.71（前日比−0.92%）でした。").length, 1);
+  assert.equal(splitUnits("10月7日の日経平均は70,035.71（前日比−0.92%）でした📉 10月6日の米国市場では主要株価指数がそろって上昇。").length, 2);
+});
