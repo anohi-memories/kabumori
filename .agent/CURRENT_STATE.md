@@ -1,3 +1,13 @@
+## H3 C3 FINAL — PR143 independent queue/Auth/security review — 2026-10-11 JST
+
+- H3 task `kabumori-pr143-ondemand-queue-auth-security-review-20261011`: **review_required / next_owner chatgpt**, return C3 to `かぶモリアプリG2のちゃ`, recommended Sol（高）. Exact Draft PR143 head `1d0529bb68b0e60b32ce0a2cb0002872b1671177` remains open/unmerged; fresh main at review `ccad07fa679cde4f07b0d3ecb8e3658a91ea6128`, no product-file overlap since merge base.
+- Result **CHANGES_REQUIRED / PRODUCTION_NO_GO**: P2 lease-fencing defect — `fail_personalized_analysis_job` at candidate migration lines 479-480 omits expiry check while complete checks it. Require expiry predicate + expired-but-not-reclaimed test. Auth/RLS/SECURITY DEFINER, owner-data filtering, completed result save before optional push and market date/Fact gates were otherwise source-consistent; no P0/P1 found.
+- 58 targeted Deno runtime tests PASS with `--no-check`; worker entry `deno check` PASS; normal Deno test resolution blocked by absent `npm:@types/node`; disposable PostgreSQL NOT_RUN because local PG/Podman was unavailable. One unchanged lint warning in reports screen; diff-check clean.
+- Existing all-users shared morning/close push remains a separate blocker. 1,000-item queue worst-case estimate ~12.5 hours at 4 slots and 180 seconds/job is an unmeasured capacity caveat. No product edits, production DB/migration/deploy/Cron/secret changes, external provider/X/Expo calls.
+- Report: `.agent/CODEX_REPORT_3.md`. Previous G2 K2 source-candidate record below is retained as history; this H3 C3 review is the current review status. G2 may take the narrow failure-lease correction; no automatic merge/deploy authorization.
+
+---
+
 ## POSTONA Threads first real post — G4 integration source TASK READY — 2026-10-11 JST
 
 - **User directive:** “すすめて” after K4, meaning next POSTONA milestone is G4 Threads OAuth→permission→manual TEXT publish→Meta post read-back integration toward ONE tester-owned real post, **not authorization to post publicly now**. No production DB/Meta/Supabase/Auth/Edge/Vault operations or PR merge/deploy occurred during this allocation.
