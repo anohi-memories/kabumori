@@ -3,8 +3,9 @@
 - task_id: kabumori-pr110-p2-final-narrow-review-20261011
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
+- c2_result: CHANGES_REQUIRED / R1 P1 true Hard-Fact fail-open demonstrated, 20/20 unsafe matrix; G2 corrective ready, PR110 merge/deploy HOLD
 - start_code: H2
 - completion_code: C2
 - return_to: かぶモリアプリG2のちゃ
