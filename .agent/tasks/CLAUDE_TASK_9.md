@@ -3,8 +3,8 @@
 - task_id: api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011
 - owner: claude
 - slot: claude-9
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G9
 - finish_code: K9
 - return_to: ニュース改善API最適化のちゃ
@@ -32,16 +32,69 @@
 ## Report
 
 - task_id: api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011
-- result: not_started
-- changed_files: none
-- tests: not_run
-- commit_hash: none
-- push: not_performed
+- result: PASS_OFFLINE_GATE_IMPLEMENTED（外部AI送信ゲートの実装・テスト完了。EXTERNAL_CALLS_RELEASE_HOLD は維持。有料API・実ネットワーク・本番アクセスは0）
+- finished: 2026-10-11 JST
+- branch: `claude/g9-fixture-rights-cost-eval-20261011`（独立worktree `/Users/yuya/Developer/kabumori-g9-fixture-rights`、`b6020dbb` の継続）
+- commit_hash: `65c95589564845e7b343fe9d0acc7d293bebf783`（親 `b6020dbb`）
+- push: performed（G9ブランチのみ、`b6020dbb..65c95589` の fast-forward。main へのコード push・force push なし。この Report は `.agent` の自TASKのみ）
+- PR: none（Draft PR は作成していない。PR #115 は未変更: OPEN/Draft、head `8f430557`、updatedAt 2026-10-09 のまま）
 - merge: not_performed
 - deploy: not_performed
-- remaining_issues: rights_unconfirmed原文を外部AIへ流すlive/runtimeBodies・probe_cli/legacy経路をfail-closed化。PR115旧fixture/履歴は別工程。
-- safety_checks: not_started
-- next_recommendation: G9開始、外部送信ゲートだけ是正→K9で返却。
+
+### 外部送信ゲートの実装証拠
+
+- 新規 `tools/provider-compare/src/external_send_gate.ts`（純粋関数。ネットワーク・env・ファイル読込・子プロセスなし。テストで固定）。ケースごとに `allowed` / 理由コードを返す。
+  - `rights_unconfirmed` の本文は、ハッシュ一致・`--runtime-bodies`・`PROVIDER_COMPARE_ALLOW_PAID` では**送信不可**（`blocked_rights_unconfirmed_no_licence`、理由に「ハッシュ一致や opt-in は許諾ではない」と表示）。
+  - 送れるのは、(a) 保存済みの open_terms 本文、(b) 本文なしかつ公開利用条件のホスト、(c) **許諾台帳に明示記録があるケース**のみ。記録は本文ハッシュ・provider・送信内容（title / body / recorded_text）・日付に紐づき、`state: denied` は確認記録より優先。台帳の構造不正は `LICENCE_REGISTER_INVALID` で全体停止。
+  - legacy fixture は常に不可（`blocked_legacy_fixtures`）。由来不明・manifest なしは fail closed。
+- 許諾台帳 `fixtures/body_licences.json` は**空**（新たな許諾は仮定していない）。TDnet / BBC / Al Jazeera / AP の18件は全経路で止まる。
+- `cli.ts`: 既定 fixtures を `rights_safe` に変更（legacy は `--fixtures legacy` の明示時のみ、ローカル専用・警告付き、live は従来どおり拒否）。ゲートは **API キー探索より前**に走り、許可0件なら `EXTERNAL_SEND_NO_ELIGIBLE_CASES`。live は許可ケースだけで実行し、provider を `guardProvider` で包む（不許可の caseId・不許可本文を含むペイロードは内側 provider を呼ばず `EXTERNAL_SEND_BLOCKED`）。
+- `probe_cli.ts`: `--fixtures legacy` を**最初に**拒否（`LEGACY_FIXTURES_REFUSED_FOR_EXTERNAL_CALLS`。キー探索・ケース読込・ネットワークの前）。次にゲート、その後にキー探索。`--plan-only`（キー・ネットワーク無しで送信予定と理由を表示）を追加。送信直前にも全リクエストを再検査。
+- 送信内容の対象範囲: 見出しと `recorded.generation.text` に出典の引用が残りうるため、許諾記録に `title` / `recorded_text` の明示を要求し、本文なしでも許可リスト外ホストなら記録を要求。送信前にケースごとの送信量（文字数のみ）を表示。
+
+### changed_files（12。`tools/provider-compare/` と `docs/model-optimization/` のみ）
+
+- 新規: `src/external_send_gate.ts`, `src/external_send_gate_test.ts`, `fixtures/body_licences.json`, `docs/model-optimization/G9_R2_EXTERNAL_SEND_GATE_AND_LICENCES_2026-10-11.md`, `docs/model-optimization/PR115_BODY_REMOVAL_MIGRATION_PLAN_2026-10-11.md`
+- 変更: `src/cli.ts`, `src/probe_cli.ts`, `src/fixture_loader.ts`, `src/fixture_access.ts`（コメント・manifest note のみ）, `src/fixture_access_test.ts`（「既定は legacy」前提の1件を「既定は rights_safe、legacy は明示」に更新）, `fixtures/cases_body_manifest.json`（note 文言のみ）, `docs/model-optimization/G9_FIXTURE_RIGHTS_AND_COST_BASELINE_2026-10-11.md`（R2 訂正の注記のみ）
+- `fixtures/cases.json` は**変更していない**（PR #115 のテストが本文を前提とするため）。
+
+### tests
+
+- `deno test --no-config -A tools/provider-compare/`: **299 passed / 0 failed**（既存 284 + 新規 15。既存で変更したのは上記1件の前提のみ。他の既存テストは無変更で通過）。
+- 新規15件の内容（すべて pure mock / ローカルファイル / `--allow-net` なしのサブプロセス。実キー・外部API無し）:
+  - `rights_safe + runtimeBodies(18)`: 18件は attached_verified だが全件 blocked、許可は4件。全 task × 全22件を mock vendor に流しても、内側 provider に届いた caseId に18件は含まれず、届いたペイロードに18件の本文は含まれない。
+  - CLI live: runtime bodies 付きで TDnet 1件に絞ると、キー探索前に `EXTERNAL_SEND_NO_ELIGIBLE_CASES`（stdout に `key:` なし）。
+  - `probe_cli --fixtures legacy`: ネットワーク・キー探索・ケース読込の前に拒否。`--plan-only` は既定で4件許可、runtime bodies を足しても許可は4件のまま。
+  - 既定のオフライン安全4件（公的機関2 + 本文なし2）、ハッシュ不一致・欠落は従来どおり除外、台帳は空で読込可、許諾記録の紐づけ（ハッシュ・provider・送信内容・期限・否認・本文なしの扱い）、構造不正の拒否、ペイロードへの本文混入検出（先頭・中央）。
+- 変異テスト: `attached_verified` を無条件許可に書き換えると8件が失敗することを確認（元に戻して再実行済み）。
+- `deno check`（cli / probe_cli / gate / test / loader）エラーなし、`deno lint` エラーなし。`git diff --check` 問題なし。シークレット走査（変更ファイルへのキー形式の正規表現）一致なし。
+
+### 権利の残件（隠さずに記録）
+
+1. `fixtures/cases.json` には第三者本文20件中18件（TDnet 11 / AJ 3 / BBC 2 / AP 2）が**今も入っている**。変更していない。
+2. Git 履歴にも残る。導入は `8f430557`、含むリモートブランチ: `claude/b-claude-api-compare-20261009`（PR #115）、`claude/b-news-eval-prep-20261010`、`claude/g9-fixture-rights-cost-eval-20261011`。履歴書換・force push は行っていない。
+3. 過去に18件を含む本文を Anthropic の無料 count_tokens へ送っている（Phase 2 L0、開示済み、取り消せない）。以後の経路はゲートで止まる。
+4. 許可リスト（政府・中央銀行・国連）はリポジトリ方針でありページ単位の確認ではない。`eval_expansion.json` / `eval_nopost_sample.json` の本文（27 / 9 件）は許可リストのホストのみで、現在の CLI からは読まれない。見出しと保存済み投稿は全ケースに残る。
+5. PR #115 の所有者は不明（共有アカウント作成）。置き換えの手順は `PR115_BODY_REMOVAL_MIGRATION_PLAN_2026-10-11.md`（推奨: main から新ブランチで本文なしの最終ツリーを1コミットにして新PRを作り、PR #115 を閉じる。完全消去が必要なら所有者が履歴書換と GitHub への削除依頼を判断）。
+
+### safety_checks
+
+- 有料API 0 / count_tokens 実呼び出し 0 / 本番DB 0 / 実キー使用 0 / ネットワーク接続 0（テストは `--allow-net` なしのサブプロセスと mock のみ）。
+- PR #115・#116・#129、監視Edge Function、本番DB・Secrets・Cron・モデル・Provider に変更なし。他slotのブランチ・worktree・未commit・サーバに触れていない。変更は `tools/provider-compare/` と `docs/model-optimization/`（と本TASKのReport）のみ。
+- 開始時確認: `.agent/ACTIVE_TASK.md`・G9 TASK・過去Report・fresh `origin/main`（`147590a4`）・G9 head（`b6020dbb`、worktree clean）・PR #115 の状態・`tools/provider-compare` が main に存在しないこと（他slotと競合なし）。`PROJECT_RULES.md` / `ORCHESTRATION.md` / `CURRENT_STATE.md` は G9・Report 運用・保護対象の記述を確認（競合なし）。
+- merge・deploy は実行していない。
+
+### remaining_issues
+
+- `cases.json` と Git 履歴の本文（上記 権利の残件 1・2）。PR #115 の所有者の判断と別工程が必要。
+- 許諾の確認（TDnet 等の利用条件）は未実施。確認できたら台帳に `evidenceRef` 付きで追記すれば外部送信が可能になる（コード変更不要のため、追記は所有者確認を経ること）。
+- 有料の Claude 比較実行は、ユーザーの別途の予算承認が引き続き必要（EXTERNAL_CALLS_RELEASE_HOLD は維持）。
+
+### next_recommendation
+
+- K9: ちゃが `65c95589` のゲート（`external_send_gate.ts`）と `cli.ts` / `probe_cli.ts` の順序（ゲート → キー探索 → ネットワーク）を確認し、PASS_OFFLINE 判定。ローカルでの再実行は `deno test --no-config -A tools/provider-compare/`（299件）。
+- PR #115 の所有者を確認し、移行手順（別紙）の実施可否を判断する。実施するまで `cases.json` を含むブランチは merge しない。
+- Aへ決算・日銀・FOMC 調査を引き継ぐことはしない（G8 が進行中）。
 
 ---
 
