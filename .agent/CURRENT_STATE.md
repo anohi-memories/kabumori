@@ -1,3 +1,17 @@
+## G6 production_mutation_window: ACTIVE — 共通AI基盤 Phase1f ledger apply + trial policies (user-run) — 2026-10-11 JST
+
+- production_mutation_window: **ACTIVE** — owner **G6**, task_id `common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011`, opened 2026-10-11T12:22Z (21:22 JST).
+- target: Supabase project `wsmznyzcvmuitkglfeuj` only.
+- exact scope (runner `supabase/tests/ai_provider_budget_ledger_rollout.sh` only, run once by the user in their own terminal):
+  1. `apply`: migration `20261010050613_ai_provider_budget_ledger.sql` (sha256 `680aeb3f…5737`) and its one history row
+  2. `policies`: chained with `&&`, so it runs only after `apply` exits 0 (full PASS): the 2 system-only trial policies
+  - Nothing else: no G5 `20261009120000`, no existing table/function/Auth/RLS change, no Secrets, no provider/API calls.
+- precheck: runner `check` 21:22 JST TARGET_VERIFIED / READY_TO_APPLY / predicted_refusals 4/4 no; all 15 slots fresh: no other ACTIVE window, G5 `done`.
+- The earlier 19:28 G6 window was CLOSED at 19:29 without any write (harness refused `apply`).
+- Other slots: do not start production DDL on this project until this window is CLOSED.
+
+---
+
 ## G2 報告 — 個別レポートの配信安定化 P1（Draft PR #141）— 2026-10-11 JST
 
 - G2 `kabumori-personalized-report-delivery-p1-hardening-20261011`: 20人の上限で21人目以降が届かない問題、通知の予約の失敗で完成したレポートが failed に戻る問題、止まった「生成中」の行を、`personalized-reports` の中だけで修正した（Draft PR #141、head `4bc5c0177aa74085eb488604a00e2b66c7fe527c`）。DB・Cron・権限の変更なし、全テスト成功、本番操作・デプロイ・マージ 0。

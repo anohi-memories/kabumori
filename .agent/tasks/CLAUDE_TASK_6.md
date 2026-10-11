@@ -11,7 +11,7 @@
 - recommended_model: **Opus5.5（高）**
 - priority: high
 - user_explicit_approval: **YES — 2026-10-11 このチャットで「おk」**（直前の説明：「本番Supabaseに予算管理DBを作成し、試験用の月$5・日$2の上限を登録する」への承認）
-- production_mutation_window: **RESERVED_NOT_ACTIVE** (opened 19:28 JST, CLOSED 19:29 JST without any write: the harness refused `apply`; reopen only right before apply can actually run) — rule。待機中はDBロックを占有しない。実行直前のfresh全15枠確認でG5/他writerにACTIVEが無い場合のみ、`.agent/CURRENT_STATE.md`へG6唯一の対象/操作とwindow ACTIVEをCAS追記してからapply。書込・readbackの完了/STOPでCLOSEDを記録。CAS競合または他writer ACTIVEなら**DB変更を開始しない**。
+- production_mutation_window: **ACTIVE** (2026-10-11T12:22Z (21:22 JST), user-run apply && policies; recorded in .agent/CURRENT_STATE.md. Earlier: opened 19:28 JST, CLOSED 19:29 JST without any write) — rule。待機中はDBロックを占有しない。実行直前のfresh全15枠確認でG5/他writerにACTIVEが無い場合のみ、`.agent/CURRENT_STATE.md`へG6唯一の対象/操作とwindow ACTIVEをCAS追記してからapply。書込・readbackの完了/STOPでCLOSEDを記録。CAS競合または他writer ACTIVEなら**DB変更を開始しない**。
 - mutation_scope: target Supabase project `wsmznyzcvmuitkglfeuj` の **exact migration `20261010050613_ai_provider_budget_ledger.sql`**、適用履歴、同一 Ledger の初期system-only予算ポリシー **2件のみ**。これ以外一切不可。
 - original Phase1e K6/Report and earlier unassigned G6 template are preserved unchanged below. This Phase1f task is separate, with new `K6` on completion.
 
