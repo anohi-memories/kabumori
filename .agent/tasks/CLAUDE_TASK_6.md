@@ -3,13 +3,17 @@
 - task_id: common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011
 - owner: claude
 - slot: claude-6
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - recommended_model: **Opus5.5（高）**
 - priority: high
+- k6_final_verdict: **PASS_FULL_APPLY_AND_POLICIES_ACCEPTED / G6 RELEASED** — 2026-10-11 JST
+- chatgpt_independent_live_readback: Supabase SELECT 2026-10-11 21:55 JST: migration registry exactly 1; `ai_provider_budget_ledger_readback.sql` must_be_true **17/17 true**, budget policies **2 exact system-only enabled** (month $5/40, day $2/6, per-call $1, Anthropic Opus5.5 kabumori market_report), ledger reservation/usage/billing counts all zero. Claude report's historical before/after fingerprint and user-run CLI runner PASS accepted as user/Claude-observed evidence, not independently replayed by ChatGPT.
+- completion_state: source-only TASK/INDEX/STATE updates after verification. No additional production DB write, API key setup, Claude/OpenAI paid call, Cron, Edge, or cutover by K6. Production window CLOSED; future work requires new exact authorization, fresh task and conflict check.
+
 - user_explicit_approval: **YES — 2026-10-11 このチャットで「おk」**（直前の説明：「本番Supabaseに予算管理DBを作成し、試験用の月$5・日$2の上限を登録する」への承認）
 - production_mutation_window: **CLOSED** (ACTIVE 2026-10-11T12:22Z / 21:22 JST → CLOSED 12:33Z / 21:33 JST after read-back; earlier 19:28→19:29 JST window closed without any write) — rule。待機中はDBロックを占有しない。実行直前のfresh全15枠確認でG5/他writerにACTIVEが無い場合のみ、`.agent/CURRENT_STATE.md`へG6唯一の対象/操作とwindow ACTIVEをCAS追記してからapply。書込・readbackの完了/STOPでCLOSEDを記録。CAS競合または他writer ACTIVEなら**DB変更を開始しない**。
 - mutation_scope: target Supabase project `wsmznyzcvmuitkglfeuj` の **exact migration `20261010050613_ai_provider_budget_ledger.sql`**、適用履歴、同一 Ledger の初期system-only予算ポリシー **2件のみ**。これ以外一切不可。
