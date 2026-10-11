@@ -19,6 +19,19 @@ export function classifyFedMonetaryTitle(title: string): FedMonetaryItemKind {
   return "other";
 }
 
+/**
+ * What the fetched page itself says it is: the <title> and the headings of the article, classified like a feed title.
+ * A page whose own heading is not the FOMC statement (minutes, projections, a note) is never read as one.
+ */
+export function fomcDocumentKind(html: string): FedMonetaryItemKind {
+  const heading = [
+    html.match(/<title[^>]*>([\s\S]*?)<\/title>/iu)?.[1] ?? "",
+    ...Array.from(html.matchAll(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/giu), (match) => match[1]),
+  ].join(" ").replace(/<[^>]*>/gu, " ").replace(/\s+/gu, " ");
+  if (/minutes|implementation note|economic projections/iu.test(heading)) return classifyFedMonetaryTitle(heading) === "statement" ? "other" : classifyFedMonetaryTitle(heading);
+  return classifyFedMonetaryTitle(heading);
+}
+
 export type FomcStatementFacts = {
   ok: boolean;
   issues: string[];
@@ -32,6 +45,8 @@ export type FomcStatementFacts = {
   votesFor: number | null;
   votesAgainst: number | null;
   dissenters: string[];
+  /** The dissent sentence exists but the names / count could not be read with certainty (names are then not output). */
+  dissentersUncertain: boolean;
 };
 
 function articleText(html: string): string {
@@ -96,17 +111,37 @@ export function extractFomcStatementFacts(html: string): FomcStatementFacts {
   if (vote) {
     votesFor = Number(vote[1]);
     votesAgainst = Number(vote[2]);
-  } else if (/by unanimous vote|unanimously/iu.test(text)) {
-    votesAgainst = 0;
   }
+  const unanimousEvidence = /by unanimous vote|unanimously/iu.test(text);
+  if (!vote && unanimousEvidence) votesAgainst = 0;
+
+  // "Voting against this action were Christopher J. Waller and Michelle W. Bowman, who preferred …": a period after a
+  // single capital letter is a middle initial, not the end of the sentence, and the reason clause is not a name.
   const dissenters: string[] = [];
-  const against = text.match(/Voting against (?:this action|the action|these actions)? ?(?:was|were)[:\s]+([^.]+?)\./iu);
+  let dissentersUncertain = false;
+  const against = /Voting against (?:this action|the action|these actions)?\s*(?:was|were)[:\s]+/iu.exec(text);
   if (against) {
-    for (const part of against[1].split(/,| and /u)) {
-      const name = part.replace(/\bwho preferred.*$/iu, "").trim();
-      if (name.length > 2 && name.length < 60) dissenters.push(name);
+    const tail = text.slice(against.index + against[0].length);
+    const sentenceEnd = /(?<![\s.][A-Z])\.(?=\s|$)/u.exec(tail);
+    let segment = sentenceEnd ? tail.slice(0, sentenceEnd.index) : tail.slice(0, 200);
+    segment = segment.replace(/,?\s+who\b[\s\S]*$/iu, "").replace(/;[\s\S]*$/u, "").trim();
+    const parts = segment.split(/\s*,\s*(?:and\s+)?|\s+and\s+/u).map((part) => part.trim()).filter(Boolean);
+    const plausible = parts.length > 0 && parts.every((part) => /^[A-Z][A-Za-z'’-]*\.?(?:\s+[A-Z][A-Za-z'’.-]*){1,4}$/u.test(part));
+    if (plausible) dissenters.push(...parts);
+    else dissentersUncertain = true;
+    if (dissenters.length > 0) {
+      if (vote && votesAgainst !== dissenters.length) {
+        // the stated count and the names disagree: neither is trusted for the names
+        dissenters.length = 0;
+        dissentersUncertain = true;
+      } else if (!vote && unanimousEvidence) {
+        dissenters.length = 0;
+        dissentersUncertain = true;
+        votesAgainst = null;
+      } else if (!vote) {
+        votesAgainst = dissenters.length;
+      }
     }
-    if (votesAgainst === null) votesAgainst = dissenters.length;
   }
 
   if (action === null) issues.push("NO_DECISION_FOUND");
@@ -126,6 +161,7 @@ export function extractFomcStatementFacts(html: string): FomcStatementFacts {
     votesFor,
     votesAgainst,
     dissenters,
+    dissentersUncertain,
   };
 }
 
@@ -145,7 +181,7 @@ export function renderFomcStatementSummary(facts: FomcStatementFacts, officialUr
   const lines = [
     `【FOMC声明（公式ページから抽出）】${facts.releaseDate ?? "日付不明"}`,
     `政策金利（FF金利誘導目標レンジ）: ${facts.rangeLowerPct}〜${facts.rangeUpperPct}%（${ACTION_JA[facts.action]}、${change}）`,
-    vote + (facts.dissenters.length > 0 ? `（反対: ${facts.dissenters.join("、")}）` : ""),
+    vote + (facts.dissenters.length > 0 && !facts.dissentersUncertain ? `（反対: ${facts.dissenters.join("、")}）` : ""),
   ];
   if (officialUrl) lines.push(`出典: ${officialUrl}`);
   return lines.join("\n");

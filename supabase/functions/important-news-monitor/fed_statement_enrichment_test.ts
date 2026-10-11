@@ -62,16 +62,17 @@ test("a statement that cannot be read is withheld, never emitted as a title-only
   assert.deepEqual(failed.errors, ["fed_statement:network_error"]);
 });
 
-test("per-fetch cap: statements beyond the cap are withheld without fetching", async () => {
+test("per-fetch cap is kept and the over-cap statement is reported as deferred, not silently lost", async () => {
   let called = 0;
-  const items = [1, 2, 3].map((n) => candidate("Federal Reserve issues FOMC statement", `${URL_OK}?n=${n}`));
+  const items = ["a", "b", "c"].map((n) => candidate("Federal Reserve issues FOMC statement", URL_OK.replace("0916a", `0916${n}`)));
   const out = await enrichFedStatementCandidates(items, async () => {
     called += 1;
     return htmlResponse(RAISE);
   });
   assert.equal(called, FED_STATEMENT_LIMITS.maxPerFetch);
   assert.equal(out.enriched, FED_STATEMENT_LIMITS.maxPerFetch);
-  assert.equal(out.withheld, 1);
+  assert.equal(out.deferred, 1);
+  assert.ok(out.errors.includes("fed_statement:deferred_over_cap:1"));
 });
 
 test("unsafe urls are rejected before any request", async () => {
@@ -132,11 +133,102 @@ test("size cap (declared and streamed), content type and http errors stop safely
 
 test("wiring: only the fed market_macro source is enriched in index.ts and BOJ has no new fetch path", async () => {
   const index = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
-  assert.match(index, /if \(source\.key === "fed"\) \{[^}]*enrichFedStatementCandidates\(candidates\)/u);
+  assert.match(index, /if \(source\.key === "fed"\) \{[\s\S]*?enrichFedStatementCandidates\(candidates, fetch,/u);
   assert.equal(index.match(/enrichFedStatementCandidates\(/gu)?.length, 1);
   assert.equal(/boj_document_text/u.test(index), false);
   const fetchers = await Deno.readTextFile(new URL("./official_source_fetchers.ts", import.meta.url));
   assert.equal(/boj_document_text/u.test(fetchers), false);
   const enrichment = await Deno.readTextFile(new URL("./fed_statement_enrichment.ts", import.meta.url));
   assert.equal(/boj_document_text|boj\.or\.jp/u.test(enrichment), false);
+});
+
+
+// ---- PR #129 R1 / F6, F7, F9 ------------------------------------------------------------------------------------
+
+const MINUTES_HTML =
+  `<html><head><title>Federal Reserve Board - Minutes of the Federal Open Market Committee, September 16-17, 2025</title></head><body><div id="article"><p class="article__time">October 8, 2025</p><h3>Minutes of the Federal Open Market Committee</h3><p>At the previous meeting the Committee decided to raise the target range for the federal funds rate by 1/4 percentage point to 3-3/4 to 4 percent. The action was approved by a 12 – 0 vote.</p></div><div id="footer">Last Update: October 8, 2025</div></body></html>`;
+
+test("F6: a statement title that lands on older minutes is rejected, whatever the quoted decision says", async () => {
+  const redirect = (location: string) => new Response(null, { status: 302, headers: { location } });
+  let n = 0;
+  const out = await enrichFedStatementCandidates([candidate("Federal Reserve issues FOMC statement")], async () =>
+    n++ === 0 ? redirect("/monetarypolicy/fomcminutes20250917.htm") : htmlResponse(MINUTES_HTML));
+  assert.equal(out.candidates.length, 0);
+  assert.equal(out.enriched, 0);
+  assert.deepEqual(out.errors, ["fed_statement:doc_redirected"]);
+});
+
+test("F6: minutes content served under the statement address, and a mismatching date, are rejected", async () => {
+  const sameAddressMinutes = await enrichFedStatementCandidates([candidate("Federal Reserve issues FOMC statement")], async () => htmlResponse(MINUTES_HTML));
+  assert.deepEqual(sameAddressMinutes.errors, ["fed_statement:doc_not_statement"]);
+  const old = STATEMENT_HTML("The Committee decided to raise the target range for the federal funds rate by 1/4 percentage point to 3-3/4 to 4 percent.").replace("September 16, 2026", "September 17, 2025");
+  const oldDate = await enrichFedStatementCandidates([candidate("Federal Reserve issues FOMC statement")], async () => htmlResponse(old));
+  assert.deepEqual(oldDate.errors, ["fed_statement:doc_date_mismatch"]);
+  const staleFeed = await enrichFedStatementCandidates([
+    { ...candidate("Federal Reserve issues FOMC statement"), publishedAt: "2026-07-01T00:00:00Z" },
+  ], async () => htmlResponse(RAISE));
+  assert.deepEqual(staleFeed.errors, ["fed_statement:doc_date_vs_feed"]);
+  const notStatementPath = await enrichFedStatementCandidates([
+    candidate("Federal Reserve issues FOMC statement", "https://www.federalreserve.gov/monetarypolicy/fomcminutes20250917.htm"),
+  ], async () => htmlResponse(MINUTES_HTML));
+  assert.deepEqual(notStatementPath.errors, ["fed_statement:doc_url_not_statement"]);
+});
+
+test("F7: stored statements cost no fetch, so a third item behind two stored ones is reached", async () => {
+  const urls = ["a", "b", "c"].map((n) => URL_OK.replace("0916a", `0916${n}`));
+  const items = urls.map((url) => candidate("Federal Reserve issues FOMC statement", url));
+  const stored = new Map([
+    [urls[0], { id: "1", status: "pending_judgement", hasBody: true }],
+    [urls[1], { id: "2", status: "no_post", hasBody: true }],
+  ]);
+  const fetched: string[] = [];
+  const out = await enrichFedStatementCandidates(items, async (url) => {
+    fetched.push(url);
+    return htmlResponse(RAISE);
+  }, { stored });
+  assert.deepEqual(fetched, [urls[2]]);
+  assert.equal(out.enriched, 1);
+});
+
+test("F7: three unstored statements are all reached over three fetches (rotation, cap kept)", async () => {
+  const urls = ["a", "b", "c"].map((n) => URL_OK.replace("0916a", `0916${n}`));
+  const items = urls.map((url) => candidate("Federal Reserve issues FOMC statement", url));
+  const reached = new Set<string>();
+  for (let rotation = 0; rotation < 3; rotation += 1) {
+    const fetched: string[] = [];
+    await enrichFedStatementCandidates(items, async (url) => {
+      fetched.push(url);
+      return new Response("down", { status: 503, headers: { "content-type": "text/html" } });
+    }, { rotation });
+    assert.equal(fetched.length, FED_STATEMENT_LIMITS.maxPerFetch);
+    for (const url of fetched) reached.add(url);
+  }
+  assert.equal(reached.size, 3);
+});
+
+test("F9: a stored unjudged statement without a body is filled in place; other statuses are never rewritten", async () => {
+  const stored = new Map([
+    [URL_OK, { id: "row-1", status: "pending_judgement", hasBody: false }],
+    [URL_OK.replace("0916a", "0916b"), { id: "row-2", status: "published", hasBody: false }],
+    [URL_OK.replace("0916a", "0916c"), { id: "row-3", status: "no_post", hasBody: false }],
+  ]);
+  const items = [...stored.keys()].map((url) => candidate("Federal Reserve issues FOMC statement", url));
+  const out = await enrichFedStatementCandidates(items, async () => htmlResponse(RAISE), { stored });
+  assert.equal(out.bodyUpdates.length, 1);
+  assert.equal(out.bodyUpdates[0].id, "row-1");
+  assert.match(out.bodyUpdates[0].bodySummary, /3\.75〜4%/);
+  // the filled one is not emitted again as a new candidate; the others pass through (they stay duplicates)
+  assert.equal(out.candidates.length, 2);
+  assert.ok(out.errors.includes("fed_statement:stored_without_body:published"));
+  assert.ok(out.errors.includes("fed_statement:stored_without_body:no_post"));
+});
+
+test("F9: the in-place fill is a guarded update that cannot touch judged, generated or published rows", async () => {
+  const index = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  const fn = index.slice(index.indexOf("async function fillMissingCandidateBody"));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.match(body, /status: "eq\.pending_judgement"/u);
+  assert.match(body, /body_summary\.is\.null/u);
+  assert.match(body, /method: "PATCH"/u);
+  assert.equal(/published|status: "/u.test(body.replace(/status: "eq\.pending_judgement"/u, "")), false);
 });

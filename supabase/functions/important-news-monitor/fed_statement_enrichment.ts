@@ -3,6 +3,7 @@ import { validateOfficialUrl } from "./jp_official_enrichment.ts";
 import {
   classifyFedMonetaryTitle,
   extractFomcStatementFacts,
+  fomcDocumentKind,
   renderFomcStatementSummary,
 } from "../_shared/news_body_extraction/fomc_statement_facts.ts";
 
@@ -100,39 +101,112 @@ export async function fetchFedHtml(rawUrl: string, fetchImpl: FedFetchLike = fet
   }
 }
 
+export type FedStoredState = { id: string; status: string; hasBody: boolean };
+
 export type FedEnrichmentOutcome = {
   candidates: IncomingNewsCandidate[];
+  /** Existing candidates (judgement still pending, no body yet) that now have an official body to be filled in. */
+  bodyUpdates: Array<{ id: string; sourceUrl: string; bodySummary: string }>;
   /** Statement items withheld because their facts could not be read (retried on a later fetch). */
   withheld: number;
+  /** Statement items not attempted this time because the per-fetch cap was reached (retried, in rotation). */
+  deferred: number;
   enriched: number;
   errors: string[];
 };
 
+const STATEMENT_PATH = /^\/newsevents\/pressreleases\/monetary(\d{4})(\d{2})(\d{2})[a-z]?\.htm$/iu;
+const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+
+function isoDateOfFedText(text: string | null): string | null {
+  const match = text?.match(/^([A-Za-z]+) (\d{1,2}), (\d{4})$/u);
+  if (!match) return null;
+  const month = MONTHS.indexOf(match[1].toLowerCase()) + 1;
+  if (month === 0) return null;
+  return `${match[3]}-${String(month).padStart(2, "0")}-${String(Number(match[2])).padStart(2, "0")}`;
+}
+
+function pathOf(rawUrl: string): string | null {
+  try {
+    return new URL(rawUrl).pathname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A fetched page is accepted as THIS candidate's statement only when its address is the statement's own press-release
+ * path (no hop to another document, e.g. a redirect to older minutes), the page's own heading is the FOMC statement,
+ * and the document date, the date in the address and the feed's publication date agree. Returns a reason or null.
+ */
+export function statementDocumentRejection(
+  candidate: { sourceUrl: string; publishedAt: string },
+  finalUrl: string,
+  html: string,
+  releaseDate: string | null,
+): string | null {
+  const candidatePath = pathOf(candidate.sourceUrl);
+  const match = candidatePath ? STATEMENT_PATH.exec(candidatePath) : null;
+  if (!candidatePath || !match) return "doc_url_not_statement";
+  if (pathOf(finalUrl) !== candidatePath) return "doc_redirected";
+  if (fomcDocumentKind(html) !== "statement") return "doc_not_statement";
+  const urlDate = `${match[1]}-${match[2]}-${match[3]}`;
+  if (isoDateOfFedText(releaseDate) !== urlDate) return "doc_date_mismatch";
+  const published = Date.parse(candidate.publishedAt);
+  const documentDay = Date.parse(`${urlDate}T00:00:00Z`);
+  if (!Number.isFinite(published) || Math.abs(published - documentDay) > 3 * 24 * 60 * 60 * 1000) return "doc_date_vs_feed";
+  return null;
+}
+
 /**
  * Candidates of the Fed feed -> the same candidates, statement items carrying the official page's facts. Statement
  * items that cannot be read are dropped from the result; every other item passes through unchanged.
+ *
+ * Quota: statements already stored with a body cost no fetch (they only become duplicates later); the others share the
+ * per-fetch cap in a rotation, so a statement behind two failing ones is still reached on a later fetch.
  */
 export async function enrichFedStatementCandidates(
   candidates: IncomingNewsCandidate[],
   fetchImpl: FedFetchLike = fetch,
-  limits: { maxPerFetch?: number } = {},
+  limits: { maxPerFetch?: number; rotation?: number; stored?: ReadonlyMap<string, FedStoredState> } = {},
 ): Promise<FedEnrichmentOutcome> {
   const maxPerFetch = limits.maxPerFetch ?? FED_STATEMENT_LIMITS.maxPerFetch;
-  const out: IncomingNewsCandidate[] = [];
+  const stored = limits.stored ?? new Map<string, FedStoredState>();
   const errors: string[] = [];
+  const bodyUpdates: FedEnrichmentOutcome["bodyUpdates"] = [];
+  const passthrough: Array<{ at: number; candidate: IncomingNewsCandidate }> = [];
+  const eligible: Array<{ at: number; candidate: IncomingNewsCandidate; fill: FedStoredState | null }> = [];
+
+  candidates.forEach((candidate, at) => {
+    if (classifyFedMonetaryTitle(candidate.title) !== "statement") {
+      passthrough.push({ at, candidate });
+      return;
+    }
+    const known = stored.get(candidate.sourceUrl);
+    if (!known) {
+      eligible.push({ at, candidate, fill: null });
+    } else if (known.hasBody) {
+      passthrough.push({ at, candidate });
+    } else if (known.status === "pending_judgement") {
+      eligible.push({ at, candidate, fill: known });
+    } else {
+      // judged / generated / published without a body: never rewritten here (see the PR notes); it only stays a duplicate
+      errors.push(`fed_statement:stored_without_body:${known.status}`);
+      passthrough.push({ at, candidate });
+    }
+  });
+
+  const offset = eligible.length > 0 ? Math.abs(Math.trunc(limits.rotation ?? 0)) % eligible.length : 0;
+  const ordered = [...eligible.slice(offset), ...eligible.slice(0, offset)];
+  const attempt = ordered.slice(0, maxPerFetch);
+  const deferred = ordered.length - attempt.length;
+  if (deferred > 0) errors.push(`fed_statement:deferred_over_cap:${deferred}`);
+
+  const emitted: Array<{ at: number; candidate: IncomingNewsCandidate }> = [...passthrough];
   let withheld = 0;
   let enriched = 0;
-  let attempted = 0;
-  for (const candidate of candidates) {
-    if (classifyFedMonetaryTitle(candidate.title) !== "statement") {
-      out.push(candidate);
-      continue;
-    }
-    if (attempted >= maxPerFetch) {
-      withheld += 1;
-      continue;
-    }
-    attempted += 1;
+  for (const item of attempt) {
+    const { candidate } = item;
     const page = await fetchFedHtml(candidate.sourceUrl, fetchImpl);
     if (!page.ok) {
       withheld += 1;
@@ -140,6 +214,12 @@ export async function enrichFedStatementCandidates(
       continue;
     }
     const facts = extractFomcStatementFacts(page.html);
+    const rejection = statementDocumentRejection(candidate, page.finalUrl, page.html, facts.releaseDate);
+    if (rejection) {
+      withheld += 1;
+      errors.push(`fed_statement:${rejection}`);
+      continue;
+    }
     const summary = renderFomcStatementSummary(facts, page.finalUrl);
     if (!summary) {
       withheld += 1;
@@ -147,7 +227,9 @@ export async function enrichFedStatementCandidates(
       continue;
     }
     enriched += 1;
-    out.push({ ...candidate, bodySummary: summary });
+    if (item.fill) bodyUpdates.push({ id: item.fill.id, sourceUrl: candidate.sourceUrl, bodySummary: summary });
+    else emitted.push({ at: item.at, candidate: { ...candidate, bodySummary: summary } });
   }
-  return { candidates: out, withheld, enriched, errors };
+  emitted.sort((a, b) => a.at - b.at);
+  return { candidates: emitted.map((entry) => entry.candidate), bodyUpdates, withheld, deferred, enriched, errors };
 }
