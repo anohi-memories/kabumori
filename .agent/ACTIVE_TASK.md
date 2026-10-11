@@ -154,16 +154,16 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: done
-- task_id: common-account-phase3h-local-oss-keycloak-safe-pilot-20261011
+- status: ready
+- task_id: common-account-phase3i-local-findings-safe-lifecycle-plan-20261012
 - start_code: G5
 - finish_code: K5
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 accepted completion of Phase3h local pilot with safety findings. Draft PR146 faf8007a4ab5c925430c7cc6a9896046e30ce25a OPEN/UNMERGED with seven new documentation/test-driver files. Local evidence identified auth lifecycle race and residual-data risks: source task complete, proof of managed safety NOT obtained. G5 unit 7/7 and isolated Podman teardown are Claude-reported, not independently rerun. Other Draft PR heads protected. Managed experiments, photo-app pause, paid actions, Option D, managed_auth_delete and production activation remain BLOCKED. Next G5 assignment not yet created; use fresh conflict checks and a bounded corrective task when appropriate.
-- recommended_model: Sonnet5（高） (completed)
+- allocation: User 2026-10-12「おk すすめて」 approved next G5 Phase3i bounded LOCAL-OFFLINE account lifecycle containment design and synthetic regression tests based on Phase3h F1/F2/F3/F4/F6/F7. Opus5.5 high. New G5 independent worktree, new docs/tests only, optional new Draft PR; older G5 Draft PRs #121/#122/#128/#130/#134/#137/#146 remain unchanged. Other G/H TASK and worktrees protected. No managed Supabase, real auth/prov, photo pause, live DB/Edge, migration, Option D/E11, paid action, merge/deploy. IDP_PREPAUSE_BLOCKED and managed_auth_delete BLOCKED. Return K5.
+- recommended_model: Opus5.5（高）
 ## Claude G6
 - owner: claude
 - slot: claude-6
