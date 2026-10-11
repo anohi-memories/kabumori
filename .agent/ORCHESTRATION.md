@@ -92,6 +92,73 @@ Claudeの5時間制限時など必要時だけ、ChatGPTがH1〜H5へ「臨時�
 
 レビューTASKには対象branch/commit/PR、目的、重点確認事項、安全制約、必要な検証、完了条件を記載する。H1〜H5のTASKには冒頭ヘッダーに `return_to` と `completion_code` も必ず記載する（「Codex完了後の返却先（2026-10-07〜）」参照）。どの枠でも割当時には推薦モデルを必ず設定する（「モデル運用」参照）。既存TASKを上書きしてはならない。
 
+## レビュー最適化方針（2026-09-25〜）
+
+方針の要約は `PROJECT_RULES.md` の「レビュー頻度・Codex利用方針（2026-09-25〜）」、詳細はこの節を正とする。（2026-09-25の更新時に本文が欠落していたため、2026-10-11に現在の正式運用として復元。）
+
+CodexレビューをすべてのClaude実装に機械的に挟まない。ChatGPTが変更範囲・リスク・重要度を見てレビュー要否を判断する。
+
+### 原則レビュー不要または後回しでよいもの
+
+- UI微修正
+- 文言修正
+- prompt調整
+- 画像・asset差し替え
+- 小規模な既存仕様内バグ修正
+- テスト追加
+- 単一ファイルの低リスク変更
+- 連続した軽微修正
+
+これらは「Claude実装 → テスト / Preview / 実機確認 → ChatGPT確認」で進めてよい。必要なら複数修正をまとめて後から1回レビューする。
+
+### Codexレビューを優先するもの
+
+- DB schema
+- migration
+- RLS
+- Auth
+- 権限
+- RPC
+- SECURITY DEFINER
+- Edge Function
+- OAuth
+- token / Vault / secret境界
+- 外部APIへの実書き込み
+- X実投稿
+- cross-user / cross-brand境界
+- 複雑な並行処理
+- idempotency
+- 破壊的production変更
+- 大規模機能
+- 重大バグ修正
+- 高い回帰リスク
+- production deploy前の重要gate
+- 複数システム横断変更
+
+### レビュータイミング
+
+固定ではない。
+
+- 高リスクなら実装途中でも入れてよい。
+- 低リスクならレビューを省略してよい。
+- 同一機能の細かい修正は1件ずつレビューせず、安定化後にまとめてレビューしてよい。
+
+### レビュー省略時
+
+レビューを省略しても、tests、dry-run、Preview、simulator / real device、read-back、regression checkなどの実証確認は減らさない。
+
+### TASKでの扱い
+
+ChatGPTが `review not required` または `review deferred` と判断した場合、Claudeは不要なCodex待ちを勝手に作らない。
+
+### 15枠運用との関係
+
+この方針はレビューの「要否と時期」だけを決める。スロット運用は変えない。
+
+- Codexレビューを入れる場合は、真に未割当のH1〜H5へTASKを置き、`return_to` と `completion_code`（H1→C1、H2→C2、H3→C3、H4→C4、H5→C5）を記入する。H1〜H5は固定プロジェクト専用にしない。
+- Claude実装はG1〜G10（G1/G2=かぶモリアプリ、G3/G4=X自動投稿アプリ、G5〜G10=明示割当専用の予備枠）、完了確認はK1〜K10。レビュー要否はChatGPTがK1〜K10の完了確認時に判断する。
+- `F` は引き続き全15枠を対象とする。
+
 ## 作業開始コード
 
 ### G1〜G10 — Claude
