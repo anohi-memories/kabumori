@@ -47,16 +47,16 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: review_required
 - task_id: kabumori-fact-v2-pr132-final-integrated-review-20261011
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: ONE independent bounded Fact V2 final review of G2 Draft stacked PR132 exact head bd424616a135e7bf71592c2ac41acb3e03f8568d on protected PR110 head 319a442edcd61c07274e3409d8864234f9d77cd4. Check grounded independent interpretation permissiveness plus strict objective facts/dates/TOPIX and no laundering false historical cause, especially combined negated/affirmed same-day and new guard exceptions. Four changed market-report-analysis paths, G2 reported 1356/1356 mocked local suite PASS. Focused fake-input probes only, not recurring broad reviews. Product source edits0; no paid API, production Supabase/Edge, X, migration, PR merge/deploy. Previous H2 G5 C2 completed, prior TASK/Report history preserved; return C2 to G2. PR110 and PR132 remain protected OPEN/UNMERGED, consumer flags unchanged.
+- allocation: H2 completed ONE integrated source-only review of exact PR132 bd424616 on protected PR110 319a442e: CHANGES_REQUIRED, three reproduced P2 objective exception regressions (same-day denial scope, TOPIX calculated-value exemption, postposed wrong-date stripping). Focused typed55/55 PASS, independent14 behavior probes10 PASS/4 FAIL (3 defect groups), baseline rejects the four unsafe strings; check/lint/diff PASS. Detailed Report published/read back at commit950dd827; TASK current completion published at929c0c4b. Product source0, merge/deploy0, live Supabase/paidAI/X0; prior history and other slots preserved. Return C2 to かぶモリアプリG2のちゃ for one bounded G2 correction; inference policy accepted, cutover separately gated.
 - recommended_model: Sol（高）
 
 ## Claude G1
