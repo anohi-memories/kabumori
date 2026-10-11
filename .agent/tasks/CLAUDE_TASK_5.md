@@ -3,7 +3,7 @@
 - task_id: common-account-phase3e-e11-offline-review-r1-r5-corrective-20261011
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: critical
 - start_code: G5
