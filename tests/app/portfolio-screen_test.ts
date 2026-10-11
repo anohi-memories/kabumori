@@ -63,11 +63,12 @@ test("the data comes from the saved reports and the user's registrations; nothin
 
 test("holdings and the report load independently: a failed report never hides the registrations", async () => {
   const screen = await code("src/app/(tabs)/explore.tsx");
-  assert.ok(screen.includes(".catch(() => setReportError(true))"));
+  assert.ok(screen.includes("reportsFailed() { setReportError(true); }"), "a failed report only raises the banner");
+  assert.ok(screen.includes("runPortfolioLoad(loadGate, { fetchRegistrations, fetchReports: () => fetchRecentReports(20) }, sink)"));
   assert.ok(screen.includes("レポートのデータを読み込めませんでした。引っ張って更新できます。"));
   assert.ok(screen.includes("<RefreshControl"), "pull to refresh");
   assert.ok(screen.includes("一覧を読み込めませんでした。"), "the tracked_stocks failure message is kept");
-  assert.ok(screen.includes("buildHoldingRows(registrations, report, registrationMatchesSnapshot)"), "holdings are built from the registrations, not from the report");
+  assert.ok(screen.includes("buildHoldingRows(items, report, registrationMatchesSnapshot)"), "holdings are built from the registrations, not from the report");
 });
 
 // Stale-valuation guard: the saved valuation is paired with the registrations only once they are KNOWN, with the
@@ -75,15 +76,186 @@ test("holdings and the report load independently: a failed report never hides th
 test("the tab pairs the saved valuation only with registrations it actually read, through the detail's own predicate", async () => {
   const screen = await code("src/app/(tabs)/explore.tsx");
   assert.ok(screen.includes("import { registrationMatchesSnapshot, trackedDetailHref } from '@/lib/stock-detail-view';"));
-  assert.ok(screen.includes("const [registrationsKnown, setRegistrationsKnown] = useState(false);"));
-  assert.equal((screen.match(/setRegistrationsKnown\(false\)/g) ?? []).length, 2, "signed out and a failed read are both 'unknown'");
-  assert.ok(screen.includes("setRegistrationsKnown(true)"), "known only after a successful read");
-  assert.ok(screen.includes("const registrations = registrationsKnown ? items : null;"), "an unknown set is null, never []");
+  assert.ok(screen.includes("const [registrationsReady, setRegistrationsReady] = useState(false);"));
+  assert.ok(screen.includes("const registrations = registrationsReady ? items : null;"), "an unknown / pending set is null, never []");
   assert.ok(screen.includes("assetSummary(basis?.snapshot ?? null, registrations, registrationMatchesSnapshot)"));
   assert.ok(screen.includes("topImpacts(basis?.snapshot ?? null, registrations, registrationMatchesSnapshot)"));
-  assert.ok(screen.includes("registrationsKnown && !loading && !message"), "the 'no holdings yet' empty state needs a verified-empty account");
+  assert.ok(screen.includes("registrationsReady && !loading && !message"), "the 'no holdings yet' empty state needs a verified-empty account");
   const view = await code("src/lib/portfolio-view.ts");
   assert.ok(!/from '[^']*stock-detail-view'/.test(view), "the pure module receives the predicate; it does not import it");
+});
+
+// K1 correction (PR #142): a focus reload / pull-to-refresh must not show the PREVIOUS load's registrations paired
+// with the saved report as if they were current. The load sequence is the pure `runPortfolioLoad`; these tests drive
+// it with controllable promises and record exactly what the screen's sink would receive.
+type Reg = { id: string };
+type Rep = { id: string };
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+async function harness() {
+  const { createLatestLoadGate, runPortfolioLoad } = await import("../../src/lib/portfolio-load.ts");
+  type Result = { status: "ok"; items: Reg[] } | { status: "signed_out" } | { status: "failed" };
+  const gate = createLatestLoadGate();
+  const events: string[] = [];
+  const sink = {
+    begin: () => { events.push("begin"); },
+    reports: (next: Rep) => { events.push(`reports:${next.id}`); },
+    reportsFailed: () => { events.push("reportsFailed"); },
+    registrations: (result: Result) => { events.push(`registrations:${result.status === "ok" ? result.items.map((i) => i.id).join(",") : result.status}`); },
+    settled: (ready: boolean) => { events.push(`settled:${ready}`); },
+  };
+  // One controllable request pair per load.
+  const pending: Array<{ regs: ReturnType<typeof deferred<Result>>; reps: ReturnType<typeof deferred<Rep>> }> = [];
+  const start = () => {
+    const regs = deferred<Result>();
+    const reps = deferred<Rep>();
+    pending.push({ regs, reps });
+    events.push("call");
+    return runPortfolioLoad<Reg, Rep>(gate, { fetchRegistrations: () => regs.promise, fetchReports: () => reps.promise }, sink);
+  };
+  return { events, pending, start };
+}
+
+test("a reload makes valuations ineligible before any request is awaited, and they come back only when this load settled", async () => {
+  const h = await harness();
+  const run = h.start();
+  assert.deepEqual(h.events, ["call", "begin"], "begin() has already run synchronously, before the first await");
+  const first = h.pending[0];
+  await tick();
+  // The report arrives first: it is applied, but nothing is settled -- the surfaces still get no registrations.
+  first.reps.resolve({ id: "r-new" });
+  await tick();
+  assert.ok(h.events.includes("reports:r-new"));
+  assert.ok(!h.events.some((e) => e.startsWith("settled")), "not eligible while the registrations are pending");
+  first.regs.resolve({ status: "ok", items: [{ id: "a" }] });
+  await run;
+  assert.deepEqual(h.events.filter((e) => e !== "call"), ["begin", "reports:r-new", "registrations:a", "settled:true"]);
+  assert.ok(h.events.indexOf("settled:true") > h.events.indexOf("registrations:a"), "ready is the LAST event of the load");
+});
+
+test("the registrations are applied in the same load generation as its report: settled only after both", async () => {
+  const h = await harness();
+  const run = h.start();
+  const first = h.pending[0];
+  first.regs.resolve({ status: "ok", items: [{ id: "a" }] });
+  await tick();
+  assert.ok(h.events.includes("registrations:a"));
+  assert.ok(!h.events.includes("settled:true"), "registrations alone do not re-open valuations; the report is still pending");
+  first.reps.resolve({ id: "r1" });
+  await run;
+  assert.equal(h.events.at(-1), "settled:true");
+});
+
+test("signed out, a failed read, or a thrown read stays unknown (settled false) and never reads as 'no holdings'", async () => {
+  for (const outcome of ["signed_out", "failed", "throws"] as const) {
+    const h = await harness();
+    const run = h.start();
+    const first = h.pending[0];
+    first.reps.resolve({ id: "r1" });
+    if (outcome === "throws") first.regs.reject(new Error("network"));
+    else first.regs.resolve({ status: outcome });
+    await run;
+    assert.equal(h.events.at(-1), "settled:false", outcome);
+    assert.ok(h.events.includes(outcome === "throws" ? "registrations:failed" : `registrations:${outcome}`), outcome);
+    assert.ok(!h.events.includes("settled:true"), outcome);
+  }
+});
+
+test("a failed report with a successful registration read still settles (the last good report is paired as before)", async () => {
+  const h = await harness();
+  const run = h.start();
+  const first = h.pending[0];
+  first.reps.reject(new Error("offline"));
+  first.regs.resolve({ status: "ok", items: [{ id: "a" }] });
+  await run;
+  const seq = h.events.filter((e) => e !== "call");
+  assert.deepEqual([seq[0], seq.at(-1)], ["begin", "settled:true"]);
+  assert.deepEqual([...seq.slice(1, -1)].sort(), ["registrations:a", "reportsFailed"], "both results applied before settling, in either arrival order");
+});
+
+test("overlapping reloads: a slower older load can neither overwrite newer data nor re-open valuations", async () => {
+  const h = await harness();
+  const older = h.start();           // e.g. the tab-focus load
+  const newer = h.start();           // e.g. a pull-to-refresh right behind it
+  const [a, b] = h.pending;
+  // The newer load finishes first.
+  b.reps.resolve({ id: "r-B" });
+  b.regs.resolve({ status: "ok", items: [{ id: "B" }] });
+  await newer;
+  const afterNewer = h.events.slice();
+  assert.equal(afterNewer.at(-1), "settled:true");
+  // The older load answers afterwards: nothing it carries may reach the sink.
+  a.reps.resolve({ id: "r-A" });
+  a.regs.resolve({ status: "ok", items: [{ id: "A" }] });
+  await older;
+  assert.deepEqual(h.events, afterNewer, "the stale load is silent");
+  assert.ok(!h.events.includes("registrations:A") && !h.events.includes("reports:r-A"));
+});
+
+test("overlapping reloads: an older load that answers FIRST does not open valuations while the newer one is pending", async () => {
+  const h = await harness();
+  const older = h.start();
+  const newer = h.start();
+  const [a, b] = h.pending;
+  a.reps.resolve({ id: "r-A" });
+  a.regs.resolve({ status: "ok", items: [{ id: "A" }] });
+  await older;
+  assert.ok(!h.events.includes("settled:true"), "stale: it must not re-open valuations");
+  assert.ok(!h.events.includes("registrations:A"));
+  b.reps.resolve({ id: "r-B" });
+  b.regs.resolve({ status: "ok", items: [{ id: "B" }] });
+  await newer;
+  const seq = h.events.filter((e) => e !== "call");
+  assert.deepEqual(seq.slice(0, 2), ["begin", "begin"]);
+  assert.equal(seq.at(-1), "settled:true");
+  assert.deepEqual([...seq.slice(2, -1)].sort(), ["registrations:B", "reports:r-B"], "only the newer load's data, then settled");
+});
+
+test("the next successful load recovers the original values: begin -> settled(true) again after a failed one", async () => {
+  const h = await harness();
+  const first = h.start();
+  h.pending[0].reps.resolve({ id: "r1" });
+  h.pending[0].regs.resolve({ status: "failed" });
+  await first;
+  const second = h.start();
+  h.pending[1].reps.resolve({ id: "r2" });
+  h.pending[1].regs.resolve({ status: "ok", items: [{ id: "a" }] });
+  await second;
+  assert.deepEqual(h.events.filter((e) => e.startsWith("settled")), ["settled:false", "settled:true"]);
+});
+
+test("the gate is latest-wins and pure", async () => {
+  const { createLatestLoadGate } = await import("../../src/lib/portfolio-load.ts");
+  const gate = createLatestLoadGate();
+  const a = gate.begin();
+  assert.equal(gate.isLatest(a), true);
+  const b = gate.begin();
+  assert.deepEqual([gate.isLatest(a), gate.isLatest(b)], [false, true]);
+  const text = await Deno.readTextFile(new URL("../../src/lib/portfolio-load.ts", import.meta.url));
+  assert.ok(!/^import /m.test(text), "no import at all (no RN, no Supabase)");
+});
+
+test("the tab hands every load to runPortfolioLoad; the sink closes valuations at begin and opens them only at settled", async () => {
+  const screen = await code("src/app/(tabs)/explore.tsx");
+  assert.ok(screen.includes("import { createLatestLoadGate, runPortfolioLoad"));
+  assert.ok(screen.includes("const [loadGate] = useState(createLatestLoadGate);"));
+  assert.ok(/begin\(\) \{\s*setRegistrationsReady\(false\);\s*setLoading\(true\);\s*setMessage\(''\);/.test(screen), "begin closes valuations before anything else");
+  assert.ok(/settled\(ready\) \{\s*setLoading\(false\);\s*setRegistrationsReady\(ready\);/.test(screen), "ready is applied only by settled");
+  assert.equal((screen.match(/setRegistrationsReady\(/g) ?? []).length, 2, "begin and settled are the only writers");
+  assert.ok(screen.includes("runPortfolioLoad(loadGate,") && !/await supabase\.auth\.getUser\(\);\s*if \(authError[\s\S]{0,40}setItems/.test(screen));
+  // Cached registrations stay LISTED while a reload is pending, but are never priced or valued.
+  assert.ok(screen.includes("buildHoldingRows(items, null, registrationMatchesSnapshot)"));
+  assert.ok(screen.includes("hasReport={!!basis && registrationsReady}"), "no 未反映 tag for rows that are merely waiting for the reload");
+  // The three financial surfaces never see the cached set.
+  assert.ok(screen.includes("assetSummary(basis?.snapshot ?? null, registrations, registrationMatchesSnapshot)"));
+  assert.ok(screen.includes("topImpacts(basis?.snapshot ?? null, registrations, registrationMatchesSnapshot)"));
 });
 
 test("a withheld valuation is explained, never spoken or drawn as current", async () => {

@@ -18,6 +18,7 @@ import { WatchlistSection } from '@/components/portfolio/watchlist-section';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import { todayJst } from '@/lib/dashboard';
 import { fetchRecentReports } from '@/lib/personalized-reports';
+import { createLatestLoadGate, runPortfolioLoad, type PortfolioLoadSink, type RegistrationsResult } from '@/lib/portfolio-load';
 import {
   aiSummary,
   assetSummary,
@@ -47,10 +48,12 @@ const BOTTOM_SPACE = 28;
 export default function PortfolioScreen() {
   const [view, setView] = useState<StocksView>('portfolio');
   const [items, setItems] = useState<TrackedStock[]>([]);
-  // True only after the registrations were really read for this user. `items` is [] both for a user with no
-  // holdings and while the read is pending / failed / signed out; only this flag tells them apart, so an unknown
-  // registration set is never paired with the saved report (see alignHoldings).
-  const [registrationsKnown, setRegistrationsKnown] = useState(false);
+  // True only while `items` are the registrations that THIS load read for this user and they are paired with that
+  // load's report. `items` is [] both for a user with no holdings and while the read is pending / failed / signed
+  // out; and during a focus / pull reload it still holds the PREVIOUS load's registrations. Only this flag tells
+  // those apart: it is cleared before any request of a reload is awaited and set again only when that same load
+  // has settled (runPortfolioLoad), so a previous registration set is never paired with a report as if current.
+  const [registrationsReady, setRegistrationsReady] = useState(false);
   const [reports, setReports] = useState<PersonalizedReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
@@ -58,39 +61,49 @@ export default function PortfolioScreen() {
   // The pull-to-refresh spinner follows a pull only, not the reload on tab focus.
   const [pulling, setPulling] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setMessage('');
-    const reportsPromise = fetchRecentReports(20)
-      .then((next) => {
-        setReports(next);
-        setReportError(false);
-      })
-      .catch(() => setReportError(true));
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError || !authData.user) {
-      setItems([]);
-      setRegistrationsKnown(false);
-      setMessage('一覧を見るにはログインが必要です。');
-    } else {
+  // Latest-wins: a slower, older load can neither overwrite newer data nor re-open valuations (portfolio-load.ts).
+  const [loadGate] = useState(createLatestLoadGate);
+
+  const sink = useMemo<PortfolioLoadSink<TrackedStock, PersonalizedReport[]>>(() => ({
+    begin() {
+      setRegistrationsReady(false);
+      setLoading(true);
+      setMessage('');
+    },
+    reports(next) {
+      setReports(next);
+      setReportError(false);
+    },
+    reportsFailed() { setReportError(true); },
+    registrations(result) {
+      if (result.status === 'ok') {
+        setItems(result.items);
+      } else {
+        setItems([]);
+        setMessage(result.status === 'signed_out' ? '一覧を見るにはログインが必要です。' : '一覧を読み込めませんでした。');
+      }
+    },
+    settled(ready) {
+      setLoading(false);
+      setRegistrationsReady(ready);
+    },
+  }), []);
+
+  const load = useCallback(() => {
+    const fetchRegistrations = async (): Promise<RegistrationsResult<TrackedStock>> => {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) return { status: 'signed_out' };
       const { data, error } = await supabase
         .from('tracked_stocks')
         .select('id,user_id,stock_id,tracking_type,quantity,average_price,position_type,side,target_buy_price,target_sell_price,memo,stocks_master!inner(id,ticker_code,company_name,market)')
         .eq('user_id', authData.user.id)
         .eq('is_active', true)
         .order('created_at', { ascending: false });
-      if (error) {
-        setItems([]);
-        setRegistrationsKnown(false);
-        setMessage('一覧を読み込めませんでした。');
-      } else {
-        setItems((data ?? []) as unknown as TrackedStock[]);
-        setRegistrationsKnown(true);
-      }
-    }
-    await reportsPromise;
-    setLoading(false);
-  }, []);
+      if (error) return { status: 'failed' };
+      return { status: 'ok', items: (data ?? []) as unknown as TrackedStock[] };
+    };
+    return runPortfolioLoad(loadGate, { fetchRegistrations, fetchReports: () => fetchRecentReports(20) }, sink);
+  }, [loadGate, sink]);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
@@ -99,7 +112,7 @@ export default function PortfolioScreen() {
   const basis = useMemo(() => portfolioBasis(report, today), [report, today]);
   const labels = portfolioLabels(basis);
   // The registrations the saved valuation may be paired with: null while they are not known.
-  const registrations = registrationsKnown ? items : null;
+  const registrations = registrationsReady ? items : null;
   const summary = useMemo(
     () => assetSummary(basis?.snapshot ?? null, registrations, registrationMatchesSnapshot),
     [basis, registrations],
@@ -110,9 +123,13 @@ export default function PortfolioScreen() {
     [basis, registrations],
   );
   const overview = aiSummary(basis);
+  // While a reload is pending the cached registrations stay LISTED (the screen does not empty out), but nothing is
+  // priced or valued from the report until that reload has settled.
   const holdings = useMemo(
-    () => buildHoldingRows(registrations, report, registrationMatchesSnapshot),
-    [registrations, report],
+    () => (registrationsReady
+      ? buildHoldingRows(items, report, registrationMatchesSnapshot)
+      : buildHoldingRows(items, null, registrationMatchesSnapshot)),
+    [registrationsReady, items, report],
   );
   const watch = useMemo(() => buildWatchRows(items, report), [items, report]);
   const watchLayout = useMemo(() => layoutWatchlist(watch, basis?.snapshot ?? null), [watch, basis]);
@@ -146,8 +163,8 @@ export default function PortfolioScreen() {
               <View style={styles.holdings}>
                 <HoldingsHeader count={holdings.length} />
                 {holdings.length > 0 ? (
-                  <HoldingsList rows={holdings} labels={labels} hasReport={!!basis} onOpen={openDetail} />
-                ) : registrationsKnown && !loading && !message ? (
+                  <HoldingsList rows={holdings} labels={labels} hasReport={!!basis && registrationsReady} onOpen={openDetail} />
+                ) : registrationsReady && !loading && !message ? (
                   <View style={styles.empty}>
                     <Text style={styles.emptyText}>保有銘柄はまだありません。検索から銘柄を登録できます。</Text>
                     <Pressable onPress={() => router.push('/search')} accessibilityRole="button" style={styles.emptyButton}>
