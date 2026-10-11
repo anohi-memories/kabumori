@@ -153,16 +153,16 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: done
-- task_id: common-account-phase3g-free-auth-provider-test-readiness-20261011
+- status: ready
+- task_id: common-account-phase3h-local-oss-keycloak-safe-pilot-20261011
 - start_code: G5
 - finish_code: K5
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 2026-10-11 accepted Phase3g as PASS_SOURCE_FEASIBILITY / IDP_PREPAUSE_BLOCKED. Verified Draft PR137 HEAD eba0ba5abc56f8188a03d567d319754e4ac8ea4c, one new docs file, OPEN/DRAFT/UNMERGED, and PR121/122/128/130/134 protected unchanged. Supabase Free custom OIDC/hooks/rate feasibility verified against official docs; Auth0 users/config/cost and managed E1-E12 NOT_RUN. Photo app NOT_PAUSED, real project/provider calls 0, paid actions 0; E11/Option D/managed_auth_delete/production BLOCKED. G5 completed and unreserved; no next task until user decision on local no-downtime OSS pilot / Auth0 Free preparation / later independently approved managed E1 pilot. Other slots protected.
-- recommended_model: Opus5.5（中）
+- allocation: K5 accepted Phase3g source-only feasibility and freed G5. User 2026-10-11 「すすめて」 expressly chooses next no-photo-downtime local OSS pilot. G5 Phase3h on isolated dedicated worktree/Podman resources, local Supabase OSS + Keycloak with 2-3 fake users and limited E2/E3/E5/E8/E9 evidence; new docs/test fixtures only, new Draft PR. No production or managed Supabase, no Auth0/real credentials/users, no family photo stop, no SQL direct delete E11, no paid actions, no app/DB/Auth/RPC/Edge deploy/merge. Preserve PR121/122/128/130/134/137 and other slots. LOCAL evidence not managed proof; IDP_PREPAUSE_BLOCKED persists. Return K5 for evaluation.
+- recommended_model: Sonnet5（高）
 ## Claude G6
 - owner: claude
 - slot: claude-6
