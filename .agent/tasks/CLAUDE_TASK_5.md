@@ -1,3 +1,82 @@
+# G5 — CURRENT TASK — Phase 3h isolated LOCAL OSS/Keycloak authentication pilot (NO family-photo downtime)
+
+- task_id: common-account-phase3h-local-oss-keycloak-safe-pilot-20261011
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- priority: high
+- start_code: G5
+- finish_code: K5
+- return_to: 共通アカウントG5のちゃ
+- recommended_model: **Sonnet5（高）**
+- project: 共通アカウント基盤（かぶモリ / POSTONA）
+- origin: ユーザー2026-10-11「すすめて」— K5推奨の写真アプリ無停止ローカル検証を進める明示判断
+- max_scope: local, disposable, synthetic test identities only
+- remote_supabase_managed_or_provider_API_calls: FORBIDDEN
+- photo_project_pause_restore_delete_or_paid_plan: FORBIDDEN
+- production_auth_storage_db_edge_rpc_rls_migration_settings_or_secrets: FORBIDDEN
+- branch_merge_production_deploy_or_EAS: FORBIDDEN
+
+## 目的（Phase3g の繰り返し調査ではなく実行可能なローカル検証）
+
+Phase3g K5 は [Draft PR137](https://github.com/anohi-memories/kabumori/pull/137) の無料認証環境調査を `PASS_SOURCE_FEASIBILITY / IDP_PREPAUSE_BLOCKED` と判定した。写真共有アプリを止めない代替として **Mac上で隔離されたローカル Supabase OSS（GoTrue/DB/Storage等）とローカル Keycloak** を用意し、偽アカウントで OAuth / PKCE / identity-link / token / 削除後の残留観測を実際に小さく検証する。
+
+これは **LOCAL_OSS_EVIDENCE の作成**であり、managed Supabase のPASS、E11 SQL直接削除の安全証明、本番適用の承認には絶対に置き換えない。成功しても `IDP_PREPAUSE_BLOCKED` は維持する。
+
+参考正本:
+- `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`
+- G5 Phase3g Report / [Draft PR137](https://github.com/anohi-memories/kabumori/pull/137) の `docs/common-account/phase3g-free-idp-test-feasibility.md` (head `eba0ba5abc56f8188a03d567d319754e4ac8ea4c`)
+- Phase3c E1–E12 harness Draft PR122 exact `f17a47e36632fff4a1f4cfb0b860df200e1c99e1`, Phase3f Draft PR134 exact `1d4de2c73c42221ad4b2f9b1f231c271aa084907`, photo stop runbook Draft PR128 exact `e9244d29ea944156cf1479c0976053d433469e06` — all READ-ONLY reference, no edits/rebase/merge.
+- Prior `managed_auth_delete`, Option D and E11 independently gated / BLOCKED.
+
+## 起動前セーフティチェック（未達なら STOP）
+
+1. Fresh `origin/main` / G5 TASK header / Report / ACTIVE / CURRENT / independent worktree + other G/H tasksの競合を確認。新しく **G5専用** の独立worktree/branchを作る。他slotのcheckout/dev server/container/Podman machineを操作しない。G6等が使う実DBや実験ポートとは分離。
+2. Macの空きRAM・disk、Podman CLI/VM/ネットワーク、Supabase CLI、必要なイメージ容量、ローカル listen portsを**読み取りで**把握する。以前の観測は Mac 24GiB・停止Podman VM 2GiBだが現況が正本。既存Podman VMを勝手に再設定/削除しない。
+3. 無料の公開公式イメージ・必要ツールの取得と、G5だけが所有するコンテナ環境のセットアップは今回のユーザー進行了承範囲。ただし新規作成する隔離VM/Podman namespaceのメモリは必要最小限（目安 8 GiB、24GiBマシンの他作業を圧迫しない）。既存VMしか使えず他slotへの影響を排除できない、権限昇格/OS変更/追加課金/想定外大容量/空きdisk不足の場合は作業を止めて理由だけ報告。容量や所要リソースが大きい場合は取得前にユーザー確認。Mac上の他の開発環境を犠牲にしない。
+4. **本番のURL / Supabase project ref / API key / service role / .env / auth cookies / personal data は一切読み込まない。** 空の専用ENVと架空のダミー値のみ。全てのDB/HTTPターゲットが loopback / G5-owned Podman isolated networkであることを read-back / allowlistで検証し、不一致は STOP。外部への通信は公開公式ドキュメント・レジストリからのイメージ取得のみ許可。実Auth0/Google/GitHub OAuth、managed Supabase、写真サービスへのアクセスは禁止。
+
+## 実作業（小さな実証を最優先）
+
+A. 現行公式Supabase local development/Podman/Keycloak手順を根拠付きで検証し、G5所有の一時コンテナを安全に起動する。既存のポートに競合するなら所有権を確認のうえ別のポートへ変更する。他slotのサービスは停止しない。費用ゼロ/管理アカウント不要の範囲だけ。
+
+B. ローカル Keycloak をテスト IdP とし、**架空で非実在のテストユーザー 2–3 人**と、使い捨てローカルDB、専用 fake bucket を用意。localhost callback / redirect allowlist / PKCE / OAuth state を明示確認。Secret や個人情報はリポジトリに置かず、テスト後破棄。管理Authに間違って届かない endpoint fence を先に作る。
+
+C. 実験は独立した小さな smoke のみ。実際にできたものを証拠とともに記録する:
+- local stack起動、versions/config fingerprint、環境識別（**managed E1 PASS と記載しない**）。
+- E2: social/identity auto-link + BAN前後の挙動をダミーユーザーで可能な限り。
+- E3: 手動 linkIdentity が beta/default disabled である点と有効化時の安全性。
+- E5: PKCE/callback、refresh、ID-token と logout/expired token の観測。
+- E8/E9: **G5の完全に隔離されたローカル環境内だけ**で Admin delete / token / Storageメタデータと物理ファイル残留を観測（実削除対象がfakeであることを実行前に read-back）。実環境の挙動と同一とは扱わない。
+- E4/E6/E7/E10/E12 は余力と安全性に応じて限定サンプルのみ、未実施なら NOT_RUN と明記。E6 は200件の負荷を掛けず小規模・PARTIALのみ。
+- **E11 auth.users SQL直接削除、Option D、実環境へのSQL/管理API、誰かの本番認証/セッション操作は行わない。**
+
+各ケースで test setup / version / input category / expected / observed / logsの最小匿名要約 / PASS, FAIL, PARTIAL, BLOCKED, NOT_RUN / limitations を残す。機能がOSSやCLIの差異で動作しないと判明したら「動作不可/UNKNOWN」を正直に報告し、別手段を推測で成功扱いにしない。mockだけでPASSにしない。
+
+D. 終了時は自分のG5コンテナ・試験用identity/一時DB/コンテナだけを停止・破棄。所有不明の Podman VM、Docker volume、別slotのfixture、dev server を停止・削除しない。ローカルに残す必要がある証拠は秘密情報を除いたミニマルなものだけ。
+
+## 変更・成果物・PR
+
+- 新しい G5所有の `docs/common-account/phase3h-local-oss-pilot.md` に再現手順・実観測・テスト表・失敗理由・必要メモリ/ディスク・cleanup・managedに引き継げない部分をまとめる。必要なら新しい G5専用 `tools/common-account-local-pilot/` 配下へ最小の再現用 fake fixture/test launcher（secret無し、default fail closed）を追加してよい。
+- 既存の PR121/122/128/130/134/137、他の source/test/runbook、G1〜G4/G6〜G10/H1〜H5のTASKとReport、Auth/DB/RLS/RPC/Edge/Expo/production設定は変更しない。ドキュメント/独立テスト資産以外へ波及しない。
+- 新しいG5専用 branchから **Draft PR → main** を1件だけ作成。自動merge/本番deployしない。画像/DBスナップショット/実credential/個人データは絶対にcommitしない。
+- `git diff --check`、テストランナーの無害なdry-run + stop/fail-closed検証、secret scan、PR changed files/branch HEAD、関連PRとの重複、残留コンテナの所有範囲を確認する。テストコードの動作確認ができないならその理由を明確に記載。
+
+## 完了ゲート・Report
+
+- `LOCAL_OSS_PARTIAL_EVIDENCE`: 小さな実環境・合成IDテストに成功（managed proofは不明）。
+- `LOCAL_OSS_BLOCKED`: 安全な隔離起動やKeycloak連携が不可。停止して理由・残留物・次の最短解決策を報告。
+- `LOCAL_OSS_FAIL`: 実測の安全性/期待挙動違反を再現。具体的な再現と影響を報告。いずれも `IDP_PREPAUSE_BLOCKED` 維持。
+
+自分のTASK末尾`## Report — Phase3h`に task_id / result / case matrix / versions / setup/teardown証拠 / changed_files / tests / commit hash / push/PR/merge/deploy / real_remote_calls=0 / photo_app_paused=false / paid_actions=0 / remaining_issues / safety_checks / next_recommendation を記録。status `review_required` / next_owner `chatgpt` で返し、**「共通アカウントG5のちゃへ K5 を送ってください。」** を末尾に明記する。
+
+推薦モデル：**Sonnet5（高）**（より重いモデルへ自動切替しない）。
+
+---
+
+# Preserved G5 Phase3g and older TASK / Reports (immutable below)
+
 # G5 — CURRENT TASK — Phase 3g free-tier OAuth/OIDC test-provider prerequisites (NO photo downtime)
 
 - task_id: common-account-phase3g-free-auth-provider-test-readiness-20261011
