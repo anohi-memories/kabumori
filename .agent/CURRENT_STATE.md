@@ -6820,3 +6820,11 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - No DB/schema/Edge/EAS/publish/scheduler/OAuth/Auth/Vault/Cron change authorized or performed by this K3.
 - G3 status done/free. Future G3 production task must check fresh G5 conflicts and user approval; do not preempt G4 provider PR106 or G5 common-account operations.
 - AI Lab diary: 候補あり — AIとの相談画面で利用先を切り替えたときに以前の会話や覚えた設定が混ざらないよう見直した。保存ボタンの連打についても確認した。
+
+## K3 FINAL — POSTONA AI＋手動統合予約 V1 local-only completion — 2026-10-11 JST
+
+- G3 task `postona-unified-ai-manual-schedule-planner-v1-20261011`: **done/next_owner none**, K3 final **PASS_SOURCE_PREVIEW_ONLY**. Exact [Draft PR138](https://github.com/anohi-memories/kabumori/pull/138) head `f6b8f866b449cd432f649c132bbaa2e70a9f2ace`, OPEN/DRAFT/UNMERGED.
+- R1 reroll preserving edited/reordered text and cancellation terminal; R2/R2b selected account brand used for AI settings and owner even when snapshot first workspace is different; R3 server posts lacking account binding remain branded read-only without false attribution. Source and actual mocked screen wiring tests inspected. G3 reports app 277/277, domain 22/22, TS/lint PASS; ChatGPT did not independently run them.
+- Real posting/production DB/Edge/RPC/migration/paid provider calls/deploy/EAS/PR merge = 0 by G3 Report. Draft PR138 cannot be assumed mergeable: GitHub direct REST mergeable=null / state=unknown with branch behind main; Vercel quota rate-limit check, Netlify Preview canceled. Do NOT merge/deploy without separate user authorization and fresh conflict/check verification.
+- No new G3 task assigned. G4 Threads manual publish + H5 Threads OAuth runtime, G5 shared account, G6 ACTIVE production window and all other slots unchanged. Post-preview runtime reservation requires G5 active entitlement/Auth deletion, G4 verified X account / Issue131, G3 safe per-account reservation source/RPC/Edge and one Sol（高） independent integrated security review before user-approved limited X pilot.
+
