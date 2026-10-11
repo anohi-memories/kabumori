@@ -1,3 +1,111 @@
+# H2 independent completion — PR130 E11 R1–R5 narrow corrective re-review — 2026-10-11 JST
+
+- task_id: common-account-pr130-e11-r1-r5-narrow-security-rereview-20261011
+- owner: codex
+- slot: codex-2
+- status: review_required
+- next_owner: chatgpt
+- return_to: 共通アカウントG5のちゃ
+- completion_code: C2
+- recommended_model: Sol（高）
+- result: **CHANGES_REQUIRED / REAL_MANAGED_PROOF_NOT_RUN**
+- reviewed_exact_head: `5943fad5f724191f6ae77f3baf826a4c7698d542` (Draft PR130)
+- reviewed_parent_and_stacked_base: `f17a47e36632fff4a1f4cfb0b860df200e1c99e1` (protected Draft PR122)
+- fresh_main_at_start_and_prepublication: `743121c7a8a85990f35e9a4c0a9a44c7b95684e6`
+- source_delta: exactly 1 commit / 22 files (12 modified, 10 new), only the Phase3c runbook and `supabase/tests/common_account_disposable_e2e/**`.
+- protected_refs_readback: PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`; PR122 above; PR128 `e9244d29ea944156cf1479c0976053d433469e06`; all four including PR130 independently confirmed OPEN / DRAFT / UNMERGED before and after tests, exact heads unchanged.
+- independent_checkout: `/private/tmp/h2-pr130-e11-rereview-20261011.NVWMwU`, detached exact PR130, tracked source clean throughout. Formal fresh base's existing `?? supabase/.temp/` preserved. No old H/G checkout reused.
+
+## Decision and narrow closure summary
+
+**The original R1–R5 are substantially addressed, but not all closed.** R2 and R3 are CLOSED at the offline source-methodology scope. R1, R4 and R5 retain independently reproduced P2 evidence-validation/read-back residuals below. This is NOT an authorization/runtime exploit or a finding that any real project was touched: the harness has no executor; even its most permissive answer is only `EVIDENCE_COMPLETE_PENDING_INDEPENDENT_REVIEW`, not release approval.
+
+- R1: PARTIAL. Added two comparable Admin/SQL cohorts, positive denominators, audit/physical-Storage rows, ACL/FK/trigger/timeouts/rollback, pre-captured ids, both valid/expired JWTs, guarded/unguarded/Storage/GET-user cases and no-blind-retry checks. However, non-token remaining rows cannot affect the residue gate, and an invalid/unmeasured token outcome can be accepted.
+- R2: CLOSED (source-only). Explicit `platform_permission_fk_cascade_row_latch_probe`, NOT a full lifecycle decision. Separate independently reviewed `option_d_full_decision_proof` required; deleting-transaction full decision, manual/automatic/PKCE in-flight, both writer lock directions, owner-only execution and blocked gate listed as future proof obligations. No such real proof performed.
+- R3: CLOSED (source-only). Last successful callback explicitly lower bound; label-only mitigation rejected. Version/config expiry plus callback-after-expiry refusal, request-duration/skew/settle, drain and final exclusive recheck/order required. All targeted baseline boundary tests passed. This validates record shape/decision semantics, NOT whether later operator measurements are truthful or managed GoTrue actually obeys them.
+- R4: PARTIAL. Guard/plan now explicitly self-declared dry-run only; W1–W7 manual/two-person, per-run, exact-target/fake allowlist/single row/user approval/prior-E1/E8/E9/E10/E12 obligations documented. But missing mandatory non-self-declared flag is silently accepted.
+- R5: PARTIAL. Limited fingerprint disclaimers, managed trigger bodies, ACL/default/inherited privileges, RLS/policy and target-id readbacks added. SQL is read-only/deterministic on fake PG, absent/ACL-denied paths work. RLS-filtered access still produces a misleading zero.
+
+## Finding R1 [P2] — the matrix can lose residue or treat an unmeasured token case as PASS
+
+Paths/lines:
+- `supabase/tests/common_account_disposable_e2e/e11_matrix.ts:79–83,94–114,133–141`
+- `supabase/tests/common_account_disposable_e2e/evidence.ts:110–113` (D residue rule; exact range may be consulted in source).
+
+1. The documented D_SESSIONS_REFRESH PASS means both after-counts are recorded, even if rows remain, and line82 says those remaining rows block Option D. B_STORAGE also permits a classified success leaving metadata/blobs. But CohortEvidence/E11Evidence have only before denominators/row statuses and token outcomes; no after-count/remaining-row or non-token-residue field. `evaluateE11().residue` is set ONLY by `ACCEPTED_RESIDUE_RECORDED` from a token write. With all tokens refused and measured retained refresh/object rows described in redacted evidence, B/D may legitimately be PASS under those row criteria while D is still `EVIDENCE_COMPLETE_PENDING_INDEPENDENT_REVIEW` with no blocking reason. The existing fake PG suite itself finds exactly one legacy refresh row and one Storage metadata row after deletion, demonstrating why this distinction matters.
+   - Reviewer reproduction: `H2_R1_NON_TOKEN_REMAINS_BUT_D_PENDING_REPRODUCED`.
+   - Minimal scope correction: represent recorded remaining session/refresh/Storage state (or explicit independently attested residue) and propagate it to the D blocker. Missing necessary after-state must be UNKNOWN, not infer absence from tokens/users/hash. This is not a request for machine authentication of external evidence files.
+
+2. An external record with `valid_old_jwt:unguarded_writer = "NOT_RUN"` (or storage_upload) falls through all tests at lines138–141: it is neither undefined/UNKNOWN nor one of the recognized accepted results. Matrix outcome remains PASS. These fields must reject every value outside the exact token outcome enum; NOT_RUN/MAYBE are not observed refusals. No executor or production gate is bypassed, but the offline verdict contradicts its documented unmeasured-case=UNKNOWN guarantee.
+   - Reviewer reproduction: `H2_R1_INVALID_NOT_RUN_TOKEN_PASSES_REPRODUCED` on BOTH targets.
+
+Additional R1 methodology inconsistency (fail-safe false-negative, not a release bypass): `ambiguous_commit_readback` is included in the uniform UNCHANGED_READBACK-only failure-branch loop (lines43–45,151–157). A COMMIT whose acknowledgement was lost but whose completed deletion is conclusively observed will be CHANGED and FAIL despite no retry and resolved readback. The prose correctly requires unchanged only for refused/rolled-back branches and allows lost-COMMIT resolution. Separate APPLIED/NOT_APPLIED/UNKNOWN reconciliation from rollback-unchanged semantics.
+- Reviewer reproduction: `H2_R1_RESOLVED_COMMIT_APPLIED_IS_FAIL_REPRODUCED`.
+
+## Finding R4 [P2] — missing self_declared flag is accepted as a witnessed observation
+
+Path/lines: `supabase/tests/common_account_disposable_e2e/witness.ts:124–134`, especially128.
+
+The field is mandatory in WitnessRecord and must explicitly distinguish observed evidence from declarations, but runtime validation uses `if (r.self_declared)`. Remove that field from all otherwise complete fake records via JSON round-trip: `evaluateWitness` returns `complete:true,reasons:[]`, and the end-to-end D verdict remains pending with no reason. Missing provenance is not an affirmative witnessed observation. Require `self_declared === false` (and ordinary malformed-record validation); absent/null/nonboolean should fail closed. Do not claim this can prove an actual human observed anything—manual verification remains separate.
+
+- Reviewer reproduction: `H2_R4_MISSING_SELF_DECLARED_IS_ACCEPTED_REPRODUCED`.
+- Real approval, named operator, exact disposable destination and witness documents have NOT been obtained/verified; real E11 stays unapproved.
+
+## Finding R5 [P2] — table SELECT privilege does not guarantee rows are visible under RLS
+
+Paths/lines:
+- `supabase/tests/common_account_disposable_e2e/target_readback.sql:41–49` (same pattern across row counts)
+- `supabase/tests/common_account_disposable_e2e/catalog_extended_readback.sql:66–74`.
+
+Both SQL scripts select count(*) whenever `has_table_privilege(...,'SELECT')` is true. This only checks table ACL, not row visibility. A completely fake one-row Storage table with RLS enabled, no applicable SELECT policy, and a nonowner/no-bypass reader with SELECT privilege yields:
+- authoritative fake owner readback: `ACTUAL_ROW_COUNT|1`
+- inspecting-role ACL: `ACL_SELECT|t`
+- candidate target output: `target|storage_objects_by_id|0`, `target|storage_objects_owned_by_target|0`
+- candidate extended output: `storage_count|objects|0` (also buckets0).
+
+Thus the advertised unreadable=UNKNOWN/not-zero protection is incomplete under a permitted-role/RLS failure mode. Do not infer cleanup from this zero. Verify that the inspecting role can obtain complete unfiltered visibility for each required table (without escalating permissions), or return UNKNOWN_RLS/UNKNOWN_DENIED. If the later operator is demonstrably an owner/bypass role, prove that precondition rather than assuming it from table SELECT. This is a fake local reproduction, NOT a claim about the current remote postgres role or actual Supabase ACL.
+
+- Proof file: `/private/tmp/h2-pr130-probes.NYoJbN/rls_false_zero.sql`.
+- Entire fake role/schema/data test transaction ROLLBACK, no persistent fixture left.
+
+## Independent tests actually executed
+
+1. `deno test --no-config --allow-read supabase/tests/common_account_disposable_e2e/`: typed **56/56 PASS**, no net/env/run permissions. All E11/E4/witness/verdict/guard/CLI/catalog/redaction/static baseline tests.
+2. `python3 supabase/tests/common_account_disposable_e2e/harness_mutations.py`: unmutated control PASS; **58/58 mutations detected**, scratch copies only, no source edits. This does not imply untested negative cases safe.
+3. Reviewer-only typed no-network tests in `/private/tmp/h2-pr130-probes.NYoJbN/reviewer_test.ts`: **4/4 reproduction assertions PASS** (unsafe offline behavior reproduced, NOT safety PASS): non-token residue; invalid NOT_RUN token targets; omitted self_declared; resolved-applied COMMIT misclassification.
+4. Completely fake, NEW local PostgreSQL **17.11**, Unix socket only/no TCP, `/private/tmp/h2-pr130-fakepg.voRpuI`:
+   - `fingerprint_local_run.sh`: PASS,78 lines, deterministic readonly catalog fingerprint.
+   - `readback_local_run.sh`: ALL_PASS for extended readback, ACL-denied=UNKNOWN, positive denominators, FK/lock/rollback/ACL branch unchanged, pre-captured IDs find retained legacy refresh/object rows.
+   - independent RLS-hidden-one-row proof: reproduced candidate zero as above; transaction fully rolled back.
+   - Sandbox initially denied shared memory/socket; normal reviewed escalation authorized local-only fake checks; no alternative remote environment or bypass. Only this own PG instance stopped after all checks.
+   - These are local simulation semantics, **not** GoTrue/Admin/Storage/provider proof.
+5. `git diff --check f17a47e3 HEAD`: PASS; reviewer exact PR checkout tracked status clean. Scope matches the22 permitted offline files, no runtime/migration/Edge changes. Static no-network/no-secret-data and redaction suites PASS; no secret files read/output.
+6. Fresh main and PR exact heads re-read before publication. Other active slot source files never edited or staged. G2 prior PR110 review not reopened. No broad unrelated review.
+
+## Managed proof / rollout / remaining gates
+
+- real_managed_proof: **NOT_RUN**; E1–E12 real outcomes NOT_RUN, never invented PASS.
+- E11 actual Auth SQL/Admin deletion: **NOT APPROVED / NOT_RUN**.
+- Option D full-decision proof: future, unimplemented/unverified; NOT chosen.
+- `managed_auth_delete`: unchanged BLOCKED (no schema or gate operations).
+- A+B mitigation on real pinned GoTrue: NOT proven by offline tests.
+- Physical Storage blob, actual audit, real sessions/refresh, OAuth/manual/auto/PKCE/provider state: NOT tested.
+- Family-photo downtime/project creation: PREPAUSE_BLOCKED, not requested/performed. Existing missing fake OAuth/OIDC/operator consent/baseline/cost/restoration gates remain.
+- next_recommendation: C2 evaluate these THREE narrow residual groups and return to G5 for bounded offline methodology fixes, especially missing/unknown input and unfiltered readback. Do not begin real E11 or reopen broader Auth architecture. A corrected source plan still needs separate real-project/operator/user approvals and independent evidence review.
+- skill_influence: Supabase and Postgres security guidance kept ACL vs RLS visibility distinct, and local catalog evidence distinct from managed platform proof; no Supabase remote tools invoked.
+
+## Publication / safety
+
+- changed_files_by_H2: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md`, H2 status/next_owner only in `.agent/ACTIVE_TASK.md`.
+- implementation_commit: unchanged reviewed G5 PR130 `5943fad5f724191f6ae77f3baf826a4c7698d542`; no H2 source commit.
+- report_commit/push: published through guarded GitHub Contents API to origin/main; returned publication SHA and exact readback will be recorded in current H2 TASK receipt. No PR merge or protected source push.
+- historical_report_suffix: entire preexisting report preserved verbatim; historical TASK suffix preserved verbatim; other slots' index sections unchanged.
+- source_changes_by_H2=0; remote_Supabase_calls(read/write)=0; real_or_managed_disposable_Auth/BAN/DELETE=0; provider/OpenAI/X/Push=0; photo_pause/project_create/billing=0; production_DB/schema/migration/ACL/Cron/settings/Vault/OAuth=0; runtime/Edge_deploy/EAS/PR_merge=0; apps/admin/HANDOFF/other_slot_changes=0; secret_exposure=0.
+- Local fake-PG role/schema fixtures and scratch files are authorized test semantics only, not production changes. No other dev server stopped or existing repo/worktree data altered.
+- Return **C2 to 共通アカウントG5のちゃ**; review_required / next_owner chatgpt.
+
+---
+
 # H2 — PR #110 P2 final narrow boundary review — 2026-10-11 JST
 
 - task_id: kabumori-pr110-p2-final-narrow-review-20261011
