@@ -1,3 +1,12 @@
+## K8 FINAL — G8 PR129 R1 correction: CHANGES_REQUIRED / NARROW R2 ASSIGNED — 2026-10-11 JST
+
+- 対象は**ニュース改善A/G8のみ**、G9（API最適化B）・他のG/H・別案件は非干渉。G8旧TASK `news-improvement-a-pr129-f1-f9-remediation-g8-20261011` が `review_required` でK8を受信。GitHub PR129 head `984eeb41f14257be56ecfc00e9a55fa01d1ee136` は前回 `61dd33d7` の直系+1 commit、6 filesのみ。OPEN/Draft/未merge、production deploy未実施（実際の本番read-backは行っていない）。
+- G8自己報告: F1/F2/F3/F4/F5/F6/F8の抽出・同一性修正、important-news-monitor748件/抽出29件/discovery162件/observer+shadow57件 PASS、実PDF60件中facts51件/数値正しい原文照合51件。ChatGPTはソースとテストをGitHubで確認したが**テストを自ら再実行していない**。旧G8 Reportの個別欄にF8が欠落し `## Report` 見出しも壊れているため、次Reportで明示を要求（旧Reportは保全）。
+- **K8 verdict: CHANGES_REQUIRED**。追加の重要なF7反例: `rotation=Math.floor(Date.now()/(10分))`、`maxPerFetch=2`、候補3件、監視呼出が毎時のときoffset差は6≡0 (mod3)、毎回同じ2候補となり3件目が取りこぼされる。現実Cron間隔は未照合なので「毎時なら」という条件付きの再現を必須とする。PR129をmerge/deployしない。
+- F9は未解決の非pending対象(published/no_post/generation_failed)があり、PR129で`pending_judgement`空本文への**guard付きPATCHという新たな本番DB書込経路**を実装。schema/RPCは変更していないが、候補status・content_hash整合・並行処理・重複配信を独立レビューする必要がある。今回K8が全面PASSを与える理由はない。
+- 新規限定R2 TASK `news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011` を**同じG8枠**に`ready`として明示再割当、推薦`Opus5.5（高）`。変更対象はPR129のF7/F9に必要な狭い修正・mock回帰テストのみ、F1〜F6/F8と他レイヤーは保護。完了時K8はこのチャットへ。次に重要なF7/F9とP1安全性の独立限定レビューを判断する。
+- GitHub CI: Netlify Preview success、Vercelはbuild-rate-limitによるfailure（製品コードの失敗と断定しない）。PR116の固定コミット`a26e4365`本番予定にPR129は混入禁止。PR116関連worktree・G9・その他のG/H TASKは一切編集していない。今回変更した制御ファイルはG8 TASK、ACTIVE_TASKのG8欄、CURRENT_STATEの当記録・G8欄のみ。
+
 ## K5 FINAL — common account Phase3g free IdP feasibility / 2026-10-11 JST
 
 - G5 `common-account-phase3g-free-auth-provider-test-readiness-20261011` accepted **PASS_SOURCE_FEASIBILITY / IDP_PREPAUSE_BLOCKED**, marked done/next_owner:none (no next TASK allocated). GitHub [Draft PR137](https://github.com/anohi-memories/kabumori/pull/137) exact `eba0ba5abc56f8188a03d567d319754e4ac8ea4c`, 1 commit/1 new documentation file, OPEN/DRAFT/UNMERGED; independent source review, no local test rerun. Protected PR121/122/128/130/134 all retain exact earlier HEAD and Draft/unmerged. G5 reported 12 docs URLs HTTP200, diff check/secret scan PASS; not independently rerun.
@@ -180,7 +189,7 @@
 | G5 | `in_progress` | `common-account-phase3g-free-auth-provider-test-readiness-20261011` | `claude` | — | `K5` | `.agent/tasks/CLAUDE_TASK_5.md` |
 | G6 | `idle` | `none` | `none` | — | `K6` | `.agent/tasks/CLAUDE_TASK_6.md` |
 | G7 | `idle` | `none` | `none` | — | `K7` | `.agent/tasks/CLAUDE_TASK_7.md` |
-| G8 | `ready` | `news-improvement-a-pr129-f1-f9-remediation-g8-20261011` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
+| G8 | `ready` | `news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
 | G9 | `ready` | `api-optimization-b-phase5-followup-fixture-rights-and-cost-eval-g9-20261011` | `claude` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
 | G10 | `idle` | `none` | `none` | — | `K10` | `.agent/tasks/CLAUDE_TASK_10.md` |
 
