@@ -3,8 +3,8 @@
 - task_id: news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012
 - owner: claude
 - slot: claude-8
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G8
 - finish_code: K8
 - return_to: ニュース改善API最適化のちゃ
@@ -81,16 +81,21 @@ At this meeting, the Committee decided to maintain the target range for the fede
 ## Report
 
 - task_id: news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012
-- result: not_started
-- changed_files: none
-- tests: not_run
-- commit_hash: none
-- push: not_performed
+- result: implemented — H4-R1/R2/R3 fixed with tests; no schema/RPC change
+- reviewed_head: 7bf9b8a0a014ebe9a613e9ebeb0082d0b7834c54（開始時のPR129 head=同一、競合なし）
+- H4-R1 [P1]: `parseRow` は「m個の数値」を、見出しの単位行が amounts_only と確証できる場合だけ金額行とする。interleaved/grouped でm個なら ROW_INCOMPLETE。折返しは「数値のみの次行」を2m個になるまで結合、注記・別期間・過剰・欠落は読取不可でfail-closed。before: 指摘の合成表で営業10/経常100/純利益20を `ok=true` で出力 → after: 売上1000/営業100/経常80/純利益50（+10/+20/+30/+40%）。正常m/2m/grouped/EPS余剰は不変。
+- H4-R2 [P2]: `saveCandidateJudgement` は、本文なしでSELECTした候補の保存を `status=pending_judgement AND (body_summary is null OR '')` の1回の条件付きUPDATEで行う（snapshotは「空」のみで足りる＝fillは空の行にしか書かないため。長文URLなし）。0行の場合は読み戻しで「本文が後から付いた(NEWS_JUDGEMENT_STALE_BODY_CHANGED、pendingのまま次回再判定)」と「行が先へ進んだ(NEWS_JUDGEMENT_CANDIDATE_CHANGED)」を区別。即時生成しない、一括処理は候補単位のエラーとして継続（従来動作）。実 index.ts の judge_pending ハンドラ（Deno.serve捕捉＋PostgREST/OpenAI mock）で、モデル実行中に実 fillMissingCandidateBody が成功する競合を再現: before=旧no_post理由が本文あり行に保存 → after=保存されずpending維持。content_hashはheadline-only維持（既存duplicate方針と矛盾なし）。
+- H4-R3 [P2]: action/range/changeを同一の「今回の決定文」から読む。過去会合・前回・月名・引用を含む文は履歴として除外。異なる現在決定が複数なら AMBIGUOUS_DECISION で ok=false。before: 4.25〜4.5%（引き上げ、25bp）→ after: 4.25〜4.5%（据え置き、変更なし）。通常の単一声明/反対票氏名/R1同一性は不変。
+- changed_files: _shared/news_body_extraction/{kessan_tanshin_facts,fomc_statement_facts,review_fixes_test}.ts; important-news-monitor/{index,judgement_body_race_test(新規)}.ts
+- tests: important-news-monitor 761 pass（前757+新規4）; news_body_extraction 34 pass（前29+新規5）; discovery+observer 162 pass; shadow 20 pass（重複合算なし。H4の968は別scope/別集計で、本報告の件数と単純加算しない）; before-fail確認: R1 2件/R2 1件/R3 2件が旧実装でFAIL; F7回帰（呼出間隔非依存）維持; lint 97(baseline同数); typecheck既存TS2322(x_oauth2_post.ts)のみ; 実PDF60件再照合: facts51/数値一致51/prose4/missing4/空1（変更なし）。
+- commit_hash: 0a2df248f6e49bcb1bfea690f38064c93e5f895c
+- push: done（claude/news-body-integration-phase7-20261011, 7bf9b8a0→0a2df248）
+- PR_head: 0a2df248f6e49bcb1bfea690f38064c93e5f895c（PR #129 Draft/OPEN、未merge）
 - merge: not_performed
 - deploy: not_performed
-- remaining_issues: H4-R1 P1 wrapped tables, H4-R2 P2 stale judgement CAS, H4-R3 P2 historical FOMC action, existing no_post backlog.
-- safety_checks: not_started
-- next_recommendation: G8 R3 bounded correction, K8へ戻る。
+- remaining_issues: (1) 既存 no_post/生成失敗/公開済み候補への本文反映は未実装（意図的、履歴保護・設計判断待ち）。(2) 本文fillの20秒budget・取得枠は従来どおり。(3) 並行本番での実競合は mock による再現であり実PostgREST/Edgeでは未確認。(4) 実Fed文書での過去会合参照の頻度は未確認（合成のみ）。
+- safety_checks: 本番deploy/merge/DB schema・RPC・migration・Cron・Secrets・Provider・モデル変更なし; 実DB/実Edge/実Fed/TDnet(PDF fetchはローカル検証のみ既存手順)・有料API呼出なし（テストはmock）; PR116・他slot/G9/H4 worktree未変更。
+- next_recommendation: 再レビューは R1(折返し・amounts_only確証)/R2(CAS・0行区別)/R3(決定文選択)に限定。K8をニュース改善API最適化のちゃへ返却。
 
 ---
 
