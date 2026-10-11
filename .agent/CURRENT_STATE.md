@@ -1,3 +1,16 @@
+## G2 報告 — 共通の朝刊・大引けの一斉通知 V1（Draft PR #149、PR143 の上に積む）— 2026-10-12 JST
+
+- G2 `kabumori-market-report-scalable-broadcast-push-v1-20261012`: **SOURCE_COMPLETE／本番 NO_GO**（Draft PR #149、head `31c509df1c08ecc437ca4b70541284f223c836e2`、base は PR143 のブランチ）。
+  - 共通の回が完成したら、朝刊・大引けごとに一斉通知を1つ作る。
+  - 対象者（通知 ON・朝刊／大引けの通知 ON・端末あり）を500人ずつの区切りに分け、専用の worker が期限付きの貸し出しで送る。1人1回。送ったかどうか分からない人には送り直さない。
+  - 重要ニュースの経路（`notifications`・`send-push-notifications`）には触れない。送信の速さは一斉通知だけで上限300通/秒（Expo の上限600通/秒より低い）。
+  - ゲートはすべて OFF（作成・送信・試す人の一覧）。旧来の定時の個別レポートが動いている間は作らない。
+- 手元の PostgreSQL 17 で全項目 PASS: 同時実行、1万人／10万人、変異テスト19通り、取り消し。同時実行の確認で見つけた期限切れの後始末の順序の不具合は修正済み。Deno・アプリのテストもすべて成功した。
+- 所要時間（模擬・推定）: 1万人で約0.7分、10万人で約7.5分（300通/秒）、約5.1分（450通/秒）。DB 側は手元の実測で数秒。
+- 本番の操作・マージ・デプロイ・実際の送信は 0。PR143 の本番化が先。G2 は review_required / chatgpt で K2 待ち。H1〜H4 で Sol（高）の重点レビューを1回推奨。
+
+---
+
 ## H3 C3 FINAL — POSTONA PR144 Auth/SQL review — 2026-10-12 JST
 
 - H3 `postona-threads-pr144-auth-publish-p1-security-review-h3-20261012` **review_required / next_owner chatgpt**, exact Draft PR144 `d4a1e87b77d1fbd362dc51809ce2d998afda15ea` remains OPEN/DRAFT/UNMERGED. Verdict **CHANGES_REQUIRED / REAL_PILOT_HOLD**; return C3 to POSTONA｜マルチSNS化・開発統括（G4）のちゃ. H3 is freed after C3.
