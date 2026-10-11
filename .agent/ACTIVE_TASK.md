@@ -8,6 +8,7 @@
 - X自動投稿・複数ブランドX実装は G3 / G4 を使用する。
 - `G5`〜`G10`: 予備のClaude実装スロット。用途は固定せず、ユーザーまたはChatGPTが明示割当した場合のみ使用する。既存の基本ルーティングの自動fallbackにはしない。idleだからという理由だけで自動使用しない。
 - 各ペア内の割当は空き状況・競合・依存関係を見てChatGPTが決める。
+- `G7` はMIC専用チャットの「Market Intelligence Core」作業担当（ユーザー明示指定2026-10-11）。MICの作業を他G枠へ勝手に割り当てない。各TASKはG7の真の空き・競合確認後のみ割り当てる。
 - `G8` はこのチャットの「ニュース改善 A」専用、`G9` はこのチャットの「API最適化 B」専用（ユーザー明示指定2026-10-11）。ほかのG枠や別案件への自動引継ぎ・再割当禁止。各新TASKは対象枠の真の空き・競合を確認してから割り当てる。
 - H1〜H4はCodexのレビュー・バグ修正・検証枠（固定プロジェクト専用にしない）。H5はCodex臨時実装専用で原則空けておき、レビュー・検証には使わない。割当時は `return_to` / `completion_code` / 推薦モデルを必ず記入する。
 - ユーザーの個別指定がある場合はその指定を優先する。
@@ -90,17 +91,17 @@
 ## Codex H5
 - owner: codex
 - slot: codex-5
-- status: ready
+- status: done
 - task_id: postona-threads-oauth-runtime-bridge-h5-20261011
 - start_code: H5
 - finish_code: C5
 - completion_code: C5
-- next_owner: codex
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CODEX_TASK_5.md
 - report: .agent/CODEX_REPORT_5.md
-- allocation: User 2026-10-11 authorized using H5 temporarily to finish POSTONA Threads connection and first text-post pilot. H5 explicitly assigned 臨時実装 Threads OAuth trusted runtime/verified principal/callback/durable claim/owner-only RPC transport source and mock PG tests, stacked on protected Draft PR135/PR124 if safe. This is NOT a model-safety bypass. G4 independently owns Threads publish API/manual UI (separate paths); G3 schedule, G5 shared Auth/T13/deletion and all other slots protected. No real Meta/Supabase/Auth calls, secrets, DB apply, production writes, merge, deploy or real posts until separate tester pilot authorization. H5 source implementation only; no permanent reservation after C5.
-- recommended_model: Sol（高）
+- allocation: C5 2026-10-11 CHATGPT ACCEPTED PASS_SOURCE_CANDIDATE / RELEASE_HOLD. Exact Draft PR139 head b4fa672f97592e87682671454e868a92098cbd56, OPEN/UNMERGED, one commit 13 entirely new H5 source/test/docs paths stacked on original Draft PR135 exact e38788d6677082138f0990453c7d2f00549666d0. H5 PR reported Deno32 focus/97 combined PASS and fake-PG17 concurrency/ACL/parent integration PASS; tests not independently rerun. Auth+owner SQL state claim candidate implemented but effective production DB owner transport/session privileges/Meta/GoTrue/Vault/T13/T9/T10/mobile callback not proven; new Edge returns 503, static gate false. This C5 was independently recorded by ChatGPT from verified PR/source after Codex Report had NOT been synced; .agent/CODEX_REPORT_5.md explicitly distinguishes assessment authorship. No merge/deploy/real connection/post, no H5 park. H5 now done/unreserved; H1-H4/G1-G10 unaffected, future focused Sol（高） security review required only at integrated release gate.
+- recommended_model: Sol（高） (source candidate completed; C5)
 ## Claude G1
 - owner: claude
 - slot: claude-1
@@ -111,21 +112,20 @@
 - next_owner: none
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS_SOURCE_IMPLEMENTATION after narrow valuation truthfulness fix, exact PR136 head ca2477e0fdc4ba85f620e48aa7d9221e691ba485. Old saved holding market value/P&L shown in detail only if qty/avg/position_type/side/tracking_type match. Added 6 tests; Claude reported focus fail-before 20 pass/5 fail, after 25/25, app suite 494/494 PASS and TS/diff check PASS. PR #136 OPEN/UNMERGED; CI at head Vercel SUCCESS, no source overlap on main at review, GitHub REST mergeability unknown. Await explicit user authorization before any source merge; preserve PR branch. Five NativeTabs unchanged, no Auth/DB/RPC/Edge/prod/EAS/user-data edit. Potential stale valuation in existing portfolio list/impact is separately recorded in CURRENT_STATE backlog, NOT a new G1 TASK. G1 done/available for new explicit independent allocation after fresh state/worktree checks.
+- allocation: Final K1 PASS_SOURCE_IMPLEMENTATION and user-authorized PR #136 protected squash MERGED. Exact approved PR head ca2477e0fdc4ba85f620e48aa7d9221e691ba485 merged by GitHub to main commit f662cee90b2d18557ebd111fc5236e372ff4d9c1; GitHub PR closed/merged=true and main read-back verified. 16 PR paths only, five NativeTabs unchanged, portfolio/watch/search detail UI; financial valuation terms match qty/cost/position/side/holding type. Claude app tests reported 494/494 PASS, PR head CI success. No EAS/manual deploy/DB/Auth/Edge/user-stock write; main push may trigger automatic Web CI. G1 done/free subject to fresh worktree/conflict checks. Existing portfolio-list stale-P&L improvement stays backlog only (no TASK allocated); old-method Oct7–9 gap out of scope.
 - recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: kabumori-fact-v2-pr132-three-objective-guards-correction-20261011
+- status: review_required
+- task_id: kabumori-shared-report-x-app-cutover-preflight-20261011
 - start_code: G2
 - finish_code: K2
-- next_owner: none
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 2026-10-11 PASS_SOURCE_CANDIDATE / RELEASE_HOLD — Draft PR132 exact 68d45dde1be34715267b5066fa3b3686d756b79e, stacked on unchanged PR110 319a442edcd61c07274e3409d8864234f9d77cd4. R1-R3 4 objective false claims rejected X/app, 3 allowed controls plus 6 grounded analyses preserved, 1,360 G2-reported offline tests PASS (not independently rerun); source correction only 3 files. No new material risk, no repeat H-review required. PR110→PR132 combined source merge gate next, production cutover separate and requires explicit authorization. No merge/deploy/prod writes.
-- recommended_model: Opus5.5（高） (completed)
-
+- allocation: 新方式の朝刊・大引けの X／アプリ切替の本番前読み取り監査を完了（本番接続 NOT_RUN、製品ソース変更 0）。判定は NO_GO：P0 は新コードの未デプロイの可能性と本番の状態の未確認、P1 は共有パケットが無い日の全停止・個別レポートの20人上限・通知予約失敗での上書き・生成中の放置・アプリのバイナリ。段階0（読み取り）→段階1（デプロイ）→段階2（アプリだけ ON）→段階3（X も ON）の手順案とロールバックを Report に記載。K2 の判断待ち。
+- recommended_model: Opus5.5（高）
 ## Claude G3
 - owner: claude
 - slot: claude-3
@@ -136,8 +136,8 @@
 - next_owner: claude
 - return_to: POSTONA G3のちゃ（AI相談・X投稿予約担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: K3 reviewed Draft PR138 exact b244400ac710bdb6cd576631aacdb0b219bf73fd and G3 Report. Core source-only manual exact/random/interval and AI planner + preview accepted as PASS_CANDIDATE; source inspection found 3 P2 correctness gaps requiring SAME-PR narrow follow-up before K3 final: R1 reroll regenerates edited/reordered/cancelled drafts and resurrects cancelled posts; R2 AI frequency/consent cached from prior brand while new brand settings read pending/failed; R3 live brand-bound posts accountId unknown falsely rewritten as selected active X or Threads account, contaminating attribution/conflicts. Modify only isolated G3 schedule planner/UI/read-only types/tests, preserve source-only/no cloud reservation, protect G5/H1/G4/PR127 and all other tasks, no production writes, migration, Edge, X or deploy. Re-run local tests and return K3. No additional Codex now; Sol（高） integration review before eventual backend release.
-- recommended_model: Sonnet5（高）
+- allocation: K3 accepted fixes R1 reroll content/cancel preservation and R3 unbound brand-level server posts on source. ONE R2b P2 still remains: schedule.tsx uses snapshot.workspace.id (first brand) for AI settings while activeAccount.brandId could be another brand; may show A consent/frequency in B preview. Source-only same Draft PR138 head 48f070cc6a8472990dc07760e61ce255e5d21c91. Fix selected account verified brand for repository.read, aiPlanningFor, owner and test actual screen wiring. No other changes, no G4/H1/G5 work, no prod/DB/Edge/X/merge. Return K3. Prior Report/history preserved.
+- recommended_model: Sonnet5（中）
 ## Claude G4
 - owner: claude
 - slot: claude-4
@@ -166,29 +166,31 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: review_required
+- status: done
 - task_id: common-ai-provider-g6-phase1e-readonly-runner-preflight-20261011
 - start_code: G6
 - finish_code: K6
-- next_owner: chatgpt
-- latest_result: PASS_READONLY_CHECK — production runner `check` run once 2026-10-11 19:05 JST: TARGET_VERIFIED (cron refs = wsmznyzcvmuitkglfeuj only, markers 6/6, history 2/2), READY_TO_APPLY, predicted_refusals 4/4 no, fingerprint 12 categories / 168 functions; CLI 2.116.0 temp login role x3 (known). READY is not apply approval. Report: .agent/tasks/CLAUDE_TASK_6.md#report
+- next_owner: none
+- latest_result: K6 FINAL ACCEPTED / PASS_READONLY_CHECK — production runner `check` run once 2026-10-11 19:05 JST: TARGET_VERIFIED (cron refs = wsmznyzcvmuitkglfeuj only, markers 6/6, history 2/2), READY_TO_APPLY, predicted_refusals 4/4 no, fingerprint 12 categories / 168 functions; CLI 2.116.0 temp login role x3 (known). READY is not apply approval. Report: .agent/tasks/CLAUDE_TASK_6.md#report
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
 - report: .agent/tasks/CLAUDE_TASK_6.md#report
 - allocation: USER EXPLICIT 2026-10-11: from now on common-AI project tasks from this ChatGPT room go through **G6 Claude**, not standalone direct-copy instructions. First G6 Phase1e validates actual production runner `check` only in isolated worktree, with fresh main and G5 mutation window check. No `apply`, `policies`, Secret, paid provider, Cron, Edge, deployment, migration or report cutover. Supabase CLI may create an ephemeral login role before read-only SELECT; disclose and STOP if unexpected. Return `K6` to this common-AI chat, then formally clear task and allocate next common-AI task to G6 (do not park a memo to occupy slot). Other G/H tasks untouched.
-- recommended_model: Sonnet5（高）
+- recommended_model: Sonnet5（高） (completed)
 ## Claude G7
 - owner: claude
 - slot: claude-7
-- status: idle
-- task_id: none
+- status: ready
+- task_id: mic-stage1-formal-verification-design-finalization-g7-20261011
 - start_code: G7
 - finish_code: K7
-- next_owner: none
+- completion_code: K7
+- next_owner: claude
+- return_to: MICのちゃ（Market Intelligence Core専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_7.md
 - report: .agent/tasks/CLAUDE_TASK_7.md#report
-- allocation: 未割当（2026-10-11追加）。用途を固定しない予備枠。ユーザーまたはChatGPTの明示割当時だけ使用し、idleだけで作業開始・自動投入しない。
-- recommended_model: none
+- allocation: ユーザー明示指定2026-10-11でMIC作業をG7専任化。初回はDraft PR125のStage1正式Verification DESIGN ONLY最終補強（U2/U3/U6/U9決定反映、phantom INSERT / read snapshot / events parity / pointer整合性 / A1不一致 / SQL競合テスト計画）。PR125既存設計worktreeを共有せずG7専用独立worktreeから安全確認し、docs1ファイルだけを更新。PRはDraft、main merge・production・migration・Edge・Cron・ソース変更禁止。10/14以降の自然観測と正式実装GO判定は別工程。完了はK7でMICのちゃへ返却。他G/H枠のTASK/Report/branchを保護。
+- recommended_model: Opus5.5（高）
 ## Claude G8
 - owner: claude
 - slot: claude-8

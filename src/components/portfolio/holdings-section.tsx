@@ -66,7 +66,7 @@ function HoldingCard({ row, labels, hasReport, onPress }: { row: HoldingRow; lab
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={summary}
-      accessibilityHint="この保有銘柄の情報を編集します"
+      accessibilityHint="この保有銘柄の詳細を開きます"
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <View style={styles.top}>
         <StockAvatar label={row.avatar} name={row.company} size={wide ? 52 : 42} />

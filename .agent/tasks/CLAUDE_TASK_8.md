@@ -3,8 +3,8 @@
 - task_id: news-improvement-a-pr129-f1-f9-remediation-g8-20261011
 - owner: claude
 - slot: claude-8
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G8
 - finish_code: K8
 - return_to: ニュース改善API最適化のちゃ
@@ -91,18 +91,26 @@
 - 可能な限り実PDF39/60件の集計と、当期/前期数値の正確性を再照合。本文はrepo/DBに保存しない。観測できない実データは未実施と明記。
 - P1の5件をすべて解消。P2の4件を修正、または安全な未解決/実装停止と依存条件を明示。P1/P2未解決の状態で全面PASSを自称しない。
 - 競合なしを確認できた場合に限りPR129の既存branchにcommit/push。PRheadを再取得してから差分を適用、他作業を上書きしない。**merge/deploy禁止**。
-- 完了後、このTASK末尾の `## Report` に task_id/result/F1〜F9個別状態/changed_files/tests/before_after_quality/commit_hash/push/PR_head/remaining_issues/safety_checks/next_recommendation を書き、`K8` を **ニュース改善API最適化のちゃ** に返す。別チャットの作業を進めない。
-
-## Report
+- 完了後、このTASK末尾の `## Report
 
 - task_id: news-improvement-a-pr129-f1-f9-remediation-g8-20261011
-- result: not_started
-- changed_files: none
-- tests: not_run
-- commit_hash: none
-- push: not_performed
+- result: implemented — F1〜F9 all addressed in source; F9 staged (see F9). PR #129 stays Draft / unmerged.
+- F1: fixed — 分離した△/▲を後続の数値に結合、結合先のない印・想定外トークンは行ごと拒否（DANGLING_MINUS / UNEXPECTED_TOKEN）。
+- F2: fixed — 見出しの単位行から「交互/金額→増減率」配置を確証。確証できない8数値は LAYOUT_UNCONFIRMED で拒否（個数だけの推定を廃止）。
+- F3: fixed — 税引前利益(pretax_profit)・当期利益(profit_total)・親会社帰属(net_profit)を別指標化、同一指標の重複列は表ごと拒否。経常利益へ置換しない。
+- F4: fixed — 表直上の最近接の「経営成績/業績」見出しで連結/個別を決定。見出し内の相反は BASIS_CONFLICT で拒否。「参考: 個別…」では上書きしない。
+- F5: fixed — 前期行は決算期末月・四半期/中間/通期・累計・1年前を満たす場合のみ。満たさなければ facts 自体を採用しない（PRIOR_ROW_*_MISMATCH）。
+- F6: fixed — 候補URLが声明のプレスリリースpath、最終URL＝同path（別文書へのredirect拒否）、ページ見出しが声明、文書日付＝URL日付＝RSS日付(±3日)を要求。議事録・見通しは受理しない。
+- F7: fixed (no schema) — 保存済み(本文あり)は取得枠を消費しない、残りは10分周期のローテーションで公平化、上限(2)維持、超過は deferred_over_cap を観測、失敗は次回再試行。RSSから消えた項目の継続保証は永続化なしでは不可（残課題）。
+- F9: partially staged — 未判定(pending_judgement)かつ本文なしの保存済み声明は、guard付きPATCH（status=pending_judgement かつ body空）で本文を後付け（スキーマ/RPC変更なし）。published / no_post / generation_failed 等は書き換えず stored_without_body:<status> を観測のみ。再判定・履歴保護が必要な後者は設計判断待ち（DB/RPC変更が要るなら未実施）。
+- changed_files: _shared/news_body_extraction/{kessan_tanshin_facts,fomc_statement_facts}.ts, review_fixes_test.ts(新規); important-news-monitor/{fed_statement_enrichment,fed_statement_enrichment_test,index}.ts
+- tests: important-news-monitor 748 pass（742+新規6）; news_body_extraction 29 pass（Phase6 19+新規10; F1〜F9の before-fail→after-pass確認済み、旧実装では16件FAILED）; news-discovery-observer+_shared/news_discovery 162 pass; observer+shadow 57 pass; lint 97件（baseline同数）; typecheck は既存 TS2322(x_oauth2_post.ts)のみ; git diff --check 問題なし。
+- before_after_quality: 実PDF60件(TDnet決算短信)で facts 51 / 数値verbatim一致 51 / prose 4 / missing 4 / 抽出空 1 — Phase 6と同等でF1〜F5の厳格化による取りこぼし増なし（初回実装で重複列判定が過剰に拒否し30件に低下→表行がある場合のみ判定に修正して51へ回復）。正文の改変数値は51/51検出、正しい文の誤conflictは0。
+- commit_hash: 984eeb41f14257be56ecfc00e9a55fa01d1ee136
+- push: done (claude/news-body-integration-phase7-20261011, fast-forward from 61dd33d7)
+- PR_head: 984eeb41f14257be56ecfc00e9a55fa01d1ee136 (PR #129 Draft, OPEN)
 - merge: not_performed
 - deploy: not_performed
-- remaining_issues: F1〜F9（上記）
-- safety_checks: not_started
-- next_recommendation: G8で開始し、安全な専用worktreeを作って修正を実施。完了時K8。
+- remaining_issues: (1) F9の非pending行（published/no_post/generation_failed）への本文反映・再判定は未実装（履歴保護とstatus遷移の設計・必要ならRPC/migrationが前提）。(2) F7: RSSから消えた未取得声明の永続的再試行は永続化なしでは保証できない。(3) 日銀は未接続のまま。(4) fed取得は本番未検証。(5) 標準の正常系で「-」単独記号の分離(△以外)は曖昧のため結合しない。
+- safety_checks: 本番deploy/DB/schema/RPC/Cron/Secrets/モデル/Provider変更なし・有料API呼出なし; PR #116(a26e4365)・kabumori-ex・kabumori-pf・他slotのTASKへ変更なし; 日銀本文の取得/接続なし; 実PDFの本文はrepo/DBに保存せず。
+- next_recommendation: PR #129 を独立レビュー(Codex)に再提出 → F9の非pending行の扱いを設計判断（schema/RPCが必要なら別TASK）。merge/deployはPR #116反映・観測後に別途判断。K8 を ニュース改善API最適化のちゃ へ返却。

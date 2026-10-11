@@ -3,8 +3,8 @@
 - task_id: postona-threads-oauth-runtime-bridge-h5-20261011
 - owner: codex
 - slot: codex-5
-- status: ready
-- next_owner: codex
+- status: done
+- next_owner: none
 - start_code: H5
 - finish_code: C5
 - completion_code: C5
@@ -20,6 +20,16 @@
 - existing_X_OAuth_pr126_issue131: **OUT OF SCOPE / unchanged**
 - source_owner: **Threads OAuth/authenticated callback/DB claim+owner transport+T9 integration contract; NO Threads publishing UI/provider publish client**
 - other_slots: G4 G3 G5 H1-H4 G1-G10 all protected; exclusive independent H5 checkout.
+
+## C5 FINAL — ChatGPT source-based acceptance / 2026-10-11 JST
+
+- **Result: PASS_SOURCE_CANDIDATE / RELEASE_HOLD**. H5's implementation source Draft [PR139](https://github.com/anohi-memories/kabumori/pull/139) verified at exact head `b4fa672f97592e87682671454e868a92098cbd56`, OPEN/DRAFT/NOT_MERGED, one commit/13 all-new paths stacked on protected PR135 head `e38788d6677082138f0990453c7d2f00549666d0` (PR124 exact `c30f246409a77080cbc03aef6c4cb72b5481e125` untouched). H5 new Edge entry intentionally returns HTTP 503; production gate still false and posting disabled.
+- Code/documentation examined by ChatGPT: verified Auth actor via injected SDK `getClaims/getUser`, local session checks, owner-only SQL/T13 boundary candidate, durable state/code burn with two-worker fake PostgreSQL race, provider exchange/identity/attestation use, G5 T10 handoff and G4 receipt. PR body reports 32 new focused Deno / 97 combined Deno PASS and disposable PostgreSQL17.11 tests PASS; ChatGPT did NOT independently run these suites or real managed Auth/Meta/DB.
+- Main H5 Report was **not synced by Codex** (only idle template existed) at C5. ChatGPT recorded **an explicitly attributed independent C5 evaluation** in `.agent/CODEX_REPORT_5.md` from source and PR evidence, NOT a fabricated Codex-authored completion report. No further sync-only work is demanded for accepting this source candidate.
+- **Outstanding release blockers**: actual owner connection/auth session privilege proof, PR124/G5 T13/schema apply and Vault config, callback to mobile, Meta tester, X exclusion, G5 T10 actual lifecycle cleanup, G4 per-account publish consent+idempotency; focused independent Sol（高） cross-boundary security review and separate explicit pilot authorization. **Not production ready; do not merge/apply/deploy/enable or post.**
+- H5 C5 closure now **done / next_owner none**; slot free. Historic original unassigned template and this TASK body preserved below. No G4/G5/G3/H1-H4 changes; no production action. Return to **POSTONA｜マルチSNS化・開発統括（G4）のちゃ** as C5, recorded.
+
+---
 
 ## Purpose and scope boundary
 

@@ -70,13 +70,15 @@ test("holdings and the report load independently: a failed report never hides th
   assert.ok(screen.includes("buildHoldingRows(items, report)"), "holdings are built from the registrations, not from the report");
 });
 
-test("holdings stay editable through the existing editor; the row says it edits the holding", async () => {
+test("a holding row opens the read-only 銘柄詳細 (not the editor); the editor is reached from there", async () => {
   const screen = await code("src/app/(tabs)/explore.tsx");
-  assert.ok(screen.includes("<TrackedStockEditor"));
-  assert.ok(screen.includes("existing={selected}") && screen.includes("onSaved={() => { setSelected(null); void load(); }}") && screen.includes("onDeleted="));
+  assert.ok(!screen.includes("<TrackedStockEditor") && !screen.includes("setSelected"), "viewing never opens the editor from the tab");
+  assert.ok(screen.includes("router.push(trackedDetailHref(trackedId))") && screen.includes("onOpen={openDetail}"));
   const holdings = await read("src/components/portfolio/holdings-section.tsx");
-  assert.ok(holdings.includes('accessibilityHint="この保有銘柄の情報を編集します"'), "no pretend stock-detail screen");
-  assert.ok(!/router\.push\(\{ pathname: '\/stock|stock-detail/.test(holdings));
+  assert.ok(holdings.includes('accessibilityHint="この保有銘柄の詳細を開きます"'));
+  assert.ok(!/router\.|pathname/.test(holdings), "the row only calls back; the screen decides where it goes");
+  const detail = await code("src/app/stock-detail.tsx");
+  assert.ok(detail.includes("<TrackedStockEditor") && detail.includes("登録内容を編集"));
   const editor = await read("src/components/tracked-stock-editor.tsx");
   assert.ok(editor.includes("tracked_stocks"), "the editor itself is unchanged in purpose");
 });
@@ -143,8 +145,8 @@ test("search semantics are preserved: debounce, sanitizing, limit 30, registered
   assert.ok(search.includes("setTimeout(() => void search(term), STOCK_SEARCH_DEBOUNCE_MS)"));
   assert.ok(search.includes("currentRequest !== requestId.current"), "a stale response never overwrites a newer one");
   assert.ok(search.includes("from('tracked_stocks')") && search.includes(".in('stock_id'"), "registered-state check");
-  assert.ok(search.includes("if (!registered) setSelected(item)"), "a registered result opens no duplicate editor");
-  assert.ok(search.includes("registered ? '登録済み' : '登録する'"));
+  assert.ok(search.includes("if (registered) router.push(searchResultDetailHref(item.id)); else setSelected(item);"), "registered -> detail, unregistered -> the registration editor");
+  assert.ok(search.includes("registered ? '登録済み ›' : '登録する'"));
 });
 
 test("Watchlist is a subview of the SAME 銘柄 tab behind a two-segment switch (no new route, no sixth tab, no tags)", async () => {
@@ -153,8 +155,8 @@ test("Watchlist is a subview of the SAME 銘柄 tab behind a two-segment switch 
   assert.ok(screen.includes("{view === 'portfolio' ? ("), "the two subviews render under the same header");
   assert.ok(!/ウォッチリスト.*router\.push|router\.push\([^)]*watch/i.test(screen), "switching is local state, not navigation");
   assert.ok(screen.includes("監視銘柄はまだありません。気になる銘柄を検索から登録できます。"), "honest empty state");
-  assert.ok(screen.includes("onEdit={openTracked}"), "watch records stay editable / deletable through the existing editor");
-  assert.ok(screen.includes("<TrackedStockEditor"));
+  assert.ok(screen.includes("onOpen={openDetail}"), "watch rows and featured cards open the detail, where the existing editor is one button away");
+  assert.ok(!screen.includes("<TrackedStockEditor"));
   assert.ok(!/\btags?\b|タグ|label_ids|category_id/i.test(screen), "no tag UI or schema is invented");
   const root = await read("src/app/_layout.tsx");
   assert.ok(!root.includes("watchlist"), "the root navigator is untouched");

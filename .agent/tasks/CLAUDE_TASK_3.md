@@ -8,7 +8,7 @@
 - priority: high
 - project: POSTONA / X posting scheduling
 - type: **SOURCE/LOCAL UI + pure planner only; NO live posting or DB write**
-- recommended_model: **Sonnet5（高）**
+- recommended_model: **Sonnet5（中）**
 - start_code: G3
 - finish_code: K3
 - return_to: POSTONA G3のちゃ（AI相談・X投稿予約担当チャット）
@@ -17,6 +17,16 @@
 - DB_migration_Auth_RLS_RPC_Edge_Cron_Vault_secrets_or_traffic_switch: FORBIDDEN
 - production_deploy_PR_merge_EAS_TestFlight: FORBIDDEN
 - protect: previous G3 Report/PR127, H1 Threads OAuth, G4 X OAuth Issue131, G5 shared account/Auth, G1/G2/H2, existing X/Kabumori/AI Lab posting
+
+## K3 selected-brand binding — SINGLE remaining P2 on Draft PR138
+
+- Verdict: **CHANGES_REQUIRED (R2b only)** at PR138 head `48f070cc6a8472990dc07760e61ce255e5d21c91`. Prior R1 (reroll edited/cancelled content) and R3 (unbound brand-level server rows) accepted from source inspection. G3 reports 269/269 app tests, 22/22 domain and TS/lint PASS. Not independently rerun. Draft unmerged, no live schedule/posting.
+- **Root cause still in actual screen:** `schedule.tsx` `const brandId = snapshot?.workspace?.id` refers to the FIRST brand from `SupabaseSocialRepository.readSnapshot()`, but `activeAccount` may be an X account from ANOTHER authorized brand. The screen passes that first brand to `repository.read(brandId)`, `aiPlanningFor(aiState,brandId)` and AI composer, so B's preview can show A's saved weekly frequency and `auto_post_preference`. Existing `schedule-view.ts` helper tests only prove safety if the screen supplies the correct brand.
+- **ONLY fix:** for `status === 'ready'` compute effective brand from the **currently selected activeAccount.brandId**, never from arbitrary first `snapshot.workspace.id` when real selected account's brand missing; use SAME effective brand for read, AI planning and owner. Missing verified brand, blocked or loading must show safe default/unloaded and consent off; mock_preview may show explicit demo defaults but must never fetch production brand setting. Keep async loadId rejection for rapid A→B→A. Same-brand account switching may share brand-scoped settings.
+- **Fail-before/pass-after UI-wiring regression:** snapshot.workspace='A', authorized accounts X_A brand A, X_B brand B; selected X_B must load brand B (not A) and display B frequency 2/manual_review even when A had frequency7/auto_post_preference. Cover failed/blocked B read, missing brand, mock-only and rapid switching. Include a test that asserts **actual schedule.tsx wiring**, not only idealized pure helper arguments.
+- Modify only this same G3 Draft PR138's screen, optional `schedule-view.ts`, narrowly relevant tests. Do NOT edit accepted R1/R3, G4/H1/G5, Auth/RLS, migration, Edge, Cron, live posting, PR127 or tabs. Work in isolated G3 worktree, verify PR head before push; no force-push, merge, production writes/deploy/EAS. Re-run local suite and Report, return K3. Recommended **Sonnet5（中）**; no new Codex review for local UI. Later real publishing still requires one Sol（高） integrated security review.
+
+---
 
 ## K3 focused correction — R1/R2/R3 P2, exact Draft PR138 source ONLY — 2026-10-11 JST
 
@@ -194,6 +204,92 @@ Develop in the EXISTING POSTONA `投稿予定` tab a **unified view/composer for
 1. K3 で受け入れ。下書き PR #138 の merge は、別途判断する（ローカルの UI と計画ロジックだけなので、独立レビューは不要と考える）。
 2. 次の G3: G5 / G4 のゲートがそろったら、計画の表・RPC と保存の境界の実装（ソースのみ）。その前に、PR #127 の Stage 3B との統合の順番を決める。
 3. 実際の保存と配信の前に、G3 + G4 + G5 をまとめて Sol（高）のレビューを 1 回。
+
+## Report — K3 focused correction R1/R2/R3（PR #138）
+
+- result: **PASS candidate（3 点とも修正し、修正前に失敗するテストで固定した）**
+- モデル: Sonnet 5.5（TASK の推奨どおり。ユーザーの選択で切り替えて実施）
+- PR #138（下書き、merge していない）: 修正前の先頭 `b244400ac710bdb6cd576631aacdb0b219bf73fd` → **新しい先頭 `48f070cc6a8472990dc07760e61ce255e5d21c91`**
+  - 内訳: 修正コミット `a9f8e5a2` と、最新 main `9071e76c` の通常 merge。rebase / force-push なし。`b244400a` は履歴に含まれる。
+  - 先頭は、GitHub 側からも読み戻して一致を確認した。MERGEABLE、下書きのまま。
+- worktree: `/Users/yuya/Developer/kabumori-g3-unified-schedule`（同じ PR #138 の作業フォルダ。開始時に先頭が `b244400a` と一致し、clean だった）
+- 本番: 読み取り 0 / 書き込み 0 / migration 0 / RPC 0 / Edge 0 / OAuth 0 / X・Meta・AI の呼び出し 0 / Cron 0 / merge 0 / 配備 0 / EAS 0 / 投稿 0
+
+### changed_files
+- `apps/social-mobile/src/domain/schedule-planner.ts`（R1: `rerollBatch`）
+- `apps/social-mobile/src/domain/schedule-view.ts`（**新規**、R2 / R3 の判定。import なしの純粋な関数）
+- `apps/social-mobile/src/app/(tabs)/schedule.tsx`（R1〜R3 の接続）
+- `apps/social-mobile/src/features/schedule/schedule-composer.tsx`（R2: 設定の状態を正直に表示）
+- `apps/social-mobile/src/domain/types.ts`、`apps/social-mobile/src/data/supabase-repository.ts`（R3: 読み取り専用の `brandId`。各 1 行）
+- `apps/social-mobile/tests/schedule-planner.test.mjs`、`apps/social-mobile/tests/schedule-view.test.mjs`（**新規**）
+- `docs/postona/unified-ai-manual-scheduling-v1-20261011.md`（実装に合わせて追記）
+- 新しいファイル 2 つ（`schedule-view.ts` と `schedule-view.test.mjs`）の理由: R2 と R3 の判定は、画面のコンポーネントの中では単体で検証できないため。画面から切り出した純粋な関数にして、修正前の挙動で失敗することをテストで確認した。TASK の範囲（G3 の画面・計画ロジック・読み取り専用の型とテスト）の内側。
+
+### R1 — 「再抽選」で編集・並び替え・取り消しが巻き戻る → 修正
+- 原因（確認）: `rerollBatch` が、元の `batch.request.texts` から全件を作り直し、取り消し済みの予定の ID も作り直していた。
+- 修正:
+  - `rerollBatch(batch, context, current)` は、現在の下書きを受け取り、**まだ取り消されていない予定の時刻だけ**を置き直す。
+  - 本文（編集・並び替え後のもの）、ID、所有（アカウント・ブランド）はそのまま。
+  - 取り消した予定は終端の状態のままで、再び現れない。
+  - 初めの `shuffleContent` が、後の編集を上書きすることもない。
+  - 置き直しは、バッチ自身の期間・時間帯・曜日・除外日・最小間隔・1 日の上限・他の予定の占有を守る。入りきらなければ、一部も変えずにエラーにする（戻り値に下書きを含めない）。
+  - 指定日時と間隔指定は、これまでどおり再抽選しない。別のアカウントの下書きが混ざっていたら拒否する。
+- 画面側は、置き直した予定だけを現在の下書きに反映する（全件の入れ替えをやめた）。
+- テスト（修正前は 4 件が失敗、修正後はすべて成功）:
+  1. 3 件のランダム → B を編集 → 本文を並び替え → A を取り消し → 再抽選 → 有効な予定はちょうど 2 件、編集・並び替えた本文のまま、A は復活しない、ID は同じ、時刻だけが変わる
+  2. 再抽選を繰り返しても、本文・ID・所有が変わらず、同じ入力なら同じ結果
+  3. `shuffleContent: true` で作った場合でも、編集が上書きされない
+  4. 入りきらないときは何も返さない／指定日時と間隔指定は対象外
+  5. AI の枠: 取り消した枠は取り消しのまま、件数も同じ
+
+### R2 — ワークスペースを切り替えたあとに、古い AI 設定が残る → 修正
+- 原因（確認）: 画面の `ai` の state は、読み取りが `ready` のときだけ更新されていた。ブランドが変わっても前のブランドの頻度と同意が残り、新しい読み取りが失敗すると、そのまま残り続けた。
+- 修正（`schedule-view.ts`）:
+  - AI の頻度・所有者の `approvalMode` を、読み取ったブランドの ID と読み込みの通し番号に結びつけた。
+  - ブランドが変わった時点で、前のブランドの値は即座に使われなくなる。読み込み前・読み込み中・設定なし・読めない・権限なしは、初期値（週 3 回、同意なし）と本当の状態の表示になる。
+  - 前のブランドや前の読み込みの遅れて届いた結果は捨てる。A → B → A でも、最初の A の結果は新しい A に使われない。
+  - フォームに、状態を正直に表示する（「まだ読み込んでいません」「まだありません」「確認できませんでした」「権限が確認できませんでした」）。
+  - 認証・G5 の所有確認のコードには触れていない。同じブランドの複数のアカウントでは、ブランド単位の設定を共有する（意図どおり）。
+- テスト（修正前の挙動に戻すと 3 件が失敗）: A → B の切り替え直後に B が A の値を持たない、遅れて届いた A の結果は無視、B の読み取り失敗・権限なし・設定なしで A を引き継がない、A → B → A、ブランド無し、画面がこの関数を使っていること（静的）。
+
+### R3 — ブランド単位の予約が、選択中の X アカウントの投稿として扱われる → 修正
+- 原因（確認）: 画面が、`accountId: 'unknown'` の行をすべて「選択中のアカウント」に付け替えていた。Threads や別の X に切り替えても同じ行が出て、そのアカウントの競合の確認に入っていた。
+- 修正:
+  - 既存の RLS つきの `scheduled_posts` の読み取りで、すでに取っている `brand_id` を、読み取り専用の `brandId` として行に付けた（新しい DB の読み取り・Edge・RLS・書き込みは無し）。
+  - 画面は、本番の行を `classifyServerPosts` で分ける:
+    - アカウントに結びついた行 → そのアカウントの行としてだけ扱う。
+    - アカウントに結びつかない行 → 「投稿先アカウント未特定／ブランド単位」として、別の欄に読み取り専用で表示する（詳細画面への移動は維持）。アカウントごとの競合の確認・再配置・同意には入れない。
+    - 別のブランドの行 → 表示しない。ブランドが分からない行 → 件数だけ警告する（隠さないが、付け替えもしない）。
+  - 見本データのモードで、アカウントが分かっている行は、これまでどおりそのアカウントで絞り込む。読み込み中・取得失敗・見本データの扱いは変えていない。
+- テスト（修正前の挙動に戻すと 3 件が失敗）: 付け替えない、別の X や Threads に切り替えても同じ行が付け替わらない、別ブランドには出ない、競合の確認と解消に入らない、見本データの絞り込み、他のブランドのアカウントに結びついた行、アカウントなし。
+
+### 画面での確認（見本データのモード、本番には接続していない）
+- ログイン画面を飛ばす一時改変を `_layout.tsx` に入れ、確認後にバックアップから戻した（元のバイト列と一致を確認。コミットしていない）。
+- R1: A・B・C の 3 件を作成 → A を取り消し → B を「Bを編集した」に編集 → B と C を入れ替え → 「再抽選」を 2 回
+  - 10/22 10:15 C ・ 10/25 20:40 B → 10/15 10:45 C ・ 10/24 12:55 B → 10/17 14:35 C ・ 10/24 13:15 B
+  - 日時だけが変わり、本文の編集と並び替えは維持。A は復活せず、まとまりは「2件」のまま。
+- R2: AI 自動予約のフォームに「まだ読み込んでいません。初期設定（週3回）」、「自動投稿の同意なし」と表示。
+- R3: 見本の予約は選択中のアカウントに 1 件だけ表示され、ブランド単位の見出しは出ない。
+- 本番の接続が無いので、R2 のブランドの切り替えと R3 の本番の行は、画面ではなく、純粋な関数のテストで確認した。
+
+### テスト
+- アプリ全体の `tests/*.test.mjs`: **269/269**（前回の 250 に 19 件を追加: schedule-planner +5、schedule-view 14）。
+- `src/domain/*.test.ts`: **22/22**。
+- `tsc --noEmit` エラーなし、eslint（変更した 8 ファイル）エラーなし、`git diff --check` クリーン、追加行の秘密情報スキャン 0。
+- 最新 main の merge 後にも、269/269・22/22・tsc を再確認した。
+- 画面と計画ロジックが、保存・RPC・端末への保存・投稿を呼ばないことの静的テストも、これまでどおり成功している。
+- open な PR と、変更ファイルの重なりはない（確認済み）。
+- Vercel のチェックは FAILURE。以前の先頭では、アカウント全体の利用上限（レート制限）によるものだった。今回の説明文は取得できなかったため断定しない。アプリのテストとは別。netlify のプレビューは SUCCESS。
+
+### safety_checks
+- 保存・予約・投稿・同意の付与・権限の変更は 0。「プレビュー／未予約・投稿されません」と、再起動すると消える旨の表示は維持。
+- AI 相談の「これで覚えて」を同意にしていない。AI の枠は、設定で同意があっても `publishable: false`。
+- 画面の読み取りは、AI 相談の保存設定（本人の RLS）と、これまでの予約・アカウントの一覧だけ。
+- 認証・DataProvider・G5・G4・H1・PR #127・PR #123・Edge・migration には触れていない。下の 5 つのタブは変更なし。
+
+### remaining_issues / next_recommendation
+- 実際の保存と投稿の前に必要なもの（変更なし）: G5 の利用権の確認、G4 の本人証明、計画の表・RPC のソース、G3 + G4 + G5 をまとめた Sol（高）のレビュー、ユーザーの承認による適用。
+- K3 で、この 3 点の修正を受け入れるか判断する。ローカルの UI と計画ロジックだけなので、独立レビューは不要と考える。
 
 ---
 

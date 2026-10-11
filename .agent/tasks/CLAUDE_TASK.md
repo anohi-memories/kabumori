@@ -1,3 +1,236 @@
+# G2 CURRENT TASK — 新方式の朝刊・大引け X／アプリ配信切替：本番前 READ-ONLY 監査
+
+- task_id: kabumori-shared-report-x-app-cutover-preflight-20261011
+- owner: claude
+- slot: claude-2
+- status: review_required
+- next_owner: chatgpt
+- start_code: G2
+- finish_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Opus5.5（高）**
+- classification: read-only/source-only release preflight / NO production cutover
+- prerequisite_merged_PR110: https://github.com/anohi-memories/kabumori/pull/110
+- exact_PR110_merge_commit: 650e5183441ccb3b3356cfc087d43230628b0d78
+- prerequisite_merged_PR132: https://github.com/anohi-memories/kabumori/pull/132
+- exact_PR132_merge_commit: d2e9b03a3715f34512a451278a61929aa54a31b9
+- production_x_enabled_app_enabled: NOT AUTHORIZED TO CHANGE
+- user_priority: 事実は厳格に / AIの合理的な経済分析を積極的に許可 / 配信安定 / 無駄なAPI削減 / レビュー無限ループ回避
+
+## Why / outcome
+
+PR110（Delivery First）とPR132（Fact V2）のSOURCEはmainへ順番にマージ済み。生成成功と実配信成功は異なる。本TASKは新方式を正式な朝刊・大引けの唯一の配信元にする前に、全経路を証拠付きで検証し、事故が起きない限定切替手順を作ること。今回のTASKに本番切替の承認は無い。**このTASKだけではX実投稿、consumer settings変更、旧方式停止、Edge/Cron deploy、DB/RPC/migration、Auth/secret/provider/模型変更を一切実行しない。**
+
+## Scope / concrete checkpoints
+
+1. Fresh origin/mainとPR110/132のマージ実体を検証し、PROJECT_RULES.md / AGENTS.md / .agent/ORCHESTRATION.md / ACTIVE_TASK / CURRENT_STATE / 自TASK過去Reportを読む。G2専用独立worktree/checkoutのみ。G1/G3/G4/G5/G6/G7/G8/G9/G10/H1〜H5のTASK・Report・branch・worktree・dev serverは変更禁止。G5優先の共通DB/Auth・G6 AI Provider本番切替・G8 news / G9 API最適化も触れない。
+2. 朝刊と大引けの新方式の生成周期、saved `market_report_cycles` / `market_report_packets` / `market_report_generation_traces`、旧方式の配信writer・Cron・投稿実行箇所を**ソースコード・履歴・fixture**から特定。新方式X向け `market_report_consumer_settings.x_enabled`、アプリ向け `app_enabled` を読み、切替順・権威あるwriter・同日同種の二重投稿/二重保存を避けるキーとゲートを明示する。
+3. X投稿の取り込み経路（`x-test-post`等の共有consumer）とアプリ市場レポート表示／保存経路を追跡。正しい対象・朝刊/大引け・X/アプリで本文整合、注意書き1回、Fact objectively false removed、MAX_GENERATIONS=2、MAX_MODEL_CALLS=4保持をコードと既存テストから検証。G3/G4 POSTONAの投稿・OAuthや他ブランドへの機能変更は厳禁。
+4. **個別レポート**は共通市場レポートとは別。10/7〜9の共通closeはcompleted/passed/保存済、旧方式close failed、`public.personalized_reports` の当日closeはfailedだったという旧read-only観測を事前情報として扱い、現在のソース上の「共通パケット→ユーザー保有/ウォッチ情報→個別close生成・DB保存→アプリ画面の表示→push通知」の経路・失敗点・権限を分けて確認。新方式切替で自動解決すると断定禁止。古い個別レポートを当日データと偽らない。
+5. 通知の多重送信防止、再試行/idempotency、空候補やAPI失敗時の縮退、故障時のロールバック、監視とread-back項目を列挙。事故時に安全な復旧が可能な**具体的なgate ON/OFF順序**、切替日・朝夕の実行タイミング、確認SQL/ログIDと期待値、旧方式停止条件を設計。ただし今回適用はしない。10/7〜9の旧方式はユーザー方針で修正/再生成/再配信/backfill不要。
+6. 既存のオフラインテストは必要範囲だけ実行できる（有料API、実X、実Supabase write、実通知不可）。本番SupabaseはこのTASKでは原則アクセスしない。read-only本番接続が不可欠なら接続前に独立した明示承認が必要か安全ポリシーを確認し、必要な場合は NOT_RUN と報告（本人のuser権限を勝手に使用しない）。本番設定・secret・OAuth・Cron・providerの実確認結果を推測しない。
+7. Reportは次を証拠付きで明示: source_trace（trigger/old/new/consumer）、X gate、app gate、personalized close、notification、duplicate prevention、rollback、blocking gaps（P0/P1/P2）、GO/NO_GO（本番切替可能か）、限定本番適用の具体的な**別工程TASK案**、実測オフラインtests、changed_files、commit/push/merge/deploy/prod truth。単純なread-only監査で済むなら製品ソース変更・PR作成不要。推奨として切替前の一回だけ重点Codexレビューの必要性も判断（初期からH枠を予約しない）。
+
+## Acceptance / return
+
+- OFFLINE / READ-ONLY findings only; no source refactor, no business logic / DB / API / RPC / Edge edits; no PR merged/deployed, no production toggle and no real posting.
+- 主要消費者経路を検証して未確認は「未確認」と明記。共通close成功を個別close成功と混同しない。
+- 無許可production操作を禁止したまま、切替に必要な手順・権限・ロールバック・未解決ブロッカーを報告する。
+- `## Report — current cutover preflight` へ記入し status=review_required / next_owner=chatgpt に変更。対象ACTIVE_TASKとCURRENT_STATEのG2部分のみ更新、全履歴保護。
+- 完了したら **かぶモリアプリG2のちゃへ K2** を返す。次の本番切替はChatGPTがReport確認後、別途ユーザー承認を得ること。
+
+## Report — current cutover preflight
+
+### 前提と方法
+
+- 読んだソース: `origin/main` `dd30d7ab`（PR110 のマージ `650e5183`、PR132 のマージ `d2e9b03a` を含むことを確認）。G2 専用の読み取り用 worktree（一時フォルダ、detached）で読んだ。
+- 本番への接続: **NOT_RUN**。本番の DB・Cron・設定・デプロイ済みの版は、このタスクでは確認していない。以下で「本番」と書いた値は、すべて過去のタスクが `.agent/` に残した記録か、リポジトリ内の文書によるもので、**現在の値としては未確認**。
+- 製品ソースの変更: 0。PR 作成: 0。マージ・デプロイ・本番の設定変更・X 投稿・通知: 0。
+- 読み取りの一部（X 経路、アプリ・個別レポート・通知、生成スケジュールとゲート）は、読み取り専用の調査用サブエージェント3つで並行に行った。重要な箇所（X の分岐、共有パケットが無いときの扱い、個別レポートの20人上限と失敗処理）は、自分でソースを開いて確認した。
+
+### source_trace（起動元・旧方式・新方式・消費者）
+
+| 段階 | 起動 | 時刻（JST） | 根拠 |
+|---|---|---|---|
+| データパケット（朝刊／大引け） | pg_cron `market-report-data-packet-morning` / `-close` | 平日 07:50 ／ 16:15（再試行の Cron なし） | `.agent/CODEX_REPORT.md:1748-1749`（本番の記録。リポジトリに Cron の定義なし） |
+| 共通の分析（新方式） | pg_cron `market-report-analysis-morning`(+`-retry`) / `-close`(+`-retry`) | 07:55・08:05 ／ 16:20・16:35 | `.agent/CODEX_REPORT.md:1750-1753` |
+| X の朝刊・大引け | 毎分の `dispatch-scheduled-posts` → `x-test-post`。投稿時刻は `claim_due_post` の中の `plan_morning_report` / `plan_close_report` が `morning_report_settings` / `close_report_settings` の時刻で `scheduled_posts` を作る | 朝刊 08:20、大引け 17:00（リポジトリの初期値は 16:00、本番は 9/11 に 17:00 へ変更した記録） | `x-test-post/index.ts:3979`、`20260829030000_add_morning_report.sql:126-158`、`20260830112826_…:75-106`、`.agent/CODEX_REPORT_2.md:4838-4840` |
+| アプリの個別レポート | pg_cron `personalized-reports-morning` / `-close` | 08:35 ／ 17:15 | `.agent/CODEX_REPORT_2.md:3427`、`docs/market-report-shared-platform/DESIGN.md:39-40` |
+| 通知の送信 | pg_cron `send-push-notifications-dispatch`（毎分） | 毎分 | `20260910163500_add_send_push_notifications_dispatch_cron.sql:24-52`（リポジトリにある唯一の Cron） |
+
+- 生成から使う側までの順序: 07:50 データ → 07:55／08:05 分析 → 08:20 X → 08:35 アプリ。大引けは 16:15 → 16:20／16:35 → 17:00 → 17:15。時刻の上では、再試行の後でも X とアプリに間に合う。
+
+### X のゲート（`market_report_consumer_settings.x_enabled`）
+
+- **読む場所:** `x-test-post/index.ts:4270-4287` → `loadSharedMarketReport`（`shared_market_report_consumer.ts:33-65`）→ RPC `get_shared_market_report`（`p_consumer:'x'`、`20260920100000_market_report_packets_phase2.sql:322-384`）。
+- **OFF の場合:** 旧方式（x-test-post の中での生成）がそのまま動く（朝刊 `index.ts:4290-4468`、大引け `4470-4612`）。
+- **ON の場合:** 共有パケットだけを投稿する。パケットが `completed` でなければ、`SHARED_MARKET_REPORT_UNAVAILABLE` で失敗し（`shared_market_report_consumer.ts:127-134`）、**旧方式には戻らない**。再試行もない（`fail_scheduled_post` で終わる）。
+- **ゲートの読み取り自体が失敗した場合:** RPC が404 以外のエラーで2回失敗すると `SHARED_MARKET_REPORT_GATE_FAILED` になり、ゲートが OFF でもその回の投稿は失敗する（`shared_market_report_consumer.ts:54-61`）。
+- **パケットの選び方:** `(report_type, trading_date)` で一意の周期。`trading_date` は投稿予定時刻の日本の日付（`:41`）。パケットの指す先は一度決まると変えられない（`phase2.sql:140-146`）。
+- **本文:** 新方式は `formatSharedXPost` による決まった整形で、AI の呼び出しはない。注意書きは1回（`_shared/market_report_packet.ts`）。Fact の状態は、passed→'passed'、advisory→'failed'、not_run→NULL で記録する（`shared_market_report_consumer.ts:89-102`）。
+
+### アプリのゲート（`market_report_consumer_settings.app_enabled`）
+
+- **読む場所:** `personalized-reports/index.ts:223-235`（`p_consumer:'app'`）。アプリ本体（`src/`）は読まない。
+- **OFF の場合:** 旧方式（Yahoo の指数、市場の節なし、`lane: app_personalized_v1`）。
+- **ON の場合:** 指数は共有のデータパケットの値（`fresh` のときだけ）、`market_section` / `market_detail` を付ける（`shared_gate.ts:30-58`、`lane: app_personalized_v3_market_detail`）。
+- **ON で共有パケットが `completed` でない場合:** その回の実行全体を飛ばす（`index.ts:294-298`）。保有株の部分も含めて、その日の個別レポートは1件も作られず、通知も出ない。個別レポートには再試行の Cron がない。
+
+### 個別レポート（大引け）— 共通の大引けとは別物
+
+- **流れ:**
+  1. 有効な `tracked_stocks` を利用者ごとにまとめる（`index.ts:277-288`）
+  2. ゲートを判定する（`:294`）
+  3. 利用者ごとに `personalized_reports` に `generating` の行を作って取得する（`(user_id, report_type, trading_date)` で一意、`:344-353`）
+  4. 生成1回と Fact1回、計2回の呼び出しで作る（モデル `gpt-6-luna`、`report_logic.ts:67, 1337-1386`）
+  5. `completed` / `failed` を保存する（`:401`）
+  6. completed のときだけ通知を予約する（`:402-405`）
+- **アプリの表示:** RLS（行ごとの閲覧権限）により、利用者に見えるのは自分の `completed` かつ `fact_status='passed'` の行だけ（`20260911230000_personalized_reports.sql:60-64`）。「今日」の表示は `trading_date === 今日（日本時間）` のものだけで、古いレポートを今日の分として見せることはない（`src/app/(tabs)/reports/index.tsx:26-28, 82-84`）。
+- **大引けが failed になる主な理由（ソース上）:**
+  - 全銘柄の株価が取れない `PRICES_UNAVAILABLE`。大引けは、Yahoo にその日付の日足がまだ無いと株価なしになる（`report_logic.ts:174-179, 545`）。
+  - 生成の不備、ローカル検査、Fact の不合格。
+  - OpenAI の失敗。
+- **10/7〜9 の大引けの失敗:** 旧の観測（共通の大引けは成功、旧方式の大引けと個別の大引けは失敗）がどの理由によるものかは、本番の記録を読んでいないので**未確認**。新方式に切り替えれば自動で解決するとは言えない。個別レポートの株価は、新方式でも Yahoo の個別銘柄の日足に頼る（`index.ts:318-319`）。
+
+### 通知
+
+- 予約は `enqueue_personalized_report_notification`（completed かつ Fact passed のときだけ。`20260911230000_…:202-252`）。部分ユニーク索引 `notifications_personalized_report_once`（`:79-81`）と `on conflict … do nothing` で、同じレポートの通知は1件だけ。
+- 送信は毎分の dispatcher。取得は `FOR UPDATE SKIP LOCKED` で、15分を超えた送信中の行は「結果不明」として失敗にし、送り直さない（`20260912100000_harden_push_notification_claims.sql:43-173`）。送信前の失敗だけ最大3回まで再送する（`push_send_logic.ts:87-116`）。
+- 再実行しても、レポートの取得（一意キー）と通知の索引の2段で重複を防いでいる。
+
+### 二重投稿・二重保存の防止
+
+| 対象 | 防いでいるもの | 残る点 |
+|---|---|---|
+| X の朝刊・大引け | `scheduled_posts` の一意キー（`(brand_id, schedule_date, post_type, slot_no)` の版が本番に適用済みかは未確認）、`claim_due_post` の `FOR UPDATE SKIP LOCKED`、ゲートの分岐は排他（ON なら必ず return か throw） | `morning_report_runs` / `close_report_runs` に一意キーはない。パケットを「使用済み」にする記録もない。2つ目の `scheduled_posts` 行ができれば、同じパケットを2回投稿できる |
+| 共通の分析 | 周期ごとに1つのパケット（`cycle_id` が一意）、`already_completed` で再生成しない | — |
+| 個別レポート | `(user_id, report_type, trading_date)` が一意 | 失敗・生成中の行は再実行で作り直されない |
+| 通知 | 部分ユニーク索引 | — |
+| 旧方式との重複 | ゲートの分岐が排他なので、1つの予約で旧と新の両方は動かない | リポジトリ外の dispatcher や、本番だけにある予約関数の中身は未確認 |
+
+### 見つかった問題（P0 / P1 / P2）
+
+**P0（切替の前に必ず解決すること）**
+1. **新しいコードが本番にデプロイされていない可能性が高い。**
+   - 最後に確認した版（2026-10-08、このセッションで読み取り）: `market-report-analysis` v28、`x-test-post` v141、`personalized-reports` v42。いずれも PR110/132 のマージより前の版。
+   - 今のままゲートを ON にすると、次のようになる:
+     - X は新しい整形（注意書き・ポイント0〜3）と新しい Fact の状態の記録なしで投稿する。
+     - 分析は Delivery First・Fact V2 の前の判定のままになる。
+   - `x-test-post` は、マージ済みでまだデプロイしていない他の PR も一緒に出てしまう（過去の記録）。デプロイ前に、デプロイ済みの中身との差分を確認する必要がある。
+2. **本番の実際の状態がどれも未確認。** Cron の中身と時刻、X の投稿時刻の設定（大引け 17:00 か）、`is_active`、ゲートの値（記録上は両方 false）、`scheduled_posts` の一意キーの版、関数の版。切替の前に読み取りで確認する（ユーザーが実行する読み取り SQL）。
+
+**P1（切替の前に方針を決めること）**
+3. **共有パケットが無い日は、X もアプリも何も出ない（安全側で止まる）。**
+   - データパケットは1回だけ、分析は2回だけ実行される。どちらも失敗すると、その日は X の投稿もアプリの個別レポートもすべて止まり、旧方式には戻らない。
+   - 「配信安定」の方針とぶつかる。対策の候補（どれも別の承認が必要）:
+     - 分析の3回目（例 08:12・16:50）とデータパケットの再試行の Cron を足す（`claim_market_report_analysis` は3回まで許可済み）
+     - パケットが無いとき、アプリは保有株の部分だけでも作るように変える
+4. **個別レポートは1回の実行で20人まで。** `MAX_USERS_PER_RUN = 20` を `user_id` の順で切るので、21人目以降は永久に作られない（`index.ts:56, 289`）。再実行しても同じ20人が「作成済み」で飛ばされるだけ。本番の利用者数は未確認で、20人を超えるなら P0。
+5. **通知の予約が失敗すると、完成したレポートが failed になる。** 保存のあとに通知の予約が例外になると、利用者ごとの catch が `status:'failed'` に上書きする（`index.ts:401-405, 427-433`）。本文はあるのに、アプリからは見えなくなる。
+6. **生成中で止まった行が残り続ける。** 実行が途中で止まると `generating` のまま残り、以後の実行で作り直されない（古い `generating` を戻す仕組みがない）。
+7. **アプリ画面の注意書きは、アプリの新しいバイナリ（EAS / TestFlight）を出すまで表示されない。** PR110 で直したのはアプリのソースなので、配布中のアプリには旧の注記が出る。
+
+**P2（監視と後続）**
+8. **X 大引け:** `X_RESPONSE_MISSING_POST_ID` のとき、行が `running` のまま残る。朝刊にはある「止まった実行の片付け」が大引けにはない（`index.ts:4852-4854`、`morning_report_retry_logic.ts:110-174`）。また、大引けの完了 RPC が失敗すると、予約が失敗扱いになる（朝刊は除外されているが、大引けは除外されていない。`index.ts:4847-4851`）。どちらも再投稿にはならないが、記録が実際と食い違う。
+9. **`market_report_packets.fact_status` は常に 'passed'。** 本当の判定は `payload.fact.ai_status` にあるので、監視はこちらを読む必要がある。
+10. **分析の再試行の間隔（10分）が、古い実行とみなす時間（600秒）と同じ。** 1回目が実行中のまま止まると、2回目が `in_progress` で飛ばされる可能性がある（推測で、観測はしていない）。
+11. **ゲートの設定を変えるには、所有者の SQL が必要。** API のロールには書き込み権限がない（`phase2.sql:391-396`）。`updated_at` は自動で更新されない。
+
+### 切替の手順案（今回は適用しない）
+
+**段階0: 読み取りの確認（ユーザーが実行する、書き込みなし）**
+- `select jobid, jobname, schedule, active from cron.job where jobname like 'market-report%' or jobname like 'personalized-reports%' or jobname in ('dispatch-scheduled-posts','send-push-notifications-dispatch');`
+  - 期待: 8つの市況・個別の Cron が上の時刻で active、dispatcher 2つも active。
+- `select is_active, window_start_time, center_time, window_end_time from morning_report_settings;`（`close_report_settings` も同様）
+  - 期待: 朝刊の中心 08:20、大引けの中心 17:00、どちらも `is_active=true`。
+- `select x_enabled, app_enabled, updated_at from market_report_consumer_settings;`
+  - 期待: 両方 false。
+- `select report_type, trading_date, cycle_status, report_status, report_attempt_count from market_report_cycles where trading_date >= current_date - 10 order by 2,1;`
+  - 期待: 直近の周期の completed の割合が分かる。
+- `select count(distinct user_id) from tracked_stocks where is_active;`
+  - 期待: 20以下。20を超えるなら P1-4 を先に直す。
+- 関数の版: `supabase functions list`。3つの関数の版とバイトを、デプロイ予定の中身と照合する。
+
+**段階1: デプロイ（別承認。ゲートは OFF のまま）**
+- 生成とも投稿とも重ならない時間（例 平日 12:00）に、`market-report-analysis` → `personalized-reports` → `x-test-post` の順に1つずつ出す。
+- それぞれ、明示した引数でデプロイし、読み戻したバイトを照合する。
+- `x-test-post` は、デプロイ済みの中身との差分を先に確認する。
+- 確認すること: 翌日の朝刊・大引けの周期が completed になり、`payload.fact.ai_status` と `removed_units` が入ること。ゲートが OFF の間は、利用者への配信は旧方式のまま変わらない。
+
+**段階2: アプリだけ ON（別承認）**
+- 平日の 12:00 に `update market_report_consumer_settings set app_enabled = true, updated_at = now();` を実行する（所有者の SQL）。最初に使われるのはその日の 17:15 の大引け。
+- 確認すること:
+  - 新しい `personalized_reports` 行の `source_basis` の lane が v3 であること
+  - `body.market_detail` のパケット ID が、その周期の `current_report_packet_id` と一致すること
+  - completed の件数と、通知の件数が一致すること
+  - 同じ利用者・日付・種類の行が1つだけであること
+  - 失敗した行の `error` の内訳
+- 2〜3営業日（朝刊・大引けの両方）、問題がないことを見る。
+
+**段階3: X も ON（別承認）**
+- 平日の 12:00 に `x_enabled = true`。最初は 17:00 の大引け。
+- 確認すること:
+  - `close_report_runs` の `model_used='shared_market_report'`、`x_post_id` があること
+  - `market_data.sharedMarketReport.reportPacketId` が、アプリの行のパケット ID と同じであること
+  - X の本文の末尾に注意書きが1回あること
+  - 同じ日・同じ種類の `scheduled_posts` が succeeded で1件であること
+- 翌朝 08:20 の朝刊も同じように確認する。
+
+**ロールバック**
+- 該当のフラグを false に戻す UPDATE 1つで、次の実行から旧方式に戻る。パケットは追記だけなので、データを消す必要はない。
+- 誤った投稿が出た場合、X 上での削除はユーザーが行う。
+- アプリの誤った行は、`status='failed'` への更新で非表示にできる（別承認）。
+
+**旧方式の停止条件**
+- 旧方式のコードは、ゲートを OFF にしたときの戻り先として残す。
+- 段階3のあと、2週間程度、新方式の欠配が無いことを確認してから、旧方式の削除を別タスクで判断する。
+
+### GO / NO_GO
+
+**NO_GO（今すぐの本番切替はできない）。** 理由は P0-1（新しいコードが未デプロイの可能性が高い）と P0-2（本番の状態が未確認）。
+P1-3 と P1-4 について、ユーザーの方針（止まる日を許すか、何人まで対応するか）が決まり、段階0と段階1が終われば、段階2（アプリだけ ON）に進める見込み。
+
+### 別工程の TASK 案
+
+1. **段階0 の読み取り確認:** ユーザーが SQL を実行し、G2 が結果を読む。書き込みなし。
+2. **配信の安定化（ソースのみ）:**
+   - 個別レポートの20人上限（実行を分ける、または未作成の利用者から順に処理する）
+   - 通知予約の失敗で completed を上書きしない
+   - 生成中で止まった行の片付け
+   - 大引けの X の後始末
+   - パケットが無いときの扱いの方針（3回目の分析の Cron は別承認）
+3. **段階1 のデプロイ:** 3つの関数。`x-test-post` は差分の確認つき。
+4. **段階2・段階3 の切替:** それぞれ別承認。上の確認項目つき。
+5. **アプリのバイナリの公開:** 注意書きの表示のため。EAS はリリースの節目で行う。
+
+### Codex のレビューの要否
+
+- ゲートの切替そのものは設定の変更なので、レビューは不要と考える。
+- 別工程2（配信の安定化）でソースを直す場合、個別レポートの取得・失敗処理の境目が変わるので、そのときに1回だけ、焦点を絞ったレビューを推奨する。H 枠は今は予約しない。
+
+### 実行したオフラインテスト（`origin/main` `dd30d7ab`、手元のみ）
+
+| 対象 | 件数 | 結果 |
+|---|---|---|
+| `market-report-analysis/` | 283 | 成功 |
+| `x-test-post/shared_market_report_consumer_test.ts` | 10 | 成功 |
+| `personalized-reports/` | 129 | 成功 |
+| `market-report-data-packet/` | 42 | 成功 |
+| `_shared/`（--no-check） | 597 | 成功 |
+| `tests/app/`（--no-check） | 498 | 成功 |
+
+### changed_files・commit・push・マージ・デプロイ・本番
+
+- 製品ソースの変更・PR: なし。
+- 変更したのは、この TASK の Report、ACTIVE_TASK の G2 の部分、CURRENT_STATE の G2 の記載だけ。
+- マージ・デプロイ・本番の DB や設定の変更・ゲートの切替・X 投稿・通知・有料 API の呼び出し: **すべて0**。
+
+Recommended next owner: **chatgpt（K2）**
+
+---
+
+## Previous G2 TASK/Report history — preserved verbatim below
+
 # G2 CURRENT TASK — Fact V2 PR132: C2 3件の客観事実ガードのみ限定是正
 
 - task_id: kabumori-fact-v2-pr132-three-objective-guards-correction-20261011

@@ -15,7 +15,6 @@ import {
 } from '@/components/portfolio/portfolio-sections';
 import { PF } from '@/components/portfolio/portfolio-theme';
 import { WatchlistSection } from '@/components/portfolio/watchlist-section';
-import { TrackedStockEditor } from '@/components/tracked-stock-editor';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import { todayJst } from '@/lib/dashboard';
 import { fetchRecentReports } from '@/lib/personalized-reports';
@@ -32,6 +31,7 @@ import {
   watchlistLabels,
 } from '@/lib/portfolio-view';
 import { dataGapNotes, latestCloseReport, type PersonalizedReport } from '@/lib/report-presentation';
+import { trackedDetailHref } from '@/lib/stock-detail-view';
 import type { TrackedStock } from '@/lib/stocks';
 import { supabase } from '@/lib/supabase';
 
@@ -41,8 +41,8 @@ const BOTTOM_SPACE = 28;
 
 // The 銘柄 tab: the canonical portfolio dashboard (summary, AI overview, impact top 3, holdings) with a
 // Watchlist subview. Every figure comes from the latest SAVED close report -- no live quotes -- joined to the
-// user's CURRENT registrations (tracked_stocks), which stay editable through the existing editor. Search is its
-// own screen (/search). Holdings, watch stocks and the report load independently, so a failed report never
+// user's CURRENT registrations (tracked_stocks). A tap on a holding / watch row opens that stock's read-only
+// detail (/stock-detail), where the existing editor is one explicit button away. Search is its own screen (/search). Holdings, watch stocks and the report load independently, so a failed report never
 // hides the registrations (and vice versa).
 export default function PortfolioScreen() {
   const [view, setView] = useState<StocksView>('portfolio');
@@ -51,7 +51,6 @@ export default function PortfolioScreen() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [reportError, setReportError] = useState(false);
-  const [selected, setSelected] = useState<TrackedStock | null>(null);
   // The pull-to-refresh spinner follows a pull only, not the reload on tab focus.
   const [pulling, setPulling] = useState(false);
 
@@ -102,7 +101,9 @@ export default function PortfolioScreen() {
   const watchLabels = watchlistLabels(basis);
   const notes = dataGapNotes(basis?.snapshot ?? null);
 
-  const openTracked = (trackedId: string) => setSelected(items.find((item) => item.id === trackedId) ?? null);
+  // Viewing is not editing: the row opens the detail, which pushes onto the root stack above this tab (so the
+  // segment chosen here is still selected when the detail is closed).
+  const openDetail = (trackedId: string) => router.push(trackedDetailHref(trackedId));
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -127,7 +128,7 @@ export default function PortfolioScreen() {
               <View style={styles.holdings}>
                 <HoldingsHeader count={holdings.length} />
                 {holdings.length > 0 ? (
-                  <HoldingsList rows={holdings} labels={labels} hasReport={!!basis} onOpen={openTracked} />
+                  <HoldingsList rows={holdings} labels={labels} hasReport={!!basis} onOpen={openDetail} />
                 ) : !loading && !message ? (
                   <View style={styles.empty}>
                     <Text style={styles.emptyText}>保有銘柄はまだありません。検索から銘柄を登録できます。</Text>
@@ -157,7 +158,7 @@ export default function PortfolioScreen() {
                 flagged={watchLayout.flagged}
                 featuredTitle={watchLabels.featuredTitle}
                 basisLabel={watchLabels.basis}
-                onEdit={openTracked}
+                onOpen={openDetail}
                 onOpenNews={(newsId) => router.push({ pathname: '/news-detail', params: { id: newsId, from: 'stocks' } })}
               />
               {watch.length > 0 ? (
@@ -171,15 +172,6 @@ export default function PortfolioScreen() {
           )}
         </View>
       </ScrollView>
-
-      <TrackedStockEditor
-        stock={selected?.stocks_master ?? null}
-        existing={selected}
-        visible={!!selected}
-        onClose={() => setSelected(null)}
-        onSaved={() => { setSelected(null); void load(); }}
-        onDeleted={() => { setSelected(null); void load(); }}
-      />
     </SafeAreaView>
   );
 }

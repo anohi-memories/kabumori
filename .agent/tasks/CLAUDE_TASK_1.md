@@ -19,6 +19,19 @@
 - new_feature_PR: permitted (one source-only PR, NOT self-merge)
 - review_gate: ChatGPT K1 after implementation; Codex only if actual changes extend into auth/data-security boundaries or high-risk navigation.
 
+## G1 PR #136 — final verified merge (2026-10-11 JST)
+
+- task_id: `kabumori-stock-detail-v1-readonly-navigation-20261011`
+- result: **PASS / SQUASH MERGED / TASK DONE**. User explicitly authorized source merge of K1-accepted [PR #136](https://github.com/anohi-memories/kabumori/pull/136) into `main`.
+- PR exact accepted head `ca2477e0fdc4ba85f620e48aa7d9221e691ba485`. Atomic GitHub `squash` merge with `expected_head_sha` guard returned `merged: true`, commit SHA `f662cee90b2d18557ebd111fc5236e372ff4d9c1`. Independently read back PR `closed`, `merged=true`, `merged_at=2026-10-11T10:10:21Z`; `main` was exactly `f662cee90b2d18557ebd111fc5236e372ff4d9c1` after merge. Server accepted merge despite prior transient `mergeable=null/unknown` REST.
+- Changed files verified by inspecting resulting merge commit: 16 PR-scoped paths = 12 code/test files + 4 safe fixture UI screenshots; **zero NativeTabs menu/layout/icon paths**. Original five labels (ホーム/銘柄/ニュース/レポート/メニュー) remain unchanged. Root stack received `stock-detail` registration, and the displayed details are saved-close-only, user-scoped reads. Existing tracked editor is opened via a separate explicit action; holdings/watch/search navigation connects.
+- At premerge fresh check PR branch matched approved head, CI status SUCCESS (Vercel success), no overlap between any of 16 PR paths and main changes since PR base. Server-side protected expected-head-SHA merge completed. G1-reported Deno app **494/494 PASS**, source TypeScript no errors, `git diff --check` clean, 375pt fixture screenshots and 402pt real account Simulator smoke (earlier); ChatGPT independently reviewed source/test/screenshot and merge checks but **did not run tests**.
+- Safety: `main` source merge only. **No EAS/TestFlight/App Store update, no manual production DB/RPC/Edge/Auth change, no user-stock edit, no paid AI call or new application binary**. GitHub/Vercel integrations may automatically build/deploy when main is updated; any actual automatic production deployment outcome must be verified separately if needed, not treated as native app release.
+- Existing `src/lib/portfolio-view.ts` holding-list and impact-card stale-P&L hazard remains **separate follow-up backlog only**. New detail's registration-to-snapshot match includes quantity, average cost, cash/margin, long/short and holding/watch; old-list behavior was outside PR136. No G1 slot reserved or new TASK automatically allocated by this merge.
+- User's decision on old 10/7–10/9 close report gap remains: **do not investigate/fix old method**; new generation is ready for separately coordinated cutover. This PR neither touches nor triggers that cutover.
+- G1 final status `done`, `next_owner:none`, PR merged/closed; historical TASKs/Reports remain intact. Reallocation to G1 only with fresh task/index/worktree/conflict check.
+- AI Lab diary candidate: 銘柄検索・監視リスト・保有一覧から銘柄詳細に移動でき、閲覧と編集操作を分離。保有情報の更新後は古い評価損益を新しい登録内容に誤表示しない制御を追加。
+
 ## Purpose and user-approved direction
 
 The user accepted the watchlist/portfolio visual direction, PR #120 was squash-merged (`53678a2f1fe5e01ecde4e9988abcbd0ed573da66`) and 402pt real-data Simulator smoke checks passed for the actually observed cases (18 watch rows, saved basis, search and editor). Next requested progress in the **かぶモリ「銘柄」** workstream: implement a basic **銘柄詳細画面 V1** and a consistent flow from ポートフォリオ / ウォッチリスト / 検索 to stock detail, while separating **viewing** from **editing**.

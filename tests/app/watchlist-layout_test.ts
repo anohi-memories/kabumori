@@ -226,7 +226,9 @@ test("search and the editor are functionally unchanged and still the registratio
   assert.ok(search.includes("<TrackedStockEditor") && search.includes("stockSearchFilter(term)"));
   const screen = await code("src/app/(tabs)/explore.tsx");
   assert.ok(screen.includes("onSearch={() => router.push('/search')}"));
-  assert.ok(screen.includes("existing={selected}") && screen.includes("onDeleted="));
+  assert.ok(screen.includes("onOpen={openDetail}") && !screen.includes("<TrackedStockEditor"), "rows open the detail; the editor lives there");
+  const detail = await code("src/app/stock-detail.tsx");
+  assert.ok(detail.includes("existing={state.status === 'ready' ? state.loaded.tracked : null}") && detail.includes("onDeleted="));
 });
 
 test("the move label follows the same raw threshold as the featured rule; the UI shows two decimals so -4.99% never reads as -5.0%", async () => {
