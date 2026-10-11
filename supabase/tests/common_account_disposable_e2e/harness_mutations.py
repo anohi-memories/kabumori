@@ -14,6 +14,7 @@ REL = 'supabase/tests/common_account_disposable_e2e'
 RUNBOOK = 'docs/common-account/phase3c-disposable-supabase-proof-runbook.md'
 
 G, R, E, C, K = 'guard.ts', 'redact.ts', 'evidence.ts', 'cli.ts', 'catalog.ts'
+W, X, B, P, T, XR = 'witness.ts', 'e11_matrix.ts', 'e4_bound.ts', 'plan.ts', 'target_readback.sql', 'catalog_extended_readback.sql'
 M = [
     ('a production ref is accepted', G, "if (refOk && PRODUCTION_PROJECT_REFS.includes(ref)) reasons.push('PROJECT_REF_PRODUCTION');", ''),
     ('a reused ref is accepted', G, "else if (refOk && (ledger.used_project_refs as string[]).includes(ref)) reasons.push('PROJECT_REF_REUSED');", ''),
@@ -41,14 +42,42 @@ M = [
     ('authorization codes are kept', R, "[?&#](?:code|state|", "[?&#](?:state|"),
     ('secret-named JSON fields are kept', R, "    kind: 'field',\n    pattern: /(", "    kind: 'field',\n    pattern: /(?!)("),
     ('redaction is salted by nothing (linkable across runs)', R, "encoder.encode(`${salt}|${kind}|${value}`)", "encoder.encode(`${kind}|${value}`)"),
-    ('a PASS without evidence counts', E, "  if (result.outcome === 'PASS' && result.evidence.length === 0) return 'UNKNOWN';\n", ''),
+    ('a PASS without evidence counts', E, "  if (result.evidence.length === 0) reasons.push('NO_EVIDENCE');\n", ''),
     ('UNKNOWN counts as PASS', E, "      if (outcome !== 'PASS') reasons.push(`${id}:${outcome}`);", "      if (outcome !== 'PASS' && outcome !== 'UNKNOWN') reasons.push(`${id}:${outcome}`);"),
-    ('E4 LINKED without mitigation is accepted', E, "&& !e4.e4Mitigation) reasons.push('E4:LINKED_WITHOUT_PROVEN_MITIGATION');", "&& false) reasons.push('E4:LINKED_WITHOUT_PROVEN_MITIGATION');"),
-    ('E4 without a finding counts', E, "  if (result.id === 'E4' && result.outcome === 'PASS' && !result.e4Finding) return 'UNKNOWN';\n", ''),
+    ('E4 LINKED without mitigation is accepted', E, "        if (!e4.e4Mitigation) reasons.push('E4:LINKED_WITHOUT_PROVEN_MITIGATION');", "        if (!e4.e4Mitigation) { /* accepted */ }"),
+    ('E4 without a finding counts', E, "  if (result.id === 'E4' && !result.e4Finding) reasons.push('E4_FINDING_MISSING');\n", ''),
     ('a PR121 pass condition is reworded', K, "pass: '403 `user_banned`; no `auth.identities` row; no session',", "pass: '403 `user_banned`; no session',"),
     ('E11 loses its extra approval', K, "    extraApprovals: ['option_d_security_approval'],", '    extraApprovals: [],'),
     ('E6 claims it can be forced', K, "    forcing: 'statistical_only',", "    forcing: 'database_lock_latch',"),
     ('the harness gains a network call', C, "if (import.meta.main) {", "if (import.meta.main) {\n  await fetch('about:blank').catch(() => null);"),
+    # --- Phase 3e: H2 E11 review R1-R5 -------------------------------------------------------------------
+    ('R4 a self-declared witness record counts', W, "    if (r.self_declared) reasons.push(`WITNESS_SELF_DECLARED:${id}`);\n", ''),
+    ('R4 the two-person rule is dropped', W, "if (check.twoPerson && (!r.second_observer || r.second_observer === r.observed_by))", 'if (false)'),
+    ('R4 witness records of another run count', W, "(records ?? []).filter((r) => r.id === id && r.run_id === runId)", "(records ?? []).filter((r) => r.id === id)"),
+    ('R4 E11 no longer needs W5-W7', W, "    if (id === 'E11') for (const c of WITNESS_CHECKS) if (c.appliesTo === 'E11') needed.add(c.id);\n", ''),
+    ('R4 a mismatching witness counts', W, "    if (r.result === 'MISMATCH') reasons.push(`WITNESS_MISMATCH:${id}`);\n    else if (r.result !== 'MATCH')", "    if (r.result !== 'MATCH' && r.result !== 'MISMATCH')"),
+    ('R4 a destructive PASS no longer needs witness', E, "  if (isDestructive(result.id)) reasons.push(...evaluateWitness(context.witness, context.runId, requiredWitness([result.id], isDestructive)).reasons);\n", ''),
+    ('R4 the guard calls its inputs verified', G, "    verification: 'SELF_DECLARED_INPUTS_NOT_VERIFIED',\n", "    verification: 'VERIFIED' as 'SELF_DECLARED_INPUTS_NOT_VERIFIED',\n"),
+    ('R4 the plan stops warning that inputs are self-declared', P, "    lines.push(`  verification: ${guard.verification} (dry-run plan eligibility only; NOT verified consent, destination, reviewer, fake users or prior evidence)`);\n", ''),
+    ('R1 zero denominators are accepted', X, "    for (const d of E11_DENOMINATORS) if (!(c.denominators?.[d] > 0)) unknown.push(`E11_DENOMINATOR_ZERO:${name}:${d}`);\n", ''),
+    ('R1 an expired token may be accepted', X, "const mustRefuse = kind === 'expired_old_jwt' || target === 'guarded_writer' || target === 'auth_get_user';", "const mustRefuse = target === 'guarded_writer' || target === 'auth_get_user';"),
+    ('R1 a blind retry is tolerated', X, "  if (e.ambiguousCommit?.blindRetry !== false) fail.push('E11_BLIND_RETRY');\n", ''),
+    ('R1 cohorts need not be comparable', X, "  if (a && s && (!HEX64.test(a.schemaFingerprintSha256)", "  if (false && a && s && (!HEX64.test(a.schemaFingerprintSha256)"),
+    ('R1 cleanup may be inferred from the users row', X, "  if (e.cleanupInferredFromUsersRowOrCatalog !== false) unknown.push('E11_CLEANUP_INFERRED_NOT_MEASURED');\n", ''),
+    ('R1 a changed failure branch is only unknown', X, "    if (got === 'CHANGED') fail.push(`E11_FAILURE_BRANCH_CHANGED_STATE:${b}`);\n    else if", "    if"),
+    ('R1 recorded residue is not flagged', X, "        else if (got === 'ACCEPTED_RESIDUE_RECORDED') residue = true;\n", ''),
+    ('R1 the E11 matrix is not evaluated', E, "    const matrix = evaluateE11(result.e11);", "    const matrix = { outcome: 'PASS' as Outcome, reasons: [] as string[], residue: false };"),
+    ('R1 residue does not block Option D', E, "      if (outcomes.get('E11') === 'PASS' && evaluateE11(byId.get('E11')?.e11).residue) reasons.push('E11:STALE_TOKEN_RESIDUE_RECORDED');\n", ''),
+    ('R2 Option D no longer needs the full-decision proof', E, "      if (!proof || proof.evidence.length === 0 || proof.independentlyReviewed !== true) reasons.push(`${OPTION_D_FULL_DECISION_PROOF.id}:MISSING`);\n", ''),
+    ('R2 E11 claims the lifecycle lock again', K, "while holding only a login row latch (auth.users FOR UPDATE) -- NOT the lifecycle decision", 'under the lifecycle lock'),
+    ('R2 the E11 scope label changes', X, "export const E11_PROBE_SCOPE = 'platform_permission_fk_cascade_row_latch_probe' as const;", "export const E11_PROBE_SCOPE = 'option_d_proof' as const;"),
+    ('R3 the E4 bound is not evaluated', E, "        else for (const r of evaluateE4Bound(e4.e4Bound)) reasons.push(`E4:${r}`);\n", ''),
+    ('R3 the settle need not cover the expiry', B, "    && bound.settleSeconds < bound.configuredFlowExpirySeconds", "    && false && bound.settleSeconds < bound.configuredFlowExpirySeconds"),
+    ('R3 the last success may stand in for the expiry', B, "    && !(bound.expiredCallbackAttemptDelaySeconds > bound.configuredFlowExpirySeconds)) reasons.push('E4_BOUND_NO_CALLBACK_AFTER_EXPIRY');", "    && false) reasons.push('E4_BOUND_NO_CALLBACK_AFTER_EXPIRY');"),
+    ('R3 started flows need not be drained', B, "  if (bound.inFlightDrainVerified !== true) reasons.push('E4_BOUND_IN_FLIGHT_NOT_DRAINED');\n", ''),
+    ('R3 the order revoke -> ban -> drain -> re-check is not required', B, "  if (!Array.isArray(bound.sequence) || bound.sequence.join('>') !== E4_REQUIRED_SEQUENCE.join('>')) reasons.push('E4_BOUND_SEQUENCE');\n", ''),
+    ('R5 the per-target read-back gains a write', T, "select line from (", "insert into public.p3e_probe values (1);\nselect line from ("),
+    ('R5 the extended read-back takes a row lock', XR, "  select format('rls|%s.%s|enabled=%s|forced=%s', nspname, relname, relrowsecurity, relforcerowsecurity) as line from watched_tables", "  select format('rls|%s.%s|enabled=%s|forced=%s', nspname, relname, relrowsecurity, relforcerowsecurity) as line from watched_tables for update"),
 ]
 
 def deno(root):

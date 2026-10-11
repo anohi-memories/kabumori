@@ -42,6 +42,25 @@ test('the sample request is valid -- and still only unlocks a dry run', () => {
   assert.equal(result.execution, 'NOT_AVAILABLE_IN_THIS_STAGE');
 });
 
+test('R4: an allowed answer is self-declared dry-run eligibility; it names the witness checks still owed', () => {
+  const sample = check();
+  assert.equal(sample.verification, 'SELF_DECLARED_INPUTS_NOT_VERIFIED');
+  assert.deepEqual(sample.witnessRequired, ['W1_NEW_DISPOSABLE_PROJECT', 'W2_PROTECTED_PROJECTS_EXCLUDED', 'W3_CONNECTION_TARGET', 'W4_FAKE_USER_PROVENANCE']);
+  // H2's probe: E11 alone with FAKE approval strings is "allowed" -- still unexecutable and still owed every witness check.
+  const e11 = check(({ request }) => {
+    request.scenarios = ['E11'];
+    request.destructive_consents = { E11: destructiveConsent('E11', REF, RUN) };
+    request.extra_approvals = { option_d_security_approval: { user_approval_reference: 'FAKE-USER', independent_security_review_reference: 'FAKE-REVIEW' } };
+  });
+  assert.equal(e11.allowed, true);
+  assert.equal(e11.execution, 'NOT_AVAILABLE_IN_THIS_STAGE');
+  assert.equal(e11.verification, 'SELF_DECLARED_INPUTS_NOT_VERIFIED');
+  assert.ok(e11.witnessRequired.includes('W5_SINGLE_ROW_DELETE_TARGET') && e11.witnessRequired.includes('W6_APPROVAL_PROVENANCE') && e11.witnessRequired.includes('W7_PRIOR_EVIDENCE'));
+  assert.deepEqual(check(({ request }) => { request.scenarios = ['E1']; request.destructive_consents = {}; }).witnessRequired, [], 'an observation owes none');
+  const denied = validateRunRequest({ request: undefined, marker: undefined, markerPath: null, ledger: undefined, repoRoot: REPO, now: NOW });
+  assert.equal(denied.verification, 'SELF_DECLARED_INPUTS_NOT_VERIFIED');
+});
+
 test('default deny: no request, an empty one, or a non-object', () => {
   for (const request of [undefined, null]) {
     const result = validateRunRequest({ request, marker: MARKER, markerPath: REQUEST.project_marker_path, ledger: LEDGER, repoRoot: REPO, now: NOW });

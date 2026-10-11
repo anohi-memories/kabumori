@@ -1,8 +1,13 @@
 // Deny-by-default project guard for a FUTURE disposable-Supabase proof run (Phase 3c, offline readiness).
+// Phase 3e (H2 E11 review R4): an allowed answer is DRY-RUN PLAN ELIGIBILITY over SELF-DECLARED inputs only. The
+// marker, ledger, typed sentence and approval references are what the requester typed; nothing here verifies the
+// real project, the connection target, the reviewer, the fake-only users or prior evidence. Those are the manual
+// witness checks of witness.ts, required (and recorded) at the window before each destructive step.
 // It validates a run request, a standalone project marker and a used-project ledger, and answers which reasons
 // refuse the run. Pure: no file, network or environment access here (the CLI reads the three files and passes
 // their contents). Even an allowed request only unlocks the dry-run plan: there is no executor in this stage.
 import { EXPERIMENT_IDS, experiment, type ExperimentId } from './catalog.ts';
+import { requiredWitness, type WitnessId } from './witness.ts';
 
 export const REQUEST_SCHEMA = 'kabumori.common-account.disposable-e2e.run-request.v1';
 export const MARKER_SCHEMA = 'kabumori.common-account.disposable-e2e.project-marker.v1';
@@ -35,6 +40,10 @@ export interface GuardResult {
   scenarios: ExperimentId[];
   /** Always the same in this stage: nothing can be executed. */
   execution: 'NOT_AVAILABLE_IN_THIS_STAGE';
+  /** Always the same: the inputs are the requester's declarations, not verified facts. */
+  verification: 'SELF_DECLARED_INPUTS_NOT_VERIFIED';
+  /** Manual witness checks the selected scenarios still need at the window (none is satisfied by this answer). */
+  witnessRequired: WitnessId[];
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -55,7 +64,11 @@ function validIsoInstant(value: unknown): Date | null {
 export function validateRunRequest(input: GuardInput): GuardResult {
   const reasons: string[] = [];
   const scenarios: ExperimentId[] = [];
-  const done = (): GuardResult => ({ allowed: reasons.length === 0, reasons, scenarios, execution: 'NOT_AVAILABLE_IN_THIS_STAGE' });
+  const done = (): GuardResult => ({
+    allowed: reasons.length === 0, reasons, scenarios, execution: 'NOT_AVAILABLE_IN_THIS_STAGE',
+    verification: 'SELF_DECLARED_INPUTS_NOT_VERIFIED',
+    witnessRequired: requiredWitness(scenarios, (id) => experiment(id)?.kind === 'destructive'),
+  });
   const request = input.request;
   if (request === undefined || request === null) {
     reasons.push('REQUEST_MISSING');
