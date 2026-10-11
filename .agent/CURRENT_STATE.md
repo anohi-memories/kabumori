@@ -1,3 +1,12 @@
+## G3 NEXT — POSTONA X booking offline source candidate assigned — 2026-10-11 JST
+
+- User replied `おk` to the previous proposal to advance POSTONA from merged preview-only PR138 to safe real reservation integration. Fresh read-back: G3 previous `postona-unified-ai-manual-schedule-planner-v1-20261011` **done/none** and K3 PASS; PR138 `a9b7cd2032169ae375a4b9f3e3086e6b3a2f3ff7` merged, no live posting. Latest main HEAD at assignment `ddd71cc1fd622807c5e07e54703df4cf9221da7b`. G3 new task `postona-x-reservation-store-offline-v1-g3-20261011` **ready/next_owner claude**, recommended **Opus5.5（高）**; start G3, return K3 to POSTONA G3のちゃ.
+- Immediate deliverable: offline **X** user-authored exact/random/interval and AI frequency reservation store/create/read/edit/cancel + claim/lease source code, app typed client behind FALSE feature gate, strong negative local PG and app tests, new Draft PR (unmerged), with no main auto-migrations/real scheduled writes. Do not weaken authorization because G5 active `x_autopost` entitlement/T13 and G4 X identity provenance Issue #131 aren't released; stage3B three migrations main source do not prove production deployment.
+- G4 current Threads OAuth/manual publisher integration source TASK **ready**, protected existing Draft PR #124/#135/#139/#140; G5 current local Supabase OSS/Keycloak pilot **ready**, protected T13 PR #121. G6 production mutation/smoke area, H3 Kabumori RLS review, G8/G9, other tasks and independent worktrees all untouched. Source-only G3 candidate never deploys, posts, SQL-applies, enables grants/OAuth/Edge/Cron, merges or uses EAS. One later **Sol（高）** integrated security review and user-authorized limited X pilot required.
+- New G3 worktree MUST be freshly isolated, with git worktree/branch/PR overlap checks before any edit; no collision with G4 account detail, H5 Threads OAuth, G5 T10/T13. Old G3 TASK/Report and merge receipts completely archived verbatim under new TASK.
+
+---
+
 ## H3 C3 FINAL — PR143 independent queue/Auth/security review — 2026-10-11 JST
 
 - H3 task `kabumori-pr143-ondemand-queue-auth-security-review-20261011`: **review_required / next_owner chatgpt**, return C3 to `かぶモリアプリG2のちゃ`, recommended Sol（高）. Exact Draft PR143 head `1d0529bb68b0e60b32ce0a2cb0002872b1671177` remains open/unmerged; fresh main at review `ccad07fa679cde4f07b0d3ecb8e3658a91ea6128`, no product-file overlap since merge base.
