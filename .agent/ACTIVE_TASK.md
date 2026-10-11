@@ -117,14 +117,14 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: kabumori-personalized-report-delivery-p1-hardening-20261011
+- status: ready
+- task_id: kabumori-personalized-ondemand-background-push-v1-20261011
 - start_code: G2
 - finish_code: K2
-- next_owner: chatgpt
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: 個別レポートの配信安定化 P1（20人の上限・完成したレポートの保護・止まった生成中）を Draft PR #141（head 4bc5c0177aa74085eb488604a00e2b66c7fe527c）として作成。DB・Cron・権限の変更なし、全テスト成功、本番操作・デプロイ・マージ 0。21人以上への全員配信は複数回実行の Cron が別に必要（PARTIAL）。本番は前回の P0 が未解消のため NO_GO のまま。Report は .agent/tasks/CLAUDE_TASK.md の先頭の節。K2 の判断待ち。
+- allocation: USER PRODUCT DIRECTION 2026-10-11: shared morning/close/news automated, personalized AI **only on explicit authenticated user request**, persistent server queue/worker after app exits, private stored result and once-only completion push. K2-queued prior auto-batch P1 PR141 exact 4bc5c017 is protected OPEN/Draft/unmerged and superseded as roadmap; old Report preserved, no K2 code acceptance. G2 source-only cross-layer Draft PR + offline tests, off-by-default, no live DB/Edge/Cron/API/X/push/payment/model switch or production release. No other slot changes. Return K2 here; focused independent Sol（高） review at source-ready gate.
 - recommended_model: Opus5.5（高）
 ## Claude G3
 - owner: claude
