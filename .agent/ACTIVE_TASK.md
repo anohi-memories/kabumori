@@ -105,7 +105,7 @@
 - next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Prior G4 Opus5.5 safeguard-stopped TASK has no matching Claude completion Report and is NOT K4-done. H1 delegated DEFENSIVE_ASSESSMENT_COMPLETE was accepted at C1 and H1 is released; original G4 remains blocked pending a separate user decision on strictly read-only production metadata preflight vs maintained pause/fully reviewed future v2. No G4 task restart, production inventory/ACL/RPC/Edge write, connection suspension, real API calls, or PR121/124/126 merge is approved. G3/G5 and H2 separately preserved.
+- allocation: User decision 2026-10-11: DEFER existing-X OAuth preclaim remediation for later; prioritize other POSTONA development. Previous G4 Opus5.5-stopped TASK is NOT completed and remains blocked. H1 C1 accepted defensive evaluation, H1 done. Read-only live Supabase audit verified `authenticated` EXECUTE on legacy completion RPC; no proven X takeover/victim posting, but fake identity association/legitimate connection denial remains an open risk, NOT security PASS. PR126 v2 and G5/T9 prerequisites remain unmerged; no new ACL restriction, pause, deploy, merge or G4 restart authorized. Revisit with G5 integration or broader release, and promptly on new evidence. A separately scoped TASK and explicit user authorization are required. G3/G5/H2 protected.
 - recommended_model: Opus5.5（高） (on hold)
 ## Claude G5
 - owner: claude
