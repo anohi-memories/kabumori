@@ -47,13 +47,20 @@ import type { AppMarketDetail } from "./market_detail.ts";
 import { buildSharedConsumption, sharedGateDecision } from "./shared_gate.ts";
 import { withDeliveryPolicy } from "./delivery_policy.ts";
 import { loadMicMarketContext, micSourceBasis, toMicPacketEntries } from "./mic_market_context.ts";
+import {
+  claimReport,
+  finalizeReport,
+  MAX_USERS_PER_RUN,
+  restReportStore,
+  selectRunUsers,
+  sweepNotifications,
+} from "./delivery_lifecycle.ts";
 
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
 const YAHOO_CHART_URL = "https://query2.finance.yahoo.com/v8/finance/chart/";
 const INDEX_SYMBOLS = [{ label: "日経平均", symbol: "^N225" }, { label: BENCHMARK_LABEL, symbol: BENCHMARK_SYMBOL }];
 const PRICE_CONCURRENCY = 6;
 const TIME_BUDGET_MS = 110_000;
-const MAX_USERS_PER_RUN = 20;
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: jsonHeaders });
@@ -94,6 +101,7 @@ type Rest = {
   get<T>(path: string): Promise<T>;
   post<T>(path: string, body: unknown, prefer?: string): Promise<T>;
   patch(path: string, body: unknown): Promise<void>;
+  patchReturning<T>(path: string, body: unknown): Promise<T>;
 };
 
 function rest(supabaseUrl: string, secretKey: string): Rest {
@@ -116,6 +124,14 @@ function rest(supabaseUrl: string, secretKey: string): Rest {
         method: "PATCH", headers: headers(secretKey, "return=minimal"), body: JSON.stringify(body),
       });
       if (!result.ok) throw new Error(`REST_PATCH_FAILED:${path.split("?")[0]}:${result.status}`);
+    },
+    async patchReturning<T>(path: string, body: unknown) {
+      const result = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
+        method: "PATCH", headers: headers(secretKey, "return=representation"), body: JSON.stringify(body),
+      });
+      if (!result.ok) throw new Error(`REST_PATCH_FAILED:${path.split("?")[0]}:${result.status}`);
+      const text = await result.text();
+      return (text ? JSON.parse(text) : []) as T;
     },
   };
 }
@@ -286,8 +302,10 @@ Deno.serve(async (req) => {
       if (!tracked) continue;
       byUser.set(row.user_id, [...(byUser.get(row.user_id) ?? []), tracked]);
     }
-    const userIds = [...byUser.keys()].slice(0, MAX_USERS_PER_RUN);
-    if (userIds.length === 0) return response({ status: "completed", reportType, tradingDate, users: [] });
+    // Every user with tracked stocks is a candidate; one run takes at most MAX_USERS_PER_RUN of those not yet
+    // processed today, so repeated runs reach everyone (2026-10-11 P1-4: user 21+ used to be skipped forever).
+    const candidates = [...byUser.keys()];
+    if (candidates.length === 0) return response({ status: "completed", reportType, tradingDate, users: [] });
 
     // Gate ON: market values and the market analysis come only from the shared
     // packets; without a completed shared report nothing is generated (fail closed).
@@ -314,6 +332,17 @@ Deno.serve(async (req) => {
     const micStates = await loadMicMarketContext(db);
     const micPacketEntries = toMicPacketEntries(micStates);
 
+    const store = restReportStore(db);
+    const selection = selectRunUsers(candidates, dryRun ? [] : await store.listRows(reportType, tradingDate, onlyUser), now);
+    const picks = [
+      ...selection.fresh.map((userId) => ({ userId, staleReportId: undefined as string | undefined })),
+      ...selection.stale.map((item) => ({ userId: item.userId, staleReportId: item.reportId as string | undefined })),
+    ].sort((a, b) => a.userId.localeCompare(b.userId)).slice(0, MAX_USERS_PER_RUN);
+    // Completed reports whose notification could not be queued earlier are queued again (one row per report).
+    const notificationSweep = dryRun
+      ? null
+      : await sweepNotifications(store, reportType, tradingDate, safeError).catch((error) => ({ error: safeError(error) }));
+    const userIds = picks.map((pick) => pick.userId);
     const tickers = [...new Set(userIds.flatMap((id) => byUser.get(id)!.map((stock) => stock.tickerCode)))];
     const series = await fetchAllSeries([
       ...tickers.map(yahooSymbol),
@@ -333,22 +362,21 @@ Deno.serve(async (req) => {
     const requester = openAiRequester(openAiApiKey);
 
     const results: Array<Record<string, unknown>> = [];
-    for (const userId of userIds) {
+    for (const pick of picks) {
+      const userId = pick.userId;
       if (Date.now() - startedAt > TIME_BUDGET_MS) {
         results.push({ user: userId.slice(0, 8), status: "deferred", reason: "TIME_BUDGET" });
         continue;
       }
       let reportId: string | null = null;
+      // The final save landed (completed or failed): nothing may mark this row failed afterwards.
+      let finalized = false;
       try {
         if (!dryRun) {
-          const claimed = await db.post<Array<{ id: string }>>(
-            "personalized_reports?on_conflict=user_id,report_type,trading_date",
-            { user_id: userId, report_type: reportType, trading_date: tradingDate, status: "generating" },
-            "resolution=ignore-duplicates,return=representation",
-          );
-          reportId = claimed?.[0]?.id ?? null;
+          const claim = await claimReport(store, pick, reportType, tradingDate, new Date());
+          reportId = claim.reportId;
           if (!reportId) {
-            results.push({ user: userId.slice(0, 8), status: "skipped", reason: "ALREADY_EXISTS" });
+            results.push({ user: userId.slice(0, 8), status: "skipped", reason: claim.reason === "already_exists" ? "ALREADY_EXISTS" : "LOST_TAKEOVER" });
             continue;
           }
         }
@@ -397,14 +425,13 @@ Deno.serve(async (req) => {
         const deliveryPolicy = (update.source_basis as { delivery_policy?: { voice_status?: string; delivery_blocked_by?: string | null } })
           .delivery_policy;
         let notification: string = "not_attempted";
+        let saved = true;
         if (!dryRun && reportId) {
-          await db.patch(`personalized_reports?id=eq.${reportId}`, update);
-          if (update.status === "completed") {
-            const queued = await db.post<Array<{ notification_id: string }>>(
-              "rpc/enqueue_personalized_report_notification", { p_report_id: reportId },
-            );
-            notification = queued?.length ? "queued" : "not_queued_by_settings_or_duplicate";
-          }
+          // Saved only while the row is still generating; a failed enqueue never turns a completed report failed.
+          const finalizedResult = await finalizeReport(store, reportId, update, safeError);
+          finalized = finalizedResult.saved;
+          saved = finalizedResult.saved;
+          notification = finalizedResult.notification;
         }
         console.log(JSON.stringify({
           event: "personalized_report", reportType, tradingDate, user: userId.slice(0, 8), dryRun,
@@ -415,7 +442,7 @@ Deno.serve(async (req) => {
         results.push({
           user: userId.slice(0, 8),
           reportId,
-          status: update.status,
+          status: saved ? update.status : "superseded",
           error: update.error,
           issues: outcome.issues,
           calls: outcome.calls,
@@ -426,15 +453,15 @@ Deno.serve(async (req) => {
         });
       } catch (error) {
         const code = safeError(error);
-        if (reportId) {
-          await db.patch(`personalized_reports?id=eq.${reportId}`, {
-            status: "failed", fact_status: "pending", error: code, updated_at: new Date().toISOString(),
-          }).catch(() => {});
-        }
+        // Only a row that is still generating is marked failed: a completed report keeps its body and Fact status.
+        if (reportId && !finalized) await store.markFailed(reportId, code, new Date().toISOString()).catch(() => {});
         results.push({ user: userId.slice(0, 8), reportId, status: "failed", error: code });
       }
     }
-    return response({ status: "completed", reportType, tradingDate, dryRun, users: results });
+    return response({
+      status: "completed", reportType, tradingDate, dryRun, users: results,
+      remaining_users: selection.remaining, notification_sweep: notificationSweep,
+    });
   } catch (error) {
     return response({ status: "failed", error: safeError(error) }, 500);
   }
