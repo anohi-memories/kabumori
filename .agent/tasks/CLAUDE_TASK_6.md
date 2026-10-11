@@ -14,6 +14,13 @@
 - production_mutation_window: **RESERVED_NOT_ACTIVE**。実際の`--ledger=supabase` smokeは共有本番DBのRPC書込みを伴う。実行直前にfreshの全15枠/G5/STATEを確認し、他のACTIVE窓がなければ自枠の短い `ACTIVE` 窓（対象：このsmoke1件のai_ledger reserve→mark_sent→settleだけ）を`.agent/CURRENT_STATE.md`へCAS記録。完了/失敗/STOPで必ずCLOSED。窓記録不可なら実APIを呼ばない。
 - source_version: fresh origin/main の固定 `supabase/tests/ai_provider_claude_smoke.ts`、`docs/ai-provider/PHASE1D_ACTIVATION_RUNBOOK.md` §2手順1–3・7、Phase1a provider / Phase1b ledger。既存コードの修正や再デプロイは本TASK不要・禁止。
 
+## CRITICAL G6 SAFETY HOLD — Supabase new sb_secret REST header compatibility (2026-10-11)
+
+- **STATUS FOR LIVE: HOLD until explicitly resolved.** ChatGPT source-checked `supabase/functions/_shared/ai_provider/ledger_guard.ts`: existing `SupabaseLedgerBudgetGuard.#rpc` sets BOTH `apikey: <serviceKey>` and `Authorization: Bearer <serviceKey>`. The Phase1g runbook recommends a NEW ephemeral `sb_secret_...` key. Current Supabase official docs warn that `sb_secret` is an opaque key and is **not JWT**; using it as bearer on Data REST API may fail/reject JWT verification. Reference: https://supabase.com/docs/guides/getting-started/api-keys , Known limitations; official auth gateways route new keys via `apikey`. Fake PG/PostgREST shim tests may not detect this production incompatibility.
+- **Fail-closed:** Do not ask the user to create a new high-privilege Supabase secret yet; do not issue/borrow a legacy service_role key; do not run `--mode=live`, call any API, or invoke a real ledger RPC until compatibility is verified **without an unapproved live API call**. Do NOT replace `sb_secret` with `anon` or fall back to `--ledger=memory`. Claude workspace creation/key storage and offline plan are safe to proceed separately.
+- G6 should examine the official platform docs, actual REST auth expectations for `apikey` vs `Authorization`, the `ledger_guard.ts` fetch headers, and mocks. **Current TASK forbids source changes**. If a fix/test is needed, report `BLOCKED_KEY_COMPAT`/K6 and propose a narrow new G6 source/test-only TASK (Opus5.5（高） or Sonnet5（高） depending on complexity), separate approval for any code changes, before real production RPC smoke. Do not bypass security guard/tools.
+- User was informed in this chat while giving setup steps. This safety hold is compatible with the original one-call approval; one-call approval remains valid but must only be executed after the new-key authentication mismatch is resolved and G6 startup gates still pass.
+
 ## 背景・現在の本番状態
 
 - G6 Phase1f K6独立検証済み：本番 Supabase `wsmznyzcvmuitkglfeuj`に `ai_ledger`5表、`public.ai_ledger_*`7 RPC（service_role-only）、migration `20261010050613`、試験system-onlyポリシー **2件**あり。2026-10-11 21:55 JST、ChatGPT read-only readback 17/17 TRUE、history1、2 enabled、利用予約/利用/請求観測0。G6のPhase1f本番DB窓はCLOSED。
