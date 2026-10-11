@@ -3,8 +3,8 @@
 - task_id: kabumori-watchlist-simulator-user-login-realdata-qa-20261011
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: normal
 - type: **READ-ONLY APP QA with USER-OPERATED LOGIN**, no app implementation
 - recommended_model: **Sonnet5（中）**
@@ -60,10 +60,87 @@ The work has **two interactive stages** in ONE G1 TASK. DO NOT issue final Repor
 
 ## Report — current task
 - task_id: kabumori-watchlist-simulator-user-login-realdata-qa-20261011
-- result: NOT_RUN (waiting for G1 start and user-operated Simulator login)
-- deploy: prohibited
-- EAS: prohibited
+- result: **PASS_REAL_DATA (partial coverage — see NOT_OBSERVED rows)**. The user signed in themselves inside the Simulator; the app loaded genuine saved user-scoped records. The watchlist two-segment view behaved truthfully on every case that exists in the current data. Cases that the current data does not contain (featured card, verified-news card, `—` row) are **NOT_OBSERVED**, not claimed. 375pt was **not run**. No bug found; no fix attempted.
+- status: `review_required` / next_owner `chatgpt` (return to かぶモリアプリG1のちゃ for `K1`)
+- date: 2026-10-11 JST (Simulator clock 9:26–9:32, Sunday)
+- base: fresh `origin/main` `920bc7a` (contains PR #120 squash `53678a2f`); independent clone; real standard app source (no fixture / auth-bypass rig)
 
+### Environment / device
+- Xcode 27.0 (27A266a), iOS 27.0 Simulator, one device: iPhone 18 Pro, **402pt** wide (the only device used; no other device booted or touched).
+- Existing installed dev client `com.anohimemories.kabumori` (no reinstall, reset, keychain or AsyncStorage clearing). Dedicated local Metro on **port 8082** (started and stopped by this task; 8081 was free and was not used; no other slot's process touched).
+- Metro host note: `localhost` bound IPv6 only and the dev client dialled 127.0.0.1; the server was restarted once with `--lan` + `REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1` (own process only).
+
+### Stage 1 / sign-in (user-operated)
+- App launched on latest main source; onboarding (local-only AsyncStorage flag) was advanced by G1 (swipe + 「はじめる」); the sign-in screen appeared; **G1 stopped there**. The user typed their own credentials in the Simulator and replied 「ログインできた」. G1 never saw, requested, typed or logged credentials. No account was created; 新規登録 was not used.
+- Startup/auth source review before launch: Simulator is `Device.isDevice=false` → push-token registration skipped (no `device_push_tokens` write). Sign-in triggers the app's normal idempotent `start_kabumori_service()` RPC (common-account enrollment; for an existing Kabumori user a no-op). The RPC response/network was **not** inspected (no network capture); noted as the one app-initiated, non-tracked-stock call on session establishment.
+
+### Real-data vs fixture vs physical
+- (a) Fixture/harness checks already completed earlier (457/457 G1 tests, 402pt + 375pt fixture Simulator passes): **not re-run**; not counted here.
+- (b) **Genuine saved session UI data actually observed: YES** (402pt). Session confirmed through the app UI only (home shows user-scoped sections; 銘柄 shows the user's saved portfolio + watch registrations).
+- (c) Physical iPhone: **not tested**. 375pt: **not run** (would need a second Simulator device and a second user sign-in).
+
+### Findings matrix (anonymized: counts / rules only; no symbols, amounts or names)
+| # | check | result | observed behaviour |
+|---|---|---|---|
+| 1 | Genuine session loaded | PASS | home/銘柄/レポート show user-scoped saved data |
+| 2 | NativeTabs = ホーム / 銘柄 / ニュース / レポート / メニュー | PASS | five tabs; 銘柄 selected on both segments |
+| 3 | Initial segment = ポートフォリオ | PASS | portfolio card + AI summary + holdings impact rendered on first entry |
+| 4 | Segment switch ポートフォリオ ⇄ ウォッチリスト | PASS | internal switch only; header eyebrow changes PORTFOLIO↔WATCHLIST; bottom tab stays 銘柄; portfolio layout unbroken |
+| 5 | Watch count shown vs rows | PASS | count badge = **18**; **18** rows counted over two screens |
+| 6 | Each stock exactly once, none silently omitted | PASS | 18 distinct codes, no duplicate row; no featured/list double-listing |
+| 7 | Holdings not mislabelled as watch | PASS | the 2 held stocks do not appear in the watch list; editor of a watch row shows 登録方法=監視 |
+| 8 | Saved close, two-decimal signed %, colours | PASS | every row price + `±x.xx%`; positive green / negative red pills; 18/18 had data |
+| 9 | Basis date / no live claim | PASS | footer states the saved-close basis (`10/6 終値ベース（保存済み大引け）`, "not real-time") on Sunday 10/11 |
+| 10 | Basis equals latest *saved close report* | PASS | レポート list: latest 大引けレポート = 10/6; 10/7–10/9 have 朝刊 only → "10/6" is truthful (see data note below) |
+| 11 | Portfolio totals vs 10/6 close report detail | PASS | valuation / day P&L / day % / unrealised P&L on 銘柄 equal the 10/6 report detail cards |
+| 12 | Watch row values vs report detail | NOT_OBSERVED | report detail has no per-watch price view in the UI; no second in-app source to compare |
+| 13 | Featured card ( \|chg\| ≥ 5.0 ) | NOT_OBSERVED | max \|chg\| among the 18 rows is below 5.0, so correctly 0 featured cards; the ≥5 path was not exercised on real data |
+| 14 | Verified stock-linked news card / CTA / back to 銘柄 | NOT_OBSERVED | no watch-linked verified news in current data; home also showed no holding-news; CTA path not exercised |
+| 15 | Rest-count badge / no phantom group | PASS (case 0 featured) | with 0 featured the single group is titled 監視銘柄 with badge 18 = all stocks; no 「その他の監視銘柄」 group. The rest-count case with ≥1 featured is not observed |
+| 16 | `—` for missing report rows | NOT_OBSERVED | all 18 rows had a saved price |
+| 17 | Search opens without registering | PASS | search icon → 銘柄を探す screen; nothing typed or registered; もどる returned to 銘柄 with ウォッチリスト segment preserved |
+| 18 | Tracked-stock editor opened without save/delete | PASS | opened on one row (type 監視; target-price value equal to the row's 買 line), closed with 閉じる; 変更を保存 / 登録を解除 never pressed |
+| 19 | Read-only refresh | PASS | pull-to-refresh spinner, list identical after refresh (count 18) |
+| 20 | Visual: long names, avatars, pills, safe area, bottom tab | PASS | long corporate names ellipsise cleanly (`…`), tinted fallback avatars legible, pills aligned, last row clears floating tab bar, footer note visible |
+| 21 | 375pt | NOT_RUN | see above |
+
+### Data-side observation for K1 (not an app defect)
+- The latest *saved* 大引けレポート is 10/6 while today is 10/11; 10/7–10/9 close reports are absent from the user's saved list (only 朝刊 for 10/7–10/9). The app labels this truthfully (`10/6 終値ベース`), but watch prices are therefore ~3 trading days old. This is upstream report generation/saving (cf. open PR #110 about 10/7 false-positive handling), not the watchlist UI. Worth a K1 decision on whether stale-basis wording should be more prominent (currently footer only).
+
+### Bugs
+- None observed. (An iOS keyboard-intro sheet appeared on the search screen; it is an OS/Simulator dialog, not the app.)
+
+### changed_files
+- `.agent/tasks/CLAUDE_TASK_1.md` (this Report + status) and `.agent/CURRENT_STATE.md` (G1 row) only. No app source, config, dependency, asset or native change.
+
+### test run status
+- No automated tests were run or claimed (QA-only). The prior 457/457 is a separate fixture result.
+
+### commit_hash / push
+- Report commit on `main` (`agent: G1 watchlist user-login real-data simulator QA report`); no PR (QA-only, no source diff). Hash is in `git log` of `.agent/tasks/CLAUDE_TASK_1.md`.
+
+### deploy / EAS / writes
+- deploy = 0, EAS = 0, TestFlight/App Store Connect = 0, `expo prebuild` = 0, production SQL = 0, migrations/Edge deploy = 0, AI/paid smoke = 0.
+- User-data writes performed by G1: **0** (no registration, edit, delete, settings or notification toggle touched; editor closed without saving; reports opened read-only). App-initiated on sign-in only: Supabase auth session + the idempotent enrollment RPC described above.
+
+### privacy / safety
+- No credentials, tokens, emails, symbols, names, amounts or raw responses in this Report, the repo, PR or chat. Simulator screen captures taken during QA stay only in the local session log outside the repo (`~/.claude/projects/...`), not committed or sent anywhere.
+- No other slot's process, port, device, branch or worktree touched. Scratch clone only (`.env`/`node_modules` were never staged).
+- The user's signed-in session was left in place on the Simulator (not signed out, per "no force logout").
+
+### remaining_issues
+- Featured card (≥5%), verified-news card + CTA/back-nav, `—` row and "rest-count with ≥1 featured" cannot be exercised on real data until the data contains them; they remain covered by the 457/457 fixture tests + earlier Simulator fixture passes only.
+- 375pt on real data and a physical iPhone pass are not done.
+- Stale saved-close (10/6) upstream gap as noted above.
+
+### next_recommendation
+1. Accept real-data PASS for the cases observed (rows 1–11, 15 partial, 17–20). Keep rows 12–14, 16, 21 as NOT_OBSERVED/NOT_RUN; do not escalate them to bugs.
+2. Optional: when a close report is saved with a watch stock moving ≥5% (or a verified linked news item exists), re-check the featured/news paths in a short Simulator pass (the Simulator is still signed in; G1 can start a Metro on 8082 on request).
+3. Optional (user decision): 375pt pass needs a second Simulator device + a second sign-in; physical-iPhone confirmation requires checking that the installed iPhone binary includes PR #120's JS (Metro-served builds do; a store/TestFlight build must be rebuilt first — EAS only at milestone).
+4. Separate K1 decision: whether to surface the stale basis date more prominently or to chase the missing 10/7–10/9 close reports (G2/market-report lane, PR #110).
+
+### return_to
+- かぶモリアプリG1のちゃ — send `K1`.
 
 ---
 
