@@ -141,15 +141,16 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: postona-threads-manual-text-publish-v1-20261011
+- status: ready
+- task_id: postona-threads-connect-publish-integrated-offline-v1-g4-20261011
 - start_code: G4
 - finish_code: K4
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: K4 2026-10-11 PASS_SOURCE_CANDIDATE / RELEASE_HOLD. Reviewed G4 TASK Report and Draft PR140 exact 2e75a6a842e70f3de78558681803b60935fb4251: OPEN/DRAFT/NOT_MERGED, one commit/20 bounded files. G4 reports Deno86, mobile252, disposable PG17 concurrency/ACL PASS (ChatGPT inspected code but did not rerun). Two-stage Meta TEXT manual posting, pre-provider claim/consent and status/read-back source implemented; Edge gate THREADS_MANUAL_PUBLISH_PREREQUISITES_MET=false, mobile UI flag false, no live Meta/DB/app connection or post. Production HOLD especially service_role redeem after user claim does not recheck G5 T13/owner membership at redeem within 60s grant, requires reviewed safe lifecycle/role race design with H5/G5 before real publishing; credential-expires-at reader/T10 still missing. PR124/135/139 OAuth chain and Phase2a-2/T13/Meta pilot unmet. G4 done/unreserved and historic Report preserved; no Codex review until joint integrated gate; no PR merge/deploy. Other slots protected.
-- recommended_model: Opus5.5（高） (completed)
+- report: .agent/tasks/CLAUDE_TASK_4.md#report
+- allocation: User 2026-10-11 explicitly requested proceed to POSTONA Threads authenticated connection + manual TEXT publisher integration. New G4 TASK after K4 accepted PR140 source-only. Opus5.5（高） owns isolated NEW stacked Draft PR (base protected PR140 2e75a6a842e70f3de78558681803b60935fb4251), G4-only glue/tests and P1 server permission/entitlement revocation TOCTOU remediation candidate. Locally combine protected read-only PR124 c30f246409a77080cbc03aef6c4cb72b5481e125, PR135 e38788d6677082138f0990453c7d2f00549666d0, H5 PR139 b4fa672f97592e87682671454e868a92098cbd56, PR140 and mock G5 T13 for end-to-end offline proof, WITHOUT editing original branches/worktrees/H5/G5/G3 files. Resolve / precisely block absent account-credential expiry reader, provider-aware T10 and H5 owner route, and cover revoke-after-claim-before-redeem/HTTP; never bypass true actor/T13. All real Auth/Meta/X/Supabase calls, permissions changes, DB apply, feature flags, Edge deploy, merge, external Threads post forbidden. Keep static connect/publish/app gates false. No H5 allocation, H1-H4 review only at joined Auth/DB/publish release boundary; stop if dirty worktree/overlap. K4 returns here.
+- recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
 - slot: claude-5
