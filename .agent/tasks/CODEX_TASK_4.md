@@ -3,8 +3,8 @@
 - task_id: news-improvement-a-pr129-phase7-r2-final-focused-review-h4-20261012
 - owner: codex
 - slot: codex-4
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - start_code: H4
 - finish_code: C4
 - completion_code: C4
@@ -63,3 +63,19 @@ PR129は現在OPEN/Draft/unmerged。Netlify/Vercel commit checks success（画�
 - `.agent/CODEX_REPORT_4.md` に `task_id/result/reviewed_head/changed_files(レビュー作業の編集なし)/tests/remaining_issues/safety_checks/next_recommendation/return_to/completion_code` を記載し、H4自身のTASK status`review_required`・next_owner`chatgpt`で返す。自分で最終merge/deployを決めない。
 - 末尾に正確に `ニュース改善API最適化のちゃ へ C4 を送ってください。` と書く。返却先を推測しない。
 
+
+## H4 Completion — 2026-10-12 JST
+
+- result: CHANGES_REQUIRED（P1×1 / P2×2）
+- reviewed_head: 7bf9b8a0a014ebe9a613e9ebeb0082d0b7834c54
+- tests: existing 968 PASS; independent 12 probes = 9 PASS / 3 FAIL; failures recorded as H4-R1/R2/R3.
+- findings: wrapped amount/% row misread; concurrent enrichment permits stale judgement; historical FOMC decision emitted as current action.
+- report: .agent/CODEX_REPORT_4.md
+- source_changes: none
+- production_calls: 0
+- merge/deploy: not_performed
+- next_recommendation: 依頼元ChatGPTでC4確認、G8の限定修正TASKを判断。H4から他TASKを再割当しない。
+- return_to: ニュース改善API最適化のちゃ
+- completion_code: C4
+
+ニュース改善API最適化のちゃ へ C4 を送ってください。
