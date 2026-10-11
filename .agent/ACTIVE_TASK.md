@@ -167,20 +167,18 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: in_progress
-- task_id: common-ai-provider-g6-phase1g-one-paid-call-ledger-smoke-20261011
+- status: ready
+- task_id: common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012
 - start_code: G6
 - finish_code: K6
 - next_owner: claude
-- latest_result: KEY_COMPAT_VERIFIED_NO_SOURCE_CHANGE / WAIT_HOLD_RELEASE_AND_USER_SETUP — production market-report-analysis has used sb_secret in apikey+Bearer for service_role-only RPCs since 9/17 (claims passed on 10/2 and 10/5 in prod); the smoke refuses before any paid call if the ledger RPC is rejected. No live call, no ledger RPC, paid calls 0. Report: .agent/tasks/CLAUDE_TASK_6.md
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
-- report: .agent/tasks/CLAUDE_TASK_6.md#report
-- live_smoke_gate: K6_CONDITIONAL_RELEASE — user Anthropic workspace $10 cap and scoped 0600 key saved; obtain temporary user-owned sb_secret, plan, one fail-closed live smoke only. If ledger probe rejects new secret, 0 paid calls, STOP. No retry. Previous HOLD_SB_SECRET_COMPAT — NEW sb_secret key with Authorization Bearer in ledger_guard.ts may fail JWT verification; user key creation and live smoke WAIT pending G6 offline compatibility check / narrow fix. User can complete Claude Console workspace setup. See G6 TASK safety hold.
-- production_mutation_window: RESERVED_NOT_ACTIVE (one paid Claude smoke with only ai_ledger RPC reserve/mark_sent/settle. G5-first and other-writer ACTIVE windows block; CAS open immediately prior, CLOSED immediately after)
-- user_authorization: 2026-10-11 「じゃあ進めて」 — approved ONE real Anthropic Opus 5.5 paid test with fixed synthetic payload and live Supabase budget ledger verification; not a broader production provider/cutover authorization.
-- allocation: prior Phase1f source/DB PASS, K6 accepted, now G6 Phase1g. Verify dedicated Claude Console workspace $10/month cap + scoped key, ephemeral user-managed Supabase secret test key, no secrets logged; plan=PASS then strictly ONE `--mode=live --ledger=supabase --confirm=ONE_PAID_CALL`, allowed hosts only and <$0.05 upper-bound, no retry or fallback. Independently read-back usage/cost delta and revoke ephemeral key; unexpected provider/safety/auth/conflict => STOP, no workaround. No Supabase Edge Secret/Edge/Cron/other migration/G2 release/PR merge. Past G6 TASK + Report preserved in own TASK. Return K6 only to this common-AI chat.
+- report: .agent/tasks/CLAUDE_TASK_6.md#report--phase2a
 - recommended_model: Opus5.5（高）
+- latest_result: K6 Phase1g PASS; ONE Opus5.5 paid smoke, ledger reservation1/usage1/open0, user-confirmed temporary secret revocation and ledger.env removal. Prior TASK done/none, safely preserved in G6 TASK history. OLD index stale in_progress corrected.
+- allocation: Phase2a source-only common AI provider adapter and synthetic fixture/fake-ledger tests; new G6-only independent Draft PR. No changes to G2 scalable morning/close notification pipeline, PR143, G5 Auth, G8 news, G9 model evaluations, other G/H slots.
+- production_mutation_window: FORBIDDEN (offline-only). No external paid calls, actual market report generation, Edge secrets, DB migration, Cron, deploy, merge or cutover.
 ## Claude G7
 - owner: claude
 - slot: claude-7
