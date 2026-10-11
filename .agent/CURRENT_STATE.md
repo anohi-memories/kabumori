@@ -1,3 +1,13 @@
+## G6 Phase2a assigned — common AI market report adapter offline — 2026-10-12 JST
+
+- User approved Phase2a G6 assignment in 共通AI基盤のちゃ. task_id `common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012` status **ready**, next_owner **claude**, start **G6**, return **K6**, recommended **Opus5.5（高）**.
+- Fixed previous G6 stale ACTIVE_TASK index `in_progress` after accepted Phase1g K6; Phase1g TASK itself is **done**, its one paid Opus5.5 smoke recorded in production ledger (reservation1, usage1, open0), user reported temporary sb_secret revoked and local ledger.env deleted. Phase1g history preserved in G6 TASK; do not repeat paid smoke.
+- Phase2a change scope: separate G6-only Draft PR, new adapter under shared `ai_provider` and synthetic tests/docs, disabled default, fake-transport/ledger-only. G2 owns scalable common morning/close push + PR143; G5 owns Auth, G8 news/G9 API, all protected. If shared report Edge entrypoint/API/file conflicts, STOP / K6; no cross-slot edit.
+- Production/paid API/secret/Edge/Cron/DB migration/real report changes/deploy/merge FORBIDDEN. No production mutation window. Later shadow/real connection requires distinct approval.
+- G6 independently checks fresh origin/main, all 15 slots/worktrees/PR overlaps before code; report actual tests/changed_files and return K6.
+
+---
+
 ## C4 FINAL — PR129 独立H4レビュー CHANGES_REQUIRED、G8へ3件だけ限定修正を再割当 — 2026-10-12 JST
 
 - `ニュース改善API最適化のちゃ`でC4受信、H4 TASK/ReportのID・返却先・レビューhead一致確認。独立Codex H4の結論 **CHANGES_REQUIRED P1×1/P2×2**。対象PR129 OPEN/Draft/unmerged, exact head `7bf9b8a0a014ebe9a613e9ebeb0082d0b7834c54`。
