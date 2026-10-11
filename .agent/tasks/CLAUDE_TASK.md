@@ -1,3 +1,50 @@
+# G2 CURRENT TASK — 個別朝刊・大引けレポート 配信安定化 P1（ソースのみ）
+
+- task_id: kabumori-personalized-report-delivery-p1-hardening-20261011
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- start_code: G2
+- finish_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Opus5.5（高）**
+- scope: personalized-reports limited source/test + offline-only proof
+- production_mutation_or_deploy: FORBIDDEN
+- source_release: DRAFT_ONLY
+- predecessor_report: kabumori-shared-report-x-app-cutover-preflight-20261011 / K2 PASS_PREFLIGHT and PRODUCTION_NO_GO
+
+## Product intent / non-negotiable
+
+事実は厳格に、AI独自の根拠ある経済分析は自由に、毎日の朝刊・大引けを安定配信。Fact V2 PR110/132はmainへマージ済みだが、新方式consumerは本番ON未承認。生成できた共有市場レポートと各ユーザーの個別レポートは別物。旧方式の10/7〜9の欠配/再生成/遡及配信を修正しない。
+
+## This task — correct the bounded personalized P1 bugs first
+
+K2前TASKのReportのNO_GO/P0/P1/P2全文を読み、同じ監査を繰り返さず、以下の**観測済みコード上のP1を最小限のソース変更＋差分前後テスト**で直す。
+
+1. **P1-4 / 利用者20人制限・飢餓:** `personalized-reports/index.ts` `MAX_USERS_PER_RUN=20` / `userIds.slice(0,20)` により21人目以降が恒久的に飛ばされる問題。朝刊/大引けごとにすべての対象利用者が有限の安全な複数起動でカバーできる方式（処理済みを適切に除外した先着未処理ユーザー選定、または安全なbounded partition/cursor等）を設計・実装。単に上限値を増やして110秒TIME_BUDGET超過・API費用を増やさない。利用者ごとの一意キー、実行途中の失敗・保有ゼロ・ウォッチ・並行実行・複数回再実行の整合性を必ず検証。必要Cron追加はこのTASKでは**設計だけで未適用**、実際の全利用者配信保証がない場合はPARTIALとして報告する。
+2. **P1-5 / completedの保護:** `personalized-reports/index.ts` でレポートDB保存成功後 `enqueue_personalized_report_notification` が失敗したとき、catch節が`status='failed'`に上書きして本文を非表示にする問題を修正。通知失敗を別個の状態/ログに保持し、完成した本文・Fact statusは絶対に巻き戻さない。通知再試行や重複回避は既存の一意キーと権限境界を維持し、不確実な送信結果を勝手に再送しない。
+3. **P1-6 / stale generating:** 関数停止後に`personalized_reports`行が`generating`のまま残り、通常起動で永遠に処理されない問題。安全に回復する条件（タイムアウトと実行所有者・token/fence・再実行idempotency）を明文化し、現行権限・schemaだけで誤上書きなしに改善できる場合に限りsource修正。DB migration/RPC/権限変更が必要なら**無理に実装せず、別工程の設計/具体的条件とテスト計画をReportに残す**。完成済みの上書き・他ユーザー混同・未確定通知二重送信禁止。
+4. **P1-3 / missing shared packet:** 安定性との衝突をReportに整理。現行のfail-closedを勝手に旧方式へのfallbackへ変更しない。合理的なbounded retry/保有銘柄のみの部分配信を候補として安全性（古い相場を新しい確定値と称しない、免責・Fact・パケット整合）と必要Cron/DB権限を評価し、具体策を1つ推薦。ただしconsumer gate/本番CronやX配信経路を今回勝手に変更しない。
+5. **P2 X close後処理/停止・パケットfact_statusメタ・G5/G6/Auth/権限:** 今回の製品変更対象外。追加の不具合として記録のみ、Xの実投稿・POSTONA G3/G4・共通Providerや共通アカウント機能に触れない。
+
+## Safety, tests, deliverables
+
+- 新規G2専用独立worktree/checkoutでfresh origin/mainを確認。自TASK・Report・ORCHESTRATION・PROJECT_RULES・ACTIVE_TASK・CURRENT_STATE、他PRによる対象path重複とG5/G6本番境界を確認。競合する作業があればSTOPして報告。G1/G3〜G10/H1〜H5のbranch、TASK、Report、ローカルファイル、dev serverを触らない。
+- 変更許可: `supabase/functions/personalized-reports/` の当該ソースと同ディレクトリのテストだけ。必要ならその範囲の小さな純粋ヘルパー可。migration/RLS/RPC/Edge他関数/一般共通API/X/React Native/Provider/Secrets/スケジュール/productionは変更禁止。必要なら変更可能範囲の拡張承認を求めず**安全な部分実装とblocker報告**。
+- regression: 1/20/21/45人の再実行/cursor/progress、同一ユーザー重複/並走、complete then enqueue failureでもreport.completed保持、生成失敗時failed、途中落ち生成中の安全保留、X/app共有パケットFact/注意書き/出典、認証境界。既存personalized suite・市場共通連携mock回帰。no paid AI, no live Supabase, no API production mutation, no X, no push, no deploy.
+- 変更をsource-only **Draft PR**（新規G2ブランチ・他PR重複なし・no force push）。Reportにはtask_id, changed_files, before/after reproductions, tests, commit_hash, push, merge=NO, deploy=NO, production_calls=0, residual blockers（特に実際の全利用者に配信可能か）, GO/NO_GO, production read-only P0 と実deployが未解消であること、独立Codexでレビューすべき境界を記す。
+- Opus経済分析の柔軟性とFact V2ソースを変更しない。ユーザーの投資判断や実際の保存済みユーザーデータも一切書き換えない。
+- 作業終了: `## Report — current P1 delivery hardening` を先頭TASKへ記入、status=review_required / next_owner=chatgpt、ACTIVE_TASKのG2節/CURRENT_STATE G2記録だけ更新。他歴史を保護。**かぶモリアプリG2のちゃへ K2**。
+
+## Report — current P1 delivery hardening
+
+PENDING G2.
+
+---
+
+## Previous G2 TASK/Report history — preserved verbatim below
+
 # G2 CURRENT TASK — 新方式の朝刊・大引け X／アプリ配信切替：本番前 READ-ONLY 監査
 
 - task_id: kabumori-shared-report-x-app-cutover-preflight-20261011
