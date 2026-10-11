@@ -224,8 +224,36 @@ function quote(sentence: string): string {
   return `「${characters.length > 44 ? `${characters.slice(0, 44).join("")}…` : trimmed}」`;
 }
 
+/**
+ * The end of a predicate, for the pictograph sentence break only: a verb, auxiliary or polite ending (〜た／〜だ／
+ * 〜です・ます／〜ません／〜る), or an adjective from this list (〜しい／〜ない／〜たい／大きい／高い／強い …).
+ * Here a missing adjective fails safe: the text is not split, so a date and the value after it stay in one sentence
+ * (「10月6日の売りの勢い📉 日経平均は…」). The clause check works the other way round (CLAUSE_PREDICATE_END in
+ * analysis_logic.ts): there an unknown ending must count as a boundary, so it does not use this list.
+ */
+export const PREDICATE_END =
+  "(?:[たすだんる]|(?:しい|ない|たい|よい|いい|きい|さい|かい|るい|ろい|[高安強弱多早遅鈍重軽狭広薄厚長短低良悪近遠深浅鋭速堅固硬甘辛熱寒暑太細濃淡丸若古痛偉]い))";
+
+/**
+ * A pictograph that ends a sentence: it follows a completed statement and is followed by a space and a new sentence,
+ * or by the end of the text. 2026-10-07 close: 「10月7日の日経平均は70,035.71（前日比−0.92%）でした📉 10月6日の米国
+ * 市場では…」 was read as one sentence, so the second sentence's date was taken as the Nikkei's and a correct report
+ * was rejected.
+ * "Completed" is positive: the text before the pictograph ends with a predicate (PREDICATE_END) or a move noun used as
+ * one (〜上昇／〜下落 …). A date, a subject, a particle, a noun such as 「勢い」 or
+ * another pictograph is no statement, so 「10月6日📉 日経平均は…」「日経平均📉 10月6日は…」「10月6日の📉 📉 日経平均は…」
+ * and 「10月6日の日経平均は📉 70,035.71」 keep date, subject and value in one sentence (2026-10-08 H2 B2, B2-R1).
+ * What follows must start a new sentence (it may start with a date), not continue a value or a clause.
+ */
+export const EMOJI_SENTENCE_END = new RegExp(
+  `(?<=(?:${PREDICATE_END}|上昇|下落|反発|反落|横ばい|まちまち))\\p{Extended_Pictographic}\\uFE0F?` +
+    "(?=\\s*$|\\s+(?:[0-9０-９]{1,2}月[0-9０-９]{1,2}日|[^\\s0-9０-９+\\-−＋±%％(（、。,.・はがもをのにでとへや円]))",
+  "u",
+);
+
+/** Sentences: split at 。!? and line breaks, and at a pictograph that ends a sentence (EMOJI_SENTENCE_END). */
 function sentences(text: string): string[] {
-  return normalize(text).split(/[。!?\n]/u).map((part) => part.trim()).filter(Boolean);
+  return normalize(text).split(new RegExp(`[。!?\\n]|${EMOJI_SENTENCE_END.source}`, "u")).map((part) => part.trim()).filter(Boolean);
 }
 
 export type GuardTexts = {

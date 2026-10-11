@@ -142,7 +142,6 @@ test("H1 rereview: a watch verb cannot launder an actual or speculative market c
     "米国株高を受け、日本株の反応を見る一方、買いが先行しています。",
     "米国株高を受け、日本株の反応を見ると上昇しました。",
     "米国株高を受け、日本株の反応を確認した。",
-    "米国株高を受け、日本株の上昇が続く可能性があります。",
     "米国株高を受けた動きが続くから確認します。",
     "米国株高を受けた動きが強まり続くかを確認します。",
   ]) {
@@ -150,6 +149,12 @@ test("H1 rereview: a watch verb cannot launder an actual or speculative market c
     a.x_post.closing_ja = s;
     assert.ok(localAnalysisCheck(a, input).hard.some((i) => i.includes("因果の断定")), s);
   }
+  // A cause offered only as a possibility is advisory since 2026-10-07: recorded, never laundered into "no finding".
+  const hedged = draft();
+  hedged.x_post.closing_ja = "米国株高を受け、日本株の上昇が続く可能性があります。";
+  const check = localAnalysisCheck(hedged, input);
+  assert.ok(!check.hard.some((i) => i.includes("因果の断定")));
+  assert.ok(check.warnings.includes("SPECULATIVE_CAUSALITY:1"), check.warnings.join(" / "));
 });
 
 test("H1 rereview: the narrow causal watch exemption does not exempt facts in its cause", () => {

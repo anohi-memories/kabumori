@@ -116,13 +116,17 @@ test("blocked data packet → fail closed without generation", async () => {
   assert.ok(calls.some((call) => call.url.endsWith("rpc/fail_market_report_analysis")));
 });
 
-test("Fact failure on both generations records fail_market_report_analysis and stores nothing", async () => {
+test("Fact failure on both generations is delivered once as advisory (delivery first, 2026-10-07)", async () => {
   const { calls, deps } = harness({ factPassed: false });
   const body = await (await handleRequest(request({ mode: "close" }), deps)).json();
-  assert.equal(body.status, "failed");
-  assert.equal(body.error, "ANALYSIS_FACT_FAILED");
-  assert.ok(!calls.some((call) => call.url.endsWith("rpc/complete_market_report_analysis")));
-  assert.ok(calls.some((call) => call.url.endsWith("rpc/fail_market_report_analysis")));
+  assert.equal(body.status, "completed");
+  const complete = calls.filter((call) => call.url.endsWith("rpc/complete_market_report_analysis"));
+  assert.equal(complete.length, 1);
+  const sent = complete[0].body as { p_payload: { fact: { ai_status: string } }; p_diagnostics: Record<string, string>; p_generation_calls: number };
+  assert.equal(sent.p_payload.fact.ai_status, "advisory");
+  assert.equal(sent.p_diagnostics.fact_status, "advisory");
+  assert.equal(sent.p_generation_calls, 4);
+  assert.ok(!calls.some((call) => call.url.endsWith("rpc/fail_market_report_analysis")));
 });
 
 test("already completed cycle is idempotent: no OpenAI call", async () => {
