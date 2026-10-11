@@ -167,7 +167,7 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: ready
+- status: in_progress
 - task_id: common-ai-provider-g6-phase1g-one-paid-call-ledger-smoke-20261011
 - start_code: G6
 - finish_code: K6

@@ -1,3 +1,17 @@
+## G6 production_mutation_window: ACTIVE — 共通AI基盤 Phase1g one paid Claude call through the ledger — 2026-10-11 JST
+
+- production_mutation_window: **ACTIVE** — owner **G6**, task_id `common-ai-provider-g6-phase1g-one-paid-call-ledger-smoke-20261011`, opened 2026-10-11T14:43Z (23:43 JST).
+- target: Supabase project `wsmznyzcvmuitkglfeuj`, ledger RPCs only.
+  - Scope: the fixed smoke `supabase/tests/ai_provider_claude_smoke.ts --mode=live --ledger=supabase`, run exactly once. It makes ONE ledger reservation (reserve → mark_sent → settle) for logical role `kabumori.market_report.connection_smoke` and ONE Anthropic request (Opus 5.5, fixed synthetic text, cost upper bound $0.040164).
+  - No schema, policy, grant, Secret, Edge, Cron or other change.
+- precheck:
+  - offline plan PASS
+  - all 15 slots fresh: no other ACTIVE window. G5 `in_progress` is a local-only pilot with production FORBIDDEN; G3, G4 and G9 forbid production
+  - ledger read-back (22:16 JST): 2 trial policies, 0 usage
+- Other slots: do not start production DDL on this project until this window is CLOSED.
+
+---
+
 ## G3 NEXT — POSTONA X booking offline source candidate assigned — 2026-10-11 JST
 
 - User replied `おk` to the previous proposal to advance POSTONA from merged preview-only PR138 to safe real reservation integration. Fresh read-back: G3 previous `postona-unified-ai-manual-schedule-planner-v1-20261011` **done/none** and K3 PASS; PR138 `a9b7cd2032169ae375a4b9f3e3086e6b3a2f3ff7` merged, no live posting. Latest main HEAD at assignment `ddd71cc1fd622807c5e07e54703df4cf9221da7b`. G3 new task `postona-x-reservation-store-offline-v1-g3-20261011` **ready/next_owner claude**, recommended **Opus5.5（高）**; start G3, return K3 to POSTONA G3のちゃ.
