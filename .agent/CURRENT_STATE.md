@@ -1,3 +1,10 @@
+## API最適化B G9 次工程 — PR115権利安全な置き換えDraft PR（R3）ready — 2026-10-11 JST
+
+- 「次は？」へのB側オーケストレーション判断により、前K9 PASS_OFFLINEの次工程を**G9だけ**に新規割当。G8/A、他G/H、別案件のTASKには触れない。
+- 新TASK `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011`：推薦 Opus5.5（高）、開始G9／返却K9。PR115はOPEN/Draft head `8f430557`・第三者本文18件を含む。G9 R2成果 `65c95589` は権利ゲート・評価基盤・安全な22件fixtureあり。新規mainから独立branchを作って本文のない最終tool treeを再構築し、既存のunsafe祖先コミットをmerge/cherry-pickしない。元PR115・旧branchesには無断操作しない。
+- 初回G9新TASKは本番変更/paid API/外部count_tokens/PR mergeなしのオフラインだけ。安全な差分と履歴・テストが確認できれば別の新規Draft PR作成まで許可。PR115をclose/force push/削除する権限は与えていない。旧Git refs/キャッシュに残る本文は解消できないため、所有者判断待ち。
+- PR129の新head `7bf9b8a0` はA/G8の別工程、PR116本番予定も別。このTASKでK8を読んだり判定したりしない。
+
 ## G5 Phase3h local OSS auth pilot assigned — 2026-10-11 JST
 
 - User 「すすめて」 after K5 accepted Phase3g and recommended local no-photo-downtime next step. G5 task `common-account-phase3h-local-oss-keycloak-safe-pilot-20261011` **ready / next_owner claude**, recommended **Sonnet5（高）**, start G5, return K5 to 共通アカウントG5のちゃ. TASK and ACTIVE index updated; previous G5 Phase3g K5/report histories preserved.
@@ -358,7 +365,7 @@
 | G6 | `idle` | `none` | `none` | — | `K6` | `.agent/tasks/CLAUDE_TASK_6.md` |
 | G7 | `idle` | `none` | `none` | — | `K7` | `.agent/tasks/CLAUDE_TASK_7.md` |
 | G8 | `ready` | `news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
-| G9 | `done` | `api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011` | `none` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
+| G9 | `ready` | `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011` | `claude` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
 | G10 | `idle` | `none` | `none` | — | `K10` | `.agent/tasks/CLAUDE_TASK_10.md` |
 
 - 既存索引との差分: G1（索引 `ready` / 正本 `review_required`）。各担当の記録直後で索引が未更新と見られるため、衝突を避けてこの拡張では既存枠の索引を変更していない。TASK正本を優先する。この拡張ではH1/H2/G1〜G5のTASK本文・Report・status・allocationを変更していない。
