@@ -1,10 +1,23 @@
+# K5 Phase 3e — offline E11 R1–R5 corrective source accepted for focused independent review — 2026-10-11 JST
+
+- task_id: common-account-phase3e-e11-offline-review-r1-r5-corrective-20261011
+- **K5 verdict: PASS_OFFLINE_CORRECTIVE_CANDIDATE / TARGETED_SECURITY_REREVIEW_REQUIRED**. This accepts completion of the bounded G5 implementation task, NOT the full security adequacy or any execution of E11 or application release. `PREPAUSE_BLOCKED` continues for family photos.
+- Verified Draft [PR #130](https://github.com/anohi-memories/kabumori/pull/130) exact `5943fad5f724191f6ae77f3baf826a4c7698d542`, OPEN / DRAFT / UNMERGED, based on unchanged PR122 exact `f17a47e36632fff4a1f4cfb0b860df200e1c99e1`. One new commit, 22-file **stacked delta only**, 12 modified and 10 added, all in PR122 G5-owned offline runbook/test directories; no deployed Auth, SQL migration, RPC, OAuth/Meta/X, shared service, Edge or app code changed. Direct GitHub PR contents and changed-file lists verified. PR121 and PR128 source branches remain protected original heads. GitHub Vercel success is not proof of actual Supabase Auth deletion or any native deploy.
+- Source inspected by ChatGPT at PR130 exact head: `evidence.ts` checks manual witness records for destructive experiment PASS and E11 matrix/e4Bound, with future independent full-decision proof requirement; `e11_matrix.ts` explicitly limits E11 to platform ACL/FK/cascade/row-latch and codifies Admin-vs-SQL audit/Storage/refresh/JWT negative comparisons; `e4_bound.ts` treats last successful flow delay as lower bound and requires expiry upper bound plus post-expiry refusal/in-flight drain/exclusive recheck; `witness.ts` W1–W7 records off-repo human evidence with explicit caveat that it is an attestation; `catalog_extended_readback.sql` is intended read-only supplemental metadata/cross-role/RLS/trigger/Storage inspection. These are limited *source inspection*, not independent executed proof of managed Supabase platform behavior.
+- G5 reported **Deno 56/56 typed tests, mutations 58/58 detected, local fake PostgreSQL fingerprint/readback PASS, lint/check/diff/secret scan clean**. ChatGPT did not rerun these suites. Real GoTrue/PostgREST/Storage/Auth E1–E12: **NOT_RUN**; G5 reports `remote_calls:0`, `actual_Auth_DELETE:0`, `projects_created:0`, `family_photo_paused:false`, `production_mutation:0`, `merge: NO`, `deploy: NO`.
+- H2 prior findings were R1 P1 + R2–R5 P2. Their **candidate fixes submitted**, not yet independently reverified. Need **one exact-head narrow Codex Sol（高） re-review**, no repeated broad security research. At this point H2 is **occupied by a separate G2 PR110 review (review_required)** and MUST NOT be overwritten; H1 is eligible only if genuinely free after fresh H1 TASK+Report/index check. If none safely free, wait without preempting other owner.
+- Family project `anohi-memories` remains ACTIVE/untouched per task report, no new temporary test project created. **Do not pause photo service** to proceed to dummy OAuth/OIDC/tester/E6/Option D proof: verified provider test accounts and issuer, user/independent E11 destructive approval, human restoration owner/time window, Free slot/cost/pause-resume checks and before-photo baseline are all outstanding. `managed_auth_delete` remains blocked, T13 guard PR121 remains source-only and unwired.
+- Mark G5 Phase3e **done / next_owner none**, preserve entire original task+Report history. Future work must be separately assigned in safe isolated slot; no automatic test/deploy/merge or authorization change.
+
+---
+
 # G5 — CURRENT TASK — Phase 3e E11 independent-review corrective (offline only)
 
 - task_id: common-account-phase3e-e11-offline-review-r1-r5-corrective-20261011
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - start_code: G5
 - finish_code: K5
