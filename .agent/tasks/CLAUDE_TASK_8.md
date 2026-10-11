@@ -3,8 +3,8 @@
 - task_id: news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011
 - owner: claude
 - slot: claude-8
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G8
 - finish_code: K8
 - return_to: ニュース改善API最適化のちゃ
@@ -35,16 +35,20 @@
 ## Report
 
 - task_id: news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011
-- result: not_started
-- changed_files: none
-- tests: not_run
-- commit_hash: none
-- push: not_performed
+- result: implemented (F7 root-cause fixed; F9 boundary hardened and tested; non-pending rows deliberately unchanged)
+- F7: 時刻剰余ローテーションを廃止。反例（3件・上限2・毎時起動で `(rotation+6)%3` が不変）は取得上限を「成功数」で数える方式に変更して解消。試行は最大4回/20秒、順序は「直近失敗が少ない順→乱数タイブレーク」で、呼出間隔(10/30/60分)に依存しない。未取得≤4件は毎回全件に機会があり、それ以上はwarm instanceで失敗を後回し、cold startは乱数。厳密な毎回保証は4件超では不可（永続化なしの限界）。
+- F9: DB書込み部を `candidate_body_fill.ts` に分離（スキーマ/RPC変更なし）。PATCH条件 = id一致 + status=pending_judgement + source_name=market_macro + 本文null/空、1文を原子的に更新、返却行を読み戻して本文・status一致を検証（不一致は例外）。content_hashは意図的に不更新（見出しのみ候補のhashと一致し続け重複扱いを維持）。他レーンの行は取得対象外。書込み失敗は例外→sourceErrors→次回再試行、競合で既にstatusが動いた行は"skipped"。published/no_post/generation_failed等は一切変更しない。
+- F1〜F6・F8: 変更なし（再回帰で維持）。F8個別結果: ミドルイニシャル付き反対者 `Christopher J. Waller`・`Michelle W. Bowman` を完全氏名で2票と読む／票数と氏名が食い違えば氏名省略(uncertain)／不明確なら票数を作らない — review_fixes_test の2件でPASS。
+- changed_files: important-news-monitor/{fed_statement_enrichment,fed_statement_enrichment_test,index}.ts; 新規 candidate_body_fill.ts, candidate_body_fill_test.ts
+- tests: important-news-monitor 757 pass（前回748→+新規F7 5件/F9 mock 6件、旧static 1件置換）; news_body_extraction 29 pass（Phase6 19+R1 10）; news-discovery-observer+_shared/news_discovery 162 pass; important-news-shadow 20 pass; F7新規5件は旧実装で5件FAILED→修正後PASS; lint 97（baseline同数）; typecheck既存TS2322のみ; diff --check clean。実PDF60件の再照合は今回kessan側を変更していないため未再実施（前回: facts 51/数値一致51）。
+- commit_hash: 7bf9b8a0a014ebe9a613e9ebeb0082d0b7834c54
+- push: done（claude/news-body-integration-phase7-20261011, 984eeb41→7bf9b8a0, fast-forward）
+- PR_head: 7bf9b8a0a014ebe9a613e9ebeb0082d0b7834c54（Draft/OPEN, 未merge）
 - merge: not_performed
 - deploy: not_performed
-- remaining_issues: F7時刻剰余エイリアシング、F9 guarded PATCHの正当性と既存非pending行の方針
-- safety_checks: not_started
-- next_recommendation: G8で開始し、追加限定修正・テスト完了後K8を返す。
+- remaining_issues: (1) F9の非pending行（published/no_post/generation_failed）は未解消のまま意図的に未変更。履歴保護とstatus遷移の設計が必要。(2) 判定の実行中に本文を後付けすると、その1回の判定は見出しのみで確定し得る（Phase 7前と同等。ガードで公開済み二重投稿・生成済み行の改変は起きない）。(3) fed取得間隔は10分想定だがrepo内で確認できず、実装は間隔非依存にした。(4) 4件超の永続失敗では厳密保証なし。
+- safety_checks: 本番deploy/DB schema/RPC/migration/Cron/Secrets/モデル/Provider変更なし、有料API・実DB/Edge呼出なし（DBは完全mock）; PR #116(a26e4365)・他slot/G9/kabumori-ex/kabumori-pfのbranch・worktree・TASKへ変更なし; BOJ未接続維持。
+- next_recommendation: 独立レビュー(F7アルゴリズム/F9 guarded PATCH)へ。F9非pending行は別設計判断。K8をニュース改善API最適化のちゃへ返却。
 
 ---
 
