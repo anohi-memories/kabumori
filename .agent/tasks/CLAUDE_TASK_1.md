@@ -3,8 +3,8 @@
 - task_id: kabumori-stock-detail-v1-readonly-navigation-20261011
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: normal
 - recommended_model: **Sonnet5（高）**
 - task_type: Kabumori mobile UI feature / user-scoped READ-ONLY presentation + existing editor navigation
@@ -74,10 +74,56 @@ CURRENT implementation evidence:
 
 ## Report — this current task
 - task_id: kabumori-stock-detail-v1-readonly-navigation-20261011
-- result: NOT_RUN
-- source_merge: NOT_AUTHORIZED
-- production_deploy: NOT_AUTHORIZED
+- result: **IMPLEMENTED — PR #136 (source only, NOT merged)**. 銘柄詳細 V1 を追加し、閲覧(読み取り専用)と編集(既存エディタ)を分離。ポートフォリオの保有行・ウォッチリストの注目カード/一覧行・登録済みの検索結果から詳細へ接続。
+- status: `review_required` / next_owner `chatgpt` (return to かぶモリアプリG1のちゃ for `K1`)
+- PR: https://github.com/anohi-memories/kabumori/pull/136 — head `e2dfdab5c7219aa2ff31c50c51f0125f816c16a7`, branch `claude/g1-stock-detail-v1-20261011`, base `origin/main` `4768607` (rebased onto nothing; main has since moved only by `.agent` commits)
+- date: 2026-10-11 JST
 
+### changed_files
+- 新規: `src/app/stock-detail.tsx`, `src/lib/stock-detail-view.ts`, `tests/app/stock-detail-view_test.ts`(19), `tests/app/stock-detail-screen_test.ts`(8), `docs/ui-review/stock_detail_{watch_news,holding,no_report,search_registered}_375pt.webp`(フィクスチャのみ)
+- 変更(最小): `src/app/_layout.tsx`(`<Stack.Screen name="stock-detail" />` 1行のみ), `src/app/(tabs)/explore.tsx`(タップ先を詳細へ、エディタ除去), `src/app/search.tsx`(登録済み→詳細、復帰時にバッジ再確認), `src/components/portfolio/watchlist-section.tsx`・`holdings-section.tsx`(コールバック名と accessibilityHint のみ), `tests/app/{portfolio-screen,root-navigator,watchlist-layout}_test.ts`(契約更新)
+- 未変更: `src/app/(tabs)/_layout.tsx` と NativeTabs アイコン/ラベル/順序、`tracked-stock-editor.tsx`、`report-presentation.ts`、`portfolio-view.ts`、`detail-navigation.ts`、依存関係、`app.json`、Supabase/Edge/migrations、G2/G5/news
+
+### 仕様との対応
+1. 閲覧: 保有行 / 注目カード / 一覧行 → `/stock-detail`(root Stack)。戻る・端スワイプで元の画面、ポートフォリオ/ウォッチリストのセグメントは保持（375pt/402ptで確認）。
+2. 編集: 登録済み詳細の「登録内容を編集」で既存 `TrackedStockEditor` を開く。閉じる＝変化なし、保存＝詳細を再読込、解除＝戻る。閲覧だけでは書き込まない（画面は `select` のみ、テストで固定）。
+3. 検索: 登録済み→詳細（検索語・結果は保持）。未登録→従来どおり登録エディタ。
+4. 価格の真実性: 保存済み大引けのみ。`M/D 終値ベース`＋「リアルタイムではありません」。日付は銘柄の sessionDate→price_basis_date。無し/非有限は `—`＋理由。未登録は市場データ・保有・ニュースを出さない。
+5. 保有: 株数/平均取得/現物・信用/買い・売り（登録内容）＋保存済み評価額・評価損益・当日損益。編集後は数量/取得単価が保存行と一致しない間、評価額を保留表示。
+6. ニュース: `verifiedWatchNews` と同じ基準（自身の news_ids + 同一ticker + 見出し + 日付 + 高signal）。`news_ids` のみでは出さない。CTAは既存 `news-detail`、戻ると詳細。
+7. スタイル: 既存 PF テーマ/StockAvatar。チャート・偽ニュース・AI予測なし。会社名はカード全幅（長い名前でも1文字折返しなし）。
+8. 下部メニュー: 変更なし（テストで 5 ラベル固定、詳細内にタブバー重複なし）。
+9. 旧/新レポート: 旧配信の10/7〜10/9欠落は調査・修正・監視していない（TASK 指示どおり）。
+
+### tests / checks (head `e2dfdab5`)
+- `deno test --no-check --no-lock --no-config --allow-read tests/app/` → **488 passed / 0 failed**（新規27、既存5本を契約変更に合わせ更新）。旧 457/457 とは別集計。
+- `tsc --noEmit`: `src/` にエラー無し。`git diff --check` OK。
+- 実行していないもの: EAS、実機、`deno lint`(本TASKでは未実施)。
+
+### Simulator (iOS 27 / Xcode 27)
+- **375pt**: 使い捨て iPhone SE3 + フィクスチャ rig(ネットワーク無し・実セッション非使用): 注目カード→詳細→ニュース詳細→戻る(詳細)→銘柄に戻る(ウォッチリスト保持)、無効ID、保有、レポート無し、検索経由、編集→保存→再読込、解除確認→解除→戻る。
+- **402pt**: iPhone 18 Pro（ユーザーのログイン済みセッション・実データ・読み取りのみ）: 保有詳細、監視詳細、検索(登録済み→詳細→編集を開いて閉じる／未登録→登録エディタを開いて閉じる)。保存・削除・登録は行っていない。実データのスクリーンショットはリポジトリに無し。
+- 検出して直した不具合: 詳細ヘッダで長い社名が1文字ずつ折り返す（ロゴ横の狭い列）→社名をカード全幅の行へ移動。
+
+### 残課題 / 制約
+- 実データでは検証済みニュース付きの銘柄が現在無く、ニュース経路はフィクスチャのみ。
+- 保存済み大引けが古い間（実データは 10/6 基準）は価格も古い。表記は「10/6 終値ベース」で正直（上流の配信は本TASK範囲外）。
+- 詳細の「前日比 ¥」はレポートの保存値のまま小数2桁まで表示（フィクスチャの端数。実データの整数株価では整数）。
+- 402pt のフィクスチャ画面は未保存（使い捨て 402pt 端末のアクセス許可が未付与だったため。実データ側で確認済み）。実機 iPhone は未実施。
+
+### safety_checks
+- deploy=0, EAS=0, TestFlight/App Store=0, `expo prebuild`=0, Supabase 書き込み/migration/Edge deploy=0, AI/有料API=0。
+- 実ユーザーデータへの書き込み: **0**（実セッションでは編集画面を開いて閉じただけ）。保存/解除を実行したのはフィクスチャ rig の in-memory DB のみ。
+- 他スロットのプロセス/ポート(8081)/ブランチ/worktree は未接触。使った Metro は 8082/8083(自分のもの)で全て停止、使い捨て端末は削除、ユーザーのログイン済みセッションは維持。
+- PR/Report に銘柄名・金額・認証情報なし（フィクスチャの架空値のみ）。
+
+### next_recommendation
+1. K1: PR #136 のソースレビュー（認証/データ境界の変更なし。Codex は不要の見込み。必要なら `search.tsx` の `useFocusEffect` 再確認と `stock-detail.tsx` の読み取りクエリのみ）。
+2. 合格後に merge。実データでニュース付き銘柄が出た時点で、詳細→ニュース→戻るの実データ確認を短く再実施可能。
+3. 将来(別承認): 価格履歴/チャート、AI解説は本PRに含めていない。
+
+### return_to
+- かぶモリアプリG1のちゃ — send `K1`.
 
 ---
 
