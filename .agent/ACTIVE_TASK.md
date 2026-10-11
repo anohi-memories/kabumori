@@ -105,14 +105,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-portfolio-holdings-stale-valuation-guard-20261011
+- status: ready
+- task_id: kabumori-g1-portfolio-watchlist-simulator-qa-20261012
 - start_code: G1
 - finish_code: K1
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 PR142 final PASS_SOURCE_IMPLEMENTATION after focused reload safety correction on exact PR head cfaf5dcf8d24b942988c10acf7a3959c05dba20a; PR OPEN/UNMERGED, explicit user permission still required for merge. G1 source-only: saved vs current five-field match guards holdings row P/L, impact top3 and aggregate. On focus/pull reload, valuation eligibility closes immediately and reopens only after current generation finishes; latest-wins fetch fence prevents older responses resetting the view. Claude reported focused 26/26 PASS and full app 521/521 PASS; tsc 2 existing CSS/typing diagnostics (no new), 375pt fixture pass, no native real-account edit. CI Vercel rate limited, NOT green; latest main files no PR overlap. No native five-tab, DB/Auth/API/Edge/EAS/production changes. G1 done/free subject to fresh slot/worktree review. Old report Oct7–9 gap explicitly no fix; G2 cutover untouched.
+- allocation: 2026-10-12 G1 read-only Simulator QA authorized after PR142 squash merge 4d0d0660831c1bf7403a908592c337c284332cdf. Verify 375pt/402pt portfolio/watchlist/detail navigation with synthetic stale-valuation fixtures. No real user data edits, G2/G5 work, native tabs changes, EAS or deploy. Original K1 report archived in TASK.
 - recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
