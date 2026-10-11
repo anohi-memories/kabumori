@@ -1,3 +1,11 @@
+## C4 FINAL — PR129 独立H4レビュー CHANGES_REQUIRED、G8へ3件だけ限定修正を再割当 — 2026-10-12 JST
+
+- `ニュース改善API最適化のちゃ`でC4受信、H4 TASK/ReportのID・返却先・レビューhead一致確認。独立Codex H4の結論 **CHANGES_REQUIRED P1×1/P2×2**。対象PR129 OPEN/Draft/unmerged, exact head `7bf9b8a0a014ebe9a613e9ebeb0082d0b7834c54`。
+- 3件の合成再現: **H4-R1 P1** 連結決算短信のinterleaved amount/%の途中改行で営業利益100→10と誤Fact出力；**H4-R2 P2** pending_judgementを見出しのみでSELECT後にFed本文がPATCHされると、古いno_post判定がstatus CASだけで保存される；**H4-R3 P2** 正規FOMC声明中の7月利上げと今回の据置が混在する場合に古い利上げを今回と誤抽出。いずれも本番発生の実測ではなくoffline合成再現。
+- H4自身が既存重要ニュース757、抽出29、news_discovery/observer162、shadow20（計968、重複無し）PASS、独立12 probe = 9PASS/3FAILと報告。ChatGPTはGitHub Report/ソース/PR確認のみ、独立テストを再実行していない。H4 source変更0/本番・外部API・merge/deploy無し。PR129 merge/deploy HOLD。
+- **H4** TASKは `done/next_owner:none`、レビュー枠は解放。**G8** `news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012` を `ready/next_owner:claude` で明示限定再割当（Opus5.5（高）、開始G8→完了K8、このチャットへ）。F7等旧修正を保全し、3件のfail-before/pass-afterと既存回帰のみ。PR129にcommit/pushは競合チェック後、merge/deploy/DB schema-RPC-migration-本番変更は不可。安全なら次K8で最終判断し、機械的に毎回Codex全面レビューを繰り返さない。
+- G8ニュース改善A/G9 API最適化Bの専任は維持。G9や他G/HのTASK/Report/worktreeは変更しない。PR116本番の固定コードとPR129は分離。
+
 ## G1 QA assignment — 2026-10-12 JST
 
 - User approved next G1 stage after PR142 squash merge `4d0d0660831c1bf7403a908592c337c284332cdf`.
@@ -486,7 +494,7 @@
 | H1 | `ready` | `postona-h1-threads-oauth-edge-offline-implementation-20261011` | `codex` | POSTONA｜マルチSNS化・開発統括（G4）のちゃ | `C1` | `.agent/tasks/CODEX_TASK.md` / `.agent/CODEX_REPORT.md` |
 | H2 | `done` | `kabumori-fact-v2-pr132-final-integrated-review-20261011` | `none` | かぶモリアプリG2のちゃ | `C2` | `.agent/tasks/CODEX_TASK_2.md` / `.agent/CODEX_REPORT_2.md` |
 | H3 | `idle` | `none` | `none` | none（未割当） | `C3` | `.agent/tasks/CODEX_TASK_3.md` / `.agent/CODEX_REPORT_3.md` |
-| H4 | `ready` | `news-improvement-a-pr129-phase7-r2-final-focused-review-h4-20261012` | `codex` | ニュース改善API最適化のちゃ | `C4` | `.agent/tasks/CODEX_TASK_4.md` / `.agent/CODEX_REPORT_4.md` |
+| H4 | `done` | `news-improvement-a-pr129-phase7-r2-final-focused-review-h4-20261012` | `none` | ニュース改善API最適化のちゃ | `C4` | `.agent/tasks/CODEX_TASK_4.md` / `.agent/CODEX_REPORT_4.md` |
 | H5 | `idle` | `none` | `none` | none（未割当） | `C5` | `.agent/tasks/CODEX_TASK_5.md` / `.agent/CODEX_REPORT_5.md` |
 | G1 | `review_required` | `kabumori-portfolio-holdings-stale-valuation-guard-20261011` | `chatgpt` | — | `K1` | `.agent/tasks/CLAUDE_TASK_1.md` |
 | G2 | `ready` | `kabumori-fact-v2-pr132-three-objective-guards-correction-20261011` | `claude` | — | `K2` | `.agent/tasks/CLAUDE_TASK.md` |
@@ -495,7 +503,7 @@
 | G5 | `in_progress` | `common-account-phase3g-free-auth-provider-test-readiness-20261011` | `claude` | — | `K5` | `.agent/tasks/CLAUDE_TASK_5.md` |
 | G6 | `idle` | `none` | `none` | — | `K6` | `.agent/tasks/CLAUDE_TASK_6.md` |
 | G7 | `idle` | `none` | `none` | — | `K7` | `.agent/tasks/CLAUDE_TASK_7.md` |
-| G8 | `done` | `news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011` | `codex-4` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
+| G8 | `ready` | `news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
 | G9 | `done` | `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011` | `none` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
 | G10 | `idle` | `none` | `none` | — | `K10` | `.agent/tasks/CLAUDE_TASK_10.md` |
 
