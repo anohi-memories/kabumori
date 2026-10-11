@@ -3,8 +3,8 @@
 - task_id: common-account-pr130-e11-r1-r5-narrow-security-rereview-20261011
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - start_code: H2
 - completion_code: C2
 - priority: critical
@@ -48,7 +48,20 @@ Your job: **compare PR130 vs the old PR122 head and determine whether the specif
 ## Report — PR130 R1–R5 narrow re-review
 
 - task_id: common-account-pr130-e11-r1-r5-narrow-security-rereview-20261011
-- result: pending
+- result: CHANGES_REQUIRED / REAL_MANAGED_PROOF_NOT_RUN
+- reviewed_exact_head: 5943fad5f724191f6ae77f3baf826a4c7698d542
+- R1: PARTIAL — non-token residue not propagated to D, invalid NOT_RUN token case accepted; ambiguous applied COMMIT wrongly failed
+- R2: CLOSED at offline methodology scope; separate full-decision proof still mandatory
+- R3: CLOSED at offline methodology scope; genuine managed upper-bound/drain proof still NOT_RUN
+- R4: PARTIAL — missing explicit self_declared=false is accepted
+- R5: PARTIAL — RLS-hidden row returns 0 despite actual fake count1
+- tests: typed Deno56/56; mutations58/58 detected; fake PG fingerprint/readback ALL_PASS; reviewer4/4 defect-reproduction assertions and RLS false-zero rollback proof
+- report_publication_commit: 31ede4de6527d936602087c51cf5012f51b05708
+- report_push_readback: exact full new Report + entire prior741233-character suffix verified on origin/main
+- source_changes_by_H2: 0
+- production_or_remote_Supabase_Auth_provider_deploy_merge_photo_pause: 0
+- completion_code: C2
+- return_to: 共通アカウントG5のちゃ
 - remote_calls: 0
 
 ---
