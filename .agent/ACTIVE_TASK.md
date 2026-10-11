@@ -47,12 +47,12 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: review_required
 - task_id: common-account-pr130-e11-r1-r5-narrow-security-rereview-20261011
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
