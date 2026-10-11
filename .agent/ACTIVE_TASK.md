@@ -115,15 +115,15 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: done
 - task_id: kabumori-fact-v2-pr132-three-objective-guards-correction-20261011
 - start_code: G2
 - finish_code: K2
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: PR132 の C2 R1〜R3（例外が広すぎて通っていた客観的な誤り4文）を修正し、新しい head 68d45dde1be34715267b5066fa3b3686d756b79e を push 済み（Draft のまま、PR110 は変更なし）。4文はローカル判定・単位の除外・X とアプリへの配信のすべてで止まり、通すべき3文は届く。全テスト成功、本番操作・デプロイ・マージ 0。Report は .agent/tasks/CLAUDE_TASK.md の先頭の節。K2 の判断待ち。
-- recommended_model: Opus5.5（高）
+- allocation: K2 2026-10-11 PASS_SOURCE_CANDIDATE / RELEASE_HOLD — Draft PR132 exact 68d45dde1be34715267b5066fa3b3686d756b79e, stacked on unchanged PR110 319a442edcd61c07274e3409d8864234f9d77cd4. R1-R3 4 objective false claims rejected X/app, 3 allowed controls plus 6 grounded analyses preserved, 1,360 G2-reported offline tests PASS (not independently rerun); source correction only 3 files. No new material risk, no repeat H-review required. PR110→PR132 combined source merge gate next, production cutover separate and requires explicit authorization. No merge/deploy/prod writes.
+- recommended_model: Opus5.5（高） (completed)
 
 ## Claude G3
 - owner: claude
