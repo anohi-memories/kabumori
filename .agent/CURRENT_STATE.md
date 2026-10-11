@@ -1,3 +1,10 @@
+## C2 FINAL — PR110 R1 P1 Hard-Fact fail-open / G2 corrective READY — 2026-10-11 JST
+
+- Independent H2 task `kabumori-pr110-p2-final-narrow-review-20261011` reviewed PR110 exact `2c876b0bafee31844b9854c4a7d34ba69660d4cf` and returned **CHANGES_REQUIRED / ONE R1 P1**. Source-only mocked reproduction shows predicate list missing `緩い/脆い/きつい/しつこい` before no-comma `が/けれど/ので/ため/ものの`: unrelated later speculation improperly qualifies unsupported asserted market cause. New head retained 20/20 unsafe controls in BOTH X and app, older baseline rejected them. This is a deterministic Hard-Fact FAIL-OPEN, no evidence of real prod incident. Normal `勢いが` plus other noun subject positives, emoji/date checks and 54/54 existing focused suites PASS.
+- C2 accepted review **CHANGES_REQUIRED**, closed H2 current TASK `done/next_owner:none`, preserved full H2 report/history, and reopened EXISTING G2 PR110 task `kabumori-market-report-delivery-first-guard-calibration-20261007` `ready/next_owner:claude`, recommended **Opus5.5（高）**, same workstream/PR. G2 must fix clause-local hedge scope robustly (NOT just expanding adjective list); add 20 unsafe negative controls, preserve normal noun-subject and emoji/date/safe delivery, no wider feature. Return `K2` to G2.
+- H2 independent 54/54 focused tests PASS, 22 PASS / 20 FAIL newly introduced unsafe-case probes, product code edits0, actual provider/DB/Edge/X calls0. Source PR110 remains OPEN/UNMERGED and **MERGE/DEPLOY HOLD**. No paid API or credentials/production access authorized. New exact-head narrow independent review only after G2 correction if needed.
+- GitHub contents readback confirms H2/G2 TASK and ACTIVE_TASK assignments synchronized. Other G1/G3/G4/G5/H1 work and PRs protected; G1 user-assisted Simulator task remains unaffected.
+
 ## G1 USER LOGIN SIMULATOR QA — ready (2026-10-11 JST)
 
 - User explicitly requested to proceed with Simulator. Previous G1 read-only Phase A K1 safe-stop found installed iOS Simulator/dev-client but **no logged-in account**, hence real watch data QA remained BLOCKED_AUTH; that preflight TASK was formally done and preserved.
