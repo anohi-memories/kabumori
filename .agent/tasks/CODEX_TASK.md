@@ -3,8 +3,8 @@
 - task_id: postona-h1-threads-oauth-edge-offline-implementation-20261011
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: H1
 - finish_code: C1
 - completion_code: C1
@@ -20,6 +20,19 @@
 - G3_G5_H2: protected
 - feature_gate: `THREADS_CONNECT_PREREQUISITES_MET=false` MUST REMAIN
 - return_after_completion: C1 in POSTONA G4 ChatGPT chat
+
+## C1 FINAL — 2026-10-11 JST
+
+- verdict: **PASS_OFFLINE_CANDIDATE / THREADS_RUNTIME_NOT_CONNECTED / RELEASE_HOLD**.
+- reviewed exact Draft [PR135](https://github.com/anohi-memories/kabumori/pull/135) head `e38788d6677082138f0990453c7d2f00549666d0`, original protected PR124 base `c30f246409a77080cbc03aef6c4cb72b5481e125`: OPEN/DRAFT/UNMERGED, 1 commit/4 new offline candidate files, branch isolated; no original PR124 files altered. PR121 and PR126 still Draft/unmerged.
+- reviewed H1 latest matching report in `.agent/CODEX_REPORT.md`, confirmed synced `review_required/chatgpt` before acceptance. Codex-reported tests: new mocked flow40/40, isolated import/static-gate1/1, related regression61/61 = **102/102 PASS**. ChatGPT inspected source candidate/README/isolation and exact PR refs, **did not rerun Deno tests**.
+- accepted: mock-only Threads OAuth lifecycle implementation and documentation; `THREADS_CONNECT_PREREQUISITES_MET=false`, no live Edge/mobile import, real OAuth/GoTrue/PostgREST/Meta/Vault proof, migration/grants/secrets/production traffic/merge/deploy. No X OAuth remediation.
+- remaining **release blockers**: PR124 read-only consume is not durable cross-instance state/code claim, authenticated/session-preserving owner-only RPC transport not implemented, G5 T13/T9/T10/schema and provider-aware cleanup still unintegrated, real Meta configuration/callback and Vault custody absent, focused integrated review and separately approved activation required. Do not claim ready for production or merge.
+- C1 closure: H1 **done**, `next_owner: none`; H1 slot free for future independently allocated work. No H2/H3-H5/G1-G10 TASK or code modified. Full prior H1 reports/history preserved. Separate deferred X OAuth security issue remains [Issue131](https://github.com/anohi-memories/kabumori/issues/131).
+- next_recommendation: continue G4-managed Threads production-dependency planning (T10/provider-aware cleanup + state/authority boundary design) only in a new safe scoped TASK, preserving G5 ownership; do not allocate unnecessary repeat full review while real integration is unavailable.
+- recommended_model_for_future_G4: **Opus5.5（高）** for G5-dependent design; targeted Codex review later **Sol（高）**.
+
+---
 
 ## Reason and authorization boundary
 
