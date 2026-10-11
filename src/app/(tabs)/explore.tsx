@@ -31,7 +31,7 @@ import {
   watchlistLabels,
 } from '@/lib/portfolio-view';
 import { dataGapNotes, latestCloseReport, type PersonalizedReport } from '@/lib/report-presentation';
-import { trackedDetailHref } from '@/lib/stock-detail-view';
+import { registrationMatchesSnapshot, trackedDetailHref } from '@/lib/stock-detail-view';
 import type { TrackedStock } from '@/lib/stocks';
 import { supabase } from '@/lib/supabase';
 
@@ -47,6 +47,10 @@ const BOTTOM_SPACE = 28;
 export default function PortfolioScreen() {
   const [view, setView] = useState<StocksView>('portfolio');
   const [items, setItems] = useState<TrackedStock[]>([]);
+  // True only after the registrations were really read for this user. `items` is [] both for a user with no
+  // holdings and while the read is pending / failed / signed out; only this flag tells them apart, so an unknown
+  // registration set is never paired with the saved report (see alignHoldings).
+  const [registrationsKnown, setRegistrationsKnown] = useState(false);
   const [reports, setReports] = useState<PersonalizedReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
@@ -66,6 +70,7 @@ export default function PortfolioScreen() {
     const { data: authData, error: authError } = await supabase.auth.getUser();
     if (authError || !authData.user) {
       setItems([]);
+      setRegistrationsKnown(false);
       setMessage('一覧を見るにはログインが必要です。');
     } else {
       const { data, error } = await supabase
@@ -76,9 +81,11 @@ export default function PortfolioScreen() {
         .order('created_at', { ascending: false });
       if (error) {
         setItems([]);
+        setRegistrationsKnown(false);
         setMessage('一覧を読み込めませんでした。');
       } else {
         setItems((data ?? []) as unknown as TrackedStock[]);
+        setRegistrationsKnown(true);
       }
     }
     await reportsPromise;
@@ -91,11 +98,22 @@ export default function PortfolioScreen() {
   const report = useMemo(() => latestCloseReport(reports), [reports]);
   const basis = useMemo(() => portfolioBasis(report, today), [report, today]);
   const labels = portfolioLabels(basis);
-  const summary = assetSummary(basis?.snapshot ?? null);
+  // The registrations the saved valuation may be paired with: null while they are not known.
+  const registrations = registrationsKnown ? items : null;
+  const summary = useMemo(
+    () => assetSummary(basis?.snapshot ?? null, registrations, registrationMatchesSnapshot),
+    [basis, registrations],
+  );
   const spark = useMemo(() => sparklineValues(reports), [reports]);
-  const impacts = useMemo(() => topImpacts(basis?.snapshot ?? null), [basis]);
+  const impacts = useMemo(
+    () => topImpacts(basis?.snapshot ?? null, registrations, registrationMatchesSnapshot),
+    [basis, registrations],
+  );
   const overview = aiSummary(basis);
-  const holdings = useMemo(() => buildHoldingRows(items, report), [items, report]);
+  const holdings = useMemo(
+    () => buildHoldingRows(registrations, report, registrationMatchesSnapshot),
+    [registrations, report],
+  );
   const watch = useMemo(() => buildWatchRows(items, report), [items, report]);
   const watchLayout = useMemo(() => layoutWatchlist(watch, basis?.snapshot ?? null), [watch, basis]);
   const watchLabels = watchlistLabels(basis);
@@ -129,7 +147,7 @@ export default function PortfolioScreen() {
                 <HoldingsHeader count={holdings.length} />
                 {holdings.length > 0 ? (
                   <HoldingsList rows={holdings} labels={labels} hasReport={!!basis} onOpen={openDetail} />
-                ) : !loading && !message ? (
+                ) : registrationsKnown && !loading && !message ? (
                   <View style={styles.empty}>
                     <Text style={styles.emptyText}>保有銘柄はまだありません。検索から銘柄を登録できます。</Text>
                     <Pressable onPress={() => router.push('/search')} accessibilityRole="button" style={styles.emptyButton}>

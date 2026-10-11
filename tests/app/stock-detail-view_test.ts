@@ -187,7 +187,7 @@ test("a holding shows quantity, average price, position and side from the regist
     valuationNote: null,
   });
   // The figures are exactly what the portfolio row shows (no second sign/arithmetic path).
-  const portfolioRow = buildHoldingRows([reg], report({ holdings: [row] }))[0];
+  const portfolioRow = buildHoldingRows([reg], report({ holdings: [row] }), registrationMatchesSnapshot)[0];
   assert.equal(view.holding?.valuation?.marketValue, portfolioRow.marketValue);
   assert.equal(view.holding?.valuation?.dayPl, portfolioRow.dayPl);
   assert.equal(view.holding?.valuation?.unrealizedPl, portfolioRow.unrealizedPl);

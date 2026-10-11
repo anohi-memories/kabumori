@@ -67,7 +67,33 @@ test("holdings and the report load independently: a failed report never hides th
   assert.ok(screen.includes("レポートのデータを読み込めませんでした。引っ張って更新できます。"));
   assert.ok(screen.includes("<RefreshControl"), "pull to refresh");
   assert.ok(screen.includes("一覧を読み込めませんでした。"), "the tracked_stocks failure message is kept");
-  assert.ok(screen.includes("buildHoldingRows(items, report)"), "holdings are built from the registrations, not from the report");
+  assert.ok(screen.includes("buildHoldingRows(registrations, report, registrationMatchesSnapshot)"), "holdings are built from the registrations, not from the report");
+});
+
+// Stale-valuation guard: the saved valuation is paired with the registrations only once they are KNOWN, with the
+// same exact-match predicate the stock detail uses.
+test("the tab pairs the saved valuation only with registrations it actually read, through the detail's own predicate", async () => {
+  const screen = await code("src/app/(tabs)/explore.tsx");
+  assert.ok(screen.includes("import { registrationMatchesSnapshot, trackedDetailHref } from '@/lib/stock-detail-view';"));
+  assert.ok(screen.includes("const [registrationsKnown, setRegistrationsKnown] = useState(false);"));
+  assert.equal((screen.match(/setRegistrationsKnown\(false\)/g) ?? []).length, 2, "signed out and a failed read are both 'unknown'");
+  assert.ok(screen.includes("setRegistrationsKnown(true)"), "known only after a successful read");
+  assert.ok(screen.includes("const registrations = registrationsKnown ? items : null;"), "an unknown set is null, never []");
+  assert.ok(screen.includes("assetSummary(basis?.snapshot ?? null, registrations, registrationMatchesSnapshot)"));
+  assert.ok(screen.includes("topImpacts(basis?.snapshot ?? null, registrations, registrationMatchesSnapshot)"));
+  assert.ok(screen.includes("registrationsKnown && !loading && !message"), "the 'no holdings yet' empty state needs a verified-empty account");
+  const view = await code("src/lib/portfolio-view.ts");
+  assert.ok(!/from '[^']*stock-detail-view'/.test(view), "the pure module receives the predicate; it does not import it");
+});
+
+test("a withheld valuation is explained, never spoken or drawn as current", async () => {
+  const holdings = await code("src/components/portfolio/holdings-section.tsx");
+  assert.ok(holdings.includes("row.valuationChanged ? REGISTRATION_CHANGED_NOTE"), "the accessibility label carries the note instead of the old P/L");
+  assert.ok(holdings.includes("row.reflected && !row.valuationChanged && (!!row.tag || !!row.line)"), "report prose about the old position is hidden");
+  const sections = await code("src/components/portfolio/portfolio-sections.tsx");
+  assert.ok(sections.includes("summary.withheld === 'changed' ? <Text style={styles.note}>{REGISTRATION_CHANGED_NOTE}</Text> : null"));
+  assert.ok(sections.includes("資産評価額 更新待ち"));
+  assert.ok(!/withheld[^;\n]*formatAmount/.test(sections), "no amount is formatted from a withheld total");
 });
 
 test("a holding row opens the read-only 銘柄詳細 (not the editor); the editor is reached from there", async () => {

@@ -3,6 +3,8 @@ import test from "node:test";
 
 import type { PersonalizedReport, ReportSnapshot, ReportStock } from "../../src/lib/report-presentation.ts";
 import type { TrackedStock } from "../../src/lib/stocks.ts";
+import * as view from "../../src/lib/portfolio-view.ts";
+import { buildStockDetail, registrationMatchesSnapshot } from "../../src/lib/stock-detail-view.ts";
 import {
   aiSummary,
   assetSummary,
@@ -47,10 +49,19 @@ function report(date: string, snap: ReportSnapshot | null, extra: Partial<Person
 
 function tracked(id: string, ticker: string, name: string, kind: "holding" | "watch" = "holding"): TrackedStock {
   return {
-    id, user_id: "u", stock_id: `s-${id}`, tracking_type: kind, quantity: kind === "holding" ? 100 : null, average_price: null,
-    position_type: null, side: null, target_buy_price: null, target_sell_price: null, memo: null,
+    id, user_id: "u", stock_id: `s-${id}`, tracking_type: kind, quantity: kind === "holding" ? 100 : null,
+    average_price: kind === "holding" ? 1000 : null, position_type: kind === "holding" ? "cash" : null,
+    side: kind === "holding" ? "long" : null, target_buy_price: null, target_sell_price: null, memo: null,
     stocks_master: { id: `s-${id}`, ticker_code: ticker, company_name: name, market: "プライム" },
   };
+}
+
+/** Registrations that exactly match every saved holding of a snapshot (so the saved figures are valid). */
+function currentFor(snap: ReportSnapshot): TrackedStock[] {
+  return snap.holdings.map((holding, index) => ({
+    ...tracked(`t${index}`, holding.ticker_code, holding.company_name),
+    quantity: holding.quantity, average_price: holding.average_price, position_type: holding.position_type, side: holding.side,
+  }));
 }
 
 test("unrealized percent: derived from the cost basis only when it is safe", () => {
@@ -63,18 +74,19 @@ test("unrealized percent: derived from the cost basis only when it is safe", () 
 });
 
 test("asset summary: values from snapshot.totals, null (never 0) when missing", () => {
-  const full = assetSummary(snapshot());
+  const full = assetSummary(snapshot(), [tracked("a", "7203", "トヨタ自動車")], registrationMatchesSnapshot);
+  assert.equal(full.withheld, null);
   assert.equal(full.assetValue, 3248500);
   assert.equal(full.unrealizedPl, 218400);
   assert.equal(full.dayPl, 32600);
   assert.equal(full.dayChangePercent, 1.01);
   assert.equal(Number(full.unrealizedPlPercent?.toFixed(2)), 7.21);
-  const empty = assetSummary(null);
+  const empty = assetSummary(null, [], registrationMatchesSnapshot);
   assert.deepEqual(
     [empty.assetValue, empty.unrealizedPl, empty.unrealizedPlPercent, empty.dayPl, empty.dayChangePercent, empty.holdingCount],
     [null, null, null, null, null, 0],
   );
-  const gap = assetSummary(snapshot({ totals: { ...snapshot().totals, market_value: null, day_pl: null, unrealized_pl: null, all_holdings_valued: false } }));
+  const gap = assetSummary(snapshot({ totals: { ...snapshot().totals, market_value: null, day_pl: null, unrealized_pl: null, all_holdings_valued: false } }), [tracked("a", "7203", "トヨタ自動車")], registrationMatchesSnapshot);
   assert.equal(gap.assetValue, null);
   assert.equal(gap.dayPl, null);
   assert.equal(gap.allValued, false);
@@ -146,7 +158,7 @@ test("sparkline: recent CLOSE totals, oldest first, one per date, finite only, b
 });
 
 test("impact top 3: ranked by absolute day P/L, null day P/L excluded, at most 3", () => {
-  const impacts = topImpacts(snapshot({
+  const ranked = snapshot({
     holdings: [
       stock("A", "アルファ", { day_pl: 1000 }),
       stock("B", "ベータ", { day_pl: -9000 }),
@@ -155,12 +167,15 @@ test("impact top 3: ranked by absolute day P/L, null day P/L excluded, at most 3
       stock("E", "イプシロン", { day_pl: -5000 }),
       stock("F", "ゼータ", { day_pl: 0 }),
     ],
-  }));
+  });
+  const impacts = topImpacts(ranked, currentFor(ranked), registrationMatchesSnapshot);
   assert.deepEqual(impacts.map((item) => item.ticker), ["B", "D", "E"], "|−9000| first; the 5000 tie is by ticker");
   assert.equal(impacts[0].dayPl, -9000);
-  assert.equal(topImpacts(snapshot({ holdings: [stock("A", "ア", { day_pl: null })] })).length, 0, "no numeric holding => no section");
-  assert.equal(topImpacts(null).length, 0);
-  assert.equal(topImpacts(snapshot({ holdings: [stock("A", "ア", { price: { status: "unavailable", sessionDate: null, close: null, previousClose: null, change: null, changePercent: null } })] }))[0].changePercent, null);
+  const noPl = snapshot({ holdings: [stock("A", "ア", { day_pl: null })] });
+  assert.equal(topImpacts(noPl, currentFor(noPl), registrationMatchesSnapshot).length, 0, "no numeric holding => no section");
+  assert.equal(topImpacts(null, [], registrationMatchesSnapshot).length, 0);
+  const unpriced = snapshot({ holdings: [stock("A", "ア", { price: { status: "unavailable", sessionDate: null, close: null, previousClose: null, change: null, changePercent: null } })] });
+  assert.equal(topImpacts(unpriced, currentFor(unpriced), registrationMatchesSnapshot)[0].changePercent, null);
 });
 
 test("holding rows join the CURRENT registrations to the latest report by ticker", () => {
@@ -175,7 +190,7 @@ test("holding rows join the CURRENT registrations to the latest report by ticker
     tracked("b", "8306", "三菱UFJフィナンシャルG"),
     tracked("c", "9999", "新規登録株式会社"),   // registered after the report was written
     tracked("w", "6758", "ソニー", "watch"),
-  ], rep);
+  ], rep, registrationMatchesSnapshot);
   assert.deepEqual(rows.map((row) => row.ticker), ["8306", "7203", "9999"], "market value desc, rows without one last");
   const known = rows[0];
   assert.equal(known.reflected, true);
@@ -188,7 +203,7 @@ test("holding rows join the CURRENT registrations to the latest report by ticker
 });
 
 test("holding rows without any report keep every registered holding, all unreflected", () => {
-  const rows = buildHoldingRows([tracked("a", "7203", "トヨタ自動車"), tracked("b", "1332", "ニッスイ")], null);
+  const rows = buildHoldingRows([tracked("a", "7203", "トヨタ自動車"), tracked("b", "1332", "ニッスイ")], null, registrationMatchesSnapshot);
   assert.equal(rows.length, 2);
   assert.ok(rows.every((row) => !row.reflected && row.close === null));
   assert.deepEqual(rows.map((row) => row.ticker), ["1332", "7203"], "deterministic fallback: by ticker");
@@ -214,7 +229,7 @@ test("material tag and line only come from stored report data", () => {
       stock_notes: [{ ticker_code: "3", note_ja: "従来メモ。" }],
     },
   });
-  const rows = Object.fromEntries(buildHoldingRows(["1", "2", "3", "4", "5"].map((t) => tracked(t, t, `銘柄${t}`)), rep).map((row) => [row.ticker, row]));
+  const rows = Object.fromEntries(buildHoldingRows(["1", "2", "3", "4", "5"].map((t) => tracked(t, t, `銘柄${t}`)), rep, registrationMatchesSnapshot).map((row) => [row.ticker, row]));
   assert.deepEqual([rows["1"].tag, rows["1"].line], ["ニュース", null]);
   assert.deepEqual([rows["2"].tag, rows["2"].line], ["追い風", "好決算を発表しました。"]);
   assert.deepEqual([rows["3"].tag, rows["3"].line], ["逆風", "従来メモ。"], "a blank fact falls back to the stored note");
@@ -251,4 +266,203 @@ test("watch rows keep the registered watch records (newest first as queried) wit
   assert.equal(rows[0].close, 3000);
   assert.equal(rows[1].close, null);
   assert.equal(rows[0].tracked.id, "w1", "the original record is kept so it stays editable");
+});
+
+// ---- stale valuation guard (K1 task kabumori-portfolio-holdings-stale-valuation-guard-20261011) ---------------------
+// The saved report's per-holding valuation, the impact top 3 and the asset totals describe the registrations the
+// report was written for. They are shown only while the CURRENT registrations match them exactly (the same
+// predicate the 銘柄詳細 uses). Everything below goes through the public view-model functions.
+const MATCH = registrationMatchesSnapshot;
+
+function saved(ticker: string, overrides: Partial<ReportStock> = {}): ReportStock {
+  return stock(ticker, `会社${ticker}`, { quantity: 100, average_price: 1000, position_type: "cash", side: "long", ...overrides });
+}
+
+function held(ticker: string, overrides: Partial<TrackedStock> = {}): TrackedStock {
+  return { ...tracked(`id-${ticker}`, ticker, `会社${ticker}`), ...overrides };
+}
+
+function twoHoldings(): { snap: ReportSnapshot; rep: PersonalizedReport } {
+  const snap = snapshot({
+    holdings: [
+      saved("1111", { market_value: 400000, day_pl: 4000, unrealized_pl: 60000, unrealized_pl_percent: 17.6 }),
+      saved("2222", { market_value: 200000, day_pl: -2500, unrealized_pl: 15000, unrealized_pl_percent: 8.1 }),
+    ],
+    totals: { ...snapshot().totals, holding_count: 2, market_value: 600000, day_pl: 1500, day_change_percent: 0.25, unrealized_pl: 75000 },
+  });
+  return { snap, rep: report("2026-10-06", snap) };
+}
+
+const rowOf = (rows: view.HoldingRow[], ticker: string) => rows.find((row) => row.ticker === ticker)!;
+
+test("guard: every field matches => rows, impacts and totals are exactly the saved ones (nothing lost by accident)", () => {
+  const { snap, rep } = twoHoldings();
+  const regs = [held("1111"), held("2222")];
+  assert.equal(view.alignHoldings(regs, snap, MATCH).state, "aligned");
+  const rows = buildHoldingRows(regs, rep, MATCH);
+  assert.deepEqual(rows.map((row) => [row.ticker, row.marketValue, row.dayPl, row.unrealizedPl, row.valuationChanged]), [
+    ["1111", 400000, 4000, 60000, false],
+    ["2222", 200000, -2500, 15000, false],
+  ]);
+  assert.deepEqual(topImpacts(snap, regs, MATCH).map((item) => [item.ticker, item.dayPl]), [["1111", 4000], ["2222", -2500]]);
+  const summary = assetSummary(snap, regs, MATCH);
+  assert.deepEqual([summary.assetValue, summary.dayPl, summary.unrealizedPl, summary.dayChangePercent, summary.withheld], [600000, 1500, 75000, 0.25, null]);
+});
+
+test("guard: same ticker, quantity and cost but 買い<->売り or 現物<->信用 flipped => that row's valuation, its impact and the totals are withheld", () => {
+  const { snap, rep } = twoHoldings();
+  for (const change of [{ side: "short" as const }, { position_type: "margin" as const }]) {
+    const regs = [held("1111", change), held("2222")];
+    const rows = buildHoldingRows(regs, rep, MATCH);
+    const changed = rowOf(rows, "1111");
+    assert.deepEqual([changed.marketValue, changed.dayPl, changed.unrealizedPl, changed.unrealizedPlPercent], [null, null, null, null], "withheld, never 0");
+    assert.equal(changed.valuationChanged, true);
+    assert.equal(changed.reflected, true);
+    assert.equal(changed.close, 2731, "the independent saved closing price stays");
+    assert.equal(changed.changePercent, 2.44);
+    assert.deepEqual([changed.tag, changed.line], [null, null], "report prose about the old position is not shown");
+    // the unchanged holding keeps its own valuation
+    assert.equal(rowOf(rows, "2222").marketValue, 200000);
+    assert.equal(rowOf(rows, "2222").valuationChanged, false);
+    // impacts: only the matched one; totals: withheld as a whole
+    assert.deepEqual(topImpacts(snap, regs, MATCH).map((item) => item.ticker), ["2222"]);
+    const summary = assetSummary(snap, regs, MATCH);
+    assert.deepEqual([summary.assetValue, summary.unrealizedPl, summary.unrealizedPlPercent, summary.dayPl, summary.dayChangePercent], [null, null, null, null, null]);
+    assert.equal(summary.withheld, "changed");
+  }
+});
+
+test("guard: changed quantity or average cost withholds the same way", () => {
+  const { snap, rep } = twoHoldings();
+  for (const change of [{ quantity: 200 }, { average_price: 900 }, { quantity: null }]) {
+    const regs = [held("1111", change), held("2222")];
+    const changed = rowOf(buildHoldingRows(regs, rep, MATCH), "1111");
+    assert.equal(changed.marketValue, null);
+    assert.equal(changed.valuationChanged, true);
+    assert.equal(assetSummary(snap, regs, MATCH).withheld, "changed");
+  }
+});
+
+test("guard: a holding converted to a watch, or deregistered, no longer contributes (rows, impacts) and the totals are withheld", () => {
+  const { snap, rep } = twoHoldings();
+  const toWatch = [held("1111", { tracking_type: "watch", quantity: null, average_price: null, position_type: null, side: null }), held("2222")];
+  const rowsA = buildHoldingRows(toWatch, rep, MATCH);
+  assert.deepEqual(rowsA.map((row) => row.ticker), ["2222"], "a watch record is not a holding row");
+  assert.deepEqual(topImpacts(snap, toWatch, MATCH).map((item) => item.ticker), ["2222"]);
+  assert.equal(assetSummary(snap, toWatch, MATCH).withheld, "changed");
+
+  const removed = [held("2222")];
+  assert.deepEqual(topImpacts(snap, removed, MATCH).map((item) => item.ticker), ["2222"]);
+  assert.equal(assetSummary(snap, removed, MATCH).assetValue, null);
+  assert.equal(assetSummary(snap, removed, MATCH).withheld, "changed");
+});
+
+test("guard: a holding registered after the report keeps its 未反映 row; the totals no longer describe the portfolio and are withheld", () => {
+  const { snap, rep } = twoHoldings();
+  const regs = [held("1111"), held("2222"), held("3333")];
+  const rows = buildHoldingRows(regs, rep, MATCH);
+  const fresh = rowOf(rows, "3333");
+  assert.deepEqual([fresh.reflected, fresh.valuationChanged, fresh.close, fresh.marketValue], [false, false, null, null]);
+  assert.equal(rowOf(rows, "1111").marketValue, 400000, "the matched holdings keep their own figures");
+  assert.equal(view.alignHoldings(regs, snap, MATCH).state, "changed");
+  assert.equal(assetSummary(snap, regs, MATCH).assetValue, null);
+  assert.deepEqual(topImpacts(snap, regs, MATCH).map((item) => item.ticker), ["1111", "2222"]);
+});
+
+test("guard: ambiguous tickers (duplicate saved rows, or a collision on the current side) never produce a valuation", () => {
+  const dup = snapshot({ holdings: [saved("1111", { market_value: 1 }), saved("1111", { market_value: 2 })] });
+  const rep = report("2026-10-06", dup);
+  const rows = buildHoldingRows([held("1111")], rep, MATCH);
+  assert.deepEqual([rows[0].marketValue, rows[0].dayPl, rows[0].close, rows[0].valuationChanged], [null, null, null, true]);
+  assert.equal(topImpacts(dup, [held("1111")], MATCH).length, 0);
+  assert.equal(assetSummary(dup, [held("1111")], MATCH).withheld, "changed");
+
+  const single = snapshot({ holdings: [saved("1111")] });
+  const twoCurrent = [held("1111"), { ...held("1111"), id: "other", stock_id: "s-other" }];
+  assert.equal(topImpacts(single, twoCurrent, MATCH).length, 0, "two current holdings share a ticker: neither is the unique match");
+  assert.equal(assetSummary(single, twoCurrent, MATCH).withheld, "changed");
+});
+
+test("guard: null / legacy / non-finite fields follow the detail's conservative matching (a blank is not a wildcard)", () => {
+  const legacyRow = { ...saved("1111") } as Record<string, unknown>;
+  delete legacyRow.position_type;
+  delete legacyRow.side;
+  const snapLegacy = snapshot({ holdings: [legacyRow as unknown as ReportStock] });
+  const blank = held("1111", { position_type: null, side: null });
+  assert.equal(assetSummary(snapLegacy, [blank], MATCH).withheld, null, "blank == blank: the valuation is kept");
+  assert.equal(assetSummary(snapLegacy, [held("1111")], MATCH).withheld, "changed", "a concrete registration vs a legacy blank row is not a match");
+  const nonFinite = snapshot({ holdings: [saved("1111", { quantity: Number.NaN })] });
+  assert.equal(assetSummary(nonFinite, [held("1111", { quantity: Number.NaN })], MATCH).withheld, null, "both normalise to blank");
+  assert.equal(assetSummary(nonFinite, [held("1111")], MATCH).withheld, "changed");
+});
+
+test("guard: honest states stay honest -- no report, no holdings, and not-all-valued", () => {
+  // no saved close report: nothing to pair, nothing withheld, rows are 未反映
+  const none = assetSummary(null, [held("1111")], MATCH);
+  assert.deepEqual([none.assetValue, none.dayPl, none.withheld], [null, null, null]);
+  assert.equal(view.alignHoldings([held("1111")], null, MATCH).state, "no_report");
+  assert.ok(buildHoldingRows([held("1111")], null, MATCH).every((row) => !row.reflected && !row.valuationChanged));
+  // a verified-empty account against a report with no holdings is aligned (its totals are shown as saved)
+  const empty = snapshot({ holdings: [], totals: { ...snapshot().totals, holding_count: 0, market_value: 0, day_pl: 0, day_change_percent: null, unrealized_pl: 0 } });
+  assert.equal(view.alignHoldings([], empty, MATCH).state, "aligned");
+  assert.equal(assetSummary(empty, [], MATCH).withheld, null);
+  // but a verified-empty account against a report that still has holdings is a change
+  const { snap } = twoHoldings();
+  assert.equal(assetSummary(snap, [], MATCH).withheld, "changed");
+  // all_holdings_valued=false is reported by the saved totals as before, not by the guard
+  const partial = snapshot({ holdings: [saved("1111")], totals: { ...snapshot().totals, all_holdings_valued: false, market_value: null, day_pl: null, unrealized_pl: null } });
+  const gap = assetSummary(partial, [held("1111")], MATCH);
+  assert.deepEqual([gap.allValued, gap.withheld, gap.assetValue], [false, null, null]);
+});
+
+test("guard: registrations that are not known yet (loading / failed / signed out) are never read as 'no holdings'", () => {
+  const { snap, rep } = twoHoldings();
+  assert.equal(view.alignHoldings(null, snap, MATCH).state, "unknown");
+  assert.deepEqual(buildHoldingRows(null, rep, MATCH), []);
+  assert.deepEqual(topImpacts(snap, null, MATCH), []);
+  const summary = assetSummary(snap, null, MATCH);
+  assert.deepEqual([summary.assetValue, summary.unrealizedPl, summary.dayPl, summary.dayChangePercent], [null, null, null, null]);
+  assert.equal(summary.withheld, "unknown", "no 'registration changed' claim while it is merely unknown");
+  // the same snapshot with a KNOWN empty account is a different state
+  assert.equal(assetSummary(snap, [], MATCH).withheld, "changed");
+});
+
+test("guard: the list, the impact card, the totals and the stock detail agree on the same eligibility", () => {
+  const { snap, rep } = twoHoldings();
+  const scenarios: Array<[string, TrackedStock[]]> = [
+    ["all match", [held("1111"), held("2222")]],
+    ["side flipped", [held("1111", { side: "short" }), held("2222")]],
+    ["cash->margin", [held("1111"), held("2222", { position_type: "margin" })]],
+    ["qty changed", [held("1111", { quantity: 5 }), held("2222")]],
+    ["one removed", [held("1111")]],
+    ["one added", [held("1111"), held("2222"), held("4444")]],
+  ];
+  for (const [label, regs] of scenarios) {
+    const rows = buildHoldingRows(regs, rep, MATCH);
+    const impactTickers = new Set(topImpacts(snap, regs, MATCH).map((item) => item.ticker));
+    for (const row of rows) {
+      const reg = regs.find((item) => item.id === row.trackedId)!;
+      const detail = buildStockDetail({ stock: reg.stocks_master, tracked: reg, report: rep });
+      const listHasValuation = row.marketValue !== null;
+      const detailHasValuation = detail.holding?.valuation != null;
+      assert.equal(listHasValuation, detailHasValuation, `${label}/${row.ticker}: list vs detail`);
+      if (detailHasValuation) assert.equal(row.marketValue, detail.holding!.valuation!.marketValue, `${label}/${row.ticker}: same figure`);
+      assert.equal(impactTickers.has(row.ticker), listHasValuation && row.dayPl !== null, `${label}/${row.ticker}: impact vs list`);
+    }
+    const allMatched = rows.length === 2 && rows.every((row) => row.marketValue !== null);
+    assert.equal(assetSummary(snap, regs, MATCH).withheld === null, allMatched, `${label}: totals shown only when every holding is matched`);
+  }
+});
+
+test("guard: withheld rows sort after valued rows, deterministically", () => {
+  const { rep } = twoHoldings();
+  const regs = [held("1111", { side: "short" }), held("2222")];
+  assert.deepEqual(buildHoldingRows(regs, rep, MATCH).map((row) => row.ticker), ["2222", "1111"]);
+});
+
+test("guard: the pure module takes the matcher as a parameter and keeps type-only imports", async () => {
+  const text = await Deno.readTextFile(new URL("../../src/lib/portfolio-view.ts", import.meta.url));
+  assert.ok(!/^import (?!type )/m.test(text), "no runtime import (testable with Deno)");
+  assert.ok(!/stock-detail-view/.test(text.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "")), "no dependency on the detail module in code");
+  assert.equal(view.REGISTRATION_CHANGED_NOTE, "登録内容が変わったため、評価額・損益は次の大引けレポートで更新されます");
 });

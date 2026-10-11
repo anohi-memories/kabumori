@@ -90,7 +90,10 @@ test("no fixed decorative chart, no invented or smoothed points; 0-1 usable poin
   assert.ok(spark.includes("values.map((value, index)") && spark.includes("points.slice(1).map("), "one point per real value, one bar per gap");
   assert.ok(spark.includes("if (values.length < 2 || width <= 0 || height <= 0) return null;"));
   const sections = await code("src/components/portfolio/portfolio-sections.tsx");
-  assert.ok(sections.includes("{spark.length >= 2 ? ("), "the card renders no sparkline slot for 0-1 points");
+  assert.ok(
+    sections.includes("const showSpark = !withheld && spark.length >= 2;") && sections.includes("{showSpark ? ("),
+    "the card renders no sparkline slot for 0-1 points, nor while the totals are withheld",
+  );
   // The data side is unchanged: only real saved close totals, a single point is returned as-is.
   const report = (date: string, value: number) => ({
     id: date, report_type: "close", trading_date: date, title_ja: null, summary_ja: null, body: null, generated_at: `${date}T07:00:00Z`,
