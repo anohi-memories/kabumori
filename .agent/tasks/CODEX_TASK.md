@@ -1,3 +1,81 @@
+# Codex H1 — CURRENT TASK — POSTONA Threads OAuth Edge offline integration candidate（臨時実装）
+
+- task_id: postona-h1-threads-oauth-edge-offline-implementation-20261011
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- start_code: H1
+- finish_code: C1
+- completion_code: C1
+- return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
+- recommended_model: **Sol（高）**
+- priority: high
+- type: **臨時実装 — ユーザーの2026-10-11明示指示で、Threads OAuth Edgeの通常の正規アプリ機能だけをH1が代行。通常のCodexレビュー枠を一時使用する例外。**
+- source_only: true
+- production_db_reads_writes: forbidden
+- remote_meta_threads_x_auth_or_live_supabase_calls: forbidden
+- migration_apply_rpc_grant_revoke_secrets_deploy_PR_merge: forbidden
+- G4_active: false (G4 former unstarted TASK archived and G4 released)
+- G3_G5_H2: protected
+- feature_gate: `THREADS_CONNECT_PREREQUISITES_MET=false` MUST REMAIN
+- return_after_completion: C1 in POSTONA G4 ChatGPT chat
+
+## Reason and authorization boundary
+
+User specifically requested transferring this feature to Codex after a Claude Code safety-mechanism interruption on the **legitimate Threads OAuth connection development**. This is a one-task routing exception, not a blanket change of Codex's normal review role. **Do not attempt to bypass, work around, replay or reframe any model safety refusal or obtain prohibited implementation.** Work only on a normal, authorized OAuth client integration with isolated mock interfaces; if similar safety constraints arise, STOP, report precisely the blocked safe scope, and request task redesign via ChatGPT. Never reproduce other users' account binding, authorization bypass, preclaim exploitation, fake identity claims on live services or attack scripts.
+
+The previous G4 task `postona-threads-oauth-edge-offline-candidate-20261011` remained `ready` in GitHub and was interrupted in Claude's local UI; it was **not completed** and must not be marked K4. Its complete task text was preserved in `.agent/archive/CLAUDE_TASK_4_threads_edge_pre_codex_20261011.md`. G4 now has no active task, is available for unrelated POSTONA development, and is not an owner of this H1 work. Existing X OAuth hardening was independently deferred to backlog [Issue #131](https://github.com/anohi-memories/kabumori/issues/131) and is not part of this task.
+
+## Exact sources / ownership
+
+- PR #118: merged main pure Threads provider contract, `supabase/functions/_shared/social/threads_connect_contract.ts`, approved provider response validation and `THREADS_CONNECT_PREREQUISITES_MET=false`.
+- PR #124: **OPEN/DRAFT/UNMERGED** exact previously verified head `c30f246409a77080cbc03aef6c4cb72b5481e125`, branch `claude/g4-postona-threads-workspace-oauth-20261010`. It contains offline workspace, begin/consume/complete RPC candidate SQL, `threads_connect_rpc_contract.ts` and tests. Treat its branch as READ-ONLY PROTECTED. Re-fetch exact head at start.
+- PR #121: G5 T13 writer guard candidate exact `76b50e1e03f82faaa3460bab1603afa8fef3ce44`, DRAFT/UNMERGED; **no real T13 in prod** from this branch.
+- PR #126: old X OAuth v2 candidate exact `65f49f98dab39b974e6e4b450f376a37f99ef1ac`, DRAFT/UNMERGED; deferred, unchanged.
+- PR #127: G3 Stage3B deployment readiness documents only, exact `4b0278228e726b65d782e9b231eb6fe84d9173ad`, DRAFT/UNMERGED; protected.
+- Common design `docs/postona/threads-g5-t9-t10-t13-shared-contract-20261010.md`, and `docs/postona/threads-connection-phase2b.md` from PR124 head.
+
+## Startup and isolation (hard STOP on conflict)
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, **this H1 TASK and previous H1 Report**, previous G4 archived TASK, and latest G3/G5/H2 TASK headers. Confirm H1 status=ready/task_id match, G4 no active overlapping TASK, H2 current review is separate.
+2. From `/Users/yuya/Developer/kabumori-fresh`, obtain fresh `origin/main` and fetch PR refs. Create a **fresh independent H1 worktree/checkout**; NEVER use the older G4 checkout or any G/H other worktrees, branches, locks, uncommitted files or dev servers. If old G4 local worktree contains any uncommitted work, preserve it untouched and avoid identical-path edits until ownership is resolved.
+3. For unmerged PR124 types, create a NEW independently named H1 branch at exact PR124 head and a new H1 isolated checkout; do not checkout/rebase/reset/push/change original PR124 branch. Only after verifying exact head and no changes to PR124, create a **new Draft stacked PR** with base = PR124 original branch. Verify the PR diff includes **only H1's delta**, not the 8 existing PR124 files. If this cannot be assured, STOP and report BLOCKED (do not push any owner-overlapping change).
+4. Never alter G3/G5/H2 TASK, Report, branch, or active PR. Preserve all previous H1 Report content and previous H1 TASK history below. No force push, no user credentials in fixture/log/commit.
+
+## Implementation scope — legitimate Threads OAuth Edge candidate only
+
+Implement a disconnected, off-line testable candidate **outside production Edge Function deployment directories** (preferred `supabase/candidates/postona_threads_edge/`) with typed, injection-friendly interfaces to the existing PR118 provider contract and PR124 RPC contract:
+
+A. Start: validate authenticated subject via a **mockable signed-in identity verifier**, not just presence of a bearer string. Generate cryptographically random OAuth state; store only the hash by invoking injected mock begin RPC; validate exact HTTPS redirect/allowed scope; return authorization URL and public, nonsensitive metadata. Do not generate a real provider network request or production JWT.
+
+B. Callback: parse strict code/state/redirect and verify the same caller/session, consume the single-use state via mocked PR124 `consume` contract, call injected fake provider HTTP for documented authorization-code → short-lived → long-lived token + `/me` identity. Provider numeric IDs above JS safe integer must be preserved losslessly and match. A consumed, expired, replayed, foreign, mismatched or unavailable state fails closed; one-time code must not be retried after unknown outcome.
+
+C. Completion: construct attestation from server-observed provider identity using existing PR124 typed function (dummy test key only), invoke mocked `complete` RPC without leaking long-lived token, and produce fixed, nonsensitive success/error shape. Preserve `publish_enabled=false`, never issue X/Threads/Instagram posting, never create or reactivate common-account entitlement. Existing X OAuth remains wholly unchanged.
+
+D. Safety: G5 inactive/locked/deleting entitlement refusal at begin/complete (simulated), identity mismatch, connect duplicate, timeouts/network failures, Vault/RPC errors, secrets/log protection, callback late after entitlement ends, double-use races. Prove mocked no-write/no-release behavior after failure; do not claim real GoTrue/PostgREST/Meta or Vault proof.
+
+E. Documentation: report next real dependency gates — main schema 2a-2 prod apply, real G5 T13, G4 T9 reviewed integration, provider-aware T10 deletion, Meta app/tester/config, Vault HMAC secret ownership and controlled activation, integrated security review and separate production authorization. Do NOT alter deferred X auth Issue #131.
+
+## Tests / proof
+
+- Deterministic fake auth/RPC/provider HTTP and explicit negative authorization, state, id mismatch, high-number identity, replay, denial, exchange failure and malformed-response cases.
+- Simulate G5 lifecycle flip between begin and complete, Vault/RPC failure, no token logging, no duplicate provider code retry.
+- Ensure `THREADS_CONNECT_PREREQUISITES_MET=false`, zero imports into any live/mobile/scheduler code, no deployed Edge Function, no real provider/Supabase calls; existing X provider contract remains intact.
+- Run focus tests, Deno check/lint, applicable regression, git diff check and secret scan. If runtime unavailable, mark NOT_RUN with reason.
+- No manual live testing, no secrets, no production reads/writes, no grants/migrations/trigger changes, no X posts, no PR merge/deploy/EAS.
+
+## Completion and handoff
+
+- If safe, commit and push only isolated new H1 branch and create **Draft** stacked PR against PR124. Never modify the original PR124 or G4 branches.
+- Append a new matching section to `.agent/CODEX_REPORT.md` with: task_id, result, changed_files, tests, commit_hash, push/readback, PR number/exact head/base, merge, deploy, remaining_issues, safety_checks, next_recommendation. Preserve prior H1 reports verbatim.
+- Set H1 TASK and only H1 portion of `.agent/ACTIVE_TASK.md` to `review_required/next_owner:chatgpt` at actual completion, not before; report `C1` to **POSTONA G4 ChatGPT**. Do not mark K4. Every status/commit/push claim needs confirmation.
+- If blocked by safety, scope, ownership, runner constraints or collision: no workaround, no fabricated success; record `BLOCKED` and next safe options, hand off C1.
+
+---
+
+## Preserved former H1 TASK and completed history (read-only)
+
 # C1 FINAL — POSTONA G4 existing-X OAuth defensive assessment accepted — 2026-10-11 JST
 
 - task_id: postona-g4-x-oauth-containment-defensive-assessment-20261010
