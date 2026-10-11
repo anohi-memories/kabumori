@@ -3,8 +3,8 @@
 - task_id: api-optimization-b-phase5-followup-fixture-rights-and-cost-eval-g9-20261011
 - owner: claude
 - slot: claude-9
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G9
 - finish_code: K9
 - return_to: ニュース改善API最適化のちゃ
@@ -50,13 +50,34 @@
 ## Report
 
 - task_id: api-optimization-b-phase5-followup-fixture-rights-and-cost-eval-g9-20261011
-- result: not_started
-- changed_files: none
-- tests: not_run
-- commit_hash: none
-- push: not_performed
+- result: **PASS_OFFLINE（review_required）** — 第三者本文18件を本文非保存・fail-closedで扱う仕組みと検証、評価指標の分母固定、オフラインのベースライン、配信済み側100件のSQL計画を独立branchに実装。`cases.json` とPR115は未変更（所有者判断待ち）。
+- completion_code: K9（return_to: ニュース改善API最適化のちゃ）
+- branch: `claude/g9-fixture-rights-cost-eval-20261011`（`claude/b-news-eval-prep-20261010` の `96d2aebb` から分岐。新規独立worktree `/Users/yuya/Developer/kabumori-g9-fixture-rights`）
+- changed_files:
+  - 新規 `tools/provider-compare/src/{fixture_access,fixture_loader,baseline_metrics}.ts` と `{fixture_access,baseline_metrics,pending_distinction}_test.ts`
+  - 新規 `tools/provider-compare/scripts/{build_rights_safe_fixtures,baseline_report}.ts`、`export_eval_posted_sample.sql`（SELECTのみ・本番未実行）
+  - 新規 `tools/provider-compare/fixtures/{cases.rights_safe,cases_body_manifest}.json`
+  - 新規 `docs/model-optimization/{G9_FIXTURE_RIGHTS_AND_COST_BASELINE_2026-10-11.md,baseline_2026-10-11.json}`
+  - 変更（B所有の評価ツールのみ）`src/cli.ts`（`--fixtures`、`--runtime-bodies`、liveはrights_safe必須）、`src/probe_cli.ts`（既定をrights_safe）、`scripts/phase5_report.ts` と `phase5_report_2026-10-10.json`（期間別のPR116見込みを追記のみ。他の値は不変）
+- tests: `deno test --no-config -A tools/provider-compare/src` **284 passed / 0 failed**（既存259を未改変で維持 + 追加25）。`deno check` / `deno lint`（tools/provider-compare 全体 83ファイル）エラー・指摘なし。isolation（JSON文字列単位のsecret scan含む）PASS。SQLはローカルPostgreSQL 17で構文・抽出数を確認。
+- commit_hash: `b6020dbb41d63cba88208cef20063c8d24632c0e`
+- push: 実施（上記branchのみ）。PR作成なし（PR115との重複を避けるため。必要ならちゃが判断）。
 - merge: not_performed
 - deploy: not_performed
-- remaining_issues: 第三者本文18件の評価fixture権利、安全な費用対効果・取りこぼし評価、PR115所有確認
-- safety_checks: not_started
-- next_recommendation: G9で開始し、B限定の独立worktreeでPhase5から継続。完了時K9。
+- PR: PR115 未変更（OPEN/Draft、head `8f430557`、更新なし。所有者合意が確認できないため直接更新せず）。PR116/117/129 未変更。
+- rights_checks:
+  - 評価fixture22件の内訳: 保存許容2（金融庁・財務省）、本文なし2、**許諾を確認できない18（TDnet 11、Al Jazeera 3、BBC 2、AP 2、16,252文字）**
+  - 18件は既定で `needs_rights_review` として実行から除外。取得元（ローカルの読み取り専用エクスポート）を明示した場合のみ、サニタイズ後SHA-256が一致したものだけ付与。行なし=`body_source_missing`、不一致=`body_hash_mismatch`。ネットワーク/子プロセスのコードは無く、TDnet 403は構造上迂回できない
+  - TDnet（JPX・発行体）の利用規約は公式ページから確認できず（サービス概要のみ）。BBC/AJ/APは許諾未確認。権利未確認はPASSにしていない
+  - **未解決**: Git履歴にはPR115の初回コミットの本文が残る。`recorded.generation.text`（本番の公開投稿文）と見出しは各ケースに残る（本番自身の文章として扱ったが権利確認の対象）。Phase2のL0で、18件の本文を含むリクエストをAnthropicの無料count_tokensへ送っていた（課金・モデル呼び出しなし）。以後 `probe_cli` は既定でrights_safe
+- cost_estimates（台帳の平均×件数。請求書ではない。有料比較は未実行）:
+  - ニュースパイプライン全体 約 $13.3/30日（Sol判定 $8.7、Luna $1.4、検索 $1.7）
+  - ゲートでno_postになったSol判定 約 $2.6（30日の件数）〜 $5.5（現在の量）/30日。生成失敗に使った費用 約 $0.17〜0.25/30日 → 失敗の損失は費用ではなく到達
+  - 将来の比較（見積）: 一次判定×290件 Haiku(off) $0.09 / Sonnet(low) $2.60 / Opus(medium) $8.88。一次+詳細×290件 $0.20 / $5.72 / $19.03。生成の連鎖×100件 $0.12 / $3.27 / $10.04。Sonnet・Opusは一次判定でLunaの約30〜110倍。実行はユーザーの予算承認後
+- metrics_baseline:
+  - 配信失敗率の分母は「重要以上」に固定（no_postを入れると関数が失敗）。全判定を分母にした値は別名。30日 48.4%（196/405）と直近7日 **23.1%（39/169）** を窓つきで別保持
+  - 段階別: 判定でno_post 1,406、ゲート402、重要以上405、生成停止（Fact168/Voice25/ローカル1/API2）、X配信208
+  - PR116の効果は**未観測**（merge後の最初の完全な週で比較。15%への低下の検出に各群約369件=約3週間、10%なら約127件=約1週間）。直近7日の失敗39件のうち改善見込み6・部分的7・対象外26は読み取りの推定で実測ではない
+- remaining_issues: (1) `cases.json` の置換とGit履歴の扱いはPR115所有者の判断（本文を前提とする既存テストの前処理追加が必要）。(2) A担当Preflightの定義（期間・分母・状態・重複・試行か最終か）は未照合。(3) ゲート前重要度の保存（`JudgementTrace`）は承認とC2レビューが必要な本番変更で、Bからは実施しない。(4) 配信済み側100件は製品方針の問い6項目の回答後に実施。(5) 人手確認済みラベルは0件。(6) TDnet原本は未確認（403は迂回しない）。
+- safety_checks: 有料API呼び出し0。本番DBへの新規アクセス0（既存のコミット済み成果物のみ使用）。DB書込み/schema/Cron/Secrets/Provider/モデル変更なし。PR115/116/117/129・`supabase/functions/important-news-monitor/`・他slotのTASK/worktreeに触れていない。`cases.json` 不変。merge/deploy なし。AI暫定を人手承認として扱っていない（`verifier` は全件 `none`）。
+- next_recommendation: ちゃが次を判断。(a) PR115所有者へ `cases.rights_safe.json` への切替と履歴の扱いを依頼、(b) A/G8へPhase5の取得段階の高優先3件（決算短信の当期行、日銀PDFの本文、FOMC声明）を引き継ぎ、(c) ゲート観測（`JudgementTrace`）の保存方式の承認、(d) 製品方針の問い6項目の回答後に配信済み側100件を実施、(e) 有料比較はユーザーの予算承認後のみ。K9 を **ニュース改善API最適化のちゃ** に返す。
