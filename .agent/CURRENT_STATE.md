@@ -1,3 +1,17 @@
+## G2 報告 — オンデマンド個別AI分析 V1（Draft PR #143）— 2026-10-11 JST
+
+- G2 `kabumori-personalized-ondemand-background-push-v1-20261011`: **SOURCE_COMPLETE_WITH_ONE_BLOCKER**（Draft PR #143、head `1d0529bb68b0e60b32ce0a2cb0002872b1671177`）。
+  - 端から端まで実装した: 利用者の依頼 → 保存されるジョブ → サーバーの worker（毎分の Cron から。アプリを閉じても続く）→ 本人だけの結果 → 完成の通知1件 → 通知から結果を開く。
+  - 遅れて終わった worker の書き込みは、貸し出しの token・版・期限で捨てる。
+  - 共通の朝刊・大引けは、公開してよい項目だけを読む関数で表示する。
+  - ゲートはすべて既定で OFF。ON の間は、旧来の定時の個別レポートを止める（二重の生成・通知なし）。
+- 手元の使い捨ての PostgreSQL（権限・RLS・同時実行・変異テスト13通り・取り消し）と、Deno・アプリの全テストが成功した。
+- migration は**未適用**、worker と personalized-reports は**未デプロイ**、Cron は**未作成**、本番の操作・マージ・有料 API は 0。切り替えは `docs/personalized-ondemand/RUNBOOK.md`（別承認待ち・未実行）。
+- BLOCKER: 全員への共通の朝刊・大引けの一斉通知（送信の worker の容量と、送る相手の決定が要る）。本番は NO_GO。
+- PR #141 は置き換え（SUPERSEDED、未変更・未マージ）。G2 は review_required / chatgpt で K2 待ち。H1〜H4 で Sol（高）の重点レビューを推奨。
+
+---
+
 ## G6 Phase1g live smoke HOLD — sb_secret Authorization compatibility precheck — 2026-10-11 JST
 
 - While explaining user-owned credential setup, ChatGPT independently inspected merged `supabase/functions/_shared/ai_provider/ledger_guard.ts`: the RPC client sends `apikey: serviceKey` and `Authorization: Bearer serviceKey`. The Phase1g runbook recommends an ephemeral **new `sb_secret_...`** API key; Supabase official docs state these new keys are opaque, not JWTs, and should be sent in `apikey`, so bearer use may fail authorization. Source: https://supabase.com/docs/guides/getting-started/api-keys. Local fake PostgREST/shim tests do not conclusively establish managed-platform compatibility. **No actual error claimed; potential compatibility blocker.**

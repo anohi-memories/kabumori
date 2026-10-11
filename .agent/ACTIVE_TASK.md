@@ -117,11 +117,11 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-personalized-ondemand-background-push-v1-20261011
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
 - allocation: USER PRODUCT DIRECTION 2026-10-11: shared morning/close/news automated, personalized AI **only on explicit authenticated user request**, persistent server queue/worker after app exits, private stored result and once-only completion push. K2-queued prior auto-batch P1 PR141 exact 4bc5c017 is protected OPEN/Draft/unmerged and superseded as roadmap; old Report preserved, no K2 code acceptance. G2 source-only cross-layer Draft PR + offline tests, off-by-default, no live DB/Edge/Cron/API/X/push/payment/model switch or production release. No other slot changes. Return K2 here; focused independent Sol（高） review at source-ready gate.

@@ -3,8 +3,8 @@
 - task_id: kabumori-personalized-ondemand-background-push-v1-20261011
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G2
 - finish_code: K2
 - return_to: かぶモリアプリG2のちゃ
@@ -43,7 +43,233 @@
 
 ## Report — current on-demand V1
 
-PENDING G2.
+### 位置づけ
+
+- task_id: `kabumori-personalized-ondemand-background-push-v1-20261011`
+- 判定: **SOURCE_COMPLETE_WITH_ONE_BLOCKER**
+  - 依頼 → 保存されるジョブ → サーバーの worker → 本人だけの結果 → 完成の通知1件 → 通知から結果を開く、を端から端までソースで実装し、手元で検証した。
+  - BLOCKER は「全員への共通の朝刊・大引けの通知（一斉送信）」だけ。理由は下の「残る課題」。
+- Draft PR: https://github.com/anohi-memories/kabumori/pull/143（ブランチ `g2-ondemand-v1-20261011`、base は main、force-push なし）
+  - commit: `0ceead43`（本体）、`1d0529bb`（共通の市況の画面に分析のボタンを追加）
+  - head: `1d0529bb68b0e60b32ce0a2cb0002872b1671177`
+- 作業場所: G2 専用の新しい worktree `/Users/yuya/Developer/kabumori-g2-ondemand`（origin/main `7e63397b` から作成）。他のスロットの worktree・ブランチ・サーバーには触れていない。
+- merge=NO、deploy=NO、migration の適用=NO、production_calls=0。本番の DB は読み取りも含めて接続していない。Cron・Secrets・通知の実送信・X・有料 API も 0。
+- PR #141 は置き換え（SUPERSEDED）。変更もマージもしていない。考え方（通知の失敗で完成を巻き戻さない）だけを参考にし、コードは移していない。
+
+### 構成
+
+1. **受け口（本人だけ）**
+   - `request_personalized_analysis(scope, client_request_id, model_tier)`
+     - SECURITY DEFINER。`auth.uid()` で本人を決める。利用者の ID は受け取らない。
+     - 同じ利用者の依頼は、ロックで1つずつ処理する。
+     - 同じ依頼 ID の再送は、同じジョブを返す（二重タップ・2台の端末・再送）。
+     - 1人に同時に1件まで（部分ユニーク索引）。
+     - 1日の上限（既定5回、東京時間の日付）。
+     - 保有・ウォッチが無ければ受け付けない。
+     - `model_tier` は `standard` だけ。
+   - `get_personalized_analysis_status()`: 受付中か、今日の残りの回数、処理中のジョブ。本人の分だけ。
+2. **DB（migration 候補、未適用）**: `supabase/migrations/20261011150000_personalized_ondemand_analysis_v1.sql`
+   - `personalized_ondemand_settings`: ゲート。すべて既定で OFF。API のロールからは書けない。
+   - `personalized_analysis_jobs`: queued / processing / completed / failed。試行の回数、貸し出しの token・版・期限、通知の状態を持つ。
+   - `personalized_analysis_results`: 本文、Fact passed、保有のスナップショット、出典の記録、モデル、トークン、費用の見積もり、基準の回（種類と日付）。
+   - 通知の表には `source_type='personalized_analysis'` の部分ユニーク索引を1つ足すだけ。既存の表・関数・権限・方針は1つも変えていない（手元で全定義を比べて確認した）。
+3. **worker**: 新しい Edge Function `personalized-analysis-worker`（未デプロイ）
+   - DB の Cron から毎分呼ぶ（Runbook に SQL を記載、未作成）。
+   - 認証は `X-Cron-Secret`。既存の `SEND_PUSH_NOTIFICATIONS_CRON_SECRET` を使い、新しい秘密情報は増やしていない。
+   - 引き取り `claim_personalized_analysis_jobs`
+     - 先着順に引き取る。
+     - 同時に動かせる数に上限がある（既定4）。引き取りにロックがあるので、Cron が重なっても超えない。
+     - 期限切れの貸し出しは、版を進めてから順番待ちへ戻す。回数を使い切れば failed。
+   - 完了・失敗 `complete_ / fail_personalized_analysis_job`
+     - **token・版・期限がすべて一致したときだけ**効く。
+     - 遅れて終わった worker の結果と失敗は `lease_lost` で捨てる。
+     - 「生成中かどうか」を比べるだけの方式には頼っていない。
+   - 分析の流れ
+     - 共通の朝刊・大引けの、完成したパケットを直接読む（アプリ用ゲートの `app_enabled` には依存しない）。
+     - 本人の保有・ウォッチ、株価（基準の回の日付に合わせる）、ニュースを集める。
+     - 定時の個別レポートと同じ部品で、生成1回と Fact 確認1回を行う（`report_logic.ts` の buildSnapshot / buildPacket / generateReport / reportUpdate）。
+   - 共通の回が無いときは、旧来の「市場の節なし」には戻らない。作成中なら待ち、最後の試行では7日以内の完成した回で書き、それも無ければ失敗する。
+   - 貸し出しの残りが 200 秒未満なら、AI を呼ばずに順番待ちへ戻す。
+4. **RLS・権限**
+   - 本人は、自分のジョブの公開列と、自分の結果の公開列だけを読める。貸し出しの token・版、出典の記録、費用は列ごと見せない。
+   - 書き込みは、すべて RPC を通す。
+   - worker 用の RPC は service_role だけ。利用者用の RPC は authenticated だけ。service_role から利用者の依頼を代わりに出すこともできない。
+5. **アプリ**
+   - 分析の画面 `src/app/ai-analysis.tsx`
+     - 依頼のボタン3つ（最新・朝刊の視点・大引けの視点）、今日の残りの回数、依頼した分析の一覧（状態と失敗の理由）。
+     - 通信の失敗では、同じ依頼 ID で送り直す。
+     - 処理中のジョブがある間だけ、10秒おきに表示を新しくする（表示のためだけで、処理はサーバーで進む）。
+   - 共通の市況の画面 `src/app/market-report.tsx`
+     - `get_app_market_report` が返す、公開してよい項目だけを表示する。
+     - 今日の分でなければ、日付で明示する。
+     - 受付が ON なら「私の保有銘柄をAIで分析する」を出す。
+   - レポート一覧の入口: サーバーのゲートが ON のときだけ出す。関数が無い・取得に失敗したときは出さない。
+   - 詳細画面: `?source=analysis` のとき分析の結果を読み、「あなたの依頼で作成・◯月◯日の大引けレポートを基準にした分析」を出す。
+   - アプリには service_role のキーも AI の呼び出しも無い。
+6. **通知**
+   - 完成したジョブごとに1件だけ予約する（部分ユニーク索引）。
+   - 送信は既存の送信の worker が行う（未知の source_type も `push_enabled` だけで送ることを確認した）。
+   - プッシュ通知が OFF の人や、通知設定の行が無い人には予約しない。結果はアプリで読める。
+   - 予約に失敗しても完成のまま。印を付けて次の実行で予約し直す（最大3回）。ここでは送信しないので、送信結果が不明な通知を再送することはない。
+   - 通知をタップすると `/reports/<job_id>?source=analysis` を開く。
+7. **旧来の定時の個別レポート**
+   - `personalized-reports/index.ts` は、`ondemand_requests_enabled=true` の間、その回を丸ごと飛ばす（`ONDEMAND_MODE`）。対象者の読み込み・生成・通知より前に判定する。
+   - 表が無いとき（404）は OFF として従来どおり動く。読み取りの失敗が続いたときは、その回は何もしない（二重の生成を避ける側に倒す）。
+   - 入力の部品（保有・ニュース・株価）は、`portfolio_inputs.ts` へ中身を変えずに移した。
+
+### 変更したファイル（30）
+
+- 新規: migration 1、worker 8（テスト3を含む）、`personalized-reports/` 3（`ondemand_mode.ts`、そのテスト、`portfolio_inputs.ts`）、手元の PG の検証 4、アプリ 4（2画面、`ondemand-analysis.ts`、`ondemand-analysis-presentation.ts`）、アプリのテスト 1、Runbook 1
+- 変更: `personalized-reports/index.ts`、`src/app/_layout.tsx`（2画面を登録）、`src/app/(tabs)/reports/index.tsx`、`src/app/(tabs)/reports/[id].tsx`、`src/lib/report-presentation.ts`、`src/hooks/use-push-notification-navigation.ts`（コメントだけ）、既存のアプリのテスト2（画面の一覧と、詳細画面の引数の形）
+
+### main との差分・他のスロットとの競合
+
+- 作業の起点（`7e63397b`）のあと、main で変わったのは `.agent` のファイルだけで、コードの重なりは無い。
+- 開いている PR との重なりは、置き換え済みの PR #141（`personalized-reports/index.ts`）だけ。G1 の PR #142 とは、ファイルの重なりが無い。
+- G5（アカウント・削除）・G6（共通 AI 基盤）・G3/G4・G7・G8・G9 のソースは変えていない。
+- 新しい表は、どれも利用者の削除で連鎖して消える。共通アカウント基盤の検査（`PROFILES_CHILD_NOT_CASCADE`）を満たす。
+- G1 のポートフォリオ・銘柄の画面は触っていない。ホームの画面も変えていない。
+
+### テスト（すべて手元。実際に実行したもの）
+
+**手元の使い捨ての PostgreSQL 17**（`OD_PGHOST=/tmp/... bash supabase/tests/personalized_ondemand_analysis_run.sh`）。所要約18秒、すべて PASS。
+- 事前確認: 土台が無ければ、何も作らずに止まる。
+- 追加だけ: 既存の定義の変化0。追加は想定の表・索引・関数だけ。
+- 取り消し: 取り消しの SQL のあと、定義が適用前と完全に一致する。
+- 二重の適用は拒否される。
+- 動作（約120の確認）
+  - 既定の OFF
+  - 匿名・他のロール・本人以外の拒否（列の権限・RLS・RPC）
+  - service_role による利用者の依頼の代行の拒否
+  - 再送・二重依頼・上位モデルの拒否
+  - 誤った token・誤った版・期限切れの完了の拒否
+  - 期限切れの引き取り直しで版が2つ進むこと
+  - 遅れた worker の完了・失敗の拒否
+  - 回数を使い切ったときの failed
+  - 再試行の待ち時間
+  - 1日の上限
+  - 通知が1件だけになること（記録が失われたあとの再予約でも重複しない）
+  - 通知 OFF・設定の行なしの扱い
+  - 共通の市況で、モデル名・根拠の ref・Fact の内部・費用が出ないこと、今日でない回の明示、ゲート
+  - 同時に動かせる数の上限
+  - 100人・1000人の公平さ（依頼の順に全員ちょうど1回、通知は ON の人だけ1件）
+  - 削除の連鎖
+- 2つの接続での同時実行
+  - 同じ利用者の同時の依頼: 1件だけ作られる。同じ ID の同時の再送も同じジョブになる。
+  - 同時の引き取り: 上限を超えず、同じジョブを2回取らない。
+  - 完了と期限切れの引き取り直しの競合: 両方の順序で確かめた。
+- 変異テスト: 守りを1つずつ外した **13通りの版をすべて検出した**。外した守りは、版、期限、token、期限切れでの版の繰り上げ、引き取りのロック、依頼のロック、上限、通知の設定、1日の上限、RLS、共通レポートの項目の漏れ、共通レポートのゲート、モデルの層。
+
+**Deno・アプリのテスト**（`deno test -A --no-config --node-modules-dir=none`。`_shared` と `tests/app` は `--no-check`）
+
+| 対象 | 件数 | 結果 |
+|---|---|---|
+| `personalized-analysis-worker/`（新規） | 31 | 成功 |
+| `personalized-reports/` | 134（新規5） | 成功 |
+| `market-report-analysis/` | 283 | 成功 |
+| `x-test-post/shared_market_report_consumer_test.ts` | 10 | 成功 |
+| `market-report-data-packet/` | 42 | 成功 |
+| `_shared/` | 597 | 成功 |
+| `tests/app/` | 508（新規10） | 成功 |
+| `supabase/tests/migration_source_invariants_test.ts` | 11 | 成功 |
+
+- worker の模型（DB と同じ規則）で確かめたこと
+  - token と版
+  - 遅れて終わった worker の結果・失敗の破棄（結果1件・通知1件）
+  - 何も書かずに止まった worker の引き取り直し
+  - 例外の再試行と、回数の使い切り
+  - 秘密情報を含みうる例外の文章を記録しないこと
+  - 貸し出しの残りが短いときに AI を呼ばないこと
+  - 通知の失敗でも完成のままで、次回1回だけ予約すること、3回で予約をやめること
+  - 100件・1000件の公平さ（2つの worker の同時実行、同時に動くのは4まで）
+- 分析の流れ: 本物の共通パケット（2026-09-18 大引け）と模型の DB・AI で確かめたこと
+  - 前日の回を基準にしたときの株価の基準日（後の日の値を使わない）
+  - 本人の保有だけを使い、他人の行が返っても使わない
+  - 共通の市場の節はパケットのまま
+  - 作成中なら待ち、最後の試行で前の回を使う
+  - 共通の回が無いときの失敗
+  - 保有なし・上位モデル・Fact 不合格のとき
+- 東京時間の日付: 日本時間の深夜0時をまたぐときの扱い（UTC の日付を使うと誤ることも再現した）。
+- deno check / lint（変更した Deno のファイル）はどちらも0件。`git diff --check` は問題なし。
+- アプリの tsc（`src/`）は、既存の CSS の読み込みの2件だけで、新しいエラーは0件。
+
+**実行していないもの**
+- Simulator・実機での画面の確認（ゲートが ON のサーバーが無いため）。
+- 本物の OpenAI・Expo・Supabase での確認。
+
+### モデル
+
+- V1 の通常分析は、今の個別レポートと同じ `report_logic.REPORT_MODEL` と、同じ OpenAI の呼び出し。新しいモデル名や原価は書いていない。
+- `model_tier` は DB と worker の両方で `standard` だけを受け付ける。アプリは「上位のモデルは準備中」と表示する。Haiku・Opus は使えない。
+- G6 の共通 AI 基盤（provider・ledger）は変えていない。
+- 課金・回数の引き落とし・購入の画面は無い。1日の上限だけ。
+
+### 本番の状態
+
+- migration・worker・Cron・定時の個別レポートの変更・アプリは、**すべて本番に未反映**。
+- ゲートは、本番には存在すらしない（migration が未適用）。
+- 旧来の個別レポートの Cron は、本番で現状のまま。止めていない。
+- 切り替えの手順は `docs/personalized-ondemand/RUNBOOK.md` に書いた（別承認待ち・未実行）。
+  - 段階0: 読み取りの確認
+  - 段階1: migration
+  - 段階2: デプロイ
+  - 段階3: worker の Cron
+  - 段階4: アプリの公開
+  - 段階5: ゲートを ON（共通の市況 → 分析の順）
+  - 段階6: 旧来の Cron の停止（任意）
+  - ほかに、見張り・止め方・取り消しを記載。
+
+### 残る課題
+
+- **BLOCKER（共通の朝刊・大引けの一斉通知）**: 実装していない。理由は次のとおり。
+  1. 送信の worker は1分に200件まで。全員分を一度に予約すると、重要ニュースの通知が、その件数ぶん遅れる（例 1万人で約50分）。
+  2. 誰に送るか（既存の `morning_report` / `close_report` を使うか、新しい設定か）は、プロダクトとして決める必要がある。
+  3. 送るきっかけを作るには、X と共有している market-report-analysis の経路を触るか、新しい Cron が要る。
+- **本番の P0（切り替えの前に必要）**
+  - migration の適用
+  - worker と personalized-reports のデプロイ。personalized-reports には、まだ本番に出ていない main の変更（PR110・PR132 など）も一緒に入るので、先に差分を確認すること。
+  - worker の Cron
+  - アプリのビルドの公開
+  - 段階0の読み取りの確認
+- **P1（確認・決めること）**
+  - Edge Function の実時間の上限と、pg_net の待ち時間（Runbook では 150 秒）を過ぎたあとに関数が動き続けるかは未確認。止まっても、貸し出しの期限切れのあとに引き取り直す。
+  - `max_attempts=2` だと、今日の回が作成中のときに待つのは約1〜2分で、そのあとは前の回で書く（日付は明示する）。もっと待たせたいなら 3〜5 に上げる。
+  - 完成の通知は `push_enabled` だけを見る（`morning_report` / `close_report` は定時のレポート用として見ていない）。
+  - 1日の上限は、失敗した分も数える（無駄な AI の呼び出しを防ぐため）。プロダクトとして要確認。
+  - 大引けの分析の「朝の見立てとの答え合わせ」は、定時の朝刊の個別レポートがある日だけ。オンデマンドに切り替えると、その日の比較は無くなる。
+  - PostgREST の既定の取得件数の上限は、本人の分の読み込みだけなので影響しない。
+
+### GO / NO_GO
+
+- **ソース:** Draft のレビュー候補。K2 の確認と、下の独立レビューが要る。
+- **本番:** **NO_GO**。上の P0 が未実施のため。どの段階も、ユーザーの別承認が要る。
+
+### 次に必要な作業
+
+1. K2 の確認。
+2. H1〜H4 の空き枠で、Sol（高）の重点独立レビュー（範囲は下）。
+3. 指摘があれば、G2 で修正する。
+4. 本番は、段階0の読み取りの確認から、Runbook の順に、1段ずつ別承認で進める。
+5. 共通の一斉通知は、プロダクトの決定（誰に送るか）のあとで、別の TASK にする。
+
+### 推奨する重点レビューの範囲（Sol（高）、1回）
+
+- 貸し出しの fencing
+  - `claim` / `complete` / `fail` の、token・版・期限の判定
+  - 期限切れの処理と、ロックの順序
+  - READ COMMITTED での同時実行（引き取りのロックと `skip locked`、完了と期限切れの引き取り直しの競合）
+- SECURITY DEFINER の4つの利用者用・共通の関数
+  - `auth.uid()` の扱い
+  - `search_path=''`
+  - 列の権限と RLS
+  - 共通の市況で、公開してよい項目だけが出ること
+- worker
+  - 失敗の分類（再試行するか）
+  - 費用の上限（1件あたり AI 2回 × 試行の回数）
+  - 例外の文章を記録しないこと
+- `ONDEMAND_MODE` の判定の位置と、読み取りの失敗を安全側に倒す扱い
+
+Recommended next owner: **chatgpt（K2）**
 
 ---
 
