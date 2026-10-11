@@ -1,3 +1,35 @@
+## Orchestration / current slot snapshot — 15-slot expansion H1〜H5 + G1〜G10 (2026-10-11 JST)
+
+- checked_main: `570cc45fe487ae911e6bd3c0d2cc6291dfae4837`（fresh `origin/main`）。以下は各TASKの先頭メタデータを読み取ったスナップショットであり、完了判定・再割当は行っていない。正本は各TASK / Report。
+- Codexを H1〜H5 の5枠、Claudeを G1〜G10 の10枠へ拡張（全15枠）。新規 H3〜H5（`.agent/tasks/CODEX_TASK_3.md`〜`_5.md` / `.agent/CODEX_REPORT_3.md`〜`_5.md`）と G6〜G10（`.agent/tasks/CLAUDE_TASK_6.md`〜`_10.md`、ReportはTASK末尾）は未割当テンプレート。
+- 目的: 直接指示で使っていた作業も、明示割当でTASKを置くことで今後 `F` からすべて把握できるようにする。`F` は全15枠のTASK / ReportとACTIVE_TASK / CURRENT_STATEを確認する。
+- 完了確認コードは1対1: H1→`C1` … H5→`C5`、G1→`K1` … G10→`K10`。単独 `C` は使わない。単独 `G` / `K` はG1〜G10から対象が1枠だけと明白な場合のみ。
+- G1/G2=かぶモリ、G3/G4=Xの基本ルーティングを維持。G5〜G10は予備・明示割当専用で、idleやG1〜G4満杯を理由に自動使用しない。H1〜H5は固定プロジェクト専用にしない。
+- H1〜H5の新規TASKには `return_to` / `completion_code` を必ず記入し、全枠で割当時の推薦モデル必須（Claude: Sonnet5 / Opus5.5、Codex: Luna / Sol × 中・高・極高）。独立worktree / checkoutルールと `kabumori-fresh` clean baseは全15枠に適用。
+
+| Slot | status（TASK正本） | task_id | next_owner | return_to（H枠） | 完了確認 | TASK / Report |
+| --- | --- | --- | --- | --- | --- | --- |
+| H1 | `ready` | `postona-h1-threads-oauth-edge-offline-implementation-20261011` | `codex` | POSTONA｜マルチSNS化・開発統括（G4）のちゃ | `C1` | `.agent/tasks/CODEX_TASK.md` / `.agent/CODEX_REPORT.md` |
+| H2 | `done` | `kabumori-fact-v2-pr132-final-integrated-review-20261011` | `none` | かぶモリアプリG2のちゃ | `C2` | `.agent/tasks/CODEX_TASK_2.md` / `.agent/CODEX_REPORT_2.md` |
+| H3 | `idle` | `none` | `none` | none（未割当） | `C3` | `.agent/tasks/CODEX_TASK_3.md` / `.agent/CODEX_REPORT_3.md` |
+| H4 | `idle` | `none` | `none` | none（未割当） | `C4` | `.agent/tasks/CODEX_TASK_4.md` / `.agent/CODEX_REPORT_4.md` |
+| H5 | `idle` | `none` | `none` | none（未割当） | `C5` | `.agent/tasks/CODEX_TASK_5.md` / `.agent/CODEX_REPORT_5.md` |
+| G1 | `review_required` | `kabumori-stock-detail-v1-readonly-navigation-20261011` | `chatgpt` | — | `K1` | `.agent/tasks/CLAUDE_TASK_1.md` |
+| G2 | `ready` | `kabumori-fact-v2-pr132-three-objective-guards-correction-20261011` | `claude` | — | `K2` | `.agent/tasks/CLAUDE_TASK.md` |
+| G3 | `in_progress` | `postona-unified-ai-manual-schedule-planner-v1-20261011` | `claude` | — | `K3` | `.agent/tasks/CLAUDE_TASK_3.md` |
+| G4 | `idle` | `none` | `none` | — | `K4` | `.agent/tasks/CLAUDE_TASK_4.md` |
+| G5 | `in_progress` | `common-account-phase3g-free-auth-provider-test-readiness-20261011` | `claude` | — | `K5` | `.agent/tasks/CLAUDE_TASK_5.md` |
+| G6 | `idle` | `none` | `none` | — | `K6` | `.agent/tasks/CLAUDE_TASK_6.md` |
+| G7 | `idle` | `none` | `none` | — | `K7` | `.agent/tasks/CLAUDE_TASK_7.md` |
+| G8 | `idle` | `none` | `none` | — | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
+| G9 | `idle` | `none` | `none` | — | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
+| G10 | `idle` | `none` | `none` | — | `K10` | `.agent/tasks/CLAUDE_TASK_10.md` |
+
+- 既存索引との差分: G1（索引 `ready` / 正本 `review_required`）。各担当の記録直後で索引が未更新と見られるため、衝突を避けてこの拡張では既存枠の索引を変更していない。TASK正本を優先する。この拡張ではH1/H2/G1〜G5のTASK本文・Report・status・allocationを変更していない。
+- `in_progress`: G3 / G5。`ready`（開始可能・作業中の可能性あり）: H1 / G2。`review_required`: G1。`done`: H2。実際の作業状況は各TASK / Reportで確認する。
+- 既存7枠の `done` / `idle` の枠も既存割当の保護対象であり、新規割当には本文・Report・next_owner・競合・作業環境のfresh確認が必要。新規のH3〜H5 / G6〜G10も、statusだけで空きと判断せず同じ確認を行う。
+- 下記の過去の完了記録は履歴。現在の割当は各TASK / Reportと上記スナップショットを参照する。
+
 ## C2 FINAL — Fact V2 PR132 three P2 objective-guard regressions; G2 narrow correction READY — 2026-10-11 JST
 
 - H2 completed ONE integrated final source-only review `kabumori-fact-v2-pr132-final-integrated-review-20261011` exact PR132 `bd424616a135e7bf71592c2ac41acb3e03f8568d` on protected PR110 `319a442edcd61c07274e3409d8864234f9d77cd4`, both OPEN/UNMERGED, PR132 DRAFT. **C2 verdict CHANGES_REQUIRED — 3 reproducible P2 objective Fact exception regressions, NOT an objection to Opus independent analysis**.

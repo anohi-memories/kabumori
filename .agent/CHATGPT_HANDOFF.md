@@ -10,25 +10,29 @@
 - 通常のレビュー・バグ修正・検証担当: Codex（こでさん）
 - ChatGPT（ちゃ）: 全体オーケストレーションとレビュー時期判断
 
-### 6スロット
+### 15スロット（2026-10-11〜）
 
 - H1: `.agent/tasks/CODEX_TASK.md` / `.agent/CODEX_REPORT.md`
 - H2: `.agent/tasks/CODEX_TASK_2.md` / `.agent/CODEX_REPORT_2.md`
+- H3〜H5: `.agent/tasks/CODEX_TASK_3.md`〜`CODEX_TASK_5.md` / `.agent/CODEX_REPORT_3.md`〜`CODEX_REPORT_5.md`
 - G1: `.agent/tasks/CLAUDE_TASK_1.md`（ReportはTASK内）
 - G2: `.agent/tasks/CLAUDE_TASK.md`（ReportはTASK内）
 - G3: `.agent/tasks/CLAUDE_TASK_3.md`（ReportはTASK内）
 - G4: `.agent/tasks/CLAUDE_TASK_4.md`（ReportはTASK内）
+- G5〜G10: `.agent/tasks/CLAUDE_TASK_5.md`〜`CLAUDE_TASK_10.md`（ReportはTASK末尾。予備枠・明示割当専用）
 
 ### コード
 
-- `H1` / `H2`: Codex開始
-- `C1` / `C2`: Codex個別完了確認
-- `G1`〜`G4`: Claude開始
-- `K1`〜`K4`: Claude個別完了確認
-- 単独`G` / `K`: 対象が1枠だけ明白な場合のみ
-- `F`: 全6枠統括
+- `H1`〜`H5`: Codex開始
+- `C1`〜`C5`: Codex個別完了確認（H1→C1 … H5→C5。返却先はH TASKの `return_to`）
+- `G1`〜`G10`: Claude開始
+- `K1`〜`K10`: Claude個別完了確認（G1→K1 … G10→K10）
+- 単独`G` / `K`: 対象が1枠だけ明白な場合のみ。単独`C`は使わない
+- `F`: 全15枠統括
 
-Claudeが5時間利用制限に到達した場合だけ、ChatGPT判断でCodexへ臨時実装を割り当てられる。通常時のH1/H2はレビュー・バグ修正・検証用。
+詳細と正本は `PROJECT_RULES.md` と `.agent/ORCHESTRATION.md`。
+
+Claudeが5時間利用制限に到達した場合など必要時だけ、ChatGPT判断でCodexへ臨時実装を割り当てられる。通常時のH1〜H5はレビュー・バグ修正・検証用。
 
 ChatGPTは機能完了、DB/API境界、認証・権限、複数レイヤー変更、重要バグ修正後、本番反映前などを目安にレビュー要否を判断する。固定条件ではなくリスクベース。既存TASKを上書きせず、未割当H枠だけを使う。
 

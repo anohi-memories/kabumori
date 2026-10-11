@@ -18,7 +18,7 @@ GitHub共有タスク運用は `.agent/ORCHESTRATION.md` を参照する。競�
 - 旧 `/Users/yuya/Developer/kabumori` は既存worktree群の保護用として保持し、新規作業のbaseには使用しない。
 - 既存G1〜G5 worktreeは対応TASK完了まで継続してよい。旧repo / 旧worktreeを削除・rename・prune・resetしない。
 - 新規G slotは `kabumori-fresh` で fresh `origin/main` を確認し、slot専用の独立worktree / checkoutを作成してから作業する。
-- G1〜G5 / K1〜K5 の意味と既存TASK運用は従来どおり。詳細は `.agent/ORCHESTRATION.md` を正とする。
+- G1〜G5 / K1〜K5 の意味と既存TASK運用は従来どおり。2026-10-11追加のG6〜G10 / K6〜K10も同じルールに従う。詳細は `.agent/ORCHESTRATION.md` を正とする。
 
 ## レビュー頻度の最新方針
 

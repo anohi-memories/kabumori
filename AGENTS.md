@@ -17,7 +17,7 @@ GitHub共有タスク運用は `.agent/ORCHESTRATION.md` を参照する。競�
 - 旧 `/Users/yuya/Developer/kabumori` は既存worktree保護のため保持し、新規作業のbaseには使用しない。
 - 既存H1/H2 worktreeは対応TASK完了まで継続してよい。旧repo / 旧worktreeを削除・rename・prune・resetしない。
 - 新規H slotは `kabumori-fresh` の fresh `origin/main` から専用の独立worktree / checkoutを作成する。
-- H1/H2/C1/C2の意味と既存TASK運用は従来どおり。
+- H1/H2/C1/C2の意味と既存TASK運用は従来どおり。2026-10-11追加のH3〜H5/C3〜C5も同じルールに従う。
 
 ## Codex task start codes
 
@@ -25,5 +25,8 @@ GitHub共有タスク運用は `.agent/ORCHESTRATION.md` を参照する。競�
 
 - `H1`: Codex slot 1。`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、`.agent/tasks/CODEX_TASK.md` を確認し、TASKが `ready` または `in_progress` の場合のみ開始する。
 - `H2`: Codex slot 2。`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、`.agent/tasks/CODEX_TASK_2.md` を確認し、TASKが `ready` または `in_progress` の場合のみ開始する。
+- `H3`: Codex slot 3。`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、`.agent/tasks/CODEX_TASK_3.md` を確認し、TASKが `ready` または `in_progress` の場合のみ開始する。
+- `H4`: Codex slot 4。`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、`.agent/tasks/CODEX_TASK_4.md` を確認し、TASKが `ready` または `in_progress` の場合のみ開始する。
+- `H5`: Codex slot 5。`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、`.agent/tasks/CODEX_TASK_5.md` を確認し、TASKが `ready` または `in_progress` の場合のみ開始する。
 
-`idle` / `done` / `review_required` の場合は勝手に新規作業を開始しない。H1/H2の意味をユーザーへ聞き返さない。
+`idle` / `done` / `review_required` の場合は勝手に新規作業を開始しない。H1〜H5の意味をユーザーへ聞き返さない。
