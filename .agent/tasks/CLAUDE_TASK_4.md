@@ -20,6 +20,8 @@
 - delegated_task: postona-g4-x-oauth-containment-defensive-assessment-20261010
 - return_trigger: C1 completed 2026-10-11; defensive H1 assessment accepted, H1 now done. G4 remains blocked; ask user to approve a separate read-only live metadata/aggregate preflight before any next implementation. No G4 restart without new safe TASK.
 - h1_verdict: PASS_DEFENSIVE_ASSESSMENT_ONLY, not vulnerability remediation or production approval.
+- user_decision_2026_10_11: **DEFER X OAuth preclaim remediation for later; prioritize POSTONA other features**. Current users are limited according to user. No permission to resume this legacy TASK or deploy candidate fixes. **Security concern remains open**, with actual production `authenticated` EXECUTE on `public.complete_social_mobile_x_oauth_connection` verified by read-only Supabase metadata check, but no demonstrated account takeover or victim posts; risk is bogus X-ID binding / denial of legitimate connection. No known exploit proof in production. The user accepts temporary deferral but this is **not** a security PASS. Reevaluate at onboarding/auth integration or before widening access, and track for post-release remediation if user still elects a limited release. Use new explicit scoped TASK after coordination with G5/G3; no automatic migration/ACL revocation/deploy, connection pause, PR #126 merge or G4 restart.
+
 
 ## Context / precise risk
 
