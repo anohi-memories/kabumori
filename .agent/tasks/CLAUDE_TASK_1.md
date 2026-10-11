@@ -3,8 +3,8 @@
 - task_id: kabumori-portfolio-holdings-stale-valuation-guard-20261011
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: normal
 - task_type: Kabumori financial presentation integrity / source-only
 - recommended_model: **Sonnet5（中）**
@@ -136,6 +136,35 @@ The user's explicit decision about 2026-10-07 through 10-09 OLD delivery missing
 
 ### return_to
 - かぶモリアプリG1のちゃ — send `K1`.
+
+### K1 targeted corrective appendix — focus/refresh reload must withhold cached valuations (2026-10-11), PR #142
+
+- result: **CORRECTED** — every load (first open, tab focus, pull-to-refresh) now closes valuation eligibility **before any request is awaited**, and re-opens it only when that same load has read the registrations successfully and its report request has finished. Same PR #142 branch; no new PR, no force push, no history rewrite.
+- status: `review_required` / next_owner `chatgpt` (return to かぶモリアプリG1のちゃ for `K1`)
+- PR #142 head: `5fe4a6e37d6899e9731bd4ca6bc2c4e8e825ed38` → **`cfaf5dcf8d24b942988c10acf7a3959c05dba20a`** (one commit on top; PR still OPEN, not merged)
+- preflight: PR head verified equal to the K1-reviewed `5fe4a6e3` (remote and local) at start and again immediately before push; no other open PR touches `explore.tsx` / `portfolio-view|load` / `portfolio-screen_test`.
+
+#### Root cause (as K1 described, confirmed)
+`load()` set `loading=true` but left `registrationsKnown=true` and the previous `items`; `registrations = registrationsKnown ? items : null` kept feeding the PREVIOUS registrations to `assetSummary` / `topImpacts` / `buildHoldingRows` until the new `tracked_stocks` read resolved — a pre-edit valuation could show as current right after returning from the stock detail editor. Reports and registrations also resolved into state independently and a slower older load could overwrite a newer one.
+
+#### Change
+- `src/app/(tabs)/explore.tsx`: `registrationsKnown` → `registrationsReady`. The load sequence is delegated to `runPortfolioLoad`; the sink's `begin()` is `setRegistrationsReady(false)` (+ loading) and `settled(ready)` is the only place that sets it back. The three financial surfaces still receive `registrations = registrationsReady ? items : null`. While a reload is pending the cached registrations stay **listed** (`buildHoldingRows(items, null, …)`: no price, no valuation, no 未反映 tag — `hasReport` is false for rows that are merely waiting) so the holdings list does not empty out; the "no holdings yet" empty state still needs a verified-empty account. Query/auth code is the same read path (`auth.getUser` + the same owner-constrained `tracked_stocks` select + `fetchRecentReports(20)`), just wrapped; no new request, no auth change.
+- `src/lib/portfolio-load.ts` (**new, ~100 lines, no imports**): explained helper that the K1 note allowed "only if necessary". It exists so the transition can be tested **behaviourally** instead of by source text: `createLatestLoadGate()` (latest-wins ticket) and `runPortfolioLoad(gate, deps, sink)`. Contract: `begin()` first (before any await); results of a load are applied only while it is still the latest; `settled(true)` only after THIS load's registrations read succeeded AND its report request finished; signed-out / failed / thrown read settles `false`; a failed report with a good registration read still settles `true` (last good report, as before).
+- Not changed: `portfolio-view.ts`, `stock-detail-view.ts`, editor, sections/design, watchlist, backend/Auth/RLS, NativeTabs.
+
+#### Tests (fail-before / pass-after, actually executed)
+- `tests/app/portfolio-screen_test.ts`: 2 old pins updated to the new structure, 9 new tests — pure sequence tests (begin before any await; report-first / registrations-first both stay closed until settled; signed-out / failed / thrown stay unknown; failed report + good registrations; overlapping reloads in both completion orders → the stale load is silent and cannot re-open valuations; recovery after a failed load; the gate) plus a screen contract (sink closes at begin, opens only at settled, only two writers of the flag, surfaces get `null`, cached rows listed but unpriced).
+- **Before the source change** (helper + tests present, `explore.tsx` byte-identical to PR head `5fe4a6e3`): `deno test --no-check --no-lock --no-config --allow-read tests/app/portfolio-screen_test.ts` → **23 passed / 3 failed** — the three screen-contract tests fail (the old `load()` structure, `registrationsKnown`, no sink/gate). The helper's unit tests pass because the helper is new code: they pin the behaviour the screen is now required to use, and the contract tests prove the screen does.
+- **After**: same file **26 passed / 0 failed**; full `tests/app/` **521 passed / 0 failed** (512 + 9); `tsc --noEmit` — no new errors (only the two pre-existing css type-declaration errors in `animated-icon.web.tsx` / `global.css`); `git diff --check` OK.
+
+#### Simulator (375pt fixture rig, iOS 27, no network)
+- Backend latency raised to 6 s, tab refocused: **during the reload** the asset card shows `—` everywhere (no note, no sparkline, no stale numbers; botanical background/date label kept); after the load settles the original values and sparkline return (positive control unchanged). Temporary device, Metro (8083) and ctl (8099) were stopped/deleted afterwards. 402pt / real device not run.
+
+#### Honest trade-off for K1
+- Because valuation eligibility is closed at the start of every reload, the asset card and the per-holding P/L now blink to `—` for the duration of each focus/pull reload (typically sub-second) and then return. That is the intended effect of the correction (no pre-edit number is shown as current); a quieter variant (keep showing the last pair until the new read finishes) would reintroduce exactly the flash K1 flagged.
+
+#### Safety
+- deploy=0, EAS=0, Supabase/Edge/migration=0, real-user data writes=0 (the fixture rig only); no other slot's process, port, branch or worktree touched; no new PR.
 
 ---
 
