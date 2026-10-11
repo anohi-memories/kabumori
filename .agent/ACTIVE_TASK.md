@@ -91,17 +91,17 @@
 ## Codex H5
 - owner: codex
 - slot: codex-5
-- status: ready
+- status: done
 - task_id: postona-threads-oauth-runtime-bridge-h5-20261011
 - start_code: H5
 - finish_code: C5
 - completion_code: C5
-- next_owner: codex
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CODEX_TASK_5.md
 - report: .agent/CODEX_REPORT_5.md
-- allocation: User 2026-10-11 authorized using H5 temporarily to finish POSTONA Threads connection and first text-post pilot. H5 explicitly assigned 臨時実装 Threads OAuth trusted runtime/verified principal/callback/durable claim/owner-only RPC transport source and mock PG tests, stacked on protected Draft PR135/PR124 if safe. This is NOT a model-safety bypass. G4 independently owns Threads publish API/manual UI (separate paths); G3 schedule, G5 shared Auth/T13/deletion and all other slots protected. No real Meta/Supabase/Auth calls, secrets, DB apply, production writes, merge, deploy or real posts until separate tester pilot authorization. H5 source implementation only; no permanent reservation after C5.
-- recommended_model: Sol（高）
+- allocation: C5 2026-10-11 CHATGPT ACCEPTED PASS_SOURCE_CANDIDATE / RELEASE_HOLD. Exact Draft PR139 head b4fa672f97592e87682671454e868a92098cbd56, OPEN/UNMERGED, one commit 13 entirely new H5 source/test/docs paths stacked on original Draft PR135 exact e38788d6677082138f0990453c7d2f00549666d0. H5 PR reported Deno32 focus/97 combined PASS and fake-PG17 concurrency/ACL/parent integration PASS; tests not independently rerun. Auth+owner SQL state claim candidate implemented but effective production DB owner transport/session privileges/Meta/GoTrue/Vault/T13/T9/T10/mobile callback not proven; new Edge returns 503, static gate false. This C5 was independently recorded by ChatGPT from verified PR/source after Codex Report had NOT been synced; .agent/CODEX_REPORT_5.md explicitly distinguishes assessment authorship. No merge/deploy/real connection/post, no H5 park. H5 now done/unreserved; H1-H4/G1-G10 unaffected, future focused Sol（高） security review required only at integrated release gate.
+- recommended_model: Sol（高） (source candidate completed; C5)
 ## Claude G1
 - owner: claude
 - slot: claude-1
