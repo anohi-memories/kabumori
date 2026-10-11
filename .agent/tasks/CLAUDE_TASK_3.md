@@ -18,6 +18,15 @@
 - production_deploy_PR_merge_EAS_TestFlight: FORBIDDEN
 - protect: previous G3 Report/PR127, H1 Threads OAuth, G4 X OAuth Issue131, G5 shared account/Auth, G1/G2/H2, existing X/Kabumori/AI Lab posting
 
+## G3 SOURCE MERGE RECEIPT — PR138 / 2026-10-11 JST
+
+- K3 accepted unified POSTONA AI/manual local-only schedule preview, then user authorized proceeding with PR138 merge. [PR #138](https://github.com/anohi-memories/kabumori/pull/138) was safely **SQUASH MERGED**, GitHub verified `closed / merged=true`, exact reviewed source head `f6b8f866b449cd432f649c132bbaa2e70a9f2ace`, merge commit `a9b7cd2032169ae375a4b9f3e3086e6b3a2f3ff7`, PR `merged_at=2026-10-11T14:30:47Z` (23:30:47 JST).
+- Pre-merge: main 68 commits advanced from PR's common base but ZERO changed-file overlap across 10 PR files; REST `mergeable=true`, Draft marked ready, SHA-guarded squash accepted. GitHub read-back squash commit changed EXACTLY 10 approved `apps/social-mobile`/tests and `docs/postona` files, main pointed to merge commit immediately afterward. Vercel CI failure was account-wide deploy rate limit, not local suite failure; Netlify preview canceled.
+- Source-only: plans remain in-memory preview `プレビュー／未予約・投稿されません`, user-authored exact/random/interval and AI frequency plan, no DB/cloud reservation, no live X/Threads posting. This action did not directly deploy Edge, apply migration, change Auth/RLS/RPC/Cron/Vault, run EAS/native or call provider APIs. Automatic GitHub hosting hooks may run; their downstream deployment outcomes were not independently confirmed.
+- G3 TASK **done / next_owner none**. No new task was assigned. Separate runtime authorization G5/G4, new user-scoped booking backend and independent Sol（高） security review + user-approved pilot remain required. Previous `MERGE_HOLD` statement was the historical K3 acceptance gate before this separate user-authorized source merge.
+
+---
+
 ## K3 FINAL ACCEPTANCE — Unified AI + manual local schedule planner V1 / PR #138
 
 - task_id: `postona-unified-ai-manual-schedule-planner-v1-20261011`
