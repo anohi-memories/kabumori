@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -13,6 +14,7 @@ import {
   STOCK_SEARCH_PROMPT,
   stockSearchFilter,
 } from '@/lib/stock-search';
+import { searchResultDetailHref } from '@/lib/stock-detail-view';
 import type { StockMaster } from '@/lib/stocks';
 import { supabase } from '@/lib/supabase';
 
@@ -20,7 +22,8 @@ const colors = KABUMORI_COLORS.light;
 
 // Stock search as its own screen (a root Stack route; it used to redirect into the 銘柄 tab). Same behaviour
 // as before: code / company-name search, debounced, sanitized, at most 30 results, a registered-state check,
-// and an unregistered result opens the editor so it can be added as a holding or a watch stock.
+// an unregistered result opens the editor so it can be added as a holding or a watch stock, and a registered
+// result opens that stock's detail (/stock-detail) -- the editor itself is reached from there.
 export default function SearchScreen() {
   const input = useRef<TextInput>(null);
   const requestId = useRef(0);
@@ -30,6 +33,7 @@ export default function SearchScreen() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(STOCK_SEARCH_PROMPT);
   const [selected, setSelected] = useState<StockMaster | null>(null);
+  const shown = useRef<StockMaster[]>([]);
 
   async function search(term: string) {
     const currentRequest = ++requestId.current;
@@ -92,6 +96,30 @@ export default function SearchScreen() {
   }, [query]);
 
   useEffect(() => {
+    shown.current = results;
+  }, [results]);
+
+  // Back from a stock detail the registration may have been removed there (or added from it): the registered
+  // badges of the results on screen are re-checked, and the query and results themselves are left as they were.
+  useFocusEffect(useCallback(() => {
+    const stocks = shown.current;
+    if (!stocks.length) return;
+    let cancelled = false;
+    void (async () => {
+      const { data: authData } = await supabase.auth.getUser();
+      if (cancelled || !authData.user) return;
+      const { data } = await supabase
+        .from('tracked_stocks')
+        .select('stock_id')
+        .eq('user_id', authData.user.id)
+        .in('stock_id', stocks.map((stock) => stock.id));
+      if (cancelled || !data) return;
+      setRegisteredIds(new Set(data.map((item) => item.stock_id as string)));
+    })();
+    return () => { cancelled = true; };
+  }, []));
+
+  useEffect(() => {
     const timer = setTimeout(() => input.current?.focus(), 150);
     return () => clearTimeout(timer);
   }, []);
@@ -125,11 +153,11 @@ export default function SearchScreen() {
             const registered = registeredIds.has(item.id);
             return (
               <Pressable
-                onPress={() => { if (!registered) setSelected(item); }}
-                style={({ pressed }) => [styles.card, pressed && !registered && styles.pressed]}
+                onPress={() => { if (registered) router.push(searchResultDetailHref(item.id)); else setSelected(item); }}
+                style={({ pressed }) => [styles.card, pressed && styles.pressed]}
                 accessibilityRole="button"
                 accessibilityLabel={`${item.ticker_code} ${item.company_name}`}
-                accessibilityHint={registered ? '登録済みです' : '保有または監視に登録します'}>
+                accessibilityHint={registered ? '登録済みです。銘柄の詳細を開きます' : '保有または監視に登録します'}>
                 <StockAvatar label={avatarLabel(item.company_name, item.ticker_code)} name={item.company_name} size={40} />
                 <View style={styles.cardMain}>
                   <Text style={styles.ticker}>{item.ticker_code}</Text>
@@ -137,7 +165,7 @@ export default function SearchScreen() {
                   <Text style={styles.market}>{item.market}</Text>
                 </View>
                 <View style={[styles.badge, registered && styles.registeredBadge]}>
-                  <Text style={[styles.badgeText, registered && styles.registeredText]}>{registered ? '登録済み' : '登録する'}</Text>
+                  <Text style={[styles.badgeText, registered && styles.registeredText]}>{registered ? '登録済み ›' : '登録する'}</Text>
                 </View>
               </Pressable>
             );

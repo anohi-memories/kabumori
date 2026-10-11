@@ -50,6 +50,7 @@ function SignedInNavigator() {
       <Stack.Screen name="settings" />
       <Stack.Screen name="ai" />
       <Stack.Screen name="search" />
+      <Stack.Screen name="stock-detail" />
     </Stack>
   );
 }
