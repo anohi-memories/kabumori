@@ -166,11 +166,12 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: ready
+- status: review_required
 - task_id: common-ai-provider-g6-phase1g-one-paid-call-ledger-smoke-20261011
 - start_code: G6
 - finish_code: K6
-- next_owner: claude
+- next_owner: chatgpt
+- latest_result: KEY_COMPAT_VERIFIED_NO_SOURCE_CHANGE / WAIT_HOLD_RELEASE_AND_USER_SETUP — production market-report-analysis has used sb_secret in apikey+Bearer for service_role-only RPCs since 9/17 (claims passed on 10/2 and 10/5 in prod); the smoke refuses before any paid call if the ledger RPC is rejected. No live call, no ledger RPC, paid calls 0. Report: .agent/tasks/CLAUDE_TASK_6.md
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
 - report: .agent/tasks/CLAUDE_TASK_6.md#report

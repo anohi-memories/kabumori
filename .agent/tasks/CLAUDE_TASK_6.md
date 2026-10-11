@@ -3,8 +3,8 @@
 - task_id: common-ai-provider-g6-phase1g-one-paid-call-ledger-smoke-20261011
 - owner: claude
 - slot: claude-6
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -54,27 +54,57 @@
 ## Report — Phase1g（G6記入）
 
 - task_id: common-ai-provider-g6-phase1g-one-paid-call-ledger-smoke-20261011
-- result: NOT_STARTED
-- timestamp: pending
-- source_head / worktree: pending
-- setup: dedicated_workspace_cap=unverified, claude_key=unverified, temporary_supabase_key=unverified
-- plan_result: NOT_RUN
+- result: **KEY_COMPAT_VERIFIED_NO_SOURCE_CHANGE / WAIT_HOLD_RELEASE_AND_USER_SETUP**
+  - SAFETY HOLD の論点（新形式 `sb_secret_` を `apikey` ＋ `Authorization: Bearer` で送る）は、本番での実績により互換と判断した
+  - ソースの変更は不要
+  - live は未実行（HOLD の解除とユーザーの準備を待つ）。**有料 API 0回、台帳 RPC 0回**
+- timestamp: 2026-10-11 JST（調査のみ）
+- source_head / worktree:
+  - fresh `origin/main` から作成。独立 G6 worktree `/Users/yuya/Developer/kabumori-g6-common-ai`
+  - smoke・共通 Provider・ポリシー SQL・runbook は、PR133 の head `61be0dfb` と差分 0
+- key_compat_finding（実 API を呼ばずに確認）:
+  1. 公式ドキュメント（getting-started/api-keys の Known limitations、functions/auth-headers）
+     - 「secret / publishable キーは `apikey` で送り、Bearer には入れない。JWT ではないので、JWT として検証するものは失敗する」
+     - ただし、Data API の窓口が「`apikey` と同じキーが入った Authorization」をどう扱うか（拒否する／JWT に置き換える）は書かれていない
+  2. **このプロジェクトの本番での実績**（台帳 Guard と同じ呼び方）
+     - `market-report-analysis` は 9/17（05a677f1）から `SUPABASE_SECRET_KEYS['default']`（新形式の secret キー）を使っている
+     - 呼び方は `{apikey: key, Authorization: Bearer key}` で `/rest/v1/rpc/<name>` に POST。デプロイ中の `e3379f80` も同じ
+     - 呼んでいる `claim_market_report_analysis` は、public / anon / authenticated から取り消し、**service_role だけ**に EXECUTE を許可した RPC（台帳の RPC と同じ構成）
+     - 本番の記録（CLAUDE_TASK.md）: 10/2 の朝刊は packet まで配信された。10/5 の朝刊は claim と DB の読み取りを通過し、その後の OpenAI の段階で `ANALYSIS_OPENAI_GENERATE_FAILED:429` になった。どちらも、窓口が service_role 専用の RPC を受け付けた証拠
+     - `market-intelligence-ingest` と `send-push-notifications` も同じヘッダーの組み合わせで本番の REST に書き込んでいる
+  3. **互換性がなくても有料呼び出しは発生しない**
+     - smoke（`--ledger=supabase`）は、Claude を呼ぶ前に `ai_ledger_usage_summary` を同じヘッダーで呼ぶ
+     - そこで 401 / 403 などなら REFUSED（終了コード 2）になり、送信 0
+     - reserve / mark_sent が失敗した場合も、executeAiRequest は送信しない（GUARD_UNAVAILABLE / SEND_NOT_CONFIRMED）
+  - 結論: **BLOCKED_KEY_COMPAT ではない。** 台帳 Guard・smoke の修正は不要
+  - 将来の任意改善（今回は禁止。別 TASK）: 公式の推奨に合わせ、`sb_` 形式のキーは `apikey` だけで送る（Bearer を付けない）
+- setup:
+  - dedicated_workspace_cap=未確認（ユーザーの作業待ち）、claude_key=未保存
+  - temporary_supabase_key=**未作成**（HOLD のため、まだ作らないようユーザーへ伝えた）
+  - `~/.kabumori-secrets/` は未作成
+- prod_readonly_status（runner `status`、2026-10-11 22:16 JST）:
+  - TARGET_VERIFIED、READBACK_PASS、history_row=1
+  - policies 2件が有効（month $5・40回、day $2・6回、1回 $1）
+  - buckets・予約・利用記録・請求観測は 0（予算の空きは全額）
+- plan_result: NOT_RUN（キーのファイルが無いため）
 - live_result: NOT_RUN
-- paid_provider_call_count: 0 (not started)
-- ledger_before_after_delta: NOT_RUN
-- cost_estimate_vs_usage: NOT_RUN
-- budget_policy_gate: NOT_RUN
-- temporary_supabase_key_revocation: NOT_DONE
-- window: NOT_ACTIVE
-- changed_files: none
-- tests: not_run
-- commit_hash: none
-- push: not_performed
-- merge: not_performed
-- deploy: not_performed
-- remaining_issues: verification and single smoke execution pending
-- next_recommendation: G6 START then K6 RETURN after PASS or safe STOP.
-
+- paid_provider_call_count: **0**
+- ledger_before_after_delta: NOT_RUN / cost_estimate_vs_usage: NOT_RUN（上限見積もり $0.040164 は固定）/ budget_policy_gate: NOT_RUN
+- temporary_supabase_key_revocation: 対象なし（未作成）
+- window: NOT_ACTIVE（今回は窓を開いていない）
+- changed_files: `.agent/tasks/CLAUDE_TASK_6.md`（この Report とヘッダー）、`.agent/ACTIVE_TASK.md`（G6 の部分だけ）
+- tests: 本番の read-only `status` 1回だけ（runner。SELECT のみ。CLI の一時ログインロールは既知の副作用）。ソースとテストの変更は無し
+- commit_hash: この Report の commit / push: main へ fast-forward / merge: not_performed / deploy: not_performed
+- remaining_issues:
+  1. HOLD を解除するか（ChatGPT の判断）
+  2. ユーザーの準備
+     - Console: 専用 workspace と月 $10 の上限、workspace 限定のキーを `anthropic.env` に保存
+     - 解除後に、一時的な Supabase の secret キーを `ledger.env` に保存
+  3. その後に plan → 窓 → live を1回 → 照合 → 一時キーの削除
+- next_recommendation:
+  - K6 で互換の根拠を評価し、HOLD を解除する（同じ TASK の続きとして G6 を ready に戻す）
+  - G6 はユーザーの「準備OK」の後、gate 6〜11 を順に実行する
+  - Claude の安全機能が live の実行を拒否した場合は、ユーザーが自分の端末で1回だけ実行する
 ---
 
 # PRESERVED G6 PRIOR TASKS / REPORTS — immutable history below
