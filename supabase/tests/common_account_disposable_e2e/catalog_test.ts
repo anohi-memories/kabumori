@@ -56,6 +56,25 @@ test('both candidates need the shared base; each needs its own decisive experime
   assert.deepEqual([...EXPERIMENT_IDS].filter((id) => !covered.has(id)), [], 'every experiment informs a candidate');
 });
 
+test('R2 / R3: E11 never claims the lifecycle decision; E4 calls the last successful delay a LOWER bound', () => {
+  const e11 = EXPERIMENTS.find((e) => e.id === 'E11')!;
+  const e4 = EXPERIMENTS.find((e) => e.id === 'E4')!;
+  assert.ok(!e11.destructiveOperations.some((o) => /lifecycle lock/iu.test(o)));
+  assert.ok(e11.destructiveOperations.some((o) => o.includes('NOT the lifecycle decision')));
+  assert.ok(e11.observables.some((o) => o.includes('not the Option D decision proof')));
+  assert.ok(e4.observables.some((o) => o.includes('LOWER bound only')));
+  assert.ok(e4.observables.some((o) => o.includes('UPPER bound')));
+  assert.ok(EXPERIMENTS.find((e) => e.id === 'E9')!.observables.some((o) => o.includes('explicitly expired old JWT')));
+});
+
+test('the runbook covers every H2 E11 finding R1-R5', async () => {
+  const runbook = await Deno.readTextFile(new URL('docs/common-account/phase3c-disposable-supabase-proof-runbook.md', repo));
+  for (const heading of ['### R1 ', '### R2 ', '### R3 ', '### R4 ', '### R5 ']) assert.ok(runbook.includes(heading), heading);
+  for (const word of ['platform permission / FK cascade / row-latch probe', 'LOWER bound', 'SELF_DECLARED_INPUTS_NOT_VERIFIED', 'catalog_extended_readback.sql', 'target_readback.sql', 'option_d_full_decision_proof']) {
+    assert.ok(runbook.includes(word), word);
+  }
+});
+
 test('the runbook has a section for every experiment and pins PR121 exactly', async () => {
   const runbook = await Deno.readTextFile(new URL('docs/common-account/phase3c-disposable-supabase-proof-runbook.md', repo));
   for (const id of EXPERIMENT_IDS) assert.match(runbook, new RegExp(`^### ${id} `, 'mu'), `runbook section ${id}`);

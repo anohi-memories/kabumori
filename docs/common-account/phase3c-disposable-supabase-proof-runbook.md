@@ -8,6 +8,15 @@ TASK `common-account-phase3c-disposable-supabase-proof-readiness-20261010` (G5).
 - No project exists, none was created, and no credential was set up.
 - Whole-account managed Auth deletion stays **BLOCKED**: the Phase 3a gate `managed_auth_delete` is schema-locked to `blocked`.
 - Neither candidate fence (Option A+B or Option D) is chosen or approved here.
+- **Phase 3e correction** (TASK `common-account-phase3e-e11-offline-review-r1-r5-corrective-20261011`, stacked on
+  PR122 head `f17a47e36632fff4a1f4cfb0b860df200e1c99e1`): the H2 E11 review findings R1–R5 are closed in this
+  runbook and the harness (§11).
+  - E11 is now labelled a **platform permission / FK cascade / row-latch probe**.
+  - E11 compares independent Admin and SQL cohorts.
+  - E4 mitigations need an evidenced upper bound.
+  - Guard answers are self-declared dry-run eligibility, backed by manual witness checks W1–W7.
+  - The limited catalog fingerprint is complemented by extended and per-target read-backs.
+  - This approves nothing: not E11, not Option D, not production Auth deletion, and not pausing the photo app.
 
 **Immutable inputs** (cross-referenced, never edited by Phase 3c):
 
@@ -34,7 +43,14 @@ TASK `common-account-phase3c-disposable-supabase-proof-readiness-20261010` (G5).
 | `…/fixtures/*.sample.json` | Fake request, marker and ledger (fake refs) |
 | `…/operator_checklist.md` | Checklist template for a future approved run |
 | `…/*_test.ts` | Offline Deno tests: default deny, ambiguity, override refusal, consent per scenario, redaction, verdicts, E1–E12 coverage, static no-network rules |
-| `…/harness_mutations.py` | Defect detection: 31 single mutations (guard, CLI, redaction, verdict, catalog, a network call) applied to a scratch copy; every one must make the suite fail |
+| `…/harness_mutations.py` | Defect detection: single mutations (guard, CLI, redaction, verdict, catalog, a network call, and the Phase 3e matrix / bound / witness rules) applied to a scratch copy; every one must make the suite fail |
+| `…/witness.ts` (Phase 3e, R4) | Manual witness checks W1–W7 (human attestations at the window, per run, never self-declared; W1/W2/W6 two-person) and their fail-closed evaluation |
+| `…/e11_matrix.ts` (Phase 3e, R1/R2) | E11 scope label, what E11 does not prove, the separate `option_d_full_decision_proof`, and the Admin-vs-SQL matrix (cohorts, denominators, failure branches, token cases, rows A–E) with its evaluation |
+| `…/e4_bound.ts` (Phase 3e, R3) | The E4 upper-bound evidence and its evaluation (a mitigation label alone never qualifies) |
+| `…/catalog_extended_readback.sql` (Phase 3e, R5) | Read-only: trigger function bodies, RLS and policies, schema / table / column / default grants, effective (inherited) privileges of API and service roles, managed auth / storage function ACLs, Storage counts; `ABSENT` / `UNKNOWN_DENIED` instead of 0 |
+| `…/target_readback.sql` (Phase 3e, R1/R5) | Read-only per-target counts by the ids captured **before** the delete (users, identities, sessions, refresh tokens, identity_linked and user_deleted audit, Storage objects by id and by owner, lifecycle rows) |
+| `…/readback_local_run.sh` (Phase 3e) | Local SIMULATION of the read-back method on a fake schema: read-only and deterministic, denied → `UNKNOWN_DENIED`, failure branches leave state unchanged, residue found by captured ids where a join from the user says 0 |
+| `…/test_support.ts` (Phase 3e) | Fake complete witness / E11 / E4-bound shapes for the offline tests |
 
 Run the offline proof. Deno runs **without** net / env / run permissions; the static test asserts it.
 
@@ -44,6 +60,10 @@ deno test --no-config --no-check --allow-read supabase/tests/common_account_disp
 
 ```bash
 CAL_PGHOST=/private/tmp/<socket-dir> CAL_PGPORT=<port> CAL_PGSUPER=<local superuser> bash supabase/tests/common_account_disposable_e2e/fingerprint_local_run.sh
+```
+
+```bash
+CAL_PGHOST=/private/tmp/<socket-dir> CAL_PGPORT=<port> CAL_PGSUPER=<local superuser> bash supabase/tests/common_account_disposable_e2e/readback_local_run.sh
 ```
 
 ```bash
@@ -76,6 +96,8 @@ python3 supabase/tests/common_account_disposable_e2e/harness_mutations.py
    - E7 needs `project_auth_config_change`: it enables a test Auth hook on the disposable project.
    - E11 needs `option_d_security_approval`, with **both** a user approval reference and an independent security review reference.
 7. **`cli.ts validate` must answer `REQUEST_VALID_DRY_RUN_ONLY`** (exit 0), and its output is kept as the first evidence item.
+   - This is **dry-run plan eligibility over self-declared inputs only** (`verification: SELF_DECLARED_INPUTS_NOT_VERIFIED`).
+   - The marker, ledger, typed sentence and approval strings are what the requester typed. They do not prove the real project, the connection target, the reviewer, the fake-only users or prior evidence.
    - There is no `--force`: every override-shaped flag or field is refused (`OVERRIDE_NOT_SUPPORTED`).
    - No default ref; no fallback to an environment variable or a CLI link.
    - The ref is never echoed.
@@ -88,6 +110,12 @@ python3 supabase/tests/common_account_disposable_e2e/harness_mutations.py
    - are held by the operator only (password manager, interactive prompt);
    - are never written to the repository, a file, shell history or evidence;
    - must not be pasted into chat.
+10. **Manual witness checks (R4)** — before the matching destructive step, recorded per run (`witness.ts`):
+    - W1 new disposable project, W2 protected projects excluded, W3 connection target and W4 fake-user provenance, for every destructive experiment;
+    - W5 single-row DELETE target, W6 approval provenance and W7 prior evidence (E1/E8/E9/E10/E12), for E11.
+    - Each record is a human observation: a dashboard view, a SQL read-back or a document review. It is never a copy of the request (`self_declared` records never count).
+    - W1, W2 and W6 need a second, different person.
+    - A missing, mismatching or unreadable record stops the step. Without the records, `verdict()` downgrades every destructive PASS to UNKNOWN.
 
 The future executor does not exist. A later, separately reviewed task may add one; until then a run is manual, step by step, against this runbook.
 
@@ -101,11 +129,18 @@ The future executor does not exist. A later, separately reviewed task may add on
   - Without a skew bound, ordering claims are UNKNOWN.
 - **Catalog fingerprint:** run `catalog_fingerprint.sql` inside `begin transaction read only; … rollback;` at run start, before and after every destructive experiment, and at run end. Keep each sha256.
   - Format reference (local fixture, not a project): 78 lines, sha256 `423c0d486abc752d531371d6c897efffe200b567ceab45a0599565575ccf3833`.
+  - **It is a LIMITED catalog read (R5).** It shows trigger names and enabled flags but not managed trigger-function bodies. It hashes only lifecycle and auth-helper function bodies, and it shows only `current_user`'s SELECT/DELETE bit. It does not cover RLS policies, schema / column / default grants, Storage, physical blobs or row counts.
+  - A fingerprint match never means "everything is back".
+- **Extended read-back (R5):** `catalog_extended_readback.sql` in the same read-only wrapper, at the same points.
+  - A table or role it cannot see prints `ABSENT` or `UNKNOWN_DENIED`, never 0. An `UNKNOWN_DENIED` on an object the experiment depends on makes that experiment UNKNOWN.
+- **Per-target read-back (R1/R5):** `target_readback.sql` with the target ids captured **before** the delete (`psql -v target_user=… -v target_sessions='{…}' …`). Counts only; redacted before storage.
+  - Never count by joining from the deleted user: that reports a vacuous 0 even when rows remain (proven locally by `readback_local_run.sh`).
+- **Neither read-back undoes external provider effects:** grants, sent e-mails and tokens already handed out stay outside the database.
 - **Redaction before write:** everything passes through `redact(text, run_id, [ref])` before it touches disk. That covers JWTs, `Bearer`/`Basic`, `apikey`/`authorization`/cookie headers, `code`/`state`/token/nonce/verifier parameters, secret-named JSON fields, e-mails, project hosts, UUIDs and IPv4 addresses.
   - UUIDs become stable per-run placeholders, so one fake user can be followed through a run, while two runs cannot be joined.
   - Configuration is captured only through `allowlist(config, E1_CONFIG_ALLOWLIST)`.
 - **Per experiment**, one redacted JSON file:
-  - `{ id, correlation ids, outcome PASS|FAIL|UNKNOWN|NOT_RUN, evidence[], e4Finding?, e4Mitigation?, notes }`;
+  - `{ id, correlation ids, outcome PASS|FAIL|UNKNOWN|NOT_RUN, evidence[], e4Finding?, e4Mitigation?, e4Bound?, e11?, notes }`, plus the run's witness records (W1–W7) and any `option_d_full_decision_proof`;
   - the HTTP method, path template, status and GoTrue error code of each request — never bodies containing tokens;
   - SQL read-backs as counts and timestamps, with ids hashed.
 - **Retention:**
@@ -184,9 +219,16 @@ Paths and payload shapes below come from GoTrue master `ce9a8ee` and the public 
   4. Admin ban U and read back `banned_until`.
   5. Complete the consent; the callback arrives after the ban.
 - **Read-back:** `auth.identities` for U — a new provider row means **LINKED**; an error with no row means **REFUSED**. Compare the row's `created_at` with the ban read-back time.
-- **Flow lifetime (fills E1):** repeat with fresh users and consent delays of 240 s, 310 s and 600 s. The longest delay that still links bounds the expiry.
+- **Flow lifetime (R3):** repeat with fresh users and consent delays (e.g. 240 s, 310 s, 600 s). The longest delay that still links is only a **LOWER bound** on the lifetime; a 600 s success says nothing about 900 s. It is recorded, never used as the bound.
+- **Upper bound (`e4_bound.ts`), required for any A+B mitigation:**
+  - the configured flow-state expiry of the pinned GoTrue version (project configuration or that version's source);
+  - a callback attempted **after** that expiry, and refused;
+  - `api_max_request_duration` and a clock-skew margin on both sides;
+  - a settle time ≥ expiry + request duration + 2 × skew;
+  - a verified **drain** of flows started before the ban — disabling manual linking does **not** cancel callbacks already begun;
+  - an exclusive final re-check, in the order revoke sessions → ban → drain → exclusive re-check → Admin delete.
 - **PASS:** a conclusive LINKED or REFUSED, with the ordering read back (`e4Finding` set).
-  - LINKED blocks A+B unless a mitigation is itself evidenced (`e4Mitigation`): manual linking verifiably off in the target setting, or a settle time longer than the measured flow lifetime.
+  - LINKED blocks A+B unless `e4Mitigation` comes with that evidenced upper bound (`e4Bound`). A label alone — `settle_exceeds_measured_flow_expiry` or `manual_linking_disabled_verified` — is `E4_BOUND_MISSING` and stays BLOCKED.
 - **UNKNOWN:** the ban time cannot be read back; the provider fails; manual linking cannot be enabled.
 
 ### E5 Ban vs refresh and ID-token grant; logout ordering (destructive)
@@ -254,10 +296,11 @@ Paths and payload shapes below come from GoTrue master `ce9a8ee` and the public 
      - `POST /rest/v1/rpc/fixture_guarded_service_write` — the guarded writer;
      - a direct insert into an RLS-owned test table — unguarded;
      - a Storage upload.
-  3. Read back `storage.objects.owner_id`.
+  3. **Expired-token control (R1):** repeat each call with an access token kept until after its `exp` on purpose. It must be refused everywhere.
+  4. Read back `storage.objects.owner_id`, the physical object (service download), and anything an unguarded writer accepted.
 - **Expected from the PR121 guard:** live OK; logout `ACCOUNT_LIFECYCLE_AUTH_REQUIRED`; after delete `ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND`.
-- **Unguarded and Storage outcomes:** recorded as facts. They feed the owner tasks.
-- **UNKNOWN:** the token expired before the replay (`jwt_exp` too short — rerun with fresh tokens per state).
+- **Unguarded and Storage outcomes:** recorded as facts, with a read-back of anything accepted. They feed the owner tasks.
+- **UNKNOWN:** the still-valid token expired unintentionally before its replay. Rerun with a fresh token; the expired case is a separate, deliberate control.
 
 ### E10 Audit log (destructive)
 
@@ -270,17 +313,45 @@ Paths and payload shapes below come from GoTrue master `ce9a8ee` and the public 
   5. Record `has_table_privilege` from the fingerprint.
 - **UNKNOWN:** the table is absent or unreadable (audit-to-Postgres off). This also back-fills E1.
 
-### E11 Option D (destructive, user + independent security approval)
+### E11 Option D — platform permission / FK cascade / row-latch probe (destructive, user + independent security approval)
 
 - **PR121 pass (verbatim):** Can `postgres` `DELETE FROM auth.users` under our lock? Differences from the Admin delete. GoTrue's view of the user's tokens afterwards.
-- **Run only** with `option_d_security_approval` (both references). This is a probe of the platform, not an adoption of Option D.
+- **What E11 is (R2):** a **platform permission / FK cascade / row-latch probe** (`E11_PROBE_SCOPE`).
+  - "Our lock" here is only a login row latch (`auth.users … for update`).
+  - The Phase 3a full authorization, required checkpoints, provider snapshot and owner lease are **not** evaluated inside the deleting transaction.
+  - E11 therefore proves nothing about the Option D decision being atomic. That is the separate future `option_d_full_decision_proof` (§11 R2), without which `verdict()` keeps Option D BLOCKED.
+  - E11 never approves Option D, production SQL deletion or opening `managed_auth_delete`.
+- **Run only** with `option_d_security_approval` (both references) **and** witness W1–W7 complete. W5: exactly one allowlisted fake user per DELETE, `row_count = 1`, else rollback.
+- **Cohorts (R1):** in the same run, under one schema fingerprint and one config fingerprint:
+  - a **control** cohort deleted by the Admin API;
+  - a **test** cohort deleted by the SQL probe.
+  - Before any delete, every user gets non-zero fixtures: sessions, refresh tokens, two identities, an `identity_linked` audit row, an owned Storage object (plus users without one), a guarded and an unguarded service row.
+  - Capture their target ids (hashed in evidence) as denominators with `target_readback.sql`. All correlation is masked.
 - **Steps:**
-  1. Set up U as in E8.
-  2. In one `psql` transaction on the disposable database, as `postgres`: `select … from auth.users where id = <U> for update`; record the permission outcome; then `delete from auth.users where id = <U>`; commit.
-  3. Compare the per-table counts with E8.
-  4. Afterwards, U's refresh token is refused and `GET /auth/v1/user` with U's access token answers 403 (`session_not_found` / user missing). Record both.
-  5. **Latch variant:** hold the `for update` and fire an automatic-link attempt for U. GoTrue's insert queues (observe if visible). Then delete and commit: the link must fail with no identity row.
-- **UNKNOWN:** E8 has no comparable result. A refused `DELETE` is a **FAIL for Option D** (not UNKNOWN).
+  1. Extended and per-target read-backs, before.
+  2. Control cohort: Admin delete each user.
+  3. Test cohort: per user, one `psql` transaction as `postgres`: `select … from auth.users where id = <U> for update`; record the permission outcome; `delete from auth.users where id = <U>`; check `row_count = 1`; commit.
+  4. Failure branches on further test-cohort users. Each must leave the user and every captured row **unchanged** (read-back equals before):
+     - FK RESTRICT fixture, trigger refusal, role/ACL refusal, `lock_timeout`, `statement_timeout`, explicit ROLLBACK before COMMIT;
+     - a COMMIT whose answer is lost: resolve by read-back only, **never a blind retry**.
+  5. Extended and per-target read-backs, after, by the captured ids (never by a join from the deleted user).
+  6. Tokens: for each cohort, a still-valid old JWT and an explicitly expired old JWT against the guarded writer, an unguarded PostgREST writer, a Storage upload and `GET /auth/v1/user`, each with a read-back.
+  7. **Latch variant:** hold the `for update` and fire an automatic-link attempt for a test-cohort user. GoTrue's insert queues (observe if visible). Then delete and commit: the link must fail with no identity row.
+- **Matrix rows (all must be PASS; `e11_matrix.ts`):**
+  - **A_AUDIT:** Admin `user_deleted` vs whatever the SQL path leaves (never assumed); `identity_linked` rows survive in both.
+  - **B_STORAGE:** owned vs unowned objects; refusal vs success; metadata and physical blob read-back.
+  - **C_FAILURE_PATHS:** every branch unchanged; no blind retry.
+  - **D_SESSIONS_REFRESH:** counts by the captured ids, non-zero before.
+  - **E_TOKENS_WRITERS:**
+    - The guarded writer and `GET /user` refuse both tokens. The expired token is refused everywhere.
+    - An accepted unguarded or Storage write is found by read-back and recorded as residue, which blocks Option D.
+- **No inference:** neither the disappearance of the `auth.users` row nor an unchanged catalog hash shows cleanup. Neither path revokes an external provider grant.
+- **UNKNOWN:** any row, denominator, branch or token case not measured; cohorts with different fingerprints; a lost COMMIT not read back.
+- **FAIL:**
+  - a refused `DELETE` (for Option D);
+  - a changed state after a refusal or rollback;
+  - a blind retry;
+  - an old token accepted by the guarded writer or `GET /user`, or an expired token accepted anywhere.
 
 ### E12 Apply the guard migration on the disposable database (destructive)
 
@@ -299,10 +370,10 @@ Paths and payload shapes below come from GoTrue master `ce9a8ee` and the public 
 
 ## 6. A+B vs D (comparison only — no choice, no approval)
 
-| | Option A+B (ban + settle + verify + Admin delete; access-token hook) | Option D (same-transaction SQL delete under the lifecycle lock) |
+| | Option A+B (ban + settle + verify + Admin delete; access-token hook) | Option D (same-transaction SQL delete under the full lifecycle decision — NOT what E11 tests) |
 | --- | --- | --- |
-| Experiments needed (`REQUIRED_FOR`) | E1, E2, E3, E4, E5, E6, E7, E8, E9, E10, E12 | E1, E8, E9, E10, E11, E12 |
-| Known source-level obstacle | V11: a manual link begun before the ban completes after it. LINKED in E4 blocks A+B until a mitigation is evidenced. | Changes the established lifecycle safety model, under which this repository never deletes a login in SQL. Prohibited without separate user approval **and** an independent security review. |
+| Experiments needed (`REQUIRED_FOR`) | E1, E2, E3, E4, E5, E6, E7, E8, E9, E10, E12 | E1, E8, E9, E10, E11, E12, **plus `option_d_full_decision_proof`** (not one of E1–E12) |
+| Known source-level obstacle | V11: a manual link begun before the ban completes after it. LINKED in E4 blocks A+B until a mitigation with an evidenced UPPER bound exists (R3). | Changes the established lifecycle safety model, under which this repository never deletes a login in SQL. Prohibited without separate user approval **and** an independent security review. E11 alone is only a row-latch probe (R2). |
 | Version and config dependence | High: ≥ v2.195.0, manual linking, request duration, flow expiry, hook availability | Lower for the fence itself; it depends on `postgres` `DELETE` privilege and on the auth schema's cascades (E8, E11) |
 | What stays unfenced even if proven | E6 windows can only be bounded statistically; a hook outage blocks every sign-in | GoTrue's admin-delete audit row is not written (E10/E11 compare); Supabase support stance unknown |
 | Residual DB evidence | Audit-log check after delete (E10) | The delete commits with the decision; the latch variant shows queued links failing |
@@ -319,9 +390,11 @@ Passing every experiment for one candidate gives `EVIDENCE_COMPLETE_PENDING_INDE
 - the verdict never turns UNKNOWN into PASS and never chooses a candidate;
 - E1–E12 are complete and verbatim;
 - the harness has no network, process or environment access (static rules plus Deno permissions);
-- the fingerprint SQL only reads, is deterministic, and sees cascades, triggers, owners and ACLs on the local fixture.
+- the fingerprint SQL only reads, is deterministic, and sees cascades, triggers, owners and ACLs on the local fixture;
+- (Phase 3e) a destructive PASS without complete, non-self-declared, per-run witness records is UNKNOWN; E11 without the full Admin-vs-SQL matrix is UNKNOWN (and FAIL on a changed failure branch, a blind retry or an accepted old token); recorded residue and a missing `option_d_full_decision_proof` keep Option D BLOCKED; an E4 mitigation label without an evidenced upper bound keeps A+B BLOCKED;
+- (Phase 3e, local SIMULATION on a fake schema) the extended and per-target read-backs are read-only and deterministic, report `UNKNOWN_DENIED` / `ABSENT` instead of 0, show failure branches leaving state unchanged, and find remaining rows by captured ids where a join from the deleted user reports 0.
 
-**Not proven:** any GoTrue, PostgREST, Storage or Management API behaviour, the platform's privileges and cascades, and every V/H item of PR121. Local mocks are not evidence.
+**Not proven:** any GoTrue, PostgREST, Storage or Management API behaviour, the platform's privileges and cascades, every V/H item of PR121, and every E11 matrix row on a real project. Local mocks and simulations are not evidence. Manual witness records are human attestations, not machine verification.
 
 ## 8. Operator checklist
 
@@ -357,3 +430,68 @@ See `supabase/tests/common_account_disposable_e2e/operator_checklist.md`.
    - Without them, the dependent halves stay UNKNOWN.
 6. **One consolidated independent security review**, once the real G5 guard and G4's begin/complete, credential and cleanup boundaries exist together. No H1/H2 allocation now.
 7. **Later, distinct production approvals** (migration apply, Edge deploy, gate opening), each with its own preflight. None follows from any disposable result automatically.
+
+## 11. Phase 3e: H2 E11 review R1–R5 — corrections (offline only)
+
+Source of the findings: `.agent/CODEX_REPORT_2.md`, the H2 E11 review of 2026-10-10 (CHANGES_REQUIRED, R1 [P1], R2–R5 [P2]).
+
+These corrections change the test method, the evidence semantics, the read-only read-backs and the dry-run tests. They do **not** change any deletion implementation, migration, Auth object or runtime. They approve no E11 run, no Option D and no photo-app pause.
+
+### R1 [P1] — Admin vs SQL independent deletion evidence matrix
+
+- `e11_matrix.ts` defines the matrix:
+  - two cohorts (Admin control, SQL test) under one schema and config fingerprint;
+  - non-zero before-state denominators, captured by target id and masked;
+  - rows **A_AUDIT** (Admin `user_deleted` vs whatever SQL leaves, `identity_linked` retained), **B_STORAGE** (owned / unowned objects, metadata and physical blob), **C_FAILURE_PATHS** (FK / trigger / role / lock / statement timeouts, rollback, lost COMMIT with read-back and no blind retry), **D_SESSIONS_REFRESH** (by pre-captured ids, never a join from the deleted user) and **E_TOKENS_WRITERS** (valid old and explicitly expired old JWT against the guarded writer, an unguarded writer, Storage upload and `GET /user`).
+- Each row has PASS / FAIL / UNKNOWN criteria.
+- Cleanup is never inferred from the users row or a catalog hash. External provider revocation is never assumed.
+- `verdict()` needs the matrix for an E11 PASS. Recorded stale-token residue blocks Option D.
+- E9 gained the explicit expired-token control and the physical blob read-back.
+- `target_readback.sql` and `readback_local_run.sh` give the read-back method (locally simulated).
+
+### R2 [P2] — the SQL row-latch probe is labelled as exactly that
+
+- E11 is a **platform permission / FK cascade / row-latch probe** (`E11_PROBE_SCOPE`). The catalog no longer says "under the lifecycle lock".
+- `E11_NOT_PROVEN` lists what it cannot show.
+- The future `option_d_full_decision_proof` (`OPTION_D_FULL_DECISION_PROOF.requires`) needs all of:
+  - the Phase 3a full decision in the deleting transaction, with no lock released in between;
+  - an identity link committed first vs a delete committed first, with manual, automatic and PKCE callbacks;
+  - PostgREST writers of other roles in both lock orders;
+  - owner-only execution;
+  - the gate still blocked.
+- `verdict()` keeps Option D BLOCKED without that proof, independently reviewed.
+- No feature is implemented or unblocked.
+
+### R3 [P2] — E4 expiry: the last success is a LOWER bound
+
+- `e4_bound.ts` requires, for any A+B mitigation:
+  - the configured expiry of the pinned version;
+  - a callback attempted after it, and refused;
+  - request-duration and skew margins;
+  - a covering settle time;
+  - a drain of flows already started;
+  - an exclusive re-check, in order.
+- `verdict()` refuses a mitigation label without that bound (`E4_BOUND_MISSING`). A bound resting on the last success alone fails `E4_BOUND_NO_CALLBACK_AFTER_EXPIRY`.
+- Disabling manual linking does not cancel started callbacks; the drain stays required.
+
+### R4 [P2] — static declarations are not verified consent or destination
+
+- `guard.ts` answers carry `verification: SELF_DECLARED_INPUTS_NOT_VERIFIED` and the witness checks still owed. The plan prints both.
+- `witness.ts` defines W1–W7, the human checks at the window (§2 item 10):
+  - W1 new disposable project, W2 the two running app projects and the inactive historical project excluded, W3 connection target, W4 run-scoped fake-user provenance;
+  - for E11 also W5 one-row DELETE target, W6 real approval and review provenance, W7 prior E1/E8/E9/E10/E12 evidence.
+- They are fail-closed, per run, never self-declared, and two-person for W1, W2 and W6.
+- There is no remote verification, no live connection and no executor.
+
+### R5 [P2] — fingerprint limitations
+
+- `catalog_fingerprint.sql` is kept and documented as a LIMITED catalog read (§3).
+- `catalog_extended_readback.sql` adds:
+  - managed trigger-function bodies;
+  - RLS and policies;
+  - schema / table / column / default grants;
+  - effective inherited privileges of `anon`, `authenticated`, `service_role`, `authenticator`, `supabase_auth_admin`, `supabase_storage_admin` and `postgres`;
+  - managed function ACLs and Storage counts.
+- `target_readback.sql` adds per-target counts.
+- Both are read-only. Denied access is `UNKNOWN_DENIED` and absence is `ABSENT`, never 0. No privilege elevation, no write SQL.
+- A matching catalog never shows that external provider effects were undone.

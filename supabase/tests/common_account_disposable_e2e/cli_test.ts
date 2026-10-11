@@ -37,6 +37,10 @@ test('plan with no request: every experiment listed, default deny, nothing execu
   assert.match(r.out, /guard: NO_REQUEST \(default deny\)/u);
   assert.match(r.out, /execution: NOT_AVAILABLE_IN_THIS_STAGE/u);
   assert.match(r.out, /neither candidate is chosen here; the managed_auth_delete release gate stays blocked\./u);
+  assert.match(r.out, /scope: platform_permission_fk_cascade_row_latch_probe -- NOT the Option D decision proof/u);
+  assert.match(r.out, /plus option_d_full_decision_proof \(not part of E1-E12\)/u);
+  assert.match(r.out, /a LINKED finding qualifies A\+B only with an evidenced UPPER bound/u);
+  for (const w of ['W1_NEW_DISPOSABLE_PROJECT', 'W5_SINGLE_ROW_DELETE_TARGET', 'W7_PRIOR_EVIDENCE']) assert.ok(r.out.includes(`  ${w} [`), w);
   assert.ok(!/https?:\/\//u.test(r.out), 'no URL is printed');
 });
 
@@ -45,6 +49,8 @@ test('validate: the valid sample is a dry run only (exit 0); the marker is read 
   const r = await run(VALIDATE, d);
   assert.equal(r.code, 0, r.out);
   assert.match(r.out, /guard: REQUEST_VALID_DRY_RUN_ONLY/u);
+  assert.match(r.out, /verification: SELF_DECLARED_INPUTS_NOT_VERIFIED \(dry-run plan eligibility only; NOT verified consent, destination, reviewer, fake users or prior evidence\)/u);
+  assert.match(r.out, /manual witness checks still required at the window: W1_NEW_DISPOSABLE_PROJECT, W2_PROTECTED_PROJECTS_EXCLUDED, W3_CONNECTION_TARGET, W4_FAKE_USER_PROVENANCE/u);
   assert.match(r.out, /^E2 \[destructive\] \[selected\]/mu);
   assert.match(r.out, /^E3 \[destructive\] \[not selected\]/mu);
   assert.deepEqual(d.reads, ['/in/request.json', '/in/ledger.json', REQUEST.project_marker_path]);

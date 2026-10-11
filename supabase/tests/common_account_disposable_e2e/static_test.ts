@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const here = new URL('./', import.meta.url);
-const SOURCES = ['catalog.ts', 'guard.ts', 'redact.ts', 'evidence.ts', 'plan.ts', 'cli.ts'];
+const SOURCES = ['catalog.ts', 'guard.ts', 'redact.ts', 'evidence.ts', 'plan.ts', 'cli.ts', 'witness.ts', 'e11_matrix.ts', 'e4_bound.ts', 'test_support.ts'];
+const READ_ONLY_SQL = ['catalog_fingerprint.sql', 'catalog_extended_readback.sql', 'target_readback.sql'];
 const strip = (code: string) => code.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/(^|[^:'"`])\/\/.*$/gmu, '$1');
 
 test('the harness has no network, process, environment or dynamic-import path', async () => {
@@ -30,8 +31,10 @@ test('no Supabase CLI remote command, Auth Admin call, SQL login delete, RPC or 
   }
 });
 
-test('the catalog fingerprint SQL only reads', async () => {
-  const sql = (await Deno.readTextFile(new URL('catalog_fingerprint.sql', here))).replace(/--.*$/gmu, '');
+test('the fingerprint and read-back SQL files only read', async () => {
+  for (const file of READ_ONLY_SQL) {
+  // Comments and string literals out first: a ';' or a privilege name inside a literal is data.
+  const sql = (await Deno.readTextFile(new URL(file, here))).replace(/--.*$/gmu, '').replace(/'(?:[^']|'')*'/gu, "''");
   const statements = sql.split(';').map((s) => s.trim()).filter(Boolean);
   assert.ok(statements.length > 0);
   for (const statement of statements) {
@@ -40,6 +43,7 @@ test('the catalog fingerprint SQL only reads', async () => {
     assert.match(s, /^(select|with)\b/iu, `not a read: ${s.slice(0, 60)}`);
     assert.ok(!/\b(insert|update|delete|truncate|merge|alter|create|drop|grant|revoke|copy|call|lock|vacuum|analyze|refresh|reindex|cluster|comment|security\s+label|set\s+role|set_config|pg_terminate_backend|pg_cancel_backend|dblink|lo_import|lo_export|pg_read_file|pg_ls_dir)\b/iu.test(s), `write-capable word in: ${s.slice(0, 80)}`);
     assert.ok(!/\bfor\s+(update|no\s+key\s+update|share|key\s+share)\b/iu.test(s), 'no row locks');
+  }
   }
 });
 
