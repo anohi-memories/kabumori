@@ -40,15 +40,55 @@ export const OPTION_D_FULL_DECISION_PROOF = {
 export const E11_DENOMINATORS = ['sessions', 'refresh_tokens', 'identities', 'identity_linked_audit', 'owned_objects', 'guarded_rows', 'unguarded_rows'] as const;
 export type E11Denominator = typeof E11_DENOMINATORS[number];
 
+/** Refused or rolled-back branches: each must leave every captured row UNCHANGED (read-back equals before). */
 export const E11_FAILURE_BRANCHES = [
-  'fk_restrict_denied', 'trigger_denied', 'role_acl_denied', 'lock_timeout', 'statement_timeout', 'explicit_rollback_before_commit', 'ambiguous_commit_readback',
+  'fk_restrict_denied', 'trigger_denied', 'role_acl_denied', 'lock_timeout', 'statement_timeout', 'explicit_rollback_before_commit',
 ] as const;
 export type E11FailureBranch = typeof E11_FAILURE_BRANCHES[number];
+export const E11_BRANCH_OUTCOMES = ['UNCHANGED_READBACK', 'CHANGED', 'UNKNOWN'] as const;
+
+/**
+ * A COMMIT whose answer was lost is NOT a failure branch (Phase 3f, H2 rereview R1): an independent read-back
+ * resolves it to APPLIED (the delete took effect -- its after-state is then measured like any delete) or NOT_APPLIED
+ * (nothing changed). UNKNOWN stays UNKNOWN. The DELETE is never sent again to find out.
+ */
+export const E11_COMMIT_RESOLUTIONS = ['APPLIED', 'NOT_APPLIED', 'UNKNOWN'] as const;
+export type E11CommitResolution = typeof E11_COMMIT_RESOLUTIONS[number];
 
 export const E11_TOKEN_CASES = ['valid_old_jwt', 'expired_old_jwt'] as const;
 export const E11_TOKEN_TARGETS = ['guarded_writer', 'unguarded_writer', 'storage_upload', 'auth_get_user'] as const;
 export type E11TokenKey = `${typeof E11_TOKEN_CASES[number]}:${typeof E11_TOKEN_TARGETS[number]}`;
-export type E11TokenOutcome = 'REFUSED' | 'ACCEPTED_RESIDUE_RECORDED' | 'ACCEPTED_UNRECORDED' | 'UNKNOWN';
+/** The only accepted token outcomes; anything else (NOT_RUN, MAYBE, null, a typo) is an unmeasured case. */
+export const E11_TOKEN_OUTCOMES = ['REFUSED', 'ACCEPTED_RESIDUE_RECORDED', 'ACCEPTED_UNRECORDED', 'UNKNOWN'] as const;
+export type E11TokenOutcome = typeof E11_TOKEN_OUTCOMES[number];
+
+/**
+ * Persisted state that must be GONE after a delete (Phase 3f, H2 rereview R1). Anything remaining is residue and
+ * blocks Option D, however the rows were classified. The identity_linked audit rows are deliberately NOT here: they
+ * are expected history, checked by row A_AUDIT. Each count comes from its required read-back: rows by the ids
+ * captured before the delete; the physical Storage blob only from a Storage-service read-back -- a future external
+ * observation, never inferred from a metadata count.
+ */
+export const E11_AFTER_STATE = ['sessions', 'refresh_tokens', 'identities', 'owned_objects_metadata', 'owned_objects_blob', 'guarded_rows', 'unguarded_rows'] as const;
+export type E11AfterStateKind = typeof E11_AFTER_STATE[number];
+export type E11AfterProvenance = 'target_readback' | 'storage_service_readback';
+export const E11_AFTER_PROVENANCE: Readonly<Record<E11AfterStateKind, E11AfterProvenance>> = {
+  sessions: 'target_readback', refresh_tokens: 'target_readback', identities: 'target_readback',
+  owned_objects_metadata: 'target_readback', owned_objects_blob: 'storage_service_readback',
+  guarded_rows: 'target_readback', unguarded_rows: 'target_readback',
+};
+/** The before-denominator each after-state is bounded by. */
+const AFTER_STATE_DENOMINATOR: Readonly<Record<E11AfterStateKind, E11Denominator>> = {
+  sessions: 'sessions', refresh_tokens: 'refresh_tokens', identities: 'identities', owned_objects_metadata: 'owned_objects',
+  owned_objects_blob: 'owned_objects', guarded_rows: 'guarded_rows', unguarded_rows: 'unguarded_rows',
+};
+export interface E11AfterState {
+  /** Rows / objects still present after the delete, counted by the pre-captured target ids. */
+  remaining: number;
+  provenance: E11AfterProvenance;
+  /** Redacted read-back evidence file names. */
+  evidence: string[];
+}
 
 export type E11RowId = 'A_AUDIT' | 'B_STORAGE' | 'C_FAILURE_PATHS' | 'D_SESSIONS_REFRESH' | 'E_TOKENS_WRITERS';
 export interface E11Row { id: E11RowId; compares: string; pass: string; fail: string; unknown: string }
@@ -78,8 +118,8 @@ export const E11_ROWS: readonly E11Row[] = [
   {
     id: 'D_SESSIONS_REFRESH',
     compares: 'Session and refresh-token rows looked up by the target ids captured BEFORE the delete (never by joining from the deleted user).',
-    pass: 'Non-zero before-counts by id; after-counts by the same ids recorded for both cohorts.',
-    fail: 'none by itself: remaining rows are recorded facts; they block Option D through the residue rule.',
+    pass: 'Non-zero before-counts by id; after-counts by the same ids recorded (afterState) for both cohorts.',
+    fail: 'none by itself: remaining rows are recorded facts in afterState; they block Option D through the residue rule.',
     unknown: 'zero denominators, ids not captured before the delete, or rows unreadable.',
   },
   {
@@ -100,14 +140,16 @@ export interface CohortEvidence {
   /** Correlation ids are run-salted placeholders, never raw ids. */
   maskedCorrelation: boolean;
   tokens: Record<E11TokenKey, E11TokenOutcome>;
+  /** What remained after the delete, by category, with its read-back provenance (Phase 3f). */
+  afterState: Record<E11AfterStateKind, E11AfterState>;
 }
 
 export interface E11Evidence {
   scope: string;
   cohorts: { admin: CohortEvidence; sql: CohortEvidence };
   rows: Record<E11RowId, Outcome>;
-  failureBranches: Record<E11FailureBranch, 'UNCHANGED_READBACK' | 'CHANGED' | 'UNKNOWN'>;
-  ambiguousCommit: { blindRetry: boolean; resolvedByReadback: boolean };
+  failureBranches: Record<E11FailureBranch, typeof E11_BRANCH_OUTCOMES[number]>;
+  ambiguousCommit: { blindRetry: boolean; resolution: E11CommitResolution; resolvedByIndependentReadback: boolean; evidence: string[] };
   /** True when "cleanup" was concluded from auth.users disappearing or a catalog hash alone. Must be false. */
   cleanupInferredFromUsersRowOrCatalog: boolean;
   /** True when either path was taken to revoke external provider grants. Must be false. */
@@ -115,30 +157,51 @@ export interface E11Evidence {
 }
 
 const HEX64 = /^[0-9a-f]{64}$/u;
+const isPositiveInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) > 0;
+const isCount = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
+const hasEvidence = (v: unknown) => Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && x.length > 0);
 
-export function evaluateE11(e: E11Evidence | undefined): { outcome: Outcome; reasons: string[]; residue: boolean } {
+/**
+ * outcome: the matrix verdict. residue: what was measured and must still block Option D even when the matrix itself
+ * passes -- stale-token writes recorded by read-back and any non-zero after-state (Phase 3f).
+ */
+export function evaluateE11(e: E11Evidence | undefined): { outcome: Outcome; reasons: string[]; residue: string[] } {
   const fail: string[] = [];
   const unknown: string[] = [];
-  let residue = false;
-  if (!e) return { outcome: 'UNKNOWN', reasons: ['E11_MATRIX_MISSING'], residue };
+  const residue: string[] = [];
+  if (!e || typeof e !== 'object') return { outcome: 'UNKNOWN', reasons: ['E11_MATRIX_MISSING'], residue };
   if (e.scope !== E11_PROBE_SCOPE) unknown.push('E11_SCOPE_MISLABELLED');
   const pairs = [['admin', 'admin_api_delete'], ['sql', 'sql_delete_row_latch']] as const;
   for (const [name, method] of pairs) {
     const c = e.cohorts?.[name];
-    if (!c) { unknown.push(`E11_COHORT_MISSING:${name}`); continue; }
+    if (!c || typeof c !== 'object') { unknown.push(`E11_COHORT_MISSING:${name}`); continue; }
     if (c.method !== method) unknown.push(`E11_COHORT_METHOD:${name}`);
-    if (!(c.fakeUsers >= 1)) unknown.push(`E11_COHORT_EMPTY:${name}`);
-    if (!c.maskedCorrelation) unknown.push(`E11_CORRELATION_NOT_MASKED:${name}`);
-    for (const d of E11_DENOMINATORS) if (!(c.denominators?.[d] > 0)) unknown.push(`E11_DENOMINATOR_ZERO:${name}:${d}`);
+    if (!isPositiveInt(c.fakeUsers)) unknown.push(`E11_COHORT_EMPTY:${name}`);
+    if (c.maskedCorrelation !== true) unknown.push(`E11_CORRELATION_NOT_MASKED:${name}`);
+    for (const d of E11_DENOMINATORS) if (!isPositiveInt(c.denominators?.[d])) unknown.push(`E11_DENOMINATOR_ZERO:${name}:${d}`);
     for (const kind of E11_TOKEN_CASES) {
       for (const target of E11_TOKEN_TARGETS) {
         const key = `${kind}:${target}` as E11TokenKey;
-        const got = c.tokens?.[key];
+        const got: unknown = c.tokens?.[key];
         const mustRefuse = kind === 'expired_old_jwt' || target === 'guarded_writer' || target === 'auth_get_user';
-        if (got === undefined || got === 'UNKNOWN') unknown.push(`E11_TOKEN_NOT_MEASURED:${name}:${key}`);
+        if (!(E11_TOKEN_OUTCOMES as readonly unknown[]).includes(got)) unknown.push(`E11_TOKEN_INVALID:${name}:${key}`);
+        else if (got === 'UNKNOWN') unknown.push(`E11_TOKEN_NOT_MEASURED:${name}:${key}`);
         else if (mustRefuse && got !== 'REFUSED') fail.push(`E11_TOKEN_ACCEPTED:${name}:${key}`);
         else if (got === 'ACCEPTED_UNRECORDED') unknown.push(`E11_TOKEN_ACCEPTED_WITHOUT_READBACK:${name}:${key}`);
-        else if (got === 'ACCEPTED_RESIDUE_RECORDED') residue = true;
+        else if (got === 'ACCEPTED_RESIDUE_RECORDED') residue.push(`STALE_TOKEN_RESIDUE_RECORDED:${name}:${key}`);
+      }
+    }
+    for (const kind of E11_AFTER_STATE) {
+      const after = c.afterState?.[kind];
+      const before = c.denominators?.[AFTER_STATE_DENOMINATOR[kind]];
+      if (!after || typeof after !== 'object' || !isCount(after.remaining) || !hasEvidence(after.evidence)) {
+        unknown.push(`E11_AFTER_STATE_MISSING:${name}:${kind}`);
+      } else if (after.provenance !== E11_AFTER_PROVENANCE[kind]) {
+        unknown.push(kind === 'owned_objects_blob' ? `E11_BLOB_NOT_OBSERVED_BY_STORAGE_READBACK:${name}` : `E11_AFTER_STATE_PROVENANCE:${name}:${kind}`);
+      } else if (isPositiveInt(before) && after.remaining > before) {
+        unknown.push(`E11_AFTER_STATE_EXCEEDS_BEFORE:${name}:${kind}`);
+      } else if (after.remaining > 0) {
+        residue.push(`NON_TOKEN_RESIDUE_RECORDED:${name}:${kind}`);
       }
     }
   }
@@ -153,14 +216,18 @@ export function evaluateE11(e: E11Evidence | undefined): { outcome: Outcome; rea
     if (got === 'CHANGED') fail.push(`E11_FAILURE_BRANCH_CHANGED_STATE:${b}`);
     else if (got !== 'UNCHANGED_READBACK') unknown.push(`E11_FAILURE_BRANCH_NOT_READ_BACK:${b}`);
   }
-  if (e.ambiguousCommit?.blindRetry !== false) fail.push('E11_BLIND_RETRY');
-  if (e.ambiguousCommit?.resolvedByReadback !== true) unknown.push('E11_AMBIGUOUS_COMMIT_NOT_RESOLVED');
+  const commit = e.ambiguousCommit;
+  if (commit?.blindRetry !== false) fail.push('E11_BLIND_RETRY');
+  if (!commit || !(E11_COMMIT_RESOLUTIONS as readonly unknown[]).includes(commit.resolution) || commit.resolution === 'UNKNOWN'
+    || commit.resolvedByIndependentReadback !== true || !hasEvidence(commit.evidence)) {
+    unknown.push('E11_AMBIGUOUS_COMMIT_UNRESOLVED');
+  }
   if (e.cleanupInferredFromUsersRowOrCatalog !== false) unknown.push('E11_CLEANUP_INFERRED_NOT_MEASURED');
   if (e.providerRevocationAssumed !== false) unknown.push('E11_PROVIDER_REVOCATION_ASSUMED');
   for (const row of E11_ROWS) {
     const got = e.rows?.[row.id];
     if (got === 'FAIL') fail.push(`E11_ROW_FAIL:${row.id}`);
-    else if (got !== 'PASS') unknown.push(`E11_ROW_${got ?? 'MISSING'}:${row.id}`);
+    else if (got !== 'PASS') unknown.push(`E11_ROW_${typeof got === 'string' ? got : 'MISSING'}:${row.id}`);
   }
   const outcome: Outcome = fail.length ? 'FAIL' : unknown.length ? 'UNKNOWN' : 'PASS';
   return { outcome, reasons: [...fail, ...unknown], residue };

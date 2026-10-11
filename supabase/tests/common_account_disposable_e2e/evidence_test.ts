@@ -86,7 +86,7 @@ test('R1: E11 PASS without the full matrix is UNKNOWN; a matrix FAIL is FAIL; re
   const residue = completeE11();
   residue.cohorts.sql.tokens['valid_old_jwt:storage_upload'] = 'ACCEPTED_RESIDUE_RECORDED';
   const withResidue = verdict(allPass().map((r) => r.id === 'E11' ? { ...r, e11: residue } : r), FULL);
-  assert.deepEqual(withResidue.candidates.D.reasons, ['E11:STALE_TOKEN_RESIDUE_RECORDED']);
+  assert.deepEqual(withResidue.candidates.D.reasons, ['E11:STALE_TOKEN_RESIDUE_RECORDED:sql:valid_old_jwt:storage_upload']);
 });
 
 test('R2: Option D needs the separate full-decision proof, independently reviewed; E11 alone never suffices', () => {
