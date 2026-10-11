@@ -1,3 +1,12 @@
+## G6 専任ルーティング開始 — 共通AI基盤 Phase1e ready — 2026-10-11 JST
+
+- **ユーザー明示方針**：「この部屋はこれから直接ではなくG6のくろちゃん使って！」。共通AI基盤（OpenAI・Claude API）の次回以降のTASKは、従来のClaude直接コピー指示ではなく**G6専用スロット**で共有TASKに記録して進める。ユーザー許可なくG1–G5/H1–H5へ割り込まず、G6完了時は`K6`を共通AI基盤のちゃが判定し、スロットをメモ用に占有しない。新タスク時に改めて競合/最新mainを確認。
+- Latest G6 `.agent/tasks/CLAUDE_TASK_6.md` original idle/template and `## Report`を確認し、真の未割当から初回TASK `common-ai-provider-g6-phase1e-readonly-runner-preflight-20261011` を `ready/next_owner:claude` で明示割当。推薦 **Sonnet5（高）**、開始`G6`、返却`K6`、return_to=「共通AI基盤のちゃ（OpenAI・Claude API専用チャット）」。`.agent/ACTIVE_TASK.md`のG6 sectionのみ同期。旧テンプレート全文は新TASK内に保護。
+- G6 first scope: PR117/119/133 merged Phase1d toolsのfresh main/mac環境から独立worktreeで production runner `check`限定実環境確認（target identity, SQL catalog preflight, existing fingerprint, predicted refusals）。G5/shared production mutation windowがACTIVEなら停止、CLI `--linked` は一時ログインロール作成の可能性があると明示し、想定外の変更ならSTOP。実行されたかどうかはK6 Reportで確認する。**本対応ではCLI runner実行なし**。
+- `apply` / `policies` / `stop` / `rollback`, 本番migrationやSecrets/Edge/実Claude API、Cron、レポート切替、production deployと新PR mergeは **未承認・未実行**。既存G5の共通アカウント優先と並行worktree保護を継続。Codexレビューは高リスクの次の実変更ゲートで必要性を判定し、機械的に割当しない。
+
+---
+
 ## POSTONA THREADS FIRST REAL TEXT POST — G4 + H5 PARALLEL TASKS READY — 2026-10-11 JST
 
 - **User request:** prioritize finishing actual Threads account connection + ONE self-authorized text post from POSTONA over adding more unrelated features. H5 can be used temporarily if useful; do not permanently reserve H5 or park deferred issues in slots.
