@@ -33,17 +33,17 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: postona-h1-threads-oauth-edge-offline-implementation-20261011
 - start_code: H1
 - finish_code: C1
 - completion_code: C1
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: User 2026-10-11 explicitly requested Codex implementation for legitimate Threads OAuth offline Edge candidate after Claude safety interruption. TEMPORARY IMPLEMENTATION (臨時実装) exception to normal Codex review routing, NOT a request to circumvent safety safeguards. H1 owns new isolated mock-only source candidate on fresh PR124 head, new Draft stacked PR only if safe. No production/providercalls, login, real token, migration, OAuth hardening, merge/deploy. Former H1 defensive investigation C1 is completed; entire previous H1 TASK and Report protected. Return C1 to POSTONA G4 chat.
-- recommended_model: Sol（高）
+- allocation: C1 2026-10-11 accepted H1 mock-only Threads OAuth Edge candidate as PASS_OFFLINE_CANDIDATE / RELEASE_HOLD. Exact Draft PR135 e38788d6677082138f0990453c7d2f00549666d0 stacked on untouched protected Draft PR124 c30f246409a77080cbc03aef6c4cb72b5481e125, only 4 new source/test/docs files. H1-reported mocked 102/102 tests PASS; GitHub/source inspected by ChatGPT, tests not independently rerun. No actual Supabase/Meta/Threads/X/Auth/Vault calls, no production changes, RPC grant, migration, secret, deploy or merge; static Threads gate false. H1 task/report histories protected. H1 done/unreserved. Real integration still blocked by durable claim/authority transport, G5 T13/T9/T10, Meta/GoTrue/Vault proof and independent release gate. Existing X hardening Issue131 remains deferred; H2/H3-H5/G slots protected.
+- recommended_model: Sol（高） (completed)
 ## Codex H2
 - owner: codex
 - slot: codex-2
