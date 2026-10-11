@@ -1,3 +1,10 @@
+## ニュース改善API最適化 A/B → G8/G9専任割当 — 2026-10-11 JST
+
+- **ユーザー明示指定**: このチャットのニュース改善 A の今後の作業は **G8**（`G8`開始/`K8`返却）、API最適化 B の今後の作業は **G9**（`G9`開始/`K9`返却）。他のG枠にこの2系統を割り当てず、他案件のTASKをこの2枠へ勝手に引き継がない。チャットタイトルは変更しない。
+- G8 `ready`: `news-improvement-a-pr129-f1-f9-remediation-g8-20261011` / Opus5.5（高）。PR129 OPEN/Draft exact reviewed head `61dd33d7`、独立Codex指摘F1〜F9（P1×5/P2×4）の**修正実装**。PR116固定本番反映と他slotを保護、merge/deployなし。Reportは `.agent/tasks/CLAUDE_TASK_8.md`、返却先はこのチャット。
+- G9 `ready`: `api-optimization-b-phase5-followup-fixture-rights-and-cost-eval-g9-20261011` / Sonnet5（高）。B Phase5 `96d2aebb` の評価成果から権利監査・費用/recall評価準備を継続。PR115はDraft、所有/競合確認を優先。有料API、production、本番Provider/重要ニュースFunction改修なし。Reportは `.agent/tasks/CLAUDE_TASK_9.md`、返却先はこのチャット。
+- **変更対象**はG8/G9のTASKとACTIVE_TASK内のG8/G9およびこの記録のみ。他slotのTASK/Report/worktree/進行状態は未変更。両TASKはGitHubへ登録済みだが、Claudeの実行開始・ローカル作業・テストは未確認。
+
 ## K2 FINAL — Fact V2 PR132 R1–R3 correction PASS_SOURCE_CANDIDATE / RELEASE_HOLD — 2026-10-11 JST
 - G2 `kabumori-fact-v2-pr132-three-objective-guards-correction-20261011` completed K2. PR132 OPEN/DRAFT/UNMERGED exact head `68d45dde1be34715267b5066fa3b3686d756b79e`, one commit above prior head `bd424616a135e7bf71592c2ac41acb3e03f8568d`, still stacked on unchanged OPEN/UNMERGED PR110 exact `319a442edcd61c07274e3409d8864234f9d77cd4`. GitHub read-back verified 3 changed paths only: `analysis_logic.ts`, `hard_fact_guards.ts`, `fact_v2_test.ts`. G2 Report: R1-R3 four false objective cases rejected by local check, sanitizer, and X/app mocked delivery; three intended ALLOW cases and six grounded economic interpretations retained; 1,360/1,360 G2-reported offline tests PASS (ChatGPT inspected source/tests but did NOT independently rerun). PR132 Vercel status success; PR110 Vercel build-rate-limit failure not evidence of source failure, Netlify preview success. No material new boundary introduced, no extra Codex micro-review. K2 accepted source candidate; G2 current task marked done/none, other slots preserved.
 - Source merge gate next: first PR110→main, then safely restack/retarget PR132 onto refreshed main after confirming exact heads, CI, protected other changes and conflicts; do not merge Draft PR132 blindly or authorize production cutover by this K2. Production X/app consumer ON/OFF, personalized report/notification, duplicate prevention, rollback and live API/DB/deploy are separately gated with user approval. Do not fix/backfill Oct7–9 legacy close runs. No product merge, deploy, production write, or real X post in this K2.
@@ -86,8 +93,8 @@
 | G5 | `in_progress` | `common-account-phase3g-free-auth-provider-test-readiness-20261011` | `claude` | — | `K5` | `.agent/tasks/CLAUDE_TASK_5.md` |
 | G6 | `idle` | `none` | `none` | — | `K6` | `.agent/tasks/CLAUDE_TASK_6.md` |
 | G7 | `idle` | `none` | `none` | — | `K7` | `.agent/tasks/CLAUDE_TASK_7.md` |
-| G8 | `idle` | `none` | `none` | — | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
-| G9 | `idle` | `none` | `none` | — | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
+| G8 | `ready` | `news-improvement-a-pr129-f1-f9-remediation-g8-20261011` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
+| G9 | `ready` | `api-optimization-b-phase5-followup-fixture-rights-and-cost-eval-g9-20261011` | `claude` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
 | G10 | `idle` | `none` | `none` | — | `K10` | `.agent/tasks/CLAUDE_TASK_10.md` |
 
 - 既存索引との差分: G1（索引 `ready` / 正本 `review_required`）。各担当の記録直後で索引が未更新と見られるため、衝突を避けてこの拡張では既存枠の索引を変更していない。TASK正本を優先する。この拡張ではH1/H2/G1〜G5のTASK本文・Report・status・allocationを変更していない。
