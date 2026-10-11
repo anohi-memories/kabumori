@@ -1,10 +1,59 @@
+# G2 CURRENT TASK — 共通朝刊・大引け：大人数対応の全体プッシュ通知 V1（ソースのみ）
+
+- task_id: kabumori-market-report-scalable-broadcast-push-v1-20261012
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- start_code: G2
+- finish_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Opus5.5（高）**
+- mode: source-only independent implementation candidate / Draft PR / offline tests
+- source_dependency: PR143 https://github.com/anohi-memories/kabumori/pull/143 (HEAD 889ca1b44cf82bd3ecb913818dca568456849feb, OPEN/DRAFT/unmerged)
+- superseded_PR141: protected OPEN/Draft/unmerged, no merge
+- user_decision: 共通の朝刊/大引けは共通生成・全対象ユーザーへ迅速に配信と通知。個別分析は本人が押した時だけ個別ジョブ→アプリ終了後も生成→完了通知。
+- live_operations: FORBIDDEN; release_gate: PRODUCTION_NO_GO
+
+## Product requirement
+
+共通市場レポートの朝刊/大引けは利用者1人ずつLLM生成しない。市場パケットを1回生成して全利用者に表示・push通知する。登録者1万人・10万人でも、単純な`NOTIFICATION_BATCH_LIMIT=200`を1分1回まわして1万人に50分かかる設計は避ける。**実際に対象なのは通知同意をした有効端末を持つユーザー**で、通知OFFは送信しない。個別オンデマンド完了push、重要ニュース、X実投稿は別レーン。5分前後など「数分」の配信を性能評価の目標とするが、Expo API/Supabase実制約で実測できない場合は保証しない。重要ニュース送信の遅延・飢餓は厳禁。
+
+## Exact scope and acceptance
+
+1. **生成と通知を疎結合化:** `market_report_cycles` と `market_report_packets` のcompleted / 正しいFact status / report_type morning|close / trading_date / current_packetだけを監視する、安全なservice_role-only notify intent/producerを新設。X投稿経路・G6 provider・G8重要ニュース本体への変更不要。欠けた/failed/古い/不整合パケットは送信禁止。同日二重Cron/poll/再起動/世代更新でも、一つの朝刊/大引けに1人1回（選択するsource/packet keyの定義を記録）。
+2. **受信者決定:** `alert_settings.push_enabled=true` および `morning_report=true` / `close_report=true` を尊重。設定行なし/通知拒否/退会/端末登録なしはスキップ。保有銘柄の有無に依存せず共通朝刊・大引けは閲覧可能。登録端末一覧 `device_push_tokens` は送信直前に再評価し、設定ONからOFFへの変更/トークン更新で誤配信しない。複数端末は各端末に正しく通知、ユーザー単位の重複は防ぐ。
+3. **高速で安全なfanout:** 1万人・10万人を1回で全件取得や全件INSERTしない。keyset/バッチ/確実なcheckpoint・原子的claim、部分失敗時の再開、同時workerの上限/lease/fence、rate-limit、429/5xx明確拒否のみbounded retry、HTTP結果不明時は二重送信を避ける。既存 `send-push-notifications` の内部`NOTIFICATION_BATCH_LIMIT=200`、Expo `EXPO_PUSH_BATCH_SIZE=90`、通知claim RPCの制約を精査。既存送信workerをむやみに大容量化して重要ニュースを詰まらせない。必要なら**専用broadcast worker/queue**と隔離された送信経路、または証明可能な優先制御を選択。provider accepted ticketを実機到着保証と混同しない。
+4. **通知のリンク:** 通知タップでアプリの共通朝刊/大引けの正しい日付・種類を開ける（PR143 `/market-report` の既存仕様と整合）。サーバーでの共通表示ゲート・Fact/公開フィールド・認証を迂回しない。配信時刻と生成時刻・市場基準日を取り違えない。通知を受けていない人もアプリから共通市場レポートを閲覧可能。
+5. **本番移行の保護:** 新しい機能は全てデフォルトOFF。新しいschema/RPCやCron・Edge・appを本番へ適用しない。個別オンデマンドPR143未マージ／未デプロイの依存を厳密に記録し、旧朝夕自動個別レポートとの二重通知を避ける。必要なmigrationはexpand-onlyの独立候補＋service_role権限の最小化。GitHub上の候補であって既存Supabaseへの書込み許可ではない。
+6. **10k+容量と明示的な上限:** バッチ数/同時実行数/所要分数/PG負荷/Expo API側の理論上限を別々に算出・シミュレーション。10,000 / 100,000対象のdry-run負荷テスト（純粋mock・合成ユーザー）で終端性・再実行時の重複ゼロ・ニュース別レーンに影響しないことを示す。数分以内という目標に届かないなら原因・性能上限・今後のスケール手段・release blockerを正直に報告。
+7. **回帰:** 0/1/199/200/201/10k/100k件、朝刊/大引け/休日/遅延生成/重複packet、設定ON/OFF変化、登録端末変更、部分バッチ失敗/crash/restart、競合同時worker、未確定Expo結果、429/500、logout/退会、通知deep-link、個別完了push、重要ニュース優先をオフラインでテスト。必要なら専用disposable PG17でACL/RLS/lease/一意制約/トランザクションを検証。サービスの利用者DBを1万人作らない。
+
+## Worktree/changes/safety
+
+- Fresh `origin/main`・`PROJECT_RULES.md`・`.agent/ORCHESTRATION.md`・ACTIVE_TASK/CURRENT_STATE、G2過去TASKと最新K2、PR143 exact 889ca1b4、PR141を読み、全slotのworktree/checkout/PR変更競合を確認。G2専用**独立worktree**必須。G1/G3–G10/H1–H5のworktree/branch/TASK/Report/未コミット・dev server操作禁止。
+- 新しいG2所有の通知producer/dispatcher・純粋テスト、必要最小のexpand-only migration、G2所有通知リンク部分、runbookだけ変更可。G5のAuth/entitlement、G6 provider/ledger、G8重要ニュースproducer、G3/G4 POSTONA、G1保有UI、G7 MIC、G9 API経路変更禁止。既存 `send-push-notifications` の改造が本当に必要なら他PR競合/重要ニュース回帰と整合を証明、危険なら新規独立workerに分離する。
+- **新しい独立G2 Draft PRを作成**。PR143を改変・force push・rebase・マージしない。PR143の新UI/RPCに依存するなら、依存関係を明記したPR143上へのstacked branch PRか、完全に独立したinterfaceを使用。前段PR143のsourceがmainにマージされるまで本番へ出さない。source-only push candidateが部分実装に終わるときは完了と偽らずblocker記録。
+- migration apply、Supabase production DB read/write/Edge/Cron、iPhone EAS/App Store、X、Expo実push、実AI有料API、provider setting/keys、billing、gate ON、PR mergeは禁止。セキュリティ・権限・送信先の負荷や不明点は停止して安全な部分実装とReportを出す。
+- 切替Runbookには read-only preflight → PG権限/通知同意/パケット完全性 → デプロイ+ゲートOFF → 内部dry-run → 少数オプトイン → 10k capacity評価 → 段階的ON → monitor/readback → rollback を記載。各本番操作は別途ユーザー承認。個人情報やトークンをログに出さない。
+- 完了: TASK `## Report — current scalable shared report broadcast` にtask_id/result/architecture/changed_files/tests/commit/push/merge/deploy/remaining_issues、安全性/10k・100k試算/他slot競合/実測と推定の区別/production NO_GO/next_recommendationを記録。status=review_required,next_owner=chatgpt、ACTIVE_TASK G2節/CURRENT_STATE G2部分のみ更新。**かぶモリアプリG2のちゃへ K2**。新規並列DB/Expo実送信境界は、作成後にH1〜H4から空きにSol（高）で**重点レビュー1回**をChatGPTが判断する。H5レビュー禁止。
+
+## Report — current scalable shared report broadcast
+
+PENDING G2.
+
+---
+
+## Previous G2 TASKs/Reports — preserved verbatim below
+
 # G2 CURRENT TASK — PR143 C3指摘：失敗RPCの期限切れleaseフェンス限定修正（R1）
 
 - task_id: kabumori-pr143-fail-lease-expiry-fence-r1-20261011
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
+- k2_verdict: PASS_SOURCE_FIX / PR143 exact HEAD 889ca1b44cf82bd3ecb913818dca568456849feb / G2-reported tests PASS; no merge, no production (2026-10-12)
 - start_code: G2
 - finish_code: K2
 - return_to: かぶモリアプリG2のちゃ
