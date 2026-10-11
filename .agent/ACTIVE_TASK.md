@@ -63,17 +63,17 @@
 ## Codex H3
 - owner: codex
 - slot: codex-3
-- status: review_required
+- status: done
 - task_id: kabumori-pr143-ondemand-queue-auth-security-review-20261011
 - start_code: H3
 - finish_code: C3
 - completion_code: C3
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CODEX_TASK_3.md
 - report: .agent/CODEX_REPORT_3.md
-- allocation: C3 H3 completed independent read-only review of PR143 exact head 1d0529bb68b0e60b32ce0a2cb0002872b1671177. Result CHANGES_REQUIRED / PRODUCTION_NO_GO due P2 expired-lease failure RPC missing expiry fence; 58 targeted offline tests PASS with --no-check, standard type resolution and disposable PG unavailable. No product source edits or production operations. Common all-users broadcast remains blocker. Return to G2 chat for narrow fix.
-- recommended_model: Sol（高）
+- allocation: C3 2026-10-11 accepted H3 review CHANGES_REQUIRED / PRODUCTION_NO_GO for PR143 exact 1d0529bb: P2 missed lease_expires_at timeout in fail_personalized_analysis_job; no P0/P1 Auth/RLS/tenant boundary issue found. H3 58 targeted runtime tests PASS, PG environment NOT_RUN, no source edits. H3 done/unreserved; narrowly scoped G2 correction assigned without a second full review. Broadcast push still missing; no main merge/production.
+- recommended_model: Sol（高） (completed)
 ## Codex H4
 - owner: codex
 - slot: codex-4
@@ -117,15 +117,15 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: kabumori-personalized-ondemand-background-push-v1-20261011
+- status: ready
+- task_id: kabumori-pr143-fail-lease-expiry-fence-r1-20261011
 - start_code: G2
 - finish_code: K2
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 2026-10-11 accepted [Draft PR143] exact 1d0529bb68b0e60b32ce0a2cb0002872b1671177 as PASS_SOURCE_CANDIDATE_WITH_BROADCAST_BLOCKER / PRODUCTION_NO_GO. G2 reported 1,616/1,616 offline Deno/app plus disposable PG17 ACL/RLS/concurrency/13 mutations PASS; ChatGPT source-inspected but did not rerun. 30 files: authenticated request, DB persisted queue, fenced worker, private results, completion push, common market reader, OFF by default. Missing shared morning/close everyone-broadcast push is blocker; real Edge/Cron/DB/Expo/provider/native NOT_RUN. Separate H3 Sol（高） independent security review allocated; do not merge/apply PR143 before C3. Prior Draft PR141 superseded/protected; other slots untouched. G2 source task finished and released.
-- recommended_model: Opus5.5（高） (completed)
+- allocation: C3 2026-10-11 accepted H3 PR143 focused code review CHANGES_REQUIRED only P2 lease expiry fail RPC missing timeout fence. G2 R1 permitted narrow PR143 source fix of fail_personalized_analysis_job expiry, SQL expired-unreclaimed regression and mirrored worker mock fail branch; exact old head 1d0529bb, PR remains Draft/unmerged. No production, no other slot work. Main Auth/RLS/queue core otherwise reviewer found no P0/P1. Shared all-users morning/close broadcast is separate still open. After K2 target narrow security review only if new risk; then broadcast design/source task separately.
+- recommended_model: Sonnet5（高）
 ## Claude G3
 - owner: claude
 - slot: claude-3
