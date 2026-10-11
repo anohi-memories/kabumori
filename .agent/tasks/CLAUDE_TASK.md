@@ -1,3 +1,51 @@
+# G2 CURRENT TASK — Fact V2 PR132: C2 3件の客観事実ガードのみ限定是正
+
+- task_id: kabumori-fact-v2-pr132-three-objective-guards-correction-20261011
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- start_code: G2
+- finish_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Opus5.5（高）**
+- classification: C2 CHANGES_REQUIRED / three P2 objective guard exceptions / one bounded corrective
+- source_review: .agent/CODEX_REPORT_2.md 最新先頭、`kabumori-fact-v2-pr132-final-integrated-review-20261011`
+- target_draft_PR: https://github.com/anohi-memories/kabumori/pull/132
+- exact_head_at_C2: bd424616a135e7bf71592c2ac41acb3e03f8568d
+- stacked_base_protected_PR110_head: 319a442edcd61c07274e3409d8864234f9d77cd4
+- no_product_merges_no_deploy_no_paid_AI_no_X_post_no_live_DB: true
+
+## Product owner decision — never reverse
+
+**「事実は厳格に、Opusが既存の複数データから推論する経済分析・見通しは自由に、配信は安定優先」**。H2 explicitly accepted this Fact V2 policy and normal inference survival. DO NOT narrow plausible economic reasoning, restore verbatim-only source causation, or keep iterating suffix regexes/whole-article deletions. Do NOT rewrite Fact V2 prompts as source-summary-only. This TASK concerns **only three objectively false claim escapes created by Fact V2 guard exceptions**, not financial-opinion disagreements. Maintain all genuine supported analysis from PR132.
+
+## Verified C2 findings — all P2 / reproduce before editing
+
+The exact PR132 source revision was independently tested on H2: focused 55/55 PASS; *independent adverse probes* 10/14 PASS and **four actual violations of objective guards**, all four correctly removed on PR110 baseline. All four appear in BOTH simulated X and app packets if the mocked Fact response says passed; no real provider or production incident claimed.
+
+1. **R1 same-day denial scope:** `analysis_logic.ts` new `sameDayClaims` treats presence of any `同じ日ではない` in a sentence as exemption for a different, affirmative `同じ日に` proposition in same sentence. Exact bad text **「原油と東京市場は同じ日ではない一方、米国市場と東京市場は同じ日に取引を終えました。」** (US session10/6, JP10/7) must be REJECTED/removed; preserve genuine pure denial **「米国市場と東京市場は同じ日ではないため、日付を分けて確認します。」** as ALLOW.
+2. **R2 TOPIX adoption/context exception:** `TOPIX_INDEX_CONTEXT` ignores an asserted incorrect numerical/price claim under overly broad `算出` or `ウエート` context. Both **「TOPIX算出値は437.0円でした。」** and **「TOPIXのウエートは437.0円でした。」** must be REJECTED as 1306 ETF/index confusion. Preserve real composition announcement **「個別では、ジーエヌアイグループのTOPIXへの新規採用が発表されています。」** and honest discussion of index constituents; do NOT conflate 1306 ETF price 437.0円 with TOPIX index. Old obvious error `TOPIXは437.0円` must still fail.
+3. **R3 trailing date ownership:** `hard_fact_guards.ts` strips a date before a second market even when it grammatically dates the FIRST market. Exact bad **「米国市場が上昇した日付は10月7日、東京市場は下落しました。」** must be REJECTED (US10/6, JP10/7). Preserve valid multi-market synthesis **「10月6日の米国株高と10月7日の東京市場の下落を並べると、買いが続きにくい地合いと考えられます。」**. Ensure date ownership follows actual subject, not only presence of next market token.
+
+## Narrow execution & validation
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this current G2 TASK and past Report, and current top H2 Report. Fresh-fetch `origin/main`, PR132 exact head, PR110 exact base, other open PR overlap; STOP on changed head/conflict/unknown owner. Only reuse **own clean physically independent G2 Fact-V2 checkout** or create new G2-isolated checkout from fresh `/Users/yuya/Developer/kabumori-fresh`, protect other G/H worktrees, branches, uncommitted files and dev servers.
+2. Minimal corrections ONLY in G2-owned `supabase/functions/market-report-analysis/analysis_logic.ts`, `hard_fact_guards.ts`, and their local tests. Do not touch old PR110 branch. No new broad architecture, G5 Auth, G3/G4 Threads/X, provider, DB migration/RPC, UI, secrets, workflow, cron, production flags.
+3. **Before/after tests for all four unsafe strings** should fail on prior exact PR132 and pass after correction through (a) localAnalysisCheck Hard, (b) sanitizer unit removals, (c) mocked generate+Fact delivered formatted X AND app absent, with honest Fact status. Preserve all three intended ALLOW controls, six economic synthesis texts in `fact_v2_test.ts` (including currency, fuel, interest rates, multi-fact) with X/app survival, and previous H2 20 unsafe no-comma cases, five legitimate noun subjects `勢いが`, emoji binding, objective wrong prices/dates, disclaimer once. No exploitability exaggeration.
+4. Execute focused current Fact V2 + H2 corrective + causal calibration and new four regression probes, then relevant `market-report-analysis`/shared X/app/packet/personalized suites if changed behavior warrants; Deno check/lint and git diff --check. Keep `MAX_GENERATIONS=2`, `MAX_MODEL_CALLS=4`, bounded retries and original Fact semantics; no paid/live calls. Report true actual tests separate from H2 55 and prior G2 1356 self-reports. Do NOT repeatedly open new semantic regex problems without concrete behavior.
+5. Commit and push ONE bounded correction to **same G2-owned PR132 branch** only after refreshed exact head/ownership/collision preflight; no force push and NEVER edit PR110 source branch. Keep PR132 Draft; do not merge PR110/PR132, deploy, change live consumer flags, create real X posts, alter production Supabase, spend API credits or backfill old 10/7-9.
+6. Fill `## Report — current correction` with exact new head, diff, reproductions & ALLOW controls, test tally and test commands, actual commit/push/merge/deploy/prod truth, residual risk, follow-up recommendation. Preserve this entire historical TASK and every past Report byte-for-byte below. Update ONLY current G2 TASK status `review_required/next_owner chatgpt`, G2 portion of ACTIVE_TASK and relevant CURRENT_STATE note via guarded fresh SHA; return **K2 in かぶモリアプリG2のちゃ**.
+7. **No repetitive new independent broad review:** At K2 ChatGPT verifies four objective unsafe cases + three intended ALLOW controls and source constraints. If all proven and no material new objective safety boundary introduced, move to **one combined PR110→PR132 source merge gate** (and separate production consumer cutover). Independent Codex review only if this correction exposes genuinely material new risk; do not spend cycles on speculative edge-word churn.
+
+## Report — current correction
+
+（未着手）
+
+---
+
+## Previous G2 TASK/Report history — preserved verbatim below
+
 # G2 CURRENT TASK — かぶモリ Fact V2：事実を守り、Opus独自分析を通す
 
 - task_id: kabumori-market-report-fact-interpretation-v2-20261011
