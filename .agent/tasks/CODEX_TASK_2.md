@@ -1,3 +1,60 @@
+# Codex H2 — CURRENT TASK — G5 PR130 E11 R1–R5 narrow corrective re-review
+
+- task_id: common-account-pr130-e11-r1-r5-narrow-security-rereview-20261011
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- start_code: H2
+- completion_code: C2
+- priority: critical
+- return_to: **共通アカウントG5のちゃ**
+- recommended_model: **Sol（高）**
+- type: ONE exact-head independent source-only security re-review; no feature implementation
+- production_or_disposable_Supabase_remote_calls: forbidden
+- real_or_disposable_Auth_DELETE: forbidden
+- family_photo_project_pause_or_project_create: forbidden
+- source_edits_PR_merge_deploy_billing_secrets: forbidden
+
+## Purpose and exact-head sources
+
+C2 independently reviewed G5 E11 pre-run proof plan and found `R1 [P1] / R2–R5 [P2]` in current historical H2 Report `.agent/CODEX_REPORT_2.md`. G5 now submits source-only repair in Draft [PR130](https://github.com/anohi-memories/kabumori/pull/130) **EXACT `5943fad5f724191f6ae77f3baf826a4c7698d542`**, stacked atop unchanged Draft PR122 exact `f17a47e36632fff4a1f4cfb0b860df200e1c99e1`. PR130 changed 22 files, 12 modified and 10 new, only `docs/common-account/phase3c-disposable-supabase-proof-runbook.md` and `supabase/tests/common_account_disposable_e2e/`. Historical reference PR121 exact `76b50e1e03f82faaa3460bab1603afa8fef3ce44` and PR128 exact `e9244d29ea944156cf1479c0976053d433469e06` remain DRAFT/UNMERGED. No PR merge or auth/DB deploy is permitted here.
+
+Your job: **compare PR130 vs the old PR122 head and determine whether the specific previously reported R1–R5 are truly fixed**. Do not reopen unrelated reviews, future Auth/provider design or the G2 PR110 source review, which is separately completed. A PASS accepts *the offline proof runbook candidate only*, not actual E11 live project proof, user consent, Option D selection or permission to pause the family photo app.
+
+## Read and isolation
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this H2 TASK/Report historical **E11 review first section under 2026-10-10**, and current G5 Phase3e TASK/Report. Check exact PR HEADs and parent/stacked base, status, changed-file scope. STOP if mismatched.
+2. Fresh-fetch `origin/main` from `/Users/yuya/Developer/kabumori-fresh`, create a new independent H2 worktree detached at PR130 exact head; never reuse old H2 review checkout or any G5/G1–G4/H1 worktree, branch or dev server. Protect other workstreams' uncommitted files and branch pointers.
+3. **No Supabase API or remote project access even read-only**, no real/fake managed Auth BAN/DELETE/Storage/provider tests, no paid X/Apple/Meta, no permissions/GRANT, no migration apply, secrets/Vault, EAS, PR merge/deploy, photo app pause or new project creation. Local scratch PostgreSQL with completely fake state, read-only scripts and security proof of test semantics only are permitted. No source edits.
+
+## Focused review gates (all five)
+
+- **R1 P1:** Check `e11_matrix.ts`, `evidence.ts`, runbook and test fixtures: Admin-vs-SQL two cohorts, non-zero before denominators, audit differences, physical Storage objects, FK/trigger/ACL denials, lock/statement timeout, rollback and ambiguous COMMIT NO RETRY, pre-recorded session/refresh IDs, JWT unexpired/expired with guarded/unguarded writes and Storage, PASS/UNKNOWN/FAIL handling for stale artifacts and invalid branches. Check whether self-asserted PASS statuses could fake real evidence; classify scope precisely.
+- **R2 P2:** E11 may prove only *platform permission / FK cascade / row latch*. Future Option D full lifecycle decision must require a separate genuinely evidenced independent review under same lock, with manual/auto/PKCE in-flight paths and both writer lock directions. `managed_auth_delete` stays blocked.
+- **R3 P2:** E4 last successful callback time is an expiry **lower** bound, not sufficient upper bound. Review `e4_bound.ts` and evidence tests for forged label-only mitigation, absent/incorrect version/config maximum, callback-after-expiry refusal, clock skew, request duration, in-flight drain and final exclusive recheck; A+B fail-closed.
+- **R4 P2:** `guard.ts` is just dry-run plan validation, never real destination or approval proof. `witness.ts` W1–W7 must require *actual later observed evidence* for exact disposable ref and real operator; distinguish declarative attestation from independently verified. E11 requires witnessed E1/E8/E9/E10/E12, dummy user allowlist and single-row target, documented human per-run consent. Evaluate any bypass of fail-closed `verdict()` with self-declared inputs.
+- **R5 P2:** Check `catalog_extended_readback.sql`, `target_readback.sql`, Deno static tests and scratch-PG logic for safe syntax and managed-version privilege/role failure modes, FK cascade, RLS/policy/managed trigger function bodies, nested grants, Storage metadata + physical blob read-back. Missing/unreadable = UNKNOWN and not zero, no broad claim from catalog hash.
+- Ensure no executable Auth SQL DELETE, network/provider call, source DB migration/Edge/Auth schema or production feature-gate changes. No real deletion proof (E1–E12 NOT_RUN).
+
+## Evidence and completion
+
+- Independently run focused Deno tests (G5 claims 56/56), mutation detection (G5 claims 58/58), targeted R1–R5 negative probes or fake local PG when useful. Distinguish tests you did vs G5's report; `git diff --check`, scope and secret scan. If unsafe or under-specified, **CHANGES_REQUIRED**, severity+exact line/test reproduction; if correct at offline scope **PASS_SOURCE_R1_R5 / REAL_MANAGED_PROOF_NOT_RUN**. No invented PASS of future real Supabase tests.
+- Report exact PR130 head, R1–R5 verdict, changed_files by reviewer (expected only H2 TASK/Report and H2 index), independent tests, commit/push/merge/deploy state, residual blocker, safety. Append at top of own `.agent/CODEX_REPORT_2.md`, preserve all prior H2 history byte-for-byte; update own `.agent/tasks/CODEX_TASK_2.md` status `review_required`, `next_owner chatgpt`, H2-only index portion of `.agent/ACTIVE_TASK.md`. No other slot changes, no rewriting report history.
+- Return **C2** to **共通アカウントG5のちゃ**. H2 does not choose Option D, approve E11 run or request photo service downtime. User-approved free-tier temporary downtime remains PREPAUSE_BLOCKED pending missing dummy OAuth/OIDC, operator/consent, pre-stop baseline, cost/restoration proof.
+
+推薦モデル：**Sol（高）**
+
+## Report — PR130 R1–R5 narrow re-review
+
+- task_id: common-account-pr130-e11-r1-r5-narrow-security-rereview-20261011
+- result: pending
+- remote_calls: 0
+
+---
+
+# Preserved preceding H2 TASK and C2 history (immutable below)
+
 # Codex H2 CURRENT TASK — G2 PR #110 P2 Hard-Fact final boundary review
 
 - task_id: kabumori-pr110-p2-final-narrow-review-20261011
