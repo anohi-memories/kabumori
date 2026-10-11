@@ -207,3 +207,75 @@ test("上限: 生成2回・呼び出し4回・通信の再試行の上限は変�
   assert.equal(MAX_MODEL_CALLS, 4);
   assert.deepEqual(DEFAULT_TRANSPORT_RETRY, { maxRetriesPerCall: 2, runRetryBudget: 3, runWaitBudgetMs: 30_000, backoffMs: [2_000, 6_000], maxRetryAfterMs: 20_000 });
 });
+
+// ---------------------------------------------------------------------------------------------
+// C2（2026-10-11）: Fact V2 の例外が広すぎて通っていた客観的な誤り4文（R1〜R3）
+// ---------------------------------------------------------------------------------------------
+
+const C2_UNSAFE: Array<[string, string]> = [
+  // R1: 一方の「同じ日ではない」が、もう一方の「同じ日に」を許していた
+  ["原油と東京市場は同じ日ではない一方、米国市場と東京市場は同じ日に取引を終えました。", "日付の違う東京市場と米国市場を「同じ日」と表現"],
+  // R2: 「算出」「ウエート」の後ろに 1306 の値を書いた文
+  ["TOPIX算出値は437.0円でした。", "TOPIX連動ETF（1306）をTOPIXと表記"],
+  ["TOPIXのウエートは437.0円でした。", "TOPIX連動ETF（1306）をTOPIXと表記"],
+  // R3: 自分の節の最後にある日付（米国は10/6、東京は10/7）
+  ["米国市場が上昇した日付は10月7日、東京市場は下落しました。", "日付と指標の不一致"],
+];
+const C2_ALLOW = [
+  "米国市場と東京市場は同じ日ではないため、日付を分けて確認します。",
+  "個別では、ジーエヌアイグループのTOPIXへの新規採用が発表されています。",
+  "10月6日の米国株高と10月7日の東京市場の下落を並べると、買いが続きにくい地合いと考えられます。",
+];
+const inCrossAsset = (text: string) => (analysis: GeneratedAnalysis) => { analysis.app_story!.cross_asset_ja = text; };
+const withUnit = (text: string) => {
+  const analysis = delivered();
+  analysis.x_post.context_ja = `${analysis.x_post.context_ja}${text}`;
+  analysis.app_story!.cross_asset_ja = `${analysis.app_story!.cross_asset_ja}${text}`;
+  return analysis;
+};
+
+test("C2 R1〜R3: 4文はローカルの判定で止まる（「TOPIXは437.0円」も引き続き止まる）", () => {
+  for (const [text, expected] of [...C2_UNSAFE, ["TOPIXは437.0円でした。", "TOPIX連動ETF（1306）をTOPIXと表記"] as [string, string]]) {
+    assert.ok(addedHard(inCrossAsset(text)).some((issue) => issue.startsWith(expected)), text);
+  }
+});
+
+test("C2 R1〜R3: 4文は単位の除外で X とアプリの両方から外れる", () => {
+  for (const [text] of C2_UNSAFE) {
+    const result = sanitize(withUnit(text));
+    const paths = new Set(result.removed.map((unit) => unit.path.split("#")[0]));
+    assert.ok(paths.has("x_post.context_ja") && paths.has("app_story.cross_asset_ja"), `${text}: ${[...paths].join(",")}`);
+    assert.ok(!result.analysis.x_post.context_ja!.includes(text) && !result.analysis.app_story!.cross_asset_ja.includes(text), text);
+  }
+});
+
+test("C2 R1〜R3: Fact が passed と返しても、4文は配信される X とアプリに残らない", async () => {
+  for (const [text] of C2_UNSAFE) {
+    const calls: string[] = [];
+    const outcome = await generateSharedAnalysis(input, scripted([
+      { step: "generate", payload: withUnit(text) }, { step: "generate", payload: withUnit(text) }, { step: "fact", payload: PASSED },
+    ], calls), NOW);
+    assert.ok(outcome.ok, text);
+    assert.ok(calls.length <= MAX_MODEL_CALLS, `${text}: ${calls.join(",")}`);
+    const packet = outcome.ok ? outcome.packet : null!;
+    assert.ok(!formatSharedXPost(packet).includes(text), `X: ${text}`);
+    assert.ok(!JSON.stringify(packet.app_story).includes(text), `app: ${text}`);
+    // Fact の状態は、実際に Fact が返した結果（passed）のまま。外した単位は removed_units に残る。
+    assert.equal(packet.fact.ai_status, "passed");
+    assert.ok((packet.fact.removed_units ?? []).length > 0, text);
+  }
+});
+
+test("C2 R1〜R3: 意図した3つの文（否定・指数の新規採用・2つの日付）は通り、X とアプリに届く", async () => {
+  for (const text of C2_ALLOW) {
+    assert.deepEqual(addedHard(inCrossAsset(text)), [], text);
+    assert.deepEqual(sanitize(withUnit(text)).removed, [], text);
+    const calls: string[] = [];
+    const outcome = await generateSharedAnalysis(input, scripted([
+      { step: "generate", payload: withUnit(text) }, { step: "fact", payload: PASSED },
+    ], calls), NOW);
+    assert.deepEqual(calls, ["generate", "fact"], text);
+    assert.ok(outcome.ok && formatSharedXPost(outcome.packet).includes(text), `X: ${text}`);
+    assert.ok(outcome.ok && outcome.packet.app_story!.cross_asset_ja.includes(text), `app: ${text}`);
+  }
+});

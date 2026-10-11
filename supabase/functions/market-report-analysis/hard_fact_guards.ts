@@ -335,9 +335,12 @@ export function metricFactIssues(texts: GuardTexts, input: AnalysisInput): strin
         if (!statesValue && direction === null) return;
         // The date that governs this subject: one written inside its own clause, else the nearest before it,
         // unless that date already dated another market's metric ("9月28日の米国市場も…、東京市場は…").
-        // A date at the very end of the segment introduces the next subject (「10月6日の米国株高と10月7日の東京市場」):
-        // it is that subject's date, not this one's (2026-10-11 Fact V2 audit).
-        const ownClause = index + 1 < found.length ? firstClause(segment).replace(/\d{1,2}月\d{1,2}日(?:の|は)?\s*$/u, "") : firstClause(segment);
+        // A date that introduces the next subject is that subject's date, not this one's: only when it follows a list
+        // connector and modifies the next subject with の (「10月6日の米国株高と10月7日の東京市場」: 2026-10-11 Fact V2
+        // audit). A date ending this subject's own clause still dates it (「米国市場が上昇した日付は10月7日、東京市場は…」:
+        // 2026-10-11 C2 R3).
+        const nextSubjectDate = index + 1 < found.length && /(?:と|や|・|及び|および)\d{1,2}月\d{1,2}日の\s*$/u.test(segment);
+        const ownClause = firstClause(nextSubjectDate ? segment.replace(/\d{1,2}月\d{1,2}日の\s*$/u, "") : segment);
         const inClause = [...ownClause.matchAll(DATE)][0];
         const before = dates.filter((date) => date.at < mention.start).pop();
         const markets = new Set(mention.keys.map((key) => MARKET_OF[key] ?? key));

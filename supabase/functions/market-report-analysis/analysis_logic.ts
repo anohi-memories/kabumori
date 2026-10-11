@@ -348,11 +348,17 @@ const INTERNAL_FIELD = /[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+|\b(?:metric|news):|\b
 const DISCLAIMER = /確認できません|確認できない|断定できません|断定できない|判断できません|分かりません|わかりません/g;
 const SAME_DAY = /同じ日|同日/;
 /** 「…東京市場と同じ日の変化としては扱いません」 denies a same-day reading (2026-10-09 close was regenerated for it). */
-const SAME_DAY_DENIED = /(?:同じ日|同日)[^。！？!?\n]{0,16}?(?:ではな|ではありませ|とは(?:限りませ|限らな|言えませ|言えな)|として(?:は)?(?:扱|見)(?:いませ|わな|ませ|な))/u;
+const SAME_DAY_DENIED = /^(?:同じ日|同日)[^、,。！？!?\n]{0,16}?(?:ではな|ではありませ|とは(?:限りませ|限らな|言えませ|言えな)|として(?:は)?(?:扱|見)(?:いませ|わな|ませ|な))/u;
 
-/** Sentences that present differently dated Tokyo and US sessions as the same day. */
+/**
+ * Sentences that present differently dated Tokyo and US sessions as the same day. Each 「同じ日／同日」 is judged in its
+ * own clause: a denial of one (「…は同じ日ではない一方、」) does not excuse another that affirms it (「…は同じ日に取引を
+ * 終えました」: 2026-10-11 C2 R1).
+ */
 function sameDayClaims(text: string): boolean {
-  return text.split(/[。！？!?\n]/u).some((sentence) => SAME_DAY.test(sentence) && !SAME_DAY_DENIED.test(sentence));
+  return text.split(/[。！？!?\n]/u).some((sentence) =>
+    [...sentence.matchAll(/同じ日|同日/gu)].some((match) => !SAME_DAY_DENIED.test(sentence.slice(match.index)))
+  );
 }
 /** Names that describe an index or a divergence, not a sector/theme. */
 const NON_THEME = /日経平均|TOPIX|NYダウ|S&P|ナスダック|指数|方向差|乖離|報道|発表後/;
@@ -426,7 +432,7 @@ const TOPIX_DISAMBIGUATION = /^(?:\s*\(?指数\)?)?\s*(?:そのもの|自体)?\s
  * (「ジーエヌアイグループのTOPIXへの新規採用」: 2026-10-08 morning was regenerated for it). A value written right after
  * it is still a mislabel (「TOPIXは437.0円」).
  */
-const TOPIX_INDEX_CONTEXT = /^\s*(?:\(東証株価指数\))?\s*(?:への|に|の|から)?\s*(?:新規)?(?:採用|組み入れ|組入れ|除外|構成銘柄|構成|入れ替え|入替|定期入替|算出|ウエート|ウェート|浮動株)/u;
+const TOPIX_INDEX_CONTEXT = /^\s*(?:\(東証株価指数\))?\s*(?:への|に|の|から)?\s*(?:新規)?(?:採用|組み入れ|組入れ|除外|構成銘柄|構成|入れ替え|入替|定期入替)/u;
 
 /** Places where 1306 is called "TOPIX", quoted so a regeneration can fix exactly that text. */
 export function topixMislabels(texts: string[]): string[] {
@@ -437,7 +443,10 @@ export function topixMislabels(texts: string[]): string[] {
       TOPIX_PROXY_AT.lastIndex = match.index;
       if (TOPIX_PROXY_AT.test(normalized)) continue;
       const after = normalized.slice(match.index + match[0].length);
-      if (TOPIX_DISAMBIGUATION.test(after) || TOPIX_INDEX_CONTEXT.test(after)) continue;
+      // Index membership is exempt only while no number follows in the sentence: 「TOPIXの…は437.0円」 still states a
+      // value of the index (2026-10-11 C2 R2).
+      const indexTalk = TOPIX_INDEX_CONTEXT.test(after) && !/[0-9]/u.test(after.split(/[。！？!?\n]/u)[0]);
+      if (TOPIX_DISAMBIGUATION.test(after) || indexTalk) continue;
       found.push(excerpt(normalized, match.index, match[0].length));
     }
   }
