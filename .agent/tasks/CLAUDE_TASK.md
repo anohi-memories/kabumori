@@ -3,8 +3,8 @@
 - task_id: kabumori-pr143-fail-lease-expiry-fence-r1-20261011
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G2
 - finish_code: K2
 - return_to: かぶモリアプリG2のちゃ
@@ -39,7 +39,87 @@ H3（Sol高）の独立レビューはAuth/RLS/SECURITY DEFINER、本人限定�
 
 ## Report — current PR143 lease fence R1
 
-PENDING G2.
+### 位置づけ
+
+- task_id: `kabumori-pr143-fail-lease-expiry-fence-r1-20261011`
+- 判定: **H3 の P2 指摘を修正済み（SOURCE_FIX_DONE）**
+- Draft PR: https://github.com/anohi-memories/kabumori/pull/143（OPEN・Draft・未マージのまま）
+  - 開始時の head: `1d0529bb68b0e60b32ce0a2cb0002872b1671177`（TASK の指定と一致を確認）
+  - **新しい head: `889ca1b44cf82bd3ecb913818dca568456849feb`**（修正の commit 1つを追加。force-push・rebase なし）
+- 作業場所: G2 専用の worktree `/Users/yuya/Developer/kabumori-g2-ondemand`。他のスロットや PR #141 には触れていない。
+- merge=NO、deploy=NO、migration の適用=NO、production_calls=0。本番の DB は読み取りも含めて接続していない。Cron・Secrets・通知の実送信・X・有料 API も 0。
+
+### H3 の指摘と修正
+
+- **指摘（P2）:** `fail_personalized_analysis_job` は、状態・token・版しか見ていなかった。そのため、貸し出しの期限が切れたあと、まだ引き取り直されていない間に、元の worker がジョブを順番待ちへ戻したり failed にしたりできた。
+- **修正:** 完了の関数と同じ条件 `or v_job.lease_expires_at < v_now` を足した。
+  - 期限が切れていれば `lease_lost` を返し、行は1か所も変えない（状態・回数・token・版・期限・待ち時間・失敗のコード・通知の状態）。
+  - 境界も完了と同じ。期限ちょうどは有効で、期限を過ぎたら無効。
+
+### 変更したファイル（5）
+
+1. `supabase/migrations/20261011150000_personalized_ondemand_analysis_v1.sql`: 失敗の関数に期限の条件とコメントを足した（未適用の候補のまま）。
+2. `supabase/functions/personalized-analysis-worker/worker_logic_test.ts`
+   - テストの模型 `MemStore.fail` を、本物の SQL と同じ判定にした。
+   - 「期限切れのあと、引き取り直す前の失敗」のテストを3通り足した（再試行できる失敗、再試行しない失敗、例外）。
+3. `supabase/tests/personalized_ondemand_analysis_behavior.sql`
+   - 期限を過去にした（テストの中だけ）ジョブに対して、元の worker が失敗を記録しようとするケースを足した（再試行できる・できないの両方）。
+   - どちらも `lease_lost` になり、行の全体（`row_to_json` での比較）が変わらず、通知も0件であることを確かめる。
+   - そのあとの既存の確認がそのまま続き、正しく1回だけ引き取り直すこと（回数2、版3）を確かめる。
+4. `supabase/tests/personalized_ondemand_analysis_run.sh`
+   - 変異テストに「失敗の関数の期限の条件を外した版」を足した（`no_fail_expiry_fence`）。
+   - 完了と失敗が同じ文になったため、既存の3つの変異（版・期限・token）の置き換え先を、完了の関数のコメントを含めて1か所に絞った。
+5. `supabase/functions/personalized-analysis-worker/worker_logic.ts`（1行）
+   - 例外のあとに `fail` が `lease_lost` を返したとき、実行報告の区分が `error` になっていたのを `lease_lost` に直した。
+   - DB の動きは変わらない。新しいテストで見つけた、報告の区分だけの誤り。
+
+### 修正前に失敗し、修正後に成功することの確認
+
+- **本物の SQL（手元の使い捨ての PostgreSQL 17）**
+  - 修正前: 新しい確認で `FAIL expired lease cannot requeue via fail`。期待は `lease_lost` だったが、結果は `{"status": "requeued"}` だった（期限切れのジョブが順番待ちへ戻ってしまう）。
+  - 修正後: PASS。
+- **worker の模型**
+  - 修正前: 新しい3件がすべて FAILED。
+  - 修正後: 3件とも PASS。
+
+### テスト（すべて手元。実際に実行したもの）
+
+**手元の PostgreSQL 17**（`OD_PGHOST=/tmp/... bash supabase/tests/personalized_ondemand_analysis_run.sh`）。すべて PASS。
+- 事前確認、追加だけであること、取り消し、二重の適用の拒否
+- 動作、2つの接続での同時実行
+- 変異テスト: **14通りをすべて検出した**（新しく足した `no_fail_expiry_fence` を含む）。
+
+**Deno・アプリのテスト**（`deno test -A --no-config --node-modules-dir=none`。`tests/app` は `--no-check`）
+
+| 対象 | 件数 | 結果 |
+|---|---|---|
+| `personalized-analysis-worker/` | 34（新規3） | 成功 |
+| `personalized-reports/` | 134 | 成功 |
+| `market-report-analysis/` | 283 | 成功 |
+| `x-test-post/shared_market_report_consumer_test.ts` | 10 | 成功 |
+| `market-report-data-packet/` | 42 | 成功 |
+| `tests/app/` | 508 | 成功 |
+
+- 期限内の失敗・順番待ちへの戻し・failed、引き取り直したあとの遅れた worker の拒否、完成の保護は、既存のテストのまま通っている。
+- deno check / lint（worker）はどちらも0件。`git diff --check` は問題なし。
+- 実行していないもの: Simulator・実機（純粋なソースの修正のため不要）、本番。
+
+### 残る課題
+
+- **BLOCKER: 全員への共通の朝刊・大引けの一斉通知は未実装（前回から変わらず）。**
+  - 送信の worker は1分に200件までで、そのまま使うと大人数では時間がかかる（1万人で約50分。その間、重要ニュースの通知も遅れる）。
+  - 次の工程で、通知を作る側と分けた、大人数向けの送信（優先順位・設定・配信時間の目標）をソースの候補にする。
+- 本番の P0（未実施）
+  - migration の適用、worker と personalized-reports のデプロイ、worker の Cron、アプリの公開
+  - 本番の読み取りの確認
+  - どれも別承認。手順は `docs/personalized-ondemand/RUNBOOK.md`。
+
+### GO / NO_GO
+
+- **ソース:** H3 の P2 は修正済み。K2 で、H3 の指摘とこの差分（5ファイル、+62/−7）の照合をお願いしたい。
+- **本番:** **NO_GO のまま**（上の P0 と、一斉通知の BLOCKER）。
+
+Recommended next owner: **chatgpt（K2）**
 
 ---
 

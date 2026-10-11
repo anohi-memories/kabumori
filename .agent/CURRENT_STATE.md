@@ -1,3 +1,12 @@
+## G2 報告 — PR143 の失敗の記録の期限の確認（H3 の P2 修正）— 2026-10-11 JST
+
+- G2 `kabumori-pr143-fail-lease-expiry-fence-r1-20261011`: `fail_personalized_analysis_job` に、完了の関数と同じ期限の条件を足した。期限が切れた worker は、引き取り直される前でも、順番待ちへ戻すことも failed にすることもできない（`lease_lost`、行は不変）。
+- Draft PR #143 の新しい head は `889ca1b44cf82bd3ecb913818dca568456849feb`（commit 1つを追加。force-push なし。OPEN・Draft・未マージ）。変更は5ファイル（migration 候補、worker のテストと模型、SQL の動作の検証、変異テスト、worker の実行報告の区分1行）。
+- 修正前の失敗も再現した: 本物の SQL で `requeued` が通ってしまうこと、worker の模型で新しい3件が FAILED になること。修正後はすべて PASS。手元の PostgreSQL 17 は変異テスト14通りをすべて検出し、Deno・アプリの関係するテストもすべて成功した。
+- 本番の操作・マージ・デプロイ・有料 API は 0。本番は NO_GO のまま。全員への共通の朝刊・大引けの一斉通知は未実装（BLOCKER）。G2 は review_required / chatgpt で K2 待ち。
+
+---
+
 ## C3 FINAL — H3 PR143 independent review CHANGES_REQUIRED P2; G2 limited correction READY — 2026-10-11 JST
 
 - Codex H3 `kabumori-pr143-ondemand-queue-auth-security-review-20261011` report checked: **CHANGES_REQUIRED / PRODUCTION_NO_GO** on [Draft PR143](https://github.com/anohi-memories/kabumori/pull/143) exact `1d0529bb68b0e60b32ce0a2cb0002872b1671177`. Independently inspected SQL: `complete_personalized_analysis_job` rejects expired leases; `fail_personalized_analysis_job` at 479-480 does NOT check `lease_expires_at` and can mutate expired unreclaimed processing job. Mirrored MemStore.fail test also lacks deadline guard. P2 reproducible source-level defect. H3 reports no P0/P1 Auth/RLS/privileged grant/cross-user; verification is scoped, NOT security certification. H3 ran 58 target Deno --no-check PASS, disposable PostgreSQL NOT_RUN (no socket/Podman), real API/Expo/prod NOT_RUN. All sources and report records protected.

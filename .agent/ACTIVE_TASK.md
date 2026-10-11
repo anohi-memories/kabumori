@@ -117,11 +117,11 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-pr143-fail-lease-expiry-fence-r1-20261011
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
 - allocation: C3 2026-10-11 accepted H3 PR143 focused code review CHANGES_REQUIRED only P2 lease expiry fail RPC missing timeout fence. G2 R1 permitted narrow PR143 source fix of fail_personalized_analysis_job expiry, SQL expired-unreclaimed regression and mirrored worker mock fail branch; exact old head 1d0529bb, PR remains Draft/unmerged. No production, no other slot work. Main Auth/RLS/queue core otherwise reviewer found no P0/P1. Shared all-users morning/close broadcast is separate still open. After K2 target narrow security review only if new risk; then broadcast design/source task separately.
