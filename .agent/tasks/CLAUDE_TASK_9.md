@@ -3,8 +3,8 @@
 - task_id: api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011
 - owner: claude
 - slot: claude-9
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G9
 - finish_code: K9
 - return_to: ニュース改善API最適化のちゃ
@@ -59,6 +59,15 @@ G9 R2のK9は `PASS_OFFLINE / EXTERNAL_CALLS_RELEASE_HOLD`。G9既存branch
 - 新規Draft PRがあれば番号、head、差分範囲とリリース不可条件を提示。なければ理由と直し方。PR115はOPEN/Draft・未変更のまま。
 - このTASK末尾 `## Report` に result, changed_files, tests, ancestry_checks, rights_checks, commit_hash, push, PR, merge, deploy, remaining_issues, next_recommendation, return_to を残し、**`K9` を「ニュース改善API最適化のちゃ」へ**返す。
 - 同時に別案件やA/G8の進行・レビューはしない。
+
+## K9 evaluation — ChatGPT, 2026-10-12 JST
+
+- verdict: PASS_OFFLINE_BRANCH_READY / PR_NOT_CREATED / MERGE_AND_EXTERNAL_RELEASE_HOLD
+- verified: G9 Report checked, remote branch `claude/b-provider-compare-rights-safe-20261012` exact `c476ef8a5c5a0294c3df8e4fefebc8722f2e1102`, sole parent `1a4b5f3802982853ecd79abb4bf3b977c678c36e`, main-derived single commit / 129 B-only newly added files. GitHub recursive tree not truncated, no `tools/provider-compare/fixtures/cases.json`. `cases.rights_safe.json` 22 cases: 2 with body, 20 with no body; `body_licences.json` entries=[].
+- self_reported_tests: Deno 302 PASS / 1 ignored (legacy private input test; G9 says private rerun PASS), type/lint/diff/secret scans. ChatGPT did not execute Deno locally or independently scan private original 18 article bodies.
+- required_remaining: G9's scanner reports three TDnet titles matching original article body starts (>=40 chars). G9 also reports two other **existing-main** files with overlapping original texts; neither belongs to this G9 task, and no other slot is being tasked automatically. The old PR115 and 3 old branches/refs still contain original text. Rights are unconfirmed. No claim of complete deletion or resolved legal permission.
+- PR: No replacement PR was created because Claude's Create Public Surface operation was rejected by its safety system. ChatGPT has not worked around that gate or created a PR. Manual Draft PR can be opened by user with `https://github.com/anohi-memories/kabumori/pull/new/claude/b-provider-compare-rights-safe-20261012` after deciding how to handle title overlap. Original PR115 remains OPEN/Draft/unmodified. No merge/deploy or vendor API.
+- decision: G9 R3 source branch accepted as offline replacement candidate. Status done, next_owner:none, **G9 remains API最適化B専任**. No automatic further TASK and no review H slot allocated. After a Draft PR exists, decide targeted review/release gate before any merge; never treat a new Draft PR as release authorization.
 
 ## Report
 
