@@ -20,6 +20,8 @@ import {
   type ReportAlertSettings,
 } from '@/lib/personalized-reports';
 import { formatDateJa, formatTimeJa, reportTypeLabel, type PersonalizedReport, type ReportType } from '@/lib/report-presentation';
+import { fetchAnalysisStatus } from '@/lib/ondemand-analysis';
+import { STATUS_OFF, remainingToday, type AnalysisStatus } from '@/lib/ondemand-analysis-presentation';
 
 const colors = KABUMORI_COLORS.light;
 
@@ -39,6 +41,8 @@ export default function ReportsScreen() {
   const [settings, setSettings] = useState<ReportAlertSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [settingsError, setSettingsError] = useState('');
+  // サーバー側で公開されたときだけ入口を出す（未公開・取得失敗では何も出さない）。
+  const [ondemand, setOndemand] = useState<AnalysisStatus>(STATUS_OFF);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,6 +55,7 @@ export default function ReportsScreen() {
     } finally {
       setLoading(false);
     }
+    setOndemand(await fetchAnalysisStatus().catch(() => STATUS_OFF));
     try {
       setSettings(await fetchReportAlertSettings());
       setSettingsError('');
@@ -136,6 +141,31 @@ export default function ReportsScreen() {
           登録した保有・監視銘柄に合わせて、朝は「今日どこを見るか」、引け後は「今日どう動いたか」をまとめます。
         </Text>
 
+        {(ondemand.marketFeedEnabled || ondemand.enabled) && (
+          <View style={styles.entryRow}>
+            {ondemand.marketFeedEnabled && (
+              <Pressable
+                onPress={() => router.push('/market-report')}
+                style={({ pressed }) => [styles.entryCard, pressed && styles.pressed]}
+                accessibilityRole="button">
+                <Text style={styles.entryTitle}>きょうの市況</Text>
+                <Text style={styles.entryText}>全員共通の朝刊・大引け ›</Text>
+              </Pressable>
+            )}
+            {ondemand.enabled && (
+              <Pressable
+                onPress={() => router.push('/ai-analysis')}
+                style={({ pressed }) => [styles.entryCard, styles.entryAccent, pressed && styles.pressed]}
+                accessibilityRole="button">
+                <Text style={styles.entryTitle}>保有銘柄をAIで分析</Text>
+                <Text style={styles.entryText}>
+                  {ondemand.activeJobId ? '分析中です ›' : `今日あと${remainingToday(ondemand)}回 ›`}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
         {loading && reports.length === 0 ? <ActivityIndicator color={colors.accent} style={styles.status} /> : null}
         {!!error && (
           <View style={styles.errorCard}>
@@ -184,6 +214,11 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 30, fontWeight: '900', marginTop: -6 },
   description: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   status: { marginTop: 24 },
+  entryRow: { flexDirection: 'row', gap: 10 },
+  entryCard: { flex: 1, backgroundColor: colors.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 4 },
+  entryAccent: { backgroundColor: colors.accentSoft, borderColor: colors.accentSoft },
+  entryTitle: { color: colors.text, fontWeight: '900', fontSize: 15 },
+  entryText: { color: colors.accent, fontWeight: '700', fontSize: 12 },
   sectionTitle: { color: colors.text, fontWeight: '900', fontSize: 15, marginTop: 8 },
   todayCard: { backgroundColor: colors.card, borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 17 },
   todayCardEmpty: { backgroundColor: colors.accentSoft, borderStyle: 'dashed' },

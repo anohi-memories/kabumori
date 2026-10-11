@@ -4,6 +4,8 @@
 // personalized-reports Edge Function computed in code. The only prose shown is
 // the Fact-passed commentary in body. Nothing here calls an AI.
 
+import type { AppMarketReport } from './ondemand-analysis-presentation';
+
 export type ReportType = 'morning' | 'close';
 
 export type PriceFact = {
@@ -343,11 +345,16 @@ export function reportFootnotes(gaps: readonly string[]): string[] {
   return [...gaps.filter((note) => note !== REPORT_DISCLAIMER_JA), REPORT_SOURCE_NOTE_JA, REPORT_DISCLAIMER_JA];
 }
 
-/** Deep link target for a tapped push; only report pushes are routed here. */
+/**
+ * Deep link target for a tapped push; only report pushes are routed here. An on-demand analysis
+ * ('personalized_analysis', source_id = the job id) opens in the same detail screen, reading the analysis result.
+ */
 export function reportRouteForPush(data: { source_type?: unknown; source_id?: unknown } | null | undefined): string | null {
+  const id = typeof data?.source_id === 'string' ? data.source_id : '';
+  const valid = /^[0-9a-f-]{36}$/i.test(id);
+  if (data?.source_type === 'personalized_analysis') return valid ? `/reports/${id}?source=analysis` : '/ai-analysis';
   if (data?.source_type !== 'personalized_report') return null;
-  const id = typeof data.source_id === 'string' ? data.source_id : '';
-  return /^[0-9a-f-]{36}$/i.test(id) ? `/reports/${id}` : '/reports';
+  return valid ? `/reports/${id}` : '/reports';
 }
 
 // ---------------------------------------------------------------------------
@@ -450,4 +457,25 @@ export function stanceSummary(rows: readonly ImpactRow[]): string | null {
     .filter((stance) => (counts.get(stance) ?? 0) > 0)
     .map((stance) => `${STANCE_LABEL[stance]} ${counts.get(stance)}`);
   return parts.length ? parts.join('・') : null;
+}
+
+// ---------------------------------------------------------------------------
+// On-demand analysis and the shared market feed: date labels (ondemand-analysis-presentation.ts holds the rest)
+// ---------------------------------------------------------------------------
+
+/** 基準にした回（どの日の朝刊・大引けで書いたか）。古い回を新しい値のように見せないため、必ず日付を出す。 */
+export function basisLabel(reportType: ReportType, tradingDate: string): string {
+  return `${formatDateJa(tradingDate)}の${reportTypeLabel(reportType)}を基準にした分析`;
+}
+
+/** 共通レポートの日付の見出し。今日の分でなければ、その旨をはっきり書く。 */
+export function marketReportDateLine(report: Extract<AppMarketReport, { status: 'completed' }>): string {
+  const label = `${formatDateJa(report.tradingDate)}の${reportTypeLabel(report.reportType)}`;
+  return report.isToday ? label : `${label}（今日の分はまだありません。直近の回を表示しています）`;
+}
+
+export function marketReportEmptyText(report: Exclude<AppMarketReport, { status: 'completed' }>): string {
+  if (report.status === 'disabled') return 'この機能は準備中です。';
+  const label = reportTypeLabel(report.reportType);
+  return report.status === 'not_ready' ? `今日の${label}は作成中です。少し時間をおいてご覧ください。` : `直近の${label}はまだありません。`;
 }

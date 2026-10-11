@@ -3,9 +3,11 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { fetchReport } from '@/lib/personalized-reports';
+import { fetchAnalysisReport } from '@/lib/ondemand-analysis';
 import {
   CLAIM_TYPE_LABEL,
   STANCE_LABEL,
+  basisLabel,
   buildImpactRows,
   buildStockRows,
   changeDirection,
@@ -37,7 +39,9 @@ import {
 const DIRECTION_COLOR: Record<Direction, string> = { up: '#b2332b', down: '#2a5fa8', flat: '#5e6d63', none: '#89918c' };
 
 export default function ReportDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // source=analysis: an on-demand analysis result (same shape, read from personalized_analysis_results).
+  const { id, source } = useLocalSearchParams<{ id: string; source?: string }>();
+  const analysis = source === 'analysis';
   const [report, setReport] = useState<PersonalizedReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -47,14 +51,14 @@ export default function ReportDetailScreen() {
     setLoading(true);
     setError('');
     try {
-      setReport(await fetchReport(String(id)));
+      setReport(await (analysis ? fetchAnalysisReport(String(id)) : fetchReport(String(id))));
     } catch (loadError) {
       setReport(null);
       setError(loadError instanceof Error ? loadError.message : 'レポートを取得できませんでした。');
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, analysis]);
 
   useFocusEffect(useCallback(() => {
     void load();
@@ -72,7 +76,9 @@ export default function ReportDetailScreen() {
     return (
       <View style={styles.center}>
         <Text style={styles.missingText}>{error || 'このレポートは表示できません。'}</Text>
-        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/reports'))} style={styles.backButton}>
+        <Pressable
+          onPress={() => (router.canGoBack() ? router.back() : analysis ? router.replace('/ai-analysis') : router.replace('/reports'))}
+          style={styles.backButton}>
           <Text style={styles.backButtonText}>一覧へ戻る</Text>
         </Pressable>
       </View>
@@ -138,6 +144,9 @@ export default function ReportDetailScreen() {
         <Text style={styles.date}>{formatDateJa(report.trading_date)}</Text>
         {tone && <Text style={[styles.toneBadge, styles[`tone_${tone.tone}`]]}>{tone.text}</Text>}
       </View>
+      {analysis && (
+        <Text style={styles.basisNote}>あなたの依頼で作成・{basisLabel(report.report_type, report.trading_date)}</Text>
+      )}
       <Text style={styles.title}>{report.title_ja}</Text>
       {!!report.summary_ja && <Text style={styles.lead}>{report.summary_ja}</Text>}
       <Text style={styles.meta}>{formatTimeJa(report.generated_at)} 作成・{close ? '当日の終値' : '前営業日の終値'}ベース</Text>
@@ -502,6 +511,7 @@ const styles = StyleSheet.create({
   tone_neutral: { color: '#5e6d63', backgroundColor: '#eef1ee' },
   tone_cautious: { color: '#946222', backgroundColor: '#fff0d7' },
   title: { color: '#17211a', fontWeight: '900', fontSize: 22, lineHeight: 31, marginTop: 12 },
+  basisNote: { color: '#2f4f86', backgroundColor: '#e6edf8', fontSize: 12, fontWeight: '800', lineHeight: 18, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginTop: 10, overflow: 'hidden' },
   lead: { color: '#3d4a42', fontSize: 15, lineHeight: 24, marginTop: 8 },
   meta: { color: '#89918c', fontSize: 12, marginTop: 8 },
   figures: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 18 },

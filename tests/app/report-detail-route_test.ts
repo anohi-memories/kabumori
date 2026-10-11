@@ -32,7 +32,7 @@ test("the root report-detail route re-exports the SAME implementation (no second
   assert.ok(route.includes("export default ReportDetailScreen;"));
   assert.ok(route.split("\n").filter((line) => line.trim()).length <= 3, "a thin re-export only");
   const detail = await code("src/app/(tabs)/reports/[id].tsx");
-  assert.ok(detail.includes("export default function ReportDetailScreen()") && detail.includes("useLocalSearchParams<{ id: string }>()"));
+  assert.ok(detail.includes("export default function ReportDetailScreen()") && detail.includes("useLocalSearchParams<{ id: string; source?: string }>()"));
 });
 
 test("the root Stack registers report-detail with a native header (so the interactive swipe stays enabled)", async () => {
@@ -74,6 +74,10 @@ test("report -> linked news navigation is unchanged: it still opens the root new
 
 test("a direct open without a back stack falls back safely to the reports list", async () => {
   const detail = await code("src/app/(tabs)/reports/[id].tsx");
-  assert.ok(detail.includes("router.canGoBack() ? router.back() : router.replace('/reports')"), "the missing-report button");
+  // An on-demand analysis result (source=analysis) falls back to the analysis screen instead.
+  assert.ok(
+    detail.includes("router.canGoBack() ? router.back() : analysis ? router.replace('/ai-analysis') : router.replace('/reports')"),
+    "the missing-report button",
+  );
   assert.ok(detail.includes("一覧へ戻る"));
 });
