@@ -1,3 +1,11 @@
+## G1 QA assignment — 2026-10-12 JST
+
+- User approved next G1 stage after PR142 squash merge `4d0d0660831c1bf7403a908592c337c284332cdf`.
+- G1 task `kabumori-g1-portfolio-watchlist-simulator-qa-20261012` ready / next_owner claude; recommended Sonnet5（中）; start G1 and return K1 to かぶモリアプリG1のちゃ.
+- Independent 375pt/402pt simulator read-only QA of portfolio/watchlist/stock detail and fixture-based stale valuation/reload. No production holdings edits, EAS, deploy, G2/G5 files, or native tabs changes. Prior task K1 report preserved.
+
+---
+
 ## G5 Phase3i assignment — 2026-10-12 JST
 
 - User 「おk すすめて」 requested next step after G5 Phase3h K5 (`LOCAL_OSS_FAIL`). G5 is now assigned `common-account-phase3i-local-findings-safe-lifecycle-plan-20261012`, **ready / next_owner: claude**, recommended **Opus5.5（高）**, start G5 / return K5 to 共通アカウントG5のちゃ. Prior G5 Phase3h K5 report and older history retained.
