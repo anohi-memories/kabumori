@@ -1,3 +1,8 @@
+## G2 報告 — 個別レポートの配信安定化 P1（Draft PR #141）— 2026-10-11 JST
+
+- G2 `kabumori-personalized-report-delivery-p1-hardening-20261011`: 20人の上限で21人目以降が届かない問題、通知の予約の失敗で完成したレポートが failed に戻る問題、止まった「生成中」の行を、`personalized-reports` の中だけで修正した（Draft PR #141、head `4bc5c0177aa74085eb488604a00e2b66c7fe527c`）。DB・Cron・権限の変更なし、全テスト成功、本番操作・デプロイ・マージ 0。
+- 21人以上への全員配信には複数回実行の Cron が別に必要（PARTIAL）。パケットが無い日への推薦は「分析の3回目＋個別レポートの追いかけの実行」（未適用、別承認）。本番は前回の P0 が未解消のため NO_GO のまま。G2 は review_required / chatgpt で K2 待ち。
+
 ## G6 production_mutation_window: CLOSED (no write) — 共通AI基盤 Phase1f ledger apply + trial policies — 2026-10-11 JST
 
 - **CLOSED 2026-10-11T10:29Z (19:29 JST) without any production write.**

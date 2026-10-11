@@ -3,12 +3,14 @@
 - task_id: kabumori-personalized-report-delivery-p1-hardening-20261011
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G2
 - finish_code: K2
 - return_to: かぶモリアプリG2のちゃ
 - recommended_model: **Opus5.5（高）**
+- draft_pr: https://github.com/anohi-memories/kabumori/pull/141
+- draft_head: 4bc5c0177aa74085eb488604a00e2b66c7fe527c
 - scope: personalized-reports limited source/test + offline-only proof
 - production_mutation_or_deploy: FORBIDDEN
 - source_release: DRAFT_ONLY
@@ -39,7 +41,112 @@ K2前TASKのReportのNO_GO/P0/P1/P2全文を読み、同じ監査を繰り返さ
 
 ## Report — current P1 delivery hardening
 
-PENDING G2.
+### 位置づけ
+
+- task_id: `kabumori-personalized-report-delivery-p1-hardening-20261011`
+- Draft PR: https://github.com/anohi-memories/kabumori/pull/141（新しいブランチ `g2-personalized-p1-20261011`、base は main、force-push なし）
+- commit: `4bc5c0177aa74085eb488604a00e2b66c7fe527c`（作業開始時の main `e4960aac` の上に1コミット）
+- 作業場所: `/Users/yuya/Developer/kabumori-fresh` から新しく作った G2 専用の `/Users/yuya/Developer/kabumori-g2-personalized-p1`。他のスロットの worktree・ブランチ・サーバーには触れていない。
+- 着手前に、`personalized-reports` について他の open PR との重なりが無いことを確認した。
+- merge=NO、deploy=NO、production_calls=0（本番の DB・Cron・通知・X・有料 API のいずれも呼んでいない）。
+- 変更したファイル（すべて `supabase/functions/personalized-reports/`）:
+  - `delivery_lifecycle.ts`（新規）: 利用者の選定・引き受け・条件付きの保存・通知の予約し直し
+  - `index.ts`: 上のモジュールを使うように配線した
+  - `delivery_lifecycle_test.ts`（新規、13件）
+  - `delivery_policy_test.ts`: 通知の条件の置き場所が移ったため、確認する場所を合わせた（条件の中身は同じ）
+- DB の定義・RLS・RPC・権限・Cron・他の関数・アプリ・Provider・秘密情報は変えていない。Fact V2 と市況レポートのソースにも触れていない。
+
+### 修正内容と、修正前・修正後
+
+| 問題 | 修正前 | 修正後 |
+|---|---|---|
+| **P1-4** 20人の上限 | 全員を利用者 ID の昇順に並べて、先頭20人だけを処理していた（`[...byUser.keys()].slice(0, 20)`）。2回目以降も同じ20人が「作成済み」で飛ばされ、21人目以降には永久に届かない（テストで再現） | 各実行の最初に、その日・その種類の行を一覧し、行の無い利用者（と、下の古い「生成中」の行）から昇順に最大20人を選ぶ（`selectRunUsers`）。実行を重ねれば全員に届く。結果に `remaining_users`（まだ終わっていない人数）を返す |
+| **P1-5** 完成したレポートの保護 | 保存のあとに `enqueue_personalized_report_notification` が例外になると、利用者ごとの catch が無条件に `status='failed'` へ上書きし、完成した本文がアプリから見えなくなっていた（テストで再現） | 最後の保存（`finalize`）と失敗の記録（`markFailed`）は、行が「生成中」のときだけ効く条件付きの更新（`id=eq.X&status=eq.generating`、更新後の行を返させて効いたかを判定）にした。予約の失敗は保存した結果を変えない。予約に失敗した行には既存の `error` 欄に印 `NOTIFICATION_ENQUEUE_FAILED:<コード>` を付ける（アプリはこの欄を読まない）。次の実行の最初に、印の付いた行だけを最大20件、予約し直して印を消す（`sweepNotifications`）。予約は既存の部分ユニーク索引で1件までなので重複しない。ここでは送信しないので、送信結果が不明な通知を送り直すことはない |
+| **P1-6** 止まった「生成中」 | 関数が途中で止まると、行は「生成中」のまま残り、以後の実行で作り直されない | 30分（`STALE_GENERATING_MINUTES`）より古い「生成中」の行を、`id=eq.X&status=eq.generating&updated_at=lt.<30分前>` の条件付きの更新で引き取る。同時に引き取ろうとしても、成功するのは最初の1つだけ（更新で `updated_at` が新しくなるため）。元の実行が万一遅れて終わっても、最後の保存の条件（生成中だけ）により、先に完成した結果を上書きせず、通知も1件だけ |
+
+**安全に引き取るための条件（明文化）**
+1. 行がまだ「生成中」であること。完成・失敗した行には効かない。
+2. 最後の更新から30分以上たっていること。1回の実行は110秒の時間の予算と、1人あたり最大2回×90秒の呼び出しで終わるので、30分は十分長いとみなした。Edge Function の実時間の上限は未確認。
+3. 条件付きの更新が実際に1行に効いたこと（効いた実行だけが処理する）。
+4. 引き取り後も、行の一意キー（利用者・種類・日付）は同じ。別の利用者と混ざることはない。
+
+DB の migration・RPC・権限の変更なしに、既存の列（`status`・`updated_at`・`error`・`notified_at`）と service_role の PostgREST の条件付き更新だけで実装した。
+
+### P1-3（その日の共有パケットが無いとき）の整理と推薦（今回は実装していない）
+
+- **現状:** アプリのゲートを ON にすると、パケットが `completed` でない日は、その回の実行全体を飛ばす（安全側で止まる）。データの作成は1回、分析は2回しか試さないので、どちらも失敗するとその日の個別レポートは0件になる。
+- **候補:**
+  - (a) 範囲を決めた再試行: 分析の3回目の Cron と、個別レポートの追いかけの実行
+  - (b) 保有銘柄の部分だけを配信する
+  - (c) 旧方式に戻す（TASK により対象外）
+- **推薦は (a)。**
+  - `claim_market_report_analysis` は3回まで試せる設計になっている。分析の3回目（例 朝 08:12、大引け 16:50）を足す。
+  - 個別レポートは、今回の P1-4 で「まだ行の無い人だけを処理する」形になった。そのため、追いかけの実行（例 朝刊 08:35〜09:00、大引け 17:15〜17:40 に5分おき）を足すと、パケットが少し遅れた日の救済と、21人以上への全員配信の両方を同じ仕組みでまかなえる。
+  - 古い相場を新しい値として扱う心配がない。パケットの一致、注意書き、Fact の状態の扱いも、今のまま変わらない。
+- **(b) を推さない理由:** 市場の節が無い個別レポートは、アプリの表示・注意書き・Fact の扱いが別の経路になる。どの日の相場で書いたかの説明も増え、配信の安定と引き換えに、確かめることが大きく増える。
+- **必要なもの:** Cron の追加（DB の変更、別承認）。ゲートや X の経路は今回変えていない。
+
+### P2（記録のみ、変更していない）
+
+- X の大引けの後始末（`X_RESPONSE_MISSING_POST_ID` のときに `running` が残る、大引けの完了 RPC の失敗で予約が失敗扱いになる）
+- `market_report_packets.fact_status` が常に 'passed'
+- 分析の再試行の間隔と、古い実行とみなす時間（どちらも10分）の重なり
+- G5・G6・Auth・権限の範囲
+
+以上はいずれも今回の対象外。
+
+### テスト（すべて手元。実際に実行したもの）
+
+実行コマンド: `deno test -A --no-config --node-modules-dir=none <対象>`（`_shared` と `tests/app` は `--no-check` を付けた）
+
+| 対象 | 件数 | 結果 |
+|---|---|---|
+| `personalized-reports/` | 142（新規 `delivery_lifecycle_test.ts` 13件を含む） | 成功 |
+| `market-report-analysis/` | 283 | 成功 |
+| `x-test-post/shared_market_report_consumer_test.ts` | 10 | 成功 |
+| `market-report-data-packet/` | 42 | 成功 |
+| `_shared/` | 597 | 成功 |
+| `tests/app/` | 498 | 成功 |
+
+**新規13件で確かめたこと:**
+- 1・20・21・45人で、全員にちょうど1行ずつ届く。実行回数は1・1・2・3回で、その後の再実行は何もしない。
+- 時間の予算切れで後回しになった人は、次の実行で処理される。
+- 失敗した人は他を止めず、作り直されない。
+- 同時に2つ実行しても、利用者ごとの行は1つ。
+- 通知の予約に失敗しても completed・Fact passed のまま。印が付き、次の実行で1回だけ予約して印を消し、重複しない。
+- 利用者の設定で通知しない場合は、印を消して予約し直しをやめる。
+- 古い「生成中」は30分を過ぎたものだけを引き取り、同時に引き取れるのは1つだけ。
+- 遅れて終わった元の実行は、完成した結果を上書きしない。
+- REST の実装が条件付きの更新を使っている。`index.ts` の配線も確認した。
+
+**修正前の挙動の再現:** 先頭20人の固定と、完成した行の failed への上書きを、テストの中で再現した。配線のテストは、修正前の `index.ts` では失敗した（`index.ts` だけを戻して実行）。
+
+**変えていないことの確認:** 共有パケット、Fact、注意書き、出典の扱いは変えていない。既存の個別レポートのテスト（共有の消費、市場の統合、通知の重複防止の契約）がすべて成功している。
+
+deno check / lint（変更したファイル）はどちらも0件。`git diff --check` は問題なし。
+
+### 残る課題
+
+1. **全員への配信の保証は PARTIAL。** 21人以上いる場合、実際に全員へ届くには、1日に複数回実行する Cron（例 5分おきに5〜6回）が必要。Cron の追加は別承認で、未適用。実行が1回のままなら、1日に届くのは20人まで（ただし、毎回同じ20人ではなく、まだ行の無い人から順に選ぶ）。
+2. 引き取りの30分は、Edge Function の実時間の上限（未確認）より十分長いとみなした値。本番の上限を確認しておくこと。
+3. 利用者数や行数が1,000件を超えると、PostgREST の既定の取得件数の上限に当たる可能性がある（従来の `tracked_stocks` の取得も同じ）。
+4. 予約し直す印は、`error` 欄（既存の自由記述欄）を流用している。専用の列が必要なら、別工程で migration を検討する。
+
+### GO / NO_GO
+
+- **ソース:** マージ候補（Draft）。K2 の確認と、下のレビューの判断が要る。
+- **本番:** **NO_GO のまま。** 前回の P0 が未解消のため。
+  - 新しいコードの未デプロイ: 3つの関数とも、デプロイ済みの版は PR110/132 の前。今回の修正もデプロイしていない。
+  - 本番の状態の読み取り確認（段階0）が未実施。
+  - 21人以上への全員配信には、Cron の追加が別に必要。
+
+### 独立した Codex のレビューを勧める境界
+
+- 条件付きの更新による引き受け・保存（P1-5・P1-6）の、同時実行と遅れて終わった実行に対する安全性。
+- 選定（P1-4）が、行の一覧の取得に失敗したときに安全側に倒れるか。今は取得の例外で、その回の実行全体が失敗する。
+- 1回だけ、焦点を絞った Sol（高）のレビューを推奨する。
+
+Recommended next owner: **chatgpt（K2）**
 
 ---
 
