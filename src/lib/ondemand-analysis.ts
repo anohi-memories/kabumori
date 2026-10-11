@@ -63,8 +63,12 @@ export async function fetchAnalysisReport(jobId: string): Promise<PersonalizedRe
   return data ? analysisAsReport(data as AnalysisResultRow) : null;
 }
 
-export async function fetchAppMarketReport(reportType: ReportType): Promise<AppMarketReport> {
-  const { data, error } = await supabase.rpc('get_app_market_report', { p_report_type: reportType });
+/** tradingDate を渡すとその日の回、省略すると直近の完成した回（サーバーが公開してよい項目だけを返す）。 */
+export async function fetchAppMarketReport(reportType: ReportType, tradingDate: string | null = null): Promise<AppMarketReport> {
+  const { data, error } = await supabase.rpc('get_app_market_report', {
+    p_report_type: reportType,
+    ...(tradingDate ? { p_trading_date: tradingDate } : {}),
+  });
   if (isMissingFunction(error)) return { status: 'disabled' };
   if (error) throw new Error('市況レポートを取得できませんでした。');
   return parseAppMarketReport(data, reportType);

@@ -353,6 +353,11 @@ export function reportRouteForPush(data: { source_type?: unknown; source_id?: un
   const id = typeof data?.source_id === 'string' ? data.source_id : '';
   const valid = /^[0-9a-f-]{36}$/i.test(id);
   if (data?.source_type === 'personalized_analysis') return valid ? `/reports/${id}?source=analysis` : '/ai-analysis';
+  // The shared morning / close broadcast (source_id = '<report_type>:<YYYY-MM-DD>') opens that day's shared report.
+  if (data?.source_type === 'market_report') {
+    const match = /^(morning|close):(\d{4}-\d{2}-\d{2})$/.exec(id);
+    return match ? `/market-report?type=${match[1]}&date=${match[2]}` : '/market-report';
+  }
   if (data?.source_type !== 'personalized_report') return null;
   return valid ? `/reports/${id}` : '/reports';
 }
