@@ -63,17 +63,17 @@
 ## Codex H3
 - owner: codex
 - slot: codex-3
-- status: done
-- task_id: kabumori-pr143-ondemand-queue-auth-security-review-20261011
+- status: ready
+- task_id: postona-threads-pr144-auth-publish-p1-security-review-h3-20261012
 - start_code: H3
 - finish_code: C3
 - completion_code: C3
-- next_owner: none
-- return_to: かぶモリアプリG2のちゃ
+- next_owner: codex
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CODEX_TASK_3.md
 - report: .agent/CODEX_REPORT_3.md
-- allocation: C3 2026-10-11 accepted H3 review CHANGES_REQUIRED / PRODUCTION_NO_GO for PR143 exact 1d0529bb: P2 missed lease_expires_at timeout in fail_personalized_analysis_job; no P0/P1 Auth/RLS/tenant boundary issue found. H3 58 targeted runtime tests PASS, PG environment NOT_RUN, no source edits. H3 done/unreserved; narrowly scoped G2 correction assigned without a second full review. Broadcast push still missing; no main merge/production.
-- recommended_model: Sol（高） (completed)
+- allocation: K4 2026-10-12 accepted PR144 G4 Threads Auth-to-manual TEXT publish source candidate only. H3 newly assigned one focused independent Sol（高） SECURITY REVIEW of exact Draft PR144 head d4a1e87b77d1fbd362dc51809ce2d998afda15ea stacked on protected PR140 2e75a6a842e70f3de78558681803b60935fb4251; examine G4 SECURITY DEFINER SQL claim/release/record replacement, Auth session and G5 T13/lifecycle after revoke, HMAC nonce proof/replay and Vault access, H5 owner-only callback/custody, actual safe flags/dual write idempotency, disposable SQL/test fidelity. Do not edit product or PR, real Supabase/Meta/X/Vault/production, grants, migration apply, merge/deploy, posts. Distinguish mocked reports from managed proof. H4 occupied separately with G8 News PR129 review and protected; H1/H2/H5/G3/G5/G6-G10 protected. C3 return here. H3 freed after C3.
+- recommended_model: Sol（高）
 ## Codex H4
 - owner: codex
 - slot: codex-4
@@ -141,16 +141,16 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: review_required
+- status: done
 - task_id: postona-threads-connect-publish-integrated-offline-v1-g4-20261011
 - start_code: G4
 - finish_code: K4
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
 - report: .agent/tasks/CLAUDE_TASK_4.md#report
-- allocation: User 2026-10-11 explicitly requested proceed to POSTONA Threads authenticated connection + manual TEXT publisher integration. New G4 TASK after K4 accepted PR140 source-only. Opus5.5（高） owns isolated NEW stacked Draft PR (base protected PR140 2e75a6a842e70f3de78558681803b60935fb4251), G4-only glue/tests and P1 server permission/entitlement revocation TOCTOU remediation candidate. Locally combine protected read-only PR124 c30f246409a77080cbc03aef6c4cb72b5481e125, PR135 e38788d6677082138f0990453c7d2f00549666d0, H5 PR139 b4fa672f97592e87682671454e868a92098cbd56, PR140 and mock G5 T13 for end-to-end offline proof, WITHOUT editing original branches/worktrees/H5/G5/G3 files. Resolve / precisely block absent account-credential expiry reader, provider-aware T10 and H5 owner route, and cover revoke-after-claim-before-redeem/HTTP; never bypass true actor/T13. All real Auth/Meta/X/Supabase calls, permissions changes, DB apply, feature flags, Edge deploy, merge, external Threads post forbidden. Keep static connect/publish/app gates false. No H5 allocation, H1-H4 review only at joined Auth/DB/publish release boundary; stop if dirty worktree/overlap. K4 returns here.
-- recommended_model: Opus5.5（高）
+- allocation: K4 2026-10-12 PASS_SOURCE_CANDIDATE / GO_SOURCE_ONLY / BLOCKED_REAL_PILOT. Verified [Draft PR144] head d4a1e87b77d1fbd362dc51809ce2d998afda15ea, OPEN/DRAFT/UNMERGED, 1 commit/24 scoped G4 paths stacked on protected PR140 2e75a6a842e70f3de78558681803b60935fb4251; all other protected PR124/135/139/121 unchanged. G4 reports disposable PG17 negative release tests, simulated integrated 176 Deno, focused 93, app258 PASS; ChatGPT reviewed source/SQL/PR, did not independently rerun tests or real managed Auth/Vault/Meta. P1 claim+service_role redeem replaced with JWT-scoped HMAC attested transactional release SQL candidate, credential custody candidate and disabled Connect UI, WITHOUT claiming live risk resolved. Critical cross-provider Auth/RPC/role/custody code gets ONE focused independent H3 Sol（高） security review; G4 done and slot freed, no new G4 work pending C3 outcome. Both connect and publish server/mobile gates remain false; actual Threads connection/post, PR merge/deploy/prod DB apply/GRANT/keys not authorized. Meta tester and G5 real T13/T10/H5 owner transport missing. Historic G4 report preserved; G5/G3/G6/H4 and all other slots unaffected.
+- recommended_model: Opus5.5（高） (completed K4)
 ## Claude G5
 - owner: claude
 - slot: claude-5
