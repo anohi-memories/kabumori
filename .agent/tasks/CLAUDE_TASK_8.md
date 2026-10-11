@@ -32,7 +32,7 @@
 5. **テスト**: F7の本番想定固定時刻テストは修正前FAIL→修正後PASS。F9 mockの保存状態（pending/no_post/published/generation_failed）・競合・ハッシュ対応・監査保全のテスト。important-news-monitor全体、Phase6/7/R1、news_discovery/observer等既存suiteをオフライン再実行。実測未実施は未実施と記録。typecheck/lint既存baselineとの比較。
 6. **完了**: 必要な変更だけPR129 branch `claude/news-body-integration-phase7-20261011` にcommit/push、Draft維持、merge/deployせず、F7/F9の残余リスクと再レビューの対象/判定を報告。F9の保留部分をPASS扱いしない。新しいコミットがあればその正確なSHAを記載し、`K8` をこのチャットに返却。追加レビュー担当を勝手に使わない。
 
-## Report — current G8 R2
+## Report
 
 - task_id: news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011
 - result: not_started
