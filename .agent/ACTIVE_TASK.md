@@ -117,14 +117,14 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: kabumori-shared-report-x-app-cutover-preflight-20261011
+- status: ready
+- task_id: kabumori-personalized-report-delivery-p1-hardening-20261011
 - start_code: G2
 - finish_code: K2
-- next_owner: chatgpt
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: 新方式の朝刊・大引けの X／アプリ切替の本番前読み取り監査を完了（本番接続 NOT_RUN、製品ソース変更 0）。判定は NO_GO：P0 は新コードの未デプロイの可能性と本番の状態の未確認、P1 は共有パケットが無い日の全停止・個別レポートの20人上限・通知予約失敗での上書き・生成中の放置・アプリのバイナリ。段階0（読み取り）→段階1（デプロイ）→段階2（アプリだけ ON）→段階3（X も ON）の手順案とロールバックを Report に記載。K2 の判断待ち。
+- allocation: K2 2026-10-11 accepted read-only shared report cutover audit as PASS_PREFLIGHT / PRODUCTION_NO_GO. P0 actual live deployed source, Cron/gates/settings, and X/unique keys not verified. G2 limited source-only P1 personalized corrections: cap20 starvation, notification enqueue failure must not overwrite completed, stalled generating safe recovery if possible without migration; missing shared packet fail-closed policy audit only. Protect G5/G6, X/G3/G4, other slots. Draft PR only no prod/migration/Cron/deploy; focused Sol（高） review after correction before any release. Return K2 to this G2 room.
 - recommended_model: Opus5.5（高）
 ## Claude G3
 - owner: claude
