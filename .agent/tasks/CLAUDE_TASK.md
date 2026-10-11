@@ -3,8 +3,9 @@
 - task_id: kabumori-fact-v2-pr132-three-objective-guards-correction-20261011
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
+- k2_verdict: PASS_SOURCE_CANDIDATE / RELEASE_HOLD (2026-10-11; source reviewed, test results G2-reported)
 - corrected_head: 68d45dde1be34715267b5066fa3b3686d756b79e
 - start_code: G2
 - finish_code: K2
