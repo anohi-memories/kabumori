@@ -3,8 +3,8 @@
 - task_id: kabumori-portfolio-holdings-stale-valuation-guard-20261011
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: normal
 - task_type: Kabumori financial presentation integrity / source-only
 - recommended_model: **Sonnet5（高）**
@@ -69,13 +69,57 @@ The user's explicit decision about 2026-10-07 through 10-09 OLD delivery missing
 
 ## Report — current task
 - task_id: kabumori-portfolio-holdings-stale-valuation-guard-20261011
-- result: NOT_RUN
-- status: ready
-- changed_files: none
-- PR: none
-- merge: no
-- EAS/deploy: prohibited
+- result: **IMPLEMENTED — PR #142 (source only, NOT merged)**。保有銘柄一覧・「資産への影響」Top3・資産合計を、現在の登録と一致する保存済み行だけに結び付けるガードを追加（銘柄詳細 PR #136 と同じ `registrationMatchesSnapshot` を再利用）。
+- status: `review_required` / next_owner `chatgpt` (return to かぶモリアプリG1のちゃ for `K1`)
+- PR: https://github.com/anohi-memories/kabumori/pull/142 — head `5fe4a6e37d6899e9731bd4ca6bc2c4e8e825ed38`, branch `claude/g1-portfolio-holdings-valuation-guard-20261011`, base fresh `origin/main` `1af11eb`（その後 main は `.agent` のみ前進、src/tests の上流変更なし）
+- merge: no / deploy=0 / EAS=0 / user_data_writes=0
+- date: 2026-10-11 JST
 
+### changed_files
+- `src/lib/portfolio-view.ts`（`alignHoldings`・`REGISTRATION_CHANGED_NOTE` を追加。`buildHoldingRows` / `topImpacts` / `assetSummary` が登録とマッチ関数を受け取る）
+- `src/app/(tabs)/explore.tsx`（登録の「取得済み」フラグ `registrationsKnown`、未取得は `null` を渡す。新しい認証・DBリクエストなし）
+- `src/components/portfolio/holdings-section.tsx`（登録変更の注記・アクセシビリティ文言）
+- `src/components/portfolio/portfolio-sections.tsx`（合計の保留注記・スパークライン非表示）
+- `tests/app/portfolio-view_test.ts`（+12 ガード系・既存の呼び出し更新）, `tests/app/portfolio-screen_test.ts`（+2）, `tests/app/portfolio-asset-card_test.ts`・`tests/app/stock-detail-view_test.ts`（シグネチャ/ピン更新のみ）
+- `docs/ui-review/portfolio_valuation_withheld_{totals,row,impact}_375pt.webp`（フィクスチャのみ）
+- 未変更: `src/lib/stock-detail-view.ts`, `src/app/stock-detail.tsx`, `src/lib/report-presentation.ts`, `(tabs)/_layout.tsx`, `src/app/_layout.tsx`, NativeTabs, 検索/登録/エディタ, 依存関係, app config, Supabase/Edge/migrations, 他スロット
+
+### 設計
+- 単一の判定 `alignHoldings(registrations|null, snapshot, matches)`: 行 / Top3 / 合計の3面すべてが同じ判定を通る（面ごとの食い違いを構造的に排除）。state = unknown（登録未取得）/ no_report / aligned（保存側と現在側が一対一で全て5項目一致）/ changed。
+- 行: 一意に一致した保存行だけ評価額・評価損益・当日損益を表示。それ以外は `—`（0・再計算なし）、終値と変化率は区分に依存しないので維持（保存行が重複して曖昧な場合は価格も出さない）、レポート本文/タグは非表示、「登録変更」注記。保存行なしは従来の未反映。
+- Top3: 一意一致した現在の保有のみ寄与（変更・保有→監視・解除・重複は除外）。順位は従来どおり |当日損益|。
+- 合計: aligned 以外は全項目 `—` と注記「登録内容が変わったため、評価額・損益は次の大引けレポートで更新されます」、履歴スパークラインは非表示。植物背景・日付・ラベルは維持。`all_holdings_valued=false`・レポート無し・保有ゼロ（一対一）は従来どおり。
+- 登録の読込中/失敗/未ログイン: `registrationsKnown=false` → `null` を渡し、保有を列挙せず合計 `—`（「変更」とは言わない）、「保有銘柄はまだありません」も出さない。再読込（フォーカス時）では既知のまま維持（ちらつき・誤表示なし）。
+- 純関数モジュールは実行時 import を持たない（Deno でテスト可能）。判定は引数で受け取り、画面が `registrationMatchesSnapshot` を渡す（二重定義なし）。
+
+### tests / checks（実際に実行）
+- **fail-before**: main の `portfolio-view.ts` に新規テストを当てて `deno test --no-check --no-lock --no-config --allow-read tests/app/portfolio-view_test.ts` → **11 passed / 14 failed**（ガード系は全件失敗: 側/現物信用の反転、数量・取得単価、保有→監視・解除、追加、曖昧、null/旧形式、正直な状態、未取得、一致の一貫性、並び、純関数性 ほか。API が無いことによる失敗を含む）。
+- **pass-after**: 同ファイル **25 passed / 0 failed**。`deno test --no-check --no-lock --no-config --allow-read tests/app/` → **512 passed / 0 failed**（同じ手順で測った main = 498 → +14）。
+- `tsc --noEmit`: `src/` は既存2件（`animated-icon.web.tsx` の css、`global.css` の型宣言）のみ・今回起因なし。`git diff --check` OK。
+- 未実施: EAS、実機、`deno lint`、Expo public config（設定変更なし）。
+
+### Simulator（iOS 27 / Xcode 27、使い捨て iPhone SE3 375pt、フィクスチャ rig・ネットワーク無し）
+- 一致時: 合計・スパークライン・Top3 が従来どおり（正のコントロール）。
+- 詳細で 買い→売り を保存（数量・取得単価はそのまま）→ 銘柄タブ: 合計が全て `—` + 注記・スパークライン非表示、該当行は終値/変化率を維持して評価損益 `—` + 「登録変更」、Top3 から該当銘柄が外れ次点が入る、他の保有は従来どおり、下部タブ5つ不変。銘柄詳細も同じ保留（行と一致）。
+- 402pt・実データ・実機は未実施（実際の登録を変更するテストは禁止のため）。実データのスクリーンショット無し。端末・サーバーは停止/削除済み。
+
+### 既知の差 / 残課題
+- 一覧は重複した保存済み行を曖昧として保留するが、銘柄詳細（READ-ONLY 指定・未変更）は先頭行を使う。レポート生成側が同一銘柄を重複させない前提で実害は想定しないが、揃えるなら別タスク。
+- AI概要文（`overview_ja`）と「詳しいポイント」リンクは保存済みレポートの本文のまま（TASK どおり維持）。登録変更後は本文中の金額が前回のものである可能性がある。
+- 旧配信の 10/7〜10/9 欠落は調査・修正していない（TASK 指示どおり）。
+
+### safety_checks
+- deploy=0, EAS=0, TestFlight/App Store=0, `expo prebuild`=0, Supabase 書き込み/migration/Edge deploy=0, AI/有料API=0。
+- 実ユーザーデータの書き込み: 0（保存/解除したのはフィクスチャ rig の in-memory DB のみ）。他スロットのプロセス/ポート/ブランチ/worktree は未接触。自分の Metro（8083）・ctl（8099）・使い捨て端末は後始末済み、ログイン済みセッションは維持。
+- PR/Report に銘柄名・金額・認証情報なし（フィクスチャの架空値のみ）。
+
+### next_recommendation
+1. K1: PR #142 のソースレビュー（認証/RLS/DB境界の変更なし、新規リクエストなし。Codex は不要の見込み）。
+2. 合格後にユーザーの merge 承認。マージ後、実データでは「登録を編集した直後に評価額が `—` になり、次の大引けで戻る」挙動を一度確認できる。
+3. 任意（別タスク）: 銘柄詳細側の重複行の扱いを一覧と揃える。
+
+### return_to
+- かぶモリアプリG1のちゃ — send `K1`.
 
 ---
 
