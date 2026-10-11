@@ -129,15 +129,15 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
+- status: ready
 - task_id: postona-unified-ai-manual-schedule-planner-v1-20261011
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: claude
 - return_to: POSTONA G3のちゃ（AI相談・X投稿予約担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: K3 reviewed Draft PR138 exact b244400ac710bdb6cd576631aacdb0b219bf73fd and G3 Report. Core source-only manual exact/random/interval and AI planner + preview accepted as PASS_CANDIDATE; source inspection found 3 P2 correctness gaps requiring SAME-PR narrow follow-up before K3 final: R1 reroll regenerates edited/reordered/cancelled drafts and resurrects cancelled posts; R2 AI frequency/consent cached from prior brand while new brand settings read pending/failed; R3 live brand-bound posts accountId unknown falsely rewritten as selected active X or Threads account, contaminating attribution/conflicts. Modify only isolated G3 schedule planner/UI/read-only types/tests, preserve source-only/no cloud reservation, protect G5/H1/G4/PR127 and all other tasks, no production writes, migration, Edge, X or deploy. Re-run local tests and return K3. No additional Codex now; Sol（高） integration review before eventual backend release.
-- recommended_model: Sonnet5（高）
+- allocation: K3 accepted fixes R1 reroll content/cancel preservation and R3 unbound brand-level server posts on source. ONE R2b P2 still remains: schedule.tsx uses snapshot.workspace.id (first brand) for AI settings while activeAccount.brandId could be another brand; may show A consent/frequency in B preview. Source-only same Draft PR138 head 48f070cc6a8472990dc07760e61ce255e5d21c91. Fix selected account verified brand for repository.read, aiPlanningFor, owner and test actual screen wiring. No other changes, no G4/H1/G5 work, no prod/DB/Edge/X/merge. Return K3. Prior Report/history preserved.
+- recommended_model: Sonnet5（中）
 ## Claude G4
 - owner: claude
 - slot: claude-4
