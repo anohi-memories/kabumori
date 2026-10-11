@@ -3,8 +3,8 @@
 - task_id: common-account-phase3i-local-findings-safe-lifecycle-plan-20261012
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - start_code: G5
 - finish_code: K5
@@ -33,6 +33,89 @@ No managed Supabase operations, Auth changes, photo application downtime, produc
 At the end of this G5 TASK, append `## Report — Phase3i` with task_id, decision, evidence/limits, new files, test outcomes, commit/push/PR, merge/deploy truth, environment/safety checks, next steps. Set `status: review_required`, `next_owner: chatgpt`. Return to 共通アカウントG5のちゃ with completion code **K5**.
 
 推薦モデル：**Opus5.5（高）**
+
+## Report — Phase3i
+
+- task_id: common-account-phase3i-local-findings-safe-lifecycle-plan-20261012
+- reported_at: 2026-10-12 JST
+- decision: **`READY_FOR_OFFLINE_IMPLEMENTATION`** — ただし、この設計が**主張する不変条件 I1〜I7 に限る**。本番稼働の許可ではない。
+  - 主張する不変条件は、どれも「識別できる、強制可能な境界」に結びついている。
+  - 主張しないこと（N1〜N6: BAN・フック・待機・Auth の削除・ローカル = managed）は、観測された反例どおり、安全の根拠として使わない。
+  - 解決できない保証は、設計上 STOP または突合に落ちる。
+  - 名前付きで残る未解決: **U1** Storage の書き込みポリシーの現状が不明（リポジトリの migration の外）、**U2** 境界の実体が未実装（オーナー別の別 TASK が必要）、**U3** managed 側の権限と監査ログの読み取りが未確認。
+- real_remote_calls: 0 / managed_supabase_operations: 0 / photo_app_paused: false / paid_actions: 0 / production_mutation: 0
+- deploy: NO / merge: NO
+- `managed_auth_delete`: BLOCKED のまま / E11・Option D: 未承認のまま / managed の E1〜E12: NOT_RUN のまま / `IDP_PREPAUSE_BLOCKED`: 維持
+
+### ブランチ / PR / HEAD
+- 作業場所: 新規の独立 worktree `/Users/yuya/Developer/kabumori-g5-phase3i`
+  - ブランチ `claude/g5-phase3i-lifecycle-safety-design-20261012`（fresh origin/main から作成）
+- **Draft PR #147**: https://github.com/anohi-memories/kabumori/pull/147（main 向け）
+  - head `38051f023bfd150f29829a075b6f87fa7c1e3e5f`（commit 1件、8 ファイル追加、force push なし、マージなし）
+- 保護対象 PR121 / PR122 / PR128 / PR130 / PR134 / PR137 / PR146 は OPEN / Draft で head 変更なし。他の open PR とファイルの重なりなし。
+- GitHub の check: Vercel が `Deployment rate limited — retry in 24 hours.`（プラン上の制限であり、コードの不具合ではない。変更は文書とテストだけ）。Netlify は canceled / success。
+
+### changed_files（すべて新規）
+- `docs/common-account/phase3i-lifecycle-safety-design.md`
+- `tools/common-account-lifecycle-safety/`: `protocol.ts`、`world.ts`、`protocol_test.ts`、`invariants_test.ts`、`static_test.ts`、`mutations.py`、`README.md`
+
+### 何を分析したか（Phase 3h の F1/F2/F3/F4/F6/F7 のみ）
+| 知見 | 層ごとの保証 | 設計での扱い |
+| --- | --- | --- |
+| F1 手動連携が BAN 後に完了 | Auth 層では保証できない。データ面で影響を無力化できる | 識別情報は止められない（N1）。データ面は I1・I2、遅れた識別情報は検出して突合 |
+| F2 コード交換が BAN 済みユーザーにセッションを発行 | 同上 | token の鮮度ではなく状態で判定（I2） |
+| F3 処理中の自動連携が BAN 後にコミット | 同上 | スナップショットの再取得（有限回）と、削除後の監査ログでの検出 |
+| F4 古い token が PostgREST・Storage で有効 | **DB のポリシー**（RLS の述語）と書き込み関数のガード、Edge の確認で強制できる | B1・B2・B3・B4。ゲートされない経路は孤児スイーパー（B5） |
+| F6 Admin の削除が Storage を掃除しない | Storage API による掃除と、孤児スイーパー | 一覧 → 削除 → 再一覧（連続 2 回 0 件）、B5 |
+| F7 フックはトークン発行だけを止める。障害は全員のサインインを止める | 境界にならない | 閉鎖プロトコルはフックに依存しない。採用しないことを推奨 |
+
+### 成果物の要点
+- **段階的な閉鎖プロトコル P0〜P8**: 準備（STOP 判定）→ freeze → 封じ込め（最善努力。必須でも十分でもない）→ サービス掃除 → プロバイダ結果 → Storage → 排他ロックの下での決定 → 削除（1 回だけ）→ 削除後の検証と完了。
+- **読み戻しの要件**: 完了は、削除後に、判定と**同じ時点で**読んだ事実だけで確定する。
+- **境界 B1〜B6**: 状態述語（ロック形式の RLS 述語）、書き込みガード（T13）、人の token で動く Edge の確認、Storage の書き込みポリシー、孤児スイーパー、境界マニフェスト（読み戻しによる確認）。
+- **競合・遅いコールバック**の経路別の表、token の鮮度の方針、識別情報の突合、曖昧な結果の表、ロールバック（最初の破壊的な掃除の前まで）、再開と冪等性、STOP / 突合のコード一覧。
+- **統合の依存（D1〜D9）**:
+  - G3/G4 と H3 の Threads: 資格情報の保存と手動投稿の引き換えでライフサイクルを確認する。PR #144 は未マージの候補。
+  - G6 の共通 AI: 台帳の予約の前にライフサイクルを確認する。台帳の `user_id` の削除または仮名化の方針を、per-user の経路を開く前に決める。
+  - 他オーナーのリソースは変更していない。
+
+### テストの結果（すべてオフライン・合成データ）
+- `deno test --no-config --allow-read tools/common-account-lifecycle-safety/`: **32/32**
+  - 型チェックあり。`deno check`・`deno lint` は OK。ネットワーク・環境変数・時計・乱数に触れないことを `static_test.ts` で確認。
+- **不変条件の探索**: 最大 2 つの割り込みを 12 の判定点へ入れる全組合せ（約 8,800 通り）を、3 つの構成で実行。
+  - 構成: 全境界あり、Apple の識別情報あり、Storage のポリシーなし（スイーパーのみ）。
+  - どの組合せでも、不変条件が保たれ、有限回で終了する。
+  - 不変条件の内容: 書き込みの受理、完了の条件、盲目的な再削除、一回限りの再実行、不明な事実での削除。
+- **負の対照**:
+  - 述語が無いと F4 が再現する。
+  - 素朴な閉鎖（封じ込め → 掃除 → 削除 → 完了）は、遅れた識別情報・サービスデータの残り・Storage の残りで破られる。
+  - 削除後の検証のキャッシュは、残りを見逃す。
+- **ミューテーション 32/32 を検出**（境界・事実・時間・封じ込め・掃除・プロバイダ・削除・検証・ゲート・スイーパー・モデル）。
+- **探索で見つかった設計上の指摘**（実装前に直せた）:
+  - 削除後の検証結果をキャッシュすると、検証と判定の間に、freeze の前に始まった書き込みがコミットされ、完了が残りを見逃す。
+  - 契約: 検証の事実は判定と同じスナップショットで読む。
+  - 同時に、スイーパーを常に必須にし、Storage のポリシーは「主張できる不変条件を増やす」位置づけに改めた。
+- `git diff --check`: OK。シークレット・本番 ref・URL・メールの走査: 0 件。
+
+### 証拠の限界（何を証明しないか）
+- 示したのは、**提案したロジックと、観測を写したモデルの上での不変条件**。GoTrue・PostgREST・Storage・managed Supabase の実際の挙動の証明ではない。
+- B1〜B6 の実体（ロックの順序、`FOR UPDATE` の飢餓、性能、述語の評価）は、実装の後にローカルの PostgreSQL で別途証明が要る。
+- マニフェストの確認は、実行時の読み戻しで行う（本設計は仕様だけ）。
+
+### 環境と安全の確認
+- 実施しなかったこと（いずれも 0 件）:
+  - managed Supabase の操作、Auth の変更
+  - 写真アプリの停止、プロバイダへのログイン、個人情報・秘密情報の扱い
+  - migration、deploy、マージ、課金
+  - 他スロットの TASK・Report・worktree の編集
+  - 古い Draft PR のコードや migration の変更
+- PostgreSQL・Podman 等は今回使っていない。
+
+### 次のおすすめ（小さく）
+1. **K5**: 判定（I1〜I7 に限る `READY_FOR_OFFLINE_IMPLEMENTATION`）の受理と、U1〜U3 の扱いを決める。
+2. 次に価値が高い小さな単位: **B1（状態述語）の関数とロック順のローカル証明**。Phase 1/2 と同形式の 2 セッション競合テストで、`FOR UPDATE` の飢餓と `lock_timeout` を確認する。G5 所有の新しいパスだけで行い、他オーナーのテーブルや migration は含めない。
+3. D1・D2・D3・D5 は、オーナー別の短い前提条件として K5 経由で渡す（別 TASK）。
+4. 広範な再レビューは推奨しない。必要なら B1 の実装時に、絞った確認を 1 回だけ。
 
 ---
 
