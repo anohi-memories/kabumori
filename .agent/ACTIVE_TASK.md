@@ -47,16 +47,16 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: review_required
+- status: done
 - task_id: common-account-pr130-e11-r1-r5-narrow-security-rereview-20261011
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
-- next_owner: chatgpt
+- next_owner: none
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: H2 previously completed G2 PR110 narrow C2 review, TASK/report preserved. Current H2 only one focused independent review of G5 Draft stacked PR130 exact 5943fad5f724191f6ae77f3baf826a4c7698d542 vs PR122 exact f17a47e36632fff4a1f4cfb0b860df200e1c99e1 to verify prior E11 R1 P1 and R2–R5 P2 fixes. NO production/disposable Supabase, Auth DELETE, photo app pause, project creation, code edits, PR merge, schema/Edge deploy or provider secrets. PASS means offline runbook candidate only, not E11 user approval or real platform proof. Return C2 to G5 chat.
+- allocation: C2 accepted H2 independent PR130 R1-R5 E11 source security rereview as CHANGES_REQUIRED, three narrow P2 residual groups R1 non-token residues / invalid NOT_RUN token / ambiguous COMMIT, R4 missing self_declared flag, R5 RLS-hidden rows miscount zero. R2 and R3 CLOSED at offline methodology. Independent reported 56/56 typed Deno, 58/58 mutations, 4/4 defect reproduction and fakePG RLS proof; source edits0, real Supabase E11 NOT_RUN. H2 completed done/next_owner none; preserved old TASK/Report. Photo app PREPAUSE_BLOCKED.
 - recommended_model: Sol（高）
 
 ## Claude G1
@@ -111,16 +111,16 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: done
-- task_id: common-account-phase3e-e11-offline-review-r1-r5-corrective-20261011
+- status: ready
+- task_id: common-account-phase3f-pr130-r1-r4-r5-offline-logic-fix-20261011
 - start_code: G5
 - finish_code: K5
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 accepted G5 Phase3e OFFLINE_ONLY R1 P1 / R2–R5 P2 corrective as PASS_OFFLINE_CORRECTIVE_CANDIDATE / TARGETED_SECURITY_REREVIEW_REQUIRED. Exact Draft stacked PR130 head 5943fad5f724191f6ae77f3baf826a4c7698d542 on original Draft PR122 head f17a47e36632fff4a1f4cfb0b860df200e1c99e1; 22 offline-only delta files, no migration/Auth/Edge/runtime modifications or merge. Claude-reported Deno56/56, mutations58/58, fake-PG local proof PASS, remote Supabase tests NOT_RUN. G5 source completed done/next_owner none. Real E11 and Option D not authorized; family photo app must NOT be paused; PREPAUSE_BLOCKED; no project creation, no paid tier. H2 belongs to G2 PR110 review and cannot be overwritten; one separate narrow Sol（高） review in confirmed free H slot before further approval.
-- recommended_model: Opus5.5（高）
+- allocation: C2 accepted PR130 H2 rereview with R1 R4 R5 P2 evidence-validator residuals. G5 Phase3f OFFLINE ONLY, narrow correction of non-token residue/invalid token and ambiguous COMMIT, missing witness self_declared flag, and RLS-filtered zero in read-only catalog/target SQL. New independent worktree and new Draft stacked PR based on unchanged PR130 exact 5943fad5f724191f6ae77f3baf826a4c7698d542, no original protected PR121/122/128/130 branch editing. No actual Supabase, Auth DELETE, user/photo data, project create/pause/restore, paid tier, deploy, migration or merge. Photo app PREPAUSE_BLOCKED, E1-E12 real NOT_RUN. Return K5; avoid another broad rereview.
+- recommended_model: Opus5.5（中）
 
 ## Deferred
 
