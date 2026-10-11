@@ -47,17 +47,17 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: review_required
+- status: done
 - task_id: kabumori-fact-v2-pr132-final-integrated-review-20261011
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: H2 completed ONE integrated source-only review of exact PR132 bd424616 on protected PR110 319a442e: CHANGES_REQUIRED, three reproduced P2 objective exception regressions (same-day denial scope, TOPIX calculated-value exemption, postposed wrong-date stripping). Focused typed55/55 PASS, independent14 behavior probes10 PASS/4 FAIL (3 defect groups), baseline rejects the four unsafe strings; check/lint/diff PASS. Detailed Report published/read back at commit950dd827; TASK current completion published at929c0c4b. Product source0, merge/deploy0, live Supabase/paidAI/X0; prior history and other slots preserved. Return C2 to かぶモリアプリG2のちゃ for one bounded G2 correction; inference policy accepted, cutover separately gated.
-- recommended_model: Sol（高）
+- allocation: C2 COMPLETE CHANGES_REQUIRED — Fact V2 PR132 exact bd424616a135e7bf71592c2ac41acb3e03f8568d on protected PR110 319a442edcd61c07274e3409d8864234f9d77cd4; R1 same-day same-sentence negation exonerates second false affirmation, R2 TOPIX 算出値/ウエート 437円 masquerades as 1306, R3 wrong US postposed date 10/7 stripped. ALL P2 objective-fact guard regressions reproducible X+app mocked delivery; 55/55 baseline focus PASS, independent 14 probes 10 PASS 4 FAIL. Opus grounded inference ALLOW policy CONFIRMED valid; do NOT reverse. Vercel rate limit, not code failure. H2 source edits0; no prod/merge/deploy/paid API. H2 Report saved with historical suffix intact, H2 current TASK done/none, released but not pre-reserved. G2 one bounded correction registered, H2 prior G5 C2 history preserved.
+- recommended_model: Sol（高） (completed)
 
 ## Claude G1
 - owner: claude
@@ -74,14 +74,14 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: kabumori-market-report-fact-interpretation-v2-20261011
+- status: ready
+- task_id: kabumori-fact-v2-pr132-three-objective-guards-correction-20261011
 - start_code: G2
 - finish_code: K2
-- next_owner: chatgpt
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Fact V2（事実は厳格に、事実に基づく分析・見通しは通す）を、PR #110 の上に積んだ Draft PR #132（head bd424616a135e7bf71592c2ac41acb3e03f8568d、base 319a442e は変更なし）として作成。生成と Fact の指示の方針変更と、監査で再現した誤検知3件の修正。事実の誤りの判定の厳しさは変更なし。全テスト成功、本番操作・デプロイ・マージ 0。Report は .agent/tasks/CLAUDE_TASK.md の先頭の節。K2 の判断待ち。
+- allocation: C2 accepted H2's ONE integrated Fact V2 PR132 review as CHANGES_REQUIRED solely R1-R3 P2 objective-guard escapes: same-day denial scoped across wrong affirmative, TOPIX context allows ETF 437円 numerical mislabel, trailing wrong US date stripped. G2 MUST preserve user-approved Opus independent economic inference and all good Fact V2 positive examples; fix ONLY three narrow objective exception checks with before/after X+app mock proof, original R1-R3 controls, H2 P1 20 unsafe and five noun-positive cases. Draft PR132 stays on unchanged protected PR110 branch; G2 uses its own independently clean worktree, push bounded new commit to PR132 only (no force push), no merge/deploy/prod/paid API. Previous TASK/Report fully preserved, return K2. After K2 do NOT keep reiterating regex language tests; decide final merge gate and separate consumer cutover. 
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
