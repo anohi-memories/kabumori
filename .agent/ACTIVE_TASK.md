@@ -47,17 +47,17 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: review_required
+- status: done
 - task_id: kabumori-pr110-p2-final-narrow-review-20261011
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Independent final exact-head PR110 review completed CHANGES_REQUIRED: one P1 omitted-adjective predicate fail-open; 20 negative controls retain unsupported cause in mocked X/app. Narrow baseline 54/54 PASS; independent 22 PASS / 20 FAIL; same old-head negatives all excluded. Product source unchanged, no merge/deploy/API/production. Prior histories and all other slots protected. C2 to G2.
-- recommended_model: Sol（高）
+- allocation: C2 COMPLETE, CHANGES_REQUIRED one P1 R1 deterministic Hard-Fact fail-open in PR110 exact head 2c876b0bafee31844b9854c4a7d34ba69660d4cf. Omitted adjectives before no-comma conjunction cause unsupported asserted market causality to survive with later unrelated hedge in X + app. 20/20 unsafe controls fail on new head, old head excludes; 54/54 existing focused controls PASS and subject 勢いが positive fixed. H2 source edits 0, no merge/deploy/paid API; review task CLOSED, G2 narrow source correction assigned. All H2 historical Report/TASK preserved. H2 not reserved.
+- recommended_model: Sol（高） (completed)
 
 ## Claude G1
 - owner: claude
@@ -74,13 +74,14 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: ready
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: chatgpt
+- next_owner: claude
+- return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Final K2 PASS_CANDIDATE for PR110 exact head 2c876b0bafee31844b9854c4a7d34ba69660d4cf (one added commit/three allowed G2 source+test paths); G2 reported 1340/1340 regression tests PASS, normal subject-が controls and mocked delivery fixed, no API/production writes. Source reviewed; NEW PREDICATE_END regex is a HARD Fact boundary shared by clause and emoji splitting, acknowledged unknown-adjective fail-open residual risk. Before merge require ONE focused independent exact-head boundary review (Sol（高）) when genuinely free H1/H2; both currently other-owner allocated. No new H TASK reserved, no source merge/deploy. main vs PR path intersection=0, GitHub mergeable inconsistent/false in latest snapshot; do not force. AI Lab diary: 記録不要 — 10/10の限定是正、11日付へ振り替えない。
+- allocation: C2 CHANGES_REQUIRED / R1 P1: PR110 exact head 2c876b0bafee31844b9854c4a7d34ba69660d4cf contains NEW Hard-Fact fail-open from finite PREDICATE_END adjective allowlist. H2 proved 20 synthetic unsafe instances retained in X/app after unrelated future hedge; five noun-subject cases, emoji binding, 54 focused existing tests pass. G2 must implement ONE narrowly scoped fail-closed causality-clause correction (NOT adding only four adjectives), preserve noun subject 勢いが and existing controls, test 20 adversarial cases, commit/push same PR110, no merge/deploy/API/prod. G2 TASK current top is ready with full instruction and history; return K2; later one focused Sol（高） new-head check only.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
