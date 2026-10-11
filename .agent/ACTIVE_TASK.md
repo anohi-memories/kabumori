@@ -111,7 +111,7 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - task_id: common-account-phase3g-free-auth-provider-test-readiness-20261011
 - start_code: G5
 - finish_code: K5

@@ -3,7 +3,7 @@
 - task_id: common-account-phase3g-free-auth-provider-test-readiness-20261011
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - start_code: G5
