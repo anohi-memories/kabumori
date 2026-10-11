@@ -857,6 +857,12 @@ async function saveCandidateJudgement(
     })
     : null;
   const params = new URLSearchParams({ id: `eq.${candidateId}`, status: "eq.pending_judgement" });
+  // The judgement was made on the body read at selection time. A body can only appear later through
+  // fillMissingCandidateBody, which writes to rows whose body is empty — so a judgement made WITHOUT a body is saved only
+  // while the body is still empty (one conditional UPDATE: the check and the write cannot be separated). Otherwise the
+  // row stays pending_judgement and is judged again with the official body on the next run.
+  const judgedWithoutBody = candidate !== undefined && (candidate.bodySummary ?? "").trim().length === 0;
+  if (judgedWithoutBody) params.set("or", "(body_summary.is.null,body_summary.eq.)");
   const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${params}`, {
     method: "PATCH",
     headers: headers(serviceRoleKey, "return=representation"),
@@ -887,7 +893,19 @@ async function saveCandidateJudgement(
   });
   if (!result.ok) throw new Error("NEWS_JUDGEMENT_SAVE_FAILED");
   const rows = await result.json() as unknown[];
-  if (rows.length !== 1) throw new Error("NEWS_JUDGEMENT_CANDIDATE_CHANGED");
+  if (rows.length === 1) return;
+  if (judgedWithoutBody) {
+    // 0 rows: tell "the body arrived while the model was judging" (stale, left pending) from "the row moved on".
+    const probe = new URLSearchParams({ id: `eq.${candidateId}`, select: "status,body_summary", limit: "1" });
+    const check = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${probe}`, { headers: headers(serviceRoleKey) });
+    if (check.ok) {
+      const [row] = await check.json() as Array<{ status?: unknown; body_summary?: unknown }>;
+      if (row?.status === "pending_judgement" && typeof row.body_summary === "string" && row.body_summary.trim().length > 0) {
+        throw new Error("NEWS_JUDGEMENT_STALE_BODY_CHANGED");
+      }
+    }
+  }
+  throw new Error("NEWS_JUDGEMENT_CANDIDATE_CHANGED");
 }
 
 // P0.6: immediateGeneration is omitted entirely for dry runs and for no_post candidates (nothing was

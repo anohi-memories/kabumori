@@ -192,8 +192,12 @@ function parseRow(
   }
   const m = metrics.length;
   let pairs: "interleaved" | "grouped" | "none";
-  if (tokens.length === m) pairs = "none";
-  else if (tokens.length >= m * 2 && tokens.length <= m * 2 + allowExtraTokens) {
+  if (tokens.length === m && layout === "amounts_only") pairs = "none";
+  else if (tokens.length === m) {
+    // m numbers under a two-per-column header are the first half of a wrapped row (or a lost column), never amounts
+    issues.push(`ROW_INCOMPLETE:${label}:${tokens.length}/${m * 2}`);
+    return null;
+  } else if (tokens.length >= m * 2 && tokens.length <= m * 2 + allowExtraTokens) {
     // 2m numbers are either amount,change% pairs or all amounts then all change%: the count alone cannot tell
     if (layout !== "interleaved" && layout !== "grouped") {
       issues.push(`LAYOUT_UNCONFIRMED:${label}`);
@@ -248,7 +252,17 @@ export function extractKessanTankiFacts(rawText: string): KessanFacts {
       const line = lines[cursor];
       if (PERIOD_LABEL.test(line)) {
         // forecast rows may carry one extra token (EPS in yen); results rows must match the columns exactly
-        const row = parseRow(line, metrics, layout, tableIssues, isForecastHeading || /^通期|^第2四半期|^中間期/u.test(line) ? 1 : 0);
+        // A wrapped row continues on following lines that hold nothing but numbers; the join is made only for such lines
+        // and only until the row has the number of values its header declares, so it never runs into the next period,
+        // a note or another table.
+        let joined = line;
+        const target = layout === "amounts_only" ? metrics.length : metrics.length * 2;
+        const countOf = (text: string) => text.slice((text.match(PERIOD_LABEL)?.[0] ?? "").length).trim().split(/\s+/u).filter(Boolean).length;
+        while (countOf(joined) < target && cursor + 1 < lines.length && /^[\d,.\s△▲－―—+-]+$/u.test(lines[cursor + 1]) && /\d/u.test(lines[cursor + 1])) {
+          joined = `${joined} ${lines[cursor + 1]}`;
+          cursor += 1;
+        }
+        const row = parseRow(joined, metrics, layout, tableIssues, isForecastHeading || /^通期|^第2四半期|^中間期/u.test(line) ? 1 : 0);
         if (row) rows.push(row);
         cursor += 1;
         continue;

@@ -169,3 +169,93 @@ test("F8: single dissenter, explicit count agreement, and no invented numbers wh
   assert.equal(unanimous.votesAgainst, 0);
   assert.match(renderFomcStatementSummary(unanimous) ?? "", /全会一致/u);
 });
+
+// ---------------------------------------------------------------- PR #129 R3 (H4-R1, H4-R3)
+
+const WRAPPED = (rows: string[]) =>
+  [
+    "2026年3月期 決算短信〔日本基準〕(連結)",
+    "(百万円未満切捨て)",
+    "（１）連結経営成績",
+    "売上高 営業利益 経常利益 親会社株主に帰属する当期純利益",
+    "百万円 % 百万円 % 百万円 % 百万円 %",
+    ...rows,
+  ].join("\n");
+
+test("H4-R1: a row wrapped over two lines is joined and read as amount/percent pairs, never as four amounts", () => {
+  const text = WRAPPED(["2026年3月期 1000 10 100 20", "80 30 50 40", "2025年3月期 900 5 90 6", "70 7 40 8"]);
+  const facts = extractKessanTankiFacts(text);
+  assert.equal(facts.ok, true, facts.issues.join(","));
+  assert.deepEqual(facts.currentRow?.values.map((v) => [v.metric, v.amount, v.changePct]), [
+    ["sales", "1000", "10"], ["operating_profit", "100", "20"], ["ordinary_profit", "80", "30"], ["net_profit", "50", "40"],
+  ]);
+  assert.equal(facts.priorRow?.values[1].amount, "90");
+});
+
+test("H4-R1: a half row that is not completed by a numbers-only line is not a result (cut, note, next period)", () => {
+  const cut = extractKessanTankiFacts(WRAPPED(["2026年3月期 1000 10 100 20", "2025年3月期 900 5 90 6 70 7 40 8"]));
+  assert.equal(cut.ok, false);
+  assert.ok(cut.issues.some((issue) => issue.startsWith("ROW_INCOMPLETE")));
+  const note = extractKessanTankiFacts(WRAPPED(["2026年3月期 1000 10 100 20", "(注) 前期は修正再表示", "80 30 50 40", "2025年3月期 900 5 90 6 70 7 40 8"]));
+  assert.equal(note.ok, false);
+  const over = extractKessanTankiFacts(WRAPPED(["2026年3月期 1000 10 100 20 80", "30 50 40 9", "2025年3月期 900 5 90 6 70 7 40 8"]));
+  assert.equal(over.ok, false);
+  assert.equal(renderKessanFactsSummary(over), null);
+});
+
+test("H4-R1: amounts-only is accepted only when the header says so; ordinary m/2m tables are unchanged", () => {
+  const amountsOnly = [
+    "2026年3月期 決算短信〔日本基準〕(連結)",
+    "（１）連結経営成績",
+    "売上高 営業利益 経常利益 親会社株主に帰属する当期純利益",
+    "百万円 百万円 百万円 百万円",
+    "2026年3月期 1000 100 80 50",
+    "2025年3月期 900 90 70 40",
+  ].join("\n");
+  const facts = extractKessanTankiFacts(amountsOnly);
+  assert.equal(facts.ok, true, facts.issues.join(","));
+  assert.deepEqual(facts.currentRow?.values.map((v) => v.amount), ["1000", "100", "80", "50"]);
+  assert.deepEqual(facts.currentRow?.values.map((v) => v.changePct), [null, null, null, null]);
+  const noUnits = extractKessanTankiFacts(amountsOnly.replace("百万円 百万円 百万円 百万円", "(単位未記載)"));
+  assert.equal(noUnits.ok, false);
+  const plain = extractKessanTankiFacts(WRAPPED(["2026年3月期 1000 10 100 20 80 30 50 40", "2025年3月期 900 5 90 6 70 7 40 8"]));
+  assert.equal(plain.ok, true);
+  assert.equal(plain.currentRow?.values[2].amount, "80");
+});
+
+const FOMC_PAGE = (body: string) =>
+  `<html><head><title>Federal Reserve Board - Federal Reserve issues FOMC statement</title></head><body><div id="article"><p class="article__time">October 9, 2026</p><h3>Federal Reserve issues FOMC statement</h3><p>${body}</p></div><div id="footer">Last Update: October 9, 2026</div></body></html>`;
+
+test("H4-R3: a past meeting's raise is not this meeting's decision (hold at 4-1/4 to 4-1/2)", () => {
+  const facts = extractFomcStatementFacts(FOMC_PAGE(
+    "At its July meeting, the Committee decided to raise the target range for the federal funds rate by 1/4 percentage point to 4-1/4 to 4-1/2 percent. At this meeting, the Committee decided to maintain the target range for the federal funds rate at 4-1/4 to 4-1/2 percent. The action was approved by a 12 – 0 vote.",
+  ));
+  assert.equal(facts.ok, true, facts.issues.join(","));
+  assert.equal(facts.action, "maintain");
+  assert.equal(facts.changeBp, 0);
+  assert.equal(facts.rangeLowerPct, 4.25);
+  assert.equal(facts.rangeUpperPct, 4.5);
+  const rendered = renderFomcStatementSummary(facts) ?? "";
+  assert.match(rendered, /4\.25〜4\.5%（据え置き、変更なし）/u);
+  assert.doesNotMatch(rendered, /引き上げ/u);
+});
+
+test("H4-R3: two different current decisions are ambiguous and not guessed; the usual single statement is unchanged", () => {
+  const ambiguous = extractFomcStatementFacts(FOMC_PAGE(
+    "The Committee decided to raise the target range for the federal funds rate by 1/4 percentage point to 4-1/2 to 4-3/4 percent. The Committee decided to maintain the target range for the federal funds rate at 4-1/4 to 4-1/2 percent.",
+  ));
+  assert.equal(ambiguous.ok, false);
+  assert.ok(ambiguous.issues.includes("AMBIGUOUS_DECISION"));
+  assert.equal(renderFomcStatementSummary(ambiguous), null);
+  const usual = extractFomcStatementFacts(FOMC_PAGE(
+    "In support of its goals, the Committee decided to lower the target range for the federal funds rate by 1/4 percentage point to 4 to 4-1/4 percent. The action was approved by a 11 – 1 vote.",
+  ));
+  assert.equal(usual.ok, true, usual.issues.join(","));
+  assert.equal(usual.action, "lower");
+  assert.equal(usual.changeBp, 25);
+  assert.equal(usual.rangeLowerPct, 4);
+  const sameTwice = extractFomcStatementFacts(FOMC_PAGE(
+    "The Committee decided to maintain the target range for the federal funds rate at 4-1/4 to 4-1/2 percent. The Committee decided to maintain the target range for the federal funds rate at 4-1/4 to 4-1/2 percent.",
+  ));
+  assert.equal(sameTwice.ok, true);
+});

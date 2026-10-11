@@ -79,6 +79,22 @@ export function parseFedRatePercent(raw: string): number | null {
   return /^\d+(?:\.\d+)?$/u.test(text) ? Number(text) : null;
 }
 
+const MONTH_NAME = "(?:January|February|March|April|May|June|July|August|September|October|November|December)";
+
+/** A decision sentence that is a reference to an earlier meeting / earlier action / a quotation, not this meeting's decision. */
+function isHistoricalDecision(sentence: string): boolean {
+  return new RegExp(
+    [
+      "\\b(?:at|in|during|since|following)\\s+(?:its|the|their)\\s+(?:[A-Za-z]+\\s+){0,3}?(?:meeting|meetings)\\b(?<!this\\s+meeting)",
+      "\\b(?:previous|prior|last|earlier|preceding|past)\\b",
+      `\\b(?:in|since|during|at)\\s+${MONTH_NAME}\\b`,
+      "\\bhad\\s+(?:decided|raised|lowered|reduced|cut)\\b",
+      "[\"“”]",
+    ].join("|"),
+    "iu",
+  ).test(sentence) && !/\bat this meeting\b|\btoday\b/iu.test(sentence.split(/decided/iu)[0] ?? "");
+}
+
 const RATE = String.raw`(\d+(?:-\d+\/\d+|\/\d+|\.\d+)?)`;
 
 export function extractFomcStatementFacts(html: string): FomcStatementFacts {
@@ -86,19 +102,44 @@ export function extractFomcStatementFacts(html: string): FomcStatementFacts {
   const issues: string[] = [];
   const releaseDate = text.match(/\b((?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4})\b/u)?.[1] ?? null;
 
-  let action: FomcStatementFacts["action"] = null;
-  if (/decided to raise the target range/iu.test(text)) action = "raise";
-  else if (/decided to (?:lower|reduce|cut) the target range/iu.test(text)) action = "lower";
-  else if (/decided to (?:maintain|keep|leave)[^.]{0,60}target range|target range[^.]{0,60}unchanged/iu.test(text)) action = "maintain";
+  // The decision is ONE sentence of this meeting: action, range and change are all read from that same sentence. A
+  // sentence that refers to an earlier meeting / earlier action ("At its July meeting, the Committee decided to raise …")
+  // is history, not the decision. Two different current decisions are ambiguous and are not guessed between.
+  const decisions: Array<{ action: NonNullable<FomcStatementFacts["action"]>; sentence: string }> = [];
+  for (const sentence of text.split(/(?<![A-Z])(?<!\ba\.m)(?<!\bp\.m)\.\s+(?=[A-Z])/u)) {
+    if (!/target range/iu.test(sentence) || isHistoricalDecision(sentence)) continue;
+    let sentenceAction: NonNullable<FomcStatementFacts["action"]> | null = null;
+    if (/decided to raise the target range/iu.test(sentence)) sentenceAction = "raise";
+    else if (/decided to (?:lower|reduce|cut) the target range/iu.test(sentence)) sentenceAction = "lower";
+    else if (/decided to (?:maintain|keep|leave)[^.]{0,60}target range|target range[^.]{0,60}unchanged/iu.test(sentence)) sentenceAction = "maintain";
+    if (sentenceAction) decisions.push({ action: sentenceAction, sentence });
+  }
+  const parseDecision = (sentence: string) => {
+    const found = new RegExp(`target range[^.]{0,120}?(?:to|at)\\s+${RATE}\\s+to\\s+${RATE}\\s+percent`, "iu").exec(sentence) ??
+      new RegExp(`${RATE}\\s+to\\s+${RATE}\\s+percent`, "iu").exec(sentence);
+    return {
+      range: found,
+      lower: found ? parseFedRatePercent(found[1]) : null,
+      upper: found ? parseFedRatePercent(found[2]) : null,
+    };
+  };
+  const signature = (item: (typeof decisions)[number]) => {
+    const parsed = parseDecision(item.sentence);
+    return `${item.action}|${parsed.lower}|${parsed.upper}|${item.sentence.match(/by\s+(\d+(?:\/\d+|\.\d+)?)\s+(?:percentage points?|basis points?)/iu)?.[0] ?? ""}`;
+  };
+  const distinct = new Set(decisions.map(signature));
+  const chosen = distinct.size === 1 ? decisions[0] : null;
+  if (distinct.size > 1) issues.push("AMBIGUOUS_DECISION");
 
-  const range = new RegExp(`target range[^.]{0,120}?(?:to|at)\\s+${RATE}\\s+to\\s+${RATE}\\s+percent`, "iu").exec(text) ??
-    new RegExp(`${RATE}\\s+to\\s+${RATE}\\s+percent`, "iu").exec(text);
-  const rangeLowerPct = range ? parseFedRatePercent(range[1]) : null;
-  const rangeUpperPct = range ? parseFedRatePercent(range[2]) : null;
+  const action: FomcStatementFacts["action"] = chosen?.action ?? null;
+  const parsedRange = chosen ? parseDecision(chosen.sentence) : { range: null, lower: null, upper: null };
+  const range = parsedRange.range;
+  const rangeLowerPct = parsedRange.lower;
+  const rangeUpperPct = parsedRange.upper;
 
   let changeBp: number | null = null;
-  const pp = text.match(/by\s+(\d+(?:\/\d+|\.\d+)?)\s+percentage points?/iu);
-  const bp = text.match(/by\s+(\d+)\s+basis points?/iu);
+  const pp = chosen?.sentence.match(/by\s+(\d+(?:\/\d+|\.\d+)?)\s+percentage points?/iu);
+  const bp = chosen?.sentence.match(/by\s+(\d+)\s+basis points?/iu);
   if (pp) {
     const value = parseFedRatePercent(pp[1]);
     changeBp = value === null ? null : Math.round(value * 100);
