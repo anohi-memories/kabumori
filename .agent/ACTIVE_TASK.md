@@ -154,16 +154,16 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: review_required
+- status: done
 - task_id: common-account-phase3h-local-oss-keycloak-safe-pilot-20261011
 - start_code: G5
 - finish_code: K5
-- next_owner: chatgpt
+- next_owner: none
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 accepted Phase3g source-only feasibility and freed G5. User 2026-10-11 「すすめて」 expressly chooses next no-photo-downtime local OSS pilot. G5 Phase3h on isolated dedicated worktree/Podman resources, local Supabase OSS + Keycloak with 2-3 fake users and limited E2/E3/E5/E8/E9 evidence; new docs/test fixtures only, new Draft PR. No production or managed Supabase, no Auth0/real credentials/users, no family photo stop, no SQL direct delete E11, no paid actions, no app/DB/Auth/RPC/Edge deploy/merge. Preserve PR121/122/128/130/134/137 and other slots. LOCAL evidence not managed proof; IDP_PREPAUSE_BLOCKED persists. Return K5 for evaluation.
-- recommended_model: Sonnet5（高）
+- allocation: K5 accepted completion of Phase3h local pilot with safety findings. Draft PR146 faf8007a4ab5c925430c7cc6a9896046e30ce25a OPEN/UNMERGED with seven new documentation/test-driver files. Local evidence identified auth lifecycle race and residual-data risks: source task complete, proof of managed safety NOT obtained. G5 unit 7/7 and isolated Podman teardown are Claude-reported, not independently rerun. Other Draft PR heads protected. Managed experiments, photo-app pause, paid actions, Option D, managed_auth_delete and production activation remain BLOCKED. Next G5 assignment not yet created; use fresh conflict checks and a bounded corrective task when appropriate.
+- recommended_model: Sonnet5（高） (completed)
 ## Claude G6
 - owner: claude
 - slot: claude-6
