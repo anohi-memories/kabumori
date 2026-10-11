@@ -99,15 +99,15 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: blocked
-- task_id: postona-x-oauth-preclaim-containment-readiness-20261010
+- status: ready
+- task_id: postona-threads-oauth-edge-offline-candidate-20261011
 - start_code: G4
 - finish_code: K4
-- next_owner: chatgpt
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: User decision 2026-10-11: DEFER existing-X OAuth preclaim remediation for later; prioritize other POSTONA development. Previous G4 Opus5.5-stopped TASK is NOT completed and remains blocked. H1 C1 accepted defensive evaluation, H1 done. Read-only live Supabase audit verified `authenticated` EXECUTE on legacy completion RPC; no proven X takeover/victim posting, but fake identity association/legitimate connection denial remains an open risk, NOT security PASS. PR126 v2 and G5/T9 prerequisites remain unmerged; no new ACL restriction, pause, deploy, merge or G4 restart authorized. Revisit with G5 integration or broader release, and promptly on new evidence. A separately scoped TASK and explicit user authorization are required. G3/G5/H2 protected.
-- recommended_model: Opus5.5（高） (on hold)
+- allocation: User 2026-10-11 directed immediate reuse of G4 for ordinary development. Threads OAuth Edge handler/adapter **unwired offline candidate** assigned, building on Draft PR124 exact head c30f246409a77080cbc03aef6c4cb72b5481e125 in separate G4 worktree and new stacked Draft PR if safe. Source only; static Threads gate false; no merge/deploy/production writes/provider calls or modifications to G3/G5/X OAuth. Previous G4 existing-X OAuth TASK was NOT completed, explicitly deferred and fully archived to .agent/archive/CLAUDE_TASK_4_pre_threads_20261011.md; unresolved issue tracked in GitHub Issue #131 OUTSIDE G4. PR126 remains Draft/held. The archived issue does not block G4; G3/G5/H tasks preserved.
+- recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
 - slot: claude-5
