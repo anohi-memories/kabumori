@@ -89,18 +89,17 @@
 ## Codex H5
 - owner: codex
 - slot: codex-5
-- status: idle
-- task_id: none
+- status: ready
+- task_id: postona-threads-oauth-runtime-bridge-h5-20261011
 - start_code: H5
 - finish_code: C5
 - completion_code: C5
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: codex
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CODEX_TASK_5.md
 - report: .agent/CODEX_REPORT_5.md
-- allocation: 未割当（2026-10-11追加）。固定プロジェクト専用にしないCodex枠。割当時に return_to / completion_code C5 / 推薦モデルを必ず記入する。
-- recommended_model: none
-
+- allocation: User 2026-10-11 authorized using H5 temporarily to finish POSTONA Threads connection and first text-post pilot. H5 explicitly assigned 臨時実装 Threads OAuth trusted runtime/verified principal/callback/durable claim/owner-only RPC transport source and mock PG tests, stacked on protected Draft PR135/PR124 if safe. This is NOT a model-safety bypass. G4 independently owns Threads publish API/manual UI (separate paths); G3 schedule, G5 shared Auth/T13/deletion and all other slots protected. No real Meta/Supabase/Auth calls, secrets, DB apply, production writes, merge, deploy or real posts until separate tester pilot authorization. H5 source implementation only; no permanent reservation after C5.
+- recommended_model: Sol（高）
 ## Claude G1
 - owner: claude
 - slot: claude-1
@@ -141,15 +140,15 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: idle
-- task_id: none
+- status: ready
+- task_id: postona-threads-manual-text-publish-v1-20261011
 - start_code: G4
 - finish_code: K4
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: User 2026-10-11 moved Threads OAuth Edge offline implementation to H1. Original G4 `postona-threads-oauth-edge-offline-candidate-20261011` not completed; full TASK text preserved at .agent/archive/CLAUDE_TASK_4_threads_edge_pre_codex_20261011.md. G4 freed for independently assigned future POSTONA task; do not start unassigned G4 or use G4 worktree for H1. Previously deferred existing X OAuth security concern remains Issue #131 and archive, NOT a slot blocker.
-- recommended_model: none (future G4 task must select)
+- allocation: User 2026-10-11 set POSTONA next milestone actual Threads single-account text publishing. G4 owns provider two-step text post adapter, safe single manual publication backend, and user-facing one-shot compose/consent/confirmed-status UI, source and mocks on independent fresh main branch. H5 parallel owns OAuth runtime/claim/owner boundary, no same files. G3 owns scheduler, G5 Auth/T13/T10. Keep release flags OFF until exact staged integration, focused Sol（高） review and explicit Meta tester/pilot permission. No live provider call, secrets, DB apply, production change, PR merge/deploy by this TASK; do not modify existing X posting/OAuth or G3 schedule. Draft scoped PR then K4.
+- recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
 - slot: claude-5
