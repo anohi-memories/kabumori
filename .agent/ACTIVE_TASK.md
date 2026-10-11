@@ -105,14 +105,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: done
 - task_id: kabumori-portfolio-holdings-stale-valuation-guard-20261011
 - start_code: G1
 - finish_code: K1
-- next_owner: claude
+- next_owner: none
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 PR142 async refresh correction REQUIRED, one bounded stale-P&L flash defect. Existing PR #142 head 5fe4a6e37d6899e9731bd4ca6bc2c4e8e825ed38 core five-field alignment, rows/impact/totals and 375pt images reviewed positive; Deno app 512/512 PASS reported by Claude. In src/app/(tabs)/explore.tsx useFocusEffect load() sets loading=true but keeps registrationsKnown=true and cached items; the current registrations variable ignores loading, allowing previous holding valuation/P&L to remain visible while latest tracked_stocks fetch is pending after user edit or user switch, and asynchronous report responses may pair different generations. Fix ONLY this screen and focused portfolio-screen tests so valuation eligibility becomes unknown from start of any reload and cannot reopen from out-of-order earlier fetches, then shows settled values only after latest read; fail-before/pass-after coverage. Continue SAME G1 isolated worktree PR142, no new PR/merge/EAS/production DB/paid API. Preserve five NativeTabs, all financial pure helpers, G2 report cutover and old delivery gap. Return K1 to かぶモリアプリG1のちゃ.
+- allocation: K1 PR142 final PASS_SOURCE_IMPLEMENTATION after focused reload safety correction on exact PR head cfaf5dcf8d24b942988c10acf7a3959c05dba20a; PR OPEN/UNMERGED, explicit user permission still required for merge. G1 source-only: saved vs current five-field match guards holdings row P/L, impact top3 and aggregate. On focus/pull reload, valuation eligibility closes immediately and reopens only after current generation finishes; latest-wins fetch fence prevents older responses resetting the view. Claude reported focused 26/26 PASS and full app 521/521 PASS; tsc 2 existing CSS/typing diagnostics (no new), 375pt fixture pass, no native real-account edit. CI Vercel rate limited, NOT green; latest main files no PR overlap. No native five-tab, DB/Auth/API/Edge/EAS/production changes. G1 done/free subject to fresh slot/worktree review. Old report Oct7–9 gap explicitly no fix; G2 cutover untouched.
 - recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
