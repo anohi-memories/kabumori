@@ -1,3 +1,74 @@
+# Claude G3 — CURRENT TASK — POSTONA X手動＋AI予約の永続化・実行境界 V1（本番OFF／ソース実装）
+
+- task_id: postona-x-reservation-store-offline-v1-g3-20261011
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- start_code: G3
+- finish_code: K3
+- return_to: **POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）**
+- recommended_model: **Opus5.5（高）**
+- priority: high
+- type: implementation / source-only reservation persistence and guarded claim boundary; no production use
+- worktree_base: `/Users/yuya/Developer/kabumori-fresh` latest verified `origin/main` (new dedicated independent G3 worktree)
+- local_postgres_or_mock: permitted after disposable isolation proof
+- remote_supabase_db_auth_edge_migrations_rpc_grants_or_data: FORBIDDEN
+- real_X_Threads_Meta_provider_calls_or_publishing: FORBIDDEN
+- secrets_vault_cron_live_settings_or_other_app_worktree: FORBIDDEN
+- merge_deploy_EAS_TestFlight_paid_AI: FORBIDDEN
+- existing_G3_V1: [PR #138](https://github.com/anohi-memories/kabumori/pull/138) squash merged at `a9b7cd2032169ae375a4b9f3e3086e6b3a2f3ff7`, local preview only
+- protected_owner_boundaries: G4 Threads OAuth/manual publisher & existing Draft PR #124/#135/#139/#140; G5 Auth/entitlement/T10/T13/deletion & Draft PR #121; G6 separate production mutation; X OAuth Issue #131; G1/G2/G7/G8/G9; old G3 Draft PR #127 stage3B; existing Kabumori/AI Lab live X posting
+
+## Product outcome
+
+The user wants POSTONA to **really save a user-authored post with exact publish datetime**, or **save several written texts randomly spaced inside selected dates/time band**, or **save by daily/N-day intervals**, alongside AI automatic posting from confirmed frequency. Last G3 completed in-memory scheduler & common timeline in PR #138, but no reservation persists and no POSTONA user X publish is enabled.
+
+**Current bounded outcome:** implement the **real application-side reservation save/read/edit/cancel contracts and source-only server DB/API/claim design** with offline executable safety tests, so these can be connected after G5/G4 authorization. This is NOT merely another design memo; deliver code, test doubles and meaningful user flow, but explicit release flag remains OFF. DO NOT tell the user that posts will be published or survive restarts until production source-of-truth + authorization has passed separate approval and read-back.
+
+## Mandatory read / ownership / worktree preflight
+
+1. Read latest `PROJECT_RULES.md`, `AGENTS.md`, `CLAUDE.md`, `HANDOFF.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, THIS TASK and archived K3 reports, latest G4/G5/H5 TASK/Reports and PR #138 merged main source. Re-fetch fresh origin/main, `git status`, `git worktree list`, open PR changed paths and active slot reservations. Do not accept `idle` alone as free; verify this G3 status `ready/in_progress` and exact task ID, next owner, task content, reports. New unique independent G3 worktree; no other checkout/reset/rebase/prune/server shutdown.
+2. Read `docs/postona/unified-ai-manual-scheduling-v1-20261011.md`, merged app `schedule-planner.ts`/`schedule-view.ts`/`schedule.tsx`/`schedule-composer.tsx`, `supabase/migrations/20261006160000_*` through `20261006160200_*`, brand/auth membership/social account types, `supabase/functions/_shared/brand/vault_account_brand_post.ts`, and Draft PR127 docs from its exact head `4b0278228e726b65d782e9b231eb6fe84d9173ad` (this doc isn't merged onto main).
+3. Treat existing Stage3B migration files in main as **source present ≠ production applied**. G5 x_autopost lifecycle/T13 and G4 X OAuth verified ownership Issue131 remain unapproved/unintegrated. G4 CURRENT TASK is distinct Threads publish glue: protect `accounts/[id].tsx`, `supabase/candidates/postona_threads_publish/`, `social-mobile-threads-publish` and its source branch. G5 CURRENT TASK local OSS/Keycloak: protect all G5 user/Auth/deletion files, migrations and photo service.
+4. If a file, RPC, migration number, worktree or package boundary is already owned by an active slot, confine implementation to **new G3-specific paths** and report the exact interface needed. NEVER overwrite G4/G5 work. Keep K3 previous report and task history byte-for-byte below this new current TASK.
+
+## Stage 1 — working durable reservation contracts, offline only
+
+- Define a new G3-owned **server reservation source of truth** (e.g. `public.postona_post_reservations` + batch metadata/consent/audit, in **`supabase/candidates/postona_x_reservations/` only**, NOT automatic `supabase/migrations/` production chain). Align actual production `brands.id` /`social_accounts.id` types and ownership from verified source. Never repurpose existing brand-level `scheduled_posts` or AI Lab/Kabumori claim tables.
+- Design and implement SQL candidate + injected RPC/Edge-side interfaces to create, list, update/reschedule and cancel X reservations with an exact verified user/social-account association, workspace/brand, mode `manual_exact | manual_random_batch | manual_interval | ai_flexible`, explicit UTC schedule, timezone, status, batch ID, draft ID, revision/CAS, duplicate/idempotency keys, per-account min gap and daily/monthly capacity, audit metadata, expiry and owner-only read. Maintain text immutability/consent semantics when needed. Manual content must not be regenerated or silently reordered; explicit frozen datetime never automatically moves; random reassignment only with user confirmation; cancelled records never resurrect.
+- **Consent:** manual user-authored post is authorized by per-post explicit confirmation binding content hash + scheduled time + account + owner + revision and recorded server-side; changing material terms invalidates prior consent pending reconfirmation. AI generated auto slots require genuine opt-in `approvalMode='auto_post_preference'` and G5 active service & operator account authority; conversation `これで覚えて` is *settings confirmation only*, not posting approval. Both modes MUST always require the independent G5 `x_autopost` entitlement + active account lifecycle + exact G4 verified X account and publish permission. POSTONA service entitlements are NOT Threads-specific.
+- Fail-closed trust boundary: client brand/social_account_id/approvalMode/request timestamp is only a selector, never proof. Auth via independently verified Supabase JWT user identity and DB membership; no caller-controlled `auth.uid()` impersonation or unaudited service_role grant. Before write/list/update/cancel/claim and again before future publisher IO, validate live effective entitlement/owner/account state. Prefer narrowly typed injected **trusted G5-owned guard** and **G4-owned verified-identity predicate** contracts that return DENY until concrete reviewed production implementation exists; do not invent success from missing tables/functions. If effective DB transaction-scoped guards/lock ordering or grants cannot be proven using current source, DO NOT create callable public RPC or enabled endpoint: implement injectable service and local SQL proof, explicitly HOLD and specify exact G5/G4 interfaces. Test DENY by default, mock allow only in isolated tests.
+- Multi-tenant security: user A vs B, multiple brands owned by same user, X vs Threads same brand, own account switching, stale JWT/ownership withdrawn, consent withdrawal, service ended/deleting, owner role revoked, foreign ID injection, date and quota races. No direct open RLS policy or broad EXECUTE. Define "request only with own account" source contract; if effective grants uncertain, keep migration unapplied + endpoint disabled.
+- Durable create/update/cancel must be *atomic* per batch and concurrency safe. Idempotency scoped by `user_id + social_account_id + client_batch_id + revision`; same retry must not double book and conflicting payload/hash reuse must fail. UTC instants, timezone data (Asia/Tokyo V1); future-only; timestamps cannot escape user allowed date/time band; server validates interval and X text-length policy. User-visible slot collisions return explicit errors, not silent moves/drops. Backward compatibility of existing read-only `scheduled_posts` brand-level rows is required.
+
+## Stage 2 — guarded runtime / eventual delivery boundary, not live posting
+
+- Implement **real source-level** claim/lease/finish/cancel-race state machine for reservation rows in new G3 modules: planned→claimed→published or failed/UNCERTAIN, exclusive lease, CAS, retry safety, expiry, deduplication, and item status read-back. Claim and per-provider-post validation are separate from existing `claim_due_post`; never feed manual or AI reservations into existing `brand_post` live queue. Test two workers, stale leases and cancellation race. If remote post outcome is unknown, **do not blindly retry X posting**. Never actually call X/OpenAI/Meta, and never mark success from a mock/unknown outcome in production code.
+- Distinguish manual plain content (no AI generation) from later AI content generation. Future AI generation can use only explicitly approved brand persona/settings after checking `auto_post_preference`; `generationWindow` is not publish-time window. No AI content calls now. For source-only claim/publish boundary, a `NOT_AVAILABLE`/disabled production adapter is mandatory until exact G5/G4 and publisher pre/post write checks are secure.
+- If a full claim/finish SQL implementation would require sharing an unverified G5/G4 privilege boundary, do NOT make weaker shortcuts; create testable isolated candidates and explain HOLD precisely. Existing X OAuth preclaim Issue #131 still open and cannot be treated resolved.
+
+## Stage 3 — app-side save/read/cancel flow, explicit release flag OFF
+
+- In **G3-owned scheduling files only**, add typed repository / controller / integration tests for `POSTONA_RESERVATION_PERSISTENCE_ENABLED=false` or an equally explicit unshippable/fail-closed compile-time release gate. Candidate flow: manual exact/random/interval preview → explicit user confirmation of each content+time+target X account → staged save request → acknowledged durable server reservation ID/version → actual `予約済み` display only after successful read-back. If any prerequisite missing, remain `プレビュー／未予約・投稿されません`, do not show mock success or queued post. If save disabled, visible and honest; never overwrite committed reservation on reorder/reroll.
+- AI plan save is separate from manual per-post consent. Account switching must use `activeAccount.brandId` not first workspace; preserve fixed R1/R2/R2b/R3 protections. Never merge user-authored local previews with actual server-confirmed rows as if same; keep cancellation acknowledgement and status from server truth. No plaintext insecure storage, token storage, cross-user cached plan leakage or background network retries with unverified state.
+- Maintain existing five bottom tabs/navigation and preserve G4-owned accounts/Threads manual publish UI. Scope any mobile adjustment to `apps/social-mobile/src/features/schedule/` and `apps/social-mobile/src/app/(tabs)/schedule.tsx` and G3 domain/data new paths; do not modify `apps/social-mobile/src/app/accounts/[id].tsx` or shared G4 provider adapters.
+
+## Tests and acceptance
+
+- Local disposable PostgreSQL 17/18 with verified isolation and RLS/ACL negative cases (not just mocked guard): wrong account/foreign brand, role membership revoked, service entitlement ended, lifecycle deleting, concurrent batch duplicate, overlapping timestamps, fixed/flexible windows, cancellation and claim race, lease replay, incomplete provider response, default privilege leakage, PUBLIC/anon/authenticated/service_role role inheritance, rollback after failed writes, no partial batch insert. Avoid actual production Supabase and no default connection to remote.
+- Deno/node app pure/test harness: 10 manual texts between Oct15–25 09–21 JST, fixed exact and interval, seeded reroll edits/cancellation preserved, selected brand isolation, opt-in and per-item consent, durable acknowledged ID vs NOT_AVAILABLE, time change invalidates consent, fail-closed on unknown G5/G4 gates, disabled production post. Do not claim successful DB authorization based on mock-only green tests.
+- Run `apps/social-mobile` full tests, TS/lint, focused G3 SQL/Edge tests, `git diff --check`, secret scan; confirm no production mutation and exact file overlap against latest G4/H5/G5 source. Any unavailable local PG test / absent G5 interface must be marked BLOCKED, not PASS by substitution.
+- Write one compact implementation/activation doc `docs/postona/x-reservation-persistence-offline-v1-20261011.md` with actual source contracts, present blockers, rollout order relative to old PR127 Stage3B, G5 T13 / entitlement / deletion, G4 X provenance Issue131, API/DB owner transport, quota, static feature gate, fail-close proofs, rollback, release matrix and one explicit user-approved X test post plan. **No actual apply or live post in this TASK**.
+- Deliver **code/tests** on new G3-only branch from fresh main; open **Draft PR, unmerged** after review of active changes. Commit/push only G3-owned files; no touching other slots' branches/PRs. Report `task_id`, result `PASS_SOURCE_CANDIDATE_WITH_G5_G4_HOLD` or `BLOCKED`, exact changed_files/tests/commit/branch/PR/worktree, push=actual, merge=0, deploy=0, real X/Meta/OpenAI=0, production SQL/Edge/authorized grants=0, remaining blockers and next recommendation.
+- At completion set ONLY this G3 TASK/index to `review_required / next_owner chatgpt`, append new `## Report`, preserve complete archived prior G3 TASK/Report below unchanged, read back exact PR head, return **K3** to POSTONA G3のちゃ.
+- A focused independent **Codex Sol（高）** H1–H4 review is expected AFTER effective G3+G5+G4 Auth/RLS/RPC/Edge contracts are assembled, **before** any merge of unsafe backend changes or prod/pilot. Do not use H5 for normal review. Low-risk client-only pieces need not cause repetitive reviews.
+- If source alone cannot meet real reservation save due to unavailable G5/G4 production gates, still finish the isolated offline candidate and mark the gating blockers. Do not claim that an offline save makes real user reservations survive app closure.
+
+---
+
+# ARCHIVED PREVIOUS G3 TASK / K3 REPORTS AND MERGE RECEIPTS — VERBATIM
+
 # Claude Task 3 — CURRENT TASK / POSTONA AI自動・手動予約 統合スケジューラV1
 
 - task_id: postona-unified-ai-manual-schedule-planner-v1-20261011
