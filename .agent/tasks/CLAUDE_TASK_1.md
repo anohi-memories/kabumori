@@ -1,3 +1,86 @@
+# G1 CURRENT TASK — ポートフォリオ保有登録変更後の古い評価額・損益保留 — 2026-10-11
+
+- task_id: kabumori-portfolio-holdings-stale-valuation-guard-20261011
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: normal
+- task_type: Kabumori financial presentation integrity / source-only
+- recommended_model: **Sonnet5（高）**
+- start_code: G1
+- finish_code: K1
+- return_to: かぶモリアプリG1のちゃ
+- main_reference: d10b0af161c8748bebed27bc94f1d3d40bd5244f (refresh fresh origin/main before work)
+- suggested_branch: claude/g1-portfolio-holdings-valuation-guard-20261011
+- EAS_TestFlight_AppStore: prohibited
+- production_DB_Auth_RLS_RPC_Edge_API_migrations: prohibited
+- source_merge_manual_deploy: prohibited
+- permissible_result: one new G1 source-only PR, NOT self-merge
+
+## Goal
+
+User said 「すすめて」 to the next narrowly scoped app integrity improvement after G1 stock detail V1 PR #136 was merged (f662cee90b2d18557ebd111fc5236e372ff4d9c1). Ensure CURRENT holdings registered by the user are never shown alongside OLD valuation/P&L from a saved close report computed with different holding position terms. Existing stock detail V1 already prevents this.
+
+Read fresh relevant sources before implementing:
+- src/lib/portfolio-view.ts: buildHoldingRows(tracked,report) matches stored holdings by ticker alone, then shows saved marketValue, dayPl, unrealizedPl and percent; topImpacts(snapshot) also uses historic saved holdings only; assetSummary(snapshot) shows snapshot aggregate totals even when current holdings differ.
+- src/app/(tabs)/explore.tsx passes buildHoldingRows(items,report), topImpacts(snapshot), assetSummary(snapshot), and sparklineValues(reports); loading and failed registered-stock reads set items=[] (not necessarily a VERIFIED empty account).
+- src/components/portfolio/holdings-section.tsx and portfolio-sections.tsx display those values, dates, warnings and botanical asset card.
+- src/lib/stock-detail-view.ts registrationMatchesSnapshot() is the established shared source of truth: require equality of tracking_type, quantity, average_price, position_type (cash/margin) and side (long/short) between current tracked record and report holding. Null vs known does not match. Reuse exactly, do not rewrite it or cause circular runtime imports.
+- src/lib/report-presentation.ts is the correct saved-report contract; no new price or portfolio calculation service is allowed.
+
+## Required product behavior
+
+1. **保有銘柄一覧**: Keep ALL actually saved current holding registrations and their original tap-to-detail, labels, brand, avatar, layout, saved closing share price, price-basis date and movement percentage. If a report row is absent, preserve its existing 未反映 state. If a saved report row exists but the full five-field registration matching fails, set the ROW's stored market_value, day_pl, unrealized_pl and unrealized_pl_percent presentation values to null (show —, NEVER zero or derived/current P&L); explain simply that registered holding information changed and valuation will refresh with the next close report. In accessibility content never speak a stale P&L as current. Do not incorrectly hide genuinely still-valid independently dated share close prices.
+2. **「資産への影響」Top 3**: Use the CURRENT signed-in user's holdings to filter the report snapshot holdings: a ticker/role with a mismatched registration, converted watch, deregistered or absent stock MUST NOT contribute old per-holding daily P/L. Include only uniquely matched current holding with finite saved day_pl; preserve ranking by absolute day_pl and at most 3. The old report drill-down link and date-aware heading remain. No empty fake card.
+3. **資産合計 summary**: The snapshot.totals values can misrepresent current holdings if ANY current holding is unmatched or if ANY saved holding no longer exists in current registrations. When the two holding sets are not uniquely one-to-one and all five fields consistent (including added/removed/converted stocks, duplicate ambiguous ticker, changed qty/average/cash-margin/buy-sell), suppress stale aggregate assetValue, unrealizedPl/percent, dayPl and dayChangePercent (all —). Use calm explicit note 「登録内容が変わったため、評価額・損益は次の大引けレポートで更新されます」 (or equivalent). NEVER silently re-sum some subset as an accurate current total or invent fresh prices. Keep canonical botanical asset background, labels and report date. Historical sparkline is authentic SAVED HISTORY; keep only if clearly presented as historical rather than current holdings, or hide in mismatch state if otherwise contradictory. Preserve unchanged holdings, valid zero holdings, report-missing and all_holdings_valued=false behavior.
+4. **Pending/auth/error data states**: The screen may temporarily have items=[] because the registration query has not completed or has failed, not because the user's holdings are zero. Explicitly separate ready verified empty user account from loading/auth or fetch failure; never interpret an unknown registration set as matching an empty snapshot and display aggregate stale P/L. Avoid wrong transient numbers during parallel report and registrations fetch. Keep existing RLS, auth reader, refresh and tab navigation.
+5. **Consistency**: The same saved report and current registration must show matching P/L eligibility in BOTH list and stock-detail. Do not widen the task to Supabase Auth, G5 account service, data generation or AI. If older stored report lacks position_type/side, follow PR136's conservative null matching behavior, not wildcard.
+
+## Boundaries and files
+
+Expected to update only:
+- src/lib/portfolio-view.ts — pure view helpers (reuse registrationMatchesSnapshot from stock-detail-view), top impact and aggregate guards.
+- src/app/(tabs)/explore.tsx — existing user-scoped loading state and pass current registrations to the guards; NO new auth/DB request.
+- src/components/portfolio/holdings-section.tsx — distinguish report-missing vs registration-changed and accessible notice.
+- src/components/portfolio/portfolio-sections.tsx — show accurate aggregate withheld notice and avoid contradictory sparkline.
+- tests/app/portfolio-view_test.ts, tests/app/portfolio-screen_test.ts — rigorous behavioral and source-UI regression tests; add smallest directly related tests if essential.
+
+READ-ONLY: src/lib/stock-detail-view.ts guard, src/app/stock-detail.tsx, src/lib/report-presentation.ts. NO CHANGES: src/app/(tabs)/_layout.tsx, src/app/_layout.tsx, NativeTabs five labels/order/icons (ホーム / 銘柄 / ニュース / レポート / メニュー), portfolio design/assets, search/registrations/editor/route, RN dependencies, app config, G2/G3/G4/G5/G6/G7/G8/G9/H work, Auth/RLS/DB/RPC/Edge/production.
+
+The user's explicit decision about 2026-10-07 through 10-09 OLD delivery missing closes is FINAL for this task: the NEW approach already generated them, cutover not yet live. Do NOT investigate/fix/backfill/monitor OLD delivery, do not redirect this task to G2, and do not deploy new method.
+
+## Tests / completion
+
+- Write FAIL-BEFORE/PASS-AFTER behavioral tests: all five fields match => unchanged row, impact, aggregate; same ticker/qty/average but flipped side or cash/margin => suppressed stale per-row valuation, filtered impact, aggregate withheld; changed qty/cost; holdings→watch or deregistered; newly added holding absent in snapshot; two holdings with one changed => only matched row can keep its own P/L but aggregate must be withheld; report row duplicate or ticker collision => conservative no ambiguous valuation; null/legacy/nonfinite fields; honest missing report/zero holdings and all_holdings_valued=false; loading/failed user registration query MUST NOT be read as zero holdings; independent saved closing price preserved; old report date still correct.
+- Regression: portfolio/watchlist segmented switch, row->stock detail->back, five bottom native tabs, correct date basis, AI report text and existing report destination, botanical asset card layout; default 402pt and 375pt fixture/simulator only if available without disturbing another slot. Private user's securities and amounts must NEVER appear unredacted in GitHub screenshots, PR or chat. Do not mutate actual user holdings for tests.
+- Run focused tests and deno test --no-check --no-lock --no-config --allow-read tests/app/, src TypeScript check, git diff --check, Expo public config if relevant; report actual commands/results, not imagined. Test all-matching case so app doesn't lose its current P/L by accident.
+- If user-data loading or aggregate correctness cannot be safely solved in this scope, STOP with clearly explained BLOCKED before source PR; do not silently leave contradictory totals.
+- Compare changed_files vs main and all open PRs, ensure no protected code changes. No new paid AI or actual app production writes. Source PR only, no merge or EAS/deploy.
+
+## Start / isolation / report
+
+1. Read PROJECT_RULES.md, AGENTS.md, CLAUDE.md, .agent/ORCHESTRATION.md, .agent/ACTIVE_TASK.md, .agent/CURRENT_STATE.md, THIS current TASK and Report. Only G1 ready/in_progress with exact id can start.
+2. Fresh origin/main, status, existing PR worktree ownership and overlaps check. At allocation, PRs 139/138/137/135/134/130/129/128/127/126/125/124/123/122/121/115/33/11/10/3 changed-path lists showed **no overlap** with the 4 intended portfolio app source files and 2 relevant tests. Recheck immediately before coding/pushing; overlapping new work => STOP.
+3. Use a separate G1-only worktree/checkout based on clean /Users/yuya/Developer/kabumori-fresh fresh main. Do not checkout/reset/rebase other slots, change their uncommitted files, stop their Metro, move their simulator or stage/commit other TASKs.
+4. Deliver ONE G1-only source PR, do not merge. Append accurate current ## Report: task_id/result, changed_files, test counts/commands, commit_hash, push, PR/head, merge=no, deploy=0/EAS=0/user_data_writes=0, safety_checks, remaining_issues, next_recommendation. Set G1 current TASK/ACTIVE_TASK to review_required + next_owner chatgpt. Return K1 to かぶモリアプリG1のちゃ. ChatGPT independently reviews, uses Codex only if actual data/security boundary risk warrants it, and asks user before merge.
+
+推薦モデル：**Sonnet5（高）**
+
+## Report — current task
+- task_id: kabumori-portfolio-holdings-stale-valuation-guard-20261011
+- result: NOT_RUN
+- status: ready
+- changed_files: none
+- PR: none
+- merge: no
+- EAS/deploy: prohibited
+
+
+---
+
+# Prior G1 TASKs and Reports (preserved in full; historical only)
+
 # G1 CURRENT TASK — 銘柄詳細画面 V1：閲覧と編集の分離・既存導線の接続 — 2026-10-11
 
 - task_id: kabumori-stock-detail-v1-readonly-navigation-20261011
