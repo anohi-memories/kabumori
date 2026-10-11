@@ -209,15 +209,15 @@
 ## Claude G9
 - owner: claude
 - slot: claude-9
-- status: ready
+- status: done
 - task_id: api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011
 - start_code: G9
 - finish_code: K9
-- next_owner: claude
+- next_owner: none
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_9.md
 - report: .agent/tasks/CLAUDE_TASK_9.md#report
-- allocation: USER EXPLICIT G9=API最適化B専任。前K9のbranch b6020dbbオフライン評価基盤の実装成果はPASS_OFFLINE_PARTIAL。しかしrights_unconfirmedの第三者本文がlocal runtimeBodiesハッシュ一致でlive送信可能、probe_cli明示legacyでも外部count_tokens送信可能なためRELEASE_HOLD。限定R2で外部送信前の権利ゲートをfail-closed化。PR115の既存fixture/履歴は所有者判断待ち、PR115/G8 PR129/他slotは変更禁止。K9でこのチャットへ。
+- allocation: USER EXPLICIT G9=API最適化B専任。K9完了確認で R2 `65c95589` の権利未確認18件の外部API送信ゲートをPASS_OFFLINEとして受理。今回のTASKはdone、次TASK未割当。**G9は引き続きB専任**、他案件のメモ/引継ぎに転用禁止。PR115/旧cases.json/Git履歴の無許諾本文削除/利用条件の確認は別工程、外部AI実送信/有料比較/merge/deployはHOLD。新規B TASKは安全な別途明示割当がある時だけ置く。
 - recommended_model: Sonnet5（高）
 ## Claude G10
 - owner: claude
