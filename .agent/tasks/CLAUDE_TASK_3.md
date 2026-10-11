@@ -3,8 +3,8 @@
 - task_id: postona-unified-ai-manual-schedule-planner-v1-20261011
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - project: POSTONA / X posting scheduling
 - type: **SOURCE/LOCAL UI + pure planner only; NO live posting or DB write**
@@ -290,6 +290,66 @@ Develop in the EXISTING POSTONA `投稿予定` tab a **unified view/composer for
 ### remaining_issues / next_recommendation
 - 実際の保存と投稿の前に必要なもの（変更なし）: G5 の利用権の確認、G4 の本人証明、計画の表・RPC のソース、G3 + G4 + G5 をまとめた Sol（高）のレビュー、ユーザーの承認による適用。
 - K3 で、この 3 点の修正を受け入れるか判断する。ローカルの UI と計画ロジックだけなので、独立レビューは不要と考える。
+
+## Report — K3 selected-brand binding R2b（PR #138）
+
+- result: **PASS candidate（R2b を修正し、実際の画面の配線を動かすテストで固定した）**
+- モデル: Sonnet 5.5（TASK の推奨どおり）
+- PR #138（下書き、merge していない）: 修正前の先頭 `48f070cc6a8472990dc07760e61ce255e5d21c91` → **新しい先頭 `f6b8f866b449cd432f649c132bbaa2e70a9f2ace`**
+  - 内訳: 修正コミット `fe535f05` と、最新 main `52b5c4cd` の通常 merge。rebase / force-push なし。`48f070cc` は履歴に含まれる。
+  - 先頭は、GitHub 側から読み戻して一致を確認した。MERGEABLE、下書きのまま。
+- worktree: `/Users/yuya/Developer/kabumori-g3-unified-schedule`（PR #138 の作業フォルダ。開始時に先頭が `48f070cc` と一致し、clean だった）
+- 本番: 読み取り 0 / 書き込み 0 / migration 0 / RPC 0 / Edge 0 / OAuth 0 / X・Meta・AI の呼び出し 0 / Cron 0 / merge 0 / 配備 0 / EAS 0 / 投稿 0
+
+### R2b の原因（確認）
+- `schedule.tsx` の `const brandId = snapshot?.workspace?.id` は「所属する最初のブランド」で、選択中のアカウントのブランドとは限らない。
+- この値が、設定の読み取り（`repository.read`）、AI の頻度と同意の表示（`aiPlanningFor`）、プレビュー作成の所有者の 3 か所に使われていた。
+- そのため、ブランド B の X アカウントを選んでも、ブランド A の「週 7 回・自動投稿の同意」が読まれ、B の予定として計画されていた。
+- 前回の `schedule-view.ts` の関数は、画面が正しいブランドを渡す前提でのみ安全だった（TASK の指摘どおり）。
+
+### 修正
+- `schedule-view.ts` に `effectiveBrandId({ status, activeAccount })` を追加:
+  - 選択中のアカウントの `brandId` だけを返す。**最初のワークスペースへの代替はしない。**
+  - ブランドが分からないアカウント、空文字、アカウントなしは `null`。
+  - ワークスペースが `ready` でなければ `null`（見本データ・読み込み中・権限なし・取得失敗のいずれでも、ブランドの設定を読まない）。
+- `schedule.tsx`:
+  - 読み取り・AI の計画・ローカル下書きの所有者のすべてに、同じ「画面で使うブランド」を使う。
+  - 読み込みの通し番号による、遅れて届いた結果の破棄は維持（A → B → A でも有効）。
+  - 本物のアカウントでブランドが分からないときは、プレビューを作れないようにし、理由を表示する。見本データのモードは、これまでどおり作成できる（ブランドの設定は読まない）。
+- 同じブランドの複数アカウントは、ブランド単位の設定を共有する（意図どおり。ブランドごとに 1 回の読み取り）。
+- 変更していないもの: R1（再抽選）と R3（ブランド単位の予約）、`schedule-planner.ts`、認証・G4・G5・H1、migration・Edge・RLS、タブ。
+
+### テスト（実際の `schedule.tsx` の配線を動かすもの）
+- 新規 `tests/schedule-screen-wiring.test.mjs`: 本物の `schedule.tsx` を変換して実行し、偽の React・RN・データで動かす。**どのブランドを読んだか**と、**コンポーザーに渡った AI の入力**を検証する（純粋な関数の引数だけを見るのではない）。
+  1. `snapshot.workspace=A`、認可済みアカウント X_A（A）と X_B（B）、X_B を選択 → B を読み、A は読まない。B の頻度 2・`manual_review` が渡る（A は頻度 7・`auto_post_preference`）。
+  2. A → B → A（B の応答が保留のまま戻る）→ 切り替え中は A の値が出ない。B の遅れた応答は A に適用されない。
+  3. B の読み取りが失敗・権限なし・設定なし → 初期値、同意なし、本当の状態。A の値を引き継がない。
+  4. 選択中のアカウントのブランドが不明 → 何も読まない（最初のワークスペースを使わない）。プレビューの作成は無効。
+  5. 見本データ → 本番のブランドを読まない。
+  6. 同じブランドの 2 アカウント → 設定を共有する。
+  7. 読み込み中・権限なし・取得失敗 → 何も読まない。
+- 修正前（`48f070cc` の画面）では、1・2・3・4 の **4 件が失敗**し、5・6・7 は成功する（現状でも守れていた部分）。修正後は **7/7**。
+- `schedule-view.test.mjs` に `effectiveBrandId` の単体テストを 1 件追加（合計 15 件）。
+- アプリ全体の `tests/*.test.mjs`: **277/277**（前回の 269 に 8 件を追加: 配線 7 + effectiveBrandId 1）。`src/domain/*.test.ts`: **22/22**。
+- `tsc --noEmit` エラーなし、eslint（変更ファイルを含む 7 ファイル）エラー・警告なし、`git diff --check` クリーン、追加行の秘密情報スキャン 0。
+- 最新 main の merge 後にも、277/277・22/22・tsc を再確認した。
+- open な PR と、変更ファイルの重なりはない。
+
+### 画面での確認（見本データのモード、本番には接続していない）
+- ログイン画面を飛ばす一時改変を `_layout.tsx` に入れ、確認後にバックアップから戻して、元のバイト列と一致を確認した（コミットしていない）。
+- 見本データのモードでも「投稿を作成」が使え、AI 自動予約には「まだ読み込んでいません。初期設定（週3回）」と「自動投稿の同意なし」が表示された。ブラウザのエラー 0、Supabase への通信 0。
+- ブランドの切り替えそのものは、本番に接続しないと画面では再現できない。配線のテスト（上記）で確認した。
+
+### safety_checks
+- 保存・予約・投稿・同意の付与・権限の変更は 0。「プレビュー／未予約・投稿されません」の表示は維持。
+- 画面が設定を書き込む処理を呼ばないことを、偽の保存先が書き込みで例外を投げる形でも確認した。
+- AI 相談の「これで覚えて」を同意にしていない。ブランドの設定が読めない・分からないときは、同意なしで表示する。
+- 認証・DataProvider・G4・G5・H1・PR #127・PR #123・Edge・migration・タブには触れていない。
+- Vercel のチェックは FAILURE のまま。以前の先頭では利用上限（レート制限）だった。今回の説明文は取得できなかったので断定しない。アプリのテストとは別。netlify のプレビューは SUCCESS。
+
+### remaining_issues / next_recommendation
+- R1・R2・R2b・R3 の指摘はすべて対応した。本番の保存と投稿の前提（G5 の利用権、G4 の本人証明、計画の表・RPC、Sol（高）のレビュー、承認）は変更なし。
+- K3 で受け入れを判断する。ローカルの UI だけなので、独立レビューは不要と考える。
 
 ---
 

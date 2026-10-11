@@ -129,11 +129,11 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: postona-unified-ai-manual-schedule-planner-v1-20261011
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: POSTONA G3のちゃ（AI相談・X投稿予約担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
 - allocation: K3 accepted fixes R1 reroll content/cancel preservation and R3 unbound brand-level server posts on source. ONE R2b P2 still remains: schedule.tsx uses snapshot.workspace.id (first brand) for AI settings while activeAccount.brandId could be another brand; may show A consent/frequency in B preview. Source-only same Draft PR138 head 48f070cc6a8472990dc07760e61ce255e5d21c91. Fix selected account verified brand for repository.read, aiPlanningFor, owner and test actual screen wiring. No other changes, no G4/H1/G5 work, no prod/DB/Edge/X/merge. Return K3. Prior Report/history preserved.
