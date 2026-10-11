@@ -1,3 +1,53 @@
+# Current H1 — Threads OAuth Edge offline integration candidate — 2026-10-11 JST
+
+- task_id: postona-h1-threads-oauth-edge-offline-implementation-20261011
+- result: **PASS_OFFLINE_CANDIDATE** — legitimate mock-only integration implemented; NOT production connection enabled, independent security-release PASS, real Auth/Meta/Vault proof or remediation of existing X OAuth.
+- status: review_required; next_owner: chatgpt; completion_code: C1.
+- return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**; recommended_model: Sol（高）.
+- startup: fresh main `9c0d91d442f15ab3d45b0c28f8b0877ca7902f7c`; own fresh root `/private/tmp/kabumori-h1-threads-20261011.K9o04P`, separate `source` and `report` worktrees. Old G4 Threads Edge checkout was clean and left untouched. Existing G/H worktrees, branches, pending work and servers preserved. G4 current no-task/idle, G3 done, G5 independently in_progress and H2 accepted done; only canonical TASK headers establish current ownership, older CURRENT_STATE snapshots are historical.
+- protected sources checked OPEN/DRAFT/UNMERGED at preparation: PR124 `c30f246409a77080cbc03aef6c4cb72b5481e125`, PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`, PR126 `65f49f98dab39b974e6e4b450f376a37f99ef1ac`, PR127 `4b0278228e726b65d782e9b231eb6fe84d9173ad`. They were neither edited, pushed nor merged. Existing X Issue131 remains deferred.
+
+## Implementation / changed_files
+
+Source PR delta is exactly four NEW files (no underlying PR124 files):
+
+1. `supabase/candidates/postona_threads_edge/offline_candidate.ts`: injected verified subject/session, WebCrypto state/hash-only begin, strict callback/exact registered redirect, shared mock atomic attempt+code-hash claim, read-only consume binding, inherited pure provider exchange/profile/large-ID validation, dummy-key attestation, mocked complete, fixed public shapes, publishing off, bounded asynchronous operations, no retry/release after unknown outcomes.
+2. `supabase/candidates/postona_threads_edge/offline_candidate_test.ts`: deterministic fake auth/RPC/HTTP/coordinator and refusal/lifecycle/timeout/Vault/duplicate/race/secret-output fixtures. No real IDs, JWTs, credentials, provider/account impersonation or actual services.
+3. `supabase/candidates/postona_threads_edge/offline_isolation_test.ts`: repository-read-only import/entry-point/static-gate checks.
+4. `supabase/candidates/postona_threads_edge/README.md`: port semantics, source authority/consume mismatch, mock-only limits, missing session handoff/distributed coordinator, lifecycle/activation dependencies, unknown completion reconciliation and verification commands.
+
+Separate shared-main bookkeeping delta: this H1 Report, current H1 TASK status/next_owner/completion note, ONLY H1 status/next_owner in ACTIVE_TASK. Entire prior TASK/Report preserved; CURRENT_STATE, G1-G5/H2 and product source on main are not changed by H1.
+
+## Tests actually run
+
+- Deno2.9.6 / TypeScript6.0.3, `deno check --no-config --no-lock supabase/candidates/postona_threads_edge/*.ts`: PASS.
+- `deno lint supabase/candidates/postona_threads_edge/`: PASS; `deno fmt` restricted to the four new files; format check/diff check PASS.
+- New flow suite: **40/40 PASS**, with **no --allow-net/--allow-env/--allow-write**. Atomic shared fake coordinator across two instances permits one exchange/completion; state/code cannot be retried through fresh state or changed mock session after uncertain exchange. Large raw numeric ID kept exact; /me mismatch/oversized ID rejected. Missing/invalid auth, wrong state/session/redirect/expiry, all begin/complete contract refusal codes, inactive/locked/deleting lifecycle, late auth/expiry, malformed provider responses and timeout failures tested.
+- Isolation: **1/1 PASS**, only `--allow-read=./supabase,./apps`; zero deployed/mobile/scheduler imports, no candidate server/env/native-fetch/log entry, static Threads gate false.
+- Existing regression: **61/61 PASS**, same restricted read permission: X user OAuth19, Threads provider14, PR124 RPC/attestation10, provider domain10/parity3, X account-bound posting routing5. These are existing mocks/source checks, NOT real provider or SQL execution; unchanged X retry fixtures do not authorize new retry logic in Threads or remediate X.
+- Total latest distinct suites: **102 passed / 0 failed**. Initial local test-fixture readonly typing and isolation root path mistakes were corrected before publication; no existing code/test modified.
+- Targeted new-directory secret-pattern scan: no real-looking JWT/secret-key/private-key findings; fixtures explicitly offline_dummy/mock/reserved example. This is a bounded pattern scan, not a universal credential audit. Callback output/log guards pass.
+- PR124 base-to-H1 diff exactly the four candidate files; inherited PR124 eight-file delta unchanged. `git diff --check` PASS. No SQL apply/tests necessary for new TS-only candidate; existing SQL authority treated as source, not runtime proof.
+
+## Push / PR / read-back
+
+- source commit_hash: **`e38788d6677082138f0990453c7d2f00549666d0`**; normal push of NEW `codex/h1-threads-edge-offline-20261011` **SUCCEEDED**.
+- Draft stacked **[PR135](https://github.com/anohi-memories/kabumori/pull/135)** created and attached; GitHub read-back OPEN/DRAFT, exact head e38788d6, base `claude/g4-postona-threads-workspace-oauth-20261010` exact c30f2464, only four H1 files. Remote branch read-back matches source bytes.
+- fresh main preparation: `a2cce4ddea892a31ae28aa15a748377fa8f596c9`; H1 canonical TASK/Report and G4 assignment unchanged. Other owners' subsequent main/index changes retained. Shared report-only normal push/read-back and final control commit SHA are recorded in the final user receipt only after actual verification; no force/rebase/owner-overwrite.
+- merge: **NOT_DONE**; deploy/EAS: **NOT_DONE**; real Supabase/Auth/Meta/Threads/X/provider calls, production/staging reads/writes, migration/RPC/GRANT/REVOKE/Vault/secrets changes, posting/refresh/Cron/settings activation: **0**.
+
+## Remaining_issues / safety_checks / next_recommendation
+
+- **Runtime still disabled/unwired.** PR124 consume is read-only and consumes the DB state only at complete. Shared fake coordinator is not a durable production claim. Worker restart/multiple regions, code-hash lifetime, outcome reconciliation and drain need separate reviewed design; no release API or code retry is provided.
+- PR124 RPCs revoke authenticated AND service_role EXECUTE while requiring auth.uid(); no functioning verified-subject owner transport exists here. No grants added or service-key proxy fabricated. Real signed JWT verification/session revocation/browser-to-app callback session handoff remain ports, not implementation/proof.
+- Real G5 T13 transaction fence/lock order, G4 T9/X provisioner delegation, provider-aware T10 cleanup, phase2a-2 production schema, Meta app/tester/host/redirect validation, HMAC/Vault custody, integrated focused security review and separate production approval all remain gates. No entitlement creation/reactivation or publishing enablement.
+- Known fake refusals/Vault failure write no fixture credentials; an intentionally committed-with-lost-response fixture returns COMPLETE_OUTCOME_UNKNOWN despite one fake write. Do not claim every error rolled back or restart automatically on unknown. Begin may already have created pending metadata if later attempt setup fails; nothing auto-cleans it.
+- Supabase skill/current auth documentation informed explicit verified-subject/session ports and separation from admin authority. Changelog markdown was unsupported; HTML fallback consulted. Meta official documentation unavailable to the reader; inherited PR118 endpoint contract retained, Meta-owned collection reference attempted, exact live behavior remains NOT_VERIFIED. No SDK/config/version changes or live calls. References: [Supabase auth](https://supabase.com/docs/guides/functions/auth), [changelog](https://supabase.com/changelog), [Meta Threads collection](https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api).
+- Next: C1 for offline candidate acceptance/dependency planning. Do not automatically merge PR135/124, enable connection UI, configure real keys or deploy. Keep G3/G5/H2 and Issue131 ownership unchanged; one integrated boundary review when prerequisites/real adapters exist, not redundant whole-review loops.
+- **返却先：POSTONA｜マルチSNS化・開発統括（G4）のちゃへ C1。**
+
+---
+
 # Current H1 — approved defensive-assessment report synchronization recovery — 2026-10-10 JST
 
 - task_id: postona-g4-x-oauth-containment-defensive-assessment-20261010

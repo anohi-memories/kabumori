@@ -3,8 +3,8 @@
 - task_id: postona-h1-threads-oauth-edge-offline-implementation-20261011
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - start_code: H1
 - finish_code: C1
 - completion_code: C1
@@ -71,6 +71,18 @@ E. Documentation: report next real dependency gates — main schema 2a-2 prod ap
 - Append a new matching section to `.agent/CODEX_REPORT.md` with: task_id, result, changed_files, tests, commit_hash, push/readback, PR number/exact head/base, merge, deploy, remaining_issues, safety_checks, next_recommendation. Preserve prior H1 reports verbatim.
 - Set H1 TASK and only H1 portion of `.agent/ACTIVE_TASK.md` to `review_required/next_owner:chatgpt` at actual completion, not before; report `C1` to **POSTONA G4 ChatGPT**. Do not mark K4. Every status/commit/push claim needs confirmation.
 - If blocked by safety, scope, ownership, runner constraints or collision: no workaround, no fabricated success; record `BLOCKED` and next safe options, hand off C1.
+
+---
+
+## H1 completion — 2026-10-11 JST
+
+- result: **PASS_OFFLINE_CANDIDATE**, NOT real connection enabled, managed Auth/Meta/Vault proof, security-release PASS or X remediation.
+- source: NEW independent branch `codex/h1-threads-edge-offline-20261011` at protected PR124 exact c30f2464; source commit **`e38788d6677082138f0990453c7d2f00549666d0`**, normal push confirmed.
+- Draft stacked **PR135** OPEN/DRAFT read-back: head e38788d6, base original PR124 branch `claude/g4-postona-threads-workspace-oauth-20261010` exact c30f2464. Only four new candidate TS/test/README files; original PR124 eight files and PR121/126/127 untouched.
+- tests: new flow40 + isolation1 + existing Threads/X/provider/routing61 = **102 PASS**; Deno check/lint/format/diff and bounded secret-pattern scan PASS. Mocks only; new flow runs without net/env/write permissions. Detailed scopes/failures/limits in matching H1 Report.
+- safety: THREADS_CONNECT_PREREQUISITES_MET remains false, deployed/mobile imports0, real Supabase/Auth/Meta/Threads/X calls0, production/migrations/grants/Vault/secrets/post/Cron/deploy/PR merge/EAS0. G4/G3/G5/H2 and all previous TASK/Report history preserved.
+- remaining: durable state/code claim and RPC owner/verified-subject transport, same-session browser handoff, real T13/T9/T10/schema/Meta/Vault custody, integrated review and separate activation consent. Read-only consume is not a production lease; unknown completion needs reconciliation, not retry/rollback claims.
+- shared controls: only H1 TASK/Report and H1 status/next_owner in ACTIVE_TASK. Fresh-main guarded normal sync/read-back actual control SHA/outcome in final receipt after verification. Return **C1** to **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**; recommended_model Sol（高）.
 
 ---
 

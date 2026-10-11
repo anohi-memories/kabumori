@@ -33,12 +33,12 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: postona-h1-threads-oauth-edge-offline-implementation-20261011
 - start_code: H1
 - finish_code: C1
 - completion_code: C1
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
