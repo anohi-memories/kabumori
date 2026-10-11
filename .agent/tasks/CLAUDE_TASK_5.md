@@ -3,8 +3,8 @@
 - task_id: common-account-phase3g-free-auth-provider-test-readiness-20261011
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - start_code: G5
 - finish_code: K5
@@ -124,6 +124,18 @@ User explicitly rejected paying for additional Supabase subscription and was wil
   - migration、deploy、マージ、EAS
   - H1/H2 の割り当て
 - 他スロットの担当範囲と、保護対象の PR は変更していない。
+
+---
+
+# K5 FINAL — Phase3g FREE IDP prerequisites — 2026-10-11 JST
+
+- task_id: common-account-phase3g-free-auth-provider-test-readiness-20261011
+- verdict: **PASS_SOURCE_FEASIBILITY / IDP_PREPAUSE_BLOCKED**. Phase3g document work accepted; no managed live proof or project pause approval.
+- Verified [Draft PR137](https://github.com/anohi-memories/kabumori/pull/137), HEAD `eba0ba5abc56f8188a03d567d319754e4ac8ea4c`, OPEN/DRAFT/UNMERGED; one new docs file. Protected Draft PR121/122/128/130/134 unchanged at reported heads. E1–E12 matrix, Auth0 Free OIDC feasibility, E6 full-scale NO_GO, local Keycloak pilot, user prerequisites and E1 stop/restore instructions delivered.
+- External Supabase docs corroborate Free custom provider quota (3), Free relevant hooks and published rate limits. Auth0 tenant/test identities, managed settings, free slot and restore conditions remain UNVERIFIED. Claude reported diff/check, links and secret scans PASS; ChatGPT did not rerun. Calls to real Supabase/provider 0; photos paused false; paid 0; E1–E12 NOT_RUN; production/merge/deploy none. `managed_auth_delete`, Option D and E11 remain BLOCKED.
+- Next preferred step: optional **local no-photo-downtime OSS pilot** on separate explicit G5 task (recommended Claude Sonnet5（高）), after user authorization for Podman/containers; then user-only Auth0 Free setup; then separately approved E1 disposable managed pilot with full photo restore gate. Do not automatically allocate G5, reopen E11 review or touch other slots.
+- AI Lab diary: 記録不要 — 内部認証検証前提の調査であり、公開向け機能追加ではない。
+- status done / next_owner none.
 
 ---
 
