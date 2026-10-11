@@ -11,9 +11,11 @@ import {
   type GeneratedAnalysis,
   generateSharedAnalysis,
   generationRequestBody,
+  localAnalysisCheck,
   localAnalysisIssues,
   type Requester,
 } from "./analysis_logic.ts";
+import { formatSharedXPost } from "../_shared/market_report_packet.ts";
 import { type Deps, handleRequest } from "./handler.ts";
 
 const directory = new URL("./fixtures/", import.meta.url);
@@ -122,7 +124,10 @@ const ASSERTED_CAUSES = [
   "米国株安の流れを引き継いで東京市場も下落",
   "米株安・半導体株安が東京市場下落の原因です",
   "米国株安の影響で日経平均も下落",
-  // A hedge does not make an unsupported cause acceptable.
+];
+
+// Since 2026-10-07 a reason offered only as a possibility is an analysis: recorded as advisory, delivered.
+const HEDGED_CAUSES = [
   "米株安が影響した可能性があります",
   "半導体株安が響いたとみられます",
 ];
@@ -151,6 +156,25 @@ test("replay 16:35: the same in x_post (lead, points, closing), summary and non-
       const analysis = compliant0929();
       place(analysis, text);
       assert.ok(hasIssue(localAnalysisIssues(analysis, built), CAUSAL_ISSUE), `not detected: ${text}`);
+    }
+  }
+});
+
+test("a hedged cause is advisory (SPECULATIVE_CAUSALITY), never a hard issue, wherever it is placed", () => {
+  const built = input0929();
+  const placements: Array<(a: GeneratedAnalysis, text: string) => void> = [
+    (a, text) => { a.headline_ja = text; },
+    (a, text) => { a.x_post.lead_ja = `${text}📉`; },
+    (a, text) => { a.x_post.closing_ja = text; },
+    (a, text) => { a.market_summary_ja = `${text}。${a.market_summary_ja}`; },
+  ];
+  for (const text of HEDGED_CAUSES) {
+    for (const place of placements) {
+      const analysis = compliant0929();
+      place(analysis, text);
+      const check = localAnalysisCheck(analysis, built);
+      assert.ok(!hasIssue(check.hard, CAUSAL_ISSUE), `hard: ${text}`);
+      assert.ok(check.warnings.some((warning) => warning.startsWith("SPECULATIVE_CAUSALITY:")), `not recorded: ${text}`);
     }
   }
 });
@@ -215,7 +239,7 @@ test("K2 mixed case: a valid causal claim A does not license an unrelated unsupp
     ["headline A+B", (a) => { a.headline_ja = "米半導体株安と円高を受けて東京市場は下落"; }],
     ["x_post lead", (a) => { a.x_post.lead_ja = "原油高が重しとなり、東京市場も下げました📉"; }],
     ["x_post point", (a) => { a.x_post.points_ja[1] = "中東情勢の緊迫につれて売られました"; }],
-    ["summary", (a) => { a.market_summary_ja = `米国の金利上昇の影響で下落した可能性があります。${a.market_summary_ja}`; }],
+    ["summary", (a) => { a.market_summary_ja = `米国の金利上昇の影響で下落しました。${a.market_summary_ja}`; }],
     ["another claim", (a) => { a.claims[2].text_ja = "9月28日の米国株安を受けて、9月29日の東京市場も下落しました。"; }],
   ];
   for (const [label, mutate] of placements) {
@@ -240,11 +264,15 @@ test("K2 mixed case through regeneration: fixing one issue cannot introduce an u
   const outcome = await generateSharedAnalysis(inputWithConfirmedCause(), requester([
     { step: "generate", payload: first },
     { step: "generate", payload: second },
+    { step: "fact", payload: { passed: true, issues: [] } },
   ], calls), NOW);
-  assert.equal(outcome.ok, false);
-  assert.equal(!outcome.ok && outcome.error, "ANALYSIS_LOCAL_CHECK_FAILED");
-  assert.ok(!outcome.ok && hasIssue(outcome.issues, CAUSAL_ISSUE));
-  assert.deepEqual(calls.map((call) => call.step), ["generate", "generate"], "no Fact call is spent on it");
+  // Neither wrong lead is delivered: the lead is removed and the rest of the report goes out (2026-10-07).
+  assert.equal(outcome.ok, true);
+  const post = outcome.ok ? formatSharedXPost(outcome.packet) : "";
+  assert.ok(!post.includes("円高") && !post.includes("TOPIXも"), post);
+  assert.ok(outcome.ok && outcome.packet.fact.removed_units?.some((code) => code.includes("@x_post.lead_ja")));
+  assert.ok(hasIssue(outcome.trace.records[1].localIssues, CAUSAL_ISSUE), "the regeneration's cause is recorded");
+  assert.deepEqual(calls.map((call) => call.step), ["generate", "generate", "fact"], "Fact runs once, on what is delivered");
 
   const fixed = await generateSharedAnalysis(inputWithConfirmedCause(), requester([
     { step: "generate", payload: first },
@@ -315,10 +343,13 @@ test("K2 polarity: valid A plus an inverted B fails, including when B is introdu
   const outcome = await generateSharedAnalysis(built, requester([
     { step: "generate", payload: first },
     { step: "generate", payload: second },
+    { step: "fact", payload: { passed: true, issues: [] } },
   ], calls), NOW);
-  assert.equal(!outcome.ok && outcome.error, "ANALYSIS_LOCAL_CHECK_FAILED");
-  assert.ok(!outcome.ok && hasIssue(outcome.issues, CAUSAL_ISSUE));
-  assert.deepEqual(calls.map((call) => call.step), ["generate", "generate"], "no Fact call is spent on it");
+  assert.equal(outcome.ok, true);
+  const post = outcome.ok ? formatSharedXPost(outcome.packet) : "";
+  assert.ok(!post.includes("半導体株高") && !post.includes("TOPIXも"), post);
+  assert.ok(hasIssue(outcome.trace.records[1].localIssues, CAUSAL_ISSUE));
+  assert.deepEqual(calls.map((call) => call.step), ["generate", "generate", "fact"]);
 });
 
 test("a cause the news states (a causal claim without disclaimer) can still be written as confirmed", () => {
@@ -365,7 +396,7 @@ test("replay: 1306 mislabel then a compliant regeneration → Fact → one packe
   assert.deepEqual(calls.map((call) => call.step), ["generate", "generate", "fact"]);
 });
 
-test("replay 16:35 mechanism: a regeneration that turns a qualified statement into a cause is stopped before Fact", async () => {
+test("replay 16:35 mechanism: a regeneration that turns a qualified statement into a cause never reaches the packet", async () => {
   const first = compliant0929();
   first.headline_ja = "日経平均とTOPIXがそろって下落";
   const second = compliant0929();
@@ -375,16 +406,22 @@ test("replay 16:35 mechanism: a regeneration that turns a qualified statement in
   const outcome = await generateSharedAnalysis(input0929(), requester([
     { step: "generate", payload: first },
     { step: "generate", payload: second },
+    { step: "fact", payload: { passed: true, issues: [] } },
   ], calls), NOW);
-  assert.equal(outcome.ok, false);
-  assert.equal(!outcome.ok && outcome.error, "ANALYSIS_LOCAL_CHECK_FAILED");
-  assert.ok(!outcome.ok && hasIssue(outcome.issues, CAUSAL_ISSUE));
-  assert.deepEqual(calls.map((call) => call.step), ["generate", "generate"], "no Fact call is spent on it");
+  assert.equal(outcome.ok, true);
+  const packet = outcome.ok ? outcome.packet : null;
+  const post = packet ? formatSharedXPost(packet) : "";
+  // 「〜の流れで」 is not a guarded causal link (a gap that predates 2026-10-07): only the guarded wording is asserted.
+  for (const wrong of ["を受けて", "TOPIXがそろって"]) {
+    assert.ok(!post.includes(wrong) && !packet!.headline_ja.includes(wrong), `${wrong}: ${post}`);
+  }
+  assert.ok(hasIssue(outcome.trace.records[1].localIssues, CAUSAL_ISSUE));
+  assert.deepEqual(calls.map((call) => call.step), ["generate", "generate", "fact"], "Fact runs once, on what is delivered");
 });
 
 // --- handler: fail closed, no transport retry, one claim -----------------------------------------
 
-test("handler: content rejection on both generations fails closed with no transport retry and no packet", async () => {
+test("handler: a wrong headline in both generations is replaced and the rest delivered, with no transport retry", async () => {
   const SUPABASE = "https://project-ref.supabase.co";
   const SECRET = "cron-secret-for-tests";
   const bad = compliant0929();
@@ -423,12 +460,18 @@ test("handler: content rejection on both generations fails closed with no transp
     method: "POST", headers: { "Content-Type": "application/json", "X-Cron-Secret": SECRET }, body: JSON.stringify({ mode: "close" }),
   }), deps);
   const body = await response.json();
-  assert.equal(body.error, "ANALYSIS_LOCAL_CHECK_FAILED");
-  assert.deepEqual(openai, ["generate", "generate"]);
+  assert.equal(body.status, "completed");
+  // The mock answers the Fact call with the analysis itself, which is not a pass: delivered as advisory.
+  assert.deepEqual(openai, ["generate", "generate", "fact"]);
   assert.deepEqual(waits, []);
-  assert.deepEqual(rpc.map((call) => call.name), ["claim_market_report_analysis", "fail_market_report_analysis"], "one claim, one fail, no packet");
+  assert.deepEqual(rpc.map((call) => call.name), ["claim_market_report_analysis", "complete_market_report_analysis"], "one claim, one packet");
+  const payload = rpc[1].body.p_payload as { headline_ja: string; fact: { ai_status: string; removed_units: string[] } };
+  assert.ok(!payload.headline_ja.includes("を受けて"), payload.headline_ja);
+  assert.equal(payload.fact.ai_status, "advisory");
+  assert.ok(payload.fact.removed_units.some((code) => code.startsWith("UNIT_REMOVED:UNSUPPORTED_CAUSALITY@headline_ja")));
   const diagnostics = rpc[1].body.p_diagnostics as Record<string, string>;
   assert.equal(diagnostics.transport_retries, "0");
-  assert.ok(diagnostics.issues.includes(CAUSAL_ISSUE), "the reason is kept for the next investigation");
+  assert.equal(diagnostics.fact_status, "advisory");
+  assert.ok(diagnostics.removed_units.includes("UNSUPPORTED_CAUSALITY@headline_ja"), "the reason is kept for the next investigation");
   assert.ok(!JSON.stringify(rpc).includes("openai-test-key"));
 });

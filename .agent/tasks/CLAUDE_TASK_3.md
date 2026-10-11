@@ -8,7 +8,7 @@
 - priority: high
 - project: POSTONA / X posting scheduling
 - type: **SOURCE/LOCAL UI + pure planner only; NO live posting or DB write**
-- recommended_model: **Opus5.5（高）**
+- recommended_model: **Sonnet5（高）**
 - start_code: G3
 - finish_code: K3
 - return_to: POSTONA G3のちゃ（AI相談・X投稿予約担当チャット）
@@ -17,6 +17,35 @@
 - DB_migration_Auth_RLS_RPC_Edge_Cron_Vault_secrets_or_traffic_switch: FORBIDDEN
 - production_deploy_PR_merge_EAS_TestFlight: FORBIDDEN
 - protect: previous G3 Report/PR127, H1 Threads OAuth, G4 X OAuth Issue131, G5 shared account/Auth, G1/G2/H2, existing X/Kabumori/AI Lab posting
+
+## K3 focused correction — R1/R2/R3 P2, exact Draft PR138 source ONLY — 2026-10-11 JST
+
+**Verdict: CHANGES_REQUIRED (3 narrow UI/state correctness defects); original implementation/tests accepted as a candidate, NOT merged or deployable.** This correction block OVERRIDES broad V1 implementation scope below. Correct ONLY the following reproducible issues on existing Draft PR #138 head `b244400ac710bdb6cd576631aacdb0b219bf73fd`. Keep the SAME task_id, only change current G3 status and Report, protect all old Report/TASK history and other slots. No independent Codex review for local-only fixes.
+
+### R1 P2 — 「再抽選」で編集/並び替え/取り消しが巻き戻る
+- Cause: `schedule.tsx` `reroll` replaces all batch drafts with `rerollBatch(batch,...)`, which regenerates every text from the original `batch.request.texts` and recreates cancelled draft IDs. Preview text edits (`editDraftText`) and post-content reorder (`moveDraftText`) live only in current `drafts`; a subsequent `再抽選` discards them. Worse, a partly cancelled random batch resurrects the cancelled post. This violates terminal `cancelled` and the user's expectation that re-roll only changes flexible times.
+- Fix `schedule-planner.ts` + `schedule.tsx` minimally, preserving the current ACTIVE draft identities, edited/reordered texts, original per-account ownership, and CANCELLED terminal records on reroll. Only times of active flexible drafts may change; cancelled drafts must NEVER be reintroduced. The new preview must still obey per-day/min gap/date-window constraints; infeasible placement must fail with NO partial edits. Explicit `shuffleContent` at initial planning must not override subsequent user edits on reroll. Exact/interval times must not be rerolled.
+- Add fail-before/pass-after focused tests: random 3 items → edit text B, move texts, cancel A → reroll → exactly 2 ACTIVE items with same edited/reordered content and no resurrected A; repeated reroll, no lost account ownership; exact/manual_interval unaffected; test shuffleContent true too.
+
+### R2 P2 — stale AI settings after switching workspace/account
+- Cause: `schedule.tsx` local `ai` state is only assigned on `repository.read(brandId)` `ready`. When workspace changes, the previous brand's frequency/approvalMode stays visible until a new read returns, and stays indefinitely if the new read is blocked/unavailable. This can display brand A's consent/frequency for brand B and plan B slots with A's setting.
+- Bind cached AI settings to the **exact authorized current brand/workspace**; clear/reset to explicit unloaded/default/unavailable state immediately on brand/session/status changes and non-ready read, prevent stale async results after change/unmount. If settings unavailable, do not claim a remembered frequency or owner opt-in; label the actual status. Auth and G5 ownership code must remain untouched. Where multiple accounts share the same brand, brand-scoped settings are intentional.
+- Add controlled rapid A→B and B-error/no-row transitions tests; ensure B's preview never inherits A's `auto_post_preference` / frequency.
+
+### R3 P2 — server brand-level posts falsely attributed to selected X account
+- Cause: existing `supabase-repository.ts` returns real `scheduled_posts` with `accountId:'unknown'` because DB has no social_account_id; `schedule.tsx` lines 68–70 maps **all unknown rows to whatever activeAccount is selected**. Switching to a different X or Threads account falsely labels the same brand-level plans as its posts and brings them into that account's conflict solver. Existing read-only display must not claim verified account ownership.
+- Do NOT invent account ownership. Preserve remote rows in a distinct read-only `投稿先アカウント未特定／ブランド単位` display (and origin uncertainty if appropriate), without applying X-specific per-account conflict shifts/consent to them; maintain navigation to `/posts/[id]`, real/mock/loading/unavailable semantics, and prevent cross-brand attribution where multi-brand membership exists. If needed, add the minimal **read-only** brandId metadata from the existing RLS-protected scheduled_posts read, avoiding any new DB/Edge/RLS or write contract. Display unknowns conservatively rather than hiding them, and make active-account switching accurate. In mock preview, explicit known account posts still filter normally.
+- Add focused regressions with two accounts including Threads and multiple owned brands; no relabeling of unbound server posts as X-account rows.
+
+### Non-negotiable safety, scope and gates
+- **SAME exact Draft PR #138 branch**, only the current G3-owned planner/screen/data-view or tiny read-only types/tests files necessary for R1–R3. No unrelated feature expansion or new PR, no change to historical PR127/123, no change to current bottom tab count.
+- Before editing, read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, current TASK/Report/ACTIVE_TASK/CURRENT_STATE, fresh `origin/main`, worktree and open PR changed paths; use only G3 isolated worktree, do not disturb H1/G4/G5/G1/G2 or development servers. Do not force-push/rebase another slot; update same PR safely after HEAD verification.
+- Run focused R1–R3 regressions plus full 250/250 app suite, 22/22 domain suite, TypeScript/lint/diff/secret checks (report updated totals truthfully), test no Supabase write/posting, and read-back new exact PR HEAD. Any inability to reproduce must be documented with evidence; don't invent a fix or introduce a new flow.
+- NO production Supabase reads or writes, new migration/RPC/Edge/OAuth/X/Meta/AI calls, Cron, PR merge, release/deploy/EAS or real posts. Vercel status on old PR head was quota rate-limit, not evidence of app test failure; report separately. Keep `プレビュー／未予約・投稿されません` and no server save.
+- Update ONLY G3 TASK Report/status to `review_required`/`next_owner:chatgpt` when complete, preserving previous G3 Report history verbatim. Return `K3` to this G3 chat.
+- **推薦モデル：Sonnet5（高）**; no separate Codex review for these UI/state-only corrections. One **Sol（高）** independent review later before real DB/RLS/publish writes.
+
+---
 
 ## Mission — user product requirement
 
@@ -64,6 +93,107 @@ Develop in the EXISTING POSTONA `投稿予定` tab a **unified view/composer for
 - Run local unit tests, existing app schedule/data-view/account-isolation regressions, app TypeScript and lint checks, `git diff --check`, secret scan; if possible inspect local mock UI (without EAS or using another slot's Metro). Test that no preview can actually write, publish or schedule in live backend and no scheduling implies AI-consult consent.
 - Create a NEW G3-only branch from fresh main, commit/push and DRAFT PR; do not merge or deploy. Report exact implementation, UI proof/screenshots if available, test counts, changed files, commit/PR, worktree, explicit remaining backend gates, production reads/writes/posts/Edge/DB migrations/Cron changes (= 0), safety checks. Transition ONLY the current G3 TASK to `review_required`/`next_owner:chatgpt`; preserve all historical G3 TASK/Reports verbatim and do not edit other slots.
 - K3 decides acceptance and next owner. No routine Codex review for local UI/domain work; **Sol（高）** once before future G3+G4+G5 actual authorization/write/delivery integration. Recommended **Opus5.5（高）**.
+
+## Report — postona-unified-ai-manual-schedule-planner-v1-20261011
+
+- result: **PASS candidate（ローカルのプレビューのみ）**
+  - 既存の「投稿予定」タブに、AI 自動予約と手動予約（指定日時、まとめてランダム、間隔指定）を合わせた一覧とプレビューの作成を追加した。
+  - 保存・予約・投稿・同意の付与は一切しない。
+  - 実際のクラウド保存と投稿は **BLOCKED**（G5 / G4 のゲート、レビュー済みのソース、Sol 高のレビュー、別の承認が必要）。
+- モデル: Opus 5.5（高）
+- worktree: 新しく作った `/Users/yuya/Developer/kabumori-g3-unified-schedule`（kabumori-fresh の origin/main `b5811293` から）。前回までの G3 の作業フォルダや、他スロットには触れていない。
+- branch: `claude/g3-postona-unified-schedule-v1-20261011` / commit `b244400a` / push 済み
+- PR: https://github.com/anohi-memories/kabumori/pull/138 （**下書き**、merge しない）
+- changed_files:
+  - `apps/social-mobile/src/domain/schedule-planner.ts`（新規）
+  - `apps/social-mobile/src/features/schedule/schedule-composer.tsx`（新規）
+  - `apps/social-mobile/src/app/(tabs)/schedule.tsx`（変更）
+  - `apps/social-mobile/tests/schedule-planner.test.mjs`（新規）
+  - `docs/postona/unified-ai-manual-scheduling-v1-20261011.md`（新規）
+- 本番: 読み取り 0 / 書き込み 0 / 予約 0 / 投稿 0 / Edge 0 / migration 0 / Cron 0 / 有料の AI 0 / merge 0 / EAS 0
+
+### 計画ロジック（`schedule-planner.ts`、import なしの純粋な関数）
+- 型:
+  - 由来（`ai_generated` / `user_authored`）とモード 4 種
+  - 所有（アカウント・ブランド・プラットフォーム）、UTC の時刻と日本時間の表示
+  - まとまりの ID、シード、版数、一方向の状態（editing → previewed、cancelled は最後）
+- すべての下書き: `persistence: 'local_only'`、`publishable: false`、`manualPublishConsent: false`。
+  - AI の枠は `aiAutoPostConsent` で、所有者の `approvalMode` を「表示する」だけ。`auto_post_preference` でも投稿可能にはならない。
+- 検査:
+  - 本文が空でないこと
+  - X の重み付きの文字数（全角 2、URL 23、標準 280）。140 文字の自動投稿の方針を X 全体の上限にはしない
+  - 5 分以上先の日時、正しい日付、時間帯（終わりは 24:00 まで、始まりと時刻には 24:00 を使えない）、日をまたぐ場合
+  - 1 回 50 件まで、期間 90 日まで
+  - 日本時間以外のタイムゾーンは拒否
+  - 最小間隔（既定 60 分）と 1 日の上限（既定 10 件）
+- まとめてランダム:
+  - シードつきで、期間を件数で区切った各区間から 1 枠ずつ選ぶ（偏らないように分散）
+  - 曜日・除外日を守り、本文は入力した順（並べ替えは選んだときだけ、これもシードつき）
+  - 試行回数には上限があり、配置できなければ `NOT_ENOUGH_SLOTS` / `SPACING_INFEASIBLE`
+- 再抽選: 明示の操作のときだけ（版数 +1）。指定日時と間隔指定は再抽選できない。
+- 間隔指定: 日ごと（1〜30 日）・時間ごと（1〜72 時間）。既存の予定と重なったら、近い空き時刻を示してエラーにする（勝手には動かさない）。
+- 競合の解消（明示の操作のときだけ）: 固定 ＞ 手動の柔軟 ＞ AI の順。AI とランダムは、それぞれ決めた時間帯・日付の中だけで動かす。動かせなければエラー。何も捨てない。
+- 一覧: 保存済みの予定（読み取りだけ）とプレビューを、アカウントごとに時刻順で並べる。「すべて／AI／手動」で絞り込み、近すぎる組を検出する。
+
+### 画面
+- 投稿予定タブ:
+  - 「すべて／AI自動投稿／手動予約」の絞り込み
+  - 「投稿を作成」→ フォーム（4 モード、本文の追加・削除・↑↓、日時・期間・時間帯・曜日・本文の順番・間隔、AI は頻度と同意の状態を表示）
+  - プレビューの一覧（編集・↑↓・取り消し・まとめて取り消し・再抽選・競合の解消）
+- 「プレビュー／未予約・投稿されません」のバッジと、「この画面を閉じたりアプリを再起動したりすると消えます（端末にもサーバーにも保存しません）」の表示。「予約確定」のボタンは置いていない。
+- 保存済みの予定: 読み込み中・取得失敗・見本データの扱いはそのまま（取得失敗のときに見本データを出さない）。行から詳細画面（`/posts/[id]`）に移る動作も維持。下の 5 つのタブは変更なし。
+- AI の頻度: AI 相談の保存設定から `read` するだけ（見本データのモードでは初期値の週 3 回）。生成時刻（`generationWindow`）は使わず、投稿の時間帯を別に選ぶ。
+
+### 画面での確認（見本データのモード、本番には接続していない）
+- ログイン画面を飛ばす一時改変を `_layout.tsx` に入れて、Web 版で操作した。確認後にバックアップから戻し、元のバイト列と一致することを確認した（コミットしていない）。
+- スマホの幅（375×812）で確認したこと:
+  - まとめてランダムで 3 件 → 10/16 19:05、10/18 18:50、10/22 20:40
+  - 「再抽選」→ 10/15 20:30、10/19 11:00、10/23 15:25（日時だけが変わり、本文の順番は維持）
+  - AI 自動予約で 3 件、「自動投稿の同意なし」と表示
+  - 「手動予約」に絞ると、手動のプレビュー 3 件 + 見本の手動作成 1 件だけ
+  - ブラウザのエラー 0、Supabase への通信 0
+- Expo が `.gitignore` に足した行は元に戻した。Metro は止めた。
+
+### テスト
+- `tests/schedule-planner.test.mjs`: 16 件（計画ロジック 15 + 画面の静的チェック 1）
+  - 10 件を 10/15〜25 の 9〜21 時に配置、同じシードで同じ結果・明示の再抽選、本文の並べ替えは選んだときだけ
+  - 複数の指定日時、検査（空・長すぎ・過去・存在しない日付・24:00・逆の期間・期間の上限・タイムゾーン）、配置できない時間帯
+  - 曜日と除外日、間隔指定（日・時間・日またぎ・重なりは代わりの時刻を示すエラー）、指定日時どうしの重なり
+  - AI（頻度・投稿の時間帯・同意の扱い）、AI と手動の衝突（固定を守り、AI だけ動く）、誰も動かせない重なりはエラー
+  - 編集・並べ替え（時刻は変わらない）・取り消し、アカウントの分離と絞り込み
+  - 保存・通信・投稿の能力が無いこと、画面が保存の処理を呼ばないこと
+- アプリ全体の `tests/*.test.mjs`: **250/250**。`src/domain/*.test.ts`: **22/22**。
+  - 既存の「行が詳細画面を開く」テストに合わせて、保存済みの予定のカードの中で直接移動する形にした（動作は同じ）。
+- `tsc --noEmit` エラーなし、eslint（変更ファイル 4 つ）エラーなし、`git diff --check` クリーン、秘密情報スキャン 0。
+- 他の open な PR と、変更ファイルの重なりはない。
+
+### 将来の仕様（`docs/postona/unified-ai-manual-scheduling-v1-20261011.md`）
+- 正本はサーバーの新しい計画の表。今の `scheduled_posts` は、ブランド単位でアカウントとの結びつきが無いので、そのままは使わない。
+- 書き込みは本人の JWT で呼ぶ専用の RPC だけ。所有、本人確認済みのアカウント（G4）、G5 の利用権を、作成・取得・投稿直前の 3 か所で確認する。
+- 同意:
+  - AI 自動は、所有者の `auto_post_preference` + 運用側の権限 + 利用権
+  - 手動は、予約ごとの明示の同意（本文のハッシュつき）。手動の投稿は AI の生成は通らないが、投稿の許可は必ず通る
+- そのほか: 文字数とメディアの規則、冪等性、取り消しと投稿の競合、重複、上限、巻き戻し、監査。
+- まだ配線しない型の境界: V1 では、どの呼び出しも `NOT_AVAILABLE` を返す想定。保存のボタンも出さない。
+
+### remaining_issues（バックエンドの残りのゲート）
+- G5: `x_autopost` 利用権の確認関数、削除順、T13 の書き込みガード（PR #127 §5 と同じ）
+- G4: X アカウントの本人証明と、ワークスペースの作り方
+- G3: 計画の表・RPC・Edge のソース（PR #127 の Stage 3B との順番も含む）
+- G3 + G4 + G5 をまとめた Sol（高）のレビュー → ユーザー承認の本番適用と限定パイロット
+- プレビューは画面を閉じると消える（安全に保存できる場所がまだ無いため、端末にも保存していない）
+
+### safety_checks
+- 本番・Supabase・X・Threads・Meta・AI の API には接続していない。保存・予約・投稿・同意の付与・権限の変更は 0。
+- 画面とフォームは、保存・RPC・Edge・端末への保存を呼ばない（静的テストで固定）。AI の頻度の読み取り（本人の RLS の範囲）だけ。
+- 「これで覚えて」を自動投稿の同意として扱っていない。AI の枠は、同意があっても `publishable: false`。
+- 一時改変（ログイン画面を飛ばす）は元に戻し、コミットしていない。
+- PR #127、H1（Threads）、G4（Issue #131）、G5、G1 / G2 / H2、既存の X / かぶモリ / AI ラボの投稿には触れていない。
+
+### next_recommendation
+1. K3 で受け入れ。下書き PR #138 の merge は、別途判断する（ローカルの UI と計画ロジックだけなので、独立レビューは不要と考える）。
+2. 次の G3: G5 / G4 のゲートがそろったら、計画の表・RPC と保存の境界の実装（ソースのみ）。その前に、PR #127 の Stage 3B との統合の順番を決める。
+3. 実際の保存と配信の前に、G3 + G4 + G5 をまとめて Sol（高）のレビューを 1 回。
 
 ---
 

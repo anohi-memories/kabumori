@@ -123,7 +123,7 @@ test("one generation + one Fact check produces the packet; usage and cost are co
   assert.match(await reportContentHash(packet), /^[0-9a-f]{64}$/);
 });
 
-test("a local-check failure regenerates once with the issues; Fact failure twice fails closed", async () => {
+test("a local-check failure regenerates once with the issues; Fact failure twice is delivered as advisory", async () => {
   const bad = goodAnalysis();
   bad.headline_ja = "日経平均は続伸";
   const calls: Array<{ step: string; body: Record<string, unknown> }> = [];
@@ -142,8 +142,13 @@ test("a local-check failure regenerates once with the issues; Fact failure twice
     { step: "generate", payload: goodAnalysis() },
     { step: "fact", payload: { passed: false, issues: ["根拠の無い因果"] } },
   ], []), NOW);
-  assert.equal(failed.ok, false);
-  assert.equal(!failed.ok && failed.error, "ANALYSIS_FACT_FAILED");
+  // Delivery first (2026-10-07): a Fact finding the deterministic guards do not confirm regenerates once, then the
+  // packet is delivered with the findings recorded. Still four calls at most.
+  assert.equal(failed.ok, true);
+  assert.equal(failed.ok && failed.packet.fact.ai_status, "advisory");
+  assert.ok(failed.ok && failed.packet.fact.quality_warnings?.includes("FACT_ADVISORY:1"));
+  assert.equal(failed.trace.factStatus, "advisory");
+  assert.equal(failed.trace.records.find((record) => record.selectedForDelivery)?.fallbackReason, "fact_advisory");
   assert.equal(failed.calls, 4);
 });
 

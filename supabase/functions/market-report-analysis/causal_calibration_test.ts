@@ -243,18 +243,28 @@ test("replay 16:20: the mistyped ref is regenerated once, within the unchanged c
   assert.equal(recovered.ok, true);
   assert.deepEqual(calls, ["generate", "generate", "fact"]);
   assert.deepEqual([recovered.trace.hardRejections, recovered.trace.deliveredGeneration], [["local"], 2]);
-  // A ref that stays wrong fails closed: no fuzzy matching, no extra generation.
+  // A ref that stays wrong is never repaired by fuzzy matching and never costs a third generation: the claim that
+  // carries it is removed and the rest is delivered (2026-10-07, delivery first).
   const twice: string[] = [];
-  const failed = await generateSharedAnalysis(input, requester([
+  const degraded = await generateSharedAnalysis(input, requester([
     { step: "generate", payload: mistyped }, { step: "generate", payload: mistyped },
+    { step: "fact", payload: { passed: true, issues: [] } },
   ], twice), NOW);
-  assert.deepEqual([failed.ok, !failed.ok && failed.error, twice], [false, "ANALYSIS_LOCAL_CHECK_FAILED", ["generate", "generate"]]);
-  // Market causality without evidence also still fails closed.
+  assert.deepEqual(twice, ["generate", "generate", "fact"]);
+  assert.ok(degraded.ok);
+  assert.ok(degraded.ok && !degraded.packet.claims.some((claim) => claim.evidence_refs.includes("news:47b69d8a-4a57-40c1-b9c1-efddb404b0b1")));
+  assert.ok(degraded.ok && degraded.packet.fact.removed_units?.includes(`UNIT_REMOVED:UNKNOWN_REF@claims[${mistyped.claims[3].claim_id}]`));
+  // Market causality without evidence never reaches the packet: the sentence is removed, the rest delivered.
   const market = withNews("AI向け半導体需要を背景に東京市場も上昇しました");
   const blocked = await generateSharedAnalysis(input, requester([
     { step: "generate", payload: market }, { step: "generate", payload: market },
+    { step: "fact", payload: { passed: true, issues: [] } },
   ]), NOW);
-  assert.deepEqual([blocked.ok, !blocked.ok && has(blocked.issues, CAUSAL)], [false, true]);
+  assert.ok(has(blocked.trace.records[0].localIssues, CAUSAL));
+  assert.ok(blocked.ok);
+  const delivered = blocked.ok ? `${formatSharedXPost(blocked.packet)}\n${blocked.packet.app_story?.news_ja}` : "";
+  assert.ok(!delivered.includes("背景に東京市場も上昇"), delivered);
+  assert.ok(delivered.includes("トランプ大統領がAI企業と安全対策の自主協定"), "the safe sentence of the same paragraph stays");
 });
 
 test("product check: the 10/1 close renders a readable X digest and app story with the news sentence in both", () => {
@@ -277,8 +287,9 @@ test("the prompt lets a news item's own cause be restated and keeps it apart fro
   assert.ok(instructions.includes("そのニュース本文に書かれている原因と結果を、本文の言い方に沿ってそのまま書いてかまいません"));
   assert.ok(instructions.includes("本文に因果の表現が無いニュースには「〜を受けて」「〜を背景に」を足しません"));
   assert.ok(instructions.includes("ニュースの中の原因を、東京市場・米国市場・指数の値動きの理由にはしません"));
-  // The market-level rule is unchanged.
-  assert.ok(instructions.includes("値動きの理由として書けるのは、入力のニュースが理由として明記しているもの（causal の claim）だけです"));
+  // The market-level rule is kept (Fact V2, 2026-10-11, reworded): a past move's reason is stated as fact only when a
+  // news item states it; otherwise it is written as an interpretation, never asserted.
+  assert.ok(instructions.includes("すでに起きた値動きの理由は、入力のニュースが理由として明記している（causal の claim がある）場合だけ事実として書きます"));
 });
 
 test("a news item that states its cause in other words is still a supported restatement", () => {

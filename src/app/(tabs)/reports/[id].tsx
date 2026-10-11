@@ -22,6 +22,7 @@ import {
   formatYen,
   positionLabel,
   relativeText,
+  reportFootnotes,
   reportTypeLabel,
   toneLabel,
   type Direction,
@@ -281,10 +282,7 @@ export default function ReportDetailScreen() {
       )}
 
       <View style={styles.disclaimer}>
-        {gaps.map((note) => <Text key={note} style={styles.footnote}>{note}</Text>)}
-        <Text style={styles.footnote}>
-          数値は株価データからアプリが計算しています。文章は、その数値と内容確認済みのニュースだけをもとにAIが作成し、根拠データと照合しています。売買をすすめるものではありません。
-        </Text>
+        {reportFootnotes(gaps).map((note) => <Text key={note} style={styles.footnote}>{note}</Text>)}
       </View>
     </ScrollView>
   );

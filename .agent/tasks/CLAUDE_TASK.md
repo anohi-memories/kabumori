@@ -1,3 +1,140 @@
+# G2 CURRENT TASK — Fact V2 PR132: C2 3件の客観事実ガードのみ限定是正
+
+- task_id: kabumori-fact-v2-pr132-three-objective-guards-correction-20261011
+- owner: claude
+- slot: claude-2
+- status: done
+- next_owner: none
+- k2_verdict: PASS_SOURCE_CANDIDATE / RELEASE_HOLD (2026-10-11; source reviewed, test results G2-reported)
+- corrected_head: 68d45dde1be34715267b5066fa3b3686d756b79e
+- start_code: G2
+- finish_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Opus5.5（高）**
+- classification: C2 CHANGES_REQUIRED / three P2 objective guard exceptions / one bounded corrective
+- source_review: .agent/CODEX_REPORT_2.md 最新先頭、`kabumori-fact-v2-pr132-final-integrated-review-20261011`
+- target_draft_PR: https://github.com/anohi-memories/kabumori/pull/132
+- exact_head_at_C2: bd424616a135e7bf71592c2ac41acb3e03f8568d
+- stacked_base_protected_PR110_head: 319a442edcd61c07274e3409d8864234f9d77cd4
+- no_product_merges_no_deploy_no_paid_AI_no_X_post_no_live_DB: true
+
+## Product owner decision — never reverse
+
+**「事実は厳格に、Opusが既存の複数データから推論する経済分析・見通しは自由に、配信は安定優先」**。H2 explicitly accepted this Fact V2 policy and normal inference survival. DO NOT narrow plausible economic reasoning, restore verbatim-only source causation, or keep iterating suffix regexes/whole-article deletions. Do NOT rewrite Fact V2 prompts as source-summary-only. This TASK concerns **only three objectively false claim escapes created by Fact V2 guard exceptions**, not financial-opinion disagreements. Maintain all genuine supported analysis from PR132.
+
+## Verified C2 findings — all P2 / reproduce before editing
+
+The exact PR132 source revision was independently tested on H2: focused 55/55 PASS; *independent adverse probes* 10/14 PASS and **four actual violations of objective guards**, all four correctly removed on PR110 baseline. All four appear in BOTH simulated X and app packets if the mocked Fact response says passed; no real provider or production incident claimed.
+
+1. **R1 same-day denial scope:** `analysis_logic.ts` new `sameDayClaims` treats presence of any `同じ日ではない` in a sentence as exemption for a different, affirmative `同じ日に` proposition in same sentence. Exact bad text **「原油と東京市場は同じ日ではない一方、米国市場と東京市場は同じ日に取引を終えました。」** (US session10/6, JP10/7) must be REJECTED/removed; preserve genuine pure denial **「米国市場と東京市場は同じ日ではないため、日付を分けて確認します。」** as ALLOW.
+2. **R2 TOPIX adoption/context exception:** `TOPIX_INDEX_CONTEXT` ignores an asserted incorrect numerical/price claim under overly broad `算出` or `ウエート` context. Both **「TOPIX算出値は437.0円でした。」** and **「TOPIXのウエートは437.0円でした。」** must be REJECTED as 1306 ETF/index confusion. Preserve real composition announcement **「個別では、ジーエヌアイグループのTOPIXへの新規採用が発表されています。」** and honest discussion of index constituents; do NOT conflate 1306 ETF price 437.0円 with TOPIX index. Old obvious error `TOPIXは437.0円` must still fail.
+3. **R3 trailing date ownership:** `hard_fact_guards.ts` strips a date before a second market even when it grammatically dates the FIRST market. Exact bad **「米国市場が上昇した日付は10月7日、東京市場は下落しました。」** must be REJECTED (US10/6, JP10/7). Preserve valid multi-market synthesis **「10月6日の米国株高と10月7日の東京市場の下落を並べると、買いが続きにくい地合いと考えられます。」**. Ensure date ownership follows actual subject, not only presence of next market token.
+
+## Narrow execution & validation
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this current G2 TASK and past Report, and current top H2 Report. Fresh-fetch `origin/main`, PR132 exact head, PR110 exact base, other open PR overlap; STOP on changed head/conflict/unknown owner. Only reuse **own clean physically independent G2 Fact-V2 checkout** or create new G2-isolated checkout from fresh `/Users/yuya/Developer/kabumori-fresh`, protect other G/H worktrees, branches, uncommitted files and dev servers.
+2. Minimal corrections ONLY in G2-owned `supabase/functions/market-report-analysis/analysis_logic.ts`, `hard_fact_guards.ts`, and their local tests. Do not touch old PR110 branch. No new broad architecture, G5 Auth, G3/G4 Threads/X, provider, DB migration/RPC, UI, secrets, workflow, cron, production flags.
+3. **Before/after tests for all four unsafe strings** should fail on prior exact PR132 and pass after correction through (a) localAnalysisCheck Hard, (b) sanitizer unit removals, (c) mocked generate+Fact delivered formatted X AND app absent, with honest Fact status. Preserve all three intended ALLOW controls, six economic synthesis texts in `fact_v2_test.ts` (including currency, fuel, interest rates, multi-fact) with X/app survival, and previous H2 20 unsafe no-comma cases, five legitimate noun subjects `勢いが`, emoji binding, objective wrong prices/dates, disclaimer once. No exploitability exaggeration.
+4. Execute focused current Fact V2 + H2 corrective + causal calibration and new four regression probes, then relevant `market-report-analysis`/shared X/app/packet/personalized suites if changed behavior warrants; Deno check/lint and git diff --check. Keep `MAX_GENERATIONS=2`, `MAX_MODEL_CALLS=4`, bounded retries and original Fact semantics; no paid/live calls. Report true actual tests separate from H2 55 and prior G2 1356 self-reports. Do NOT repeatedly open new semantic regex problems without concrete behavior.
+5. Commit and push ONE bounded correction to **same G2-owned PR132 branch** only after refreshed exact head/ownership/collision preflight; no force push and NEVER edit PR110 source branch. Keep PR132 Draft; do not merge PR110/PR132, deploy, change live consumer flags, create real X posts, alter production Supabase, spend API credits or backfill old 10/7-9.
+6. Fill `## Report — current correction` with exact new head, diff, reproductions & ALLOW controls, test tally and test commands, actual commit/push/merge/deploy/prod truth, residual risk, follow-up recommendation. Preserve this entire historical TASK and every past Report byte-for-byte below. Update ONLY current G2 TASK status `review_required/next_owner chatgpt`, G2 portion of ACTIVE_TASK and relevant CURRENT_STATE note via guarded fresh SHA; return **K2 in かぶモリアプリG2のちゃ**.
+7. **No repetitive new independent broad review:** At K2 ChatGPT verifies four objective unsafe cases + three intended ALLOW controls and source constraints. If all proven and no material new objective safety boundary introduced, move to **one combined PR110→PR132 source merge gate** (and separate production consumer cutover). Independent Codex review only if this correction exposes genuinely material new risk; do not spend cycles on speculative edge-word churn.
+
+## Report — current correction
+
+### 位置づけ
+
+- Draft PR #132 を更新した（同じブランチ `g2-fact-v2-20261011`、Draft のまま、force-push なし）。
+- 各コミットの位置:
+  - 新しい head: `68d45dde1be34715267b5066fa3b3686d756b79e`（bd424616 の上に1コミット）
+  - base: PR #110 の head `319a442edcd61c07274e3409d8864234f9d77cd4`（変更していない）
+  - main: 報告時点で `d1046319af21eb956640bb7a73ca721fa973b3b8`
+- 作業場所: G2 専用の `/Users/yuya/Developer/kabumori-g2-fact-v2`（clean で、PR #132 の head と一致していたものを使用）。
+- 着手前と push 直前に確認したこと: PR #132 の head が bd424616、PR #110 の head が 319a442e のまま。他の open PR と `market-report-analysis` の重なりはなし。
+- 変更したファイル:
+  - `market-report-analysis/analysis_logic.ts`（R1・R2）
+  - `market-report-analysis/hard_fact_guards.ts`（R3）
+  - `market-report-analysis/fact_v2_test.ts`（テストを4件追加）
+- 範囲外のもの（他スロット、DB、Provider、UI、秘密情報、Cron、本番の設定）には触れていない。
+
+### 修正内容（Fact V2 の方針は変えず、例外だけを絞った）
+
+- **R1「同じ日」:** `sameDayClaims` は、文中の「同じ日／同日」を1つずつ、その位置から読点・句点までの範囲で否定されているかを見るようにした。どれか1つでも否定されていなければ、誤りとする。
+- **R2 TOPIX:**
+  - `TOPIX_INDEX_CONTEXT`（指数そのものの話として例外にする語）から、値と紛れる「算出」「ウエート」「ウェート」「浮動株」を外した。残りは、採用・組み入れ・除外・構成銘柄・構成・入れ替え・定期入替。
+  - 例外にするのは、同じ文の後ろに数値が無いときだけにした。
+- **R3 日付:** 主語の区間の最後にある日付を「次の主語の日付」として扱うのは、次の形のときだけにした。それ以外の日付は、その主語自身の日付として扱う。
+  - 並べる語（と・や・・・及び・および）の直後にある
+  - 「の」で次の主語に掛かっている（「…と10月7日の東京市場」）
+
+### 修正前（bd424616）と修正後（68d45dde）
+
+| 文 | 修正前 | 修正後 |
+|---|---|---|
+| R1「原油と東京市場は同じ日ではない一方、米国市場と東京市場は同じ日に取引を終えました。」 | 通る | 止める（「同じ日」と表現） |
+| R2「TOPIX算出値は437.0円でした。」 | 通る | 止める（1306 を TOPIX と表記） |
+| R2「TOPIXのウエートは437.0円でした。」 | 通る | 止める（同上） |
+| R3「米国市場が上昇した日付は10月7日、東京市場は下落しました。」 | 通る | 止める（日付と指標の不一致：米国は10月6日） |
+| 「TOPIXは437.0円でした。」（以前からの誤り） | 止める | 止める |
+| 通すべき「米国市場と東京市場は同じ日ではないため、日付を分けて確認します。」 | 通す | 通す |
+| 通すべき「個別では、ジーエヌアイグループのTOPIXへの新規採用が発表されています。」 | 通す | 通す |
+| 通すべき「10月6日の米国株高と10月7日の東京市場の下落を並べると、買いが続きにくい地合いと考えられます。」 | 通す | 通す |
+
+- 4文は、次の3段階すべてで止まることを確認した:
+  1. ローカルの判定
+  2. 単位の除外（X の `x_post.context_ja` とアプリの `app_story.cross_asset_ja` の両方）
+  3. 擬似的な生成で Fact が passed と返した場合の、X とアプリへの配信。呼び出しは4回以内。`ai_status` は Fact が実際に返した passed のままで、外した単位は `removed_units` に残る。
+- この3つのテストは、修正前のソースでは失敗した。
+- 通すべき3文のテストは修正前後どちらでも通り、作り直しなし（生成1回＋Fact1回）で X とアプリに届く。
+
+### テスト（今回実際に実行したもの。H2 の55件や、前回の G2 の自己報告とは別）
+
+実行コマンド: `deno test -A --no-config --node-modules-dir=none <対象>`（`_shared` と `tests/app` は `--no-check` を付けた）
+
+| 対象 | 件数 | 結果 |
+|---|---|---|
+| `supabase/functions/market-report-analysis/`（全体） | 283 | 成功 |
+| うち `fact_v2_test.ts` | 15 | 成功 |
+| うち `h2_corrective_test.ts` | 26 | 成功 |
+| うち `causal_calibration_test.ts` | 18 | 成功 |
+| うち `delivery_first_test.ts` | 19 | 成功 |
+| うち `transport_retry_test.ts` | 14 | 成功 |
+| `x-test-post/shared_market_report_consumer_test.ts` | 10 | 成功 |
+| `personalized-reports/` | 129 | 成功 |
+| `market-report-data-packet/` | 42 | 成功 |
+| `_shared/` | 466 | 成功 |
+| `tests/app/` | 430 | 成功 |
+
+- 分析の6文（為替・燃料・金利・複数の事実の組み合わせを含む）は X とアプリに届く。
+- 引き続き成功しているもの:
+  - H2 の読点の無い20通り、名詞＋主語の「が」5例、絵文字の日付の結び付き
+  - 値・日付の誤りの検出、注意書き1回
+- deno check / lint（変更したファイル）はどちらも0件。`git diff --check` は問題なし。
+- ネットワーク・本番・有料 API の呼び出しはなし。
+
+### commit・push・マージ・デプロイ・本番
+
+- commit `68d45dde` を PR #132 のブランチに push した。PR #132 は Draft のまま。PR #110 のブランチは変えていない。
+- マージ（#110・#132）・デプロイ・本番の Supabase の変更・配信スイッチの変更・X 送信・API クレジットの使用・10/7〜9 の作り直し：**すべて0**。
+
+### 残るリスク
+
+1. **R2:** 数値を含む、指数の構成銘柄の正しい話（例:「TOPIX構成銘柄の2,000社」）は、例外にせず1306 の取り違えとして止める。外しすぎる側の誤りで、事実の誤りが配信されることはない。
+2. **R3:** 「…と10月7日の東京市場」以外の形で次の主語の日付を書いた文（例:「米国株高、そして10月7日の東京市場の下落」）は、日付を前の主語のものとして読み、止める。外しすぎる側の誤り。
+3. いずれも語の並びによる判定で、文法の解析ではない点は、これまでと同じ。
+
+### 次の推奨
+
+- K2 で次の2点を確認する: 4文が止まり、3文が通ること／変更が `analysis_logic.ts`・`hard_fact_guards.ts`・テストに限られていること。
+- 新しい客観的な安全の境界は増やしていない（例外を狭めただけ）。そのため、追加の独立レビューは不要と考える。
+- 次は、PR #110 → PR #132 をまとめたソースのマージ判断へ進むことを推奨する。本番の切り替えは別に判断する。
+
+Recommended next owner: **chatgpt（K2）**
+
+---
+
+## Previous G2 TASK/Report history — preserved verbatim below
+
 # G2 CURRENT TASK — かぶモリ Fact V2：事実を守り、Opus独自分析を通す
 
 - task_id: kabumori-market-report-fact-interpretation-v2-20261011

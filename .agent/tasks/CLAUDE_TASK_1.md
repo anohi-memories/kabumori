@@ -3,10 +3,10 @@
 - task_id: kabumori-stock-detail-v1-readonly-navigation-20261011
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: done
+- next_owner: none
 - priority: normal
-- recommended_model: **Sonnet5（高）**
+- recommended_model: **Sonnet5（中）**
 - task_type: Kabumori mobile UI feature / user-scoped READ-ONLY presentation + existing editor navigation
 - start_code: G1
 - finish_code: K1
@@ -72,12 +72,112 @@ CURRENT implementation evidence:
 
 推薦モデル：**Sonnet5（高）**
 
+## K1 FINAL — PR136 source PASS, implementation DONE / user merge approval pending — 2026-10-11 JST
+
+- **Final K1 source verdict: PASS_SOURCE_IMPLEMENTATION / PR #136 OPEN, NOT MERGED**. G1 TASK `kabumori-stock-detail-v1-readonly-navigation-20261011` completed. Accepted exact approved PR136 head `ca2477e0fdc4ba85f620e48aa7d9221e691ba485`, one new commit above initial head `e2dfdab5c7219aa2ff31c50c51f0125f816c16a7`; correction changed EXACTLY two files: `src/lib/stock-detail-view.ts`, `tests/app/stock-detail-view_test.ts`. Full PR 16 files (source/tests + 4 fixture-only screenshots). No self-merge or further implementation requested.
+- Independent K1 examined GitHub compare `e2dfdab5..ca2477e0`, both versions of `registrationMatchesSnapshot`, added test cases and preserved original PR screenshot/source prior K1. The comparison now requires equality on saved vs registered `tracking_type`, `quantity`, `average_price`, `position_type` and `side` before showing user holding `market_value`/`day_pl`/`unrealized_pl`. If mismatched, return existing `VALUATION_NOTE.changed` and no saved valuation, while independent dated saved close price continues. Cases for long↔short, cash↔margin, role mismatch, null/legacy fields, identical row, revert and date-safe close present in new tests.
+- Claude G1 report says intentional fail-before `20 passed / 5 failed`, after-fix focus `25 passed / 0 failed`, app suite `494 passed / 0 failed`, source TypeScript 0 errors, `git diff --check` clean. **ChatGPT independently inspected source and tests but did not execute commands on the Mac**. Earlier G1 fixture 375pt screenshots and 402pt user-authenticated view were accepted in the prior K1; pure helper correction did not rerun Simulator, physical iPhone not tested.
+- GitHub PR head now exact `ca2477e0`, PR OPEN/unmerged; **GitHub PR head status SUCCESS including Vercel (previous rate-limit failure cleared)**. Main moved since PR base but fresh compare found **zero overlap across all 16 PR paths** (main only independent docs/AI-provider/agent/test paths). REST mergeable remains `null/unknown`, so do not assert explicit merge readiness. Must refresh exact PR head/main/checks/mergeability at any future merge; do not merge until user explicitly requests.
+- Safety: no changes to native `src/app/(tabs)/_layout.tsx` or menu 5 icons/labels, `AuthGate`, Supabase schema/Auth/RLS/Edge/production or G2/G5 scopes; read-only user-scoped detail query and editor behind explicit save action. No EAS or manual deploy, no real user-stock registration edits, no AI/paid API. New code source is only a PR candidate, not a native binary released to iPhone. Vercel PR check success is not TestFlight/App Store release.
+- **Separate pre-existing UI consistency backlog, NOT part of PR136 or a new G1 TASK:** `src/lib/portfolio-view.ts` `buildHoldingRows` and `topImpacts` may still show stale saved report holding valuation after changing registration terms, since only the new detail's view-helper performs the expanded match. Once a user approves separately, consider updating portfolio list/impact financial-truth semantics with a specifically scoped source/test task (suggested Sonnet5（中）). Do not use G2/new old-report cutover for this. Not a PR136 merge blocker, but should be tracked before app release.
+- User 2026-10-11 explicitly confirmed old close-report gap Oct7–9 will be resolved by separately planned new approach; **no legacy close investigation, patch, monitoring or backfill**.
+- Current G1 TASK marked **done / next_owner:none** because development is finished; open PR136 + pending explicit user merge direction are **not a reason to occupy G1 as a memo slot**. Keep PR branch untouched/protected from other work; new G1 allocation requires fresh overlap and independent worktree checks. No H slot allocated: low-risk view-only helper correction, no DB/Auth security boundary changed.
+- AI Lab diary: candidate after successful merge — 銘柄を開いて詳細情報を確認し、編集は別アクションに分離。保有条件が更新された後は古い評価損益を保留する。
+
+## K1 focused correction — valuation matching must include position type and long/short (2026-10-11)
+
+- **K1 interim verdict: CHANGES_REQUIRED (one P2 financial-truthfulness bug; otherwise source/UI positive)**; no merge authorization yet. Exact reviewed PR #136 head `e2dfdab5c7219aa2ff31c50c51f0125f816c16a7`, OPEN, source-only.
+- ChatGPT independently read `src/lib/stock-detail-view.ts` and `src/app/stock-detail.tsx`, source diff of root/portfolio/watchlist/search navigation, all 4 fixture-only 375pt images, GitHub changed-file list. NativeTabs layout/icons and Supabase/Edge/migrations untouched; 488/488 app tests, TS and Simulator checks were reported by Claude and **not rerun** by ChatGPT.
+- **Confirmed defect:** `registrationMatchesSnapshot(tracked, saved)` compares ONLY `quantity` and `average_price` (both normalized through `finite`). If the user's registration changes `position_type` (現物↔信用) and/or `side` (買い↔売り), while keeping quantity + average price identical, the saved report row's old `market_value`/`unrealized_pl`/`day_pl` continues to display alongside the **new** position labels. This misrepresents the freshness/meaning of holdings' financial numbers. The saved `ReportStock` and actual `TrackedStock` already include both `position_type` and `side`; no schema/API change required. Compare `tracking_type` as an additional same-role integrity check for saved holding rows. This is not a theoretical unsupported field.
+- **Exact minimal correction:** In `src/lib/stock-detail-view.ts`, extend `registrationMatchesSnapshot` to require equality of all valuation-relevant registration fields: `quantity`, `average_price`, `position_type`, `side`, `tracking_type` against the saved snapshot; use existing null-safe semantics and no conversion of missing or differing values to a fictitious match. If the saved row lacks the required correspondence, show existing `VALUATION_NOTE.changed`/hold valuation until next saved report; the independent *saved closing share price* may still display accurately with the honest as-of date.
+- **Tests required:** Add behavioral negative test cases to existing `tests/app/stock-detail-view_test.ts` for (i) same qty/avg but current long vs saved short, (ii) cash vs margin, (iii) inconsistent stored `tracking_type`; each MUST withhold valuation, while same quantity/avg/type/side/position must keep exact saved valuation and previous behavior. Include null/legacy saved values if material. Test should FAIL against current PR head before change and PASS afterward; record actual fail-before/pass-after results (no invented execution). Confirm no stale report P/L is paired with edited registration. Re-run relevant Deno app tests, source TS check, `git diff --check`. The user-owned 18 watch records and any real holding MUST NOT be edited to test this.
+- **Strict scope:** ONLY `src/lib/stock-detail-view.ts` + `tests/app/stock-detail-view_test.ts` and current G1 TASK/Report, plus optional fixture screenshots if needed (normally not needed). No refactors of stock page, nav, generic formatters, editor, auth, DB, schema, RPC/Edge, market reports, old 10/7–10/9 close gap, or bottom NativeTabs. Keep old/new report production approach exactly as user directed: old close gaps ignored until new method cutover, separate G2 work.
+- Continue in **EXISTING PR #136 branch** `claude/g1-stock-detail-v1-20261011`. Before changes verify fresh main / origin-main and exact PR head `e2dfdab5c7219aa2ff31c50c51f0125f816c16a7`; dedicated G1 independent worktree, no inter-slot overlap. No force push; do not spawn a replacement PR or rewrite branch history. Any unexpected head/ownership drift ⇒ STOP and report. No self-merge, paid API, deployment/EAS, native package updates, or real user writes.
+- On completion update original Report with a dated **K1 targeted corrective appendix**, exact changed files/PR head/test commands/commit/deploy=0, set current header `status: review_required`/`next_owner: chatgpt` and sync G1 index (other slots untouched). Return `K1` to **かぶモリアプリG1のちゃ**. Source K1 can then PASS without another Codex review if a small self-contained change passes focused tests. PR #136 remains OPEN and not merged pending next K1+user's merge approval.
+- GitHub Vercel check at original head is **failure due to rate-limit**, NOT a demonstrated code regression; Netlify deploy-preview status is canceled (do not falsely call it production deployed). No production deploy authorized.
+
+推薦モデル：**Sonnet5（中）**
+
 ## Report — this current task
 - task_id: kabumori-stock-detail-v1-readonly-navigation-20261011
-- result: NOT_RUN
-- source_merge: NOT_AUTHORIZED
-- production_deploy: NOT_AUTHORIZED
+- result: **IMPLEMENTED — PR #136 (source only, NOT merged)**. 銘柄詳細 V1 を追加し、閲覧(読み取り専用)と編集(既存エディタ)を分離。ポートフォリオの保有行・ウォッチリストの注目カード/一覧行・登録済みの検索結果から詳細へ接続。
+- status: `review_required` / next_owner `chatgpt` (return to かぶモリアプリG1のちゃ for `K1`)
+- PR: https://github.com/anohi-memories/kabumori/pull/136 — head `e2dfdab5c7219aa2ff31c50c51f0125f816c16a7`, branch `claude/g1-stock-detail-v1-20261011`, base `origin/main` `4768607` (rebased onto nothing; main has since moved only by `.agent` commits)
+- date: 2026-10-11 JST
 
+### changed_files
+- 新規: `src/app/stock-detail.tsx`, `src/lib/stock-detail-view.ts`, `tests/app/stock-detail-view_test.ts`(19), `tests/app/stock-detail-screen_test.ts`(8), `docs/ui-review/stock_detail_{watch_news,holding,no_report,search_registered}_375pt.webp`(フィクスチャのみ)
+- 変更(最小): `src/app/_layout.tsx`(`<Stack.Screen name="stock-detail" />` 1行のみ), `src/app/(tabs)/explore.tsx`(タップ先を詳細へ、エディタ除去), `src/app/search.tsx`(登録済み→詳細、復帰時にバッジ再確認), `src/components/portfolio/watchlist-section.tsx`・`holdings-section.tsx`(コールバック名と accessibilityHint のみ), `tests/app/{portfolio-screen,root-navigator,watchlist-layout}_test.ts`(契約更新)
+- 未変更: `src/app/(tabs)/_layout.tsx` と NativeTabs アイコン/ラベル/順序、`tracked-stock-editor.tsx`、`report-presentation.ts`、`portfolio-view.ts`、`detail-navigation.ts`、依存関係、`app.json`、Supabase/Edge/migrations、G2/G5/news
+
+### 仕様との対応
+1. 閲覧: 保有行 / 注目カード / 一覧行 → `/stock-detail`(root Stack)。戻る・端スワイプで元の画面、ポートフォリオ/ウォッチリストのセグメントは保持（375pt/402ptで確認）。
+2. 編集: 登録済み詳細の「登録内容を編集」で既存 `TrackedStockEditor` を開く。閉じる＝変化なし、保存＝詳細を再読込、解除＝戻る。閲覧だけでは書き込まない（画面は `select` のみ、テストで固定）。
+3. 検索: 登録済み→詳細（検索語・結果は保持）。未登録→従来どおり登録エディタ。
+4. 価格の真実性: 保存済み大引けのみ。`M/D 終値ベース`＋「リアルタイムではありません」。日付は銘柄の sessionDate→price_basis_date。無し/非有限は `—`＋理由。未登録は市場データ・保有・ニュースを出さない。
+5. 保有: 株数/平均取得/現物・信用/買い・売り（登録内容）＋保存済み評価額・評価損益・当日損益。編集後は数量/取得単価が保存行と一致しない間、評価額を保留表示。
+6. ニュース: `verifiedWatchNews` と同じ基準（自身の news_ids + 同一ticker + 見出し + 日付 + 高signal）。`news_ids` のみでは出さない。CTAは既存 `news-detail`、戻ると詳細。
+7. スタイル: 既存 PF テーマ/StockAvatar。チャート・偽ニュース・AI予測なし。会社名はカード全幅（長い名前でも1文字折返しなし）。
+8. 下部メニュー: 変更なし（テストで 5 ラベル固定、詳細内にタブバー重複なし）。
+9. 旧/新レポート: 旧配信の10/7〜10/9欠落は調査・修正・監視していない（TASK 指示どおり）。
+
+### tests / checks (head `e2dfdab5`)
+- `deno test --no-check --no-lock --no-config --allow-read tests/app/` → **488 passed / 0 failed**（新規27、既存5本を契約変更に合わせ更新）。旧 457/457 とは別集計。
+- `tsc --noEmit`: `src/` にエラー無し。`git diff --check` OK。
+- 実行していないもの: EAS、実機、`deno lint`(本TASKでは未実施)。
+
+### Simulator (iOS 27 / Xcode 27)
+- **375pt**: 使い捨て iPhone SE3 + フィクスチャ rig(ネットワーク無し・実セッション非使用): 注目カード→詳細→ニュース詳細→戻る(詳細)→銘柄に戻る(ウォッチリスト保持)、無効ID、保有、レポート無し、検索経由、編集→保存→再読込、解除確認→解除→戻る。
+- **402pt**: iPhone 18 Pro（ユーザーのログイン済みセッション・実データ・読み取りのみ）: 保有詳細、監視詳細、検索(登録済み→詳細→編集を開いて閉じる／未登録→登録エディタを開いて閉じる)。保存・削除・登録は行っていない。実データのスクリーンショットはリポジトリに無し。
+- 検出して直した不具合: 詳細ヘッダで長い社名が1文字ずつ折り返す（ロゴ横の狭い列）→社名をカード全幅の行へ移動。
+
+### 残課題 / 制約
+- 実データでは検証済みニュース付きの銘柄が現在無く、ニュース経路はフィクスチャのみ。
+- 保存済み大引けが古い間（実データは 10/6 基準）は価格も古い。表記は「10/6 終値ベース」で正直（上流の配信は本TASK範囲外）。
+- 詳細の「前日比 ¥」はレポートの保存値のまま小数2桁まで表示（フィクスチャの端数。実データの整数株価では整数）。
+- 402pt のフィクスチャ画面は未保存（使い捨て 402pt 端末のアクセス許可が未付与だったため。実データ側で確認済み）。実機 iPhone は未実施。
+
+### safety_checks
+- deploy=0, EAS=0, TestFlight/App Store=0, `expo prebuild`=0, Supabase 書き込み/migration/Edge deploy=0, AI/有料API=0。
+- 実ユーザーデータへの書き込み: **0**（実セッションでは編集画面を開いて閉じただけ）。保存/解除を実行したのはフィクスチャ rig の in-memory DB のみ。
+- 他スロットのプロセス/ポート(8081)/ブランチ/worktree は未接触。使った Metro は 8082/8083(自分のもの)で全て停止、使い捨て端末は削除、ユーザーのログイン済みセッションは維持。
+- PR/Report に銘柄名・金額・認証情報なし（フィクスチャの架空値のみ）。
+
+### next_recommendation
+1. K1: PR #136 のソースレビュー（認証/データ境界の変更なし。Codex は不要の見込み。必要なら `search.tsx` の `useFocusEffect` 再確認と `stock-detail.tsx` の読み取りクエリのみ）。
+2. 合格後に merge。実データでニュース付き銘柄が出た時点で、詳細→ニュース→戻るの実データ確認を短く再実施可能。
+3. 将来(別承認): 価格履歴/チャート、AI解説は本PRに含めていない。
+
+### return_to
+- かぶモリアプリG1のちゃ — send `K1`.
+
+### K1 targeted corrective appendix — valuation matching (2026-10-11), PR #136
+
+- result: **CORRECTED** — `registrationMatchesSnapshot` now requires the saved holding row to match the registration on `tracking_type`, `quantity`, `average_price`, `position_type` and `side` (null-safe). Same existing PR #136 branch; no new PR, no force push, no history rewrite.
+- status: `review_required` / next_owner `chatgpt` (return to かぶモリアプリG1のちゃ for `K1`)
+- PR #136 head: `e2dfdab5c7219aa2ff31c50c51f0125f816c16a7` → **`ca2477e0fdc4ba85f620e48aa7d9221e691ba485`** (exactly one commit on top; PR still OPEN, not merged)
+- preflight: PR head verified equal to the K1-reviewed `e2dfdab5` and local/remote before the change; no open PR touches `stock-detail*`; no unexpected ownership drift.
+- changed_files (this correction only): `src/lib/stock-detail-view.ts`, `tests/app/stock-detail-view_test.ts`. Nothing else (no stock-detail screen, nav, formatter, editor, auth, DB/RPC/Edge, report, or NativeTabs file).
+
+#### Behaviour
+- Withheld (existing `VALUATION_NOTE.changed`, valuation `null`): same qty/avg with 買い↔売り changed; same qty/avg with 現物↔信用 changed; saved row whose own `tracking_type` is not `holding` (or a non-holding registration against a holding row).
+- Kept (exact saved figures, unchanged behaviour): qty, avg, position type, side and role all equal.
+- Null/legacy: a blank field equals only another blank one (a saved row without the fields = blank, not a wildcard); a concrete registration vs a blank saved row (or the reverse) is a mismatch. Non-finite numbers normalise to blank as before.
+- The saved closing share price and its dated `M/D 終値ベース` stay visible regardless: they do not depend on the position. The registration's own labels (現物/信用, 買い/売り) are still shown from the registration.
+
+#### Tests (fail-before / pass-after, actually executed)
+- Added 6 behavioural tests to `tests/app/stock-detail-view_test.ts` (kept-when-all-match; side long↔short; cash↔margin; inconsistent role; null/legacy/non-finite; revert restores valuation + price stays visible).
+- **Before the source change, against PR head `e2dfdab5`**: `deno test --no-check --no-lock --no-config --allow-read tests/app/stock-detail-view_test.ts` → **20 passed / 5 failed** (side, position type, role, null/legacy, revert-restores).
+- **After**: same command → **25 passed / 0 failed**; full `tests/app/` → **494 passed / 0 failed** (previous 488 + 6).
+- `tsc --noEmit`: no `src/` errors and no non-environment errors in the touched test; `git diff --check` OK.
+- Not run: Simulator (pure view-model change; the screen/UI is untouched), EAS, real device.
+
+#### Safety
+- deploy=0, EAS=0, Supabase/Edge/migration=0, real-user data writes=0 (tests only; the user's 18 watch records and holdings were not touched). No other slot's process, port, branch or worktree touched; no Metro/Simulator was started for this correction.
+- GitHub Vercel/Netlify checks at the original head are rate-limit/canceled per K1, not caused by code; nothing here was deployed.
+
+#### Observation for K1 (not changed, outside this correction's strict scope)
+- The 銘柄 tab's holding rows and the impact card (`buildHoldingRows` / `topImpacts` in `src/lib/portfolio-view.ts`, merged earlier, not part of PR #136) join the saved row to the registration by ticker only and show the saved valuation without this registration-match check. After an edit of qty / 現物・信用 / 買い・売り they would show the previous report's figures until the next report. The new detail screen is now stricter than the list; K1 may want a separate scoped decision (not done here).
 
 ---
 

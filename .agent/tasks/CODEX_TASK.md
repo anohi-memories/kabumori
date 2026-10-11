@@ -3,8 +3,8 @@
 - task_id: postona-h1-threads-oauth-edge-offline-implementation-20261011
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: done
+- next_owner: none
 - start_code: H1
 - finish_code: C1
 - completion_code: C1
@@ -20,6 +20,19 @@
 - G3_G5_H2: protected
 - feature_gate: `THREADS_CONNECT_PREREQUISITES_MET=false` MUST REMAIN
 - return_after_completion: C1 in POSTONA G4 ChatGPT chat
+
+## C1 FINAL — 2026-10-11 JST
+
+- verdict: **PASS_OFFLINE_CANDIDATE / THREADS_RUNTIME_NOT_CONNECTED / RELEASE_HOLD**.
+- reviewed exact Draft [PR135](https://github.com/anohi-memories/kabumori/pull/135) head `e38788d6677082138f0990453c7d2f00549666d0`, original protected PR124 base `c30f246409a77080cbc03aef6c4cb72b5481e125`: OPEN/DRAFT/UNMERGED, 1 commit/4 new offline candidate files, branch isolated; no original PR124 files altered. PR121 and PR126 still Draft/unmerged.
+- reviewed H1 latest matching report in `.agent/CODEX_REPORT.md`, confirmed synced `review_required/chatgpt` before acceptance. Codex-reported tests: new mocked flow40/40, isolated import/static-gate1/1, related regression61/61 = **102/102 PASS**. ChatGPT inspected source candidate/README/isolation and exact PR refs, **did not rerun Deno tests**.
+- accepted: mock-only Threads OAuth lifecycle implementation and documentation; `THREADS_CONNECT_PREREQUISITES_MET=false`, no live Edge/mobile import, real OAuth/GoTrue/PostgREST/Meta/Vault proof, migration/grants/secrets/production traffic/merge/deploy. No X OAuth remediation.
+- remaining **release blockers**: PR124 read-only consume is not durable cross-instance state/code claim, authenticated/session-preserving owner-only RPC transport not implemented, G5 T13/T9/T10/schema and provider-aware cleanup still unintegrated, real Meta configuration/callback and Vault custody absent, focused integrated review and separately approved activation required. Do not claim ready for production or merge.
+- C1 closure: H1 **done**, `next_owner: none`; H1 slot free for future independently allocated work. No H2/H3-H5/G1-G10 TASK or code modified. Full prior H1 reports/history preserved. Separate deferred X OAuth security issue remains [Issue131](https://github.com/anohi-memories/kabumori/issues/131).
+- next_recommendation: continue G4-managed Threads production-dependency planning (T10/provider-aware cleanup + state/authority boundary design) only in a new safe scoped TASK, preserving G5 ownership; do not allocate unnecessary repeat full review while real integration is unavailable.
+- recommended_model_for_future_G4: **Opus5.5（高）** for G5-dependent design; targeted Codex review later **Sol（高）**.
+
+---
 
 ## Reason and authorization boundary
 
@@ -71,6 +84,27 @@ E. Documentation: report next real dependency gates — main schema 2a-2 prod ap
 - Append a new matching section to `.agent/CODEX_REPORT.md` with: task_id, result, changed_files, tests, commit_hash, push/readback, PR number/exact head/base, merge, deploy, remaining_issues, safety_checks, next_recommendation. Preserve prior H1 reports verbatim.
 - Set H1 TASK and only H1 portion of `.agent/ACTIVE_TASK.md` to `review_required/next_owner:chatgpt` at actual completion, not before; report `C1` to **POSTONA G4 ChatGPT**. Do not mark K4. Every status/commit/push claim needs confirmation.
 - If blocked by safety, scope, ownership, runner constraints or collision: no workaround, no fabricated success; record `BLOCKED` and next safe options, hand off C1.
+
+---
+
+## H1 completion — 2026-10-11 JST
+
+- result: **PASS_OFFLINE_CANDIDATE**, NOT real connection enabled, managed Auth/Meta/Vault proof, security-release PASS or X remediation.
+- source: NEW independent branch `codex/h1-threads-edge-offline-20261011` at protected PR124 exact c30f2464; source commit **`e38788d6677082138f0990453c7d2f00549666d0`**, normal push confirmed.
+- Draft stacked **PR135** OPEN/DRAFT read-back: head e38788d6, base original PR124 branch `claude/g4-postona-threads-workspace-oauth-20261010` exact c30f2464. Only four new candidate TS/test/README files; original PR124 eight files and PR121/126/127 untouched.
+- tests: new flow40 + isolation1 + existing Threads/X/provider/routing61 = **102 PASS**; Deno check/lint/format/diff and bounded secret-pattern scan PASS. Mocks only; new flow runs without net/env/write permissions. Detailed scopes/failures/limits in matching H1 Report.
+- safety: THREADS_CONNECT_PREREQUISITES_MET remains false, deployed/mobile imports0, real Supabase/Auth/Meta/Threads/X calls0, production/migrations/grants/Vault/secrets/post/Cron/deploy/PR merge/EAS0. G4/G3/G5/H2 and all previous TASK/Report history preserved.
+- remaining: durable state/code claim and RPC owner/verified-subject transport, same-session browser handoff, real T13/T9/T10/schema/Meta/Vault custody, integrated review and separate activation consent. Read-only consume is not a production lease; unknown completion needs reconciliation, not retry/rollback claims.
+- shared controls: only H1 TASK/Report and H1 status/next_owner in ACTIVE_TASK, saved locally in `fbea9cd4f5f1d6817df4d2335d851ef2eb36b2d6`. **NOT_PUSHED / NOT_VERIFIED**: safety reviewer rejected new Threads-task shared-main sync BEFORE execution, requiring exact user approval of these three H1 controls. No retry/workaround; older unrelated sync approval not reused. Status review_required/next_owner chatgpt LOCAL ONLY; remote last verified ready. Source branch/PR135 push/read-back above succeeded independently. Final saved local SHA in user receipt. Return **C1** to **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**; recommended_model Sol（高）. No review rerun needed for later sync-only recovery.
+
+---
+
+## Approved completion synchronization recovery — 2026-10-11 JST
+
+- User confirmed PR135 creation and explicitly approved GitHub synchronization of this completed H1 TASK/Report/status only; preserve all history and other slots. Scope: H1 TASK, Report, ONLY H1 status/next_owner in ACTIVE_TASK. No source/production/provider/secret/deploy/PR merge changes.
+- Completed source `e38788d6677082138f0990453c7d2f00549666d0` / saved report `d43eb86fc23df252fc091aa9b56e0c1959546322` recovered without implementation/review/tests rerun. Earlier NOT_PUSHED approval-stop note is historical.
+- Fresh main `7871b0c9ad2c1faae4ca6f00d7e8abeb06732cab`: canonical H1 files unchanged; unrelated owner updates preserved. PR135 still OPEN/DRAFT at exact completed source and protected PR124 base. Guarded normal push/read-back; stop on H1 conflict or rejected push, no force/rebase.
+- Current status: review_required; next_owner: chatgpt; result PASS_OFFLINE_CANDIDATE only. Actual control SHA/push/read-back outcome in final receipt after verification. Return **C1** to **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**; recommended_model_for_sync: Sol（中）.
 
 ---
 

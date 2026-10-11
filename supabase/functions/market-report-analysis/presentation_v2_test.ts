@@ -9,6 +9,7 @@ import {
   formatSharedXPost,
   type MarketReportPacket,
   PRESENTATION_VERSION,
+  REPORT_DISCLAIMER_JA,
   REPORT_SCHEMA_VERSION,
   sharedXPostIssues,
   sharedXPostWarnings,
@@ -85,7 +86,11 @@ for (const [label, fixture, make] of [["morning", morning, richMorning1001], ["c
     assert.equal(packet.schema_version, REPORT_SCHEMA_VERSION, "the stored schema_version is unchanged (table check)");
     assert.equal(packet.presentation_version, PRESENTATION_VERSION);
     const post = formatSharedXPost(packet);
-    assert.ok(chars(post) >= X_POST_TARGET_MIN_CHARS && chars(post) <= X_POST_TARGET_MAX_CHARS, `length ${chars(post)}`);
+    // The disclaimer closes every post, once, and is not part of the editorial length.
+    assert.ok(post.endsWith(`\n\n${REPORT_DISCLAIMER_JA}`));
+    assert.equal(post.split(REPORT_DISCLAIMER_JA).length, 2);
+    const body = post.slice(0, -(REPORT_DISCLAIMER_JA.length + 2));
+    assert.ok(chars(body) >= X_POST_TARGET_MIN_CHARS && chars(body) <= X_POST_TARGET_MAX_CHARS, `length ${chars(body)}`);
     assert.deepEqual([sharedXPostIssues(packet, post), sharedXPostWarnings(packet, post)], [[], []]);
     const sections = post.split("\n\n");
     assert.ok(sections[0].startsWith(label === "morning" ? "【朝刊】きょうの日本株、ここをチェック☀️\n" : "【大引け】きょうの日本株まとめ🌙\n"));
@@ -95,6 +100,7 @@ for (const [label, fixture, make] of [["morning", morning, richMorning1001], ["c
     assert.equal(sections[3], `📰 ${analysis.x_post.news_ja}`, "news paragraph");
     assert.ok(sections[4].startsWith(label === "morning" ? "👀 今日見るポイント\n" : "👀 明日以降の注目点\n"));
     assert.ok(sections[5].startsWith("💬 今日のひとこと\n"));
+    assert.equal(sections[6], REPORT_DISCLAIMER_JA);
     assert.ok(emojiCount(post) >= 3 && emojiCount(post) <= 8, `emoji ${emojiCount(post)}`);
     assert.ok(!/https?:|[#＃]\S/.test(post), "no URL, no hashtag (fixed hashtags are appended by the X consumer)");
   });
@@ -128,7 +134,8 @@ test("X: malformed or platform-unsafe output is a hard failure", () => {
   twoPoints.x_post.points_ja = twoPoints.x_post.points_ja.slice(0, 2);
   assert.ok(has(hardOf(twoPoints), "X_POST_POINTS_INVALID"));
   const endless = richMorning1001(input);
-  endless.x_post.context_ja = "指数の方向が分かれています。".repeat(60);
+  // The Premium limit (2026-10-07): 12,500 characters, every one of which may weigh 2.
+  endless.x_post.context_ja = "指数の方向が分かれています。".repeat(1000);
   assert.ok(chars(formatSharedXPost(packetOf(endless, input))) > X_POST_HARD_MAX_CHARS);
   assert.ok(has(hardOf(endless), "X_POST_TOO_LONG"));
   const noLead = richMorning1001(input);
@@ -145,7 +152,8 @@ test("App morning: structured story with headings, prose and dated fact lines; r
   const input = inputOf(morning);
   const packet = packetOf(richMorning1001(input), input);
   const story = buildAppMarketStory(packet);
-  assert.deepEqual(story.sections.map((item) => item.key), ["summary", "overseas", "japan", "cross_asset", "news", "caution", "watch", "gaps"]);
+  assert.deepEqual(story.sections.map((item) => item.key), ["summary", "overseas", "japan", "cross_asset", "news", "caution", "watch", "gaps", "disclaimer"]);
+  assert.deepEqual(story.sections.at(-1), { key: "disclaimer", heading_ja: "", body_ja: REPORT_DISCLAIMER_JA, lines_ja: [] });
   assert.deepEqual(story.sections.map((item) => item.heading_ja).slice(0, 5), [
     "☀️ 今日の市場をひとことで", "🇺🇸 前夜の米国市場", "🇯🇵 今日の日本株をどう見るか", "💹 為替・金利・半導体など", "📰 重要ニュース",
   ]);
@@ -165,7 +173,7 @@ test("App close: story sections, and the morning packet of the same day is answe
   const input = inputOf(close);
   const packet = packetOf(richClose0930(input), input);
   const story = buildAppMarketStory(packet, v1Morning0930);
-  assert.deepEqual(story.sections.map((item) => item.key), ["summary", "japan", "moves", "news", "caution", "morning_check", "watch", "gaps"]);
+  assert.deepEqual(story.sections.map((item) => item.key), ["summary", "japan", "moves", "news", "caution", "morning_check", "watch", "gaps", "disclaimer"]);
   assert.equal(story.sections[0].heading_ja, "🌙 今日の市場をひとことで");
   assert.ok(story.char_count >= APP_STORY_TARGET_MIN_CHARS, `narrative ${story.char_count}`);
   const check = story.sections.find((item) => item.key === "morning_check")!;
@@ -412,11 +420,15 @@ test("content regeneration is recorded apart from transport retry (the 10/1 morn
   assert.equal(outcome.ok, true);
   assert.deepEqual(calls, ["generate", "generate", "fact"]);
   const { records, ...trace } = outcome.trace;
-  assert.deepEqual(trace, { generations: 2, hardRejections: ["local"], rejectionReasons: ["1306"], qualityRewrite: false, deliveredGeneration: 2, warnings: [] });
+  assert.deepEqual(trace, {
+    generations: 2, hardRejections: ["local"], rejectionReasons: ["1306"], qualityRewrite: false, deliveredGeneration: 2, warnings: [],
+    removedUnits: [], factStatus: "passed",
+  });
   assert.deepEqual(records.map((record) => [record.generationIndex, record.stage, record.selectedForDelivery]), [[1, "local", false], [2, "delivered", true]]);
   assert.deepEqual(generationDiagnostics(outcome.trace), {
     generation_attempts: "2", content_regenerations: "1", hard_rejections: "local", rejection_reasons: "1306", quality_rewrite: "false",
     delivered_generation: "2", quality_warnings: "", quality_rewrite_request_failed: "false",
+    fact_status: "passed", removed_units: "", removed_unit_count: "0",
   });
   assert.equal(outcome.ok && outcome.packet.fact.generation_attempts, 2);
 });
@@ -442,9 +454,12 @@ test("a quality rewrite that breaks a hard fact falls back to the safe original 
     { step: "generate", payload: richMorning1001(input) }, { step: "fact", payload: { passed: true, issues: [] } },
   ]), NOW);
   assert.deepEqual(better.ok && [better.trace.deliveredGeneration, better.packet.fact.quality_warnings], [2, []]);
-  // A hard-fact failure with no safe draft still fails closed.
-  const failed = await generateSharedAnalysis(input, requester([{ step: "generate", payload: broken }, { step: "generate", payload: broken }]), NOW);
-  assert.deepEqual([failed.ok, !failed.ok && failed.error], [false, "ANALYSIS_LOCAL_CHECK_FAILED"]);
+  // With no safe draft, the wrong sentence is removed and the rest delivered after one Fact call (2026-10-07).
+  const failed = await generateSharedAnalysis(input, requester([
+    { step: "generate", payload: broken }, { step: "generate", payload: broken }, { step: "fact", payload: { passed: true, issues: [] } },
+  ]), NOW);
+  assert.ok(failed.ok && !failed.packet.x_post.context_ja?.includes("米国株高を受けて"));
+  assert.ok(failed.ok && failed.packet.fact.removed_units?.some((code) => code.startsWith("UNIT_REMOVED:UNSUPPORTED_CAUSALITY@x_post.context_ja")));
 });
 
 // ---------------------------------------------------------------------------------------------

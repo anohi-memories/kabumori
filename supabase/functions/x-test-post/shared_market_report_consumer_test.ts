@@ -105,7 +105,8 @@ test("packet for another report type or an invalid body is never posted", async 
   assert.ok(!wrongType.log.some((entry) => entry.op === "postToX"));
 
   const broken = recordingDeps();
-  const invalid = { ...COMPLETED, report: { ...REPORT, x_post: { ...REPORT.x_post, points_ja: ["一つだけ"] } } } as SharedMarketReportResult;
+  // Fewer than three points is postable since 2026-10-07 (a wrong point is removed upstream); no lead is not.
+  const invalid = { ...COMPLETED, report: { ...REPORT, x_post: { ...REPORT.x_post, lead_ja: "" } } } as SharedMarketReportResult;
   await assert.rejects(publishSharedMarketReport("close", invalid, broken.deps), /FORMAT_INVALID/);
   assert.ok(!broken.log.some((entry) => entry.op === "postToX"));
 });
@@ -154,7 +155,7 @@ test("app market section is the shared packet verbatim", () => {
 
 import { assemblePacket } from "../market-report-analysis/analysis_logic.ts";
 import { inputOf, loadFixture, richClose0930 } from "../market-report-analysis/test_support.ts";
-import { PRESENTATION_VERSION, X_POST_TARGET_MAX_CHARS, X_POST_TARGET_MIN_CHARS } from "../_shared/market_report_packet.ts";
+import { PRESENTATION_VERSION, REPORT_DISCLAIMER_JA, X_POST_TARGET_MAX_CHARS, X_POST_TARGET_MIN_CHARS } from "../_shared/market_report_packet.ts";
 
 const close0930 = await loadFixture("close_2026-09-30");
 function v2Completed(): Extract<SharedMarketReportResult, { status: "completed" }> {
@@ -169,7 +170,9 @@ test("presentation v2 packet: the X post is the ~500-character digest, formatted
   const { log, deps } = recordingDeps();
   const result = await publishSharedMarketReport("close", shared, deps);
   const body = formatSharedXPost(shared.report);
-  const length = Array.from(body).length;
+  // The disclaimer closes the post once and is not part of the editorial length (2026-10-07).
+  assert.ok(body.endsWith(`\n\n${REPORT_DISCLAIMER_JA}`));
+  const length = Array.from(body).length - Array.from(REPORT_DISCLAIMER_JA).length - 2;
   assert.ok(length >= X_POST_TARGET_MIN_CHARS && length <= X_POST_TARGET_MAX_CHARS, `length ${length}`);
   assert.equal(result.text, appendKabumoriReportFixedHashtags(body));
   for (const heading of ["📌 今日の3ポイント", "📰 ", "👀 明日以降の注目点", "💬 今日のひとこと"]) assert.ok(body.includes(heading), heading);
@@ -188,8 +191,42 @@ test("a short packet is posted with its quality warnings recorded; only broken o
   assert.deepEqual(log.map((entry) => entry.op), ["createRun", "updateRun", "postToX", "completePost"], "posted");
 
   const broken = v2Completed();
-  broken.report = { ...broken.report, x_post: { ...broken.report.x_post, points_ja: ["一つだけ"] } };
+  broken.report = { ...broken.report, x_post: { ...broken.report.x_post, lead_ja: "" } };
   const second = recordingDeps();
   await assert.rejects(() => publishSharedMarketReport("close", broken, second.deps), /SHARED_MARKET_REPORT_FORMAT_INVALID/);
   assert.ok(!second.log.some((entry) => entry.op === "postToX"));
+});
+
+// --- the run records the packet's actual Fact state (2026-10-08 H2 B4) ------------------------------------------
+
+test("the run's Fact columns follow the packet: passed / advisory / not_run, and the post goes out in each case", async () => {
+  const expected: Array<["passed" | "advisory" | "not_run", "passed" | "failed" | null]> = [["passed", "passed"], ["advisory", "failed"], ["not_run", null]];
+  for (const [state, column] of expected) {
+    const shared = v2Completed();
+    shared.report = {
+      ...shared.report,
+      fact: { ...shared.report.fact, ai_status: state, removed_units: ["UNIT_REMOVED:WRONG_DATE@app_story.japan_ja#0"], quality_warnings: state === "advisory" ? ["FACT_ADVISORY:2"] : [] },
+    };
+    const { log, deps } = recordingDeps();
+    await publishSharedMarketReport("close", shared, deps);
+    assert.deepEqual(log.map((entry) => entry.op), ["createRun", "updateRun", "postToX", "completePost"], `${state}: delivered`);
+    const values = log[1].args[1] as { fact_check_status: unknown; fact_check_notes: string[]; market_data: { fact_status: string; removed_units: string[] } };
+    assert.equal(values.fact_check_status, column, state);
+    assert.ok(values.fact_check_notes.includes(`fact_status:${state}`));
+    assert.ok(values.fact_check_notes.includes("UNIT_REMOVED:WRONG_DATE@app_story.japan_ja#0"));
+    if (state === "advisory") assert.ok(values.fact_check_notes.includes("FACT_ADVISORY:2"));
+    assert.deepEqual([values.market_data.fact_status, values.market_data.removed_units], [state, ["UNIT_REMOVED:WRONG_DATE@app_story.japan_ja#0"]]);
+  }
+});
+
+test("an invalid-format packet never records a Fact pass it did not have", async () => {
+  for (const [state, column] of [["advisory", "failed"], ["not_run", null], ["passed", "passed"]] as const) {
+    const broken = v2Completed();
+    broken.report = { ...broken.report, x_post: { ...broken.report.x_post, lead_ja: "" }, fact: { ...broken.report.fact, ai_status: state } };
+    const { log, deps } = recordingDeps();
+    await assert.rejects(() => publishSharedMarketReport("close", broken, deps), /SHARED_MARKET_REPORT_FORMAT_INVALID/);
+    const values = log[1].args[1] as { fact_check_status: unknown; fact_check_notes: string[] };
+    assert.equal(values.fact_check_status, column, state);
+    assert.ok(values.fact_check_notes.includes("X_POST_SECTION_EMPTY") && values.fact_check_notes.includes(`fact_status:${state}`));
+  }
 });

@@ -3,8 +3,9 @@
 - task_id: kabumori-fact-v2-pr132-final-integrated-review-20261011
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
+- c2_verdict: CHANGES_REQUIRED (R1–R3 P2 objective Fact exceptions only); one G2 corrective ready, no repeated broad review
 - start_code: H2
 - finish_code: C2
 - completion_code: C2

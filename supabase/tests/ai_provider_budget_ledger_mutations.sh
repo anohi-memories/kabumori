@@ -63,4 +63,27 @@ mutant no_role_path_check adverse 's/  -- 5b\. Roles an application role can REA
 # R2: following inheritance only (not SET ROLE) misses NOINHERIT paths.
 mutant role_path_inherit_only adverse 's/ or pg_has_role\(v_role, r\.oid, v_set_check\)\)/)/'
 
+# ---- the production preflight must predict every refusal: each mutant removes one of its checks -------------------
+PREFLIGHT="$HERE/ai_provider_budget_ledger_preflight.sql"
+preflight_mutant() {
+  local name="$1" perl_expr="$2" file="$WORK/$1.sql"
+  perl -0pe "$perl_expr" "$PREFLIGHT" >"$file"
+  if cmp -s "$PREFLIGHT" "$file"; then echo "FAIL: preflight mutant $name did not change the preflight" >&2; exit 1; fi
+  if AIL_PREFLIGHT="$file" AIL_PARTS=adverse bash "$HERE/ai_provider_budget_ledger_run.sh" >"$WORK/$name.log" 2>&1; then
+    echo "FAIL: preflight mutant $name SURVIVED" >&2
+    tail -5 "$WORK/$name.log" >&2
+    exit 1
+  fi
+  killed=$((killed + 1))
+  echo "killed: $name ($(grep -m1 -E "FAIL" "$WORK/$name.log" | cut -c1-140))"
+}
+# Only the reached role itself, not what it inherits (misses a SET hop into a role inheriting service_role).
+preflight_mutant pf_reached_role_only "s/pg_has_role\\(held\\.role_oid, .service_role., .USAGE.\\)/held.role_oid = to_regrole(\x27service_role\x27)::oid/"
+# No default-privilege prediction.
+preflight_mutant pf_no_default_acl "s/where d\\.grantee not in \\(.PUBLIC., .anon., .authenticated., .service_role., current_user::text\\)/where false/"
+# No plain-membership (section 2) prediction.
+preflight_mutant pf_no_membership "s/\\n\\s*or exists \\(select 1 from app join pg_roles s on s\\.rolsuper or s\\.rolname = current_user\\n\\s*where pg_has_role\\(app\\.oid, s\\.oid, .MEMBER.\\)\\)//"
+# No all-data prediction.
+preflight_mutant pf_no_all_data "s/exists \\(select 1 from held\\n\\s*where pg_has_role\\(held\\.role_oid, .pg_read_all_data., .USAGE.\\)\\n\\s*or pg_has_role\\(held\\.role_oid, .pg_write_all_data., .USAGE.\\)\\)/false/"
+
 echo "ALL $killed MUTANTS KILLED"

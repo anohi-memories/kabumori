@@ -122,7 +122,8 @@ test("audit metadata: logical role, actual model, reasoning and configuration ve
 });
 
 test("audit metadata is also written when the run fails (so a failed cycle says which configuration ran)", async () => {
-  const { calls, deps } = harness((body) => okResponse(String(body.instructions).includes("Factチェッカー") ? { passed: false, issues: ["x"] } : rich0917(input())));
+  // Unparsable output twice: nothing deliverable, the run fails (a Fact finding alone no longer fails it).
+  const { calls, deps } = harness(() => okResponse({ broken: true }));
   await handleRequest(request(), deps);
   const fail = calls.find((call) => call.url.endsWith("rpc/fail_market_report_analysis"))!.body as { p_diagnostics: Record<string, string> };
   assert.equal(fail.p_diagnostics.ai_config_version, KABUMORI_AI_CONFIG_VERSION);
@@ -157,8 +158,9 @@ test("accepted behaviour is unchanged by the migration: at most 4 calls, two gen
     return Promise.resolve({ payload: step === "fact" ? { passed: false, issues: ["x"] } : rich0917(input()), inputTokens: 1000, outputTokens: 500 });
   };
   const outcome = await generateSharedAnalysis(input(), requester, () => new Date("2026-09-17T07:20:30Z"));
-  assert.equal(outcome.ok, false);
-  assert.ok(steps.length <= 4);
+  // Delivery first (2026-10-07): delivered with the Fact findings as advisory, within the same four calls.
+  assert.equal(outcome.ok && outcome.packet.fact.ai_status, "advisory");
+  assert.deepEqual(steps, ["generate", "fact", "generate", "fact"]);
   assert.equal(outcome.calls, steps.length);
   // 2 generations + 2 Fact checks, each priced as its own request.
   assert.equal(outcome.costUsd, Number((steps.length * (1000 * 2 + 500 * 10) / 1_000_000).toFixed(6)));
