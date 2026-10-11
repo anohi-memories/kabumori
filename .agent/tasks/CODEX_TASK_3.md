@@ -3,8 +3,8 @@
 - task_id: kabumori-pr143-ondemand-queue-auth-security-review-20261011
 - owner: codex
 - slot: codex-3
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - start_code: H3
 - finish_code: C3
 - completion_code: C3
@@ -74,7 +74,7 @@ G2が使い捨てPG17のRLS/ACL/並行処理/rollback/13 mutation、Deno+app 1,6
 
 ## Report
 
-PENDING H3.
+H3 review complete: CHANGES_REQUIRED / PRODUCTION_NO_GO. See `.agent/CODEX_REPORT_3.md` H3 FINAL entry. Return C3 to かぶモリアプリG2のちゃ.
 
 ---
 
