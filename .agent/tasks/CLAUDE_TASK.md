@@ -1,3 +1,61 @@
+# G2 CURRENT TASK — かぶモリ Fact V2：事実を守り、Opus独自分析を通す
+
+- task_id: kabumori-market-report-fact-interpretation-v2-20261011
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- start_code: G2
+- finish_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Opus5.5（高）**
+- priority: high
+- type: bounded **source-only policy calibration + offline test candidate**, no production
+- accepted_previous_G2_task: kabumori-market-report-delivery-first-guard-calibration-20261007
+- prior_K2_verdict: **PASS_SOURCE_CANDIDATE / RELEASE_HOLD** — exact PR #110 head `319a442edcd61c07274e3409d8864234f9d77cd4`
+- prior_PR: https://github.com/anohi-memories/kabumori/pull/110
+- prior_PR_status: OPEN / UNMERGED / protected
+- new_work_policy: NEVER modify PR #110's existing branch; use a new isolated stacked Draft PR if safe
+- source_merge: forbidden
+- production_edge_db_credential_paid_API_X_post: forbidden
+
+## Product intent — user decision, normative for this TASK
+
+**「事実は厳格に、AIの分析・推測は積極的に許容、配信は安定優先」**。
+かぶモリは単なるニュース転載・要約サービスではない。ニュース・株価・為替・マクロ・企業資料など、取得された裏付けある事実を材料として、**Opusが自分で複数材料を組み合わせ、合理的な経済分析・独自の見通し・注目点を導く**ことに価値がある。「元ニュースに同じ市場因果・予想が明記されていない」という理由**だけ**でAIの解釈を削除してはいけない。推測の中身がデータと論理に照らして妥当か、断定でなく分析・仮説として表現されているかを区別する。根拠のない作り話を許す意味ではない。
+
+### Three semantic classes, not a Japanese suffix arms race
+
+1. **OBJECTIVE_FACT / HARD**: stock prices, index values, percentages, actual market sessions/dates, reported enterprise announcements, actor/event facts, real quotations and source existence; do not invent/change. Clear falsity, contradiction, or fabricated company/news/source requires targeted removal/correction and recheck. Safety critical rules stay strict.
+2. **SUPPORTED_INTERPRETATION / ALLOW**: explain implications and future risk grounded in verified facts plus general economic/industry mechanisms and explicit causal reasoning, even when source news itself did not state that impact. Allow combining multiple independently verified facts. User-facing language should naturally distinguish `可能性`/`考えられる`/`見込む` etc., NOT force each line to contain a literal hedge. Opus may develop its own view; avoid flattening all analysis into quotes from news.
+3. **UNVERIFIED_ATTRIBUTION / REWRITE or ADVISORY**: presenting a particular *observed historical price move* as conclusively caused by X without sufficient basis, or treating speculation as confirmed occurrence, needs careful calibrated language/attribution. Prefer local rewording or at most existing bounded business rewrite instead of suppressing the entire report. Where impossible to salvage without asserting an objective falsehood, isolate that unit; do not knowingly publish a fabricated historical fact.
+
+A disclaimer remains mandatory but does NOT cure false prices, fabricated events or misleading claims of verified fact. Distinguish a mistaken objective number from an intellectually arguable economic hypothesis.
+
+## Execution — respect current branch ownership
+
+1. Read PROJECT_RULES, ORCHESTRATION, ACTIVE_TASK, CURRENT_STATE, this full TASK and previous G2 Reports. Fresh fetch origin/main and PR #110 exact head/status; identify all involved paths, concurrent PR overlaps and worktree ownership. **Never reuse other G/H worktree, branch, dev server or uncommitted work**. Protected old Mac folders. Use fresh `/Users/yuya/Developer/kabumori-fresh` as clean base, NEW G2-only isolated worktree and NEW branch based on PR #110 exact head if safe. Keep protected PR #110 branch/head unchanged. Open a separate **Draft stacked PR** targeting the protected PR #110 branch only for the *new delta* (no merge), or STOP and report if clean stacking is not viable. Never force-push.
+2. First **audit existing logic** rather than assuming the previous Fact failures had one cause: inspect actual `analysis_logic.ts`, `unit_sanitizer.ts`, hard guards, Generate/Fact prompt and output contract, provider boundary, delivery-first behavior, 10/7 fixtures, available past Fact failure fixtures/log summaries. Classify with reproducible local examples how many are objective errors vs analysis false positives vs unknown. Do not claim all historical failures were caused by causality guards without measured evidence. Document strict invariants and minimal change proposal.
+3. Within G2-owned `market-report-analysis/` and necessary local tests only, implement **smallest coherent policy calibration**: strict objective Hard checks unchanged, semantic distinction between inference and reported fact; do not automatically block plausible own-market analysis for lack of verbatim source claim. Reduce fragile clause suffix/known-noun list chasing where possible without erasing objective safety. Use existing bounded rewrite/soft warning appropriately and log final status honestly. Preserve X+app consistency and human-readable natural Japanese. If safe implementation requires touching G3/G4/G5-owned files, DB/RPC, shared Provider, migrations, Auth, production config or broad architecture, STOP at audit+design and request allocation, do not cross scope.
+4. Run entirely **offline**, using deterministic mocked generation and fixtures, at least:
+   - ALLOW: oil price fall → transport fuel cost/margin outlook, yen appreciation → exporter earnings headwind outlook, interest-rate change → differential sector effects, and one multi-fact synthesized market outlook, even if no news source literally says the whole inference; include proper conditional language/uncertainty.
+   - GUARD: false Nikkei date/value/sign, fabricated corporate release, unknown sources; numerical and dated claims must never be laundered by distant `可能性`.
+   - HANDLE clearly attributed vs unsubstantiated *historical observed price-causation*: sensible qualified interpretation passes; falsely asserting source-confirmed historical cause does not become an invented verified fact.
+   - Preserve H2 P1 20 malformed comma-free cases, correct noun-subject `勢いが` positive cases, emoji/date binding, B1–B4 prior Fact objectives. If a previously hard assertion is intentionally newly allowed as a *marked interpretation*, document the semantic change and test genuine wrong-fact controls separately.
+   - Demonstrate X and app packet survival, disclaimer once, no misleading passed Fact status, MAX_GENERATIONS=2, MAX_MODEL_CALLS=4, retries unchanged, no new paid calls.
+5. Evaluate sample output **informativeness, naturalness, unnecessary deletions, clean-delivery eligibility, and prompt/token cost proxies**, not just count of strict rejected strings. A guard that trivially allows everything or suppresses almost every Opus explanation is not acceptable. Distinguish proven behavioral regressions from debate about reasonable financial projections.
+6. Required local tests: focused new semantic matrix + relevant market-report-analysis, shared X consumer, packet, app/personalized suites; Deno check/lint and git diff --check; no live/paid OpenAI or Anthropic calls or real production cron. Protect existing API secrets, provider budgets, market data/users and previous report history.
+7. Return with a NEW Draft stacked PR only if actual source diff, scope/branch/CI and independent worktree separation are safe. Report exact main/base/head, touched files, test totals, verified behavioral before/after, reasons for Hard vs Advisory/Allow, remaining false positives, risk and cost, commit/push status. **Do not merge PR #110 or this PR, deploy, flip models or enable real X posts.** On completion update only G2 current TASK and own ACTIVE_TASK entry to `review_required/next_owner chatgpt`, preserve ALL archived historical text below, return `K2`.
+8. ChatGPT at K2 decides **at most one risk-targeted integrated Codex review for this actual policy change** (Sol（高） if Hard factual boundary changes); do not automatically repeat 1,345+ broad reviews or micro-patch individual uncommon Japanese words. Separate source merge gate and production release gate.
+
+## Report — new task
+
+（未着手）
+
+---
+
+## Archived previous G2 TASK / all Reports — preserved verbatim below
+
 # C2 R1 P1 — PR #110 Hard-Fact predicate conjunction fail-open — bounded G2 corrective
 
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
