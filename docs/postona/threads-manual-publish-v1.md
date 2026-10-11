@@ -1,5 +1,7 @@
 # POSTONA Threads 手動テキスト投稿 V1（ソース実装・未配線・無効）
 
+> **2026-10-12 追記（統合 TASK `postona-threads-connect-publish-integrated-offline-v1-g4-20261011`）**: §3〜§4 の `claim`→`redeem`（service_role）→`record` は、K4 の P1 指摘により `release`（権限判定とトークン受け渡しを1トランザクション・サーバーの証明つき）と `record` に置き換えた。ワークスペースの条件と G5 のエラーコードの読み分けも修正した。最新は `docs/postona/threads-connect-publish-integration-v1.md`。
+
 - TASK: `postona-threads-manual-text-publish-v1-20261011`（G4）
 - 基準: `origin/main` `9fef4659`（2026-10-11 JST）
 - 状態: **ソースと偽データのテストだけ。本番の DB・Edge Function・Meta・Supabase には一切触れていない。** 実際の Threads 投稿は、下の「本番までの関門」がすべて揃い、別途承認されるまで動かない。

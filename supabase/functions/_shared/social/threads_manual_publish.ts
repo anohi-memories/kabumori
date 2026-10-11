@@ -10,14 +10,21 @@
 //                           the account's workspace, a verified Threads account, the per-account manual
 //                           publish permission, the exact text stored. Replays of the same key return
 //                           the same attempt; at most one open attempt per account.
-//   claim (caller JWT)      immediately before EACH provider call, the database re-decides everything
-//                           begin decided, moves the attempt to the step's in-flight state with a compare-
-//                           and-set, and issues a single-use step grant (60 s).
-//   redeem (server only)    the grant buys this account's Threads credential from Vault, once, together
-//                           with the stored text / container id for that step. The caller never sees it.
+//   release (caller JWT +   immediately before EACH provider call, ONE database transaction re-decides
+//   server attestation)     everything (G5 lifecycle fence, the caller's Auth session, workspace,
+//                           membership, account, credential expiry, manual permission), moves the attempt
+//                           with a compare-and-set and only then hands this account's credential to the
+//                           server, with a record grant bound to the same user and session. A signed-in
+//                           client can call it but cannot attest, so it never obtains a token
+//                           (threads_publish_release_candidate.sql; the K4 P1 fix).
 //   provider call           exactly one request (threads_publish_contract.ts).
-//   record (server only)    the provider's answer, bound to the same grant, through a fixed transition
-//                           table. An unknown publish outcome is recorded as `uncertain`, never resent.
+//   record (caller JWT +    the provider's answer, bound to the grant, the same user and session, attested
+//   server attestation)     over the exact result, through a fixed transition table. An unknown publish
+//                           outcome is recorded as `uncertain`, never resent.
+//
+// Not closed, and not claimed: between the release commit and the HTTP request (milliseconds, at most
+// the 10 s request bound) a lifecycle change cannot stop a request already released. Every LATER write
+// needs a new release.
 //
 // Statuses (THREADS_ATTEMPT_STATUSES): reserved -> creating_container -> container_created -> publishing
 // -> publish_returned -> published, plus failed / uncertain / published_unidentified. Only `published`
@@ -59,13 +66,13 @@ export type ThreadsAttemptStatus = (typeof THREADS_ATTEMPT_STATUSES)[number];
 
 export const THREADS_TERMINAL_STATUSES: ReadonlySet<ThreadsAttemptStatus> = new Set(["published", "published_unidentified", "failed"]);
 
-/** The steps a claim can be made for, and the status each must find (the database enforces the same). */
+/** The steps a release can be made for, and the status each must find (the database enforces the same). */
 export const THREADS_CLAIM_STEPS = ["create_container", "check_container", "publish", "confirm", "reconcile"] as const;
 export type ThreadsClaimStep = (typeof THREADS_CLAIM_STEPS)[number];
 
 /**
- * What a claim requires and does: the status the attempt must be in, and the in-flight status a write
- * step moves it to (null: a read step, no move). A write step's claim is a compare-and-set, so two
+ * What a release requires and does: the status the attempt must be in, and the in-flight status a write
+ * step moves it to (null: a read step, no move). A write step's release is a compare-and-set, so two
  * requests can never both send the same write.
  */
 export const THREADS_CLAIM_RULES: Readonly<Record<ThreadsClaimStep, Readonly<{ from: ThreadsAttemptStatus; to: ThreadsAttemptStatus | null }>>> = Object.freeze({
@@ -77,21 +84,20 @@ export const THREADS_CLAIM_RULES: Readonly<Record<ThreadsClaimStep, Readonly<{ f
 });
 
 /**
- * Steps that lead to a post need the per-account manual publish permission at claim AND redeem time.
+ * Steps that lead to a post need the per-account manual publish permission at release time.
  * The read-backs after a publish (confirm, reconcile) do not: withdrawing the permission must not stop
  * the person from learning whether their post went out.
  */
 export const THREADS_PERMISSION_STEPS: ReadonlySet<ThreadsClaimStep> = new Set(["create_container", "check_container", "publish"]);
 
 /**
- * An in-flight write abandoned (the server died between claim and record) is settled by a reconcile
- * claim once it is this old: `creating_container` -> failed STEP_INTERRUPTED (no container id was ever
+ * An in-flight write abandoned (the server died between release and record) is settled by a reconcile
+ * release once it is this old: `creating_container` -> failed STEP_INTERRUPTED (no container id was ever
  * recorded, so nothing can be published from it); `publishing` -> uncertain STEP_INTERRUPTED, then the
  * normal read-only reconciliation.
  */
 export const THREADS_STALE_IN_FLIGHT_SECONDS = 120;
 export const THREADS_ATTEMPT_MAX_AGE_SECONDS = 15 * 60;
-export const THREADS_GRANT_TTL_SECONDS = 60;
 
 /**
  * Every result a server may record, as [step, from status, to status]. Nothing else is accepted; in
@@ -119,7 +125,7 @@ export const THREADS_STORE_REFUSALS = [
   "TEXT_INVALID",
   "ACCOUNT_NOT_FOUND", // missing, or the caller has no membership (indistinguishable on purpose)
   "PUBLISH_FORBIDDEN", // a member, but not the workspace owner/admin
-  "WORKSPACE_INACTIVE", // the workspace is disabled (is_active false or publish_mode 'disabled')
+  "WORKSPACE_INACTIVE", // not the person's own self-service POSTONA workspace (automatic-publishing flags are not read)
   "SERVICE_NOT_ACTIVE", // G5 lifecycle: POSTONA service not registered / ended / suspended
   "ACCOUNT_LIFECYCLE_BLOCKED", // G5 lifecycle: deletion in progress, locked, or the fence unavailable
   "PLATFORM_NOT_SUPPORTED",
@@ -133,6 +139,7 @@ export const THREADS_STORE_REFUSALS = [
   "ATTEMPT_EXPIRED", // too old to continue to a publish; nothing was published
   "STALE_STEP", // the attempt is no longer in the status this step needs
   "GRANT_INVALID",
+  "ATTESTATION_INVALID", // the server's own attestation was refused (key mismatch, replay, stale): a server fault
   "BUSY",
   "STORE_UNAVAILABLE",
 ] as const;
@@ -180,12 +187,13 @@ export const THREADS_ATTEMPT_ERROR_CODES = [
   "PUBLISHED_POST_NOT_FOUND",
   "ATTEMPT_EXPIRED", // set by the database: too old to continue, nothing was published
   "STEP_INTERRUPTED", // set by the database: an in-flight step was abandoned (see the SQL candidate)
-  "AUTHORIZATION_CHANGED", // set by the database: the re-check at redeem refused, so the claimed write was never sent
+  "AUTHORIZATION_CHANGED", // PR #140's superseded redeem path only; the release candidate never sets it
 ] as const;
 export type ThreadsAttemptErrorCode = (typeof THREADS_ATTEMPT_ERROR_CODES)[number];
 
-/** What a redeemed grant buys: the credential and exactly the stored inputs of that step. */
-export type ThreadsRedeemedStep = Readonly<{
+/** What one release hands to the server: the record grant, the credential and that step's stored inputs. */
+export type ThreadsReleasedStep = Readonly<{
+  grant: string;
   credential: ThreadsCredential;
   /** The stored text (create_container, and reconcile to find the post by its exact text). */
   text: string | null;
@@ -207,15 +215,15 @@ export type ThreadsStepResult =
 export type VerifiedCaller = Readonly<{ userId: string; bearerToken: string }>;
 
 /**
- * The database boundary (SQL candidate supabase/candidates/postona_threads_publish/). begin, claim and
- * read run as the CALLER (their JWT: inside the database auth.uid() is the caller); redeem and record
- * are server-only and are bound to a grant a caller-authorized claim issued moments before.
+ * The database boundary (SQL candidates in supabase/candidates/postona_threads_publish/). Everything runs
+ * as the CALLER (their JWT: inside the database auth.uid() and the session are the caller's). release and
+ * record additionally carry the server's attestation (added by the adapter, never by the app), so only
+ * the publish server can obtain a credential or record a result. There is no service_role path.
  */
 export interface ThreadsPublishStore {
   begin(caller: VerifiedCaller, input: Readonly<{ socialAccountId: string; idempotencyKey: string; text: string }>): Promise<ThreadsAttempt>;
-  claim(caller: VerifiedCaller, input: Readonly<{ attemptId: string; step: ThreadsClaimStep }>): Promise<Readonly<{ grant: string; attempt: ThreadsAttempt }>>;
-  redeem(input: Readonly<{ attemptId: string; step: ThreadsClaimStep; grant: string }>): Promise<ThreadsRedeemedStep>;
-  record(input: Readonly<{ attemptId: string; step: ThreadsClaimStep; grant: string; result: ThreadsStepResult }>): Promise<ThreadsAttempt>;
+  release(caller: VerifiedCaller, input: Readonly<{ attemptId: string; step: ThreadsClaimStep }>): Promise<ThreadsReleasedStep>;
+  record(caller: VerifiedCaller, input: Readonly<{ attemptId: string; step: ThreadsClaimStep; grant: string; result: ThreadsStepResult }>): Promise<ThreadsAttempt>;
   read(caller: VerifiedCaller, attemptId: string): Promise<ThreadsAttempt>;
 }
 
@@ -288,16 +296,15 @@ export async function resumeThreadsAttempt(deps: ThreadsManualPublishDeps, calle
 export async function reconcileThreadsAttempt(deps: ThreadsManualPublishDeps, caller: VerifiedCaller, attemptId: string): Promise<ThreadsAttempt> {
   const attempt = await deps.store.read(caller, attemptId);
   if (attempt.status !== "uncertain" && attempt.status !== "creating_container" && attempt.status !== "publishing") return attempt;
-  let claimed: Readonly<{ grant: string; attempt: ThreadsAttempt }>;
+  let redeemed: ThreadsReleasedStep;
   try {
     // For an abandoned in-flight write the database settles it first (see THREADS_STALE_IN_FLIGHT_SECONDS).
-    claimed = await deps.store.claim(caller, { attemptId, step: "reconcile" });
+    redeemed = await deps.store.release(caller, { attemptId, step: "reconcile" });
   } catch (error) {
     if (error instanceof ThreadsStoreError && error.code === "STALE_STEP") return await deps.store.read(caller, attemptId);
     throw error;
   }
-  const redeemed = await deps.store.redeem({ attemptId, step: "reconcile", grant: claimed.grant });
-  const record = (result: ThreadsStepResult) => deps.store.record({ attemptId, step: "reconcile", grant: claimed.grant, result });
+  const record = (result: ThreadsStepResult) => deps.store.record(caller, { attemptId, step: "reconcile", grant: redeemed.grant, result });
   if (redeemed.containerId === null) return await record({ to: "uncertain", errorCode: "RECONCILE_CONTAINER_UNKNOWN" });
   let status: ThreadsContainerStatus;
   try {
@@ -336,9 +343,9 @@ async function drive(deps: ThreadsManualPublishDeps, caller: VerifiedCaller, sta
 }
 
 async function createContainerStep(deps: ThreadsManualPublishDeps, caller: VerifiedCaller, attempt: ThreadsAttempt): Promise<ThreadsAttempt> {
-  const { grant } = await deps.store.claim(caller, { attemptId: attempt.attemptId, step: "create_container" });
-  const redeemed = await deps.store.redeem({ attemptId: attempt.attemptId, step: "create_container", grant });
-  const record = (result: ThreadsStepResult) => deps.store.record({ attemptId: attempt.attemptId, step: "create_container", grant, result });
+  const redeemed = await deps.store.release(caller, { attemptId: attempt.attemptId, step: "create_container" });
+  const record = (result: ThreadsStepResult) =>
+    deps.store.record(caller, { attemptId: attempt.attemptId, step: "create_container", grant: redeemed.grant, result });
   if (redeemed.text === null) return await record({ to: "failed", errorCode: "STORED_TEXT_MISSING" });
   try {
     const { containerId } = await createThreadsTextContainer(deps.fetch, redeemed.credential, redeemed.text);
@@ -358,8 +365,7 @@ async function publishWhenReady(deps: ThreadsManualPublishDeps, caller: Verified
   const delay = Math.max(0, deps.containerCheckDelayMs ?? 3000);
   for (let check = 0; check < checks; check += 1) {
     if (check > 0) await deps.sleep(delay);
-    const { grant } = await deps.store.claim(caller, { attemptId: attempt.attemptId, step: "check_container" });
-    const redeemed = await deps.store.redeem({ attemptId: attempt.attemptId, step: "check_container", grant });
+    const redeemed = await deps.store.release(caller, { attemptId: attempt.attemptId, step: "check_container" });
     let status: ThreadsContainerStatus;
     try {
       status = (await readThreadsContainerStatus(deps.fetch, redeemed.credential, String(redeemed.containerId))).status;
@@ -368,7 +374,12 @@ async function publishWhenReady(deps: ThreadsManualPublishDeps, caller: Verified
       return attempt;
     }
     if (status === "error" || status === "expired") {
-      return await deps.store.record({ attemptId: attempt.attemptId, step: "check_container", grant, result: { to: "failed", errorCode: status === "error" ? "CONTAINER_ERROR" : "CONTAINER_EXPIRED" } });
+      return await deps.store.record(caller, {
+        attemptId: attempt.attemptId,
+        step: "check_container",
+        grant: redeemed.grant,
+        result: { to: "failed", errorCode: status === "error" ? "CONTAINER_ERROR" : "CONTAINER_EXPIRED" },
+      });
     }
     // PUBLISHED before we ever claimed publish cannot come from this flow; do not touch it.
     if (status === "published") return attempt;
@@ -378,9 +389,9 @@ async function publishWhenReady(deps: ThreadsManualPublishDeps, caller: Verified
 }
 
 async function publishStep(deps: ThreadsManualPublishDeps, caller: VerifiedCaller, attempt: ThreadsAttempt): Promise<ThreadsAttempt> {
-  const { grant } = await deps.store.claim(caller, { attemptId: attempt.attemptId, step: "publish" });
-  const redeemed = await deps.store.redeem({ attemptId: attempt.attemptId, step: "publish", grant });
-  const record = (result: ThreadsStepResult) => deps.store.record({ attemptId: attempt.attemptId, step: "publish", grant, result });
+  const redeemed = await deps.store.release(caller, { attemptId: attempt.attemptId, step: "publish" });
+  const record = (result: ThreadsStepResult) =>
+    deps.store.record(caller, { attemptId: attempt.attemptId, step: "publish", grant: redeemed.grant, result });
   if (redeemed.containerId === null) return await record({ to: "uncertain", errorCode: "STORED_CONTAINER_MISSING" });
   try {
     const { mediaId } = await publishThreadsContainer(deps.fetch, redeemed.credential, redeemed.containerId);
@@ -393,12 +404,16 @@ async function publishStep(deps: ThreadsManualPublishDeps, caller: VerifiedCalle
 }
 
 async function confirmStep(deps: ThreadsManualPublishDeps, caller: VerifiedCaller, attempt: ThreadsAttempt): Promise<ThreadsAttempt> {
-  const { grant } = await deps.store.claim(caller, { attemptId: attempt.attemptId, step: "confirm" });
-  const redeemed = await deps.store.redeem({ attemptId: attempt.attemptId, step: "confirm", grant });
+  const redeemed = await deps.store.release(caller, { attemptId: attempt.attemptId, step: "confirm" });
   if (redeemed.providerPostId === null) return attempt;
   try {
     const post = await readThreadsPublishedPost(deps.fetch, redeemed.credential, redeemed.providerPostId);
-    return await deps.store.record({ attemptId: attempt.attemptId, step: "confirm", grant, result: { to: "published", providerPostId: post.mediaId, permalink: post.permalink } });
+    return await deps.store.record(caller, {
+      attemptId: attempt.attemptId,
+      step: "confirm",
+      grant: redeemed.grant,
+      result: { to: "published", providerPostId: post.mediaId, permalink: post.permalink },
+    });
   } catch {
     // Not confirmed yet: the attempt stays `publish_returned` (shown as "confirming"), never as success.
     return await deps.store.read(caller, attempt.attemptId);

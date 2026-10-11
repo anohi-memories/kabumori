@@ -3,12 +3,13 @@
 // POSTONA: the signed-in person posts ONE text to their own connected Threads account, explicitly.
 //
 // This function decides nothing about who may publish. It checks the request shape, confirms the bearer
-// token with the Auth server, and hands every decision to the database (SQL candidate
-// supabase/candidates/postona_threads_publish/): the caller's own JWT for reserving, claiming each step
-// and reading; a server-only, single-use step grant for the credential and the recorded result. The
-// provider calls go through _shared/social/threads_publish_contract.ts, one request each, never resent.
-// Responses carry fixed codes and the attempt's public fields only: no token, no container internals,
-// no provider body.
+// token with the Auth server, and hands every decision to the database (SQL candidates in
+// supabase/candidates/postona_threads_publish/), always with the CALLER'S OWN JWT: reserving and reading
+// as the caller; and immediately before EACH Threads call, one attested release in which the database
+// re-decides everything (G5 lifecycle, the caller's session, workspace, membership, account, credential
+// expiry, manual permission) and only then hands this server the credential. The provider calls go through
+// _shared/social/threads_publish_contract.ts, one request each, never resent. Responses carry fixed codes
+// and the attempt's public fields only: no token, no container internals, no provider body.
 
 import {
   publishThreadsTextNow,
@@ -33,7 +34,8 @@ export const THREADS_MANUAL_PUBLISH_PREREQUISITES = Object.freeze([
   "PHASE_2A2_MIGRATION_APPLIED", // multi-provider social_accounts, applied in production
   "THREADS_CONNECT_RUNTIME_LIVE", // H5: real verified Threads connections, Vault-held tokens, per-account expiry reader
   "COMMON_ACCOUNT_WRITER_FENCE_LIVE", // G5: private.account_lifecycle_assert_active_service_write
-  "PUBLISH_LEDGER_APPLIED", // the reviewed SQL candidate (permission + attempts + grants), applied
+  "PUBLISH_LEDGER_APPLIED", // the reviewed SQL candidates (custody -> manual publish -> release), applied
+  "PUBLISH_ATTESTATION_KEY_PROVISIONED", // the same random key in Vault and in this function's secrets (user-operated)
   "META_APP_PUBLISH_READY", // Meta app with threads_content_publish for the tester; exact redirect
   "INTEGRATED_SECURITY_REVIEW", // one focused review of connect + publish + T13 together
   "PILOT_APPROVED", // explicit user approval for a named tester account
@@ -76,6 +78,7 @@ const HTTP_STATUS: Readonly<Record<ThreadsStoreRefusal, number>> = {
   ATTEMPT_EXPIRED: 409,
   STALE_STEP: 409,
   GRANT_INVALID: 503, // never the caller's fault: the server lost its own grant
+  ATTESTATION_INVALID: 503, // never the caller's fault: this server's own attestation was refused
   BUSY: 409,
   STORE_UNAVAILABLE: 503,
 };

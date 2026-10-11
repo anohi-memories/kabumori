@@ -1,15 +1,15 @@
 // TEST SUPPORT ONLY (imported by *_test.ts files, never by runtime code).
 //
-// An in-memory reference model of the database boundary in
-// supabase/candidates/postona_threads_publish/threads_manual_publish_candidate.sql: the same refusal
-// order, the same claim rules, single-use grants and the same transition table. The SQL candidate is
-// proven separately against a disposable PostgreSQL (supabase/tests/postona_threads_publish_*.sql).
+// An in-memory reference model of the database boundary in supabase/candidates/postona_threads_publish/
+// (custody -> manual publish -> release): the same refusal order, the same step rules, one atomic release
+// per provider call, record grants bound to user and session, and the same transition table. The SQL is
+// proven separately against a disposable PostgreSQL (supabase/tests/postona_threads_release_*.sql).
+// The server attestation is not modelled here (the adapter adds it; http_test.ts and the SQL proof cover it).
 
 import {
   THREADS_ATTEMPT_ERROR_CODES,
   THREADS_ATTEMPT_MAX_AGE_SECONDS,
   THREADS_CLAIM_RULES,
-  THREADS_GRANT_TTL_SECONDS,
   THREADS_PERMISSION_STEPS,
   THREADS_RECORD_TRANSITIONS,
   THREADS_STALE_IN_FLIGHT_SECONDS,
@@ -20,7 +20,7 @@ import {
   type ThreadsClaimStep,
   type ThreadsPublishPermissionStore,
   type ThreadsPublishStore,
-  type ThreadsRedeemedStep,
+  type ThreadsReleasedStep,
   type ThreadsStepResult,
   ThreadsStoreError,
   type VerifiedCaller,
@@ -52,10 +52,9 @@ type Row = {
   createdAt: number;
   updatedAt: number;
 };
-type Grant = { value: string; step: ThreadsClaimStep; state: "issued" | "redeemed"; expiresAt: number };
+type Grant = { value: string; step: ThreadsClaimStep; user: string; session: string };
 
 export const ATTEMPT_MAX_AGE_MS = THREADS_ATTEMPT_MAX_AGE_SECONDS * 1000;
-export const GRANT_TTL_MS = THREADS_GRANT_TTL_SECONDS * 1000;
 export const STALE_IN_FLIGHT_MS = THREADS_STALE_IN_FLIGHT_SECONDS * 1000;
 
 export class FakeThreadsPublishStore implements ThreadsPublishStore, ThreadsPublishPermissionStore {
@@ -63,12 +62,15 @@ export class FakeThreadsPublishStore implements ThreadsPublishStore, ThreadsPubl
   memberships = new Map<string, "owner" | "admin" | "member" | "viewer">(); // `${brandId}|${userId}`
   services = new Map<string, FakeService>(); // userId -> lifecycle
   permissions = new Set<string>();
-  /** Workspaces that are disabled (is_active false or publish_mode 'disabled'). */
+  /** Workspaces that are not a self-service POSTONA workspace (code_profile_key other than social_mobile_user_v1). */
   inactiveBrands = new Set<string>();
   attempts = new Map<string, Row>();
   grants = new Map<string, Grant>();
   /** Verified bearer tokens -> user ids; anything else is not authenticated. */
   tokens = new Map<string, string>();
+  /** Bearer token -> its Auth session id (default `session:<token>`); revoked sessions are refused. */
+  sessions = new Map<string, string>();
+  revokedSessions = new Set<string>();
   clock = Date.parse("2026-10-11T03:00:00Z");
   log: string[] = [];
   /** Test hook: runs after each successful record (e.g. to revoke the permission between steps). */
@@ -115,13 +117,22 @@ export class FakeThreadsPublishStore implements ThreadsPublishStore, ThreadsPubl
     });
   }
 
-  claim(caller: VerifiedCaller, input: Readonly<{ attemptId: string; step: ThreadsClaimStep }>): Promise<Readonly<{ grant: string; attempt: ThreadsAttempt }>> {
-    return this.run(`claim:${input.step}`, () => {
+  /**
+   * One transaction (threads_publish_release_candidate.sql): the fence, the caller's session, every
+   * authorization check, the compare-and-set and the credential, together. Nothing moves and no
+   * credential is returned unless all of it holds at once.
+   */
+  release(caller: VerifiedCaller, input: Readonly<{ attemptId: string; step: ThreadsClaimStep }>): Promise<ThreadsReleasedStep> {
+    return this.run(`release:${input.step}`, () => {
       const user = this.authenticate(caller);
-      const row = this.memberAttempt(user, input.attemptId);
+      const session = this.sessionOf(caller);
       const rule = THREADS_CLAIM_RULES[input.step];
       if (rule === undefined) throw new ThreadsStoreError("REQUEST_INVALID");
-      this.authorize(user, row.socialAccountId, THREADS_PERMISSION_STEPS.has(input.step));
+      const row = this.memberAttempt(user, input.attemptId);
+      // G5 fence, then the session, then workspace / membership / account / expiry / permission.
+      this.fence(user);
+      if (this.revokedSessions.has(session)) throw new ThreadsStoreError("AUTH_REQUIRED");
+      const account = this.authorize(user, row.socialAccountId, THREADS_PERMISSION_STEPS.has(input.step));
       if (input.step === "reconcile" && this.clock - row.updatedAt > STALE_IN_FLIGHT_MS) {
         // An abandoned in-flight write is settled first (see THREADS_STALE_IN_FLIGHT_SECONDS).
         if (row.status === "creating_container") {
@@ -132,18 +143,25 @@ export class FakeThreadsPublishStore implements ThreadsPublishStore, ThreadsPubl
       }
       if (row.status !== rule.from) throw new ThreadsStoreError("STALE_STEP");
       if (rule.to !== null && this.clock - row.createdAt > ATTEMPT_MAX_AGE_MS) {
-        // Too old to continue to a provider write: closed as failed (nothing was published: a write step
-        // starts from reserved or container_created, neither of which can have a post).
         this.settle(row, "failed", "ATTEMPT_EXPIRED");
         throw new ThreadsStoreError("ATTEMPT_EXPIRED");
       }
+      // The credential is read before anything moves.
+      if (!account.token || !account.threadsUserId) throw new ThreadsStoreError("CREDENTIALS_MISSING");
       if (rule.to !== null) {
         row.status = rule.to;
         row.updatedAt = this.clock;
       }
       const value = `grant-${row.attemptId}-${++this.sequence}-${input.step}`;
-      this.grants.set(row.attemptId, { value, step: input.step, state: "issued", expiresAt: this.clock + GRANT_TTL_MS });
-      return { grant: value, attempt: this.view(row) };
+      this.grants.set(row.attemptId, { value, step: input.step, user, session });
+      return {
+        grant: value,
+        credential: { threadsUserId: account.threadsUserId, accessToken: account.token },
+        text: input.step === "create_container" || input.step === "reconcile" ? row.text : null,
+        containerId: row.containerId,
+        providerPostId: row.providerPostId,
+        attemptCreatedAt: new Date(row.createdAt).toISOString(),
+      };
     });
   }
 
@@ -201,58 +219,27 @@ export class FakeThreadsPublishStore implements ThreadsPublishStore, ThreadsPubl
     });
   }
 
-  // --- server-side --------------------------------------------------------------------------------
+  // --- record: facts only, bound to the grant, the same user and session; no fence ---------------------
 
-  redeem(input: Readonly<{ attemptId: string; step: ThreadsClaimStep; grant: string }>): Promise<ThreadsRedeemedStep> {
-    return this.run(`redeem:${input.step}`, () => {
-      const row = this.attempts.get(input.attemptId);
-      const grant = this.grants.get(input.attemptId);
-      const rule = THREADS_CLAIM_RULES[input.step];
-      if (!row || !grant || !rule || grant.value !== input.grant || grant.step !== input.step || grant.state !== "issued"
-        || this.clock > grant.expiresAt || row.status !== (rule.to ?? rule.from)) {
-        throw new ThreadsStoreError("GRANT_INVALID");
-      }
-      grant.state = "redeemed";
-      // Re-checked here too: the account may have changed since the claim.
-      const account = this.accounts.get(row.socialAccountId);
-      const refusal = !account || account.platform !== "threads" || account.brandId !== row.brandId ? "ACCOUNT_NOT_FOUND"
-        : account.connection !== "identity_verified" || !account.threadsUserId ? "CONNECTION_NOT_VERIFIED"
-        : THREADS_PERMISSION_STEPS.has(input.step) && !this.permissions.has(row.socialAccountId) ? "MANUAL_PUBLISH_NOT_PERMITTED"
-        : !account.token ? "CREDENTIALS_MISSING"
-        : this.expired(account) ? "CREDENTIALS_EXPIRED"
-        : null;
-      if (refusal !== null || !account?.threadsUserId || !account.token) {
-        // No credential left the store, so a claimed write was provably never sent.
-        if (input.step === "create_container" || input.step === "publish") this.settle(row, "failed", "AUTHORIZATION_CHANGED");
-        throw new ThreadsStoreError(refusal ?? "CREDENTIALS_MISSING");
-      }
-      return {
-        credential: { threadsUserId: account.threadsUserId, accessToken: account.token },
-        text: input.step === "create_container" || input.step === "reconcile" ? row.text : null,
-        containerId: row.containerId,
-        providerPostId: row.providerPostId,
-        attemptCreatedAt: new Date(row.createdAt).toISOString(),
-      };
-    });
-  }
-
-  record(input: Readonly<{ attemptId: string; step: ThreadsClaimStep; grant: string; result: ThreadsStepResult }>): Promise<ThreadsAttempt> {
+  record(caller: VerifiedCaller, input: Readonly<{ attemptId: string; step: ThreadsClaimStep; grant: string; result: ThreadsStepResult }>): Promise<ThreadsAttempt> {
     return this.run(`record:${input.step}:${input.result.to}`, () => {
+      const user = this.authenticate(caller);
+      const session = this.sessionOf(caller);
       const row = this.attempts.get(input.attemptId);
       const grant = this.grants.get(input.attemptId);
-      if (!row || !grant || grant.value !== input.grant || grant.step !== input.step || grant.state !== "redeemed") {
+      if (!row || !grant || grant.value !== input.grant || grant.step !== input.step || grant.user !== user || grant.session !== session) {
         throw new ThreadsStoreError("GRANT_INVALID");
       }
       const allowed = THREADS_RECORD_TRANSITIONS.some(([step, from, to]) => step === input.step && from === row.status && to === input.result.to);
       if (!allowed) throw new ThreadsStoreError("STALE_STEP");
       const result = input.result;
       if ("errorCode" in result && !(THREADS_ATTEMPT_ERROR_CODES as readonly string[]).includes(result.errorCode)) throw new ThreadsStoreError("REQUEST_INVALID");
+      if (result.to === "published" && row.providerPostId !== null && row.providerPostId !== result.providerPostId) throw new ThreadsStoreError("REQUEST_INVALID");
       row.status = result.to;
       row.updatedAt = this.clock;
       if (result.to === "container_created") row.containerId = result.containerId;
       if (result.to === "publish_returned") row.providerPostId = result.providerPostId;
       if (result.to === "published") {
-        if (row.providerPostId !== null && row.providerPostId !== result.providerPostId) throw new ThreadsStoreError("STALE_STEP");
         row.providerPostId = result.providerPostId;
         row.permalink = result.permalink;
         row.errorCode = null;
@@ -274,6 +261,16 @@ export class FakeThreadsPublishStore implements ThreadsPublishStore, ThreadsPubl
     } catch (error) {
       return Promise.reject(error);
     }
+  }
+
+  private sessionOf(caller: VerifiedCaller): string {
+    return this.sessions.get(caller.bearerToken) ?? `session:${caller.bearerToken}`;
+  }
+
+  private fence(user: string): void {
+    const service = this.services.get(user) ?? "not_registered";
+    if (service === "not_registered" || service === "ended") throw new ThreadsStoreError("SERVICE_NOT_ACTIVE");
+    if (service !== "active") throw new ThreadsStoreError("ACCOUNT_LIFECYCLE_BLOCKED");
   }
 
   private authenticate(caller: VerifiedCaller): string {

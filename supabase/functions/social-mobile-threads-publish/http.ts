@@ -1,15 +1,16 @@
 // HTTP layer for social-mobile-threads-publish. SOURCE CANDIDATE (hard-disabled).
 //
 // Outgoing calls, and with which credential:
-//  - Auth:   GET  /auth/v1/user                                    caller's token (is it valid)
-//  - RPC:    begin / claim / read / set permission / account state  CALLER'S token: auth.uid() is the caller
-//  - RPC:    redeem / record                                        service-role key, server only; bound to a
-//                                                                   single-use grant a caller-authorized claim
-//                                                                   issued moments before
+//  - Auth:   GET  /auth/v1/user                                     caller's token (is it valid)
+//  - RPC:    begin / read / set permission / account state           CALLER'S token: auth.uid() is the caller
+//  - RPC:    release / record                                        CALLER'S token + this server's attestation
+//            (HMAC-SHA256 with THREADS_PUBLISH_ATTESTATION_KEY, the same secret the database holds in Vault as
+//            postona_threads_publish_attestation_v1; single-use nonce, 60 s): the database decides everything
+//            for the caller and hands the credential only to a request this server attested
 //  - Threads: through _shared/social/threads_publish_contract.ts only
-// The service-role key is used for exactly the two server-only functions and nothing else; it is never
-// combined with a caller-chosen user, workspace or account as authority. No table is read or written
-// directly. No token, text or provider body is logged or returned.
+// No service-role key: this function has no privileged database path at all. It never decodes a JWT
+// (the database takes the user and session from the verified claims). No table is read or written
+// directly. No token, text, key or provider body is logged or returned.
 
 import {
   THREADS_ATTEMPT_STATUSES,
@@ -19,7 +20,7 @@ import {
   type ThreadsClaimStep,
   type ThreadsPublishPermissionStore,
   type ThreadsPublishStore,
-  type ThreadsRedeemedStep,
+  type ThreadsReleasedStep,
   type ThreadsStepResult,
   ThreadsStoreError,
   type ThreadsStoreRefusal,
@@ -30,10 +31,9 @@ import { gatedHandler, handleThreadsPublish, THREADS_MANUAL_PUBLISH_PREREQUISITE
 
 export const THREADS_PUBLISH_RPC = Object.freeze({
   begin: "begin_threads_manual_publish",
-  claim: "claim_threads_manual_publish_step",
   read: "get_threads_manual_publish_attempt",
-  redeem: "redeem_threads_manual_publish_step",
-  record: "record_threads_manual_publish_step",
+  release: "release_threads_manual_publish_step",
+  record: "record_threads_manual_publish_result",
   setPermission: "set_threads_manual_publish_permission",
   accountState: "get_threads_manual_publish_state",
 });
@@ -73,9 +73,32 @@ function refusal(body: Record<string, unknown>): ThreadsStoreError | null {
     : unavailable();
 }
 
-export type StoreConfig = Readonly<{ supabaseUrl: string; anonKey: string; serviceRoleKey: string }>;
+export type StoreConfig = Readonly<{ supabaseUrl: string; anonKey: string; attestationKey: string }>;
 
-export function createStore(config: StoreConfig, fetchImpl: FetchLike = fetch): ThreadsPublishStore & ThreadsPublishPermissionStore {
+const encoder = new TextEncoder();
+const hex = (bytes: ArrayBuffer | Uint8Array) => [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+/** The attestation key must be a long random secret; anything shorter is refused at startup. */
+export function isAcceptableAttestationKey(key: string): boolean {
+  return key.length >= 32 && key.length <= 512 && !/\s/.test(key);
+}
+
+/** Exactly the database's message (threads_publish_release_candidate.sql), signed with the shared key. */
+export async function attest(key: string, parts: readonly string[]): Promise<string> {
+  const cryptoKey = await crypto.subtle.importKey("raw", encoder.encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return hex(await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(parts.join("\n"))));
+}
+
+/** 32 random bytes as hex: single use, the database refuses a repeat. */
+export function newNonce(): string {
+  return hex(crypto.getRandomValues(new Uint8Array(32)));
+}
+
+export function createStore(
+  config: StoreConfig,
+  fetchImpl: FetchLike = fetch,
+  clock: Readonly<{ nowSeconds: () => number; nonce: () => string }> = { nowSeconds: () => Math.floor(Date.now() / 1000), nonce: newNonce },
+): ThreadsPublishStore & ThreadsPublishPermissionStore {
   const call = async (rpc: string, bearer: string, apikey: string, args: Record<string, unknown>): Promise<Record<string, unknown>> => {
     let response: Response;
     try {
@@ -101,7 +124,13 @@ export function createStore(config: StoreConfig, fetchImpl: FetchLike = fetch): 
     return body;
   };
   const asCaller = (caller: VerifiedCaller, rpc: string, args: Record<string, unknown>) => call(rpc, caller.bearerToken, config.anonKey, args);
-  const asServer = (rpc: string, args: Record<string, unknown>) => call(rpc, config.serviceRoleKey, config.serviceRoleKey, args);
+  /** The caller's own request, plus this server's attestation over exactly these values. */
+  const attested = async (caller: VerifiedCaller, rpc: string, prefix: string, parts: readonly string[], args: Record<string, unknown>) => {
+    const issuedAt = clock.nowSeconds();
+    const nonce = clock.nonce();
+    const attestation = await attest(config.attestationKey, [prefix, caller.userId, ...parts, String(issuedAt), nonce]);
+    return await asCaller(caller, rpc, { ...args, p_issued_at: issuedAt, p_nonce: nonce, p_attestation: attestation });
+  };
 
   return {
     async begin(caller, input) {
@@ -113,23 +142,22 @@ export function createStore(config: StoreConfig, fetchImpl: FetchLike = fetch): 
       if (body.status !== "reserved" && body.status !== "replayed") throw unavailable();
       return parseAttempt(body.attempt, body.status === "replayed");
     },
-    async claim(caller, input) {
-      const body = await asCaller(caller, THREADS_PUBLISH_RPC.claim, { p_attempt_id: input.attemptId, p_step: input.step });
-      if (body.status !== "claimed" || typeof body.grant !== "string" || !/^[0-9a-f]{64}$/.test(body.grant)) throw unavailable();
-      return { grant: body.grant, attempt: parseAttempt(body.attempt) };
-    },
     async read(caller, attemptId) {
       const body = await asCaller(caller, THREADS_PUBLISH_RPC.read, { p_attempt_id: attemptId });
       if (body.status !== "ok") throw unavailable();
       return parseAttempt(body.attempt);
     },
-    async redeem(input): Promise<ThreadsRedeemedStep> {
-      const body = await asServer(THREADS_PUBLISH_RPC.redeem, { p_attempt_id: input.attemptId, p_step: input.step, p_grant: input.grant });
-      if (body.status !== "redeemed" || typeof body.threads_user_id !== "string" || typeof body.access_token !== "string"
-        || typeof body.attempt_created_at !== "string") {
+    async release(caller, input): Promise<ThreadsReleasedStep> {
+      const body = await attested(caller, THREADS_PUBLISH_RPC.release, "postona-threads-publish-release-v1", [input.attemptId, input.step], {
+        p_attempt_id: input.attemptId,
+        p_step: input.step,
+      });
+      if (body.status !== "released" || typeof body.grant !== "string" || !/^[0-9a-f]{64}$/.test(body.grant)
+        || typeof body.threads_user_id !== "string" || typeof body.access_token !== "string" || typeof body.attempt_created_at !== "string") {
         throw unavailable();
       }
       return {
+        grant: body.grant,
         credential: { threadsUserId: body.threads_user_id, accessToken: body.access_token },
         text: nullableString(body.text, 8192),
         containerId: nullableString(body.container_id, 32),
@@ -137,18 +165,28 @@ export function createStore(config: StoreConfig, fetchImpl: FetchLike = fetch): 
         attemptCreatedAt: body.attempt_created_at,
       };
     },
-    async record(input: Readonly<{ attemptId: string; step: ThreadsClaimStep; grant: string; result: ThreadsStepResult }>) {
+    async record(caller: VerifiedCaller, input: Readonly<{ attemptId: string; step: ThreadsClaimStep; grant: string; result: ThreadsStepResult }>) {
       const r = input.result;
-      const body = await asServer(THREADS_PUBLISH_RPC.record, {
-        p_attempt_id: input.attemptId,
-        p_step: input.step,
-        p_grant: input.grant,
-        p_to_status: r.to,
-        p_container_id: r.to === "container_created" ? r.containerId : null,
-        p_provider_post_id: r.to === "publish_returned" || r.to === "published" ? r.providerPostId : null,
-        p_permalink: r.to === "published" ? r.permalink : null,
-        p_error_code: "errorCode" in r ? r.errorCode : null,
-      });
+      const containerId = r.to === "container_created" ? r.containerId : null;
+      const providerPostId = r.to === "publish_returned" || r.to === "published" ? r.providerPostId : null;
+      const permalink = r.to === "published" ? r.permalink : null;
+      const errorCode = "errorCode" in r ? r.errorCode : null;
+      const body = await attested(
+        caller,
+        THREADS_PUBLISH_RPC.record,
+        "postona-threads-publish-record-v1",
+        [input.attemptId, input.step, input.grant, r.to, containerId ?? "", providerPostId ?? "", permalink ?? "", errorCode ?? ""],
+        {
+          p_attempt_id: input.attemptId,
+          p_step: input.step,
+          p_grant: input.grant,
+          p_to_status: r.to,
+          p_container_id: containerId,
+          p_provider_post_id: providerPostId,
+          p_permalink: permalink,
+          p_error_code: errorCode,
+        },
+      );
       if (body.status !== "recorded") throw unavailable();
       return parseAttempt(body.attempt);
     },
@@ -203,13 +241,13 @@ export function createHandler(env: { get: (name: string) => string | undefined }
   return gatedHandler(THREADS_MANUAL_PUBLISH_PREREQUISITES_MET, (request) => {
     const supabaseUrl = (env.get("SUPABASE_URL") ?? "").replace(/\/$/u, "");
     const anonKey = env.get("SUPABASE_ANON_KEY") ?? "";
-    const serviceRoleKey = env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    const attestationKey = env.get("THREADS_PUBLISH_ATTESTATION_KEY") ?? "";
+    if (!supabaseUrl || !anonKey || !isAcceptableAttestationKey(attestationKey)) {
       return Promise.resolve(Response.json({ success: false, error: "STORE_UNAVAILABLE" }, { status: 503 }));
     }
     return handleThreadsPublish(request, {
       getUser: createGetUser({ supabaseUrl, anonKey }, fetchImpl),
-      store: createStore({ supabaseUrl, anonKey, serviceRoleKey }, fetchImpl),
+      store: createStore({ supabaseUrl, anonKey, attestationKey }, fetchImpl),
       fetch: fetchImpl,
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       now: () => new Date(),
