@@ -1,3 +1,50 @@
+# G2 CURRENT TASK — PR143 C3指摘：失敗RPCの期限切れleaseフェンス限定修正（R1）
+
+- task_id: kabumori-pr143-fail-lease-expiry-fence-r1-20261011
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- start_code: G2
+- finish_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Sonnet5（高）**
+- source_pr: https://github.com/anohi-memories/kabumori/pull/143
+- protected_review_head: 1d0529bb68b0e60b32ce0a2cb0002872b1671177
+- review_h3_task: kabumori-pr143-ondemand-queue-auth-security-review-20261011
+- review_verdict: C3 CHANGES_REQUIRED / PRODUCTION_NO_GO
+- scope: one P2 race only — source/test; no production/merge/deploy
+
+## Why this task and concrete correction
+
+H3（Sol高）の独立レビューはAuth/RLS/SECURITY DEFINER、本人限定参照、queue並行処理/通知整合のP0/P1不具合なしと報告。既知のP2が1件残る。
+
+`supabase/migrations/20261011150000_personalized_ondemand_analysis_v1.sql` の `fail_personalized_analysis_job`（現候補479-480）は `status='processing'`、`lease_token`、`lease_version` までしか確認せず、**期限 `lease_expires_at` を確認しない**。`complete_personalized_analysis_job` の対称箇所（現候補425-426）には `or v_job.lease_expires_at < v_now` があり、期限切れ後・再claim前に旧workerが失敗してしまう。H3のReport `.agent/CODEX_REPORT_3.md` exact resultを確認。
+
+**修正は1か所のガード追加のみが基本**:
+1. `fail_personalized_analysis_job` に complete と全く同じ期限不一致条件を加え、期限が過ぎたjobは `lease_lost` を返しstatus/attempt/lease/notificationを一切変更しない。境界 < / = の意味もcompleteと同じにする。
+2. `supabase/functions/personalized-analysis-worker/worker_logic_test.ts` の `MemStore.fail` も同じガードにして**テスト模型と本物のSQLの対称性**を確保。必要な純粋なデータ構造だけ触る。
+3. `supabase/tests/personalized_ondemand_analysis_behavior.sql` （または同じ既存テストの適切箇所）に**期限切れかつまだ引き取り直されていないケース**の検証を追加。遅れた元workerが fail RPC を呼んでも `lease_lost`、DB行とattempt/status/token/version/notifyが不変であること。その後正常なclaimが一度だけ再取得できること、失敗/成功の旧workerレースとcompleted保護も確認。テストケースでPostgresの実時間の時計制御が難しければ、lease_expires_atをテストだけ安全に過去へ更新して再現する。正常期限内のfailure/requeue/terminal、expiry後・reclaim後の正常フローの回帰を維持。
+4. workerのruntime testでも【期限切れ後、reclaim前のfail】を再現（fail nonretryable/ retryable各1）して旧実装でFAIL・修正後PASSを可能なら証明。SQL helperの fixtureは本番用ソースに持ち込まない。
+
+## Constraints and tests
+
+- Fresh origin/main、`PROJECT_RULES.md`、`.agent/ORCHESTRATION.md`、自己TASKの履歴とReport、H3 Reportを読む。G2専用独立worktreeでPR143 head exact `1d0529bb68b0e60b32ce0a2cb0002872b1671177` を確認。branchのheadが動いていたら最新差分を再確認して不一致ならSTOP/REPORT。競合する他slot/PR変更やdirty worktreeを編集しない。
+- **変更可能:** 原則上述migration/worker logic test/SQL behavior testの3ファイルだけ。合理的な不足があれば、worker_logic.ts等のG2/PR143所有の直接関連テストだけ追加可。UI/ホーム/ニュース/Fact V2/経済文/Provider/G6/共通Auth G5/POSTONA/G1/他migration/RPCは触れない。先代[PR141](https://github.com/anohi-memories/kabumori/pull/141)はSUPERSEDED/OPEN/Draft保護し変更・マージしない。
+- 変更は既存**PR143のG2専用branch上にfix commit追加**が基本。mainへの直接製品コミット禁止、force-push/rebase/他slot checkout禁止。PR143はOPEN/Draft・未マージを維持。
+- run: focused expired fail lease fail-before/pass-after、worker 31件+new、SQL PG17 disposable isolated runner（ローカル環境が安全に利用可能な場合だけ）、既存個別・shared/report app回帰の必要範囲、`deno check`, lint, `git diff --check`。シミュレータや本番実機が不要な純粋source修正。テストが環境由来で実施不能なら明確にNOT_RUN、無理な権限昇格/production接続なし。
+- paid OpenAI/Anthropic、Supabase 本番read/write/DDL/Cron/Edge、X/Expo live、notification real delivery、iPhone EAS、購入/課金、G6 ledger/provider設定は実行禁止。PR merge/deploy/gates ON/old Cron OFF不可。
+- `## Report — current PR143 lease fence R1` に task_id, exact PR new SHA, changed_files, fail-before/pass-after, tests, commit/push, merge/deploy/prod zero, leftover blocker: **共通朝刊/大引け全利用者push未実装**、H3 C3指摘への対応、GO/NO_GOを記録。完了後status=review_required / next_owner=chatgpt、ACTIVE_TASK G2節とCURRENT_STATE G2要点だけ更新、他歴史維持。返却は **かぶモリアプリG2のちゃへ K2**。
+- この修正を完了しても、PR143の本番配信GOにはならない。ChatGPTがK2で直前のH3指摘とピンポイント差分を照合し、適切ならCodex再レビューを省略し次工程へ。**次工程は共通朝刊・大引けの大人数向けpush fanout/優先順位/設定・配信時間目標を源流producerと分離してソース候補にする**。ユーザーの「1万人で500分等は避けたい」というスケール要件から、200件/分現状を無批判に全員向けに流用しない。
+
+## Report — current PR143 lease fence R1
+
+PENDING G2.
+
+---
+
+## Previous G2 TASKs/Reports — preserved verbatim below
+
 # G2 CURRENT TASK — オンデマンド個別AI分析 V1：閉じても続く生成・結果保存・完了通知（Source Only）
 
 - task_id: kabumori-personalized-ondemand-background-push-v1-20261011
