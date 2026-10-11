@@ -1,3 +1,54 @@
+# G2 CURRENT TASK — オンデマンド個別AI分析 V1：閉じても続く生成・結果保存・完了通知（Source Only）
+
+- task_id: kabumori-personalized-ondemand-background-push-v1-20261011
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- start_code: G2
+- finish_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Opus5.5（高）**
+- classification: user-approved product-direction change / substantial full-stack source implementation / security-gated Draft PR
+- user_decision: 共通朝刊・大引け・重要ニュースは自動提供。個別AI分析はユーザー明示操作でのみ生成。アプリ閉鎖後もサーバー生成継続、完成後に保存＋プッシュ通知。旧・全員個別自動生成は廃止予定。
+- prior_G2_PR141: https://github.com/anohi-memories/kabumori/pull/141 (OPEN / DRAFT / unmerged / protected exact 4bc5c0177aa74085eb488604a00e2b66c7fe527c)
+- prior_G2_status_resolution: SUPERSEDED_BY_USER_PRODUCT_DECISION / source Report preserved / NO K2 code acceptance / NO merge
+- production_release_gate: HOLD (no live DB/Cron/function/Secrets/G6 provider/billing/user data writes or deployment)
+
+## Feature contract — completed V1 experience
+
+1. **共通市場情報を全員へ:** 市場全体の朝刊と大引けはそれぞれ1回生成して共有保存し、利用者の保有銘柄数や個別レポート生成成否にかかわらずアプリのホーム／朝刊・大引け閲覧画面に表示できる。共通ニュースや重要ニュースの現行feed/通知を維持する。利用者数に比例するLLM再生成は禁止。共通レポートを読むためにservice_role鍵をモバイルへ埋め込まない。既存RPC `get_shared_market_report` はconsumers gate/service role前提のため、アプリ公開用には**厳格な読み取り専用の認証付き（必要なら匿名公開の設計を明示）サニタイズ済み提供経路**を新設する。公開するのはcompletedかつ適切なFact/guardを通ったユーザー公開可能なフィールドのみ、内部trace/APIキー/非公開素材は絶対公開しない。実配信・グローバル通知の有効化は別リリースゲート。
+2. **個別リクエストUI:** 共通朝刊・大引けから「私の保有銘柄をAIで分析する」ボタンを置く。分析対象（朝刊/大引け/現在時点）、当該ユーザーの有効な保有・監視銘柄、リクエスト日時/東京市場の基準日時と参照packetを示す。対象が無い・市場packetが無い/古い/Fact未検証の場合は明示した安全な待機/再試行/入力案内で対応し、古い市場情報を今日の確定値と偽らない。
+3. **即時受付→後で完了:** ボタン押下のHTTPは署名済ユーザーを認証して、本人に紐付く**durableなジョブ**を安全にDB永続化し、受付結果（job_id / queued等）を迅速に返す。分析をHTTP/React componentの寿命内で完了させない。アプリのバックグラウンド・終了・再起動・ネットワーク切断でも、**独立したサーバーworker/queue** が安全に処理を再開/継続する。単純な `EdgeRuntime.waitUntil` のみ、クライアントintervalのみ、スマホ画面常駐のみは不可。
+4. **結果と通知:** durable job状態 queued/processing/completed/failed、進行画面と再表示・履歴を実装。完成した本文・Fact Passed・利用者保有データsnapshot・モデル・reference packet・生成時刻を保存し、再ログイン後も本人だけ閲覧。completed保存後に本人へ完了pushを一度だけ予約し、通知をタップすると正しい結果を開く。通知OFFや登録端末無しでも結果は保存・閲覧可。通知予約失敗でも完成済みをfailedへ巻き戻さず、未知送信結果を無制限再送しない（PR141改善点を参考にするがPR141から不用意に丸ごと移植しない）。
+5. **公平な処理・費用:** 固定「先頭20人」方式は禁止。リクエストされたジョブだけを公平にclaimし、1万人以上の登録でも全員分の朝夕個別分析を強制生成しない。bounded parallelism/queue backpressure/API token or rate limit/worker time-budget、タイムアウト・可視キュー深さ・開始/完了までの時間を設計。same-user double tap/different devices/repeated callbacks/Cron overlap/lease timeout/late workers/crashes/duplicate pushは、(request_id, user_id, attempts, lease_version/token)等の**原子的fencing/idempotency**で防ぐ。失敗時の再実行と利用者へのretryは区別。単純な `status=generating` CASのみで古いworkerの更新を排除できると仮定しない。
+6. **分析品質:** 市場Fact V2方針を保つ（事実は厳格、根拠あるAI独自の経済分析は自由、配信を安定優先）。現行 `personalized-reports/report_logic.ts` 等の保有銘柄スナップショット/Factチェック/通知の信頼できる部品を優先再利用し、元の全自動Cronから切り離す。日本時間の確定/未確定株価、snapshot freshness、当日と過去履歴を区別する。
+7. **モデル選択と将来課金:** 通常分析はLuna/Haiku候補、上位分析はOpus候補。**本TASKは有料機能・課金の本番実装を承認していない**。G6共通AI基盤の公式モデルID/アダプター/予算ledger・利用権限と衝突しない抽象インターフェースを用意。現行で動作実証可能な**単一の低コストモデル**をV1通常分析のsource-defaultにし、Haiku/Opusは現在の共通Provider対応が実測で確かめられるまでUIで準備中/非表示/disabled。架空のAPIモデル名や原価をハードコードしない。料金（例 月30回、Opus月5回、追加50/80円）は未確定の商品案であり、購入、回数引き落とし、無制限化、課金画面を無許可で実装・公開しない。将来のper-user cost/usage meteringに必要な非機密フィールド/明確な連携境界は設計可能。
+8. **移行・旧Cron:** 従来の `personalized-reports-morning` / `-close` は本番では現状維持（移行前）。ソース上は新オンデマンド処理が旧定時自動生成と**同時に二重生成・二重通知しない**よう、off-by-defaultの独立ゲートと段階的cutover/rollbackを設計する。PR141の20人バッチ自動処理強化は新方式には原則マージしない。既存の `personalized_reports` と通知の履歴/RLS/運用記録を保護。旧Cron停止や切替用SQLは「別承認待ちのRunbook」にとどめ、実行しない。
+9. **全体朝夕の通知:** 全利用者への共通朝刊/大引けのアプリ内提供を個別生成と完全分離。共通朝夕のpushもユーザーの通知設定・端末登録を尊重し、既存 `notifications` + `send-push-notifications` 等の分割workerの容量/一意キーを確認し、必要ならsource-only実装/テストまたは明示的BLOCKER。無差別X投稿やデバイスへの実送信はしない。個別分析の完了通知は共通通知とは別のsource/idempotencyで管理。
+
+## Implementation boundaries / safety
+
+- Fresh origin/main、`PROJECT_RULES.md`, `AGENTS.md`, `.agent/ORCHESTRATION.md`, ACTIVE_TASK/CURRENT_STATE、G2旧TASK/Report、Draft PR141、およびG1/G5/G6/Hその他スロットの所有ファイルとPR差分を確認。**G2専用の独立worktree/checkout**に限る。他スロットのworktree/branch/dev server/processを操作しない。
+- G2が所有するアプリの共通朝夕/個別分析画面、G2のサービスEndpoint/worker/純粋テスト、必要なexpand-only新規migrationと権限制御テスト、関連する最小の通知統合のみ変更可能。既存のG5アカウント/Auth/deletion/entitlement、G6共通AI provider/ledger、G3/G4 POSTONA、G7 MIC、G8ニュース、G9最適化のソース・migration・RPC・Edge境界は変更禁止。G1作業中のポートフォリオ/銘柄UIも触らない。不可避な境界はまず契約/依存を文書化してblockerにする。
+- 本番DB（readも許可範囲不明ならNO_CONNECT）/migration apply/SQL実行/Cron更新/Edge deploy/X・Expo実送信/実Claude・OpenAI有料API/Secrets/Auth書き込み/購入・課金操作/PR main mergeは一切行わない。新SQLは**未適用ソース候補**と明記。ベンダーによるPreview自動ビルドをproduction反映と混同しない。
+- 原則**1つのG2 Draft PR**で共通feedのread-only UI + user request → durable queue → backend worker → private result → complete pushのend-to-end**offline verified source candidate**を作る。全範囲が安全に完遂不能なら、先に閉じたsliceを実装したDraft PRと、次の具体的な依存/順序をReportに示し、**見かけだけ完成（clientが閉じると処理も止まるなど）は不可**。不要な修正ループや過剰な新基盤開発は避ける。
+- アプリ層だけでなくAuth/RLS/SECURITY DEFINERのclient-to-service境界を重点的に検証。本人以外へのジョブ作成/取得/キャンセル/通知/credit消費、JWT詐称、service_role漏洩を禁止。G5 common-account/deletion が未マージ・未適用の部分はまだ本番前提にしない。
+- オフラインテスト: RLS/DB権限とcross-user negative cases、同時受付と2端末double tap、モデル選択不正値、ジョブ永続化/workerがクライアント終了後も続くこと、claim lease/fence late-write/crash/retry、同じジョブの多重課金/二重AI呼び出し抑制、push失敗でもcompleted保持・重複防止、100/1000の大量ジョブ公平性（mock/simulation）、JST日付と確定データfreshness、共通朝夕の本人依存なし表示、既存X/news/portfolio/cross-brand退行なし。可能ならローカルのdisposable PostgreSQLでmigration + RLS/トランザクション確認。
+- Source-only end-to-end完了後、**H1〜H4 の空き枠でSol（高）の重点独立レビュー**をChatGPTが別割当（Auth/RLS/queue/concurrency/notify/cost/fencing）。H5レビュー禁止。production cutoverは、レビューとread-only本番プリフライト後、ユーザー別承認で個別工程。
+
+## Report / completion
+
+`## Report — current on-demand V1` に、task_id、受け口/DB/worker/RLS/app/通知の構成、完全実装かpartialか、PR・changed_files、mainとの差分/他slot競合、実測testsと制限、モデル実装状況、停止Cronと新しいゲートの本番未適用、commit/push/merge/deploy/prod status、remaining P0/P1、GO/NO_GO、次に必要な作業、推奨重点Codexレビュー範囲を記入。status=review_required / next_owner=chatgpt としてG2節/STATEのみ更新し、**かぶモリアプリG2のちゃへ K2** を返す。
+
+## Report — current on-demand V1
+
+PENDING G2.
+
+---
+
+## Previous G2 TASKs/Reports — protected verbatim below
+
 # G2 CURRENT TASK — 個別朝刊・大引けレポート 配信安定化 P1（ソースのみ）
 
 - task_id: kabumori-personalized-report-delivery-p1-hardening-20261011
