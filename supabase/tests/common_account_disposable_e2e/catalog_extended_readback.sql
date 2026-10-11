@@ -5,7 +5,8 @@
 --   RLS state and policies, schema / table / column grants, default privileges, effective (inherited) privileges of
 --   the API and service roles on the key tables, managed auth / storage function owners and ACLs, Storage counts.
 -- Run it inside `begin transaction read only; ... rollback;` before and after each destructive step. A table or
--- role that is absent prints ABSENT; one the inspecting role cannot read prints UNKNOWN_DENIED (never 0). It reads
+-- role that is absent prints ABSENT; one the inspecting role cannot read prints UNKNOWN_DENIED, and one whose rows RLS
+-- would filter for this role prints UNKNOWN_RLS (never 0; SELECT privilege is not row visibility). It reads
 -- no user row, no secret and no object content. A match before/after says nothing about external provider effects,
 -- physical Storage blobs or GoTrue's own state; those need their own read-backs (target_readback.sql, runbook).
 with watched_tables as (
@@ -63,14 +64,18 @@ select line from (
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname in ('auth', 'storage') and p.prokind = 'f'
   union all
-  select 'storage_count|objects|' || case
-           when to_regclass('storage.objects') is null then 'ABSENT'
-           when not has_table_privilege('storage.objects', 'SELECT') then 'UNKNOWN_DENIED'
-           else (xpath('/row/c/text()', query_to_xml('select count(*) as c from storage.objects', false, true, '')))[1]::text end
+  -- Counts only when this role sees the table unfiltered (Phase 3f): SELECT privilege is not row visibility.
+  select 'storage_count|' || s.label || '|' || case
+           when to_regclass(s.tbl) is null then 'ABSENT'
+           when not has_table_privilege(to_regclass(s.tbl), 'SELECT') then 'UNKNOWN_DENIED'
+           when exists (select 1 from pg_class c join pg_roles r on r.rolname = current_user
+                         where c.oid = to_regclass(s.tbl) and c.relrowsecurity
+                           and not (r.rolsuper or r.rolbypassrls or (pg_has_role(current_user, c.relowner, 'USAGE') and not c.relforcerowsecurity)))
+             then 'UNKNOWN_RLS'
+           else (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %s', s.tbl), false, true, '')))[1]::text end
+    from (values ('objects', 'storage.objects'), ('buckets', 'storage.buckets')) s(label, tbl)
   union all
-  select 'storage_count|buckets|' || case
-           when to_regclass('storage.buckets') is null then 'ABSENT'
-           when not has_table_privilege('storage.buckets', 'SELECT') then 'UNKNOWN_DENIED'
-           else (xpath('/row/c/text()', query_to_xml('select count(*) as c from storage.buckets', false, true, '')))[1]::text end
+  -- Physical Storage blobs are not visible to SQL: their read-back is a future Storage-service observation.
+  select 'storage_blob_readback|NOT_OBSERVABLE_BY_SQL|future_storage_service_readback'
 ) lines
 order by line;

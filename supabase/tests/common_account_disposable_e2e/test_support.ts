@@ -1,7 +1,7 @@
 // Fake, complete evidence shapes for the offline tests (Phase 3e). Every value is invented; nothing here was observed
 // on a real or disposable project.
 import type { E4BoundEvidence } from './e4_bound.ts';
-import { E11_DENOMINATORS, E11_FAILURE_BRANCHES, E11_PROBE_SCOPE, E11_ROWS, E11_TOKEN_CASES, E11_TOKEN_TARGETS, type CohortEvidence, type E11Evidence, type E11TokenKey } from './e11_matrix.ts';
+import { E11_AFTER_PROVENANCE, E11_AFTER_STATE, E11_DENOMINATORS, E11_FAILURE_BRANCHES, E11_PROBE_SCOPE, E11_ROWS, E11_TOKEN_CASES, E11_TOKEN_TARGETS, type CohortEvidence, type E11Evidence, type E11TokenKey } from './e11_matrix.ts';
 import { WITNESS_CHECKS, type WitnessRecord } from './witness.ts';
 
 export const RUN = 'p3c-run-20261011-01';
@@ -29,6 +29,8 @@ function cohort(method: CohortEvidence['method']): CohortEvidence {
     method, fakeUsers: 3, schemaFingerprintSha256: FP, configFingerprintSha256: CONFIG, maskedCorrelation: true,
     denominators: Object.fromEntries(E11_DENOMINATORS.map((d) => [d, 2])) as CohortEvidence['denominators'],
     tokens,
+    // A clean delete: nothing remains, each count from its required read-back.
+    afterState: Object.fromEntries(E11_AFTER_STATE.map((k) => [k, { remaining: 0, provenance: E11_AFTER_PROVENANCE[k], evidence: [`${method}-${k}-after.redacted.json`] }])) as CohortEvidence['afterState'],
   };
 }
 
@@ -38,7 +40,7 @@ export function completeE11(): E11Evidence {
     cohorts: { admin: cohort('admin_api_delete'), sql: cohort('sql_delete_row_latch') },
     rows: Object.fromEntries(E11_ROWS.map((r) => [r.id, 'PASS'])) as E11Evidence['rows'],
     failureBranches: Object.fromEntries(E11_FAILURE_BRANCHES.map((b) => [b, 'UNCHANGED_READBACK'])) as E11Evidence['failureBranches'],
-    ambiguousCommit: { blindRetry: false, resolvedByReadback: true },
+    ambiguousCommit: { blindRetry: false, resolution: 'NOT_APPLIED', resolvedByIndependentReadback: true, evidence: ['commit-readback.redacted.json'] },
     cleanupInferredFromUsersRowOrCatalog: false,
     providerRevocationAssumed: false,
   };

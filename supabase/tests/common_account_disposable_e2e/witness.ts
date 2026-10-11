@@ -115,23 +115,36 @@ export function requiredWitness(scenarios: readonly ExperimentId[], destructive:
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/u;
+const ROLES: readonly unknown[] = ['operator', 'user', 'independent_reviewer'];
+const RESULTS: readonly unknown[] = ['MATCH', 'MISMATCH', 'UNREADABLE'];
 
+/**
+ * Fail closed on every record shape (Phase 3f, H2 rereview R4): a record counts only when `self_declared` is the
+ * boolean false -- missing, null, a string, a number or true never count -- and every other field has its declared
+ * type. A well-formed record is still only an attestation, not proof that a person observed anything.
+ */
 export function evaluateWitness(records: readonly WitnessRecord[] | undefined, runId: string | undefined, required: readonly WitnessId[]) {
   const reasons: string[] = [];
-  if (!runId) reasons.push('WITNESS_RUN_ID_MISSING');
+  if (typeof runId !== 'string' || runId.length === 0) reasons.push('WITNESS_RUN_ID_MISSING');
+  const list: readonly unknown[] = Array.isArray(records) ? records : [];
   for (const id of required) {
     const check = WITNESS_CHECKS.find((c) => c.id === id)!;
-    const mine = (records ?? []).filter((r) => r.id === id && r.run_id === runId);
+    const mine = list.filter((r): r is WitnessRecord =>
+      typeof r === 'object' && r !== null && (r as WitnessRecord).id === id && (r as WitnessRecord).run_id === runId);
     if (mine.length === 0) { reasons.push(`WITNESS_MISSING:${id}`); continue; }
     if (mine.length > 1) { reasons.push(`WITNESS_AMBIGUOUS:${id}`); continue; }
-    const r = mine[0];
-    if (r.self_declared) reasons.push(`WITNESS_SELF_DECLARED:${id}`);
-    if (r.result === 'MISMATCH') reasons.push(`WITNESS_MISMATCH:${id}`);
+    const r = mine[0] as unknown as Record<string, unknown>;
+    if (r.self_declared === true) reasons.push(`WITNESS_SELF_DECLARED:${id}`);
+    else if (r.self_declared !== false) reasons.push(`WITNESS_MALFORMED:${id}:self_declared`);
+    if (!ROLES.includes(r.observed_by)) reasons.push(`WITNESS_MALFORMED:${id}:observed_by`);
+    if (r.second_observer !== undefined && !ROLES.includes(r.second_observer)) reasons.push(`WITNESS_MALFORMED:${id}:second_observer`);
+    if (!RESULTS.includes(r.result)) reasons.push(`WITNESS_MALFORMED:${id}:result`);
+    else if (r.result === 'MISMATCH') reasons.push(`WITNESS_MISMATCH:${id}`);
     else if (r.result !== 'MATCH') reasons.push(`WITNESS_UNREADABLE:${id}`);
-    if (!check.methods.includes(r.method)) reasons.push(`WITNESS_METHOD:${id}`);
-    if (!ISO.test(r.observed_at) || Number.isNaN(new Date(r.observed_at).getTime())) reasons.push(`WITNESS_TIME:${id}`);
-    if (!Array.isArray(r.evidence) || r.evidence.length === 0) reasons.push(`WITNESS_NO_EVIDENCE:${id}`);
-    if (check.twoPerson && (!r.second_observer || r.second_observer === r.observed_by)) reasons.push(`WITNESS_NOT_TWO_PERSON:${id}`);
+    if (!(check.methods as readonly unknown[]).includes(r.method)) reasons.push(`WITNESS_METHOD:${id}`);
+    if (typeof r.observed_at !== 'string' || !ISO.test(r.observed_at) || Number.isNaN(new Date(r.observed_at).getTime())) reasons.push(`WITNESS_TIME:${id}`);
+    if (!Array.isArray(r.evidence) || r.evidence.length === 0 || !r.evidence.every((x) => typeof x === 'string' && x.length > 0)) reasons.push(`WITNESS_NO_EVIDENCE:${id}`);
+    if (check.twoPerson && (r.second_observer === undefined || r.second_observer === r.observed_by)) reasons.push(`WITNESS_NOT_TWO_PERSON:${id}`);
   }
   return { complete: reasons.length === 0, reasons };
 }

@@ -21,6 +21,7 @@ tests="$here/.."
 migrations="$here/../../migrations"
 owner="kb_cal_readback_owner"
 reader="kb_cal_readback_reader"
+bypass="kb_cal_readback_bypass"
 db="kabumori_cal_readback_$$"
 S=(psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super")
 O=(psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$db")
@@ -36,6 +37,7 @@ trap cleanup EXIT
 do \$\$ begin
   if not exists (select 1 from pg_roles where rolname = '$owner') then create role $owner login nosuperuser nocreatedb nocreaterole; end if;
   if not exists (select 1 from pg_roles where rolname = '$reader') then create role $reader login nosuperuser nocreatedb nocreaterole; end if;
+  if not exists (select 1 from pg_roles where rolname = '$bypass') then create role $bypass login nosuperuser nocreatedb nocreaterole bypassrls; end if;
   if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
   if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role nologin bypassrls; end if;
@@ -61,7 +63,7 @@ create table public.p3e_restrict_probe (user_id uuid primary key references auth
 insert into storage.buckets (id) values ('p3e-fake');
 SQL
 "${S[@]}" -d "$db" >/dev/null <<SQL
-grant usage on schema auth, storage, public to $reader;
+grant usage on schema auth, storage, public to $reader, $bypass;
 grant select on auth.users to $reader;
 revoke all on auth.audit_log_entries, auth.identities, auth.sessions, auth.refresh_tokens, storage.objects from $reader;
 SQL
@@ -95,7 +97,10 @@ expect() {  # file expected-line
 
 # 1. The extended read-back: a READ ONLY transaction, deterministic, catalog unchanged, ABSENT/UNKNOWN never 0.
 u1="$(uid 901)"; person "$u1"
-extended() { { echo 'begin transaction read only;'; cat "$here/catalog_extended_readback.sql"; echo 'rollback;'; } | "${Q[@]}"; }
+extended() {  # [role]
+  { echo 'begin transaction read only;'; cat "$here/catalog_extended_readback.sql"; echo 'rollback;'; } \
+    | psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "${1:-$owner}" -d "$db"
+}
 catalog_md5() { "${Q[@]}" -c "select md5(string_agg(oid::text || relname || relkind::text, ',' order by oid)) from pg_class"; }
 before="$(catalog_md5)"
 extended > "$tmp/x1"; extended > "$tmp/x2"
@@ -104,6 +109,7 @@ cmp -s "$tmp/x1" "$tmp/x2" || { echo "FAIL extended read-back not deterministic"
 expect "$tmp/x1" 'rls|public.common_accounts|enabled=t|forced=f'
 expect "$tmp/x1" 'storage_count|objects|1'
 expect "$tmp/x1" 'storage_count|buckets|1'
+expect "$tmp/x1" 'storage_blob_readback|NOT_OBSERVABLE_BY_SQL|future_storage_service_readback'
 for want in '^trigger_fn\|public\.common_accounts\|account_lifecycle_guard_account_delete\|.*\|definer=t\|config=search_path=""\|body_md5=[0-9a-f]{32}$' \
             '^effective\|anon\|auth\.users\|select=f\|' '^effective\|service_role\|public\.common_accounts\|' \
             '^table_acl\|public\.profiles\|authenticated\|INSERT\|' '^column_acl\|public\.common_accounts\.' '^schema_acl\|private\|' \
@@ -124,6 +130,35 @@ for line in 'target|identities_by_id|UNKNOWN_DENIED' 'target|sessions_by_id|UNKN
   expect "$tmp/denied" "$line"
 done
 echo "COMMON_ACCOUNT_DISPOSABLE_READBACK_DENIED_IS_UNKNOWN_PASS"
+
+# 2b. Phase 3f (H2 rereview R5): table SELECT privilege is not row visibility. One real object row; RLS enabled with
+#     no policy; a reader WITH SELECT but neither owner nor BYPASSRLS would count 0 -- it must print UNKNOWN_RLS. The
+#     owner sees it unfiltered unless FORCE ROW LEVEL SECURITY; a BYPASSRLS role sees it even then. Restored after.
+rls_line() {  # role label -> the storage_objects_by_id line for that role
+  readback "$u1" "$i1" "$s1" "$r1" "$o1" "$1" | grep '^target|storage_objects_by_id|'
+}
+"${S[@]}" -d "$db" >/dev/null <<SQL
+grant select on storage.objects to $reader, $bypass;
+alter table storage.objects enable row level security;
+SQL
+[[ "$(rls_line "$reader")" == 'target|storage_objects_by_id|UNKNOWN_RLS' ]] || { echo "FAIL RLS-hidden row counted for a SELECT-only reader: $(rls_line "$reader")" >&2; exit 1; }
+readback "$u1" "$i1" "$s1" "$r1" "$o1" "$reader" > "$tmp/rls_reader"
+expect "$tmp/rls_reader" 'target|storage_objects_owned_by_target|UNKNOWN_RLS'
+extended "$reader" > "$tmp/rls_extended"
+expect "$tmp/rls_extended" 'storage_count|objects|UNKNOWN_RLS'
+expect "$tmp/rls_extended" 'storage_count|buckets|UNKNOWN_DENIED'
+[[ "$(rls_line "$owner")" == 'target|storage_objects_by_id|1' ]] || { echo "FAIL the owner (no FORCE) should see the row: $(rls_line "$owner")" >&2; exit 1; }
+[[ "$(rls_line "$bypass")" == 'target|storage_objects_by_id|1' ]] || { echo "FAIL the BYPASSRLS role should see the row: $(rls_line "$bypass")" >&2; exit 1; }
+"${S[@]}" -d "$db" -c "alter table storage.objects force row level security" >/dev/null
+[[ "$(rls_line "$owner")" == 'target|storage_objects_by_id|UNKNOWN_RLS' ]] || { echo "FAIL the owner under FORCE RLS must be UNKNOWN_RLS: $(rls_line "$owner")" >&2; exit 1; }
+[[ "$(rls_line "$bypass")" == 'target|storage_objects_by_id|1' ]] || { echo "FAIL BYPASSRLS under FORCE should still see the row: $(rls_line "$bypass")" >&2; exit 1; }
+"${S[@]}" -d "$db" >/dev/null <<SQL
+alter table storage.objects no force row level security;
+alter table storage.objects disable row level security;
+revoke select on storage.objects from $reader, $bypass;
+SQL
+[[ "$(rls_line "$reader")" == 'target|storage_objects_by_id|UNKNOWN_DENIED' ]] || { echo "FAIL restore after the RLS section" >&2; exit 1; }
+echo "COMMON_ACCOUNT_DISPOSABLE_READBACK_RLS_HIDDEN_IS_UNKNOWN_PASS"
 
 # 3. Denominators captured BEFORE the delete are non-zero.
 readback "$u1" "$i1" "$s1" "$r1" "$o1" > "$tmp/before"

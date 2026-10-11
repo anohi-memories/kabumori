@@ -14,7 +14,7 @@ const expectOutcome = (outcome: string, reason: string, mutate: (e: E11Evidence)
 };
 
 test('the complete matrix passes, and the scope says exactly what E11 is', () => {
-  assert.deepEqual(evaluateE11(completeE11()), { outcome: 'PASS', reasons: [], residue: false });
+  assert.deepEqual(evaluateE11(completeE11()), { outcome: 'PASS', reasons: [], residue: [] });
   assert.equal(E11_PROBE_SCOPE, 'platform_permission_fk_cascade_row_latch_probe');
   assert.deepEqual(E11_ROWS.map((r) => r.id), ['A_AUDIT', 'B_STORAGE', 'C_FAILURE_PATHS', 'D_SESSIONS_REFRESH', 'E_TOKENS_WRITERS']);
   assert.ok(E11_NOT_PROVEN.some((n) => n.includes('atomic')));
@@ -26,7 +26,7 @@ test('the complete matrix passes, and the scope says exactly what E11 is', () =>
 });
 
 test('no matrix, a mislabelled scope, or a missing cohort is UNKNOWN', () => {
-  assert.deepEqual(evaluateE11(undefined), { outcome: 'UNKNOWN', reasons: ['E11_MATRIX_MISSING'], residue: false });
+  assert.deepEqual(evaluateE11(undefined), { outcome: 'UNKNOWN', reasons: ['E11_MATRIX_MISSING'], residue: [] });
   expectOutcome('UNKNOWN', 'E11_SCOPE_MISLABELLED', (e) => { e.scope = 'option_d_full_proof'; });
   expectOutcome('UNKNOWN', 'E11_COHORT_MISSING:admin', (e) => { delete (e.cohorts as Partial<E11Evidence['cohorts']>).admin; });
   expectOutcome('UNKNOWN', 'E11_COHORT_METHOD:sql', (e) => { e.cohorts.sql.method = 'admin_api_delete'; });
@@ -54,7 +54,7 @@ test('failure branches: a changed state is FAIL, an unexercised one UNKNOWN; a b
     expectOutcome('UNKNOWN', `E11_FAILURE_BRANCH_NOT_READ_BACK:${b}`, (e) => { e.failureBranches[b] = 'UNKNOWN'; }, `${b} unknown`);
   }
   expectOutcome('FAIL', 'E11_BLIND_RETRY', (e) => { e.ambiguousCommit.blindRetry = true; });
-  expectOutcome('UNKNOWN', 'E11_AMBIGUOUS_COMMIT_NOT_RESOLVED', (e) => { e.ambiguousCommit.resolvedByReadback = false; });
+  expectOutcome('UNKNOWN', 'E11_AMBIGUOUS_COMMIT_UNRESOLVED', (e) => { e.ambiguousCommit.resolvedByIndependentReadback = false; });
 });
 
 test('tokens: guarded writer, GET /user and every expired-token case must refuse; an accepted write needs a read-back', () => {
@@ -65,7 +65,7 @@ test('tokens: guarded writer, GET /user and every expired-token case must refuse
         const mustRefuse = kind === 'expired_old_jwt' || target === 'guarded_writer' || target === 'auth_get_user';
         const accepted = check((e) => { e.cohorts[cohort].tokens[key] = 'ACCEPTED_RESIDUE_RECORDED'; });
         if (mustRefuse) assert.ok(accepted.outcome === 'FAIL' && accepted.reasons.includes(`E11_TOKEN_ACCEPTED:${cohort}:${key}`), `${cohort} ${key} accepted`);
-        else assert.deepEqual([accepted.outcome, accepted.residue], ['PASS', true], `${cohort} ${key}: accepted with read-back is recorded residue`);
+        else assert.deepEqual([accepted.outcome, accepted.residue], ['PASS', [`STALE_TOKEN_RESIDUE_RECORDED:${cohort}:${key}`]], `${cohort} ${key}: accepted with read-back is recorded residue`);
         expectOutcome('UNKNOWN', `E11_TOKEN_NOT_MEASURED:${cohort}:${key}`, (e) => { e.cohorts[cohort].tokens[key] = 'UNKNOWN'; }, `${cohort} ${key} unknown`);
         if (!mustRefuse) {
           expectOutcome('UNKNOWN', `E11_TOKEN_ACCEPTED_WITHOUT_READBACK:${cohort}:${key}`, (e) => { e.cohorts[cohort].tokens[key] = 'ACCEPTED_UNRECORDED'; }, `${cohort} ${key} unrecorded`);

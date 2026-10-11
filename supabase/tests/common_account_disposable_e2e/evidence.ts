@@ -6,8 +6,8 @@
 // Phase 3e additions (each fails closed):
 //   R4  a destructive experiment counts as PASS only with the run's manual witness checks complete (witness.ts);
 //       the guard's dry-run eligibility is self-declared and proves nothing about the destination or the fakes.
-//   R1  E11 counts as PASS only with the full Admin-vs-SQL matrix (e11_matrix.ts); stale-token residue it records
-//       blocks Option D.
+//   R1  E11 counts as PASS only with the full Admin-vs-SQL matrix (e11_matrix.ts); any residue it records (stale-token
+//       writes, and since Phase 3f non-token after-state) blocks Option D.
 //   R2  Option D also needs the separate full-decision proof (OPTION_D_FULL_DECISION_PROOF), not part of E1-E12.
 //   R3  an E4 LINKED finding qualifies A+B only with an evidenced upper bound (e4_bound.ts); a label is not enough.
 import { EXPERIMENT_IDS, experiment, REQUIRED_FOR, type ExperimentId } from './catalog.ts';
@@ -106,10 +106,12 @@ export function verdict(results: readonly ExperimentResult[], context: RunContex
         else for (const r of evaluateE4Bound(e4.e4Bound)) reasons.push(`E4:${r}`);
       }
     } else {
-      // R2: the E11 row-latch probe is not the decision proof. R1: stale-token residue blocks Option D.
+      // R2: the E11 row-latch probe is not the decision proof. R1: any residue the matrix recorded -- stale-token writes
+      // and (Phase 3f) remaining sessions, refresh tokens, identities, Storage metadata or blobs, service rows -- blocks
+      // Option D even though the matrix itself passed.
       const proof = (context.additionalProofs ?? []).find((p) => p.id === OPTION_D_FULL_DECISION_PROOF.id);
       if (!proof || proof.evidence.length === 0 || proof.independentlyReviewed !== true) reasons.push(`${OPTION_D_FULL_DECISION_PROOF.id}:MISSING`);
-      if (outcomes.get('E11') === 'PASS' && evaluateE11(byId.get('E11')?.e11).residue) reasons.push('E11:STALE_TOKEN_RESIDUE_RECORDED');
+      if (outcomes.get('E11') === 'PASS') for (const r of evaluateE11(byId.get('E11')?.e11).residue) reasons.push(`E11:${r}`);
     }
     if (invalid.length) reasons.push('INVALID_RESULTS');
     candidates[candidate] = { verdict: reasons.length ? 'BLOCKED' : 'EVIDENCE_COMPLETE_PENDING_INDEPENDENT_REVIEW', reasons };
