@@ -166,17 +166,18 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: done
-- task_id: common-ai-provider-g6-phase1e-readonly-runner-preflight-20261011
+- status: ready
+- task_id: common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011
 - start_code: G6
 - finish_code: K6
-- next_owner: none
-- latest_result: K6 FINAL ACCEPTED / PASS_READONLY_CHECK — production runner `check` run once 2026-10-11 19:05 JST: TARGET_VERIFIED (cron refs = wsmznyzcvmuitkglfeuj only, markers 6/6, history 2/2), READY_TO_APPLY, predicted_refusals 4/4 no, fingerprint 12 categories / 168 functions; CLI 2.116.0 temp login role x3 (known). READY is not apply approval. Report: .agent/tasks/CLAUDE_TASK_6.md#report
+- next_owner: claude
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
 - report: .agent/tasks/CLAUDE_TASK_6.md#report
-- allocation: USER EXPLICIT 2026-10-11: from now on common-AI project tasks from this ChatGPT room go through **G6 Claude**, not standalone direct-copy instructions. First G6 Phase1e validates actual production runner `check` only in isolated worktree, with fresh main and G5 mutation window check. No `apply`, `policies`, Secret, paid provider, Cron, Edge, deployment, migration or report cutover. Supabase CLI may create an ephemeral login role before read-only SELECT; disclose and STOP if unexpected. Return `K6` to this common-AI chat, then formally clear task and allocate next common-AI task to G6 (do not park a memo to occupy slot). Other G/H tasks untouched.
-- recommended_model: Sonnet5（高） (completed)
+- production_mutation_window: RESERVED_NOT_ACTIVE (user-approved ONLY fixed ai_ledger migration 20261010050613 + exactly 2 system market_report Anthropic Opus test policies; must acquire ACTIVE at actual write after fresh G5/all-writer gate, release CLOSED after readback)
+- user_authorization: 2026-10-11 user「おk」 after explicit question approving production ai ledger apply + monthly $5 / daily $2 policy insertion. This is NOT a general migration/project-wide deploy permission.
+- allocation: Phase1e `PASS_READONLY_CHECK` K6 accepted and prior full G6 TASK/Report preserved under own TASK. G6 Phase1f performs *only* verified runner `check`, exact `apply`, then exact `policies` in isolated worktree. STOP without retry/cleanup if identity/CLI/result/ACL/fingerprint/G5 mutation overlap/window conflict/Stage B-D readback fail. Log G5 RPC+7/history+1 after success, not in G5 TASK. No secrets, temporary service key, paid AI, Edge, Cron, app model/report cutover, arbitrary SQL, other migrations or production deploy. Return K6 with observed effect; user consent does not allow auto-continue to provider smoke.
+- recommended_model: Opus5.5（高）
 ## Claude G7
 - owner: claude
 - slot: claude-7
