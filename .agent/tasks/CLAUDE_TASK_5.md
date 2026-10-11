@@ -3,7 +3,7 @@
 - task_id: common-account-phase3f-pr130-r1-r4-r5-offline-logic-fix-20261011
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - next_owner: claude
 - start_code: G5
 - finish_code: K5
