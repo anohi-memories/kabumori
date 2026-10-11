@@ -1,3 +1,48 @@
+# C2 R1 P1 — PR #110 Hard-Fact predicate conjunction fail-open — bounded G2 corrective
+
+- task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- start_code: G2
+- finish_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Opus5.5（高）**
+- target_pr: https://github.com/anohi-memories/kabumori/pull/110
+- exact_head_at_C2: 2c876b0bafee31844b9854c4a7d34ba69660d4cf
+- source: .agent/CODEX_REPORT_2.md current top R1 P1
+- category: **ONE P1 source-only corrective / no broader rewrite**
+- merge_deploy_production_paid_api_allowed: false
+
+## Critical finding
+
+H2's independent exact-head review is **CHANGES_REQUIRED**. G2's prior noun-subject 「勢いが」 correction works; H2 also verified earlier 7 regressions remain closed. But the finite adjective list `PREDICATE_END` in `supabase/functions/market-report-analysis/hard_fact_guards.ts` (consumed by `analysis_logic.ts` `CLAUSE_BOUNDARY`) fails to recognize genuine predicate endings 「緩い」「脆い」「きつい」「しつこい」 before comma-less conjunctions. The unrelated downstream 「可能性があります」 then wrongly qualifies a preceding *unsupported asserted market cause*. Both X and app mocked final delivery retain unsupported text. This is a **new deterministic Hard-Fact fail-open**. Not a verified production incident.
+
+Exact independent counterexample:
+「ウクライナ情勢の影響で東京市場の戻りは緩いが今後の企業業績は改善する可能性があります。」
+
+On cb3d77d5 the asserted unsupported cause is removed. On PR110 head 2c876b0b it survives in BOTH mocked X and app. Independent H2 tested four omitted predicates × five `が/けれど/ので/ため/ものの` comma-free conjunctions = **20/20 unsafe cases wrongly retained** on current head, 20/20 safely rejected on older head; recognized adjective controls 10/10 appropriately rejected on both. Independent pre-existing focused suites **54/54 PASS**; 22 PASS and 20 FAIL new adversarial probes. These are one defect, not 20 distinct bugs.
+
+## Only required change and acceptance
+
+1. Fresh-read `PROJECT_RULES.md`, ORCHESTRATION, CURRENT_STATE, ACTIVE_TASK, this G2 TASK/Report and H2 Report; fresh-fetch origin/main and PR110 and require exact head/ownership. Use solely G2's isolated, clean, owned worktree or safely create a new G2 checkout from `/Users/yuya/Developer/kabumori-fresh`. Never disturb another slot, uncommitted work or dev server. If branch/head differs, STOP and report.
+2. **Fix causality-hedge scope robustly** so an unrelated later speculative phrase cannot legitimize a previously asserted unsupported cause. Do not rely on expanding a finite adjective allowlist with the four observed words; ensure unseen correct Japanese predicate endings (including adjective + no-comma conjunctions) fail closed. Choose a minimal well-reasoned bounded implementation, document trade-offs. Do not weaken existing objective Fact, source/quote checks, date checks, delivery-first or fallback guarantees.
+3. Preserve correct noun+subject cases `勢いが/思いが/狙いが/違いが/戻りが` and original exact legitimate speculative sentence 「ウクライナ情勢の影響で売りの勢いが強まって東京市場は下落した可能性があります。」; keep it in X/app mocked output without extra regeneration.
+4. Add explicit positive and negative regressions for ALL four H2 observed adjectives × five no-comma conjunctions in local deterministic verdict, sanitizer and generated/delivered X and app behavior, plus some independent unknown adjective controls and original `〜しましたが` B3-R1 cases. The unsupported asserted first clause MUST be rejected even with an unrelated later hedge. Preserve five noun-positive cases and wrong-date emoji/date binding, previous B1–B4 + seven R1 controls.
+5. Rerun `h2_corrective_test.ts`, `delivery_first_test.ts`, `transport_retry_test.ts` and relevant local market-report/X/app/shared suites as warranted; Deno check/lint and git diff --check. No real network/paid provider generation. Distinguish mock tests and source inspection from production.
+6. Retain `MAX_GENERATIONS=2`, `MAX_MODEL_CALLS=4`, existing transport retry budgets, user-facing disclaimers, report output and Fact fail-closed semantics; no broader provider/Auth/G1/G3/G4/G5/DB/Secrets/Cron change.
+7. Change only G2-owned `market-report-analysis` validator/parser implementation and focused tests. Commit+push to SAME PR #110 branch after fresh main, ownership/head/collision check; no force-push. **Do not merge/deploy**, trigger production jobs, post X, access real Supabase or spend API credit.
+8. Append new G2 `## Report` inside this current TASK with exact new head, changed_files, 20-negative and noun-positive before/after evidence, genuinely run tests, commit/push/deploy truth, safety checks, residual issues and next recommendation; preserve all historical TASK/Report verbatim below. Set own current TASK `review_required / next_owner chatgpt`, update ONLY G2 index entry and relevant CURRENT_STATE note via freshness guards; return **K2 to かぶモリアプリG2のちゃ**. Then ChatGPT may issue ONE focused independent `Sol（高）` review for the new exact head; this is not authorization to merge.
+
+## Report — current P1 task
+
+（着手前）
+
+---
+
+## Historical G2 TASK/Report (fully preserved below)
+
 # C2 差し戻し — PR #110 の P2 1件のみ：名詞＋主語の「が」（「勢いが」）を節の区切りと誤認する問題
 
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
