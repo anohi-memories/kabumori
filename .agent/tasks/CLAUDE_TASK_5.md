@@ -3,8 +3,8 @@
 - task_id: common-account-phase3h-local-oss-keycloak-safe-pilot-20261011
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - start_code: G5
 - finish_code: K5
@@ -72,6 +72,107 @@ D. 終了時は自分のG5コンテナ・試験用identity/一時DB/コンテナ
 自分のTASK末尾`## Report — Phase3h`に task_id / result / case matrix / versions / setup/teardown証拠 / changed_files / tests / commit hash / push/PR/merge/deploy / real_remote_calls=0 / photo_app_paused=false / paid_actions=0 / remaining_issues / safety_checks / next_recommendation を記録。status `review_required` / next_owner `chatgpt` で返し、**「共通アカウントG5のちゃへ K5 を送ってください。」** を末尾に明記する。
 
 推薦モデル：**Sonnet5（高）**（より重いモデルへ自動切替しない）。
+
+## Report — Phase3h
+
+- task_id: common-account-phase3h-local-oss-keycloak-safe-pilot-20261011
+- reported_at: 2026-10-12 00:50 JST 頃
+- result: **`LOCAL_OSS_PARTIAL_EVIDENCE`**（隔離したローカル環境が安全に起動し、小さな実測に成功。managed の PASS ではない）
+  - ただし、安全性の期待に反する挙動を 3 件再現した（F1〜F3）。TASK の定義では `LOCAL_OSS_FAIL` にも当たりうるため、分類は K5 の判断を仰ぐ。
+  - `IDP_PREPAUSE_BLOCKED` は維持。
+- real_remote_calls: 0（managed Supabase、Auth0 などの実プロバイダ、写真アプリへのアクセスは 0。外部通信は公開レジストリからのイメージ取得だけ）
+- photo_app_paused: false
+- paid_actions: 0
+- production_mutation: 0
+- deploy: NO / merge: NO
+
+### ブランチ / PR / HEAD
+- 作業場所: 新規の独立 worktree `/Users/yuya/Developer/kabumori-g5-phase3h`
+  - ブランチ `claude/g5-phase3h-local-oss-keycloak-pilot-20261011`（fresh origin/main から作成）
+- **Draft PR #146**: https://github.com/anohi-memories/kabumori/pull/146（main 向け）
+  - head `faf8007a4ab5c925430c7cc6a9896046e30ce25a`（commit 1件、7 ファイル追加、force push なし、マージなし）
+- 保護対象 PR121 / PR122 / PR128 / PR130 / PR134 / PR137 は OPEN / Draft で head 変更なし。他の open PR とファイルの重なりなし。
+
+### changed_files（すべて新規）
+- `docs/common-account/phase3h-local-oss-pilot.md`
+- `tools/common-account-local-pilot/`: `README.md`、`prepare.py`、`core.py`、`cases.py`、`extra.py`、`test_fail_closed.py`
+
+### セットアップと後片付けの証拠
+- **専用の隔離環境**: Podman 仮想マシン `g5-local-pilot`（CPU 4、メモリ 8 GiB、ディスク上限 40 GiB）。利用者の承認（8 GiB）に従い新規作成し、終了後に停止・削除した。
+  - 既存の `podman-machine-default` は起動も設定変更もしていない（停止中・2 GiB のまま）。既定の接続も元のまま。
+  - Supabase CLI が一度だけ既存マシンへの接続を試みて失敗した（`CONTAINER_CONNECTION` で解消。起動はされていない）。
+- **版**: GoTrue v2.196.0、PostgreSQL 17.6.1.165、PostgREST v16.1、Storage API v1.70.3、Kong 2.8.1、Keycloak 26.8.0、Supabase CLI 2.116.0、Podman 6.1.1。
+- **必要資源**: 仮想マシンのメモリ使用 約 2.3 GiB（コンテナ合計 約 1.3 GB）、ディスク使用 5.7 GiB、イメージ合計 約 2.9 GB（展開後）。
+- **隔離**: 公開ポートは `127.0.0.1` の 3 つ（API 55421・DB 55422・Keycloak 55480）だけ。
+  - **CLI の既定では全インターフェースで待ち受ける**ことを発見した。API と DB（弱い既定パスワード）が LAN から到達可能になる状態だった。
+  - 発見後すぐスタックを止め、仮想マシン側の `default_host_ips = ["127.0.0.1"]` で修正し、`lsof` で確認してから実測した。修正前の実測はしていない。
+- **後片付け**:
+  - コンテナ 0・ボリューム 0・待ち受けポート 0。
+  - 仮想マシンと専用ファイルを削除した。
+  - `podman.sock` のシンボリックリンクを既存マシンへ戻した。
+  - 偽の secret・偽のパスワードはリポジトリ外のスクラッチ領域だけ（コミットなし）。
+
+### ケースの結果（詳細は文書 §4）
+| ケース | 結果 |
+| --- | --- |
+| C0 版と設定（E1 のローカル版） | PARTIAL（ローカルの値） |
+| C1 自動連携 対照 / C2 BAN 済みの自動連携（E2） | PASS / PASS（`user_banned`、識別情報の追加なし） |
+| C3 手動連携は既定で無効 / C4 有効時の連携 / C5 BAN 後の開始（E3） | PASS / PASS / PASS（403 `user_banned`） |
+| **C6 連携開始 → BAN → 完了（E4）** | **LINKED_AFTER_BAN（F1）。コード交換は BAN 済みユーザーにセッションを発行（F2）** |
+| C7 フローの有効期限（E4） | PARTIAL（20 秒で連携、310 / 330 秒は `bad_oauth_state` "OAuth state has expired"） |
+| C8a〜C8d refresh・パスワード・logout・ID token（E5） | PASS（BAN 後は refresh 400 / password 400 / logout 403 / ID token 403。logout を BAN 前にすれば 204 でセッション 0） |
+| C15 同時 8 件 × 3 ラウンド + 追加 6 ラウンド（E6 の小規模版） | PARTIAL。**+10 ms で 8 件連携、うち 7 件の識別情報が BAN 更新後に作成（F3）** |
+| C16〜C20 Custom Access Token hook（E7） | PASS、V10 を実機で確認（トークンは拒否、識別情報は確定）。フック障害は全員のサインインを止める |
+| C9 Admin の削除（auth スキーマ）/ C10 監査（E8・E10） | PASS（子行は全件 0、`identity_linked` は残り `user_deleted` が作られる） |
+| C11〜C14 Storage と古いトークン（E8・E9） | PASS（観測）。F4〜F6 |
+| E11 / E12 / managed 版のすべて | **NOT_RUN**（禁止または未適用） |
+
+### 再現できた知見（F1〜F9。詳細は文書 §5）
+1. **F1** BAN の前に始めた手動連携は、BAN の後に完了する。
+2. **F2** そのコード交換が、BAN 済みユーザーに新しい access token / refresh token を発行する。access token は PostgREST で有効（refresh は 400、`GET /user` は 403）。
+3. **F3** 自動連携でも、BAN の約 10 ms 前に始まった処理が、BAN の更新時刻より後に識別情報を作る（コミットの順序そのものは未観測）。
+4. **F4** access token は状態を持たない。logout・BAN・削除の後でも有効期限まで PostgREST と Storage が受け付け、削除済みユーザーの ID で行・ファイルが作られる。
+5. **F5** PostgREST は期限切れ直後（+5 秒）の JWT を受け付ける。+75 秒では拒否。
+6. **F6** Admin の削除は Storage を掃除しない（メタデータも実ファイルも残る）。
+7. **F7** フックはトークン発行だけを止め、識別情報の確定は止められない。
+8. **F8** Keycloak の組み込みプロバイダは `scopes=openid` が必須。
+9. **F9** Admin の削除は `user_deleted` の監査行を作る。SQL での削除（Option D）との比較は E11 の対象（未実施）。
+
+### 誤りの訂正（正直な記録）
+- 最初の E9 の対照で、期限切れトークンを PostgREST が受け付けたため FAIL と記録した。
+  - 原因は、確認が期限の 3〜5 秒後で、PostgREST の許容時間内だったこと。
+  - 時刻を変えて取り直し、C13a（直後）と C13（90 秒以上後）に分けて記録した。
+
+### テストと確認
+- `python3 -m unittest -v tools/common-account-local-pilot/test_fail_closed.py`: **7/7**（確認用の環境変数がなければ拒否、ワークディレクトリがリポジトリ内なら拒否、HTTP クライアントは 2 つのループバックにしか接続しない、偽の値だけを生成する、ソースに外部ホストや秘密情報や SQL 削除がない）。
+- `git diff --check`: OK。シークレット・本番 ref・URL・メール・JWT の走査: 0 件。
+- 実測で使った結果ファイルに、識別子・メール・トークンは含まれない（確認済み）。
+- **注意**: 安全装置（確認用の環境変数、ワークディレクトリのチェック、オフラインの試験モード）は、実測の**後**に追加した。ケースの処理は実測時のものから変えていない。装置を加えた版でスタックを再起動しての再実行は、していない。
+
+### 限界（managed に引き継げないこと。文書 §6）
+- managed の GoTrue の版・設定・手動連携・フローの有効期限、`postgres` の権限、gateway とレート制限、S3 の Storage バックエンド、監査ログの設定は不明。
+- 独自 OIDC プロバイダ（https 必須の issuer）の経路は実行していない。ここは組み込みの Keycloak。
+- Apple 固有の挙動、大規模な同時実行、E11、E12 は未検証。
+- 結果は `LOCAL_OSS_EVIDENCE` であり、managed の PASS として数えない。
+
+### 次のおすすめ
+- **K5 / ChatGPT**:
+  - 分類（`LOCAL_OSS_PARTIAL_EVIDENCE` か `LOCAL_OSS_FAIL`）を判断する。
+  - F1〜F3 を、A+B 方式（BAN + 待機 + 確認 + 削除）の前提条件として扱うか判断する。具体的には、待機はフローの有効期限とリクエスト時間を覆う、待機の後にセッションを再失効し識別情報を再確認する、など。
+- 同じ範囲の広い再レビューは推奨しない。必要なら F1・F2・F3 に絞った 1 回の確認だけにする。
+- この結果は、E11 の実施・D 方式・managed での検証・写真アプリの一時停止の承認にはならない。
+
+### 安全確認
+- 実施しなかったこと（いずれも 0 件）:
+  - 実 / 使い捨ての managed プロジェクトの操作
+  - Auth の本番操作
+  - 実プロバイダの呼び出し
+  - 秘密情報のコミット、課金
+  - migration の適用、deploy、マージ
+  - E11 の SQL 削除
+  - 写真アプリの停止
+  - H1〜H5 の割り当て
+- 他スロットの担当範囲、保護対象の PR は変更していない。
 
 ---
 
