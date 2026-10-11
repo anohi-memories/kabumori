@@ -74,14 +74,14 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
+- status: ready
+- task_id: kabumori-market-report-fact-interpretation-v2-20261011
 - start_code: G2
 - finish_code: K2
-- next_owner: chatgpt
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: PR110 の C2 R1 P1（一覧に無い形容詞で断定を見逃す問題）を修正し、新しい head 319a442edcd61c07274e3409d8864234f9d77cd4 を push 済み。H2 の20通りはすべて断定として除外、名詞の5例は推測のまま配信。全テスト成功、本番操作・デプロイ 0。Report は .agent/tasks/CLAUDE_TASK.md の先頭の節。K2 の判断待ち。マージ・デプロイは保留。
+- allocation: K2 accepted previous delivery-first PR110 source candidate exact head 319a442edcd61c07274e3409d8864234f9d77cd4, G2-reported 1345/1345 local regression tests PASS; true H2 twenty fail-open cases corrected, native noun-subject 5 preserved. PRIOR PR110 OPEN/UNMERGED/RELEASE_HOLD, no merge/deploy. NEW TASK Fact V2: classify objective factual errors as Hard; allow Opus independent economic analysis and reasoned forecasts grounded in verified upstream material without requiring verbatim market causation in news; unverified observed-historical cause should be careful inference/advisory/rewrite, not fabricated certainty. Avoid systematic analysis deletion / repetitive regex word reviews; implement only G2-owned source and offline tests in NEW safe separate stacked Draft PR based on exact protected PR110 head, no edits to original branch or other slots; no paid/provider/production. Return K2; one integrated security/factual safety review at most, not broad recurring review.
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
