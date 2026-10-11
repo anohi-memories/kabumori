@@ -141,15 +141,15 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: done
 - task_id: postona-threads-manual-text-publish-v1-20261011
 - start_code: G4
 - finish_code: K4
-- next_owner: claude
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: User 2026-10-11 set POSTONA next milestone actual Threads single-account text publishing. G4 owns provider two-step text post adapter, safe single manual publication backend, and user-facing one-shot compose/consent/confirmed-status UI, source and mocks on independent fresh main branch. H5 parallel owns OAuth runtime/claim/owner boundary, no same files. G3 owns scheduler, G5 Auth/T13/T10. Keep release flags OFF until exact staged integration, focused Sol（高） review and explicit Meta tester/pilot permission. No live provider call, secrets, DB apply, production change, PR merge/deploy by this TASK; do not modify existing X posting/OAuth or G3 schedule. Draft scoped PR then K4.
-- recommended_model: Opus5.5（高）
+- allocation: K4 2026-10-11 PASS_SOURCE_CANDIDATE / RELEASE_HOLD. Reviewed G4 TASK Report and Draft PR140 exact 2e75a6a842e70f3de78558681803b60935fb4251: OPEN/DRAFT/NOT_MERGED, one commit/20 bounded files. G4 reports Deno86, mobile252, disposable PG17 concurrency/ACL PASS (ChatGPT inspected code but did not rerun). Two-stage Meta TEXT manual posting, pre-provider claim/consent and status/read-back source implemented; Edge gate THREADS_MANUAL_PUBLISH_PREREQUISITES_MET=false, mobile UI flag false, no live Meta/DB/app connection or post. Production HOLD especially service_role redeem after user claim does not recheck G5 T13/owner membership at redeem within 60s grant, requires reviewed safe lifecycle/role race design with H5/G5 before real publishing; credential-expires-at reader/T10 still missing. PR124/135/139 OAuth chain and Phase2a-2/T13/Meta pilot unmet. G4 done/unreserved and historic Report preserved; no Codex review until joint integrated gate; no PR merge/deploy. Other slots protected.
+- recommended_model: Opus5.5（高） (completed)
 ## Claude G5
 - owner: claude
 - slot: claude-5
