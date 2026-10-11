@@ -111,8 +111,8 @@
 - next_owner: claude
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: New G1 銘柄詳細画面 V1 source-only UI feature. Build root Stack stock-detail view from genuine saved close report and existing tracked-stock user-scoped reads (NOT live quotes); stock-row/featured-card taps open detail with back to original portfolio/watchlist, explicit separate edit button opens existing editor; registered search rows open detail, unregistered search still opens existing registration editor. Five bottom NativeTabs absolutely frozen; AuthGate/G5, G2/new report generation, news collection, migration/Edge/production/EAS untouched. User 2026-10-11: old reporting missing 10/7–10/9 is intentional cutover backlog, new method already generated those closes — DO NOT investigate or fix old close; verify app saved report feed only after new method cutover. Fresh origin/main and isolated G1 worktree; one source-only PR no self-merge, return K1 for review.
-- recommended_model: Sonnet5（高）
+- allocation: K1 first source review of G1 PR #136 head e2dfdab5c7219aa2ff31c50c51f0125f816c16a7 found ONE P2 valuation freshness bug: stock-detail-view.ts registrationMatchesSnapshot compares ONLY quantity/average_price, but edits to cash/margin or long/short with unchanged numeric values still show OLD saved report valuation/P&L beside NEW position labels. G1 narrowly correct current helper to compare quantity/avg/position_type/side/tracking_type with same saved row, add fail-before/pass-after behavioral regressions, keep existing PR #136 and all other code untouched. No NativeTabs changes, no other slot, no source merge, production, DB/Edge/EAS; Vercel rate-limit failure not a source regression. Return K1 to かぶモリアプリG1のちゃ. Review source then decide user-approved merge.
+- recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
 - slot: claude-2
