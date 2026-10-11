@@ -21,7 +21,21 @@ const MODES: { mode: Mode; label: string; detail: string }[] = [
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export type AiPlanningInput = { frequencyTargetPerWeek: number; approvalMode: string; source: "saved" | "default" };
+export type AiPlanningInput = {
+  frequencyTargetPerWeek: number;
+  approvalMode: string;
+  source: "saved" | "default";
+  status: "unloaded" | "loading" | "ready" | "no_saved_settings" | "unavailable" | "blocked";
+};
+
+const AI_STATUS_TEXT: Record<AiPlanningInput["status"], string> = {
+  unloaded: "AI相談で覚えた設定は、まだ読み込んでいません。初期設定（週3回）で枠を作ります。",
+  loading: "AI相談で覚えた設定を読み込み中です。初期設定（週3回）で枠を作ります。",
+  ready: "AI相談で覚えた設定",
+  no_saved_settings: "AI相談で覚えた設定はまだありません。初期設定（週3回）で枠を作ります。",
+  unavailable: "AI相談で覚えた設定を確認できませんでした。初期設定（週3回）で枠を作ります。",
+  blocked: "AI相談で覚えた設定を読む権限が確認できませんでした。初期設定（週3回）で枠を作ります。",
+};
 
 type Row = { text: string; date: string; time: string };
 
@@ -121,10 +135,11 @@ export function ScheduleComposer({
         </View>
       ) : (
         <View style={{ gap: 4 }}>
-          <Text style={{ color: colors.ink }}>週あたりの投稿回数: {ai.frequencyTargetPerWeek}回（{ai.source === "saved" ? "AI相談で覚えた設定" : "初期設定"}）</Text>
+          <Text style={{ color: colors.ink }}>週あたりの投稿回数: {ai.frequencyTargetPerWeek}回</Text>
+          <Text style={styles.muted}>{AI_STATUS_TEXT[ai.status]}</Text>
           <Text style={styles.muted}>本文は投稿の直前にAIが作成します。ここでは投稿する枠だけを作ります。</Text>
           <Pill tone="warning">
-            {ai.approvalMode === "auto_post_preference"
+            {ai.source === "saved" && ai.approvalMode === "auto_post_preference"
               ? "自動投稿の同意: 設定画面で選択済み（それでも、このプレビューからは投稿されません）"
               : "自動投稿の同意: なし。AI相談の「これで覚えて」は自動投稿の同意になりません"}
           </Pill>

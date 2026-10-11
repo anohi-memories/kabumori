@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { mockRepository } from '@/data/mock-repository';
 import { SupabaseContentSettingsRepository } from '@/data/content-settings-repository';
@@ -7,7 +7,14 @@ import { supabase } from '@/lib/supabase';
 import { colors } from '@/constants/theme';
 import { ActionButton, Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { resolvePostsView } from '@/domain/data-view';
-import { SOCIAL_MOBILE_CONTENT_DEFAULTS } from '@/domain/content-settings';
+import {
+  AI_SETTINGS_UNLOADED,
+  aiPlanningFor,
+  applyAiSettingsResult,
+  classifyServerPosts,
+  startAiSettingsLoad,
+  type AiSettingsState,
+} from '@/domain/schedule-view';
 import {
   buildUnifiedSchedule,
   cancelDraft,
@@ -49,24 +56,43 @@ export default function ScheduleScreen() {
   const [batches, setBatches] = useState<ScheduleBatch[]>([]);
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const [notice, setNotice] = useState<{ tone: 'success' | 'warning' | 'danger'; text: string } | null>(null);
-  const [ai, setAi] = useState<AiPlanningInput>({ frequencyTargetPerWeek: SOCIAL_MOBILE_CONTENT_DEFAULTS.frequencyTargetPerWeek, approvalMode: SOCIAL_MOBILE_CONTENT_DEFAULTS.approvalMode, source: 'default' });
-
   // The AI plan uses the frequency confirmed in AI consultation (read only; nothing is written from here).
+  // The values are bound to the exact brand they were read for: a workspace switch drops them at once, a late
+  // answer for a previous brand/load is discarded, and an unreadable brand is labelled instead of inheriting.
+  const [aiState, setAiState] = useState<AiSettingsState>(AI_SETTINGS_UNLOADED);
+  const loadCounter = useRef(0);
   useEffect(() => {
+    // Not ready / no brand: nothing to load. aiPlanningFor() already returns the unloaded default for any
+    // brand the state was not read for, so a previous brand's values are never shown here.
     if (status !== 'ready' || !brandId || !repository) return;
+    loadCounter.current += 1;
+    const loadId = loadCounter.current;
+    setAiState((current) => startAiSettingsLoad(current, brandId, loadId));
     let cancelled = false;
     void repository.read(brandId).then((result) => {
-      if (!cancelled && result.state === 'ready') setAi({ frequencyTargetPerWeek: result.data.frequencyTargetPerWeek, approvalMode: result.data.approvalMode, source: 'saved' });
+      if (cancelled) return;
+      setAiState((current) => applyAiSettingsResult(current, brandId, loadId,
+        result.state === 'ready'
+          ? { state: 'ready', data: result.updatedAt === null ? null : { frequencyTargetPerWeek: result.data.frequencyTargetPerWeek, approvalMode: result.data.approvalMode } }
+          : { state: result.state }));
     });
     return () => {
       cancelled = true;
     };
   }, [brandId, repository, status]);
+  const ai: AiPlanningInput = aiPlanningFor(aiState, brandId);
 
   const accountId = activeAccount?.id ?? null;
   const owner = activeAccount && activeAccount.platform === 'x' ? { accountId: activeAccount.id, brandId: activeAccount.brandId ?? brandId ?? 'preview', platform: 'x' as const } : null;
-  // Server rows are shown exactly as before (read-only). Brand-bound rows have no account binding yet.
-  const serverPosts = view.kind === 'posts' ? view.posts.map((post) => ({ ...post, accountId: post.accountId === 'unknown' && accountId ? accountId : post.accountId })) : [];
+  // Server rows are read-only. Production rows have no account binding: they are listed as brand-level and
+  // never relabelled as the selected account's posts, so only account-bound rows reach the per-account solver.
+  const classified = classifyServerPosts({
+    rows: view.kind === 'posts' ? view.posts : [],
+    accounts: snapshot?.accounts ?? mockRepository.getAccounts(),
+    activeAccount: activeAccount ? { id: activeAccount.id, brandId: activeAccount.brandId, platform: activeAccount.platform } : null,
+    isPreview: view.kind === 'posts' && view.isPreview,
+  });
+  const serverPosts = classified.accountBound;
   const everything = buildUnifiedSchedule({ accountId, serverPosts, drafts });
   const items = filter === 'all' ? everything : buildUnifiedSchedule({ accountId, serverPosts, drafts, filter });
   const conflicts = detectConflicts(everything);
@@ -78,12 +104,13 @@ export default function ScheduleScreen() {
 
   function reroll(batch: ScheduleBatch) {
     if (!owner) return;
-    const result = rerollBatch(batch, { owner, now: new Date(), occupied: occupiedExcept(batch.id) });
+    const result = rerollBatch(batch, { owner, now: new Date(), occupied: occupiedExcept(batch.id) }, drafts);
     if (!result.ok) {
       setNotice({ tone: 'danger', text: result.issues.map((issue) => issue.message).join(' ') });
       return;
     }
-    setDrafts((current) => [...current.filter((draft) => draft.batchId !== batch.id), ...result.drafts]);
+    const rerolled = new Map(result.drafts.map((draft) => [draft.id, draft]));
+    setDrafts((current) => current.map((draft) => rerolled.get(draft.id) ?? draft));
     setBatches((current) => current.map((candidate) => (candidate.id === batch.id ? result.batch : candidate)));
     setNotice({ tone: 'success', text: `${modeLabels[batch.mode]}の日時を引き直しました（プレビューのみ）。` });
   }
@@ -166,6 +193,16 @@ export default function ScheduleScreen() {
         ) : view.kind === 'unavailable' ? (
           <EmptyState title="投稿予定を確認できません" detail={view.reason ?? '時間をおいて再度お試しください。'} />
         ) : null}
+        {classified.brandLevel.length || classified.unattributable.length ? (
+          <View style={{ gap: 8 }}>
+            <Text style={{ color: colors.ink, fontWeight: '800' }}>投稿先アカウント未特定／ブランド単位</Text>
+            <Text style={styles.muted}>この予定は、どのアカウントから投稿されるかがまだ記録されていません。選択中のアカウントの投稿としては扱わず、競合の確認にも使いません。</Text>
+            {classified.brandLevel.map((post) => (
+              <BrandLevelCard key={post.id} post={post} />
+            ))}
+            {classified.unattributable.length ? <Pill tone="warning">{`ブランドを確認できない予定が${classified.unattributable.length}件あります`}</Pill> : null}
+          </View>
+        ) : null}
         {view.kind !== 'loading' && items.length
           ? items.map((item) => (item.source === 'server'
             ? <ServerCard key={item.id} item={item} />
@@ -192,6 +229,23 @@ function ServerCard({ item }: { item: Extract<UnifiedItem, { source: 'server' }>
         </View>
         <Text style={{ color: colors.ink }}>{item.text || '（本文は投稿の確認画面で表示されます）'}</Text>
         <Text style={styles.muted}>{item.origin === 'other' ? '予定' : originLabels[item.origin]} ・ 実投稿は次フェーズ</Text>
+      </Card>
+    </Pressable>
+  );
+}
+
+function BrandLevelCard({ post }: { post: { id: string; scheduledAt: string; status: string; text: string } }) {
+  const router = useRouter();
+  const status = statusLabels[post.status as PostStatus] ?? statusLabels.scheduled;
+  return (
+    <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/posts/[id]', params: { id: post.id } })} style={({ pressed }) => pressed && styles.buttonPressed}>
+      <Card style={{ borderStyle: 'dotted' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={{ color: colors.ink, fontWeight: '800' }}>{formatJst(post.scheduledAt)}</Text>
+          <Pill tone={status.tone}>{status.label}</Pill>
+        </View>
+        <Text style={{ color: colors.ink }}>{post.text || '（本文は投稿の確認画面で表示されます）'}</Text>
+        <Text style={styles.muted}>投稿先アカウント未特定 ・ ブランド単位 ・ 実投稿は次フェーズ</Text>
       </Card>
     </Pressable>
   );

@@ -53,7 +53,7 @@ export class SupabaseSocialRepository {
       const status = mapScheduledPostStatus(row.status);
       // Production scheduled_posts has no social_account_id relation. Do not
       // attribute a post to the first account merely because it is available.
-      return [{ id: row.id, accountId: 'unknown', scheduledAt: row.scheduled_for, origin: 'ai_generated', status, text: '' }];
+      return [{ id: row.id, accountId: 'unknown', brandId: row.brand_id, scheduledAt: row.scheduled_for, origin: 'ai_generated', status, text: '' }];
     });
     const brand = brandRows?.find((row) => typeof row.id === 'string' && brandIds.includes(row.id)) ?? brandRows?.[0];
     return { state: 'ready', data: { workspace: brand ? { id: String(brand.id), name: typeof brand.display_name === 'string' ? brand.display_name : String(brand.id), plan: 'standard' } : null, accounts, plannedPosts: posts.filter((post) => post.status !== 'published'), history: posts } };

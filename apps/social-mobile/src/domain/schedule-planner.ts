@@ -522,14 +522,52 @@ function nextFreeSlot(fromMs: number, taken: number[], spacing: SpacingRule): nu
 /**
  * Explicit re-roll: a new seed for ONE flexible batch (random or AI). Exact and interval batches cannot be
  * re-rolled. Other batches' slots are passed as `occupied` and stay where they are.
+ *
+ * Only the TIMES of the batch's currently active drafts change. Their identities, texts (including edits and
+ * reordering), owner and every cancelled draft are kept exactly as given: a cancelled draft is terminal and
+ * never comes back, and `shuffleContent` chosen at planning time never overrides later edits. If the active
+ * posts cannot be placed again inside the batch's own date range / window / gap / capacity, nothing at all is
+ * returned (no partial edits).
  */
-export function rerollBatch(batch: ScheduleBatch, context: Omit<PlanContext, 'batchId' | 'seed'>): PlanResult {
+export function rerollBatch(
+  batch: ScheduleBatch,
+  context: Omit<PlanContext, 'batchId' | 'seed'>,
+  current: readonly ScheduleDraft[],
+): PlanResult {
   if (batch.mode !== 'manual_random_batch' && batch.mode !== 'ai_flexible') {
     return { ok: false, issues: [{ code: 'REROLL_NOT_ALLOWED', message: '日時を指定した投稿は再抽選しません。' }] };
   }
+  const own = current.filter((draft) => draft.batchId === batch.id);
+  if (own.some((draft) => draft.accountId !== batch.accountId || draft.brandId !== batch.brandId)) {
+    return { ok: false, issues: [{ code: 'REROLL_OWNER_MISMATCH', message: '別のアカウントの予定は再抽選できません。' }] };
+  }
+  const active = own.filter((draft) => draft.state !== 'cancelled');
+  if (!active.length) return { ok: false, issues: [{ code: 'NO_ACTIVE_POSTS', message: '再抽選できる投稿がありません。' }] };
+
+  const request = batch.request;
+  if (request.mode !== 'manual_random_batch' && request.mode !== 'ai_flexible') {
+    return { ok: false, issues: [{ code: 'REROLL_NOT_ALLOWED', message: '日時を指定した投稿は再抽選しません。' }] };
+  }
+  const window = windowMinutes(request.mode === 'manual_random_batch' ? request.window : request.publishWindow);
+  if ('code' in window) return { ok: false, issues: [window] };
+  const found = [...contextIssues({ ...context, batchId: batch.id }), ...rangeIssues(request.dateFrom, request.dateTo, context.now.getTime())];
+  if (found.length) return { ok: false, issues: found };
+
+  const spacing = context.spacing ?? DEFAULT_SPACING;
+  const excluded = new Set(request.mode === 'manual_random_batch' ? request.excludedDates ?? [] : []);
+  const weekdays = request.mode === 'manual_random_batch' ? request.weekdays : undefined;
+  const dates = datesBetween(request.dateFrom, request.dateTo)
+    .filter((date) => !excluded.has(date) && (!weekdays?.length || weekdays.includes(jstWeekday(date))));
+  const occupied = (context.occupied ?? []).map((item) => new Date(item.scheduledAt).getTime());
   const nextSeed = seededRandom(batch.seed ^ (batch.revision + 1))() * 4294967296 >>> 0;
-  const result = planBatch(batch.request, { ...context, batchId: batch.id, seed: nextSeed });
-  return result.ok ? { ...result, batch: { ...result.batch, revision: batch.revision + 1 } } : result;
+  const placed = placeSpread(active.length, candidateSlots(dates, window, context.now.getTime()), occupied, spacing, nextSeed);
+  if (!placed.ok) return { ok: false, issues: [placed.issue] };
+
+  // Active drafts keep their chronological order: the n-th earliest draft takes the n-th new slot.
+  const byTime = [...active].sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt) || a.id.localeCompare(b.id));
+  const moved = new Map(byTime.map((draft, index) => [draft.id, { ...draft, scheduledAt: new Date(placed.slots[index]).toISOString(), state: 'previewed' as const }]));
+  const drafts = own.map((draft) => moved.get(draft.id) ?? draft);
+  return { ok: true, batch: { ...batch, seed: nextSeed, revision: batch.revision + 1 }, drafts };
 }
 
 // ---------------------------------------------------------------------------------------------------

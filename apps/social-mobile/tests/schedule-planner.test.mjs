@@ -52,13 +52,13 @@ test('the same seed re-renders identically; only an explicit re-roll changes ran
   const first = planBatch(randomRequest(), ctx());
   const again = planBatch(randomRequest(), ctx());
   assert.deepEqual(plain(again), plain(first));
-  const rerolled = rerollBatch(first.batch, { owner: OWNER, now: NOW });
+  const rerolled = rerollBatch(first.batch, { owner: OWNER, now: NOW }, first.drafts);
   assert.equal(rerolled.ok, true);
   assert.equal(rerolled.batch.revision, 1);
   assert.notDeepEqual(rerolled.drafts.map((d) => d.scheduledAt), first.drafts.map((d) => d.scheduledAt));
   assert.deepEqual(rerolled.drafts.map((d) => d.text), TEN, 're-roll keeps the text order');
   // The re-roll itself is deterministic too (same batch + revision -> same result).
-  assert.deepEqual(plain(rerollBatch(first.batch, { owner: OWNER, now: NOW })), plain(rerolled));
+  assert.deepEqual(plain(rerollBatch(first.batch, { owner: OWNER, now: NOW }, first.drafts)), plain(rerolled));
 });
 
 test('content shuffle happens only when chosen, and is seeded', () => {
@@ -77,7 +77,7 @@ test('multiple exact posts keep exactly the chosen times; exact batches cannot b
   assert.equal(result.ok, true);
   assert.deepEqual(result.drafts.map((d) => formatJst(d.scheduledAt)), ['10/15(木) 08:30', '10/15(木) 22:15']);
   assert.ok(result.drafts.every((d) => d.fixed));
-  assert.equal(rerollBatch(result.batch, { owner: OWNER, now: NOW }).ok, false);
+  assert.equal(rerollBatch(result.batch, { owner: OWNER, now: NOW }, result.drafts).ok, false);
 });
 
 test('validation: empty/too-long text, past times, bad dates/windows, zones, reversed ranges and horizon', () => {
@@ -233,4 +233,106 @@ test('the schedule screen and composer cannot save, schedule or publish: read-on
   assert.doesNotMatch(composer, /@\/data\/|@\/lib\/supabase/u, 'the composer has no data access at all');
   assert.match(screen, /プレビュー／未予約・投稿されません/u);
   assert.match(screen, /再起動したりすると消えます/u);
+});
+
+// ---------------------------------------------------------------------------------------------------
+// K3 correction R1: re-roll must keep edits, reorder, cancellation and ownership
+// ---------------------------------------------------------------------------------------------------
+
+const activeOf = (drafts) => drafts.filter((d) => d.state !== 'cancelled');
+const sortedActive = (drafts) => activeOf(drafts).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+
+function threeRandom(over = {}) {
+  const planned = planBatch(randomRequest({ texts: ['A', 'B', 'C'], ...over }), ctx({ batchId: 'rb' }));
+  assert.equal(planned.ok, true);
+  return planned;
+}
+
+test('R1: re-roll after edit + reorder + cancel keeps the edited/reordered texts and never resurrects the cancelled post', () => {
+  const planned = threeRandom();
+  let drafts = planned.drafts; // chronological: A(0) B(1) C(2)
+  const editedB = editDraftText(drafts[1], 'Bを編集');
+  drafts = drafts.map((d) => (d.id === editedB.id ? editedB : d));
+  drafts = moveDraftText(drafts, drafts[1].id, 1); // swap texts of slot 1 and slot 2
+  const cancelledId = drafts[0].id;
+  drafts = drafts.map((d) => (d.id === cancelledId ? cancelDraft(d) : d));
+  const before = sortedActive(drafts);
+  assert.deepEqual(before.map((d) => d.text), ['C', 'Bを編集']);
+
+  const result = rerollBatch(planned.batch, { owner: OWNER, now: NOW }, drafts);
+  assert.equal(result.ok, true);
+  const active = sortedActive(result.drafts);
+  assert.equal(active.length, 2, 'exactly the two active posts');
+  assert.deepEqual(active.map((d) => d.text).sort(), ['Bを編集', 'C'].sort(), 'edited / reordered texts kept');
+  assert.ok(!result.drafts.some((d) => d.id === cancelledId && d.state !== 'cancelled'), 'cancelled stays cancelled');
+  assert.equal(result.drafts.find((d) => d.id === cancelledId).state, 'cancelled');
+  assert.deepEqual(before.map((d) => d.id).sort(), active.map((d) => d.id).sort(), 'same draft identities');
+  assert.notDeepEqual(active.map((d) => d.scheduledAt).sort(), before.map((d) => d.scheduledAt).sort(), 'only the times change');
+  for (const draft of active) {
+    assert.equal(draft.accountId, 'acc_a');
+    assert.equal(draft.brandId, 'u_a');
+    assert.equal(draft.fixed, false);
+    assert.equal(draft.publishable, false);
+  }
+});
+
+test('R1: repeated re-rolls keep the same texts, identities and owner; each is deterministic', () => {
+  const planned = threeRandom();
+  let current = { batch: planned.batch, drafts: planned.drafts };
+  const seenTimes = new Set();
+  for (let round = 0; round < 3; round += 1) {
+    const next = rerollBatch(current.batch, { owner: OWNER, now: NOW }, current.drafts);
+    assert.equal(next.ok, true);
+    assert.equal(next.batch.revision, round + 1);
+    assert.deepEqual(sortedActive(next.drafts).map((d) => d.text), ['A', 'B', 'C']);
+    assert.deepEqual(next.drafts.map((d) => d.id).sort(), planned.drafts.map((d) => d.id).sort());
+    assert.ok(next.drafts.every((d) => d.accountId === 'acc_a'));
+    seenTimes.add(next.drafts.map((d) => d.scheduledAt).join());
+    const again = rerollBatch(current.batch, { owner: OWNER, now: NOW }, current.drafts);
+    assert.deepEqual(plain(again), plain(next), 'same inputs -> same re-roll');
+    current = { batch: next.batch, drafts: next.drafts };
+  }
+  assert.ok(seenTimes.size >= 2, 'times actually move');
+});
+
+test('R1: shuffleContent chosen at planning does not override later edits on re-roll', () => {
+  const planned = threeRandom({ shuffleContent: true });
+  const edited = editDraftText(planned.drafts[0], '自分で直した本文');
+  const drafts = planned.drafts.map((d) => (d.id === edited.id ? edited : d));
+  const result = rerollBatch(planned.batch, { owner: OWNER, now: NOW }, drafts);
+  assert.equal(result.ok, true);
+  assert.equal(result.drafts.find((d) => d.id === edited.id).text, '自分で直した本文');
+  assert.deepEqual(result.drafts.map((d) => d.text).sort(), drafts.map((d) => d.text).sort(), 'no text lost or reshuffled');
+});
+
+test('R1: an infeasible re-roll fails with no partial edits; exact and interval batches are not re-rolled', () => {
+  const planned = threeRandom();
+  // A tighter occupied calendar: every slot of the range is blocked except a single slot -> 3 posts cannot be re-placed.
+  const occupied = [];
+  for (let day = 15; day <= 25; day += 1) {
+    for (let minute = 9 * 60; minute < 21 * 60; minute += 60) {
+      if (day === 15 && minute === 9 * 60) continue;
+      occupied.push({ scheduledAt: new Date(Date.UTC(2026, 9, day, 0, 0) + (minute - 9 * 60) * 60000).toISOString(), fixed: true });
+    }
+  }
+  const tight = rerollBatch(planned.batch, { owner: OWNER, now: NOW, occupied }, planned.drafts);
+  assert.equal(tight.ok, false, 'not enough room left in the window');
+  assert.ok(tight.issues.length > 0);
+  assert.equal(tight.drafts, undefined, 'no partial result is returned');
+  const exact = planBatch({ mode: 'manual_exact', posts: [{ text: 'x', date: '2026-10-15', time: '09:00' }] }, ctx({ batchId: 'ex' }));
+  assert.equal(rerollBatch(exact.batch, { owner: OWNER, now: NOW }, exact.drafts).ok, false);
+  const interval = planBatch({ mode: 'manual_interval', texts: ['a', 'b'], startDate: '2026-10-15', startTime: '12:00', every: { unit: 'days', value: 1 } }, ctx({ batchId: 'iv' }));
+  assert.equal(rerollBatch(interval.batch, { owner: OWNER, now: NOW }, interval.drafts).ok, false);
+});
+
+test('R1: AI slots re-roll keeps cancelled slots cancelled and the slot count', () => {
+  const planned = planBatch({ mode: 'ai_flexible', frequencyTargetPerWeek: 7, publishWindow: { start: '18:00', end: '22:00' }, dateFrom: '2026-10-15', dateTo: '2026-10-17', approvalMode: 'manual_review' }, ctx({ batchId: 'aiR' }));
+  assert.equal(planned.drafts.length, 3);
+  const drafts = planned.drafts.map((d, index) => (index === 0 ? cancelDraft(d) : d));
+  const result = rerollBatch(planned.batch, { owner: OWNER, now: NOW }, drafts);
+  assert.equal(result.ok, true);
+  assert.equal(result.drafts.length, 3);
+  assert.equal(activeOf(result.drafts).length, 2);
+  assert.equal(result.drafts[0].state, 'cancelled');
+  assert.ok(activeOf(result.drafts).every((d) => d.aiAutoPostConsent === 'not_granted' && d.publishable === false));
 });
