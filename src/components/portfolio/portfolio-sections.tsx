@@ -10,6 +10,7 @@ import {
   formatAmount,
   formatSignedAmount,
   formatSignedPercent,
+  REGISTRATION_CHANGED_NOTE,
   sparklineTrend,
   tone,
   type AiSummary,
@@ -119,8 +120,16 @@ export function AssetSummaryCard({
   hasReport: boolean;
   notes: readonly string[];
 }) {
+  const withheld = summary.withheld !== null;
+  // A history line that ends at the withheld value would contradict the "—" next to it, so it is hidden too.
+  const showSpark = !withheld && spark.length >= 2;
+  const accessibilityLabel = summary.withheld === 'changed'
+    ? `資産評価額 更新待ち。${REGISTRATION_CHANGED_NOTE}`
+    : summary.withheld === 'unknown'
+      ? '資産評価額 登録内容の確認中'
+      : `資産評価額 ${formatAmount(summary.assetValue)}`;
   return (
-    <View style={[styles.card, styles.assetCard]} accessibilityLabel={`資産評価額 ${formatAmount(summary.assetValue)}`}>
+    <View style={[styles.card, styles.assetCard]} accessibilityLabel={accessibilityLabel}>
       {/* Decorative botanical background: first child (behind every text and the sparkline), clipped to the card's
           rounded corners, takes no touches and is hidden from accessibility. It carries no financial meaning. */}
       <Image
@@ -138,7 +147,7 @@ export function AssetSummaryCard({
             {hasReport ? `${labels.basis}（保存済み大引け）` : '評価額は大引けレポート作成後に表示されます'}
           </Text>
         </View>
-        {spark.length >= 2 ? (
+        {showSpark ? (
           <View style={styles.sparkWrap}>
             <Sparkline values={spark} width={104} height={56} color={sparkColor(sparklineTrend(spark))} />
           </View>
@@ -150,6 +159,7 @@ export function AssetSummaryCard({
         <View style={styles.metricDivider} />
         <Metric label={labels.dayChange} amount={summary.dayPl} percent={summary.dayChangePercent} />
       </View>
+      {summary.withheld === 'changed' ? <Text style={styles.note}>{REGISTRATION_CHANGED_NOTE}</Text> : null}
       {notes.map((note) => (
         <Text key={note} style={styles.note}>{note}</Text>
       ))}

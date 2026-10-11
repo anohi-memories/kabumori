@@ -65,6 +65,94 @@ export function portfolioLabels(basis: PortfolioBasis | null): PortfolioLabels {
   };
 }
 
+// ---- registration <-> saved report alignment ---------------------------------------------------------------------------
+// The saved close report priced the positions the user had registered WHEN IT WAS WRITTEN. After a registration
+// changes (quantity, cost, 現物/信用, 買い/売り, holding -> watch, added, deregistered) the report's market values and
+// P/L no longer describe what the screen lists. Everything that shows a saved valuation (rows, impact top 3,
+// asset totals) goes through this one alignment so they can never disagree.
+
+/** The exact-match predicate (`registrationMatchesSnapshot` in stock-detail-view), injected: this module stays free of
+ *  runtime imports so it is testable with Deno, and the screen and the detail share a single definition. */
+export type RegistrationMatcher = (tracked: TrackedStock, saved: ReportStock) => boolean;
+
+/** The note shown wherever a valuation is withheld because the registration changed. */
+export const REGISTRATION_CHANGED_NOTE = '登録内容が変わったため、評価額・損益は次の大引けレポートで更新されます';
+
+export type HoldingFit =
+  /** One saved row for this ticker, and it was computed for exactly this registration. */
+  | 'matched'
+  /** The report has no row for this holding (registered after it was written): the existing 未反映 state. */
+  | 'absent'
+  /** A saved row exists but is not a unique exact match (edited position, or an ambiguous duplicate ticker). */
+  | 'changed';
+
+export type HoldingsAlignment = {
+  /**
+   * unknown   -- the registrations are not known (still loading / failed): nothing may be paired with the report.
+   * no_report -- there is no saved close report: nothing to pair, nothing to withhold.
+   * aligned   -- the saved holdings and the current holdings are one-to-one and every pair matches exactly.
+   * changed   -- anything else: the saved totals / per-holding figures do not describe the current holdings.
+   */
+  state: 'unknown' | 'no_report' | 'aligned' | 'changed';
+  /** By tracked_stocks.id, for every current holding. */
+  fit: ReadonlyMap<string, HoldingFit>;
+  /** Tickers whose saved row is a unique exact match for the current registration (the only rows whose own P/L is valid). */
+  matchedTickers: ReadonlySet<string>;
+};
+
+function groupBy<T>(items: readonly T[], key: (item: T) => string): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const k = key(item);
+    const list = groups.get(k);
+    if (list) list.push(item);
+    else groups.set(k, [item]);
+  }
+  return groups;
+}
+
+/**
+ * `tracked` is the signed-in user's registrations, or null when they are NOT KNOWN (loading, failed, signed out): an
+ * unknown set is never read as "no holdings". A ticker that appears more than once on either side is ambiguous and
+ * never matches. Missing / legacy fields follow the matcher (a blank equals only a blank).
+ */
+export function alignHoldings(
+  tracked: readonly TrackedStock[] | null,
+  snapshot: ReportSnapshot | null,
+  matches: RegistrationMatcher,
+): HoldingsAlignment {
+  const fit = new Map<string, HoldingFit>();
+  const matchedTickers = new Set<string>();
+  if (tracked === null) return { state: 'unknown', fit, matchedTickers };
+  const current = tracked.filter((item) => item.tracking_type === 'holding');
+  if (!snapshot) {
+    for (const item of current) fit.set(item.id, 'absent');
+    return { state: 'no_report', fit, matchedTickers };
+  }
+  const savedByTicker = groupBy(snapshot.holdings, (stock) => stock.ticker_code);
+  const currentByTicker = groupBy(current, (item) => item.stocks_master.ticker_code);
+  let oneToOne = true;
+  for (const item of current) {
+    const ticker = item.stocks_master.ticker_code;
+    const saved = savedByTicker.get(ticker) ?? [];
+    if (saved.length === 0) {
+      fit.set(item.id, 'absent');
+      oneToOne = false;
+    } else if (saved.length === 1 && currentByTicker.get(ticker)?.length === 1 && matches(item, saved[0])) {
+      fit.set(item.id, 'matched');
+      matchedTickers.add(ticker);
+    } else {
+      fit.set(item.id, 'changed');
+      oneToOne = false;
+    }
+  }
+  // A saved holding with no current holding (deregistered, or converted to a watch) also breaks the totals.
+  for (const ticker of savedByTicker.keys()) {
+    if (!currentByTicker.has(ticker)) oneToOne = false;
+  }
+  return { state: oneToOne ? 'aligned' : 'changed', fit, matchedTickers };
+}
+
 // ---- asset summary ---------------------------------------------------------------------------------------------
 
 /**
@@ -90,9 +178,35 @@ export type AssetSummary = {
   holdingCount: number;
   /** False when some holding could not be valued: the totals then do not cover every holding. */
   allValued: boolean;
+  /**
+   * Why the saved totals are not shown: 'changed' = the registrations differ from the ones the report priced (a calm
+   * note explains it); 'unknown' = the registrations are not known yet. Null = the totals are the saved ones.
+   */
+  withheld: 'changed' | 'unknown' | null;
 };
 
-export function assetSummary(snapshot: ReportSnapshot | null): AssetSummary {
+/**
+ * The saved totals, only while they describe the CURRENT holdings (see alignHoldings). Otherwise every figure is null
+ * ("—"): never zero, never a re-summed subset, never a fresh price. `tracked` null = registrations not known yet.
+ */
+export function assetSummary(
+  snapshot: ReportSnapshot | null,
+  tracked: readonly TrackedStock[] | null,
+  matches: RegistrationMatcher,
+): AssetSummary {
+  const alignment = alignHoldings(tracked, snapshot, matches);
+  if (alignment.state === 'unknown' || alignment.state === 'changed') {
+    return {
+      assetValue: null,
+      unrealizedPl: null,
+      unrealizedPlPercent: null,
+      dayPl: null,
+      dayChangePercent: null,
+      holdingCount: finite(snapshot?.totals?.holding_count) ?? 0,
+      allValued: snapshot?.totals?.all_holdings_valued !== false,
+      withheld: alignment.state,
+    };
+  }
   const totals = snapshot?.totals;
   const assetValue = finite(totals?.market_value);
   const unrealizedPl = finite(totals?.unrealized_pl);
@@ -104,6 +218,7 @@ export function assetSummary(snapshot: ReportSnapshot | null): AssetSummary {
     dayChangePercent: finite(totals?.day_change_percent),
     holdingCount: finite(totals?.holding_count) ?? 0,
     allValued: totals?.all_holdings_valued !== false,
+    withheld: null,
   };
 }
 
@@ -158,11 +273,22 @@ export type ImpactItem = {
   changePercent: number | null;
 };
 
-/** Holdings with a numeric day P/L, biggest absolute impact first (ties by ticker); at most `limit`. */
-export function topImpacts(snapshot: ReportSnapshot | null, limit = 3): ImpactItem[] {
+/**
+ * Holdings with a numeric day P/L, biggest absolute impact first (ties by ticker); at most `limit`. Only a saved row
+ * that is a unique exact match for a CURRENT holding contributes: a changed, converted, deregistered or ambiguous
+ * holding never adds its old day P/L, and with the registrations unknown there is nothing to show.
+ */
+export function topImpacts(
+  snapshot: ReportSnapshot | null,
+  tracked: readonly TrackedStock[] | null,
+  matches: RegistrationMatcher,
+  limit = 3,
+): ImpactItem[] {
   if (!snapshot) return [];
+  const { matchedTickers } = alignHoldings(tracked, snapshot, matches);
   return snapshot.holdings
     .flatMap((stock): ImpactItem[] => {
+      if (!matchedTickers.has(stock.ticker_code)) return [];
       const dayPl = finite(stock.day_pl);
       if (dayPl === null) return [];
       return [{
@@ -215,6 +341,12 @@ export type HoldingRow = {
   tag: string | null;
   /** One short Fact-passed line from the stored report. */
   line: string | null;
+  /**
+   * True when the report has a row for this holding but it was computed for a different registration (or the row is
+   * ambiguous): the saved value / P/L are withheld (null) and the screen says so. The share price stays when the row
+   * is unambiguous -- it does not depend on the position.
+   */
+  valuationChanged: boolean;
 };
 
 const STANCE_TAG: Partial<Record<Stance, string>> = { tailwind: '追い風', headwind: '逆風' };
@@ -229,12 +361,21 @@ function materialFor(stock: ReportStock, impact: HoldingImpact | undefined, note
 
 /**
  * The CURRENT registered holdings (tracked_stocks), each enriched with the latest report's row for the same
- * ticker. A holding the report does not know yet is kept and flagged `reflected: false` -- never dropped.
+ * ticker. A holding the report does not know yet is kept and flagged `reflected: false` -- never dropped. A holding
+ * whose saved row was computed for another registration keeps its row and its independent share price, but its
+ * valuation / P/L and the report prose about it are withheld (`valuationChanged`).
  * Order: market value descending (finite first), then holdings without one, ties by ticker.
+ * `tracked` null = the registrations are not known: nothing is listed.
  */
-export function buildHoldingRows(tracked: readonly TrackedStock[], report: PersonalizedReport | null): HoldingRow[] {
+export function buildHoldingRows(
+  tracked: readonly TrackedStock[] | null,
+  report: PersonalizedReport | null,
+  matches: RegistrationMatcher,
+): HoldingRow[] {
+  if (tracked === null) return [];
   const snapshot = report?.portfolio_snapshot ?? null;
-  const byTicker = new Map((snapshot?.holdings ?? []).map((stock) => [stock.ticker_code, stock]));
+  const alignment = alignHoldings(tracked, snapshot, matches);
+  const savedByTicker = groupBy(snapshot?.holdings ?? [], (stock) => stock.ticker_code);
   const impacts = new Map((report?.body?.holding_impacts ?? []).map((impact) => [impact.ticker_code, impact]));
   const notes = new Map((report?.body?.stock_notes ?? []).map((entry) => [entry.ticker_code, entry.note_ja]));
   const rows = tracked
@@ -242,7 +383,8 @@ export function buildHoldingRows(tracked: readonly TrackedStock[], report: Perso
     .map((item): HoldingRow => {
       const ticker = item.stocks_master.ticker_code;
       const company = item.stocks_master.company_name;
-      const stock = byTicker.get(ticker);
+      const savedRows = savedByTicker.get(ticker) ?? [];
+      const stock = savedRows.length === 1 ? savedRows[0] : undefined;
       const base = {
         trackedId: item.id,
         ticker,
@@ -250,16 +392,33 @@ export function buildHoldingRows(tracked: readonly TrackedStock[], report: Perso
         market: item.stocks_master.market,
         avatar: avatarLabel(company, ticker),
       };
-      if (!stock) {
+      if (savedRows.length === 0) {
         return {
           ...base, reflected: false, close: null, changePercent: null, marketValue: null, dayPl: null,
-          unrealizedPl: null, unrealizedPlPercent: null, tag: null, line: null,
+          unrealizedPl: null, unrealizedPlPercent: null, tag: null, line: null, valuationChanged: false,
         };
       }
-      const priced = stock.price.status === 'ok';
+      const priced = stock !== undefined && stock.price.status === 'ok';
+      if (!stock || alignment.fit.get(item.id) !== 'matched') {
+        // Exactly the same eligibility as the totals and the impact card (alignHoldings): withheld, never zero.
+        return {
+          ...base,
+          reflected: true,
+          close: priced ? finite(stock.price.close) : null,
+          changePercent: priced ? finite(stock.price.changePercent) : null,
+          marketValue: null,
+          dayPl: null,
+          unrealizedPl: null,
+          unrealizedPlPercent: null,
+          tag: null,
+          line: null,
+          valuationChanged: true,
+        };
+      }
       return {
         ...base,
         reflected: true,
+        valuationChanged: false,
         close: priced ? finite(stock.price.close) : null,
         changePercent: priced ? finite(stock.price.changePercent) : null,
         marketValue: finite(stock.market_value),

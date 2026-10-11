@@ -6,6 +6,7 @@ import {
   formatPriceYen,
   formatSignedAmount,
   formatSignedPercent,
+  REGISTRATION_CHANGED_NOTE,
   tone,
   type HoldingRow,
   type PortfolioLabels,
@@ -58,9 +59,10 @@ function HoldingCard({ row, labels, hasReport, onPress }: { row: HoldingRow; lab
     row.company,
     row.ticker,
     row.reflected ? `${labels.priceWord} ${formatPriceYen(row.close)}` : unreflected ? '最新レポート未反映' : '',
-    row.reflected ? `評価損益 ${formatSignedAmount(row.unrealizedPl)}` : '',
+    // A valuation that belongs to a previous registration is never spoken as the current P/L.
+    row.valuationChanged ? REGISTRATION_CHANGED_NOTE : row.reflected ? `評価損益 ${formatSignedAmount(row.unrealizedPl)}` : '',
   ].filter(Boolean).join(' ');
-  const hasMaterial = row.reflected && (!!row.tag || !!row.line);
+  const hasMaterial = row.reflected && !row.valuationChanged && (!!row.tag || !!row.line);
   return (
     <Pressable
       onPress={onPress}
@@ -90,6 +92,14 @@ function HoldingCard({ row, labels, hasReport, onPress }: { row: HoldingRow; lab
         </View>
         <Text style={styles.chevron}>›</Text>
       </View>
+      {row.valuationChanged ? (
+        <View style={styles.material} accessible={false}>
+          <View style={[styles.tag, { backgroundColor: NEUTRAL_TAG.background }]}>
+            <Text style={[styles.tagText, { color: NEUTRAL_TAG.color }]}>登録変更</Text>
+          </View>
+          <Text style={styles.line} numberOfLines={2}>{REGISTRATION_CHANGED_NOTE}</Text>
+        </View>
+      ) : null}
       {unreflected ? (
         <View style={styles.material}>
           <View style={[styles.tag, { backgroundColor: NEUTRAL_TAG.background }]}>
