@@ -3,8 +3,8 @@
 - task_id: common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012
 - owner: claude
 - slot: claude-6
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -35,18 +35,76 @@
 - 次のPhase2b（実レポート入口への配線、shadow、本番Secret登録・配信切替）は**別TASK/別ユーザー承認**が必要。
 
 ## Report — Phase2a（G6記入）
-- task_id: common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012
-- result: NOT_STARTED
-- changed_files: none
-- tests: NOT_RUN
-- commit_hash: none
-- push: no
-- merge: no
-- deploy: no
-- remaining_issues: Await G6
-- safety_checks: no provider/DB/production actions authorized
-- next_recommendation: G6 starts; return K6
 
+- task_id: common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012
+- result: **PASS_CANDIDATE (source only, default off, not wired)**
+- scope / changed_files: Draft PR [#148](https://github.com/anohi-memories/kabumori/pull/148)。新規3ファイルだけで、既存ファイルの変更は 0
+  - `supabase/functions/_shared/ai_provider/market_report_shadow.ts`
+    - `createMarketReportRequester`
+    - `shadowRequestFromResponsesBody`
+    - `compareStructure`
+    - `ledgerGuardFromEdgeEnv`
+    - `parseMarketReportAiMode`
+    - `marketReportShadowCallId`
+  - `supabase/functions/_shared/ai_provider/market_report_shadow_test.ts`（18件）
+  - `docs/ai-provider/PHASE2A_MARKET_REPORT_ADAPTER.md`（実装済み（ソースのみ）と、未承認の本番の手順・rollback を分けて記載）
+  - 変更していないもの: market-report-analysis（G2 所有）、`mod.ts`、モデル登録表、migration、ポリシー、Phase1g の smoke、G2 PR143 と push 関連
+- design:
+  - 市況レポートの `Requester`（`(step, body) => {payload, inputTokens, outputTokens}`）を包む
+  - `KABUMORI_MARKET_REPORT_AI_MODE`
+    - 未設定・`off`・その他の値（`primary` / `on` / 大文字小文字違い）→ off。**今の requester そのもの（同じ関数）を返し**、読む環境変数はモードの1つだけ
+    - ちょうど `shadow` で、かつ条件（使えるキー、台帳 Guard、cycle と claim の試行番号、呼び出し側が渡すカタログ上の Anthropic モデル）がそろったときだけ shadow。条件が欠ければ理由付きで off
+  - shadow の動作
+    - 今の段階が成功した後に、同じ instructions・input・スキーマ・最大出力・effort を1回だけ送る
+    - 送信は1回で、再試行も fallback もしない。台帳（reserve → mark_sent → settle）を通し、主体は system（kabumori / market_report、logical role `*.shadow`）
+    - 戻り値は今の結果のまま。今の段階が失敗したら shadow しない。対象は既定で generate だけ、最大2回、90秒、AbortSignal に対応
+  - 呼び出し ID は `mr:<cycle>:a<claim の試行番号>:<step>:<何回目か>` で決まる。再実行は台帳が拒否するので、二重課金しない
+  - 記録には本文を入れない（コード・トークン・台帳と同じ金額・構造の比較のみ）。sink の例外は飲み込む
+  - モデル ID はこの層に直書きしない（Provider の分離テストの規則「モデル ID はカタログだけ」と、呼び出し側が選ぶという契約に従う）
+- compatibility（オフライン）: 実際の generate / fact の依頼本文（オフライン fixture から作成）は、Provider の検査と Anthropic 向けのスキーマ変換に PASS
+  - 1回あたりの上限見積もり: generate $0.45、fact $0.16。どちらも試験用ポリシーの1回 $1 以内
+- tests:
+  - 新規 18件 PASS（実 API・本番 0。Claude の応答は合成、台帳は「1回の試行につき送信1回」の偽物）
+    - 既定 OFF と、同じ関数であること
+    - 条件が欠けたときの off（8通り）
+    - 変換と、不正な本文5種類の拒否
+    - 成功時の結果の一致と、台帳との費用の一致
+    - 対象と回数、今の段階が失敗したときの扱い
+    - エラー6種類（送信1回、再試行なし）
+    - スキーマ違反と max_tokens での打ち切り
+    - 予算の拒否4種類（送信 0）
+    - 冪等性（再実行は ATTEMPT_FINALIZED）
+    - 確定の失敗（予約は残る）
+    - 時間切れと取消（開始前・送信中）
+    - sink の例外
+    - 本文・キーの漏洩なし（項目は15個に固定）
+    - 構造の比較に本文が入らないこと
+    - **`generateSharedAnalysis` の結果が、shadow あり・なしで完全に一致**
+    - `ledgerGuardFromEdgeEnv`
+  - mutation 4/4 検出（off で別の関数を返す／再試行を許す／記録に本文を混ぜる／既定で fact も対象にする）
+  - 回帰: 共通 Provider 112件（分離の規則のテストを含む）、市況レポート 283件、型チェック、lint（30ファイル）すべて PASS
+  - 差分の秘密情報スキャン 0件
+- commits / branch / PR head: `a71de72b` on `claude/g6-phase2a-market-report-adapter-20261012`、Draft PR #148
+- push: PR の branch へ push 済み。この Report は main へ fast-forward。merge: no。deploy: no
+- production=0、external_paid_calls=0
+  - Secrets・`.env`・Claude API キー・Supabase キーは読んでいない、コピーしていない
+  - DB・Edge・Cron・X への操作は無い
+- security_checks:
+  - 既定は off、条件が欠けても off
+  - 主体は system だけで、利用者・ブランドを渡す経路が無い
+  - 記録に本文・キーが入らない
+  - 台帳を必ず通し、二重送信を防ぐ
+  - 別の provider への切り替えは無い
+  - 認証・権限・DB の新しい境界は無い（台帳 Guard の経路は既存の Phase1b / Phase1g と同じ）
+- remaining_issues（どれも Phase 2b 以降。別 TASK・別承認）:
+  1. `market-report-analysis/handler.ts` への配線は G2 が所有するファイル。G2（PR143 など）との調整が必要。`mod.ts` へのエクスポートもこのときに追加する
+  2. shadow は今の段階の後に順番に走るので、実行時間が延びる（最大 `timeoutMs`）。Edge の時間内に収まるかを決める必要がある
+  3. 今の試験用ポリシー（月 $5・40回）では、毎日の shadow は月の途中で `BUDGET_DENIED` になる（試算は月 42〜84回・$11〜23。安全側）。毎日続けるならポリシーの見直しが必要
+  4. Edge Secret `ANTHROPIC_API_KEY` の登録と、台帳の回復処理の Cron（台帳を使う本番の呼び出しより前に必要）
+  5. レポートの `diagnostics.cost_usd` は OpenAI の単価のまま。Claude の費用は台帳で確認する
+- next_recommendation:
+  - K6 で PR #148 を評価する（認証・権限の新しい境界は無いので、追加の H レビューは任意）
+  - 次は Phase 2b: G2 と調整して配線し、Secret・Cron・ポリシーを決め、数日だけ shadow を ON にする。それぞれ別承認
 ---
 
 # PRESERVED G6 PRIOR TASKS / REPORTS (completed Phase1g below; immutable history)

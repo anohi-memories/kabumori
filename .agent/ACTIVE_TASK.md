@@ -167,16 +167,16 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: ready
+- status: review_required
 - task_id: common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012
 - start_code: G6
 - finish_code: K6
-- next_owner: claude
+- next_owner: chatgpt
+- latest_result: PASS_CANDIDATE — Draft PR #148 (a71de72b): market report shadow connection candidate, default off (returns the legacy requester itself), not wired; 18 offline tests incl. identical generateSharedAnalysis outcome, 4/4 mutants, provider 112 / report 283 regression; production=0, paid calls=0. Report: .agent/tasks/CLAUDE_TASK_6.md
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
 - report: .agent/tasks/CLAUDE_TASK_6.md#report--phase2a
 - recommended_model: Opus5.5（高）
-- latest_result: K6 Phase1g PASS; ONE Opus5.5 paid smoke, ledger reservation1/usage1/open0, user-confirmed temporary secret revocation and ledger.env removal. Prior TASK done/none, safely preserved in G6 TASK history. OLD index stale in_progress corrected.
 - allocation: Phase2a source-only common AI provider adapter and synthetic fixture/fake-ledger tests; new G6-only independent Draft PR. No changes to G2 scalable morning/close notification pipeline, PR143, G5 Auth, G8 news, G9 model evaluations, other G/H slots.
 - production_mutation_window: FORBIDDEN (offline-only). No external paid calls, actual market report generation, Edge secrets, DB migration, Cron, deploy, merge or cutover.
 ## Claude G7
