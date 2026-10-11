@@ -62,15 +62,15 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-watchlist-simulator-user-login-realdata-qa-20261011
+- status: ready
+- task_id: kabumori-stock-detail-v1-readonly-navigation-20261011
 - start_code: G1
 - finish_code: K1
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 accepted genuine-data Simulator 402pt check PASS_REAL_DATA_OBSERVED / PARTIAL_COVERAGE. User personally signed in; source from merged PR120 ran in own Metro 8082. Real saved watch rows 18/18 visible exactly once, correct saved-close/basis/two-decimal change, search/editor/read-only refresh and portfolio-watch segment + original five NativeTabs PASS. No ≥5% featured/news featured/missing-price real data was present; those are NOT_OBSERVED, 375pt and physical iPhone NOT_RUN. G1 report notes latest saved close 10/6 while 10/7–10/9 had morning reports only — independent G2/news-delivery follow-up required, cause not proven and G2 active task NOT overwritten. No app code changes, EAS/deploy=0, user watchlist edits=0, credentials not logged; standard login idempotent enrollment RPC was not independently inspected for server effects. G1 task closed/slot free only after fresh worktree and task check for next assignment.
-- recommended_model: Sonnet5（中）
+- allocation: New G1 銘柄詳細画面 V1 source-only UI feature. Build root Stack stock-detail view from genuine saved close report and existing tracked-stock user-scoped reads (NOT live quotes); stock-row/featured-card taps open detail with back to original portfolio/watchlist, explicit separate edit button opens existing editor; registered search rows open detail, unregistered search still opens existing registration editor. Five bottom NativeTabs absolutely frozen; AuthGate/G5, G2/new report generation, news collection, migration/Edge/production/EAS untouched. User 2026-10-11: old reporting missing 10/7–10/9 is intentional cutover backlog, new method already generated those closes — DO NOT investigate or fix old close; verify app saved report feed only after new method cutover. Fresh origin/main and isolated G1 worktree; one source-only PR no self-merge, return K1 for review.
+- recommended_model: Sonnet5（高）
 ## Claude G2
 - owner: claude
 - slot: claude-2
