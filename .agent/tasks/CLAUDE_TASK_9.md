@@ -1,3 +1,52 @@
+# Claude Task G9 — API最適化B R2：外部AI送信の権利ゲート是正
+
+- task_id: api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011
+- owner: claude
+- slot: claude-9
+- status: ready
+- next_owner: claude
+- start_code: G9
+- finish_code: K9
+- return_to: ニュース改善API最適化のちゃ
+- recommended_model: Sonnet5（高）
+- task_type: G9 K9 review correction; B専用（外部AI送信の権利ゲート）
+- user_routing: ユーザー明示割当 G9=API最適化B。G8ニュース改善A/その他全G/H枠は触らない。
+- prohibited: paid API calls, count_tokens real network calls, production DB, paid provider access, deployment/merge, PR115 direct modification, source other than G9-owned evaluation tools/docs
+
+## K9判定・今回の目的
+
+- 前G9 TASK `api-optimization-b-phase5-followup-fixture-rights-and-cost-eval-g9-20261011` は `b6020dbb41d63cba88208cef20063c8d24632c0e` を `claude/g9-fixture-rights-cost-eval-20261011` にpush、17ファイル（B評価ツール/文書のみ）。G9報告: 284件PASS、typecheck/lint問題なし、実有料API0、本番アクセス0、PR merge/deploy0。GitHub変更ファイル/ブランチheadをちゃが確認、ローカルテスト自体はちゃ未実施。
+- 22fixtureのうちrights_unconfirmed 18は `cases.rights_safe.json` から本文を外した。これはオフライン成果として有用。ただしPR115の `cases.json` とGit過去commitには18件の本文が残り、権利問題は未解決。PR115の既存ownerが不明なため本TASKで勝手にPR115を書き換えない。
+- **K9 verdict: PASS_OFFLINE_PARTIAL / EXTERNAL_CALLS_RELEASE_HOLD**。実装の危険な残り: `fixture_access.ts` の `runtimeBodiesPath` を提供すると、SHA256一致だけで `rights_unconfirmed` 18件が `ready` になる。`cli.ts` はlive時に `--fixtures rights_safe` を確認するだけで、これら18件の外部AI送信を防ぐライセンス許諾ゲートがない。`probe_cli.ts` は既定rights_safeだが `--fixtures legacy` を指定すれば外部Anthropic count_tokensへ旧本文を送れる。ハッシュは内容一致の証拠で、転載/商用/第三者送信の許諾ではない。
+
+## 対応範囲
+
+1. **外部送信ゲート**: `cli.ts` live、`probe_cli.ts` count_tokens/モデル一覧等の外部接続前に、`rights_unconfirmed` は本文のハッシュが一致しても**外部プロバイダへ絶対送らない**。許諾確認済みを表す監査可能な明示情報がなければ除外/停止（fail-closed）。非公開ローカル評価でのみ一時本文を読む場合も外部へ流す経路を分離。送信前にケースごとに検査して理由を表示。APIキー発見/モデル呼出/送信前に検査できる構造を優先。
+2. **legacyの扱い**: 旧 `cases.json` に本文がある事実を隠さない。少なくとも外部送信を伴う `probe_cli --fixtures legacy` は拒否。通常 `cli` はできれば安全な `rights_safe` 既定に変更し、legacyを使う必要があるローカル定型テストは明示的に指定して互換維持。古いfixture本文を含んだ本番由来記録のGit履歴書換・force pushは禁止。PR115 ownerへの移行計画として別報告。
+3. **許諾の表現**: SHA256一致/オペレーターの単なるopt-inを「利用許諾あり」と扱わない。許諾状態を明示的に区別し、後日権利確認が取れたケースだけ監査記録を伴って許可する設計。今回、新たな権利許諾を仮定しない。TDnet/BBC/AJ/APの条項不明を安全側で止める。見出しや `recorded.generation.text` に引用が残り得る点も文書に記載し、評価時送信ペイロードの対象まで範囲を考慮。
+4. **テスト**: 純粋mockで `rights_safe + runtimeBodies 18件有り + live` が外部送信できないこと、`probe_cli --fixtures legacy` がネットワーク開始前に拒否されること、defaultオフラインの安全な4件、許諾が検証済みの公式2件、hash mismatch/missingが既存通り、無ネットワーク/無有料APIで検証。既存284件の回帰、deno check/lint、diff check/secret scan、PR115との差分/ownership確認。テストで本物のkeysや外部APIは絶対使わない。
+5. **作業境界**: 事前に `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`、G9 TASK末尾の過去Report、fresh origin/main、G9 branch最新headと他slotの所有/競合/worktreeを確認。G9専用の独立worktreeから `b6020dbb` の継続を安全に扱い、他slotのbranch/checkout/未commit/サーバを操作しない。対象変更は `tools/provider-compare/` と `docs/model-optimization/` のみ。G8 PR129、PR116、PR115、監視Edge Function/本番DB/Secrets/Cron/モデル/Providerは不干渉。
+6. **成果**: 安全な場合に限りG9 branchへcommit/push、Draft PR作成は別のユーザー指示/所有確認が必要なら作らない。PR115の所有者が未確認の場合、PR115を編集しない。古い `cases.json` とGit履歴が残るという未完了課題を隠さず、別オーナーへの推奨移行手順をまとめる。
+7. **完了報告**: K9で本チャットへ。TASK末尾 `## Report` にresult/外部送信ゲートの実装証拠/changed_files/tests/commit_hash/push/PR/権利の残件/safety_checks/remaining_issues/next_recommendationを書き、merge/deploy本番実行したと誤称しない。
+
+## Report
+
+- task_id: api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011
+- result: not_started
+- changed_files: none
+- tests: not_run
+- commit_hash: none
+- push: not_performed
+- merge: not_performed
+- deploy: not_performed
+- remaining_issues: rights_unconfirmed原文を外部AIへ流すlive/runtimeBodies・probe_cli/legacy経路をfail-closed化。PR115旧fixture/履歴は別工程。
+- safety_checks: not_started
+- next_recommendation: G9開始、外部送信ゲートだけ是正→K9で返却。
+
+---
+
+## Preserved previous G9 TASK / Report（履歴・改変禁止）
+
 # Claude Task G9 — API最適化B / Phase5成果から評価基盤の権利・費用整理へ
 
 - task_id: api-optimization-b-phase5-followup-fixture-rights-and-cost-eval-g9-20261011
