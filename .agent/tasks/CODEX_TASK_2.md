@@ -1,3 +1,62 @@
+# Codex H2 CURRENT TASK — Fact V2 PR #132 ONE integrated evidence and safety review
+
+- task_id: kabumori-fact-v2-pr132-final-integrated-review-20261011
+- owner: codex
+- slot: codex-2
+- status: done
+- next_owner: none
+- c2_verdict: CHANGES_REQUIRED (R1–R3 P2 objective Fact exceptions only); one G2 corrective ready, no repeated broad review
+- start_code: H2
+- finish_code: C2
+- completion_code: C2
+- return_to: **かぶモリアプリG2のちゃ**
+- recommended_model: **Sol（高）**
+- type: **ONE NARROW INDEPENDENT source-only integrated review, no implementation**
+- reviewed_candidate: https://github.com/anohi-memories/kabumori/pull/132
+- exact_pr132_head: bd424616a135e7bf71592c2ac41acb3e03f8568d
+- protected_base_pr110: https://github.com/anohi-memories/kabumori/pull/110
+- exact_pr110_head: 319a442edcd61c07274e3409d8864234f9d77cd4
+- product_source_edits: forbidden
+- any_PR_merge_or_production_deploy_or_paid_API: forbidden
+
+## Product intent and review scope
+
+The product owner explicitly chose **「事実は厳格に、AIの分析・推測は積極的に許容、配信は安定優先」**. Kabumori needs Opus to reason across observed economic facts and publish its own plausible market interpretations and forward views. Fact checking must NOT reject a grounded interpretation solely because source news did not state the same implication verbatim. At the same time wrong objective prices/dates/index identity, fabricated company releases, bogus source attributions, and historical realized-move causation falsely presented as verified fact must not pass. Avoid endless minor Japanese regex micro-reviews; this is ONE integrated independent review of this completed change, not an invitation to re-review all old PR110 controls.
+
+PR132 is stacked Draft on intact PR110: **exact ONE delta commit, FOUR market-report-analysis source/test paths only**. G2 reported 1,356 offline tests PASS (analysis279, _shared466, app430, personalized129, packet42, X10), 11 new Fact V2 tests, 3 reproduced prior false-positive fixes and 10/7 mocked 459-char analysis retaining ~199 chars previously removed; previous factual guards kept. These are G2-reported, not independently run. Vercel commit status failure may be non-native; verify actual reasons before treating as code failure and do not change unrelated Vercel pipeline.
+
+## Mandatory preflight and focused checks
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this H2 TASK/Report (previous G5 history immutable), current G2 TASK and Report. Fresh `origin/main`, PR132 and PR110, verify OPEN/UNMERGED, exact pinned HEADs/base, only four allowed delta paths, no overlap with other active workstreams. STOP if head/base/ownership changed. Create dedicated **new isolated H2 checkout/worktree** with fresh `/Users/yuya/Developer/kabumori-fresh` base; never use another G/H worktree, uncommitted file, dev server, branch or port. Product source edits 0.
+2. Inspect ONLY PR110 `319a442e` to PR132 `bd424616` diff and helper callers necessary for behavior. Focus: (a) Generate + Fact prompts allow grounded synthesis (oil/fuel, yen/exporters, interest/sector, US/Japan multi-fact context) **without false past market attribution**; (b) objective issue extraction/cross-source date scope; (c) TOPIX index adoption disambiguation vs 1306 market price mislabel; (d) negated `same-day` expressions vs genuine mixed assertions in one sentence; (e) accepted PR110 noun subject, emoji/date and H2 R1 P1 20 no-comma unsafe cases. Review subtle true objective wrong facts that might be falsely exempted by broad regex contexts. Tests must be behavior-based, not only prompt-text inclusion.
+3. Run **small independent adversarial fake-input/local harness** probing at least: a text that contains both `同じ日ではない` and a separate actual false `同じ日に` assertion in same sentence; TOPIX actual constituent news, fake index price 437円, wrong Nikkei trading date/sign; two dated markets with ambiguous appended date; fabricated earnings/market announcement, unknown news ref; true opinion/inference without verbatim evidence; unsubstantiated past-move cause hidden behind later unrelated speculative phrase. Check X+app unit removal/acceptance and status semantics. Real input and model calls NOT required. Do not treat ordinary financial opinion differences as security blockers.
+4. Distinguish G2-reported 1,356 suites from tests actually rerun. Run relevant focused `fact_v2_test.ts`, `h2_corrective_test.ts`, `causal_calibration_test.ts` and targeted individual risk probes; avoid re-running all 1,356 without concrete evidence. `deno check/lint`, `git diff --check` where appropriate. Compare changed paths to fresh PR/main and other open PR. No migration/RPC/Auth/provider/DB/Cron/UI changes.
+5. Return **PASS_SOURCE_CANDIDATE** or **CHANGES_REQUIRED** with severity, exact reproducible bad cases (if genuine), changed paths, actual test evidence, remaining risks and one minimal scoped correction only if necessary. ONE review round for this policy delta; do not escalate reasonable inference disagreements into unlimited regex patch cycles. No automatic merge permission.
+6. Prepend current H2 review section to `.agent/CODEX_REPORT_2.md` preserving previous history byte-for-byte. Set only current H2 TASK `review_required / next_owner chatgpt` and H2 portion of `.agent/ACTIVE_TASK.md` with guarded CAS after fresh read. Return user to **かぶモリアプリG2のちゃ** with `C2`. No merge/deploy, paid Opus/OpenAI, production Supabase/Edge, data or X-posting calls; old/new consumer flags stay OFF.
+7. Production follow-up is a **separate cutover task**: existing 10/7–10/9 close reports were generated by shared method but new consumer flags `x_enabled=false, app_enabled=false` as of user's investigation; legacy `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE` prevented old close posts. H2 MUST NOT change flags or implement routing here. After PASS ChatGPT must create distinct G2 rollout/cutover preflight (single publisher, duplicate prevention, app personalization + notifications, safe rollback, user approval before production writes).
+
+## Completion / safety
+
+- implementation/product_changed_files: zero
+- Report: task_id, reviewed_head, outcome, finding controls, actual tests, source/prod write 0, commit/push of own Report/TASK/index only with exact readback, deploy/merge=false, return_to=G2, next=C2.
+- Recommended model: **Sol（高）**.
+
+
+## H2 completion — 2026-10-11 JST
+
+- outcome: **CHANGES_REQUIRED**; exact PR132 `bd424616a135e7bf71592c2ac41acb3e03f8568d` on protected PR110 `319a442edcd61c07274e3409d8864234f9d77cd4`, both OPEN/UNMERGED; PR132 DRAFT.
+- findings: three **P2** objective-guard regressions, not inference-policy objections: R1 same-sentence negation launders another affirmative same-day assertion (analysis_logic.ts:355); R2 TOPIX context `算出値/ウエート` exempts fake ETF/index value (analysis_logic.ts:429-440); R3 blanket trailing-date removal hides incorrect postposed US-session date (hard_fact_guards.ts:340). Before/after exact fixture evidence and minimal scoped corrections are in the Report.
+- actual tests: focused typed Deno **55/55 PASS** (Fact V2 11, H2 corrective26, causal18); independent scratch **10/14 PASS, 4 expected safety assertions FAIL** representing the three groups; SAME four unsafe strings blocked/removed in X+app on exact PR110 baseline. Four-file check/lint/diff-check PASS. G2's 1356 remains reported only, not rerun.
+- CI: Vercel status actual reason **Deployment rate limited — retry in 24 hours.**; no native code/build failure inferred.
+- report publication commit: `950dd827daa0ca92406f9a9af33c3f3bb2132a66`, guarded Contents API update to origin/main, exact full Report content read-back verified; prior entire Report suffix preserved byte-for-byte.
+- own bookkeeping only: this H2 TASK current header/completion, H2 Report prepend, H2 ACTIVE index section; preserved prior TASK/Report and all other slots. No H2 product source commit.
+- source edits0, PR merge0, deploy0, live Supabase reads/writes0, paid AI/API0, X/Push0, DB/RPC/migration/Cron/settings/flags/Auth/Storage/Vault/OAuth0, HANDOFF/apps/admin0; fresh base untracked supabase/.temp remains protected.
+- status: review_required / next_owner: chatgpt; return **C2 to かぶモリアプリG2のちゃ**. Single bounded G2 correction/ChatGPT source decision; production/cutover is a separately authorized task.
+
+---
+
+## Prior H2 TASK history (preserved verbatim below)
+
 # C2 — G5 PR130 E11 R1–R5 narrow rereview accepted as CHANGES_REQUIRED — 2026-10-11 JST
 
 - task_id: common-account-pr130-e11-r1-r5-narrow-security-rereview-20261011

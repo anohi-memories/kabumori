@@ -1,14 +1,14 @@
 # Active Tasks Index
 
-このファイルは共有オーケストレーションの7枠インデックスです。詳細指示と割当の正本は各TASK/Reportです。statusだけで空き判定せず、task_idとTASK本文も確認してください。
+このファイルは共有オーケストレーションの全15枠（Codex H1〜H5 + Claude G1〜G10）インデックスです。詳細指示と割当の正本は各TASK/Reportです。statusだけで空き判定せず、task_idとTASK本文も確認してください。
 
 ## Routing preference
 
 - かぶモリアプリ実装は G1 / G2 を使用する。
 - X自動投稿・複数ブランドX実装は G3 / G4 を使用する。
-- `G5`: 予備のClaude実装スロット。用途は固定せず、ユーザーまたはChatGPTが明示割当した場合のみ使用する。既存の基本ルーティングの自動fallbackにはしない。
+- `G5`〜`G10`: 予備のClaude実装スロット。用途は固定せず、ユーザーまたはChatGPTが明示割当した場合のみ使用する。既存の基本ルーティングの自動fallbackにはしない。idleだからという理由だけで自動使用しない。
 - 各ペア内の割当は空き状況・競合・依存関係を見てChatGPTが決める。
-- H1/H2はCodexのレビュー・バグ修正・検証枠。
+- H1〜H5はCodexのレビュー・バグ修正・検証枠（固定プロジェクト専用にしない）。割当時は `return_to` / `completion_code` / 推薦モデルを必ず記入する。
 - ユーザーの個別指定がある場合はその指定を優先する。
 - 競合防止ルールは常に優先する。
 
@@ -48,16 +48,58 @@
 - owner: codex
 - slot: codex-2
 - status: done
-- task_id: common-account-pr130-e11-r1-r5-narrow-security-rereview-20261011
+- task_id: kabumori-fact-v2-pr132-final-integrated-review-20261011
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
 - next_owner: none
-- return_to: 共通アカウントG5のちゃ
+- return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: C2 accepted H2 independent PR130 R1-R5 E11 source security rereview as CHANGES_REQUIRED, three narrow P2 residual groups R1 non-token residues / invalid NOT_RUN token / ambiguous COMMIT, R4 missing self_declared flag, R5 RLS-hidden rows miscount zero. R2 and R3 CLOSED at offline methodology. Independent reported 56/56 typed Deno, 58/58 mutations, 4/4 defect reproduction and fakePG RLS proof; source edits0, real Supabase E11 NOT_RUN. H2 completed done/next_owner none; preserved old TASK/Report. Photo app PREPAUSE_BLOCKED.
-- recommended_model: Sol（高）
+- allocation: C2 COMPLETE CHANGES_REQUIRED — Fact V2 PR132 exact bd424616a135e7bf71592c2ac41acb3e03f8568d on protected PR110 319a442edcd61c07274e3409d8864234f9d77cd4; R1 same-day same-sentence negation exonerates second false affirmation, R2 TOPIX 算出値/ウエート 437円 masquerades as 1306, R3 wrong US postposed date 10/7 stripped. ALL P2 objective-fact guard regressions reproducible X+app mocked delivery; 55/55 baseline focus PASS, independent 14 probes 10 PASS 4 FAIL. Opus grounded inference ALLOW policy CONFIRMED valid; do NOT reverse. Vercel rate limit, not code failure. H2 source edits0; no prod/merge/deploy/paid API. H2 Report saved with historical suffix intact, H2 current TASK done/none, released but not pre-reserved. G2 one bounded correction registered, H2 prior G5 C2 history preserved.
+- recommended_model: Sol（高） (completed)
+## Codex H3
+- owner: codex
+- slot: codex-3
+- status: idle
+- task_id: none
+- start_code: H3
+- finish_code: C3
+- completion_code: C3
+- next_owner: none
+- return_to: none（未割当）
+- source: .agent/tasks/CODEX_TASK_3.md
+- report: .agent/CODEX_REPORT_3.md
+- allocation: 未割当（2026-10-11追加）。固定プロジェクト専用にしないCodex枠。割当時に return_to / completion_code C3 / 推薦モデルを必ず記入する。
+- recommended_model: none
+## Codex H4
+- owner: codex
+- slot: codex-4
+- status: idle
+- task_id: none
+- start_code: H4
+- finish_code: C4
+- completion_code: C4
+- next_owner: none
+- return_to: none（未割当）
+- source: .agent/tasks/CODEX_TASK_4.md
+- report: .agent/CODEX_REPORT_4.md
+- allocation: 未割当（2026-10-11追加）。固定プロジェクト専用にしないCodex枠。割当時に return_to / completion_code C4 / 推薦モデルを必ず記入する。
+- recommended_model: none
+## Codex H5
+- owner: codex
+- slot: codex-5
+- status: idle
+- task_id: none
+- start_code: H5
+- finish_code: C5
+- completion_code: C5
+- next_owner: none
+- return_to: none（未割当）
+- source: .agent/tasks/CODEX_TASK_5.md
+- report: .agent/CODEX_REPORT_5.md
+- allocation: 未割当（2026-10-11追加）。固定プロジェクト専用にしないCodex枠。割当時に return_to / completion_code C5 / 推薦モデルを必ず記入する。
+- recommended_model: none
 
 ## Claude G1
 - owner: claude
@@ -75,26 +117,26 @@
 - owner: claude
 - slot: claude-2
 - status: review_required
-- task_id: kabumori-market-report-fact-interpretation-v2-20261011
+- task_id: kabumori-fact-v2-pr132-three-objective-guards-correction-20261011
 - start_code: G2
 - finish_code: K2
 - next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Fact V2（事実は厳格に、事実に基づく分析・見通しは通す）を、PR #110 の上に積んだ Draft PR #132（head bd424616a135e7bf71592c2ac41acb3e03f8568d、base 319a442e は変更なし）として作成。生成と Fact の指示の方針変更と、監査で再現した誤検知3件の修正。事実の誤りの判定の厳しさは変更なし。全テスト成功、本番操作・デプロイ・マージ 0。Report は .agent/tasks/CLAUDE_TASK.md の先頭の節。K2 の判断待ち。
+- allocation: PR132 の C2 R1〜R3（例外が広すぎて通っていた客観的な誤り4文）を修正し、新しい head 68d45dde1be34715267b5066fa3b3686d756b79e を push 済み（Draft のまま、PR110 は変更なし）。4文はローカル判定・単位の除外・X とアプリへの配信のすべてで止まり、通すべき3文は届く。全テスト成功、本番操作・デプロイ・マージ 0。Report は .agent/tasks/CLAUDE_TASK.md の先頭の節。K2 の判断待ち。
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: postona-x-autopost-production-readiness-20261010
+- status: in_progress
+- task_id: postona-unified-ai-manual-schedule-planner-v1-20261011
 - start_code: G3
 - finish_code: K3
-- next_owner: none
-- return_to: POSTONA G3のちゃ（AI相談V1本番接続担当チャット）
+- next_owner: claude
+- return_to: POSTONA G3のちゃ（AI相談・X投稿予約担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: K3 accepted G3 Stage3B X autopost rollout readiness as PASS_PREPARATION_ONLY / PREPARED_BLOCKED_ON_G5. Draft PR127 exact 4b0278228e726b65d782e9b231eb6fe84d9173ad contains only 5 new docs/offline-test and read-only inventory files; no source/SQL migrations/Edge changed or PR merged. G3-reported local PG O1/A1-A3/R1-R4, six existing pilot parts, ACL adverse, Deno 808/808; live read-only Supabase independently confirms 160000/160100/160200 not applied, publish authority/reader/check absent, AI consultation table and Stage3A refresh table present; x-test-post v141 unchanged. NO live write/deploy/X post/enable/EAS. Blocking G5 active x_autopost entitlement (claim/check/set), service deletion FK cleanup/T13; G4 real X OAuth account identity/T9 and current preclaim containment; G3 future booking generation and four-file deployed-bundle ownership diff. No Codex rereview of offline candidate; one integrated Sol（高） security review before actual production publish authorization. PR127 OPEN DRAFT UNMERGED, no new G3 task; next work driven by G5/G4 owner handoff with separate approval gates.
+- allocation: User requested same POSTONA schedule UI for AI-generated auto posts and manual text posts with exact date/time, randomized assignment of multiple texts in a date/time window, and interval schedule. G3 owns isolated local deterministic planner, account-scoped mock/UI preview in existing apps/social-mobile 5-tab app, new scheduling tests/docs, no real schedule DB writes or X posting. Explicit per-post manual consent differs from AI auto_post_preference, but G5 x_autopost service entitlement, account ownership and publisher permissions remain hard production prerequisites. G4/H1 X/Threads OAuth and G5 Auth/entitlement work untouched, prior G3 PR127 protected; no live Supabase/X/Meta/API, migrations, Edge, Cron, PR merge or deploy. K3 on completion; later Sol（高） integrated review only for real publisher/persistence.
 - recommended_model: Opus5.5（高）
 ## Claude G4
 - owner: claude
@@ -111,16 +153,76 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
-- task_id: common-account-phase3f-pr130-r1-r4-r5-offline-logic-fix-20261011
+- status: review_required
+- task_id: common-account-phase3g-free-auth-provider-test-readiness-20261011
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: C2 accepted PR130 H2 rereview with R1 R4 R5 P2 evidence-validator residuals. G5 Phase3f OFFLINE ONLY, narrow correction of non-token residue/invalid token and ambiguous COMMIT, missing witness self_declared flag, and RLS-filtered zero in read-only catalog/target SQL. New independent worktree and new Draft stacked PR based on unchanged PR130 exact 5943fad5f724191f6ae77f3baf826a4c7698d542, no original protected PR121/122/128/130 branch editing. No actual Supabase, Auth DELETE, user/photo data, project create/pause/restore, paid tier, deploy, migration or merge. Photo app PREPAUSE_BLOCKED, E1-E12 real NOT_RUN. Return K5; avoid another broad rereview.
+- allocation: G5 Phase3f K5 accepted source-only proof harness corrections Draft PR134 exact 1d4de2c73c42221ad4b2f9b1f231c271aa084907; Phase3f task completed and full history preserved. New G5 Phase3g OFFLINE public-docs/source feasibility of completely FREE OAuth/OIDC provider/test user support for managed E1-E12 before family photo downtime. Provide one bounded practical E1-E12 provider prerequisite matrix, actual Free tier provider/hook/rate eligibility, concrete consent-free provider test setup feasibility, user steps and GO/NO_GO; no repetitive R1-R5 audit. New independent worktree, one new doc Draft PR only; NO real Supabase/provider calls, signup, credentials, project/photo pause, Auth deletion, migration, app changes, paid tier, merge/deploy. Photo app PREPAUSE_BLOCKED; real E1-E12 NOT_RUN; managed_auth_delete BLOCKED. Return K5.
 - recommended_model: Opus5.5（中）
+## Claude G6
+- owner: claude
+- slot: claude-6
+- status: idle
+- task_id: none
+- start_code: G6
+- finish_code: K6
+- next_owner: none
+- source: .agent/tasks/CLAUDE_TASK_6.md
+- report: .agent/tasks/CLAUDE_TASK_6.md#report
+- allocation: 未割当（2026-10-11追加）。用途を固定しない予備枠。ユーザーまたはChatGPTの明示割当時だけ使用し、idleだけで作業開始・自動投入しない。
+- recommended_model: none
+## Claude G7
+- owner: claude
+- slot: claude-7
+- status: idle
+- task_id: none
+- start_code: G7
+- finish_code: K7
+- next_owner: none
+- source: .agent/tasks/CLAUDE_TASK_7.md
+- report: .agent/tasks/CLAUDE_TASK_7.md#report
+- allocation: 未割当（2026-10-11追加）。用途を固定しない予備枠。ユーザーまたはChatGPTの明示割当時だけ使用し、idleだけで作業開始・自動投入しない。
+- recommended_model: none
+## Claude G8
+- owner: claude
+- slot: claude-8
+- status: idle
+- task_id: none
+- start_code: G8
+- finish_code: K8
+- next_owner: none
+- source: .agent/tasks/CLAUDE_TASK_8.md
+- report: .agent/tasks/CLAUDE_TASK_8.md#report
+- allocation: 未割当（2026-10-11追加）。用途を固定しない予備枠。ユーザーまたはChatGPTの明示割当時だけ使用し、idleだけで作業開始・自動投入しない。
+- recommended_model: none
+## Claude G9
+- owner: claude
+- slot: claude-9
+- status: idle
+- task_id: none
+- start_code: G9
+- finish_code: K9
+- next_owner: none
+- source: .agent/tasks/CLAUDE_TASK_9.md
+- report: .agent/tasks/CLAUDE_TASK_9.md#report
+- allocation: 未割当（2026-10-11追加）。用途を固定しない予備枠。ユーザーまたはChatGPTの明示割当時だけ使用し、idleだけで作業開始・自動投入しない。
+- recommended_model: none
+## Claude G10
+- owner: claude
+- slot: claude-10
+- status: idle
+- task_id: none
+- start_code: G10
+- finish_code: K10
+- next_owner: none
+- source: .agent/tasks/CLAUDE_TASK_10.md
+- report: .agent/tasks/CLAUDE_TASK_10.md#report
+- allocation: 未割当（2026-10-11追加）。用途を固定しない予備枠。ユーザーまたはChatGPTの明示割当時だけ使用し、idleだけで作業開始・自動投入しない。
+- recommended_model: none
 
 ## Deferred
 
@@ -129,11 +231,11 @@
 
 ## Control codes
 
-- `H1` / `H2`: Codex H1/H2開始。
-- `G1`〜`G5`: Claude G1〜G5開始。ready / in_progressのTASKのみ。
-- `C1` / `C2`: ChatGPTが対応Codex枠だけ完了確認。
-- `K1`〜`K5`: ChatGPTが対応Claude枠だけ完了確認。
-- 単独 `G` / `K`: G5も候補に含め、対象が1枠だけと明白な場合のみ使用。
-- `F`: H1/H2 + G1〜G5の全7枠の状態・競合・実際の空き状況を確認する統括コード。
+- `H1`〜`H5`: Codex H1〜H5開始。ready / in_progressのTASKのみ。
+- `G1`〜`G10`: Claude G1〜G10開始。ready / in_progressのTASKのみ。
+- `C1`〜`C5`: ChatGPTが対応Codex枠だけ完了確認（H1→C1、H2→C2、H3→C3、H4→C4、H5→C5）。単独 `C` は使用しない。
+- `K1`〜`K10`: ChatGPTが対応Claude枠だけ完了確認（G1→K1 … G10→K10）。
+- 単独 `G` / `K`: G1〜G10（G5〜G10は明示割当済みの場合のみ）から、対象が1枠だけと明白な場合のみ使用。
+- `F`: H1〜H5 + G1〜G10の全15枠の状態・競合・実際の空き状況を確認する統括コード。完了コードではなく、別チャット担当のTASKを完了・再割当しない。
 
 並行実行はtask_idと変更対象が分離され競合しない場合に限る。同じファイル・DB migration/RPC・Edge Function・workflow・production設定等を複数枠で同時変更しない。

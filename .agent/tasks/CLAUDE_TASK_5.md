@@ -1,10 +1,152 @@
+# G5 — CURRENT TASK — Phase 3g free-tier OAuth/OIDC test-provider prerequisites (NO photo downtime)
+
+- task_id: common-account-phase3g-free-auth-provider-test-readiness-20261011
+- owner: claude
+- slot: claude-5
+- status: review_required
+- next_owner: chatgpt
+- priority: high
+- start_code: G5
+- finish_code: K5
+- return_to: 共通アカウントG5のちゃ
+- recommended_model: **Opus5.5（中）**
+- deliverable: practical once-only provider feasibility / zero-cost test readiness gate, NOT further E11 code review
+- remote_project_and_provider_API_calls: forbidden
+- real_auth_or_personal_data_access: forbidden
+- photo_app_pause_project_create_restore_delete: forbidden
+- paid_account_tier_or_api_or_secrets: forbidden
+- sql_migration_runtime_edge_oauth_integration_merge_deploy: forbidden
+
+## Goal and rationale
+
+G5 Phase3f produced one new Draft stacked PR134 exact `1d4de2c73c42221ad4b2f9b1f231c271aa084907` (11 entirely offline E11 evidence-check files) on unchanged Draft PR130 exact `5943fad5f724191f6ae77f3baf826a4c7698d542`, which stacks on protected PR122 `f17a47e36632fff4a1f4cfb0b860df200e1c99e1`. Phase3f K5 accepted `PASS_SOURCE_CANDIDATE`, after source inspection and G5's reported Deno 63/63, mutation 68/68, SQL mutation 2/2 and fake-PG verification. **Real E1–E12 managed proof has NEVER run**; `managed_auth_delete`, Option D, actual destructive E11 and photo service pause are BLOCKED. Do not reopen R1–R5 repeated review cycle; refer to PR134 tests, avoid changing them.
+
+User explicitly rejected paying for additional Supabase subscription and was willing to suspend a family-only photo-sharing project for at most approximately 2–3 days during **actual** managed tests. Family photo project **MUST NOT be paused for setup research**. Two active Free projects plus an older INACTIVE historic test project; neither running app nor historical project may be touched or reused for disposable auth tests. Before a real pause/restore/free slot action, exact live status, cost and restoration have to be separately verified/approved.
+
+**The current critical unknown is whether E1–E12 OAuth/OIDC identity-link and E6 high-concurrency fixtures can actually be prepared with zero paid service; do not use the family's downtime merely to discover missing IDP/tester/hook capabilities.** G5 Phase3g must provide an actionable definitive pre-pause answer, not create another generic checklist or add another speculative security review.
+
+## Startup / protected boundaries
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, `.agent/ACTIVE_TASK.md`, own G5 TASK and prior Reports; phase3d photo stop/test/restore (protected Draft PR128 head `e9244d29ea944156cf1479c0976053d433469e06`), Phase3c E1–E12 exact PR122, Phase3e PR130, Phase3f PR134, Phase3b GoTrue feasibility PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`; G4 Threads OAuth and G5 T13/T10 contract for Auth provider restrictions. Do not alter protected branches, headings, other slots, or prior artifacts.
+2. Fresh origin/main from `/Users/yuya/Developer/kabumori-fresh`, separate new G5 worktree and branch ONLY if writing docs. Respect G1/G2/G3/G4/H1/H2 and uncommitted owner files. No source-edit to PR121/122/128/130/134, no app/DB/Auth/Edge/migration changes, no provider secrets, never disable photo sharing.
+3. Use **public official current docs** (e.g. Supabase Auth/Social OAuth/OIDC provider setup, GitHub/Google development test apps, rate/plan/free-tier restrictions, PKCE/manual link/auth rate constraints) PLUS source runbook for factual feasibility. Browsing public docs permitted, but **no live Supabase/project/account/provider remote API calls**, dashboard mutations, trial/payment/signup, identities, credentials, login, DNS/domain configuration. Distinguish verified doc facts with URL/date from open unknowns and mere assumptions.
+
+## Exactly what must be delivered
+
+- A compact **E1–E12 provider prerequisite matrix** extracted from PR122+PR134, separating (a) can run against one new empty managed Free disposable project with *one verified fake test user* and no social IDP; (b) requires an actual OAuth/PKCE provider, callback and link support; (c) requires configured **OIDC issuer/tester/multiple independent identities**; (d) requires managed Auth hook or rate-limit configuration Free may lack; (e) requires explicit destructive per-scenario user consent/E11 independent reviewer; (f) cannot meaningfully run/interpret without account access. No fake "PASS" from mocked GoTrue.
+- Identify **one practical fully-free provider test setup**, if documented and feasible, including exact console-side setup steps for the *user* to do later, fake account creation and verification without violating signup/terms or bulk-account policies, OIDC endpoint/issuer requirement and redirect URI configuration, PKCE/client-secrets handling and callback security. If legitimate free E6 200-account high-concurrency proof is unrealistic, say so and propose a lower-scale pilot whose result remains PARTIAL/UNKNOWN, never fake equivalence. Never instruct mass account circumvention or rate-limit evasion.
+- Check whether the currently proposed `custom OIDC provider` and Auth Hooks fit actual **Supabase Free** platform/feature eligibility. If provider-specific links or extra identity providers require a paid upgrade or external domain/tunnel not available, make **NO_GO** decision for that experiment and note a supported alternative only if truly documented; do not buy.
+- Define an **actual Phase3g end gate**, not just repeated plan: `IDP_PREPAUSE_READY` iff all minimum free provider prerequisites can be satisfied **without** stopping photos; otherwise `IDP_PREPAUSE_BLOCKED` with explicit user-only setup steps/decisions and alternatives. One page `docs/common-account/phase3g-free-idp-test-feasibility.md`, only if needed. Use a tiny table with actual verified docs and source references plus specific missing credentials/testers/config selections; no secret-bearing config or downloadable credential inventory.
+- Derive a **minimal first disposable-project pilot** after prerequisites are settled (ideally E1 and smallest non-destructive observation subset, with exact STOP/RESTORE criteria and user-only plan to minimize downtime); separate later destructive E2–E12 approvals and `E11` independent review/proof. Do not propose any real project action in this TASK.
+- Evaluate if there is a viable **no-photo-downtime alternative** for the initial tests, such as local mock/non-managed isolated Docker/GoTrue, and precisely mark which managed identity races/audit/Storage behaviors it cannot prove. Do not substitute local mocks as managed PASS.
+- Include concise practical next user actions—maximum 3 items—not demanding paid subscription; if zero-cost full proof is not realistic, state scope and what can be completed now with no project pause. Avoid endlessly cycling on source-only security review.
+
+## Safety, tests, delivery
+
+- Only ONE NEW G5-owned documentation file, source-only; no changes to PR122/130/134 code, tests, runbooks, feature flags, Auth/Edge, migrations or Supabase remote. No service disruption, real test identity login, secrets, credential screenshot, user photo access, external account creation, upgrades, project actions, PR merge/deploy.
+- New branch from fresh main; one independent Draft PR to main for Phase3g doc **only**, unless direct clean nonconflicting private report is preferable. Confirm changed-file overlap and protected PRs unmodified, `git diff --check`, doc links and secret scan. Report verification limits and docs publish dates. No claims to have run E1–E12 or configured providers.
+- Return Report in own G5 task (task_id, GO/NO_GO, current Free restrictions and verified sources, missing real preconditions, changed_files, tests/docs checks, SHA, push/PR/merge/deploy truth, photo_app_paused=false, paid_actions=0, real_remote_calls=0, safety). Set own TASK `review_required`, next_owner `chatgpt`; return `K5`.
+- A proof readiness gate is **not an authorization to pause photos or actually delete dummy Auth identities**. Real GoTrue/Storage/Auth operations remain independently gated; `managed_auth_delete` stays BLOCKED.
+
+推薦モデル：**Opus5.5（中）**
+
+## Report — Phase3g
+
+- task_id: common-account-phase3g-free-auth-provider-test-readiness-20261011
+- reported_at: 2026-10-11 14:01 JST
+- result: **`IDP_PREPAUSE_BLOCKED`**（無料で用意できる道はあるが、利用者だけができる準備が未了。写真アプリは止めない）
+- remote_calls: 0（Supabase のプロジェクト・Auth・プロバイダ API への呼び出しは 0）
+  - 見たのは公開文書（supabase.com、auth0.com、docs.github.com、support.google.com）と、公開ソース（GitHub 上の supabase/auth `ce9a8ee`）だけ。
+  - リンク確認の HTTP GET は公開ページに対してだけ行った。
+- photo_app_paused: false / projects_created: 0 / paid_actions: 0 / accounts_created: 0 / secrets_handled: 0
+- deploy: NO / merge: NO
+
+### ブランチ / PR / HEAD
+- 作業場所: 新規の独立 worktree `/Users/yuya/Developer/kabumori-g5-phase3g`
+  - ブランチ `claude/g5-phase3g-free-idp-feasibility-20261011`（fresh origin/main `570cc45f` から作成）
+- **Draft PR #137**: https://github.com/anohi-memories/kabumori/pull/137
+  - main 向け。head `eba0ba5abc56f8188a03d567d319754e4ac8ea4c`（commit 1件、1 ファイル）。
+- 保護対象: PR121 `76b50e1e`、PR122 `f17a47e3`、PR128 `e9244d29`、PR130 `5943fad5`、PR134 `1d4de2c7` は、いずれも OPEN / Draft で変更なし。
+- 他の PR と変更ファイルの重なり: なし（新しいパス）。
+
+### changed_files
+- `docs/common-account/phase3g-free-idp-test-feasibility.md`（新規。文書 1 つだけ。コード・テスト・runbook・migration の変更なし）
+
+### 確認した Free プランの事実（2026-10-11 JST 時点。出典は文書 §1）
+- 独自 OAuth / OIDC プロバイダは **Free で 3 件まで**。OIDC は issuer のディスカバリで設定し、PKCE は自動。
+- GoTrue `ce9a8ee` のソースより:
+  - 独自 OIDC の issuer は **https 必須**で、ループバック・プライベート・リンクローカルの IP は拒否される。つまり、ローカルの IdP は独自 OIDC としては使えない。
+  - 独自 OIDC は `email_verified` を扱う。
+  - ID token の grant は `custom:` と Keycloak を受け付ける。
+  - 組み込みの Keycloak は、設定された URL を使い、この検証を通らない。
+- Auth Hooks: Before User Created と Custom Access Token は **Free・Pro**。Postgres の hook には 2 秒の制限。
+- 手動連携は beta で、既定は無効。
+- 既定のレート制限: サインアップ・サインインは IP ごとに 5 分あたり 30 件、token は 5 分あたり 150 件、組み込みのメール送信は 1 時間あたり 2 通。
+- GitHub は無料アカウント 1 人 1 つ（マシンアカウントは 1 つまで、自動処理専用）。Google の Testing 状態はテストユーザーが生涯 100 人まで（実在のアカウントが必要）。
+- Auth0 の無料プラン: 月間アクティブユーザー 25,000、Management API は 2 件/秒。
+- ローカルの CLI スタックは Podman でも動くが、RAM 7 GB 以上を推奨。この Mac は 24 GiB だが、Podman の仮想マシンは 2 GiB で停止中（ローカルの読み取りで確認）。
+
+### E1〜E12 の判定（詳細は文書 §2）
+- managed で無料のまま **GO 見込み**: E1（読み取りのみ）、E2〜E5・E7〜E10・E12（Auth0 の独自 OIDC と、テナント内の偽ユーザーを使う）。
+  - E10 は、監査ログを Postgres に書く設定がなければ UNKNOWN。
+- **E6 は完全な形では NO_GO**（レート制限と、規約に沿った多数の主体の用意ができないため）。20 件以下の試行は PARTIAL で、「問題がない」ことの証明にはならない。
+- **E11** は、独立レビュー・利用者の承認・W1〜W7 が無ければ実施しない。
+- **Apple 固有の挙動は NO_GO**（有料のため。購入しない）。
+- **写真アプリを止めない代替**: ローカルの OSS スタックと組み込みの Keycloak で、E2〜E9・E12 の多くを試せる。
+  - 結果は `LOCAL_OSS_EVIDENCE` であり、managed の PASS ではない。
+  - managed の版や設定、権限と RLS で見えるか、レート制限、物理ファイル（S3）、監査ログの設定は証明できない。
+
+### 足りない実際の前提（これが揃うまで BLOCKED）
+1. Auth0 の無料テナント、Web アプリ、確認済みの偽ユーザー 2〜3 人（予約ドメインのメール、メール送信なし）。利用者だけが行う。
+2. ローカルの OSS 検証を先に行うかどうかの判断。行う場合は、Podman を 8 GiB 以上にすることと、イメージのダウンロードの承認が必要（別 TASK）。
+3. E1 だけのパイロット（停止 2〜3 時間）の担当者と時間帯。PR128 の P1〜P9 と R1〜R8（費用 0・空き枠・停止と再開・実機での基準確認）。
+
+### テストと文書の確認
+- `git diff --check`: OK。
+- 文書内の公開リンク 12 本: すべて HTTP 200（2026-10-11 に確認）。
+- シークレット・本番 ref・プロジェクトの URL・メール・client secret の走査: 0 件。
+- 実行しなかったもの: E1〜E12 の実験、プロバイダの設定、ログイン、ローカルの Supabase スタックの起動。いずれもこの TASK では禁止または対象外。PR122 / PR134 のテストは変更していないため、再実行していない。
+
+### 次のおすすめ
+- **K5 / ChatGPT**: 利用者に、次の 3 つのアクション（課金なし）を提示する。
+  1. ローカルの OSS 検証を先に行うか（Podman の 8 GiB 化と、イメージのダウンロード承認）
+  2. Auth0 の無料テナントと偽ユーザーの準備
+  3. E1 だけのパイロットの担当者と時間帯
+- 写真アプリの一時停止は、これらが揃い、別途承認された後だけ。
+- 同じ範囲のセキュリティレビューは繰り返さない。
+
+### 安全確認
+- 実施しなかったこと（いずれも 0 件）:
+  - 実 / 使い捨てプロジェクトの操作
+  - Auth の変更や削除
+  - プロバイダのアカウント作成やログイン
+  - 秘密情報の扱い、課金、写真アプリの停止
+  - migration、deploy、マージ、EAS
+  - H1/H2 の割り当て
+- 他スロットの担当範囲と、保護対象の PR は変更していない。
+
+---
+
+# Preserved G5 prior K5/TASK/Report history (immutable below)
+
+# K5 Phase 3f — R1/R4/R5 offline residual corrections accepted / real proof BLOCKED — 2026-10-11 JST
+
+- task_id: common-account-phase3f-pr130-r1-r4-r5-offline-logic-fix-20261011
+- **K5 verdict: PASS_SOURCE_CANDIDATE / E11_REAL_MANAGED_PROOF_NOT_RUN / PREPAUSE_BLOCKED.** The *offline-only* source correction task is completed; no claim of real managed Supabase Auth deletion proof, approval of Option D, release of `managed_auth_delete`, consent to destructive tests or permission to suspend family photo service.
+- Exact [Draft PR134](https://github.com/anohi-memories/kabumori/pull/134) HEAD `1d4de2c73c42221ad4b2f9b1f231c271aa084907`, OPEN/DRAFT/UNMERGED, base protected Draft PR130 exact `5943fad5f724191f6ae77f3baf826a4c7698d542`. One commit and **11 files** under G5-owned `supabase/tests/common_account_disposable_e2e/`, no source migration, live Auth/RPC/Edge, provider code or shared app. Source heads of PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`, PR122 `f17a47e36632fff4a1f4cfb0b860df200e1c99e1`, PR128 `e9244d29ea944156cf1479c0976053d433469e06`, and PR130 protected; all DRAFT and unmerged. PR134 was independently inspected at the pinned SHA; Code review not a runtime proof.
+- R1 source check: `e11_matrix.ts` now explicitly checks both cohorts' structured `afterState` and non-token residue, validates a closed token enum, distinguishes independently reconciled APPLIED/NOT_APPLIED/UNKNOWN ambiguous commits, stops unknown/readbackless or blind retry; `evidence.ts` blocks Option D on actual measured residue. R4: `witness.ts` now requires `self_declared === false` and fails malformed records. R5: read-only `target_readback.sql` and `catalog_extended_readback.sql` distinguish ABSENT / UNKNOWN_DENIED / UNKNOWN_RLS from unfiltered counts; physical blobs explicitly require separate future Storage service observation. These are **static implementation checks and G5 self-reported mocked proof**, not fresh independent executed managed service tests.
+- G5 Report reported Deno **63/63**, mutation detection **68/68**, SQL mutation **2/2**, seven fail-before targeted regression tests, local fake PG fingerprint/readback PASS, check/lint/secret/scope PASS; ChatGPT did not independently rerun local suites. GitHub Vercel status SUCCESS but irrelevant to Auth proof.
+- Remaining gates: managed E1–E12 all **NOT_RUN**; no test project, no live OAuth/OIDC credentials or verified test identities, no paid subscription, no real Auth delete, no photo project pause; operator/time window, run-scoped human consent and independent security review for E11, actual cost/free-slot/restore checks and family app baseline still outstanding. `managed_auth_delete` and Option D remain BLOCKED, as does production activation.
+- **Review strategy:** no additional automatic broad H1/H2 re-review of these same offline corrections; one narrowly focused final comparison can be scheduled at a genuine external E11 execution authorization gate if required. H2 currently owns a separate G2 PR132 review; do not preempt it.
+- Current G5 Phase3f marked **done/next_owner none** after K5. Do not overwrite existing TASK/Report history and do not merge/deploy any PR.
+---
 # G5 — CURRENT TASK — Phase 3f three narrow E11 evidence-validation residual corrections (OFFLINE)
 
 - task_id: common-account-phase3f-pr130-r1-r4-r5-offline-logic-fix-20261011
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: done
+- next_owner: none
 - start_code: G5
 - finish_code: K5
 - return_to: 共通アカウントG5のちゃ
@@ -51,9 +193,89 @@ H2 independent C2 `common-account-pr130-e11-r1-r5-narrow-security-rereview-20261
 ## Report — Phase 3f
 
 - task_id: common-account-phase3f-pr130-r1-r4-r5-offline-logic-fix-20261011
-- result: pending
-- remote_calls: 0
+- reported_at: 2026-10-11 13:42 JST
+- result: **`OFFLINE_NARROW_FIX_READY`**（H2 再レビューの残件 R1・R4・R5 をオフラインで修正。R2・R3 は変更していない）
+  - 機能としては引き続き BLOCKED。写真アプリの一時停止は **PREPAUSE_BLOCKED** のまま。
+  - 実際の E1〜E12 は NOT_RUN。
+- remote_calls: 0（Supabase のプロジェクト・Auth・Storage・プロバイダへのアクセスは 0。git fetch と GitHub の操作は除く）
 - family_photo_paused: false
+- projects_created: 0
+- actual_Auth_DELETE: 0（ローカルの偽 DB での模擬削除は除く）
+- deploy: NO / merge: NO / paid_actions: 0 / production_mutation: 0
+
+### ブランチ / PR / HEAD
+- 作業場所: 新規の独立 worktree `/Users/yuya/Developer/kabumori-g5-phase3f`
+  - ブランチ `claude/g5-phase3f-e11-r1-r4-r5-fix-20261011` は、**PR130 の head `5943fad5f724191f6ae77f3baf826a4c7698d542` から作成**した。
+- **Draft PR #134**: https://github.com/anohi-memories/kabumori/pull/134
+  - base は PR130 のブランチ `claude/g5-phase3e-e11-review-corrective-20261011`（積み重ね）。
+  - head は `1d4de2c73c42221ad4b2f9b1f231c271aa084907`（commit 1件、force push なし）。差分は 11 ファイル。
+- 保護対象（開始時と push 前に再確認）:
+  - PR121 `76b50e1e…`、PR122 `f17a47e3…`、PR128 `e9244d29…`、PR130 `5943fad5…` はいずれも OPEN / Draft / 未マージで、head は変わっていない。
+  - 元のブランチや worktree は変更していない。
+- 他の open PR と変更ファイルの重なり: なし。
+
+### changed_files（11件。すべて `supabase/tests/common_account_disposable_e2e/` 内）
+- 本体 5件: `e11_matrix.ts`, `evidence.ts`, `witness.ts`, `target_readback.sql`, `catalog_extended_readback.sql`
+- テスト・検証 6件: `e11_matrix_test.ts`, `evidence_test.ts`, `test_support.ts`, `phase3f_regression_test.ts`（新規）, `readback_local_run.sh`, `harness_mutations.py`
+- 手順書（runbook）・migration・Auth・runtime は変更していない。
+  - 手順書の §3 には「ABSENT / UNKNOWN_DENIED、決して 0 にしない」とある。新しい `UNKNOWN_RLS` は SQL のヘッダーに説明を書いた。手順書への追記は、指示（必要不可欠でない限り変更しない）に従い見送った。
+
+### 3点の修正と、修正前の再現
+| 指摘 | 修正 | 修正前（PR130）→ 修正後 |
+| --- | --- | --- |
+| R1-1 トークン以外の残留物 | グループごとに `afterState` を追加した。<br>・対象: sessions、refresh_tokens、identities、Storage のメタデータ、**実ファイル（Storage サービスでの読み戻しだけを根拠にする）**、ガード付き / ガードなしのサービス行<br>・それぞれに `remaining` と根拠（provenance）と証拠ファイルを持たせた<br>・残りが 1 件でもあれば、行が PASS でも D をブロック（`E11:NON_TOKEN_RESIDUE_RECORDED:<グループ>:<種類>`）<br>・欠落、型の不正、根拠の違い、削除前より多い値は UNKNOWN<br>・`identity_linked` の監査記録は、残るのが正しい履歴なので残留物として扱わない | PR130 では D が「判定待ち」のまま → **ブロック**（14 通りすべて） |
+| R1-2 想定外のトークン値 | 認める値を REFUSED / ACCEPTED_RESIDUE_RECORDED / ACCEPTED_UNRECORDED / UNKNOWN の 4 つに限定。NOT_RUN、MAYBE、'refused'、''、null、42、true は `E11_TOKEN_INVALID`（UNKNOWN） | PR130 では PASS → **UNKNOWN（D はブロック）** |
+| R1-3 応答が失われた COMMIT | 失敗分岐（変化なしが必須）から切り離した。<br>・`resolution` を APPLIED / NOT_APPLIED / UNKNOWN の 3 つにし、独立した読み戻しと証拠を必須にした<br>・UNKNOWN と形の崩れた値は `E11_AMBIGUOUS_COMMIT_UNRESOLVED`<br>・どの resolution でも再実行は FAIL | PR130 では、反映済みと確定しても FAIL → **PASS（確定済みの場合）**。UNKNOWN と再実行は従来どおり止まる |
+| R4 `self_declared` | `self_declared === false` のときだけ受け付ける（true は SELF_DECLARED、欠落・null・文字列・数値は MALFORMED）。役割・結果・時刻・証拠の型も確認し、配列でない入力や文字列のレコードも拒否する。`verdict()` まで通しても拒否されることを確認 | PR130 では、欠落していると受理された → **拒否** |
+| R5 RLS で隠れる行 | どちらの SQL も、テーブルが ABSENT → ACL の拒否は UNKNOWN_DENIED → RLS で行が絞られうる場合は **UNKNOWN_RLS** の順に判定する。<br>・RLS 有効で、superuser でも BYPASSRLS でもなく、所有者でもない（または所有者でも FORCE RLS）の場合が UNKNOWN_RLS<br>・件数を出すのは、その役割が行を絞られずに見られるときだけ<br>・権限の昇格はしない。実ファイルは `storage_blob_readback|NOT_OBSERVABLE_BY_SQL|future_storage_service_readback` と明記 | PR130 の SQL では、SELECT だけを持つ読み取り役で `target|storage_objects_by_id|0` → **`UNKNOWN_RLS`** |
+
+### テスト（すべてオフライン。模擬検証であり、managed Supabase の証拠ではない）
+- `deno test --no-config --allow-read supabase/tests/common_account_disposable_e2e/`: **63/63**
+  - 型チェックあり。ネットワーク・環境変数・実行の権限なし。以前の 56 件に、新しい回帰テスト 7 件を加えた。
+- **修正前の確認**: 新しい回帰テスト 7 件を PR130 のコードに当てた（scratchpad 内のコピー。足したのは export の定数と、古い形式の項目だけ）。
+  - **7/7 が失敗**した。うち 6 件は H2 の再現（トークン以外の残留物、想定外のトークン値、反映済み COMMIT の誤判定、`self_declared` の欠落、形の崩れた記録、after-state の欠落）。
+  - 残り 1 件（正常系の対照）は、residue の戻り値を boolean から配列に変えたことによる失敗。
+- `deno check`（20 ファイル）と `deno lint`: OK
+- `harness_mutations.py`: **68/68 検出**（control PASS）
+  - 内訳: PR130 時代の 58 件（位置が変わった 9 件は新しいコードに向け直した）と、Phase 3f 用に追加した 10 件。
+- SQL のミューテーション（scratchpad で臨時に実施）: target_readback.sql と catalog_extended_readback.sql から RLS の判定を外すと、どちらも `readback_local_run.sh` が FAIL。**2/2 検出**。
+- `fingerprint_local_run.sh`: PASS。
+- `readback_local_run.sh`: ALL PASS。新しい §2b で次を確認した:
+  - 実在する 1 行に対して、SELECT だけを持つ読み取り役 → UNKNOWN_RLS
+  - 拡張読み戻し → objects は UNKNOWN_RLS、buckets は UNKNOWN_DENIED
+  - FORCE なしの所有者 → 1、FORCE ありの所有者 → UNKNOWN_RLS、BYPASSRLS の役割 → 1（FORCE ありでも）
+  - 終了後に元の状態へ戻ったこと
+- 同じスクリプトを PR130 の SQL に当てると `...|0` で FAIL（修正前の再現）。
+- `bash -n`、`git diff --check`: OK。シークレット・本番 ref・URL・メールの走査: 0件。
+- **NOT_RUN**: 実際の GoTrue / PostgREST / Storage の挙動、実プロジェクトでの役割の権限（postgres が BYPASSRLS かどうか等）、E1〜E12 のすべての実験。
+
+### 残っている前提と限界
+- 立会い記録は、形が正しくても「人が実際に確認した」ことの証明にはならない。あくまで本人の証言の記録。
+- `UNKNOWN_RLS` が出た場合は、今後、行を絞られずに見られる役割であることを別途証明した運用者による読み戻しが必要（今回は手順として定義しただけ）。
+- 実ファイルの確認は、今後 Storage サービスで読み戻す外部観測。
+- 実プロジェクトでの E11 の実施には、別々に次がすべて必要:
+  - 承認
+  - 新しい使い捨てプロジェクト
+  - 実験ごとの同意
+  - W1〜W7 の実施
+  - `option_d_full_decision_proof`
+  - 独立レビュー
+- ダミーの OAuth / OIDC、担当者と日程、空き枠と費用、写真アプリの実機での基準確認は未整備（PREPAUSE_BLOCKED）。
+
+### 次のおすすめ
+- **K5**: 新しい回帰テスト 7 件と RLS の §2b を確認する。実プロジェクトでの実験を提案する前に、必要なら 1回だけ、絞り込んだ独立の最終確認を行う。広範な再レビューを繰り返すことは推奨しない。
+- このレビューや PASS は、E11 の実行・D 方式・本番での削除・写真アプリの一時停止の承認にはならない。
+
+### 安全確認
+- 実施しなかったこと（いずれも 0 件）:
+  - 実 / 使い捨てプロジェクトの操作
+  - Auth の DELETE や BAN
+  - プロバイダの呼び出し
+  - secrets、課金、deploy、migration の適用、EAS、マージ
+  - 家族写真データへのアクセス
+  - H1/H2 の割り当て
+- PR121 / PR122 / PR128 / PR130 と、他スロットの担当範囲は変更していない。
+- ローカルの偽 DB は scratchpad 内で、unix socket のみ。
 
 ---
 

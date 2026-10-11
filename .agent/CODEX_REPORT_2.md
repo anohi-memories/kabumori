@@ -1,3 +1,110 @@
+# H2 independent completion — Fact V2 PR132 integrated review — 2026-10-11 JST
+
+- task_id: kabumori-fact-v2-pr132-final-integrated-review-20261011
+- owner: codex
+- slot: codex-2
+- status: review_required
+- next_owner: chatgpt
+- result: **CHANGES_REQUIRED — 3 bounded P2 objective-fact guard regressions**
+- return_to: **かぶモリアプリG2のちゃ**
+- completion_code: **C2**
+- recommended_model: **Sol（高）**
+- reviewed_head / implementation commit (G2, NOT H2): `bd424616a135e7bf71592c2ac41acb3e03f8568d`
+- protected PR110 base: `319a442edcd61c07274e3409d8864234f9d77cd4`
+- fresh main at start: `e8a76c7ad6382984b9b8414246eab95a2c938c0c`
+- fresh main immediately before publication: `a2cce4ddea892a31ae28aa15a748377fa8f596c9`; intervening changes were G5 TASK/index only, zero reviewed source overlap.
+- production / PR merge / product source writes: **0**. This is ONE integrated source-only review; do not automatically reopen broad recurring reviews.
+
+## Conclusion / product intent
+
+Accept the policy direction: **事実は厳格に、Opus独自の合理的な分析・推測は積極的に許容、配信は安定優先**. The new generation/Fact instructions distinguish grounded economic inference from objective facts and unverified realized-move attribution. Oil/fuel cost, yen/exporter, rates/sector differences, semiconductor linkage and correctly dated US/Japan synthesis survive mocked X/app delivery without requiring news to state the implication verbatim. There is no request to restore verbatim-only causality or suppress reasonable interpretations.
+
+However, the three new local false-positive exceptions also exempt reproducibly wrong objective facts. These are actual before/after regressions, not financial-opinion differences or cosmetic regex disputes. **Hold PR132 source acceptance until this one bounded objective-exception correction is reviewed by G2/ChatGPT.** PR110 and PR132 remain OPEN/UNMERGED (PR132 DRAFT), exact heads unchanged. No cutover/deploy permission is implied.
+
+## Reproducible findings (all P2, exact reviewed lines)
+
+### R1 — A negated same-day mention exempts a distinct positive same-day assertion in the same sentence
+
+- Location: `supabase/functions/market-report-analysis/analysis_logic.ts:351-355`, especially line **355**; the same predicate is used by localAnalysisCheck at 821 and unitChecker at 931.
+- Fixture: `close_2026-10-07`, Tokyo session 10/7, US session 10/6, `sessionsDiffer=true`.
+- Exact text: **「原油と東京市場は同じ日ではない一方、米国市場と東京市場は同じ日に取引を終えました。」**
+- The first relationship is denied; the second explicitly asserts the incompatible US/Tokyo sessions were the same day. `SAME_DAY_DENIED.test(sentence)` is applied to the whole sentence rather than to each relevant occurrence/proposition. Finding any denial makes `sameDayClaims` false, hiding the separate assertion.
+- PR132: local hard `[]`, sanitizer removed `[]`, mocked calls `generate,fact`, outcome ok, exact wrong sentence remains in **both formatted X and app_story.japan_ja**, fact.ai_status `passed` when the mock Fact response is passed.
+- PR110: SAME_DAY hard issue and both units removed; wrong sentence absent from X/app.
+- Positive control: pure denial **「米国市場と東京市場は同じ日ではないため、日付を分けて確認します。」** is correctly retained by PR132. Simple affirmative **「米国市場と東京市場は同じ日に取引を終えました。」** remains rejected.
+- Minimal correction within the existing exception: scope the denial to its actual same-day assertion instead of immunizing the entire sentence; preserve pure-denial acceptance.
+
+### R2 — TOPIX composition exemption also accepts an actual ETF/index price mislabel
+
+- Location: `supabase/functions/market-report-analysis/analysis_logic.ts:429-440`, especially new context at **429** and unconditional continue at **440**.
+- Exact texts: **「TOPIX算出値は437.0円でした。」** and the same-class **「TOPIXのウエートは437.0円でした。」**.
+- Input has **1306 ETF = 437.0円**, not a TOPIX index price. `TOPIX_INDEX_CONTEXT` accepts prefix `算出` / `ウエート` without checking whether the rest asserts a price/value. The ETF value is already in allowedNumbers, and bare TOPIX has no independent metric binding to recover this mismatch.
+- PR132: for both strings, local hard `[]`, sanitizer removed `[]`, calls `generate,fact`, exact bad statement remains in X+app with mock fact.ai_status `passed`.
+- PR110: TOPIX_MISLABEL hard issue, both units removed, bad text absent from X+app.
+- Positive control: fixture-supported **「個別では、ジーエヌアイグループのTOPIXへの新規採用が発表されています。」** is correctly retained by PR132. Negative control **「TOPIXは437.0円でした。」** is still removed. Passing those two controls does not cover the new `算出値` gap.
+- Minimal correction: preserve genuine constituent/composition discussion but do not exempt an asserted TOPIX numerical price/value merely because its prefix is in the composition/context list. Do not invent a TOPIX index value or replace all genuine constituent news with ETF wording.
+
+### R3 — Removing a trailing date before any second market launders a wrong postposed date
+
+- Location: `supabase/functions/market-report-analysis/hard_fact_guards.ts:338-341`, especially **340**.
+- Exact text: **「米国市場が上昇した日付は10月7日、東京市場は下落しました。」**
+- US metrics are dated **10/6**. Here 10/7 is explicitly the date of the preceding US rise, not an introduction to the next subject. Because another market mention follows, the new replacement strips 10/7 from firstClause(segment) anyway; no governing date remains for the US mention. Tokyo then sees 10/7 and passes.
+- PR132: no hard issue/removal, one generate+fact pair, wrong text delivered in both X/app with mock fact.ai_status `passed`.
+- PR110: WRONG_DATE hard issue and both units removed.
+- Positive control: **「10月6日の米国株高と10月7日の東京市場の下落を並べると、買いが続きにくい地合いと考えられます。」** now correctly survives (the intended fix).
+- Additional ambiguous control: **「10月6日の米国株高と東京市場の下落を並べた10月7日、買いが続きにくい地合いと考えられます。」** is retained on BOTH heads; it is not counted as a new defect because 10/7 can frame the comparison, not the US session.
+- Minimal correction: strip a trailing date only when it actually modifies the following market subject, not simply whenever a following mention exists; keep the correct two-explicit-dates synthesis valid.
+
+## Evidence / independently executed tests
+
+1. Focused **typed Deno 55/55 PASS** at exact PR132:
+   - `fact_v2_test.ts`: **11/11**
+   - `h2_corrective_test.ts`: **26/26**, including the original 20 comma-free adjective predicates, five legitimate noun-subject hedges, existing clause/emoji-date controls
+   - `causal_calibration_test.ts`: **18/18**
+   - Command:
+     `deno test --no-config --allow-read supabase/functions/market-report-analysis/fact_v2_test.ts supabase/functions/market-report-analysis/h2_corrective_test.ts supabase/functions/market-report-analysis/causal_calibration_test.ts`
+2. Independent scratch harness: **14 behavior expectations, 10 PASS / 4 FAIL**, failures are R1 one case, R2 two same-class cases, R3 one case. These are reproducible expected guard failures, not infrastructure/compile failures. All mocked call counts stayed within MAX_MODEL_CALLS. A second independent checkout at exact PR110 reran the SAME 14 inputs; the four unsafe strings were caught and absent from X/app. The old base falsely rejects intended pure-denial, constituent and correct two-date controls, demonstrating why the exception fixes are needed rather than rolling the whole policy back.
+3. Four changed-file `deno check --no-config` **PASS**; four-file `deno lint --no-config` **PASS**; `git diff --check 319a442e HEAD` **PASS**.
+4. G2's **1,356/1,356** broad suites remain **G2-reported, NOT independently rerun**. This H2 intentionally ran only the 55 focused tests and adverse probes.
+5. Existing focused tests also independently demonstrate: wrong Nikkei date/value/sign rejected despite distant speculation; nonexistent news ref removed UNKNOWN_REF; fabricated Toyota corporate release removed from X+app when mock Fact supplies the objective quote, final fact.ai_status stays **advisory**, not misleading passed; unsubstantiated past cause plus unrelated later hedge removed, allowed marked interpretation retained; normal legitimate analysis reaches X/app with disclaimer once. No real AI quality/production output measurement is claimed.
+
+### Fully reproducible offline probe method (no temporary-file dependency for C2)
+
+At pinned head use `inputOf(await loadFixture("close_2026-10-07"))` from test_support.ts. Parse attempt=2 of fixtures/close_2026-10-07_generations.json with parseGeneratedAnalysis, clone for each string, and append the exact R1/R2/R3 string to BOTH `x_post.context_ja` and `app_story.japan_ja`. Then:
+- compare `localAnalysisCheck(analysis,input).hard` to the unmodified baseline;
+- call `sanitizeAnalysis(analysis,input,kept=>unitChecker(input,kept),codeFallbacks(input))` and inspect removed codes;
+- call `generateSharedAnalysis(input, requester, ()=>new Date("2026-10-07T07:20:05Z"))`, where requester returns the identical analysis for generate and `{passed:true,issues:[],objective_issues:[]}` for fact, plus deterministic token counts;
+- assert the wrong string absent from `formatSharedXPost(outcome.packet)` and `outcome.packet.app_story.japan_ja`.
+The four negative safety assertions FAIL on bd424616 and are controlled on 319a442e. The passed mock intentionally isolates the deterministic objective guard rather than claiming a real Fact model would always miss the statement.
+Local scratch harness: `/private/tmp/h2-pr132-fact-v2-probes-20261011.ts`; PR132 checkout `/private/tmp/h2-pr132-fact-v2-20261011.I5GXBK`; PR110 comparison checkout `/private/tmp/h2-pr132-protected-base-20261011.0laLwg`. Scratch is outside the repo and NOT committed.
+
+## Scope / CI / concurrency / costs
+
+- Exact ONE source delta commit and FOUR reviewed paths:
+  - supabase/functions/market-report-analysis/analysis_logic.ts
+  - supabase/functions/market-report-analysis/hard_fact_guards.ts
+  - supabase/functions/market-report-analysis/fact_v2_test.ts
+  - supabase/functions/market-report-analysis/causal_calibration_test.ts
+- `git diff` = 236 insertions / 8 deletions; H2 product changed_files **[]**.
+- Open PR changed-file inventories checked (PR133,130,129,128,127,126,125,124,123,122,121,115,33,11,10,3): no market-report-analysis overlap. PR110 is the deliberately shared/protected stack base, not a competing edit. Current G2 is review_required/chatgpt. G5's intervening .agent updates preserved.
+- Actual GitHub commit status read-back for bd424616: Vercel failure at **2026-10-11T02:32:22Z**, description **"Deployment rate limited — retry in 24 hours."**, target build-rate-limit upgrade page. Check-runs count **0**. This is a Vercel rate/quota status, NOT demonstrated Expo native or TypeScript source-build failure. No retry/deployment/paid upgrade/pipeline edit performed.
+- H2 made **0 Opus/OpenAI/Anthropic/X/production Supabase calls**. Request/token counts in probes are synthetic mocks, NOT actual billable cost. Generate/Fact prompts and retry budgets reviewed; no provider/model/call-ceiling source delta. G2's prompt-length/token cost proxies were not remeasured via a paid API.
+
+## Bookkeeping / safety / next recommendation
+
+- H2 publication changed_files ONLY: `.agent/CODEX_REPORT_2.md` (prepend), `.agent/tasks/CODEX_TASK_2.md` (current header + own completion record), H2 section of `.agent/ACTIVE_TASK.md`.
+- Report historical suffix preserved verbatim; current TASK history preserved verbatim; other ACTIVE slots protected by fresh read and per-file blob-SHA CAS.
+- commit_hash: reviewed implementation `bd424616a135e7bf71592c2ac41acb3e03f8568d`; **no H2 source implementation commit**. Control-only publication commit/readback receipts are recorded in the current H2 TASK completion section and final response.
+- push: publish H2 control-only files via guarded GitHub Contents API; acknowledge completion ONLY after exact origin/main read-back. No force push, local main/other-worktree stage/commit/reset/stash, or other-slot write.
+- deploy=false; merge=false; live reads/writes=false.
+- safety_checks: product source0; DB/RPC/schema/migration/Auth/Storage/Edge/Cron/settings/flags/OAuth/Vault/secrets0; production invocation0; paid API0; X/Push0; apps/admin0; HANDOFF0; secret exposure0.
+- New review checkouts were independent clones, not shared G/H worktrees. Fresh-base existing `?? supabase/.temp/` remains unchanged; root/legacy repo changes, branches, servers/ports untouched.
+- remaining_issues: R1–R3 above; real Opus output quality, current production packet consumption and OFF flags were not independently live-queried (prohibited). These are NOT a claim of safe production cutover.
+- next_recommendation: **one G2-owned bounded correction of the three objective exception scopes + behavior regressions**, preserving grounded-inference policy and positive controls; no repeated broad regex audit or automatic deployment. ChatGPT at **C2** decides source follow-up. Any shared-report X/app consumer cutover remains a separate explicitly approved release task.
+- return_to: **かぶモリアプリG2のちゃへ C2**.
+
+---
+
 # H2 independent completion — PR130 E11 R1–R5 narrow corrective re-review — 2026-10-11 JST
 
 - task_id: common-account-pr130-e11-r1-r5-narrow-security-rereview-20261011
