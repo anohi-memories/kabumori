@@ -47,17 +47,17 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: kabumori-pr110-p2-final-narrow-review-20261011
+- status: ready
+- task_id: common-account-pr130-e11-r1-r5-narrow-security-rereview-20261011
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
-- next_owner: none
-- return_to: かぶモリアプリG2のちゃ
+- next_owner: codex
+- return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: C2 COMPLETE, CHANGES_REQUIRED one P1 R1 deterministic Hard-Fact fail-open in PR110 exact head 2c876b0bafee31844b9854c4a7d34ba69660d4cf. Omitted adjectives before no-comma conjunction cause unsupported asserted market causality to survive with later unrelated hedge in X + app. 20/20 unsafe controls fail on new head, old head excludes; 54/54 existing focused controls PASS and subject 勢いが positive fixed. H2 source edits 0, no merge/deploy/paid API; review task CLOSED, G2 narrow source correction assigned. All H2 historical Report/TASK preserved. H2 not reserved.
-- recommended_model: Sol（高） (completed)
+- allocation: H2 previously completed G2 PR110 narrow C2 review, TASK/report preserved. Current H2 only one focused independent review of G5 Draft stacked PR130 exact 5943fad5f724191f6ae77f3baf826a4c7698d542 vs PR122 exact f17a47e36632fff4a1f4cfb0b860df200e1c99e1 to verify prior E11 R1 P1 and R2–R5 P2 fixes. NO production/disposable Supabase, Auth DELETE, photo app pause, project creation, code edits, PR merge, schema/Edge deploy or provider secrets. PASS means offline runbook candidate only, not E11 user approval or real platform proof. Return C2 to G5 chat.
+- recommended_model: Sol（高）
 
 ## Claude G1
 - owner: claude
