@@ -33,17 +33,17 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: postona-g4-x-oauth-containment-defensive-assessment-20261010
+- status: ready
+- task_id: postona-h1-threads-oauth-edge-offline-implementation-20261011
 - start_code: H1
 - finish_code: C1
 - completion_code: C1
-- next_owner: none
+- next_owner: codex
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: C1 accepted H1's published DEFENSIVE_ASSESSMENT_COMPLETE source-only evaluation and benign mock-PG 42501 deny proof; no exploitation/real production proof. Narrow legacy X OAuth completion restriction is conditional and would block new/reconnections; posting/refresh structurally separate but live continuity unknown. Report/history retained, H1 done and unreserved. No live preflight or ACL change authorized. G4 blocked awaiting ChatGPT/user next decision; H2/G5 untouched.
-- recommended_model: Sol（高） (completed)
+- allocation: User 2026-10-11 explicitly requested Codex implementation for legitimate Threads OAuth offline Edge candidate after Claude safety interruption. TEMPORARY IMPLEMENTATION (臨時実装) exception to normal Codex review routing, NOT a request to circumvent safety safeguards. H1 owns new isolated mock-only source candidate on fresh PR124 head, new Draft stacked PR only if safe. No production/providercalls, login, real token, migration, OAuth hardening, merge/deploy. Former H1 defensive investigation C1 is completed; entire previous H1 TASK and Report protected. Return C1 to POSTONA G4 chat.
+- recommended_model: Sol（高）
 ## Codex H2
 - owner: codex
 - slot: codex-2
@@ -99,15 +99,15 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
-- task_id: postona-threads-oauth-edge-offline-candidate-20261011
+- status: idle
+- task_id: none
 - start_code: G4
 - finish_code: K4
-- next_owner: claude
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: User 2026-10-11 directed immediate reuse of G4 for ordinary development. Threads OAuth Edge handler/adapter **unwired offline candidate** assigned, building on Draft PR124 exact head c30f246409a77080cbc03aef6c4cb72b5481e125 in separate G4 worktree and new stacked Draft PR if safe. Source only; static Threads gate false; no merge/deploy/production writes/provider calls or modifications to G3/G5/X OAuth. Previous G4 existing-X OAuth TASK was NOT completed, explicitly deferred and fully archived to .agent/archive/CLAUDE_TASK_4_pre_threads_20261011.md; unresolved issue tracked in GitHub Issue #131 OUTSIDE G4. PR126 remains Draft/held. The archived issue does not block G4; G3/G5/H tasks preserved.
-- recommended_model: Opus5.5（高）
+- allocation: User 2026-10-11 moved Threads OAuth Edge offline implementation to H1. Original G4 `postona-threads-oauth-edge-offline-candidate-20261011` not completed; full TASK text preserved at .agent/archive/CLAUDE_TASK_4_threads_edge_pre_codex_20261011.md. G4 freed for independently assigned future POSTONA task; do not start unassigned G4 or use G4 worktree for H1. Previously deferred existing X OAuth security concern remains Issue #131 and archive, NOT a slot blocker.
+- recommended_model: none (future G4 task must select)
 ## Claude G5
 - owner: claude
 - slot: claude-5
