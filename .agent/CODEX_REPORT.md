@@ -1,3 +1,16 @@
+# Current H1 — approved Threads candidate completion synchronization — 2026-10-11 JST
+
+- task_id: postona-h1-threads-oauth-edge-offline-implementation-20261011
+- result: **PASS_OFFLINE_CANDIDATE**; completed implementation/report recovered from source `e38788d6677082138f0990453c7d2f00549666d0` and protected local report `d43eb86fc23df252fc091aa9b56e0c1959546322`. No implementation, review or tests rerun for this synchronization.
+- status: review_required; next_owner: chatgpt; completion_code: C1.
+- return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**; recommended_model_for_sync: Sol（中）.
+- authorization: after confirming PR135 creation, user explicitly approved synchronizing the existing H1 completion Report/TASK/status to GitHub, preserving all history and changing no other slot. Scope is H1 TASK, Report and ONLY H1 status/next_owner in ACTIVE_TASK; no source push/PR merge/deploy/production/provider/secret change.
+- fresh main at recovery: `7871b0c9ad2c1faae4ca6f00d7e8abeb06732cab`; canonical H1 TASK/Report and governing instructions unchanged since startup. Other-slot TASK/Report/index/state updates are preserved. PR135 read-back remains OPEN/DRAFT at exact source e38788d6, base protected PR124 exact c30f2464.
+- publication: guarded normal report-only main push, fresh pre-push fetch/CAS and GitHub read-back. Actual final control commit SHA/push/read-back outcome is supplied in the final user receipt only after verification. Prior NOT_PUSHED/NOT_VERIFIED approval-stop notes below are retained as historical evidence, not a current implementation blocker. All earlier Report/TASK history remains unchanged.
+- remaining: **offline candidate only**, not real connection/managed Auth/Meta/Vault proof or security-release approval. Existing runtime/dependency/activation gates remain closed; C1 acceptance/dependency planning only.
+
+---
+
 # Current H1 — Threads OAuth Edge offline integration candidate — 2026-10-11 JST
 
 - task_id: postona-h1-threads-oauth-edge-offline-implementation-20261011
