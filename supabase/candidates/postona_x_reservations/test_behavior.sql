@@ -29,6 +29,16 @@ create function pg_temp.band(p_from integer, p_to integer, p_start text, p_end t
   select jsonb_build_object('date_from', (now() at time zone 'Asia/Tokyo')::date + p_from, 'date_to', (now() at time zone 'Asia/Tokyo')::date + p_to,
                             'window_start', p_start, 'window_end', p_end) $$;
 create function pg_temp.count_resv() returns bigint language sql as $$ select count(*) from postona_x_resv.reservations $$;
+-- Interval cadence metadata as the planner's request carries it: start = JST date (today + p_day) and time.
+create function pg_temp.iband(p_start_date date, p_time text, p_unit text, p_value integer, p_count integer) returns jsonb language sql as $$
+  select jsonb_build_object('time_zone', 'Asia/Tokyo', 'start_date', to_char(p_start_date, 'YYYY-MM-DD'), 'start_time', p_time,
+                            'every_unit', p_unit, 'every_value', p_value, 'count', p_count) $$;
+-- The n slots of a cadence as manual items (slot k at start + k * step), optionally only the listed slots.
+create function pg_temp.iitems(p_prefix text, p_start_date date, p_time text, p_step interval, p_slots integer[]) returns jsonb language sql as $$
+  select jsonb_agg(pg_temp.item(p_prefix || s, ((p_start_date + p_time::time) at time zone 'Asia/Tokyo') + p_step * s, p_prefix || ' 本文' || s)
+                   || jsonb_build_object('slot', s) order by o)
+  from unnest(p_slots) with ordinality as u(s, o) $$;
+create function pg_temp.jst_date(p_day integer) returns date language sql as $$ select (now() at time zone 'Asia/Tokyo')::date + p_day $$;
 
 \set A '00000000-0000-4000-8000-00000000000a'
 \set B '00000000-0000-4000-8000-00000000000b'
@@ -150,6 +160,92 @@ select pg_temp.expect_error(format($q$select * from postona_x_resv.cancel(%L, 2)
 select pg_temp.expect_error(format($q$select * from postona_x_resv.reschedule(%L, 2, pg_temp.jst(14, '12:00'))$q$, current_setting('rt.c')), 'POSTONA_RESV_NOT_PLANNED');
 select 'M5_RESCHEDULE_CONSENT_CANCEL_PASS' as result;
 
+-- M6. manual_interval: the server checks the user's cadence itself (metadata + every instant), atomically.
+select set_config('rt.before_m6', pg_temp.count_resv()::text, false);
+-- Exact daily (3 posts), every 3 days, every 2 hours: accepted, stored fixed with their exact instants.
+create temp table m6 as
+select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', pg_temp.iband(pg_temp.jst_date(70), '08:00', 'days', 1, 3),
+  pg_temp.iitems('d1_', pg_temp.jst_date(70), '08:00', interval '24 hours', array[0, 1, 2]));
+insert into m6 select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', pg_temp.iband(pg_temp.jst_date(74), '12:00', 'days', 3, 3),
+  pg_temp.iitems('d3_', pg_temp.jst_date(74), '12:00', interval '72 hours', array[0, 1, 2]));
+insert into m6 select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', pg_temp.iband(pg_temp.jst_date(82), '09:00', 'hours', 2, 3),
+  pg_temp.iitems('h2_', pg_temp.jst_date(82), '09:00', interval '2 hours', array[0, 1, 2]));
+select pg_temp.check((select count(*) from m6) = 9 and (select bool_and(fixed and mode = 'manual_interval' and status = 'planned') from m6), 'interval rows stored fixed');
+select pg_temp.check((select array_agg(to_char(scheduled_at at time zone 'Asia/Tokyo', 'HH24:MI') order by scheduled_at) from m6 where draft_id like 'h2_%')
+  = array['09:00', '11:00', '13:00'], 'hour cadence in JST');
+select pg_temp.check((select max(scheduled_at) - min(scheduled_at) from m6 where draft_id like 'd3_%') = interval '144 hours', 'N-day cadence');
+-- Month and day boundary: 22:00 JST on the last day of next month, every 2 hours -> 22:00, 00:00, 02:00 next month.
+select set_config('rt.eom', ((date_trunc('month', now() at time zone 'Asia/Tokyo') + interval '2 months')::date - 1)::text, false);
+insert into m6 select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', pg_temp.iband(current_setting('rt.eom')::date, '22:00', 'hours', 2, 3),
+  pg_temp.iitems('eom_', current_setting('rt.eom')::date, '22:00', interval '2 hours', array[0, 1, 2]));
+select pg_temp.check((select array_agg(to_char(scheduled_at at time zone 'Asia/Tokyo', 'MM-DD HH24:MI') order by scheduled_at) from m6 where draft_id like 'eom_%')
+  = array[to_char(current_setting('rt.eom')::date, 'MM-DD') || ' 22:00', to_char(current_setting('rt.eom')::date + 1, 'MM-DD') || ' 00:00',
+          to_char(current_setting('rt.eom')::date + 1, 'MM-DD') || ' 02:00'], 'month boundary cadence');
+-- A slot the user cancelled from the preview is skipped; the remaining posts stay exactly on the cadence.
+insert into m6 select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', pg_temp.iband(pg_temp.jst_date(86), '07:00', 'days', 1, 3),
+  pg_temp.iitems('skip_', pg_temp.jst_date(86), '07:00', interval '24 hours', array[0, 2]));
+select pg_temp.check((select count(*) from m6 where draft_id like 'skip_%') = 2, 'cancelled middle slot skipped');
+select set_config('rt.after_ok', pg_temp.count_resv()::text, false);
+-- One irregular gap, every timestamp otherwise >= 60 minutes apart: hourly 09:00, 10:00, 11:00 then 12:30.
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', pg_temp.iband(pg_temp.jst_date(64), '09:00', 'hours', 1, 4),
+  pg_temp.iitems('irr_', pg_temp.jst_date(64), '09:00', interval '1 hour', array[0, 1, 2]) || jsonb_build_array(
+    pg_temp.item('irr_3', ((pg_temp.jst_date(64) + time '12:30') at time zone 'Asia/Tokyo'), 'irr 本文3') || '{"slot": 3}'))$q$, 'POSTONA_RESV_INTERVAL_MISMATCH');
+-- Wrong start (times 30 minutes after the stated start), and the start read as UTC instead of JST.
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', pg_temp.iband(pg_temp.jst_date(65), '10:00', 'days', 1, 2),
+  pg_temp.iitems('ws_', pg_temp.jst_date(65), '10:30', interval '24 hours', array[0, 1]))$q$, 'POSTONA_RESV_INTERVAL_MISMATCH');
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', pg_temp.iband(pg_temp.jst_date(65), '10:00', 'days', 1, 2),
+  (select jsonb_agg(pg_temp.item('utc_' || s, ((pg_temp.jst_date(65) + time '10:00') at time zone 'UTC') + interval '24 hours' * s, 'utc ' || s) || jsonb_build_object('slot', s) order by s)
+   from generate_series(0, 1) s))$q$, 'POSTONA_RESV_INTERVAL_MISMATCH');
+-- Reordered: slots out of order (times follow the slots), and slots in order with their times swapped.
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 1, 3),
+  pg_temp.iitems('ro_', pg_temp.jst_date(66), '10:00', interval '24 hours', array[0, 2, 1]))$q$, 'POSTONA_RESV_INTERVAL_MISMATCH');
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 1, 2),
+  jsonb_build_array(pg_temp.item('sw_0', (pg_temp.jst_date(67) + time '10:00') at time zone 'Asia/Tokyo', 'a') || '{"slot": 0}',
+                    pg_temp.item('sw_1', (pg_temp.jst_date(66) + time '10:00') at time zone 'Asia/Tokyo', 'b') || '{"slot": 1}'))$q$, 'POSTONA_RESV_INTERVAL_MISMATCH');
+-- Duplicate slot, slot beyond count, more items than count, item without slot.
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 1, 3),
+  pg_temp.iitems('dup_', pg_temp.jst_date(66), '10:00', interval '24 hours', array[0, 0]))$q$, 'POSTONA_RESV_INTERVAL_MISMATCH');
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 1, 2),
+  pg_temp.iitems('big_', pg_temp.jst_date(66), '10:00', interval '24 hours', array[0, 2]))$q$, 'POSTONA_RESV_INTERVAL_MISMATCH');
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 1, 2),
+  pg_temp.iitems('many_', pg_temp.jst_date(66), '10:00', interval '24 hours', array[0, 1, 2]))$q$, 'POSTONA_RESV_INTERVAL_MISMATCH');
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 1, 1),
+  jsonb_build_array(pg_temp.item('noslot', (pg_temp.jst_date(66) + time '10:00') at time zone 'Asia/Tokyo', 'x')))$q$, 'POSTONA_RESV_INTERVAL_MISMATCH');
+-- A flat list of times with no cadence: no metadata, or a random-style band.
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', null,
+  pg_temp.iitems('flat_', pg_temp.jst_date(66), '10:00', interval '24 hours', array[0, 1]))$q$, 'POSTONA_RESV_BAND_REQUIRED');
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', pg_temp.band(66, 68, '09:00', '21:00'),
+  pg_temp.iitems('flat_', pg_temp.jst_date(66), '10:00', interval '24 hours', array[0, 1]))$q$, 'POSTONA_RESV_INTERVAL_INVALID');
+-- Missing / invalid cadence fields: unit, value range, count range, horizon, zone, start time/date, extra key, types.
+select pg_temp.expect_error(format($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_interval', %L::jsonb,
+  pg_temp.iitems('bad_', pg_temp.jst_date(66), '10:00', interval '24 hours', array[0]))$q$, b), 'POSTONA_RESV_INTERVAL_INVALID')
+from (values
+  (pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 1, 1) - 'every_unit'),
+  (pg_temp.iband(pg_temp.jst_date(66), '10:00', 'weeks', 1, 1)),
+  (pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 0, 1)),
+  (pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 31, 1)),
+  (pg_temp.iband(pg_temp.jst_date(66), '10:00', 'hours', 73, 1)),
+  (pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 1, 0)),
+  (pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 1, 51)),
+  (pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 30, 5)),
+  (pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 1, 1) || '{"time_zone": "UTC"}'),
+  (pg_temp.iband(pg_temp.jst_date(66), '24:00', 'days', 1, 1)),
+  (pg_temp.iband(pg_temp.jst_date(66), '9:00', 'days', 1, 1)),
+  (pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 1, 1) || '{"start_date": "2026-02-30"}'),
+  (pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 1, 1) || '{"seed": 1}'),
+  (pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 1, 1) || '{"every_value": "1"}'),
+  (pg_temp.iband(pg_temp.jst_date(66), '10:00', 'days', 1, 1) || '{"count": 1.5}')
+) as v(b);
+select pg_temp.check(pg_temp.count_resv() = current_setting('rt.after_ok')::bigint, 'every refused interval batch stored nothing');
+select pg_temp.check(current_setting('rt.after_ok')::bigint = current_setting('rt.before_m6')::bigint + 14, 'only the 14 regular posts were stored');
+-- Exact and random batches are unaffected by the interval contract (no slot / cadence needed).
+select pg_temp.check((select count(*) from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_exact', null,
+  jsonb_build_array(pg_temp.item('ex_m6', pg_temp.jst(88, '15:00'), 'exact')))) = 1, 'manual_exact unaffected');
+-- Clean up M6 rows so later sections see the same rows as before.
+delete from postona_x_resv.batches where id in (select batch_id from m6) or id in (select batch_id from postona_x_resv.reservations where draft_id = 'ex_m6');
+select pg_temp.check(pg_temp.count_resv() = current_setting('rt.before_m6')::bigint, 'M6 cleaned up');
+select 'M6_INTERVAL_CADENCE_SERVER_CHECK_PASS' as result;
+
 -- W1. Worker: claim only due, consented, publishable manual rows; one lease; finish; replay; lease expiry.
 -- Make three rows due (test-only time travel keeps consent bound to the new time).
 update postona_x_resv.reservations set scheduled_at = now() - interval '1 minute', consent_scheduled_at = now() - interval '1 minute',
@@ -200,6 +296,67 @@ update postona_x_resv.reservations set expires_at = now() - interval '1 second' 
 select pg_temp.check((select count(*) from postona_x_resv.claim_due('worker-1', 120, 50)) = 0, 'expired not claimed');
 select pg_temp.check((select status from postona_x_resv.reservations where draft_id = 'm1_4') = 'expired', 'expired');
 select 'W2_LIVE_AUTHORITY_RECHECK_PASS' as result;
+
+-- W3. finish() enforces the lease deadline itself: NO claim_due() sweep runs between expiry and finish.
+update postona_x_resv.reservations set scheduled_at = now() - interval '1 minute', consent_scheduled_at = now() - interval '1 minute',
+  expires_at = now() + interval '6 hours'
+where draft_id in ('m1_5', 'm1_6', 'm1_7', 'ascii280');
+create temp table w3 as select r.*, x.draft_id from postona_x_resv.claim_due('worker-1', 120, 50) r
+  join postona_x_resv.reservations x on x.id = r.reservation_id;
+select pg_temp.check((select array_agg(draft_id order by draft_id) from w3) = array['ascii280', 'm1_5', 'm1_6', 'm1_7'], 'four claimed');
+create function pg_temp.w3_id(p_draft text) returns uuid language sql as $$ select reservation_id from w3 where draft_id = p_draft $$;
+create function pg_temp.w3_tok(p_draft text) returns uuid language sql as $$ select lease_token from w3 where draft_id = p_draft $$;
+create function pg_temp.w3_row(p_draft text) returns postona_x_resv.reservations language sql as $$
+  select r.* from postona_x_resv.reservations r where r.id = pg_temp.w3_id(p_draft) $$;
+-- Expired (1 s ago), unswept: a late 'published' is NOT accepted; the row is fenced to uncertain atomically.
+update postona_x_resv.reservations set lease_expires_at = clock_timestamp() - interval '1 second' where id = pg_temp.w3_id('m1_5');
+select pg_temp.check((pg_temp.w3_row('m1_5')).status = 'claimed', 'still claimed: no sweep ran');
+select pg_temp.check(postona_x_resv.finish(pg_temp.w3_id('m1_5'), pg_temp.w3_tok('m1_5'), 'published', '777000111', null) = 'lease_lost', 'late published refused');
+select pg_temp.check((select status = 'uncertain' and outcome_code = 'LEASE_EXPIRED_AT_FINISH' and provider_post_id is null from pg_temp.w3_row('m1_5')),
+  'fenced to uncertain, no provider id recorded as success');
+select pg_temp.check((select count(*) = 1 and bool_and(detail ->> 'reported_outcome' = 'published' and detail ->> 'reported_provider_post_id' = '777000111')
+  from postona_x_resv.audit where reservation_id = pg_temp.w3_id('m1_5') and action = 'finish_after_lease'), 'late report kept for reconciliation only');
+select pg_temp.expect_error(format($q$select postona_x_resv.finish(%L, %L, 'published', '777000111', null)$q$, pg_temp.w3_id('m1_5'), pg_temp.w3_tok('m1_5')), 'POSTONA_RESV_LEASE_LOST');
+-- Expired, unswept: a late 'failed_before_send' is NOT accepted either (cannot be proven once the lease is gone).
+update postona_x_resv.reservations set lease_expires_at = clock_timestamp() - interval '1 second' where id = pg_temp.w3_id('m1_6');
+select pg_temp.check(postona_x_resv.finish(pg_temp.w3_id('m1_6'), pg_temp.w3_tok('m1_6'), 'failed_before_send', null, 'RATE_LIMITED') = 'lease_lost', 'late failed refused');
+select pg_temp.check((select status = 'uncertain' and outcome_code = 'LEASE_EXPIRED_AT_FINISH' from pg_temp.w3_row('m1_6')), 'fenced, not failed');
+-- pre_publish_check uses the real clock too: a lease that runs out inside the transaction is not ours to send on.
+do $$
+begin
+  update postona_x_resv.reservations set lease_expires_at = clock_timestamp() + interval '200 milliseconds' where id = pg_temp.w3_id('m1_7');
+  if postona_x_resv.pre_publish_check(pg_temp.w3_id('m1_7'), pg_temp.w3_tok('m1_7')) is distinct from 'OK' then raise exception 'CHECK_FAILED: pre-publish before deadline'; end if;
+  perform pg_sleep(0.5);
+  if postona_x_resv.pre_publish_check(pg_temp.w3_id('m1_7'), pg_temp.w3_tok('m1_7')) is distinct from 'LEASE_LOST' then
+    raise exception 'CHECK_FAILED: pre-publish after an in-transaction deadline must not allow a send';
+  end if;
+end $$;
+-- Near the deadline (30 s left): the current lease is honoured; the published replay stays idempotent even after
+-- the deadline passes, and a different id is refused.
+update postona_x_resv.reservations set lease_expires_at = clock_timestamp() + interval '30 seconds' where id = pg_temp.w3_id('m1_7');
+select pg_temp.check(postona_x_resv.finish(pg_temp.w3_id('m1_7'), pg_temp.w3_tok('m1_7'), 'published', '888000222', null) = 'published', 'valid lease accepted');
+update postona_x_resv.reservations set lease_expires_at = clock_timestamp() - interval '1 second' where id = pg_temp.w3_id('m1_7');
+select pg_temp.check(postona_x_resv.finish(pg_temp.w3_id('m1_7'), pg_temp.w3_tok('m1_7'), 'published', '888000222', null) = 'published', 'published replay idempotent');
+select pg_temp.expect_error(format($q$select postona_x_resv.finish(%L, %L, 'published', '1', null)$q$, pg_temp.w3_id('m1_7'), pg_temp.w3_tok('m1_7')), 'POSTONA_RESV_LEASE_LOST');
+select pg_temp.check((select status = 'published' and provider_post_id = '888000222' from pg_temp.w3_row('m1_7')), 'published kept');
+select pg_temp.check((select count(*) from postona_x_resv.audit where reservation_id = pg_temp.w3_id('m1_7') and action = 'finish') = 1, 'one finish recorded');
+-- The deadline passes INSIDE one transaction (lease valid at transaction start): the real clock decides.
+do $$
+declare v_result text;
+begin
+  update postona_x_resv.reservations set lease_expires_at = clock_timestamp() + interval '200 milliseconds' where id = pg_temp.w3_id('ascii280');
+  perform pg_sleep(0.5);
+  v_result := postona_x_resv.finish(pg_temp.w3_id('ascii280'), pg_temp.w3_tok('ascii280'), 'published', '999000333', null);
+  if v_result is distinct from 'lease_lost' then raise exception 'CHECK_FAILED: deadline crossed within the transaction accepted (%)', v_result; end if;
+end $$;
+select pg_temp.check((select status = 'uncertain' and provider_post_id is null from pg_temp.w3_row('ascii280')), 'in-transaction expiry fenced');
+-- Invariants: nothing is re-claimed or sent twice; no claimed row outlives its lease after finish.
+select pg_temp.check((select count(*) from postona_x_resv.claim_due('worker-2', 120, 50)) = 0, 'nothing re-claimed');
+select pg_temp.check((select array_agg(status order by draft_id) from postona_x_resv.reservations where id in (select reservation_id from w3))
+  = array['uncertain', 'uncertain', 'uncertain', 'published'], 'final states');
+select pg_temp.check(not exists (select 1 from postona_x_resv.reservations where status = 'published' and outcome_code = 'LEASE_EXPIRED_AT_FINISH'), 'no fenced row is published');
+select pg_temp.check(not exists (select 1 from postona_x_resv.reservations where status = 'claimed'), 'no claimed row left');
+select 'W3_FINISH_LEASE_DEADLINE_PASS' as result;
 
 -- L1. Lifecycle: deleting a social account / brand cascades its reservations (never blocks G5 deletion);
 --     the legacy brand queue is untouched.

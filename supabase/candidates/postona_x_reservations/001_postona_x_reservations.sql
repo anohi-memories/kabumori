@@ -23,7 +23,8 @@
 -- Concurrency: one transaction-scoped advisory lock per social account serialises every create / reschedule
 -- for that account (gap and capacity checks see each other); claims use FOR UPDATE SKIP LOCKED.
 -- Delivery state machine: planned -> claimed -> published | failed | uncertain; planned -> cancelled | expired.
--- A claimed row whose lease expires becomes 'uncertain' and is never re-claimed (no blind X retry).
+-- A claimed row whose lease expires becomes 'uncertain' and is never re-claimed (no blind X retry): swept by
+-- claim_due(), and fenced by finish() itself when the holder reports after its deadline.
 -- Deleting a brand or a social account cascades its reservations (never blocks G5 deletion).
 begin;
 
@@ -222,6 +223,66 @@ exception when others then
 end $$;
 
 /**
+ * manual_interval contract. p_band is the cadence the user confirmed in the planner, exactly:
+ *   { time_zone: 'Asia/Tokyo', start_date: 'YYYY-MM-DD', start_time: 'HH:MM' (JST),
+ *     every_unit: 'days' (1-30) | 'hours' (1-72), every_value, count: planned series length 1-50 }
+ * and every item carries its series position `slot` (0 .. count-1). Slots must strictly increase in item order
+ * and each scheduled_at must equal start + slot * every exactly (absolute hours: Asia/Tokyo has no DST). A
+ * skipped slot is a post the user cancelled from the preview; no post is ever moved onto or off the cadence.
+ * A flat list of times without this metadata, or any irregular / reordered / inconsistent instant, raises.
+ */
+create function postona_x_resv.assert_interval(p_band jsonb, p_items jsonb) returns void
+language plpgsql stable set search_path = '' as $$
+declare v_unit text; v_value integer; v_count integer; v_step_hours integer; v_first timestamptz;
+        v_item jsonb; v_slot integer; v_prev integer := -1;
+begin
+  if p_band is null or jsonb_typeof(p_band) <> 'object'
+     or (select array_agg(k order by k) from jsonb_object_keys(p_band) k)
+        is distinct from array['count', 'every_unit', 'every_value', 'start_date', 'start_time', 'time_zone']
+     or jsonb_typeof(p_band -> 'time_zone') <> 'string' or (p_band ->> 'time_zone') <> 'Asia/Tokyo'
+     or jsonb_typeof(p_band -> 'start_date') <> 'string' or (p_band ->> 'start_date') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+     or jsonb_typeof(p_band -> 'start_time') <> 'string' or (p_band ->> 'start_time') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+     or jsonb_typeof(p_band -> 'every_unit') <> 'string' or (p_band ->> 'every_unit') not in ('days', 'hours')
+     or jsonb_typeof(p_band -> 'every_value') <> 'number' or (p_band ->> 'every_value') !~ '^[0-9]{1,3}$'
+     or jsonb_typeof(p_band -> 'count') <> 'number' or (p_band ->> 'count') !~ '^[0-9]{1,3}$' then
+    raise exception 'POSTONA_RESV_INTERVAL_INVALID' using errcode = 'P0001';
+  end if;
+  v_unit := p_band ->> 'every_unit';
+  v_value := (p_band ->> 'every_value')::integer;
+  v_count := (p_band ->> 'count')::integer;
+  if not ((v_unit = 'days' and v_value between 1 and 30) or (v_unit = 'hours' and v_value between 1 and 72))
+     or v_count not between 1 and 50 then
+    raise exception 'POSTONA_RESV_INTERVAL_INVALID' using errcode = 'P0001';
+  end if;
+  v_step_hours := case v_unit when 'days' then v_value * 24 else v_value end;
+  if (v_count - 1) * v_step_hours > 90 * 24 then  -- the planner's horizon: last post within 90 days of the first
+    raise exception 'POSTONA_RESV_INTERVAL_INVALID' using errcode = 'P0001';
+  end if;
+  begin
+    v_first := ((p_band ->> 'start_date')::date + (p_band ->> 'start_time')::time) at time zone 'Asia/Tokyo';
+  exception when others then
+    raise exception 'POSTONA_RESV_INTERVAL_INVALID' using errcode = 'P0001';  -- e.g. 2026-02-30
+  end;
+  if (p_band ->> 'start_date') <> pg_catalog.to_char((p_band ->> 'start_date')::date, 'YYYY-MM-DD') then
+    raise exception 'POSTONA_RESV_INTERVAL_INVALID' using errcode = 'P0001';
+  end if;
+  if jsonb_array_length(p_items) > v_count then
+    raise exception 'POSTONA_RESV_INTERVAL_MISMATCH' using errcode = 'P0001';
+  end if;
+  for v_item in select value from jsonb_array_elements(p_items) loop
+    if jsonb_typeof(v_item -> 'slot') is distinct from 'number' or (v_item ->> 'slot') !~ '^[0-9]{1,3}$' then
+      raise exception 'POSTONA_RESV_INTERVAL_MISMATCH' using errcode = 'P0001';
+    end if;
+    v_slot := (v_item ->> 'slot')::integer;
+    if v_slot <= v_prev or v_slot >= v_count
+       or (v_item ->> 'scheduled_at')::timestamptz is distinct from v_first + pg_catalog.make_interval(hours => v_slot * v_step_hours) then
+      raise exception 'POSTONA_RESV_INTERVAL_MISMATCH' using errcode = 'P0001';
+    end if;
+    v_prev := v_slot;
+  end loop;
+end $$;
+
+/**
  * Gap / capacity check for one account against every active reservation (planned, claimed, published,
  * uncertain), excluding `p_exclude`. Raises a fixed code naming the problem; never moves anything.
  */
@@ -266,7 +327,9 @@ create type postona_x_resv.reservation_view as (
 );
 
 /**
- * Atomic batch create. p_items: [{ draft_id, scheduled_at, body?, consent?: { confirmed: true, content_sha256 } }].
+ * Atomic batch create. p_items: [{ draft_id, scheduled_at, body?, consent?: { confirmed: true, content_sha256 }, slot? }].
+ * p_band: null (manual_exact), the JST date/time band (random, AI), or the cadence (manual_interval, see
+ * assert_interval).
  * Idempotent per (owner, account, client_batch_id, revision): the same payload returns the stored rows; a
  * different payload under the same key fails. Either every item is stored or none is.
  */
@@ -342,6 +405,9 @@ begin
     end if;
     v_times := v_times || v_at;
   end loop;
+  if p_mode = 'manual_interval' then
+    perform postona_x_resv.assert_interval(p_band, p_items);  -- the user's cadence, never only UI validation
+  end if;
   perform postona_x_resv.assert_slots_free(p_social_account_id, v_times, '{}');
 
   insert into postona_x_resv.batches (user_id, brand_id, social_account_id, client_batch_id, revision, mode, origin, time_zone, band, payload_sha256)
@@ -542,7 +608,7 @@ declare v_row postona_x_resv.reservations%rowtype;
 begin
   select r.* into v_row from postona_x_resv.reservations r where r.id = p_reservation_id for update;
   if not found or v_row.status <> 'claimed' or v_row.lease_token is distinct from p_lease_token
-     or v_row.lease_expires_at <= pg_catalog.now() then
+     or v_row.lease_expires_at <= pg_catalog.clock_timestamp() then
     return 'LEASE_LOST';
   end if;
   if not postona_x_resv.row_publishable(v_row) then
@@ -556,7 +622,8 @@ end $$;
 /**
  * Lease holder reports the outcome:
  *   published (with the provider post id), failed_before_send (provably never sent), uncertain (unknown).
- * A repeated identical report is idempotent; anything else on a finished row is refused.
+ * Returns the recorded outcome, or 'lease_lost' when the lease had already expired (row fenced to uncertain).
+ * A repeated identical 'published' report is idempotent; anything else on a finished row is refused.
  */
 create function postona_x_resv.finish(p_reservation_id uuid, p_lease_token uuid, p_outcome text, p_provider_post_id text, p_code text)
 returns text
@@ -579,6 +646,20 @@ begin
   if v_row.status <> 'claimed' then
     -- Includes a lease swept to 'uncertain': a late success is recorded only by a reviewed reconciliation.
     raise exception 'POSTONA_RESV_LEASE_LOST' using errcode = 'P0001';
+  end if;
+  -- The lease deadline is enforced here, at the decision point, on the real clock (not the transaction start)
+  -- and independently of any claim_due() sweep. An expired lease is fenced atomically under the row lock:
+  -- the row becomes 'uncertain' (never re-claimed, never re-sent, never shown as success) and the late report
+  -- is kept in the audit trail only, so a future reviewed reconciliation can verify it with X before any
+  -- 'published'. Nothing is raised, so the fence commits; the caller gets 'lease_lost', not its outcome.
+  if v_row.lease_expires_at <= pg_catalog.clock_timestamp() then
+    update postona_x_resv.reservations r
+    set status = 'uncertain', outcome_code = 'LEASE_EXPIRED_AT_FINISH', updated_at = pg_catalog.now()
+    where r.id = v_row.id;
+    insert into postona_x_resv.audit (user_id, reservation_id, action, detail)
+    values (v_row.user_id, v_row.id, 'finish_after_lease', pg_catalog.jsonb_build_object(
+      'reported_outcome', p_outcome, 'reported_provider_post_id', p_provider_post_id, 'reported_code', p_code));
+    return 'lease_lost';
   end if;
   update postona_x_resv.reservations r
   set status = case p_outcome when 'published' then 'published' when 'failed_before_send' then 'failed' else 'uncertain' end,

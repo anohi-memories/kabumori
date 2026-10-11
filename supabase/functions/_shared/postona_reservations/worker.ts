@@ -11,7 +11,8 @@
  *   publish               -> exactly once per lease; never retried by this module;
  *   finish                -> published (with provider post id) | failed_before_send (provably not sent)
  *                            | uncertain (anything else: timeout, unknown response, crash) -- an uncertain row
- *                            is never re-claimed, so X is never posted to twice blindly.
+ *                            is never re-claimed, so X is never posted to twice blindly. A finish after the
+ *                            lease deadline answers 'lease_lost' (row fenced to uncertain): never a success.
  * Manual text is sent exactly as stored (no AI generation). AI slots are not claimed in V1.
  */
 
@@ -103,13 +104,17 @@ export async function runReservationDelivery(input: {
     if (result.kind === "published" && !POST_ID_RE.test(result.providerPostId)) {
       result = { kind: "unknown", code: "PROVIDER_POST_ID_INVALID" };
     }
+    // Only the outcome the store actually recorded counts. Anything else -- 'lease_lost' (the lease ran out
+    // before finish: the store fenced the row to uncertain) or an unexpected answer -- is uncertain.
     try {
       if (result.kind === "published") {
-        await input.store.finish(item.reservationId, item.leaseToken, "published", result.providerPostId, null);
-        report.published += 1;
+        const recorded = await input.store.finish(item.reservationId, item.leaseToken, "published", result.providerPostId, null);
+        if (recorded === "published") report.published += 1;
+        else report.uncertain += 1;
       } else if (result.kind === "rejected_before_send") {
-        await input.store.finish(item.reservationId, item.leaseToken, "failed_before_send", null, safeCode(result.code, "REJECTED_BEFORE_SEND"));
-        report.failedBeforeSend += 1;
+        const recorded = await input.store.finish(item.reservationId, item.leaseToken, "failed_before_send", null, safeCode(result.code, "REJECTED_BEFORE_SEND"));
+        if (recorded === "failed_before_send") report.failedBeforeSend += 1;
+        else report.uncertain += 1;
       } else {
         await input.store.finish(item.reservationId, item.leaseToken, "uncertain", null, safeCode(result.code, "OUTCOME_UNKNOWN"));
         report.uncertain += 1;

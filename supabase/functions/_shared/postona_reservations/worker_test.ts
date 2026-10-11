@@ -124,6 +124,21 @@ test("if the outcome cannot be recorded, the run reports uncertain and does not 
   assert.deepEqual(pub.sent, ["a"]);
 });
 
+test("a finish after the lease deadline ('lease_lost') is counted uncertain, never published or failed, and not re-sent", async () => {
+  const { store, state } = fakeStore([{ id: "a", body: "a" }, { id: "b", body: "b" }]);
+  // Model of the SQL fence: the lease ran out before finish, so the store records uncertain and answers lease_lost.
+  store.finish = (id) => {
+    state.get(id)!.status = "uncertain";
+    return Promise.resolve("lease_lost");
+  };
+  const pub = publisher([{ kind: "published", providerPostId: "99" }, { kind: "rejected_before_send", code: "PROVIDER_REJECTED" }]);
+  const report = await runReservationDelivery({ store, publisher: pub, worker: "w" });
+  assert.deepEqual(report, { claimed: 2, published: 0, failedBeforeSend: 0, uncertain: 2, skipped: 0, notAvailable: false });
+  const again = await runReservationDelivery({ store, publisher: pub, worker: "w" });
+  assert.equal(again.claimed, 0);
+  assert.deepEqual(pub.sent, ["a", "b"], "one attempt each");
+});
+
 test("two workers on one store: every row is sent at most once", async () => {
   const { store, state } = fakeStore(Array.from({ length: 5 }, (_, i) => ({ id: `r${i}`, body: `b${i}` })));
   const sent: string[] = [];

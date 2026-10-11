@@ -85,6 +85,56 @@ test('exact and interval batches keep their user-chosen times as confirmed', asy
   const r2 = await buildSaveRequest({ batch: interval.batch, drafts: interval.drafts, confirmations: await confirmAll(interval.drafts), aiOptIn: OPT_OUT, sha256 });
   assert.equal(r2.ok, true);
   assert.equal(r2.request.mode, 'manual_interval');
+  assert.ok(r1.request.items.every((i) => !('slot' in i)), 'exact items carry no slot');
+});
+
+test('interval: the cadence and each post\'s slot come from the SAME batch request; the server formula gives every instant', async () => {
+  const cases = [
+    { texts: ['a', 'b', 'c'], startDate: '2026-10-31', startTime: '23:30', every: { unit: 'days', value: 1 }, stepH: 24 },
+    { texts: ['a', 'b', 'c'], startDate: '2026-10-15', startTime: '12:00', every: { unit: 'days', value: 3 }, stepH: 72 },
+    { texts: ['a', 'b', 'c'], startDate: '2026-10-31', startTime: '22:00', every: { unit: 'hours', value: 2 }, stepH: 2 },
+  ];
+  for (const c of cases) {
+    const planned = planBatch({ mode: 'manual_interval', texts: c.texts, startDate: c.startDate, startTime: c.startTime, every: c.every }, { owner: OWNER, now: NOW, batchId: `iv-${c.stepH}` });
+    assert.equal(planned.ok, true);
+    const result = await buildSaveRequest({ batch: planned.batch, drafts: planned.drafts, confirmations: await confirmAll(planned.drafts), aiOptIn: OPT_OUT, sha256 });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.request.band, {
+      time_zone: 'Asia/Tokyo', start_date: c.startDate, start_time: c.startTime, every_unit: c.every.unit, every_value: c.every.value, count: 3,
+    });
+    assert.deepEqual(result.request.items.map((i) => i.slot), [0, 1, 2]);
+    // The SQL candidate's assert_interval: (start_date + start_time) at time zone 'Asia/Tokyo' + slot * every (absolute hours).
+    const start = Date.parse(`${c.startDate}T${c.startTime}:00+09:00`);
+    for (const item of result.request.items) assert.equal(Date.parse(item.scheduled_at), start + item.slot * c.stepH * 3600 * 1000);
+  }
+});
+
+test('interval: a cancelled post leaves its slot empty; a moved time or a changed cadence is refused before any request', async () => {
+  const planned = planBatch({ mode: 'manual_interval', texts: ['a', 'b', 'c'], startDate: '2026-10-15', startTime: '09:00', every: { unit: 'hours', value: 3 } },
+    { owner: OWNER, now: NOW, batchId: 'iv-x' });
+  const withCancel = planned.drafts.map((d, i) => (i === 1 ? cancelDraft(d) : d));
+  const skipped = await buildSaveRequest({ batch: planned.batch, drafts: withCancel, confirmations: await confirmAll(withCancel), aiOptIn: OPT_OUT, sha256 });
+  assert.equal(skipped.ok, true);
+  assert.deepEqual(skipped.request.items.map((i) => i.slot), [0, 2]);
+  assert.equal(skipped.request.band.count, 3, 'count is the confirmed series length, not the number sent');
+  // A time moved off the cadence (re-confirmed, so only the cadence check can refuse it).
+  const moved = planned.drafts.map((d, i) => (i === 2 ? { ...d, scheduledAt: new Date(Date.parse(d.scheduledAt) + 30 * 60 * 1000).toISOString() } : d));
+  const off = await buildSaveRequest({ batch: planned.batch, drafts: moved, confirmations: await confirmAll(moved), aiOptIn: OPT_OUT, sha256 });
+  assert.deepEqual(off.issues?.map((i) => i.code), ['INTERVAL_CADENCE_MISMATCH']);
+  // The cadence is read from the batch request, never inferred from the drafts' times.
+  const otherCadence = { ...planned.batch, request: { ...planned.batch.request, every: { unit: 'hours', value: 2 } } };
+  const changed = await buildSaveRequest({ batch: otherCadence, drafts: planned.drafts, confirmations: await confirmAll(planned.drafts), aiOptIn: OPT_OUT, sha256 });
+  assert.deepEqual(changed.issues?.map((i) => i.code), ['INTERVAL_CADENCE_MISMATCH']);
+  const otherStart = { ...planned.batch, request: { ...planned.batch.request, startTime: '09:30' } };
+  const shifted = await buildSaveRequest({ batch: otherStart, drafts: planned.drafts, confirmations: await confirmAll(planned.drafts), aiOptIn: OPT_OUT, sha256 });
+  assert.deepEqual(shifted.issues?.map((i) => i.code), ['INTERVAL_CADENCE_MISMATCH']);
+  // A batch whose mode does not match its request is refused (no flat list labelled as an interval).
+  const relabelled = { ...tenRandom().batch, mode: 'manual_interval' };
+  const flat = await buildSaveRequest({ batch: relabelled, drafts: tenRandom().drafts, confirmations: await confirmAll(tenRandom().drafts), aiOptIn: OPT_OUT, sha256 });
+  assert.deepEqual(flat.issues?.map((i) => i.code), ['BATCH_INCONSISTENT']);
+  // Random batches are unaffected: no slot on any item.
+  const random = await buildSaveRequest({ batch: tenRandom().batch, drafts: tenRandom().drafts, confirmations: await confirmAll(tenRandom().drafts), aiOptIn: OPT_OUT, sha256 });
+  assert.ok(random.ok && random.request.items.every((i) => !('slot' in i)));
 });
 
 test('selected-brand isolation: a confirmation for one account never authorises another', async () => {
