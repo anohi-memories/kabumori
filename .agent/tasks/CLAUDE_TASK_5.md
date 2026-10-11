@@ -3,8 +3,8 @@
 - task_id: common-account-phase3h-local-oss-keycloak-safe-pilot-20261011
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - start_code: G5
 - finish_code: K5
@@ -173,6 +173,19 @@ D. 終了時は自分のG5コンテナ・試験用identity/一時DB/コンテナ
   - 写真アプリの停止
   - H1〜H5 の割り当て
 - 他スロットの担当範囲、保護対象の PR は変更していない。
+
+---
+
+# K5 FINAL — Phase3h local OSS/Keycloak live pilot / 2026-10-12 JST
+
+- task_id: common-account-phase3h-local-oss-keycloak-safe-pilot-20261011
+- **K5 verdict: TASK_COMPLETE_WITH_SAFETY_FINDINGS / LOCAL_OSS_FAIL / IDP_PREPAUSE_BLOCKED.** A real isolated local OSS/Keycloak pilot was conducted; F1–F3 demonstrate violations of the assumed BAN-as-linking-fence. Also F4 stale JWT writes and F6 persistent Storage require lifecycle enforcement. Positive case observations are valid **LOCAL_OSS_PARTIAL_EVIDENCE**, not managed proof. This FAIL is a security design finding, not a declaration that production was attacked or managed Supabase reproduces it.
+- Independently inspected [Draft PR146](https://github.com/anohi-memories/kabumori/pull/146) exact HEAD `faf8007a4ab5c925430c7cc6a9896046e30ce25a`, OPEN/DRAFT/UNMERGED, 1 commit, 7 entirely new documentation/local-driver paths; no app, migration, Auth runtime, managed DB, Edge or production source. Verified report, source/docs, safety tests definition and PR scope, but local stack executions, Podman cleanup, resource readings and 7/7 unit tests are G5-reported and NOT independently rerun. The fail-closed checks were added after the live observations and that edition was not rerun against the stack.
+- Critical evidence: F1 manual OAuth link started before BAN completed after BAN; F2 code exchange issued banned user's fresh JWT/refresh; JWT could write through local PostgREST; F3 in-flight auto-link produced identity rows timestamped after BAN update (commit sequence not observed). F4 older JWT permitted PostgREST/Storage mutations despite logout/BAN/Auth deletion; F6 Admin Auth delete did not remove Storage metadata/blobs. F7 hook blocks token issue but not identity linking, and hook failure prevents other users signing in. These are not proof of managed compatibility.
+- Report says 4 CPU / 8GiB isolated Podman machine with loopback ports and eventual teardown (0 owned containers/volumes/listeners, VM removed, preexisting Podman VM untouched); discovered initially broad interface bind, shut down immediately and fixed before measurements. Managed/provider/photo calls 0, paid actions 0, E11 SQL delete NOT_RUN, no merge/deploy. Other 121/122/128/130/134/137 PR protected unchanged.
+- **Next gate**: no managed E1–E12, family-photo pause, Option D/managed_auth_delete, or production release. Before re-evaluating A+B, a bounded source/design correction must address in-flight link callbacks, session recreation, stale-JWT writes and Storage cleanup, explicit failure/UNKNOWN semantics and testable re-read fencing; not simply assume BAN blocks all writes. No repeated generic H1–H4 E11 review; focused Sol（高） independent security review only once a concrete runnable lifecycle boundary/change is proposed for integration.
+- G5 Phase3h work closed `done/next_owner:none`; future TASK separate after fresh collision checks. AI Lab diary: 記録不要 — discovered unshipped authentication boundary behavior is security-sensitive and not appropriate for external publishing at this detail.
+- GitHub/source inspection and report accepted; no PR merge/deploy or live operations by ChatGPT.
 
 ---
 
