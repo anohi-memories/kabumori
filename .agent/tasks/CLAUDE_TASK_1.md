@@ -1,3 +1,88 @@
+# G1 CURRENT TASK — 銘柄詳細画面 V1：閲覧と編集の分離・既存導線の接続 — 2026-10-11
+
+- task_id: kabumori-stock-detail-v1-readonly-navigation-20261011
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: normal
+- recommended_model: **Sonnet5（高）**
+- task_type: Kabumori mobile UI feature / user-scoped READ-ONLY presentation + existing editor navigation
+- start_code: G1
+- finish_code: K1
+- return_to: かぶモリアプリG1のちゃ
+- allocation_main_reference: `aeb48e59e2c9643aeaa6c32dc524f830139edc9b` (refresh origin/main before implementation/push)
+- suggested_branch: claude/g1-stock-detail-v1-20261011
+- production_write_or_deploy: **FORBIDDEN**
+- Supabase_schema_migrations_RLS_RPC_Edge_Auth: **NO CHANGES**
+- EAS_TestFlight_AppStore: **FORBIDDEN**
+- new_feature_PR: permitted (one source-only PR, NOT self-merge)
+- review_gate: ChatGPT K1 after implementation; Codex only if actual changes extend into auth/data-security boundaries or high-risk navigation.
+
+## Purpose and user-approved direction
+
+The user accepted the watchlist/portfolio visual direction, PR #120 was squash-merged (`53678a2f1fe5e01ecde4e9988abcbd0ed573da66`) and 402pt real-data Simulator smoke checks passed for the actually observed cases (18 watch rows, saved basis, search and editor). Next requested progress in the **かぶモリ「銘柄」** workstream: implement a basic **銘柄詳細画面 V1** and a consistent flow from ポートフォリオ / ウォッチリスト / 検索 to stock detail, while separating **viewing** from **editing**.
+
+CURRENT implementation evidence:
+- No `src/app/stock-detail.tsx` route exists.
+- `src/app/(tabs)/explore.tsx` currently calls `openTracked` and launches `TrackedStockEditor` immediately when tapping holding/watch rows.
+- `src/components/portfolio/watchlist-section.tsx` uses `onEdit` for featured-card and compact-row presses, and `news-detail` for verified linked news.
+- `src/app/search.tsx` opens registration editor for an **unregistered** item, but pressing a registered search result does nothing.
+- Shared stock identity `StockMaster` = `id, ticker_code, company_name, market`; user `TrackedStock` contains optional target buy/sell, memo, position info. `latestCloseReport` and `portfolio_snapshot` are **saved close-report data, not live quotes**.
+- The **actual bottom NativeTabs** are **ホーム / 銘柄 / ニュース / レポート / メニュー**, exactly five. Screenshot's alternate bottom menu is NOT canonical.
+
+### Authoritative product UX
+
+1. **Viewing:** Tap a saved holding row OR watchlist featured price card OR compact row => `銘柄詳細` page for that stock, *not* immediate edit modal. This page belongs to the root Stack and its ordinary back/edge-swipe must return to **the exact previous screen and preserve portfolio vs watchlist segment**. Do not duplicate bottom tabs within details.
+2. **Editing:** On a registered stock detail screen, show a clearly separate `登録内容を編集` action that opens the **existing** `TrackedStockEditor` (do not rewrite editing/upsert/remove). Close/cancel returns to the detail unchanged; saved/removed can reload and return safely to the proper origin. Confirmed user mutations still happen ONLY on explicit existing editor Save/Delete buttons. Do not auto-write on viewing.
+3. **Search:** Preserve the current single-tap **unregistered ⇒ opens existing registration editor** behavior so the user doesn't lose quick registration. Make **registered** search entries tappable and route them to new detail instead of their current no-op state. A small separate `詳細` secondary action for unregistered results is optional **only if consistent and accessible without crowding**, not required. Search back-stack must work; route to detail must not lose search query/results when returning unless unavoidable and documented.
+4. **Price truthfulness:** Stock detail shows company, stock code/market, registration type (保有/監視/未登録), existing fallback `StockAvatar`, user-visible optional targets/memo, and only market figures **actually present in user's last SAVED close `portfolio_snapshot`**. Display close, previous-close difference and signed change percent only if valid, with explicit `M/D 終値ベース` date and a note `リアルタイムではありません`. If no report or stock absent from latest snapshot, show `—` / `保存済みの終値データがありません`, no zero/fake figures. Never treat `trading_date` as the market price date when `price_basis_date` is present.
+5. **Holdings:** For holdings only, show owned quantity/average purchase price, cash/margin and long/short designation and any known saved valuation/P&L when genuinely reflected in the snapshot. Use existing `buildHoldingRows`/report helpers rather than reimplementing financial sign arithmetic. For a watch stock, do not show holding valuations. For unregistered search stocks, do not pretend to have a user-specific quote/holding snapshot.
+6. **News:** Can display a limited verified/date-stamped company-linked news CTA **only when grounded in existing `ReportSnapshot.news` using `verifiedWatchNews` or equivalent validated join and an actually supported news detail route**; otherwise omit, don't fill with sample causes or material. Do not fetch paid external feeds, AI-generate causal text, assert new corporate releases, or treat `news_ids` alone as verified article proof. Do not modify news collection or reporting backend.
+7. **Style:** Warm ivory / soft white / muted deep green, typographic hierarchy, differentiated round existing fallback avatars, 375pt/402pt responsive, VoiceOver labels and accessible 44pt tap targets, calm empty/error/loading/retry states; avoid fake corporate trademarks. Do not add a fake stock chart, fake news, fake live-price badge, or unsupported AI predictions. Leave future real price history/analytics/AI explanation for a later, separately approved phase.
+8. **MOST IMPORTANT — no changes to bottom menu:** `src/app/(tabs)/_layout.tsx`, its five menu labels, order, icons, styling/selected behavior, tab routes and native icon assets must remain completely unchanged. Allowed route-registration change is ONLY adding a root Stack `stock-detail` entry to `src/app/_layout.tsx`, preserving all existing AuthGate logic, root routes and provider state. If other workstream conflicts in root layout, STOP and report rather than force edits.
+9. **Old/new report source decision (user 2026-10-11):** Current *old* delivery lacked 10/7–10/9 personalized close reports; user explicitly confirmed the *new* approach already generated those closes and future cutover will resolve it. **Do NOT investigate, fix, backfill, or monitor old-close delivery** and do NOT modify G2/market-report/Fact/Provider/Edge/DB/production. On later new-method cutover only verify that saved report data feeds this existing UI. Don't allocate a follow-up to G2 or treat this as an active blocker. Existing saved 10/6 basis wording stays truthful.
+
+## Startup, isolation, and overlap gates
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this exact TASK and previous G1 Report. Confirm `status: ready`, `task_id: kabumori-stock-detail-v1-readonly-navigation-20261011`, and G1 ownership; inspect Git status, fresh `origin/main`, active PRs and their file scopes.
+2. New work must use an **independent G1-owned worktree/checkout** based on fresh `/Users/yuya/Developer/kabumori-fresh` origin/main. NEVER share worktrees with G2/G3/G4/G5/H1/H2, alter their branch, reset/prune/remove another worktree, stage someone else's files, interrupt their dev servers or attached Simulator devices.
+3. At allocation the open PRs #132/#130/#129/#128/#127/#126/#125/#124/#123/#122/#121/#115/#110 had **no overlap** with intended G1 stock-detail/portfolio/search/root-stack source (PR110 touches `src/app/(tabs)/reports/[id].tsx`, which is OUTSIDE this scope). Recheck exact fresh PR heads/diffs at work time and again before push; if a new source overlap appears, STOP.
+4. G2 owns report Fact/new-method migration; G5 owns account/session/entitlement; external news workstream owns news discovery. This G1 task must not edit any of those, or shared deployment/production configuration.
+5. Current iOS Simulator was left logged in after prior G1 read-only QA. For verification reuse **only a G1-owned simulator/device**, protect session and other slot processes. Dedicated Metro on a genuinely free port (prior G1 used 8082) with no stop/restart of other developer's running server. Do not consume monthly EAS build quota.
+
+## Implementation scope and data boundary
+
+- Suggested new: `src/app/stock-detail.tsx`; `src/lib/stock-detail-view.ts` pure deterministic presentation helpers + `tests/app/stock-detail-view_test.ts`.
+- Targeted existing allowed: `src/app/_layout.tsx` ONLY one root Stack screen registration (no AuthGate/service-enrollment changes), `src/app/(tabs)/explore.tsx` tap callbacks + explicit origin navigation, `src/app/search.tsx` registered result navigation; `src/components/portfolio/watchlist-section.tsx` + `src/components/portfolio/holdings-section.tsx` ONLY callback naming/semantics, and focused navigation/test guards as needed.
+- Prefer reusing `src/lib/report-presentation.ts`, `src/lib/portfolio-view.ts`, `src/components/portfolio/stock-avatar.tsx`, `src/components/tracked-stock-editor.tsx`, `src/lib/detail-navigation.ts` **without changing their existing semantics**. Dedicated read-only derived view helpers may be added separately, not with shared source rewrites.
+- Data route: use only stock IDs/tracked IDs, *never private prices or auth tokens in route params*. Fetch/select user-scoped `tracked_stocks` with `auth.getUser` and `user_id` owner constraint and `stocks_master` metadata. Existing `fetchRecentReports(20)` subject to RLS for the current user. Guard missing/mismatched/deleted tracked ID, stale navigation, empty/no-price rows. Do not use service_role, SQL admin, new grants or unsafe guessed endpoints. Require auth through existing app gate.
+- Stock identity data should be queried without altering the schema or adding new network sources. Strictly no write except an *explicit* user action inside the existing editor.
+- No source changes to `src/app/(tabs)/_layout.tsx`, data generation/saving, report functions, Supabase migrations/functions, common accounts, POSTONA, MIC, native config/assets, app dependencies or CI workflows.
+
+## Acceptance / regression suite
+
+- Compare exact `git diff` showing NO NativeTabs layout/tab icons edits, no G2/G5/backend files and no source changes outside intended UI route.
+- For each origin, exercise `銘柄 > ポートフォリオ > holding > 銘柄詳細 > 戻る`, `銘柄 > ウォッチリスト > watch row/featured price > 銘柄詳細 > 戻る`, `検索 > registered result > 詳細 > 戻る` preserving search and previous segments, plus unregistered result still opens registration editor.
+- Registered editor action opens existing editor without auto-writing; cancel, save, deregister paths have correct navigation/state and no stale forms; test with mocks/disposable fixtures only, **do not modify the user's actual 18 watch stocks for tests**.
+- Direct/invalid/deleted ID, signed-out/mismatched user, missing snapshot, missing watch row, stale basis date, null numbers, nonfinite values, registered-vs-unregistered/hold-vs-watch, positives/negatives/zero, narrow long-name layout. No fake price on unregistered, no leaked holdings.
+- Reuse existing READ-ONLY logged-in simulator for viewing and navigation only if safe. Verify 402pt and 375pt in isolated fixtures; if 375pt not feasible, clearly report. Do not expose private financial data/screenshots externally; store fixture-only safe screenshots under `docs/ui-review` if useful.
+- Run scoped Deno/app tests, src TypeScript check, Expo public config, `git diff --check`, local Simulator navigation tests. Clearly distinguish new tests from previous 457/457 fixture suite; do not claim PASS for commands not executed. No EAS/cloud builds, TestFlight, paid API, production writes or manual deploy.
+- On completion create one G1-only PR (source, NOT self-merge), Report in current TASK `## Report` with task_id/result/changed_files/tests/commit_hash/push/PR exact head/deploy=0/EAS=0/remaining_issues/safety_checks/next_recommendation. Set TASK/index to `review_required` / `next_owner: chatgpt`, return to **かぶモリアプリG1のちゃ** with `K1`. ChatGPT decides if Codex review is required based on actual auth/data/navigation changes. No H slot reservation now.
+
+推薦モデル：**Sonnet5（高）**
+
+## Report — this current task
+- task_id: kabumori-stock-detail-v1-readonly-navigation-20261011
+- result: NOT_RUN
+- source_merge: NOT_AUTHORIZED
+- production_deploy: NOT_AUTHORIZED
+
+
+---
+
+# Preserved prior G1 TASKs and Reports (do not rewrite historical sections)
+
 # G1 CURRENT TASK — User-assisted iOS Simulator login and genuine-data watchlist QA (2026-10-11)
 
 - task_id: kabumori-watchlist-simulator-user-login-realdata-qa-20261011
