@@ -1,3 +1,12 @@
+## K8 FINAL — ニュース改善A G8 PR129 R2: ACCEPTED_IMPLEMENTATION / H4 REVIEW READY — 2026-10-12 JST
+
+- 対象はユーザー専任のニュース改善A/G8のK8。G8 R2 TASK `news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011` は`review_required`で完成報告。GitHub PR129はOPEN/Draft/unmerged、head `7bf9b8a0a014ebe9a613e9ebeb0082d0b7834c54`、以前のR1 `984eeb41`から1 commit/5 files。Netlify/Vercel checks success（本番実行ではない）。
+- 報告されたテスト: important-news-monitor 757 PASS、extractor29、discovery162、shadow20、lint97 baselineと既存TS2322のみ、G8はPDF60件をR2で再実行していない。ChatGPTはソース・テストコード・リモートcommit/headを確認したがDenoテストを独立実行していない。
+- F7: 時刻剰余rotationを除去、成功2件まで／最大4試行／20秒のループ間時間チェック、実行間隔10/30/60分をmock。候補4件超のcold startで厳密coverage保証なし、20秒は試行途中のhard deadlineではなく最大4*8秒のfetch timeout可能。RSS消失の永続保留キューはない。
+- F9: `candidate_body_fill.ts` にDB対象変更を分離。`pending_judgement`+`source_name=market_macro`+空本文の条件付きPATCH/返却行read-back。nonpending (`no_post`/`generation_failed`/`published`)は履歴保護で更新しない。content_hash headline-only保持、judgementとの並行読取・判定結果の整合には独立確認が必要。
+- **K8 verdict: ACCEPTED_IMPLEMENTATION / INDEPENDENT_REVIEW_REQUIRED / MERGE_HOLD**。高リスクEdge function / DB更新 / Fact抽出のため、未割当だった **H4** に`news-improvement-a-pr129-phase7-r2-final-focused-review-h4-20261012`を`ready`で新規登録。H4 review-only, Sol（高）、`H4`開始、完了`C4`→`ニュース改善API最適化のちゃ`。既存G8 R2は`done`/next_owner`codex-4`、A専任G8は維持しC4後に必要ならG8の次TASKを発行。G9/API最適化Bを含む他のG/H TASK/Report/worktreeは変更していない。
+- PR129 merge/deploy/production実行は禁止継続。PR116の固定本番反映は別工程、PR129混入禁止。H5は通常レビューに使わない。
+
 ## K5 FINAL — G5 Phase3h isolated local auth pilot — 2026-10-12 JST
 
 - G5 TASK `common-account-phase3h-local-oss-keycloak-safe-pilot-20261011`: **TASK_COMPLETE_WITH_SAFETY_FINDINGS / LOCAL_OSS_FAIL**. Accepted G5 report and source inspection of [Draft PR146](https://github.com/anohi-memories/kabumori/pull/146) exact HEAD `faf8007a4ab5c925430c7cc6a9896046e30ce25a` OPEN/DRAFT/UNMERGED, seven all-new docs/local-only test paths; no production source changes.
@@ -433,7 +442,7 @@
 | H1 | `ready` | `postona-h1-threads-oauth-edge-offline-implementation-20261011` | `codex` | POSTONA｜マルチSNS化・開発統括（G4）のちゃ | `C1` | `.agent/tasks/CODEX_TASK.md` / `.agent/CODEX_REPORT.md` |
 | H2 | `done` | `kabumori-fact-v2-pr132-final-integrated-review-20261011` | `none` | かぶモリアプリG2のちゃ | `C2` | `.agent/tasks/CODEX_TASK_2.md` / `.agent/CODEX_REPORT_2.md` |
 | H3 | `idle` | `none` | `none` | none（未割当） | `C3` | `.agent/tasks/CODEX_TASK_3.md` / `.agent/CODEX_REPORT_3.md` |
-| H4 | `idle` | `none` | `none` | none（未割当） | `C4` | `.agent/tasks/CODEX_TASK_4.md` / `.agent/CODEX_REPORT_4.md` |
+| H4 | `ready` | `news-improvement-a-pr129-phase7-r2-final-focused-review-h4-20261012` | `codex` | ニュース改善API最適化のちゃ | `C4` | `.agent/tasks/CODEX_TASK_4.md` / `.agent/CODEX_REPORT_4.md` |
 | H5 | `idle` | `none` | `none` | none（未割当） | `C5` | `.agent/tasks/CODEX_TASK_5.md` / `.agent/CODEX_REPORT_5.md` |
 | G1 | `review_required` | `kabumori-portfolio-holdings-stale-valuation-guard-20261011` | `chatgpt` | — | `K1` | `.agent/tasks/CLAUDE_TASK_1.md` |
 | G2 | `ready` | `kabumori-fact-v2-pr132-three-objective-guards-correction-20261011` | `claude` | — | `K2` | `.agent/tasks/CLAUDE_TASK.md` |
@@ -442,7 +451,7 @@
 | G5 | `in_progress` | `common-account-phase3g-free-auth-provider-test-readiness-20261011` | `claude` | — | `K5` | `.agent/tasks/CLAUDE_TASK_5.md` |
 | G6 | `idle` | `none` | `none` | — | `K6` | `.agent/tasks/CLAUDE_TASK_6.md` |
 | G7 | `idle` | `none` | `none` | — | `K7` | `.agent/tasks/CLAUDE_TASK_7.md` |
-| G8 | `ready` | `news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
+| G8 | `done` | `news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011` | `codex-4` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
 | G9 | `ready` | `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011` | `claude` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
 | G10 | `idle` | `none` | `none` | — | `K10` | `.agent/tasks/CLAUDE_TASK_10.md` |
 
