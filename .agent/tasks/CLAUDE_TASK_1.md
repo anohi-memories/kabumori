@@ -1,3 +1,74 @@
+# G1 CURRENT TASK — User-assisted iOS Simulator login and genuine-data watchlist QA (2026-10-11)
+
+- task_id: kabumori-watchlist-simulator-user-login-realdata-qa-20261011
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: normal
+- type: **READ-ONLY APP QA with USER-OPERATED LOGIN**, no app implementation
+- recommended_model: **Sonnet5（中）**
+- start_code: G1
+- finish_code: K1
+- return_to: かぶモリアプリG1のちゃ
+- QA_previous_task: kabumori-watchlist-real-data-simulator-qa-20261010 (done, BLOCKED_AUTH)
+- source_reference: merged PR #120 / main merge `53678a2f1fe5e01ecde4e9988abcbd0ed573da66`; use NEW fresh `origin/main`
+- EAS: prohibited
+- TestFlight/AppStore: prohibited
+- production/DB/API/Edge/AI write/deploy: prohibited
+- source_or_configuration_change: prohibited
+- new PR/merge: prohibited
+
+## User authorization / goal
+
+User agreed 2026-10-11 to test the **iOS Simulator now**. The objective is to verify actual authenticated saved stock/watchlist/report UI for merged PR #120, avoiding EAS build quota. Previous G1 Phase A reported Xcode 27 / iOS 27 Simulator with installed `com.anohimemories.kabumori` dev client, but **no login session**; it did NOT run real-data Phase B. User will now **personally enter authentication credentials inside the Simulator**. Never ask user to share a password, OTP, magic-login link, Apple token or session secret through ChatGPT, Claude, terminal, GitHub or logs.
+
+The work has **two interactive stages** in ONE G1 TASK. DO NOT issue final Report simply because sign-in has not occurred yet: prepare a safe UI for sign-in, explicitly ask the user to sign in themselves, then wait for the user's reply ("ログインできた"/similar) and continue Phase B within same G1 session. If an insurmountable environment issue occurs, report BLOCKED with minimal reproducible steps; never invent success. No unattended monitoring is promised.
+
+## Safety and startup
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, THIS G1 current TASK and archived G1 Report, Git status, other G/H active TASK ownership and fresh origin/main and current open PR scopes. Proceed only if this exact task_id is ready/in_progress.
+2. Host Mac has new clean base `/Users/yuya/Developer/kabumori-fresh`. Start a **NEW G1-owned isolated worktree/checkout** from fresh origin/main, never share a worktree with other slots or reset/prune/switch their branches. Don't modify other slots' uncommitted source, worktree, simulator session or dev servers.
+3. At prior preflight port **8081** was in use by an unrelated POSTONA social-mobile Metro. Verify owners and open ports afresh; **never kill/restart/replace any other slot's process**. Choose a currently unused separate port, e.g. 8082 only if genuinely free. If same Simulator device is owned/running for another slot, don't touch it; ask the user or select separate device without resetting anyone else's.
+4. Preflight whether existing installed `com.anohimemories.kabumori` dev-client and local Metro with freshly merged JS source can open the real standard app (not fixture/auth-bypass rig). Prefer no reinstall, reset or clearing keychain/AsyncStorage. If an iOS local build is essential, confirm it is compatible and genuinely free of EAS/paid quotas; preserve other process state, and ask user before destructive install. **No `expo prebuild` or EAS build**.
+5. Inspect auth/login screen and start-up code enough to avoid accidentally invoking domain-data writes merely by opening an auth flow. Normal user-initiated session establishment is permitted; no test-account creation, tracked-stock insert/update/delete, profile mutation, Auth administration, SQL, migration, RPC management, service-role, AI/paid traffic, or production operation is permitted. If UI automatically writes tracked records, stop and report.
+
+## Stage 1 — Launch app and ask for USER-OPERATED sign-in
+
+- Start a dedicated compatible local Metro server on free port and launch Kabumori dev-client on the isolated/appropriate iOS Simulator. The build must show *real app source on latest main*, **not an unauthenticated fixture**. No force logout, reset or replace existing signed-in session.
+- Once normal sign-in screen appears, **STOP interaction** (do not click through sign-in or type credentials). Tell the user: the Simulator shows the login screen, **please sign in directly inside the Simulator window** and reply "ログインできた". User may prefer Apple/passwordless flow; allow UI's supported options, do not choose an account on their behalf.
+- If app fails to start, there is no UI login, auth redirect/Apple login is blocked in Simulator, or server fails, report precise redacted blocker and minimal user action; do not use secrets/workarounds to simulate authentication. Keep a prepared environment only when safe. For new user-service entitlement flows, verify their safety but do not create accounts or enroll services without distinct user authorization.
+- Do not count a launch or unauthenticated screen as real-data QA success.
+
+## Stage 2 — after user confirms login, READ-ONLY genuine-data QA
+
+- Confirm only through app UI that an actual user session is active; do not print or collect tokens/email/private financial details, raw network logs, screenshots or credentials.
+- Inspect `銘柄` lower NativeTab (exact 5 unchanged: ホーム / 銘柄 / ニュース / レポート / メニュー), then switch `ポートフォリオ ⇄ ウォッチリスト`; bottom selected remains 銘柄; portfolio existing layout unbroken.
+- Using actually saved user-scoped reports and watch registrations: check counts, exact once (featured OR compact row), no silently missing watch rows, actual stored close basis date and two-decimal change vs in-app report, — for unavailable data; no LIVE claims. Top 0-3 featured chosen for abs(change%) >= 5% or verified correctly linked dated important news, news CTA only for genuinely existing article and proper back to 銘柄. Confirm `その他の監視銘柄` badge is *rest count*, and group absent if rest=0. **Do not make up a market move to manufacture a card.** Mark cases absent in current data as NOT_OBSERVED, separately from prior 457/457 fixture coverage.
+- Verify visually at current 402pt and, only if free/available without disturbing other devices, 375pt. Legibility, long company names, safe areas, bottom tab, scroll, colors, no overflow. Search opens without stock registration; open editor for visual inspection WITHOUT save/delete, only if it has no implicit writes; navigate back. Refresh only if truly read-only.
+- No personal stock holdings / watchlists / financial screenshots in GitHub, TASK/Report, PR or remote logs. If a screenshot is needed keep locally in a PRIVATE OUTSIDE-REPO folder, redacted; report only anonymized statuses, generic reproduction and local evidence names. Never expose credentials or personal financial amounts to the chat.
+- If UI shows no registered watch stocks or no saved close, report BLOCKED_NO_DATA/NOT_OBSERVED instead of creating stocks or demanding user trade. If a verified bug appears, report minimal reproducer and severity; **do not implement code fixes** under this QA task.
+
+## Finish and return
+
+- On user-confirmed Stage 2 completion, write anonymized G1 `## Report` in THIS TASK: task_id, result PASS_REAL_DATA / PARTIAL / BLOCKED, Simulator device & actual width, session verification without identity, coverage PASS/FAIL/NOT_OBSERVED, counts assessed without listing their actual symbols, findings and reproduction, source paths touched (expected none), test run status (do not claim to rerun 457), Git commit/push only for authorized .agent reporting, manual deploy=0/EAS=0/DB write=0, privacy/safety, remaining limitations, next recommendation.
+- Update status `review_required`, `next_owner: chatgpt` in TASK/index, append short CURRENT_STATE update. Historical Reports and other slots/PRs preserved. No app PR or merge, no EAS/TestFlight/deploy. Return **K1 to かぶモリアプリG1のちゃ**.
+- If user has not confirmed login yet, stay at **WAITING_FOR_USER_LOGIN**; do NOT close task as BLOCKED_AUTH just because no session was present before inviting the user to log in.
+- If environment hard-blocked, report BLOCKED with precise constraint and safe next step, then K1.
+
+推薦モデル：**Sonnet5（中）**
+
+## Report — current task
+- task_id: kabumori-watchlist-simulator-user-login-realdata-qa-20261011
+- result: NOT_RUN (waiting for G1 start and user-operated Simulator login)
+- deploy: prohibited
+- EAS: prohibited
+
+
+---
+
+# Previous G1 TASKs / Reports (preserved verbatim)
+
 # G1 — CURRENT TASK — Simulator real-data watchlist acceptance QA (2026-10-10)
 
 - task_id: kabumori-watchlist-real-data-simulator-qa-20261010
