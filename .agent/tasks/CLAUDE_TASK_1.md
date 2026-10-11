@@ -3,10 +3,10 @@
 - task_id: kabumori-stock-detail-v1-readonly-navigation-20261011
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: normal
-- recommended_model: **Sonnet5（高）**
+- recommended_model: **Sonnet5（中）**
 - task_type: Kabumori mobile UI feature / user-scoped READ-ONLY presentation + existing editor navigation
 - start_code: G1
 - finish_code: K1
@@ -71,6 +71,20 @@ CURRENT implementation evidence:
 - On completion create one G1-only PR (source, NOT self-merge), Report in current TASK `## Report` with task_id/result/changed_files/tests/commit_hash/push/PR exact head/deploy=0/EAS=0/remaining_issues/safety_checks/next_recommendation. Set TASK/index to `review_required` / `next_owner: chatgpt`, return to **かぶモリアプリG1のちゃ** with `K1`. ChatGPT decides if Codex review is required based on actual auth/data/navigation changes. No H slot reservation now.
 
 推薦モデル：**Sonnet5（高）**
+
+## K1 focused correction — valuation matching must include position type and long/short (2026-10-11)
+
+- **K1 interim verdict: CHANGES_REQUIRED (one P2 financial-truthfulness bug; otherwise source/UI positive)**; no merge authorization yet. Exact reviewed PR #136 head `e2dfdab5c7219aa2ff31c50c51f0125f816c16a7`, OPEN, source-only.
+- ChatGPT independently read `src/lib/stock-detail-view.ts` and `src/app/stock-detail.tsx`, source diff of root/portfolio/watchlist/search navigation, all 4 fixture-only 375pt images, GitHub changed-file list. NativeTabs layout/icons and Supabase/Edge/migrations untouched; 488/488 app tests, TS and Simulator checks were reported by Claude and **not rerun** by ChatGPT.
+- **Confirmed defect:** `registrationMatchesSnapshot(tracked, saved)` compares ONLY `quantity` and `average_price` (both normalized through `finite`). If the user's registration changes `position_type` (現物↔信用) and/or `side` (買い↔売り), while keeping quantity + average price identical, the saved report row's old `market_value`/`unrealized_pl`/`day_pl` continues to display alongside the **new** position labels. This misrepresents the freshness/meaning of holdings' financial numbers. The saved `ReportStock` and actual `TrackedStock` already include both `position_type` and `side`; no schema/API change required. Compare `tracking_type` as an additional same-role integrity check for saved holding rows. This is not a theoretical unsupported field.
+- **Exact minimal correction:** In `src/lib/stock-detail-view.ts`, extend `registrationMatchesSnapshot` to require equality of all valuation-relevant registration fields: `quantity`, `average_price`, `position_type`, `side`, `tracking_type` against the saved snapshot; use existing null-safe semantics and no conversion of missing or differing values to a fictitious match. If the saved row lacks the required correspondence, show existing `VALUATION_NOTE.changed`/hold valuation until next saved report; the independent *saved closing share price* may still display accurately with the honest as-of date.
+- **Tests required:** Add behavioral negative test cases to existing `tests/app/stock-detail-view_test.ts` for (i) same qty/avg but current long vs saved short, (ii) cash vs margin, (iii) inconsistent stored `tracking_type`; each MUST withhold valuation, while same quantity/avg/type/side/position must keep exact saved valuation and previous behavior. Include null/legacy saved values if material. Test should FAIL against current PR head before change and PASS afterward; record actual fail-before/pass-after results (no invented execution). Confirm no stale report P/L is paired with edited registration. Re-run relevant Deno app tests, source TS check, `git diff --check`. The user-owned 18 watch records and any real holding MUST NOT be edited to test this.
+- **Strict scope:** ONLY `src/lib/stock-detail-view.ts` + `tests/app/stock-detail-view_test.ts` and current G1 TASK/Report, plus optional fixture screenshots if needed (normally not needed). No refactors of stock page, nav, generic formatters, editor, auth, DB, schema, RPC/Edge, market reports, old 10/7–10/9 close gap, or bottom NativeTabs. Keep old/new report production approach exactly as user directed: old close gaps ignored until new method cutover, separate G2 work.
+- Continue in **EXISTING PR #136 branch** `claude/g1-stock-detail-v1-20261011`. Before changes verify fresh main / origin-main and exact PR head `e2dfdab5c7219aa2ff31c50c51f0125f816c16a7`; dedicated G1 independent worktree, no inter-slot overlap. No force push; do not spawn a replacement PR or rewrite branch history. Any unexpected head/ownership drift ⇒ STOP and report. No self-merge, paid API, deployment/EAS, native package updates, or real user writes.
+- On completion update original Report with a dated **K1 targeted corrective appendix**, exact changed files/PR head/test commands/commit/deploy=0, set current header `status: review_required`/`next_owner: chatgpt` and sync G1 index (other slots untouched). Return `K1` to **かぶモリアプリG1のちゃ**. Source K1 can then PASS without another Codex review if a small self-contained change passes focused tests. PR #136 remains OPEN and not merged pending next K1+user's merge approval.
+- GitHub Vercel check at original head is **failure due to rate-limit**, NOT a demonstrated code regression; Netlify deploy-preview status is canceled (do not falsely call it production deployed). No production deploy authorized.
+
+推薦モデル：**Sonnet5（中）**
 
 ## Report — this current task
 - task_id: kabumori-stock-detail-v1-readonly-navigation-20261011
