@@ -59,7 +59,7 @@ const COMMON = [
   "本文は読者向けの自然な日本語です。入力のキー名、ref（metric:… / news:…）、英字の項目名や記号的な識別子を本文に書きません。例: 「日経平均は65,018.95（前日比+1.38%）」とは書くが、「change_pct」「session_date」のような語は書きません。",
   "「市場の方向」は入力で確定済みです。それと矛盾する方向（上昇/下落）を書きません。",
   "claims の claim_type は次の基準で付けます。observation: 指標の値動きそのもの。causal: 入力のニュース本文が理由として明記している場合だけ（evidence_refs に news の ref を必ず含める）。consistent_with: 同時期に確認できるが因果は確認できない組み合わせ。insufficient_evidence: 理由を確認できない値動き（理由を推測しない）。watch_point: 次に確認する点。",
-  "値動きの理由として書けるのは、入力のニュースが理由として明記しているもの（causal の claim）だけです。それが無い日は、headline_ja・market_summary_ja・x_post・claims のどこでも、同時期の別の値動き（米国株、半導体株、為替など）やニュースを値動きの理由として断定しません（「〜を受けて」「〜につれて」「〜安で下落」「〜の影響で」「〜が重しとなり」「〜が原因」など）。同時期の値動きは日付を付けた別々の事実として並べます。読者の役に立つときだけ、本文（x_post.context_ja や app_story）で1回まで、推測だと分かる言い方の見立てを添えてかまいません（例: 「〜が意識された可能性があります」「〜が一因として考えられます」）。見出し・3つのポイント・claims には書かず、事実のようには書きません。理由が確認できないことを書くのは1回だけにします。",
+  "事実は厳格に書きます。指標の値・前日比・日付、企業の発表、出来事は入力のとおりにし、入力に無い事実を書きません。そのうえで、入力の事実を組み合わせた分析・見通しは積極的に書きます。為替と輸出企業の採算、金利と銀行・不動産、原油と運輸・素材、米国の半導体株と日本の関連株のような一般的な経済の仕組みに基づく見立ては、ニュースに同じことが書かれていなくても書いてかまいません。見立ては「〜と考えられます」「〜しやすい」「〜の可能性があります」「〜が焦点です」のように、事実ではなく分析だと読者に分かる言い方にします（すべての文に同じ言葉を付ける必要はありません）。ただし、すでに起きた値動きの理由は、入力のニュースが理由として明記している（causal の claim がある）場合だけ事実として書きます。それ以外は「〜を受けて日経平均は下落しました」のように断定せず、「〜が重しになった可能性があります」のように見立てとして書きます。見出しには、すでに起きた値動きの理由の見立てを書きません。理由が確認できないことを書くのは1回だけにします。",
   "ニュースの中身を伝える文（x_post.news_ja、app_story.news_ja、key_news、observation の claim）では、そのニュース本文に書かれている原因と結果を、本文の言い方に沿ってそのまま書いてかまいません（例: 本文が「需要の拡大を背景に輸出が増加」なら「需要を背景に輸出が増えたと報じられました」）。本文に因果の表現が無いニュースには「〜を受けて」「〜を背景に」を足しません。ニュースの中の原因を、東京市場・米国市場・指数の値動きの理由にはしません（それを書けるのは、ニュースが市場の値動きの理由として明記している場合だけです）。",
   "日付の違う市場（例: 前日の米国市場と当日の東京市場）を並べるときは、それぞれの日付を明記します（例: 「9月17日の米国市場は上昇、9月18日の東京市場では…」）。「同じ日」「同日」とは書きません。入力の「日付の注意」に従います。",
   "evidence_refs には入力の ref（metric:… または news:…）だけを入れます。ref は evidence_refs の中だけに書き、本文には書きません。",
@@ -201,7 +201,8 @@ const FACT_SCHEMA = {
 
 export const FACT_INSTRUCTIONS = [
   "あなたは市場レポートの厳格なFactチェッカーです。input（根拠）と analysis（生成結果）だけを照合します。Web検索や外部知識は使いません。",
-  "次を検出したら passed を false にします: input に無い数字・日付・固有名詞・事実、数値の書き換えや独自計算、market_direction と矛盾する方向、news に理由として書かれていない因果を causal や断定で書いたもの、consistent_with や insufficient_evidence なのに本文が因果を断定しているもの、理由を確認できない値動きの理由を推測なのに事実のように書いたもの（「〜の可能性があります」「一因として考えられます」のように推測と分かる見立てを1回添えるのは可）、TOPIX連動ETF（1306）をTOPIXそのものとして書いたもの（「TOPIX連動型ETF」のような正確な言い換えは可）、古い値を最新のように書いたもの、将来の値動きの断定、売買推奨。",
+  "次を検出したら passed を false にします: input に無い数字・日付・固有名詞・事実、数値の書き換えや独自計算、market_direction と矛盾する方向、すでに起きた値動きの理由を news が理由として書いていないのに事実として断定したもの（causal の claim や断定の文）、consistent_with や insufficient_evidence なのに本文が過去の値動きの因果を断定しているもの、TOPIX連動ETF（1306）をTOPIXそのものとして書いたもの（「TOPIX連動型ETF」のような正確な言い換えや、TOPIX への新規採用など指数そのものの話は可）、古い値を最新のように書いたもの、将来の値動きの断定（「明日は上昇します」など）、売買推奨。",
+  "input の事実と一般的な経済の仕組みに基づく分析・見通し（「〜と考えられます」「〜しやすい」「〜の可能性があります」など、事実ではなく見立てだと分かる書き方のもの）は、news に同じ記述が無くても問題にしません。見立てとして書かれた過去の値動きの理由（「〜が重しになった可能性があります」）も問題にしません。",
   "自然な言い換えや要約は許容します。x_post の口語的な文体は問題にしません。issues は短い日本語で返します。",
   "objective_issues には、input と客観的に矛盾するものだけを入れます: input と違う数字・日付・方向、古い値を最新とした記述、1306をTOPIXそのものとした記述、input に無い事実の断定、input にある事実を否定・反転した記述（例: input では調査を受けていると公表しているのに「調査を実施していません」）。quote_ja には analysis の該当する文を一字一句そのまま写し、reason_ja に input のどこと矛盾するかを書きます。言い回し・推測の程度・一般論・input から判断できない点は objective_issues に入れず issues にだけ書きます。objective_issues に入れたものも issues に書きます。",
 ].join("\n");
@@ -346,6 +347,19 @@ const UNIT_AFTER = /^\s*(?:%|％|円|ドル|倍|ポイント|pt|bp|億|兆|万|�
 const INTERNAL_FIELD = /[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+|\b(?:metric|news):|\b(?:ref|freshness|claim_type|evidence_refs|value_display|market_direction|null|undefined|true|false)\b/;
 const DISCLAIMER = /確認できません|確認できない|断定できません|断定できない|判断できません|分かりません|わかりません/g;
 const SAME_DAY = /同じ日|同日/;
+/** 「…東京市場と同じ日の変化としては扱いません」 denies a same-day reading (2026-10-09 close was regenerated for it). */
+const SAME_DAY_DENIED = /^(?:同じ日|同日)[^、,。！？!?\n]{0,16}?(?:ではな|ではありませ|とは(?:限りませ|限らな|言えませ|言えな)|として(?:は)?(?:扱|見)(?:いませ|わな|ませ|な))/u;
+
+/**
+ * Sentences that present differently dated Tokyo and US sessions as the same day. Each 「同じ日／同日」 is judged in its
+ * own clause: a denial of one (「…は同じ日ではない一方、」) does not excuse another that affirms it (「…は同じ日に取引を
+ * 終えました」: 2026-10-11 C2 R1).
+ */
+function sameDayClaims(text: string): boolean {
+  return text.split(/[。！？!?\n]/u).some((sentence) =>
+    [...sentence.matchAll(/同じ日|同日/gu)].some((match) => !SAME_DAY_DENIED.test(sentence.slice(match.index)))
+  );
+}
 /** Names that describe an index or a divergence, not a sector/theme. */
 const NON_THEME = /日経平均|TOPIX|NYダウ|S&P|ナスダック|指数|方向差|乖離|報道|発表後/;
 const MULTI_DAY_WORDS = ["続伸", "続落", "反発", "反落", "連騰", "連落", "連敗", "連勝", "年初来", "上場来", "最高値", "最安値", "高値更新", "安値更新"];
@@ -413,6 +427,12 @@ function excerpt(value: string, index: number, length: number): string {
  * TOPIXそのものではなく、指数に連動するETFです」, a correct explanation, was rejected as a mislabel).
  */
 const TOPIX_DISAMBIGUATION = /^(?:\s*\(?指数\)?)?\s*(?:そのもの|自体)?\s*(?:では(?:な|あり)|じゃな|とは(?:異な|別|違)|と同じではな|と同一ではな)/u;
+/**
+ * Text right after "TOPIX" that is about the index itself, not a value of it: membership and composition
+ * (「ジーエヌアイグループのTOPIXへの新規採用」: 2026-10-08 morning was regenerated for it). A value written right after
+ * it is still a mislabel (「TOPIXは437.0円」).
+ */
+const TOPIX_INDEX_CONTEXT = /^\s*(?:\(東証株価指数\))?\s*(?:への|に|の|から)?\s*(?:新規)?(?:採用|組み入れ|組入れ|除外|構成銘柄|構成|入れ替え|入替|定期入替)/u;
 
 /** Places where 1306 is called "TOPIX", quoted so a regeneration can fix exactly that text. */
 export function topixMislabels(texts: string[]): string[] {
@@ -422,7 +442,11 @@ export function topixMislabels(texts: string[]): string[] {
     for (const match of normalized.matchAll(/TOPIX/g)) {
       TOPIX_PROXY_AT.lastIndex = match.index;
       if (TOPIX_PROXY_AT.test(normalized)) continue;
-      if (TOPIX_DISAMBIGUATION.test(normalized.slice(match.index + match[0].length))) continue;
+      const after = normalized.slice(match.index + match[0].length);
+      // Index membership is exempt only while no number follows in the sentence: 「TOPIXの…は437.0円」 still states a
+      // value of the index (2026-10-11 C2 R2).
+      const indexTalk = TOPIX_INDEX_CONTEXT.test(after) && !/[0-9]/u.test(after.split(/[。！？!?\n]/u)[0]);
+      if (TOPIX_DISAMBIGUATION.test(after) || indexTalk) continue;
       found.push(excerpt(normalized, match.index, match[0].length));
     }
   }
@@ -803,7 +827,7 @@ export function localAnalysisCheck(analysis: GeneratedAnalysis, input: AnalysisI
   if (speculative.length > 0) warnings.push(`SPECULATIVE_CAUSALITY:${speculative.length}`);
   const leaked = texts.map((value) => value.match(INTERNAL_FIELD)?.[0]).filter(Boolean);
   if (leaked.length > 0) issues.push(`本文に内部の項目名や識別子: ${[...new Set(leaked)].slice(0, 3).join(",")}`);
-  if (input.sessionsDiffer && SAME_DAY.test(joined)) {
+  if (input.sessionsDiffer && sameDayClaims(joined)) {
     issues.push("日付の違う東京市場と米国市場を「同じ日」と表現");
   }
   // metric -> session date -> value / direction, stale values, and unscoped "no material" claims.
@@ -913,7 +937,7 @@ export function unitChecker(input: AnalysisInput, keptClaims: readonly Claim[]):
     for (const mislabel of topixMislabels([text])) add("TOPIX_MISLABEL", `TOPIX連動ETF（1306）をTOPIXと表記: 「${mislabel}」`);
     const leaked = text.match(INTERNAL_FIELD)?.[0];
     if (leaked) add("INTERNAL_FIELD", `本文に内部の項目名や識別子: ${leaked}`);
-    if (input.sessionsDiffer && SAME_DAY.test(text)) add("SAME_DAY", "日付の違う東京市場と米国市場を「同じ日」と表現");
+    if (input.sessionsDiffer && sameDayClaims(text)) add("SAME_DAY", "日付の違う東京市場と米国市場を「同じ日」と表現");
     const guardTexts = kind === "factual" ? { factual: [text], forward: [] } : { factual: [], forward: [text] };
     for (const issue of metricFactIssues(guardTexts, input)) add(metricCode(issue), issue);
     for (const issue of emojiDirectionIssues([text], input)) add("EMOJI_DIRECTION", issue);
