@@ -8,6 +8,7 @@
 - X自動投稿・複数ブランドX実装は G3 / G4 を使用する。
 - `G5`〜`G10`: 予備のClaude実装スロット。用途は固定せず、ユーザーまたはChatGPTが明示割当した場合のみ使用する。既存の基本ルーティングの自動fallbackにはしない。idleだからという理由だけで自動使用しない。
 - 各ペア内の割当は空き状況・競合・依存関係を見てChatGPTが決める。
+- `G8` はこのチャットの「ニュース改善 A」専用、`G9` はこのチャットの「API最適化 B」専用（ユーザー明示指定2026-10-11）。ほかのG枠や別案件への自動引継ぎ・再割当禁止。各新TASKは対象枠の真の空き・競合を確認してから割り当てる。
 - H1〜H4はCodexのレビュー・バグ修正・検証枠（固定プロジェクト専用にしない）。H5はCodex臨時実装専用で原則空けておき、レビュー・検証には使わない。割当時は `return_to` / `completion_code` / 推薦モデルを必ず記入する。
 - ユーザーの個別指定がある場合はその指定を優先する。
 - 競合防止ルールは常に優先する。
@@ -190,27 +191,29 @@
 ## Claude G8
 - owner: claude
 - slot: claude-8
-- status: idle
-- task_id: none
+- status: ready
+- task_id: news-improvement-a-pr129-f1-f9-remediation-g8-20261011
 - start_code: G8
 - finish_code: K8
-- next_owner: none
+- next_owner: claude
+- return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_8.md
 - report: .agent/tasks/CLAUDE_TASK_8.md#report
-- allocation: 未割当（2026-10-11追加）。用途を固定しない予備枠。ユーザーまたはChatGPTの明示割当時だけ使用し、idleだけで作業開始・自動投入しない。
-- recommended_model: none
+- allocation: USER EXPLICIT 2026-10-11 — このチャットのニュース改善 A のみをG8に固定。初回TASKはPR129の独立レビューP1×5/P2×4（F1〜F9）修正実装。Draft維持、無merge/deploy、PR116本番固定コミットおよび他枠を保護。G8作業はK8でこのチャットへ返却。他のG/H枠・別案件を引き継がない。
+- recommended_model: Opus5.5（高）
 ## Claude G9
 - owner: claude
 - slot: claude-9
-- status: idle
-- task_id: none
+- status: ready
+- task_id: api-optimization-b-phase5-followup-fixture-rights-and-cost-eval-g9-20261011
 - start_code: G9
 - finish_code: K9
-- next_owner: none
+- next_owner: claude
+- return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_9.md
 - report: .agent/tasks/CLAUDE_TASK_9.md#report
-- allocation: 未割当（2026-10-11追加）。用途を固定しない予備枠。ユーザーまたはChatGPTの明示割当時だけ使用し、idleだけで作業開始・自動投入しない。
-- recommended_model: none
+- allocation: USER EXPLICIT 2026-10-11 — このチャットのAPI最適化 B のみをG9に固定。初回TASKはPhase5成果からPR115 fixture権利18件の安全な改善準備、API費用・取りこぼし・生成失敗の評価設計（オフライン、無有料API、無production）。他のG/H枠・別案件、AのPR129を引き継がない。G9作業はK9でこのチャットへ返却。
+- recommended_model: Sonnet5（高）
 ## Claude G10
 - owner: claude
 - slot: claude-10
