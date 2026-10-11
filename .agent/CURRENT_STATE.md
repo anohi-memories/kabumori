@@ -1,3 +1,13 @@
+## K5 FINAL — G5 Phase3h isolated local auth pilot — 2026-10-12 JST
+
+- G5 TASK `common-account-phase3h-local-oss-keycloak-safe-pilot-20261011`: **TASK_COMPLETE_WITH_SAFETY_FINDINGS / LOCAL_OSS_FAIL**. Accepted G5 report and source inspection of [Draft PR146](https://github.com/anohi-memories/kabumori/pull/146) exact HEAD `faf8007a4ab5c925430c7cc6a9896046e30ce25a` OPEN/DRAFT/UNMERGED, seven all-new docs/local-only test paths; no production source changes.
+- Local Keycloak and Supabase OSS evidence showed important gaps in assumed account closure/linking/session/Storage controls. In-flight identity-linking and session creation can outlive a BAN; retained access tokens and Storage objects need separate controls. These are **local-version findings only** and do not establish managed behavior. The correct outcome is LOCAL_OSS_FAIL on the safety premise, while the pilot task itself is complete.
+- G5 report states Podman isolation and cleanup (own VM removed, 0 owned containers/volumes/listeners), readback of other VM unchanged, zero managed/project/provider/photo calls, zero paid actions, E11/Option D not run. G5-reported offline fail-closed tests 7/7, git diff/secret scan PASS; ChatGPT inspected scope/source but did not rerun local tests or directly inspect Mac. The fail-closed driver gates were added after live observations and not rerun live with these gates, so this remains a qualification.
+- G5 marked **done/next_owner:none** in TASK and ACTIVE; next assignment **not yet created**. Appropriate next step is a bounded, independently tested lifecycle-boundary remedy before any further managed experiment. `IDP_PREPAUSE_BLOCKED`, `managed_auth_delete` BLOCKED; photo app stays running and unmodified. All older G5 Draft PRs and other slots protected; no merge/deploy.
+- AI Lab diary: 記録不要 — unshipped authentication security behavior is sensitive, not an appropriate public diary entry.
+  
+---
+
 ## G2 報告 — PR143 の失敗の記録の期限の確認（H3 の P2 修正）— 2026-10-11 JST
 
 - G2 `kabumori-pr143-fail-lease-expiry-fence-r1-20261011`: `fail_personalized_analysis_job` に、完了の関数と同じ期限の条件を足した。期限が切れた worker は、引き取り直される前でも、順番待ちへ戻すことも failed にすることもできない（`lease_lost`、行は不変）。
