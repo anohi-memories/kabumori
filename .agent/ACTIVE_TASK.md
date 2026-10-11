@@ -129,14 +129,14 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
+- status: done
 - task_id: postona-unified-ai-manual-schedule-planner-v1-20261011
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA G3のちゃ（AI相談・X投稿予約担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: K3 accepted fixes R1 reroll content/cancel preservation and R3 unbound brand-level server posts on source. ONE R2b P2 still remains: schedule.tsx uses snapshot.workspace.id (first brand) for AI settings while activeAccount.brandId could be another brand; may show A consent/frequency in B preview. Source-only same Draft PR138 head 48f070cc6a8472990dc07760e61ce255e5d21c91. Fix selected account verified brand for repository.read, aiPlanningFor, owner and test actual screen wiring. No other changes, no G4/H1/G5 work, no prod/DB/Edge/X/merge. Return K3. Prior Report/history preserved.
+- allocation: K3 FINAL PASS_SOURCE_PREVIEW_ONLY. Accepted unified manual exact/random/interval and AI flexible local preview Draft PR138 exact f6b8f866b449cd432f649c132bbaa2e70a9f2ace OPEN/DRAFT/UNMERGED. R1 reroll preserves edited/reordered/cancelled, R2 and R2b safely bind AI frequency/opt-in to currently selected activeAccount.brandId (not first snapshot.workspace), R3 legacy unknown posts remain brand-level read-only and not attributed. G3 reports 277/277 app and 22/22 domain tests PASS; source/Report inspected by ChatGPT but tests not independently rerun. No live saved reservations, Supabase writes, RPC/migration/Edge/Cron, real X/Meta/AI posting, merge/deploy/EAS. PR branch behind main, GitHub mergeability unknown; source merge requires separate checks/authorization. G3 closed with no successor TASK. G4/H5/G5/G6 and all other slots protected; one Sol（高） security review only for future actual Auth/RLS/publisher rollout.
 - recommended_model: Sonnet5（中）
 ## Claude G4
 - owner: claude
