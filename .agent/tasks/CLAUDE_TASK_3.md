@@ -3,8 +3,8 @@
 - task_id: postona-x-reservation-store-offline-v1-g3-20261011
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G3
 - finish_code: K3
 - return_to: **POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）**
@@ -196,6 +196,156 @@ The user wants POSTONA to **really save a user-authored post with exact publish 
 1. K3 で受け入れを判断する（下書き PR #145 は merge しない）。
 2. G5 と G4 に、上の 2 つの判定の約束（名前・引数・同じトランザクションで評価すること）を渡す。
 3. G5 / G4 の本物ができたら、G3 が候補を migration と入口にする → Sol（高）の独立レビューを 1 回 → ユーザー承認の適用と、1 回だけのテスト投稿。
+
+## Report — K3 R1 R2 focused correction（2026-10-12、同じ PR #145）
+
+- task_id: postona-x-reservation-store-offline-v1-g3-20261011
+- result: **PASS_SOURCE_CANDIDATE_WITH_G5_G4_HOLD**（R1・R2 の 2 つの P2 を修正。本番は無効のまま、リリースの保留も変わらない）
+- モデル: Opus 5.5（中）
+- worktree: 同じ G3 専用の `/Users/yuya/Developer/kabumori-g3-x-reservations`
+  - 作業前に、先頭が `1306cdc5` で変更が無いこと、PR の先頭と一致することを確認した。
+  - main 側で G3 のファイルに重なる変更が無いことも確認した。
+- branch: `claude/g3-postona-x-reservations-offline-v1-20261011`（同じ PR、新しい PR は作っていない）
+- commit:
+  - `6aae11a2`: R1・R2 の修正
+  - `8820fa8d`: 最新 main（`4bdc4e61`）の通常 merge。G3 のファイルへの変更は無い。
+- push: 実施（force・rebase は使っていない）
+- PR: https://github.com/anohi-memories/kabumori/pull/145 （**下書き**、MERGEABLE）
+  - 先頭の `8820fa8de0f978767535472f5a44f8623bc74a30` を、GitHub 側から読み戻して一致を確認した。
+  - PR のファイルは前回と同じ 12 本。
+- merge 0 / deploy 0 / 実際の X・Meta・AI 0 / 本番の DB・Auth・RLS・migration の適用 0 / Edge・Cron 0 / EAS 0 / 本番の読み取り 0
+
+### changed_files（今回の 8 本。すべて PR #145 の既存の G3 ファイル）
+- `supabase/candidates/postona_x_reservations/001_postona_x_reservations.sql`
+  - R1: `finish`・`pre_publish_check` の期限の確認
+  - R2: `assert_interval` を新しく追加し、`create_batch` から呼ぶ
+- `supabase/candidates/postona_x_reservations/test_behavior.sql`: M6・W3 を追加
+- `supabase/candidates/postona_x_reservations/run.sh`: 合格の目印 2 つを、確認する一覧に追加
+- `supabase/functions/_shared/postona_reservations/worker.ts`・`worker_test.ts`
+  - R1 の意味に合わせて、実際に記録された結果だけを数えるようにした。
+- `apps/social-mobile/src/domain/reservation-flow.ts`・`apps/social-mobile/tests/reservation-flow.test.mjs`
+- `docs/postona/x-reservation-persistence-offline-v1-20261011.md`（§2・§3・§5 に追記）
+- 残りの 4 本は変更していない: `schedule.tsx`、`reservation-store.ts`、`schedule-screen-wiring.test.mjs`、`test_fixture.sql`。前回の Report もそのまま残した。
+
+### R1: 期限が切れたリースの完了（P2）
+- `finish` が、リースの期限を自分で確かめるようにした。
+  - `claim_due` の整理が走ったかどうかには関係しない。
+  - 判断する時点の実際の時刻 `clock_timestamp()` を使う。トランザクション開始時刻の `now()` は使わない。
+- 期限切れの `claimed` の行の扱い:
+  - 行ロックの中で、その場で `uncertain`（`LEASE_EXPIRED_AT_FINISH`）にし、`lease_lost` を返す。
+  - 例外にはしないので、この移行は確定する。
+  - 遅れて届いた `published` も `failed_before_send` も受け付けない。
+  - X の投稿 ID は記録しない。成功としても表示しない（アプリの表示は「結果を確認中」）。
+  - 再取得も、再送もしない。
+- 今後の照合の道:
+  - 遅れた報告（結果・X の投稿 ID・コード）は、監査 `finish_after_lease` にだけ残す。
+  - 将来、X 側で本当に投稿されたかを確かめる照合の仕組みを、別にレビューして作る。`published` にできるのはその後（V1 には無い）。
+- すでに `published` の行に、同じ ID で再送した場合は、期限後でも冪等に `published` を返す。違う ID は `LEASE_LOST`。
+- `pre_publish_check` も、実際の時刻で期限を確かめるようにした。
+- ワーカー（`worker.ts`）:
+  - `finish` が実際に記録した結果だけを数える。
+  - `lease_lost` やほかの答えは `uncertain` として数え、「投稿済み」とは数えない。
+
+### R2: 間隔指定をサーバーが確かめていない（P2）
+- 間隔の情報の約束（`p_band` を間隔指定の専用の形で使う。キーはちょうど次の 6 つ）:
+  - `time_zone`: `Asia/Tokyo` のみ
+  - `start_date`: `YYYY-MM-DD`
+  - `start_time`: `HH:MM`（日本時間）
+  - `every_unit`: `days`（1〜30）か `hours`（1〜72）
+  - `every_value`
+  - `count`: 計画した件数（1〜50）
+  - 各投稿には `slot`（何番目の枠か）を持たせる。
+  - 単位と範囲は、もとの計画（schedule-planner）が対応しているものと同じ。夏時間の地域や、新しい単位は追加していない。
+- SQL の `assert_interval` が確かめること:
+  - 形・型・範囲。90 日以内に収まること（計画と同じ規則）。
+  - `slot` が送った順に増えていること、`count` 未満であること、件数が `count` 以下であること。
+  - すべての時刻が「(開始日 + 開始時刻) の日本時間 + slot × 間隔」と完全に一致すること。間隔は時間の絶対値で計算する。
+  - 違反があれば `INTERVAL_INVALID` か `INTERVAL_MISMATCH` で、バッチ全体を拒否する（何も保存しない）。
+  - 間隔の情報が無ければ、従来どおり `BAND_REQUIRED`。
+- 本文も時刻も、サーバーが書き換えたり、ずらしたりすることは無い。抜けている枠は、プレビューで取り消した投稿を意味する。
+- アプリ（`reservation-flow.ts`）:
+  - 計画のもとになった **同じ** `ScheduleBatch.request` から、間隔の情報（`count` は計画した件数）を作る。
+  - 各下書きの `slot` を計算し、間隔に合わない下書きがあれば、依頼を作らない（`INTERVAL_CADENCE_MISMATCH`）。
+  - バッチの種類と request の種類が違う場合も、依頼を作らない（`BATCH_INCONSISTENT`）。
+  - 指定日時・ランダム・AI の依頼は、これまでと同じ（`slot` は付けない）。
+
+### テスト（すべて手元。本番には接続していない）
+- **DB**（PostgreSQL 17.11、使い捨て、`/tmp` のソケットのみ）: `run.sh` → `POSTONA_RESV_CANDIDATE_ALL_PASS`
+  - これまでの R0・A1・D0・M1〜M5・W1・W2・L1・C1〜C3 もすべて合格。merge 後にも再実行した。
+- **M6（R2、新規）** の合格条件:
+  - 受け付けるもの:
+    - 毎日（3 件）
+    - 3 日ごと
+    - 2 時間ごと
+    - 月末から翌月に、日付をまたぐ 2 時間ごと（22:00 → 0:00 → 2:00）
+    - 真ん中の 1 件を取り消したもの
+  - 拒否するもの:
+    - 他は 60 分以上空いていて、1 か所だけずれている（9:00・10:00・11:00・12:30）
+    - 開始時刻とのずれ
+    - 開始を UTC として読んだ時刻
+    - 順番の入れ替え（2 通り）
+    - 枠の重複・`count` を超えた枠・件数の超過・`slot` 無し
+    - 間隔の情報が無い、またはランダム用の形
+    - 不正な値 15 通り（単位・値と件数の範囲・90 日超え・タイムゾーン・開始時刻と開始日・余分なキー・型）
+  - 拒否されたバッチは 1 件も保存されない。指定日時のバッチには影響しない。
+- **W3（R1、新規）**: 期限切れから `finish` までの間に `claim_due` を呼ばない。
+  - 期限切れ（1 秒前）の行:
+    - `published` は `lease_lost` になり、`uncertain` に移る。投稿 ID は記録されず、監査に報告が残る。そのあとの再送は `LEASE_LOST`。
+    - `failed_before_send` も `lease_lost` で `uncertain`（`failed` にはならない）。
+  - 残り 30 秒の行:
+    - `published` を受け付ける。期限が過ぎたあとの同じ ID の再送も `published`、違う ID は拒否する。
+    - finish の監査は 1 件だけ。
+  - トランザクションの途中で期限が切れる場合（開始時点では有効）:
+    - `finish` は `lease_lost` を返す。
+    - `pre_publish_check` は `LEASE_LOST` を返し、送らせない。
+  - そのあとの状態:
+    - 何も再取得されない。
+    - 囲い込んだ行が `published` になっていない。
+    - `claimed` の行が残っていない。
+- **修正前で失敗すること（fail-before）**:
+  - 修正前の SQL 候補では、M6 で不規則な間隔のバッチが受け付けられ、失敗した（`EXPECTED_ERROR_NOT_RAISED`）。
+  - R1 の部分だけを元に戻した変異では、W3 で失敗した（「遅れた published を拒否する」の確認）。
+  - 修正前のワーカーでは、新しいテストが失敗した。
+  - 修正前の `reservation-flow.ts` では、新しい 2 件が失敗した。
+- **変異テスト 20/20 を検出**（すべて今の候補から作り直した。merge 後にも再実行）
+  - これまでの 9 種類。
+  - R1 の 4 種類:
+    - `finish` で期限を見ない
+    - `finish` が `now()` を使う
+    - 遅れた `published` だけを通す
+    - `pre_publish_check` が `now()` を使う
+  - R2 の 7 種類:
+    - 間隔を確かめない
+    - 順番を見ない
+    - 時刻を照合しない
+    - 件数の上限なし
+    - 単位の範囲なし
+    - 開始を UTC で読む
+    - 余分なキーを許す
+- **実行の境界**（Deno）: 8/8（新規 1 件）。`deno check`・lint はクリーン。
+- **アプリ**:
+  - `tests/*.test.mjs` **289/289**（新規 2 件）、`src/domain` **22/22**
+  - `tsc` と、変更したファイルの eslint はクリーン。
+- `git diff --check` はクリーン。追加した行の秘密情報スキャンは 0 件。
+- 既存の migration の不変条件テストは、migration を変えていないので今回は再実行していない。
+- **MOCK_ONLY の注意**: 許可が必要な DB の検証は、使い捨ての DB の中で G5 / G4 の判定を偽物に置き換えて行った。本物の G5 / G4 の境界の安全性の証拠ではない。
+
+### 設計上のメモ
+- 間隔指定の行を所有者が明示的に `reschedule` した場合は、これまでどおり受け付ける。
+  - その投稿は同意が `needs_reconfirm` になり、再確認するまで取得されない。
+  - ユーザー本人による新しい日時の指定なので、R2 の範囲（保存時の検証）の外とした。
+  - K3 が間隔指定の日時変更も禁止すべきと判断した場合は、同じ形で狭く追加できる。
+
+### remaining_blockers（HOLD、変わらず）
+- **G5**: `postona_x_resv.g5_x_autopost_allowed(user_id uuid)` の本物。
+  - x_autopost の利用権、ライフサイクル、T13 の書き込みフェンスを、同じトランザクションで評価すること。
+- **G4**: `postona_x_resv.g4_x_account_verified(user_id uuid, social_account_id text)` の本物（Issue #131）。
+- **G3**（G5 / G4 の後）: migration にする、本番の入口、ワーカーの配線。遅れた成功の照合の仕組みも、ここで別に設計する。
+- G5 の利用権と G4 の判定・入口がそろった時点で、Auth / RLS / API / DB / X 投稿をまとめた **Sol（高）** の独立レビューを 1 回。そのあと、ユーザー承認の適用。
+
+### next_recommendation
+1. K3 で R1・R2 の修正を判断する（下書き PR #145 は merge しない）。
+2. 受け入れられれば、G3 は G5 / G4 の本物の判定を待つ（HOLD）。
 
 ---
 
