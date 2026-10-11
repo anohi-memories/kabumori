@@ -47,16 +47,16 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: review_required
 - task_id: kabumori-pr110-p2-final-narrow-review-20261011
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: ONE narrow exact-head PR110 Hard-Fact review at 2c876b0bafee31844b9854c4a7d34ba69660d4cf following G2 K2. Check novel PREDICATE_END false-negative risk on unlisted adjectives, correct subject-が/emoji/date binding, preserving accepted old H2 B1/B2/B3 cases. Only focused fake-input tests, no broad repeat; no source edits, paid API, source merge or production deploy. Previous H2 G5 E11 review completed C2/done, all historical TASK and Report retained. Return C2 to G2.
+- allocation: Independent final exact-head PR110 review completed CHANGES_REQUIRED: one P1 omitted-adjective predicate fail-open; 20 negative controls retain unsupported cause in mocked X/app. Narrow baseline 54/54 PASS; independent 22 PASS / 20 FAIL; same old-head negatives all excluded. Product source unchanged, no merge/deploy/API/production. Prior histories and all other slots protected. C2 to G2.
 - recommended_model: Sol（高）
 
 ## Claude G1
