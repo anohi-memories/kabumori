@@ -1,3 +1,12 @@
+## K9 FINAL — API最適化B/G9 R3 clean replacement source complete, Draft PR not created — 2026-10-12 JST
+
+- 返却先 `ニュース改善API最適化のちゃ`、K9受信。G9ユーザー専任TASK `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011`（Opus5.5高） Report status review_required 確認。
+- **K9 verdict: PASS_OFFLINE_BRANCH_READY / DRAFT_PR_NOT_CREATED / RELEASE_HOLD**。remote branch `claude/b-provider-compare-rights-safe-20261012` head `c476ef8a5c5a0294c3df8e4fefebc8722f2e1102`、親 `1a4b5f3802982853ecd79abb4bf3b977c678c36e`、1 commit / B所属129新規ファイル。GitHub recursive treeは非truncatedで旧 `tools/provider-compare/fixtures/cases.json` は無い。22ケース（2件本文あり、20件本文なし）、許諾台帳空。過去の危険なBコミットを祖先に持たない報告と整合。Draft PR作成はClaude安全装置[Create Public Surface]が拒否、強行・迂回なし、PR115はOPEN/Draft/未変更。
+- G9報告302 PASS / 1 ignored（private legacy fixture必須、G9ローカルで指定して追加PASS）、typecheck/lint/diff/secretsスキャンPASS。ChatGPTはコード・GitHubツリーとremote SHA確認、Denoローカル実行/元18件原文の独立スキャンは未実施。
+- 残件: 旧本文と40文字以上重複するTDnet見出し3件（タイトルであって本文全体ではないが、公開安全性は別判断）。旧PR115/古いBリモートrefsに18件原文残存。G9 Reportによればmain既存の別レイヤー2ファイルで元本文と一致（G9管轄外で、他G枠へ勝手に渡さない）。ライセンス未確認、実Claude/OpenAI送信とpaid比較はHOLD。merge/deploy/force push/PR115変更なし。
+- ユーザー選択は、見出し3件を保留のままDraft PRの候補として作成するか、先にG9で見出しもハッシュ化するか。ユーザー用の新規Draft PR作成リンク `https://github.com/anohi-memories/kabumori/pull/new/claude/b-provider-compare-rights-safe-20261012`。安全機構を無理に回避しない。新PRが作られれば別途review要否/merge前権利処理を判断。
+- G9今回TASKを `done` / `next_owner:none` として終了。API最適化Bの専任割当は維持するが新しい具体的TASKなし。他G/H枠・別案件・G8のPR129/H4レビューは変更していない。
+
 ## K4 FINAL — POSTONA Threads integrated offline source candidate accepted, H3 security review READY — 2026-10-12 JST
 
 - **K4 source verdict:** G4 task `postona-threads-connect-publish-integrated-offline-v1-g4-20261011` **PASS_SOURCE_CANDIDATE / GO_SOURCE_ONLY / BLOCKED_REAL_PILOT**. Verified [Draft PR144](https://github.com/anohi-memories/kabumori/pull/144) exact HEAD `d4a1e87b77d1fbd362dc51809ce2d998afda15ea`, OPEN/DRAFT/UNMERGED, 1 commit/24 G4-scoped files stacked on protected Draft PR140 `2e75a6a842e70f3de78558681803b60935fb4251`. Protected PR124 `c30f246409a77080cbc03aef6c4cb72b5481e125`, PR135 `e38788d6677082138f0990453c7d2f00549666d0`, H5 PR139 `b4fa672f97592e87682671454e868a92098cbd56`, G5 PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44` remained unmerged/untouched at K4 inspection.
@@ -470,7 +479,7 @@
 | G6 | `idle` | `none` | `none` | — | `K6` | `.agent/tasks/CLAUDE_TASK_6.md` |
 | G7 | `idle` | `none` | `none` | — | `K7` | `.agent/tasks/CLAUDE_TASK_7.md` |
 | G8 | `done` | `news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011` | `codex-4` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
-| G9 | `ready` | `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011` | `claude` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
+| G9 | `done` | `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011` | `none` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
 | G10 | `idle` | `none` | `none` | — | `K10` | `.agent/tasks/CLAUDE_TASK_10.md` |
 
 - 既存索引との差分: G1（索引 `ready` / 正本 `review_required`）。各担当の記録直後で索引が未更新と見られるため、衝突を避けてこの拡張では既存枠の索引を変更していない。TASK正本を優先する。この拡張ではH1/H2/G1〜G5のTASK本文・Report・status・allocationを変更していない。
