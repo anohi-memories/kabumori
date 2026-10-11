@@ -104,14 +104,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: done
 - task_id: kabumori-stock-detail-v1-readonly-navigation-20261011
 - start_code: G1
 - finish_code: K1
-- next_owner: claude
+- next_owner: none
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 first source review of G1 PR #136 head e2dfdab5c7219aa2ff31c50c51f0125f816c16a7 found ONE P2 valuation freshness bug: stock-detail-view.ts registrationMatchesSnapshot compares ONLY quantity/average_price, but edits to cash/margin or long/short with unchanged numeric values still show OLD saved report valuation/P&L beside NEW position labels. G1 narrowly correct current helper to compare quantity/avg/position_type/side/tracking_type with same saved row, add fail-before/pass-after behavioral regressions, keep existing PR #136 and all other code untouched. No NativeTabs changes, no other slot, no source merge, production, DB/Edge/EAS; Vercel rate-limit failure not a source regression. Return K1 to かぶモリアプリG1のちゃ. Review source then decide user-approved merge.
+- allocation: Final K1 PASS_SOURCE_IMPLEMENTATION after narrow valuation truthfulness fix, exact PR136 head ca2477e0fdc4ba85f620e48aa7d9221e691ba485. Old saved holding market value/P&L shown in detail only if qty/avg/position_type/side/tracking_type match. Added 6 tests; Claude reported focus fail-before 20 pass/5 fail, after 25/25, app suite 494/494 PASS and TS/diff check PASS. PR #136 OPEN/UNMERGED; CI at head Vercel SUCCESS, no source overlap on main at review, GitHub REST mergeability unknown. Await explicit user authorization before any source merge; preserve PR branch. Five NativeTabs unchanged, no Auth/DB/RPC/Edge/prod/EAS/user-data edit. Potential stale valuation in existing portfolio list/impact is separately recorded in CURRENT_STATE backlog, NOT a new G1 TASK. G1 done/available for new explicit independent allocation after fresh state/worktree checks.
 - recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
