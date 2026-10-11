@@ -1,3 +1,64 @@
+# G5 — CURRENT TASK — Phase 3f three narrow E11 evidence-validation residual corrections (OFFLINE)
+
+- task_id: common-account-phase3f-pr130-r1-r4-r5-offline-logic-fix-20261011
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- start_code: G5
+- finish_code: K5
+- return_to: 共通アカウントG5のちゃ
+- priority: high
+- recommended_model: **Opus5.5（中）**
+- purpose: 3 narrowly reproduced P2 residuals, no new feature, NO broad redesign
+- remote_supabase_Auth_Storage_provider_reads_or_writes: forbidden
+- project_create_pause_restore_delete_or_paid_tier: forbidden
+- auth_delete_migration_runtime_changes_deploy_merge_EAS: forbidden
+
+## Why / exact fixed provenance
+
+H2 independent C2 `common-account-pr130-e11-r1-r5-narrow-security-rereview-20261011` verdict `CHANGES_REQUIRED`, read the current **first section** of `.agent/CODEX_REPORT_2.md` dated 2026-10-11. Source of truth is its concrete repro of **R1 P2 / R4 P2 / R5 P2**. R2/R3 are CLOSED for *offline methodology only*; do not reopen or change them unnecessarily. Actual Supabase E1–E12 and any `auth.users` deletion remain NOT_RUN / unauthorized.
+
+- Correct against EXACT Draft PR130 `5943fad5f724191f6ae77f3baf826a4c7698d542`, stacked on Draft PR122 `f17a47e36632fff4a1f4cfb0b860df200e1c99e1`. PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44` and PR128 `e9244d29ea944156cf1479c0976053d433469e06` are protected. Verify all prior heads, Draft and unmerged before starting and before push.
+- G5 Phase3e preceding K5 complete and G5 free; H2 C2 complete; G1–G4/H1 other slots protected.
+- No change to existing PR121/122/128/130 branches or worktrees: create a NEW independent G5 worktree from `/Users/yuya/Developer/kabumori-fresh` after fresh origin/main, then base new branch on exact PR130 snapshot. Create NEW Draft PR stacked on original PR130 branch, **only 3 corrective groups' delta**. No force push/rebase/reset/checkouts of protected owners. If branch base or path isolation unsafe, stop and report.
+
+## Only three corrections
+
+**R1 [P2] `supabase/tests/common_account_disposable_e2e/e11_matrix.ts` and `evidence.ts` + narrow tests**:
+1. Non-token residue: ensure post-delete session/refresh rows, Storage metadata and physical blob, or other required persisted child evidence has explicit structured after-state and provenance. A cohort/row can be measured PASS but still contain recorded residue; that MUST independently block Option D candidate, not only `ACCEPTED_RESIDUE_RECORDED` token writes. Missing before/after-denominator or after-state => UNKNOWN, never infer cleanup from `auth.users` or a catalog hash. Distinguish expected audit history from a harmful residue to avoid false positives; use H2 findings as source.
+2. Token matrix: only exact `REFUSED`, `ACCEPTED_RESIDUE_RECORDED`, `ACCEPTED_UNRECORDED`, `UNKNOWN` allowed. Runtime `NOT_RUN`, `MAYBE`, null or unexpected string must result UNKNOWN/BLOCKED; `NOT_RUN` cannot be counted as PASS for any token target.
+3. Lost COMMIT response: distinguish confirmed APPLIED and NOT_APPLIED via independent read-back from actually refused/rolled-back failure branches requiring UNCHANGED. Unknown outcome => UNKNOWN and **NO blind retry**, do not wrongly mark conclusively APPLIED as failed rollback. Add tests for APPLIED/NOT_APPLIED/UNKNOWN and retry denial.
+
+**R4 [P2] `supabase/tests/common_account_disposable_e2e/witness.ts` + narrow tests**:
+- Replace truthy `self_declared` rejection with acceptance ONLY if `self_declared === false` explicitly. Missing, null, string, numeric or true must be UNKNOWN/BLOCKED. Validate malformed record types fail closed, including in a `verdict()` integration regression. A syntactically valid witness is still only an attestation, not proof of an actual human's approval or actual remote destination.
+
+**R5 [P2] `supabase/tests/common_account_disposable_e2e/target_readback.sql`, `catalog_extended_readback.sql` + fake-PG read-back tests**:
+- `has_table_privilege(...,'SELECT')` checks ACL, **NOT unfiltered visibility** when row-level security filters rows. Role with SELECT, RLS on, no matching policy, one actual owner-visible row must yield `UNKNOWN_RLS`/`UNKNOWN_DENIED` (or equivalent unambiguous fail closed), never 0. Prove a legitimate unfiltered owner/bypass capability on required tables or downgrade UNKNOWN, including FORCE RLS/role ownership cases. No privilege elevation, bypass escalation or production role change.
+- Preserve ABSENT distinctly from empty, and ACL_DENIED distinctly from RLS-hidden. SQL queries still READ ONLY, run in scratch fake PostgreSQL only. If complete visibility cannot be established statically, document **future operator privileged independent read-back** and UNKNOWN rather than invent proof.
+- Check that recorded physical Storage object read-back is still a future external observation, not inferred from metadata count.
+
+## Test / deliverable boundaries
+
+- Keep delta **minimal (prefer <=6 product-source files plus relevant existing/new tests only)** within PR130's G5-owned `supabase/tests/common_account_disposable_e2e/` directory. No SQL migrations, no Auth/GoTrue/Edge/X/Threads source, no provider clients, no live executor. Do not modify PR130 runbook unless absolutely essential for internal contract accuracy.
+- New regression tests must reproduce each H2 case **fail-before/pass-after** with test counts: non-token residue blocking D; invalid tokens; resolved APPLIED COMMIT; missing `self_declared`; RLS-hidden-one-row ACL SELECT; valid clean controls. The 4 reviewer probes and fake PG SQL reproduced in H2 Report may guide test structure, but never use a user's actual data.
+- Run typed Deno restricted-read test suite, focused no-network static tests, `deno check`/`lint`, mutation runner on changed code, scratch fake PG scripts including RLS hidden row, `git diff --check`, source/secret/ownership scans. Report what ran and what did not. Run NO managed Supabase or provider calls even read only.
+- Publish a NEW Draft PR stacked against **unchanged PR130 head**; record exact SHA, changed_files, scope, tests, commit/push, PR state, no merge/deploy/paid actions, actual remote_calls=0, no photo pause/project create, remaining assumptions and `PREPAUSE_BLOCKED`. PR130 source branch and all predecessors must remain unmodified.
+- Update only own G5 TASK status to `review_required` next_owner `chatgpt` and G5 index segment via fresh CAS; preserve historical task/report byte-for-byte. Return **K5**. Avoid requesting automatic consecutive broad Codex reviews: K5 should check the new narrow regressions and schedule one targeted independent final check only if required before any proposed future live experiment.
+
+推薦モデル：**Opus5.5（中）**
+
+## Report — Phase 3f
+
+- task_id: common-account-phase3f-pr130-r1-r4-r5-offline-logic-fix-20261011
+- result: pending
+- remote_calls: 0
+- family_photo_paused: false
+
+---
+
+# Preserved G5 prior K5 / Reports / TASK history (immutable below)
+
 # K5 Phase 3e — offline E11 R1–R5 corrective source accepted for focused independent review — 2026-10-11 JST
 
 - task_id: common-account-phase3e-e11-offline-review-r1-r5-corrective-20261011
