@@ -5,6 +5,10 @@
 // run time from a LOCAL export of production (read-only, never committed) after the operator opts in. Whatever cannot be
 // attached is excluded from the run and recorded with a reason; it is never run with an empty input, and nothing here can
 // reach the network, so a refused source (TDnet answers 403) cannot be worked around from this code.
+//
+// IMPORTANT: attaching is LOCAL-ONLY. A SHA-256 match shows the exported text is the text the manifest fingerprinted; it is
+// not a licence, and neither is the operator's opt-in. Whether an attached body may be sent to a vendor is decided
+// separately, per case, by src/external_send_gate.ts from explicit licence records (the shipped register is empty).
 import type { CaseFixture } from "./fixtures.ts";
 import { bodyMayBeStored, hostOf } from "./body_policy.ts";
 import { sanitizeBody } from "./sanitize.ts";
@@ -42,7 +46,7 @@ export type Exclusion = { caseId: string; state: ExclusionState; reason: string 
 export type Resolution = {
   ready: CaseFixture[];
   excluded: Exclusion[];
-  /** How each ready case got its body. */
+  /** How each ready case got its body. "attached_verified" is identity-verified and LOCAL-ONLY: not cleared for external send. */
   provenance: Record<string, "stored_open_terms" | "attached_verified" | "no_body">;
 };
 
@@ -74,7 +78,7 @@ export async function manifestFor(cases: readonly CaseFixture[], generatedFrom: 
   return {
     version: 1,
     generatedFrom,
-    note: "Per-case body rights state and fingerprint. A body listed as rights_unconfirmed is not in the rights-safe fixture file; it is re-read at run time and accepted only when its sanitised SHA-256 equals bodySha256.",
+    note: "Per-case body rights state and fingerprint. A body listed as rights_unconfirmed is not in the rights-safe fixture file; it may be re-read at run time for LOCAL use and is accepted only when its sanitised SHA-256 equals bodySha256. The hash identifies content; it is not a licence, and such a body is never sent to an external provider without an explicit record in body_licences.json.",
     entries,
   };
 }

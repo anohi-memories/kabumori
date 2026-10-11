@@ -1,7 +1,7 @@
 {
   "version": 1,
   "generatedFrom": "fixtures/cases.json",
-  "note": "Per-case body rights state and fingerprint. A body listed as rights_unconfirmed is not in the rights-safe fixture file; it is re-read at run time and accepted only when its sanitised SHA-256 equals bodySha256.",
+  "note": "Per-case body rights state and fingerprint. A body listed as rights_unconfirmed is not in the rights-safe fixture file; it may be re-read at run time for LOCAL use and is accepted only when its sanitised SHA-256 equals bodySha256. The hash identifies content; it is not a licence, and such a body is never sent to an external provider without an explicit record in body_licences.json.",
   "entries": [
     {
       "caseId": "aj-flydubai-attack-e956ae92",

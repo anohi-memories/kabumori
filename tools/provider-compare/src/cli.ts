@@ -5,8 +5,12 @@
 //
 // Default mode is dry-run: no key is read and nothing leaves the machine. Live mode needs ALL of:
 //   --mode live  PROVIDER_COMPARE_ALLOW_PAID=1  --max-calls N  --max-usd X  and an API key (env or --keychain-*).
+// Fixtures default to rights_safe. `--fixtures legacy` (the PR #115 file, which still holds third-party bodies) is local
+// only and is refused for live. Whatever the mode, a case is sent to a vendor only after src/external_send_gate.ts clears
+// it, and that check runs before any API key is looked up.
 // Nothing in this program writes to Supabase or any production system.
 import { type FixtureMode, loadRunnableCases } from "./fixture_loader.ts";
+import { describePayloadScope, guardProvider, planExternalSend, type SendPlan, type SendProvider } from "./external_send_gate.ts";
 import { averagesOf, loadLedgerSnapshot } from "./ledger_snapshot.ts";
 import { budgetFromArgs, type RunMode } from "./budget.ts";
 import { createMockProvider } from "./providers/mock.ts";
@@ -33,14 +37,14 @@ type Args = {
   keychainOpenai?: string;
   caseFilter?: string;
   tokenizerFactor: number;
-  /** "legacy" is the PR #115 file with third-party bodies; "rights_safe" excludes any case whose body cannot be verified. */
+  /** "rights_safe" (default) excludes any case whose body cannot be verified; "legacy" is the PR #115 file with third-party bodies, local use only. */
   fixtures: FixtureMode;
-  /** Local JSON-lines export of production rows (scripts/export_cases.sql); attaches bodies that may not be stored. */
+  /** Local JSON-lines export of production rows (scripts/export_cases.sql); attaches bodies for LOCAL runs. Attaching is not a licence to send. */
   runtimeBodies?: string;
 };
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { mode: "dry-run", tasks: [...TASK_IDS], providers: [], creditUsd: 0, tokenizerFactor: 1, fixtures: "legacy" };
+  const args: Args = { mode: "dry-run", tasks: [...TASK_IDS], providers: [], creditUsd: 0, tokenizerFactor: 1, fixtures: "rights_safe" };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     const value = argv[i + 1];
@@ -78,7 +82,7 @@ async function main(): Promise<void> {
     for (const e of loaded.excluded) console.log(`excluded ${e.caseId}: ${e.state} (${e.reason})`);
   }
   const allCases = loaded.cases;
-  const cases = args.caseFilter ? allCases.filter((c) => c.caseId.includes(args.caseFilter as string)) : allCases;
+  let cases = args.caseFilter ? allCases.filter((c) => c.caseId.includes(args.caseFilter as string)) : allCases;
   const snapshot = await loadLedgerSnapshot();
   const averages = averagesOf(snapshot);
   const budget = budgetFromArgs({ mode: args.mode, maxCalls: args.maxCalls, maxUsd: args.maxUsd }, Deno.env);
@@ -87,6 +91,27 @@ async function main(): Promise<void> {
   if (args.mode === "live" && args.fixtures !== "rights_safe") throw new Error("FIXTURES_RIGHTS_SAFE_REQUIRED_FOR_LIVE");
   const specs: ProviderSpec[] = args.providers.map(parseProviderSpec);
   const secrets: string[] = [];
+
+  // External-send gate. Runs for every mode so the plan is visible, but only live mode acts on it, and it acts BEFORE any
+  // API key is looked up: a case that is not cleared (rights_unconfirmed without a licence record, unknown origin) is
+  // dropped from the run no matter how its body got here (hash match and operator opt-in are not licences).
+  const sendProviders = [...new Set(specs.map((s) => s.provider))] as SendProvider[];
+  const plan: SendPlan = planExternalSend({
+    fixtureMode: loaded.mode,
+    cases,
+    provenance: loaded.provenance,
+    manifest: loaded.manifest,
+    licences: loaded.licences,
+    providers: sendProviders,
+    today: new Date().toISOString().slice(0, 10),
+  });
+  console.log(`external_send cleared=${plan.allowedCases.length} blocked=${plan.blocked.length} ${JSON.stringify(plan.counts)}`);
+  for (const d of plan.blocked) console.log(`external_send blocked ${d.caseId}: ${d.code} (${d.reason})`);
+  if (args.mode === "live") {
+    cases = plan.allowedCases;
+    for (const item of cases) console.log(`external_send payload ${JSON.stringify(describePayloadScope(item))}`);
+    if (cases.length === 0) throw new Error("EXTERNAL_SEND_NO_ELIGIBLE_CASES");
+  }
 
   const providers: Provider[] = [createRecordedProvider(cases, averages)];
   const estimateSpecs = [null as ReturnType<typeof estimateSpecOf> | null];
@@ -120,11 +145,13 @@ async function main(): Promise<void> {
     console.log(`${spec.provider} key:`, JSON.stringify(describeKey(resolved)));
     if (!resolved) throw new Error(`no ${spec.provider} API key available (env or --keychain-${spec.provider})`);
     secrets.push(resolved.key);
-    providers.push(
+    // Second layer: the vendor provider only ever sees requests the gate cleared (and no payload carrying a blocked body).
+    providers.push(guardProvider(
       spec.provider === "anthropic"
         ? createAnthropicProvider({ apiKey: resolved.key, model: spec.model, effort: spec.effort, thinking: spec.thinking })
         : createOpenAiProvider({ apiKey: resolved.key, model: spec.model }),
-    );
+      plan,
+    ));
   }
 
   const report: Report = await runComparison({

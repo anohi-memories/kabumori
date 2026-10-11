@@ -6,6 +6,8 @@ TASK: `api-optimization-b-phase5-followup-fixture-rights-and-cost-eval-g9-202610
 有料API呼び出し・本番DBへの新規アクセス・merge・deploy・本番のFunction/設定の変更・PR #115/#116/#117/#129 の変更は一切していない。
 本書の数値は、すべて**コミット済みの成果物**（Phase 5 報告、OpenAI 台帳のスナップショット）から再現できる。
 
+> **R2 での訂正（2026-10-11、K9 差し戻し）**: 下の §1 の 1・3 は不十分だった。(a) ローカルのエクスポートと SHA-256 が一致した本文を「実行可能」にしていたが、**一致は内容の同一性の確認であり、外部AIへ送る許諾ではない**。(b) `probe_cli` は `--fixtures legacy` を受け付け、キー探索を先に行っていた。(c) live は「rights_safe であること」だけを見ており、ハッシュ一致で付けた18件を送れた。R2 で外部送信ゲート（`src/external_send_gate.ts`）と許諾台帳（`fixtures/body_licences.json`、空）を追加し、いずれも直した。詳細は `G9_R2_EXTERNAL_SEND_GATE_AND_LICENCES_2026-10-11.md`。
+
 ## 1. 結論
 
 1. PR #115 の評価 fixture 22件のうち、第三者の本文18件（TDnet 11、Al Jazeera 3、BBC 2、AP 2）を、本文を持たない形（長さ・SHA-256 のみ）で扱う仕組みと、その検証を作った。**既定では何も取得せず、18件は `needs_rights_review` として実行から外れる。** 実行時に本文を付けるには、ローカルの読み取り専用エクスポートを明示的に渡す必要があり、SHA-256 が一致しなければ `body_hash_mismatch`、行が無ければ `body_source_missing` として外れる。ネットワーク・子プロセスを使うコードは含まないため、403 を迂回する経路は構造上存在しない。

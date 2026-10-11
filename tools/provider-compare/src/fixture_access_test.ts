@@ -175,12 +175,16 @@ test("CLI: rights_safe dry-run lists the 18 excluded cases and needs no network"
   assert.equal((stdout.match(/^excluded .*needs_rights_review/gm) ?? []).length, 18);
 });
 
-test("CLI: legacy fixtures print a warning and are refused for a live run", async () => {
-  const dry = await runCli(["--mode", "dry-run", "--tasks", "judgement_primary", "--providers", "anthropic:claude-haiku-5-5"]);
+test("CLI: the default is rights_safe; legacy must be named, prints a warning and is refused for a live run", async () => {
+  const byDefault = await runCli(["--mode", "dry-run", "--tasks", "judgement_primary", "--providers", "anthropic:claude-haiku-5-5"]);
+  assert.equal(byDefault.code, 0, byDefault.stderr);
+  assert.match(byDefault.stdout, /fixtures=rights_safe ready=4 excluded=18/);
+  assert.ok(!byDefault.stderr.includes("legacy fixtures hold"), "no legacy warning unless legacy was asked for");
+  const dry = await runCli(["--mode", "dry-run", "--tasks", "judgement_primary", "--fixtures", "legacy", "--providers", "anthropic:claude-haiku-5-5"]);
   assert.equal(dry.code, 0, dry.stderr);
   assert.match(dry.stderr, /legacy fixtures hold third-party bodies/);
   const live = await runCli(
-    ["--mode", "live", "--max-calls", "5", "--max-usd", "0.1", "--providers", "anthropic:claude-haiku-5-5"],
+    ["--mode", "live", "--fixtures", "legacy", "--max-calls", "5", "--max-usd", "0.1", "--providers", "anthropic:claude-haiku-5-5"],
     { PROVIDER_COMPARE_ALLOW_PAID: "1", ANTHROPIC_API_KEY: "sk-ant-FAKEFAKE0123456789" },
   );
   assert.equal(live.code, 1);
