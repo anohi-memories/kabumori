@@ -95,7 +95,8 @@ class MemStore implements WorkerStore {
 
   fail(claimed: ClaimedJob, code: string, retryable: boolean): Promise<string> {
     const job = this.jobs.get(claimed.job_id)!;
-    if (job.status !== "processing" || job.token !== claimed.lease_token || job.version !== claimed.lease_version) {
+    if (job.status !== "processing" || job.token !== claimed.lease_token || job.version !== claimed.lease_version ||
+      job.expiresAt! < this.clock.now) {
       return Promise.resolve("lease_lost");
     }
     const final = !retryable || job.attempt >= job.max;
@@ -209,6 +210,33 @@ test("遅れて終わった worker の失敗の記録も、引き取り直され
   assert.deepEqual((await slow).jobs.map((job) => job.outcome), ["lease_lost"]);
   assert.equal(store.jobs.get(id)!.status, "completed");
 });
+
+for (const late of [
+  { name: "再試行できる失敗", outcome: (): Promise<AnalyzeOutcome> => Promise.resolve({ kind: "failed", code: "REPORT_FACT_FAILED", retryable: true, calls: 2 }) },
+  { name: "再試行しない失敗", outcome: (): Promise<AnalyzeOutcome> => Promise.resolve({ kind: "failed", code: "NO_TRACKED_STOCKS", retryable: false, calls: 0 }) },
+  { name: "例外", outcome: (): Promise<AnalyzeOutcome> => Promise.reject(new Error("REST_GET_FAILED:tracked_stocks:503")) },
+]) {
+  test(`期限切れのあと、引き取り直す前の失敗の記録（${late.name}）は効かず、行は変わらない。次の引き取りで1回だけ取り直す`, async () => {
+    const { clock, store } = setup();
+    const id = store.add("user-a");
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const slow = runWorker(store, () => gate.then(late.outcome), { now: () => clock.now });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const before = { ...store.jobs.get(id)! };
+    clock.now += 301_000; // 期限切れ（まだ誰も引き取り直していない）
+    release();
+    const first = await slow;
+    assert.deepEqual(first.jobs.map((job) => job.outcome), ["lease_lost"]);
+    assert.deepEqual(store.jobs.get(id), before, "状態・回数・token・版・期限・失敗のコードは変わらない");
+    const second = await runWorker(store, ok, { now: () => clock.now });
+    assert.deepEqual(second.jobs.map((job) => job.outcome), ["completed"]);
+    assert.equal(store.jobs.get(id)!.attempt, 2);
+    assert.equal(store.results.size, 1);
+    assert.equal(store.notifications.get(id), 1);
+    assert.equal((await runWorker(store, ok, { now: () => clock.now })).claimed, 0, "取り直しは1回だけ");
+  });
+}
 
 test("途中で止まった worker（何も書かずに消えた）: 期限切れのあと次の実行が引き取り直して完成させる", async () => {
   const { clock, store } = setup();

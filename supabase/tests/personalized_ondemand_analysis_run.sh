@@ -242,10 +242,27 @@ PY
   fi
   echo "  変異 $name: 検出"
 }
-mutate no_version_fence "or v_job.lease_version <> p_lease_version or v_job.lease_expires_at < v_now then" "or v_job.lease_expires_at < v_now then"
-mutate no_expiry_fence "or v_job.lease_version <> p_lease_version or v_job.lease_expires_at < v_now then" "or v_job.lease_version <> p_lease_version then"
-mutate no_token_fence "if v_job.status <> 'processing' or v_job.lease_token is distinct from p_lease_token
-     or v_job.lease_version <> p_lease_version or v_job.lease_expires_at < v_now then" "if v_job.status <> 'processing'
+mutate no_version_fence "  -- 貸し出しの token・版・期限がすべて一致するときだけ（遅れて終わった worker の結果は捨てる）。
+  if v_job.status <> 'processing' or v_job.lease_token is distinct from p_lease_token
+     or v_job.lease_version <> p_lease_version or v_job.lease_expires_at < v_now then" "  -- 貸し出しの token・版・期限がすべて一致するときだけ（遅れて終わった worker の結果は捨てる）。
+  if v_job.status <> 'processing' or v_job.lease_token is distinct from p_lease_token
+     or v_job.lease_expires_at < v_now then"
+mutate no_expiry_fence "  -- 貸し出しの token・版・期限がすべて一致するときだけ（遅れて終わった worker の結果は捨てる）。
+  if v_job.status <> 'processing' or v_job.lease_token is distinct from p_lease_token
+     or v_job.lease_version <> p_lease_version or v_job.lease_expires_at < v_now then" "  -- 貸し出しの token・版・期限がすべて一致するときだけ（遅れて終わった worker の結果は捨てる）。
+  if v_job.status <> 'processing' or v_job.lease_token is distinct from p_lease_token
+     or v_job.lease_version <> p_lease_version then"
+mutate no_fail_expiry_fence "     or v_job.lease_version <> p_lease_version or v_job.lease_expires_at < v_now then
+    return jsonb_build_object('status', 'lease_lost', 'job_status', v_job.status);
+  end if;
+  v_final :=" "     or v_job.lease_version <> p_lease_version then
+    return jsonb_build_object('status', 'lease_lost', 'job_status', v_job.status);
+  end if;
+  v_final :="
+mutate no_token_fence "  -- 貸し出しの token・版・期限がすべて一致するときだけ（遅れて終わった worker の結果は捨てる）。
+  if v_job.status <> 'processing' or v_job.lease_token is distinct from p_lease_token
+     or v_job.lease_version <> p_lease_version or v_job.lease_expires_at < v_now then" "  -- 貸し出しの token・版・期限がすべて一致するときだけ（遅れて終わった worker の結果は捨てる）。
+  if v_job.status <> 'processing'
      or v_job.lease_version <> p_lease_version or v_job.lease_expires_at < v_now then"
 mutate expire_without_version_bump "lease_token = null, lease_expires_at = null, lease_version = j.lease_version + 1,
          available_at = v_now, updated_at = v_now" "lease_token = null, lease_expires_at = null,

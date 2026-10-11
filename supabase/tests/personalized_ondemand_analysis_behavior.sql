@@ -250,6 +250,13 @@ select lease_token as b_tok, lease_version as b_ver from claimed where job_id = 
 update public.personalized_analysis_jobs set lease_expires_at = clock_timestamp() - interval '1 second' where id = :'b_job';
 -- 期限切れのあと、引き取り直す前でも、元の worker の完了は拒む。
 select fx.eq(fx.call_as(null, 'service_role', format($$select public.complete_personalized_analysis_job(%L, %L, %s, %L)::text$$, :'b_job', :'b_tok', :'b_ver', fx.result_ok(:'pkt', 'morning', :'today'))), '{"status": "lease_lost", "job_status": "processing"}', 'expired lease cannot complete');
+-- 失敗の記録も同じ: 期限切れのあと、引き取り直す前の失敗は、再試行できる・できないのどちらも拒み、行を一切変えない
+-- （状態・回数・token・版・期限・待ち時間・失敗のコード・通知の状態）。
+select row_to_json(j)::text as b_row from public.personalized_analysis_jobs as j where id = :'b_job' \gset
+select fx.eq(fx.call_as(null, 'service_role', format($$select public.fail_personalized_analysis_job(%L, %L, %s, 'LATE_RETRYABLE', true)::text$$, :'b_job', :'b_tok', :'b_ver')), '{"status": "lease_lost", "job_status": "processing"}', 'expired lease cannot requeue via fail');
+select fx.eq(fx.call_as(null, 'service_role', format($$select public.fail_personalized_analysis_job(%L, %L, %s, 'LATE_FINAL', false)::text$$, :'b_job', :'b_tok', :'b_ver')), '{"status": "lease_lost", "job_status": "processing"}', 'expired lease cannot terminally fail');
+select fx.eq((select row_to_json(j)::text from public.personalized_analysis_jobs as j where id = :'b_job'), :'b_row', 'expired-lease fail leaves the row untouched');
+select fx.eq((select count(*)::text from public.notifications where user_id = :'b'), '0', 'expired-lease fail queues no notification');
 truncate claimed;
 select fx.call_as(null, 'service_role', $$with c as (insert into claimed select job_id, user_id, attempt_count, lease_token, lease_version from public.claim_personalized_analysis_jobs(10) returning 1) select count(*)::text from c$$) as n \gset
 select fx.eq(:'n', '1', 'expired job reclaimed');

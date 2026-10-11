@@ -126,7 +126,8 @@ async function processJob(
     const code = safeCode(error);
     const status = await store.fail(job, code, true).catch(() => "unreported");
     log({ event: "personalized_analysis_job", ...base, status, code });
-    return { ...base, outcome: status === "requeued" ? "requeued" : status === "failed" ? "failed" : "error", code };
+    const outcome = status === "requeued" || status === "failed" || status === "lease_lost" ? status : "error";
+    return { ...base, outcome, code };
   }
 }
 

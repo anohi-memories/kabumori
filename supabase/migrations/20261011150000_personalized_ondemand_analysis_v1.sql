@@ -476,8 +476,10 @@ begin
   if not found then
     return jsonb_build_object('status', 'not_found');
   end if;
+  -- 完了と同じ: 貸し出しの token・版・期限がすべて一致するときだけ（期限が切れた worker は、
+  -- 引き取り直される前でも、順番待ちへ戻すことも failed にすることもできない）。
   if v_job.status <> 'processing' or v_job.lease_token is distinct from p_lease_token
-     or v_job.lease_version <> p_lease_version then
+     or v_job.lease_version <> p_lease_version or v_job.lease_expires_at < v_now then
     return jsonb_build_object('status', 'lease_lost', 'job_status', v_job.status);
   end if;
   v_final := not coalesce(p_retryable, false) or v_job.attempt_count >= v_job.max_attempts;
