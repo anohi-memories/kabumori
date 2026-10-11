@@ -211,16 +211,16 @@
 ## Claude G9
 - owner: claude
 - slot: claude-9
-- status: ready
+- status: done
 - task_id: api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011
 - start_code: G9
 - finish_code: K9
-- next_owner: claude
+- next_owner: none
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_9.md
 - report: .agent/tasks/CLAUDE_TASK_9.md#report
-- allocation: USER EXPLICIT G9=API最適化B専任。他のG/H・別案件へ引継禁止。R2外部送信権利ゲートはK9でPASS_OFFLINE、ブランチ65c95589。次のB工程は既存PR115に第三者本文18件を含む問題の改善として、fresh main起点の**履歴の綺麗な新規Draft PR候補**の再構築（PR115/旧ブランチの変更・close・force-push・merge/本番使用なし）。G9はB専任維持、R3完了時K9返却。
-- recommended_model: Opus5.5（高）
+- allocation: USER EXPLICIT G9=API最適化B専任。K9 2026-10-12 **PASS_OFFLINE_BRANCH_READY / PR_NOT_CREATED / RELEASE_HOLD**。新規Bだけのclean-historyブランチ `claude/b-provider-compare-rights-safe-20261012` commit `c476ef8a` に129新規ファイル、旧本文入り `cases.json` なし。G9報告302 PASS/1 ignored。Draft PR作成はClaude安全機構により拒否、無理に回避せずユーザー作成待ち。TDnet見出し3件の本文重複/旧PR115 Git refsの本文/元main既存重複2ファイルは別の判断事項。PR115/本番/外部AI利用は未変更、merge/deploy不可。新TASK未割当、他案件に転用禁止、G8その他枠不干渉。
+- recommended_model: Opus5.5（高） (completed)
 ## Claude G10
 - owner: claude
 - slot: claude-10
