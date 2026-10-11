@@ -3,8 +3,8 @@
 - task_id: postona-threads-connect-publish-integrated-offline-v1-g4-20261011
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G4
 - finish_code: K4
 - return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
@@ -18,6 +18,43 @@
 - external_auth_apis: **FORBIDDEN** without new explicit user-approved separate pilot TASK
 - merge_deploy: **FORBIDDEN**; only Draft source PR and local fake test database allowed
 - G4_previous_TASK: `postona-threads-manual-text-publish-v1-20261011` K4 PASS_SOURCE_CANDIDATE; old history/Report preserved below
+
+## Report — postona-threads-connect-publish-integrated-offline-v1-g4-20261011（G4 → K4、2026-10-12 JST）
+
+- task_id: postona-threads-connect-publish-integrated-offline-v1-g4-20261011
+- result: **GO_SOURCE_ONLY / BLOCKED_REAL_PILOT**。I1〜I5 をすべてコードとテストで実装。接続→許可→予約→投稿→読み戻しの一連が、保護対象の正確な版（#124 / #135 / #139）を読み取り専用でコピーした使い捨て環境で、実際の SQL 候補どうし・H5 の実コードどうしで通った。実際の Threads 投稿は不可（全ゲート false）。本番・Meta・Supabase・X の呼び出し 0。
+  - **I2（P1、必須ゲート）: 修正済み（ソース）**。`supabase/candidates/postona_threads_publish/threads_publish_release_candidate.sql` が、#140 の `claim`／service_role の `redeem`／`record` を **DROP** し、`release_threads_manual_publish_step` に置換。Threads への各書き込みの直前に**1トランザクション**で「サーバー証明（HMAC-SHA256・Vault `postona_threads_publish_attestation_v1`・使い捨て nonce・60秒）→ G5 フェンス（T13、ロック保持）→ `auth.sessions`（KEY SHARE）→ ワークスペース／メンバー（owner/admin）／アカウント／トークン期限／手動同意（行ロック）→ 比較更新 → Vault 読み出し → 状態移動＋記録用許可証（本人＋セッションに束縛）」。`record_threads_manual_publish_result` は許可証＋同じ本人・同じセッション＋結果への証明、フェンスなし（途中終了でも事実は記録）。service_role・anon はどの関数も実行不可（事後条件で確認）。Edge は service_role キーを持たず JWT を解読しない。**閉じていない隙間（主張しない）**: release 確定から Threads への HTTP 要求までの数ミリ秒〜最大10秒。次の書き込みは新しい release で止まる。
+  - **I3**: `threads_credential_custody_candidate.sql`（アカウント単位の期限。接続確定の同じトランザクション（`verified_at = now()`）でのみ記録、Vault secret id と記録時刻 ≥ `verified_at` に束縛。不明・期限切れ・5分以内は拒否）。**H5 への最小依頼**: owner transport の `complete` に `select public.record_threads_credential_custody($account, $expires_at)` を1文追加（PR #124 complete と H5 outcome の間）。T10: G4 の4表（許可・試行・nonce・custody）は cascade、G5 の T10 は Vault secret と行を一緒に削除すること（フェイク削除で孤児なしを確認）。
+  - **統合で見つけて直した不具合 2件**: ①#124／X オンボーディングは個人ワークスペースを `is_active=false, publish_mode='disabled'`（自動投稿用）で作るため、#140 の条件では**全利用者の手動投稿が拒否**されていた → `code_profile_key='social_mobile_user_v1'`（本人用ワークスペース）を条件に変更。②G5 フェンス候補の SQLSTATE `42501` を #140 は読み分けず BLOCKED に丸めていた → 固定メッセージで読み分け。
+  - **I1**: `supabase/functions/_shared/social/threads_connect_publish_integration.ts`（段階・担当・不足の一覧、`firstUnavailableStage`、H5 受領票の厳密パース＝権限ではない、H5 完了トランザクションの3文）。組み合わせ環境専用 `supabase/candidates/postona_threads_integration/integration_smoke.{sql,ts}`。現状の最初の不足段階は `actor`（AUTH_GET_CLAIMS 未配線）、owner transport 未提供なら `oauth_state` で `OWNER_TRANSPORT`。
+  - **I4**: 接続／再接続の入口（`THREADS_CONNECT_UI_ENABLED=false`、無効ボタン、無効な starter）とコールバック受け渡しの設計関数（登録 HTTPS URL のみ、そのままサーバーへ、コード／state をアプリで扱わない）。G3 の予約画面・X・タブは無変更。
+  - **I5**: `supabase/tests/postona_threads_integration_run.sh`（組み合わせ環境の構築＋SQL 通し＋TS 通し＋回帰）、`postona_threads_release_run.sh`。
+- changed_files: 24（Draft [PR #144](https://github.com/anohi-memories/kabumori/pull/144)）
+  - 新規: `supabase/candidates/postona_threads_publish/{threads_credential_custody_candidate,threads_publish_release_candidate}.sql`、`supabase/candidates/postona_threads_integration/integration_smoke.{sql,ts}`、`supabase/functions/_shared/social/threads_connect_publish_integration{,_test}.ts`、`supabase/tests/postona_threads_release_{fixture,behavior}.sql`、`supabase/tests/postona_threads_release_run.sh`、`supabase/tests/postona_threads_integration_run.sh`、`apps/social-mobile/src/domain/threads-connect.ts`、`apps/social-mobile/src/features/threads-connect/threads-connect-card.tsx`、`apps/social-mobile/tests/threads-connect.test.mjs`、`docs/postona/threads-connect-publish-integration-v1.md`
+  - G4 所有の修正: `supabase/functions/_shared/social/threads_manual_publish{,_fake,_test}.ts`、`supabase/functions/social-mobile-threads-publish/{http,logic,http_test}.ts`、`apps/social-mobile/src/domain/threads-manual-publish.ts`（文言）、`apps/social-mobile/src/app/accounts/{index,[id]}.tsx`（カード追加のみ）、`docs/postona/threads-manual-publish-v1.md`（置換の注記のみ）
+  - 無変更: `threads_manual_publish_candidate.sql`（#140 の DB 候補とその検証）、#124／#135／#139／#121 のファイル、G3、`x-test-post`、G5。
+- tests（すべて RUN・ローカル・偽データ）:
+  - `THREADS_PGHOST=/private/tmp/g4ti-sock THREADS_PGPORT=54942 THREADS_PGSUPER=g4super bash supabase/tests/postona_threads_release_run.sh` → ALL PASS（前提不足4種停止、P1 の14ケース＝利用権終了 P0001/42501・削除開始・ロック・降格・メンバー削除・同意取消・サインアウト・セッション期限・トークン期限間近・custody なし・custody 更新なし再接続・接続失敗・本人用でないワークスペース、証明の偽造／期限切れ／nonce 再利用、記録の束縛（別セッション・別ユーザー・別の鍵）、途中終了後の記録、custody 制約、T10 フェイク削除、TS と同じ HMAC 既知解、同時 publish release で1件のみ、**変異8種すべて検出**）
+  - `bash supabase/tests/postona_threads_integration_run.sh`（同じ環境変数）→ ALL PASS（重なりなし、#124 自身の behavior、SQL 通し、TS 通し、組み合わせ環境の Deno 回帰 **176 PASS**）
+  - `bash supabase/tests/postona_threads_publish_run.sh` → ALL PASS（#140 の既存検証、回帰）
+  - `deno test --no-config --allow-env --allow-read supabase/functions/social-mobile-threads-publish/ supabase/functions/_shared/social/` → **93 PASS**、`deno lint --no-config`（18ファイル）問題なし、`deno check` エラー 0
+  - アプリ: `npm test` **258 PASS**（新規 threads-connect 6 を含む）、`npx tsc --noEmit` PASS、`npx expo lint` 問題なし
+  - `git diff --check` PASS、秘密情報の文字列検査 0、他担当・保護パスの混入 0、4つのゲートすべて false を確認
+  - NOT_RUN: 管理された Supabase Auth／PostgREST／Vault、本物の G5 T13（代役は #124 の MOCK_ONLY と G4 の契約代役）、Meta、実機、本番
+- commit_hash: `d4a1e87b77d1fbd362dc51809ce2d998afda15ea`（`git rev-parse HEAD` の出力）
+- push: DONE（branch `claude/g4-postona-threads-integration-20261011`）
+- PR: [#144](https://github.com/anohi-memories/kabumori/pull/144) OPEN/DRAFT、**base = #140 のブランチ `claude/g4-postona-threads-manual-publish-20261011`（head `2e75a6a842e70f3de78558681803b60935fb4251`、無変更）**、HEAD `d4a1e87b77d1fbd362dc51809ce2d998afda15ea`。保護対象の head（push 直前に再確認）: #124 `c30f246409a77080cbc03aef6c4cb72b5481e125`、#135 `e38788d6677082138f0990453c7d2f00549666d0`、#139 `b4fa672f97592e87682671454e868a92098cbd56`、#121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`、すべて OPEN・無変更。CI の Vercel は「Deployment rate limited — retry in 24 hours」（コード起因ではない）。
+- merge / deploy: NOT_DONE（マージ・Edge デプロイ・DB 適用・GRANT・secret・フラグ変更・EAS・投稿すべて無し）
+- remaining_issues / 次の作業（担当別）:
+  - **G5**: T13 フェンスの本番化（#121 系）。T10 の provider 別後始末に G4 の4表と Vault secret を入れる。
+  - **H5**: owner transport の本番接続口（未提供のため `oauth_state` 段階で停止）、`complete` に custody の1文、Meta コールバック→アプリリンク→サーバーの受け渡しの実装。
+  - **G4**: なし（ソース）。レビュー指摘の反映のみ。
+  - **ユーザー（Meta／鍵）**: Threads ユースケースのアプリ、`threads_basic`＋`threads_content_publish`、テスター招待と承認、HTTPS コールバック、連携解除・データ削除コールバック、接続用・投稿用の証明鍵（Vault と Edge に同じ値。チャット・GitHub に貼らない）。
+  - **H1〜H4（Sol（高））**: 接続（H5）＋投稿（G4）＋T13（G5）を合わせた1回の独立セキュリティレビュー。本番の DB 適用・GRANT・Edge デプロイ・フラグ・テスト投稿の前に必須。今の段階で個別レビューが必要な具体的 P1 は残っていない（P1 は修正済み・変異で検証済み）。
+  - 前回 Report（PR #140）の commit_hash の訂正: 前回 `2e75a6a874b2a5f31e8ec7bac3c80de92e9ac78f` と書いたのは**誤り**（短縮値から補って書いた）。正しくは `2e75a6a842e70f3de78558681803b60935fb4251`（K4 記載どおり）。前回の本文は保存のため変更していない。
+- safety_checks: 新しい専用 worktree `/Users/yuya/Developer/kabumori-g4-threads-integration`（`kabumori-fresh` から #140 の正確な head で作成）。#124／#135／#139／#121／#140 のブランチは checkout・rebase・変更・push なし（組み合わせは /private/tmp の使い捨てコピー、重なりチェックつき、終了時に削除）。使い捨て PostgreSQL は自分専用の socket `/private/tmp/g4ti-sock` のクラスタのみ。G6 の本番作業窓とは無関係（本番への読み書き 0）。ACTIVE_TASK は G4 欄の status／next_owner だけを変更。
+- next_recommendation: K4 で GO_SOURCE_ONLY として受け入れ判断。次は G5（T13 本番化・T10）と H5（owner transport・custody の1文・コールバック受け渡し）の小さな TASK、ユーザーの Meta 準備を並行し、揃った時点で Sol（高）の統合レビュー → 承認されたテスター1名・1件のパイロット、の順を推奨。
+- AI Lab diary 候補（公開しても安全な粒度）: 「SNS の接続と投稿を別々に作ってきた部品を、本物どうしで初めてつないで通しで動かしたところ、単体のテストでは見えなかった不具合が2つ見つかった。権限の確認と鍵の受け渡しを1回の処理にまとめる形にも直した。」
 
 ## Why this is the next stage
 

@@ -3,8 +3,8 @@
 - task_id: common-ai-provider-g6-phase1g-one-paid-call-ledger-smoke-20261011
 - owner: claude
 - slot: claude-6
-- status: in_progress
-- next_owner: claude
+- status: done
+- next_owner: none
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -58,6 +58,21 @@
 - **別ゲート**: `ANTHROPIC_API_KEY`の本番Supabase Edge Secret登録、再試行/回復Cron、Phase2a G2との実レポートシャドー接続、個別課金・プラン・利用上限更新はすべて別TASK/承認。
 - **レビュー**: ソースに変更なし、従来Provider/ledger/runnerのPhase1b独立C1レビューとPhase1d/E2E fakeテストを確認済。通常の追加Codex枠使用不要。Auth/課金/権限/Secret境界に新たな高リスク問題を観察した場合に限り、K6でH1–H4レビュー要否を判断（H5は臨時実装専用）。
 - **AI Lab日記**: 実際の動作事実だけ公開安全に、secret・プロジェクトURL/identifier・内部認証構造・請求関連識別子を含めない。
+
+## K6 FINAL APPENDIX — phase1g confirmed after credential cleanup (2026-10-11 JST)
+
+- K6 final verdict: **PASS_SMOKE_WITH_USER_CONFIRMED_KEY_REVOCATION / G6 RELEASED**. Do not re-run `G6` live smoke or the same paid call.
+- Real execution observation: `.agent/CURRENT_STATE.md` records one fixed live smoke 23:43 JST, provider request **1**, Claude Opus 5.5, fixed synthetic content, **estimated cost $0.001448**, system/kabumori/market_report, usage reconciled by G6's observed run. Production mutation window 23:43–23:44 JST **CLOSED**. The original earlier Report below is an **interim report from before the paid call**; it is preserved but superseded by this appendix and the K6 verified observations.
+- ChatGPT independently inspected production ai_ledger readback via Supabase SELECT (2026-10-11 23:47 JST): **17/17 invariant checks true**, `history_row=1`, `reservations=1`, `usage_events=1`, `open_sent=0`, `open_reserved=0`, 2 enabled narrow test budget policies unchanged. Provider's independent HTTP request count and per-token usage not directly re-executed by ChatGPT; production db counts + G6 shared-state record are cited as distinct evidence.
+- **SECURITY CLEANUP USER CONFIRMED IN THIS CHAT:** user reported they revoked/deleted the newly created temporary Supabase secret API key `g6_smoke_20261011` from Dashboard and subsequently confirmed they deleted the local `~/.kabumori-secrets/ledger.env` file. **Not independently verified from Console/Mac**. Ongoing Claude workspace key in `anthropic.env` deliberately retained. No credential values were shared, fetched or committed.
+- status: **done / next_owner: none**. No new paid request/DB mutation/secret action by this K6. Source/Edge/Cron/model switch/deploy left untouched. Production provider integration still NOT deployed.
+- tests: G6-run original single live smoke (shared-state entry), ChatGPT-readback production SELECT (17/17), user-confirmed temporary-secret cleanup.
+- changed_files: G6 TASK final appendix/status, G6 ACTIVE_TASK index, CURRENT_STATE K6 final note only.
+- commit_hash/push: GitHub source-control bookkeeping only; exact commit of this final note not yet known in this file.
+- remaining_issues: separate Phase2a/cron/Edge-secret/cutover approvals and G2 coordination, possible independent Anthropic Console request bill reconciliation later if desired.
+- next_recommendation: await specific next user instruction for a new G6 scope, preserve existing TASK/Report.
+
+---
 
 ## Report — Phase1g（G6記入）
 
