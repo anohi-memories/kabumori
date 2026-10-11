@@ -1,12 +1,12 @@
 import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
-import { fetchAppMarketReport } from '@/lib/ondemand-analysis';
-import type { AppMarketReport } from '@/lib/ondemand-analysis-presentation';
+import { fetchAnalysisStatus, fetchAppMarketReport } from '@/lib/ondemand-analysis';
+import { STATUS_OFF, type AnalysisStatus, type AppMarketReport } from '@/lib/ondemand-analysis-presentation';
 import {
   CLAIM_TYPE_LABEL,
   REPORT_DISCLAIMER_JA,
@@ -29,10 +29,13 @@ export default function MarketReportScreen() {
   const [report, setReport] = useState<AppMarketReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // 分析の受付が ON のときだけ「保有銘柄をAIで分析する」を出す。
+  const [analysis, setAnalysis] = useState<AnalysisStatus>(STATUS_OFF);
 
   const load = useCallback(async (reportType: ReportType) => {
     setLoading(true);
     setError('');
+    void fetchAnalysisStatus().then(setAnalysis, () => setAnalysis(STATUS_OFF));
     try {
       setReport(await fetchAppMarketReport(reportType));
     } catch (loadError) {
@@ -151,6 +154,16 @@ export default function MarketReportScreen() {
               </View>
             )}
 
+            {analysis.enabled && (
+              <Pressable
+                onPress={() => router.push('/ai-analysis')}
+                style={({ pressed }) => [styles.analysisButton, pressed && { opacity: 0.85 }]}
+                accessibilityRole="button">
+                <Text style={styles.analysisTitle}>私の保有銘柄をAIで分析する</Text>
+                <Text style={styles.analysisText}>この市況を基準に、保有・ウォッチ銘柄への影響を分析します ›</Text>
+              </Pressable>
+            )}
+
             <View style={styles.footer}>
               {report.dataGapsJa.map((note) => <Text key={note} style={styles.footnote}>{note}</Text>)}
               <Text style={styles.footnote}>{REPORT_DISCLAIMER_JA}</Text>
@@ -205,6 +218,9 @@ const styles = StyleSheet.create({
   bulletDot: { color: colors.accent, fontSize: 15, lineHeight: 22 },
   bulletText: { color: colors.text, fontSize: 15, lineHeight: 22, flex: 1 },
   tag: { color: colors.muted, fontSize: 12 },
+  analysisButton: { backgroundColor: colors.accentSoft, borderRadius: 16, padding: 15, gap: 4 },
+  analysisTitle: { color: colors.text, fontWeight: '900', fontSize: 16 },
+  analysisText: { color: colors.accent, fontWeight: '700', fontSize: 13 },
   footer: { gap: 4, marginTop: 6 },
   footnote: { color: colors.muted, fontSize: 12, lineHeight: 18 },
 });

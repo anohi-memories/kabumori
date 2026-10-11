@@ -146,6 +146,8 @@ test("配線: 入口はサーバーが公開したときだけ。詳細画面は
   const detail = await code("src/app/(tabs)/reports/[id].tsx");
   assert.ok(detail.includes("analysis ? fetchAnalysisReport(String(id)) : fetchReport(String(id))"));
   assert.ok(detail.includes("basisLabel(report.report_type, report.trading_date)"));
+  const market = await code("src/app/market-report.tsx");
+  assert.ok(market.includes("{analysis.enabled && (") && market.includes("router.push('/ai-analysis')"), "共通の市況から分析へ");
   const root = await read("src/app/_layout.tsx");
   assert.ok(root.includes('<Stack.Screen name="market-report" />') && root.includes('<Stack.Screen name="ai-analysis" />'));
 });
