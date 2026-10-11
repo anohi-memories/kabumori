@@ -1,3 +1,11 @@
+## MIC G7専任割当 — Stage 1正式Verification設計補強 ready（2026-10-11 JST）
+
+- **ユーザー明示指定**: MIC（Market Intelligence Core）担当チャットのClaude作業は今後 **G7だけ**に割り当てる（`G7`開始 / `K7`でMICのちゃへ返却）。他のG1〜G6/G8〜G10のTASKを上書き・MICへ再割当しない。
+- 初回G7 TASK: `mic-stage1-formal-verification-design-finalization-g7-20261011`、`ready / next_owner:claude`、推薦モデル **Opus5.5（高）**。正本 `.agent/tasks/CLAUDE_TASK_7.md`、索引 `.agent/ACTIVE_TASK.md` に割当記録済み。実際のClaude実行、PR更新・テスト・commit等は **未着手・未確認**。
+- 対象: [MIC設計Draft PR #125](https://github.com/anohi-memories/kabumori/pull/125) `7e548b9f2bff583664fc48a3ec1d658e552509d9` と [ChatGPT設計決定コメント](https://github.com/anohi-memories/kabumori/pull/125#issuecomment-6096779221)。U2/U3/U6/U9の方針反映、新観測INSERT・READ COMMITTED snapshot、イベント修正/欠損/50件境界、pointer、A1記述整合、SQLテスト計画の最終補強のみ。**DESIGN ONLY**、変更はPR #125の文書1ファイルに限定。旧MIC設計worktree保護、G7専用独立worktree必須、他のTASK/worktreeも保護。
+- **正式Stage 1実装は未承認**。2026-10-14以降の自然shadow再集計・GO判定を待つ。ソース変更、migration、Production DB/API、deploy、main merge、Cron変更なし。
+- 他slotのstatus・PR・権限・Reportは本件で変更していない。完了確認時は `K7` のみをこのチャットで扱う。
+
 ## G2 NEXT — Shared market report X/app cutover preflight READY — 2026-10-11 JST
 - User requested continue after source K2. GitHub merge API/readback confirmed [PR110](https://github.com/anohi-memories/kabumori/pull/110) main merge `650e5183441ccb3b3356cfc087d43230628b0d78` then [PR132](https://github.com/anohi-memories/kabumori/pull/132) main merge `d2e9b03a3715f34512a451278a61929aa54a31b9`. PR132 retargeted to main, verified exact four-file Fact V2 delta and one-time marked review-ready before merge; no manual Edge/Supabase/consumer flag/X production write by orchestration. PR110 Vercel per-day build rate limit not treated as source regression, PR132 Vercel SUCCESS; GitHub merging may invoke provider-managed pipelines, not asserted as disabled.
 - New G2 TASK `kabumori-shared-report-x-app-cutover-preflight-20261011` ready/claude, recommended **Opus5.5（高）**, for **source-only/read-only** audit of old/new morning/close consumer authority, x/app gate and idempotency, personalized close generation/storage/display, push notifications, rollback and separate exact production cutover GO/NO_GO; preserves older G2 TASK/Report verbatim. No actual cutover until separately approved. G8 news/G9 API/G6 AI provider/G5 Auth/POSTONA/G1 and all H slots protected. Return K2 to かぶモリアプリG2のちゃ.
