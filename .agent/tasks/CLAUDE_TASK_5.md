@@ -1,3 +1,43 @@
+# G5 — CURRENT TASK — Phase 3i account-lifecycle safeguards: design and offline regressions
+
+- task_id: common-account-phase3i-local-findings-safe-lifecycle-plan-20261012
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- priority: high
+- start_code: G5
+- finish_code: K5
+- return_to: 共通アカウントG5のちゃ
+- recommended_model: **Opus5.5（高）**
+
+## Purpose
+
+In the accepted Phase 3h K5, isolated local tests (Draft PR #146, head `faf8007a4ab5c925430c7cc6a9896046e30ce25a`) demonstrated that disabling a user does not automatically stop an authentication flow already in progress. Local tests also observed issuance of a session after disabling, continuing use of old tokens in selected data services, and persistence of Storage objects after Auth deletion. These are **local OSS observations only**, not managed-Supabase proof. The next goal is a bounded, defensible account-closure design supported by deterministic offline regression tests.
+
+## Required execution
+
+1. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, own TASK history, Phase 3h report and Draft PR #146, plus prior G5 PRs #121/#122/#128/#130/#134/#137. Verify current PR heads, fresh `origin/main`, other-slot ownership, and an independent G5 worktree/branch. Never overwrite other worktrees or tasks.
+2. Analyze only Phase 3h findings F1/F2/F3/F4/F6/F7, identifying which guarantees can be implemented by application permissions, database policies, provider integrations, lifecycle state transitions or Storage-specific cleanup. Distinguish guarantees from observations and unknown managed behavior. **Do not treat a fixed waiting period, BAN, a token hook, or Auth deletion alone as sufficient security.**
+3. Deliver a phase-gated account closure protocol with explicit invariants, read-back requirements, race/late-callback handling, session/token freshness, data-access restrictions, identity reconciliation, Storage cleanup, ambiguous outcomes, rollback/resume, idempotency and a clear STOP decision when a guarantee is unprovable. Specify precise ownership and integration dependencies with POSTONA Threads OAuth (G4/H3) and common AI (G6); do not edit those owners' resources.
+4. Add small deterministic **synthetic-only, offline** regression tests for the findings and unknown/failure paths. These are tests of the *proposed decision logic*, not proof of actual Supabase behavior. Restrict changes to NEW G5-owned paths such as `docs/common-account/phase3i-lifecycle-safety-design.md` and `tools/common-account-lifecycle-safety/`. Do not edit older Draft PR code or migrate database schemas.
+5. Verify tests, fail-closed behavior, `git diff --check`, secret/personal-data scan, affected-file isolation and PR status. Open ONE independent Draft PR to main if safe, without merging.
+6. Report either `READY_FOR_OFFLINE_IMPLEMENTATION` if each claimed invariant has an identifiable enforceable boundary, or `BLOCKED_UNPROVEN_BOUNDARY` naming the missing guarantee. Neither is permission to run real managed tests. Make a small next-step recommendation, not another sweeping review cycle.
+
+## Absolute safeguards
+
+No managed Supabase operations, Auth changes, photo application downtime, production writes, provider login, personal information, secrets, paid actions, migration deployment, PR merge, or real account deletion. No use of existing G/H worktrees or modification of other-slot TASK/Report. Preserve existing G5 Draft PR branches and previous Report histories. Real managed E1–E12 are NOT_RUN; destructive E11 and Option D remain unauthorized; `managed_auth_delete` remains BLOCKED and `IDP_PREPAUSE_BLOCKED` stays unchanged. If an intended validation requires a real environment or an authorization not granted here, STOP and document it.
+
+## Completion
+
+At the end of this G5 TASK, append `## Report — Phase3i` with task_id, decision, evidence/limits, new files, test outcomes, commit/push/PR, merge/deploy truth, environment/safety checks, next steps. Set `status: review_required`, `next_owner: chatgpt`. Return to 共通アカウントG5のちゃ with completion code **K5**.
+
+推薦モデル：**Opus5.5（高）**
+
+---
+
+# Preserved Phase3h and earlier G5 TASKs / Reports (immutable below)
+
 # G5 — CURRENT TASK — Phase 3h isolated LOCAL OSS/Keycloak authentication pilot (NO family-photo downtime)
 
 - task_id: common-account-phase3h-local-oss-keycloak-safe-pilot-20261011
