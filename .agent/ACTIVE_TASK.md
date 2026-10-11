@@ -196,14 +196,14 @@
 - owner: claude
 - slot: claude-8
 - status: ready
-- task_id: news-improvement-a-pr129-f1-f9-remediation-g8-20261011
+- task_id: news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011
 - start_code: G8
 - finish_code: K8
 - next_owner: claude
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_8.md
 - report: .agent/tasks/CLAUDE_TASK_8.md#report
-- allocation: USER EXPLICIT 2026-10-11 — このチャットのニュース改善 A のみをG8に固定。初回TASKはPR129の独立レビューP1×5/P2×4（F1〜F9）修正実装。Draft維持、無merge/deploy、PR116本番固定コミットおよび他枠を保護。G8作業はK8でこのチャットへ返却。他のG/H枠・別案件を引き継がない。
+- allocation: USER EXPLICIT G8はニュース改善A専任。前TASK `news-improvement-a-pr129-f1-f9-remediation-g8-20261011` K8はCHANGES_REQUIRED：PR129修正984eeb41を確認、F1〜F6/F8の修正あり。F7の10分単位rotationは毎時起動3候補では同じ2候補に固定されるため、G8へ狭いR2是正を再割当。F9 guarded PATCHのstatus/content_hash/判定競合と残留no_post等の方針を確認。PR129 Draft、PR116固定本番と他slotを保護。K8で本チャットへ返却。G9/API-Bは不干渉。
 - recommended_model: Opus5.5（高）
 ## Claude G9
 - owner: claude
