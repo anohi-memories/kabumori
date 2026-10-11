@@ -1,3 +1,11 @@
+## G1 USER LOGIN SIMULATOR QA — ready (2026-10-11 JST)
+
+- User explicitly requested to proceed with Simulator. Previous G1 read-only Phase A K1 safe-stop found installed iOS Simulator/dev-client but **no logged-in account**, hence real watch data QA remained BLOCKED_AUTH; that preflight TASK was formally done and preserved.
+- After checking current G1 index `done/next_owner:none`, previous current-task top `done`, prior report and fresh main `cc84995f89b782e737ed7a3727c1f7371b902bc0`, allocated G1 NEW task `kabumori-watchlist-simulator-user-login-realdata-qa-20261011` `ready`, `next_owner=claude`, `return_to=かぶモリアプリG1のちゃ`, recommended **Sonnet5（中）**. G1 starts on code `G1`, ends only after user-assisted login and genuine data QA `K1`. Previous G1 TASK and Report preserved verbatim.
+- Two-stage interactive run: Claude independently verifies free G1 Mac worktree and dedicated Metro port (8081 previously owned POSTONA) then opens real Kabumori app on Simulator **without** fixture/auth bypass; pauses at login. User alone types credentials on Simulator UI and replies login completed; Claude resumes same session for actual saved `tracked_stocks` and stored-close watchlist checks. Avoid re-closing early as BLOCKED_AUTH while waiting for the user.
+- No code or navigation changes, no extra PR/merge, no production data edits, account enrollment, EAS cloud builds, manual deploy, SQL/Auth administration, or paid API. Native bottom five tabs frozen; private financial data/screenshot/token never committed or sent to GitHub. Do not interfere with other slot's dev server, simulator or worktree.
+- Other H/G allocations unchanged. If environment/login genuinely fails, record BLOCKED with exact steps. No independent Codex review for read-only QA.
+
 ## POSTONA user deferral — existing X OAuth preclaim hardening on hold — 2026-10-11 JST
 
 - User explicitly chose **temporarily defer remediation** and prioritize other POSTONA features. Current access is user-only by their statement. This is a priority/schedule decision, **NOT security remediation/PASS** or a claim that the vulnerability is harmless. Promptly reconsider if new evidence arises and at G5/T9 integration / any broadened user access; preserve a tracked remediation work item even if user later elects launch first.
