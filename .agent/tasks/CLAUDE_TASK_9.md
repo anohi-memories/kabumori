@@ -1,3 +1,84 @@
+# Claude Task G9 — API最適化B R3：PR #115の権利安全な置き換えDraft PR準備
+
+- task_id: api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011
+- owner: claude
+- slot: claude-9
+- status: ready
+- next_owner: claude
+- start_code: G9
+- finish_code: K9
+- return_to: ニュース改善API最適化のちゃ
+- recommended_model: Opus5.5（高）
+- allocation: このチャットのAPI最適化B専任G9だけを使用。G8ニュース改善Aおよび他G/H・別案件に触れたり自動引継ぎしたりしない。
+- operation: オフライン評価用比較ツールの履歴を汚染しない新規Draft PR準備（旧PR115の書換・閉鎖禁止）。
+- work_authorization: ユーザーの「次は？」によりこのチャットでBの次工程を決定。既存PR115を無断で更新/closeする承認ではない。
+- budget: paid API 0 / 無許可外部送信0 / production mutation 0
+
+## 目的・判断
+
+G9 R2のK9は `PASS_OFFLINE / EXTERNAL_CALLS_RELEASE_HOLD`。G9既存branch
+`claude/g9-fixture-rights-cost-eval-20261011` head `65c95589564845e7b343fe9d0acc7d293bebf783`
+には `external_send_gate.ts`、rights_safe fixture、評価コスト基準、テストが完成。
+一方、Draft [PR #115](https://github.com/anohi-memories/kabumori/pull/115) の
+`tools/provider-compare/fixtures/cases.json` にTDnet 11 / Al Jazeera 3 / BBC 2 / AP 2、
+計18ケース分の権利未確認の原文が含まれ、関連過去のB branchのGit履歴にも残る。
+現在のPR115をそのままmergeするとmainにこの内容が入るため、今回の狙いは
+**クリーンな最新mainから別ブランチを作り、第三者本文を一切含まない最終コードだけを載せる**こと。
+
+現時点の参考資料:
+- `docs/model-optimization/PR115_BODY_REMOVAL_MIGRATION_PLAN_2026-10-11.md` （G9 R2 headに存在）
+- `docs/model-optimization/G9_R2_EXTERNAL_SEND_GATE_AND_LICENCES_2026-10-11.md`
+- `docs/model-optimization/G9_FIXTURE_RIGHTS_AND_COST_BASELINE_2026-10-11.md`
+- PR115: 2026-10-11確認時 OPEN/Draft, head `8f4305574d1895a9f3b45c91470792bed7edb774`。PR129はA/G8が所有し、最新head `7bf9b8a0`。PR116本番は別作業。
+- G9 R2はDeno 299件PASSと報告（ChatGPTの独立実行結果ではない）。
+
+## 実行前のガード
+
+1. `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`,
+   `.agent/CURRENT_STATE.md` とこのTASK/過去Reportを確認し、G9が`ready`で同一TASKを持ち他ownerがいないことを照合。
+2. fresh `origin/main`、PR115 head/差分、G9 R2 head、Git worktree/checkout、他slotの変更対象を確認。専用の新しい独立worktreeを作る。mainに `tools/provider-compare` が既に存在するなどの重複・他セッションと競合があれば自動移植せず停止・報告。
+3. `G9` の作業だけ。G8のPR129、PR116固定本番worktree、他G/Hのbranch/TASK/Report/worktree、他案件・DB/Edge/Cron/Secrets/API実行に触れない。
+4. PR115のownershipは共有アカウントで不明、現時点では**PR115ブランチを更新・rebase・force push・close・削除しない**。既存G9 R2ブランチも履歴書換・force pushは禁止。
+
+## 実装作業：クリーンな置き換え
+
+1. **履歴の分離が最重要**: 最新 `origin/main` を唯一の親とする新規ブランチを作る。過去PR115、Phase5、G9 branchのcommitを `merge / cherry-pick / rebase` **しない**。Gitへ書く前に、安全なsource treeにコードだけをコピー/再構築して履歴を切る。新しいPR/branchの ancestry に過去の `cases.json` 本文入りコミットが一件でも混入したら作成/更新を禁止。
+2. `tools/provider-compare/` と `docs/model-optimization/` のBに必要な最新成果だけを再構築。旧 `fixtures/cases.json`（許諾未確認18本文）を**一度も新branchのGit indexへstage/commitしない**。代わりに `fixtures/cases.rights_safe.json` とbody manifest +空許諾台帳を採用。PR115/Phase5/G9由来の公表引用が別のJSON、fixture、ドキュメント、テストに混じらないか慎重に確認。判断不能な引用は削るか `needs_rights_review` として使えないようにする。
+3. `loadCases()` の既定と `cli.ts`/probe/mock/runnerの本番送信対象は rights_safe に統一。旧 `legacy` 互換は、必要な場合のみ `.gitignore` 配下の明示的なローカルファイルから、オフライン専用で読む。外部送信時は legacy絶対拒否。DRY-RUN/テスト用の合成本文は権利確認済みの公的素材か**自作の完全合成テキスト**を利用。
+4. 現行テストの `cases.json` 本文依存（`fixture_rights_audit_test`, `tasks_test`, `fixtures_test`, `metrics_test`, `eval_manifest_test`, `fixture_access_test` 等）を棚卸しし、**単にskip/削除して全PASSと見せない**。合成フィクスチャの注入、権利が安全な集計用スナップショット、ローカル原文がない場合の意味あるsafe fallbackへ置換。元の件数・監査/精度チェックをできるだけ維持し、数値やカバレッジに意味ある低下があれば報告。
+5. `external_send_gate.ts` の fail-closed を保持: TDnet/AJ/BBC/AP 18件の外部送信はデフォルト拒否。ハッシュ一致やオペレータopt-inだけで解除しない。空許諾台帳、署名/根拠を持つ明示記録のみ将来受理。無料count_tokensも外部送信とみなす。本TASKは本物のライセンスを追加しない。
+6. 新規branchの最終tree、git staged content、git log/ancestry、PR diffを機械的に検査し、**旧本文を追跡しないこと**を検証。旧ブランチ/PR115やGitHub refsの削除を主張しない。GitHubの内部キャッシュやPR refsからの完全消去は本TASKでは達成不可能として扱い、所有者判断待ちとする。
+7. tests: `deno test --no-config -A tools/provider-compare/`（前baselineはG9 R2が299 PASS報告。変更に伴う差・理由を明示）、Deno check/lint, git diff --check, secret scan, fixture権利監査, 外部送信拒否テスト, 許諾台帳空を確認。**無料count_tokensを含めた外部接続や有料APIを一切実行しない**。
+8. checkoutと最新mainに競合がなければ、**B専用の新ブランチにcommit/pushし、安全に作成できる場合は新規Draft PRを作成してよい**（PR #115への操作なし）。PRの説明には「PR115の権利安全な置き換え候補。PR115のclose/旧branch削除・GitHub歴史の消去は未承認、mergeも未承認、実AI比較/デプロイなし」を明記。PR番号/正確なshaを報告。安全な確認ができなければDraft PRを作らずBLOCKEDで返す。
+9. **絶対禁止**: PR115のclose/変更、既存branchの強制push・履歴書換・削除、他G/Hへの実装再割当、main merge、Supabase DB/Edge変更、Secrets/Cron、provider設定変更、実Claude/OpenAI有料比較、本番運用切替。
+
+## 完了・返却
+
+- 新branchが最新main単独の子孫である。旧PR115/Phase5/G9 unsafe ancestorが入らず、treeに権利未確認18件の本文が残らない。
+- 安全な評価比較tool・fixtures・gate・既存の重要テストが使え、スキップによる安全性欠落なし。元のPR115/Phase5/G9成果を失った箇所は明示。
+- 新規Draft PRがあれば番号、head、差分範囲とリリース不可条件を提示。なければ理由と直し方。PR115はOPEN/Draft・未変更のまま。
+- このTASK末尾 `## Report` に result, changed_files, tests, ancestry_checks, rights_checks, commit_hash, push, PR, merge, deploy, remaining_issues, next_recommendation, return_to を残し、**`K9` を「ニュース改善API最適化のちゃ」へ**返す。
+- 同時に別案件やA/G8の進行・レビューはしない。
+
+## Report
+
+- task_id: api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011
+- result: not_started
+- changed_files: none
+- tests: not_run
+- commit_hash: none
+- push: not_performed
+- PR: none
+- merge: not_performed
+- deploy: not_performed
+- remaining_issues: safe replacement PR preparation; legacy PR115 cases.json+history retains 18 unlicensed bodies.
+- safety_checks: not_started
+- next_recommendation: start G9; complete clean replacement implementation then return K9.
+
+---
+
+## Preserved previous G9 TASKs and Reports (history; do not edit)
+
 # Claude Task G9 — API最適化B R2：外部AI送信の権利ゲート是正
 
 - task_id: api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011
