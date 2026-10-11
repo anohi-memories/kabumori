@@ -116,16 +116,15 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: kabumori-fact-v2-pr132-three-objective-guards-correction-20261011
+- status: ready
+- task_id: kabumori-shared-report-x-app-cutover-preflight-20261011
 - start_code: G2
 - finish_code: K2
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 2026-10-11 PASS_SOURCE_CANDIDATE / RELEASE_HOLD — Draft PR132 exact 68d45dde1be34715267b5066fa3b3686d756b79e, stacked on unchanged PR110 319a442edcd61c07274e3409d8864234f9d77cd4. R1-R3 4 objective false claims rejected X/app, 3 allowed controls plus 6 grounded analyses preserved, 1,360 G2-reported offline tests PASS (not independently rerun); source correction only 3 files. No new material risk, no repeat H-review required. PR110→PR132 combined source merge gate next, production cutover separate and requires explicit authorization. No merge/deploy/prod writes.
-- recommended_model: Opus5.5（高） (completed)
-
+- allocation: K2 accepted PR132 Fact V2, and PR110→main merge 650e5183 plus PR132→main merge d2e9b03a independently verified. New G2 ONLY read-only preflight for morning/close new shared report X/app consumers, personalized_reports and notifications, old/new duplicate prevention, rollback and exact release GO/NO_GO. No production switches, deploy, live API, DB writes, real X, Auth/Provider/other slots. Return K2 to G2 room with a bounded release checklist; production cutover separate approval.
+- recommended_model: Opus5.5（高）
 ## Claude G3
 - owner: claude
 - slot: claude-3
