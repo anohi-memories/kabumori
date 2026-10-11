@@ -3,8 +3,8 @@
 - task_id: kabumori-stock-detail-v1-readonly-navigation-20261011
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: normal
 - recommended_model: **Sonnet5（中）**
 - task_type: Kabumori mobile UI feature / user-scoped READ-ONLY presentation + existing editor navigation
@@ -138,6 +138,34 @@ CURRENT implementation evidence:
 
 ### return_to
 - かぶモリアプリG1のちゃ — send `K1`.
+
+### K1 targeted corrective appendix — valuation matching (2026-10-11), PR #136
+
+- result: **CORRECTED** — `registrationMatchesSnapshot` now requires the saved holding row to match the registration on `tracking_type`, `quantity`, `average_price`, `position_type` and `side` (null-safe). Same existing PR #136 branch; no new PR, no force push, no history rewrite.
+- status: `review_required` / next_owner `chatgpt` (return to かぶモリアプリG1のちゃ for `K1`)
+- PR #136 head: `e2dfdab5c7219aa2ff31c50c51f0125f816c16a7` → **`ca2477e0fdc4ba85f620e48aa7d9221e691ba485`** (exactly one commit on top; PR still OPEN, not merged)
+- preflight: PR head verified equal to the K1-reviewed `e2dfdab5` and local/remote before the change; no open PR touches `stock-detail*`; no unexpected ownership drift.
+- changed_files (this correction only): `src/lib/stock-detail-view.ts`, `tests/app/stock-detail-view_test.ts`. Nothing else (no stock-detail screen, nav, formatter, editor, auth, DB/RPC/Edge, report, or NativeTabs file).
+
+#### Behaviour
+- Withheld (existing `VALUATION_NOTE.changed`, valuation `null`): same qty/avg with 買い↔売り changed; same qty/avg with 現物↔信用 changed; saved row whose own `tracking_type` is not `holding` (or a non-holding registration against a holding row).
+- Kept (exact saved figures, unchanged behaviour): qty, avg, position type, side and role all equal.
+- Null/legacy: a blank field equals only another blank one (a saved row without the fields = blank, not a wildcard); a concrete registration vs a blank saved row (or the reverse) is a mismatch. Non-finite numbers normalise to blank as before.
+- The saved closing share price and its dated `M/D 終値ベース` stay visible regardless: they do not depend on the position. The registration's own labels (現物/信用, 買い/売り) are still shown from the registration.
+
+#### Tests (fail-before / pass-after, actually executed)
+- Added 6 behavioural tests to `tests/app/stock-detail-view_test.ts` (kept-when-all-match; side long↔short; cash↔margin; inconsistent role; null/legacy/non-finite; revert restores valuation + price stays visible).
+- **Before the source change, against PR head `e2dfdab5`**: `deno test --no-check --no-lock --no-config --allow-read tests/app/stock-detail-view_test.ts` → **20 passed / 5 failed** (side, position type, role, null/legacy, revert-restores).
+- **After**: same command → **25 passed / 0 failed**; full `tests/app/` → **494 passed / 0 failed** (previous 488 + 6).
+- `tsc --noEmit`: no `src/` errors and no non-environment errors in the touched test; `git diff --check` OK.
+- Not run: Simulator (pure view-model change; the screen/UI is untouched), EAS, real device.
+
+#### Safety
+- deploy=0, EAS=0, Supabase/Edge/migration=0, real-user data writes=0 (tests only; the user's 18 watch records and holdings were not touched). No other slot's process, port, branch or worktree touched; no Metro/Simulator was started for this correction.
+- GitHub Vercel/Netlify checks at the original head are rate-limit/canceled per K1, not caused by code; nothing here was deployed.
+
+#### Observation for K1 (not changed, outside this correction's strict scope)
+- The 銘柄 tab's holding rows and the impact card (`buildHoldingRows` / `topImpacts` in `src/lib/portfolio-view.ts`, merged earlier, not part of PR #136) join the saved row to the registration by ticker only and show the saved valuation without this registration-match check. After an edit of qty / 現物・信用 / 買い・売り they would show the previous report's figures until the next report. The new detail screen is now stricter than the list; K1 may want a separate scoped decision (not done here).
 
 ---
 
