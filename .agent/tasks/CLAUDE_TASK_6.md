@@ -1,3 +1,71 @@
+# G6 CURRENT TASK — 共通AI基盤 Phase 1f / 本番 AI Ledger 限定適用＋試験ポリシー
+
+- task_id: common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011
+- owner: claude
+- slot: claude-6
+- status: ready
+- next_owner: claude
+- start_code: G6
+- finish_code: K6
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- recommended_model: **Opus5.5（高）**
+- priority: high
+- user_explicit_approval: **YES — 2026-10-11 このチャットで「おk」**（直前の説明：「本番Supabaseに予算管理DBを作成し、試験用の月$5・日$2の上限を登録する」への承認）
+- production_mutation_window: **RESERVED_NOT_ACTIVE**。待機中はDBロックを占有しない。実行直前のfresh全15枠確認でG5/他writerにACTIVEが無い場合のみ、`.agent/CURRENT_STATE.md`へG6唯一の対象/操作とwindow ACTIVEをCAS追記してからapply。書込・readbackの完了/STOPでCLOSEDを記録。CAS競合または他writer ACTIVEなら**DB変更を開始しない**。
+- mutation_scope: target Supabase project `wsmznyzcvmuitkglfeuj` の **exact migration `20261010050613_ai_provider_budget_ledger.sql`**、適用履歴、同一 Ledger の初期system-only予算ポリシー **2件のみ**。これ以外一切不可。
+- original Phase1e K6/Report and earlier unassigned G6 template are preserved unchanged below. This Phase1f task is separate, with new `K6` on completion.
+
+## 今回の正本・事前情報
+
+- PR117 Provider / PR119 Ledger / PR133 rollout runner はmainへmerge済み。最新 `origin/main` を作業開始時と本番適用の直前に確認する。Phase1d実装は独立検証済み。変更は不要。
+- 前回 G6 Phase1eは `PASS_READONLY_CHECK`：2026-10-11 19:05 JST にMac CLI2.116.0で `rollout.sh check` 1回成功、`TARGET_VERIFIED` / `READY_TO_APPLY`、権限拒否予測4/4 `no`、12カテゴリ・既存関数168、台帳RPC0。**時間が経つので本番書込み前に毎回取り直す**。
+- ChatGPTが最新Supabase `list_migrations` で81件、最新履歴 `20261007214402`、`20261010050613`（ai ledger）未適用、G5 `20261009120000`（common_account_deletion_completion）も未適用と確認。**G5のmigrationは今回適用しない**。`supabase db push`禁止（他migrationが巻き込まれる）。
+- G5の共通アカウントはpriority CRITICAL。直前の `G5 review_required` は本番禁止のオフライン調査だが、状況変化に備え全枠・windowsをfresh検証。G5が同一Supabase DDL/Auth/RPC/指紋等のmutationを開始していればG6 STOP。G5側TASK・Reportの追記/上書き禁止。
+- 本番DB `ensure_rls` event trigger の本体はChatGPT read-only検証済み：新規 `public` tableに作用、台帳表 `ai_ledger` namespace は対象外。引き続き新しい挙動ならSTOP。
+- このチャットのClaude作業はユーザー明示で専任G6。**他のG枠へ割当・直接コピー指示方式への差戻しはしない**。
+
+## G6 開始時に必要なこと
+
+1. `PROJECT_RULES.md`, `HANDOFF.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md` と本TASK、`docs/ai-provider/PHASE1D_ACTIVATION_RUNBOOK.md`、PR133 runner/proof、G5現在のTASKヘッダーをfresh read。G6専用の**独立クリーンworktree/checkout**を `/Users/yuya/Developer/kabumori-fresh` の最新 `origin/main` から安全に使う。既存G6 Phase1e worktreeは**G6本人のものでクリーンな場合に限り**そのworktreeを更新利用できる。別slotのworktree/dev server/branchは絶対触れない。
+2. 現時点の全15枠のstatus/task_id/next_ownerとproduction mutation windows、fresh source HEAD、Supabaseの現状を確認。同時writer/G5と競合が無いか判断。親mainで関連migration/runner/policy/権限経路が変更されていたら**承認済みの既知コードであることを再確認できるまでSTOP**。
+3. 実行するのは既存の固定runner `supabase/tests/ai_provider_budget_ledger_rollout.sh` の **`check` → `apply` → `policies`** のみ。runbook §2手順4〜6が正本。CLI 2.116以上3未満、target identity、`--agent no` JSON厳格解析、migration SHA256 `680aeb3f2e540b184476b0c1e3534d8586b4857ec29856e40793ed44eff35737`、限定操作の正確なACKを必ず使う。手順を自作SQLやダッシュボード操作へ置換しない。key/DBパスワード/ログイン認証情報は出力しない。
+4. **windowの開始**: `check`で `TARGET_VERIFIED`、`READY_TO_APPLY`、predicted_refusals4件すべて否定、既存指紋とG5非競合が確認できたときのみ、fresh `.agent/CURRENT_STATE.md`の先頭に `production_mutation_window: ACTIVE`（owner G6, task_id, target ref, exact scope, UTC/JST開始時刻）をcompare-and-swap/競合確認付きで書いてから次へ。ACTIVE中はwriteとread-back以外でロックを保持しない。他slotのSTATE内容は保護。ACTIVEを記録できなければ **apply禁止・WAIT**。
+5. **Stage A `apply`**: runner自身の同一実行内Stage0再チェック、指紋再取得、target再照合を通過し、**承認済みmigration 1本だけ**適用。runnerのStage B/C/D読み戻し + 履歴ちょうど1行 + 既存business fingerprint同一、増加する公開RPCが正確に7件か確認。CLI `--linked` が3本以上の一時DBログインロールを作成しうることは既知。未検証のManagement API複数文 SQLが失敗/曖昧な場合、runner STOPに従う。**リトライ・手動補修・巻き戻し・`--resume-history`の自己判断実行は禁止**。STOP[11-16]のまま内容をReportし、次判断はK6へ返す。
+6. **Stage B `policies`**: `apply`が文字列・exit code・独立readbackで完全PASSした場合のみ、同じwrite window内で承認済み初期SQLをrunner `policies` 1回。合計正確に2件、以下完全一致をread-back：
+   - `anthropic.opus.kabumori.market_report.monthly`: anthropic / claude-opus-5-5 / kabumori / market_report / system, month, $5.00, 40 calls, $1.00/per call
+   - `anthropic.opus.kabumori.market_report.daily`: same scope, day, $2.00, 6 calls, $1.00/per call
+   - user/brand/POSTONA/他model/他featureを有効化しない。*広域ポリシーは作らない*。G5の個人IDに関するデータを送受信しない。
+7. **window終了**: PASSでもSTOPでも、window `CLOSED` にCASで更新し、結果とG5への影響（public RPC+7、migration history+1、既存関数指紋差分の共有）を `.agent/CURRENT_STATE.md` に公開安全な範囲で記録する。CAS失敗ならその事実をReportし、別slotを上書きせず STOP。G5のTASK/Reportは触らない。共有ファイルの変更が競合した場合は、保全して再調整を依頼する。
+8. G6自身のTASKの現行Reportと `.agent/ACTIVE_TASK.md` のG6ブロックだけを更新して、`status: review_required/next_owner: chatgpt`で `K6` を返す。個人情報、SECRET/KEY、CLI credential、一時ログインロール秘密値は記録しない。GitHub commit/pushの成否は実測し、実際に未成功なら成功とは書かない。
+
+## 拘束範囲と明確な停止条件
+
+- **承認済み実変更**: `ai_ledger` 5テーブル + `public.ai_ledger_*` RPC7件に関わる**固定migration**、migration registry 1行、試験用policy2件。いずれもrunner経由。正確な事後構造はrunbook SQL/gateが検証。
+- **禁止**: G5 `20261009120000`等ほかのmigration適用、広域予算の作成、Secrets登録/閲覧、Claude Console Workspace作成/限度額変更、Claude/OpenAI API実呼び出し・課金、実Claude smoke、Edge Function deploy、Cron変更、Auth/RLS既存ポリシー修正、G2朝刊/大引け切替、X実投稿、Netlify/Vercel本番deploy、PR merge、写真アプリの停止。既存ソース/migration/policy/runnerの変更も不要・禁止。
+- **fail-closed**: project ref・CLI JSON・role/default ACL・history・sha256・G5/他writer競合・window記録・Readback・指紋差分・想定外のSQL出力で即時STOP。よくある「再実行で直る」は不可。部分適用時も台帳削除やhistory補修を勝手にしない。
+- **本番観測の注意**: DDLはDBカタログと必要なロックを取る。既存表に明示変更が無くても完全無影響とは言わない。トランザクション結果が不明な場合はDBを書き直さず、独立した `status` をread-onlyで確認して報告するか、明確な追加判断を待つ。CLI `--linked` は一時ログインロールを作る。
+- **レビュー**: Phase1bのCodex C1レビュー（R1/R2修正PASS）とPhase1d多数ローカルfake CLI検証、Phase1e実環境read-only PASS済み。ソース変更なしの既定runnerの限定applyについて追加の機械的Hレビューを作らない。STOP/新たなSecurity問題を見つけた場合のみ新しいレビュー要否をK6で判断する。
+- **公開安全性**: AI Lab開発日記は本番DB内部構造や権限/ポリシー詳細、端末path/ログ、秘密IDを含めない。今回の日記公開は原則不要。
+
+## 完了/返却K6 Report（新しい最上部 Report、履歴は下に保護）
+
+- task_id: common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011
+- result: NOT_STARTED / PASS_FULL_APPLY_AND_POLICIES / PARTIAL_STOP / STOP_WITHOUT_WRITE いずれか
+- executed_at, target_confirmation, source SHA, CLI_version, check_exit_code
+- mutation_window_start / mutation_window_end / other_writers_checked
+- apply_executed, stage_A_to_D_status, migration_registry_verification
+- ledger_schema_5_tables_rpcs_7_grants_rls_verification
+- policies_executed, exact_2_policy_readback
+- before_after_business_fingerprint / g5_notification
+- changed_files, tests, commit_hash, push, merge, deploy
+- explicit confirmation: secrets=0, paid_AI=0, model_switch=0, other_migrations=0
+- STOP_reason, outstanding_issues, safety_checks, next_recommendation
+- `K6` -> **共通AI基盤のちゃ**。本番適用後も次のsmoke/Secret/Cronは別承認であり、自動続行しない。
+
+---
+
+# PRESERVED PRIOR G6 TASK + REPORT — Phase1e (historical, do not execute)
+
 # K6 FINAL — 共通AI基盤 Phase 1e / production runner READ-ONLY check
 
 - task_id: common-ai-provider-g6-phase1e-readonly-runner-preflight-20261011
