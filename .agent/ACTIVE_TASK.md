@@ -111,15 +111,15 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: done
 - task_id: common-account-phase3e-e11-offline-review-r1-r5-corrective-20261011
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: none
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: C2 accepted H2 E11 independent security review CHANGES_REQUIRED, R1 P1 and R2–R5 P2. G5 Phase3e corrects ONLY PR122-owned OFFLINE dry-run runbook/catalog/evidence/checklist/tests, addressing Admin-vs-SQL negative case matrix, lock-probe limits, E4 flow expiry upper-bound proof, actual project/fake-user/consent witness plan, full role/RLS/trigger/Storage evidence. New independent worktree and **new Draft stacked PR onto protected exact PR122 head**, no original PR121/122/128 branch modifications or source merges. Existing family photo app stays active, NO Supabase remote calls, project creation, Auth DELETE, migration, provider, deploy, EAS or feature activation. Return K5; optional ONE narrow Sol（高） H2 corrective rereview after completion if slot available.
+- allocation: K5 accepted G5 Phase3e OFFLINE_ONLY R1 P1 / R2–R5 P2 corrective as PASS_OFFLINE_CORRECTIVE_CANDIDATE / TARGETED_SECURITY_REREVIEW_REQUIRED. Exact Draft stacked PR130 head 5943fad5f724191f6ae77f3baf826a4c7698d542 on original Draft PR122 head f17a47e36632fff4a1f4cfb0b860df200e1c99e1; 22 offline-only delta files, no migration/Auth/Edge/runtime modifications or merge. Claude-reported Deno56/56, mutations58/58, fake-PG local proof PASS, remote Supabase tests NOT_RUN. G5 source completed done/next_owner none. Real E11 and Option D not authorized; family photo app must NOT be paused; PREPAUSE_BLOCKED; no project creation, no paid tier. H2 belongs to G2 PR110 review and cannot be overwritten; one separate narrow Sol（高） review in confirmed free H slot before further approval.
 - recommended_model: Opus5.5（高）
 
 ## Deferred
