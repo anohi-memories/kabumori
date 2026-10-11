@@ -1,3 +1,12 @@
+## G1 PR136 verified MERGED — read-only stock detail V1 / 2026-10-11 JST
+
+- User said 「マージして」 and authorized only G1 PR136 source merge; current G1 TASK `kabumori-stock-detail-v1-readonly-navigation-20261011` had K1 PASS. GitHub atomic `squash` with `expected_head_sha=ca2477e0fdc4ba85f620e48aa7d9221e691ba485` MERGED [PR #136](https://github.com/anohi-memories/kabumori/pull/136) into main. Readback: PR `closed`, `merged=true`, `merged_at=2026-10-11T10:10:21Z`; squash commit `f662cee90b2d18557ebd111fc5236e372ff4d9c1`, verified exact main HEAD immediately after merge.
+- PR changed 16 approved paths (12 source/tests + 4 fixture-only screenshot WebPs); NO native 5-tab layout/icon changes. Adds root-stack stock detail view from portfolio/watchlist/registered search, editor only on explicit action, user-scoped saved historical close basis (not live). View-helper prevents OLD saved valuation/P&L if current quantity/cost/現物信用/買い売り/holding-role differs. No user records or DB/Auth/RPC/Edge/production source changed.
+- GitHub PR checks SUCCESS incl Vercel Preview; zero overlap across 16 PR paths vs latest main changes (70 paths from PR base). REST `mergeable` was transient unknown, but GitHub accepted SHA-guarded merge. Claude reported 494/494 app tests, source TS PASS and clean diff; ChatGPT source-reviewed but did not rerun suites. No additional Codex review required for targeted UI view-only correction.
+- No EAS/Apple/TestFlight/app binary, no manual prod deploy, no paid API use. GitHub/Vercel hooks may automatically run on main; downstream web production outcome not independently verified. Source merge != native app release.
+- G1 TASK and `.agent/ACTIVE_TASK.md` synchronized `done/next_owner:none` with verified merge SHA, other G/H slots protected. G1 available only following fresh checks, and previous task/PR branch must not be overwritten.
+- Separate later backlog ONLY: pre-existing `src/lib/portfolio-view.ts` holdings list and impact UI can show stale saved P/L after user edits holdings; this is not part of approved PR136 and no new TASK created. Suggested future Sonnet5（中） focused source/test correction before native release. User old report Oct7–9 gap is intentionally no-fix; new-method cutover is separate under G2 and remains undisturbed.
+
 ## MIC G7専任割当 — Stage 1正式Verification設計補強 ready（2026-10-11 JST）
 
 - **ユーザー明示指定**: MIC（Market Intelligence Core）担当チャットのClaude作業は今後 **G7だけ**に割り当てる（`G7`開始 / `K7`でMICのちゃへ返却）。他のG1〜G6/G8〜G10のTASKを上書き・MICへ再割当しない。
