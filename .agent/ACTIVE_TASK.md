@@ -166,19 +166,19 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: review_required
+- status: done
 - task_id: common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011
 - start_code: G6
 - finish_code: K6
-- next_owner: chatgpt
+- next_owner: none
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
 - report: .agent/tasks/CLAUDE_TASK_6.md#report
 - production_mutation_window: CLOSED (ACTIVE 21:22 JST → CLOSED 21:33 JST 2026-10-11 after read-back)
-- latest_result: PASS_FULL_APPLY_AND_POLICIES — user-run runner `apply && policies` 21:31 JST: ai_ledger (5 tables, 7 service_role-only RPCs, RLS) + history row 20261010050613 + exactly 2 system-only trial policies; existing business fingerprint unchanged (12/12, functions +7 only). Report: .agent/tasks/CLAUDE_TASK_6.md
+- latest_result: K6 FINAL VERIFIED PASS_FULL_APPLY_AND_POLICIES — user-run runner `apply && policies` 21:31 JST: ai_ledger (5 tables, 7 service_role-only RPCs, RLS) + history row 20261010050613 + exactly 2 system-only trial policies; existing business fingerprint unchanged (12/12, functions +7 only). ChatGPT independent live readback 2026-10-11 21:55 JST 17/17 checks PASS, migration history1, enabled test policies exact 2, no usage rows. Production mutation window CLOSED. Report: .agent/tasks/CLAUDE_TASK_6.md
 - user_authorization: 2026-10-11 user「おk」 after explicit question approving production ai ledger apply + monthly $5 / daily $2 policy insertion. This is NOT a general migration/project-wide deploy permission.
 - allocation: Phase1e `PASS_READONLY_CHECK` K6 accepted and prior full G6 TASK/Report preserved under own TASK. G6 Phase1f performs *only* verified runner `check`, exact `apply`, then exact `policies` in isolated worktree. STOP without retry/cleanup if identity/CLI/result/ACL/fingerprint/G5 mutation overlap/window conflict/Stage B-D readback fail. Log G5 RPC+7/history+1 after success, not in G5 TASK. No secrets, temporary service key, paid AI, Edge, Cron, app model/report cutover, arbitrary SQL, other migrations or production deploy. Return K6 with observed effect; user consent does not allow auto-continue to provider smoke.
-- recommended_model: Opus5.5（高）
+- recommended_model: Opus5.5（高） (completed)
 ## Claude G7
 - owner: claude
 - slot: claude-7
