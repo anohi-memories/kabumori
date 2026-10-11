@@ -3,12 +3,12 @@
 - task_id: postona-x-reservation-store-offline-v1-g3-20261011
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - start_code: G3
 - finish_code: K3
 - return_to: **POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）**
-- recommended_model: **Opus5.5（高）**
+- recommended_model: **Opus5.5（中）**
 - priority: high
 - type: implementation / source-only reservation persistence and guarded claim boundary; no production use
 - worktree_base: `/Users/yuya/Developer/kabumori-fresh` latest verified `origin/main` (new dedicated independent G3 worktree)
@@ -64,6 +64,29 @@ The user wants POSTONA to **really save a user-authored post with exact publish 
 - At completion set ONLY this G3 TASK/index to `review_required / next_owner chatgpt`, append new `## Report`, preserve complete archived prior G3 TASK/Report below unchanged, read back exact PR head, return **K3** to POSTONA G3のちゃ.
 - A focused independent **Codex Sol（高）** H1–H4 review is expected AFTER effective G3+G5+G4 Auth/RLS/RPC/Edge contracts are assembled, **before** any merge of unsafe backend changes or prod/pilot. Do not use H5 for normal review. Low-risk client-only pieces need not cause repetitive reviews.
 - If source alone cannot meet real reservation save due to unavailable G5/G4 production gates, still finish the isolated offline candidate and mark the gating blockers. Do not claim that an offline save makes real user reservations survive app closure.
+
+## K3 R1 R2 focused correction 2026-10-12 — CHANGES_REQUIRED / SAME PR #145
+
+- K3 inspected exact Draft PR145 HEAD `1306cdc5d37e8b28b4819484846aed00875654b2` and G3 Report. Accepted scoped offline SQL candidate, app flow and disabled publication approach as solid SOURCE CANDIDATE; G3-reported disposable PG17.11 run PASS, mutants 9/9 caught, Deno worker 7/7, app 287/287, domain 22/22, type/lint PASS. ChatGPT inspected GitHub source but did not independently rerun tests/inspect Mac worktrees.
+- **Two concrete P2 correctness gaps remain** in new source code. Do not merge PR145 or activate DB/API/Edge/posting. Treat source PASS as contingent on these narrow corrections only.
+
+### R1 P2: expired lease finish without sweep
+- Source `supabase/candidates/postona_x_reservations/001_postona_x_reservations.sql` `finish()` approx lines 572–583: validates matching `lease_token` and `status='claimed'` but **does not check `lease_expires_at`**. A lease expiry is only swept by another `claim_due()` invocation. Therefore a worker can call `finish('published',id)` or `finish('failed_before_send')` after its lease deadline but before any sweeper runs, and be accepted. This contradicts the stated lease-fencing contract. `pre_publish_check` checks expiry but runs BEFORE network IO, not during `finish()`.
+- Correct `finish` to reject/handle **already expired CLAIMED leases independently of sweeping**, without ever reclaiming or blindly re-sending X. Use a real current time at decision point (consider PG `clock_timestamp()` vs transaction-start `now()`) and ensure atomic row-lock transition. Decide and document if an expired row becomes `uncertain` atomically or `LEASE_LOST` with an eventual sweeper, while preserving an explicit future reconciliation route for a genuine X success observed after deadline. **Preserve already terminal `published` idempotent identical read-back**; a late success receipt must not cause duplicate X send or fake user-visible confirmed success without provider verification.
+- Add disposable real SQL regression **without calling `claim_due` sweeper between expiry and `finish`**: claim → make lease expired in test → call `finish('published',valid_post_id)` and `finish('failed_before_send')`, assert cannot accept stale claims; never reclaims or sends twice; current valid lease and already published idempotent replay stay PASS. Also test near-deadline behavior and SQL state invariants. Prior test only checked late finish AFTER a sweeper and thus missed the defect.
+
+### R2 P2: interval scheduling contract not checked by server
+- Current SQL `create_batch()` checks only individual future times and general minGap/day cap. `p_mode='manual_interval'` accepts `p_band=NULL`, and **no spacing cadence metadata** (daily/N-day/hourly) is sent by app `reservation-flow.ts:bandOf()` (returns `null` for interval). Arbitrary irregular timestamps with enough 60-minute gap can be written while labelled `manual_interval`, violating requested user cadence and TASK "server validates interval".
+- Add a narrowly defined, explicitly user-confirmed **interval metadata contract** to client typed `SaveRequest` + candidate DB schema/parser (may reuse mode-specific JSON `p_band` if sound). Validate the interval expression, intended start/time zone, count and all submitted UTC instants on the DB side, rejecting irregular, reordered, or inconsistent intervals as an **atomic batch error**. Keep `Asia/Tokyo` and the original schedule planner's supported interval units; don't silently expand to DST zones or invent unsupported cadence. Do not rewrite the user's content or move exact slots. A flat list of timestamps with no intended cadence must be rejected for interval mode.
+- Add fail-before/pass-after real PostgreSQL tests: exact daily, N-day example, hour cadence if supported by planner; one irregular gap with all timestamps otherwise 60min apart must be refused; wrong start/reorder, missing/invalid cadence, mixed month/day boundary. App tests ensure interval metadata is carried from the SAME `ScheduleBatch.request` and never accepted by relying only on UI validation; existing manual exact and random cases unaffected.
+
+### Scope, safety and completion
+- SAME G3 `task_id`, SAME Draft PR145 branch, no new PR; verify PR HEAD/isolated G3 worktree `/Users/yuya/Developer/kabumori-g3-x-reservations`, fresh main, overlapping changes, other TASKs BEFORE edit. G4 #144 Threads, G5 #146 common account, G6 ledger and other slots are separately owned and protected. Only modify existing G3 SQL candidate, G3 `reservation-flow.ts`, relevant G3 SQL/app tests, maybe G3 doc, and essential local harness/worker if R1 semantics require. Keep other 10 files and G3 previous Report bytes intact. Never modify G4/H5/G5 code or another worktree.
+- Re-run affected disposable PG behavior and concurrency/mutations, worker unit, full app/domain/TS/lint/diff/secret checks. Report exact PASS/FAIL and no production DB/Auth/RLS/migration apply, Edge/Cron, X/Meta/AI, deploy/EAS, PR merge. Local fake G5/G4 predicates are MOCK_ONLY, not production assurance.
+- Push narrow correction to SAME PR145 without force/rebase of other slots; verify HEAD read-back. Update current G3 status `review_required / next_owner chatgpt`, append new focused `## Report` retaining previous reports/history, and return **K3** to **POSTONA G3のちゃ**. No extra H1–H4 review this round; one **Sol（高）** Auth/RLS/API/DB/X-publish integrated review is necessary once G5 effective entitlement and G4 verified-account predicates/entrypoints are ready, prior to any live rollout.
+- **推薦モデル Opus5.5（中）** for these two SQL/data-contract fixes. G3 remains off in production; release hold unchanged.
+
+---
 
 ## Report — postona-x-reservation-store-offline-v1-g3-20261011
 
