@@ -1,3 +1,76 @@
+# G4 CURRENT TASK — POSTONA Threads 認証＋手動テキスト投稿 統合V1（オフライン・本番無効）
+
+- task_id: **postona-threads-connect-publish-integrated-offline-v1-g4-20261011**
+- owner: claude
+- slot: claude-4
+- status: ready
+- next_owner: claude
+- start_code: G4
+- finish_code: K4
+- return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
+- recommended_model: **Opus5.5（高）**
+- priority: high
+- type: normal implementation / cross-layer integration candidate + negative security behavior tests (**no production deployment**)
+- goal: **本人のThreads接続→アカウント別明示許可→テキスト1件投稿→Threads結果read-backの一連の処理を統合候補として組み上げる。次の安全審査・限定テスター実投稿に必要な不足を最小化する**
+- current_limit: OFFLINE_ONLY / SOURCE_ONLY / NO_REAL_THREADS_POST / NO_SUPABASE_PRODUCTION_WRITE
+- source_authority: G4 owns only NEW integration glue and scoped G4 publish-candidate corrections, NOT H5 OAuth or G5 Auth/entitlement/identity/deletion implementation
+- production_mutation: **FORBIDDEN** (including Supabase Auth/DB/RPC/GRANT/RLS/migration apply, Vault, Edge deploy, Meta app config, live tokens, Cron, push, EAS, PR merge, public posting)
+- external_auth_apis: **FORBIDDEN** without new explicit user-approved separate pilot TASK
+- merge_deploy: **FORBIDDEN**; only Draft source PR and local fake test database allowed
+- G4_previous_TASK: `postona-threads-manual-text-publish-v1-20261011` K4 PASS_SOURCE_CANDIDATE; old history/Report preserved below
+
+## Why this is the next stage
+
+2026-10-11 user explicitly requested proceeding after K4 toward posting from POSTONA to their own Threads account. Implement **the integration code and proof now**, not another memo alone. Previous source-only components:
+- [Draft PR124](https://github.com/anohi-memories/kabumori/pull/124) — G4 earlier workspace/Threads begin-consume-complete SQL/RPC contract; exact protected head `c30f246409a77080cbc03aef6c4cb72b5481e125`, branch `claude/g4-postona-threads-workspace-oauth-20261010`.
+- [Draft PR135](https://github.com/anohi-memories/kabumori/pull/135) — H1 fake OAuth Edge candidate, stacked on #124, exact protected head `e38788d6677082138f0990453c7d2f00549666d0`, branch `codex/h1-threads-edge-offline-20261011`.
+- [Draft PR139](https://github.com/anohi-memories/kabumori/pull/139) — H5 signed actor/session + state/code durable burn + owner transport candidate, stacked on #135, exact protected head `b4fa672f97592e87682671454e868a92098cbd56`, branch `codex/h5-threads-runtime-20261011`. C5 accepted source candidate only; owner credential channel NOT provisioned, new Edge entry always 503.
+- [Draft PR140](https://github.com/anohi-memories/kabumori/pull/140) — G4 Threads TEXT media container→publish→read-back + account card/manual permission/attempt SQL, exact protected head `2e75a6a842e70f3de78558681803b60935fb4251`, branch `claude/g4-postona-threads-manual-publish-20261011`, based on main. K4 accepted source-only; publishing Edge flag `THREADS_MANUAL_PUBLISH_PREREQUISITES_MET=false`, mobile `THREADS_MANUAL_PUBLISH_UI_ENABLED=false`.
+- [Draft PR121](https://github.com/anohi-memories/kabumori/pull/121) — G5 T13/fence source candidate `76b50e1e03f82faaa3460bab1603afa8fef3ce44`, NOT production-applied. G5 owns `account_lifecycle_assert_active_service_write`, T10, common Auth deletion; this TASK cannot change those or use a fake G5 function as evidence of production readiness.
+- G3 owns booking/scheduling UI Draft PR138, source unchanged; X OAuth security Issue #131 separately deferred. G1/G2/G6-G10/H1-H5 independent work/production mutation windows protected.
+
+## Mandatory preflight / isolation (STOP rather than overwrite)
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this task and K4 Report, H5 C5 Report, current G5/G3 task headers and exact PR source docs. Fetch **fresh `origin/main`** and re-read **current** PR #124/#135/#139/#140/#121 head/base/draft/changed-paths. If any protected SHA moved, first re-evaluate delta and ownership; do not blindly rebase/cherry-pick.
+2. Create **brand-new independent G4 worktree/checkout**, NOT previous G4 checkout unless proven clean and explicitly safe. Do NOT enter/edit/check out/reset/rebase other G/H worktrees, their PR branches, their uncommitted edits or dev servers. Any collision/uncertain dirty worktree = STOP and report. Worktree paths under own G4 workspace only, separate test socket/PG cluster.
+3. **PR strategy:** Prefer NEW independent `claude/g4-postona-threads-integration-20261011` branch starting from exact, protected #140 head; new **Draft stacked PR BASE #140 original branch** containing only THIS TASK's G4-owned changes. **Never modify original #140** or #139/#135/#124, even though #140 was G4-owned. For a full chain test, build a SEPARATE disposable G4-only integration checkout that combines read-only fetched exact candidates #124→#135→#139 with #140 via normal non-destructive Git merges or explicit bounded file copies; original branches remain immutable. Clearly record fetched SHAs and diff; ensure no accidental G5/H5 file edit. Do not push combined copies or imply merged main. If the test integration needs files from another owner's branch, use only local disposable checkout and keep pushed PR delta G4-only. If this cannot be made reproducible and conflict-free, stop and explain a precise branch/ownership BLOCKER.
+4. Recheck `.agent/CURRENT_STATE.md` for active G6 production mutation window. Even if closed, **this TASK never applies production SQL or invokes external Meta/Auth.** No implicit permission from user saying “すすめて” to do a public Threads post.
+
+## Implementation deliverables — code/tests required, no memo-only completion
+
+**I1: Real source-level composition path (offline).**
+- Provide a typed G4-owned integration adaptor/contract and an end-to-end test harness linking: verified app user/session through H5 `getClaims/getUser`+durable callback state/owner authority *contract* → PR124 verified Threads `social_account_id` and server-side token custody → G4 explicit per-account permission → attempt reservation/idempotency → G4 two-step Meta TEXT API → read-back confirmed post id/permalink. Integration must be proven with injected mocks and disposable DB source candidates, not fabricated `connected` or `published` UI booleans. Show one **golden path test** and precise unavailable stage when real owner transport is unprovisioned.
+- Do not read/tamper with G5 users or create privileges. Don't import absent unmerged H5 paths into a deployable live entry without a source-complete flag/fail-closed build. H5's C5 receipt `publishEnabled:false` is NOT a posting capability; new G4 server MUST independently authorize exact account/user/session.
+
+**I2: P1 permission/entitlement TOCTOU fix** — **mandatory acceptance gate**.
+- K4 exposed a concrete security gap: G4 SQL `public.redeem_threads_manual_publish_step` currently redeems server `service_role` voucher up to 60s after caller-side `claim` but **does not itself recheck G5 T13 POSTONA entitlement or originating caller's owner/admin membership**. A membership/entitlement may be revoked in this interval. Implement a reviewed, effective **source-only** fix inside a NEW G4-owned SQL candidate (or an isolated addition to new G4-only integration source, not to protected PR140 source branch), ensuring DB lock order (G5 lifecycle→workspace/membership→account/attempt→Vault) and a server-authenticated principal, account, brand and grant cannot be forged by the client. Re-evaluate current lifecycle, role and manual consent immediately before **each** provider write, and analyze race between redemption and actual HTTP POST. If impossible without G5-owned RPC/privileges or H5 owner channel, **fail closed, explicitly BLOCK live**, provide smallest implementable G5/H5 interface request and regression tests; NO caller-selected userId, forged `auth.uid()`, JWT decode-as-proof, broad grants or `service_role` authority shortcut. Do not claim atomic DB locks span network calls. Never turn incomplete permission proof into `publishEnabled=true`.
+- Tests at minimum: entitlement ends/locked/deleting after claim but before redeem, owner/admin demotion/removal, account switches brand, manual consent revoked, session expiry, revoked token, grant replay/late redemption, concurrent publishes, duplicate tap/HTTP lost response. Ensure provider write fake count **ZERO** after authorization failure, and no unauthorized Vault credential read.
+
+**I3: Token custody / expiry interface.**
+- PR140 depends on absent `public.threads_account_credential_expires_at(text) returns timestamptz` while H5 PR139 has per-attempt `token_expires_at`, not an account-scoped verified credential expiry. Provide a **concrete G4-owned proposal + testable adapter** for account-scoped expiry, bound to exact connected account/token rotation and Vault custody (not an arbitrary OAuth attempt row), with absent/expired/unknown = denied. If the actual persistence must be changed in H5/G5-owned schema/RPC, do **NOT edit their protected files**; specify exact interface/owner change and mark end-to-end pilot blocked. Never assume 60-day default or trust client timestamp. No real Vault/secrets access.
+- G5 T10 disconnect/deletion must recognize `social_account_manual_publish_permissions` and `threads_manual_publish_attempts`. Document required G5 contract and test fake deletion while retaining no orphan credentials; do not edit G5-managed procedures.
+
+**I4: Connection and posting UI bridge.**
+- In the new stacked G4 candidate only, expose a **testable** “Threads 接続する / 再接続する” path on the account detail page and strict authorized app callback handoff design to H5; preserve G4's existing draft/manual confirmation UI and accurate unavailable/expired/consent state. Must NOT put Meta app secret, service-role key, OAuth state in diagnostic logs, credential, raw callback code, token, or fake connected result on mobile. Do not make a live Auth/Meta call. App link/universal link specifics require real Meta configuration and separate pilot; if cannot be verified offline, provide disabled explicit placeholder + clear implementation adapter rather than misleading functional button.
+- Preserve G3's `schedule.tsx` and composer, X `x-test-post`, active account/provider routing, bottom tabs, any G5 App/Auth code; no new scheduled posting.
+
+**I5: Reproducible integrated smoke pack + operator gates.**
+- A new executable mock fixture/test runner (G4-owned paths), with dependency matrix for #124/#135/#139/#140, required G5 T13 real contract, Phase2a-2 schema, owner role privileges, Vault, Meta scopes `threads_basic/threads_content_publish`, tester, HTTPS callback, and T10. Explicit `RUN`/ `NOT_RUN` for real managed Auth/PostgREST/Vault/Meta/prod, and distinguish blocked requirements.
+- Leave BOTH source gates `THREADS_CONNECT_PREREQUISITES_MET=false` and `THREADS_MANUAL_PUBLISH_PREREQUISITES_MET=false`, and mobile `THREADS_MANUAL_PUBLISH_UI_ENABLED=false`; new Edge entry must remain 503/unreachable. PR cannot contain true/“temporary debug ON” flips or production routes. Do not accidentally permit double posting on retry or call real Meta.
+- Execute deno check/lint/focus/regressions, app TypeScript/unit/lint, disposable-local PG ACL/locks/concurrency if touched, static isolated imports, secret scan, `git diff --check`; report exact counts, commands and skipped tests. If unavailable, NOT_RUN with reason.
+
+## Completion requirements and next owners
+
+- Deliver **actual source and tests** in one new G4 Draft PR stacked on original protected #140 if non-overlapping and code can be kept fully disabled. If integration cannot safely compile/source-prove without unmerged G5/H5, record specific hard blocker and a small safe design patch, **not** a fake completed end-to-end.
+- Include an exact next-steps matrix identifying **G5-owned** T13/T10/role prerequisites versus **G4-owned** manual publish, **H5-owned** actor/Vault and Meta operator setup. Decide **GO_SOURCE_ONLY / BLOCKED_REAL_PILOT** honestly. A narrowly scoped future G5 TASK is separately allocated by ChatGPT later; do not self-assign G5/H5 or commit to another slot.
+- **Final integrated independent security review must be run separately by H1-H4**, recommended **Sol（高）**, BEFORE any production DB apply/GRANT/Edge deploy/feature flags/test public post. No self-merge/no changes to production. If a focused review is required earlier due to concrete P1 Auth/DB blockers, say so with exact file/test evidence; do not burn Codex review for UI-only edits.
+- Update ONLY `.agent/tasks/CLAUDE_TASK_4.md` at top with new `## Report` (task_id, result, changed_files, tests, commit_hash, push, PR base+HEAD, merge/deploy, remaining_issues, safety_checks, next_recommendation) while preserving ALL previous task/Report text verbatim; set own TASK/index to `review_required/next_owner:chatgpt` after the actual PR push/read-back, then return **K4** to POSTONA G4 chat. Guard each write with fresh SHA; do not overwrite concurrent state changes. Do not leave task idle or claim unperformed deploy.
+- AI Lab diary: may record safe mock-only milestone and lessons, no secrets, vulnerability procedure or fictitious Threads product launch.
+
+---
+
+## Preserved complete previous G4 TASK, K4 assessment and Report (READ-ONLY HISTORY; not current TASK)
+
 # Claude G4 — CURRENT TASK — POSTONA Threads text publish + user-facing manual publish V1
 
 - task_id: postona-threads-manual-text-publish-v1-20261011
@@ -121,5 +194,6 @@ Use new G4 branch from **fresh main**, own independent worktree; PR135/PR124/H5 
   - 要検証: 絵文字以外の文字数の数え方、Threads 固有のエラーコード、`owner` フィールドの有無。決めてほしいこと: `publish_mode='dry_run'` で手動投稿を許すか（今は `disabled` のみ停止）、許可の単位（今はアカウントごと）、画面の置き場所（今はアカウント詳細）。
 - safety_checks: 専用 worktree `/Users/yuya/Developer/kabumori-g4-threads-publish`（`kabumori-fresh` の fresh `origin/main` から作成、他スロットと非共有）。PR #124 / #135 / #139（H5）/ #138（G3）/ G5 のブランチ・ファイルは checkout も変更もしていない（変更ファイルの重なり 0 を確認）。`x-test-post`・X OAuth（Issue #131）・G3 スケジューラ・G5 Auth/削除は無変更。`THREADS_CONNECT_PREREQUISITES_MET=false` は無変更。本番 DB/Auth/RPC の読み書き、Meta/X/Supabase API 呼び出し、トークン・secret の取得、課金 API は 0。使い捨て PostgreSQL は自分専用の socket `/private/tmp/g4tp-sock` のクラスタのみ使用。
 - next_recommendation: K4 で受け入れ判断。Codex レビューは、H5・G5 の本番側の境界が揃って接続＋投稿＋T13 を統合する時点で1回（Sol（高））にまとめるのを推奨（この単体候補のための個別レビューは不要と考える）。並行して、H5/トークン管理側で期限読み出し口の置き場所を決める小さな TASK と、ユーザー側の Meta アプリ準備（§8）を進めると、実投稿までの距離が最短になる。
+
 
 
