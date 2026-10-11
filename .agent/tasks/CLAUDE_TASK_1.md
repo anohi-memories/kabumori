@@ -3,8 +3,8 @@
 - task_id: kabumori-watchlist-simulator-user-login-realdata-qa-20261011
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: normal
 - type: **READ-ONLY APP QA with USER-OPERATED LOGIN**, no app implementation
 - recommended_model: **Sonnet5（中）**
@@ -18,6 +18,19 @@
 - production/DB/API/Edge/AI write/deploy: prohibited
 - source_or_configuration_change: prohibited
 - new PR/merge: prohibited
+
+## K1 FINAL — G1 Simulator genuine-data PASS_OBSERVED / completed (2026-10-11 JST)
+
+- task_id: `kabumori-watchlist-simulator-user-login-realdata-qa-20261011`
+- verdict: **PASS_REAL_DATA_OBSERVED / PARTIAL_COVERAGE**. The assigned two-stage user-assisted Simulator exercise has been completed as reported, and G1 source/QA task can close. **Do not claim full coverage** of no-featured vs ≥5% featured/newspaper CTA/missing-price paths, or 375pt/physical iPhone.
+- Independent K1 read: current G1 TASK + privacy-redacted Report and its main commit `703aebed84f25cd089fb6affc9989786890a985e`; previous merged PR #120 `53678a2f1fe5e01ecde4e9988abcbd0ed573da66`. Claude reports an actual user-entered local Simulator sign-in, stock/portfolio saved data loaded in the standard app (not fixture), 402pt iPhone 18 Pro, local Metro 8082. G1 didn't request or type credentials; signed-in session intentionally retained locally. QA details are Claude's recorded local observations, **not independently rerun on Mac by ChatGPT**.
+- PASS on observed states: original five lower NativeTabs and internal two-segment toggle; 18 watch rows count equals actual rows with no duplicates/missing, separate holdings not mislabelled; saved-close value/pct/rise-fall styling/format; count=18 for *zero featured* state; list long-name truncation/safe area and bottom space; portfolio totals agree with latest available close detail; search return state; editor opened/closed with no stock mutation; read-only pull-to-refresh retained list. No observed UI bug.
+- **NOT_OBSERVED** due to genuine current saved data: a ≥5% change card, stock-linked verified-news card/CTA/back return, ≥1 featured with correct remainder badge, and missing-price `—`; per-watch quote second-source comparison also unavailable inside app. **NOT_RUN**: real-user 375pt and physical iPhone. Prior 457/457 fixture PASS is separate and was **not rerun**.
+- **Important upstream follow-up, not G1 watchlist defect**: on 2026-10-11 the last *saved* close report shown was 2026-10-06; 10/7–10/9 had morning-only entries in the viewed reports. The app truthfully displayed `10/6 終値ベース` but prices were stale by multiple trading sessions. This does not prove whether report generation, persistence, visibility, or upstream gating failed. Route to **かぶモリ G2 market-report / news-delivery workstream** for separate investigation **after current G2 task ownership/overlap check**; do NOT override G2 TASK or assume PR110 is the root cause. Consider making stale basis more conspicuous as an independent UX improvement, not a prerequisite for this test's closure.
+- Safety: G1 reports no app source/config/navigation change, no PR or merge, no EAS/Edge deploy, no stock/portfolio edits, no credentials recorded, no other slot process reset. Normal app login invoked `start_kabumori_service()` idempotent enrollment RPC; the RPC/network response was **not inspected**, so do not overclaim that this sign-in produced absolutely no server-side write. No explicit test-triggered DB mutation. GitHub Report contains counts but not securities identifiers, prices, tokens, email, financial screenshots or private profile.
+- No Codex review required: app code unchanged, read-only UI acceptance. No new bugfix task allocated. No extra EAS build or release.
+- G1 current task final status `done` / `next_owner:none`. G1 can accept a new independently scoped task only after future fresh-state/worktree checks; actual simulator currently holds login session and prior Metro process was stopped. Historical G1 Reports protected.
+- Recommendation: prioritize the stale saved-close gap in G2/news delivery separately. Wait for naturally occurring verified feature-card data or use existing fixture tests to cover cases not observed in genuine account; don't manipulate the user's holdings to trigger cards. At future release milestone perform iPhone native version and narrower 375pt check if needed.
 
 ## User authorization / goal
 
@@ -61,7 +74,7 @@ The work has **two interactive stages** in ONE G1 TASK. DO NOT issue final Repor
 ## Report — current task
 - task_id: kabumori-watchlist-simulator-user-login-realdata-qa-20261011
 - result: **PASS_REAL_DATA (partial coverage — see NOT_OBSERVED rows)**. The user signed in themselves inside the Simulator; the app loaded genuine saved user-scoped records. The watchlist two-segment view behaved truthfully on every case that exists in the current data. Cases that the current data does not contain (featured card, verified-news card, `—` row) are **NOT_OBSERVED**, not claimed. 375pt was **not run**. No bug found; no fix attempted.
-- status: `review_required` / next_owner `chatgpt` (return to かぶモリアプリG1のちゃ for `K1`)
+- status: `done` / next_owner `none` after final K1 (PASS_REAL_DATA_OBSERVED / PARTIAL_COVERAGE)
 - date: 2026-10-11 JST (Simulator clock 9:26–9:32, Sunday)
 - base: fresh `origin/main` `920bc7a` (contains PR #120 squash `53678a2f`); independent clone; real standard app source (no fixture / auth-bypass rig)
 
