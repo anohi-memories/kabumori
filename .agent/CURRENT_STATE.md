@@ -1,3 +1,10 @@
+## K9 FINAL — G9 R2 external-send rights gate: PASS_OFFLINE / EXTERNAL_CALLS_RELEASE_HOLD — 2026-10-11 JST
+
+- 対象はAPI最適化B/G9の `api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011` のみ。TASK Report `review_required` / head commit `65c95589564845e7b343fe9d0acc7d293bebf783` をGitHubから確認。ブランチ `claude/g9-fixture-rights-cost-eval-20261011` は親 `b6020dbb` の直系+1 commit、12ファイルすべて `tools/provider-compare/` / `docs/model-optimization/` 内。G9報告Deno 299 pass、deno check/lint/diff/secret scan PASS、paid API/network/prod write/merge/deploy無しは自己報告でありChatGPTはローカル実行していない。
+- GitHubソースの `external_send_gate.ts`、`cli.ts`、`probe_cli.ts`、`fixture_loader.ts`、空の `body_licences.json` を照合。18件 `rights_unconfirmed` は `--runtime-bodies` でハッシュ一致しても許諾台帳に実証可能な記録がない限り外部送信不可。`probe_cli --fixtures legacy` はAPIキー検索・外部アクセスより前に拒否、`cli` もrights_safe既定でlive時の内側providerを `guardProvider` に包む。**K9 PASS_OFFLINE**。実際のライセンス確認・外部送信のエンドツーエンド検証をしたわけではなく、**EXTERNAL_CALLS_RELEASE_HOLD**を維持。
+- 未解決: PR115 OPEN/Draft・head `8f430557` の元 `cases.json` に第三者の18件の本文とGit履歴が残る。PR115所有者合意なくrewrite/force push/mergeしない。権利台帳は空。見出し・既存投稿文中の引用も許諾別判定が必要。許可・予算承認なく有料モデル比較/count_tokens本番呼出なし。G8のPR129/F7/F9やPR116の本番工程はここでは扱わない。
+- このK9でG9の該当TASKを `done` / `next_owner:none` とし、担当をメモで占有しない。**G9がAPI最適化Bの専任であるユーザー指示は維持**するが、次の具体的TASKは未割当。G8や他のG/H、他案件は変更なし。
+
 ## K2 FINAL — On-demand personalized AI Draft PR143 SOURCE_CANDIDATE; H3 SECURITY REVIEW READY — 2026-10-11 JST
 - G2 `kabumori-personalized-ondemand-background-push-v1-20261011` completed source review by ChatGPT: [PR143](https://github.com/anohi-memories/kabumori/pull/143) exact `1d0529bb68b0e60b32ce0a2cb0002872b1671177` OPEN/DRAFT/UNMERGED, 30 changed files, 2 commits. Independent GitHub readbacks inspected migration SECURITY DEFINER and ownership/RLS GRANTS, market read projection, DB job CAS/fenced lease, worker separate from client, G2 Report. G2-reported Deno+app 1,616 PASS; disposable PG17 ACL/RLS/concurrency/rollback/13 mutations PASS; ChatGPT did not run full tests or live environment. Vercel status build-rate-limit (not source failure); Netlify preview success; no main merge, production deploy, migration apply, worker Cron, mobile release, paid API/real push.
 - Verdict: **PASS_SOURCE_CANDIDATE_WITH_BROADCAST_BLOCKER / H3_SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO**. Per-user explicit request → durable server worker → private report → optional completion push source candidate accepted. Common morning/close read UI works source-only but all-users morning/close broadcast push **NOT IMPLEMENTED**: existing dispatcher processes up to 200 notifications/run and fanout + preference/priority mechanism separate. Previous auto-batch P1 [Draft PR141](https://github.com/anohi-memories/kabumori/pull/141) remains OPEN/unmerged/SUPERSEDED; no merge/source overwrite. Base model current personalized report model; Haiku/Opus selection/billing not implemented and NOT authorized.
@@ -333,7 +340,7 @@
 | G6 | `idle` | `none` | `none` | — | `K6` | `.agent/tasks/CLAUDE_TASK_6.md` |
 | G7 | `idle` | `none` | `none` | — | `K7` | `.agent/tasks/CLAUDE_TASK_7.md` |
 | G8 | `ready` | `news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
-| G9 | `ready` | `api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011` | `claude` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
+| G9 | `done` | `api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011` | `none` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
 | G10 | `idle` | `none` | `none` | — | `K10` | `.agent/tasks/CLAUDE_TASK_10.md` |
 
 - 既存索引との差分: G1（索引 `ready` / 正本 `review_required`）。各担当の記録直後で索引が未更新と見られるため、衝突を避けてこの拡張では既存枠の索引を変更していない。TASK正本を優先する。この拡張ではH1/H2/G1〜G5のTASK本文・Report・status・allocationを変更していない。
