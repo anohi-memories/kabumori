@@ -3,11 +3,11 @@
 - task_id: kabumori-portfolio-holdings-stale-valuation-guard-20261011
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: normal
 - task_type: Kabumori financial presentation integrity / source-only
-- recommended_model: **Sonnet5（高）**
+- recommended_model: **Sonnet5（中）**
 - start_code: G1
 - finish_code: K1
 - return_to: かぶモリアプリG1のちゃ
@@ -17,6 +17,22 @@
 - production_DB_Auth_RLS_RPC_Edge_API_migrations: prohibited
 - source_merge_manual_deploy: prohibited
 - permissible_result: one new G1 source-only PR, NOT self-merge
+
+## K1 focused correction — refocus refresh must immediately withhold cached holding valuations (2026-10-11)
+
+- **K1 interim result: CHANGES_REQUIRED (ONE bounded temporal financial-truthfulness issue), NOT a rejection of the core 3-surface fix.**
+- Independently reviewed PR [#142](https://github.com/anohi-memories/kabumori/pull/142) exact head `5fe4a6e37d6899e9731bd4ca6bc2c4e8e825ed38`, all changed paths, full `alignHoldings`/`buildHoldingRows`/`assetSummary`/`topImpacts` logic, `explore.tsx` load flow, focused behavioral/source tests and the three 375pt fixture screenshots. The underlying new 5-field matching/valuation-withholding/impact/totals logic is sound in a settled saved-registration state. Deno 512/512 and iOS fixture smoke PASS are Claude-reported, **not independently executed by ChatGPT**.
+- **Confirmed remaining issue:** `src/app/(tabs)/explore.tsx` `load()` begins with `setLoading(true); setMessage('')`, but `registrationsKnown` stays true and old `items` remain visible until its later authenticated `tracked_stocks` read resolves. On return from a user's stock-detail editor Save/Remove (or any focus reload), `useFocusEffect` starts load, while `const registrations = registrationsKnown ? items : null` still supplies **previous** registered holdings to `assetSummary`, `topImpacts` and `buildHoldingRows`. Thus old saved valuation/P&L can flash as CURRENT while new registration state is being fetched, exactly the risk this task is supposed to eliminate. Similarly, an asynchronous report update before registration refresh completes can pair two different fetch generations. The independent code tests only assert the initial signed-out/loading states and do not cover this focus-refresh transition.
+- **Required bounded fix:** At the start of EVERY registration reload (including focus/refresh), the current user-registration set must become **temporarily ineligible** for valuation, impact top3, and holding-row P/L until that invocation's authenticated registrations have been successfully fetched; existing confirmed-registered data may remain cached only if not presented as a fresh valuation. One acceptable minimal solution is to gate `registrations` on active `loading` as well as `registrationsKnown`, with correct atomic rendering after the relevant latest report/registration refresh settles; or clear an explicit known/ready flag at load entry. Ensure concurrent invocations cannot allow a completed old request to reopen current valuations during a newer still-pending load, nor let stale responses overwrite newer user data. Prefer generation/ref gating only if needed and remain strictly within existing app read path (no new request, no changed auth semantics).
+- **Required tests (FAIL-before/PASS-after):** in `tests/app/portfolio-screen_test.ts` (plus smallest necessary pure helper test if one is actually added) pin that (a) focus/RefreshControl load enters a "valuation eligibility unknown" state before any await, (b) until current successful `tracked_stocks` and report refresh completes the three financial surfaces receive `null` registrations, (c) failed/authless loads remain unknown and do not show old P/L, (d) successful latest load recovers original values after all five fields match, (e) duplicate/out-of-order async reload cannot reintroduce stale values, or document tested scheduler guard if no overlap possible. Do not add unrealistic source-only assertions that could pass despite the stale flash; combine a pure test of generation/eligibility logic or component/state transition test with source contract where feasible. Record actual fail-before and pass-after test outputs.
+- **Preserve everything else unchanged:** source edit ONLY `src/app/(tabs)/explore.tsx`, and focused `tests/app/portfolio-screen_test.ts` (a tiny pure test helper only if necessary, explain it explicitly). Do NOT change `src/lib/portfolio-view.ts`, `src/lib/stock-detail-view.ts`, current registered-editor code, portfolio sections/design, saved reports, watchlist/backend/Auth/RLS/migrations/G2 old/new delivery, or the native five bottom tabs / their icons. Do not manipulate actual user holdings, create test records in production or publish real finance screenshots. Existing UI positive control must remain.
+- Continue on **SAME PR #142 / same isolated G1 branch** `claude/g1-portfolio-holdings-valuation-guard-20261011`; verify fresh origin/main, exact head `5fe4a6e37d6899e9731bd4ca6bc2c4e8e825ed38`, absence of new overlapping PR at start and before push; no new PR, reset, force push or self-merge. If branch or owned worktree conflict, STOP. No EAS/production/paid API/manual deploy.
+- Rerun focused tests, full app tests, source TypeScript, `git diff --check`, and 375pt fixture smoke only if needed; return exact changed files + new PR head. Append a **K1 corrective appendix** to the current `## Report — current task`, preserving all original evidence. On completion set current TASK `review_required / next_owner chatgpt`, sync G1 index and return `K1` to **かぶモリアプリG1のちゃ**.
+- **No Codex security review necessary** for this narrow local state/read-only presentation correction if correct; user must separately authorize PR142 merge after K1 PASS.
+- Vercel PR check is **failure due to deployment rate limit**, not evidence of a runtime regression. Netlify status describes canceled preview; do not claim native iPhone or production Web deployment.
+- The user explicitly declined old report Oct7–9 close gap repair: do not investigate, fix, backfill or monitor old delivery.
+
+推薦モデル：**Sonnet5（中）**
 
 ## Goal
 
