@@ -105,15 +105,15 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-stock-detail-v1-readonly-navigation-20261011
+- status: ready
+- task_id: kabumori-portfolio-holdings-stale-valuation-guard-20261011
 - start_code: G1
 - finish_code: K1
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS_SOURCE_IMPLEMENTATION and user-authorized PR #136 protected squash MERGED. Exact approved PR head ca2477e0fdc4ba85f620e48aa7d9221e691ba485 merged by GitHub to main commit f662cee90b2d18557ebd111fc5236e372ff4d9c1; GitHub PR closed/merged=true and main read-back verified. 16 PR paths only, five NativeTabs unchanged, portfolio/watch/search detail UI; financial valuation terms match qty/cost/position/side/holding type. Claude app tests reported 494/494 PASS, PR head CI success. No EAS/manual deploy/DB/Auth/Edge/user-stock write; main push may trigger automatic Web CI. G1 done/free subject to fresh worktree/conflict checks. Existing portfolio-list stale-P&L improvement stays backlog only (no TASK allocated); old-method Oct7–9 gap out of scope.
-- recommended_model: Sonnet5（中）
+- allocation: User-authorized G1 source-only portfolio stale valuation consistency. Reuse five-field holding snapshot match from merged PR136; withhold mismatched per-row P/L, suppress invalid impact top3 and aggregate totals if even one current vs saved holding mismatch, preserve saved close/date and canonical bottom five NativeTabs. Distinguish loading/error from verified empty; fail-before/pass-after tests; no production/DB/API/EAS/manual deploy, no G2 old-method report fix, no other slot interference. One separate G1 worktree and PR, no self-merge; return K1.
+- recommended_model: Sonnet5（高）
 ## Claude G2
 - owner: claude
 - slot: claude-2
