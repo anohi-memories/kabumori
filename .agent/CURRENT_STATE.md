@@ -1,3 +1,12 @@
+## K9 FINAL — API最適化B/G9 Phase5 rights & cost offline task: PASS_OFFLINE_PARTIAL / EXTERNAL_CALLS_RELEASE_HOLD — 2026-10-11 JST
+
+- ユーザー指定の**API最適化BのみG9**で完了確認。前TASK `api-optimization-b-phase5-followup-fixture-rights-and-cost-eval-g9-20261011` は review_required だった。G9が独立branch `claude/g9-fixture-rights-cost-eval-20261011` に `b6020dbb41d63cba88208cef20063c8d24632c0e` をpush。GitHubで前 Phase5 head `96d2aebb` の直系+1 commit/17ファイル(全て `tools/provider-compare/` と `docs/model-optimization/`)を確認。G9報告284 Deno tests pass、type/lint PASS、SQL local PG17、実paid API/本番DB操作/PR merge/deployなし。ChatGPTはGitHubのコードとfixture数を照合したがテスト自体は未実行。
+- `cases.rights_safe.json`22件は GitHub 上で本文あり2・本文なし20、manifest `rights_unconfirmed`18/ `open_terms`2/ `no_body`2。一方、旧 `cases.json` は本文あり20件で **削除されておらずPR115・Git履歴の第三者本文を引き続き保持**。PR115はOPEN/Draft・head `8f430557`・未変更。既存所有者の合意がないためPR115のbranchを触らない。
+- 指標分母/30日196/405=48.4%と直近7日39/169=23.1%の区別、コスト試算月約$13.3（ledger換算・請求書ではない）、有料APIモデル比較未実行、AI暫定3件/人手待ち13件の区別、posted側100件SQLオフライン作成を報告。
+- **K9判定**: オフライン評価基盤の成果はPASS_OFFLINE_PARTIAL。**外部AIの送信ゲートは未PASS**。`fixture_access.ts` では利用権未確認でも `--runtime-bodies` のSHA256一致で18件がreadyになり、`cli --mode live --fixtures rights_safe` はその本文を送信可能。`probe_cli --fixtures legacy` は外部Anthropic count_tokensへ第三者の旧本文を送信可能。**SHA一致とoperator opt-inは第三者利用許諾ではない**。本番/外部API接続前に必ずfail-closed化し、別途rightsの監査判断が必要。
+- 限定R2の新G9 TASK `api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011` を `ready`に登録（Sonnet5（高））。純粋オフラインで権利未確認本文を外部APIに送らせないgate/回帰テスト、旧legacyの標準利用縮小、PR115のowner別手順だけを扱う。前TASK/Report全文を保全、G8 PR129・他G/H TASK/本番DB/Cron/Secrets/Providerは非干渉。
+- G9報告のnext_recommendationに「Aへ決算・日銀・FOMC調査を引継ぐ」があるが、**A/G8のPhase6/7で既に原因調査・実装が進んでおり、G9からの自動割当・引継ぎは行わない**。PR116は本番未観測。PR115のmergeやGit履歴書換も未承認。
+
 ## G6 production_mutation_window: ACTIVE — 共通AI基盤 Phase1f ledger apply + trial policies (user-run) — 2026-10-11 JST
 
 - production_mutation_window: **ACTIVE** — owner **G6**, task_id `common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011`, opened 2026-10-11T12:22Z (21:22 JST).
@@ -228,7 +237,7 @@
 | G6 | `idle` | `none` | `none` | — | `K6` | `.agent/tasks/CLAUDE_TASK_6.md` |
 | G7 | `idle` | `none` | `none` | — | `K7` | `.agent/tasks/CLAUDE_TASK_7.md` |
 | G8 | `ready` | `news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
-| G9 | `ready` | `api-optimization-b-phase5-followup-fixture-rights-and-cost-eval-g9-20261011` | `claude` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
+| G9 | `ready` | `api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011` | `claude` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
 | G10 | `idle` | `none` | `none` | — | `K10` | `.agent/tasks/CLAUDE_TASK_10.md` |
 
 - 既存索引との差分: G1（索引 `ready` / 正本 `review_required`）。各担当の記録直後で索引が未更新と見られるため、衝突を避けてこの拡張では既存枠の索引を変更していない。TASK正本を優先する。この拡張ではH1/H2/G1〜G5のTASK本文・Report・status・allocationを変更していない。
