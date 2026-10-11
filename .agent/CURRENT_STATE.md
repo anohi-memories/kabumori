@@ -12,6 +12,7 @@
 - C2 accepted review **CHANGES_REQUIRED**, closed H2 current TASK `done/next_owner:none`, preserved full H2 report/history, and reopened EXISTING G2 PR110 task `kabumori-market-report-delivery-first-guard-calibration-20261007` `ready/next_owner:claude`, recommended **Opus5.5（高）**, same workstream/PR. G2 must fix clause-local hedge scope robustly (NOT just expanding adjective list); add 20 unsafe negative controls, preserve normal noun-subject and emoji/date/safe delivery, no wider feature. Return `K2` to G2.
 - H2 independent 54/54 focused tests PASS, 22 PASS / 20 FAIL newly introduced unsafe-case probes, product code edits0, actual provider/DB/Edge/X calls0. Source PR110 remains OPEN/UNMERGED and **MERGE/DEPLOY HOLD**. No paid API or credentials/production access authorized. New exact-head narrow independent review only after G2 correction if needed.
 - GitHub contents readback confirms H2/G2 TASK and ACTIVE_TASK assignments synchronized. Other G1/G3/G4/G5/H1 work and PRs protected; G1 user-assisted Simulator task remains unaffected.
+- 2026-10-11 G2 報告: 修正を PR110 に push 済み（新しい head `319a442edcd61c07274e3409d8864234f9d77cd4`）。読点の無い接続の前の「い」は、既知の名詞以外すべて節の終わりとして扱う方式に変更。H2 の20通りはローカル判定・単位の除外・X とアプリへの配信のすべてで断定として除外、名詞の5例は推測のまま配信。全テスト成功、本番操作・デプロイ 0。G2 は review_required / chatgpt で K2 待ち。
 
 ## G1 USER LOGIN SIMULATOR QA — ready (2026-10-11 JST)
 

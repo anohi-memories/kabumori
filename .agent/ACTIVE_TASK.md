@@ -74,14 +74,14 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-market-report-delivery-first-guard-calibration-20261007
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: C2 CHANGES_REQUIRED / R1 P1: PR110 exact head 2c876b0bafee31844b9854c4a7d34ba69660d4cf contains NEW Hard-Fact fail-open from finite PREDICATE_END adjective allowlist. H2 proved 20 synthetic unsafe instances retained in X/app after unrelated future hedge; five noun-subject cases, emoji binding, 54 focused existing tests pass. G2 must implement ONE narrowly scoped fail-closed causality-clause correction (NOT adding only four adjectives), preserve noun subject 勢いが and existing controls, test 20 adversarial cases, commit/push same PR110, no merge/deploy/API/prod. G2 TASK current top is ready with full instruction and history; return K2; later one focused Sol（高） new-head check only.
+- allocation: PR110 の C2 R1 P1（一覧に無い形容詞で断定を見逃す問題）を修正し、新しい head 319a442edcd61c07274e3409d8864234f9d77cd4 を push 済み。H2 の20通りはすべて断定として除外、名詞の5例は推測のまま配信。全テスト成功、本番操作・デプロイ 0。Report は .agent/tasks/CLAUDE_TASK.md の先頭の節。K2 の判断待ち。マージ・デプロイは保留。
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
