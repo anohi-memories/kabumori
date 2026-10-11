@@ -3,15 +3,15 @@
 - task_id: common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011
 - owner: claude
 - slot: claude-6
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - recommended_model: **Opus5.5（高）**
 - priority: high
 - user_explicit_approval: **YES — 2026-10-11 このチャットで「おk」**（直前の説明：「本番Supabaseに予算管理DBを作成し、試験用の月$5・日$2の上限を登録する」への承認）
-- production_mutation_window: **ACTIVE** (2026-10-11T12:22Z (21:22 JST), user-run apply && policies; recorded in .agent/CURRENT_STATE.md. Earlier: opened 19:28 JST, CLOSED 19:29 JST without any write) — rule。待機中はDBロックを占有しない。実行直前のfresh全15枠確認でG5/他writerにACTIVEが無い場合のみ、`.agent/CURRENT_STATE.md`へG6唯一の対象/操作とwindow ACTIVEをCAS追記してからapply。書込・readbackの完了/STOPでCLOSEDを記録。CAS競合または他writer ACTIVEなら**DB変更を開始しない**。
+- production_mutation_window: **CLOSED** (ACTIVE 2026-10-11T12:22Z / 21:22 JST → CLOSED 12:33Z / 21:33 JST after read-back; earlier 19:28→19:29 JST window closed without any write) — rule。待機中はDBロックを占有しない。実行直前のfresh全15枠確認でG5/他writerにACTIVEが無い場合のみ、`.agent/CURRENT_STATE.md`へG6唯一の対象/操作とwindow ACTIVEをCAS追記してからapply。書込・readbackの完了/STOPでCLOSEDを記録。CAS競合または他writer ACTIVEなら**DB変更を開始しない**。
 - mutation_scope: target Supabase project `wsmznyzcvmuitkglfeuj` の **exact migration `20261010050613_ai_provider_budget_ledger.sql`**、適用履歴、同一 Ledger の初期system-only予算ポリシー **2件のみ**。これ以外一切不可。
 - original Phase1e K6/Report and earlier unassigned G6 template are preserved unchanged below. This Phase1f task is separate, with new `K6` on completion.
 
@@ -61,6 +61,91 @@
 - explicit confirmation: secrets=0, paid_AI=0, model_switch=0, other_migrations=0
 - STOP_reason, outstanding_issues, safety_checks, next_recommendation
 - `K6` -> **共通AI基盤のちゃ**。本番適用後も次のsmoke/Secret/Cronは別承認であり、自動続行しない。
+
+## Report — Phase1f（K6。最上部の Report。以前の Report は下に保存）
+
+- task_id: common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011
+- result: **PASS_FULL_APPLY_AND_POLICIES**
+- executed_at:
+  - apply 21:31:00〜21:31:37 JST、policies 21:31:37〜21:31:49 JST
+  - Claude による独立した read-only `status` は 21:32:54 JST
+- who_ran_writes: **ユーザーが自分のターミナルで1回だけ実行した**
+  - 実行したコマンドは `rollout.sh apply && rollout.sh policies`（runbook §2 手順5・6、正確な ACK 付き）
+  - Claude が 19:28 JST に `apply` を実行しようとしたところ、Claude Code の自動モードが "Production Deploy" として拒否した。コマンドは始まっておらず、書き込みは 0
+  - そのため 19:29 JST に窓をいったん CLOSED にし、ユーザーの「準備OK」の後に開き直した
+- target_confirmation:
+  - check（21:22）と、apply 内の2回（Stage 0 と Stage A の直前）、policies、status のすべてで `TARGET_VERIFIED`
+  - cron 42件が呼ぶ ref は `wsmznyzcvmuitkglfeuj` の1種類だけ。かぶモリ固有の表 6/6、履歴の目印 2/2
+- source_SHA:
+  - main 上の runner・gate・SQL・migration・policies は、PR133 の head `61be0dfb` と差分 0
+  - migration の sha256 `680aeb3f…5737` は runner の固定値と一致（一致しないと runner が拒否する）
+- CLI_version: 2.116.0（`--linked --project-ref wsmznyzcvmuitkglfeuj --agent no --output-format json`、空の作業ディレクトリ）
+- check_exit_code: 0（21:22 JST。TARGET_VERIFIED / READY_TO_APPLY / predicted_refusals 4/4 no）
+- mutation_window_start / end:
+  - 本実行: ACTIVE 2026-10-11T12:22Z（21:22 JST、commit `1af11eb5`）→ CLOSED 12:33Z（21:33 JST、この commit）
+  - 先行の試み: 19:28 → 19:29 JST（書き込み 0）
+- other_writers_checked:
+  - 窓を開く直前に全15枠を確認した。ACTIVE の窓は無し。G5 は done。ready の G1 と G8 は本番禁止
+  - 共有の状態ファイルへの記録は fast-forward の push で行った（1回目は他の担当の同時書き込みと衝突したため、取り込んで再確認してから記録した）
+- apply_executed: yes（1回）。stage_A_to_D_status: **ALL PASS**
+  - Stage 0: TARGET_VERIFIED、READY_TO_APPLY（21:31:06）、適用前の指紋、Stage A 直前の TARGET_VERIFIED
+  - Stage A: migration 1本。CLI の終了コード 0、出力 `[]`
+  - 「台帳が存在するか」の確認: あり
+  - Stage B: READBACK_PASS（履歴 0行の時点）
+  - Stage C: 履歴の行を追加
+  - Stage D: READBACK_PASS（履歴 1行）、既存オブジェクトの比較は EXISTING_UNCHANGED
+- migration_registry_verification: `20261010050613 / ai_provider_budget_ledger` がちょうど1行（読み戻しの `history_row=1`）
+  - 本番の履歴は 81 → 82行。max は `20261010050613`
+- ledger_schema_5_tables_rpcs_7_grants_rls_verification: 読み戻しの must_be_true 17項目が、Stage B・Stage D・policies 前後・status のすべてで True
+  - schema とちょうど5つの表、ちょうど7つの RPC（`(p jsonb) -> jsonb`）、所有者は1つ
+  - SECURITY DEFINER と空の search_path、RLS は全表で有効、ポリシー 0
+  - 直接の付与なし、EXECUTE は service_role だけ（anon / authenticated は不可）、grant option なし
+  - アプリ用ロールには schema・表・補助関数の権限なし
+  - 追記専用のトリガー 6、状態遷移のトリガー 1
+- policies_executed: yes（1回。apply の終了コード 0 の後だけ実行される `&&` でつないだ）。exact_2_policy_readback: **完全一致**
+  - `anthropic.opus.kabumori.market_report.monthly`: anthropic / claude-opus-5-5 / kabumori / market_report / system、month、$5、40回、1回 $1、enabled
+  - `anthropic.opus.kabumori.market_report.daily`: 同じ範囲、day、$2、6回、1回 $1、enabled
+  - logical_role・brand・user のスコープや、per_brand / per_user は無し。広い範囲のポリシーは無し
+  - 台帳の行: 予約・利用記録・請求観測は 0
+- before_after_business_fingerprint: public・private と全体のロール等、12カテゴリすべて同一
+  - columns 1486、constraints 639、default_acl 27、event_triggers 7、indexes 211、memberships 25、policies 66、relations 303、roles 17、schemas 2、triggers 60、functions 168
+  - 台帳の RPC を含む関数数は 168 → 175（ちょうど +7、すべて ai_ledger の RPC）
+- g5_notification: `.agent/CURRENT_STATE.md` の CLOSED の記録に書いた
+  - 履歴 +1。G5 の `20261009120000` は未適用のまま
+  - G5 の指紋で変わるのは、07 の `functions`、04 の `untouched_functions` / `history_count` / `history_latest`。その他は不変
+  - G5 の TASK・Report には触れていない
+- cli_side_effects: 既知の副作用だけ
+  - CLI の呼び出しごとに `Initialising login role...`（一時ログインロール）
+  - 分離した作業ディレクトリへの `linked-project.json`
+  - worktree の `supabase/.temp/cli-latest` は削除済み
+- changed_files: `.agent/tasks/CLAUDE_TASK_6.md`、`.agent/ACTIVE_TASK.md`（G6 の部分だけ）、`.agent/CURRENT_STATE.md`（G6 の窓の記録だけ）
+  - ソース・migration・ポリシーの SQL・runner は変更していない
+- tests: 本番での実行で観察したものだけを PASS とする
+  - runner の check / apply / policies / status の出力の形、終了コード、読み戻し、指紋の比較
+  - 新しいオフラインテストは追加していない（既定の runner をそのまま使ったため）
+- commit_hash: 窓を開いた記録 `1af11eb5`、窓を閉じた記録と Report はこの commit（K6 で GitHub 上の値を確認）
+- push: main へ fast-forward（push の前に fresh `origin/main` を再確認）
+- merge / deploy: not_performed
+- explicit confirmation: secrets=0、paid_AI=0、model_switch=0、other_migrations=0
+  - Edge・Cron・Auth・RLS の既存ポリシー、G2 の切替、photo project: すべて 0
+- STOP_reason: なし（先行の試みの「ハーネスによる拒否」だけ。書き込みは無し）
+- outstanding_issues:
+  1. 回復処理の Cron が未設定。台帳を使う呼び出しを始める前に、別の承認が必要（smoke だけなら不要）
+  2. `ANTHROPIC_API_KEY` の Supabase への登録と、実 API smoke（台帳込みにするか、台帳なしにするか）は別の承認
+  3. authenticator の `statement_timeout=8s` が、PostgREST 経由の台帳 RPC の上限になる（Phase 2a の smoke で実測する）
+  4. Claude からは本番に書き込めない（自動モードが拒否する）。今後の本番の書き込みも、ユーザーが実行する流れを前提にする
+  5. 1回のコマンドの中で「Stage 0 の事前チェック → Stage A」の間に、他の担当が DDL を流す可能性はゼロではない
+     - 窓の記録と、直前の全枠確認で防いだ
+     - 指紋の比較が EXISTING_UNCHANGED だったので、実際の干渉は無かった
+- safety_checks:
+  - 書き込みは、承認された範囲（migration 1本と履歴1行、ポリシー2件）だけ。いずれも runner 経由で、それぞれ1回
+  - 再試行・手動の補修・巻き戻し・`--resume-history` は使っていない
+  - 個人情報・キー・CLI の認証情報は記録していない
+- next_recommendation: K6 で評価する。次の候補は、いずれも別の承認が必要
+  1. 実 API smoke（`ai_provider_claude_smoke.ts`、上限見積もり $0.040）
+  2. `ANTHROPIC_API_KEY` の登録（Phase 2a の直前）
+  3. 回復処理の Cron
+  4. G2 と調整して、市況レポートのシャドー接続（Phase 2a）
 
 ---
 

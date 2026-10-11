@@ -18,9 +18,23 @@
 - 限定R2の新G9 TASK `api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011` を `ready`に登録（Sonnet5（高））。純粋オフラインで権利未確認本文を外部APIに送らせないgate/回帰テスト、旧legacyの標準利用縮小、PR115のowner別手順だけを扱う。前TASK/Report全文を保全、G8 PR129・他G/H TASK/本番DB/Cron/Secrets/Providerは非干渉。
 - G9報告のnext_recommendationに「Aへ決算・日銀・FOMC調査を引継ぐ」があるが、**A/G8のPhase6/7で既に原因調査・実装が進んでおり、G9からの自動割当・引継ぎは行わない**。PR116は本番未観測。PR115のmergeやGit履歴書換も未承認。
 
-## G6 production_mutation_window: ACTIVE — 共通AI基盤 Phase1f ledger apply + trial policies (user-run) — 2026-10-11 JST
+## G6 production_mutation_window: CLOSED — 共通AI基盤 Phase1f ledger applied + 2 trial policies (PASS) — 2026-10-11 JST
 
-- production_mutation_window: **ACTIVE** — owner **G6**, task_id `common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011`, opened 2026-10-11T12:22Z (21:22 JST).
+- **CLOSED 2026-10-11T12:33Z (21:33 JST) after read-back. Result: PASS_FULL_APPLY_AND_POLICIES.**
+  - The user ran the fixed runner once in their own terminal (`apply && policies`, 21:31 JST). Claude did the checks and an independent read-only `status` (21:32 JST).
+  - Applied: migration `20261010050613_ai_provider_budget_ledger.sql` + exactly one history row.
+    - New schema `ai_ledger` with 5 tables; 7 new `public.ai_ledger_*(p jsonb)` RPCs.
+    - EXECUTE is service_role only; RLS is on with no policies.
+  - Inserted: exactly 2 system-only trial budget policies (Anthropic / Opus 5.5 / kabumori / market_report: month $5 + 40 calls, day $2 + 6 calls, $1 per call). Nothing broader.
+  - Existing business objects of public/private were identical before and after in all 12 categories (functions 168 → 175 = exactly the 7 RPCs).
+- **G5 / other slots, please note:**
+  - Migration history is now 82 rows; max is `20261010050613` (was `20261007214402`).
+  - G5's `20261009120000` stays unapplied and would enter history as an older version later; that is harmless without `db push`.
+  - G5's existing-object fingerprints change only in the function sets: 07_existing_fingerprint `functions`; 04_touched_and_fingerprints `untouched_functions`, `history_count`, `history_latest`.
+  - Nothing else in production changed. No Secrets, no provider/API calls, no Edge/Cron/Auth/RLS change.
+
+
+- production_mutation_window (as opened): **ACTIVE** — owner **G6**, task_id `common-ai-provider-g6-phase1f-production-ledger-apply-policies-20261011`, opened 2026-10-11T12:22Z (21:22 JST).
 - target: Supabase project `wsmznyzcvmuitkglfeuj` only.
 - exact scope (runner `supabase/tests/ai_provider_budget_ledger_rollout.sh` only, run once by the user in their own terminal):
   1. `apply`: migration `20261010050613_ai_provider_budget_ledger.sql` (sha256 `680aeb3f…5737`) and its one history row
