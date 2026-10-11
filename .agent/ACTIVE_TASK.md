@@ -116,14 +116,14 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-fact-v2-pr132-three-objective-guards-correction-20261011
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: C2 accepted H2's ONE integrated Fact V2 PR132 review as CHANGES_REQUIRED solely R1-R3 P2 objective-guard escapes: same-day denial scoped across wrong affirmative, TOPIX context allows ETF 437円 numerical mislabel, trailing wrong US date stripped. G2 MUST preserve user-approved Opus independent economic inference and all good Fact V2 positive examples; fix ONLY three narrow objective exception checks with before/after X+app mock proof, original R1-R3 controls, H2 P1 20 unsafe and five noun-positive cases. Draft PR132 stays on unchanged protected PR110 branch; G2 uses its own independently clean worktree, push bounded new commit to PR132 only (no force push), no merge/deploy/prod/paid API. Previous TASK/Report fully preserved, return K2. After K2 do NOT keep reiterating regex language tests; decide final merge gate and separate consumer cutover. 
+- allocation: PR132 の C2 R1〜R3（例外が広すぎて通っていた客観的な誤り4文）を修正し、新しい head 68d45dde1be34715267b5066fa3b3686d756b79e を push 済み（Draft のまま、PR110 は変更なし）。4文はローカル判定・単位の除外・X とアプリへの配信のすべてで止まり、通すべき3文は届く。全テスト成功、本番操作・デプロイ・マージ 0。Report は .agent/tasks/CLAUDE_TASK.md の先頭の節。K2 の判断待ち。
 - recommended_model: Opus5.5（高）
 
 ## Claude G3
