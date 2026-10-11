@@ -1,6 +1,6 @@
 # G4 CURRENT TASK — POSTONA Threads 認証＋手動テキスト投稿 統合V1（オフライン・本番無効）
 
-- task_id: **postona-threads-connect-publish-integrated-offline-v1-g4-20261011**
+- task_id: postona-threads-connect-publish-integrated-offline-v1-g4-20261011
 - owner: claude
 - slot: claude-4
 - status: ready
