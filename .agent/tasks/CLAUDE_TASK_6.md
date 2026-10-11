@@ -3,8 +3,8 @@
 - task_id: common-ai-provider-g6-phase1g-one-paid-call-ledger-smoke-20261011
 - owner: claude
 - slot: claude-6
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -14,7 +14,15 @@
 - production_mutation_window: **RESERVED_NOT_ACTIVE**。実際の`--ledger=supabase` smokeは共有本番DBのRPC書込みを伴う。実行直前にfreshの全15枠/G5/STATEを確認し、他のACTIVE窓がなければ自枠の短い `ACTIVE` 窓（対象：このsmoke1件のai_ledger reserve→mark_sent→settleだけ）を`.agent/CURRENT_STATE.md`へCAS記録。完了/失敗/STOPで必ずCLOSED。窓記録不可なら実APIを呼ばない。
 - source_version: fresh origin/main の固定 `supabase/tests/ai_provider_claude_smoke.ts`、`docs/ai-provider/PHASE1D_ACTIVATION_RUNBOOK.md` §2手順1–3・7、Phase1a provider / Phase1b ledger。既存コードの修正や再デプロイは本TASK不要・禁止。
 
-## CRITICAL G6 SAFETY HOLD — Supabase new sb_secret REST header compatibility (2026-10-11)
+## K6 INTERIM VERDICT — CONDITIONAL HOLD RELEASE / Phase1g CONTINUE (2026-10-11)
+
+- **K6 verdict: ACCEPT KEY_COMPAT_PRODUCTION_PRECEDENT, NOT A LIVE SMOKE PASS.** G6 Report claims production market-report-analysis uses new secret key with same apikey+Bearer headers to call service_role-only RPC successfully; source of this project shares that header pattern. However this is evidence from a different key/RPC, not direct proof that the new ephemeral key works. Existing smoke reads `ai_ledger_usage_summary` before external Anthropic call, and reserve/mark_sent are fail-closed. DO NOT remove authentication error handling.
+- **Safety HOLD is conditionally released** for the specific once-only paid test, AFTER all prerequisite checks: user verified dedicated Workspace `kabumori-production` monthly $10 limit and email alerts $5/$8 in screenshots; user created workspace-scoped non-admin Claude key expiring ~2026-11-10 and confirmed local `anthropic.env` exists with permissions 0600 on 2026-10-11 23:13 JST. Actual key validity / file contents never disclosed or verified by ChatGPT.
+- Continue SAME G6 TASK, not a new PR/slot: first guide user to create a NEW temporary Supabase secret key and save to local mode-0600 `ledger.env`; verify setup in offline `plan`. No key values/screenshots/chat logs. `G6` start proceeds only while task ready. Confirm no other production window ACTIVE; CAS record narrow ACTIVE before live call and CLOSED after, even failure.
+- **Fail closed** if new secret key cannot call the ledger RPC in the live smoke's pre-Anthropic usage-summary probe, or if any warning/401/403: zero paid calls, STOP without changing guards/retrying/falling back to memory. After any Anthropic attempt, do not retry. 1 paid call upper cost <$0.05, fixed synthetic content; revoke Supabase temporary secret key after. Legacy service_role key use remains forbidden.
+- Old CRITICAL hold below is retained as historical rationale, superseded by this conditional decision. Any new source/API compatibility anomaly reestablishes STOP and report K6.
+
+## HISTORICAL CRITICAL G6 SAFETY HOLD — Supabase new sb_secret REST header compatibility (2026-10-11)
 
 - **STATUS FOR LIVE: HOLD until explicitly resolved.** ChatGPT source-checked `supabase/functions/_shared/ai_provider/ledger_guard.ts`: existing `SupabaseLedgerBudgetGuard.#rpc` sets BOTH `apikey: <serviceKey>` and `Authorization: Bearer <serviceKey>`. The Phase1g runbook recommends a NEW ephemeral `sb_secret_...` key. Current Supabase official docs warn that `sb_secret` is an opaque key and is **not JWT**; using it as bearer on Data REST API may fail/reject JWT verification. Reference: https://supabase.com/docs/guides/getting-started/api-keys , Known limitations; official auth gateways route new keys via `apikey`. Fake PG/PostgREST shim tests may not detect this production incompatibility.
 - **Fail-closed:** Do not ask the user to create a new high-privilege Supabase secret yet; do not issue/borrow a legacy service_role key; do not run `--mode=live`, call any API, or invoke a real ledger RPC until compatibility is verified **without an unapproved live API call**. Do NOT replace `sb_secret` with `anon` or fall back to `--ledger=memory`. Claude workspace creation/key storage and offline plan are safe to proceed separately.
