@@ -3,8 +3,8 @@
 - task_id: kabumori-stock-detail-v1-readonly-navigation-20261011
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: normal
 - recommended_model: **Sonnet5（中）**
 - task_type: Kabumori mobile UI feature / user-scoped READ-ONLY presentation + existing editor navigation
@@ -71,6 +71,18 @@ CURRENT implementation evidence:
 - On completion create one G1-only PR (source, NOT self-merge), Report in current TASK `## Report` with task_id/result/changed_files/tests/commit_hash/push/PR exact head/deploy=0/EAS=0/remaining_issues/safety_checks/next_recommendation. Set TASK/index to `review_required` / `next_owner: chatgpt`, return to **かぶモリアプリG1のちゃ** with `K1`. ChatGPT decides if Codex review is required based on actual auth/data/navigation changes. No H slot reservation now.
 
 推薦モデル：**Sonnet5（高）**
+
+## K1 FINAL — PR136 source PASS, implementation DONE / user merge approval pending — 2026-10-11 JST
+
+- **Final K1 source verdict: PASS_SOURCE_IMPLEMENTATION / PR #136 OPEN, NOT MERGED**. G1 TASK `kabumori-stock-detail-v1-readonly-navigation-20261011` completed. Accepted exact approved PR136 head `ca2477e0fdc4ba85f620e48aa7d9221e691ba485`, one new commit above initial head `e2dfdab5c7219aa2ff31c50c51f0125f816c16a7`; correction changed EXACTLY two files: `src/lib/stock-detail-view.ts`, `tests/app/stock-detail-view_test.ts`. Full PR 16 files (source/tests + 4 fixture-only screenshots). No self-merge or further implementation requested.
+- Independent K1 examined GitHub compare `e2dfdab5..ca2477e0`, both versions of `registrationMatchesSnapshot`, added test cases and preserved original PR screenshot/source prior K1. The comparison now requires equality on saved vs registered `tracking_type`, `quantity`, `average_price`, `position_type` and `side` before showing user holding `market_value`/`day_pl`/`unrealized_pl`. If mismatched, return existing `VALUATION_NOTE.changed` and no saved valuation, while independent dated saved close price continues. Cases for long↔short, cash↔margin, role mismatch, null/legacy fields, identical row, revert and date-safe close present in new tests.
+- Claude G1 report says intentional fail-before `20 passed / 5 failed`, after-fix focus `25 passed / 0 failed`, app suite `494 passed / 0 failed`, source TypeScript 0 errors, `git diff --check` clean. **ChatGPT independently inspected source and tests but did not execute commands on the Mac**. Earlier G1 fixture 375pt screenshots and 402pt user-authenticated view were accepted in the prior K1; pure helper correction did not rerun Simulator, physical iPhone not tested.
+- GitHub PR head now exact `ca2477e0`, PR OPEN/unmerged; **GitHub PR head status SUCCESS including Vercel (previous rate-limit failure cleared)**. Main moved since PR base but fresh compare found **zero overlap across all 16 PR paths** (main only independent docs/AI-provider/agent/test paths). REST mergeable remains `null/unknown`, so do not assert explicit merge readiness. Must refresh exact PR head/main/checks/mergeability at any future merge; do not merge until user explicitly requests.
+- Safety: no changes to native `src/app/(tabs)/_layout.tsx` or menu 5 icons/labels, `AuthGate`, Supabase schema/Auth/RLS/Edge/production or G2/G5 scopes; read-only user-scoped detail query and editor behind explicit save action. No EAS or manual deploy, no real user-stock registration edits, no AI/paid API. New code source is only a PR candidate, not a native binary released to iPhone. Vercel PR check success is not TestFlight/App Store release.
+- **Separate pre-existing UI consistency backlog, NOT part of PR136 or a new G1 TASK:** `src/lib/portfolio-view.ts` `buildHoldingRows` and `topImpacts` may still show stale saved report holding valuation after changing registration terms, since only the new detail's view-helper performs the expanded match. Once a user approves separately, consider updating portfolio list/impact financial-truth semantics with a specifically scoped source/test task (suggested Sonnet5（中）). Do not use G2/new old-report cutover for this. Not a PR136 merge blocker, but should be tracked before app release.
+- User 2026-10-11 explicitly confirmed old close-report gap Oct7–9 will be resolved by separately planned new approach; **no legacy close investigation, patch, monitoring or backfill**.
+- Current G1 TASK marked **done / next_owner:none** because development is finished; open PR136 + pending explicit user merge direction are **not a reason to occupy G1 as a memo slot**. Keep PR branch untouched/protected from other work; new G1 allocation requires fresh overlap and independent worktree checks. No H slot allocated: low-risk view-only helper correction, no DB/Auth security boundary changed.
+- AI Lab diary: candidate after successful merge — 銘柄を開いて詳細情報を確認し、編集は別アクションに分離。保有条件が更新された後は古い評価損益を保留する。
 
 ## K1 focused correction — valuation matching must include position type and long/short (2026-10-11)
 
