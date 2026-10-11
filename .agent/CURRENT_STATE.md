@@ -1,3 +1,10 @@
+## K3 G3 R2b source follow-up — 2026-10-11 JST
+
+- Current G3 unified AI/manual planner PR138 head 48f070cc6a8472990dc07760e61ce255e5d21c91: R1/R3 corrections accepted, G3-reported 269/269 app +22/22 domain tests PASS, not independently rerun. ONE remaining R2b P2 UI-binding problem: current schedule screen picks AI settings brand from snapshot.workspace first-brand, not selected activeAccount.brandId across owned brands; A opt-in/frequency may be shown for B local preview. No proof of production posting, and actual X scheduling remains BLOCKED.
+- G3 `postona-unified-ai-manual-schedule-planner-v1-20261011` returned ready/claude for ONE same Draft PR138 selected-brand source test/fix; Sonnet5（中）; K3 after local regression. No other H/G ownership touched, no real Supabase/X/Edge/DB/Cron/EAS or PR merge. Previous G3 Report/history preserved. Real post backend later G5/G4 and one Sol（高） integrated security review.
+
+---
+
 ## K6 FINAL — 共通AI Phase1e production runner preflight PASS / no DB apply — 2026-10-11 JST
 
 - K6 accepted G6 task `common-ai-provider-g6-phase1e-readonly-runner-preflight-20261011` **PASS_READONLY_CHECK**, source-independent GitHub Report commit `9071e76cef20c942c2e87bfbff96940e391ceacc`; G6 TASK `done/next_owner:none`, index G6-only synchronized, old TASK/Report history intact. This room's common-AI future Claude work remains G6 ONLY, but no held idle memo or autoallocated G6 task.
