@@ -52,7 +52,8 @@ import {
   planImportantNewsFetchGroups,
   planSourceFairCandidateBatch,
 } from "./fetch_resource_limit_logic.ts";
-import { enrichFedStatementCandidates, type FedStoredState } from "./fed_statement_enrichment.ts";
+import { enrichFedStatementCandidates } from "./fed_statement_enrichment.ts";
+import { fillMissingCandidateBody, storedStatementStates } from "./candidate_body_fill.ts";
 import { classifyFedMonetaryTitle } from "../_shared/news_body_extraction/fomc_statement_facts.ts";
 import { fetchOfficialPageText } from "./jp_official_enrichment.ts";
 import { collapseSameEventItems, createPermanentFailureMemory, runJpOfficialFill } from "./jp_official_lane_logic.ts";
@@ -178,6 +179,7 @@ type StoredCandidate = {
   published_at: string;
   status?: string;
   body_summary?: string | null;
+  source_name?: string | null;
 };
 
 type CandidateResult = {
@@ -391,7 +393,7 @@ async function selectCandidates(
   limit = 20,
 ): Promise<StoredCandidate[]> {
   const params = new URLSearchParams({
-    select: "id,source_url,normalized_title,content_hash,company_code,entity_key,published_at,status,body_summary",
+    select: "id,source_url,normalized_title,content_hash,company_code,entity_key,published_at,status,body_summary,source_name",
     limit: String(limit),
   });
   for (const [key, value] of Object.entries(filters)) {
@@ -402,59 +404,6 @@ async function selectCandidates(
   });
   if (!result.ok) throw new Error("NEWS_CANDIDATE_LOOKUP_FAILED");
   return await result.json() as StoredCandidate[];
-}
-
-/**
- * Stored state (status / has a body) of the feed's FOMC statement items, keyed by the feed's own URL. Used to keep
- * already-stored statements out of the per-fetch fetch quota and to find unjudged ones that still lack a body.
- */
-async function storedFedStatementStates(
-  supabaseUrl: string,
-  serviceRoleKey: string,
-  candidates: IncomingNewsCandidate[],
-): Promise<Map<string, FedStoredState>> {
-  const states = new Map<string, FedStoredState>();
-  for (const candidate of candidates) {
-    if (classifyFedMonetaryTitle(candidate.title) !== "statement") continue;
-    const prepared = await prepareNewsCandidate(parseIncoming(candidate));
-    const rows = await selectCandidates(supabaseUrl, serviceRoleKey, { source_url: `eq.${prepared.sourceUrl}` }, 1);
-    const row = rows[0];
-    if (row) {
-      states.set(candidate.sourceUrl, {
-        id: row.id,
-        status: typeof row.status === "string" ? row.status : "unknown",
-        hasBody: typeof row.body_summary === "string" && row.body_summary.trim().length > 0,
-      });
-    }
-  }
-  return states;
-}
-
-/**
- * Fills the official body into a candidate that has none, atomically: the row must still be awaiting judgement and
- * still have no body, so a judged, generated or published candidate is never rewritten and a concurrent judgement run
- * cannot see a half-updated row. Returns whether a row was changed (false = someone else moved it first).
- */
-async function fillMissingCandidateBody(
-  supabaseUrl: string,
-  serviceRoleKey: string,
-  candidateId: string,
-  bodySummary: string,
-): Promise<boolean> {
-  if (bodySummary.trim().length === 0) return false;
-  const params = new URLSearchParams({
-    id: `eq.${candidateId}`,
-    status: "eq.pending_judgement",
-    or: "(body_summary.is.null,body_summary.eq.)",
-  });
-  const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${params}`, {
-    method: "PATCH",
-    headers: headers(serviceRoleKey, "return=representation"),
-    body: JSON.stringify({ body_summary: bodySummary }),
-  });
-  if (!result.ok) throw new Error("NEWS_CANDIDATE_BODY_FILL_FAILED");
-  const rows = await result.json() as unknown[];
-  return Array.isArray(rows) && rows.length === 1;
 }
 
 async function selectStoredCandidatesByHashes(
@@ -2159,11 +2108,19 @@ Deno.serve(async (req) => {
           if (source.key === "fed") {
             // Phase 7: FOMC statement items carry no description; read the official statement page. Statement items whose
             // facts cannot be read are withheld (retried while fresh) instead of being judged on the headline alone.
-            const stored = await storedFedStatementStates(supabaseUrl, serviceRoleKey, candidates);
-            const enrichment = await enrichFedStatementCandidates(candidates, fetch, {
-              stored,
-              rotation: Math.floor(Date.now() / (10 * 60 * 1000)),
-            });
+            const statements: Array<{ sourceUrl: string; normalizedUrl: string }> = [];
+            for (const candidate of candidates) {
+              if (classifyFedMonetaryTitle(candidate.title) !== "statement") continue;
+              statements.push({
+                sourceUrl: candidate.sourceUrl,
+                normalizedUrl: (await prepareNewsCandidate(parseIncoming(candidate))).sourceUrl,
+              });
+            }
+            const stored = await storedStatementStates(
+              statements,
+              async (url) => (await selectCandidates(supabaseUrl, serviceRoleKey, { source_url: `eq.${url}` }, 1))[0] ?? null,
+            );
+            const enrichment = await enrichFedStatementCandidates(candidates, fetch, { stored });
             candidates = enrichment.candidates;
             sourceErrors.push(...enrichment.errors.map((error) => `market_macro:fed:${error}`));
             // A stored, still unjudged statement that had no body gets the official body (guarded update, see below).
@@ -2174,7 +2131,7 @@ Deno.serve(async (req) => {
                   bodySummary: update.bodySummary, category: "frb", publishedAt: new Date().toISOString(),
                 }));
                 const filled = await fillMissingCandidateBody(supabaseUrl, serviceRoleKey, update.id, prepared.bodySummary ?? "");
-                if (!filled) sourceErrors.push("market_macro:fed:fed_statement:body_fill_skipped");
+                if (filled !== "filled") sourceErrors.push("market_macro:fed:fed_statement:body_fill_skipped");
               } catch (error) {
                 sourceErrors.push(`market_macro:fed:fed_statement:body_fill_failed:${safeError(error)}`);
               }

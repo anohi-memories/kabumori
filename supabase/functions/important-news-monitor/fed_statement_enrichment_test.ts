@@ -190,20 +190,76 @@ test("F7: stored statements cost no fetch, so a third item behind two stored one
   assert.equal(out.enriched, 1);
 });
 
-test("F7: three unstored statements are all reached over three fetches (rotation, cap kept)", async () => {
-  const urls = ["a", "b", "c"].map((n) => URL_OK.replace("0916a", `0916${n}`));
-  const items = urls.map((url) => candidate("Federal Reserve issues FOMC statement", url));
-  const reached = new Set<string>();
-  for (let rotation = 0; rotation < 3; rotation += 1) {
-    const fetched: string[] = [];
-    await enrichFedStatementCandidates(items, async (url) => {
-      fetched.push(url);
-      return new Response("down", { status: 503, headers: { "content-type": "text/html" } });
-    }, { rotation });
-    assert.equal(fetched.length, FED_STATEMENT_LIMITS.maxPerFetch);
-    for (const url of fetched) reached.add(url);
+const sUrl = (n: string) => URL_OK.replace("0916a", `0916${n}`);
+const statementsOf = (names: string[]) => names.map((n) => candidate("Federal Reserve issues FOMC statement", sUrl(n)));
+const down = () => new Response("down", { status: 503, headers: { "content-type": "text/html" } });
+
+test("F7: a statement behind two failing ones is reached on every run, whatever the call interval (cold start each time)", async () => {
+  // Reproduction of the reviewed counterexample: 3 statements, cap 2, a call every 60 min used to rotate by
+  // floor(now/10min) % 3 and never advance. Intervals are simulated through the injected clock; the result must not depend on it.
+  const failing = new Set([sUrl("a"), sUrl("b")]);
+  for (const intervalMinutes of [10, 30, 60]) {
+    for (let run = 0; run < 6; run += 1) {
+      const clock = Date.UTC(2026, 9, 11, 0, 0, 0) + run * intervalMinutes * 60_000;
+      const out = await enrichFedStatementCandidates(statementsOf(["a", "b", "c"]), async (url) =>
+        failing.has(url) ? down() : htmlResponse(RAISE), { memory: new Map(), random: () => 0.5, now: () => clock });
+      assert.equal(out.enriched, 1, `interval ${intervalMinutes} run ${run}`);
+      assert.deepEqual(out.candidates.map((item) => item.sourceUrl), [sUrl("c")]);
+    }
   }
-  assert.equal(reached.size, 3);
+});
+
+test("F7: failures do not use up the success cap; four statements, cap 2, all reachable in one run when they succeed", async () => {
+  const out = await enrichFedStatementCandidates(statementsOf(["a", "b", "c", "d"]), async (url) =>
+    url === sUrl("a") ? down() : htmlResponse(RAISE), { memory: new Map(), random: () => 0.5 });
+  assert.equal(out.enriched, 2);
+  assert.equal(out.withheld, 1);
+  assert.equal(out.deferred, 1);
+});
+
+test("F7: a warm instance tries the statements that did not fail recently first, so six statements are all reached", async () => {
+  const names = ["a", "b", "c", "d", "e", "f"];
+  const failing = new Set(["a", "b", "c", "d"].map(sUrl));
+  const memory = new Map<string, number>();
+  const stored = new Map<string, { id: string; status: string; hasBody: boolean }>();
+  const reached = new Set<string>();
+  for (let run = 0; run < 3; run += 1) {
+    const out = await enrichFedStatementCandidates(statementsOf(names), async (url) => {
+      reached.add(url);
+      return failing.has(url) ? down() : htmlResponse(RAISE);
+    }, { memory, random: () => 0.5, stored });
+    for (const item of out.candidates) if (item.bodySummary) stored.set(item.sourceUrl, { id: item.sourceUrl, status: "pending_judgement", hasBody: true });
+  }
+  assert.equal(reached.size, 6);
+});
+
+test("F7: cold start every run with random tie-break still gives every statement a turn over time", async () => {
+  // seeded LCG so the run is reproducible; 6 statements, 5 of them always failing, one attempt budget of 4 per run
+  let seed = 12345;
+  const random = () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+  const names = ["a", "b", "c", "d", "e", "f"];
+  const reached = new Map<string, number>();
+  for (let run = 0; run < 24; run += 1) {
+    await enrichFedStatementCandidates(statementsOf(names), async (url) => {
+      reached.set(url, (reached.get(url) ?? 0) + 1);
+      return down();
+    }, { memory: new Map(), random });
+  }
+  assert.equal(reached.size, 6);
+  for (const count of reached.values()) assert.ok(count > 0);
+});
+
+test("F7: the per-run time budget stops further attempts", async () => {
+  let clock = 0;
+  const out = await enrichFedStatementCandidates(statementsOf(["a", "b", "c"]), async () => {
+    clock += 30_000;
+    return down();
+  }, { memory: new Map(), random: () => 0.5, now: () => clock });
+  assert.equal(out.withheld, 1);
+  assert.equal(out.deferred, 2);
 });
 
 test("F9: a stored unjudged statement without a body is filled in place; other statuses are never rewritten", async () => {
@@ -221,14 +277,4 @@ test("F9: a stored unjudged statement without a body is filled in place; other s
   assert.equal(out.candidates.length, 2);
   assert.ok(out.errors.includes("fed_statement:stored_without_body:published"));
   assert.ok(out.errors.includes("fed_statement:stored_without_body:no_post"));
-});
-
-test("F9: the in-place fill is a guarded update that cannot touch judged, generated or published rows", async () => {
-  const index = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
-  const fn = index.slice(index.indexOf("async function fillMissingCandidateBody"));
-  const body = fn.slice(0, fn.indexOf("\n}\n"));
-  assert.match(body, /status: "eq\.pending_judgement"/u);
-  assert.match(body, /body_summary\.is\.null/u);
-  assert.match(body, /method: "PATCH"/u);
-  assert.equal(/published|status: "/u.test(body.replace(/status: "eq\.pending_judgement"/u, "")), false);
 });

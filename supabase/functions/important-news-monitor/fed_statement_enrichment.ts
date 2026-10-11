@@ -159,23 +159,56 @@ export function statementDocumentRejection(
 }
 
 /**
+ * Consecutive failures per statement URL, kept in the memory of the running Edge instance only (nothing is persisted).
+ * It is used to try the statements that did not fail recently first; a cold start simply forgets it.
+ */
+const defaultFailureMemory = new Map<string, number>();
+const FAILURE_MEMORY_MAX = 200;
+/** Failing statements are retried; the time spent on them in one fetch is bounded. */
+export const FED_ENRICHMENT_BUDGET_MS = 20_000;
+
+export type FedEnrichmentOptions = {
+  /** Successful enrichments per fetch (default FED_STATEMENT_LIMITS.maxPerFetch). */
+  maxPerFetch?: number;
+  /** Fetch attempts per run, successes and failures together (default 2 x maxPerFetch). */
+  maxAttempts?: number;
+  stored?: ReadonlyMap<string, FedStoredState>;
+  /** Tie-break among statements with the same failure count; injected in tests. Default Math.random. */
+  random?: () => number;
+  memory?: Map<string, number>;
+  now?: () => number;
+  budgetMs?: number;
+};
+
+/**
  * Candidates of the Fed feed -> the same candidates, statement items carrying the official page's facts. Statement
  * items that cannot be read are dropped from the result; every other item passes through unchanged.
  *
- * Quota: statements already stored with a body cost no fetch (they only become duplicates later); the others share the
- * per-fetch cap in a rotation, so a statement behind two failing ones is still reached on a later fetch.
+ * Quota (no dependence on the call schedule):
+ *  - statements already stored with a body cost no fetch (they only become duplicates later);
+ *  - the cap counts SUCCESSFUL enrichments, so a failing statement does not take a slot from the ones behind it;
+ *  - attempts are bounded (maxAttempts) and time-bounded; the statements are ordered by recent failures (fewest first)
+ *    and, among equals, by a random tie-break — never by the clock — so no call interval (hourly, 30 min, 10 min) can
+ *    lock a statement out. With at most maxAttempts unstored statements every one is tried on every run. Beyond that a
+ *    warm instance moves recent failures behind the untried ones; a cold start is random, so each statement still has
+ *    a positive chance on every run (no fixed period can starve it), though not a hard per-run guarantee.
  */
 export async function enrichFedStatementCandidates(
   candidates: IncomingNewsCandidate[],
   fetchImpl: FedFetchLike = fetch,
-  limits: { maxPerFetch?: number; rotation?: number; stored?: ReadonlyMap<string, FedStoredState> } = {},
+  options: FedEnrichmentOptions = {},
 ): Promise<FedEnrichmentOutcome> {
-  const maxPerFetch = limits.maxPerFetch ?? FED_STATEMENT_LIMITS.maxPerFetch;
-  const stored = limits.stored ?? new Map<string, FedStoredState>();
+  const maxPerFetch = options.maxPerFetch ?? FED_STATEMENT_LIMITS.maxPerFetch;
+  const maxAttempts = options.maxAttempts ?? maxPerFetch * 2;
+  const stored = options.stored ?? new Map<string, FedStoredState>();
+  const random = options.random ?? Math.random;
+  const memory = options.memory ?? defaultFailureMemory;
+  const now = options.now ?? Date.now;
+  const budgetMs = options.budgetMs ?? FED_ENRICHMENT_BUDGET_MS;
   const errors: string[] = [];
   const bodyUpdates: FedEnrichmentOutcome["bodyUpdates"] = [];
   const passthrough: Array<{ at: number; candidate: IncomingNewsCandidate }> = [];
-  const eligible: Array<{ at: number; candidate: IncomingNewsCandidate; fill: FedStoredState | null }> = [];
+  const eligible: Array<{ at: number; candidate: IncomingNewsCandidate; fill: FedStoredState | null; tie: number }> = [];
 
   candidates.forEach((candidate, at) => {
     if (classifyFedMonetaryTitle(candidate.title) !== "statement") {
@@ -184,11 +217,11 @@ export async function enrichFedStatementCandidates(
     }
     const known = stored.get(candidate.sourceUrl);
     if (!known) {
-      eligible.push({ at, candidate, fill: null });
+      eligible.push({ at, candidate, fill: null, tie: random() });
     } else if (known.hasBody) {
       passthrough.push({ at, candidate });
     } else if (known.status === "pending_judgement") {
-      eligible.push({ at, candidate, fill: known });
+      eligible.push({ at, candidate, fill: known, tie: random() });
     } else {
       // judged / generated / published without a body: never rewritten here (see the PR notes); it only stays a duplicate
       errors.push(`fed_statement:stored_without_body:${known.status}`);
@@ -196,20 +229,26 @@ export async function enrichFedStatementCandidates(
     }
   });
 
-  const offset = eligible.length > 0 ? Math.abs(Math.trunc(limits.rotation ?? 0)) % eligible.length : 0;
-  const ordered = [...eligible.slice(offset), ...eligible.slice(0, offset)];
-  const attempt = ordered.slice(0, maxPerFetch);
-  const deferred = ordered.length - attempt.length;
-  if (deferred > 0) errors.push(`fed_statement:deferred_over_cap:${deferred}`);
-
+  const ordered = [...eligible].sort((a, b) =>
+    (memory.get(a.candidate.sourceUrl) ?? 0) - (memory.get(b.candidate.sourceUrl) ?? 0) || a.tie - b.tie
+  );
+  const startedAt = now();
   const emitted: Array<{ at: number; candidate: IncomingNewsCandidate }> = [...passthrough];
   let withheld = 0;
   let enriched = 0;
-  for (const item of attempt) {
+  let attempted = 0;
+  const noteFailure = (url: string) => {
+    if (memory.size >= FAILURE_MEMORY_MAX && !memory.has(url)) memory.delete(memory.keys().next().value as string);
+    memory.set(url, (memory.get(url) ?? 0) + 1);
+  };
+  for (const item of ordered) {
+    if (enriched >= maxPerFetch || attempted >= maxAttempts || now() - startedAt > budgetMs) break;
+    attempted += 1;
     const { candidate } = item;
     const page = await fetchFedHtml(candidate.sourceUrl, fetchImpl);
     if (!page.ok) {
       withheld += 1;
+      noteFailure(candidate.sourceUrl);
       errors.push(`fed_statement:${page.reason}`);
       continue;
     }
@@ -217,19 +256,24 @@ export async function enrichFedStatementCandidates(
     const rejection = statementDocumentRejection(candidate, page.finalUrl, page.html, facts.releaseDate);
     if (rejection) {
       withheld += 1;
+      noteFailure(candidate.sourceUrl);
       errors.push(`fed_statement:${rejection}`);
       continue;
     }
     const summary = renderFomcStatementSummary(facts, page.finalUrl);
     if (!summary) {
       withheld += 1;
+      noteFailure(candidate.sourceUrl);
       errors.push(`fed_statement:facts_${facts.issues[0] ?? "unreadable"}`);
       continue;
     }
     enriched += 1;
+    memory.delete(candidate.sourceUrl);
     if (item.fill) bodyUpdates.push({ id: item.fill.id, sourceUrl: candidate.sourceUrl, bodySummary: summary });
     else emitted.push({ at: item.at, candidate: { ...candidate, bodySummary: summary } });
   }
-  emitted.sort((a, b) => a.at - b.at);
+  const deferred = ordered.length - attempted;
+  if (deferred > 0) errors.push(`fed_statement:deferred_over_cap:${deferred}`);
+  emitted.sort((x, y) => x.at - y.at);
   return { candidates: emitted.map((entry) => entry.candidate), bodyUpdates, withheld, deferred, enriched, errors };
 }
