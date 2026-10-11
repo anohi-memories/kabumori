@@ -63,16 +63,16 @@
 ## Codex H3
 - owner: codex
 - slot: codex-3
-- status: ready
+- status: review_required
 - task_id: kabumori-pr143-ondemand-queue-auth-security-review-20261011
 - start_code: H3
 - finish_code: C3
 - completion_code: C3
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CODEX_TASK_3.md
 - report: .agent/CODEX_REPORT_3.md
-- allocation: K2 G2 source candidate Draft PR143 1d0529bb; high-risk independent Sol（高） code/security review of new user/RLS/SECURITY DEFINER queue RPC + DB fences/late worker, completed result/push dedupe, financial market Fact/freshness, old Cron gate/rollback, missing all-user shared broadcast. Read-only/new dedicated H3 worktree; no product source edits, PR merge/deploy/production/real AI/Expo/X. Return C3 to かぶモリアプリG2のちゃ; preserve prior H3 template/report and all other slots.
+- allocation: C3 H3 completed independent read-only review of PR143 exact head 1d0529bb68b0e60b32ce0a2cb0002872b1671177. Result CHANGES_REQUIRED / PRODUCTION_NO_GO due P2 expired-lease failure RPC missing expiry fence; 58 targeted offline tests PASS with --no-check, standard type resolution and disposable PG unavailable. No product source edits or production operations. Common all-users broadcast remains blocker. Return to G2 chat for narrow fix.
 - recommended_model: Sol（高）
 ## Codex H4
 - owner: codex
