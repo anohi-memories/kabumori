@@ -153,11 +153,11 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: in_progress
+- status: review_required
 - task_id: common-account-phase3g-free-auth-provider-test-readiness-20261011
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
