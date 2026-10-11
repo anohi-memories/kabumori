@@ -1,3 +1,101 @@
+# Claude Task G8 — PR #129 H4独立レビュー3件の最小修正（R3）
+
+- task_id: news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012
+- owner: claude
+- slot: claude-8
+- status: ready
+- next_owner: claude
+- start_code: G8
+- finish_code: K8
+- return_to: ニュース改善API最適化のちゃ
+- recommended_model: Opus5.5（高）
+- type: targeted code correction after Codex H4 C4
+- target_PR: https://github.com/anohi-memories/kabumori/pull/129
+- reviewed_head: 7bf9b8a0a014ebe9a613e9ebeb0082d0b7834c54
+- review_report: .agent/CODEX_REPORT_4.md
+- review_verdict: CHANGES_REQUIRED / P1×1 P2×2
+- user_routing: Aニュース改善専任G8だけ。API最適化B/G9、ほかG/H、別案件に触れず、引継ぎもしない。
+- forbidden: production deploy/merge/paid API/real DB/real Edge/real Fed/TDnet requests, schema/RPC/migration/Cron/Secrets/provider/model changes, other worktrees/tasks
+
+## 目的（レビューの繰返しではなく、実装とテスト）
+
+H4によるPR129独立レビューは完了、C4確認済み。H4はソース未変更。GitHub PR129のレビュー済head `7bf9b8a0a014ebe9a613e9ebeb0082d0b7834c54` はOPEN/Draft/未merge（作業開始時にHEAD再確認）。既存968 PASS、H4独立12 probeの9 PASS/3 FAILは**実行済みレビュー結果**で、失敗した3件は安全性期待を破る合成再現。
+
+以下のH4-R1(P1),R2(P2),R3(P2)だけを**実際に修正**する。F7の従来毎時modulo取りこぼしの改善、旧F1〜F6・F8等を維持。Styleや無関係なコードを広げない。失敗を誤Factにしないfail-closedを優先し、正常配信の不必要な停止を避ける。
+
+## H4-R1 [P1] 決算短信：折返したinterleaved列の金額/増減率誤変換
+
+- 対象 `supabase/functions/_shared/news_body_extraction/kessan_tanshin_facts.ts` の `parseRow()`、特に `tokens.length === metrics.length` を無条件でamounts_onlyにする処理と継続行の無視。
+- **独立再現合成テキスト（架空数値）:**
+
+```text
+2026年3月期 決算短信〔日本基準〕(連結)
+(百万円未満切捨て)
+（１）連結経営成績
+売上高 営業利益 経常利益 親会社株主に帰属する当期純利益
+百万円 % 百万円 % 百万円 % 百万円 %
+2026年3月期 1000 10 100 20
+80 30 50 40
+2025年3月期 900 5 90 6
+70 7 40 8
+```
+
+- 真の当期金額: 売上1000 / 営業100 / 経常80 / 純利益50（百万円）。変化率 +10/+20/+30/+40%。旧実装は `ok=true, issues=[]` で営業10・経常100・純利益20を確定Factと出力する。
+- 必須修正: `m` 個の数値をamounts_only行として認めるのは **headerからlayout==='amounts_only'と確証できる場合だけ**。interleaved/groupedの2m未満行は、明確で安全な継続行結合ができる条件だけ結合し、そうでなければ **表を読取不可・重要Fact非出力**。続行が別期間/forecast/注記に跨るのを誤結合しない。正常なinterleaved, grouped, amounts_only, 負号分離/IFRS/連結/forecast EPSを回帰で維持。
+- 必須テスト: 上記折返し、次行切れ/欠落、曖昧な注記挿入、正常m/2m表、forecast EPS余剰token。同じ誤金額を確定の `kessan_facts` として通さない。読み取れない場合は明示issuesにfail-closed。
+
+## H4-R2 [P2] 判定と本文追記のTOCTOU競合
+
+- 対象 `important-news-monitor/index.ts` の `selectCandidatesForJudgement`→ `saveCandidateJudgement` と新 `candidate_body_fill.ts`。
+- **独立再現:** `pending_judgement, body_summary=null` を `judge_pending` がSELECT→AIを一時停止（見出しのみでno_post推論）→同じrowに公式本文が `fillMissingCandidateBody` でPATCH成功→古いAI結果を返す→保存PATCHは `id+pending_judgement` のみなので旧no_postの理由が本文あり行に保存される。
+- **修正要件:** 読み取った `body_summary` snapshot と保存時の値を**原子的な条件付き更新(CAS)**で照合し、変化していたら古い判定を保存せず、即時生成せず、`pending_judgement`を維持して次回公式本文で判定できる。再SELECTだけのTOCTOU、既存headline-only `content_hash` だけの比較を修正済みとしない。成功行は従来どおり処理。
+- 変更の範囲は今回の**新規本文追記が関係する**レーンに限定できるなら限定する。初期bodyがnull/空の保存条件を `body_summary.is.null/eq.` 等で原子的にfilterする方法を検討し、PostgRESTクエリのNULL/空の意味と既存有本文/長文/URL長/特殊文字/他laneへの副作用を試験する。snapshotを一般に安全にCASできない場合は勝手なschema/RPC/migrationを追加せずBLOCKEDとして最小設計を報告。判定変更時に過去本文を消したり二重生成を許さない。
+- 本番同時処理は mock mockだけで不十分の可能性を明記。少なくとも **実 `index.ts` handler のjudge_pending経路 + 本文fill経路**をDeno/DB mockで独立再現し、失敗前→修正後に同じ旧判定が保存されないことを確認。0-row conditional UPDATE の扱いは故障と競合を区別し、即時生成しない。bulk処理が古い判定で中断しないよう可能な限り既存作業制御を保護。
+- `content_hash` はheadline-only保持の既存duplicate方針と矛盾しないことを確認。必要なら判断に明示リスク報告、危険なら勝手に広範囲変更しない。
+
+## H4-R3 [P2] FOMC声明本文で過去の判断を今回の判断として採用
+
+- 対象 `supabase/functions/_shared/news_body_extraction/fomc_statement_facts.ts` の `extractFomcStatementFacts()`。
+- 旧実装: 記事全体に `decided to raise` が1つでもあれば、現在の `maintain` より優先し、金利レンジ・変更幅もそれぞれ本文の最初のmatchから取る。R1の正規URL/日付/文書種別検証では防げない。
+- **独立再現合成HTML:** 正規URL `monetary20261009a.htm`、ヘッダー `Federal Reserve issues FOMC statement`、公開日 `October 9, 2026` を一致させた公式風本文：
+
+```text
+At its July meeting, the Committee decided to raise the target range for the federal funds rate by 1/4 percentage point to 4-1/4 to 4-1/2 percent.
+At this meeting, the Committee decided to maintain the target range for the federal funds rate at 4-1/4 to 4-1/2 percent.
+```
+
+- 期待：**今回は4.25〜4.5%で据え置き**。旧出力 `4.25〜4.5%（引き上げ、25bp引き上げ）` は誤り。
+- **修正要件:** action/range/changeを**同一の確定できる今回の政策決定文に結合**。過去の会合への参照やquoted historical actionを現在と区別し、複数の決定候補で確証なければ `facts.ok=false` / withheld（誤Factを作らない）。Fed通常の単一声明のraise/lower/maintain、分数レンジ、反対票/氏名、R1の同一性チェックを維持。英語文解析の過剰推測で特殊例を通さない。
+- 実Fed文書で頻度は未確認。合成入力と実運用の発生を混同しない。
+
+## 実行・安全条件
+
+1. G8のTASK/Report、`PROJECT_RULES.md`、`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、`.agent/ACTIVE_TASK.md`、H4 `.agent/CODEX_REPORT_4.md` を確認。PR129最新headとfresh `origin/main`、worktree list、未commit変更、他slot所有、対象ファイルの他作業競合を確認。
+2. PR129を編集する場合はG8**専用の独立**worktree/checkout。G9の評価ツールとPR115の所有ブランチ、PR116本番保護worktree、H4 worktree/他slot branch/dev serverを一切変更しない。並行他ownerがPR129を同時編集しているなら即停止。
+3. 対象原則: `_shared/news_body_extraction/kessan_tanshin_facts.ts`, `fomc_statement_facts.ts`, `important-news-monitor/index.ts` の必要な狭い修正と関連テストのみ。候補本文fillそのものの安全条件は維持。DB schema/RPC/migration/Auth/Cron/Secrets/provider/modelの変更は別途明示承認が必要。
+4. F7既存時刻依存starvationが戻ってないこと、旧F1〜F9で既に修正済みの検証、正常決算短信・通常Fed声明が過剰に止まらないことを再実行。offline no-net: G8前報告757 important-news-monitor、29 extractor、162 discovery/observer、20 shadowとH4既存968のscope差を説明し、件数を重複合算しない。
+5. 3件それぞれ **修正前FAIL→修正後PASS** をG8-ownedテストとして恒久化。H4再現ログが別worktreeにある場合、参照だけで既存H4作業物を改変しない。Deno check/lint baseline `x_oauth2_post.ts:66` 既知エラーと今回新規を区別。実PDF/実Fed/本番/PostgREST実行していない場合は未確認と記す。有料API/公開/投稿はすべて不可。
+6. 同一PR129既存branchへの変更は競合なし確認できた場合だけcommit/push可、Draft維持、**merge/deploy禁止**。PR116明日固定本番のソース混入を禁止。
+7. 3件の欠陥が残るなら全面PASSを自称しない。固定head、変更ファイル、重要Factのbefore/after、実テスト、PR state、commit、既存F9のno_post backlog制約/20秒budget制約を含む `## Report` に結果を記録し、**`K8` をニュース改善API最適化のちゃへ返す**。新たなCodexレビューを独断で割り当てない。C4は既に完了、H4を勝手に再利用しない。
+
+## Report
+
+- task_id: news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012
+- result: not_started
+- changed_files: none
+- tests: not_run
+- commit_hash: none
+- push: not_performed
+- merge: not_performed
+- deploy: not_performed
+- remaining_issues: H4-R1 P1 wrapped tables, H4-R2 P2 stale judgement CAS, H4-R3 P2 historical FOMC action, existing no_post backlog.
+- safety_checks: not_started
+- next_recommendation: G8 R3 bounded correction, K8へ戻る。
+
+---
+
+## Preserved previous G8 tasks, reports, and K8 evaluations (do not edit)
+
 # Claude Task G8 — PR #129 R2：K8追加指摘F7の公平性・F9境界確認
 
 - task_id: news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011
