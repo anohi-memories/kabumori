@@ -227,6 +227,8 @@ supabase secrets list --project-ref wsmznyzcvmuitkglfeuj
 
 ## 9. 本番適用の手順・読み戻し・rollback（承認後。ユーザーが実行）
 
+> **1d で置き換え済み。この節のコマンドを直接使わない。** 1d の runner（`supabase/tests/ai_provider_budget_ledger_rollout.sh`）は、接続先の検証（cron の URL の ref とかぶモリ固有の目印）、CLI の互換性の確認、`--agent no` と出力の厳密な判定を行う。下のコマンドには、それが無い。
+
 前提として、次の3つを満たしてから進める。
 
 - 専用のちゃ・ユーザーの承認

@@ -68,8 +68,11 @@ select jsonb_build_object(
                                      + (select count(*) from pg_class c where c.relname like 'ai\_ledger%')
                                      + (select count(*) from pg_type t where t.typname like 'ai\_ledger%' and t.typtype <> 'c')),
   'g5_objects', jsonb_build_object(
-    'deletion_completion_applied', to_regclass('private.account_lifecycle_release_gates') is not null,
-    'lifecycle_foundation_present', to_regclass('private.account_lifecycle_operations') is not null,
+    -- Catalog lookups (not to_regclass): no USAGE on schema private is needed to answer.
+    'deletion_completion_applied', exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                                            where n.nspname = 'private' and c.relname = 'account_lifecycle_release_gates'),
+    'lifecycle_foundation_present', exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                                             where n.nspname = 'private' and c.relname = 'account_lifecycle_operations'),
     -- G5's existing-object fingerprints (07_existing_fingerprint / 04_touched_and_fingerprints) hash every function
     -- in public and private: the apply adds exactly seven there and changes nothing else they read.
     'public_private_functions_now', (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace

@@ -1,22 +1,30 @@
 #!/usr/bin/env python3
 """Verdicts for the AI budget ledger production gate (migration 20261010050613). Reads JSON only; prints catalog
-facts, counts and policy configuration, never table data or secrets.
+facts, counts, project refs and policy configuration, never table data or secrets.
 
-  preflight          stdin = output of ai_provider_budget_ledger_preflight.sql
-                     exit 0 READY_TO_APPLY, 1 NOT_READY (the migration would refuse, or it is already there)
-  readback EXPECT    stdin = output of ai_provider_budget_ledger_readback.sql; EXPECT = none | test | stopped
-                     (none: no policy rows yet; test: exactly the Phase 1d test-phase policies, enabled;
-                      stopped: the same policies, all disabled by the stop switch)
-                     exit 0 READBACK_PASS, 1 READBACK_FAIL
-  compare BEFORE AFTER [--expect-rpcs N]
-                     two outputs of ai_provider_budget_ledger_existing_fingerprint.sql (files)
-                     exit 0 EXISTING_UNCHANGED, 1 EXISTING_CHANGED
-  Exit 2 = unreadable input.
+  [--require-array] preflight        stdin = ai_provider_budget_ledger_preflight.sql output
+                                     exit 0 READY_TO_APPLY, 1 NOT_READY (the migration would refuse, or it is there)
+  [--require-array] readback EXPECT  stdin = ai_provider_budget_ledger_readback.sql output; EXPECT = none | test | stopped
+                                     (none: no policy rows yet; test: exactly the Phase 1d policies, enabled;
+                                      stopped: the same policies, all disabled by the stop switch)
+                                     exit 0 READBACK_PASS, 1 READBACK_FAIL
+  [--require-array] identity REF     stdin = ai_provider_budget_ledger_target_identity.sql output
+                                     exit 0 TARGET_VERIFIED (cron jobs call exactly REF, Kabumori markers present),
+                                     1 TARGET_NOT_VERIFIED
+  [--require-array] field KIND EXPR  stdin = output of the KIND query; exit 0 when the Python expression EXPR over the
+                                     result `r` is true, 1 when false (used by the rollout runner)
+  [--require-array] compare BEFORE AFTER [--expect-rpcs N]
+                                     two ai_provider_budget_ledger_existing_fingerprint.sql outputs (files)
+                                     exit 0 EXISTING_UNCHANGED, 1 EXISTING_CHANGED
+  Exit 2 = unreadable or unexpected input: anything but exactly one row whose only column "result" is an object with
+  exactly the keys of that query. Nothing unexpected is ever read as a pass.
 
-Input is the Supabase CLI output: a plain JSON array of rows, or the {"boundary", "rows", "warning"} object the CLI
-prints when it detects an agent. Exactly one row with a "result" column is expected.
+Input is the Supabase CLI output (`db query --output-format json`): a plain JSON array of rows (`--agent no`), or the
+agent envelope {"boundary", "rows", "warning"[, "advisory"]}. --require-array (the rollout runner, which always
+passes --agent no) accepts only the plain array.
 """
 import json
+import re
 import sys
 
 TEST_POLICIES = {
@@ -24,19 +32,54 @@ TEST_POLICIES = {
     "anthropic.opus.kabumori.market_report.monthly": ("month", 5.0, 40, 1.0),
 }
 
+# The exact shape of every query's result: a missing or renamed key is unreadable input, never a silent pass.
+KEYS = {
+    "preflight": {"identity", "history", "target_absent", "g5_objects", "app_roles", "reachable_roles",
+                  "predicted_refusals", "default_acl", "event_triggers", "postgrest", "extensions"},
+    "readback": {"checked_at_jst", "must_be_true", "rows", "policies", "history_row"},
+    "fingerprint": {"checked_at_jst", "categories", "functions_including_ai_ledger", "ai_ledger_rpcs"},
+    "identity": {"database", "cron_jobs", "cron_project_refs", "product_markers", "history_markers"},
+}
+PREDICTED_REFUSALS = {"app_role_reaches_owner_or_superuser", "app_role_reaches_service_role_privileges",
+                      "app_role_reaches_all_data_role", "default_acl_grantees_not_revoked"}
+MUST_BE_TRUE = {"schema_present", "exact_seven_rpcs", "exact_five_tables", "one_owner",
+                "rpcs_security_definer_empty_search_path", "helpers_not_security_definer", "rls_on_every_table",
+                "no_policies", "no_direct_relation_grants", "service_role_executes_rpcs",
+                "anon_authenticated_cannot_execute_rpcs", "no_rpc_grant_option", "app_roles_no_schema_access",
+                "app_roles_no_table_access", "app_roles_no_helper_execute", "reject_change_triggers",
+                "reservation_transition_trigger"}
+ROWS = {"budget_policies", "budget_policies_enabled", "budget_buckets", "reservations", "open_reserved", "open_sent",
+        "usage_events", "billing_observations"}
+ENVELOPE_KEYS = {"boundary", "rows", "warning"}
+REF = re.compile(r"^[a-z]{20}$")
+
 
 class Unreadable(Exception):
     pass
 
 
-def load_result(text):
+def rows_of(data, require_array):
+    if isinstance(data, list):
+        return data
+    if require_array:
+        raise Unreadable("expected a plain JSON array (the runner passes --agent no)")
+    if not isinstance(data, dict) or not ENVELOPE_KEYS <= set(data) or not set(data) <= ENVELOPE_KEYS | {"advisory"}:
+        raise Unreadable("neither a JSON array nor the CLI agent envelope")
+    if not isinstance(data["boundary"], str) or not re.fullmatch(r"[0-9a-f]{32}", data["boundary"]):
+        raise Unreadable("agent envelope without a valid boundary")
+    return data["rows"]
+
+
+def load_result(text, kind=None, require_array=False):
+    if not text.strip():
+        raise Unreadable("empty output")
     try:
         data = json.loads(text)
     except ValueError as error:
         raise Unreadable(f"not JSON: {error}") from None
-    rows = data.get("rows") if isinstance(data, dict) else data
-    if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict) or "result" not in rows[0]:
-        raise Unreadable("expected exactly one row with a result column")
+    rows = rows_of(data, require_array)
+    if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict) or set(rows[0]) != {"result"}:
+        raise Unreadable("expected exactly one row whose only column is result")
     result = rows[0]["result"]
     try:
         result = json.loads(result) if isinstance(result, str) else result
@@ -44,7 +87,33 @@ def load_result(text):
         raise Unreadable(f"result is not JSON: {error}") from None
     if not isinstance(result, dict):
         raise Unreadable("result is not an object")
+    if kind is not None:
+        validate(result, kind)
     return result
+
+
+def validate(r, kind):
+    if set(r) != KEYS[kind]:
+        raise Unreadable(f"{kind}: unexpected keys (missing {sorted(KEYS[kind] - set(r))}, extra {sorted(set(r) - KEYS[kind])})")
+    if kind == "preflight":
+        if set(r["predicted_refusals"]) != PREDICTED_REFUSALS:
+            raise Unreadable("preflight: unexpected predicted_refusals keys")
+        if not isinstance(r["history"], dict) or not isinstance(r["target_absent"], dict):
+            raise Unreadable("preflight: history / target_absent missing")
+    elif kind == "readback":
+        if set(r["must_be_true"]) != MUST_BE_TRUE or set(r["rows"]) != ROWS:
+            raise Unreadable("readback: unexpected must_be_true / rows keys")
+        if not all(isinstance(v, bool) for v in r["must_be_true"].values()) or not isinstance(r["policies"], list):
+            raise Unreadable("readback: must_be_true values must be booleans and policies a list")
+    elif kind == "fingerprint":
+        if not isinstance(r["categories"], dict) or not r["categories"]:
+            raise Unreadable("fingerprint: no categories")
+    elif kind == "identity":
+        refs = r["cron_project_refs"]
+        if not isinstance(refs, list) or not all(isinstance(x, str) and REF.match(x) for x in refs):
+            raise Unreadable("identity: cron_project_refs must be a list of project refs")
+        if not isinstance(r["product_markers"], dict) or not isinstance(r["history_markers"], dict):
+            raise Unreadable("identity: markers missing")
 
 
 def verdict(ok, good, bad, problems):
@@ -133,6 +202,23 @@ def readback(r, expect):
     return verdict(not problems, "READBACK_PASS", "READBACK_FAIL", problems)
 
 
+def identity(r, ref):
+    problems = []
+    refs = r["cron_project_refs"]
+    print(f"database={r['database']} cron_jobs={r['cron_jobs']} cron_project_refs={','.join(refs) or '(none)'} expected_ref={ref}")
+    print(f"product_markers: {json.dumps(r['product_markers'], sort_keys=True)}")
+    print(f"history_markers: {json.dumps(r['history_markers'], sort_keys=True)}")
+    if refs != [ref]:
+        problems.append(f"PROJECT_REF_MISMATCH: the database's cron jobs call {refs or 'no project'}, not exactly [{ref}]")
+    missing = sorted(name for name, present in r["product_markers"].items() if present is not True)
+    if missing:
+        problems.append(f"NOT_THIS_PRODUCT: missing {missing}")
+    history = sorted(name for name, present in r["history_markers"].items() if present is not True)
+    if history:
+        problems.append(f"HISTORY_MARKERS_MISSING: {history}")
+    return verdict(not problems, "TARGET_VERIFIED", "TARGET_NOT_VERIFIED", problems)
+
+
 def compare(before, after, expect_rpcs):
     problems = []
     b, a = before["categories"], after["categories"]
@@ -150,11 +236,21 @@ def compare(before, after, expect_rpcs):
 
 
 def main(argv):
+    require_array = False
+    if argv[:1] == ["--require-array"]:
+        require_array, argv = True, argv[1:]
     try:
-        if len(argv) == 1 and argv[0] == "preflight":
-            return preflight(load_result(sys.stdin.read()))
+        if argv == ["preflight"]:
+            return preflight(load_result(sys.stdin.read(), "preflight", require_array))
         if len(argv) == 2 and argv[0] == "readback" and argv[1] in ("none", "test", "stopped"):
-            return readback(load_result(sys.stdin.read()), argv[1])
+            return readback(load_result(sys.stdin.read(), "readback", require_array), argv[1])
+        if len(argv) == 2 and argv[0] == "identity":
+            if not REF.match(argv[1]):
+                raise Unreadable("identity needs a 20-letter project ref")
+            return identity(load_result(sys.stdin.read(), "identity", require_array), argv[1])
+        if len(argv) == 3 and argv[0] == "field" and argv[1] in KEYS:
+            r = load_result(sys.stdin.read(), argv[1], require_array)
+            return 0 if eval(argv[2], {"__builtins__": {}}, {"r": r}) else 1  # expressions are constants in the runner
         if len(argv) in (3, 5) and argv[0] == "compare":
             expect = None
             if len(argv) == 5:
@@ -162,8 +258,9 @@ def main(argv):
                     raise Unreadable("usage: compare BEFORE AFTER [--expect-rpcs N]")
                 expect = int(argv[4])
             with open(argv[1], encoding="utf-8") as fb, open(argv[2], encoding="utf-8") as fa:
-                return compare(load_result(fb.read()), load_result(fa.read()), expect)
-        raise Unreadable("usage: preflight | readback none|test|stopped | compare BEFORE AFTER [--expect-rpcs N]")
+                return compare(load_result(fb.read(), "fingerprint", require_array), load_result(fa.read(), "fingerprint", require_array), expect)
+        raise Unreadable("usage: [--require-array] preflight | readback none|test|stopped | identity REF | field KIND EXPR"
+                         " | compare BEFORE AFTER [--expect-rpcs N]")
     except (Unreadable, KeyError, TypeError, OSError) as error:
         print(f"UNREADABLE: {error}")
         return 2

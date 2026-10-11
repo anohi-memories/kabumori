@@ -15,6 +15,7 @@
 | Claude API | クレジットと API の利用実績はユーザー確認済み。クレジット取得や基本の利用登録は繰り返さない |
 | 共通 Provider の利用箇所 | 0（どの Edge Function も import していない） |
 | 本番作業の窓 | G1〜G5・H1/H2 とも ACTIVE なし（10/11 確認） |
+| Supabase CLI | 2.116.0（このMacで確認）。runner は 2.116.0 以上・3.0 未満で、`db query --help` に `--linked` `--project-ref` `--file` `--output-format` `--agent` `--workdir` があることを確認してから動く。環境変数 `SUPABASE_PROJECT_ID` が別の ref なら拒否する |
 | migration の固定 | `20261010050613_ai_provider_budget_ledger.sql` の sha256 `680aeb3f2e540b184476b0c1e3534d8586b4857ec29856e40793ed44eff35737`（PR #119 の head `8ef3843f` を main にマージしたもの）。runner はこれ以外のバイト列を拒否する |
 
 ## 1. 全体の流れ
@@ -91,13 +92,27 @@ env -i PATH="$PATH" HOME="$HOME" deno run --no-config --no-prompt --allow-env=AN
 - `--allow-net` を付けていないので、通信はできない
 - `env -i` で、端末の他の環境変数（`ANTHROPIC_BASE_URL` など）を持ち込まないようにしている
 
+### 接続先の確認方法（runner が毎回、書き込みの前に行う）
+
+runner は、すべての操作で DB を読む前に CLI を確認し、最初に接続先を検証する。apply では、migration を流す直前にもう一度検証する。検証できなければ、何も書かずに `STOP[10]` で止まる。
+
+| 層 | 確認すること | 根拠 |
+|---|---|---|
+| CLI | 呼び方を `supabase db query --workdir <空の作業ディレクトリ> --linked --project-ref $AIL_ROLLOUT_REF --output-format json --agent no -f FILE` に固定する | CLI 2.116.0 のソース（`apps/cli/src/legacy/commands/db/query/`）で確認した: `--linked` の SQL は Management API の `POST /v1/projects/{ref}/database/query` に送られる。ref は `--project-ref` → `SUPABASE_PROJECT_ID` → 作業ディレクトリの `supabase/.temp/project-ref` の順で決まる。空の作業ディレクトリを使うので、別のリンク先に落ちる余地がない。存在しない ref で試すと、CLI はその ref の API にだけ問い合わせて失敗した（DB には届かない） |
+| DB | `ai_provider_budget_ledger_target_identity.sql`: この DB の pg_cron ジョブが呼ぶ URL の ref が、ちょうど `$AIL_ROLLOUT_REF` の1種類であること | 本番の cron（重要ニュース・push 配信・MIC）は `https://wsmznyzcvmuitkglfeuj.supabase.co/functions/v1/...` を呼んでいる（migration で確認）。家族写真アプリや使い捨てのプロジェクトには、この ref を呼ぶ cron が無い |
+| DB | かぶモリ・POSTONA・共通アカウントの表（profiles / brands / social_accounts / common_accounts / service_entitlements / private.account_lifecycle_operations）と、適用済みの履歴（20261001150000 / 20261006230000）があること | 別のプロジェクトには、これらがそろわない |
+
+- 出力するのは、真偽値・件数・20文字の ref だけ（cron のコマンド本文や秘密情報は出さない）
+- pg_cron の表が無い DB や、cron の URL の ref が0種類・2種類以上の DB では検証できず、止まる（安全側）
+
 ### 手順4　runner の check（読み取りのみ）
 
 ```bash
 AIL_ROLLOUT_REF=wsmznyzcvmuitkglfeuj bash supabase/tests/ai_provider_budget_ledger_rollout.sh check
 ```
 
-- 最後の行が `DONE check: READY_TO_APPLY` であることを確認する
+- 最後の行が `DONE check: target verified, READY_TO_APPLY` であることを確認する
+- 先に `VERDICT: TARGET_VERIFIED` と `cron_project_refs=wsmznyzcvmuitkglfeuj` が出る（接続先の確認）
 - 出力（カタログの事実と件数だけ）は `~/.kabumori-ai-ledger-rollout/<日時>-check/` に残る
 - 共有するのは、`VERDICT` の行と `predicted_refusal` の4行で足りる
 
@@ -223,13 +238,13 @@ pg_cron で `select public.ai_ledger_recover_stale('{}'::jsonb)` を数分ごと
 | 表示 | 状態 | 対応 |
 |---|---|---|
 | `REFUSED`（2） | 何もしていない | 表示された理由（確認フレーズ、ref、migration のバイト列）を直す |
-| `STOP[10]` | 事前条件が不成立。何も書いていない | `check` の `VERDICT` と理由を ChatGPT に共有する。補修の GRANT / REVOKE はしない |
+| `STOP[10]` | 事前条件が不成立。何も書いていない（接続先が検証できない場合を含む: `TARGET_NOT_VERIFIED`） | `check` の `VERDICT` と理由を ChatGPT に共有する。接続先の不一致なら、ref と CLI のログイン先を確認する。補修の GRANT / REVOKE はしない |
 | `STOP[11]` | Stage A が失敗し、台帳が無いことを確認済み（何も変わっていない） | `stage_a.err` を確認する。原因が分かるまで再実行しない |
-| `STOP[12]` | Stage A の結果が不明（エラーなのに台帳がある、など） | **再実行しない**。`status` で状態を見る。読み戻しが PASS し履歴だけ無いなら `apply --resume-history` |
+| `STOP[12]` | Stage A の結果が不明（エラーなのに台帳がある、成功と返ったのに台帳が無い、など） | **再実行しない**。`status` で状態を見る。読み戻しが PASS し履歴だけ無いなら `apply --resume-history` |
 | `STOP[13]` | 台帳はあるが、読み戻しが期待と違う | 書き込みを止めて共有する。rollback は台帳が空のときだけ（§4） |
 | `STOP[14]` | 台帳は検証済みで、履歴の行だけ失敗 | `apply --resume-history`（同じ確認フレーズ） |
 | `STOP[15]` | 適用後の確認が不一致（既存業務の指紋の差分など） | 差分の分類を共有する。同時に別の作業が本番を変えた可能性がある（G5 など）。台帳を消す前に原因を確認する |
-| `STOP[16]` | 出力を読めない（CLI の障害など） | 何も推測しない。`status` をやり直す |
+| `STOP[16]` | 出力を読めない、または想定外（空・JSON でない・素の配列でない・行が1つでない・列が result だけでない・項目の集合が違う） | 成功とはみなさない。何も推測しない。CLI のバージョンと `*.json` / `*.err` を共有し、`status` をやり直す |
 
 ### 3.2 Claude の呼び出し（smoke・Phase 2a）
 
@@ -298,7 +313,8 @@ AIL_ROLLOUT_REF=wsmznyzcvmuitkglfeuj AIL_ROLLOUT_ACK="drop the empty ai_ledger i
 | smoke（オフライン） | 送信なし（plan）、送信前の拒否9種類、送信1回と照合、エラー5種類で再試行なし・キー非表示、照合の不一致検出、import の分離 | 9件 PASS |
 | smoke（台帳込み e2e） | 偽の Anthropic → 実 migration ＋試験用ポリシー（PostgREST の代替サーバー経由）: 台帳の増分が一致。停止後は送信前に拒否 | PASS |
 | smoke の実行フラグ | 実際のフラグで、Anthropic への通信を Deno の権限で遮断して実行: SDK の初期化に問題なし、送信は遮断されて1回で停止 | 確認済み |
-| runner | 偽の supabase CLI で29経路（成功・確認フレーズ・Stage A 失敗・応答喪失→再開・既存オブジェクトの変化・予測拒否・バイト改ざん・停止・rollback の可否） | 29件 PASS |
+| runner | 偽の supabase CLI（2.116 の仕様に合わせ、必須のフラグが欠けると失敗し、エラーは JSON と終了コード 1）で74経路。既存の28経路はそのまま。agent 形式の出力は、runner では受け入れない形に変更した（1経路）。追加した経路は次のとおり。接続先の取り違え（別プロジェクト・2つの ref・ref なし・cron なし）は、書き込み前に STOP[10]。`SUPABASE_PROJECT_ID` の不一致、CLI のバージョンとフラグの不足は拒否。出力の異常（空・非 JSON・agent 形式・エラー JSON で終了コード 0・余計な列・2行・別の形の結果・コマンドタグ）は STOP[16]。「成功」と返ったのに何もしていない書き込みは、読み戻しで検出 | 74件 PASS |
+| 本物の CLI | インストール済みの CLI 2.116.0 で、ローカル DB に対して（`--db-url`）読み取りの4本を実行し、その JSON を判定スクリプトが読めること。agent 形式は runner の判定では拒否し、手動の判定では読める | PASS |
 | mutation | migration 16件＋事前チェック4件 | 20/20 検出 |
 | 回帰 | 台帳の proof runner 全パート、Deno（ai_provider と smoke）103件、型チェック、lint、migration_source_invariants 11件 | PASS |
 

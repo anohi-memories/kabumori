@@ -79,7 +79,10 @@ SQL
 drop_db() { psql_super -d postgres -c "drop database if exists $1" >/dev/null; }
 cleanup() {
   if [ -f "$SHIM_PID_FILE" ]; then kill "$(cat "$SHIM_PID_FILE")" 2>/dev/null || true; fi
-  for db in ${DBS[@]+"${DBS[@]}"}; do psql_super -d postgres -c "drop database if exists $db" >/dev/null 2>&1 || true; done
+  # By prefix: fresh_db runs in a command substitution, so DBS stays empty in this shell.
+  for db in $(psql_super -d postgres -Atc "select datname from pg_database where datname like '${PREFIX}\\_%'" 2>/dev/null); do
+    psql_super -d postgres -c "drop database if exists $db" >/dev/null 2>&1 || true
+  done
   reset_cluster_roles
   find "$WORK" -type f -delete 2>/dev/null || true
   rmdir "$WORK" 2>/dev/null || true
