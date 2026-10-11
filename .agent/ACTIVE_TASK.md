@@ -181,16 +181,16 @@
 ## Claude G7
 - owner: claude
 - slot: claude-7
-- status: ready
+- status: done
 - task_id: mic-stage1-formal-verification-design-finalization-g7-20261011
 - start_code: G7
 - finish_code: K7
 - completion_code: K7
-- next_owner: claude
+- next_owner: none
 - return_to: MICのちゃ（Market Intelligence Core専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_7.md
 - report: .agent/tasks/CLAUDE_TASK_7.md#report
-- allocation: ユーザー明示指定2026-10-11でMIC作業をG7専任化。初回はDraft PR125のStage1正式Verification DESIGN ONLY最終補強（U2/U3/U6/U9決定反映、phantom INSERT / read snapshot / events parity / pointer整合性 / A1不一致 / SQL競合テスト計画）。PR125既存設計worktreeを共有せずG7専用独立worktreeから安全確認し、docs1ファイルだけを更新。PRはDraft、main merge・production・migration・Edge・Cron・ソース変更禁止。10/14以降の自然観測と正式実装GO判定は別工程。完了はK7でMICのちゃへ返却。他G/H枠のTASK/Report/branchを保護。
+- allocation: K7 2026-10-11 PASS_DESIGN_ONLY / TASK_COMPLETE。PR125 exact `aa47e40d2a3ba7ec8bfc7d1d30c8eb51d53f2c48` OPEN/Draft/UNMERGED、G7差分は設計文書のみ(+352/-163)でコード/migration/本番変更なし。U2/U3/U6/U9設計決定・単一事実スナップショット・イベント50件超/同ID改定・ポインタ/rollback/SQL42テスト設計を確認。ローカル静的チェックはClaude報告、GitHub diffをChatGPT read-back。U12/U13、実SQL/競合/権限テストは実装レビューで検証。10/14以降の自然shadow観測まで実装GOなし、PR merge/deploy禁止。G7 TASKは完了・next_owner:noneで解放するがMICの今後のG実装担当はユーザー指定によりG7のみ。別作業は新TASKで明示割当。
 - recommended_model: Opus5.5（高）
 ## Claude G8
 - owner: claude
