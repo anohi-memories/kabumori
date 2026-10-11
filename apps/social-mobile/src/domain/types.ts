@@ -9,7 +9,12 @@ export type Workspace = { id: string; name: string; plan: PlanTier };
 export type VoiceSettings = { tone: string; language: string; avoid: string[] };
 export type AccountProfile = { displayName: string; handle: string; avatarColor: string; voice: VoiceSettings };
 export type SocialAccount = { id: string; brandId?: string; platform: SocialPlatform; profile: AccountProfile; connectionStatus: AccountConnectionStatus; postingState: PostingState };
-export type PlannedPost = { id: string; accountId: string; scheduledAt: string; origin: PostOrigin; status: PostStatus; text: string };
+/**
+ * `accountId` is 'unknown' for production rows (scheduled_posts has no account binding). `brandId` is the
+ * row's own brand from the same RLS-scoped read; it only scopes a brand-level row to its workspace and never
+ * implies which account posts it.
+ */
+export type PlannedPost = { id: string; accountId: string; brandId?: string; scheduledAt: string; origin: PostOrigin; status: PostStatus; text: string };
 export type ConsultationMessage = { id: string; role: 'assistant' | 'user'; text: string; createdAt: string };
 export type SettingsProposal = { id: string; title: string; summary: string; changes: { label: string; before: string; after: string }[]; status: 'pending' | 'applied' | 'cancelled' };
 export type MediaAsset = { id: string; name: string; kind: 'image' | 'video'; sizeLabel: string };
