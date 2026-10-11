@@ -3,8 +3,8 @@
 - task_id: postona-unified-ai-manual-schedule-planner-v1-20261011
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - project: POSTONA / X posting scheduling
 - type: **SOURCE/LOCAL UI + pure planner only; NO live posting or DB write**
@@ -64,6 +64,107 @@ Develop in the EXISTING POSTONA `投稿予定` tab a **unified view/composer for
 - Run local unit tests, existing app schedule/data-view/account-isolation regressions, app TypeScript and lint checks, `git diff --check`, secret scan; if possible inspect local mock UI (without EAS or using another slot's Metro). Test that no preview can actually write, publish or schedule in live backend and no scheduling implies AI-consult consent.
 - Create a NEW G3-only branch from fresh main, commit/push and DRAFT PR; do not merge or deploy. Report exact implementation, UI proof/screenshots if available, test counts, changed files, commit/PR, worktree, explicit remaining backend gates, production reads/writes/posts/Edge/DB migrations/Cron changes (= 0), safety checks. Transition ONLY the current G3 TASK to `review_required`/`next_owner:chatgpt`; preserve all historical G3 TASK/Reports verbatim and do not edit other slots.
 - K3 decides acceptance and next owner. No routine Codex review for local UI/domain work; **Sol（高）** once before future G3+G4+G5 actual authorization/write/delivery integration. Recommended **Opus5.5（高）**.
+
+## Report — postona-unified-ai-manual-schedule-planner-v1-20261011
+
+- result: **PASS candidate（ローカルのプレビューのみ）**
+  - 既存の「投稿予定」タブに、AI 自動予約と手動予約（指定日時、まとめてランダム、間隔指定）を合わせた一覧とプレビューの作成を追加した。
+  - 保存・予約・投稿・同意の付与は一切しない。
+  - 実際のクラウド保存と投稿は **BLOCKED**（G5 / G4 のゲート、レビュー済みのソース、Sol 高のレビュー、別の承認が必要）。
+- モデル: Opus 5.5（高）
+- worktree: 新しく作った `/Users/yuya/Developer/kabumori-g3-unified-schedule`（kabumori-fresh の origin/main `b5811293` から）。前回までの G3 の作業フォルダや、他スロットには触れていない。
+- branch: `claude/g3-postona-unified-schedule-v1-20261011` / commit `b244400a` / push 済み
+- PR: https://github.com/anohi-memories/kabumori/pull/138 （**下書き**、merge しない）
+- changed_files:
+  - `apps/social-mobile/src/domain/schedule-planner.ts`（新規）
+  - `apps/social-mobile/src/features/schedule/schedule-composer.tsx`（新規）
+  - `apps/social-mobile/src/app/(tabs)/schedule.tsx`（変更）
+  - `apps/social-mobile/tests/schedule-planner.test.mjs`（新規）
+  - `docs/postona/unified-ai-manual-scheduling-v1-20261011.md`（新規）
+- 本番: 読み取り 0 / 書き込み 0 / 予約 0 / 投稿 0 / Edge 0 / migration 0 / Cron 0 / 有料の AI 0 / merge 0 / EAS 0
+
+### 計画ロジック（`schedule-planner.ts`、import なしの純粋な関数）
+- 型:
+  - 由来（`ai_generated` / `user_authored`）とモード 4 種
+  - 所有（アカウント・ブランド・プラットフォーム）、UTC の時刻と日本時間の表示
+  - まとまりの ID、シード、版数、一方向の状態（editing → previewed、cancelled は最後）
+- すべての下書き: `persistence: 'local_only'`、`publishable: false`、`manualPublishConsent: false`。
+  - AI の枠は `aiAutoPostConsent` で、所有者の `approvalMode` を「表示する」だけ。`auto_post_preference` でも投稿可能にはならない。
+- 検査:
+  - 本文が空でないこと
+  - X の重み付きの文字数（全角 2、URL 23、標準 280）。140 文字の自動投稿の方針を X 全体の上限にはしない
+  - 5 分以上先の日時、正しい日付、時間帯（終わりは 24:00 まで、始まりと時刻には 24:00 を使えない）、日をまたぐ場合
+  - 1 回 50 件まで、期間 90 日まで
+  - 日本時間以外のタイムゾーンは拒否
+  - 最小間隔（既定 60 分）と 1 日の上限（既定 10 件）
+- まとめてランダム:
+  - シードつきで、期間を件数で区切った各区間から 1 枠ずつ選ぶ（偏らないように分散）
+  - 曜日・除外日を守り、本文は入力した順（並べ替えは選んだときだけ、これもシードつき）
+  - 試行回数には上限があり、配置できなければ `NOT_ENOUGH_SLOTS` / `SPACING_INFEASIBLE`
+- 再抽選: 明示の操作のときだけ（版数 +1）。指定日時と間隔指定は再抽選できない。
+- 間隔指定: 日ごと（1〜30 日）・時間ごと（1〜72 時間）。既存の予定と重なったら、近い空き時刻を示してエラーにする（勝手には動かさない）。
+- 競合の解消（明示の操作のときだけ）: 固定 ＞ 手動の柔軟 ＞ AI の順。AI とランダムは、それぞれ決めた時間帯・日付の中だけで動かす。動かせなければエラー。何も捨てない。
+- 一覧: 保存済みの予定（読み取りだけ）とプレビューを、アカウントごとに時刻順で並べる。「すべて／AI／手動」で絞り込み、近すぎる組を検出する。
+
+### 画面
+- 投稿予定タブ:
+  - 「すべて／AI自動投稿／手動予約」の絞り込み
+  - 「投稿を作成」→ フォーム（4 モード、本文の追加・削除・↑↓、日時・期間・時間帯・曜日・本文の順番・間隔、AI は頻度と同意の状態を表示）
+  - プレビューの一覧（編集・↑↓・取り消し・まとめて取り消し・再抽選・競合の解消）
+- 「プレビュー／未予約・投稿されません」のバッジと、「この画面を閉じたりアプリを再起動したりすると消えます（端末にもサーバーにも保存しません）」の表示。「予約確定」のボタンは置いていない。
+- 保存済みの予定: 読み込み中・取得失敗・見本データの扱いはそのまま（取得失敗のときに見本データを出さない）。行から詳細画面（`/posts/[id]`）に移る動作も維持。下の 5 つのタブは変更なし。
+- AI の頻度: AI 相談の保存設定から `read` するだけ（見本データのモードでは初期値の週 3 回）。生成時刻（`generationWindow`）は使わず、投稿の時間帯を別に選ぶ。
+
+### 画面での確認（見本データのモード、本番には接続していない）
+- ログイン画面を飛ばす一時改変を `_layout.tsx` に入れて、Web 版で操作した。確認後にバックアップから戻し、元のバイト列と一致することを確認した（コミットしていない）。
+- スマホの幅（375×812）で確認したこと:
+  - まとめてランダムで 3 件 → 10/16 19:05、10/18 18:50、10/22 20:40
+  - 「再抽選」→ 10/15 20:30、10/19 11:00、10/23 15:25（日時だけが変わり、本文の順番は維持）
+  - AI 自動予約で 3 件、「自動投稿の同意なし」と表示
+  - 「手動予約」に絞ると、手動のプレビュー 3 件 + 見本の手動作成 1 件だけ
+  - ブラウザのエラー 0、Supabase への通信 0
+- Expo が `.gitignore` に足した行は元に戻した。Metro は止めた。
+
+### テスト
+- `tests/schedule-planner.test.mjs`: 16 件（計画ロジック 15 + 画面の静的チェック 1）
+  - 10 件を 10/15〜25 の 9〜21 時に配置、同じシードで同じ結果・明示の再抽選、本文の並べ替えは選んだときだけ
+  - 複数の指定日時、検査（空・長すぎ・過去・存在しない日付・24:00・逆の期間・期間の上限・タイムゾーン）、配置できない時間帯
+  - 曜日と除外日、間隔指定（日・時間・日またぎ・重なりは代わりの時刻を示すエラー）、指定日時どうしの重なり
+  - AI（頻度・投稿の時間帯・同意の扱い）、AI と手動の衝突（固定を守り、AI だけ動く）、誰も動かせない重なりはエラー
+  - 編集・並べ替え（時刻は変わらない）・取り消し、アカウントの分離と絞り込み
+  - 保存・通信・投稿の能力が無いこと、画面が保存の処理を呼ばないこと
+- アプリ全体の `tests/*.test.mjs`: **250/250**。`src/domain/*.test.ts`: **22/22**。
+  - 既存の「行が詳細画面を開く」テストに合わせて、保存済みの予定のカードの中で直接移動する形にした（動作は同じ）。
+- `tsc --noEmit` エラーなし、eslint（変更ファイル 4 つ）エラーなし、`git diff --check` クリーン、秘密情報スキャン 0。
+- 他の open な PR と、変更ファイルの重なりはない。
+
+### 将来の仕様（`docs/postona/unified-ai-manual-scheduling-v1-20261011.md`）
+- 正本はサーバーの新しい計画の表。今の `scheduled_posts` は、ブランド単位でアカウントとの結びつきが無いので、そのままは使わない。
+- 書き込みは本人の JWT で呼ぶ専用の RPC だけ。所有、本人確認済みのアカウント（G4）、G5 の利用権を、作成・取得・投稿直前の 3 か所で確認する。
+- 同意:
+  - AI 自動は、所有者の `auto_post_preference` + 運用側の権限 + 利用権
+  - 手動は、予約ごとの明示の同意（本文のハッシュつき）。手動の投稿は AI の生成は通らないが、投稿の許可は必ず通る
+- そのほか: 文字数とメディアの規則、冪等性、取り消しと投稿の競合、重複、上限、巻き戻し、監査。
+- まだ配線しない型の境界: V1 では、どの呼び出しも `NOT_AVAILABLE` を返す想定。保存のボタンも出さない。
+
+### remaining_issues（バックエンドの残りのゲート）
+- G5: `x_autopost` 利用権の確認関数、削除順、T13 の書き込みガード（PR #127 §5 と同じ）
+- G4: X アカウントの本人証明と、ワークスペースの作り方
+- G3: 計画の表・RPC・Edge のソース（PR #127 の Stage 3B との順番も含む）
+- G3 + G4 + G5 をまとめた Sol（高）のレビュー → ユーザー承認の本番適用と限定パイロット
+- プレビューは画面を閉じると消える（安全に保存できる場所がまだ無いため、端末にも保存していない）
+
+### safety_checks
+- 本番・Supabase・X・Threads・Meta・AI の API には接続していない。保存・予約・投稿・同意の付与・権限の変更は 0。
+- 画面とフォームは、保存・RPC・Edge・端末への保存を呼ばない（静的テストで固定）。AI の頻度の読み取り（本人の RLS の範囲）だけ。
+- 「これで覚えて」を自動投稿の同意として扱っていない。AI の枠は、同意があっても `publishable: false`。
+- 一時改変（ログイン画面を飛ばす）は元に戻し、コミットしていない。
+- PR #127、H1（Threads）、G4（Issue #131）、G5、G1 / G2 / H2、既存の X / かぶモリ / AI ラボの投稿には触れていない。
+
+### next_recommendation
+1. K3 で受け入れ。下書き PR #138 の merge は、別途判断する（ローカルの UI と計画ロジックだけなので、独立レビューは不要と考える）。
+2. 次の G3: G5 / G4 のゲートがそろったら、計画の表・RPC と保存の境界の実装（ソースのみ）。その前に、PR #127 の Stage 3B との統合の順番を決める。
+3. 実際の保存と配信の前に、G3 + G4 + G5 をまとめて Sol（高）のレビューを 1 回。
 
 ---
 

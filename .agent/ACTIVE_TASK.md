@@ -129,11 +129,11 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: postona-unified-ai-manual-schedule-planner-v1-20261011
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: POSTONA G3のちゃ（AI相談・X投稿予約担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
 - allocation: User requested same POSTONA schedule UI for AI-generated auto posts and manual text posts with exact date/time, randomized assignment of multiple texts in a date/time window, and interval schedule. G3 owns isolated local deterministic planner, account-scoped mock/UI preview in existing apps/social-mobile 5-tab app, new scheduling tests/docs, no real schedule DB writes or X posting. Explicit per-post manual consent differs from AI auto_post_preference, but G5 x_autopost service entitlement, account ownership and publisher permissions remain hard production prerequisites. G4/H1 X/Threads OAuth and G5 Auth/entitlement work untouched, prior G3 PR127 protected; no live Supabase/X/Meta/API, migrations, Edge, Cron, PR merge or deploy. K3 on completion; later Sol（高） integrated review only for real publisher/persistence.
