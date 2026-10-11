@@ -287,8 +287,9 @@ test("the prompt lets a news item's own cause be restated and keeps it apart fro
   assert.ok(instructions.includes("そのニュース本文に書かれている原因と結果を、本文の言い方に沿ってそのまま書いてかまいません"));
   assert.ok(instructions.includes("本文に因果の表現が無いニュースには「〜を受けて」「〜を背景に」を足しません"));
   assert.ok(instructions.includes("ニュースの中の原因を、東京市場・米国市場・指数の値動きの理由にはしません"));
-  // The market-level rule is unchanged.
-  assert.ok(instructions.includes("値動きの理由として書けるのは、入力のニュースが理由として明記しているもの（causal の claim）だけです"));
+  // The market-level rule is kept (Fact V2, 2026-10-11, reworded): a past move's reason is stated as fact only when a
+  // news item states it; otherwise it is written as an interpretation, never asserted.
+  assert.ok(instructions.includes("すでに起きた値動きの理由は、入力のニュースが理由として明記している（causal の claim がある）場合だけ事実として書きます"));
 });
 
 test("a news item that states its cause in other words is still a supported restatement", () => {
