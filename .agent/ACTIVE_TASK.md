@@ -77,17 +77,17 @@
 ## Codex H4
 - owner: codex
 - slot: codex-4
-- status: ready
+- status: done
 - task_id: news-improvement-a-pr129-phase7-r2-final-focused-review-h4-20261012
 - start_code: H4
 - finish_code: C4
 - completion_code: C4
-- next_owner: codex
+- next_owner: none
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CODEX_TASK_4.md
 - report: .agent/CODEX_REPORT_4.md
-- allocation: G8/K8によりPR129 R2 head `7bf9b8a0` の実装は完了したが、F7の公平性とF9のguarded PATCH（DB書込み）・同時判定・既存F1-F9のP1/P2回帰を一度限りのsource-only独立安全レビューで確認。H4はレビュー専用、他worktree/PR/他G/H/本番に触れない。PR129 Draft継続、merge/deploy禁止。C4をこのチャットへ返す。
-- recommended_model: Sol（高）
+- allocation: C4 2026-10-12 CHANGES_REQUIRED。独立H4がPR129 head `7bf9b8a0` で既存968 PASS、独立12probe=9 PASS/3 FAILを実施。H4-R1 P1:決算表折返し誤Fact、R2 P2:本文更新と判定保存のCAS競合、R3 P2:過去FOMC決定を現在決定と誤認。レビュー完了、コード未変更、本番アクセス・merge・deployなし。G8ニュース改善Aだけへ限定修正TASKを戻す。H4はdone/unreserved、他案件を勝手に引継がない。
+- recommended_model: Sol（高） (completed)
 ## Codex H5
 - owner: codex
 - slot: codex-5
@@ -198,16 +198,16 @@
 ## Claude G8
 - owner: claude
 - slot: claude-8
-- status: done
-- task_id: news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011
+- status: ready
+- task_id: news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012
 - start_code: G8
 - finish_code: K8
-- next_owner: codex-4
+- next_owner: claude
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_8.md
 - report: .agent/tasks/CLAUDE_TASK_8.md#report
-- allocation: K8 2026-10-12 ACCEPTED_IMPLEMENTATION / INDEPENDENT_REVIEW_REQUIRED。PR129 R2 head `7bf9b8a0` OPEN/Draft/未merge、5ファイル差分、G8報告 important-news-monitor757 PASS, extraction29, discovery162, shadow20。F7旧毎時取りこぼしは成功枠上限2+最大4試行/20秒チェック・確率tie-breakへ改修、ただし4件超とRSS消失には厳密保証なし。F9はpending_judgement+market_macro+本文空だけに条件付きPATCH、状態/本文read-back、no_post等の更新は未実装。DB並行判定・content_hash整合・F7負荷の独立レビューをH4へ割当。**G8はニュース改善A専任を維持**。H4 C4で要修正なら同じG8へ個別TASK再割当、それまでは他案件を入れない。G9/API-Bは保護。
-- recommended_model: Opus5.5（高） (completed)
+- allocation: USER EXPLICIT ニュース改善Aの専任G8。H4/C4のP1×1・P2×2独立レビュー指摘だけをPR129へ実装するR3 TASK。決算短信の折返し表をfail-closed、本文更新後の古い判定保存を原子的CASで防止、FOMC声明の過去判断と現在判断を正しく分離。前のR1/R2実装・Report保全、PR129 Draft維持、merge/deploy/本番変更なし。C4レビューは完了、次のK8で確認。G9その他枠は非干渉。
+- recommended_model: Opus5.5（高）
 ## Claude G9
 - owner: claude
 - slot: claude-9
