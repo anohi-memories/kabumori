@@ -1,3 +1,12 @@
+## K6 INTERIM — Phase1g secret-key compatibility accepted conditionally, G6 READY — 2026-10-11 JST
+
+- G6 Phase1g Report `KEY_COMPAT_VERIFIED_NO_SOURCE_CHANGE / WAIT_HOLD_RELEASE_AND_USER_SETUP` reviewed. G6 claims same new Supabase secret key + `apikey` and `Authorization: Bearer` used in a production service_role-only RPC already. This is a production precedent, **not direct proof** of test key compatibility. Ledger smoke first reads usage_summary; reserve/markSent also fail-closed. Source unchanged, real Anthropic/ledger call count 0 at G6 Report.
+- K6 CONDITIONAL HOLD RELEASE accepted as intermediate result; **same G6 task now ready/next_owner claude** (not done), recommended Opus5.5（高）, return K6. Explicit one-call approval remains unspent. User showed Claude Console `kabumori-production` $10 monthly cap and $5/$8 notifications, generated non-admin workspace key, confirmed local `anthropic.env` file permissions 0600 at 2026-10-11 23:13 JST. Contents and actual key validity uninspected, not shared.
+- Next G6: user creates a **new ephemeral Supabase secret API key only**, saves to local `ledger.env` mode 0600, no secret disclosure. Validate offline plan; fresh G5/windows/project/ledger; acquire short CAS ACTIVE window, fixed `--mode=live --ledger=supabase --confirm=ONE_PAID_CALL` once, no retry; pre-Anthropic ledger key rejection means 0 paid API calls and STOP. If Anthropic attempt occurred or unknown, do not rerun. Verify DB delta/cost and revoke ephemeral key; close window; report K6. No Edge secret, Cron, report cutover, source/migration/policy changes.
+- This K6 is NOT confirmation that actual paid smoke passed. Existing production ledger Phase1f still live with two narrow policies; no production mutation performed by ChatGPT here.
+
+---
+
 ## K9 FINAL — G9 R2 external-send rights gate: PASS_OFFLINE / EXTERNAL_CALLS_RELEASE_HOLD — 2026-10-11 JST
 
 - 対象はAPI最適化B/G9の `api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011` のみ。TASK Report `review_required` / head commit `65c95589564845e7b343fe9d0acc7d293bebf783` をGitHubから確認。ブランチ `claude/g9-fixture-rights-cost-eval-20261011` は親 `b6020dbb` の直系+1 commit、12ファイルすべて `tools/provider-compare/` / `docs/model-optimization/` 内。G9報告Deno 299 pass、deno check/lint/diff/secret scan PASS、paid API/network/prod write/merge/deploy無しは自己報告でありChatGPTはローカル実行していない。
