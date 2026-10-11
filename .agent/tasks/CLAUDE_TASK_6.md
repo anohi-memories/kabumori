@@ -1,3 +1,56 @@
+# G6 CURRENT TASK — 共通AI基盤 Phase 2a / 市況レポート向け Provider 接続アダプター（オフライン限定）
+
+- task_id: common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012
+- owner: claude
+- slot: claude-6
+- status: ready
+- next_owner: claude
+- start_code: G6
+- finish_code: K6
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- recommended_model: **Opus5.5（高）**
+- priority: high
+- user_approval: 2026-10-12 本チャット「OK」— 共通AI基盤 Phase2aを G6 に割り当てる。**オフライン実装・検証のみ**、本番接続/切替/課金は未承認。
+- mode: source-only, separate G6 worktree, independent Draft PR, NO production
+- production_mutation_window: NOT_APPLICABLE / FORBIDDEN
+- previous_phase1g: K6 final PASS; production ledger 1 usage event; user reported temporary sb_secret and local ledger.env destroyed; **NEVER repeat paid smoke**.
+
+## Goal
+共通 Provider + Ledger を、既存のかぶモリ共通朝刊/大引けパイプラインから段階的に呼べるようにする、切替OFF既定の**接続候補**を用意する。既存配信の挙動は main / production で変更しない。Phase2aでは運用上のモデル自動切替や料金プラン、利用者の個別レポート接続は実装しない。
+
+## Starting gates
+1. fresh origin/main から G6 **固有の独立クリーンworktree** を作る（または G6 自身のクリーンworktreeのみ利用）。PROJECT_RULES.md / HANDOFF.md / .agent/ORCHESTRATION.md / ACTIVE_TASK.md / CURRENT_STATE.md / 本TASK / 既存共通 Provider と ledger / main市況レポート生成入口を確認。TASK status ready/in_progress 以外では開始しない。
+2. 全15枠、TASK/Report、worktree/branch、変更予定ファイルと Draft PRを照合。G2は `kabumori-market-report-scalable-broadcast-push-v1-20261012` を進めるため、**G2のPR143、朝夕push producer/dispatcher/worker/DB migration/notificationファイルに触れない**。G5の共通Auth、G8ニュース、G9コスト調査、POSTONA、MICにも触れない。同一ファイルやAPI境界に競合があれば **STOP→K6で相談**。他slotのdev serverやGit変更に触れない。
+3. 独立した限定アダプターを追加する前に、実際に共通市場レポート生成側の既存 Providerインターフェース、payload、error propagation、Edge env/secrets、ログ、旧生成経路を把握して変更ファイル候補を列挙。G6の変更対象を `supabase/functions/_shared/ai_provider/` 新規 adapter・その新規テスト・`docs/ai-provider/` 文書に原則限定。既存の report Edge entrypoint や共通 import をどうしても触る必要がある場合、競合・リスクを明記し **その場でコードを触らず STOP/K6**。
+4. 既存 `ai_provider` / `ai_ledger` API、system `kabumori.market_report` ポリシーの仕様に適合。新アダプターは `off` / `disabled` が明示の既定値、誤設定・未設定時も legacy existing behavior を維持（本番に接続しない）。新モデル・用途への広域ポリシー自動作成は禁止。
+5. Claude Opus 5.5 を **shadow候補**として、**合成Fixtureだけ**使う Deno unit/fake transport/fake ledger / contractテストを実装。出力のschema適合、長文/エラー、タイムアウト、予算拒否、部分失敗、取消、トークン利用量と推定費用、二重送信防止、クロスユーザー/データ漏洩・secret出力抑止を検証。可能なら旧生成結果との構造比較は offline fixture のみ。production RESTやAnthropicへの実呼出は禁止。
+6. レポート生成が推論失敗した場合の挙動は既存の安全な配信継続方針を守る。ただし「強引な retry/二重生成」「budget拒否時の別providerの実課金への無断切替」はしない。切替ONの条件/スコープ、予算ガード、計測、roll backを仕様書へ。課金算定は Ledger と突合できるもののみ。
+7. docsに「Phase2a実装済（ソースのみ）」と「未承認の本番ステップ」を明確に分離した接続/rollback runbookを作る。候補Draft PRへコード変更を集約し、original G6 Phase1g smoke script/既存DB migration/Policyを変更しない。PR open Draft のみ。mergeせず Preview/Testのみ。
+8. 変更範囲内のテスト/型検査/lint/差分・機密情報確認を実行。外部送信はもちろん、`SUPABASE` secrets/Claude API keyの読み取り、.envのコピー、Edge secrets set、Supabase production DB/Edge/Cron、X実投稿、deploy/merge、課金・追加モデル呼び出しはすべて禁止。
+9. ReportをこのTASKの `## Report — Phase2a` に追記、status `review_required` next_owner `chatgpt` でK6へ返す。証拠: task_id, result, scope/changed_files, tests pass/fail, commits/branch/PR head, actual push/merge/deploy, remaining_issues, security_checks, production=0, external_paid_calls=0, next_recommendation. 共通STATE/ACTIVE の自身区画のみ競合なしにCAS更新。他slot Reportは触らない。
+
+## Done criteria and review gate
+- Phase2a pass = 新しいadapter層と安全なdisabled default、合成Fixtureテスト、error/budget/idempotency検証、Draft PR + docs + Report。実朝刊/大引けの生成モデル変更・本番動作は**未完了が正しい**。
+- DB/RLS/Auth/Secrets/productionへの差分が出たら fail-closed STOP。K6時にAuth/security/budgetの新境界があればH1〜H4で独立レビュー要否を判断（H5通常レビュー禁止）。
+- 次のPhase2b（実レポート入口への配線、shadow、本番Secret登録・配信切替）は**別TASK/別ユーザー承認**が必要。
+
+## Report — Phase2a（G6記入）
+- task_id: common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012
+- result: NOT_STARTED
+- changed_files: none
+- tests: NOT_RUN
+- commit_hash: none
+- push: no
+- merge: no
+- deploy: no
+- remaining_issues: Await G6
+- safety_checks: no provider/DB/production actions authorized
+- next_recommendation: G6 starts; return K6
+
+---
+
+# PRESERVED G6 PRIOR TASKS / REPORTS (completed Phase1g below; immutable history)
+
 # G6 CURRENT TASK — 共通AI基盤 Phase 1g / Claude API 1回だけ台帳込み実接続テスト
 
 - task_id: common-ai-provider-g6-phase1g-one-paid-call-ledger-smoke-20261011
