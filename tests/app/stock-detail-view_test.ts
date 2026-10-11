@@ -208,6 +208,88 @@ test("a holding edited after the report was saved withholds the old valuation in
   assert.equal(registrationMatchesSnapshot(same, row), true);
 });
 
+// K1 correction (PR #136): the saved valuation belongs to the exact position it was computed for. Quantity and
+// average price alone are not enough -- 現物/信用 and 買い/売り change what the saved figures mean.
+function valued(overrides: Partial<ReportStock> = {}): ReportStock {
+  return saved("3333", {
+    tracking_type: "holding", quantity: 100, average_price: 900, position_type: "cash", side: "long",
+    market_value: 125050, day_pl: 1500, unrealized_pl: 35050, unrealized_pl_percent: 38.9, ...overrides,
+  });
+}
+function registered(overrides: Partial<TrackedStock> = {}): TrackedStock {
+  return tracked("3333", { tracking_type: "holding", quantity: 100, average_price: 900, position_type: "cash", side: "long", ...overrides });
+}
+function detailFor(reg: TrackedStock, row: ReportStock) {
+  return buildStockDetail({ stock: master("3333"), tracked: reg, report: report({ holdings: [row] }) });
+}
+
+test("the saved valuation is kept only when quantity, average price, position type, side and role all match", () => {
+  const view = detailFor(registered(), valued());
+  assert.equal(registrationMatchesSnapshot(registered(), valued()), true);
+  assert.deepEqual(view.holding?.valuation, { marketValue: 125050, dayPl: 1500, unrealizedPl: 35050, unrealizedPlPercent: 38.9 });
+  assert.equal(view.holding?.valuationNote, null);
+});
+
+test("same quantity and average price, but the side changed (long <-> short): the old valuation is withheld", () => {
+  for (const [now, then] of [["long", "short"], ["short", "long"]] as const) {
+    const reg = registered({ side: now });
+    const row = valued({ side: then });
+    assert.equal(registrationMatchesSnapshot(reg, row), false, `${then} -> ${now}`);
+    const view = detailFor(reg, row);
+    assert.equal(view.holding?.valuation, null);
+    assert.equal(view.holding?.valuationNote, VALUATION_NOTE.changed);
+    assert.equal(view.holding?.sideLabel, now === "long" ? "買い" : "売り", "the registration's own label is still shown");
+  }
+});
+
+test("same quantity and average price, but the position type changed (cash <-> margin): the old valuation is withheld", () => {
+  for (const [now, then] of [["cash", "margin"], ["margin", "cash"]] as const) {
+    const reg = registered({ position_type: now });
+    const row = valued({ position_type: then });
+    assert.equal(registrationMatchesSnapshot(reg, row), false, `${then} -> ${now}`);
+    const view = detailFor(reg, row);
+    assert.equal(view.holding?.valuation, null);
+    assert.equal(view.holding?.valuationNote, VALUATION_NOTE.changed);
+    assert.equal(view.holding?.positionLabel, now === "cash" ? "現物" : "信用");
+  }
+});
+
+test("a saved row whose own role is not 'holding' is never paired with a holding registration", () => {
+  const row = valued({ tracking_type: "watch" });
+  assert.equal(registrationMatchesSnapshot(registered(), row), false);
+  const view = detailFor(registered(), row);
+  assert.equal(view.holding?.valuation, null);
+  assert.equal(view.holding?.valuationNote, VALUATION_NOTE.changed);
+  // The role is compared against the registration too (a watch registration vs a holding row).
+  assert.equal(registrationMatchesSnapshot(registered({ tracking_type: "watch" }), valued()), false);
+});
+
+test("missing values never turn into a match: null/legacy fields match only each other, never a concrete value", () => {
+  // Both sides blank (the user never entered them): same position, so the valuation stays.
+  const blankReg = registered({ position_type: null, side: null });
+  const blankRow = valued({ position_type: null, side: null });
+  assert.equal(registrationMatchesSnapshot(blankReg, blankRow), true);
+  // A legacy saved row without the fields at all counts as blank, not as a wildcard.
+  const legacy = { ...blankRow } as Record<string, unknown>;
+  delete legacy.position_type;
+  delete legacy.side;
+  assert.equal(registrationMatchesSnapshot(blankReg, legacy as unknown as ReportStock), true);
+  assert.equal(registrationMatchesSnapshot(registered(), legacy as unknown as ReportStock), false, "a concrete registration vs a blank saved row");
+  assert.equal(registrationMatchesSnapshot(blankReg, valued()), false, "a blank registration vs a concrete saved row");
+  // A non-finite number is not equal to anything, including another non-finite number.
+  assert.equal(registrationMatchesSnapshot(registered({ quantity: Number.NaN }), valued({ quantity: Number.NaN })), true, "both normalise to null = both blank");
+  assert.equal(registrationMatchesSnapshot(registered({ quantity: Number.NaN }), valued()), false);
+});
+
+test("an edit that is reverted matches again (the valuation comes back); the share price stays visible throughout", () => {
+  const row = valued();
+  const edited = detailFor(registered({ side: "short" }), row);
+  assert.equal(edited.holding?.valuation, null);
+  assert.ok(edited.price.available, "the saved close is independent of the position and keeps its dated basis");
+  const reverted = detailFor(registered(), row);
+  assert.notEqual(reverted.holding?.valuation, null);
+});
+
 test("a holding the report does not know yet says so; with no report at all there is no note and no valuation", () => {
   const reg = tracked("4444", { tracking_type: "holding", quantity: 10, average_price: 100 });
   const pending = buildStockDetail({ stock: master("4444"), tracked: reg, report: report({ holdings: [] }) });

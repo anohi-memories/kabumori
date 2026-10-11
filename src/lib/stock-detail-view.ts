@@ -143,12 +143,23 @@ export type HoldingDetail = {
   valuationNote: string | null;
 };
 
+/** A blank (null/absent/unknown) field is equal only to another blank one -- never a wildcard for a value. */
+const label = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null);
+
 /**
- * True when the saved row was computed from the same quantity and average price the user has registered now.
- * After an edit the saved valuation belongs to the old numbers; it is withheld until the next report.
+ * True when the saved row was computed for exactly the position the user has registered now: the same role
+ * (holding), quantity, average price, 現物/信用 and 買い/売り. Any of them can change what the saved market value
+ * and P/L mean, so after an edit the old valuation is withheld until the next report. A blank field matches
+ * only another blank one (a missing value is never read as "the same").
  */
 export function registrationMatchesSnapshot(tracked: TrackedStock, saved: ReportStock): boolean {
-  return finite(tracked.quantity) === finite(saved.quantity) && finite(tracked.average_price) === finite(saved.average_price);
+  return (
+    label(tracked.tracking_type) === label(saved.tracking_type)
+    && finite(tracked.quantity) === finite(saved.quantity)
+    && finite(tracked.average_price) === finite(saved.average_price)
+    && label(tracked.position_type) === label(saved.position_type)
+    && label(tracked.side) === label(saved.side)
+  );
 }
 
 export const VALUATION_NOTE = {
