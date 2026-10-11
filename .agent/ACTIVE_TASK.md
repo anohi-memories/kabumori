@@ -63,16 +63,16 @@
 ## Codex H3
 - owner: codex
 - slot: codex-3
-- status: ready
+- status: review_required
 - task_id: postona-threads-pr144-auth-publish-p1-security-review-h3-20261012
 - start_code: H3
 - finish_code: C3
 - completion_code: C3
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CODEX_TASK_3.md
 - report: .agent/CODEX_REPORT_3.md
-- allocation: K4 2026-10-12 accepted PR144 G4 Threads Auth-to-manual TEXT publish source candidate only. H3 newly assigned one focused independent Sol（高） SECURITY REVIEW of exact Draft PR144 head d4a1e87b77d1fbd362dc51809ce2d998afda15ea stacked on protected PR140 2e75a6a842e70f3de78558681803b60935fb4251; examine G4 SECURITY DEFINER SQL claim/release/record replacement, Auth session and G5 T13/lifecycle after revoke, HMAC nonce proof/replay and Vault access, H5 owner-only callback/custody, actual safe flags/dual write idempotency, disposable SQL/test fidelity. Do not edit product or PR, real Supabase/Meta/X/Vault/production, grants, migration apply, merge/deploy, posts. Distinguish mocked reports from managed proof. H4 occupied separately with G8 News PR129 review and protected; H1/H2/H5/G3/G5/G6-G10 protected. C3 return here. H3 freed after C3.
+- allocation: H3 completed focused independent review of PR144 exact d4a1e87b77d1fbd362dc51809ce2d998afda15ea. CHANGES_REQUIRED / REAL_PILOT_HOLD: one P2 R1 KEY SHARE session-expiry UPDATE race proven in two-connection local PG17; FOR SHARE control blocks update. Deno93/composite176/app258, release8 and parent6 mutations PASS; real pinned G5 T13 also PASS on fake local foundations, not managed proof. Product edits/PR changes/production/real APIs/posts0. Return C3 to POSTONA G4 chat; other slots/history protected. H3 freed after C3.
 - recommended_model: Sol（高）
 ## Codex H4
 - owner: codex

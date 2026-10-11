@@ -3,8 +3,8 @@
 - task_id: postona-threads-pr144-auth-publish-p1-security-review-h3-20261012
 - owner: codex
 - slot: codex-3
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - start_code: H3
 - finish_code: C3
 - completion_code: C3
@@ -42,6 +42,12 @@ G4's source PR144 changed security-critical `SECURITY DEFINER` functions, princi
 - Fields required in H3 report: task_id,result,reviewed_pr_sha,changed_files,tests,commit_hash,push,merge,deploy,remaining_issues,safety_checks,next_recommendation,return_to,completion_code.
 - **H3 is freed after C3** (no parked integration backlog; separate explicit TASKs for G4/G5/H5).
 - Last line of Codex completion: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ へ C3 を送ってください。**
+
+---
+
+## H3 completion — 2026-10-12 JST
+
+CHANGES_REQUIRED / REAL_PILOT_HOLD on exact PR144 d4a1e87b77d1fbd362dc51809ce2d998afda15ea. One P2 R1 session expiry UPDATE race independently reproduced on PG17; local FOR SHARE control blocks it. Deno93/composite176/app258 and supplied SQL/mutations PASS. See `.agent/CODEX_REPORT_3.md` for evidence, limits and owner matrix. Product edits0 / production0 / real API0. Return C3 to POSTONA｜マルチSNS化・開発統括（G4）のちゃ.
 
 ---
 

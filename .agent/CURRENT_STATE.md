@@ -1,3 +1,12 @@
+## H3 C3 FINAL — POSTONA PR144 Auth/SQL review — 2026-10-12 JST
+
+- H3 `postona-threads-pr144-auth-publish-p1-security-review-h3-20261012` **review_required / next_owner chatgpt**, exact Draft PR144 `d4a1e87b77d1fbd362dc51809ce2d998afda15ea` remains OPEN/DRAFT/UNMERGED. Verdict **CHANGES_REQUIRED / REAL_PILOT_HOLD**; return C3 to POSTONA｜マルチSNS化・開発統括（G4）のちゃ. H3 is freed after C3.
+- **One P2 R1:** candidate release SQL lines 229-232 locks `auth.sessions` with KEY SHARE. H3 two-connection fake PostgreSQL17 proof: session expiry UPDATE commits while release pauses after validation, then release hands out the credential. FOR SHARE local control blocks UPDATE. Require G4 narrow row-lock correction + concurrent regression; coordinate protected H5's same session contract separately. Actual GoTrue mutation route NOT_RUN; no live unauthorized post claimed.
+- Independent PASS: Deno93, composite176 (counts overlap), app258, release SQL preconditions/apply/behavior/race +8 mutations, parent PR140 regression +6 mutations. H3 also substituted the exact PR121 T13 source on fake lifecycle foundations and passed the SQL chain; not managed proof. No product edits, protected branch changes, production writes, deploy/merge, real API/paid call or posts. All four gates false.
+- Report `.agent/CODEX_REPORT_3.md` includes exact reproduction, managed/owner/Vault/Meta NOT_RUN, finite release→HTTP gap, actual workspace deletion guard blocking late record and prioritized G4/G5/H5/operator rollout matrix. Real pilot remains held for T13/T10, owner channel/session privileges/custody/callback, Meta app/tester/key and explicit single-post approval. No other slot status or TASK changed.
+
+---
+
 ## G6 Phase2a assigned — common AI market report adapter offline — 2026-10-12 JST
 
 - User approved Phase2a G6 assignment in 共通AI基盤のちゃ. task_id `common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012` status **ready**, next_owner **claude**, start **G6**, return **K6**, recommended **Opus5.5（高）**.
