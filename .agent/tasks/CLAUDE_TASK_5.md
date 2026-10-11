@@ -3,8 +3,8 @@
 - task_id: common-account-phase3e-e11-offline-review-r1-r5-corrective-20261011
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - start_code: G5
 - finish_code: K5
@@ -56,10 +56,85 @@ Protected exact OPEN/DRAFT/UNMERGED heads; verify again:
 ## Report — Phase 3e
 
 - task_id: common-account-phase3e-e11-offline-review-r1-r5-corrective-20261011
-- result: pending
-- remote_calls: 0
+- reported_at: 2026-10-11 09:22 JST
+- result: **`OFFLINE_CORRECTIVE_READY_FOR_REREVIEW`**（H2 の R1〜R5 をすべてオフラインで補正）
+  - 次のことは、いずれも承認していない: E11 の実行、D 方式の採用、本番での Auth 削除、`managed_auth_delete` の開放、写真アプリの一時停止。
+  - 機能としては引き続き **BLOCKED**。写真アプリの一時停止も PREPAUSE_BLOCKED のまま。
+- remote_calls: 0（Supabase のプロジェクト・Auth・Admin・GoTrue・Storage・プロバイダへのアクセスは 0。git fetch と GitHub の操作は除く）
 - family_photo_paused: false
-- actual_Auth_DELETE: 0
+- actual_Auth_DELETE: 0（実 Supabase でも使い捨て Supabase でも 0。ローカルの偽 DB での模擬削除は除く）
+- projects_created: 0
+- deploy: NO / merge: NO / production_mutation: 0
+
+### ブランチ / PR / HEAD
+- 作業場所: 新規の独立 worktree `/Users/yuya/Developer/kabumori-g5-phase3e`
+  - ブランチ `claude/g5-phase3e-e11-review-corrective-20261011` は、**PR122 の head `f17a47e36632fff4a1f4cfb0b860df200e1c99e1` から作成**した。
+  - 元の PR122 のブランチや worktree は checkout も reset も push もしていない。force push なし。
+- **Draft PR #130**: https://github.com/anohi-memories/kabumori/pull/130
+  - base は PR122 のブランチ `claude/g5-phase3c-disposable-proof-readiness-20261010`（**積み重ね**）。head は `5943fad5f724191f6ae77f3baf826a4c7698d542`（commit 1件）。
+  - 22 ファイル（PR122 との差分だけ）。報告時点の CI: 成功 1 / 実行中 1。
+- 保護対象の確認（開始時と報告時に再確認）: PR121 `76b50e1e…`、PR122 `f17a47e3…`、PR128 `e9244d29…` は、いずれも OPEN / Draft / 未マージで変更なし。
+- 他の open PR 14件と変更ファイルの重なり: **なし**。
+
+### changed_files（22件。PR122 が所有するパスだけ。SQL migration・auth スキーマ・runtime の変更なし）
+- 変更 12件:
+  - `docs/common-account/phase3c-disposable-supabase-proof-runbook.md`
+  - `supabase/tests/common_account_disposable_e2e/` の `catalog.ts`, `catalog_test.ts`, `cli_test.ts`, `evidence.ts`, `evidence_test.ts`, `guard.ts`, `guard_test.ts`, `harness_mutations.py`, `operator_checklist.md`, `plan.ts`, `static_test.ts`
+- 追加 10件（同じディレクトリ）: `witness.ts`, `witness_test.ts`, `e11_matrix.ts`, `e11_matrix_test.ts`, `e4_bound.ts`, `e4_bound_test.ts`, `test_support.ts`, `catalog_extended_readback.sql`, `target_readback.sql`, `readback_local_run.sh`
+
+### R1〜R5 の対応表
+| 指摘 | 状態 | 対応内容 | 否定ケースの確認 |
+| --- | --- | --- | --- |
+| R1 [P1] Admin と SQL の比較証拠 | **対応済み（オフライン）** | `e11_matrix.ts` で次を定義した。<br>・Admin 削除と SQL 削除の 2グループを、同じスキーマ・設定の指紋で比較する<br>・削除前に記録した 0 でない分母（7種類）、相関 ID は伏せる<br>・行 A_AUDIT（`user_deleted` の有無を仮定しない、`identity_linked` が残る）<br>・行 B_STORAGE（所有オブジェクトの有無、メタデータとファイル本体の読み戻し）<br>・行 C_FAILURE_PATHS（FK・トリガー・権限・ロックや文のタイムアウト・ロールバック・応答が失われた COMMIT のすべてで状態が変わらないこと、盲目的な再実行の禁止）<br>・行 D_SESSIONS_REFRESH（削除前に記録した ID で数える）<br>・行 E_TOKENS_WRITERS（有効な古い JWT と期限切れ JWT ×ガード付き / ガードなしの書き込み / Storage / `GET /user`）<br>・users 行が消えたことやカタログの hash から片付け済みと推測しない。外部プロバイダの失効を仮定しない<br>・E11 の PASS にはこの表が必要。残留物が記録されたら D はブロック。E9 にも期限切れ JWT の対照とファイル本体の読み戻しを追加 | 分母が 0、グループの指紋が違う、範囲の表示が違う、失敗分岐で状態が変わった（FAIL）、盲目的な再実行（FAIL）、期限切れや古い token が受理された（FAIL）、読み戻しなしの受理（UNKNOWN）、推測、プロバイダ失効の仮定、行の FAIL / UNKNOWN / 欠落 |
+| R2 [P2] 行ロック確認の正確な表示 | **対応済み** | ・E11 を「権限・FK cascade・行ロックの確認」と表示し、catalog の「lifecycle lock の下で」という表現を削除<br>・`E11_NOT_PROVEN` を一覧にした<br>・将来の別証明 `option_d_full_decision_proof`（同じトランザクション内での完全な判断、ロックを途中で解放しない、手動・自動・PKCE の本人確認方法の追加、両方向のロック順、所有者のみの実行、gate は blocked のまま）が無ければ、D は BLOCKED | 証明が無い、レビューされていない、証拠が空のとき → D は BLOCKED |
+| R3 [P2] E4 の期限の上限 | **対応済み** | ・`e4_bound.ts` を追加。最後に成功した待機時間は**下限**として扱う<br>・必要な上限の証拠: 対象バージョンの設定上の期限、期限後のコールバックが拒否されること、リクエスト上限と時計のずれの余裕、それらを覆う待機時間、開始済みフローの処理待ち、排他的な再確認を、セッション失効 → BAN → 処理待ち → 再確認 → 削除の順で<br>・`e4Mitigation` の文字列だけでは `E4_BOUND_MISSING` で BLOCKED | ラベルだけ（2種類とも）、最後の成功を上限として使う、待機時間が短い、期限後のコールバック試行が無い、観測と矛盾、処理待ちや再確認が無い、順序違い、数値の不正 |
+| R4 [P2] 自己申告は検証ではない | **対応済み** | ・guard の結果と計画表示に `SELF_DECLARED_INPUTS_NOT_VERIFIED` と、まだ必要な立会い確認を表示<br>・`witness.ts` で W1〜W7 を定義（新しい使い捨てプロジェクト、写真・本番・過去プロジェクトの除外、接続先、偽ユーザーの出所、削除対象が 1行であること、承認とレビューの実在、事前実験の証拠）<br>・実行ごと、自己申告は不可、W1 / W2 / W6 は 2人で確認。チェックリストにも欄を追加<br>・確認がない破壊的実験の PASS は UNKNOWN | H2 の再現（E11 単独と偽の承認文字列で allowed=true）でも、検証未済の表示と W5〜W7 が要求されることを確認。記録の欠落、別の実行の記録、重複、自己申告、不一致、読めない、方法の違い、証拠なし、1人だけ |
+| R5 [P2] 指紋の限界 | **対応済み** | ・既存の指紋は「限定的なカタログの読み取り」と明記<br>・`catalog_extended_readback.sql`（トリガー関数の本体、RLS とポリシー、スキーマ・テーブル・列・既定の権限、継承を含む実効権限、managed 関数の ACL、Storage の件数）を追加<br>・`target_readback.sql`（削除前に記録した ID ごとの件数）を追加<br>・どちらも読み取り専用で、権限が無ければ `UNKNOWN_DENIED`、存在しなければ `ABSENT`（0 にはしない） | 静的テストで読み取り専用であることを確認（書き込みや行ロックを入れる改変は検出される）。ローカルの模擬検証で、権限なし → UNKNOWN_DENIED、JOIN だと 0 に見える落とし穴の再現 |
+
+### テスト（すべてオフライン。模擬検証であり、managed Supabase の証拠ではない）
+- `deno test --no-config --allow-read supabase/tests/common_account_disposable_e2e/`: **56/56**
+  - 型チェックあり。ネットワーク・環境変数・実行の権限は無いことを static_test で確認。
+- `deno check`（19 ファイル）と `deno lint`: OK
+- `harness_mutations.py`: **58/58 検出**（control PASS。PR122 由来 31件と、Phase 3e の R1〜R5 用 27件）
+- `fingerprint_local_run.sh`（ローカル PG 17.11）: PASS（sha256 は以前と同じ `423c0d48…`）
+- `readback_local_run.sh`（ローカル PG、偽のスキーマでの**模擬**）: ALL PASS
+  - 拡張読み戻しは読み取り専用で決定的。
+  - 権限が無い場合は UNKNOWN_DENIED。
+  - 失敗分岐 4種（FK RESTRICT、lock_timeout、明示的なロールバック、権限なし）で状態が不変。
+  - 削除前の分母は 0 でない。
+  - 削除後、記録した ID で数えると残留物（古い形式の refresh token 1件、Storage 1件）が見つかる。ユーザーから JOIN すると 0 と出る落とし穴も再現した。
+  - SQL の経路では `user_deleted` の監査は 0 件。
+- `bash -n` と `py_compile`: OK。`git diff --check`: OK。
+- シークレットの走査: JWT、各種キー、PEM、DB 接続文字列、メール、プロジェクトの ref・URL はいずれも 0件。
+- **NOT_RUN**: 実際の GoTrue / PostgREST / Storage / Management API の挙動、E1〜E12 のすべての実験、行 A〜E の実プロジェクトでの値。
+  - ローカルではトリガーによる拒否、statement_timeout、応答が失われた COMMIT は模擬していない（手順書と表で必須項目として定義済み）。
+
+### 残っているブロッカー
+1. ダミーの OAuth / OIDC アカウント、テスト用の ID 発行元、検証担当者と日程、空き枠と費用の再確認、写真アプリの実機での基準確認（PR128 / Phase 3d のまま）。
+2. E11 を実行するには、次がすべて別々に必要:
+   - 今回の補正版に対する独立した再レビュー
+   - 利用者の承認
+   - 新しい使い捨てプロジェクト
+   - 偽ユーザーごとの破壊的同意
+   - W1〜W7 の実施
+3. D 方式には `option_d_full_decision_proof` の設計・実装・独立レビューが必要（今回は定義だけ）。
+4. A+B 方式には、E4 の上限の証拠（GoTrue の版、設定上の期限、期限後の拒否、処理待ち）が必要。
+
+### 次のおすすめ
+- **ChatGPT / K5**: PR #130 の head `5943fad5` に絞った、Sol（高）の H2 再レビューを 1回、H2 が空いていれば割り当てるか判断する。
+- レビューの PASS は、E11 の実行・D 方式・利用者の同意・本番での削除・写真アプリの一時停止の承認にはならない。
+- 次の段階は、ダミーのプロバイダ・OIDC・担当者・日程の準備（オフライン）。
+
+### 安全確認
+- 実施しなかったこと（いずれも 0 件）:
+  - 実 / 使い捨てプロジェクトの読み書き、作成、削除、一時停止、再開
+  - Auth の DELETE、BAN、Admin 操作
+  - プロバイダの呼び出し
+  - secrets、課金、deploy、migration の適用、EAS、マージ、有効化
+  - 家族写真データへのアクセス
+  - H1/H2 の割り当て
+- PR121 / PR122 / PR128、G1〜G4 と H1/H2 の担当範囲、`docs/postona` は変更していない。
+- ローカルの使い捨て DB は scratchpad 内で、unix socket のみ。
 
 ---
 
