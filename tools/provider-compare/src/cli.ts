@@ -6,7 +6,7 @@
 // Default mode is dry-run: no key is read and nothing leaves the machine. Live mode needs ALL of:
 //   --mode live  PROVIDER_COMPARE_ALLOW_PAID=1  --max-calls N  --max-usd X  and an API key (env or --keychain-*).
 // Nothing in this program writes to Supabase or any production system.
-import { loadCases } from "./fixtures.ts";
+import { type FixtureMode, loadRunnableCases } from "./fixture_loader.ts";
 import { averagesOf, loadLedgerSnapshot } from "./ledger_snapshot.ts";
 import { budgetFromArgs, type RunMode } from "./budget.ts";
 import { createMockProvider } from "./providers/mock.ts";
@@ -33,10 +33,14 @@ type Args = {
   keychainOpenai?: string;
   caseFilter?: string;
   tokenizerFactor: number;
+  /** "legacy" is the PR #115 file with third-party bodies; "rights_safe" excludes any case whose body cannot be verified. */
+  fixtures: FixtureMode;
+  /** Local JSON-lines export of production rows (scripts/export_cases.sql); attaches bodies that may not be stored. */
+  runtimeBodies?: string;
 };
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { mode: "dry-run", tasks: [...TASK_IDS], providers: [], creditUsd: 0, tokenizerFactor: 1 };
+  const args: Args = { mode: "dry-run", tasks: [...TASK_IDS], providers: [], creditUsd: 0, tokenizerFactor: 1, fixtures: "legacy" };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     const value = argv[i + 1];
@@ -54,6 +58,10 @@ function parseArgs(argv: string[]): Args {
       case "--keychain-openai": args.keychainOpenai = value; i += 1; break;
       case "--cases": args.caseFilter = value; i += 1; break;
       case "--tokenizer-factor": args.tokenizerFactor = Number(value); i += 1; break;
+      case "--fixtures":
+        if (value !== "legacy" && value !== "rights_safe") throw new Error("--fixtures must be legacy or rights_safe");
+        args.fixtures = value; i += 1; break;
+      case "--runtime-bodies": args.runtimeBodies = value; i += 1; break;
       default: throw new Error(`unknown flag ${flag}`);
     }
   }
@@ -63,11 +71,20 @@ function parseArgs(argv: string[]): Args {
 
 async function main(): Promise<void> {
   const args = parseArgs(Deno.args);
-  const allCases = await loadCases();
+  const loaded = await loadRunnableCases({ fixtures: args.fixtures, runtimeBodiesPath: args.runtimeBodies });
+  if (loaded.warning) console.error(`WARNING: ${loaded.warning}`);
+  if (loaded.mode === "rights_safe") {
+    console.log(`fixtures=rights_safe ready=${loaded.cases.length} excluded=${loaded.excluded.length} ${JSON.stringify(loaded.summary)}`);
+    for (const e of loaded.excluded) console.log(`excluded ${e.caseId}: ${e.state} (${e.reason})`);
+  }
+  const allCases = loaded.cases;
   const cases = args.caseFilter ? allCases.filter((c) => c.caseId.includes(args.caseFilter as string)) : allCases;
   const snapshot = await loadLedgerSnapshot();
   const averages = averagesOf(snapshot);
   const budget = budgetFromArgs({ mode: args.mode, maxCalls: args.maxCalls, maxUsd: args.maxUsd }, Deno.env);
+  // A paid run must not send third-party bodies whose reuse is unconfirmed: live mode requires the rights-safe fixtures.
+  // (After the budget check, so the paid opt-in and the limits are still the first thing a live run is refused for.)
+  if (args.mode === "live" && args.fixtures !== "rights_safe") throw new Error("FIXTURES_RIGHTS_SAFE_REQUIRED_FOR_LIVE");
   const specs: ProviderSpec[] = args.providers.map(parseProviderSpec);
   const secrets: string[] = [];
 

@@ -1,0 +1,243 @@
+{
+  "definitions": {
+    "deliveryFailureRate": {
+      "id": "delivery_failure_rate_v1",
+      "numerator": "status = generation_failed",
+      "denominator": "candidates judged important or most_important (no_post is never in the denominator)",
+      "notThis": [
+        "failed / all judged candidates (that is `failureShareOfAllJudged`)",
+        "the 30-day figure used as the current rate"
+      ]
+    },
+    "failureShareOfAllJudged": {
+      "id": "failure_share_of_all_judged_v1",
+      "numerator": "status = generation_failed",
+      "denominator": "every AI-judged candidate, no_post included",
+      "notThis": [
+        "a delivery-failure rate"
+      ]
+    },
+    "gateShareOfNoPost": {
+      "id": "gate_share_of_no_post_v1",
+      "numerator": "no_post decisions that carry the information-sufficiency gate sentence",
+      "denominator": "all AI-judged no_post decisions of the window",
+      "notThis": [
+        "the share of important news the gate hid (pre-gate importance is not stored)"
+      ]
+    },
+    "noPostMissShare": {
+      "id": "no_post_miss_share_v1",
+      "numerator": "sampled no_post cases labelled important or most_important",
+      "denominator": "the no_post sampling frame, weighted by the design weights, two layers (gate / not gated)",
+      "notThis": [
+        "the application's recall",
+        "anything about items production never ingested"
+      ]
+    },
+    "eventReach": {
+      "id": "event_reach_v1",
+      "numerator": "events with at least one candidate reaching the channel",
+      "denominator": "events among candidates judged important or above (approximate grouping)",
+      "notThis": [
+        "the number of users who saw the news"
+      ]
+    }
+  },
+  "funnel": {
+    "window": "2026-09-10 .. 2026-10-09 (created, JST)",
+    "judged": 2213,
+    "stoppedBefore": {
+      "judgementModelNoPost": 1406,
+      "judgementGate": 402
+    },
+    "importantPlus": 405,
+    "stoppedAtGeneration": {
+      "fact": 168,
+      "voice": 25,
+      "local": 1,
+      "api": 2
+    },
+    "reachedX": 208,
+    "other": 1
+  },
+  "deliveryFailure": {
+    "last30Days": {
+      "rate": 0.484,
+      "numerator": 196,
+      "denominator": 405,
+      "window": "2026-09-10..2026-10-09"
+    },
+    "last7Days": {
+      "rate": 0.231,
+      "numerator": 39,
+      "denominator": 169,
+      "window": "2026-10-03..2026-10-09"
+    },
+    "note": "The 30-day figure is front-loaded by failures that were later fixed; the 7-day figure is the current reference."
+  },
+  "reach": {
+    "last7Days": {
+      "candidates": 169,
+      "events": 165,
+      "x": {
+        "candidates": 130,
+        "events": 127
+      },
+      "appListed": {
+        "candidates": 169,
+        "events": 165
+      },
+      "appText": {
+        "candidates": 146,
+        "events": 142
+      },
+      "pushable": {
+        "candidates": 146,
+        "events": 142
+      },
+      "notified": {
+        "candidates": 52,
+        "events": 51
+      },
+      "none": {
+        "candidates": 0,
+        "events": 0
+      },
+      "xOnly": 0,
+      "appOnly": 39,
+      "severityUnknown": 0
+    },
+    "all30Days": {
+      "candidates": 405,
+      "events": 388,
+      "x": {
+        "candidates": 208,
+        "events": 205
+      },
+      "appListed": {
+        "candidates": 349,
+        "events": 340
+      },
+      "appText": {
+        "candidates": 249,
+        "events": 245
+      },
+      "pushable": {
+        "candidates": 235,
+        "events": 231
+      },
+      "notified": {
+        "candidates": 94,
+        "events": 93
+      },
+      "none": {
+        "candidates": 45,
+        "events": 37
+      },
+      "xOnly": 11,
+      "appOnly": 152,
+      "severityUnknown": 56
+    }
+  },
+  "cost": {
+    "basis": "ledger snapshot 2026-10-06 00:31..2026-10-09 17:15 (3.7 days) x Phase 5 counts (2026-09-10 .. 2026-10-09 (created, JST))",
+    "windowDays": 3.7,
+    "perFeature": {
+      "judgement_luna": {
+        "calls": 643,
+        "usd": 0.17,
+        "usdPer30Days": 1.38
+      },
+      "judgement_sol": {
+        "calls": 173,
+        "usd": 1.076,
+        "usdPer30Days": 8.72
+      },
+      "trigger_triage_luna": {
+        "calls": 199,
+        "usd": 0.038,
+        "usdPer30Days": 0.31
+      },
+      "generation_draft": {
+        "calls": 116,
+        "usd": 0.06,
+        "usdPer30Days": 0.49
+      },
+      "generation_fact": {
+        "calls": 122,
+        "usd": 0.038,
+        "usdPer30Days": 0.31
+      },
+      "generation_fact_retry": {
+        "calls": 6,
+        "usd": 0.002,
+        "usdPer30Days": 0.02
+      },
+      "generation_voice": {
+        "calls": 99,
+        "usd": 0.034,
+        "usdPer30Days": 0.28
+      },
+      "generation_voice_retry": {
+        "calls": 1,
+        "usd": 0,
+        "usdPer30Days": 0
+      },
+      "app_copy_draft": {
+        "calls": 8,
+        "usd": 0.003,
+        "usdPer30Days": 0.02
+      },
+      "app_copy_fact": {
+        "calls": 8,
+        "usd": 0.001,
+        "usdPer30Days": 0.01
+      },
+      "breaking_search": {
+        "calls": 15,
+        "usd": 0.214,
+        "usdPer30Days": 1.74
+      }
+    },
+    "newsPipelineUsdPer30Days": 13.26,
+    "attributable": {
+      "gateAfterSolUsd": 2.61,
+      "failedGenerationUsd": 0.17,
+      "gateAfterSolUsdPer30DaysAtCurrentVolume": 5.51,
+      "failedGenerationUsdPer30DaysAtCurrentVolume": 0.25
+    },
+    "note": "Estimates, not an invoice. The ledger window (3.7 days) is the current, higher-volume regime; the Phase 5 counts cover 30 days of an older one, so both views are given. Task-average cost per call; retries are only what the average already contains."
+  },
+  "pr116": {
+    "observed": false,
+    "expectedAmongLast7DayFailures": {
+      "not_addressed": 26,
+      "expected_to_improve": 6,
+      "partly": 7
+    },
+    "expectedAmong30DayFailures": {
+      "expected_to_improve": 7,
+      "not_addressed": 167,
+      "partly": 22
+    },
+    "note": "PR #116 was merged after the window; its effect has not been observed. The counts are a reading of what it changes, not a measurement."
+  },
+  "comparisonPlan": {
+    "beforeWindow": "2026-10-03..2026-10-09",
+    "beforeRate": 0.231,
+    "perGroupToDetect": [
+      {
+        "from": 0.231,
+        "to": 0.15,
+        "candidatesPerGroup": 369,
+        "weeksAtLast7DayVolume": 3
+      },
+      {
+        "from": 0.231,
+        "to": 0.1,
+        "candidatesPerGroup": 127,
+        "weeksAtLast7DayVolume": 1
+      }
+    ]
+  }
+}

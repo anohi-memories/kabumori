@@ -5,7 +5,7 @@
 //
 // The key comes from ANTHROPIC_API_KEY, or from the macOS Keychain item named with --keychain-anthropic. Only
 // whether a key was found and where from is printed, never any part of it.
-import { loadCases } from "./fixtures.ts";
+import { type FixtureMode, loadRunnableCases } from "./fixture_loader.ts";
 import { averagesOf, loadLedgerSnapshot } from "./ledger_snapshot.ts";
 import { describeKey, resolveApiKey } from "./keys.ts";
 import { runProbe } from "./probe.ts";
@@ -27,7 +27,14 @@ async function main(): Promise<void> {
   console.log("anthropic key:", JSON.stringify(describeKey(resolved)));
   if (!resolved) throw new Error("no Anthropic API key available (ANTHROPIC_API_KEY or --keychain-anthropic <service>)");
 
-  const cases = await loadCases();
+  // The probe sends request bodies to a vendor endpoint, so it defaults to the rights-safe fixtures: a case whose body
+  // cannot be verified is excluded and listed instead of being sent.
+  const fixtures = (value("--fixtures") ?? "rights_safe") as FixtureMode;
+  if (fixtures !== "legacy" && fixtures !== "rights_safe") throw new Error("--fixtures must be legacy or rights_safe");
+  const loaded = await loadRunnableCases({ fixtures, runtimeBodiesPath: value("--runtime-bodies") });
+  if (loaded.warning) console.error(`WARNING: ${loaded.warning}`);
+  console.log(`fixtures=${loaded.mode} ready=${loaded.cases.length} excluded=${loaded.excluded.length} ${JSON.stringify(loaded.summary)}`);
+  const cases = loaded.cases;
   const requests: NeutralRequest[] = [];
   const tasks: TaskName[] = ["judgement_primary", "judgement_detail", "generation_draft", "generation_fact", "generation_voice"];
   for (const task of tasks) {

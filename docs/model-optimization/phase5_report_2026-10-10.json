@@ -124,6 +124,22 @@
         "not_addressed": 7
       }
     },
+    "pr116OutlookByPeriod": {
+      "A 09-10..09-18": {
+        "not_addressed": 94,
+        "partly": 12,
+        "expected_to_improve": 1
+      },
+      "B 09-19..10-02": {
+        "not_addressed": 47,
+        "partly": 3
+      },
+      "C 10-03..10-09": {
+        "not_addressed": 26,
+        "expected_to_improve": 6,
+        "partly": 7
+      }
+    },
     "bySource": {
       "al_jazeera": 17,
       "bbc_world": 7,

@@ -73,6 +73,7 @@ export function generationSummary(rows: readonly Json[]) {
   const outlook: string[] = [];
   const secondary: Record<string, number> = {};
   const bySourceOutlook: Record<string, Record<string, number>> = {};
+  const outlookByPeriod: Record<string, Record<string, number>> = {};
   for (const r of failed) {
     const c = classifyGenerationFailure({
       generationError: String(r.generation_error ?? ""),
@@ -89,6 +90,8 @@ export function generationSummary(rows: readonly Json[]) {
     byStage.push(c.stage);
     const o = pr116Outlook(c.primary as FailureCause, String(r.source_name));
     outlook.push(o);
+    outlookByPeriod[p] ??= {};
+    outlookByPeriod[p][o] = (outlookByPeriod[p][o] ?? 0) + 1;
     bySourceOutlook[String(r.source_name)] ??= {};
     bySourceOutlook[String(r.source_name)][o] = (bySourceOutlook[String(r.source_name)][o] ?? 0) + 1;
     for (const cause of c.causes) secondary[cause] = (secondary[cause] ?? 0) + 1;
@@ -101,6 +104,7 @@ export function generationSummary(rows: readonly Json[]) {
     byStage: tally(byStage),
     pr116Outlook: tally(outlook),
     pr116OutlookBySource: bySourceOutlook,
+    pr116OutlookByPeriod: outlookByPeriod,
     bySource: tally(failed.map((r) => String(r.source_name))),
   };
 }
