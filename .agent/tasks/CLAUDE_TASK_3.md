@@ -1,3 +1,74 @@
+# Claude Task 3 — CURRENT TASK / POSTONA AI自動・手動予約 統合スケジューラV1
+
+- task_id: postona-unified-ai-manual-schedule-planner-v1-20261011
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: high
+- project: POSTONA / X posting scheduling
+- type: **SOURCE/LOCAL UI + pure planner only; NO live posting or DB write**
+- recommended_model: **Opus5.5（高）**
+- start_code: G3
+- finish_code: K3
+- return_to: POSTONA G3のちゃ（AI相談・X投稿予約担当チャット）
+- independent_clean_base: `/Users/yuya/Developer/kabumori-fresh` fresh `origin/main`
+- live_supabase_X_Threads_Meta_AI_API_writes_or_calls: FORBIDDEN
+- DB_migration_Auth_RLS_RPC_Edge_Cron_Vault_secrets_or_traffic_switch: FORBIDDEN
+- production_deploy_PR_merge_EAS_TestFlight: FORBIDDEN
+- protect: previous G3 Report/PR127, H1 Threads OAuth, G4 X OAuth Issue131, G5 shared account/Auth, G1/G2/H2, existing X/Kabumori/AI Lab posting
+
+## Mission — user product requirement
+
+Develop in the EXISTING POSTONA `投稿予定` tab a **unified view/composer for AI-scheduled and manually authored posts**. Manual modes:
+1. **指定日時**: one or multiple user-authored texts with fully selected exact date/time. Never auto-move a user-fixed time.
+2. **まとめてランダム**: multiple authored texts (e.g. 10), user-selected date range (e.g. Oct15–25), daily allowed hours (e.g. 09:00–21:00), optionally weekdays/exclusions. Allocate a concrete valid date/time per draft; show all results, reorder/edit, and explicit `再抽選` to change. No rerandomization on render/restart unless the user chooses it. Preserve post-text order by default; content shuffle optional only if chosen.
+3. **間隔指定**: daily or N-day/other valid time intervals, producing a concrete preview.
+4. **AI自動予約**: use already confirmed AI consultation content preferences, including `frequencyTargetPerWeek`, for source-only slot planning; define a separately chosen **publish-time window**. Existing `generationWindow` is AI CONTENT GENERATION timing, never silently reuse it as publish timing.
+5. **共通スケジュール**: mixed AI/manual chronological view, account and origin labels, editable plans, cancellation, conflict detection. Fixed manual slots win; flexible AI/random/interval slots may only be reassigned inside selected allowed windows and subject to gap/capacity constraints. Impossible allocation must show explicit error; no silent drops, overruns, or duplicate slots.
+
+### Critical product/permission distinction
+- `これで覚えて` in AI consultation only saves content settings/persona and **DOES NOT** give auto-publish consent.
+- AI unattended auto-posting still requires owner `approvalMode='auto_post_preference'`, verified account/brand, explicit authority and G5 `x_autopost` service entitlement.
+- Manual authored scheduling needs an independently confirmed **per-post/manual explicit user consent** rather than requiring AI's blanket opt-in. It STILL must pass G5 active entitlement, ownership, post-specific consent, valid publisher authorization, plan quota, cancellation/expiry, provider safety and audit. No workaround that grants service_role, disables RLS or bypasses existing G5/G4 gates.
+- For this current task, neither kind of draft can reach X posting or real Supabase scheduled writes. Show **「プレビュー／未予約・投稿されません」** for local-only plans. Do not falsely display preview as saved/posting.
+
+## Mandatory initial safety/ownership checks
+
+1. Read `PROJECT_RULES.md`, `HANDOFF.md`, `AGENTS.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this TASK and full historical G3 Reports, current H1/G4/G5 TASKs and Reports, prior G3 [Draft PR127](https://github.com/anohi-memories/kabumori/pull/127) docs §5, and `apps/social-mobile` schedule, domain, mock/real data and tests.
+2. Create a NEW unique isolated G3 worktree from fresh `kabumori-fresh origin/main`; inspect git status, owner/worktree list and current PR overlaps. NEVER reuse prior G3 worktrees, edit another slot, change branch/reset/rebase/prune others, or stop another slot's server. Confirm `ready/in_progress` before implementation.
+3. H1 temporarily owns Threads Edge candidate; G4 owns X OAuth identity/connection and tracked Issue #131; G5 owns Auth/lifecycle/entitlement. Don't edit source/migrations/functions belonging to them. Previous PR127 Stage3B 3 migrations are unapplied and protected; current production `x-test-post` doesn't have POSTONA dispatcher; do not imply live backend exists. If collision unclear, restrict to isolated new planner/test files or STOP.
+
+## Stage A — source-only scheduling domain + tests
+
+- Implement new pure, testable `apps/social-mobile/src/domain/` or `src/features/schedule/` scheduler with explicit types for origin (`ai_generated`/`user_authored`), scheduling mode (`manual_exact`, `manual_random_batch`, `manual_interval`, `ai_flexible`), account/brand/platform ownership, UTC instant+display timezone, approval state vs local preview, stable local post/batch IDs, seed/revision and one-way draft state transitions.
+- Strict validation: nonempty trimmed text, supported X content-length policy without erroneously assuming 140-character automated-policy is X-wide, time in future, date/window start/end, bounded batch quantity/horizon, timezone (`Asia/Tokyo` initially, explicit rejection of unsupported zones), 24:00 and day-boundary rules, duplicate/fixed-time conflicts, configurable conservative spacing and daily capacity, plan quota awareness.
+- Random mode must be seeded and reproducible for a preview, spread dates/times inside permitted windows without clustering when feasible; deterministic under re-render and stable after user approval; bounded search, explicit infeasible reason; re-roll is an explicit separate action and must not silently change exact/fixed slots.
+- Interval mode must detect when a fixed date/time is blocked and fail or offer an **explicit** alternative, not secretly change it. Conflict priority exact>manual-flexible>AI-flexible as defined by product contract.
+- Test 10 texts across Oct15–25 09–21, multiple exact posts, seeded re-render, explicit re-roll, impossible windows, time zones, past dates, duplicate/min spacing, AI/manual collision, optional no-shuffle, cancellation/edit/replan, account isolation, per-post manual consent boundary, no unapproved AI auto posting.
+
+## Stage B — real interactive but LOCAL preview UI
+
+- Extend existing `apps/social-mobile/src/app/(tabs)/schedule.tsx` (the current tab is **read-only**), with sections/filter: `すべて`/`AI自動投稿`/`手動予約`. Add CTA `投稿を作成`, manual textarea/cards and exact/random/interval form, preview table/list showing time and content; edit/delete/reorder; explicit re-roll; meaningful disabled actions and visible validation. Keep five bottom tabs **exactly unchanged**.
+- Existing remote `snapshot.plannedPosts` is read-only, `resolvePostsView` has `loading`/`unavailable`/`mock_preview` semantics. Preserve these; don't let unsaved local drafts appear as actual server scheduled entries, and never fall back to mock data on live read failures. Preserve account selection, `history`, `consult`, `posts/[id]` and AuthGate.
+- Keep offline plans in scoped in-memory state unless genuinely secure account-scoped durable storage exists; if session-only, prominently disclose plans disappear on restart. No unencrypted cross-user shared local storage or plaintext OAuth tokens. Do not add a pretending `予約確定` action that never persists remotely.
+
+## Stage C — runtime persistence integration spec ONLY
+
+- Add **one** `docs/postona/unified-ai-manual-scheduling-v1-20261011.md` detailing future user-authored DB schema/source of truth, account-to-post binding missing in current `scheduled_posts`, server-side ownership/consent+G5 active entitlement, G4 valid X-account provenance, platform-specific length/media rules, idempotent batch and scheduled-job delivery, claim/CAS locks, cancellation-vs-publish races, duplicate prevention, plan quota, rollback, audit, separation manual content from AI generation and automated 140-character source policy. Explicitly plan manual posts to bypass **AI generation**, NOT publish authorization. No new migrations in this TASK.
+- Define a future disabled or not-wired **typed write API boundary**, not an active backend endpoint. Mark real user-facing cloud save + publish as BLOCKED until G5/G4 gates, migration/Edge reviewed source, 1 targeted Sol（高） security review and separate user-approved production apply/pilot.
+- Protect `stock-x-autopost` live schedule, existing AI Lab and Kabumori X automation, their Cron, Vault, secrets, historical posts, G5 temporary photo Supabase situation, and H1/G4 branches.
+
+## Verification / completion
+
+- Run local unit tests, existing app schedule/data-view/account-isolation regressions, app TypeScript and lint checks, `git diff --check`, secret scan; if possible inspect local mock UI (without EAS or using another slot's Metro). Test that no preview can actually write, publish or schedule in live backend and no scheduling implies AI-consult consent.
+- Create a NEW G3-only branch from fresh main, commit/push and DRAFT PR; do not merge or deploy. Report exact implementation, UI proof/screenshots if available, test counts, changed files, commit/PR, worktree, explicit remaining backend gates, production reads/writes/posts/Edge/DB migrations/Cron changes (= 0), safety checks. Transition ONLY the current G3 TASK to `review_required`/`next_owner:chatgpt`; preserve all historical G3 TASK/Reports verbatim and do not edit other slots.
+- K3 decides acceptance and next owner. No routine Codex review for local UI/domain work; **Sol（高）** once before future G3+G4+G5 actual authorization/write/delivery integration. Recommended **Opus5.5（高）**.
+
+---
+
+# ARCHIVED PREVIOUS G3 TASK AND FULL REPORT HISTORY (VERBATIM)
+
 # Claude Task 3 — CURRENT TASK / POSTONA X自動投稿 本番接続準備（ソース・検証のみ）
 
 - task_id: postona-x-autopost-production-readiness-20261010

@@ -87,14 +87,14 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: postona-x-autopost-production-readiness-20261010
+- status: ready
+- task_id: postona-unified-ai-manual-schedule-planner-v1-20261011
 - start_code: G3
 - finish_code: K3
-- next_owner: none
-- return_to: POSTONA G3のちゃ（AI相談V1本番接続担当チャット）
+- next_owner: claude
+- return_to: POSTONA G3のちゃ（AI相談・X投稿予約担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: K3 accepted G3 Stage3B X autopost rollout readiness as PASS_PREPARATION_ONLY / PREPARED_BLOCKED_ON_G5. Draft PR127 exact 4b0278228e726b65d782e9b231eb6fe84d9173ad contains only 5 new docs/offline-test and read-only inventory files; no source/SQL migrations/Edge changed or PR merged. G3-reported local PG O1/A1-A3/R1-R4, six existing pilot parts, ACL adverse, Deno 808/808; live read-only Supabase independently confirms 160000/160100/160200 not applied, publish authority/reader/check absent, AI consultation table and Stage3A refresh table present; x-test-post v141 unchanged. NO live write/deploy/X post/enable/EAS. Blocking G5 active x_autopost entitlement (claim/check/set), service deletion FK cleanup/T13; G4 real X OAuth account identity/T9 and current preclaim containment; G3 future booking generation and four-file deployed-bundle ownership diff. No Codex rereview of offline candidate; one integrated Sol（高） security review before actual production publish authorization. PR127 OPEN DRAFT UNMERGED, no new G3 task; next work driven by G5/G4 owner handoff with separate approval gates.
+- allocation: User requested same POSTONA schedule UI for AI-generated auto posts and manual text posts with exact date/time, randomized assignment of multiple texts in a date/time window, and interval schedule. G3 owns isolated local deterministic planner, account-scoped mock/UI preview in existing apps/social-mobile 5-tab app, new scheduling tests/docs, no real schedule DB writes or X posting. Explicit per-post manual consent differs from AI auto_post_preference, but G5 x_autopost service entitlement, account ownership and publisher permissions remain hard production prerequisites. G4/H1 X/Threads OAuth and G5 Auth/entitlement work untouched, prior G3 PR127 protected; no live Supabase/X/Meta/API, migrations, Edge, Cron, PR merge or deploy. K3 on completion; later Sol（高） integrated review only for real publisher/persistence.
 - recommended_model: Opus5.5（高）
 ## Claude G4
 - owner: claude
