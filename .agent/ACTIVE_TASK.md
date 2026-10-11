@@ -62,14 +62,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: done
 - task_id: kabumori-watchlist-simulator-user-login-realdata-qa-20261011
 - start_code: G1
 - finish_code: K1
-- next_owner: claude
+- next_owner: none
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: User approved iOS Simulator now. G1 read-only interactive QA: use separate fresh-main worktree and an unused Metro port (8081 was POSTONA), launch existing Kabumori dev-client with genuine PR120 merged source; stop on login screen, ask user to personally sign in on Simulator (never request/log password/token). WAIT_FOR_USER_LOGIN and continue same G1 task after user's confirmation, check real saved watch/report display in UI without any user-data edits. Protect 5 NativeTabs, no source changes/new PR, no cross-slot worktree/process effects, private financial data never to GitHub, EAS/build/deploy/DB writes = 0. K1 only after real-data QA or genuine environment blocker. Previous BLOCKED_AUTH preflight completed and preserved.
+- allocation: K1 accepted genuine-data Simulator 402pt check PASS_REAL_DATA_OBSERVED / PARTIAL_COVERAGE. User personally signed in; source from merged PR120 ran in own Metro 8082. Real saved watch rows 18/18 visible exactly once, correct saved-close/basis/two-decimal change, search/editor/read-only refresh and portfolio-watch segment + original five NativeTabs PASS. No ≥5% featured/news featured/missing-price real data was present; those are NOT_OBSERVED, 375pt and physical iPhone NOT_RUN. G1 report notes latest saved close 10/6 while 10/7–10/9 had morning reports only — independent G2/news-delivery follow-up required, cause not proven and G2 active task NOT overwritten. No app code changes, EAS/deploy=0, user watchlist edits=0, credentials not logged; standard login idempotent enrollment RPC was not independently inspected for server effects. G1 task closed/slot free only after fresh worktree and task check for next assignment.
 - recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
