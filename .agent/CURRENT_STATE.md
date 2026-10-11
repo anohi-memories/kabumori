@@ -1,3 +1,93 @@
+## H3 C3 FINAL — POSTONA PR144 Auth/SQL review — 2026-10-12 JST
+
+- H3 `postona-threads-pr144-auth-publish-p1-security-review-h3-20261012` **review_required / next_owner chatgpt**, exact Draft PR144 `d4a1e87b77d1fbd362dc51809ce2d998afda15ea` remains OPEN/DRAFT/UNMERGED. Verdict **CHANGES_REQUIRED / REAL_PILOT_HOLD**; return C3 to POSTONA｜マルチSNS化・開発統括（G4）のちゃ. H3 is freed after C3.
+- **One P2 R1:** candidate release SQL lines 229-232 locks `auth.sessions` with KEY SHARE. H3 two-connection fake PostgreSQL17 proof: session expiry UPDATE commits while release pauses after validation, then release hands out the credential. FOR SHARE local control blocks UPDATE. Require G4 narrow row-lock correction + concurrent regression; coordinate protected H5's same session contract separately. Actual GoTrue mutation route NOT_RUN; no live unauthorized post claimed.
+- Independent PASS: Deno93, composite176 (counts overlap), app258, release SQL preconditions/apply/behavior/race +8 mutations, parent PR140 regression +6 mutations. H3 also substituted the exact PR121 T13 source on fake lifecycle foundations and passed the SQL chain; not managed proof. No product edits, protected branch changes, production writes, deploy/merge, real API/paid call or posts. All four gates false.
+- Report `.agent/CODEX_REPORT_3.md` includes exact reproduction, managed/owner/Vault/Meta NOT_RUN, finite release→HTTP gap, actual workspace deletion guard blocking late record and prioritized G4/G5/H5/operator rollout matrix. Real pilot remains held for T13/T10, owner channel/session privileges/custody/callback, Meta app/tester/key and explicit single-post approval. No other slot status or TASK changed.
+
+---
+
+## G6 Phase2a assigned — common AI market report adapter offline — 2026-10-12 JST
+
+- User approved Phase2a G6 assignment in 共通AI基盤のちゃ. task_id `common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012` status **ready**, next_owner **claude**, start **G6**, return **K6**, recommended **Opus5.5（高）**.
+- Fixed previous G6 stale ACTIVE_TASK index `in_progress` after accepted Phase1g K6; Phase1g TASK itself is **done**, its one paid Opus5.5 smoke recorded in production ledger (reservation1, usage1, open0), user reported temporary sb_secret revoked and local ledger.env deleted. Phase1g history preserved in G6 TASK; do not repeat paid smoke.
+- Phase2a change scope: separate G6-only Draft PR, new adapter under shared `ai_provider` and synthetic tests/docs, disabled default, fake-transport/ledger-only. G2 owns scalable common morning/close push + PR143; G5 owns Auth, G8 news/G9 API, all protected. If shared report Edge entrypoint/API/file conflicts, STOP / K6; no cross-slot edit.
+- Production/paid API/secret/Edge/Cron/DB migration/real report changes/deploy/merge FORBIDDEN. No production mutation window. Later shadow/real connection requires distinct approval.
+- G6 independently checks fresh origin/main, all 15 slots/worktrees/PR overlaps before code; report actual tests/changed_files and return K6.
+
+---
+
+## C4 FINAL — PR129 独立H4レビュー CHANGES_REQUIRED、G8へ3件だけ限定修正を再割当 — 2026-10-12 JST
+
+- `ニュース改善API最適化のちゃ`でC4受信、H4 TASK/ReportのID・返却先・レビューhead一致確認。独立Codex H4の結論 **CHANGES_REQUIRED P1×1/P2×2**。対象PR129 OPEN/Draft/unmerged, exact head `7bf9b8a0a014ebe9a613e9ebeb0082d0b7834c54`。
+- 3件の合成再現: **H4-R1 P1** 連結決算短信のinterleaved amount/%の途中改行で営業利益100→10と誤Fact出力；**H4-R2 P2** pending_judgementを見出しのみでSELECT後にFed本文がPATCHされると、古いno_post判定がstatus CASだけで保存される；**H4-R3 P2** 正規FOMC声明中の7月利上げと今回の据置が混在する場合に古い利上げを今回と誤抽出。いずれも本番発生の実測ではなくoffline合成再現。
+- H4自身が既存重要ニュース757、抽出29、news_discovery/observer162、shadow20（計968、重複無し）PASS、独立12 probe = 9PASS/3FAILと報告。ChatGPTはGitHub Report/ソース/PR確認のみ、独立テストを再実行していない。H4 source変更0/本番・外部API・merge/deploy無し。PR129 merge/deploy HOLD。
+- **H4** TASKは `done/next_owner:none`、レビュー枠は解放。**G8** `news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012` を `ready/next_owner:claude` で明示限定再割当（Opus5.5（高）、開始G8→完了K8、このチャットへ）。F7等旧修正を保全し、3件のfail-before/pass-afterと既存回帰のみ。PR129にcommit/pushは競合チェック後、merge/deploy/DB schema-RPC-migration-本番変更は不可。安全なら次K8で最終判断し、機械的に毎回Codex全面レビューを繰り返さない。
+- G8ニュース改善A/G9 API最適化Bの専任は維持。G9や他G/HのTASK/Report/worktreeは変更しない。PR116本番の固定コードとPR129は分離。
+
+## G1 QA assignment — 2026-10-12 JST
+
+- User approved next G1 stage after PR142 squash merge `4d0d0660831c1bf7403a908592c337c284332cdf`.
+- G1 task `kabumori-g1-portfolio-watchlist-simulator-qa-20261012` ready / next_owner claude; recommended Sonnet5（中）; start G1 and return K1 to かぶモリアプリG1のちゃ.
+- Independent 375pt/402pt simulator read-only QA of portfolio/watchlist/stock detail and fixture-based stale valuation/reload. No production holdings edits, EAS, deploy, G2/G5 files, or native tabs changes. Prior task K1 report preserved.
+
+---
+
+## G5 Phase3i assignment — 2026-10-12 JST
+
+- User 「おk すすめて」 requested next step after G5 Phase3h K5 (`LOCAL_OSS_FAIL`). G5 is now assigned `common-account-phase3i-local-findings-safe-lifecycle-plan-20261012`, **ready / next_owner: claude**, recommended **Opus5.5（高）**, start G5 / return K5 to 共通アカウントG5のちゃ. Prior G5 Phase3h K5 report and older history retained.
+- Scope: tightly bounded source-only design and synthetic fail-closed tests against F1/F2/F3/F4/F6/F7 local OSS findings (in-flight identity linking, sessions, token-enabled writes, Storage residue, hook blast radius). New independent G5 worktree / new docs/tests / independent Draft PR only. Verify cross-slot Auth boundary with G4/H3 and other users before files are touched.
+- No managed or production auth/DB/Storage/Edge changes, real provider calls, family-photo pause, project actions, paid requests, E11 Option D experiment, deployment or merge. `IDP_PREPAUSE_BLOCKED` and `managed_auth_delete BLOCKED` remain. Other slots and previously open G5 Draft PRs unchanged.
+- Next: Claude G5 runs the TASK and returns K5 with real changed_files/tests/evidence; ChatGPT decides review gate. No generic H1–H4 review pre-assigned.
+
+---
+
+## K9 FINAL — API最適化B/G9 R3 clean replacement source complete, Draft PR not created — 2026-10-12 JST
+
+- 返却先 `ニュース改善API最適化のちゃ`、K9受信。G9ユーザー専任TASK `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011`（Opus5.5高） Report status review_required 確認。
+- **K9 verdict: PASS_OFFLINE_BRANCH_READY / DRAFT_PR_NOT_CREATED / RELEASE_HOLD**。remote branch `claude/b-provider-compare-rights-safe-20261012` head `c476ef8a5c5a0294c3df8e4fefebc8722f2e1102`、親 `1a4b5f3802982853ecd79abb4bf3b977c678c36e`、1 commit / B所属129新規ファイル。GitHub recursive treeは非truncatedで旧 `tools/provider-compare/fixtures/cases.json` は無い。22ケース（2件本文あり、20件本文なし）、許諾台帳空。過去の危険なBコミットを祖先に持たない報告と整合。Draft PR作成はClaude安全装置[Create Public Surface]が拒否、強行・迂回なし、PR115はOPEN/Draft/未変更。
+- G9報告302 PASS / 1 ignored（private legacy fixture必須、G9ローカルで指定して追加PASS）、typecheck/lint/diff/secretsスキャンPASS。ChatGPTはコード・GitHubツリーとremote SHA確認、Denoローカル実行/元18件原文の独立スキャンは未実施。
+- 残件: 旧本文と40文字以上重複するTDnet見出し3件（タイトルであって本文全体ではないが、公開安全性は別判断）。旧PR115/古いBリモートrefsに18件原文残存。G9 Reportによればmain既存の別レイヤー2ファイルで元本文と一致（G9管轄外で、他G枠へ勝手に渡さない）。ライセンス未確認、実Claude/OpenAI送信とpaid比較はHOLD。merge/deploy/force push/PR115変更なし。
+- ユーザー選択は、見出し3件を保留のままDraft PRの候補として作成するか、先にG9で見出しもハッシュ化するか。ユーザー用の新規Draft PR作成リンク `https://github.com/anohi-memories/kabumori/pull/new/claude/b-provider-compare-rights-safe-20261012`。安全機構を無理に回避しない。新PRが作られれば別途review要否/merge前権利処理を判断。
+- G9今回TASKを `done` / `next_owner:none` として終了。API最適化Bの専任割当は維持するが新しい具体的TASKなし。他G/H枠・別案件・G8のPR129/H4レビューは変更していない。
+
+## K4 FINAL — POSTONA Threads integrated offline source candidate accepted, H3 security review READY — 2026-10-12 JST
+
+- **K4 source verdict:** G4 task `postona-threads-connect-publish-integrated-offline-v1-g4-20261011` **PASS_SOURCE_CANDIDATE / GO_SOURCE_ONLY / BLOCKED_REAL_PILOT**. Verified [Draft PR144](https://github.com/anohi-memories/kabumori/pull/144) exact HEAD `d4a1e87b77d1fbd362dc51809ce2d998afda15ea`, OPEN/DRAFT/UNMERGED, 1 commit/24 G4-scoped files stacked on protected Draft PR140 `2e75a6a842e70f3de78558681803b60935fb4251`. Protected PR124 `c30f246409a77080cbc03aef6c4cb72b5481e125`, PR135 `e38788d6677082138f0990453c7d2f00549666d0`, H5 PR139 `b4fa672f97592e87682671454e868a92098cbd56`, G5 PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44` remained unmerged/untouched at K4 inspection.
+- **Source-only milestones:** newly proposed HMAC-attested, JWT caller/session verified and G5 T13-locked SQL release replacing old claim/service_role redeem/record; separate token expiry custody candidate bound to verified account; disabled Connect/reconnect UI; offline mock composite connecting OAuth receipt→consent→two-step TEXT publish→provider-confirmed receipt. Two integration regressions from prior PR140 corrected as source: self-service workspace flags not appropriate to manual publishing; T13 SQLSTATE 42501 normalization. Original G4 Report, prior task history and review preserved in G4 TASK. All server/connect/manual/UI gates FALSE; both Edge functions intentionally 503, not deployed.
+- **Verification:** G4 self-reports disposable PostgreSQL17 release negative/8 mutations and composite SQL PASS, combined Deno176 PASS, focused Deno93 PASS, app258 PASS, lint/TS/diff/secret scan PASS. ChatGPT inspected GitHub source/PR metadata, but did NOT run commands, inspect local worktree, or test real managed Supabase Auth/PostgREST/Vault, G5 T13, Meta, native device, X, or any real posting. Vercel rate-limit is not a verified successful CI. No source merge/deploy/production DB/Auth/Edge/Vault/Meta mutation or actual post in this K4.
+- **G4:** `done/next_owner none`, slot freed. Do not park future G5/H5 dependencies in G4. The same PR144 is NOT live-ready; original release risk was remediated only in mock/source candidate.
+- **H4 reserved by separate News workstream concurrently:** GitHub H4 TASK `news-improvement-a-pr129-phase7-r2-final-focused-review-h4-20261012` ready while allocation underway; **H4 was not overwritten or assigned POSTONA**. Freshly checked **H3** previous G2 C3 was done, report read, and H3 assigned `postona-threads-pr144-auth-publish-p1-security-review-h3-20261012` **ready/next_owner codex**, Sol（高）, `return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ`, completion C3. H3 independent SOURCE ONLY review of PR144 Auth/G5 T13/RPC/Vault/HMAC/principal/nonce/expiry and H5/G4 boundary, not implementation or production clearance; product source change forbidden. All other slots unchanged.
+- **Remaining external dependencies:** G5 real T13 and provider-aware T10 including new permissions/attempts/nonces/custody tables and Vault cleanup, H5 trusted owner SQL transport/session privileges + one custodian expiry write in complete transaction and approved HTTPS app callback, Meta developer app/tester/scope/redirect and server keys in secure operator channel. Document finite release→Meta HTTP race rather than claim transaction locks cover it. Only after one focused independent H3 result and separately resolved prerequisites can exact live DB migration/Edge/deploy/source flags and ONE tester-owned public post be considered under explicit user authorization.
+- **Review prioritization:** if H3 finds concrete blocking issues, return a narrowly scoped G4 corrective TASK with code+regression test. Avoid repeated broad review cycles for UI minutiae. H5 remains used only for temporary implementation if needed; G5's independent local OSS account test work untouched. No cross-chat task auto-completed or reallocated.
+
+---
+
+## K2 FINAL — H3/C3 PR143 lease-expiry correction PASS_SOURCE_FIX; G2 next scalable broadcast READY — 2026-10-12 JST
+
+- **Result**: K2 inspected [Draft PR143](https://github.com/anohi-memories/kabumori/pull/143) NEW head `889ca1b44cf82bd3ecb913818dca568456849feb`, exactly 1 commit / 5 files since H3-reviewed `1d0529bb68b0e60b32ce0a2cb0002872b1671177`, no unrelated paths. `fail_personalized_analysis_job` now checks `lease_expires_at < v_now` like complete RPC, rejecting expired unreclaimed failure before old worker can requeue or set failed; worker test MemStore.fail mirrors, 3 worker cases/SQL 2 failure modes, mutation no_fail_expiry_fence, corrected lease_lost report. **PASS_SOURCE_FIX**, no repeat Codex review for surgical correction. G2 reports fail-before and local PostgreSQL17 14 mutants/deno worker34/personalized134/market283/market-data42/app508/shared X10 all pass; ChatGPT did not rerun local tests. PR143 CI Netlify+Vercel success is preview checks only. No production change, migration apply, Cron, Edge deploy, real Expo push, model call or PR merge; PR143 remains OPEN/Draft/unmerged. Prior PR141 remains SUPERSEDED OPEN/Draft/unmerged.
+- **Next G2** `kabumori-market-report-scalable-broadcast-push-v1-20261012` ready, owner Claude, model **Opus5.5（高）**, return K2 to かぶモリアプリG2のちゃ. Task in `.agent/tasks/CLAUDE_TASK.md`: separate scalable all-opted-in shared morning/close push notification lane (not individual analysis) with notification preferences, strict Fact/completed packet, duplicate prevention, bounded keyset fanout/parallel sender/Expo ambiguous delivery, importance-news priority isolation, 10k/100k synthetic throughput and OFF-by-default staged rollback Runbook. Current `send-push-notifications` claims 200/run; naive 1/min->10k ~50min, not acceptable as final. Implement new Draft PR independent/explicit stack on PR143; protect PR143/PR141 and all other slots.
+- **Production NO_GO** still applies: shared market all-users push is not implemented in production, PR143 schema/app/worker/Cron unmerged/unapplied, no real notification/load test. High-risk new push/SQL candidate may need one independent H1-H4 Sol（高） review after new K2; H5 never review. G5/G6 active data and all other slots protected; no live write/approval inferred.
+
+## K8 FINAL — ニュース改善A G8 PR129 R2: ACCEPTED_IMPLEMENTATION / H4 REVIEW READY — 2026-10-12 JST
+
+- 対象はユーザー専任のニュース改善A/G8のK8。G8 R2 TASK `news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011` は`review_required`で完成報告。GitHub PR129はOPEN/Draft/unmerged、head `7bf9b8a0a014ebe9a613e9ebeb0082d0b7834c54`、以前のR1 `984eeb41`から1 commit/5 files。Netlify/Vercel checks success（本番実行ではない）。
+- 報告されたテスト: important-news-monitor 757 PASS、extractor29、discovery162、shadow20、lint97 baselineと既存TS2322のみ、G8はPDF60件をR2で再実行していない。ChatGPTはソース・テストコード・リモートcommit/headを確認したがDenoテストを独立実行していない。
+- F7: 時刻剰余rotationを除去、成功2件まで／最大4試行／20秒のループ間時間チェック、実行間隔10/30/60分をmock。候補4件超のcold startで厳密coverage保証なし、20秒は試行途中のhard deadlineではなく最大4*8秒のfetch timeout可能。RSS消失の永続保留キューはない。
+- F9: `candidate_body_fill.ts` にDB対象変更を分離。`pending_judgement`+`source_name=market_macro`+空本文の条件付きPATCH/返却行read-back。nonpending (`no_post`/`generation_failed`/`published`)は履歴保護で更新しない。content_hash headline-only保持、judgementとの並行読取・判定結果の整合には独立確認が必要。
+- **K8 verdict: ACCEPTED_IMPLEMENTATION / INDEPENDENT_REVIEW_REQUIRED / MERGE_HOLD**。高リスクEdge function / DB更新 / Fact抽出のため、未割当だった **H4** に`news-improvement-a-pr129-phase7-r2-final-focused-review-h4-20261012`を`ready`で新規登録。H4 review-only, Sol（高）、`H4`開始、完了`C4`→`ニュース改善API最適化のちゃ`。既存G8 R2は`done`/next_owner`codex-4`、A専任G8は維持しC4後に必要ならG8の次TASKを発行。G9/API最適化Bを含む他のG/H TASK/Report/worktreeは変更していない。
+- PR129 merge/deploy/production実行は禁止継続。PR116の固定本番反映は別工程、PR129混入禁止。H5は通常レビューに使わない。
+
+## K5 FINAL — G5 Phase3h isolated local auth pilot — 2026-10-12 JST
+
+- G5 TASK `common-account-phase3h-local-oss-keycloak-safe-pilot-20261011`: **TASK_COMPLETE_WITH_SAFETY_FINDINGS / LOCAL_OSS_FAIL**. Accepted G5 report and source inspection of [Draft PR146](https://github.com/anohi-memories/kabumori/pull/146) exact HEAD `faf8007a4ab5c925430c7cc6a9896046e30ce25a` OPEN/DRAFT/UNMERGED, seven all-new docs/local-only test paths; no production source changes.
+- Local Keycloak and Supabase OSS evidence showed important gaps in assumed account closure/linking/session/Storage controls. In-flight identity-linking and session creation can outlive a BAN; retained access tokens and Storage objects need separate controls. These are **local-version findings only** and do not establish managed behavior. The correct outcome is LOCAL_OSS_FAIL on the safety premise, while the pilot task itself is complete.
+- G5 report states Podman isolation and cleanup (own VM removed, 0 owned containers/volumes/listeners), readback of other VM unchanged, zero managed/project/provider/photo calls, zero paid actions, E11/Option D not run. G5-reported offline fail-closed tests 7/7, git diff/secret scan PASS; ChatGPT inspected scope/source but did not rerun local tests or directly inspect Mac. The fail-closed driver gates were added after live observations and not rerun live with these gates, so this remains a qualification.
+- G5 marked **done/next_owner:none** in TASK and ACTIVE; next assignment **not yet created**. Appropriate next step is a bounded, independently tested lifecycle-boundary remedy before any further managed experiment. `IDP_PREPAUSE_BLOCKED`, `managed_auth_delete` BLOCKED; photo app stays running and unmodified. All older G5 Draft PRs and other slots protected; no merge/deploy.
+- AI Lab diary: 記録不要 — unshipped authentication security behavior is sensitive, not an appropriate public diary entry.
+  
+---
+
 ## G2 報告 — PR143 の失敗の記録の期限の確認（H3 の P2 修正）— 2026-10-11 JST
 
 - G2 `kabumori-pr143-fail-lease-expiry-fence-r1-20261011`: `fail_personalized_analysis_job` に、完了の関数と同じ期限の条件を足した。期限が切れた worker は、引き取り直される前でも、順番待ちへ戻すことも failed にすることもできない（`lease_lost`、行は不変）。
@@ -423,7 +513,7 @@
 | H1 | `ready` | `postona-h1-threads-oauth-edge-offline-implementation-20261011` | `codex` | POSTONA｜マルチSNS化・開発統括（G4）のちゃ | `C1` | `.agent/tasks/CODEX_TASK.md` / `.agent/CODEX_REPORT.md` |
 | H2 | `done` | `kabumori-fact-v2-pr132-final-integrated-review-20261011` | `none` | かぶモリアプリG2のちゃ | `C2` | `.agent/tasks/CODEX_TASK_2.md` / `.agent/CODEX_REPORT_2.md` |
 | H3 | `idle` | `none` | `none` | none（未割当） | `C3` | `.agent/tasks/CODEX_TASK_3.md` / `.agent/CODEX_REPORT_3.md` |
-| H4 | `idle` | `none` | `none` | none（未割当） | `C4` | `.agent/tasks/CODEX_TASK_4.md` / `.agent/CODEX_REPORT_4.md` |
+| H4 | `done` | `news-improvement-a-pr129-phase7-r2-final-focused-review-h4-20261012` | `none` | ニュース改善API最適化のちゃ | `C4` | `.agent/tasks/CODEX_TASK_4.md` / `.agent/CODEX_REPORT_4.md` |
 | H5 | `idle` | `none` | `none` | none（未割当） | `C5` | `.agent/tasks/CODEX_TASK_5.md` / `.agent/CODEX_REPORT_5.md` |
 | G1 | `review_required` | `kabumori-portfolio-holdings-stale-valuation-guard-20261011` | `chatgpt` | — | `K1` | `.agent/tasks/CLAUDE_TASK_1.md` |
 | G2 | `ready` | `kabumori-fact-v2-pr132-three-objective-guards-correction-20261011` | `claude` | — | `K2` | `.agent/tasks/CLAUDE_TASK.md` |
@@ -432,8 +522,8 @@
 | G5 | `in_progress` | `common-account-phase3g-free-auth-provider-test-readiness-20261011` | `claude` | — | `K5` | `.agent/tasks/CLAUDE_TASK_5.md` |
 | G6 | `idle` | `none` | `none` | — | `K6` | `.agent/tasks/CLAUDE_TASK_6.md` |
 | G7 | `idle` | `none` | `none` | — | `K7` | `.agent/tasks/CLAUDE_TASK_7.md` |
-| G8 | `ready` | `news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
-| G9 | `ready` | `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011` | `claude` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
+| G8 | `ready` | `news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
+| G9 | `done` | `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011` | `none` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
 | G10 | `idle` | `none` | `none` | — | `K10` | `.agent/tasks/CLAUDE_TASK_10.md` |
 
 - 既存索引との差分: G1（索引 `ready` / 正本 `review_required`）。各担当の記録直後で索引が未更新と見られるため、衝突を避けてこの拡張では既存枠の索引を変更していない。TASK正本を優先する。この拡張ではH1/H2/G1〜G5のTASK本文・Report・status・allocationを変更していない。
@@ -7064,3 +7154,9 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - User approved proceeding from K3 to merge judgment. [POSTONA AI＋手動統合予約プレビュー PR #138](https://github.com/anohi-memories/kabumori/pull/138) **squash merged**. GitHub PR readback `closed / merged=true`, `merged_at=2026-10-11T14:30:47Z` (23:30:47 JST); reviewed head `f6b8f866b449cd432f649c132bbaa2e70a9f2ace`, squash `a9b7cd2032169ae375a4b9f3e3086e6b3a2f3ff7`. Main immediately matched. Squash changed 10 G3-owned app tests/docs files ONLY; no .agent files part of merge. Before merge: PR `mergeable=true`; main 68 commits ahead of common base with no changed-path overlap. Vercel quota rate-limit check, Netlify preview canceled; G3 reported 277/277 app + 22/22 domain PASS, ChatGPT did not rerun.
 - Source code alone (Expo POSTONA existing schedule tab) now contains manual exact/random/interval and AI-plan local preview with R1/R2/R2b/R3 safety fixes. **No actual scheduled posts saved, no remote reservation writer, no X or Threads real posting**, no DB/RPC/Edge/migration/Cron/Auth/Vault/secret changes or direct production/EAS deployment. GitHub automation may build; downstream hosting outcome not verified.
 - G3 `postona-unified-ai-manual-schedule-planner-v1-20261011` remains **done / next_owner none**, no successor automatically assigned. G4/H5/G5/G6/G8 etc TASKs untouched. Runtime integration requires separate G3 and G5/G4 approvals, tenant-scoped reservation backend, X OAuth Issue #131, and one Sol（高） integrated Auth/RLS/API security review before any user-approved real X pilot.
+
+## K3 G3 PR145 2 P2 source corrections assigned — 2026-10-12 JST
+
+- G3 `postona-x-reservation-store-offline-v1-g3-20261011` K3 source review found two concrete P2 gaps on Draft [PR #145](https://github.com/anohi-memories/kabumori/pull/145) HEAD `1306cdc5d37e8b28b4819484846aed00875654b2`: (R1) `finish` accepts a claimed lease after its deadline unless `claim_due` sweep ran first; (R2) `manual_interval` accepts irregular timestamps, as `bandOf()` sends no cadence and `create_batch` only checks general minGap. Must fix with fail-before/pass-after disposable PG tests, including stale finish without sweep and server-rejected irregular interval, source-only on SAME PR, app request contract and affected tests/docs.
+- G3 TASK/index returned `ready / next_owner claude`, recommended **Opus5.5（中）**, start G3 / return K3; previous G3 Report and archived TASKs preserved. Offline SQL candidate/worker/client flow and G3 reported PG17.11, 9/9 mutation, Deno7, app287, domain22 were inspected as source evidence, ChatGPT did not rerun tests.
+- No remote Supabase/X/Meta/AI calls, DB/Edge migration, production reservation, Cron/merge/EAS/deploy. G4 Threads + G5 common account, other H/G slots, their reports/PRs remain independently owned. G5/G4 guard predicates remain FALSE, app save disabled. One later **Sol（高）** effective Auth/RLS/publisher integration review and user-approved pilot mandatory before live use.

@@ -1,3 +1,58 @@
+# H3 CURRENT TASK — POSTONA Threads OAuth＋手動投稿 統合Auth/SQL重点レビュー（独立・READ ONLY）
+
+- task_id: postona-threads-pr144-auth-publish-p1-security-review-h3-20261012
+- owner: codex
+- slot: codex-3
+- status: review_required
+- next_owner: chatgpt
+- start_code: H3
+- finish_code: C3
+- completion_code: C3
+- return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
+- recommended_model: **Sol（高）**
+- type: **ONE focused independent source/security review — REVIEW only, not 臨時実装**
+- target: [Draft PR #144](https://github.com/anohi-memories/kabumori/pull/144) exact HEAD **`d4a1e87b77d1fbd362dc51809ce2d998afda15ea`**, base Draft PR140 `2e75a6a842e70f3de78558681803b60935fb4251`, 24 changed G4-only files, OPEN/DRAFT/UNMERGED
+- protected PRs: #124 `c30f246409a77080cbc03aef6c4cb72b5481e125`, #135 `e38788d6677082138f0990453c7d2f00549666d0`, #139 `b4fa672f97592e87682671454e868a92098cbd56`, #121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`; all unmerged Draft/source candidate
+- current release decision: G4 K4 **PASS_SOURCE_CANDIDATE / BLOCKED_REAL_PILOT**; no actual OAuth/Meta/GoTrue/Vault/DB managed proof; no live feature gates enabled, no public posting or deploy authorized
+- changes_forbidden: product files, PR branches, migration apply, GRANT, RLS, Auth/Vault secrets, external Meta/Supabase/X APIs, real posts, paid calls, PR merge or deploy
+- allowed: isolated source read, mock Deno/fake PostgreSQL tests and H3 TASK/Report/ACTIVE section/CURRENT_STATE bookkeeping only
+
+## Why this review is now necessary
+
+G4's source PR144 changed security-critical `SECURITY DEFINER` functions, principal+session authorization, grant issuance and token Vault custody, not merely UI. Prior K4 P1: PR140 `service_role` voucher `redeem_threads_manual_publish_step` could release a token after user/entitlement revocation. PR144 replaces caller claim + `service_role` redeem/record functions with caller-JWT `release_threads_manual_publish_step` and `record_threads_manual_publish_result` HMAC attestation and nonce. G4 reports disposable PostgreSQL negative tests/mutation8, combined Deno176, focus Deno93 and app258 PASS; **these are developer reports only**. Confirm whether the actual new ownership/auth boundary is safe; do not certify production based on mocks. Focus on P0/P1/P2 real bugs and proof gaps; do not spawn repeated UI review or generic TODO audit.
+
+## Preflight and worktree
+
+1. Read latest `PROJECT_RULES.md`, `AGENTS.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this H3 TASK/Report (preserved prior G2 C3 history below), G4 latest K4 TASK/Report, H5 C5 Report, G5 latest TASK. Fetch **fresh origin/main** and exact PR #144/#140/#139/#135/#124/#121 heads/base/files. Note: H4 has been allocated in ANOTHER chat to News PR129 and must not be used/altered; H1/H2/H5 and G3/G5 independent ownership protected. If head moved or PR conflict, report exact drift before adjudicating.
+2. New physically independent H3 checkout/worktree; NO sharing other slot worktrees/dev servers/PG clusters/ports; cannot edit/check out/rebase someone else's live branch. Use read-only refs, a local H3-only disposable composite copy and fake PostgreSQL 17 socket if available, never production DB or real Auth/Meta. If no isolated environment, STOP with BLOCKED.
+3. This is a **read-only independent review**. Product source edits/commits/push PR comments prohibited. Report evidence with exact path:line/commit, actual test output vs developer-claimed tests and NOT_RUN reasons.
+
+## High priority adversarial boundaries
+
+**S1 — Critical live privilege/TOCTOU**. Review PR144 new `supabase/candidates/postona_threads_publish/threads_publish_release_candidate.sql` plus PR140 `threads_manual_publish_candidate.sql`: confirm old `claim/redeem/record` are actually dropped (including inherited PUBLIC EXECUTE / nonfunction REST paths); new release/record functions have effective correct EXECUTE grants, ownership and SECURITY DEFINER locked search_path, current user `auth.uid()` from authenticated JWT, session row from `auth.sessions` (lock against deletion/refresh) and real G5 `private.account_lifecycle_assert_active_service_write(uuid,'x_autopost')` same-transaction fence. Verify no cross-user/brand/X socialAccount or revoked member owner/admin, no wrong service entitlement, no bare service_role principal forging. Check G5 T13 function's SQLSTATE 42501 mapping. Test user deleted/deactivated, service ended/suspended/deletion race, member downgrade/removal, revoked per-account manual consent, wrong workspace `code_profile_key`, stale provider token, grant replay/late return, concurrent writer. **Call out gap between release COMMIT and Meta HTTP** as a bounded residual risk; never claim DB locks cover the network call.
+**S2 — HMAC/proof integrity**. Compare `supabase/functions/social-mobile-threads-publish/http.ts` HMAC exact message bytes/nonce/userId/attempt/step/results with SQL `release_threads_manual_publish_step` and `record_threads_manual_publish_result`. Check signature provenance (server `/auth/v1/user` vs caller bearer) and no JWT decoded as authority, nonce replay, TTL skew, grants bound session/account, no client obtainable attestation secret/Vault token, constant-time concerns, log/HTTP/exception leakage, rollback/uncertain outcome behavior and 2-write Threads duplicate controls. Confirm no alternative route bypasses privilege proof.
+**S3 — Token expiry and H5 boundary**. Review `supabase/candidates/postona_threads_publish/threads_credential_custody_candidate.sql`, owner-only writer/read contract, real PR124 verified connection, H5 PR139 `complete` compatible with `record_threads_credential_custody(account,expires_at)` *same DB transaction*, `verified_at=now()` precision/reconnect/rotation/secret-id binding; NULL/expired refuses, 5min buffer. Check managed Auth schema privileges/roles, actual owner transport not yet provisioned and remaining T10 G5 provider-aware deletion/orphan token risk. Don't edit G5/H5 files to force a PASS.
+**S4 — End-to-end simulation fidelity and safe flags**. Inspect the G4 combined runner `supabase/tests/postona_threads_integration_run.sh` that copies actual pinned protected PR124/135/139 and G4 PR140 candidate into local copy, G5 T13 MOCK_ONLY not managed proof, `postona_threads_release_run.sh` negative cases/8 mutations; verify no misrepresented live functionality. Check original Threads connect false, manual publish server false, mobile UI two flags false, Edge returns 503; actual account-scoped permission and verified Meta-owned readback; unknown publish result MUST NOT retry. No touching G3 reservation, old X OAuth hardening Issue131 or X dispatcher.
+
+## Verdict and handoff
+
+- Give one `PASS_SOURCE_SECURITY_REVIEW / REAL_PILOT_HOLD`, `CHANGES_REQUIRED / REAL_PILOT_HOLD`, or `BLOCKED_REVIEW`. If P0/P1/P2: exact source:line + reproducible mocked input/SQL negative proof, severity, impact and MINIMAL correction owner. Avoid vague speculative blockers and repeated broad audits.
+- Report explicit managed/real proof NOT_RUN separate from developer-reported fake results; one prioritized owner-dependent rollout matrix: G5 T13/T10, H5 owner/GoTrue/callback/custody, G4 publish/release, Meta operator/app/tester. Production merge/DB apply/Edge deploy/feature flags/one real Threads test post still require separate review/preflight and user approval; this source-only verdict is never production GO.
+- Only update this H3 task and `.agent/CODEX_REPORT_3.md` preserving complete G2 historic task/report verbatim, H3 own ACTIVE_TASK and relevant CURRENT_STATE via guarded SHA; when actually finished `review_required/next_owner:chatgpt` and return exact `C3`.
+- Fields required in H3 report: task_id,result,reviewed_pr_sha,changed_files,tests,commit_hash,push,merge,deploy,remaining_issues,safety_checks,next_recommendation,return_to,completion_code.
+- **H3 is freed after C3** (no parked integration backlog; separate explicit TASKs for G4/G5/H5).
+- Last line of Codex completion: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ へ C3 を送ってください。**
+
+---
+
+## H3 completion — 2026-10-12 JST
+
+CHANGES_REQUIRED / REAL_PILOT_HOLD on exact PR144 d4a1e87b77d1fbd362dc51809ce2d998afda15ea. One P2 R1 session expiry UPDATE race independently reproduced on PG17; local FOR SHARE control blocks it. Deno93/composite176/app258 and supplied SQL/mutations PASS. See `.agent/CODEX_REPORT_3.md` for evidence, limits and owner matrix. Product edits0 / production0 / real API0. Return C3 to POSTONA｜マルチSNS化・開発統括（G4）のちゃ.
+
+---
+
+## Protected entire previous H3 TASK (historical, no active G2 assignment)
+
 # H3 CURRENT TASK — かぶモリ G2 オンデマンド個別AI分析 PR143 重点独立レビュー（READ-ONLY）
 
 - task_id: kabumori-pr143-ondemand-queue-auth-security-review-20261011
@@ -128,3 +183,4 @@ H3専用の独立Git worktree/checkoutを `/Users/yuya/Developer/kabumori-fresh`
 ユーザー向け最終報告の末尾には必ず「返却先」を置き、TASKの `return_to` をそのまま使って「`<return_to>` へ `C3` を送ってください。」と表示する。返却先は推測しない。`return_to` / `completion_code` が欠落・不明・矛盾・不一致（`C3` 以外）の場合は「返却先未確定 — ChatGPT確認待ち」とし、理由を明記する。
 
 `C3` はH3専用の完了確認コード。ChatGPTが対応TASKとReportを評価する。未実施を成功扱いにしない。
+

@@ -1,10 +1,133 @@
+# G5 — CURRENT TASK — Phase 3i account-lifecycle safeguards: design and offline regressions
+
+- task_id: common-account-phase3i-local-findings-safe-lifecycle-plan-20261012
+- owner: claude
+- slot: claude-5
+- status: review_required
+- next_owner: chatgpt
+- priority: high
+- start_code: G5
+- finish_code: K5
+- return_to: 共通アカウントG5のちゃ
+- recommended_model: **Opus5.5（高）**
+
+## Purpose
+
+In the accepted Phase 3h K5, isolated local tests (Draft PR #146, head `faf8007a4ab5c925430c7cc6a9896046e30ce25a`) demonstrated that disabling a user does not automatically stop an authentication flow already in progress. Local tests also observed issuance of a session after disabling, continuing use of old tokens in selected data services, and persistence of Storage objects after Auth deletion. These are **local OSS observations only**, not managed-Supabase proof. The next goal is a bounded, defensible account-closure design supported by deterministic offline regression tests.
+
+## Required execution
+
+1. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, own TASK history, Phase 3h report and Draft PR #146, plus prior G5 PRs #121/#122/#128/#130/#134/#137. Verify current PR heads, fresh `origin/main`, other-slot ownership, and an independent G5 worktree/branch. Never overwrite other worktrees or tasks.
+2. Analyze only Phase 3h findings F1/F2/F3/F4/F6/F7, identifying which guarantees can be implemented by application permissions, database policies, provider integrations, lifecycle state transitions or Storage-specific cleanup. Distinguish guarantees from observations and unknown managed behavior. **Do not treat a fixed waiting period, BAN, a token hook, or Auth deletion alone as sufficient security.**
+3. Deliver a phase-gated account closure protocol with explicit invariants, read-back requirements, race/late-callback handling, session/token freshness, data-access restrictions, identity reconciliation, Storage cleanup, ambiguous outcomes, rollback/resume, idempotency and a clear STOP decision when a guarantee is unprovable. Specify precise ownership and integration dependencies with POSTONA Threads OAuth (G4/H3) and common AI (G6); do not edit those owners' resources.
+4. Add small deterministic **synthetic-only, offline** regression tests for the findings and unknown/failure paths. These are tests of the *proposed decision logic*, not proof of actual Supabase behavior. Restrict changes to NEW G5-owned paths such as `docs/common-account/phase3i-lifecycle-safety-design.md` and `tools/common-account-lifecycle-safety/`. Do not edit older Draft PR code or migrate database schemas.
+5. Verify tests, fail-closed behavior, `git diff --check`, secret/personal-data scan, affected-file isolation and PR status. Open ONE independent Draft PR to main if safe, without merging.
+6. Report either `READY_FOR_OFFLINE_IMPLEMENTATION` if each claimed invariant has an identifiable enforceable boundary, or `BLOCKED_UNPROVEN_BOUNDARY` naming the missing guarantee. Neither is permission to run real managed tests. Make a small next-step recommendation, not another sweeping review cycle.
+
+## Absolute safeguards
+
+No managed Supabase operations, Auth changes, photo application downtime, production writes, provider login, personal information, secrets, paid actions, migration deployment, PR merge, or real account deletion. No use of existing G/H worktrees or modification of other-slot TASK/Report. Preserve existing G5 Draft PR branches and previous Report histories. Real managed E1–E12 are NOT_RUN; destructive E11 and Option D remain unauthorized; `managed_auth_delete` remains BLOCKED and `IDP_PREPAUSE_BLOCKED` stays unchanged. If an intended validation requires a real environment or an authorization not granted here, STOP and document it.
+
+## Completion
+
+At the end of this G5 TASK, append `## Report — Phase3i` with task_id, decision, evidence/limits, new files, test outcomes, commit/push/PR, merge/deploy truth, environment/safety checks, next steps. Set `status: review_required`, `next_owner: chatgpt`. Return to 共通アカウントG5のちゃ with completion code **K5**.
+
+推薦モデル：**Opus5.5（高）**
+
+## Report — Phase3i
+
+- task_id: common-account-phase3i-local-findings-safe-lifecycle-plan-20261012
+- reported_at: 2026-10-12 JST
+- decision: **`READY_FOR_OFFLINE_IMPLEMENTATION`** — ただし、この設計が**主張する不変条件 I1〜I7 に限る**。本番稼働の許可ではない。
+  - 主張する不変条件は、どれも「識別できる、強制可能な境界」に結びついている。
+  - 主張しないこと（N1〜N6: BAN・フック・待機・Auth の削除・ローカル = managed）は、観測された反例どおり、安全の根拠として使わない。
+  - 解決できない保証は、設計上 STOP または突合に落ちる。
+  - 名前付きで残る未解決: **U1** Storage の書き込みポリシーの現状が不明（リポジトリの migration の外）、**U2** 境界の実体が未実装（オーナー別の別 TASK が必要）、**U3** managed 側の権限と監査ログの読み取りが未確認。
+- real_remote_calls: 0 / managed_supabase_operations: 0 / photo_app_paused: false / paid_actions: 0 / production_mutation: 0
+- deploy: NO / merge: NO
+- `managed_auth_delete`: BLOCKED のまま / E11・Option D: 未承認のまま / managed の E1〜E12: NOT_RUN のまま / `IDP_PREPAUSE_BLOCKED`: 維持
+
+### ブランチ / PR / HEAD
+- 作業場所: 新規の独立 worktree `/Users/yuya/Developer/kabumori-g5-phase3i`
+  - ブランチ `claude/g5-phase3i-lifecycle-safety-design-20261012`（fresh origin/main から作成）
+- **Draft PR #147**: https://github.com/anohi-memories/kabumori/pull/147（main 向け）
+  - head `38051f023bfd150f29829a075b6f87fa7c1e3e5f`（commit 1件、8 ファイル追加、force push なし、マージなし）
+- 保護対象 PR121 / PR122 / PR128 / PR130 / PR134 / PR137 / PR146 は OPEN / Draft で head 変更なし。他の open PR とファイルの重なりなし。
+- GitHub の check: Vercel が `Deployment rate limited — retry in 24 hours.`（プラン上の制限であり、コードの不具合ではない。変更は文書とテストだけ）。Netlify は canceled / success。
+
+### changed_files（すべて新規）
+- `docs/common-account/phase3i-lifecycle-safety-design.md`
+- `tools/common-account-lifecycle-safety/`: `protocol.ts`、`world.ts`、`protocol_test.ts`、`invariants_test.ts`、`static_test.ts`、`mutations.py`、`README.md`
+
+### 何を分析したか（Phase 3h の F1/F2/F3/F4/F6/F7 のみ）
+| 知見 | 層ごとの保証 | 設計での扱い |
+| --- | --- | --- |
+| F1 手動連携が BAN 後に完了 | Auth 層では保証できない。データ面で影響を無力化できる | 識別情報は止められない（N1）。データ面は I1・I2、遅れた識別情報は検出して突合 |
+| F2 コード交換が BAN 済みユーザーにセッションを発行 | 同上 | token の鮮度ではなく状態で判定（I2） |
+| F3 処理中の自動連携が BAN 後にコミット | 同上 | スナップショットの再取得（有限回）と、削除後の監査ログでの検出 |
+| F4 古い token が PostgREST・Storage で有効 | **DB のポリシー**（RLS の述語）と書き込み関数のガード、Edge の確認で強制できる | B1・B2・B3・B4。ゲートされない経路は孤児スイーパー（B5） |
+| F6 Admin の削除が Storage を掃除しない | Storage API による掃除と、孤児スイーパー | 一覧 → 削除 → 再一覧（連続 2 回 0 件）、B5 |
+| F7 フックはトークン発行だけを止める。障害は全員のサインインを止める | 境界にならない | 閉鎖プロトコルはフックに依存しない。採用しないことを推奨 |
+
+### 成果物の要点
+- **段階的な閉鎖プロトコル P0〜P8**: 準備（STOP 判定）→ freeze → 封じ込め（最善努力。必須でも十分でもない）→ サービス掃除 → プロバイダ結果 → Storage → 排他ロックの下での決定 → 削除（1 回だけ）→ 削除後の検証と完了。
+- **読み戻しの要件**: 完了は、削除後に、判定と**同じ時点で**読んだ事実だけで確定する。
+- **境界 B1〜B6**: 状態述語（ロック形式の RLS 述語）、書き込みガード（T13）、人の token で動く Edge の確認、Storage の書き込みポリシー、孤児スイーパー、境界マニフェスト（読み戻しによる確認）。
+- **競合・遅いコールバック**の経路別の表、token の鮮度の方針、識別情報の突合、曖昧な結果の表、ロールバック（最初の破壊的な掃除の前まで）、再開と冪等性、STOP / 突合のコード一覧。
+- **統合の依存（D1〜D9）**:
+  - G3/G4 と H3 の Threads: 資格情報の保存と手動投稿の引き換えでライフサイクルを確認する。PR #144 は未マージの候補。
+  - G6 の共通 AI: 台帳の予約の前にライフサイクルを確認する。台帳の `user_id` の削除または仮名化の方針を、per-user の経路を開く前に決める。
+  - 他オーナーのリソースは変更していない。
+
+### テストの結果（すべてオフライン・合成データ）
+- `deno test --no-config --allow-read tools/common-account-lifecycle-safety/`: **32/32**
+  - 型チェックあり。`deno check`・`deno lint` は OK。ネットワーク・環境変数・時計・乱数に触れないことを `static_test.ts` で確認。
+- **不変条件の探索**: 最大 2 つの割り込みを 12 の判定点へ入れる全組合せ（約 8,800 通り）を、3 つの構成で実行。
+  - 構成: 全境界あり、Apple の識別情報あり、Storage のポリシーなし（スイーパーのみ）。
+  - どの組合せでも、不変条件が保たれ、有限回で終了する。
+  - 不変条件の内容: 書き込みの受理、完了の条件、盲目的な再削除、一回限りの再実行、不明な事実での削除。
+- **負の対照**:
+  - 述語が無いと F4 が再現する。
+  - 素朴な閉鎖（封じ込め → 掃除 → 削除 → 完了）は、遅れた識別情報・サービスデータの残り・Storage の残りで破られる。
+  - 削除後の検証のキャッシュは、残りを見逃す。
+- **ミューテーション 32/32 を検出**（境界・事実・時間・封じ込め・掃除・プロバイダ・削除・検証・ゲート・スイーパー・モデル）。
+- **探索で見つかった設計上の指摘**（実装前に直せた）:
+  - 削除後の検証結果をキャッシュすると、検証と判定の間に、freeze の前に始まった書き込みがコミットされ、完了が残りを見逃す。
+  - 契約: 検証の事実は判定と同じスナップショットで読む。
+  - 同時に、スイーパーを常に必須にし、Storage のポリシーは「主張できる不変条件を増やす」位置づけに改めた。
+- `git diff --check`: OK。シークレット・本番 ref・URL・メールの走査: 0 件。
+
+### 証拠の限界（何を証明しないか）
+- 示したのは、**提案したロジックと、観測を写したモデルの上での不変条件**。GoTrue・PostgREST・Storage・managed Supabase の実際の挙動の証明ではない。
+- B1〜B6 の実体（ロックの順序、`FOR UPDATE` の飢餓、性能、述語の評価）は、実装の後にローカルの PostgreSQL で別途証明が要る。
+- マニフェストの確認は、実行時の読み戻しで行う（本設計は仕様だけ）。
+
+### 環境と安全の確認
+- 実施しなかったこと（いずれも 0 件）:
+  - managed Supabase の操作、Auth の変更
+  - 写真アプリの停止、プロバイダへのログイン、個人情報・秘密情報の扱い
+  - migration、deploy、マージ、課金
+  - 他スロットの TASK・Report・worktree の編集
+  - 古い Draft PR のコードや migration の変更
+- PostgreSQL・Podman 等は今回使っていない。
+
+### 次のおすすめ（小さく）
+1. **K5**: 判定（I1〜I7 に限る `READY_FOR_OFFLINE_IMPLEMENTATION`）の受理と、U1〜U3 の扱いを決める。
+2. 次に価値が高い小さな単位: **B1（状態述語）の関数とロック順のローカル証明**。Phase 1/2 と同形式の 2 セッション競合テストで、`FOR UPDATE` の飢餓と `lock_timeout` を確認する。G5 所有の新しいパスだけで行い、他オーナーのテーブルや migration は含めない。
+3. D1・D2・D3・D5 は、オーナー別の短い前提条件として K5 経由で渡す（別 TASK）。
+4. 広範な再レビューは推奨しない。必要なら B1 の実装時に、絞った確認を 1 回だけ。
+
+---
+
+# Preserved Phase3h and earlier G5 TASKs / Reports (immutable below)
+
 # G5 — CURRENT TASK — Phase 3h isolated LOCAL OSS/Keycloak authentication pilot (NO family-photo downtime)
 
 - task_id: common-account-phase3h-local-oss-keycloak-safe-pilot-20261011
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- next_owner: claude
+- status: done
+- next_owner: none
 - priority: high
 - start_code: G5
 - finish_code: K5
@@ -72,6 +195,120 @@ D. 終了時は自分のG5コンテナ・試験用identity/一時DB/コンテナ
 自分のTASK末尾`## Report — Phase3h`に task_id / result / case matrix / versions / setup/teardown証拠 / changed_files / tests / commit hash / push/PR/merge/deploy / real_remote_calls=0 / photo_app_paused=false / paid_actions=0 / remaining_issues / safety_checks / next_recommendation を記録。status `review_required` / next_owner `chatgpt` で返し、**「共通アカウントG5のちゃへ K5 を送ってください。」** を末尾に明記する。
 
 推薦モデル：**Sonnet5（高）**（より重いモデルへ自動切替しない）。
+
+## Report — Phase3h
+
+- task_id: common-account-phase3h-local-oss-keycloak-safe-pilot-20261011
+- reported_at: 2026-10-12 00:50 JST 頃
+- result: **`LOCAL_OSS_PARTIAL_EVIDENCE`**（隔離したローカル環境が安全に起動し、小さな実測に成功。managed の PASS ではない）
+  - ただし、安全性の期待に反する挙動を 3 件再現した（F1〜F3）。TASK の定義では `LOCAL_OSS_FAIL` にも当たりうるため、分類は K5 の判断を仰ぐ。
+  - `IDP_PREPAUSE_BLOCKED` は維持。
+- real_remote_calls: 0（managed Supabase、Auth0 などの実プロバイダ、写真アプリへのアクセスは 0。外部通信は公開レジストリからのイメージ取得だけ）
+- photo_app_paused: false
+- paid_actions: 0
+- production_mutation: 0
+- deploy: NO / merge: NO
+
+### ブランチ / PR / HEAD
+- 作業場所: 新規の独立 worktree `/Users/yuya/Developer/kabumori-g5-phase3h`
+  - ブランチ `claude/g5-phase3h-local-oss-keycloak-pilot-20261011`（fresh origin/main から作成）
+- **Draft PR #146**: https://github.com/anohi-memories/kabumori/pull/146（main 向け）
+  - head `faf8007a4ab5c925430c7cc6a9896046e30ce25a`（commit 1件、7 ファイル追加、force push なし、マージなし）
+- 保護対象 PR121 / PR122 / PR128 / PR130 / PR134 / PR137 は OPEN / Draft で head 変更なし。他の open PR とファイルの重なりなし。
+
+### changed_files（すべて新規）
+- `docs/common-account/phase3h-local-oss-pilot.md`
+- `tools/common-account-local-pilot/`: `README.md`、`prepare.py`、`core.py`、`cases.py`、`extra.py`、`test_fail_closed.py`
+
+### セットアップと後片付けの証拠
+- **専用の隔離環境**: Podman 仮想マシン `g5-local-pilot`（CPU 4、メモリ 8 GiB、ディスク上限 40 GiB）。利用者の承認（8 GiB）に従い新規作成し、終了後に停止・削除した。
+  - 既存の `podman-machine-default` は起動も設定変更もしていない（停止中・2 GiB のまま）。既定の接続も元のまま。
+  - Supabase CLI が一度だけ既存マシンへの接続を試みて失敗した（`CONTAINER_CONNECTION` で解消。起動はされていない）。
+- **版**: GoTrue v2.196.0、PostgreSQL 17.6.1.165、PostgREST v16.1、Storage API v1.70.3、Kong 2.8.1、Keycloak 26.8.0、Supabase CLI 2.116.0、Podman 6.1.1。
+- **必要資源**: 仮想マシンのメモリ使用 約 2.3 GiB（コンテナ合計 約 1.3 GB）、ディスク使用 5.7 GiB、イメージ合計 約 2.9 GB（展開後）。
+- **隔離**: 公開ポートは `127.0.0.1` の 3 つ（API 55421・DB 55422・Keycloak 55480）だけ。
+  - **CLI の既定では全インターフェースで待ち受ける**ことを発見した。API と DB（弱い既定パスワード）が LAN から到達可能になる状態だった。
+  - 発見後すぐスタックを止め、仮想マシン側の `default_host_ips = ["127.0.0.1"]` で修正し、`lsof` で確認してから実測した。修正前の実測はしていない。
+- **後片付け**:
+  - コンテナ 0・ボリューム 0・待ち受けポート 0。
+  - 仮想マシンと専用ファイルを削除した。
+  - `podman.sock` のシンボリックリンクを既存マシンへ戻した。
+  - 偽の secret・偽のパスワードはリポジトリ外のスクラッチ領域だけ（コミットなし）。
+
+### ケースの結果（詳細は文書 §4）
+| ケース | 結果 |
+| --- | --- |
+| C0 版と設定（E1 のローカル版） | PARTIAL（ローカルの値） |
+| C1 自動連携 対照 / C2 BAN 済みの自動連携（E2） | PASS / PASS（`user_banned`、識別情報の追加なし） |
+| C3 手動連携は既定で無効 / C4 有効時の連携 / C5 BAN 後の開始（E3） | PASS / PASS / PASS（403 `user_banned`） |
+| **C6 連携開始 → BAN → 完了（E4）** | **LINKED_AFTER_BAN（F1）。コード交換は BAN 済みユーザーにセッションを発行（F2）** |
+| C7 フローの有効期限（E4） | PARTIAL（20 秒で連携、310 / 330 秒は `bad_oauth_state` "OAuth state has expired"） |
+| C8a〜C8d refresh・パスワード・logout・ID token（E5） | PASS（BAN 後は refresh 400 / password 400 / logout 403 / ID token 403。logout を BAN 前にすれば 204 でセッション 0） |
+| C15 同時 8 件 × 3 ラウンド + 追加 6 ラウンド（E6 の小規模版） | PARTIAL。**+10 ms で 8 件連携、うち 7 件の識別情報が BAN 更新後に作成（F3）** |
+| C16〜C20 Custom Access Token hook（E7） | PASS、V10 を実機で確認（トークンは拒否、識別情報は確定）。フック障害は全員のサインインを止める |
+| C9 Admin の削除（auth スキーマ）/ C10 監査（E8・E10） | PASS（子行は全件 0、`identity_linked` は残り `user_deleted` が作られる） |
+| C11〜C14 Storage と古いトークン（E8・E9） | PASS（観測）。F4〜F6 |
+| E11 / E12 / managed 版のすべて | **NOT_RUN**（禁止または未適用） |
+
+### 再現できた知見（F1〜F9。詳細は文書 §5）
+1. **F1** BAN の前に始めた手動連携は、BAN の後に完了する。
+2. **F2** そのコード交換が、BAN 済みユーザーに新しい access token / refresh token を発行する。access token は PostgREST で有効（refresh は 400、`GET /user` は 403）。
+3. **F3** 自動連携でも、BAN の約 10 ms 前に始まった処理が、BAN の更新時刻より後に識別情報を作る（コミットの順序そのものは未観測）。
+4. **F4** access token は状態を持たない。logout・BAN・削除の後でも有効期限まで PostgREST と Storage が受け付け、削除済みユーザーの ID で行・ファイルが作られる。
+5. **F5** PostgREST は期限切れ直後（+5 秒）の JWT を受け付ける。+75 秒では拒否。
+6. **F6** Admin の削除は Storage を掃除しない（メタデータも実ファイルも残る）。
+7. **F7** フックはトークン発行だけを止め、識別情報の確定は止められない。
+8. **F8** Keycloak の組み込みプロバイダは `scopes=openid` が必須。
+9. **F9** Admin の削除は `user_deleted` の監査行を作る。SQL での削除（Option D）との比較は E11 の対象（未実施）。
+
+### 誤りの訂正（正直な記録）
+- 最初の E9 の対照で、期限切れトークンを PostgREST が受け付けたため FAIL と記録した。
+  - 原因は、確認が期限の 3〜5 秒後で、PostgREST の許容時間内だったこと。
+  - 時刻を変えて取り直し、C13a（直後）と C13（90 秒以上後）に分けて記録した。
+
+### テストと確認
+- `python3 -m unittest -v tools/common-account-local-pilot/test_fail_closed.py`: **7/7**（確認用の環境変数がなければ拒否、ワークディレクトリがリポジトリ内なら拒否、HTTP クライアントは 2 つのループバックにしか接続しない、偽の値だけを生成する、ソースに外部ホストや秘密情報や SQL 削除がない）。
+- `git diff --check`: OK。シークレット・本番 ref・URL・メール・JWT の走査: 0 件。
+- 実測で使った結果ファイルに、識別子・メール・トークンは含まれない（確認済み）。
+- **注意**: 安全装置（確認用の環境変数、ワークディレクトリのチェック、オフラインの試験モード）は、実測の**後**に追加した。ケースの処理は実測時のものから変えていない。装置を加えた版でスタックを再起動しての再実行は、していない。
+
+### 限界（managed に引き継げないこと。文書 §6）
+- managed の GoTrue の版・設定・手動連携・フローの有効期限、`postgres` の権限、gateway とレート制限、S3 の Storage バックエンド、監査ログの設定は不明。
+- 独自 OIDC プロバイダ（https 必須の issuer）の経路は実行していない。ここは組み込みの Keycloak。
+- Apple 固有の挙動、大規模な同時実行、E11、E12 は未検証。
+- 結果は `LOCAL_OSS_EVIDENCE` であり、managed の PASS として数えない。
+
+### 次のおすすめ
+- **K5 / ChatGPT**:
+  - 分類（`LOCAL_OSS_PARTIAL_EVIDENCE` か `LOCAL_OSS_FAIL`）を判断する。
+  - F1〜F3 を、A+B 方式（BAN + 待機 + 確認 + 削除）の前提条件として扱うか判断する。具体的には、待機はフローの有効期限とリクエスト時間を覆う、待機の後にセッションを再失効し識別情報を再確認する、など。
+- 同じ範囲の広い再レビューは推奨しない。必要なら F1・F2・F3 に絞った 1 回の確認だけにする。
+- この結果は、E11 の実施・D 方式・managed での検証・写真アプリの一時停止の承認にはならない。
+
+### 安全確認
+- 実施しなかったこと（いずれも 0 件）:
+  - 実 / 使い捨ての managed プロジェクトの操作
+  - Auth の本番操作
+  - 実プロバイダの呼び出し
+  - 秘密情報のコミット、課金
+  - migration の適用、deploy、マージ
+  - E11 の SQL 削除
+  - 写真アプリの停止
+  - H1〜H5 の割り当て
+- 他スロットの担当範囲、保護対象の PR は変更していない。
+
+---
+
+# K5 FINAL — Phase3h local OSS/Keycloak live pilot / 2026-10-12 JST
+
+- task_id: common-account-phase3h-local-oss-keycloak-safe-pilot-20261011
+- **K5 verdict: TASK_COMPLETE_WITH_SAFETY_FINDINGS / LOCAL_OSS_FAIL / IDP_PREPAUSE_BLOCKED.** A real isolated local OSS/Keycloak pilot was conducted; F1–F3 demonstrate violations of the assumed BAN-as-linking-fence. Also F4 stale JWT writes and F6 persistent Storage require lifecycle enforcement. Positive case observations are valid **LOCAL_OSS_PARTIAL_EVIDENCE**, not managed proof. This FAIL is a security design finding, not a declaration that production was attacked or managed Supabase reproduces it.
+- Independently inspected [Draft PR146](https://github.com/anohi-memories/kabumori/pull/146) exact HEAD `faf8007a4ab5c925430c7cc6a9896046e30ce25a`, OPEN/DRAFT/UNMERGED, 1 commit, 7 entirely new documentation/local-driver paths; no app, migration, Auth runtime, managed DB, Edge or production source. Verified report, source/docs, safety tests definition and PR scope, but local stack executions, Podman cleanup, resource readings and 7/7 unit tests are G5-reported and NOT independently rerun. The fail-closed checks were added after the live observations and that edition was not rerun against the stack.
+- Critical evidence: F1 manual OAuth link started before BAN completed after BAN; F2 code exchange issued banned user's fresh JWT/refresh; JWT could write through local PostgREST; F3 in-flight auto-link produced identity rows timestamped after BAN update (commit sequence not observed). F4 older JWT permitted PostgREST/Storage mutations despite logout/BAN/Auth deletion; F6 Admin Auth delete did not remove Storage metadata/blobs. F7 hook blocks token issue but not identity linking, and hook failure prevents other users signing in. These are not proof of managed compatibility.
+- Report says 4 CPU / 8GiB isolated Podman machine with loopback ports and eventual teardown (0 owned containers/volumes/listeners, VM removed, preexisting Podman VM untouched); discovered initially broad interface bind, shut down immediately and fixed before measurements. Managed/provider/photo calls 0, paid actions 0, E11 SQL delete NOT_RUN, no merge/deploy. Other 121/122/128/130/134/137 PR protected unchanged.
+- **Next gate**: no managed E1–E12, family-photo pause, Option D/managed_auth_delete, or production release. Before re-evaluating A+B, a bounded source/design correction must address in-flight link callbacks, session recreation, stale-JWT writes and Storage cleanup, explicit failure/UNKNOWN semantics and testable re-read fencing; not simply assume BAN blocks all writes. No repeated generic H1–H4 E11 review; focused Sol（高） independent security review only once a concrete runnable lifecycle boundary/change is proposed for integration.
+- G5 Phase3h work closed `done/next_owner:none`; future TASK separate after fresh collision checks. AI Lab diary: 記録不要 — discovered unshipped authentication boundary behavior is security-sensitive and not appropriate for external publishing at this detail.
+- GitHub/source inspection and report accepted; no PR merge/deploy or live operations by ChatGPT.
 
 ---
 

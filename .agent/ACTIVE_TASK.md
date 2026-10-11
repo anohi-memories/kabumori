@@ -63,31 +63,31 @@
 ## Codex H3
 - owner: codex
 - slot: codex-3
-- status: done
-- task_id: kabumori-pr143-ondemand-queue-auth-security-review-20261011
+- status: review_required
+- task_id: postona-threads-pr144-auth-publish-p1-security-review-h3-20261012
 - start_code: H3
 - finish_code: C3
 - completion_code: C3
-- next_owner: none
-- return_to: かぶモリアプリG2のちゃ
+- next_owner: chatgpt
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CODEX_TASK_3.md
 - report: .agent/CODEX_REPORT_3.md
-- allocation: C3 2026-10-11 accepted H3 review CHANGES_REQUIRED / PRODUCTION_NO_GO for PR143 exact 1d0529bb: P2 missed lease_expires_at timeout in fail_personalized_analysis_job; no P0/P1 Auth/RLS/tenant boundary issue found. H3 58 targeted runtime tests PASS, PG environment NOT_RUN, no source edits. H3 done/unreserved; narrowly scoped G2 correction assigned without a second full review. Broadcast push still missing; no main merge/production.
-- recommended_model: Sol（高） (completed)
+- allocation: H3 completed focused independent review of PR144 exact d4a1e87b77d1fbd362dc51809ce2d998afda15ea. CHANGES_REQUIRED / REAL_PILOT_HOLD: one P2 R1 KEY SHARE session-expiry UPDATE race proven in two-connection local PG17; FOR SHARE control blocks update. Deno93/composite176/app258, release8 and parent6 mutations PASS; real pinned G5 T13 also PASS on fake local foundations, not managed proof. Product edits/PR changes/production/real APIs/posts0. Return C3 to POSTONA G4 chat; other slots/history protected. H3 freed after C3.
+- recommended_model: Sol（高）
 ## Codex H4
 - owner: codex
 - slot: codex-4
-- status: idle
-- task_id: none
+- status: done
+- task_id: news-improvement-a-pr129-phase7-r2-final-focused-review-h4-20261012
 - start_code: H4
 - finish_code: C4
 - completion_code: C4
 - next_owner: none
-- return_to: none（未割当）
+- return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CODEX_TASK_4.md
 - report: .agent/CODEX_REPORT_4.md
-- allocation: 未割当（2026-10-11追加）。固定プロジェクト専用にしないCodex枠。割当時に return_to / completion_code C4 / 推薦モデルを必ず記入する。
-- recommended_model: none
+- allocation: C4 2026-10-12 CHANGES_REQUIRED。独立H4がPR129 head `7bf9b8a0` で既存968 PASS、独立12probe=9 PASS/3 FAILを実施。H4-R1 P1:決算表折返し誤Fact、R2 P2:本文更新と判定保存のCAS競合、R3 P2:過去FOMC決定を現在決定と誤認。レビュー完了、コード未変更、本番アクセス・merge・deployなし。G8ニュース改善Aだけへ限定修正TASKを戻す。H4はdone/unreserved、他案件を勝手に引継がない。
+- recommended_model: Sol（高） (completed)
 ## Codex H5
 - owner: codex
 - slot: codex-5
@@ -105,27 +105,27 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-portfolio-holdings-stale-valuation-guard-20261011
+- status: ready
+- task_id: kabumori-g1-portfolio-watchlist-simulator-qa-20261012
 - start_code: G1
 - finish_code: K1
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 PR142 final PASS_SOURCE_IMPLEMENTATION after focused reload safety correction on exact PR head cfaf5dcf8d24b942988c10acf7a3959c05dba20a; PR OPEN/UNMERGED, explicit user permission still required for merge. G1 source-only: saved vs current five-field match guards holdings row P/L, impact top3 and aggregate. On focus/pull reload, valuation eligibility closes immediately and reopens only after current generation finishes; latest-wins fetch fence prevents older responses resetting the view. Claude reported focused 26/26 PASS and full app 521/521 PASS; tsc 2 existing CSS/typing diagnostics (no new), 375pt fixture pass, no native real-account edit. CI Vercel rate limited, NOT green; latest main files no PR overlap. No native five-tab, DB/Auth/API/Edge/EAS/production changes. G1 done/free subject to fresh slot/worktree review. Old report Oct7–9 gap explicitly no fix; G2 cutover untouched.
+- allocation: 2026-10-12 G1 read-only Simulator QA authorized after PR142 squash merge 4d0d0660831c1bf7403a908592c337c284332cdf. Verify 375pt/402pt portfolio/watchlist/detail navigation with synthetic stale-valuation fixtures. No real user data edits, G2/G5 work, native tabs changes, EAS or deploy. Original K1 report archived in TASK.
 - recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: kabumori-pr143-fail-lease-expiry-fence-r1-20261011
+- status: ready
+- task_id: kabumori-market-report-scalable-broadcast-push-v1-20261012
 - start_code: G2
 - finish_code: K2
-- next_owner: chatgpt
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: C3 2026-10-11 accepted H3 PR143 focused code review CHANGES_REQUIRED only P2 lease expiry fail RPC missing timeout fence. G2 R1 permitted narrow PR143 source fix of fail_personalized_analysis_job expiry, SQL expired-unreclaimed regression and mirrored worker mock fail branch; exact old head 1d0529bb, PR remains Draft/unmerged. No production, no other slot work. Main Auth/RLS/queue core otherwise reviewer found no P0/P1. Shared all-users morning/close broadcast is separate still open. After K2 target narrow security review only if new risk; then broadcast design/source task separately.
-- recommended_model: Sonnet5（高）
+- allocation: K2 2026-10-12 PASS_SOURCE_FIX for C3 P2: PR143 head 889ca1b44cf82bd3ecb913818dca568456849feb verified 1 commit after H3 old head, exact 5 files, SQL fail expires_at fence + MemStore mock + worker 3 regressions/SQL 2 regressions/mutation. G2 reported PG17 14 mutants PASS, worker34, personalized134, market283, data42, app508, X shared10 PASS; ChatGPT reviewed exact patch but did not run tests. PR143 OPEN/DRAFT/unmerged, no production. New G2: shared market morning/close broadcast push for opted-in users at 10k+ scale, dedicated/priority-safe producer+dispatch/queue, unique once-per-user, Expo unknown delivery handling, no important-news starvation, performance model, runbook, offline-only new Draft PR; PR143/PR141 protected. No DB/Cron/Edge/app deployment/real Expo/X/paid model/merge. Return K2.
+- recommended_model: Opus5.5（高）
 ## Claude G3
 - owner: claude
 - slot: claude-3
@@ -136,51 +136,49 @@
 - next_owner: claude
 - return_to: POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: User accepted next POSTONA milestone after PR138 local planner was squash-merged. G3 owns isolated **X-only AI/manual reservation durable backend candidate**: new offline SQL candidate/store/RPC or trustworthy port, new reservation claim/lease/finish boundary, save/read/edit/cancel client adapter with explicit disabled-by-default gate, disposable PG17/18 safety tests + app regressions and docs. Source-only Draft PR, never apply SQL/create live posts/X provider calls/migrate/Edge/Cron/EAS/merge. Manual per-post explicit consent vs unattended AI auto_post_preference; G5 active x_autopost entitlement and lifecycle guard, G4 verified X OAuth Issue131 and signed owner permission are hard blocked dependencies, never fake authorize. Stage3B PR127 docs and main 2026100616 migrations are read-only reference, not live. G4 current Threads integration PR140/PR124/PR135/PR139 and G5 local OSS/Auth/T13 PR121 protected; no G4/G5/H5 code overlap. Live activation only after Sol（高） independent integrated Auth/RLS/DB/API review and separate user authorization. At K3 return to this G3 chat.
-- recommended_model: Opus5.5（高）
+- allocation: K3 PR145 exact 1306cdc5d37e8b28b4819484846aed00875654b2 CHANGES_REQUIRED two P2. R1 SQL finish() accepts expired lease if claim_due() sweeper did not run; enforce deadline independent of sweep and add real PG regression (no duplicate posting; preserve published idempotence). R2 manual_interval mode accepts arbitrary irregular timestamps because app sends no cadence metadata and SQL checks only 60min gap; transmit intended interval and validate on server atomically with interval tests. Same PR145 source-only candidate, G5/G4 deny stubs / client store flag stay OFF; past reported PG/mutation/Deno/app tests accepted as evidence only, not independently rerun. Do not modify G4/H5/G5 or other worktrees, no live DB/Edge/Cron/OAuth/X/Meta/AI/deploy/merge/EAS. Return K3. Sol（高） independent review only before real G5/G4-integrated Auth/RLS/publisher rollout.
+- recommended_model: Opus5.5（中）
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: review_required
+- status: done
 - task_id: postona-threads-connect-publish-integrated-offline-v1-g4-20261011
 - start_code: G4
 - finish_code: K4
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
 - report: .agent/tasks/CLAUDE_TASK_4.md#report
-- allocation: User 2026-10-11 explicitly requested proceed to POSTONA Threads authenticated connection + manual TEXT publisher integration. New G4 TASK after K4 accepted PR140 source-only. Opus5.5（高） owns isolated NEW stacked Draft PR (base protected PR140 2e75a6a842e70f3de78558681803b60935fb4251), G4-only glue/tests and P1 server permission/entitlement revocation TOCTOU remediation candidate. Locally combine protected read-only PR124 c30f246409a77080cbc03aef6c4cb72b5481e125, PR135 e38788d6677082138f0990453c7d2f00549666d0, H5 PR139 b4fa672f97592e87682671454e868a92098cbd56, PR140 and mock G5 T13 for end-to-end offline proof, WITHOUT editing original branches/worktrees/H5/G5/G3 files. Resolve / precisely block absent account-credential expiry reader, provider-aware T10 and H5 owner route, and cover revoke-after-claim-before-redeem/HTTP; never bypass true actor/T13. All real Auth/Meta/X/Supabase calls, permissions changes, DB apply, feature flags, Edge deploy, merge, external Threads post forbidden. Keep static connect/publish/app gates false. No H5 allocation, H1-H4 review only at joined Auth/DB/publish release boundary; stop if dirty worktree/overlap. K4 returns here.
-- recommended_model: Opus5.5（高）
+- allocation: K4 2026-10-12 PASS_SOURCE_CANDIDATE / GO_SOURCE_ONLY / BLOCKED_REAL_PILOT. Verified [Draft PR144] head d4a1e87b77d1fbd362dc51809ce2d998afda15ea, OPEN/DRAFT/UNMERGED, 1 commit/24 scoped G4 paths stacked on protected PR140 2e75a6a842e70f3de78558681803b60935fb4251; all other protected PR124/135/139/121 unchanged. G4 reports disposable PG17 negative release tests, simulated integrated 176 Deno, focused 93, app258 PASS; ChatGPT reviewed source/SQL/PR, did not independently rerun tests or real managed Auth/Vault/Meta. P1 claim+service_role redeem replaced with JWT-scoped HMAC attested transactional release SQL candidate, credential custody candidate and disabled Connect UI, WITHOUT claiming live risk resolved. Critical cross-provider Auth/RPC/role/custody code gets ONE focused independent H3 Sol（高） security review; G4 done and slot freed, no new G4 work pending C3 outcome. Both connect and publish server/mobile gates remain false; actual Threads connection/post, PR merge/deploy/prod DB apply/GRANT/keys not authorized. Meta tester and G5 real T13/T10/H5 owner transport missing. Historic G4 report preserved; G5/G3/G6/H4 and all other slots unaffected.
+- recommended_model: Opus5.5（高） (completed K4)
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: in_progress
-- task_id: common-account-phase3h-local-oss-keycloak-safe-pilot-20261011
+- status: review_required
+- task_id: common-account-phase3i-local-findings-safe-lifecycle-plan-20261012
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 accepted Phase3g source-only feasibility and freed G5. User 2026-10-11 「すすめて」 expressly chooses next no-photo-downtime local OSS pilot. G5 Phase3h on isolated dedicated worktree/Podman resources, local Supabase OSS + Keycloak with 2-3 fake users and limited E2/E3/E5/E8/E9 evidence; new docs/test fixtures only, new Draft PR. No production or managed Supabase, no Auth0/real credentials/users, no family photo stop, no SQL direct delete E11, no paid actions, no app/DB/Auth/RPC/Edge deploy/merge. Preserve PR121/122/128/130/134/137 and other slots. LOCAL evidence not managed proof; IDP_PREPAUSE_BLOCKED persists. Return K5 for evaluation.
-- recommended_model: Sonnet5（高）
+- allocation: User 2026-10-12「おk すすめて」 approved next G5 Phase3i bounded LOCAL-OFFLINE account lifecycle containment design and synthetic regression tests based on Phase3h F1/F2/F3/F4/F6/F7. Opus5.5 high. New G5 independent worktree, new docs/tests only, optional new Draft PR; older G5 Draft PRs #121/#122/#128/#130/#134/#137/#146 remain unchanged. Other G/H TASK and worktrees protected. No managed Supabase, real auth/prov, photo pause, live DB/Edge, migration, Option D/E11, paid action, merge/deploy. IDP_PREPAUSE_BLOCKED and managed_auth_delete BLOCKED. Return K5.
+- recommended_model: Opus5.5（高）
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: in_progress
-- task_id: common-ai-provider-g6-phase1g-one-paid-call-ledger-smoke-20261011
+- status: ready
+- task_id: common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012
 - start_code: G6
 - finish_code: K6
 - next_owner: claude
-- latest_result: KEY_COMPAT_VERIFIED_NO_SOURCE_CHANGE / WAIT_HOLD_RELEASE_AND_USER_SETUP — production market-report-analysis has used sb_secret in apikey+Bearer for service_role-only RPCs since 9/17 (claims passed on 10/2 and 10/5 in prod); the smoke refuses before any paid call if the ledger RPC is rejected. No live call, no ledger RPC, paid calls 0. Report: .agent/tasks/CLAUDE_TASK_6.md
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
-- report: .agent/tasks/CLAUDE_TASK_6.md#report
-- live_smoke_gate: K6_CONDITIONAL_RELEASE — user Anthropic workspace $10 cap and scoped 0600 key saved; obtain temporary user-owned sb_secret, plan, one fail-closed live smoke only. If ledger probe rejects new secret, 0 paid calls, STOP. No retry. Previous HOLD_SB_SECRET_COMPAT — NEW sb_secret key with Authorization Bearer in ledger_guard.ts may fail JWT verification; user key creation and live smoke WAIT pending G6 offline compatibility check / narrow fix. User can complete Claude Console workspace setup. See G6 TASK safety hold.
-- production_mutation_window: RESERVED_NOT_ACTIVE (one paid Claude smoke with only ai_ledger RPC reserve/mark_sent/settle. G5-first and other-writer ACTIVE windows block; CAS open immediately prior, CLOSED immediately after)
-- user_authorization: 2026-10-11 「じゃあ進めて」 — approved ONE real Anthropic Opus 5.5 paid test with fixed synthetic payload and live Supabase budget ledger verification; not a broader production provider/cutover authorization.
-- allocation: prior Phase1f source/DB PASS, K6 accepted, now G6 Phase1g. Verify dedicated Claude Console workspace $10/month cap + scoped key, ephemeral user-managed Supabase secret test key, no secrets logged; plan=PASS then strictly ONE `--mode=live --ledger=supabase --confirm=ONE_PAID_CALL`, allowed hosts only and <$0.05 upper-bound, no retry or fallback. Independently read-back usage/cost delta and revoke ephemeral key; unexpected provider/safety/auth/conflict => STOP, no workaround. No Supabase Edge Secret/Edge/Cron/other migration/G2 release/PR merge. Past G6 TASK + Report preserved in own TASK. Return K6 only to this common-AI chat.
+- report: .agent/tasks/CLAUDE_TASK_6.md#report--phase2a
 - recommended_model: Opus5.5（高）
+- latest_result: K6 Phase1g PASS; ONE Opus5.5 paid smoke, ledger reservation1/usage1/open0, user-confirmed temporary secret revocation and ledger.env removal. Prior TASK done/none, safely preserved in G6 TASK history. OLD index stale in_progress corrected.
+- allocation: Phase2a source-only common AI provider adapter and synthetic fixture/fake-ledger tests; new G6-only independent Draft PR. No changes to G2 scalable morning/close notification pipeline, PR143, G5 Auth, G8 news, G9 model evaluations, other G/H slots.
+- production_mutation_window: FORBIDDEN (offline-only). No external paid calls, actual market report generation, Edge secrets, DB migration, Cron, deploy, merge or cutover.
 ## Claude G7
 - owner: claude
 - slot: claude-7
@@ -199,28 +197,28 @@
 - owner: claude
 - slot: claude-8
 - status: ready
-- task_id: news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011
+- task_id: news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012
 - start_code: G8
 - finish_code: K8
 - next_owner: claude
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_8.md
 - report: .agent/tasks/CLAUDE_TASK_8.md#report
-- allocation: USER EXPLICIT G8はニュース改善A専任。前TASK `news-improvement-a-pr129-f1-f9-remediation-g8-20261011` K8はCHANGES_REQUIRED：PR129修正984eeb41を確認、F1〜F6/F8の修正あり。F7の10分単位rotationは毎時起動3候補では同じ2候補に固定されるため、G8へ狭いR2是正を再割当。F9 guarded PATCHのstatus/content_hash/判定競合と残留no_post等の方針を確認。PR129 Draft、PR116固定本番と他slotを保護。K8で本チャットへ返却。G9/API-Bは不干渉。
+- allocation: USER EXPLICIT ニュース改善Aの専任G8。H4/C4のP1×1・P2×2独立レビュー指摘だけをPR129へ実装するR3 TASK。決算短信の折返し表をfail-closed、本文更新後の古い判定保存を原子的CASで防止、FOMC声明の過去判断と現在判断を正しく分離。前のR1/R2実装・Report保全、PR129 Draft維持、merge/deploy/本番変更なし。C4レビューは完了、次のK8で確認。G9その他枠は非干渉。
 - recommended_model: Opus5.5（高）
 ## Claude G9
 - owner: claude
 - slot: claude-9
-- status: ready
+- status: done
 - task_id: api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011
 - start_code: G9
 - finish_code: K9
-- next_owner: claude
+- next_owner: none
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_9.md
 - report: .agent/tasks/CLAUDE_TASK_9.md#report
-- allocation: USER EXPLICIT G9=API最適化B専任。他のG/H・別案件へ引継禁止。R2外部送信権利ゲートはK9でPASS_OFFLINE、ブランチ65c95589。次のB工程は既存PR115に第三者本文18件を含む問題の改善として、fresh main起点の**履歴の綺麗な新規Draft PR候補**の再構築（PR115/旧ブランチの変更・close・force-push・merge/本番使用なし）。G9はB専任維持、R3完了時K9返却。
-- recommended_model: Opus5.5（高）
+- allocation: USER EXPLICIT G9=API最適化B専任。K9 2026-10-12 **PASS_OFFLINE_BRANCH_READY / PR_NOT_CREATED / RELEASE_HOLD**。新規Bだけのclean-historyブランチ `claude/b-provider-compare-rights-safe-20261012` commit `c476ef8a` に129新規ファイル、旧本文入り `cases.json` なし。G9報告302 PASS/1 ignored。Draft PR作成はClaude安全機構により拒否、無理に回避せずユーザー作成待ち。TDnet見出し3件の本文重複/旧PR115 Git refsの本文/元main既存重複2ファイルは別の判断事項。PR115/本番/外部AI利用は未変更、merge/deploy不可。新TASK未割当、他案件に転用禁止、G8その他枠不干渉。
+- recommended_model: Opus5.5（高） (completed)
 ## Claude G10
 - owner: claude
 - slot: claude-10

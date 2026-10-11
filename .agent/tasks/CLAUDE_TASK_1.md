@@ -1,3 +1,51 @@
+# G1 CURRENT TASK — ポートフォリオ／ウォッチリスト iOS Simulator最終確認 — 2026-10-12
+
+- task_id: kabumori-g1-portfolio-watchlist-simulator-qa-20261012
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: normal
+- task_type: iOS Simulator QA / read-only regression
+- recommended_model: **Sonnet5（中）**
+- start_code: G1
+- finish_code: K1
+- return_to: かぶモリアプリG1のちゃ
+- baseline: PR #142 squash-merged commit `4d0d0660831c1bf7403a908592c337c284332cdf`; verify current origin/main, never assume local checkout is current
+- EAS_TestFlight_AppStore_production_deploy: prohibited
+
+## Goal
+Verify merged portfolio, watchlist and stock-detail screens in an **independent G1 iOS Simulator**. This is QA first, not a feature redesign. Preserve user's portfolio, actual tracked_stocks and reports; do not edit/add/remove any real account data.
+
+## Before starting
+1. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, current G1 TASK/Report, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`; check fresh origin/main, status/task_id/next_owner and overlapping PRs/worktrees.
+2. Use a NEW isolated G1 worktree or checkout based on fresh origin/main, not shared `kabumori-fresh` directory or another slot's worktree. Do not stop/restart other slot's dev servers. Detect port use; choose isolated port.
+3. Read actual app navigation and tests before planning smoke steps. Prefer existing Simulator setup; do not request password, OTP or tokens in chat.
+
+## QA matrix
+- 375pt and 402pt iPhone Simulator layouts when available; note concrete device names/iOS versions. If device/runtime cannot be used, report NOT_RUN explicitly, never invent a result.
+- Verify lower NativeTabs remain exactly ホーム／銘柄／ニュース／レポート／メニュー. Watchlist is a switch within 銘柄, NOT a sixth tab.
+- Portfolio↔watchlist switching; cards/list, registered counts (including watchlist featured-vs-remaining logic), scroll, search linkage.
+- Registered stock tap→read-only stock-detail→editor link→back to originating portfolio or watchlist. Check back navigation and duplicate screens.
+- Saved price's **as-of date**; never imply a real-time quote. Missing data shows `—`, not invented zero.
+- PR #142: during focus reload/refresh valuations & impact/top3/asset total are withheld until current registration+report generation has settled; loaded matching holdings regain value; stale or changed fixture registration mismatches withhold P/L, asset totals and relevant impacts; old network response does not overwrite newer.
+- For safety, simulate edit/save/remove/mismatch ONLY against a local fixture or disposable synthetic account with no production data writes. For real account, strictly read-only inspection, if legitimately already authenticated. Do not modify real holdings for test.
+- Compare screenshot behavior with merged spec; distinguish verified, not verified and known limitations. No use of paid APIs, real financial writes, EAS build, TestFlight, App Store or production configuration.
+
+## Deliverables & acceptance
+1. Simulator QA report: test matrix with PASS/FAIL/NOT_RUN, screenshots **only synthetic fixtures**, device width, route, outcomes; no real account portfolio screenshots committed/shared.
+2. Run available focused regression and app suite on clean merged baseline, `tsc --noEmit` and diff check where appropriate. Record **actual** commands/counts; pre-existing CSS type errors distinguished.
+3. If a bug appears, document exact reproduction, impact, proposed narrowly scoped change and overlapping files; do NOT silently expand scope or change production data. Fix only isolated low-risk G1 UI issues if safe and clearly attributable, with focused tests; otherwise report `CHANGES_REQUIRED` and wait for ChatGPT scope judgment. Do not alter G2 report generation/new delivery, G5 Auth, DB/RLS/RPC/Edge, bottom navigation tab structure, unrelated designs.
+4. Prefer **no product changes** if QA passes. Do not create or merge a PR for QA-only; do not self-merge, deploy or build EAS. Update only G1-owned TASK/Report and G1 index/current-state references after safe nonconflicting checks; preserve historic Report below.
+5. Final Report includes task_id, result, actual changed_files, tests, Simulator dimensions/steps, commit/push/PR/merge/deploy status, remaining_issues, safety_checks, next_recommendation. End with `かぶモリアプリG1のちゃ へ K1 を送ってください。`
+
+## Report — current task
+Pending Claude G1 execution. Do not mark PASS before actual verification.
+
+---
+
+# Archived G1 TASK / Report (preserve history)
+
 # G1 CURRENT TASK — ポートフォリオ保有登録変更後の古い評価額・損益保留 — 2026-10-11
 
 - task_id: kabumori-portfolio-holdings-stale-valuation-guard-20261011

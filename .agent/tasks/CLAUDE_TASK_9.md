@@ -3,8 +3,8 @@
 - task_id: api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011
 - owner: claude
 - slot: claude-9
-- status: ready
-- next_owner: claude
+- status: done
+- next_owner: none
 - start_code: G9
 - finish_code: K9
 - return_to: ニュース改善API最適化のちゃ
@@ -60,20 +60,81 @@ G9 R2のK9は `PASS_OFFLINE / EXTERNAL_CALLS_RELEASE_HOLD`。G9既存branch
 - このTASK末尾 `## Report` に result, changed_files, tests, ancestry_checks, rights_checks, commit_hash, push, PR, merge, deploy, remaining_issues, next_recommendation, return_to を残し、**`K9` を「ニュース改善API最適化のちゃ」へ**返す。
 - 同時に別案件やA/G8の進行・レビューはしない。
 
+## K9 evaluation — ChatGPT, 2026-10-12 JST
+
+- verdict: PASS_OFFLINE_BRANCH_READY / PR_NOT_CREATED / MERGE_AND_EXTERNAL_RELEASE_HOLD
+- verified: G9 Report checked, remote branch `claude/b-provider-compare-rights-safe-20261012` exact `c476ef8a5c5a0294c3df8e4fefebc8722f2e1102`, sole parent `1a4b5f3802982853ecd79abb4bf3b977c678c36e`, main-derived single commit / 129 B-only newly added files. GitHub recursive tree not truncated, no `tools/provider-compare/fixtures/cases.json`. `cases.rights_safe.json` 22 cases: 2 with body, 20 with no body; `body_licences.json` entries=[].
+- self_reported_tests: Deno 302 PASS / 1 ignored (legacy private input test; G9 says private rerun PASS), type/lint/diff/secret scans. ChatGPT did not execute Deno locally or independently scan private original 18 article bodies.
+- required_remaining: G9's scanner reports three TDnet titles matching original article body starts (>=40 chars). G9 also reports two other **existing-main** files with overlapping original texts; neither belongs to this G9 task, and no other slot is being tasked automatically. The old PR115 and 3 old branches/refs still contain original text. Rights are unconfirmed. No claim of complete deletion or resolved legal permission.
+- PR: No replacement PR was created because Claude's Create Public Surface operation was rejected by its safety system. ChatGPT has not worked around that gate or created a PR. Manual Draft PR can be opened by user with `https://github.com/anohi-memories/kabumori/pull/new/claude/b-provider-compare-rights-safe-20261012` after deciding how to handle title overlap. Original PR115 remains OPEN/Draft/unmodified. No merge/deploy or vendor API.
+- decision: G9 R3 source branch accepted as offline replacement candidate. Status done, next_owner:none, **G9 remains API最適化B専任**. No automatic further TASK and no review H slot allocated. After a Draft PR exists, decide targeted review/release gate before any merge; never treat a new Draft PR as release authorization.
+
 ## Report
 
 - task_id: api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011
-- result: not_started
-- changed_files: none
-- tests: not_run
-- commit_hash: none
-- push: not_performed
-- PR: none
+- result: PASS_OFFLINE_REPLACEMENT_BRANCH_READY / DRAFT_PR_NOT_CREATED（置き換えブランチは作成・push済み。Draft PR の作成は auto mode の権限拒否で未実施。有料API・実ネットワーク・本番アクセス・PR #115 への操作は0）
+- finished: 2026-10-12 JST
+- return_to: ニュース改善API最適化のちゃ（K9）
+- worktree: `/Users/yuya/Developer/kabumori-g9-clean-replacement`（G9専用の新規独立worktree。旧 G9 worktree・他slotは未操作）
+- branch: `claude/b-provider-compare-rights-safe-20261012`
+- commit_hash: `c476ef8a5c5a0294c3df8e4fefebc8722f2e1102`（親 `1a4b5f3802982853ecd79abb4bf3b977c678c36e` = push 時点の `origin/main` の先頭。1コミットのみ）
+- push: performed（新規ブランチを `origin` へ、`refs/heads/claude/b-provider-compare-rights-safe-20261012` として。既存ブランチへの push・force push なし。この Report は `.agent` の自TASKのみ）
+- PR: **not_created**。`gh pr create --draft` を実行したが auto mode の分類器に「公開面の作成」として拒否された（TASK 本文は Draft PR 作成を許可しているが、実行環境側の許可が無い）。回避は試みていない。作成する場合の作成用URL: https://github.com/anohi-memories/kabumori/pull/new/claude/b-provider-compare-rights-safe-20261012 。PR 本文の案は `docs/model-optimization/G9_R3_CLEAN_REPLACEMENT_2026-10-12.md` の要約と同内容（「PR115の権利安全な置き換え候補。PR115のclose/旧branch削除・GitHub歴史の消去は未承認、mergeも未承認、実AI比較/デプロイなし」を明記する）。PR #115 は OPEN / Draft / head `8f430557` / updatedAt 2026-10-09 のまま（確認済み）。
 - merge: not_performed
 - deploy: not_performed
-- remaining_issues: safe replacement PR preparation; legacy PR115 cases.json+history retains 18 unlicensed bodies.
-- safety_checks: not_started
-- next_recommendation: start G9; complete clean replacement implementation then return K9.
+
+### changed_files（129。すべて新規追加。`tools/provider-compare/` と `docs/model-optimization/` のみ）
+
+- `tools/provider-compare/**`（G9 R2 `65c95589` の最終ツリーから `fixtures/cases.json` だけを除いたもの＋R3 の変更）。R3 での変更: `src/fixtures.ts`（`loadCases()` の既定を `cases.rights_safe.json` に）、`src/fixture_loader.ts`（legacy は `--legacy-file` の私的ファイル必須、`--fixtures-dir`）、`src/cli.ts` / `src/probe_cli.ts`（上記フラグ。legacy+live はファイル読込前に拒否）、`scripts/build_cases.ts` / `build_rights_safe_fixtures.ts` / `fixture_rights_audit.ts` / `phase5_report.ts`（`cases.json` への固定参照を除去、出力はリポジトリ外）、`src/isolation_test.ts`（cases.json の除外を削除）、`README.md`、`.gitignore`（`.local/`）、新規 `src/synthetic_fixtures.ts` `src/body_leak_scan.ts` `scripts/body_leak_scan.ts`。
+- `docs/model-optimization/**`（B の過去文書＋`G9_R3_CLEAN_REPLACEMENT_2026-10-12.md`、`PR115_BODY_REMOVAL_MIGRATION_PLAN` に R3 追記、`G9_R2_...` を同梱）。
+- main 側の既存ファイルの変更・削除は0。
+
+### tests
+
+- `deno test --no-config -A tools/provider-compare/`: **302 passed / 0 failed / 1 ignored**（合計 303 件。R2 の 299 件から、削除/置換 8・追加 12）。ignored の1件は旧18本文の実物を要する検査で、私的ファイルが無い環境では実行されない。手元で私的ファイルを指定して実行し **PASS** を確認した（`PROVIDER_COMPARE_LEGACY_FILE`）。
+- 置換した旧テスト（スキップ・削除で全PASSに見せていない）:
+  - マニフェスト/監査の一致、「旧ファイルから再生成した結果と一致（ドリフト）」、「本文が残らない（24文字窓）」、「ゲート（18件・live・runtime bodies）」→ 合成本文（実物と同じ長さ・ホスト）で同じ実コード経路を通すテストに置換。ビルダーの動作は「合成入力から committed の rights-safe ケースと一致」で検証。
+  - 「本文以外は変わらない」は元ファイルが無く同語反復になるため削除（ビルダーのテストが同じ性質を保証）。
+  - 「評価コードの版が PR #115 基点と一致」→ 現在の main は PR #116 の変更を含むため「記録された基点/headのどちらか一方に一致（第3の版は失敗）」に変更。意味の低下は「基点のみ許容」→「基点または head を許容」。
+  - 新規: 全 fixture JSON の本文保持ホスト検査（`eval_expansion.json` 本文27件・`eval_nopost_sample.json` 本文9件を含め許可リスト以外が0）、スキャナの陽性対照、実本文確認（私的ファイル時）、台帳レコードで1件のみクリアされる `probe_cli --plan-only` ほか。
+- カバレッジの意味ある低下: 実本文（TDnet 等）を入力にした回帰は、私的ファイルが無い環境では合成本文での検証になる（本文由来の抽出テストは元から公開フィクスチャ側の `tanshin_extraction_test.ts` が自前の合成断片を使用）。
+- `deno check`（全 `src/*_test.ts` と CLI・スクリプト）エラーなし、`deno lint` エラーなし、`git diff --cached --check` 問題なし、シークレット走査（キー形式の正規表現）一致なし。
+
+### ancestry_checks
+
+- `origin/main..HEAD` はコミット1件（`c476ef8a`）。親は `1a4b5f38`（`origin/main`）のみ。
+- `8f430557`（PR #115 head）・`65c95589`（G9 R2）・`96d2aebb`（Phase 5）は **祖先ではない**（`merge-base --is-ancestor` が終了コード1）。`b6020dbb` / `63dba7be` も merge/cherry-pick/rebase していない。
+- `git log HEAD -- tools/provider-compare/fixtures/cases.json` は空。HEAD のツリーに `cases.json` は無い（`cat-file -e` 終了コード128）。旧 `cases.json` の blob `030cd709…` は push 対象オブジェクト（`rev-list --objects origin/main..HEAD`）に含まれない。
+- 旧ファイルは新ブランチの Git index へ一度も stage していない（コピー時に除外）。
+
+### rights_checks
+
+- 旧18本文 vs 新ツリー（`scripts/body_leak_scan.ts`、40文字窓）: `tools/` と `docs/` で **本文の一致 0**。見出し欄（`candidate.title`）の一致 3 件（TDnet の開示タイトルが本文1行目と同一。40–57文字）。
+- 20文字窓の参考値: 見出し 11 件、ほかに `export_cases.sql` の選択条件の英文見出し文字列（1行84文字）と決算短信の定型句（22文字、テスト2ファイル）。長い散文の一致なし。
+- 外部送信ゲート: 空台帳で18件は全経路 blocked。`rights_safe + runtimeBodies(18) + live` は送信不可（合成本文でテスト）。`probe_cli --fixtures legacy` はネットワーク・キー探索・ケース読込の前に拒否。legacy は同梱なし、`--legacy-file` の私的ファイルのみ・オフライン専用。
+- 台帳 `body_licences.json` は空（本物の許諾は追加していない）。
+
+### remaining_issues
+
+1. **Draft PR 未作成**。ユーザーが権限を許可するか、手動で作成（作成用URL上記）。PR 本文には「PR115の権利安全な置き換え候補。PR115のclose/旧branch削除・GitHub歴史の消去は未承認、mergeも未承認、実AI比較/デプロイなし」と下記の残件2・3を明記する。タイトル案: `feat(provider-compare): rights-safe model-comparison harness without third-party bodies (replacement candidate for #115, Draft)`。コマンド: `gh pr create --draft --base main --head claude/b-provider-compare-rights-safe-20261012 --title <上記> --body-file <本文ファイル>`。
+2. **見出し3件**（TDnet 開示タイトルが旧本文1行目と同一、40文字以上）。評価データの従来方針（見出し・URL は保持）に従ったが、不可とする場合は18件の見出しも本文と同じ仕組み（ハッシュのみ・実行時付与）に移す。このブランチでは未実施。
+3. **main にもともとある2ファイルが旧本文と40文字以上一致**（本ブランチは未変更・範囲外）: `supabase/functions/important-news-monitor/company_identity_fixtures.ts`（625窓）、`supabase/functions/market-report-analysis/fixtures/close_2026-09-30_news_rows.json`（57窓）。所有する工程（A/G8 等）の判断が必要。
+4. 旧ブランチ3本（`claude/b-claude-api-compare-20261009`=PR #115、`claude/b-news-eval-prep-20261010`、`claude/g9-fixture-rights-cost-eval-20261011`）と GitHub の `refs/pull/115/head` には旧本文が残る。クローズ・削除・履歴書換・GitHub 側の消去は未承認（このタスクでは達成不可）。
+5. 過去の Phase 2 L0 で18件を含む本文を Anthropic の無料 `count_tokens` へ送っている（開示済み、取り消せない）。
+6. 許諾（TDnet 等の利用条件）は未確認。有料比較・merge・deploy は未承認。
+
+### safety_checks
+
+- 有料API 0 / `count_tokens` 実呼び出し 0 / 本番DB 0 / 実キー 0 / テスト中のネットワーク接続 0（`--allow-net` なしのサブプロセスと mock のみ）。
+- PR #115・#116・#129、他slotのブランチ・worktree・未commit・サーバ、監視Edge Function、Secrets/Cron/モデル/Provider に変更なし。main へのコード push なし。旧 G9 ブランチ（`65c95589`）の更新・force push・履歴書換なし。
+- 開始時確認: `ACTIVE_TASK.md`（G9=ready）・G9 TASK・過去Report・fresh `origin/main`（`60c82a07`、その後 `1a4b5f38` に前進したため rebase して再テスト）・PR #115（OPEN/Draft/`8f430557`）・`tools/provider-compare` と `docs/model-optimization` が main に無いこと・他の open PR（#115 以外はこれらのパスに触れない）。
+- 実行環境の分類器が、PR 作成（公開面の作成）と、その後の1回の `git ls-remote` を拒否した。いずれも回避していない。
+
+### next_recommendation
+
+- K9: ブランチ `claude/b-provider-compare-rights-safe-20261012` の祖先・ツリーを確認し、`PASS_OFFLINE` 判定。再実行: `deno test --no-config -A tools/provider-compare/`（302 passed / 1 ignored）。
+- ユーザー: (a) Draft PR の作成を許可または手動作成、(b) 見出し3件の扱い、(c) PR #115 のクローズ・旧ブランチ削除・履歴の扱いを所有者として決定、(d) `main` 側の2ファイルの扱いを A/G8 へ。いずれも G9 は自動では行わない。
+- A/G8 の作業へは引き継がない。
 
 ---
 
