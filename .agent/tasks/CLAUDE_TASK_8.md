@@ -1,3 +1,55 @@
+# Claude Task G8 — PR #129 R2：K8追加指摘F7の公平性・F9境界確認
+
+- task_id: news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011
+- owner: claude
+- slot: claude-8
+- status: ready
+- next_owner: claude
+- start_code: G8
+- finish_code: K8
+- return_to: ニュース改善API最適化のちゃ
+- recommended_model: Opus5.5（高）
+- allocation: ユーザー専任指定の「ニュース改善A」のG8のみ。ほかのG/H枠・別案件・API最適化B（G9）に触れない。
+- task_type: prior K8 CHANGES_REQUIRED narrowly scoped corrective implementation
+- review_base_pr: https://github.com/anohi-memories/kabumori/pull/129
+- review_base_head: 984eeb41f14257be56ecfc00e9a55fa01d1ee136
+- safety: 本番deploy/PR merge/DB schema/RPC/migration/Cron/Secrets/Provider/モデル変更/有料API/他worktree操作は禁止
+
+## K8評価の理由（完了判定：CHANGES_REQUIRED / RELEASE_HOLD）
+
+- 2026-10-11のG8前TASK `news-improvement-a-pr129-f1-f9-remediation-g8-20261011` は `984eeb41` に6ファイル変更をpush。PR129はOPEN/Draft、未merge。G8が重要ニュース748、抽出29、discovery162等PASSを報告したが、ちゃ自身はローカルテスト未実施。
+- F1〜F6・F8について具体的修正と回帰テストがGitHubに存在する。**F7の時間依存ローテーションに別条件で取りこぼしが残る**ため、K8は最終PASSを出さない。
+- **必ず再現すべき反例**: `fed_statement_enrichment.ts` は `rotation=Math.floor(Date.now()/(10*60*1000))` を `eligible.length` で剰余する。一定の順番の新規FOMC声明が3件、取得上限2、起動が正確に毎時（60分=10分刻み6回）なら `(rotation+6)%3 === rotation%3` となり**毎回同じ2件しか取得せず、3件目を恒久的に保留**する。従来の「rotation:0/1/2」テストだけでは本番間隔を再現していない。実際のCron/呼出頻度はsource・runbook・read-only既存資料から確認し、未確認の本番実行間隔を断定しない。
+- F9について `pending_judgement` かつ本文空の既存候補へのguard付きPATCHという新しい**本番DB更新経路**がPR129に含まれる（まだdeploy無し）。F9の `no_post`, `generation_failed`, `published` 等は未解消。公開済み重複投稿を防ぎ、ステータス・content_hashとbody_summaryの不一致やjudgementとの同時競合を安全に扱えるか独立レビュー要。
+- 旧G8 Report内のF8個別結果記載が欠落し、`## Report` が厳密な見出しになっていない。旧履歴は全文保持し、今回のReportは明確な独立見出しで報告する。
+
+## 今回の実装範囲と検証
+
+1. **F7修正**: 実監視タイミングをsourceで確認し、1時間間隔/30分間隔の合成スケジュール（連続3〜6回）、再起動・cold start、候補3〜4件、上限2件、同一順序、先頭既存/失敗を含めて、有限周期で未処理の全件に処理機会が回ることを検証する。単に10分ずつ手動でrotation引数を増やすテストは禁止。実行間隔と候補数の公約数によるエイリアシングを防ぐ。既存DB上の有効な実行ID/履歴利用が必要な場合はSELECT-onlyのread pathに限り、DB schemaや本番設定変更を勝手にしない。任意周期を保証できない条件は明示。
+2. **F9安全性確認**: Guard付きPATCHが `pending_judgement`・空本文以外を絶対更新しないよう、テストはfetch/DBを完全mockする。選択→同時処理→更新の競合を模擬し、body内容・candidate.content_hash・その後のjudgement/duplicate経路の整合、書込み失敗時の報告・再試行、行状態read-back、二重配信回避を点検する。**欠陥を認めたらPR129内で安全に修正**。スキーマ/RPC/実データ移行を要する場合は禁止事項を守り、別工程が必要な理由と最小安全設計を提示。非pending行は履歴保護のため現段階では変更しない。
+3. **F1〜F6・F8正常系維持**: 前回の修正・合成ケースと実PDFで数値・連結/個別・FOMC文書同一性が壊れていないことを確認。F8ミドルイニシャルの個別Report結果を今回含める。新規レビュー対象はF7/F9と回帰に限定し、他P1を不要に書き換えない。
+4. **PR/安全境界**: PR129だけ更新。G8専用独立worktree/checkoutをfresh origin/mainから確立。旧G8/他slot/G9/API-B/PR116のbranch・worktree・TASKを一切変更しない。PR116は2026-10-13予定の固定コミット専用、PR129混入禁止。BOJ取得未接続、著作権に注意。本番DB読み書き・実Edge呼出・有料AI使用なし。GitHubに先行したPR129更新や対象変更の競合があれば停止。
+5. **テスト**: F7の本番想定固定時刻テストは修正前FAIL→修正後PASS。F9 mockの保存状態（pending/no_post/published/generation_failed）・競合・ハッシュ対応・監査保全のテスト。important-news-monitor全体、Phase6/7/R1、news_discovery/observer等既存suiteをオフライン再実行。実測未実施は未実施と記録。typecheck/lint既存baselineとの比較。
+6. **完了**: 必要な変更だけPR129 branch `claude/news-body-integration-phase7-20261011` にcommit/push、Draft維持、merge/deployせず、F7/F9の残余リスクと再レビューの対象/判定を報告。F9の保留部分をPASS扱いしない。新しいコミットがあればその正確なSHAを記載し、`K8` をこのチャットに返却。追加レビュー担当を勝手に使わない。
+
+## Report — current G8 R2
+
+- task_id: news-improvement-a-pr129-k8-f7-rotation-and-f9-boundary-g8-20261011
+- result: not_started
+- changed_files: none
+- tests: not_run
+- commit_hash: none
+- push: not_performed
+- merge: not_performed
+- deploy: not_performed
+- remaining_issues: F7時刻剰余エイリアシング、F9 guarded PATCHの正当性と既存非pending行の方針
+- safety_checks: not_started
+- next_recommendation: G8で開始し、追加限定修正・テスト完了後K8を返す。
+
+---
+
+## Preserved previous G8 TASK / Report (immutable history below)
+
 # Claude Task G8 — ニュース改善A / PR #129 R1指摘9件の修正実装
 
 - task_id: news-improvement-a-pr129-f1-f9-remediation-g8-20261011
