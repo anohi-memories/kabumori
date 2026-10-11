@@ -210,16 +210,16 @@
 ## Claude G9
 - owner: claude
 - slot: claude-9
-- status: done
-- task_id: api-optimization-b-g9-r2-licenses-and-external-call-gate-20261011
+- status: ready
+- task_id: api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011
 - start_code: G9
 - finish_code: K9
-- next_owner: none
+- next_owner: claude
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_9.md
 - report: .agent/tasks/CLAUDE_TASK_9.md#report
-- allocation: USER EXPLICIT G9=API最適化B専任。K9完了確認で R2 `65c95589` の権利未確認18件の外部API送信ゲートをPASS_OFFLINEとして受理。今回のTASKはdone、次TASK未割当。**G9は引き続きB専任**、他案件のメモ/引継ぎに転用禁止。PR115/旧cases.json/Git履歴の無許諾本文削除/利用条件の確認は別工程、外部AI実送信/有料比較/merge/deployはHOLD。新規B TASKは安全な別途明示割当がある時だけ置く。
-- recommended_model: Sonnet5（高）
+- allocation: USER EXPLICIT G9=API最適化B専任。他のG/H・別案件へ引継禁止。R2外部送信権利ゲートはK9でPASS_OFFLINE、ブランチ65c95589。次のB工程は既存PR115に第三者本文18件を含む問題の改善として、fresh main起点の**履歴の綺麗な新規Draft PR候補**の再構築（PR115/旧ブランチの変更・close・force-push・merge/本番使用なし）。G9はB専任維持、R3完了時K9返却。
+- recommended_model: Opus5.5（高）
 ## Claude G10
 - owner: claude
 - slot: claude-10
