@@ -3,8 +3,8 @@
 - task_id: kabumori-portfolio-holdings-stale-valuation-guard-20261011
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: normal
 - task_type: Kabumori financial presentation integrity / source-only
 - recommended_model: **Sonnet5（中）**
@@ -33,6 +33,18 @@
 - The user explicitly declined old report Oct7–9 close gap repair: do not investigate, fix, backfill or monitor old delivery.
 
 推薦モデル：**Sonnet5（中）**
+
+## K1 FINAL — PR142 source review PASS, implementation complete; merge requires user approval (2026-10-11 JST)
+
+- task_id: `kabumori-portfolio-holdings-stale-valuation-guard-20261011`; **K1 verdict: PASS_SOURCE_IMPLEMENTATION / PARTIAL_NATIVE_QA / NO_MERGE**. Exact reviewed PR [#142](https://github.com/anohi-memories/kabumori/pull/142) head `cfaf5dcf8d24b942988c10acf7a3959c05dba20a` (two commits, OPEN/UNMERGED), initial `5fe4a6e37d6899e9731bd4ca6bc2c4e8e825ed38` plus one focused `cfaf5dcf...` correction. G1's task complete and ready to release its slot.
+- Original 11-file source PR adds deterministic `alignHoldings` to enforce current registration vs saved holdings (role/qty/cost/現物信用/買売 match), suppressing stale holding-row valuation/impact rank and full aggregate on any mismatch; no fictitious prices, preserving independent as-of close where valid. K1 inspected pure view-model logic and three 375pt fixture screenshots. Five bottom NativeTabs and source account/DB/Edge/schema untouched.
+- **K1 temporal bug fix accepted**: incremental compare of exact heads `5fe4a6e3..cfaf5dcf` adds only `src/app/(tabs)/explore.tsx`, new import-free testable `src/lib/portfolio-load.ts`, and `tests/app/portfolio-screen_test.ts`. The screen `sink.begin` invalidates valuation eligibility before pending fetches; `sink.settled(ready)` reopens it only after registrations and reports of the same latest ticket finish. `createLatestLoadGate` prevents old/out-of-order results from re-opening valuations or overwriting current data. During pending load cached holdings may remain listed but unpriced; summary/impact receive unknown registrations; 5 native tabs unchanged, no new network/DB requests.
+- Claude G1 reported targeted fail-before **23 PASS / 3 FAIL** (new screen contract, not a claim the helper tests failed), after-fix **26 PASS / 0 FAIL**, complete Deno app suite **521 PASS / 0 FAIL** (previous 512 + 9), tsc no NEW errors but 2 pre-existing CSS/typing diagnostics remain, `git diff --check` clean; 375pt fixture iOS Simulator six-second network delay confirmed placeholder while pending then recovery. Tests and simulator run were **reported by Claude, not independently executed** by ChatGPT. 402pt real-account edit, physical iPhone, native build remain NOT_RUN. No real holdings edited.
+- GitHub exact PR head still OPEN/non-DRAFT, PR changed-paths 12 = initial 11 + new `portfolio-load.ts`, latest main since PR branch base had **zero overlap** with all PR paths (other main change files confined to `.agent/`), GitHub mergeable=true at last check; status `failure` only because Vercel **deployment rate limited — retry in 24 hours**; Netlify status says deploy preview canceled. Treat CI as **NOT GREEN**, do not invent passed deployment. No EAS/TestFlight/iPhone binary and no production deploy manually triggered; pushes to main may trigger automatic website CI.
+- **Report-failure behavior reviewed**: helper settles true when registrations succeeded but saved reports fetch failed. The existing screen retains last locally cached dated report and displays a report fetch error. This is existing stale-but-dated fallback for the same signed-in app; AuthGate only renders SignedInNavigator when serviceSession ready and unmounts on session change, reducing cross-account cache exposure. **Not a proven cross-user vulnerability, not part of this pure presentation fix**. Future lifecycle/reliability checks may revisit failure caching with deliberate auth-transition tests, but do not allocate a new TASK as a placeholder.
+- **No automatic Codex review**: correction is local read-only UI state and pure helper, no new Auth/DB/RLS/API boundary or production write, no material new scope. K1 accepts without additional review; source PR remains protected and **will not be merged until user separately explicitly authorizes it**. Before merge, refresh main/PR exact head/CI/change overlap and use expected_head_sha guard, never force-rebase other work.
+- G1 current TASK formally `done/next_owner:none` (free for future fresh-status independent worktree allocation); no new TASK reserved. Keep PR142 open intact. Old approach's 10/7–10/9 missing close issue is specifically no-fix/no-investigate per user; new report method cutover belongs solely to G2, not touched.
+- AI Lab diary candidate once merged: 保有内容変更直後に保存済みレポートの古い評価損益を表示しない安全設計を追加。公開時に個人銘柄/資産を示さない。
 
 ## Goal
 
