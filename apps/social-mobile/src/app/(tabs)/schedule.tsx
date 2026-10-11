@@ -33,6 +33,7 @@ import {
 } from '@/domain/schedule-planner';
 import type { PostOrigin, PostStatus } from '@/domain/types';
 import { ScheduleComposer, SmallButton, type AiPlanningInput } from '@/features/schedule/schedule-composer';
+import { createReservationStore } from '@/features/schedule/reservation-store';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useDataStatus } from '@/providers/data-provider';
 
@@ -52,6 +53,8 @@ export default function ScheduleScreen() {
   const brandId = effectiveBrandId({ status, activeAccount });
   const repository = useMemo(() => (supabase ? new SupabaseContentSettingsRepository(supabase) : null), []);
 
+  // Release gate OFF: this is the disabled store; nothing is ever sent from this screen.
+  const reservationStore = useMemo(() => createReservationStore(), []);
   const [filter, setFilter] = useState<UnifiedFilter>('all');
   const [composing, setComposing] = useState(false);
   // Session-only preview plans: kept in memory for this screen, never stored on the device or sent anywhere.
@@ -181,6 +184,12 @@ export default function ScheduleScreen() {
           <Card>
             <Pill tone="warning">{PREVIEW_LABEL}</Pill>
             <Text style={styles.muted}>プレビューは、この画面を閉じたりアプリを再起動したりすると消えます（端末にもサーバーにも保存しません）。実際の予約と投稿は、まだ利用できません。</Text>
+            {!reservationStore.enabled ? (
+              <View style={{ gap: 4 }}>
+                <ActionButton label="予約として保存（準備中）" onPress={() => {}} disabled />
+                <Text style={styles.muted}>予約の保存は、利用登録・Xアカウントの本人確認・安全確認の準備が整うまで使えません。押しても何も送信されません。</Text>
+              </View>
+            ) : null}
             {myBatches.map((batch) => (
               <View key={batch.id} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
                 <Text style={{ color: colors.ink }}>{modeLabels[batch.mode]}（{myDrafts.filter((draft) => draft.batchId === batch.id).length}件）</Text>

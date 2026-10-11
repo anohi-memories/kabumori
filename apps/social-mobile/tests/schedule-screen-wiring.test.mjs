@@ -10,6 +10,7 @@ import * as scheduleView from '../src/domain/schedule-view.ts';
 import * as planner from '../src/domain/schedule-planner.ts';
 import * as dataView from '../src/domain/data-view.ts';
 import * as contentSettings from '../src/domain/content-settings.ts';
+import * as reservationStore from '../src/features/schedule/reservation-store.ts';
 
 const walk = (node, visit) => {
   if (Array.isArray(node)) return node.forEach((child) => walk(child, visit));
@@ -78,6 +79,8 @@ async function scheduleHarness({ status = 'ready', active = 'X_B', rows = {}, ac
       ScheduleComposer: function ScheduleComposer(props) { return { type: 'ScheduleComposer', props }; },
       SmallButton: 'SmallButton',
     },
+    // The real (disabled) reservation store: the screen must never be able to save from here.
+    '@/features/schedule/reservation-store': reservationStore,
     '@/providers/active-account-provider': { useActiveAccount: () => ({ activeAccount: world.accounts.find((a) => a.id === world.active) ?? null, accounts: world.accounts }) },
     '@/providers/data-provider': { useDataStatus: () => ({ status: world.status, reason: null, snapshot: world.status === 'ready' ? { workspace: world.workspaceId ? { id: world.workspaceId } : null, accounts: world.accounts, plannedPosts: [], history: [] } : null }) },
   };
