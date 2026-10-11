@@ -3,8 +3,8 @@
 - task_id: postona-threads-connect-publish-integrated-offline-v1-g4-20261011
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G4
 - finish_code: K4
 - return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
@@ -55,6 +55,20 @@
 - safety_checks: 新しい専用 worktree `/Users/yuya/Developer/kabumori-g4-threads-integration`（`kabumori-fresh` から #140 の正確な head で作成）。#124／#135／#139／#121／#140 のブランチは checkout・rebase・変更・push なし（組み合わせは /private/tmp の使い捨てコピー、重なりチェックつき、終了時に削除）。使い捨て PostgreSQL は自分専用の socket `/private/tmp/g4ti-sock` のクラスタのみ。G6 の本番作業窓とは無関係（本番への読み書き 0）。ACTIVE_TASK は G4 欄の status／next_owner だけを変更。
 - next_recommendation: K4 で GO_SOURCE_ONLY として受け入れ判断。次は G5（T13 本番化・T10）と H5（owner transport・custody の1文・コールバック受け渡し）の小さな TASK、ユーザーの Meta 準備を並行し、揃った時点で Sol（高）の統合レビュー → 承認されたテスター1名・1件のパイロット、の順を推奨。
 - AI Lab diary 候補（公開しても安全な粒度）: 「SNS の接続と投稿を別々に作ってきた部品を、本物どうしで初めてつないで通しで動かしたところ、単体のテストでは見えなかった不具合が2つ見つかった。権限の確認と鍵の受け渡しを1回の処理にまとめる形にも直した。」
+
+## K4 FINAL — 2026-10-12 JST / Threads integration candidate source-only
+
+- task_id: postona-threads-connect-publish-integrated-offline-v1-g4-20261011
+- verdict: **PASS_SOURCE_CANDIDATE / GO_SOURCE_ONLY / BLOCKED_REAL_PILOT / INDEPENDENT_REVIEW_REQUIRED**.
+- exact [Draft PR144](https://github.com/anohi-memories/kabumori/pull/144) **`d4a1e87b77d1fbd362dc51809ce2d998afda15ea`**, OPEN/DRAFT/UNMERGED, 1 commit/24 G4-scoped paths, base protected [Draft PR140](https://github.com/anohi-memories/kabumori/pull/140) branch head `2e75a6a842e70f3de78558681803b60935fb4251` unchanged. Protected Draft #124 `c30f246409a77080cbc03aef6c4cb72b5481e125`, #135 `e38788d6677082138f0990453c7d2f00549666d0`, #139 `b4fa672f97592e87682671454e868a92098cbd56`, #121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44` unchanged at K4. No cross-slot changed-file overlap with H5 PR139 / parent G4 PR140 delta (PR144 modifies only its own stacked G4 paths).
+- accepted **candidate source and mock integration**, not production security assurance: G4-owned release-authorization replacement `threads_publish_release_candidate.sql`, account token custody candidate, H5/PR124 integration test pack, connect/reconnect disabled UI contract, precise dependency runbook. Integration tests use exact protected read-only source candidate copies in disposable environment, G5 T13 mock/contract and provider/Auth fakes. **Source gate still OFF**: server `THREADS_MANUAL_PUBLISH_PREREQUISITES_MET=false`, original connect `THREADS_CONNECT_PREREQUISITES_MET=false`, mobile manual publish / connect flags false, Edge 503. No real Meta/managed Supabase/GoTrue/Vault/POSTONA deployment.
+- G4 Report self-tests (NOT rerun by ChatGPT): local PostgreSQL 17 standalone negative/release + fixture integration scripts PASS, local combined Deno176 PASS, focused Deno93 PASS, app258 PASS, lint/check/diff/secret scan PASS. ChatGPT inspected source candidate and tests, SQL privilege/session/custody components, PR metadata and claimed command/result matrix. Mac worktree, true managed PostgREST/Auth/Vault, real API and tester NOT verified. Vercel rate-limited is not interpreted as successful CI.
+- The previously identified **P1 old service-role voucher gap** is addressed **as a source proposal**: old claim/redeem/record functions DROP, new caller JWT-scoped release requires server HMAC attestation, fresh T13 G5 fence/session, membership/account/custody/consent check, one-shot nonce/transactional Vault read. Do not assert end-to-end security proof until independent H4 review and real owner/auth authority design. SQL transaction cannot protect already-released provider HTTP request against later revocation; a bounded race remains and must be explicitly assessed/accepted or further mitigated. Record factual post outcomes even after permission revocation.
+- Cross-system release blockers: #121 G5 T13 real managed service fence and provider-aware T10 cleanup of four new G4 tables; H5 production owner SQL connection and role/session privileges, one-source additional account-scoped custody write in verified OAuth completion; real mobile HTTPS callback, Meta Threads app/basic/publish scopes/tester, Vault key custody/attestation, targeted preflight + migration ordering/rollback and auth/race proof. User has NOT approved real test posting or production source/database changes. No public post, PR merge, deploy, secrets, grant, applied migration, EAS, charges or external provider calls in this K4.
+- G4 slot **done / next_owner none**. Historic task and current G4 Report preserved unchanged below; no G5/H5/G3/etc TASK edits. Independent focused **H4 Sol（高）** source-level review of real high-risk SQL/RPC/HMAC/GoTrue/G5/H5 boundary assigned separately (H4 no implementation). Return C4 here. Any H4 findings requiring edits => new explicit narrow G4 TASK, not review loops for UI. H5 remains free and reserved only for user-authorized temporary implementation.
+- AI Lab diary: public-safe summary possible about mock end-to-end, security-focused integration and two caught defects, avoiding any launch/secret claims.
+
+---
 
 ## Why this is the next stage
 
