@@ -3,8 +3,8 @@
 - task_id: kabumori-pr110-p2-final-narrow-review-20261011
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - start_code: H2
 - completion_code: C2
 - return_to: かぶモリアプリG2のちゃ
