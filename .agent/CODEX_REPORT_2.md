@@ -1,3 +1,114 @@
+# H2 — PR #110 P2 final narrow boundary review — 2026-10-11 JST
+
+- task_id: kabumori-pr110-p2-final-narrow-review-20261011
+- result: **CHANGES_REQUIRED**
+- findings: **R1 / P1 — new deterministic Hard-Fact fail-open for omitted adjective predicates**. Twenty failed matrix probes are ONE defect, not twenty independent findings.
+- status: review_required
+- next_owner: chatgpt
+- return_to: かぶモリアプリG2のちゃ
+- completion_code: C2
+- recommended_model: Sol（高）
+- exact_reviewed_head: `2c876b0bafee31844b9854c4a7d34ba69660d4cf`
+- earlier_negative_control_head: `cb3d77d50e848d043f5427df363769b75d3c7764`
+- fresh_origin_main: `dd1a5b0c8c22ae7e8ef4c53cee1cb3ba6f354327` at startup and publication preflight.
+- PR110 independently read back OPEN / UNMERGED / exact pinned head; mergeable=true at final read, but source merge NOT permitted and safety verdict blocks recommendation.
+- isolation: NEW independent clone `/private/tmp/h2-pr110-final-20261011.N1xmpa`, detached exact head; old-head control in own `/private/tmp/h2-pr110-final-20261011.N1xmpa-old`. No previous G/H/B checkout reused. Formal base main and pre-existing `?? supabase/.temp/` preserved.
+- reviewed_delta: exactly THREE files (59 insertions / 6 deletions): `supabase/functions/market-report-analysis/analysis_logic.ts`, `hard_fact_guards.ts`, `h2_corrective_test.ts`.
+- scope_collision_check: actual merge-base `07f08019e30ebc45804fe75d5985ae52669a8ef8`; all 27 PR paths vs current main changes have ZERO intersection. Other owner slots remain untouched.
+- changed_files_by_H2: ONLY own Report, current H2 TASK status/next_owner, H2 section of ACTIVE_TASK; historical Report/TASK suffix unchanged. Product source edits ZERO.
+- implementation_commit: none (review-only); publication commits recorded after actual GitHub read-back below.
+- merge: NOT_RUN / HOLD
+- deploy: NOT_RUN
+
+## R1 [P1]: finite adjective allowlist lets later unrelated speculation qualify an asserted unsupported cause
+
+Changed location: `supabase/functions/market-report-analysis/hard_fact_guards.ts:233–234`; consumer `analysis_logic.ts:624–625`; consequence `analysis_logic.ts:585–597`.
+
+Exact input (public fixture + synthetic text, no real API):
+> ウクライナ情勢の影響で東京市場の戻りは緩いが今後の企業業績は改善する可能性があります。
+
+The first clause ASSERTS that Ukraine caused Tokyo's weak rebound; the later statement about future company earnings is merely a possibility and does NOT qualify that cause. The fixture has no grounded evidence for this asserted cause.
+
+`PREDICATE_END` omits `緩い`, `脆い`, `きつい`, `しつこい`. Therefore CLAUSE_BOUNDARY fails to split their comma-free conjunction, clauseOf includes the unrelated future hedge, and causalVerdict returns speculative instead of assertive. This is a NEW regression, NOT just an acknowledged theoretical limitation.
+
+| Same input + same generate/Fact mock | Earlier cb3d77d5 | Current 2c876b0b |
+| --- | --- | --- |
+| Local verdict | assertive | speculative |
+| Outcome | ok=true, unsafe sentence removed | ok=true, unsafe sentence kept |
+| X formatted payload contains unsafe sentence | false | true |
+| app_story contains unsafe sentence | false | true |
+| Business call sequence | generate → generate → fact | generate → fact |
+
+The mock Fact responder returns passed=true to independently test the deterministic guard contract; this proves actual generated-payload eligibility, NOT any real model or production incident. A model might identify the problem, but relying on it does not preserve the existing deterministic Hard-Fact guarantee.
+
+Independent matrix: four omitted predicates × five comma-free conjunctions (`が / けれど / ので / ため / ものの`) = **20/20 unsafe cases retained on new head**; all were correctly excluded on old head. Recognized `弱い / 重い` × same five conjunctions = **10/10 safe exclusion controls PASS** on both heads.
+
+Requested correction (G2 only): ensure a hedge only qualifies its own causal clause, without making safety depend on a finite positive adjective list. Preserve genuine noun+subject speculation and emoji date binding; adding only the four observed words does not address unknown-adjective fail-open. Add these independent negative delivery controls and normal controls as regressions. No relaxation of Fact thresholds, no extra calls or wider feature redesign authorized. H2 made NO product correction.
+
+## Accepted behavior retained / focused tests actually executed
+
+- Original P2 exact 勢いが correction now PASSES existing full mocked generation → Fact → X test without regeneration.
+- Independent qualified noun controls `勢い / 思い / 狙い / 違い / 戻り`: all five remain speculative and present in BOTH mocked X/app delivery, calls exactly generate/fact (2).
+- Independent emoji after those five noun fragments: wrong-date numeric binding preserved, all five PASS. Complete predicate + emoji + next dated sentence still splits without false rejection.
+- Earlier accepted B1-R1 span coverage/objective removal, B2-R1 three date/subject/emoji shapes and B3-R1 original conjunction controls pass the narrow corrective suite. No reopening of the seven accepted residual findings.
+- MAX_GENERATIONS=2 / MAX_MODEL_CALLS=4 unchanged; all independent runs enforce both bounds. Transport source byte-unchanged from old head; narrow transport budget tests preserve two per-call extra attempts, three total retries, 30s wait budget and 20s Retry-After cap.
+
+| Independently executed suite | Result |
+| --- | --- |
+| h2_corrective_test.ts | **21/21 PASS** |
+| delivery_first_test.ts | **19/19 PASS** |
+| transport_retry_test.ts | **14/14 PASS** |
+| Narrow existing total | **54/54 PASS** |
+| Own adversarial harness, exact current head | **22 PASS / 20 FAIL** (one R1 defect) |
+| SAME harness, old-head negative control | **34 PASS / 8 expected old failures** (four noun-subject + four noun-emoji failures fixed by current commit); ALL 30 unsafe-cause controls PASS |
+| Deno check analysis_logic.ts + hard_fact_guards.ts | PASS |
+| Strict Deno lint three corrective files | PASS |
+| git diff --check cb3d77d5..HEAD / tracked source status both heads | PASS / clean |
+
+No broad 1,340-test rerun: deliberately obeyed this TASK's ONE narrow review scope. G2's 1,340/1,340 remains G2-reported historical evidence, not this H2 run. Transport test mocks emit expected GENERATION_TRACE_WRITE_FAILED warnings because fake trace DB is absent; suite exits 0, no real DB access.
+
+## Reproduction (C2-readable; no dependency on local attachments)
+
+Commands:
+```sh
+deno test --no-config --no-check --allow-read --allow-env supabase/functions/market-report-analysis/h2_corrective_test.ts supabase/functions/market-report-analysis/delivery_first_test.ts supabase/functions/market-report-analysis/transport_retry_test.ts
+deno test --no-config --no-check --allow-read /private/tmp/h2-pr110-final-20261011.N1xmpa-probes.ts
+deno test --no-config --no-check --allow-read /private/tmp/h2-pr110-final-20261011.N1xmpa-probes.ts -- /private/tmp/h2-pr110-final-20261011.N1xmpa-old
+```
+
+Portable minimal reproduction from either exact-head checkout (scratch file ONLY, not product source):
+```typescript
+import assert from "node:assert/strict";
+import { generateSharedAnalysis, localAnalysisCheck, parseGeneratedAnalysis } from "./supabase/functions/market-report-analysis/analysis_logic.ts";
+import { inputOf, loadFixture } from "./supabase/functions/market-report-analysis/test_support.ts";
+import { formatSharedXPost } from "./supabase/functions/_shared/market_report_packet.ts";
+const input = inputOf(await loadFixture("close_2026-10-07"));
+const generations = JSON.parse(await Deno.readTextFile("./supabase/functions/market-report-analysis/fixtures/close_2026-10-07_generations.json"));
+const a = parseGeneratedAnalysis(structuredClone(generations.find((g: any) => g.attempt === 2).candidate))!;
+const s = "ウクライナ情勢の影響で東京市場の戻りは緩いが今後の企業業績は改善する可能性があります。";
+a.x_post.context_ja += s;
+a.app_story!.news_ja += s;
+console.log(localAnalysisCheck(a, input));
+const calls: string[] = [];
+const out = await generateSharedAnalysis(input, async (step) => {
+  calls.push(step);
+  return { payload: structuredClone(step === "generate" ? a : { passed: true, issues: [], objective_issues: [] }), inputTokens: 1, outputTokens: 1 };
+}, () => new Date("2026-10-07T07:20:00Z"));
+console.log({ ok: out.ok, calls, retained: out.ok && formatSharedXPost(out.packet).includes(s) });
+assert.ok(!out.ok || !formatSharedXPost(out.packet).includes(s), "Unsupported asserted cause must not survive");
+```
+Expected: assertion fails at 2c876b0b, passes at cb3d77d5. No --allow-net; callbacks mocked.
+
+## Safety / next recommendation
+
+- safety_checks: source/code0; PR source push0; merge0; deploy0; Supabase/DB/migration/RLS/RPC0; Cron/settings0; OpenAI/X/Push/provider real calls0; real X posts0; secrets/OAuth/Vault0; user data access0.
+- H1/G1–G5 source/TASK/Report, apps/admin, HANDOFF, existing uncommitted changes and all other servers/worktrees untouched.
+- remaining_issues: **one blocking R1/P1 safety regression**. Normal-noun P2 fixed; standard passing tests do not erase the unsafe negative proof. No production occurrence inferred.
+- next_recommendation: C2 to **かぶモリアプリG2のちゃ**. G2 makes only a bounded predicate/clause safety correction (recommended **Opus5.5（高）**) with these controls; later ONE focused **Sol（高）** exact-head review. No merge or production release authorized.
+- control_sync: publication attempted via fresh guarded Contents CAS; exact commits and origin/main read-back recorded in receipt when confirmed.
+
+---
+
 # H2 — E11 Option D disposable実験前・独立セキュリティレビュー — 2026-10-10 JST
 
 - task_id: common-account-phase3d-e11-optiond-disposable-security-review-20261010
