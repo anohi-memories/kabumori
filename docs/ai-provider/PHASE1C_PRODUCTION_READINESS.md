@@ -6,6 +6,8 @@
   - 本番DBの変更、migration 適用、Secrets の追加・変更・値の取得、実 Claude API 呼び出し、deploy、モデル切替、merge は**していない**
 - 本書のコマンドは、すべて**ユーザーが承認したうえで、ユーザーの端末で実行する**前提で書いている
 
+> **2026-10-11 Phase 1d で更新:** 本番適用・接続テストの実行手順は `docs/ai-provider/PHASE1D_ACTIVATION_RUNBOOK.md` を正とする。本書の §9 の個別コマンドは、1d の runner（`supabase/tests/ai_provider_budget_ledger_rollout.sh`）に置き換えた。§10 の段階2 は 1d の smoke スクリプトで実装した。事前チェックの予測は 1d で一般化した（SET で中継したロールが継承する権限まで判定する）。
+
 ## 0. 結論
 
 1. **コードは接続準備まで済んでいる。** ただし、共通 Provider を読み込む Edge Function はまだ1つも無い（`isolation_test.ts` が保証）。キーを登録しても、今の本番の動作は何も変わらない。
@@ -145,7 +147,7 @@ supabase secrets list --project-ref wsmznyzcvmuitkglfeuj
 - `supabase/tests/ai_provider_budget_ledger_preflight.sql`
   - カタログと migration 履歴だけを読む SELECT 1文。表の中身・個人データ・秘密情報は読まない
   - migration の事後検証が本番で**拒否するかどうかを事前に予測**する
-- `supabase/tests/ai_provider_budget_ledger_preflight_check.py`
+- `supabase/tests/ai_provider_budget_ledger_gate.py`（1d で改名。`preflight` サブコマンド）
   - 上の出力から事実だけを表示し、`READY_TO_APPLY` / `NOT_READY` を判定する
 - ローカル（PG17、superuser ではない所有者）での検証では、**予測と migration の実際の判定が7ケースすべてで一致**した
   - 拒否されるケース（4件）: pg_read_all_data への SET、anon → service_role の SET、SET の連鎖、ほかのロールへの既定権限
@@ -197,7 +199,7 @@ supabase secrets list --project-ref wsmznyzcvmuitkglfeuj
 - 組織の利用上限は暦月の1日にリセットされる。クレジットは請求サイクルで補充されるため、両者の区切りは一致しない
 - **紐づけ・残高・有効期限は未確認。$100 を予算として前提にしない。**
 
-### 8.2 台帳のポリシー（`docs/ai-provider/phase1c_initial_policies.sql`。未適用）
+### 8.2 台帳のポリシー（`supabase/tests/ai_provider_budget_ledger_initial_policies.sql`。未適用）
 
 | policy_key | 範囲 | 期間 | 上限 |
 |---|---|---|---|
@@ -236,7 +238,7 @@ supabase secrets list --project-ref wsmznyzcvmuitkglfeuj
 1. **事前チェック（読み取りのみ）:** 判定が `READY_TO_APPLY` であることを確認する。`NOT_READY` なら中止し、表示された理由を共有する
 
 ```bash
-supabase db query --linked --project-ref wsmznyzcvmuitkglfeuj --output-format json -f supabase/tests/ai_provider_budget_ledger_preflight.sql | python3 -I supabase/tests/ai_provider_budget_ledger_preflight_check.py
+supabase db query --linked --project-ref wsmznyzcvmuitkglfeuj --output-format json -f supabase/tests/ai_provider_budget_ledger_preflight.sql | python3 -I supabase/tests/ai_provider_budget_ledger_gate.py preflight
 ```
 
 2. **窓を開く:** ChatGPT が CURRENT_STATE に「共通AI基盤 ledger apply ACTIVE（対象: schema ai_ledger と public.ai_ledger_* だけ）」を記録する。
@@ -263,7 +265,7 @@ supabase db query --linked --project-ref wsmznyzcvmuitkglfeuj "insert into supab
 ```
 
 6. 読み戻しをもう一度行い、`history_row = 1` を確認する。窓を CLOSED にして、G5 に共有する。
-7. **ポリシーの登録（書き込み・別の承認）:** Console の確認と金額の承認が済んでから、`docs/ai-provider/phase1c_initial_policies.sql` を適用し、読み戻しで `budget_policies = 2` を確認する。
+7. **ポリシーの登録（書き込み・別の承認）:** Console の確認と金額の承認が済んでから、`supabase/tests/ai_provider_budget_ledger_initial_policies.sql` を適用し、読み戻しで `budget_policies = 2` を確認する。
 8. **回復処理の Cron（書き込み・別ゲート）:** Phase 2a を本番で動かす前に設定する。
    - pg_cron で `select public.ai_ledger_recover_stale('{}'::jsonb)` を数分ごとに実行する
    - 所有者権限で動くので、HTTP もキーも不要
@@ -333,7 +335,7 @@ supabase db query --linked --project-ref wsmznyzcvmuitkglfeuj "insert into supab
 | ファイル | 種類 | 本番での扱い |
 |---|---|---|
 | `supabase/tests/ai_provider_budget_ledger_preflight.sql` | 読み取り専用 SELECT | 事前チェック（§5.2） |
-| `supabase/tests/ai_provider_budget_ledger_preflight_check.py` | 判定スクリプト（stdin の JSON だけを読む） | 事前チェックの判定 |
+| `supabase/tests/ai_provider_budget_ledger_gate.py`（1d で改名。`preflight` サブコマンド） | 判定スクリプト（stdin の JSON だけを読む） | 事前チェックの判定 |
 | `supabase/tests/ai_provider_budget_ledger_readback.sql` | 読み取り専用 SELECT（台帳の行は件数だけ） | 適用後の読み戻し（§9） |
-| `docs/ai-provider/phase1c_initial_policies.sql` | 運用 SQL（書き込み・未適用） | 承認後のポリシー登録 |
+| `supabase/tests/ai_provider_budget_ledger_initial_policies.sql` | 運用 SQL（書き込み・未適用） | 承認後のポリシー登録 |
 | `docs/ai-provider/PHASE1C_PRODUCTION_READINESS.md` | 本書 | — |

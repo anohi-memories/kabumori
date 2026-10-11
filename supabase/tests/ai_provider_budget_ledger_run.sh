@@ -16,6 +16,11 @@
 #   rollback     the catalog outside the ledger is unchanged by the migration, and the rollback script restores it
 #   e2e          executeAiRequest + SupabaseLedgerBudgetGuard -> a PostgREST shim -> this migration (fake AI provider);
 #                needs deno, curl and AIL_SHIM_PORT (default 54398) free on 127.0.0.1
+#   phase1d      test-phase policies (allowlist, caps, stop switch), the effect on G5's existing-object fingerprints,
+#                the Claude connection smoke end to end through the shim (fake Anthropic), and the rollout runner proof
+#
+# The adverse, nonsuper and supabase parts also run the production preflight (ai_provider_budget_ledger_preflight.sql)
+# and require its prediction to match: NOT_READY on every graph the migration refuses, READY where it applies.
 #
 # The host must be a local socket directory under /tmp (anything else is refused), so a mistyped host can never
 # point this at a real project. Scratch databases and roles are created and dropped.
@@ -32,7 +37,8 @@ esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 MIGRATION="${AIL_MIGRATION:-$HERE/../migrations/20261010050613_ai_provider_budget_ledger.sql}"
-PARTS="${AIL_PARTS:-behaviour supabase nonsuper concurrency adverse rollback e2e}"
+PREFLIGHT_SQL="${AIL_PREFLIGHT:-$HERE/ai_provider_budget_ledger_preflight.sql}"
+PARTS="${AIL_PARTS:-behaviour supabase nonsuper concurrency adverse rollback e2e phase1d}"
 PREFIX="ail_proof_$$"
 DBS=()
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ail_proof.XXXXXX")"
@@ -98,6 +104,9 @@ begin
 end
 $$;
 grant usage on schema public to anon, authenticated, service_role;
+-- the migration history table every Supabase project has (the production preflight reads it)
+create schema supabase_migrations;
+create table supabase_migrations.schema_migrations (version text primary key, statements text[], name text);
 SQL
   if [ "${2:-}" = "supabase" ]; then
     psql_super -d "$db" >/dev/null <<'SQL'
@@ -118,6 +127,16 @@ ledger_objects() {
   psql_super -d "$1" -Atc "select (select count(*) from pg_namespace where nspname = 'ai_ledger') + (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'ai\_ledger\_%')"
 }
 has_part() { case " $PARTS " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+# preflight_verdict <db> [nonsuper]: the production preflight's verdict, run as the role that would apply.
+preflight_verdict() {
+  local out
+  if [ "${2:-}" = nonsuper ]; then
+    out="$(psql_super -d "$1" -At -c "set role ail_owner" -f "$PREFLIGHT_SQL")"
+  else
+    out="$(psql_super -d "$1" -At -f "$PREFLIGHT_SQL")"
+  fi
+  if printf '[{"result": %s}]' "$out" | python3 -I "$HERE/ai_provider_budget_ledger_gate.py" preflight >/dev/null; then echo READY; else echo NOT_READY; fi
+}
 
 # ---- behaviour -------------------------------------------------------------------------------------------------
 if has_part behaviour; then
@@ -132,6 +151,7 @@ fi
 # ---- supabase-like default privileges ----------------------------------------------------------------------------
 if has_part supabase; then
   DB="$(fresh_db supabase supabase)"
+  want "$(preflight_verdict "$DB")" READY "supabase: preflight on Supabase-like default privileges"
   apply "$DB"
   psql_super -d "$DB" -f "$HERE/ai_provider_budget_ledger_fixture.sql" >/dev/null
   psql_super -d "$DB" -f "$HERE/ai_provider_budget_ledger_behavior.sql" >/dev/null
@@ -253,6 +273,8 @@ make_owner() {
 do \$\$ begin if not exists (select 1 from pg_roles where rolname = 'ail_owner') then create role ail_owner nologin; end if; end \$\$;
 grant create on database $1 to ail_owner;
 grant create on schema public to ail_owner;
+grant usage on schema supabase_migrations to ail_owner;
+grant select, insert on supabase_migrations.schema_migrations to ail_owner;
 SQL
 }
 apply_as_owner() { psql_super -d "$1" -c "set role ail_owner" -f "$MIGRATION" >/dev/null; }
@@ -265,6 +287,9 @@ refuse() {
   db="$(fresh_db "$name")"
   [ "$owner" = nonsuper ] && make_owner "$db"
   psql_super -d "$db" -c "$setup" >/dev/null
+  if [ "${AIL_REPORT_ONLY:-}" != 1 ]; then
+    want "$(preflight_verdict "$db" "$([ "$owner" = nonsuper ] && echo nonsuper)")" NOT_READY "$name: preflight must predict the refusal"
+  fi
   before="$(digest "$db")"
   local applied=no
   if [ "$owner" = nonsuper ]; then
@@ -299,6 +324,10 @@ if has_part adverse; then
   refuse r2_set_into_read_all_data AI_LEDGER_ACL_UNSAFE_ROLE_PATH "grant pg_read_all_data to anon with inherit false, set true"
   refuse r2_set_existing_acl_anomaly AI_LEDGER_ACL_UNEXPECTED_RELATION_GRANT "create role ail_reader nologin; alter default privileges grant select on tables to ail_reader; grant ail_reader to authenticated with inherit false, set true"
   refuse r2_set_direct_nonsuper_owner AI_LEDGER_ACL_UNSAFE_ROLE_PATH "grant service_role to authenticated with inherit false, set true" nonsuper
+  # Phase 1d preflight cases: a SET hop into a role that INHERITS what must not be reached.
+  refuse p1d_set_hop_inherits_read_all_data AI_LEDGER_ACL_UNSAFE_ROLE_PATH "create role ail_hop1 nologin; grant ail_hop1 to authenticated with inherit false, set true; grant pg_read_all_data to ail_hop1"
+  refuse p1d_inert_member_of_owner AI_LEDGER_ACL_UNSAFE_MEMBERSHIP "grant ail_owner to authenticated with inherit false, set false" nonsuper
+  refuse p1d_set_hop_inherits_owner AI_LEDGER_ACL_UNSAFE_MEMBERSHIP "create role ail_hop1 nologin; grant ail_hop1 to anon with inherit false, set true; grant ail_owner to ail_hop1" nonsuper
 
   # R2 safe controls: memberships that confer neither privileges nor SET ROLE must NOT be refused.
   for setup in \
@@ -306,6 +335,7 @@ if has_part adverse; then
     "create role ail_hop1 nologin; grant ail_hop1 to anon with inherit true, set false; grant service_role to ail_hop1 with inherit false, set true"; do
     DB="$(fresh_db r2_control)"
     psql_super -d "$DB" -c "$setup" >/dev/null
+    want "$(preflight_verdict "$DB")" READY "R2 control: preflight must not predict a refusal ($setup)"
     apply "$DB" || fail "R2 control refused: $setup"
     for app in anon authenticated; do
       if psql_super -d "$DB" -c "set session authorization $app" -c "set role service_role" >/dev/null 2>&1; then
@@ -322,7 +352,9 @@ fi
 if has_part nonsuper; then
   DB="$(fresh_db nonsuper supabase)"
   make_owner "$DB"
+  want "$(preflight_verdict "$DB" nonsuper)" READY "nonsuper: preflight on a Supabase-like target"
   apply_as_owner "$DB"
+  want "$(preflight_verdict "$DB" nonsuper)" NOT_READY "nonsuper: preflight sees the applied ledger"
   want "$(query "$DB" "select pg_get_userbyid(nspowner) from pg_namespace where nspname = 'ai_ledger'")" ail_owner "nonsuper: owner"
   psql_super -d "$DB" -f "$HERE/ai_provider_budget_ledger_fixture.sql" >/dev/null
   psql_super -d "$DB" -f "$HERE/ai_provider_budget_ledger_behavior.sql" >/dev/null
@@ -376,6 +408,98 @@ if has_part e2e; then
   kill "$(cat "$SHIM_PID_FILE")" 2>/dev/null || true
   rm -f "$SHIM_PID_FILE"
   echo "PASS e2e: $(grep -Eo '[0-9]+ passed \| [0-9]+ failed' "$WORK/e2e.log" | tail -1) (TypeScript -> PostgREST shim -> PostgreSQL)"
+fi
+
+# ---- Phase 1d: test-phase policies, G5 fingerprint impact, smoke end to end, rollout runner ---------------------------
+if has_part phase1d; then
+  POLICY_SQL="$HERE/ai_provider_budget_ledger_initial_policies.sql"
+  # The policy file needs the ledger, refuses a second run and checks its own result.
+  DB="$(fresh_db policies_missing)"
+  if psql_super -d "$DB" -f "$POLICY_SQL" >/dev/null 2>&1; then fail "phase1d: policies applied without the ledger"; fi
+  drop_db "$DB"
+  DB="$(fresh_db policies supabase)"
+  make_owner "$DB"
+  apply_as_owner "$DB"
+  psql_super -d "$DB" -f "$HERE/ai_provider_budget_ledger_fixture.sql" >/dev/null
+  psql_super -d "$DB" -c "set role ail_owner" -f "$POLICY_SQL" >/dev/null
+  if out="$(psql_super -d "$DB" -c "set role ail_owner" -f "$POLICY_SQL" 2>&1)"; then fail "phase1d: policies applied twice"; fi
+  case "$out" in *AI_LEDGER_POLICIES_ALREADY_PRESENT*) ;; *) fail "phase1d: second policy run: $out" ;; esac
+  psql_super -d "$DB" -f "$HERE/ai_provider_budget_ledger_policies_behavior.sql"
+  drop_db "$DB"
+  reset_cluster_roles
+  echo "PASS phase1d policies: allowlist, per-call / daily / monthly caps, stop switch, refused re-run"
+
+  # G5's existing-object fingerprints vs ours, before and after the apply + history row.
+  DB="$(fresh_db g5impact supabase)"
+  make_owner "$DB"
+  psql_super -d "$DB" >/dev/null <<'SQL'
+create schema private;
+create table public.g5_like_accounts (id uuid primary key);
+create function private.g5_like_lifecycle(p uuid) returns integer language sql security definer set search_path = '' as 'select 1';
+insert into supabase_migrations.schema_migrations (version, name) values ('20261009120000', 'common_account_deletion_completion');
+SQL
+  G5_07="$HERE/common_account_lifecycle_preflight/sql/07_existing_fingerprint.sql"
+  G5_04="$WORK/g5_04_without_state.sql"
+  # 04's "state" section reads G5's live tables; everything else in it is catalog-only and kept verbatim.
+  perl -0pe "s/,\n  'state', jsonb_build_object\(.*?\n\) as result;/\n) as result;/s" \
+    "$HERE/common_account_service_start_intent_preflight/sql/04_touched_and_fingerprints.sql" >"$G5_04"
+  if grep -q "'state'" "$G5_04"; then fail "phase1d: could not strip the G5 04 state section"; fi
+  for f in ours:"$HERE/ai_provider_budget_ledger_existing_fingerprint.sql" g5_07:"$G5_07" g5_04:"$G5_04"; do
+    printf '[{"result": %s}]' "$(psql_super -d "$DB" -At -f "${f#*:}")" >"$WORK/before_${f%%:*}.json"
+  done
+  apply_as_owner "$DB"
+  query "$DB" "insert into supabase_migrations.schema_migrations (version, name) values ('20261010050613', 'ai_provider_budget_ledger')" >/dev/null
+  for f in ours:"$HERE/ai_provider_budget_ledger_existing_fingerprint.sql" g5_07:"$G5_07" g5_04:"$G5_04"; do
+    printf '[{"result": %s}]' "$(psql_super -d "$DB" -At -f "${f#*:}")" >"$WORK/after_${f%%:*}.json"
+  done
+  python3 -I "$HERE/ai_provider_budget_ledger_gate.py" compare "$WORK/before_ours.json" "$WORK/after_ours.json" --expect-rpcs 7 >"$WORK/compare.log" \
+    || { cat "$WORK/compare.log" >&2; fail "phase1d: existing business objects changed"; }
+  g5_changed="$(python3 -I -c '
+import json, sys
+w = sys.argv[1]
+def load(name):
+    return json.loads(open(w + "/" + name + ".json").read())[0]["result"]
+b7, a7 = load("before_g5_07"), load("after_g5_07")
+b4, a4 = load("before_g5_04"), load("after_g5_04")
+c7 = sorted(k for k in set(b7["sections"]) | set(a7["sections"]) if b7["sections"].get(k) != a7["sections"].get(k))
+c4 = sorted(k for k in set(b4) | set(a4) if b4.get(k) != a4.get(k))
+print("07:" + ",".join(c7) + " 04:" + ",".join(c4))' "$WORK")"
+  want "$g5_changed" "07:functions 04:history_count,history_latest,untouched_functions" "phase1d: G5 fingerprint impact"
+  drop_db "$DB"
+  reset_cluster_roles
+  echo "PASS phase1d G5 impact: our existing-object fingerprint unchanged (+7 RPCs); G5 sees only $g5_changed"
+
+  # The Claude connection smoke through the shim with the real policies; then the stop switch refuses it.
+  DB="$(fresh_db smoke supabase)"
+  apply "$DB"
+  psql_super -d "$DB" -f "$POLICY_SQL" >/dev/null
+  SHIM_PORT="${AIL_SHIM_PORT:-54398}"
+  SHIM_KEY="local-shim-key-$$-not-a-secret"
+  ( AIL_PGHOST="$HOST" AIL_PGPORT="$PORT" AIL_PGSUPER="$SUPER" AIL_DB="$DB" SHIM_PORT="$SHIM_PORT" SHIM_KEY="$SHIM_KEY" \
+      deno run --no-config --allow-net=127.0.0.1 --allow-env --allow-run=psql "$HERE/ai_provider_budget_ledger_postgrest_shim.ts" \
+      >"$WORK/shim_smoke.log" 2>&1 & echo $! >"$SHIM_PID_FILE" )
+  for _ in $(seq 1 100); do
+    if curl -s -o /dev/null -X POST "http://127.0.0.1:$SHIM_PORT/rest/v1/rpc/ai_ledger_budget_status" -H "apikey: x"; then break; fi
+    sleep 0.1
+  done
+  SMOKE_ENV="ANTHROPIC_CUSTOM_HEADERS,ANTHROPIC_WEBHOOK_SIGNING_KEY,ANTHROPIC_LOG,ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,AIL_E2E_URL,AIL_E2E_KEY,AIL_SMOKE_EXPECT"
+  for expect in pass denied; do
+    if [ "$expect" = denied ]; then query "$DB" "update ai_ledger.budget_policies set enabled = false" >/dev/null; fi
+    AIL_E2E_URL="http://127.0.0.1:$SHIM_PORT" AIL_E2E_KEY="$SHIM_KEY" AIL_SMOKE_EXPECT="$expect" \
+      deno test --no-config --allow-net=127.0.0.1 --allow-env="$SMOKE_ENV" --allow-read "$HERE/ai_provider_claude_smoke_e2e_test.ts" >"$WORK/smoke_$expect.log" 2>&1 \
+      || { cat "$WORK/smoke_$expect.log" >&2; fail "phase1d smoke e2e ($expect)"; }
+    grep -q "1 passed | 0 failed" "$WORK/smoke_$expect.log" || { cat "$WORK/smoke_$expect.log" >&2; fail "phase1d smoke e2e ($expect) did not run exactly one test"; }
+  done
+  want "$(query "$DB" "select count(*) || '/' || count(*) filter (where outcome = 'succeeded') from ai_ledger.usage_events where logical_role = 'kabumori.market_report.connection_smoke'")" "2/2" "phase1d: smoke ledger rows"
+  kill "$(cat "$SHIM_PID_FILE")" 2>/dev/null || true
+  rm -f "$SHIM_PID_FILE"
+  echo "PASS phase1d smoke: one reconciled call per run through the ledger; refused before sending once stopped"
+
+  # The operator runner, every path, through a fake supabase CLI.
+  AIL_PGHOST="$HOST" AIL_PGPORT="$PORT" AIL_PGSUPER="$SUPER" bash "$HERE/ai_provider_budget_ledger_rollout_proof.sh" >"$WORK/rollout.log" 2>&1 \
+    || { cat "$WORK/rollout.log" >&2; fail "phase1d rollout runner proof"; }
+  reset_cluster_roles
+  echo "PASS phase1d rollout runner: $(grep -c '^PASS ' "$WORK/rollout.log") paths"
 fi
 
 echo "ALL REQUESTED PARTS PASSED: $PARTS"
