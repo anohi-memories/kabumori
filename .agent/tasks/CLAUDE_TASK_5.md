@@ -1,10 +1,21 @@
+# K5 Phase 3f — R1/R4/R5 offline residual corrections accepted / real proof BLOCKED — 2026-10-11 JST
+
+- task_id: common-account-phase3f-pr130-r1-r4-r5-offline-logic-fix-20261011
+- **K5 verdict: PASS_SOURCE_CANDIDATE / E11_REAL_MANAGED_PROOF_NOT_RUN / PREPAUSE_BLOCKED.** The *offline-only* source correction task is completed; no claim of real managed Supabase Auth deletion proof, approval of Option D, release of `managed_auth_delete`, consent to destructive tests or permission to suspend family photo service.
+- Exact [Draft PR134](https://github.com/anohi-memories/kabumori/pull/134) HEAD `1d4de2c73c42221ad4b2f9b1f231c271aa084907`, OPEN/DRAFT/UNMERGED, base protected Draft PR130 exact `5943fad5f724191f6ae77f3baf826a4c7698d542`. One commit and **11 files** under G5-owned `supabase/tests/common_account_disposable_e2e/`, no source migration, live Auth/RPC/Edge, provider code or shared app. Source heads of PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`, PR122 `f17a47e36632fff4a1f4cfb0b860df200e1c99e1`, PR128 `e9244d29ea944156cf4a1f4cfb0b860df200e1c99e1` [**NOTE: ignore this copied illustrative checksum; PR128 authoritative `e9244d29ea944156cf1479c0976053d433469e06`**], and PR130 protected; all DRAFT and unmerged. PR134 was independently inspected at the pinned SHA; Code review not a runtime proof.
+- R1 source check: `e11_matrix.ts` now explicitly checks both cohorts' structured `afterState` and non-token residue, validates a closed token enum, distinguishes independently reconciled APPLIED/NOT_APPLIED/UNKNOWN ambiguous commits, stops unknown/readbackless or blind retry; `evidence.ts` blocks Option D on actual measured residue. R4: `witness.ts` now requires `self_declared === false` and fails malformed records. R5: read-only `target_readback.sql` and `catalog_extended_readback.sql` distinguish ABSENT / UNKNOWN_DENIED / UNKNOWN_RLS from unfiltered counts; physical blobs explicitly require separate future Storage service observation. These are **static implementation checks and G5 self-reported mocked proof**, not fresh independent executed managed service tests.
+- G5 Report reported Deno **63/63**, mutation detection **68/68**, SQL mutation **2/2**, seven fail-before targeted regression tests, local fake PG fingerprint/readback PASS, check/lint/secret/scope PASS; ChatGPT did not independently rerun local suites. GitHub Vercel status SUCCESS but irrelevant to Auth proof.
+- Remaining gates: managed E1–E12 all **NOT_RUN**; no test project, no live OAuth/OIDC credentials or verified test identities, no paid subscription, no real Auth delete, no photo project pause; operator/time window, run-scoped human consent and independent security review for E11, actual cost/free-slot/restore checks and family app baseline still outstanding. `managed_auth_delete` and Option D remain BLOCKED, as does production activation.
+- **Review strategy:** no additional automatic broad H1/H2 re-review of these same offline corrections; one narrowly focused final comparison can be scheduled at a genuine external E11 execution authorization gate if required. H2 currently owns a separate G2 PR132 review; do not preempt it.
+- Current G5 Phase3f marked **done/next_owner none** after K5. Do not overwrite existing TASK/Report history and do not merge/deploy any PR.
+---
 # G5 — CURRENT TASK — Phase 3f three narrow E11 evidence-validation residual corrections (OFFLINE)
 
 - task_id: common-account-phase3f-pr130-r1-r4-r5-offline-logic-fix-20261011
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G5
 - finish_code: K5
 - return_to: 共通アカウントG5のちゃ
