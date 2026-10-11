@@ -85,13 +85,22 @@
 ## Report
 
 - task_id: mic-stage1-formal-verification-design-finalization-g7-20261011
-- result: not_started（ChatGPTがTASK登録。G7 Claude実行は未確認）
-- changed_files: none
-- tests: not_run
-- commit_hash: none
-- push: not_performed
-- merge: not_performed
-- deploy: not_performed
-- remaining_issues: G7作業開始前。PR #125設計最終補強、10/14以降の自然shadow観測
-- safety_checks: このTASK割当では本番・他workstream・ソースへの操作なし
-- next_recommendation: G7を開始して設計文書だけを更新後、K7で確認
+- result: design_v2_pushed_to_pr125（DESIGN ONLY 完了。header の status は本TASKの指示どおり変更せず K7 判定へ返す）
+- changed_files: `docs/mic/stage1-formal-verification-design-20261010.md` のみ（PR #125 内、+352 / -163）。本 Report 追記で `.agent/tasks/CLAUDE_TASK_7.md` の `## Report` 欄のみ
+- tests: 実テストは未実施（TASKどおり。コード・migration なし）。静的確認のみ実施: 引用したコード事実の照合（`fetchRecentDomainEvents` の published_at 降順 limit 50、`unseenEvents` の欠損・不正の安全側扱い、material 時 `source_event_ids` = recentEvents の id、market_events.updated_at NOT NULL＋トリガー）、見出し・節番号・内部参照、`FOR SHARE` 誤記の撤回、`git diff --check` OK
+- pr_head_before: `7e548b9f2bff583664fc48a3ec1d658e552509d9`（TASK 期待値と一致を確認）
+- pr_head_after: `aa47e40d2a3ba7ec8bfc7d1d30c8eb51d53f2c48`（GitHub API で read-back、Draft 維持、変更ファイルは設計文書 1 件のみ）
+- commit_hash: `aa47e40d`
+- push: G7 専用 worktree `/Users/yuya/Developer/kabumori-g7-mic`（branch `g7/mic-stage1-design-finalize-20261011`）から PR ブランチ `claude/mic-stage1-verification-design-20261010` へ、push 直前に remote head = `7e548b9f` を確認したうえで force なしの fast-forward push
+- merge: not_performed（PR #125 は Draft のまま）
+- deploy: not_performed（Production 変更 0、migration 0、source 変更 0）
+- resolved_U2: 条件付き採用を反映（1.5）。SQL 定数と Edge `DOMAIN_EVENT_TYPES` の不変条件テスト＋実行時の `p_event_types` 一致確認、Edge の 50 件窓の上位集合（タイ全件）、窓外で narrative 後に改定された high/critical の検出、欠損・不正は安全側、走査上限 500 件、Edge/DB 不一致は not_verified
+- resolved_U3: 採用を反映（3.1）。run の不変 `verification_detail jsonb` に DB 由来の metric id/source/anchor/value/baseline/閾値/比較結果/イベント/ブロック理由。必須項目欠損は `evidence_incomplete` で verified 禁止
+- resolved_U6: 採用を反映（1.2・1.7・2.2）。fetch/observation/coverage は DB が単一スナップショットで再計算。状態 5 列は旧 RPC と同じく Edge 値を書き、DB 再計算値は判定と証拠に使用
+- resolved_U9: 採用を反映（2.1・2.5）。通常・all-stale とも新 RPC、旧 RPC は rollback 用に維持
+- safety_corrections: (1) phantom/READ COMMITTED — 既存行 `FOR SHARE` 案を撤回し、事実取得を 1 SQL 文の単一スナップショットに限定、market_metrics/market_events はロックしない（ingest とのロック逆転なし）、代替案比較を記載（1.7）。(2) event parity（1.5）。(3) pointer — トリガーが全 UPDATE で非 null ポインタを検証、neutral は維持・negative は消去、Stage 2 読み取り規約、無効化一覧（3.3〜3.5）。(4) A1 を not_verified に統一し理由を記載（1.2・2.4）。(5) `verified_at` = トランザクション開始時刻の意味を確定（1.7）。(6) U1/U5/U8 と仮値を実装 GO と切り離し（9.2・11）。(7) rollback（S1-A 単独互換、v32 復帰時のポインタ扱い、誤 verified）（8）。SQL テスト計画を 42 項目＋変異テスト 5 通りに拡充
+- remaining_issues: U1（equity の no_new_observation 未取得、10/14 以降に確認）、U4/U5/U7/U8（Stage 2 以降）、U10（migration version は S1-A 着手時に予約）、U11（無効化一覧は Stage 2 の migration）、U12（イベント走査上限）・U13（状態 5 列の扱い）は S1-A レビュー時に確定。設計完成は Stage 1 正式実装 GO ではない（10/14 以降の自然観測と別途 ChatGPT 判断が条件）
+- safety_checks: fresh origin/main 確認、main に同名設計文書なし。旧 PR #125 worktree `/Users/yuya/Developer/kabumori-mic-stage1-design` は一切操作せず（clean のまま）。他 G/H 枠の TASK・Report・branch・worktree 不変。本番は read-only も含め今回未実施。Vercel の失敗は 24 時間デプロイ回数制限で修正対象外
+- next_recommendation: MICのちゃが PR #125 v2（`aa47e40d`）を確認し K7 判定。10/14 以降に自然 shadow 観測を集計して GO 条件 1〜3 を判定し、ChatGPT が許可した場合のみ S1-A/S1-B を実装（実装後に Codex Sol（高）でまとめてレビュー）
+- return_to: MICのちゃ（Market Intelligence Core専用チャット）
+- completion_code: K7
