@@ -1,10 +1,24 @@
+# C2 — G5 PR130 E11 R1–R5 narrow rereview accepted as CHANGES_REQUIRED — 2026-10-11 JST
+
+- task_id: common-account-pr130-e11-r1-r5-narrow-security-rereview-20261011
+- **C2 verdict: CHANGES_REQUIRED / REAL_MANAGED_PROOF_NOT_RUN / H2 REVIEW FINISHED.** Independently reproduced **R1 P2, R4 P2, R5 P2** residual groups; **R2/R3 CLOSED for offline methodology only**. The detailed fresh H2 Report in `.agent/CODEX_REPORT_2.md` is the source of truth, with exact line references, probes and safety boundaries.
+- Exact pinned Draft PR130 head `5943fad5f724191f6ae77f3baf826a4c7698d542` on Draft PR122 head `f17a47e36632fff4a1f4cfb0b860df200e1c99e1` checked OPEN/UNMERGED; historical PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`, PR128 `e9244d29ea944156cf1479c0976053d433469e06` remain protected unchanged Drafts.
+- **R1 P2**: remaining non-token session/refresh/Storage artifacts do not propagate to Option D's residue blocker; token enum accepts invalid `NOT_RUN` as measured PASS; resolved-but-applied ambiguous COMMIT is falsely classified as rollback failure. Require explicit structured before/after residue, exact enum validation, separate committed/rolled-back/UNKNOWN reconciliation with **NO blind retry**.
+- **R4 P2**: `witness.ts` accepts absent/null `self_declared` because a truthiness check is used; require **`=== false`** to count as real witness attestation and fail closed otherwise. Written witness records still do NOT prove a human actually observed the target; future manual/operator check remains compulsory.
+- **R5 P2**: under RLS a reader may have SELECT ACL but see 0 filtered rows despite a hidden actual row; `target_readback.sql` and `catalog_extended_readback.sql` then misstate zero. Check actual effective unfiltered owner/bypass visibility or return `UNKNOWN_RLS`/`UNKNOWN_DENIED` rather than infer absence. No privilege escalation or real Supabase reading.
+- H2 reports independent **typed Deno 56/56 PASS, mutations 58/58 detected, 4/4 independent defect reproductions, local fake-PG readback/fingerprint and RLS-hidden-one-row proof**. Those baseline green tests do **not** close R1/R4/R5. C2 accepted reproduced findings based on Report inspection; ChatGPT did not rerun local suites. H2 source changes 0, own TASK/Report/index only; publication confirmed by H2 Report, no real Supabase/Auth/GoTrue/Storage/provider activity, no project creation, photo pause, migration, deploy, merge, paid service or production action.
+- H2 TASK **done / next_owner none** after C2, historical TASK and Report preserved. One G5-owned tightly bounded offline corrective TASK may be prepared in its actual free slot; prefer targeted negative regression checks and avoid another broad independent audit unless material new security behavior appears. Existing G1–G4/H1/H2 other work intact.
+- **NO** actual E11 run/Option D adoption/production Auth-delete gate opening. Family `anohi-memories` remains in service: **PREPAUSE_BLOCKED**, and E2–E12 per-run destructive approval remains separate. Missing fake OAuth/OIDC, operator/witness, free-slot/cost and app baseline remain blockers to real test.
+
+---
+
 # Codex H2 — CURRENT TASK — G5 PR130 E11 R1–R5 narrow corrective re-review
 
 - task_id: common-account-pr130-e11-r1-r5-narrow-security-rereview-20261011
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: H2
 - completion_code: C2
 - priority: critical
