@@ -129,15 +129,15 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
+- status: ready
 - task_id: postona-x-reservation-store-offline-v1-g3-20261011
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: claude
 - return_to: POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: User accepted next POSTONA milestone after PR138 local planner was squash-merged. G3 owns isolated **X-only AI/manual reservation durable backend candidate**: new offline SQL candidate/store/RPC or trustworthy port, new reservation claim/lease/finish boundary, save/read/edit/cancel client adapter with explicit disabled-by-default gate, disposable PG17/18 safety tests + app regressions and docs. Source-only Draft PR, never apply SQL/create live posts/X provider calls/migrate/Edge/Cron/EAS/merge. Manual per-post explicit consent vs unattended AI auto_post_preference; G5 active x_autopost entitlement and lifecycle guard, G4 verified X OAuth Issue131 and signed owner permission are hard blocked dependencies, never fake authorize. Stage3B PR127 docs and main 2026100616 migrations are read-only reference, not live. G4 current Threads integration PR140/PR124/PR135/PR139 and G5 local OSS/Auth/T13 PR121 protected; no G4/G5/H5 code overlap. Live activation only after Sol（高） independent integrated Auth/RLS/DB/API review and separate user authorization. At K3 return to this G3 chat.
-- recommended_model: Opus5.5（高）
+- allocation: K3 PR145 exact 1306cdc5d37e8b28b4819484846aed00875654b2 CHANGES_REQUIRED two P2. R1 SQL finish() accepts expired lease if claim_due() sweeper did not run; enforce deadline independent of sweep and add real PG regression (no duplicate posting; preserve published idempotence). R2 manual_interval mode accepts arbitrary irregular timestamps because app sends no cadence metadata and SQL checks only 60min gap; transmit intended interval and validate on server atomically with interval tests. Same PR145 source-only candidate, G5/G4 deny stubs / client store flag stay OFF; past reported PG/mutation/Deno/app tests accepted as evidence only, not independently rerun. Do not modify G4/H5/G5 or other worktrees, no live DB/Edge/Cron/OAuth/X/Meta/AI/deploy/merge/EAS. Return K3. Sol（高） independent review only before real G5/G4-integrated Auth/RLS/publisher rollout.
+- recommended_model: Opus5.5（中）
 ## Claude G4
 - owner: claude
 - slot: claude-4
