@@ -3,7 +3,7 @@
 - task_id: postona-x-reservation-store-offline-v1-g3-20261011
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - start_code: G3
 - finish_code: K3
