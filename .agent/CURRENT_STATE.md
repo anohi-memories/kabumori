@@ -1,3 +1,12 @@
+## G5 Phase3h local OSS auth pilot assigned — 2026-10-11 JST
+
+- User 「すすめて」 after K5 accepted Phase3g and recommended local no-photo-downtime next step. G5 task `common-account-phase3h-local-oss-keycloak-safe-pilot-20261011` **ready / next_owner claude**, recommended **Sonnet5（高）**, start G5, return K5 to 共通アカウントG5のちゃ. TASK and ACTIVE index updated; previous G5 Phase3g K5/report histories preserved.
+- Objective: isolated Mac local Supabase OSS + Keycloak using only dummy identities; limited actual local E2/E3/E5/E8/E9 observations, fake bucket and explicit synthetic readback; document managed equivalence limitations and cleanup; bounded docs/new test fixtures on G5 independent worktree with Draft PR to main, no merging.
+- Safety gate: no family photo project pause, managed Supabase/provider calls, existing Podman VM mutation or other dev server stop, production Auth/DB/RLS/RPC/Edge/migrations, E11 SQL direct deletion, any real account/secrets, paid plan, merge or deploy. Podman VM/resources and official image downloads only if independently G5-owned and safe; stop on conflict/unexpected large resources. Maintain **IDP_PREPAUSE_BLOCKED** until later explicit managed permission.
+- PR121/122/128/130/134/137 protected; all other G/H tasks untouched.
+
+---
+
 ## K6 INTERIM — Phase1g secret-key compatibility accepted conditionally, G6 READY — 2026-10-11 JST
 
 - G6 Phase1g Report `KEY_COMPAT_VERIFIED_NO_SOURCE_CHANGE / WAIT_HOLD_RELEASE_AND_USER_SETUP` reviewed. G6 claims same new Supabase secret key + `apikey` and `Authorization: Bearer` used in a production service_role-only RPC already. This is a production precedent, **not direct proof** of test key compatibility. Ledger smoke first reads usage_summary; reserve/markSent also fail-closed. Source unchanged, real Anthropic/ledger call count 0 at G6 Report.
