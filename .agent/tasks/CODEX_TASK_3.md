@@ -3,8 +3,9 @@
 - task_id: kabumori-pr143-ondemand-queue-auth-security-review-20261011
 - owner: codex
 - slot: codex-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
+- c3_verdict: REVIEW_COMPLETE / CHANGES_REQUIRED_P2_EXPIRY_FENCE / PRODUCTION_NO_GO (2026-10-11; H3 58 targeted offline PASS, disposable PG NOT_RUN)
 - start_code: H3
 - finish_code: C3
 - completion_code: C3
