@@ -166,17 +166,17 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: review_required
+- status: done
 - task_id: common-ai-provider-g6-phase1e-readonly-runner-preflight-20261011
 - start_code: G6
 - finish_code: K6
-- next_owner: chatgpt
-- latest_result: PASS_READONLY_CHECK — production runner `check` run once 2026-10-11 19:05 JST: TARGET_VERIFIED (cron refs = wsmznyzcvmuitkglfeuj only, markers 6/6, history 2/2), READY_TO_APPLY, predicted_refusals 4/4 no, fingerprint 12 categories / 168 functions; CLI 2.116.0 temp login role x3 (known). READY is not apply approval. Report: .agent/tasks/CLAUDE_TASK_6.md#report
+- next_owner: none
+- latest_result: K6 FINAL ACCEPTED / PASS_READONLY_CHECK — production runner `check` run once 2026-10-11 19:05 JST: TARGET_VERIFIED (cron refs = wsmznyzcvmuitkglfeuj only, markers 6/6, history 2/2), READY_TO_APPLY, predicted_refusals 4/4 no, fingerprint 12 categories / 168 functions; CLI 2.116.0 temp login role x3 (known). READY is not apply approval. Report: .agent/tasks/CLAUDE_TASK_6.md#report
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
 - report: .agent/tasks/CLAUDE_TASK_6.md#report
 - allocation: USER EXPLICIT 2026-10-11: from now on common-AI project tasks from this ChatGPT room go through **G6 Claude**, not standalone direct-copy instructions. First G6 Phase1e validates actual production runner `check` only in isolated worktree, with fresh main and G5 mutation window check. No `apply`, `policies`, Secret, paid provider, Cron, Edge, deployment, migration or report cutover. Supabase CLI may create an ephemeral login role before read-only SELECT; disclose and STOP if unexpected. Return `K6` to this common-AI chat, then formally clear task and allocate next common-AI task to G6 (do not park a memo to occupy slot). Other G/H tasks untouched.
-- recommended_model: Sonnet5（高）
+- recommended_model: Sonnet5（高） (completed)
 ## Claude G7
 - owner: claude
 - slot: claude-7
