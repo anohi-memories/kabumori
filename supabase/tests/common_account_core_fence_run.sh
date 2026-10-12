@@ -364,6 +364,16 @@ if want e2e; then
   echo "COMMON_ACCOUNT_CORE_FENCE_E2E_PASS"
 fi
 
+if want app; then
+  # F5: the apps' own enrollment modules (unmodified) against this database's SQL, over HTTP, through a
+  # PostgREST stand-in (HS256 tokens, claims, role, one transaction per call, SQLSTATE -> HTTP status).
+  ( cd "$here/../.." && CAL_E2E=1 PGHOST="$host" PGPORT="$port" PGUSER="$owner" PGDATABASE="$db_run" \
+      deno test --no-config --no-check --allow-run=psql --allow-net=127.0.0.1 --allow-env --allow-read supabase/tests/common_account_phase5_app_contract_test.ts ) > "$tmp/app" 2>&1 \
+    || { echo "FAIL app contract" >&2; cat "$tmp/app" >&2; exit 1; }
+  grep -qE ' 14 passed \| 0 failed ' "$tmp/app" || { echo "FAIL app contract: expected 14 passed" >&2; cat "$tmp/app" >&2; exit 1; }
+  echo "COMMON_ACCOUNT_CORE_FENCE_APP_CONTRACT_PASS"
+fi
+
 if want failclosed; then
   u="$(uid 901)"; person "$u" x_autopost
   for iso in 'repeatable read' serializable; do
