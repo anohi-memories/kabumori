@@ -3,8 +3,8 @@
 - task_id: kabumori-g1-home-report-return-and-holdings-count-fix-20261012
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - task_type: narrow UI bugfix / regression
 - recommended_model: **Sonnet5（中）**
 - start_code: G1
@@ -31,7 +31,54 @@ G1 five-tab QA K1 accepted PASS_WITH_FINDINGS: P3 home report detail return land
 Update current G1 Report with result, files, tests, branch/commit/PR status, safety, unresolved risk; status review_required / next_owner chatgpt. Preserve archived reports. End: かぶモリアプリG1のちゃ へ K1 を送ってください。
 
 ## Report — current task
-Pending G1 implementation.
+- task_id: kabumori-g1-home-report-return-and-holdings-count-fix-20261012
+- result: **IMPLEMENTED — PR #156（ソースのみ・未マージ）**。P3（ホームのレポート詳細の戻り先）と P4（読み込み失敗時の「0銘柄」）を修正。
+- status: `review_required` / next_owner `chatgpt`（return to かぶモリアプリG1のちゃ for `K1`）
+- PR: https://github.com/anohi-memories/kabumori/pull/156 — head `fe120b997a3e77ee840660245fdc0207b2850570`、branch `claude/g1-home-report-return-holdings-count-20261012`、base `fdec2c68e99b6f95b59bc616060a7b1edab601e2`（その後 main は `.agent` 中心に前進、src/tests の上流競合なしを push 直前に再確認）
+- merge: no / deploy=0 / EAS=0 / user_data_writes=0
+- date: 2026-10-12 JST
+
+### changed_files
+- `src/app/(tabs)/index.tsx`（ホームのレポート詳細を root の `/report-detail` へ）
+- `src/lib/portfolio-view.ts`（`holdingsBadgeCount` 純関数を追加）
+- `src/app/(tabs)/explore.tsx`（`HoldingsHeader` に `holdingsBadgeCount(registrationsReady, holdings.length)`）
+- `src/components/portfolio/holdings-section.tsx`（`count: number | null`、null ならバッジ非表示）
+- `tests/app/home-report-return_test.ts`（新規 4）、`tests/app/portfolio-view_test.ts`（+1）、`tests/app/portfolio-screen_test.ts`（+1）
+- **触れていない**: PR #143 変更中の `(tabs)/reports/[id].tsx`・`reports/index.tsx`・`app/_layout.tsx`・`report-detail-route_test.ts`（最初に同テストへ追記したが、#143 との重複が push 直前の確認で判明したため取り消し、Home のルート固定テストを新規ファイルへ移した）、PR #149 のファイル、`report-detail.tsx`、`(tabs)/_layout.tsx`、認証/DB/Edge、実データ
+
+### P3 の設計
+- 銘柄タブ（AIカード・「詳しく見る」）が既に使っている root の `/report-detail` をホームのヒーローも使う。`report-detail.tsx` は `(tabs)/reports/[id]` の再エクスポートで画面実装は同一。ルートパラメータは従来どおり `id` のみ。
+- レポートタブの 一覧→詳細→戻る（一覧）は変更なし（`reports/index.tsx` は nested のまま。テストで固定）。レポート詳細から linked news へ進んでの戻り（`from=reports`）、直接オープン時のフォールバック（`一覧へ戻る`）、プッシュ通知のディープリンク `/reports/<id>` も変更なし。
+
+### P4 の設計
+- `holdingsBadgeCount(ready, listedRows)`: `ready` なら件数（0 を含む）、未取得で一覧が空なら `null`（非表示）、再読込中でキャッシュ済み行がある場合はその件数。`ready` は PR #142 の `registrationsReady`（読み込み完了時のみ true）をそのまま使うので、失敗・未ログイン・初回読み込み中は 0 を出さない。
+- 変えていない: エラー文言と再試行、評価の保留、ウォッチリスト、5タブ、「保有銘柄はまだありません」の空状態条件（`registrationsReady && !loading && !message`）。
+
+### tests / checks（実際に実行）
+- **fail-before**: 元のソースに新規テストを当てた `deno test --no-check --no-lock --no-config --allow-read tests/app/` → 521 passed / **3 failed**（バッジの純関数・バッジの画面契約・Home ルート）。Home 専用ファイル単体では 1 passed / **3 failed**（残り 1 件は元から成立する「root ルートは同一実装」の確認）。
+- **pass-after**: `tests/app/` 全体 **527 passed / 0 failed**（main 521 → +6）。
+- `tsc --noEmit`: `src/` の既存 css 型宣言 2 件のみ（今回起因なし）。`git diff --check` OK。
+- 未実施: EAS、実機、`deno lint`。
+
+### Simulator（iOS 27 / Xcode 27、フィクスチャ rig・通信なし）
+- **402pt（iPhone 18 Pro にフィクスチャ rig の JS を読み込み。ログイン済みの実セッションには触れていない）**:
+  - ホーム →「レポートを見る」→ レポート詳細（ヘッダ「‹ 戻る」、下部タブはホーム選択のまま）→ エッジスワイプ → **ホーム**。
+  - レポートタブ → 大引けレポート → 詳細（ヘッダ「‹ 一覧」）→ スワイプ → レポート一覧（従来どおり）。
+  - 通信失敗フィクスチャで銘柄タブ: 「保有銘柄」の見出しのみでバッジ無し、資産評価額 `—`、エラー文言と再試行は従来どおり。
+- **375pt: NOT_RUN**（使い捨て端末の操作許可が下りなかったため。同じコード経路）。実データ・実機: NOT_RUN。
+- 端末・Metro・テスト用サーバーは停止/削除済み。ユーザーの iPhone 用サーバーは共有 node_modules のため `--clear` で再起動。
+
+### safety_checks
+- deploy=0, EAS=0, TestFlight/App Store=0, `expo prebuild`=0, Supabase 書き込み/migration/Edge deploy=0, AI/有料API=0。実ユーザーデータの書き込み 0（rig の偽バックエンドのみ）、実データのスクリーンショットなし。
+- 他スロットのプロセス/ポート(8081)/ブランチ/worktree は未接触。PR #143・#149 のファイルは未変更。
+
+### remaining_issues / next_recommendation
+1. 375pt の目視は未実施（同一コード・テスト固定）。必要なら端末許可後に短く再実施可。
+2. PR #143（`reports/[id].tsx` 変更）と本 PR は別ファイルのため独立してマージ可能。#143 が `report-detail-route_test.ts` を更新しても本 PR は影響しない。
+3. K1 レビュー後にユーザーのマージ承認。
+
+### return_to
+- かぶモリアプリG1のちゃ へ K1 を送ってください。
 
 ---
 
