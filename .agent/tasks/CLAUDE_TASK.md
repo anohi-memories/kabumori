@@ -3,8 +3,11 @@
 - task_id: kabumori-g2-pr143-live-mergeability-diagnosis-20261012
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: done
+- next_owner: none
+- disposition: SUPERSEDED_BEFORE_START_BY_USER_F2_REQUEST
+- replacement_task_id: kabumori-f2-pr143-live-mergeability-diagnosis-20261012
+- execution: NOT_STARTED / NO_SOURCE_CHANGE / NO_MERGE
 - start_code: G2
 - finish_code: K2
 - return_to: かぶモリアプリG2のちゃ
@@ -19,6 +22,17 @@ User explicitly authorized source-only merge of PR143→PR149→PR158. On fresh 
 2. If conflict is transient GitHub state, reproduce clean merge using current SHA, report the exact evidence and stop for K2; if actual conflict, identify owner and minimal fix; do not alter G1/G5/G6/.agent_v2 assets. No broad retesting unless source delta justifies it.
 3. Preserve PR143/149/158 branches and draft state, **no actual merge** in this limited diagnosis TASK. User's approval for merge remains recorded; ChatGPT after K2 may continue source-only merges after independent fresh validation.
 4. No production DB/Edge/Auth/Cron/Expo/EAS/paid APIs, no PR155 changes, no force push/rebase/reset.
+
+## Cancellation Record — 2026-10-12
+- result: CANCELLED_UNSTARTED / superseded by user-requested NEW F2 task
+- changed_files: none (product source)
+- tests: not_run
+- commit_hash: none (product source)
+- push: no product branch push
+- merge: no
+- deploy: no
+- remaining_issues: PR143 GitHub mergeable=false must be diagnosed under new F2 task
+- next_recommendation: F2 / L2; do not start this G2 task
 
 ## Report
 Include main SHA, PR143 head/base/mergeability, exact cause, tests, files, source mutations, and GO/NO_GO recommendation. Set review_required/chatgpt on completion. Return かぶモリアプリG2のちゃへ K2.
