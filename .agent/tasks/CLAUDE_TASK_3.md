@@ -3,8 +3,8 @@
 - task_id: postona-g3-x-reservation-api-client-wiring-offline-v1-20261012
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G3
 - finish_code: K3
 - return_to: POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）
@@ -36,6 +36,175 @@ D. feature release gateは**ソース既定OFF・本番API未登録**を維持�
 - AI Lab開発日記には公開安全な一般的進捗のみ候補。
 
 推薦モデル：**Opus5.5（高）**。
+
+## Report — postona-g3-x-reservation-api-client-wiring-offline-v1-20261012
+
+- task_id: postona-g3-x-reservation-api-client-wiring-offline-v1-20261012
+- result: **PASS_SOURCE_WIRING_LOCAL_E2E / PRODUCTION_BLOCKED_G5_G4**
+  - API の候補・DB の API 専用ロール・アプリの通信クライアント・予定画面の操作を、コードとしてつないだ。
+  - 使い捨ての DB で、通しで動くことを確かめた。
+  - 本番は OFF で、デプロイもしていない。G5 / G4 の本物の判定が無いため、本番接続は BLOCKED。
+  - **本番で予約を保存できるとは言えない。**
+- モデル: Opus 5.5（高・推奨どおり）
+- worktree: 新しく作った独立 G3 用 `/Users/yuya/Developer/kabumori-g3-resv-api`
+  - PR #151 の先頭 `0cd5c596a4d553df924a16c1f5091815e74b199a` から作った。main は混ぜていない。
+  - 作業前に確認したこと:
+    - PR #145 `8820fa8de0f978767535472f5a44f8623bc74a30` と PR #151 は、どちらも下書きのまま。
+    - G5 の PR #121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`、PR #152 `ccea1fe8132c6f573a768f0df5a033a05c62ef2c`、G4 の PR #154 `98287392327eabfd5092a3ba89dde51a2e8beff6`、Issue #131（保留）。
+    - main 側に G3 の領域と重なる変更が無いこと。
+    - 開いている他の全 PR と、変更パスが重ならないこと。
+- branch: `claude/g3-postona-x-reservation-api-wiring-v1-20261012`
+- commit_hash: `9359e949d0704c08653a4d61dd5791f4d4febec9`（1 本）
+- push: 実施（force なし）
+- PR: https://github.com/anohi-memories/kabumori/pull/163 （**下書き**、MERGEABLE、16 ファイル）
+  - base は PR #151 のブランチ。積み重ねの依存関係は PR 本文に明記した。
+  - 先頭は GitHub 側から読み戻して一致を確認した。
+  - PR #145・#151 は変更していない（先頭も同じ）。
+- merge 0 / deploy 0（Edge の入口なし）/ migration の適用 0 / 本番の DB・Auth・RLS・Edge・Cron・Secrets・権限の変更 0 / 実際の X・Meta・AI の呼び出し 0 / EAS 0 / 本番の読み取り 0
+
+### changed_files（16 本。すべて G3 の新しいファイルか、G3 の予定画面・テスト）
+- API 候補（入口なし）:
+  - `supabase/functions/_shared/postona_reservations/api.ts`（新規）
+  - `api_test.ts`（新規）
+- DB 候補:
+  - `supabase/candidates/postona_x_reservations/002_postona_x_resv_api_role.sql`（新規）
+  - `api_e2e_run.sh`（新規）
+  - `api_e2e/api_e2e.test.mjs`（新規）
+  - `api_e2e/psql_db.mjs`（新規・テスト専用）
+- アプリ:
+  - `src/features/schedule/remote-reservation-store.ts`（新規）
+  - `server-reservations-state.ts`（新規）
+  - `server-reservation-card.tsx`（新規）
+  - `src/app/(tabs)/schedule.tsx`（配線）
+  - `reservation-store.ts`（型に「1 件取得・日時変更・再同意」を追加。工場関数は無効な保存先のまま）
+  - `src/domain/reservation-flow.ts`（保存結果に「未確定」を追加。サーバー行に表示用の項目を追加）
+  - `schedule-composer.tsx`（まとまり ID を UUID に。サーバーの冪等キーになるため）
+- テスト:
+  - `tests/remote-reservation-store.test.mjs`（新規）
+  - `tests/schedule-screen-wiring.test.mjs`（追記）
+  - `tests/reservation-flow.test.mjs`（静的検査を更新）
+- 触れていないもの:
+  - G4 のアカウント・OAuth・Threads、G5 の Auth・ライフサイクル・利用権・T13
+  - H5、既存の AI ラボ・かぶモリの投稿の仕組み、`scheduled_posts`
+  - 既存の `supabase/migrations/`（新しい migration 番号は使っていない）
+  - PR #145 の SQL（001）とワーカー
+
+### 実装の内容
+**A. サーバー API の候補（`api.ts`、Edge の入口は無い）**
+- 要求ごとに、次の順で判断する。どこかで欠ければ拒否する。
+  1. ゲート: ソースの定数が OFF。OFF なら 503 `NOT_AVAILABLE` を返し、他は何も触らない。
+  2. 入力: POST のみ、64KB まで、キー・形式を厳格に確認。
+     - 利用者 ID・ブランド ID・承認モードは、クライアントから受け取らない。
+  3. 本人確認: アクセストークンを、差し込んだ `AuthVerifier` でその都度確認する（本番では Supabase Auth の getUser を想定）。
+     - トークンが無い・不正なら 401。確認する仕組みが未接続・失敗なら 503。
+  4. G5（`x_autopost` の利用権とライフサイクル）と G4（X アカウントの本人確認）: 差し込み口 `PermissionSources`。
+     - **既定は拒否**（未接続）。文字どおりの true だけを許可とし、失敗は 503。
+  5. DB の関数を 1 つだけ、確認済みの本人として実行する（`ReservationDb`）。
+     - DB の関数の中でも、所有者・アカウント・G5・G4 をもう一度確認する。
+- エラーは固定コードだけを返す。DB の文言は出さない。結果が分からない書き込みは 503 `STORE_UNAVAILABLE`。
+- `service_role` の秘密はモバイルに送らない。API のモジュールは import も環境変数も持たない（静的検査で固定）。
+
+**B. DB の API 専用ロール（002）**
+- `postona_resv_api` の属性: ログイン不可、継承なし、スーパーユーザーなし、RLS の回避なし。
+- 実行できるのは、予約の 6 操作（create / list / get / reschedule / reconfirm / cancel）だけ。
+  - 表・シーケンス・ワーカーの関数（claim_due / pre_publish_check / finish）・補助関数には届かない。
+- `get_reservation` を追加した（所有者・アカウント・G5・G4 をその場で確認する）。
+- anon・authenticated・service_role には、今までどおり何も与えない。
+- 失敗すれば全体を取り消す事後条件を付けた（属性・メンバー関係・実行できる関数の一覧・表の権限・search_path）。
+- 想定する本番の呼び出し方:
+  - サーバー側のログイン用ロールが、このロールのメンバーになる。
+  - 1 つのトランザクションで `SET LOCAL ROLE` を行い、確認済みの本人を `request.jwt.claims` に入れて呼ぶ。
+  - ログイン用ロールとその資格情報は、このファイルには含めない（承認された本番作業で行う）。
+
+**C. アプリの通信クライアント（`remote-reservation-store.ts`）**
+- 保存の流れ:
+  1. 作成する（冪等: まとまり ID + 版数）。
+  2. **別の要求で一覧を読み戻し**、全件が「予約中の時刻・同意のまま」のときだけ「保存済み」にする。
+  3. 書き込みの返事が成功でも、読み戻しが一致しなければ失敗にする。
+  4. ネットワーク・5xx・不正な応答・読み戻しの失敗は「未確定」。同じ依頼をもう一度送れば安全。
+  5. 明確な拒否（4xx の固定コード）は、何も書かれていないので「失敗」。
+- 日時変更・再同意・取り消し: 版数の CAS を行い、1 件の読み戻しで変更が見えたときだけ成功。
+- アクセストークンが無ければ、何も送らない。
+- HTTPS 専用の通信を用意した（リダイレクトなし、時間切れあり、JSON でない応答は不明として扱う）。本番では未登録で、使っていない。
+- **アプリの工場関数 `createReservationStore()` は、今も無効な保存先を返す**（静的検査で固定）。
+
+**D. 予定画面（`schedule.tsx`）**: 保存先が有効なときだけ（今はテストで差し込んだときだけ）次が動く。
+- アカウントに入る（アプリ再起動を含む）たびに、サーバーの予約一覧を読み直す。
+  - 別のアカウントの応答や古い応答は捨てる（読み込みの番号は画面全体で 1 つ）。
+- まとまりごとに「サーバーに保存」がある。手動は全件確認済み、AI は枠があるときだけ押せる。
+  - 「保存済み」は読み戻しが一致したときだけ。保存したプレビューは消え、サーバーの予約として表示する。
+- 未確定のとき:
+  - 「保存状況を確認」で、確認済みの**同じ依頼**を再送する。そのあとに編集があっても、依頼は変えない（同じ冪等キーで違う内容は拒否されるため）。
+  - 未確定の間は「まとめて取り消し」と「再抽選」を止める。
+- 拒否されたときは、理由を表示してプレビューを残す。
+- サーバーの予約のカード:
+  - 日時変更（手動は再確認が必要になる）、「この内容で再確認」（本文のハッシュ）、取り消し。
+  - 版数が古ければ、理由を表示して一覧を読み直す。
+- サーバーの予約とプレビューは別の見出しで表示し、混ぜない。
+- 既存の G1/G2 の `scheduled_posts` の表示は、そのまま。
+- 予約済みのラベルは、サーバーの行（ドメインの関数）からだけ出す。画面のソースに「予約済み」の文字は無い（既存の静的検査どおり）。
+- AI: 「これで覚えて」は許可にしない。サーバーがブランドの `auto_post_preference` を読み、G5 / G4 も別に必要。本文は受け付けない。
+- 実際の X への投稿処理は、今も `NOT_AVAILABLE` のまま。PR #145 のワーカー・リース・冪等の約束は変更していない。
+
+### tests
+- **DB の通しの検証**（PostgreSQL 17.11、使い捨て、`/tmp` のソケットのみ）: `api_e2e_run.sh` → `POSTONA_RESV_API_E2E_ALL_PASS`
+  - P0: 002 は、失敗時に全体を取り消す。再適用は拒否する。
+  - P1: API 専用ロールでできないこと（すべて permission denied）
+    - 表を読む・書き換える
+    - claim_due・pre_publish_check・finish・補助関数を呼ぶ
+    - API ロール（anon・authenticated・service_role）からの get
+  - E1（12/12）: アプリの通信クライアント → API の処理本体 → 専用ロール → 候補の SQL（001 + 002）
+    - 保存（作成 → 別の読み戻し）、再起動相当の新しいクライアントでの一覧、同じ依頼の再送（重複なし）
+    - 未確定（返事が失われても読み戻しで解決、届かなければ未確定 → 同じ鍵で再送）
+    - 日時変更 → 再同意（違う本文のハッシュは拒否）、CAS の衝突、取り消し（終了状態）
+    - 他人・member・Threads・対象外ブランド・他人のアカウントへの保存（すべて拒否、何も保存しない）
+    - トークンなし・不正なトークン
+    - 間隔指定の保存と、ずらした時刻の拒否（何も保存しない）
+    - ランダム 10 件、AI（同意なしは拒否 → ブランドの設定ありで保存、本文なし）
+    - DB 側での G5 / G4 の取り消し（TS 側が許可でも拒否される）
+    - 投稿処理中の取り消しは手遅れ、取得後に利用権を失えば送信直前に止まり「失敗」になる
+  - 既存の `run.sh` も `POSTONA_RESV_CANDIDATE_ALL_PASS`。
+- **Deno**: `_shared/postona_reservations` 16/16（API 8 件は新規、ワーカー 8 件）。`deno check`・lint はクリーン。
+- **アプリ**:
+  - `tests/*.test.mjs` 327/327（PR #151 の 309 件に新規 18 件）、`src/domain` 22/22。
+  - `tsc`・変更ファイルの eslint はクリーン。
+  - 新規の内訳: 通信クライアントとサーバー予約カードが 11 件、画面の配線が 7 件。
+    - 画面の配線: OFF なら呼び出し 0 回、保存と読み戻し、未確定の再送、再起動、変更・再確認・取り消し、アカウント分離と遅れた応答、拒否。
+- **変異テスト 20/20 を検出**
+  - API: ゲート・本人確認・G5・G4 の真っぽい値・余分なキー・コードの漏れ・DB の例外
+  - 通信クライアント: 書き込みの返事を信じる・5xx を拒否扱い・不明を失敗扱い・読み戻しなしの変更・トークン
+  - 画面: 遅れた応答・OFF での読み込み・確認前の保存・再送で依頼を作り直す・保存後もプレビューを残す
+  - 専用ロールの SQL: claim_due の付与・表の付与・get の所有者確認なし
+  - 最初の実行で 2 件（G4 の真っぽい値、再送で依頼を作り直す）が検出されなかったため、テストを足した。
+- `git diff --check` はクリーン。追加行の秘密情報スキャンは 0 件。他の開いている PR との変更パスの重なりは 0 件。
+- **MOCK_ONLY**: 通しの検証のアクセストークン確認、TS 側の許可、DB 側の G5 / G4 の判定は、使い捨ての DB の中の偽物。本物の Auth / G5 / G4 の境界が安全だという証拠ではない。
+- iOS の実機・シミュレーターでの確認は未実施（今回は画面の配線テストのみ）。
+
+### remaining_issues（HOLD）
+- **G5**: `x_autopost` の利用権とライフサイクル（凍結・削除の書き込みフェンス、JWT の寿命に頼らないその場の確認）の本物の判定。
+  - PR #152 の `private.account_lifecycle_service_state_refusal(user, 'x_autopost')` は未承認の候補なので、使っていない。
+  - 承認されたら、SQL の `g5_x_autopost_allowed` と TS の `xAutopostAllowed` の中身を、G5 が提供する。
+- **G4**: X アカウントの本人確認と公開の許可の本物の判定（Issue #131 は保留中）。`g4_x_account_verified` と `xAccountVerified`。
+- **本人確認の本物**: Supabase Auth の getUser（その場の確認）で `AuthVerifier` を実装すること。
+- **本番の入口**: Edge Function の index.ts、DB 接続ドライバーの `ReservationDb`（ログイン用ロールの資格情報はサーバー側の秘密）、URL の登録と、アプリ側のトークン取得の接続。
+- 未確定の再送は、最初に確認した内容を送る。その間に行った編集は、保存されると消える（今は案内の表示のみ）。
+- 実機での確認。
+- 以上がそろった時点で、**Codex Sol（高）の独立セキュリティレビューを、H1〜H4 で 1 回だけ**行う（H5 は使わない）。対象は Auth / RLS / API / DB / ワーカー / X の統合。そのあと、ユーザー承認 → 段階的な本番適用 → 限定 1 件の X テスト → 読み戻し。
+
+### safety_checks
+- 本番・リモートの Supabase には、読み取りも含めて接続していない。DB の runner は `/tmp` のソケット以外を拒否する。
+- 実際の X / Meta / OpenAI の呼び出しは 0。
+- API ロールにも API の候補にも、`service_role` や秘密は無い。モバイルには何も送らない。
+- 保存のゲートは OFF のまま。アプリは保存の呼び出しをしない（静的検査と、OFF で呼び出し 0 回の配線テストで固定）。
+- 他スロット（G4・G5・H5・G6 など）の worktree・ブランチ・PR は操作していない。
+
+### next_recommendation
+1. K3 で受け入れを判断する（PR #163・#151・#145 はどれも下書きのまま。merge しない）。
+2. G5 と G4 に、判定の差し込み口（SQL の 2 つの関数と TS の `PermissionSources`）の約束を渡す。
+3. 本物がそろったら、G3 が次を行う: 本番の入口、DB の接続、Auth の確認の実装、migration への変換 → Sol（高）の統合レビュー → ユーザー承認の適用。
+
+### AI Lab diary 候補（外部公開してよい粒度）
+- AI Lab diary: 候補あり — 投稿予約を「保存した」と表示する条件を、サーバーの返事ではなく、保存のあとにもう一度読み直して全件一致したときだけにした。通信が途中で切れたときは「未確定」と正直に出して、同じ内容で安全に確かめ直せる作りにした。本番ではまだ使えない状態のまま、使い捨てのデータベースで最初から最後まで動くことを確かめた。
 
 ---
 
