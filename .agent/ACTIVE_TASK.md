@@ -197,14 +197,14 @@
 - owner: claude
 - slot: claude-8
 - status: ready
-- task_id: news-improvement-a-pr129-premerge-offline-integration-qa-g8-20261012
+- task_id: news-improvement-a-pr129-release-safety-env-switches-g8-20261012
 - start_code: G8
 - finish_code: K8
 - next_owner: claude
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_8.md
 - report: .agent/tasks/CLAUDE_TASK_8.md#report
-- allocation: USER EXPLICIT G8=ニュース改善A専任。K8 2026-10-12 R3実装修正`0a2df248`は `SOURCE_CORRECTIONS_ACCEPTED`。H4-R1/R2/R3の3件はソースおよび再現回帰テストで修正確認、G8報告761/34/162/20 PASS・実PDF51件数値一致。次の具体TASKは**PR129のfresh-main統合確認とsource-only premerge QA**のみ（推薦Sonnet5高）。実行はgit merge-tree等dry-runと既存テスト、リリースリスクの評価、PR129を実merge/deployしない。古いF7/F9の一部制約、TDnet fallback、Fed権利、main330commits前進、Vercel build-rate-limit、mergeability unknownを隠さない。G9他slot/PR116固定本番環境不干渉。完了K8はこのチャット。
+- allocation: ユーザー明示指定 G8=ニュース改善A専任。K8でPR129 R4のQA報告 `MERGE_CANDIDATE(source-only)` を確認、mainとのmerge-treeと一時checkout競合0、G8実施761+34+162+20既存スイートPASS。新規Fed公式声明enrichmentとTDnet決算factsが無条件ONのまま本番へ入るリスクがあるため、同G8限定R5 `news-improvement-a-pr129-release-safety-env-switches-g8-20261012` をreadyで明示登録。両機能の**独立・初期OFF envスイッチ**とON/OFF回帰のみ。PR129はOPEN/Draft/未マージ、Vercelはビルド回数制限、PR116固定本番（10/13予定）は別。ほかG/H・B/G9・worktreeへ一切触れず、G8→K8返却。今回のrelease gateをK8で再評価。
 - recommended_model: Sonnet5（高）
 ## Claude G9
 - owner: claude
