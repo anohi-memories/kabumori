@@ -3,8 +3,9 @@
 - task_id: kabumori-g2-ondemand-broadcast-release-integration-20261012
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
+- k2_verdict: PASS_INTEGRATION_READY / PRODUCTION_NO_GO (2026-10-12; PR158 ea7bbd07, reported offline integration validation accepted; no merge/deploy)
 - start_code: G2
 - finish_code: K2
 - return_to: かぶモリアプリG2のちゃ
@@ -34,7 +35,16 @@ The agreed Kabumori product V1 behavior: (1) morning/close **one shared market r
 ## Completion / return
 
 - Implement source changes when required and safe; if no code changes are needed, provide reproducible main-integration evaluation + focused tests and explicitly distinguish `INTEGRATION_READY`, `CHANGES_REQUIRED`, or `BLOCKED_BY_OTHER_OWNER`; do NOT pad the task with paper-only outputs.
-- Report inside `## Report — current V1 release integration`: original PR heads, fresh main SHA, mergeability conflicts by file+cause, actual G2-owned resolutions, changed_files, optional new Draft PR with source/head/base, all real offline tests/NOT_RUN, outstanding G1/G5/production blockers, prioritized steps to get into iPhone, risk checks, commit/push/merge/deploy actual status, next recommendation. Explicit **PRODUCTION_NO_GO** until separately authorized.
+- Report inside `## K2 Final — 2026-10-12
+
+- verdict: **PASS_INTEGRATION_READY / PRODUCTION_NO_GO**; G2 TASK done, slot unreserved.
+- accepted candidate: PR143 `889ca1b4` → PR149 `e9bb86c4` → PR158 `ea7bbd07`, all Draft and unmerged at report; PR158 adds 2 integration test files + release runbook only.
+- G2 reported local fresh-main merge conflict 0, G1/G5 overlap 0; disposable PG integration/rollback/RLS tests PASS, Deno 504 and app 534 PASS. These tests are G2-reported, not independently rerun by ChatGPT.
+- prior H3/H2 findings fixed; no automatic repeat H review for test/doc-only PR158. Focused release-boundary review before production writes remains required.
+- No main merge, DB/Edge/Cron/Expo/paid API/EAS/deploy. The legacy daily personalized production Cron remains active. Source approval is not production approval.
+- next: separate decision on ordered PR merges; user-approved production read-only preflight; staged deployment, opt-in pilot, rollback gate. Protect other slots.
+
+## Report — current V1 release integration`: original PR heads, fresh main SHA, mergeability conflicts by file+cause, actual G2-owned resolutions, changed_files, optional new Draft PR with source/head/base, all real offline tests/NOT_RUN, outstanding G1/G5/production blockers, prioritized steps to get into iPhone, risk checks, commit/push/merge/deploy actual status, next recommendation. Explicit **PRODUCTION_NO_GO** until separately authorized.
 - Set own task `review_required` / `next_owner: chatgpt`, update only G2 index and G2 record in CURRENT_STATE, protect history/other slots; send **かぶモリアプリG2のちゃへ K2**. ChatGPT decides focused security/production review only at the actual gate; do not automatically allocate H review on every trivial change.
 
 ## Report — current V1 release integration
