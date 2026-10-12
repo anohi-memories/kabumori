@@ -3,8 +3,8 @@
 - task_id: kabumori-g1-v1-release-gap-inventory-20261012
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - task_type: read-only release readiness audit
 - recommended_model: **Sonnet5（高）**
 - start_code: G1
@@ -35,7 +35,47 @@
 - 現行TASK完了後はstatus review_required / next_owner chatgptでK1へ返す。Reportと過去履歴は消さない。末尾：かぶモリアプリG1のちゃ へ K1 を送ってください。
 
 ## Report — current task
-Pending G1 audit.
+- task_id: kabumori-g1-v1-release-gap-inventory-20261012
+- result: **COMPLETE — ① 棚卸しの成果物を Draft PR #160 に作成（ドキュメントのみ・未マージ）**。必須 10 / 推奨 8 / 公開後 5 の計 23 件に分類。
+- status: `review_required` / next_owner `chatgpt`（return to かぶモリアプリG1のちゃ for `K1`）
+- PR: https://github.com/anohi-memories/kabumori/pull/160（**Draft**）— head `c785d560abee781f1b83b7110c51b52b42fce083`、branch `claude/g1-v1-release-gap-inventory-20261012`、base `origin/main` `45489fc305261fd3b74dd6a7f39fb97c418f0e75`
+- merge: no / deploy=0 / EAS=0 / production=0 / user_data_writes=0
+- date: 2026-10-12 JST
+
+### changed_files
+- 追加のみ: `docs/release-readiness/kabumori-app/V1_GAP_INVENTORY_2026-10-12.md`（他 PR とのパス重複なしを push 直前に確認）
+- コード・設定・DB/RLS/RPC/Auth/Edge・migration・workflow・本番・実データ・他スロットのファイルは変更 0
+
+### 結論の要約（詳細は上記ドキュメント）
+- **画面そのものの未完成は少ない**（5タブ・オンボーディング・設定・退会・検索・銘柄詳細・ニュース・レポートはソースとして揃い、フィクスチャの Simulator QA でクラッシュ・崩れなし）。
+- **必須（10）**: REL-01 実機未検証 / REL-02 本番ビルドの env（特に法務リンク用 WEB URL）/ REL-03 公開ページの運営者情報・公開状態 / REL-04 プライバシーポリシーと実際のデータ取扱いの整合 / REL-05 共通アカウント削除が「準備中」（G5 の PR 群が未マージ）/ REL-06 G2 V1（PR143→149→158）未マージ・本番未適用 / REL-07 Push の実機・資格情報 / REL-08 App Store Connect 資材と審査用アカウント / REL-09 「AIに聞く」3入口が静的な準備中画面（要判断）/ REL-10 認証メール・再設定の本番リンク先。
+- **推奨（8）**: 通知許可の即時要求、通知設定の置き場所と文言、ダークモードの扱い、輸出コンプライアンスのフラグ、アクセシビリティ、ニュース要約の「準備中」状態、実データ未観測のパス、プライバシー・マニフェスト。
+- **公開後（5）**: 価格推移・チャート、テンプレート残骸、Android/iPad/Web、G6 の AI 比較（既定 OFF）、POSTONA/MIC。
+- **② の G1 単独候補（優先順・最大5）**: 「AIに聞く」入口の整理（要判断）→ app.json 整備（ライト固定・輸出フラグ）→ 通知許可のタイミング（#149 後に文言と同時）→ アクセシビリティ確認 → テンプレート残骸の整理。
+- **③〜⑥ のゲート**と **実機チェックリスト（⑤）** を文書に記載。
+
+### tests / checks（実際に実行）
+- `deno test --no-check --no-lock --no-config --allow-read tests/app/`（clean main `45489fc3`）→ **527 passed / 0 failed**
+- `tsc --noEmit -p tsconfig.json` → `src/` は既存の css 型宣言 2 件のみ
+- `git diff --check` → クリーン / 追跡ファイルの変更 0
+- 実行していない: 実機、EAS、本番 read、実アカウント操作、ダークモード、VoiceOver/Dynamic Type（文書でも未確認と明記）
+
+### 判断・注意（K1 向け）
+- REL-05（共通アカウント削除）は「かぶモリの利用終了」だけで審査要件を満たすとみなせるかの **ユーザー判断が先**。G5 への確認事項として記載したのみで、割当はしていない。
+- REL-09 の方針（隠す／残す／実装）が決まるまで、②-1 は着手できない。
+- 他スロット（G2/G5/G6/G8/G9）の「Draft・未マージ・本番 NO_GO」は完了と誤記せず他者報告として引用した。旧方式の 10/7〜9 大引け欠落は文書でも対象外と明記。
+
+### safety_checks
+- コード・設定・本番・実データ・外部 API・有料 API・EAS・TestFlight・App Store の変更 0。マージ・デプロイなし。Draft PR、no self-merge。
+- 他スロットの branch / worktree / dev server は未接触（自分のクローン `g1-t19` のみ）。
+
+### next_recommendation
+1. K1: 棚卸しの分類（必須/推奨/公開後）とリリース要否の妥当性レビュー、REL-05・REL-09 のユーザー判断の取り次ぎ。
+2. 承認後は ② の候補 1〜4 から選んで G1 TASK を割当（REL-09 の判断後に候補 1）。
+3. ③〜⑥ は G2/G5/ユーザーの承認が先（G1 は占有されない）。
+
+### return_to
+- かぶモリアプリG1のちゃ へ K1 を送ってください。
 
 ---
 
