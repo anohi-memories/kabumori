@@ -38,18 +38,18 @@
 
 ## F3
 - slot: F3
-- status: idle
-- task_id: none
+- status: ready
+- task_id: postona-f3-x-reservation-live-boundary-source-integration-20261012
 - owner: claude
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: claude
+- return_to: POSTONA G3のちゃ（新F3担当・AI自動投稿／X予約担当チャット）
 - completion_code: L3
-- recommended_model: none
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F3.md
 - current_report_path: .agent_v2/tasks/F3.md#report
-- dependencies: none
-- blocker: none
-- slot_use: X自動投稿アプリ（POSTONA）
+- dependencies: 旧G3 K3 accepted done; protected Draft PR145→PR151→PR163, F5/G5 entitlement, G4 X Issue131, F4 Threads separate
+- blocker: production auth/entitlement/X ownership real guards not integrated; offline source work ready; no production authorization
+- slot_use: POSTONA X予約 Edge/Auth/DB実接続ソース実装（本番OFF、F3→L3）
 
 ## F4
 - slot: F4
