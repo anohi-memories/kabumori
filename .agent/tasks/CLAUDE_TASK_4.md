@@ -3,8 +3,8 @@
 - task_id: postona-threads-pr144-c3-r1-session-expiry-lock-fix-g4-20261012
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G4
 - finish_code: K4
 - return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
@@ -50,6 +50,20 @@
 - safety_checks: PR #144 のブランチは G4 専用のきれいな作業フォルダ `/Users/yuya/Developer/kabumori-g4-threads-integration` にだけ割り当てられていることを `git worktree list` で確認してから1コミットを追加。他スロットのブランチ・作業フォルダ・TASK／Report は変更なし。使い捨て PostgreSQL は自分専用の socket `/private/tmp/g4r1-sock` のクラスタのみ。本番への読み書き 0。ACTIVE_TASK は G4 欄の status／next_owner だけを変更。
 - next_recommendation: K4 で差分（SQL の1語＋コメント）と競合テストを確認のうえ受け入れ判断。修正が狭いため、機械的な広いレビューの追加は不要と考える。次は前回どおり G5／H5 の小さな TASK とユーザーの Meta 準備を並行し、揃った時点で統合レビュー → 承認されたテスター1名・1件のパイロット。
 - AI Lab diary: 記録不要寄り（内部のロック強度の修正。公開するなら「並行して起きる処理の順番を、実際に2つの接続でぶつけて確かめるテストを作った」程度）。
+
+## K4 FINAL — ChatGPT 2026-10-12 JST / PR144 R1 narrow patch PASS_SOURCE_FIX
+
+- task_id: postona-threads-pr144-c3-r1-session-expiry-lock-fix-g4-20261012
+- verdict: **PASS_SOURCE_FIX / C3_R1_REMEdIED_OFFLINE / REAL_PILOT_HOLD**; G4's work accepted, G4 task `done`/`next_owner: none`. This is **not** a real Auth/Meta/Vault/GoTrue/production security release.
+- Actual GitHub [Draft PR144](https://github.com/anohi-memories/kabumori/pull/144) HEAD verified `09fd2c49114b7d26c23b71a3084574dc6a5a7ad6`, 2 commits, OPEN/DRAFT/UNMERGED, base protected PR140 HEAD `2e75a6a842e70f3de78558681803b60935fb4251`, branch `claude/g4-postona-threads-integration-20261011`. Exact compare prior reviewed `d4a1e87b77d1fbd362dc51809ce2d998afda15ea` to new HEAD: **1 commit, 4 changed paths only** (G4 SQL `threads_publish_release_candidate.sql`, SQL behavior fixture `postona_threads_release_behavior.sql`, two-connection runner `postona_threads_release_run.sh`, G4 docs `threads-connect-publish-integration-v1.md`). No H5/G5/G3/other slot product files modified.
+- Independently inspected source diff: release `auth.sessions` row lock `FOR KEY SHARE` → `FOR SHARE`, preserving G5 T13/session/brand/member/attempt/Vault lock order and function signature. New local race runner has ordered two-connection session expiry/release tests for both orderings, a fail-before key-share mutation, old-session JWT regression and delete-started late-result reconciliation behavior. Matches H3's reproduced C3 P2 R1 source cause; no need for a mechanical repeat comprehensive H review for this bounded fix.
+- G4 Report states local PG17 session race case1/case2 PASS, key-share mutation fails-before as expected, safety mutation9/9 caught, integrated disposable SQL/T13 mocks and Deno176 PASS, focused Deno93 PASS, diff/secret/static flags PASS. **ChatGPT has NOT independently executed** actual PostgreSQL/Deno/Expo tests; app tests, protected PR140 test suite, real managed GoTrue/PostgREST/Auth/Vault/Meta/native pilot **NOT_RUN in this patch task**. Source branch code, PR, delta and report inspected; claimed Mac worktree clean, not independently inspected.
+- Remaining true gates: protected H5 PR139 `claim_candidate.sql` KEY SHARE session lock still needs owner-side revocation contract; trusted owner Auth/SQL transport + custody one-statement complete + callback; G5 real T13, multi-provider T10 deletion/frozen in-flight publication audit; real project/managed Auth/PostgREST/Vault credential+EXECUTE privilege proof, Meta Threads developer app/basic/publish scopes/tester, HTTPS callback, secret keys, one exact user-approved tester account and text. An UPDATE-free natural expiry near release commit and short release→provider HTTP gap remain inherent and documented; **never claim zero race**. All server/app connect/manual gates FALSE and 503, no merge/DB apply/GRANT/Edge deploy/public post.
+- Other PR original heads and their owners protected. H3 C3 completed/done/free. G5 common account Phase4 currently `ready` and must not be edited by G4. G4 slot free after acceptance; next work requires independent explicit TASK. AI Lab diary: not necessary (internal lock/race-only correction); if public summary, exclude auth source details/secrets and any live-launch claim.
+- reviewer_recommendation_for_later_lifecycle_owner_proof: **Sol（高）** focused actual managed boundary; do not repeat full source review until material Auth/T13/owner transport changes exist.
+- production_calls/deploy/merge/post: **NONE** at K4.
+
+---
 
 ## Exact C3 review finding and accepted correction scope
 
