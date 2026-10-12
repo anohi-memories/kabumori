@@ -19,6 +19,7 @@ GitHub共有タスク運用は `.agent/ORCHESTRATION.md` を参照する。競�
 - 既存G1〜G5 worktreeは対応TASK完了まで継続してよい。旧repo / 旧worktreeを削除・rename・prune・resetしない。
 - 新規G slotは `kabumori-fresh` で fresh `origin/main` を確認し、slot専用の独立worktree / checkoutを作成してから作業する。
 - G1〜G5 / K1〜K5 の意味と既存TASK運用は従来どおり。2026-10-11追加のG6〜G10 / K6〜K10も同じルールに従う。詳細は `.agent/ORCHESTRATION.md` を正とする。
+- 移行期間中（`.agent_v2/` 導入後）は、新系統の `F1`〜`F10`（完了確認 `L1`〜`L10`、TASKは `.agent_v2/tasks/F1.md`〜`F10.md`）も開始コードとして扱う。数字の付かない単独 `F` は新旧30枠の統括コードで、`F1`〜`F10` とは別。詳細は `PROJECT_RULES.md` の「新旧二重系統」と `.agent_v2/ORCHESTRATION.md`。
 
 ## レビュー頻度の最新方針
 

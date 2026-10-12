@@ -1,0 +1,56 @@
+# Current State v2（新系統・現在有効な情報だけ）
+
+この文書には、現在有効な情報だけを置く。解決済みの問題、過去の完了解説、K / L / C / V判定の全文は書かない（完了作業は `HISTORY_INDEX.md` と `archive/` へ）。古くなった項目は追記ではなく書き換えて消す。
+
+- 更新: 2026-10-12 JST（G10 `agent-v2-dual-slot-migration-20261012` による初版）
+
+## 移行の状態
+
+- 新系統 `.agent_v2/` は導入PR（Draft）の段階で、まだmergeされていない。merge前は新系統のslotを使わない。
+- 移行期間中の現行正本は旧 `.agent/`（G1〜G10 / H1〜H5）。旧系統で進行中・完了確認待ちのTASKは、すべて旧系統で完結させる。
+- 旧 `.agent/` の初回snapshot: `archive/2026-10-12-initial-migration/`（snapshot元 main commit `d811b4dc72f3e65fc61e40ae99e61b2094b18ff7`、33ファイル、SHA256照合・復元テスト済み）。完全移行前に最終snapshotを別TASKで取る。
+
+## プロジェクト別現状
+
+- 新系統に置かれたTASKはまだ無い（F1〜F10 / J1〜J5 はすべて `idle`）。
+- かぶモリアプリ、X自動投稿アプリ（POSTONA）、共通アカウント、共通AI基盤、MIC、ニュース改善などの現状は、旧 `.agent/CURRENT_STATE.md` と旧各TASKが正本。
+
+## 未解決問題
+
+- 新系統として未解決のものは無い。
+- 旧系統の未解決問題は旧 `.agent/CURRENT_STATE.md` と旧各TASK / Reportを参照する。
+
+## production安全制約（現在有効）
+
+- production の DB / Auth / RLS / migration / Edge Function / secrets / Cron / workflow / 実投稿 / 有料API は、各TASKの明示承認と安全ゲートが無い限り操作しない。
+- 共通アカウント（旧G5）の優先は「競合したときに優先」であり全体停止ではない。同じDB object・RPC・Auth / RLS・Edge・settings・workflow・API境界に重なる場合だけ待つ。同一Supabase DBのDDL / write区間は直列化する。
+- production mutation window は実writeの直前に開き、read-back後すぐ閉じる。各TASKヘッダーの `production_mutation_window: ACTIVE` と、その境界を確認してからproductionへ書く（新旧両系統のTASKを確認する）。
+- 秘密情報（`.env`、APIキー、token、Cookie、秘密鍵）は表示・commit・ログ出力しない。
+
+## 未マージPR
+
+- 新系統のTASKに属する未マージPRは無い。
+- 新系統の導入PR（このDraft PR）自体は未merge。旧系統のPRは旧CURRENT_STATEとGitHubを参照する。
+
+## deploy待ち
+
+- 新系統としては無い。
+
+## slot競合
+
+- 新系統内の競合は無い（全枠idle）。
+- 移行期間中は、旧Gn / Hn と新Fn / Jn が同じ境界を同時に変更しないよう、TASKを置くときに新旧両方の索引を確認する。
+
+## 現在有効な運用判断
+
+- 旧系統: G1/G2=かぶモリアプリ、G3/G4=X自動投稿アプリ（POSTONA）、G5〜G10=明示割当専用。H1〜H4=レビュー枠、H5=Codex臨時実装専用。単独 `F` は導入PRのmerge後、新旧30枠の統括。
+- 新系統: F1〜F10は旧G1〜G10の後継枠、J1〜J4はレビュー枠、J5は臨時実装の優先枠（ユーザーの明示指示があればJ1〜J4も実装可）。
+- 旧系統で開始したtask_idは旧系統で完結させ、新系統へは次の新規TASKから移す。
+- Codexレビューの要否と時期は「レビュー最適化方針（2026-09-25〜）」に従う。レビュー省略時も実証確認は減らさない。
+
+## 次工程
+
+1. 導入Draft PRのK10確認と、必要ならCodexレビュー（レビュー先は旧系統のH1〜H4）。
+2. ユーザー / ChatGPTの判断でmerge。merge後に新系統が有効になる。
+3. 旧系統の各slotが完了した時点で、ChatGPTが次の新規TASKを新系統へ置くかを判断する。
+4. 完全移行の条件が揃ったら、最終snapshotと完全移行を別TASKで行う。

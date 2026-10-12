@@ -30,3 +30,5 @@ GitHub共有タスク運用は `.agent/ORCHESTRATION.md` を参照する。競�
 - `H5`: Codex slot 5。`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、`.agent/tasks/CODEX_TASK_5.md` を確認し、TASKが `ready` または `in_progress` の場合のみ開始する。
 
 `idle` / `done` / `review_required` の場合は勝手に新規作業を開始しない。H1〜H5の意味をユーザーへ聞き返さない。
+
+移行期間中（`.agent_v2/` 導入後）は、新系統の `J1`〜`J5`（完了確認 `V1`〜`V5`）も開始コードとして扱う。TASKは `.agent_v2/tasks/J1.md`〜`J5.md`、最新Reportは `.agent_v2/reports/J1.md`〜`J5.md`。詳細は `PROJECT_RULES.md` の「新旧二重系統」と `.agent_v2/ORCHESTRATION.md` に従う。

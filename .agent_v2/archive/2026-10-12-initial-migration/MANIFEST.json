@@ -1,0 +1,274 @@
+{
+  "snapshot_id": "2026-10-12-initial-migration",
+  "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7",
+  "snapshot_commit_date": "2026-10-12T15:34:45+09:00",
+  "file_count": 33,
+  "total_bytes": 6017158,
+  "scope": "all files under .agent/ at snapshot_commit + root shared rule/handoff files",
+  "files": [
+    {
+      "original_path": ".agent/ACTIVE_TASK.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/ACTIVE_TASK.md",
+      "size": 21535,
+      "sha256": "302f85bcee66eeca9cd56494d4902128ba6d74850329f68489f92594f58ec9a3",
+      "git_blob": "19adee9d1a913ea8c76d9c97e9546b46b7a2292a",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/CHATGPT_HANDOFF.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/CHATGPT_HANDOFF.md",
+      "size": 3163,
+      "sha256": "6abdbc20eb9ee56cf5e7d0dc25d658591d0ecab0bb214f5a9dae5cd9dbf5d364",
+      "git_blob": "1d5a1f62fb9b0a7f1d92f91ca1a8cc19bec5a7dc",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/CLAUDE_REPORT.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/CLAUDE_REPORT.md",
+      "size": 5330,
+      "sha256": "cf129783c0f0568b04a692f2fd52bfb9442023e282f88b2e65d468837d24dd93",
+      "git_blob": "540dea05b87b886e7a5680b1e4e168fa11a85b84",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/CODEX_REPORT.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/CODEX_REPORT.md",
+      "size": 525969,
+      "sha256": "33cb918645145f1940587953f996831f085ac9c9bf18325c11cd7ff3eeada4f6",
+      "git_blob": "45f41d5c5fbafd9ba55f42cde56997cd3f13a555",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/CODEX_REPORT_2.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/CODEX_REPORT_2.md",
+      "size": 814077,
+      "sha256": "ae042e68d34946ce69811cda4a734e93c085a94de8e214694cb432d13a11753b",
+      "git_blob": "d3d6b4cd9cfd954680b5f15ca6ab1a990fbe3288",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/CODEX_REPORT_3.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/CODEX_REPORT_3.md",
+      "size": 16592,
+      "sha256": "8428e2c3f7f14dd09edfd8a850998cdca789dd778403d0b94a8c2e984b14e54c",
+      "git_blob": "07689978ea28d741a1cae65e00366dc65a5de750",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/CODEX_REPORT_4.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/CODEX_REPORT_4.md",
+      "size": 14368,
+      "sha256": "eaefd6b030dd868364a86883df11ec20356e4c2228b9aa95e00db636d52fed16",
+      "git_blob": "b0d4e5c6794b647958ae08f9350c3398803a2f6b",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/CODEX_REPORT_5.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/CODEX_REPORT_5.md",
+      "size": 6205,
+      "sha256": "192d33225ca775dee986e890c1b4f03bec3dbbe5249fc5ebda6efc01dc4e5e0d",
+      "git_blob": "e707065c4443f8400e50a7866e95beb47b15c978",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/CURRENT_STATE.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/CURRENT_STATE.md",
+      "size": 795940,
+      "sha256": "a692cb52d082cc0a18c0220ef580c9fa537b52c8bbeb203b35fef7b4d86fabf1",
+      "git_blob": "8c4ff7f6f72a4d918c2dddcc283ee5cb994a6d07",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/ORCHESTRATION.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/ORCHESTRATION.md",
+      "size": 33520,
+      "sha256": "97e2185d17c4f0a022674525268bb3c00783d4b9c3324f2e587fed625e261276",
+      "git_blob": "96a505f3a864ea35f6ade267421f1b6e5db86abc",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/archive/CLAUDE_TASK_4_pre_threads_20261011.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/archive/CLAUDE_TASK_4_pre_threads_20261011.md",
+      "size": 307561,
+      "sha256": "3ab04a32937ed6c2bc0c8d8809d58b64faec52f58a115a6bc58d3b93d93a9027",
+      "git_blob": "e8f10a36db5a95d3676395a4f7f949982958dd0f",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/archive/CLAUDE_TASK_4_threads_edge_pre_codex_20261011.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/archive/CLAUDE_TASK_4_threads_edge_pre_codex_20261011.md",
+      "size": 9222,
+      "sha256": "3da37797f41365b3baceb29ae24ee50774236846a35837b4df696748e7b5f69e",
+      "git_blob": "370ab0b75412088dc2a34ab2aeb3679ba4aea158",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/room_handoffs/X_AUTOPOST_CHAT.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/room_handoffs/X_AUTOPOST_CHAT.md",
+      "size": 3700,
+      "sha256": "5abea8f1adb531fb7a5f9c8e453e081e5cee1d8ddf4f9772f3c0306dc09452fa",
+      "git_blob": "5bc2e0395fe3c134d9ce79c0f853263d04138b69",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/tasks/CLAUDE_TASK.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/tasks/CLAUDE_TASK.md",
+      "size": 804227,
+      "sha256": "620e7454ff1bee47af2fe8ca75d07810ff9851d046ff0cf14245fbd0ea7270dc",
+      "git_blob": "1bbbd931318f3467fb574da0966dd7bf3f924c01",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/tasks/CLAUDE_TASK_1.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/tasks/CLAUDE_TASK_1.md",
+      "size": 576539,
+      "sha256": "a38443b3cbf178133189d9617e887ce5c3f00dd2e4d771ef7432762fc56650e1",
+      "git_blob": "fab1b7e0330bd6a7410977ddc476a7f82b4279fa",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/tasks/CLAUDE_TASK_10.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/tasks/CLAUDE_TASK_10.md",
+      "size": 13301,
+      "sha256": "d5d8f7bf4f855485cb476fa97d94e361c516bf03bf18e205122b009b35d96ce8",
+      "git_blob": "b657bb43ef8aeffeaee05413962c6ac8ce08c7cb",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/tasks/CLAUDE_TASK_3.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/tasks/CLAUDE_TASK_3.md",
+      "size": 497403,
+      "sha256": "0bf58f022cafe851484f2cec1d7951712e90351f4afe42988a7fd09c782b9531",
+      "git_blob": "7fabd2daa8cc498e1e058b87174a76a45bbc6a0c",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/tasks/CLAUDE_TASK_4.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/tasks/CLAUDE_TASK_4.md",
+      "size": 97406,
+      "sha256": "c3f40f59da890062961f71f6a2c09e05ba7efb091346c1c020e6289336fff7e6",
+      "git_blob": "bb4313b3a3fdb5541a1fec7470287dff36692947",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/tasks/CLAUDE_TASK_5.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/tasks/CLAUDE_TASK_5.md",
+      "size": 618761,
+      "sha256": "9458ec9dbd7984ddccaed5be6318d20dcc6c28073b827bea011c902395660909",
+      "git_blob": "f3eb8883087fe72b3170f80d16ece81f80ed8517",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/tasks/CLAUDE_TASK_6.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/tasks/CLAUDE_TASK_6.md",
+      "size": 88851,
+      "sha256": "56180424dd054756621694d7cf679557c78b8ba5c02504d95f94c5d756c90180",
+      "git_blob": "a0316a25224fb0822e491cb4332468db7e330b9c",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/tasks/CLAUDE_TASK_7.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/tasks/CLAUDE_TASK_7.md",
+      "size": 17627,
+      "sha256": "d7559f747e2ea7990f95f824e224683130e1ecbed43beb6cfcd542cc6ca7e209",
+      "git_blob": "a31efd0b8f571dc65d9cefa7c8440aa55bc88956",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/tasks/CLAUDE_TASK_8.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/tasks/CLAUDE_TASK_8.md",
+      "size": 62254,
+      "sha256": "b1970df9f14a047ba24a2643fec290109a23e1af903aa23e68122962ca505d26",
+      "git_blob": "865d13e22d7a111c7068589b99a2d3a0c6c763d9",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/tasks/CLAUDE_TASK_9.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/tasks/CLAUDE_TASK_9.md",
+      "size": 50686,
+      "sha256": "8794ca15c621c5c1a6c32d4ce64457c3c4c1f6ec6ffcac2f06dcf361ef153787",
+      "git_blob": "8bd42aa5dabc9c148f74b142659cbeb39292f826",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/tasks/CODEX_TASK.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/tasks/CODEX_TASK.md",
+      "size": 285770,
+      "sha256": "072a47249ac5746c1a7c22398276432d83a15dc8cd0ff09869e99a018e7e23bf",
+      "git_blob": "8598f77e9b91f89027966dec0ee39f65fc668a06",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/tasks/CODEX_TASK_2.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/tasks/CODEX_TASK_2.md",
+      "size": 218981,
+      "sha256": "858efc7cf89c557ed9d359a45b55c39f0199315530b6ccee29183fe6e73baca5",
+      "git_blob": "891ec88c432b0e8674e5ccc28cb9265e0d5c4371",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/tasks/CODEX_TASK_3.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/tasks/CODEX_TASK_3.md",
+      "size": 24175,
+      "sha256": "fb6f8a18540fa0c5a2a2e905979f8db3ab75c205bd3da8cfda1495a4ed63b471",
+      "git_blob": "ab6c3ff1cf144aa14fac27057be629f6b40217e1",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/tasks/CODEX_TASK_4.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/tasks/CODEX_TASK_4.md",
+      "size": 12987,
+      "sha256": "7826db8843a6f5970aa729a6ebbae6909b01df4336ec4001337ce0a8c8f246a5",
+      "git_blob": "5ec5d5bf6bd074b3df375cef61ad1aa25cf98a1b",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": ".agent/tasks/CODEX_TASK_5.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/.agent/tasks/CODEX_TASK_5.md",
+      "size": 16090,
+      "sha256": "fe948ddfd9c92aafc36acbe68bf12d26b01c142bb6117f69e09ea819f67071ec",
+      "git_blob": "2b60e682894c6a1de06ae469b70d501b48ddcd8a",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": "AGENTS.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/AGENTS.md",
+      "size": 2706,
+      "sha256": "f32a3b959ae794713527b7fde1fc2349eef7f5d6cf56116b25412916955ede07",
+      "git_blob": "27e3838c0a66e6f0e15f07397b0f0413917732f7",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": "CLAUDE.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/CLAUDE.md",
+      "size": 2602,
+      "sha256": "9ced1cdf51de384c804b8216aafff029d57874795d80d79152ca7c98133e25cc",
+      "git_blob": "87d542c59ed1fbb9156c67ff45f91e1b8afbee51",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": "HANDOFF.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/HANDOFF.md",
+      "size": 49771,
+      "sha256": "180ce7cf74f0c5f1a9f6c2dd56f61285ee036b4ca582f7f2e84764becd84cc9c",
+      "git_blob": "2a608d05301cfaf0649faf62d53d9d0d4bdf8a42",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": "HANDOFF_TEMPLATE.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/HANDOFF_TEMPLATE.md",
+      "size": 737,
+      "sha256": "338d724192a2c10dc9bffa947b4584434102f07c1da2adb2ec3704cab810c70a",
+      "git_blob": "e3f66324574ed19d3dcd0c8ab0cceac498fde713",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    },
+    {
+      "original_path": "PROJECT_RULES.md",
+      "archive_path": ".agent_v2/archive/2026-10-12-initial-migration/files/PROJECT_RULES.md",
+      "size": 19102,
+      "sha256": "f2de98a8c0ee6e86d80bc74bbd7df242b3af965fed4b6deb9db72975923a9abf",
+      "git_blob": "d69f8dbae8e3169c159714c35b73448d89546af0",
+      "snapshot_commit": "d811b4dc72f3e65fc61e40ae99e61b2094b18ff7"
+    }
+  ]
+}

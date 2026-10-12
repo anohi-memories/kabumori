@@ -1,0 +1,4 @@
+# archive配下は原本とバイト単位で同一のコピー（SHA256で照合）。
+# -whitespace: 原本由来の行末空白等を git diff --check の対象にしない（直すとhashが変わるため）。
+# -text: どの環境でも改行コード変換をしない（checkout後もSHA256が一致するように）。
+** -text -whitespace

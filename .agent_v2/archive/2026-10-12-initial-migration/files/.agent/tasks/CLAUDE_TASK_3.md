@@ -1,0 +1,7090 @@
+# G3 — CURRENT TASK — POSTONA投稿予約 確認UI実装 V1（OFFLINE）
+
+- task_id: postona-g3-reservation-preview-confirmation-ux-v1-20261012
+- owner: claude
+- slot: claude-3
+- status: done
+- next_owner: none
+- start_code: G3
+- finish_code: K3
+- return_to: POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）
+- recommended_model: **Sonnet5（高）**
+- priority: high
+- production_post_or_reservation_enabled: false
+
+## Objective
+PR #138 merged preview / PR #145 draft source-only contracts を利用し、実際に触れる予約確認UIを完成させる。固定日時・ランダム・毎日/N日間隔のプレビューから、各投稿の本文・日時・X投稿先を確認、編集、取消、確認済みの進捗を表示する。本文・日時・アカウント変更や再抽選は確認を無効化し、取消投稿を復活させない。異なるブランド/アカウントの状態を混ぜない。既存の5 bottom tabsを変更しない。投稿先への本番送信やサーバー予約保存は一切しない。常時「プレビュー／未予約・投稿されません」を表示し、「予約済み」や投稿完了を偽装しない。「これで覚えて」は自動投稿同意ではない。
+
+## Boundaries and execution
+1. fresh origin/main、PROJECT_RULES、ORCHESTRATION、ACTIVE_TASK、CURRENT_STATE、G3/G4/G5 TASK/Report、PR138 merged、PR145 Draft head 8820fa8d、G3/G4/G5 worktrees / ownership / conflictsを先に確認。独立した新G3 worktree / branchで作業。旧PR145 head/branch、G4/G5/H5、他worktreeは変更しない。
+2. 変更可能はG3所有の `apps/social-mobile/src/features/schedule/`, `apps/social-mobile/src/app/(tabs)/schedule.tsx`, 必要な同領域UI testのみ。PR145の未マージ保存契約への依存が必要なら、安全なG3内stacked Draft PRとして依存関係を明示し、PR145を勝手にマージしない。SQL候補、Edge、共通Auth/Entitlement、G4 SNS accounts UIには触れない。
+3. UIコードの実装を優先。固定時刻、10件ランダム、N日間隔、再抽選、編集、取消、切替の必要最低限の回帰テスト、TS/lint/diff-check/秘密情報検査。すでに実装済みなら重複させず欠けている操作だけ作る。
+4. production Supabase DB/Auth/RLS/Edge/Cron/Secrets、X/Threads/Meta/OpenAI実呼出、migration適用、merge/deploy/EASなし。保存フラグはOFF。PR145修正はK3でPASS_SOURCE_CANDIDATE_WITH_G5_G4_HOLD、旧TASK終了扱いで履歴保持。
+5. 独立G3 branchにコードcommit/pushし、新規Draft PRを作成。TASK末尾に## Report（task_id/result/changed_files/tests/commit/push/merge/deploy/safety/remaining/PR/next）を追加、status review_required/next_owner chatgptにしてK3。開発日記は公開安全性確認。
+推薦モデル：**Sonnet5（高）**。
+
+## Report — postona-g3-reservation-preview-confirmation-ux-v1-20261012
+
+- task_id: postona-g3-reservation-preview-confirmation-ux-v1-20261012
+- result: **PASS_UI_SOURCE_LOCAL_PREVIEW_ONLY**（確認 UI を実装。保存・予約・投稿は一切できない。保存フラグは OFF のまま）
+- モデル: Sonnet 5.5（推奨どおり）
+- worktree: 新しく作った独立 G3 用 `/Users/yuya/Developer/kabumori-g3-reservation-confirm-ui`
+  - PR #145 の先頭 `8820fa8de0f978767535472f5a44f8623bc74a30` の上に積んだ（merge で main を混ぜていない）。
+  - 作業前に、PR #145 が下書きのまま先頭が変わっていないこと、PR #138 が merge 済み（`a9b7cd2032169ae375a4b9f3e3086e6b3a2f3ff7`）であることを確認した。
+  - main 側に、G3 の領域へ重なる変更が無いことも確認した。
+- branch: `claude/g3-postona-reservation-confirmation-ux-v1-20261012`
+- commit: `0cd5c596a4d553df924a16c1f5091815e74b199a`（1 本）
+- push: 実施（force・rebase なし）
+- PR: https://github.com/anohi-memories/kabumori/pull/151 （**下書き**、MERGEABLE）
+  - base は PR #145 のブランチ `claude/g3-postona-x-reservations-offline-v1-20261011`（積み重ねの依存関係を PR 本文に明記）。
+  - 先頭 `0cd5c596a4d553df924a16c1f5091815e74b199a` は GitHub 側から読み戻して一致を確認した。9 ファイル。
+- PR #145 は変更していない（先頭は `8820fa8d` のまま）。merge しない。
+- merge 0 / deploy 0 / EAS・TestFlight 0 / 実際の X・Threads・Meta・AI の呼び出し 0 / 本番の DB・Auth・RLS・Edge・Cron・Secrets への接続 0 / migration の適用 0
+
+### changed_files（G3 の領域だけ。9 本）
+- `apps/social-mobile/src/app/(tabs)/schedule.tsx`（確認・日時変更の配線。カードを部品へ移動）
+- `apps/social-mobile/src/features/schedule/confirmation-state.ts`（新規）
+- `apps/social-mobile/src/features/schedule/time-edit.ts`（新規）
+- `apps/social-mobile/src/features/schedule/preview-card.tsx`（新規）
+- `apps/social-mobile/src/features/schedule/schedule-labels.ts`（新規）
+- `apps/social-mobile/src/features/schedule/sha256.ts`（新規）
+- `apps/social-mobile/tests/reservation-confirmation.test.mjs`（新規）
+- `apps/social-mobile/tests/schedule-screen-wiring.test.mjs`（追記）
+- `apps/social-mobile/tests/schedule-planner.test.mjs`（更新）
+- 触れていないもの: SQL 候補・Edge・共通 Auth / 利用権・G4 の SNS アカウント画面・`reservation-store.ts`・`reservation-flow.ts`・migration・依存関係（`expo-crypto` は既存）・下タブの構成。
+
+### 実装したこと（すでにあったものは重複させていない）
+すでにあった: プレビューの作成（4 モード）、本文の編集、並べ替え、取り消し、再抽選、競合の解消、切替時のブランド分離。
+新しく作った操作:
+
+1. **投稿ごとの確認**（「本文・日時・投稿先を確認」）
+   - カードに、本文・日本時間の日時・投稿先の X アカウント（表示名とハンドル）をまとめて表示する。確認はそのカードの内容そのものを記録する。
+   - 状態は「未確認」→「確認済み」。「確認を取り消す」で戻せる。
+   - 近い予定がある（競合）、投稿先が確認できない、編集中・日時変更中の投稿は、確認できない（理由を表示）。
+2. **確認の無効化**
+   - 確認は、画面に出ている本文・日時・アカウントと毎回突き合わせる。
+   - 本文の編集、並べ替え（2 件とも）、日時の変更、再抽選、競合の解消で動いた投稿は、その場で「確認が無効になりました。もう一度確認してください」に変わる。
+   - 本文を確認時とまったく同じ内容に戻した場合は、確認が有効に戻る（確認した内容と同じため）。
+3. **進捗の表示**
+   - まとまりごとの「確認 n/m」と、全体の「確認済み n/m件」（未確認・変更による無効の内訳つき）。
+   - 全件確認済みでも「ただし、予約の保存はまだ利用できません」と表示する。
+4. **固定日時の投稿の日時変更**（「日時を変更」）
+   - 日時を指定した投稿だけが対象。ランダムは再抽選、間隔指定は間隔を保つため、それぞれ手では動かせない（カードに案内を表示）。
+   - 過去・5 分未満・90 日超え・形式不正は、メッセージを出して変更しない。本文とアカウントは変えない。
+5. **取り消しは終了状態**
+   - 取り消した投稿は一覧に出ず、数にも入らず、確認も残らない。古い確認があっても復活しない。
+   - 「まとめて取り消し」は、そのまとまりだけを取り消す。
+6. **アカウントごとの分離**
+   - 進捗・確認・カードは、選択中のアカウントの投稿だけから計算する。別のアカウントに切り替えても混ざらず、戻れば元の状態に戻る。
+   - 確認は、そのアカウントのものにだけ結びつく。
+7. **AI 自動予約の枠**
+   - 本文がないため 1 件ずつの確認はなく、手動の進捗の数には入らない。
+   - 「AI相談の『これで覚えて』は自動投稿の同意になりません」を表示する。
+8. **表示の約束**
+   - 「プレビュー／未予約・投稿されません」を常に表示する。
+   - 「予約として保存（準備中）」は無効のまま。押しても何も送らない。
+   - 「予約済み」「予約しました」「投稿しました」は、どこにも出さない（静的テストで固定）。
+
+### tests（すべて手元。本番には接続していない）
+- アプリ: `tests/*.test.mjs` **309/309**（PR #145 の 289 件に、今回の新規 20 件を加えた数）、`src/domain` **22/22**
+  - 新規 `reservation-confirmation.test.mjs`: 14 件（確認の状態・進捗、日時変更、カードの表示、ソースの静的検査）
+  - `schedule-screen-wiring.test.mjs`: 本物の `schedule.tsx` を動かす 6 件を追加（確認・編集・日時変更・取り消し・まとめて取り消し・再抽選・アカウント切替・AI／間隔の見え方）
+  - 保存の約束（`reservation-flow.ts`）との整合は、新規の `reservation-confirmation.test.mjs` で検査している。確認が全件そろったときだけ保存依頼が作れること、確認の同期判定が `confirmationHolds` と一致すること、間隔指定の保存依頼に同じ間隔の情報が載ること。
+  - 既存の `reservation-flow.test.mjs` は変更せず、合格している。
+- `tsc --noEmit`・変更ファイルの eslint・`git diff --check` はクリーン。追加行の秘密情報スキャンは 0 件。
+- **変異テスト 19 種類をすべて検出**:
+  - 確認が本文・日時・アカウント・取り消しを見ない
+  - 進捗が取り消しや AI 枠を数える
+  - AI 枠を確認できる
+  - 日時変更が全モードを許す、過去を許す、取り消した投稿を動かす
+  - カードが競合中・編集中でも確認できる、投稿先を隠す
+  - 画面が全アカウントの下書きで進捗を出す、投稿先を渡さない、状態を常に確認済みにする、確認の取り消しが効かない、まとめて取り消しが 1 件だけになる、日時変更後の通知を出さない
+  - 最初の実行では 2 件（まとめて取り消し・日時変更後の通知）が検出されなかったため、テストを足して検出されるようにした。
+- **画面の確認（ブラウザ上の Web 表示、サンプルデータ）**:
+  - 投稿を作成 → 確認 → 日時を変更 → 確認が無効になる流れを実際に操作して確認した。
+  - 進捗・無効化の通知・無効のままの保存ボタン・投稿先の表示を確認した。コンソールのエラーは 0 件。
+  - 検証用に入れた認証回避は、すべて元に戻した（`_layout.tsx` は先頭と同一、`.gitignore` も復元、サーバー停止、設定ファイルの一時追加も削除）。
+  - **iOS の実機・シミュレーターでのタップ確認は未実施**（Web 表示のみ）。
+
+### 既存テストの更新（1 件）
+- `schedule-planner.test.mjs` の「画面は保存・投稿できない」検査は、プレビュー表示の文言を画面のソースに直接探していた。
+- 文言を共通の定数に移したため、次のように更新した（検査は弱めていない）。
+  - 定数の定義を確認する。
+  - 画面とカードが定数を表示していることを確認する。
+  - 禁止事項の検査（保存・通信・「予約しました」など）を、新しい部品にも広げた。
+
+### safety
+- この UI は、保存・予約・投稿・通信・端末への保存を一切しない。確認はこの画面のメモリだけに持つ（画面を閉じるかアプリを再起動すると消える）。
+- 本文のハッシュは、既存の `expo-crypto` で端末の中だけで計算する。外部には送らない。
+- `reservation-store.ts` の保存フラグ（`POSTONA_RESERVATION_PERSISTENCE_ENABLED = false`）は変更していない。画面は保存の呼び出しをしない（静的テストで固定）。
+- 「これで覚えて」を自動投稿の同意として扱っていない。
+- 他スロット（G4 の Threads・SNS アカウント画面、G5 の Auth・利用権・削除、G6、PR #145 のブランチ）には触れていない。
+
+### remaining（保留・次の段階）
+- 予約の保存・一覧・取り消しは、PR #145 の候補が前提。G5（x_autopost の利用権とライフサイクル）と G4（X アカウントの本人確認）の本物の判定がそろうまで保留。保存フラグは OFF のまま。
+- PR #151 の merge は、PR #145 の扱いが決まったあと（積み重ねのため）。
+- 実機（iOS）でのタップ確認、日時変更の入力の使い勝手（日付・時刻の手入力）の確認。
+- 判断を K3 に任せたい点:
+  1. 「全件を一括で確認」ボタンは、投稿ごとの同意の意味が薄れるため作っていない。10 件なら 10 回のタップになる。要望があれば、1 件ずつ内容を見せる形で別に検討できる。
+  2. 日時変更は「日時を指定した投稿」だけにした。ランダムは再抽選、間隔指定は作り直し。
+
+### next_recommendation
+1. K3 で受け入れを判断する（PR #151・PR #145 はどちらも下書きのまま。merge しない）。
+2. 実機の確認を行う場合は、別途ローカルで 1 回だけ（EAS ビルドは不要。ローカルの Expo + シミュレーター）。
+3. G5 / G4 の本物の判定ができたあと、PR #145 の候補と合わせて Sol（高）の統合レビュー → ユーザー承認の適用。
+
+### AI Lab diary 候補（外部公開してよい粒度）
+- AI Lab diary: 候補あり — 投稿の予約を作る画面に、「本文・日時・投稿先を1件ずつ確認する」操作を作った。確認したあとに内容や時間を変えると、確認が自動で無効に戻る作りにして、確認したつもりで違う内容が出る事故を防いでいる。保存はまだ無効のままで、押しても何も送られないことを画面に正直に出している。
+
+---
+
+## K3 Acceptance — 2026-10-12
+
+- verdict: **PASS_UI_SOURCE_LOCAL_PREVIEW_ONLY / MERGE_DEPLOY_HOLD**.
+- Reviewed G3 report, GitHub PR #151 changed paths and app confirmation state, card, time-edit and wiring source. Exact PR151 commit `0cd5c596a4d553df924a16c1f5091815e74b199a` stacked one commit on unchanged Draft PR145 `8820fa8de0f978767535472f5a44f8623bc74a30`; nine paths confined to G3 schedule UI/tests.
+- Reported tests: 309/309 app, 22/22 domain, 19/19 mutations, TypeScript/lint/diff PASS, sample Web Preview. ChatGPT did not independently rerun local tests. iOS simulator/device NOT_RUN.
+- Per-post confirmation, editing, retiming, cancellation, invalidation and account isolation accepted as offline UI candidate. Reservation persistence remains OFF; no production booking, X/Meta/AI, database, migration, deploy, EAS or PR merge authorized.
+- Review decision: no additional H1-H4 review for bounded UI. Future integrated G3/G4/G5 Auth/RLS/DB/X publish receives one Sol（高） focused security review before real rollout.
+- PR145 and PR151 remain Draft/unmerged; dependencies preserved. No new G3 task auto-assigned. Recommend next G3 feature implementation only after explicit new scope/owner-conflict check; otherwise wait G5/G4 authentic authorization boundaries.
+
+# ARCHIVED PREVIOUS G3 TASK — K3 accepted source-only PR145 R1/R2; original record preserved
+
+# Claude G3 — CURRENT TASK — POSTONA X手動＋AI予約の永続化・実行境界 V1（本番OFF／ソース実装）
+
+- task_id: postona-x-reservation-store-offline-v1-g3-20261011
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: chatgpt
+- start_code: G3
+- finish_code: K3
+- return_to: **POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）**
+- recommended_model: **Opus5.5（中）**
+- priority: high
+- type: implementation / source-only reservation persistence and guarded claim boundary; no production use
+- worktree_base: `/Users/yuya/Developer/kabumori-fresh` latest verified `origin/main` (new dedicated independent G3 worktree)
+- local_postgres_or_mock: permitted after disposable isolation proof
+- remote_supabase_db_auth_edge_migrations_rpc_grants_or_data: FORBIDDEN
+- real_X_Threads_Meta_provider_calls_or_publishing: FORBIDDEN
+- secrets_vault_cron_live_settings_or_other_app_worktree: FORBIDDEN
+- merge_deploy_EAS_TestFlight_paid_AI: FORBIDDEN
+- existing_G3_V1: [PR #138](https://github.com/anohi-memories/kabumori/pull/138) squash merged at `a9b7cd2032169ae375a4b9f3e3086e6b3a2f3ff7`, local preview only
+- protected_owner_boundaries: G4 Threads OAuth/manual publisher & existing Draft PR #124/#135/#139/#140; G5 Auth/entitlement/T10/T13/deletion & Draft PR #121; G6 separate production mutation; X OAuth Issue #131; G1/G2/G7/G8/G9; old G3 Draft PR #127 stage3B; existing Kabumori/AI Lab live X posting
+
+## Product outcome
+
+The user wants POSTONA to **really save a user-authored post with exact publish datetime**, or **save several written texts randomly spaced inside selected dates/time band**, or **save by daily/N-day intervals**, alongside AI automatic posting from confirmed frequency. Last G3 completed in-memory scheduler & common timeline in PR #138, but no reservation persists and no POSTONA user X publish is enabled.
+
+**Current bounded outcome:** implement the **real application-side reservation save/read/edit/cancel contracts and source-only server DB/API/claim design** with offline executable safety tests, so these can be connected after G5/G4 authorization. This is NOT merely another design memo; deliver code, test doubles and meaningful user flow, but explicit release flag remains OFF. DO NOT tell the user that posts will be published or survive restarts until production source-of-truth + authorization has passed separate approval and read-back.
+
+## Mandatory read / ownership / worktree preflight
+
+1. Read latest `PROJECT_RULES.md`, `AGENTS.md`, `CLAUDE.md`, `HANDOFF.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, THIS TASK and archived K3 reports, latest G4/G5/H5 TASK/Reports and PR #138 merged main source. Re-fetch fresh origin/main, `git status`, `git worktree list`, open PR changed paths and active slot reservations. Do not accept `idle` alone as free; verify this G3 status `ready/in_progress` and exact task ID, next owner, task content, reports. New unique independent G3 worktree; no other checkout/reset/rebase/prune/server shutdown.
+2. Read `docs/postona/unified-ai-manual-scheduling-v1-20261011.md`, merged app `schedule-planner.ts`/`schedule-view.ts`/`schedule.tsx`/`schedule-composer.tsx`, `supabase/migrations/20261006160000_*` through `20261006160200_*`, brand/auth membership/social account types, `supabase/functions/_shared/brand/vault_account_brand_post.ts`, and Draft PR127 docs from its exact head `4b0278228e726b65d782e9b231eb6fe84d9173ad` (this doc isn't merged onto main).
+3. Treat existing Stage3B migration files in main as **source present ≠ production applied**. G5 x_autopost lifecycle/T13 and G4 X OAuth verified ownership Issue131 remain unapproved/unintegrated. G4 CURRENT TASK is distinct Threads publish glue: protect `accounts/[id].tsx`, `supabase/candidates/postona_threads_publish/`, `social-mobile-threads-publish` and its source branch. G5 CURRENT TASK local OSS/Keycloak: protect all G5 user/Auth/deletion files, migrations and photo service.
+4. If a file, RPC, migration number, worktree or package boundary is already owned by an active slot, confine implementation to **new G3-specific paths** and report the exact interface needed. NEVER overwrite G4/G5 work. Keep K3 previous report and task history byte-for-byte below this new current TASK.
+
+## Stage 1 — working durable reservation contracts, offline only
+
+- Define a new G3-owned **server reservation source of truth** (e.g. `public.postona_post_reservations` + batch metadata/consent/audit, in **`supabase/candidates/postona_x_reservations/` only**, NOT automatic `supabase/migrations/` production chain). Align actual production `brands.id` /`social_accounts.id` types and ownership from verified source. Never repurpose existing brand-level `scheduled_posts` or AI Lab/Kabumori claim tables.
+- Design and implement SQL candidate + injected RPC/Edge-side interfaces to create, list, update/reschedule and cancel X reservations with an exact verified user/social-account association, workspace/brand, mode `manual_exact | manual_random_batch | manual_interval | ai_flexible`, explicit UTC schedule, timezone, status, batch ID, draft ID, revision/CAS, duplicate/idempotency keys, per-account min gap and daily/monthly capacity, audit metadata, expiry and owner-only read. Maintain text immutability/consent semantics when needed. Manual content must not be regenerated or silently reordered; explicit frozen datetime never automatically moves; random reassignment only with user confirmation; cancelled records never resurrect.
+- **Consent:** manual user-authored post is authorized by per-post explicit confirmation binding content hash + scheduled time + account + owner + revision and recorded server-side; changing material terms invalidates prior consent pending reconfirmation. AI generated auto slots require genuine opt-in `approvalMode='auto_post_preference'` and G5 active service & operator account authority; conversation `これで覚えて` is *settings confirmation only*, not posting approval. Both modes MUST always require the independent G5 `x_autopost` entitlement + active account lifecycle + exact G4 verified X account and publish permission. POSTONA service entitlements are NOT Threads-specific.
+- Fail-closed trust boundary: client brand/social_account_id/approvalMode/request timestamp is only a selector, never proof. Auth via independently verified Supabase JWT user identity and DB membership; no caller-controlled `auth.uid()` impersonation or unaudited service_role grant. Before write/list/update/cancel/claim and again before future publisher IO, validate live effective entitlement/owner/account state. Prefer narrowly typed injected **trusted G5-owned guard** and **G4-owned verified-identity predicate** contracts that return DENY until concrete reviewed production implementation exists; do not invent success from missing tables/functions. If effective DB transaction-scoped guards/lock ordering or grants cannot be proven using current source, DO NOT create callable public RPC or enabled endpoint: implement injectable service and local SQL proof, explicitly HOLD and specify exact G5/G4 interfaces. Test DENY by default, mock allow only in isolated tests.
+- Multi-tenant security: user A vs B, multiple brands owned by same user, X vs Threads same brand, own account switching, stale JWT/ownership withdrawn, consent withdrawal, service ended/deleting, owner role revoked, foreign ID injection, date and quota races. No direct open RLS policy or broad EXECUTE. Define "request only with own account" source contract; if effective grants uncertain, keep migration unapplied + endpoint disabled.
+- Durable create/update/cancel must be *atomic* per batch and concurrency safe. Idempotency scoped by `user_id + social_account_id + client_batch_id + revision`; same retry must not double book and conflicting payload/hash reuse must fail. UTC instants, timezone data (Asia/Tokyo V1); future-only; timestamps cannot escape user allowed date/time band; server validates interval and X text-length policy. User-visible slot collisions return explicit errors, not silent moves/drops. Backward compatibility of existing read-only `scheduled_posts` brand-level rows is required.
+
+## Stage 2 — guarded runtime / eventual delivery boundary, not live posting
+
+- Implement **real source-level** claim/lease/finish/cancel-race state machine for reservation rows in new G3 modules: planned→claimed→published or failed/UNCERTAIN, exclusive lease, CAS, retry safety, expiry, deduplication, and item status read-back. Claim and per-provider-post validation are separate from existing `claim_due_post`; never feed manual or AI reservations into existing `brand_post` live queue. Test two workers, stale leases and cancellation race. If remote post outcome is unknown, **do not blindly retry X posting**. Never actually call X/OpenAI/Meta, and never mark success from a mock/unknown outcome in production code.
+- Distinguish manual plain content (no AI generation) from later AI content generation. Future AI generation can use only explicitly approved brand persona/settings after checking `auto_post_preference`; `generationWindow` is not publish-time window. No AI content calls now. For source-only claim/publish boundary, a `NOT_AVAILABLE`/disabled production adapter is mandatory until exact G5/G4 and publisher pre/post write checks are secure.
+- If a full claim/finish SQL implementation would require sharing an unverified G5/G4 privilege boundary, do NOT make weaker shortcuts; create testable isolated candidates and explain HOLD precisely. Existing X OAuth preclaim Issue #131 still open and cannot be treated resolved.
+
+## Stage 3 — app-side save/read/cancel flow, explicit release flag OFF
+
+- In **G3-owned scheduling files only**, add typed repository / controller / integration tests for `POSTONA_RESERVATION_PERSISTENCE_ENABLED=false` or an equally explicit unshippable/fail-closed compile-time release gate. Candidate flow: manual exact/random/interval preview → explicit user confirmation of each content+time+target X account → staged save request → acknowledged durable server reservation ID/version → actual `予約済み` display only after successful read-back. If any prerequisite missing, remain `プレビュー／未予約・投稿されません`, do not show mock success or queued post. If save disabled, visible and honest; never overwrite committed reservation on reorder/reroll.
+- AI plan save is separate from manual per-post consent. Account switching must use `activeAccount.brandId` not first workspace; preserve fixed R1/R2/R2b/R3 protections. Never merge user-authored local previews with actual server-confirmed rows as if same; keep cancellation acknowledgement and status from server truth. No plaintext insecure storage, token storage, cross-user cached plan leakage or background network retries with unverified state.
+- Maintain existing five bottom tabs/navigation and preserve G4-owned accounts/Threads manual publish UI. Scope any mobile adjustment to `apps/social-mobile/src/features/schedule/` and `apps/social-mobile/src/app/(tabs)/schedule.tsx` and G3 domain/data new paths; do not modify `apps/social-mobile/src/app/accounts/[id].tsx` or shared G4 provider adapters.
+
+## Tests and acceptance
+
+- Local disposable PostgreSQL 17/18 with verified isolation and RLS/ACL negative cases (not just mocked guard): wrong account/foreign brand, role membership revoked, service entitlement ended, lifecycle deleting, concurrent batch duplicate, overlapping timestamps, fixed/flexible windows, cancellation and claim race, lease replay, incomplete provider response, default privilege leakage, PUBLIC/anon/authenticated/service_role role inheritance, rollback after failed writes, no partial batch insert. Avoid actual production Supabase and no default connection to remote.
+- Deno/node app pure/test harness: 10 manual texts between Oct15–25 09–21 JST, fixed exact and interval, seeded reroll edits/cancellation preserved, selected brand isolation, opt-in and per-item consent, durable acknowledged ID vs NOT_AVAILABLE, time change invalidates consent, fail-closed on unknown G5/G4 gates, disabled production post. Do not claim successful DB authorization based on mock-only green tests.
+- Run `apps/social-mobile` full tests, TS/lint, focused G3 SQL/Edge tests, `git diff --check`, secret scan; confirm no production mutation and exact file overlap against latest G4/H5/G5 source. Any unavailable local PG test / absent G5 interface must be marked BLOCKED, not PASS by substitution.
+- Write one compact implementation/activation doc `docs/postona/x-reservation-persistence-offline-v1-20261011.md` with actual source contracts, present blockers, rollout order relative to old PR127 Stage3B, G5 T13 / entitlement / deletion, G4 X provenance Issue131, API/DB owner transport, quota, static feature gate, fail-close proofs, rollback, release matrix and one explicit user-approved X test post plan. **No actual apply or live post in this TASK**.
+- Deliver **code/tests** on new G3-only branch from fresh main; open **Draft PR, unmerged** after review of active changes. Commit/push only G3-owned files; no touching other slots' branches/PRs. Report `task_id`, result `PASS_SOURCE_CANDIDATE_WITH_G5_G4_HOLD` or `BLOCKED`, exact changed_files/tests/commit/branch/PR/worktree, push=actual, merge=0, deploy=0, real X/Meta/OpenAI=0, production SQL/Edge/authorized grants=0, remaining blockers and next recommendation.
+- At completion set ONLY this G3 TASK/index to `review_required / next_owner chatgpt`, append new `## Report`, preserve complete archived prior G3 TASK/Report below unchanged, read back exact PR head, return **K3** to POSTONA G3のちゃ.
+- A focused independent **Codex Sol（高）** H1–H4 review is expected AFTER effective G3+G5+G4 Auth/RLS/RPC/Edge contracts are assembled, **before** any merge of unsafe backend changes or prod/pilot. Do not use H5 for normal review. Low-risk client-only pieces need not cause repetitive reviews.
+- If source alone cannot meet real reservation save due to unavailable G5/G4 production gates, still finish the isolated offline candidate and mark the gating blockers. Do not claim that an offline save makes real user reservations survive app closure.
+
+## K3 R1 R2 focused correction 2026-10-12 — CHANGES_REQUIRED / SAME PR #145
+
+- K3 inspected exact Draft PR145 HEAD `1306cdc5d37e8b28b4819484846aed00875654b2` and G3 Report. Accepted scoped offline SQL candidate, app flow and disabled publication approach as solid SOURCE CANDIDATE; G3-reported disposable PG17.11 run PASS, mutants 9/9 caught, Deno worker 7/7, app 287/287, domain 22/22, type/lint PASS. ChatGPT inspected GitHub source but did not independently rerun tests/inspect Mac worktrees.
+- **Two concrete P2 correctness gaps remain** in new source code. Do not merge PR145 or activate DB/API/Edge/posting. Treat source PASS as contingent on these narrow corrections only.
+
+### R1 P2: expired lease finish without sweep
+- Source `supabase/candidates/postona_x_reservations/001_postona_x_reservations.sql` `finish()` approx lines 572–583: validates matching `lease_token` and `status='claimed'` but **does not check `lease_expires_at`**. A lease expiry is only swept by another `claim_due()` invocation. Therefore a worker can call `finish('published',id)` or `finish('failed_before_send')` after its lease deadline but before any sweeper runs, and be accepted. This contradicts the stated lease-fencing contract. `pre_publish_check` checks expiry but runs BEFORE network IO, not during `finish()`.
+- Correct `finish` to reject/handle **already expired CLAIMED leases independently of sweeping**, without ever reclaiming or blindly re-sending X. Use a real current time at decision point (consider PG `clock_timestamp()` vs transaction-start `now()`) and ensure atomic row-lock transition. Decide and document if an expired row becomes `uncertain` atomically or `LEASE_LOST` with an eventual sweeper, while preserving an explicit future reconciliation route for a genuine X success observed after deadline. **Preserve already terminal `published` idempotent identical read-back**; a late success receipt must not cause duplicate X send or fake user-visible confirmed success without provider verification.
+- Add disposable real SQL regression **without calling `claim_due` sweeper between expiry and `finish`**: claim → make lease expired in test → call `finish('published',valid_post_id)` and `finish('failed_before_send')`, assert cannot accept stale claims; never reclaims or sends twice; current valid lease and already published idempotent replay stay PASS. Also test near-deadline behavior and SQL state invariants. Prior test only checked late finish AFTER a sweeper and thus missed the defect.
+
+### R2 P2: interval scheduling contract not checked by server
+- Current SQL `create_batch()` checks only individual future times and general minGap/day cap. `p_mode='manual_interval'` accepts `p_band=NULL`, and **no spacing cadence metadata** (daily/N-day/hourly) is sent by app `reservation-flow.ts:bandOf()` (returns `null` for interval). Arbitrary irregular timestamps with enough 60-minute gap can be written while labelled `manual_interval`, violating requested user cadence and TASK "server validates interval".
+- Add a narrowly defined, explicitly user-confirmed **interval metadata contract** to client typed `SaveRequest` + candidate DB schema/parser (may reuse mode-specific JSON `p_band` if sound). Validate the interval expression, intended start/time zone, count and all submitted UTC instants on the DB side, rejecting irregular, reordered, or inconsistent intervals as an **atomic batch error**. Keep `Asia/Tokyo` and the original schedule planner's supported interval units; don't silently expand to DST zones or invent unsupported cadence. Do not rewrite the user's content or move exact slots. A flat list of timestamps with no intended cadence must be rejected for interval mode.
+- Add fail-before/pass-after real PostgreSQL tests: exact daily, N-day example, hour cadence if supported by planner; one irregular gap with all timestamps otherwise 60min apart must be refused; wrong start/reorder, missing/invalid cadence, mixed month/day boundary. App tests ensure interval metadata is carried from the SAME `ScheduleBatch.request` and never accepted by relying only on UI validation; existing manual exact and random cases unaffected.
+
+### Scope, safety and completion
+- SAME G3 `task_id`, SAME Draft PR145 branch, no new PR; verify PR HEAD/isolated G3 worktree `/Users/yuya/Developer/kabumori-g3-x-reservations`, fresh main, overlapping changes, other TASKs BEFORE edit. G4 #144 Threads, G5 #146 common account, G6 ledger and other slots are separately owned and protected. Only modify existing G3 SQL candidate, G3 `reservation-flow.ts`, relevant G3 SQL/app tests, maybe G3 doc, and essential local harness/worker if R1 semantics require. Keep other 10 files and G3 previous Report bytes intact. Never modify G4/H5/G5 code or another worktree.
+- Re-run affected disposable PG behavior and concurrency/mutations, worker unit, full app/domain/TS/lint/diff/secret checks. Report exact PASS/FAIL and no production DB/Auth/RLS/migration apply, Edge/Cron, X/Meta/AI, deploy/EAS, PR merge. Local fake G5/G4 predicates are MOCK_ONLY, not production assurance.
+- Push narrow correction to SAME PR145 without force/rebase of other slots; verify HEAD read-back. Update current G3 status `review_required / next_owner chatgpt`, append new focused `## Report` retaining previous reports/history, and return **K3** to **POSTONA G3のちゃ**. No extra H1–H4 review this round; one **Sol（高）** Auth/RLS/API/DB/X-publish integrated review is necessary once G5 effective entitlement and G4 verified-account predicates/entrypoints are ready, prior to any live rollout.
+- **推薦モデル Opus5.5（中）** for these two SQL/data-contract fixes. G3 remains off in production; release hold unchanged.
+
+---
+
+## Report — postona-x-reservation-store-offline-v1-g3-20261011
+
+- task_id: postona-x-reservation-store-offline-v1-g3-20261011
+- result: **PASS_SOURCE_CANDIDATE_WITH_G5_G4_HOLD**
+  - 予約の保存・一覧・日時変更・再確認・取り消しと、取得・リース・完了の仕組みを、ソースとして実装した。手元の使い捨て PostgreSQL で検証済み。
+  - 本番では無効: migration に入れず、API の入口も無く、アプリの保存フラグも OFF。
+  - G5 / G4 の判定は「否」を返すスタブなので、本番のどの経路からも使えない。
+  - **予約はまだ本当には保存されない**（アプリを閉じると消え、X にも投稿されない）。
+- モデル: Opus 5.5（高）
+- worktree: 新しく作った `/Users/yuya/Developer/kabumori-g3-x-reservations`（kabumori-fresh の origin/main、PR #138 の merge `a9b7cd20` を含む）
+- branch: `claude/g3-postona-x-reservations-offline-v1-20261011`
+- commit: `01e19fa3`（実装）+ `1306cdc5`（最新 main の通常 merge）
+- push: 実施
+- PR: https://github.com/anohi-memories/kabumori/pull/145 （**下書き**、MERGEABLE）。先頭 `1306cdc5d37e8b28b4819484846aed00875654b2` は GitHub 側から読み戻して一致。
+- merge 0 / deploy 0 / 実際の X・Meta・OpenAI 0 / 本番の SQL・Edge・権限の付与 0 / 本番の読み取り 0
+
+### changed_files（すべて G3 の新しいパスか、G3 の画面・テスト）
+- `supabase/candidates/postona_x_reservations/001_postona_x_reservations.sql`（新規）
+- `supabase/candidates/postona_x_reservations/test_fixture.sql`、`test_behavior.sql`、`run.sh`（新規）
+- `supabase/functions/_shared/postona_reservations/worker.ts`、`worker_test.ts`（新規）
+- `apps/social-mobile/src/domain/reservation-flow.ts`（新規）
+- `apps/social-mobile/src/features/schedule/reservation-store.ts`（新規）
+- `apps/social-mobile/src/app/(tabs)/schedule.tsx`（+9 行: 無効な「予約として保存（準備中）」とその説明）
+- `apps/social-mobile/tests/reservation-flow.test.mjs`（新規）、`apps/social-mobile/tests/schedule-screen-wiring.test.mjs`（+3 行: 新しい依存を一覧に追加）
+- `docs/postona/x-reservation-persistence-offline-v1-20261011.md`（新規）
+- 他スロットのファイル・PR #123 / #127・既存の migration・Edge・`accounts/[id].tsx`・G4 の提供部分は変更していない。
+- `supabase/candidates/` の下では、G3 専用のフォルダ `postona_x_reservations/` だけを使った（G4 / H の Threads・X OAuth の候補とは別のフォルダ）。
+
+### 段階 1: サーバーの約束（SQL 候補）
+- 専用スキーマ `postona_x_resv`（PostgREST の公開外）に、`batches` / `reservations` / `audit` を置く。
+  - RLS は有効、ポリシーは無し。
+  - anon・authenticated・service_role・PUBLIC には、スキーマ・表・シーケンス・関数のどの権限も無い（事後条件で確認し、違えばファイル全体を取り消す）。
+  - 既存の `scheduled_posts` や `claim_due_post` は使わない。
+  - `brands.id` / `social_accounts.id` は text（本番と同じ型）。
+- 所有者の操作（SECURITY DEFINER、`search_path=''`）:
+  - `create_batch`: 不可分（全件か 0 件）。冪等（同じ鍵と同じ内容なら同じ行、内容が違えば `IDEMPOTENCY_CONFLICT`）。
+  - 時刻は 5 分以上先・90 日以内。ランダムと AI は期間・時間帯の内側だけ。本文は X の重み付き 280 以内。
+  - 手動は投稿ごとの同意（本文のハッシュが一致）が必須。
+  - アカウントごとのロックで、最小間隔 60 分・1 日 10 件・1 か月 300 件を守る。重なれば `SLOT_CONFLICT` で、勝手にずらさない。
+  - AI はブランドの `auto_post_preference` をサーバー側で読む。本文は受け付けない。
+  - `list_reservations`、`reschedule`（手動の同意を `needs_reconfirm` にする）、`reconfirm`、`cancel`（取り消しは最終。`claimed` は手遅れとして拒否）。
+- 呼び出し元の確認（毎回、その時点の状態で）:
+  - `auth.uid()`、本物の X アカウント、そのブランドの owner、`social_mobile_user_v1`。
+  - `g5_x_autopost_allowed`、`g4_x_account_verified`。
+  - 他人・Threads・member は、区別なく `ACCOUNT_NOT_FOUND`。
+- 削除: ブランド・アカウントの削除で予約も連鎖して消える（G5 の削除を止めない。PR #127 の R4 の問題を作らない）。
+
+### 段階 2: 実行の境界
+- SQL 側:
+  - `claim_due`: 期限切れは `expired`、リース切れは `uncertain` にする（再取得しない）。同意が今の本文・日時・版数と一致し、所有・G5・G4 を満たす手動の行だけを `skip locked` で取得する。V1 では AI の枠は取得しない。
+  - `pre_publish_check`: 投稿の直前の再確認。だめなら `failed`。
+  - `finish`: published は投稿 ID が必須で、再送は冪等。failed_before_send / uncertain。
+- TS（`worker.ts`）:
+  - 本番の投稿処理は `PRODUCTION_PUBLISHER_NOT_AVAILABLE` だけで、この場合は何も取得しない。
+  - 1 リースに 1 回だけ送信し、再試行しない。不明・例外・不正な ID・記録の失敗は、すべて uncertain。
+  - 既存の `brand_post` の待ち行列には流さない。AI の本文生成は無し。
+
+### 段階 3: アプリ（保存のフラグ OFF）
+- `POSTONA_RESERVATION_PERSISTENCE_ENABLED = false`。`createReservationStore()` はフラグに関係なく無効な保存先を返し、通信しない。
+- `reservation-flow.ts`:
+  - 手動は、投稿ごとに本文・日時・アカウントを確認する（時刻・本文・アカウントが変われば無効。再抽選も含む）。
+  - 取り消していない投稿だけで依頼を作る。読み戻しで全件が一致したときだけ「予約済み」にする。
+  - AI は、選択中のブランドで実際に読めた同意のときだけ（初期値や AI 相談からは作れない）。
+- 投稿予定タブ:
+  - 無効な「予約として保存（準備中）」と、「押しても何も送信されません」の説明を表示。
+  - 「プレビュー／未予約・投稿されません」はそのまま。R1・R2・R2b・R3 の保護も維持。
+
+### テスト
+- **DB**（PostgreSQL 17.11、使い捨て。フィクスチャの既定の権限は最悪のケース）: `run.sh` → `POSTONA_RESV_CANDIDATE_ALL_PASS`
+  - R0: 前提不足の拒否、失敗時の全取り消し、再適用の拒否
+  - A1: anon・authenticated・service_role は、表も関数も permission denied。PUBLIC の実行権限なし、RLS 有効、ポリシーなし
+  - D0: スタブのままでは、作成・一覧とも拒否（何も保存されない）
+  - M1: 10 件のバッチが不可分、冪等、二重予約なし
+  - M2: 他人・Threads・別ブランド・member の拒否
+  - M3: 同意なし・ハッシュ違い・長すぎ・過去・期間外・間隔・1 日の上限で、途中保存が無いこと
+  - M4: AI の同意をサーバーで読み、本文は拒否
+  - M5: 日時変更で同意が無効になり、再確認・取り消しは最終
+  - W1: 取得・二重取得なし・取得後の取り消しは手遅れ・完了・冪等・リース違い・不明・リース切れは uncertain で再取得なし・AI は取得しない
+  - W2: 送信直前に利用権が終わると送らない。利用権の終了・owner の剥奪・本人確認の取り消し・期限切れでは取得しない
+  - L1: アカウントの削除で予約も消える。既存の待ち行列は変わらない
+  - C1〜C3（2 接続）: 同じ鍵の同時保存は 1 件だけ、重なる時刻は 1 つだけ、2 ワーカーで各行 1 回だけ
+- **変異テスト 9/9 を検出**: G5 が常に許可、owner の確認なし、同意の確認なし、アカウントのロックなし、リースの整理なし、skip locked なし（二重取得を検出）、実行権限の付与（事後条件で取り消し）、取得後の取り消しを許す、同意を見ない。
+- **実行の境界**（Deno）: 7/7、`deno check` / lint クリーン。
+- **アプリ**: `tests/*.test.mjs` **287/287**（新規 10 件を含む）、`src/domain` **22/22**、`tsc` / eslint クリーン。
+- 既存の migration の不変条件テスト（Deno）も成功。`git diff --check` クリーン、追加行の秘密情報スキャン 0。
+- 最新 main の取り込み後にも、DB の runner・実行の境界・アプリ・tsc を再確認した。
+- **MOCK_ONLY の注意**: 許可が必要な DB の検証は、使い捨ての DB の中で G5 / G4 の判定を偽物に置き換えて行った。本物の G5 / G4 の境界の安全性の証拠ではない。
+
+### remaining_blockers（HOLD）
+- **G5**: `postona_x_resv.g5_x_autopost_allowed(user_id uuid) returns boolean` の本物が必要。
+  - `x_autopost` の利用権が active で、共通アカウントが削除中・ロックでないこと。
+  - T13 の書き込みフェンスと同じトランザクションで評価すること（PR #121 は下書き）。
+- **G4**: `postona_x_resv.g4_x_account_verified(user_id uuid, social_account_id text) returns boolean` の本物が必要。
+  - Issue #131 の本人証明と公開の許可。PR #126 の候補には、本人確認済みかを答える判定の関数はまだ無い。
+- **G3**（G5 / G4 の後）: 候補を migration にする、本番の入口（JWT の検証と公開の方法）、ワーカーの配線。
+- G3 + G4 + G5 をまとめた Sol（高）の独立レビュー → ユーザー承認の適用と、1 回だけのテスト投稿（文書 §8）。
+
+### safety_checks
+- 本番・リモートの Supabase には、読み取りも含めて接続していない。DB の runner は `/tmp` のソケット以外を拒否する。
+- 実際の X / Meta / OpenAI の呼び出しは 0。本番の投稿処理は「利用不可」だけ。
+- 「これで覚えて」を投稿の同意として扱っていない。AI の枠には、ブランド自身の `auto_post_preference` と G5 / G4 が必要（V1 では取得もしない）。
+- アプリは、保存・一覧・取り消しの呼び出しをしない（フラグ OFF、静的テストで固定）。端末に予定を保存しない。
+- G4（Threads・X OAuth・`accounts/[id].tsx`）、G5（Auth・利用権・削除・写真）、G6、PR #127、既存のかぶモリ / AI ラボの X 投稿には触れていない。
+
+### next_recommendation
+1. K3 で受け入れを判断する（下書き PR #145 は merge しない）。
+2. G5 と G4 に、上の 2 つの判定の約束（名前・引数・同じトランザクションで評価すること）を渡す。
+3. G5 / G4 の本物ができたら、G3 が候補を migration と入口にする → Sol（高）の独立レビューを 1 回 → ユーザー承認の適用と、1 回だけのテスト投稿。
+
+## Report — K3 R1 R2 focused correction（2026-10-12、同じ PR #145）
+
+- task_id: postona-x-reservation-store-offline-v1-g3-20261011
+- result: **PASS_SOURCE_CANDIDATE_WITH_G5_G4_HOLD**（R1・R2 の 2 つの P2 を修正。本番は無効のまま、リリースの保留も変わらない）
+- モデル: Opus 5.5（中）
+- worktree: 同じ G3 専用の `/Users/yuya/Developer/kabumori-g3-x-reservations`
+  - 作業前に、先頭が `1306cdc5` で変更が無いこと、PR の先頭と一致することを確認した。
+  - main 側で G3 のファイルに重なる変更が無いことも確認した。
+- branch: `claude/g3-postona-x-reservations-offline-v1-20261011`（同じ PR、新しい PR は作っていない）
+- commit:
+  - `6aae11a2`: R1・R2 の修正
+  - `8820fa8d`: 最新 main（`4bdc4e61`）の通常 merge。G3 のファイルへの変更は無い。
+- push: 実施（force・rebase は使っていない）
+- PR: https://github.com/anohi-memories/kabumori/pull/145 （**下書き**、MERGEABLE）
+  - 先頭の `8820fa8de0f978767535472f5a44f8623bc74a30` を、GitHub 側から読み戻して一致を確認した。
+  - PR のファイルは前回と同じ 12 本。
+- merge 0 / deploy 0 / 実際の X・Meta・AI 0 / 本番の DB・Auth・RLS・migration の適用 0 / Edge・Cron 0 / EAS 0 / 本番の読み取り 0
+
+### changed_files（今回の 8 本。すべて PR #145 の既存の G3 ファイル）
+- `supabase/candidates/postona_x_reservations/001_postona_x_reservations.sql`
+  - R1: `finish`・`pre_publish_check` の期限の確認
+  - R2: `assert_interval` を新しく追加し、`create_batch` から呼ぶ
+- `supabase/candidates/postona_x_reservations/test_behavior.sql`: M6・W3 を追加
+- `supabase/candidates/postona_x_reservations/run.sh`: 合格の目印 2 つを、確認する一覧に追加
+- `supabase/functions/_shared/postona_reservations/worker.ts`・`worker_test.ts`
+  - R1 の意味に合わせて、実際に記録された結果だけを数えるようにした。
+- `apps/social-mobile/src/domain/reservation-flow.ts`・`apps/social-mobile/tests/reservation-flow.test.mjs`
+- `docs/postona/x-reservation-persistence-offline-v1-20261011.md`（§2・§3・§5 に追記）
+- 残りの 4 本は変更していない: `schedule.tsx`、`reservation-store.ts`、`schedule-screen-wiring.test.mjs`、`test_fixture.sql`。前回の Report もそのまま残した。
+
+### R1: 期限が切れたリースの完了（P2）
+- `finish` が、リースの期限を自分で確かめるようにした。
+  - `claim_due` の整理が走ったかどうかには関係しない。
+  - 判断する時点の実際の時刻 `clock_timestamp()` を使う。トランザクション開始時刻の `now()` は使わない。
+- 期限切れの `claimed` の行の扱い:
+  - 行ロックの中で、その場で `uncertain`（`LEASE_EXPIRED_AT_FINISH`）にし、`lease_lost` を返す。
+  - 例外にはしないので、この移行は確定する。
+  - 遅れて届いた `published` も `failed_before_send` も受け付けない。
+  - X の投稿 ID は記録しない。成功としても表示しない（アプリの表示は「結果を確認中」）。
+  - 再取得も、再送もしない。
+- 今後の照合の道:
+  - 遅れた報告（結果・X の投稿 ID・コード）は、監査 `finish_after_lease` にだけ残す。
+  - 将来、X 側で本当に投稿されたかを確かめる照合の仕組みを、別にレビューして作る。`published` にできるのはその後（V1 には無い）。
+- すでに `published` の行に、同じ ID で再送した場合は、期限後でも冪等に `published` を返す。違う ID は `LEASE_LOST`。
+- `pre_publish_check` も、実際の時刻で期限を確かめるようにした。
+- ワーカー（`worker.ts`）:
+  - `finish` が実際に記録した結果だけを数える。
+  - `lease_lost` やほかの答えは `uncertain` として数え、「投稿済み」とは数えない。
+
+### R2: 間隔指定をサーバーが確かめていない（P2）
+- 間隔の情報の約束（`p_band` を間隔指定の専用の形で使う。キーはちょうど次の 6 つ）:
+  - `time_zone`: `Asia/Tokyo` のみ
+  - `start_date`: `YYYY-MM-DD`
+  - `start_time`: `HH:MM`（日本時間）
+  - `every_unit`: `days`（1〜30）か `hours`（1〜72）
+  - `every_value`
+  - `count`: 計画した件数（1〜50）
+  - 各投稿には `slot`（何番目の枠か）を持たせる。
+  - 単位と範囲は、もとの計画（schedule-planner）が対応しているものと同じ。夏時間の地域や、新しい単位は追加していない。
+- SQL の `assert_interval` が確かめること:
+  - 形・型・範囲。90 日以内に収まること（計画と同じ規則）。
+  - `slot` が送った順に増えていること、`count` 未満であること、件数が `count` 以下であること。
+  - すべての時刻が「(開始日 + 開始時刻) の日本時間 + slot × 間隔」と完全に一致すること。間隔は時間の絶対値で計算する。
+  - 違反があれば `INTERVAL_INVALID` か `INTERVAL_MISMATCH` で、バッチ全体を拒否する（何も保存しない）。
+  - 間隔の情報が無ければ、従来どおり `BAND_REQUIRED`。
+- 本文も時刻も、サーバーが書き換えたり、ずらしたりすることは無い。抜けている枠は、プレビューで取り消した投稿を意味する。
+- アプリ（`reservation-flow.ts`）:
+  - 計画のもとになった **同じ** `ScheduleBatch.request` から、間隔の情報（`count` は計画した件数）を作る。
+  - 各下書きの `slot` を計算し、間隔に合わない下書きがあれば、依頼を作らない（`INTERVAL_CADENCE_MISMATCH`）。
+  - バッチの種類と request の種類が違う場合も、依頼を作らない（`BATCH_INCONSISTENT`）。
+  - 指定日時・ランダム・AI の依頼は、これまでと同じ（`slot` は付けない）。
+
+### テスト（すべて手元。本番には接続していない）
+- **DB**（PostgreSQL 17.11、使い捨て、`/tmp` のソケットのみ）: `run.sh` → `POSTONA_RESV_CANDIDATE_ALL_PASS`
+  - これまでの R0・A1・D0・M1〜M5・W1・W2・L1・C1〜C3 もすべて合格。merge 後にも再実行した。
+- **M6（R2、新規）** の合格条件:
+  - 受け付けるもの:
+    - 毎日（3 件）
+    - 3 日ごと
+    - 2 時間ごと
+    - 月末から翌月に、日付をまたぐ 2 時間ごと（22:00 → 0:00 → 2:00）
+    - 真ん中の 1 件を取り消したもの
+  - 拒否するもの:
+    - 他は 60 分以上空いていて、1 か所だけずれている（9:00・10:00・11:00・12:30）
+    - 開始時刻とのずれ
+    - 開始を UTC として読んだ時刻
+    - 順番の入れ替え（2 通り）
+    - 枠の重複・`count` を超えた枠・件数の超過・`slot` 無し
+    - 間隔の情報が無い、またはランダム用の形
+    - 不正な値 15 通り（単位・値と件数の範囲・90 日超え・タイムゾーン・開始時刻と開始日・余分なキー・型）
+  - 拒否されたバッチは 1 件も保存されない。指定日時のバッチには影響しない。
+- **W3（R1、新規）**: 期限切れから `finish` までの間に `claim_due` を呼ばない。
+  - 期限切れ（1 秒前）の行:
+    - `published` は `lease_lost` になり、`uncertain` に移る。投稿 ID は記録されず、監査に報告が残る。そのあとの再送は `LEASE_LOST`。
+    - `failed_before_send` も `lease_lost` で `uncertain`（`failed` にはならない）。
+  - 残り 30 秒の行:
+    - `published` を受け付ける。期限が過ぎたあとの同じ ID の再送も `published`、違う ID は拒否する。
+    - finish の監査は 1 件だけ。
+  - トランザクションの途中で期限が切れる場合（開始時点では有効）:
+    - `finish` は `lease_lost` を返す。
+    - `pre_publish_check` は `LEASE_LOST` を返し、送らせない。
+  - そのあとの状態:
+    - 何も再取得されない。
+    - 囲い込んだ行が `published` になっていない。
+    - `claimed` の行が残っていない。
+- **修正前で失敗すること（fail-before）**:
+  - 修正前の SQL 候補では、M6 で不規則な間隔のバッチが受け付けられ、失敗した（`EXPECTED_ERROR_NOT_RAISED`）。
+  - R1 の部分だけを元に戻した変異では、W3 で失敗した（「遅れた published を拒否する」の確認）。
+  - 修正前のワーカーでは、新しいテストが失敗した。
+  - 修正前の `reservation-flow.ts` では、新しい 2 件が失敗した。
+- **変異テスト 20/20 を検出**（すべて今の候補から作り直した。merge 後にも再実行）
+  - これまでの 9 種類。
+  - R1 の 4 種類:
+    - `finish` で期限を見ない
+    - `finish` が `now()` を使う
+    - 遅れた `published` だけを通す
+    - `pre_publish_check` が `now()` を使う
+  - R2 の 7 種類:
+    - 間隔を確かめない
+    - 順番を見ない
+    - 時刻を照合しない
+    - 件数の上限なし
+    - 単位の範囲なし
+    - 開始を UTC で読む
+    - 余分なキーを許す
+- **実行の境界**（Deno）: 8/8（新規 1 件）。`deno check`・lint はクリーン。
+- **アプリ**:
+  - `tests/*.test.mjs` **289/289**（新規 2 件）、`src/domain` **22/22**
+  - `tsc` と、変更したファイルの eslint はクリーン。
+- `git diff --check` はクリーン。追加した行の秘密情報スキャンは 0 件。
+- 既存の migration の不変条件テストは、migration を変えていないので今回は再実行していない。
+- **MOCK_ONLY の注意**: 許可が必要な DB の検証は、使い捨ての DB の中で G5 / G4 の判定を偽物に置き換えて行った。本物の G5 / G4 の境界の安全性の証拠ではない。
+
+### 設計上のメモ
+- 間隔指定の行を所有者が明示的に `reschedule` した場合は、これまでどおり受け付ける。
+  - その投稿は同意が `needs_reconfirm` になり、再確認するまで取得されない。
+  - ユーザー本人による新しい日時の指定なので、R2 の範囲（保存時の検証）の外とした。
+  - K3 が間隔指定の日時変更も禁止すべきと判断した場合は、同じ形で狭く追加できる。
+
+### remaining_blockers（HOLD、変わらず）
+- **G5**: `postona_x_resv.g5_x_autopost_allowed(user_id uuid)` の本物。
+  - x_autopost の利用権、ライフサイクル、T13 の書き込みフェンスを、同じトランザクションで評価すること。
+- **G4**: `postona_x_resv.g4_x_account_verified(user_id uuid, social_account_id text)` の本物（Issue #131）。
+- **G3**（G5 / G4 の後）: migration にする、本番の入口、ワーカーの配線。遅れた成功の照合の仕組みも、ここで別に設計する。
+- G5 の利用権と G4 の判定・入口がそろった時点で、Auth / RLS / API / DB / X 投稿をまとめた **Sol（高）** の独立レビューを 1 回。そのあと、ユーザー承認の適用。
+
+### next_recommendation
+1. K3 で R1・R2 の修正を判断する（下書き PR #145 は merge しない）。
+2. 受け入れられれば、G3 は G5 / G4 の本物の判定を待つ（HOLD）。
+
+---
+
+# ARCHIVED PREVIOUS G3 TASK / K3 REPORTS AND MERGE RECEIPTS — VERBATIM
+
+# Claude Task 3 — CURRENT TASK / POSTONA AI自動・手動予約 統合スケジューラV1
+
+- task_id: postona-unified-ai-manual-schedule-planner-v1-20261011
+- owner: claude
+- slot: claude-3
+- status: done
+- next_owner: none
+- priority: high
+- project: POSTONA / X posting scheduling
+- type: **SOURCE/LOCAL UI + pure planner only; NO live posting or DB write**
+- recommended_model: **Sonnet5（中）**
+- start_code: G3
+- finish_code: K3
+- return_to: POSTONA G3のちゃ（AI相談・X投稿予約担当チャット）
+- independent_clean_base: `/Users/yuya/Developer/kabumori-fresh` fresh `origin/main`
+- live_supabase_X_Threads_Meta_AI_API_writes_or_calls: FORBIDDEN
+- DB_migration_Auth_RLS_RPC_Edge_Cron_Vault_secrets_or_traffic_switch: FORBIDDEN
+- production_deploy_PR_merge_EAS_TestFlight: FORBIDDEN
+- protect: previous G3 Report/PR127, H1 Threads OAuth, G4 X OAuth Issue131, G5 shared account/Auth, G1/G2/H2, existing X/Kabumori/AI Lab posting
+
+## G3 SOURCE MERGE RECEIPT — PR138 / 2026-10-11 JST
+
+- K3 accepted unified POSTONA AI/manual local-only schedule preview, then user authorized proceeding with PR138 merge. [PR #138](https://github.com/anohi-memories/kabumori/pull/138) was safely **SQUASH MERGED**, GitHub verified `closed / merged=true`, exact reviewed source head `f6b8f866b449cd432f649c132bbaa2e70a9f2ace`, merge commit `a9b7cd2032169ae375a4b9f3e3086e6b3a2f3ff7`, PR `merged_at=2026-10-11T14:30:47Z` (23:30:47 JST).
+- Pre-merge: main 68 commits advanced from PR's common base but ZERO changed-file overlap across 10 PR files; REST `mergeable=true`, Draft marked ready, SHA-guarded squash accepted. GitHub read-back squash commit changed EXACTLY 10 approved `apps/social-mobile`/tests and `docs/postona` files, main pointed to merge commit immediately afterward. Vercel CI failure was account-wide deploy rate limit, not local suite failure; Netlify preview canceled.
+- Source-only: plans remain in-memory preview `プレビュー／未予約・投稿されません`, user-authored exact/random/interval and AI frequency plan, no DB/cloud reservation, no live X/Threads posting. This action did not directly deploy Edge, apply migration, change Auth/RLS/RPC/Cron/Vault, run EAS/native or call provider APIs. Automatic GitHub hosting hooks may run; their downstream deployment outcomes were not independently confirmed.
+- G3 TASK **done / next_owner none**. No new task was assigned. Separate runtime authorization G5/G4, new user-scoped booking backend and independent Sol（高） security review + user-approved pilot remain required. Previous `MERGE_HOLD` statement was the historical K3 acceptance gate before this separate user-authorized source merge.
+
+---
+
+## K3 FINAL ACCEPTANCE — Unified AI + manual local schedule planner V1 / PR #138
+
+- task_id: `postona-unified-ai-manual-schedule-planner-v1-20261011`
+- **verdict: PASS_SOURCE_PREVIEW_ONLY / G3 DONE / MERGE_HOLD.** All original K3 R1, R2, R2b, R3 local-preview concerns accepted on source inspection. Acceptance does NOT authorize PR merge, real cloud-saved reservations, scheduler/migration/Edge, any X/Threads post, deployment or EAS.
+- PR: [#138](https://github.com/anohi-memories/kabumori/pull/138), **OPEN/DRAFT/UNMERGED**, inspected exact source head `f6b8f866b449cd432f649c132bbaa2e70a9f2ace`. Latest compare against main: branch ahead 5, behind 13. GitHub direct REST `mergeable=null, mergeable_state=unknown` at this time; do not assert conflict or mergeability from a boolean projection. Vercel check fails with **Deployment rate limited — retry in 24 hours**, Netlify preview was cancelled; neither proves app test failure. Recheck fresh base/conflicts/checks and user authorization separately before any source merge. G4 explicitly owns separate Threads manual publishing and protects G3 schedule paths.
+- R1: `rerollBatch` now takes current drafts, preserves identity/text/manual edits/reorder/ownership/cancelled terminal state, changes only remaining flexible timestamps with window/gap/capacity checks and no partial mutation on failure; UI updates matching IDs only.
+- R2/R2b: `effectiveBrandId({status,activeAccount})` now chooses the selected authorized account's brand, NOT first `snapshot.workspace.id`. Same brand feeds settings `repository.read`, `aiPlanningFor` and the preview owner; unknown/not-ready/mock cannot fetch or display another brand's opt-in. Existing brand/read request generation guards late results; actual transformed `schedule.tsx` mock execution exercises A-workspace/B-selected account and captures composer props, including delayed A↔B, missing/blocked defaults.
+- R3: real `scheduled_posts` accountId unknown kept as unbound brand-level read-only with RLS-provided brandId, never silently assigned to selected account or per-account conflict planner; mock known-account rows still filtered.
+- G3-reported tests **277/277** `apps/social-mobile/tests/*.test.mjs`, **22/22** domain TS, `tsc --noEmit` clean, eslint/diff/secret checks PASS; mock screen simulated, production no access; ChatGPT independently inspected current PR source/Report but DID NOT rerun test suites or Mac worktree. Changed files 10 G3-owned `apps/social-mobile` source/tests and `docs/postona` only; earlier PR127, G4, H5, G5 and other slots protected.
+- Verified no live operations by G3's reported scope: live DB reads/writes, production scheduled row writes, migrations, RPC, Edge deploy, Cron, Auth/OAuth, Meta/X/AI API calls, real posting, merge, EAS = **0**. Pure local memory plans display `プレビュー／未予約・投稿されません`, do not survive reload, and have `publishable:false`; manual per-post consent and AI unattended authorization remain separate.
+- **G3 current task done / next_owner none.** NO new G3 task automatically assigned, and NO unnecessary Codex review for inert local UI. Later runtime reservation + real posting still requires G5 active `x_autopost` entitlement/withdrawal guards, G4 proven identity + X OAuth Issue131 and H5 Threads contracts, new tenant-isolated reservation store/RPC and verified idempotent claim, one integrated **Sol（高）** security review and separate explicit production/pilot approval. Recommendation: reconcile PR138 with latest main and decide source-only merge separately, then sequence runtime backend once G5/G4 dependencies are ready.
+
+---
+
+## K3 selected-brand binding — SINGLE remaining P2 on Draft PR138
+
+- Verdict: **CHANGES_REQUIRED (R2b only)** at PR138 head `48f070cc6a8472990dc07760e61ce255e5d21c91`. Prior R1 (reroll edited/cancelled content) and R3 (unbound brand-level server rows) accepted from source inspection. G3 reports 269/269 app tests, 22/22 domain and TS/lint PASS. Not independently rerun. Draft unmerged, no live schedule/posting.
+- **Root cause still in actual screen:** `schedule.tsx` `const brandId = snapshot?.workspace?.id` refers to the FIRST brand from `SupabaseSocialRepository.readSnapshot()`, but `activeAccount` may be an X account from ANOTHER authorized brand. The screen passes that first brand to `repository.read(brandId)`, `aiPlanningFor(aiState,brandId)` and AI composer, so B's preview can show A's saved weekly frequency and `auto_post_preference`. Existing `schedule-view.ts` helper tests only prove safety if the screen supplies the correct brand.
+- **ONLY fix:** for `status === 'ready'` compute effective brand from the **currently selected activeAccount.brandId**, never from arbitrary first `snapshot.workspace.id` when real selected account's brand missing; use SAME effective brand for read, AI planning and owner. Missing verified brand, blocked or loading must show safe default/unloaded and consent off; mock_preview may show explicit demo defaults but must never fetch production brand setting. Keep async loadId rejection for rapid A→B→A. Same-brand account switching may share brand-scoped settings.
+- **Fail-before/pass-after UI-wiring regression:** snapshot.workspace='A', authorized accounts X_A brand A, X_B brand B; selected X_B must load brand B (not A) and display B frequency 2/manual_review even when A had frequency7/auto_post_preference. Cover failed/blocked B read, missing brand, mock-only and rapid switching. Include a test that asserts **actual schedule.tsx wiring**, not only idealized pure helper arguments.
+- Modify only this same G3 Draft PR138's screen, optional `schedule-view.ts`, narrowly relevant tests. Do NOT edit accepted R1/R3, G4/H1/G5, Auth/RLS, migration, Edge, Cron, live posting, PR127 or tabs. Work in isolated G3 worktree, verify PR head before push; no force-push, merge, production writes/deploy/EAS. Re-run local suite and Report, return K3. Recommended **Sonnet5（中）**; no new Codex review for local UI. Later real publishing still requires one Sol（高） integrated security review.
+
+---
+
+## K3 focused correction — R1/R2/R3 P2, exact Draft PR138 source ONLY — 2026-10-11 JST
+
+**Verdict: CHANGES_REQUIRED (3 narrow UI/state correctness defects); original implementation/tests accepted as a candidate, NOT merged or deployable.** This correction block OVERRIDES broad V1 implementation scope below. Correct ONLY the following reproducible issues on existing Draft PR #138 head `b244400ac710bdb6cd576631aacdb0b219bf73fd`. Keep the SAME task_id, only change current G3 status and Report, protect all old Report/TASK history and other slots. No independent Codex review for local-only fixes.
+
+### R1 P2 — 「再抽選」で編集/並び替え/取り消しが巻き戻る
+- Cause: `schedule.tsx` `reroll` replaces all batch drafts with `rerollBatch(batch,...)`, which regenerates every text from the original `batch.request.texts` and recreates cancelled draft IDs. Preview text edits (`editDraftText`) and post-content reorder (`moveDraftText`) live only in current `drafts`; a subsequent `再抽選` discards them. Worse, a partly cancelled random batch resurrects the cancelled post. This violates terminal `cancelled` and the user's expectation that re-roll only changes flexible times.
+- Fix `schedule-planner.ts` + `schedule.tsx` minimally, preserving the current ACTIVE draft identities, edited/reordered texts, original per-account ownership, and CANCELLED terminal records on reroll. Only times of active flexible drafts may change; cancelled drafts must NEVER be reintroduced. The new preview must still obey per-day/min gap/date-window constraints; infeasible placement must fail with NO partial edits. Explicit `shuffleContent` at initial planning must not override subsequent user edits on reroll. Exact/interval times must not be rerolled.
+- Add fail-before/pass-after focused tests: random 3 items → edit text B, move texts, cancel A → reroll → exactly 2 ACTIVE items with same edited/reordered content and no resurrected A; repeated reroll, no lost account ownership; exact/manual_interval unaffected; test shuffleContent true too.
+
+### R2 P2 — stale AI settings after switching workspace/account
+- Cause: `schedule.tsx` local `ai` state is only assigned on `repository.read(brandId)` `ready`. When workspace changes, the previous brand's frequency/approvalMode stays visible until a new read returns, and stays indefinitely if the new read is blocked/unavailable. This can display brand A's consent/frequency for brand B and plan B slots with A's setting.
+- Bind cached AI settings to the **exact authorized current brand/workspace**; clear/reset to explicit unloaded/default/unavailable state immediately on brand/session/status changes and non-ready read, prevent stale async results after change/unmount. If settings unavailable, do not claim a remembered frequency or owner opt-in; label the actual status. Auth and G5 ownership code must remain untouched. Where multiple accounts share the same brand, brand-scoped settings are intentional.
+- Add controlled rapid A→B and B-error/no-row transitions tests; ensure B's preview never inherits A's `auto_post_preference` / frequency.
+
+### R3 P2 — server brand-level posts falsely attributed to selected X account
+- Cause: existing `supabase-repository.ts` returns real `scheduled_posts` with `accountId:'unknown'` because DB has no social_account_id; `schedule.tsx` lines 68–70 maps **all unknown rows to whatever activeAccount is selected**. Switching to a different X or Threads account falsely labels the same brand-level plans as its posts and brings them into that account's conflict solver. Existing read-only display must not claim verified account ownership.
+- Do NOT invent account ownership. Preserve remote rows in a distinct read-only `投稿先アカウント未特定／ブランド単位` display (and origin uncertainty if appropriate), without applying X-specific per-account conflict shifts/consent to them; maintain navigation to `/posts/[id]`, real/mock/loading/unavailable semantics, and prevent cross-brand attribution where multi-brand membership exists. If needed, add the minimal **read-only** brandId metadata from the existing RLS-protected scheduled_posts read, avoiding any new DB/Edge/RLS or write contract. Display unknowns conservatively rather than hiding them, and make active-account switching accurate. In mock preview, explicit known account posts still filter normally.
+- Add focused regressions with two accounts including Threads and multiple owned brands; no relabeling of unbound server posts as X-account rows.
+
+### Non-negotiable safety, scope and gates
+- **SAME exact Draft PR #138 branch**, only the current G3-owned planner/screen/data-view or tiny read-only types/tests files necessary for R1–R3. No unrelated feature expansion or new PR, no change to historical PR127/123, no change to current bottom tab count.
+- Before editing, read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, current TASK/Report/ACTIVE_TASK/CURRENT_STATE, fresh `origin/main`, worktree and open PR changed paths; use only G3 isolated worktree, do not disturb H1/G4/G5/G1/G2 or development servers. Do not force-push/rebase another slot; update same PR safely after HEAD verification.
+- Run focused R1–R3 regressions plus full 250/250 app suite, 22/22 domain suite, TypeScript/lint/diff/secret checks (report updated totals truthfully), test no Supabase write/posting, and read-back new exact PR HEAD. Any inability to reproduce must be documented with evidence; don't invent a fix or introduce a new flow.
+- NO production Supabase reads or writes, new migration/RPC/Edge/OAuth/X/Meta/AI calls, Cron, PR merge, release/deploy/EAS or real posts. Vercel status on old PR head was quota rate-limit, not evidence of app test failure; report separately. Keep `プレビュー／未予約・投稿されません` and no server save.
+- Update ONLY G3 TASK Report/status to `review_required`/`next_owner:chatgpt` when complete, preserving previous G3 Report history verbatim. Return `K3` to this G3 chat.
+- **推薦モデル：Sonnet5（高）**; no separate Codex review for these UI/state-only corrections. One **Sol（高）** independent review later before real DB/RLS/publish writes.
+
+---
+
+## Mission — user product requirement
+
+Develop in the EXISTING POSTONA `投稿予定` tab a **unified view/composer for AI-scheduled and manually authored posts**. Manual modes:
+1. **指定日時**: one or multiple user-authored texts with fully selected exact date/time. Never auto-move a user-fixed time.
+2. **まとめてランダム**: multiple authored texts (e.g. 10), user-selected date range (e.g. Oct15–25), daily allowed hours (e.g. 09:00–21:00), optionally weekdays/exclusions. Allocate a concrete valid date/time per draft; show all results, reorder/edit, and explicit `再抽選` to change. No rerandomization on render/restart unless the user chooses it. Preserve post-text order by default; content shuffle optional only if chosen.
+3. **間隔指定**: daily or N-day/other valid time intervals, producing a concrete preview.
+4. **AI自動予約**: use already confirmed AI consultation content preferences, including `frequencyTargetPerWeek`, for source-only slot planning; define a separately chosen **publish-time window**. Existing `generationWindow` is AI CONTENT GENERATION timing, never silently reuse it as publish timing.
+5. **共通スケジュール**: mixed AI/manual chronological view, account and origin labels, editable plans, cancellation, conflict detection. Fixed manual slots win; flexible AI/random/interval slots may only be reassigned inside selected allowed windows and subject to gap/capacity constraints. Impossible allocation must show explicit error; no silent drops, overruns, or duplicate slots.
+
+### Critical product/permission distinction
+- `これで覚えて` in AI consultation only saves content settings/persona and **DOES NOT** give auto-publish consent.
+- AI unattended auto-posting still requires owner `approvalMode='auto_post_preference'`, verified account/brand, explicit authority and G5 `x_autopost` service entitlement.
+- Manual authored scheduling needs an independently confirmed **per-post/manual explicit user consent** rather than requiring AI's blanket opt-in. It STILL must pass G5 active entitlement, ownership, post-specific consent, valid publisher authorization, plan quota, cancellation/expiry, provider safety and audit. No workaround that grants service_role, disables RLS or bypasses existing G5/G4 gates.
+- For this current task, neither kind of draft can reach X posting or real Supabase scheduled writes. Show **「プレビュー／未予約・投稿されません」** for local-only plans. Do not falsely display preview as saved/posting.
+
+## Mandatory initial safety/ownership checks
+
+1. Read `PROJECT_RULES.md`, `HANDOFF.md`, `AGENTS.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this TASK and full historical G3 Reports, current H1/G4/G5 TASKs and Reports, prior G3 [Draft PR127](https://github.com/anohi-memories/kabumori/pull/127) docs §5, and `apps/social-mobile` schedule, domain, mock/real data and tests.
+2. Create a NEW unique isolated G3 worktree from fresh `kabumori-fresh origin/main`; inspect git status, owner/worktree list and current PR overlaps. NEVER reuse prior G3 worktrees, edit another slot, change branch/reset/rebase/prune others, or stop another slot's server. Confirm `ready/in_progress` before implementation.
+3. H1 temporarily owns Threads Edge candidate; G4 owns X OAuth identity/connection and tracked Issue #131; G5 owns Auth/lifecycle/entitlement. Don't edit source/migrations/functions belonging to them. Previous PR127 Stage3B 3 migrations are unapplied and protected; current production `x-test-post` doesn't have POSTONA dispatcher; do not imply live backend exists. If collision unclear, restrict to isolated new planner/test files or STOP.
+
+## Stage A — source-only scheduling domain + tests
+
+- Implement new pure, testable `apps/social-mobile/src/domain/` or `src/features/schedule/` scheduler with explicit types for origin (`ai_generated`/`user_authored`), scheduling mode (`manual_exact`, `manual_random_batch`, `manual_interval`, `ai_flexible`), account/brand/platform ownership, UTC instant+display timezone, approval state vs local preview, stable local post/batch IDs, seed/revision and one-way draft state transitions.
+- Strict validation: nonempty trimmed text, supported X content-length policy without erroneously assuming 140-character automated-policy is X-wide, time in future, date/window start/end, bounded batch quantity/horizon, timezone (`Asia/Tokyo` initially, explicit rejection of unsupported zones), 24:00 and day-boundary rules, duplicate/fixed-time conflicts, configurable conservative spacing and daily capacity, plan quota awareness.
+- Random mode must be seeded and reproducible for a preview, spread dates/times inside permitted windows without clustering when feasible; deterministic under re-render and stable after user approval; bounded search, explicit infeasible reason; re-roll is an explicit separate action and must not silently change exact/fixed slots.
+- Interval mode must detect when a fixed date/time is blocked and fail or offer an **explicit** alternative, not secretly change it. Conflict priority exact>manual-flexible>AI-flexible as defined by product contract.
+- Test 10 texts across Oct15–25 09–21, multiple exact posts, seeded re-render, explicit re-roll, impossible windows, time zones, past dates, duplicate/min spacing, AI/manual collision, optional no-shuffle, cancellation/edit/replan, account isolation, per-post manual consent boundary, no unapproved AI auto posting.
+
+## Stage B — real interactive but LOCAL preview UI
+
+- Extend existing `apps/social-mobile/src/app/(tabs)/schedule.tsx` (the current tab is **read-only**), with sections/filter: `すべて`/`AI自動投稿`/`手動予約`. Add CTA `投稿を作成`, manual textarea/cards and exact/random/interval form, preview table/list showing time and content; edit/delete/reorder; explicit re-roll; meaningful disabled actions and visible validation. Keep five bottom tabs **exactly unchanged**.
+- Existing remote `snapshot.plannedPosts` is read-only, `resolvePostsView` has `loading`/`unavailable`/`mock_preview` semantics. Preserve these; don't let unsaved local drafts appear as actual server scheduled entries, and never fall back to mock data on live read failures. Preserve account selection, `history`, `consult`, `posts/[id]` and AuthGate.
+- Keep offline plans in scoped in-memory state unless genuinely secure account-scoped durable storage exists; if session-only, prominently disclose plans disappear on restart. No unencrypted cross-user shared local storage or plaintext OAuth tokens. Do not add a pretending `予約確定` action that never persists remotely.
+
+## Stage C — runtime persistence integration spec ONLY
+
+- Add **one** `docs/postona/unified-ai-manual-scheduling-v1-20261011.md` detailing future user-authored DB schema/source of truth, account-to-post binding missing in current `scheduled_posts`, server-side ownership/consent+G5 active entitlement, G4 valid X-account provenance, platform-specific length/media rules, idempotent batch and scheduled-job delivery, claim/CAS locks, cancellation-vs-publish races, duplicate prevention, plan quota, rollback, audit, separation manual content from AI generation and automated 140-character source policy. Explicitly plan manual posts to bypass **AI generation**, NOT publish authorization. No new migrations in this TASK.
+- Define a future disabled or not-wired **typed write API boundary**, not an active backend endpoint. Mark real user-facing cloud save + publish as BLOCKED until G5/G4 gates, migration/Edge reviewed source, 1 targeted Sol（高） security review and separate user-approved production apply/pilot.
+- Protect `stock-x-autopost` live schedule, existing AI Lab and Kabumori X automation, their Cron, Vault, secrets, historical posts, G5 temporary photo Supabase situation, and H1/G4 branches.
+
+## Verification / completion
+
+- Run local unit tests, existing app schedule/data-view/account-isolation regressions, app TypeScript and lint checks, `git diff --check`, secret scan; if possible inspect local mock UI (without EAS or using another slot's Metro). Test that no preview can actually write, publish or schedule in live backend and no scheduling implies AI-consult consent.
+- Create a NEW G3-only branch from fresh main, commit/push and DRAFT PR; do not merge or deploy. Report exact implementation, UI proof/screenshots if available, test counts, changed files, commit/PR, worktree, explicit remaining backend gates, production reads/writes/posts/Edge/DB migrations/Cron changes (= 0), safety checks. Transition ONLY the current G3 TASK to `review_required`/`next_owner:chatgpt`; preserve all historical G3 TASK/Reports verbatim and do not edit other slots.
+- K3 decides acceptance and next owner. No routine Codex review for local UI/domain work; **Sol（高）** once before future G3+G4+G5 actual authorization/write/delivery integration. Recommended **Opus5.5（高）**.
+
+## Report — postona-unified-ai-manual-schedule-planner-v1-20261011
+
+- result: **PASS candidate（ローカルのプレビューのみ）**
+  - 既存の「投稿予定」タブに、AI 自動予約と手動予約（指定日時、まとめてランダム、間隔指定）を合わせた一覧とプレビューの作成を追加した。
+  - 保存・予約・投稿・同意の付与は一切しない。
+  - 実際のクラウド保存と投稿は **BLOCKED**（G5 / G4 のゲート、レビュー済みのソース、Sol 高のレビュー、別の承認が必要）。
+- モデル: Opus 5.5（高）
+- worktree: 新しく作った `/Users/yuya/Developer/kabumori-g3-unified-schedule`（kabumori-fresh の origin/main `b5811293` から）。前回までの G3 の作業フォルダや、他スロットには触れていない。
+- branch: `claude/g3-postona-unified-schedule-v1-20261011` / commit `b244400a` / push 済み
+- PR: https://github.com/anohi-memories/kabumori/pull/138 （**下書き**、merge しない）
+- changed_files:
+  - `apps/social-mobile/src/domain/schedule-planner.ts`（新規）
+  - `apps/social-mobile/src/features/schedule/schedule-composer.tsx`（新規）
+  - `apps/social-mobile/src/app/(tabs)/schedule.tsx`（変更）
+  - `apps/social-mobile/tests/schedule-planner.test.mjs`（新規）
+  - `docs/postona/unified-ai-manual-scheduling-v1-20261011.md`（新規）
+- 本番: 読み取り 0 / 書き込み 0 / 予約 0 / 投稿 0 / Edge 0 / migration 0 / Cron 0 / 有料の AI 0 / merge 0 / EAS 0
+
+### 計画ロジック（`schedule-planner.ts`、import なしの純粋な関数）
+- 型:
+  - 由来（`ai_generated` / `user_authored`）とモード 4 種
+  - 所有（アカウント・ブランド・プラットフォーム）、UTC の時刻と日本時間の表示
+  - まとまりの ID、シード、版数、一方向の状態（editing → previewed、cancelled は最後）
+- すべての下書き: `persistence: 'local_only'`、`publishable: false`、`manualPublishConsent: false`。
+  - AI の枠は `aiAutoPostConsent` で、所有者の `approvalMode` を「表示する」だけ。`auto_post_preference` でも投稿可能にはならない。
+- 検査:
+  - 本文が空でないこと
+  - X の重み付きの文字数（全角 2、URL 23、標準 280）。140 文字の自動投稿の方針を X 全体の上限にはしない
+  - 5 分以上先の日時、正しい日付、時間帯（終わりは 24:00 まで、始まりと時刻には 24:00 を使えない）、日をまたぐ場合
+  - 1 回 50 件まで、期間 90 日まで
+  - 日本時間以外のタイムゾーンは拒否
+  - 最小間隔（既定 60 分）と 1 日の上限（既定 10 件）
+- まとめてランダム:
+  - シードつきで、期間を件数で区切った各区間から 1 枠ずつ選ぶ（偏らないように分散）
+  - 曜日・除外日を守り、本文は入力した順（並べ替えは選んだときだけ、これもシードつき）
+  - 試行回数には上限があり、配置できなければ `NOT_ENOUGH_SLOTS` / `SPACING_INFEASIBLE`
+- 再抽選: 明示の操作のときだけ（版数 +1）。指定日時と間隔指定は再抽選できない。
+- 間隔指定: 日ごと（1〜30 日）・時間ごと（1〜72 時間）。既存の予定と重なったら、近い空き時刻を示してエラーにする（勝手には動かさない）。
+- 競合の解消（明示の操作のときだけ）: 固定 ＞ 手動の柔軟 ＞ AI の順。AI とランダムは、それぞれ決めた時間帯・日付の中だけで動かす。動かせなければエラー。何も捨てない。
+- 一覧: 保存済みの予定（読み取りだけ）とプレビューを、アカウントごとに時刻順で並べる。「すべて／AI／手動」で絞り込み、近すぎる組を検出する。
+
+### 画面
+- 投稿予定タブ:
+  - 「すべて／AI自動投稿／手動予約」の絞り込み
+  - 「投稿を作成」→ フォーム（4 モード、本文の追加・削除・↑↓、日時・期間・時間帯・曜日・本文の順番・間隔、AI は頻度と同意の状態を表示）
+  - プレビューの一覧（編集・↑↓・取り消し・まとめて取り消し・再抽選・競合の解消）
+- 「プレビュー／未予約・投稿されません」のバッジと、「この画面を閉じたりアプリを再起動したりすると消えます（端末にもサーバーにも保存しません）」の表示。「予約確定」のボタンは置いていない。
+- 保存済みの予定: 読み込み中・取得失敗・見本データの扱いはそのまま（取得失敗のときに見本データを出さない）。行から詳細画面（`/posts/[id]`）に移る動作も維持。下の 5 つのタブは変更なし。
+- AI の頻度: AI 相談の保存設定から `read` するだけ（見本データのモードでは初期値の週 3 回）。生成時刻（`generationWindow`）は使わず、投稿の時間帯を別に選ぶ。
+
+### 画面での確認（見本データのモード、本番には接続していない）
+- ログイン画面を飛ばす一時改変を `_layout.tsx` に入れて、Web 版で操作した。確認後にバックアップから戻し、元のバイト列と一致することを確認した（コミットしていない）。
+- スマホの幅（375×812）で確認したこと:
+  - まとめてランダムで 3 件 → 10/16 19:05、10/18 18:50、10/22 20:40
+  - 「再抽選」→ 10/15 20:30、10/19 11:00、10/23 15:25（日時だけが変わり、本文の順番は維持）
+  - AI 自動予約で 3 件、「自動投稿の同意なし」と表示
+  - 「手動予約」に絞ると、手動のプレビュー 3 件 + 見本の手動作成 1 件だけ
+  - ブラウザのエラー 0、Supabase への通信 0
+- Expo が `.gitignore` に足した行は元に戻した。Metro は止めた。
+
+### テスト
+- `tests/schedule-planner.test.mjs`: 16 件（計画ロジック 15 + 画面の静的チェック 1）
+  - 10 件を 10/15〜25 の 9〜21 時に配置、同じシードで同じ結果・明示の再抽選、本文の並べ替えは選んだときだけ
+  - 複数の指定日時、検査（空・長すぎ・過去・存在しない日付・24:00・逆の期間・期間の上限・タイムゾーン）、配置できない時間帯
+  - 曜日と除外日、間隔指定（日・時間・日またぎ・重なりは代わりの時刻を示すエラー）、指定日時どうしの重なり
+  - AI（頻度・投稿の時間帯・同意の扱い）、AI と手動の衝突（固定を守り、AI だけ動く）、誰も動かせない重なりはエラー
+  - 編集・並べ替え（時刻は変わらない）・取り消し、アカウントの分離と絞り込み
+  - 保存・通信・投稿の能力が無いこと、画面が保存の処理を呼ばないこと
+- アプリ全体の `tests/*.test.mjs`: **250/250**。`src/domain/*.test.ts`: **22/22**。
+  - 既存の「行が詳細画面を開く」テストに合わせて、保存済みの予定のカードの中で直接移動する形にした（動作は同じ）。
+- `tsc --noEmit` エラーなし、eslint（変更ファイル 4 つ）エラーなし、`git diff --check` クリーン、秘密情報スキャン 0。
+- 他の open な PR と、変更ファイルの重なりはない。
+
+### 将来の仕様（`docs/postona/unified-ai-manual-scheduling-v1-20261011.md`）
+- 正本はサーバーの新しい計画の表。今の `scheduled_posts` は、ブランド単位でアカウントとの結びつきが無いので、そのままは使わない。
+- 書き込みは本人の JWT で呼ぶ専用の RPC だけ。所有、本人確認済みのアカウント（G4）、G5 の利用権を、作成・取得・投稿直前の 3 か所で確認する。
+- 同意:
+  - AI 自動は、所有者の `auto_post_preference` + 運用側の権限 + 利用権
+  - 手動は、予約ごとの明示の同意（本文のハッシュつき）。手動の投稿は AI の生成は通らないが、投稿の許可は必ず通る
+- そのほか: 文字数とメディアの規則、冪等性、取り消しと投稿の競合、重複、上限、巻き戻し、監査。
+- まだ配線しない型の境界: V1 では、どの呼び出しも `NOT_AVAILABLE` を返す想定。保存のボタンも出さない。
+
+### remaining_issues（バックエンドの残りのゲート）
+- G5: `x_autopost` 利用権の確認関数、削除順、T13 の書き込みガード（PR #127 §5 と同じ）
+- G4: X アカウントの本人証明と、ワークスペースの作り方
+- G3: 計画の表・RPC・Edge のソース（PR #127 の Stage 3B との順番も含む）
+- G3 + G4 + G5 をまとめた Sol（高）のレビュー → ユーザー承認の本番適用と限定パイロット
+- プレビューは画面を閉じると消える（安全に保存できる場所がまだ無いため、端末にも保存していない）
+
+### safety_checks
+- 本番・Supabase・X・Threads・Meta・AI の API には接続していない。保存・予約・投稿・同意の付与・権限の変更は 0。
+- 画面とフォームは、保存・RPC・Edge・端末への保存を呼ばない（静的テストで固定）。AI の頻度の読み取り（本人の RLS の範囲）だけ。
+- 「これで覚えて」を自動投稿の同意として扱っていない。AI の枠は、同意があっても `publishable: false`。
+- 一時改変（ログイン画面を飛ばす）は元に戻し、コミットしていない。
+- PR #127、H1（Threads）、G4（Issue #131）、G5、G1 / G2 / H2、既存の X / かぶモリ / AI ラボの投稿には触れていない。
+
+### next_recommendation
+1. K3 で受け入れ。下書き PR #138 の merge は、別途判断する（ローカルの UI と計画ロジックだけなので、独立レビューは不要と考える）。
+2. 次の G3: G5 / G4 のゲートがそろったら、計画の表・RPC と保存の境界の実装（ソースのみ）。その前に、PR #127 の Stage 3B との統合の順番を決める。
+3. 実際の保存と配信の前に、G3 + G4 + G5 をまとめて Sol（高）のレビューを 1 回。
+
+## Report — K3 focused correction R1/R2/R3（PR #138）
+
+- result: **PASS candidate（3 点とも修正し、修正前に失敗するテストで固定した）**
+- モデル: Sonnet 5.5（TASK の推奨どおり。ユーザーの選択で切り替えて実施）
+- PR #138（下書き、merge していない）: 修正前の先頭 `b244400ac710bdb6cd576631aacdb0b219bf73fd` → **新しい先頭 `48f070cc6a8472990dc07760e61ce255e5d21c91`**
+  - 内訳: 修正コミット `a9f8e5a2` と、最新 main `9071e76c` の通常 merge。rebase / force-push なし。`b244400a` は履歴に含まれる。
+  - 先頭は、GitHub 側からも読み戻して一致を確認した。MERGEABLE、下書きのまま。
+- worktree: `/Users/yuya/Developer/kabumori-g3-unified-schedule`（同じ PR #138 の作業フォルダ。開始時に先頭が `b244400a` と一致し、clean だった）
+- 本番: 読み取り 0 / 書き込み 0 / migration 0 / RPC 0 / Edge 0 / OAuth 0 / X・Meta・AI の呼び出し 0 / Cron 0 / merge 0 / 配備 0 / EAS 0 / 投稿 0
+
+### changed_files
+- `apps/social-mobile/src/domain/schedule-planner.ts`（R1: `rerollBatch`）
+- `apps/social-mobile/src/domain/schedule-view.ts`（**新規**、R2 / R3 の判定。import なしの純粋な関数）
+- `apps/social-mobile/src/app/(tabs)/schedule.tsx`（R1〜R3 の接続）
+- `apps/social-mobile/src/features/schedule/schedule-composer.tsx`（R2: 設定の状態を正直に表示）
+- `apps/social-mobile/src/domain/types.ts`、`apps/social-mobile/src/data/supabase-repository.ts`（R3: 読み取り専用の `brandId`。各 1 行）
+- `apps/social-mobile/tests/schedule-planner.test.mjs`、`apps/social-mobile/tests/schedule-view.test.mjs`（**新規**）
+- `docs/postona/unified-ai-manual-scheduling-v1-20261011.md`（実装に合わせて追記）
+- 新しいファイル 2 つ（`schedule-view.ts` と `schedule-view.test.mjs`）の理由: R2 と R3 の判定は、画面のコンポーネントの中では単体で検証できないため。画面から切り出した純粋な関数にして、修正前の挙動で失敗することをテストで確認した。TASK の範囲（G3 の画面・計画ロジック・読み取り専用の型とテスト）の内側。
+
+### R1 — 「再抽選」で編集・並び替え・取り消しが巻き戻る → 修正
+- 原因（確認）: `rerollBatch` が、元の `batch.request.texts` から全件を作り直し、取り消し済みの予定の ID も作り直していた。
+- 修正:
+  - `rerollBatch(batch, context, current)` は、現在の下書きを受け取り、**まだ取り消されていない予定の時刻だけ**を置き直す。
+  - 本文（編集・並び替え後のもの）、ID、所有（アカウント・ブランド）はそのまま。
+  - 取り消した予定は終端の状態のままで、再び現れない。
+  - 初めの `shuffleContent` が、後の編集を上書きすることもない。
+  - 置き直しは、バッチ自身の期間・時間帯・曜日・除外日・最小間隔・1 日の上限・他の予定の占有を守る。入りきらなければ、一部も変えずにエラーにする（戻り値に下書きを含めない）。
+  - 指定日時と間隔指定は、これまでどおり再抽選しない。別のアカウントの下書きが混ざっていたら拒否する。
+- 画面側は、置き直した予定だけを現在の下書きに反映する（全件の入れ替えをやめた）。
+- テスト（修正前は 4 件が失敗、修正後はすべて成功）:
+  1. 3 件のランダム → B を編集 → 本文を並び替え → A を取り消し → 再抽選 → 有効な予定はちょうど 2 件、編集・並び替えた本文のまま、A は復活しない、ID は同じ、時刻だけが変わる
+  2. 再抽選を繰り返しても、本文・ID・所有が変わらず、同じ入力なら同じ結果
+  3. `shuffleContent: true` で作った場合でも、編集が上書きされない
+  4. 入りきらないときは何も返さない／指定日時と間隔指定は対象外
+  5. AI の枠: 取り消した枠は取り消しのまま、件数も同じ
+
+### R2 — ワークスペースを切り替えたあとに、古い AI 設定が残る → 修正
+- 原因（確認）: 画面の `ai` の state は、読み取りが `ready` のときだけ更新されていた。ブランドが変わっても前のブランドの頻度と同意が残り、新しい読み取りが失敗すると、そのまま残り続けた。
+- 修正（`schedule-view.ts`）:
+  - AI の頻度・所有者の `approvalMode` を、読み取ったブランドの ID と読み込みの通し番号に結びつけた。
+  - ブランドが変わった時点で、前のブランドの値は即座に使われなくなる。読み込み前・読み込み中・設定なし・読めない・権限なしは、初期値（週 3 回、同意なし）と本当の状態の表示になる。
+  - 前のブランドや前の読み込みの遅れて届いた結果は捨てる。A → B → A でも、最初の A の結果は新しい A に使われない。
+  - フォームに、状態を正直に表示する（「まだ読み込んでいません」「まだありません」「確認できませんでした」「権限が確認できませんでした」）。
+  - 認証・G5 の所有確認のコードには触れていない。同じブランドの複数のアカウントでは、ブランド単位の設定を共有する（意図どおり）。
+- テスト（修正前の挙動に戻すと 3 件が失敗）: A → B の切り替え直後に B が A の値を持たない、遅れて届いた A の結果は無視、B の読み取り失敗・権限なし・設定なしで A を引き継がない、A → B → A、ブランド無し、画面がこの関数を使っていること（静的）。
+
+### R3 — ブランド単位の予約が、選択中の X アカウントの投稿として扱われる → 修正
+- 原因（確認）: 画面が、`accountId: 'unknown'` の行をすべて「選択中のアカウント」に付け替えていた。Threads や別の X に切り替えても同じ行が出て、そのアカウントの競合の確認に入っていた。
+- 修正:
+  - 既存の RLS つきの `scheduled_posts` の読み取りで、すでに取っている `brand_id` を、読み取り専用の `brandId` として行に付けた（新しい DB の読み取り・Edge・RLS・書き込みは無し）。
+  - 画面は、本番の行を `classifyServerPosts` で分ける:
+    - アカウントに結びついた行 → そのアカウントの行としてだけ扱う。
+    - アカウントに結びつかない行 → 「投稿先アカウント未特定／ブランド単位」として、別の欄に読み取り専用で表示する（詳細画面への移動は維持）。アカウントごとの競合の確認・再配置・同意には入れない。
+    - 別のブランドの行 → 表示しない。ブランドが分からない行 → 件数だけ警告する（隠さないが、付け替えもしない）。
+  - 見本データのモードで、アカウントが分かっている行は、これまでどおりそのアカウントで絞り込む。読み込み中・取得失敗・見本データの扱いは変えていない。
+- テスト（修正前の挙動に戻すと 3 件が失敗）: 付け替えない、別の X や Threads に切り替えても同じ行が付け替わらない、別ブランドには出ない、競合の確認と解消に入らない、見本データの絞り込み、他のブランドのアカウントに結びついた行、アカウントなし。
+
+### 画面での確認（見本データのモード、本番には接続していない）
+- ログイン画面を飛ばす一時改変を `_layout.tsx` に入れ、確認後にバックアップから戻した（元のバイト列と一致を確認。コミットしていない）。
+- R1: A・B・C の 3 件を作成 → A を取り消し → B を「Bを編集した」に編集 → B と C を入れ替え → 「再抽選」を 2 回
+  - 10/22 10:15 C ・ 10/25 20:40 B → 10/15 10:45 C ・ 10/24 12:55 B → 10/17 14:35 C ・ 10/24 13:15 B
+  - 日時だけが変わり、本文の編集と並び替えは維持。A は復活せず、まとまりは「2件」のまま。
+- R2: AI 自動予約のフォームに「まだ読み込んでいません。初期設定（週3回）」、「自動投稿の同意なし」と表示。
+- R3: 見本の予約は選択中のアカウントに 1 件だけ表示され、ブランド単位の見出しは出ない。
+- 本番の接続が無いので、R2 のブランドの切り替えと R3 の本番の行は、画面ではなく、純粋な関数のテストで確認した。
+
+### テスト
+- アプリ全体の `tests/*.test.mjs`: **269/269**（前回の 250 に 19 件を追加: schedule-planner +5、schedule-view 14）。
+- `src/domain/*.test.ts`: **22/22**。
+- `tsc --noEmit` エラーなし、eslint（変更した 8 ファイル）エラーなし、`git diff --check` クリーン、追加行の秘密情報スキャン 0。
+- 最新 main の merge 後にも、269/269・22/22・tsc を再確認した。
+- 画面と計画ロジックが、保存・RPC・端末への保存・投稿を呼ばないことの静的テストも、これまでどおり成功している。
+- open な PR と、変更ファイルの重なりはない（確認済み）。
+- Vercel のチェックは FAILURE。以前の先頭では、アカウント全体の利用上限（レート制限）によるものだった。今回の説明文は取得できなかったため断定しない。アプリのテストとは別。netlify のプレビューは SUCCESS。
+
+### safety_checks
+- 保存・予約・投稿・同意の付与・権限の変更は 0。「プレビュー／未予約・投稿されません」と、再起動すると消える旨の表示は維持。
+- AI 相談の「これで覚えて」を同意にしていない。AI の枠は、設定で同意があっても `publishable: false`。
+- 画面の読み取りは、AI 相談の保存設定（本人の RLS）と、これまでの予約・アカウントの一覧だけ。
+- 認証・DataProvider・G5・G4・H1・PR #127・PR #123・Edge・migration には触れていない。下の 5 つのタブは変更なし。
+
+### remaining_issues / next_recommendation
+- 実際の保存と投稿の前に必要なもの（変更なし）: G5 の利用権の確認、G4 の本人証明、計画の表・RPC のソース、G3 + G4 + G5 をまとめた Sol（高）のレビュー、ユーザーの承認による適用。
+- K3 で、この 3 点の修正を受け入れるか判断する。ローカルの UI と計画ロジックだけなので、独立レビューは不要と考える。
+
+## Report — K3 selected-brand binding R2b（PR #138）
+
+- result: **PASS candidate（R2b を修正し、実際の画面の配線を動かすテストで固定した）**
+- モデル: Sonnet 5.5（TASK の推奨どおり）
+- PR #138（下書き、merge していない）: 修正前の先頭 `48f070cc6a8472990dc07760e61ce255e5d21c91` → **新しい先頭 `f6b8f866b449cd432f649c132bbaa2e70a9f2ace`**
+  - 内訳: 修正コミット `fe535f05` と、最新 main `52b5c4cd` の通常 merge。rebase / force-push なし。`48f070cc` は履歴に含まれる。
+  - 先頭は、GitHub 側から読み戻して一致を確認した。MERGEABLE、下書きのまま。
+- worktree: `/Users/yuya/Developer/kabumori-g3-unified-schedule`（PR #138 の作業フォルダ。開始時に先頭が `48f070cc` と一致し、clean だった）
+- 本番: 読み取り 0 / 書き込み 0 / migration 0 / RPC 0 / Edge 0 / OAuth 0 / X・Meta・AI の呼び出し 0 / Cron 0 / merge 0 / 配備 0 / EAS 0 / 投稿 0
+
+### R2b の原因（確認）
+- `schedule.tsx` の `const brandId = snapshot?.workspace?.id` は「所属する最初のブランド」で、選択中のアカウントのブランドとは限らない。
+- この値が、設定の読み取り（`repository.read`）、AI の頻度と同意の表示（`aiPlanningFor`）、プレビュー作成の所有者の 3 か所に使われていた。
+- そのため、ブランド B の X アカウントを選んでも、ブランド A の「週 7 回・自動投稿の同意」が読まれ、B の予定として計画されていた。
+- 前回の `schedule-view.ts` の関数は、画面が正しいブランドを渡す前提でのみ安全だった（TASK の指摘どおり）。
+
+### 修正
+- `schedule-view.ts` に `effectiveBrandId({ status, activeAccount })` を追加:
+  - 選択中のアカウントの `brandId` だけを返す。**最初のワークスペースへの代替はしない。**
+  - ブランドが分からないアカウント、空文字、アカウントなしは `null`。
+  - ワークスペースが `ready` でなければ `null`（見本データ・読み込み中・権限なし・取得失敗のいずれでも、ブランドの設定を読まない）。
+- `schedule.tsx`:
+  - 読み取り・AI の計画・ローカル下書きの所有者のすべてに、同じ「画面で使うブランド」を使う。
+  - 読み込みの通し番号による、遅れて届いた結果の破棄は維持（A → B → A でも有効）。
+  - 本物のアカウントでブランドが分からないときは、プレビューを作れないようにし、理由を表示する。見本データのモードは、これまでどおり作成できる（ブランドの設定は読まない）。
+- 同じブランドの複数アカウントは、ブランド単位の設定を共有する（意図どおり。ブランドごとに 1 回の読み取り）。
+- 変更していないもの: R1（再抽選）と R3（ブランド単位の予約）、`schedule-planner.ts`、認証・G4・G5・H1、migration・Edge・RLS、タブ。
+
+### テスト（実際の `schedule.tsx` の配線を動かすもの）
+- 新規 `tests/schedule-screen-wiring.test.mjs`: 本物の `schedule.tsx` を変換して実行し、偽の React・RN・データで動かす。**どのブランドを読んだか**と、**コンポーザーに渡った AI の入力**を検証する（純粋な関数の引数だけを見るのではない）。
+  1. `snapshot.workspace=A`、認可済みアカウント X_A（A）と X_B（B）、X_B を選択 → B を読み、A は読まない。B の頻度 2・`manual_review` が渡る（A は頻度 7・`auto_post_preference`）。
+  2. A → B → A（B の応答が保留のまま戻る）→ 切り替え中は A の値が出ない。B の遅れた応答は A に適用されない。
+  3. B の読み取りが失敗・権限なし・設定なし → 初期値、同意なし、本当の状態。A の値を引き継がない。
+  4. 選択中のアカウントのブランドが不明 → 何も読まない（最初のワークスペースを使わない）。プレビューの作成は無効。
+  5. 見本データ → 本番のブランドを読まない。
+  6. 同じブランドの 2 アカウント → 設定を共有する。
+  7. 読み込み中・権限なし・取得失敗 → 何も読まない。
+- 修正前（`48f070cc` の画面）では、1・2・3・4 の **4 件が失敗**し、5・6・7 は成功する（現状でも守れていた部分）。修正後は **7/7**。
+- `schedule-view.test.mjs` に `effectiveBrandId` の単体テストを 1 件追加（合計 15 件）。
+- アプリ全体の `tests/*.test.mjs`: **277/277**（前回の 269 に 8 件を追加: 配線 7 + effectiveBrandId 1）。`src/domain/*.test.ts`: **22/22**。
+- `tsc --noEmit` エラーなし、eslint（変更ファイルを含む 7 ファイル）エラー・警告なし、`git diff --check` クリーン、追加行の秘密情報スキャン 0。
+- 最新 main の merge 後にも、277/277・22/22・tsc を再確認した。
+- open な PR と、変更ファイルの重なりはない。
+
+### 画面での確認（見本データのモード、本番には接続していない）
+- ログイン画面を飛ばす一時改変を `_layout.tsx` に入れ、確認後にバックアップから戻して、元のバイト列と一致を確認した（コミットしていない）。
+- 見本データのモードでも「投稿を作成」が使え、AI 自動予約には「まだ読み込んでいません。初期設定（週3回）」と「自動投稿の同意なし」が表示された。ブラウザのエラー 0、Supabase への通信 0。
+- ブランドの切り替えそのものは、本番に接続しないと画面では再現できない。配線のテスト（上記）で確認した。
+
+### safety_checks
+- 保存・予約・投稿・同意の付与・権限の変更は 0。「プレビュー／未予約・投稿されません」の表示は維持。
+- 画面が設定を書き込む処理を呼ばないことを、偽の保存先が書き込みで例外を投げる形でも確認した。
+- AI 相談の「これで覚えて」を同意にしていない。ブランドの設定が読めない・分からないときは、同意なしで表示する。
+- 認証・DataProvider・G4・G5・H1・PR #127・PR #123・Edge・migration・タブには触れていない。
+- Vercel のチェックは FAILURE のまま。以前の先頭では利用上限（レート制限）だった。今回の説明文は取得できなかったので断定しない。アプリのテストとは別。netlify のプレビューは SUCCESS。
+
+### remaining_issues / next_recommendation
+- R1・R2・R2b・R3 の指摘はすべて対応した。本番の保存と投稿の前提（G5 の利用権、G4 の本人証明、計画の表・RPC、Sol（高）のレビュー、承認）は変更なし。
+- K3 で受け入れを判断する。ローカルの UI だけなので、独立レビューは不要と考える。
+
+---
+
+# ARCHIVED PREVIOUS G3 TASK AND FULL REPORT HISTORY (VERBATIM)
+
+# Claude Task 3 — CURRENT TASK / POSTONA X自動投稿 本番接続準備（ソース・検証のみ）
+
+- task_id: postona-x-autopost-production-readiness-20261010
+- owner: claude
+- slot: claude-3
+- status: done
+- next_owner: none
+- priority: high
+- project: POSTONA / X automatic posting and AI-consult confirmed settings
+- type: **source-only rollout-readiness and offline proof; NOT production activation**
+- recommended_model: **Opus5.5（高）**
+- start_code: G3
+- finish_code: K3
+- return_to: **POSTONA G3のちゃ（AI相談V1本番接続担当チャット）**
+- clean_base: /Users/yuya/Developer/kabumori-fresh (fresh origin/main)
+- target_supabase_project: stock-x-autopost / wsmznyzcvmuitkglfeuj (**read-only catalog checks only**)
+- source_baseline: PR #41 merged (b90ee326600b075e3d0b23209b4eefc1b4cd9c16); AI相談V1 PR #114 merged and S0–S5 prod PASS at K3
+- production_db_write: **FORBIDDEN**
+- edge_deploy_or_x_post_or_scheduler_change: **FORBIDDEN**
+- live_x_test_or_provider_calls: **FORBIDDEN**
+- PR_merge_or_eas: **FORBIDDEN**
+- security_boundary_owner: **G5 for Auth/entitlements/T13; G4 for X/Threads OAuth and workspace creation**
+- acceptance_gate: **K3; separately authorized rollout and limited real X pilot are FUTURE TASKS**
+
+## Goal and important real-world state
+
+AI相談V1 is live and K3 accepted: consult → explicit 「これで覚えて」 → versioned settings save → memory → dry-run preview; live Edge `social-mobile-consult` v1 / `social-mobile-brand-dry-run` v17. Source PR #41 contains account-bound `brand_post` dispatch and G3-owned publishing gates, but is **source-merged only** for the Stage 3B activation. On 2026-10-10 the following three versions are NOT in live Supabase migration history:
+
+1. `supabase/migrations/20261006160000_vault_account_brand_post_completion.sql`
+2. `supabase/migrations/20261006160100_social_mobile_publish_settings_reader.sql`
+3. `supabase/migrations/20261006160200_x_account_publish_authority.sql`
+
+**Never apply them in this TASK.** More fundamentally, the approved Stage 3B design explicitly needs G5 active `x_autopost` entitlement checks in both publish authority read/check and authority-setter before any real user's auto-publishing is enabled. G5 candidate T13 `private.account_lifecycle_assert_active_service_write` is Draft PR #121, not deployed, not an authority to assume that the boundary is finished. G4's Threads T9/OAuth source Draft PR #124 and latest G4 X OAuth hardening TASK own X/Threads connection and workspace paths. Source presence is NOT evidence of production readiness.
+
+This task is the **fastest safe independent G3 preparation**, not a request to reactivate or deploy an already-tested AI consultation function and not an authorization to turn on X posting.
+
+## Start-up and collision gate
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this TASK and its archived K3 PASS/Report, `supabase/tests/x_account_refresh_pilot.md`, the three exact SQL migration sources, PR #41 source, and the latest G4/G5 TASK/Report and related shared contract. Check current source/pending PR differences.
+2. Create a **NEW clean, independent G3 worktree/checkout** from fresh `origin/main` in `/Users/yuya/Developer/kabumori-fresh`. Do not reuse or disturb previous G3 activation worktree `/Users/yuya/Developer/kabumori-g3-consult-activation`, the old checkout, G4/G5 branches, uncommitted files or dev servers. If impossible, STOP with BLOCKED. Do not force-push or reset/rebase another slot.
+3. Confirm fresh remote status for G3 TASK (must be `ready` / `in_progress`), G4 current X OAuth scope, G5 current blockers and shared DB usage; no file, migration, RPC, Edge or Auth collisions. Ownership ambiguity => report and STOP conflicting edits, not all independent investigation.
+4. Read production Supabase **catalogs only** (if network/auth available) to verify exactly which Stage 3B migrations/functions/tables/Edge versions are active and whether AI-consult settings are available. Do not make credential-bearing dumps, update secrets, sign in as real users, or query private contents. A missing or drifted prerequisite is a **HOLD**, never silently corrected.
+
+## Stage A — exact integration inventory and missing-gate list
+
+- Map `supabase/functions/_shared/brand/vault_account_brand_post.ts`, `x-test-post` dispatch, `social_mobile_content_settings` settings/persona read path, `read_social_mobile_publish_settings`, `check_x_account_publish_authority`, `set_x_account_publish_authority`, scheduled `brand_post` claim/finish and Stage 3A refresh authority. Trace execution order **before both generation and real X create**; show existing fail-closed gates.
+- Resolve migration prerequisites and versions/owners/EXECUTE privileges for the **three exact Stage 3B SQL migrations** and source-vs-live drift. Check that target names, migration history version uniqueness, G5 / G4 reserved migration versions and any current production DDL writer do not overlap.
+- Distinguish user `approvalMode='auto_post_preference'` from AI相談V1 explicit `これで覚えて`: setting save/preview must **never grant auto-post consent or publish permission**. Map legitimate opt-in, opt-out, 30-day authority expiry, admin enablement, and brand/account exact identity.
+- Identify **all missing G5 entitlement/T13 guards** at authority enable/check and related POSTONA service-withdrawal/deletion and stale JWT pathways; do not assume Draft PR121 (or future PR) is live. Specify precise G5-owned contract/entrypoints and one shared handoff to G5; flag G4-owned OAuth/workspace changes without implementing them.
+- Preserve Kabumori / AI Lab existing X autopost paths, their Cron schedules, X/Vault secrets, current brands/accounts and provider configuration.
+
+## Stage B — local-only proof / safe artifacts
+
+- Work primarily in **NEW G3-owned documents and isolated test/verification files**, e.g. `docs/postona/x-autopost-stage3b-production-readiness-20261010.md` and `supabase/tests/postona_x_autopost_readiness/*`, after checking no PR/file ownership collision. Existing PR #123 activation-runner files are historical records and are OFF LIMITS.
+- For a **disposable local PostgreSQL** matching prerequisites, rehearse the exact three source migrations, same-owner effective ACL/RLS/SECURITY DEFINER and function behavior; include absence/partial application/rollback/drift failure cases. This is an offline rehearsal only: never use a real Supabase project or `supabase db push`. No command or script may accidentally default to remote production.
+- Focused regression tests and negative scenarios: no content-settings/opt-in; non-owner/cross-tenant; disabled/expired/revoked authority; stale/absent G5 entitlement; bad/duplicated account IDs; brand mismatch; claimed post replay; concurrent claim/complete; exact-account token/refresh constraints; preservation of Kabumori/AI Lab paths. If G5 guard is unavailable, mock-boundary tests must be labeled `MOCK_ONLY` and **not** counted as real permission security evidence.
+- Only if source/tests reveal a self-contained low-risk defect wholly G3-owned, isolate and report before change; do not extend into G4 OAuth, G5 Auth/entitlement, published Edge files, existing migrations or current production configuration. Prefer documenting required follow-up over changing shared live-path code in this preparatory task.
+- No AI paid API calls, actual X posts, live OAuth, X/Meta tokens, actual scheduling, account mutation, Supabase remote writes, Edge deployment or EAS.
+
+## Stage C — decision-quality rollout plan
+
+Prepare a precise go/no-go matrix and next TASK proposal covering:
+1. Preconditions to apply the **three existing Stage 3B migrations** in safe order, including production role ACL/owner/drift check, transaction/history plan, immediate read-back, and rollback/STOP.
+2. The **G5-owned** effective `x_autopost` service entitlement guards for `check_x_account_publish_authority`, `set_x_account_publish_authority`, account deletion/withdrawal and any writer boundary; include G4 X provider identity proof and T9 shared-workspace prerequisites. List the required owner-specific implementation/review gates and blocked unknowns.
+3. Proposed limited eventual X pilot (ONE approved dedicated test account, explicit user opt-in, finite short-lived publish window, zero unexpected posts, hard stop and rollback), with expected spend/counts, rate/expiry constraints and independent high-risk security review **before** any actual enablement. **Proposal only; no pilot execution, no permission changes.**
+4. Reconcile AI consultation confirmed settings/persona to the actual post-generation path and explain why preview ≠ published output until the gate is live; no autonomous enable from remembered settings.
+5. Exact current source-only tests and deploy-preflight evidence versus absent live Auth/entitlement evidence; keep G5 managed-auth-delete release gate `blocked`.
+
+## Completion and reporting
+
+- Deliver a compact, actionable G3 readiness document + offline test/evidence (if safe), commit/push to a new **G3-only branch**, optionally create a **Draft PR**; never self-merge. If the work remains design/proof only, a Draft PR plus explicit HOLD gates is a valid PASS_CANDIDATE.
+- Run relevant focused Deno, local PostgreSQL, SQL invariant, secret, `git diff --check`, source-vs-origin checks and any required existing X routing regressions; list exact totals, what was locally rerun and what stayed unverified.
+- Report `task_id`, verdict `PREPARED_BLOCKED_ON_G5` or `BLOCKED` or `READY_FOR_GATED_ROLLOUT_REVIEW` (never `LIVE_PUBLISH_READY`), changed_files, test counts, branch, commit hash, push, PR, production reads/writes/deploy/posts (must be 0 mutations), remaining blockers, next owner-specific recommendations and safety checks.
+- Update **only current G3 TASK/Report** to `review_required` / `next_owner: chatgpt`; preserve ALL previous G3 tasks/Reports verbatim, and leave G4/G5/H1/H2/G1/G2 intact. Return `K3` to this G3 ChatGPT chat.
+- **Recommended model: Opus5.5（高）.** Extra H1/H2 review is not automatically needed for offline docs/tests; decide **Sol（高）** targeted integrated security review later when G5+G4 authority implementation is available and before production rollout.
+
+## Report — postona-x-autopost-production-readiness-20261010
+
+- verdict: **PREPARED_BLOCKED_ON_G5**
+  - Stage 3B のソース・順番・取り消し・権限は、ローカルで確認済み。
+  - 本番の前提（owner・インデックス・型・ロール）は、読み取りで一致した。
+  - 本番で有効にする前に、次が必要: G5 の利用権の確認（3 か所）、削除順の契約、T13 の書き込みガード、G4 の X の本人証明、POSTONA の予約を作る仕組み。
+- モデル: Opus 5.5（高）
+- worktree: 新しく作った `/Users/yuya/Developer/kabumori-g3-x-autopost-readiness`（kabumori-fresh の origin/main から）。前回の作業フォルダ、元の checkout、G4 / G5 のブランチには触れていない。
+- branch: `claude/g3-postona-x-autopost-readiness-20261010` / commit `4b027822` / push 済み
+- PR: https://github.com/anohi-memories/kabumori/pull/127 （**下書き**、merge しない）
+- changed_files（すべて新規。既存のファイル、PR #123 のファイル、migration、Edge は変更なし）:
+  - `docs/postona/x-autopost-stage3b-production-readiness-20261010.md`
+  - `supabase/tests/postona_x_autopost_readiness/run.sh`
+  - `supabase/tests/postona_x_autopost_readiness/readiness_behavior.sql`
+  - `supabase/tests/postona_x_autopost_readiness/prod_catalog.sh`
+  - `supabase/tests/postona_x_autopost_readiness/prod_catalog.sql`
+- 本番:
+  - 読み取り: 2026-10-10 に 1 回。ユーザーが `prod_catalog.sh --production-read-only` を実行した。
+    - 内容: カタログ（読み取り専用のトランザクション）、Edge 関数の一覧、本番の x-test-post のダウンロード照合、秘密情報の名前だけ。
+    - 利用者の内容・トークン・Cron の実行内容は読んでいない。
+  - 書き込み 0 / 適用 0 / 配備 0 / X への投稿 0 / 権限の変更 0 / 有料の AI 呼び出し 0 / merge 0 / EAS 0
+
+### 本番の現状（読み取り結果の要点）
+- Stage 3B（`20261006160000` / `160100` / `160200`）: **未適用**（関数・`x_account_publish_authority`・履歴のどれも無い）。
+- AI 相談の設定テーブル: 適用済み。行は 1 行で、`auto_post_preference` は 0。
+- Stage 3A: 関数と表あり。`x_account_refresh_rollout` は 1 行。
+- G5: `service_entitlements` / `common_accounts` / `private.account_lifecycle_*` / `start/reactivate_x_autopost_service` がある。T13（PR #121 の `20261010051938`）は未適用。
+- 前提:
+  - `scheduled_posts` / `social_accounts` / `brands` / `brand_settings` / 設定テーブルの owner は、どれも postgres（superuser ではない）
+  - 投稿済み記録に `(social_account_id, x_post_id)` の部分一意インデックスがある
+  - `brand_settings.enabled_post_types` は jsonb
+  - API ロールから postgres や service_role への経路は無い
+- 本番の x-test-post（v141）: **POSTONA 向けの汎用経路は入っていない。** main とは 4 ファイル違う（index.ts、brand_post_generator.ts、social_mobile_content_settings.ts、ai_lab_dev_diary_context.snapshot.ts）。
+- POSTONA のワークスペース:
+  - 2 件。live 0、X 接続 2（本人確認済み 1）、`publish_enabled` 0、brand_post 有効 0、予約 0
+  - brand_post の予約を作る DB 関数は無い（Cron の `dispatch-scheduled-posts` は、既にある予約を実行するだけ）
+
+### 見つかった抜け
+- **G5**:
+  1. `check_x_account_publish_authority` に、利用権（`x_autopost` が active）の確認が無い（R3、MOCK_ONLY）
+  2. `set_x_account_publish_authority('enabled')` にも無い（R3）
+  3. 予約の取得にも無い
+  4. 権限の表の外部キーが NO ACTION のため、`revoked` でも X アカウントを削除できない（R4）。本番では、ほかにも 4 つの表が同じく NO ACTION で参照している。
+  5. T13 は下書き・未適用
+  - G5 への 1 つにまとめた契約案を文書の §5 に書いた（3 か所で同じトランザクションの中で確認する + 削除順か外部キーのカスケードを決める）。
+- **G4**: 接続した X アカウントの本人証明と、ワークスペースの作り方（`identity_verified` を誰がどう付けるか）。G3 は実装していない。
+- **G3**（文書化のみ）:
+  - POSTONA の予約を作る仕組みが無い（scheduler は今回の禁止範囲）。
+  - 投稿権限の確認より前に、Vault の読み込みとトークン更新が走る（Stage 3A で制御されている）。
+  - x-test-post を配備すると、merge 済み・未配備の 4 ファイルが一緒に出るので、事前に変更の持ち主ごとの確認が必要。
+
+### AI 相談の記憶と同意
+- 相談は `approvalMode` を変えられない（アプリとサーバーの両方の許可リスト）。
+- 確認済みのペルソナ + `manual_review` は `SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED` になる（R1）。
+- 同意は、本人が設定画面で `auto_post_preference` を選ぶことだけ。取り消しは `manual_review` に戻す。運用側の許可は最長 30 日の期間で、`off` / `revoked` ですぐ止まる。
+- プレビューは文字数の上限なし（10/10 は 184 文字）。実際の投稿は 140 文字の上限・NG 語・重複の確認があるので、同じ文章にはならない。今は投稿の経路が本番に無いので、覚えた設定から自動で投稿が始まることはない。
+
+### テスト（ローカルで再実行したもの）
+- `postona_x_autopost_readiness/run.sh`（新規、使い捨ての PostgreSQL 17.11）: `POSTONA_X_AUTOPOST_READINESS_ALL_PASS`
+  - O1: 逆順の拒否
+  - A1〜A3: 3 本それぞれ、COMMIT 直前の失敗で全部取り消し
+  - R1、R2
+  - R3 / R4: 抜けの実証
+- 既存の `x_account_refresh_pilot_run.sh`: PILOT_BEHAVIOR / PUBLISH_AUTHORITY_BEHAVIOR / PUBLISH_SETTINGS_READER_BEHAVIOR / PILOT_RACE / PUBLISH_RACE / PILOT_CLEANUP の 6 項目 PASS
+- 既存の `x_account_stage3b_acl_adverse_run.sh`: STAGE3B_ACL_ADVERSE_PASS
+- Deno（`_shared/brand`、x-test-post、相談、プレビュー、migration の不変条件）: 808/808
+- `prod_catalog.sql` は、適用前と適用後の両方の模擬 DB で形を確認した（Cron の実行内容が出ないことも）。`prod_catalog.sh` は、フラグや出力先が無いと拒否することを確認した。
+- `git diff --check` クリーン、秘密情報スキャン 0。
+- 確認していないもの:
+  - G5 の利用権の本物の確認（無いため。R3 は MOCK_ONLY で、セキュリティの証拠には数えない）
+  - G4 の本人証明
+  - 本物の X / OpenAI
+
+### safety_checks
+- 本番は読み取りだけ（ユーザーが実行）。書き込み・適用・配備・投稿・権限の変更・Cron の変更は 0。
+- パスワードはその場で入力し、保存・表示していない。秘密情報は名前だけを見た。
+- ローカルの runner は `/tmp` のソケット以外を拒否する。本番の読み取りスクリプトは、`--production-read-only` を明示しないと動かない。
+- G4 / G5 / PR #123 / 既存の migration・Edge・x-test-post は変更していない。
+
+### next_recommendation
+1. **G5**: 文書 §5 の契約を実装する（利用権の確認を 3 か所に + 削除順か外部キーのカスケード）。T13 も含めて、本番に出す前の条件にする。
+2. **G4**: X の本人証明とワークスペースの作り方の候補。
+3. **G3**（その後）: G5 の確認を入れた置き換え用の migration と、3 本の適用 runner（スキーマ → 読み戻し → 履歴）。POSTONA の予約を作る仕組みの設計は、別の TASK で。
+4. G3 + G4 + G5 がそろったら、一度だけ独立レビュー（Sol 高）→ 本番への適用（別の承認）→ 限定パイロット（案は文書 §8、別の承認）。
+5. G5 の managed auth delete の公開ゲートは `blocked` のまま。
+
+---
+
+# ARCHIVED PREVIOUS G3 TASK / K3 ACCEPTANCE AND ALL REPORT HISTORY (preserve verbatim)
+
+# Claude Task 3 — CURRENT TASK / POSTONA AI相談V1 本番接続
+
+- task_id: postona-ai-consult-v1-production-activation-20261010
+- owner: claude
+- slot: claude-3
+- status: done
+- next_owner: none
+- priority: high
+- type: bounded production activation of already merged/reviewed AI consultation V1
+- recommended_model: **Opus5.5（高）**
+- start_code: G3
+- finish_code: K3
+- return_to: **POSTONA G3のちゃ（AI相談V1本番接続担当チャット）**
+- project: POSTONA / AI consultation
+- baseline_pr: #114 (**MERGED** as `952db5b18e2a4464fb076ccfc32af31063a6bb7e`; do not reopen/re-review)
+- target_supabase_project_id: `wsmznyzcvmuitkglfeuj` (`stock-x-autopost`)
+- production_access: **APPROVED ONLY FOR S0–S5 BELOW by user on 2026-10-10**
+- production_mutation_window: **CLOSED** — 2026-10-10 18:59 JST (ACTIVE 2026-10-10 18:30 JST〜). S0–S5 PASS and read back; G3 performs no further production action.
+- real_X_publish: prohibited
+- scheduler_or_Cron_change: prohibited
+- EAS_TestFlight: prohibited
+- unrelated_Auth_entitlement_Threads: prohibited
+- extra_independent_Codex_review: **not required if deploying exact previously reviewed source and all preflight/read-back/smoke gates pass**
+- production_priority: G5 common-account owns overlapping Auth/DB/permissions operations; serialize actual shared-DB migration/DDL write and read-back windows.
+
+## Mission
+
+Bring already implemented AI相談V1 into a usable production state: **相談 → 変更提案 → 利用者が「これで覚えて」を明示確認 → DB保存 → 次回相談への記憶 → プレビュー反映**. This is an activation task, NOT a new feature or a source redesign. AI相談 must never autonomously enable publish, change posting permissions, create scheduled posts or send real X posts.
+
+## Mandatory startup / conflict gate
+
+1. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, THIS TASK and its archived previous task/report, `supabase/tests/social_mobile_content_settings_rollout.md`, both exact migrations, and `AGENTS.md` / `CLAUDE.md`. Read G4 and G5 current TASK/Reports and PR #112/#118 as needed.
+2. Use **your own independent G3 worktree** rooted from fresh `/Users/yuya/Developer/kabumori-fresh` and fresh `origin/main`. Verify unique worktree/checkout and branch, git status, no other's uncommitted changes; never reset/prune/checkout/rebase another slot, or stop another server. The old `/Users/yuya/Developer/kabumori` checkout is protected.
+3. Reconfirm PR #114 merged, current G3 source unchanged from reviewed version, production project identity, current production migration/Edge state, and no actual overlapping G5 production DB/Auth write window. G4 PR #118 source-only Threads changes are out of scope.
+4. If any ambiguity in ownership, schema/migration history, permission/default privilege, local worktree or concurrent DB writer exists: **STOP before production writes**, report exact blocker. Do not infer safety from `done` alone.
+5. The user ALREADY approved the bounded S0–S5 production activation. Do **not** ask to re-approve the exact same safe steps individually, but approval never overrides fail-closed safety gates.
+
+## S0 — fresh read-only production preflight (mandatory before writes)
+
+Use the SAME intended apply role inside read-only transactions and follow the reviewed rollout plan. Confirm:
+- Supabase project `stock-x-autopost`, id `wsmznyzcvmuitkglfeuj`.
+- `public.social_mobile_content_settings` absent; same-prefix functions absent; both target migration history rows absent.
+- Existing prerequisite brand/ownership schema, functions, current owner, RLS, role memberships/inheritance and default ACLs match documented source assumptions exactly; no unknown pre-existing drift.
+- No G5 or other workstream is writing migration/DDL to the same production DB during the critical S1/S2 window.
+- `social-mobile-consult` absent and `social-mobile-brand-dry-run` still production v16/old implementation (or STOP if drift).
+- Secrets/keys existence can be verified securely; **never output secret values** to logs, commits or chat.
+A preliminary remote read on 2026-10-10 found the table/history absent; do not substitute it for the immediate same-role S0 gate.
+
+## S1 — EXACTLY two reviewed migrations atomically
+
+Only these source files:
+- `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql`
+- `supabase/migrations/20261003120000_social_mobile_content_settings_hardening.sql`
+
+Follow `supabase/tests/social_mobile_content_settings_rollout.md` exactly. **Both SQL files AND their two history rows must commit in ONE OUTER TRANSACTION**, with `psql --single-transaction -v ON_ERROR_STOP=1` or the precisely rehearsed documented equivalent. Do not run ordinary `supabase db push`, individual migration up/apply calls, or two separate commits. A standalone candidate can expose a weak-ACL state. Verify the exact production migration history schema, invocation and rollback/failure behavior before executing. No other pending migrations, no ad hoc SQL repair or unrelated DDL. If any guard fails, rollback/STOP and report.
+
+## S2 — immediate production read-back gate
+
+Verify exactly two target history versions, settings table/owner, RLS enabled, expected owner-only policies (3), authenticated least-privilege table ACL, absence of unintended `anon`/`service_role`/`PUBLIC` grants (including effective inherited privileges), expected five functions and function EXECUTE ACL, trigger/version invariants, strict JSON/persona constraints and CAS stale-write rejection. Cross-check against rollout docs and actual catalog. Any mismatch => STOP **without** deploying Edge, and do not blindly GRANT/REVOKE to patch it. Capture evidence without private rows/tokens.
+
+## S3 — AI相談 Edge deploy
+
+Deploy ONLY current reviewed `supabase/functions/social-mobile-consult/` and its exact shared dependencies; keep `verify_jwt=true`, verified user identity, per-brand/tenant isolation, server-side `OPENAI_API_KEY`, no exposed credentials or elevated unauthorized DB writes, explicit confirmation before saving. Do not switch Claude/shared provider here. Verify deployed version, source/bundle identity and logs (no secrets); STOP on mismatch.
+
+## S4 — dry-run preview Edge update
+
+Update ONLY `supabase/functions/social-mobile-brand-dry-run/` from current reviewed source (currently production v16 old implementation). Preserve JWT, tenant ownership, verified saved settings, eight persona fields (`toneSignals`, `sentenceLength`, `punctuationEmoji`, `recurringVocabulary`, `topicSignals`, `hashtagHabits`, `ctaStyle`, `openingClosingPatterns`), confirmed-only inclusion and fixed brand safety constraints. Verify approved GPT-6 Luna central model policy without changing it. Read back deployed version/bundle. Preview MUST NOT publish, schedule, or alter authorization.
+
+## S5 — narrow real-AI smoke with NO posts
+
+Use ONE dedicated valid test account/brand/owned workspace, minimal necessary paid OpenAI calls:
+1. Consult and request a preference change; verify mere proposal does NOT write DB.
+2. Confirm only via user-like explicit `これで覚えて` action; verify one saved CAS write, read-back, and correct tenant.
+3. Start a fresh consultation and verify previously confirmed preference is reflected.
+4. Generate dry-run preview and verify confirmed eight-field persona/settings, no unconfirmed change.
+5. Verify wrong-tenant / unauthorized access is denied using controlled test identities/fixtures; verify A→B→A, workspace isolation and no unwanted stale save.
+6. Check X actual publish count **0**, newly scheduled posts **0**, publish permission changes **0**, existing company AI Lab / Kabumori X automation has NOT been changed or disabled.
+Keep costs bounded; no broad live test batch or unbounded retries.
+
+## Strict exclusions and handoff boundaries
+
+- **G4** owns Threads/Instagram Phase 2b; do not change its OAuth, Vault, provider database contracts or PR #118.
+- **G5** owns shared Auth, entitlement, deletion and DB/API authority boundaries; PR #112 source is separate and not a permit to co-apply its migration. Serialize actual DB write window if shared.
+- **G2** owns Kabumori morning/close report unification. Do not modify morning `SEARCH_BUDGET_EXCEEDED`/close report, shared market report Fact checks or API.
+- Separate shared AI Provider PR #117 is NOT part of activation. Keep reviewed OpenAI path; do not migrate to Claude API simultaneously.
+- DO NOT change `x-test-post`, scheduled X posting, Cron, real social posts, shared account deletion, Vercel/Netlify production, EAS/TestFlight/native builds, or any other production migration.
+- Preserve existing user-data, live schedulers and postings. Never invent a successful deploy/read-back/test if unverified.
+
+## Completion / report / STOP behavior
+
+When S0–S5 fully pass: record true applied versions, ownership/RLS/ACL proof, Edge deployed versions and exact bundle source, scoped real smoke result, confirmed published=0, scheduled=0, changes to existing X automation=0, cost/call count, changed files, tests, branch/commit/push, remaining issues, safety checks. `deploy` only marked success if independently read back. Update only this G3 TASK's **current** Report/status to `review_required` (or `done` only per established protocol) and `next_owner: chatgpt` while preserving all past task/Report history byte-for-byte. Return **K3** to **POSTONA G3のちゃ**.
+
+If preflight/transaction/permissions/Edge authentication/tenant smoke does not pass, immediately STOP subsequent mutation steps and report **BLOCKED/PARTIAL** with exact last completed gate and safe next action. Do not run unreviewed corrective SQL or silently expand the approval. **Avoid unnecessary additional Codex review**; if unexpected high-risk drift arises, first assess bounded evidence and whether a focused separate review is truly required.
+
+## Report — postona-ai-consult-v1-production-activation-20261010
+
+- result: **PASS — S0〜S5 完了。すべての段階を独立に読み戻して確認した。**
+- 本番で、次の流れが使える状態になった: AI 相談 → 変更の提案 → 利用者の「これで覚えて」→ DB 保存 → 次の相談での記憶 → プレビューへの反映。
+- 投稿 0 / 予約 0 / 投稿権限の変更 0 / 既存の X 自動投稿（かぶモリ・会社員AIラボ）への変更 0。
+- モデルは推奨の Opus 5.5（高）で実施。
+- 本番の操作は、自動モードが Claude からの本番の読み書き・配備を拒否したため、すべてユーザーがターミナルで実行した。Claude が作った実行バンドルを使い、パスワードはその場で入力（保存・表示なし）。各段階の結果は、Claude が出力ファイルから読み戻して再判定した。
+- production_mutation_window: ACTIVE 18:30 JST 〜 **CLOSED**（S5 の確認後）。G5 など他スロットで、本番 DB に書き込む作業が並行していないことを開始前と適用直前に確認した。
+
+### 実行バンドル（記録用 PR）
+- PR: https://github.com/anohi-memories/kabumori/pull/123 （open、merge していない）
+- ブランチ `claude/g3-consult-v1-activation-20261010`、コミット `9349fc79`
+- 中身: `supabase/tests/social_mobile_content_settings_activation/` — `preflight.sql`, `readback.sql`, `snapshot.sql`, `apply_guard_pre.sql`, `apply_guard_post.sql`, `check.py`, `run.sh`, `smoke.py`, `expected_readback.json`
+- アプリ・Edge・migration のソースは変更していない。配備したのは、レビュー済みの PR #114 の merge（`952db5b`）と同じバイト列。2 本の migration の SHA-256 も固定して照合した。
+
+### 予行演習（本番の前、使い捨てのローカル PostgreSQL 17.11 + 偽の CLI）
+- `run.sh proof`: 適用・読み戻しの一致、適用済みなら S0 が拒否すること、途中で失敗したら全部取り消されること（表・関数・履歴が残らない）→ PROOF_ALL_PASS
+- `activate` の通し 7 場面がすべて期待どおり:
+  - 正常 → 最後まで通る
+  - 相談の関数が既にある → S0 で停止
+  - OpenAI のキーが無い → S0 で停止
+  - S1 の途中で失敗 → 取り消されたことを確認して停止
+  - 配備に失敗 → 停止
+  - 配備されたソースが違う → 停止
+  - 他の関数が変わった → 停止
+- `smoke.py` の 5 場面（偽の本番）がすべて期待どおり。異常があれば保存前に止まること、メールアドレス・パスワード・トークン・キーが結果に残らないことも確認した。
+
+### S0 事前確認（読み取り専用。18:33 JST に適用直前にも再実行）
+- 適用するロールは postgres（superuser ではない。`public.brands` の owner）。Postgres 17.6。
+- 対象の表・関数（`social_mobile_content_settings_*`）・履歴 2 行は、どれも無い。
+- 前提:
+  - `brands.id`（text、主キー）
+  - `brand_memberships`（brand_id の FK は ON DELETE CASCADE、role の CHECK）
+  - `auth.uid()`
+- ロール: anon / authenticated / service_role から postgres や service_role へ届く経路は無い。
+- postgres の既定権限: 表は anon / authenticated / service_role だけ（強化 migration がすべて取り消す）、関数は owner だけ。
+- イベントトリガーは既知の 7 個だけ（`ensure_rls` は RLS を有効にするだけ）。前提の表への他セッションの強いロックは 0。
+- Edge: `social-mobile-consult` は無い。`social-mobile-brand-dry-run` は v16、ACTIVE、verify_jwt=true（21 関数）。
+- 秘密情報: `OPENAI_API_KEY` がある（名前だけを確認し、値は読んでいない）。
+- 履歴は 79 行、最大の version は `20261007214402`。
+
+### S1 適用（18:33 JST）
+- `psql --single-transaction -v ON_ERROR_STOP=1` で、次を **1 つのトランザクション** で実行して commit した:
+  1. 最初の検査
+  2. candidate → hardening
+  3. 履歴 2 行
+  4. 最後の検査
+- `db push` や migration up は使っていない。他の migration も、追加の SQL もない。
+
+### S2 読み戻し（18:33 JST）— ローカルで適用した結果と完全一致
+- 履歴: `20260922045046 social_mobile_content_settings_candidate`、`20261003120000 social_mobile_content_settings_hardening` の 2 行。
+- 表: owner は postgres、RLS は有効（FORCE はなし）、通常の表。
+- ポリシー: owner 用の 3 つ（select / insert / update、authenticated、permissive）。
+- 実効権限: authenticated は INSERT / SELECT / UPDATE だけ。anon・service_role・PUBLIC は何もない。列単位の付与は 0。
+- 関数 5 個:
+  - いずれも owner は表と同じ、SECURITY DEFINER ではない、`search_path=pg_catalog`。
+  - 本体の md5 は、ローカルで適用したものと一致。
+  - EXECUTE は、検証用の 4 個に authenticated だけ。version トリガーの関数は owner だけ。
+- 制約・インデックス・トリガーの定義も一致: 主キー、ON DELETE CASCADE の FK、settings / persona の形の検査、provenance、件数、有限の日時、トリガー `social_mobile_content_settings_version`。
+
+### S3 / S4 Edge の配備（18:33 JST）
+- `social-mobile-consult`: **v1** ACTIVE、verify_jwt=true（新規）。
+- `social-mobile-brand-dry-run`: v16 → **v17** ACTIVE、verify_jwt=true。v16 は保存設定を読まない古い実装だった。
+- 配備後にダウンロードしたソースは、レビュー済みのものとバイト単位で一致した（相談 4 ファイル、プレビュー 10 ファイル）。
+- 他の 19 関数は、version / updated_at / ezbr / verify_jwt のすべてが不変（x-test-post を含む）。
+- モデルは中央の方針のまま（相談・プレビューとも `gpt-6-luna`）。Claude への切り替えはしていない。
+
+### S5 本物の AI での確認（18:56〜18:57 JST、投稿なし）
+- 使ったもの: テスト用アカウント 1 件（POSTONA のワークスペース `u_ae343f5caedb67d4af33fc7a` を 1 つ所有し、本人確認済みの X アカウントを接続済み）。
+- 結果: **19/19 PASS**。AI の呼び出しは 3 回（相談 2 回 + プレビュー 1 回）、再試行なし。
+
+拒否の確認（どれも AI を呼ぶ前に止まる）:
+- ログインなしの相談・プレビュー → 401
+- 他人のワークスペース（`kabumori`）への相談・プレビュー → 404 `OWNED_WORKSPACE_NOT_FOUND`
+- 他人の設定の読み取り → 空
+- 他人の設定への書き込み → 403 `42501`
+- ログインなしの書き込み → 401 `42501`
+
+相談と保存:
+1. 相談で提案を受けた（設定: 投稿頻度・トーン、ペルソナ: 呼びかけ方・記号/絵文字・口調）。この時点では DB に何も書かれていない。
+2. 明示の確認として、アプリと同じ「版数つき保存」で書き込んだ。1 行で、新規作成だった。読み戻しは保存した内容と一致し、ペルソナは確認済み・会話由来になった。
+3. 古い版数での上書きは 0 行、同じ行の二重作成は 409 `23505` で拒否され、行は変わらなかった。
+4. 会話履歴なしで新しく相談すると、保存した内容（週 4 回・やわらかいトーン・絵文字控えめ・問いかけで締める）を説明した。書き込みは無し。
+5. プレビュー（v17）は 200。保存した頻度 4 を使い、184 文字の下書きを `gpt-6-luna` で生成した。投稿・X の呼び出し・予約の作成は、いずれも false。書き込みは無し。
+6. 最後にログアウトした（204）。
+
+前後比較（読み取り専用の件数と指紋）:
+- POSTONA のワークスペースの予約 0→0、実行ログ 0→0、投稿済み記録 0→0
+- 全体の予約 565→565、全体の実行ログ 1609→1609
+- 投稿権限（`social_accounts.publish_enabled` を含む指紋）、ブランド、ブランド設定は不変
+- Edge 関数は S4 のあとから不変
+- 設定の行は 0→1（テスト用アカウントの 1 行だけ）
+
+画面の切り替え（A → B → A）やワークスペースの分離は、アプリの画面テスト（PR #114、234/234）で確認済み。本番では、他人のワークスペースが拒否されることと、古い版数での保存が拒否されることを確認した。
+
+### 補足
+- S5 用のアカウントを探すため、ユーザーの依頼で、POSTONA アプリの Metro（Web 版、本番接続）をこの作業フォルダで起動している。
+  - 最初は、環境ファイルに `EXPO_PUBLIC_DATA_SOURCE=supabase` が無く、見本データ（「かぶモリ公式」）が表示された。Claude の設定漏れで、指定を足して直した。
+  - Web 版では、X の接続（OAuth）は仕様上できない（アプリ専用の戻り先が必要）。今回の範囲外でもあるので、触っていない。
+- 1 つ目のアカウントには、G5 の「利用登録が終了しました」が表示された。再登録は G5 の担当範囲で、S0〜S5 の範囲外のため、していない。
+- 作業フォルダにある、コミットしないもの:
+  - `apps/social-mobile/.env`（公開用の値だけ、600）
+  - `node_modules` へのリンク
+  - `supabase/config.toml`（verify_jwt=true）と `supabase/.temp/`
+  - Expo が `.gitignore` に足した行
+
+### 変更したファイル / テスト
+- 追加: PR #123 の 9 ファイル（実行バンドル）。既存のファイルは変更していない。
+- テスト:
+  - ローカルの proof は ALL_PASS、activate の通し 7/7、smoke の偽本番 5/5
+  - 本番: S0 PASS、S1 commit、S2 完全一致、S3/S4 のバイト照合 PASS、S5 19/19 PASS、前後比較 PASS
+- `git diff --check` クリーン、秘密情報スキャン 0。
+
+### remaining_issues
+- 本番の投稿経路（PR #41 の migration 3 本、`x_account_publish_authority`、G5 の利用権ゲート）は、未適用のまま（今回の範囲外）。
+  - 保存した設定を本番の自動投稿で使うのは、その作業のあと。
+- アプリの配布（EAS / TestFlight）は禁止範囲のため、していない。iPhone の今のビルドは Metro に接続できない（開発用ランチャーと IP の埋め込みがない）。
+- テスト用アカウントの設定 1 行（週 4 回など）は、そのまま残している。
+
+### safety_checks
+- DB パスワード・テスト用アカウントの認証情報・トークン・キーは、表示・保存・記録していない（結果ファイルにも無いことを予行演習で確認）。
+- 本番の操作は S0〜S5 の範囲だけ。
+  - x-test-post、Cron、scheduler、OAuth / Vault、G4（PR #118）、G5 の Auth・利用権・削除、Vercel / Netlify、EAS は触っていない。
+  - Claude API への切り替え（PR #117）もしていない。
+- 追加の Codex レビューはしていない（レビュー済みと同じバイト列を配備し、すべての検査と読み戻しに合格したため）。
+
+### next_recommendation
+1. K3 で受け入れ → status を done へ。PR #123（記録用のバンドル）を merge するかどうか判断する。
+2. 次の POSTONA の段階: 本番投稿の経路（PR #41 の 3 本 + G5 の利用権ゲート）を別の TASK で。
+3. 実機で確かめる場合は、IP を埋め込んだ開発用ビルドを Mac で作り直す（EAS を使わない方法）か、EAS の節目で配布する。
+
+---
+
+# ARCHIVED PREVIOUS G3 TASK AND REPORT — preserve verbatim
+
+# Claude Task 3 — CURRENT TASK
+
+- task_id: postona-ai-consult-pr114-session-epoch-corrective-20261009
+- owner: claude
+- slot: claude-3
+- status: done
+- next_owner: user
+- priority: high
+- recommended_model: Sonnet5（高）
+- start_code: G3
+- finish_code: K3
+- project: POSTONA / AI consultation
+- target_pr: 114
+- reviewed_candidate_head: f24c8efe84c433d0e7ca3e16b640a80d9c984a51
+- type: one bounded K3 async-workspace isolation corrective
+- source_only: true
+- merge_allowed: false
+- deploy_allowed: false
+- production_mutation_allowed: false
+
+## K3 disposition / accepted evidence
+
+Prior G3 task `postona-ai-consult-v1-release-readiness-20261009` is a **PASS_CANDIDATE with one correctable UI/session guard gap**. Keep its Report below as canonical history; do not rework the whole V1.
+
+Existing PR #114 fixes genuine cases:
+- workspace A -> B clears pending proposals/chat and ignores old A responses;
+- a double press of 「これで覚えて」 sends one write;
+- four red-before/green-after tests;
+- app 230/230, Edge 90/90, local disposable PG 48 PASS;
+- tests/type/lint/diff/secret scan clean, production mutation/deploy/OpenAI/X=0.
+PR #114 is open/unmerged and exact candidate head is `f24c8efe84c433d0e7ca3e16b640a80d9c984a51`. Vercel/Netlify statuses have been successful. Latest GitHub mergeability is not reliably settled (REST UNKNOWN), so require fresh-main integration proof before K3.
+
+**Only remaining source finding (P2): repeated workspace IDs (ABA) can accept obsolete asynchronous results.**
+
+Code at `apps/social-mobile/src/app/(tabs)/consult.tsx` uses:
+- `sessionBrand = useRef(brandId)`
+- `ask()`: `if (sessionBrand.current !== forBrand) return` after async work;
+- `confirmProposal()`: `stillSameWorkspace() => sessionBrand.current === forBrand` after async reads/saves.
+
+This distinguishes A->B but not A->B->A:
+1. Start consult request in A and keep response in flight.
+2. Switch to B (reset), then back to A (another reset).
+3. Complete original request from the first A session.
+4. Because only brand string equality is checked, old response can be dispatched into the new A session, despite the intervening reset. The same risk applies to stale save completion/rebase after the workspace cycles back.
+This is a source-visible race proof; do not silently claim the previous A->B test covers it.
+
+A second related isolation check is needed for `savedRef.current` fallback in `ask()`: when the new workspace's re-read is unavailable, stale previous-workspace settings must never be presented as the new workspace's saved settings/proposal basis. Do not invent an unrelated redesign if current guards already prevent it; add a deterministic test and minimally fix if reproduced.
+
+## Required bounded correction
+
+- Preserve the exact current UX, explicit 「これで覚えて」 confirmation, versioned CAS, tenancy/RLS, proposal validators and 8 persona signals.
+- Introduce a **monotonically increasing consultation session generation / epoch** on each workspace switch, including a return to the previous workspace ID. Async tasks must capture both workspace ID and epoch and check both before any post-await local state write, dispatch or latest-settings adoption.
+- Make sure a repeated-brand A->B->A renders a new clean conversation and *does not* accept a response/save outcome begun in the first A session.
+- Guard pre-existing workspace-independent cancellation/session-signout behavior; do not use raw access tokens as epoch keys, persist them, or log them.
+- Keep the existing single-flight saving guard. New resets must not accidentally allow an old save's completion to alter the new workspace's state.
+- Distinguish **ignoring a result** from **canceling a network-side write already sent**. Never claim an in-flight persistent RPC was canceled if only its UI completion was ignored. Do not add unsafe compensating writes.
+- Preserve normal same-workspace in-flight reply/save success and repeat-confirm behavior.
+
+## Tests / freshness
+
+Use dedicated clean G3 worktree, fresh origin/main, and recheck file overlap against G1/G2/G4/G5. Rebase/merge safely within own PR branch only; no main reset or other slots' branches/worktrees.
+
+Deterministic focused tests:
+1. A -> B -> A during pending AI response: original A response never displayed/accepted, current A greeting remains.
+2. A -> B -> A during pending read/save completion: obsolete pending result never rehydrates proposal, saved state or success notice in the new A session.
+3. If read fails on new B, cannot display/use savedRef settings from old A.
+4. A -> B ordinary switch, double confirm, valid same-workspace same-epoch response and CAS successful path remain PASS.
+5. Session/signout behavior remains safe; no X publish, scheduled-post write or account crossing.
+6. Focused + full app consult tests; relevant Edge/test smoke unchanged, tsc, eslint, git diff --check, added-line secret scan. List exact test counts.
+
+Changed files restricted to current PR #114:
+- `apps/social-mobile/src/app/(tabs)/consult.tsx`
+- `apps/social-mobile/src/domain/consult-session.ts` only if needed
+- `apps/social-mobile/tests/consult-screen.test.mjs`
+Any new file requires prior STOP/report rationale. Do not change auth provider, DataProvider, server-side code, DB/RPC/migrations, G4/5, G2 reports, AI Lab, X publisher/scheduler.
+
+## Completion
+
+Update existing **PR #114** only, push source/test changes to its own branch. Preserve all previous accepted content. No merge, no production mutation/deploy, no real AI or X call.
+
+In this TASK's Report write: task_id, exact new PR head, changed_files, tests, source review evidence, A->B->A red-before/green-after and fallback test, fresh-main integration status, commit/push, production mutation=0, remaining issues, safety checks, next recommendation.
+
+Set status `review_required`, next_owner `chatgpt`; stop for **K3**. ChatGPT will assess whether one focused independent review is appropriate for the resulting session/tenant boundary, recommendation **Sol（高）**.
+
+## Report
+
+- task_id: postona-ai-consult-pr114-session-epoch-corrective-20261009
+- result: **PASS candidate**
+  - A → B → A の場合も、最初の A で始まった応答・確認の読み取り・保存結果を、新しい A の相談に入れないようにした。
+  - 新しいワークスペースを読めないときに、前の相談の保存済み設定を提案の基準に使わないことも、テストで固定した。
+- 指定モデルは Sonnet5（高）だったが、ユーザーの選択で Opus 5.5 のまま実施。
+- PR #114 head: `f24c8efe84c433d0e7ca3e16b640a80d9c984a51` → **新 `98d3cb727a967c2a921da6afee3faafa85cb9de6`**
+  - 内訳: 修正コミット `ead54249` と、最新 main `ad9a1f48` の通常 merge。
+  - rebase / force-push なし。`f24c8efe` は履歴に含まれる。
+  - GitHub: MERGEABLE。netlify は SUCCESS、Vercel は記録時点で実行中。
+- changed_files（`f24c8efe` からの差分）:
+  - `apps/social-mobile/src/app/(tabs)/consult.tsx`（+49 / −18 の一部）
+  - `apps/social-mobile/tests/consult-screen.test.mjs`
+  - `consult-session.ts` は変更不要だった。新しいファイルはない。
+- commit_hash: `ead54249`（修正）、`98d3cb72`（main の取り込み）
+- push: PR #114 のブランチ `claude/g3-postona-ai-consult-v1-readiness-20261009` へ（fast-forward）
+- deploy: not authorized（0）。本番の読み書き 0 / 本物の AI・X 0 / merge 0
+
+### 修正の内容
+- **相談の世代番号（epoch）**
+  - ワークスペースが変わるたびに 1 つ増える。前に表示したワークスペースに戻った場合（A → B → A）も増える。
+  - 非同期の処理（AI への送信、確認時の読み取り・保存・再読込、保存済み設定の初回読み込み）は、開始時に「ワークスペース ID と世代番号」の両方を記録する。
+  - 各 await のあとで両方が今と一致するときだけ、次のことを行う: 画面の状態の更新、保存済み設定の採用、保存中フラグの解除。
+  - 世代の判定はアクセストークンを使わない。世代番号は保存も記録もしない。
+- **保存済み設定に世代番号を付けた**
+  - AI に送信したあとで今のワークスペースを読めなかったとき、基準に使うのは同じ世代で読んだ設定だけ。それも無ければ既定値を使う（確認時に再読込し、差があれば再確認になる）。
+  - 別の世代（別のワークスペースの可能性がある）の設定は使わない。
+- **「無視」と「取り消し」の区別**
+  - サーバーに送信済みの保存は取り消していない（取り消すための書き込みもしない）。古い世代では、結果を画面に出さないだけ。
+  - テストでも、送信済みの書き込みは保存されたまま（`applied: true`）であることを確認している。
+- 変えていないもの:
+  - 1 回目の保存が終わるまで 2 回目を送らない処理
+  - 「これで覚えて」での明示確認、版数つき保存、RLS / テナント
+  - 提案の検証、ペルソナ 8 項目
+  - サーバー・DB・認証・DataProvider
+
+### 修正前に失敗し、修正後に成功したテスト
+`f24c8efe` の画面で実行して失敗することを確認した:
+1. **応答の待機中に A → B → A**: 新しい A でも質問を送っておき、最初の A の応答が先に届く場合。
+   - 修正前: 古い A の提案が新しい A に表示された。
+   - 修正後: 表示されず、新しい A の返事だけが出る。書き込みは 0。
+2. **確認の読み取り中に A → B → A**:
+   - 修正前: 古い確認が書き込んだ（書き込み 1）。
+   - 修正後: 書き込み 0。保存の通知も、再確認の表示も、提案も出ない。
+3. **書き込みの送信後に A → B → A**:
+   - 書き込みはサーバーに届いて保存されたまま（取り消さない）。
+   - 修正前: 新しい A に「保存しました」が出た。
+   - 修正後: 出ない。
+   - そのあと新しい A では、自分の提案を問題なく保存できる（古い保存に妨げられない）。書き込み先は 2 回とも A だけ。
+
+### 新しいワークスペースを読めない場合のテスト
+4. A に保存済み設定がある状態で B に切り替え、B は読み取りに失敗するとする。B で提案を出したあと、B が読めるようになって確認する（B の実際の内容は、偶然 A と同じ）。
+   - 期待どおり、保存されずに再確認になる（A の設定を基準にしていれば、そのまま保存されてしまう）。
+   - このケースは PR #114 のリセット処理ですでに防げていたため、`f24c8efe` でも成功する（正直に記録する）。
+   - テストが効くことは変異で確認した: 「前の設定を基準に使う」変更（世代の判定とリセット時の既定値設定の両方を外す）を入れると、このテストだけが失敗した。確認後に元へ戻した。
+- 変異と修正前の確認は、作業ファイルを退避して戻す形で行い、最後にバイト一致を確認した。
+
+### テスト
+- アプリ: **234/234** 成功。
+  - 内訳: 前回の 230 件 + 今回の 4 件。相談の画面テストは 20 件。
+  - 前回からある次のテストもすべて成功: A → B の切り替え、二重押し、同じワークスペースでの通常の応答と保存成功、版数の再確認、ログアウト時の扱いは画面ごと破棄。
+- `tsc --noEmit` エラーなし。eslint（変更ファイル）はエラー・警告なし。
+- Edge（変更なし）: 相談・プレビュー・設定・本番投稿経路・生成の **90/90** 成功。
+- `git diff --check` クリーン。追加行の秘密情報スキャン 0（トークン名を含む行もなし）。
+- main を取り込んだあとも、アプリ 234/234 と tsc を再確認した。
+
+### 最新 main と他スロット
+- 作業前と push 前に最新 main を取得した（`ad9a1f48` を通常 merge、衝突なし）。
+- main 側に、相談・設定のファイルの変更は無い。
+- open な PR（#116 / #115 / #112 G5 / #110 G2 / #106 G4 / #33 ほか）は、相談・設定のファイルに触れていない。
+- 他スロットの worktree やブランチは触っていない。
+
+### remaining_issues
+- ソースの残りは無し。
+- 本番の準備（設定テーブル・相談 Edge・プレビューの配備し直し）は、前回の Report の S0〜S6 のとおりで変わらない。
+
+### safety_checks
+- 本番の読み書き・適用・deploy・merge は 0。本物の OpenAI / X は 0。
+- X 投稿、予約の書き込み、アカウントの切り替えは無い。書き込みはテスト用の保存処理だけで、送信先はそのワークスペースだけ。
+- トークンを世代の判定・保存・記録に使っていない。
+- `node_modules` は既存 worktree へのリンクで、コミットしていない。
+
+### next_recommendation
+1. K3 で、新しい head `98d3cb72` に対して、セッションとテナントの境界に絞った独立レビューを 1 回（Sol（高）を推奨）。
+2. PASS したら PR #114 を merge。そのあとは前回の Report の本番手順（S0 → S6）に進む。各ステップの直前にユーザーの承認をもらう。
+
+
+## Final K3 acceptance / PR #114 source merge — 2026-10-10 JST
+
+- verdict: **PASS / source merge completed**. Per explicit user request, no further Codex/Claude review; user prioritizes saving 5h review capacity. The bounded epoch/ABA guard and tests were evaluated by ChatGPT directly.
+- exact accepted PR #114 head: `98d3cb727a967c2a921da6afee3faafa85cb9de6`; GitHub OPEN/CLEAN and Netlify/Vercel statuses SUCCESS before merge.
+- PR #114 squash merge: **SUCCESS**, merge commit `952db5b18e2a4464fb076ccfc32af31063a6bb7e`, read-back `merged=true`.
+- accepted source: consult.tsx workspace+epoch async checks, epoch-tagged same-session saved settings and fallback, consult-session reset, screen tests. G3 reports app 234/234, Edge 90/90, tsc/ESLint/diff/secret scan PASS, A→B→A 3 red-before/green-after scenarios and fallback mutation probe.
+- H1 and H2 remained occupied by independent existing tasks and were **not** overwritten.
+- source merge did not apply schema migration, deploy any Edge Function, build EAS, mutate production DB, invoke real OpenAI/X, create scheduled posts or publish X.
+- fresh read-only production S0 (2026-10-10 JST): `public.social_mobile_content_settings` absent, related `social_mobile_content_settings%` functions absent; both schema migration versions absent; `social-mobile-consult` Edge absent; `social-mobile-brand-dry-run` v16 ACTIVE `verify_jwt=true`. Existing `brand_memberships` and `brands` present; API role-membership paths from anon/authenticated/service_role = none.
+- G3 scope is closed after source merge. Next step is a separate production rollout gate, with explicit user approval before any live DB migration, RLS/grants/RPC mutation, Edge deploy, real AI smoke or EAS build.
+- AI Lab diary: 候補あり — AIとの相談機能を作り、利用先を素早く切り替えたときに以前の会話や設定が混ざらないよう見直した。保存ボタンの連打についてもテストした。
+
+---
+
+# Previous G3 tasks and reports — preserved history
+
+# Claude Task 3 — CURRENT TASK
+
+- task_id: postona-ai-consult-v1-release-readiness-20261009
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: chatgpt
+- priority: high
+- start_code: G3
+- finish_code: K3
+- recommended_model: Opus5.5（高）
+- project: POSTONA / X auto-posting
+- type: AI consultation V1 release readiness + bounded source-only integration
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## User decision
+
+User explicitly defers the Kabumori X **morning/close reports** while a separate team unifies them with the Kabumori app. Do NOT start/fix the morning search-budget incident, close market data issue, or any market report sharing in this task. Do not reopen the completed AI Lab topic-exhaustion fix.
+
+Next product priority: **POSTONA AI consultation V1**.
+
+Core user experience:
+1. Have a natural chat about posts, preferred topics, wording and style.
+2. AI presents a reviewable proposal for structured settings/persona.
+3. **Only** when the user explicitly confirms (e.g. 「これで覚えて」), persist the approved settings/persona.
+4. On subsequent consultation, retrieve confirmed memory and reflect it in the conversation.
+5. Apply confirmed memory to preview and later live post generation, never unconfirmed suggestions.
+6. No implicit publishing, schedule edits, OAuth/permissions, account deletion or service entitlement side effects from consultation.
+
+## Verified baseline (2026-10-09 JST)
+
+- PR #78 AI consultation V1 source core **merged**: `60dff4e28a763e3c182495dfc41cadf94671952f`.
+- PR #81 content-settings schema source **merged**: `686f23a7094389b793470503fceb2f47a71f8fbf`, but live prerequisite remains unproven.
+- PR #41 older live brand-post route **merged**: `b90ee326600b075e3d0b23209b4eefc1b4cd9c16`. Do not assume its old merged source alone is a fully authorized general-user live rollout; review actual current source/DB gating.
+- Previous K3 confirmed 8 persona fields are consumed by brand generation when explicitly confirmed: toneSignals, sentenceLength, punctuationEmoji, recurringVocabulary, topicSignals, hashtagHabits, ctaStyle, openingClosingPatterns.
+- Current production `stock-x-autopost` (`wsmznyzcvmuitkglfeuj`) read-only inspection: no `public.social_mobile_content_settings` table, no corresponding migration history entry and no deployed `social-mobile-consult` function shown. Existing `social-mobile-brand-dry-run` is ACTIVE v16.
+- Shared G4: PR #106 multi-provider social-account migration candidate is `review_required`; do not edit G4 files.
+- G5 common-account critical path owns Auth/service entitlement/deletion and must not be obstructed.
+- Kabumori X morning/close remains owned by its app/common-report workstream, expressly deferred by user.
+
+## Task scope / required work
+
+**A. Fresh source + production read-only readiness audit**
+- Read `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this TASK and previous Report.
+- Use separate clean G3 worktree from fresh `/Users/yuya/Developer/kabumori-fresh`; do not share working directory, branch, server or uncommitted changes with other slots.
+- Inspect actual current main AI consultation UI, app client/repository, Edge handler, settings/persona validators, preview/brand generation, and existing related migrations.
+- Read only the necessary production metadata (schema/migrations/functions/config); do not access secrets/tokens or user content.
+- Explicitly determine whether PR #81 depends on PR #76 or other unapplied earlier migrations, and identify the correct non-destructive order. Do not skip any security/dependency gate.
+- Identify all release blockers by owner: G3 vs G4 vs G5 vs user production approval.
+
+**B. Full V1 source-only round trip**
+- Reproduce (mock/test environment) consultation -> proposal -> **explicit confirmation** -> optimistic CAS save -> reread -> next consultation -> preview/generator guidance.
+- Verify all 8 confirmed persona fields influence generation; unconfirmed fields do not. Maintain brand-specific hashtag precedence and no user-generated instructions masquerading as system instructions.
+- Handle stale proposal/CAS conflicts, sign-out/session switch, lost network, repeated confirmations and malformed model responses safely.
+- Ensure UI communicates what will be saved, confirmation and retry/errors naturally in Japanese.
+- No transcript-as-durable-memory migration. No personal/other tenant leakage.
+- Where a narrow missing link exists in G3-owned consultation files, implement the minimum source-only fix + tests. Do not redesign already-merged flows without reproducible reason.
+
+**C. Production release package (not execution)**
+- Prepare exact future gates: prerequisite schema migration(s) in dependency order -> verified RLS/owner/ACL/CAS -> consult Edge deploy (JWT/tenant/authorization) -> real AI API smoke limited to **no-publish** consultation -> confirm/save/remember -> preview/brand generation no-publish -> separate live posting consent/entitlement gate.
+- Do NOT deploy/activate anything without a separate ChatGPT/user-reviewed production task and direct authorization.
+- No forced scheduled post, real X API or any publish action.
+- If integration requires changing G5 Auth/entitlement or G4 provider schema, report a dependency and STOP on that boundary; coordinate rather than edit.
+
+## Out of scope / must not change
+
+- Kabumori X morning report / close report / shared market report; news monitor/API cost optimization; Kabumori app G1/G2 features.
+- AI Lab topic claims/security migration/74 topics/publishing/model selection.
+- G4 Threads/Instagram/provider migration schema/identity indexes/triggers.
+- G5 common-account Auth, service provisioning, entitlement, deletion and shared identity gates.
+- OAuth/token/Vault, X provider publish/credential, scheduler/Cron, existing live POSTONA publication controls.
+- Production schema/RPC/ACL/DB writes, migration apply, Edge deploy, real OpenAI/X calls, publish settings, EAS/TestFlight, PR merge.
+
+## Validation
+
+- Focused Deno + Expo/app tests for consult/auth mock/response parsing/persona/repository CAS/generator/preview.
+- Multi-tenant isolation, explicit-save-only, cancel/session-switch, stale-reconfirm and malformed-output adversarial tests.
+- Current source vs deployed edge/relevant migrations invariant check.
+- `deno check`, lint/typecheck for changed files, `git diff --check`, added-line secret scan.
+- Source-only, isolated branch and PR if changes are needed; do not directly merge or deploy.
+- Do not create a no-op PR: if fully ready except production prerequisites, deliver a clear, exact deployment/approval runbook and STOP.
+
+## Completion / Report
+
+Fill the new task's `## Report` with:
+- task_id, verdict/result;
+- live/prerequisite readiness matrix;
+- confirmed source vs pending production separation;
+- proposed exact migration/deploy sequence and safety gates;
+- changed_files, tests, commit_hash, push/PR exact head (or no source change);
+- prod_reads metadata only / prod_mutations 0 / deploy 0 / real AI/X 0;
+- remaining blockers grouped by G3/G4/G5/user approval;
+- safety_checks and next_recommendation.
+
+Set `status: review_required`, `next_owner: chatgpt`, STOP for K3.
+If a material security/DB/API authorization boundary changes, ChatGPT will decide one focused Codex review (suggest **Sol（高）**). Do not automatically allocate H1/H2 or overwrite other TASK files.
+
+## Report
+
+- task_id: postona-ai-consult-v1-release-readiness-20261009
+- result: **SOURCE READY（PR #114 のレビュー後）／本番は未準備**
+  - ソースの流れ（相談 → 提案 → 明示の確認 → 版数つき保存 → 再読込 → 次の相談 → プレビュー・生成）は main でそろっている。
+  - 抜けていた 2 点（ワークスペース切り替え・確認の二重押し）は PR #114 で修正した。
+  - 本番には、設定テーブル・相談の Edge 関数・設定を読むプレビューの**どれもまだ無い**。
+- changed_files（PR #114 のみ）:
+  - `apps/social-mobile/src/app/(tabs)/consult.tsx`
+  - `apps/social-mobile/src/domain/consult-session.ts`
+  - `apps/social-mobile/tests/consult-screen.test.mjs`
+- commit_hash / push: `f24c8efe`（最新 main `f133974b` の上）。ブランチ `claude/g3-postona-ai-consult-v1-readiness-20261009`。
+  - PR: https://github.com/anohi-memories/kabumori/pull/114 （open、merge していない）
+- deploy: not authorized（0）
+- prod_reads: メタデータのみ。自動モードが Claude からの本番読み取りを拒否したため、読み取り専用スクリプトをユーザーが実行した（2026-10-09 16:59 JST）。
+  - 読んだもの: 表・関数の有無、migration 履歴、権限の構成、Edge 関数の一覧、配備済みプレビュー関数のソース。
+  - 秘密情報・利用者の内容は読んでいない。
+- prod_mutations: 0 / real AI: 0 / real X: 0 / merge: 0
+
+### 1. 本番の状態（読み取り結果）
+| 項目 | 本番 | V1 に必要か |
+|---|---|---|
+| `public.social_mobile_content_settings` 表 | **無い** | 必要（保存と記憶の土台） |
+| `social_mobile_content_settings_*` 関数（5 個） | **無い** | 必要 |
+| 履歴 `20260922045046` / `20261003120000` | **無い** | 必要（2 本を 1 つのトランザクションで適用） |
+| 前提 `brands.code_profile_key` / `brand_memberships`（owner の CHECK・FK）/ `auth.uid()` | ある | 前提を満たす |
+| PR #76 の `20261003090000`（投稿権限の境界） | **適用済み**（履歴あり） | 依存はない（下記） |
+| Edge `social-mobile-consult` | **配備されていない** | 必要 |
+| Edge `social-mobile-brand-dry-run` | v16（2026-09-21 12:41 JST）、`verify_jwt=true` | **配備し直しが必要**（下記） |
+| 投稿の本番経路の migration（`20261006160000` / `160100` / `160200`、`x_account_publish_authority`） | 無い | V1（投稿しない相談）には不要。投稿は別のゲート |
+
+その他の構成:
+- Postgres 17.6。`current_user` は postgres で、`public.brands` の owner も postgres。
+- anon / authenticated から postgres や service_role へ届くメンバーシップは無い（4 方向とも false）。
+- postgres の既定権限（public の新しい表）: anon / authenticated / service_role に `Dxtm`（TRUNCATE・REFERENCES・TRIGGER・MAINTAIN）が付く。この 3 つのロール以外は出てこないので、強化 migration の検査は通る想定。また強化 migration が 3 つとも取り消す。
+- event trigger `ensure_rls`: 新しい表に RLS を自動で有効にするだけ。migration 側でも有効にしているので衝突しない。
+- 履歴表には `version`, `statements`, `name` のほかに、NULL 可の列が 3 つ増えている（`created_by` / `idempotency_key` / `rollback`）。手順書の `(version, name)` の挿入はそのまま使える。
+- `social_mobile_user_v1` のワークスペースは 2 件（件数のみ）。
+
+### 2. 依存関係と順番
+- **PR #81 は PR #76 に依存しない。**
+  - 設定テーブルの 2 本（候補 + 強化）の前提は、`brands` / `brand_memberships` / `auth.uid()` / ロール構成だけ。PR #76 の関数や表は参照していない。
+  - PR #76 の `20261003090000` はすでに本番にあるので、手順書にある「G4 の 20261003090000 を先に調整」はもう済んでいる。
+- 2 本はどちらも、本番の履歴の最大値（`20261007214402`）より古い version になる。そのため `db push` は使わず、手順書（`supabase/tests/social_mobile_content_settings_rollout.md`）のとおり、psql の `--single-transaction` で 2 本と履歴 2 行を 1 回で適用する。
+  - 本番の履歴は repo と 1 対 1 ではないので、「適用済みかどうか」は catalog で判断する。
+- 投稿の本番経路（`20261006160000` → `160100` → `160200`）は設定テーブルに依存する。順番は「設定テーブル → 160000 → 160100 → 160200」。
+  - V1（投稿しない相談）の範囲外で、G5 の利用権（entitlement）のゲートとあわせて別の作業にする。
+
+### 3. 本番に出す手順案（実行はしていない。各ステップに別途の承認が必要）
+1. **S0 事前確認（読み取りのみ・当日）**: 今回の読み取りスクリプトと、手順書の Preflight（表と関数が無い、2 つの version が無い、既定権限、owner、ロール）。
+2. **S1 設定テーブルの適用**（ユーザー承認・DB パスワードはユーザーが入力）: 手順書の psql コマンドで、2 本 + 履歴 2 行を 1 つのトランザクションで適用する。失敗したら全部取り消される。
+3. **S2 読み戻し**: 履歴 2 行、RLS 有効、owner のポリシー 3 つ。実効権限は authenticated の SELECT / INSERT / UPDATE だけ（anon / service_role / PUBLIC は無し）。関数 5 個と EXECUTE の付与先、トリガー 1 個。
+4. **S3 Edge `social-mobile-consult` の配備**（未配備 → 新規）:
+   - レビュー済みのクリーンな checkout から配備する。`supabase/config.toml` が無いので、JWT 検証は既定の有効のまま。
+   - 必要な環境変数は `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `OPENAI_API_KEY` だけで、新しい秘密は無い。
+   - 配備後に、ダウンロードしたソースとバイト単位で一致することを確認する（worktree から配備すると別の checkout が配備される事故があったため）。
+5. **S4 Edge `social-mobile-brand-dry-run` の配備し直し**:
+   - 配備済みの v16 は、保存した設定を**読まず**に常にコードの既定値で生成し、ペルソナの処理も無い（`persona` の出現 0 件。`logic.ts` は main と 59 行の差）。このままでは、相談で覚えさせた内容がプレビューに出ない。
+   - モデルも、v16 の固定 `gpt-5.6-luna` から、main の方針の `gpt-6-luna`（x-test-post v141 で本番稼働中）に変わる。
+6. **S5 投稿しないスモーク（本物の AI・テスト用アカウント 1 件）**:
+   - 雑談 → 提案 → 「これで覚えて」→ 再読込 → 次の相談で内容を説明できる → プレビューに反映、の順に確認する。
+   - X 呼び出し 0、予約作成 0、投稿権限の変化 0 を確認する。
+7. **S6 アプリの配布**: PR #114 を含むビルド（EAS は節目でのみ。ユーザー承認）。
+8. **S7（別のゲート）本番投稿**: PR #41 の migration 3 本 + G5 の利用権ゲート + 投稿の同意。V1 には含めない。
+
+### 4. ソース確認の結果
+- 既存の往復の流れは main のテストで確認できており、今回も実行してすべて成功した:
+  - アプリ側の相談関連 48 件
+  - Edge 側（相談・プレビュー・設定・本番投稿経路・生成）90 件
+- 確認済みペルソナの 8 項目は生成の指示に入り、未確認のペルソナは生成にも次の相談にも使われない（既存テスト）。
+- ハッシュタグの優先順位: 固定タグ・AI ラボ自身の方針が、利用者の確認済みの習慣より優先される（既存テスト）。
+- 利用者の文章が system 指示にならないこと:
+  - 生成側では、保存した自由入力を 1 行に詰め、上限を付けてから指示に入れる。
+  - 相談側では、保存済みの内容を「データ」と明記して渡し、モデルの出力は許可リストで検証する。
+- 保存は「これで覚えて」からだけ、差分だけを、版数（updated_at）が変わっていないときだけ書き込む。
+  - 他で同じ項目が変わっていたら上書きせずに再確認を求め、関係のない新しい値は残す。
+  - DB 側の、2 接続で同時に保存したときに勝つのは 1 つだけ、という検証も今回ローカルで再実行して成功した。
+- 壊れた応答・通信の失敗・時間切れは、保存せずに再試行できるエラーになる。ログアウトすると画面ごと破棄され、会話も提案も残らない。
+- **今回直した抜け（PR #114）**:
+  1. 表示中のワークスペースは「所属ブランドの先頭」で決まり、所属が複数あると切り替わりうる。切り替え後も会話と提案が残っていたため、前のワークスペース向けの提案を、再確認のうえで別のワークスペースに保存できた。送信中だった応答が新しい相談に表示されることもあった。
+     → 切り替えで相談をリセットし、前のワークスペース向けに処理中だった応答や保存は捨てる。
+  2. 「これで覚えて」の二重押しで、書き込みが 2 回送られていた（版数チェックで二重保存にはならないが、「変わっていました」と誤表示されることがあった）。→ 1 回目が終わるまで、2 回目は何もしない。
+  - 再現テスト 4 件は、修正前の画面ですべて失敗し、修正後に成功した。
+- DB を永続的な会話記録にする変更は無い。会話は端末のその場の会話の中だけ。
+
+### 5. テスト
+- アプリ: 全 230/230 成功（PR #114 のテスト 4 件を含む）。`tsc --noEmit` エラーなし、eslint（変更ファイル）エラーなし。
+- Edge: 相談・プレビュー・設定・本番投稿経路・生成の 90/90 成功（Edge は変更なし）。
+- DB（ローカルの使い捨て PostgreSQL 17）: `social_mobile_content_settings_run.sh` が `SOCIAL_MOBILE_CONTENT_SETTINGS_ALL_PASS`（PASS 48 件）。
+  - 内容: 1 トランザクションでの適用と再実行、ファイルごとに適用した場合は弱い候補が残ることの確認、同時保存で勝つのは 1 つ、前提のずれの拒否など。
+- 本番の読み取りクエリは、先にローカルの模擬スキーマで構文を確認した。
+- `git diff --check` クリーン、追加行の秘密情報スキャン 0。
+
+### 6. 最新 main との重なり
+- 最新 main `f133974b` の上に作成した。
+- open な PR（#113 G1 / #112 G5 / #110 G2 / #106 G4 / #33）は、相談・設定のファイルに触れていない。
+- G4 / G5 のファイルは編集していない。
+
+### 7. 残っている課題（担当別）
+- **G3**
+  - PR #114 のレビューと merge。
+  - 本番作業の TASK が出たら、S0〜S5 を実行（読み取りスクリプトと手順書は用意済み）。
+  - 本番投稿の S7 は、PR #41 の 3 本を別の作業として扱う。
+- **G4**: V1 への依存は無い（PR #106 の provider スキーマとは独立）。
+- **G5**
+  - V1（投稿しない相談）には依存なし。
+  - 本番投稿（S7）の前に、`check_x_account_publish_authority` などで `x_autopost` の利用権を必須にする必要がある（既知の申し送り）。
+  - 退会処理: 設定テーブルはブランドの削除で自動的に消える（FK の ON DELETE CASCADE）。G5 の削除処理（PR #112）で対象の表を一覧にしている場合は、この表を追加するか確認が必要。
+- **ユーザー承認**
+  - S1 の本番適用（DB パスワードの入力が必要）
+  - S3 / S4 の Edge 配備
+  - S5 の本物の AI を使ったスモーク
+  - S6 の EAS ビルド
+
+### safety_checks
+- 本番の書き込み・適用・deploy・merge は 0。本物の OpenAI / X の呼び出しは 0。
+- 秘密情報・トークン・メールアドレスの表示や記録は無い。
+- 相談 Edge には service_role もトークンの読み書きも無い。本人の JWT と RLS でワークスペースの所有を確認し、クライアントが送る brand_id は選択値としてだけ使う。
+- テナントの境界（owner だけの RLS）は変えていない。
+- `node_modules` は既存 worktree へのリンクで、コミットしていない。
+
+### next_recommendation
+1. PR #114 のレビュー（変更は画面のみで小さいので、Codex のレビューは任意。必要なら Sol（高）で 1 回）。
+2. 承認されたら、本番 TASK を作り、S0 → S1 → S2 → S3 → S4 → S5 の順に実施する。それぞれの直前にユーザーの明示承認をもらう。
+3. S7（本番投稿）は、G5 の利用権ゲートが入るまで保留。
+
+---
+
+# Preserved previous G3 TASK / Reports — historical only
+
+# Claude Task 3 — CURRENT TASK
+
+- task_id: ai-lab-premium-length-policy-unlimited-20261007
+- owner: claude
+- slot: claude-3
+- status: done
+- next_owner: user
+- priority: urgent
+- recommended_model: Sonnet5（高）
+- type: bounded AI Lab length-policy correction on existing PR #109
+- target_pr: 109
+- accepted_security_head: 7c3c06d07c32910472185e1c94b04fa1aab794f5
+- production_mutation_allowed: false
+- deploy_allowed: false
+- merge_allowed: false  # historical task gate; source merge completed after external PASS
+
+## Context / K3 disposition
+
+The prior PR #109 migration-security corrective is a **PASS candidate for rereview**:
+- B1 SET ROLE graph guard added;
+- B2 canonical prerequisite table-shape proof added;
+- B3 exact companion lifecycle-function body proof added;
+- 13/13 adverse cases reject and rollback;
+- healthy apply/reapply passes;
+- real SQL capacity remains 140/140;
+- accepted 74-topic/Tier2/Tier3 design unchanged;
+- production mutation/deploy/merge remains 0.
+
+Before sending that head to Codex, the user clarified a product policy:
+
+> 会社員AIラボはX Premium運用なので、140文字を超えてよい。短文上限に縛らない。
+
+Fresh source inspection found the current AI Lab profile is not 140-limited, but **is hard-limited to 280 Unicode code points**:
+- `AI_SALARYMAN_LAB_CODE_PROFILE.postLengthPolicy = { mode: "limited", maxChars: 280 }`;
+- generator rejects 281 with `BRAND_POST_LENGTH_LIMIT_EXCEEDED`;
+- final pre-X dispatch guard rejects 281 again.
+
+This hard ceiling conflicts with the user's Premium-account policy.
+
+## Goal
+
+Remove the hard finite character ceiling **for company AI Lab only**.
+
+Required final behavior:
+- AI Lab `brand_post` uses the existing generic `UNLIMITED_POST_LENGTH` policy.
+- 281+ characters do not fail solely because of character count.
+- 140 characters is not a target or ceiling.
+- 280 characters is not a target or ceiling.
+- Do not force long posts either. Add/adjust AI Lab profile guidance so the model varies length naturally:
+  - concise topic -> concise post is fine;
+  - when the content benefits from context/detail, it may exceed 280;
+  - do not pad/fill merely because Premium permits longer posts.
+- Existing content safety, dedupe, topic, hashtag and account checks remain unchanged.
+- Character count should still be measured/reported for diagnostics; only the finite ceiling disappears.
+
+## Scope
+
+Expected files:
+- `supabase/functions/_shared/brand/brand_profiles.ts`
+- `supabase/functions/_shared/brand/brand_profiles_test.ts`
+- `supabase/functions/_shared/brand/brand_post_generator_test.ts`
+- `supabase/functions/_shared/brand/brand_post_dispatch_guard_test.ts`
+
+Do not change the generic length-policy implementation unless strictly necessary; it already supports `UNLIMITED_POST_LENGTH`.
+
+Do not change:
+- POSTONA / `social_mobile_user_v1` length behavior;
+- Kabumori X length behavior;
+- x-test-post report/morning/useful-tip length contracts;
+- PR #109 topic pool / 74 seeds / Tier ordering;
+- PR #109 B1/B2/B3 migration correction;
+- scheduler/posting windows;
+- X OAuth/Vault/Auth/common-account/provider logic.
+
+## Mandatory tests
+
+Update the old AI Lab 280-limit tests to prove the new user policy:
+1. AI Lab profile is explicitly `UNLIMITED_POST_LENGTH`.
+2. generation prompt no longer says `280文字以内`; it communicates no hard ceiling and natural-length guidance.
+3. generator accepts >280 text (use at least one 600+ code-point fixture) and returns correct `characterCount`.
+4. final AI Lab dispatch guard accepts >280 text and still returns the measured character count.
+5. account mismatch / wrong post type / other existing dispatch safety checks remain unchanged.
+6. POSTONA/general-user and Kabumori profile length behavior is unchanged.
+7. no source/test assertion anywhere in AI Lab path still requires max 280.
+
+Run:
+- focused profile/generator/dispatch tests;
+- relevant AI Lab/shared brand suite;
+- PR #109 existing topic/migration tests as a smoke regression (do not need to redo every expensive PostgreSQL adverse runner if source bytes of migration are unchanged, but verify migration files remain byte-identical to accepted security head);
+- deno check/lint;
+- git diff --check;
+- added-line secret scan.
+
+## PR / freshness
+
+- Keep using existing PR #109.
+- Require `7c3c06d07c32910472185e1c94b04fa1aab794f5` in PR history.
+- Fresh-fetch origin/main before editing and before push.
+- Re-check G2/G4/G5 overlap.
+- Do not alter migration/security files except for conflict-free merge resolution if absolutely necessary; if their bytes change, STOP and report before push.
+- No production access/write/apply/deploy/scheduler/OpenAI/X call.
+
+## Completion
+
+Update PR #109 and report:
+- new exact head;
+- exact files changed for length policy;
+- proof that prior B1/B2/B3 migration bytes are unchanged from `7c3c06d0`;
+- >280 generation + dispatch results;
+- focused/full relevant test counts;
+- fresh-main overlap;
+- production mutation/deploy/merge = 0.
+
+Then:
+- status: review_required
+- next_owner: chatgpt
+- STOP for K3.
+
+After this K3, assign one exact-head Codex rereview covering:
+- previously corrected B1/B2/B3 migration guards;
+- this small AI Lab unlimited-length policy delta only.
+
+
+## Report — ai-lab-premium-length-policy-unlimited-20261007
+
+- result: **PASS candidate** — 会社員AIラボだけ、投稿本文の文字数上限をなくした（X Premium 運用）。PR #109 を更新し、open のまま（GitHub: MERGEABLE）。本番の読み書き 0 / migration 適用 0 / deploy 0 / merge 0 / scheduler 0 / OpenAI・X 0。
+- PR #109 head: `7c3c06d07c32910472185e1c94b04fa1aab794f5` → 最新 main の通常 merge `c6df5dfc` → **新 `fb4afb21d7ce808de3257bebc8062aed93353dec`**（修正コミット 1 つ）。rebase / force-push なし。`7c3c06d0` は履歴に含まれる。
+- CI: Vercel だけ「Deployment rate limited」（アカウント全体の制限で以前から同じ）。netlify は SUCCESS。
+- worktree: 既存の `/Users/yuya/Developer/kabumori-g3-ai-lab-continuity`（開始時 clean、`7c3c06d0` と一致を確認）。
+- 指定モデルは Sonnet5（高）だったが、ユーザーの選択で Opus 5.5 のまま実施。
+
+### 変更内容
+- `brand_profiles.ts`
+  - AI ラボの `postLengthPolicy` を `{ mode: "limited", maxChars: 280 }` → **`UNLIMITED_POST_LENGTH`**（既存の汎用の無制限モード）。
+  - 口調の指示に 1 行追加: 「X Premiumで運用しているため上限はない。140文字や280文字は目標でも上限でもない。題材が簡潔なら短くてよい。背景・具体的な手順・判断の理由が役立つときは280文字を超えてよい。水増しや繰り返しはしない。」
+- `brand_post_generator.ts`（汎用の生成処理。**無制限モードのときだけ**挙動が変わる。理由は下記）
+  - 出力トークンの上限: 無制限モードは 2000、それ以外は従来どおり 600。
+  - 無制限モードで応答が打ち切られた（`status: "incomplete"`）ときは、投稿せず `BRAND_POST_OUTPUT_INCOMPLETE` で失敗する。
+  - 理由: このモデルは推論ありで、推論分も 600 トークンに含まれる。日本語だと 300〜500 文字前後で打ち切られる可能性があり、しかも従来は打ち切りを検出していなかった。上限をなくすと「途中で切れた文章がそのまま投稿される」危険が出るため、最小限の対策を入れた。かぶモリ・POSTONA は無制限モードを使っていないので影響しない（テストで確認）。
+  - 文字数（`characterCount`）は従来どおり計測して返す。
+- 変えていないもの: 汎用の文字数ポリシー本体（`post_length_policy.ts`）、送信前ガード本体（`brand_post_dispatch_guard.ts`）、かぶモリと POSTONA の長さの扱い（POSTONA の 140 上限を含む）、x-test-post の各レポートの長さ、題材の 74 件・Tier の順番、B1/B2/B3 の migration、scheduler、OAuth / Vault / Auth / 共通アカウント / provider。
+- `supabase/tests/x_account_refresh_pilot.md` の古い一文（「AI Lab keeps its own 280 policy」）を現状に合わせて修正。
+
+### 280 文字を超える場合の結果
+- 生成: 641 コードポイント（「あ」640 文字＋絵文字 1 つ。UTF-16 では 642）の本文を受け付け、`characterCount = 641`、本文は変更なし。281 文字と 3 文字も受け付けた。
+- 生成時の指示文: `280文字以内` も「◯文字以内」も含まない。「投稿本文の文字数上限は設定されていません。」と、自然な長さの指示を含む。
+- 送信前ガード: 1 / 140 / 279 / 280 / 281 / 600 文字と、641 コードポイントの本文をすべて受け付け、計測した文字数を返す。
+- 予約投稿の実行: 641 コードポイントの本文が、そのまま X 送信処理に渡り、`characterCount = 641` が報告された。
+
+### 安全性の確認（変わっていないこと）
+- アカウント不一致: ブランド ID / アカウント ID / アカウントのブランド / プラットフォーム / ハンドル / アカウントなし の 6 通りで、長文でも `AI_LAB_DISPATCH_ACCOUNT_MISMATCH`。
+- 投稿種別の誤り、`brand_post` が無効、文字数ポリシーが未設定 → 従来どおり拒否。
+- 有限の上限を明示的に設定した場合は、汎用の処理として従来どおり 280 で拒否される。
+- かぶモリ・POSTONA のプロフィールには長さポリシーがないまま。POSTONA の送信は 140 上限のまま。
+- 内容の安全性・重複除外・題材・ハッシュタグの処理は変更なし。
+
+### 変異確認
+- AI ラボを一時的に 280 上限に戻すと、新しいテスト 8 件が失敗した。
+- 打ち切り検出を一時的に無効にすると、打ち切りのテストが失敗した。
+- どちらも確認後に元へ戻した。
+
+### テスト
+- 関連の重点テスト: 生成 20 件、プロフィール・送信前ガード・予約投稿・文字数ポリシー・POSTONA を含めてすべて成功。
+- x-test-post + `_shared` + migration の不変条件: **1028/1028** 成功。
+- PR109 のスモーク（ローカルの使い捨て PostgreSQL 17）: `ai_lab_topic_capacity_run.sh` と `ai_lab_topic_capacity_adverse_run.sh` の両方が ALL PASSED。
+- migration と題材のファイルは `7c3c06d0` と**バイト単位で同じ**（`git diff --quiet 7c3c06d0 --` が差分 0）: `20261007173000_ai_lab_topic_evergreen_capacity.sql`、`ai_lab_topic_capacity_run.sh`、`ai_lab_topic_capacity_adverse_run.sh`、`ai_lab_dev_diary_context.ts`。`supabase/migrations` 全体でも `7c3c06d0` からの差分なし。
+- `deno check`: 既存の 3 件（`brand_post_generator_test.ts` の今回触っていないテスト）だけで、変更前と同じ。`deno lint`: 13 件で変更前と同じ（すべて既存の `require-await`）。`git diff --check` クリーン。追加行の秘密情報スキャン 0。
+
+### 最新 main との重なり
+- 作業前と push 前に最新の main を取得した（main `c5f14378` は取り込み済み）。
+- open な PR（#110 G2 / #106 G4 / #33）と変更ファイルの重なりはない。G2 / G4 / G5 のファイルには触れていない。
+
+### 本番・ゲート
+本番へのアクセス・書き込み・適用・deploy・scheduler・OpenAI・X はすべて 0。merge 0。
+
+### 次
+- TASK のとおり、新しい head `fb4afb21` に対して Codex の再レビューを 1 回（B1/B2/B3 の migration の修正と、今回の文字数の変更）。
+- レビューで見てほしい点: 生成処理の「無制限モードのときだけ出力上限 2000・打ち切りは失敗」は TASK に明記されていない追加なので、この判断でよいか。
+- status → review_required / next_owner → chatgpt。STOP。
+
+---
+
+# Previous G3 task — preserved history
+
+# Claude Task 3 — CURRENT TASK
+
+- task_id: ai-lab-topic-continuity-pr109-security-corrective-20261007
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: chatgpt
+- priority: urgent
+- recommended_model: Opus5.5（高）
+- type: bounded migration/security corrective on existing PR #109
+- target_pr: 109
+- reviewed_head: f83247ae1024d4220dfbfa5484c725381d63815d
+- production_mutation_allowed: false
+- deploy_allowed: false
+- merge_allowed: false
+
+## C1 disposition
+
+H1 exact-head review of PR #109 returned **CHANGES REQUIRED**.
+
+Preserve the accepted topic/capacity implementation. Correct **only** the three migration boundary findings B1-B3 and the tests necessary to prove them.
+
+Do not redesign the topic pool, cooldowns, scheduler, provider flow, X handling or AI model policy.
+
+## Accepted evidence — do not reopen without concrete regression
+
+The following is accepted and should remain byte/behavior stable except where a narrow test hook is unavoidable:
+- 74 total evergreen seeds.
+- evergreen-0..6 identities/text/tags preserved.
+- Tier 2 diverse evergreen + Tier 3 reserve ordering.
+- recent dev diary remains first.
+- Tier 3 remains last priority.
+- no Web Search dependency for fallback.
+- no fabricated specific current-AI/news claims.
+- same-seed 72h cooldown unchanged.
+- tagged-theme 48h cooldown unchanged.
+- unresolved claimed/provider_started/ambiguous blocking unchanged.
+- event-level dedupe/fencing unchanged.
+- cross-brand fingerprint/content guards unchanged.
+- provider outcome / ambiguous no-resend unchanged.
+- candidate limit target 128 is acceptable in principle.
+- exact TS/SQL 74-entry map parity is accepted.
+- real SQL 14 days x 10/day = 140/140, fixed/skewed rotation 140/140 accepted.
+- old seven-seed pool exhaustion reproduction accepted.
+- migration-first then x-test-post-deploy order accepted.
+
+## Blocking B1 — fail closed on SET ROLE paths to service_role
+
+Current reviewed migration checks direct/inherited effective privileges but misses role memberships that allow:
+- direct `anon -> service_role` with `INHERIT FALSE, SET TRUE`;
+- indirect `authenticated -> bridge -> service_role` with SET ROLE capability.
+
+Required correction:
+- before replacing the claim function, detect and reject **direct and transitive** API-role paths that can `SET ROLE` into `service_role` or another privileged target that would gain claim execution.
+- retain existing owner-membership checks.
+- support PostgreSQL 16+ per-edge membership semantics; where exact edge semantics are unavailable, fail conservatively rather than assuming safety.
+- do not auto-revoke or repair role membership.
+- transaction must rollback fully on detection; no function/body/ACL change may persist.
+
+Required adverse fixtures:
+1. anon -> service_role, INHERIT FALSE / SET TRUE.
+2. authenticated -> intermediate role -> service_role, SET TRUE path.
+3. existing ordinary INHERIT TRUE privilege path remains rejected.
+4. healthy role graph remains accepted.
+5. rollback/no-definition-change assertion for each rejected case.
+
+## Blocking B2 — prerequisite table canonical-shape proof
+
+Current preflight is too weak: object existence + substring CHECK can accept drift.
+
+Before `CREATE OR REPLACE FUNCTION`, validate the prerequisite `ai_lab_topic_claims` shape as canonical.
+
+At minimum prove:
+- expected columns, data types, nullability/defaults;
+- primary key;
+- event_key and other required CHECK semantics, not substring matching;
+- required unique/index definitions including key columns, predicates, uniqueness, validity/readiness;
+- RLS enabled/forced state as expected;
+- policies/triggers expected by the accepted base;
+- table owner;
+- explicit/effective table + column ACL boundary;
+- no unexpected conflicting object shape relevant to claim safety.
+
+Accepted states:
+- canonical pre-capacity base state from `20261004090000`;
+- canonical already-capacity state for idempotent reapply.
+
+Reject unknown drift. Do not mutate/repair the table, RLS, policies, indexes or ACLs in this migration.
+
+Required adverse fixtures against the **capacity migration itself**:
+- missing PK;
+- missing diary active unique index;
+- RLS disabled;
+- vacuous/replaced event-key CHECK that only contains matching text;
+- at least one wrong index predicate/key/validity fixture;
+- unexpected table/column ACL drift.
+All must fail before function replacement and rollback cleanly.
+
+## Blocking B3 — verify unchanged lifecycle function bodies, not metadata only
+
+The capacity migration replaces only `claim_ai_lab_topic`, but currently accepts body drift in companion functions such as `start_ai_lab_topic_provider`.
+
+Required correction:
+- preflight exact approved definitions/contracts for the four unchanged lifecycle functions:
+  - start provider
+  - release claim
+  - mark ambiguous
+  - settle published
+- check signature, argument names/order/types where contract-sensitive, language, return type, SECURITY DEFINER, search_path, owner/ACL **and normalized body definition**.
+- also recognize the approved old claim definition before first apply and approved new claim definition for idempotent reapply.
+- unknown body/contract drift must abort before replacement.
+- do **not** rewrite those four companion functions.
+
+Required adverse fixture:
+- replace `start_ai_lab_topic_provider` with same signature/owner/return/security/search_path/ACL but body `RETURN true` without state transition.
+- applying capacity migration must fail and rollback with claim function unchanged.
+- add one positive healthy companion-definition control.
+
+Use a deterministic normalization/fingerprint approach that is stable enough for the supported PostgreSQL versions and documented in tests. Do not trust only function metadata.
+
+## Scope
+
+Keep working on existing PR #109; do not open a replacement PR unless technically unavoidable.
+
+Expected changed files:
+- `supabase/migrations/20261007173000_ai_lab_topic_evergreen_capacity.sql`
+- `supabase/tests/ai_lab_topic_capacity_run.sh`
+- focused migration/adversarial/static tests as needed
+- existing invariant test only if required.
+
+Avoid changing:
+- `EVERGREEN_TOPIC_SEEDS` content/count/order unless a concrete regression forces it;
+- `EVERGREEN_THEME_TAGS`;
+- Tier ordering;
+- x-test-post runtime;
+- brand post store;
+- provider outcome;
+- scheduler/posting windows;
+- G2/G4/G5-owned files;
+- Auth/OAuth/Vault/X provider boundaries.
+
+## Mandatory verification
+
+Re-run:
+- all new B1/B2/B3 adverse fixtures;
+- healthy apply + reapply;
+- 74-entry TS/SQL parity;
+- 129-candidate/unknown-seed rejection;
+- old 7-seed exhaustion;
+- real SQL >=14 days x 10/day = 140/140;
+- fixed and skewed rotation capacity;
+- existing claim proof;
+- migration source invariants;
+- relevant Deno AI Lab suites;
+- explicit `deno check` / lint for changed TS tests;
+- `git diff --check`;
+- added-line secret scan.
+
+Mutation-style expectation:
+- each adverse drift must cause migration failure;
+- no partial definition/ACL/table mutation after failure.
+
+## Freshness / isolation
+
+1. Read ORCHESTRATION / ACTIVE_TASK / CURRENT_STATE / this TASK / H1 Report.
+2. Use the existing isolated G3 PR109 worktree only if still clean/safe; otherwise make a new independent G3 worktree from fresh `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh-fetch origin/main and PR #109.
+4. Require reviewed head `f83247ae1024d4220dfbfa5484c725381d63815d` in PR history.
+5. Re-check G2/G4/G5 overlap before editing and before push.
+6. No production access/write/apply/deploy/scheduler/OpenAI/X call.
+
+## Completion
+
+Update the existing PR #109.
+
+Report:
+- exact new PR head;
+- B1/B2/B3 fix summary;
+- adverse fixture results;
+- healthy apply/reapply;
+- capacity result still 140/140;
+- accepted topic files byte/semantic stability;
+- changed_files;
+- tests;
+- fresh-main overlap;
+- production mutation/deploy/merge = 0.
+
+Then:
+- status: review_required
+- next_owner: chatgpt
+- STOP for K3.
+
+A second focused exact-head Codex rereview is required after this correction.
+
+
+## Report — ai-lab-topic-continuity-pr109-security-corrective-20261007
+
+- result: **PASS candidate** — B1・B2・B3 を capacity migration の preflight で fail closed にした。PR #109 を更新し、open のまま（GitHub: MERGEABLE）。本番の読み書き 0 / migration 適用 0 / deploy 0 / merge 0 / scheduler 0 / OpenAI・X 0。
+- PR #109 head: 旧（レビュー対象）`f83247ae1024d4220dfbfa5484c725381d63815d` → **新 `7c3c06d07c32910472185e1c94b04fa1aab794f5`**。内訳は最新 main の通常 merge `46b3ce5b` と修正コミット 1 つ。rebase / force-push はしていない。
+- CI: Vercel だけ「Deployment rate limited — retry in 24 hours」（アカウント全体の制限で、以前から同じ）。コードとは無関係。
+- worktree: 既存の `/Users/yuya/Developer/kabumori-g3-ai-lab-continuity`。作業開始時に clean で、レビュー対象の head と一致していることを確認した。
+
+### 修正の要約
+いずれも `claim_ai_lab_topic` を置き換える前に評価する。1 つでも外れればファイル全体を取り消し、何も直さない。
+
+- **B1（SET ROLE の経路）**
+  - `pg_auth_members` を、anon / authenticated / service_role から再帰的にたどる。
+  - 各辺の INHERIT / SET のオプションは問わず、「経路があれば届く」とみなす（PG16 以降の辺ごとの意味にも保守的に対応）。
+  - anon / authenticated から次のどれかに届けば拒否する: owner、superuser、service_role、5 つの lifecycle 関数のどれかを実行できるロール、表に何らかの権限（列単位を含む）を持つロール。
+  - service_role から owner / superuser に届く場合も拒否する。
+  - 既存の owner メンバーシップの検査は維持した。ロールの付け外しは一切しない。
+- **B2（前提の表の形）**
+  - 20261004090000 の正本の定義を作る関数と、形を比べる関数を **そのままの文字で写し**、pg_temp に正本を作って比較する。
+  - 比較の対象: 列・型・NOT NULL・既定値・PK・CHECK の全文・インデックス（キー・述語・一意性・valid / ready / live）・RLS / FORCE・ポリシー数・トリガー数・列 ACL の数。
+  - 加えて、表の明示 ACL は owner のみであること、API ロールが実効権限（列単位・継承・PUBLIC を含む）を持たないことも確認する。
+  - 以前の弱い部分一致の CHECK 検査は削除した。この migration は表を変えないので、「容量修正前の正しい形」と「再適用時の正しい形」は同じものになる。
+- **B3（変更しない 4 関数の中身）**
+  - start / release / mark ambiguous / settle の 4 関数について、次をすべて承認済みの値と照合する: 引数（名前・順序・型）、戻り値、plpgsql、SECURITY DEFINER、`search_path=""`、volatility、STRICT でないこと、owner、直接 ACL（owner と service_role の再付与なし EXECUTE 1 件だけ）、**`md5(prosrc)`**。
+  - `prosrc` は `$$`〜`$$` の間の文字列がそのまま保存されるので、PostgreSQL のバージョンで変わらない。
+  - claim は「容量修正前の本体 `a3cbe667…`」か「この migration の本体 `9aefd06d…`」（再適用時）だけを受け付ける。
+  - 置き換えた後の事後条件でも、新しい本体の md5 を固定した。4 関数は書き換えていない。
+  - Deno のテストが、期待する md5 を 2 つの migration のソースから計算し直して一致を確認する。
+
+### 異常系の結果（`supabase/tests/ai_lab_topic_capacity_adverse_run.sh`、PG 17）
+次の **13 件はすべて拒否** された。どの場合も、カタログの指紋（public の関数の本体と ACL、表の ACL / RLS、列 ACL、制約、インデックスの定義と valid / ready）が適用前と完全に同じで、claim の本体も容量修正前のままだった。
+
+- B1:
+  1. `anon -> service_role` を INHERIT FALSE / SET TRUE で付与（anon は直接 EXECUTE できないことも確認したうえで）
+  2. `authenticated -> bridge -> service_role` を、SET の経路で付与
+  3. 通常の INHERIT TRUE で `authenticated -> service_role`
+  - 健全なロール構成は受け付ける（下の健全な場合）。ロールの変更は各ケースの直後と終了時に元に戻し、残っていないことを確認した。
+- B2:
+  4. PK を削除
+  5. 日記の有効性を守る一意インデックスを削除
+  6. RLS を無効化
+  7. event_key の CHECK を、同じ文字列を含むが中身のない式（`… or true`）に置き換え
+  8. 一意インデックスの述語を変更
+  9. インデックスを invalid にする
+  10. 表への SELECT の付与
+  11. 列単位の SELECT の付与
+- B3:
+  12. `start_ai_lab_topic_provider` を、同じシグネチャ・owner・戻り値・security・search_path・ACL のまま、本体だけ `return true` にする
+  13. claim の本体が未知のもの
+- 修正前（`f83247ae`）の migration に同じ runner を当てると、最初のケース（B1）で「適用されてしまった」として失敗する。テストが指摘された問題を検出できることを確認した。
+
+### 健全な場合の適用と再適用
+- 健全な場合: 適用でき、claim の本体は `9aefd06d…` になる。再適用もできる。4 関数の本体は template と同じ（書き換えられていない）。
+- `ai_lab_topic_capacity_run.sh` もすべて PASS:
+  - 20261004090000 がない状態での適用は拒否され、何も作られない
+  - 適用と再適用ができる
+  - 実効 ACL は変わらない
+  - 129 件以上の候補と、対応表にない seed は拒否される
+
+### 容量の結果（変更なし）
+- 本物の SQL で 14 日 × 10 投稿 / 日 = **140/140**。72 時間・48 時間のクールダウンも守られ、61 種類の seed が使われた。
+- 旧来の 7 件は 1 日目で尽きる（10 枠中 6 件確保、4 件が題材切れ）。
+- TS のシミュレーションも合格: 本番どおり / 0 で固定 / 偏ったローテーション、28 日間、7 件に 1 件が結果不明になる場合。
+
+### 承認済みの題材ファイルの安定性
+- `ai_lab_dev_diary_context.ts` は `f83247ae` から **1 バイトも変えていない**（git diff 0）。
+- 次も変えていない: 74 件の seed、0〜6 番、タグ、Tier の順番、x-test-post、brand post store、provider outcome、scheduler。
+
+### 変更ファイル
+- `supabase/migrations/20261007173000_ai_lab_topic_evergreen_capacity.sql`（B1 / B2 / B3 の preflight と、claim 本体の事後条件。claim の本体は変更なし = md5 `9aefd06d…` のまま）
+- `supabase/tests/ai_lab_topic_capacity_adverse_run.sh`（新規）
+- `supabase/functions/_shared/brand/ai_lab_event_dedupe_test.ts`（B1〜B3 の静的テストを追加。既存の migration テストは、pg_temp で写した部分だけを除外して判定するように直した）
+
+### テスト
+- 異常系 13/13 の拒否と、健全な場合の適用・再適用。
+- 容量の実証はすべて PASS（140/140）。既存の claim の実証も 132 件すべて PASS。
+- Deno: x-test-post + _shared + migration の不変条件で 1019/1019（74 件の TS / SQL の対応表の一致、期待する md5 をソースから再計算した一致を含む）。
+- 変異確認:
+  - 期待する md5 を 1 文字変えると、Deno のテストが失敗する
+  - 修正前の migration だと、異常系の runner が失敗する
+- `deno check` / `deno lint` クリーン、shell の構文 OK、`git diff --check` クリーン、追加行の秘密情報スキャン 0。
+
+### 最新 main との重なり
+- 作業前と push 前に最新の main を取得した。
+- 変更ファイルは main 側で変更されていない。
+- open な PR（#106 G4 / #33 / #11 / #10 / #3）とも重なりはない。
+- G2 / G4 / G5 のファイルには触れていない。
+
+### 本番・ゲート
+本番へのアクセス・書き込み・適用・deploy・scheduler・OpenAI・X はすべて 0。merge 0。
+
+### 次
+- TASK のとおり、**この修正の head（`7c3c06d0`）に対して、Codex の集中再レビューを 1 回**。
+- 本番に適用する順番は前回と同じ（preflight → migration `20261007173000` を単体で適用して読み戻し → x-test-post の deploy）。
+- 本番の preflight では、本番のロール構成でこの B1 の検査が通ることも確認する（2026-10-05 の読み取りでは、anon / authenticated / service_role から外向きのメンバーシップは無かった）。
+- status → review_required / next_owner → chatgpt。STOP。
+
+---
+
+# Previous G3 task — preserved history
+
+# Claude Task 3 — CURRENT TASK
+
+- task_id: ai-lab-topic-continuity-fix-20261007
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: chatgpt
+- priority: urgent
+- recommended_model: Opus5.5（高）
+- type: company AI Lab production-post continuity bugfix / topic-pool capacity / safe fallback
+- production_mutation_allowed: false
+- deploy_allowed: false
+- merge_allowed: false
+
+## User decision
+
+会社員AIラボは、開発日記の題材や通常のevergreen題材が不足しても、`AI_LAB_TOPIC_POOL_EXHAUSTED` だけを理由に投稿を止めない。
+
+優先順位:
+1. 実際の最近の開発日記
+2. 個人開発・AI活用についての多様なevergreen
+3. それでも通常題材が不足する場合は、当たり障りのない「個人開発」「AIを使って作るときの気づき」「AIの進歩を使う側から感じること」等の継続用safe topic
+
+ユーザーの要求は「題材がなければ投稿を止める」ではなく、「安全で無理のない一般話題へフォールバックして投稿を続ける」。
+
+## Confirmed production root cause — read-only evidence
+
+2026-10-07 15:50 JST時点のproduction read-only確認:
+- `ai_salaryman_lab` は active/live、brand_post enabled。
+- posting_windows は1日10枠、全枠 `daily_probability=1.0`。
+- 2026-10-06: 10件予定、9 succeeded、22:19 JSTの10件目が `AI_LAB_TOPIC_POOL_EXHAUSTED`。
+- 2026-10-07: 10件予定、15:50時点で実行済み5件がすべて `AI_LAB_TOPIC_POOL_EXHAUSTED`、残り5件pending。
+- 失敗はOpenAI/X送信前。X障害・API残高・OAuthが直接原因ではない。
+- current production bundleのevergreenは7件のみ。
+- DB claim policyは同じevergreen seedを72時間、重なるgeneric themeを48時間cooldown。
+- 10/6にfresh diary 3件 + evergreen 6件がpublishedとなり、残り候補もcooldown/既publishで塞がった。
+- 10/7の新しい開発日記snapshotはmainにはあるが、現在のproduction x-test-post bundleには未反映。
+
+この容量設計では10投稿/日を継続できない。偶発障害ではなくcapacity bugとして直す。
+
+## Goal A — 3段階topic policy
+
+### Tier 1 — recent dev diary
+- 既存どおり、公開安全な直近開発日記を最優先。
+- 1 event_id = 1 published event の既存event-level dedupeは維持。
+- future/stale/sanitizer fail-closedを弱めない。
+
+### Tier 2 — diverse evergreen
+- 現在7件しかない `EVERGREEN_TOPIC_SEEDS` を大幅に拡充する。
+- **最低60件**の安定したtopic seedを用意する。
+- 同じ意味の言い換えだけで水増ししない。
+- カテゴリ例:
+  - 本業と個人開発の両立
+  - 小さく作る / 直す / 試す
+  - 仕様決め・やり直し・バグ修正
+  - AIへの指示の出し方
+  - 複数AIの役割分担
+  - UI/UXを実機で見る重要性
+  - テスト・安全確認・失敗からの学び
+  - コードが書けなくても作れる側の気づき
+  - AIの進歩で以前より出来ることが増えた実感
+  - 新しいAIを試すときの期待と戸惑い
+  - 自動化しても最後は人が判断する話
+  - モデル更新・性能向上を利用者目線で感じる話
+
+### Tier 3 — continuity-safe fallback
+- Tier 1/2が通常選択できない状況でも、投稿継続用のsafe topicsを候補末尾に必ず持つ。
+- Tier 3は上記60件の中の明確な continuity reserve 区分でも、別の内部配列でもよいが、DB claimの安全性を迂回しない。
+- 内容例:
+  - 今日少しだけ進める個人開発
+  - AIとの試行錯誤
+  - 便利になっても指示や確認は必要
+  - 最近AIの進歩が速いと感じる、という利用者目線の一般的な感想
+  - 自分の作業が少し楽になった/やれることが増えた、という一般論
+- 「本日○○が発表された」「最新モデルが○○を達成した」等の具体的な最近のAI事実を、検索・根拠なしで捏造しない。
+- このfixでは新しいWeb Search依存を追加しない。外部ニュース取得失敗で投稿継続まで止まる設計にしない。
+
+## Goal B — capacity proof
+
+安全策を雑に無効化して直さない。
+
+原則維持:
+- same evergreen seed: 72h cooldown
+- generic theme overlap: 48h cooldown
+- event-level claim/fencing
+- provider_started / ambiguous safety
+- X送信前claim
+- cross-brand fingerprint duplicate guard
+- content diversity guard
+- no resend on ambiguous/confirmed provider outcome
+
+evergreen数を増やすため、DB側 `claim_ai_lab_topic` のcanonical evergreen key/tag mappingもsourceと一致させる必要がある。
+
+必要なら新しいforward migration candidateで `CREATE OR REPLACE FUNCTION public.claim_ai_lab_topic...` のcanonical mapだけを拡張する。
+- table schema変更は原則不要。
+- existing function security/grants/search_path/argument validation/fencing/cooldown semanticsを弱めない。
+- G4のsocial_accounts schema taskには触れない。
+- production applyは禁止。このTASKはsource/migration candidateまで。
+
+### Mandatory simulation test
+
+「60個あるから多分大丈夫」では不可。
+
+少なくとも以下を自動テストで証明:
+- diary候補0件
+- 1日10投稿
+- 72h seed cooldown
+- 48h theme cooldown
+- **連続14日以上**
+- 各slotで最低1件claimable topicが存在し、`TOPIC_POOL_EXHAUSTED`にならない
+
+必要なら候補数・theme tags配置を調整し、実際のpolicyで成立させる。
+rotationが偏っても同一seedへ集中しないことも確認する。
+
+## Goal C — regression boundaries
+
+必須:
+- recent diary remains preferred over evergreen/fallback
+- one diary event is never published twice
+- evergreen seed cooldown remains enforced
+- theme cooldown remains enforced where tagged
+- simultaneous claim cannot publish same event twice
+- provider_started/ambiguous remains non-reopenable
+- pre-X generation rejection releases safely
+- X no-post typed failure behavior unchanged
+- X ambiguous outcome does not auto-retry
+- exact/cross-brand duplicate gates remain
+- generic fallback still uses AI Lab voice/profile
+- schedule generation remains 10 slots/day unchanged
+- no change to X OAuth/token/Vault/Auth/common-account/POSTONA settings
+- no change to Kabumori report/important-news/MIC paths
+
+## Goal D — source/DB parity
+
+If DB canonical evergreen map is expanded:
+- TS `EVERGREEN_TOPIC_SEEDS` / `EVERGREEN_THEME_TAGS`
+- DB `c_evergreen_tags`
+must remain exactly aligned.
+
+Add an invariant/static test so a future seed addition cannot update only one side.
+
+## Scope candidates
+
+Expected:
+- `supabase/functions/_shared/brand/ai_lab_dev_diary_context.ts`
+- related AI Lab topic tests
+- one new migration replacing `claim_ai_lab_topic` canonical evergreen mapping if required
+- migration/static/disposable proof tests directly related to this function
+
+Possible only if necessary:
+- `supabase/functions/_shared/brand/ai_lab_brand_post_store.ts`
+- `supabase/functions/x-test-post/index.ts`
+
+Do not touch:
+- G4 social_accounts migration candidate/files
+- G5 common-account native/Auth files
+- G2 market-report rollout files
+- POSTONA multi-social provider schema
+- unrelated X report generation/model policy
+- important-news/MIC/Kabumori app model files
+- scheduler frequencies/posting windows unless a test proves they are broken.
+
+## Startup / isolation
+
+1. Read ORCHESTRATION / ACTIVE_TASK / CURRENT_STATE / this TASK.
+2. Use fresh `/Users/yuya/Developer/kabumori-fresh` as clean base.
+3. Fresh-fetch `origin/main`.
+4. Create a new independent G3 worktree/checkout; do not reuse the completed GPT-6 task worktree.
+5. Confirm G4/G5/G2 intended files have no overlap before editing.
+6. Before push, refresh `origin/main` again and re-check overlap.
+
+## Testing
+
+At minimum:
+- existing AI Lab dev diary/topic candidate tests
+- event dedupe/claim tests
+- scheduled AI Lab dispatch tests
+- provider outcome tests
+- new >=14-day 10-post/day exhaustion simulation
+- source/DB canonical mapping parity
+- migration SQL static/disposable proof if function changes
+- relevant x-test-post tests if runtime file changes
+- Deno check/lint for touched modules
+- git diff --check
+- added-line secret scan
+
+No real OpenAI/X call.
+No production DB write.
+No deploy.
+No scheduler invoke.
+
+## PR / completion
+
+Create a dedicated PR. Do not merge.
+
+Report:
+- exact root cause
+- before/after topic counts and categories
+- exact cooldown semantics retained/changed
+- 14-day simulation result
+- DB function/migration changes
+- changed_files
+- tests
+- branch/commit/PR/head
+- fresh-main overlap check
+- production mutation/deploy = 0
+- whether current production can still fail until migration+deploy are separately rolled out
+- recommended rollout order
+
+Then:
+- status: review_required
+- next_owner: chatgpt
+- STOP for `K3`.
+
+Because a SECURITY DEFINER claim function/migration may be changed, expect K3 to require one focused Codex review unless implementation proves no DB function change was necessary.
+
+## Report — ai-lab-topic-continuity-fix-20261007
+
+- result: **PASS candidate (source + migration candidate)** — 題材切れで投稿が止まる問題を、題材の容量を増やすことで直した。PR #109 を作成して open のまま。本番の読み書き 0 / deploy 0 / migration 適用 0 / scheduler 実行 0 / 実際の OpenAI・X の呼び出し 0 / merge 0。
+- branch / commit / PR / head: `claude/g3-ai-lab-topic-continuity-20261007` / `f83247ae` / [anohi-memories/kabumori#109](https://github.com/anohi-memories/kabumori/pull/109) / `f83247ae`。
+- CI: Vercel だけ「Deployment rate limited — retry in 24 hours」（アカウント全体の制限で、他の PR も同じ）。コードとは無関係。
+- worktree: 新規 `/Users/yuya/Developer/kabumori-g3-ai-lab-continuity`（GPT-6 の作業の worktree は再利用していない）。
+
+### 原因
+- evergreen が **7件しかない** 状態で、「同じ seed は72時間」「同じテーマは48時間」のクールダウンをかけると、1日10投稿は続かない。
+- 10/6 は日記3件と evergreen 6件で枠を使い切り、10件目から `AI_LAB_TOPIC_POOL_EXHAUSTED` になった。10/7 も同様。OpenAI や X に送る前の段階で止まっている。
+- 偶然の障害ではなく、容量の設計不足。
+- TS のモデルでも、本物の SQL でも、「7件の題材だけでは同じルールで 1 日目のうちに尽きる」ことを再現した（SQL では 10 枠中 6 件確保、4 件が題材切れ）。
+
+### 題材の数とカテゴリ（前 → 後）
+- 前: 7 件（タグ付き 3、タグなし 4）。
+- 後: **74 件**（`evergreen-0`〜`evergreen-73`。テーブルの CHECK により上限は 99）。
+  - 0〜6: 既存の 7 件。文章も添字もタグも変えていない（DB の行は添字で題材を指すため）。
+  - 7〜61: **Tier 2 の多様な evergreen 55 件**（Tier 2 は既存と合わせて 62 件）。カテゴリと件数:
+    - 本業との両立 5
+    - 小さく作る・試す 5
+    - 仕様決め・やり直し・バグ修正 5
+    - AI への指示の出し方 5
+    - 複数 AI の役割分担 4
+    - 実機で UI を確かめる 5
+    - テスト・安全確認・失敗からの学び 5
+    - コードが書けなくても作れる 5
+    - AI の進歩で出来ることが増えた実感 4
+    - 新しい AI を試すときの期待と戸惑い 4
+    - 自動化しても最後は人が判断 4
+    - モデル更新を利用者目線で 4
+  - 62〜73: **Tier 3 の継続用の予備 12 件**（`AI_LAB_CONTINUITY_RESERVE_START = 62`）。当たり障りのない一般的な振り返りで、候補の一番最後に置く。
+- 追加した 67 件は、テーマ判定のパターン（地味・試行錯誤・手戻り・個人開発は大変・進んでいない・調べるだけ・コードを書かない）に当たらない言い回しにし、テーマタグも付けていない（72 時間の seed クールダウンだけで管理）。
+- 「本日」「発表」「達成」「最新モデル」、具体的なモデル名や年などの、根拠のない最近の事実は書いていない（テストで確認）。重複なし。
+- Web 検索への依存は増やしていない。
+
+### クールダウンの扱い（変更なし）
+次の安全策はどれも変えていない。
+- 同じ seed: published から 72 時間
+- 同じテーマ: published から 48 時間
+- 未解決（claimed / provider_started / ambiguous）の seed とテーマ: 時間に関係なく隔離
+- 日記イベントは一度きり
+- ブランド単位の advisory lock
+- 候補は全件を先に正規の形で検証する
+- lease の fencing
+- X の前に provider_started を確定する
+- ブランド横断の fingerprint、内容の多様性ガード
+- 結果不明・確定済みの X 投稿は再送しない
+
+変えたのは次の 2 点だけ。
+- 候補の順番: 新しい日記 → Tier 2（rotationIndex で回す）→ Tier 3（同じく回す。常に最後）
+- 1 回の呼び出しの候補数の上限: 64 → **128**。TS 側も 128 件で切り、切った分は `CLAIM_CANDIDATE_LIMIT` として除外ログに残す。日記が先頭にあるので、切れるのは優先度の低い evergreen だけ。今の題材数では切れることはない。
+
+### 14 日間のシミュレーション結果（日記 0 件、1 日 10 投稿）
+- 本物の SQL（`supabase/tests/ai_lab_topic_capacity_run.sh`）: 実際の `claim_ai_lab_topic` / start / settle を通し、毎枠の前にすべての時刻を 2.4 時間戻して時間の経過を再現した。候補は本番の TS の builder がそのまま作ったもの。
+  - **140/140 件を確保、題材切れ 0 件**
+  - 同じ seed を 72 時間以内に使い回した例は 0 件、同じテーマを 48 時間以内に重ねた例も 0 件
+  - 使われた seed は 61 種類
+- TS のモデル（SQL の写しの `ClaimDb`）:
+  - 14 日間を、ローテーションが本番どおり / 0 で固定 / ばらばら の 3 通りで回し、どれも題材切れ 0 件
+  - 各 seed の再利用は 72 時間以上空いていて、1 つの seed の使用回数は上限（5 回）以内。偏りはない
+  - 28 日間でも 0 件
+  - 7 件に 1 件 X の結果が不明（永久に隔離）になる場合の 14 日間でも 0 件
+  - 通常の運用では Tier 3 の使用は 0 件で、Tier 2 がすべてクールダウン中のときにだけ Tier 3 を確保する
+
+### DB の関数と migration の変更
+- 新しい migration `20261007173000_ai_lab_topic_evergreen_capacity.sql`（候補。未適用）。
+  - 当初は `20261007120000` にしたが、main 上の G2 の `20261007120000_market_report_generation_traces.sql` と番号が衝突したため変更した。G4 の PR #106 の `20261007150000` とも別の番号。
+  - `claim_ai_lab_topic` だけを `create or replace` する。正規の対応表を 74 件にし、候補の上限を 128 にした。
+  - **関数のそれ以外の部分は `20261004090000` と完全に同じ**（テストで、対応表と上限を除いた本体が一致することを確認）。
+  - preflight は元と同じ: owner の方針、API ロールの継承、overload の検査。加えて次を確認する: `20261004090000` が適用済みであること、event_key の CHECK が想定どおりであること。
+  - 事後条件は元と同じで、5 つの関数とテーブルの owner と実効権限（継承・PUBLIC・列単位の権限を含む）を検証する。テーブルの変更はなく、`create or replace` は 1 つだけ。
+- TS と SQL の対応表の一致: `EVERGREEN_TOPIC_SEEDS` / `EVERGREEN_THEME_TAGS` と、新しい migration の `c_evergreen_tags` が完全に一致し、元の 7 件の対応も残っていることをテストで確認。片方だけ更新すると失敗する。
+
+### 変更ファイル
+- `supabase/functions/_shared/brand/ai_lab_dev_diary_context.ts`（題材、Tier 3、候補の順番と上限）
+- `supabase/functions/_shared/brand/ai_lab_event_dedupe_test.ts`（DB の写しの上限、整合テスト、容量・優先順・品質・migration 差分のテストを追加。既存の 2 件は「7 件前提」の数値だけ直した）
+- `supabase/migrations/20261007173000_ai_lab_topic_evergreen_capacity.sql`（新規）
+- `supabase/tests/ai_lab_topic_capacity_run.sh`（新規）
+- `supabase/tests/migration_source_invariants_test.ts`（新しい番号を予約一覧に追加）
+
+`ai_lab_brand_post_store.ts`・`x-test-post/index.ts`・スケジュール・posting_windows・X 認証・POSTONA・G2 / G4 / G5 のファイルは変更していない。
+
+### テスト
+- Deno: x-test-post + _shared で 1007/1007（新しいテストを含む。`--allow-run` 付き）。
+- 本物の DB:
+  - 容量の実証はすべて PASS（前提なしでの適用拒否、適用と再適用、実効権限は変わらない、129 件以上の候補と対応表にない seed は拒否、14 日間で 140/140、旧 7 件は 1 日目で尽きる）
+  - 既存の claim の実証も 132 件すべて PASS
+- migration の不変条件 11/11。
+- `deno check` / `deno lint` クリーン、`git diff --check` クリーン、追加行の秘密情報スキャン 0。
+
+### 最新 main との重なりの確認
+push の直前に最新の main を取り込んだ。
+- 変更ファイルの重なりは 0。
+- migration の番号の衝突は上のとおり解消済み。
+- open な PR #106（G4）/ #33 / #11 / #10 / #3 とも変更ファイルの重なりは 0。
+
+### 本番がまだ失敗し得るか、適用の順番
+- **merge しただけでは本番は直らない。** 本番は 7 件の bundle のままなので、10 投稿 / 日の題材切れは、適用と deploy まで続く。
+- 推奨の順番:
+  1. 本番の preflight（読み取りのみ）: `20261004090000` が適用済みで関数の形が想定どおりであること、owner の方針、ai_lab_topic_claims の未解決の行の数を確認する。
+  2. migration `20261007173000` を単体で適用し、読み戻す（関数の本体の md5・ACL・対応表 74 件）。
+  3. `x-test-post` を deploy し直し、bytes を検証する。10/7 の開発日記の snapshot も一緒に入る。他の未 deploy の PR が bundle に入るかを事前に差分確認すること。
+- **逆の順番（deploy を先にする）は不可。** 新しい bundle が 65 件以上の候補や evergreen-7 以降を送ると、古い DB 関数が `INVALID_ARGUMENT` で全件を拒否し、すべての枠が失敗する。
+
+### レビュー
+SECURITY DEFINER の claim 関数を置き換えるので、TASK のとおり **集中レビュー 1 回** を想定している。差分は対応表と上限の 2 点だけで、テストで固定してある。
+
+- status → review_required / next_owner → chatgpt。STOP。
+
+---
+
+# Previous G3 task — preserved history
+
+# Claude Task 3 — CURRENT TASK
+
+- task_id: x-social-ai-model-policy-gpt6-upgrade-20261007
+- owner: claude
+- slot: claude-3
+- status: done
+- next_owner: none
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: source-only AI model upgrade / centralized social-post model policy / POSTONA + AI Lab + Kabumori X
+- production_mutation_allowed: false
+- deploy_allowed: false
+- merge_allowed: false
+
+## User decision
+
+This G3 owns **X auto-post AI only**.
+
+In scope:
+1. POSTONA / social-mobile
+2. 会社員AIらぼ / AI Lab automatic posts
+3. かぶモリ X automatic-post AI paths
+
+Out of scope:
+- Kabumori app market-report-analysis/personalized-report model migration owned by G2;
+- important-news-monitor / breaking-market model migration;
+- MIC;
+- unrelated app/backend AI;
+- image-generation model upgrades.
+
+Current user direction:
+- Luna current target = `gpt-6-luna`
+- Sol current target = `gpt-6.1-sol`
+- future model releases should be easy to adopt without searching dozens of runtime files.
+
+Official API pricing verified 2026-10-07:
+- `gpt-6-luna`: $0.10 / 1M input tokens, $0.50 / 1M output tokens
+- `gpt-6.1-sol`: $2.00 / 1M input tokens, $10.00 / 1M output tokens
+
+Do not use stale 5.6 pricing after the migration.
+
+## Current production/source inventory
+
+Production project: `stock-x-autopost`.
+
+Observed production:
+- `x-test-post` v136 contains `gpt-5.6-luna` and `gpt-5.6-sol`;
+- `social-mobile-brand-dry-run` v14 imports brand generator with `gpt-5.6-luna`;
+- `brand-post-dry-run` also uses the shared brand generator and therefore 5.6 Luna;
+- `social-mobile-consult` is **not deployed yet**; main source currently uses `gpt-5.6-luna`;
+- `social-mobile-history-learning` uses **no OpenAI text model**; it derives persona signals mechanically from bounded X history;
+- `social-mobile-publish-setting` uses no OpenAI model.
+
+Main source:
+- `supabase/functions/social-mobile-consult/logic.ts`: `gpt-5.6-luna`
+- `supabase/functions/_shared/brand/brand_post_generator.ts`: `gpt-5.6-luna`
+- `supabase/functions/x-test-post/index.ts`: many `gpt-5.6-luna` call sites plus selected `gpt-5.6-sol` escalation paths
+- `supabase/functions/x-test-post/report_voice_rewrite_logic.ts`: `gpt-5.6-luna`
+- `supabase/functions/x-test-post/useful_tip_generation_logic.ts`: 5.6 Luna/Sol model union
+- `supabase/functions/x-test-post/morning_greeting_logic.ts`: 5.6 Luna
+- `gpt-image-2` is image generation and is deliberately not part of this text-model migration.
+
+## Goal A — one source of truth
+
+Create a small shared X/social AI model policy module, preferred location:
+
+`supabase/functions/_shared/social_ai_model_policy.ts`
+
+A different nearby shared location is allowed only if import/tooling constraints make it materially safer.
+
+The purpose is that future model migration should normally require changing **one policy module**, not hunting literals throughout POSTONA / AI Lab / Kabumori X runtime.
+
+Design should separate:
+
+### Model catalog / tier
+
+At minimum:
+- FAST / routine text tier -> `gpt-6-luna`
+- QUALITY / Sol escalation tier -> `gpt-6.1-sol`
+
+Each text model entry should own:
+- API model id;
+- input price per 1M;
+- output price per 1M;
+- any capability metadata actually required by existing callers, but no speculative complexity.
+
+### Workload policy
+
+Use semantic workload names so callers do not know raw model ids.
+
+At minimum cover:
+- POSTONA consultation;
+- generic social-mobile/brand post generation;
+- AI Lab brand post generation;
+- Kabumori X default text generation;
+- Kabumori X web-search collection text model where part of x-test-post;
+- Kabumori X voice evaluation;
+- Kabumori X voice rewrite;
+- useful-tip base generation;
+- useful-tip quality escalation;
+- US premarket base/quality escalation or any equivalent existing Sol escalation.
+
+If multiple workloads intentionally share the same tier, map them explicitly.
+
+## Important policy constraint
+
+Do **not** introduce a silent unrestricted production environment-variable override that can change every live model without source review.
+
+The user's goal is easy future version upgrades, not an unaudited runtime switch.
+
+Preferred contract:
+- model ids/prices/workload mapping are centralized in one source-controlled policy;
+- future release changes the policy in one place and redeploys the relevant Edge Functions;
+- tests prove runtime files do not drift back to raw text-model literals.
+
+If there is already a project-standard reviewed config mechanism that is clearly safer, document before using it. Do not invent a broad dynamic override.
+
+## Goal B — actual model migration
+
+Within X/social-auto-post scope only:
+
+- every routine `gpt-5.6-luna` runtime call -> policy resolving to `gpt-6-luna`;
+- every existing `gpt-5.6-sol` quality/escalation runtime call -> policy resolving to `gpt-6.1-sol`;
+- if an X/social runtime path already uses a newer valid model, preserve it unless this policy should own it;
+- do not migrate non-X Kabumori app/report/news/MIC paths.
+
+### POSTONA
+
+Must cover:
+- `social-mobile-consult`;
+- generic `brand_post_generator`;
+- generic live scheduled-user generation added by merged PR #41;
+- social-mobile brand dry-run;
+- brand-post dry-run where it reuses the same generic brand generator.
+
+AI consultation should therefore launch for the first time on `gpt-6-luna`, never 5.6.
+
+### AI Lab
+
+AI Lab scheduled brand-post generation currently reaches the shared brand generator.
+Prove its generated text resolves to `gpt-6-luna`.
+
+Do not alter:
+- AI Lab topic claim/dedupe;
+- diary context;
+- X auth;
+- publish permission;
+- schedule/brand settings.
+
+### Kabumori X auto-post
+
+Update the **X auto-post AI calls in x-test-post and its direct shared helpers**, including:
+- normal text generation;
+- interaction posts;
+- useful tips;
+- morning/close/US-premarket legacy generator paths that remain inside x-test-post;
+- web-search collection model calls owned by x-test-post;
+- voice evaluation;
+- voice rewrite;
+- preview/test generation paths that use production text-model policy.
+
+Existing Luna->Sol escalation semantics remain the same; only the model tier target changes.
+
+Do not alter prompts, post schedules, X auth, publish gates, Fact/voice thresholds, retry count, call ceiling or output contract merely because the model id changed.
+
+## Goal C — cost/accounting correctness
+
+Replace 5.6-specific cost tables/types in X/social-auto-post scope with the shared policy/catalog.
+
+Requirements:
+- one cost helper reads the selected model's centralized token rates;
+- `gpt-6-luna` calculation uses 0.10 input / 0.50 output per 1M;
+- `gpt-6.1-sol` uses 2.00 / 10.00;
+- existing web-search per-tool-call fees remain separate and unchanged;
+- diagnostics/model_used fields must record the actual selected API id;
+- remove stale 5.6-only unions and comparisons;
+- do not silently report a 6-series call at 5.6 pricing.
+
+## Goal D — drift prevention
+
+Add a focused static/invariant test for the X/social-auto-post runtime scope.
+
+It should fail if:
+- `gpt-5.6-luna` or `gpt-5.6-sol` returns to targeted runtime source;
+- a raw social text model id such as `gpt-6-luna` / `gpt-6.1-sol` is newly hard-coded outside the central policy module, except a narrowly documented fixture/test case if unavoidable;
+- cost/type logic diverges from the policy.
+
+Do **not** scan unrelated G2/news/MIC source and fail on their separately-owned model decisions.
+
+`gpt-image-2` is not a violation.
+
+## Goal E — API compatibility
+
+Before changing source, confirm the current Responses API bodies used by these social/X paths are supported by:
+- `gpt-6-luna`;
+- `gpt-6.1-sol` for the paths that actually use Sol.
+
+Preserve current reasoning effort unless incompatible.
+If a 6.1 Sol request shape needs a mechanical compatibility adjustment, keep it minimal and add a test.
+
+No real OpenAI calls are allowed in this task.
+
+## Scope / likely files
+
+Allowed primary runtime:
+- `supabase/functions/_shared/social_ai_model_policy.ts` (new preferred)
+- `supabase/functions/social-mobile-consult/logic.ts`
+- `supabase/functions/_shared/brand/brand_post_generator.ts`
+- `supabase/functions/x-test-post/index.ts`
+- `supabase/functions/x-test-post/report_voice_rewrite_logic.ts`
+- `supabase/functions/x-test-post/useful_tip_generation_logic.ts`
+- `supabase/functions/x-test-post/morning_greeting_logic.ts`
+- directly related X/social model-policy tests
+
+Additional X/social runtime files may be changed only when fresh inventory proves they contain an actual text-model literal/type/cost dependency.
+
+Do not touch G2-owned market-report-analysis/personalized-reports model files.
+
+## Coordination / isolation
+
+1. Read ORCHESTRATION / ACTIVE_TASK / CURRENT_STATE / this TASK.
+2. Fresh-fetch `origin/main` from `/Users/yuya/Developer/kabumori-fresh`.
+3. Use a new independent G3 worktree.
+4. Read current G4 and G5 TASK/Report before editing.
+5. Current G4 provider-domain foundation must remain independent; do not edit its provider-domain files.
+6. G5 production migration work has project-wide production priority.
+7. This task is source-only: no production mutation window.
+8. Before push, fresh-fetch main and verify changed-file overlap with active G4/G5/G2.
+9. Any overlap with another slot's in-progress product file => STOP rather than overwriting.
+
+## Tests
+
+At minimum prove:
+
+### Central policy
+- POSTONA consult -> `gpt-6-luna`
+- generic/AI Lab brand generator -> `gpt-6-luna`
+- Kabumori X default/voice/rewrite -> `gpt-6-luna`
+- existing quality escalation -> `gpt-6.1-sol`
+- exact price calculation for both tiers
+- selected model id is emitted in diagnostics
+
+### POSTONA
+- consult request body model is policy-selected Luna
+- one call/send remains unchanged
+- brand generator request body model is policy-selected Luna
+- remembered content settings/persona flow unchanged
+- dry-run and live generic generator share the same policy
+
+### AI Lab
+- AI Lab scheduled generation still uses generic brand generator and therefore policy Luna
+- topic/dedupe/provider outcome behavior unchanged
+
+### Kabumori X
+- useful-tip Luna-first / Sol-escalation behavior unchanged semantically
+- US-premarket conditional Sol escalation unchanged semantically
+- voice evaluation/rewrite model updated via policy
+- morning/close/interaction/tip generation paths no longer embed old 5.6 ids
+- web-search collection behavior/call count unchanged
+- gpt-image-2 remains unchanged
+
+### Drift/static
+- no targeted runtime `gpt-5.6-luna` / `gpt-5.6-sol`
+- no social text-model literals outside policy
+- unrelated G2/news/MIC paths are not accidentally rewritten
+
+Run relevant:
+- social-mobile-consult tests;
+- brand_post_generator tests;
+- AI Lab scheduled brand post tests;
+- x-test-post focused/full feasible Deno suite;
+- static/invariant test;
+- deno check/lint on changed files;
+- git diff --check;
+- added-line secret scan.
+
+No real OpenAI, X, DB mutation or provider calls.
+
+## Production / deploy / merge
+
+Forbidden in this G3:
+- Edge deploy;
+- production DB read/write;
+- migration/history apply;
+- X post;
+- model/provider live smoke call;
+- secret/config mutation;
+- PR merge.
+
+Create/update a dedicated PR and stop for K3.
+
+At K3:
+- verify exact changed files and CI;
+- decide merge;
+- normally **no Codex review** is needed if changes are only centralized model policy/model ids/costs/types/tests and no Auth/DB/permission boundary changed;
+- if the implementation unexpectedly changes retry/security/publish behavior, K3 may allocate one focused review.
+
+## Completion report
+
+Include:
+- fresh main / branch / PR / head;
+- every targeted runtime model before -> after;
+- central policy design;
+- model-id literal drift test;
+- cost-rate proof;
+- POSTONA proof;
+- AI Lab proof;
+- Kabumori X proof;
+- G2/G4/G5 overlap check;
+- tests;
+- production mutation/deploy/real OpenAI/X = 0;
+- remaining deployment functions that must be updated later;
+- whether any review is actually needed.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+Recommended model: **Opus5.5（高）**.
+
+## Report — x-social-ai-model-policy-gpt6-upgrade-20261007
+
+- result: **PASS candidate (source-only)** — X / ソーシャル自動投稿の文章 AI を、中央のポリシーで `gpt-6-luna` / `gpt-6.1-sol` に切り替えた。PR を作成して open のまま。本番の読み書き 0 / deploy 0 / 実際の OpenAI・X の呼び出し 0 / merge 0。
+- fresh main: `4e8e8c5c`（この TASK の in_progress コミット）。push 前に最新 main を再取得し、同じファイルの変更がないことを確認した。
+- branch / PR / head: `claude/g3-social-ai-model-policy-20261007` / [anohi-memories/kabumori#105](https://github.com/anohi-memories/kabumori/pull/105) / `78a43ae8`。
+- CI: Vercel だけ「Deployment rate limited — retry in 24 hours」。直近の PR #99 / #100 / #101 も同じで、アカウント全体の回数制限によるもの。コードとは無関係。netlify は pass / skip。
+- worktree: 新規 `/Users/yuya/Developer/kabumori-g3-model-policy`。
+
+### 実行コードのモデル（変更前 → 変更後。すべて中央のポリシー経由）
+| 呼び出し箇所 | workload | 前 → 後 |
+|---|---|---|
+| `social-mobile-consult/logic.ts` `CONSULT_MODEL` | postonaConsult | 5.6-luna → gpt-6-luna |
+| `_shared/brand/brand_post_generator.ts` `MODEL`（POSTONA のプレビューと本番、brand dry-run、AI Lab） | brandPostGeneration | 5.6-luna → gpt-6-luna |
+| x-test-post: generatePostParts / 交流投稿 / 投稿予定のプレビュー / 朝・引けレポートの文章作成 / 作成ログの model_used / draft.model | kabumoriXText | 5.6-luna → gpt-6-luna |
+| x-test-post: 朝・引け・米国市場前の Web 検索による材料集め（3 か所） | kabumoriXWebSearchCollection | 5.6-luna → gpt-6-luna |
+| x-test-post: evaluateKabumoriVoice（呼び出しと料金） | kabumoriXVoiceEvaluation | 5.6-luna → gpt-6-luna |
+| `report_voice_rewrite_logic.ts` `REPORT_VOICE_REWRITE_MODEL`（と書き直しの料金） | kabumoriXVoiceRewrite | 5.6-luna → gpt-6-luna |
+| `morning_greeting_logic.ts` `MODEL` と結果の型 | kabumoriXMorningGreeting | 5.6-luna → gpt-6-luna |
+| 有用 tips: 最初の試行 / Sol への昇格 | usefulTipBase / usefulTipQualityEscalation | 5.6-luna → gpt-6-luna / 5.6-sol → gpt-6.1-sol |
+| 米国市場前の文章作成（`packet.requires_sol` の条件は変更なし）、作成ログの初期値 | usPremarketBase / usPremarketQualityEscalation | 5.6-luna → gpt-6-luna / 5.6-sol → gpt-6.1-sol |
+
+`gpt-image-2` は変更なし。G2（market-report-analysis / personalized-reports）、ニュース監視、MIC には触れていない。
+
+### 中央ポリシーの設計（`supabase/functions/_shared/social_ai_model_policy.ts`）
+- モデル表（catalog）: `fast` = gpt-6-luna（$0.10 / $0.50）、`quality` = gpt-6.1-sol（$2 / $10、100 万トークンあたり）。各モデルが API の id と料金を持つ。
+- 処理 → 層の対応表（workload → tier）: 11 個の処理名を明示的に割り当てた。同じ層を使う処理も、1 つずつ別に書いてある。呼び出し側はモデルの id を知らず、`socialTextModel(処理名)` を使う。
+- 補助関数: `isSocialQualityTextModel`（診断用の「Sol に昇格したか」）、`socialTextModelTokenCostUsd`（丸めない）、`socialTextModelCostUsd`（小数 6 桁に丸める）。表にないモデルを渡すとエラー。
+- 環境変数でモデルを切り替える仕組みは作っていない。今後のモデル更新は、このファイルを変えて関係する関数を deploy し直す。
+
+### モデル名の直書きを防ぐテスト（`social_ai_model_policy_test.ts`）
+- X / ソーシャルの実行コード（x-test-post、_shared/brand、social-mobile-consult / brand-dry-run / history-learning / publish-setting。テストは除く）を走査して、次があれば失敗する:
+  - `gpt-5.6-luna` / `gpt-5.6-sol`
+  - ポリシー以外での `gpt-…-luna` / `gpt-…-sol` の直書き
+  - ファイルごとの料金表（`/ 1_000_000` や `{ input: 0.2, output: 1.2 }` のような書き方）
+- 配線の確認:
+  - 相談・ブランド生成・書き直し・朝のあいさつがポリシーを使っている
+  - POSTONA のプレビューと本番、AI Lab は共通の生成部だけを通り、独自にモデルを選ばない
+  - Web 検索の材料集めは 3 か所のまま
+  - Sol への昇格条件は 2 つとも変わっていない
+  - `gpt-image-2` は変わっていない
+- 変異確認: 次の 4 通りに壊すと、いずれもテストが失敗する。
+  - 5.6 のモデル名を戻す
+  - 6 系のモデル名を直書きする
+  - 料金表を直書きする
+  - Sol への昇格先を変える
+- G2 / ニュース / MIC は走査しない（担当外のモデルの決定で失敗しないように）。
+
+### 料金の正しさ
+- Luna で入出力 100 万トークンずつ = $0.6、Sol = $12。150 / 90 トークンなら Luna $0.00006、Sol $0.0012。
+- 古い料金（1.4 / 35）にはならない。
+- `modelCostUsd` はポリシーの料金だけを読む。5.6 用の料金表（Luna 0.2/1.2、Sol 5/30）と、5.6 のモデル名に固定した型（union）・比較は削除した。
+- Web 検索を使うレポート（朝・引け・米国市場前）は、材料集めのモデル料金 + 検索料（1 回 $0.01、変更なし）+ 文章作成のモデル料金を合計して、最後に 1 回だけ丸める（新しい `reportApiCostUsd`）。
+- 診断の `model` / `model_used` / `escalatedToSol` には、実際に選んだ API の id が入る。
+
+### POSTONA の証明
+- 相談: リクエストの `body.model` は `CONSULT_MODEL`（ポリシーの Luna）。既存の logic_test で確認。1 回の送信で呼ぶのは 1 回のままで、テスト全体が合格。
+- ブランド生成: リクエストの model と `draft.model` がポリシーの Luna で、料金はその料金表から計算される。
+- プレビューと本番の利用者投稿は、同じ `generateBrandPost` を使う（配線テスト）。
+- 記憶した設定・文体の流れは変更なし（PR78 の memory-generation を含むアプリのテスト 226/226）。
+
+### AI Lab の証明
+- AI Lab の予約投稿は、共通のブランド生成を通る（配線テスト）。
+- `brand_post_generator_test` の AI Lab のテストで、`draft.model` = ポリシーの Luna、料金 = ポリシーの料金表で 150 / 90 トークン分であることを確認。
+- topic の claim・重複排除・provider outcome のテストはすべて合格（_shared 全体）。
+
+### かぶモリ X の証明
+- 有用 tips: 「Luna を先に試し、だめなら Sol に昇格」の順序と、昇格時の 2400 トークンは変更なし。昇格先だけがポリシーの quality。
+- 米国市場前: `packet.requires_sol` の条件で quality / base を選ぶ（変更なし）。
+- 声色の評価・書き直しはポリシー経由。朝・引け・交流・tips・プレビューに 5.6 の名前は残っていない（ドリフトのテスト）。
+- Web 検索の回数・設定（max_tool_calls / search_context_size / include）は変更なし。
+- x-test-post 全体のテストが合格。
+
+### API の互換性（公式ドキュメントのみで確認、実際の API 呼び出しはなし）
+- `gpt-6-luna`（[model page](https://developers.openai.com/api/docs/models/gpt-6-luna)）: reasoning.effort none / low / medium / high / xhigh / max。Responses API で `web_search` と構造化出力に対応。料金は $0.10 / $0.50。
+- `gpt-6.1-sol`（[model page](https://developers.openai.com/api/docs/models/gpt-6.1-sol)）: reasoning.effort low / medium / high / xhigh / max（none と minimal は非対応）。Responses API で `web_search` と構造化出力に対応。料金は $2 / $10。
+- 現在のリクエストは、Sol も含めてすべて `effort: "low"` なので、どちらも対応している。リクエストの形は変えていない。
+
+### G2 / G4 / G5 との重なり
+- 変更した 11 ファイルについて:
+  - main 側で同じファイルの変更はない
+  - open な PR（#101 / #100 / #33 / #11 / #10 / #3）とも重なりなし
+- G2 の report のモデル用ファイル、G4 の provider-domain のファイル、G5 の app / auth / migration には触れていない。
+
+### テスト
+- `social_ai_model_policy_test.ts` 6/6。
+- Deno: x-test-post + _shared + social-mobile-consult + brand-dry-run で 1025/1025（`--allow-run` を付けて実行）。
+- アプリ（social-mobile）226/226。
+- `deno check`: 変更したファイルに新しいエラーはない。x-test-post の既存の型エラー 6 件は main と同じ。
+- `deno lint` 7 ファイルともクリーン、`git diff --check` クリーン、追加行の秘密情報スキャン 0 件。
+
+### 本番・ゲート
+Edge deploy 0、本番 DB の読み書き 0、migration 0、X 投稿 0、モデルを実際に呼ぶ確認 0、secret・設定の変更 0、merge 0。
+
+### 後で deploy し直しが必要な Edge Function
+- `x-test-post`（かぶモリ X、AI Lab、POSTONA の本番利用者投稿）
+- `social-mobile-brand-dry-run`
+- 本番の `brand-post-dry-run`（repo には同名のフォルダがない。同じブランド生成部を bundle している場合は、同じく deploy し直す）
+- `social-mobile-consult`（まだ deploy していない。最初の deploy から gpt-6-luna で動く）
+
+x-test-post の deploy では、それまでに merge 済みでまだ deploy していない PR の変更もまとめて入るので、deploy の前に graph の差分を確認すること。
+
+### レビュー
+- 変えたのはモデルの id、料金、型、テスト、中央のポリシーだけ。Auth / DB / 権限の境界、リトライ、送信のガード、プロンプトは変更していない。
+- このため、**追加のレビューは不要の見込み**（TASK の方針どおり）。
+- status → review_required / next_owner → chatgpt。STOP。
+
+
+## Final K3 — GPT-6 social AI model policy — 2026-10-07
+
+- verdict: **PASS / MERGED / G3 CLOSED**.
+- accepted PR head: `78a43ae878205f726111dde1002bd28ea8e82b97`.
+- squash merge: `9e359b3e600196fa0602ccd4162d125d613ebbb9`.
+- accepted scope: X/social auto-post AI only (POSTONA, AI Lab, Kabumori X); 11 runtime/test files. G2 app/report/news/MIC and image generation were not changed.
+- model policy: routine social text -> `gpt-6-luna`; existing quality escalation -> `gpt-6.1-sol`; model ids, token pricing and workload mapping are centralized with drift tests.
+- independent K3 check: OpenAI official model catalog confirms the selected model IDs, standard prices ($0.10/$0.50 for Luna and $2/$10 for Sol per 1M input/output tokens), Responses API support, and `reasoning.effort: low` compatibility.
+- tests accepted: policy 6/6, Deno social/X suite 1025/1025, social-mobile app 226/226, lint/diff/secret checks clean; only the reported pre-existing x-test-post type diagnostics remain unchanged from main.
+- CI: Netlify success. Vercel failure is the repository/account build-rate-limit condition and is not attributed to this source change.
+- Codex review: **not required**. Diff is limited to model selection, centralized pricing/types and drift tests; no Auth/DB/RPC/permission/publish/retry/prompt boundary changed.
+- production mutation/read/deploy/real OpenAI/X call: **0** during this task.
+- important runtime state: **source is merged, but production text models are not upgraded yet**. Existing deployed Edge Functions remain on their previously deployed bundles until a separately gated redeploy.
+- later redeploy set: `x-test-post`, `social-mobile-brand-dry-run`, production `brand-post-dry-run` if present, and first deploy of `social-mobile-consult`. Before `x-test-post` deploy, inspect the full bundled graph because other merged-but-not-deployed changes may ride along.
+- next step: production rollout is a separate G3 task only after current G5 production-priority/gating is clear; no deploy is authorized by this K3.
+- AI Lab diary: 候補あり — AIモデルの世代更新を楽にするため、モデルと料金の設定を1か所にまとめ、古い設定の直書きが戻ったらテストで気づけるようにした。
+
+---
+
+# Previous G3 task — preserved history
+
+- task_id: x-social-mobile-pr41-acl-corrective-20261007
+- owner: claude
+- slot: claude-3
+- status: done
+- next_owner: none
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: bounded security corrective / effective column privileges / exact RPC ACL
+- target_pr: 41
+- previous_head: 280aa0f83d4f039ba3e43f32da202a91fd2333f2
+- h2_review: x-social-mobile-pr41-live-generation-security-review-20261007
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## C2 accepted findings
+
+H2 reviewed exact PR #41 head:
+`280aa0f83d4f039ba3e43f32da202a91fd2333f2`
+
+Verdict: **CHANGES REQUIRED**.
+
+Only two blocking findings are in scope for this corrective.
+
+### R1 — P2 effective column privilege drift
+
+Target migration:
+`supabase/migrations/20261006160100_social_mobile_publish_settings_reader.sql`
+
+Current postcondition checks table privilege but can miss column-level grants.
+
+Reproduced H2 case:
+- an effective column SELECT on `social_mobile_content_settings.settings` is granted to service_role before migration;
+- table-level SELECT remains false;
+- migration currently COMMITs;
+- service_role can directly read settings rows cross-brand, bypassing the narrow reader.
+
+Required correction:
+- migration must fail closed if service_role has **any effective column privilege that violates the intended table denial**, including privilege inherited through another role or PUBLIC;
+- inspect every live column, not only `settings`;
+- cover at least SELECT / INSERT / UPDATE / REFERENCES or the full set of column privileges PostgreSQL exposes for this relation;
+- preserve legitimate authenticated client privileges from PR81; do not globally revoke/repair unrelated ACLs;
+- do not silently normalize unknown column ACL drift;
+- refusal must roll back the migration completely;
+- reader must remain absent after refused apply.
+
+Required adverse fixtures:
+- direct service_role column SELECT;
+- inherited service_role column SELECT;
+- PUBLIC-derived column SELECT where effective for service_role;
+- at least one column UPDATE/DML drift case;
+- each must refuse atomically.
+
+### R2 — P1 unexpected default/inherited EXECUTE
+
+Target migrations:
+- `20261006160000_vault_account_brand_post_completion.sql`
+- `20261006160200_x_account_publish_authority.sql`
+
+Current source revokes only known roles.
+Unknown function default ACL grantees can survive CREATE FUNCTION.
+If authenticated inherits that role, it can effectively execute service/operator-only RPCs.
+
+H2 reproduced:
+- authenticated could call `set_x_account_publish_authority(...enabled...)`;
+- authenticated could call `complete_vault_account_brand_post(...)`;
+- both migrations COMMIT instead of refusing.
+
+Required correction for every privileged function created by these two migrations:
+- exact signature and routine kind;
+- no unexpected overload/procedure collision;
+- explicit safe owner;
+- fixed safe search_path;
+- exact direct ACL;
+- no unexpected grantee;
+- no grant option;
+- exact effective EXECUTE matrix;
+- PUBLIC/anon/authenticated must not gain effective EXECUTE;
+- service_role must have only the intended EXECUTE;
+- unsafe application-role inheritance must refuse;
+- unknown default EXECUTE grantee must cause atomic refusal;
+- do not change global ALTER DEFAULT PRIVILEGES;
+- do not change role memberships;
+- do not broadly grant/revoke unrelated objects.
+
+Prefer the already-reviewed robust ACL pattern used in the PR76/reader hardening where applicable, but do not copy assumptions blindly.
+
+Required adverse fixtures:
+- unknown default EXECUTE;
+- authenticated inherits unknown default grantee;
+- anon inherits unknown default grantee;
+- grant option;
+- unexpected direct grant;
+- unknown overload/procedure;
+- unsafe owner/creator;
+- verify failed migration leaves no partial table/function/ACL mutation.
+
+Behavioral proof must explicitly show:
+- authenticated setter call is refused;
+- authenticated completion call is refused;
+- service_role intended calls still work in the clean graph.
+
+## Preserve accepted PR41 behavior
+
+Do not redesign or reopen already-passed areas unless these ACL corrections affect them:
+
+- narrow reader tenant binding;
+- no direct settings-table read in runtime/authority paths;
+- missing row/manual_review = no publish;
+- `auto_post_preference` only;
+- generic `social_mobile_user_v1` dispatcher;
+- PR76 pre-send guard;
+- authority pre-generation + immediately pre-X;
+- PR78 remembered settings/persona -> live generation;
+- NG/length/duplicate gates;
+- exact account/brand binding;
+- terminal/non-replayable confirmed X completion;
+- AI Lab / Kabumori paths unchanged;
+- G5 entitlement enforcement still not implemented here.
+
+## Freshness / G4 / G5
+
+1. Read current ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK / H2 report.
+2. Fresh fetch current main and PR #41.
+3. Use a new independent G3 worktree based on `/Users/yuya/Developer/kabumori-fresh`.
+4. Preserve fresh-main corrections that landed after the prior PR41 integration, including test/static corrections.
+5. Read current G4 and G5 TASKs for conflict only.
+6. G4 is a separate chat-owned X slot; do not alter it.
+7. G5 owns common-account Auth/session/enforcement/deletion semantics. Do not touch its app/migration/RPC files.
+8. If current main now overlaps the PR41 source/migration files materially, STOP and report before editing.
+
+## Tests
+
+Rerun only what is needed plus bounded regressions:
+
+- new R1 column ACL adverse matrix;
+- new R2 function ACL/default/inheritance adverse matrix;
+- existing reader behavior;
+- existing publish authority behavior/race;
+- existing completion behavior;
+- x-test-post focused runtime;
+- PR76 guard regression;
+- PR78 memory-to-live generation;
+- AI Lab/Kabumori bounded regression;
+- migration invariants;
+- `git diff --check`;
+- added-line secret scan.
+
+No need to rerun unrelated broad suites unless a changed shared helper requires it.
+
+## Safety
+
+Forbidden:
+- production read/write;
+- migration/history apply;
+- Edge deploy;
+- PR merge;
+- real X/OpenAI;
+- Auth/Vault/OAuth/Cron mutation;
+- publish-authority activation;
+- G5 entitlement enforcement.
+
+## Completion
+
+Update PR #41 branch normally; no force-push.
+
+Report:
+- old/new head;
+- exact files changed;
+- R1 correction and direct/inherited/PUBLIC column ACL proofs;
+- R2 correction and effective EXECUTE/default ACL proofs;
+- clean-graph intended permissions;
+- atomic rollback proofs;
+- bounded runtime regression results;
+- G4/G5 overlap check;
+- production/deploy/merge/real X/OpenAI = 0.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+### Review policy
+
+Because H2 found concrete P1/P2 in the same security boundary, one **focused rereview of only R1/R2** is required after correction.
+
+Do not repeat the full PR41 review if unchanged live/runtime behavior is covered by bounded regression.
+
+Recommended reviewer after K3: **Sol（高）**.
+
+Recommended Claude model: **Opus5.5（高）**.
+
+## Report — x-social-mobile-pr41-acl-corrective-20261007
+
+- result: **PASS candidate (source-only)** — R1・R2 を修正。PR #41 は open のまま、GitHub: MERGEABLE。本番の読み書き 0 / migration・履歴の適用 0 / deploy 0 / merge 0 / 実 X・OpenAI 0 / 投稿権限の有効化 0。
+- PR41 head: 旧 `280aa0f83d4f039ba3e43f32da202a91fd2333f2` → 新 `c509117f8addf5a8687d60d9c18ae271b2c1777c`。内訳は、最新 main の通常 merge `f810d188`（PR97 のテスト・スナップショット修正を含む）+ 修正 1 コミット。rebase / force-push なし。
+- worktree: 新規 `/Users/yuya/Developer/kabumori-g3-pr41-acl`（kabumori-fresh 由来）。
+- G4 / G5: G4 は done（docs のみ）。G5 は PR #95（アプリの認証・登録ファイル）で、今回の変更ファイルとの重なりは 0（機械的に確認）。main 側でも PR41 の対象ファイル・migrations への変更なし。
+
+### 変更ファイル（修正コミット `c509117f`）
+- `supabase/migrations/20261006160000_vault_account_brand_post_completion.sql`（R2）
+- `supabase/migrations/20261006160100_social_mobile_publish_settings_reader.sql`（R1 + 関数 ACL の厳密化）
+- `supabase/migrations/20261006160200_x_account_publish_authority.sql`（R2、テーブルを含む）
+- `supabase/tests/x_account_stage3b_base_fixture.sql`（新規。pilot runner の共通の土台を切り出し、内容は同じ）
+- `supabase/tests/x_account_refresh_pilot_run.sh`（上の fixture を読み込むだけに変更）
+- `supabase/tests/x_account_stage3b_acl_adverse_run.sh`（新規。異常系一式）
+関数本体・TS ランタイム・x-test-post・PR76 / PR78 / AI Lab / Kabumori のコードは無変更。
+
+### R1 の修正（設定テーブルの列単位の権限）
+- reader migration の作成前と作成後の両方で、service_role が設定テーブルに対して実際に持つ権限を検査する。対象はテーブル単位（SELECT / INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER、PG17 以降は MAINTAIN も）と、**すべての列**の SELECT / INSERT / UPDATE / REFERENCES（`has_column_privilege`）。直接の付与、別ロールからの継承、PUBLIC 経由のいずれも含む。
+- 1 つでも見つかれば `PUBLISH_SETTINGS_READER_PRECONDITION_SERVICE_ACCESS` で全体を取り消す。見つけた付与を勝手に直すことはしない（テストで、付与が残っていることも確認）。authenticated の PR81 のクライアント権限には触れない。
+- 証明（それぞれ全体が取り消され、カタログは変化なし、reader は存在しない）:
+  - service_role への列 SELECT の直接付与（settings 列）
+  - 継承による列 SELECT（persona_profile 列を別ロールに付与し、そのロールを service_role に付与）
+  - PUBLIC への列 SELECT（brand_id 列）
+  - 列 UPDATE（persona_confirmed 列）
+  - 列 INSERT（brand_id, settings 列）
+  - 列 REFERENCES
+  - テーブル DELETE
+- 問題がない状態: 適用でき、authenticated の列ごとの S / I / U とテーブル ACL が適用前後で完全に同じ。
+
+### R2 の修正（デフォルト権限・継承による実行権限）
+3 本の migration の、権限を持つすべての関数に同じ型の検査を入れた（completion / reader / check / set）。
+- 作成前:
+  - 同じ名前の routine が、どの種類・どの引数でも存在しない（overload・procedure の衝突は拒否）
+  - anon / authenticated / service_role のロールが存在する
+  - **適用するロールは superuser ではなく**、対象テーブルの所有者である（completion: scheduled_posts と social_accounts、authority: social_accounts、reader: 設定テーブル）
+  - anon / authenticated が所有者や service_role を継承していない
+- 作成後:
+  - 関数は 1 つだけで、通常の関数（prokind f）
+  - SECURITY DEFINER / INVOKER の区別が想定どおり（check は INVOKER）
+  - 所有者が想定どおりで、`search_path=""`
+  - 直接の ACL が「所有者 + service_role の EXECUTE 1 件（再付与権なし）」だけ。PUBLIC やその他の付与先がない
+  - 実際の実行権限: anon / authenticated は不可、service_role は可
+  - それ以外の非 superuser ロールは、所有者か service_role を継承している場合しか実行できない
+- 投稿権限テーブル（`x_account_publish_authority`）:
+  - 所有者が同じで、RLS が有効
+  - 直接の ACL は「所有者 + service_role の SELECT 1 件（再付与権なし）」だけで、列単位の付与は 0
+  - 実際の権限: anon / authenticated はテーブル・列とも 0、service_role は SELECT だけで書き込みは 0
+  - その他のロールは、所有者経由（全権限）か service_role 経由（SELECT のみ）だけ
+  - PostgreSQL の組み込みの全データ用ロール（pg_read_all_data / pg_write_all_data / pg_maintain）とその継承者は、DB 全体の管理用の付与なので最後の走査からだけ外した。app ロールの検査は、組み込みロール経由も含めて別に行っている。
+- 知らない付与先は「黙って外す」のではなく、ファイル全体を取り消して拒否する。失敗理由はコードで区別した（`…:DIRECT_ACL` / `:EFFECTIVE` / `:TABLE_DIRECT_ACL` など）。
+- 既知のロール（service_role）に付いた再付与権は、明示的な revoke / grant で普通の EXECUTE に戻る（テストで、再付与権が残らないことを確認）。
+- グローバルな ALTER DEFAULT PRIVILEGES・ロールの membership・関係のないオブジェクトの権限は変更しない。
+
+### デフォルト権限・継承についての証明（`x_account_stage3b_acl_adverse_run.sh`）
+completion / authority / reader それぞれに、次を実行した（3 × 9 = 27 件）:
+- 知らないロールへのデフォルト EXECUTE
+- authenticated がそのロールを継承
+- anon がそのロールを継承
+- そのロールへの再付与権つき付与
+- 同じ名前の overload
+- 同じ名前の procedure
+- superuser が適用
+- 所有者でないロールが適用
+- authenticated が service_role を継承
+
+これに加えて、authority のテーブルについて「知らないロールへのデフォルトの INSERT / UPDATE を authenticated が継承」した場合の 1 件。どれも拒否され、カタログ全体の指紋（default ACL・public の関数とテーブルと列の ACL・app ロールの membership）が適用前と完全に同じで、テーブルも関数も残らない。
+- 修正前のファイルで同じテストを実行すると、R1 は「列単位の付与があるのに適用された」、R2 は「知らないデフォルト EXECUTE があるのに適用された」で失敗する。テストが H2 の再現を検知することを確認した。
+- 「authenticated が所有者を継承」は、fixture の所有者がすでに authenticated のメンバーで PostgreSQL が循環を拒むため作れない（migration 側の検査はある）。
+
+### 問題がない状態で意図どおりの権限
+anon と authenticated は、次の 5 つの操作がすべて 42501（permission denied）になる。投稿権限の行は 0 件のままで、投稿は running のまま。
+- setter で `enabled` にする
+- completion を呼ぶ
+- check を呼ぶ
+- reader を呼ぶ
+- 投稿権限テーブルに直接 INSERT する
+
+service_role の結果:
+- setter → `enabled`
+- completion → `fingerprint_persisted=true`
+- 投稿権限テーブルへの直接 UPDATE → 42501
+
+### 全体が取り消されることの証明
+27 + 8（R1）= **35 件の拒否すべて**で、カタログの指紋が一致し、Stage 3B の routine と権限テーブルが残っていないことを確認した。R1 では、見つけた付与を勝手に直していないことも確認した。
+
+### 範囲を絞った回帰テスト
+- 使い捨て PostgreSQL 17（UTF8）、既存の pilot runner: PILOT_BEHAVIOR / PUBLISH_AUTHORITY_BEHAVIOR / PUBLISH_SETTINGS_READER_BEHAVIOR / PILOT_RACE / PUBLISH_RACE / CLEANUP すべて PASS。completion・投稿権限・reader の挙動と競合テストを含む。
+- 異常系 runner: `STAGE3B_ACL_ADVERSE_PASS`（拒否 35 件 + 再付与権の正規化 + 問題がない状態）。
+- x-test-post 全体 534/534（PR76 の送信前ガード・Vault の更新の権限を含む）。
+- 範囲を絞った Deno テスト 63/63: PR41 の dispatcher（PR78 の記憶 → 本番生成の指示文を含む）、brand generator（AI Lab・Kabumori のハッシュタグ）、AI Lab の予約投稿、設定、phase15 の静的検査、migration の不変条件。
+- `_shared` 全体 436/436（最新 main の PR97 修正が入り、以前の既存の失敗 3 件も解消）。
+- `deno check` クリーン、shell の構文チェック OK、`git diff --check` クリーン、追加行の秘密情報スキャン 0 件。
+
+### 本番・ゲート
+本番の読み書き 0、migration・履歴の適用 0、Edge deploy 0、PR merge 0、実 X / OpenAI 0、Auth / Vault / OAuth / Cron の変更 0、投稿権限の有効化 0、G5 の entitlement の実装 0。
+
+### 残る課題・次の推奨
+- TASK のとおり、**R1 / R2 だけを対象に Sol（高）の集中再レビューを 1 回**。PR41 全体の再レビューは不要（ランタイムは無変更で、回帰テストで確認済み）。
+- 本番適用の前のライブ preflight で、次を本番で確認する必要がある（今回は本番を読んでいない）:
+  - 適用するロール（postgres の想定）が superuser ではなく、scheduled_posts と social_accounts と設定テーブルの所有者であること
+  - app ロールの継承関係
+  - service_role が設定テーブルの列に権限を持たないこと
+- 以前の作業として起動された「既存テスト 3 件の修正」タスクは、main の PR97 で同じ修正がすでに入っている。重複していないか確認が必要。
+- status → review_required / next_owner → chatgpt。STOP。
+
+---
+
+# Previous G3 task — preserved history
+
+- task_id: x-social-mobile-pr41-live-generation-fresh-integration-20261006
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: codex
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: source-only fresh integration / live scheduled-user generation / narrow content-settings service read boundary
+- source_pr: 41
+- source_head: 59f4f53037f231e831774c04e9a1b1982eff3bd9
+- prerequisite_ai_consult_merge: 60dff4e28a763e3c182495dfc41cadf94671952f
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Product goal
+
+V1の中核である「AIと相談して覚えた投稿内容・口調」を、
+一般ユーザーの実際の定期自動投稿経路でも使えるsourceへつなぐ。
+
+PR #78 AI相談V1は Final K3 PASS 後、squash-merged to main:
+`60dff4e28a763e3c182495dfc41cadf94671952f`.
+
+AI相談側は以下まで完成済み:
+- 会話だけでは保存0;
+- 明示的「これで覚えて」でのみ保存;
+- CASで古い提案を拒否;
+- confirmed settings/personaが次回相談へ反映;
+- 全8 persona signals + settingsがgeneration guidanceへ反映;
+- default/AI Lab/Kabumori hashtag behaviorに回帰なし.
+
+残るlive側の主要blockerはPR #41.
+
+## Current PR #41 facts
+
+PR #41 is open and currently stale/not mergeable against modern main.
+It owns:
+- generic Vault-backed scheduled `brand_post` path for `social_mobile_user_v1`;
+- `x-test-post` routing;
+- completion RPC candidate;
+- per-account publish-authority candidate.
+
+Current PR41 source loads `public.social_mobile_content_settings` directly with service_role.
+Final PR81 hardening intentionally grants service_role no table access, therefore the direct read fails closed.
+The publish-authority SQL also reads that table while executing as service_role and has the same dependency.
+
+Do not solve this by granting broad table SELECT to service_role unless a narrower design is proven impossible.
+
+## G4 / G5 coordination
+
+- G4 is another X-app slot owned by another chat. Inspect its TASK/Report for overlap, but do not execute/modify G4.
+- G5 common-account remains project-wide critical path.
+- Current G5 Phase2 service-enrollment work touches app auth/session/enrollment files, not PR41 backend paths.
+- This G3 is source-only and must not perform production DB/Auth/permission mutation.
+- Do **not** implement common-account entitlement enforcement here. G5 owns the product semantics/timing for enforcement and deletion.
+- Before editing, fresh-check G5 head/changed files again. Any overlap => STOP.
+
+## Mandatory startup / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK.
+2. Read Final K3 AI consultation reports and merged PR78 source.
+3. Read current G4/G5 TASK/Report for conflict only.
+4. Use fresh `/Users/yuya/Developer/kabumori-fresh`; fetch fresh origin/main.
+5. Create a new independent G3 worktree.
+6. Fetch exact PR41 head `59f4f53037f231e831774c04e9a1b1982eff3bd9`.
+7. Inventory every PR41 changed file and every migration dependency before integration.
+8. Do not rebase/reset/force-push another slot worktree.
+
+## Phase A — reassess PR41 against current main
+
+Before editing, determine what remains valid vs obsolete.
+
+Re-check:
+- current `x-test-post` routing after PR76/PR82;
+- current Vault account auth/refresh code;
+- current scheduled_posts/account-bound queue shape;
+- current publish permission boundary;
+- current PR81 settings/persona contract;
+- current G5 common-account foundation/enrollment source;
+- whether PR41's two historical migrations are still safe to keep at their 20260927 versions or should be replaced/renumbered because they were never merged/applied and now depend on later source.
+
+Do not preserve old migration numbering merely for convenience if clean-bootstrap/order semantics would be wrong.
+
+## Phase B — narrow settings read boundary
+
+Preferred architecture:
+- keep `social_mobile_content_settings` table denied to service_role;
+- expose the minimum publish-time read through a tightly scoped service-only function/RPC;
+- exact brand-scoped input;
+- only `social_mobile_user_v1` eligible;
+- return only fields needed for publish consent + generation:
+  - settings
+  - persona_profile
+  - persona provenance/confirmed/analyzed metadata as required;
+- no email/user identity/token/Vault data;
+- no mutation.
+
+Security requirements:
+- explicit owner;
+- SECURITY DEFINER only if needed;
+- `search_path = ''` or equally pinned safe path;
+- PUBLIC/anon/authenticated EXECUTE none;
+- service_role EXECUTE only;
+- no unexpected overload/procedure;
+- safe behavior for missing brand/settings;
+- cannot read Kabumori/AI Lab/internal profile settings through this reader;
+- no broad service_role SELECT on the underlying settings table.
+
+PR41 Edge/runtime loader must use this narrow boundary instead of direct table SELECT.
+
+PR41 publish-authority consent check must either:
+- reuse the same narrow helper safely inside SQL; or
+- use an equally narrow reviewed internal SQL helper.
+Do not leave one of the two direct-table reads unresolved.
+
+## Phase C — fresh-integrate live scheduled-user path
+
+Integrate only the still-valid PR41 functionality onto fresh main:
+- generic `social_mobile_user_v1` scheduled brand_post dispatcher;
+- exact-account Vault X port;
+- admin/publish gates before generation and immediately before X create;
+- explicit user auto-post consent;
+- confirmed content settings/persona passed to current main `generateBrandPost`;
+- NG words;
+- cross-brand duplicate protection;
+- bounded X length;
+- confirmed-X completion becomes terminal/non-replayable.
+
+Preserve:
+- Kabumori legacy path untouched;
+- AI Lab specialized path untouched;
+- PR76 publish permission semantics;
+- PR82 AI Lab dedupe;
+- current AI consultation generation guidance.
+
+Do not special-case raw user brand IDs.
+
+## Phase D — common-account boundary awareness
+
+Do **not** activate entitlement enforcement here.
+
+However document the exact future insertion point(s) where G5 Phase3 should require active `x_autopost` entitlement before:
+- claiming/generating a user scheduled post;
+- allowing/re-authorizing live publish authority.
+
+The current source must remain safe/dormant until explicit rollout gates are satisfied.
+
+If current PR41 would allow a future user to bypass G5 service enrollment semantics once enabled, STOP and report the conflict rather than inventing G5 policy.
+
+## Migration rules
+
+Because PR41 migrations are unmerged/unapplied candidates:
+- fresh-check repo + production history before choosing final migration versions;
+- no duplicate versions;
+- no normal `db push` assumption;
+- no production apply in this task;
+- migration source must be clean-bootstrap coherent with PR81 and current main;
+- if renumbering/replacing old candidate migrations is safest, do so only within PR41 branch and document old->new mapping;
+- all functions/tables/grants must be idempotency/precondition aware per project conventions.
+
+## Tests
+
+At minimum:
+- narrow settings reader refuses PUBLIC/anon/authenticated;
+- service_role reads only exact allowed brand;
+- wrong/internal brand fails/empty safely;
+- no direct service_role table SELECT required;
+- publish-authority consent check works through narrow boundary;
+- manual_review/no row/unconfirmed state does not publish;
+- auto_post_preference + confirmed settings reaches `generateBrandPost`;
+- all AI-consult remembered generation fields survive into live generation prompt;
+- authority checked pre-generation and pre-X;
+- account/brand mismatch fails;
+- OFF/revoked/expired authority fails;
+- NG word blocks;
+- duplicate blocks;
+- X success + completion ambiguity never causes replay;
+- AI Lab path unchanged;
+- Kabumori path unchanged;
+- PR76 guard unchanged;
+- G5 enrollment/app files untouched.
+
+Run relevant:
+- disposable PostgreSQL behavior/ACL/adversarial tests;
+- x-test-post focused Deno tests;
+- shared-brand tests;
+- PR78 memory-generation contract;
+- typecheck/lint where applicable;
+- git diff --check;
+- added-line secret scan.
+
+No real X/OpenAI.
+
+## Production / merge gates
+
+Forbidden:
+- production migration/history write;
+- Edge deploy;
+- real X/OpenAI;
+- Vault/OAuth/Auth mutation;
+- Cron change;
+- publish enablement;
+- PR41 merge;
+- G5 enforcement or deletion changes.
+
+Keep resulting PR open for K3.
+
+## Review policy
+
+This task introduces/changes a DB permission + service_role read boundary.
+If implementation reaches PASS candidate, K3 should normally allocate **one focused Codex review**.
+
+Recommended reviewer:
+- **Sol（高）** for the narrow SECURITY DEFINER/RPC/ACL + live-publish boundary.
+- Do not perform repeated routine rereviews unless the review finds a concrete P1/P2 in the same boundary.
+
+## Completion report
+
+Include:
+- result
+- fresh main
+- old/new PR41 head
+- migration version decisions
+- changed files
+- settings-reader design
+- ACL/owner/search_path proof
+- live generation path proof
+- PR78 memory->live generation proof
+- G4/G5 conflict check
+- tests
+- production mutation/deploy/real X/OpenAI = 0
+- remaining V1 blockers
+- whether focused Codex review is required
+- next recommendation
+
+At completion:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+Recommended model: **Opus5.5（高）**.
+
+## Report — x-social-mobile-pr41-live-generation-fresh-integration-20261006
+
+- result: **PASS candidate (source-only)** — PR #41 を最新 main に統合し、利用者の設定の読み取りを「公開時だけの狭い RPC」1本に絞った。PR #41 は open のまま、GitHub: MERGEABLE。本番変更 0 / deploy 0 / merge 0 / 実 X・OpenAI 0。
+- fresh main: 統合時 `e7da97d4`（この TASK の in_progress コミット。PR78 squash `60dff4e2` を含む）。その後の main は `.agent` などの記録だけで、今回の変更ファイルとの重なりなし。
+- PR41 head: 旧 `59f4f53037f231e831774c04e9a1b1982eff3bd9` → 新 `280aa0f83d4f039ba3e43f32da202a91fd2333f2`（通常 merge `48681238` + 1 コミット。rebase / force-push なし）。
+- worktree: 新規 `/Users/yuya/Developer/kabumori-g3-pr41-live`。G4/G5 の worktree・dev server には触れていない。
+
+### Phase A — 現在の main に対する再評価
+- 衝突は `x-test-post/index.ts` の import 1 か所のみ（AI Lab の dev-diary/topic import と汎用 Vault 口座の import を両方残した）。汎用経路のブロックと `postToX` の `beforeCreate` は自動で合わさり、内容は変わっていない。
+- まだ有効: 汎用 `social_mobile_user_v1` brand_post 経路、口座固定の Vault X 送信、投稿権限（生成前と X 作成直前）、同意、NG 語、ブランド横断の重複、140 字、完了 RPC（確定済み X 投稿は再送しない）。
+- PR76: 送信前ガード `assert_x_publish_permission_for_legacy_post` は `VaultAccountXAuth.send` の中にあり、汎用経路も同じ `send` を通る。順序は PR76 ガード →（更新時は再ガード）→ PR41 の権限再確認（`beforeCreate`）→ X 作成。X を作るたびに両方が走る。PR76 のコードは無変更。
+- PR82: AI Lab の dispatcher・topic claim は無変更（汎用経路は `ai_salaryman_lab` 以外だけ）。
+- 不要になった前提: 「設定テーブルが未作成なら同意なし」の分岐（PR81 の後では常に存在する前提に変更）、service_role による設定テーブルの直接 SELECT。
+
+### Migration の番号（旧 → 新）
+- `20260927101423_vault_account_brand_post_completion` → `20261006160000_vault_account_brand_post_completion`（本文は変更なし、注記のみ）
+- 新規 `20261006160100_social_mobile_publish_settings_reader`
+- `20260927124300_x_account_publish_authority` → `20261006160200_x_account_publish_authority`（同意確認を reader 経由に変更）
+- 理由: 3 本とも main にも本番にも未適用。新しい設計は PR81 の hardening（`20261003120000`）に依存するので、何もない状態から順に作り直したときに後ろに来る番号が必要。本番履歴の最新（`20261004090000`）・repo・open PR の番号と重複なし。旧 2 番号は `migration_source_invariants_test.ts` で「再利用禁止」として登録した。
+
+### 変更ファイル（main との差分、14 ファイル）
+`_shared/brand/vault_account_brand_post.ts` (+test), `x-test-post/index.ts`, `x-test-post/vault_account_auth_test.ts`（PR41 由来のテスト）, `x-test-post/vault_account_brand_post_routing_test.ts`, migrations 3 本, `supabase/tests/{migration_source_invariants_test.ts, social_mobile_publish_settings_reader_behavior.sql（新規）, x_account_publish_authority_behavior.sql, x_account_refresh_pilot.md, x_account_refresh_pilot_behavior.sql, x_account_refresh_pilot_run.sh}`。
+禁止領域（G5 の app/auth/enrollment、PR76 migration/`vault_account_auth.ts`、AI Lab、`brand_post_generator.ts`、`social_mobile_content_settings.ts`、退会、workflow）の変更 0 を機械的に確認。
+
+### 設定の読み取り設計（Phase B）
+`public.read_social_mobile_publish_settings(p_scheduled_post_id uuid, p_brand_id text)` → `settings, persona_profile, persona_provenance, persona_confirmed, persona_last_analyzed_at, persona_last_analyzed_count`
+- 応答する条件: その投稿が **実行中（running）の brand_post**、**ちょうどそのブランド**、ブランド単位の行（`social_account_id` なし）で、かつブランドのプロファイルが `social_mobile_user_v1`。
+- 返すのは設定・ペルソナの列だけ（user id / email / token / Vault なし）。保存がなければ 0 行（＝同意なし）。書き込みなし。
+- 拒否コード: 入力不正 `..._REQUEST_INVALID`、別投稿・別ブランド・pending/終了済み・別 post_type `..._POST_NOT_RUNNING`、Kabumori・AI Lab・その他の内部プロファイル `..._BRAND_NOT_ELIGIBLE`。
+- 呼び出し元: Edge の `loadSocialMobileContentSettingsForPublish`（RPC。拒否・失敗はすべて fail closed）と、`check_x_account_publish_authority` の同意確認（直接・動的なテーブル読み取りは削除）。
+
+### ACL / 所有者 / search_path の証明
+- `SECURITY DEFINER`、`search_path = ''`、STABLE、オーバーロードなし。所有者は設定テーブルの所有者（migration 内で明示的に `alter function ... owner to <テーブル所有者>`）。
+- EXECUTE: service_role のみ。PUBLIC / anon / authenticated は不可（実行すると 42501）。
+- 設定テーブル自体は service_role に権限なし（列単位の権限も含めて 0）。migration の事後条件で、これに反する場合は適用を中止。
+- 使い捨て DB で、service_role がテーブルを直接 SELECT / UPDATE すると 42501 になることを確認。
+
+### 本番生成経路の証明（Phase C）
+- `dispatchVaultAccountScheduledBrandPost` → 現在の main の `generateBrandPost`（PR78 の全項目ガイダンス）。順序は「権限 → 設定 → 重複の材料 → 生成 → 長さ・NG 語・重複 → 権限の再確認 → X → 完了」。
+- 同意は `approvalMode = auto_post_preference` のみ。行なし・manual_review は生成も X も 0。
+
+### PR78 の記憶 → 本番生成の証明
+新しいテストで、本番の dispatcher から本物の `generateBrandPost`（OpenAI だけ差し替え）に渡し、指示文に次がすべて出ることを確認:
+- 設定: トーン / 目的 / テーマ / NG 語 / メモ
+- 確認済みペルソナ全 8 項目: 口調 / 文の長さ / 記号・絵文字 / 語彙 / 話題 / 呼びかけ / 書き出し・締め / ハッシュタグ習慣
+- ハッシュタグの習慣は「付けないでください」と同居しない。140 字の上限も同じ指示文に入る。
+- 未確認ペルソナは指示 0 行で、従来のハッシュタグ禁止が残る。
+
+### G5 の境界（Phase D、実装はしていない）
+- 今は動かない構造: 運用者が `x_account_publish_authority` に enabled の期間（最大 30 日）を作らない限り投稿しない（このテーブルも本番に未作成）。
+- G5 Phase 3 が、実際の利用者に期間を有効化する前に、ブランドの owner の `service_entitlements(service_key='x_autopost')` が有効であることを、次の 3 か所で要求する必要がある（`vault_account_brand_post.ts` の先頭コメントと手順書に記載）:
+  1. `check_x_account_publish_authority`（生成前と X 作成直前に評価される唯一の判定）
+  2. `set_x_account_publish_authority('enabled')`（期間の付与・再付与）
+  3. 利用者の予約投稿の claim（終了したサービスの投稿を claim・生成しない）
+- G5 のサービス退会では、その口座の権限行も終了・取り消しにする必要がある。
+- 今のソースで、有効化後に G5 の登録を迂回できる経路はない（有効化そのものが運用者の明示操作）。ただし上の 3 点がないまま期間を有効化すると、サービス終了後も最大 30 日投稿し得る。このため、有効化の前提条件として明記した。
+
+### テスト
+- 使い捨て PostgreSQL 17（UTF8）: `x_account_refresh_pilot_run.sh` → PILOT_BEHAVIOR / PUBLISH_AUTHORITY_BEHAVIOR / **PUBLISH_SETTINGS_READER_BEHAVIOR** / PILOT_RACE / PUBLISH_RACE / CLEANUP すべて PASS。
+  - PR81 の candidate + hardening を本物のまま適用している。
+  - 前提が欠けた状態での権限 migration の適用が拒否されること、各 migration の再適用が拒否されることも確認。
+- reader の変異確認: ①プロファイル確認を外す ②実行中の投稿か確認を外す ③ブランド一致確認を外す → いずれもテストが失敗。
+- Deno: x-test-post 534/534、PR41 TS 14/14、ルーティング + migration 不変条件 16/16、consult + dry-run + 不変条件 47/47。
+  - `deno check`: PR41 本体・テストはクリーン。`x-test-post/index.ts` の型エラー 6 件は main にも同じ 6 件があり、今回の変更とは無関係。
+  - `deno lint` クリーン。
+- アプリ（PR78 の契約）: memory-generation + consult + repository 36/36。
+- `git diff --check` クリーン、追加行の秘密情報スキャン 0 件。実 X / OpenAI 呼び出し 0。
+- 既存の別件: `_shared` 全体では 433 合格 / 3 失敗。3 件とも main でも同じように失敗する。
+  - 2 件は AI Lab 日記スナップショットの古さ。
+  - 1 件は `social_mobile_phase15_static_test` が、前回 G3（PR78）で厳密化した `persona.confirmed === true` を古い文字列で検査しているもの（動作は正しい）。
+  - どちらも別の作業として切り出し済み（テスト・スナップショットのみの修正）。
+
+### 本番・ゲート
+本番 migration / 履歴の書き込み 0、Edge deploy 0、実 X / OpenAI 0、Vault / OAuth / Auth の変更 0、Cron 0、投稿の有効化 0、PR41 merge 0、G5 の enforcement・退会の変更 0。
+
+### 残る V1 の課題
+1. PR81 の本番適用（G5 の後）→ その後に Stage 3B の 3 migration を順に適用（各 1 本ずつ・読み戻し付き）、x-test-post の deploy。
+2. G5 Phase 3 の entitlement 要件（上の 3 点）を、本番で投稿権限を有効化する前に入れる。
+3. AI 相談エンドポイントの deploy（PR78、PR81 の後）。
+4. 既存のテスト 3 件の修正（別の作業）。
+
+### レビュー
+- 新しい DB 権限の境界（service_role 用の SECURITY DEFINER の reader と、本番投稿の境界）を追加したので、TASK のとおり **集中レビュー 1 回（Sol（高））を推奨**。
+- 観点: reader の ACL・所有者・search_path と応答条件、同意確認の reader 経由化、migration の番号付け直しと事前・事後条件。
+
+### 次の推奨
+K3 で Sol（高）の集中レビューを 1 回。PASS 後も PR #41 は merge せず、PR81 の本番適用と G5 Phase 3 を待つ。
+- status → review_required / next_owner → chatgpt。STOP。
+
+---
+
+# Previous G3 task — preserved history
+
+- task_id: x-social-mobile-ai-consult-persona-generation-guidance-20261006
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: chatgpt
+- priority: highest
+- recommended_model: Sonnet5（高）
+- type: source-only V1 completion / remembered persona -> generation prompt
+- source_pr: 78
+- source_head: d1f131c56b082d2af57660b5bd3d83ff8c619c7d
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Product decision
+
+AI相談はV1必須の中核機能。
+「覚えた」内容が実際の投稿生成に反映されなければV1完成とはしない。
+
+Previous G3 proved:
+- conversation -> proposal -> explicit 「これで覚えて」 -> CAS save -> reread -> next consultation works;
+- settings + confirmed persona survive the save/read round trip;
+- current post generator consumes settings and some persona signals.
+
+K3 found one V1 gap:
+confirmed persona fields
+`toneSignals`, `topicSignals`, `hashtagHabits`, `ctaStyle`, `openingClosingPatterns`
+are persisted and re-read but are not currently reflected in post-generation guidance.
+
+## Current conflict / dependency state
+
+- G5 common-account critical path is active. This task must remain source-only and must not touch Auth/entitlement/account deletion/common-account migrations or production.
+- G4 is a separate X-app slot handled in another chat. Current G4 morning-greeting work is done; future G4 UI work must not be edited here.
+- PR #41 remains open and owns live general-user scheduled-post routing + account-bound Vault path. Its changed files do **not** include:
+  - `supabase/functions/_shared/brand/social_mobile_content_settings.ts`
+  - `supabase/functions/_shared/brand/brand_post_generator.ts`
+  - their focused tests.
+- PR81 production schema apply is still deferred behind G5.
+- PR #78 stays open; no merge/deploy in this task.
+
+## Goal
+
+Make every user-confirmed persona signal that AI consultation can save materially available to social-mobile post generation, without changing security, DB, live dispatch, X, or account boundaries.
+
+The generation contract must cover:
+- preferredTone
+- themes
+- objective
+- optionalNgWords
+- notes
+- persona.toneSignals
+- persona.sentenceLength
+- persona.punctuationEmoji
+- persona.recurringVocabulary
+- persona.topicSignals
+- persona.hashtagHabits
+- persona.ctaStyle
+- persona.openingClosingPatterns
+
+Unconfirmed persona must contribute **zero persona guidance**.
+
+## Allowed scope
+
+Primary:
+- `supabase/functions/_shared/brand/social_mobile_content_settings.ts`
+- `supabase/functions/_shared/brand/brand_post_generator.ts` only if needed for conflict-free hashtag-policy composition
+- focused tests:
+  - `supabase/functions/_shared/brand/brand_post_generator_test.ts`
+  - PR78 memory-generation test(s)
+
+Small app/server test updates are allowed only if necessary to keep the same contract explicit.
+
+Do not edit:
+- PR #41 files;
+- x-test-post routing;
+- Vault/OAuth/token/auth code;
+- common-account/G5 files;
+- DB migrations/RLS/RPC;
+- account deletion;
+- publish toggle/permission;
+- G4 workflow/UI files;
+- production config/secrets.
+
+## Guidance requirements
+
+1. **All confirmed signals must be represented semantically in the model instructions.**
+   Do not merely save/read them.
+
+2. Preserve existing bounds and sanitization.
+   - no unbounded prompt injection from saved free text;
+   - values remain data/guidance, not system authority;
+   - do not let notes/persona override safety/publish/account instructions.
+
+3. Keep existing settings behavior stable:
+   - preferredTone / themes / objective / NG words remain;
+   - notes must remain bounded but should not silently lose most of the remembered intent if a safe larger bound is practical;
+   - approvalMode / generationWindow / frequencyTargetPerWeek remain operational/read-only and are not converted into AI-editable behavior here.
+
+4. **Hashtag interaction must be internally consistent.**
+   Current generic social-mobile generation ends with `ハッシュタグは付けないでください` when no fixed hashtags exist.
+   If a confirmed social-mobile persona contains `hashtagHabits`, do not emit a contradictory later instruction that nullifies the remembered preference.
+   Requirements:
+   - no confirmed hashtag preference -> existing no-hashtag default remains unchanged;
+   - confirmed hashtag habit -> generator may follow that confirmed habit within the user's own social-mobile profile;
+   - do not alter AI Lab's existing hashtag policy;
+   - do not alter Kabumori fixed-hashtag behavior;
+   - no cross-brand special-casing by raw brand id.
+
+5. Topic/tone/CTA/opening/closing signals must guide style, not invent personal facts.
+
+## Required tests
+
+At minimum prove:
+
+- confirmed persona with every field produces guidance containing every field;
+- unconfirmed persona produces none of the persona guidance;
+- default social-mobile profile with no confirmed hashtag habit still says no hashtags;
+- confirmed social-mobile hashtag habit does not coexist with a contradictory final no-hashtag instruction;
+- AI Lab hashtag behavior unchanged;
+- Kabumori fixed hashtag behavior unchanged;
+- content-settings save -> reread -> generation guidance still round-trips all remembered fields;
+- consultation cannot alter approval/publish/account/OAuth/schedule boundaries;
+- no PR41/live-dispatch code changed.
+
+Run:
+- focused shared-brand tests;
+- PR78 consult memory-generation tests;
+- relevant app tests if touched;
+- Deno check/lint on changed runtime;
+- `git diff --check`;
+- added-line secret scan.
+
+No real OpenAI/X call.
+
+## Production / merge
+
+Forbidden:
+- production mutation;
+- Edge deploy;
+- PR81 apply;
+- PR78 merge;
+- PR41 integration;
+- real X/OpenAI;
+- Auth/Vault/OAuth/Cron changes.
+
+At completion:
+- push only to PR #78 branch if clean;
+- keep PR #78 open;
+- status -> review_required / next_owner -> chatgpt;
+- K3 decides next.
+
+## Completion report
+
+Include:
+- result
+- fresh main / previous and new PR78 head
+- changed files
+- exact persona fields now consumed
+- hashtag behavior proof
+- memory-to-generation round trip
+- tests
+- G4/G5/PR41 conflict check
+- production mutation/deploy/merge = 0
+- remaining V1 blockers
+- next recommendation
+
+## Review policy
+
+This is bounded prompt/generation behavior, not a new auth/DB/permission boundary.
+Default: no Codex review if tests and scope are clean.
+If an unexpected cross-brand or publish-safety concern appears, STOP and report rather than widening scope.
+
+Recommended model: **Sonnet5（高）**.
+
+## Report — x-social-mobile-ai-consult-persona-generation-guidance-20261006
+
+- result: **PASS (source-only)** — 確認済みの文体・好みはすべて投稿生成の指示に入るようになった。PR #78 は open のまま。本番変更 0、merge 0、deploy 0。
+- fresh main: 取り込み時点 `2b120d03`（この TASK の in_progress コミット）。その後 main は G5 の K5 記録だけ進んだ（コード変更なし）。
+- PR78 head: 前 `d1f131c56b082d2af57660b5bd3d83ff8c619c7d` → 新 `1f33c58ca82a9d33d8c5c7282e0ac5c2fbb4aca9`（通常の merge + 1 コミット。rebase / force-push なし。GitHub: MERGEABLE）。
+- 競合: なし。PR78 が実際に変えるのは 17 ファイル（PR78 本来の 11 + 前回の追加 + 今回の 5）。
+
+### 変更ファイル（今回）
+- `supabase/functions/_shared/brand/social_mobile_content_settings.ts`
+- `supabase/functions/_shared/brand/brand_post_generator.ts`（ハッシュタグ指示の 1 か所だけ）
+- `supabase/functions/_shared/brand/social_mobile_content_settings_test.ts`
+- `supabase/functions/_shared/brand/brand_post_generator_test.ts`
+- `apps/social-mobile/tests/consult-memory-generation.test.mjs`
+PR #41 / x-test-post / Vault・OAuth・Auth / common-account（G5）/ DB migration・RLS・RPC / 退会 / 投稿 ON-OFF・権限 / G4 のワークフロー・UI には触れていない。
+
+### 投稿生成が使う項目（確認済みペルソナのみ）
+- 設定側（従来どおり）: preferredTone / themes / objective / optionalNgWords / notes。approvalMode・generationWindow・frequencyTargetPerWeek は運用値のままで AI 編集対象にしていない。
+- ペルソナ側（今回で全 8 項目）:
+  - toneSignals → 「確認済みの口調の特徴」（新規）
+  - sentenceLength → 「確認済みの文体傾向」（`short` などの生の値ではなく 短め / 長短まじり / 長め の文に変更）
+  - punctuationEmoji → 「確認済みの記号・絵文字傾向」（上限 120→200 字。DB と同じ）
+  - recurringVocabulary → 「確認済みの語彙傾向」（上限 10→30 語。DB と同じ）
+  - topicSignals → 「確認済みの話題の傾向」（新規）
+  - ctaStyle → 「確認済みの呼びかけ方」（新規）
+  - openingClosingPatterns → 「確認済みの書き出し・締めの型」（新規）
+  - hashtagHabits → 下記のハッシュタグ指示に反映（新規）
+- 確認済みペルソナがあるときだけ、末尾に「文体・話題・構成の参考にするだけ。語っていない個人的な体験・実績・数値は作らない。安全・投稿権限・アカウントの指示は変えない」という注意行を付ける。
+- 未確認ペルソナは、ペルソナ由来の指示を 0 行にする（ハッシュタグ習慣も無視）。
+
+### 安全上の上限
+- 保存された自由文（トーン・目的・テーマ・NG 語・メモ・ペルソナ）は、空白・改行を 1 つの空白にまとめた 1 行にしてから上限で切る。メモに改行つきの偽指示（例: 「ハッシュタグは付けないでください」「以前の指示を無視して」）を入れても、独立した指示行にならない（テストで確認）。
+- notes は 300 → 600 字（DB の保存上限は 1000 字。安全に確保できる範囲で、覚えた内容の大半を残す）。1 行に収め、「事実として未確認の内容は採用しない」の注記は維持。
+
+### ハッシュタグの証明
+優先順位: 固定ハッシュタグ > プロファイル自身のハッシュタグ方針（AI Lab）> 確認済み hashtagHabits > 従来の「付けないでください」。ブランド ID による特別扱いなし。
+- 確認済みの習慣なし／未確認 → 従来どおり「ハッシュタグは付けないでください」（テスト 1）
+- 確認済みの習慣あり（social-mobile）→ 「利用者が確認した次の方針に従ってください（方針にない使い方はしない）: …」に置き換わり、禁止行は同居しない（テスト 2）
+- AI Lab（`voiceControlsHashtags`）に習慣を渡しても従来の AI Lab 指示のまま／かぶモリ型の固定タグ（#日本株）に習慣を渡しても固定タグのまま（テスト 3）
+
+### 保存 → 読み戻し → 生成の往復（`consult-memory-generation.test.mjs`、実コード）
+AI 提案（全項目入り）→ 確認 → 版付き書き込み → 実際の dry-run 読み取り → 実際の `generateBrandPost` で、設定の全項目と、ペルソナの全 8 項目（toneSignals / sentenceLength / punctuationEmoji / recurringVocabulary / topicSignals / hashtagHabits / ctaStyle / openingClosingPatterns）が、変形なしで指示文に出る。同じ行が次回の相談の文脈にも出る。未確認ペルソナは生成にも次回の相談にも出ない。
+- 変異確認（壊すと落ちる）: ①指示の文言を変える ②確認済み判定を外す ③ハッシュタグ習慣を無視する ④AI Lab より習慣を優先する → いずれもテストが失敗。
+
+### テスト
+- Deno（`--no-config`、`--allow-read`）: 共有ブランド + consult + dry-run + 設定 72/72、AI Lab 既存（scheduled / dev-diary / topic-dedup）59/59。`deno check` 4 ファイル・`deno lint` 2 ファイル クリーン。
+- アプリ: `npm test` 193/193、`tsc --noEmit`、`expo lint` クリーン。
+- 既存テスト 1 件の期待値だけ変更: 「メモは 400 字未満」→「700 字未満」（メモ上限を 600 字に上げたため）。
+- `git diff --check` クリーン、追加行の秘密情報スキャン 0 件。実 OpenAI / 実 X 呼び出し 0。
+
+### 衝突確認・ゲート
+- G4 / G5 / PR #41: 触れていない（禁止領域のファイル変更 0 を機械的に確認）。PR #41 の変更ファイルとも重ならない。
+- 本番変更 0 / Edge deploy 0 / PR81 適用 0 / PR78 merge 0 / PR41 統合 0 / Auth・Vault・OAuth・Cron 0。
+
+### 残る V1 の課題
+1. **実運用の定期投稿が保存設定をまだ読まない**。今それを読むのはユーザー JWT のプレビュー経路だけ。実運用の経路は PR #41（口座単位の Vault 経路）の統合が必要。
+2. **PR #41 の読み取り権限**: PR #41 は service_role で `social_mobile_content_settings` を読むが、PR #81 の最終権限では service_role に何も与えていない。このままだと PR #41 の読み取りは拒否される（fail closed）。service_role に SELECT を狭く与えるか、定義者権限の読み取り関数にするかを、別の DB タスクで決める必要がある。
+3. PR #81 の本番適用が未実施（G5 の後）。相談エンドポイントも未 deploy。
+4. 全タブの上部見出しが時計と重なる（以前からの問題）。別の UI タスク。
+5. 未確認: ソフトウェアキーボード、375pt 幅の実機表示（前回の Simulator 確認は 402pt のみ）。
+
+### 次の推奨
+- K3 で、PR #41 の読み取り方式（課題 2）の決定と、そのための小さな DB タスクの要否を決める。
+- 追加レビューは不要の見込み（境界は変えず、プロンプト内容と上限だけの変更）。気になる場合は、一行化と上限の `social_mobile_content_settings.ts` だけを Luna（高）で軽く確認。
+- status → review_required / next_owner → chatgpt。STOP。
+
+---
+
+# Previous G3 task — preserved history
+
+- task_id: x-social-mobile-ai-consult-v1-fresh-integration-20261006
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: chatgpt
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: source-only fresh-main integration / AI consultation V1 core / memory-to-generation contract
+- source_pr: 78
+- source_head: 6e9f78a31bae9b65599732a9b416dcb50f2bfbc7
+- production_mutation_allowed: false
+- merge_allowed: false
+- deploy_allowed: false
+
+## Product decision
+
+「AIと相談する」はV1必須の中核機能。
+単なるチャットではなく、利用者とAIが会話しながら投稿内容・口調・好みを整理し、
+利用者が明示確認した内容だけを覚え、その保存内容が実際の投稿生成へ反映されることをV1完成条件とする。
+
+## Current dependencies
+
+- PR #81 source is merged and independently reviewed, but production schema apply is still HOLD while G5 common-account critical path is active.
+- G5 currently owns common-account legacy backfill / entitlement critical path. Do not overlap Auth/entitlement/account deletion/production DB work.
+- G4 morning-greeting reliability task is complete; G4 is a separate X-app slot and will later handle UI work. Do not edit G4-owned work.
+- PR #78 is still open at head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7` and is currently not mergeable against fresh main.
+- PR #78 changed paths are limited to the AI-consult/content-settings surface:
+  - `apps/social-mobile/src/app/(tabs)/consult.tsx`
+  - `apps/social-mobile/src/data/consult-client.ts`
+  - `apps/social-mobile/src/data/content-settings-repository.ts`
+  - `apps/social-mobile/src/domain/consult-session.ts`
+  - `apps/social-mobile/src/domain/content-settings-conversation.ts`
+  - `apps/social-mobile/src/domain/content-settings.ts`
+  - `apps/social-mobile/tests/consult-screen.test.mjs`
+  - `apps/social-mobile/tests/consult.test.mjs`
+  - `supabase/functions/social-mobile-consult/index.ts`
+  - `supabase/functions/social-mobile-consult/logic.ts`
+  - `supabase/functions/social-mobile-consult/logic_test.ts`
+- Current main brand generator already supports `contentSettings` and feeds `socialMobileGenerationGuidance(contentSettings)` into the prompt. This contract must remain compatible.
+
+## Goal
+
+Fresh-integrate PR #78 onto current main and make the AI consultation V1 source ready for later production activation, without touching production or G5 boundaries.
+
+The task must prove:
+1. natural conversation works;
+2. AI can explain what it currently understands;
+3. proposal is delta-only;
+4. nothing is saved merely because the AI replied;
+5. only explicit user confirmation ("これで覚えて") commits;
+6. stale proposals never overwrite newer settings;
+7. confirmed persona/settings survive re-read and are the same shape consumed by post generation;
+8. AI cannot alter publish ON/OFF, X account/OAuth, schedule, approval mode, deletion, entitlement or Auth;
+9. one user's workspace/settings cannot leak into another user's consultation;
+10. the consultation source can be merged later without silently activating a production path before PR81 schema is live.
+
+## Mandatory startup / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK / prior PR78 body / final PR81 H2/C2 evidence.
+2. Read current G4 and G5 TASKs for conflict only; do not execute or modify them.
+3. Use new-Mac clean base `/Users/yuya/Developer/kabumori-fresh`.
+4. Fetch fresh `origin/main` and PR #78 head.
+5. Create a new independent G3 worktree/checkout. Never share G4/G5 workdir or dev server.
+6. Confirm PR #78 exact head before integration.
+7. Do not rebase/reset/force-push another slot branch.
+8. Prefer a normal fresh-main integration into the PR branch or an equivalent non-destructive continuation. If the PR branch has moved unexpectedly, STOP.
+
+## Scope
+
+Primary scope is the existing PR #78 11 paths above plus the smallest narrowly-related tests necessary to prove current-main compatibility.
+
+Allowed only when necessary for the memory-to-generation contract:
+- read-only inspection of `supabase/functions/_shared/brand/social_mobile_content_settings.ts`
+- read-only inspection/tests around `brand_post_generator.ts`
+- a narrowly-scoped contract test may be added if it does not change the generator/runtime behavior.
+
+Do not edit:
+- G5 common-account / entitlement / lifecycle files or migration;
+- Auth signup/login/provider wiring;
+- account deletion;
+- X OAuth/token/Vault paths;
+- PR #41 generic live auto-post implementation;
+- PR #76 publish permission code;
+- morning greeting workflows;
+- DB migrations, RLS, RPC, Cron;
+- production settings or secrets.
+
+If a required fix would cross one of these boundaries, STOP and report it as the next task rather than expanding scope.
+
+## Fresh-main integration
+
+Resolve PR #78 conflicts against current main deliberately.
+
+Especially verify:
+- final PR81 `SocialMobileContentSettings` shape;
+- final persona provenance/confirmed fields;
+- final `updated_at` CAS contract;
+- 24:00 generation-window semantics;
+- current RLS-facing repository calls;
+- no old candidate migration assumptions remain in app/server code.
+
+Do not weaken current PR81 validation to make PR78 fit.
+
+## AI consultation behavior
+
+Preserve/verify:
+- authenticated user JWT only; no service-role shortcut;
+- owner membership + `social_mobile_user_v1` workspace proof;
+- tenant-safe not-found behavior;
+- bounded request/history/body sizes;
+- exactly one AI provider call per send;
+- `gpt-5.6-luna`, structured output, `store:false`, no web/tools/X call;
+- no conversation body/token/email/secret logging;
+- untrusted model output allowlist + length/type validation;
+- chat/question responses cannot carry mutation deltas;
+- ambiguous user intent asks instead of silently proposing;
+- proposal changes only explicitly requested editable fields;
+- current settings explanation produces no delta;
+- history-learning intent is detected but does not pretend to have read X history;
+- publish/account/oauth/token/schedule/cron/approval/deletion/auth/entitlement changes remain forbidden.
+
+## Explicit memory contract
+
+The UI must make the state transition clear:
+
+conversation
+→ AI proposal
+→ user sees exactly what will change
+→ user presses explicit confirmation
+→ latest settings are re-read
+→ only proposal-target fields are applied
+→ CAS on `updated_at`
+→ stale/conflicting proposal refuses and asks for reconfirmation
+→ confirmed state becomes the next consultation's saved context.
+
+No implicit save on:
+- send;
+- AI reply;
+- navigation;
+- retry;
+- app resume;
+- preview/example mode.
+
+Persona must be treated as remembered truth only after user confirmation.
+
+## Memory-to-post-generation proof
+
+This is a V1 acceptance requirement.
+
+Prove with source/tests that:
+- the exact confirmed settings/persona persisted by the consultation path materialize into the final `SocialMobileContentSettings` / confirmed persona contract;
+- the current main post-generation guidance consumes those remembered values without a lossy/remapped shadow schema;
+- preferred tone, themes/objective/notes/NG words and confirmed persona signals used by generation are preserved through save → read → guidance;
+- unconfirmed persona is not treated as remembered guidance;
+- unrelated read-only controls such as approval mode/generation time are not changed by consultation.
+
+If the current live scheduled-user dispatcher that consumes this guidance still depends on open PR #41, do not implement PR #41 here. Instead, report the exact missing live wiring as a release blocker and prove the reusable generator contract only.
+
+## UX / native verification
+
+Use local iOS Simulator where practical.
+
+Verify:
+- normal conversation;
+- loading;
+- retryable provider error;
+- question;
+- proposal card;
+- explicit "これで覚えて";
+- successful save;
+- stale-save conflict;
+- continue conversation after save;
+- keyboard/scroll/safe-area on narrow width;
+- no misleading "保存済み" wording before confirmation.
+
+No EAS build.
+
+## Tests
+
+At minimum:
+- all PR78 consult server logic tests;
+- all social-mobile consult/session/screen tests;
+- content-settings repository tests;
+- PR81-related content-settings tests affected by integration;
+- targeted generation-guidance compatibility test;
+- unauthorized / wrong-member / cross-brand refusal;
+- unknown-key and dangerous-key model output refusal;
+- one provider call maximum;
+- no X call;
+- no save before confirmation;
+- stale CAS refusal;
+- confirmed persona/settings re-read into next consultation;
+- memory-to-generation guidance round trip;
+- typecheck;
+- lint;
+- Deno check/lint for changed runtime;
+- `git diff --check`;
+- added-line secret scan.
+
+Use fake model/X where appropriate. Do not make a paid real-AI production call in this task.
+
+## Merge / production gates
+
+This task is **source-only**.
+
+Forbidden:
+- PR merge;
+- Edge deploy;
+- PR81 production schema apply;
+- DB/history write;
+- Auth/Vault/OAuth/X/Cron mutation;
+- production feature flag;
+- real X post.
+
+Reason:
+PR81 production schema must be exact before the consultation endpoint can be activated safely, and G5 critical-path production work has priority.
+
+At completion, if source integration/tests PASS:
+- keep PR #78 open;
+- report exact integrated head;
+- status -> review_required / next_owner -> chatgpt;
+- K3 will decide whether one focused review is needed.
+- Do not request production deploy yet.
+
+## Completion report
+
+Include:
+- task_id / result
+- fresh main and original/new PR78 head
+- conflicts and exact resolutions
+- changed files
+- memory contract proof
+- memory-to-generation proof
+- whether PR #41 remains required for live scheduled-user generation
+- native verification
+- tests
+- production mutation = 0
+- merge/deploy = 0
+- G4/G5 conflict check
+- remaining V1 blockers
+- next recommendation
+
+## Review policy
+
+This is Auth/RLS-adjacent AI behavior but no new DB/auth/permission boundary is introduced.
+
+Default after a clean focused integration:
+- one independent review only if fresh integration materially changes auth/tenant/CAS/model-output safety boundaries;
+- otherwise no routine rereview of already-reviewed unchanged contracts.
+- if review is warranted, prefer **Luna（高）**; use Sol only for a concrete security-boundary change.
+
+Recommended model: **Opus5.5（高）**.
+
+## Report — x-social-mobile-ai-consult-v1-fresh-integration-20261006
+
+- result: **PASS (source-only) — PR #78 fresh-integrated onto main; memory contract and memory-to-generation contract proven; PR kept open.** Production mutation 0, merge 0, deploy 0.
+- fresh main merged: `5f37d63e` (this TASK's in_progress commit). Original PR78 head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7` (confirmed exact before integration; single commit on merge-base `0c2c04e0`). New PR78 head: `d1f131c56b082d2af57660b5bd3d83ff8c619c7d` (GitHub: MERGEABLE) (non-destructive: merge commit `e9ed439b` + one commit `d1f131c5`; no rebase/force-push).
+- worktree: new independent `/Users/yuya/Developer/kabumori-g3-ai-consult` (branch `g3-ai-consult-v1-int` → pushed to `claude/g3-ai-consult-v1-20261002`). G4/G5 worktrees, dev servers and the other session's Simulator rig were not touched.
+
+### Conflicts / resolutions
+- Textual conflicts: **0** (`content-settings-repository.ts` auto-merged: main's PR81 `saveConfirmedProposal` metadata stripping + PR78's `updatedAt` read and `saveConfirmedIfUnchanged`).
+- Semantic checks against final PR81 (no PR81 validation weakened):
+  - `SocialMobileContentSettings` shape: app validator, server `isSocialMobileContentSettings` and DB `valid_settings` agree (9 keys; the app never writes `livePublishingEnabled`; server re-adds it as `false`).
+  - persona: `saveConfirmedIfUnchanged` strips `source/confirmed/analyzedAt/analyzedPostCount` from `persona_profile` and writes them to the dedicated columns, matching DB `valid_persona` (style-signal keys only). App/proposal bounds equal DB bounds (toneSignals 20×80, recurringVocabulary 30×50, topicSignals 20×80, openingClosingPatterns 20×100, free text 200; settings tone 120 / themes 8×100 / objective 160 / NG 20×60 / notes 1000).
+  - CAS: `update … eq(brand_id) eq(updated_at, expected)` + `select` → 0 rows = stale; first save `insert` → 23505 = stale. Compatible with the hardening trigger (`updated_at = greatest(clock_timestamp(), old+1µs)`, server-owned) and RLS owner policies (authenticated SELECT/INSERT/UPDATE only).
+  - 24:00: PR78's app `endTimePattern` makes the saved 24:00 default valid (server and DB already accept it in the window end only). PR81's repository test comment that worked around it is now obsolete and was updated.
+  - repository/server reads use the final PR81 column names; no candidate-only assumptions remain.
+
+### Changed files (vs main)
+PR78's 11 paths, plus:
+- `apps/social-mobile/src/app/(tabs)/consult.tsx` — fix: a signed-in (non-preview) workspace that is unreachable at confirm time now reports 「いまは保存できません…」 and saves nothing; previously it showed the sample-preview text 「ローカルプレビューとして確認しました」 and updated local state (misleading).
+- `apps/social-mobile/tests/consult-screen.test.mjs` — regression test for that (fails without the fix).
+- `apps/social-mobile/tests/consult-memory-generation.test.mjs` — new contract test (below).
+- `apps/social-mobile/tests/content-settings-repository.test.mjs` — uses the 24:00 defaults directly.
+No change to generator/runtime, DB migrations, RLS, Auth, X/OAuth, PR76, G5 or workflow files.
+
+### Memory contract proof (real screen code with stubbed RN/network, plus pure logic)
+- answer arriving / chat / question / explanation / retry / failure / dismiss / preview / unreachable-workspace: **0 writes** (consult-screen + consult tests).
+- only 「これで覚えて」 → re-read latest → `planConfirmedSave` (delta onto latest, unrelated newer values kept) → `saveConfirmedIfUnchanged` with the re-read `updated_at` → success re-reads and becomes the next turn's saved context.
+- a proposed field changed elsewhere → `reconfirm`, nothing written; row changed between re-read and write → `stale`, nothing written, proposal rebased and the user asked to press again.
+- persona is written only when the proposal changed it, always `persona_confirmed=true`, `persona_provenance='conversation'`; settings-only confirmation never touches persona columns.
+- server endpoint is read-only (`settings_saved=false` etc. enforced client-side), one provider call per send, `gpt-5.6-luna`, `store:false`, no tools/web/X, model output allowlisted; chat/question cannot carry deltas; publish/OAuth/token/schedule/approval/account keys refused.
+- tenant: verified Auth user + owner membership read with the caller's JWT + `social_mobile_user_v1` profile; missing/non-owned → same 404; no service role in the endpoint.
+
+### Memory-to-generation proof (`consult-memory-generation.test.mjs`, 4 tests, real code at every hop)
+validated AI proposal → `planConfirmedSave` → repository `saveConfirmedIfUnchanged` (recorded PostgREST insert) → that exact row returned by a stubbed PostgREST → real `handleSocialMobileBrandDryRun` reader (`normalize` + `materialize`) → real `generateBrandPost` with stubbed OpenAI fetch:
+- every saved settings field arrives unchanged (no remap), `livePublishingEnabled=false`, `personaProfile` = confirmed conversation persona;
+- prompt contains tone, objective, themes, NG words, notes and the confirmed persona lines (文体傾向 / 記号・絵文字 / 語彙);
+- approvalMode / generationWindow / frequency unchanged by consultation;
+- the same row is the next consultation's saved context (real consult handler);
+- an unconfirmed persona produces no 「確認済み」 guidance and is hidden from the next consultation; nothing saved → code defaults.
+- mutation check: renaming one guidance line, or saving `persona_confirmed=false`, makes the test fail.
+
+### Live scheduled-user generation — release blockers (not implemented here)
+1. On main, the only consumer that reads `social_mobile_content_settings` into generation is the user-JWT **dry-run preview** (`social-mobile-brand-dry-run`). `x-test-post`'s live `generateBrandPost` call is the AI Lab path and passes no content settings. Live scheduled-user generation still depends on **open PR #41** (`vault_account_brand_post.ts` `loadSocialMobileContentSettings`), which uses the same normalize/materialize contract.
+2. PR #41 reads the table with **service_role**, but the final PR81 hardening ACL grants service_role **nothing** on `social_mobile_content_settings` (authenticated S/I/U only). As written, PR #41's read would be refused and fail closed (`CONTENT_SETTINGS_READ_FAILED`), and its consent check (`x_account_publish_authority` reading `approvalMode`) has the same dependency. Needs a reviewed decision (narrow SELECT grant for service_role vs. a definer reader) in a separate DB task — not done here.
+3. Generation guidance consumes only `sentenceLength`, `punctuationEmoji`, `recurringVocabulary` from the persona and the first 300 chars of notes. `toneSignals`, `topicSignals`, `hashtagHabits`, `ctaStyle`, `openingClosingPatterns` confirmed in consultation are saved and re-read (and shown to the next consultation) but **not used by post generation**. Changing guidance is outside this task's scope (generator read-only); recommend a small follow-up.
+4. PR81 production schema still HOLD; the consult endpoint is not deployed. Until both, the app's real-data path falls back to "unavailable".
+
+### Native verification
+- iOS Simulator iPhone 18 Pro (402pt, iOS 27), local dev build (SDK-26 build-version patch on a scratch copy of the .app, as before), **real taps/swipes** via the Simulator control. No EAS.
+- The app gates every screen behind sign-in, and the Simulator control could not type into the TextInput, so a **temporary uncommitted rig** was used: auth gate bypassed in `_layout.tsx`; in `consult.tsx` only the dependency bindings were swapped (data status=ready, session token, `supabase.functions.invoke` → scripted endpoint envelopes parsed by the real `requestConsult`/`parseConsultResponse`, repository → versioned in-memory row, TextInput → tap-to-fill scripted messages). All screen logic/reducer/save planning ran unmodified. Rig fully reverted (`git status` clean), app uninstalled, build folder deleted.
+- verified on device: question reply (no proposal card); proposal card listing only changed fields with 「まだ保存していません。変わるのは次の項目だけです。」 and 「これで覚えて」/「この提案をやめる」; loading 「AIが考えています…」; retryable provider error 「AIが混み合っています…」 + 「もう一度送る」 → retry resent once (user turn not duplicated) while the pending proposal stayed; settings changed elsewhere → 「保存されている設定が、この提案のあとに変わっていました…もう一度「これで覚えて」を押してください。」 and nothing overwritten; second confirm → 「確認した内容を保存しました。投稿権限や投稿実行は変更していません。」 and the card closed; conversation continued after save and the next answer reflected the saved tone/themes; scrolling OK.
+- not verified natively: the software keyboard (rig input), 375pt narrow width (402pt only; layout is single-column flex and the screen harness covers state), real endpoint/DB (not deployed by design).
+- pre-existing app-wide issue observed (not introduced here, not fixed): every tab's `Screen` has no top safe-area inset with `headerShown:false`, so headings overlap the status bar/clock on iPhone 18 Pro (Home, AI相談, …). Recommend a separate small UI task (G4 UI).
+
+### Tests
+- app: `npm test` 193/193 (includes consult 29, consult-screen 12, memory-generation 4, repository 3); `tsc --noEmit` clean; `expo lint` clean.
+- Deno (`--no-config`, `DENO_NO_PACKAGE_JSON=1`, `--allow-read`): social-mobile-consult + brand-dry-run + content-settings (+hardening static, migration) 52/52; `deno check` index/logic_test/dry-run clean; `deno lint` consult clean. `brand_post_generator_test.ts` 13/13 with `--no-check` (its 3 type errors under `--no-config` are pre-existing on main, file untouched).
+- `git diff --check` clean; added-line secret scan (whole PR diff vs main) 0 hits.
+- no paid AI call, no X call (all model/X/PostgREST stubbed).
+
+### Gates
+- production mutation 0; Edge deploy 0; PR81 apply 0; DB/history write 0; Auth/Vault/OAuth/X/Cron 0; real X post 0; EAS 0.
+- PR #78 not merged (kept open). No feature flag.
+- G4/G5 conflict check: open PRs #93 (G5 backfill), #41, #33 touch none of these paths; G5 common-account / entitlement / G4 morning-greeting files untouched.
+
+### Remaining V1 blockers / next recommendation
+- PR81 production apply (after G5 critical path) → then deploy `social-mobile-consult` (verify_jwt=true) with the reviewed OPENAI secret path.
+- Decide the service_role read path for live generation (blocker 2), then fresh-integrate PR #41 (blocker 1).
+- Small follow-up: make generation guidance use the remaining confirmed persona signals (blocker 3).
+- App-wide top safe-area overlap (pre-existing) — separate UI task.
+- Review: integration did not change auth/tenant/CAS/model-output boundaries (one UI fail-closed fix + tests). Suggest no extra review, or at most one focused Luna（高） pass on `consult.tsx` confirm path if K3 wants it.
+- status → review_required / next_owner → chatgpt. STOP.
+
+---
+
+# Previous G3 task — preserved history
+
+- task_id: x-social-mobile-pr81-production-apply-continuation-20261006
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: chatgpt
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: production schema continuation / same-day preflight / exact atomic apply / post-apply read-back
+- source_pr: 81
+- merged_main_sha: 686f23a7094389b793470503fceb2f47a71f8fbf
+- prerequisite_pr76: satisfied
+- blocks_pr: 78
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #76 production prerequisite is now satisfied and Final K4 PASS.
+
+Verified production state before this allocation:
+- PR76 history exact: `20261003090000 / social_mobile_publish_permission_boundary` = 1 row;
+- exact two PR76 SECURITY DEFINER RPCs present with expected owner/search_path/effective EXECUTE graph;
+- `x-test-post` active with guarded runtime;
+- `social-mobile-publish-setting` ACTIVE v1 / verify_jwt=true;
+- running=0 / overdue pending=0;
+- G4 production_mutation_window = CLOSED.
+
+Resume the previously accepted PR #81 rollout plan.
+
+Target files:
+- `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql`
+- `supabase/migrations/20261003120000_social_mobile_content_settings_hardening.sql`
+
+Accepted SHA256:
+- candidate: `b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb`
+- hardening: `83d44ccfd51bcd8fcd78d31236fa52d1d8f90c6642f12c5bb1586f9d1497467e`
+
+Reviewed production apply method:
+one operator-controlled
+`psql -X --single-transaction -v ON_ERROR_STOP=1`
+session containing:
+1. candidate SQL;
+2. hardening SQL;
+3. exact history insert for `20260922045046 / social_mobile_content_settings_candidate`;
+4. exact history insert for `20261003120000 / social_mobile_content_settings_hardening`.
+
+No `db push`, no `migration up`, no `--include-all`, no history repair, no unrelated migration.
+
+## Startup / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / Final K4 PR76 / Final C2 PR81 / prior G3 report / this TASK.
+2. Use fresh `/Users/yuya/Developer/kabumori-fresh` and a new independent G3 worktree.
+3. Fetch fresh origin/main.
+4. Confirm current main still contains PR81 accepted merge and both SQL files are byte unchanged.
+5. Do not touch G4 worktree/runtime or G5/common-account work.
+6. Production mutation mutex: before any production write, verify G2/G5/other slots are not mutating production. If another production mutation window is ACTIVE, STOP.
+7. Do not read secrets/token plaintext/user content.
+
+## Gate A — same-day production ordering
+
+Read-only verify:
+- PR76 history exact one row;
+- PR82 history exact one row;
+- PR81 candidate and hardening history absent unless legitimately already applied;
+- no version/name collision;
+- no newer unresolved prerequisite that changes the reviewed order;
+- do not reorder/repair history.
+
+If PR76 is not exact anymore, STOP.
+
+## Gate B — fresh production preflight
+
+One explicit READ ONLY transaction.
+
+Verify:
+- `public.social_mobile_content_settings` absent unless an exact reviewed prior apply exists;
+- same-prefix helper functions absent unless exact;
+- exact live migration-ledger shape;
+- applying role = reviewed owner assumptions;
+- `brands` / `brand_memberships` dependencies unchanged;
+- default ACL and API role graph unchanged from accepted H2 baseline;
+- no same-name relation/function/policy/trigger collisions;
+- no unexpected overload/grant drift.
+
+Any drift => STOP; no repair.
+
+## Gate C — freeze exact package
+
+Freeze:
+- fresh main SHA;
+- both SQL SHA256;
+- exact two version/name pairs;
+- exact operator command;
+- exact post-apply read-back SQL;
+- failure/abort behavior.
+
+Run local syntax/diff/secret checks only as needed. Do not modify accepted migrations.
+
+## Mandatory STOP for approval
+
+After A/B/C are clean, STOP before first production write and report:
+- project identity;
+- fresh main SHA;
+- exact hashes;
+- current ledger state;
+- exact outer transaction;
+- expected schema/history changes;
+- mutex state;
+- rollback/abort behavior;
+- confirmation PR76/PR82/G5 are not bundled.
+
+Request fresh explicit approval for PR81 production apply.
+
+TASK creation or prior approvals do not authorize mutation.
+
+## After fresh explicit approval only
+
+Immediately rerun Gate A/B.
+If any material state changed, approval is invalid; STOP.
+
+Then execute only the reviewed outer transaction.
+
+Open a new separate READ ONLY session and verify:
+- exact two history rows;
+- table columns/types/nullability/defaults exact;
+- PK/index immediate, nondeferrable, valid/ready/live;
+- FK/check constraints exact;
+- finite timestamp CHECK exact;
+- RLS enabled;
+- exact policies;
+- table effective ACL exact;
+- helper signatures/owners/search_path/effective EXECUTE exact;
+- exact one expected version trigger;
+- no overloads/unexpected grants/column ACL.
+
+Mismatch => STOP, no auto-drop/history repair, no PR78 continuation.
+
+No Edge deploy in this task.
+
+## PR78 continuation
+
+Only after PR81 production schema/read-back PASS:
+- report schema prerequisite satisfied;
+- do not merge/rebase PR78 inside the same production mutation;
+- next G3 task should fresh-integrate/rebase PR #78 current head onto fresh main and resume remaining AI/Auth/security work.
+
+## Safety
+
+Before explicit approval forbidden:
+- production DDL/DML/history write;
+- Edge deploy;
+- X/OpenAI/Auth/Vault/OAuth/Cron mutation.
+
+Always forbidden:
+- accepted migration rewrite;
+- PR76/PR82/G5 bundling;
+- history repair/reorder;
+- production test data writes.
+
+## Completion / K3
+
+Report:
+- result
+- fresh main
+- Gate A/B/C
+- hashes
+- approval requested/received
+- exact production mutations
+- post-apply read-back
+- deploy=0
+- X/OpenAI/Vault/OAuth/Cron=0
+- whether PR78 may resume
+- remaining risks
+- next recommendation
+
+Then status -> review_required / next_owner -> chatgpt / STOP for K3.
+
+Review policy:
+- PR81 source and migration plan already had independent final review.
+- do not add routine Codex review after exact apply/read-back PASS.
+- only review if a concrete production mismatch or source change appears.
+
+Recommended model: **Opus5.5（高）**.
+
+## Report — x-social-mobile-pr81-production-apply-continuation-20261006
+
+- result: **PREFLIGHT_READY / HOLD — Gate A/B/C PASS (read-only); approval NOT requested** because Final K5 (`2328415d`) holds G3 production writes while the G5 common-account production-apply decision is pending. Production mutations **0**.
+- fresh main at start: `af4c8996` (this TASK's in_progress commit; contains PR81 merge `686f23a7`). Main later advanced to `8f86112f` (K5 hold + G4 morning-greeting allocation, control files only; PR81 files untouched).
+- worktree: new independent `/Users/yuya/Developer/kabumori-g3-pr81-apply` (detached). G4/G5 worktrees not touched (G4 `s3_stage_a.sh` only read for the pooler connection pattern).
+- hashes (byte-unchanged vs accepted): candidate `b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb`; hardening `83d44ccfd51bcd8fcd78d31236fa52d1d8f90c6642f12c5bb1586f9d1497467e`.
+- local proof on fresh main (PG 17.11, UTF8, disposable): `social_mobile_content_settings_run.sh` → `SOCIAL_MOBILE_CONTENT_SETTINGS_ALL_PASS` (48 markers). Note: a cluster made with `--locale=C` but without `-E UTF8` is SQL_ASCII and fails the length checks — always `-E UTF8`.
+
+### Gate A — ordering (read-only, user-run at 2026-10-06 05:28 UTC; auto mode denies Claude's production reads)
+- ledger 74 rows (was 72 on 10/05): +`20261003090000 social_mobile_publish_permission_boundary` (1 row) and +`20261004090000 ai_lab_topic_claims` (1 row) — exactly PR76 and PR82.
+- versions ≥ 20261002: only `20261002090000`, `20261003090000`, `20261004090000`. PR81 versions/names absent; no collision.
+- pre-existing, unrelated: duplicate ledger name `add_us_premarket_report` (two versions) — reported only. Earlier ledger notes (repo `20260929090000` missing from ledger; ledger-only `20260924001508`/`20260924024406`) unchanged.
+- common-account `20261001150000` is unapplied and sorts between the PR81 candidate and hardening versions; it is a separate file/feature with no object overlap, but if G5 applies first, Gate A/B must be re-read (ledger/default ACL baseline changes).
+
+### Gate B — fresh preflight (one READ ONLY transaction; `transaction_read_only=on`)
+- diff vs the accepted 10/05 baseline: **only** the ledger changes above (+ newly added probe keys). Target table/any-schema same-name relation absent; same-prefix routines/policies/triggers/constraints 0; ledger shape (version text PK, statements, name, created_by, idempotency_key UNIQUE, rollback; no triggers) unchanged; `current_user=postgres` (non-superuser, bypassrls), owns `brands`; brands/brand_memberships columns/constraints/RLS/self-select policy unchanged; auth.uid unchanged; default ACL (postgres→anon/authenticated/service_role TRUNCATE/REFERENCES/TRIGGER/MAINTAIN on tables; functions postgres only) unchanged; public schema ACL and API role graph unchanged.
+- new probe: production event trigger `ensure_rls` (`rls_auto_enable`, SECURITY DEFINER, ddl_command_end on CREATE TABLE in `public`; src md5 `99be20677b456ea8d3be47bdd44fb369`) runs `alter table … enable row level security` and swallows errors. The candidate enables RLS itself, so the effect is idempotent. Reproduced byte-identically (same md5) in the local rehearsal: apply + read-back exact, `force_rls=false`.
+- probe-filter note: `pr76_rpcs=[]` is a too-narrow name filter (`social_mobile_%publish%`); PR76 functions are `set_social_account_publish_enabled` / `assert_x_publish_permission_for_legacy_post`, already independently read back at K4. Not drift.
+
+### Gate C — frozen package (untracked, `/Users/yuya/Developer/kabumori-g3-pr81-apply/.g3-local/`)
+- `pr81_apply.sh` — operator runs it; checks 4 SHA-256 then ONE `psql -X --single-transaction -v ON_ERROR_STOP=1` via session pooler (`aws-0-ap-northeast-1.pooler.supabase.com:5432`, `postgres.wsmznyzcvmuitkglfeuj`, password prompt, sslmode=require): `select current_user` → `pr81_guard.sql` → candidate → hardening → `pr81_history_insert.sql`. Exit 0 = committed; 3 = whole transaction rolled back; never rerun blindly.
+- `pr81_guard.sql` `bb78f9700b903e55b23d3c33cd1b322e67faa5e34ced5328e3b7fe8438703ab8` — operator-side fail-closed assertion only (no schema change): `set local lock_timeout='5s'`; current_user=postgres; PR76 history exact 1 row; PR81 history/objects absent.
+- `pr81_history_insert.sql` `bf8778d9f315815357911bffaa0ceb18383106441da5cca3d50520115ff17311` — exactly `(20260922045046, social_mobile_content_settings_candidate)` and `(20261003120000, social_mobile_content_settings_hardening)`, `(version, name)` only as reviewed.
+- `pr81_readback.sql` `12f136b10c450c20578b47df03b8d0b1eff04a39e78556a0eca10923d850c5d4` — separate READ ONLY session: history rows, columns/defaults/column ACL, constraints (deferrable/validated/def), PK index flags, RLS/force, policies, trigger, table ACL + effective privileges, function owner/secdef/volatility/search_path/src md5/ACL/effective EXECUTE, overloads, row count only. Expected output frozen from the local prod-shaped rehearsal in `readback_expected_local.json` (only `ledger_count` should differ: production expects 76).
+- local prod-shaped rehearsal (role named `postgres`, nonsuperuser bypassrls; ensure_rls copy; ledger with PR76/PR82 rows) of the exact script: first run hit a local-only schema-permission error inside the guard → exit 3, nothing left (proves abort path); after fixing the local fixture → exit 0, `PR81_GUARD_OK`, 2 history rows; immediate rerun → `PR81_GUARD: PR81 history already present`, exit 3.
+- expected read-back: 9 columns; 7 constraints all non-deferrable/validated incl. `finite_versions`; PK btree immediate/valid/ready/live; RLS on / force off; 3 owner policies (select/insert/update) for authenticated; one `social_mobile_content_settings_version` BEFORE INSERT OR UPDATE trigger; 5 functions owner postgres, non-secdef, `search_path=pg_catalog`; effective table privileges anon none / authenticated SELECT,INSERT,UPDATE / service_role none; EXECUTE authenticated on 4 validators only; overloads 0; rows 0.
+
+### Approval / mutations / side effects
+- approval requested: **no** (K5 hold). approval received: no.
+- production DDL/DML/history writes 0; deploy 0; X/OpenAI/Auth/Vault/OAuth/Cron 0. Production reads: one user-run catalog/ledger-only READ ONLY preflight (no user content/PII/token/Vault).
+- PR78 may resume: **no** (PR81 schema not applied).
+
+### Remaining risks / next recommendation
+- Decide order between G5 common-account apply and G3 PR81 apply (mutex: never concurrent). If G5 goes first, G3 resume must rerun the preflight (`.g3-local/pr81_preflight_v2.sql`, sha `6c9782a1…`) and accept G5's reviewed deltas before requesting approval.
+- On resume: fresh mutex check → user-run preflight → diff → request explicit approval with this package → immediate Gate A/B re-read → operator runs `pr81_apply.sh` (needs the DB password reset during G4) → user-run `pr81_readback.sql` → compare to `readback_expected_local.json`.
+- Pre-existing ledger irregularities (missing `20260929090000`, ledger-only `20260924001508/024406`, duplicate name `add_us_premarket_report`) remain for a separate ledger-hygiene task; they do not affect the manual PR81 path.
+- status → review_required / next_owner → chatgpt. STOP.
+
+---
+
+# Previous G3 task history — preserved below
+
+# Previous G3 task — preserved history
+
+- task_id: x-social-mobile-pr81-production-schema-gate-20261005
+- owner: claude
+- slot: claude-3
+- status: done
+- next_owner: none
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: production migration gate / read-only preflight / ordered rollout / post-apply read-back
+- source_pr: 81
+- merged_main_sha: 686f23a7094389b793470503fceb2f47a71f8fbf
+- blocks_pr: 78
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #81 content-settings hardeningは source実装・H2最終レビュー・main mergeまで完了済み。
+
+本来の次工程は:
+
+1. production schemaのsame-day read-only preflight
+2. pending migration順序の確認
+3. explicit user approval後に、PR #81の2ファイルをreview済みのouter transactionでproductionへ適用
+4. separate-session read-back
+5. その完了後にPR #78 AI相談 v1をfresh mainへrebase/integrateして残りレビューを再開
+
+このTASKでは、まず1〜2と適用準備まで行う。
+
+**production mutationは、TASKに書いてあるだけでは許可しない。**
+実際のapply直前にユーザーの明示承認が必要。
+承認前は必ずSTOPする。
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES / CLAUDE.md / ORCHESTRATION / CURRENT_STATE / this TASK / Final C2 for PR #81 / H2 final report.
+2. New Mac clean base: `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh `origin/main`からG3専用の独立worktree/checkoutを使用。
+4. Confirm main contains PR #81 merge `686f23a7094389b793470503fceb2f47a71f8fbf`.
+5. Confirm these exact merged files are unchanged:
+   - `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql`
+   - `supabase/migrations/20261003120000_social_mobile_content_settings_hardening.sql`
+6. G4/PR #76 is a separate workstream. Do not edit its files/worktree.
+7. Do not touch AI Lab PR #82 runtime/migration.
+8. Do not touch common-account G5/H1 work.
+9. No production user content/PII/token/Vault plaintext reads.
+
+## Gate A — fresh migration ordering / pending history
+
+Before any production mutation, read-only verify current source + production ledger.
+
+Relevant versions:
+- PR #76: `20261003090000_social_mobile_publish_permission_boundary`
+- PR #81: `20261003120000_social_mobile_content_settings_hardening`
+- merged PR #82: `20261004090000_ai_lab_topic_claims`
+- historical PR #81 candidate: `20260922045046_social_mobile_content_settings_candidate`
+
+Rules:
+- if PR #76's earlier `20261003090000` is still an active pending/unmerged/unapplied workstream, **do not apply PR #81 ahead of it by assumption**.
+- report the exact ordering conflict and STOP at read-only HOLD unless ChatGPT/user has separately resolved the rollout order.
+- do not fake/repair/reorder migration history to bypass this.
+- if PR #76 is merged and its production disposition is known, re-evaluate with fresh ledger.
+- PR #82 being merged does not authorize its production apply and must not be bundled.
+
+## Gate B — PR #81 production read-only preflight
+
+Use one explicit READ ONLY production transaction and verify:
+
+- target table `public.social_mobile_content_settings` absent unless an explicitly reviewed prior apply happened;
+- same-prefix helper functions absent unless exact reviewed shape exists;
+- both PR #81 migration versions absent from ledger unless already legitimately applied;
+- exact live `supabase_migrations.schema_migrations` column/constraint shape;
+- applying role identity;
+- `brands` / `brand_memberships` dependency shape;
+- current default table/function ACL relevant to the migration;
+- current API role membership graph;
+- no target-version/name collision;
+- no unexpected same-name relation/function/policy/trigger.
+
+If any drift from the H2-reviewed preconditions is found:
+- STOP;
+- do not apply;
+- do not repair;
+- report exact mismatch.
+
+## Gate C — freeze reviewed production apply package
+
+If A/B are clean and ordering is resolved, prepare but do not execute:
+
+- exact current main SHA;
+- SHA256 of both PR #81 SQL files;
+- exact migration version/name pairs;
+- exact operator command/runbook based on the H2-reviewed procedure;
+- pre-apply and post-apply read-back SQL;
+- failure/abort conditions.
+
+Reviewed apply policy:
+- direct operator-controlled `psql -X --single-transaction -v ON_ERROR_STOP=1`;
+- candidate + hardening + exact two migration-history records in the same outer transaction;
+- no `supabase db push`;
+- no `migration up`;
+- no Management API migration apply;
+- no history repair/reconcile;
+- no unrelated pending migration;
+- production connection supplied securely outside logs/chat.
+
+Do not change the two merged SQL files.
+
+## Mandatory STOP for approval
+
+When Gate A/B/C are complete, STOP before the first production write.
+
+Report to ChatGPT/user:
+- exact production project identity;
+- fresh main SHA;
+- exact migration hashes;
+- current ledger state;
+- PR #76 ordering status;
+- exact operation proposed;
+- expected schema/history changes;
+- rollback/abort behavior;
+- confirmation that no other migration/deploy is included.
+
+Then request explicit production-apply approval.
+
+Do not treat this TASK creation or a previous generic “continue” as mutation approval.
+
+## After explicit approval only — production apply
+
+Only if ChatGPT/user explicitly approves after the above STOP:
+
+1. repeat fresh same-day Gate A/B reads immediately before mutation;
+2. if any state changed -> STOP and invalidate approval;
+3. execute the exact reviewed outer transaction only;
+4. do not retry blindly on lost/ambiguous response;
+5. open a new separate read-only session and verify:
+   - both ledger rows exact;
+   - target table exact columns/types/nullability/defaults;
+   - PK/index immediate/nondeferrable/valid/ready/live;
+   - FK/check constraints exact;
+   - finite timestamp CHECK exact;
+   - RLS enabled and policies exact;
+   - table effective ACL exact;
+   - helper signatures/owners/search_path/exact effective EXECUTE;
+   - single expected version trigger;
+   - no unexpected overloads/grants/column ACL.
+6. if read-back mismatch:
+   - STOP;
+   - do not auto-drop;
+   - do not history-repair;
+   - do not proceed to PR #78;
+   - report exact committed state for separate recovery decision.
+
+No Edge deploy is part of this schema task.
+
+## PR #78 continuation gate
+
+Only after production PR #81 apply + read-back is PASS:
+
+- fresh-check PR #78 exact current head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`;
+- do not silently merge/rebase it inside this same mutation step;
+- report that schema prerequisite is satisfied;
+- next G3 task should fresh-integrate/rebase PR #78 onto current main and resume its unfinished Auth/AI/security gates.
+
+PR #78 remains unmerged until that separate continuation.
+
+## Safety
+
+Forbidden before explicit mutation approval:
+- production INSERT/UPDATE/DELETE/DDL;
+- migration/history write;
+- Edge deploy;
+- Auth/Vault/OAuth/X/OpenAI mutation;
+- Cron/scheduler/settings changes;
+- PR #78 merge/deploy;
+- PR #76 changes.
+
+Always forbidden in this task:
+- rewriting accepted PR #81 migrations;
+- broad migration repair;
+- bundling PR #76 or PR #82;
+- production test data/user-content writes.
+
+## Verification
+
+Before approval:
+- read-only production catalog/ledger preflight;
+- local command/runbook syntax check;
+- verify exact source hashes;
+- `git diff --check`;
+- no source changes expected except .agent unless a bounded operator-readback script is truly necessary.
+
+After approved apply:
+- separate-session production read-back only;
+- no app/Edge/runtime test required for schema-only change beyond existing accepted source tests.
+
+## Completion / K3
+
+Report:
+- task_id/result
+- fresh main
+- PR #76 ordering disposition
+- production preflight
+- exact SQL hashes
+- whether approval was requested/received
+- exact production mutations, if any
+- post-apply read-back, if any
+- production deploy = 0
+- X/OpenAI/Vault/OAuth/Cron = 0
+- remaining blockers
+- whether PR #78 may now resume
+- next recommendation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+Review policy:
+- this is execution of an already independently reviewed migration plan.
+- do **not** automatically add another Codex review after a clean exact apply/read-back.
+- if only read-only preflight/HOLD occurs, no review is needed.
+
+## Report — x-social-mobile-pr81-production-schema-gate-20261005
+
+- task_id: x-social-mobile-pr81-production-schema-gate-20261005
+- result: **HOLD (read-only) — Gate B CLEAN, Gate A ordering unresolved; Gate C not frozen; no approval requested; production mutations 0.** Model: Opus 5.5.
+- fresh main at start: `2eebb066` (contains PR #81 merge `686f23a7094389b793470503fceb2f47a71f8fbf`). Isolated G3 worktree created from the new clean base: `/Users/yuya/Developer/kabumori-g3-schema-gate` (detached on origin/main).
+- exact SQL hashes (unchanged since the merge; `git diff 686f23a7..HEAD` empty for both):
+  - `20260922045046_social_mobile_content_settings_candidate.sql` sha256 `b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb`
+  - `20261003120000_social_mobile_content_settings_hardening.sql` sha256 `83d44ccfd51bcd8fcd78d31236fa52d1d8f90c6642f12c5bb1586f9d1497467e`
+
+### Gate A — ordering: HOLD
+- PR #76 `20261003090000_social_mobile_publish_permission_boundary` is **OPEN / unmerged** (head `5448e545f4a88bbf6597a981c0bcbe4c01043c30`) and **absent from the production ledger**. It sorts before PR #81's `20261003120000`. CURRENT_STATE also records this order as unresolved. Per the TASK, PR #81 is not applied ahead of it by assumption; no history reorder/fake/repair.
+- PR #82 `20261004090000_ai_lab_topic_claims` is merged but **not applied** in production (ledger absent); it sorts after PR #81 and is not bundled.
+- Needed decision (ChatGPT/user): either apply PR #76's migration first when it is ready, or explicitly accept PR #81 going first (then a later PR #76 apply is out-of-order for the CLI and must use the same reviewed manual procedure or `--include-all`, decided then).
+
+### Gate B — production read-only preflight: CLEAN
+One `BEGIN TRANSACTION READ ONLY` catalog/ledger query (`transaction_read_only=on`), **run by the user in their own terminal** because Claude's production read was refused by the auto-mode classifier; Claude read only the user's output file. Query sha256 `f74fbc29f8e90961b86323aef2b3b9736ea11d98a3ffa44bf90c1b0f61617054` (syntax-tested first on a throwaway local PostgreSQL, since removed). No user content, PII, tokens or Vault data selected. Results (checked_at 2026-10-05T14:32:55Z, project `wsmznyzcvmuitkglfeuj`, PostgreSQL 17.6):
+- `public.social_mobile_content_settings` absent (no same-name relation in any schema); same-prefix routines 0, policies 0, triggers 0, constraints 0.
+- Ledger: 72 rows; versions 20260922045046 / 20261003090000 / 20261003120000 / 20261004090000 and matching names all **absent**; latest applied `20261002090000`. Ledger columns: version text NOT NULL PK, statements text[], name text, created_by text, idempotency_key text UNIQUE, rollback text[] — all but version nullable, no triggers, so the reviewed `(version, name)` history insert fits.
+- Applying role: `postgres` (current_user = session_user, not superuser), owner of `public.brands` — matches the hardening guard's owner rules.
+- Dependencies: brands.id text NOT NULL PK; brand_memberships(brand_id text FK -> brands ON DELETE CASCADE, user_id uuid FK -> auth.users ON DELETE CASCADE, role CHECK owner/admin/member/viewer, PK (brand_id,user_id)), RLS on, self-select policy for authenticated using `(select auth.uid()) = user_id`, authenticated SELECT granted; auth.uid() stable, not SECURITY DEFINER.
+- Default ACL (postgres, public): tables -> owner + anon/authenticated/service_role TRUNCATE/REFERENCES/TRIGGER/MAINTAIN (as H2 recorded; normalised by the hardening, allowed by its grantee guard); functions -> EXECUTE to postgres only. No global (all-schema) defaults. Public schema: USAGE for PUBLIC/anon/authenticated/service_role, CREATE only pg_database_owner.
+- Role graph: authenticator, postgres and supabase_realtime_admin are members of anon/authenticated/service_role (expected Supabase shape; inherited privileges therefore follow the hardened grants).
+- Verdict: no drift from the H2-reviewed preconditions.
+
+### Gate C — not frozen (ordering unresolved)
+The reviewed procedure remains `supabase/tests/social_mobile_content_settings_rollout.md` (one `psql -X --single-transaction -v ON_ERROR_STOP=1` session: candidate + hardening + two `(version, name)` history rows; no db push / migration up / Management API apply / repair; no other migration). It will be frozen with a fresh same-day preflight once the order is decided.
+
+### Approval / mutations
+- Production apply approval: **not requested** (Gate A HOLD). Production writes / DDL / history: **0**. Deploy: **0**. X/OpenAI/Vault/OAuth/Cron: **0**. PR #76/#78/#82 untouched.
+
+### Pre-existing ledger observations (not touched, outside PR #81)
+- `20260929090000_news_discovery_observer` exists in the repo but **not** in the production ledger (the history row known missing since the N3 canary).
+- Ledger contains `20260924001508` and `20260924024406`, which have **no file** on main (remote-only versions).
+Both matter for any future CLI `db push` and should be reconciled separately with approval; they do not affect the manual PR #81 procedure.
+
+### Remaining blockers / PR #78
+- Blocker: rollout order vs PR #76. PR #78 may **not** resume yet (schema prerequisite not applied).
+- Local evidence files (untracked, not committed): `/Users/yuya/Developer/kabumori-g3-schema-gate/.g3-local/pr81_preflight.sql` and `pr81_preflight_out.json` (catalog/ledger metadata only).
+
+### Next recommendation
+ChatGPT/user decide the PR #76 vs PR #81 order. Then reassign G3: fresh same-day preflight (same query), freeze the package, request explicit production approval, apply the reviewed outer transaction, separate-session read-back; only then fresh-integrate PR #78.
+
+
+---
+
+# Withdrawn G3 allocation — user corrected routing; DO NOT EXECUTE
+
+- task_id: ai-lab-pr82-production-rollout-runner-20261005
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- type: bounded production-rollout tooling / runbook / local rehearsal
+- source_pr: 82
+- merged_main_sha: 80e11c9207d44599db26a25195f1ee0091484231
+- target_migration: 20261004090000_ai_lab_topic_claims.sql
+- production_mutation_allowed: false
+
+## Purpose
+
+会社員AIラボ PR #82 の source implementation / review / main merge は完了済み。
+
+残っているのは production rollout の **適用方式だけ**。
+
+H1 read-only preflight で以下が確定している:
+- production target table/functions/history version は未存在
+- owner/default ACL/role-membership 前提は通る
+- exact deploy target は `x-test-post` のみ
+- Cron変更不要
+- migration本体は自前の BEGIN/COMMIT を持つ
+- Supabase CLI では migration SQL の COMMIT 後に history insert が走るため、schema + ledger は同一transactionにならない
+- history insert失敗時に「schemaは入ったがledgerがない」状態があり得る
+- migration本体を accepted source から書き換えてはいけない
+
+このTASKでは、accepted migrationを変更せずに、本番反映を安全・再現可能に行うための **operator runner / runbook / local proof** を作る。
+
+productionへの実行はしない。
+
+## Isolation / startup
+
+1. Read PROJECT_RULES / CLAUDE.md / ORCHESTRATION / CURRENT_STATE / H1 preflight report / this TASK.
+2. Use new Mac clean base `/Users/yuya/Developer/kabumori-fresh` with a fresh origin/main and independent G3 worktree.
+3. Confirm merged PR #82 SHA `80e11c9207d44599db26a25195f1ee0091484231` is ancestor of current main.
+4. G4 PR #76 is a separate active workstream. Do not touch PR #76 files/worktree/migration.
+5. PR #81 is merged. Do not alter its migration/history plan.
+6. No production connection, no production SQL, no deploy, no X call.
+
+## Chosen rollout policy
+
+Use the already-reviewed **schema-first / history-second checkpoint** policy rather than inventing a new migration or editing the accepted migration.
+
+The runner must make this explicit:
+
+### Stage A — exact schema apply
+- apply ONLY the exact merged `20261004090000_ai_lab_topic_claims.sql`
+- via direct psql/operator connection, not `supabase db push`, not `migration up`, not Management API
+- preserve the migration's own BEGIN/COMMIT exactly
+- ON_ERROR_STOP=1
+- no include-all / repair / history rewrite
+- no unrelated migrations
+
+### Stage B — mandatory read-back checkpoint
+After Stage A returns, before any history insertion:
+- catalog-read exact target table/index/constraint/RLS/function owner/signature/security/search_path/effective ACL
+- verify exactly five intended functions
+- verify no unsafe/default/public API privileges
+- verify target migration effects are fully present and safe
+- if response was lost/ambiguous, inspect catalog first; never blindly rerun
+- if catalog absent -> treat Stage A unapplied
+- if catalog fully correct -> proceed to Stage C only with the exact same frozen source/version/name
+- if catalog partial/unsafe -> STOP, no history write, no deploy, no automatic drop/down migration
+
+### Stage C — narrow history record
+Only after Stage B proves the target schema exactly correct:
+- insert only the exact migration history record for version `20261004090000`, name `ai_lab_topic_claims`
+- use a dedicated explicit transaction
+- re-read ledger immediately
+- never write/repair unrelated history rows
+- if insert fails, leave schema in place and STOP with `schema present / history missing`; do not deploy and do not automatically retry/repair
+
+The exact insert shape must be derived from the live ledger shape already documented by H1:
+`version text NOT NULL PK, statements text[], name text, created_by text, idempotency_key text UNIQUE, rollback text[]`.
+Do not assume fields beyond what is required; prove locally which minimal insert remains compatible with CLI pending/version detection.
+
+## Required deliverables
+
+Prefer adding:
+- `supabase/tests/ai_lab_topic_claims_rollout.sh`
+- `supabase/tests/ai_lab_topic_claims_rollout.md`
+
+The shell runner must default to **local/disposable only** and refuse accidental production execution unless an explicit operator-only environment switch is provided in a future authorized run. Do not embed production URL/project ref/credentials.
+
+It should support/rehearse:
+- preflight
+- Stage A exact migration apply
+- Stage B catalog verification
+- Stage C ledger insertion
+- postflight
+- failure modes
+
+Do not make it a generic migration runner.
+
+## Failure-state proof
+
+Use disposable PostgreSQL only and prove:
+
+1. clean success:
+   - no schema/no history
+   - Stage A -> exact schema
+   - Stage B PASS
+   - Stage C -> one exact history row
+   - postflight PASS
+
+2. migration SQL failure before COMMIT:
+   - no target schema
+   - no history
+
+3. lost/unknown Stage A response simulation:
+   - catalog determines whether schema exists
+   - runner never auto-reruns before catalog read-back
+
+4. Stage B detects unsafe/partial catalog:
+   - no history insertion
+   - no deploy recommendation
+
+5. Stage C history INSERT failure:
+   - schema remains exact
+   - history absent
+   - runner STOPs and marks operator-review-required
+   - no automatic history repair/retry
+
+6. rerun after fully completed rollout:
+   - detects exact schema + exact history and becomes no-op/read-only
+   - does not duplicate schema/history
+
+7. mismatch:
+   - wrong history name/version or drifted target object -> STOP
+
+## Production cutover runbook
+
+Document exact future order, but do NOT execute:
+
+1. same-day production read-only preflight
+2. verify no running/overdue AI Lab work
+3. freeze exact migration SHA and x-test-post source/import graph
+4. Stage A schema apply
+5. Stage B catalog/API-cache read-back
+6. Stage C exact history insert
+7. ledger read-back
+8. verify no in-flight/overdue old worker immediately before deploy
+9. deploy only exact `x-test-post`
+10. read back Function version/status/verify_jwt/source-byte graph
+11. no manual POST/scheduler/backlog injection
+12. separately authorized natural-cycle observation
+
+Document the cold-ledger limitation truthfully:
+- no historical event-claim backfill
+- dedupe guarantee is forward-looking from cutover
+- no retroactive no-repeat guarantee for already-posted diary topics
+
+## Scope / safety
+
+Allowed:
+- new rollout runner/docs/tests
+- local disposable DB proof
+- minimal static test updates if needed
+- .agent task/report
+
+Forbidden:
+- editing accepted migration `20261004090000_ai_lab_topic_claims.sql`
+- editing AI Lab runtime logic
+- production DB/history writes
+- Edge deploy
+- Cron/gate changes
+- real X/OpenAI/Vault/OAuth/token actions
+- PR #76 / PR #81 changes
+- generic migration-repair tooling
+
+## Verification
+
+Run:
+- rollout shell in disposable DB across all failure states
+- shell syntax
+- relevant migration source invariant/static checks
+- exact accepted migration SHA check
+- `git diff --check`
+- secret/project-ref scan
+
+No broad app/runtime test rerun required because runtime source is unchanged.
+
+## Completion / K3
+
+Report:
+- task_id/result
+- changed_files
+- accepted migration untouched proof + SHA
+- runner/runbook design
+- Stage A/B/C semantics
+- failure-state results
+- local tests
+- production reads/writes = 0
+- deploy/X/Vault/OAuth/Cron = 0
+- exact future production operator sequence
+- remaining risks
+- whether an additional Codex review is truly necessary
+- recommended reviewer model if needed, preferring Luna
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+Review policy:
+- do NOT automatically request Sol review.
+- If K3 shows only runner/docs/test additions and all local failure-state proofs pass, prefer either no extra review or at most **Luna（高）** for a single focused rollout-script review.
+
+---
+
+# Previous G3 task history — preserved below
+
+# Previous G3 task — preserved history
+
+- task_id: x-social-mobile-pr81-hardening-residual-corrective-20261005
+- owner: claude
+- slot: claude-3
+- status: done
+- next_owner: none
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: bounded corrective implementation / migration drift / function ACL / CAS finite-domain / rollout plan
+- continues_from: x-social-mobile-content-settings-schema-hardening-20261003
+- target_pr: 81
+- current_head: 5595fb131813542c55c43bc783af623cdb9ea442
+- blocks_pr: 78
+- production_mutation_allowed: false
+
+## C2 verdict / purpose
+
+H2 rereview of PR #81 returned **CHANGES REQUIRED**.
+
+Important:
+- the original large F1 JSON/persona contract issue is closed for inspected writer shapes;
+- the original table ACL/RLS flaw is closed;
+- finite-path CAS and normal concurrency behavior are closed;
+- most drift checks are closed.
+
+This task is **not** a redesign. It must correct exactly the remaining adversarial boundaries and produce a safe production-apply plan.
+
+PR #81 remains open/unmerged. Production apply is still forbidden.
+
+## Freshness / isolation
+
+1. Read PROJECT_RULES / CLAUDE.md / ORCHESTRATION / CURRENT_STATE / this TASK / full H2 rereview report.
+2. Use the existing isolated G3 worktree only.
+3. Fetch fresh `origin/main`.
+4. Confirm PR #81 exact head is still `5595fb131813542c55c43bc783af623cdb9ea442` before editing. If head moved, STOP.
+5. Fresh C2 comparison: main is 62 commits ahead of PR base with **0 overlap** across PR #81 files; still recheck before push.
+6. G4 PR #76 and direct AI-Lab PR #82 are separate. Do not touch their migrations/files.
+7. No production apply/write/deploy/Auth/Vault/X/OpenAI/Cron mutation.
+
+## Residual R1 — reject deferrable PK drift
+
+Current hardening validates PK key columns/count but not enough of the PK/index semantics.
+
+H2 reproduced:
+- replace the expected PK with `PRIMARY KEY (brand_id) DEFERRABLE INITIALLY IMMEDIATE`;
+- hardening succeeds;
+- actual repository `INSERT ... ON CONFLICT (brand_id) DO UPDATE` then fails with SQLSTATE 55000.
+
+Correction requirements:
+- explicitly require the expected immediate, non-deferrable PK contract;
+- verify the backing unique index is usable as an ON CONFLICT arbiter;
+- reject deferrable / initially deferred / unexpected PK/index drift;
+- do **not** silently repair an unknown PK definition;
+- add a disposable DB regression using the actual Settings upsert pattern, not catalog-only assertions.
+
+Expected result:
+- exact candidate PK -> accepted;
+- deferrable/wrong PK -> hardening refuses before mutation;
+- real owner upsert remains successful after hardening.
+
+## Residual R2 — helper function owner / ACL drift
+
+H2 reproduced an existing helper function with an unexpected EXECUTE grant to another role. `CREATE OR REPLACE` preserved that ACL and hardening did not reject it.
+
+Correction requirements for all content-settings helper/version functions introduced or replaced by the hardening migration:
+- validate exact expected signatures;
+- fail closed on unexpected overloads;
+- validate owner identity/policy before replacement;
+- fail closed on unexpected pre-existing grantees / EXECUTE ACLs;
+- after creation/replacement, assert exact effective EXECUTE privileges;
+- PUBLIC / anon / service_role / unrelated roles must not inherit unexpected EXECUTE;
+- authenticated may EXECUTE only the validator helper(s) that genuinely must run under CHECK evaluation;
+- version trigger function must not be directly executable by app roles if not required;
+- do not globally modify default privileges or unrelated role memberships;
+- do not silently rewrite an unexpected owner/ACL drift unless the exact known transition is explicitly justified and tested.
+
+Use effective privilege checks, not only `proacl` text.
+
+Add regressions for:
+- unknown helper EXECUTE grant;
+- unexpected helper owner;
+- unexpected overload/signature;
+- post-hardening exact ACL.
+
+## Residual R3 — finite CAS domain / infinity
+
+H2 reproduced a valid historical row with:
+`updated_at = 'infinity'`
+
+The current trigger:
+`greatest(clock_timestamp(), old.updated_at + interval '1 microsecond')`
+cannot advance infinity, so the same old CAS token remains reusable.
+
+Correction requirements:
+- before hardening changes, explicitly refuse existing rows with non-finite `updated_at`;
+- also assess `created_at` finite-domain expectations and document/enforce consistently if needed for invariant safety;
+- do not silently rewrite historical infinity values;
+- enforce finite timestamps for future rows/updates with a DB constraint or equivalent fail-closed invariant;
+- server-owned INSERT/UPDATE version semantics remain unchanged for valid finite rows;
+- preserve PR #78 string-token interface.
+
+Add tests:
+- existing updated_at=infinity -> hardening fails before mutation;
+- negative infinity likewise;
+- future finite timestamp (e.g. year 2999) remains valid if intended;
+- post-hardening attempt to write non-finite version is rejected/overridden safely;
+- same-transaction, concurrent one-winner, long-running earlier transaction, stale-token zero-row behavior remain GREEN.
+
+## Whole-chain production apply plan
+
+H2 proved actual Supabase CLI 2.116.0 gives **per-file atomicity**, not whole-chain atomicity.
+
+The current chain is:
+1. `20260922045046_social_mobile_content_settings_candidate.sql`
+2. `20261003120000_social_mobile_content_settings_hardening.sql`
+
+A normal migration-up can commit (1), then fail before/inside (2), temporarily leaving the known weak candidate live.
+
+This task must produce a concrete rollout plan that avoids exposing the weak candidate.
+
+Preferred options to evaluate:
+- a reviewed operator-controlled outer transaction that applies both source files atomically and records migration history correctly/safely, OR
+- a new deployment-safe source strategy that avoids ever exposing the weak intermediate state, without rewriting already-applied production history (none exists yet) and without breaking repo migration semantics.
+
+Do not implement a production history repair or remote apply here.
+
+Because production currently has neither migration version applied and the target table is absent, you may propose a source consolidation strategy **only if** it is clearly safer, preserves auditability, and H2 can independently review it. Do not silently rewrite the historical candidate without explaining why.
+
+The completion report must state the exact intended production apply commands/transaction boundaries conceptually, but do not execute them.
+
+## Preserve closed behavior
+
+Do not regress:
+- exact settings/persona JSON/type/key validation;
+- endLocal 24:00 only;
+- authenticated table privileges exactly SELECT/INSERT/UPDATE;
+- DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN denied;
+- owner-only RLS;
+- no service-role DML requirement;
+- server-owned finite monotonic updated_at;
+- CAS stale zero-row semantics;
+- brand FK cascade;
+- no durable publish/token/OAuth controls in settings/persona;
+- PR #78 source compatibility.
+
+## Tests
+
+Run independently after correction:
+
+### SQL / migration
+- original candidate -> corrected hardening
+- reapply exact hardened shape
+- all prior 20 drift cases
+- deferrable PK drift
+- wrong PK/index arbiter
+- unknown helper EXECUTE grant
+- unexpected helper owner
+- unexpected overload
+- infinity / -infinity existing versions
+- exact effective function ACL
+- table ACL/RLS
+- valid historical rows unchanged
+- invalid rows refuse
+- same-tx CAS
+- concurrent CAS one winner
+- long-tx no regression
+- actual repository upsert under authenticated owner
+- cascade lifecycle
+- no unrelated mutation.
+
+### App/source
+- focused content-settings repository tests
+- full social-mobile tests
+- PR #78 composition/merge-tree if useful
+- typecheck
+- lint
+- relevant Deno shared tests
+- bash syntax
+- `git diff --check`
+- secret/scope scan.
+
+Use disposable local PostgreSQL/Supabase only.
+
+## PR handling
+
+Prefer amending PR #81 normally.
+
+- preserve old reviewed head `5595fb131813542c55c43bc783af623cdb9ea442` in Report;
+- normal push only; no force push;
+- fresh-main integration only if needed;
+- do not merge.
+
+## Production safety
+
+Forbidden:
+- production migration apply / db push
+- migration history repair
+- production INSERT/UPDATE/DELETE
+- RLS/grant/function change
+- Edge deploy
+- Auth/Vault/X/OpenAI/Cron mutation
+- PR #78 merge/deploy.
+
+Read-only catalog checks are optional only if required to confirm no new collision; do not read user content/PII.
+
+## Completion / K3
+
+Report:
+- task_id/result
+- R1 deferrable-PK fix and proof
+- R2 helper owner/ACL fix and proof
+- R3 finite-version fix and proof
+- exact migration/source strategy chosen
+- whole-chain production apply plan
+- whether historical candidate changed and why
+- changed_files
+- SQL tests
+- app/Deno tests
+- old/new PR head
+- fresh-main overlap
+- production reads/mutations
+- remaining risks
+- safety checks
+- next recommendation.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+After K3, H2 independent rereview is mandatory.
+
+Recommended H2 model: **Sol（高）**.
+
+## Report — x-social-mobile-pr81-hardening-residual-corrective-20261005
+
+- task_id: x-social-mobile-pr81-hardening-residual-corrective-20261005
+- result: **PASS (source + disposable local proof; nothing applied)**. Model: Opus 5.5.
+- PR #81: old reviewed head `5595fb131813542c55c43bc783af623cdb9ea442` (confirmed unchanged before editing, preserved in history) -> new head `bcc01312c638f5922db4ffd6255ddddf6f611183`, normal push (no force), PR body appended truthfully. Not merged.
+- PR #78 head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7` untouched; `git merge-tree` of #78 onto new #81 head: clean (tree `7fb711e2`).
+- fresh-main overlap: main changed 59 files since the PR merge-base; overlap with the 8 PR #81 files = **0**. Version `20261003120000` not present on main. G4 PR #76 / AI-Lab PR #82 files untouched.
+
+### R1 — deferrable PK (fixed)
+Guard now requires exactly one PK whose constraint is `not condeferrable`, `not condeferred`, `convalidated`, with key exactly (brand_id), backed by an index that is `indisprimary`, `indisunique`, `indimmediate`, valid/ready/live, 1 key column = brand_id, no predicate/expressions, btree, default opclass for the column type, collation = column collation. Unknown PK definitions are refused, never repaired. Proof: drift refusals `pk_deferrable` (the H2 reproduction), `pk_initially_deferred`, `pk_composite`, `pk_missing`; the actual Settings writer pattern `INSERT … ON CONFLICT (brand_id) DO UPDATE` as authenticated owner through RLS succeeds after hardening (behavior section A). Constraint- and index-side immediacy are two independent checks; removing both makes `pk_deferrable` accepted -> suite FAIL.
+
+### R2 — helper owner/ACL (fixed)
+Guard: every `public.social_mobile_content_settings_%` routine must be one of the six known signatures (legacy touch, text_ok, text_list_ok, valid_settings, valid_persona, version) by oid — no overloads, other names or procedures; `prokind='f'`; owner = table owner (CREATE OR REPLACE would otherwise keep a foreign owner); grantees only owner/PUBLIC/anon/authenticated/service_role. Post-conditions: exactly five functions by signature, all owned by the table owner; exact non-owner EXECUTE list = authenticated on the four validators only; effective `has_function_privilege` false for anon/service_role on all, false for authenticated on `version()`. No default-privilege or role-membership change. Proof: drift refusals `helper_unknown_grant` (H2 reproduction, real parameter names so CREATE OR REPLACE would otherwise succeed), `touch_unknown_grant`, `helper_overload`, `helper_unknown_name`, `helper_procedure`, `helper_owner` (owned by another role), plus `after_hardening_function_grant`; behavior asserts effective EXECUTE for anon/authenticated/service_role/an unrelated role on all five, PUBLIC none, legacy function removed, and that revoking EXECUTE on a validator or either nested helper makes the owner's write fail (42501) — the four grants are genuinely required. Removing guard + post-condition makes `helper_unknown_grant` accepted -> suite FAIL.
+
+### R3 — finite versions (fixed)
+Guard (before any change) refuses rows with non-finite `updated_at` or `created_at` (`…_EXISTING_ROWS_NONFINITE`), never rewriting them. New CHECK `social_mobile_content_settings_finite_versions` `((isfinite(created_at) and isfinite(updated_at)) is true)`. Trigger semantics unchanged (server-owned, `greatest(clock_timestamp(), old + 1us)`); string-token interface unchanged. Proof: `updated_infinity`, `updated_minus_infinity`, `created_infinity` refused with the row byte-identical and nothing created; a valid historical row with a 2999 version survives hardening byte-identical and advances by exactly 1us on the next update; caller-supplied ±infinity overridden on update; with the trigger disabled, infinite values are refused by the CHECK while a finite 2999 value is accepted; same-tx / concurrent one-winner / long-tx no-regression / stale-zero-row / competing insert all still PASS. Removing guard + CHECK -> suite FAIL.
+
+### Migration / source strategy
+Historical candidate **unchanged** (its reviewed shape is exactly what the guard accepts; rewriting would discard review history and production has nothing applied, so there is nothing to gain). The hardening migration was amended in place (it is itself unapplied anywhere). Whole-chain safety comes from the apply procedure, not from rewriting history.
+
+### Whole-chain production apply plan (documented, NOT executed)
+`supabase/tests/social_mobile_content_settings_rollout.md`: same-day read-only preflight (table/functions absent, both versions absent from history, history column list, applying role owns brands, default ACL grantees only anon/authenticated/service_role, dependency shape, other pending migrations e.g. G4 `20261003090000` coordinated first). Apply in ONE outer transaction from the reviewed commit:
+`psql "<prod URL by operator>" --single-transaction -v ON_ERROR_STOP=1 -f …20260922045046_…candidate.sql -f …20261003120000_…hardening.sql -c "insert into supabase_migrations.schema_migrations (version, name) values ('20260922045046','social_mobile_content_settings_candidate'), ('20261003120000','social_mobile_content_settings_hardening')"`
+— schema and history commit together or not at all; never `db push`/`migration up` for these versions. Then a separate read-only read-back (history, RLS/policies, effective table and function privileges, constraints, single trigger). Failure handling = a separately approved removal transaction. Rehearsed locally: `SMCS_ATOMIC_CHAIN_REHEARSAL_PASS` (atomic success with both history rows; a forced failure after the hardening leaves no table and no history; per-file application of the same failure leaves the weak candidate — the contrast that motivates the plan).
+
+### changed_files (this corrective commit)
+- supabase/migrations/20261003120000_social_mobile_content_settings_hardening.sql (R1/R2/R3 + header)
+- supabase/tests/social_mobile_content_settings_behavior.sql (function ACL, nested EXECUTE, finite checks)
+- supabase/tests/social_mobile_content_settings_run.sh (rollout rehearsal, 14 new drift/non-finite/historical cases)
+- supabase/tests/social_mobile_content_settings_rollout.md (new)
+- supabase/functions/_shared/brand/social_mobile_content_settings_hardening_static_test.ts (R1/R2/R3/rollout invariants)
+
+### SQL tests (disposable local PostgreSQL 17.11, socket-only, non-superuser owner, fake data)
+`SOCIAL_MOBILE_CONTENT_SETTINGS_ALL_PASS` with 48 PASS markers (run twice): apply + re-run, single-transaction apply, atomic-chain rehearsal, behavior (contract 61+24 invalid cases, legitimate payloads incl. real upsert, table ACL/RLS, exact function ACL, CAS, finite, lifecycle/cascade, unrelated untouched), concurrent CAS one winner, long-tx no regression, competing insert, invalid rows refused, **37 drift refusals** (prior 20 + after-hardening + 4 PK + 6 function + function-grant after hardening … incl. all prior cases), 3 non-finite refusals, valid historical row unchanged, 3 enumerated repairs, cleanup. Mutation checks: combined removal of each new defence (R1 both immediacy checks; R2 guard + post-condition; R3 guard + CHECK) -> suite FAIL; single-layer removals are caught by the other layer (defence in depth). All disposable DBs dropped; cluster stopped and deleted.
+
+### App / Deno tests
+social-mobile 116/116; typecheck 0; lint 0; `deno test --no-check` `_shared/brand` + dry-run 162/162 (incl. 9 static invariants); `deno lint` clean; `bash -n` clean; `git diff --check` clean. App code unchanged in this commit; validators not loosened.
+
+### Production reads / mutations
+Production reads: 0. Production apply / db push / history repair / writes / RLS / grants / functions / deploy: 0. Auth/Vault/X/OpenAI/Cron: 0.
+
+### Remaining risks
+1. The rollout's history insert assumes `schema_migrations(version, name)` suffices for the CLI in use — confirm the column list in the preflight; the plan is a reviewed manual step and needs explicit approval.
+2. Cross-PR version collision noted by H2 (PR #76 and #82 both `20261003090000`) is outside PR #81 but affects any later `db push`; settle before combining histories.
+3. Local PostgreSQL proof only (no managed Supabase/PostgREST E2E).
+4. Validators remain callable via PostgREST RPC by authenticated (pure booleans).
+5. Structural validation only (no semantic secret detection in free text).
+
+### Safety checks
+Own G3 worktree/branch only; normal push; explicit-path staging; other workstreams' files untouched; untracked supabase/.temp and supabase/config.toml left alone; no secrets/PII in code, tests, PR or report.
+
+### Next recommendation
+H2 independent rereview of PR #81 at `bcc01312` (Sol（高）), focusing on R1–R3 closure and the rollout plan. Then a separately approved production apply per the plan with preflight and read-back. Only after that, rebase PR #78 and resume its review.
+
+---
+
+# Claude Task 3 — CURRENT TASK
+
+- task_id: x-social-mobile-content-settings-schema-hardening-20261003
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: codex
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: corrective implementation / DB migration / RLS / JSON contract / optimistic concurrency
+- continues_from: x-social-mobile-ai-consult-v1-20261002
+- blocks_pr: 78
+- production_mutation_allowed: false
+
+## C2 verdict / purpose
+
+H2 independently reviewed the existing source-only migration candidate:
+
+`supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql`
+
+and returned **FAIL / CHANGES REQUIRED**.
+
+PR #78 AI相談 v1 remains open/unmerged. The AI consultation source is not rejected on its merits; its durable settings/persona persistence prerequisite is not safe enough yet.
+
+This TASK hardens that schema prerequisite **in source + local disposable tests only**.
+
+Do NOT apply any migration to production.
+
+## Accepted H2 findings to correct
+
+### F1 / P1 — JSON boundary too weak
+
+The existing CHECKs allow durable malformed or forbidden data because SQL CHECK may evaluate NULL and pass, and `->>` coerces types.
+
+H2 reproduced acceptance of examples including:
+- required fields present but null
+- wrong scalar types that coerce through `->>`
+- malformed/missing generationWindow members
+- arrays with non-string/null/object members or overlong strings
+- structurally forbidden settings keys such as token/secret/oauth/publish controls
+- nested forbidden controls
+- persona fields with forbidden token/publish/history-like content or wrong types.
+
+The DB boundary must validate exact structured shape/types compatible with legitimate current app/server writers.
+
+### F2 / P1 — effective ACL too broad
+
+Production default ACL means the unchanged candidate can leave authenticated with non-DML privileges such as:
+- TRUNCATE
+- TRIGGER
+- REFERENCES
+- MAINTAIN
+
+H2 locally proved an authenticated role could TRUNCATE the settings table despite DELETE being denied.
+
+The corrected migration must normalize effective table privileges to true least privilege.
+
+### F3 / P2 — updated_at is not a robust version
+
+Current trigger uses `now()`, which is transaction-start time.
+
+H2 proved:
+- two updates within one transaction can retain the same timestamp
+- an earlier long-running transaction can write a timestamp older than a later transaction's version.
+
+PR #78 relies on `updated_at` as a compare-and-swap version, so the server-owned update value must be strictly monotonic for that row.
+
+### F4 / P2 — drift silently accepted
+
+`CREATE TABLE IF NOT EXISTS` lets a same-name but drifted table survive migration.
+H2 removed CHECK/FK constraints in a disposable DB, reran the original candidate, and migration succeeded while those constraints remained absent.
+
+The migration path must fail closed on unknown/unsafe drift rather than silently claim success.
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES, CLAUDE.md, ORCHESTRATION, CURRENT_STATE, this TASK.
+2. Read the full H2 report for `x-social-mobile-content-settings-schema-prereq-review-20261002`.
+3. Use independent G3 worktree/checkout.
+4. Fresh origin/main and PR #78 branch/head.
+5. Preserve original PR #78 head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7` as review history.
+6. G4 is independently changing publish-toggle authorization/migration/RPC. Do not touch its migration/RPC/function/files. Use a unique migration version and confirm no filename/order collision before push.
+7. H1 is reviewing Kabumori PR #79. Do not touch H1/G2 files.
+8. Read Supabase skill before DB work.
+9. No production apply/write/deploy.
+
+## Migration strategy
+
+Default: **preserve the historical source-candidate migration and add a new versioned hardening migration**.
+
+Do not silently rewrite `20260922045046_social_mobile_content_settings_candidate.sql`.
+
+If you believe consolidation/editing the historical never-applied migration is materially safer, STOP and report exact migration-history evidence and rollout rationale before changing that strategy. Do not make that choice implicitly.
+
+The new hardening migration must work safely when:
+- the original candidate has just created the exact expected table, and
+- the exact candidate already exists in a disposable/local environment.
+
+Unknown drift must fail explicitly.
+
+Production currently has no target table and no applied version `20260922045046`; that fact does not authorize apply here.
+
+## Required corrected contract
+
+### 1. Exact durable settings shape
+
+Use current source types/normalizers as the canonical value contract.
+
+At DB level, reject missing/null/wrong-type/unknown structured fields as appropriate.
+
+Validate at minimum:
+- root `settings` is object
+- exact/approved root keys only
+- `locale` string and currently supported values
+- `preferredTone` string, bounded
+- `themes` array of bounded strings, bounded count and per-item length
+- `objective` string, bounded
+- `frequencyTargetPerWeek` JSON number/integer semantics matching current writers; do not accept string coercion unless current canonical writer intentionally stores strings (prove if so)
+- `approvalMode` exact allowed values
+- `generationWindow` object with approved keys only
+- timezone string constrained to current legitimate contract; do not invent support that app/server cannot consume
+- `startLocal` time, **24:00 forbidden**
+- `endLocal` time, **24:00 allowed**
+- `defaultGenerationLocal` time, **24:00 forbidden**
+- `generationDayOffset` actual canonical type and allowed values
+- `optionalNgWords` array of bounded strings, count and per-item length
+- `notes` string, bounded.
+
+The DB is a structural safety boundary. Do not claim it can detect whether arbitrary allowed human text semantically contains a "secret"; that is not realistic.
+
+### 2. Exact persona shape
+
+Derive exact allowed durable keys/types from the current `PersonaProfile` model and server materializer.
+
+Requirements:
+- root object only
+- exact approved keys only
+- bounded strings/arrays/numbers as applicable
+- no raw posts/history bodies
+- no token/OAuth/publish/account/scheduler/Auth controls
+- provenance/confirmed/analyzed metadata remain in dedicated columns where the current schema expects them, not silently duplicated into arbitrary JSON
+- existing legitimate conversation and future bounded past-post-analysis profiles remain representable.
+
+Do not weaken client/server validators to make malformed DB rows pass.
+
+### 3. Null-safe CHECK semantics
+
+Every invariant must evaluate to TRUE for a valid row, not merely "not false".
+
+Use explicit `IS TRUE`, `jsonb_typeof`, key-existence/keyset tests, helper functions if justified, or equivalent fail-closed SQL.
+
+Avoid unsafe cast order where malformed JSON can produce migration/runtime errors rather than a clean CHECK failure.
+
+If helper validation functions are introduced:
+- fixed search_path
+- least privilege
+- deterministic/immutable semantics where valid
+- no dynamic SQL
+- no user-controlled object names
+- explicit EXECUTE grants/revokes.
+
+### 4. Least-privilege ACL
+
+Normalize effective ACL for this table/function(s).
+
+At minimum:
+- PUBLIC: no table privileges
+- anon: no table privileges
+- authenticated: only the exact operations needed by current mobile settings flow (expected SELECT/INSERT/UPDATE)
+- DELETE denied
+- TRUNCATE denied
+- REFERENCES denied unless concretely needed
+- TRIGGER denied
+- MAINTAIN denied
+- service_role: grant only what a current proven server path actually needs; do not inherit broad defaults by accident.
+
+Do not globally alter database default privileges or unrelated tables.
+
+RLS remains enabled and owner-scoped to exact `brand_id + auth.uid()`.
+
+Test effective privileges, not only the GRANT statements in the file.
+
+### 5. Monotonic CAS version
+
+Keep compatibility with PR #78's `updated_at timestamptz` CAS unless a change is demonstrably necessary.
+
+Preferred bounded approach to evaluate:
+`greatest(clock_timestamp(), old.updated_at + interval '1 microsecond')`
+on every UPDATE, ignoring caller-supplied version.
+
+Requirements:
+- strictly greater than OLD.updated_at
+- cannot regress due to transaction-start time
+- same transaction repeated updates advance
+- normal concurrent CAS yields one winner
+- stale old timestamp yields zero updates
+- caller cannot set arbitrary future/past version
+- insert gets a server-owned initial version.
+
+If PostgreSQL timestamptz precision/serialization creates any remaining ABA/collision issue, document and fix before declaring PASS. A revision integer is allowed only if coordinated app/schema change is justified; avoid unnecessary scope expansion.
+
+### 6. Drift guard / migration safety
+
+The hardening migration must distinguish:
+- expected exact candidate shape -> harden successfully
+- already-hardened exact shape -> safe/idempotent behavior where migration tooling may re-run in disposable tests
+- unexpected same-name relation/column/FK/CHECK/function/trigger/policy drift -> explicit failure.
+
+Do not silently repair arbitrary unknown drift unless every repaired property is deliberately enumerated and safe.
+
+Validate:
+- expected columns/types/nullability/defaults
+- PK/FK target + ON DELETE action
+- expected relation kind/schema
+- policy/function/trigger identity where relevant.
+
+Avoid trusting constraint names alone; verify definitions/columns/actions for security-critical properties.
+
+### 7. FK / lifecycle compatibility
+
+Confirm:
+- `brand_id` text compatible with current `brands(id)`
+- FK ON DELETE CASCADE is still intended
+- settings row disappears with brand deletion
+- current common-account source work does not require a different owner key
+- no dependency on unapplied common-account production schema for this table to function
+- no interference with G4's new publish-toggle migration/RPC.
+
+## Local disposable proof
+
+Use G3-owned disposable PostgreSQL/Supabase environment only.
+
+Must execute:
+
+### Valid behavior
+- original candidate -> hardening migration succeeds
+- legitimate default row succeeds
+- current Settings screen payloads succeed
+- current PR #78 save/persona payloads succeed
+- endLocal 24:00 succeeds
+- startLocal/defaultGenerationLocal 24:00 fail
+- legitimate persona examples succeed.
+
+### Invalid JSON/persona
+Regression-test H2 adverse cases:
+- missing/null required fields
+- wrong scalar types
+- numeric/bool text coercion
+- malformed generationWindow
+- unknown root/window/persona keys
+- non-string array items
+- overlong array items
+- forbidden publish/token/oauth/account/scheduler-like structured keys
+- invalid persona shapes.
+
+### ACL/RLS
+Under representative roles:
+- owner SELECT/INSERT/UPDATE succeed
+- owner DELETE fails
+- owner TRUNCATE fails
+- owner cannot CREATE TRIGGER on table
+- owner cannot use REFERENCES privilege
+- member/viewer/nonmember/cross-brand fail DML/read as intended
+- anon fails
+- effective privilege queries prove only intended privileges.
+
+### CAS
+- distinct transactions advance
+- two updates in same transaction advance strictly
+- long-running earlier transaction cannot regress version
+- concurrent CAS exactly one winner
+- stale CAS zero rows
+- competing insert -> unique conflict
+- caller-supplied timestamp cannot control version.
+
+### Drift
+Create representative bad same-name structures:
+- missing FK
+- wrong FK target/action
+- missing/weak CHECK
+- wrong column type/nullability
+- wrong trigger/function/policy
+and prove hardening refuses unknown drift or explicitly repairs only the enumerated safe case.
+
+### Lifecycle
+- brand delete cascades settings row
+- no unrelated rows/tables touched.
+
+Drop disposable DB/cluster after proof.
+
+## Source consumers / tests
+
+Compare and run:
+- current content-settings domain validators
+- content-settings repository
+- shared server normalizer/materializer
+- PR #78 tests where source can be tested without production table
+- full social-mobile tests
+- relevant Deno/shared tests
+- migration-specific SQL test harness
+- typecheck/lint
+- `git diff --check`
+- secret/scope scan.
+
+Do not loosen application validators simply because the DB is hardened.
+
+## PR #78 handling
+
+You may amend PR #78 with the new hardening migration/tests if that is the cleanest ownership path, because G3 owns the blocked feature.
+
+If you do:
+- keep exact original head in Report
+- rebase/fresh-main safely
+- ensure no overlap with G4 migration/RPC work
+- update PR body truthfully
+- do not merge.
+
+Alternatively create a dedicated prerequisite PR and report dependency ordering. Choose based on smallest conflict and clearest rollout; document why.
+
+## Production safety
+
+Forbidden:
+- production migration apply
+- production settings INSERT/UPDATE/DELETE
+- production RLS/grant/function change
+- Edge deploy
+- Auth/Vault/X/OpenAI/Cron mutation
+- PR #78 merge.
+
+Read-only production catalog inspection is allowed only if needed to confirm no new collision since H2.
+
+## Completion / K3
+
+Report:
+- task_id/result
+- migration strategy chosen
+- original H2 F1-F4 disposition
+- exact table/settings/persona contract
+- ACL/RLS result
+- monotonic CAS design and proofs
+- drift handling
+- lifecycle/common-account compatibility
+- changed_files
+- local disposable SQL evidence
+- app/server tests
+- original PR #78 head and new PR/dependency head
+- production reads/mutations
+- remaining risks
+- safety checks
+- next recommendation.
+
+Then status -> review_required, next_owner -> chatgpt, STOP for K3.
+
+After K3, allocate fresh H2 review before any production apply or PR #78 merge.
+
+Recommended Codex rereview: **Sol（高）**.
+
+## Report — x-social-mobile-content-settings-schema-hardening-20261003
+
+- task_id: x-social-mobile-content-settings-schema-hardening-20261003
+- result: **PASS (source + disposable local proof; nothing applied)**. Model: Opus 5.5.
+- PR: https://github.com/anohi-memories/kabumori/pull/81 — branch `claude/g3-content-settings-hardening-20261003`, head `5595fb13` (rebased on origin/main `cde3a7d3`), pushed. Not merged.
+- original PR #78 head: `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7` — **unchanged** (not amended, not rebased). Dependency order: #81 (review -> separate apply approval -> apply) first, then #78 rebased on it. `git merge-tree` of #78 onto #81: clean, no conflict (only shared file: content-settings-repository.ts).
+
+### Migration strategy
+- Kept `20260922045046_social_mobile_content_settings_candidate.sql` byte-unchanged as history; added `20261003120000_social_mobile_content_settings_hardening.sql` after it.
+- Unique version; G4 PR #76 uses `20261003090000_social_mobile_publish_permission_boundary.sql` and does not reference this table/its functions (grep of its migration on the fetched branch: 0 hits). No H1/G2/G4 file touched.
+- Chosen over amending #78: the table is a prerequisite of main's existing Settings screen too, so it can be reviewed/applied on its own and #78 stays a pure feature PR.
+- Must run inside one transaction (migration tool / `psql -1`); the file itself has no BEGIN/COMMIT. All checks run before the first change; post-conditions after the last.
+
+### H2 F1–F4 disposition
+- F1 FIXED: `social_mobile_content_settings_valid_settings(jsonb)` / `_valid_persona(jsonb)` (+ `_text_ok`, `_text_list_ok`): plpgsql IMMUTABLE PARALLEL SAFE, `search_path=pg_catalog`, no dynamic SQL, type checked before any cast, never NULL. CHECKs are `(... ) is true`. Candidate shape CHECKs replaced.
+- F2 FIXED: `revoke all ... from public, anon, authenticated, service_role` + `grant select, insert, update ... to authenticated`; validators EXECUTE to authenticated only (proven necessary: CHECK runs with the writer's privileges); version function EXECUTE to nobody. No default-privilege change. Post-condition asserts the exact effective ACL and zero column ACLs.
+- F3 FIXED: single trigger `social_mobile_content_settings_version` BEFORE INSERT OR UPDATE; INSERT sets created_at=updated_at=clock_timestamp(); UPDATE keeps created_at and sets `greatest(clock_timestamp(), old.updated_at + 1us)`. Old `touch_updated_at` trigger+function dropped. timestamptz stays (PR #78 CAS contract unchanged).
+- F4 FIXED: catalog drift guard (see below) + refusal when existing rows break the contract (`..._EXISTING_ROWS_INVALID`, nothing rewritten).
+
+### Exact table / settings / persona contract
+- Columns (exact set): brand_id text NOT NULL PK + FK -> public.brands(id) ON DELETE CASCADE; settings jsonb NOT NULL; persona_profile jsonb NOT NULL default {}; persona_provenance text NOT NULL in (conversation, past_post_analysis, manual); persona_confirmed boolean NOT NULL default false; persona_last_analyzed_at timestamptz NULL; persona_last_analyzed_count integer NULL 0..1000; created_at/updated_at timestamptz NOT NULL (server-owned).
+- settings: exactly {locale, preferredTone, themes, objective, frequencyTargetPerWeek, approvalMode, generationWindow, optionalNgWords, notes}; locale = "ja-JP"; preferredTone string 1..120 non-blank; themes array <=8 of non-blank strings <=100; objective 1..160 non-blank; frequencyTargetPerWeek JSON number, integer 0..14; approvalMode "manual_review"|"auto_post_preference"; generationWindow exactly {timezone="Asia/Tokyo", startLocal HH:MM (no 24:00), endLocal HH:MM or 24:00, defaultGenerationLocal HH:MM (no 24:00), generationDayOffset JSON number -1|0}; optionalNgWords array <=20 of non-blank strings <=60; notes string <=1000. Blank = only ASCII/full-width whitespace.
+- persona_profile: object with only {toneSignals <=20x80, recurringVocabulary <=30x50, topicSignals <=20x80, openingClosingPatterns <=20x100 (non-blank string items), punctuationEmoji/hashtagHabits/ctaStyle strings <=200, sentenceLength short|mixed|long}. source/confirmed/analyzedAt/analyzedPostCount are column data and refused as JSON keys.
+- Not claimed: semantic secret detection inside allowed free text.
+
+### ACL / RLS result
+Effective privileges (has_table_privilege, all 8 privileges incl. MAINTAIN) for anon/authenticated/service_role: only authenticated SELECT/INSERT/UPDATE; PUBLIC none; no column ACL. RLS enabled; the three owner policies recreated unchanged in meaning (`brand_id` + `(select auth.uid())` + role owner); no DELETE policy. Proven: owner SELECT/INSERT/UPDATE ok; owner DELETE/TRUNCATE/CREATE TRIGGER/REFERENCES/ALTER denied (42501); admin/member/viewer/non-member see 0, update 0, insert denied; owner A cannot update/insert/move rows to brand B/C; anon and service_role denied.
+
+### Monotonic CAS design and proofs
+Distinct transactions advance; two updates in one transaction advance strictly and the first version then matches 0; stale CAS 0 rows; current CAS 1 row; caller-supplied updated_at/created_at (future or past) ignored; update cannot move the version back; from a far-future stored version it still advances by exactly 1us per update; `to_json(updated_at)` token round-trips exactly. Two-connection: concurrent CAS on one version -> changed=1 / changed=0 and the first writer's value stored; an earlier long-running transaction updating after a later commit still ends strictly above it; two first inserts -> one row + duplicate key. Residual: only a delete+recreate of the same brand id combined with a backwards wall clock could reproduce an old token (users cannot DELETE; rows disappear only with their brand).
+
+### Drift handling
+Accepted states: exact candidate, or the hardened shape (safe re-run proven). Verified by definition: relation kind/schema, no inheritance/partition, exact column name/type/nullability/identity/generated set, single PK on brand_id, single FK brand_id -> brands.id ON DELETE CASCADE / ON UPDATE NO ACTION / validated / not deferrable, only known-named CHECKs, only the PK index, only the candidate/hardened trigger bound to its own function, only the three owner policies, grantees only owner/PUBLIC/anon/authenticated/service_role (table and column). Refused in proof (20): FK missing / retargeted / RESTRICT / NOT VALID / extra; column type / nullable / extra / missing; unknown CHECK; extra UNIQUE; extra index; unknown trigger; rebound trigger; extra policy; unknown table grantee; unknown column grantee; table missing; same-name view; drift introduced after hardening. Each refusal leaves no partial change. Enumerated repair only: weakened or missing known-named candidate CHECK, and over-broad grants to anon/authenticated/service_role -> replaced/normalised (proven).
+
+### Lifecycle / common-account compatibility
+brand_id text matches brands.id text; ON DELETE CASCADE kept and proven (also when the deleting role has no privilege on this table — the RI action runs as the table owner); other brand's row and an unrelated table untouched. No dependency on the unapplied common-account (PR #70) schema; owner key stays the existing brand membership model. No interaction with G4's publish-toggle migration/RPC.
+
+### changed_files (PR #81)
+- supabase/migrations/20261003120000_social_mobile_content_settings_hardening.sql (new)
+- supabase/tests/social_mobile_content_settings_{fixture.sql,behavior.sql,run.sh} (new)
+- supabase/functions/_shared/brand/social_mobile_content_settings_hardening_static_test.ts (new)
+- apps/social-mobile/src/data/content-settings-repository.ts (saveConfirmedProposal no longer copies analyzedAt/analyzedPostCount into persona_profile)
+- apps/social-mobile/tests/content-settings-repository.test.mjs (new)
+
+### Local disposable SQL evidence
+Homebrew PostgreSQL 17.11, own cluster, Unix socket under /private/tmp only, lc_messages=C, non-superuser owner, fixture default ACL = ALL to anon/authenticated/service_role (broader than production's TRUNCATE/REFERENCES/TRIGGER/MAINTAIN). Runner output: APPLY_AND_RERUN, SINGLE_TRANSACTION_APPLY, BEHAVIOR (61 invalid settings + 24 invalid persona cases rejected with 23514; legitimate default/Settings/bounds/24:00/PR78 persona/full analysis persona accepted; ACL/RLS; CAS; lifecycle), CONCURRENT_CAS_ONE_WINNER, LONG_TRANSACTION_NO_REGRESSION, COMPETING_INSERT_UNIQUE, EXISTING_INVALID_ROWS_REFUSED, DRIFT_REFUSED x20, ENUMERATED_REPAIR x3, CLEANUP -> `SOCIAL_MOBILE_CONTENT_SETTINGS_ALL_PASS`. Mutation checks (8): version via now(), no key-count check, FK action unchecked, frequency type unchecked, blank text allowed, startLocal unchecked, extra policy tolerated, ACL normalisation + post-condition removed -> each made the suite fail. All disposable databases dropped; cluster stopped and deleted.
+
+### App / server tests
+social-mobile `npm test` 116/116 (incl. 3 new repository tests); typecheck 0; lint 0; `deno test --no-check` `_shared/brand` + `social-mobile-brand-dry-run` 158/158 (incl. 5 new static invariants; candidate static tests still pass); `deno lint` clean; `bash -n` clean; `git diff --check` clean. App validators were not loosened. Note: main's app validator still rejects its own 24:00 default — fixed in PR #78 (not merged here, per H2).
+
+### Production reads / mutations
+Production reads: 0 (no catalog inspection needed; relied on H2's 2026-10-03 read-only facts). Production mutations / apply / deploy / RLS / grants / migration history: 0. OpenAI / X / Auth / Vault / Cron: 0.
+
+### Remaining risks
+1. If production's default ACL also grants this new table to a role other than anon/authenticated/service_role, the guard stops the migration (fail closed). Do a read-only `aclexplode(acldefault)` / default-ACL check in the apply preflight.
+2. Validators are public functions callable via PostgREST RPC by authenticated (pure boolean, no side effects). Moving them to a non-exposed schema would be a separate decision.
+3. Structural validation only; free text is not secret-scanned.
+4. Theoretical old-token reuse only after brand delete+recreate with a backwards clock (see CAS).
+5. Requires transactional application; not tested through managed Supabase/PostgREST (local PostgreSQL only).
+6. #78 must still be rebased after #81 and re-reviewed for its own A–H gates.
+
+### Safety checks
+Own G3 worktree/branch; explicit-path staging; no other slot's files; untracked supabase/.temp and supabase/config.toml left alone; no secrets/tokens/personal data in code, tests, PR or report.
+
+### Next recommendation
+H2 rereview of PR #81 (Sol（高）): contract completeness vs writers, ACL/default-ACL assumptions, CAS trigger, drift guard coverage. Then a separate, explicitly approved production apply with read-only preflight and read-back. Only after that, rebase PR #78 and resume its review.
+
+---
+
+# Claude Task 3 — CURRENT TASK
+
+- task_id: x-social-mobile-ai-consult-v1-20261002
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: codex
+- priority: high
+- recommended_model: Opus5.5（高）
+- type: feature implementation / AI conversation / Edge Function / authenticated settings proposal
+- production_mutation_allowed: false
+
+## Product goal
+
+X自動投稿アプリの「AIと相談する」を、現在のローカル疑似判定から**本当にAIと自然に会話できる機能**へ進める。
+
+この機能は投稿生成そのものではなく、その前段としてAIがユーザーを理解する場所。
+
+ユーザーは普通の会話で、
+- どんな投稿をしたいか相談する
+- AIから不足情報を質問してもらう
+- 発信テーマ、文体、読者、目的、NG表現などを整理する
+- 現在AIが理解している投稿方針を聞く
+- 簡単な雑談や一般的な質問をする
+ことができる。
+
+会話から設定変更候補が生まれても、**AIは勝手に保存しない**。
+必ずユーザーが内容を確認して「これで覚えて」等の明示操作をした後だけ、既存の投稿設定 / PersonaProfileへ保存する。
+
+過去X投稿の実取得・分析はこのTASKでは行わない。現在の同意導線・意図検出を壊さず、K3後に別G4 TASKとして接続できる境界だけ維持する。
+
+## Existing foundation — preserve and reuse
+
+Fresh mainで以下が既に存在する。
+
+- `apps/social-mobile/src/app/(tabs)/consult.tsx`
+  - 会話画面
+  - 保存前提案カード
+  - 明示確認
+  - existing settings/persona read/save
+- `apps/social-mobile/src/domain/content-settings.ts`
+  - `SocialMobileContentSettings`
+  - `PersonaProfile`
+- `apps/social-mobile/src/domain/content-settings-conversation.ts`
+  - bounded structured proposal
+  - untrusted AI-output validator
+  - publish/account/OAuth/token/scheduler controlsの拒否
+  - past-post learning intent scaffold
+- `apps/social-mobile/src/data/content-settings-repository.ts`
+  - existing `social_mobile_content_settings` storage
+  - settings + confirmed persona save
+  - settings-only saveがpersonaを消さない設計
+
+Current `createConversationalAssistantProposal()` is deterministic/local scaffolding. This TASK replaces the runtime conversation path with an authenticated server-side AI boundary while keeping deterministic helpers/validators useful for tests/fallback where appropriate.
+
+## Mandatory startup / isolation
+
+1. Read `PROJECT_RULES.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK.
+2. Use an independent G3 worktree/checkout. Do not use G1/G2/G4/G5/H1/H2 worktrees, untracked files, simulator, Metro or branch.
+3. Fresh `origin/main`.
+4. Confirm G4 is done and PR #65 merged.
+5. Confirm G5/H1 common-account PR #70 work does not overlap intended runtime files.
+6. **Do not create or edit a DB migration in this TASK.** Existing `social_mobile_content_settings` schema/persona columns are the storage boundary. If production/source schema is actually insufficient, STOP and report the exact missing column/constraint instead of creating a migration while the common-account migration review is active.
+7. Inspect existing AI/LLM Edge Functions/shared helpers/model config and reuse the established provider/client/usage/error patterns. Do not introduce a new AI vendor or duplicate secret scheme.
+
+## Functional requirements
+
+### 1. Real conversational AI
+
+Implement an authenticated server-side AI conversation endpoint for social-mobile consultation.
+
+Preferred boundary:
+- a dedicated narrowly scoped Edge Function such as `social-mobile-consult`, unless repository conventions clearly point to an existing suitable endpoint.
+- client never receives AI provider secret.
+- no direct provider call from Expo client.
+
+Request should be bounded and include only what the assistant needs:
+- current brand/workspace id
+- current confirmed `SocialMobileContentSettings`
+- current confirmed `PersonaProfile` if present
+- bounded recent conversation turns from this consultation session
+- current user message
+
+Do not send:
+- OAuth tokens
+- X access/refresh tokens
+- Vault ids/plaintext
+- provider credentials
+- unrelated workspace data
+- raw account deletion/auth internals.
+
+Keep history bounded. Do not send an unlimited chat transcript.
+
+### 2. Natural conversation modes
+
+The AI must support at least these behaviors without requiring explicit mode buttons:
+
+**A. General conversation / simple questions**
+Examples:
+- 「今日何投稿しようかな」
+- 「Xってどれくらいの頻度がいい？」
+- 「最近ネタがない」
+- 「ちょっと疲れた」
+- simple casual conversation / brainstorming / general questions
+
+It should answer naturally.
+A normal answer **must not automatically create a settings proposal**.
+
+No web search/current-news browsing in v1. If the user asks for genuinely current/external facts that cannot be known from supplied context, the assistant should say that this consultation chat does not currently fetch live web information rather than inventing it.
+
+**B. Preference discovery**
+When the user wants help deciding posting style or has not supplied enough detail, AI should ask concise follow-up questions naturally.
+
+Important:
+- avoid a rigid questionnaire dump.
+- ask preferably 1 useful question at a time, at most 2 when tightly related.
+- do not force questions when enough information exists.
+- use already confirmed settings/persona so it does not repeatedly ask what it already knows.
+
+Useful dimensions include:
+- main themes
+- intended audience
+- purpose
+- tone/formality
+- post length / sentence length
+- emoji/punctuation tendencies
+- CTA style
+- hashtag tendency
+- topics/expressions to avoid
+- posting frequency preference
+- personal/private disclosure boundaries where explicitly discussed
+
+Do not invent personal facts.
+
+**C. Explain current understanding**
+If user asks things like:
+- 「今どういう設定になってる？」
+- 「俺の投稿方針どう理解してる？」
+AI should explain the currently saved settings/persona clearly without proposing a mutation unless the user asks to change something.
+
+**D. Settings/persona proposal**
+Only when the conversation contains a reasonably clear preference/change should the AI return a structured proposal delta.
+
+Examples:
+- 「もっと親しみやすくして」
+- 「AIの話を多めにしたい」
+- 「絵文字は少なめ」
+- 「週5回くらい」
+
+Proposal must be a **delta**, not a replacement snapshot, so unrelated saved fields are preserved.
+
+Ambiguous statements such as「AIの話多めでもいいかな」should be handled conversationally and may ask/offer confirmation rather than silently treating them as durable settings.
+
+### 3. Structured AI contract
+
+Keep/reuse `validateConversationalAssistantResult()` as the trust boundary and strengthen it if needed.
+
+Model output must be parsed as untrusted structured data containing conceptually:
+- assistant reply
+- optional settings delta
+- optional persona delta
+- follow-up questions
+- confidence / uncertainty
+- history-learning intent
+- requires confirmation = true for any persistent change
+- publish permission changed = false
+
+Add explicit distinction if helpful between:
+- chat-only response
+- clarification/question
+- proposal
+
+But do not allow the model to control:
+- auto-post on/off
+- publish permission
+- posting execution
+- scheduler
+- OAuth/account selection
+- Auth/session
+- deletion
+- secrets/tokens.
+
+Malformed/unsafe structured output must fail closed:
+- show a safe retryable assistant error or safe chat fallback
+- do not save anything
+- do not alter posting state.
+
+### 4. Confirmation and persistence
+
+Existing principle remains mandatory:
+
+**conversation → proposal → user confirmation → save**
+
+Never:
+- mutate settings on AI response arrival
+- mutate persona because AI “learned” something without confirmation
+- enable posting
+- create scheduled posts
+- change X connection.
+
+When user confirms:
+- apply only the returned delta to the latest known/safely refreshed saved state
+- preserve unrelated existing fields
+- save settings/persona using the existing repository/storage boundary
+- visibly report save success/failure.
+
+If a proposal became stale because saved settings changed during the conversation, prefer re-read/merge or require reconfirmation rather than silently overwriting unrelated newer settings.
+
+### 5. Conversation UX — functional only
+
+UI design will be substantially redesigned later. Do NOT spend time on polish.
+
+Functional minimum:
+- user message input
+- send action
+- visible assistant/user turns
+- loading state
+- retryable error state
+- proposal/“AIが理解した内容” block only when there is something persistent to confirm
+- clear explicit confirmation button
+- clear indication after successful save
+- user can keep chatting after a proposal/save
+- current settings can be explained through conversation.
+
+Do not redesign global navigation, theme, cards, spacing, animation, avatar, etc.
+
+### 6. Past-post learning handoff
+
+Do **not** fetch X history in this TASK.
+
+If user says:
+- 「過去の投稿を読んで」
+- 「自分の過去ポストから学んで」
+the AI may recognize the intent and explain that past-post learning requires explicit confirmation / the upcoming learning flow.
+
+Preserve a structured `historyLearningIntent` boundary so the next G4 task can attach:
+- verified connected X account
+- bounded post fetch
+- style analysis
+- user confirmation
+without redesigning this chat contract.
+
+No X API read/write in this TASK.
+
+## Authentication / authorization boundary
+
+Because this adds an Edge Function/API boundary:
+
+1. Require valid user JWT/session.
+2. Do not trust a client-supplied brand id by itself.
+3. Verify the caller has current allowed membership/ownership for that brand using the repository's established social-mobile authorization pattern.
+4. Do not use future/common-account service entitlement semantics from unmerged PR #70.
+5. Fail closed for missing/ambiguous membership.
+6. Never log Authorization headers, JWTs, user email, AI provider secrets, X tokens, or full sensitive conversation bodies.
+7. Prefer metadata-only logs: request id, result class, bounded lengths/counts, error code, duration/model usage if existing conventions support it.
+
+## Cost / abuse bounds
+
+Reuse existing AI cost/usage helpers if present.
+
+At minimum:
+- cap user message length
+- cap number of conversation turns sent
+- cap total context length
+- cap model output
+- one model call per send under normal path
+- no automatic recursive “agent” loops
+- no web search
+- no X API call
+- bounded timeout
+- deterministic error path.
+
+Use the least expensive existing model/config that safely supports the repository's structured-output contract; do not introduce a premium model simply because Claude is implementing the feature.
+
+## Data/privacy behavior
+
+For v1:
+- do not create a new table to persist raw chat transcripts.
+- raw conversation may live in screen/session state only.
+- durable memory is the **user-confirmed structured settings/persona**, not the entire transcript.
+- do not store raw conversation text in analytics/logs.
+- if existing observability captures request bodies, explicitly prevent consultation text from being logged there.
+
+This keeps the “AI learns me” behavior transparent: it remembers only what the user confirms.
+
+## Tests
+
+Add focused tests for at least:
+
+### Server/API
+- unauthenticated request rejected
+- caller without brand membership rejected
+- valid member accepted
+- bounded message/history input
+- oversized/malformed input rejected
+- AI secret never returned/logged
+- safe model response parses
+- malformed JSON/shape fails closed
+- model attempt to include publish/OAuth/token/scheduler/account controls rejected
+- chat-only response creates no proposal
+- proposal response cannot persist by itself
+- current-settings explanation path has no mutation
+- past-post intent creates no X API call
+- provider timeout/error is safe/retryable
+- model call count bounded
+
+### Domain/client
+- multi-turn assistant history sent in bounded form
+- normal chat displays reply without proposal card
+- follow-up question displays naturally
+- proposal displays only changed fields
+- explicit confirmation persists
+- unconfirmed proposal persists nothing
+- correction in later turn supersedes/replaces prior pending proposal safely
+- unrelated settings remain unchanged when applying a delta
+- existing persona not erased by settings-only confirmation
+- settings changed after proposal cannot be silently clobbered
+- general chat never toggles posting/scheduling/X connection
+- history-learning request stays consent-gated / no fetch.
+
+Run:
+- new focused tests
+- full social-mobile tests
+- relevant Edge Function/shared tests
+- typecheck / lint / runtime check per repo conventions
+- `git diff --check`
+- secret scan
+- scope diff check.
+
+No live paid AI call is required in automated tests; mock/stub the model boundary.
+
+## Local verification
+
+Use G3-owned environment only.
+
+Verify with local/mock AI responses or a safe dev invocation:
+1. greeting / casual conversation returns a natural answer
+2. 「どんな投稿にしたらいい？」 produces a useful follow-up question
+3. 「親しみやすく、AIの話を多めにしたい」 produces a reviewable proposal
+4. before confirmation, saved settings unchanged
+5. after explicit confirmation, local/test storage shows only intended changes
+6. 「今どういう設定？」 explains saved understanding
+7. 「過去投稿を読んで」 does not call X and remains consent-gated
+8. no posting/schedule/X connection side effect.
+
+Do not use real X posting or destructive production flows.
+
+## DB / migration rule
+
+**No new migration in this task.**
+Use the existing `social_mobile_content_settings` settings/persona storage.
+
+If the required production schema columns are absent or incompatible:
+- STOP
+- report exact evidence
+- do not create a migration
+- do not borrow/modify PR #70 common-account migration.
+
+## Explicit non-scope
+
+- actual past-X-post retrieval/analysis
+- AI-generated post creation
+- editing/regeneration/approval of a generated post
+- automatic posting
+- scheduled posting
+- X API read/write
+- x-connect/OAuth behavior
+- login provider changes
+- account deletion
+- common-account/service-entitlement implementation
+- new DB migration/schema
+- major UI redesign
+- production deploy
+- feature flag rollout.
+
+## Production / safety
+
+This is **source + tests + PR only**.
+
+Forbidden:
+- production Edge Function deploy
+- production DB mutation
+- migration apply
+- real X API operation
+- real X post
+- Vault mutation
+- Auth mutation
+- provider configuration mutation.
+
+## Completion / K3
+
+Report:
+- task_id
+- result
+- architecture / endpoint chosen
+- existing foundations reused
+- exact AI request/response trust boundary
+- authorization checks
+- chat modes implemented
+- confirmation/persistence semantics
+- changed_files
+- tests
+- local verification
+- AI/provider/model usage policy
+- DB migration = none
+- production mutation = 0
+- real X operations = 0
+- remaining issues
+- safety_checks
+- commit_hash / push / PR
+- next_recommendation.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+### Expected next stage
+
+Because this task introduces an authenticated AI Edge Function/API boundary, K3 should normally allocate a focused Codex review before merge.
+
+Likely review:
+- H2 if free
+- recommended Codex model: **Sol（高）**
+- focus: Auth/membership boundary, prompt/structured-output injection, no implicit persistence, cost bounds, no publish/X side effects.
+
+Only after source review/merge should G4 be assigned the real **past-post learning** integration.
+
+
+## Report — x-social-mobile-ai-consult-v1-20261002
+
+- task_id: x-social-mobile-ai-consult-v1-20261002
+- result: **PASS (source + tests + PR; K3 / Codex review requested before merge)**. Model: Opus 5.5 (switched by the user before start).
+- PR: https://github.com/anohi-memories/kabumori/pull/78 — branch `claude/g3-ai-consult-v1-20261002`, commit `6e9f78a3` (rebased on origin/main `0c2c04e0`), pushed.
+
+### Architecture / endpoint chosen
+- New dedicated Edge Function `supabase/functions/social-mobile-consult` (`index.ts` + pure `logic.ts`). Read-only: it has no write path, no service-role client, no token/Vault adapter, no X adapter.
+- Client: `domain/consult-session.ts` (pure), `data/consult-client.ts` (functions.invoke), rewritten `app/(tabs)/consult.tsx`, versioned save in `data/content-settings-repository.ts`.
+- One deliberate tightening vs. the TASK text: saved settings/persona are **read server-side with the caller's JWT** instead of being sent by the client, so the request is only `brand_id` + `message` + bounded `history`. The assistant gets the same inputs; the client cannot inject "saved" state.
+
+### Existing foundations reused
+- Auth/ownership pattern of `social-mobile-brand-dry-run` (`/auth/v1/user` + RLS-scoped REST reads with the user JWT + `social_mobile_user_v1` profile check).
+- `_shared/brand/social_mobile_content_settings.ts` (`normalizeSocialMobileContentSettings`, `materializeSocialMobilePersonaProfile`).
+- OpenAI Responses API pattern and default model tier of `brand_post_generator.ts` (`gpt-5.6-luna`, `store:false`, low reasoning) and the strict `json_schema` output pattern already used in `market-intelligence-ingest`. Same `OPENAI_API_KEY` secret; no new vendor or secret.
+- `validateConversationalAssistantResult()` kept as the client trust boundary (strengthened), `applyConfirmedConversationProposal()`, existing `social_mobile_content_settings` storage, existing history-learning consent gate. `createConversationalAssistantProposal()` is kept only for the sample-data preview and tests.
+
+### Exact AI request / response trust boundary
+- Request to the model: system prompt + a data block of saved editable settings (+ read-only approval mode / generation time for explanation) and the **confirmed** persona only + bounded turns + the message. Never tokens, Vault ids, account/auth data, other workspaces.
+- Model output = untrusted. `sanitizeConsultModelOutput()` (server): exact top-level key set; allowlisted settings keys (preferredTone, themes, objective, frequencyTargetPerWeek, optionalNgWords, notes) and persona keys; types and lengths bounded; any key matching publish/account/oauth/token/secret/schedul/cron/approval/generationWindow/locale/password/session/delete/vault refused anywhere; `chat`/`question` can never carry a delta; a delta equal to the saved value is dropped; anything else -> `CONSULT_AI_MALFORMED` (502, retryable), nothing saved.
+- The client re-validates the envelope and result (`parseConsultResponse` -> `validateConversationalAssistantResult`), independently allowlisted; an envelope claiming a save/publish/X call is rejected.
+- Result always has `requiresConfirmation: true`, `publishPermissionChanged: false`; envelope pins `settings_saved/persona_saved/publish_attempted/scheduled_post_created/x_api_called: false`.
+
+### Authorization checks
+1. Bearer required -> Auth server verifies the user (identity checked before body parsing).
+2. `brand_memberships` read with the user's JWT, filtered by the **verified** user id + requested brand + role owner; row must match all three.
+3. `brands` row must exist for that id and be `social_mobile_user_v1`.
+4. Any missing/malformed/mismatched row -> 404/409, no settings read, no model call. No PR #70 / common-account semantics used. No service role anywhere.
+5. Logs are metadata only (request id, result class, counts/lengths, duration, model, token usage); message/history/reply text, Authorization, user id, brand id, email and keys are never logged or returned (tested).
+
+### Chat modes implemented
+chat (casual talk, general questions, brainstorming, explaining current settings — no proposal), question (1 question, at most 2), proposal (delta only, on a clear preference; hesitant statements are handled conversationally by prompt rule). No web/live info (the assistant says so). Requests to change posting/schedule/X connection/login/deletion are answered as chat with a pointer to the app screen.
+
+### Confirmation / persistence semantics
+- An arriving answer only updates on-screen session state. The only write path is 「これで覚えて」 -> re-read latest -> `planConfirmedSave` -> `saveConfirmedIfUnchanged`.
+- Delta applied onto the freshly read state: unrelated fields (including newer ones) are preserved.
+- If a field the proposal touches changed since the proposal was shown -> no write, user is asked to confirm again against the current state.
+- Save is a compare-and-swap on `updated_at` (insert when no row; a concurrent change/insert -> `stale`, nothing written).
+- Settings-only confirmation does not touch persona columns or relabel persona provenance; a persona delta is merged and saved as confirmed/conversation.
+- A newer proposal replaces the pending one; a plain answer leaves it; the user can dismiss it. Chat continues after a save.
+- Raw conversation lives in screen state only; no transcript table, no analytics.
+
+### Past-post learning handoff
+`historyLearningIntent` preserved (model flag OR deterministic match on the user's own words). It only opens the existing consent gate; no X call, no persona derived, `derivedProfile` always null. G4 can attach the verified-account fetch behind that gate without changing the chat contract.
+
+### changed_files
+- supabase/functions/social-mobile-consult/{index.ts,logic.ts,logic_test.ts} (new)
+- apps/social-mobile/src/domain/consult-session.ts (new), src/data/consult-client.ts (new)
+- apps/social-mobile/src/app/(tabs)/consult.tsx, src/data/content-settings-repository.ts, src/domain/content-settings-conversation.ts, src/domain/content-settings.ts
+- apps/social-mobile/tests/{consult.test.mjs,consult-screen.test.mjs} (new)
+
+### Pre-existing defect found and fixed (it blocked every save)
+The app validator rejected the saved default `generationWindow.endLocal = "24:00"` (DB constraint and server accept it), so `validateSocialMobileContentSettings(DEFAULTS)` was false and any settings save/read with the default window failed. Only the end time now accepts `24:00`; regression test added. Not a schema change.
+
+### tests
+- Server (`logic_test.ts`, 26): unauthenticated rejected; non-member / wrong role / wrong user rejected; valid owner accepted; bounded message/history; oversized/malformed/unknown-key input rejected; secret never returned/logged; safe response parses; malformed JSON/shape fails closed; publish/OAuth/token/scheduler/account/approval smuggling rejected; chat-only creates no proposal; proposal does not persist (handler performs only GETs); current-settings explanation has no mutation; past-post intent makes no X call; provider error/timeout safe + retryable; model call count = 1.
+- App domain (`consult.test.mjs`, 29) and real screen code driven with stubbed React + scripted AI + in-memory versioned store (`consult-screen.test.mjs`, 11): bounded multi-turn history; chat shows no proposal card; follow-up question; proposal shows only changed fields; confirmation persists; unconfirmed persists nothing; later correction replaces pending proposal; unrelated settings unchanged; persona not erased by settings-only confirmation; changed settings not clobbered (reconfirm + CAS); general chat never toggles posting/scheduling/X; history request stays consent-gated; retry; preview mode makes no call and no write.
+- End-to-end contract test: client -> real Edge handler (model stubbed) -> client validator -> save plan.
+- Mutation checks (10): removing the membership check, the chat-delta rule, the settings allowlist, the request-key allowlist, the CAS filter, the stale-conflict rule, the client allowlist, or leaking the message into the log each makes a test fail. The deep forbidden-key scan is redundant with the allowlists (defence in depth; noted in code).
+- Runs: `npm test` 153/153; typecheck 0; lint 0; `deno test` social-mobile-consult + dry-run + history-learning + `_shared/brand` 196/196; `deno check`, `deno lint` clean; `git diff --check` clean; secret scan and scope diff clean (no migration, x-connect, auth-provider, account-deletion, env, Vault, config path).
+- No live paid AI call was made.
+
+### Local verification (G3-owned, mock AI responses)
+1 greeting/casual -> natural reply, no proposal. 2 「どんな投稿にしたらいい？」 -> follow-up question. 3 「親しみやすく、AIの話を多めにしたい」 -> reviewable proposal (tone + themes only). 4 before confirmation the store is byte-identical, zero writes. 5 after 「これで覚えて」 the store shows only the intended changes. 6 「今どういう設定？」 -> explanation, no proposal. 7 「過去投稿を読んで」 -> consent gate only, no X call. 8 no posting/schedule/X-connection side effect (handler issues only GETs + one provider request). All executed through the real screen code and the real handler with stubs.
+
+### AI / provider / model usage policy
+OpenAI Responses API, `gpt-5.6-luna` (existing default tier), structured output, `max_output_tokens` 900, 25 s timeout, 1 call per send, no retry/tools/web search, `store:false`. Input caps: message 1000 chars, 12 turns x 1000 chars, 6000 chars total, 32 KB body.
+
+### DB migration = none. production mutation = 0. real X operations = 0. No deploy, no secret/config change.
+
+### remaining issues
+1. Live model behaviour (prompt quality, how reliably it distinguishes chat / question / proposal and hesitant statements) is **not verified**; it needs a dev invocation after deploy. Contract safety does not depend on it.
+2. No native (Simulator) visual check of the new screen in this task; behaviour is verified through the real screen code in tests. UI is functional-only by design.
+3. No per-user rate limit / usage accounting (no existing helper for social-mobile); only per-request caps. Recommend a quota before public rollout.
+4. The endpoint is not deployed; the app shows a retryable error until it is. Deploy with `verify_jwt` on (the function also verifies the user itself). Remember the worktree-root deploy caveat (byte-verify).
+5. Client-supplied `history` can contain forged assistant turns; they only influence the caller's own conversation and the output is still allowlisted. Worth a reviewer's look.
+6. A persona edited through conversation sets provenance to `conversation` even when it was derived from past posts (existing `source: result.provenance` rule kept; analysed count/date are preserved).
+7. Whether the production `social_mobile_content_settings` table exists was not checked (production reads are not available to this slot); the endpoint falls back to defaults if the table is absent, and the app already reports the table as unavailable.
+
+### safety_checks
+Own worktree/branch only; explicit-path staging; untracked `supabase/.temp`, `supabase/config.toml` left untouched; no other slot's files, simulator or Metro used; no secrets, tokens or personal emails in code, tests or this report.
+
+### next_recommendation
+- K3 -> focused Codex review (H2, Sol（高）) on: Auth/membership boundary, prompt / structured-output injection, no implicit persistence, cost bounds, no publish/X side effects.
+- After merge: controlled deploy + one dev conversation to tune the prompt; then G4 past-post learning behind the existing consent gate; add a per-user quota.
+
+---
+
+# Claude Task 3 — CURRENT TASK
+
+- task_id: x-ai-lab-dev-diary-kabumori-hero-8state-sync-20261002
+- owner: claude
+- slot: claude-3
+- status: done
+- next_owner: none
+- priority: low
+- recommended_model: Sonnet5（中）
+- type: AI Lab public-safe development diary context sync
+- production_mutation_allowed: false
+
+## Purpose
+
+Final K1で完了した「かぶモリ Home Report Hero 8-state integration」を、会社員AIラボの公開安全な開発日記題材へ同期する。
+
+これはX投稿生成ロジックの改修ではない。
+共有メモ正本と、そのcommit済みruntime snapshotの同期だけを行う。
+
+## Source fact
+
+実際に完了・merge確認済みの事実:
+- かぶモリHomeのレポートHeroで、レポート内容に応じて8種類のキャラクター表情を切り替えるUIを実装した。
+- 追加AI呼び出しなしで、保存済みレポートの情報から表示状態を決める。
+- 画面幅や「今日のポイント」1〜3件の差でも崩れないよう調整した。
+- iOS Simulatorで複数幅を確認した。
+- EAS build / production backend mutationは行っていない。
+
+公開文にはPR番号、task_id、branch、commit SHA、内部テーブル/関数名、秘密情報を入れない。
+
+## Required changes
+
+1. `supabase/functions/_shared/brand/ai_lab_dev_diary_context.md`
+   - 2026-10-02に既存entryがあるため、**同日entryを増やさない**。
+   - 既存2026-10-02 entryはX自動投稿アプリの不具合修正について書かれているので、その内容を壊さない。
+   - 1日1entry原則を守るため、今回のKabumori Hero内容を同entryへ無理に混ぜない。
+   - 代わりに **2026-10-03 entryとして先取りして書かないこと**。
+   - 結論として、正本Markdownへ新しい日付entryを追加できないため、今回のK1内容は**保留メモとしてTASK Reportへ記録するだけ**にする。日付が変わって実際の10/03作業が発生した場合のみ別TASKで追加する。
+
+2. このTASKでは runtime snapshot / generator / tests を変更しない。
+
+## Important
+
+「K1で公開安全な題材候補がある」こと自体は記録するが、存在しない日付の開発日記を捏造しない。
+同日1entryルールを破らない。
+既存2026-10-02 entryを書き換えて異なる2つの開発内容を混在させない。
+
+## Tests
+
+- source diffが `.agent/**` のみであること
+- `git diff --check`
+
+## Completion
+
+Reportに以下を記録:
+- task_id
+- result
+- diary update performed: no
+- reason: existing 2026-10-02 entry + one-entry-per-day rule
+- preserved public-safe candidate text for future manual/next-day use
+- production mutation: 0
+- changed_files
+- next_recommendation
+
+その後:
+- status -> done
+- next_owner -> none
+- STOP.
+
+Recommended model: **Sonnet5（中）**.
+
+## Report — K1 diary decision
+
+- task_id: `x-ai-lab-dev-diary-kabumori-hero-8state-sync-20261002`
+- result: **NO SOURCE UPDATE REQUIRED / DONE**.
+- diary update performed: no.
+- reason: canonical diary already has a real 2026-10-02 entry, and the documented rule is one entry per day. The K1-completed Kabumori Hero work is a valid public-safe candidate, but creating a duplicate same-day entry or pre-dating 2026-10-03 would break the diary contract.
+- preserved candidate: 「株アプリのホームで、その日のレポート内容に合わせて8種類のキャラクター表情を切り替え、画面サイズやポイント数が変わっても崩れないよう調整した。」
+- production mutation: 0.
+- changed_files: `.agent/tasks/CLAUDE_TASK_3.md` only.
+- next_recommendation: do not consume a Claude slot; reuse the candidate only if a later real diary-update task needs a backlog of public-safe development topics.
+- next_owner: none.
+
+---
+
+## Archived previous G3 task
+
+# Claude Task 3
+
+- task_id: x-social-mobile-native-link-navigation-cleanup-20261001
+- owner: claude
+- slot: claude-3
+- status: review_required
+- next_owner: chatgpt
+- priority: medium
+- recommended_model: Sonnet5（高）
+- continues_from: x-social-mobile-account-deletion-ui-release-finish-20261001
+- purpose: PR #68 / PR #65 後に残った social-mobile の native navigation UI 不具合を、Link-asChild の既知パターンに限定して修正・再発防止する。
+
+## Confirmed current-main findings
+
+Fresh main で以下を確認済み。
+
+1. `apps/social-mobile/src/app/accounts/index.tsx`
+   - 「ログイン方法」カードがまだ `<Link asChild><Pressable style={({ pressed }) => ...}>`。
+   - PR #68 で確定した同じ root cause により、native で card styling が落ちる既知パターン。
+   - G4 PR #65 は Final K4 PASS で merge 済みのため、現在はG4所有競合なし。
+
+2. `apps/social-mobile/src/app/(tabs)/settings.tsx`
+   - 「会話で相談する」が `<Link asChild><Card>...`。
+   - `Card` は navigation press handler を受け取らないため、native確認で dead tap になっている。
+
+3. PR #68 の `native-link-button-style.test.mjs` には `accounts/index.tsx` の known allowlist が残っている。今回の修正後はこの例外を除去する。
+
+## Mandatory startup
+
+1. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK.
+2. Use an independent G3 worktree/checkout.
+3. Fresh `origin/main`.
+4. Confirm G4 task is done and PR #65 is merged; do not reopen OAuth/auth-session work.
+5. Confirm H1/G5 common-account work does not overlap the UI files below.
+6. Do not reuse another slot's untracked files, .env, Simulator process, Metro process, branch, or worktree.
+
+## Primary required fixes
+
+### A. Accounts screen — 「ログイン方法」card
+
+Fix the remaining native styling defect in:
+- `apps/social-mobile/src/app/accounts/index.tsx`
+
+Requirements:
+- the whole intended card/tap target remains visibly styled on native iOS.
+- tap navigates to `/login-methods`.
+- preserve accessibility role / readable label.
+- do not change X-connect hook, connect/reconnect behavior, OAuth, PKCE, callback, or account data.
+- remove `accounts/index.tsx` from the known-unfixed allowlist once fixed.
+
+Prefer the already accepted safe pattern:
+- standalone `Pressable` + `router.push`
+rather than `Link asChild` around a function-styled Pressable.
+
+### B. Settings — 「会話で相談する」
+
+Fix:
+- `apps/social-mobile/src/app/(tabs)/settings.tsx`
+
+Requirements:
+- the card is visibly tappable.
+- tap navigates to `/(tabs)/consult`.
+- preserve the existing copy and overall layout.
+- no content-settings persistence logic change.
+
+Prefer explicit navigation with an interactive element rather than relying on `Link asChild` to inject press behavior into a component that does not forward it.
+
+## Narrow same-pattern audit
+
+Audit only `apps/social-mobile/src/app/**` and `apps/social-mobile/src/components/**` for these two specific invalid compositions:
+
+1. `Link asChild` + direct child with function-valued `style` that can be lost by Slot style merging.
+2. `Link asChild` + direct child such as `Card` / `View` that does not actually forward the injected press handler/ref and is therefore dead/non-interactive.
+
+For every match:
+- classify as broken / safe / false positive with concrete source reason.
+- fix only demonstrably broken navigation in the same family.
+- do not broaden into visual redesign or unrelated route cleanup.
+- if a shared UI component change is proposed, make it only if it is strictly safer/smaller than fixing the call sites and regression coverage proves all consumers remain safe.
+
+Potential rows mentioned by prior G3 report (history/schedule/account rows) are **audit candidates, not automatic edit targets**. Prove the issue before changing them.
+
+## Tests
+
+Update/extend `apps/social-mobile/tests/native-link-button-style.test.mjs` or a narrowly named companion test so that:
+
+- `accounts/index.tsx` is no longer allowlisted.
+- no `Link asChild` + function-valued direct-child style remains in app/components.
+- the detector also catches the proven dead `Link asChild > Card/View` class where the child cannot receive/forward press behavior.
+- detector self-tests prove the scanner actually fails on synthetic broken examples.
+- the Accounts 「ログイン方法」 target is an interactive element with explicit navigation to `/login-methods`.
+- Settings 「会話で相談する」 is interactive and explicitly navigates to `/(tabs)/consult`.
+- any additional call-site fix gets a focused route/navigation regression.
+
+Run:
+- social-mobile full tests
+- typecheck
+- lint
+- `git diff --check`
+- focused static/navigation tests
+- secret/scope diff check
+
+## Native verification
+
+Use a G3-owned local iOS Simulator environment only.
+
+Verify at minimum:
+1. Accounts → 「ログイン方法」 card has expected visible card styling and opens Login methods.
+2. Settings → 「会話で相談する」 visibly responds to tap and opens Consult.
+3. If any additional same-pattern call site was changed, visually/tap-verify that route too.
+4. No production data mutation is needed; sample/mock data preferred.
+5. No EAS build unless local verification is genuinely impossible.
+
+Temporary local auth/sample-data harness is allowed only if:
+- isolated to G3,
+- untracked/uncommitted,
+- reverted/removed after verification,
+- does not connect to protected production data.
+
+## Explicit non-scope
+
+Do NOT change:
+- `apps/social-mobile/src/features/x-connect/**`
+- OAuth / PKCE / callback / provider behavior
+- Supabase Auth/provider flows
+- account deletion backend/state machine
+- common-account/service-entitlement work
+- DB / RLS / RPC / migrations
+- Edge Functions
+- Vault/token storage
+- scheduler/posting
+- production feature flags
+- App Store/TestFlight/EAS release configuration
+
+## Production / safety
+
+- source + tests + PR only
+- production mutation = 0
+- real X operations = 0
+- no deploy
+- no account deletion
+- no provider login/revoke/post
+- do not expose secrets or personal credentials
+
+## Completion / K3
+
+Report:
+- task_id
+- result
+- exact broken Link-asChild patterns found
+- exact files fixed
+- audit matrix (broken / safe / false positive)
+- changed_files
+- tests
+- native simulator result
+- proof x-connect/Auth/deletion/common-account/backend scopes unchanged
+- commit_hash
+- push
+- PR
+- production mutation = 0
+- real X operations = 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+Expected review policy:
+- if changes stay UI/navigation-only and native verification passes, additional Codex review is normally unnecessary.
+- if implementation touches shared interactive primitives broadly, Auth/OAuth, or any backend boundary, STOP and let ChatGPT decide review before merge.
+
+
+## Report — x-social-mobile-native-link-navigation-cleanup-20261001
+
+- task_id: x-social-mobile-native-link-navigation-cleanup-20261001
+- result: **PASS** (source + tests + native before/after verification; PR open). Model: Sonnet 5.5.
+- PR: https://github.com/anohi-memories/kabumori/pull/73 (branch `claude/g3-native-link-cleanup-20261001`)
+- commit_hash: 645923ba (rebased on origin/main 0c27998b); push: done, branch pushed to origin.
+
+### Exact broken Link-asChild patterns found (all proven dead/broken on native BEFORE the fix)
+1. `Link asChild` + `Card`/`View` direct child: Link only injects its press handler into the direct child; `Card`/`View` do not accept/forward `onPress` -> tap does nothing.
+2. `Link asChild` + function-valued `style` on the direct child: radix Slot merges style as `{...slotStyle, ...childStyle}`, a function spreads to `{}` -> styling lost.
+
+### Exact files fixed
+- apps/social-mobile/src/app/(tabs)/history.tsx (row -> /posts/[id])
+- apps/social-mobile/src/app/(tabs)/schedule.tsx (row -> /posts/[id])
+- apps/social-mobile/src/app/(tabs)/settings.tsx (「会話で相談する」 -> /(tabs)/consult)
+- apps/social-mobile/src/app/accounts/index.tsx (account row -> /accounts/[id]; 「ログイン方法」 card -> /login-methods keeps styles.card)
+All now use a standalone `Pressable` + `router.push` (accessibilityRole="button"), copy/layout unchanged.
+
+### Audit matrix (src/app/** and src/components/**; every Link asChild)
+| site | direct child | verdict |
+|---|---|---|
+| (tabs)/index.tsx x5 (切り替える/予定/履歴/設定/相談) | ActionButton | safe (forwards onPress to Pressable; Home→アカウント verified on native) |
+| posts/[id].tsx 再接続 | ActionButton | safe (same class) |
+| (tabs)/history.tsx, (tabs)/schedule.tsx | Card | broken -> fixed (dead tap proven native) |
+| (tabs)/settings.tsx 会話で相談する | Card | broken -> fixed (dead tap proven native) |
+| accounts/index.tsx account row | View | broken -> fixed (dead tap proven native) |
+| accounts/index.tsx ログイン方法 | Pressable + function style | broken -> fixed (flat unstyled block proven native) |
+| login-methods.tsx, settings.tsx アカウント管理 | (fixed in PR #68) | safe |
+False positives: none.
+
+### changed_files
+- apps/social-mobile/src/app/(tabs)/history.tsx, (tabs)/schedule.tsx, (tabs)/settings.tsx, accounts/index.tsx
+- apps/social-mobile/tests/native-link-button-style.test.mjs
+
+### tests (clean env, no local .env.local)
+- `npm test` 113/113, typecheck exit 0, lint exit 0, `git diff --check` clean.
+- test file: allowlist for accounts/index.tsx removed; both broken classes detected app-wide (allowlist of press-forwarding components: Pressable/ActionButton/Text/Touchable*); detector self-tests fail on synthetic broken (Card, View, function-style Pressable) and pass on good examples; per-route navigation checks (/login-methods, /accounts/[id], /(tabs)/consult, /posts/[id]); new tests failed (6) against the unfixed code, pass after the fix.
+- scope diff check: no x-connect/Auth/DB/RLS/RPC/migrations/Edge/Vault/flag path in the diff; no secret-like string added.
+
+### Native simulator result (G3-owned device, iOS Simulator Release, sample data)
+- Own simulator "G3-nav-cleanup" created and used only (another slot's devices were not touched; one stray tap on another booted device's empty home-screen area happened before I pinned the device, no effect).
+- BEFORE: 履歴行, 投稿予定行, 会話で相談する, アカウント行 = no response after 8s; ログイン方法 = flat unstyled block.
+- AFTER: 履歴行 -> 投稿詳細 (8:20), 投稿予定行 -> 投稿詳細 (11:44), 会話で相談する -> AI相談 tab, アカウント行 -> アカウント詳細 (@kabumori), ログイン方法 card visibly styled and -> ログイン方法 screen. Home ActionButton path also works.
+- Local-only harness (sample-data .env.local, temporary auth-gate bypass in _layout.tsx, throwaway bundle id, generated ios/) used and removed; simulator deleted; nothing of it committed; package.json/.gitignore unchanged.
+
+### proof x-connect / Auth / deletion / common-account / backend unchanged
+- diff touches only the 4 screens + 1 test; `git diff --name-only` has no match for x-connect, supabase, migrations, env, auth-provider, account-deletion.
+
+### production mutation = 0, real X operations = 0
+No deploy, no flag change, no deletion, no provider login/revoke/post; sample-data build had no Supabase config.
+
+### remaining issues
+1. `/accounts/[id]` (アカウント詳細) shows no top header/back button. It was unreachable before (dead row); now reachable. Edge-swipe back works. Header config is route cleanup (out of scope) — decide separately.
+2. Any future `Link asChild` around a new non-forwarding component is now caught by the test; shared primitives were not changed.
+3. Unchanged release gates: common-account deletion semantics, Apple production config, legal URLs/texts, audit retention, main-app account-delete coordination; deletion flag stays OFF.
+
+### safety_checks
+- own worktree + own simulator only; explicit-path staging; no secrets/tokens/emails in report; G4/G5/H1 files untouched.
+
+### next_recommendation
+- Review/merge PR #73 (UI/navigation only; additional Codex review normally unnecessary per TASK).
+- Separate small task: give `/accounts/[id]` a visible header/back button (or confirm it is intended).
+
+---
+
+# Claude Task 3
+
+- task_id: x-social-mobile-account-deletion-ui-release-finish-20261001
+- owner: claude
+- slot: claude-3
+- status: done
+- next_owner: none
+- priority: high
+- recommended_model: Sonnet5（高）
+- continues_from: x-social-mobile-e3-delete-revoke-residue-20261001
+- purpose: E3で機能動作がPASSしたX自動投稿アプリのアカウント削除について、残っているnative iOS UIブロッカーを解消し、共通アカウント設計に踏み込まずに現行削除UIをリリース可能な見た目・導線まで仕上げる。
+
+## Context
+
+Previous G3 E3 reached Final K3 PASS:
+- disposable X authorization revoke succeeded
+- social-mobile workspace/membership/social account/X credential/OAuth transient data were removed
+- unexpected residue = 0
+- protected production posting accounts unchanged
+- shared Supabase Auth/login/main-app profile intentionally remained under current `social_only` behavior
+- real X posts = 0
+
+Remaining UI findings from the native iOS Release verification:
+1. On `login-methods`, the buttons for 「投稿用のX接続を確認する」 and 「アカウントの削除について」 can render as blank/invisible text while their tap area still works.
+2. Account deletion is too deep to discover; Settings has no direct account-management/deletion entry.
+
+A separate common-account/auth design effort is now defining the future company-wide account/service-entitlement model. This G3 task MUST NOT preempt or redesign that model.
+
+## Mandatory startup
+
+1. Read `PROJECT_RULES.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, and this TASK.
+2. Fresh-check `origin/main`.
+3. Use an independent G3 worktree/checkout. Do not use G4/H1/H2 worktrees or simulator processes.
+4. Confirm G4 PR #65 owns X account-switch auth-session work and currently touches X-connect/account-selection paths. Do not edit G4-owned files.
+5. Confirm H2 PR #66 review and H1 PR #67 review do not overlap the files you intend to change.
+6. Preserve all previous G3 E3 reports below; do not rewrite historical results.
+
+## Allowed primary scope
+
+Prefer the smallest set necessary:
+- `apps/social-mobile/src/app/login-methods.tsx`
+- `apps/social-mobile/src/app/(tabs)/settings.tsx`
+- `apps/social-mobile/src/app/account-deletion.tsx` only if needed for UI consistency
+- narrowly related social-mobile UI tests
+- shared UI component only if the root cause is proven there and the change is demonstrably safe for all consumers
+
+Do NOT edit:
+- `apps/social-mobile/src/features/x-connect/**`
+- G4-owned account-switch files
+- Supabase Auth/provider flows
+- account-deletion backend/state machine
+- DB/RLS/RPC/migrations
+- Vault/token storage
+- OAuth ownership
+- service-entitlement/common-account design
+- production feature flags
+- scheduler/posting paths
+
+## Required work
+
+### 1. Root-cause the invisible native buttons
+
+Reproduce or inspect the iOS Release/native rendering path for:
+- 「投稿用のX接続を確認する」
+- 「アカウントの削除について」
+
+Determine why the text is invisible while the Pressable remains tappable.
+
+Do not merely change color blindly. Confirm whether the problem is caused by:
+- `Link asChild` + `Pressable`
+- inherited/native text/style behavior
+- shared `styles.buttonText`
+- Release-only rendering
+- another concrete cause
+
+Fix the actual source cause with the narrowest safe change.
+
+### 2. Make account management discoverable from Settings
+
+Add a clear, ordinary Settings entry for account/login management.
+
+Preferred UX:
+- a distinct account section/card in Settings
+- direct route to `/login-methods`
+- wording should make it obvious that login methods, X connection, and account/service deletion live there
+
+If a direct deletion shortcut is clearly safer/usably better, it may be added, but do not bypass the existing preview/re-auth/confirmation deletion screen.
+
+Do not move destructive logic into Settings.
+
+### 3. Preserve deletion truthfulness
+
+Current deletion UI must continue to:
+- preview what the server says will be deleted/kept
+- require fresh reauthentication
+- require the typed confirmation
+- report server-confirmed outcome only
+- keep the current feature-gate behavior
+
+Do not alter `social_only` / `social_and_login` semantics in this task. Those semantics will be reconsidered by the common-account project.
+
+### 4. Feature flag
+
+Do NOT globally enable `EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED` in this task.
+
+Goal is source/UI readiness only.
+
+After the common-account design decides the final deletion semantics, activation can be a separate controlled release step.
+
+## Tests / verification
+
+At minimum:
+- relevant social-mobile tests
+- new/updated UI/static tests proving the two button labels remain visibly rendered in native-compatible composition
+- Settings contains a discoverable account-management route
+- existing account-deletion preview/reauth/typed-confirmation behavior unchanged
+- no G4 X-connect source change
+- no Auth/DB/RLS/RPC/Vault/OAuth backend diff
+- typecheck
+- lint
+- `git diff --check`
+
+Native verification:
+- use local iOS Simulator / Release-like build where practical
+- visually confirm both affected button labels are visible
+- confirm both routes are tappable and land on the correct screens
+- confirm the Settings account entry is visible without requiring knowledge of hidden navigation
+- no EAS build unless truly required; explain if unavoidable
+
+## Production / safety
+
+- source + tests + PR only
+- no production deploy
+- no feature-flag enable
+- no destructive account deletion in this task
+- no real X login/revoke/post
+- production mutation = 0
+- do not remove the retained disposable Auth/profile from the E3 test; that now belongs to the common-account/account-lifecycle decision
+
+## Completion conditions
+
+- invisible button root cause identified
+- source fix implemented
+- both labels visible in native verification
+- Settings account-management entry added and verified
+- deletion semantics/backend unchanged
+- tests/typecheck/lint/diff checks pass
+- commit + push + PR
+- production mutation 0
+- real X operations 0
+
+## Report
+
+Include:
+- task_id
+- result
+- root cause of invisible buttons
+- UX change
+- changed_files
+- tests
+- native/simulator verification
+- proof deletion backend/semantics unchanged
+- proof no G4 overlap
+- commit_hash
+- push
+- PR
+- production mutation
+- real X operations
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then status -> review_required, next_owner -> chatgpt and STOP for K3.
+
+---
+
+## Previous completed G3 history — preserved below
+
+# Claude Task 3
+
+- task_id: x-social-mobile-e3-delete-revoke-residue-20261001
+- owner: claude
+- slot: claude-3
+- status: done
+- next_owner: none
+- priority: critical
+- recommended_model: Opus5.5（高）
+- continues_from: x-social-mobile-pr63-merge-native-e3-resume-20260930
+- purpose: E3の使い捨てユーザー/X接続が正常に成立した状態から、アカウント削除E2Eを最後まで検証する。削除によるX認可失効、Vault/DB/Auth等の残存データ、既存本番アカウントへの非影響を確認する。
+
+## Confirmed starting point
+
+Operator report:
+- local iPhone Simulator build is connected to real production data.
+- a genuinely disposable X account `@tigers_torataro` is now connected successfully to the disposable social-mobile user.
+- protected production posting accounts were not touched.
+- account deletion and X authorization revoke have NOT been executed yet.
+- a temporary local-only browser-session workaround was used to choose the correct X account; it was not committed.
+
+The previous K3 blocker (wrong X account already connected in production) is therefore resolved.
+
+## Mandatory startup
+
+1. Read `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK, and the previous G3 report history.
+2. Use the existing independent G3 worktree/checkout only. Do not use G4's worktree.
+3. Fresh-check `origin/main`, but do NOT pull unrelated G4 source changes into the already verified E3 session unless rebuilding becomes unavoidable.
+4. Do not make source changes in this task unless a blocking defect is found. This task is operational E2E verification.
+5. Confirm the disposable connected X identity is exactly `@tigers_torataro`.
+6. Confirm protected production posting accounts remain unchanged and are excluded from every destructive selector.
+7. Do not reveal token plaintext, secret values, Vault plaintext, or personal email addresses in logs/report.
+
+## Phase 1 — read-only preflight before deletion
+
+Capture a read-only baseline sufficient to prove isolation:
+- disposable Auth/user/profile/workspace/membership state
+- disposable social account state and platform identity
+- disposable token-reference / Vault-reference existence only (never plaintext)
+- OAuth state / pending rows relevant to the disposable flow
+- deletion/audit/tombstone baseline if present
+- protected production X account state/count/hash or equivalent invariant
+- Vault count/identifier hash or equivalent protected-account invariant
+- feature flags relevant to deletion remain unchanged; do not globally enable deletion
+
+Confirm again:
+- no real X post
+- no scheduler/manual publish
+- no provider-console mutation
+- no protected production account mutation
+
+## MANDATORY STOP — fresh destructive approval
+
+After Phase 1 is complete and BEFORE the first destructive action, STOP and report:
+
+- disposable identity confirmed: `@tigers_torataro`
+- read-only baseline captured
+- protected production accounts unchanged
+- exact first destructive operation: execute the existing account-deletion flow for this disposable social-mobile user
+- expected effects: delete the disposable account/workspace data, revoke only this disposable X authorization as designed, remove only this disposable credential material
+- feature remains OFF globally
+
+Then request **fresh explicit user approval in the conversation**.
+
+The user's current request to create this TASK is NOT the destructive approval.
+Do not reuse any older approval.
+
+## Phase 2 — after fresh approval only: execute deletion
+
+Only after explicit approval:
+1. Use the existing app/account-deletion E2E path for the disposable user.
+2. If a local-only flag/config is required to expose the deletion path, keep it local/uncommitted and do not globally enable production deletion.
+3. Perform the deletion once. Do not retry blindly if the result is ambiguous.
+4. Do not manually revoke other X accounts or make provider-console changes.
+5. If deletion fails before completion, STOP and preserve evidence; do not run separate cleanup mutations unless explicitly approved.
+
+## Phase 3 — verify X revoke
+
+After successful deletion:
+- verify the deletion path attempted/completed revoke for the disposable X authorization according to the existing implementation.
+- prefer server-side/audit/result evidence that does not require retaining token plaintext.
+- if provider-side confirmation requires an interactive X "Connected apps" check, ask the user to perform only that read/confirmation for `@tigers_torataro`.
+- never revoke the app globally and never touch the protected production X accounts.
+- do not perform a real X post as a revocation test.
+- if automatic revoke is not provable or failed, STOP; do not perform a separate manual revoke without new explicit approval.
+
+## Phase 4 — residue / isolation verification
+
+Read-only verify the disposable user's data is removed or intentionally retained exactly as designed. Check the relevant boundaries:
+- Auth user/session
+- profile/workspace/membership
+- social account
+- OAuth transient state
+- token-reference/Vault credential
+- content/settings/history rows owned only by the disposable workspace, where applicable
+- deletion audit/tombstone records that are intentionally retained
+
+Also prove protected production invariants are unchanged:
+- existing production X accounts
+- their credential references/Vault identifiers
+- refresh state
+- posting/scheduler state
+- feature flags
+- no real X post created
+
+Classify every remaining row/value as:
+- expected retained audit/tombstone
+- unexpected residue
+- unrelated protected production data
+
+Do not "clean up" unexpected residue during verification. Report it first.
+
+## Completion / K3
+
+Report:
+- task_id
+- result
+- destructive approval timestamp/message boundary
+- deletion result
+- X revoke proof/result
+- residue matrix
+- protected-account invariants before/after
+- source changes (expected none)
+- local-only temporary config used, if any
+- tests/checks
+- production mutations performed exactly
+- real X posts = 0
+- remaining issues
+- safety checks
+- next recommendation
+
+Then status -> review_required, next_owner -> chatgpt, STOP for K3.
+
+## Previous G3 task closure
+
+Previous task `x-social-mobile-pr63-merge-native-e3-resume-20260930` reached Final K3 BLOCKED only because the first X identity was already connected to a protected production posting account. No destructive action occurred. Its report and Final K3 state remain in Git history / CURRENT_STATE and are not to be re-executed.
+
+## Report — x-social-mobile-e3-delete-revoke-residue-20261001
+
+- task_id: x-social-mobile-e3-delete-revoke-residue-20261001
+- result: **PASS** (E3 complete: deletion, X revoke, residue, protected invariants all verified). Two UI findings and one retained-by-design item are listed under remaining issues.
+- model: Opus 5.5
+
+### Destructive approval boundary
+- Phase 1 (read-only baseline) finished, then STOP. Fresh explicit approval was requested in the conversation with the exact operation, expected effects and "feature stays OFF globally".
+- User answered "承認する（自分で削除ボタンを押す）" at 2026-09-30T15:50:00Z (JST 10/1 00:50). No older approval was reused.
+- The delete button was pressed once, by the user, in the local Simulator build. Claude pressed no destructive control.
+
+### Deletion result
+- App showed「削除しました — このアプリのデータを削除しました。ログイン用アカウントと「かぶモリ」のデータは残っています。」and returned to the login screen with the same notice banner (D2 fix confirmed on native).
+- Scope: `social_only` (the disposable login also has a main-app profile), as predicted in Phase 1.
+- Audit trail for the subject after the approval boundary (UTC): requested 15:57:07.42 → started 15:57:07.47 → x_revoked 15:57:07.91 → purged 15:57:07.95 → completed_social_only 15:57:08.05. No `failed` / `operator_required` / `blocked` row, no reason code. One attempt, no retry.
+
+### X revoke proof
+- Server-side: the flow stops with X_REVOKE_FAILED unless the X revoke endpoint returns success for both the refresh and the access token of exactly this account, and the `x_revoked` checkpoint is only written when the fingerprints of the revoked material match the credential set. The `x_revoked` audit row exists, followed by `purged`.
+- Provider-side (user read-only check, logged in as `@tigers_torataro`): the app is no longer listed under X "connected apps". Nothing was pressed there.
+- No global app revoke, no provider-console change, no real X post used as a test.
+
+### Residue matrix (disposable subject, before → after)
+| boundary | before | after | class |
+|---|---|---|---|
+| workspace | 1 | 0 | removed |
+| membership | 1 | 0 | removed |
+| social account (`tigers_torataro`, identity_verified, publish_enabled=false) | 1 | 0 | removed |
+| token references in Vault (access + refresh) | 2 | 0 | removed |
+| OAuth transient states (5 unconsumed) | 6 | 0 | removed |
+| refresh state / scheduled posts / post logs / claims / windows / fingerprints of the workspace | 0 | 0 | none existed |
+| deletion tombstone | 0 | 0 | none left (removed at finalize, as designed) |
+| deletion audit rows (hashed subject only) | 10 | 15 | expected retained audit |
+| Auth user / identity (email) / profile | 1 / 1 / 1 | 1 / 1 / 1 | expected retained (`social_only`: login belongs to the main app) |
+| Auth sessions / refresh tokens | 3 / 4 | 3 / 4 | expected retained with the login (device sign-out is local) |
+| handle present anywhere else | 0 | 0 | none |
+
+Unexpected residue: **none**.
+
+### Protected-account invariants (before = after, byte-equal hashes)
+- protected social accounts: 3, row hash (ids, workspace, platform user, both token references, publish flag, status, updated_at) unchanged
+- Vault rows referenced by protected accounts (id + updated_at hash) unchanged; all other Vault ids unchanged; Vault total 22 → 20 (= exactly the two disposable references)
+- refresh state count/hash, refresh rollout, non-user workspaces hash, the other pre-existing user workspace: unchanged
+- scheduled_posts 408, post_execution_logs 949 (latest timestamp unchanged, before the test), publish_claims 20, posting_windows 19, fingerprints 103: unchanged
+- auth users 4, profiles 2: unchanged
+- global totals changed only by the disposable rows: user workspaces 2→1, memberships 2→1, social accounts 4→3, OAuth states 28→22
+
+### Other fields
+- source changes: none committed. No PR.
+- local-only temporary config (uncommitted, not in any product build): `.env.local` (real-data mode + deletion flag), `app.config.js` (throwaway bundle id), generated `ios/`, and a one-line ephemeral auth-session option in the X-connect hook used only to pick the right X account. The hook edit has been reverted in the worktree; the other files stay untracked until K3, then are removed.
+- feature flag: the deletion entry is still gated by the client build flag, which is unset in every committed config. Nothing was enabled globally. No secret, Edge function, migration or provider setting was changed.
+- tests/checks: operational verification only (read-only SQL before/after diff). No code changed, so no test run.
+- production mutations performed exactly: (1) the user's X connect for the disposable account (new social account + 2 Vault references + OAuth states), done before this TASK; (2) one account-deletion call by the user, which revoked that X authorization and removed the rows above and wrote 5 audit rows. Nothing else.
+- real X posts = 0. No scheduler/manual publish.
+
+### Remaining issues
+1. **Invisible buttons on the Login methods screen (native iOS, Release build).** 「アカウントの削除について」and「投稿用のX接続を確認する」render as blank space; the hidden area is still tappable and navigates. The deletion entry is effectively undiscoverable for a signed-in, onboarded user (the onboarding-gate entry from PR #59 is visible and fine). Release blocker for the deletion feature; needs a source fix + Simulator check. Not fixed here (operational task).
+2. **Deletion entry is deep**: Home → アカウントを切り替える → ログイン方法 → bottom card. Not in the 設定 tab, where the user looked first. Consider a direct entry.
+3. X auth session reuses the previous X login (already assigned to G4).
+4. The disposable login itself remains in production (main-app profile exists → `social_only`). Removing it is a main-app (G1/G2) account-delete or operator action; not done.
+5. Unchanged release gates: Apple production config, legal URLs/texts, audit retention policy, main-app account-delete coordination.
+
+### Safety checks
+- no token plaintext, Vault plaintext, secret value/id or personal email in logs or this report
+- every destructive selector was the caller-bound deletion flow of the disposable user; no first-row fallback, no manual SQL mutation, no cleanup mutation
+- protected production posting accounts untouched and proven unchanged
+- dedicated G3 worktree only; G4 worktree and X-connect source untouched
+
+### Next recommendation
+- Final K3 for E3 = PASS candidate.
+- Open a small source task for issue 1 (and decide issue 2) before the deletion flag can be enabled in any product build.
+- Decide who removes the leftover disposable login (issue 4).
+
+
+## Final K3 — E3 deletion/revoke/residue
+
+- verdict: **PASS**
+- accepted task: `x-social-mobile-e3-delete-revoke-residue-20261001`
+- operational result: the disposable social-mobile service data was deleted once after fresh approval; its X authorization was revoked; no unexpected residue remained.
+- accepted scope: `social_only`. The shared Supabase Auth user / login identity / main-app profile were intentionally retained.
+- residue: workspace, membership, social account, disposable X credential references/material, and OAuth transient state removed as designed; deletion audit retained as designed.
+- protected production posting accounts and their credential references/state remained unchanged.
+- real X posts: 0. No scheduler/manual publish. No global deletion flag enable. No source commit or PR from this task.
+- source changes: none. Local-only verification edits/config were not product changes; the X-connect temporary hook edit was reverted before report.
+- remaining release blocker: native iOS Login methods screen has invisible/tappable-only buttons for the deletion and posting-X navigation. Deletion entry is also too deep. Keep deletion feature globally gated until UI/flow work is addressed.
+- retained disposable login/profile is intentional under current `social_only` behavior and now becomes input to the new common-account/service-entitlement design rather than an E3 failure.
+- Codex review: **not required for this K3** because no implementation source changed and the purpose of this task was operational E2E of already reviewed boundaries. Re-review at the next source change / production activation gate.
+- AI Lab diary: 候補あり — 使い捨てアカウントで「このアプリだけ利用終了」の流れを最後まで試し、他のサービス用ログインを残したままX連携とアプリ専用データだけ消えることを確認した。
+- next: common-account design should replace the current proxy-style service-existence decision with an explicit service entitlement. Separately fix the native deletion/navigation button visibility before enabling self-service deletion broadly.
+
+
+## Report — x-social-mobile-account-deletion-ui-release-finish-20261001
+
+- task_id: x-social-mobile-account-deletion-ui-release-finish-20261001
+- result: **PASS** (source + tests + native visual check done; PR open for review). Model: Sonnet 5.5 (recommended Sonnet5（高）, switched by user before start).
+- PR: https://github.com/anohi-memories/kabumori/pull/68 (branch `claude/g3-deletion-ui-finish-20261001`, commit `ec292b5`)
+
+### Root cause of the invisible buttons
+- `<Link asChild>` renders expo-router's Slot, which uses radix `mergeProps`: `style = { ...slotStyle, ...childStyle }`.
+- A `Pressable` whose `style` is a function (`({ pressed }) => [...]`) spreads to `{}` → the button's background, padding and border were dropped; the label (`color: #FFFFFF`) stayed → white text on a near-white screen. The Pressable and its tap area still existed, hence "invisible but tappable".
+- Not Release-only and not `styles.buttonText`; it is the Link-asChild + function-style composition. Verified in `node_modules/@radix-ui/react-slot` (mergeProps) and `expo-router/build/ui/Slot.js` (only flattens the Slot's own style).
+
+### UX change
+- login-methods: the two buttons are standalone `Pressable` + `router.push('/accounts' | '/account-deletion')`, same style as before (primary / danger).
+- Settings: new「アカウント管理」card at the top (above the long content form, visible without scrolling): ログイン方法の確認 / 投稿用のXアカウントの接続 / アカウントの削除 are explained, button「アカウントを管理する」→ `/login-methods`. No destructive logic in Settings.
+- Deletion screen, reauth, typed confirmation, server-confirmed outcome, `social_only` / `social_and_login` semantics, feature gate: untouched. `EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED` not enabled anywhere.
+
+### changed_files
+- apps/social-mobile/src/app/login-methods.tsx
+- apps/social-mobile/src/app/(tabs)/settings.tsx
+- apps/social-mobile/tests/native-link-button-style.test.mjs (new)
+- No change to x-connect, accounts/index.tsx, Auth, DB/RLS/RPC/migrations, Vault, OAuth, Edge functions, flags.
+
+### tests / checks (clean env, no local .env.local)
+- `npm test` 94/94 pass (5 new), `npm run typecheck` exit 0, `npm run lint` exit 0, `git diff --check` clean.
+- New test: AST scan of src/app + src/components for `Link asChild` with a function-valued child style (one known file excepted, listed in the test), detector self-check, both labels live in standalone Pressables that navigate and keep button style, Settings entry opens `/login-methods` and sits above 「コンテンツ設定」.
+- Note: with a local `.env.local` present (my earlier real-data E2E file) `auth-release-readiness` "operator script" fails because the script reads it; unrelated to this change, passes without the file.
+
+### Native verification (iOS Simulator, Release build, sample-data mode, no production connection)
+- Settings → 「アカウント管理」card + button visible at top without scrolling.
+- Tap → ログイン方法 screen. 「投稿用のX接続を確認する」 (blue) and 「アカウントの削除について」 (red) both visibly render with white labels.
+- Tap 削除 → アカウントの削除 screen (shows 準備中 because the flag is unset — gate behavior preserved). Tap X-confirm → アカウント screen. Both land correctly.
+- Local-only harness used and removed: sample-data `.env.local`, a temporary auth-gate bypass in `_layout.tsx` (reverted, never committed), a throwaway bundle id. After the check: app uninstalled, `ios/`, `app.config.js`, `.env.local` and the env backup deleted. Untracked `supabase/.temp` and `supabase/config.toml` (CLI link files) remain untracked and unstaged.
+
+### Findings (not fixed, out of this TASK's boundary)
+1. `src/app/accounts/index.tsx`「ログイン方法」card has the same defect (Link asChild + function style → card styling lost; visible as a flat unstyled block). File is touched by G4 PR #65; fix there or after it merges, then drop it from the test's allowlist.
+2. Settings existing「会話で相談する」 card is a dead tap (verified on native): `Link asChild` child is `Card`, which does not accept `onPress`. Needs a separate small fix (Pressable + router.push, or let Card forward touch props). Also applies to other `Link asChild > Card/View` uses (accounts/index.tsx account rows, history/schedule rows) — worth auditing together.
+3. The same family of problem can silently return; the new test guards only Link-asChild-with-function-style, not non-forwarding children.
+
+### Production / safety
+- production mutation = 0, real X operations = 0, no deploy, no flag change, no destructive deletion, no secrets/tokens/emails in report.
+- Disposable E3 login/profile left in production untouched (belongs to the common-account decision).
+- G4 files and worktree untouched; own worktree only; explicit-path staging.
+
+### Remaining / next recommendation
+- Review and merge PR #68; then decide the fix for findings 1–2 (G4 / a follow-up).
+- Release gates unchanged: common-account deletion semantics, Apple production config, legal URLs/texts, audit retention, main-app account-delete coordination; deletion flag stays OFF.
+
+
+## Final K3 — account deletion UI release finish
+
+- verdict: **PASS**.
+- accepted PR #68 exact head: `ec292b50f8d9622a9c35dd1ce62a7d9ec1c1512b`.
+- squash merged as `c1f4f42ab78430ee0c214759b4ddac280b7f2265`.
+- root cause accepted: `Link asChild` + function-valued Pressable style lost the button container styling, leaving white text on a light background.
+- fix accepted: standalone Pressable + router.push for the two affected buttons; Settings now has a visible account-management entry.
+- native iOS Simulator Release verification passed for visibility and navigation.
+- tests: 94/94, typecheck PASS, lint PASS, diff check PASS.
+- no account-deletion backend/state-machine/scope/feature-flag/Auth/DB/RLS/RPC/Vault/OAuth change.
+- G4 files untouched; PR #65 remains a separate account-switch workstream.
+- production mutation: 0; real X operations: 0.
+- extra Codex review: not required because this is a narrow UI/navigation fix with native verification and no security/backend boundary change.
+- remaining non-blocking findings: accounts screen has a similar styling issue in a G4-owned file; Settings 「会話で相談する」 and similar Link-asChild non-forwarding children need a separate UI follow-up.
+- app binary/TestFlight release was not performed by this task; merge makes the source ready for the next native build.
+- G3 closed and reusable only after fresh allocation.
+
+
+## Final K3 — native Link navigation cleanup
+
+- verdict: **PASS**.
+- accepted PR #73 exact head: `645923ba87c8667073061d13a2fc46bbb31ebcbe`.
+- squash merged as `a81a60bb731e2c51aa907b4cc08234cb602c4f6a`.
+- scope remained UI/navigation-only: history, schedule, Settings, Accounts and the focused navigation regression test.
+- native Release-like Simulator verification confirmed all previously dead targets now navigate correctly and the Accounts 「ログイン方法」 card styling is restored.
+- audit accepted: all broken `Link asChild > Card/View` and function-style direct-child cases in app/components were fixed; remaining ActionButton cases are safe because they forward onPress to Pressable.
+- tests: social-mobile 113/113 PASS; typecheck PASS; lint PASS; git diff --check PASS.
+- no x-connect/OAuth/Auth/account-deletion/common-account/DB/RLS/RPC/Edge/Vault/flag/scheduler change.
+- production mutation: 0; real X operations: 0; deploy: none.
+- extra Codex review: not required because the final delta is narrow UI/navigation-only, shared primitives were not changed, and native before/after verification passed.
+- Netlify preview succeeded. Vercel status failure was only the known free-tier build-rate-limit and is not a candidate-quality failure for this native UI PR.
+- remaining UI issue: `/accounts/[id]` is now reachable but lacks a visible top header/back button; edge-swipe works. Treat separately as route/navigation polish.
+- no TestFlight/App Store/native production build was released by this task.
+- G3 closed and reusable after fresh allocation.
+
+
+## K3 decision — PR #78 AI consultation v1
+
+- verdict: **PASS to focused Codex review; merge/deploy HOLD**.
+- review target: PR #78 exact head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`.
+- PR open/mergeable; fresh main +7 commits with no overlap across the 11 PR files.
+- Netlify success; Vercel failure is the known build-rate-limit signal.
+- source/test scope is consistent with AI consultation v1; no migration/deploy/production mutation/X operation.
+- K3 does not merge because the candidate adds an authenticated AI API plus user-confirmed durable settings/persona writes.
+- H2 assigned `x-social-mobile-pr78-ai-consult-review-20261002`, recommended **Sol（高）**.
+- key review includes real production `updated_at` CAS/trigger semantics and verify_jwt config, not only unit tests.
+- next_owner: codex; wait for C2.
+
+
+## C2 result — schema prerequisite missing
+
+- verdict: **HOLD / CHANGES REQUIRED before PR #78 merge**.
+- H2 confirmed production `public.social_mobile_content_settings` is absent.
+- PR #78 source head remains `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`; no H2 source fix.
+- AI conversation source is not rejected on its merits; review stopped at the mandatory persistence/CAS prerequisite.
+- existing source-only migration candidate is undergoing a separate H2 review.
+- no production schema apply is authorized.
+- G3 remains review_required and blocked from merge/deploy until schema prerequisite and the remaining H2 PR #78 review gates are completed.
+
+
+## K3 decision — PR #81 content-settings hardening
+
+- verdict: **PASS to focused H2 rereview; merge/apply/deploy HOLD**.
+- accepted review target: PR #81 exact head `5595fb131813542c55c43bc783af623cdb9ea442`.
+- fresh main is 24 commits ahead of PR base with no overlap across the 7 PR files.
+- Netlify/Vercel checks green.
+- reported local evidence is sufficient to proceed to independent review, not to production apply.
+- H2 assigned `x-social-mobile-pr81-content-settings-hardening-rereview-20261003`, recommended **Sol（高）**.
+- production migration apply remains separately approval-gated.
+- PR #78 remains blocked until schema is independently accepted, applied with explicit approval, and read back.
+- next_owner: codex; wait for C2.
+
+
+## Final K3 — AI Lab topic continuity + Premium unlimited length — 2026-10-07
+
+- verdict: **PASS_CANDIDATE / final Codex rereview required / merge HOLD**.
+- exact candidate: PR #109 head `fb4afb21d7ce808de3257bebc8062aed93353dec`; PR remains open/unmerged.
+- accepted Premium-length delta:
+  - AI Lab profile changed from finite 280-code-point limit to explicit `UNLIMITED_POST_LENGTH`;
+  - 140/280 are neither target nor ceiling;
+  - natural short posts remain allowed; >280 is allowed when useful; no padding instruction;
+  - 641-code-point generation, dispatch guard and scheduled-post handoff all pass with exact characterCount;
+  - character-count diagnostics remain;
+  - account/post-type safety remains unchanged.
+- generator delta to rereview:
+  - explicit unlimited mode uses `max_output_tokens=2000` instead of 600;
+  - explicit unlimited mode rejects Responses API `status=incomplete` with `BRAND_POST_OUTPUT_INCOMPLETE` rather than returning a cut-off post;
+  - non-unlimited profiles retain prior 600-token behavior according to tests.
+- prior security/capacity delta remains accepted as candidate:
+  - B1 SET ROLE graph fail-closed guard;
+  - B2 canonical prerequisite table-shape proof;
+  - B3 exact unchanged lifecycle-function body proof;
+  - 13/13 adverse drift cases rejected with rollback;
+  - healthy migration apply/reapply PASS;
+  - real SQL 14 days x 10/day = 140/140;
+  - accepted 74-topic/Tier2/Tier3 source and migration/capacity/adverse files are byte-stable from security head `7c3c06d0`.
+- reported tests: x-test-post + _shared + migration invariants **1028/1028 PASS**; both PR109 disposable PG17 capacity/adverse runners ALL PASSED; Netlify SUCCESS; Vercel only account-wide deployment-rate-limit.
+- production access/write/migration apply/deploy/merge/scheduler/OpenAI/X: 0.
+- fresh slot check at K3: H1 is occupied by G4 PR #106 rereview; H2 is occupied by G2 PR #110 review. Do not overwrite either slot.
+- next: assign the first genuinely free H1/H2 to one exact-head rereview of `fb4afb21d7ce808de3257bebc8062aed93353dec`, recommended **Sol（高）**. Scope: prior B1-B3 closure + Premium unlimited-length delta + 2000-token/incomplete-response behavior only.
+- production rollout remains HOLD until that review passes and a later explicit migration/deploy gate is created.
+
+
+## Final ChatGPT acceptance — PR #109 merged — 2026-10-08 JST
+
+- external direct Codex review verdict accepted: **PASS**, no blocking finding.
+- exact reviewed head: `fb4afb21d7ce808de3257bebc8062aed93353dec`.
+- reviewer independently accepted B1/B2/B3, rollback/no-partial-mutation, 74-topic capacity (140/140), Premium unlimited length, 2000-token unlimited budget, incomplete-response fail-closed behavior, POSTONA non-regression and Kabumori X non-regression.
+- fresh GitHub check before merge: PR open/unmerged, exact head unchanged, `mergeable=true`; Netlify SUCCESS; Vercel FAILURE target was build-rate-limit.
+- source merge: **SUCCESS**, squash merge commit `d4f693128494d8e05b97563fb82b7db2871818c8`.
+- no production DB read/write, migration apply, Edge deploy, scheduler/manual invoke, real OpenAI/X call, OAuth/Vault/Auth/Cron/settings mutation was performed by this acceptance/merge.
+- production remains **NOT UPDATED** by source merge alone.
+- required production order remains: read-only preflight -> migration `20261007173000_ai_lab_topic_evergreen_capacity` first -> exact function/body/owner/ACL/role-graph/map read-back -> `x-test-post` deploy second -> bundle read-back -> natural scheduled-post observation.
+- production migration/deploy require a separate explicit rollout gate.
+- task status: done; next_owner: user/chatgpt rollout approval.
+
+
+## Production rollout receipt — PR #109 — 2026-10-08 JST
+
+- user approval: explicit approval received for PR #109 production rollout.
+- source already merged: `d4f693128494d8e05b97563fb82b7db2871818c8`.
+- target Supabase project: `wsmznyzcvmuitkglfeuj` / `stock-x-autopost`, ACTIVE_HEALTHY.
+- preflight:
+  - base migration `20261004090000_ai_lab_topic_claims` present;
+  - capacity migration not yet present;
+  - old claim body md5 `a3cbe66723878b209a84bbd32b2bdc21`;
+  - companion lifecycle body md5s all canonical;
+  - table owner postgres, RLS ON, FORCE RLS OFF, no policies/triggers, owner-only table ACL;
+  - anon/authenticated/service_role outgoing membership graph from these API roles: none;
+  - anon/authenticated claim EXECUTE false; service_role true;
+  - reviewed migration source on main exactly matched reviewed PR head.
+- migration apply: **SUCCESS**.
+  - MCP history entry: version `20261007214402`, name `20261007173000_ai_lab_topic_evergreen_capacity`.
+  - post-apply claim md5 `9aefd06d1ab537fbc6bde527997dace7`;
+  - SECURITY DEFINER true; `search_path=""`;
+  - ACL remains owner + service_role EXECUTE only;
+  - anon/authenticated EXECUTE false; service_role true;
+  - role membership paths remain none;
+  - evergreen-73 and 128-candidate contract present;
+  - four companion lifecycle function md5s unchanged.
+- Security Advisor before/after: existing baseline findings remain; no new PR109-specific security finding identified.
+- Edge deploy:
+  - previous `x-test-post`: v138, verify_jwt=false.
+  - deployed `x-test-post`: **v139 ACTIVE**, verify_jwt=false, EZBR `39eb22bc4584494aabc6f871e7623d74b86f57b00043a8bc219c0e4912cfb843`.
+  - deploy used current production v138 bundle as baseline to avoid bundling separately merged/unapproved social-model changes.
+  - changed runtime files were exactly:
+    1. `functions/_shared/brand/brand_profiles.ts`
+    2. `functions/_shared/brand/ai_lab_dev_diary_context.ts`
+    3. `functions/_shared/brand/brand_post_generator.ts`
+  - diary and profiles read back byte-equal to reviewed PR #109 head.
+  - generator intentionally preserves production `gpt-5.6-luna` model configuration while adding only PR109 Premium-length runtime behavior: unlimited output budget 2000 and incomplete-response fail-closed; no `social_ai_model_policy` import deployed.
+  - read-back confirms 74-topic/candidate source, reserve split, unlimited policy, 2000 budget, incomplete guard, default 600 budget for non-unlimited profiles.
+- manual scheduler invoke / manual X post / real test OpenAI call: **0**.
+- 2026-10-08 AI Lab schedule: 10 brand_post rows present and pending. First natural slot is 2026-10-08 07:51 JST.
+- rollout status: **APPLIED_PASS / natural scheduled-post observation pending**.
+- do not force a post merely for verification. Confirm the first natural slot later from scheduled_posts / execution logs.
+
+
+## Production model rollout receipt — AI Lab gpt-6-luna — 2026-10-08 JST
+
+- user requested the model change immediately after PR #109 rollout.
+- scope intentionally limited to the AI Lab scheduled-brand-post path inside `x-test-post`.
+- reviewed source basis: merged PR #105 exact head `78a43ae878205f726111dde1002bd28ea8e82b97`.
+- official OpenAI docs rechecked before deploy: `gpt-6-luna` supports Responses API and `reasoning.effort: low`; standard token pricing matches the reviewed policy ($0.10 input / $0.50 output per 1M).
+- production baseline: x-test-post v139.
+- deploy changed exactly two runtime modules:
+  1. `functions/_shared/brand/brand_post_generator.ts`
+  2. `functions/_shared/social_ai_model_policy.ts`
+- generator now resolves `brandPostGeneration` through the reviewed central policy -> `gpt-6-luna`; token cost uses the same policy.
+- PR #109 runtime behavior remains intact: AI Lab unlimited length, 2000 max-output-token budget for explicit unlimited mode, incomplete-response fail-closed, 74-topic/candidate source.
+- x-test-post production after deploy: **v140 ACTIVE**, verify_jwt=false, EZBR `fb79c7866b30339215c4f104d700f882a8ff17c864d061de0f83cf4c14dab1f4`.
+- post-deploy read-back:
+  - policy file present;
+  - `brandPostGeneration -> fast -> gpt-6-luna`;
+  - old hardcoded 5.6 Luna removed from shared brand generator;
+  - Kabumori x-test-post index still contains its existing 5.6 model configuration and was not migrated by this deploy;
+  - POSTONA standalone Edge Functions were not deployed or changed.
+- manual scheduler invoke / manual OpenAI call / manual X post: 0.
+- first natural AI Lab scheduled row remains pending for 2026-10-08 07:51 JST.
+- completion condition for the combined AI Lab repair + model rollout: first natural scheduled post succeeds through claim -> GPT-6 Luna generation -> X publish.
+
+## Production rollout receipt — Kabumori X GPT-6 models — 2026-10-08 JST
+
+- user explicitly requested the Kabumori X model rollout after AI Lab GPT-6 Luna went live.
+- source basis: already-merged/reviewed PR #105 exact head `78a43ae878205f726111dde1002bd28ea8e82b97`.
+- production baseline: `x-test-post` v140.
+- scope: Kabumori X model IDs + centralized token-cost accounting only. No prompt/retry/web-search-count/authorization/schedule changes.
+- routine Kabumori X workloads now resolve to `gpt-6-luna`.
+- existing quality escalation paths (Useful Tips and US premarket only under their pre-existing conditions) resolve to `gpt-6.1-sol`.
+- deployed runtime files changed exactly:
+  1. `functions/x-test-post/index.ts`
+  2. `functions/x-test-post/morning_greeting_logic.ts`
+  3. `functions/x-test-post/report_voice_rewrite_logic.ts`
+  4. `functions/x-test-post/useful_tip_generation_logic.ts`
+- central policy module was already present from the preceding AI Lab v140 rollout and was unchanged.
+- production result: **x-test-post v141 ACTIVE**, verify_jwt=false, EZBR `804467c5f9b3887a7937001da70c74d0dc1bf2153dc806a5362eb450d1c29895`.
+- read-back:
+  - no `gpt-5.6-luna` / `gpt-5.6-sol` literals remain in x-test-post index or the three model helper modules;
+  - policy catalog resolves routine to `gpt-6-luna`, quality to `gpt-6.1-sol`;
+  - normal text, search collection, voice evaluation/rewrite, greeting and useful-tip/us-premarket escalation paths all reference central workloads;
+  - AI Lab GPT-6 Luna + unlimited/2000/incomplete/74-topic fixes remain intact.
+- POSTONA standalone Edge Functions were not deployed/changed by this rollout.
+- DB/schema/migration/Auth/OAuth/Vault/Cron changes: 0.
+- manual OpenAI call/manual X post/manual scheduler invoke: 0.
+- next verification: observe the next natural Kabumori X scheduled generation/post; no forced post is required.
