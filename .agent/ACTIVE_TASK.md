@@ -107,11 +107,11 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: done
 - task_id: kabumori-g1-five-tab-release-simulator-qa-20261012
 - start_code: G1
 - finish_code: K1
-- next_owner: claude
+- next_owner: none
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
 - allocation: 2026-10-12 prior portfolio Simulator QA K1 PASS and done; new read-only five-tab release Simulator QA assigned. Home/銘柄/ニュース/レポート/メニュー navigation, 375pt/402pt, fixtures, regressions; no G2/G5/G8/G9 work, production data editing, EAS or deploy.
