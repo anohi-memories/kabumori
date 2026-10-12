@@ -53,18 +53,18 @@
 
 ## F4
 - slot: F4
-- status: idle
-- task_id: none
+- status: ready
+- task_id: postona-f4-threads-disconnect-lease-safe-v1-20261012
 - owner: claude
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: claude
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
-- recommended_model: none
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
-- dependencies: none
-- blocker: none
-- slot_use: X自動投稿アプリ（POSTONA）
+- dependencies: G4 PR154, G5 PR152 corrected, H5 PR159; G3 X booking protected
+- blocker: real pilot/production NO_GO; G5 adapter registration separate
+- slot_use: POSTONA Threads（旧G4の後継）
 
 ## F5
 - slot: F5
