@@ -229,14 +229,14 @@
 ## Claude G10
 - owner: claude
 - slot: claude-10
-- status: review_required
+- status: done
 - task_id: agent-v2-dual-slot-migration-20261012
 - start_code: G10
 - finish_code: K10
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_10.md
 - report: .agent/tasks/CLAUDE_TASK_10.md#report
-- allocation: 2026-10-12 ユーザーがチャットで直接提示・明示承認しClaudeが登録。新旧30枠の段階移行用に `.agent_v2/` 新15枠基盤（F1〜F10/L1〜L10、J1〜J5/V1〜V5）・旧.agent完全snapshot・MANIFEST/SHA256・HISTORY_INDEX・移行ルールを別系統で構築し、Draft PRまで。旧G/H TASK・Report変更、merge、deploy、production操作は禁止。2026-10-12 G10報告: Draft PR #155（head 8a28a067a20daec5bd96e09656bdfab144c3c458、未merge）、snapshot 33ファイルのSHA256・復元テスト・HISTORY_INDEX参照856件すべてPASS、旧15枠差分ゼロ。K10待ち。
+- allocation: 2026-10-12 ユーザーがチャットで直接提示・明示承認しClaudeが登録。新旧30枠の段階移行用に `.agent_v2/` 新15枠基盤（F1〜F10/L1〜L10、J1〜J5/V1〜V5）・旧.agent完全snapshot・MANIFEST/SHA256・HISTORY_INDEX・移行ルールを別系統で構築し、Draft PRまで。旧G/H TASK・Report変更、merge、deploy、production操作は禁止。2026-10-12 G10報告: Draft PR #155（head 8a28a067a20daec5bd96e09656bdfab144c3c458、未merge）、snapshot 33ファイルのSHA256・復元テスト・HISTORY_INDEX参照856件すべてPASS、旧15枠差分ゼロ。K10 PASS / PR #155 merged `4e80c79dc42c11fbc1ca105665514b0dd32842d3`、G10完了・解放済み。
 - recommended_model: Opus5.5（高）
 
 ## Deferred
