@@ -53,17 +53,17 @@
 
 ## F4
 - slot: F4
-- status: ready
+- status: review_required
 - task_id: postona-f4-threads-disconnect-lease-safe-v1-20261012
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
 - dependencies: G4 PR154, G5 PR152 corrected, H5 PR159; G3 X booking protected
-- blocker: real pilot/production NO_GO; G5 adapter registration separate
+- blocker: real pilot/production NO_GO; G5 adapter registration separate; F4 reported Draft PR167 head 02fd1989303879979b137f8338f8bc6944f266b1 (base PR154 branch), awaiting L4
 - slot_use: POSTONA Threads（旧G4の後継）
 
 ## F5
