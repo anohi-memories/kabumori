@@ -3,8 +3,8 @@
 - task_id: common-account-g5-phase4-pr152-pr121-security-review-h4-20261012
 - owner: codex
 - slot: codex-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: H4
 - finish_code: C4
 - completion_code: C4
