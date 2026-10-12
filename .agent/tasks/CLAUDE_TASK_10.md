@@ -3,8 +3,8 @@
 - task_id: agent-v2-dual-slot-migration-20261012
 - owner: claude
 - slot: claude-10
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G10
 - finish_code: K10
 - recommended_model: **Opus5.5（高）**
@@ -689,3 +689,13 @@ bytes・文字数は実測。tokenは「ASCII文字数÷4＋非ASCII文字数÷1
 5. 完全移行の条件（旧系統の継続TASKと未処理K / Cが無い、新基盤が安定稼働、未解決の依存関係が無い）が揃ったら、別TASKで旧 `.agent/` の最終snapshotを取り、hash照合と復元確認をする。
 6. 別TASKで完全移行を行う（F→G、J→H、L→K、V→C、`.agent_v2/` を正式 `.agent/` へ昇格、旧基盤をarchiveへ）。
 - next_recommendation: K10でPR #155を確認し、merge可否と最初の新系統TASKの置き場所を判断する。
+
+
+## K10 FINAL — ChatGPT acceptance / 2026-10-12 JST
+
+- task_id: agent-v2-dual-slot-migration-20261012
+- result: **PASS / MERGED / CLOSED**。G10実装PASS、H3 C3独立レビューPASS。
+- PR: #155; reviewed HEAD `8a28a067a20daec5bd96e09656bdfab144c3c458`; merge commit `4e80c79dc42c11fbc1ca105665514b0dd32842d3`（GitHub read-back確認）。
+- tests/safety: archive 33/33 hash・restore、HISTORY_INDEX参照856件、旧TASK/Report/ACTIVE/CURRENT保護をH3報告とマージ後の確認で受理。production deployなし。新F/J割当なし。
+- next_owner: none。G10を解放。旧TASKは旧G/Hで完結し、次の新規TASKから個別にF/Jへ移行する。
+- remaining: `.agent_v2/CURRENT_STATE.md` のmerge済み記載を更新。初回新TASK完了時に履歴保存を実証し、完全移行は別TASK。
