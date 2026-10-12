@@ -1,3 +1,12 @@
+## K8 FINAL — PR129 R4 QA = MERGE_CANDIDATE(source-only), G8 R5 default-OFF release switches READY — 2026-10-12 11:36 JST
+
+- K8の対象はこのチャットのニュース改善A/G8専任TASK `news-improvement-a-pr129-premerge-offline-integration-qa-g8-20261012`。TASK/Reportに `review_required` と `MERGE_CANDIDATE (source-only)`を確認。PR129 `0a2df248f6e49bcb1bfea690f38064c93e5f895c` OPEN/Draft、未merge。本番反映未実施。
+- G8の独立一時QAワークツリー（報告）: 統合main `cdb066fad5b2a7bd20ce4e0685f50f575fe560ef` に対し `git merge-tree --write-tree`および一時 `git merge --no-commit --no-ff`で競合0（中断・一時worktree破棄、コミットなし）。既存重要ニュース761 PASS、抽出34 PASS、news_discovery/observer162 PASS、shadow20 PASS、shared ai_provider94 PASS（G8実行報告、ChatGPTはこれらを再実行していない）。H4指摘 R1/R2/R3回帰はG8報告でPASS。PDF実取得60件は今回は再検証せず、以前のfacts51/数値一致51を採用したと明記。
+- K8確認時のfresh mainは`26d6921667701027033c1ea9d2cc67a31617b45b`。G8 QA-main以降main+1 commit/changed file1、PR129関連path重複なしとGitHub比較で確認したが、K8自身が最新mainでmerge-tree/testをやり直しておらず最新mergeabilityはGitHub API`unknown`。Vercel failureは`build-rate-limit`、Netlify Preview success。CI全GREENや本番成功と断定しない。
+- **K8 verdict: MERGE_CANDIDATE_SOURCE_ONLY / RELEASE_HOLD**。理由: 新Fed声明本文取得（同一Fed公式hostのFact抽出・pending body-fill）と新TDnet決算factsが`fetchSources=true`で無条件起動し、production rollbackなしのOFFスイッチ無し。稼働時に誤Factや過剰API/漏れが判明しても安全に独立停止できない。既存F9 backlog(no_post/failed)再判定無し、F7 RSS14日/2 success/4attempt/20s非hard、TDnet unreadable generic fallback、BOJ rights pending、production Edge/RLS未検証等を残件として保持。
+- **次の限定作業はG8のみ**: `news-improvement-a-pr129-release-safety-env-switches-g8-20261012`を`ready`で登録。推薦Sonnet5（高）、G8→K8。独立初期OFF env `IMPORTANT_NEWS_FED_STATEMENT_BODY_ENRICHMENT=enabled`、`IMPORTANT_NEWS_TDNET_KESSAN_FACTS=enabled`を追加。OFFでFed legacy RSS・TDnet legacy genericを維持、ONでR3機能保持、ON/OFF回帰とrunbookのみ。PR129ブランチへの安全なcommit/pushは可、merge/deploy/production env改変は禁止。他のG/H TASK、G9 API最適化B、PR116固定本番作業を変更しない。
+- PR116の固定コミット`a26e4365ebcb701491629892e8bae207d28833c2`での2026-10-13 JST 08:00前デプロイ予定は別工程として保護。GitHub上PR116がmergedであることは確認したが、このK8で本番read-backしないためdeploy済みと扱わない。PR129はPR116 sourceへ混入させない。
+
 ## G6 Phase2b offline wiring assignment — 2026-10-12 JST
 
 - User 「すすめて」 approved next **offline-only** Phase2b following K6 acceptance of Phase2a PR148. G6 task `common-ai-provider-g6-phase2b-market-report-wiring-offline-20261012`, status **ready/next_owner claude**, start G6, finish K6, return_to 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）, recommended **Opus5.5（高）**.
@@ -587,7 +596,7 @@
 | G5 | `in_progress` | `common-account-phase3g-free-auth-provider-test-readiness-20261011` | `claude` | — | `K5` | `.agent/tasks/CLAUDE_TASK_5.md` |
 | G6 | `idle` | `none` | `none` | — | `K6` | `.agent/tasks/CLAUDE_TASK_6.md` |
 | G7 | `idle` | `none` | `none` | — | `K7` | `.agent/tasks/CLAUDE_TASK_7.md` |
-| G8 | `ready` | `news-improvement-a-pr129-premerge-offline-integration-qa-g8-20261012` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
+| G8 | `ready` | `news-improvement-a-pr129-release-safety-env-switches-g8-20261012` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
 | G9 | `done` | `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011` | `none` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
 | G10 | `idle` | `none` | `none` | — | `K10` | `.agent/tasks/CLAUDE_TASK_10.md` |
 
