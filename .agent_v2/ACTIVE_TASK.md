@@ -1,0 +1,238 @@
+# Active Tasks Index v2（新系統15枠）
+
+新系統（F1〜F10 / J1〜J5）の現在状態だけを置く索引。詳細と正本は各TASK / Report。過去のK / L / C / V判定は書かない。statusだけで空き判定しない。
+
+- 旧系統（G1〜G10 / H1〜H5）の索引は `.agent/ACTIVE_TASK.md`（移行期間中の現行正本）。
+- 単独 `F` は、移行期間中この索引と旧索引の両方を見て新旧30枠を統括する（`.agent_v2/ORCHESTRATION.md`）。
+- 導入PRのmerge前は新系統を使わない。merge後も、TASKが置かれるまで全枠 `idle`。
+
+## F1
+- slot: F1
+- status: idle
+- task_id: none
+- owner: claude
+- next_owner: none
+- return_to: none（未割当）
+- completion_code: L1
+- recommended_model: none
+- current_task_path: .agent_v2/tasks/F1.md
+- current_report_path: .agent_v2/tasks/F1.md#report
+- dependencies: none
+- blocker: none
+- slot_use: かぶモリアプリ
+
+## F2
+- slot: F2
+- status: idle
+- task_id: none
+- owner: claude
+- next_owner: none
+- return_to: none（未割当）
+- completion_code: L2
+- recommended_model: none
+- current_task_path: .agent_v2/tasks/F2.md
+- current_report_path: .agent_v2/tasks/F2.md#report
+- dependencies: none
+- blocker: none
+- slot_use: かぶモリアプリ
+
+## F3
+- slot: F3
+- status: idle
+- task_id: none
+- owner: claude
+- next_owner: none
+- return_to: none（未割当）
+- completion_code: L3
+- recommended_model: none
+- current_task_path: .agent_v2/tasks/F3.md
+- current_report_path: .agent_v2/tasks/F3.md#report
+- dependencies: none
+- blocker: none
+- slot_use: X自動投稿アプリ（POSTONA）
+
+## F4
+- slot: F4
+- status: idle
+- task_id: none
+- owner: claude
+- next_owner: none
+- return_to: none（未割当）
+- completion_code: L4
+- recommended_model: none
+- current_task_path: .agent_v2/tasks/F4.md
+- current_report_path: .agent_v2/tasks/F4.md#report
+- dependencies: none
+- blocker: none
+- slot_use: X自動投稿アプリ（POSTONA）
+
+## F5
+- slot: F5
+- status: idle
+- task_id: none
+- owner: claude
+- next_owner: none
+- return_to: none（未割当）
+- completion_code: L5
+- recommended_model: none
+- current_task_path: .agent_v2/tasks/F5.md
+- current_report_path: .agent_v2/tasks/F5.md#report
+- dependencies: none
+- blocker: none
+- slot_use: 予備枠（ユーザーまたはChatGPTの明示割当専用）
+
+## F6
+- slot: F6
+- status: idle
+- task_id: none
+- owner: claude
+- next_owner: none
+- return_to: none（未割当）
+- completion_code: L6
+- recommended_model: none
+- current_task_path: .agent_v2/tasks/F6.md
+- current_report_path: .agent_v2/tasks/F6.md#report
+- dependencies: none
+- blocker: none
+- slot_use: 予備枠（ユーザーまたはChatGPTの明示割当専用）
+
+## F7
+- slot: F7
+- status: idle
+- task_id: none
+- owner: claude
+- next_owner: none
+- return_to: none（未割当）
+- completion_code: L7
+- recommended_model: none
+- current_task_path: .agent_v2/tasks/F7.md
+- current_report_path: .agent_v2/tasks/F7.md#report
+- dependencies: none
+- blocker: none
+- slot_use: 予備枠（ユーザーまたはChatGPTの明示割当専用）
+
+## F8
+- slot: F8
+- status: idle
+- task_id: none
+- owner: claude
+- next_owner: none
+- return_to: none（未割当）
+- completion_code: L8
+- recommended_model: none
+- current_task_path: .agent_v2/tasks/F8.md
+- current_report_path: .agent_v2/tasks/F8.md#report
+- dependencies: none
+- blocker: none
+- slot_use: 予備枠（ユーザーまたはChatGPTの明示割当専用）
+
+## F9
+- slot: F9
+- status: idle
+- task_id: none
+- owner: claude
+- next_owner: none
+- return_to: none（未割当）
+- completion_code: L9
+- recommended_model: none
+- current_task_path: .agent_v2/tasks/F9.md
+- current_report_path: .agent_v2/tasks/F9.md#report
+- dependencies: none
+- blocker: none
+- slot_use: 予備枠（ユーザーまたはChatGPTの明示割当専用）
+
+## F10
+- slot: F10
+- status: idle
+- task_id: none
+- owner: claude
+- next_owner: none
+- return_to: none（未割当）
+- completion_code: L10
+- recommended_model: none
+- current_task_path: .agent_v2/tasks/F10.md
+- current_report_path: .agent_v2/tasks/F10.md#report
+- dependencies: none
+- blocker: none
+- slot_use: 予備枠（ユーザーまたはChatGPTの明示割当専用）
+
+## J1
+- slot: J1
+- status: idle
+- task_id: none
+- owner: codex
+- next_owner: none
+- return_to: none（未割当）
+- completion_code: V1
+- recommended_model: none
+- current_task_path: .agent_v2/tasks/J1.md
+- current_report_path: .agent_v2/reports/J1.md
+- dependencies: none
+- blocker: none
+- slot_use: レビュー・バグ修正・検証（案件固定なし）
+
+## J2
+- slot: J2
+- status: idle
+- task_id: none
+- owner: codex
+- next_owner: none
+- return_to: none（未割当）
+- completion_code: V2
+- recommended_model: none
+- current_task_path: .agent_v2/tasks/J2.md
+- current_report_path: .agent_v2/reports/J2.md
+- dependencies: none
+- blocker: none
+- slot_use: レビュー・バグ修正・検証（案件固定なし）
+
+## J3
+- slot: J3
+- status: idle
+- task_id: none
+- owner: codex
+- next_owner: none
+- return_to: none（未割当）
+- completion_code: V3
+- recommended_model: none
+- current_task_path: .agent_v2/tasks/J3.md
+- current_report_path: .agent_v2/reports/J3.md
+- dependencies: none
+- blocker: none
+- slot_use: レビュー・バグ修正・検証（案件固定なし）
+
+## J4
+- slot: J4
+- status: idle
+- task_id: none
+- owner: codex
+- next_owner: none
+- return_to: none（未割当）
+- completion_code: V4
+- recommended_model: none
+- current_task_path: .agent_v2/tasks/J4.md
+- current_report_path: .agent_v2/reports/J4.md
+- dependencies: none
+- blocker: none
+- slot_use: レビュー・バグ修正・検証（案件固定なし）
+
+## J5
+- slot: J5
+- status: idle
+- task_id: none
+- owner: codex
+- next_owner: none
+- return_to: none（未割当）
+- completion_code: V5
+- recommended_model: none
+- current_task_path: .agent_v2/tasks/J5.md
+- current_report_path: .agent_v2/reports/J5.md
+- dependencies: none
+- blocker: none
+- slot_use: Codex臨時実装の優先枠（基本は空けておく）
+
+## コード
+
+- `F1`〜`F10`: 新Claude枠の開始。完了確認は `L1`〜`L10`（1対1）。
+- `J1`〜`J5`: 新Codex枠の開始。完了確認は `V1`〜`V5`（1対1）。
+- 単独 `F`（数字なし）: 新旧30枠の統括。`F1`〜`F10` とは完全一致で区別する。
