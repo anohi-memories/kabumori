@@ -3,7 +3,7 @@
 - task_id: postona-h5-threads-auth-owner-runtime-final-wiring-20261012
 - owner: codex
 - slot: codex-5
-- status: ready
+- status: in_progress
 - next_owner: codex
 - start_code: H5
 - finish_code: C5
@@ -19,6 +19,8 @@
 - source_restrictions: edit **only NEW H5-owned files and carefully scoped H5-auth-runtime files/Edge index owned by H5**. Never change G4 PR154/144/140/124 source, G5 PR152/121/source/Auth/delete/entitlements, H1 PR135, G3 X/schedule or other owner branches/files, `.agent_v2/`, production workflow, G6-G10. Do not create role/grants that bypass owner-only fences; don't use `service_role` as owner, forge unverified user/session claims or remove security checks.
 
 ## Verified state and protected PR dependencies at allocation (2026-10-12 JST)
+
+H5 startup 2026-10-12: fresh main `34b64ad4`; new isolated source/report/integration worktrees under `/private/tmp/kabumori-h5-wiring-20261012.EzokAp`. Source is exactly PR139-based new branch `codex/h5-threads-owner-runtime-wiring-20261012`; G4 PR154 unchanged. G5 PR152 advanced legitimately to `ccea1fe8132c6f573a768f0df5a033a05c62ef2c` and current G5 TASK done after K5; compatibility must use/read this repaired version as well, without editing G5. All production/pilot gates stay NO_GO.
 
 - Fresh GitHub `origin/main` at assignment **`add7685c782195a3a1a93cafeed5af88852b809d`** (refresh locally on start).
 - **H5 Draft [PR139](https://github.com/anohi-memories/kabumori/pull/139)**: exact `b4fa672f97592e87682671454e868a92098cbd56`, OPEN/DRAFT/UNMERGED, 13 H5-owned paths; base H1 [PR135](https://github.com/anohi-memories/kabumori/pull/135) `e38788d6677082138f0990453c7d2f00549666d0`; ancestor G4 [PR124](https://github.com/anohi-memories/kabumori/pull/124) `c30f246409a77080cbc03aef6c4cb72b5481e125`. H5 PR139 has candidate `verified_actor.ts` (real getClaims+getUser interface), `owner_transport.ts` (injected SQL client, strict owner role and SET LOCAL verified actor, one-shot commit), `runtime.ts` (signed actor/state/code exchange and complete), `claim_candidate.sql` (durable claim), and `supabase/functions/threads-oauth-connect-user/index.ts` (intentionally 503 via disabled_entry).
