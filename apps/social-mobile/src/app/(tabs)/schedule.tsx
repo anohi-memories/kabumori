@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { mockRepository } from '@/data/mock-repository';
 import { SupabaseContentSettingsRepository } from '@/data/content-settings-repository';
 import { supabase } from '@/lib/supabase';
@@ -27,21 +27,31 @@ import {
   resolveConflicts,
   type ScheduleBatch,
   type ScheduleDraft,
-  type ScheduleMode,
   type UnifiedFilter,
   type UnifiedItem,
 } from '@/domain/schedule-planner';
 import type { PostOrigin, PostStatus } from '@/domain/types';
-import { ScheduleComposer, SmallButton, type AiPlanningInput } from '@/features/schedule/schedule-composer';
+import {
+  confirmDraft,
+  confirmationProgress,
+  confirmationStatus,
+  EMPTY_CONFIRMATIONS,
+  withConfirmation,
+  withoutConfirmations,
+  type ConfirmationMap,
+} from '@/features/schedule/confirmation-state';
+import { PreviewCard } from '@/features/schedule/preview-card';
 import { createReservationStore } from '@/features/schedule/reservation-store';
+import { MODE_LABELS, PREVIEW_LABEL } from '@/features/schedule/schedule-labels';
+import { ScheduleComposer, SmallButton, type AiPlanningInput } from '@/features/schedule/schedule-composer';
+import { sha256Hex } from '@/features/schedule/sha256';
+import { jstFieldsOf, retimeFixedDraft } from '@/features/schedule/time-edit';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useDataStatus } from '@/providers/data-provider';
 
 const originLabels: Record<PostOrigin, string> = { ai_generated: 'AI生成', user_authored: 'ユーザー作成', fixed: '固定', manual: '手動' };
 const statusLabels: Record<PostStatus, { label: string; tone: 'neutral' | 'success' | 'warning' | 'danger' }> = { draft: { label: '下書き', tone: 'neutral' }, scheduled: { label: '投稿待ち', tone: 'warning' }, publishing: { label: '投稿中', tone: 'warning' }, published: { label: '投稿済み', tone: 'success' }, failed: { label: '失敗', tone: 'danger' } };
-const modeLabels: Record<ScheduleMode, string> = { manual_exact: '指定日時', manual_random_batch: 'まとめてランダム', manual_interval: '間隔指定', ai_flexible: 'AI自動予約' };
 const FILTERS: { key: UnifiedFilter; label: string }[] = [{ key: 'all', label: 'すべて' }, { key: 'ai', label: 'AI自動投稿' }, { key: 'manual', label: '手動予約' }];
-const PREVIEW_LABEL = 'プレビュー／未予約・投稿されません';
 
 export default function ScheduleScreen() {
   const { activeAccount } = useActiveAccount();
@@ -61,6 +71,10 @@ export default function ScheduleScreen() {
   const [drafts, setDrafts] = useState<ScheduleDraft[]>([]);
   const [batches, setBatches] = useState<ScheduleBatch[]>([]);
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  const [retiming, setRetiming] = useState<{ id: string; date: string; time: string } | null>(null);
+  // What the user confirmed, post by post (session-only). Validity is recomputed from the current draft on
+  // every render, so an edit, time change, re-roll or conflict move invalidates it at once.
+  const [confirmations, setConfirmations] = useState<ConfirmationMap>(EMPTY_CONFIRMATIONS);
   const [notice, setNotice] = useState<{ tone: 'success' | 'warning' | 'danger'; text: string } | null>(null);
   // The AI plan uses the frequency confirmed in AI consultation (read only; nothing is written from here).
   // The values are bound to the exact brand they were read for: a workspace switch drops them at once, a late
@@ -111,6 +125,9 @@ export default function ScheduleScreen() {
   const conflictIds = new Set(conflicts.flatMap((conflict) => [conflict.firstId, conflict.secondId]));
   const myDrafts = drafts.filter((draft) => draft.accountId === accountId && draft.state !== 'cancelled');
   const myBatches = batches.filter((batch) => batch.accountId === accountId && myDrafts.some((draft) => draft.batchId === batch.id));
+  // The selected X account is the only posting destination shown or confirmed here.
+  const previewAccount = activeAccount ? { displayName: activeAccount.profile.displayName, handle: activeAccount.profile.handle } : null;
+  const overall = confirmationProgress(myDrafts, confirmations);
   const occupiedExcept = (batchId?: string) => everything.filter((item) => item.source === 'server' || item.draft.batchId !== batchId)
     .map((item) => ({ scheduledAt: item.scheduledAt, fixed: item.source === 'server' || item.draft.fixed }));
 
@@ -124,7 +141,7 @@ export default function ScheduleScreen() {
     const rerolled = new Map(result.drafts.map((draft) => [draft.id, draft]));
     setDrafts((current) => current.map((draft) => rerolled.get(draft.id) ?? draft));
     setBatches((current) => current.map((candidate) => (candidate.id === batch.id ? result.batch : candidate)));
-    setNotice({ tone: 'success', text: `${modeLabels[batch.mode]}の日時を引き直しました（プレビューのみ）。` });
+    setNotice({ tone: 'success', text: `${MODE_LABELS[batch.mode]}の日時を引き直しました（プレビューのみ）。` });
   }
 
   function resolve() {
@@ -133,6 +150,37 @@ export default function ScheduleScreen() {
     setNotice(result.issues.length
       ? { tone: 'danger', text: result.issues.map((issue) => issue.message).join(' ') }
       : { tone: 'success', text: `${result.moved.length}件の予定を、決めた時間帯の中で動かしました（プレビューのみ）。` });
+  }
+
+  function confirm(draftId: string) {
+    const target = drafts.find((draft) => draft.id === draftId);
+    if (!target) return;
+    // Records exactly what the card shows now; an edit made while the hash is computed leaves it invalid.
+    void confirmDraft(target, sha256Hex).then((confirmed) => {
+      if (confirmed) setConfirmations((current) => withConfirmation(current, confirmed));
+    });
+  }
+
+  function cancelPosts(ids: string[]) {
+    const drop = new Set(ids);
+    setDrafts((current) => current.map((draft) => (drop.has(draft.id) ? cancelDraft(draft) : draft)));
+    setConfirmations((current) => withoutConfirmations(current, ids));
+    setEditing((current) => (current && drop.has(current.id) ? null : current));
+    setRetiming((current) => (current && drop.has(current.id) ? null : current));
+  }
+
+  function applyRetime() {
+    if (!retiming) return;
+    const target = drafts.find((draft) => draft.id === retiming.id);
+    if (!target) return;
+    const next = retimeFixedDraft(target, { date: retiming.date, time: retiming.time }, new Date());
+    if ('code' in next) {
+      setNotice({ tone: 'danger', text: next.message });
+      return;
+    }
+    setDrafts((current) => current.map((draft) => (draft.id === next.id ? next : draft)));
+    setRetiming(null);
+    setNotice({ tone: 'warning', text: '日時を変更しました。この投稿の確認は無効になりました（プレビューのみ）。' });
   }
 
   function applyEdit() {
@@ -184,19 +232,37 @@ export default function ScheduleScreen() {
           <Card>
             <Pill tone="warning">{PREVIEW_LABEL}</Pill>
             <Text style={styles.muted}>プレビューは、この画面を閉じたりアプリを再起動したりすると消えます（端末にもサーバーにも保存しません）。実際の予約と投稿は、まだ利用できません。</Text>
+            {overall.manualTotal ? (
+              <View style={{ gap: 4 }}>
+                <Pill tone={overall.complete ? 'success' : 'warning'}>{`確認済み ${overall.confirmed}/${overall.manualTotal}件`}</Pill>
+                <Text style={styles.muted}>
+                  {overall.complete
+                    ? 'すべての手動投稿の本文・日時・投稿先を確認しました。ただし、予約の保存はまだ利用できません。'
+                    : `保存できるようになるには、手動投稿を1件ずつ確認する必要があります（未確認 ${overall.unconfirmed}件${overall.invalidated ? `・変更により確認が無効 ${overall.invalidated}件` : ''}）。`}
+                </Text>
+              </View>
+            ) : null}
+            {overall.aiSlots ? (
+              <Text style={styles.muted}>AI自動予約の枠は本文がなく、1件ずつの確認はありません。AI相談の「これで覚えて」は自動投稿の同意になりません。</Text>
+            ) : null}
             {!reservationStore.enabled ? (
               <View style={{ gap: 4 }}>
                 <ActionButton label="予約として保存（準備中）" onPress={() => {}} disabled />
                 <Text style={styles.muted}>予約の保存は、利用登録・Xアカウントの本人確認・安全確認の準備が整うまで使えません。押しても何も送信されません。</Text>
               </View>
             ) : null}
-            {myBatches.map((batch) => (
-              <View key={batch.id} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-                <Text style={{ color: colors.ink }}>{modeLabels[batch.mode]}（{myDrafts.filter((draft) => draft.batchId === batch.id).length}件）</Text>
-                {batch.mode === 'manual_random_batch' || batch.mode === 'ai_flexible' ? <SmallButton label="再抽選" onPress={() => reroll(batch)} /> : null}
-                <SmallButton label="まとめて取り消し" onPress={() => setDrafts((current) => current.map((draft) => (draft.batchId === batch.id ? cancelDraft(draft) : draft)))} />
-              </View>
-            ))}
+            {myBatches.map((batch) => {
+              const own = myDrafts.filter((draft) => draft.batchId === batch.id);
+              const progress = confirmationProgress(own, confirmations);
+              return (
+                <View key={batch.id} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ color: colors.ink }}>{MODE_LABELS[batch.mode]}（{own.length}件）</Text>
+                  {progress.manualTotal ? <Pill tone={progress.complete ? 'success' : 'neutral'}>{`確認 ${progress.confirmed}/${progress.manualTotal}`}</Pill> : null}
+                  {batch.mode === 'manual_random_batch' || batch.mode === 'ai_flexible' ? <SmallButton label="再抽選" onPress={() => reroll(batch)} /> : null}
+                  <SmallButton label="まとめて取り消し" onPress={() => cancelPosts(own.map((draft) => draft.id))} />
+                </View>
+              );
+            })}
           </Card>
         ) : null}
         {conflicts.length ? (
@@ -226,11 +292,20 @@ export default function ScheduleScreen() {
         {view.kind !== 'loading' && items.length
           ? items.map((item) => (item.source === 'server'
             ? <ServerCard key={item.id} item={item} />
-            : <PreviewCard key={item.id} item={item} conflict={conflictIds.has(item.id)} editing={editing?.id === item.id ? editing.text : null}
-                onEdit={() => setEditing({ id: item.id, text: item.draft.text })} onEditChange={(text) => setEditing({ id: item.id, text })}
+            : <PreviewCard key={item.id} draft={item.draft} account={previewAccount} conflict={conflictIds.has(item.id)}
+                confirmation={confirmationStatus(item.draft, confirmations)}
+                editing={editing?.id === item.id ? editing.text : null}
+                retiming={retiming?.id === item.id ? { date: retiming.date, time: retiming.time } : null}
+                onEdit={() => { setRetiming(null); setEditing({ id: item.id, text: item.draft.text }); }}
+                onEditChange={(text) => setEditing({ id: item.id, text })}
                 onEditApply={applyEdit} onEditCancel={() => setEditing(null)}
+                onRetime={() => { setEditing(null); setRetiming({ id: item.id, ...jstFieldsOf(item.draft.scheduledAt) }); }}
+                onRetimeChange={(patch) => setRetiming((current) => (current && current.id === item.id ? { ...current, ...patch } : current))}
+                onRetimeApply={applyRetime} onRetimeCancel={() => setRetiming(null)}
                 onMove={(direction) => setDrafts((current) => moveDraftText(current, item.id, direction))}
-                onCancel={() => setDrafts((current) => current.map((draft) => (draft.id === item.id ? cancelDraft(draft) : draft)))} />))
+                onCancel={() => cancelPosts([item.id])}
+                onConfirm={() => confirm(item.id)}
+                onUnconfirm={() => setConfirmations((current) => withoutConfirmations(current, [item.id]))} />))
           : view.kind === 'posts' ? <EmptyState title="投稿予定はありません" detail="「投稿を作成」から、プレビューを作れます。" /> : null}
       </ScrollView>
     </Screen>
@@ -268,50 +343,5 @@ function BrandLevelCard({ post }: { post: { id: string; scheduledAt: string; sta
         <Text style={styles.muted}>投稿先アカウント未特定 ・ ブランド単位 ・ 実投稿は次フェーズ</Text>
       </Card>
     </Pressable>
-  );
-}
-
-function PreviewCard({ item, conflict, editing, onEdit, onEditChange, onEditApply, onEditCancel, onMove, onCancel }: {
-  item: Extract<UnifiedItem, { source: 'local_preview' }>;
-  conflict: boolean;
-  editing: string | null;
-  onEdit: () => void;
-  onEditChange: (text: string) => void;
-  onEditApply: () => void;
-  onEditCancel: () => void;
-  onMove: (direction: -1 | 1) => void;
-  onCancel: () => void;
-}) {
-  const draft = item.draft;
-  const manual = draft.origin === 'user_authored';
-  return (
-    <Card style={{ borderStyle: 'dashed', borderColor: conflict ? colors.danger : colors.border }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <Text style={{ color: colors.ink, fontWeight: '800' }}>{formatJst(draft.scheduledAt)}{draft.fixed ? '（日時指定）' : ''}</Text>
-        <Pill tone="neutral">{PREVIEW_LABEL}</Pill>
-      </View>
-      {editing !== null ? (
-        <View style={{ gap: 6 }}>
-          <TextInput accessibilityLabel="本文を編集" value={editing} onChangeText={onEditChange} multiline style={{ borderColor: colors.border, borderWidth: 1, borderRadius: 8, padding: 8, color: colors.ink, backgroundColor: '#FFFFFF', minHeight: 64 }} />
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <SmallButton label="反映" onPress={onEditApply} />
-            <SmallButton label="やめる" onPress={onEditCancel} />
-          </View>
-        </View>
-      ) : (
-        <Text style={{ color: colors.ink }}>{manual ? draft.text : 'AIが投稿の直前に本文を作成します'}</Text>
-      )}
-      <Text style={styles.muted}>
-        {manual ? `手動予約・${modeLabels[draft.mode]}` : 'AI自動投稿'}
-        {!manual ? (draft.aiAutoPostConsent === 'granted_by_owner_setting' ? ' ・ 自動投稿の同意: 設定で選択済み' : ' ・ 自動投稿の同意なし') : ''}
-        {conflict ? ' ・ 近い予定があります' : ''}
-      </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {manual && editing === null ? <SmallButton label="編集" onPress={onEdit} /> : null}
-        {manual ? <SmallButton label="↑" onPress={() => onMove(-1)} /> : null}
-        {manual ? <SmallButton label="↓" onPress={() => onMove(1)} /> : null}
-        <SmallButton label="取り消し" onPress={onCancel} />
-      </View>
-    </Card>
   );
 }
