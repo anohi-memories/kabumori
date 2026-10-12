@@ -1,3 +1,8 @@
+## G1 AIに聞く V1 approved; Phase A assigned — 2026-10-12 JST
+- User approved V1 conversational holdings + market/news question answering. G1 task `kabumori-g1-ai-ask-v1-phase-a-ui-contract-20261012` ready; recommended Opus5.5（中）; start G1, return K1 to かぶモリアプリG1のちゃ.
+- Phase A: G1-only offline chat UI and backend contract as Draft PR. Phase B: separate secured AI/provider server implementation with JWT/RLS cross-user isolation, source freshness, usage and rate controls + security review. No G2/G5/G6/G8/G9 changes, production/DB/paid API/EAS/deploy.
+- Audit Draft PR160 stays open; readiness classification will need update after V1 AI is implemented.
+---
 ## K2 FINAL — G2 three-PR premerge (2026-10-12 JST)
 - G2 `kabumori-g2-v1-three-pr-final-merge-preflight-20261012` accepted **PASS_GO_TO_MERGE_DECISION / PRODUCTION_NO_GO**, done/none, G2 released. G2 reported fresh-main `155a3c60`, clean local PR143→PR149→PR158 staged merges, no overlap with G1 PR156, 540 app tests pass (not independently rerun), H2/H3 corrections preserved. All three PRs remain Draft/unmerged at latest G2 Report. Real source merge requires separate explicit user approval and fresh GitHub revalidation, merge-commit each, retarget later PR base main and check diff. No deploy, DB, Cron, Expo, EAS or paid API; production NO_GO. PR155 belongs to separate orchestration owner, not G2.
 
