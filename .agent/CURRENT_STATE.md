@@ -1,3 +1,8 @@
+## G1 K1 accepted and next five-tab QA assigned — 2026-10-12 JST
+- Previous G1 portfolio/watchlist Simulator QA K1: PASS with 375pt fixture full smoke, 402pt presentation smoke; 521/521 Deno reported by Claude, not independently re-run by ChatGPT. Some 402pt interactions, real account and actual iPhone NOT_RUN. No product changes/deploy. G1 previous task finalized done/none.
+- New G1: `kabumori-g1-five-tab-release-simulator-qa-20261012`, ready/next_owner claude, Sonnet5（中）, start G1 / return K1 to かぶモリアプリG1のちゃ. Simulator read-only QA on five native tabs; no G2/G5/G8/G9 changes, live data edits, EAS or deploy.
+- AI Lab diary: 候補あり — 保有銘柄の情報更新時に古い評価損益を見せない安全対策を、テスト用の画面で点検した。公開候補のみで実日付の公開ルールを維持。
+---
 ## G5 Phase4 implementation-first assignment — 2026-10-12 JST
 
 - User explicitly prioritizes implementation progress/token efficiency: 「そのほうがいい！全然実装が進んでないから テストばかりにトークン消費させてては時間もトークンももったいないよ」. G5 `common-account-phase4-core-end-to-end-implementation-20261012` is **ready / next_owner claude**, recommended **Opus5.5（高）**, start G5 / finish K5, return to 共通アカウントG5のちゃ. Phase3i K5 and older reports preserved.
