@@ -120,16 +120,15 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: kabumori-g2-v1-three-pr-final-merge-preflight-20261012
+- status: ready
+- task_id: kabumori-g2-pr143-live-mergeability-diagnosis-20261012
 - start_code: G2
 - finish_code: K2
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- recommended_model: Opus5.5（高）
-- allocation: K2 accepted PR143/149/158 source integration and released G2. New source-only final premerge check: refresh origin/main and exact PR stacks/CI/conflicts, inspect H3/H2 fixes, migration/RLS/gates, G1/G5 boundaries and release runbook, targeted tests only. Report GO_TO_MERGE_DECISION/CHANGES_REQUIRED/BLOCKED and return K2. No actual PR merge, production read/write, deploy, Expo, EAS, paid API or force push.
-- k2_verdict: PASS_GO_TO_MERGE_DECISION / PRODUCTION_NO_GO; G2 source-only premerge checks accepted, merge not performed; slot released.
+- recommended_model: Sonnet5（高）
+- allocation: User explicitly authorized source-only merge PR143→149→158. Fresh GitHub PR143 now mergeable=false despite no filename overlap with main advancement (PR155 .agent_v2). Narrow read-only G2 independent worktree diagnosis to distinguish actual source conflict vs GitHub metadata; NO merge, production, branch rewrite. Return K2 for merge continuation.
 ## Claude G3
 - owner: claude
 - slot: claude-3
