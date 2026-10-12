@@ -1,3 +1,11 @@
+## K8 FINAL — PR129 R5 independent default-OFF feature gates accepted / G8 done — 2026-10-12 JST
+
+- このチャットのニュース改善A/G8専任TASK `news-improvement-a-pr129-release-safety-env-switches-g8-20261012` 完了確認。`review_required`のG8 Report、PR129 `81251b316ae44a634a1b4108b420a18765d17261`（OPEN/Draft/unmerged）、前R3 head `0a2df248`から1 commit/6 changed filesをGitHubで照合した。
+- **K8 verdict: PASS_SOURCE_REVIEW / MERGE_CANDIDATE / DEPLOY_HOLD**。`IMPORTANT_NEWS_FED_STATEMENT_BODY_ENRICHMENT=enabled`でだけFed statement page fetch・saved body fillが動く。`IMPORTANT_NEWS_TDNET_KESSAN_FACTS=enabled`でだけTDnet決算factsの文章が作られる。各フラグ既定OFF（exact enabledのみON）で互いに独立。OFFで以前のFed RSS/TDnet keyword summaryを維持。BOJ本文は未接続。source・新release_flags_test.ts・runbookを確認した。
+- G8自己実行報告重要ニュース768 PASS、本文抽出34 PASS、shadow20 PASS、discovery+observer162 PASS、新フラグtest7 PASS。ChatGPTがDenoを再実行したわけではなく、実Edge/DB/Fed/PDF liveテストは無し。R4のmainとPR129の一時統合は競合0（G8報告）。今回のGitHub最新mainは `59c19ed2c4100f861416ee43534641855209cb8a`、R4 QA時main以降main+19コミット/8 files（主に.agent/）。PR129対象source pathと重複しないがGitHub PR mergeability は`unknown`なので現時点で正式にmerge済みとは主張しない。Netlify Preview success、Vercel build-rate-limit failureのためCI完全Greenではない。
+- **今後**: G8 R5 TASKを`done`/`next_owner:none`にして新TASKは自動割当しない。ユーザーのG8=ニュース改善A専任は維持、B=G9など他slotや別案件への引き継ぎ無し。明日10/13予定のPR116固定ソース`a26e4365` production反映は独立工程。実際にsource read-back成功を確認するまではdeploy完了扱いしない。**PR129のmergeとdeployは未承認/未実行**、PR116確認後にfresh HEAD/base/mergeabilityを確認してユーザーと最終マージ判断。初回のPR129 deployは両envフラグOFF、将来ONは機能ごとに別承認。既存no_post/失敗 backlog再判断、TDnet旧要約数字の曖昧さ、RSS切れ/20秒budget、BOJ権利確認は未解決。
+- G8以外のG/H TASK・Report・worktree・PR115/PR116を今回のK8では変更せず。
+
 ## G1 K1 accepted and next five-tab QA assigned — 2026-10-12 JST
 - Previous G1 portfolio/watchlist Simulator QA K1: PASS with 375pt fixture full smoke, 402pt presentation smoke; 521/521 Deno reported by Claude, not independently re-run by ChatGPT. Some 402pt interactions, real account and actual iPhone NOT_RUN. No product changes/deploy. G1 previous task finalized done/none.
 - New G1: `kabumori-g1-five-tab-release-simulator-qa-20261012`, ready/next_owner claude, Sonnet5（中）, start G1 / return K1 to かぶモリアプリG1のちゃ. Simulator read-only QA on five native tabs; no G2/G5/G8/G9 changes, live data edits, EAS or deploy.
@@ -610,7 +618,7 @@
 | G5 | `in_progress` | `common-account-phase3g-free-auth-provider-test-readiness-20261011` | `claude` | — | `K5` | `.agent/tasks/CLAUDE_TASK_5.md` |
 | G6 | `idle` | `none` | `none` | — | `K6` | `.agent/tasks/CLAUDE_TASK_6.md` |
 | G7 | `idle` | `none` | `none` | — | `K7` | `.agent/tasks/CLAUDE_TASK_7.md` |
-| G8 | `ready` | `news-improvement-a-pr129-release-safety-env-switches-g8-20261012` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
+| G8 | `done` | `news-improvement-a-pr129-release-safety-env-switches-g8-20261012` | `none` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
 | G9 | `done` | `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011` | `none` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
 | G10 | `idle` | `none` | `none` | — | `K10` | `.agent/tasks/CLAUDE_TASK_10.md` |
 
