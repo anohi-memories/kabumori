@@ -1,3 +1,32 @@
+# G3 — CURRENT TASK — POSTONA投稿予約 確認UI実装 V1（OFFLINE）
+
+- task_id: postona-g3-reservation-preview-confirmation-ux-v1-20261012
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- start_code: G3
+- finish_code: K3
+- return_to: POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）
+- recommended_model: **Sonnet5（高）**
+- priority: high
+- production_post_or_reservation_enabled: false
+
+## Objective
+PR #138 merged preview / PR #145 draft source-only contracts を利用し、実際に触れる予約確認UIを完成させる。固定日時・ランダム・毎日/N日間隔のプレビューから、各投稿の本文・日時・X投稿先を確認、編集、取消、確認済みの進捗を表示する。本文・日時・アカウント変更や再抽選は確認を無効化し、取消投稿を復活させない。異なるブランド/アカウントの状態を混ぜない。既存の5 bottom tabsを変更しない。投稿先への本番送信やサーバー予約保存は一切しない。常時「プレビュー／未予約・投稿されません」を表示し、「予約済み」や投稿完了を偽装しない。「これで覚えて」は自動投稿同意ではない。
+
+## Boundaries and execution
+1. fresh origin/main、PROJECT_RULES、ORCHESTRATION、ACTIVE_TASK、CURRENT_STATE、G3/G4/G5 TASK/Report、PR138 merged、PR145 Draft head 8820fa8d、G3/G4/G5 worktrees / ownership / conflictsを先に確認。独立した新G3 worktree / branchで作業。旧PR145 head/branch、G4/G5/H5、他worktreeは変更しない。
+2. 変更可能はG3所有の `apps/social-mobile/src/features/schedule/`, `apps/social-mobile/src/app/(tabs)/schedule.tsx`, 必要な同領域UI testのみ。PR145の未マージ保存契約への依存が必要なら、安全なG3内stacked Draft PRとして依存関係を明示し、PR145を勝手にマージしない。SQL候補、Edge、共通Auth/Entitlement、G4 SNS accounts UIには触れない。
+3. UIコードの実装を優先。固定時刻、10件ランダム、N日間隔、再抽選、編集、取消、切替の必要最低限の回帰テスト、TS/lint/diff-check/秘密情報検査。すでに実装済みなら重複させず欠けている操作だけ作る。
+4. production Supabase DB/Auth/RLS/Edge/Cron/Secrets、X/Threads/Meta/OpenAI実呼出、migration適用、merge/deploy/EASなし。保存フラグはOFF。PR145修正はK3でPASS_SOURCE_CANDIDATE_WITH_G5_G4_HOLD、旧TASK終了扱いで履歴保持。
+5. 独立G3 branchにコードcommit/pushし、新規Draft PRを作成。TASK末尾に## Report（task_id/result/changed_files/tests/commit/push/merge/deploy/safety/remaining/PR/next）を追加、status review_required/next_owner chatgptにしてK3。開発日記は公開安全性確認。
+推薦モデル：**Sonnet5（高）**。
+
+---
+
+# ARCHIVED PREVIOUS G3 TASK — K3 accepted source-only PR145 R1/R2; original record preserved
+
 # Claude G3 — CURRENT TASK — POSTONA X手動＋AI予約の永続化・実行境界 V1（本番OFF／ソース実装）
 
 - task_id: postona-x-reservation-store-offline-v1-g3-20261011
