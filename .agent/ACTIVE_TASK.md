@@ -141,16 +141,16 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: review_required
+- status: done
 - task_id: postona-threads-pr144-c3-r1-session-expiry-lock-fix-g4-20261012
 - start_code: G4
 - finish_code: K4
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
 - report: .agent/tasks/CLAUDE_TASK_4.md#report
-- allocation: User Threads actual text post milestone; H3 independent C3 result one P2 R1 on PR144 session expiry race. Opus5.5（高） G4 task narrowly fixes its owned threads_publish_release_candidate.sql auth.sessions FOR KEY SHARE lock to FOR SHARE/equivalent, and adds deterministic 2-connection fail-before/pass-after proof covering both orderings, member/entitlement/consent regressions and role privilege checks. Exact protected PR144 head d4a1e87b77d1fbd362dc51809ce2d998afda15ea, parent PR140 2e75a6a842e70f3de78558681803b60935fb4251; append scoped fix only if original G4 branch clean/exclusive, else new Draft stacked on PR144. Avoid source work on H5 protected PR139 auth.sessions KEY SHARE, G5 Auth/T13/T10, G3 X scheduler, other slots. No real Supabase/Meta/Auth/API, external post, DB migration apply, GRANT, secret, merge, deploy, EAS or flags. All real Threads connection/pilot gates OFF. K4 exact source+race review when complete, no mechanical repeated full H review.
-- recommended_model: Opus5.5（高）
+- allocation: K4 2026-10-12 PASS_SOURCE_FIX / C3_R1_REMEdIED_OFFLINE / REAL_PILOT_HOLD. Original G4 PR144 head d4a1e87b77d1fbd362dc51809ce2d998afda15ea advanced with ONE non-force commit to 09fd2c49114b7d26c23b71a3084574dc6a5a7ad6, exactly four G4-only files (session-lock SQL, PG race runner, behavior fixture, documentation); parent PR140 unchanged, OPEN/DRAFT/unmerged. H3's local P2 R1 FOR KEY SHARE nonkey session expiry UPDATE race corrected with FOR SHARE lock and both-order two-connection regression plus explicit fail-before mutation. G4 reports PG17 and 9/9 mutations, combined Deno176, focused93 PASS; ChatGPT inspected diff/test source but did not rerun. No H3 re-review needed for this narrow source change. Real managed GoTrue revocation, H5 protected KEY SHARE owner transport, G5 real T13/T10 and deletion audit, Vault credentials, Meta tester/callback, external provider/post and public flag remain blocked. App/server gates all FALSE and Edge 503. No merge/deploy/grant/migration/real API. G4 done/unreserved; prior task Report preserved; H5/G5/G3 and other slots unchanged.
+- recommended_model: Opus5.5（高） (completed K4)
 ## Claude G5
 - owner: claude
 - slot: claude-5
