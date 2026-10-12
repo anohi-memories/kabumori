@@ -3,12 +3,13 @@
 - task_id: news-improvement-a-jp-official-diagnostics-j1a-g8-20261012
 - owner: claude
 - slot: claude-8
-- status: ready
-- next_owner: claude
+- status: done
+- next_owner: none
 - start_code: G8
 - finish_code: K8
 - return_to: ニュース改善API最適化のちゃ
 - recommended_model: Sonnet5（高）
+- cancellation: UNSTARTED_REALLOCATION_TO_F8（2026-10-12）。旧G8側は開始しない。新F8で別task_idを使用する。旧J0履歴は保全。
 - scope: 国内 jp_official の診断集計を既存 important_news_monitor_runs.diagnostics JSONB に格納する最小実装。ニュース判断・候補選定・公開・Pushは変更しない。
 - safety: 独立 worktree/checkout必須。main/本番の直接変更、merge/deploy、DB migration/RPC/RLS、secrets、実API/Web Search有料呼出、外部AI送信禁止。PR116固定10/13 production worktree、PR129、G9および他slotを保護。
 
