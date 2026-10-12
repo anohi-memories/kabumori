@@ -133,7 +133,7 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - task_id: postona-g3-x-reservation-api-client-wiring-offline-v1-20261012
 - start_code: G3
 - finish_code: K3
