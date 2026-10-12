@@ -12,8 +12,13 @@
 
 ## プロジェクト別現状
 
-- F2に新規診断TASK `kabumori-f2-pr143-live-mergeability-diagnosis-20261012` を割当済み（ready/claude）。その他の新系統枠は割当前の状態を各TASKで確認。
+- F2に新規診断TASK `kabumori-f2-pr143-live-mergeability-diagnosis-20261012` を割当済み（ready/claude）。F8にニュース改善A J1-a診断TASK `news-improvement-a-jp-official-diagnostics-j1a-f8-20261012` を割当済み（ready/claude、L8返却、Sonnet5高）。その他の新系統枠は割当前の状態を各TASKで確認。
 - かぶモリアプリ、X自動投稿アプリ（POSTONA）、共通アカウント、共通AI基盤、MIC、ニュース改善などの現状は、旧 `.agent/CURRENT_STATE.md` と旧各TASKが正本。
+
+## G8 → F8の新規TASK移行
+
+- 旧G8のJ0はK8で受入済み。旧G8の未開始J1-a（task_id `news-improvement-a-jp-official-diagnostics-j1a-g8-20261012`）は明示キャンセル・done/none。F8には**別task_id**でJ1-aを新規登録、旧G8との二重開始禁止。
+- F8はjp_official診断の既存JSONBへの記録だけ。PR116の2026-10-13固定production反映、PR129、G9を保護。DB変更/merge/deploy/有料API無し、production NO_GO。F8は独立worktreeとfresh mainの競合を実作業開始時に確認する。
 
 ## 未解決問題
 
@@ -50,6 +55,7 @@
 
 ## 次工程
 
+- F8で国内ニュースJ1-aを実装、L8で本チャットへ報告（Sonnet5高、production NO_GO）。
 - F2でPR143のマージ不可判定を再現・調査し、L2でこのチャットに報告。推薦モデル Sonnet5（高）。本番 NO_GO。
 
 1. 旧系統の各slotが完了した時点で、ChatGPTが次の新規TASKを新系統へ置くかを判断する。
