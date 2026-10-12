@@ -11,6 +11,14 @@
 //
 // Auth: verify_jwt = false + X-Cron-Secret (existing
 // SEND_PUSH_NOTIFICATIONS_CRON_SECRET, same as the other report functions).
+//
+// Optional Claude comparison (G6 shared AI provider, Phase 2c wiring; default OFF):
+// KABUMORI_MARKET_REPORT_AI_MODE unset / unknown / incomplete -> the existing OpenAI requester is used as is (same
+// object, same requests, nothing else read or sent). In "shadow" mode the generation is still produced only by
+// OpenAI; G6's wiring remembers the generate step, and only AFTER complete_market_report_analysis succeeded and the
+// traces were written, the comparison is handed to the runtime's waitUntil and the response returns at once. Without
+// waitUntil nothing is captured or sent. Nothing from the comparison reaches the packet, its diagnostics, cost,
+// traces or the response, and no error of it can turn a completed report into a failure.
 
 import type { MarketDataPacket } from "../market-report-data-packet/packet_schema.ts";
 import { decideRunWindow, type ReportType } from "../market-report-data-packet/session_logic.ts";
@@ -26,6 +34,12 @@ import {
 } from "./analysis_logic.ts";
 import { persistTraces, promptHash, traceRows } from "./debug_trace.ts";
 import { auditDiagnostics } from "../_shared/kabumori_ai_models.ts";
+import { prepareMarketReportShadow, type PreparedMarketReportShadow } from "../_shared/ai_provider/market_report_wiring.ts";
+import {
+  MARKET_REPORT_AI_MODE_ENV,
+  type MarketReportShadowRecord,
+  parseMarketReportAiMode,
+} from "../_shared/ai_provider/market_report_shadow.ts";
 import {
   fetchWithTransportRetry,
   newTransportStats,
@@ -42,7 +56,109 @@ export type Deps = {
   now: () => Date;
   // Injectable for tests; production waits for real.
   sleep?: Sleep;
+  // The Edge runtime's waitUntil (EdgeRuntime.waitUntil). Absent -> the optional comparison is never prepared or sent.
+  waitUntil?: (pending: Promise<unknown>) => void;
+  // One line of structured, non-sensitive output (default console.log). Its failure never affects the report.
+  log?: (line: string) => void;
 };
+
+/** The comparison must be finished (by G6's flush deadline logic) within this window from the request start. */
+export const SHADOW_WALL_CLOCK_MS = 150_000;
+
+const SAFE_DETAIL = /^[A-Za-z0-9_.:@/-]{1,80}$/;
+
+/** Only identifiers and numbers: no prompt, payload, news, keys or provider text (a non-identifier detail is dropped). */
+export function shadowLogRecord(record: MarketReportShadowRecord): Record<string, unknown> {
+  const structure = record.structure;
+  return {
+    event: "market_report_shadow",
+    phase: "call",
+    step: record.step,
+    sequence: record.sequence,
+    callId: record.callId,
+    model: record.model,
+    ok: record.ok,
+    errorCode: record.errorCode,
+    detail: typeof record.detail === "string" && SAFE_DETAIL.test(record.detail) ? record.detail : record.detail === null ? null : "REDACTED",
+    providerRequests: record.providerRequests,
+    actualModel: record.actualModel,
+    inputTokens: record.inputTokens,
+    outputTokens: record.outputTokens,
+    estimatedCostUsd: record.estimatedCostUsd,
+    costBasis: record.costBasis,
+    latencyMs: record.latencyMs,
+    structure: structure
+      ? {
+        sameTopLevelKeys: structure.sameTopLevelKeys,
+        missingInShadow: structure.missingInShadow.length,
+        extraInShadow: structure.extraInShadow.length,
+      }
+      : null,
+  };
+}
+
+function emitLine(deps: Deps, value: Record<string, unknown>): void {
+  try {
+    (deps.log ?? console.log)(JSON.stringify(value));
+  } catch {
+    // Logging must never affect the report.
+  }
+}
+
+/**
+ * The legacy requester itself unless the comparison can actually run later: waitUntil present, G6 decides "shadow".
+ * Any exception while preparing falls back to the legacy requester (the report is never affected).
+ */
+function prepareShadow(deps: Deps, legacy: Requester, claim: ClaimRow): PreparedMarketReportShadow | null {
+  if (!deps.waitUntil) {
+    // Only the mode variable is read (as G6's off path does), to make a misconfiguration visible.
+    try {
+      if (parseMarketReportAiMode(deps.env(MARKET_REPORT_AI_MODE_ENV)).mode === "shadow") {
+        emitLine(deps, { event: "market_report_shadow", phase: "prepare", status: "skipped", reason: "NO_WAIT_UNTIL" });
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+  try {
+    const prepared = prepareMarketReportShadow({
+      legacy,
+      readEnv: (name) => deps.env(name),
+      claim: { cycle_id: claim.cycle_id, attempt: claim.attempt },
+      sink: (record) => emitLine(deps, shadowLogRecord(record)),
+      fetch: (input, init) => deps.fetch(input, init),
+      // The same clock as the rest of the handler (deps.now), never a second time source.
+      nowMs: () => deps.now().getTime(),
+    });
+    return prepared.mode === "shadow" ? prepared : null;
+  } catch {
+    emitLine(deps, { event: "market_report_shadow", phase: "prepare", status: "skipped", reason: "PREPARE_FAILED" });
+    return null;
+  }
+}
+
+/**
+ * Hands the comparison to waitUntil; never throws. The flush starts only after waitUntil accepted the promise, so a
+ * failing registration leaves nothing running unawaited.
+ */
+function scheduleShadow(deps: Deps, shadow: PreparedMarketReportShadow | null, startedAtMs: number): void {
+  if (!shadow || !deps.waitUntil) return;
+  try {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const pending = gate
+      .then(() => shadow.flush({ deadlineAtMs: startedAtMs + SHADOW_WALL_CLOCK_MS }))
+      .then((summary) => emitLine(deps, {
+        event: "market_report_shadow", phase: "flush", attempted: summary.attempted, skipped: summary.skipped, reason: summary.reason,
+      }))
+      .catch(() => emitLine(deps, { event: "market_report_shadow", phase: "flush", status: "failed", reason: "FLUSH_EXCEPTION" }));
+    deps.waitUntil(pending);
+    release();
+  } catch {
+    emitLine(deps, { event: "market_report_shadow", phase: "schedule", status: "skipped", reason: "WAIT_UNTIL_FAILED" });
+  }
+}
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
@@ -161,6 +277,8 @@ const NEWS_COLUMNS = [
 ].join(",");
 
 export async function handleRequest(req: Request, deps: Deps): Promise<Response> {
+  // Start of this invocation, in the handler's own clock: the comparison's deadline is counted from here.
+  const startedAtMs = deps.now().getTime();
   if (req.method !== "POST") return respond({ error: "METHOD_NOT_ALLOWED" }, 405);
   const expectedSecret = deps.env("SEND_PUSH_NOTIFICATIONS_CRON_SECRET");
   if (!expectedSecret || req.headers.get("X-Cron-Secret") !== expectedSecret) {
@@ -262,12 +380,10 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
     diagnostics.direction = input.direction;
     traceBasePromptHash = await promptHash(String(generationRequestBody(input, []).instructions)).catch(() => null);
 
-    const outcome = await generateSharedAnalysis(
-      input,
-      openAiRequester(openAiApiKey, deps.fetch, { stats: transport, sleep: deps.sleep ?? realSleep }),
-      deps.now,
-      records,
-    );
+    const legacy = openAiRequester(openAiApiKey, deps.fetch, { stats: transport, sleep: deps.sleep ?? realSleep });
+    // Off (default) or no waitUntil: `legacy` itself. Shadow: returns legacy's results unchanged and only remembers.
+    const shadow = prepareShadow(deps, legacy, claim);
+    const outcome = await generateSharedAnalysis(input, shadow ? shadow.requester : legacy, deps.now, records);
     Object.assign(diagnostics, transportDiagnostics(transport));
     // Content regeneration (local / Fact rejection, quality rewrite) is not a transport retry.
     Object.assign(diagnostics, generationDiagnostics(outcome.trace));
@@ -296,6 +412,8 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
       p_diagnostics: diagnostics,
     });
     await writeTraces(packetId);
+    // Only now (packet stored, traces written) may the comparison run; the response does not wait for it.
+    scheduleShadow(deps, shadow, startedAtMs);
     return respond({
       status: "completed",
       reportType,
