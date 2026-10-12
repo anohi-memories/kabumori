@@ -3,8 +3,8 @@
 - task_id: postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G4
 - finish_code: K4
 - return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
@@ -53,6 +53,19 @@
 - safety_checks: 新しい専用 worktree `/Users/yuya/Developer/kabumori-g4-threads-connect`（`kabumori-fresh` から #144 の正確な head で作成、前の G4 worktree はそのまま）。他スロットのブランチ・作業フォルダ・TASK／Report・G5 の port／registration・H5 の原本は無変更。組み合わせは /private/tmp の使い捨てコピー（終了時に削除）。使い捨て PostgreSQL は自分専用の socket `/private/tmp/g4cw-sock`。本番への読み書き 0。ACTIVE_TASK は G4 欄の status／next_owner だけを変更。
 - next_recommendation: K4 で受け入れ判断。次は G5（#152 の K5 → レビュー → 登録）、H5（owner transport と入口への組み込み）、運用（Meta とアプリリンク）を並行。揃った時点で統合レビュー（Sol（高））→ 承認されたテスター1名で「接続→許可→1件投稿」のパイロット。
 - AI Lab diary 候補（公開しても安全な粒度）: 「SNS 連携の『ログインして戻ってくる』流れで、戻りが二重に来たり途中でアカウントが変わったりしても安全に止まるよう、ブラウザとアプリの両方の戻り方をまとめて扱う形にした。退会時に連携データを片付ける処理も、投稿の途中かもしれないものは消さずに人が確認する設計にした。」
+
+## K4 FINAL — ChatGPT 2026-10-12 JST / Threads mobile OAuth + T10 cleanup implementation candidate
+
+- task_id: postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012
+- verdict: **PASS_SOURCE_IMPLEMENTATION / REAL_PILOT_HOLD**. Source code and focused relevant tests accepted as a bounded G4-owned deliverable; this is NOT actual Threads connection, production security GO, G5 T10 registration, owner transport provisioning or publication approval. G4 status **done / next_owner none**; slot freed, no parked tasks.
+- GitHub verified [Draft PR154](https://github.com/anohi-memories/kabumori/pull/154) exact HEAD `98287392327eabfd5092a3ba89dde51a2e8beff6`, base Draft PR144 exact `09fd2c49114b7d26c23b71a3084574dc6a5a7ad6`, OPEN/DRAFT/UNMERGED, one commit, 19 G4 source/test/docs paths, no G5 `account-delete` or H5 PR139 source modified. PR140 `2e75a6a842e70f3de78558681803b60935fb4251`, PR139 `b4fa672f97592e87682671454e868a92098cbd56`, PR135 `e38788d6677082138f0990453c7d2f00549666d0`, PR124 `c30f246409a77080cbc03aef6c4cb72b5481e125`, G5 PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44` and PR152 `5ad5bb40cadf013f00553acd5509f4f74fdbff7c` heads remain protected at K4 check. Latest origin/main `c026672dafa0f1aabae17441d4ecc33925ee5dd0` at PR inspection.
+- **Inspected implementation:** POSTONA Expo/React Native authenticated start→validated official Threads authorization URL→system auth browser→one strict HTTPS callback returned by browser or app-link→current same user's bearer to H5 runtime→server receipt→RLS account readback before showing connected. Defensive fixed error states/cancel/session switch/timeout/duplicate return. G4-only `threads_connect_edge.ts` strictly validates request/response and `publishEnabled:false`, with absent runtime fail closed; H5 existing deployed entry unchanged/always 503. G4 `threads_provider_cleanup.ts` adapter structurally matching G5 PR152 `ProviderCleanupAdapter`, owner-only SQL candidate checks deletion lifecycle and local Threads-only workspace/account/Vault secret ownership, refuses uncertain/in-flight attempts and shared token, returns `local_removed_remote_unverified` not false confirmed remote revoke. **G5 adapter registration and EXECUTE grants NOT implemented in this G4 task.**
+- **Tests reported by G4 (not independently rerun by ChatGPT):** Expo app Threads connect18 PASS and manual publish18 PASS, app tsc/lint PASS; focused Deno105 PASS (connect Edge8, cleanup4 new), disposable PG17 cleanup precondition/ACL/owner/inflight/cross-user/X separation PASS and mutation4/4 detected; H5 source+G5 PR152 port combined **mock-only** smoke PASS; diff check/secret scan PASS; five static connection/posting/edge gates false. Broad unchanged app258, old integration176, G5 suites **NOT_RUN by design**, not silently claimed passing. Real Meta/Auth/PostgREST/Vault owner-grant/mobile app-link E2E/publishing **NOT_RUN**.
+- **Outstanding actual integration blockers:** ① G5 Phase4 PR152 K5 and focused independent security review, G5-owned registration of Threads T10 adapter and exact service lifecycle/fence + targeted RPC ACL, effective production DB grants to dedicated owner only; ② H5 protected PR139 source runtime needs actual dedicated verified owner connection (not service_role proxy), auth.sessions lock/revocation contract `FOR SHARE`, custody write in connection-complete transaction, H5 Edge entry inject/delegate to G4 Edge glue; ③ exact HTTPS callback association (iOS Associated Domains/Android App Links), Meta for Developers Threads app and tester/scopes, keys in proper secrets custody, managed Auth/Vault/GoTrue/permissions proof, targeted joined security release check and **separate explicit user approval for one named test post**. SQL cleanup has not been applied and its lifecycle TOCTOU, owner grants and remote-revoke limitations require targeted G5/H5 integration security validation before any live deletion. PR154 cannot independently enable OAuth/posting.
+- **Actions not performed:** no production DB migration, RLS/RPC GRANT, Auth/Edge/Vault/Meta network, secret, app link/EAS, feature flag flip, PR merge, deploy, real Threads/X post, paid API. All gates FALSE and H5 Edge entry 503.
+- **Next recommendation:** finish G5 source assessment in its own chat (K5); then H5 may be explicitly reallocated for **臨時実装** of H5-owned real authenticated owner transport/Edge/custody and G5 registration in G5-owned TASK (not unauthorized cross-edit). G4 SOURCE COMPLETE and free. One focused **Sol（高）** real Auth/RPC/Vault/T10 integration security review at material change, not repeated mock-only generic review. AI Lab diary candidate: safe general account-connect/browser-return and deletion uncertain-outcome story only, no live launch claims.
+
+---
 
 ## Boundaries and protected baselines
 
