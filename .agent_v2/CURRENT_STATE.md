@@ -2,11 +2,11 @@
 
 この文書には、現在有効な情報だけを置く。解決済みの問題、過去の完了解説、K / L / C / V判定の全文は書かない（完了作業は `HISTORY_INDEX.md` と `archive/` へ）。古くなった項目は追記ではなく書き換えて消す。
 
-- 更新: 2026-10-12 JST（G10 `agent-v2-dual-slot-migration-20261012` による初版）
+- 更新: 2026-10-12 JST（PR #155 merge後の状態に更新）
 
 ## 移行の状態
 
-- 新系統 `.agent_v2/` は導入PR（Draft）の段階で、まだmergeされていない。merge前は新系統のslotを使わない。
+- 新系統 `.agent_v2/` はPR #155のmainマージ（`4e80c79dc42c11fbc1ca105665514b0dd32842d3`）により有効。新F/J枠は新規TASKを明示割当した後に使用する。
 - 移行期間中の現行正本は旧 `.agent/`（G1〜G10 / H1〜H5）。旧系統で進行中・完了確認待ちのTASKは、すべて旧系統で完結させる。
 - 旧 `.agent/` の初回snapshot: `archive/2026-10-12-initial-migration/`（snapshot元 main commit `d811b4dc72f3e65fc61e40ae99e61b2094b18ff7`、33ファイル、SHA256照合・復元テスト済み）。完全移行前に最終snapshotを別TASKで取る。
 
@@ -30,7 +30,7 @@
 ## 未マージPR
 
 - 新系統のTASKに属する未マージPRは無い。
-- 新系統の導入PR（このDraft PR）自体は未merge。旧系統のPRは旧CURRENT_STATEとGitHubを参照する。
+- 新系統導入PR #155はマージ済み。旧系統の未マージPRは旧CURRENT_STATEとGitHubを参照する。
 
 ## deploy待ち
 
@@ -43,14 +43,13 @@
 
 ## 現在有効な運用判断
 
-- 旧系統: G1/G2=かぶモリアプリ、G3/G4=X自動投稿アプリ（POSTONA）、G5〜G10=明示割当専用。H1〜H4=レビュー枠、H5=Codex臨時実装専用。単独 `F` は導入PRのmerge後、新旧30枠の統括。
+- 旧系統: G1/G2=かぶモリアプリ、G3/G4=X自動投稿アプリ（POSTONA）、G5〜G10=明示割当専用。H1〜H4=レビュー枠、H5=Codex臨時実装専用。単独 `F` は新旧30枠の統括。
 - 新系統: F1〜F10は旧G1〜G10の後継枠、J1〜J4はレビュー枠、J5は臨時実装の優先枠（ユーザーの明示指示があればJ1〜J4も実装可）。
 - 旧系統で開始したtask_idは旧系統で完結させ、新系統へは次の新規TASKから移す。
 - Codexレビューの要否と時期は「レビュー最適化方針（2026-09-25〜）」に従う。レビュー省略時も実証確認は減らさない。
 
 ## 次工程
 
-1. 導入Draft PRのK10確認と、必要ならCodexレビュー（レビュー先は旧系統のH1〜H4）。
-2. ユーザー / ChatGPTの判断でmerge。merge後に新系統が有効になる。
-3. 旧系統の各slotが完了した時点で、ChatGPTが次の新規TASKを新系統へ置くかを判断する。
-4. 完全移行の条件が揃ったら、最終snapshotと完全移行を別TASKで行う。
+1. 旧系統の各slotが完了した時点で、ChatGPTが次の新規TASKを新系統へ置くかを判断する。
+2. 初回の新系統TASK完了時にarchive / MANIFEST / SHA256 / HISTORY_INDEXの保存運用を確認する。
+3. 完全移行の条件が揃ったら、最終snapshotと完全移行を別TASKで行う。
