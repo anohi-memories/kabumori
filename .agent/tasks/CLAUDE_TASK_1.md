@@ -1,3 +1,42 @@
+# G1 CURRENT TASK — AIに聞く V1 設計・UI安全実装 Phase A — 2026-10-12
+
+- task_id: kabumori-g1-ai-ask-v1-phase-a-ui-contract-20261012
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: **Opus5.5（中）**
+- task_type: scoped design and offline UI implementation
+- start_code: G1
+- finish_code: K1
+- return_to: かぶモリアプリG1のちゃ
+
+## User decision
+「AIに聞く」はV1で非表示にせず実装する。V1の対象は②自分の保有銘柄への質問 + ③ニュース・市場情報を踏まえた回答。会話履歴の永続化/高度な投資推奨・モデル選択は公開後。入口は既存ホーム・メニュー・ポートフォリオの3つを活かす。新規の有料API・productionへの接続はこのPhaseでは禁止。
+
+## Purpose / scope of Phase A
+- fresh origin/mainと全slotの最新TASK/Report、Draft PR #143/#149/#158 (G2), G5 Auth, G6 AI adapter, G8/G9 newsを確認し、重複せずにAI質問V1の契約を決める。
+- G1所有の `src/app/ai.tsx`、3入口周辺に限定して、スマホ向け実用チャットUI（質問入力、送信中表示、応答、失敗/再試行、根拠・情報時点・未取得明示、保有銘柄を参照する場合の説明、AI利用に関する注意）を**mock/offline data adapterのみ**で設計・実装。未接続の状態で本番チャットとして誤認させない。既存5タブ・root戻り遷移とスプラッシュを維持。
+- 「今日の市況は？」「〇〇の下落理由は？」「保有銘柄に影響するニュースは？」「ポートフォリオのリスクは？」等の質問を適切に扱える入出力型と質問テンプレートを検討。株価/ニュース/保有一覧の取得時刻、ソース、同意/権限/個人情報境界、費用/レート制限/トークン上限を含む **backend interface contractとリスク一覧** を `docs/release-readiness/kabumori-app/` の別名の文書に書く。
+- AIは「買うべき・売るべき」の個別断定、架空の最新株価・ニュースの生成を避け、参考情報・根拠・時点・不明の明示。AIの応答を本番の本人データに接続する前にサーバー側でJWTからuser_idを確定・RLS・クロスユーザー隔離・入力検証・レート制限・利用量台帳・情報鮮度を実装/レビューする必要があることをゲート化。
+- backend実装や API call/Edge/RPC/Auth/G6変更は**実施しない**。これらはPhase BでChatGPTが安全性・slotを判断して別TASK化する。G2のオンデマンド個別分析と役割の違い（定型レポート vs 対話型Q&A）を明文化。
+
+## Safety / engineering
+- independent clean G1 worktree/checkout、fresh main、所有・ファイル競合確認。G2/G5/G6/G8/G9/POSTONAのbranch/worktree/serverに触らない。
+- 実ユーザーの保有銘柄の取得/編集や外部AIへの送信、実API課金、DB/production write、migration、Auth/トークン処理、EAS、deploy、mergeを禁止。
+- Offline UI は既存の「準備中」画面を未完成な実機能に偽装しない（実API未連携で送信できるように見せて放置しない）。mockモードは開発環境のみ、productionでは準備中表示を保持してよい。
+- 変更対象をG1単独所有に絞り、G2/G6の既存システムと重なる部分を触らない。
+- Focused tests、app全体tests、tsc、git diff --check、375/402pt Simulator（実行可の範囲）を実施。既存型エラーは分離。個人データをログ・スクショに出さない。
+- Source-only Draft PRを作成（独立branch）、self-merge禁止。API契約文書も同PR。Reportには画面、changed_files、tests、PR/commit、残りPhase B課題、safety、未実施テスト、next_recommendationを記載。
+- status review_required / next_owner chatgpt、末尾「かぶモリアプリG1のちゃ へ K1 を送ってください。」
+
+## Report — current task
+Pending G1 execution.
+
+---
+
+## Archived earlier G1 TASK/Reports
 # G1 CURRENT TASK — かぶモリV1リリース前機能・残課題棚卸し — 2026-10-12
 
 - task_id: kabumori-g1-v1-release-gap-inventory-20261012
