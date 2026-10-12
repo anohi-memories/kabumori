@@ -154,15 +154,16 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: review_required
 - task_id: common-account-phase4-core-end-to-end-implementation-20261012
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
 - allocation: User 2026-10-12「そのほうがいい！全然実装が進んでないから テストばかりにトークン消費させてては時間もトークンももったいないよ」。G5 Phase4 IMPLEMENTATION-FIRST: complete G5-owned backend shared Auth ID + per-app entitlement and idempotency, B1/B2 locked status guard, practical bounded delete/freeze/reconcile implementation or explicitly blocked interface, connection contracts. NO further documents-only/synthetic-model-only or repeated review loops. Only focused local tests; no other slot worktree/source changes. Prior G5 PR heads immutable, new independent G5 branch and draft PR source implementation. Photos/managed auth/prod unchanged; E11 Option D and managed_auth_delete BLOCKED. At K5 decide one focused Sol高 review for high-risk source. 
+- latest_result: Phase4 IMPLEMENTED_SOURCE_CANDIDATE (PR152 Draft, stacked on PR121, local PG17 proof incl. real orchestrator E2E; not production ready, no merge/deploy). Report: .agent/tasks/CLAUDE_TASK_5.md#report--phase4. One focused Sol高 review of PR152+PR121 recommended at K5.
 - recommended_model: Opus5.5（高）
 ## Claude G6
 - owner: claude

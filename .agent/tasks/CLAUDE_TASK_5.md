@@ -3,8 +3,8 @@
 - task_id: common-account-phase4-core-end-to-end-implementation-20261012
 - owner: claude
 - slot: claude-5
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G5
 - finish_code: K5
 - return_to: 共通アカウントG5のちゃ
@@ -46,6 +46,70 @@ If full closure cannot be completed without another owner's file/permissions, st
 4. Set status `review_required` / next_owner `chatgpt`; return **共通アカウントG5のちゃへ K5 を送ってください。** High-risk implementation will receive ONE focused independent Codex security review (recommended **Sol（高）**) when feature source is ready, not iterative design-review loops.
 
 推薦モデル：**Opus5.5（高）**（実装中心・既存検証資産再利用）。
+
+---
+
+## Report — Phase4 common account CORE implementation（実装・ソース候補・ローカル実証）
+
+- task_id: common-account-phase4-core-end-to-end-implementation-20261012
+- 結果: **IMPLEMENTED_SOURCE_CANDIDATE（使い捨てローカル PostgreSQL 17 で実証・本番可ではない）**。調査・設計書のみの成果ではなく、本番対象のソース（migration 1 本・Edge Function 内の新モジュール・変更）と、それを実 SQL に対して通しで動かす検証を出した。
+- Draft PR: https://github.com/anohi-memories/kabumori/pull/152（Draft・未 merge・未 deploy。base は #121 の `claude/g5-phase3b-identity-writer-fence-20261010`、head `claude/g5-phase4-core-account-gateway-20261012` = `5ad5bb40cadf013f00553acd5509f4f74fdbff7c`）。#121 の head `76b50e1e03f82faaa3460bab1603afa8fef3ce44` は不変。
+- 独立 worktree: `/Users/yuya/Developer/kabumori-g5-phase4`（#121 の head から新規ブランチ。main の共通アカウント関連ファイルと #121 の土台は 3 行の docs を除き同一で、main との merge-tree は競合なし）。
+
+### 事前の棚卸し（短く）と、書き直さなかったもの
+- 利用開始の縦スライス（共通 ID に対する新規登録時の entitlement 付与・既存 ID は要求元アプリの entitlement だけ追加・かぶモリと POSTONA は混線／二重作成なし・不正な要求は fail closed・権限昇格なし）は **既に main の Phase 1/2 に実装済み**（`start_kabumori_service()`、`start_x_autopost_service()`、`reactivate_*_service(bigint)`、クライアントは `src/lib/auth.ts`）。書き直さず、実行経路を `phase4-core-integration.md` §2 に記録し、通しで再証明した。
+- 退会のオーケストレータ（`supabase/functions/account-delete`）も Phase 3a で実装済み。書き直さず、足りなかった層だけを足した。
+
+### 実装したもの（実際に足りなかった層）
+1. **書込の状態判定＋行フェンス（B1）と、プロフィール根の閉鎖**（`supabase/migrations/20261012130000_common_account_core_service_fence.sql`、未適用）
+   - `private.account_lifecycle_service_state_refusal(user, service)`: account active／削除 operation なし／entitlement active を I1 のロック順（login KEY SHARE → account FOR UPDATE → entitlement FOR UPDATE）で判定する唯一の関数。ロックは呼び出し側のトランザクション終了まで保持（凍結と書込が全順序になる）。待ちは 3 秒で打切り、再試行可の固定コード `ACCOUNT_LIFECYCLE_BUSY`（55P03）で何も書かない。アカウント・entitlement は作らない。
+   - `private.account_lifecycle_service_insert_fence()`: サービス所有者が 1 行で付けられる BEFORE INSERT 行フェンス。人の JWT が別人の ID を名指しした場合はロックを取る前に拒否（他人の account 行に並べない）。INSERT のみ（UPDATE トリガは行ロック後に走り、削除カスケードと I1 順が逆転するため意図的に対象外）。
+   - `public.profiles` にフェンスを付与: 開始・再開・`ensure_my_profile()`・直接 INSERT・service-role ジョブのいずれでも、凍結中・終了後はプロフィールを作り直せない（Phase 3a §6 の「not gated」の穴を DB で閉じた）。
+   - `public.ensure_my_profile()`: 名前・grant・戻り値は旧ビルド互換のまま、Phase 2 の自動開始のラッパーに。終了済みを黙って再開せず（`SERVICE_REENROLL_REQUIRED`）、削除中は作らない。
+2. **プロバイダ別後始末のポート（T10）**（`supabase/functions/account-delete/provider_cleanup.ts`、`lifecycle_logic.ts`）
+   - 結果は `confirmed_remote_revoked / local_removed_remote_unverified / reconciliation_required / blocked`。未知・例外・タイムアウトは成功にしない、reconciliation が blocked に優先、全アダプタを固定順で実行、予約名（x・kabumori・apple 等）・重複・不正キーは blocked。
+   - オーケストレータ内の位置: X saga の後、POSTONA の entitlement を終了する前（POSTONA が未開始・終了済みでも実行）。lease の所有者だけが呼ぶ。リモート未確認は既定で停止（`PROVIDER_REMOTE_UNVERIFIED`、`acceptRemoteUnverified` を明示した場合のみ成功に `remote_unverified` を付ける）。固定コードと固定プロバイダ名しか外に出さない。
+   - **アダプタは 1 つも登録していない**（登録なしなら流れは従来どおり。可視的に BLOCKED なのは未統合の G4）。
+3. **接続仕様**（`docs/common-account/phase4-core-integration.md`）: 入口・状態・冪等性（状態収束＋lifecycle_version の CAS。クライアントの冪等キーは不要）・エラー・オーナー別（G1/G2、G3/G4、G6）の配線チェックリスト・未証明の一覧・実行方法。Phase 3a doc に Phase 4 の注記を追加。
+
+### changed_files（15、すべて G5 の共通アカウント領域。他スロットのファイルは 0）
+- 新規: `supabase/migrations/20261012130000_common_account_core_service_fence.sql`、`supabase/functions/account-delete/{provider_cleanup.ts, provider_cleanup_test.ts, provider_cleanup_flow_test.ts}`、`supabase/tests/{common_account_core_fence_run.sh, common_account_core_fence_behavior.sql, common_account_core_fence_fixture.sql, common_account_core_fence_rollback.sql, common_account_core_fence_mutations.py, common_account_phase4_e2e_test.ts, common_account_phase4_ts_mutations.py}`、`docs/common-account/phase4-core-integration.md`
+- 変更: `supabase/functions/account-delete/lifecycle_logic.ts`（+55）、`supabase/functions/account-delete/wiring_test.ts`（順序の固定を追加・成功行の固定を拡張）、`docs/common-account/phase3a-deletion-orchestrator.md`（注記 +6）
+
+### 実行した検証（対象コードに絞った最小限・偽データ・使い捨て DB のみ）
+- `common_account_core_fence_run.sh` **ALL PASS**（約 19 秒）: 前提拒否（ガード無し／`ensure_my_profile` の形／ロック ACL の変化）／変更の厳密性（追加は関数 2・トリガ 1・`ensure_my_profile` の本体のみ、ACL 不変）／再適用拒否／静的規則／動作／競合 8 種／環境フェイルクローズ（REPEATABLE READ・SERIALIZABLE）／ロールバック・再適用／**実オーケストレータ（TS・無改変）を実 SQL に対して通しで実行する E2E 4 本**。
+  - 動作: 縦スライス（新規 → かぶモリ → 同一 ID に POSTONA、二重送信、アカウント行 1・entitlement 2・login/identity 不変・workspace 非作成）、分離（RLS、直接 INSERT/UPDATE 拒否、内部関数・anon・主体なしの拒否）、POSTONA 終了 → 自動開始で再開しない・古いバージョンでの再開は変更なし・提示バージョンでの明示再開、フェンス（entitlement なし／account なし／他人 ID／終了後／削除中／service-role）、旧ビルド経路、Phase 3b ガードとの判定一致（11 状態）。
+  - 競合（2 セッション・ロック待ちを観測して順序付け）: 凍結先 → 書込拒否、書込先 → 凍結が待つ、3 秒の待ち打切り（3.0 秒で `ACCOUNT_LIFECYCLE_BUSY`・何も書かない）、プロフィール根と凍結、二重送信（`started` が 1 件）、他人 ID が即時拒否（キュー待ちなし）、POSTONA 単独終了と書込（かぶモリは影響なし）、login 削除と書込。
+  - E2E: 実ゲート（blocked）で先に拒否・何も変わらない／テスト専用 DDL でゲートを開けると正規順序で完了し `verified_at` 付きの read-back でのみ「削除済み」／凍結中の古い token の書込（プロフィール直接 INSERT・`ensure_my_profile()`・フェンス表・開始）がすべて実 DB で拒否／プロバイダ blocked でアカウントは凍結のまま・コードが operation に残り、修復後に同じ operation が再開して完了。
+- 変異: SQL 14 件（`common_account_core_fence_mutations.py`）・TS 15 件（`common_account_phase4_ts_mutations.py`）すべて検出、対照は PASS。既存 Phase 3a の TS 変異 45 件も引き続き 45/45 検出。entitlement 行の FOR UPDATE は account ロックに包含される等価変異のため意図的に非対象（スクリプトと doc に明記）。
+- Deno `supabase/functions/account-delete/` 83 件 PASS（既存 66＋新規 17）、`deno check` PASS。ベースライン: #121 の既存ガード証明（`common_account_write_guard_run.sh`）も ALL PASS。
+- `git diff --check` clean、秘密情報スキャン該当なし、他の open PR とのファイル重複は #121 の同一 docs のみ（積み上げのため）。本番・managed への書込・実プロバイダ・実認証情報・課金: なし。
+
+### merge / deploy
+- merge なし・deploy なし・migration 本番適用なし・EAS なし。Vercel 等の PR チェックは確認時点で失敗 0（通過 1・保留 1）。
+
+### 証明していないこと・blocker（名前付き、PASS と偽らない）
+1. managed Supabase の挙動（`auth.sessions` の読取権限、所有者ロールの権限、`55P03` の PostgREST 側の扱い、Storage ポリシー U1、監査ログ U3）。ローカル PG17 のみ。
+2. Auth の identity 連携 race（managed 削除の意図確定後に GoTrue が identity を足せる）。SQL では閉じられない。`managed_auth_delete` は blocked のまま（E2E ではテスト専用 DDL で開けただけ）。`IDP_PREPAUSE_BLOCKED` も継続。
+3. プロバイダの遠隔 revoke（Threads/Instagram の API 未確認）とアダプタ実体（G4 の仕事）。Storage と DB の原子的スナップショットは主張しない。
+4. アプリ側の配線（G1/G2/G3/G4）は未実施。X saga・Apple・Auth ログアウト／管理削除は E2E では 1 文のスタンドイン。
+5. 発行済みの token は期限まで PostgREST/Storage に受理される。フェンス／ガードに届く書込だけが拒否される（doc §3 に明記）。
+
+### 利用者に見える進捗
+- 共通アカウントの「登録 → サービス別の利用開始 → 凍結中の書込拒否 → 退会の通し」が、ローカルで実際に動くところまで来た。凍結中・終了後に古い token でかぶモリのプロフィールが作り直される穴が DB で塞がった。まだ本番には何も入っていない。
+
+### 現実的な残作業
+- 他オーナーの統合（G4: ガード呼び出し・行フェンス・Threads アダプタ・フットプリントへの 4 表追加／G1/G2: 新ビルドの配線は main 済み、任意で行フェンス）。
+- managed 環境の読取専用確認（U1〜U3）と本番適用手順（単一ファイル適用・読み戻し・ロールバック）の承認。
+- Auth identity 連携の閉じ方の決定（`managed_auth_delete` を開ける前提）。
+- 独立セキュリティレビュー 1 回。
+
+### 次の推奨
+- **#152（と土台の #121）を 1 回だけ、ソースに対する焦点を絞った独立レビュー（Sol（高）推奨）にかける**。設計レビューの繰り返しは不要。レビュー観点: (a) 2 本の関数の SECURITY DEFINER／ACL／ロック順、(b) `ensure_my_profile()` の互換（旧ビルドで終了済みの人が `SERVICE_REENROLL_REQUIRED` を受ける）の是非、(c) `acceptRemoteUnverified` の既定、(d) 3 秒の待ち打切りの値。
+- 広範な再テストは推奨しない。次に動かす価値が大きいのは、G4 が T13 ガードと行フェンスを自分の接続 RPC に載せる統合（別 TASK・G4 所有）。
+
+### 守った安全制約
+managed Supabase・本番・実プロバイダ・実認証情報・写真アプリの一時停止・課金・project 作成/削除・migration 適用・deploy・EAS・merge・E11／Option D の SQL 削除: いずれも未実施。`managed_auth_delete` BLOCKED、`IDP_PREPAUSE_BLOCKED` 維持。他スロット（G1〜G4、G6〜G10、H1〜H5）の TASK／Report／worktree／ブランチは未変更。#121/#122/#128/#130/#134/#137/#146/#147 の head は不変（確認済み）。力ずくの push・自己 merge なし。シークレットはリポジトリ外のスクラッチのみ（今回は実シークレット未使用）。
 
 ---
 
