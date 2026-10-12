@@ -129,14 +129,14 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
+- status: done
 - task_id: postona-g3-reservation-preview-confirmation-ux-v1-20261012
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: K3 accepted previous PR145 R1/R2 corrections as PASS_SOURCE_CANDIDATE_WITH_G5_G4_HOLD, original Draft PR145 head 8820fa8d is unchanged/unmerged. New implementation-only G3 task: per-post X reservation preview confirmation/edit/cancel UX, fixed/random/interval, confirmation invalidation, account isolation, persistence OFF and no live post. Fresh independent G3 worktree/branch + new Draft PR; protected G4/G5/H5 and PR145 code. No production changes/merge/deploy; return K3.
+- allocation: K3 2026-10-12 PASS_UI_SOURCE_LOCAL_PREVIEW_ONLY for PR151 exact head 0cd5c596, 1 commit / 9 G3-owned paths stacked on unchanged Draft PR145 8820fa8d. Per-post user confirmation/edit/retime/cancel, invalidation, account isolation and preview-only OFF release gate accepted. G3 reports app309/309, domain22/22, mutants19/19; ChatGPT inspected source but did not rerun tests; iOS device NOT_RUN. Both PR145/151 stay Draft unmerged, all production/real X operations OFF. G5/G4 auth required before future integration and one focused Sol（高） review; no new G3 task automatically assigned.
 - recommended_model: Sonnet5（高）
 ## Claude G4
 - owner: claude
