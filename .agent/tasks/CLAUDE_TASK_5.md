@@ -1,3 +1,52 @@
+# G5 CURRENT TASK — H4 C4 R1/R2 Phase4限定修正
+
+- task_id: common-account-g5-phase4-h4-c4-r1-r2-repair-20261012
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- start_code: G5
+- finish_code: K5
+- return_to: 共通アカウントG5のちゃ
+- recommended_model: **Opus5.5（高）**
+- priority: high
+- source: [Draft PR152](https://github.com/anohi-memories/kabumori/pull/152) HEAD 5ad5bb40cadf013f00553acd5509f4f74fdbff7c
+- dependency: [Draft PR121](https://github.com/anohi-memories/kabumori/pull/121) HEAD 76b50e1e03f82faaa3460bab1603afa8fef3ce44
+- independent_review: H4 C4 CHANGES_REQUIRED (P2×2), .agent/CODEX_REPORT_4.md
+
+## 目的
+既存G5 Phase4の本格実装に対して、H4が独立再現した **R1/R2だけの限定ソース修正** を行う。コード変更＋fail-before/pass-after検証が成果。調査のみ・新設計だけ・大規模既存テスト再実行は禁止。共通アカウント実装を実際に完成へ近づける。
+
+## 修正A：H4-P4-R1 [P2] lease喪失後のprovider cleanup継続
+- 対象: supabase/functions/account-delete/lifecycle_logic.ts (review lines 440–441, 476) および provider_cleanup.ts (63–71,96–97)、必要な関連テスト。
+- hasConnection()などawait後、破壊的cleanup前、adapter間、finish_service_deletion前にlease所有権を再確認するG5-owned port契約を実装。adapter自身がawait／外部mutationする場合のoperation/lease最終チェックとUNKNOWN/RECONCILE契約を明確にし、単にlease600秒を延ばさない。
+- 合成時計で lease喪失(1)hasConnection後、(2)provider1 cleanup中の2失敗事例を改修前FAIL→改修後PASS。旧ownerによるcleanup/次provider/entitlement ended を拒否。正常/unknown/blocked/既存Xの順序を維持。
+- G4の実Threadsアダプタは別slot所有。G5はportだけを直し、G4 source/worktree/PRには触らない。
+
+## 修正B：H4-P4-R2 [P2] dependent trigger接続後のrollback
+- 対象: supabase/tests/common_account_core_fence_rollback.sql などG5所有ファイル。
+- 共有insert fenceを他サービスが利用する場合、DROP FUNCTION RESTRICTが外部trigger依存で失敗する。現行の「function absent fail-closed」説明はDB依存性と不整合。自動 CASCADE 削除は禁止。
+- rollbackが他ownerのtrigger保護を無断解除しないsource実装/手順を選び、依存存在時にsafe拒否stubを残すか、明示的にSTOPした上で手順/保証を訂正する。G5の本番向けrollbackとして妥当な選択と根拠を記録。
+- local PG17のfixture_fenced_rowsに別table triggerが付いたまま rollback を実行するfail-before/pass-after、他サービスのwrite-denial、依存無しの旧rollback回帰を確認する。
+
+## 付帯修正（追加P2扱いしない）
+- ACCOUNT_LIFECYCLE_BUSYの実際のSQLSTATEが42501であり55P03との説明不一致を解消する。実装変更かdoc修正かを決め、既存callerの再試行互換性を確認する。lock waitの3秒はRPC全体hard deadlineでないことも正確に説明。
+
+## 安全/事前確認
+fresh origin/main、PROJECT_RULES.md、.agent/ORCHESTRATION.md、ACTIVE_TASK、CURRENT_STATE、G5 TASK/Report、H4 Report、PR121/152 HEAD、関連他slot状況と独立G5 worktreeを確認。現在のG5 PR152 head、依存PR121のhead、他slot PR/ファイル/worktreeに衝突があればSTOPして理由を報告。安全ならG5自身の既存PR152へ追加commitしpush（force/rebaseなし）、または独立した積み上げDraft PR。過去のG5 Report全文を保護。
+- 本番Supabase/Auth/Storage/Edge、実provider/OAuth/ユーザー、Secrets、有料API、本番migration、PR merge、deploy、E11/Option D、managed_auth_delete、写真共有アプリ操作は禁止。IDP_PREPAUSE_BLOCKED維持。
+- 変更はG5所有のソース/テスト/ドキュメントのみ。大量テストを避け、2指摘の回帰・既存関連テスト・git diff --check・秘密情報・差分競合だけ確認。
+
+## 完了条件
+1. R1/R2のソース修正、独立再現の改修前FAIL/改修後PASS。
+2. BUSYコード説明と実動作が一致。実adapter未登録・managed実挙動未証明を明記。
+3. G5 TASK末尾に新規Reportを追記（task_id / changed_files / tests / commit / push / Draft PR / merge/deploy / blockers / safety_checks / remaining_issues / next_recommendation）。
+4. status review_required / next_owner chatgptへ戻し、**共通アカウントG5のちゃ へ K5 を送ってください。**
+5. 大きな新規Codex全面レビューを自動依頼しない。K5でR1/R2の回帰根拠を精査して次の統合を判断。
+
+---
+
+## PREVIOUS G5 TASKS AND REPORTS (preserved)
 # G5 — CURRENT TASK — Phase 4 common account CORE implementation (implementation-first)
 
 - task_id: common-account-phase4-core-end-to-end-implementation-20261012
