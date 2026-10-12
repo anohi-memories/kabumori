@@ -172,11 +172,12 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: ready
+- status: review_required
 - task_id: common-ai-provider-g6-phase2c-isolation-test-allowlist-20261012
 - start_code: G6
 - finish_code: K6
-- next_owner: claude
+- next_owner: chatgpt
+- latest_result: PASS_OFFLINE — Draft PR #157 (9b952d64, stacked on unchanged PR153 6c576567): isolation_test.ts only; exact allowlist (handler.ts + shadow_wiring_test.ts, exact specifiers), only handler/index reach the module via imports, Anthropic names stay in module; synthetic + on-disk probes all refused; old test failure reproduced; provider 126 / report 313 / _shared 629; production NO_GO, production=0, paid calls=0. Report: .agent/tasks/CLAUDE_TASK_6.md
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
 - report: .agent/tasks/CLAUDE_TASK_6.md#report--phase2c-isolationg6記入

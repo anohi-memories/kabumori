@@ -3,8 +3,8 @@
 - task_id: common-ai-provider-g6-phase2c-isolation-test-allowlist-20261012
 - owner: claude
 - slot: claude-6
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -32,17 +32,76 @@
 - Before any actual live Claude shadow: separate authorization and independent focused release review of recovery Cron, Edge Secret, waitUntil, policy limits and paid canary.
 
 ## Report — Phase2c isolation（G6記入）
-- result: NOT_STARTED
-- changed_files: none
-- tests: NOT_RUN
-- push: no
-- merge: no
-- deploy: no
-- production: 0
-- paid_external_requests: 0
-- remaining_issues: awaiting G6 implementation
-- next_recommendation: G6 → K6
 
+- task_id: common-ai-provider-g6-phase2c-isolation-test-allowlist-20261012
+- result: **PASS_OFFLINE**（テストだけの修正）。production は **NO_GO** のまま
+- changed_files: `supabase/functions/_shared/ai_provider/isolation_test.ts` の1ファイルだけ（+180 / -16）。新しいファイルは無い
+  - G2 のファイル、PR148 / 150 / 153 の branch は変更していない
+- branch / commit / PR
+  - `claude/g6-phase2c-isolation-allowlist-20261012` @ `9b952d64a9ec954e74af7e762c9df4e4c2e2f3a5`
+  - Draft PR [#157](https://github.com/anohi-memories/kabumori/pull/157)。base は PR153 の branch `g2-phase2c-market-shadow-20261012`（`6c576567328c99a58c2e4beaed86d155fe875769`）
+  - 新しい worktree `/Users/yuya/Developer/kabumori-g6-phase2c` を `kabumori-fresh` から、PR153 の head ちょうどで作った
+- 依存の順番: #148 `a71de72b…` → #150 `18d9058a…` → #153 `6c576567…` → #157。どれも Draft で、merge していない（着手時と完了時に head を確認した）
+- 内容: Phase 1a の「本番の関数は provider を import しない」という一律の規則を、**完全一致の許可リスト** に置き換えた
+  1. provider の外で provider を参照してよいのは2ファイルだけで、参照先も完全一致
+     - `market-report-analysis/handler.ts` → `market_report_shadow.ts` と `market_report_wiring.ts`
+     - `market-report-analysis/shadow_wiring_test.ts` → `market_report_wiring.ts` と `test_support.ts`
+     - これ以外のファイル、参照先の追加、文字列の外での言及（コメントなど）は失敗にする
+     - 許可はファイル単位で、ディレクトリや「テストなら可」という形では許していない
+  2. deploy 対象のファイル（テスト以外）について、import の連鎖をたどる
+     - provider に届いてよいのは `market-report-analysis/handler.ts` と `index.ts` だけ
+     - handler を import する橋渡しのファイルのような、間接的な参照も検出する
+  3. Anthropic の SDK と `ANTHROPIC_*` の名前は、provider の中だけに置く
+     - 例外は、handler のオフラインテスト（`shadow_wiring_test.ts`）だけ
+     - 本番コードがキーを直接読むことは失敗にする
+  4. アプリ（`src/`、`apps/`）の検査は今と同じ（`ai_provider`、`ANTHROPIC_API_KEY`、`@anthropic-ai/sdk` を検出）
+  5. 拒否されることのテスト: 実際のファイル構成に、禁止の例を足した仮の構成で確かめた
+     - ほかの関数からの import 4種類（static / dynamic / re-export / side-effect）
+     - handler を経由した間接参照
+     - handler の参照先の追加
+     - 市況レポートのほかのファイルからの参照
+     - ほかの関数のテストからの参照
+     - 文字列の外での言及
+     - 本番コードでのキーの読み取りと、SDK の import
+     - アプリでの漏れ3種類
+     - どれも必ず失敗になる
+- tests（PR153 を含む全体で実行。実通信・鍵・本番 0）
+  - 修正前の再現: 古い隔離テストは、PR153 の上で `Phase 1a scope` が FAILED になる（G2 の報告どおり）
+  - isolation_test 8/8 PASS（前は5件。2c の規則3件、アプリ1件、拒否の確認1件）
+  - 実ファイルを使った検査（置いて実行し、消す）
+    - x-test-post から provider を import
+    - `_shared` に handler を再 export するファイル
+    - 本番コードで `ANTHROPIC_API_KEY` を読む
+    - `src/` で `ANTHROPIC_API_KEY` を参照する
+    - どれも新しいテストが失敗し、消した後は PASS に戻った
+  - 回帰
+    - `_shared/ai_provider` 126/126: 前回の 123 に、隔離テストの増えた3件を足した数
+    - `market-report-analysis` 313/313: TASK の記載どおり
+    - `_shared` 全体 629/629: 626 + 3
+  - `deno check`（isolation_test、PR153 の index.ts と shadow_wiring_test.ts）PASS。`deno lint`（32ファイル）PASS
+  - 差分の秘密情報スキャン 0件
+  - PR #157 の CI: Vercel だけが失敗表示。理由は「Deployment rate limited — retry in 24 hours」というプランの回数制限で、コードの不具合ではない
+- push: PR の branch へ push 済み。この Report は main へ fast-forward。merge: no。deploy: no
+- production=0、external_paid_calls=0
+  - Edge・Cron・Secrets・DB の変更は無い
+  - Anthropic / OpenAI の呼び出しは無い
+  - 鍵は読んでいない
+- safety_checks
+  - 許可は、ちょうど G2 の handler の接続分だけ
+  - ほかの Edge Function は、直接でも間接でも provider を使えないまま
+  - アプリの検査は弱めていない
+  - 認証・Secrets・DB に関わる許可は増やしていない
+- blocking conditions（どれも別の承認と、独立したリリースレビューが必要）
+  1. 回復処理の Cron
+  2. Edge Secret `ANTHROPIC_API_KEY`
+  3. 本番での `waitUntil` の確認
+  4. ポリシーの上限
+  5. 有料のカナリア
+  - あわせて、PR148 → 150 → 153 → 157 の順での merge 判断が必要
+- next_recommendation
+  - K6 で PR #157 を評価する
+  - 受け入れられたら、#148 から #157 までを1つのまとまりとして merge の順番を決める
+  - 本番は、計画書（PHASE2B）§6 の前提を1つずつ別承認で進める
 ---
 
 # PRESERVED G6 PRIOR TASKS / REPORTS — Phase2b and earlier (do not rewrite below)
