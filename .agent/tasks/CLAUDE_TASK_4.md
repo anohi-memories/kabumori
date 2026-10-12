@@ -1,3 +1,51 @@
+# G4 CURRENT TASK — POSTONA PR144 C3-R1 session-expiry race narrow fix（SOURCE ONLY）
+
+- task_id: postona-threads-pr144-c3-r1-session-expiry-lock-fix-g4-20261012
+- owner: claude
+- slot: claude-4
+- status: ready
+- next_owner: claude
+- start_code: G4
+- finish_code: K4
+- return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
+- recommended_model: **Opus5.5（高）**
+- priority: high
+- type: **ONE narrow Auth/SQL session-row-lock bug correction + deterministic concurrent regression**; no broader feature implementation
+- task_origin: C3 accepted independent Codex H3 `postona-threads-pr144-auth-publish-p1-security-review-h3-20261012` as CHANGES_REQUIRED, one P2 R1; H3 closed and Report preserved
+- target_PR: [#144](https://github.com/anohi-memories/kabumori/pull/144)
+- target_exact_HEAD: `d4a1e87b77d1fbd362dc51809ce2d998afda15ea`
+- parent_PR140_exact_HEAD: `2e75a6a842e70f3de78558681803b60935fb4251`
+- scope_own: `supabase/candidates/postona_threads_publish/threads_publish_release_candidate.sql`, H3 finding-specific PostgreSQL test fixture/runner in `supabase/tests/postona_threads_release_*`, optional small G4 integration note and locally modified mock only if essential
+- prohibited: G5 `account_lifecycle_assert_active_service_write`/T10/Auth, H5 PR139 `claim_candidate.sql`/owner transport, G3 schedules, old X OAuth and x-test-post, H3/H4 TASK/Reports/PRs, any other slot source/worktree, production Supabase/Auth/PostgREST/Vault/Meta/X calls, real providers, secrets, migration apply, PR merge, deploy, feature-flag activation, EAS, paid AI, actual posting
+- release_gate: **REAL_PILOT_HOLD**; all connect/publish/mobile gates remain FALSE, disabled Edge response remains 503
+
+## Exact C3 review finding and accepted correction scope
+
+H3 C3 reviewed exact Draft PR144 HEAD `d4a1e87b77d1fbd362dc51809ce2d998afda15ea`, parent PR140 `2e75a6a842e70f3de78558681803b60935fb4251`. H3's report is `.agent/CODEX_REPORT_3.md` top `## H3 FINAL — POSTONA Threads PR144...`, result **CHANGES_REQUIRED / REAL_PILOT_HOLD**.
+
+- **R1 P2 (reproducible):** `supabase/candidates/postona_threads_publish/threads_publish_release_candidate.sql:229-232` validates an `auth.sessions` row `not_after` and locks it `FOR KEY SHARE`. A different connection can `UPDATE auth.sessions SET not_after=now()-interval '1 second'` (non-key field) and COMMIT while the release is blocked later in the transaction; release then returns the Vault credential **after session has expired**. Two-connection synthetic local PG17 reproduction from H3 report. H3's LOCAL-only `FOR SHARE` control prevents that concurrent nonkey update until release commit. No actual GoTrue managed API reproduction; don't claim exploited production.
+- **Bounded G4 correction:** strengthen the session-row lock to `FOR SHARE` **only at the verified session check**, preserve lock order G5 T13 → session → membership/account/custody/nonce/attempt → Vault and existing source SQL ACL/SECURITY DEFINER behavior. Confirm PostgreSQL `FOR SHARE` behavior for non-key UPDATE and whether read-only Meta POST outside transaction still creates finite revocation window; don't claim network call atomicity. If safe equivalent is required because of lock order or owner privileges, document and test narrowly, no broad grants or new authority route.
+- **Mandatory fail-before/pass-after race test:** run two isolated local PG sessions with a reliable synchronization barrier. Case 1 release obtains session lock first; concurrent `UPDATE auth.sessions.not_after` with bounded timeout must wait/be blocked until release COMMIT; case 2 expiry update commits first and then release must fail/return AUTH_REQUIRED without Vault release. Verify session reactivation/old JWT replay is not silently accepted; exact errors and snapshot results recorded. Re-run H3's existing revoked-entitlement/member-removed/consent-revoked/nonce-replay/concurrent-publish regression and mutation cases to establish unchanged safety. Tests fake Auth/T13/Vault and isolated DB, no managed claims.
+- **H5 coordination note ONLY:** H3 also found H5 protected PR139 `supabase/candidates/postona_threads_auth_runtime/claim_candidate.sql` uses KEY SHARE; do NOT edit H5 files or create H5 task. Record the exact later interface request for H5/G5 to resolve at genuine owner-transport integration. `threads_credential_custody_candidate.sql`, PR124/135/139 and PR121 must remain unchanged.
+- **G5 deletion outcome note ONLY:** H3 found an inherited deletion guard can refuse a late Threads publication result `ACCOUNT_LIFECYCLE_BLOCKED`, despite a release and possible Meta write; record this as future G5/T10 reconciliation contract, no weakening of guard.
+
+## Mandatory preflight / branch ownership
+
+- Read `PROJECT_RULES.md`, `AGENTS.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this G4 TASK and protected prior Report below, H3 latest C3 Report, H5 C5 and G5 current status; fetch fresh `origin/main` and PR144 exact head/base/changed-file ownership.
+- Use an **independent clean G4 checkout/worktree** from exact PR144 head, not another slot or dirty previous checkout. PR144 original G4 branch `claude/g4-postona-threads-integration-20261011` is exclusively G4-owned but may be attached to previous G4 worktree: coordinate safely. APPEND one narrowly scoped commit to that PR's G4 branch **only if** no other active worktree/dirty files, no rebase/reset/force push and pinned head remains unchanged before push. May instead create NEW narrowly stacked Draft PR from exact PR144 head if direct append would disturb existing worktree or ownership; never overwrite PR144 or #140/139/etc branches. In either case report exact branch/PR/base/HEAD and preserve prior G4 Report.
+- Stop rather than edit if conflicting ownership, worktree, unrelated PR head drift or safe independent environment cannot be established. Do not change production state.
+
+## Tests and completion
+
+- Run local disposable PostgreSQL 17 negative two-session race with deterministic ordering, release preconditions, claim+publish safety regressions and mutation/fail-before/pass-after if possible. Run focused Deno check/lint/tests and G4 app tests only as relevant; report `RUN/PASS/FAIL/NOT_RUN` explicitly. Check static false gates unchanged, Vault/token logging negative, role EXECUTE/implicit grants unchanged, `git diff --check`, `git status`, PR exact delta and no cross-slot file paths.
+- **Completion = one P2 R1 correction + evidence**, not G5/H5/Meta real pilot. Push scoped Draft correction if safe; after remote head/diff read-back append new `## Report` to the **TOP of this current G4 TASK** (preserving whole previous K4 and G4 history), update G4 TASK + its `.agent/ACTIVE_TASK.md` block `review_required/next_owner chatgpt`. Do not change G3/G5/H1-H5 or other chat slot TASK/Report. Return `K4` to POSTONA｜マルチSNS化・開発統括（G4）のちゃ.
+- ChatGPT will inspect exact source diff and concurrent regression on K4. If the change is truly bounded, avoid another mechanical broad Codex review; any later integrated real Auth/Vault/T13/Meta release still requires focused proof/approval.
+- recommended_model: **Opus5.5（高）**; completion_code K4; no H5 temporary implementation needed for this G4-owned one-lock fix.
+
+---
+
+## Protected prior G4 K4 task and reports (read-only, complete original text follows)
+
 # G4 CURRENT TASK — POSTONA Threads 認証＋手動テキスト投稿 統合V1（オフライン・本番無効）
 
 - task_id: postona-threads-connect-publish-integrated-offline-v1-g4-20261011
@@ -245,6 +293,7 @@ Use new G4 branch from **fresh main**, own independent worktree; PR135/PR124/H5 
   - 要検証: 絵文字以外の文字数の数え方、Threads 固有のエラーコード、`owner` フィールドの有無。決めてほしいこと: `publish_mode='dry_run'` で手動投稿を許すか（今は `disabled` のみ停止）、許可の単位（今はアカウントごと）、画面の置き場所（今はアカウント詳細）。
 - safety_checks: 専用 worktree `/Users/yuya/Developer/kabumori-g4-threads-publish`（`kabumori-fresh` の fresh `origin/main` から作成、他スロットと非共有）。PR #124 / #135 / #139（H5）/ #138（G3）/ G5 のブランチ・ファイルは checkout も変更もしていない（変更ファイルの重なり 0 を確認）。`x-test-post`・X OAuth（Issue #131）・G3 スケジューラ・G5 Auth/削除は無変更。`THREADS_CONNECT_PREREQUISITES_MET=false` は無変更。本番 DB/Auth/RPC の読み書き、Meta/X/Supabase API 呼び出し、トークン・secret の取得、課金 API は 0。使い捨て PostgreSQL は自分専用の socket `/private/tmp/g4tp-sock` のクラスタのみ使用。
 - next_recommendation: K4 で受け入れ判断。Codex レビューは、H5・G5 の本番側の境界が揃って接続＋投稿＋T13 を統合する時点で1回（Sol（高））にまとめるのを推奨（この単体候補のための個別レビューは不要と考える）。並行して、H5/トークン管理側で期限読み出し口の置き場所を決める小さな TASK と、ユーザー側の Meta アプリ準備（§8）を進めると、実投稿までの距離が最短になる。
+
 
 
 
