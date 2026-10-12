@@ -1,3 +1,56 @@
+# G5 — CURRENT TASK — Phase 4 common account CORE implementation (implementation-first)
+
+- task_id: common-account-phase4-core-end-to-end-implementation-20261012
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- start_code: G5
+- finish_code: K5
+- return_to: 共通アカウントG5のちゃ
+- priority: high
+- recommended_model: **Opus5.5（高）**
+- assignment_reason: ユーザー2026-10-12「そのほうがいい！全然実装が進んでないから テストばかりにトークン消費させてては時間もトークンももったいないよ」。以降は細分化調査ではなく、G5担当範囲の機能実装と動作確認をまとめて進める。
+
+## 最重要 — 今回は調査TASKではない
+
+**コードを実装する。** 共通Supabase Auth ID + サービス単位の利用登録（entitlement）+ 退会時の安全なデータ書込封鎖を、一連の利用者フローとして成立させる **G5所有のバックエンド実装** にする。前段Phase3b〜3iの調査・モデル・テストを繰り返さない。既存のPhase1/2/3aのソース、Draft PR121のT13 guard、PR146のローカル反例、PR147のP0〜P8設計を再利用する。調査のみ・設計書のみ・テスト資産のみを成果として出すことは不可。
+
+実装の優先順位:
+1. **利用開始の動く縦スライス**: 共通 Auth ID に対して (a)新規登録時に要求元アプリの利用登録を付与、(b)既存共通IDはパスワードやAuthユーザーを作り直さず要求元アプリの利用登録だけを追加、(c)かぶモリとPOSTONAのentitlement/データは混線せず二重作成もなし。もし現行 source already implemented, don't rewrite: inspect and record concrete executable path, then fill only actual missing layers. Invalid claim/authorization => fail closed. No uncontrolled entitlement escalation.
+2. **実装して動かす書込境界（B1/B2）**: account+service entitlement status predicate, permission-scoped RPC/SECURITY DEFINER writer guard, lock order compatible with freeze, RLS/grants. 2 session local PG test of freeze vs in-flight write and lock_timeout, authorization/cross-user denial. Avoid treating BAN or a JWT alone as fence. The previously drafted PR121 migration may be reused in a *new independent G5 branch* without altering its original branch/head; avoid duplicate migration or contradictory grants.
+3. **退会の実装**: connect existing Phase3a lifecycle state/protocol to real G5-owned orchestration for freeze → bounded service/provider cleanup handoff → Storage cleanup/readback → guarded Auth deletion → post-delete reconciliation. Real adapters owned by G1/G2/G3/G4/G6 may be interface/fail-closed placeholders only, visibly BLOCKED until those owners integrate. Do not falsely mark a partially wired end-to-end flow complete. For missing permissions or cross-service consistency, STOP/RECONCILE; never invent atomic Storage+DB snapshot guarantees.
+4. **接続仕様の完成**: exact entrypoints, request/response statuses, idempotency key, RLS/auth context, errors, owner-specific wiring points for かぶモリ(G1/G2), POSTONA(G3/G4), AI(G6), without changing those owners' files. Keep short integration checklist; postpone polishing UI. Implement G5-authored shared interfaces rather than only proposing them on paper.
+
+If full closure cannot be completed without another owner's file/permissions, still ship real working **signup/entitlement + guard** with runnable local evidence and identify exact remaining dependency. Never call an unfinished backend "production ready". This is one coherent implementation task, not an endless collection of study subtasks.
+
+## Safety / ownership gates
+
+- Before starting: fresh `origin/main`; verify `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, own TASK/Reports and precise heads/files of Draft PR121/122/128/130/134/137/146/147 plus other G/H slots. G5-owned independent worktree/branch required. Never operate in another slot's worktree or overwrite their branch. On collision, stop that file and record dependency; continue nonconflicting G5 source.
+- Source edits only in newly owned common-account code/migrations/candidate tests or safe existing G5-owned common-account paths after verification. Do not touch other G/H task/report; no G1/G2 mobile source, G3/G4 POSTONA source, G6 ledger/market report, G8/G9, shared production workflow; do not overwrite previously stacked G5 PRs. Distinct migration IDs; respect G6 production mutation window and any other active writer.
+- **NO managed Supabase operations**, no Auth/Storage production writes, real OAuth/provider API, user account or family photo actions, pause, upgrade, charges, real sessions/tokens, secrets, deploy, migration apply to production, PR merge, E11 direct SQL `auth.users` delete/Option D, or destructive managed tests. Project `stock-x-autopost` and `anohi-memories` immutable. `managed_auth_delete` and `IDP_PREPAUSE_BLOCKED` remain BLOCKED.
+- Local disposable PostgreSQL/OSS with only dummy data permitted when isolated; start/stop ONLY G5-owned containers, preserve others. Do not default to large Podman downloads or change global connections. If resource collision or unsafe settings, use offline candidate tests and document blocker.
+
+## Token/time saving operating mode
+
+- **70% effort to source implementation and genuine integration; minimal risk-proportional tests, no repeated 8,800-case modeling or broad mutation campaigns.** Reuse existing test harness; add only new happy path, same-ID dual entitlements, denied cross-service/cross-user, double-submit idempotency, freeze/inflight lock concurrency, and unknown/rollback controls. Do NOT add another speculative long design document, Phase3g feasibility re-study, re-audit old E11 notes or create a sequence of phase4a/4b plans.
+- Do short inventory at start, then implement multiple related commits on one G5 branch. One draft PR, *source implementation* required. Scope/test only the touched code. If a new P0 security issue is uncovered, stop the unsafe operation and report exact blocker; no unbounded rounds.
+- IMPORTANT nuance: if PR121 is needed as ancestor, create new independent G5 worktree branch from its immutable exact commit and a clearly stacked Draft PR targeting its branch; do not change PR121. If fresh main contains equivalent merged implementation, build on main instead. No wholesale cherry-pick of protected PR122/130/134 just for test reuse. Avoid duplicate migration definitions.
+- Do not claim dynamic managed OAuth, app UI wiring, real entitlement grants, Storage consistency or production DELETE as proven. Use a local disposable dummy workflow as proof.
+
+## Complete when
+
+1. New Draft PR with actual production-target **source code**, meaningful local runnable happy path: create shared account / enable app-specific entitlement / verify isolation / idempotent retry, plus state-dependent write denial and basic deletion-safety path or honest source-blocked interfaces. If a core part remains blocked, report precisely what needs an owner/user decision.
+2. Focused relevant tests PASS (or precise observed failure), no broadened mass test suites, `git diff --check`, secret scan, changed-file isolation, independent worktree. No production writes.
+3. TASK appended `## Report — Phase4`: task_id, actual implementation/features, changed_files, focused tests, commit hash/push/Draft PR, merge/deploy, blockers, user-visible progress, realistic remaining work, safety checks and next recommendation.
+4. Set status `review_required` / next_owner `chatgpt`; return **共通アカウントG5のちゃへ K5 を送ってください。** High-risk implementation will receive ONE focused independent Codex security review (recommended **Sol（高）**) when feature source is ready, not iterative design-review loops.
+
+推薦モデル：**Opus5.5（高）**（実装中心・既存検証資産再利用）。
+
+---
+
+# Preserved Phase3i and earlier G5 TASKs / Reports (read-only history)
+
 # G5 — CURRENT TASK — Phase 3i account-lifecycle safeguards: design and offline regressions
 
 - task_id: common-account-phase3i-local-findings-safe-lifecycle-plan-20261012
