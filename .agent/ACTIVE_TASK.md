@@ -108,15 +108,15 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-g1-home-report-return-and-holdings-count-fix-20261012
+- status: ready
+- task_id: kabumori-g1-v1-release-gap-inventory-20261012
 - start_code: G1
 - finish_code: K1
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: 2026-10-12 five-tab Simulator QA K1 accepted PASS_WITH_FINDINGS and completed; focused G1 P3 home report detail return-to-home + P4 unknown holding count badge fix. One bounded source PR, tests/simulator, no merge/deploy; G2 PR143 report-detail implementation and G5 boundaries protected.
-- recommended_model: Sonnet5（中）
+- allocation: 2026-10-12 user chose sequential release readiness 1→6; first G1 read-only audit/inventory of V1 five-tab UI, unimplemented features, source/PR/release gates and owner dependencies. No product edits, no deployment, G2/G5/G6/G8/G9 boundaries protected.
+- recommended_model: Sonnet5（高）
 ## Claude G2
 - owner: claude
 - slot: claude-2
