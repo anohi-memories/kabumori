@@ -94,15 +94,16 @@
 ## Codex H5
 - owner: codex
 - slot: codex-5
-- status: ready
+- status: review_required
 - task_id: postona-h5-threads-auth-owner-runtime-final-wiring-20261012
 - start_code: H5
 - finish_code: C5
 - completion_code: C5
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CODEX_TASK_5.md
 - report: .agent/CODEX_REPORT_5.md
+- completion: H5 new Draft PR159 exact `163675c62835e84417905f98f97ceedd4dd1bcd9` stacked on protected PR139, H5-only18 files. Real SDK/TLS driver/source G4 handler composition, SHARE revocation fix and same-tx custody code implemented; unit/runtime47 + overlay18 + actual-driver local fake PG6 PASS, old KEY SHARE fail-before reproduced. All5 gates false/Edge503; actual owner/Auth/TLS/Meta/pilot and repaired G5/G4 T10 semantic compatibility still NO_GO. No own final review or live action; C5 bounded source evaluation pending. Control records via separate H5-only Draft PR, not direct main mutation.
 - allocation: User 2026-10-12 “つぎいこう”, continuing toward 1 real authorized POSTONA→Threads test post. **臨時実装**, Codex Sol（高）, prior user explicitly permitted H5 when needed; ChatGPT deemed Codex appropriate because H5 owns PR139 verified Auth/owner SQL/OAuth state source while G5 G5 Phase4 repair is independently ready and G4 PR154 source is finished. H5 source NEW independent H5 branch stacked on PR139 exact b4fa672f97592e87682671454e868a92098cbd56; original PR139/135/124 unchanged, G4 PR154 98287392327eabfd5092a3ba89dde51a2e8beff6 and G5 PR152 5ad5bb40cadf013f00553acd5509f4f74fdbff7c protected. Build REAL server-side Supabase SDK getClaims/getUser verifier composition, dedicated non-super TLS parameterized owner Postgres connector, H5-owned auth.sessions FOR SHARE revocation race correction and local dual-session regression, same-transaction account-token-expiry custody port compatible with G4 PR144, fail-closed edge start/callback server composition contract with G4 module via disposable overlay. New code/test source and focused Deno/PG proof required, not memo-only. Existing H5 Edge must remain 503 and ALL Threads publish/connect source/mobile gates FALSE; NO production Auth/DB/Meta/Vault/API/SQL grants/deploy/merge/real connection/post, no paid call. Never fake session claims/service_role grants, never edit G5/G4/G3/H1-H4 source/slot files, no shared worktree. Actual operator Meta/callback/owner credentials remain separate authorization. Return C5 to POSTONA G4 chat; independent Sol（高） reviewer from H1–H4 before live activation, H5 cannot self-review.
 - recommended_model: Sol（高）
 ## Claude G1

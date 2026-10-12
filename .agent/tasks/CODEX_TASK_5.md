@@ -3,8 +3,8 @@
 - task_id: postona-h5-threads-auth-owner-runtime-final-wiring-20261012
 - owner: codex
 - slot: codex-5
-- status: in_progress
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - start_code: H5
 - finish_code: C5
 - completion_code: C5
@@ -21,6 +21,19 @@
 ## Verified state and protected PR dependencies at allocation (2026-10-12 JST)
 
 H5 startup 2026-10-12: fresh main `34b64ad4`; new isolated source/report/integration worktrees under `/private/tmp/kabumori-h5-wiring-20261012.EzokAp`. Source is exactly PR139-based new branch `codex/h5-threads-owner-runtime-wiring-20261012`; G4 PR154 unchanged. G5 PR152 advanced legitimately to `ccea1fe8132c6f573a768f0df5a033a05c62ef2c` and current G5 TASK done after K5; compatibility must use/read this repaired version as well, without editing G5. All production/pilot gates stay NO_GO.
+
+## Report — H5 bounded source implementation / 2026-10-12 JST
+
+- task_id: postona-h5-threads-auth-owner-runtime-final-wiring-20261012
+- result: SOURCE_COMPOSITION_IMPLEMENTED / MANAGED_OWNER_PILOT_NO_GO / INDEPENDENT_REVIEW_REQUIRED
+- source: Draft [PR159](https://github.com/anohi-memories/kabumori/pull/159), exact `163675c62835e84417905f98f97ceedd4dd1bcd9`, base protected PR139 branch `codex/h5-threads-runtime-20261011`. 18 H5-only paths (3 scoped edits +15 new), source pushed/readback, parents unchanged. New code constructs real pinned SDK/parameterized TLS driver+G4 handler port; existing Edge always503 and all five source gates false.
+- tests: focused unit/runtime47 PASS; pinned G4/G5 source overlay18 PASS; actual Deno driver+real source G5 T13/PR124/G4 custody local fake PG6 PASS; deliberate KEY SHARE fail-before1 FAIL, corrected SHARE PASS; check/lint12/bash/diff PASS. Managed Auth/TLS/owner/Meta/device/pilot NOT_RUN.
+- blockers: actual approved dedicated owner/TLS/Auth session privileges and managed policies; schema/apply/attestation/operator Meta/tester/app links; G4 PR154 cleanup ignores repaired G5 context.stillOwned during mutation, so T10 registration still needs its owners. H5 changed no G4/G5 source or slot.
+- merge/deploy/flag-enable/real Supabase/Auth/DB/Vault/Meta/X/provider/API calls: 0; no production grant/secret/migration or real post. This is not own final security review.
+- shared bookkeeping: separate H5-only Draft PR against fresh main, not direct main push. Canonical main remains prior state until explicitly accepted by coordinator; complete detail in new top `.agent/CODEX_REPORT_5.md`.
+- next_owner: chatgpt; return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ; completion_code: C5. C5 evaluates this bounded source and frees H5; later independent H1–H4 Sol（高） review before rights/DB/Meta activation.
+
+POSTONA｜マルチSNS化・開発統括（G4）のちゃ へ C5 を送ってください。
 
 - Fresh GitHub `origin/main` at assignment **`add7685c782195a3a1a93cafeed5af88852b809d`** (refresh locally on start).
 - **H5 Draft [PR139](https://github.com/anohi-memories/kabumori/pull/139)**: exact `b4fa672f97592e87682671454e868a92098cbd56`, OPEN/DRAFT/UNMERGED, 13 H5-owned paths; base H1 [PR135](https://github.com/anohi-memories/kabumori/pull/135) `e38788d6677082138f0990453c7d2f00549666d0`; ancestor G4 [PR124](https://github.com/anohi-memories/kabumori/pull/124) `c30f246409a77080cbc03aef6c4cb72b5481e125`. H5 PR139 has candidate `verified_actor.ts` (real getClaims+getUser interface), `owner_transport.ts` (injected SQL client, strict owner role and SET LOCAL verified actor, one-shot commit), `runtime.ts` (signed actor/state/code exchange and complete), `claim_candidate.sql` (durable claim), and `supabase/functions/threads-oauth-connect-user/index.ts` (intentionally 503 via disabled_entry).
