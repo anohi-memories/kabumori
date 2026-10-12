@@ -71,7 +71,13 @@ test('the legacy direct delete is gone: no module deletes a login outside the li
   assert.ok(logic.indexOf("call(deps, 'complete'") > deleteAt, 'the read-back follows it');
   // Success is only ever the verified read-back.
   assert.equal(logic.match(/outcome: 'deleted'/gu)?.length, 1);
-  assert.match(logic, /if \(done\?\.status === 'completed' && done\.login_deleted === true\) \{\n\s+return \{ status: 200, body: \{ ok: true, outcome: 'deleted' \} \};/u);
+  assert.match(logic, /if \(done\?\.status === 'completed' && done\.login_deleted === true\) \{\n\s+return \{ status: 200, body: \{ ok: true, outcome: 'deleted'(, \.\.\.\(remoteUnverified\.length \? \{ remote_unverified: remoteUnverified \} : \{\}\))? \} \};/u);
+  // Phase 4: the provider cleanup settles before the POSTONA entitlement is ended and before any managed step.
+  const flow = logic.slice(logic.indexOf('async function ownedDeletion'));
+  const providerAt = flow.indexOf('const providerFailure = await providerStep();');
+  const finishAt = flow.indexOf("call(deps, 'finish_service_deletion'");
+  assert.ok(providerAt > 0 && providerAt < finishAt, 'providers settle before POSTONA ends');
+  assert.ok(finishAt < flow.indexOf("call(deps, 'withdraw_kabumori'"), 'POSTONA ends before Kabumori');
 });
 
 test('the function uses only owned lifecycle calls and never the operator reconciliation', async () => {

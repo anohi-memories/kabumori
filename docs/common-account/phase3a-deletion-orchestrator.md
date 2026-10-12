@@ -143,6 +143,12 @@ that PostgREST and Storage accept until they expire (the project's JWT expiry, 1
 Finite re-reads narrow every window; they do not close the last one. The "not gated" rows and the
 identity link are enforcement prerequisites (§9).
 
+> **Phase 4 update (source candidate `20261012130000_common_account_core_service_fence.sql`, not applied):**
+> the "re-create a profile" row is gated at the database for every creator (the profile root fence, and
+> `ensure_my_profile()` is a wrapper of the Phase 2 start): see `phase4-core-integration.md` section 3.
+> The X workspace and Storage rows stay as above (other owners' writers; the generic fence and the Phase 3b
+> writer guard are what they attach). The Auth identity link is unchanged.
+
 ## 7. Storage
 
 A read-only, `service_role`-only inventory (`common_account_deletion_storage_objects`) lists
