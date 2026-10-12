@@ -204,15 +204,15 @@
 ## Claude G8
 - owner: claude
 - slot: claude-8
-- status: ready
+- status: done
 - task_id: news-improvement-a-jp-official-diagnostics-j1a-g8-20261012
 - start_code: G8
 - finish_code: K8
-- next_owner: claude
+- next_owner: none
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_8.md
 - report: .agent/tasks/CLAUDE_TASK_8.md#report
-- allocation: G8ニュース改善A専任。J0はK8 PASS_SOURCE_DESIGNで完了済み。J1-aはjp_official診断を既存run diagnostics JSONBに記録する限定実装。DB migration/本番/有料API/merge/deploy禁止。PR116固定本番とPR129/G9・他slot保護。独立worktreeとfresh mainの競合確認を必須とする。
+- allocation: UNSTARTED/CANCELLED 2026-10-12, user requested new F8 task in .agent_v2 with distinct task_id, not dual assignment. G8ニュース改善A専任。J0はK8 PASS_SOURCE_DESIGNで完了済み。J1-aはjp_official診断を既存run diagnostics JSONBに記録する限定実装。DB migration/本番/有料API/merge/deploy禁止。PR116固定本番とPR129/G9・他slot保護。独立worktreeとfresh mainの競合確認を必須とする。
 - recommended_model: Sonnet5（高）
 ## Claude G9
 - owner: claude
