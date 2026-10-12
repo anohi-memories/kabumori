@@ -125,9 +125,9 @@ export const THREADS_STORE_REFUSALS = [
   "TEXT_INVALID",
   "ACCOUNT_NOT_FOUND", // missing, or the caller has no membership (indistinguishable on purpose)
   "PUBLISH_FORBIDDEN", // a member, but not the workspace owner/admin
-  "WORKSPACE_INACTIVE", // not the person's own self-service POSTONA workspace (automatic-publishing flags are not read)
-  "SERVICE_NOT_ACTIVE", // G5 lifecycle: POSTONA service not registered / ended / suspended
-  "ACCOUNT_LIFECYCLE_BLOCKED", // G5 lifecycle: deletion in progress, locked, or the fence unavailable
+  "WORKSPACE_INACTIVE", // not the person's own self-service POSTONA workspace, or its owner is ambiguous (F5 WORKSPACE_OWNER_UNKNOWN; automatic-publishing flags are not read)
+  "SERVICE_NOT_ACTIVE", // G5 lifecycle: the caller's (T13) or the workspace owner's (F5) POSTONA not registered / ended / suspended
+  "ACCOUNT_LIFECYCLE_BLOCKED", // G5 lifecycle (caller or workspace owner): deletion in progress, locked, or the fence unavailable
   "PLATFORM_NOT_SUPPORTED",
   "CONNECTION_NOT_VERIFIED",
   "CREDENTIALS_MISSING",

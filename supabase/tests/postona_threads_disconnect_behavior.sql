@@ -120,14 +120,18 @@ begin
   end loop;
 end $$;
 
--- ---- POSTONA must be active and no deletion of this person may be running (G5 owns that removal) -----------
+-- ---- G5 lifecycle, REMOVAL policy: suspended / ended / not registered may remove; a deletion or a lock may not --
 do $$
-declare a uuid := '00000000-0000-4000-8000-0000000000a1'; acct text := pg_temp.get('acct_a'); before text := pg_temp.footprint(acct); r jsonb; s text;
+declare a uuid := '00000000-0000-4000-8000-0000000000a1'; acct text := pg_temp.get('acct_a'); before text := pg_temp.footprint(acct);
+        calls bigint; r jsonb; s text;
 begin
-  foreach s in array array['not_registered', 'ended'] loop
+  foreach s in array array['not_registered', 'ended', 'suspended'] loop
     update postona_rel.lifecycle set state = s where user_id = a;
-    r := pg_temp.disc(a, acct, 'alice');
-    perform postona_rel.check(r = pg_temp.refused('SERVICE_NOT_ACTIVE'), s || ': ' || r::text);
+    -- Past the lifecycle decision (stopped here by a stale handle, so nothing changes).
+    calls := (select count(*) from postona_rel.fence_calls where user_id = a);
+    r := pg_temp.disc(a, acct, 'someone_else');
+    perform postona_rel.check(r = pg_temp.refused('ACCOUNT_CHANGED'), s || ' does not block a removal: ' || r::text);
+    perform postona_rel.check((select count(*) from postona_rel.fence_calls where user_id = a) = calls + 1, s || ': G5''s decision was asked once');
   end loop;
   foreach s in array array['deleting', 'locked'] loop
     update postona_rel.lifecycle set state = s where user_id = a;
@@ -259,6 +263,19 @@ begin
 end $$;
 drop trigger fake_vault_failure on vault.secrets;
 
+-- The connection's OAuth states as PR #124 leaves them (consumed and pending; they reference the account WITHOUT
+-- a cascade), one holding a verifier secret, and another person's state that must stay.
+do $$
+declare v uuid;
+begin
+  insert into vault.secrets (secret) values ('fake_verifier_a') returning id into v;
+  perform pg_temp.put('verifier_a', v::text);
+  insert into public.social_account_oauth_states (social_account_id, brand_id, state_hash, code_verifier_vault_secret_id, consumed_at)
+  values (pg_temp.get('acct_a'), pg_temp.get('brand_a'), repeat('a', 64), null, now()),
+         (pg_temp.get('acct_a'), pg_temp.get('brand_a'), repeat('b', 64), v, null),
+         (pg_temp.get('acct_b'), pg_temp.get('brand_b'), repeat('c', 64), null, now());
+end $$;
+
 -- ---- The disconnect: this person's Threads only; X, POSTONA, the other person untouched; idempotent ---------
 do $$
 declare
@@ -274,6 +291,9 @@ begin
                             'disconnected: ' || r::text);
   perform postona_rel.check(pg_temp.footprint(acct) = '0|0|0|0|0|0', 'no Threads row, permission, attempts, nonces or custody left: ' || pg_temp.footprint(acct));
   perform postona_rel.check(not exists (select 1 from vault.secrets s where s.id = v_secret), 'the Threads secret is gone');
+  perform postona_rel.check(not exists (select 1 from public.social_account_oauth_states s where s.social_account_id = acct), 'its OAuth states are gone');
+  perform postona_rel.check(not exists (select 1 from vault.secrets s where s.id = pg_temp.get('verifier_a')::uuid), 'their verifier secret is gone');
+  perform postona_rel.check(exists (select 1 from public.social_account_oauth_states s where s.social_account_id = pg_temp.get('acct_b')), 'another person''s OAuth state stays');
   perform postona_rel.check(pg_temp.untouchable() = kept, 'X rows and secrets, workspaces, memberships and the POSTONA registration untouched');
   perform postona_rel.check(pg_temp.footprint(pg_temp.get('acct_b')) = b_before, 'the other person untouched');
   r := pg_temp.disc(a, acct, 'alice');
@@ -287,9 +307,14 @@ declare a uuid := '00000000-0000-4000-8000-0000000000a1'; acct text; r jsonb;
 begin
   acct := postona_rel.connect_threads(a, pg_temp.get('brand_a'), 'alice2');
   perform postona_rel.as_user(a, 'permission', acct, 'true', 'false');
+  -- POSTONA was then suspended: no new post can start (T13 on begin), but the person can still remove Threads.
+  update postona_rel.lifecycle set state = 'suspended' where user_id = a;
+  r := postona_rel.as_user(a, 'begin', acct, 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', '停止中の投稿');
+  perform postona_rel.check(r->>'code' = 'SERVICE_NOT_ACTIVE', 'suspended: no new post: ' || r::text);
   r := pg_temp.disc(a, acct, 'alice2');
-  perform postona_rel.check(r->>'status' = 'disconnected' and r->>'publish_permission' = 'withdrawn', 'reconnected then disconnected: ' || r::text);
+  perform postona_rel.check(r->>'status' = 'disconnected' and r->>'publish_permission' = 'withdrawn', 'suspended, then disconnected: ' || r::text);
   perform postona_rel.check(public.threads_provider_connection_state(a) = 'not_connected', 'the deletion cleanup sees nothing left');
+  update postona_rel.lifecycle set state = 'active' where user_id = a;
 end $$;
 
 select 'DISCONNECT_BEHAVIOR_OK';

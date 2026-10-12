@@ -65,7 +65,10 @@ begin
   end if;
   if pg_catalog.to_regprocedure('public.social_mobile_account_deletion_workspace(uuid)') is null
      or pg_catalog.to_regprocedure('public.social_mobile_account_deletion_workspace_lock(text)') is null
-     or pg_catalog.to_regclass('vault.secrets') is null then
+     or pg_catalog.to_regclass('vault.secrets') is null
+     or (select count(*) from pg_catalog.pg_attribute a
+         where a.attrelid = pg_catalog.to_regclass('public.social_account_oauth_states')
+           and a.attname in ('social_account_id', 'code_verifier_vault_secret_id') and not a.attisdropped) <> 2 then
     raise exception 'THREADS_CLEANUP_PRECONDITION_DELETION';
   end if;
   select c.relowner into v_owner from pg_catalog.pg_class c where c.oid = 'public.social_accounts'::regclass;
@@ -103,6 +106,7 @@ declare
   v_workspace text;
   v_account public.social_accounts%rowtype;
   v_secret uuid;
+  v_verifiers uuid[];
   v_result jsonb;
 begin
   if p_user_id is null or not public.threads_cleanup_authorized(p_user_id) then
@@ -134,12 +138,22 @@ begin
     return pg_catalog.jsonb_build_object('outcome', 'reconciliation_required', 'code', 'SECRET_SHARED');
   end if;
   begin
+    -- F4: the connection's own OAuth states reference the row without a cascade (found on the real G5 world:
+    -- a PR #124-connected account could not be removed); a verifier secret goes with its state.
+    select coalesce(pg_catalog.array_agg(s.code_verifier_vault_secret_id), '{}') into v_verifiers
+      from public.social_account_oauth_states s
+     where s.social_account_id = v_account.id and s.code_verifier_vault_secret_id is not null;
+    delete from public.social_account_oauth_states s where s.social_account_id = v_account.id;
     if v_secret is not null then
       delete from vault.secrets s where s.id = v_secret;
     end if;
     -- Cascades: manual publish permission, attempts (and their nonces), credential custody.
     delete from public.social_accounts a where a.id = v_account.id;
+    delete from vault.secrets s where s.id = any (v_verifiers)
+       and not exists (select 1 from public.social_account_oauth_states o where o.code_verifier_vault_secret_id = s.id)
+       and not exists (select 1 from public.social_accounts o where o.vault_access_token_secret_id = s.id or o.vault_refresh_token_secret_id = s.id);
     if exists (select 1 from public.social_accounts a where a.id = v_account.id)
+       or exists (select 1 from public.social_account_oauth_states s where s.social_account_id = v_account.id)
        or exists (select 1 from public.threads_manual_publish_attempts t where t.social_account_id = v_account.id)
        or exists (select 1 from public.social_account_manual_publish_permissions p where p.social_account_id = v_account.id)
        or exists (select 1 from public.threads_account_credential_custody c where c.social_account_id = v_account.id)
