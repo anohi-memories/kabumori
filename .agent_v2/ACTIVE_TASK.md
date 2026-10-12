@@ -53,19 +53,18 @@
 
 ## F4
 - slot: F4
-- status: done
-- task_id: postona-f4-threads-disconnect-lease-safe-v1-20261012
+- status: ready
+- task_id: postona-f4-threads-t13-authenticated-writer-integration-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
-- dependencies: G4 PR154, G5 PR152 corrected, H5 PR159; G3 X booking protected
-- blocker: independent security review, G5 T10 registration/service-deletion lease and managed pilot remain production NO_GO
-- l4_verdict: PASS_SOURCE_IMPLEMENTATION / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; PR167 head 02fd1989303879979b137f8338f8bc6944f266b1 Draft/unmerged; 24 source files; Claude-reported focused tests; F4 released, next task requires archive.
-- slot_use: POSTONA Threads（旧G4の後継）
+- dependencies: F4 PR167, F5 PR165 G5 PR121/152, H5 PR159 (all Draft source); old F4 archived in .agent_v2/archive/2026-10-13-F4-postona-f4-threads-disconnect-lease-safe-v1-20261012/
+- blocker: F5 contract owner boundary and H5 guarded writer interface must be checked with independent source overlay; live production NO_GO
+- slot_use: POSTONA Threads new T13 writer integration; no F3/F5/G5/H5 changes
 
 ## F5
 - slot: F5
