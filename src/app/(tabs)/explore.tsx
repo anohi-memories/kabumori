@@ -24,6 +24,7 @@ import {
   assetSummary,
   buildHoldingRows,
   buildWatchRows,
+  holdingsBadgeCount,
   layoutWatchlist,
   portfolioBasis,
   portfolioLabels,
@@ -161,7 +162,7 @@ export default function PortfolioScreen() {
               {basis && impacts.length > 0 ? <ImpactCard items={impacts} labels={labels} reportId={basis.report.id} /> : null}
 
               <View style={styles.holdings}>
-                <HoldingsHeader count={holdings.length} />
+                <HoldingsHeader count={holdingsBadgeCount(registrationsReady, holdings.length)} />
                 {holdings.length > 0 ? (
                   <HoldingsList rows={holdings} labels={labels} hasReport={!!basis && registrationsReady} onOpen={openDetail} />
                 ) : registrationsReady && !loading && !message ? (

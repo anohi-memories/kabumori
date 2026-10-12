@@ -258,6 +258,17 @@ test("the tab hands every load to runPortfolioLoad; the sink closes valuations a
   assert.ok(screen.includes("topImpacts(basis?.snapshot ?? null, registrations, registrationMatchesSnapshot)"));
 });
 
+test("the 保有銘柄 badge is hidden while the registrations are unknown (no '0銘柄' for loading / failed / signed out)", async () => {
+  const screen = await code("src/app/(tabs)/explore.tsx");
+  assert.ok(screen.includes("<HoldingsHeader count={holdingsBadgeCount(registrationsReady, holdings.length)} />"));
+  assert.ok(!screen.includes("<HoldingsHeader count={holdings.length} />"), "the raw list length is never the badge");
+  const section = await code("src/components/portfolio/holdings-section.tsx");
+  assert.ok(section.includes("{ count: number | null }") && section.includes("count !== null ? ("));
+  assert.ok(section.includes("{count}銘柄"), "a known count is still shown");
+  // Retry / error text and the empty state keep their own conditions.
+  assert.ok(screen.includes("一覧を読み込めませんでした。") && screen.includes("registrationsReady && !loading && !message"));
+});
+
 test("a withheld valuation is explained, never spoken or drawn as current", async () => {
   const holdings = await code("src/components/portfolio/holdings-section.tsx");
   assert.ok(holdings.includes("row.valuationChanged ? REGISTRATION_CHANGED_NOTE"), "the accessibility label carries the note instead of the old P/L");
