@@ -71,7 +71,7 @@ export default function AccountsScreen() {
           <Text style={styles.muted}>接続後も投稿機能は自動で有効になりません。</Text>
         </Card>
 
-        <ThreadsConnectCard threadsAccount={threadsAccount} preview={status === 'mock_preview'} />
+        <ThreadsConnectCard threadsAccount={threadsAccount} accounts={accounts} reload={reload} preview={status === 'mock_preview'} />
 
         <Pressable accessibilityRole="button" onPress={() => router.push('/login-methods')} style={({ pressed }) => [styles.card, pressed && styles.buttonPressed]}>
           <Text style={{ color: colors.ink, fontWeight: '800' }}>ログイン方法</Text>
