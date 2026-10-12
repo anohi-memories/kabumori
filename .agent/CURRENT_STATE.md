@@ -1,3 +1,9 @@
+## G6 Phase2c isolation test fix assigned — 2026-10-12 JST
+
+- G2 completed Phase2c K2 with source candidate PR153 exact `6c576567328c99a58c2e4beaed86d155fe875769` (Draft/unmerged). Existing Phase1a test `supabase/functions/_shared/ai_provider/isolation_test.ts` asserts no production function imports ai_provider, now obsolete for authorized `market-report-analysis/handler.ts`. G2 handler 313 tests reported passing but shared Provider isolation test fails.
+- G6 previous Phase2b K6 done, new **G6 ready**: `common-ai-provider-g6-phase2c-isolation-test-allowlist-20261012`. **Sonnet5（中）**, start G6, return K6 to 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）. New clean G6-only Draft PR stacked on PR153, only the exact allowlist within G6-owned isolation test, with positive/negative checks and Provider123/market-report313 offline regression. Do not widen other Edge permissions or client/secret boundaries.
+- PR dependency: #148 → #150 → #153 → G6 new test PR. No merging/deploy/production API, cost, auth, migration, Edge Secret/Cron, waitUntil live confirmation or paid canary. Other slots/tasks/worktrees protected. K6 decides final integration gate.
+
 ## G1 K1 five-tab QA complete; P3/P4 UI fix assigned — 2026-10-12 JST
 - Previous five-tab Simulator QA K1 PASS_WITH_FINDINGS accepted. Claude reported 521/521 app tests PASS, 375pt/402pt synthetic fixtures, no major crash; real account/device NOT_RUN, tests not independently rerun by ChatGPT. TASK marked done/none before new allocation.
 - G1 new TASK `kabumori-g1-home-report-return-and-holdings-count-fix-20261012`: ready / Sonnet5（中） / start G1 / return K1 to かぶモリアプリG1のちゃ. P3 home-origin report detail must return home, P4 count badge must not say 0 when holdings fetch fails. Focused tests + isolated Simulator, limited G1 source PR only; do not self-merge/deploy.
