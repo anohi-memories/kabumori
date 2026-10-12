@@ -1,3 +1,12 @@
+## G5 Phase4 implementation-first assignment — 2026-10-12 JST
+
+- User explicitly prioritizes implementation progress/token efficiency: 「そのほうがいい！全然実装が進んでないから テストばかりにトークン消費させてては時間もトークンももったいないよ」. G5 `common-account-phase4-core-end-to-end-implementation-20261012` is **ready / next_owner claude**, recommended **Opus5.5（高）**, start G5 / finish K5, return to 共通アカウントG5のちゃ. Phase3i K5 and older reports preserved.
+- **Mandatory tangible backend source**: shared Supabase Auth ID new and existing user app entitlement provision/idempotency/cross-app isolation, account+service lifecycle guarded writes (B1/B2; PostgreSQL two-session proof), G5-owned freeze/delete/reconcile backend and owner-specific wiring contracts. Reuse earlier Phase1/2/3a sources and immutable draft PR121/146/147; if another owner's integration is required, provide source + exact BLOCKED boundary, not another study-only result. One owned independent G5 branch and Draft PR; focus tests on changed code, no duplicate broad synthetic suites.
+- Prohibited: photo pause, paid provider or plan, production Supabase Auth/RLS/DB/Edge/Storage, managed tests, Option D/E11, real secrets, other slot code/worktree or TASK, deploy, merge. `IDP_PREPAUSE_BLOCKED`, `managed_auth_delete BLOCKED`. G1/G2/G3/G4/G6 own application-specific integration, do not claim it already works. After G5 implemented source is ready, one focused Sol（高） review of actual high-risk implementation; no generic research-review loop.
+- Allocation only, implementation **not yet executed**. GitHub TASK / ACTIVE updated, awaiting G5 start.
+
+---
+
 ## K8 FINAL — PR129 R4 QA = MERGE_CANDIDATE(source-only), G8 R5 default-OFF release switches READY — 2026-10-12 11:36 JST
 
 - K8の対象はこのチャットのニュース改善A/G8専任TASK `news-improvement-a-pr129-premerge-offline-integration-qa-g8-20261012`。TASK/Reportに `review_required` と `MERGE_CANDIDATE (source-only)`を確認。PR129 `0a2df248f6e49bcb1bfea690f38064c93e5f895c` OPEN/Draft、未merge。本番反映未実施。
