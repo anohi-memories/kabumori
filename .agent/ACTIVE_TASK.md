@@ -172,17 +172,17 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: review_required
+- status: done
 - task_id: common-ai-provider-g6-phase2c-isolation-test-allowlist-20261012
 - start_code: G6
 - finish_code: K6
-- next_owner: chatgpt
-- latest_result: PASS_OFFLINE — Draft PR #157 (9b952d64, stacked on unchanged PR153 6c576567): isolation_test.ts only; exact allowlist (handler.ts + shadow_wiring_test.ts, exact specifiers), only handler/index reach the module via imports, Anthropic names stay in module; synthetic + on-disk probes all refused; old test failure reproduced; provider 126 / report 313 / _shared 629; production NO_GO, production=0, paid calls=0. Report: .agent/tasks/CLAUDE_TASK_6.md
+- next_owner: none
+- latest_result: K6 ACCEPTED PASS_OFFLINE_SOURCE_CANDIDATE / PRODUCTION_NO_GO — Draft PR #157 (9b952d64, stacked on unchanged PR153 6c576567): isolation_test.ts only; exact allowlist (handler.ts + shadow_wiring_test.ts, exact specifiers), only handler/index reach the module via imports, Anthropic names stay in module; synthetic + on-disk probes all refused; old test failure reproduced; provider 126 / report 313 / _shared 629; production NO_GO, production=0, paid calls=0. Report: .agent/tasks/CLAUDE_TASK_6.md
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
 - report: .agent/tasks/CLAUDE_TASK_6.md#report--phase2c-isolationg6記入
 - recommended_model: Sonnet5（中）
-- allocation: G2 Phase2c PR153 (head 6c576567) now imports AI provider in market-report-analysis/handler.ts. Phase1a isolation_test.ts blanket no-production-import rule must be replaced by exact handler/test allowlist. G6 owns only isolation_test.ts in a separate branch Draft stacked on PR153 (PR148→150→153). All other Edge imports and app/client secret leakage remain forbidden; positive/negative regressions, Provider123 + market report313 offline. No G2 source/PR changes, no prod/paid API, merge/deploy/secrets/DB/Cron.
+- allocation: K6 completed, G6 now unreserved; G2 Phase2c PR153 (head 6c576567) now imports AI provider in market-report-analysis/handler.ts. Phase1a isolation_test.ts blanket no-production-import rule must be replaced by exact handler/test allowlist. G6 owns only isolation_test.ts in a separate branch Draft stacked on PR153 (PR148→150→153). All other Edge imports and app/client secret leakage remain forbidden; positive/negative regressions, Provider123 + market report313 offline. No G2 source/PR changes, no prod/paid API, merge/deploy/secrets/DB/Cron.
 - previous_result: Phase2b K6 accepted PASS_OFFLINE_SOURCE_CANDIDATE; history retained in own task.
 - production_mutation_window: FORBIDDEN
 
