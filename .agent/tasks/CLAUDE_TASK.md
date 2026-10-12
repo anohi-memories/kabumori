@@ -1,3 +1,76 @@
+# G2 CURRENT TASK — PR149 H2 C2指摘 R1〜R6 6件の限定是正（本番OFF・ソースのみ）
+
+- task_id: kabumori-pr149-h2-r1-r6-bounded-fixes-g2-20261012
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- start_code: G2
+- finish_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Opus5.5（高）**
+- source_pr: https://github.com/anohi-memories/kabumori/pull/149
+- exact_pr149_head_before_fix: 31c509df1c08ecc437ca4b70541284f223c836e2
+- stacked_base_pr143: https://github.com/anohi-memories/kabumori/pull/143
+- protected_exact_pr143_head: 889ca1b44cf82bd3ecb913818dca568456849feb
+- source_review: .agent/CODEX_REPORT_2.md — kabumori-pr149-broadcast-fanout-push-security-review-h2-20261012
+- review_verdict: H2 C2 CHANGES_REQUIRED (R1–R6 all P2 reproducible) / no P0/P1 cross-user exposure found
+- production_release: HOLD/NO_GO; no merge, deploy, migration apply, real Expo push, production DB, Cron, gates, provider key or paid API.
+
+## Goal: 6 identified defects only, not a new architecture project
+
+市場全体の朝刊/大引けは共通レポート1回生成→対象ユーザーへ独立した高速通知。個人AI分析は利用者の明示指示のみ（アプリ終了後もworker継続）。[PR149](https://github.com/anohi-memories/kabumori/pull/149) はPR143に積んだsource candidateで、現状 500人単位/4並列/設定300通秒・旧ニュース通知キューとは別。H2 Sol（高）は local PG17 + Deno で six P2 negative cases を独立再現した。Source未merge、ここで同じ範囲の大規模レビューを繰り返さない。**六つの不具合だけを直し、前回の成功済みテストは必要な回帰のみ**。
+
+### Exact R1–R6 fixes and demonstrable tests
+
+**R1 P2: 公開ゲートOFFでも送ってしまう**
+- SQL `supabase/migrations/20261012100000_market_report_broadcast_push_v1.sql` の `begin_market_report_broadcast_chunk`（現440–445） / claim を確認。`enqueue`の時しか `public.personalized_ondemand_settings.public_market_feed_enabled` を見ていない。
+- H2再現: enqueue→plan→claim後にfeed OFF、認証済 `get_app_market_report('morning')` はdisabledになるのに `begin` は183 tokensを返す。
+- 送信権限の最終境界で現時点のfeed公開と対象レポートの可読性を照合し、OFFなら新たなExpoターゲットを返さない。既に送信を試行した個人の `sending/unknown` を勝手に解放・再送しない。回復/requeue時に無駄な無限ループを作らない。Test: OFF-before-begin=0 tokens、ONで正常、OFF mid-flightの既送信結果は記録可能。
+
+**R2 P2: レポート生成時点からの鮮度期限**
+- stale/claim は `market_report_broadcasts.created_at`（現375）を基準にしているが設定 `max_report_age_minutes` は市場レポート`market_report_cycles.report_completed_at` 基準。
+- H2: 119分経過のレポートをenqueueし、121分へ進めても旧claimが3chunk/begin183tokensを返す。
+- 選択したcycle/packetの完成時点から一貫して cutoff を評価し、claim/beginでもfreshnessを拒否。古い通知の最終結果・checkpointはloss-safe / idempotentに処理。Test: 119分は対象、121分でsend0、同日で後からbroadcast作成しても猶予延長しない、Fact/packet current一致を維持。
+
+**R3 P2: 91台目の端末を黙って捨てて成功扱い**
+- `supabase/functions/market-report-broadcast-worker/broadcast_logic.ts` 旧 `devices.slice(0, size)`（現106）。`device_push_tokens`にはユーザー90端末上限のDB制約が無い。
+- H2: 91端末登録でbegin91件→batch90だけに変換→user `sent`、91番目へ送らない。
+- 「すべての有効端末へ」の定義と Expo 90 messages/request、ユーザー単位の再送/重複制約を両立。安全な複数batch送信が証明困難なら**過剰登録ユーザーを明示的なover-limit未送信/failedとして扱い、observabilityを残し、sentに偽装しない**。過剰端末を黙って切ることを禁止。必要な限りデバイス登録数のpolicy設計を明記し、他slot/G5 Authや端末DB自体を勝手に改造しない。Test: 90 OK / 91の挙動は明示かつ二重送信なし / 1端末や通常2端末回帰。
+
+**R4 P2: 同時16chunkで送信バースト640通**
+- `max_parallel_chunks` はSQL 1..16が合法、workerは平均速度の単純な分割でburstを抑えていない。`broadcast_logic.ts`現150–164/223/243。
+- H2: legal16 chunks × 40 messages, t=0に640 > Expo600/s（既存ニュース送信余力も消失）。
+- 合法設定の全域で、単一workerの初回wave/実時間窓の上限を**明確な実測可能な形で制御**するか、危険な設定をデフォルトOFF/DB check等で禁止して安全な範囲に限定。複数Cron workerの相互作用を踏まえる（DB claim global limit と送信start wave）。平均rateの割算を実上限と主張しない。Expo/project globalの残りニュース配信枠も確保、送信量/窓境界のsynthetic max burstを記録。Test: 4/16 parallel、40/90 per request、300・450設定、旧640 burst FAIL-before/PASS-after、live速度は未保証。
+
+**R5 P2: 計画された人数を超えてUUID範囲全員を送る**
+- `plan_market_report_broadcast`はUUID範囲で500人として計画、`begin_market_report_broadcast_chunk`現455-476が現在のeligibleを範囲全体で再展開し、plan後に設定ONの人数が増えると一塊が上限越え。
+- H2: chunk_size50・plan対象1人→範囲内の60人がOFF→ONでbeginが61人を返す。1万人規模でDB/Edge処理が無制限化。
+- **安定した対象集合 / 原子的・ページング可能なbounded snapshot** を選び、送信直前のconsent/端末再チェックは維持する。固定対象からのOFF・退会は除外し、計画後の新規ONを過去の通知に無制限追加しない（次回から対象等の仕様を明示）。**単にbeginへLIMITを足して対象を永久に落とすだけは不可**。500人チャンクの真の人数上限とcheckpoint、concurrency/pilot変更の意味を定義。高コストな新規基盤への過剰設計は避け、既存のG2専用テーブル/RPC/テスト範囲内で最小設計変更。Test: H2 1→61 reproを拒否、50/500/10k/100k snapshot、設定ON→OFF、1人複数端末、cursor gaps/dupe=0、途中crash/reclaim/retry。
+
+**R6 P2: 内容不正のHTTP200 Expo応答は unknown**
+- `broadcast_logic.ts`現123–134 / `expo_sender.ts`現25–27。ticket件数のみ合致なら`classifyTicket`が不正形状をtransientと解釈し自動再送する。
+- H2: `HTTP 200 {"data":[{}]}` で1 tokenなら`retry`→重複配信の危険。
+- ticket.status `ok`なら契約に則った妥当性、`error`なら明示的妥当性とerror種別を検証。形状不明/件数不正/解釈不能を`unknown`扱いにして**二度と自動再送しない**。現存 `send-push-notifications` helperは変更不要。HTTP429/5xxの明示rejectはbounded retry維持、ネットワーク例外もunknown。Test: HTTP200 {}、部分件数、malformed mixed、複数端末 mixed accepted+transient、明示429/5xx後成功、transport unknownは再送0。
+
+## Boundaries / worktree
+
+- 開始前 fresh origin/main、`PROJECT_RULES.md` / `AGENTS.md` / `.agent/ORCHESTRATION.md` / CURRENT_STATE / ACTIVE_TASK、H2 Report（六つのexact再現）と自G2旧TASK/Report、PR149/PR143両HEADと全15枠の作業範囲を確認。G2**専用独立worktree**でのみ変更。PR149 head `31c509df1c08ecc437ca4b70541284f223c836e2` / base PR143 `889ca1b44cf82bd3ecb913818dca568456849feb` と異なる場合は差分・競合を確認し曖昧ならSTOP/REPORT。
+- 変更可能: **PR149所有** `supabase/migrations/20261012100000_market_report_broadcast_push_v1.sql`, `supabase/functions/market-report-broadcast-worker/{broadcast_logic.ts,expo_sender.ts,store.ts,*.test.ts}`, `supabase/tests/market_report_broadcast_*.sql` / runner / runbook。R5 bounded snapshot用の**同じPR149独立migration内の新規補助表/列**は必要ならOK、ACL/RLS/rollback/expand-onlyを維持。R1/R2のPR143設定参照は読み取りのみで、PR143/G5/G6/G8/G1/G3/G4/Hにまたがるソース変更禁止。R3のUI/DB登録機能改造は別工程。単なる定義修正にPR143やPR141を巻き込まない。
+- 修正は既存**Draft PR149の同じG2ブランチ**へ限定commit/push。PR143, PR141, G6/他slotのbranch/PR/worktreeは不変。PR149は stacked Draftのまま、PR head新SHAをReportで明示。絶対にmainへsource直接commit/force-push/rebase/マージ/本番デプロイしない。
+- **オフライン限定:** 無害な synthetic fixture, 独立 disposable PostgreSQL (安全な/tmp socketのみ), offline Deno. H2が具体的に再現した六ケースを**修正前FAIL→修正後PASS**（修正前FAILがソース/SQLで既知なら重い再現を再計測する必要なし、H2 Reportの再現に紐づける）。必要な回帰はSQL ACL/lease/queue、互換の主要workerテスト、app link数件、10kのmock model。**過去の全1,669件・100k負荷/19 mutantsを機械的に毎回反復しない**。ただしR5等migrationのキーバウンダリ変更の検証に必要なfocused localPGと代表scaleは実施し、未実行項目は NOT_RUN を明記。
+- 本番Supabase DB read/write、Auth、Secrets、migration apply、Cron/Edge、実ExpoPush/端末テスト、AI API有料呼び出し、X/Threads投稿、EAS/App Store、料金/entitlement/AIモデル変更、他slot操作一切禁止。
+- **完了条件:** R1〜R6すべてに対応するコード・最小反証テスト・結果・性能再試算/不確実性・自G2新PR149 commit SHA・changed_files・テスト実数・残る問題・merge/deploy/prod=NO・GO/NO_GOを `## Report — current PR149 C2 R1–R6 correction` に記録。H2レビュー済み範囲は再度全面Hへ回さず、ChatGPTがK2で6件のピンポイントsource diffと回帰証拠を照合。もし重大な新たな高リスク設計変更/新規権限拡大で追加review必要なら、その境界に絞る。G2完了後 `status: review_required / next_owner: chatgpt`、ACTIVE_TASK G2節とCURRENT_STATE最新G2記録だけ更新、旧Report/全slotを保護。返却 **かぶモリアプリG2のちゃへ K2**。
+- 修正が全部終わっても**本番GOではない**。PR143（オンデマンド個別分析）のmainマージ/独立デプロイ判断と、PR149のマージ/実機・少人数opt-in試験は、ユーザー別承認・read-only prod preflight後に段階ごと。
+
+## Report — current PR149 C2 R1–R6 correction
+
+PENDING G2.
+
+---
+
+## Previous G2 TASKs/Reports — preserved verbatim below
+
 # G2 CURRENT TASK — 共通朝刊・大引け：大人数対応の全体プッシュ通知 V1（ソースのみ）
 
 - task_id: kabumori-market-report-scalable-broadcast-push-v1-20261012
