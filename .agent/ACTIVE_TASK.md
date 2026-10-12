@@ -167,18 +167,18 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: done
-- task_id: common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012
+- status: ready
+- task_id: common-ai-provider-g6-phase2b-market-report-wiring-offline-20261012
 - start_code: G6
 - finish_code: K6
-- next_owner: none
-- latest_result: K6 PASS_SOURCE_CANDIDATE / NOT_WIRED / PRODUCTION_NO_GO — Phase2a source candidate accepted; prior G6 PASS_CANDIDATE — Draft PR #148 (a71de72b): market report shadow connection candidate, default off (returns the legacy requester itself), not wired; 18 offline tests incl. identical generateSharedAnalysis outcome, 4/4 mutants, provider 112 / report 283 regression; production=0, paid calls=0. Report: .agent/tasks/CLAUDE_TASK_6.md
+- next_owner: claude
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
-- report: .agent/tasks/CLAUDE_TASK_6.md#report--phase2a
+- report: .agent/tasks/CLAUDE_TASK_6.md#report--phase2b
 - recommended_model: Opus5.5（高）
-- allocation: Phase2a source-only common AI provider adapter and synthetic fixture/fake-ledger tests; new G6-only independent Draft PR. No changes to G2 scalable morning/close notification pipeline, PR143, G5 Auth, G8 news, G9 model evaluations, other G/H slots.
-- production_mutation_window: FORBIDDEN (offline-only). No external paid calls, actual market report generation, Edge secrets, DB migration, Cron, deploy, merge or cutover.
+- latest_result: Phase2a K6 PASS_SOURCE_CANDIDATE (PR148 open/Draft, default OFF, not wired), prior Phase1g one paid smoke done/closed. Histories protected in own TASK.
+- allocation: Phase2b **offline-only** full generator-boundary wiring/harness and synthetic tests/docs, new independent G6 Draft PR only. G2 protected PR143/149, market-report handler/notification/worker/migration files; no other G/H edits. If actual handler edit required, document handoff contract and STOP.
+- production_mutation_window: FORBIDDEN; no paid API, real report/shadow, Edge secrets, DB/Cron, deploy, merge or live cutover.
 ## Claude G7
 - owner: claude
 - slot: claude-7
