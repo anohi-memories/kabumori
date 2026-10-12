@@ -16,6 +16,13 @@
 - 実装範囲：Threadsのみ個別解除UI/API/owner-only SQL候補、G5 `signal/stillOwned()` に追従したThreads固有cleanup adapter。G3のX予約/X saga、G5共通ID/T13/T10登録、H5 owner runtimeは保護。G3 in_progressのため変更パス衝突禁止。
 - 解除・接続・投稿の本番ゲートOFF、Edge503、実Meta/Auth/DB/Vault/secrets/公開投稿/merge/deploy/EASは一切未承認。G5への本登録、managed権限、独立Sol（高）レビューと本人承認後の限定pilotは別工程。
 
+## かぶモリV1 ソース統合（2026-10-12 JST）
+
+- ユーザー承認によりPR143→PR149→PR158を**通常merge commit**でmainへ順次マージ済み。GitHub read-backで3件とも `closed/merged=true`、base mainを確認。
+- PR143 merge `c12b869bc422cf5eb6593006a1f352fc644c71eb`; PR149 merge `17edfd007e6a0922ee2b6c13a6e2016a995d209c`; PR158 merge `42c66e07d3517a40ae4c41192aaebcb9cb14beb3`。
+- PR149/158は先行PRマージ後にbase mainへ変更し、差分をそれぞれ17件/3件と確認。source-only mergeであり、**production NO_GO**。managed DB/migration、Edge、Cron、実Expo push、EAS、課金API、アプリ公開は一切未実施。
+- 次工程：別承認で本番read-only事前確認、その後セキュリティゲートと段階導入計画。旧自動個別レポートの本番停止は未確認・未実施。
+
 ## プロジェクト別現状
 
 - F2の診断TASK `kabumori-f2-pr143-live-mergeability-diagnosis-20261012` はL2受入済み（done/none、PASS_GO_TO_MERGE_DECISION / PRODUCTION_NO_GO）。F8にニュース改善A J1-a診断TASK `news-improvement-a-jp-official-diagnostics-j1a-f8-20261012` を割当済み（ready/claude、L8返却、Sonnet5高）。その他の新系統枠は割当前の状態を各TASKで確認。
@@ -33,7 +40,7 @@
 
 ## 未解決問題
 
-- F2: PR143 の GitHub の表示（GraphQL は UNKNOWN、REST は clean）は、試しのマージが古い main `50a2e079` の上のまま再計算されていないため。今の main `3c590d40` に対して、手元で PR143→149→158 を順に当てて衝突0件。マージは L2 の確認のあと、通常のマージで、間で後ろの PR の base を main に付け替えて進める（`delete_branch_on_merge: false`）。本番は NO_GO。
+- 解決済み: PR143のGitHubマージ可否表示は古いmainに対するものだったが、実際には通常マージ成功。旧記録: 試しのマージが古い main `50a2e079` の上のまま再計算されていないため。今の main `3c590d40` に対して、手元で PR143→149→158 を順に当てて衝突0件。マージは L2 の確認のあと、通常のマージで、間で後ろの PR の base を main に付け替えて進める（`delete_branch_on_merge: false`）。本番は NO_GO。
 - 旧系統の未解決問題は旧 `.agent/CURRENT_STATE.md` と旧各TASK / Reportを参照する。
 
 ## production安全制約（現在有効）
@@ -45,7 +52,7 @@
 
 ## 未マージPR
 
-- F2は診断TASKのみで新規PRなし。対象の旧G2 PR143/149/158は未マージ、Draft。
+- F2は診断TASKのみで新規PRなし。旧G2 PR143/149/158は3件ともmainへマージ済み。
 - 新系統導入PR #155はマージ済み。旧系統の未マージPRは旧CURRENT_STATEとGitHubを参照する。
 
 ## deploy待ち
