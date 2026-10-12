@@ -1,3 +1,8 @@
+## G1 V1 release readiness inventory assigned — 2026-10-12 JST
+- User chose to progress sequentially through release steps ①→⑥. G1 now owns **① read-only release gap inventory** task `kabumori-g1-v1-release-gap-inventory-20261012`, status ready / next_owner claude, recommended **Sonnet5（高）**, start G1 / return K1 to かぶモリアプリG1のちゃ.
+- Evidence-based classification mandatory / recommended / postrelease of 5-tab incomplete UI, AI question feature, onboarding, notification, account, reporting integration and dependencies. G2/G5/G6/G8/G9 ongoing draft/source/production states must not be confused with shipped. Do not assign work to other slots.
+- Source/document-only; no product, production, EAS, live account changes, paid API or merge. Once inventory is accepted, next step is ② G1 UI finish task selection.
+---
 ## G6 four-PR premerge QA assigned — 2026-10-12 JST
 - User requested continue after G6 K6 isolation PASS. G6 new `common-ai-provider-g6-four-pr-premerge-offline-qa-20261012` **ready**, recommended Sonnet5（高）, start G6, return K6 to 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）.
 - Four Draft stack PR148 a71de72b → PR150 18d9058a → PR153 6c576567 → PR157 9b952d64 unchanged at assignment. GitHub PR148 reports **mergeable=false against main**; child PRs report mergeable=true only against their parent, not proof of merge into fresh main. G6 must locate conflicts using a disposable own worktree and run full offline merged-stack tests if safe; no product edits or new PR, no merge/deploy/prod/secrets/Cron/paid API. G2 PR143/149/158 and G5 protected. Return K6 with root cause and ownership-specific recommendation. Production remains NO_GO.
