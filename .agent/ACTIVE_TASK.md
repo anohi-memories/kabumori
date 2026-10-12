@@ -120,15 +120,16 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: done
 - task_id: kabumori-g2-v1-three-pr-final-merge-preflight-20261012
 - start_code: G2
 - finish_code: K2
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
 - recommended_model: Opus5.5（高）
 - allocation: K2 accepted PR143/149/158 source integration and released G2. New source-only final premerge check: refresh origin/main and exact PR stacks/CI/conflicts, inspect H3/H2 fixes, migration/RLS/gates, G1/G5 boundaries and release runbook, targeted tests only. Report GO_TO_MERGE_DECISION/CHANGES_REQUIRED/BLOCKED and return K2. No actual PR merge, production read/write, deploy, Expo, EAS, paid API or force push.
+- k2_verdict: PASS_GO_TO_MERGE_DECISION / PRODUCTION_NO_GO; G2 source-only premerge checks accepted, merge not performed; slot released.
 ## Claude G3
 - owner: claude
 - slot: claude-3
