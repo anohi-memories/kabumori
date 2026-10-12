@@ -1,0 +1,13 @@
+{
+  "task_id": "postona-f4-threads-disconnect-lease-safe-v1-20261012",
+  "slot": "F4",
+  "original_path": ".agent_v2/tasks/F4.md",
+  "archive_path": ".agent_v2/archive/2026-10-13-F4-postona-f4-threads-disconnect-lease-safe-v1-20261012/files/.agent_v2/tasks/F4.md",
+  "size_bytes": 18775,
+  "sha256": "a57781febc127dcfe5d1982f76df624f00681a943fb51bf981ee6de358094c7f",
+  "original_blob_sha": "10b4adaa9baafa6573627cb3db2fcf171a9f6c8a",
+  "source_commit": "b7bac01832e0ba6030edfd7afb765a25b9b01874",
+  "verified_read_back": true,
+  "restore": "full UTF-8 content equality verified between main original and archived copy",
+  "created_at": "2026-10-13 JST"
+}
