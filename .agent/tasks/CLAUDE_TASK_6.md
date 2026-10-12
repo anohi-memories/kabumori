@@ -3,8 +3,8 @@
 - task_id: common-ai-provider-g6-f1-f2-timeout-tests-stability-20261012
 - owner: claude
 - slot: claude-6
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -99,6 +99,11 @@
   - 補足: #162 を #148・#150 と一緒に入れない場合、その間の main ではこの不安定なテストが残る
   - 本番は、今までどおり別承認の前提（回復処理の Cron、Secret、`waitUntil`、ポリシー、有料カナリア）を満たしてから
 ---
+
+## K6 FINAL — 2026-10-12 JST
+- verdict: **PASS_PREMERGE_QA / PRODUCTION_NO_GO**. PR162 Draft head `93de927aec8726a6269d9c6747b998d29df113da` stacked on PR157; precise two-file test-only diff inspected by ChatGPT, no product or runtime changes. PR148→150→153→157→162 remain OPEN/Draft/unmerged at assessment.
+- G6 reports before 12 failures/150 focused runs, after 0 failures/100 runs; provider126, market313, shared629 x3, personalized129, X10, data packet42 and deny-net73 PASS. ChatGPT did not independently rerun. G6 fresh-main merge-tree reports clean but GitHub PR148 mergeability was previously inconsistent and needs fresh recheck before merge.
+- K6 completed: **done/none**, no additional G6 task. Source integration eligible for a separately approved staged PR merge decision only, with fresh heads/merge-tree/CI and G2/G5 parallel-source collision check. Production, Edge Secret, recovery Cron, paid canary, runtime waitUntil and budgets remain NO_GO/unapproved; prod0/paid0/merge0/deploy0 during this task.
 
 # PRESERVED G6 PRIOR TASKS / REPORTS — do not rewrite below
 
