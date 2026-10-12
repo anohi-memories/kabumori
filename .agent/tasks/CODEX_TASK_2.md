@@ -1,3 +1,70 @@
+# H2 CURRENT TASK — かぶモリ PR149 共通朝刊・大引けの大量プッシュ通知：重点独立レビュー
+
+- task_id: kabumori-pr149-broadcast-fanout-push-security-review-h2-20261012
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- start_code: H2
+- finish_code: C2
+- completion_code: C2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Sol（高）**
+- task_type: **source-only security/concurrency/delivery reliability review — NO IMPLEMENTATION**
+- review_pr: https://github.com/anohi-memories/kabumori/pull/149
+- exact_pr149_head: 31c509df1c08ecc437ca4b70541284f223c836e2
+- stacked_on_pr143: https://github.com/anohi-memories/kabumori/pull/143
+- exact_pr143_head: 889ca1b44cf82bd3ecb913818dca568456849feb
+- diff_scope: 17 files, 1 commit, PR149 base `g2-ondemand-v1-20261011`, NOT main; PR143 previous H3 review+G2 expiry correction source candidate
+- return_to_confirmed: かぶモリアプリG2のちゃ
+- production_status: PRODUCTION_NO_GO / both PRs DRAFT UNMERGED / no live push / no migration/deploy/Cron
+- review_constraint: ONE independent risk-focused pass, no blanket style or repeated full cycle
+
+## Context and review goal
+
+User specifically rejected simplistic 20 users/batch scale: shared morning/close market report should be generated ONCE and available to all; opted-in users should receive shared push rapidly, while personalized holding AI analysis is **only at user request**, survives app termination, stores private result and notifies completion. Existing `send-push-notifications` sends 200 notifications per run, and naive 10,000 users at 1 run/minute would take ~50min. G2 created a new **separate** broadcaster (PR149) not modifying existing important news notification queue, 500-user keyset chunks, up to 4 concurrently, default 300 messages/sec cap, unknown-provider outcomes fail closed, ALL gates OFF. Depends on PR143 private on-demand + `get_app_market_report` read path. **Do not conflate DB mock 10k/100k throughput with real Expo arrival.**
+
+G2 report says local disposable PG17 behavior/concurrency/rollback/19 mutation runs PASS and Deno tests under new broadcaster 23, prior push24, personalized worker34, personalized legacy134, market283, packet42, shared597, app511, X shared10, schema11 PASS. This is G2-reported; ChatGPT inspected PR files/high-risk source independently but DID NOT run tests. PR149 CI Vercel status failed **build-rate-limit**, not reliable code failure. PR149 exact head/base verified; no production write, Expo send or PR merge is authorized.
+
+## Mandatory review
+
+1. **Fresh preflight & isolation:** Read `PROJECT_RULES.md`, `AGENTS.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, your H2 TASK/Report histories, G2 current TASK Report and prior PR143 H3 findings. Verify fresh `origin/main` and both PR exact heads/17-path stacked delta, other slot ownership, independent H2 clean worktree/checkout from fresh origin/main. **Do not touch other-slot worktrees, branches, local ports, unfinished changes.** If source/head/status drift, report blocker rather than guessing.
+
+2. **SECURITY / ACL:** Review `supabase/migrations/20261012100000_market_report_broadcast_push_v1.sql` all SECURITY DEFINER, search_path, PUBLIC/default-function grants, table GRANTS + RLS (anon/authenticated/service_role), owner/service-role RPC use. Look for arbitrary user enqueue, cross-user exposure, send-to-user consent logic. New 3 tables+settings must not expose device tokens/log secrets; read-only access by worker via trusted RPC only. Verify auth/deletion/notification-source integration without modifying G5 or prior migration.
+
+3. **Completed/Fact market source:** `enqueue_market_report_broadcasts` handles completed/Fact-pass packet/day/type and packet-cycle coherence and only today's fresh valid report, idempotent even when Cron overlap/new packet arrives and same broadcast sent. Check `get_app_market_report` PR143 date/visibility/deep-link behavior under public feed flag; market report notification should never be issued while viewing disabled, and migration must be strictly expand-only/off.
+
+4. **Queue and race conditions:** On 500-user keyset chunks / 4 concurrent workers / 180sec leases, independent SQL transactions `plan_market_report_broadcast`, `claim_market_report_broadcast_chunks`, `begin_market_report_broadcast_chunk`, `finish_market_report_broadcast_chunk` need consistency. Independently probe lease expiry after begin before send, simultaneous expiry/claim and finish, partial send/crash, duplicate Cron/parallel SQL, stale cutoff, retry after explicit provider 429/5xx, and unknown transport. Confirm no duplicate user+report across restarts, no invisible stuck `sending`, attempts fenced atomically. Distinguish DB and Expo external side effects (cannot guarantee exactly-once delivery). Review SQL account settings/read-before-send and changes to device tokens, opt-in→OFF, unsubscribe, multi-device and account deletion.
+
+5. **Specific adversarial boundary checks (source hypotheses; validate with test before asserting findings):**
+   - `batchByUser` at `market-report-broadcast-worker/broadcast_logic.ts:100-118` uses `devices.slice(0, size)` and notes a user is assumed to have ≤90 registered tokens. Determine whether this **silently drops** still-valid extra device tokens, and whether `device_push_tokens` schema enforces that. Report severity/proposed bounded correction if real. Avoid generating >90 Expo messages.
+   - `begin_market_report_broadcast_chunk` verifies lease token/version/expiry; when an owner disables `sending_enabled` mid-run, assess whether in-flight claims can continue to send beyond OFF/stop expectations and whether runbook documents latency.
+   - `sendChunk` per-chunk rate `messages_per_second/max_parallel_chunks` and Expo project's aggregate 600/s (existing news also sends). Multiple concurrent Cron invocations, window bursts and 30s timeout must not break project-wide throttle. Do not turn simulated times into an SLA.
+   - `expoSender` retry boundary for HTTP 429/5xx vs abort/network ambiguity/partial valid ticket. Examine no duplicate sends and acceptable **loss rather than duplicate** policy; single transient error on one token with other token error; unregistered-device cleanup if disabled.
+   - Plan first + send while more users register/unregister/allow toggle mid-cycle; user keyset ordering and progress must be honest. A test showing missing receivers or duplicate is P1/P2 depending product severity.
+   - All calls to new worker require valid Cron header; app never obtains service_role key.
+
+6. **Important-news protection:** Existing `send-push-notifications` code NOT modified. Confirm new worker neither consumes `notifications` nor blocks its PG locks; Expo same project rate is shared, so verify rate headroom and bounded response under real pressure. No claim that **all important news always reaches immediately**, only sound isolation in source.
+
+7. **Offline tests independently:** Focus on new source/race/consent/batch/cutover and G2-specific tests `supabase/tests/market_report_broadcast_run.sh`, `*_behavior.sql`, `*_scale.sql`, `supabase/functions/market-report-broadcast-worker/broadcast_logic_test.ts`, app deep-link test. Use **only disposable fresh local PostgreSQL under /tmp socket, synthetic data, no managed DB** if available; if unavailable mark NOT_RUN. Retest few hard edges and `deno check`, `git diff --check`. Keep tests few and risk-targeted, no 100k real API sends. Distinguish G2-reported PASS from independently run.
+
+8. **Runbook and deliver:** Verify stacked PR on PR143, proper merge dependency without rebase/force/auto merge, deployment order, OFF-by-default flags, disabled old personalized Cron, preview vs production, paced pilot and rollback, consumer notification settings and actionable observability. Source-only findings P0/P1/P2 exact `path:line`/evidence/fail-before and minimal recommended fixes. If unknown due missing runtime specify evidence gap. Verdict `PASS_SOURCE_REVIEW_WITH_LIVE_GATE`, `CHANGES_REQUIRED`, or `BLOCKED_VERIFICATION`. No product source edits/PR comments/merges, no deploy, no production DB or Expo calls, no actual push, no paid API.
+
+## Report and completion
+
+- Write a complete H2 result to `.agent/CODEX_REPORT_2.md` **PREPEND** while protecting all previous reports, with task_id/result/changed_files/tests/review_commit/source SHA/push(own TASK bookkeeping)/merge/deploy/production/security/remaining_issues/return_to/completion_code/next_recommendation.
+- Set H2 own TASK `review_required/next_owner: chatgpt` and update only H2 slot in `.agent/ACTIVE_TASK.md`; add H2 finding to `.agent/CURRENT_STATE.md` without overwriting other slots' updates.
+- Final line must be exactly: **かぶモリアプリG2のちゃ へ C2 を送ってください。** If slot return codes become unclear STOP; don't infer return_to.
+- G2 is `done/next_owner:none` after K2 source-candidate acceptance. H2 review does not reserve G2 or implement fixes; if genuine risks found, ChatGPT assigns one limited G2 correction only at C2. **H5 is never a routine reviewer.**
+
+## Report
+
+PENDING H2.
+
+---
+
+## Prior H2 TASKs/Reports — protected history below
+
 # Codex H2 CURRENT TASK — Fact V2 PR #132 ONE integrated evidence and safety review
 
 - task_id: kabumori-fact-v2-pr132-final-integrated-review-20261011
