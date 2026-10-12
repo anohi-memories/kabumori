@@ -100,7 +100,9 @@ export default function HomeScreen() {
           points={highlights.points}
           loading={loading && !reports.length}
           error={errors.reports}
-          onOpen={() => report && router.push({ pathname: '/reports/[id]', params: { id: report.id } })}
+          // The root-stack report detail (the same screen as the レポート tab's nested route): a swipe / 戻る pops
+          // straight back to Home instead of revealing the reports list and switching tab.
+          onOpen={() => report && router.push({ pathname: '/report-detail', params: { id: report.id } })}
           onRetry={() => void load(true)}
         />
 

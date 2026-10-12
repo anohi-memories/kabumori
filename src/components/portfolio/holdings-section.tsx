@@ -23,14 +23,17 @@ function StackMark() {
   );
 }
 
-export function HoldingsHeader({ count }: { count: number }) {
+/** `count` null = not known (loading / failed): the badge is not drawn rather than claiming "0銘柄". */
+export function HoldingsHeader({ count }: { count: number | null }) {
   return (
     <View style={styles.header}>
       <StackMark />
       <Text style={styles.headerTitle}>保有銘柄</Text>
-      <View style={styles.countBadge}>
-        <Text style={styles.countText}>{count}銘柄</Text>
-      </View>
+      {count !== null ? (
+        <View style={styles.countBadge}>
+          <Text style={styles.countText}>{count}銘柄</Text>
+        </View>
+      ) : null}
     </View>
   );
 }

@@ -460,6 +460,16 @@ test("guard: withheld rows sort after valued rows, deterministically", () => {
   assert.deepEqual(buildHoldingRows(regs, rep, MATCH).map((row) => row.ticker), ["2222", "1111"]);
 });
 
+test("holdings count badge: a number only when authoritative; never '0' for loading / failed / signed out", () => {
+  // loading (first open, nothing listed yet) and failed / signed out (list reset to []): unknown -> hidden
+  assert.equal(view.holdingsBadgeCount(false, 0), null);
+  // a reload keeps the cached rows listed: their count is shown, it is not "0"
+  assert.equal(view.holdingsBadgeCount(false, 4), 4);
+  // successful read: 0 is a verified empty account, and a non-empty list shows its size
+  assert.equal(view.holdingsBadgeCount(true, 0), 0);
+  assert.equal(view.holdingsBadgeCount(true, 3), 3);
+});
+
 test("guard: the pure module takes the matcher as a parameter and keeps type-only imports", async () => {
   const text = await Deno.readTextFile(new URL("../../src/lib/portfolio-view.ts", import.meta.url));
   assert.ok(!/^import (?!type )/m.test(text), "no runtime import (testable with Deno)");

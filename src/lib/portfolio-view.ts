@@ -438,6 +438,17 @@ export function buildHoldingRows(
   });
 }
 
+/**
+ * The 保有銘柄 count badge. `ready` = the registrations were read for this load (see runPortfolioLoad). While they are
+ * pending, failed or signed out the list is empty because it is UNKNOWN, not because there are no holdings, so the
+ * badge must not say "0銘柄": it is hidden (null). A reload keeps showing the cached rows' count (those rows are
+ * listed). 0 appears only after a successful, authoritative empty read.
+ */
+export function holdingsBadgeCount(ready: boolean, listedRows: number): number | null {
+  if (ready) return listedRows;
+  return listedRows > 0 ? listedRows : null;
+}
+
 export type WatchRow = {
   tracked: TrackedStock;
   ticker: string;
