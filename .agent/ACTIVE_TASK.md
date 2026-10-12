@@ -142,16 +142,16 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: review_required
+- status: done
 - task_id: postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012
 - start_code: G4
 - finish_code: K4
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
 - report: .agent/tasks/CLAUDE_TASK_4.md#report
-- allocation: User 2026-10-12 requested G4 proactively finish its own Threads tasks before G5 final. Implementation-FIRST with Opus5.5（高）. G4 mobile actual authenticated Threads OAuth start/reconnect + expo-web-browser callback forwarding and verified readback UI, G4-owned disabled server/H5 composition helper, real provider-specific Threads T10 adapter compatible with G5 PR152 ProviderCleanupAdapter and safe local credential/attempt footprint cleanup. Create NEW isolated G4 branch stacked on protected G4 Draft PR144 head 09fd2c49114b7d26c23b71a3084574dc6a5a7ad6 and NEW Draft PR; original PR144/140/124/135/139 HEADs untouched. G5 Draft PR152 5ad5bb40cadf013f00553acd5509f4f74fdbff7c is review_required at assignment and protected; NO G5 account-delete/lifecycle/Auth code edits or registration, H5 owner auth source PR139 protected, G3 scheduling/X protected. User requested code, not additional study/testing loop: real app/service callback adapter + concrete T10 implementation and targeted tests; no false claim of live connection. All Threads client/server source gates false, Edge 503, no actual Meta/Supabase/Auth/Vault/prod calls, migration/GRANT, secrets, PR merge/deploy, EAS or posts. G5 K5 and high-risk review and H5 real owner transport/managed privileges/Meta tester prerequisites later. Complete Draft code/test report, K4 to this POSTONA G4 chat.
-- recommended_model: Opus5.5（高）
+- allocation: K4 2026-10-12 PASS_SOURCE_IMPLEMENTATION / REAL_PILOT_HOLD. Verified Draft PR154 exact head 98287392327eabfd5092a3ba89dde51a2e8beff6, OPEN/DRAFT/UNMERGED, 1 commit 19 G4-only files stacked on protected PR144 09fd2c49114b7d26c23b71a3084574dc6a5a7ad6. App Expo browser authenticated Threads OAuth start, HTTPS callback/app-link handoff and RLS account readback (no optimistic connected), new G4 H5-runtime Edge contract strictly validates official URL and success, Threads-specific local cleanup adapter+owner-only SQL candidate matches G5 PR152 port but is unregistered and unapplied. G4 reports app18 connect+18 manual PASS, tsc/lint, Deno105 PASS, disposable PG17 cleanup ACL/inflight/identity mutation4/4 and H5+G5 fake composite smoke PASS; ChatGPT inspected PR/source and tests but did not rerun. Real Meta, managed Supabase Auth/Vault, dedicated H5 owner transport/session privilege, callback app-link, G5 Phase4 actual T13/T10 adapter registration and grants, live test pilot not done. All five static source/app/server flags FALSE, deployed H5 Edge entry 503. No PR merge/deploy/production migration/API/post. G4 status done/none and slot unreserved; G5 current Phase4 review_required unaffected, H5 done/none and separate 臨時実装 only if explicitly allocated. Next G5 K5 and H5 owner-specific integration, one focused Sol高 review before any live permission.
+- recommended_model: Opus5.5（高） (completed K4)
 ## Claude G5
 - owner: claude
 - slot: claude-5
