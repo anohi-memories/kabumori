@@ -1,5 +1,6 @@
 -- SOURCE CANDIDATE ONLY. NOT a migration, NOT applied anywhere (G4,
--- postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012). Apply only after the G4 publish stack
+-- postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012; lease re-check added by F4,
+-- postona-f4-threads-disconnect-lease-safe-v1-20261012). Apply only after the G4 publish stack
 -- (custody -> manual publish -> release), as a single reviewed file, after the integrated review.
 --
 -- POSTONA Threads: the database side of the Threads provider cleanup that G5's account deletion (T10,
@@ -14,8 +15,9 @@
 --         reconciliation_required          a post may be in flight (creating_container / publishing /
 --                                          publish_returned / uncertain), or the secret is shared, or the
 --                                          read-back failed: NOTHING is removed, a person checks first
---         blocked                          no POSTONA / account deletion is in progress for this person
---                                          (or the workspace is busy): nothing is removed
+--         blocked                          no POSTONA / account deletion is in progress for this person, an
+--                                          account deletion holds no live lease (also re-checked after the
+--                                          locks), or the workspace is busy: nothing is removed
 --       It never reports confirmed_remote_revoked and never calls Threads.
 --
 -- Authority: the person id comes from G5's orchestrator, which owns the deletion lease. This function does
@@ -23,11 +25,21 @@
 -- cleanup step (account_deletion, or service_deletion of x_autopost = ending POSTONA only). It touches only
 -- the deterministic POSTONA workspace of that person (social_mobile_account_deletion_workspace) and only its
 -- Threads row, never X rows, other workspaces or other people's secrets. It takes the workspace lock that
--- serializes with connection (PR #124) and deletion, then the account row.
+-- serializes with connection (PR #124), the person's own Threads disconnect and deletion, then the account row.
+--
+-- Lease (F4, G5 PR #152 R1 contract): an account deletion authorizes only while it HOLDS an unexpired owner
+-- lease (owner_lease / owner_lease_expires_at, 20261009120000), checked against the wall clock
+-- (clock_timestamp, not the transaction start), once on entry and AGAIN after the locks were obtained, right
+-- before anything is deleted: a lease that ran out while this call waited for a lock removes nothing
+-- (blocked / LEASE_NOT_HELD). The adapter asks G5's stillOwned() immediately before calling this function;
+-- the function cannot tell WHICH owner holds the lease (the port does not hand the lease to adapters), so a
+-- takeover by a new owner in between is safe only because the removal is idempotent and serialized by the
+-- workspace lock (G5's own rule: "a lease check is not a lock"). A POSTONA-only end (service_deletion) has no
+-- owner lease in G5's schema; it authorizes by its in-progress cleanup step alone (see the F4 doc, G5 request).
 --
 -- Access: EXECUTE for the owner only. Granting it to the role G5's account-delete function runs as is part
 -- of G5's adapter registration (separately reviewed); until then the adapter cannot reach it and fails
--- closed. The lease itself is checked by G5's caller (owned() before runProviderCleanups).
+-- closed.
 begin;
 
 set local lock_timeout = '5s';
@@ -47,7 +59,8 @@ begin
   end if;
   if (select count(*) from pg_catalog.pg_attribute a
       where a.attrelid = pg_catalog.to_regclass('private.account_lifecycle_operations')
-        and a.attname in ('user_id', 'operation_type', 'service_key', 'status', 'current_step') and not a.attisdropped) <> 5 then
+        and a.attname in ('user_id', 'operation_type', 'service_key', 'status', 'current_step', 'owner_lease', 'owner_lease_expires_at')
+        and not a.attisdropped) <> 7 then
     raise exception 'THREADS_CLEANUP_PRECONDITION_LIFECYCLE';
   end if;
   if pg_catalog.to_regprocedure('public.social_mobile_account_deletion_workspace(uuid)') is null
@@ -62,13 +75,16 @@ begin
   end if;
 end $$;
 
--- Whether a deletion of this person is in its cleanup step (G5's table, read only).
+-- Whether a deletion of this person is in its cleanup step NOW (G5's table, read only): an account deletion
+-- only while some owner holds its unexpired lease, by the wall clock.
 create function public.threads_cleanup_authorized(p_user_id uuid) returns boolean
-language sql stable security definer set search_path = '' as $$
+language sql volatile security definer set search_path = '' as $$
   select exists (
     select 1 from private.account_lifecycle_operations o
     where o.user_id = p_user_id and o.status = 'in_progress' and o.current_step = 'cleanup'
-      and (o.operation_type = 'account_deletion' or (o.operation_type = 'service_deletion' and o.service_key = 'x_autopost')))
+      and ((o.operation_type = 'account_deletion' and o.owner_lease is not null
+            and o.owner_lease_expires_at > pg_catalog.clock_timestamp())
+           or (o.operation_type = 'service_deletion' and o.service_key = 'x_autopost')))
 $$;
 
 create function public.threads_provider_connection_state(p_user_id uuid) returns text
@@ -97,6 +113,10 @@ begin
   perform public.social_mobile_account_deletion_workspace_lock(v_workspace);
   select a.* into v_account from public.social_accounts a
    where a.brand_id = v_workspace and a.platform = 'threads' for update;
+  -- The locks may have taken up to lock_timeout: the lease is asked again before anything is deleted.
+  if not public.threads_cleanup_authorized(p_user_id) then
+    return pg_catalog.jsonb_build_object('outcome', 'blocked', 'code', 'LEASE_NOT_HELD');
+  end if;
   if v_account.id is null then
     -- Nothing local remains (a previous run, or never stored): the remote grant is still not verified.
     return pg_catalog.jsonb_build_object('outcome', 'local_removed_remote_unverified', 'code', 'ALREADY_REMOVED');

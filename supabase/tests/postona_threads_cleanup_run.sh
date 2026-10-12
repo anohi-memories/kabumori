@@ -7,7 +7,8 @@
 # G4 publish stack (custody -> manual publish -> release), a stand-in of G5's lifecycle operations table
 # (postona_threads_cleanup_fixture.sql), then the candidate, and:
 #   1. preconditions: refused without the publish stack and without the lifecycle table; re-apply refused;
-#   2. postona_threads_cleanup_behavior.sql;
+#   2. a two-session race (F4): the deletion owner's lease ends while the cleanup waits for the workspace
+#      lock -> nothing is removed; then postona_threads_cleanup_behavior.sql;
 #   3. mutations that remove a safety property must FAIL the proof.
 # Fake data only; every database and role it creates is dropped. Never production.
 # Usage: THREADS_PGHOST=/private/tmp/<socket-dir> THREADS_PGPORT=<port> THREADS_PGSUPER=<superuser> \
@@ -91,11 +92,34 @@ create_db "$base" "$stack"
 as_owner "$base" -f "$here/postona_threads_cleanup_fixture.sql" > /dev/null
 echo "PASS preconditions (publish stack, lifecycle table)"
 
+# F4 race: the owner's lease runs out WHILE the cleanup waits for the person's workspace lock (held by
+# another session for 1.5 s; the lease ends 0.7 s after the call starts). The re-check after the locks
+# must remove nothing (LEASE_NOT_HELD).
+race_lease() {
+  local db="$1" person='00000000-0000-4000-8000-0000000000e1' out holder
+  as_owner "$db" -A -t > /dev/null <<SQL
+select public.fixture_brand('$person', 'xe');
+select postona_rel.login('$person');
+insert into postona_rel.lifecycle (user_id, state) values ('$person', 'active');
+select postona_rel.connect_threads('$person', public.social_mobile_account_deletion_workspace('$person'), 'e');
+SQL
+  as_owner "$db" -A -t -c "begin; select public.social_mobile_account_deletion_workspace_lock(public.social_mobile_account_deletion_workspace('$person')); select pg_sleep(1.5); commit;" > /dev/null &
+  holder=$!
+  sleep 0.3
+  out="$(as_owner "$db" -A -t -c "insert into private.account_lifecycle_operations (user_id, operation_type, status, current_step, owner_lease, owner_lease_expires_at) values ('$person', 'account_deletion', 'in_progress', 'cleanup', gen_random_uuid(), clock_timestamp() + interval '700 milliseconds'); select public.cleanup_threads_provider_footprint('$person')::text;" 2>&1)" || true
+  wait "$holder" || true
+  [[ "$out" == *'"code": "LEASE_NOT_HELD"'* ]] || { echo "RACE_ANSWER ${out//$'\n'/ }"; return 0; }
+  [[ "$(as_owner "$db" -A -t -c "select count(*) from public.social_accounts where id = 'sa_th_e'")" == 1 ]] || { echo "RACE_REMOVED"; return 0; }
+  echo PASS
+}
+
 prove() {
   local file="$1" tag="$2" db out
   db="$(copy "main_$tag" "$base")"
   [[ "$(apply "$db" "$file")" == applied ]] || { echo "APPLY"; return 0; }
   [[ "$(apply "$db" "$file")" == THREADS_CLEANUP_PRECONDITION_ALREADY_APPLIED ]] || { echo "REAPPLY"; return 0; }
+  out="$(race_lease "$(copy "race_$tag" "$db")")"
+  [[ "$out" == PASS ]] || { echo "$out"; return 0; }
   if ! out="$(as_owner "$db" -A -t -f "$here/postona_threads_cleanup_behavior.sql" 2>&1)"; then
     echo "BEHAVIOR $(sed -n 's/^.*ERROR: *//p' <<<"$out" | head -1)"; return 0
   fi
@@ -104,7 +128,7 @@ prove() {
 }
 result="$(prove "$candidate" real)"
 [[ "$result" == PASS ]] || fail "candidate: $result"
-echo "PASS candidate: apply, re-apply refused, behavior"
+echo "PASS candidate: apply, re-apply refused, lease race, behavior"
 
 mutate() {
   local tag="$1" from="$2" to="$3" out="$tmp/mut_$1.sql" got
@@ -120,4 +144,11 @@ mutate no_shared_secret_check "  if v_secret is not null and exists (
        select 1 from public.social_accounts o" "  if false and exists (
        select 1 from public.social_accounts o"
 mutate any_service_deletion "(o.operation_type = 'service_deletion' and o.service_key = 'x_autopost')" "(o.operation_type = 'service_deletion')"
+# F4 (lease): an account deletion must hold a live owner lease, by the wall clock, re-checked after the locks.
+mutate no_lease_check "(o.operation_type = 'account_deletion' and o.owner_lease is not null
+            and o.owner_lease_expires_at > pg_catalog.clock_timestamp())" "(o.operation_type = 'account_deletion')"
+mutate lease_by_tx_start "o.owner_lease_expires_at > pg_catalog.clock_timestamp()" "o.owner_lease_expires_at > pg_catalog.now()"
+mutate no_recheck_after_locks "  if not public.threads_cleanup_authorized(p_user_id) then
+    return pg_catalog.jsonb_build_object('outcome', 'blocked', 'code', 'LEASE_NOT_HELD');" "  if false then
+    return pg_catalog.jsonb_build_object('outcome', 'blocked', 'code', 'LEASE_NOT_HELD');"
 echo "ALL PASS"
