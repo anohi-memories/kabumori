@@ -3,8 +3,8 @@
 - task_id: common-ai-provider-g6-phase2b-market-report-wiring-offline-20261012
 - owner: claude
 - slot: claude-6
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -105,6 +105,12 @@
   - 受け入れられたら、G2 の手が空いた時点で G2 の配線パッチ TASK を出す
   - 本番は「回復処理の Cron → Secret → off のまま deploy・1サイクル観察 → カナリア」の順に、それぞれ別承認で進める
 ---
+
+## K6 FINAL — 2026-10-12 JST
+- verdict: **PASS_OFFLINE_SOURCE_CANDIDATE / NOT_WIRED / PRODUCTION_NO_GO**. Draft PR #150 exact `18d9058aa8bd451f3cd0181f8570a31484750035` OPEN/DRAFT/UNMERGED, stacked on unchanged PR148 `a71de72b3bcfc88547b616f789df7765283565ed`. Three new files only (deferred wiring module, 11-case offline handler-boundary harness, rollout/rollback document); no G2-owned production handler edits.
+- ChatGPT inspected GitHub PR metadata, exact changed-file diff and G6 Report; reported tests were **not independently rerun**. G6 reports 11/11 harness, 11/11 mutations, Provider123, market report283, shared626, lint/type/secret scan PASS. No live Edge waitUntil, wall clock or real Claude latency proof.
+- Deferred shadow after report completion reduces critical-path coupling but is not production-guaranteed until G2 integrates handler with waitUntil/deadline and validates runtime. Other blockers: recovery Cron, scoped Edge secret, explicit small paid canary approval and trial budget cap ($5/month). No auto widening. PR #148/#150 merge/deploy NOT authorized; paid calls0, prod mutation0.
+- G6 Phase2b task **done / next_owner:none**, no new G6 task allocated. Future G2 handler patch requires fresh ownership/competition checks and separate G2-chat TASK. Focused security review before live Ledger/Secret/recovery/Edge boundary, not mandatory for this source-only candidate.
 
 # PRESERVED G6 PRIOR TASKS / REPORTS — do not rewrite below
 
