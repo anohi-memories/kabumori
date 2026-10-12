@@ -1,3 +1,124 @@
+# H2 independent completion — PR149 broadcast fanout security/reliability review — 2026-10-12 JST
+
+- task_id: kabumori-pr149-broadcast-fanout-push-security-review-h2-20261012
+- owner: codex
+- slot: codex-2
+- status: review_required
+- next_owner: chatgpt
+- result: **CHANGES_REQUIRED / PRODUCTION_NO_GO**
+- return_to: **かぶモリアプリG2のちゃ**
+- completion_code: **C2**
+- recommended_model: **Sol（高）**
+- reviewed_head / G2 implementation commit: `31c509df1c08ecc437ca4b70541284f223c836e2`
+- protected stacked PR143 base: `889ca1b44cf82bd3ecb913818dca568456849feb`
+- fresh formal-base main at start: `cdb066fad5b2a7bd20ce4e0685f50f575fe560ef`; isolated clone fresh main: `26d6921667701027033c1ea9d2cc67a31617b45b`
+- fresh main before bookkeeping: `a226e3908ec2b57290394f5a20b6641b85956562`; intervening .agent updates belong to other slots and were preserved.
+- source changed_files: **[]**; PR comments/merge/deploy/production/real Expo calls **0**.
+- ONE risk-focused independent review. This does not reserve G2 or authorize production rollout.
+
+## Verdict
+
+The separate queue, service-role-only RPCs, expand-only defaults-OFF migration, fixed report/day idempotency, bounded DB claim capacity and unknown-transport no-resend model are sound directions. Existing offline suites pass, including real local SQL ACL/lease/concurrency/rollback/mutations. No P0/P1 cross-user/token exposure was found in the reviewed source.
+
+However **six reproducible P2 source issues** remain. These are specific gate, freshness, bounded-fanout, outcome-classification and legal-configuration regressions; not a blanket style review. Require one G2-owned bounded correction at C2. Both PR149 and PR143 remain **OPEN / DRAFT / UNMERGED**, unchanged exact heads. Source acceptance and any live release are separate gates.
+
+## Findings, exact lines and evidence
+
+### R1 [P2] Recheck the public feed gate before handing a claimed chunk to Expo
+
+- Location: `supabase/migrations/20261012100000_market_report_broadcast_push_v1.sql:440-445` (begin lease check followed by report-type lookup, no current feed gate), and claim lacks that gate as well. enqueue checks it at 202–204, but only when creating a broadcast.
+- Reproduction in dedicated synthetic PostgreSQL: enable feed/broadcast, enqueue+plan+claim, then set `personalized_ondemand_settings.public_market_feed_enabled=false` **before begin, no send yet**. Actual authenticated `get_app_market_report('morning')` returns **disabled**; begin still returns **183 device targets** for 123 recipients, marked sending. This is not the unavoidable tiny race after a send-time check; the gate changed before begin was even called.
+- Impact: a notification is issued for a report users cannot open, violating the task's “never notify while viewing disabled” gate. Existing queued broadcasts bypass the producer-only feed check.
+- Minimal correction: validate current public feed availability at the actual send-authority boundary (claim/begin) and prevent handing targets to a sender when disabled. Preserve legitimate in-flight send reconciliation; do not delete history or auto-resend.
+
+### R2 [P2] Freshness must use report completion, not later broadcast creation
+
+- Location: same migration **375**; enqueue uses `c.report_completed_at` at 211–215, but stale sweep/claim uses **b.created_at**.
+- Exact synthetic case: `max_report_age_minutes=120`, enqueue a report completed **119 minutes ago**, then advance the source's elapsed age to **121 minutes** (synthetic completion timestamp moved back two minutes to represent the next Cron, no real wait). Broadcast is newly created. claim returns **3 chunks** and begin returns **183 targets**, despite the source already exceeding the 120-minute completion-age cutoff.
+- Impact: a report enqueued near the freshness boundary can be sent for almost another full freshness window; created-at fallback is especially misleading in plan-only→sending rollout. Runbook explicitly defines this setting from report completion.
+- Minimal correction: keep the producer's source-completion timestamp as the shared enqueue/claim/begin freshness reference, preferably fixed to the selected packet/cycle. Recheck at begin; reject stale source, not merely old queue rows. Do not weaken Fact/day/coherence checks.
+
+### R3 [P2] A valid 91st device is silently dropped but the user is marked sent
+
+- Location: `supabase/functions/market-report-broadcast-worker/broadcast_logic.ts:106` (`devices.slice(0,size)`).
+- Actual existing `20260903160000_add_device_push_tokens.sql` enforces unique token and owner RLS, **not ≤90 tokens/user**. Needed local SQL allowed **91 distinct tokens** and begin returned **91**, while device_count is 91.
+- Exact worker mock: pass these 91 targets to sendChunk. batchByUser returns one batch of **90**, sender sees exactly90 (never >90/request), and result is **{user_id:'u',outcome:'sent'}**. Token91 is not attempted, not recorded deferred/failed, and cannot be visited in another chunk after terminal user delivery.
+- Impact: contradicts the all-valid-devices requirement and hides delivery omissions, e.g. repeated registrations/reinstalls. This is not a claim that one person normally owns 91 phones.
+- Minimal correction: explicitly bound/define eligible device policy rather than assume a nonexistent schema invariant. Preserve the 90-message request ceiling and user dedup; if overflow cannot be safely supported in V1, make it an explicit observable refusal/selection policy, not silent successful loss. Do not solve by blindly resending accepted devices.
+
+### R4 [P2] Legal parallelism can burst above the advertised rate and Expo project's 600/s
+
+- Location: `broadcast_logic.ts:150-164` first request starts immediately, rate sleep follows; `223` divides nominal rate, `243` starts chunks together. Migration permits `max_parallel_chunks` **1..16** at **52**, so16 is not invalid input.
+- Exact independent mock: 16 simultaneous chunks with **40 messages each**, setting `messages_per_second=300`, same per-chunk formula `floor(300/16)=18`. Every initial sender call occurs at t=0; first-second requests contain **640 messages** (all requests40, never >90), exceeding600 before existing news sends. No actual Expo request was made.
+- Defaults4 did not reproduce that specific 600+ burst. Provided 10k/100k default simulation peak is312 rather than exact300; 450/sec simulation456. Those simulations and steady-state averages are not project-wide rate/SLA proof.
+- Minimal correction: enforce an actual shared/start-wave burst budget or constrain supported parallelism+batch/rate combinations at configuration/worker boundary. Keep reserved headroom for existing news and cap concurrent Expo connections; merely dividing average rate cannot enforce this bound.
+
+### R5 [P2] UUID ranges are not bounded recipient snapshots after opt-in changes
+
+- Location: migration **455-476** begin expands the whole UUID range using current eligibility; no stored recipient list or bounded resume exists.
+- Exact SQL: set chunk_size=50. Create60 synthetic lower UUID users with notifications OFF and one later UUID user ON. plan records **planned_users=1**, one chunk from start to later UUID. Turn those60 ON **after plan**. begin returns **61 distinct users**, exceeding configured50; planned count still1.
+- Impact: with many opt-ins/registrations between sparse planned UUID endpoints, one supposedly500-user chunk can expand to arbitrarily many existing profiles, return all their tokens into one Edge invocation, and mark all sending. This defeats bounded fanout and understates progress; a timeout can strand a large group as unknown (intentional no-duplicate policy then loses them). Also later users behind a completed cursor are not consistently part of the audience.
+- Minimal correction: define a stable bounded audience/checkpoint and recheck current consent/devices for that audience; or implement truly bounded resumable begin selection with explicit continuation. A bare LIMIT silently dropping the remainder is not adequate. Do not add a broad unrelated scheduler refactor.
+
+### R6 [P2] Malformed same-count tickets are retried instead of treated as ambiguous
+
+- Location: `broadcast_logic.ts:123-134`, ticket count is checked but ticket shape/status is trusted before `classifyTicket`; new `expo_sender.ts:25-27` casts unvalidated JSON to tickets.
+- Exact fake response: HTTP200 JSON **{"data":[{}]}**, one recipient/token. It has matching count but no valid acknowledgement/error. New sender accepts it; sendChunk yields **retry / EXPO_TICKET_TRANSIENT_ERROR**, enabling another chunk attempt (up to3).
+- Contrast independently tested: thrown network/abort → unknown with one request; mismatched partial count → unknown; mixed accepted+transient same-user tickets → sent to avoid resending accepted token.
+- Impact: a malformed/unknown provider result is laundered into explicit rejection and automatic resend, contrary to the “loss rather than duplicate” rule.
+- Minimal correction: validate every ticket's accepted/rejected discriminant before calling the inherited classifier. Missing/invalid/uncertain outcome → terminal unknown, never retry. Keep existing explicit429/5xx bounded retry. No change to the important-news helper/worker is needed.
+
+## Passing / intentionally accepted controls
+
+- SECURITY DEFINER functions use empty search_path, qualified objects and final explicit EXECUTE revokes/grants. anon/authenticated cannot access broadcaster tables/RPCs or arbitrary-user target tokens; worker is service_role-only, settings are owner-write only, delivery table not service-role SELECT. Local behavior ACL tests actually switch roles, not only source scans.
+- Producer requires current-JST completed cycle, selected packet coherence, DB fact_status passed and permitted AI state, headline, initial completion freshness; unique report_type/trading_date and selected packet constrain duplicate creation. Public feed projection remains authenticated and flag-gated, not exposed through app table queries. R1/R2 concern later send boundaries.
+- Claim advisory lock bounds active chunk count across concurrent Cron; queued claim uses SKIP LOCKED; token/version/time completion/begin fences and crash→unknown controls tested. Races cover begin-vs-expiry, finish-before/after-sweeper; unknown users are not returned for next send. Exactly-once DB bookkeeping does NOT guarantee exactly-once external Expo delivery.
+- Consent OFF / report-category OFF / token replacement is rechecked at begin. Profile deletion cascades dependent rows in the supplied schema test. This is fake local schema evidence, NOT actual managed common-account freeze/delete proof.
+- sending_enabled OFF mid-run: **new claim count0**, but already claimed begin can return183 targets. Runbook section6 explicitly permits finishing the current chunk; this is documented stop latency, **not an extra finding**. Title “すぐ効く” must not be interpreted as cancelling issued HTTP requests. Feed OFF is a separate undocumented and task-prohibited case (R1).
+- Multi-device success+transient is deliberately terminal at user level to avoid duplicate accepted-device resend; possible missed secondary device is an explicit consequence of at-most-once user policy, unlike the silent91-token assumption.
+- No source change to `send-push-notifications` or its notification queue; broadcaster uses dedicated tables/RPC/claim locks. It still shares Expo capacity. Important-news delay/SLA under real pressure is **NOT_PROVEN**.
+- App three focused deep-link tests pass: current type/date encoded and passed to authenticated RPC, malformed route handled, date fallback uses existing feed. No service key in new app code. No native-device arrival/navigation proof performed.
+- Runbook has PR143-before-PR149 dependency, expansion/rollback, gatesOFF, legacy-personalized coexistence block, plan-only/pilot/full/monitor stages and explicit user approval. It is not permission to apply migration/create Cron/deploy now.
+
+## Independently executed evidence
+
+- **Deno focused typed 44/44 PASS**: broadcaster23, unchanged push-send logic18, new app routing3. Command:
+  `deno test --no-config --sloppy-imports --allow-read supabase/functions/market-report-broadcast-worker/broadcast_logic_test.ts tests/app/market-report-broadcast_test.ts supabase/functions/send-push-notifications/push_send_logic_test.ts`
+- Initial run without `--sloppy-imports` failed TS2307 on inherited extensionless app imports; compatible resolver option fixes that without --no-check or source edit. Not classified as a new functional failure.
+- **Independent scratch Deno8/8 PASS** (assertions reproduce defects R3/R4/R6 and validate transport/partial/expiry controls; PASS of a reproduction is NOT source acceptance).
+- **Exact supplied PostgreSQL runner ALL PASS**: foundation/PR143 missing refusal, expand-only fingerprint, rollback exact restoration, reapply refusal, behavior/role ACL checks, real two-connection race orderings, synthetic10k/100k, **19/19 mutations detected**.
+- PG17.11 UTF8/C, H2-owned cluster `/private/tmp/h2-pr149-pg-20261012.b4lxZw/data`, Unix socket under same /tmp path, port54986, **TCP listen disabled**. All fixtures synthetic. Separate adversarial DB `h2_pr149_adverse` executes R1/R2/R3/R5 plusOFF controls; each added probe transaction ROLLBACK. Cluster **stopped** after review, other slots' servers untouched.
+- Independently measured local PG100k: plan6 calls total973ms; begin200 total3043ms (15.2ms/call); finish200 total1749ms (8.7ms/call). 10k plan14ms, begin209ms, finish112ms. These are local SQL-only values, not production/external-delivery measurements.
+- Provided virtual-time simulations independently rerun: 10k/12k tokens **0.66min** send span, 100k/120k **7.47min** at300 (8 Cron runs); 100k **5.08min** at450. No arrival/receipt/SLA guarantee.
+- `deno check --no-config` worker entry and test **PASS**; runtime-only four-file lint **PASS**. Whole directory lint including test file emits5 require-await findings in fake-store methods/fetch mock, recorded as non-blocking test style, not repaired. `git diff --check` **PASS**.
+- G2's broader **1,669 tests** remain G2-reported, NOT independently rerun/summed with focused suites. Whole native TS/build/device/managed permissions/Edge runtime/real Expo **NOT_RUN**.
+
+## Reproduction / traceable artifacts
+
+C2 does not need access to temp files to understand evidence: exact cases/outputs above are sufficient to allocate bounded regressions. Local retained probes:
+- independent typed fake HTTP/batching/rate `/private/tmp/h2-pr149-independent_test.ts`
+- synthetic SQL `/private/tmp/h2-pr149-adverse.sql`; setup `/private/tmp/h2-pr149-local-proof-setup.sh`
+- review checkout `/private/tmp/h2-pr149-broadcast-20261012.I1dZ3J`, detached exact PR149, clean.
+SQL setup uses the candidate's own fixture + actual inherited foundation/PR143 migration + exact PR149 migration + behavior helper functions fx.user/call_as/market, all in the disposable cluster. No actual Supabase credential/project/production data involved. Initial reviewer-only fixture adjustment attempted to mark a packetless running cycle completed and was refused by the existing CHECK constraint; restricting synthetic freshness updates to already-completed packet-bearing cycles resolved the harness setup error, product source unchanged.
+
+## Freshness / scope / bookkeeping / safety
+
+- Exact17 paths / one commit stack independently verified; PR149 and PR143 re-read OPEN/DRAFT/UNMERGED with pinned SHA before completion. Other27 open PR file inventories have no target overlap except five app paths in the intended protected PR143 parent. G2 done/unreserved; this review does not assign G2 another task.
+- Current main changes during review were only other-slot .agent files, zero reviewed product overlap. H2 preserves those changes and all prior TASK/Report history by fresh read and per-file blob-SHA CAS.
+- Current Vercel status actual reason: **Deployment rate limited — retry in 24 hours.** Not treated as Expo/native code failure, not retried or upgraded.
+- H2 changed_files ONLY own .agent Report prepend, TASK current completion/status, own ACTIVE index portion, CURRENT_STATE prepend. Product source **0**, source implementation commit by H2 **none**.
+- commit_hash: reviewed G2 source31c509df; control-only publication commit/read-back receipt is recorded in the current TASK/final acknowledgement, not represented as a source commit.
+- push: guarded GitHub Contents API main publication, completion acknowledged only after full exact read-back; no force push, no product branch write/PR comment/merge.
+- merge=false; deploy=false; production Supabase reads/writes0; migration/RPC/RLS/Auth/Cron/settings/flags/secrets/OAuth/Vault/Storage0; real Expo/Push/X/OpenAI/paid API0; apps/admin/HANDOFF/other-slot sources0.
+- Clean-base existing `?? supabase/.temp/` and otherworkstream worktrees/branches/ports/unfinished changes protected. No local shared checkout stage/commit/reset/stash.
+- Skills applied: Supabase security checklist + PostgreSQL least-privilege/RLS/SKIP LOCKED/lock-order review guided actual local ACL/queue proofs; no live advisor/production call performed.
+- remaining_issues: R1–R6; source-feed gate and source-age must be guaranteed before release; bounded recipient/device handling and rate/outcome behavior need clear contracts. Managed account ending/deletion effects, actual Edge budgets, Expo permissions/headroom/receipt/native tap remain separate live gates, not already PASS.
+- next_recommendation: **C2 to G2 ChatGPT; one bounded G2 correction task for R1–R6 with focused negative regressions only**, preserve at-most-once unknown and actual important-news queue separation. Do not run another broad synthetic audit or enable/apply/deploy from this result.
+
+**かぶモリアプリG2のちゃ へ C2 を送ってください。**
+
+---
+
 # H2 independent completion — Fact V2 PR132 integrated review — 2026-10-11 JST
 
 - task_id: kabumori-fact-v2-pr132-final-integrated-review-20261011
