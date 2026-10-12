@@ -3,8 +3,8 @@
 - task_id: postona-g3-reservation-preview-confirmation-ux-v1-20261012
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G3
 - finish_code: K3
 - return_to: POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）
@@ -22,6 +22,119 @@ PR #138 merged preview / PR #145 draft source-only contracts を利用し、実�
 4. production Supabase DB/Auth/RLS/Edge/Cron/Secrets、X/Threads/Meta/OpenAI実呼出、migration適用、merge/deploy/EASなし。保存フラグはOFF。PR145修正はK3でPASS_SOURCE_CANDIDATE_WITH_G5_G4_HOLD、旧TASK終了扱いで履歴保持。
 5. 独立G3 branchにコードcommit/pushし、新規Draft PRを作成。TASK末尾に## Report（task_id/result/changed_files/tests/commit/push/merge/deploy/safety/remaining/PR/next）を追加、status review_required/next_owner chatgptにしてK3。開発日記は公開安全性確認。
 推薦モデル：**Sonnet5（高）**。
+
+## Report — postona-g3-reservation-preview-confirmation-ux-v1-20261012
+
+- task_id: postona-g3-reservation-preview-confirmation-ux-v1-20261012
+- result: **PASS_UI_SOURCE_LOCAL_PREVIEW_ONLY**（確認 UI を実装。保存・予約・投稿は一切できない。保存フラグは OFF のまま）
+- モデル: Sonnet 5.5（推奨どおり）
+- worktree: 新しく作った独立 G3 用 `/Users/yuya/Developer/kabumori-g3-reservation-confirm-ui`
+  - PR #145 の先頭 `8820fa8de0f978767535472f5a44f8623bc74a30` の上に積んだ（merge で main を混ぜていない）。
+  - 作業前に、PR #145 が下書きのまま先頭が変わっていないこと、PR #138 が merge 済み（`a9b7cd2032169ae375a4b9f3e3086e6b3a2f3ff7`）であることを確認した。
+  - main 側に、G3 の領域へ重なる変更が無いことも確認した。
+- branch: `claude/g3-postona-reservation-confirmation-ux-v1-20261012`
+- commit: `0cd5c596a4d553df924a16c1f5091815e74b199a`（1 本）
+- push: 実施（force・rebase なし）
+- PR: https://github.com/anohi-memories/kabumori/pull/151 （**下書き**、MERGEABLE）
+  - base は PR #145 のブランチ `claude/g3-postona-x-reservations-offline-v1-20261011`（積み重ねの依存関係を PR 本文に明記）。
+  - 先頭 `0cd5c596a4d553df924a16c1f5091815e74b199a` は GitHub 側から読み戻して一致を確認した。9 ファイル。
+- PR #145 は変更していない（先頭は `8820fa8d` のまま）。merge しない。
+- merge 0 / deploy 0 / EAS・TestFlight 0 / 実際の X・Threads・Meta・AI の呼び出し 0 / 本番の DB・Auth・RLS・Edge・Cron・Secrets への接続 0 / migration の適用 0
+
+### changed_files（G3 の領域だけ。9 本）
+- `apps/social-mobile/src/app/(tabs)/schedule.tsx`（確認・日時変更の配線。カードを部品へ移動）
+- `apps/social-mobile/src/features/schedule/confirmation-state.ts`（新規）
+- `apps/social-mobile/src/features/schedule/time-edit.ts`（新規）
+- `apps/social-mobile/src/features/schedule/preview-card.tsx`（新規）
+- `apps/social-mobile/src/features/schedule/schedule-labels.ts`（新規）
+- `apps/social-mobile/src/features/schedule/sha256.ts`（新規）
+- `apps/social-mobile/tests/reservation-confirmation.test.mjs`（新規）
+- `apps/social-mobile/tests/schedule-screen-wiring.test.mjs`（追記）
+- `apps/social-mobile/tests/schedule-planner.test.mjs`（更新）
+- 触れていないもの: SQL 候補・Edge・共通 Auth / 利用権・G4 の SNS アカウント画面・`reservation-store.ts`・`reservation-flow.ts`・migration・依存関係（`expo-crypto` は既存）・下タブの構成。
+
+### 実装したこと（すでにあったものは重複させていない）
+すでにあった: プレビューの作成（4 モード）、本文の編集、並べ替え、取り消し、再抽選、競合の解消、切替時のブランド分離。
+新しく作った操作:
+
+1. **投稿ごとの確認**（「本文・日時・投稿先を確認」）
+   - カードに、本文・日本時間の日時・投稿先の X アカウント（表示名とハンドル）をまとめて表示する。確認はそのカードの内容そのものを記録する。
+   - 状態は「未確認」→「確認済み」。「確認を取り消す」で戻せる。
+   - 近い予定がある（競合）、投稿先が確認できない、編集中・日時変更中の投稿は、確認できない（理由を表示）。
+2. **確認の無効化**
+   - 確認は、画面に出ている本文・日時・アカウントと毎回突き合わせる。
+   - 本文の編集、並べ替え（2 件とも）、日時の変更、再抽選、競合の解消で動いた投稿は、その場で「確認が無効になりました。もう一度確認してください」に変わる。
+   - 本文を確認時とまったく同じ内容に戻した場合は、確認が有効に戻る（確認した内容と同じため）。
+3. **進捗の表示**
+   - まとまりごとの「確認 n/m」と、全体の「確認済み n/m件」（未確認・変更による無効の内訳つき）。
+   - 全件確認済みでも「ただし、予約の保存はまだ利用できません」と表示する。
+4. **固定日時の投稿の日時変更**（「日時を変更」）
+   - 日時を指定した投稿だけが対象。ランダムは再抽選、間隔指定は間隔を保つため、それぞれ手では動かせない（カードに案内を表示）。
+   - 過去・5 分未満・90 日超え・形式不正は、メッセージを出して変更しない。本文とアカウントは変えない。
+5. **取り消しは終了状態**
+   - 取り消した投稿は一覧に出ず、数にも入らず、確認も残らない。古い確認があっても復活しない。
+   - 「まとめて取り消し」は、そのまとまりだけを取り消す。
+6. **アカウントごとの分離**
+   - 進捗・確認・カードは、選択中のアカウントの投稿だけから計算する。別のアカウントに切り替えても混ざらず、戻れば元の状態に戻る。
+   - 確認は、そのアカウントのものにだけ結びつく。
+7. **AI 自動予約の枠**
+   - 本文がないため 1 件ずつの確認はなく、手動の進捗の数には入らない。
+   - 「AI相談の『これで覚えて』は自動投稿の同意になりません」を表示する。
+8. **表示の約束**
+   - 「プレビュー／未予約・投稿されません」を常に表示する。
+   - 「予約として保存（準備中）」は無効のまま。押しても何も送らない。
+   - 「予約済み」「予約しました」「投稿しました」は、どこにも出さない（静的テストで固定）。
+
+### tests（すべて手元。本番には接続していない）
+- アプリ: `tests/*.test.mjs` **309/309**（PR #145 の 289 件に、今回の新規 20 件を加えた数）、`src/domain` **22/22**
+  - 新規 `reservation-confirmation.test.mjs`: 14 件（確認の状態・進捗、日時変更、カードの表示、ソースの静的検査）
+  - `schedule-screen-wiring.test.mjs`: 本物の `schedule.tsx` を動かす 6 件を追加（確認・編集・日時変更・取り消し・まとめて取り消し・再抽選・アカウント切替・AI／間隔の見え方）
+  - 保存の約束（`reservation-flow.ts`）との整合は、新規の `reservation-confirmation.test.mjs` で検査している。確認が全件そろったときだけ保存依頼が作れること、確認の同期判定が `confirmationHolds` と一致すること、間隔指定の保存依頼に同じ間隔の情報が載ること。
+  - 既存の `reservation-flow.test.mjs` は変更せず、合格している。
+- `tsc --noEmit`・変更ファイルの eslint・`git diff --check` はクリーン。追加行の秘密情報スキャンは 0 件。
+- **変異テスト 19 種類をすべて検出**:
+  - 確認が本文・日時・アカウント・取り消しを見ない
+  - 進捗が取り消しや AI 枠を数える
+  - AI 枠を確認できる
+  - 日時変更が全モードを許す、過去を許す、取り消した投稿を動かす
+  - カードが競合中・編集中でも確認できる、投稿先を隠す
+  - 画面が全アカウントの下書きで進捗を出す、投稿先を渡さない、状態を常に確認済みにする、確認の取り消しが効かない、まとめて取り消しが 1 件だけになる、日時変更後の通知を出さない
+  - 最初の実行では 2 件（まとめて取り消し・日時変更後の通知）が検出されなかったため、テストを足して検出されるようにした。
+- **画面の確認（ブラウザ上の Web 表示、サンプルデータ）**:
+  - 投稿を作成 → 確認 → 日時を変更 → 確認が無効になる流れを実際に操作して確認した。
+  - 進捗・無効化の通知・無効のままの保存ボタン・投稿先の表示を確認した。コンソールのエラーは 0 件。
+  - 検証用に入れた認証回避は、すべて元に戻した（`_layout.tsx` は先頭と同一、`.gitignore` も復元、サーバー停止、設定ファイルの一時追加も削除）。
+  - **iOS の実機・シミュレーターでのタップ確認は未実施**（Web 表示のみ）。
+
+### 既存テストの更新（1 件）
+- `schedule-planner.test.mjs` の「画面は保存・投稿できない」検査は、プレビュー表示の文言を画面のソースに直接探していた。
+- 文言を共通の定数に移したため、次のように更新した（検査は弱めていない）。
+  - 定数の定義を確認する。
+  - 画面とカードが定数を表示していることを確認する。
+  - 禁止事項の検査（保存・通信・「予約しました」など）を、新しい部品にも広げた。
+
+### safety
+- この UI は、保存・予約・投稿・通信・端末への保存を一切しない。確認はこの画面のメモリだけに持つ（画面を閉じるかアプリを再起動すると消える）。
+- 本文のハッシュは、既存の `expo-crypto` で端末の中だけで計算する。外部には送らない。
+- `reservation-store.ts` の保存フラグ（`POSTONA_RESERVATION_PERSISTENCE_ENABLED = false`）は変更していない。画面は保存の呼び出しをしない（静的テストで固定）。
+- 「これで覚えて」を自動投稿の同意として扱っていない。
+- 他スロット（G4 の Threads・SNS アカウント画面、G5 の Auth・利用権・削除、G6、PR #145 のブランチ）には触れていない。
+
+### remaining（保留・次の段階）
+- 予約の保存・一覧・取り消しは、PR #145 の候補が前提。G5（x_autopost の利用権とライフサイクル）と G4（X アカウントの本人確認）の本物の判定がそろうまで保留。保存フラグは OFF のまま。
+- PR #151 の merge は、PR #145 の扱いが決まったあと（積み重ねのため）。
+- 実機（iOS）でのタップ確認、日時変更の入力の使い勝手（日付・時刻の手入力）の確認。
+- 判断を K3 に任せたい点:
+  1. 「全件を一括で確認」ボタンは、投稿ごとの同意の意味が薄れるため作っていない。10 件なら 10 回のタップになる。要望があれば、1 件ずつ内容を見せる形で別に検討できる。
+  2. 日時変更は「日時を指定した投稿」だけにした。ランダムは再抽選、間隔指定は作り直し。
+
+### next_recommendation
+1. K3 で受け入れを判断する（PR #151・PR #145 はどちらも下書きのまま。merge しない）。
+2. 実機の確認を行う場合は、別途ローカルで 1 回だけ（EAS ビルドは不要。ローカルの Expo + シミュレーター）。
+3. G5 / G4 の本物の判定ができたあと、PR #145 の候補と合わせて Sol（高）の統合レビュー → ユーザー承認の適用。
+
+### AI Lab diary 候補（外部公開してよい粒度）
+- AI Lab diary: 候補あり — 投稿の予約を作る画面に、「本文・日時・投稿先を1件ずつ確認する」操作を作った。確認したあとに内容や時間を変えると、確認が自動で無効に戻る作りにして、確認したつもりで違う内容が出る事故を防いでいる。保存はまだ無効のままで、押しても何も送られないことを画面に正直に出している。
 
 ---
 
