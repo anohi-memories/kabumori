@@ -1,10 +1,45 @@
+# G6 CURRENT TASK — 4PR統合QA F1/F2 タイムアウトテスト限定修正
+
+- task_id: common-ai-provider-g6-f1-f2-timeout-tests-stability-20261012
+- owner: claude
+- slot: claude-6
+- status: ready
+- next_owner: claude
+- start_code: G6
+- finish_code: K6
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- recommended_model: **Sonnet5（中）**
+- mode: OFFLINE_TEST_FIX_ONLY
+- production_mutation_window: FORBIDDEN
+- merge/deploy: FORBIDDEN
+- origin: K6 2026-10-12 CHANGES_REQUIRED_TEST_ONLY after G6 4PR premerge QA.
+
+## Scope
+- Fix only F1 `supabase/functions/_shared/ai_provider/market_report_shadow_test.ts` (PR148; flaky timeoutMs 1000, raise to 6000 and adjust elapsed ceiling to 10000 with justified assertion), and F2 `supabase/functions/_shared/ai_provider/market_report_wiring_test.ts` (PR150; deadlineInMs 1500, raise to 6500). Preserve real safety behavior and ensure assertions still cover timeout/deadline/abort. These are *reported candidate edits*, verify source/semantics before use; never relax assertions simply to green tests.
+- Before work, inspect fresh main, current G6 TASK/Report, ACTIVE_TASK/CURRENT_STATE, all conflicting slots and PR heads. Exact protected stack: PR148 a71de72b, PR150 18d9058a, PR153 6c576567, PR157 9b952d64 (verify latest). Independent G6 worktree required; never touch others' uncommitted changes. G2 owns PR153; G5 Auth, G2 V1 PR143/149/158 and all other slots protected.
+- **Do not amend, rebase, force-push, or overwrite PR148/150/153/157 branches.** Create a NEW clean G6 correction branch/Draft PR stacked on PR157 containing only the two G6-owned test-file changes. The original PRs remain intact. Avoid changing G2 files or protected ancestry.
+- Validate both failures before and after on clean integrated stack, 20+ repeated runs for each focus test at comparable load, full _shared/provider/market report suite, type/lint/secret scan, no-network/key-denial tests. Run fresh main merge-tree checks and report GitHub PR148 mergeable=false discrepancy, if still present. Report exact test counts, unstable residuals, HEADs and files, and whether merge needs further integration work.
+- No business logic, provider, Ledger, timeout execution behavior, policy, Auth/DB/Edge/Cron/Secret, actual external AI invocation or cost changes. No main merge, deploy, real data/API, or production access.
+- Write Report for this task, set status review_required/next_owner chatgpt, return K6 with evidence. K6 to decide source PR merge sequencing separately; not authorized by this task.
+
+## Report — F1/F2 test stability（G6記入）
+- result: NOT_STARTED
+- changed_files: none
+- tests: NOT_RUN
+- push/merge/deploy/production/paid_external_requests: 0
+- next_recommendation: G6→K6
+
+---
+
+# PRESERVED G6 PRIOR TASKS / REPORTS — do not rewrite below
+
 # G6 CURRENT TASK — 共通AI基盤 PR148/150/153/157 fresh-main 統合QA・競合調査（オフライン）
 
 - task_id: common-ai-provider-g6-four-pr-premerge-offline-qa-20261012
 - owner: claude
 - slot: claude-6
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -179,6 +214,11 @@ Prepare safe next decision for 4 stacked Draft PRs: #148 → #150 → #153 → #
   - K6 が F1 と F2（テストだけ、計3行）の修正を G6 に割り当てる
   - 修正後に統合検査をもう一度行い、PASS_PREMERGE_QA になったら、順番に merge するかを判断する
 ---
+
+## K6 FINAL — 2026-10-12 JST
+- verdict: **CHANGES_REQUIRED_TEST_ONLY / SOURCE_MERGE_HOLD / PRODUCTION_NO_GO**. G6 offline merge-tree from fresh main `45489fc305261fd3b74dd6a7f39fb97c418f0e75` reports PR148→150→153→157 no conflicts; GitHub PR148 mergeable API remains false at ChatGPT check, so live premerge recheck required and original flag cause unproven.
+- G6 reports provider126, market313, personalized129, X10, data packet42 PASS; _shared 628/629, two load-dependent timeout assertions fail 3/20 and 2/20. G6 disposable test corrections at >=6s yielded 0/20 on both; *not* committed. No tests independently rerun by ChatGPT. No product source issue proven. All four PRs Draft unchanged; merge0/deploy0/production0/paid0.
+- Narrow G6 test-only correction approved as NEXT task; historical task done/none. No automatic full Codex review. Reassess PASS_PREMERGE_QA on fixed integrated stack, no production permissions granted.
 
 # PRESERVED G6 PRIOR TASKS / REPORTS — do not rewrite below
 
