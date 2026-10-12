@@ -108,15 +108,15 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-g1-v1-release-gap-inventory-20261012
+- status: ready
+- task_id: kabumori-g1-ai-ask-v1-phase-a-ui-contract-20261012
 - start_code: G1
 - finish_code: K1
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: 2026-10-12 user chose sequential release readiness 1→6; first G1 read-only audit/inventory of V1 five-tab UI, unimplemented features, source/PR/release gates and owner dependencies. No product edits, no deployment, G2/G5/G6/G8/G9 boundaries protected.
-- recommended_model: Sonnet5（高）
+- allocation: 2026-10-12 user approved shipping AIに聞く V1 supporting holdings + market/news contextual Q&A. Phase A implements G1-only offline UI + secure server contract design, no live provider/DB/Auth and no G2/G5/G6/G8/G9 overlap. Phase B actual backend requires separate review and work.
+- recommended_model: Opus5.5（中）
 ## Claude G2
 - owner: claude
 - slot: claude-2
