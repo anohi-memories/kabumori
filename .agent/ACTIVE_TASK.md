@@ -154,16 +154,16 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: review_required
+- status: done
 - task_id: common-account-phase3i-local-findings-safe-lifecycle-plan-20261012
 - start_code: G5
 - finish_code: K5
-- next_owner: chatgpt
+- next_owner: none
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: User 2026-10-12「おk すすめて」 approved next G5 Phase3i bounded LOCAL-OFFLINE account lifecycle containment design and synthetic regression tests based on Phase3h F1/F2/F3/F4/F6/F7. Opus5.5 high. New G5 independent worktree, new docs/tests only, optional new Draft PR; older G5 Draft PRs #121/#122/#128/#130/#134/#137/#146 remain unchanged. Other G/H TASK and worktrees protected. No managed Supabase, real auth/prov, photo pause, live DB/Edge, migration, Option D/E11, paid action, merge/deploy. IDP_PREPAUSE_BLOCKED and managed_auth_delete BLOCKED. Return K5.
-- recommended_model: Opus5.5（高）
+- allocation: K5 2026-10-12 PASS_OFFLINE_DESIGN / READY_FOR_OFFLINE_IMPLEMENTATION_LIMITED / MANAGED_RELEASE_HOLD. Verified Draft PR147 38051f023bfd150f29829a075b6f87fa7c1e3e5f, 1 commit, 8 new design/model/test files, OPEN/DRAFT/UNMERGED, previous G5 PR heads unchanged. G5 reports 32 Deno and 32 mutation checks PASS, ChatGPT inspected source without independent test rerun. U1 Storage policies, U2 actual boundary implementation, U3 managed roles/audit and cross-service same-time verification unproven. No managed/paid/photo/production actions or PR merge; E11, Option D, managed_auth_delete and IDP_PREPAUSE all BLOCKED. Task completed; no next G5 reservation. Future bounded B1 PostgreSQL lock-order offline proof recommended. Other slots protected.
+- recommended_model: Opus5.5（高） (completed)
 ## Claude G6
 - owner: claude
 - slot: claude-6
