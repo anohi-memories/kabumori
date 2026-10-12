@@ -57,6 +57,10 @@ Phase 2 start (**it enrolls**, and never silently restarts an ended service or r
 deletion is open). An old build whose person ended Kabumori now gets `SERVICE_REENROLL_REQUIRED` instead of a
 silent profile; that is intended.
 
+Bulk loads, restores and backfills that insert `profiles` rows must disable the trigger deliberately
+(`alter table ... disable trigger`, an operator act); an `ON CONFLICT DO NOTHING` insert for a person whose state is
+not active is refused even when the row exists (the trigger fires before the conflict check).
+
 Limits (stated, not hidden): it does not fence Supabase Auth (an identity link, a sign-in, a token refresh
 happen in GoTrue); a token issued before the freeze is accepted by PostgREST/Storage until it expires, so only
 writes that reach one of the two boundaries above are refused; Storage object writes are fenced only by the
