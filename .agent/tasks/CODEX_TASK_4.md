@@ -3,8 +3,8 @@
 - task_id: common-account-g5-phase4-pr152-pr121-security-review-h4-20261012
 - owner: codex
 - slot: codex-4
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - start_code: H4
 - finish_code: C4
 - completion_code: C4
@@ -37,6 +37,21 @@ PROJECT_RULES.md / .agent/ORCHESTRATION.md / .agent/ACTIVE_TASK.md / .agent/CURR
 ## 完了
 .agent/CODEX_REPORT_4.mdへ新しい報告を先頭に追加し、以前の報告を保護する。H4のstatus review_required/next_owner chatgptへの更新のみ許可。result、changed_files、tests、reviewed_heads、commit/push/merge/deploy、remaining_issues、safety_checks、next_recommendation、return_to、completion_codeを明記する。
 最後に「共通アカウントG5のちゃ へ C4 を送ってください。」と記載する。
+
+
+## H4 Completion — Phase4 security review 2026-10-12 JST
+
+- result: CHANGES_REQUIRED（P2×2: H4-P4-R1 / H4-P4-R2）
+- reviewed_heads: PR152 5ad5bb40cadf013f00553acd5509f4f74fdbff7c / PR121 76b50e1e03f82faaa3460bab1603afa8fef3ce44
+- tests: provider17 PASS; independent provider5 = 3 PASS/2 FAIL; SQL behavior PASS; races8 PASS; real orchestrator SQL E2E4 PASS; rollback with dependent trigger fails, without dependent succeeds.
+- source_changes: none
+- merge/deploy/production: not_performed / 0 calls
+- report: .agent/CODEX_REPORT_4.md
+- next_recommendation: G5へ限定source修正を判断（Opus5.5高）、実adapter・managed環境は別ゲート。H4は他TASKを再割当しない。
+- return_to: 共通アカウントG5のちゃ
+- completion_code: C4
+
+共通アカウントG5のちゃ へ C4 を送ってください。
 
 ---
 
