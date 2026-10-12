@@ -1,3 +1,12 @@
+## K6 FINAL — G6 Phase2a market-report shadow adapter source candidate PASS — 2026-10-12 JST
+
+- G6 `common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012`: **done/none**. Draft PR #148 head `a71de72b3bcfc88547b616f789df7765283565ed`, 3 new adapter/test/docs files, OPEN/DRAFT/UNMERGED. Default OFF, shadow sends only after successful legacy step and does not alter report result. Ledger-protected single attempt, synthetic tests.
+- K6 **PASS_SOURCE_CANDIDATE / NOT_WIRED / PRODUCTION_NO_GO**. G6 reports 18 new tests, 112 provider and 283 report regressions, 4/4 mutations, type/lint/secret scan PASS; ChatGPT independently inspected PR/file diff, not the local tests. No G2/G5 overlap, paid API, production changes, merge/deploy.
+- Before Phase2b: G2 PR143/149 ownership coordination, sequential 90s latency, $5/40 trial budget cap, Edge key/ledger recovery, real shadow quality/cost observation; separate explicit authorization. H review reconsider at production/security boundary; not needed automatically now.
+- G6 task/index marked done/none. No new G6 assignment or source merge from this K6.
+
+---
+
 ## K2 FINAL — Shared market broadcast push PR149 source candidate / H2 focused review ready — 2026-10-12 JST
 
 - G2 `kabumori-market-report-scalable-broadcast-push-v1-20261012` verified `review_required/ChatGPT`; its Report describes [Draft PR149](https://github.com/anohi-memories/kabumori/pull/149) head `31c509df1c08ecc437ca4b70541284f223c836e2` (OPEN/Draft/unmerged) stacked on [PR143](https://github.com/anohi-memories/kabumori/pull/143) exact `889ca1b44cf82bd3ecb913818dca568456849feb`, **one commit / 17 paths**, no unrelated source. ChatGPT independently inspected PR metadata/file list and sections of SQL/RPC/broadcast worker/Expo sender/app link. G2 self-reports disposable PG17 behavior+concurrency+19 mutation 10k/100k scale PASS and 1,669 targeted Deno/app PASS; ChatGPT did NOT run tests. Synthetic 10k ~0.7min, 100k ~7.5min at 300msg/sec; real delivery/receipt/Expo/Supabase runtime NOT_RUN. CI Vercel build-rate-limit (not green).
