@@ -1,3 +1,31 @@
+# G2 CURRENT TASK — PR143 live mergeability blocker quick diagnosis (pre-authorized merge sequence)
+
+- task_id: kabumori-g2-pr143-live-mergeability-diagnosis-20261012
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- start_code: G2
+- finish_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Sonnet5（高）**
+- production_status: PRODUCTION_NO_GO
+
+## Context
+User explicitly authorized source-only merge of PR143→PR149→PR158. On fresh GitHub check, PR143 exact head 889ca1b4, base main SHA 2cc1508352906956e74b48498323bbafd551e101, reports mergeable=false, while PR149/158 child branch mergeable=true. Main advanced due to PR155 .agent_v2 migration and related .agent updates, while GitHub per-file comparison since prior K2 main 155a3c60 found ZERO overlapping files with PR143 (30 files). Cannot assume false means real source conflict. No merges have occurred in this attempt.
+
+## Required
+1. Verify TASK/ACTIVE_TASK/CURRENT_STATE and independent G2 worktree, fresh origin/main and PR143 actual branch/head status. Resolve why GitHub says false using disposable local `git merge --no-commit` or merge-tree without editing existing branches, verify actual conflicting paths and code semantics. Consult PR checks and exact head; watch for main concurrent advancement (PR155 and .agent_v2).
+2. If conflict is transient GitHub state, reproduce clean merge using current SHA, report the exact evidence and stop for K2; if actual conflict, identify owner and minimal fix; do not alter G1/G5/G6/.agent_v2 assets. No broad retesting unless source delta justifies it.
+3. Preserve PR143/149/158 branches and draft state, **no actual merge** in this limited diagnosis TASK. User's approval for merge remains recorded; ChatGPT after K2 may continue source-only merges after independent fresh validation.
+4. No production DB/Edge/Auth/Cron/Expo/EAS/paid APIs, no PR155 changes, no force push/rebase/reset.
+
+## Report
+Include main SHA, PR143 head/base/mergeability, exact cause, tests, files, source mutations, and GO/NO_GO recommendation. Set review_required/chatgpt on completion. Return かぶモリアプリG2のちゃへ K2.
+
+---
+## Previous G2 TASKs/Reports — protected verbatim below
+
 # G2 CURRENT TASK — かぶモリV1 PR143→PR149→PR158 マージ直前チェック
 
 - task_id: kabumori-g2-v1-three-pr-final-merge-preflight-20261012
