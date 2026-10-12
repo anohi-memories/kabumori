@@ -157,15 +157,16 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: review_required
 - task_id: common-account-g5-phase4-h4-c4-r1-r2-repair-20261012
 - start_code: G5
 - finish_code: K5
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
 - allocation: H4 C4 independent review of G5 Draft PR152 stacked on PR121 found 2 P2 defects. G5 Opus5.5（高） narrow code corrections only: R1 owner lease recheck around provider cleanup awaits / before service finish; R2 foreign dependent fence trigger rollback safety, with targeted fail-before/pass-after PG/TS regression. Align observed ACCOUNT_LIFECYCLE_BUSY SQLSTATE 42501 vs documented 55P03. PR152 current protected head 5ad5bb40cadf013f00553acd5509f4f74fdbff7c, PR121 76b50e1e03f82faaa3460bab1603afa8fef3ce44. No managed Supabase/production/merge/deploy/other slot changes. G5 Report history preserved.
+- latest_result: Phase4 H4 R1/R2 repaired on PR152 (head ccea1fe8132c6f573a768f0df5a033a05c62ef2c, one added commit, PR121 head unchanged): lease re-checked at every provider boundary + dependency-safe rollback + BUSY SQLSTATE 55P03. Fail-before/pass-after recorded; local PG17 only; no adapter registered, managed behaviour unproven; no merge/deploy. Report: .agent/tasks/CLAUDE_TASK_5.md#report--phase4-h4-c4-r1r2
 - recommended_model: Opus5.5（高）
 
 ## Claude G6

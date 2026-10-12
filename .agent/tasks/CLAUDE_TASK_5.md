@@ -3,8 +3,8 @@
 - task_id: common-account-g5-phase4-h4-c4-r1-r2-repair-20261012
 - owner: claude
 - slot: claude-5
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G5
 - finish_code: K5
 - return_to: 共通アカウントG5のちゃ
@@ -43,6 +43,78 @@ fresh origin/main、PROJECT_RULES.md、.agent/ORCHESTRATION.md、ACTIVE_TASK、C
 3. G5 TASK末尾に新規Reportを追記（task_id / changed_files / tests / commit / push / Draft PR / merge/deploy / blockers / safety_checks / remaining_issues / next_recommendation）。
 4. status review_required / next_owner chatgptへ戻し、**共通アカウントG5のちゃ へ K5 を送ってください。**
 5. 大きな新規Codex全面レビューを自動依頼しない。K5でR1/R2の回帰根拠を精査して次の統合を判断。
+
+---
+
+## Report — Phase4 H4 C4 R1/R2 限定修正（実装済み・ソース候補・ローカル実証）
+
+- task_id: common-account-g5-phase4-h4-c4-r1-r2-repair-20261012
+- 結果: **R1・R2 ともソース修正済み（改修前 FAIL → 改修後 PASS を取得）。付帯の BUSY コード不一致も解消。** 実 adapter 未登録・managed 実挙動未証明は変わらない。Phase 4 を production ready とは扱わない。
+- Draft PR: https://github.com/anohi-memories/kabumori/pull/152（Draft・未 merge・未 deploy）。既存 PR152 に追加 commit 1 本のみ（force/rebase なし）: `5ad5bb40cadf013f00553acd5509f4f74fdbff7c` → `ccea1fe8132c6f573a768f0df5a033a05c62ef2c`。依存 PR121 の head `76b50e1e03f82faaa3460bab1603afa8fef3ce44` は不変（`git ls-remote` で確認）。PR152 の PR 本文に追記済み。
+- 独立 worktree: `/Users/yuya/Developer/kabumori-g5-phase4`（前回の G5 worktree を継続使用。他スロットの worktree・ブランチ・PR には触れていない）。main との merge-tree は競合なし、他の open PR との対象ファイル重複なし（#121 の docs のみ、積み上げのため）。
+
+### 修正 A: H4-P4-R1 [P2] lease 喪失後も provider cleanup が続く
+- 原因（再現して確認）: 所有権確認は provider 段の入口 1 回だけで、`hasConnection()` の await 後・破壊的 `cleanup()` の前・adapter 間・`finish_service_deletion` の前に再確認がなく、adapter には lease を確かめる手段も渡されていなかった。
+- 実装（`provider_cleanup.ts`、`lifecycle_logic.ts`）:
+  1. `runProviderCleanups(adapters, userId, { stillOwned })`（必須）: `hasConnection()` の後・`cleanup()` の前、`cleanup()` の後（その答えは採用しない）に DB へ所有権を確認し、失ったら `lease_lost` で即停止（以降の adapter を呼ばない）。確認の失敗・例外・`true` 以外の値は「失った」とみなす（fail closed）。
+  2. adapter へ `{ signal, stillOwned() }` を渡す契約。複数の await／外部 mutation を持つ adapter は各 mutation の直前に `stillOwned()` を呼んで停止する（何か済んでいれば `reconciliation_required`、何も無ければ `blocked`）。ポートが待つのをやめた（タイムアウト・返却後）後は `stillOwned()` が false、`signal` が abort（遅れて再開した呼び出しが mutation しない）。タイムアウトは adapter を cancel しない・20 秒無応答は「副作用なし」の証拠ではない、を契約に明記。lease の確認は lock ではないため、mutation 側の冪等性と adapter 自身の durable な不確実状態が引き続き必要（オーケストレータは固定コードと lease 解放のみ）。
+  3. オーケストレータ: `lease_lost` は記録も終了もせず `DELETION_IN_PROGRESS`（旧オーナーとして）。全 adapter の後・POSTONA 終了 RPC の前にも所有権を再確認。lease を延ばす修正ではない。
+  4. adapter 未登録のときの流れは従来のまま（X saga → `finish_service_deletion` の既存の受け渡しは変更していない。この RPC が SQL 上 lease に束縛されないのは既存の性質で、doc に明記）。
+- 改修前 FAIL → 改修後 PASS（合成時計で lease を `LEASE_SECONDS+1` 進める）:
+  - R1-A `hasConnection` 中に喪失 → 旧: cleanup が 1 回走り entitlement が ended。新: cleanup 0 回・entitlement `deleting`・`DELETION_IN_PROGRESS`。
+  - R1-B provider1 の cleanup 中に喪失 → 旧: 次の provider の cleanup も走る。新: 呼ばれない。
+  - R1-C 最後の cleanup 中に喪失 → 旧: `finish_service_deletion` が走る。新: 走らない。
+  - R1-D POSTONA 未開始＋残存 provider でも、旧 owner は読取すら呼ばない（入口の確認）。
+  - R1-E adapter 内の `stillOwned()` が喪失後 false。
+  - R1-F 所有権の問い合わせ自体が一過性に失敗 → 止まる（スキップしない）。
+  - 5 件（R1-A〜E）が 5ad5bb40 のコードで FAIL、修正後は全件 PASS。正常・blocked・unknown・既存 X の順序は既存テストで維持。
+
+### 修正 B: H4-P4-R2 [P2] 他サービスのトリガー接続後に rollback が依存エラー
+- 原因（実 SQL で再現）: 共有 insert fence に別 table のトリガーが付くと `DROP FUNCTION`（RESTRICT）が依存エラーで失敗し、旧 rollback の「関数が無ければ fail-closed」という説明は PostgreSQL の依存管理と不整合だった（この説明は撤回）。
+- 選択と根拠（`common_account_core_fence_rollback.sql`）: **共有関数を「拒否 stub」にも「CASCADE 削除」にもしない**。G5 が付けたもの（profile トリガー・旧 `ensure_my_profile()`）だけを必ず戻し、共有関数 2 本は、他テーブルのトリガーまたは本体にその名を持つ他の関数が存在する間は**変更せず動いたまま残す**（NOTICE で依存先を列挙）。理由: (1) 他オーナーの保護を無断解除しない（CASCADE は不可）、(2) 拒否 stub は他オーナーの書込を全面停止する障害になり得る、(3) 緊急 rollback の目的（G5 が付けた profile の fence と ensure_my_profile を元に戻す）は依存の有無に関わらず達成できる、(4) fence 自体が不具合なら `create or replace` で本体を直す手順（DROP しない）。依存が無くなった後に再実行すれば関数を削除、再適用も可。再実行可能、「何も戻すものが無い」ときだけ `NOT_APPLIED`。PostgreSQL は plpgsql 本体内の呼び出しを依存として追跡しないため、ソース走査（保守的な guard。見えない呼び出し元は関数削除後に fail closed）を併用。
+- 改修前 FAIL → 改修後 PASS（local PG17、`fixture_fenced_rows` に別 table のトリガーを付けたまま実 rollback を実行）:
+  - 旧 rollback: `cannot drop function ... because other objects depend on it`（トランザクション全体が失敗、profile トリガーも残る）。
+  - 新 rollback: 成功。profile トリガー無し・`ensure_my_profile` は旧 invoker・共有関数 2 本は残り・他 table のトリガーは enabled のまま。他サービスの write 拒否が継続（凍結後の insert は `ACCOUNT_DELETION_IN_PROGRESS`、active は通る）。profile の旧 insert は復活（設計どおり）。再実行で変化なし。トリガーを外した後の再実行で関数が消え、再適用が通る。他 owner の関数が名指ししている場合も関数を残す。
+  - 依存なしの旧 rollback 回帰（カタログが適用前と一致・2 回目は `NOT_APPLIED`・再適用）は引き続き PASS。
+
+### 付帯: ACCOUNT_LIFECYCLE_BUSY の SQLSTATE と 3 秒の意味
+- 実動作は 42501 で、doc の「55P03」と不一致だった（改修前に race テストの SQLSTATE 検査で 42501 を確認）。**実装を doc に合わせて 55P03（lock_not_available）にした**（BUSY は「人の状態の拒否」ではなく再試行可の待ち打切りなので、再試行判定のクラスと整合）。他の拒否は 42501 のまま。
+- 既存 caller の再試行互換性: 本 migration は未適用で、フェンスの BUSY を読む既存 caller は無い（G4 の候補が読み分けるのは PR121 ガードの P0001/42501 で、このフェンスではない）。`ensure_my_profile()`／`start_*` の経路は先に lifecycle lock を取るため BUSY にならない。PostgREST が `55P03` をどの HTTP 状態に対応させるかは managed 未確認（doc に記載）。
+- 3 秒は「各ロック待ち」の上限（最大 3 回直列）で、RPC／文全体の hard deadline ではない（呼び出し側が先に取る lock は PostgreSQL 既定どおり待ち、プラットフォームの statement timeout が掛かる）。migration の見出し・仕様 doc を訂正。
+
+### changed_files（10、すべて既存 G5 ファイルの修正・他スロットのファイル 0）
+`supabase/functions/account-delete/{provider_cleanup.ts, lifecycle_logic.ts, provider_cleanup_test.ts, provider_cleanup_flow_test.ts}`、`supabase/migrations/20261012130000_common_account_core_service_fence.sql`（トリガーの SQLSTATE 1 行＋見出しの訂正。未適用）、`supabase/tests/{common_account_core_fence_rollback.sql, common_account_core_fence_run.sh, common_account_core_fence_mutations.py, common_account_phase4_ts_mutations.py}`、`docs/common-account/phase4-core-integration.md`（+533／−68 行）
+
+### 実行した検証（2 指摘の回帰と関連テストに限定。偽データ・使い捨て DB のみ）
+| 検証 | 結果 |
+| --- | --- |
+| R1 flow 5 本（改修前コード 5ad5bb40） | **5 FAIL**（改修前） |
+| 同 5 本＋一過性失敗の 1 本（改修後） | **PASS** |
+| Deno `account-delete/` 全体 | **96 PASS / 0 FAIL**（前回 83 → +13）、`deno check` PASS |
+| R2 rollback＋依存つき（旧 rollback を指定して実行） | **FAIL 再現**（依存エラー） |
+| `common_account_core_fence_run.sh` 全 section | **ALL PASS**（約 20 秒。依存つき rollback・関数の呼び出し元・BUSY の SQLSTATE `55P03` を追加。改修前に 42501 で FAIL を確認） |
+| SQL 変異（`common_account_core_fence_mutations.py`） | fence 15 件＋rollback 5 件 **すべて検出**（rollback の CASCADE 単独は到達不能な等価変異のため、ガード無効化との組で検出） |
+| TS 変異（`common_account_phase4_ts_mutations.py`） | **22/22 検出**（所有権の再確認・停止・タイムアウト後の失効・問い合わせ失敗を追加） |
+| 既存 Phase 3a TS 変異 | **45/45 検出**・対照 PASS |
+| `git diff --check` / 秘密情報スキャン / main との merge-tree | clean／該当なし／競合なし |
+- 意図的に変異対象外: オーケストレータの「利用権終了の直前の `owned()`」は、ポートが全 adapter の最後に所有権を確認済みで間に await が無いため等価変異（二重防御として残し、スクリプトに明記）。
+
+### merge / deploy
+merge なし・deploy なし・migration 本番適用なし・EAS なし。PR152 は Draft・MERGEABLE のまま。
+
+### blockers / remaining_issues（PASS と偽らない）
+1. **実 adapter は未登録**（G4 の Threads adapter・フットプリントへの 4 表追加・provider の durable な不確実状態は未実装・未レビュー）。ポートは契約を強めただけで、実 adapter が `stillOwned()` を各 mutation の直前に呼ぶかは G4 統合時に確認が必要。
+2. managed Supabase の実挙動（権限、`55P03` の PostgREST 対応、Storage ポリシー、実 Edge の中断）は未証明。ローカル PG17・合成時計・fake lifecycle のみ。
+3. `finish_service_deletion` は SQL 上 lease に束縛されない（既存の性質）。TS 側の再確認は窓を狭めるが閉じない。閉じるなら別 migration（lease 付き finish）が要る＝別 TASK の判断事項。
+4. Auth identity 連携 race、`managed_auth_delete` BLOCKED、`IDP_PREPAUSE_BLOCKED`、provider 遠隔 revoke、アプリ配線は従来どおり未解決。
+5. B2 ガード（PR121）の待ちは無制限のまま（doc のとおり）。
+
+### safety_checks
+managed Supabase・本番・実プロバイダ／OAuth／ユーザー・シークレット・有料 API・本番 migration・merge・deploy・EAS・E11／Option D・`managed_auth_delete`・写真アプリ操作: いずれも 0。`IDP_PREPAUSE_BLOCKED` 維持。他スロット（G1〜G4、G6〜G10、H1〜H5）の TASK／Report／worktree／ブランチ／PR は未変更。#121/#122/#128/#130/#134/#137/#146/#147 の head は不変。force push・自己 merge なし。過去の G5 Report 全文は原文のまま保持。
+
+### next_recommendation
+- K5 で R1/R2 の回帰根拠（上の表）を精査し、**追加の全面レビューは不要**。
+- 次に価値が大きいのは、G4 が T13 ガードと行フェンスを自分の接続 RPC に載せ、adapter の契約（`stillOwned()`、durable な不確実状態）を実装する統合（G4 所有の別 TASK）。そのとき「finish を lease 付き RPC にするか」も併せて判断する。
 
 ---
 
