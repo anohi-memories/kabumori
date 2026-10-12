@@ -151,4 +151,8 @@ mutate lease_by_tx_start "o.owner_lease_expires_at > pg_catalog.clock_timestamp(
 mutate no_recheck_after_locks "  if not public.threads_cleanup_authorized(p_user_id) then
     return pg_catalog.jsonb_build_object('outcome', 'blocked', 'code', 'LEASE_NOT_HELD');" "  if false then
     return pg_catalog.jsonb_build_object('outcome', 'blocked', 'code', 'LEASE_NOT_HELD');"
+# F4 T13 task (found on the real G5 world): the connection's OAuth states must go with it, and their verifier.
+mutate no_oauth_state_removal "    delete from public.social_account_oauth_states s where s.social_account_id = v_account.id;
+" ""
+mutate verifier_kept "    delete from vault.secrets s where s.id = any (v_verifiers)" "    delete from vault.secrets s where false and s.id = any (v_verifiers)"
 echo "ALL PASS"

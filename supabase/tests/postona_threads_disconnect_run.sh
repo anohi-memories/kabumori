@@ -170,7 +170,10 @@ mutate() {
   echo "PASS mutation $tag caught (${got:0:140})"
 }
 mutate gate_open "language sql immutable set search_path = '' as \$\$ select false \$\$;" "language sql immutable set search_path = '' as \$\$ select true \$\$;"
-mutate no_lifecycle_check "  if exists (select 1 from private.account_lifecycle_operations o" "  if false and exists (select 1 from private.account_lifecycle_operations o"
+mutate no_lifecycle_decision "  v_code := private.account_lifecycle_service_state_refusal(v_user, 'x_autopost');" "  v_code := null;"
+mutate removal_during_deletion "v_code not in ('SERVICE_NOT_ACTIVE', 'SERVICE_NOT_REGISTERED')" \
+  "v_code not in ('SERVICE_NOT_ACTIVE', 'SERVICE_NOT_REGISTERED', 'ACCOUNT_DELETION_IN_PROGRESS', 'SERVICE_DELETION_IN_PROGRESS')"
+mutate active_only "  if v_code is not null and v_code not in ('SERVICE_NOT_ACTIVE', 'SERVICE_NOT_REGISTERED') then" "  if v_code is not null then"
 mutate no_session_check "  if not found then return public.threads_manual_publish_refused('AUTH_REQUIRED'); end if;
   -- Only the caller's own" "  -- Only the caller's own"
 mutate foreign_workspace "  v_workspace := public.social_mobile_account_deletion_workspace(v_user);" \
@@ -184,4 +187,8 @@ mutate no_shared_secret_check "  if v_secret is not null and exists (
        select 1 from public.social_accounts o" "  if false and exists (
        select 1 from public.social_accounts o"
 mutate no_account_row_lock "   where a.brand_id = v_workspace and a.platform = 'threads' for update;" "   where a.brand_id = v_workspace and a.platform = 'threads';"
+# F4 T13 task (found on the real G5 world): the connection's OAuth states must go with it, and their verifier.
+mutate no_oauth_state_removal "    delete from public.social_account_oauth_states s where s.social_account_id = v_account.id;
+" ""
+mutate verifier_kept "    delete from vault.secrets s where s.id = any (v_verifiers)" "    delete from vault.secrets s where false and s.id = any (v_verifiers)"
 echo "ALL PASS"

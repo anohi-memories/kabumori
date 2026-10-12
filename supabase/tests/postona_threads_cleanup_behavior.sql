@@ -131,6 +131,19 @@ begin
   update public.threads_manual_publish_attempts set status = 'failed', error_code = 'CONTAINER_EXPIRED', provider_post_id = null where id = att;
 end $$;
 
+-- F4: the connection's OAuth states as PR #124 leaves them (no cascade), one with a verifier secret, and another
+-- person's state that must stay.
+do $$
+declare v uuid;
+begin
+  insert into vault.secrets (secret) values ('fake_verifier_a') returning id into v;
+  perform pg_temp.put('verifier_a', v::text);
+  insert into public.social_account_oauth_states (social_account_id, brand_id, state_hash, code_verifier_vault_secret_id, consumed_at)
+  select pg_temp.get('acct_a'), a.brand_id, repeat('a', 64), null, now() from public.social_accounts a where a.id = pg_temp.get('acct_a')
+  union all select pg_temp.get('acct_a'), a.brand_id, repeat('b', 64), v, null from public.social_accounts a where a.id = pg_temp.get('acct_a')
+  union all select pg_temp.get('acct_b'), a.brand_id, repeat('c', 64), null, now() from public.social_accounts a where a.id = pg_temp.get('acct_b');
+end $$;
+
 -- ---- The removal: one person's Threads footprint, nothing else; idempotent --------------------------------
 do $$
 declare
@@ -145,6 +158,9 @@ begin
   perform postona_rel.check(r = '{"code": "LOCAL_REMOVED", "outcome": "local_removed_remote_unverified"}', 'removed: ' || r::text);
   perform postona_rel.check(pg_temp.footprint(acct) = '0|0|0|0|0|0', 'no Threads row, permission, attempts, nonces or custody left: ' || pg_temp.footprint(acct));
   perform postona_rel.check(not exists (select 1 from vault.secrets s where s.id = v_secret), 'the Threads secret is gone');
+  perform postona_rel.check(not exists (select 1 from public.social_account_oauth_states s where s.social_account_id = acct), 'its OAuth states are gone');
+  perform postona_rel.check(not exists (select 1 from vault.secrets s where s.id = pg_temp.get('verifier_a')::uuid), 'their verifier secret is gone');
+  perform postona_rel.check(exists (select 1 from public.social_account_oauth_states s where s.social_account_id = pg_temp.get('acct_b')), 'another person''s OAuth state stays');
   perform postona_rel.check(pg_temp.footprint(pg_temp.get('acct_b')) = b_before, 'another person untouched');
   perform postona_rel.check((select md5(string_agg(to_jsonb(s)::text, ',' order by s.id)) from public.social_accounts s where s.platform = 'x') = x_before, 'X rows untouched');
   perform postona_rel.check(public.threads_provider_connection_state(a) = 'not_connected', 'no connection any more');

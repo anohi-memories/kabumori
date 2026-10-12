@@ -1,5 +1,7 @@
 -- SOURCE CANDIDATE ONLY. NOT a migration, NOT applied anywhere (F4,
--- postona-f4-threads-disconnect-lease-safe-v1-20261012). Apply only after the G4 publish stack (custody ->
+-- postona-f4-threads-disconnect-lease-safe-v1-20261012; lifecycle removal policy on G5 Phase 4 by F4,
+-- postona-f4-threads-t13-authenticated-writer-integration-20261013). Apply only after G5 Phase 4
+-- (20261012130000) and the G4 publish stack (custody ->
 -- manual publish -> release), as a single reviewed file, after an independent security review. It ships
 -- with its release gate CLOSED (threads_disconnect_gate_open() = false): even applied, nothing can be
 -- disconnected until a separately reviewed change opens it.
@@ -11,9 +13,13 @@
 --   public.disconnect_threads_account(social_account_id, expected_handle) -> jsonb
 --     run with the CALLER'S JWT (role authenticated; auth.uid() and the session from the same verified
 --     claims), ONE transaction:
---       release gate -> G5 fence (T13: POSTONA active, no deletion; its locks first and held) -> no deletion
---       of this person in progress (G5's table) -> the caller's Auth session still signed in (auth.sessions
---       FOR SHARE) -> the caller's OWN self-service POSTONA workspace (workspace lock) -> owner/admin
+--       release gate -> G5's lifecycle decision for the caller (Phase 4 private.account_lifecycle_service_
+--       state_refusal: the I1 locks first, held to COMMIT) under a REMOVAL policy (F4 T13 task): allowed while
+--       POSTONA is active, suspended, ended or not registered -- removing a credential grants nothing and an
+--       ended service must not strand one -- and refused while the account or POSTONA is being deleted (G5's
+--       cleanup owns the removal under its lease), while the account is locked or unknown, or busy -> the
+--       caller's Auth session still signed in (auth.sessions FOR SHARE) -> the caller's OWN self-service
+--       POSTONA workspace (workspace lock) -> owner/admin
 --       membership -> its Threads account FOR UPDATE, the one the person confirmed (id + handle) ->
 --       1. publishing stops: the manual publish permission is withdrawn (kept withdrawn in every answer
 --          below except a refusal, which changes nothing);
@@ -49,14 +55,21 @@ begin
      or pg_catalog.to_regclass('public.social_account_manual_publish_permissions') is null
      or pg_catalog.to_regclass('public.threads_account_credential_custody') is null
      or pg_catalog.to_regclass('public.threads_manual_publish_nonces') is null
-     or pg_catalog.to_regprocedure('public.threads_manual_publish_fence(uuid)') is null
      or pg_catalog.to_regprocedure('public.threads_manual_publish_session_id()') is null
      or pg_catalog.to_regprocedure('public.threads_manual_publish_refused(text)') is null then
     raise exception 'THREADS_DISCONNECT_PRECONDITION_PUBLISH_STACK';
   end if;
-  if (select count(*) from pg_catalog.pg_attribute a
-      where a.attrelid = pg_catalog.to_regclass('private.account_lifecycle_operations')
-        and a.attname in ('user_id', 'operation_type', 'service_key', 'status') and not a.attisdropped) <> 4 then
+  select c.relowner into v_owner from pg_catalog.pg_class c where c.oid = 'public.social_accounts'::regclass;
+  -- G5 Phase 4: the one lifecycle decision, owned by the table owner and reachable by no API role.
+  if pg_catalog.to_regprocedure('private.account_lifecycle_service_state_refusal(uuid,text)') is null
+     or (select p.proowner from pg_catalog.pg_proc p
+         where p.oid = pg_catalog.to_regprocedure('private.account_lifecycle_service_state_refusal(uuid,text)')) is distinct from v_owner
+     or (select p.prorettype from pg_catalog.pg_proc p
+         where p.oid = pg_catalog.to_regprocedure('private.account_lifecycle_service_state_refusal(uuid,text)')) is distinct from 'text'::regtype
+     or exists (select 1 from pg_catalog.pg_roles r
+                where r.rolname in ('anon', 'authenticated', 'service_role', 'authenticator')
+                  and (pg_catalog.has_function_privilege(r.oid, 'private.account_lifecycle_service_state_refusal(uuid,text)', 'EXECUTE')
+                       or pg_catalog.pg_has_role(r.oid, v_owner, 'MEMBER'))) then
     raise exception 'THREADS_DISCONNECT_PRECONDITION_LIFECYCLE';
   end if;
   if (select count(*) from pg_catalog.pg_attribute a
@@ -66,7 +79,10 @@ begin
   end if;
   if pg_catalog.to_regprocedure('public.social_mobile_account_deletion_workspace(uuid)') is null
      or pg_catalog.to_regprocedure('public.social_mobile_account_deletion_workspace_lock(text)') is null
-     or pg_catalog.to_regclass('vault.secrets') is null then
+     or pg_catalog.to_regclass('vault.secrets') is null
+     or (select count(*) from pg_catalog.pg_attribute a
+         where a.attrelid = pg_catalog.to_regclass('public.social_account_oauth_states')
+           and a.attname in ('social_account_id', 'code_verifier_vault_secret_id') and not a.attisdropped) <> 2 then
     raise exception 'THREADS_DISCONNECT_PRECONDITION_DELETION';
   end if;
   select c.relowner into v_owner from pg_catalog.pg_class c where c.oid = 'public.social_accounts'::regclass;
@@ -101,6 +117,7 @@ declare
   v_account public.social_accounts%rowtype;
   v_withdrawn boolean;
   v_secret uuid;
+  v_verifiers uuid[];
 begin
   if not public.threads_disconnect_gate_open() then return public.threads_manual_publish_refused('DISCONNECT_DISABLED'); end if;
   if v_user is null or v_session is null then return public.threads_manual_publish_refused('AUTH_REQUIRED'); end if;
@@ -109,13 +126,13 @@ begin
      or p_expected_handle ~ '[[:cntrl:][:space:]]' then
     return public.threads_manual_publish_refused('REQUEST_INVALID');
   end if;
-  -- G5 lifecycle first (T13): POSTONA active for the caller, no deletion; its locks are held to COMMIT.
-  v_code := public.threads_manual_publish_fence(v_user);
-  if v_code is not null then return public.threads_manual_publish_refused(v_code); end if;
-  -- A deletion of this person (whole account, or POSTONA) owns the removal under its lease: never race it.
-  if exists (select 1 from private.account_lifecycle_operations o
-             where o.user_id = v_user and o.status = 'in_progress'
-               and (o.operation_type = 'account_deletion' or (o.operation_type = 'service_deletion' and o.service_key = 'x_autopost'))) then
+  -- G5 lifecycle first (Phase 4 decision, I1 locks held to COMMIT), under the REMOVAL policy: a suspended,
+  -- ended or never-registered POSTONA may still remove its Threads credential; a deletion of this person
+  -- (whole account, or POSTONA) owns the removal under its lease and is never raced; a locked or unknown
+  -- account changes nothing.
+  v_code := private.account_lifecycle_service_state_refusal(v_user, 'x_autopost');
+  if v_code = 'ACCOUNT_LIFECYCLE_BUSY' then return public.threads_manual_publish_refused('BUSY'); end if;
+  if v_code is not null and v_code not in ('SERVICE_NOT_ACTIVE', 'SERVICE_NOT_REGISTERED') then
     return public.threads_manual_publish_refused('ACCOUNT_LIFECYCLE_BLOCKED');
   end if;
   -- The person is still signed in on this session. FOR SHARE: a sign-out or expiry UPDATE waits for us.
@@ -162,12 +179,22 @@ begin
   end if;
   -- 4. The removal, read back. On any failure only this block rolls back; publishing stays stopped.
   begin
+    -- The connection's own OAuth states (PR #124 keeps them, consumed or pending): they reference the row
+    -- without a cascade, as the POSTONA deletion removes them first. A verifier secret goes with its state.
+    select coalesce(pg_catalog.array_agg(s.code_verifier_vault_secret_id), '{}') into v_verifiers
+      from public.social_account_oauth_states s
+     where s.social_account_id = v_account.id and s.code_verifier_vault_secret_id is not null;
+    delete from public.social_account_oauth_states s where s.social_account_id = v_account.id;
     if v_secret is not null then
       delete from vault.secrets s where s.id = v_secret;
     end if;
     -- Cascades: attempts (and their nonces), credential custody.
     delete from public.social_accounts a where a.id = v_account.id;
+    delete from vault.secrets s where s.id = any (v_verifiers)
+       and not exists (select 1 from public.social_account_oauth_states o where o.code_verifier_vault_secret_id = s.id)
+       and not exists (select 1 from public.social_accounts o where o.vault_access_token_secret_id = s.id or o.vault_refresh_token_secret_id = s.id);
     if exists (select 1 from public.social_accounts a where a.id = v_account.id)
+       or exists (select 1 from public.social_account_oauth_states s where s.social_account_id = v_account.id)
        or exists (select 1 from public.social_accounts a where a.brand_id = v_workspace and a.platform = 'threads')
        or exists (select 1 from public.threads_manual_publish_attempts t where t.social_account_id = v_account.id)
        or exists (select 1 from public.social_account_manual_publish_permissions p where p.social_account_id = v_account.id)

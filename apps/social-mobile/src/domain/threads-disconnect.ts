@@ -122,7 +122,7 @@ export const DISCONNECT_FAILURE_COPY: Readonly<Record<string, string>> = {
   REQUEST_INVALID: 'この操作は受け付けられませんでした。画面を読み直してからお試しください。',
   ACCOUNT_CHANGED: '表示中のThreadsアカウントが変わっています。画面を読み直して、もう一度確認してください。',
   ACCOUNT_NOT_FOUND: 'このThreadsアカウントは見つかりませんでした。画面を読み直してください。',
-  ACCOUNT_LIFECYCLE_BLOCKED: 'アカウントの削除や利用終了の手続き中のため、ここからは解除できません。',
+  ACCOUNT_LIFECYCLE_BLOCKED: 'アカウントの削除・利用終了の手続き中か、アカウントが一時的に止められているため、ここからは解除できません。',
   SERVICE_NOT_ACTIVE: 'POSTONAの利用登録が有効ではないため、解除できません。',
   DISCONNECT_FORBIDDEN: 'この操作を行う権限がありません。',
   BUSY: '処理が混み合っています。少し待ってからお試しください。',
