@@ -167,16 +167,16 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: ready
+- status: review_required
 - task_id: common-ai-provider-g6-phase2b-market-report-wiring-offline-20261012
 - start_code: G6
 - finish_code: K6
-- next_owner: claude
+- next_owner: chatgpt
+- latest_result: PASS_OFFLINE — Draft PR #150 (18d9058a, stacked on unchanged PR148): deferred market report shadow wiring (records during the report, sends after complete within the time left), not wired; handler-boundary harness 11/11 with real openAiRequester/generateSharedAnalysis + fixtures, also under --deny-net and denied key env; mutants 11/11; provider 123 / report 283 / _shared 626; G2 handler patch contract + canary/stop thresholds documented; production=0, paid calls=0. Report: .agent/tasks/CLAUDE_TASK_6.md
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
 - report: .agent/tasks/CLAUDE_TASK_6.md#report--phase2b
 - recommended_model: Opus5.5（高）
-- latest_result: Phase2a K6 PASS_SOURCE_CANDIDATE (PR148 open/Draft, default OFF, not wired), prior Phase1g one paid smoke done/closed. Histories protected in own TASK.
 - allocation: Phase2b **offline-only** full generator-boundary wiring/harness and synthetic tests/docs, new independent G6 Draft PR only. G2 protected PR143/149, market-report handler/notification/worker/migration files; no other G/H edits. If actual handler edit required, document handoff contract and STOP.
 - production_mutation_window: FORBIDDEN; no paid API, real report/shadow, Edge secrets, DB/Cron, deploy, merge or live cutover.
 ## Claude G7

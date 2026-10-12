@@ -3,8 +3,8 @@
 - task_id: common-ai-provider-g6-phase2b-market-report-wiring-offline-20261012
 - owner: claude
 - slot: claude-6
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -36,18 +36,74 @@
 - **Never automatically activate shadow, create/inspect secrets, increase budget, change live Edge/Cron, merge PRs or run another paid Claude smoke.** Later live canary/policy/production needs fresh user approval after K6 and any required independent security review.
 
 ## Report — Phase2b（G6記入）
-- task_id: common-ai-provider-g6-phase2b-market-report-wiring-offline-20261012
-- result: NOT_STARTED
-- changed_files: none
-- tests: NOT_RUN
-- push: no
-- merge: no
-- deploy: no
-- production: 0
-- paid_external_requests: 0
-- remaining_issues: G6 to resolve
-- next_recommendation: G6 starts; return K6
 
+- task_id: common-ai-provider-g6-phase2b-market-report-wiring-offline-20261012
+- result: **PASS_OFFLINE (candidate, not wired)**。本番への配線には G2 の `handler.ts` パッチが必要。その差分案と受け入れ条件を文書化した（G2 のファイルは変更していない）
+- changed_files: Draft PR [#150](https://github.com/anohi-memories/kabumori/pull/150)（#148 の上に積んだもの）。新規3ファイルだけで、既存ファイルの変更は 0
+  - `supabase/functions/_shared/ai_provider/market_report_wiring.ts`（`prepareMarketReportShadow`）
+  - `supabase/functions/_shared/ai_provider/market_report_wiring_test.ts`（11件）
+  - `docs/ai-provider/PHASE2B_MARKET_REPORT_WIRING_PLAN.md`
+  - 変更していないもの: PR #148（head `a71de72b` のまま）、`market-report-analysis/`（G2）、PR143/149、worker、migration、通知、`mod.ts`、ポリシー
+- branch / commit: `claude/g6-phase2b-market-report-wiring-20261012` @ `18d9058a`（base: `claude/g6-phase2a-market-report-adapter-20261012`）
+- 主な発見: Phase 2a のまま「各生成の直後に順番に shadow」で配線すると、配信の前に最大 90 秒 × 回数が加わる。Free plan の Edge の制限（wall clock 150 秒、応答 150 秒）を越えると、**レポート自体が失敗しうる**
+  - → **後回し（deferred）方式** にした
+    - 生成中は generate の依頼と結果を記憶するだけで、送らない
+    - `complete_market_report_analysis` の成功後に `flush({ deadlineAtMs })` で送る。既定は最後の生成1回
+    - 締め切りの 10 秒前までに収め、残り 20 秒未満なら送らない。1回の制限は残り時間に合わせて短くし、2件目の前にも確かめ直す
+  - off（既定、または設定が欠けたとき）は今の requester そのもの。読むのはモードの設定だけ
+- integration（handler.ts は読み取りのみで確認）
+  - 接続点: `generateSharedAnalysis(input, openAiRequester(...), ...)` の requester
+  - claim の `cycle_id` と `attempt`（1〜3）が、呼び出し ID `mr:<cycle>:a<attempt>:generate:<n>` になる
+  - G2 の差分案は計画書 §8 にある: `Deps.waitUntil`、処理開始 + 150 秒の締め切り、sink はログ1行
+  - G2 のパッチに要るテスト6項目と、衝突時に止める条件も §8 に記載
+- 時間・Cron
+  - Cron は朝 07:55 / 再試行 08:05、引け 16:20 / 16:35（CURRENT_STATE の記録）。間隔は wall clock の最大 400 秒より長いので、shadow は再試行と重ならない
+  - 確定済みのサイクルは skip されるので、shadow は2回目が無い
+  - **オフラインでは保証しないこと**（計画書 §4）: `EdgeRuntime.waitUntil` の挙動、Opus の実際の応答時間、送信中に worker が止められた場合（回復処理が上限額で確定させる）
+  - 今のレポートは、shadow が無くても最悪で 150 秒を越えうる。これは G2 の既存の性質で、今回の変更とは関係しない
+- budget（ポリシーは広げない）
+  - 1回 約 $0.27（予約の上限額は約 $0.45）。`last` で1日 2 回・約 $0.54。1日の枠（6回・$2）に収まる
+  - 月は 42〜44 回・約 $11〜12 で、$5 の枠を越える。17 回目まで通り、18 回目から `COST_LIMIT` で送る前に拒否される（目安は月の 9 営業日目）。レポートには影響しない（テスト済み）
+  - カナリア案: 3 営業日・最大6回・約 $1.6。前提が5つ、止める条件が6つ、止め方が3段階（計画書 §6）。どれも別承認
+- tests（実 API・本番 0。すべて実行した結果）
+  - 新規 harness 11/11 PASS
+    - 本物の `openAiRequester` と `generateSharedAnalysis`、朝刊 10/1・引け 9/30・引け 9/17 の fixture を使用
+    - 通信先は偽の OpenAI・Anthropic・台帳（試験用ポリシーと「1試行1送信」を再現）。それ以外の宛先はテスト失敗
+    - off と shadow で、packet・hash・diagnostics・OpenAI の費用と依頼のバイト列が一致する
+    - shadow は生成中に送信 0、確定後に1回
+    - 再生成（`last` / `all`）、2件目の前の残り時間の再確認
+    - 同じ試行は1回分だけ払い、次の試行は新しい呼び出しになる
+    - 日・月の枠、台帳の認証拒否、Claude の 529 と 429、時間切れ（上限額で確定）、取消（送信前・送信中）、sink の例外、`NO_TIME`、`ALREADY_FLUSHED`
+    - OpenAI の 400 による失敗と、503 からの再試行が今と同じ
+    - 設定不足7通りで off になる。記録にキー・本文が入らず、読む設定は5つだけ
+  - 鍵の環境変数を読み取り禁止にし、`--deny-net` にしても 11/11 PASS
+  - mutation 11/11 検出（off で別の関数を返す／Fact も記憶する／生成中に送る／既定を all にする／時間の確認を外す・1回だけにする／flush を2回動かす／試行番号を固定する／取消の確認を外す／制限時間を短くしない／取消を渡さない）
+    - 途中で1件がすり抜けた。原因は時間の確認が2か所に重複していたことで、重複を消して確認を補った
+  - 回帰: 共通 Provider 123（分離の規則のテストを含む）、市況レポート 283、`_shared` 全体 626 がすべて PASS。`deno check` と `deno lint`（32ファイル）も PASS
+  - 差分の秘密情報スキャン 0件（テスト用の偽の値だけ）
+  - PR #150 の CI: 作成直後で1件 PASS、1件実行中
+- collision: 2026-10-12 に開いている全 PR のファイルを確認した。`market-report-analysis/` と `_shared/ai_provider/` に触れているのは #148（G6）だけ
+  - PR143（`889ca1b4`）と PR149（`31c509df`）は Draft のままで、重なりは無い
+- push: PR の branch へ push 済み。この Report は main へ fast-forward。merge: no。deploy: no
+- production=0、paid_external_requests=0
+  - Secrets・`.env`・キーは読んでいない
+  - DB・Edge・Cron・X・push への操作は無い
+- security_checks
+  - 既定は off で、設定が欠けても off
+  - 主体は system だけで、予約に `user_id` / `brand_id` は付かない
+  - 台帳を必ず通る。1回だけ送り、再試行も fallback もしない
+  - レポートの費用（`cost_usd`）は OpenAI 分のまま。Claude の費用は台帳だけに残る
+  - 記録にキー・本文が入らない
+- blockers（どれも別 TASK・別承認）
+  1. `handler.ts` への配線と、その中での `waitUntil` の確認（G2）
+  2. 回復処理の Cron（本番で使う前の必須条件）
+  3. Edge Secret `ANTHROPIC_API_KEY`（専用 workspace と spend limit）
+  4. カナリア（Opus の応答時間と時間切れの割合を測る）
+  5. 毎日続けるなら、ポリシーの見直し（別の本番変更）か方式 C（別の処理に分ける）
+- next_recommendation
+  - K6 で PR #148 と #150 を評価する
+  - 受け入れられたら、G2 の手が空いた時点で G2 の配線パッチ TASK を出す
+  - 本番は「回復処理の Cron → Secret → off のまま deploy・1サイクル観察 → カナリア」の順に、それぞれ別承認で進める
 ---
 
 # PRESERVED G6 PRIOR TASKS / REPORTS — do not rewrite below
