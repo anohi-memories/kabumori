@@ -1,3 +1,42 @@
+# G1 CURRENT TASK — ホーム戻り先・保有件数表示の修正 — 2026-10-12
+
+- task_id: kabumori-g1-home-report-return-and-holdings-count-fix-20261012
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- task_type: narrow UI bugfix / regression
+- recommended_model: **Sonnet5（中）**
+- start_code: G1
+- finish_code: K1
+- return_to: かぶモリアプリG1のちゃ
+- priority: normal
+
+## Background
+G1 five-tab QA K1 accepted PASS_WITH_FINDINGS: P3 home report detail return lands on reports list, P4 failed tracked stock load incorrectly shows "保有銘柄 0銘柄". Previous QA task now done; full Report archived below.
+
+## Required scope
+1. **P3**: Home "今日のかぶモリレポート" > "レポートを見る" > detail > back/edge-swipe must land on HOME, not reports list. Inspect actual root `/report-detail` route and current navigation contract; likely minimum `src/app/(tabs)/index.tsx` pathname switch from nested `/reports/[id]` to root `/report-detail` with correct route parameters, but do not blindly assume. Reports tab's own list > detail > back remains reports list. Preserve portfolio AI card's current behavior. Add focused navigation regression for each entry origin.
+2. **P4**: When tracked-stock registration FETCH FAILS or is UNKNOWN, never show "保有銘柄 0銘柄" as if an authenticated empty holding list were verified. Hide count badge or show neutral placeholder when unknown; show 0 only after successful authoritative empty load. Keep existing error/retry, valuation withholding, watchlist and five tabs intact. Add tests for loading, failure, success-empty and success-nonempty.
+
+## Preflight and safety
+- Read PROJECT_RULES, ORCHESTRATION, active/current, own archived Report; fetch fresh origin/main; verify actual worktree/branch and PR overlap at start and before push.
+- Existing PR #143 changes `src/app/(tabs)/reports/[id].tsx` and report route tests; PR #149 report backend integration. Do not change their files or unmerged behaviors. Check newer PRs as well. Keep G1 independent fresh-main worktree; never touch other slot branch/dev server.
+- Restrict changes to G1-owned home route/portfolio presentation and focused tests. No G2 report generation, G5 Auth, DB/RLS/RPC/Edge, API or real user data writes. No five-tab redesign.
+- No automatic merge/deploy, EAS/TestFlight/App Store, paid calls, production changes.
+- Run targeted tests, full app regression (if feasible), tsc and diff check; fixture Simulator smoke 375pt; if 402pt feasible verify too. Record real commands/results, separate existing TS errors. Do not alter actual holdings.
+- Produce one small non-Draft G1 PR if needed, but DO NOT self-merge. If route contract conflicts with unmerged G2 PR, stop and report instead of changing G2-owned files.
+
+## Completion
+Update current G1 Report with result, files, tests, branch/commit/PR status, safety, unresolved risk; status review_required / next_owner chatgpt. Preserve archived reports. End: かぶモリアプリG1のちゃ へ K1 を送ってください。
+
+## Report — current task
+Pending G1 implementation.
+
+---
+
+## Archived G1 tasks and reports
+
 # G1 CURRENT TASK — アプリ全体5タブのリリース前Simulator QA — 2026-10-12
 
 - task_id: kabumori-g1-five-tab-release-simulator-qa-20261012
