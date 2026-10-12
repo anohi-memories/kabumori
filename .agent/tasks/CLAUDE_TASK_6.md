@@ -3,8 +3,8 @@
 - task_id: common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012
 - owner: claude
 - slot: claude-6
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -33,6 +33,16 @@
 - Phase2a pass = 新しいadapter層と安全なdisabled default、合成Fixtureテスト、error/budget/idempotency検証、Draft PR + docs + Report。実朝刊/大引けの生成モデル変更・本番動作は**未完了が正しい**。
 - DB/RLS/Auth/Secrets/productionへの差分が出たら fail-closed STOP。K6時にAuth/security/budgetの新境界があればH1〜H4で独立レビュー要否を判断（H5通常レビュー禁止）。
 - 次のPhase2b（実レポート入口への配線、shadow、本番Secret登録・配信切替）は**別TASK/別ユーザー承認**が必要。
+
+## K6 FINAL — Phase2a source candidate accepted (2026-10-12 JST)
+
+- verdict: **PASS_SOURCE_CANDIDATE / NOT_WIRED / PRODUCTION_NO_GO**. GitHub Draft PR #148, head `a71de72b3bcfc88547b616f789df7765283565ed` inspected: 3 newly added files only (new shadow adapter, 18 offline test cases, docs). PR remains OPEN/DRAFT/unmerged.
+- scoped source review: default OFF returns legacy requester identical; missing key/ledger/context/model also OFF; shadow sends at most once per call with deterministic IDs, budget guard; legacy result returned regardless of shadow outcome. No G2, G5 or report entrypoint modification. Direct source inspection agrees with task. 18 new tests, provider112, report283, mutations4/4, lint/type/secret scan are **G6-reported**, not independently reexecuted by ChatGPT.
+- caveats before wiring: shadow execution sequentially extends report runtime (max 90s per invocation unless configured), actual quality/content equivalence cannot be inferred from structural comparison, ledger budget monthly $5/40 calls insufficient for continuous daily shadow, and observable per-report OpenAI diagnostics exclude shadow Anthropic cost. Integration ownership/secret/recovery policy to be decided before any production stage.
+- status: **done / next_owner: none**. Additional H-review not assigned at source-only isolated adapter stage; reassess focused security/side effects before activating paid shadow/Edge Secrets or production changes.
+- production=0; external_paid_calls=0; source commit only; PR not merged or deployed. No Phase2b approval implied. Future task requires new explicit user decision and fresh all-slot conflict check.
+
+---
 
 ## Report — Phase2a（G6記入）
 
