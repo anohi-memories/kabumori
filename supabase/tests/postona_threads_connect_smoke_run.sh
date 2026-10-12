@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# G4 POSTONA Threads CONNECT + CLEANUP composite smoke (TypeScript only; no database, no network).
+# G4/F4 POSTONA Threads CONNECT + CLEANUP composite smoke (TypeScript only; no database, no network).
 #
 # Builds a throwaway combined source tree under /private/tmp from this checkout's working tree (HEAD plus
 # local edits) and BOUNDED, READ-ONLY copies of the exact protected candidates:
 #   PR #124 c30f246409a77080cbc03aef6c4cb72b5481e125   (G4 OAuth/workspace SQL + RPC contract)
 #   PR #135 e38788d6677082138f0990453c7d2f00549666d0   (H1 mock OAuth Edge)
-#   PR #139 b4fa672f97592e87682671454e868a92098cbd56   (H5 runtime + verifier + owner transport)
-#   PR #152 5ad5bb40cadf013f00553acd5509f4f74fdbff7c   (G5 provider cleanup port: provider_cleanup.ts only)
+#   PR #159 163675c62835e84417905f98f97ceedd4dd1bcd9   (H5 runtime + verifier, latest; stacked on PR #139)
+#   PR #152 ccea1fe8132c6f573a768f0df5a033a05c62ef2c   (G5 provider cleanup port, H4-P4-R1 lease repair:
+#                                                       provider_cleanup.ts only)
 # Nothing is merged, checked out or pushed; an overlay path that already exists stops the run. Then runs
 # supabase/candidates/postona_threads_integration/connect_cleanup_smoke.ts there with deno test (fakes only).
 # Requires the git objects of the four SHAs. Usage: supabase/tests/postona_threads_connect_smoke_run.sh
@@ -18,9 +19,9 @@ head="$(git -C "$repo" rev-parse HEAD)"
 fail() { echo "FAIL $*" >&2; exit 1; }
 PR124=c30f246409a77080cbc03aef6c4cb72b5481e125
 PR135=e38788d6677082138f0990453c7d2f00549666d0
-PR139=b4fa672f97592e87682671454e868a92098cbd56
-PR152=5ad5bb40cadf013f00553acd5509f4f74fdbff7c
-for sha in "$PR124" "$PR135" "$PR139" "$PR152"; do
+PR159=163675c62835e84417905f98f97ceedd4dd1bcd9
+PR152=ccea1fe8132c6f573a768f0df5a033a05c62ef2c
+for sha in "$PR124" "$PR135" "$PR159" "$PR152"; do
   git -C "$repo" cat-file -e "${sha}^{commit}" 2>/dev/null || fail "missing git objects for $sha (fetch its branch first)"
 done
 tree="$(mktemp -d /private/tmp/kabumori-threads-conn.XXXXXX)"
@@ -36,7 +37,7 @@ overlay() {
 }
 overlay "$PR124" supabase/functions/_shared/social/threads_connect_rpc_contract.ts
 overlay "$PR135" supabase/candidates/postona_threads_edge
-overlay "$PR139" supabase/candidates/postona_threads_auth_runtime supabase/functions/threads-oauth-connect-user
+overlay "$PR159" supabase/candidates/postona_threads_auth_runtime supabase/functions/threads-oauth-connect-user
 overlay "$PR152" supabase/functions/account-delete/provider_cleanup.ts
 cd "$tree"
 deno test --no-config --no-lock --allow-env --allow-read supabase/candidates/postona_threads_integration/connect_cleanup_smoke.ts > "$tree/smoke.log" 2>&1 \

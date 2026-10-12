@@ -77,11 +77,34 @@ begin
   perform postona_rel.check(pg_temp.footprint(pg_temp.get('acct_a')) = before, 'nothing removed');
 end $$;
 
+-- ---- F4: an account deletion authorizes only while an owner holds its live lease ---------------------------
+do $$
+declare a uuid := '00000000-0000-4000-8000-0000000000a1'; before text := pg_temp.footprint(pg_temp.get('acct_a')); r jsonb;
+begin
+  -- In its cleanup step, but nobody owns it (released, or never claimed).
+  insert into private.account_lifecycle_operations (user_id, operation_type, status, current_step) values (a, 'account_deletion', 'in_progress', 'cleanup');
+  r := public.cleanup_threads_provider_footprint(a);
+  perform postona_rel.check(r = '{"code": "DELETION_NOT_IN_PROGRESS", "outcome": "blocked"}', 'no owner lease: ' || r::text);
+  -- The owner's lease ran out (by the wall clock).
+  update private.account_lifecycle_operations set owner_lease = gen_random_uuid(), owner_lease_expires_at = clock_timestamp() - interval '1 second' where user_id = a;
+  r := public.cleanup_threads_provider_footprint(a);
+  perform postona_rel.check(r->>'outcome' = 'blocked', 'expired lease: ' || r::text);
+  -- A lease that expires DURING this transaction: now() is the transaction start, clock_timestamp() is not.
+  update private.account_lifecycle_operations set owner_lease_expires_at = clock_timestamp() + interval '300 milliseconds' where user_id = a;
+  perform pg_sleep(0.5);
+  r := public.cleanup_threads_provider_footprint(a);
+  perform postona_rel.check(r->>'outcome' = 'blocked', 'lease expired by the wall clock within one transaction: ' || r::text);
+  perform postona_rel.check(public.threads_provider_connection_state(a) = 'connected', 'still connected');
+  delete from private.account_lifecycle_operations where user_id = a;
+  perform postona_rel.check(pg_temp.footprint(pg_temp.get('acct_a')) = before, 'nothing removed without a live lease');
+end $$;
+
 -- ---- A post that may be in flight blocks the removal (reconcile first) ------------------------------------
 do $$
 declare a uuid := '00000000-0000-4000-8000-0000000000a1'; att uuid; r jsonb; before text;
 begin
-  insert into private.account_lifecycle_operations (user_id, operation_type, status, current_step) values (a, 'account_deletion', 'in_progress', 'cleanup');
+  insert into private.account_lifecycle_operations (user_id, operation_type, status, current_step, owner_lease, owner_lease_expires_at)
+  values (a, 'account_deletion', 'in_progress', 'cleanup', gen_random_uuid(), clock_timestamp() + interval '10 minutes');
   att := (postona_rel.as_user(a, 'begin', pg_temp.get('acct_a'), 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '送信中かもしれない投稿')->'attempt'->>'attempt_id')::uuid;
   r := postona_rel.release(a, att, 'create_container');
   perform pg_temp.put('inflight', att::text);

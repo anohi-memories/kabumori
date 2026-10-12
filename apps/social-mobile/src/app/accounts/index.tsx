@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-nati
 import { colors } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { ThreadsConnectCard } from '@/features/threads-connect/threads-connect-card';
+import { ThreadsDisconnectCard } from '@/features/threads-disconnect/threads-disconnect-card';
 import { useXConnect } from '@/features/x-connect/use-x-connect';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useDataStatus } from '@/providers/data-provider';
@@ -72,6 +73,7 @@ export default function AccountsScreen() {
         </Card>
 
         <ThreadsConnectCard threadsAccount={threadsAccount} accounts={accounts} reload={reload} preview={status === 'mock_preview'} />
+        <ThreadsDisconnectCard threadsAccount={threadsAccount} accounts={accounts} reload={reload} preview={status === 'mock_preview'} />
 
         <Pressable accessibilityRole="button" onPress={() => router.push('/login-methods')} style={({ pressed }) => [styles.card, pressed && styles.buttonPressed]}>
           <Text style={{ color: colors.ink, fontWeight: '800' }}>ログイン方法</Text>
