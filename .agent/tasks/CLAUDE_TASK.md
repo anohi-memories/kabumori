@@ -3,8 +3,8 @@
 - task_id: kabumori-g2-v1-three-pr-final-merge-preflight-20261012
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G2
 - finish_code: K2
 - return_to: かぶモリアプリG2のちゃ
@@ -29,6 +29,106 @@ Make a precise, current **GO_TO_MERGE_DECISION / CHANGES_REQUIRED / BLOCKED** re
 - Record ## Report in this TASK with task_id, result, main/head/base and dependencies, actual PR checks, changed_files, tests, commit_hash, push, merge, deploy, remaining_issues, safety_checks, next_recommendation, GO/NO_GO.
 - Set status review_required / next_owner chatgpt; update only own G2 status/index and CURRENT_STATE G2 record without altering other slots.
 - Return: **かぶモリアプリG2のちゃへ K2**.
+
+## Report
+
+### 判定
+
+- task_id: `kabumori-g2-v1-three-pr-final-merge-preflight-20261012`
+- **GO_TO_MERGE_DECISION（PR143 → PR149 → PR158 は、下の手順を守れば順にマージしてよい）／PRODUCTION_NO_GO**
+  - 実際のマージはしていない。Draft の解除もしていない。
+
+### SHA・土台・状態（`gh pr view` と `git rev-parse` の値）
+
+| | head | base | 状態 | mergeable | CI |
+|---|---|---|---|---|---|
+| main | `155a3c6051caaf4efd9c4fb1b11bfaaa29ffe5db` | — | — | — | — |
+| PR143 | `889ca1b44cf82bd3ecb913818dca568456849feb` | main | OPEN・Draft | UNKNOWN（GitHub が計算中。手元では衝突0件） | Vercel pass、Netlify pass |
+| PR149 | `e9bb86c44808d87ad8cbd3de4f1d1564066f958a` | `g2-ondemand-v1-20261011`（PR143） | OPEN・Draft | MERGEABLE / CLEAN | Vercel pass |
+| PR158 | `ea7bbd07d06533d359a733d3dce65169d0e24283` | `g2-broadcast-push-v1-20261012`（PR149） | OPEN・Draft | MERGEABLE / CLEAN | Vercel pass |
+
+- レビューの承認（reviewDecision）は、3つとも未設定。
+- main のブランチの保護: 無し（必須のチェックも無し）。
+- 他のスロットの PR:
+  - G1 の PR156 は、`fe120b99` で main にマージ済み。
+  - G5 の PR152 は、OPEN・Draft、base は G5 のブランチで、main には入っていない。
+
+### マージの順番の確認（使い捨ての G2 の worktree、push していない）
+
+- 今の main `155a3c60` に、`git merge --no-ff` で PR143 → PR149 → PR158 の順に統合した（各 head を1回ずつ。親を二重に当てていない）。
+  - **3回とも衝突0件**。統合の結果の head は `6ac4744d77a98af73a299fcf9725a81df666b31b`（確認後に worktree とブランチを削除）。
+  - main との差分は45ファイルで、前回の確認と同じ。
+- 前回の確認（main `32be4653`）以降に main で変わったコードは、G1 の PR156 の7ファイルだけ（`src/app/(tabs)/index.tsx`・`explore.tsx`・`holdings-section.tsx`・`portfolio-view.ts`・テスト3つ）。3つの PR の45ファイルとの重なりは0件。
+- 意味の上の確認:
+  - G1 のホームは、ルートの `/report-detail` を `id` だけで開く。PR143 のレポート詳細は、`source=analysis` が無ければ今までどおり。
+  - G1 の新しいテスト（`home-report-return_test.ts`）は、統合した版で成功した。
+  - migration は2つとも main の最新の migration より後の時刻で、順番は PR143 → PR149（逆だと PR149 の migration は止まる。前回、手元で確認済み）。
+  - RLS・Auth・G5 のファイルには触れていない。
+
+### 最終版の中身の確認（統合した版で確認した）
+
+- **H3 の期限の確認:** 完了と失敗の両方に `lease_expires_at < v_now` がある。
+- **H2 の R1〜R6:** すべてある。
+  - R1: 「今送ってよいか」の関数を引き取りと送る直前で使う
+  - R2: 回の完成時刻
+  - R3: 端末の上限（DB と worker）
+  - R4: 同時は最大6・速さは最大400／秒・1区切りの速さ ≥ 端末の上限
+  - R5: 分割のときに対象者を固定（planned）
+  - R6: ticket を厳しく読む
+- **ゲート:** すべて既定で OFF（`public_market_feed_enabled`・`ondemand_requests_enabled`・`enabled`・`sending_enabled`）。
+- **旧来の定時の個別レポート:** ソースでは、オンデマンドの受付が ON のときだけ止まる。この作業では本番に一度も触れていないので、本番の Cron は変わっていない（本番の状態そのものは読んでいない）。
+- **通知を許可しない人・本人以外・送ったか分からない人の扱い:** 前回までの検証から変えていない（変更が無いことを、差分で確認した）。
+- **PR158:** `docs/v1-release/RUNBOOK.md`、`supabase/tests/g2_v1_release_integration_behavior.sql`、`supabase/tests/g2_v1_release_integration_run.sh` の3ファイルだけ。
+- **G6 への依存:** 45ファイルのどれも `ai_provider` を読み込んでいない。Claude の比較処理（PR148／150／153）は V1 の条件ではない。
+
+### テスト（今回、実際に実行したもの）
+
+main で変わったのはアプリのファイルだけなので、アプリに絞って実行した。
+
+| 対象（今の main + PR143 + PR149 + PR158） | 結果 |
+|---|---|
+| `tests/app/`（G1 の PR156 の新しいテストを含む） | 540 成功 |
+| うち G1 の戻り先・ルートの画面の一覧・レポート詳細のルート | 16 成功 |
+| アプリの型（`src/`） | 既存の CSS の2件だけ（新しいエラー0件） |
+| `git diff --check` | 問題なし |
+
+**実行していない（NOT_RUN）:** 手元の PostgreSQL の検証・Deno の関数のテスト。main の変更が、データベース・関数のファイルに及んでいないため。前回の結果（統合した版で全項目 PASS）を使う。本番・本物の API・Expo も実行していない。
+
+### マージするときの注意（必ず守る手順）
+
+1. **マージの方法:** 3つとも通常のマージ（merge commit）にする（squash・rebase にしない）。
+   - 積み上げの後ろの PR は、前の PR のコミットをそのまま含んでいるため。squash にすると、後ろの PR の差分に前の変更が二重に出て、比べにくくなる。
+2. **土台の付け替え:** このリポジトリは「マージしたらブランチを消す」が OFF なので、GitHub は後ろの PR の土台を自動で main に付け替えない。
+   1. PR143 を main にマージする。
+   2. **PR149 の base を main に付け替える**。そのあと、差分が一斉通知の分（PR149 の分だけ）になることを確かめてからマージする。
+   3. 同じく **PR158 の base を main に付け替え**、差分が3ファイルだけになることを確かめてからマージする。
+   - 付け替えずに PR149 をマージすると、main ではなく PR143 のブランチに入る。
+3. Draft の解除とマージは、ユーザーの判断で行う（この作業では行っていない）。
+
+### 残る課題
+
+- 本番は NO_GO のまま。マージは、本番に出すことではない。
+  - マージしても、migration の適用・Edge のデプロイ・Cron・ゲートの ON・アプリのビルドがすべて別承認で残る。
+  - 順番は `docs/v1-release/RUNBOOK.md`。
+- personalized-reports の Edge をデプロイするときは、本番にまだ出ていない main の変更も一緒に出るので、デプロイの前に本番の版との差分を確かめる。
+- 決めること（前回のまま）:
+  - アプリの「朝刊の通知」が一斉通知の受け取りも決めること
+  - 1人あたりの端末の上限20台
+  - 1日の個別分析の上限5回
+
+### commit / push / merge / deploy
+
+- ソースの変更: 無し（changed_files 0。PR のブランチも更新していない）。
+- 統合の確認の worktree・ブランチは使い捨てで、push せず、削除した。
+- merge=NO、deploy=NO、production_calls=0。次もすべて0: Draft の解除、本番の DB・Edge・Cron・Secrets、Expo・EAS、有料 API。
+
+### 次に勧めること
+
+1. ユーザーのマージの判断。判断する場合は、上の手順で PR143 → PR149 → PR158 の順にマージする（通常のマージ、間で base を main に付け替える）。
+2. マージのあと、本番の**読み取りだけ**の確認（RUNBOOK の段階2）を、別承認で行う。
+3. 追加のレビューは要らない見込み。PR143 は H3、PR149 は H2 のレビューと修正済みで、今回の変更は0件。
+
+Recommended next owner: **chatgpt（K2）**
 
 ---
 ## Previous G2 TASKs/Reports — protected verbatim below

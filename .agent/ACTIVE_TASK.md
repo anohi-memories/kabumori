@@ -120,11 +120,11 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-g2-v1-three-pr-final-merge-preflight-20261012
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
 - recommended_model: Opus5.5（高）

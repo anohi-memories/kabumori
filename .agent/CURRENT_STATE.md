@@ -1,3 +1,15 @@
+## G2 報告 — かぶモリ V1 の PR143 → PR149 → PR158 マージ直前の確認 — 2026-10-12 JST
+
+- G2 `kabumori-g2-v1-three-pr-final-merge-preflight-20261012`: **GO_TO_MERGE_DECISION／PRODUCTION_NO_GO**（マージ・Draft の解除はしていない）。
+  - main `155a3c6051caaf4efd9c4fb1b11bfaaa29ffe5db` に、PR143 `889ca1b4`・PR149 `e9bb86c4`・PR158 `ea7bbd07` を順に統合して、衝突0件。CI は3つとも pass。
+  - 前回の確認以降の main の変更は G1 の PR156 だけで、重なりは0件。
+  - 統合した版で、アプリのテスト540件（G1 の新しいテストを含む）が成功し、型の新しいエラーは0件。
+  - H3・H2（R1〜R6）の修正、すべて OFF のゲート、PR158 が3ファイルだけであること、G6 への依存が無いことを確認した。
+- **マージの注意:** 「マージしたらブランチを消す」が OFF なので、GitHub は後ろの PR の土台を自動で main に付け替えない。PR143 のマージのあとに PR149、その次に PR158 の base を main に付け替えてから、通常のマージ（squash にしない）で入れる。
+- ソースの変更・本番の操作は 0。G2 は review_required / chatgpt で K2 待ち。
+
+---
+
 ## G2 next — Three stacked PRs final premerge verification assigned (2026-10-12 JST)
 - G2 `kabumori-g2-v1-three-pr-final-merge-preflight-20261012` **ready / next_owner claude**, Opus5.5（高）, start G2, return K2 to かぶモリアプリG2のちゃ. Prior K2 PASS_INTEGRATION_READY for source PR143→PR149→PR158, all Draft/unmerged. Refresh fresh main and actual PR heads/CI, prove no accidental duplicate parent delta, inspect H2/H3 safety corrections and G1/G5 conflicts, focused tests, and provide GO_TO_MERGE_DECISION or concrete blockers. **Do not merge any PR**; release remains PRODUCTION_NO_GO and requires separate merge decision plus user-approved production read-only preflight. Other slot state/worktree protected.
 
