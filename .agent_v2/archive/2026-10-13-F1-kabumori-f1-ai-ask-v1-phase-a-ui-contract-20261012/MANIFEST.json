@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "task_id": "kabumori-f1-ai-ask-v1-phase-a-ui-contract-20261012",
+  "slot": "F1",
+  "archived_at_jst": "2026-10-13",
+  "source_commit": "b7bac01832e0ba6030edfd7afb765a25b9b01874",
+  "original_path": ".agent_v2/tasks/F1.md",
+  "archive_path": ".agent_v2/archive/2026-10-13-F1-kabumori-f1-ai-ask-v1-phase-a-ui-contract-20261012/files/.agent_v2/tasks/F1.md",
+  "size": 11352,
+  "sha256": "bd4f9fe441097b3be95900e23cd0184aafc0d8d3d18a1aa642470d5b0ac0bbff",
+  "original_blob_sha": "9f42f7f317eb70cf4ea8ecc48c6fcc9ef3a27d46",
+  "restore_checked": false
+}
