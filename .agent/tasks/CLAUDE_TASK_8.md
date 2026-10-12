@@ -3,8 +3,8 @@
 - task_id: news-improvement-a-pr129-premerge-offline-integration-qa-g8-20261012
 - owner: claude
 - slot: claude-8
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G8
 - finish_code: K8
 - return_to: ニュース改善API最適化のちゃ
@@ -38,16 +38,29 @@ G8自己報告：important-news-monitor761 PASS、extraction34 PASS、discovery/
 ## Report
 
 - task_id: news-improvement-a-pr129-premerge-offline-integration-qa-g8-20261012
-- result: not_started
+- integration_main_SHA: cdb066fad5b2a7bd20ce4e0685f50f575fe560ef（開始時点のorigin/main。K8時点 7a5d7e3f からさらに前進、PR base 77a627da）
+- PR_head: 0a2df248f6e49bcb1bfea690f38064c93e5f895c（PR #129 OPEN/Draft、未merge、GitHub mergeable=MERGEABLE / mergeStateStatus=UNSTABLE＝Vercelのみ失敗）
+- merge-tree結果: `git merge-tree --write-tree origin/main <PR head>` 競合なし（tree 616943c5…）。使い捨てworktreeで `git merge --no-commit --no-ff` も "Automatic merge went well"、15ファイル追加/変更・競合0。**commit/ref/push は一切作成せず `merge --abort` 後にworktree削除**。
+- affected_paths: PR129=15ファイル（_shared/news_body_extraction/*7、important-news-monitor/{candidate_body_fill,fed_statement_enrichment,index,official_source_fetchers}.ts と関連テスト4）。mainの前進(124ファイル)との交差は0。main側で変わった _shared/ai_provider・market_report_* は important-news-monitor が import しておらず、静的依存の衝突なし。
+- tests（統合結果の使い捨てcheckout上、offline・mockのみ）: important-news-monitor 761 PASS / news_body_extraction 34 PASS / important-news-shadow 20 PASS / news-discovery-observer 37 PASS / _shared/news_discovery 125 PASS（observer+discoveryの合算162と一致）/ _shared/ai_provider 94 PASS（main側の追加分、参考）。FAILなし。typecheck=既存TS2322(x_oauth2_post.ts)のみ、lint=97件(baseline同数)、diff --check clean。実PDF60件はソース不変のため前回結果(facts51/一致51/prose4/missing4/空1)を採用し今回は再取得せず。G8前報告761/34/162/20と一致（件数の差なし）。
+- 3fixes_checked: R1（m個/2m個/grouped/折返し結合/注記挿入・過不足でfail-closed/amounts_only確証）、R2（実index.tsのjudge_pendingハンドラ＋fill競合、他lane/先進status/0行区別/即時生成なし）、R3（過去利上げ×今回据置、複数現在決定は保留、通常raise/lower/maintain、反対票）— いずれも既存テストで再実行しPASS。旧F1〜F9・F7毎時starvation防止も同スイートでPASS。
+- flags_and_risks（未解決を隠さない）:
+  1. **Fed本文取得と決算短信factsはフラグ/kill switchなし**。`fetchSources===true` のmarket_macro fedループと、TDnet PDF経路に無条件で有効。deploy時は即時ON（停止手段はdeploy rollbackのみ）。ON/OFFが必要なら別TASKでenv flag追加が妥当。
+  2. 既存 no_post / generation_failed / published 行への新本文再判定は未実装（pending_judgement かつ本文空のみ更新）。履歴は保全されるが、旧見出しのみ判定は是正されない。
+  3. Fed取得は1回2成功/4試行/20秒budget。RSS鮮度は14日(MAX_MARKET_MACRO_ITEM_AGE_MS)。cold start・連続失敗時は取りこぼし得るが、呼出間隔依存の恒久starvationはない（4件超の永続失敗は確率的）。取得間隔は10分想定でrepo内未確認。
+  4. 本文が読めない決算短信は「読み取れませんでした」注記＋従来keyword要約にfallbackする。その要約内の数字（期の取り違えあり得る）は確定Factではなく参考扱いで、生成Factの照合元が従来要約になる点は既知制約（PR116のTDnet忠実性ガードに依存）。
+  5. BOJ本文は未接続（boj_document_text.tsはPhase 6モジュールとして存在するがindex/fetchersから未参照を静的テストで確認）。権利確認待ち。
+  6. 並行競合は mock による再現で、実PostgREST/Edgeでは未確認。実Fed文書での過去会合言及の頻度も未確認。
+  7. PR #129はPR116固定コミット a26e4365 の祖先ではなく（`merge-base --is-ancestor` で確認）、a26e4365 の変更ファイルに PR129 のファイルは含まれない。PR116の10/13本番反映が a26e4365 固定ソースである限りPR129は混入しない。PR129を先にmainへmergeしても、deployをa26e4365固定のworktree(kabumori-pf)から行えば影響しないが、mainからのdeployに切り替える場合はPR129が入る点に注意。
+- CI: Vercel=FAILURE（既知のbuild-rate-limit系。コード失敗とは扱わない・未再実行）、netlify deploy-preview=SUCCESS。GitHub mergeable=MERGEABLE だが mergeStateStatus=UNSTABLE。CI GREENとは主張しない。
+- result: **MERGE_CANDIDATE（source-only）— ただし deploy は上記1(無フラグ)と2を承認した上で別判断。実merge/deployはChatGPT判断とユーザー承認待ち**
 - changed_files: none
-- tests: not_run
-- commit_hash: none
-- push: not_performed
+- commit_hash: none（ソース変更・commit・pushなし。本Reportのみmainへ）
+- push: not_performed（PR129 branch / main のソースとも）
 - merge: not_performed
 - deploy: not_performed
-- remaining_issues: 最新mainからのPR129統合QA、既知のF7/F9/tdnet fallback/rights/release gates。
-- safety_checks: not_started
-- next_recommendation: G8で独立統合QAを実行しK8に結果を返す。
+- safety_checks: 本番DB/Edge/Cron/Secrets/有料API/実Fed・TDnet外部取得なし（テストはmock、実PDF再取得もなし）; PR129 branch・main・他slot/G9/PR115/PR116(kabumori-pf)・G8実装worktree(kabumori-p7)に未変更; 使い捨てworktreeは削除済み。
+- next_recommendation: ChatGPT判断。mergeするなら(a)Fed/決算短信facts用のenvフラグ追加を別TASKで先行するか、フラグなしで即時ONを承認し、(b)PR116 10/13反映後にPR129をmerge→deploy、(c)非pending行の再判定は別設計。K8をニュース改善API最適化のちゃへ返却。
 
 ---
 
