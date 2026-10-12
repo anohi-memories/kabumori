@@ -26,6 +26,11 @@
 - 旧G8のJ0はK8で受入済み。旧G8の未開始J1-a（task_id `news-improvement-a-jp-official-diagnostics-j1a-g8-20261012`）は明示キャンセル・done/none。F8には**別task_id**でJ1-aを新規登録、旧G8との二重開始禁止。
 - F8はjp_official診断の既存JSONBへの記録だけ。PR116の2026-10-13固定production反映、PR129、G9を保護。DB変更/merge/deploy/有料API無し、production NO_GO。F8は独立worktreeとfresh mainの競合を実作業開始時に確認する。
 
+## 共通アカウント G5→F5 新規TASK
+- 旧G5 `common-account-g5-phase4-h4-c4-r1-r2-repair-20261012` はK5受入済み・done/none、旧系統のまま完結（PR152修正head `ccea1fe8132c6f573a768f0df5a033a05c62ef2c`、依存PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`）。旧TASK/ReportをF5へ複写しない。
+- F5の新規task_id `common-account-f5-phase5-app-auth-entitlement-integration-20261012` を明示割当、`ready/claude`、推薦 `Opus5.5（高）`、開始F5・完了L5、返却先 `共通アカウントG5のちゃ（新F5担当）`。
+- 既存Phase1/2開始・再登録のRPCを再利用し、本人共通ID＋サービスentitlementのG5-owned backend接続部分だけ実装。G1/G2アプリUI/Auth、G3/G4 POSTONA/Threads、H5 transport等は所有者保護し、別slotへの正確な接続依頼に分離。全てsource/offline、PR121/152未merge、本番 Auth/DB/deploy/実SNSはNO_GO。
+
 ## 未解決問題
 
 - F2: PR143 の GitHub の表示（GraphQL は UNKNOWN、REST は clean）は、試しのマージが古い main `50a2e079` の上のまま再計算されていないため。今の main `3c590d40` に対して、手元で PR143→149→158 を順に当てて衝突0件。マージは L2 の確認のあと、通常のマージで、間で後ろの PR の base を main に付け替えて進める（`delete_branch_on_merge: false`）。本番は NO_GO。
