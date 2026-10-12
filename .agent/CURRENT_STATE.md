@@ -1,3 +1,10 @@
+## H5 FINAL — POSTONA real source runtime wiring / LIVE_NO_GO — 2026-10-12 JST
+
+- H5 task `postona-h5-threads-auth-owner-runtime-final-wiring-20261012`, candidate status **review_required/next_owner chatgpt**, return C5 to **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**. Source [Draft PR159](https://github.com/anohi-memories/kabumori/pull/159) exact `163675c62835e84417905f98f97ceedd4dd1bcd9`, base protected PR139; H5-only18 files. Functional pinned SDK/getClaims/getUser/issuer + dedicated enforced-TLS parameterized driver + typed G4 HTTP composition, actual H5 SHARE revocation lock and same-transaction account expiry/custody writer implemented. Edge remains503 and all5 static gates false; no actual connection/post/merge/deploy/apply/real Auth/DB/Meta/API or secrets changes.
+- Focused evidence: unit/runtime47 PASS, pinned G4/repaired G5 source overlay18 PASS, actual Deno driver/real parent/G5 T13/G4 custody local fake PG6 PASS; old KEY SHARE mutation FAIL→SHARE PASS. Live managed owner/Auth/TLS/session/app-link/Meta eligibility/pilot NOT_RUN. **External dependency:** G5 PR152 repaired head `ccea1fe8132c6f573a768f0df5a033a05c62ef2c` now requires internal adapter stillOwned checks; G4 PR154 adapter does not implement that semantic context. Owners must reconcile T10 before registration; H5 did not edit their code/slot. C5 evaluates bounded implementation; independent H1–H4 Sol（高） source/security review remains mandatory before live activation. H5 own control sync is separate Draft PR, not main direct push; detailed new top `.agent/CODEX_REPORT_5.md` preserves prior C5 history.
+
+---
+
 ## G2 報告 — かぶモリ V1 の PR143 → PR149 → PR158 マージ直前の確認 — 2026-10-12 JST
 
 - G2 `kabumori-g2-v1-three-pr-final-merge-preflight-20261012`: **GO_TO_MERGE_DECISION／PRODUCTION_NO_GO**（マージ・Draft の解除はしていない）。
