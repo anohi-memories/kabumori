@@ -1,3 +1,23 @@
+# C5 acceptance — H5 authenticated owner runtime wiring (2026-10-13 JST)
+
+- task_id: postona-h5-threads-auth-owner-runtime-final-wiring-20261012
+- verdict: PASS_SOURCE_CANDIDATE / SOURCE_DELIVERABLE_ACCEPTED / INDEPENDENT_SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO
+- status_after_C5: done
+- next_owner: none
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
+- completion_code: C5
+- recommended_model: Sol（高）
+- source: [Draft PR159](https://github.com/anohi-memories/kabumori/pull/159) HEAD `163675c62835e84417905f98f97ceedd4dd1bcd9`, base protected PR139 HEAD `b4fa672f97592e87682671454e868a92098cbd56`. 18 H5-owned paths only. Source branch push verified; not merged.
+- formal Codex implementation Report: [Draft PR161](https://github.com/anohi-memories/kabumori/pull/161) HEAD `1ef3aaa43e72540f6f6ac5c2dd97820aaa3259d2`. The PR remains unmerged and its main-targeted bookkeeping now overlaps the C5 corrections; reconcile before any merge. The detailed original Report remains in PR161, not misrepresented as merged.
+- implemented: pinned Supabase SDK getClaims/getUser and TLS owner Postgres client, SQL auth.sessions FOR SHARE, same-transaction account token custody, fail-closed G4 HTTP composition; actual Edge503/all five gates OFF.
+- tests: Codex-reported 47 focused + 18 G4/G5 overlay + 6 disposable local PostgreSQL PASS; fail-before KEY SHARE mutation demonstrated. ChatGPT checked PR159 diff/source metadata and scoped reported evidence, but did not independently run Deno/PostgreSQL or managed tests.
+- push: yes (source PR159 and Report PR161). merge: NOT_DONE. deploy: NOT_DONE. real OAuth/Meta/Threads/Supabase managed/DB/Vault mutation: NOT_RUN. public post: NOT_DONE.
+- remaining_issues: independent J1–J4 Sol（高） security review prior to live; managed non-super owner credentials/permissions/TLS/Auth policy, G4/G5 lease-contract adapter alignment and registration, callback/Meta tester, operator approval and limited pilot. No production go.
+- safety_checks: source gates stay OFF; separate H5 old TASK/ACTIVE status corrected to done/none on main by ChatGPT; no source PR merge, no production operations.
+- next_recommendation: H5 task ends; future work is a new task, not a silent restart.
+
+---
+
 # C5 ChatGPT acceptance record — POSTONA Threads authenticated runtime bridge — 2026-10-11 JST
 
 - task_id: **postona-threads-oauth-runtime-bridge-h5-20261011**
