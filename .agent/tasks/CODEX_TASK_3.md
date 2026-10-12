@@ -3,8 +3,8 @@
 - task_id: postona-threads-pr144-auth-publish-p1-security-review-h3-20261012
 - owner: codex
 - slot: codex-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: H3
 - finish_code: C3
 - completion_code: C3
@@ -16,6 +16,17 @@
 - current release decision: G4 K4 **PASS_SOURCE_CANDIDATE / BLOCKED_REAL_PILOT**; no actual OAuth/Meta/GoTrue/Vault/DB managed proof; no live feature gates enabled, no public posting or deploy authorized
 - changes_forbidden: product files, PR branches, migration apply, GRANT, RLS, Auth/Vault secrets, external Meta/Supabase/X APIs, real posts, paid calls, PR merge or deploy
 - allowed: isolated source read, mock Deno/fake PostgreSQL tests and H3 TASK/Report/ACTIVE section/CURRENT_STATE bookkeeping only
+
+## C3 FINAL — ChatGPT acceptance / 2026-10-12 JST
+
+- task_id: postona-threads-pr144-auth-publish-p1-security-review-h3-20261012
+- verdict: **REVIEW_COMPLETE / CHANGES_REQUIRED_P2_R1 / REAL_PILOT_HOLD**. Independently reviewed verified H3 report and [Draft PR144](https://github.com/anohi-memories/kabumori/pull/144), exact unchanged head `d4a1e87b77d1fbd362dc51809ce2d998afda15ea`; base PR140 exact `2e75a6a842e70f3de78558681803b60935fb4251`, OPEN/DRAFT/UNMERGED. H3 Report completed and synced; no additional report-sync task required.
+- **One independently reproduced P2:** `supabase/candidates/postona_threads_publish/threads_publish_release_candidate.sql:229-232` locks `auth.sessions` with `FOR KEY SHARE`, which does not block `UPDATE not_after` (non-key). H3 two-connection local PG17.11 proved expiry revocation can COMMIT after read and before token release. In H3-only control changing to `FOR SHARE`, expiry UPDATE waits. User-facing risk not yet shown on managed GoTrue; no real Meta/provider calls. Minimal correction assigned separately to G4 in its owned PR144 only, plus two-order concurrent regression. H5's protected `claim_candidate.sql` KEY SHARE use must be reconciled in future H5 owner transport contract; H3/G4 must not modify H5 original.
+- H3 independently reports tested Deno 93 PASS; composite 176 PASS (overlap with 93, do not add), app258 PASS, disposable PG17 release preflight+8 mutations and parent #140+6 mutations PASS, source-accurate PR121 real T13 candidate against fake Auth/Vault fixtures PASS, additional session race FAIL as expected and FOR SHARE control PASS. ChatGPT inspected report and SQL source; **did not independently run Deno/PG**.
+- Findings also clarify that workspace deletion guard can reject a late publish result record (audit reconciliation with G5 T10 required), and DB locks do not span external Meta HTTP. Real owner route/Auth session locks, actual G5 T13/T10, Vault/custody, mobile callback and Meta configuration/tester remain absent. All connect/publish mobile/server gates FALSE; **REAL_PILOT_HOLD**. No production DB/Edge/ACL/Auth/secret changes, PR merge, deploy, external API or post; H3 product source edit0.
+- **H3 task closed** `done/next_owner none`; slot now free, no parked backlog or repeated broad review. Next: narrow G4 correction Opus5.5（高） before any activation, then ChatGPT checks exact diff+concurrency tests at K4, avoid mechanically scheduling another full Codex review for a verified single-line lock fix. Separate G5/H5 high-risk production boundary proof will be checked when integration ready; no automatic new H5 TASK.
+
+---
 
 ## Why this review is now necessary
 
