@@ -7,6 +7,7 @@ import {
   beginRpcPayload,
   completeRpcPayload,
 } from "../../functions/_shared/social/threads_connect_rpc_contract.ts";
+import { assertCustodyContract, writeCustody } from "./wiring/custody_port.ts";
 /** Structural Deno postgres Client interface. Factory must create a NEW dedicated owner connection,
  * never a shared pool transaction, PostgREST/service key proxy, or caller-selected DSN/role. */
 export interface OwnerSqlClient {
@@ -59,7 +60,7 @@ export function createOwnerTransport(
       // auth.uid() can prefer the legacy singular GUC. Overwrite both representations from the
       // sealed principal, so DSN/session defaults cannot override the verified JSON claims.
       await c.queryObject(
-        "select set_config('request.jwt.claim.sub',$1,true), set_config('request.jwt.claim.role','authenticated',true), set_config('request.jwt.claim.session_id',$2,true)",
+        "select set_config('request.jwt.claim.sub',$1,true) as verified_sub, set_config('request.jwt.claim.role','authenticated',true) as verified_role, set_config('request.jwt.claim.session_id',$2,true) as verified_session",
         [actor.userId, actor.sessionId],
       );
       const result = await operation(c);
@@ -100,6 +101,7 @@ export function createOwnerTransport(
           "select postona_threads_runtime.assert_actor($1::uuid,$2::uuid)",
           [actor.userId, actor.sessionId],
         );
+        await assertCustodyContract(c);
         const row = await c.queryObject<
           { brand_id: string; social_account_id: string }
         >(
@@ -144,6 +146,8 @@ export function createOwnerTransport(
           "select postona_threads_runtime.assert_actor($1::uuid,$2::uuid)",
           [actor.userId, actor.sessionId],
         );
+        // Missing/foreign/API-executable G4 custody contract stops BEFORE the token writer.
+        await assertCustodyContract(c);
         // Check bound claimed state BEFORE any parent Vault write. Lock follows T13/session.
         await c.queryObject(
           "select public.social_mobile_account_deletion_workspace_lock(public.social_mobile_account_deletion_workspace($1::uuid))",
@@ -153,8 +157,10 @@ export function createOwnerTransport(
           "select id from public.social_account_oauth_states where id=$1::uuid for update",
           [payload.p_oauth_state_id],
         );
-        const r = await c.queryObject<{ allowed: boolean }>(
-          `select oauth_state_id=$4::uuid and status='claimed' and expires_at>clock_timestamp() as allowed
+        const r = await c.queryObject<
+          { allowed: boolean; social_account_id: string }
+        >(
+          `select oauth_state_id=$4::uuid and status='claimed' and expires_at>clock_timestamp() as allowed, social_account_id
           from postona_threads_runtime.attempts where state_hash=$1 and user_id=$2::uuid and session_id=$3::uuid for update`,
           [hash, actor.userId, actor.sessionId, payload.p_oauth_state_id],
         );
@@ -171,6 +177,7 @@ export function createOwnerTransport(
             payload.p_attestation,
           ],
         );
+        await writeCustody(c, r.rows[0].social_account_id, expiry, now());
         await c.queryObject(
           "select postona_threads_runtime.outcome($1,$2::uuid,$3::uuid,'complete',$4::timestamptz)",
           [hash, actor.userId, actor.sessionId, expiry.toISOString()],
