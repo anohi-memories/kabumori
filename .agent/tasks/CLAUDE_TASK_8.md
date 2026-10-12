@@ -1,3 +1,58 @@
+# Claude Task G8 — PR #129 統合・マージ前 Source QA（R4）
+
+- task_id: news-improvement-a-pr129-premerge-offline-integration-qa-g8-20261012
+- owner: claude
+- slot: claude-8
+- status: ready
+- next_owner: claude
+- start_code: G8
+- finish_code: K8
+- return_to: ニュース改善API最適化のちゃ
+- recommended_model: Sonnet5（高）
+- scope: Aニュース改善専任G8によるsource-only・offline premerge QA。新機能実装・機能仕様拡張なし。B=G9、他G/H案件へ一切引き継がない。
+- target_pr: https://github.com/anohi-memories/kabumori/pull/129
+- target_head: 0a2df248f6e49bcb1bfea690f38064c93e5f895c
+- commit_source_changes: 禁止（既存コードの欠陥を発見した場合は自動修正せず報告し、ちゃが別TASKを判断）
+- prohibited: merge, deploy, production DB/Edge/Cron/Secrets, paid API, real external Fed/TDnet requests, schema/RPC/migration, other worktrees, PR116 release workspace; PR115/G9を触らない
+
+## 目的・K8判定
+
+前G8 TASK `news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012` は `0a2df248` に5ファイル/1commitのR3をpushし、H4独立レビューで見つかった以下3件を修正したと報告。GitHubソース/関連テストをChatGPTが確認：
+- H4-R1 P1 決算短信interleaved amount/%の折返し誤Fact → header layout確認・安全な結合・不明時fail-closed。
+- H4-R2 P2 Fed公式本文fillと見出しのみ判定保存の競合 → 空本文snapshotを原子的条件付きPATCHで確認、staleなら保存せず次回判定。
+- H4-R3 P2 FOMC過去利上げと今回据置の混同 → 決定文ごとaction/range/changeを束ねる、曖昧なら保留。
+G8自己報告：important-news-monitor761 PASS、extraction34 PASS、discovery/observer162 PASS、shadow20 PASS、実PDF60件のfacts51件で原文一致51件。ChatGPTはコマンド未実行。PR129 OPEN/Draft/未merged。本番未反映。
+
+**K8評価：SOURCE_CORRECTIONS_ACCEPTED / PREMERGE_QA_REQUIRED / MERGE_DEPLOY_HOLD**。H4がすでに1回重要な独立レビューを実施しており、今回は**新たな全面レビューの繰返しではなく、最新mainとの統合安全性とreleaseゲートだけをQA**する。
+
+## 作業
+
+1. **fresh state**：`PROJECT_RULES.md`・`.agent/ORCHESTRATION.md`・`.agent/ACTIVE_TASK.md`・`.agent/CURRENT_STATE.md`・G8 TASK/Reportを読む。PR129 exact HEAD / main / other slots worktree list / 未committed変更/競合/PR116の固定本番ソースを確認。安全な独立G8 QA worktreeまたはcheckoutを用意。既存G8実装用worktreeもそのまま保護し、他slotのcheckout/reset/dev serverを操作しない。
+2. **main差分と統合可否の実証**：K8時点でmain `7a5d7e3f42526c92552bd7d585602ed692a9b103`、PR base `77a627da`。mainはその間約330commit前進、GitHub変更ファイル集合の重複は0だが `mergeable_state=unknown`。開始時最新のmainを再取得し、変更ファイル交差・依存API/型/パッケージ差・`git merge-tree`等の**read-only merge simulation**を行い、conflict/compatibilityを検証。`main`にもPR129 branchにもmerge/rebase/force-pushをせず、実際のmerge commitは作らない。preview検証が必要なら一時QA専用branch/checkoutに限定し他ownerを触らない。
+3. **高リスク3点だけの最終回帰**：H4-R1（m/2m/折返し＋負号＋IFRS＋EPS＋fail-closed）、R2（judge_pendingの実handler mockでselect→fill→save CAS、0行/他lane/先進status/即時生成不可）、R3（Fed現在と過去、複数現在判断は保留、正常raise/lower/maintain、反対票）。加えて旧F1-F9とF7毎時 starvation防止などの既存テストをsource-onlyでまとめて再実行。各ケースの期待値、全PASS/失敗、実PDF60件の対象・集計、G8前報告との差を明記する。ネットワーク/実本番DB/実モデル/実公表なし。
+4. **配信前の運用安全ゲート**：Fed enrichmentがどのruntime条件でONになるか、RSS 14日鮮度や20秒budget/cold startでの取りこぼし、未処理no_post / generation_failed / publishedの履歴保全と新本文再判定未実装、TDnet読取不可fallback原文数字、BOJ本文未接続/権利保留、生成Factの照合元の正しさを短いrelease-checklistにまとめる。QAで既知制約と新しい確定欠陥を区別し、**未解決問題をPASSに隠さない**。特にPR116の2026-10-13固定production反映へのPR129混入を防ぐため、今どのコミットがdeploy予定か照合（PR116の本番deploy実行はしない）。
+5. **CI確認**：K8時点 Vercel failureは`build-rate-limit`のURLを指し、Netlify Previewはsuccess。ビルド制限をコード失敗と扱わず、GitHubがmergeabilityを計算できていない場合はUNKNOWNと記載。偽のCI GREENやマージ可能断定は禁止。
+6. **結論を出す**：source-only `MERGE_CANDIDATE`・`CHANGES_REQUIRED`・`BLOCKED`のいずれか。源コード変更が必要なら **このTASKでは作業しないで**原因、最小fix対象と再現条件を報告。統合問題がなければマージ候補にはできるが、**実際のPR129 merge/deployはChatGPTの次回判断とユーザー承認を待つ**。このQA工程はユーザーに代わって本番反映を承認するものではない。
+7. **完了記録**：既存TASK末尾の`## Report` に task_id / integration_main_SHA / PR_head / merge-tree結果 / affected_paths / tests / 3fixes_checked / flags_and_risks / CI / result / changed_files(通常none) / commit/push(原則none) / merge/deploy(no) / safety_checks / next_recommendationを記録し、K8を`ニュース改善API最適化のちゃ`へ返す。
+
+## Report
+
+- task_id: news-improvement-a-pr129-premerge-offline-integration-qa-g8-20261012
+- result: not_started
+- changed_files: none
+- tests: not_run
+- commit_hash: none
+- push: not_performed
+- merge: not_performed
+- deploy: not_performed
+- remaining_issues: 最新mainからのPR129統合QA、既知のF7/F9/tdnet fallback/rights/release gates。
+- safety_checks: not_started
+- next_recommendation: G8で独立統合QAを実行しK8に結果を返す。
+
+---
+
+## Preserved previous G8 tasks, reports, evaluations (history; do not edit)
+
 # Claude Task G8 — PR #129 H4独立レビュー3件の最小修正（R3）
 
 - task_id: news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012
