@@ -150,7 +150,10 @@ test("5 & 7: save / notify decision is identical with the shadow telemetry (lega
 test("index.ts wires the telemetry without touching the save / notify conditions", () => {
   const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
   assert.ok(source.includes("withDeliveryPolicy(sourceBasis, outcome)"));
-  assert.ok(source.includes('if (update.status === "completed") {'), "notify still keys on completed only");
+  // 2026-10-11 P1: the save and the notify step moved to delivery_lifecycle.ts finalizeReport; the condition is the same.
+  const lifecycle = readFileSync(new URL("./delivery_lifecycle.ts", import.meta.url), "utf8");
+  assert.ok(source.includes("finalizeReport(store, reportId, update, safeError)"));
+  assert.ok(lifecycle.includes('if (update.status !== "completed") return { saved, notification: "not_attempted" };'), "notify still keys on completed only");
   assert.ok(source.includes("if (!dryRun && reportId) {"), "dry_run still never writes or notifies");
   assert.ok(!/delivery_policy[^\n]*(status|completed)\s*=/.test(source), "no delivery decision is derived from the telemetry");
 });
