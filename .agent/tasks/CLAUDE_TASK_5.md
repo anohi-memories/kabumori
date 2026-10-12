@@ -3,8 +3,8 @@
 - task_id: common-account-phase3i-local-findings-safe-lifecycle-plan-20261012
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - start_code: G5
 - finish_code: K5
@@ -116,6 +116,19 @@ At the end of this G5 TASK, append `## Report — Phase3i` with task_id, decisio
 2. 次に価値が高い小さな単位: **B1（状態述語）の関数とロック順のローカル証明**。Phase 1/2 と同形式の 2 セッション競合テストで、`FOR UPDATE` の飢餓と `lock_timeout` を確認する。G5 所有の新しいパスだけで行い、他オーナーのテーブルや migration は含めない。
 3. D1・D2・D3・D5 は、オーナー別の短い前提条件として K5 経由で渡す（別 TASK）。
 4. 広範な再レビューは推奨しない。必要なら B1 の実装時に、絞った確認を 1 回だけ。
+
+---
+
+# K5 FINAL — Phase3i targeted lifecycle design / 2026-10-12 JST
+
+- task_id: common-account-phase3i-local-findings-safe-lifecycle-plan-20261012
+- **Verdict: PASS_OFFLINE_DESIGN / READY_FOR_OFFLINE_IMPLEMENTATION_LIMITED / MANAGED_RELEASE_HOLD.** Phase3i documentation and synthetic decision-logic task complete. This is authorization of NO new managed action and is not proof that proposed DB/Storage/Edge boundaries work; `IDP_PREPAUSE_BLOCKED` remains in force.
+- Independently verified [Draft PR147](https://github.com/anohi-memories/kabumori/pull/147) HEAD `38051f023bfd150f29829a075b6f87fa7c1e3e5f`, OPEN/DRAFT/UNMERGED, one commit, eight **new** G5 documentation/synthetic-test paths; no existing product/Auth/RLS/SQL migration/Edge file touched. Protected PR121/122/128/130/134/137/146 remain OPEN/DRAFT with reported heads unchanged; work scope non-overlapping.
+- Reviewed proposed staged P0–P8 state machine, I1–I7 conditional invariants, B1–B6 proposed boundaries, unknown/ambiguous outcomes, idempotent reconciliation, and synthetic counterexamples for earlier F1/F2/F3/F4/F6/F7. G5 reported Deno 32/32, model schedule ~8,800 per setup, mutation 32/32, lint/check/diff/secrets PASS; ChatGPT inspected source but did not rerun test suites. Vercel check rate limit is not counted as test PASS, PR is not deployable.
+- Unresolved **U1** Storage write policy not inventoried or managed, **U2** real enforced lifecycle predicates/guards/edge/sweeper/manifest not installed, **U3** managed Auth audit, roles, readback and permissions unverified. The I4 same-snapshot completion assertion is proven only within the synthetic world: external Storage list/cleanup and database transaction cannot be assumed to share one atomic snapshot. Implementation must demonstrate consistency or return UNKNOWN/RECONCILE; no claim of full cross-service atomicity. B1 `FOR KEY SHARE` versus explicit freeze `FOR UPDATE` contention and actual write-path lock behavior require 2-session PostgreSQL test before any migration.
+- No live managed E1–E12, Auth/provider calls, test project, photo pause, paid action, SQL direct E11, Option D or production use. `managed_auth_delete` remains BLOCKED. No additional general Codex review for document-only task. When concrete critical B1/RLS/DB/Storage changes exist, arrange one focused Sol（高） independent review.
+- **Next**: bounded G5-only OFFLINE B1 predicate and lock-order/local-PostgreSQL proof, while respecting G4/H3 and G6 ownership. Do not automatically create a task at K5. Phase3i status done/next_owner none.
+- AI Lab diary: 記録不要 — 共通認証の未出荷セキュリティ境界の内部設計で、詳細公開は不適切。
 
 ---
 
