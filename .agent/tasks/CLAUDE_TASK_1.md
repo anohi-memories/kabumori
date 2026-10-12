@@ -1,3 +1,45 @@
+# G1 CURRENT TASK — かぶモリV1リリース前機能・残課題棚卸し — 2026-10-12
+
+- task_id: kabumori-g1-v1-release-gap-inventory-20261012
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- task_type: read-only release readiness audit
+- recommended_model: **Sonnet5（高）**
+- start_code: G1
+- finish_code: K1
+- return_to: かぶモリアプリG1のちゃ
+- priority: high
+
+## Purpose
+ユーザーが決めたリリース準備の順番①→⑥のうち、**①「アプリ全体の未完成機能・残課題の棚卸し」だけ**を実施。次の② UI仕上げ、③ G2新AIレポート統合、④ G5共通アカウント統合、⑤実機検証、⑥公開準備に必要な作業と依存関係を具体化する。今回は修正実装やリリース作業に進まない。
+
+## Preflight
+- PROJECT_RULES.md、.agent/ORCHESTRATION.md、ACTIVE_TASK、CURRENT_STATEと各担当の最新TASK/Reportをread-only確認。fresh origin/main、未マージPR、worktree/checkoutと他スロット競合を点検。
+- G1専用の独立・cleanな作業環境を使用。ほかのG/H、特にG2のレポート、G5のAuth、G6の共通AI、G8/G9ニュース・API、POSTONAを変更しない。
+- 2026-10-12 G1 merged PR #156（戻り先・銘柄数の修正）は完了扱い。既存の5タブ、ポートフォリオ、ウォッチリストのQAと520件超のテスト報告は履歴参照にとどめ、新たに実行していない確認をPASS扱いにしない。
+
+## Survey and decision matrix
+- Native 5タブ：ホーム／銘柄／ニュース／レポート／メニューとRoot Stackについて、各画面・機能・CTA・遷移、未実装の「準備中」、空/エラー/通信失敗、アクセシビリティ、端末対応をソースと既存QAに照合。
+- 特にホーム「AIに聞く」、オンデマンド個別分析、Push通知、朝刊/大引け保存・表示、新しいレポート方式、記事詳細、銘柄検索、設定/ログイン/パスワード変更、課金/権限、初回オンボーディング/スプラッシュ等の **実際の実装有無** を区別。
+- G2/G5/G6/G8/G9等に属する未マージ/試験中/production NO_GOを「完了」と誤記せず、担当・依存・先行条件・統合タイミングを整理。必要ならTASKに所有者の確認事項を書くだけにし、作業割当はしない。
+- Issue表に ID、画面/機能、現状の確かな根拠(ファイル/PR/TASK)、ユーザー影響、重大度(P0–P4)、リリース要否（必須/推奨/公開後）、owner案、依存関係、最小の次アクション、検証方法を記載。必須と推奨を混同しない。
+- ①棚卸しの最後に、② UI仕上げへのG1単独で開始可能な小さな候補を優先順位付きで最大5個、③〜⑥のゲートを簡潔に提示。G5/G2待ちのためG1を不要に占有しない。
+- 誤解禁止：PRやmainのマージはiPhoneバイナリ更新/本番配信ではない。実データ・実機未検証の箇所はNOT_RUN。10/7〜9旧方式大引け欠落はユーザー判断により修正・バックフィル・調査しない。
+
+## Deliverable / safety
+- 原則 source-only/ドキュメントのみ。リリース監査の証拠を `docs/release-readiness/` 内に新規Markdownとして作成可（他者とのパス重複がない場合のみ）。PRを作成するなら独立 Draftで、no self-merge。
+- Product、DB/RLS/RPC/Auth/Edge、migration、workflow、EAS、TestFlight、App Store、production、実データ、外部実投稿/API実書込・有料API一切変更禁止。
+- 必要な静的チェックとread-onlyテストは可。実施の有無・結果を区別。Reportにtask_id、status、changed_files、tests、commit/push/PR/merge/deploy、remaining_issues、safety_checks、next_recommendationを記載。
+- 現行TASK完了後はstatus review_required / next_owner chatgptでK1へ返す。Reportと過去履歴は消さない。末尾：かぶモリアプリG1のちゃ へ K1 を送ってください。
+
+## Report — current task
+Pending G1 audit.
+
+---
+
+## Archived G1 TASK and Report
 # G1 CURRENT TASK — ホーム戻り先・保有件数表示の修正 — 2026-10-12
 
 - task_id: kabumori-g1-home-report-return-and-holdings-count-fix-20261012
