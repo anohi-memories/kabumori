@@ -1,3 +1,11 @@
+## ニュース改善A G8 Phase J0 — 国内重大ニュース・金融/経済ニュースのアプリ掲載強化（2026-10-12 JST）
+
+- **ユーザー優先方針**: 一般重大事件・事故・企業不祥事・訴訟・災害・政策急変・国内金融/経済/企業ニュースをより広く発見し、Xだけでなく**アプリ一覧へ積極掲載**できるようにする。Pushは重要度別に制限、事実確認と報道機関の商用/AI利用権限を維持。公式・無料兆候＋重要な空白eventに限る低予算Web補完、取りこぼし最小化。
+- **G8専任 新TASK** `news-improvement-a-jp-general-major-financial-coverage-j0-g8-20261012`（推薦Opus5.5（中）、`ready`、開始G8、返却K8→ニュース改善API最適化のちゃ）。**Phase J0はread-only funnelの原因追跡と、合法source候補、既存設計照合、offline合成イベントfixture/benchmark**に限定。具体的次J1実装の順番も出す。新機能の本番連結、実provider/API/Web Search有料利用、外部AIへの無許諾送信、DB/Edge/Schema変更は未許可。
+- **ChatGPTの2026-10-12本番 read-only evidence**: 過去7日 `jp_%` news_discovery signals173件と`jp_official`候補11件/公開2件、TDnet公開86件、全候補943件/X公開146件、app_title_ja populated20件、important_news通知sent79件。ただし母集団はstage別で直接の遷移確率ではない。app_copy nullはアプリ非表示を意味せず、Fact-passed X文・日本語開示のfallbackあり。主要フィルタはRPC `get_my_important_stock_news`/phase5 baseと`alert_settings`、ホーム市場/保有ニュース各上限3。実ログ/個人ユーザーごとの表示は未検証。
+- **並行安全**: 以前のPR129 R5 head `81251b31`はK8 PASS(source)、OPEN/Draft/未merge、2独立機能default OFF。10/13 PR116固定production反映とPR129 merge/deployは別工程で保護。今回J0はfresh mainから別G8 branch/worktree、PR129/PR116 source/worktree不変更。G9=API最適化Bの専任継続。他slotは変更せず。
+- J0完了後のK8で原因とライセンスに基づくJ1限定実装の割当を判断。TASKを未来の保留メモとして占有せず、独立した設計成果物へ移してその時点でdoneにする。
+
 ## K4 FINAL — POSTONA G4 mobile Threads OAuth + provider-aware cleanup SOURCE COMPLETE; G4 FREE — 2026-10-12 JST
 
 - **K4 accepted** G4 task `postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012` as **PASS_SOURCE_IMPLEMENTATION / REAL_PILOT_HOLD**. G4 TASK & G4-only ACTIVE_TASK block changed to `done / next_owner none`, slot free; past TASK/Reports preserved. No new slot automatically assigned. [Draft PR154](https://github.com/anohi-memories/kabumori/pull/154) exact HEAD `98287392327eabfd5092a3ba89dde51a2e8beff6`, 19 changed G4-owned files/1 commit OPEN/Draft/UNMERGED, stacked on protected G4 Draft PR144 exact `09fd2c49114b7d26c23b71a3084574dc6a5a7ad6`. OAuth PR124/135/H5 PR139 and G5 PR121/152 protected; no G5-owned app/account-delete/Auth implementation or H5 runtime files edited.
@@ -713,7 +721,7 @@
 | G5 | `in_progress` | `common-account-phase3g-free-auth-provider-test-readiness-20261011` | `claude` | — | `K5` | `.agent/tasks/CLAUDE_TASK_5.md` |
 | G6 | `idle` | `none` | `none` | — | `K6` | `.agent/tasks/CLAUDE_TASK_6.md` |
 | G7 | `idle` | `none` | `none` | — | `K7` | `.agent/tasks/CLAUDE_TASK_7.md` |
-| G8 | `done` | `news-improvement-a-pr129-release-safety-env-switches-g8-20261012` | `none` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
+| G8 | `ready` | `news-improvement-a-jp-general-major-financial-coverage-j0-g8-20261012` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
 | G9 | `done` | `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011` | `none` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
 | G10 | `idle` | `none` | `none` | — | `K10` | `.agent/tasks/CLAUDE_TASK_10.md` |
 
