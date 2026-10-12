@@ -3,8 +3,8 @@
 - task_id: common-ai-provider-g6-phase2c-isolation-test-allowlist-20261012
 - owner: claude
 - slot: claude-6
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -103,6 +103,12 @@
   - 受け入れられたら、#148 から #157 までを1つのまとまりとして merge の順番を決める
   - 本番は、計画書（PHASE2B）§6 の前提を1つずつ別承認で進める
 ---
+
+## K6 FINAL — 2026-10-12 JST
+- verdict: **PASS_OFFLINE_SOURCE_CANDIDATE / PRODUCTION_NO_GO**. Draft PR157 `9b952d64a9ec954e74af7e762c9df4e4c2e2f3a5` (one file `isolation_test.ts` only), stacked on unchanged G2 PR153 `6c576567328c99a58c2e4beaed86d155fe875769`, itself dependent on PR150/148. GitHub PR metadata and precise diff independently inspected; G6 test execution **not** independently rerun.
+- Exact allowlist permits only market-report-analysis/handler.ts and its shadow_wiring_test.ts with exact provider imports. Indirect deployable import graph restricts to handler.ts/index.ts, SDK/key names only in provider and approved offline test; app/client policy preserved. G6 reports isolation8, Provider126, report313, _shared629, lint/type, synthetic + on-disk forbidden-import/app-leak probes PASS.
+- Changes production0, paid API0, merge0, deploy0. PR157 remains Draft/unmerged. Do NOT authorize release based solely on this source-only test fix: recover stale ledger Cron, Edge Secret, waitUntil actual runtime, budget/stop thresholds, narrow independent release/security review and paid canary need separate decisions.
+- TASK **done/next_owner none**, G6 unreserved; no new TASK automatically assigned. Merge dependencies must remain PR148→PR150→PR153→PR157, pending distinct merge authorization.
 
 # PRESERVED G6 PRIOR TASKS / REPORTS — Phase2b and earlier (do not rewrite below)
 
