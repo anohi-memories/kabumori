@@ -63,16 +63,17 @@
 ## Codex H3
 - owner: codex
 - slot: codex-3
-- status: ready
+- status: review_required
 - task_id: agent-v2-pr155-dual-slot-migration-review-h3-20261012
 - start_code: H3
 - finish_code: C3
 - completion_code: C3
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: こでくろ連携部屋のちゃ
 - source: .agent/tasks/CODEX_TASK_3.md
 - report: .agent/CODEX_REPORT_3.md
 - allocation: Draft PR #155 exact head 8a28a067a20daec5bd96e09656bdfab144c3c458 の新旧30枠・段階移行型 .agent_v2 基盤を独立READ ONLYレビュー。新旧コード体系、F/F1衝突、旧15枠差分ゼロ、archive/MANIFEST/SHA256/restore、HISTORY_INDEX、F/J/L/V→G/H/K/C復帰、二重割当防止、J1〜J5運用、完全移行条件、merge時の現行G/H互換性を重点確認。PR merge/deploy/production変更禁止。完了はC3。
+- review_result: PASS_REVIEW_CANDIDATE / MERGE_READY_FOR_CHATGPT_DECISION. H3 independently reproduced archive33/33+restore, index856 refs, 15 mappings and fresh-main merge preservation. No blocking source finding; final cutover path/code updates remain a separate TASK, raw GitHub mergeability unknown needs future re-check. Candidate edit/merge/deploy/production/AI0. C3 to こでくろ連携部屋のちゃ.
 - recommended_model: Sol（高）
 
 ## Codex H4

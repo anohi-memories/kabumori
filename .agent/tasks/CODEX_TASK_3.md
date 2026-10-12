@@ -3,8 +3,8 @@
 - task_id: agent-v2-pr155-dual-slot-migration-review-h3-20261012
 - owner: codex
 - slot: codex-3
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - start_code: H3
 - finish_code: C3
 - completion_code: C3
@@ -134,6 +134,16 @@ HEAD driftがあれば、勝手に別HEADをレビューせず明示する。
 最終行：
 
 **こでくろ連携部屋のちゃ へ C3 を送ってください。**
+
+---
+
+## H3 completion — PR155 / 2026-10-12 JST
+
+- result: **PASS_REVIEW_CANDIDATE / MERGE_READY_FOR_CHATGPT_DECISION** on exact unchanged `8a28a067a20daec5bd96e09656bdfab144c3c458`. No blocking source finding; PR remains OPEN/Draft/unmerged, no H3 candidate edit/merge/deploy.
+- independently verified: snapshot 33/33 bytes/hash/blobs and documented restoration (33 missing → clean), HISTORY_INDEX 856/856 refs, 15 mappings + 5 J Report contracts, protected old files unchanged and fresh-main merge simulation conflict-free. Final source/check baseline `ad063c440852ed7c5f5faaa326ddfd0b5a28e4c9`; GitHub raw mergeability unknown must be re-read before separate authorized merge.
+- report: `.agent/CODEX_REPORT_3.md` newest section contains full R1–R8 checks, limits and future cutover/path remapping cautions. Product changes0 / production0 / AI0.
+- return_to: こでくろ連携部屋のちゃ
+- completion_code: C3
 
 ---
 

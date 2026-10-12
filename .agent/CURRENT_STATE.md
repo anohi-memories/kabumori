@@ -4,6 +4,15 @@
 - PR143 G2 report detail route files, G5/Auth and other slots protected. No real account writes, EAS, paid API.
 - AI Lab diary: 候補あり — 5つの主要画面をテスト用データで横断検証し、戻り先と未取得データの表示に改善点を発見した（公開時に内部構造や個人情報を含めない）。
 ---
+## H3 FINAL — PR155 .agent_v2 phased migration independent review — 2026-10-12 JST
+
+- task_id: `agent-v2-pr155-dual-slot-migration-review-h3-20261012`; **PASS_REVIEW_CANDIDATE / MERGE_READY_FOR_CHATGPT_DECISION**, H3 `review_required / next_owner chatgpt`, return C3 to **こでくろ連携部屋のちゃ**.
+- [Draft PR155](https://github.com/anohi-memories/kabumori/pull/155) exact unchanged `8a28a067a20daec5bd96e09656bdfab144c3c458` OPEN/Draft/unmerged; source baseline fresh main `ad063c440852ed7c5f5faaa326ddfd0b5a28e4c9`. No blocking source finding. H3 independently confirmed 33 archived files/6,017,158 bytes and source/hash/blob identity, actual restore33 missing→clean, index856/856 refs and15 mappings/5J report contracts. Local fresh-main merge simulation conflict-free and all old-slot files preserved; no actual merge.
+- Full evidence/limits in `.agent/CODEX_REPORT_3.md`. Separate future final promotion must remap live `.agent_v2` links and completion codes without editing archive hashes; introductory approved merge should update Draft-state note and first new completion must exercise archive-before-replacement. Raw GitHub mergeability null/unknown is not a conflict proof or confirmed availability; re-check before authorized merge.
+- H3 product/PR source edits0, production/API/AI0, deploy/migration/secret0; other slots/worktrees/history preserved. No automatic merge/new TASK/production permission conveyed by C3.
+
+---
+
 ## ニュース改善A G8 Phase J0 — 国内重大ニュース・金融/経済ニュースのアプリ掲載強化（2026-10-12 JST）
 
 - **ユーザー優先方針**: 一般重大事件・事故・企業不祥事・訴訟・災害・政策急変・国内金融/経済/企業ニュースをより広く発見し、Xだけでなく**アプリ一覧へ積極掲載**できるようにする。Pushは重要度別に制限、事実確認と報道機関の商用/AI利用権限を維持。公式・無料兆候＋重要な空白eventに限る低予算Web補完、取りこぼし最小化。

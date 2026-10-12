@@ -1,3 +1,60 @@
+## H3 FINAL — PR155 .agent_v2 dual-slot phased migration independent review — 2026-10-12 JST
+
+- task_id: agent-v2-pr155-dual-slot-migration-review-h3-20261012
+- result: **PASS_REVIEW_CANDIDATE / MERGE_READY_FOR_CHATGPT_DECISION**. No P0/P1/P2/P3 source defect found in the reviewed introduction candidate. This is not permission to merge, deploy or perform the final migration; those remain separate ChatGPT decisions/TASKs.
+- reviewed_pr: [Draft PR155](https://github.com/anohi-memories/kabumori/pull/155), OPEN / Draft / UNMERGED; exact unchanged reviewed_head `8a28a067a20daec5bd96e09656bdfab144c3c458` (re-read at completion), branch `claude/g10-agent-v2-dual-slot-20261012`, 68 changed paths.
+- fresh_main_sha: initial `18c3c1235000d1edb9fff069aa99535f8da4e8de`, final source/check/report baseline `ad063c440852ed7c5f5faaa326ddfd0b5a28e4c9`. Candidate parent and merge-base both `d811b4dc72f3e65fc61e40ae99e61b2094b18ff7`.
+- changed_files: **product source 0 / PR155 source 0**. H3 bookkeeping only: `.agent/CODEX_REPORT_3.md`, `.agent/tasks/CODEX_TASK_3.md`, H3 block of `.agent/ACTIVE_TASK.md`, H3 completion note in `.agent/CURRENT_STATE.md`. Previous reports/TASK histories and other slots preserved.
+- worktree: physically independent source clone `/private/tmp/kabumori-h3-pr155.MAF9eJ`, exact-head detached and clean; isolated report worktree `/private/tmp/h3-pr155-report.Xf8Mjn`. Other slot worktrees/branches/servers not edited. Local audit/restore fixtures only under `/private/tmp/h3-agentv2-audit.YMQLgY`.
+- commit_hash / push: H3-only bookkeeping commit containing this report; determine its exact SHA with `git log -- .agent/CODEX_REPORT_3.md`. Report synchronization will be confirmed by remote read-back; no candidate push or merge by H3.
+- merge: 0. deploy: 0. production_changes: 0. Supabase/DB/Auth/Vault/secret/paid API/AI operations: 0.
+- return_to: **こでくろ連携部屋のちゃ**
+- completion_code: **C3**
+
+### Independent checks/tests (actually executed)
+
+1. Read fresh main H3 TASK/Report, G10 TASK/full Report, shared rules/entry documents and candidate v2 documents/templates. Confirmed task_id/status/return_to/C3 assignment and dedicated checkout; protected other-slot task/worktree ownership.
+2. Snapshot scope equals all 28 tracked `.agent/` files at the pinned snapshot commit plus five root rule/handoff files: **33/33**, **6,017,158 bytes**. Independently compared original `git show` bytes, candidate committed archive blobs, MANIFEST.json/MD path/size/commit/blob/SHA256 fields and SHA256SUMS: **33/33 PASS**.
+3. Ran documented `shasum -a 256 -c SHA256SUMS`: **33/33 OK**. Checked archive `text`/`whitespace` attributes unset, with new TASK files not exempted. `git diff --check HEAD^ HEAD`: **PASS**.
+4. Actual documented restore in a private clone at `d811b4dc...`: moved exactly 33 synthetic checkout files to a separate private backup (not deletion of user files), observed 33 missing tracked files, then `cp -R <archive>/files/. <restore>/`; `git status --porcelain` became **0**. Original/archive/review checkout left unchanged. Repeated check also PASS.
+5. HISTORY_INDEX **282 entries** (15 snapshot-current plus 267 historical), **23 aliases**, **856/856 references PASS**: every path and line exists, source lines contain the row's task_id, remaining refs contain a remaining/残 label. No inferred metadata substituted for missing values.
+6. All **15 TASK + ACTIVE mappings** and **5 J Report contracts PASS**; completion codes unique F1..F10→L1..L10 and J1..J5→V1..V5; task/report paths, routing, predecessor, return_to fields and idle/none status coherent. Read/compared every template body including F10 and J5; no stray per-slot instruction drift.
+7. Candidate changed-path scope: **68 files = 63 v2 additions + five rule/entry edits**. All **26 protected old `.agent/` files byte-identical** to candidate parent (the only two old `.agent` paths edited are allowed ORCHESTRATION/CHATGPT_HANDOFF). Old 15 TASKs, 5 Codex Reports, ACTIVE_TASK and CURRENT_STATE untouched.
+8. `git merge-tree --write-tree origin/main <exact head>` **PASS/no conflicts**, no actual merge. On final `ad063c44...` simulated merge tree `2d65d320b58170a608344a67e7da9e9af8b21efa`, all protected old-slot file blobs equal fresh main, not the old snapshot. Fresh main changes did not overlap the five edited rule/entry paths.
+9. G10's claimed byte/restore/reference counts independently reproduced. Token counts remain **estimates**, not measured model usage. Application/DB/provider suites **NOT_RUN (docs-only scope)**, no AI execution used to test orchestration.
+
+### R1–R3: codes, phased migration and old-system protection
+
+- **PASS**: single `F` (and lowercase `f`) is explicitly exact-match-only coordination, distinct from F1..F10 and F1 vs F10; bare L/V/J prohibited. Old G/K/H/C behavior preserved.
+- Old-started task_id finishes in old system, including K/C acceptance. New system receives only the next new TASK; task_id has exactly one authoritative location. User/ChatGPT chooses each transition; new slots remain idle until assignment and cannot run before PR merge. Separate old/new slots require isolated worktrees and nonoverlapping change boundaries.
+- Merge simulation preserves current running/completed old TASKs, not snapshot contents. Snapshot is data under archive; no instruction promotes it to current task state. Protected old tasks/history are not shortened, moved or reassigned by this PR.
+
+### R4–R5: archive/restore and HISTORY_INDEX assessment
+
+- **PASS**: initial snapshot pins a real main commit, captures exact tracked bytes and is independently restorable. Append-only prohibits edit/delete/shortening; per-completion archive+manifest+checksum+index is mandatory before replacing a new TASK/Report. Final old-system snapshot is explicitly a separate required TASK.
+- **PASS**: HISTORY_INDEX is a search aid, not status authority. Snapshot-current tasks are separated from completion history; missing result/PR/SHA fields and task_id-derived dates are explicitly qualified, PR lists may include referenced/protected PRs. Consumers must inspect original archive lines before drawing conclusions. Normal F/Fn/Jn/L/V work excludes full history/archive reads.
+- Limits: append-only is a documented/manual control, not immutable storage or CI enforcement. Current source counts/hash/reference accuracy PASS; future archive entries need the same checks.
+
+### R6–R8: new slots, final switch and single-F efficiency
+
+- **PASS**: F1/F2 kabumori, F3/F4 POSTONA, F5..F10 explicit reserves; predecessor-specific dedicated room assignments require ChatGPT's transition decision. J1..J4 normal review/fix/verification, explicit human-only implementation exception, J5 preferred temporary implementation slot; self-final-review disallowed. This intentionally differs from old H5-only implementation rule and is explicitly allowed by the new top-level rule.
+- **PASS for introduction stage**: old continuation/unprocessed K/C zero, final snapshot/hash/restore, new-system stability and no unresolved dependencies are prerequisites; final F→G/J→H/L→K/V→C and directory promotion are separate, not this PR. No name/file collision occurs now because roots and exact code families are separate.
+- **PASS**: single F first reads both current indexes/states and 30 latest headers; only ambiguous/review_required/blocker/conflict/production-relevant slots escalate to TASK/Report details. Full historical Reports are explicitly excluded. Safety/conflict checks remain required; unknown mutation boundaries cannot be certified safe using only idle/header metadata.
+
+### Findings / remaining issues / merge recommendation
+
+- **No blocking source findings.** Candidate is suitable for ChatGPT's merge decision; H3 did not merge it.
+- Before any future **final promotion** TASK, specify the path/alias migration and completion-code transition explicitly: HISTORY_INDEX's 23 aliases currently contain `.agent_v2/archive/...`, templates carry `.agent_v2/...` and F/J codes. A blind directory rename would break references; retain durable archive paths or deliberately regenerate live indexes/entry paths and verify all links. Preserve archive payload/manifest hashes. Handle still-running new F/J TASKs and pending L/V before changing their completion codes. These are future cutover gates, not changes performed/required to activate shadow v2.
+- On approved introductory merge, update v2 CURRENT_STATE's Draft/unmerged description before its first live assignment; archive remains an immutable pre-merge snapshot. At first completed new TASK, actually exercise archive-before-replacement flow; introduction static checks do not prove future human compliance.
+- Raw GitHub REST at completion reports `mergeable=null / mergeable_state=unknown`, while connector coerces mergeable to false. This is **not evidence of a source conflict** (local exact fresh-main merge simulation PASS), nor verified GitHub merge availability. Re-read raw server mergeability/checks and fresh main immediately before a separately authorized merge; do not treat unknown as success.
+- Independent audit helper: `/private/tmp/h3-agentv2-audit.YMQLgY/verify.py` (local, not committed/product); reproducible snapshot/index/template/merge-preservation checks above. Private synthetic restore clones retained, no user file removal.
+- safety_checks: exact reviewed HEAD unchanged, old/new mapping and routing intact, archives preserved, other slot metadata/history untouched, candidate/source edit0, real API/AI/production0, no deploy/migration/secret operation, no PR comments/merge/force push.
+- next_recommendation: ChatGPT inspect C3 and decide whether to authorize PR155 merge. Recommended model for that scoped confirmation: Luna（高）; final directory/code cutover is separate high-risk orchestration work, recommended Sol（高）. No automatic new G/H/F/J assignment.
+
+こでくろ連携部屋のちゃ へ C3 を送ってください。
+
+---
+
 ## H3 FINAL — POSTONA Threads PR144 Auth/SQL focused independent review — 2026-10-12 JST
 
 - task_id: postona-threads-pr144-auth-publish-p1-security-review-h3-20261012
