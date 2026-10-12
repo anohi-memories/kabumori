@@ -1,3 +1,9 @@
+## G8 K8 J0 accepted → J1-a assigned (2026-10-12 JST)
+- J0 task `news-improvement-a-jp-general-major-financial-coverage-j0-g8-20261012` accepted PASS_SOURCE_DESIGN / PRODUCTION_HOLD; report preserved under G8 TASK. Commit `d0be8977`, 6 J0-only new paths. Deno6 PASS per G8 report; real production funnel NOT_VERIFIED.
+- G8 TASK/ACTIVE_TASK now `ready` for `news-improvement-a-jp-official-diagnostics-j1a-g8-20261012`, model **Sonnet5（高）**, return **ニュース改善API最適化のちゃ / K8**. Only jp_official diagnostic counters → existing important_news_monitor_runs.diagnostics JSONB, no migration.
+- G8 remains exclusive for news improvement A; G9 stays API optimization B. PR116 fixed 2026-10-13 production worktree / PR129 and all other slot paths protected. No production writes, paid API, merge or deploy approved. G8 must verify fresh main/worktree/paths before implementation.
+
+---
 ## G1 AIに聞く V1 approved; Phase A assigned — 2026-10-12 JST
 - User approved V1 conversational holdings + market/news question answering. G1 task `kabumori-g1-ai-ask-v1-phase-a-ui-contract-20261012` ready; recommended Opus5.5（中）; start G1, return K1 to かぶモリアプリG1のちゃ.
 - Phase A: G1-only offline chat UI and backend contract as Draft PR. Phase B: separate secured AI/provider server implementation with JWT/RLS cross-user isolation, source freshness, usage and rate controls + security review. No G2/G5/G6/G8/G9 changes, production/DB/paid API/EAS/deploy.
