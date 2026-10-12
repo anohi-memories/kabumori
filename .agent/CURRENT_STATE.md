@@ -1,3 +1,11 @@
+## K8 FINAL — G8 PR129 R3 source corrections accepted, next offline premerge QA ready — 2026-10-12 JST
+
+- ユーザーの `K8` に対し、ニュース改善A専任G8 TASK/Report `news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012` を読込。G8 Reportは`review_required`で最終修正head `0a2df248f6e49bcb1bfea690f38064c93e5f895c` を報告。GitHub PR129はOPEN/Draft/unmerged、R2 `7bf9b8a0`から1 commit/5 files（fomc_statement_facts.ts、kessan_tanshin_facts.ts、review_fixes_test.ts、index.ts、新judgement_body_race_test.ts）。ChatGPTはコードと再現テストを読取確認、テストは独立実行していない。
+- **K8 verdict: SOURCE_CORRECTIONS_ACCEPTED / PREMERGE_QA_REQUIRED / MERGE_DEPLOY_HOLD**。H4独立レビューP1×1+P2×2の対象3件：R1折返し決算表 amount/%誤数値→header layout確定時のみm列金額、continuation時2mまで安全結合／曖昧fail closed；R2後からFed公式本文fill中の古いheadline判定保存→bodySummary空snapshotの原子CASを保存PATCHに追加、0行はread-backしstale body競合を独立エラー、pending維持、即時生成しない；R3過去raiseを現在maintainと混同→政策決定の同一文からaction/range/change、過去除外・曖昧withheld。source+関連テストがGitHub上にある。G8報告 before FAIL → after PASS、重要ニュース761、抽出34、discovery/observer162、shadow20、実PDF60件中facts51/原文数値一致51。これはG8自己報告。実Fedや実DB/PostgREST/AI end-to-endは未検証。
+- PR129分岐base `77a627da`から当時のmain `7a5d7e3f42526c92552bd7d585602ed692a9b103` は約330コミット進行、GitHub変更ファイルリストの交差0。**実merge-tree実行前のためmergeabilityはunknown（API null）**。Netlify Preview success、Vercelはbuild-rate-limit（プラン回数制限）URLで失敗、製品ソース失敗の証拠ではない。PR129 merge・deploy禁止継続、PR116固定main productionとは分離。既存F9のno_post/失敗backlog更新未実装、F7のRSS消失/cold-start公平性/20s非hard、TDnet fallback曖昧数値、BOJ権利未確認はリリース前留意点。
+- H4は前C4で既に`done`、追加の全面Codexレビューを自動割当しない。**次の実作業**を同じG8に `news-improvement-a-pr129-premerge-offline-integration-qa-g8-20261012` として`ready`（Sonnet5（高）、G8→K8）で登録。内容はfresh mainのread-only統合可能性証明、実行テストとrelease-checklist。ソース変更/merge/deploy/prod操作は禁止、問題検出時は報告のみ。A専任はG8、API最適化BはG9、それ以外は無干渉。
+- 他G/H、G9、PR115/PR116、別案件のTASK・Report・worktree・実装は変更していない。NEXT: G8開始後K8を同チャットに返し、QA結果に基づきPR129のマージ検討。
+
 ## K5 FINAL — G5 Phase3i account lifecycle offline design — 2026-10-12 JST
 
 - **PASS_OFFLINE_DESIGN / READY_FOR_OFFLINE_IMPLEMENTATION_LIMITED / MANAGED_RELEASE_HOLD**. G5 task `common-account-phase3i-local-findings-safe-lifecycle-plan-20261012` completed and set `done/next_owner:none`. Exact [Draft PR147](https://github.com/anohi-memories/kabumori/pull/147) HEAD `38051f023bfd150f29829a075b6f87fa7c1e3e5f` confirmed OPEN/DRAFT/UNMERGED: one commit, eight newly added `docs/common-account/` / `tools/common-account-lifecycle-safety/` files, no current product/Auth/DB/Edge edits or overlap. Earlier G5 PR121/122/128/130/134/137/146 unchanged.
@@ -570,7 +578,7 @@
 | G5 | `in_progress` | `common-account-phase3g-free-auth-provider-test-readiness-20261011` | `claude` | — | `K5` | `.agent/tasks/CLAUDE_TASK_5.md` |
 | G6 | `idle` | `none` | `none` | — | `K6` | `.agent/tasks/CLAUDE_TASK_6.md` |
 | G7 | `idle` | `none` | `none` | — | `K7` | `.agent/tasks/CLAUDE_TASK_7.md` |
-| G8 | `ready` | `news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
+| G8 | `ready` | `news-improvement-a-pr129-premerge-offline-integration-qa-g8-20261012` | `claude` | ニュース改善API最適化のちゃ | `K8` | `.agent/tasks/CLAUDE_TASK_8.md` |
 | G9 | `done` | `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011` | `none` | ニュース改善API最適化のちゃ | `K9` | `.agent/tasks/CLAUDE_TASK_9.md` |
 | G10 | `idle` | `none` | `none` | — | `K10` | `.agent/tasks/CLAUDE_TASK_10.md` |
 
