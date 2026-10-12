@@ -24,6 +24,11 @@
 - 移行期間中の現行正本は旧 `.agent/`（G1〜G10 / H1〜H5）。旧系統で進行中・完了確認待ちのTASKは、すべて旧系統で完結させる。
 - 旧 `.agent/` の初回snapshot: `archive/2026-10-12-initial-migration/`（snapshot元 main commit `d811b4dc72f3e65fc61e40ae99e61b2094b18ff7`、33ファイル、SHA256照合・復元テスト済み）。完全移行前に最終snapshotを別TASKで取る。
 
+## POSTONA F4 next — Threads T13 writer integration (2026-10-13 JST)
+- F4 new task `postona-f4-threads-t13-authenticated-writer-integration-20261013` ready/claude, recommended Opus5.5（高）, completion L4, return to POSTONA｜マルチSNS化・開発統括（G4）のちゃ.
+- Prior F4 PR167 source TASK archived byte-for-byte under `.agent_v2/archive/2026-10-13-F4-postona-f4-threads-disconnect-lease-safe-v1-20261012/`, manifest/SHA256 and restore equality recorded, HISTORY_INDEX updated.
+- New F4 task: use F5 PR165 source only to enforce T13/brand service active status at Threads authenticated writer entry points; don't modify F3/X, F5/G5 account core, H5 owner transport, or other branch. Read-only composite overlay permitted. Every production gate stays OFF; no real OAuth/Meta/DB/merge/deploy. Await new F4 L4 and F3/F5 owner cooperation before one focused independent J1 Sol（高） review.
+
 ## POSTONA F4 — L4 source accepted（2026-10-13 JST）
 - F4 task `postona-f4-threads-disconnect-lease-safe-v1-20261012` done/none; L4 `PASS_SOURCE_IMPLEMENTATION / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO`. Draft PR167 HEAD `02fd1989303879979b137f8338f8bc6944f266b1`, base protected G4 PR154 `98287392327eabfd5092a3ba89dde51a2e8beff6`, 24 F4-owned paths, unmerged. Threads individual disconnect UI/Edge/SQL candidate, G5 stillOwned lease-aware cleanup source; gates OFF, actual Edge/DB/Meta not activated.
 - Claude reported Deno118, app17+36, local PG focused and mutation checks PASS; ChatGPT inspected GitHub diff and PR metadata but did not independently rerun local suites. F4 complete for source only, next F4 TASK requires archive+SHA256+restore+HISTORY_INDEX.
