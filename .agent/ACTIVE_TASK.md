@@ -129,15 +129,15 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
-- task_id: postona-x-reservation-store-offline-v1-g3-20261011
+- status: ready
+- task_id: postona-g3-reservation-preview-confirmation-ux-v1-20261012
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: claude
 - return_to: POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: K3 PR145 exact 1306cdc5d37e8b28b4819484846aed00875654b2 CHANGES_REQUIRED two P2. R1 SQL finish() accepts expired lease if claim_due() sweeper did not run; enforce deadline independent of sweep and add real PG regression (no duplicate posting; preserve published idempotence). R2 manual_interval mode accepts arbitrary irregular timestamps because app sends no cadence metadata and SQL checks only 60min gap; transmit intended interval and validate on server atomically with interval tests. Same PR145 source-only candidate, G5/G4 deny stubs / client store flag stay OFF; past reported PG/mutation/Deno/app tests accepted as evidence only, not independently rerun. Do not modify G4/H5/G5 or other worktrees, no live DB/Edge/Cron/OAuth/X/Meta/AI/deploy/merge/EAS. Return K3. Sol（高） independent review only before real G5/G4-integrated Auth/RLS/publisher rollout.
-- recommended_model: Opus5.5（中）
+- allocation: K3 accepted previous PR145 R1/R2 corrections as PASS_SOURCE_CANDIDATE_WITH_G5_G4_HOLD, original Draft PR145 head 8820fa8d is unchanged/unmerged. New implementation-only G3 task: per-post X reservation preview confirmation/edit/cancel UX, fixed/random/interval, confirmation invalidation, account isolation, persistence OFF and no live post. Fresh independent G3 worktree/branch + new Draft PR; protected G4/G5/H5 and PR145 code. No production changes/merge/deploy; return K3.
+- recommended_model: Sonnet5（高）
 ## Claude G4
 - owner: claude
 - slot: claude-4
