@@ -3,8 +3,8 @@
 - task_id: kabumori-g1-v1-release-gap-inventory-20261012
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - task_type: read-only release readiness audit
 - recommended_model: **Sonnet5（高）**
 - start_code: G1
