@@ -23,17 +23,17 @@
 
 ## F2
 - slot: F2
-- status: idle
-- task_id: none
+- status: ready
+- task_id: kabumori-f2-pr143-live-mergeability-diagnosis-20261012
 - owner: claude
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: claude
+- return_to: かぶモリアプリ G2（新F2担当）のちゃ
 - completion_code: L2
-- recommended_model: none
+- recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
-- dependencies: none
-- blocker: none
+- dependencies: PR143 → PR149 → PR158; old G2 unstarted task cancelled
+- blocker: GitHub PR143 mergeable=false; diagnose vs latest main
 - slot_use: かぶモリアプリ
 
 ## F3
