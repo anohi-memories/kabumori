@@ -23,6 +23,11 @@
 - PR149/158は先行PRマージ後にbase mainへ変更し、差分をそれぞれ17件/3件と確認。source-only mergeであり、**production NO_GO**。managed DB/migration、Edge、Cron、実Expo push、EAS、課金API、アプリ公開は一切未実施。
 - 次工程：別承認で本番read-only事前確認、その後セキュリティゲートと段階導入計画。旧自動個別レポートの本番停止は未確認・未実施。
 
+## G1未開始TASK取消 → F1新規割当（2026-10-12 JST）
+- ユーザー明示指示「f1に入れ直して」。旧G1 `kabumori-g1-ai-ask-v1-phase-a-ui-contract-20261012` は未開始（ready/Report pending）で明示取消 `CANCELLED_UNSTARTED`、旧TASKとACTIVEはdone/none。旧TASKは旧系統に保持し、新旧二重開始を禁止。
+- 新F1 `kabumori-f1-ai-ask-v1-phase-a-ui-contract-20261012` は独立した新task_id、ready/claude、推薦Opus5.5（中）、開始F1・完了L1、返却先 かぶモリアプリG1のちゃ（新F1担当）。対象はAIに聞くV1のオフラインUI＋安全API契約Phase A。3入口の開発用fixture、保有銘柄・市場/ニュースへの質問UI、情報鮮度/出典/データ分離/費用設計のみ。
+- G2/G5/G6/G8/G9、他G/F/Jのファイル・worktree・本番境界は保護。実API・Auth/RLS/DB/Edge・secrets・有料API・EAS・merge・deploy禁止。Phase Bは別TASKと独立Security review。F1の作業開始前にfresh main・worktree競合を再検証。
+
 ## プロジェクト別現状
 
 - F2の診断TASK `kabumori-f2-pr143-live-mergeability-diagnosis-20261012` はL2受入済み（done/none、PASS_GO_TO_MERGE_DECISION / PRODUCTION_NO_GO）。F8にニュース改善A J1-a診断TASK `news-improvement-a-jp-official-diagnostics-j1a-f8-20261012` を割当済み（ready/claude、L8返却、Sonnet5高）。その他の新系統枠は割当前の状態を各TASKで確認。
