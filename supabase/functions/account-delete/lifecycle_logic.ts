@@ -28,6 +28,7 @@
 //     are never returned or logged.
 import { lastAuthenticatedAt, RECENT_AUTH_SECONDS } from '../social-mobile-account-delete/delete_logic.ts';
 import type { AppleRevocationOutcome } from './apple_outcome.ts';
+import { runProviderCleanups, type ProviderCleanupAdapter, type ProviderCleanupReport } from './provider_cleanup.ts';
 
 export { RECENT_AUTH_SECONDS };
 
@@ -73,6 +74,16 @@ export type LifecycleDeps = {
    */
   revokeApple: ((authorizationCode: string, expectedSubjects: readonly string[]) => Promise<AppleRevocationOutcome>) | null;
   x: XServiceCleaner;
+  /**
+   * Other providers a service connected (Threads, later Instagram), each cleaned through the adapter its
+   * owner registered (provider_cleanup.ts). Empty/absent today: the step then does nothing.
+   */
+  providers?: readonly ProviderCleanupAdapter[];
+  /**
+   * Whether a provider whose LOCAL data is gone but whose remote grant is not confirmed revoked may let a
+   * whole-account deletion complete. Default false: the deletion stops (PROVIDER_REMOTE_UNVERIFIED).
+   */
+  acceptRemoteUnverified?: boolean;
   /** Managed Auth Admin delete of the verified login. */
   deleteLogin(userId: string): Promise<'deleted' | 'not_found' | 'failed'>;
   /** Managed Auth Admin read of the verified login. */
@@ -86,12 +97,17 @@ export type LifecycleErrorCode =
   | 'DELETION_IN_PROGRESS' | 'RECONCILIATION_REQUIRED'
   | 'APPLE_REAUTH_REQUIRED' | 'APPLE_REVOCATION_UNAVAILABLE' | 'APPLE_REVOKE_FAILED'
   | 'X_CLEANUP_UNSUPPORTED' | 'X_CLEANUP_IN_PROGRESS' | 'X_CLEANUP_BLOCKED' | 'X_CLEANUP_FAILED'
+  | 'PROVIDER_CLEANUP_BLOCKED' | 'PROVIDER_REMOTE_UNVERIFIED'
   | 'SERVICE_CLEANUP_INCOMPLETE' | 'SESSION_REVOKE_FAILED'
   | 'STORAGE_CLEANUP_FAILED' | 'STORAGE_NOT_EMPTY' | 'STORAGE_BUCKET_OWNED'
   | 'NOT_READY' | 'AUTH_DELETE_FAILED' | 'AUTH_DELETE_UNCONFIRMED' | 'DELETION_VERIFICATION_PENDING'
   | 'WITHDRAW_BLOCKED' | 'WITHDRAW_INTERRUPTED' | 'WITHDRAW_INCOMPLETE' | 'FAILED';
 
-type FailureBody = { ok: false; error: LifecycleErrorCode; reasons?: string[]; sessions_revoked?: true };
+type FailureBody = {
+  ok: false; error: LifecycleErrorCode; reasons?: string[]; sessions_revoked?: true;
+  /** Fixed provider keys and fixed result codes of the provider cleanup step (provider_cleanup.ts). */
+  providers?: ProviderCleanupReport['providers'];
+};
 type Body = FailureBody | ({ ok: true } & Record<string, unknown>);
 export type LifecycleResponse = { status: number; body: Body };
 
@@ -106,13 +122,18 @@ export const REASON_CODES = [
 const reasonCode = (value: unknown) => ((REASON_CODES as readonly unknown[]).includes(value) ? value as string : 'UNKNOWN');
 const reasonCodes = (value: unknown) => [...new Set((Array.isArray(value) && value.length ? value : ['UNKNOWN']).map(reasonCode))];
 
-const fail = (status: number, error: LifecycleErrorCode, extra: { reasons?: string[]; sessionsRevoked?: boolean } = {}): LifecycleResponse => ({
+const fail = (
+  status: number,
+  error: LifecycleErrorCode,
+  extra: { reasons?: string[]; sessionsRevoked?: boolean; providers?: ProviderCleanupReport['providers'] } = {},
+): LifecycleResponse => ({
   status,
   body: {
     ok: false,
     error,
     ...(extra.reasons ? { reasons: extra.reasons } : {}),
     ...(extra.sessionsRevoked ? { sessions_revoked: true as const } : {}),
+    ...(extra.providers ? { providers: extra.providers } : {}),
   },
 });
 const record = (value: unknown) => (typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {});
@@ -408,6 +429,27 @@ async function ownedDeletion({ deps, token, user, operationId, owner, appleCode,
     (await call(deps, 'owned_checkpoint', { ...owner, p_checkpoint: key, p_recorded: present }))?.status;
   const recordStorage = (present: boolean) => ownedCheckpoint('storage_cleanup', present);
 
+  // The other providers of the person's services, each through its owner's adapter (T10). Every registered
+  // adapter runs; an unsettled answer is never replayed (reconciliation), a refusal stops before anything
+  // else is ended, and a provider that could not confirm its remote grant stops unless accepted. With no
+  // adapter registered this is a no-op.
+  let remoteUnverified: string[] = [];
+  const providerStep = async (): Promise<LifecycleResponse | null> => {
+    const adapters = deps.providers ?? [];
+    if (adapters.length === 0) return null;
+    if (!(await owned())) return lost();
+    const report = await runProviderCleanups(adapters, userId);
+    if (report.decision === 'reconciliation_required') {
+      return stop(fail(409, 'RECONCILIATION_REQUIRED', { sessionsRevoked, providers: report.providers }));
+    }
+    if (report.decision === 'blocked') return stop(fail(409, 'PROVIDER_CLEANUP_BLOCKED', { sessionsRevoked, providers: report.providers }));
+    remoteUnverified = report.remoteUnverified;
+    if (remoteUnverified.length > 0 && deps.acceptRemoteUnverified !== true) {
+      return stop(fail(409, 'PROVIDER_REMOTE_UNVERIFIED', { sessionsRevoked, providers: report.providers }));
+    }
+    return null;
+  };
+
   // 4a. X first, through its own saga, wrapped by the lifecycle service deletion.
   if (!(await owned())) return lost();
   const xBegun = await call(deps, 'begin_service_deletion', { p_user_id: userId, p_service_key: 'x_autopost' });
@@ -428,10 +470,17 @@ async function ownedDeletion({ deps, token, user, operationId, owner, appleCode,
     if (outcome === 'in_progress') return stop(fail(409, 'X_CLEANUP_IN_PROGRESS'));
     if (outcome === 'blocked') return stop(fail(409, 'X_CLEANUP_BLOCKED'));
     if (outcome !== 'done') return stop(fail(502, 'X_CLEANUP_FAILED'));
+    // The POSTONA entitlement is ended only once every other provider of the service is settled (T10).
+    const providerFailure = await providerStep();
+    if (providerFailure) return providerFailure;
     const finished = await call(deps, 'finish_service_deletion', { p_user_id: userId, p_service_key: 'x_autopost', p_operation_id: xOperation });
     if (finished?.status !== 'ended') return stop(fail(500, 'SERVICE_CLEANUP_INCOMPLETE'));
   } else if (xBegun.status !== 'not_registered' && xBegun.status !== 'already_ended') {
     return stop(fail(500, 'FAILED'));
+  } else {
+    // POSTONA was never started or already ended: a provider credential may still be there (T10).
+    const providerFailure = await providerStep();
+    if (providerFailure) return providerFailure;
   }
 
   // 4b. Kabumori (one transaction: entitlement deleting -> profile cascade -> ended).
@@ -563,7 +612,7 @@ async function ownedDeletion({ deps, token, user, operationId, owner, appleCode,
   for (let attempt = 0; attempt < 2; attempt++) {
     const done = await call(deps, 'complete', { p_user_id: userId, p_operation_id: operationId });
     if (done?.status === 'completed' && done.login_deleted === true) {
-      return { status: 200, body: { ok: true, outcome: 'deleted' } };
+      return { status: 200, body: { ok: true, outcome: 'deleted', ...(remoteUnverified.length ? { remote_unverified: remoteUnverified } : {}) } };
     }
     if (done?.status === 'login_present') return fail(500, 'AUTH_DELETE_UNCONFIRMED', { sessionsRevoked });
     if (attempt === 0 && (done?.status === 'not_verified' || done?.status === 'residue_found') && done.reason === 'MANAGED_STORAGE_OWNED'
