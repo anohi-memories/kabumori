@@ -173,18 +173,17 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: done
-- task_id: common-ai-provider-g6-phase2c-isolation-test-allowlist-20261012
+- status: ready
+- task_id: common-ai-provider-g6-four-pr-premerge-offline-qa-20261012
 - start_code: G6
 - finish_code: K6
-- next_owner: none
-- latest_result: K6 ACCEPTED PASS_OFFLINE_SOURCE_CANDIDATE / PRODUCTION_NO_GO — Draft PR #157 (9b952d64, stacked on unchanged PR153 6c576567): isolation_test.ts only; exact allowlist (handler.ts + shadow_wiring_test.ts, exact specifiers), only handler/index reach the module via imports, Anthropic names stay in module; synthetic + on-disk probes all refused; old test failure reproduced; provider 126 / report 313 / _shared 629; production NO_GO, production=0, paid calls=0. Report: .agent/tasks/CLAUDE_TASK_6.md
+- next_owner: claude
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- recommended_model: Sonnet5（高）
 - source: .agent/tasks/CLAUDE_TASK_6.md
-- report: .agent/tasks/CLAUDE_TASK_6.md#report--phase2c-isolationg6記入
-- recommended_model: Sonnet5（中）
-- allocation: K6 completed, G6 now unreserved; G2 Phase2c PR153 (head 6c576567) now imports AI provider in market-report-analysis/handler.ts. Phase1a isolation_test.ts blanket no-production-import rule must be replaced by exact handler/test allowlist. G6 owns only isolation_test.ts in a separate branch Draft stacked on PR153 (PR148→150→153). All other Edge imports and app/client secret leakage remain forbidden; positive/negative regressions, Provider123 + market report313 offline. No G2 source/PR changes, no prod/paid API, merge/deploy/secrets/DB/Cron.
-- previous_result: Phase2b K6 accepted PASS_OFFLINE_SOURCE_CANDIDATE; history retained in own task.
+- report: .agent/tasks/CLAUDE_TASK_6.md#report--four-pr-premerge-offline-qa-g6
+- allocation: Four stacked Draft PRs #148→#150→#153→#157 read-only offline premerge QA. PR148 Github mergeable=false versus main; identify exact conflicts against fresh main and test full stack if possible, no product/PR edits. Keep G2 PR143/149/158 and G5/Auth fully protected; source-only work, no main merge, deploy, paid API, prod DB/Secret/Cron. Return K6.
+- previous_result: Phase2c isolation K6 PASS_OFFLINE_SOURCE_CANDIDATE; prior history in G6 TASK.
 - production_mutation_window: FORBIDDEN
 
 ## Claude G7
