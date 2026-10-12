@@ -24,11 +24,10 @@
 - 移行期間中の現行正本は旧 `.agent/`（G1〜G10 / H1〜H5）。旧系統で進行中・完了確認待ちのTASKは、すべて旧系統で完結させる。
 - 旧 `.agent/` の初回snapshot: `archive/2026-10-12-initial-migration/`（snapshot元 main commit `d811b4dc72f3e65fc61e40ae99e61b2094b18ff7`、33ファイル、SHA256照合・復元テスト済み）。完全移行前に最終snapshotを別TASKで取る。
 
-## POSTONA F4 — Threads個別解除・lease安全化（2026-10-12 JST）
-- 旧G4 PR154 のTASKはdone、次の新規TASKを新系統F4へ登録。F4 `postona-f4-threads-disconnect-lease-safe-v1-20261012` ready/claude、Opus5.5（高）、F4→L4、返却先 POSTONA｜マルチSNS化・開発統括（G4）のちゃ。
-- 独立F4 Draft branchはG4 PR154 HEAD `98287392327eabfd5092a3ba89dde51a2e8beff6` から。G5 repaired PR152 `ccea1fe8132c6f573a768f0df5a033a05c62ef2c`、H5 source PR159 `163675c62835e84417905f98f97ceedd4dd1bcd9` を参照。PR161 bookkeepingはDraftでmain未反映、旧H5 TASKを書き換えない。
-- 実装範囲：Threadsのみ個別解除UI/API/owner-only SQL候補、G5 `signal/stillOwned()` に追従したThreads固有cleanup adapter。G3のX予約/X saga、G5共通ID/T13/T10登録、H5 owner runtimeは保護。G3 in_progressのため変更パス衝突禁止。
-- 解除・接続・投稿の本番ゲートOFF、Edge503、実Meta/Auth/DB/Vault/secrets/公開投稿/merge/deploy/EASは一切未承認。G5への本登録、managed権限、独立Sol（高）レビューと本人承認後の限定pilotは別工程。
+## POSTONA F4 — L4 source accepted（2026-10-13 JST）
+- F4 task `postona-f4-threads-disconnect-lease-safe-v1-20261012` done/none; L4 `PASS_SOURCE_IMPLEMENTATION / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO`. Draft PR167 HEAD `02fd1989303879979b137f8338f8bc6944f266b1`, base protected G4 PR154 `98287392327eabfd5092a3ba89dde51a2e8beff6`, 24 F4-owned paths, unmerged. Threads individual disconnect UI/Edge/SQL candidate, G5 stillOwned lease-aware cleanup source; gates OFF, actual Edge/DB/Meta not activated.
+- Claude reported Deno118, app17+36, local PG focused and mutation checks PASS; ChatGPT inspected GitHub diff and PR metadata but did not independently rerun local suites. F4 complete for source only, next F4 TASK requires archive+SHA256+restore+HISTORY_INDEX.
+- Outstanding production blockers: independent Sol（高） security review via available J1–J4 without changing existing slot tasks; G5 T10 actual registration/EXECUTE and service_deletion lease contract; G5 decision on local_removed_remote_unverified/acceptRemoteUnverified; managed Auth/Vault/owner/Meta credentials and explicit authorized pilot. No merge/deploy/production mutation, no real Meta deauthorize, no public post. G3 X and H5 runtime unaffected.
 
 ## かぶモリV1 ソース統合（2026-10-12 JST）
 
