@@ -3,8 +3,8 @@
 - task_id: agent-v2-dual-slot-migration-20261012
 - owner: claude
 - slot: claude-10
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G10
 - finish_code: K10
 - recommended_model: **Opus5.5（高）**
@@ -569,4 +569,123 @@ G10専用の独立Git worktree/checkoutを `/Users/yuya/Developer/kabumori-fresh
 ## Report — agent-v2-dual-slot-migration-20261012
 
 - task_id: agent-v2-dual-slot-migration-20261012
-- result: in_progress（作業中。完了時にここへ記録する）
+- reported_at: 2026-10-12 JST
+- status: review_required / next_owner: chatgpt（K10待ち）
+- result: **PASS_DRAFT_PR** — `.agent_v2/` 新15枠基盤・旧 `.agent/` 完全snapshot・MANIFEST / SHA256・HISTORY_INDEX・新旧移行ルールを [Draft PR #155](https://github.com/anohi-memories/kabumori/pull/155) にまとめた。merge・deployはしていない。旧系統のTASK・Report・ACTIVE_TASK・CURRENT_STATEは、PRでは差分ゼロ。
+- draft_pr: https://github.com/anohi-memories/kabumori/pull/155 （Draft / OPEN / 未merge、base `main`、head `8a28a067a20daec5bd96e09656bdfab144c3c458`、68ファイル）
+- commit_hash:
+  - PR head（`.agent_v2` 本体＋ルール追記）: `8a28a067a20daec5bd96e09656bdfab144c3c458`
+  - G10 TASK登録（main、ユーザー承認済み）: `d811b4dc72f3e65fc61e40ae99e61b2094b18ff7`
+  - このReport: このReportを含むmainのcommit（`git log -- .agent/tasks/CLAUDE_TASK_10.md` で確認）
+- push: PR branch `claude/g10-agent-v2-dual-slot-20261012` をpush（mainへは入れていない）。main へは、TASK登録とこのReport（このファイルと ACTIVE_TASK のG10項目のみ）を通常のfast-forward pushで反映。force push なし。
+- deploy: なし。merge: なし。
+
+### changed_files（PR #155）
+
+- 変更: `PROJECT_RULES.md`（「新旧二重系統」節、単独F＝30枠）、`.agent/ORCHESTRATION.md`（新旧二重系統、移行期間中の単独F）、`AGENTS.md`（J1〜J5の1段落）、`CLAUDE.md`（F1〜F10の1行）、`.agent/CHATGPT_HANDOFF.md`（新旧二重系統の3行）。いずれも追記のみで、G / H / K / C の意味は変えていない。
+- 追加: `.agent_v2/` 配下63ファイル（下の構造）。
+
+### `.agent_v2/` の構造
+
+- `ORCHESTRATION.md` — 新系統の運用詳細（コード体系、F と F1〜F10 の完全一致での区別、Fn＝Gnの後継枠、J1〜J4レビュー / J5臨時実装の優先枠、移行ルール、TASK / Report方式、次TASK前の履歴保存手順、返却先、単独F＝30枠の二段階確認、完全移行条件）
+- `ACTIVE_TASK.md` — 新15枠（全枠 idle）。各枠に slot / status / task_id / owner / next_owner / return_to / completion_code / recommended_model / current_task_path / current_report_path / dependencies / blocker
+- `CURRENT_STATE.md` — 現在有効な情報だけ（移行の状態、production安全制約、運用判断、次工程）
+- `HISTORY_INDEX.md` — 旧系統の完了・履歴282件（現行15件を含む）の索引
+- `tasks/F1.md`〜`F10.md`、`tasks/J1.md`〜`J5.md`、`reports/J1.md`〜`J5.md` — 未割当テンプレート
+- `archive/.gitattributes`、`archive/README.md`、`archive/2026-10-12-initial-migration/`（`files/`、`MANIFEST.md`、`MANIFEST.json`、`SHA256SUMS`、`RESTORE.md`）
+
+### snapshot / MANIFEST / SHA256 / restore
+
+- 保存先: `.agent_v2/archive/2026-10-12-initial-migration/`。snapshot元は main `d811b4dc72f3e65fc61e40ae99e61b2094b18ff7`（このTASKの登録直後）。
+- 保存ファイル数: 33（旧 `.agent/` 配下の全28ファイル＋ `PROJECT_RULES.md` / `AGENTS.md` / `CLAUDE.md` / `HANDOFF.md` / `HANDOFF_TEMPLATE.md`）、合計 6,017,158 bytes。各ファイルは作業ツリーではなく `git show <commit>:<path>` のバイト列。
+- MANIFEST: original_path / archive_path / size / SHA256 / git blob / snapshot元commit を全33件について記録（`MANIFEST.md`・`MANIFEST.json`）。
+- SHA256の結果:
+  - `shasum -a 256 -c SHA256SUMS` は 33/33件 OK。
+  - 別手段でも、`git show <commit>:<path> | shasum -a 256` と `git hash-object` が 33/33件一致。
+  - コミットされたarchiveのblobも、原本のblobと 33/33件一致。
+- restore test: snapshot元commitの一時worktreeで対象33ファイルを削除（33件の変更）→ archiveの `files/` から復元 → `git status --porcelain` 0件。一時worktreeは確認後に削除した。
+- archive配下は原本由来の行末空白を含むため、`archive/.gitattributes`（`** -text -whitespace`）で改行変換と空白チェックの対象外にした。新規に書いた非archiveファイルは引き続きチェック対象。
+
+### HISTORY_INDEX
+
+- 旧系統の各TASK / Report / 旧archive（G4の2件）から機械抽出した。完了・履歴267件と、snapshot時点の各slot現行15件（別表）を収録。旧CURRENT_STATEは参照先（S:）としてだけ使った。
+- 列: 完了日 / slot / task_id / 作業名 / result / PR番号 / final commit SHA / archive参照先（T: TASK、R: Report、K/C: 完了確認見出し、S: 旧CURRENT_STATE） / remaining issue参照先。Report本文はコピーしていない。月ごとの見出し（2026-10 / 2026-09 / 日付不明）で、将来 `history/YYYY-MM.md` へ切り出せる。
+- 参照の検証: 参照856件すべてについて、archiveの指定行が実在し、task_id（remaining参照は remaining / 残）を含む。生成とは別のスクリプトで確認した。
+- 抽出の限界: 282件中、result 65件・PR番号 72件・final SHA 197件は原文から拾えず「—」。日付119件はtask_id由来（「（id）」付き＝割当日の目安）。補完も推測もしていない。
+
+### 新15枠mapping
+
+- F1→L1、F2→L2、F3→L3、F4→L4、F5→L5、F6→L6、F7→L7、F8→L8、F9→L9、F10→L10（`.agent_v2/tasks/Fn.md`、ReportはTASK末尾）
+- J1→V1、J2→V2、J3→V3、J4→V4、J5→V5（`.agent_v2/tasks/Jn.md`、最新Reportは `.agent_v2/reports/Jn.md`）
+- TASKヘッダーと ACTIVE_TASK v2 の両方で、15件すべて一意。
+- 用途の既定: F1/F2=かぶモリアプリ、F3/F4=X自動投稿アプリ（POSTONA）、F5〜F10=明示割当専用（Fn は Gn の後継）。J1〜J4はレビュー・バグ修正・検証。J5はCodex臨時実装の優先枠で、ユーザーが明示した場合だけJ1〜J4も実装に使える。
+
+### 単独F＝30枠の仕様
+
+- 移行期間中の単独 `F`（数字なし、小文字 `f` も同じ）は、旧G1〜G10・旧H1〜H5・新F1〜F10・新J1〜J5の全30枠を統括する。`F1`〜`F10` とは完全一致で区別する（`F1` と `F10` も別）。
+- 第一段階: 旧ACTIVE_TASK、旧CURRENT_STATEの先頭の現在の記録だけ、新ACTIVE_TASK、新CURRENT_STATE、30枠のTASK先頭メタデータ。第二段階: 必要なslotだけ個別TASK / Report。過去Report全文は読まない。安全・競合確認は省略しない。
+- 完全移行後は、単独Fは全15枠の統括に戻る。
+- 記載先: `PROJECT_RULES.md`、`.agent/ORCHESTRATION.md`、`.agent_v2/ORCHESTRATION.md`、`CLAUDE.md`、`.agent/CHATGPT_HANDOFF.md`（いずれもPR #155のmerge後に有効）。
+
+### 旧15枠の差分ゼロ確認
+
+- PR #155 の差分（base `d811b4dc72f3e65fc61e40ae99e61b2094b18ff7`）で、`.agent/tasks/` 全15ファイル、`.agent/CODEX_REPORT*.md` 5件、`.agent/ACTIVE_TASK.md`、`.agent/CURRENT_STATE.md`、`.agent/archive/`、`.agent/room_handoffs/`、`.agent/CLAUDE_REPORT.md` は差分ゼロ。
+- `.agent_v2/` 以外で変わったのは、上記のルール・入口文書5ファイルの追記だけ。
+
+### サイズ / 推定token比較
+
+bytes・文字数は実測。tokenは「ASCII文字数÷4＋非ASCII文字数÷1.5」の概算式による推定で、実測ではない。
+
+| 読み込み | bytes（実測） | 文字数（実測） | 推定token |
+| --- | ---: | ---: | ---: |
+| 旧: 単独F（旧ルールどおり全文） | 5,579,744 | 4,840,143 | 1,364,138 |
+| 旧: 1枠の開始（中央値） | 992,061 | 883,362 | 243,491 |
+| 旧: 1枠の開始（最大） | 1,936,268 | 1,821,349 | 479,279 |
+| 新: 単独F 第一段階（移行期間中・30枠） | 113,977 | 93,500 | 27,638 |
+| 新: 単独F 第一段階（完全移行後・15枠） | 18,250 | 13,624 | 4,366 |
+| 新: 1枠の開始（現時点のテンプレート） | 89,753 | 48,338 | 20,714 |
+| 新: 1枠の開始（TASKが目安上限30KBの場合） | 118,617 | 67,812 | 27,538 |
+
+- 範囲の仮定: 「1枠の開始」は PROJECT_RULES＋HANDOFF＋ORCHESTRATION＋CURRENT_STATE＋自TASK（H枠は＋Report）。「旧CURRENT_STATEの先頭の現在の記録」は先頭10節で計測。旧TASKの先頭メタデータは先頭30行、新は先頭20行。30KB TASKの行は、日本語5,000字＋ASCIIで30KBとした仮定の値（推定）。
+- 新系統の1枠開始では、PROJECT_RULES と HANDOFF（約49KB）の共通部分が大半を占める。
+
+### tests / checks
+
+- 新15枠の全ファイル存在（TASK 15、J Report 5、ACTIVE_TASK、CURRENT_STATE、HISTORY_INDEX、ORCHESTRATION の24件）: PASS
+- F1〜F10→L1〜L10、J1〜J5→V1〜V5 の一意性: PASS
+- 旧15枠の差分ゼロ: PASS
+- archive SHA256一致（3つの方法）: PASS
+- snapshotからの復元: PASS
+- HISTORY_INDEX の参照有効（856件）: PASS
+- J1〜J5 の return_to / completion_code 欄の存在と対応: PASS（未割当のため値は none、completion_code は V1〜V5 固定）
+- 単独Fと F1〜F10 の区別がルール文書に明記されている: PASS
+- `git diff --check`: PASS
+- workflow / scripts / supabase/functions に `.agent` を参照するものは無い（archive追加の影響なし）
+
+### remaining_issues
+
+1. HISTORY_INDEX は機械抽出。「—」の欄（result 65 / PR 72 / SHA 197）と、task_id由来の日付119件は原文確認が必要。PR番号欄には、対象PRのほかに保護対象・参照先として書かれたPRも含まれうる。
+2. snapshotは `d811b4dc` 時点の写し。旧 `.agent/` はその後も更新されるので、完全移行の直前に別TASKで最終snapshotが必要。
+3. リポジトリ全体を検索すると、旧ファイルの写しが `.agent_v2/archive/` で重複して見つかる。検索時は必要に応じて除外する。
+4. PR #155 は `PROJECT_RULES.md`・`.agent/ORCHESTRATION.md`・`AGENTS.md`・`CLAUDE.md`・`.agent/CHATGPT_HANDOFF.md` に追記している。merge前にこれらがmainで変わると競合しうるので、merge時にfresh mainで確認が必要。
+5. 「Fn＝Gnの後継枠（同じ用途・同じ部屋）」は、完全移行時の呼び名戻しと「G1完了→次からF1」の例に合わせた既定案。予備枠で部屋の用途が決まっているもの（例: G6・G9）をFへ引き継ぐかは、移すときにChatGPTの判断が必要。
+6. 推定tokenは概算式による値で、実測ではない。
+7. G10 TASK自体は、ChatGPTではなくClaudeがユーザー承認のもとで登録した（登録commit `d811b4dc72f3e65fc61e40ae99e61b2094b18ff7`）。
+8. 旧H5（臨時実装専用・H1〜H4は実装しない）と新J5（優先枠・ユーザー明示時はJ1〜J4も実装可）は、TASK指示どおり意図的に異なる。
+
+### safety_checks
+
+- 現行G1〜G10 / H1〜H5 のTASK・Reportの変更なし（G10の登録とこのReportは、ユーザー承認のもとで自分のslotだけ）。進行中TASKの移動なし。旧 `.agent` の軽量化なし。
+- force push なし、Git履歴の書き換えなし、既存PRのmergeなし、PR #155 も未merge。
+- production deploy、Supabase本番、DB / Auth / RLS / migration、Edge Function、secrets / APIキー、有料APIの呼び出しは、いずれもなし。
+- 作業は `kabumori-fresh` の fresh `origin/main` から作った専用worktree `/Users/yuya/Developer/kabumori-g10-agent-v2` で実施した。他のworktreeや他slotのdev serverには触れていない。復元テスト用の一時worktreeは自分で作り、確認後に削除した。
+
+### 完全移行前に必要な次工程
+
+1. K10でPR #155を確認する。Codexレビューを入れる場合は、旧系統のH1〜H4へ置く（docsのみの変更なので、要否はレビュー最適化方針でChatGPTが判断）。
+2. ユーザー / ChatGPTの判断でPR #155をmergeし、新旧二重系統を有効化する。
+3. 旧系統の各slotが完了した時点で、次の新規TASKを新系統（F / J）へ置くかをChatGPTが判断する。
+4. 最初に完了したF / J TASKで、「完了時の履歴保存」（archive＋MANIFEST＋SHA256＋HISTORY_INDEX追記）が回ることを確認する。
+5. 完全移行の条件（旧系統の継続TASKと未処理K / Cが無い、新基盤が安定稼働、未解決の依存関係が無い）が揃ったら、別TASKで旧 `.agent/` の最終snapshotを取り、hash照合と復元確認をする。
+6. 別TASKで完全移行を行う（F→G、J→H、L→K、V→C、`.agent_v2/` を正式 `.agent/` へ昇格、旧基盤をarchiveへ）。
+- next_recommendation: K10でPR #155を確認し、merge可否と最初の新系統TASKの置き場所を判断する。
