@@ -1,10 +1,68 @@
+# G2 CURRENT TASK — 共通AI基盤 Phase 2c：市況レポートhandlerへClaude比較処理を既定OFFで接続（ソースのみ）
+
+- task_id: kabumori-g2-phase2c-deferred-claude-market-shadow-handler-20261012
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- start_code: G2
+- finish_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Opus5.5（高）**
+- priority: source integration after G2 PR149 H2 R1–R6 K2 PASS_SOURCE_FIX
+- source_only: true
+- production_status: PRODUCTION_NO_GO / all model+consumer+legacy Cron gates untouched
+- user_and_G6_product_contract: normally use exactly the existing OpenAI generation; after SUCCESSFUL completed market packet, optional Claude Opus shadow/comparison in separate waitUntil task, disabled by default and skip when no runtime/deadline, never block/change publication. Real API/billing/secrets/production requires separate user approval.
+- protected_G6_phase2a: https://github.com/anohi-memories/kabumori/pull/148 head a71de72b3bcfc88547b616f789df7765283565ed OPEN/Draft/unmerged
+- protected_G6_phase2b: https://github.com/anohi-memories/kabumori/pull/150 head 18d9058aa8bd451f3cd0181f8570a31484750035 OPEN/Draft/unmerged, stacked on PR148
+- protected_G2_ondemand: https://github.com/anohi-memories/kabumori/pull/143 head 889ca1b44cf82bd3ecb913818dca568456849feb OPEN/Draft/unmerged
+- protected_G2_broadcast: https://github.com/anohi-memories/kabumori/pull/149 head e9bb86c44808d87ad8cbd3de4f1d1564066f958a OPEN/Draft/unmerged, stacked on PR143
+- prior_K2: PASS_SOURCE_FIX on H2 PR149 six P2 findings, no extra broad review, source only
+- route: **G2 owns handler.ts/index.ts/handler_test.ts; G6 owns provider adapter and ledger. Never edit G6/G5/G8/G9/POSTONA/other-slot source.**
+
+## Goal and branching — do not block useful source progress on unmerged G6 parents
+
+G6 Phase2b `PASS_OFFLINE_SOURCE_CANDIDATE/NOT_WIRED`. Source details are in `docs/ai-provider/PHASE2B_MARKET_REPORT_WIRING_PLAN.md` (§2, §4, §8) from exact G6 PR150, and `_shared/ai_provider/market_report_wiring.ts` from PR150 with adapter in protected PR148.
+
+**Implement one source-only G2 Draft PR directly STACKED ON PR150 exact head** (base = G6 `claude/g6-phase2b-market-report-wiring-20261012`, create your OWN distinct G2 branch and isolated worktree at that commit, without changing G6 branch/worktree or PR148/PR150). G6 original recommended merging PR148→PR150 first; NOT needed for offline-only source candidate if stacked; rollout dependency/order must be explicit. Do not change PR143/PR149 or their base/heads; Phase2c source affects market-report-analysis only, so no need to bring G2 PR149 commits onto new branch. If G6 parent HEAD changes, module is missing, or another slot/PR now owns `handler.ts`/index/test, STOP with blocker, do not invent a new base or change other PR.
+
+**Recommended model Opus5.5（高）** because boundary includes paid-provider guard + production report Edge lifecycle, despite source-only.
+
+## Exact minimal integration
+
+1. `supabase/functions/market-report-analysis/handler.ts`: inject `prepareMarketReportShadow` from the existing **G6-owned** `../_shared/ai_provider/market_report_wiring.ts`, no copy-pasting/refactoring adapter or provider. `Deps.waitUntil?: (promise: Promise<unknown>) => void` injectable, no need for actual Edge runtime in offline tests. `startedAtMs` from the request start (after entering handleRequest, not after completing report); maintain one time domain for `deadlineAtMs` and `nowMs` (real time vs injectable fake time) and explicitly test time-bound logic. Read G6 module clock parameter carefully; avoid mismatch where injected `deps.now` mocked but shadow defaults to wall clock `Date.now`.
+2. Keep `openAiRequester` exactly unchanged in off mode: legacy requester object is reused, no additional OpenAI call, same request bytes/schema/token cost/outcome/Fact/diagnostics/trace/DB packet, no user-visible changes. Use G6 `prepareMarketReportShadow({ legacy, readEnv: deps.env, claim, sink: sanitized event, fetch: deps.fetch, nowMs? })`; in off (default, incomplete env, unknown mode/model) DO NOT send shadow or reserve cost or access sensitive unrelated keys. G6 guard/model/catalog/policy untouched.
+3. For shadow: record generate-stage request/result only during normal `generateSharedAnalysis`, **no paid Claude/ledger while the packet is uncommitted**. Await `complete_market_report_analysis` success **and** existing best-effort `writeTraces(packetId)`; schedule `deps.waitUntil(shadow.flush({deadlineAtMs: startedAtMs + 150_000}))` only after successful completion, and return existing completed response immediately without awaiting comparison. Exceptions in setup, scheduling, logging/sink, flush, mode lookup MUST NEVER turn a successfully completed report into failed or trigger `fail_market_report_analysis` after completed. Observe `EdgeRuntime.waitUntil` semantics in source: no detached unawaited promise when waitUntil absent; no fake guaranteed async execution. If target service lacks runtime, skip and report.
+4. If report `DATA_PACKET_NOT_USABLE`, `outcome.ok=false`, RPC fail, skip, unauthorized, exceptions/timeout, MUST NOT schedule Claude or change current failure semantics. Deadline: G6 `MIN_SHADOW_WINDOW_MS=20_000`, `SHADOW_DEADLINE_MARGIN_MS=10_000`; not enough time means `NO_TIME` and **no paid request**. Failure of shadow, budget refusal, Anthropic429/529, cancel or ledger exception must not stop morning/close/X/app publication. `cost_usd` / `p_api_cost_usd` stays OpenAI only, Claude cost exists only in G6 ledger; no output of comparison to user-visible packet or billing.
+5. `supabase/functions/market-report-analysis/index.ts`: only minimal `EdgeRuntime.waitUntil` injection supported by Supabase/Deno source; when undefined/not available, do not call. No deployment or real function invocation. Add **focused** integration tests in existing `handler_test.ts` and/or new G2-owned test filename. G6's `_shared` source/tests/docs are read-only; PR148/150 exact commits remain untouched.
+6. Logging: one non-sensitive structured `market_report_shadow` event from G6 sink. **No prompt, payload, news, holdings, usernames, API keys, tokens, private body**. Test error paths without emitting secrets. `traceRows` and `generationDiagnostics` must remain OpenAI-only.
+7. Check if `MarketReportShadow` timer/cancellation handling relies on ledger `ai_ledger_recover_stale`. This recovery Cron is not yet a known deployed prerequisite; leave real execution entirely OFF. If anything requires secrets/production API to complete source wiring, STOP, don't use paid smoke.
+
+## Focused tests / acceptance
+
+- Verify parent tree exact PR148 `a71de...` → PR150 `18d905...` and PR143 `889ca...` + PR149 `e9bb...`, fresh origin/main, `PROJECT_RULES.md`, `AGENTS.md`, ORCHESTRATION/ACTIVE/CURRENT_STATE, G2 prior TASK/Report and G6 Phase2b report/plan; other slot branch/worktree/PR path overlap, named independent G2 worktree/checkout clean. Never touch other slot's worktree, dev server or uncommitted files.
+- Tests on fake provider+ledger+clock: (a) absent/off/invalid config—existing response/body/trace/audit/cost exact identity, paid/ledger requests0; (b) shadow: completed RPC and writeTraces before any queued Claude call; response returns without waiting; (c) failure/skip/unauthorized/retry no flush; (d) waitUntil absent/no support no detached network; (e) 1 second before deadline/NO_TIME no real call, 20-second threshold; (f) flush throws, waitUntil registration throws, sink logging throws—no downgrade/duplicate fail, (g) repeated claim idempotency, fake 429/529/COST_LIMIT—no delivery change; (h) market-report-analysis nearby tests and G6 shared provider harness, minimal type/lint `git diff --check`. Use **offline synthetic fixtures only**, no actual Anthropic/OpenAI/Supabase request, no secrets read/registration.
+- Protect outputs: morning/close current OpenAI text + diagnostics cost unchanged; no active provider switch, no auth/model/G6 ledger policy modification, no extra user-specific analysis. Keep test count focused, avoid running all app/X/Deno suites without relevance.
+- PR finish: one **new G2 Draft PR stacked on PR150** containing ONLY the G2 handler/index/test patch, parent PR148→PR150 intact, history preserved, no PR149 or PR143 accidental changed paths. Branch/HEAD/base, exact diff/changed_files, tests, missing real runtime, source-only merge/deploy/prod0, hazards + next release gates in own `## Report — current Phase2c G2`. Set G2 status `review_required`/next_owner `chatgpt`, G2 ACTIVE and CURRENT_STATE latest G2 record only; send K2 to this chat.
+- Main merge/rebase/force push/deploy/paid shadow/Expo/X live/production Supabase DB/Edge/Cron/secret/Vault changes are **forbidden**. Real go-live requires separate: G6 recovery Cron, scoped Edge key, budget and stop gates, actual `waitUntil` compatibility, off-default deploy+readback, user-authorized 3-day canary, privacy review as needed. **$5/month trial policy is not compatible with ongoing daily Opus shadow**; do not silently increase.
+- Codex H1–H4 review not automatic on source-only wiring; ChatGPT decides narrowly at K2 if new auth/ledger/security boundary or production release preflight needs it. H5 never routine review.
+
+## Report — current Phase2c G2
+
+PENDING G2.
+
+---
+
+## Previous G2 TASKs/Reports — preserved verbatim below
+
 # G2 CURRENT TASK — PR149 H2 C2指摘 R1〜R6 6件の限定是正（本番OFF・ソースのみ）
 
 - task_id: kabumori-pr149-h2-r1-r6-bounded-fixes-g2-20261012
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
+- k2_verdict: PASS_SOURCE_FIX / H2 R1–R6 source corrected exact PR149 e9bb86c44808d87ad8cbd3de4f1d1564066f958a / PRODUCTION_NO_GO / G2 source slot released (2026-10-12)
 - start_code: G2
 - finish_code: K2
 - return_to: かぶモリアプリG2のちゃ
