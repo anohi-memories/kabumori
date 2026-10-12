@@ -105,14 +105,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-g1-portfolio-watchlist-simulator-qa-20261012
+- status: ready
+- task_id: kabumori-g1-five-tab-release-simulator-qa-20261012
 - start_code: G1
 - finish_code: K1
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: 2026-10-12 G1 read-only Simulator QA authorized after PR142 squash merge 4d0d0660831c1bf7403a908592c337c284332cdf. Verify 375pt/402pt portfolio/watchlist/detail navigation with synthetic stale-valuation fixtures. No real user data edits, G2/G5 work, native tabs changes, EAS or deploy. Original K1 report archived in TASK.
+- allocation: 2026-10-12 prior portfolio Simulator QA K1 PASS and done; new read-only five-tab release Simulator QA assigned. Home/銘柄/ニュース/レポート/メニュー navigation, 375pt/402pt, fixtures, regressions; no G2/G5/G8/G9 work, production data editing, EAS or deploy.
 - recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
