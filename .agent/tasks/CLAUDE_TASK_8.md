@@ -3,8 +3,8 @@
 - task_id: news-improvement-a-pr129-release-safety-env-switches-g8-20261012
 - owner: claude
 - slot: claude-8
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G8
 - finish_code: K8
 - return_to: ニュース改善API最適化のちゃ
@@ -32,6 +32,18 @@
 7. 不要な設計変更・新しいFact抽出・DB待機キュー・再判定backlog・外部API課金・BOJ本文接続は禁止。H4/C4は既にレビュー完了、H4を再レビューに無断再利用しない。ONの場合に突然別DB writeが起きないよう新旧全ての新規更新をゲートできることをテストで確証する。
 8. 安全な状態でのみ既存PR129ブランチ`claude/news-body-integration-phase7-20261011`へcommit/pushしDraft維持、merge/deployしない。競合があればpush停止・報告。
 9. 完了後は`## Report`にtask_id/result/flag_names/default_off/on_behavior/off_behavior/tests/changed_files/commit_hash/push/PR_head/PR_state/remaining_issues/safety_checks/next_recommendationを記し、**K8を「ニュース改善API最適化のちゃ」へ返す**。次K8でflag修正とQAを確認してmerge判断。G8はニュース改善A専任のまま、別案件は一切引き継がない。
+
+## K8 evaluation — ChatGPT, 2026-10-12 JST
+
+- verdict: PASS_SOURCE_REVIEW / MERGE_CANDIDATE / DEPLOY_HOLD
+- verified_PR: #129 OPEN/Draft/unmerged, exact head `81251b316ae44a634a1b4108b420a18765d17261`, parent R3 `0a2df248`、R5は1 commit / 6 changed files、PR total16 files。GitHubに2つの独立フラグのsourceと7つの新mockテストがある。
+- Fed flag: `IMPORTANT_NEWS_FED_STATEMENT_BODY_ENRICHMENT===enabled` の条件でのみ `storedStatementStates` / enrichment / body fillを実行。OFFは既存RSS受理・headline-only判定を維持。TDnet flag: `IMPORTANT_NEWS_TDNET_KESSAN_FACTS===enabled` の時だけ数値表facts先頭、それ以外は従来keyword summaryのまま。どちらも初期OFFで独立、BOJ本文未接続を維持。
+- verification_scope: GitHub source + tests + commit diff; Deno runはG8報告 important-news-monitor768PASS、news_body_extraction34PASS、shadow20PASS、news_discovery/observer162PASS。ChatGPT自身はDeno/実Edge/PostgREST実行せず。R4のQAは当時mainとのmerge-tree+一時統合競合0、QA時点main後進19 commitsの主な変更は.agent/等で対象sourceの重複は無し（GitHub比較）。現在GitHub mergeabilityはunknown（API null）、merge済みとは主張しない。
+- CI: Netlify Preview success、Vercel failureのURLはbuild-rate-limitのため、CI全greenとは主張しない。
+- unresolved: 既存no_post/generation_failed行の再判定なし、F7上限/RSS消失、TDnet fallback旧要約数値の曖昧さ、BOJ rights、実本番On運用検証なし。OFFにしても旧機能の品質制約は残る。R5 README冒頭にはPhase6当時の「まだEdgeに未接続」という古い説明があるため、次の最小文書整備時に訂正する（今回source release blockerとは判定しない）。
+- decision: G8 R5 TASKはdone/next_owner none、次のTASKは自動割当しない。**PR129のmergeとdeployはまだ実施しない**。2026-10-13の固定PR116 production反映は別工程でread-backが必要。PR116にPR129を混入させない。ユーザー承認とPR116実反映後のfresh SHA/mergeability確認を経てPR129のmergeを検討。導入時は両フラグOFFで開始し、各ONは別途承認。
+- routing: ニュース改善Aは引き続きG8専任、API最適化B/G9や他G/Hは不干渉。
+
 
 ## Report
 
