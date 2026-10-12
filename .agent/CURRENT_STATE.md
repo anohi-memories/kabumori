@@ -1,3 +1,13 @@
+## K5 FINAL — G5 Phase3i account lifecycle offline design — 2026-10-12 JST
+
+- **PASS_OFFLINE_DESIGN / READY_FOR_OFFLINE_IMPLEMENTATION_LIMITED / MANAGED_RELEASE_HOLD**. G5 task `common-account-phase3i-local-findings-safe-lifecycle-plan-20261012` completed and set `done/next_owner:none`. Exact [Draft PR147](https://github.com/anohi-memories/kabumori/pull/147) HEAD `38051f023bfd150f29829a075b6f87fa7c1e3e5f` confirmed OPEN/DRAFT/UNMERGED: one commit, eight newly added `docs/common-account/` / `tools/common-account-lifecycle-safety/` files, no current product/Auth/DB/Edge edits or overlap. Earlier G5 PR121/122/128/130/134/137/146 unchanged.
+- G5 source-only design claims conditional I1–I7 on attested B1–B6, records local OSS F1/F2/F3/F4/F6/F7, fails closed on missing facts, uses P0–P8 staged cleanup with bounded reconciliation, no fixed-duration/BAN/hook assumption. G5 self-reports Deno32/32, model exploration ~8,800 schedules per configuration and mutations32/32, check/lint/diff/secret scan PASS. ChatGPT source inspected; no independent local test execution. PR Vercel rate limited; not code failure nor deployment evidence.
+- Remaining **U1** Storage policy inventory, **U2** real predicate/lock/RLS/Edge/writer/sweeper/manifest implementation, **U3** managed readback roles/audit. Critical future proof: proposed B1 `FOR KEY SHARE` must actually serialize with explicit freeze `FOR UPDATE` across PostgreSQL transaction boundaries. Cross-service Storage list/cleanup and DB do not automatically offer atomic same-snapshot verification; I4 can only be claimed after effective consistency/read-back or return UNKNOWN/RECONCILE. Synthetic PASS is not managed proof.
+- No managed E1–E12, Auth, real providers, family photo pause, payments, live migration, PR merge or production deploy. `IDP_PREPAUSE_BLOCKED` and `managed_auth_delete BLOCKED`; E11/Option D unauthorized. G5 free and no next task preallocated; recommended next bounded G5 offline B1/lock-order PostgreSQL proof (Opus5.5高 or Sonnet5高 once scoped). Focused Sol（高） review at concrete high-risk implementation boundary, not automatic repeated review of this doc.
+- AI Lab diary: 記録不要 — 未公開の認証セキュリティ設計であり詳細公開を控える。
+
+---
+
 ## K6 FINAL — G6 Phase2a market-report shadow adapter source candidate PASS — 2026-10-12 JST
 
 - G6 `common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012`: **done/none**. Draft PR #148 head `a71de72b3bcfc88547b616f789df7765283565ed`, 3 new adapter/test/docs files, OPEN/DRAFT/UNMERGED. Default OFF, shadow sends only after successful legacy step and does not alter report result. Ledger-protected single attempt, synthetic tests.
