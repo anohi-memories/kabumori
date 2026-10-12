@@ -18,6 +18,59 @@ export type BreakingMarketQueryRunDiagnostic = {
   estimatedCostUsd?: number;
 };
 
+/**
+ * JP official lane counters of one run (J1-a). Counters only: no ids, urls, titles, bodies or error text. `skipped` /
+ * `drops` are reason -> count maps whose keys come from a fixed vocabulary in the lane code; anything that does not look
+ * like such a key is folded into "other" and the number of keys is bounded, so a bad reason string can neither leak nor
+ * grow the stored JSON.
+ */
+export type JpOfficialRunDiagnostic = {
+  enabled: boolean;
+  signalsRead: number;
+  selected: number;
+  alreadyKnown: number;
+  inserted: number;
+  deferred: number;
+  enrichedPages: number;
+  skipped: Record<string, number>;
+  drops: Record<string, number>;
+};
+
+const MAX_REASON_KEYS = 40;
+const REASON_KEY = /^[a-z0-9_]{1,64}$/u;
+
+function count(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.min(Math.trunc(value), 1_000_000) : 0;
+}
+
+function reasonCounts(input: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (typeof input !== "object" || input === null) return out;
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    const safe = REASON_KEY.test(key) ? key : "other";
+    if (!(safe in out) && Object.keys(out).length >= MAX_REASON_KEYS) {
+      out.other = (out.other ?? 0) + count(value);
+      continue;
+    }
+    out[safe] = (out[safe] ?? 0) + count(value);
+  }
+  return out;
+}
+
+export function jpOfficialRunDiagnostics(input: JpOfficialRunDiagnostic) {
+  return {
+    enabled: input.enabled === true,
+    signalsRead: count(input.signalsRead),
+    selected: count(input.selected),
+    alreadyKnown: count(input.alreadyKnown),
+    inserted: count(input.inserted),
+    deferred: count(input.deferred),
+    enrichedPages: count(input.enrichedPages),
+    skipped: reasonCounts(input.skipped),
+    drops: reasonCounts(input.drops),
+  };
+}
+
 const n = (value: number | undefined) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
 
 /** Bounded, secret-free per-run diagnostics; zeroes remain queryable across runs to derive consecutive streaks. */
@@ -32,6 +85,8 @@ export function buildCollectionRunDiagnostics(input: {
   marketMacroProviders: MarketMacroProviderRunDiagnostic[];
   breakingMarketQueries: BreakingMarketQueryRunDiagnostic[];
   headlineTrigger?: HeadlineTriggerRunDiagnostic;
+  /** Additive (J1-a): omitted when not supplied, so existing readers and tests are unaffected. */
+  jpOfficial?: JpOfficialRunDiagnostic;
 }) {
   const marketMacroProviders = input.marketMacroProviders.map((item) => ({ ...item }));
   const breakingMarketQueries = input.breakingMarketQueries.map((item) => ({
@@ -66,6 +121,7 @@ export function buildCollectionRunDiagnostics(input: {
     // Additive (cost optimisation Phase 0); readers of version 1 keep working.
     cost: headlineTriggerCost ? { ...cost, headlineTrigger: headlineTriggerCost } : cost,
     ...(trigger ? { triggerLane: trigger.lane } : {}),
+    ...(input.jpOfficial ? { jpOfficial: jpOfficialRunDiagnostics(input.jpOfficial) } : {}),
     marketMacro: {
       providers: marketMacroProviders,
       zeroResultCount: marketMacroProviders.filter((item) =>
