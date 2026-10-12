@@ -3,8 +3,8 @@
 - task_id: kabumori-pr149-broadcast-fanout-push-security-review-h2-20261012
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
@@ -59,7 +59,19 @@ G2 report says local disposable PG17 behavior/concurrency/rollback/19 mutation r
 
 ## Report
 
-PENDING H2.
+- task_id: kabumori-pr149-broadcast-fanout-push-security-review-h2-20261012
+- result: **CHANGES_REQUIRED / PRODUCTION_NO_GO**, ONE source-only independent review.
+- exact_review_commit: `31c509df1c08ecc437ca4b70541284f223c836e2`; protected PR143 `889ca1b44cf82bd3ecb913818dca568456849feb`; both Draft OPEN/UNMERGED unchanged.
+- findings: six reproducible P2: R1 feed gate only at enqueue (begin still183 targets while app feed disabled); R2 stale uses queue creation rather than source completion (121min source still claimed with120min limit); R3 schema allows91 devices but silently sends90 and marks sent; R4 legal16-way parallel setting bursts640 messages at t0 despite300/sec setting; R5 one planned recipient becomes61 begin users after opt-in changes with chunk_size50; R6 malformed matching-count ticket `HTTP200 data:[{}]` is retry instead of terminal unknown.
+- independently_run_tests: typed focused **44/44 PASS** with --sloppy-imports; independent scratch **8/8 PASS** including successful defect repro assertions; disposable PG17 supplied runner ALL PASS, role ACL/race/expand-only/rollback/10k/100k and **19/19 mutants detected**. Additional SQL probes R1/R2/R3/R5 andOFF controls reproduced in own synthetic DB and each transaction rolled back.
+- type/lint/diff: worker+test checkPASS, runtime4-file lintPASS, diff-checkPASS. Test-inclusive lint has5 nonblocking require-await mock style findings; unflagged initial Deno app imports TS2307 resolved via --sloppy-imports, no --no-check or source changes.
+- wider1669 G2 tests not independently rerun; actual Expo arrivals/Edge limits/managed account lifecycle/network/native are NOT_RUN. Vercel failure reason build-rate-limit, not code failure.
+- source_changed_files: []; no H2 product commit. Own Report/TASK/H2 ACTIVE/current-state bookkeeping only; other slots and full archived history protected.
+- report_commit: `5bcbc6e65e6ae452b827c7bcaf2a958fbaee265e` published to main through guarded Contents API; exact full remote Report read-back PASS, historical suffix preserved.
+- merge0/deploy0/productionDB0/Cron/settings/secrets/OAuth/Vault0/realPush0/X0/OpenAI0/paidAPI0; no actual Supabase connection. Own dedicated localPG stopped; original clean-base untracked supabase/.temp intact.
+- next: C2 evaluates one bounded G2 fix; does not reserve G2 or authorize release. Status **review_required / next_owner chatgpt**.
+- return_to: かぶモリアプリG2のちゃ
+- completion_code: C2
 
 ---
 
