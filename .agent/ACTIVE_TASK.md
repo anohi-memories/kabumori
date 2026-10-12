@@ -63,17 +63,18 @@
 ## Codex H3
 - owner: codex
 - slot: codex-3
-- status: done
-- task_id: postona-threads-pr144-auth-publish-p1-security-review-h3-20261012
+- status: ready
+- task_id: agent-v2-pr155-dual-slot-migration-review-h3-20261012
 - start_code: H3
 - finish_code: C3
 - completion_code: C3
-- next_owner: none
-- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
+- next_owner: codex
+- return_to: こでくろ連携部屋のちゃ
 - source: .agent/tasks/CODEX_TASK_3.md
 - report: .agent/CODEX_REPORT_3.md
-- allocation: C3 2026-10-12 accepted H3 independently completed review of exact Draft PR144 d4a1e87b77d1fbd362dc51809ce2d998afda15ea stacked on PR140 exact 2e75a6a842e70f3de78558681803b60935fb4251. Verdict CHANGES_REQUIRED/REAL_PILOT_HOLD with one reproducible P2: auth.sessions FOR KEY SHARE in threads_publish_release_candidate.sql:229-232 allows concurrent non-key not_after expiry UPDATE to commit before credential release; local PostgreSQL17 two-session reproduction and FOR SHARE control PASS. Deno93 and composite176 (overlap), app258 and disposable SQL/mutations PASS as H3-run; ChatGPT source/report inspected only. Actual managed GoTrue revocation not proven. Protected H5 PR139 session KEY SHARE concern noted for future separate H5 interface, not modified. H3 product edits0, no prod/Meta/DB apply/deploy/merge. H3 done/unreserved; one narrow G4 correction assigned instead of repeated broad review. Other H/G slots protected.
-- recommended_model: Sol（高） (C3 accepted)
+- allocation: Draft PR #155 exact head 8a28a067a20daec5bd96e09656bdfab144c3c458 の新旧30枠・段階移行型 .agent_v2 基盤を独立READ ONLYレビュー。新旧コード体系、F/F1衝突、旧15枠差分ゼロ、archive/MANIFEST/SHA256/restore、HISTORY_INDEX、F/J/L/V→G/H/K/C復帰、二重割当防止、J1〜J5運用、完全移行条件、merge時の現行G/H互換性を重点確認。PR merge/deploy/production変更禁止。完了はC3。
+- recommended_model: Sol（高）
+
 ## Codex H4
 - owner: codex
 - slot: codex-4
