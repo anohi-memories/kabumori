@@ -203,11 +203,11 @@
 ## Claude G8
 - owner: claude
 - slot: claude-8
-- status: ready
+- status: done
 - task_id: news-improvement-a-jp-general-major-financial-coverage-j0-g8-20261012
 - start_code: G8
 - finish_code: K8
-- next_owner: claude
+- next_owner: none
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_8.md
 - report: .agent/tasks/CLAUDE_TASK_8.md#report
