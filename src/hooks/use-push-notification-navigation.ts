@@ -9,7 +9,8 @@ import { reportRouteForPush } from '@/lib/report-presentation';
 // buildExpoPushMessage in supabase/functions/send-push-notifications:
 // 'important_news' lands on the news tab; 'personalized_report' opens that
 // report (source_id is the personalized_reports id); 'personalized_analysis'
-// opens the finished on-demand analysis (source_id is the job id).
+// opens the finished on-demand analysis (source_id is the job id); 'market_report'
+// (the shared morning/close broadcast, source_id '<type>:<date>') opens that shared report.
 // Untestable without a real device/build; see the MVP completion task Report
 // for what remains to verify once one exists.
 export function usePushNotificationNavigation(session: Session | null) {

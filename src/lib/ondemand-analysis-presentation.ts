@@ -154,6 +154,13 @@ export function analysisAsReport(row: AnalysisResultRow): PersonalizedReport {
 // 共通の朝刊・大引け（get_app_market_report が返す、公開してよい項目だけ）
 // ---------------------------------------------------------------------------
 
+/** 共通の市況の画面の引数（通知から開いたときの種類と日付）。不正な値は無視して、朝刊の最新の回にする。 */
+export function marketReportParams(params: { type?: unknown; date?: unknown }): { type: ReportType; date: string | null } {
+  const type: ReportType = params.type === 'close' ? 'close' : 'morning';
+  const date = typeof params.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(params.date) ? params.date : null;
+  return { type, date };
+}
+
 export type AppMarketReport =
   | { status: 'disabled' }
   | { status: 'missing' | 'not_ready'; reportType: ReportType; tradingDate: string | null }
