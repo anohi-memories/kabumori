@@ -133,15 +133,15 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: postona-g3-reservation-preview-confirmation-ux-v1-20261012
+- status: ready
+- task_id: postona-g3-x-reservation-api-client-wiring-offline-v1-20261012
 - start_code: G3
 - finish_code: K3
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: K3 2026-10-12 PASS_UI_SOURCE_LOCAL_PREVIEW_ONLY for PR151 exact head 0cd5c596, 1 commit / 9 G3-owned paths stacked on unchanged Draft PR145 8820fa8d. Per-post user confirmation/edit/retime/cancel, invalidation, account isolation and preview-only OFF release gate accepted. G3 reports app309/309, domain22/22, mutants19/19; ChatGPT inspected source but did not rerun tests; iOS device NOT_RUN. Both PR145/151 stay Draft unmerged, all production/real X operations OFF. G5/G4 auth required before future integration and one focused Sol（高） review; no new G3 task automatically assigned.
-- recommended_model: Sonnet5（高）
+- allocation: User continuation 2026-10-12. G3 has completed PR145 source DB/offline and stacked PR151 preview confirmation UI. Next G3 implementation: real source-only API/HTTP contract with JWT/owner/entitlement/account gate adapters DENY until true G5/G4 proof, app create/list/readback/restart/reschedule/reconfirm/cancel flow and local executable integration. Dedicated new independent G3 worktree and stacked Draft PR on unchanged PR151 head 0cd5c596; protect PR145 head 8820fa8d, PR151, G4/G5/H5 source and existing AI Lab/Kabumori posting. Persistence and real X/Meta/AI all production OFF; no migration, API deploy, grants, X post, merge, EAS. One Sol（高） security review only after effective G3+G4+G5 production-boundary source integration. Return K3.
+- recommended_model: Opus5.5（高）
 ## Claude G4
 - owner: claude
 - slot: claude-4
