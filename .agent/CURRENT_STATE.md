@@ -1,3 +1,17 @@
+## G2 報告 — 共通AI基盤 Phase 2c：市況レポートの handler に Claude 比較処理を既定 OFF で接続（Draft PR #153）— 2026-10-12 JST
+
+- G2 `kabumori-g2-phase2c-deferred-claude-market-shadow-handler-20261012`: **SOURCE_WIRED_DEFAULT_OFF／本番 NO_GO**。
+  - Draft PR #153 は head `6c576567328c99a58c2e4beaed86d155fe875769`。base は G6 PR #150 のブランチ（PR150 `18d9058a` → PR148 `a71de72b` の上。どちらも変更なし）。
+  - 変更は `market-report-analysis/` の `handler.ts`・`index.ts` と新しいテストだけ（G6 の `_shared/ai_provider/` は変えていない）。
+- 既定（未設定・不正・`waitUntil` なし）は、今の OpenAI の要求そのもので何も変わらない（応答・保存・費用・trace が同じ、比較処理への通信0）。
+  - shadow は、完了の記録と trace のあとでだけ `waitUntil` に渡し、応答は待たない。締め切りは処理の開始から150秒。
+  - どの例外も completed を失敗にしない。ログは識別子と数値だけ。
+- テスト: `market-report-analysis` 313件（新規30）すべて成功。わざと壊した3通りもすべて検出。
+- **G6 への引き継ぎ:** G6 の `isolation_test.ts`（Phase 1a の「まだ本番の関数は共通 AI 基盤を読み込まない」）が1件失敗する。接続によって当然起きるもので、G6 が許可の一覧を更新する必要がある（変更前の PR150 では123件すべて成功）。
+- 本番の操作・マージ・デプロイ・本物の API は 0。本番の前に、親の PR のマージ、回復処理の Cron、鍵・予算、`waitUntil` の確認、カナリアが要る（すべて別承認）。月 $5 の試験用の上限は、毎日の比較処理とは合わない。G2 は review_required / chatgpt で K2 待ち。
+
+---
+
 ## POSTONA G4 implementation-first — Threads mobile OAuth and G5 T10 provider adapter READY — 2026-10-12 JST
 
 - **User decision:** “G4の必要なこと先にすすめて” — proceed in parallel with shared account G5 instead of holding POSTONA. New **G4** task `postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012` assigned `ready/next_owner claude`, recommended **Opus5.5（高）**, start G4 / finish K4 to POSTONA｜マルチSNS化・開発統括（G4）のちゃ. New G4 TASK is implementation-first, NOT another offline-only research paper or unnecessary suite reruns.

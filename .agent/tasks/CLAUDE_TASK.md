@@ -3,8 +3,8 @@
 - task_id: kabumori-g2-phase2c-deferred-claude-market-shadow-handler-20261012
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G2
 - finish_code: K2
 - return_to: かぶモリアプリG2のちゃ
@@ -49,7 +49,127 @@ G6 Phase2b `PASS_OFFLINE_SOURCE_CANDIDATE/NOT_WIRED`. Source details are in `doc
 
 ## Report — current Phase2c G2
 
-PENDING G2.
+### 位置づけ
+
+- task_id: `kabumori-g2-phase2c-deferred-claude-market-shadow-handler-20261012`
+- 判定: **SOURCE_WIRED_DEFAULT_OFF（ソースとして接続し、手元で検証済み）／本番 NO_GO**
+- Draft PR: https://github.com/anohi-memories/kabumori/pull/153
+  - ブランチ `g2-phase2c-market-shadow-20261012`、head `6c576567328c99a58c2e4beaed86d155fe875769`（commit 1つ）。
+  - base は G6 の `claude/g6-phase2b-market-report-wiring-20261012`（PR #150、head `18d9058aa8bd451f3cd0181f8570a31484750035`）。PR #150 の土台は PR #148（head `a71de72b3bcfc88547b616f789df7765283565ed`）。
+  - 作業の開始時と PR の作成後に、PR148・PR150 の head が指定どおりで変わっていないことを確認した。PR148・PR150・PR143（`889ca1b4`）・PR149（`e9bb86c4`）は変更していない。
+  - 本番に出す順番: PR148 → PR150 → PR153。
+- 作業場所: G2 専用の新しい worktree `/Users/yuya/Developer/kabumori-g2-phase2c`（PR150 の head から作成）。
+  - 他のスロットの worktree・ブランチ・サーバーには触れていない。
+  - `handler.ts`・`index.ts`・`handler_test.ts` に触れる開いた PR が無いことを確認した。
+- merge=NO、deploy=NO、production_calls=0。次はすべて0: 本物の OpenAI / Anthropic への送信、Secrets、Cron、Edge、本番の DB。
+
+### 変更したファイル（3。すべて G2 の所有、+571/−6）
+
+1. `supabase/functions/market-report-analysis/handler.ts`
+   - `Deps` に `waitUntil?` と `log?` を追加した。
+   - 処理の開始時刻 `startedAtMs` を `handleRequest` の先頭で `deps.now()` から取る。
+   - `prepareShadow`: 生成の前に G6 の `prepareMarketReportShadow` を呼ぶ。次の場合は今の `openAiRequester` をそのまま使う。
+     - `waitUntil` が無い
+     - G6 が off と判断した
+     - 準備で例外が出た
+     - 渡すのは `readEnv: deps.env`、claim、fetch、`nowMs: () => deps.now().getTime()`（handler と同じ時計）、sink。
+   - `scheduleShadow`: `complete_market_report_analysis` の成功と `writeTraces` のあとで、`flush({ deadlineAtMs: startedAtMs + 150_000 })` を `waitUntil` に渡す。応答は待たない。
+     - 比較処理は、`waitUntil` が受け取ってから動き出す（関門の Promise を解く）。
+     - 登録が例外なら動き出さないので、待たれない処理は残らない。
+     - この関数は例外を投げない。
+   - `shadowLogRecord`: G6 の記録から、識別子と数値だけの `market_report_shadow` の1行を作る。識別子でない detail は `REDACTED`。
+2. `supabase/functions/market-report-analysis/index.ts`: 実行環境に `EdgeRuntime.waitUntil` があるときだけ渡す。無ければ渡さないので、比較処理は準備も送信もしない。
+3. `supabase/functions/market-report-analysis/shadow_wiring_test.ts`（新規）: つなぎ目のテスト30件。
+
+G6 の `_shared/ai_provider/`（adapter・wiring・ledger・catalog・policy）は読み込むだけで、変更していない。
+
+### 守っていること（TASK の項目ごと）
+
+1. **既定 OFF:** モード未設定・不明・不完全（モデルなし、カタログに無いモデル、Anthropic の鍵なし）、または `waitUntil` なしの場合は、今の requester そのものを使う。依頼・スキーマ・トークン・費用・Fact・診断・trace・保存する packet・応答はすべて同じ。比較処理のための設定（モデル・Anthropic の鍵）も読まない。
+2. **shadow:**
+   - 生成の段階の依頼と結果を、G6 の仕組みが覚えておくだけ（packet が未確定の間は、台帳への予約も Claude への送信もしない）。
+   - 完了の記録と trace のあとでだけ `waitUntil` に渡し、応答はすぐ返す。
+   - `cost_usd` / `p_api_cost_usd` は OpenAI だけ。Claude の費用は G6 の台帳にだけ入る。
+3. **失敗の経路:** 次の場合は登録しない。今の失敗の扱いもそのまま。
+   - `DATA_PACKET_NOT_USABLE`、`outcome.ok=false`、通信の例外、完了の記録の失敗
+   - skip、認証なし
+4. **締め切り:** 処理の開始から150秒。G6 の決まりで、締め切りの10秒前までを使い、残りが20秒未満なら送らない（NO_TIME、台帳も0）。
+   - 比較処理が動き出すのは完了の直後なので、生成に時間がかかった日（例 開始から125秒）は送らない。
+5. **例外:** 次の例外があっても completed のまま。`fail_market_report_analysis` は呼ばない。
+   - 準備、`waitUntil` への登録、ログ、比較処理（flush）
+   - Anthropic の 429・529、予算の拒否
+6. **ログ:** `market_report_shadow` の1行（phase: call / flush / prepare / schedule）。
+   - プロンプト・本文・ニュース・保有・利用者名・API の鍵は出さない。
+   - `traceRows` と `generationDiagnostics` は OpenAI だけのまま。
+7. **回復処理の Cron:** 送信中に止められた予約は、G6 の `ai_ledger_recover_stale` が上限の金額で確定させる前提（G6 の計画書 §4）。この Cron は本番で未確認なので、本番では OFF のままにする必要がある。
+
+### テスト（すべて手元。本物の API・鍵・DB なし）
+
+| 対象 | 件数 | 結果 |
+|---|---|---|
+| `market-report-analysis/`（既存の `handler_test.ts` 6件は変更なしで通る） | 313（新規30） | 成功 |
+| `_shared/kabumori_ai_models_test.ts` | 11 | 成功 |
+| `_shared/ai_provider/`（G6、変更なし） | 122 / 123 | **1件失敗（下の「G6 への引き継ぎ」）** |
+
+新規30件（`shadow_wiring_test.ts`。本物の handleRequest・openAiRequester・generateSharedAnalysis を、模型の OpenAI・Anthropic・台帳・DB で動かす）:
+- (a) OFF・不正な設定の7通りで、次のことを確かめた。
+  - 応答・保存（packet・診断・費用）・OpenAI の依頼が既定と同じ。
+  - Anthropic・台帳へは0、`waitUntil` へも何も渡さない。
+  - OFF で読む設定は、今までの5つだけ。
+- (b) shadow で、次のことを確かめた。
+  - 完了の記録と trace が、台帳・Anthropic より先。
+  - Anthropic の応答を止めても、応答は返る。
+  - 台帳は予約 → 送信 → 精算の1回だけ。
+  - OpenAI への追加の依頼は無い。
+  - ログに鍵・本文・見出しが出ない。
+- (c) 失敗・skip・認証なしの6通りでは登録しない。`outcome.ok=false` は、今どおり失敗の記録になる。
+- (d) `waitUntil` が無いときは、準備も送信もしない。鍵も読まない。設定の誤りはログ（NO_WAIT_UNTIL）で分かる。
+- (e) 締め切り:
+  - 開始から119秒・120秒なら送る。121秒・149秒なら送らない（NO_TIME）。
+  - 生成に125秒かかった日は送らない（完了の時刻から数える誤りを防ぐ）。
+- (f) 登録の例外（動き出さない）・ログの例外・比較処理の例外でも completed のまま。
+- (g) 同じ試行の再実行は台帳が断る（Anthropic へは1回だけ）。Anthropic の 429・529、予算の拒否（COST_LIMIT）でも、応答と保存は OFF と同じ。
+
+テストが守りを確かめていることの確認として、`handler.ts` をわざと3通りに壊した。どれもテストが見つけた（確認後に元へ戻した）。
+- 締め切りを完了の時刻から数える
+- 登録の前に動かし始める
+- `outcome.ok=false` でも登録する
+  - 最初は見逃したので、その経路のテストを足した。
+
+deno check / lint は0件、`git diff --check` は問題なし。TASK のとおり、アプリ・X・ほかの Deno のテストは関係が無いので実行していない（NOT_RUN）。
+
+### G6 への引き継ぎ（1件、G2 では変えていない）
+
+- G6 の `_shared/ai_provider/isolation_test.ts` の「Phase 1a scope: no production function imports the provider module yet」が失敗する。
+  - このテストは「まだどの本番の関数も共通 AI 基盤を読み込まない」ことを確かめるもので、今回の接続がその段階を進めるため。
+  - 対象は `market-report-analysis/handler.ts` と `shadow_wiring_test.ts`。3回とも、この1件だけ（1回目は、時間に左右されるらしい失敗がもう1件あったが、2回目以降は出ない）。
+  - 変更前の PR150 の head では、123件すべて成功することを確かめた（一時的な worktree、確認後に削除）。
+- 対応は G6 が行う必要がある。G6 のファイルは G2 では変えない決まりのため。
+  - `isolation_test.ts` の許可の一覧に `market-report-analysis/handler.ts`（とそのテスト）を加える。
+  - または Phase 2c に合わせて、テストの趣旨（どの関数が読み込んでよいか）を更新する。
+- これが済むまで、PR153 を main に入れると G6 のテストが1件失敗する。
+
+### 実際の実行環境で未確認のこと
+
+- `EdgeRuntime.waitUntil` が Supabase の本番で、応答のあとも wall clock の上限まで処理を動かすか。
+- Opus の実際の応答時間と、時間切れの割合（時間切れは台帳で上限の金額に確定する）。
+- 本番の plan（Free は wall clock 150秒、有料は400秒）。設計は150秒を前提にした。
+
+### 本番に出す前に要るもの（どれも別承認・未実施）
+
+1. PR148 → PR150 → PR153 のレビューとマージ（G6 の isolation_test の更新を含む）。
+2. G6 の回復処理の Cron（`ai_ledger_recover_stale`）を本番で動かす。
+3. この関数用に範囲を絞った Edge の鍵（Anthropic）と、予算・停止の条件。
+4. OFF のままデプロイし、自然な1サイクルで変化が無いことを読み戻す。
+5. 利用者の承認のもとでの3日間のカナリア。Opus の応答時間・時間切れ・費用を見る。必要ならプライバシーの確認。
+6. **予算:** 今の試験用の上限（月 $5）は、毎日の Opus の比較処理とは合わない（1回の上限が約 $0.45）。黙って上げていない。続けるなら上限の見直しが別に要る。
+
+### GO / NO_GO
+
+- **ソース:** Draft のレビュー候補。新しい権限や台帳の方針の変更は無く、G6 の部品をそのまま使っている。重点レビューの要否は K2 の判断に任せる。範囲を絞るなら、例外の扱い・`waitUntil` の扱い・締め切りの時計の3点。
+- **本番:** **NO_GO**（親の PR が未マージ、回復処理の Cron・鍵・予算・`waitUntil` の確認がすべて未実施）。
+
+Recommended next owner: **chatgpt（K2）**
 
 ---
 

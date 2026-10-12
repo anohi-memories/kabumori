@@ -117,11 +117,11 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-g2-phase2c-deferred-claude-market-shadow-handler-20261012
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
 - allocation: K2 2026-10-12 PASS_SOURCE_FIX G2 PR149 H2 R1–R6 (exact new head e9bb86c44808d87ad8cbd3de4f1d1564066f958a, 1 commit/8 paths, claimed synthetic SQL PG17/26 mutants and focused Deno/app tests PASS; ChatGPT diff/source examined but tests not rerun), no recurring Codex review. PR143 889ca1b4 + PR149 e9bb86c4 both OPEN/Draft/unmerged, no production. G2 released then assigned Phase2c user/G6 agreed: source-only integrate G6 deferred Claude shadow after completed market report into G2 market-report-analysis handler/index+focused tests, default OFF, preserve OpenAI packet/delivery, time-bound waitUntil, NO paid/real API, NO deploy/merge. G6 PR148 a71de72b, PR150 18d9058a both OPEN/Draft; create separate G2 branch stacked ON PR150, DO NOT modify G6 PRs/branches or PR143/149/other slots, verify worktree/head at start. Return K2. Production NO_GO.
