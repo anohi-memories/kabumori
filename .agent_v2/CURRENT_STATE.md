@@ -12,6 +12,12 @@
 - Issue #131 X本人確認、G5/F5 live判定・本人Auth/DB接続と本番審査は未完。**本番予約保存/X実投稿/Edge deploy/DB migration/mergeはNO_GO**。必要な権限が揃ってからJ1〜J4によるSol（高）の統合セキュリティレビュー1回と別承認。
 - 旧系統`.agent/`は未変更。新旧task_id二重割当なし。完全移行はしない。
 
+## F1 AIに聞く V1 Phase A — L1 accepted (2026-10-13 JST)
+- task_id `kabumori-f1-ai-ask-v1-phase-a-ui-contract-20261012` L1 PASS_SOURCE_PHASE_A, `done / next_owner none`. Draft PR #166 HEAD `83b51efcf3cdb207eb0bab4c6a8dddbc1f5352f4` source-only/unmerged. G1 previous unstarted task remains cancelled/done.
+- 7 files: `src/app/ai.tsx`, typed pure contract, dev-only mock, answer card, 2 test files and API/security design. Claude-reported app 576/576 PASS, 402pt offline Simulator PASS; 375pt/device/prod bundle NOT_RUN. No real provider/API/user holdings, DB/Auth/Edge/EAS/merge/deploy.
+- V1 user wants holdings + market/news grounded questions. **Phase B still needed** for actual working feature: JWT/RLS user isolation, guarded server provider with cost/usage controls, grounding/freshness/citations, privacy/consent, security review. Production still shows 準備中 until separately approved Phase B.
+- F1 available for separately assigned new task after append-only archive and HISTORY_INDEX update. PR166 merge remains separate decision.
+
 ## 移行の状態
 
 - 新系統 `.agent_v2/` はPR #155のmainマージ（`4e80c79dc42c11fbc1ca105665514b0dd32842d3`）により有効。新F/J枠は新規TASKを明示割当した後に使用する。
