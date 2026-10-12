@@ -21,6 +21,7 @@ import {
   shadowRequestFromResponsesBody,
 } from "./market_report_shadow.ts";
 import { findModelSpec } from "./model_catalog.ts";
+import { DEFAULT_RETRY_TIMING } from "./retry.ts";
 import { anthropicBody, anthropicError, FAKE_ANTHROPIC_KEY, fakeEnv, hangUntilAborted, jsonResponse, recordingFetch, type Responder } from "./test_support.ts";
 
 const MODEL = "claude-opus-5-5";
@@ -314,10 +315,16 @@ test("ledger settle failure after the send: recorded as sent and successful; the
 });
 
 test("timeout and cancellation: bounded, recorded, never in the way of the report", async () => {
-  const slow = shadow((_call, _i, init) => hangUntilAborted(init), { timeoutMs: 1_000 });
+  // The shadow's deadline is start + timeoutMs, and execute.ts sends an attempt only while at least
+  // min(DEFAULT_RETRY_TIMING.minAttemptMs, timeoutMs) is left. A timeout at or below that window is refused before
+  // sending (DEADLINE_EXCEEDED) as soon as 1 ms has passed, so this case needs a timeout clearly above it.
+  const slowTimeoutMs = 6_000;
+  assert.ok(slowTimeoutMs >= DEFAULT_RETRY_TIMING.minAttemptMs + 1_000, "the slow case must wait for a real transport timeout");
+  const slow = shadow((_call, _i, init) => hangUntilAborted(init), { timeoutMs: slowTimeoutMs });
   const started = Date.now();
   assert.equal((await slow.decision.requester("generate", GENERATE_BODY)).payload, LEGACY_ANALYSIS);
-  assert.ok(Date.now() - started < 5_000);
+  // Ended by its own 6 s timeout: far below the 90 s default, with slack for a loaded machine.
+  assert.ok(Date.now() - started < 10_000);
   assert.deepEqual([slow.records[0].ok, slow.records[0].errorCode, slow.records[0].costBasis], [false, "TIMEOUT", "includes_upper_bound"]);
 
   const before = new AbortController();
