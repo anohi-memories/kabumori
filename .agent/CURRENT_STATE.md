@@ -1,3 +1,6 @@
+## K2 FINAL — G2 three-PR premerge (2026-10-12 JST)
+- G2 `kabumori-g2-v1-three-pr-final-merge-preflight-20261012` accepted **PASS_GO_TO_MERGE_DECISION / PRODUCTION_NO_GO**, done/none, G2 released. G2 reported fresh-main `155a3c60`, clean local PR143→PR149→PR158 staged merges, no overlap with G1 PR156, 540 app tests pass (not independently rerun), H2/H3 corrections preserved. All three PRs remain Draft/unmerged at latest G2 Report. Real source merge requires separate explicit user approval and fresh GitHub revalidation, merge-commit each, retarget later PR base main and check diff. No deploy, DB, Cron, Expo, EAS or paid API; production NO_GO. PR155 belongs to separate orchestration owner, not G2.
+
 ## G2 報告 — かぶモリ V1 の PR143 → PR149 → PR158 マージ直前の確認 — 2026-10-12 JST
 
 - G2 `kabumori-g2-v1-three-pr-final-merge-preflight-20261012`: **GO_TO_MERGE_DECISION／PRODUCTION_NO_GO**（マージ・Draft の解除はしていない）。
