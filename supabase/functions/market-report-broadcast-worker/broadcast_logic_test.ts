@@ -9,6 +9,7 @@ import {
   batchByUser,
   messageFor,
   outcomesFromTickets,
+  readTicket,
   runBroadcastWorker,
   sendChunk,
   type BroadcastMessage,
@@ -76,7 +77,10 @@ class MemStore implements BroadcastStore {
   chunks: Chunk[] = [];
   deliveries = new Map<string, Delivery>();
   cycles: Array<{ type: "morning" | "close"; date: string }> = [];
-  settings_ = { chunk_size: 500, plan_chunks_per_call: 40, max_parallel_chunks: 4, lease_ms: 180_000, max_attempts: 3, messages_per_second: 300 };
+  settings_ = {
+    chunk_size: 500, plan_chunks_per_call: 40, max_parallel_chunks: 4, lease_ms: 180_000, max_attempts: 3, messages_per_second: 300,
+    max_devices: 20,
+  };
   active = 0;
   peakActive = 0;
   private seq = 0;
@@ -126,22 +130,19 @@ class MemStore implements BroadcastStore {
       }
       const after = b.cursor === 0 ? null : this.users[b.cursor - 1].id;
       b.chunks += 1;
+      const chunkId = `c-${b.id}-${b.chunks}`;
       this.chunks.push({
-        id: `c-${b.id}-${b.chunks}`, broadcast: b.id, no: b.chunks, after, to: picked[picked.length - 1].id, status: "queued",
+        id: chunkId, broadcast: b.id, no: b.chunks, after, to: picked[picked.length - 1].id, status: "queued",
         attempt: 0, max: this.settings_.max_attempts, token: null, version: 0, expires: null, available: this.clock.now(),
       });
+      // 区切りの対象者を固定する（送る直前には、この人たちだけを確かめ直す）。
+      for (const user of picked) this.deliveries.set(`${b.id}|${user.id}`, { status: "planned", chunk: chunkId, attempts: 0 });
       b.cursor = this.users.indexOf(picked[picked.length - 1]) + 1;
     }
     return "planning";
   }
   async settings(): Promise<BroadcastSettings> {
     return { messages_per_second: this.settings_.messages_per_second, max_parallel_chunks: this.settings_.max_parallel_chunks };
-  }
-  private range(c: Chunk) {
-    const start = c.after === null ? 0 : this.users.findIndex((u) => u.id > c.after!);
-    const out: User[] = [];
-    for (let i = start; i >= 0 && i < this.users.length && this.users[i].id <= c.to; i += 1) out.push(this.users[i]);
-    return out;
   }
   private completeBroadcasts() {
     for (const b of this.broadcasts) {
@@ -158,7 +159,9 @@ class MemStore implements BroadcastStore {
         for (const d of this.deliveries.values()) if (d.chunk === c.id && d.status === "sending") d.status = "unknown";
         c.status = c.attempt >= c.max ? "failed" : "queued";
         c.token = null; c.expires = null; c.version += 1; c.available = now;
-        if (c.status === "failed") for (const d of this.deliveries.values()) if (d.chunk === c.id && d.status === "retry") d.status = "failed";
+        if (c.status === "failed") {
+          for (const d of this.deliveries.values()) if (d.chunk === c.id && (d.status === "retry" || d.status === "planned")) d.status = "failed";
+        }
       }
     }
     this.completeBroadcasts();
@@ -188,17 +191,21 @@ class MemStore implements BroadcastStore {
     this.active += 1;
     this.peakActive = Math.max(this.peakActive, this.active);
     const b = this.broadcasts.find((x) => x.id === c.broadcast)!;
-    for (const [key, d] of this.deliveries) {
-      if (d.chunk === c.id && d.status === "retry" && !this.eligible(this.byId.get(key.split("|")[1]), b.type)) d.status = "skipped";
-    }
     const out: Target[] = [];
-    for (const user of this.range(c)) {
-      if (!this.eligible(user, b.type)) continue;
-      const key = `${b.id}|${user.id}`;
-      const d = this.deliveries.get(key);
-      if (d && d.status !== "retry") continue;
-      this.deliveries.set(key, { status: "sending", chunk: c.id, attempts: (d?.attempts ?? 0) + 1 });
-      for (const device of user.devices) out.push({ user_id: user.id, token_id: device.id, expo_push_token: device.token });
+    for (const [key, d] of this.deliveries) {
+      if (d.chunk !== c.id || (d.status !== "planned" && d.status !== "retry")) continue;
+      const user = this.byId.get(key.split("|")[1]);
+      if (!this.eligible(user, b.type)) {
+        d.status = "skipped";
+        continue;
+      }
+      if (user!.devices.length > this.settings_.max_devices) {
+        d.status = "failed";
+        continue;
+      }
+      d.status = "sending";
+      d.attempts += 1;
+      for (const device of user!.devices) out.push({ user_id: user!.id, token_id: device.id, expo_push_token: device.token });
     }
     return out;
   }
@@ -237,15 +244,15 @@ class MockExpo {
   received = new Map<string, number>();
   calls = 0;
   log: Array<{ at: number; count: number }> = [];
-  ticketFor: (token: string) => { status: "ok"; id: string } | { status: "error"; message: string; details: { error: string } } =
-    (token) => ({ status: "ok", id: token });
+  ticketFor: (token: string) => unknown = (token) => ({ status: "ok", id: token });
   constructor(public clock: VirtualClock, public latencyMs = 400, public script: ExpoScript = () => "ok") {}
   sender = async (messages: BroadcastMessage[]): Promise<SendResult> => {
     this.calls += 1;
+    // 送信の速さは、リクエストを送り始めた時刻で数える（worker が速さを決めるのはここ）。
+    this.log.push({ at: this.clock.now(), count: messages.length });
     const action = this.script(this.calls, messages);
     await this.clock.sleep(this.latencyMs);
     const deliver = () => {
-      this.log.push({ at: this.clock.now(), count: messages.length });
       for (const m of messages) this.received.set(m.to, (this.received.get(m.to) ?? 0) + 1);
     };
     if (action === "transport_lost") throw new Error("TypeError: network");
@@ -255,6 +262,20 @@ class MockExpo {
     if (action === "mismatch") return { kind: "tickets", tickets: [] };
     return { kind: "tickets", tickets: messages.map((m) => this.ticketFor(m.to)) };
   };
+}
+
+/** どの1秒の窓 [t, t+1000) でも数えた、送り始めた通知の数の最大（平均ではない）。 */
+function peakPerSecond(log: ReadonlyArray<{ at: number; count: number }>): number {
+  const sorted = [...log].sort((a, b) => a.at - b.at);
+  let peak = 0;
+  let sum = 0;
+  let head = 0;
+  for (const entry of sorted) {
+    sum += entry.count;
+    while (sorted[head].at <= entry.at - 1000) sum -= sorted[head++].count;
+    peak = Math.max(peak, sum);
+  }
+  return peak;
 }
 
 /** Cron を毎分起動する（各回は時間の予算の範囲で動く）。一斉通知が終わるまで。 */
@@ -317,48 +338,27 @@ test("対象外の人には送らない（通知 OFF・朝刊 OFF・端末なし
   assert.equal(got(5), 1, "朝刊だけ");
 });
 
-for (const users of [10_000, 100_000]) {
-  test(`${users.toLocaleString()}人（模擬）: 二重送信0件で完了し、送信の速さは上限以内。所要時間を記録する`, async () => {
+for (const [users, rate, parallel, limitMinutes] of [[10_000, 300, 4, 2], [100_000, 300, 4, 8], [100_000, 400, 5, 6.5]] as const) {
+  test(`${users.toLocaleString()}人（模擬）・${rate}通/秒・同時${parallel}区切り: 二重0件、どの1秒の窓でも上限以内。所要時間を記録する`, async () => {
     const { clock, store, expo } = setup(users, (n) => (n % 5 === 0 ? 2 : 1)); // 平均1.2台
+    store.settings_.messages_per_second = rate;
+    store.settings_.max_parallel_chunks = parallel;
     const minutes = await drive(clock, cronUntilDone(store, expo, clock));
     assertExactlyOnce(store, expo);
     assert.equal(store.broadcasts[0].status, "completed");
     const messages = expo.log.reduce((sum, entry) => sum + entry.count, 0);
     assert.equal(messages, Math.round(users * 1.2));
-    // 10秒ごとの送信数が、上限（300/秒）の15%増し以内。枠ごとの間隔は 1.2 秒（90通 ÷ 75通/秒）なので、10秒の窓の
-    // 端にリクエストが1つ余分に入ると見かけの値は最大で約12%上がる（長い目で見た平均は上限以内）。
-    const buckets = new Map<number, number>();
-    for (const entry of expo.log) buckets.set(Math.floor(entry.at / 10_000), (buckets.get(Math.floor(entry.at / 10_000)) ?? 0) + entry.count);
-    const peak = Math.max(...buckets.values()) / 10;
-    assert.ok(peak <= 345, `peak ${peak}/s`);
-    const spanSeconds = (Math.max(...expo.log.map((e) => e.at)) - Math.min(...expo.log.map((e) => e.at))) / 1000;
-    // 最初と最後のリクエストの間には、間隔が1つ少なく入る（植木算）。1つ分（1.2秒）を足して平均を見る。
-    assert.ok(messages / (spanSeconds + 1.2) <= 300, `平均 ${messages / (spanSeconds + 1.2)}/s は上限以内`);
-    assert.ok(store.peakActive <= 4, `active chunks ${store.peakActive}`);
-    const firstSend = Math.min(...expo.log.map((entry) => entry.at));
-    const lastSend = Math.max(...expo.log.map((entry) => entry.at));
+    const peak = peakPerSecond(expo.log);
+    assert.ok(peak <= rate, `どの1秒の窓でも ${peak} 通 <= ${rate}`);
+    assert.ok(store.peakActive <= parallel, `active chunks ${store.peakActive}`);
+    const span = (Math.max(...expo.log.map((e) => e.at)) - Math.min(...expo.log.map((e) => e.at))) / 60_000;
     console.log(JSON.stringify({
-      users, messages, chunks: store.chunks.length, expo_requests: expo.calls,
-      send_span_minutes: Number(((lastSend - firstSend) / 60_000).toFixed(2)), cron_minutes: minutes, peak_messages_per_second: peak,
+      users, messages_per_second: rate, max_parallel_chunks: parallel, messages, chunks: store.chunks.length,
+      expo_requests: expo.calls, send_span_minutes: Number(span.toFixed(2)), cron_minutes: minutes, peak_messages_in_any_second: peak,
     }));
-    if (users === 10_000) assert.ok((lastSend - firstSend) / 60_000 < 2, "1万人は2分以内（模擬）");
-    else assert.ok((lastSend - firstSend) / 60_000 < 8, "10万人は8分以内（模擬、300/秒）");
+    assert.ok(span < limitMinutes, `${span} 分（模擬）`);
   });
 }
-
-test("10万人（模擬）・上限 450/秒: 約5分（5.5分以内）で送り終え、10秒ごとの送信数も Expo の上限（600/秒）より低い", async () => {
-  const { clock, store, expo } = setup(100_000, (n) => (n % 5 === 0 ? 2 : 1));
-  store.settings_.messages_per_second = 450;
-  await drive(clock, cronUntilDone(store, expo, clock));
-  assertExactlyOnce(store, expo);
-  const span = (Math.max(...expo.log.map((e) => e.at)) - Math.min(...expo.log.map((e) => e.at))) / 60_000;
-  const buckets = new Map<number, number>();
-  for (const entry of expo.log) buckets.set(Math.floor(entry.at / 10_000), (buckets.get(Math.floor(entry.at / 10_000)) ?? 0) + entry.count);
-  const peak = Math.max(...buckets.values()) / 10;
-  console.log(JSON.stringify({ users: 100_000, messages_per_second: 450, send_span_minutes: Number(span.toFixed(2)), peak_messages_per_second: peak }));
-  assert.ok(span < 5.5, `${span} 分`);
-  assert.ok(peak < 600, `peak ${peak}/s`);
-});
 
 test("送る直前に確かめ直す: 分割のあとに通知を OFF にした人には送らず、入れ替えた端末には新しいほうへ送る", async () => {
   const { clock, store, expo } = setup(50);
@@ -393,9 +393,9 @@ test("通信が途中で切れた: そのリクエストの人は不明（実は
     await drive(clock, cronUntilDone(store, expo, clock));
     for (const user of store.users) assert.ok((expo.received.get(user.devices[0].token) ?? 0) <= 1, user.id);
     const unknown = [...store.deliveries.values()].filter((d) => d.status === "unknown").length;
-    assert.equal(unknown, 90, "2回目のリクエストの90人");
+    assert.equal(unknown, 75, "2回目のリクエストの75人（1回は 300 ÷ 4 = 75 通まで）");
     const sent = [...store.deliveries.values()].filter((d) => d.status === "sent").length;
-    assert.equal(sent, 210);
+    assert.equal(sent, 225);
     assert.equal(store.broadcasts[0].status, "completed");
   }
 });
@@ -422,7 +422,7 @@ test("429 が2回続いてから受け付け: 同じリクエストを送り直�
   })());
   assert.equal(counts.size, 150);
   assert.ok([...counts.values()].every((n) => n === 1));
-  assert.equal(calls, 4, "429 ×2 + 受け付け ×2（150人 = 90 + 60）");
+  assert.equal(calls, 4, "429 ×2 + 受け付け ×2（150人 = 75 + 75）");
 });
 
 test("500 が続く: 区切りの回数（3回）まで試して failed。届いたものは0、リクエストの数も有限", async () => {
@@ -440,8 +440,8 @@ test("400（内容の問題）は送り直さず failed。ほかのリクエス�
   expo.script = (call) => (call === 1 ? 400 : "ok");
   await drive(clock, cronUntilDone(store, expo, clock));
   const failed = [...store.deliveries.values()].filter((d) => d.status === "failed").length;
-  assert.equal(failed, 90);
-  assert.equal(expo.received.size, 110);
+  assert.equal(failed, 75);
+  assert.equal(expo.received.size, 125);
 });
 
 test("ticket の数が合わない: そのリクエストの人は不明で、送り直さない", async () => {
@@ -449,7 +449,7 @@ test("ticket の数が合わない: そのリクエストの人は不明で、�
   expo.script = (call) => (call === 1 ? "mismatch" : "ok");
   await drive(clock, cronUntilDone(store, expo, clock));
   assert.ok([...expo.received.values()].every((n) => n === 1));
-  assert.equal([...store.deliveries.values()].filter((d) => d.status === "unknown").length, 90);
+  assert.equal([...store.deliveries.values()].filter((d) => d.status === "unknown").length, 75);
 });
 
 test("端末ごとの ticket: 1台でも受け付ければ送信済み。全部無効なら failed。一時的な失敗はその人だけ次の試行で送る", async () => {
@@ -472,13 +472,13 @@ test("端末ごとの ticket: 1台でも受け付ければ送信済み。全部�
 test("貸し出しの残りが少なければ、新しいリクエストを送らずに止め、残りは次の試行へ。回数を使い切った人は failed（二重なし）", async () => {
   const { clock, store, expo } = setup(500);
   store.settings_.lease_ms = 22_000; // 安全の余白 20秒 → 引き取りから2秒の間だけ送り始められる
-  store.settings_.messages_per_second = 120; // 区切りあたり 30/秒 → 90通ごとに3秒の間隔
+  store.settings_.messages_per_second = 120; // 区切りあたり 30通/秒 → 30通ずつ1秒ごと
   await drive(clock, cronUntilDone(store, expo, clock));
   assert.ok([...expo.received.values()].every((n) => n === 1), "二重なし");
-  // 1回の試行で送れるのは最初の90人だけ。3回の試行で270人、残り230人は failed（黙って消えない）。
+  // 1回の試行で送れるのは、引き取りから2秒の間に送り始めた2回（60人）だけ。3回の試行で180人、残り320人は failed（黙って消えない）。
   const count = (status: string) => [...store.deliveries.values()].filter((d) => d.status === status).length;
-  assert.equal(count("sent"), 270);
-  assert.equal(count("failed"), 230);
+  assert.equal(count("sent"), 180);
+  assert.equal(count("failed"), 320);
   assert.equal(store.chunks[0].attempt, 3);
   assert.equal(store.broadcasts[0].status, "completed");
 });
@@ -494,8 +494,9 @@ test("Cron が重なっても（2つの実行が同時）、同時に送る区�
 test("区切りの詰め方: 1人の端末は同じリクエストに入る。通知の中身は日付と種類つきでアプリの共通の市況を開ける", () => {
   const targets: Target[] = [];
   for (let n = 1; n <= 46; n += 1) for (let d = 0; d < 2; d += 1) targets.push({ user_id: userId(n), token_id: `${n}-${d}`, expo_push_token: `t${n}-${d}` });
-  const batches = batchByUser(targets);
+  const { batches, overLimit } = batchByUser(targets);
   assert.deepEqual(batches.map((b) => b.length), [90, 2]);
+  assert.deepEqual(overLimit, []);
   for (const batch of batches) {
     for (const user of new Set(batch.map((t) => t.user_id))) assert.equal(batch.filter((t) => t.user_id === user).length, 2);
   }
@@ -517,6 +518,139 @@ test("sendChunk は例外を投げず、送らなかった人は retry", async (
   assert.equal(out.results.filter((r) => r.outcome === "retry").length, 200);
 });
 
+// ---------------------------------------------------------------------------
+// H2 の指摘 R3・R4・R6（修正前の worker では失敗する。修正前の値は H2 の Report に記録）
+// ---------------------------------------------------------------------------
+
+test("R3: 1つのリクエストに入りきらない数の端末を持つ人は、切り捨てずに failed（DEVICE_LIMIT_EXCEEDED）。90台は送る", async () => {
+  const clock = new VirtualClock();
+  const chunk = { lease_expires_at: new Date(clock.now() + 300_000).toISOString(), title: "t", body: "b", report_type: "morning", trading_date: "2026-10-12" } as ClaimedChunk;
+  const many = (user: string, count: number): Target[] =>
+    Array.from({ length: count }, (_, i) => ({ user_id: user, token_id: `${user}-${i}`, expo_push_token: `${user}-${i}` }));
+  const seen: number[] = [];
+  const sender = (messages: BroadcastMessage[]) => {
+    seen.push(messages.length);
+    return Promise.resolve({ kind: "tickets" as const, tickets: messages.map((m) => ({ status: "ok", id: m.to })) });
+  };
+  // 修正前: 91台 → 90通だけ送って sent（H2）。修正後: 送らずに failed。
+  const over = await drive(clock, sendChunk(chunk, many("u91", 91), sender, clock, 100));
+  assert.deepEqual(seen, []);
+  assert.deepEqual(over.results, [{ user_id: "u91", outcome: "failed", error_code: "DEVICE_LIMIT_EXCEEDED" }]);
+  const ok = await drive(clock, sendChunk(chunk, many("u90", 90), sender, clock, 100));
+  assert.deepEqual(seen, [90]);
+  assert.deepEqual(ok.results, [{ user_id: "u90", outcome: "sent" }]);
+  // 1台・2台はそのまま。区切りの1秒あたりの上限（ここでは 30）を超える端末の数も、1つのリクエストに入らないので failed。
+  const small = await drive(clock, sendChunk(chunk, [...many("a", 1), ...many("b", 2), ...many("c", 31)], sender, clock, 30));
+  assert.deepEqual(small.results.map((r) => `${r.user_id}:${r.outcome}`).sort(), ["a:sent", "b:sent", "c:failed"]);
+  // DB 側でも同じ人を先に除く（max_devices_per_user、既定 20）。模型でも 21台の人は failed で、送られない。
+  const { clock: c2, store, expo } = setup(3, (n) => (n === 2 ? 21 : 1));
+  await drive(c2, cronUntilDone(store, expo, c2));
+  assert.equal(store.deliveries.get(`${store.broadcasts[0].id}|${userId(2)}`)!.status, "failed");
+  assert.equal([...expo.received.keys()].filter((k) => k.startsWith("ExponentPushToken[2-")).length, 0);
+});
+
+test("R4: 同時16区切り × 40通（H2 の再現: 修正前は最初の1秒に640通）でも、どの1秒の窓でも全体の上限 300 以内", async () => {
+  const clock = new VirtualClock();
+  const log: Array<{ at: number; count: number }> = [];
+  const sender = async (messages: BroadcastMessage[]) => {
+    log.push({ at: clock.now(), count: messages.length });
+    await clock.sleep(400);
+    return { kind: "tickets" as const, tickets: messages.map((m) => ({ status: "ok", id: m.to })) };
+  };
+  const perChunk = Math.floor(300 / 16); // 18
+  await drive(clock, Promise.all(Array.from({ length: 16 }, (_, k) => {
+    const chunk = { lease_expires_at: new Date(clock.now() + 300_000).toISOString(), title: "t", body: "b", report_type: "morning", trading_date: "2026-10-12" } as ClaimedChunk;
+    const targets = Array.from({ length: 40 }, (_, i) => ({ user_id: `k${k}-${i}`, token_id: `${k}-${i}`, expo_push_token: `${k}-${i}` }));
+    return sendChunk(chunk, targets, sender, clock, perChunk);
+  })));
+  const peak = peakPerSecond(log);
+  assert.equal(log.reduce((sum, e) => sum + e.count, 0), 640);
+  assert.ok(peak <= 300, `どの1秒の窓でも ${peak} 通`);
+  assert.ok(Math.max(...log.map((e) => e.count)) <= perChunk, "1回の送信は区切りの1秒あたりの上限以下");
+  console.log(JSON.stringify({ case: "16 x 40 at 300/s", peak_messages_in_any_second: peak, h2_before_fix: 640 }));
+});
+
+test("R4: 区切りを続けて引き取っても、同じ枠で1秒の窓が重ならない（区切りの終わりに窓が空くまで待つ）", async () => {
+  const clock = new VirtualClock();
+  const log: Array<{ at: number; count: number }> = [];
+  const sender = (messages: BroadcastMessage[]) => {
+    log.push({ at: clock.now(), count: messages.length });
+    return Promise.resolve({ kind: "tickets" as const, tickets: messages.map((m) => ({ status: "ok", id: m.to })) });
+  };
+  const chunk = { lease_expires_at: new Date(clock.now() + 300_000).toISOString(), title: "t", body: "b", report_type: "morning", trading_date: "2026-10-12" } as ClaimedChunk;
+  await drive(clock, (async () => {
+    for (let k = 0; k < 5; k += 1) {
+      const targets = Array.from({ length: 70 }, (_, i) => ({ user_id: `s${k}-${i}`, token_id: `${k}-${i}`, expo_push_token: `${k}-${i}` }));
+      await sendChunk(chunk, targets, sender, clock, 75);
+    }
+  })());
+  assert.ok(peakPerSecond(log) <= 75, `${peakPerSecond(log)}`);
+});
+
+test("R6: ticket の形を厳しく読む。形の分からない ticket は unknown（送り直さない）。送り直すのは MessageRateExceeded だけ", () => {
+  assert.equal(readTicket({ status: "ok", id: "x" }), "ok");
+  assert.equal(readTicket({ status: "ok" }), "malformed");
+  assert.equal(readTicket({ status: "ok", id: "" }), "malformed");
+  assert.equal(readTicket({}), "malformed");
+  assert.equal(readTicket(null), "malformed");
+  assert.equal(readTicket([]), "malformed");
+  assert.equal(readTicket({ status: "error" }), "malformed");
+  assert.equal(readTicket({ status: "error", details: {} }), "malformed");
+  assert.equal(readTicket({ status: "error", details: { error: "DeviceNotRegistered" } }), "dead");
+  assert.equal(readTicket({ status: "error", details: { error: "MessageRateExceeded" } }), "rate_limited");
+  assert.equal(readTicket({ status: "error", details: { error: "MessageTooBig" } }), "rejected");
+  const one = (user: string, token: string): Target => ({ user_id: user, token_id: token, expo_push_token: token });
+  // H2: HTTP 200 {"data":[{}]} の1台 → 修正前は retry（送り直し）。修正後は unknown。
+  assert.deepEqual(outcomesFromTickets([one("u", "a")], [{}]), [{ user_id: "u", outcome: "unknown", error_code: "TICKET_MALFORMED" }]);
+  // 数が合わない（一部だけ）→ unknown。
+  assert.deepEqual(outcomesFromTickets([one("u", "a"), one("v", "b")], [{ status: "ok", id: "1" }]).map((r) => r.outcome), ["unknown", "unknown"]);
+  // 1人の端末が混ざっている: 受け付けがあれば sent。分からない形と一時的な失敗なら unknown。一時的な失敗だけなら retry。
+  const mixed = outcomesFromTickets(
+    [one("p", "p1"), one("p", "p2"), one("q", "q1"), one("q", "q2"), one("r", "r1"), one("s", "s1")],
+    [
+      { status: "ok", id: "1" }, { status: "error", details: { error: "MessageRateExceeded" } },
+      { status: "error", details: { error: "MessageRateExceeded" } }, { bogus: true },
+      { status: "error", details: { error: "MessageRateExceeded" } },
+      { status: "error", details: { error: "MessageTooBig" } },
+    ],
+  );
+  assert.deepEqual(mixed.map((r) => `${r.user_id}:${r.outcome}`), ["p:sent", "q:unknown", "r:retry", "s:failed"]);
+});
+
+test("R6: HTTP 200 で中身の分からない応答・本文の壊れた応答は unknown のまま、次の試行でも送り直さない", async () => {
+  for (const body of ['{"data":[{}]}', "{}", '{"data":{"status":"ok"}}', '{"errors":[{"code":"X"}]}', "not json", "null"]) {
+    const { clock, store } = setup(1);
+    let calls = 0;
+    const fetchImpl = (() => {
+      calls += 1;
+      return Promise.resolve(new Response(body, { status: 200 }));
+    }) as unknown as typeof fetch;
+    await drive(clock, cronUntilDone(store, { sender: expoSender(clock, fetchImpl) } as unknown as MockExpo, clock, 5));
+    assert.equal(calls, 1, `${body}: 1回だけ`);
+    assert.equal(store.deliveries.get(`${store.broadcasts[0].id}|${userId(1)}`)!.status, "unknown", body);
+  }
+});
+
+test("R6: 429 → 受け付けは同じリクエストの送り直しで1回、通信の例外は送り直さない（0回）", async () => {
+  const { clock, store } = setup(1);
+  let calls = 0;
+  const fetchImpl = ((_url: string, init: RequestInit) => {
+    calls += 1;
+    if (calls === 1) return Promise.resolve(new Response("{}", { status: 429 }));
+    const messages = JSON.parse(String(init.body)) as BroadcastMessage[];
+    return Promise.resolve(new Response(JSON.stringify({ data: messages.map((m) => ({ status: "ok", id: m.to })) }), { status: 200 }));
+  }) as unknown as typeof fetch;
+  await drive(clock, cronUntilDone(store, { sender: expoSender(clock, fetchImpl) } as unknown as MockExpo, clock, 5));
+  assert.equal(calls, 2);
+  assert.equal(store.deliveries.get(`${store.broadcasts[0].id}|${userId(1)}`)!.status, "sent");
+  const second = setup(1);
+  let transport = 0;
+  const failing = (() => { transport += 1; return Promise.reject(new TypeError("network")); }) as unknown as typeof fetch;
+  await drive(second.clock, cronUntilDone(second.store, { sender: expoSender(second.clock, failing) } as unknown as MockExpo, second.clock, 5));
+  assert.equal(transport, 1, "通信の例外は送り直さない");
+  assert.equal(second.store.deliveries.get(`${second.store.broadcasts[0].id}|${userId(1)}`)!.status, "unknown");
+});
+
 test("重要ニュースの経路には触れない: notifications の表・既存の送信の RPC を使わない。送信の上限は Expo の上限より低い", () => {
   const dir = new URL("./", import.meta.url);
   for (const file of ["broadcast_logic.ts", "store.ts", "index.ts", "expo_sender.ts"]) {
@@ -524,7 +658,8 @@ test("重要ニュースの経路には触れない: notifications の表・既�
     assert.ok(!/rest\/v1\/notifications|"notifications|claim_pending_push_notifications|send-push-notifications\/index/.test(source), file);
   }
   const migration = readFileSync(new URL("../../migrations/20261012100000_market_report_broadcast_push_v1.sql", import.meta.url), "utf8");
-  assert.match(migration, /messages_per_second integer not null default 300 check \(messages_per_second between 10 and 550\)/);
+  assert.match(migration, /messages_per_second integer not null default 300 check \(messages_per_second between 10 and 400\)/);
+  assert.match(migration, /max_parallel_chunks integer not null default 4 check \(max_parallel_chunks between 1 and 6\)/);
   assert.ok(!/(insert into|update|delete from) public\.notifications/.test(migration), "notifications の表は書き換えない");
 });
 

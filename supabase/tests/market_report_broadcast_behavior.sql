@@ -300,8 +300,8 @@ select fx.eq(fx.claim(4)::text, '0', 'nothing left');
 -- ---------------------------------------------------------------------------
 update public.market_report_broadcast_settings set max_chunk_attempts = 1;
 -- 手で1つ作る（今日の大引けの回は作成中で、同じ日に二つ目は作れないため、前日の朝刊の回を使う）。
-insert into public.market_report_broadcasts (report_type, trading_date, cycle_id, report_packet_id, title, body)
-  select 'close', :'today'::date - 1, c.id, c.current_report_packet_id, 't', 'b'
+insert into public.market_report_broadcasts (report_type, trading_date, cycle_id, report_packet_id, source_completed_at, title, body)
+  select 'close', :'today'::date - 1, c.id, c.current_report_packet_id, now(), 't', 'b'
     from public.market_report_cycles as c where c.report_type = 'morning' and c.trading_date = :'today'::date - 1;
 select id as bx from public.market_report_broadcasts where report_type = 'close' and trading_date = :'today'::date - 1 \gset
 update public.market_report_broadcast_settings set plan_chunks_per_call = 10;
@@ -319,8 +319,8 @@ update public.market_report_broadcast_settings set max_chunk_attempts = 3;
 update public.alert_settings set morning_report = false;
 update public.market_report_broadcast_settings set plan_chunks_per_call = 1;
 select fx.market('morning', (:'today'::date - 3), true) as pkt_old \gset
-insert into public.market_report_broadcasts (report_type, trading_date, cycle_id, report_packet_id, title, body)
-  values ('morning', :'today'::date - 3, (select cycle_id from public.market_report_packets where id = :'pkt_old'), :'pkt_old', 't', 'b');
+insert into public.market_report_broadcasts (report_type, trading_date, cycle_id, report_packet_id, source_completed_at, title, body)
+  values ('morning', :'today'::date - 3, (select cycle_id from public.market_report_packets where id = :'pkt_old'), :'pkt_old', now(), 't', 'b');
 select id as bz from public.market_report_broadcasts where trading_date = :'today'::date - 3 \gset
 select fx.eq(fx.call_as(null, 'service_role', format($$select public.plan_market_report_broadcast(%L) ->> 'status'$$, :'bz')), 'planned', 'zero users');
 select fx.eq((select status from public.market_report_broadcasts where id = :'bz'), 'completed', 'zero-user broadcast completes');
@@ -381,10 +381,129 @@ update public.market_report_cycles set report_completed_at = now() where report_
 select fx.call_as(null, 'service_role', $$select public.enqueue_market_report_broadcasts()::text$$) as ignored \gset
 select id as bs from public.market_report_broadcasts \gset
 select fx.call_as(null, 'service_role', format($$select public.plan_market_report_broadcast(%L) ->> 'status'$$, :'bs')) as ignored \gset
-update public.market_report_broadcasts set created_at = now() - interval '3 hours' where id = :'bs';
+update public.market_report_broadcasts set source_completed_at = now() - interval '3 hours' where id = :'bs';
 select fx.eq(fx.claim(4)::text, '0', 'stale broadcast is not sent');
 select fx.eq((select string_agg(distinct status || ':' || last_error_code, ',') from public.market_report_broadcast_chunks where broadcast_id = :'bs'), 'failed:BROADCAST_STALE', 'stale chunks fail');
 select fx.eq((select status from public.market_report_broadcasts where id = :'bs'), 'completed', 'stale broadcast completes');
-select fx.eq((select count(*)::text from public.market_report_broadcast_deliveries where broadcast_id = :'bs'), '0', 'nobody was sent');
+select fx.eq((select count(*)::text from public.market_report_broadcast_deliveries where broadcast_id = :'bs' and status in ('sending', 'sent')), '0', 'nobody was sent');
+select fx.eq((select string_agg(distinct status || ':' || error_code, ',') from public.market_report_broadcast_deliveries where broadcast_id = :'bs'),
+             'failed:BROADCAST_STALE', 'planned recipients of a stale broadcast are failed, not silently dropped');
+
+-- ---------------------------------------------------------------------------
+-- 12. H2 の指摘 R1〜R5 の再現（修正前の SQL ではどれも失敗する）
+-- ---------------------------------------------------------------------------
+-- 共通: 今日の朝刊の回を完成したばかりにして、一斉通知を作り直す。対象は試す人の一覧で検証用の人だけに絞る。
+create function fx.fresh_broadcast(p_pilot uuid[], p_completed_ago interval default interval '1 minute') returns uuid
+language plpgsql as $$
+declare v uuid;
+begin
+  delete from public.market_report_broadcasts;
+  update public.market_report_broadcast_settings
+     set enabled = true, sending_enabled = true, pilot_user_ids = p_pilot, chunk_size = 50, plan_chunks_per_call = 10,
+         max_parallel_chunks = 4, max_report_age_minutes = 120, max_chunk_attempts = 3;
+  update public.personalized_ondemand_settings set public_market_feed_enabled = true, ondemand_requests_enabled = true;
+  update public.market_report_cycles set report_completed_at = now() - p_completed_ago
+   where report_type = 'morning' and trading_date = (now() at time zone 'Asia/Tokyo')::date;
+  perform fx.call_as(null, 'service_role', 'select public.enqueue_market_report_broadcasts()::text');
+  select id into v from public.market_report_broadcasts where report_type = 'morning';
+  perform fx.call_as(null, 'service_role', format('select public.plan_market_report_broadcast(%L)::text', v));
+  return v;
+end
+$$;
+select count(fx.user(n, true, true, true, 1)) as ignored from generate_series(300001, 300003) as n \gset
+
+-- R1: 引き取りのあと、送る直前の前に共通の市況の公開を OFF → 誰にも印を付けず 0 件、区切りは順番待ちへ（回数は消費しない）。
+select fx.fresh_broadcast(array[fx.uid(300001), fx.uid(300002), fx.uid(300003)]) as b1 \gset
+select fx.eq(fx.claim(4)::text, '1', 'R1 claimed');
+select id as c1, lease_token as t1, lease_version as v1 from public.market_report_broadcast_chunks where broadcast_id = :'b1' \gset
+update public.personalized_ondemand_settings set public_market_feed_enabled = false;
+select fx.eq(fx.call_as(:'b', 'authenticated', $$select public.get_app_market_report('morning') ->> 'status'$$), 'disabled', 'R1 users cannot open the report');
+select fx.eq(fx.begin(:'c1', :'t1', :'v1'), '', 'R1 feed OFF before begin: 0 targets');
+select fx.eq((select status || '/' || attempt_count || '/' || last_error_code from public.market_report_broadcast_chunks where id = :'c1'), 'queued/0/SEND_NOT_ALLOWED', 'R1 chunk released without using an attempt');
+select fx.eq((select string_agg(distinct status, ',') from public.market_report_broadcast_deliveries where broadcast_id = :'b1'), 'planned', 'R1 nobody marked sending');
+update public.market_report_broadcast_chunks set available_at = clock_timestamp() where id = :'c1';
+select fx.eq(fx.claim(4)::text, '0', 'R1 not claimed while the feed is OFF (no loop)');
+update public.personalized_ondemand_settings set public_market_feed_enabled = true;
+select fx.eq(fx.claim(4)::text, '1', 'R1 claimed again once the feed is ON');
+select lease_token as t1, lease_version as v1 from public.market_report_broadcast_chunks where id = :'c1' \gset
+select fx.eq((select count(*)::text from regexp_split_to_table(fx.begin(:'c1', :'t1', :'v1'), ',')), '3', 'R1 sends when ON');
+-- 送っている途中で OFF になっても、送った結果は記録できる。
+update public.personalized_ondemand_settings set public_market_feed_enabled = false;
+select fx.eq(fx.finish(:'c1', :'t1', :'v1', fx.all_as(:'c1', 'sent')), 'done', 'R1 in-flight results are recorded after OFF');
+select fx.eq((select count(*)::text from public.market_report_broadcast_deliveries where broadcast_id = :'b1' and status = 'sent'), '3', 'R1 sent recorded');
+update public.personalized_ondemand_settings set public_market_feed_enabled = true;
+
+-- R2: 新しさは回の完成時刻で測る。119分前に完成した回は作られるが、121分になったら引き取らない（作成の時刻で延長しない）。
+select fx.fresh_broadcast(array[fx.uid(300001)], interval '119 minutes') as b2 \gset
+select fx.eq((select (abs(extract(epoch from b.source_completed_at - c.report_completed_at)) < 0.001)::text
+                from public.market_report_broadcasts as b join public.market_report_cycles as c on c.id = b.cycle_id where b.id = :'b2'),
+             'true', 'R2 broadcast keeps the report completion time');
+update public.market_report_cycles set report_completed_at = report_completed_at - interval '2 minutes' where id = (select cycle_id from public.market_report_broadcasts where id = :'b2');
+update public.market_report_broadcasts set source_completed_at = source_completed_at - interval '2 minutes' where id = :'b2';
+select fx.eq(fx.claim(4)::text, '0', 'R2 121 minutes: not claimed');
+select fx.eq((select status || ':' || last_error_code from public.market_report_broadcast_chunks where broadcast_id = :'b2'), 'failed:BROADCAST_STALE', 'R2 stale chunk ends');
+select fx.eq((select status from public.market_report_broadcasts where id = :'b2'), 'completed', 'R2 broadcast completes');
+-- 引き取りのあとに古くなったら、送る直前で止める。
+select fx.fresh_broadcast(array[fx.uid(300001)], interval '119 minutes') as b2b \gset
+select fx.eq(fx.claim(4)::text, '1', 'R2 claimed at 119 minutes');
+select id as c2, lease_token as t2, lease_version as v2 from public.market_report_broadcast_chunks where broadcast_id = :'b2b' \gset
+update public.market_report_broadcasts set source_completed_at = source_completed_at - interval '2 minutes' where id = :'b2b';
+select fx.eq(fx.begin(:'c2', :'t2', :'v2'), '', 'R2 stale at begin: 0 targets');
+update public.market_report_broadcast_chunks set available_at = clock_timestamp() where id = :'c2';
+select fx.eq(fx.claim(4)::text, '0', 'R2 then ends as stale');
+select fx.eq((select status from public.market_report_broadcast_chunks where id = :'c2'), 'failed', 'R2 stale after begin');
+
+-- R3: 端末の上限。20台は送る。21台は送らずに failed（DEVICE_LIMIT_EXCEEDED）。上限 90 なら 90台は送り、91台は failed。
+select fx.user(300020, true, true, true, 20) as u20 \gset
+select fx.user(300021, true, true, true, 21) as u21 \gset
+select fx.fresh_broadcast(array[fx.uid(300020), fx.uid(300021)]) as b3 \gset
+select count(*) as ignored from (select fx.claim(4)) as x \gset
+select id as c3, lease_token as t3, lease_version as v3 from public.market_report_broadcast_chunks where broadcast_id = :'b3' \gset
+select fx.eq((select count(*)::text from regexp_split_to_table(fx.begin(:'c3', :'t3', :'v3'), ',')), '20', 'R3 20 devices are all returned');
+select fx.eq((select status || ':' || error_code || ':' || device_count from public.market_report_broadcast_deliveries where user_id = :'u21' and broadcast_id = :'b3'),
+             'failed:DEVICE_LIMIT_EXCEEDED:21', 'R3 21 devices: explicit failure, not silently truncated');
+update public.market_report_broadcast_settings set max_devices_per_user = 90, messages_per_second = 400;
+select fx.user(300090, true, true, true, 90) as u90 \gset
+select fx.user(300091, true, true, true, 91) as u91 \gset
+update public.market_report_broadcast_settings set max_devices_per_user = 20, messages_per_second = 300;
+select fx.fresh_broadcast(array[fx.uid(300090), fx.uid(300091)]) as b3b \gset
+update public.market_report_broadcast_settings set max_devices_per_user = 90, messages_per_second = 400;
+select count(*) as ignored from (select fx.claim(4)) as x \gset
+select id as c3, lease_token as t3, lease_version as v3 from public.market_report_broadcast_chunks where broadcast_id = :'b3b' \gset
+select fx.eq((select count(*)::text from regexp_split_to_table(fx.begin(:'c3', :'t3', :'v3'), ',')), '90', 'R3 limit 90: 90 devices returned');
+select fx.eq((select status || ':' || error_code from public.market_report_broadcast_deliveries where user_id = :'u91' and broadcast_id = :'b3b'),
+             'failed:DEVICE_LIMIT_EXCEEDED', 'R3 91 devices: explicit failure');
+update public.market_report_broadcast_settings set max_devices_per_user = 20, messages_per_second = 300;
+
+-- R4: 危ない組み合わせは設定できない（同時16区切り、Expo の上限に近い速さ、1人の端末が1秒の枠に入らない）。
+-- 16区切りは、ほかの制約（1区切りの1秒あたりの数 ≥ 1人の端末の上限）に当たらない組み合わせで、区切りの数の制約だけを確かめる。
+select fx.like(fx.call_as(null, 'kb_bc_owner', $$update public.market_report_broadcast_settings set max_parallel_chunks = 16, max_devices_per_user = 5, messages_per_second = 400 returning 'x'$$),
+               'ERR:new row%violates check constraint "market_report_broadcast_settings_max_parallel_chunks_check"%', 'R4 16 parallel chunks rejected');
+select fx.like(fx.call_as(null, 'kb_bc_owner', $$update public.market_report_broadcast_settings set messages_per_second = 550 returning 'x'$$),
+               'ERR:new row%violates check constraint "market_report_broadcast_settings_messages_per_second_check"%', 'R4 550/s rejected');
+select fx.like(fx.call_as(null, 'kb_bc_owner', $$update public.market_report_broadcast_settings set max_parallel_chunks = 6, messages_per_second = 100, max_devices_per_user = 20 returning 'x'$$),
+               'ERR:new row%violates check constraint "market_report_broadcast_settings_rate_fits_devices"%', 'R4 per-chunk rate must fit one user');
+select fx.eq(fx.call_as(null, 'kb_bc_owner', $$update public.market_report_broadcast_settings set max_parallel_chunks = 6, messages_per_second = 400 returning 'ok'$$), 'ok', 'R4 6 x 400 allowed');
+update public.market_report_broadcast_settings set max_parallel_chunks = 4, messages_per_second = 300;
+
+-- R5: 分割のときの対象者を固定する。分割のあとで通知を ON にした60人には、この朝刊では送らない（区切りは計画の人数まで）。
+select count(fx.user(n, false, true, true, 1)) as ignored from generate_series(310001, 310060) as n \gset
+select fx.user(320001, true, true, true, 1) as late_on \gset
+select fx.fresh_broadcast((select array_agg(fx.uid(n)) from generate_series(310001, 310060) as n) || fx.uid(320001)) as b5 \gset
+select fx.eq((select planned_users || '/' || planned_chunks from public.market_report_broadcasts where id = :'b5'), '1/1', 'R5 one user planned');
+update public.alert_settings set push_enabled = true where user_id between fx.uid(310001) and fx.uid(310060);
+select count(*) as ignored from (select fx.claim(4)) as x \gset
+select id as c5, lease_token as t5, lease_version as v5 from public.market_report_broadcast_chunks where broadcast_id = :'b5' \gset
+select fx.eq(fx.begin(:'c5', :'t5', :'v5'), '0001:ExponentPushToken[u320001-d1]', 'R5 begin returns only the planned user (not 61)');
+select fx.eq((select count(*)::text from public.market_report_broadcast_deliveries where broadcast_id = :'b5'), '1', 'R5 no rows for later opt-ins');
+-- 固定した人のうち、分割のあとに OFF にした人は送らない。
+select count(fx.user(n, true, true, true, 1)) as ignored from generate_series(330001, 330003) as n \gset
+select fx.fresh_broadcast(array[fx.uid(330001), fx.uid(330002), fx.uid(330003)]) as b5b \gset
+update public.alert_settings set push_enabled = false where user_id = fx.uid(330002);
+select count(*) as ignored from (select fx.claim(4)) as x \gset
+select id as c5, lease_token as t5, lease_version as v5 from public.market_report_broadcast_chunks where broadcast_id = :'b5b' \gset
+select fx.eq((select count(*)::text from regexp_split_to_table(fx.begin(:'c5', :'t5', :'v5'), ',')), '2', 'R5 planned user who opted out is skipped');
+select fx.eq((select status from public.market_report_broadcast_deliveries where broadcast_id = :'b5b' and user_id = fx.uid(330002)), 'skipped', 'R5 skipped recorded');
+update public.market_report_broadcast_settings set pilot_user_ids = null;
 
 select 'MARKET_REPORT_BROADCAST_BEHAVIOR_PASS';

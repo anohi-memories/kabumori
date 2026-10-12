@@ -49,18 +49,26 @@ create table public.market_report_broadcast_settings (
   allow_with_legacy_personalized_reports boolean not null default false,
   chunk_size integer not null default 500 check (chunk_size between 50 and 2000),
   plan_chunks_per_call integer not null default 40 check (plan_chunks_per_call between 1 and 200),
-  max_parallel_chunks integer not null default 4 check (max_parallel_chunks between 1 and 16),
+  -- 同時に送る区切りの数。Expo が勧める同時の接続（6本程度）を超えない。
+  max_parallel_chunks integer not null default 4 check (max_parallel_chunks between 1 and 6),
   lease_seconds integer not null default 180 check (lease_seconds between 60 and 900),
   max_chunk_attempts integer not null default 3 check (max_chunk_attempts between 1 and 5),
   -- 回の完成からこれより時間がたったら、一斉通知を作らない。作った一斉通知も、これより古くなったら残りを送らない
   -- （古い朝刊・大引けを今さら知らせない。試し実行で作った一斉通知が、あとで送信を ON にしたときに届くこともない）。
   max_report_age_minutes integer not null default 120 check (max_report_age_minutes between 10 and 720),
-  -- 一斉通知の全体の送信の速さの上限（通知の数／秒）。worker は同時に動く区切りの数で割って使う。
-  -- Expo の上限より十分低くして、重要ニュースの送信に余裕を残す。
-  messages_per_second integer not null default 300 check (messages_per_second between 10 and 550),
+  -- 一斉通知の全体の送信の速さの上限（通知の数／秒）。worker は区切りごとに「上限 ÷ 同時の区切りの数」を、
+  -- 直近1秒の送信数で守る（平均ではなく、どの1秒の窓でも超えない）。Expo の上限（1プロジェクト600通/秒）から、
+  -- 重要ニュースなどの分として少なくとも200通/秒を残す。
+  messages_per_second integer not null default 300 check (messages_per_second between 10 and 400),
+  -- 1人あたりの端末の上限。これより多い端末を登録している人には送らず、failed（DEVICE_LIMIT_EXCEEDED）と記録する
+  -- （端末を黙って切り捨てて「送信済み」にしない）。1人の端末は1つのリクエスト（90通まで）に入れる。
+  max_devices_per_user integer not null default 20 check (max_devices_per_user between 1 and 90),
   -- 記録を残す日数（それより古い一斉通知の記録は少しずつ消す）。
   keep_days integer not null default 14 check (keep_days between 3 and 90),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  -- 区切りごとの1秒あたりの送信数（上限 ÷ 同時の区切りの数）で、1人の端末をすべて1つのリクエストに入れられること。
+  constraint market_report_broadcast_settings_rate_fits_devices
+    check (messages_per_second / max_parallel_chunks >= max_devices_per_user)
 );
 insert into public.market_report_broadcast_settings (id) values (true);
 
@@ -77,6 +85,8 @@ create table public.market_report_broadcasts (
   trading_date date not null,
   cycle_id uuid not null references public.market_report_cycles (id),
   report_packet_id uuid not null references public.market_report_packets (id),
+  -- 回の完成時刻（新しさの基準。作成・引き取り・送る直前のすべてで、これから max_report_age_minutes 以内）。
+  source_completed_at timestamptz not null,
   title text not null check (char_length(title) between 1 and 60),
   body text not null check (char_length(body) between 1 and 160),
   status text not null default 'planning' check (status in ('planning', 'sending', 'completed')),
@@ -129,6 +139,8 @@ create index market_report_broadcast_chunks_open
   on public.market_report_broadcast_chunks (broadcast_id) where status in ('queued', 'processing');
 
 -- 利用者ごとの記録。1つの一斉通知に1人1行（主キー）。
+--   planned: 分割のときに、その区切りの対象者として固定した（区切りの人数は chunk_size まで）。送る直前には、
+--            この人たちだけを確かめ直す（分割のあとに通知を ON にした人は、次の朝刊・大引けから）。
 --   sending: 送る直前に付ける。このまま止まったら unknown（送ったかもしれないので二度と送らない）。
 --   retry:   送っていないことが確かな失敗（Expo が受け付けを明示的に断った）。区切りの次の試行で送り直す。
 --   sent / failed / unknown / skipped: 終わり。
@@ -136,8 +148,8 @@ create table public.market_report_broadcast_deliveries (
   broadcast_id uuid not null references public.market_report_broadcasts (id) on delete cascade,
   user_id uuid not null references public.profiles (id) on delete cascade,
   chunk_id uuid not null references public.market_report_broadcast_chunks (id) on delete cascade,
-  status text not null check (status in ('sending', 'retry', 'sent', 'failed', 'unknown', 'skipped')),
-  attempt_count integer not null default 1 check (attempt_count >= 1),
+  status text not null check (status in ('planned', 'sending', 'retry', 'sent', 'failed', 'unknown', 'skipped')),
+  attempt_count integer not null default 0 check (attempt_count >= 0),
   device_count integer not null default 0 check (device_count >= 0),
   error_code text check (error_code is null or char_length(error_code) <= 120),
   updated_at timestamptz not null default now(),
@@ -166,6 +178,28 @@ as $$
   ) and exists (select 1 from public.device_push_tokens as t where t.user_id = p_user_id)
     and coalesce((select g.pilot_user_ids is null or p_user_id = any(g.pilot_user_ids)
                      from public.market_report_broadcast_settings as g where g.id), false);
+$$;
+
+-- 今この一斉通知を送ってよいか（引き取りと送る直前の両方で確かめる）:
+--   一斉通知・送信のゲートが ON、共通の市況の公開（PR143）が ON（タップした先が見られる）、
+--   回の完成から max_report_age_minutes 以内、回の現在のパケットが一斉通知のパケットと同じで完成のまま。
+create function public.market_report_broadcast_send_allowed(p_broadcast_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce((
+    select g.enabled and g.sending_enabled
+       and coalesce((select o.public_market_feed_enabled from public.personalized_ondemand_settings as o where o.id), false)
+       and b.source_completed_at >= pg_catalog.clock_timestamp() - pg_catalog.make_interval(mins => g.max_report_age_minutes)
+       and c.report_status = 'completed' and c.current_report_packet_id = b.report_packet_id
+      from public.market_report_broadcasts as b
+      join public.market_report_cycles as c on c.id = b.cycle_id
+      cross join public.market_report_broadcast_settings as g
+     where b.id = p_broadcast_id and g.id
+  ), false);
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -231,8 +265,8 @@ begin
     end if;
     v_title := pg_catalog.to_char(v_cycle.trading_date, 'FMMM"月"FMDD"日"')
       || case v_cycle.report_type when 'morning' then 'の朝刊ができました' else 'の大引けレポートができました' end;
-    insert into public.market_report_broadcasts (report_type, trading_date, cycle_id, report_packet_id, title, body)
-    values (v_cycle.report_type, v_cycle.trading_date, v_cycle.id, v_packet.id, v_title,
+    insert into public.market_report_broadcasts (report_type, trading_date, cycle_id, report_packet_id, source_completed_at, title, body)
+    values (v_cycle.report_type, v_cycle.trading_date, v_cycle.id, v_packet.id, v_cycle.report_completed_at, v_title,
             case when char_length(v_headline) > 160 then left(v_headline, 159) || '…' else v_headline end)
     on conflict do nothing
     returning id into v_id;
@@ -262,6 +296,7 @@ declare
   v_users uuid[];
   v_n integer;
   v_made integer := 0;
+  v_chunk uuid;
   v_now timestamptz := pg_catalog.clock_timestamp();
 begin
   select * into v_settings from public.market_report_broadcast_settings where id;
@@ -307,7 +342,11 @@ begin
     insert into public.market_report_broadcast_chunks
       (broadcast_id, chunk_no, user_after, user_to, planned_users, max_attempts, available_at)
     values
-      (v_b.id, v_b.planned_chunks + 1, v_b.plan_cursor, v_users[v_n], v_n, v_settings.max_chunk_attempts, v_now);
+      (v_b.id, v_b.planned_chunks + 1, v_b.plan_cursor, v_users[v_n], v_n, v_settings.max_chunk_attempts, v_now)
+    returning id into v_chunk;
+    -- この区切りの対象者を固定する（送る直前には、この人たちだけを確かめ直す）。
+    insert into public.market_report_broadcast_deliveries (broadcast_id, user_id, chunk_id, status, attempt_count, updated_at)
+    select v_b.id, u, v_chunk, 'planned', 0, v_now from pg_catalog.unnest(v_users) as u;
     v_b.plan_cursor := v_users[v_n];
     v_b.planned_chunks := v_b.planned_chunks + 1;
     v_b.planned_users := v_b.planned_users + v_n;
@@ -372,15 +411,15 @@ begin
        set status = 'failed', last_error_code = 'BROADCAST_STALE', available_at = v_now, updated_at = v_now
       from public.market_report_broadcasts as b
      where b.id = c.broadcast_id and c.status = 'queued'
-       and b.created_at < v_now - pg_catalog.make_interval(mins => v_settings.max_report_age_minutes)
+       and b.source_completed_at < v_now - pg_catalog.make_interval(mins => v_settings.max_report_age_minutes)
     returning c.id
   )
   select v_expired || coalesce(array_agg(id), '{}') into v_expired from stale;
-  -- 回数を使い切った区切りに残った「再試行待ち」は failed（もう送らない）。
+  -- 終わった区切り（回数を使い切った・古くなった）に残った、固定した人・再試行待ちの人は failed（もう送らない）。
   update public.market_report_broadcast_deliveries as d
-     set status = 'failed', error_code = 'CHUNK_ATTEMPTS_EXHAUSTED', updated_at = v_now
+     set status = 'failed', error_code = coalesce(c.last_error_code, 'CHUNK_ATTEMPTS_EXHAUSTED'), updated_at = v_now
     from public.market_report_broadcast_chunks as c
-   where d.chunk_id = c.id and c.id = any(v_expired) and d.status = 'retry' and c.status = 'failed';
+   where d.chunk_id = c.id and c.id = any(v_expired) and d.status in ('planned', 'retry') and c.status = 'failed';
   -- 分割が終わり、開いている区切りが無い一斉通知は完了（期限切れで区切りが終わった場合も含む）。
   update public.market_report_broadcasts as b
      set status = 'completed', completed_at = v_now, updated_at = v_now
@@ -401,6 +440,7 @@ begin
       from public.market_report_broadcast_chunks as q
       join public.market_report_broadcasts as b on b.id = q.broadcast_id
      where q.status = 'queued' and q.available_at <= v_now and b.status in ('planning', 'sending')
+       and public.market_report_broadcast_send_allowed(b.id)
      order by b.created_at, q.chunk_no
      limit v_slots
      for update of q skip locked
@@ -422,8 +462,10 @@ begin
 end
 $$;
 
--- 送る直前: 区切りの範囲の対象者を確かめ直し（設定・端末）、送る人に「送信中」を付けて、その人の端末を返す。
--- まだ送っていない人（記録なし）と、送っていないことが確かな人（retry）だけ。送信済み・不明の人は返さない。
+-- 送る直前: 分割のときに固定した対象者（planned）と、送っていないことが確かな人（retry）だけを、今の設定で確かめ直し、
+-- 送る人に「送信中」を付けて、その人の端末を返す。送信済み・不明の人は返さない。返す人数は区切りの人数まで。
+-- 今送ってよくない（ゲート OFF・共通の市況が非公開・古い・パケットが変わった）なら、誰にも印を付けずに区切りを
+-- 順番待ちへ戻し（試行の回数は消費しない）、空を返す。送ってよくない間は引き取られないので、くり返さない。
 create function public.begin_market_report_broadcast_chunk(p_chunk_id uuid, p_lease_token uuid, p_lease_version bigint)
 returns table (user_id uuid, token_id uuid, expo_push_token text)
 language plpgsql
@@ -436,40 +478,42 @@ declare
   v_now timestamptz := pg_catalog.clock_timestamp();
   v_c public.market_report_broadcast_chunks%rowtype;
   v_type text;
+  v_max_devices integer;
 begin
   select * into v_c from public.market_report_broadcast_chunks where id = p_chunk_id for update;
   if not found or v_c.status <> 'processing' or v_c.lease_token is distinct from p_lease_token
      or v_c.lease_version <> p_lease_version or v_c.lease_expires_at < v_now then
     raise exception 'MARKET_REPORT_BROADCAST_LEASE_LOST' using errcode = 'P0001';
   end if;
+  if not public.market_report_broadcast_send_allowed(v_c.broadcast_id) then
+    update public.market_report_broadcast_chunks as c
+       set status = 'queued', attempt_count = greatest(c.attempt_count - 1, 0), last_error_code = 'SEND_NOT_ALLOWED',
+           lease_token = null, lease_expires_at = null, lease_version = c.lease_version + 1,
+           available_at = v_now + interval '60 seconds', updated_at = v_now
+     where c.id = v_c.id;
+    return;
+  end if;
   select b.report_type into v_type from public.market_report_broadcasts as b where b.id = v_c.broadcast_id;
+  select g.max_devices_per_user into v_max_devices from public.market_report_broadcast_settings as g where g.id;
 
-  -- 前の試行で retry だったが、今は対象でなくなった人（通知 OFF・端末なし・退会）は skipped。
+  -- 今は対象でなくなった人（通知 OFF・端末なし・退会・試す人の一覧から外れた）は skipped。
   update public.market_report_broadcast_deliveries as d
      set status = 'skipped', error_code = 'NOT_ELIGIBLE_AT_SEND', updated_at = v_now
-   where d.chunk_id = v_c.id and d.status = 'retry'
+   where d.chunk_id = v_c.id and d.status in ('planned', 'retry')
      and not public.market_report_broadcast_eligible(d.user_id, v_type);
+  -- 端末が上限より多い人には送らず failed（黙って一部の端末だけに送り「送信済み」にしない）。
+  update public.market_report_broadcast_deliveries as d
+     set status = 'failed', error_code = 'DEVICE_LIMIT_EXCEEDED', updated_at = v_now,
+         device_count = (select count(*) from public.device_push_tokens as k where k.user_id = d.user_id)
+   where d.chunk_id = v_c.id and d.status in ('planned', 'retry')
+     and (select count(*) from public.device_push_tokens as k where k.user_id = d.user_id) > v_max_devices;
 
   return query
-  with targets as (
-    select s.user_id
-      from public.alert_settings as s
-     where (v_c.user_after is null or s.user_id > v_c.user_after) and s.user_id <= v_c.user_to
-       and public.market_report_broadcast_eligible(s.user_id, v_type)
-       and not exists (
-         select 1 from public.market_report_broadcast_deliveries as d
-          where d.broadcast_id = v_c.broadcast_id and d.user_id = s.user_id and d.status <> 'retry'
-       )
-  ), marked as (
-    insert into public.market_report_broadcast_deliveries as d
-      (broadcast_id, user_id, chunk_id, status, attempt_count, device_count, updated_at)
-    select v_c.broadcast_id, t.user_id, v_c.id, 'sending', 1,
-           (select count(*) from public.device_push_tokens as k where k.user_id = t.user_id), v_now
-      from targets as t
-    on conflict (broadcast_id, user_id) do update
-       set status = 'sending', attempt_count = d.attempt_count + 1, chunk_id = excluded.chunk_id,
-           device_count = excluded.device_count, error_code = null, updated_at = v_now
-     where d.status = 'retry'
+  with marked as (
+    update public.market_report_broadcast_deliveries as d
+       set status = 'sending', attempt_count = d.attempt_count + 1, error_code = null, updated_at = v_now,
+           device_count = (select count(*) from public.device_push_tokens as k where k.user_id = d.user_id)
+     where d.chunk_id = v_c.id and d.status in ('planned', 'retry')
     returning d.user_id
   )
   select m.user_id, k.id, k.expo_push_token
@@ -610,6 +654,7 @@ grant select on table public.market_report_broadcasts to service_role;
 grant select on table public.market_report_broadcast_chunks to service_role;
 
 revoke all on function public.market_report_broadcast_eligible(uuid, text) from public, anon, authenticated, service_role;
+revoke all on function public.market_report_broadcast_send_allowed(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.enqueue_market_report_broadcasts() from public, anon, authenticated;
 revoke all on function public.plan_market_report_broadcast(uuid) from public, anon, authenticated;
 revoke all on function public.claim_market_report_broadcast_chunks(integer) from public, anon, authenticated;

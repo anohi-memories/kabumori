@@ -9,7 +9,9 @@
 //   4. 片付ける: 古い記録を少しずつ消す（purge）
 //
 // 二重送信を防ぐ決まり
-//   - 1人の端末は、必ず同じ Expo へのリクエストに入れる（利用者ごとの結果を1つのリクエストで決める）。
+//   - 1人の端末は、必ず同じ Expo へのリクエストに入れる（利用者ごとの結果を1つのリクエストで決める）。入りきらない
+//     人には送らず failed（DEVICE_LIMIT_EXCEEDED。DB の max_devices_per_user でも同じ人を先に除く）。
+//   - ticket は形を厳しく読み、分からない形は unknown（送り直さない）。送り直すのは MessageRateExceeded だけ。
 //   - Expo へのリクエストが途中で切れた（応答が無い）ら、そのリクエストの人は unknown（送ったかもしれないので二度と送らない）。
 //     まだ送っていない後ろのリクエストの人は retry（区切りの次の試行で送る）。
 //   - 429・5xx（Expo が受け付けを明示的に断った）は、同じリクエストを数回だけ送り直し、それでも断られたら retry。
@@ -18,11 +20,7 @@
 // 重要ニュースとは別の経路（notifications の表と send-push-notifications には触れない）。Expo の受け付け（ticket）は、
 // 端末に届いたことの保証ではない。
 
-import {
-  classifyTicket,
-  EXPO_PUSH_BATCH_SIZE,
-  type ExpoPushTicket,
-} from "../send-push-notifications/push_send_logic.ts";
+import { EXPO_PUSH_BATCH_SIZE } from "../send-push-notifications/push_send_logic.ts";
 
 export type ReportType = "morning" | "close";
 
@@ -58,9 +56,9 @@ export type BroadcastStore = {
   purge(limit: number): Promise<unknown>;
 };
 
-/** Expo への1回のリクエストの結果。throw は「応答が無い」（送ったかどうか分からない）。 */
+/** Expo への1回のリクエストの結果。throw は「応答が無い」（送ったかどうか分からない）。tickets の中身は readTicket で厳しく読む。 */
 export type SendResult =
-  | { kind: "tickets"; tickets: ExpoPushTicket[] }
+  | { kind: "tickets"; tickets: unknown[] }
   | { kind: "rejected"; status: number };
 
 export type ExpoSender = (messages: BroadcastMessage[]) => Promise<SendResult>;
@@ -96,68 +94,116 @@ export function messageFor(chunk: ClaimedChunk, token: string): BroadcastMessage
   };
 }
 
-/** 利用者ごとに端末をまとめ、1人の端末が2つのリクエストに分かれないように詰める。 */
-export function batchByUser(targets: readonly Target[], size = EXPO_PUSH_BATCH_SIZE): Target[][] {
+/**
+ * 利用者ごとに端末をまとめ、1人の端末が2つのリクエストに分かれないように詰める（1つのリクエストは size 通まで）。
+ * 1人で size を超える端末は1つのリクエストに入らないので、その人には送らず overLimit に返す（黙って切り捨てない）。
+ */
+export function batchByUser(targets: readonly Target[], size = EXPO_PUSH_BATCH_SIZE): { batches: Target[][]; overLimit: string[] } {
   const byUser = new Map<string, Target[]>();
   for (const target of targets) byUser.set(target.user_id, [...(byUser.get(target.user_id) ?? []), target]);
   const batches: Target[][] = [];
+  const overLimit: string[] = [];
   let current: Target[] = [];
-  for (const devices of byUser.values()) {
-    const own = devices.slice(0, size); // 1人で size を超える端末は持てない前提（超えた分は送らない）
-    if (current.length + own.length > size) {
+  for (const [user_id, devices] of byUser) {
+    if (devices.length > size) {
+      overLimit.push(user_id);
+      continue;
+    }
+    if (current.length + devices.length > size) {
       batches.push(current);
       current = [];
     }
-    current.push(...own);
+    current.push(...devices);
   }
   if (current.length > 0) batches.push(current);
-  return batches;
+  return { batches, overLimit };
+}
+
+/**
+ * Expo の ticket を厳しく読む（既存の送信の worker の classifyTicket は使わない。形の分からない ticket を
+ * 「一時的な失敗」と読んで送り直すことになるため）。
+ *   ok:           {status:"ok", id:<空でない文字列>}
+ *   dead:         {status:"error", details:{error:"DeviceNotRegistered"}}（その端末は二度と届かない）
+ *   rate_limited: {status:"error", details:{error:"MessageRateExceeded"}}（受け付けられなかった。送り直してよい）
+ *   rejected:     {status:"error", details:{error:<ほかの文字列>}}（MessageTooBig など。送り直しても変わらない）
+ *   malformed:    それ以外の形（受け付けられたかどうか分からない。送り直さない）
+ */
+export type TicketVerdict = "ok" | "dead" | "rate_limited" | "rejected" | "malformed";
+
+export function readTicket(ticket: unknown): TicketVerdict {
+  if (!ticket || typeof ticket !== "object" || Array.isArray(ticket)) return "malformed";
+  const value = ticket as { status?: unknown; id?: unknown; details?: unknown };
+  if (value.status === "ok") return typeof value.id === "string" && value.id.length > 0 ? "ok" : "malformed";
+  if (value.status !== "error") return "malformed";
+  const details = value.details;
+  const code = details && typeof details === "object" ? (details as { error?: unknown }).error : undefined;
+  if (typeof code !== "string" || code.length === 0) return "malformed";
+  if (code === "DeviceNotRegistered") return "dead";
+  if (code === "MessageRateExceeded") return "rate_limited";
+  return "rejected";
 }
 
 /** 1つのリクエストの ticket から、利用者ごとの結果を決める。 */
-export function outcomesFromTickets(batch: readonly Target[], tickets: readonly ExpoPushTicket[]): UserResult[] {
+export function outcomesFromTickets(batch: readonly Target[], tickets: readonly unknown[]): UserResult[] {
   const users = [...new Set(batch.map((target) => target.user_id))];
-  if (tickets.length !== batch.length) {
+  if (!Array.isArray(tickets) || tickets.length !== batch.length) {
     // ticket の数が合わなければ、どの端末の結果か分からない。送ったかもしれないので unknown。
     return users.map((user_id) => ({ user_id, outcome: "unknown", error_code: "TICKET_COUNT_MISMATCH" }));
   }
-  const perUser = new Map<string, string[]>();
+  const perUser = new Map<string, TicketVerdict[]>();
   batch.forEach((target, index) => {
-    perUser.set(target.user_id, [...(perUser.get(target.user_id) ?? []), classifyTicket(tickets[index])]);
+    perUser.set(target.user_id, [...(perUser.get(target.user_id) ?? []), readTicket(tickets[index])]);
   });
-  return users.map((user_id) => {
-    const outcomes = perUser.get(user_id) ?? [];
-    if (outcomes.includes("ok")) return { user_id, outcome: "sent" };
-    if (outcomes.includes("transient_error")) return { user_id, outcome: "retry", error_code: "EXPO_TICKET_TRANSIENT_ERROR" };
+  return users.map((user_id): UserResult => {
+    const verdicts = perUser.get(user_id) ?? [];
+    // 1台でも受け付けられたら送信済み（ほかの端末へは送り直さない）。
+    if (verdicts.includes("ok")) return { user_id, outcome: "sent" };
+    // 形の分からない ticket があれば、受け付けられたかもしれないので unknown（送り直さない）。
+    if (verdicts.includes("malformed")) return { user_id, outcome: "unknown", error_code: "TICKET_MALFORMED" };
+    if (verdicts.includes("rate_limited")) return { user_id, outcome: "retry", error_code: "EXPO_MESSAGE_RATE_EXCEEDED" };
+    if (verdicts.includes("rejected")) return { user_id, outcome: "failed", error_code: "EXPO_TICKET_REJECTED" };
     return { user_id, outcome: "failed", error_code: "EXPO_DEVICE_NOT_REGISTERED" };
   });
 }
 
-/** 区切り1つ分の送信。利用者ごとの結果と、区切りに残す失敗のコードを返す。例外は投げない。 */
+/**
+ * 区切り1つ分の送信。利用者ごとの結果と、区切りに残す失敗のコードを返す。例外は投げない。
+ *
+ * 送る速さ（どの1秒の窓でも超えない）: この区切りの上限 perChunkRate（全体の上限 ÷ 同時の区切りの数）に対して、
+ *   - 1つのリクエストは min(90, perChunkRate) 通まで
+ *   - 送る前に直近1秒の送信数を数え、足すと上限を超えるなら、窓が空くまで待つ
+ *   - 区切りを終える前に、最後の送信から1秒たつまで待つ（同じ枠で次の区切りが送り始めても、窓が重ならない）
+ * DB が同時に動く区切りを max_parallel_chunks までに抑えるので、全体でも、どの1秒の窓でも上限以内になる。
+ */
 export async function sendChunk(
   chunk: ClaimedChunk,
   targets: readonly Target[],
   sender: ExpoSender,
   clock: Clock,
-  messagesPerSecond: number,
+  perChunkRate: number,
 ): Promise<{ results: UserResult[]; errorCode: string | null; requests: number }> {
   const results: UserResult[] = [];
-  const batches = batchByUser(targets);
+  const rate = Math.max(1, Math.floor(perChunkRate));
+  const { batches, overLimit } = batchByUser(targets, Math.min(EXPO_PUSH_BATCH_SIZE, rate));
+  for (const user_id of overLimit) results.push({ user_id, outcome: "failed", error_code: "DEVICE_LIMIT_EXCEEDED" });
   const deadline = Date.parse(chunk.lease_expires_at) - LEASE_SAFETY_MS;
+  const window: Array<{ at: number; count: number }> = [];
   let errorCode: string | null = null;
   let requests = 0;
   let index = 0;
-  let nextAt = clock.now();
   for (; index < batches.length; index += 1) {
     const batch = batches[index];
-    // 送る速さ: この区切りの分の上限（全体の上限 ÷ 同時に動く区切りの数）を超えない。各リクエストのあとに間隔を空け、
-    // 区切りの最後の間隔も待ってから終える（次の区切りがすぐ送り始めても、枠ごとの速さが上限を超えない）。
-    if (clock.now() < nextAt) await clock.sleep(nextAt - clock.now());
+    for (;;) {
+      while (window.length > 0 && window[0].at <= clock.now() - 1000) window.shift();
+      const used = window.reduce((sum, entry) => sum + entry.count, 0);
+      if (used + batch.length <= rate) break;
+      await clock.sleep(Math.max(1, window[0].at + 1000 - clock.now()));
+    }
     if (clock.now() >= deadline) {
       errorCode = "LEASE_SAFETY_STOP";
       break;
     }
-    nextAt = clock.now() + Math.ceil((batch.length / Math.max(1, messagesPerSecond)) * 1000);
+    window.push({ at: clock.now(), count: batch.length });
     requests += 1;
     let sent: SendResult;
     try {
@@ -186,7 +232,9 @@ export async function sendChunk(
     }
     results.push(...outcomesFromTickets(batch, sent.tickets));
   }
-  if (requests > 0 && clock.now() < nextAt) await clock.sleep(nextAt - clock.now());
+  // 最後の送信から1秒たつまで待ってから終える（枠ごとの窓を次の区切りと重ねない）。
+  const last = window[window.length - 1];
+  if (last && clock.now() < last.at + 1000) await clock.sleep(last.at + 1000 - clock.now());
   // 送らなかった後ろの人は retry（送っていないことが確か）。
   for (const batch of batches.slice(index)) {
     for (const user_id of new Set(batch.map((target) => target.user_id))) {

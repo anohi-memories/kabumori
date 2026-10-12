@@ -112,7 +112,7 @@ added_rel="$(comm -13 "$work/before" "$work/after" | grep '^rel ' | awk '{print 
 want_rel="market_report_broadcast_chunks market_report_broadcast_chunks_leases market_report_broadcast_chunks_no market_report_broadcast_chunks_open market_report_broadcast_chunks_pkey market_report_broadcast_chunks_queue market_report_broadcast_deliveries market_report_broadcast_deliveries_chunk market_report_broadcast_deliveries_pkey market_report_broadcast_settings market_report_broadcast_settings_pkey market_report_broadcasts market_report_broadcasts_once market_report_broadcasts_packet_once market_report_broadcasts_pkey "
 [[ "$added_rel" == "$want_rel" ]] || { echo "FAIL 追加された表・索引が想定と違う: $added_rel" >&2; exit 1; }
 added_fn="$(comm -13 "$work/before" "$work/after" | grep '^fn ' | awk '{print $2}' | sort | tr '\n' ' ')"
-want_fn="begin_market_report_broadcast_chunk(uuid,uuid,bigint) claim_market_report_broadcast_chunks(integer) enqueue_market_report_broadcasts() finish_market_report_broadcast_chunk(uuid,uuid,bigint,jsonb,text) market_report_broadcast_eligible(uuid,text) plan_market_report_broadcast(uuid) purge_market_report_broadcasts(integer) "
+want_fn="begin_market_report_broadcast_chunk(uuid,uuid,bigint) claim_market_report_broadcast_chunks(integer) enqueue_market_report_broadcasts() finish_market_report_broadcast_chunk(uuid,uuid,bigint,jsonb,text) market_report_broadcast_eligible(uuid,text) market_report_broadcast_send_allowed(uuid) plan_market_report_broadcast(uuid) purge_market_report_broadcasts(integer) "
 [[ "$added_fn" == "$want_fn" ]] || { echo "FAIL 追加された関数が想定と違う: $added_fn" >&2; exit 1; }
 other="$(comm -13 "$work/before" "$work/after" | grep -E '^(col|con|pol|trg) ' | grep -vE '^(col|con|pol|trg) (public\.)?market_report_broadcast(s|_settings|_chunks|_deliveries)[ .]' || true)"
 [[ -z "$other" ]] || { echo "FAIL 既存の表に列・制約・方針が増えた: $other" >&2; exit 1; }
@@ -189,10 +189,10 @@ SQL
   wait
   [[ "$(Q_ "$db" -c "select count(*) filter (where status = 'unknown') || '/' || count(*) from public.market_report_broadcast_deliveries where chunk_id = '$c'")" == "50/50" ]] \
     || { echo "FAIL 4c 期限切れの送信中が unknown にならない" >&2; return 1; }
-  # 4d. 送ったあと と 期限切れの引き取り直し（両方の順序）。まだ誰にも記録が無い区切りを使う。
+  # 4d. 送ったあと と 期限切れの引き取り直し（両方の順序）。まだ誰にも送っていない（固定した人だけの）区切りを使う。
   Q_ "$db" -c "update public.market_report_broadcast_settings set max_parallel_chunks = 4" >/dev/null
   Q_ "$db" -c "begin; set local role service_role; select count(*) from public.claim_market_report_broadcast_chunks(4); commit;" >/dev/null
-  fresh="select id, lease_token, lease_version from public.market_report_broadcast_chunks as k where broadcast_id = '$b' and status = 'processing' and not exists (select 1 from public.market_report_broadcast_deliveries as d where d.chunk_id = k.id) order by chunk_no limit 1"
+  fresh="select id, lease_token, lease_version from public.market_report_broadcast_chunks as k where broadcast_id = '$b' and status = 'processing' and not exists (select 1 from public.market_report_broadcast_deliveries as d where d.chunk_id = k.id and d.status <> 'planned') order by chunk_no limit 1"
   read -r c tok ver < <(Q_ "$db" -F ' ' -c "$fresh")
   Q_ "$db" -c "begin; set local role service_role; select count(*) from public.begin_market_report_broadcast_chunk('$c', '$tok', $ver); commit;" >/dev/null
   local results; results="$(Q_ "$db" -c "select jsonb_agg(jsonb_build_object('user_id', user_id, 'outcome', 'sent')) from public.market_report_broadcast_deliveries where chunk_id = '$c' and status = 'sending'")"
@@ -207,7 +207,8 @@ SQL
   #   (ii) 引き取り直しが先 → 古い worker の送ったあとは、待ったあと拒まれる。送信中だった人は unknown。
   read -r c tok ver < <(Q_ "$db" -F ' ' -c "$fresh")
   [[ -n "$c" ]] || { echo "FAIL 4d(ii) 使える区切りが無い" >&2; return 1; }
-  Q_ "$db" -c "begin; set local role service_role; select count(*) from public.begin_market_report_broadcast_chunk('$c', '$tok', $ver); commit;" >/dev/null
+  local began
+  began="$(Q_ "$db" -c "begin; set local role service_role; select count(distinct user_id) from public.begin_market_report_broadcast_chunk('$c', '$tok', $ver); commit;" | grep -v '^$' | tail -1)"
   results="$(Q_ "$db" -c "select jsonb_agg(jsonb_build_object('user_id', user_id, 'outcome', 'sent')) from public.market_report_broadcast_deliveries where chunk_id = '$c' and status = 'sending'")"
   Q_ "$db" -c "update public.market_report_broadcast_chunks set lease_expires_at = clock_timestamp() - interval '1 second' where id = '$c'" >/dev/null
   ( Q_ "$db" -c "begin; set local role service_role; select count(*) from public.claim_market_report_broadcast_chunks(4); reset role; select pg_sleep(1.2); commit;" >/dev/null ) &
@@ -216,8 +217,10 @@ SQL
   late="$(Q_ "$db" -c "begin; set local role service_role; select public.finish_market_report_broadcast_chunk('$c', '$tok', $ver, '$results') ->> 'status'; commit;" | grep -v '^$' | tail -1)"
   wait
   [[ "$late" == lease_lost ]] || { echo "FAIL 4d(ii) 古い worker の送ったあとが通った: $late" >&2; return 1; }
-  [[ "$(Q_ "$db" -c "select count(*) from public.market_report_broadcast_deliveries where chunk_id = '$c' and status = 'unknown'")" == 50 ]] \
-    || { echo "FAIL 4d(ii) 送信中が unknown にならない" >&2; return 1; }
+  # 送る直前に返した人（送信中）だけが unknown。端末の上限を超えた人（動作の検証の利用者）は送らずに failed のまま。
+  [[ "$began" -gt 0 && "$(Q_ "$db" -c "select count(*) from public.market_report_broadcast_deliveries where chunk_id = '$c' and status = 'unknown'")" == "$began" \
+     && "$(Q_ "$db" -c "select count(*) from public.market_report_broadcast_deliveries where chunk_id = '$c' and status = 'sending'")" == 0 ]] \
+    || { echo "FAIL 4d(ii) 送信中が unknown にならない: $(Q_ "$db" -c "select string_agg(status || '=' || n, ',') from (select status, count(*) n from public.market_report_broadcast_deliveries where chunk_id = '$c' group by 1) x")" >&2; return 1; }
   return 0
 }
 races "$main" || exit 1
@@ -239,14 +242,17 @@ echo "MARKET_REPORT_BROADCAST_SCALE_PASS"
 # ---------------------------------------------------------------------------
 # 6. 変異テスト
 # ---------------------------------------------------------------------------
-mutate() {
+mutate() {  # name, old1, new1 [, old2, new2 ...]（守りが2か所にあるときは、両方を外した版で確かめる）
   local name="$1" mutant="$work/mutant_$1.sql"
-  python3 - "$candidate_src" "$mutant" "$2" "$3" <<'PY'
+  shift
+  python3 - "$candidate_src" "$mutant" "$@" <<'PY'
 import sys
-src, dst, old, new = sys.argv[1:5]
+src, dst, pairs = sys.argv[1], sys.argv[2], sys.argv[3:]
 s = open(src, encoding="utf-8").read()
-assert s.count(old) == 1, ("mutation anchor", s.count(old), old[:80])
-open(dst, "w", encoding="utf-8").write(s.replace(old, new))
+for old, new in zip(pairs[0::2], pairs[1::2]):
+    assert s.count(old) == 1, ("mutation anchor", s.count(old), old[:80])
+    s = s.replace(old, new)
+open(dst, "w", encoding="utf-8").write(s)
 PY
   local db; db="$(new_db "m_$name" 2)"
   O_ "$db" -f "$mutant" >/dev/null
@@ -268,31 +274,12 @@ mutate finish_no_expiry "     or v_c.lease_version <> p_lease_version or v_c.lea
     return jsonb_build_object('status', 'lease_lost', 'chunk_status', v_c.status);" "     or v_c.lease_version <> p_lease_version then
     return jsonb_build_object('status', 'lease_lost', 'chunk_status', v_c.status);"
 mutate expiry_keeps_sending "     set status = 'unknown', error_code = 'LEASE_EXPIRED_OUTCOME_UNKNOWN', updated_at = v_now" "     set error_code = 'LEASE_EXPIRED_OUTCOME_UNKNOWN', updated_at = v_now"
-# 送信済みの人を外す守りは2か所（対象の選び方と、記録の更新の条件）。両方を外した版で確かめる。
-mutate begin_resends "          where d.broadcast_id = v_c.broadcast_id and d.user_id = s.user_id and d.status <> 'retry'
-       )
-  ), marked as (
-    insert into public.market_report_broadcast_deliveries as d
-      (broadcast_id, user_id, chunk_id, status, attempt_count, device_count, updated_at)
-    select v_c.broadcast_id, t.user_id, v_c.id, 'sending', 1,
-           (select count(*) from public.device_push_tokens as k where k.user_id = t.user_id), v_now
-      from targets as t
-    on conflict (broadcast_id, user_id) do update
-       set status = 'sending', attempt_count = d.attempt_count + 1, chunk_id = excluded.chunk_id,
-           device_count = excluded.device_count, error_code = null, updated_at = v_now
-     where d.status = 'retry'" "          where d.broadcast_id = v_c.broadcast_id and d.user_id = s.user_id and false
-       )
-  ), marked as (
-    insert into public.market_report_broadcast_deliveries as d
-      (broadcast_id, user_id, chunk_id, status, attempt_count, device_count, updated_at)
-    select v_c.broadcast_id, t.user_id, v_c.id, 'sending', 1,
-           (select count(*) from public.device_push_tokens as k where k.user_id = t.user_id), v_now
-      from targets as t
-    on conflict (broadcast_id, user_id) do update
-       set status = 'sending', attempt_count = d.attempt_count + 1, chunk_id = excluded.chunk_id,
-           device_count = excluded.device_count, error_code = null, updated_at = v_now"
-mutate begin_no_recheck "       and public.market_report_broadcast_eligible(s.user_id, v_type)
-       and not exists" "       and not exists"
+# 送る直前に、送信済み・不明の人を外す（固定した人と再試行待ちの人だけを送信中にする）。
+mutate begin_resends "     where d.chunk_id = v_c.id and d.status in ('planned', 'retry')
+    returning d.user_id" "     where d.chunk_id = v_c.id
+    returning d.user_id"
+# 送る直前の確かめ直し（設定 OFF・端末なし・退会・試す人の一覧）。
+mutate begin_no_recheck "     and not public.market_report_broadcast_eligible(d.user_id, v_type);" "     and false;"
 mutate missing_result_not_unknown "     set status = 'unknown', error_code = 'RESULT_MISSING', updated_at = v_now" "     set status = 'sent', error_code = 'RESULT_MISSING', updated_at = v_now"
 mutate no_claim_lock "  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('market_report_broadcast:claim', 0));" ""
 mutate no_capacity "greatest(v_settings.max_parallel_chunks - v_running, 0)" "16"
@@ -301,14 +288,24 @@ mutate feed_gate_ignored "  if not found or not v_ondemand.public_market_feed_en
 mutate legacy_gate_ignored "  if not v_ondemand.ondemand_requests_enabled and not v_settings.allow_with_legacy_personalized_reports then" "  if false then"
 mutate fact_not_checked "       or v_fact not in ('passed', 'advisory') or v_headline = '' then" "       or v_headline = '' then"
 mutate age_not_checked "       and c.report_completed_at >= v_now - pg_catalog.make_interval(mins => v_settings.max_report_age_minutes)" ""
+# 送信のゲートは、引き取りの最初と「今送ってよいか」の2か所で見る。両方を外した版で確かめる。
 mutate sending_gate_ignored "  if not found or not v_settings.enabled or not v_settings.sending_enabled then
     return;" "  if not found or not v_settings.enabled then
-    return;"
+    return;" "    select g.enabled and g.sending_enabled" "    select g.enabled"
 mutate pilot_ignored_at_send "    and coalesce((select g.pilot_user_ids is null or p_user_id = any(g.pilot_user_ids)
                      from public.market_report_broadcast_settings as g where g.id), false);" ";"
 mutate pilot_ignored_in_plan "           and (v_settings.pilot_user_ids is null or s.user_id = any(v_settings.pilot_user_ids))
 " ""
-mutate stale_sent "       and b.created_at < v_now - pg_catalog.make_interval(mins => v_settings.max_report_age_minutes)" "       and false"
+mutate stale_sent "       and b.source_completed_at < v_now - pg_catalog.make_interval(mins => v_settings.max_report_age_minutes)" "       and false"
+# H2 の R1〜R4 の守り（外すと必ず検出される = 修正前は失敗）。R5 は修正前の SQL で直接再現した（Report 参照）。
+mutate r1_begin_no_send_check "  if not public.market_report_broadcast_send_allowed(v_c.broadcast_id) then" "  if false then"
+mutate r1_claim_no_send_check "       and public.market_report_broadcast_send_allowed(b.id)
+" ""
+mutate r2_send_age_by_created_at "       and b.source_completed_at >= pg_catalog.clock_timestamp()" "       and b.created_at >= pg_catalog.clock_timestamp()"
+mutate r2_stale_by_created_at "       and b.source_completed_at < v_now - pg_catalog.make_interval(mins => v_settings.max_report_age_minutes)" "       and b.created_at < v_now - pg_catalog.make_interval(mins => v_settings.max_report_age_minutes)"
+mutate r3_no_device_limit "     and (select count(*) from public.device_push_tokens as k where k.user_id = d.user_id) > v_max_devices;" "     and false;"
+mutate r4_parallel_16 "check (max_parallel_chunks between 1 and 6)" "check (max_parallel_chunks between 1 and 16)"
+mutate r4_rate_550 "check (messages_per_second between 10 and 400)" "check (messages_per_second between 10 and 550)"
 mutate final_retry_kept "                    when r.outcome = 'retry' and not v_final_attempt then 'retry'" "                    when r.outcome = 'retry' then 'retry'"
 echo "MARKET_REPORT_BROADCAST_MUTATIONS_PASS"
 echo "MARKET_REPORT_BROADCAST_ALL_PASS"

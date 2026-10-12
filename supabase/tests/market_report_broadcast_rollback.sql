@@ -9,6 +9,7 @@ drop function public.claim_market_report_broadcast_chunks(integer);
 drop function public.plan_market_report_broadcast(uuid);
 drop function public.enqueue_market_report_broadcasts();
 drop function public.market_report_broadcast_eligible(uuid, text);
+drop function public.market_report_broadcast_send_allowed(uuid);
 drop table public.market_report_broadcast_deliveries;
 drop table public.market_report_broadcast_chunks;
 drop table public.market_report_broadcasts;
