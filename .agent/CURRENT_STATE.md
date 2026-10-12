@@ -1,3 +1,12 @@
+## G6 Phase2b offline wiring assignment — 2026-10-12 JST
+
+- User 「すすめて」 approved next **offline-only** Phase2b following K6 acceptance of Phase2a PR148. G6 task `common-ai-provider-g6-phase2b-market-report-wiring-offline-20261012`, status **ready/next_owner claude**, start G6, finish K6, return_to 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）, recommended **Opus5.5（高）**.
+- Draft PR148 (Phase2a adapter), PR143 (G2 on-demand), and stacked PR149 (G2 broadcast) all OPEN/Draft/UNMERGED at assignment. G6 must not modify G2-owned market report handler/analysis/notification/worker/migration or PR143/149; can implement separate new offline integration harness/tests/docs on isolated G6 worktree and Draft PR only. Handler changes, dependencies, timing/rollback must be documented for future coordinated task. Conflicts => STOP/K6.
+- Verify legacy unchanged on default OFF, fake Claude shadow after successful legacy only, fake ledger idempotency/limits, timeout/cancellation, representative synthetic morning/close inputs, Edge deadline and collision plan. Monthly $5/40 system trial policy cannot support routine daily canary; no auto policy widening.
+- Production/Edge/Cron/secrets/DB migration/live API/paid calls/real notifications/merge/deploy **FORBIDDEN**. Next live canary requires separate authorization, K6 and security review decision. No other slot assignment or status changed.
+
+---
+
 ## K8 FINAL — G8 PR129 R3 source corrections accepted, next offline premerge QA ready — 2026-10-12 JST
 
 - ユーザーの `K8` に対し、ニュース改善A専任G8 TASK/Report `news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012` を読込。G8 Reportは`review_required`で最終修正head `0a2df248f6e49bcb1bfea690f38064c93e5f895c` を報告。GitHub PR129はOPEN/Draft/unmerged、R2 `7bf9b8a0`から1 commit/5 files（fomc_statement_facts.ts、kessan_tanshin_facts.ts、review_fixes_test.ts、index.ts、新judgement_body_race_test.ts）。ChatGPTはコードと再現テストを読取確認、テストは独立実行していない。
