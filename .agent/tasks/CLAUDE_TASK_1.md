@@ -3,8 +3,8 @@
 - task_id: kabumori-g1-portfolio-watchlist-simulator-qa-20261012
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: normal
 - task_type: iOS Simulator QA / read-only regression
 - recommended_model: **Sonnet5（中）**
@@ -40,7 +40,64 @@ Verify merged portfolio, watchlist and stock-detail screens in an **independent 
 5. Final Report includes task_id, result, actual changed_files, tests, Simulator dimensions/steps, commit/push/PR/merge/deploy status, remaining_issues, safety_checks, next_recommendation. End with `かぶモリアプリG1のちゃ へ K1 を送ってください。`
 
 ## Report — current task
-Pending Claude G1 execution. Do not mark PASS before actual verification.
+- task_id: kabumori-g1-portfolio-watchlist-simulator-qa-20261012
+- result: **PASS（フィクスチャ検証・一部は NOT_RUN を明記）**。マージ済みの 銘柄タブ（ポートフォリオ/ウォッチリスト）・銘柄詳細・PR #142 の保留挙動は、375pt で全項目、402pt で表示系を確認し、不具合は見つからなかった。実データ・実機は今回未実施。
+- status: `review_required` / next_owner `chatgpt`（return to かぶモリアプリG1のちゃ for `K1`）
+- date: 2026-10-12 JST
+- baseline: fresh `origin/main` `41979773237e05b851e374c559244d74f2e1d48d`（PR #142 squash `4d0d0660831c1bf7403a908592c337c284332cdf` を含む。GitHub compare: main は squash の ahead 58 / behind 0）。独立クローン、ソース無変更
+- changed_files: `.agent/tasks/CLAUDE_TASK_1.md`（本Report）と `.agent/CURRENT_STATE.md` の G1 行のみ。アプリソース変更・PR・merge・deploy・EAS なし
+
+### 環境
+- Xcode 27.0 / iOS 27.0 Simulator。端末は G1 専用の使い捨て **iPhone SE (3rd gen) 375pt**（フィクスチャ rig）。
+- **402pt**: 使い捨ての iPhone 17 Pro（402pt）は端末アクセスの許可が下りず操作不可だったため、許可済みの既存 **iPhone 18 Pro（402pt）** に **フィクスチャ rig の JS** を読み込んで検証（rig は偽バックエンドで通信せず、保存済みのサインインセッションには触れない）。検証後にアプリを終了し、ユーザーのログイン済み実アプリは次回起動で通常のサーバー選択に戻る。
+- rig = マージ済み main の `src/` を同期（rig 専用 6 ファイルのみ差し替え）。Metro は専用 8083、ctl 8099（自分のもの・停止済み）。8081 は未使用/未接触。
+
+### 実測コマンド
+| コマンド | 結果 |
+|---|---|
+| `deno test --no-check --no-lock --no-config --allow-read tests/app/`（clean main） | **521 passed / 0 failed** |
+| `tsc --noEmit -p tsconfig.json` | `src/` のエラーは既存の css 型宣言 2 件のみ（`animated-icon.web.tsx`, `global.css`）。アプリの型エラー無し（`tests/` の Deno/node 型は環境差で従来どおり） |
+| `git diff --check` / `git status` | クリーン（追跡ファイルの変更 0） |
+
+### QA マトリクス
+| # | 項目 | 375pt | 402pt | 観察 |
+|---|---|---|---|---|
+| 1 | 下部 NativeTabs = ホーム/銘柄/ニュース/レポート/メニュー、ウォッチリストは銘柄内の切替（6つ目のタブではない） | PASS | PASS | `(tabs)/_layout.tsx` のラベル5つを確認、全画面で銘柄が選択状態 |
+| 2 | 初期はポートフォリオ。ポートフォリオ⇄ウォッチリスト切替 | PASS | PASS | 内部切替のみ、見出し PORTFOLIO↔WATCHLIST |
+| 3 | 資産カード・スパークライン・AI概要・Top3・保有一覧（一致時） | PASS | PASS | 値は保存済み行と一致、位置・折返し崩れなし |
+| 4 | ウォッチ: 注目カード 0/2/3/ニュース付き/全件注目/空 | PASS（8フィクスチャ） | PASS（4フィクスチャ） | 0枚=「監視銘柄 N銘柄」、1以上=「その他の監視銘柄」、全件注目=残りグループなし、空=案内+「銘柄を探す」 |
+| 5 | 基準日・リアルタイムでない旨 | PASS | PASS | 「10/12 終値ベース」「10/9 終値ベース」（古い基準）、「今日」表記は当日基準のみ、詳細に「リアルタイムではありません」 |
+| 6 | 欠損は `—`（0にしない） | PASS | PASS | レポート無し: 資産・損益・各行 `—`＋案内。ウォッチ行も `—` |
+| 7 | 登録済みタップ→読み取り専用の銘柄詳細→戻る（元のセグメントへ） | PASS | PASS（詳細表示） | ウォッチ注目カード/一覧行/保有行から開き、「銘柄に戻る」で元のウォッチリストに復帰（二重画面なし） |
+| 8 | 詳細→「登録内容を編集」→既存エディタ→保存/閉じる | PASS | NOT_RUN | 編集は保存後に詳細を再読込。フィクスチャ DB のみ |
+| 9 | 詳細→関連ニュース→戻る（詳細へ） | PASS（前回タスクで確認済・今回の流れでは未再実施） | NOT_RUN | — |
+| 10 | 検索→登録済み結果→詳細→戻る（検索語・結果を保持） | PASS | NOT_RUN | 「登録済み ›」、戻ると検索語 7203 と結果が残る |
+| 11 | PR #142 不一致: 数量・取得単価は同じで 買い→売り を保存 | PASS | NOT_RUN | 詳細: 区分「現物・売り」＋評価額保留。銘柄タブ: 資産評価額/評価損益/増減が全て `—`＋注記「登録内容が変わったため…次の大引けレポートで更新されます」、スパークライン非表示、Top3 から該当銘柄が外れ次点が入る、他の保有は従来どおり |
+| 12 | PR #142 読み込み中: 再フォーカス時は評価・Top3・合計を保留、完了で元に戻る | PASS | NOT_RUN | 6秒に遅延させた再フォーカスで、読み込み中は資産カードが全て `—`（背景/日付ラベルは維持）、完了後に元の値とスパークラインが復帰 |
+| 13 | 一致した保有は値を失わない（正のコントロール） | PASS | PASS | 一致時の合計・損益・Top3・行の評価は保存値どおり |
+| 14 | 古い応答が新しい結果を上書きしない / 失敗・未ログインは「保有なし」と解釈しない | NOT_RUN（Simulator） | NOT_RUN | 純関数の挙動テスト（`portfolio-screen_test.ts` の load シーケンス）で担保。実機/Simulator では再現未実施 |
+| 15 | 実データ（実アカウント） | NOT_RUN | NOT_RUN | 今回は実アカウントに触れていない（前回 2026-10-11 の読み取り QA が最新） |
+| 16 | 実機 iPhone | NOT_RUN | — | 範囲外 |
+
+### 確認できたこと / できていないこと
+- **確認済み**: 上表 PASS 項目。バグ・表示崩れ・二重画面・誤ラベルは見つからなかった。
+- **未確認**: 402pt での編集保存・検索・ニュース往復・不一致/読み込み保留（ロジックは同一コードで 375pt と 521 テストにより担保）、実データ・実機。
+- **既知の制約**: 古い保存済み大引け（10/9 基準のフィクスチャ、実データは 10/6）では価格も古いまま（表記は基準日付き）。フィクスチャの「前日比 ¥」は端数が小数2桁まで出る（実データの整数株価では整数）。
+
+### safety_checks
+- 実ユーザーデータへの書き込み: **0**（編集・保存はフィクスチャ rig の in-memory DB のみ）。実アカウントのスクリーンショット無し、GitHub に画像・個人データなし（画像はローカルのみ）。
+- deploy=0, EAS=0, TestFlight/App Store=0, `expo prebuild`=0, Supabase 書き込み/migration/Edge deploy=0, AI/有料API=0。
+- 他スロットのプロセス・ポート・ブランチ・worktree は未接触。作成した使い捨て端末 2 台（375pt/402pt）・Metro・ctl は停止/削除済み。
+- 競合 PR: PR #143 が `src/app/_layout.tsx` を変更（本 QA はソースを変えないため影響なし）。
+
+### remaining_issues / next_recommendation
+1. 402pt での編集・検索・不一致/保留の目視は未実施（端末アクセス許可待ち）。必要なら許可後に短く再実施可。
+2. 実データでの確認（登録を編集した直後の保留→次の大引けで復帰）は、ユーザー操作を伴うため別途。
+3. 実機 iPhone への反映は EAS ビルドを要するためマイルストーン判断（本 QA の範囲外）。
+4. 製品変更は不要。K1 判断で QA 完了として closeしてよい。
+
+### return_to
+- かぶモリアプリG1のちゃ へ K1 を送ってください。
 
 ---
 
