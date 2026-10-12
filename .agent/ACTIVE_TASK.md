@@ -107,14 +107,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-g1-five-tab-release-simulator-qa-20261012
+- status: ready
+- task_id: kabumori-g1-home-report-return-and-holdings-count-fix-20261012
 - start_code: G1
 - finish_code: K1
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: 2026-10-12 prior portfolio Simulator QA K1 PASS and done; new read-only five-tab release Simulator QA assigned. Home/銘柄/ニュース/レポート/メニュー navigation, 375pt/402pt, fixtures, regressions; no G2/G5/G8/G9 work, production data editing, EAS or deploy.
+- allocation: 2026-10-12 five-tab Simulator QA K1 accepted PASS_WITH_FINDINGS and completed; focused G1 P3 home report detail return-to-home + P4 unknown holding count badge fix. One bounded source PR, tests/simulator, no merge/deploy; G2 PR143 report-detail implementation and G5 boundaries protected.
 - recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
