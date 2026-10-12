@@ -4,6 +4,14 @@
 
 - 更新: 2026-10-12 JST（PR #155 merge後の状態に更新）
 
+## POSTONA G3 → F3 新規TASK移行（2026-10-12 JST）
+
+- 旧G3 `postona-g3-x-reservation-api-client-wiring-offline-v1-20261012` はK3受入済み `done/none`。旧G3で完結し、旧TASK/Reportは`.agent/tasks/CLAUDE_TASK_3.md`にそのまま保持。PR145→151→163はsource-only Draft/未マージ、PR163 head `9359e949d0704c08653a4d61dd5791f4d4febec9` を割当時確認。旧G3へ新規TASKは置かない。
+- ユーザーのF3明示指定で**別task_id** `postona-f3-x-reservation-live-boundary-source-integration-20261012` を`.agent_v2/tasks/F3.md`に `ready / next_owner claude` 登録。推薦`Opus5.5（高）`、開始F3→完了L3、返却先`POSTONA G3のちゃ（新F3担当・AI自動投稿／X予約担当チャット）`。
+- 目的：旧G3の予約API/画面の上に本物のEdge/Auth/DB接続**ソース**を実装し、G5/F5 entitlement・lifecycle とG4 X本人確認の未完成部分をdefault DENYで分離。F4 Threads、F5共通Auth、H5 owner-runtimeと変更ファイル/branchを分離。独立worktree・PR163上に新しいDraft PRを作り、PR145/151/163はそのまま保護。
+- Issue #131 X本人確認、G5/F5 live判定・本人Auth/DB接続と本番審査は未完。**本番予約保存/X実投稿/Edge deploy/DB migration/mergeはNO_GO**。必要な権限が揃ってからJ1〜J4によるSol（高）の統合セキュリティレビュー1回と別承認。
+- 旧系統`.agent/`は未変更。新旧task_id二重割当なし。完全移行はしない。
+
 ## 移行の状態
 
 - 新系統 `.agent_v2/` はPR #155のmainマージ（`4e80c79dc42c11fbc1ca105665514b0dd32842d3`）により有効。新F/J枠は新規TASKを明示割当した後に使用する。
