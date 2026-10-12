@@ -18,6 +18,7 @@ import { newTransportStats, transportDiagnostics } from "../../market-report-ana
 import type { FetchLike } from "./adapter.ts";
 import { MARKET_REPORT_AI_MODE_ENV, type MarketReportRequester, type MarketReportShadowRecord } from "./market_report_shadow.ts";
 import { MARKET_REPORT_SHADOW_MODEL_ENV, type MarketReportClaim, prepareMarketReportShadow, type PrepareOptions } from "./market_report_wiring.ts";
+import { DEFAULT_RETRY_TIMING } from "./retry.ts";
 import { anthropicBody, anthropicError, FAKE_ANTHROPIC_KEY, hangUntilAborted, jsonResponse } from "./test_support.ts";
 
 const OPENAI_KEY = "sk-test-openai-NOT-REAL-0000000000";
@@ -389,9 +390,14 @@ test("failures after delivery stay in the shadow: ledger auth rejected, Claude e
     assert.equal(r.contentHash, baseline.contentHash);
   }
 
+  // 6.5 s left: the flush clips the shadow's timeout to it (instead of the 90 s default). It must stay clearly above
+  // execute.ts's minimum attempt window (DEFAULT_RETRY_TIMING.minAttemptMs), or the attempt is refused before sending
+  // (DEADLINE_EXCEEDED) as soon as 1 ms has passed, and the timeout path would not be exercised.
+  const slowWindowMs = 6_500;
+  assert.ok(slowWindowMs >= DEFAULT_RETRY_TIMING.minAttemptMs + 1_000, "the slow case must wait for a real transport timeout");
   const slowNet = network({ legacy: await legacyScript(c), anthropic: (init) => hangUntilAborted(init) });
   const t0 = Date.now();
-  const slow = await run({ case: c, net: slowNet, deadlineInMs: 1_500 });
+  const slow = await run({ case: c, net: slowNet, deadlineInMs: slowWindowMs });
   assert.ok(Date.now() - t0 < 10_000, "the shadow timeout is clipped to the time left before the deadline");
   assert.deepEqual([slow.records[0].errorCode, slow.records[0].costBasis], ["TIMEOUT", "includes_upper_bound"]);
   assert.equal(slowNet.ledger.settlements[0].outcome, "unknown", "a timed-out attempt is settled at its upper bound");
