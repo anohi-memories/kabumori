@@ -3,8 +3,8 @@
 - task_id: postona-g3-x-reservation-api-client-wiring-offline-v1-20261012
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G3
 - finish_code: K3
 - return_to: POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）
@@ -207,6 +207,14 @@ D. feature release gateは**ソース既定OFF・本番API未登録**を維持�
 - AI Lab diary: 候補あり — 投稿予約を「保存した」と表示する条件を、サーバーの返事ではなく、保存のあとにもう一度読み直して全件一致したときだけにした。通信が途中で切れたときは「未確定」と正直に出して、同じ内容で安全に確かめ直せる作りにした。本番ではまだ使えない状態のまま、使い捨てのデータベースで最初から最後まで動くことを確かめた。
 
 ---
+
+## K3 acceptance — 2026-10-12
+
+- verdict: **PASS_SOURCE_WIRING_LOCAL_E2E / PRODUCTION_BLOCKED_G5_G4**.
+- Reviewed latest GitHub G3 Report, Draft PR163 one-commit 16-file diff above unchanged PR151 0cd5c596, and server api.ts fail-closed gate/Auth/G5/G4/DB flow. Exact head reported `9359e949d0704c08653a4d61dd5791f4d4febec9`.
+- G3 reported disposable PostgreSQL API E2E PASS incl 12/12 scenarios, Deno16/16, app327/327, domain22/22, mutation20/20, TS/lint PASS. ChatGPT did NOT independently rerun tests and does not assert managed Supabase/Auth/G4/G5 or iOS success.
+- DB functions are source candidates only, API has no deployed entry and mobile default store remains OFF; real auth verifier/permission guards, G4 X verification Issue131, G5 lifecycle, DB runtime role credentials and release review remain blocked. Row-ID actions rely on SQL functions for account-specific G4 check (API precheck only has account ID on create/list); verify this and effective SQL grants in the later integrated Sol（高） review.
+- No PR merge, migration apply, deploy, X post or production activity accepted. PR145, PR151, PR163 stay Draft. Current G3 task marked done; next task must be separately conflict-checked and approved by coordinator.
 
 # ARCHIVED PREVIOUS G3 TASK — original complete text preserved
 
