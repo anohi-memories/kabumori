@@ -3,8 +3,9 @@
 - task_id: kabumori-g2-phase2c-deferred-claude-market-shadow-handler-20261012
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
+- k2_verdict: PASS_SOURCE_CANDIDATE_WITH_G6_TEST_BLOCKER / PRODUCTION_NO_GO (2026-10-12; PR153 6c576567328c99a58c2e4beaed86d155fe875769; G6 Phase1a isolation one test failed; G2 source done, G6 contract fix required)
 - start_code: G2
 - finish_code: K2
 - return_to: かぶモリアプリG2のちゃ
