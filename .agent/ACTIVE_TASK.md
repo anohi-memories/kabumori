@@ -49,17 +49,17 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: kabumori-fact-v2-pr132-final-integrated-review-20261011
+- status: ready
+- task_id: kabumori-pr149-broadcast-fanout-push-security-review-h2-20261012
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
-- next_owner: none
+- next_owner: codex
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: C2 COMPLETE CHANGES_REQUIRED — Fact V2 PR132 exact bd424616a135e7bf71592c2ac41acb3e03f8568d on protected PR110 319a442edcd61c07274e3409d8864234f9d77cd4; R1 same-day same-sentence negation exonerates second false affirmation, R2 TOPIX 算出値/ウエート 437円 masquerades as 1306, R3 wrong US postposed date 10/7 stripped. ALL P2 objective-fact guard regressions reproducible X+app mocked delivery; 55/55 baseline focus PASS, independent 14 probes 10 PASS 4 FAIL. Opus grounded inference ALLOW policy CONFIRMED valid; do NOT reverse. Vercel rate limit, not code failure. H2 source edits0; no prod/merge/deploy/paid API. H2 Report saved with historical suffix intact, H2 current TASK done/none, released but not pre-reserved. G2 one bounded correction registered, H2 prior G5 C2 history preserved.
-- recommended_model: Sol（高） (completed)
+- allocation: K2 G2 PR149 one independent Sol（高） source-only review: 17-path single commit stack PR143, market morning/close all opted-in dedicated high-scale Expo sender. Focus RLS/SECURITY DEFINER, DB lease/claim/fencing, fanout and source idempotency, project wide 600 msg/sec, ambiguous Expo/individual device >90 risk, sending_enabled OFF mid-flight, silent misses, 10k/100k realistic latency vs mock, important-news isolation, app deep-link and off-by-default rollout. Exact PR149 head 31c509df1c08ecc437ca4b70541284f223c836e2, PR143 base 889ca1b44cf82bd3ecb913818dca568456849feb. No product changes, no merge/deploy/live API. Return C2 to this G2 chat.
+- recommended_model: Sol（高）
 ## Codex H3
 - owner: codex
 - slot: codex-3
@@ -117,15 +117,15 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: done
 - task_id: kabumori-market-report-scalable-broadcast-push-v1-20261012
 - start_code: G2
 - finish_code: K2
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 2026-10-12 PASS_SOURCE_FIX for C3 P2: PR143 head 889ca1b44cf82bd3ecb913818dca568456849feb verified 1 commit after H3 old head, exact 5 files, SQL fail expires_at fence + MemStore mock + worker 3 regressions/SQL 2 regressions/mutation. G2 reported PG17 14 mutants PASS, worker34, personalized134, market283, data42, app508, X shared10 PASS; ChatGPT reviewed exact patch but did not run tests. PR143 OPEN/DRAFT/unmerged, no production. New G2: shared market morning/close broadcast push for opted-in users at 10k+ scale, dedicated/priority-safe producer+dispatch/queue, unique once-per-user, Expo unknown delivery handling, no important-news starvation, performance model, runbook, offline-only new Draft PR; PR143/PR141 protected. No DB/Cron/Edge/app deployment/real Expo/X/paid model/merge. Return K2.
-- recommended_model: Opus5.5（高）
+- allocation: K2 2026-10-12 accepted PR149 exact head 31c509df1c08ecc437ca4b70541284f223c836e2 stacked on protected PR143 exact 889ca1b44cf82bd3ecb913818dca568456849feb: PASS_SOURCE_CANDIDATE_REVIEW_REQUIRED / PRODUCTION_NO_GO. 17 paths 1 commit source-only, dedicated broadcast PG/Edge (500-user chunk/4 parallel/300 msg-sec cap), opt-in/Fact/late worker unknown/dedup, separate from existing push important-news queue, app market report notification deep-link and off-by-default runbook; G2 reported PG17 local 10k/100k simulations + 19 mutant detection and 1,669 Deno/app runtime tests PASS; ChatGPT inspected source and current PR heads, not independently rerun. Simulated 1万 ~0.7min/10万 ~7.5min at300msg/s; NOT live/receipts. Vercel build-rate-limit not green. H2 Sol（高） risk-focused independent review assigned. G2 slot released/no immediate correction until C2. PR149/PR143/PR141 UNMERGED, no DB/Cron/Edge/Expo/paid/API/prod application.
+- recommended_model: Opus5.5（高） (completed)
 ## Claude G3
 - owner: claude
 - slot: claude-3
