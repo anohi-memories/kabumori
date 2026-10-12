@@ -3,8 +3,8 @@
 - task_id: kabumori-g1-five-tab-release-simulator-qa-20261012
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: normal
 - task_type: simulator QA / read-only regression / source-only
 - recommended_model: **Sonnet5（中）**
@@ -39,7 +39,64 @@
 - At end append Report (result, changed_files, tests, simulator, safety_checks, commit/push/merge/deploy, issues, next_recommendation) preserving historical TASK/Report. status review_required / next_owner chatgpt. End exactly: かぶモリアプリG1のちゃ へ K1 を送ってください。
 
 ## Report — current task
-Pending G1 execution.
+- task_id: kabumori-g1-five-tab-release-simulator-qa-20261012
+- result: **PASS_WITH_FINDINGS（フィクスチャ検証）**。5タブ横断でクラッシュ・表示崩れ・重複遷移は見つからなかった。ナビゲーション上の不整合 **1件（P3）** と軽微な表示の観察 **1件（P4）** を報告する。実データ・実機は未実施。
+- status: `review_required` / next_owner `chatgpt`（return to かぶモリアプリG1のちゃ for `K1`）
+- date: 2026-10-12 JST
+- baseline: fresh `origin/main` `7468f7e253e917da5c43c712a2c40d9fec993783`（独立クローン、ソース無変更）
+- changed_files: `.agent/tasks/CLAUDE_TASK_1.md`（本Report）と `.agent/CURRENT_STATE.md` の G1 行のみ。アプリソース変更・PR・merge・deploy・EAS なし
+- 競合 PR（未マージ・本QAの対象外）: #149（`src/app/market-report.tsx`, `report-presentation.ts`）、#143（`reports/index.tsx`, `reports/[id].tsx`, `app/_layout.tsx`）。これらの機能は main に無く、実装済みとは見なしていない
+
+### 環境
+- Xcode 27.0 / iOS 27.0 Simulator。**375pt**: G1専用の使い捨て iPhone SE (3rd gen)。**402pt**: 既存の iPhone 18 Pro（使い捨て 402pt 端末は操作許可が下りなかったため）。いずれも **フィクスチャ rig**（偽バックエンド・通信なし）を読み込み、保存済みのサインインセッションには触れない。検証後にアプリ終了、使い捨て端末は削除。
+- rig は main の `src/` を同期（rig 専用 6 ファイル＋rig/ のみ差し替え）。**通信失敗フィクスチャ**は rig 側に失敗注入スイッチを追加して実現（rig はスクラッチ内の検証用でリポジトリ外）。Metro は専用 8083、ctl 8099（停止済み）。
+
+### 実測コマンド
+| コマンド | 結果 |
+|---|---|
+| `deno test --no-check --no-lock --no-config --allow-read tests/app/`（clean main） | **521 passed / 0 failed** |
+| `tsc --noEmit -p tsconfig.json` | `src/` のエラーは既存の css 型宣言 2 件のみ（`animated-icon.web.tsx`, `global.css`） |
+| `git diff --check` / 追跡ファイルの変更 | クリーン / 0 |
+
+### QA マトリクス（フィクスチャ: 通常 / ニュース無し / レポート無し / 長文 / 通信失敗）
+| # | 項目 | 375pt | 402pt | 観察 |
+|---|---|---|---|---|
+| 1 | NativeTabs が ホーム/銘柄/ニュース/レポート/メニュー の5つ、6つ目なし | PASS | PASS | `(tabs)/_layout.tsx` のラベル5つ、全タブ表示で選択状態が正しい |
+| 2 | ホーム: 表示順（今日のかぶモリレポート→重要ニュース→保有銘柄の最新ニュース→今日のトピック→AIに聞く）、空状態の文言 | PASS | PASS | ニュース無しは「…まだありません」、レポート無しはヒーローが「まだありません」で押下不可の見た目 |
+| 3 | ホーム: ヒーロー「レポートを見る」→ レポート詳細 → 戻る | **FINDING-1** | — | 下記 |
+| 4 | 銘柄: ポートフォリオ⇄ウォッチリスト・検索・銘柄詳細・編集・PR142 保留 | PASS（前回タスクで詳細確認済、今回は5タブ横断として表示確認） | PASS（表示） | 前回 QA（kabumori-g1-portfolio-watchlist-simulator-qa-20261012）と同結果 |
+| 5 | ニュース: 一覧→詳細→戻る、空・長文・失敗 | PASS | PASS（一覧表示） | 詳細は root スタック（タブバーなし）、エッジスワイプでニュース一覧に戻る。見出し3行超は省略記号。空「…該当する重要ニュースはありません」、失敗は「重要ニュースを読み込めませんでした。」＋「もう一度試す」。ニュースを捏造しない |
+| 6 | レポート: 現行の朝刊/大引け枠・保存済み一覧・詳細・戻る | PASS | PASS（一覧表示） | 一覧→詳細→スワイプでレポート一覧に戻る。朝刊・大引けが未配信なら枠が案内文、失敗は「レポートを読み込めませんでした。」＋再試行。10/7〜10/9 旧大引け欠落は調査対象外のため触れていない |
+| 7 | メニュー: 今日のトピック・AIに聞く・設定 → 戻る | PASS | PASS（一覧表示） | 設定（メール表示・パスワード変更・通知・規約など）、トピック一覧（初級/中級/上級・未読）、AI は「準備中」。ログアウト/変更/削除/購入の操作は行っていない |
+| 8 | 通信失敗の各タブ | PASS | PASS | 全タブが落ちずにエラー文言＋再試行。値は `—`、0に偽装しない |
+| 9 | 長文・空状態・欠損 | PASS | PASS | 長文見出しは折返し/省略、空状態は案内文、レポート無しは `—` |
+| 10 | スワイプ戻る/二重画面/クラッシュ | PASS（ニュース・レポート・設定・トピック・AI） | — | 二重画面・クラッシュなし。連続タップ直後の最初のスワイプは遷移アニメ中で無視されることがある（再実施で正常。通常操作の範囲） |
+| 11 | アクセシビリティの重大崩れ | PASS（目視範囲） | PASS（目視範囲） | コントラスト・44pt タップ領域に問題なし。VoiceOver 実機検証は未実施 |
+| 12 | 実データ（実アカウント） | NOT_RUN | NOT_RUN | 実アカウントには触れていない |
+| 13 | 実機 iPhone | NOT_RUN | — | 範囲外 |
+
+### FINDING-1（P3・ナビゲーション不整合・G1所有）
+- **再現**: ホーム →「今日のかぶモリレポート」の「レポートを見る」→ レポート詳細（ヘッダ「‹ 一覧」、**下部タブが レポート に切替**）→ 戻る/エッジスワイプ → **ホームではなく「あなたのレポート」一覧**に着地。
+- **期待**: 銘柄タブ（AIカード・「詳しく見る」）と同様、開いた画面（ホーム）に戻る。
+- **原因**: `src/app/(tabs)/index.tsx:103` が入れ子ルート `'/reports/[id]'` を push。銘柄側 `portfolio-sections.tsx:28` は root の `'/report-detail'`（`report-detail.tsx` に「別タブから開く用」と明記）。
+- **提案（最小）**: `(tabs)/index.tsx:103` の `pathname` を `'/report-detail'` に変更（1行＋テスト1本）。レポートタブ内部（一覧→詳細）は現状維持。
+- **影響範囲**: UIのみ・データ境界なし。重大度 P3。**競合**: PR #143 が `(tabs)/reports/[id].tsx`・`reports/index.tsx`・`app/_layout.tsx` を変更中。`(tabs)/index.tsx` は未変更だが、`/report-detail` 側に影響する場合は #143 の取り込み後に調整が必要。**本QAでは修正していない**（K1 判断待ち）。
+
+### 観察-2（P4・表示）
+- 銘柄タブで登録の読み込みが失敗したとき、ポートフォリオ側の見出しが「保有銘柄 **0銘柄**」と出る（一覧は空、上に「一覧を読み込めませんでした。」）。資産評価額は `—` で偽の0ではないが、件数バッジの 0 は「保有なし」と読める。件数バッジを登録未取得時は非表示にする程度の小変更で足りる（任意）。
+
+### safety_checks
+- 実ユーザーデータの書き込み: **0**。実アカウントのスクリーンショット・個人データなし（画像はローカルのみ、GitHub に出していない）。
+- deploy=0, EAS=0, TestFlight/App Store=0, `expo prebuild`=0, Supabase 書き込み/migration/Edge deploy=0, AI/有料API=0。認証・ログアウト・削除・課金の操作なし。
+- 他スロットのプロセス/ポート/ブランチ/worktree は未接触。ユーザーの iPhone 用開発サーバー（8082）は同じ node_modules を共有するため、検証後に `--clear` で再起動済み。
+
+### remaining_issues / next_recommendation
+1. K1: FINDING-1 の修正を G1 の小タスクにするか判断（1行＋テスト。#143 との順序は K1 判断）。
+2. 観察-2 は任意（FINDING-1 と同じ PR に同乗可）。
+3. 実機・実データは別途（EAS ビルドはマイルストーン判断）。
+
+### return_to
+- かぶモリアプリG1のちゃ へ K1 を送ってください。
 
 ---
 

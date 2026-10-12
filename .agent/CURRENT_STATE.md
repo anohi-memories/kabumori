@@ -696,7 +696,7 @@
 | H3 | `idle` | `none` | `none` | none（未割当） | `C3` | `.agent/tasks/CODEX_TASK_3.md` / `.agent/CODEX_REPORT_3.md` |
 | H4 | `done` | `news-improvement-a-pr129-phase7-r2-final-focused-review-h4-20261012` | `none` | ニュース改善API最適化のちゃ | `C4` | `.agent/tasks/CODEX_TASK_4.md` / `.agent/CODEX_REPORT_4.md` |
 | H5 | `idle` | `none` | `none` | none（未割当） | `C5` | `.agent/tasks/CODEX_TASK_5.md` / `.agent/CODEX_REPORT_5.md` |
-| G1 | `review_required` | `kabumori-g1-portfolio-watchlist-simulator-qa-20261012` | `chatgpt` | — | `K1` | `.agent/tasks/CLAUDE_TASK_1.md` |
+| G1 | `review_required` | `kabumori-g1-five-tab-release-simulator-qa-20261012` | `chatgpt` | — | `K1` | `.agent/tasks/CLAUDE_TASK_1.md` |
 | G2 | `ready` | `kabumori-fact-v2-pr132-three-objective-guards-correction-20261011` | `claude` | — | `K2` | `.agent/tasks/CLAUDE_TASK.md` |
 | G3 | `in_progress` | `postona-unified-ai-manual-schedule-planner-v1-20261011` | `claude` | — | `K3` | `.agent/tasks/CLAUDE_TASK_3.md` |
 | G4 | `idle` | `none` | `none` | — | `K4` | `.agent/tasks/CLAUDE_TASK_4.md` |
@@ -4455,7 +4455,7 @@
 | --- | --- | --- | --- | --- |
 | H1 | `done` | `x-social-mobile-pr65-ephemeral-x-auth-session-review-20261001` | `none` | `.agent/tasks/CODEX_TASK.md` |
 | H2 | `done` | `x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930` | `none` | `.agent/tasks/CODEX_TASK_2.md` |
-| G1 | `review_required` | `kabumori-g1-portfolio-watchlist-simulator-qa-20261012` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_1.md` |
+| G1 | `review_required` | `kabumori-g1-five-tab-release-simulator-qa-20261012` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_1.md` |
 | G2 | `in_progress` | `kabumori-shared-report-v2-rich-presentation-hard-facts-20261001` | `claude` | `.agent/tasks/CLAUDE_TASK.md` |
 | G3 | `review_required` | `x-social-mobile-e3-delete-revoke-residue-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_3.md` |
 | G4 | `review_required` | `x-social-mobile-x-account-switch-auth-session-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_4.md` |
