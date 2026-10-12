@@ -176,12 +176,19 @@ export type ServerReservation = {
   status: 'planned' | 'claimed' | 'published' | 'failed' | 'uncertain' | 'cancelled' | 'expired';
   revision: number;
   consentState: 'confirmed' | 'needs_reconfirm' | 'ai_owner_opt_in';
+  /** Present on rows read from the server API (display only; never trusted for a decision). */
+  batchId?: string;
+  body?: string | null;
+  mode?: string;
+  origin?: string;
 };
 
 export type SaveOutcome =
   | { kind: 'saved'; reservations: ServerReservation[] }
   | { kind: 'not_available' }
-  | { kind: 'failed'; code: string };
+  | { kind: 'failed'; code: string }
+  /** The server may or may not have stored it (network / timeout / read-back unavailable): never shown as saved. */
+  | { kind: 'uncertain'; code: string };
 
 /**
  * '予約済み' is shown only when the read-back contains every draft of the request as a planned row at the

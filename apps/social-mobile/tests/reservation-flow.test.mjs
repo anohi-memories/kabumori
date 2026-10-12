@@ -208,6 +208,14 @@ test('the schedule screen shows an honest disabled save and never calls the stor
   const screen = await readFile(new URL('../src/app/(tabs)/schedule.tsx', import.meta.url), 'utf8');
   assert.match(screen, /createReservationStore\(\)/u);
   assert.match(screen, /label="予約として保存（準備中）" onPress=\{\(\) => \{\}\} disabled/u);
-  assert.doesNotMatch(screen, /reservationStore\.(save|list|cancel)\(/u, 'no store call while the gate is OFF');
+  // Every store call sits behind an explicit `reservationStore.enabled` guard in the same function (the
+  // disabled store answers enabled === false); the wiring tests also prove zero calls with the gate OFF.
+  const calls = [...screen.matchAll(/reservationStore\.(save|list|get|reschedule|reconfirm|cancel)\(/gu)];
+  assert.ok(calls.length > 0);
+  for (const call of calls) {
+    const before = screen.slice(0, call.index);
+    const fnStart = Math.max(before.lastIndexOf('function '), before.lastIndexOf('useEffect('));
+    assert.match(screen.slice(fnStart, call.index), /if \(!reservationStore\.enabled[^)]*\) return;/u, `guarded: ${call[0]}`);
+  }
   assert.doesNotMatch(screen, /予約しました|予約済み/u, 'the screen never claims a reservation exists');
 });

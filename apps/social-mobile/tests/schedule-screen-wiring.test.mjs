@@ -15,6 +15,8 @@ import * as reservationStore from '../src/features/schedule/reservation-store.ts
 import * as confirmationState from '../src/features/schedule/confirmation-state.ts';
 import * as timeEdit from '../src/features/schedule/time-edit.ts';
 import * as scheduleLabels from '../src/features/schedule/schedule-labels.ts';
+import * as reservationFlow from '../src/domain/reservation-flow.ts';
+import * as serverState from '../src/features/schedule/server-reservations-state.ts';
 
 const walk = (node, visit) => {
   if (Array.isArray(node)) return node.forEach((child) => walk(child, visit));
@@ -31,7 +33,7 @@ const ACCOUNTS = [
   { id: 'X_A2', brandId: 'A', platform: 'x', profile: { displayName: 'a2', handle: '@a2' }, connectionStatus: 'connected', postingState: 'active' },
 ];
 
-async function scheduleHarness({ status = 'ready', active = 'X_B', rows = {}, accounts = ACCOUNTS, workspaceId = 'A' } = {}) {
+async function scheduleHarness({ status = 'ready', active = 'X_B', rows = {}, accounts = ACCOUNTS, workspaceId = 'A', store = null } = {}) {
   const slots = []; let cursor = 0; const effects = []; const cleanups = [];
   const slot = (init) => { const i = cursor++; if (!(i in slots)) slots[i] = init(); return i; };
   const react = {
@@ -83,8 +85,12 @@ async function scheduleHarness({ status = 'ready', active = 'X_B', rows = {}, ac
       ScheduleComposer: function ScheduleComposer(props) { return { type: 'ScheduleComposer', props }; },
       SmallButton: 'SmallButton',
     },
-    // The real (disabled) reservation store: the screen must never be able to save from here.
-    '@/features/schedule/reservation-store': reservationStore,
+    // The real (disabled) reservation store unless a test injects one: with the gate OFF the screen must never
+    // be able to save from here.
+    '@/features/schedule/reservation-store': { ...reservationStore, createReservationStore: () => store ?? reservationStore.createReservationStore() },
+    '@/domain/reservation-flow': reservationFlow,
+    '@/features/schedule/server-reservations-state': serverState,
+    '@/features/schedule/server-reservation-card': { ServerReservationCard: function ServerReservationCard(props) { return { type: 'ServerReservationCard', props }; } },
     // The real confirmation / time-edit / label modules; the card is captured as props, the hash is node's.
     '@/features/schedule/confirmation-state': confirmationState,
     '@/features/schedule/time-edit': timeEdit,
@@ -424,4 +430,249 @@ test('confirmation wiring: 「まとめて取り消し」 cancels every post of 
   const tree = h.render();
   assert.deepEqual(cardsOf(tree).map((card) => card.draft.text), ['別のまとまり']);
   assert.match(collectText(tree), /確認済み 1\/1件/u);
+});
+
+// ---------------------------------------------------------------------------------------------------
+// Server reservations on the REAL screen. The gate stays OFF in the app (createReservationStore() is the
+// disabled store); these tests inject a store. MOCK_ONLY: the in-memory store stands in for the server; the
+// real handler + database path is proven by supabase/candidates/postona_x_reservations/api_e2e_run.sh.
+// ---------------------------------------------------------------------------------------------------
+const sha = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
+function memoryStore({ saveAnswers = [] } = {}) {
+  const rows = [];
+  const calls = [];
+  const holds = new Map();
+  let seq = 0;
+  const strip = ({ key: _k, account: _a, ...row }) => ({ ...row });
+  const find = (id) => rows.find((row) => row.reservationId === id);
+  const store = {
+    enabled: true,
+    async save(request) {
+      calls.push(['save', structuredClone(request)]);
+      const scripted = saveAnswers.shift();
+      if (scripted === 'uncertain') return { kind: 'uncertain', code: 'UNCERTAIN' };
+      if (scripted) return { kind: 'failed', code: scripted };
+      const key = `${request.clientBatchId}:${request.revision}`;
+      if (!rows.some((row) => row.key === key)) {
+        request.items.forEach((item) => rows.push({
+          key, account: request.socialAccountId, reservationId: `r-${++seq}`, batchId: request.clientBatchId, draftId: item.draft_id,
+          scheduledAt: item.scheduled_at, body: item.body ?? null, mode: request.mode, origin: item.body === undefined ? 'ai_generated' : 'user_authored',
+          status: 'planned', revision: 1, consentState: item.body === undefined ? 'ai_owner_opt_in' : 'confirmed',
+        }));
+      }
+      return { kind: 'saved', reservations: rows.filter((row) => row.key === key).map(strip) };
+    },
+    async list(account) {
+      calls.push(['list', account]);
+      if (holds.has(account)) await holds.get(account).promise;
+      return { ok: true, value: rows.filter((row) => row.account === account).map(strip) };
+    },
+    async get(id) { const row = find(id); return row ? { ok: true, value: strip(row) } : { ok: false, code: 'POSTONA_RESV_NOT_FOUND' }; },
+    async reschedule(id, revision, at) {
+      calls.push(['reschedule', id, revision, at]);
+      const row = find(id);
+      if (!row) return { ok: false, code: 'POSTONA_RESV_NOT_FOUND' };
+      if (row.revision !== revision) return { ok: false, code: 'POSTONA_RESV_STALE_REVISION' };
+      Object.assign(row, { scheduledAt: at, revision: row.revision + 1, consentState: row.origin === 'user_authored' ? 'needs_reconfirm' : row.consentState });
+      return { ok: true, value: strip(row) };
+    },
+    async reconfirm(id, revision, contentSha) {
+      calls.push(['reconfirm', id, revision, contentSha]);
+      const row = find(id);
+      if (row.revision !== revision) return { ok: false, code: 'POSTONA_RESV_STALE_REVISION' };
+      if (contentSha !== sha(row.body)) return { ok: false, code: 'POSTONA_RESV_CONSENT_REQUIRED' };
+      row.consentState = 'confirmed';
+      return { ok: true, value: strip(row) };
+    },
+    async cancel(id, revision) {
+      calls.push(['cancel', id, revision]);
+      const row = find(id);
+      if (row.revision !== revision) return { ok: false, code: 'POSTONA_RESV_STALE_REVISION' };
+      Object.assign(row, { status: 'cancelled', revision: row.revision + 1 });
+      return { ok: true, value: strip(row) };
+    },
+  };
+  const hold = (account) => { let release; const promise = new Promise((resolve) => { release = resolve; }); holds.set(account, { promise }); return () => { holds.delete(account); release(); }; };
+  return { store, rows, calls, hold };
+}
+const serverCardsOf = (tree) => {
+  const cards = [];
+  walk(tree, (n) => { if (n.type === 'ServerReservationCard') cards.push(n.props); });
+  return cards;
+};
+async function confirmAllCards(h) {
+  for (const card of cardsOf(h.render())) {
+    if (card.draft.origin !== 'user_authored') continue;
+    cardsOf(h.render()).find((c) => c.draft.id === card.draft.id).onConfirm();
+    await settle();
+  }
+}
+
+test('server wiring: a store that is not enabled is never called -- planning, confirming, cancelling, retiming', async () => {
+  let called = 0;
+  const off = new Proxy({ enabled: false }, { get: (target, key) => (key === 'enabled' ? false : () => { called += 1; throw new Error(`store.${String(key)} called with the gate OFF`); }) });
+  const h = await scheduleHarness({ active: 'X_B', rows: { B: SETTINGS(2, 'manual_review') }, store: off });
+  await plan(h, threeFixed(), 'f0e2b1a4-0000-4000-8000-000000000001');
+  await confirmAllCards(h);
+  byText(h.render(), '夜の投稿').onRetime();
+  cardsOf(h.render()).find((card) => card.retiming !== null).onRetimeCancel();
+  byText(h.render(), '朝の投稿').onCancel();
+  await settle();
+  const tree = h.render();
+  assert.equal(called, 0);
+  assert.equal(labelled(tree, 'SmallButton', 'サーバーに保存'), null);
+  assert.equal(serverCardsOf(tree).length, 0);
+  assert.doesNotMatch(collectText(tree), /サーバーに保存された予約/u);
+  assert.equal(labelled(tree, 'ActionButton', '予約として保存（準備中）').disabled, true);
+});
+
+test('server wiring: list on entry; save only when every post is confirmed; the preview becomes server rows after read-back', async () => {
+  const backend = memoryStore();
+  const h = await scheduleHarness({ active: 'X_B', rows: { B: SETTINGS(2, 'manual_review') }, store: backend.store });
+  assert.deepEqual(backend.calls, [['list', 'X_B']], 'the account is read on entry');
+  assert.match(collectText(h.render()), /まだありません/u);
+  await plan(h, threeFixed(), 'f0e2b1a4-0000-4000-8000-000000000002');
+  assert.equal(labelled(h.render(), 'SmallButton', 'サーバーに保存').disabled, true, 'not before every post is confirmed');
+  await confirmAllCards(h);
+  const save = labelled(h.render(), 'SmallButton', 'サーバーに保存');
+  assert.equal(save.disabled, false);
+  save.onPress();
+  await settle();
+  const tree = h.render();
+  const saved = backend.calls.find(([kind]) => kind === 'save')[1];
+  assert.equal(saved.clientBatchId, 'f0e2b1a4-0000-4000-8000-000000000002');
+  assert.equal(saved.socialAccountId, 'X_B');
+  assert.ok(saved.items.every((item) => item.consent.confirmed === true && item.consent.content_sha256 === sha(item.body)));
+  assert.equal(cardsOf(tree).length, 0, 'the saved preview is gone (it is not shown twice)');
+  assert.deepEqual(serverCardsOf(tree).map((card) => card.row.body), ['朝の投稿', '昼の投稿', '夜の投稿']);
+  assert.ok(serverCardsOf(tree).every((card) => card.account.handle === '@b'));
+  assert.match(collectText(tree), /サーバーに保存し、読み戻して一致を確認しました/u);
+  assert.deepEqual(backend.calls.map(([kind]) => kind), ['list', 'save', 'list'], 'a fresh list after the save');
+});
+
+test('server wiring: an uncertain save stays unconfirmed; 保存状況を確認 re-sends the SAME request and stores it once', async () => {
+  const backend = memoryStore({ saveAnswers: ['uncertain'] });
+  const h = await scheduleHarness({ active: 'X_B', rows: { B: SETTINGS(2, 'manual_review') }, store: backend.store });
+  await plan(h, threeFixed(), 'f0e2b1a4-0000-4000-8000-000000000003');
+  await confirmAllCards(h);
+  labelled(h.render(), 'SmallButton', 'サーバーに保存').onPress();
+  await settle();
+  let tree = h.render();
+  assert.match(collectText(tree), /保存できたかを確認できません（未確定）/u);
+  assert.equal(cardsOf(tree).length, 3, 'the preview is kept while unconfirmed');
+  assert.equal(serverCardsOf(tree).length, 0);
+  assert.equal(labelled(tree, 'SmallButton', 'まとめて取り消し').disabled, true, 'no bulk change while a save is unconfirmed');
+  // Even if a post is edited and confirmed again meanwhile, the check re-sends what was confirmed and sent
+  // first: the same idempotency key with different content would be refused, and must never be guessed.
+  byText(h.render(), '昼の投稿').onEdit();
+  cardsOf(h.render()).find((card) => card.editing !== null).onEditChange('あとで直した昼の投稿');
+  cardsOf(h.render()).find((card) => card.editing !== null).onEditApply();
+  byText(h.render(), 'あとで直した昼の投稿').onConfirm();
+  await settle();
+  tree = h.render();
+  labelled(tree, 'SmallButton', '保存状況を確認').onPress();
+  await settle();
+  tree = h.render();
+  const saves = backend.calls.filter(([kind]) => kind === 'save').map(([, request]) => request);
+  assert.equal(saves.length, 2);
+  assert.deepEqual(saves[1], saves[0], 'the retry is byte-for-byte the confirmed request (same idempotency key)');
+  assert.equal(serverCardsOf(tree).length, 3);
+  assert.equal(backend.rows.length, 3);
+});
+
+test('server wiring: an app restart reads the saved reservations again (no local copy is involved)', async () => {
+  const backend = memoryStore();
+  const first = await scheduleHarness({ active: 'X_B', rows: { B: SETTINGS(2, 'manual_review') }, store: backend.store });
+  await plan(first, threeFixed(), 'f0e2b1a4-0000-4000-8000-000000000004');
+  await confirmAllCards(first);
+  labelled(first.render(), 'SmallButton', 'サーバーに保存').onPress();
+  await settle();
+  const restarted = await scheduleHarness({ active: 'X_B', rows: { B: SETTINGS(2, 'manual_review') }, store: backend.store });
+  const tree = restarted.render();
+  assert.equal(cardsOf(tree).length, 0, 'no preview survives a restart');
+  assert.deepEqual(serverCardsOf(tree).map((card) => card.row.body), ['朝の投稿', '昼の投稿', '夜の投稿']);
+});
+
+test('server wiring: reschedule -> needs reconfirmation -> reconfirm -> cancel, each from the read-back; a stale revision reloads', async () => {
+  const backend = memoryStore();
+  const h = await scheduleHarness({ active: 'X_B', rows: { B: SETTINGS(2, 'manual_review') }, store: backend.store });
+  await plan(h, threeFixed(), 'f0e2b1a4-0000-4000-8000-000000000005');
+  await confirmAllCards(h);
+  labelled(h.render(), 'SmallButton', 'サーバーに保存').onPress();
+  await settle();
+  const first = () => serverCardsOf(h.render()).find((card) => card.row.body === '朝の投稿');
+  first().onRetime();
+  first().onRetimeChange({ date: dayAhead(5), time: '07:15' });
+  first().onRetimeApply();
+  await settle();
+  assert.equal(first().row.consentState, 'needs_reconfirm');
+  assert.equal(first().row.revision, 2);
+  assert.ok(planner.formatJst(first().row.scheduledAt).endsWith('07:15'));
+  assert.match(collectText(h.render()), /内容をもう一度確認してください/u);
+  const [, , revision, at] = backend.calls.find(([kind]) => kind === 'reschedule');
+  assert.deepEqual([revision, at.endsWith('Z')], [1, true], 'CAS on the shown revision, UTC instant');
+  first().onReconfirm();
+  await settle();
+  assert.equal(first().row.consentState, 'confirmed');
+  assert.equal(backend.calls.find(([kind]) => kind === 'reconfirm')[3], sha('朝の投稿'));
+  // Someone else changed the row: our revision is stale -> message + reload, nothing assumed.
+  backend.rows.find((row) => row.body === '昼の投稿').revision = 9;
+  const listsBefore = backend.calls.filter(([kind]) => kind === 'list').length;
+  serverCardsOf(h.render()).find((card) => card.row.body === '昼の投稿').onCancel();
+  await settle();
+  assert.match(collectText(h.render()), /ほかの操作で予約が変わっていました/u);
+  assert.equal(backend.calls.filter(([kind]) => kind === 'list').length, listsBefore + 1);
+  serverCardsOf(h.render()).find((card) => card.row.body === '昼の投稿').onCancel();
+  await settle();
+  assert.equal(serverCardsOf(h.render()).find((card) => card.row.body === '昼の投稿').row.status, 'cancelled');
+  // A malformed time never reaches the store.
+  const reschedules = backend.calls.filter(([kind]) => kind === 'reschedule').length;
+  first().onRetime();
+  first().onRetimeChange({ time: '25:99' });
+  first().onRetimeApply();
+  await settle();
+  assert.equal(backend.calls.filter(([kind]) => kind === 'reschedule').length, reschedules);
+  assert.match(collectText(h.render()), /日時が正しくありません/u);
+});
+
+test('server wiring: accounts never mix, and a late list answer for the previous account is dropped', async () => {
+  const backend = memoryStore();
+  const h = await scheduleHarness({ active: 'X_B', rows: { A: SETTINGS(2, 'manual_review'), B: SETTINGS(2, 'manual_review') }, store: backend.store });
+  await plan(h, threeFixed(), 'f0e2b1a4-0000-4000-8000-000000000006');
+  await confirmAllCards(h);
+  labelled(h.render(), 'SmallButton', 'サーバーに保存').onPress();
+  await settle();
+  assert.equal(serverCardsOf(h.render()).length, 3);
+  // B's next read is held back; switch to A while it is in flight.
+  const releaseB = backend.hold('X_B');
+  h.world.active = 'X_A';
+  await h.update();
+  h.world.active = 'X_B';
+  await h.update();
+  h.world.active = 'X_A';
+  await h.update();
+  releaseB();
+  await settle();
+  await h.update();
+  let tree = h.render();
+  assert.equal(serverCardsOf(tree).length, 0, "B's late answer is never shown under A");
+  assert.match(collectText(tree), /まだありません/u);
+  h.world.active = 'X_B';
+  await h.update();
+  tree = h.render();
+  assert.deepEqual(serverCardsOf(tree).map((card) => card.account.handle), ['@b', '@b', '@b']);
+});
+
+test('server wiring: a refusal keeps the preview and says why (no saved state is pretended)', async () => {
+  const backend = memoryStore({ saveAnswers: ['POSTONA_RESV_SERVICE_NOT_ACTIVE'] });
+  const h = await scheduleHarness({ active: 'X_B', rows: { B: SETTINGS(2, 'manual_review') }, store: backend.store });
+  await plan(h, threeFixed(), 'f0e2b1a4-0000-4000-8000-000000000007');
+  await confirmAllCards(h);
+  labelled(h.render(), 'SmallButton', 'サーバーに保存').onPress();
+  await settle();
+  const tree = h.render();
+  assert.match(collectText(tree), /X自動投稿の利用登録が有効ではないため/u);
+  assert.equal(cardsOf(tree).length, 3);
+  assert.equal(serverCardsOf(tree).length, 0);
+  assert.equal(backend.rows.length, 0);
 });

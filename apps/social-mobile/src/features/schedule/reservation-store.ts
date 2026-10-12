@@ -17,6 +17,9 @@ export type ReservationStore = {
   readonly enabled: boolean;
   save(request: SaveRequest): Promise<SaveOutcome>;
   list(socialAccountId: string): Promise<StoreResult<ServerReservation[]>>;
+  get(reservationId: string): Promise<StoreResult<ServerReservation>>;
+  reschedule(reservationId: string, expectedRevision: number, scheduledAt: string): Promise<StoreResult<ServerReservation>>;
+  reconfirm(reservationId: string, expectedRevision: number, contentSha256: string): Promise<StoreResult<ServerReservation>>;
   cancel(reservationId: string, expectedRevision: number): Promise<StoreResult<ServerReservation>>;
 };
 
@@ -27,12 +30,16 @@ export const DISABLED_RESERVATION_STORE: ReservationStore = Object.freeze({
   enabled: false,
   save: () => Promise.resolve({ kind: 'not_available' } as const),
   list: () => Promise.resolve({ ok: false as const, code: NOT_AVAILABLE }),
+  get: () => Promise.resolve({ ok: false as const, code: NOT_AVAILABLE }),
+  reschedule: () => Promise.resolve({ ok: false as const, code: NOT_AVAILABLE }),
+  reconfirm: () => Promise.resolve({ ok: false as const, code: NOT_AVAILABLE }),
   cancel: () => Promise.resolve({ ok: false as const, code: NOT_AVAILABLE }),
 });
 
 /**
- * Returns the store for this build. With the release gate OFF it is the disabled store, whatever is passed;
- * a remote implementation is added only together with the reviewed server rollout.
+ * Returns the store for this build. With the release gate OFF it is the disabled store, whatever is passed.
+ * The remote implementation (remote-reservation-store.ts) exists, but it is constructed here only together with
+ * the reviewed server rollout (registered API endpoint, G5/G4 permission sources, Sol review, user approval).
  */
 export function createReservationStore(gate: boolean = POSTONA_RESERVATION_PERSISTENCE_ENABLED): ReservationStore {
   if (gate !== true) return DISABLED_RESERVATION_STORE;
