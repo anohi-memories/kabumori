@@ -3,13 +3,16 @@
 - task_id: postona-h5-threads-auth-owner-runtime-final-wiring-20261012
 - owner: codex
 - slot: codex-5
-- status: ready
-- next_owner: codex
+- status: done
+- next_owner: none
 - start_code: H5
 - finish_code: C5
 - completion_code: C5
 - return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
 - recommended_model: **Sol（高）**
+- c5_verdict: PASS_SOURCE_CANDIDATE / SOURCE_DELIVERABLE_ACCEPTED / INDEPENDENT_SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO（2026-10-13 JST）
+- implementation_PR: Draft #159 HEAD 163675c62835e84417905f98f97ceedd4dd1bcd9; 18 H5 source-only files, stacked on protected PR139.
+- bookkeeping_note: original Codex Report is preserved in Draft PR161 HEAD 1ef3aaa43e72540f6f6ac5c2dd97820aaa3259d2; current main status corrected by ChatGPT C5 without merging PR161. Do not merge PR161 without comparing/reconciling these bookkeeping edits.
 - type: **臨時実装 / implementation-first / Auth + owner-only DB + verified OAuth Edge composition**
 - Codexへ回す理由: ユーザーはThreadsテキスト実投稿を優先し、2026-10-11に「必要ならしばらくH5を使って」と臨時実装を明示許可済み。今回、複雑なAuth/SQL接続境界はH5が既にPR139で構築・所有し、G4はアプリ接続＋G5 provider-adapter PR154をソース完成、G5は独立したPR152 P2補修で稼働中。**ChatGPT判断により**H5がH5所有の本番実装候補を進める方が別所有ファイルへの改変、Claude枠の競合、無限の模擬設計の繰り返しを避ける。これはレビュー枠の流用ではなく一時的なCodex実装。H5自身は最終レビューを行わない。
 - objective: **POSTONAの本人がThreads接続ボタンを押してからサーバーが安全にOAuth開始・コールバック完了・アカウント別トークン期限記録まで行うために、H5側に本物のランタイム構築・SDK検証・専用オーナーDBドライバー/設定・Edgeエントリ配線のソースコードを追加する**。G4 PR154とG5 PR152はオーナーのまま保持。失われている現実のcredential/managed permissionsは正確にBLOCKして、捏造しない。
