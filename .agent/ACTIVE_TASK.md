@@ -117,11 +117,11 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-pr149-h2-r1-r6-bounded-fixes-g2-20261012
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
 - allocation: C2 H2 2026-10-12 CHANGES_REQUIRED P2×6 on PR149 exact head 31c509df1c08ecc437ca4b70541284f223c836e2 stacked on untouched PR143 889ca1b44cf82bd3ecb913818dca568456849feb. Fix ONLY H2 Report six reproduced conditions: (R1) feed OFF before begin must suppress push, (R2) freshness from source completion not queue creation, (R3) >90 devices silently truncated but marked sent, (R4) legal16 chunks t=0 burst640, (R5) plan1→begin61 after opt-in violating chunk boundedness, (R6) malformed matchingcount Expo tickets incorrectly retry vs unknown. G2-only PR149 changes/repro-focused localPG/Deno tests, review six-delta at K2, do not re-run entire 1669 tests/broad review by default. Source-only/PR149 OPEN/Draft/no merge, prod NO_GO, PR143/PR141/other slots protected. H2 review completed, H2 slot freed. Return K2 here.

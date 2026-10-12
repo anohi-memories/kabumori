@@ -3,8 +3,8 @@
 - task_id: kabumori-pr149-h2-r1-r6-bounded-fixes-g2-20261012
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G2
 - finish_code: K2
 - return_to: かぶモリアプリG2のちゃ
@@ -65,7 +65,108 @@
 
 ## Report — current PR149 C2 R1–R6 correction
 
-PENDING G2.
+### 位置づけ
+
+- task_id: `kabumori-pr149-h2-r1-r6-bounded-fixes-g2-20261012`
+- 判定: **R1〜R6 をすべて修正（SOURCE_FIX_DONE）／本番 NO_GO**
+- Draft PR #149: https://github.com/anohi-memories/kabumori/pull/149（OPEN・Draft・未マージ、base は PR143 のブランチのまま）
+  - 開始時の head: `31c509df1c08ecc437ca4b70541284f223c836e2`（TASK の指定と一致を確認）。土台の PR143 は `889ca1b44cf82bd3ecb913818dca568456849feb` のまま（変更なし）。
+  - **新しい head: `e9bb86c44808d87ad8cbd3de4f1d1564066f958a`**（修正の commit 1つを追加。force-push・rebase なし）。
+- 作業場所: G2 専用の worktree `/Users/yuya/Developer/kabumori-g2-broadcast`。PR143・PR141・他のスロットには触れていない。
+- merge=NO、deploy=NO、migration の適用=NO、production_calls=0、Expo への実際の送信=0。本番の DB は読み取りも含めて接続していない。
+
+### 変更したファイル（8、+559/−204。すべて PR149 のファイル）
+
+- `supabase/migrations/20261012100000_market_report_broadcast_push_v1.sql`（未適用の候補のまま）
+- `supabase/functions/market-report-broadcast-worker/broadcast_logic.ts`、`expo_sender.ts`、`broadcast_logic_test.ts`
+- `supabase/tests/market_report_broadcast_behavior.sql`、`market_report_broadcast_run.sh`、`market_report_broadcast_rollback.sql`
+- `docs/market-report-broadcast/RUNBOOK.md`
+- アプリ・PR143 のファイル・既存の送信の worker（`send-push-notifications`）は変えていない。
+
+### R1〜R6 の修正と、修正前・修正後
+
+| | 修正前（H2 の再現） | 修正 | 修正後 |
+|---|---|---|---|
+| **R1** 共通の市況の公開 | 引き取りのあとに OFF にしても、送る直前は183台を返した | 「今送ってよいか」を新しい内部の関数 `market_report_broadcast_send_allowed` にまとめ、引き取りの候補と送る直前の両方で確かめる。中身は、ゲート・共通の市況の公開・回の完成からの時間・回の現在のパケットの一致。送る直前に NG なら、誰にも印を付けずに区切りを順番待ちへ戻す（試行の回数は戻す、60秒後）。OFF の間は引き取らないので、くり返さない。送信中に OFF になった分の結果は記録できる | OFF の前に送る直前 → 0件。順番待ちへ戻り、OFF の間は引き取られない。ON に戻ると送る |
+| **R2** 新しさの基準 | 一斉通知の作成の時刻で測り、119分→121分でも3区切り・183台を送った | 一斉通知に回の完成時刻 `source_completed_at` を残し、作成・引き取り・送る直前・古い一斉通知の後始末のすべてで、これを基準にする | 121分で引き取らず、区切りは failed（BROADCAST_STALE）。引き取りのあとに古くなっても、送る直前で止める |
+| **R3** 端末が多すぎる人 | 91台 → 90通だけ送って「送信済み」 | 設定 `max_devices_per_user`（既定20、1〜90）を足した。超える人は、送る直前に failed（DEVICE_LIMIT_EXCEEDED、端末の数も記録）。worker も1回の送信に入りきらない人を切り捨てず failed にする | 21台（上限20）・91台（上限90）は送らずに failed。20台・90台は全端末に送る |
+| **R4** 送信の山 | 同時16区切り × 40通で、最初の1秒に640通 | 設定の範囲を `max_parallel_chunks` 1〜6（Expo が勧める同時の接続の数）、`messages_per_second` 10〜400 に絞った。「区切りの1秒あたりの数 ≥ 1人の端末の上限」の制約も足した。worker は、1回の送信を min(90, 区切りの上限) にし、直近1秒の送信数で抑え、区切りの終わりに1秒の窓が空くまで待つ。DB が同時の区切りを上限までに抑えるので、全体でも、どの1秒の窓でも上限以内 | 16区切り × 40通でも、どの1秒の窓でも288通（上限300）。16区切り・550通/秒は設定できない |
+| **R5** 区切りの人数が増える | 1人の計画の区切りで、分割のあとに60人が ON にすると61人を返した | 分割のときに、区切りの対象者を利用者ごとの記録として固定する（新しい状態 `planned`）。送る直前は、固定した人と再試行待ちの人だけを今の設定で確かめ直す（OFF・退会・試す人の一覧から外れた → skipped）。分割のあとに ON にした人は、次の朝刊・大引けから。新しい表は作らず、既存の利用者ごとの記録の表に状態を1つ足しただけ | 1人だけを返す。分割のあとの ON の人の記録は作られない |
+| **R6** ticket の読み方 | HTTP 200 `{"data":[{}]}` の1台 → retry（送り直す） | 一斉通知用の `readTicket` で形を厳しく読む。ok は id が文字列、error は理由のコードが文字列。分からない形・数が合わない・本文が壊れている → unknown（送り直さない）。送り直すのは `MessageRateExceeded` と HTTP 429・5xx だけ。ほかの明示的なエラーは failed。既存の送信の worker の関数は変えていない | `{}`・一部だけ・壊れた形・`{"data":[{}]}`・`{}`・JSON でない本文は、どれも unknown で1回だけ。429 → 受け付けは送り直し1回で送信済み。通信の例外は0回 |
+
+### 修正前に失敗し、修正後に成功することの確認
+
+- **SQL（R1・R5）:** 修正前の migration（`31c509df` の版）を手元の PostgreSQL に当てて、H2 の場面を再現した。共通の市況を OFF にし、分割のあとに60人を ON にすると、送る直前の関数は62人を返した（計画は2人）。修正後は、追加した動作の検証（`market_report_broadcast_behavior.sql` の第12節）がすべて通る。
+- **SQL（R1〜R4 の守り）:** 変異テストに、各守りを外した版を足した。どれも検出される（外すと失敗する）。
+  - `r1_begin_no_send_check`、`r1_claim_no_send_check`
+  - `r2_send_age_by_created_at`、`r2_stale_by_created_at`
+  - `r3_no_device_limit`
+  - `r4_parallel_16`、`r4_rate_550`
+- **worker（R3・R4・R6）:** 修正前の `broadcast_logic.ts`（`31c509df` の版）を一時的に置いて、同じ場面を流した（一時ファイルは削除済み）。
+  - R3: 91台の人に90通だけ送り、`sent` を返した。
+  - R4: 16区切りで、最初に送り始めた通知が640通だった。
+  - R6: `[{}]` を `retry` と判定した。
+  - 修正後は、新しいテストがすべて通る。
+
+### テスト（すべて手元。実際に実行したもの）
+
+**手元の使い捨ての PostgreSQL 17**（`BC_PGHOST=/tmp/... bash supabase/tests/market_report_broadcast_run.sh`、約30秒）。すべて PASS。
+- 事前確認、追加だけであること（新しい内部の関数を含む）、取り消しで元どおり、二重の適用の拒否
+- 動作: 約120の確認（R1〜R5 の再現を含む）
+- 2つの接続での同時実行: 分割、引き取り、送る直前と期限切れ、送ったあとと期限切れ（両方の順序）
+- 規模: 合成の1万人・10万人で、全員にちょうど1回。対象者の固定のあとも、10万人で全体の数秒（手元の実測）
+- 変異テスト: **26通りをすべて検出**（前回の19通り＋R1〜R4 の7通り）
+- 二重の守りの扱い: 送信のゲートは、引き取りの最初と「今送ってよいか」の2か所で見る。そのため変異テストを、置き換えを複数組まとめて当てられるように広げ、両方を外した版で確かめた。
+- 検証側の誤りを2つ直した（ソースの誤りではない）:
+  - R4 の検証が、別の制約で拒否されていて、守りを外しても通っていた。
+  - 同時実行の検証で、前の動作の検証で作った「端末が多い人」を数えていた。
+
+**Deno・アプリのテスト**
+
+| 対象 | 件数 | 結果 |
+|---|---|---|
+| `market-report-broadcast-worker/` | 29（新規6） | 成功 |
+| `send-push-notifications/`（変更なし） | 24 | 成功 |
+| `personalized-analysis-worker/` | 34 | 成功 |
+| `personalized-reports/` | 134 | 成功 |
+| `tests/app/`（このタスクでは変更なし） | 511 | 成功 |
+| `supabase/tests/migration_source_invariants_test.ts` | 11 | 成功 |
+
+- deno check / lint（worker）はどちらも0件。`git diff --check` は問題なし。
+- TASK のとおり、前回の全件（`market-report-analysis`・`_shared` など、このタスクで触れていない範囲）は再実行していない（NOT_RUN）。
+- 実行していないもの: Expo への実際の送信、Simulator・実機、本番の DB。
+
+### 性能の試算のやり直し（模擬・推定。本番の実測ではない）
+
+前提: 1人平均1.2台、Expo への1回のリクエストに0.4秒。速さは、リクエストを送り始めた時刻で、どの1秒の窓 [t, t+1秒) でも数えた最大の値。
+
+| | 1万人 | 10万人 |
+|---|---|---|
+| 300通/秒・同時4 | 約0.7分（どの1秒も300以内） | 約7.5分（300以内） |
+| 400通/秒・同時5 | — | 約6.1分（400以内） |
+| 同時16区切り × 40通（H2 の再現、300通/秒） | — | どの1秒も288通（修正前 640通） |
+
+- 前回の「450通/秒で約5.1分」は、上限を400通/秒にしたので取り消す（450は設定できない）。
+- 10万人の理論の下限は、400通/秒で約5分。模擬が長いのは、区切りの終わりに1秒の窓が空くのを待つ分と、応答・DB の時間のため。
+- 本番の Expo の応答の速さ、Edge Function の実時間の上限は未確認。
+- 既存の送信の worker（重要ニュース。1分に最大200件）の瞬間的な送信の山は、この PR では変えていない。一斉通知は最大400通/秒で、Expo の600通/秒から少なくとも200を残す。
+
+### 残る課題
+
+- **本番の前提:** PR143 が main に入って本番に出てから。この PR の本番の段階も、Runbook のとおり、どれも別承認（読み取りの確認 → 適用（ゲート OFF）→ デプロイと Cron → 試し実行 → 社内の少数 → 全員）。
+- **端末の上限の方針（R3）:** 既定は1人20台。超える人は、古い端末の登録が残っている可能性がある。送らずに failed として記録する。登録の整理（古いトークンの削除など）は別の工程で、G5・端末の登録の仕組みは変えていない。
+- **分割のあとに ON にした人（R5）:** その朝刊・大引けには届かず、次から届く（Runbook に明記）。
+- **未確認:** Edge Function の実時間の上限、本番の Expo の応答の速さ、本番の DB での時間。
+- **V1 でしないこと（前回から変わらず）:** 届いたかの確認（receipt）、無効な端末の削除、送る時刻の指定、OS の通知の許可の確認。
+
+### GO / NO_GO
+
+- **ソース:** H2 の R1〜R6 はすべて修正済み。K2 で、H2 の指摘とこの差分（8ファイル）の照合をお願いしたい。
+  - 新しい権限の拡大は無い（新しい関数は内部専用で、どのロールにも実行の権限なし）。
+  - 設計の変更は、利用者ごとの記録の状態を1つ足した（R5）だけ。
+- **本番:** **NO_GO のまま**（PR143 の本番化が先、この PR の本番の段階も未実施）。
+
+Recommended next owner: **chatgpt（K2）**
 
 ---
 

@@ -1,3 +1,17 @@
+## G2 報告 — PR149 の H2 指摘 R1〜R6 の修正 — 2026-10-12 JST
+
+- G2 `kabumori-pr149-h2-r1-r6-bounded-fixes-g2-20261012`: H2 の6件をすべて修正した。Draft PR #149 の新しい head は `e9bb86c44808d87ad8cbd3de4f1d1564066f958a`（commit 1つを追加。force-push なし。base は PR143 のブランチのまま、PR143 は変更なし）。
+  - R1: 共通の市況の公開・ゲートを、引き取りと送る直前の両方で確かめる。
+  - R2: 新しさは回の完成時刻で測る。
+  - R3: 1人あたりの端末の上限（既定20）。超える人は送らずに failed。
+  - R4: 同時の区切りは最大6、上限は最大400通/秒。どの1秒の窓でも上限以内。
+  - R5: 分割のときに区切りの対象者を固定する。
+  - R6: ticket を厳しく読み、分からない形は送り直さない。
+- 修正前の SQL・worker で H2 の再現が起きることを手元で確かめた（R1+R5: 計画2人で62人を返す、R3: 91台で90通だけ送って sent、R4: 最初に640通、R6: `[{}]` を retry）。修正後は、手元の PostgreSQL 17 の全項目（変異テスト26通りを含む）と、Deno・アプリの関係するテストがすべて成功した。
+- 模擬の所要時間: 10万人で約7.5分（300通/秒）、約6.1分（400通/秒・同時5）。前回の「450通/秒で約5.1分」は取り消し（450は設定できない）。本番の操作・マージ・デプロイ・実際の送信は 0。本番は NO_GO。G2 は review_required / chatgpt で K2 待ち。
+
+---
+
 ## K6 FINAL — 共通AI基盤 Phase2b offline candidate — 2026-10-12 JST
 
 - G6 task `common-ai-provider-g6-phase2b-market-report-wiring-offline-20261012` **done / next_owner:none**. K6 verdict **PASS_OFFLINE_SOURCE_CANDIDATE / NOT_WIRED / PRODUCTION_NO_GO**. Draft PR [#150](https://github.com/anohi-memories/kabumori/pull/150) exact `18d9058aa8bd451f3cd0181f8570a31484750035`, OPEN/Draft/UNMERGED, stacked on untouched PR148 exact `a71de72b3bcfc88547b616f789df7765283565ed`. New three files: `market_report_wiring.ts`, `market_report_wiring_test.ts`, Phase2b plan; no G2 handler/notifications/DB/worker changes.
