@@ -68,10 +68,10 @@
 
 ## F5
 - slot: F5
-- status: review_required
+- status: done
 - task_id: common-account-f5-phase5-app-auth-entitlement-integration-20261012
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
@@ -80,6 +80,7 @@
 - dependencies: old G5 K5 done; PR152 head ccea1fe8132c6f573a768f0df5a033a05c62ef2c stacked PR121 head 76b50e1e03f82faaa3460bab1603afa8fef3ce44; app owner G1/G2/G3/G4 source protected
 - blocker: production/no managed Auth; app-owner wiring separate, must be explicitly coordinated
 - slot_use: 共通アカウント基盤 Phase5 本人Auth/サービス登録のG5-owned接続実装（ユーザー明示割当）
+- l5_verdict: PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; app enrollment existing wiring confirmed; PR165 worker entitlement functions source candidate, G3/G4 publish RPC integration outstanding; no merge/deploy.
 - latest_result: IMPLEMENTED_SOURCE_CANDIDATE — Draft PR #165 head 4638891f6c7ff432e08d462019594e1ec3d66f07 stacked on PR152 ccea1fe8132c6f573a768f0df5a033a05c62ef2c (PR121 76b50e1e03f82faaa3460bab1603afa8fef3ce44): real app enrollment modules vs real SQL contract test (13 scenarios) + workspace service-state primitives for service-role workers; local PG17 only, production NO_GO; G3/G4 wiring requested in docs/common-account/phase5-app-integration.md section 4. Report: .agent_v2/tasks/F5.md#report
 
 ## F6
