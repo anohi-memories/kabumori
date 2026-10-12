@@ -204,16 +204,16 @@
 ## Claude G8
 - owner: claude
 - slot: claude-8
-- status: done
-- task_id: news-improvement-a-jp-general-major-financial-coverage-j0-g8-20261012
+- status: ready
+- task_id: news-improvement-a-jp-official-diagnostics-j1a-g8-20261012
 - start_code: G8
 - finish_code: K8
-- next_owner: none
+- next_owner: claude
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_8.md
 - report: .agent/tasks/CLAUDE_TASK_8.md#report
-- allocation: USER EXPLICIT。G8ニュース改善A専任で国内の一般重大ニュース（事故/事件/不祥事/訴訟/災害/政策急変）と金融・経済・企業ニュースを充実させ、X投稿だけでなくアプリ内で読める記事を増やす。既存データ7日：jp_* signals173、jp_official candidates11/X公開2、TDnet公開86、アプリPush79（異なるstageの母集団を単純除算禁止）。Phase J0はsource→event→重要度→アプリRPC→home/list/Pushの**read-only実測監査と合法source設計＋オフライン合成ベンチマーク**だけ。次J1実装はK8判断後。**PR129 OPEN/Draft head81251b31 のmerge/deploy/branchは不変更**、PR116の10/13固定本番作業を保護。G9 API最適化B/他全G/H・worktree・本番DBの変更禁止。J0はfresh main別branch/独立G8 worktree、推奨Opus5.5（中）、完了K8。
-- recommended_model: Opus5.5（中）
+- allocation: G8ニュース改善A専任。J0はK8 PASS_SOURCE_DESIGNで完了済み。J1-aはjp_official診断を既存run diagnostics JSONBに記録する限定実装。DB migration/本番/有料API/merge/deploy禁止。PR116固定本番とPR129/G9・他slot保護。独立worktreeとfresh mainの競合確認を必須とする。
+- recommended_model: Sonnet5（高）
 ## Claude G9
 - owner: claude
 - slot: claude-9
