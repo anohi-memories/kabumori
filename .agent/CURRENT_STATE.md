@@ -1,3 +1,15 @@
+## H2 completion — PR149 broadcast focused review: CHANGES_REQUIRED — 2026-10-12 JST
+
+- task_id: kabumori-pr149-broadcast-fanout-push-security-review-h2-20261012; H2 **review_required / next_owner chatgpt**, return **かぶモリアプリG2のちゃ / C2**.
+- Exact Draft PR149 `31c509df1c08ecc437ca4b70541284f223c836e2` on protected Draft PR143 `889ca1b44cf82bd3ecb913818dca568456849feb`, both OPEN/UNMERGED, one17-path delta independently checked. Source-only review, **CHANGES_REQUIRED / PRODUCTION_NO_GO**; product source edits0.
+- Six P2 reproduced: R1 app feedOFF beforebegin still yields183 targets; R2 sourcecompleted121min stillclaimed under120min window because queuecreated-at is used; R3 legal91 devices truncatedto90 but marked sent; R4 schema-supported16parallel chunks burst640 mockmessages at t0 despite300/sec cap; R5 planned1 becomes61 beginusers afteropt-in with chunk_size50; R6 HTTP200 matchingcount malformed ticket `data:[{}]` classified retry instead of unknown, allowing resend. Exact locations/cases/minimal G2-owner fixes in current H2 Report. Documented sendingOFF letscurrentchunk finish; not treated as another defect. No P0/P1 exposure found.
+- Independently executed: typed Deno44/44 (broadcast23 + existingpush18 + app3) with --sloppy-imports;8 adverse repro/control probesPASS; PG17 exactrunner ACL/expand-only/rollback/concurrency/10k+100k and19/19mutationsPASS;4 SQL boundary probes confirmed. Green standardtests do not negate reproduced gaps. G2 wider1669 are reportedonly. Runtimecheck/lint/diffPASS; whole test-inclusive lint5 mock require-await issues nonblocking. Actual Vercel failure build-rate-limit.
+- Simulated120k messages7.47min at300,5.08min at450; localPG scale timings are **not actual arrival, receipts, Edge/SLA or important-news-headroom proof**. Managed lifecycle/native and realExpo NOT_RUN.
+- Own Report published/readback commit `5bcbc6e65e6ae452b827c7bcaf2a958fbaee265e`; TASK `31a31076338d8abfcabfa1468189a3de83e00a64`; own ACTIVE portion updated. All historical Report/TASK/state suffixes and other-slot index entries preserved with fresh blob-SHA CAS. H2 dedicated fakePG stopped; otherworktrees/servers/unfinished files untouched.
+- No PRcomment/merge/deploy, no productionSupabase read/write, no migration/Cron/settings/Auth/Storage/secrets/OAuth/Vault/flags change, no realPush/X/AI/paid call. G2 remains released/done; C2 may allocate one narrowly bounded correction without a repeated broad synthetic review. No release or rollout approval is inferred.
+
+---
+
 ## K4 FINAL — POSTONA PR144 C3 R1 session expiry update race fixed / G4 FREE — 2026-10-12 JST
 
 - **K4 verdict: PASS_SOURCE_FIX / REAL_PILOT_HOLD**. G4 `postona-threads-pr144-c3-r1-session-expiry-lock-fix-g4-20261012` TASK/index **done/next_owner none**, previous complete G4 Task/Report preserved. No further G4 slot task assigned in this K4.
