@@ -3,8 +3,8 @@
 - task_id: kabumori-g1-home-report-return-and-holdings-count-fix-20261012
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - task_type: narrow UI bugfix / regression
 - recommended_model: **Sonnet5（中）**
 - start_code: G1
