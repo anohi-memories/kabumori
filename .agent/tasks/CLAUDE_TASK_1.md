@@ -1,3 +1,50 @@
+# G1 CURRENT TASK — アプリ全体5タブのリリース前Simulator QA — 2026-10-12
+
+- task_id: kabumori-g1-five-tab-release-simulator-qa-20261012
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: normal
+- task_type: simulator QA / read-only regression / source-only
+- recommended_model: **Sonnet5（中）**
+- start_code: G1
+- finish_code: K1
+- return_to: かぶモリアプリG1のちゃ
+- EAS/TestFlight/AppStore/production deploy: prohibited
+
+## Purpose
+リリース前に現行アプリのホーム・銘柄・ニュース・レポート・メニューの5タブをiOS Simulatorで横断確認し、ユーザーに見えるナビゲーション・表示崩れ・クラッシュを洗い出す。今回のゴールはQAであり、機能追加・大規模変更ではない。
+
+## Mandatory preflight
+- Read current PROJECT_RULES.md, .agent/ORCHESTRATION.md, ACTIVE_TASK, CURRENT_STATE and this TASK. Fresh origin/main and competing PRs/files/processes/worktreesを確認。
+- G1専用の新規独立worktree/checkout、独立MetroポートとSimulatorを用いる。他slotのbranch/未コミット変更/dev serverを触らない。
+- G2個別AIレポート新方式、G5共通Auth、G8ニュース配信、G9 API最適化、その他G/H作業とは境界を分離。PR/Draft中の未マージ機能を実装済みと誤認しない。
+- User's actual holdings, watchlist, reports, account data remain read-only. No account registration/edit, production writes, tokens, real notifications or paid API calls. Fixture rig or local mockで遷移と例外動作を検証。
+
+## QA matrix
+1. ホーム：今日の重要・保有銘柄の出来事・AI整理・今日のトピック・AIへの質問の表示順、押下と戻る。
+2. 銘柄：ポートフォリオ⇄ウォッチリスト・検索・銘柄詳細・編集導線（実保存はsynthetic fixtureのみ）、保存済み終値基準日、PR142の評価保留。
+3. ニュース：一覧から詳細、読込/欠損/戻り、データを捏造しないこと。速報配信の実運用側は触らない。
+4. レポート：現行実装に実際にある朝刊・大引け・保存済み一覧・詳細導線を確認。未マージのG2新方式を無理に期待しない。2026-10-07〜09の旧大引け欠落はユーザーが修正不要と決定済み、調査・補完・修正禁止。
+5. メニュー：設定・アカウント関連の表示・リンク・戻る。Auth操作・ログアウト・削除/課金/外部書き込みは行わない。
+6. 共通：NativeTabs exactly 5, no sixth tab; ホーム⇄各タブ、Root Stack戻る/スワイプ、375pt/402pt表示、長文/空状態/通信失敗fixture、重複遷移・クラッシュ・accessibility重大崩れ。
+7. Device access unavailable means NOT_RUN; report exact simulator model/version/steps. Do not claim actual iPhone or real-account verification.
+
+## Verification / reporting
+- Run existing targeted and full app tests if feasible, TypeScript diagnostics, git diff --check. Separate actually executed test numbers from prior reports and existing diagnostics.
+- Record PASS/FAIL/NOT_RUN matrix and reproducible bugs with affected screens, severity, likely owner and changed-file overlap. Do not silently fix cross-slot, Auth/RLS/DB/API or high-risk problems; report for ChatGPT triage first.
+- Only minor G1-owned self-contained UI fixes may be proposed; initial QA should avoid product changes. No surprise new PR, merge, EAS or production deployment.
+- Preserve screenshots with synthetic test data only; never commit/share personal account screenshots or credentials.
+- At end append Report (result, changed_files, tests, simulator, safety_checks, commit/push/merge/deploy, issues, next_recommendation) preserving historical TASK/Report. status review_required / next_owner chatgpt. End exactly: かぶモリアプリG1のちゃ へ K1 を送ってください。
+
+## Report — current task
+Pending G1 execution.
+
+---
+
+## Archived previous G1 TASK and Report (read-only history)
+
 # G1 CURRENT TASK — ポートフォリオ／ウォッチリスト iOS Simulator最終確認 — 2026-10-12
 
 - task_id: kabumori-g1-portfolio-watchlist-simulator-qa-20261012
