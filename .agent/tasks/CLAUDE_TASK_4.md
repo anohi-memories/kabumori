@@ -3,8 +3,8 @@
 - task_id: postona-threads-pr144-c3-r1-session-expiry-lock-fix-g4-20261012
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G4
 - finish_code: K4
 - return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
@@ -18,6 +18,38 @@
 - scope_own: `supabase/candidates/postona_threads_publish/threads_publish_release_candidate.sql`, H3 finding-specific PostgreSQL test fixture/runner in `supabase/tests/postona_threads_release_*`, optional small G4 integration note and locally modified mock only if essential
 - prohibited: G5 `account_lifecycle_assert_active_service_write`/T10/Auth, H5 PR139 `claim_candidate.sql`/owner transport, G3 schedules, old X OAuth and x-test-post, H3/H4 TASK/Reports/PRs, any other slot source/worktree, production Supabase/Auth/PostgREST/Vault/Meta/X calls, real providers, secrets, migration apply, PR merge, deploy, feature-flag activation, EAS, paid AI, actual posting
 - release_gate: **REAL_PILOT_HOLD**; all connect/publish/mobile gates remain FALSE, disabled Edge response remains 503
+
+## Report — postona-threads-pr144-c3-r1-session-expiry-lock-fix-g4-20261012（G4 → K4、2026-10-12 JST）
+
+- task_id: postona-threads-pr144-c3-r1-session-expiry-lock-fix-g4-20261012
+- result: **R1_FIXED_SOURCE_ONLY / REAL_PILOT_HOLD**。C3 R1（P2）を1か所で修正し、両方の順序の2接続競合テストで修正前の失敗・修正後の成功を確認した。本番・Meta・Supabase・X の呼び出し 0、全ゲート false のまま。
+  - 修正: `supabase/candidates/postona_threads_publish/threads_publish_release_candidate.sql` の release 内の検証済みセッションの確認だけを `for key share` → **`for share`** に変更（＋理由のコメント、冒頭説明の1語）。`FOR SHARE` はセッション行のどの UPDATE とも衝突するため、`not_after` の期限切れ・失効 UPDATE は release の確定まで待たされ、進行中の UPDATE が先なら release はそれを待ってから確定後の行で再判定して `AUTH_REQUIRED`（READ COMMITTED の再評価）。ロック順（T13 → セッション → ワークスペース／メンバー／アカウント／期限／同意 → nonce → 試行 → Vault）、ACL、SECURITY DEFINER、関数の署名は不変（事後条件 PASS）。行ロックに UPDATE 権限が要るのは `FOR KEY SHARE` と同じで、本番の所有者がロックできるかは引き続き管理環境での確認事項（権限付与なし）。
+  - 主張しないこと: 時間経過だけによる期限切れ（UPDATE なし）が確認から確定までの数ミリ秒（最大 lock_timeout 3秒）の間に起きた場合、および release 確定後〜Threads への HTTP 要求の間の変更は止まらない（DB ロックはネットワークをまたがない。次の書き込みは新しい release で止まる）。
+  - H5 申し送り（変更なし）: #139 `claim_candidate.sql` の `postona_threads_runtime.assert_actor` も `auth.sessions` を `FOR KEY SHARE`。本物の owner transport 統合時に H5（＋G5 のセッション失効契約）で (1) `FOR SHARE` 化、(2) GoTrue の実際の失効 SQL（UPDATE／DELETE・列）と所有者の行ロック権限の管理環境での確認、を決めてほしい（設計書 §4 に記載）。
+  - G5 申し送り（ガードは弱めない）: POSTONA 削除開始後は既存の削除ガードが試行の更新を拒否するため、release 後の結果記録は `ACCOUNT_LIFECYCLE_BLOCKED` となり、試行は `publishing`／`creating_container` のまま残る（削除を取り下げれば同じ許可証で記録可）。G5 の削除・T10 はこの試行を「投稿されたかもしれない」として読み取り照合または監査の対象にすること、自動再投稿なし（設計書 §5、テストで境界を固定）。
+- changed_files: 4（PR #144 への追加コミット 1件、PR のファイル一覧は 24 のまま）
+  - `supabase/candidates/postona_threads_publish/threads_publish_release_candidate.sql`（+6/−2）
+  - `supabase/tests/postona_threads_release_run.sh`（2接続のセッション競合 `session_race` と変異 `release_session_key_share_only` を追加）
+  - `supabase/tests/postona_threads_release_behavior.sql`（期限切れ後の古いセッション JWT の拒否・新しいログインとの区別、削除中の遅い結果記録の境界）
+  - `docs/postona/threads-connect-publish-integration-v1.md`（§3 修正の説明、§4 H5 申し送り、§5 G5 申し送り、§7 検証）
+  - 無変更: `threads_credential_custody_candidate.sql`、#140 の候補・検証、#124／#135／#139／#121、G3、`x-test-post`、TS／アプリのソース（フラグ含む）。
+- tests:
+  - RUN/PASS `THREADS_PGHOST=/private/tmp/g4r1-sock THREADS_PGPORT=54943 THREADS_PGSUPER=g4super bash supabase/tests/postona_threads_release_run.sh` → ALL PASS。
+    - 2接続のセッション競合（DB のロック待ちを `pg_locks`／`pg_stat_activity` で観測して順序づけ。テスト専用の advisory lock の関門で release をセッション確認の後に止める）: **ケース1（release が先）** 期限切れ UPDATE（lock_timeout 1秒）は `lock timeout` で確定できない → release は `released` → その後に UPDATE が確定 → 次の release は `AUTH_REQUIRED`・トークンなし。**ケース2（期限切れ UPDATE が先に進行中）** release はロック待ちになり、UPDATE の確定後に `AUTH_REQUIRED`・トークンなし。
+    - **修正前の失敗**: 変異 `release_session_key_share_only`（`for share` → `for key share` に戻す）でケース1が「SESSION_CASE1 expiry committed while the release held the session」で失敗 → 検出。修正後は両ケース PASS。ケース2を修正前のコードで単独実行するのは NOT_RUN（ケース1で修正前の失敗を確認済み。`FOR KEY SHARE` は `FOR NO KEY UPDATE` と衝突しないため待たずに旧版の行を読むことは PostgreSQL の仕様上の理由）。
+    - 既存の安全回帰も同じ実行で PASS: 利用権終了（P0001／42501）・削除開始・ロック・降格・メンバー削除・同意取消・サインアウト・セッション期限切れ・トークン期限・custody・再接続・本人用ワークスペース、証明の偽造／期限切れ／nonce 再利用、記録の束縛、同時の publish release で1件のみ。変異 **9種すべて検出**（フェンス削除・セッション確認削除・証明無効化・nonce 無効化・比較更新削除・記録のセッション束縛削除・service_role 付与・KEY SHARE への後退・custody の再接続束縛削除）。
+  - RUN/PASS `bash supabase/tests/postona_threads_integration_run.sh`（同じ環境変数）→ ALL PASS（#124／#135／#139 の正確な版の読み取り専用コピー、SQL 通し、TS 通し、回帰 176 PASS）
+  - RUN/PASS `deno test --no-config --allow-env --allow-read supabase/functions/social-mobile-threads-publish/ supabase/functions/_shared/social/` → 93 PASS（TS は無変更）
+  - NOT_RUN: アプリのテスト（アプリのソース無変更）、`postona_threads_publish_run.sh`（#140 の候補は無変更）、管理された Supabase Auth／GoTrue の実際の失効 API／PostgREST／Vault、本物の G5 T13、Meta、実機、本番。
+  - `git diff --check` PASS、秘密情報の文字列検査 0、ゲート 4つ false（TS 無変更）、他担当・保護パスの混入 0。
+- commit_hash: `09fd2c49114b7d26c23b71a3084574dc6a5a7ad6`（`git rev-parse HEAD` の出力）
+- push: DONE（`claude/g4-postona-threads-integration-20261011` に早送りで追加。push 直前にリモートの先頭が `d4a1e87b77d1fbd362dc51809ce2d998afda15ea` のままであることを確認。force なし）
+- PR: [#144](https://github.com/anohi-memories/kabumori/pull/144) OPEN/DRAFT、HEAD `09fd2c49114b7d26c23b71a3084574dc6a5a7ad6`（2コミット）、base `claude/g4-postona-threads-manual-publish-20261011`（#140 `2e75a6a842e70f3de78558681803b60935fb4251`、無変更）。保護対象の head（push 後に再確認）: #124 `c30f246409a77080cbc03aef6c4cb72b5481e125`、#135 `e38788d6677082138f0990453c7d2f00549666d0`、#139 `b4fa672f97592e87682671454e868a92098cbd56`、#121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`。
+- merge / deploy: NOT_DONE（マージ・適用・GRANT・Edge デプロイ・secret・フラグ・EAS・投稿すべて無し）
+- remaining_issues: 本番前の関門は前回 Report のとおり（G5 の T13 本番化と T10、H5 の owner transport・custody の1文・コールバック受け渡し・セッションロックの申し送り、ユーザーの Meta 準備と鍵、統合セキュリティレビュー、テスター1名・1件の明示承認）。今回の修正で新たな関門は増えていない。
+- safety_checks: PR #144 のブランチは G4 専用のきれいな作業フォルダ `/Users/yuya/Developer/kabumori-g4-threads-integration` にだけ割り当てられていることを `git worktree list` で確認してから1コミットを追加。他スロットのブランチ・作業フォルダ・TASK／Report は変更なし。使い捨て PostgreSQL は自分専用の socket `/private/tmp/g4r1-sock` のクラスタのみ。本番への読み書き 0。ACTIVE_TASK は G4 欄の status／next_owner だけを変更。
+- next_recommendation: K4 で差分（SQL の1語＋コメント）と競合テストを確認のうえ受け入れ判断。修正が狭いため、機械的な広いレビューの追加は不要と考える。次は前回どおり G5／H5 の小さな TASK とユーザーの Meta 準備を並行し、揃った時点で統合レビュー → 承認されたテスター1名・1件のパイロット。
+- AI Lab diary: 記録不要寄り（内部のロック強度の修正。公開するなら「並行して起きる処理の順番を、実際に2つの接続でぶつけて確かめるテストを作った」程度）。
 
 ## Exact C3 review finding and accepted correction scope
 
