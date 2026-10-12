@@ -108,11 +108,11 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: done
 - task_id: kabumori-g1-home-report-return-and-holdings-count-fix-20261012
 - start_code: G1
 - finish_code: K1
-- next_owner: claude
+- next_owner: none
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
 - allocation: 2026-10-12 five-tab Simulator QA K1 accepted PASS_WITH_FINDINGS and completed; focused G1 P3 home report detail return-to-home + P4 unknown holding count badge fix. One bounded source PR, tests/simulator, no merge/deploy; G2 PR143 report-detail implementation and G5 boundaries protected.
