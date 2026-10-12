@@ -133,14 +133,14 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
+- status: done
 - task_id: postona-g3-x-reservation-api-client-wiring-offline-v1-20261012
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）
 - source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: User continuation 2026-10-12. G3 has completed PR145 source DB/offline and stacked PR151 preview confirmation UI. Next G3 implementation: real source-only API/HTTP contract with JWT/owner/entitlement/account gate adapters DENY until true G5/G4 proof, app create/list/readback/restart/reschedule/reconfirm/cancel flow and local executable integration. Dedicated new independent G3 worktree and stacked Draft PR on unchanged PR151 head 0cd5c596; protect PR145 head 8820fa8d, PR151, G4/G5/H5 source and existing AI Lab/Kabumori posting. Persistence and real X/Meta/AI all production OFF; no migration, API deploy, grants, X post, merge, EAS. One Sol（高） security review only after effective G3+G4+G5 production-boundary source integration. Return K3.
+- allocation: K3 PASS_SOURCE_WIRING_LOCAL_E2E / PRODUCTION_BLOCKED_G5_G4. PR163 (9359e949, 16 G3 paths) stacked on unchanged PR151 -> PR145. Source-only API/DB dedicated role/client create/readback/restart/edit/reconfirm/cancel approved; G3 reported PG E2E 12/12, Deno16/16, app327/327, domain22/22, mutation20/20, tsc/lint PASS (not independently run by ChatGPT). Real G5 entitlement/lifecycle, G4 verified X Issue131, AuthVerifier, DB production role and Edge registration missing; API/client source release gates OFF; no merge/deploy/production/X actions. Sol（高） integrated security review only before real rollout. No new G3 task automatically assigned.
 - recommended_model: Opus5.5（高）
 ## Claude G4
 - owner: claude
