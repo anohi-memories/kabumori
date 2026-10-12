@@ -1,46 +1,51 @@
-import { useRef, useState } from 'react';
 import { Text } from 'react-native';
 import { ActionButton, Card, styles } from '@/components/ui';
 import { colors } from '@/constants/theme';
 import {
   THREADS_CONNECT_UI_ENABLED,
-  disabledThreadsConnectStarter,
+  connectFailureCopy,
   threadsConnectView,
   type ThreadsConnectStarter,
 } from '@/domain/threads-connect';
 import type { SocialAccount } from '@/domain/types';
+import { useThreadsConnect, type ThreadsConnectUiState } from '@/features/threads-connect/use-threads-connect';
+
+function stateMessage(state: ThreadsConnectUiState, verified: boolean): string | null {
+  switch (state.kind) {
+    case 'idle':
+      return null;
+    case 'running':
+      return 'Threadsの画面で接続を続けてください…';
+    case 'verifying':
+      return verified ? 'Threadsアカウントを接続しました。投稿するには、アカウントの画面で投稿を許可してください。' : '接続を確認しています…';
+    case 'done':
+      if (state.result.kind === 'canceled') return '接続をキャンセルしました。';
+      if (state.result.kind === 'expired') return '時間が経ちすぎたため、接続を中止しました。もう一度お試しください。';
+      return connectFailureCopy(state.result.code);
+  }
+}
 
 /**
  * Threads connect / reconnect entry. Behind the release flag it is an honest "in preparation" card with a
- * disabled button. The starter is injected: production uses the disabled starter until H5's runtime and
- * the Meta callback / app link are live; nothing here ever shows a connection that did not happen.
+ * disabled button and nothing runs. With the flag on, the real flow (use-threads-connect) runs and the card
+ * reports exactly what happened; "connected" only after the reloaded account data confirms it.
  */
-export function ThreadsConnectCard({ threadsAccount, preview, releaseEnabled = THREADS_CONNECT_UI_ENABLED, starter = disabledThreadsConnectStarter }: {
+export function ThreadsConnectCard({ threadsAccount, accounts, reload, preview, releaseEnabled = THREADS_CONNECT_UI_ENABLED, starter }: {
   threadsAccount: Pick<SocialAccount, 'connectionStatus'> | null;
+  accounts: readonly Pick<SocialAccount, 'id' | 'platform' | 'connectionStatus'>[];
+  reload: () => void;
   preview: boolean;
   releaseEnabled?: boolean;
   starter?: ThreadsConnectStarter;
 }) {
   const view = threadsConnectView(threadsAccount, { releaseEnabled, preview });
-  const [message, setMessage] = useState<string | null>(null);
-  const inFlight = useRef(false);
-  const start = async () => {
-    if (!view.canStart || inFlight.current) return;
-    inFlight.current = true;
-    try {
-      const result = await starter.start();
-      setMessage(result.kind === 'opened' ? 'Threadsの画面で接続を続けてください。' : 'Threadsとの接続は、まだ利用できません。');
-    } catch {
-      setMessage('Threadsとの接続を始められませんでした。時間をおいて、もう一度お試しください。');
-    } finally {
-      inFlight.current = false;
-    }
-  };
+  const { state, verified, connect, busy } = useThreadsConnect({ accounts, reload, releaseEnabled: releaseEnabled && view.canStart, starter });
+  const message = stateMessage(state, verified);
   return (
     <Card>
       <Text style={{ color: colors.ink, fontWeight: '800' }}>{view.title}</Text>
       <Text style={styles.muted}>{view.note}</Text>
-      {view.buttonLabel ? <ActionButton label={view.buttonLabel} onPress={() => void start()} disabled={!view.canStart} /> : null}
+      {view.buttonLabel ? <ActionButton label={busy ? '接続しています…' : view.buttonLabel} onPress={() => void connect()} disabled={!view.canStart || busy} /> : null}
       {message ? <Text accessibilityLiveRegion="polite" style={styles.muted}>{message}</Text> : null}
     </Card>
   );
