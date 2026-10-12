@@ -56,6 +56,18 @@
 12. 失敗要因`no_source, terms_excluded, filtered_rule, no_candidate, judgement_rejected, generation_failed, app_display_gate, push_policy, duplicate_event, unknown`と、`fetched_at`・`first_public_at`・`judgement_at`・`display_eligible_at`（分かる範囲）の列定義を作り、重大事件/金融ニュースの**event単位Recall、アプリ到達率、遅延p50/p90**を測れるようにする。正解集合は本人の毎時監視ログ＋公式発表＋既存候補など多源だが、実ログが入手できないときは`NOT_AVAILABLE`と明記。
 13. 小さな実装PoCは**オフライン・mock・自作fixtureだけ**。外部AI・実WebSearch・第三者本文・本番API・DB書込み不可。正例だけでなく、行政処分との噂混同/誤報/旧ニュース再掲/告発の未検証/外国事件と日本関連なしなどの負例も含める。費用・誤判定・遅延の推定は`estimate`と実測を区別。
 
+### E. 追加必須要件 — 国内限定Web検索コスト・費用対効果の厳密評価（ユーザー追認 2026-10-12）
+
+- **判断前提**: 国内の重大事件・企業不祥事・訴訟・事故・日銀/銀行/保険/証券・政策急変等、一次情報の取得元が不足する領域なら**規約に適合した限定Web検索の追加費用は許容検討する**。ただしユーザーは価格調査を要求しており、**検索実行・課金の許可はまだない**。候補案・過去台帳集計・純粋なoffline仮計算だけで評価する。
+- **公式料金（2026-10-12確認）**: OpenAI Responses API 通常`web_search`は **$10/1,000ツール呼出 = $0.01/ツール実行＋検索コンテンツの入力トークン、モデル入力/出力料金**。preview non-reasoningは別料金（$25/1000, search-contentトークン無料）なので混同不可。GPT-4o-mini/4.1-mini非previewは8,000入力トークン固定ブロック特例あり。料金根拠: `https://developers.openai.com/ja-JP/api/docs/pricing`（2026-10-12）。
+- **本番の旧実績（2026-10-12 read-only確認）**: Supabase project `wsmznyzcvmuitkglfeuj` の `public.ai_usage_events`で`created_at >= '2026-10-06 00:00+09'` / `feature LIKE 'news_breaking_search|%'` / `web_search_calls>0` を集計：**31 Responsesイベント、Web Search tool 33 calls、推計cost_usd合計$0.42074、1 tool call平均$0.01275**、平均入力13,375・平均出力210 token/イベント。使ったmodelは`gpt-5.6-luna`。`cost_usd`は内部見積もりでOpenAI確定請求とは限らない。直近変更前に多数検索した古い期間を混ぜて月額予算としない。日次実測及び請求書との差異を明記。
+- **国内向けの追加呼出だけの予算感**（30日×各日定額、**$0.013/検索仮定**）：5/day = 150 calls/`$1.95/month`; 10/day = 300/`$3.90`; 20/day = 600/`$7.80`; 40/day = 1,200/`$15.60`; 80/day = 2,400/`$31.20`。2026-10-12の参考為替`$1=約¥158.43`なら、それぞれ約¥309/¥618/¥1,236/¥2,472/¥4,943。**通常検索の増分のみ**で既存Web検索、判定Luna/Sol、app-copy/翻訳、fact check、生成、Supabase処理費と超過呼出/リトライは含まない。最大ケース/イベント当たり2回検索・複数検索ツール起動等を入れた悲観ケースも別途作る。
+- **J0必須成果物**: (1) 日本一般速報・金融・企業の各カテゴリ別 source gap数、(2) 0/5/10/20/40/80検索/day × 検索context(low/medium) × 1/2回tool呼出を分けた月額 **search only / search+judgement / search+article creation** 3段階総費用表、(3) **1件の真に追加発見された重要eventあたりの増分ドル費用**（cost_per_new_verified_major_event）を過去監査またはoffline eventサンプルから推定。イベント原票が無ければ`NOT_MEASURABLE`と明記し、仮定のみの数値と区別する。
+- **節約しつつRecall優先**: 無料・合法的に取得した公式/公的signalとGDELT等の合法メタデータを先行。eventレベルのトリガーを`already_covered / insufficient_official / urgent_domestic_incident / corporate_scandal / financial_system_breakdown / policy_surprise`等へ分け、各source/eventにTTLとクールダウン・URL/event重複除去、2段階の検証で不要な再検索を避ける。危機時は優先度枠を残す設計とし、安さだけで重要事象を除外しない。
+- **予算ガード案は提案のみ**: 月額検索予算・soft/hard JST日次上限・同時実行時の原子reserve・一事象検索回数とmodel`max_tool_calls`・失敗時再試行・利用台帳と通知閾値・費用超過時停止・重大事象の例外承認が必要。初期案を**平常10/day、異常時20〜40/day（ユーザー承認待ち）**として設計し、例外超過は黙って実行しない。現行 generic検索4/dayとは別の**増分予算**として集計し、旧shadowのsoft30/hard48がそのままproduction稼働予算だと誤認しない。
+- **規約・出典**: Web検索でページが見つかっても元記事の著作権・機械取得・AI外部入力・転載利用を自動的には取得できない。公式一次資料を別確認、アプリには事実を独自に要約しURL出典を付す。規約で不可の新聞RSSや記事本文を「searchだから合法」と見なさず、技術/規約未確認はHOLD。
+- **具体的な報告**: `docs/news-coverage/JP_GENERAL_FINANCIAL_COVERAGE_J0_20261012.md`に上記公式価格URL・確認日・DB監査SQL（個人情報無し）・増分月額表・実測/推定区別・導入KPIとSTOP条件を追記。J0中に本番APIを呼ばない。次`K8`に**「いくら払えば何件改善できる見込みか」**を提示。正式な本番予算、どの検索/モデルを使うかはG8の独断で承認しない。
+
 ### D. 報告と次フェーズ設計
 
 14. 成果を `docs/news-coverage/JP_GENERAL_FINANCIAL_COVERAGE_J0_20261012.md`（実測可観測なfunnel＋missing reasons＋既存設計との矛盾＋source rights matrix＋次J1案）へ保存。J0 offline harness/fixturesはあれば各変更ファイル一覧。推奨J1実装は「権利OKの国内速報信号をshadowのみ追加」「必要時だけWeb補完」「アプリ一覧/市場全体の表示判定改善」の**3本を競合しない順番**に分割し、優先順位・対象ファイル・必要承認・tests・費用ガードを具体化。将来の広域ニュース計画をG8 TASK内に保留メモとして置き続けず、正式な設計文書へ切り分ける。
