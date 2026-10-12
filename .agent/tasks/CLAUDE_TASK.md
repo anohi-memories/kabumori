@@ -1,3 +1,50 @@
+# G2 CURRENT TASK — かぶモリV1 個別オンデマンド＋共通朝夕通知：main統合・リリース候補準備
+
+- task_id: kabumori-g2-ondemand-broadcast-release-integration-20261012
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- start_code: G2
+- finish_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Opus5.5（高）**
+- task_type: offline source integration / merge-conflict resolution and pre-release QA, NOT production release
+- source_target_1: [Draft PR143](https://github.com/anohi-memories/kabumori/pull/143) head `889ca1b44cf82bd3ecb913818dca568456849feb` (user-triggered per-user analysis, persisted server job, result and completion push; OPEN/Draft/unmerged)
+- source_target_2: [Draft PR149](https://github.com/anohi-memories/kabumori/pull/149) head `e9bb86c44808d87ad8cbd3de4f1d1564066f958a` (opted-in shared morning/close broadcast, H2 six P2 corrections; OPEN/Draft/unmerged, stacked ON PR143)
+- source_not_in_scope: G6 PR148→PR150→PR153 (Claude shadow comparison, default OFF, G6 isolation fix queued independently); do not await its completion for V1 production-readiness source QA
+- initial_known_risk: GitHub PR143 mergeable=false against current main at allocation; DO NOT assume exact conflict cause before local inspection.
+- release_status: PRODUCTION_NO_GO / no merge, deploy, migration apply, Cron changes, real Expo, EAS build or app release
+- note: G1 home/UI navigation task and G5 common Auth lifecycle task remain separately owned.
+
+## Goal: make existing features realistically releasable, not another detached design note
+
+The agreed Kabumori product V1 behavior: (1) morning/close **one shared market report**, app-readable independently of per-user analysis; (2) opted-in users receive shared report push without starving important-news alerts; (3) individualized holdings/portfolio AI report runs **only on authenticated explicit button press**; server persists job so it continues after app exit, private completed report retained and optional done push/deep link; (4) no daily per-user automatic generation once independently approved cutover is performed. AI comparison via Claude Opus PR153 is optional SHADOW and **not a release dependency**. Do not imply the existing live personalized auto-Cron was already disabled.
+
+## Work orders
+
+1. **Fresh-state collision preflight:** Read `PROJECT_RULES.md`, `AGENTS.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, G2 protected TASK/Report, G1 current TASK and G5/G6 related status; fetch true fresh `origin/main`, verify independent G2 worktree, head/base of PR143 and stacked PR149; inventory **actual** overlapping paths vs current main and G1 working UI (navigation/report route) and G5 Auth/RLS. Do not modify other-slot branch/worktree/dev server, commit or stage other-slot changes. If another owner currently edits the same file, STOP overlapping portion and surface exact coordination need.
+2. **PR143 mergeability check:** Reproduce why PR143 `mergeable=false` on GitHub (e.g. real source conflict or stale PR metadata) using a disposable G2-only isolated checkout. Report the exact actual conflicting filenames and side-by-side changed semantics. Avoid force push/rebase/reset of protected PR143. Resolve only in **new G2 integration candidate** where file ownership unambiguous; if issue requires G1/G5-owned files, report blocker and let their owners finish instead of overriding.
+3. **Integrate BOTH features on fresh-main source candidate:** In a NEW independent G2 branch/worktree based on current origin/main, assemble PR143 implementation plus PR149-only stacked delta **once**; do not incorrectly apply entire stacked PR149 as separate duplicate PR143. Preserve migrations and creation order, prior H3 lease fence fix and H2 R1–R6 broadcast fixes. Do not rewrite original Draft PR143/149 or their ancestry; create one new **Draft integration PR** only if a safe coherent candidate with actual source changes/necessary conflict fixes is established. If the issue is only review prerequisites or G1/G5 collisions, avoid a redundant 50-file PR and return a concrete BLOCKED/ready decision instead.
+4. **Local end-to-end real-code checks (not a pure mock-only writeup):** With isolated disposable local PostgreSQL, source migration apply+rollback, RLS/SECURITY DEFINER negative cross-user, request→durable queue→worker→private result→completion-notification enqueue, report feed→morning/close push intent→bounded consent-preserving fanout. Test asynchronous app-exit/reopen semantics through server state, failure/retry/late lease/notify unknown, old Cron off-by-default cohabitation, 0 holdings, multiple devices, opt-out, stale market packet, data/fact safety. Use exact real SQL/Edge modules with synthetic data/mock HTTP rather than paid API or real personal data. Focus minimum high-impact integration suites; reuse existing PR143 313? (G2 reported), PR149 PG17 26 mutants/worker29, app 511 selectively, and any changed route/navigation tests. Do NOT repeatedly run unrelated all-source/app/X suites. Run typecheck/diff check. Record what was independently run and which older reports remain prior evidence.
+5. **G1 and G5 boundaries:** G1 currently works on HOME return/back and holding count; do not update `src/app/(tabs)/index.tsx` or G1-owned tests/migrations. PR143 changes report detail `src/app/(tabs)/reports/[id].tsx` and root layout; inspect route contract and tell G1 chat precise overlap/merge dependency if needed. G5 account/entitlement/deletion/Auth remains active; no touching G5 migrations/RLS/Edge. Identify release reliance on pending G5 source vs actual production deployment without inventing state.
+6. **Meaningful release runbook, not production execution:** Enumerate actual merge/dependency and build sequence (PR143 before PR149, note integration candidate alternative), local security tests→user-approved read-only production preflight→migration apply under explicit separate approval→Edge deploy with OFF gates→Cron registration/OFF old per-user auto schedule cutover→app build/small opt-in devices→real push monitor/delivery readback and rollback. Notification preferences, duplicate/report-per-day consistency and data migration safe defaults are mandatory. Include concrete blocker evidence to get to a minimal iPhone test; do not claim automatic individualized reports ceased in production.
+7. **No production operations:** no PR main merge; no writing managed Supabase/auth/RLS, migration apply to managed DB, Edge/Cron/deploy, secrets/Anthropic/OpenAI paid calls, actual Expo push, X/Threads posts, Apple EAS/TestFlight/AppStore, payment/billing changes. No changing PR141 (superseded auto-batch), G6 PR148/150/153, PR143/149 original branches, G1/G5-owned code. A fresh local temp DB is fine, production read needs separate consent.
+
+## Completion / return
+
+- Implement source changes when required and safe; if no code changes are needed, provide reproducible main-integration evaluation + focused tests and explicitly distinguish `INTEGRATION_READY`, `CHANGES_REQUIRED`, or `BLOCKED_BY_OTHER_OWNER`; do NOT pad the task with paper-only outputs.
+- Report inside `## Report — current V1 release integration`: original PR heads, fresh main SHA, mergeability conflicts by file+cause, actual G2-owned resolutions, changed_files, optional new Draft PR with source/head/base, all real offline tests/NOT_RUN, outstanding G1/G5/production blockers, prioritized steps to get into iPhone, risk checks, commit/push/merge/deploy actual status, next recommendation. Explicit **PRODUCTION_NO_GO** until separately authorized.
+- Set own task `review_required` / `next_owner: chatgpt`, update only G2 index and G2 record in CURRENT_STATE, protect history/other slots; send **かぶモリアプリG2のちゃへ K2**. ChatGPT decides focused security/production review only at the actual gate; do not automatically allocate H review on every trivial change.
+
+## Report — current V1 release integration
+
+PENDING G2.
+
+---
+
+## Previous G2 TASKs/Reports — protected verbatim below
+
 # G2 CURRENT TASK — 共通AI基盤 Phase 2c：市況レポートhandlerへClaude比較処理を既定OFFで接続（ソースのみ）
 
 - task_id: kabumori-g2-phase2c-deferred-claude-market-shadow-handler-20261012
