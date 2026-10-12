@@ -1,3 +1,48 @@
+# G6 CURRENT TASK — 共通AI基盤 PR148/150/153/157 fresh-main 統合QA・競合調査（オフライン）
+
+- task_id: common-ai-provider-g6-four-pr-premerge-offline-qa-20261012
+- owner: claude
+- slot: claude-6
+- status: ready
+- next_owner: claude
+- start_code: G6
+- finish_code: K6
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- recommended_model: **Sonnet5（高）**
+- priority: high
+- mode: READ_ONLY_INTEGRATION_QA
+- production_mutation_window: FORBIDDEN
+- merge: FORBIDDEN
+- deploy: FORBIDDEN
+
+## Objective
+Prepare safe next decision for 4 stacked Draft PRs: #148 → #150 → #153 → #157. **At assignment GitHub reports PR148 mergeable=false versus main**; #150/#153/#157 each report mergeable=true against *their own parent*, which does not prove fresh-main integration. Diagnose exact PR148 root cause and verify whole 4-PR stack against fresh origin/main without changing protected PRs. Never treat a simulated clean merge as authorization to merge.
+
+## Ownership and verification gates
+1. Read PROJECT_RULES.md, HANDOFF.md, .agent/ORCHESTRATION.md, ACTIVE_TASK/CURRENT_STATE, own TASK/Report, fresh origin/main, all 15 relevant slots/worktrees/PR heads. G2 currently owns PR143/149/158 (V1 release-integration), G5 shared Auth; avoid overlaps. Confirm clean isolated G6 worktree; otherwise STOP/K6.
+2. Verify PR heads and bases: #148 a71de72b3bcfc88547b616f789df7765283565ed (base main, mergeable=false now), #150 18d9058aa8bd451f3cd0181f8570a31484750035, #153 6c576567328c99a58c2e4beaed86d155fe875769, #157 9b952d64a9ec954e74af7e762c9df4e4c2e2f3a5. If changed, refresh facts and document; don't force/rebase.
+3. In throwaway clean worktree simulate integration from fresh origin/main with merge-tree / git merge --no-commit as appropriate. Identify why #148 is not mergeable, enumerate exact conflicts, distinguish agent-state bookkeeping from product source. Do not alter G2/other owner code or checkout/modify other worktrees.
+4. Inspect complete effective PR148→150→153→157 delta for security and functional regressions: default OFF, legacy market report parity, waitUntil/deadline behavior, cancellation and failure containment, ledger idempotency, provider isolation allowlist, no key/contents logs, no network, no other functions importing provider. Test no secret access, no real paid calls.
+5. Run offline provider126, market-report313, _shared629 tests and relevant other integration tests, type/lint, negative permissions probes, and a secret scan against **full stack integrated with fresh main** if clean; if conflict prevents test, explicitly mark BLOCKED instead of claiming pass. Record commands, counts and test environment.
+6. Produce concrete minimal resolution plan per conflict with exact owning slot; if conflict is only .agent metadata, describe safe re-read/compare strategy. **READ-ONLY QA: do not modify product sources, any Draft PR branch, or merge to main.** No new integration PR unless specifically separately authorized. May add K6 report/QA findings in own TASK only, and update own G6 index/STATE with CAS after verifying no simultaneous edits.
+7. Return K6 with verdict PASS_PREMERGE_QA or CHANGES_REQUIRED/BLOCKED, exact merge base/head, changed paths, any remaining uncertainty, recommended merge order or hold, budget/production gates, no cross-slot mutations. Mark review_required/next_owner chatgpt.
+
+## Safety
+- No merge/deploy/prod DB/migration/Secret/Cron, real OpenAI/Anthropic, paid API, user holdings, notifications, X/Threads, Auth writes, or changing budget. All four Draft PRs stay untouched.
+- Even if all offline QA passes, production stays NO_GO. Before real shadow: ledger stale recovery, scope-safe Edge Secret, actual waitUntil runtime, focused high-risk release review, small separately approved paid canary.
+- Scope boundary with G2: handler.ts/index.ts/shadow_wiring_test.ts PR153 remain G2-owned. If source fix is needed, STOP/K6 for ownership coordination. Don't automatically assign G2.
+
+## Report — Four PR premerge offline QA (G6)
+- result: NOT_STARTED
+- changed_files: none
+- tests: NOT_RUN
+- merge/deploy/production/paid_calls: 0
+- next_recommendation: G6 → K6
+
+---
+
+# PRESERVED G6 PRIOR TASKS / REPORTS — do not rewrite below
+
 # G6 CURRENT TASK — Phase 2c 接続に伴う隔離テスト限定修正（オフライン）
 
 - task_id: common-ai-provider-g6-phase2c-isolation-test-allowlist-20261012
