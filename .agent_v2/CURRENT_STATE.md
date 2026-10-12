@@ -12,7 +12,7 @@
 
 ## プロジェクト別現状
 
-- F2の診断TASK `kabumori-f2-pr143-live-mergeability-diagnosis-20261012` は完了報告済み（review_required/chatgpt、L2待ち。判定 GO_TO_MERGE_DECISION）。F8にニュース改善A J1-a診断TASK `news-improvement-a-jp-official-diagnostics-j1a-f8-20261012` を割当済み（ready/claude、L8返却、Sonnet5高）。その他の新系統枠は割当前の状態を各TASKで確認。
+- F2の診断TASK `kabumori-f2-pr143-live-mergeability-diagnosis-20261012` はL2受入済み（done/none、PASS_GO_TO_MERGE_DECISION / PRODUCTION_NO_GO）。F8にニュース改善A J1-a診断TASK `news-improvement-a-jp-official-diagnostics-j1a-f8-20261012` を割当済み（ready/claude、L8返却、Sonnet5高）。その他の新系統枠は割当前の状態を各TASKで確認。
 - かぶモリアプリ、X自動投稿アプリ（POSTONA）、共通アカウント、共通AI基盤、MIC、ニュース改善などの現状は、旧 `.agent/CURRENT_STATE.md` と旧各TASKが正本。
 
 ## G8 → F8の新規TASK移行
@@ -56,7 +56,7 @@
 ## 次工程
 
 - F8で国内ニュースJ1-aを実装、L8で本チャットへ報告（Sonnet5高、production NO_GO）。
-- F2はPR143のマージ可否の診断を報告済み（GO_TO_MERGE_DECISION）。L2でこのチャットが確認する。本番 NO_GO。
+- F2のPR143マージ可否の診断はL2で受入済み。GitHub PR143 mergeable=falseが接続経由では継続するため、実マージ前の最新確認は必須。本番 NO_GO。
 
 1. 旧系統の各slotが完了した時点で、ChatGPTが次の新規TASKを新系統へ置くかを判断する。
 2. 初回の新系統TASK完了時にarchive / MANIFEST / SHA256 / HISTORY_INDEXの保存運用を確認する。
