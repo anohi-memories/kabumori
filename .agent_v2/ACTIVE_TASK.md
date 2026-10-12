@@ -23,17 +23,17 @@
 
 ## F2
 - slot: F2
-- status: ready
+- status: review_required
 - task_id: kabumori-f2-pr143-live-mergeability-diagnosis-20261012
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリ G2（新F2担当）のちゃ
 - completion_code: L2
 - recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
 - dependencies: PR143 → PR149 → PR158; old G2 unstarted task cancelled
-- blocker: GitHub PR143 mergeable=false; diagnose vs latest main
+- blocker: none（GitHub の表示が古い main のまま。手元では今の main に衝突0件。GO_TO_MERGE_DECISION、L2 待ち）
 - slot_use: かぶモリアプリ
 
 ## F3

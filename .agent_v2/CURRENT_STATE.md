@@ -12,7 +12,7 @@
 
 ## プロジェクト別現状
 
-- F2に新規診断TASK `kabumori-f2-pr143-live-mergeability-diagnosis-20261012` を割当済み（ready/claude）。F8にニュース改善A J1-a診断TASK `news-improvement-a-jp-official-diagnostics-j1a-f8-20261012` を割当済み（ready/claude、L8返却、Sonnet5高）。その他の新系統枠は割当前の状態を各TASKで確認。
+- F2の診断TASK `kabumori-f2-pr143-live-mergeability-diagnosis-20261012` は完了報告済み（review_required/chatgpt、L2待ち。判定 GO_TO_MERGE_DECISION）。F8にニュース改善A J1-a診断TASK `news-improvement-a-jp-official-diagnostics-j1a-f8-20261012` を割当済み（ready/claude、L8返却、Sonnet5高）。その他の新系統枠は割当前の状態を各TASKで確認。
 - かぶモリアプリ、X自動投稿アプリ（POSTONA）、共通アカウント、共通AI基盤、MIC、ニュース改善などの現状は、旧 `.agent/CURRENT_STATE.md` と旧各TASKが正本。
 
 ## G8 → F8の新規TASK移行
@@ -22,7 +22,7 @@
 
 ## 未解決問題
 
-- F2: PR143 mergeable=false の原因未確定。旧G2の同等診断TASKは未開始のまま取り消し、F2へ新しいtask_idで割当。PR143→149→158 のマージ承認はあるが、原因判定までマージ保留。
+- F2: PR143 の GitHub の表示（GraphQL は UNKNOWN、REST は clean）は、試しのマージが古い main `50a2e079` の上のまま再計算されていないため。今の main `3c590d40` に対して、手元で PR143→149→158 を順に当てて衝突0件。マージは L2 の確認のあと、通常のマージで、間で後ろの PR の base を main に付け替えて進める（`delete_branch_on_merge: false`）。本番は NO_GO。
 - 旧系統の未解決問題は旧 `.agent/CURRENT_STATE.md` と旧各TASK / Reportを参照する。
 
 ## production安全制約（現在有効）
@@ -56,7 +56,7 @@
 ## 次工程
 
 - F8で国内ニュースJ1-aを実装、L8で本チャットへ報告（Sonnet5高、production NO_GO）。
-- F2でPR143のマージ不可判定を再現・調査し、L2でこのチャットに報告。推薦モデル Sonnet5（高）。本番 NO_GO。
+- F2はPR143のマージ可否の診断を報告済み（GO_TO_MERGE_DECISION）。L2でこのチャットが確認する。本番 NO_GO。
 
 1. 旧系統の各slotが完了した時点で、ChatGPTが次の新規TASKを新系統へ置くかを判断する。
 2. 初回の新系統TASK完了時にarchive / MANIFEST / SHA256 / HISTORY_INDEXの保存運用を確認する。
