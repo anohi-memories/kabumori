@@ -1,3 +1,144 @@
+# H3 CURRENT TASK — .agent_v2 新旧30枠・段階移行基盤 PR #155 独立レビュー
+
+- task_id: agent-v2-pr155-dual-slot-migration-review-h3-20261012
+- owner: codex
+- slot: codex-3
+- status: ready
+- next_owner: codex
+- start_code: H3
+- finish_code: C3
+- completion_code: C3
+- return_to: **こでくろ連携部屋のちゃ**
+- recommended_model: **Sol（高）**
+- type: **独立レビュー / READ ONLY**
+- target: Draft PR #155 exact HEAD **8a28a067a20daec5bd96e09656bdfab144c3c458**
+- source_task: G10 `agent-v2-dual-slot-migration-20261012`
+- merge/deploy: **禁止**
+
+## 目的
+
+G10が構築した `.agent_v2/` 新15枠基盤と、新旧30枠の段階移行方式について、merge前に独立レビューする。
+
+今回のレビュー対象は共有オーケストレーション基盤のみ。アプリ実装・DB・本番環境には触れない。
+
+## 必須確認
+
+- fresh `origin/main`
+- Draft PR #155 が OPEN / Draft / 未merge であること
+- review HEAD が **8a28a067a20daec5bd96e09656bdfab144c3c458** から動いていないこと
+- G10 TASK / Report
+- `PROJECT_RULES.md`
+- `.agent/ORCHESTRATION.md`
+- `.agent_v2/ORCHESTRATION.md`
+- 旧/new ACTIVE_TASK / CURRENT_STATE
+- archive / MANIFEST / SHA256SUMS / RESTORE
+- HISTORY_INDEX
+- 新F1〜F10 / J1〜J5 TASK・J Reportテンプレート
+- 他slot/worktreeとの競合
+
+HEAD driftがあれば、勝手に別HEADをレビューせず明示する。
+
+## 重点レビュー
+
+### R1 — 新旧コード体系
+- 旧 G1〜G10 / K1〜K10、H1〜H5 / C1〜C5 が維持されるか
+- 新 F1〜F10 / L1〜L10、J1〜J5 / V1〜V5 が一意か
+- 単独 `F` と `F1`〜`F10` が曖昧なく区別できるか
+- 小文字 `f` の扱いも矛盾しないか
+
+### R2 — 段階移行
+- 旧G/Hで開始したtask_idを旧系統で完結させるルールが十分か
+- 新規TASKだけをF/Jへ移すことで二重管理を防げるか
+- ちゃが「次からFへ移行」と判断する運用に破綻がないか
+- 完全移行条件が不足していないか
+
+### R3 — 旧系統保護
+- PR #155で旧G/H TASK・Report・ACTIVE_TASK・CURRENT_STATEが本当に変更されていないか
+- 現行の進行中TASKを破壊・再割当する変更がないか
+- merge直後も旧系統が現行正本として動作し続けるか
+
+### R4 — archive / restore
+- snapshot対象が妥当か
+- MANIFESTの original_path / archive_path / size / SHA256 / commit情報が整合するか
+- SHA256検証方法が十分か
+- restore手順が実際に復元可能か
+- archiveが通常運用で誤って更新されない設計か
+
+### R5 — HISTORY_INDEX
+- HISTORY_INDEXが検索索引であり現在状態の正本ではないことが明確か
+- 機械抽出の欠損値を事実として誤認しないか
+- archive参照の形式が後から追跡可能か
+- 通常のG/H/K/C/F相当実行で全履歴を読まない設計になっているか
+
+### R6 — 新15枠
+- F1〜F10 → L1〜L10
+- J1〜J5 → V1〜V5
+- return_to / completion_code
+- F1/F2=かぶモリ、F3/F4=POSTONA、F5〜F10=明示割当専用
+- J1〜J4=通常レビュー・バグ修正・検証
+- J5=Codex臨時実装優先枠
+- ユーザー明示時のみJ1〜J4を実装へ転用可能
+がルール間で一致するか
+
+### R7 — 最終切替
+- F→G、J→H、L→K、V→Cへ戻す際の名前衝突・履歴参照切れがないか
+- `.agent_v2/` を正式 `.agent/` へ昇格する前提に不足がないか
+- 最終snapshot必須が明記されているか
+- 完全移行は別TASKであり、このPRで実施されないこと
+
+### R8 — 単独Fの読み込み最適化
+- 移行期間中の全30枠確認で、第一段階はmetadata中心になっているか
+- 必要な枠だけ個別TASK/Reportを読む仕様か
+- 過去Report全文を全件読む旧方式へ戻る抜け道がないか
+- 安全/競合確認を削り過ぎていないか
+
+## 実行方針
+
+- READ ONLYレビュー。
+- product source editsは禁止。
+- PR #155への修正commit・mergeは禁止。
+- production / Supabase / DB / Auth / RLS / Edge / Secrets / paid API操作禁止。
+- 必要ならローカルで静的check、grep、manifest/hash再検証を行ってよい。
+- 他slotのworktree/branch/dev serverを触らない。
+
+## 判定
+
+次のいずれか：
+
+- `PASS_REVIEW_CANDIDATE / MERGE_READY_FOR_CHATGPT_DECISION`
+- `CHANGES_REQUIRED / MERGE_HOLD`
+- `BLOCKED_REVIEW`
+
+問題を出す場合は P0/P1/P2/P3、具体的な path/section、影響、最小修正案を示す。
+
+## Report必須項目
+
+- task_id
+- result
+- reviewed_pr
+- reviewed_head
+- changed_files（Codexによるproduct変更は0のはず）
+- checks/tests
+- findings
+- archive/restore assessment
+- HISTORY_INDEX assessment
+- migration safety assessment
+- merge recommendation
+- remaining_issues
+- safety_checks
+- return_to
+- completion_code
+
+完了時は `.agent/CODEX_REPORT_3.md` に最新Reportを記録し、H3を `review_required / next_owner:chatgpt` とする。
+
+最終行：
+
+**こでくろ連携部屋のちゃ へ C3 を送ってください。**
+
+---
+
+## Protected previous H3 TASK / history
+
 # H3 CURRENT TASK — POSTONA Threads OAuth＋手動投稿 統合Auth/SQL重点レビュー（独立・READ ONLY）
 
 - task_id: postona-threads-pr144-auth-publish-p1-security-review-h3-20261012
@@ -194,4 +335,5 @@ H3専用の独立Git worktree/checkoutを `/Users/yuya/Developer/kabumori-fresh`
 ユーザー向け最終報告の末尾には必ず「返却先」を置き、TASKの `return_to` をそのまま使って「`<return_to>` へ `C3` を送ってください。」と表示する。返却先は推測しない。`return_to` / `completion_code` が欠落・不明・矛盾・不一致（`C3` 以外）の場合は「返却先未確定 — ChatGPT確認待ち」とし、理由を明記する。
 
 `C3` はH3専用の完了確認コード。ChatGPTが対応TASKとReportを評価する。未実施を成功扱いにしない。
+
 
