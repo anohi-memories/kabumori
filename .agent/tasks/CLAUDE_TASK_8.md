@@ -1,3 +1,47 @@
+# Claude Task G8 — 国内ニュース Phase J1-a：jp_official 診断の永続化
+
+- task_id: news-improvement-a-jp-official-diagnostics-j1a-g8-20261012
+- owner: claude
+- slot: claude-8
+- status: ready
+- next_owner: claude
+- start_code: G8
+- finish_code: K8
+- return_to: ニュース改善API最適化のちゃ
+- recommended_model: Sonnet5（高）
+- scope: 国内 jp_official の診断集計を既存 important_news_monitor_runs.diagnostics JSONB に格納する最小実装。ニュース判断・候補選定・公開・Pushは変更しない。
+- safety: 独立 worktree/checkout必須。main/本番の直接変更、merge/deploy、DB migration/RPC/RLS、secrets、実API/Web Search有料呼出、外部AI送信禁止。PR116固定10/13 production worktree、PR129、G9および他slotを保護。
+
+## 開始前の必須確認
+
+1. PROJECT_RULES.md / .agent/ORCHESTRATION.md / ACTIVE_TASK / CURRENT_STATE / G8旧J0 Report、fresh origin/mainとPR116/129、作業tree/checkout、他slot競合と未commitを確認。task_idとready一致のときのみ開始。
+2. 既存の `supabase/functions/important-news-monitor/index.ts` および `news_collection_diagnostics.ts` と該当テストを調べ、実際の保存経路と診断JSONのキーを確認する。
+3. J0設計 `docs/news-coverage/JP_GENERAL_FINANCIAL_COVERAGE_J0_20261012.md` §6 を参照（J0 branch `claude/news-jp-coverage-j0-20261012` commit `d0be8977`）。今回のJ1-aブランチに未マージJ0成果物を無断混入させない。
+
+## 実装
+
+1. jp_official診断を既存run diagnosticsに安全に追加する。原則 `jpOfficial` 内の enabled, signalsRead, selected, alreadyKnown, inserted, deferred, enrichedPages, skipped, drops の数値/真偽集計のみ。現行集計構造に合わせ、既存診断キーを破壊しない。
+2. OFF/未設定でも enabled=false、件数ゼロ相当を安全に表現し、呼び出し増加や候補・配信への影響を生じさせない。部分失敗でも監視本体を停止させない。個人情報、source URL、記事タイトル、Secrets、全文を診断に格納しない。JSONサイズとログ量を抑える。
+3. 変更可能ファイルは `supabase/functions/important-news-monitor/index.ts`、`supabase/functions/important-news-monitor/news_collection_diagnostics.ts` と同じモジュールの該当test、必要ならJ1-a専用文書に限定。G9/API provider、PR129本文抽出、PR116本番ソースなどに変更が必要なら止めて相談。
+4. 現行API/Web Search呼出数、DB schema、判断結果、候補数、X/アプリ/Pushへの副作用は増やさない。元の診断構造と後方互換にする。
+
+## テスト・完了条件
+
+- OFF / ON / skipped / drops / 部分失敗 / JSONシリアライズ / 不要情報混入無しのテストを作る。
+- important-news-monitor の関連テストと既存回帰、lint/type、git diff --check、secret scanを実施。テスト件数と未実施項目を明記。
+- mainとの対象path交差、他slot、PR116・PR129への非干渉を検証する。競合があればpushせず報告。
+- 独立G8 branchにcommit/push可。Draft PRは必要なら作成してよいがmerge/deployは禁止。
+- Reportには task_id/result/changed_files/tests/commit_hash/push/PR/merge/deploy/safety_checks/remaining_issues/next_recommendation を記載。完了時は review_required / next_owner chatgpt。返却先: ニュース改善API最適化のちゃ、完了コードK8。
+- production Edge deployと診断read-backは別承認。K8がコード受入れ後に検討。
+
+## Report
+
+（G8が実装後に記入）
+
+---
+
+## Preserved prior G8 TASK / Reports / evaluations — DO NOT EDIT history below
+
 # Claude Task G8 — 日本の一般重大ニュース＋金融ニュース網羅強化 Phase J0（取得→アプリ到達監査と次段実装設計）
 
 - task_id: news-improvement-a-jp-general-major-financial-coverage-j0-g8-20261012
