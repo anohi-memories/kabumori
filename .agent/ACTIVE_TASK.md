@@ -120,14 +120,15 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: done
 - task_id: kabumori-g2-pr143-live-mergeability-diagnosis-20261012
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: none
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
 - recommended_model: Sonnet5（高）
+- superseded: CANCELLED_UNSTARTED per user request; replacement new task in F2 / L2. Old G2 must not start.
 - allocation: User explicitly authorized source-only merge PR143→149→158. Fresh GitHub PR143 now mergeable=false despite no filename overlap with main advancement (PR155 .agent_v2). Narrow read-only G2 independent worktree diagnosis to distinguish actual source conflict vs GitHub metadata; NO merge, production, branch rewrite. Return K2 for merge continuation.
 ## Claude G3
 - owner: claude
