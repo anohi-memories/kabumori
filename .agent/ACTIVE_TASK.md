@@ -224,15 +224,15 @@
 ## Claude G10
 - owner: claude
 - slot: claude-10
-- status: idle
-- task_id: none
+- status: in_progress
+- task_id: agent-v2-dual-slot-migration-20261012
 - start_code: G10
 - finish_code: K10
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_10.md
 - report: .agent/tasks/CLAUDE_TASK_10.md#report
-- allocation: 未割当（2026-10-11追加）。用途を固定しない予備枠。ユーザーまたはChatGPTの明示割当時だけ使用し、idleだけで作業開始・自動投入しない。
-- recommended_model: none
+- allocation: 2026-10-12 ユーザーがチャットで直接提示・明示承認しClaudeが登録。新旧30枠の段階移行用に `.agent_v2/` 新15枠基盤（F1〜F10/L1〜L10、J1〜J5/V1〜V5）・旧.agent完全snapshot・MANIFEST/SHA256・HISTORY_INDEX・移行ルールを別系統で構築し、Draft PRまで。旧G/H TASK・Report変更、merge、deploy、production操作は禁止。
+- recommended_model: Opus5.5（高）
 
 ## Deferred
 
