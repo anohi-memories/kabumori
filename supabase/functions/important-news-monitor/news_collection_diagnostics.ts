@@ -22,7 +22,7 @@ export type BreakingMarketQueryRunDiagnostic = {
  * JP official lane counters of one run (J1-a). Counters only: no ids, urls, titles, bodies or error text. `skipped` /
  * `drops` are reason -> count maps whose keys come from a fixed vocabulary in the lane code; anything that does not look
  * like such a key is folded into "other" and the number of keys is bounded, so a bad reason string can neither leak nor
- * grow the stored JSON.
+ * grow the stored JSON. Counts saturate at 1,000,000.
  */
 export type JpOfficialRunDiagnostic = {
   enabled: boolean;
@@ -37,23 +37,38 @@ export type JpOfficialRunDiagnostic = {
 };
 
 const MAX_REASON_KEYS = 40;
+const COUNT_CAP = 1_000_000;
 const REASON_KEY = /^[a-z0-9_]{1,64}$/u;
+const OVERFLOW_KEY = "other";
 
 function count(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.min(Math.trunc(value), 1_000_000) : 0;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.min(Math.trunc(value), COUNT_CAP) : 0;
 }
 
+/**
+ * reason -> count, at most MAX_REASON_KEYS keys INCLUDING the overflow key "other". Keys that do not look like a reason
+ * (and a literal "other") are folded into "other". When more than 40 valid keys exist, the 39 with the largest counts are
+ * kept (ties by key, so the result does not depend on input order) and the rest are folded into "other". Every sum
+ * saturates at COUNT_CAP: a saturated count means "at least this many", never a wrapped or larger number.
+ */
 function reasonCounts(input: unknown): Record<string, number> {
-  const out: Record<string, number> = {};
-  if (typeof input !== "object" || input === null) return out;
-  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-    const safe = REASON_KEY.test(key) ? key : "other";
-    if (!(safe in out) && Object.keys(out).length >= MAX_REASON_KEYS) {
-      out.other = (out.other ?? 0) + count(value);
-      continue;
-    }
-    out[safe] = (out[safe] ?? 0) + count(value);
+  if (typeof input !== "object" || input === null) return {};
+  const valid = new Map<string, number>();
+  let overflow = 0;
+  for (const [key, raw] of Object.entries(input as Record<string, unknown>)) {
+    const value = count(raw);
+    if (REASON_KEY.test(key) && key !== OVERFLOW_KEY) valid.set(key, Math.min(COUNT_CAP, (valid.get(key) ?? 0) + value));
+    else overflow = Math.min(COUNT_CAP, overflow + value);
   }
+  const ranked = [...valid.entries()].sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0));
+  const keepAll = overflow === 0 && ranked.length <= MAX_REASON_KEYS;
+  const kept = keepAll ? ranked : ranked.slice(0, MAX_REASON_KEYS - 1);
+  if (!keepAll) {
+    for (const [, value] of ranked.slice(MAX_REASON_KEYS - 1)) overflow = Math.min(COUNT_CAP, overflow + value);
+  }
+  const out: Record<string, number> = {};
+  for (const [key, value] of kept) out[key] = value;
+  if (overflow > 0) out[OVERFLOW_KEY] = overflow;
   return out;
 }
 
