@@ -49,17 +49,17 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: review_required
+- status: done
 - task_id: kabumori-pr149-broadcast-fanout-push-security-review-h2-20261012
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: H2 completed ONE source-only independent review of Draft PR149 exact31c509df on protected PR143889ca1b4, verdict CHANGES_REQUIRED / PRODUCTION_NO_GO. Six reproduced P2: feedOFF afterenqueue still sends; source-age cutoff replaced by queue-age; token91 silently dropped; legal16parallel burst640; opt-in UUID range expands beyondchunk bound; malformed same-count tickets retry ambiguous outcome. Typed44 focused +8 independent repro/control probes, localPG ACL/races/rollback/10k/100k +19mutants PASS; broader1669 G2-reported only. Report main commit5bcbc6e6 read-back, TASK31a31076; prior history protected. Product source/merge/deploy/liveAPI/Expo/production0; ownPG stopped. Return C2 to G2; no G2 reservation or production authority.
-- recommended_model: Sol（高）
+- allocation: C2 2026-10-12 accepted H2 PR149 independent Sol（高） source-only review: CHANGES_REQUIRED P2 six reproduced R1–R6 (feed OFF, source freshness, 91st device, 16parallel burst640, plan1→begin61, malformed ticket retry). H2 ran Deno typed44 and 8 adverse, disposable PG17 ACL/concurrency/scale+19 mutants, review production/PR source writes0. G2 narrow repair TASK assigned, no blanket rereview. H2 done/next_owner none; C2 Report history unchanged, no live Expo/DB/merge/deploy.
+- recommended_model: Sol（高） (completed)
 ## Codex H3
 - owner: codex
 - slot: codex-3
@@ -117,15 +117,15 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: kabumori-market-report-scalable-broadcast-push-v1-20261012
+- status: ready
+- task_id: kabumori-pr149-h2-r1-r6-bounded-fixes-g2-20261012
 - start_code: G2
 - finish_code: K2
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 2026-10-12 accepted PR149 exact head 31c509df1c08ecc437ca4b70541284f223c836e2 stacked on protected PR143 exact 889ca1b44cf82bd3ecb913818dca568456849feb: PASS_SOURCE_CANDIDATE_REVIEW_REQUIRED / PRODUCTION_NO_GO. 17 paths 1 commit source-only, dedicated broadcast PG/Edge (500-user chunk/4 parallel/300 msg-sec cap), opt-in/Fact/late worker unknown/dedup, separate from existing push important-news queue, app market report notification deep-link and off-by-default runbook; G2 reported PG17 local 10k/100k simulations + 19 mutant detection and 1,669 Deno/app runtime tests PASS; ChatGPT inspected source and current PR heads, not independently rerun. Simulated 1万 ~0.7min/10万 ~7.5min at300msg/s; NOT live/receipts. Vercel build-rate-limit not green. H2 Sol（高） risk-focused independent review assigned. G2 slot released/no immediate correction until C2. PR149/PR143/PR141 UNMERGED, no DB/Cron/Edge/Expo/paid/API/prod application.
-- recommended_model: Opus5.5（高） (completed)
+- allocation: C2 H2 2026-10-12 CHANGES_REQUIRED P2×6 on PR149 exact head 31c509df1c08ecc437ca4b70541284f223c836e2 stacked on untouched PR143 889ca1b44cf82bd3ecb913818dca568456849feb. Fix ONLY H2 Report six reproduced conditions: (R1) feed OFF before begin must suppress push, (R2) freshness from source completion not queue creation, (R3) >90 devices silently truncated but marked sent, (R4) legal16 chunks t=0 burst640, (R5) plan1→begin61 after opt-in violating chunk boundedness, (R6) malformed matchingcount Expo tickets incorrectly retry vs unknown. G2-only PR149 changes/repro-focused localPG/Deno tests, review six-delta at K2, do not re-run entire 1669 tests/broad review by default. Source-only/PR149 OPEN/Draft/no merge, prod NO_GO, PR143/PR141/other slots protected. H2 review completed, H2 slot freed. Return K2 here.
+- recommended_model: Opus5.5（高）
 ## Claude G3
 - owner: claude
 - slot: claude-3
