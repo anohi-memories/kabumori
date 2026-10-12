@@ -3,8 +3,8 @@
 - task_id: news-improvement-a-jp-general-major-financial-coverage-j0-g8-20261012
 - owner: claude
 - slot: claude-8
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G8
 - finish_code: K8
 - return_to: ニュース改善API最適化のちゃ
@@ -73,6 +73,11 @@
 14. 成果を `docs/news-coverage/JP_GENERAL_FINANCIAL_COVERAGE_J0_20261012.md`（実測可観測なfunnel＋missing reasons＋既存設計との矛盾＋source rights matrix＋次J1案）へ保存。J0 offline harness/fixturesはあれば各変更ファイル一覧。推奨J1実装は「権利OKの国内速報信号をshadowのみ追加」「必要時だけWeb補完」「アプリ一覧/市場全体の表示判定改善」の**3本を競合しない順番**に分割し、優先順位・対象ファイル・必要承認・tests・費用ガードを具体化。将来の広域ニュース計画をG8 TASK内に保留メモとして置き続けず、正式な設計文書へ切り分ける。
 15. git diff --check・必要なDeno tests/check/lint・source rights scan・secret scanと、PR129/PR116/G9/他slotへの変更0を確認。G8専用J0のbranchへcommit/pushは可能（安全な独立worktreeがある場合のみ）。新Draft PRは必要なら作成提案だけでよい；既存PR129へのcommit/rebase/mergeは禁止。
 16. 完了時は本TASK末尾の`## Report`に task_id, result, baseline_window, source_candidates, rights_clearance, delivery_funnel, gap_reasons, benchmark/tests, changed_files, commit_hash, branch, push, merge, deploy, remaining_issues, safety_checks, recommended_J1_TASK, next_recommendation を記録。status`review_required`/next_owner`chatgpt`として**K8を「ニュース改善API最適化のちゃ」へ返す**。意図的に未確認の権利・本番有効化条件はBLOCKED/要承認とする。
+
+## K8 evaluation — 2026-10-12 JST
+- PASS_SOURCE_DESIGN / PRODUCTION_HOLD: J0 design and offline harness accepted; production funnel NOT_VERIFIED, tests 6 PASS reported by G8 only.
+- Commit d0be8977, six J0-only paths; no deployment/merge or paid API.
+- Next J1-a requires separately assigned G8 task.
 
 ## Report
 
