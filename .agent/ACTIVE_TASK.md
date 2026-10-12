@@ -174,17 +174,17 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: review_required
+- status: done
 - task_id: common-ai-provider-g6-f1-f2-timeout-tests-stability-20261012
 - start_code: G6
 - finish_code: K6
-- next_owner: chatgpt
-- latest_result: PASS_OFFLINE — Draft PR #162 (93de927a, stacked on unchanged #157): F1/F2 test-only timeouts 6 s / 6.5 s guarded against execute's 5 s attempt window; integrated fresh main + stack before 3/75 and 9/75 DEADLINE_EXCEEDED flakes, after 0/50 each; provider 126 / report 313 / _shared 629 x3 / personalized 129 / X 10 / data-packet 42; deny-net 73; merge-tree vs fresh main clean for #148/#157/#162; PR148 GitHub mergeable now unknown (stale base), not false; production NO_GO, production=0, paid calls=0. Report: .agent/tasks/CLAUDE_TASK_6.md
+- next_owner: none
+- latest_result: K6 ACCEPTED PASS_PREMERGE_QA / PRODUCTION_NO_GO — Draft PR #162 (93de927a, stacked on unchanged #157): F1/F2 test-only timeouts 6 s / 6.5 s guarded against execute's 5 s attempt window; integrated fresh main + stack before 3/75 and 9/75 DEADLINE_EXCEEDED flakes, after 0/50 each; provider 126 / report 313 / _shared 629 x3 / personalized 129 / X 10 / data-packet 42; deny-net 73; merge-tree vs fresh main clean for #148/#157/#162; PR148 GitHub mergeable now unknown (stale base), not false; production NO_GO, production=0, paid calls=0. Report: .agent/tasks/CLAUDE_TASK_6.md
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
 - report: .agent/tasks/CLAUDE_TASK_6.md#report--f1f2-test-stabilityg6記入
 - recommended_model: Sonnet5（中）
-- allocation: Prior 4PR premerge QA K6 CHANGES_REQUIRED_TEST_ONLY: G6 reported merge-tree clean at fresh main but shared test628/629 and F1/F2 load flake. Fix only two G6-owned tests on NEW stacked Draft PR after PR157; protect PR148/150/153/157 and G2 V1 PR143/149/158 branches. Run repeated offline tests and fresh main merge-tree recheck. All production/paid/merge/deploy forbidden.
+- allocation: K6 completed; G6 unreserved. Prior 4PR premerge QA K6 CHANGES_REQUIRED_TEST_ONLY: G6 reported merge-tree clean at fresh main but shared test628/629 and F1/F2 load flake. Fix only two G6-owned tests on NEW stacked Draft PR after PR157; protect PR148/150/153/157 and G2 V1 PR143/149/158 branches. Run repeated offline tests and fresh main merge-tree recheck. All production/paid/merge/deploy forbidden.
 - production_mutation_window: FORBIDDEN
 
 ## Claude G7
