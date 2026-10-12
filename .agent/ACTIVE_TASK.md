@@ -154,16 +154,16 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: done
-- task_id: common-account-phase3i-local-findings-safe-lifecycle-plan-20261012
+- status: ready
+- task_id: common-account-phase4-core-end-to-end-implementation-20261012
 - start_code: G5
 - finish_code: K5
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: K5 2026-10-12 PASS_OFFLINE_DESIGN / READY_FOR_OFFLINE_IMPLEMENTATION_LIMITED / MANAGED_RELEASE_HOLD. Verified Draft PR147 38051f023bfd150f29829a075b6f87fa7c1e3e5f, 1 commit, 8 new design/model/test files, OPEN/DRAFT/UNMERGED, previous G5 PR heads unchanged. G5 reports 32 Deno and 32 mutation checks PASS, ChatGPT inspected source without independent test rerun. U1 Storage policies, U2 actual boundary implementation, U3 managed roles/audit and cross-service same-time verification unproven. No managed/paid/photo/production actions or PR merge; E11, Option D, managed_auth_delete and IDP_PREPAUSE all BLOCKED. Task completed; no next G5 reservation. Future bounded B1 PostgreSQL lock-order offline proof recommended. Other slots protected.
-- recommended_model: Opus5.5（高） (completed)
+- allocation: User 2026-10-12「そのほうがいい！全然実装が進んでないから テストばかりにトークン消費させてては時間もトークンももったいないよ」。G5 Phase4 IMPLEMENTATION-FIRST: complete G5-owned backend shared Auth ID + per-app entitlement and idempotency, B1/B2 locked status guard, practical bounded delete/freeze/reconcile implementation or explicitly blocked interface, connection contracts. NO further documents-only/synthetic-model-only or repeated review loops. Only focused local tests; no other slot worktree/source changes. Prior G5 PR heads immutable, new independent G5 branch and draft PR source implementation. Photos/managed auth/prod unchanged; E11 Option D and managed_auth_delete BLOCKED. At K5 decide one focused Sol高 review for high-risk source. 
+- recommended_model: Opus5.5（高）
 ## Claude G6
 - owner: claude
 - slot: claude-6
