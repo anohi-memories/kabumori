@@ -1,3 +1,69 @@
+# G4 CURRENT TASK — POSTONA Threads実接続に向けたモバイルOAuth配線＋T10接続アダプター実装（G5待ちせず）
+
+- task_id: postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012
+- owner: claude
+- slot: claude-4
+- status: ready
+- next_owner: claude
+- start_code: G4
+- finish_code: K4
+- return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
+- recommended_model: **Opus5.5（高）**
+- priority: high
+- type: **実装中心 — アプリ・Edgeの正規OAuth入口/コールバック配線 + Threadsプロバイダ専用T10 cleanup adapter（G5-owned integrationを触らず）。コードと実動導線を作る。調査・設計・模擬テストのみで終わらせない。**
+- user_goal: **本人のPOSTONAからThreadsを接続→1件テキスト投稿できる状態を一日でも早く作る。G5 Phase4の完了を待たずG4が自分の所有範囲を先に実装。**
+- owner_scope: G4-specific mobile connect/reconnect/callback, new Threads-connect Edge glue and provider-specific non-X cleanup adapter/contract, strictly G4-owned source only
+- approved_writes: **独立G4 source branch + draft PR + mock/test fixture + G4 TASK/Report and ONLY G4 ACTIVE_TASK block/CURRENT_STATE relevant entry**
+- forbidden_writes: **G5 account-delete / lifecycle / entitlement / Auth implementation, H5 PR139 original SQL/runtime files, PR124/135/140/144 original branches/files if owned by another worktree, G3 schedule/X code, production DB/Auth/Edge/Vault/Meta settings, feature flag enable, PR merge, deploy, EAS, paid API, actual Threads or X posting, any real provider call/secret retrieval**
+- current_real_release_gate: **HOLD**; all 4 Threads connect/publish mobile/server static gates false, Edge runtime default 503, no public network write or managed auth experiment from this task
+- previous_K4: PR144 `09fd2c49114b7d26c23b71a3084574dc6a5a7ad6` one P2 session-row lock fix accepted PASS_SOURCE_FIX / REAL_PILOT_HOLD
+- G5_interface_status: PR152 `5ad5bb40cadf013f00553acd5509f4f74fdbff7c` SOURCE CANDIDATE, `review_required`/K5 pending at assignment, **not production-applied and NOT final G5 contract**. Never assume it merged.
+
+## Boundaries and protected baselines
+
+At 2026-10-12 assignment, exact protected open Draft heads:
+- POSTONA PR144 (G4 integrated connect/publish) `09fd2c49114b7d26c23b71a3084574dc6a5a7ad6`, stacked on PR140 `2e75a6a842e70f3de78558681803b60935fb4251`. PR140 source is G4's publisher and must be preserved.
+- G4 Threads OAuth SQL candidate PR124 `c30f246409a77080cbc03aef6c4cb72b5481e125` → Codex H1 PR135 `e38788d6677082138f0990453c7d2f00549666d0` → H5 authenticated runtime candidate PR139 `b4fa672f97592e87682671454e868a92098cbd56` (protected; no changes to original H5 files).
+- G5 shared account T13 PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`, Phase4 G5 PR152 `5ad5bb40cadf013f00553acd5509f4f74fdbff7c`, both G5-owned and open Draft. G5 K5 in separate chat. G5 provider cleanup port `supabase/functions/account-delete/provider_cleanup.ts` contains `ProviderCleanupAdapter` with `provider/hasConnection/cleanup`; **PR152 registers ZERO concrete provider adapters**, so G4 must implement provider-side code without changing G5 port/registration.
+- G3 X/AI scheduling and app `schedule.tsx` owned by G3; POSTONA app owns distinct `apps/social-mobile/src/features/threads-connect/**` and `src/domain/threads-connect.ts` already includes a disabled starter and `threadsCallbackForward`; connect screen `accounts/index.tsx` and `accounts/[id].tsx` already display disabled Threads card. The app already has `expo-web-browser`, `expo-linking`, `@supabase/supabase-js` dependencies and `useAuth` / `@/lib/supabase` pattern in Threads manual publisher. Build on it; don't add unnecessary packages.
+- PR144 G4 manual publisher `social-mobile-threads-publish` server/HTTP, account token expiry custody candidate and release SQL are G4-owned but already K4 accepted source-only; **do not reopen broad changes**. Production setup and GoTrue/owner-role proof belong later.
+
+## Start preflight (must be real)
+
+1. Read `PROJECT_RULES.md`, `AGENTS.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, this G4 TASK + prior K4 Report, G5 latest TASK/Report/PR152, H5 C5 source/Report, PR144/140/139/135/124/121. Fresh-fetch `origin/main`, exact current PR heads, real `git status`, `git worktree list`, current file ownership, any uncommitted cross-slot changes. STOP if refs or G5 interface unexpectedly changed; first reconcile and report. Ensure independent clean G4 worktree and unique dev/SQL ports; no shared worktree/dev server restarts or reset/rebase.
+2. Prefer **NEW independent G4-only branch from protected PR144 exact HEAD**, new **Draft stacked PR with BASE the PR144 branch**, leaving the original PR144 / #140 / #139 / #152 heads entirely unchanged. This avoids editing previously accepted source PR; submit only the G4-owned new source delta. Existing G4 worktree may be attached to PR144: create a separate G4 integration worktree/check-out safely; do not reset, checkout, stage or modify the prior one. If any PR/base/worktree conflict, STOP rather than force push.
+3. For cross-PR imports (H5 runtime only exists in protected unmerged PR139, G5 port only in PR152), **do not silently copy/duplicate secured OAuth source** into your production branch and do not add dangling runtime imports that break main or enable live code. Own a narrow typed adapter/port in G4 source that composes with the current exact H5/G5 interface and validates it in a disposable G4-only combined checkout; when not linked, production must fail closed. Record exact missing owner import/migration/role prerequisite for later integration.
+
+## Required implementation (do not return a memo-only TASK)
+
+### A. Real app-facing Threads connect/reconnect client and HTTPS callback handoff
+
+- Turn existing `disabledThreadsConnectStarter` interface into a **real, injectably testable `ThreadsConnectStarter` implementation** under G4's `apps/social-mobile/src/features/threads-connect/**` + `domain/threads-connect.ts` / accounts screens. Follow existing `useXConnect`, `useThreadsManualPublish` patterns and Expo `expo-web-browser`/Linking. Keep actual user-facing button gated OFF by `THREADS_CONNECT_UI_ENABLED=false`, **but source must contain fully working authenticated request/response and browser/callback handling, not just another disabled placeholder**.
+- From POSTONA's own authenticated `useAuth` access token, request H5 `threads-oauth-connect-user` server `start` (exact API envelope from its runtime contract), validate server authorization URL/allowed Meta origin, bind return to that exact current signed-in user/session and selected Threads account for reconnect (not an arbitrary client-supplied subject), launch official Meta OAuth browser safely; handle cancel, timeout, duplicate taps, account switch, app background/resume, expired session, browser redirect, and callback exactly once. Validate registered HTTPS callback origin/path and strict URL query via `threadsCallbackForward`; **never parse/store/log/send raw Meta code/state except forwarding the exact received callback URL only to the server with the person's current verified bearer**. Avoid arbitrary URL open/redirect.
+- Only after server-side success + verified read-back of the account (via normal RLS snapshot refresh) may UI say “接続済み”; never trust browser URL or mock response alone; `publishEnabled` stays false until the user separately grants it. Clearly show connection in progress / canceled / expired / failed / completed. Existing X connect and G3 scheduler unaffected. If HTTPS app link association or registered callback is not configured, fail closed with a precise disabled/unavailable state; do not switch gate ON in this PR.
+
+### B. G4-owned Connect→H5 runtime server composition contract (source only)
+
+- Implement the smallest **non-deployed G4-owned Edge integration helper / source adapter** that defines/verifies request and response shapes for `start` and authenticated `callback`, enforces same principal/session and narrow allowed redirect, and can compose with H5 PR139 owner transport in a separate disposable integrated source checkout. Keep feature disabled and no real network credentials. H5 source still missing a real dedicated owner SQL connection factory and managed row-lock proof; do not invent a `service_role` proxy or fake owner credentials. If H5 server entry remains statically 503, clearly mark live backend BLOCKED while client/contract code can be complete. Do not change original H5 PR139 or any G5 Auth files.
+- Ensure rejection/missing-transport/malformed URL/provider OAuth error response are safe fixed codes; tests must prove no token, code, state, userId, SQL credentials, Meta app secret or attestation key leaked in app logs/errors. Browser-only success ≠ connected.
+
+### C. G4-only concrete Threads T10 provider cleanup adapter for G5 Phase4 port
+
+- Implement a real **Threads-specific adapter implementation**, structurally compatible with G5 Draft PR152 `ProviderCleanupAdapter`: `provider: 'threads'`, `hasConnection(userId)`, `cleanup(userId)`. Put in NEW provider-owned G4 source/module path; **do NOT edit `supabase/functions/account-delete/provider_cleanup.ts` or `lifecycle_logic.ts` (G5 owner)**. Use an injected narrowly-privileged DB/credential-removal port; no client-supplied userId as sole authority and no cross-user/brand/X token operations. Account deletion/freeze lease and G5 caller ownership must be verified by the eventual G5-owned registration. No provider-remote revocation claims without official confirmation.
+- Cover local removal footprint: Threads social account and dedicated Vault token, new G4 `social_account_manual_publish_permissions`, `threads_manual_publish_attempts`, `threads_manual_publish_nonces`, `threads_account_credential_custody`; avoid treating in-flight `publishing`/`creating_container` attempts as “not posted”. If provider call result unknown, outcome **reconciliation_required** and never auto-retry/repost. If no safe SQL authority route is available, implement the precise source-only transaction/SQL adapter candidate that fails closed and clearly report the narrow G5 integration/privilege condition rather than fabricating a functioning privileged DELETE. Deliver runnable local fake/disposable PG tests for actual owned cleanup logic, not documentation only.
+- Return exactly allowed G5 outcomes `confirmed_remote_revoked | local_removed_remote_unverified | reconciliation_required | blocked`; do not report confirmed revoked if Threads does not provide verifiable revocation. G5's PR152 policy for `acceptRemoteUnverified` and frozen deletion is respected. **Do not register adapter inside G5's files** until separate owner/G5 review and authorization.
+
+### D. Fast focused smoke and implementation handoff (avoid token-burning test loops)
+
+- Only focused NEW app tests for start/cancel/callback/foreign user/account change/invalid URL, Edge request shape, double callback, secret no-log, T10 footprint/reconciliation and protected negative controls; re-run changed-file TypeScript/check and corresponding focused Deno/PG. Existing broad G4 176, app 258 and G5 80+ suites are already on record: **do not mechanically rerun all unmodified suites**. Skip unavailable local PG honestly; record RUN/PASS/FAIL/NOT_RUN and reasons. Check `git diff --check`, import/flags false, secret scan, changed paths ownership.
+- Draft stacked PR must contain tangible **source code**: authenticated Expo login web flow, callback handoff, G4 server contract and concrete Threads cleanup adapter; not just more typed stubs or mock tests. Keep accepted PR144/139 source immutable. If integration cannot source-compile due to separated ancestor branches, use independently reproducible disposable composite smoke and report precise owner dependency. Do not claim real Meta flow passed when all static gates still OFF.
+- Concise required handoff matrix: (a) G4 completed actual app server glue + account cleanup adapter source; (b) G5 Phase4 K5 and one independent Sol（高） high-risk review needed before G5 owner-side adapter registration/T13/T10 final wiring; (c) H5 owner runtime dedicated role/session lock/custody completion and callback Edge must be wired with verified source; (d) operator Meta developer app, HTTPS callback verified association, Threads tester, scopes `threads_basic`/`threads_content_publish`, secrets outside chat/repo, deployment approvals. Avoid another design-only G4 cycle; be honest about which exact user-touchable actions remain impossible with false gate.
+- Completion: new Draft PR + exact commit/head/base, changed_files/tests and safety/remaining_issues documented in a NEW top `## Report` in THIS G4 task (preserve full previous task/report history literally); after remote PR and read-back, update only G4 TASK + G4 ACTIVE block to `review_required/next_owner:chatgpt`; return to **POSTONA｜マルチSNS化・開発統括（G4）のちゃ** via **K4**. No real system actions, merge, deploy, migration apply or public Threads post.
+
+---
+
+## Preserved previous G4 TASKs / K4 acceptance and Reports (historical, read-only)
+
 # G4 CURRENT TASK — POSTONA PR144 C3-R1 session-expiry race narrow fix（SOURCE ONLY）
 
 - task_id: postona-threads-pr144-c3-r1-session-expiry-lock-fix-g4-20261012
