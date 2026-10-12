@@ -94,17 +94,17 @@
 ## Codex H5
 - owner: codex
 - slot: codex-5
-- status: done
-- task_id: postona-threads-oauth-runtime-bridge-h5-20261011
+- status: ready
+- task_id: postona-h5-threads-auth-owner-runtime-final-wiring-20261012
 - start_code: H5
 - finish_code: C5
 - completion_code: C5
-- next_owner: none
+- next_owner: codex
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CODEX_TASK_5.md
 - report: .agent/CODEX_REPORT_5.md
-- allocation: C5 2026-10-11 CHATGPT ACCEPTED PASS_SOURCE_CANDIDATE / RELEASE_HOLD. Exact Draft PR139 head b4fa672f97592e87682671454e868a92098cbd56, OPEN/UNMERGED, one commit 13 entirely new H5 source/test/docs paths stacked on original Draft PR135 exact e38788d6677082138f0990453c7d2f00549666d0. H5 PR reported Deno32 focus/97 combined PASS and fake-PG17 concurrency/ACL/parent integration PASS; tests not independently rerun. Auth+owner SQL state claim candidate implemented but effective production DB owner transport/session privileges/Meta/GoTrue/Vault/T13/T9/T10/mobile callback not proven; new Edge returns 503, static gate false. This C5 was independently recorded by ChatGPT from verified PR/source after Codex Report had NOT been synced; .agent/CODEX_REPORT_5.md explicitly distinguishes assessment authorship. No merge/deploy/real connection/post, no H5 park. H5 now done/unreserved; H1-H4/G1-G10 unaffected, future focused Sol（高） security review required only at integrated release gate.
-- recommended_model: Sol（高） (source candidate completed; C5)
+- allocation: User 2026-10-12 “つぎいこう”, continuing toward 1 real authorized POSTONA→Threads test post. **臨時実装**, Codex Sol（高）, prior user explicitly permitted H5 when needed; ChatGPT deemed Codex appropriate because H5 owns PR139 verified Auth/owner SQL/OAuth state source while G5 G5 Phase4 repair is independently ready and G4 PR154 source is finished. H5 source NEW independent H5 branch stacked on PR139 exact b4fa672f97592e87682671454e868a92098cbd56; original PR139/135/124 unchanged, G4 PR154 98287392327eabfd5092a3ba89dde51a2e8beff6 and G5 PR152 5ad5bb40cadf013f00553acd5509f4f74fdbff7c protected. Build REAL server-side Supabase SDK getClaims/getUser verifier composition, dedicated non-super TLS parameterized owner Postgres connector, H5-owned auth.sessions FOR SHARE revocation race correction and local dual-session regression, same-transaction account-token-expiry custody port compatible with G4 PR144, fail-closed edge start/callback server composition contract with G4 module via disposable overlay. New code/test source and focused Deno/PG proof required, not memo-only. Existing H5 Edge must remain 503 and ALL Threads publish/connect source/mobile gates FALSE; NO production Auth/DB/Meta/Vault/API/SQL grants/deploy/merge/real connection/post, no paid call. Never fake session claims/service_role grants, never edit G5/G4/G3/H1-H4 source/slot files, no shared worktree. Actual operator Meta/callback/owner credentials remain separate authorization. Return C5 to POSTONA G4 chat; independent Sol（高） reviewer from H1–H4 before live activation, H5 cannot self-review.
+- recommended_model: Sol（高）
 ## Claude G1
 - owner: claude
 - slot: claude-1
