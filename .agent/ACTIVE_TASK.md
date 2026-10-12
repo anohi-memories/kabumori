@@ -78,17 +78,17 @@
 ## Codex H4
 - owner: codex
 - slot: codex-4
-- status: ready
+- status: done
 - task_id: common-account-g5-phase4-pr152-pr121-security-review-h4-20261012
 - start_code: H4
 - finish_code: C4
 - completion_code: C4
-- next_owner: codex
+- next_owner: none
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CODEX_TASK_4.md
 - report: .agent/CODEX_REPORT_4.md
-- recommended_model: Sol（高）
-- allocation: G5 Phase4 Draft PR152 head 5ad5bb40cadf013f00553acd5509f4f74fdbff7c と依存Draft PR121 head 76b50e1e03f82faaa3460bab1603afa8fef3ce44 の安全性・権限・ロック・退会を独立1回重点レビュー。READ ONLY、他slot不干渉、本番/merge/deploy禁止。過去H4 PR129完了履歴はH4 TASK/Reportに保持。
+- recommended_model: Sol（高） (completed)
+- allocation: C4 accepted CHANGES_REQUIRED P2×2 (R1 provider lease ownership check across await; R2 rollback dependency on foreign service triggers). Source SQL/auth/freeze/races E2E candidate PASS offline, production hold. One G5 limited correction recommended, no additional full H review automatically.
 
 ## Codex H5
 - owner: codex
