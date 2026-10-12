@@ -1,3 +1,56 @@
+# Claude Task G8 — PR #129 最小リリース安全装置：新本文取得の独立OFFスイッチ（R5）
+
+- task_id: news-improvement-a-pr129-release-safety-env-switches-g8-20261012
+- owner: claude
+- slot: claude-8
+- status: ready
+- next_owner: claude
+- start_code: G8
+- finish_code: K8
+- return_to: ニュース改善API最適化のちゃ
+- recommended_model: Sonnet5（高）
+- scope: ニュース改善A/G8専任。PR129の新規Fed本文取得と決算短信facts自動生成を**別々に安全停止**できる最小実装+回帰テストのみ。他案件・G9・ほかG/H枠へ引継ぎ禁止。
+- PR: https://github.com/anohi-memories/kabumori/pull/129
+- reviewed_head: 0a2df248f6e49bcb1bfea690f38064c93e5f895c
+- preceding_qa: news-improvement-a-pr129-premerge-offline-integration-qa-g8-20261012 (source MERGE_CANDIDATE)
+- forbidden: merge, deploy, production env change, production DB/Edge, secrets, Cron, API/model/provider, schema/RPC/migration, paid AI, external live Fed/TDnet, non-G8 worktrees/tasks, unrelated code
+
+## 背景（今回のK8判断）
+
+前G8 R4 source-only QAは latest当時の main `cdb066fa...` + PR129 head `0a2df248...` で `git merge-tree --write-tree`と一時checkoutの`git merge --no-commit --no-ff`が**衝突0**、QA checkoutで重要ニュース761/抽出34/discovery+observer162/shadow20（加えてshared ai_provider94）すべてPASSを報告。GitHubでPR129 OPEN/Draft/unmerged、HEADは同SHA、Netlify Preview success、Vercel build-rate-limitによるfailureを確認。mainはその後 `26d6921667701027033c1ea9d2cc67a31617b45b`に前進したがQA-mainとの変更ファイル交差は0、GitHub mergeable表示は現在UNKNOWN（過去MERGEABLEを確定値扱いしない）。
+
+既存H4指摘3件R1/R2/R3はG8 R3で修正、R4の回帰PASS。**新たな誤Factの再発指摘ではない**。ただしPR129は本番にdeployされると新規Fed声明本文とTDnet決算factsが即時有効で、安全にOFFにする環境変数がない。PR116（固定merge commit `a26e4365ebcb701491629892e8bae207d28833c2`）の2026-10-13 JST朝8時前production Edge反映は別工程。PR129はそこへ混入禁止、PR116本番作業のworktree `/Users/yuya/Developer/kabumori-pf`保護。
+
+## 今回の限定実装
+
+1. `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, G8 TASK/Report、PR129最新head、fresh main、既存worktree・未commit変更・競合対象を最初に確認。G8専用独立worktree/checkoutで作業し、他slotのbranch/server/worktreeには触れない。
+2. **Fed公式声明本文取得のみ独立ゲート**: 推奨env `IMPORTANT_NEWS_FED_STATEMENT_BODY_ENRICHMENT=enabled` の時だけ、`important-news-monitor/index.ts` fed元候補への`storedStatementStates`/`enrichFedStatementCandidates`/`fillMissingCandidateBody` の新規処理を動かす。未設定/空/typo/disabledなら新規Fed本文取り出し・更新を一切行わず、**従来のFed RSS候補処理は保つ**。Fed以外の公式source、既存市場macro/JP official/breaking/trigger分岐は変えない。disabled pathで追加read/write/fetchが増えないようにする。
+3. **TDnet決算短信factsの別ゲート**: 推奨env `IMPORTANT_NEWS_TDNET_KESSAN_FACTS=enabled` の時だけ `official_source_fetchers.ts` の新しい `composeTdnetPdfBody` / `assessKessanBody` を評価。OFFなら既存の `buildTdnetBodySummary(text)` が従来通り返され、PDF取得数・fetch制限・source policy・非決算の汎用要約・失敗時スキップを改変しない。PDF取得自体まで無効化しない（PR129以前のTDnet PDF処理は維持）。新しいFact検証機能だけOFFにする。
+4. **デフォルトOFF / 明示ON / fail closed**: `=== "enabled"` 以外はOFFとする。既存の`IMPORTANT_NEWS_JP_OFFICIAL_LANE`等を参考に命名と環境変数読み取りを最小化。Provider/model/APIキー/DB/Cron/本番envの変更禁止。将来個別ONの選択はこのチャットのちゃとユーザーが別途判断する。コード上に本番OFF手順とON判定をreadmeか短いrunbookに明示（Secrets値は記載しない）。
+5. **OFF既定の回帰**: Deno.env.getをmock/stubまたはプロセスenv安全設定した offline test を追加。Fed独立ON/OFF・Fed statement vs minutes/projections・Fed失敗＆既存候補の更新なし/あり、TDnet 決算facts ON/OFF・非決算 generic・ダッシュ/符号/数字折返し・正常IFRS等。**OFFの旧経路**と**ONのPR129 R3安全機能**を両方確かめる。既存の重要ニュース761、抽出34、discovery/observer162、shadow20等を後退させない。テスト数を正直に報告。R4のsource-only/PR116固定ソースへの影響を説明。
+6. **稼働時の切替注意**: env flagはdeploy済みEdgeの環境として反映されるまで単独では効かない場合がある。切替方法は既存の運用に沿って具体的な手順/可否をread-only調査し、**本番設定変更/Edge deploy/secret writeを実行しない**。OFF時は既存のFed headline-only判断やTDnet旧要約に戻るので、ニュース漏れ/従来数字のあいまいさが消えるわけではないことを記録。
+7. 不要な設計変更・新しいFact抽出・DB待機キュー・再判定backlog・外部API課金・BOJ本文接続は禁止。H4/C4は既にレビュー完了、H4を再レビューに無断再利用しない。ONの場合に突然別DB writeが起きないよう新旧全ての新規更新をゲートできることをテストで確証する。
+8. 安全な状態でのみ既存PR129ブランチ`claude/news-body-integration-phase7-20261011`へcommit/pushしDraft維持、merge/deployしない。競合があればpush停止・報告。
+9. 完了後は`## Report`にtask_id/result/flag_names/default_off/on_behavior/off_behavior/tests/changed_files/commit_hash/push/PR_head/PR_state/remaining_issues/safety_checks/next_recommendationを記し、**K8を「ニュース改善API最適化のちゃ」へ返す**。次K8でflag修正とQAを確認してmerge判断。G8はニュース改善A専任のまま、別案件は一切引き継がない。
+
+## Report
+
+- task_id: news-improvement-a-pr129-release-safety-env-switches-g8-20261012
+- result: not_started
+- tests: not_run
+- changed_files: none
+- commit_hash: none
+- push: not_performed
+- merge: not_performed
+- deploy: not_performed
+- remaining_issues: Fed/TDnet新機能が無条件ON。安全な初期OFFゲート追加。
+- safety_checks: not_started
+- next_recommendation: G8 R5の最小OFFゲート→K8で確認。
+
+---
+
+## Preserved prior G8 Tasks / Reports / Evaluations (immutable history below)
+
 # Claude Task G8 — PR #129 統合・マージ前 Source QA（R4）
 
 - task_id: news-improvement-a-pr129-premerge-offline-integration-qa-g8-20261012
