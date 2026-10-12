@@ -3,8 +3,8 @@
 - task_id: common-ai-provider-g6-four-pr-premerge-offline-qa-20261012
 - owner: claude
 - slot: claude-6
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -33,12 +33,151 @@ Prepare safe next decision for 4 stacked Draft PRs: #148 → #150 → #153 → #
 - Scope boundary with G2: handler.ts/index.ts/shadow_wiring_test.ts PR153 remain G2-owned. If source fix is needed, STOP/K6 for ownership coordination. Don't automatically assign G2.
 
 ## Report — Four PR premerge offline QA (G6)
-- result: NOT_STARTED
-- changed_files: none
-- tests: NOT_RUN
-- merge/deploy/production/paid_calls: 0
-- next_recommendation: G6 → K6
 
+- task_id: common-ai-provider-g6-four-pr-premerge-offline-qa-20261012
+- result: **CHANGES_REQUIRED（軽微・テストだけ・G6 所有）**
+  - 製品のソースに直すところは無い
+  - 4 PR とも最新の main に衝突なく入る
+  - ただし、G6 のテスト2つ（PR148 と PR150）が負荷によって 10〜15% の割合で落ちる。そのため `_shared` 全体の PASS は主張しない
+  - production は **NO_GO** のまま
+- changed_files: なし
+  - 4 PR の branch、製品のソース、ほかのスロットのファイルは変更していない
+  - 書き込んだのは、この Report と ACTIVE_TASK の G6 の欄だけ
+- PR heads（着手時と完了時に確認し、変化なし。すべて OPEN / Draft）
+  - #148 `a71de72b3bcfc88547b616f789df7765283565ed`（base main）
+  - #150 `18d9058aa8bd451f3cd0181f8570a31484750035`
+  - #153 `6c576567328c99a58c2e4beaed86d155fe875769`
+  - #157 `9b952d64a9ec954e74af7e762c9df4e4c2e2f3a5`
+
+### 1. PR148 の mergeable=false の原因
+
+- **再現しない**。衝突の元になるファイルの重なりが無い
+- 4 PR の分岐点は main `41979773237e05b851e374c559244d74f2e1d48d`
+  - その後の main は 137 コミット。`.agent` 以外で変わったのは、アプリの保有銘柄画面の7ファイル（`src/app/(tabs)/explore.tsx`、`index.tsx`、`holdings-section.tsx`、`portfolio-view.ts`、tests 3つ）だけ
+  - 4 PR のパス（`docs/ai-provider`、`_shared/ai_provider`、`market-report-analysis`）に触れた main のコミットは **0**（`git log --full-history` で確認）
+- 4 PR とも `.agent` のファイルを含まない。管理ファイルの衝突も起こらない
+- GitHub の表示
+  - REST API は現在 `mergeable=true`、`mergeable_state=clean`（base.sha `4bdc4e61…` 時点の計算）
+  - `gh pr view` は `UNKNOWN`（再計算中）
+  - main には1〜2分ごとに `.agent` のコミットが入るので、GitHub の値は古いか、計算途中であることが多い
+  - 割り当て時の false は、GitHub 側の一時的な値だったと判断する。ただし当時の値の理由は、GitHub からは確かめられない
+
+### 2. 最新の main との統合の試算（ファイルは書き換えない `git merge-tree`）
+
+| 組み合わせ | main | 結果 |
+|---|---|---|
+| main + #148 | `382fde204e637ddce2af3561744dc2567e96440e` | 衝突なし（tree `848ac662f09347ec323e936c188e053603452409`） |
+| main + 4 PR 全部（#157 の head） | 同上 | 衝突なし（tree `ae2eafccfc22d160cde8fecb401b2903a4c5c20b`）。変わるパスは10 |
+| 完了時の main + #148 | `45489fc305261fd3b74dd6a7f39fb97c418f0e75` | 衝突なし（tree `1f68ff974cf3a63ab2a3ae78122c438ce7870f3d`） |
+| 完了時の main + 4 PR 全部 | 同上 | 衝突なし（tree `236ccd279436cad8c4e357f60f429675186f5547`） |
+
+- `382fde20` から `45489fc3` までは4コミットで、すべて `.agent`。製品のファイルは同じ
+- 変わる10パス
+  - 追加: `docs/ai-provider/PHASE2A_…md`、`PHASE2B_…md`、`_shared/ai_provider/market_report_shadow.ts`・`_test.ts`、`market_report_wiring.ts`・`_test.ts`、`market-report-analysis/shadow_wiring_test.ts`
+  - 変更: `_shared/ai_provider/isolation_test.ts`、`market-report-analysis/handler.ts`、`index.ts`
+
+### 3. テスト（統合した tree `ae2eafcc` で実行）
+
+- 環境
+  - 使い捨ての worktree `/Users/yuya/Developer/kabumori-g6-qa-20261012`（main `382fde20` に `9b952d64` を `merge --no-commit` で重ねたもの。コミット・push はしていない）
+  - deno 2.9.6、macOS arm64
+  - 実通信・鍵・本番は 0
+- 結果
+
+| 範囲 | 結果 |
+|---|---|
+| `_shared/ai_provider` | 126/126 PASS |
+| `market-report-analysis` | 313/313 PASS |
+| `_shared` 全体（`--no-check --allow-run`） | **628/629**。落ちたのは下の不安定なテスト1件 |
+| personalized-reports | 129/129 |
+| x-test-post の共有レポート利用側 | 10/10 |
+| market-report-data-packet | 42/42 |
+
+- 通信禁止（`--deny-net`）と、鍵・設定の環境変数8つの読み取り禁止で、関係テスト5ファイルを実行: 73/73 PASS
+  - wiring、shadow、isolation、shadow_wiring、handler
+- 型チェック（`index.ts`、各テスト）PASS
+- lint
+  - provider は 32 ファイルで問題 0
+  - market-report-analysis は3件あるが、すべて main に元からあるもの（`handler_test.ts:23`、`analysis_test.ts:34`、`analysis_logic.ts:349`）。4 PR で増えた指摘は 0
+- 秘密情報スキャン（4 PR 全体の差分 2,974 行）
+  - 本物の鍵は 0
+  - 一致した1件は、PR148 のテスト用の偽の管理キー（`sk-ant-admin01-NOT-REAL-…`。管理キーの拒否を確かめるためのもの）
+  - 実行時のコードのログ出力は、G2 の handler の `emitLine` だけ。識別子と数値に絞った記録を出す
+
+### 4. 指摘（CHANGES_REQUIRED の内容）
+
+- **F1（G6・PR148）** `market_report_shadow_test.ts:316`
+  - `timeoutMs: 1_000` の時間切れのケースが、並行4本の負荷で **3/20 回** 失敗した
+- **F2（G6・PR150）** `market_report_wiring_test.ts:394`
+  - `deadlineInMs: 1_500` のケースが **2/20 回** 失敗した。統合した `_shared` 全体の1回目の実行でも失敗した
+- 原因は共通で、どちらも `DEADLINE_EXCEEDED` / `no_request`（送る前に止まる）
+  - 中核の `execute.ts:189` は、送る前に「残り時間が min(minAttemptMs 5 秒, timeoutMs) 以上」を求める
+  - Phase 2a の部品は締め切りを「開始 + timeoutMs」にする
+  - そのため timeoutMs が 5 秒以下だと、開始から1ミリ秒でも経つと送らずに終わる
+  - 安全側の失敗（送信も課金も 0）で、テストの時間設定の問題
+- 本番への影響は無い
+  - 本番の flush は、残り時間が 20 秒以上のときだけ送る。制限時間は 10 秒以上になり、5 秒の下限に掛からない
+  - G2 の `shadow_wiring_test.ts` は偽の時計を使っていて、20/20 で安定していた
+- 直し方（使い捨ての worktree の中だけで試し、元に戻した）
+  - F1: 6_000 にし、経過時間の上限を 10_000 にする（2行）
+  - F2: 6_500 にする（1行）
+  - 同じ負荷で **0/20・0/20** になった。テストは約 10 秒長くなる
+- 補足（直す必要は無い、文書の課題）
+  - Phase 2a の部品で timeoutMs が 5 秒以下だと、実質的に送らない
+  - 本番の値では起きないが、計画書か部品の説明に「shadow の制限時間は 5 秒より長く」と書くとよい
+
+### 5. 4 PR の機能と安全性の確認（差分全体を読み、テストで確かめた）
+
+- 既定は OFF
+  - モードが無い・不明・設定が欠けている → 今の requester そのもの。読むのはモードだけ
+  - G2 の handler は `waitUntil` が無ければ準備もしない
+- レポートの同一性
+  - packet・hash・diagnostics・OpenAI の費用と依頼の内容が、shadow あり・なしで一致する（harness と G2 のテスト）
+- 時間
+  - 比較は、確定と生成 trace の書き込みが終わってから `waitUntil` に渡される。応答は待たない
+  - 締め切りは処理開始から 150 秒。flush は残り時間を確かめてから送る
+  - **本番の `waitUntil` の挙動は確かめていない**（オフライン）
+- 失敗の閉じ込め
+  - 準備・登録・flush・ログの例外は、すべて内側で受け止める。失敗の経路では flush しない
+- 台帳
+  - 同じ試行の再実行は `ATTEMPT_FINALIZED` で拒否され、1回分しか払わない
+  - 日・月・1回の上限の拒否は、送る前に起きる
+- 隔離
+  - provider を参照してよいのは、許可した2ファイルの決まった import だけ
+  - deploy 対象で provider に届くのは、`handler.ts` と `index.ts` だけ
+  - Anthropic の名前は provider の中（とテスト1つ）だけ。アプリへの漏れは無い
+- ログ
+  - 記録の項目は固定で、本文・キーは入らない。detail は識別子以外 `REDACTED`
+- 通信: 通信禁止でも全テストが通る
+
+### 6. 衝突の解決計画と merge の順番
+
+- 解決が必要な衝突は **無い**。`.agent` の衝突も無い
+  - main に `.agent` のコミットが続くので、merge の直前に `merge-tree` で確かめ直す
+- **推奨: いったん保留**
+  1. K6 が F1 と F2 の修正を認めたら、G6 が直す
+     - PR148 の branch と PR150 の branch に、それぞれテストだけの追加コミットを入れる
+     - rebase・force-push はしない。PR153 と PR157 はファイルが違うので影響を受けない
+  2. 修正後に、この統合検査（merge-tree、各スイート、`_shared` 全体の繰り返し）をもう一度行う
+  3. merge は #148 → #150 → #153 → #157 の順に1つずつ行う。親が merge されたら次の base を main に付け替え、毎回 `merge-tree` で確かめる
+  4. merge は利用者または K6 の明示的な承認が出てから
+- merge しても本番は動かない（既定 OFF）
+  - 本番の前提はそのまま。どれも別承認と独立したレビューが必要: 回復処理の Cron、Edge Secret、本番での `waitUntil` の確認、ポリシーの上限、有料のカナリア
+
+### 7. 安全
+
+- merge 0、deploy 0、production 0、paid_calls 0
+- Secrets・`.env`・鍵を読んでいない
+- 4 PR の branch と、G2 / G5 / ほかのスロットの worktree・ファイルは変更していない
+- 使い捨ての worktree `/Users/yuya/Developer/kabumori-g6-qa-20261012` を残している（未コミットの merge 状態。push はしていない。いつ削除してもよい）
+
+- remaining_uncertainty
+  - 割り当て時に GitHub が false と表示した理由（GitHub の内部の値なので確かめられない）
+  - 本番の `waitUntil` と wall clock の挙動
+  - Opus の実際の応答時間
+- next_recommendation
+  - K6 が F1 と F2（テストだけ、計3行）の修正を G6 に割り当てる
+  - 修正後に統合検査をもう一度行い、PASS_PREMERGE_QA になったら、順番に merge するかを判断する
 ---
 
 # PRESERVED G6 PRIOR TASKS / REPORTS — do not rewrite below

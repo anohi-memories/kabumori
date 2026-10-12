@@ -173,11 +173,12 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: ready
+- status: review_required
 - task_id: common-ai-provider-g6-four-pr-premerge-offline-qa-20261012
 - start_code: G6
 - finish_code: K6
-- next_owner: claude
+- next_owner: chatgpt
+- latest_result: CHANGES_REQUIRED (minor, test-only, G6) — PR148/150/153/157 heads unchanged; whole stack merges into fresh main 45489fc3 with no conflict (no main commit touched stack paths since base 41979773; PR148 false = stale GitHub value, REST now clean); integrated provider 126 / report 313 / personalized 129 / X 10 / data-packet 42 PASS, _shared 628/629: G6 tests market_report_shadow_test:316 (3/20) and market_report_wiring_test:394 (2/20) flake because core execute needs >= min(5 s, timeout) before sending; local fix (6 s timeouts) 0/20; product source OK; production NO_GO; no PR/branch modified. Report: .agent/tasks/CLAUDE_TASK_6.md
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - recommended_model: Sonnet5（高）
 - source: .agent/tasks/CLAUDE_TASK_6.md
