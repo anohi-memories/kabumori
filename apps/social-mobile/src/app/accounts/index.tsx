@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { colors } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
+import { ThreadsConnectCard } from '@/features/threads-connect/threads-connect-card';
 import { useXConnect } from '@/features/x-connect/use-x-connect';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useDataStatus } from '@/providers/data-provider';
@@ -12,6 +13,7 @@ export default function AccountsScreen() {
   const { status, reload } = useDataStatus();
   const { state: connectState, stateText, verifiedHandle, connect } = useXConnect(reload);
   const xAccount = accounts.find((account) => account.platform === 'x');
+  const threadsAccount = accounts.find((account) => account.platform === 'threads') ?? null;
   const needsReconnect = xAccount?.connectionStatus === 'needs_attention';
 
   return (
@@ -68,6 +70,8 @@ export default function AccountsScreen() {
           </Pressable>
           <Text style={styles.muted}>接続後も投稿機能は自動で有効になりません。</Text>
         </Card>
+
+        <ThreadsConnectCard threadsAccount={threadsAccount} preview={status === 'mock_preview'} />
 
         <Pressable accessibilityRole="button" onPress={() => router.push('/login-methods')} style={({ pressed }) => [styles.card, pressed && styles.buttonPressed]}>
           <Text style={{ color: colors.ink, fontWeight: '800' }}>ログイン方法</Text>

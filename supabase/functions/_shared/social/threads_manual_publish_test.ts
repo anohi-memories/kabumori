@@ -11,7 +11,7 @@ import {
   ThreadsStoreError,
   type VerifiedCaller,
 } from "./threads_manual_publish.ts";
-import { ATTEMPT_MAX_AGE_MS, FakeThreadsPublishStore, GRANT_TTL_MS } from "./threads_manual_publish_fake.ts";
+import { ATTEMPT_MAX_AGE_MS, FakeThreadsPublishStore } from "./threads_manual_publish_fake.ts";
 import type { FetchLike } from "./threads_publish_contract.ts";
 
 // Fake values only.
@@ -96,13 +96,14 @@ test("golden path: one tap -> container -> FINISHED -> publish -> read-back -> p
   // The text sent is the stored text, exactly.
   assert.equal(new URLSearchParams(provider.calls[0].body).get("text"), TEXT);
   assert.equal(new URLSearchParams(provider.calls[2].body).get("creation_id"), CONTAINER);
-  // Each provider call was preceded by its own claim (a fresh authorization) and redeem.
+  // Each provider call was preceded by its own release: one transaction that re-authorized everything and
+  // handed out the credential.
   assert.deepEqual(store.log, [
     "begin:sa_threads_owner",
-    "claim:create_container", "redeem:create_container", "record:create_container:container_created",
-    "claim:check_container", "redeem:check_container",
-    "claim:publish", "redeem:publish", "record:publish:publish_returned",
-    "claim:confirm", "redeem:confirm", "record:confirm:published",
+    "release:create_container", "record:create_container:container_created",
+    "release:check_container",
+    "release:publish", "record:publish:publish_returned",
+    "release:confirm", "record:confirm:published",
   ]);
   noSecrets(attempt);
 });
@@ -190,34 +191,44 @@ test("the same key with different text is a conflict; another key while one is o
   assert.equal(slow.calls.filter((c) => c.step === "publish").length, 0);
 });
 
-test("a write step's claim is a compare-and-set: a second claim of the same step is stale", async () => {
+test("a write step's release is a compare-and-set: a second release of the same step is stale", async () => {
   const store = world();
   const attempt = await store.begin(CALLER, input());
-  await store.claim(CALLER, { attemptId: attempt.attemptId, step: "create_container" });
-  await refuses(store.claim(CALLER, { attemptId: attempt.attemptId, step: "create_container" }), "STALE_STEP");
-  await refuses(store.claim(CALLER, { attemptId: attempt.attemptId, step: "publish" }), "STALE_STEP");
+  await store.release(CALLER, { attemptId: attempt.attemptId, step: "create_container" });
+  await refuses(store.release(CALLER, { attemptId: attempt.attemptId, step: "create_container" }), "STALE_STEP");
+  await refuses(store.release(CALLER, { attemptId: attempt.attemptId, step: "publish" }), "STALE_STEP");
 });
 
-// --- Grants ----------------------------------------------------------------------------------------------
+// --- Record grants ---------------------------------------------------------------------------------------
 
-test("grants are single use, step-bound and short-lived; a result cannot be recorded without one", async () => {
+test("a record grant is single use and bound to its step, its user and its session", async () => {
+  const store = world();
+  store.memberships.set(`u_owner|${OTHER}`, "admin");
+  const attempt = await store.begin(CALLER, input());
+  const released = await store.release(CALLER, { attemptId: attempt.attemptId, step: "create_container" });
+  assert.equal(released.text, TEXT);
+  const result = { to: "container_created", containerId: CONTAINER } as const;
+  await refuses(store.record(CALLER, { attemptId: attempt.attemptId, step: "publish", grant: released.grant, result }), "GRANT_INVALID");
+  await refuses(store.record(CALLER, { attemptId: attempt.attemptId, step: "create_container", grant: `${released.grant}x`, result }), "GRANT_INVALID");
+  await refuses(store.record({ userId: OTHER, bearerToken: OTHER_JWT }, { attemptId: attempt.attemptId, step: "create_container", grant: released.grant, result }), "GRANT_INVALID");
+  // The same user from another session (another device) cannot record either.
+  store.tokens.set("owner-jwt-second-device", OWNER);
+  await refuses(store.record({ userId: OWNER, bearerToken: "owner-jwt-second-device" }, { attemptId: attempt.attemptId, step: "create_container", grant: released.grant, result }), "GRANT_INVALID");
+  // A result the transition table does not allow is refused.
+  await refuses(store.record(CALLER, { attemptId: attempt.attemptId, step: "create_container", grant: released.grant, result: { to: "published", providerPostId: MEDIA, permalink: PERMALINK } }), "STALE_STEP");
+  await store.record(CALLER, { attemptId: attempt.attemptId, step: "create_container", grant: released.grant, result });
+  await refuses(store.record(CALLER, { attemptId: attempt.attemptId, step: "create_container", grant: released.grant, result: { to: "failed", errorCode: "THREADS_UNAVAILABLE" } }), "GRANT_INVALID");
+});
+
+test("the provider's answer is recorded even if the service ended meanwhile (facts, not authority)", async () => {
   const store = world();
   const attempt = await store.begin(CALLER, input());
-  const { grant } = await store.claim(CALLER, { attemptId: attempt.attemptId, step: "create_container" });
-  await refuses(store.redeem({ attemptId: attempt.attemptId, step: "publish", grant }), "GRANT_INVALID");
-  await refuses(store.redeem({ attemptId: attempt.attemptId, step: "create_container", grant: `${grant}x` }), "GRANT_INVALID");
-  await refuses(store.record({ attemptId: attempt.attemptId, step: "create_container", grant, result: { to: "container_created", containerId: CONTAINER } }), "GRANT_INVALID");
-  const redeemed = await store.redeem({ attemptId: attempt.attemptId, step: "create_container", grant });
-  assert.equal(redeemed.text, TEXT);
-  await refuses(store.redeem({ attemptId: attempt.attemptId, step: "create_container", grant }), "GRANT_INVALID");
-  // Recording a result the transition table does not allow is refused.
-  await refuses(store.record({ attemptId: attempt.attemptId, step: "create_container", grant, result: { to: "published", providerPostId: MEDIA, permalink: PERMALINK } }), "STALE_STEP");
-  await store.record({ attemptId: attempt.attemptId, step: "create_container", grant, result: { to: "container_created", containerId: CONTAINER } });
-  await refuses(store.record({ attemptId: attempt.attemptId, step: "create_container", grant, result: { to: "failed", errorCode: "THREADS_UNAVAILABLE" } }), "GRANT_INVALID");
-  // An expired grant buys nothing.
-  const late = await store.claim(CALLER, { attemptId: attempt.attemptId, step: "check_container" });
-  store.clock += GRANT_TTL_MS + 1;
-  await refuses(store.redeem({ attemptId: attempt.attemptId, step: "check_container", grant: late.grant }), "GRANT_INVALID");
+  const released = await store.release(CALLER, { attemptId: attempt.attemptId, step: "create_container" });
+  store.services.set(OWNER, "ended");
+  store.permissions.clear();
+  const recorded = await store.record(CALLER, { attemptId: attempt.attemptId, step: "create_container", grant: released.grant, result: { to: "container_created", containerId: CONTAINER } });
+  assert.equal(recorded.status, "container_created");
+  await refuses(store.release(CALLER, { attemptId: attempt.attemptId, step: "publish" }), "SERVICE_NOT_ACTIVE");
 });
 
 // --- Every write is re-authorized ------------------------------------------------------------------------
@@ -379,7 +390,7 @@ test("another member cannot resume, reconcile or read someone's attempt in anoth
 test("an abandoned container step is settled as failed (no container id, so no post) by a later reconcile", async () => {
   const store = world();
   const attempt = await store.begin(CALLER, input());
-  await store.claim(CALLER, { attemptId: attempt.attemptId, step: "create_container" }); // the server died here
+  await store.release(CALLER, { attemptId: attempt.attemptId, step: "create_container" }); // the server died here
   const d = deps(store, scriptedFetch({}).fetch);
   assert.equal((await reconcileThreadsAttempt(d, CALLER, attempt.attemptId)).status, "creating_container", "not yet stale: untouched");
   store.clock += 121_000;
@@ -392,25 +403,22 @@ test("an abandoned publish becomes uncertain and is then reconciled read-only fr
   const provider = scriptedFetch({ status: [status("PUBLISHED")], list: [ok({ data: [{ id: MEDIA, text: TEXT }] })], readback: [readback()] });
   const d = deps(store, provider.fetch);
   const attempt = await store.begin(CALLER, input());
-  // Drive by hand up to the publish claim, then "die" before calling Meta.
-  const c = await store.claim(CALLER, { attemptId: attempt.attemptId, step: "create_container" });
-  await store.redeem({ attemptId: attempt.attemptId, step: "create_container", grant: c.grant });
-  await store.record({ attemptId: attempt.attemptId, step: "create_container", grant: c.grant, result: { to: "container_created", containerId: CONTAINER } });
-  await store.claim(CALLER, { attemptId: attempt.attemptId, step: "publish" });
+  // Drive by hand up to the publish release, then "die" before calling Meta.
+  const c = await store.release(CALLER, { attemptId: attempt.attemptId, step: "create_container" });
+  await store.record(CALLER, { attemptId: attempt.attemptId, step: "create_container", grant: c.grant, result: { to: "container_created", containerId: CONTAINER } });
+  await store.release(CALLER, { attemptId: attempt.attemptId, step: "publish" });
   store.clock += 121_000;
   const resolved = await reconcileThreadsAttempt(d, CALLER, attempt.attemptId);
   assert.equal(resolved.status, "published");
   assert.equal(provider.calls.filter((x) => x.step === "publish").length, 0, "reconcile never publishes");
 });
 
-test("a permission withdrawn between claim and credential read: nothing is sent and the attempt is closed as failed", async () => {
+test("a signed-out or revoked session gets no release: no token, nothing moves", async () => {
   const store = world();
   const attempt = await store.begin(CALLER, input());
-  const { grant } = await store.claim(CALLER, { attemptId: attempt.attemptId, step: "create_container" });
-  store.permissions.clear();
-  await refuses(store.redeem({ attemptId: attempt.attemptId, step: "create_container", grant }), "MANUAL_PUBLISH_NOT_PERMITTED");
-  const after = await store.read(CALLER, attempt.attemptId);
-  assert.deepEqual([after.status, after.errorCode], ["failed", "AUTHORIZATION_CHANGED"]);
+  store.revokedSessions.add(`session:${JWT}`);
+  await refuses(store.release(CALLER, { attemptId: attempt.attemptId, step: "create_container" }), "AUTH_REQUIRED");
+  assert.equal((await store.read(CALLER, attempt.attemptId)).status, "reserved");
 });
 
 test("withdrawing the permission does not stop the person from learning whether an uncertain post went out", async () => {
@@ -431,7 +439,7 @@ test("a disabled workspace refuses before anything is reserved", async () => {
   assert.equal(provider.calls.length, 0);
 });
 
-test("a token whose expiry is unknown, past or within 5 minutes is never used; mid-flow expiry closes the step unsent", async () => {
+test("a token whose expiry is unknown, past or within 5 minutes is never used; expiry between steps stops the next one", async () => {
   for (const expiresAt of [null, Date.parse("2026-10-11T03:04:00Z"), Date.parse("2026-10-10T03:00:00Z")]) {
     const store = world();
     store.accounts.get(ACCOUNT)!.expiresAt = expiresAt;
@@ -440,9 +448,9 @@ test("a token whose expiry is unknown, past or within 5 minutes is never used; m
     assert.equal(provider.calls.length, 0);
   }
   const store = world();
-  const attempt = await store.begin(CALLER, input());
-  const { grant } = await store.claim(CALLER, { attemptId: attempt.attemptId, step: "create_container" });
-  store.accounts.get(ACCOUNT)!.expiresAt = store.clock + 60_000;
-  await refuses(store.redeem({ attemptId: attempt.attemptId, step: "create_container", grant }), "CREDENTIALS_EXPIRED");
-  assert.deepEqual(pick(await store.read(CALLER, attempt.attemptId)), ["failed", "AUTHORIZATION_CHANGED"]);
+  store.afterRecord = (a: ThreadsAttempt) => { if (a.status === "container_created") store.accounts.get(ACCOUNT)!.expiresAt = store.clock + 60_000; };
+  const provider = scriptedFetch(golden());
+  await refuses(publishThreadsTextNow(deps(store, provider.fetch), CALLER, input()), "CREDENTIALS_EXPIRED");
+  assert.equal(provider.calls.filter((c) => c.step === "publish").length, 0);
+  assert.equal([...store.attempts.values()][0].status, "container_created");
 });
