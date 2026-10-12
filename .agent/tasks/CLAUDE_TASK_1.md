@@ -3,8 +3,8 @@
 - task_id: kabumori-g1-five-tab-release-simulator-qa-20261012
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: normal
 - task_type: simulator QA / read-only regression / source-only
 - recommended_model: **Sonnet5（中）**
