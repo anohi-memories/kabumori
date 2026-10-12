@@ -386,14 +386,25 @@ function comparable(row: StoredCandidate): DuplicateComparable {
   };
 }
 
+/**
+ * IMPORTANT_NEWS_FED_STATEMENT_BODY_ENRICHMENT=enabled turns on the reading of the official FOMC statement page (and the
+ * stored-state lookup / body fill that go with it). Anything else is OFF: the Fed feed is then processed exactly as before
+ * PR #129 — no extra read, fetch or write.
+ */
+function fedStatementBodyEnrichmentEnabled(): boolean {
+  return Deno.env.get("IMPORTANT_NEWS_FED_STATEMENT_BODY_ENRICHMENT") === "enabled";
+}
+
 async function selectCandidates(
   supabaseUrl: string,
   serviceRoleKey: string,
   filters: Record<string, string | string[]>,
   limit = 20,
+  withState = false,
 ): Promise<StoredCandidate[]> {
   const params = new URLSearchParams({
-    select: "id,source_url,normalized_title,content_hash,company_code,entity_key,published_at,status,body_summary,source_name",
+    select: "id,source_url,normalized_title,content_hash,company_code,entity_key,published_at" +
+      (withState ? ",status,body_summary,source_name" : ""),
     limit: String(limit),
   });
   for (const [key, value] of Object.entries(filters)) {
@@ -2123,7 +2134,7 @@ Deno.serve(async (req) => {
       for (const source of MARKET_MACRO_SOURCES) {
         try {
           let candidates = await fetchMarketMacroSource(source);
-          if (source.key === "fed") {
+          if (source.key === "fed" && fedStatementBodyEnrichmentEnabled()) {
             // Phase 7: FOMC statement items carry no description; read the official statement page. Statement items whose
             // facts cannot be read are withheld (retried while fresh) instead of being judged on the headline alone.
             const statements: Array<{ sourceUrl: string; normalizedUrl: string }> = [];
@@ -2136,7 +2147,7 @@ Deno.serve(async (req) => {
             }
             const stored = await storedStatementStates(
               statements,
-              async (url) => (await selectCandidates(supabaseUrl, serviceRoleKey, { source_url: `eq.${url}` }, 1))[0] ?? null,
+              async (url) => (await selectCandidates(supabaseUrl, serviceRoleKey, { source_url: `eq.${url}` }, 1, true))[0] ?? null,
             );
             const enrichment = await enrichFedStatementCandidates(candidates, fetch, { stored });
             candidates = enrichment.candidates;

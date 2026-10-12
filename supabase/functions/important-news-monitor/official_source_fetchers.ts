@@ -108,7 +108,7 @@ export function buildTdnetBodySummary(
 
 export async function fetchTdnetPdfBodySummary(
   sourceUrl: string,
-  options: { fetcher?: typeof fetch; extractor?: PdfTextExtractor } = {},
+  options: { fetcher?: typeof fetch; extractor?: PdfTextExtractor; kessanFacts?: boolean } = {},
 ): Promise<string> {
   const fetcher = options.fetcher ?? fetch;
   const result = await fetcher(sourceUrl, {
@@ -126,7 +126,14 @@ export async function fetchTdnetPdfBodySummary(
   const text = await (options.extractor ?? extractPdfTextWithUnpdf)(bytes);
   const summary = buildTdnetBodySummary(text);
   if (!summary) throw new Error("TDNET_PDF_TEXT_EMPTY");
-  return composeTdnetPdfBody(text, summary).body;
+  // The 決算短信 table facts are a separate, default-OFF switch (PR #129 release safety): off keeps the unchanged
+  // keyword summary for every document, with the same PDF fetch, size limits and failure handling as before.
+  return (options.kessanFacts ?? tdnetKessanFactsEnabled()) ? composeTdnetPdfBody(text, summary).body : summary;
+}
+
+/** IMPORTANT_NEWS_TDNET_KESSAN_FACTS=enabled turns the 決算短信 facts-first body on; anything else is OFF. */
+export function tdnetKessanFactsEnabled(): boolean {
+  return Deno.env.get("IMPORTANT_NEWS_TDNET_KESSAN_FACTS") === "enabled";
 }
 
 export type TdnetPdfBodyKind = "generic" | "kessan_facts" | "kessan_prose" | "kessan_table_unreadable";

@@ -103,6 +103,7 @@ test("fetchTdnetPdfBodySummary returns the composed body through the injected ex
   const body = await fetchTdnetPdfBodySummary("https://www.release.tdnet.info/inbs/x.pdf", {
     fetcher: async () => pdf,
     extractor: async () => GOOD,
+    kessanFacts: true,
   });
   assert.match(body, /12,782/u);
   assert.match(body, /10,314/u);

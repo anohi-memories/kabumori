@@ -133,7 +133,7 @@ test("size cap (declared and streamed), content type and http errors stop safely
 
 test("wiring: only the fed market_macro source is enriched in index.ts and BOJ has no new fetch path", async () => {
   const index = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
-  assert.match(index, /if \(source\.key === "fed"\) \{[\s\S]*?enrichFedStatementCandidates\(candidates, fetch,/u);
+  assert.match(index, /if \(source\.key === "fed" && fedStatementBodyEnrichmentEnabled\(\)\) \{[\s\S]*?enrichFedStatementCandidates\(candidates, fetch,/u);
   assert.equal(index.match(/enrichFedStatementCandidates\(/gu)?.length, 1);
   assert.equal(/boj_document_text/u.test(index), false);
   const fetchers = await Deno.readTextFile(new URL("./official_source_fetchers.ts", import.meta.url));
