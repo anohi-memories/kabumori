@@ -67,10 +67,11 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 
 ## 新系統（F1〜F10 / J1〜J5）の完了作業
 
-（まだ無い。完了ごとに追記する）
+（完了したTASKをarchiveに保存した順に追記）
 
 | 完了日 | slot | task_id | 作業名 | result | PR番号 | final commit SHA | archive参照先 | remaining issue参照先 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-13 | F1 | `kabumori-f1-ai-ask-v1-phase-a-ui-contract-20261012` | AIに聞く V1 Phase A 対話UI・安全契約 | PASS_SOURCE_PHASE_A | #166 | `83b51efcf3cdb207eb0bab4c6a8dddbc1f5352f4` | `.agent_v2/archive/2026-10-13-F1-kabumori-f1-ai-ask-v1-phase-a-ui-contract-20261012/files/.agent_v2/tasks/F1.md` | 同 archive TASK の `## Report` Phase B remaining_issues |
 
 ## 旧系統（G1〜G10 / H1〜H5）の完了・履歴作業
 
