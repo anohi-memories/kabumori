@@ -1,3 +1,57 @@
+# G6 CURRENT TASK — 共通AI基盤 Phase 2b / 市況レポート配線のオフライン統合・安全ゲート
+
+- task_id: common-ai-provider-g6-phase2b-market-report-wiring-offline-20261012
+- owner: claude
+- slot: claude-6
+- status: ready
+- next_owner: claude
+- start_code: G6
+- finish_code: K6
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- recommended_model: **Opus5.5（高）**
+- priority: high
+- user_approval: 2026-10-12「すすめて」— K6 Phase2a PASSの次工程として**Phase2bのオフライン接続と安全性検証**。有料API・Supabase本番変更・Secrets登録・Cron/Edge deploy・実配信切替の承認ではない。
+- mode: OFFLINE_SOURCE_ONLY; production_mutation_window: FORBIDDEN; merge/deploy: FORBIDDEN
+- previous: Phase2a [Draft PR #148](https://github.com/anohi-memories/kabumori/pull/148), head `a71de72b3bcfc88547b616f789df7765283565ed`, new adapter and tests; K6 PASS_SOURCE_CANDIDATE / NOT_WIRED.
+
+## Purpose and collision constraints
+- Create an **offline integration candidate** proving how current market-report generation would use Phase2a shadow adapter, with legacy output unchanged and zero real API access. Avoid merely repeating Phase2a unit tests: add full generator/handler-boundary simulation using real repository synthetic fixtures, fake provider, fake ledger, and cost/time/error instrumentation.
+- G2 owns PR143 (Draft, head `889ca1b44cf82bd3ecb913818dca568456849feb`) and stacked PR149 (Draft, head `31c509df1c08ecc437ca4b70541284f223c836e2`), plus market-report-analysis and scalable notification/worker/DB boundaries. **Do not modify any G2 branch, handler.ts, analysis_logic.ts, PR143/149 files, worker, migrations, notifications, or G2's worktree.** Review of G2 PR149 by H2 may be underway. Even if G2 status shows done, ownership of unmerged PRs remains protected.
+- G5 Auth, G8 news, G9 API optimization, POSTONA/MIC, the other G/H slots remain protected. Do not touch shared source that another slot is editing. G6 only independent worktree/branch.
+- Reuse Phase2a candidate on separate clean G6 branch without force-pushing/rebasing PR148. New changes preferred in `supabase/functions/_shared/ai_provider/` **new integration-test/harness filenames** and `docs/ai-provider/` docs. Existing Phase2a source can be referenced/imported; if it needs correction, report problem instead of modifying PR148 without explicit next decision.
+
+## Work instructions
+1. Fresh read PROJECT_RULES.md, HANDOFF.md, ORCHESTRATION, ACTIVE_TASK, CURRENT_STATE, all 15 slots/Reports relevant to collision, fresh origin/main, PR148/143/149 heads, independent G6 worktree/branch and existing provider/ledger API. Do not assume idle=free. A file/boundary collision or unsafe independent worktree => STOP/K6.
+2. Inspect actual report generator's requester construction, claim context, report lifecycle, deadline and error path **read-only**. Identify exact offline integration seam and its compatibility constraints (cycle ID, attempt index, step count, model catalog, schema) while protecting G2 source.
+3. Implement a distinct **offline wiring/harness candidate** under G6-owned new files which models the existing report requester call sequence through the Phase2a adapter. Validate OFF (exact identity, same generated output/diagnostics as legacy), SHADOW (still legacy report output and no user-visible packet differences), fake provider and ledger, deterministic callId/idempotency across duplicate claim attempts, failure/timeout/abort, errors from recorder, and explicit no-network/no-credentials. Include fixture that closely resembles morning and close generation. No real holdings/user content to external API.
+4. Investigate **sequential shadow latency**, real report Edge execution limit and Cron overlap, possible late/shadow in-flight after primary success or timeout. If modifying the report handler would be necessary for a safe deadline guarantee, do not touch it: document exact integration contract and release blocker, tests to run in next controlled patch. Do not assert runtime guarantee from fake tests.
+5. Verify trial budget limits: month $5 /40 calls, day $2 /6, per attempt $1 for system Opus5.5. Document representative per-call cost, generation twice/day × business days, 1/2 shadow steps, daily/monthly consumption, denial behavior; **no policy widening**. Define a small canary window and stop thresholds for separate approval. A cap increase must be a separately requested production mutation.
+6. Security/operability: contract for EDGE `ANTHROPIC_API_KEY` scoped secret and existing ledger key, no secrets printed, service-role-only ledger, no user/brand cross-routing, **recovery for sent/unknown reservations BEFORE any live use**, sanitized observations, diagnostics separating OpenAI and Claude spending, rollback and monitoring plan. Identify cancellation/race risks. Existing production providers/Edge Cron untouched.
+7. Confirm the feasibility of integrating PR148 and G2 PR143/149 without moving ownership. Produce precise integration/PR dependency plan: which owner and slot should edit each file later; decide whether G2 needs to land PR143/149 first; exact tests and release gates; describe conflict stop conditions. Keep Phase2a PR148 Draft untouched; new Draft PR from G6 branch if independently implementable, otherwise STOP with a full blocker report. Never merge or deploy.
+8. Run offline Deno tests, type/lint, nearby provider and market report regressions, repository secret scan and offline bad-input/mutation probes if feasible. State results as actual executed; no web/network API, secrets/env key reads, real Supabase, Anthropic/OpenAI paid calls, X/Meta posts, push, migrations, service-key creations.
+9. Report in `## Report — Phase2b` on this TASK: result, changed_files, branch/commit/PR, integration details, test commands/counts, source/production 0, safety_checks, blockers, next_recommendation. Set status review_required/next_owner chatgpt; return **K6** to **共通AI基盤のちゃ（OpenAI・Claude API専用チャット）**. Protect previous reports and other slot state from overwrite.
+
+## Acceptance
+- PASS_OFFLINE only if full generator-boundary harness + meaningful regression tests + collision-free Draft PR/docs + safe rollout/rollback/dependency gate documented, no real external invocation. If cannot implement without modifying G2-owned source, STOP/K6 with actionable contract and await explicit coordinated G2 task.
+- **Never automatically activate shadow, create/inspect secrets, increase budget, change live Edge/Cron, merge PRs or run another paid Claude smoke.** Later live canary/policy/production needs fresh user approval after K6 and any required independent security review.
+
+## Report — Phase2b（G6記入）
+- task_id: common-ai-provider-g6-phase2b-market-report-wiring-offline-20261012
+- result: NOT_STARTED
+- changed_files: none
+- tests: NOT_RUN
+- push: no
+- merge: no
+- deploy: no
+- production: 0
+- paid_external_requests: 0
+- remaining_issues: G6 to resolve
+- next_recommendation: G6 starts; return K6
+
+---
+
+# PRESERVED G6 PRIOR TASKS / REPORTS — do not rewrite below
+
 # G6 CURRENT TASK — 共通AI基盤 Phase 2a / 市況レポート向け Provider 接続アダプター（オフライン限定）
 
 - task_id: common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012
