@@ -1,3 +1,9 @@
+## G1 K1 five-tab QA complete; P3/P4 UI fix assigned — 2026-10-12 JST
+- Previous five-tab Simulator QA K1 PASS_WITH_FINDINGS accepted. Claude reported 521/521 app tests PASS, 375pt/402pt synthetic fixtures, no major crash; real account/device NOT_RUN, tests not independently rerun by ChatGPT. TASK marked done/none before new allocation.
+- G1 new TASK `kabumori-g1-home-report-return-and-holdings-count-fix-20261012`: ready / Sonnet5（中） / start G1 / return K1 to かぶモリアプリG1のちゃ. P3 home-origin report detail must return home, P4 count badge must not say 0 when holdings fetch fails. Focused tests + isolated Simulator, limited G1 source PR only; do not self-merge/deploy.
+- PR143 G2 report detail route files, G5/Auth and other slots protected. No real account writes, EAS, paid API.
+- AI Lab diary: 候補あり — 5つの主要画面をテスト用データで横断検証し、戻り先と未取得データの表示に改善点を発見した（公開時に内部構造や個人情報を含めない）。
+---
 ## ニュース改善A G8 Phase J0 — 国内重大ニュース・金融/経済ニュースのアプリ掲載強化（2026-10-12 JST）
 
 - **ユーザー優先方針**: 一般重大事件・事故・企業不祥事・訴訟・災害・政策急変・国内金融/経済/企業ニュースをより広く発見し、Xだけでなく**アプリ一覧へ積極掲載**できるようにする。Pushは重要度別に制限、事実確認と報道機関の商用/AI利用権限を維持。公式・無料兆候＋重要な空白eventに限る低予算Web補完、取りこぼし最小化。
