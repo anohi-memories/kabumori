@@ -3,8 +3,8 @@
 - task_id: postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G4
 - finish_code: K4
 - return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**
@@ -18,6 +18,41 @@
 - current_real_release_gate: **HOLD**; all 4 Threads connect/publish mobile/server static gates false, Edge runtime default 503, no public network write or managed auth experiment from this task
 - previous_K4: PR144 `09fd2c49114b7d26c23b71a3084574dc6a5a7ad6` one P2 session-row lock fix accepted PASS_SOURCE_FIX / REAL_PILOT_HOLD
 - G5_interface_status: PR152 `5ad5bb40cadf013f00553acd5509f4f74fdbff7c` SOURCE CANDIDATE, `review_required`/K5 pending at assignment, **not production-applied and NOT final G5 contract**. Never assume it merged.
+
+## Report — postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012（G4 → K4、2026-10-12 JST）
+
+- task_id: postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012
+- result: **SOURCE_COMPLETE_GATES_OFF / REAL_PILOT_HOLD**。A・B・C を実際に動くソースとして実装（設計メモではない）。ユーザーが触れる入口はすべてゲート OFF、本番・Meta・Supabase・X の呼び出し 0。
+  - **A. アプリの接続／再接続フロー（本物の処理）**: `apps/social-mobile/src/features/threads-connect/threads-connect-starter.ts`（`createThreadsConnectStarter`）、`threads-connect-runtime.ts`（本番の依存: `supabase.functions.invoke('threads-oauth-connect-user')`・`WebBrowser.openAuthSessionAsync`（iOS 非共有セッション）・`dismissAuthSession`・`Linking.addEventListener('url')`・`expo.extra.threadsConnectCallbackUrl`）、`use-threads-connect.ts`、`threads-connect-card.tsx`、`domain/threads-connect.ts`。流れ: `useAuth` のトークンで start → 公式の認可 URL だけを検証して開く（サーバー判定と一致をテストで固定）→ ブラウザ結果／アプリリンクの最初の戻りを1回だけ → その時点でも同じ人・期限内 → 戻り URL を読まずにそのまま**その時点の**トークンで callback → 受領票 → 共有データを再読み込みし、その Threads アカウントが接続済みと読めてから「接続しました」。二重タップ（IN_PROGRESS）・キャンセル・Threads での拒否・期限切れ・アカウント切替／ログアウト・不正な戻り・開始拒否／不正 URL（ブラウザを開かない）・結果不明（再試行しない）を固定文言で。ゲート `THREADS_CONNECT_UI_ENABLED=false` のため画面のボタンは無効のまま。戻り先 URL は未設定なので有効にしても `CALLBACK_NOT_CONFIGURED` で止まる（Meta 登録＋検証済みアプリリンクが必要な運用作業）。
+  - **B. 接続の受け渡し口（未接続）**: `supabase/functions/_shared/social/threads_connect_edge.ts`（`createThreadsConnectHandler(runtime|null, {registeredCallback})`）。H5 `createThreadsRuntime` の `start`／`callback` の出力を厳密に検証し（キー完全一致・公式 URL・`publishEnabled:false`・期限の範囲）、固定コード（START_REFUSED／CALLBACK_REFUSED／EXCHANGE_OUTCOME_UNCERTAIN／COMPLETE_OUTCOME_UNKNOWN／CALLBACK_INVALID／THREADS_CONNECT_RUNTIME_UNAVAILABLE ほか）だけを返す。呼び出し元トークンはそのまま H5 へ（JWT を解読せず user id を受け取らない）。登録外の戻りは H5 に渡さない。`THREADS_CONNECT_EDGE_WIRED=false`、H5 の入口は今も 503 で、組み込みは H5 側。service_role の代理や偽の所有者資格情報は作っていない。
+  - **C. 退会時の Threads 後片付け（未登録）**: `supabase/functions/_shared/social/threads_provider_cleanup.ts`（G5 #152 `ProviderCleanupAdapter` と構造一致、組み合わせ検証で型チェック済み）＋ `supabase/candidates/postona_threads_cleanup/threads_provider_cleanup_candidate.sql`（未適用・所有者のみ実行）。G5 の `private.account_lifecycle_operations` でその人の削除（account_deletion、または x_autopost の service_deletion）が `in_progress`／`cleanup` のときだけ、決定的な POSTONA ワークスペースのロック → Threads 行 FOR UPDATE → 1トランザクションで Vault のトークン・Threads 行（→ 許可・試行・nonce・custody は cascade）を削除し読み戻し。進行中かもしれない投稿（creating_container／publishing／publish_returned／uncertain）や共有トークンは消さずに `reconciliation_required`。Threads は呼ばず、成功は `local_removed_remote_unverified`（`confirmed_remote_revoked` は返さない）。結果不明は `reconciliation_required`、再試行なし。G5 のファイルは無変更・未登録。
+- changed_files: 19（Draft [PR #154](https://github.com/anohi-memories/kabumori/pull/154)）
+  - アプリ: `apps/social-mobile/src/domain/threads-connect.ts`、`src/features/threads-connect/{threads-connect-card.tsx,threads-connect-starter.ts,threads-connect-runtime.ts,use-threads-connect.ts}`、`src/app/accounts/{index,[id]}.tsx`（カードに accounts／reload を渡すだけ）、`tests/threads-connect.test.mjs`
+  - サーバー: `supabase/functions/_shared/social/{threads_connect_edge,threads_connect_edge_test,threads_provider_cleanup,threads_provider_cleanup_test}.ts`
+  - DB 候補と検証: `supabase/candidates/postona_threads_cleanup/threads_provider_cleanup_candidate.sql`、`supabase/tests/postona_threads_cleanup_{fixture,behavior}.sql`、`postona_threads_cleanup_run.sh`
+  - 組み合わせ検証: `supabase/candidates/postona_threads_integration/connect_cleanup_smoke.ts`、`supabase/tests/postona_threads_connect_smoke_run.sh`
+  - 文書: `docs/postona/threads-mobile-connect-and-cleanup-v1.md`
+  - 無変更: PR #144／#140 のファイル、H5 #139 の原本、G5 の `account-delete/provider_cleanup.ts`・`lifecycle_logic.ts`・Auth、G3、X。
+- tests:
+  - RUN/PASS アプリ `node --test tests/threads-connect.test.mjs` **18**（開始・アプリリンク経由と二重の戻り・キャンセル／拒否／期限切れ・別アカウント／ログアウト・期限後と不正な戻り・二重タップ・未設定／ログアウト・開始拒否と不正 URL でブラウザを開かない・結果不明・console 出力 0 と結果にコード／state／トークンなし・サーバーとの URL 判定一致・ゲート OFF で開始しない・再読み込みで確認できてから接続済み・失敗文言）、`tests/threads-manual-publish.test.mjs` **18**（回帰）、`npx tsc --noEmit` PASS、`npx expo lint` 問題なし
+  - RUN/PASS Deno `deno test --no-config --allow-env --allow-read supabase/functions/_shared/social/ supabase/functions/social-mobile-threads-publish/` **105**（新規: 受け渡し口 8・後片付け 4）、`deno lint --no-config`（新規5ファイル）問題なし
+  - RUN/PASS `THREADS_PGHOST=/private/tmp/g4cw-sock THREADS_PGPORT=54944 THREADS_PGSUPER=g4super bash supabase/tests/postona_threads_cleanup_run.sh` → ALL PASS（前提不足2種で停止、ACL、接続の有無、削除中でない／後片付け段階でない／kabumori の終了では何もしない、進行中の投稿3状態、1人分だけ消える・X と他人は無傷・Vault 削除・2回目は ALREADY_REMOVED、共有トークン、POSTONA だけの終了、**変異4種検出**: 権限確認なし・進行中確認の縮小・共有確認なし・任意の service_deletion を許す）
+  - RUN/PASS `bash supabase/tests/postona_threads_connect_smoke_run.sh` → ALL PASS（#124 `c30f2464…`／#135 `e38788d6…`／#139 `b4fa672f…`／#152 `5ad5bb40…` の正確な版を読み取り専用でコピー、重なりなし。受け渡し口 × H5 実コードで start→公式 URL→他所の戻りは H5 にもMetaにも届かない→callback→受領票 publish_enabled false。アダプター × G5 の実際の `runProviderCleanups`: 削除完了→proceed（threads は remote unverified）、進行中・応答なし・読めない→reconciliation_required、未接続→not_connected）
+  - NOT_RUN（理由つき）: 既存の大きな回帰（統合 176・アプリ全 258・G5 80+）は無変更部分のため TASK の指示どおり回していない。本物の Meta、H5 の owner transport、管理された Supabase（Vault 削除権限・行ロック権限）、アプリリンクの実機確認、シミュレーター（ゲート OFF で画面は「準備中」）。
+  - `git diff --check` PASS、秘密情報の文字列検査 0、ゲート5つ（接続／投稿のサーバー・アプリ・受け渡し口）すべて false、変更パスはすべて G4 所有。
+- commit_hash: `98287392327eabfd5092a3ba89dde51a2e8beff6`（`git rev-parse HEAD` の出力）
+- push: DONE（新ブランチ `claude/g4-postona-threads-connect-wiring-20261012`、force なし）
+- PR: [#154](https://github.com/anohi-memories/kabumori/pull/154) OPEN/DRAFT、HEAD `98287392327eabfd5092a3ba89dde51a2e8beff6`、**base = #144 のブランチ `claude/g4-postona-threads-integration-20261011`（head `09fd2c49114b7d26c23b71a3084574dc6a5a7ad6`、無変更）**。保護対象の head（push 直前に再確認）: #140 `2e75a6a842e70f3de78558681803b60935fb4251`、#139 `b4fa672f97592e87682671454e868a92098cbd56`、#135 `e38788d6677082138f0990453c7d2f00549666d0`、#124 `c30f246409a77080cbc03aef6c4cb72b5481e125`、#121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`、#152 `5ad5bb40cadf013f00553acd5509f4f74fdbff7c`。
+- merge / deploy: NOT_DONE（マージ・適用・GRANT・Edge デプロイ・secret・フラグ・EAS・投稿・Meta 設定すべて無し）
+- remaining_issues / 引き継ぎ表:
+  - (a) **G4: 済（ソース）** — アプリの接続フロー、受け渡し口、Threads の後片付けアダプターと DB 候補、テスト。
+  - (b) **G5** — #152 の K5 と1回の独立レビュー（Sol（高））の後、G5 のファイルでこのアダプターを登録し、削除処理のロールに `threads_provider_connection_state(uuid)`・`cleanup_threads_provider_footprint(uuid)` の EXECUTE を付与。T13・T10 の最終配線。Vault の削除権限は既存の X の削除と同じ前提（管理環境で要確認）。
+  - (c) **H5** — 本物の owner transport（専用の所有者ロール、セッション行ロックの `FOR SHARE` 化、custody の1文）、`threads-oauth-connect-user` の入口に `createThreadsConnectHandler` を組み込む、コールバックの受け渡しの配線。
+  - (d) **運用・ユーザー** — Meta 開発者アプリ、HTTPS コールバックと検証済みアプリリンク（`expo.extra.threadsConnectCallbackUrl`）、Threads テスター、`threads_basic`／`threads_content_publish`、秘密はチャット・リポジトリ外、各デプロイの承認。
+  - ゲート OFF の今、ユーザーができないこと: アプリからの Threads 接続と投稿（ボタンは「準備中」で押せない）。サーバーの入口も 503。
+- safety_checks: 新しい専用 worktree `/Users/yuya/Developer/kabumori-g4-threads-connect`（`kabumori-fresh` から #144 の正確な head で作成、前の G4 worktree はそのまま）。他スロットのブランチ・作業フォルダ・TASK／Report・G5 の port／registration・H5 の原本は無変更。組み合わせは /private/tmp の使い捨てコピー（終了時に削除）。使い捨て PostgreSQL は自分専用の socket `/private/tmp/g4cw-sock`。本番への読み書き 0。ACTIVE_TASK は G4 欄の status／next_owner だけを変更。
+- next_recommendation: K4 で受け入れ判断。次は G5（#152 の K5 → レビュー → 登録）、H5（owner transport と入口への組み込み）、運用（Meta とアプリリンク）を並行。揃った時点で統合レビュー（Sol（高））→ 承認されたテスター1名で「接続→許可→1件投稿」のパイロット。
+- AI Lab diary 候補（公開しても安全な粒度）: 「SNS 連携の『ログインして戻ってくる』流れで、戻りが二重に来たり途中でアカウントが変わったりしても安全に止まるよう、ブラウザとアプリの両方の戻り方をまとめて扱う形にした。退会時に連携データを片付ける処理も、投稿の途中かもしれないものは消さずに人が確認する設計にした。」
 
 ## Boundaries and protected baselines
 

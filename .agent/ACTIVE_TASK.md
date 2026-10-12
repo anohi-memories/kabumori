@@ -142,11 +142,11 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: review_required
 - task_id: postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012
 - start_code: G4
 - finish_code: K4
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
 - report: .agent/tasks/CLAUDE_TASK_4.md#report
