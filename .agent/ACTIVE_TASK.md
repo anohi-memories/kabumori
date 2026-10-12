@@ -174,18 +174,16 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: review_required
-- task_id: common-ai-provider-g6-four-pr-premerge-offline-qa-20261012
+- status: ready
+- task_id: common-ai-provider-g6-f1-f2-timeout-tests-stability-20261012
 - start_code: G6
 - finish_code: K6
-- next_owner: chatgpt
-- latest_result: CHANGES_REQUIRED (minor, test-only, G6) — PR148/150/153/157 heads unchanged; whole stack merges into fresh main 45489fc3 with no conflict (no main commit touched stack paths since base 41979773; PR148 false = stale GitHub value, REST now clean); integrated provider 126 / report 313 / personalized 129 / X 10 / data-packet 42 PASS, _shared 628/629: G6 tests market_report_shadow_test:316 (3/20) and market_report_wiring_test:394 (2/20) flake because core execute needs >= min(5 s, timeout) before sending; local fix (6 s timeouts) 0/20; product source OK; production NO_GO; no PR/branch modified. Report: .agent/tasks/CLAUDE_TASK_6.md
+- next_owner: claude
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
-- recommended_model: Sonnet5（高）
 - source: .agent/tasks/CLAUDE_TASK_6.md
-- report: .agent/tasks/CLAUDE_TASK_6.md#report--four-pr-premerge-offline-qa-g6
-- allocation: Four stacked Draft PRs #148→#150→#153→#157 read-only offline premerge QA. PR148 Github mergeable=false versus main; identify exact conflicts against fresh main and test full stack if possible, no product/PR edits. Keep G2 PR143/149/158 and G5/Auth fully protected; source-only work, no main merge, deploy, paid API, prod DB/Secret/Cron. Return K6.
-- previous_result: Phase2c isolation K6 PASS_OFFLINE_SOURCE_CANDIDATE; prior history in G6 TASK.
+- report: .agent/tasks/CLAUDE_TASK_6.md#report--f1f2-test-stabilityg6記入
+- recommended_model: Sonnet5（中）
+- allocation: Prior 4PR premerge QA K6 CHANGES_REQUIRED_TEST_ONLY: G6 reported merge-tree clean at fresh main but shared test628/629 and F1/F2 load flake. Fix only two G6-owned tests on NEW stacked Draft PR after PR157; protect PR148/150/153/157 and G2 V1 PR143/149/158 branches. Run repeated offline tests and fresh main merge-tree recheck. All production/paid/merge/deploy forbidden.
 - production_mutation_window: FORBIDDEN
 
 ## Claude G7
