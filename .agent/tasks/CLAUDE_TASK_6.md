@@ -3,8 +3,8 @@
 - task_id: common-ai-provider-g6-f1-f2-timeout-tests-stability-20261012
 - owner: claude
 - slot: claude-6
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G6
 - finish_code: K6
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
@@ -23,12 +23,81 @@
 - Write Report for this task, set status review_required/next_owner chatgpt, return K6 with evidence. K6 to decide source PR merge sequencing separately; not authorized by this task.
 
 ## Report — F1/F2 test stability（G6記入）
-- result: NOT_STARTED
-- changed_files: none
-- tests: NOT_RUN
-- push/merge/deploy/production/paid_external_requests: 0
-- next_recommendation: G6→K6
 
+- task_id: common-ai-provider-g6-f1-f2-timeout-tests-stability-20261012
+- result: **PASS_OFFLINE**（テストだけの修正）。F1 と F2 は、修正前は落ちることを再現し、修正後は同じ負荷で 0 件。production は **NO_GO** のまま
+- changed_files（G6 所有のテスト2つだけ。+14 / -3）
+  - `supabase/functions/_shared/ai_provider/market_report_shadow_test.ts`（F1。PR148 のファイル）
+    - 遅い場合の `timeoutMs` を `1_000` → `6_000`、経過時間の上限を `5_000` → `10_000` に変えた
+  - `supabase/functions/_shared/ai_provider/market_report_wiring_test.ts`（F2。PR150 のファイル）
+    - 遅い場合の `deadlineInMs` を `1_500` → `6_500` に変えた
+  - どちらも、値を定数1つにまとめ、`DEFAULT_RETRY_TIMING.minAttemptMs + 1 s` 以上であることを assert で確かめる。最低時間が将来変わっても、黙って不安定に戻らない
+  - assert は緩めていない。`TIMEOUT`、上限額での確定（`includes_upper_bound` / `unknown`）、残り時間に合わせた短縮（< 10 s。既定の 90 s ではない）、取消の確認は、すべてそのまま
+- branch / commit / PR
+  - `claude/g6-f1-f2-timeout-tests-20261012` @ `93de927aec8726a6269d9c6747b998d29df113da`
+  - Draft PR [#162](https://github.com/anohi-memories/kabumori/pull/162)。base は PR157 の branch
+  - 新しい worktree `/Users/yuya/Developer/kabumori-g6-f1f2` を `kabumori-fresh` から、PR157 の head ちょうどで作った
+- protected stack: amend・rebase・force-push はしていない。push 後に `ls-remote` で確認した
+  - #148 `a71de72b3bcfc88547b616f789df7765283565ed`
+  - #150 `18d9058aa8bd451f3cd0181f8570a31484750035`
+  - #153 `6c576567328c99a58c2e4beaed86d155fe875769`
+  - #157 `9b952d64a9ec954e74af7e762c9df4e4c2e2f3a5`
+- 原因（ソースで確認した）
+  - `execute.ts:189` は、送る前に `min(DEFAULT_RETRY_TIMING.minAttemptMs = 5_000, timeoutMs)` 以上の残り時間を求める
+  - Phase 2a の shadow は締め切りを `start + timeoutMs` にする（`market_report_shadow.ts:273`）
+  - そのため timeoutMs ≤ 5 s では、1 ms でも経つと `DEADLINE_EXCEEDED` / `no_request` になり、TIMEOUT の経路を通らない
+  - 製品の動作は変えていない。本番の flush は 10 s 以上の制限時間で送るので、影響しない
+- 修正前と修正後の比較
+  - 統合した状態: 使い捨ての worktree `/Users/yuya/Developer/kabumori-g6-qa-20261012` に、最新の main `4e80c79dc42c11fbc1ca105665514b0dd32842d3` と各 head を `merge --no-commit` で重ねた（コミット・push はしていない）
+  - 負荷: 4本並行。ファイル全体を毎回実行した
+
+| | F1（shadow_test） | F2（wiring_test） | 統合した tree |
+|---|---|---|---|
+| 修正前（#157 `9b952d64`） | **3 / 75 失敗**（25 回中 0、50 回中 3） | **9 / 75 失敗**（25 回中 3、50 回中 6） | `9e19dd7d…` |
+| 修正後（`93de927a`） | **0 / 50** | **0 / 50** | `39c8acf2d6c836692d186fc403eb79adbae64abb` |
+
+  - 修正前の失敗は 12 件とも `DEADLINE_EXCEEDED` / `no_request`
+  - 修正後、2つのテストは合わせて約 12 秒長くなった
+- 全体のテスト（修正後の統合 tree。deno 2.9.6、macOS arm64、実通信・鍵・本番 0）
+
+| 範囲 | 結果 |
+|---|---|
+| `_shared/ai_provider` | 126/126 |
+| `market-report-analysis` | 313/313 |
+| `_shared` 全体 | 629/629 を3回連続（前回の QA は 628/629） |
+| personalized-reports | 129/129 |
+| x-test-post の共有レポート利用側 | 10/10 |
+| market-report-data-packet | 42/42 |
+
+  - 通信禁止（`--deny-net`）と鍵・設定の環境変数8つの読み取り禁止で、関係テスト5ファイル: 73/73
+  - 型チェック PASS
+  - lint（provider 32 ファイル）で問題 0
+  - 修正の差分の秘密情報スキャン 0 件
+- 最新の main（`e6906b58fe8fde8d75c44f2f42b4ca62a2c1cf26`）との `merge-tree`。どれも衝突なし
+  - #148: tree `9f39985daf71b703d2e21398d41b43db2ae025dd`
+  - #157: tree `a5ecbb3c5a1c16d8b6320ed07f38679b12e730bd`
+  - #162: tree `dc775bc4990a5c857ad6ccf1c8f1ee6b9f408228`
+  - テストした main（`4e80c79d`）からの差は1コミットで、`.agent` だけ
+- PR148 の GitHub の表示
+  - 今は false ではない。REST が `mergeable=null` / `mergeable_state=unknown`、gh が `UNKNOWN`
+  - GitHub の base.sha が古い `4bdc4e61…` のまま、再計算されていない
+  - 手元の試算では衝突は無いので、GitHub 側の一時的な値と判断する（理由は GitHub からは確かめられない）
+- CI: PR #162 の Vercel だけが失敗表示。理由は「Deployment rate limited — retry in 24 hours」というプランの回数制限で、コードの問題ではない
+- unstable residuals
+  - 測った範囲では 0（F1 と F2 は各 0/50、`_shared` 全体は 3/3 回 PASS）
+  - G2 の `shadow_wiring_test.ts` は、前回の QA で 20/20 回 PASS だった（偽の時計を使っている）
+- 追加の統合作業: 不要
+  - 製品のソースは変えていない
+  - 4 PR と #162 は、最新の main に衝突なく入る
+- push: PR の branch へ push 済み。この Report は main へ fast-forward。merge: no。deploy: no。production=0、paid_external_requests=0
+- safety_checks
+  - 製品、provider、台帳、タイムアウトの実行の仕組み、ポリシー、Auth・DB・Edge・Cron・Secret の変更は無い
+  - G2 / G5 / ほかのスロットのファイル・worktree は変更していない
+- next_recommendation
+  - K6 で PR #162 を評価する
+  - merge の順番（#148 → #150 → #153 → #157 → #162）は、K6 が別に判断する
+  - 補足: #162 を #148・#150 と一緒に入れない場合、その間の main ではこの不安定なテストが残る
+  - 本番は、今までどおり別承認の前提（回復処理の Cron、Secret、`waitUntil`、ポリシー、有料カナリア）を満たしてから
 ---
 
 # PRESERVED G6 PRIOR TASKS / REPORTS — do not rewrite below

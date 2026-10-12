@@ -174,11 +174,12 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: ready
+- status: review_required
 - task_id: common-ai-provider-g6-f1-f2-timeout-tests-stability-20261012
 - start_code: G6
 - finish_code: K6
-- next_owner: claude
+- next_owner: chatgpt
+- latest_result: PASS_OFFLINE — Draft PR #162 (93de927a, stacked on unchanged #157): F1/F2 test-only timeouts 6 s / 6.5 s guarded against execute's 5 s attempt window; integrated fresh main + stack before 3/75 and 9/75 DEADLINE_EXCEEDED flakes, after 0/50 each; provider 126 / report 313 / _shared 629 x3 / personalized 129 / X 10 / data-packet 42; deny-net 73; merge-tree vs fresh main clean for #148/#157/#162; PR148 GitHub mergeable now unknown (stale base), not false; production NO_GO, production=0, paid calls=0. Report: .agent/tasks/CLAUDE_TASK_6.md
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
 - report: .agent/tasks/CLAUDE_TASK_6.md#report--f1f2-test-stabilityg6記入
