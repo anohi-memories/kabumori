@@ -17,9 +17,13 @@
 --        KEY SHARE -> common account FOR UPDATE -> service entitlement FOR UPDATE) and keeps them until
 --        the caller's transaction ends, so a freeze (begin_*_deletion takes the same locks) and a write
 --        are totally ordered: a write that got the locks first completes before the freeze sees the row;
---        a freeze that got them first makes the write wait, then refuses it. A lock wait is bounded
---        (3 s) and ends as ACCOUNT_LIFECYCLE_BUSY, which is retryable and writes nothing. It never creates
---        an account or an entitlement. Anything unknown fails closed.
+--        a freeze that got them first makes the write wait, then refuses it. EACH lock this function
+--        waits for is bounded (lock_timeout 3 s; up to three in sequence) and a timed-out wait ends as
+--        ACCOUNT_LIFECYCLE_BUSY, SQLSTATE 55P03 (lock_not_available): retryable, nothing was written. That
+--        is not a deadline for the caller's whole statement or RPC (locks the caller took earlier, such as
+--        the lifecycle lock inside start_*/ensure_my_profile(), keep PostgreSQL's default of waiting; the
+--        platform's statement timeout applies). It never creates an account or an entitlement. Anything
+--        unknown fails closed.
 --   2. private.account_lifecycle_service_insert_fence() -> trigger
 --        BEFORE INSERT ... FOR EACH ROW, arguments (user_column, service_key). A service owner attaches it
 --        to a table whose rows belong to a person:
@@ -45,11 +49,17 @@
 -- grant of an existing table or policy. The managed Auth delete stays behind the Phase 3a release gate
 -- (state 'blocked'). No writer outside this file is changed.
 --
--- Codes (message text, SQLSTATE 42501 unless noted): ACCOUNT_LIFECYCLE_AUTH_REQUIRED,
--- ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND, ACCOUNT_DELETION_IN_PROGRESS, ACCOUNT_LOCKED,
--- SERVICE_NOT_REGISTERED, SERVICE_DELETION_IN_PROGRESS, SERVICE_NOT_ACTIVE, SERVICE_REENROLL_REQUIRED,
--- ACCOUNT_LIFECYCLE_SERVICE_INVALID, ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE,
--- ACCOUNT_LIFECYCLE_FENCE_MISCONFIGURED, ACCOUNT_LIFECYCLE_BUSY (retryable).
+-- Codes (message text; SQLSTATE 42501 for every refusal, except where noted):
+-- ACCOUNT_LIFECYCLE_AUTH_REQUIRED, ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND, ACCOUNT_DELETION_IN_PROGRESS,
+-- ACCOUNT_LOCKED, SERVICE_NOT_REGISTERED, SERVICE_DELETION_IN_PROGRESS, SERVICE_NOT_ACTIVE,
+-- SERVICE_REENROLL_REQUIRED, ACCOUNT_LIFECYCLE_SERVICE_INVALID, ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE,
+-- ACCOUNT_LIFECYCLE_FENCE_MISCONFIGURED; and ACCOUNT_LIFECYCLE_BUSY with SQLSTATE 55P03 (retryable: it is the
+-- one answer that is not a refusal of the person's state, so a caller that treats 42501 as "denied" must
+-- treat 55P03 as "try again").
+--
+-- Rollback: supabase/tests/common_account_core_fence_rollback.sql (takes back the profile trigger and the legacy
+-- ensure_my_profile(); keeps the shared functions while another owner's trigger or function uses them, and
+-- never uses CASCADE).
 
 begin;
 
@@ -189,7 +199,8 @@ begin
 
   v_refusal := private.account_lifecycle_service_state_refusal(v_user, v_service);
   if v_refusal is not null then
-    raise exception '%', v_refusal using errcode = '42501';
+    -- BUSY is a lock wait that timed out, not a refusal of the person's state: 55P03, retryable.
+    raise exception '%', v_refusal using errcode = case when v_refusal = 'ACCOUNT_LIFECYCLE_BUSY' then '55P03' else '42501' end;
   end if;
   return new;
 end;

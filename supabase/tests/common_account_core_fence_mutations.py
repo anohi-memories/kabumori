@@ -44,6 +44,8 @@ MUTANTS = [
      "  exception when no_data_found then\n    return 'ACCOUNT_LIFECYCLE_BUSY';\n"),
     ("lock wait unbounded",
      " set lock_timeout = '3s'\nas $$\ndeclare\n  v_account public.common_accounts;", "\nas $$\ndeclare\n  v_account public.common_accounts;"),
+    ("BUSY is raised as a refusal (42501) instead of a retryable 55P03",
+     "case when v_refusal = 'ACCOUNT_LIFECYCLE_BUSY' then '55P03' else '42501' end", "'42501'"),
     ("foreign id check before the lock removed",
      "  if v_actor is not null and v_actor <> v_user then\n    raise exception 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED' using errcode = '42501';\n  end if;\n", ""),
     ("fence ignores its service argument",
@@ -63,8 +65,30 @@ MUTANTS = [
 ]
 
 
-def run(candidate: pathlib.Path, sections: str) -> subprocess.CompletedProcess:
+ROLLBACK = HERE / "common_account_core_fence_rollback.sql"
+ROLLBACK_SECTIONS = "exact,rollback"
+# The rollback itself: it must never remove another owner's protection, and must take back what G5 attached.
+ROLLBACK_MUTANTS = [
+    ("rollback drops the shared functions whatever depends on them",
+     [("  if v_triggers is not null or v_callers is not null then\n", "  if false then\n")]),
+    ("rollback uses CASCADE without the dependency guard (removes another owner's trigger)",
+     [("  if v_triggers is not null or v_callers is not null then\n", "  if false then\n"),
+      ("  drop function if exists private.account_lifecycle_service_insert_fence();\n  drop function if exists private.account_lifecycle_service_state_refusal(uuid, text);\n",
+       "  drop function if exists private.account_lifecycle_service_insert_fence() cascade;\n  drop function if exists private.account_lifecycle_service_state_refusal(uuid, text) cascade;\n")]),
+    ("rollback ignores another owner's function that calls the decision",
+     [("     and (p.prosrc like '%account_lifecycle_service_insert_fence%' or p.prosrc like '%account_lifecycle_service_state_refusal%');",
+       "     and false;")]),
+    ("rollback leaves the profile fence in place",
+     [("drop trigger if exists account_lifecycle_profile_root_fence on public.profiles;\n", "")]),
+    ("rollback never removes the shared functions",
+     [("  drop function if exists private.account_lifecycle_service_insert_fence();\n  drop function if exists private.account_lifecycle_service_state_refusal(uuid, text);\n", "")]),
+]
+
+
+def run(candidate: pathlib.Path, sections: str, rollback: "pathlib.Path | None" = None) -> subprocess.CompletedProcess:
     env = dict(os.environ, LC_ALL="C", CAL_CORE_FENCE_CANDIDATE=str(candidate), CAL_CORE_FENCE_SECTIONS=sections)
+    if rollback is not None:
+        env["CAL_CORE_FENCE_ROLLBACK"] = str(rollback)
     return subprocess.run(["bash", str(RUNNER)], env=env, capture_output=True, text=True, timeout=900)
 
 
@@ -98,10 +122,29 @@ def main() -> int:
             print(f"mutant {index:2d} {'KILLED  ' if killed else 'SURVIVED'} {name}: {detail}")
             if not killed:
                 survivors.append(name)
+        rollback_source = ROLLBACK.read_text()
+        for index, (name, edits) in enumerate(ROLLBACK_MUTANTS, 1):
+            mutated_source = rollback_source
+            for find, replace in edits:
+                if mutated_source.count(find) != 1:
+                    print(f"rollback mutant {index} '{name}': the pattern is not unique ({mutated_source.count(find)})")
+                    return 1
+                mutated_source = mutated_source.replace(find, replace)
+            mutated = pathlib.Path(tmp) / f"rollback_mutant_{index}.sql"
+            mutated.write_text(mutated_source)
+            result = run(CANDIDATE, ROLLBACK_SECTIONS, mutated)
+            killed = result.returncode != 0
+            detail = ""
+            if killed:
+                lines = [l for l in (result.stderr + result.stdout).splitlines() if l.startswith("FAIL")]
+                detail = (lines[0] if lines else "(failed while running)")[:150]
+            print(f"rollback mutant {index} {'KILLED  ' if killed else 'SURVIVED'} {name}: {detail}")
+            if not killed:
+                survivors.append("rollback: " + name)
         if survivors:
             print("SURVIVORS: " + "; ".join(survivors))
             return 1
-        print(f"COMMON_ACCOUNT_CORE_FENCE_MUTATIONS_PASS ({len(MUTANTS)} mutants killed)")
+        print(f"COMMON_ACCOUNT_CORE_FENCE_MUTATIONS_PASS ({len(MUTANTS)} fence + {len(ROLLBACK_MUTANTS)} rollback mutants killed)")
         return 0
 
 

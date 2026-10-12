@@ -35,13 +35,15 @@ tpl_pre="kabumori_cal_cf_pre_$tag"
 tpl="kabumori_cal_cf_tpl_$tag"
 db_exact="kabumori_cal_cf_exact_$tag"
 db_run="kabumori_cal_cf_run_$tag"
+db_dep="kabumori_cal_cf_dep_$tag"
+rollback_file="${CAL_CORE_FENCE_ROLLBACK:-$here/common_account_core_fence_rollback.sql}"
 S=(psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super")
 psql_o() { local d="$1"; shift; psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" "$@"; }
 psql_q() { local d="$1"; shift; psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" "$@"; }
 tmp="$(mktemp -d /private/tmp/kabumori-cal-core-fence.XXXXXX)"
 cleanup() {
   rm -rf "$tmp"
-  for d in "$db_run" "$db_exact" "$tpl" "$tpl_pre"; do
+  for d in "$db_dep" "$db_run" "$db_exact" "$tpl" "$tpl_pre"; do
     "${S[@]}" -d postgres -c "drop database if exists $d with (force)" >/dev/null 2>&1 || true
   done
 }
@@ -273,11 +275,12 @@ if want races; then
   holder=$!
   sleep 0.5
   t0="$(now_s)"
-  r="$(fenced "$u")"
+  # VERBOSITY=verbose shows the SQLSTATE: the documented retryable class is 55P03 (lock_not_available), not 42501.
+  r="$("${RQ[@]}" -v VERBOSITY=verbose -c "begin; $(claims "$u") set local role authenticated; insert into public.fixture_fenced_rows (owner_id) values ('$u'); commit;" 2>&1 || true)"
   t1="$(now_s)"
   wait "$holder"
   elapsed="$(perl -e "printf '%.1f', $t1 - $t0")"
-  [[ "$r" == *ACCOUNT_LIFECYCLE_BUSY* && "$(rows "$u")" == 0 ]] || { echo "FAIL race lock-timeout: $r rows=$(rows "$u")" >&2; exit 1; }
+  [[ "$r" == *"55P03: ACCOUNT_LIFECYCLE_BUSY"* && "$(rows "$u")" == 0 ]] || { echo "FAIL race lock-timeout: expected 55P03 ACCOUNT_LIFECYCLE_BUSY, got: $r rows=$(rows "$u")" >&2; exit 1; }
   perl -e "exit(($elapsed >= 2.5 && $elapsed <= 4.8) ? 0 : 1)" || { echo "FAIL race lock-timeout: waited ${elapsed}s, expected about 3s" >&2; exit 1; }
   [[ "$(fenced "$u")" == *ACCOUNT_DELETION_IN_PROGRESS* ]] || { echo "FAIL race lock-timeout: after the freeze" >&2; exit 1; }
   echo "COMMON_ACCOUNT_CORE_FENCE_RACE_BOUNDED_WAIT_PASS (waited ${elapsed}s)"
@@ -374,7 +377,7 @@ fi
 
 if want rollback; then
   catalog > "$tmp/after_candidate"
-  "${O[@]}" -f "$here/common_account_core_fence_rollback.sql" >/dev/null
+  "${O[@]}" -f "$rollback_file" >/dev/null
   catalog > "$tmp/rolled_back_after"
   # The same catalog as before the candidate, apart from ensure_my_profile's body hash being the original's.
   diff <(grep -v '^fn public.ensure_my_profile()' "$tmp/before") <(grep -v '^fn public.ensure_my_profile()' "$tmp/rolled_back_after") >/dev/null \
@@ -384,10 +387,64 @@ if want rollback; then
     || { echo "FAIL rollback: ensure_my_profile ACL changed" >&2; exit 1; }
   [[ "$(psql_q "$db_exact" -c "select prosecdef from pg_proc where oid = 'public.ensure_my_profile()'::regprocedure")" == f ]] \
     || { echo "FAIL rollback: ensure_my_profile is not the legacy invoker function again" >&2; exit 1; }
-  if out="$("${O[@]}" -f "$here/common_account_core_fence_rollback.sql" 2>&1)"; then echo "FAIL rollback ran twice" >&2; exit 1; fi
+  if out="$("${O[@]}" -f "$rollback_file" 2>&1)"; then echo "FAIL rollback ran twice" >&2; exit 1; fi
   grep -q COMMON_ACCOUNT_CORE_FENCE_ROLLBACK_NOT_APPLIED <<<"$out" || { echo "FAIL rollback reason: $out" >&2; exit 1; }
   "${O[@]}" -f "$candidate" >/dev/null
   echo "COMMON_ACCOUNT_CORE_FENCE_ROLLBACK_PASS"
+
+  # H4-P4-R2: another owner's insert fence is never removed (or opened) by this rollback. A DROP of the shared
+  # function cannot succeed while a trigger depends on it, and DROP ... CASCADE would remove that owner's
+  # protection: so the rollback takes back only what G5 attached (the profile trigger, the legacy bootstrap)
+  # and keeps the shared functions, working, for as long as anything else uses them.
+  "${S[@]}" -d postgres -c "create database $db_dep template $tpl owner $owner" >/dev/null
+  psql_o "$db_dep" -f "$candidate" >/dev/null
+  psql_o "$db_dep" -f "$here/common_account_core_fence_fixture.sql" >/dev/null   # a table of another owner with the fence attached
+  RQ=(psql_q "$db_dep")
+  D=(psql_o "$db_dep")
+  u="$(uid 951)"; person "$u" x_autopost kabumori; v="$(version "$u")"
+  "${RQ[@]}" -c "select public.fixture_login('$(uid 952)'::uuid)" >/dev/null
+  if ! out="$("${D[@]}" -f "$rollback_file" 2>&1)"; then echo "FAIL rollback with another owner's trigger attached: $out" >&2; exit 1; fi
+  [[ "$("${RQ[@]}" -c "select count(*) from pg_trigger where tgname = 'account_lifecycle_profile_root_fence' and not tgisinternal")" == 0 ]] \
+    || { echo "FAIL rollback (dependents): the profile trigger is still there" >&2; exit 1; }
+  [[ "$("${RQ[@]}" -c "select prosecdef from pg_proc where oid = 'public.ensure_my_profile()'::regprocedure")" == f ]] \
+    || { echo "FAIL rollback (dependents): ensure_my_profile is not the legacy function" >&2; exit 1; }
+  [[ "$("${RQ[@]}" -c "select to_regprocedure('private.account_lifecycle_service_insert_fence()') is not null and to_regprocedure('private.account_lifecycle_service_state_refusal(uuid,text)') is not null")" == t ]] \
+    || { echo "FAIL rollback (dependents): the shared functions were removed under another owner's trigger" >&2; exit 1; }
+  [[ "$("${RQ[@]}" -c "select tgenabled from pg_trigger where tgname = 'fixture_fenced_rows_fence'")" == O ]] \
+    || { echo "FAIL rollback (dependents): the other owner's trigger was changed" >&2; exit 1; }
+  # The other owner's fence still refuses a write for a frozen account, and still allows an active one.
+  [[ -z "$(fenced "$u")" && "$(rows "$u")" == 1 ]] || { echo "FAIL rollback (dependents): an active person's write" >&2; exit 1; }
+  svc "select public.begin_common_account_deletion('$u'::uuid, $v) ->> 'status'" >/dev/null
+  [[ "$(fenced "$u")" == *ACCOUNT_DELETION_IN_PROGRESS* && "$(rows "$u")" == 1 ]] \
+    || { echo "FAIL rollback (dependents): the other owner's fence no longer refuses a frozen account" >&2; exit 1; }
+  # The profile fence is gone by design (the legacy window is back): a login with no entitlement can insert one.
+  r="$("${RQ[@]}" -c "begin; $(claims "$(uid 952)") set local role authenticated; insert into public.profiles (id) values ('$(uid 952)'); commit;" 2>&1 || true)"
+  [[ -z "$r" && "$(profiles "$(uid 952)")" == 1 ]] || { echo "FAIL rollback (dependents): the legacy profile insert is not restored: [$r]" >&2; exit 1; }
+  # Re-running changes nothing and still succeeds; the shared functions stay while the trigger exists.
+  "${D[@]}" -f "$rollback_file" >/dev/null 2>&1 || { echo "FAIL rollback (dependents): not repeatable" >&2; exit 1; }
+  [[ "$("${RQ[@]}" -c "select to_regprocedure('private.account_lifecycle_service_insert_fence()') is not null")" == t ]] \
+    || { echo "FAIL rollback (dependents): a repeat removed the shared functions" >&2; exit 1; }
+  # The other owner detaches its own trigger (its reviewed step); the next run removes the shared functions.
+  "${RQ[@]}" -c "drop trigger fixture_fenced_rows_fence on public.fixture_fenced_rows" >/dev/null
+  "${D[@]}" -f "$rollback_file" >/dev/null 2>&1 || { echo "FAIL rollback (dependents): the final run" >&2; exit 1; }
+  [[ "$("${RQ[@]}" -c "select to_regprocedure('private.account_lifecycle_service_insert_fence()') is null and to_regprocedure('private.account_lifecycle_service_state_refusal(uuid,text)') is null")" == t ]] \
+    || { echo "FAIL rollback (dependents): the shared functions remain after the last dependent left" >&2; exit 1; }
+  # Nothing left to roll back: refused as not applied; and the candidate can be applied again.
+  if out="$("${D[@]}" -f "$rollback_file" 2>&1)"; then echo "FAIL rollback (dependents): ran with nothing applied" >&2; exit 1; fi
+  grep -q COMMON_ACCOUNT_CORE_FENCE_ROLLBACK_NOT_APPLIED <<<"$out" || { echo "FAIL rollback (dependents) reason: $out" >&2; exit 1; }
+  "${D[@]}" -f "$candidate" >/dev/null || { echo "FAIL rollback (dependents): re-apply" >&2; exit 1; }
+  # Another owner's FUNCTION that calls the decision (PostgreSQL does not track calls in function bodies):
+  # found by the source scan, so the shared functions are kept for it too.
+  "${RQ[@]}" -c "create function public.fixture_other_owner_writer() returns text language plpgsql security definer set search_path = ''
+                 as \$f\$ begin return private.account_lifecycle_service_state_refusal('$u'::uuid, 'x_autopost'); end \$f\$" >/dev/null
+  "${D[@]}" -f "$rollback_file" >/dev/null 2>&1 || { echo "FAIL rollback (function caller): the run" >&2; exit 1; }
+  [[ "$("${RQ[@]}" -c "select to_regprocedure('private.account_lifecycle_service_state_refusal(uuid,text)') is not null and to_regprocedure('private.account_lifecycle_service_insert_fence()') is not null")" == t ]] \
+    || { echo "FAIL rollback (function caller): the shared functions were removed under another owner's function" >&2; exit 1; }
+  "${RQ[@]}" -c "drop function public.fixture_other_owner_writer()" >/dev/null
+  "${D[@]}" -f "$rollback_file" >/dev/null 2>&1 || { echo "FAIL rollback (function caller): the final run" >&2; exit 1; }
+  [[ "$("${RQ[@]}" -c "select to_regprocedure('private.account_lifecycle_service_state_refusal(uuid,text)') is null and to_regprocedure('private.account_lifecycle_service_insert_fence()') is null")" == t ]] \
+    || { echo "FAIL rollback (function caller): the shared functions remain" >&2; exit 1; }
+  echo "COMMON_ACCOUNT_CORE_FENCE_ROLLBACK_DEPENDENTS_PASS"
 fi
 
 echo "COMMON_ACCOUNT_CORE_FENCE_ALL_PASS"

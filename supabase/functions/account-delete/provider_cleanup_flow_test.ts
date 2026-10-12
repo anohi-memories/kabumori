@@ -129,6 +129,116 @@ test('an owner that lost its lease never calls a provider adapter and never repo
   go.resolve();
   const stale = await first;
   assert.equal(error(stale), 'DELETION_IN_PROGRESS');
-  assert.ok(!w.effects.includes('provider:threads:cleanup'), 'the provider was not touched by a stale owner');
+  assert.ok(!w.effects.includes('provider:threads:cleanup') && !w.effects.includes('provider:threads:has'),
+    'the provider was not touched at all by a stale owner (not even read)');
   assert.equal(w.state.calls.delete, 0);
+});
+
+// --- H4-P4-R1: the lease is re-checked at every awaited boundary of the provider step ------------------------
+// A lease lost while an adapter awaits (the synthetic clock moves past the lease) must stop the next
+// destructive call, the next provider and the end of the POSTONA entitlement; the stale owner never
+// reports success. The HTTP 409 alone is not enough: nothing external may have run after the loss.
+const lose = (w: World) => { w.state.clock += LEASE_SECONDS + 1; };
+
+test('R1-A: the lease is lost while hasConnection awaits -- no cleanup, POSTONA is not ended', async () => {
+  const w = world({ x: 'active' });
+  const calls: string[] = [];
+  w.deps.providers = [{
+    provider: 'threads',
+    hasConnection: async () => { calls.push('has'); lose(w); return true; },
+    cleanup: async () => { calls.push('cleanup'); return 'confirmed_remote_revoked'; },
+  }];
+  const response = await remove(w);
+  assert.equal(error(response), 'DELETION_IN_PROGRESS');
+  assert.deepEqual(calls, ['has'], 'the destructive cleanup was never called by a stale owner');
+  assert.equal(w.state.services.x_autopost, 'deleting', 'the POSTONA entitlement was not ended');
+  assert.equal(w.state.calls.delete, 0);
+});
+
+test('R1-B: the lease is lost during the first provider\'s cleanup -- the next provider is never called', async () => {
+  const w = world({ x: 'active' });
+  const calls: string[] = [];
+  const named = (provider: string, onCleanup?: () => void): ProviderCleanupAdapter => ({
+    provider,
+    hasConnection: async () => { calls.push(`${provider}:has`); return true; },
+    cleanup: async () => { calls.push(`${provider}:cleanup`); onCleanup?.(); return 'confirmed_remote_revoked'; },
+  });
+  w.deps.providers = [named('instagram', () => lose(w)), named('threads')];
+  const response = await remove(w);
+  assert.equal(error(response), 'DELETION_IN_PROGRESS');
+  assert.deepEqual(calls, ['instagram:has', 'instagram:cleanup'], 'the second provider was not touched by a stale owner');
+  assert.equal(w.state.services.x_autopost, 'deleting');
+  assert.equal(w.state.calls.delete, 0);
+});
+
+test('R1-C: the lease is lost during the LAST cleanup -- the entitlement is not ended on its answer', async () => {
+  const w = world({ x: 'active' });
+  const calls: string[] = [];
+  w.deps.providers = [{
+    provider: 'threads',
+    hasConnection: async () => true,
+    cleanup: async () => { calls.push('cleanup'); lose(w); return 'confirmed_remote_revoked'; },
+  }];
+  const response = await remove(w);
+  assert.equal(error(response), 'DELETION_IN_PROGRESS');
+  assert.deepEqual(calls, ['cleanup']);
+  assert.equal(w.state.services.x_autopost, 'deleting', 'finish_service_deletion was not called');
+  assert.ok(!w.effects.includes('rpc:finish_service_deletion'));
+});
+
+test('R1-D: a POSTONA that was never started: a stale owner still never cleans a leftover provider', async () => {
+  const w = world({ x: null });
+  const calls: string[] = [];
+  w.deps.providers = [{
+    provider: 'threads',
+    hasConnection: async () => { calls.push('has'); lose(w); return true; },
+    cleanup: async () => { calls.push('cleanup'); return 'confirmed_remote_revoked'; },
+  }];
+  const response = await remove(w);
+  assert.equal(error(response), 'DELETION_IN_PROGRESS');
+  assert.deepEqual(calls, ['has']);
+  assert.equal(w.state.calls.delete, 0);
+});
+
+test('R1-E: the adapter is given a live ownership check: true while owned, false after the loss', async () => {
+  const w = world({ x: 'active' });
+  const seen: boolean[] = [];
+  w.deps.providers = [{
+    provider: 'threads',
+    hasConnection: async () => true,
+    cleanup: async (_user: string, context?: { stillOwned(): Promise<boolean>; signal: AbortSignal }) => {
+      assert.ok(context, 'a context is passed');
+      seen.push(await context.stillOwned());
+      lose(w);
+      seen.push(await context.stillOwned());
+      seen.push(context.signal.aborted);
+      return 'confirmed_remote_revoked';
+    },
+  } as ProviderCleanupAdapter];
+  const response = await remove(w);
+  assert.equal(error(response), 'DELETION_IN_PROGRESS');
+  assert.deepEqual(seen, [true, false, false], 'owned before the loss, not owned after it; the signal is aborted only once the port stops waiting');
+});
+
+test('R1-F: a transient database failure of the ownership question is a stop, never a skip', async () => {
+  const w = world({ x: 'active' });
+  const original = w.answers.renew;
+  let renews = 0;
+  // 1: the step's own ownership check, 2: the provider step's entry, 3: right after the first read.
+  w.answers.renew = (args) => {
+    renews += 1;
+    if (renews === 3) throw new Error('database unavailable');
+    return original(args);
+  };
+  const calls: string[] = [];
+  w.deps.providers = [{
+    provider: 'threads',
+    hasConnection: async () => { calls.push('has'); return true; },
+    cleanup: async () => { calls.push('cleanup'); return 'confirmed_remote_revoked'; },
+  }];
+  const response = await remove(w);
+  assert.equal(error(response), 'DELETION_IN_PROGRESS');
+  assert.deepEqual(calls, ['has'], 'an unanswered ownership question never lets the destructive call through');
+  assert.equal(w.state.services.x_autopost, 'deleting');
+  assert.ok(!w.effects.includes('rpc:finish_service_deletion'), 'the entitlement was not ended after the early stop');
 });

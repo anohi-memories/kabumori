@@ -47,7 +47,7 @@ got them first makes the write wait, then refuses it. Same fixed codes in both (
 | Call | first statement of an owner's reviewed `SECURITY DEFINER` writer: `perform private.account_lifecycle_assert_active_service_write((select auth.uid()), 'x_autopost')` | `create trigger ... before insert on <table> for each row execute function private.account_lifecycle_service_insert_fence('<user_column>', '<service_key>')` |
 | Who it checks | the person's own session: `authenticated` JWT, subject = user, live `auth.sessions` row, then the state | the row's person: any creator (RPC, direct insert, service-role job); a person's JWT naming another id is refused **before any lock** |
 | Covers | all statements of that writer | INSERT only (an UPDATE trigger fires after the row is locked and inverts the I1 order against a deletion cascade) |
-| Wait | unbounded (Postgres default) | bounded: 3 s, then retryable `ACCOUNT_LIFECYCLE_BUSY` (SQLSTATE 55P03), nothing written |
+| Wait | unbounded (Postgres default) | each lock the decision takes is bounded: `lock_timeout` 3 s (up to three in sequence), then retryable `ACCOUNT_LIFECYCLE_BUSY` with SQLSTATE **55P03** (every other refusal is 42501), nothing written. Not a deadline for the whole statement/RPC: a lock taken earlier by the caller (the lifecycle lock inside `start_*`/`ensure_my_profile()`) still waits as PostgreSQL does, under the platform's statement timeout |
 | Missing/unknown | refuses; creates nothing | refuses; creates nothing |
 
 Applied by G5 in this change: the fence on `public.profiles` (service `kabumori`). Whoever creates a profile
@@ -75,9 +75,26 @@ never started or already ended, because a credential may remain). Decision: unre
 `RECONCILIATION_REQUIRED`; invalid, duplicate or reserved key (`x`, `x_autopost`, `kabumori`, `apple`, ...) ->
 `PROVIDER_CLEANUP_BLOCKED`; `local_removed_remote_unverified` -> `PROVIDER_REMOTE_UNVERIFIED` unless
 `deps.acceptRemoteUnverified === true` (a product decision, default off; then success carries
-`remote_unverified:[provider]`). A stale owner never calls an adapter. **No adapter is registered by this change.**
-Adapter obligations (G4): idempotent; report `hasConnection=true` while a remote grant is unverified if the product
+`remote_unverified:[provider]`). **No adapter is registered by this change.**
+
+Ownership contract (H4-P4-R1): the deletion is owned through a database lease, and an `await` is not a lock, so the
+port asks the database again at every boundary where a stale owner could do harm: after `hasConnection()` returns and
+**before** `cleanup()` is called, after `cleanup()` returns (its answer is then not used), between adapters, and (the
+orchestrator) before the POSTONA entitlement ends. A lost lease -- or an ownership question that fails or throws --
+stops the step as `lease_lost`: nothing is recorded, no further adapter is called, no entitlement is ended, the
+request answers `DELETION_IN_PROGRESS`; the next owner re-runs the idempotent adapters. Each adapter call receives
+`{ signal, stillOwned() }`; an adapter that awaits or mutates more than once **must** call `stillOwned()` immediately
+before every external mutation and stop when it is false (`reconciliation_required` if something may already be done,
+`blocked` if nothing was). `stillOwned()` is also false and `signal` aborted once the port stopped waiting for the
+adapter (timeout), so the late continuation of an abandoned call must not mutate; the timeout itself does not cancel
+the adapter, and 20 s without an answer is not evidence that nothing happened. A lease check is not a lock: every
+mutation must still be idempotent, and the adapter keeps its own durable uncertain state (the orchestrator keeps only a
+fixed code and gives the lease back; a retry re-enters the same `cleanup()`).
+Further adapter obligations (G4): report `hasConnection=true` while a remote grant is unverified if the product
 requires a halt; never replay an unsettled provider call; return fixed codes only.
+With no adapter registered the step is a no-op, and the pre-existing X-saga -> `finish_service_deletion` hand-over is
+unchanged (that RPC is not lease-bound in SQL; a stale owner ending an entitlement after a completed cleanup is
+idempotent, and the next owner would do the same).
 
 ## 5. Owner wiring checklist (nothing below is done by this change; no owner file was touched)
 
@@ -93,8 +110,17 @@ requires a halt; never replay an unsettled provider call; return fixed codes onl
   person is added, attach the row fence with that service's key.
 
 Apply order (separate, individually approved steps; not executed): Phase 1 -> Phase 2 -> Phase 3a -> Phase 3b guard
-(`20261010051938`) -> this file (`20261012130000`). Emergency rollback: `supabase/tests/common_account_core_fence_rollback.sql`
-(restores the legacy `ensure_my_profile()`; any trigger that already calls the fence then fails closed).
+(`20261010051938`) -> this file (`20261012130000`).
+
+Emergency rollback: `supabase/tests/common_account_core_fence_rollback.sql`. It always takes back what G5 attached or
+replaced (the profile trigger; the legacy `ensure_my_profile()` is restored, which reopens the Phase 3a window by
+design). It removes the two shared functions **only when nothing else uses them**: PostgreSQL refuses a plain DROP
+while another owner's trigger depends on a function, and `DROP ... CASCADE` would silently remove that owner's
+protection, so it is never used. While any other trigger (or a function whose source names them) exists, the
+rollback keeps the functions unchanged and working, prints who depends on them, and succeeds; the owners detach
+their own triggers in their own reviewed step, and running the file again then removes the functions. A fence that
+itself misbehaves is fixed by `create or replace` of its body, not by dropping it under others. (The earlier claim
+that "a missing function makes dependent triggers fail closed" was wrong for PostgreSQL and is withdrawn.)
 
 ## 6. Not proven, not done (named; none relabelled as PASS)
 

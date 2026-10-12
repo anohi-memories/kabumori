@@ -438,7 +438,10 @@ async function ownedDeletion({ deps, token, user, operationId, owner, appleCode,
     const adapters = deps.providers ?? [];
     if (adapters.length === 0) return null;
     if (!(await owned())) return lost();
-    const report = await runProviderCleanups(adapters, userId);
+    // Ownership is asked again at every awaited boundary inside the port (after each read, after each
+    // cleanup, between adapters); a stale owner stops with nothing recorded and nothing ended (H4-P4-R1).
+    const report = await runProviderCleanups(adapters, userId, { stillOwned: owned });
+    if (report.decision === 'lease_lost') return lost();
     if (report.decision === 'reconciliation_required') {
       return stop(fail(409, 'RECONCILIATION_REQUIRED', { sessionsRevoked, providers: report.providers }));
     }
@@ -447,6 +450,9 @@ async function ownedDeletion({ deps, token, user, operationId, owner, appleCode,
     if (remoteUnverified.length > 0 && deps.acceptRemoteUnverified !== true) {
       return stop(fail(409, 'PROVIDER_REMOTE_UNVERIFIED', { sessionsRevoked, providers: report.providers }));
     }
+    // Everything is settled; the caller ends the POSTONA entitlement next. A lease lost since the last
+    // adapter answered must not end it.
+    if (!(await owned())) return lost();
     return null;
   };
 
