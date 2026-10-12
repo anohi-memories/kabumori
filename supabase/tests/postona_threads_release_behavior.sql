@@ -233,6 +233,47 @@ begin
   perform postona_rel.check(r->>'code' = 'ATTEMPT_EXPIRED', 'too old');
 end $$;
 
+-- ---- Session (C3 R1): an expired session stays refused; a new login does not revive the old JWT ----------
+do $$
+declare
+  a uuid := '00000000-0000-4000-8000-0000000000a1';
+  old_session uuid := postona_rel.session_of('00000000-0000-4000-8000-0000000000a1');
+  new_session uuid := '5e550000-0000-4000-8000-0000000000a1';
+  att uuid := pg_temp.get('att1')::uuid;
+  r jsonb;
+begin
+  update auth.sessions set not_after = clock_timestamp() - interval '1 second' where id = old_session;
+  insert into auth.sessions (id, user_id) values (new_session, a);
+  -- The old JWT (old session id): refused before anything else, whatever the attempt's state.
+  r := postona_rel.release(a, att, 'confirm', p_session => old_session);
+  perform postona_rel.check(r->>'code' = 'AUTH_REQUIRED' and not (r ? 'access_token'), 'old session after expiry: ' || r::text);
+  -- The new login's JWT passes the session check (this attempt is already published, so it is STALE).
+  r := postona_rel.release(a, att, 'confirm', p_session => new_session);
+  perform postona_rel.check(r->>'code' = 'STALE_STEP', 'new session reaches the attempt check: ' || r::text);
+  delete from auth.sessions where id = new_session;
+  update auth.sessions set not_after = null where id = old_session;
+end $$;
+
+-- ---- Documented boundary (C3, for G5 / T10): once POSTONA deletion has started, a late provider result is
+--      refused by the inherited deletion guard and the attempt stays in flight; it is recorded only if the
+--      deletion is lifted. Deletion must therefore treat publishing / creating_container attempts as "may
+--      have posted" (reconcile or audit), never as "not posted". The guard is not weakened here.
+do $$
+declare a uuid := '00000000-0000-4000-8000-0000000000a1'; att uuid; r jsonb; g text;
+begin
+  att := pg_temp.to_container(a, pg_temp.get('acct'), 'f1f1f1f1-f1f1-4f1f-8f1f-f1f1f1f1f1f1', '削除と競合する投稿')::uuid;
+  r := postona_rel.release(a, att, 'publish');
+  g := r->>'grant';
+  insert into public.social_mobile_account_deletions (user_id, workspace_id, state, scope, credential_set)
+  values (a, pg_temp.get('brand_a'), 'started', 'social_only', '[]');
+  r := postona_rel.record(a, att, 'publish', g, 'publish_returned', p_post => '17890000000000005');
+  perform postona_rel.check(r->>'code' = 'ACCOUNT_LIFECYCLE_BLOCKED', 'late result during deletion: ' || r::text);
+  perform postona_rel.check((select status from public.threads_manual_publish_attempts where id = att) = 'publishing', 'stays in flight (may have posted)');
+  delete from public.social_mobile_account_deletions where user_id = a;
+  r := postona_rel.record(a, att, 'publish', g, 'publish_returned', p_post => '17890000000000005');
+  perform postona_rel.check(r->'attempt'->>'status' = 'publish_returned', 'recorded once deletion is lifted: ' || r::text);
+end $$;
+
 -- ---- Custody: only inside the connecting transaction, bound to the stored credential ----------------------
 do $$
 declare a uuid := '00000000-0000-4000-8000-0000000000a1'; got text;

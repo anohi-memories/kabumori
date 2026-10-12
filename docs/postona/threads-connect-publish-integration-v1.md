@@ -57,6 +57,7 @@
 - **トークンを受け取れるのは `release` だけ**。呼び出し元の JWT（`auth.uid()` とセッションは DB 自身が検証済みの claims から読む）＋サーバーの証明。証明が無い・違う・古い・再利用 → 何もロックせず・何も書かずに `ATTESTATION_INVALID`（フェンスにも到達しないことを検証済み）。
 - **記録（record）は許可証・同じ本人・同じセッション・結果そのものへの証明**が必要。別の端末（別セッション）や管理者でも記録できない。利用権が途中で終わっても記録はできる（事実を消さないため）が、次の release は拒否される。
 - **service_role・anon はどの関数も実行できない**（適用時の事後条件と検証で確認）。Edge 関数は service_role キーを持たない。持つのは証明用の鍵だけ（`THREADS_PUBLISH_ATTESTATION_KEY`、Vault の同名 secret と同じ値をユーザーが登録）。
+- **セッションの行ロックは `FOR SHARE`**（2026-10-12、C3 R1 の修正）。以前の `FOR KEY SHARE` は削除やキーの変更とだけ衝突し、`not_after` の更新（期限切れ・失効）とは衝突しなかったため、release の途中で別の接続が期限切れを確定でき、その後にトークンが渡り得た（H3 がローカル PG17 で再現）。`FOR SHARE` はセッション行のどの更新とも衝突するので、(1) release が先なら期限切れの更新は release の確定まで待たされ、(2) 期限切れの更新が先に進行中なら release はそれを待ってから確定後の行で判定し直して拒否する。2つの接続を DB のロック待ちの観測で順序づけた競合テストで両方を確認し、`FOR KEY SHARE` に戻すと失敗することも確認した。ロックの順序（T13 → セッション → ワークスペース・メンバー・アカウント・期限・同意 → nonce → 試行 → Vault）と権限は変えていない。行ロックに表の UPDATE 権限が要るのは `FOR KEY SHARE` と同じで、本番の所有者がこの行をロックできるかは別途の確認事項（広い権限付与はしない）。セッションの期限が「時間の経過だけで」切れる場合（更新なし）は、確認から確定までの数ミリ秒（最大で lock_timeout の3秒）の間に切れたものは止まらない。確定後の Threads への HTTP 要求の間の変更が止まらないのは §1 のとおり。
 - 証明の文言（TS と SQL で同じ値になることを既知の答えで固定）: `postona-threads-publish-release-v1` / `postona-threads-publish-record-v1` ＋ 本人 id・試行 id・手順・（許可証・結果）・発行時刻・nonce を改行でつないだもの。セッション id は文言に入れない（DB が自分で読む）ので、サーバーは JWT を解読しない。
 
 ## 4. H5 への依頼（最小の変更）
@@ -72,11 +73,13 @@ select postona_threads_runtime.outcome($hash,$user::uuid,$session::uuid,'complet
 - `$expires_at` は H5 が既に計算している値（`now + expires_in`）。custody はこのトランザクションで接続されたアカウントでなければ拒否し、61日を超える期限も拒否する。
 - この1文が入るまで、接続できても custody が無い＝期限不明なので、G4 は投稿しない（安全側）。
 - 統合の検証（`integration_smoke.sql`）は、この3文を1トランザクションで実行して通ることを確認している。
+- **セッションのロックの申し送り（C3）**: H5 の `postona_threads_runtime.assert_actor`（#139 の `claim_candidate.sql`）も `auth.sessions` を `FOR KEY SHARE` でロックしている。G4 と同じ理由で、接続の確定（`complete`）中に期限切れの更新が確定し得る。G4 は H5 のファイルを変更しない。本物の owner transport を統合するときに、H5（と G5 のセッション失効の契約）で次を決めてほしい: (1) セッション行のロックを `FOR SHARE` にする（G4 と同じ）。(2) GoTrue が実際に失効・期限切れに使う SQL（UPDATE か DELETE か、どの列か）と、それに対して所有者が行ロックできる権限があるかを、管理された環境で確認する。
 
 ## 5. G5 への依頼（T10・T13）
 
 - **T13**: 本番のフェンス `private.account_lifecycle_assert_active_service_write(uuid,text)`。G4 は P0001 でも 42501 でも、固定のメッセージで読み分ける。
 - **T10（削除・切断）**: Threads アカウントを消すときは、Vault の secret と `social_accounts` の行を一緒に消すこと。G4 の4つの表（手動投稿の許可・投稿の試行・nonce・custody）は `on delete cascade` で一緒に消え、トークンの残骸は残らない（G4 の検証で確認）。フットプリントの集計にこの4表を入れてほしい。すでに公開された Threads の投稿は消さない（Threads 側の削除は別段階）。
+- **削除と「結果の記録」の境界（C3 で確認、ガードは弱めない）**: POSTONA の削除が始まったワークスペースでは、既存の削除ガードが試行の更新を拒否する。そのため、release の後（Threads に書き込んだかもしれない）に削除が始まると、結果の記録は `ACCOUNT_LIFECYCLE_BLOCKED` で拒否され、試行は `publishing`（または `creating_container`）のまま残る（G4 の検証で確認。削除を取り下げれば同じ許可証で記録できる）。G5 の削除・T10 の手順では、この状態の試行を「投稿されていない」とみなさず「投稿されたかもしれない」として、読み取りだけの照合（コンテナの状態）か監査記録の対象にすること。自動の再投稿はしない。
 
 ## 6. 次の作業の一覧
 
@@ -90,6 +93,8 @@ select postona_threads_runtime.outcome($hash,$user::uuid,$session::uuid,'complet
 | **ユーザー** | テスター1名・テキスト1件の実投稿の明示承認 | 未 |
 
 ## 7. 検証（2026-10-11〜12 JST、すべてローカル・偽データ）
+
+2026-10-12 の C3 R1 修正後: `postona_threads_release_run.sh` ALL PASS（セッションの競合2順序、古いセッションの JWT の拒否、削除中の記録の境界を追加。変異9種検出＝`FOR KEY SHARE` へ戻す変異を含む）、`postona_threads_integration_run.sh` ALL PASS（回帰176件）、Deno 93件 PASS。以下は 10-11 時点の記録。
 
 | 検証 | 結果 |
 |---|---|

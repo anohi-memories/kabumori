@@ -12,7 +12,7 @@
 --   release_threads_manual_publish_step(attempt, step, issued_at, nonce, attestation)
 --       ONE transaction, run with the CALLER'S JWT (auth.uid() is the caller, session_id from the same
 --       verified claims): server attestation -> G5 fence (T13, its locks first and held) -> the caller's
---       Auth session (auth.sessions KEY SHARE: signed out / expired = refused) -> workspace, membership,
+--       Auth session (auth.sessions FOR SHARE: signed out / expired = refused) -> workspace, membership,
 --       account, credential expiry, manual permission (threads_manual_publish_authorize, row locks) ->
 --       single-use nonce -> attempt FOR UPDATE (compare-and-set) -> Vault read -> status move + a record
 --       grant bound to this user and session. The token leaves the database only in the transaction that
@@ -226,9 +226,13 @@ begin
   -- G5 lifecycle first (its locks are held to COMMIT), then the session, then the workspace and account.
   v_code := public.threads_manual_publish_fence(v_user);
   if v_code is not null then return public.threads_manual_publish_refused(v_code); end if;
+  -- FOR SHARE, not FOR KEY SHARE (C3 R1): it conflicts with ANY update of the session row, not only key
+  -- changes and deletion, so an expiry / revocation UPDATE (not_after) cannot commit while this release is
+  -- still running; it waits until this transaction ends. An UPDATE already in flight makes this statement
+  -- wait and then re-check the committed row (READ COMMITTED), which then fails. Held to COMMIT.
   perform 1 from auth.sessions s
    where s.id = v_session and s.user_id = v_user and (s.not_after is null or s.not_after > pg_catalog.clock_timestamp())
-   for key share;
+   for share;
   if not found then return public.threads_manual_publish_refused('AUTH_REQUIRED'); end if;
   v_code := public.threads_manual_publish_authorize(v_user, v_row.social_account_id, p_step in ('create_container', 'check_container', 'publish'));
   if v_code is not null then return public.threads_manual_publish_refused(v_code); end if;
