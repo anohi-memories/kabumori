@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { mockRepository } from '@/data/mock-repository';
 import { SupabaseContentSettingsRepository } from '@/data/content-settings-repository';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseConfig, supabase } from '@/lib/supabase';
 import { colors } from '@/constants/theme';
 import { ActionButton, Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { resolvePostsView } from '@/domain/data-view';
@@ -42,7 +42,7 @@ import {
   type ConfirmationMap,
 } from '@/features/schedule/confirmation-state';
 import { PreviewCard } from '@/features/schedule/preview-card';
-import { createReservationStore } from '@/features/schedule/reservation-store';
+import { createReservationStore, POSTONA_RESERVATION_PERSISTENCE_ENABLED } from '@/features/schedule/reservation-store';
 import { ServerReservationCard } from '@/features/schedule/server-reservation-card';
 import {
   applyListAnswer,
@@ -78,8 +78,12 @@ export default function ScheduleScreen() {
   const repository = useMemo(() => (supabase ? new SupabaseContentSettingsRepository(supabase) : null), []);
 
   // Release gate OFF: this is the disabled store (enabled === false) and every server path below is skipped, so
-  // nothing is ever sent from this screen. A remote store is only ever injected by tests.
-  const reservationStore = useMemo(() => createReservationStore(), []);
+  // nothing is ever sent from this screen. The live client is handed over, but only a gate ON builds the live store.
+  const reservationStore = useMemo(() => {
+    const config = getSupabaseConfig();
+    const live = supabase && config.ok ? { supabaseUrl: config.config.url, session: supabase } : null;
+    return createReservationStore(POSTONA_RESERVATION_PERSISTENCE_ENABLED, live);
+  }, []);
   const [filter, setFilter] = useState<UnifiedFilter>('all');
   const [composing, setComposing] = useState(false);
   // Session-only preview plans: kept in memory for this screen, never stored on the device or sent anywhere.

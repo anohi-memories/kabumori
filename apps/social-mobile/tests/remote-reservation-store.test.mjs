@@ -151,14 +151,46 @@ test('fetch transport: HTTPS only, bearer token, JSON, no redirects, a hard time
   await assert.rejects(hanging({ action: 'list', payload: {} }, 't'), /aborted/u);
 });
 
-test('source: the remote store has no Supabase client, storage or service key; the app factory still returns the disabled store', async () => {
+test('source: the remote store has no Supabase client, storage or service key; the gate constant is a literal false', async () => {
   const source = await readFile(new URL('../src/features/schedule/remote-reservation-store.ts', import.meta.url), 'utf8');
   const code = source.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/\/\/.*$/gmu, '');
   assert.doesNotMatch(code, /supabase|AsyncStorage|localStorage|SecureStore|service_role|SERVICE_ROLE|EXPO_PUBLIC/iu);
   const factory = await readFile(new URL('../src/features/schedule/reservation-store.ts', import.meta.url), 'utf8');
   assert.match(factory, /export const POSTONA_RESERVATION_PERSISTENCE_ENABLED = false as const;/u);
-  assert.doesNotMatch(factory.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/\/\/.*$/gmu, ''), /remote-reservation-store|createRemoteReservationStore|fetch/u,
-    'the app factory never constructs the remote store while the gate is OFF');
+  assert.match(factory, /if \(gate !== true \|\| !live\) return DISABLED_RESERVATION_STORE;/u);
+  const live = await readFile(new URL('../src/features/schedule/live-reservation-store.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(live.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/\/\/.*$/gmu, ''), /service_role|SERVICE_ROLE|AsyncStorage|SecureStore|console\./iu);
+});
+
+test('factory: gate OFF -> the disabled store even with a live client; gate ON + live client -> the live store on the real function path', async () => {
+  const { createReservationStore, DISABLED_RESERVATION_STORE } = await import('../src/features/schedule/reservation-store.ts');
+  let reads = 0;
+  const session = { auth: { getSession: async () => { reads += 1; return { data: { session: { access_token: 'tok-live' } }, error: null }; } } };
+  const sent = [];
+  const fakeFetch = async (url, init) => { sent.push({ url, init }); return { status: 200, json: async () => ({ ok: true, reservations: [] }) }; };
+  const live = { supabaseUrl: 'https://project.example.invalid', session, fetch: fakeFetch };
+  assert.equal(createReservationStore(), DISABLED_RESERVATION_STORE);
+  assert.equal(createReservationStore(false, live), DISABLED_RESERVATION_STORE);
+  assert.equal(createReservationStore(true, null), DISABLED_RESERVATION_STORE, 'no live client: still disabled');
+  assert.equal(reads, 0);
+  const store = createReservationStore(true, live);
+  assert.equal(store.enabled, true);
+  assert.deepEqual(await store.list('x_a'), { ok: true, value: [] });
+  assert.equal(sent[0].url, 'https://project.example.invalid/functions/v1/postona-x-reservations');
+  assert.equal(sent[0].init.headers.authorization, 'Bearer tok-live');
+  assert.equal(reads, 1, 'the CURRENT session token is read per call');
+  assert.throws(() => createReservationStore(true, { ...live, supabaseUrl: 'http://project.example.invalid' }), /HTTPS/u);
+});
+
+test('live token: no session, an empty token or a session error sends nothing', async () => {
+  const { createLiveReservationStore } = await import('../src/features/schedule/live-reservation-store.ts');
+  let sent = 0;
+  const fakeFetch = async () => { sent += 1; return { status: 200, json: async () => ({ ok: true, reservations: [] }) }; };
+  for (const answer of [{ data: { session: null }, error: null }, { data: { session: { access_token: '' } }, error: null }, { data: { session: { access_token: 'x' } }, error: new Error('refresh failed') }]) {
+    const store = createLiveReservationStore({ supabaseUrl: 'https://p.example.invalid', session: { auth: { getSession: async () => answer } }, fetch: fakeFetch });
+    assert.deepEqual(await store.list('x_a'), { ok: false, code: 'AUTH_REQUIRED' });
+  }
+  assert.equal(sent, 0);
 });
 
 // ---------------------------------------------------------------------------------------------------
