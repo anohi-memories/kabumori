@@ -1,0 +1,8 @@
+{
+  "lock": "deno.lock",
+  "nodeModulesDir": "none",
+  "imports": {
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.115.0",
+    "@db/postgres": "jsr:@db/postgres@0.19.5"
+  }
+}

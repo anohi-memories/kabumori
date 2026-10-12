@@ -42,14 +42,14 @@ alter table postona_threads_runtime.burned_codes enable row level security;
 revoke all on all tables in schema postona_threads_runtime from public,anon,authenticated,service_role;
 
 -- SECURITY INVOKER: only an already-authorized owner connection can execute. T13 is first; then
--- active session KEY SHARE, parent read-only consume, then H5 attempt/unique-code lock. No inversion.
+-- active session SHARE (also blocks non-key not_after revocation), then parent consume/attempt.
 create function postona_threads_runtime.assert_actor(p_user uuid,p_session uuid) returns void
 language plpgsql security invoker set search_path='' as $$
 begin
   if p_user is distinct from auth.uid() or p_session is null then raise exception 'H5_ACTOR_INVALID'; end if;
   perform private.account_lifecycle_assert_active_service_write(p_user,'x_autopost');
   perform 1 from auth.sessions s where s.id=p_session and s.user_id=p_user
-    and (s.not_after is null or s.not_after>clock_timestamp()) for key share;
+    and (s.not_after is null or s.not_after>clock_timestamp()) for share;
   if not found then raise exception 'H5_SESSION_INACTIVE'; end if;
 end $$;
 create function postona_threads_runtime.remember(p_hash text,p_user uuid,p_session uuid,p_redirect text)

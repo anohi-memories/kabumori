@@ -134,6 +134,8 @@ export function createThreadsRuntime(d: RuntimeDependencies) {
           !/^[0-9a-f-]{36}$/.test(claim.oauth_state_id)
         ) throw new RuntimeRefusal("CLAIM_INVALID");
         exchangeStarted = true;
+        // Conservative receipt clock: never extend provider expires_in by profile/Auth/DB latency.
+        const exchangeStartedAt = now();
         const exchanged = await completeThreadsConnectExchange(
           http,
           config,
@@ -152,7 +154,9 @@ export function createThreadsRuntime(d: RuntimeDependencies) {
           handle: exchanged.identity.handle ?? null,
           accessToken: exchanged.longLivedToken,
         });
-        const expiry = new Date(now() + exchanged.expiresInSeconds * 1000);
+        const expiry = new Date(
+          exchangeStartedAt + exchanged.expiresInSeconds * 1000,
+        );
         completeStarted = true;
         await bounded(() => d.bridge.complete(actor!, hash!, payload, expiry));
         // This DTO is a receipt, NOT a publish authority/token; G4 must reauthorize on each post.
