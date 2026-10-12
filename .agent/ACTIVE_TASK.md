@@ -108,11 +108,11 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: done
 - task_id: kabumori-g1-v1-release-gap-inventory-20261012
 - start_code: G1
 - finish_code: K1
-- next_owner: claude
+- next_owner: none
 - return_to: かぶモリアプリG1のちゃ
 - source: .agent/tasks/CLAUDE_TASK_1.md
 - allocation: 2026-10-12 user chose sequential release readiness 1→6; first G1 read-only audit/inventory of V1 five-tab UI, unimplemented features, source/PR/release gates and owner dependencies. No product edits, no deployment, G2/G5/G6/G8/G9 boundaries protected.
