@@ -77,17 +77,18 @@
 ## Codex H4
 - owner: codex
 - slot: codex-4
-- status: done
-- task_id: news-improvement-a-pr129-phase7-r2-final-focused-review-h4-20261012
+- status: ready
+- task_id: common-account-g5-phase4-pr152-pr121-security-review-h4-20261012
 - start_code: H4
 - finish_code: C4
 - completion_code: C4
-- next_owner: none
-- return_to: ニュース改善API最適化のちゃ
+- next_owner: codex
+- return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CODEX_TASK_4.md
 - report: .agent/CODEX_REPORT_4.md
-- allocation: C4 2026-10-12 CHANGES_REQUIRED。独立H4がPR129 head `7bf9b8a0` で既存968 PASS、独立12probe=9 PASS/3 FAILを実施。H4-R1 P1:決算表折返し誤Fact、R2 P2:本文更新と判定保存のCAS競合、R3 P2:過去FOMC決定を現在決定と誤認。レビュー完了、コード未変更、本番アクセス・merge・deployなし。G8ニュース改善Aだけへ限定修正TASKを戻す。H4はdone/unreserved、他案件を勝手に引継がない。
-- recommended_model: Sol（高） (completed)
+- recommended_model: Sol（高）
+- allocation: G5 Phase4 Draft PR152 head 5ad5bb40cadf013f00553acd5509f4f74fdbff7c と依存Draft PR121 head 76b50e1e03f82faaa3460bab1603afa8fef3ce44 の安全性・権限・ロック・退会を独立1回重点レビュー。READ ONLY、他slot不干渉、本番/merge/deploy禁止。過去H4 PR129完了履歴はH4 TASK/Reportに保持。
+
 ## Codex H5
 - owner: codex
 - slot: codex-5
