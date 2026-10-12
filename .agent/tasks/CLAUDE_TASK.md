@@ -1,3 +1,38 @@
+# G2 CURRENT TASK — かぶモリV1 PR143→PR149→PR158 マージ直前チェック
+
+- task_id: kabumori-g2-v1-three-pr-final-merge-preflight-20261012
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- start_code: G2
+- finish_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Opus5.5（高）**
+- task_type: source-only final premerge verification; no actual merge or production activity
+- production_status: PRODUCTION_NO_GO
+- previous_k2: PASS_INTEGRATION_READY for PR143/149/158 (G2-reported PG+Deno504+app534, not independently rerun by ChatGPT)
+
+## Objective
+Make a precise, current **GO_TO_MERGE_DECISION / CHANGES_REQUIRED / BLOCKED** recommendation for stacked PR143 → PR149 → PR158. No speculative unrelated implementation. Do not rerun all old tests.
+
+## Required work
+1. Read PROJECT_RULES.md, .agent/ORCHESTRATION.md, ACTIVE_TASK, CURRENT_STATE, G2 current TASK+Report and relevant G1/G5/G6 statuses. Inspect fresh origin/main SHA, PR143/149/158 actual head/base/draft/mergeability, PR review and checks. Verify independent G2 worktree/checkout and collision-free owner boundaries before touching source. Protect other slots.
+2. On a disposable independent G2 worktree, prove the exact current merge sequence PR143 → PR149 → PR158, noting that PR149 is stacked on PR143 and PR158 on PR149; do not double-apply parents. Produce exact overlap/conflict filenames and semantic hazards (migration ordering, RLS/Auth, route integration, source shifts). Check G1 PR156 and G5 PR152 current status without modifying them.
+3. Review the three PRs' final deltas against the latest main and their parents. Confirm that H3 lease fencing and H2 R1–R6 fixes remain present, rollout gates are OFF, old personalized Cron remains unchanged in production, opt-outs, cross-user isolation and unknown-delivery retry rules stay intact. Verify PR158 includes only integration tests + release RUNBOOK. Confirm no dependency on G6 Claude shadow PRs for core V1.
+4. Run focused migration/source/RLS/integration tests only if latest main has meaningful changes since prior K2 or checks need verification. Record exact run/not run distinctions. No real Expo, API, production database or paid call. Review RUNBOOK for safe OFF-first, app/device pilot, rollback steps.
+5. Deliver a concise evidence-based recommendation: ordered PR head/base/current main SHAs; mergeability and CI; whether the three can safely be merged in order; residual blockers and exact required review (if any); precise next step to user-approved production **read-only** preflight after a separate merge decision. Do not claim merged/deployed.
+6. **Forbidden:** do not merge any PR; do not mark Draft ready; do not update PR branches without separately justified safe source fix; do not force-push/rebase/reset protected branches; do not alter G1/G5/G6/G3/G4 files; do not touch managed DB, Auth, RLS, Edge, Cron, Vault/Secrets, Expo send, EAS, Apple, paid APIs or production flags. No billable calls.
+7. If an actual G2-owned premerge defect is found, document it and make the smallest safely isolated Draft candidate only when ownership and worktree are unambiguous, otherwise stop conflicting portion and report blocker.
+
+## Completion
+- Record ## Report in this TASK with task_id, result, main/head/base and dependencies, actual PR checks, changed_files, tests, commit_hash, push, merge, deploy, remaining_issues, safety_checks, next_recommendation, GO/NO_GO.
+- Set status review_required / next_owner chatgpt; update only own G2 status/index and CURRENT_STATE G2 record without altering other slots.
+- Return: **かぶモリアプリG2のちゃへ K2**.
+
+---
+## Previous G2 TASKs/Reports — protected verbatim below
+
 # G2 CURRENT TASK — かぶモリV1 個別オンデマンド＋共通朝夕通知：main統合・リリース候補準備
 
 - task_id: kabumori-g2-ondemand-broadcast-release-integration-20261012
