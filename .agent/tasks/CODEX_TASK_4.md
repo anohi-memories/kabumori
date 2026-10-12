@@ -1,3 +1,46 @@
+# H4 CURRENT TASK — G5 Phase4 共通アカウント実装 セキュリティ重点レビュー
+
+- task_id: common-account-g5-phase4-pr152-pr121-security-review-h4-20261012
+- owner: codex
+- slot: codex-4
+- status: ready
+- next_owner: codex
+- start_code: H4
+- finish_code: C4
+- completion_code: C4
+- return_to: 共通アカウントG5のちゃ
+- recommended_model: **Sol（高）**
+- task_type: independent focused source/security review (read-only)
+- target: https://github.com/anohi-memories/kabumori/pull/152
+- expected_head: 5ad5bb40cadf013f00553acd5509f4f74fdbff7c
+- dependency: https://github.com/anohi-memories/kabumori/pull/121
+- expected_dependency_head: 76b50e1e03f82faaa3460bab1603afa8fef3ce44
+
+## 目的
+G5 Phase4の実装コード（SQL書込フェンス、既存利用登録との整合、退会時provider_cleanup）を、#121 T13ガードも含めて一度だけ独立レビューする。設計だけの再レビューや大量の既存テスト再実行はしない。作業開始時にGitHubの最新HEADを読み戻し、変化があれば差分を確認する。
+
+## 開始前確認
+PROJECT_RULES.md / .agent/ORCHESTRATION.md / .agent/ACTIVE_TASK.md / .agent/CURRENT_STATE.md / G5 TASK・Report / H4 TASK・Reportを確認し、fresh origin/main・PR152/121の正確なHEAD・他slotとの競合・独立H4 worktreeを検証する。以前のH4 PR129レビューは完了済みであり、その履歴を保存する。
+
+## 重点レビュー
+1. SECURITY DEFINER、search_path、ACL、GRANT、RLS、auth.uid()、サービス間/ユーザー間権限分離、service_roleによる迂回。
+2. account/entitlement/identityロック順、freezeとINSERT/UPDATEの競合、3秒lock_timeout、55P03、デッドロック、削除中の旧JWT書込。
+3. ensure_my_profile()の旧ビルド互換、終了後の再登録、冪等性。
+4. provider_cleanupの未知/失敗/remote_unverified/再照合、leaseの所有権、T10接続未実装とmanaged_auth_delete BLOCKEDの境界。
+5. #121ガードと#152のmigration依存・導入順、実際の本番未検証条件。
+
+必要な限定オフライン・合成データテストのみ行い、重要なP0/P1/P2をファイル/行・再現手順付きで報告する。G5が報告したローカルPASSを、独立実行したものと混同しない。
+
+## 禁止
+本番Supabase・Auth/Storage・実OAuth・実ユーザー・有料API・本番migration・deploy・PR merge・他slot source/TASK・worktreeへの操作は禁止。H4はレビューのみで修正実装しない。原PRはDraft未統合のまま。
+
+## 完了
+.agent/CODEX_REPORT_4.mdへ新しい報告を先頭に追加し、以前の報告を保護する。H4のstatus review_required/next_owner chatgptへの更新のみ許可。result、changed_files、tests、reviewed_heads、commit/push/merge/deploy、remaining_issues、safety_checks、next_recommendation、return_to、completion_codeを明記する。
+最後に「共通アカウントG5のちゃ へ C4 を送ってください。」と記載する。
+
+---
+
+## 過去H4 TASK（保存）
 # Codex Task H4 — PR #129 Phase7/R1/R2 一度限りの独立安全レビュー
 
 - task_id: news-improvement-a-pr129-phase7-r2-final-focused-review-h4-20261012
