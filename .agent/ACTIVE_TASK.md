@@ -197,15 +197,15 @@
 - owner: claude
 - slot: claude-8
 - status: ready
-- task_id: news-improvement-a-pr129-h4-r1-r2-r3-correction-g8-20261012
+- task_id: news-improvement-a-pr129-premerge-offline-integration-qa-g8-20261012
 - start_code: G8
 - finish_code: K8
 - next_owner: claude
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_8.md
 - report: .agent/tasks/CLAUDE_TASK_8.md#report
-- allocation: USER EXPLICIT ニュース改善Aの専任G8。H4/C4のP1×1・P2×2独立レビュー指摘だけをPR129へ実装するR3 TASK。決算短信の折返し表をfail-closed、本文更新後の古い判定保存を原子的CASで防止、FOMC声明の過去判断と現在判断を正しく分離。前のR1/R2実装・Report保全、PR129 Draft維持、merge/deploy/本番変更なし。C4レビューは完了、次のK8で確認。G9その他枠は非干渉。
-- recommended_model: Opus5.5（高）
+- allocation: USER EXPLICIT G8=ニュース改善A専任。K8 2026-10-12 R3実装修正`0a2df248`は `SOURCE_CORRECTIONS_ACCEPTED`。H4-R1/R2/R3の3件はソースおよび再現回帰テストで修正確認、G8報告761/34/162/20 PASS・実PDF51件数値一致。次の具体TASKは**PR129のfresh-main統合確認とsource-only premerge QA**のみ（推薦Sonnet5高）。実行はgit merge-tree等dry-runと既存テスト、リリースリスクの評価、PR129を実merge/deployしない。古いF7/F9の一部制約、TDnet fallback、Fed権利、main330commits前進、Vercel build-rate-limit、mergeability unknownを隠さない。G9他slot/PR116固定本番環境不干渉。完了K8はこのチャット。
+- recommended_model: Sonnet5（高）
 ## Claude G9
 - owner: claude
 - slot: claude-9
