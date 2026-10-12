@@ -38,10 +38,10 @@
 
 ## F3
 - slot: F3
-- status: in_progress
+- status: review_required
 - task_id: postona-f3-x-reservation-live-boundary-source-integration-20261012
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: POSTONA G3のちゃ（新F3担当・AI自動投稿／X予約担当チャット）
 - completion_code: L3
 - recommended_model: Opus5.5（高）
