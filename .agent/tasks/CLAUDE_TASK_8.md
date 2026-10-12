@@ -3,8 +3,8 @@
 - task_id: news-improvement-a-pr129-release-safety-env-switches-g8-20261012
 - owner: claude
 - slot: claude-8
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G8
 - finish_code: K8
 - return_to: ニュース改善API最適化のちゃ
@@ -36,16 +36,21 @@
 ## Report
 
 - task_id: news-improvement-a-pr129-release-safety-env-switches-g8-20261012
-- result: not_started
-- tests: not_run
-- changed_files: none
-- commit_hash: none
-- push: not_performed
-- merge: not_performed
-- deploy: not_performed
-- remaining_issues: Fed/TDnet新機能が無条件ON。安全な初期OFFゲート追加。
-- safety_checks: not_started
-- next_recommendation: G8 R5の最小OFFゲート→K8で確認。
+- result: implemented — 2つの独立・既定OFFスイッチを追加（機能/Fact抽出ロジックは不変）
+- flag_names: `IMPORTANT_NEWS_FED_STATEMENT_BODY_ENRICHMENT`（Fed公式声明本文）, `IMPORTANT_NEWS_TDNET_KESSAN_FACTS`（TDnet決算短信facts）
+- default_off: 両方とも `=== "enabled"` の完全一致のみON。未設定/空/`true`/`Enabled`/`disabled`/typoはOFF（fail closed）。
+- on_behavior: Fed=statement項目のみ公式ページを読み、factsを本文化し、保存済み・未判定・本文なしの行へguard付きで本文追記（R3までの安全機能は全て有効）。TDnet=`composeTdnetPdfBody`でfacts先頭の本文（読めない表は注意文＋従来要約）。
+- off_behavior: Fed=RSS候補は従来どおり（見出しのみ）、stored-state read・声明ページfetch・body fill が一切走らない（`selectCandidates` の追加列も要求しない）。TDnet=従来の `buildTdnetBodySummary` の結果をそのまま返す（PDF取得数・サイズ上限・失敗時の例外・非決算要約は不変）。Fed以外のmacro/JP official/breaking/trigger分岐は未変更。
+- tests: important-news-monitor 768 PASS（761+新規7）; news_body_extraction 34 PASS; shadow 20 PASS; discovery+observer 162 PASS（合算の重複なし）; 新規7件=TDnetフラグ値判定/OFF==従来要約/失敗系不変/非決算不変、実 index.ts ハンドラ＋RSS/DB mockでFed OFF(未設定・空・true・Enabled・disabled)は声明ページ非取得・本文null・PATCHなし、ON は声明のみ取得し据置4.25〜4.5%を本文化・議事録は不変、フラグ名の分離。旧実装(フラグなし)では新規テストは import 不能/OFF期待でFAIL。typecheck=既存TS2322のみ、lint=97(baseline同数)、diff --check clean。
+- changed_files: important-news-monitor/{index,official_source_fetchers,fed_statement_enrichment_test,kessan_pdf_body_integration_test}.ts, release_flags_test.ts(新規), _shared/news_body_extraction/README.md（OFF手順/ON判定を明記、Secrets値は記載なし）
+- commit_hash: 81251b316ae44a634a1b4108b420a18765d17261
+- push: done（claude/news-body-integration-phase7-20261011, 0a2df248→81251b31）
+- PR_head: 81251b316ae44a634a1b4108b420a18765d17261
+- PR_state: OPEN / Draft / 未merge
+- 切替の注意（read-only調査・実行はしていない）: フラグはEdge Functionの環境変数。deploy済み関数に反映するには関数のsecrets/環境へ設定が必要（`supabase secrets set` は全関数versionを更新する既知の挙動、readbackで確認）。repo側は何も設定しない。OFFに戻すとFedは見出しのみ判定、TDnetは従来keyword要約に戻り、ニュース漏れリスクと数字のあいまいさは消えない。
+- remaining_issues: 既存 no_post/generation_failed/published 行の再判定は未実装（意図的）。実PostgREST/Edgeでの競合・実Fed文書の過去会合言及頻度は未確認。mergeabilityは再取得が必要（過去のMERGEABLEを確定値としない）。
+- safety_checks: merge/deploy/本番env・DB・Edge・Cron・Secrets変更なし、有料API・実Fed/TDnet取得なし（テストはmock）、PR116(a26e4365)固定・kabumori-pf・他slot/G9未変更、BOJ未接続維持。
+- next_recommendation: K8でフラグ実装とQAを確認。本番投入は PR116反映後に merge→deploy（両フラグOFFで出荷）→必要に応じて個別にON、の順を提案。ON判断はちゃとユーザー。
 
 ---
 
