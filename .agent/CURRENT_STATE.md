@@ -1,3 +1,7 @@
+## G6 four-PR premerge QA assigned — 2026-10-12 JST
+- User requested continue after G6 K6 isolation PASS. G6 new `common-ai-provider-g6-four-pr-premerge-offline-qa-20261012` **ready**, recommended Sonnet5（高）, start G6, return K6 to 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）.
+- Four Draft stack PR148 a71de72b → PR150 18d9058a → PR153 6c576567 → PR157 9b952d64 unchanged at assignment. GitHub PR148 reports **mergeable=false against main**; child PRs report mergeable=true only against their parent, not proof of merge into fresh main. G6 must locate conflicts using a disposable own worktree and run full offline merged-stack tests if safe; no product edits or new PR, no merge/deploy/prod/secrets/Cron/paid API. G2 PR143/149/158 and G5 protected. Return K6 with root cause and ownership-specific recommendation. Production remains NO_GO.
+
 ## G2 報告 — かぶモリ V1 の main 統合とリリース候補の準備（Draft PR #158）— 2026-10-12 JST
 
 - G2 `kabumori-g2-ondemand-broadcast-release-integration-20261012`: **INTEGRATION_READY／PRODUCTION_NO_GO**。
