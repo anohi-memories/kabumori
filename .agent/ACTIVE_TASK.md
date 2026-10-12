@@ -141,16 +141,16 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: postona-threads-pr144-c3-r1-session-expiry-lock-fix-g4-20261012
+- status: ready
+- task_id: postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012
 - start_code: G4
 - finish_code: K4
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
 - report: .agent/tasks/CLAUDE_TASK_4.md#report
-- allocation: K4 2026-10-12 PASS_SOURCE_FIX / C3_R1_REMEdIED_OFFLINE / REAL_PILOT_HOLD. Original G4 PR144 head d4a1e87b77d1fbd362dc51809ce2d998afda15ea advanced with ONE non-force commit to 09fd2c49114b7d26c23b71a3084574dc6a5a7ad6, exactly four G4-only files (session-lock SQL, PG race runner, behavior fixture, documentation); parent PR140 unchanged, OPEN/DRAFT/unmerged. H3's local P2 R1 FOR KEY SHARE nonkey session expiry UPDATE race corrected with FOR SHARE lock and both-order two-connection regression plus explicit fail-before mutation. G4 reports PG17 and 9/9 mutations, combined Deno176, focused93 PASS; ChatGPT inspected diff/test source but did not rerun. No H3 re-review needed for this narrow source change. Real managed GoTrue revocation, H5 protected KEY SHARE owner transport, G5 real T13/T10 and deletion audit, Vault credentials, Meta tester/callback, external provider/post and public flag remain blocked. App/server gates all FALSE and Edge 503. No merge/deploy/grant/migration/real API. G4 done/unreserved; prior task Report preserved; H5/G5/G3 and other slots unchanged.
-- recommended_model: Opus5.5（高） (completed K4)
+- allocation: User 2026-10-12 requested G4 proactively finish its own Threads tasks before G5 final. Implementation-FIRST with Opus5.5（高）. G4 mobile actual authenticated Threads OAuth start/reconnect + expo-web-browser callback forwarding and verified readback UI, G4-owned disabled server/H5 composition helper, real provider-specific Threads T10 adapter compatible with G5 PR152 ProviderCleanupAdapter and safe local credential/attempt footprint cleanup. Create NEW isolated G4 branch stacked on protected G4 Draft PR144 head 09fd2c49114b7d26c23b71a3084574dc6a5a7ad6 and NEW Draft PR; original PR144/140/124/135/139 HEADs untouched. G5 Draft PR152 5ad5bb40cadf013f00553acd5509f4f74fdbff7c is review_required at assignment and protected; NO G5 account-delete/lifecycle/Auth code edits or registration, H5 owner auth source PR139 protected, G3 scheduling/X protected. User requested code, not additional study/testing loop: real app/service callback adapter + concrete T10 implementation and targeted tests; no false claim of live connection. All Threads client/server source gates false, Edge 503, no actual Meta/Supabase/Auth/Vault/prod calls, migration/GRANT, secrets, PR merge/deploy, EAS or posts. G5 K5 and high-risk review and H5 real owner transport/managed privileges/Meta tester prerequisites later. Complete Draft code/test report, K4 to this POSTONA G4 chat.
+- recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
 - slot: claude-5
