@@ -1,3 +1,52 @@
+# G6 CURRENT TASK — Phase 2c 接続に伴う隔離テスト限定修正（オフライン）
+
+- task_id: common-ai-provider-g6-phase2c-isolation-test-allowlist-20261012
+- owner: claude
+- slot: claude-6
+- status: ready
+- next_owner: claude
+- start_code: G6
+- finish_code: K6
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- recommended_model: **Sonnet5（中）**
+- mode: OFFLINE_SOURCE_ONLY
+- production_mutation_window: FORBIDDEN
+- user_request: G2 Phase2c K2 PR153 reports one expected failure of the Phase1a import isolation test; assess and narrowly assign G6-owned test correction. Prior G6 Phase2b done and archived below.
+
+## Fixed evidence / ownership gate
+- PR148 head `a71de72b3bcfc88547b616f789df7765283565ed` → PR150 head `18d9058aa8bd451f3cd0181f8570a31484750035` → PR153 head `6c576567328c99a58c2e4beaed86d155fe875769`, all Draft/unmerged at allocation. PR153 adds only `market-report-analysis/handler.ts`, `index.ts`, `shadow_wiring_test.ts`; G2 owns all three. Never edit their PR/branch/worktree.
+- G6-owned test: `supabase/functions/_shared/ai_provider/isolation_test.ts` on current main still contains "Phase 1a scope: no production function imports the provider module yet". This obsolete rule must only permit the authorized Phase2c handler import, without widening other Edge imports or client leakage.
+- Before starting: read PROJECT_RULES.md, HANDOFF.md, .agent/ORCHESTRATION.md, own task/report, ACTIVE_TASK/CURRENT_STATE, fresh origin/main and updated heads/PR file lists; verify exclusive G6 worktree / clean checkout and conflicts across all 15 slots. If overlap/branch ownership unclear, STOP and report K6. Do not alter another slot TASK or reports.
+
+## Scope and implementation
+1. Create clean independent G6 worktree and new scoped branch based on **PR153 exact HEAD**, preserving PR148/150/153 commits and branches unchanged. PR base should be PR153 branch. Do not rebase or force-push any protected branch.
+2. Change only `supabase/functions/_shared/ai_provider/isolation_test.ts` and, if genuinely necessary, a new G6-owned test fixture/file. Replace obsolete blanket restriction with *exact positive allowlist* for `supabase/functions/market-report-analysis/handler.ts` and strictly necessary `market-report-analysis` test file(s), not entire directory nor any other Edge Function. Check exact import site and ensure tests are handled without a broad wildcard.
+3. Keep the guarantees: **other production Edge functions may not import the provider module**, app/client (`src/`, `apps/`) cannot import it or reference ANTHROPIC_API_KEY/SDK, no expansion to Auth/Secrets/DB. Add negative tests/probes proving a forbidden Edge file still fails and that app secret leakage is still detected.
+4. Run tests against **full stacked PR153 integration**, including isolation test, 123 Provider tests, relevant 313 market-report tests, type/lint and secret scan. Record accurate counts/results; where totals differ explain. Do not use actual external network or credentials.
+5. Create **G6-only Draft PR**, stacked on PR153, with only scoped test changes. Explain dependency chain and clear distinction between offline PASS and production NO_GO. No merge, deploy, Edge/Cron/Secrets/DB modifications, or paid Anthropic/OpenAI calls.
+6. Update this TASK `## Report — Phase2c isolation`: result, changed_files, commands/tests, branch/PR/commit/push, safety_checks, blocking conditions, production0/external_paid_calls0; set status review_required/next_owner chatgpt and return **K6** to 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）.
+
+## Acceptance / security gates
+- PASS only for exact allowlist that admits the approved G2 handler integration and preserves denial for other Edge Functions and all app/client references. Test both positive and negative paths on the PR153 stack. No production authorization is implied.
+- If PR153/head changes, dependency conflict, or an additional non-G6 code change is necessary: STOP/K6; never patch G2-owned code or broaden import permissions to make tests green.
+- Before any actual live Claude shadow: separate authorization and independent focused release review of recovery Cron, Edge Secret, waitUntil, policy limits and paid canary.
+
+## Report — Phase2c isolation（G6記入）
+- result: NOT_STARTED
+- changed_files: none
+- tests: NOT_RUN
+- push: no
+- merge: no
+- deploy: no
+- production: 0
+- paid_external_requests: 0
+- remaining_issues: awaiting G6 implementation
+- next_recommendation: G6 → K6
+
+---
+
+# PRESERVED G6 PRIOR TASKS / REPORTS — Phase2b and earlier (do not rewrite below)
+
 # G6 CURRENT TASK — 共通AI基盤 Phase 2b / 市況レポート配線のオフライン統合・安全ゲート
 
 - task_id: common-ai-provider-g6-phase2b-market-report-wiring-offline-20261012
