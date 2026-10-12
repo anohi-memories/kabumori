@@ -18,6 +18,9 @@
 //
 // dry_run: builds and generates but writes nothing and enqueues nothing; the
 // response carries the snapshot and report for inspection.
+//
+// On-demand mode (personalized_ondemand_settings.ondemand_requests_enabled, off by default):
+// the whole run is skipped with ONDEMAND_MODE; personalized-analysis-worker serves user requests.
 import {
   buildPacket,
   buildSnapshot,
@@ -26,11 +29,8 @@ import {
   jstParts,
   newsWindowStartIso,
   openAiRequester,
-  parseYahooDaily,
   reportUpdate,
   yahooSymbol,
-  type NewsInput,
-  type PriceSeries,
   type ReportType,
   type TrackedInput,
   BENCHMARK_LABEL,
@@ -47,11 +47,11 @@ import type { AppMarketDetail } from "./market_detail.ts";
 import { buildSharedConsumption, sharedGateDecision } from "./shared_gate.ts";
 import { withDeliveryPolicy } from "./delivery_policy.ts";
 import { loadMicMarketContext, micSourceBasis, toMicPacketEntries } from "./mic_market_context.ts";
+import { fetchAllSeries, toNews, toTracked, TRACKED_SELECT, type NewsRow, type TrackedRow } from "./portfolio_inputs.ts";
+import { ondemandModeEnabled } from "./ondemand_mode.ts";
 
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
-const YAHOO_CHART_URL = "https://query2.finance.yahoo.com/v8/finance/chart/";
 const INDEX_SYMBOLS = [{ label: "日経平均", symbol: "^N225" }, { label: BENCHMARK_LABEL, symbol: BENCHMARK_SYMBOL }];
-const PRICE_CONCURRENCY = 6;
 const TIME_BUDGET_MS = 110_000;
 const MAX_USERS_PER_RUN = 20;
 
@@ -120,100 +120,6 @@ function rest(supabaseUrl: string, secretKey: string): Rest {
   };
 }
 
-type TrackedRow = {
-  id: string;
-  user_id: string;
-  tracking_type: "holding" | "watch";
-  quantity: number | string | null;
-  average_price: number | string | null;
-  position_type: "cash" | "margin" | null;
-  side: "long" | "short" | null;
-  stock: { ticker_code: string; company_name: string; sector: string | null } | null;
-};
-
-type NewsRow = {
-  news_id: string;
-  ticker_code: string | null;
-  company_name: string;
-  tracking_type: "holding" | "watch";
-  severity: string;
-  matched_sectors: string[] | null;
-  news_time: string;
-  source_url: string | null;
-  source_type: string | null;
-  text_origin: NewsInput["textOrigin"];
-  headline_ja: string;
-  summary_ja: string | null;
-  key_points_ja: unknown;
-};
-
-function toNumber(value: number | string | null): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  const parsed = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-function toTracked(row: TrackedRow): TrackedInput | null {
-  if (!row.stock?.ticker_code) return null;
-  return {
-    trackedStockId: row.id,
-    tickerCode: row.stock.ticker_code,
-    companyName: row.stock.company_name,
-    sector: row.stock.sector,
-    trackingType: row.tracking_type,
-    quantity: toNumber(row.quantity),
-    averagePrice: toNumber(row.average_price),
-    positionType: row.position_type,
-    side: row.side,
-  };
-}
-
-function toNews(row: NewsRow): NewsInput {
-  return {
-    newsId: row.news_id,
-    tickerCode: row.ticker_code,
-    companyName: row.company_name,
-    trackingType: row.tracking_type,
-    severity: row.severity,
-    matchedSectors: Array.isArray(row.matched_sectors) ? row.matched_sectors : [],
-    newsTime: row.news_time,
-    sourceUrl: row.source_url,
-    sourceType: row.source_type,
-    textOrigin: row.text_origin,
-    headlineJa: row.headline_ja,
-    summaryJa: row.summary_ja,
-    keyPointsJa: Array.isArray(row.key_points_ja)
-      ? row.key_points_ja.filter((point): point is string => typeof point === "string")
-      : [],
-  };
-}
-
-async function fetchSeries(symbol: string): Promise<PriceSeries | null> {
-  try {
-    const result = await fetch(
-      `${YAHOO_CHART_URL}${encodeURIComponent(symbol)}?range=1mo&interval=1d&events=history`,
-      { headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(15_000) },
-    );
-    if (!result.ok) return null;
-    return parseYahooDaily(await result.json());
-  } catch {
-    return null;
-  }
-}
-
-async function fetchAllSeries(symbols: string[]): Promise<Map<string, PriceSeries | null>> {
-  const results = new Map<string, PriceSeries | null>();
-  const queue = [...new Set(symbols)];
-  const workers = Array.from({ length: Math.min(PRICE_CONCURRENCY, queue.length) }, async () => {
-    while (queue.length > 0) {
-      const symbol = queue.shift()!;
-      results.set(symbol, await fetchSeries(symbol));
-    }
-  });
-  await Promise.all(workers);
-  return results;
-}
-
 type RequestBody = { mode?: unknown; dry_run?: unknown; user_id?: unknown };
 
 const INDEX_METRIC_KEYS: Record<string, string> = { "^N225": "nikkei225", [BENCHMARK_SYMBOL]: "topix_proxy_1306" };
@@ -257,6 +163,12 @@ Deno.serve(async (req) => {
   const db = rest(supabaseUrl, secretKey);
 
   try {
+    // On-demand lane ON: the user-requested worker owns personalized generation, so the scheduled
+    // run generates and notifies nothing (no double generation / double push). Read errors fail closed.
+    if (await ondemandModeEnabled(db)) {
+      console.log(JSON.stringify({ event: "personalized_report_skipped_ondemand_mode", reportType, tradingDate }));
+      return response({ status: "skipped", reason: "ONDEMAND_MODE", reportType, tradingDate });
+    }
     const holidayRows = await db.get<Array<{ holiday_date: string }>>(
       `market_holidays?market=eq.JPX&holiday_date=gte.${tradingDate.slice(0, 4)}-01-01&select=holiday_date`,
     );
@@ -277,8 +189,7 @@ Deno.serve(async (req) => {
     const trackedRows = await db.get<TrackedRow[]>(
       "tracked_stocks?is_active=eq.true" +
         (onlyUser ? `&user_id=eq.${onlyUser}` : "") +
-        "&select=id,user_id,tracking_type,quantity,average_price,position_type,side," +
-        "stock:stocks_master(ticker_code,company_name,sector)&order=user_id.asc,created_at.asc",
+        `&select=${TRACKED_SELECT}&order=user_id.asc,created_at.asc`,
     );
     const byUser = new Map<string, TrackedInput[]>();
     for (const row of trackedRows) {
