@@ -3,8 +3,8 @@
 - task_id: news-improvement-a-jp-general-major-financial-coverage-j0-g8-20261012
 - owner: claude
 - slot: claude-8
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G8
 - finish_code: K8
 - return_to: ニュース改善API最適化のちゃ
@@ -77,21 +77,23 @@
 ## Report
 
 - task_id: news-improvement-a-jp-general-major-financial-coverage-j0-g8-20261012
-- result: not_started
-- changed_files: none
-- tests: not_run
-- baseline_window: TBD
-- source_candidates: TBD
-- rights_clearance: not_verified
-- delivery_funnel: TBD
-- commit_hash: none
-- branch: none
-- push: not_performed
+- result: J0 完了（監査・設計・オフライン評価）。**本番read-only集計は auto mode に拒否され未実行 → 実測funnelは NOT_VERIFIED**。ChatGPTの数値(173/11/2 等)は reported_unverified のまま。ソース/本番/PR129/PR116/他slot 変更なし。
+- baseline_window: 7日（SQLは窓変更で14日・JST日別・10/12祝日分離に対応）。実行はユーザー側 `tools/jp-news-coverage/run_j0_funnel.sh`（1つのjson、ID/URL/タイトル/ユーザー無し）。ローカルPGで構文・集計動作のみ検証済み。
+- source_candidates: 稼働=財務省/金融庁/首相官邸/消費者庁/気象庁特別警報(jp_official)、OFF=ESRI(リンクがメニュー頁)/JMA eqvol(market_macro重複)、EDINET(キー未登録)。公取委・警察庁・消防庁・外務省・自治体・企業newsroomは先行カタログに評価なし→`unknown`（feed実在を仮定しない）。国交省・厚労省・経産省・防衛省・e-StatはTier B。
+- rights_clearance: 国内主要報道(NHK/時事/朝日/毎日/Yahoo!/東洋経済 等)は機械取得・AI入力・表示とも許諾なし(D)→使用禁止。JPX RSS不可、TDnet閲覧サイトはrobots全拒否、日銀は商用転載事前相談。**初報を埋める合法・無料源は構造的に無い**（有料配信の契約・一次情報網羅拡大・限定Web検索のいずれか）。規約は先行docs(2026-09-28)の転記で本日再確認なし。権利リスク未解消: headline triggerのAl Jazeera(D)/BBC(C)、UN News(C)、日銀、TDnetレーン。
+- delivery_funnel（コード確定分）: レーンは enabled 5系統のみ読み、48h/READ_LIMIT200/挿入6件/25s予算/テーマfilterはデフォルトDROP。`jp_official`候補は`rejected`でも、base `market_feed` は rejected 除外条件を持たない（wrapperの`broad_feed`はtdnet/company_irのみ可視）ため、severity≥medium＋追跡銘柄sector一致なら表示され得る（意図か不整合か未確認）。日本語app_copyは可視性の条件ではない（表示は 検証済み投稿文→app_copy→開示→日本語本文→原文抜粋）。ホームは市場3/保有3、一覧RPC最大50。実機表示は NOT_VERIFIED_ON_DEVICE。
+- gap_reasons: 173→11は別母集団（jp_%全系統 vs enabled5系統、routine drop、容量、重複、judgement no_post）。公開2はX基準でアプリ到達とは別。原因別の件数は集計SQL実行後に確定。観測穴=**レーンON/OFFと drops 診断がDBに残らない**（HTTPレスポンスのみ。`collectionDiagnostics` に jpOfficial 無し）、signal側にcandidate_id無し。
+- benchmark/tests: `tools/jp-news-coverage/`（合成fixtures16件・7グループ各2以上+負例4、4軸 discovered/relevant/eligible_for_app/urgent_push と miss_reason 10種、recall/アプリ到達率/遅延p50p90、時刻なしは NOT_AVAILABLE）。deno test 6件PASS、lint clean。モデル検証であり本番実測ではない。
+- changed_files: docs/news-coverage/JP_GENERAL_FINANCIAL_COVERAGE_J0_20261012.md, tools/jp-news-coverage/{fixtures,classify,classify_test}.ts, run_j0_funnel.sh, prod_readonly/j0_funnel_aggregate.sql（すべて新規・本番未接続）
+- commit_hash: d0be8977afc2ee53626e10c52a106e36e6c35168
+- branch: claude/news-jp-coverage-j0-20261012（origin/main 0d7a35fb 起点）
+- push: done（ls-remote で同SHA確認）。Draft PRは未作成（提案のみ）
 - merge: not_performed
 - deploy: not_performed
-- remaining_issues: 国内一般重大ニュースの合法かつ早い発見経路、アプリ内掲載拡充、実測可能なevent基準の抜け追跡。
-- safety_checks: not_started
-- next_recommendation: J0の監査・offline PoC完了後にK8、確認後にJ1の限定実装を別TASKへ。
+- remaining_issues: 本番集計の実行、JP公式レーン本番値の確認、権利リスク源の方針、base market_feed の rejected 非対称、新規feedの実在・規約一次確認、有料配信/Web検索の予算。
+- safety_checks: 本番read/write・Edge・Cron・Secrets・有料API・外部検索なし（本番readは拒否され迂回せず）。PR129(81251b31)/PR116固定/G9/他slot未変更。secret/diff-check clean。使い捨てPGは停止。
+- recommended_J1_TASK: J1-a 観測性（jp_official診断をrun diagnosticsへ、DB変更なし）→ J1-b アプリ一覧表示判定（migration=別承認）→ J1-c 権利OKの国内公的feedをshadow追加（要プローブ）→ J1-d 限定Web検索（要予算承認）。詳細は設計文書§6。
+- next_recommendation: ユーザーが集計スクリプトを実行→結果で原因別funnelを確定。ちゃがJ1-aを先行TASK化。K8をニュース改善API最適化のちゃへ返却。
 
 ---
 
