@@ -120,15 +120,16 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: done
 - task_id: kabumori-g2-ondemand-broadcast-release-integration-20261012
 - start_code: G2
 - finish_code: K2
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
 - allocation: USER wants to resume core Kabumori app work without waiting G6 Phase2c isolation test: G2 source-only fresh main integration/readiness of Draft PR143 ondemand server-backed private report (889ca1b4) and Draft PR149 opted-in mass morning/close push (e9bb86c4). Investigate GitHub PR143 mergeable=false with independent G2 worktree; make G2-owned conflict fixes only in NEW integration candidate branch/Draft PR as justified; local disposable PostgreSQL actual migration/RLS/queue/push and app deep-link focused tests. Protect G1 home UI, G5 account/Auth, G6 PR148/150/153 and previous original PRs/branches. No production, no merges, no real API/Expo/Apple build, no gate changes. Return K2. G6 independently ready doing one isolation test; NOT blocker for base app source QA.
 - recommended_model: Opus5.5（高）
+- k2_verdict: PASS_INTEGRATION_READY / PRODUCTION_NO_GO; PR158 ea7bbd07 offline integration reported PASS; source review complete, no merge/deploy/production, G2 unreserved.
 ## Claude G3
 - owner: claude
 - slot: claude-3
