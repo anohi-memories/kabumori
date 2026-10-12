@@ -68,18 +68,18 @@
 
 ## F5
 - slot: F5
-- status: idle
-- task_id: none
+- status: ready
+- task_id: common-account-f5-phase5-app-auth-entitlement-integration-20261012
 - owner: claude
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: claude
+- return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
-- recommended_model: none
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: none
-- blocker: none
-- slot_use: 予備枠（ユーザーまたはChatGPTの明示割当専用）
+- dependencies: old G5 K5 done; PR152 head ccea1fe8132c6f573a768f0df5a033a05c62ef2c stacked PR121 head 76b50e1e03f82faaa3460bab1603afa8fef3ce44; app owner G1/G2/G3/G4 source protected
+- blocker: production/no managed Auth; app-owner wiring separate, must be explicitly coordinated
+- slot_use: 共通アカウント基盤 Phase5 本人Auth/サービス登録のG5-owned接続実装（ユーザー明示割当）
 
 ## F6
 - slot: F6
