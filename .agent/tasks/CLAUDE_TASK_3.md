@@ -3,8 +3,8 @@
 - task_id: postona-g3-reservation-preview-confirmation-ux-v1-20261012
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G3
 - finish_code: K3
 - return_to: POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）
@@ -137,6 +137,15 @@ PR #138 merged preview / PR #145 draft source-only contracts を利用し、実�
 - AI Lab diary: 候補あり — 投稿の予約を作る画面に、「本文・日時・投稿先を1件ずつ確認する」操作を作った。確認したあとに内容や時間を変えると、確認が自動で無効に戻る作りにして、確認したつもりで違う内容が出る事故を防いでいる。保存はまだ無効のままで、押しても何も送られないことを画面に正直に出している。
 
 ---
+
+## K3 Acceptance — 2026-10-12
+
+- verdict: **PASS_UI_SOURCE_LOCAL_PREVIEW_ONLY / MERGE_DEPLOY_HOLD**.
+- Reviewed G3 report, GitHub PR #151 changed paths and app confirmation state, card, time-edit and wiring source. Exact PR151 commit `0cd5c596a4d553df924a16c1f5091815e74b199a` stacked one commit on unchanged Draft PR145 `8820fa8de0f978767535472f5a44f8623bc74a30`; nine paths confined to G3 schedule UI/tests.
+- Reported tests: 309/309 app, 22/22 domain, 19/19 mutations, TypeScript/lint/diff PASS, sample Web Preview. ChatGPT did not independently rerun local tests. iOS simulator/device NOT_RUN.
+- Per-post confirmation, editing, retiming, cancellation, invalidation and account isolation accepted as offline UI candidate. Reservation persistence remains OFF; no production booking, X/Meta/AI, database, migration, deploy, EAS or PR merge authorized.
+- Review decision: no additional H1-H4 review for bounded UI. Future integrated G3/G4/G5 Auth/RLS/DB/X publish receives one Sol（高） focused security review before real rollout.
+- PR145 and PR151 remain Draft/unmerged; dependencies preserved. No new G3 task auto-assigned. Recommend next G3 feature implementation only after explicit new scope/owner-conflict check; otherwise wait G5/G4 authentic authorization boundaries.
 
 # ARCHIVED PREVIOUS G3 TASK — K3 accepted source-only PR145 R1/R2; original record preserved
 
