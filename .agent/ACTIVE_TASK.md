@@ -196,16 +196,16 @@
 ## Claude G8
 - owner: claude
 - slot: claude-8
-- status: ready
+- status: done
 - task_id: news-improvement-a-pr129-release-safety-env-switches-g8-20261012
 - start_code: G8
 - finish_code: K8
-- next_owner: claude
+- next_owner: none
 - return_to: ニュース改善API最適化のちゃ
 - source: .agent/tasks/CLAUDE_TASK_8.md
 - report: .agent/tasks/CLAUDE_TASK_8.md#report
-- allocation: ユーザー明示指定 G8=ニュース改善A専任。K8でPR129 R4のQA報告 `MERGE_CANDIDATE(source-only)` を確認、mainとのmerge-treeと一時checkout競合0、G8実施761+34+162+20既存スイートPASS。新規Fed公式声明enrichmentとTDnet決算factsが無条件ONのまま本番へ入るリスクがあるため、同G8限定R5 `news-improvement-a-pr129-release-safety-env-switches-g8-20261012` をreadyで明示登録。両機能の**独立・初期OFF envスイッチ**とON/OFF回帰のみ。PR129はOPEN/Draft/未マージ、Vercelはビルド回数制限、PR116固定本番（10/13予定）は別。ほかG/H・B/G9・worktreeへ一切触れず、G8→K8返却。今回のrelease gateをK8で再評価。
-- recommended_model: Sonnet5（高）
+- allocation: USER EXPLICIT G8ニュース改善A専任。K8 2026-10-12 PR129 R5デフォルトOFFの独立Fed/TDnetスイッチはソース確認でPASS、branch head `81251b31`、G8報告 important-news768 / extraction34 / discovery+observer162 / shadow20 PASS。新フラグを明示`enabled`しない限り従来ルート、PR129現在OPEN/Draft/未merged、Vercel build-rate-limit失敗をCI greenとしない。G8現TASKはdone/next_owner none、次TASK未割当（同専任を維持し別案件へ引き継がない）。**PR129マージ・本番deployは未承認・未実施**。PR116固定production反映のread-back後にPR129マージ/両フラグOFF deployを検討。G9/他G/Hと別案件不干渉。
+- recommended_model: Sonnet5（高） (completed)
 ## Claude G9
 - owner: claude
 - slot: claude-9
