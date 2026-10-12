@@ -50,7 +50,7 @@
 ## G8 → F8の新規TASK移行
 
 - 旧G8のJ0はK8で受入済み。旧G8の未開始J1-a（task_id `news-improvement-a-jp-official-diagnostics-j1a-g8-20261012`）は明示キャンセル・done/none。F8には**別task_id**でJ1-aを新規登録、旧G8との二重開始禁止。
-- F8はjp_official診断の既存JSONBへの記録だけ。PR116の2026-10-13固定production反映、PR129、G9を保護。DB変更/merge/deploy/有料API無し、production NO_GO。F8は独立worktreeとfresh mainの競合を実作業開始時に確認する。
+- F8 J1-a L8（2026-10-13）PASS_SOURCE_FIXでsource完了。PR164 Draft、理由キー上限40（other込み）と集計飽和をソース確認。F8はdone/next_owner:none。PR164 merge/deploy未実施・本番NO_GO。次J1-bをF8に置く前に完了TASKのarchive/SHA256/restore/HISTORY_INDEXを必ず実施。PR116/129とG9保護。
 
 ## 共通アカウント G5→F5 新規TASK
 - 旧G5 `common-account-g5-phase4-h4-c4-r1-r2-repair-20261012` はK5受入済み・done/none、旧系統のまま完結（PR152修正head `ccea1fe8132c6f573a768f0df5a033a05c62ef2c`、依存PR121 `76b50e1e03f82faaa3460bab1603afa8fef3ce44`）。旧TASK/ReportをF5へ複写しない。
