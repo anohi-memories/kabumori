@@ -115,17 +115,17 @@
 
 ## F8
 - slot: F8
-- status: ready
+- status: done
 - task_id: news-improvement-a-jp-official-diagnostics-j1a-f8-20261012
 - owner: claude
-- next_owner: claude
+- next_owner: none
 - return_to: ニュース改善API最適化のちゃ
 - completion_code: L8
 - recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F8.md
 - current_report_path: .agent_v2/tasks/F8.md#report
 - dependencies: G8 J0 accepted; old G8 J1-a unstarted/cancelled
-- blocker: L8 minor fix required: diagnostics reason key budget may produce 41st key; PR164 remains unmerged, production HOLD
+- blocker: none for source; PR164 merge/deploy remain on hold pending separate approval and updated integration review
 - slot_use: ニュース改善A専任（ユーザー明示割当）
 
 ## F9
