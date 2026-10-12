@@ -3,13 +3,14 @@
 - task_id: kabumori-g1-ai-ask-v1-phase-a-ui-contract-20261012
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: **Opus5.5（中）**
 - task_type: scoped design and offline UI implementation
 - start_code: G1
 - finish_code: K1
+- migration_note: cancelled before start; use F1→L1 for replacement task only
 - return_to: かぶモリアプリG1のちゃ
 
 ## User decision
@@ -32,7 +33,8 @@
 - status review_required / next_owner chatgpt、末尾「かぶモリアプリG1のちゃ へ K1 を送ってください。」
 
 ## Report — current task
-Pending G1 execution.
+- result: CANCELLED_UNSTARTED — user explicitly requested reallocation to new F1; no G1 execution, source changes, PR, deploy or merge.
+- next: separately assigned new task_id in `.agent_v2/tasks/F1.md`; old task_id must not start.
 
 ---
 
