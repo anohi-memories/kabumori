@@ -352,6 +352,15 @@ if want races; then
   echo "COMMON_ACCOUNT_CORE_FENCE_RACE_REMOVAL_THEN_WRITE_PASS"
 fi
 
+if want e2e; then
+  # The real orchestrator (TypeScript, unmodified) against the real SQL of this database, through psql.
+  ( cd "$here/../.." && CAL_E2E=1 PGHOST="$host" PGPORT="$port" PGUSER="$owner" PGDATABASE="$db_run" \
+      deno test --no-config --no-check --allow-run=psql --allow-env --allow-read supabase/tests/common_account_phase4_e2e_test.ts ) > "$tmp/e2e" 2>&1 \
+    || { echo "FAIL e2e" >&2; cat "$tmp/e2e" >&2; exit 1; }
+  grep -q ' 4 passed | 0 failed' "$tmp/e2e" || { echo "FAIL e2e: expected 4 passed" >&2; cat "$tmp/e2e" >&2; exit 1; }
+  echo "COMMON_ACCOUNT_CORE_FENCE_E2E_PASS"
+fi
+
 if want failclosed; then
   u="$(uid 901)"; person "$u" x_autopost
   for iso in 'repeatable read' serializable; do
