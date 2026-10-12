@@ -3,8 +3,8 @@
 - task_id: kabumori-g2-ondemand-broadcast-release-integration-20261012
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G2
 - finish_code: K2
 - return_to: かぶモリアプリG2のちゃ
@@ -39,7 +39,154 @@ The agreed Kabumori product V1 behavior: (1) morning/close **one shared market r
 
 ## Report — current V1 release integration
 
-PENDING G2.
+### 判定
+
+- task_id: `kabumori-g2-ondemand-broadcast-release-integration-20261012`
+- **INTEGRATION_READY（ソースとして main に統合可能）／PRODUCTION_NO_GO**
+  - PR143・PR149 は、最新の main に文字の衝突なしで統合できる。統合した版で、関係する検証とテストがすべて通った。
+  - G1・G5 との衝突も無い。
+  - 本番は、別承認の段階がすべて未実施なので NO_GO。
+
+### 元の PR と main
+
+- PR143: https://github.com/anohi-memories/kabumori/pull/143
+  - head `889ca1b44cf82bd3ecb913818dca568456849feb`、base main、OPEN・Draft。
+  - 作業の開始時、GitHub の表示は `MERGEABLE / CLEAN`。
+- PR149: https://github.com/anohi-memories/kabumori/pull/149
+  - head `e9bb86c44808d87ad8cbd3de4f1d1564066f958a`、base は PR143 のブランチ、OPEN・Draft、`MERGEABLE / CLEAN`。
+- 最新の main（作業の開始時）: `32be46538396fcb150999a5509f7feaca4fcc50b`
+- PR143・PR149・PR141・G6 の PR148／150／153・G1・G5 のブランチは、どれも変更していない。
+
+### マージできるかの確認（TASK の2）
+
+- 割り当ての時点では「マージできない」だったが、作業の開始時の GitHub の表示は `MERGEABLE / CLEAN` だった。一時的な表示だったとみられる（原因の断定はしない）。
+- 手元で確かめた。
+  - G2 専用の新しい worktree `/Users/yuya/Developer/kabumori-g2-v1-integration`、ブランチ `g2-v1-release-integration-20261012`（**push していない**）。
+  - 最新の main に、`git merge --no-ff` で PR143 → PR149 の順に統合したところ、**文字の衝突は0件**だった。
+  - 統合と検証のコミットの head は `93f22041eb6224228fd0336272e9c1872d8fce58`。
+- 意味の上での重なり:
+  - 起点 `7e63397b` 以降に main で変わったコード（`.agent` 以外の22ファイル）は、POSTONA のアプリ（`apps/social-mobile/`）と、G1 のポートフォリオ（PR142: `explore.tsx`・`portfolio-*`・`portfolio-view.ts`・そのテスト）だけ。
+  - PR143・PR149 が変えた42ファイルとの重なりは0件。
+  - main に、2つの migration より後の時刻の migration は無い（2つが最新のまま）。
+- G2 で直したもの: 無し（直す必要が無かった）。
+
+### G1・G5 との境界（TASK の5）
+
+- **G1 の PR156**（`src/app/(tabs)/index.tsx`・`explore.tsx`・`holdings-section.tsx`・`portfolio-view.ts`・テスト）とは、ファイルの重なりが無い。
+  - G1 のホームは、ルートの `/report-detail` を `id` だけで開く。PR143 のレポート詳細は、`source=analysis` が無ければ今までどおり個別レポートを読むので、両立する。どちらを先にマージしてもよい。
+  - G1 に必要な連絡は「重なりなし」だけ。
+- **G5 の PR152**（`20261012130000_common_account_core_service_fence.sql` など）は、プロフィールを作るときの確認（trigger）を足すもの。
+  - V1 はプロフィールを作らず、新しい表はすべて利用者の削除で連鎖して消える（共通アカウント基盤の `PROFILES_CHILD_NOT_CASCADE` を満たす）。
+  - V1 は G5 の未マージのソースに依存しない。本番の G5 の状態は、この作業では読んでいない。
+
+### 新しい Draft PR（TASK の3）
+
+- https://github.com/anohi-memories/kabumori/pull/158
+  - ブランチ `g2-v1-release-qa-20261012`、head `ea7bbd07d06533d359a733d3dce65169d0e24283`。
+  - base は PR149 のブランチ（PR149 の上に積んだ）。
+- 変更は新しい3ファイルだけ（既存のファイルは変えていない）:
+  - `supabase/tests/g2_v1_release_integration_run.sh`、`supabase/tests/g2_v1_release_integration_behavior.sql`: 両方の migration を同じ DB に入れた状態での確認
+  - `docs/v1-release/RUNBOOK.md`: リリースの手順
+- main と PR143・PR149 を取り込んだ統合のブランチは、50ファイルを超える重複の PR になるので出していない（手元の統合の結果は上のとおり）。
+
+### テスト（すべて手元。実際に実行したもの）
+
+**統合した版（main `32be4653` + PR143 + PR149）:**
+
+| 対象 | 結果 |
+|---|---|
+| オンデマンドの検証 `personalized_ondemand_analysis_run.sh`（PostgreSQL 17、変異テストを含む） | すべて PASS |
+| 一斉通知の検証 `market_report_broadcast_run.sh`（PostgreSQL 17、変異26通り、1万人／10万人） | すべて PASS |
+| 両方を合わせた検証 `g2_v1_release_integration_run.sh`（新規） | すべて PASS |
+| `personalized-analysis-worker/` | 34 成功 |
+| `market-report-broadcast-worker/` | 29 成功 |
+| `personalized-reports/` | 134 成功 |
+| `send-push-notifications/` | 24 成功 |
+| `market-report-analysis/` | 283 成功 |
+| `tests/app/`（main の G1 の変更を含む） | 534 成功 |
+| `supabase/tests/migration_source_invariants_test.ts` | 11 成功 |
+| アプリの型（`src/`） | 既存の CSS の2件だけ（新しいエラー0件） |
+| `git diff --check` | 問題なし |
+
+**PR158 の版（PR149 の上）:** 両方を合わせた検証がすべて PASS。
+
+**両方を合わせた検証で確かめたこと（約45の確認）:**
+- 順序: PR149 の migration を先に当てると止まる（`..._ONDEMAND_V1_MISSING`、何も作らない）。
+- 取り消し: 両方を当てて逆の順で取り消すと、定義が適用前と完全に一致する。
+- ゲート: 既定はすべて OFF。一斉通知は、共通の市況の公開（なければ `feed_disabled`）と、旧来の個別レポートの停止（なければ `legacy_personalized_active`）を待つ。二重の通知は起きない。
+- 共通の市況: 保有が無い人も読める。匿名は読めない。モデル名・Fact の内部は出ない。
+- 一斉通知: 1つの回に1つ。対象は通知 ON・朝刊 ON・端末ありの人だけ（通知 OFF・朝刊 OFF・設定なしの人は除く。2台の人は2台とも）。重要ニュースの通知の表には書かない。
+- 個別分析:
+  - 保有0件の人は依頼できない。二重タップは同じジョブ。
+  - アプリを閉じても（本人のセッションが無くても）worker が完成させる。開き直すと本人だけが読める。他人は読めない。
+  - 通知 OFF の人は通知なしでも結果を読める。完成の通知は本人に1回。
+- 2つの通知の経路が混ざらない。
+- 古い回: 3時間前の回は一斉通知にしない。市況は日付つきで読める。
+- 退会: 本人のジョブ・結果・通知が消え、他人の分は残る。
+
+**前の Report の証拠をそのまま使ったもの（今回は再実行していない）:**
+- 一斉通知の worker の模擬の所要時間（10万人で約6〜7.5分）
+- PR143 の H3 指摘の修正、PR149 の H2 の R1〜R6 の「修正前に失敗」の再現
+
+**実行していない（NOT_RUN）:**
+- `_shared`・X・POSTONA など、関係の無い範囲のテスト
+- Simulator・実機
+- Expo への実際の送信
+- 本番の読み取り
+
+### 本番に出す前に止まっていること（優先の順）
+
+1. PR143 → PR149 → PR158 のレビューとマージの判断（ユーザー・ChatGPT）。
+2. 本番の読み取りの確認（読み取りにも承認が要る）。確かめること:
+   - 2つの migration が未適用であること、土台の表があること
+   - 共通の回が毎日完成しているか、Fact の状態
+   - 旧来の個別レポートの Cron の名前
+   - 対象者と端末の数（21台以上の人）
+   - personalized-reports の本番の版
+3. migration の適用（PR143 → PR149、ゲートは OFF）。
+4. Edge Function のデプロイ（`personalized-analysis-worker`・`market-report-broadcast-worker` は新規）と、2つの worker の Cron。
+   - `personalized-reports` は、本番にまだ出ていない main の変更も一緒に出るので、先に差分を確かめる。
+5. アプリのビルド（EAS は区切りのときだけ、別承認）。
+6. ゲートを ON:
+   - 市況の公開 → 一斉通知の試し実行 → オンデマンドの受付 ON（**この時点で旧来の定時の個別レポートが止まる**）→ 社内の端末だけ → 全員
+7. 見張り・読み戻し・止め方（`docs/v1-release/RUNBOOK.md`）。
+
+**iPhone で試すまでのいちばん短い道:**
+- 1〜4 のあと、市況の公開だけを ON にすれば「きょうの市況」は見られる。
+- 個別分析と一斉通知を試すには、オンデマンドの受付 ON（旧来の個別レポートが止まる）と、社内の端末だけの一斉通知が要る。
+- 手元の Simulator だけでは、本番のサーバーに関数とゲートが無いので、新しい画面は「準備中」のまま。
+
+**今の本番では、旧来の定時の個別レポートは止まっていない**（ゲートも migration も未適用）。
+
+### リスクの確認
+
+- **二重の通知:** 一斉通知は旧来の個別レポートが動いている間は作られない。完成の通知は1つの分析に1回。一斉通知は1つの朝刊・大引けに1人1回。
+- **重要ニュース:** 一斉通知は別の経路（`notifications` を使わない）で、速さは最大400通/秒（Expo の上限600通/秒から200を残す）。
+- **データ:** 既存の表・関数・権限は変えない（追加だけ）。既定はすべて OFF・空。取り消しは手元で確認済み。
+- **未確認:**
+  - 本番の Edge の実時間の上限と、pg_net の待ち時間を過ぎたあとに処理が続くか
+  - 本番の Expo の応答の速さ
+  - 本番の共通の回の状態
+- **プロダクトとして決めること:**
+  - アプリの「朝刊の通知」「大引けレポートの通知」が一斉通知の受け取りも決めること（文言）
+  - 1人あたりの端末の上限20台
+  - 1日の個別分析の上限5回（失敗も数える）
+
+### commit / push / merge / deploy
+
+- commit:
+  - `ea7bbd07d06533d359a733d3dce65169d0e24283`（PR158、push 済み）
+  - 統合の確認のための手元のブランチ（`93f22041eb6224228fd0336272e9c1872d8fce58`、push していない）
+- merge=NO、deploy=NO、production_calls=0。
+- 次もすべて0: migration の適用、Cron、Secrets、本物の OpenAI / Anthropic、Expo の実際の送信、EAS、X・Threads。
+
+### 次に勧めること
+
+1. K2 で PR158 の確認。PR143・PR149 は、前回までのレビュー（H3・H2）と修正済み。新しい境界は無いので、追加のレビューは要らない見込み。
+2. ユーザーの判断で、PR143 → PR149 → PR158 の順にマージ（G1 の PR156 とは独立）。
+3. 本番の段階は、`docs/v1-release/RUNBOOK.md` の段階2（読み取りの確認）から、1段ずつ別承認で進める。
+
+Recommended next owner: **chatgpt（K2）**
 
 ---
 

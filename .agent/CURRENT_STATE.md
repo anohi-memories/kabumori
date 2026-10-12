@@ -1,3 +1,18 @@
+## G2 報告 — かぶモリ V1 の main 統合とリリース候補の準備（Draft PR #158）— 2026-10-12 JST
+
+- G2 `kabumori-g2-ondemand-broadcast-release-integration-20261012`: **INTEGRATION_READY／PRODUCTION_NO_GO**。
+  - PR143（`889ca1b4`）・PR149（`e9bb86c4`）は、最新の main（`32be4653`）に手元で統合して、文字の衝突0件だった。GitHub の表示も `MERGEABLE / CLEAN`。
+  - main で変わったコードは、POSTONA と G1 のポートフォリオだけで、PR143・PR149 の42ファイルとの重なりは0件。G1 の PR156・G5 の PR152 とも衝突しない。
+- 統合した版で、次がすべて通った。
+  - 手元の PostgreSQL 17 の検証: オンデマンド、一斉通知（変異26通り・10万人）、両方を合わせた新しい検証
+  - Deno の関係する範囲: 504件
+  - アプリ: 534件
+  - アプリの型: 新しいエラー0件
+- 新しい Draft PR #158（head `ea7bbd07d06533d359a733d3dce65169d0e24283`、PR149 の上）には、両方を合わせた検証と `docs/v1-release/RUNBOOK.md`（マージの順番、本番の段階、ゲートの順番、iPhone までの道）だけを入れた。
+- 本番の操作・マージ・デプロイ・EAS は 0。**旧来の定時の個別レポートは本番で止まっていない。** G2 は review_required / chatgpt で K2 待ち。
+
+---
+
 ## K6 FINAL — G6 Phase2c isolation allowlist accepted — 2026-10-12 JST
 - G6 TASK `common-ai-provider-g6-phase2c-isolation-test-allowlist-20261012`: **done/none**, K6 **PASS_OFFLINE_SOURCE_CANDIDATE / PRODUCTION_NO_GO**. Draft PR157 HEAD `9b952d64a9ec954e74af7e762c9df4e4c2e2f3a5`, OPEN/Draft/UNMERGED, stacked on unchanged G2 PR153 `6c576567328c99a58c2e4beaed86d155fe875769`. Only `_shared/ai_provider/isolation_test.ts` changed. Exact allowlist for handler.ts + shadow_wiring_test.ts, indirect reach restricted to handler/index; all other Edge/app references and Anthropic secrets denied. Source diff GitHub inspected by ChatGPT; tests G6-reported not rerun: isolation8, provider126, market-report313, shared629, negative synthetic/on-disk probes, type/lint/secret scan PASS. Production0/paid0/merge0/deploy0. G6 slot released.
 - Dependency PR148→150→153→157 remains Draft and unmerged. Any merge needs explicit separate decision; live release blocked on recovery Cron, Edge Secret, actual waitUntil test, controlled budget and paid canary, and focused security/release review. No new G6 task assigned.
