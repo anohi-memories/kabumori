@@ -48,7 +48,7 @@ async function scheduleHarness({ status = 'ready', active = 'X_B', rows = {}, ac
       effects.push(effect);
     },
   };
-  const world = { status, active, rows: { ...rows }, reads: [], pending: new Map(), hold: new Set(), workspaceId, accounts };
+  const world = { status, active, rows: { ...rows }, reads: [], pending: new Map(), hold: new Set(), workspaceId, accounts, sessionReads: 0, factoryArgs: null };
   class Repository {
     read(brandId) {
       world.reads.push(brandId);
@@ -75,7 +75,11 @@ async function scheduleHarness({ status = 'ready', active = 'X_B', rows = {}, ac
     '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', EmptyState: 'EmptyState', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: { muted: {}, buttonPressed: {} } },
     '@/data/mock-repository': { mockRepository: { getPlannedPosts: () => [], getAccounts: () => world.accounts } },
     '@/data/content-settings-repository': { SupabaseContentSettingsRepository: Repository },
-    '@/lib/supabase': { supabase: status === 'mock_preview' ? null : {} },
+    // A live-looking client: its session must never be read while the reservation gate is OFF.
+    '@/lib/supabase': {
+      supabase: status === 'mock_preview' ? null : { auth: { getSession: () => { world.sessionReads += 1; return Promise.resolve({ data: { session: { access_token: 'should-not-be-read' } }, error: null }); } } },
+      getSupabaseConfig: () => ({ ok: true, config: { url: 'https://example.invalid', publishableKey: 'publishable' } }),
+    },
     '@/domain/data-view': dataView,
     '@/domain/schedule-view': scheduleView,
     '@/domain/schedule-planner': planner,
@@ -87,7 +91,10 @@ async function scheduleHarness({ status = 'ready', active = 'X_B', rows = {}, ac
     },
     // The real (disabled) reservation store unless a test injects one: with the gate OFF the screen must never
     // be able to save from here.
-    '@/features/schedule/reservation-store': { ...reservationStore, createReservationStore: () => store ?? reservationStore.createReservationStore() },
+    '@/features/schedule/reservation-store': {
+      ...reservationStore,
+      createReservationStore: (...args) => { world.factoryArgs = args; return store ?? reservationStore.createReservationStore(...args); },
+    },
     '@/domain/reservation-flow': reservationFlow,
     '@/features/schedule/server-reservations-state': serverState,
     '@/features/schedule/server-reservation-card': { ServerReservationCard: function ServerReservationCard(props) { return { type: 'ServerReservationCard', props }; } },
@@ -675,4 +682,18 @@ test('server wiring: a refusal keeps the preview and says why (no saved state is
   assert.equal(cardsOf(tree).length, 3);
   assert.equal(serverCardsOf(tree).length, 0);
   assert.equal(backend.rows.length, 0);
+});
+
+test('live wiring: the screen hands the live client to the factory, and the gate OFF still yields the disabled store', async () => {
+  const h = await scheduleHarness({ active: 'X_B', rows: { B: SETTINGS(2, 'manual_review') } });
+  const [gate, live] = h.world.factoryArgs;
+  assert.equal(gate, false, 'the source gate is OFF');
+  assert.equal(live.supabaseUrl, 'https://example.invalid');
+  assert.equal(typeof live.session.auth.getSession, 'function');
+  await plan(h, threeFixed(), 'f0e2b1a4-0000-4000-8000-000000000008');
+  await confirmAllCards(h);
+  const tree = h.render();
+  assert.equal(labelled(tree, 'SmallButton', 'サーバーに保存'), null);
+  assert.equal(labelled(tree, 'ActionButton', '予約として保存（準備中）').disabled, true);
+  assert.equal(h.world.sessionReads, 0, 'no access token is read, nothing is sent');
 });

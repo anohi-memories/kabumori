@@ -206,7 +206,7 @@ test('source: the client store has no Supabase client, fetch or storage; the gat
 test('the schedule screen shows an honest disabled save and never calls the store', async () => {
   const { readFile } = await import('node:fs/promises');
   const screen = await readFile(new URL('../src/app/(tabs)/schedule.tsx', import.meta.url), 'utf8');
-  assert.match(screen, /createReservationStore\(\)/u);
+  assert.match(screen, /createReservationStore\(POSTONA_RESERVATION_PERSISTENCE_ENABLED, live\)/u, 'the gate constant decides');
   assert.match(screen, /label="予約として保存（準備中）" onPress=\{\(\) => \{\}\} disabled/u);
   // Every store call sits behind an explicit `reservationStore.enabled` guard in the same function (the
   // disabled store answers enabled === false); the wiring tests also prove zero calls with the gate OFF.

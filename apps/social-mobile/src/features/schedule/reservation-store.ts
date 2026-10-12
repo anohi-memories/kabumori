@@ -8,6 +8,7 @@
  * keeps every plan a preview.
  */
 import type { SaveOutcome, SaveRequest, ServerReservation } from '@/domain/reservation-flow';
+import { createLiveReservationStore, type LiveReservationDeps } from './live-reservation-store.ts';
 
 export const POSTONA_RESERVATION_PERSISTENCE_ENABLED = false as const;
 
@@ -37,12 +38,12 @@ export const DISABLED_RESERVATION_STORE: ReservationStore = Object.freeze({
 });
 
 /**
- * Returns the store for this build. With the release gate OFF it is the disabled store, whatever is passed.
- * The remote implementation (remote-reservation-store.ts) exists, but it is constructed here only together with
- * the reviewed server rollout (registered API endpoint, G5/G4 permission sources, Sol review, user approval).
+ * Returns the store for this build. With the release gate OFF (the source constant) it is the disabled store,
+ * whatever is passed. Only with the gate ON AND a live Supabase client (URL + session) is the live store
+ * (live-reservation-store.ts -> the postona-x-reservations function) built -- flipping the constant is a reviewed
+ * rollout step that also needs the deployed function, the G5 / G4 decisions, a Sol review and user approval.
  */
-export function createReservationStore(gate: boolean = POSTONA_RESERVATION_PERSISTENCE_ENABLED): ReservationStore {
-  if (gate !== true) return DISABLED_RESERVATION_STORE;
-  // Reaching here means the constant was flipped without the reviewed remote implementation: fail closed.
-  return DISABLED_RESERVATION_STORE;
+export function createReservationStore(gate: boolean = POSTONA_RESERVATION_PERSISTENCE_ENABLED, live: LiveReservationDeps | null = null): ReservationStore {
+  if (gate !== true || !live) return DISABLED_RESERVATION_STORE;
+  return createLiveReservationStore(live);
 }

@@ -112,6 +112,8 @@ const STATUS_BY_CODE: Record<string, number> = {
   POSTONA_RESV_BRAND_NOT_ELIGIBLE: 403,
   POSTONA_RESV_SERVICE_NOT_ACTIVE: 403,
   POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED: 403,
+  // The common-account write fence was held by a lifecycle step (freeze, deletion): retryable, nothing written.
+  POSTONA_RESV_SERVICE_BUSY: 503,
   POSTONA_RESV_AI_NOT_OPTED_IN: 403,
   POSTONA_RESV_STALE_REVISION: 409,
   POSTONA_RESV_IDEMPOTENCY_CONFLICT: 409,
