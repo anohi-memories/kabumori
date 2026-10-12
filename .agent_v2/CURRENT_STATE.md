@@ -10,6 +10,12 @@
 - 移行期間中の現行正本は旧 `.agent/`（G1〜G10 / H1〜H5）。旧系統で進行中・完了確認待ちのTASKは、すべて旧系統で完結させる。
 - 旧 `.agent/` の初回snapshot: `archive/2026-10-12-initial-migration/`（snapshot元 main commit `d811b4dc72f3e65fc61e40ae99e61b2094b18ff7`、33ファイル、SHA256照合・復元テスト済み）。完全移行前に最終snapshotを別TASKで取る。
 
+## POSTONA F4 — Threads個別解除・lease安全化（2026-10-12 JST）
+- 旧G4 PR154 のTASKはdone、次の新規TASKを新系統F4へ登録。F4 `postona-f4-threads-disconnect-lease-safe-v1-20261012` ready/claude、Opus5.5（高）、F4→L4、返却先 POSTONA｜マルチSNS化・開発統括（G4）のちゃ。
+- 独立F4 Draft branchはG4 PR154 HEAD `98287392327eabfd5092a3ba89dde51a2e8beff6` から。G5 repaired PR152 `ccea1fe8132c6f573a768f0df5a033a05c62ef2c`、H5 source PR159 `163675c62835e84417905f98f97ceedd4dd1bcd9` を参照。PR161 bookkeepingはDraftでmain未反映、旧H5 TASKを書き換えない。
+- 実装範囲：Threadsのみ個別解除UI/API/owner-only SQL候補、G5 `signal/stillOwned()` に追従したThreads固有cleanup adapter。G3のX予約/X saga、G5共通ID/T13/T10登録、H5 owner runtimeは保護。G3 in_progressのため変更パス衝突禁止。
+- 解除・接続・投稿の本番ゲートOFF、Edge503、実Meta/Auth/DB/Vault/secrets/公開投稿/merge/deploy/EASは一切未承認。G5への本登録、managed権限、独立Sol（高）レビューと本人承認後の限定pilotは別工程。
+
 ## プロジェクト別現状
 
 - F2の診断TASK `kabumori-f2-pr143-live-mergeability-diagnosis-20261012` はL2受入済み（done/none、PASS_GO_TO_MERGE_DECISION / PRODUCTION_NO_GO）。F8にニュース改善A J1-a診断TASK `news-improvement-a-jp-official-diagnostics-j1a-f8-20261012` を割当済み（ready/claude、L8返却、Sonnet5高）。その他の新系統枠は割当前の状態を各TASKで確認。
