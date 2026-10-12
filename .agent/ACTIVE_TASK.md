@@ -63,17 +63,17 @@
 ## Codex H3
 - owner: codex
 - slot: codex-3
-- status: review_required
+- status: done
 - task_id: postona-threads-pr144-auth-publish-p1-security-review-h3-20261012
 - start_code: H3
 - finish_code: C3
 - completion_code: C3
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CODEX_TASK_3.md
 - report: .agent/CODEX_REPORT_3.md
-- allocation: H3 completed focused independent review of PR144 exact d4a1e87b77d1fbd362dc51809ce2d998afda15ea. CHANGES_REQUIRED / REAL_PILOT_HOLD: one P2 R1 KEY SHARE session-expiry UPDATE race proven in two-connection local PG17; FOR SHARE control blocks update. Deno93/composite176/app258, release8 and parent6 mutations PASS; real pinned G5 T13 also PASS on fake local foundations, not managed proof. Product edits/PR changes/production/real APIs/posts0. Return C3 to POSTONA G4 chat; other slots/history protected. H3 freed after C3.
-- recommended_model: Sol（高）
+- allocation: C3 2026-10-12 accepted H3 independently completed review of exact Draft PR144 d4a1e87b77d1fbd362dc51809ce2d998afda15ea stacked on PR140 exact 2e75a6a842e70f3de78558681803b60935fb4251. Verdict CHANGES_REQUIRED/REAL_PILOT_HOLD with one reproducible P2: auth.sessions FOR KEY SHARE in threads_publish_release_candidate.sql:229-232 allows concurrent non-key not_after expiry UPDATE to commit before credential release; local PostgreSQL17 two-session reproduction and FOR SHARE control PASS. Deno93 and composite176 (overlap), app258 and disposable SQL/mutations PASS as H3-run; ChatGPT source/report inspected only. Actual managed GoTrue revocation not proven. Protected H5 PR139 session KEY SHARE concern noted for future separate H5 interface, not modified. H3 product edits0, no prod/Meta/DB apply/deploy/merge. H3 done/unreserved; one narrow G4 correction assigned instead of repeated broad review. Other H/G slots protected.
+- recommended_model: Sol（高） (C3 accepted)
 ## Codex H4
 - owner: codex
 - slot: codex-4
@@ -141,16 +141,16 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: postona-threads-connect-publish-integrated-offline-v1-g4-20261011
+- status: ready
+- task_id: postona-threads-pr144-c3-r1-session-expiry-lock-fix-g4-20261012
 - start_code: G4
 - finish_code: K4
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - source: .agent/tasks/CLAUDE_TASK_4.md
 - report: .agent/tasks/CLAUDE_TASK_4.md#report
-- allocation: K4 2026-10-12 PASS_SOURCE_CANDIDATE / GO_SOURCE_ONLY / BLOCKED_REAL_PILOT. Verified [Draft PR144] head d4a1e87b77d1fbd362dc51809ce2d998afda15ea, OPEN/DRAFT/UNMERGED, 1 commit/24 scoped G4 paths stacked on protected PR140 2e75a6a842e70f3de78558681803b60935fb4251; all other protected PR124/135/139/121 unchanged. G4 reports disposable PG17 negative release tests, simulated integrated 176 Deno, focused 93, app258 PASS; ChatGPT reviewed source/SQL/PR, did not independently rerun tests or real managed Auth/Vault/Meta. P1 claim+service_role redeem replaced with JWT-scoped HMAC attested transactional release SQL candidate, credential custody candidate and disabled Connect UI, WITHOUT claiming live risk resolved. Critical cross-provider Auth/RPC/role/custody code gets ONE focused independent H3 Sol（高） security review; G4 done and slot freed, no new G4 work pending C3 outcome. Both connect and publish server/mobile gates remain false; actual Threads connection/post, PR merge/deploy/prod DB apply/GRANT/keys not authorized. Meta tester and G5 real T13/T10/H5 owner transport missing. Historic G4 report preserved; G5/G3/G6/H4 and all other slots unaffected.
-- recommended_model: Opus5.5（高） (completed K4)
+- allocation: User Threads actual text post milestone; H3 independent C3 result one P2 R1 on PR144 session expiry race. Opus5.5（高） G4 task narrowly fixes its owned threads_publish_release_candidate.sql auth.sessions FOR KEY SHARE lock to FOR SHARE/equivalent, and adds deterministic 2-connection fail-before/pass-after proof covering both orderings, member/entitlement/consent regressions and role privilege checks. Exact protected PR144 head d4a1e87b77d1fbd362dc51809ce2d998afda15ea, parent PR140 2e75a6a842e70f3de78558681803b60935fb4251; append scoped fix only if original G4 branch clean/exclusive, else new Draft stacked on PR144. Avoid source work on H5 protected PR139 auth.sessions KEY SHARE, G5 Auth/T13/T10, G3 X scheduler, other slots. No real Supabase/Meta/Auth/API, external post, DB migration apply, GRANT, secret, merge, deploy, EAS or flags. All real Threads connection/pilot gates OFF. K4 exact source+race review when complete, no mechanical repeated full H review.
+- recommended_model: Opus5.5（高）
 ## Claude G5
 - owner: claude
 - slot: claude-5
