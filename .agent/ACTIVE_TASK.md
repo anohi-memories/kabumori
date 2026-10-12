@@ -156,17 +156,17 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: review_required
-- task_id: common-account-phase4-core-end-to-end-implementation-20261012
+- status: ready
+- task_id: common-account-g5-phase4-h4-c4-r1-r2-repair-20261012
 - start_code: G5
 - finish_code: K5
-- next_owner: chatgpt
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: User 2026-10-12「そのほうがいい！全然実装が進んでないから テストばかりにトークン消費させてては時間もトークンももったいないよ」。G5 Phase4 IMPLEMENTATION-FIRST: complete G5-owned backend shared Auth ID + per-app entitlement and idempotency, B1/B2 locked status guard, practical bounded delete/freeze/reconcile implementation or explicitly blocked interface, connection contracts. NO further documents-only/synthetic-model-only or repeated review loops. Only focused local tests; no other slot worktree/source changes. Prior G5 PR heads immutable, new independent G5 branch and draft PR source implementation. Photos/managed auth/prod unchanged; E11 Option D and managed_auth_delete BLOCKED. At K5 decide one focused Sol高 review for high-risk source. 
-- latest_result: Phase4 IMPLEMENTED_SOURCE_CANDIDATE (PR152 Draft, stacked on PR121, local PG17 proof incl. real orchestrator E2E; not production ready, no merge/deploy). Report: .agent/tasks/CLAUDE_TASK_5.md#report--phase4. One focused Sol高 review of PR152+PR121 recommended at K5.
+- allocation: H4 C4 independent review of G5 Draft PR152 stacked on PR121 found 2 P2 defects. G5 Opus5.5（高） narrow code corrections only: R1 owner lease recheck around provider cleanup awaits / before service finish; R2 foreign dependent fence trigger rollback safety, with targeted fail-before/pass-after PG/TS regression. Align observed ACCOUNT_LIFECYCLE_BUSY SQLSTATE 42501 vs documented 55P03. PR152 current protected head 5ad5bb40cadf013f00553acd5509f4f74fdbff7c, PR121 76b50e1e03f82faaa3460bab1603afa8fef3ce44. No managed Supabase/production/merge/deploy/other slot changes. G5 Report history preserved.
 - recommended_model: Opus5.5（高）
+
 ## Claude G6
 - owner: claude
 - slot: claude-6
