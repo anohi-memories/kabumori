@@ -167,12 +167,12 @@
 ## Claude G6
 - owner: claude
 - slot: claude-6
-- status: review_required
+- status: done
 - task_id: common-ai-provider-g6-phase2a-market-report-adapter-offline-20261012
 - start_code: G6
 - finish_code: K6
-- next_owner: chatgpt
-- latest_result: PASS_CANDIDATE — Draft PR #148 (a71de72b): market report shadow connection candidate, default off (returns the legacy requester itself), not wired; 18 offline tests incl. identical generateSharedAnalysis outcome, 4/4 mutants, provider 112 / report 283 regression; production=0, paid calls=0. Report: .agent/tasks/CLAUDE_TASK_6.md
+- next_owner: none
+- latest_result: K6 PASS_SOURCE_CANDIDATE / NOT_WIRED / PRODUCTION_NO_GO — Phase2a source candidate accepted; prior G6 PASS_CANDIDATE — Draft PR #148 (a71de72b): market report shadow connection candidate, default off (returns the legacy requester itself), not wired; 18 offline tests incl. identical generateSharedAnalysis outcome, 4/4 mutants, provider 112 / report 283 regression; production=0, paid calls=0. Report: .agent/tasks/CLAUDE_TASK_6.md
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - source: .agent/tasks/CLAUDE_TASK_6.md
 - report: .agent/tasks/CLAUDE_TASK_6.md#report--phase2a
