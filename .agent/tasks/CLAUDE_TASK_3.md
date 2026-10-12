@@ -1,3 +1,46 @@
+# G3 CURRENT TASK — POSTONA X予約 API・アプリ接続実装 V1（本番OFF）
+
+- task_id: postona-g3-x-reservation-api-client-wiring-offline-v1-20261012
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- start_code: G3
+- finish_code: K3
+- return_to: POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）
+- recommended_model: **Opus5.5（高）**
+- priority: high
+- kind: implementation / source-only guarded API and real client persistence wiring, no real deployment
+- dependencies: G3 Draft PR #145 (8820fa8de0f978767535472f5a44f8623bc74a30), stacked G3 Draft PR #151 (0cd5c596a4d553df924a16c1f5091815e74b199a), G5 Draft PR #121/#152, G4 X verified-account Issue #131 unresolved
+- release_gate: **OFF**; managed Supabase DB/Edge/Auth changes, X/Meta/AI real calls, real posting, migrations apply, Cron, merge/deploy/EAS are forbidden
+
+## User outcome
+POSTONAの手動投稿「予約として保存」→サーバーの予約ID/版数をread-back→一覧に予約済み表示→アプリを再起動した後の一覧取得→ユーザーが日時変更・再同意・取消、という **動く実装経路をコードとして完成**させる。前回のPR145はDB/RPCのオフライン候補・アプリ保存OFF、PR151は確認UIだけ。今回はそれらを**API境界と画面の実装で繋ぐ**。保存/永続化の動作証明は使い捨てローカルDB/ローカルAPIとテストクライアントで行い、本番で予約成功と誤表示しない。利用者にまだ使えると主張しない。
+
+## Preflight・所有範囲
+1. fresh origin/main、PROJECT_RULES.md、.agent/ORCHESTRATION.md、ACTIVE_TASK、CURRENT_STATE、G3/G4/G5/H5 TASK/Report、PR #145/#151、G5 PR121/152とG4 Issue131/PR154の最新HEAD、すべてのworktree/dirty status/変更パスを確認。G3が空いていることとPRのstack依存を確認。独立新G3 worktree/checkout、他slotのbranch/reset/rebase/server操作禁止。
+2. PR151のheadをベースとする独立G3ブランチで、**G3-ownedの新しい** API handler/transport、reservation repository、auth-context/permission dependency adapter、G3のschedule screenとtestsに限定する。PR145と151のHEADやPR設定は変更しない。G4 accounts/OAuth/Threads、G5 shared Auth/lifecycle/entitlement/T13、H5 owner transportや既存AI Lab/かぶモリ投稿機構には手を出さない。新たなmigration番号を衝突させない。
+3. G5 entitlement/lifecycle (有効な `x_autopost` 利用権とfreeze/delete書込フェンス、JWTの寿命に頼らないlive check) とG4 X account proof/publish authorization はそれぞれ**オーナーの本物の判定インターフェイスが必要**。今回G3は型定義/注入点/呼び出しとデフォルトDENYを実装する。G5/G4からの未承認候補SQLやmockを本番ALLOWの代用品にしない。実際の実装/関数名・実認可・DDL権限・JWT原本が証明できなければ、本番接続はBLOCKEDと記録。G5/G4 sourceに変更を加えない。
+
+## 実装（調査や追加設計だけでは完了扱いしない）
+A. 独立のG3 HTTP/Edge候補ハンドラと型付きデータ契約を新設。要求ごとに検証済みJWT主体/ownership/該当Xアカウント/利用権・ライフサイクル・同意をサーバー側で確認し、create/list/get/reschedule/reconfirm/cancelのRPC候補を安全に呼ぶ。PUBLIC・anon・authenticated・service_roleへ安易なSECURITY DEFINER EXECUTEを付与せず、service_roleの固定秘密をモバイルへ送らない。API入口は未デプロイ・default DENY、未知/取消/権限喪失時fail-closed。
+B. 予約画面の手動投稿確認状態と保存リクエストを接続。1件単位の明示同意・本文ハッシュ・JST日時・投稿先Xアカウント・revision/idempotencyをサーバーへ送る。成功応答だけで「予約済み」にせず**保存後の独立サーバーread-back一致**時だけ表示。保存失敗、ネットワーク不明、キャンセル処理遅延、権限取消なら未確定/要確認。完了した予約の変更→再同意→取消（CAS）を受け付けるUI・状態遷移と、アプリ再起動時の一覧再取得を実装。ローカルプレビューとは混同しない。
+C. AI投稿は `これで覚えて` を投稿許可にせず、`auto_post_preference` とG5/G4を別々に必要とする。G3 worker/lease/idempotencyのPR145契約を壊さない。実X publisherは未実装/NOT_AVAILABLEのまま。アカウント単位に全CRUD/read-backを区分し、旧 `scheduled_posts` ブランド配信を変更しない。
+D. feature release gateは**ソース既定OFF・本番API未登録**を維持。OFFでは既存PR151のUI説明・機能を壊さず、通信/保存/「予約済み」偽表示なし。テスト専用にローカルDB+ローカルAPI/transportを注入して、create→read-back→restart同等fresh client→edit/reconfirm/cancelが実際に成立する実行証拠を作る。G5/G4許可をmockするテストは `MOCK_ONLY` と明記し、実認可の証明としない。
+
+## Tests / 完了条件
+- コード必須。HTTP認証失敗/権限未接続/foreign owner/account/brand/expired or revoked entitlement/uncertain save/idempotent retries/CAS conflict/interval invariants/tenant leakage/active cancellation/pre-publish gateを関連テストで確認。手動exact/random/intervalとAI consentの境界、読み戻し・起動後再読み込み/キャンセル/再確認・保存OFFを検証する。必要に応じて専用使い捨てPG17/18、モックAPI/React stateの最小限。全体数千テストや大量再調査はせず変更箇所中心。PGを実行できない場合はRUN_NOT_AVAILABLEとして明示。
+- app focused/full relevant tests、TS/lint、Edge tests、`git diff --check`、secret scan、他slot path overlapの再確認。ライブSupabase/Meta/X/AIへの読み書きは行わない。productionへのmigration/Edge/Cron/Auth/DB/OAuth/permission changesは0。
+- **本番の予約保存が動くとは言わない。** G5/G4の実permission sourceが揃い、Auth/RLS/API/worker/Xを統合した時点で別途 **Codex Sol（高）** H1〜H4を1回だけ使う独立セキュリティレビュー→ユーザー承認→段階的本番適用→限定1件Xテスト→read-back。H5レビュー使用不可。
+- 独立G3 branchにcommit/pushし、PR151の上に**別のDraft PR**（stacked dependencyを明記）を作成。PR145/151は変更・マージしない。G3 TASKへ`## Report`追記（task_id,result,changed_files,tests,commit_hash,push,merge,deploy,remaining_issues,safety_checks,next_recommendation,PR/branch/worktree）。status review_required/next_owner chatgptへ更新し、K3をPOSTONA G3のちゃへ返す。
+- AI Lab開発日記には公開安全な一般的進捗のみ候補。
+
+推薦モデル：**Opus5.5（高）**。
+
+---
+
+# ARCHIVED PREVIOUS G3 TASK — original complete text preserved
+
 # G3 — CURRENT TASK — POSTONA投稿予約 確認UI実装 V1（OFFLINE）
 
 - task_id: postona-g3-reservation-preview-confirmation-ux-v1-20261012
