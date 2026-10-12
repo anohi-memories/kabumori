@@ -49,16 +49,16 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: review_required
 - task_id: kabumori-pr149-broadcast-fanout-push-security-review-h2-20261012
 - start_code: H2
 - finish_code: C2
 - completion_code: C2
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: K2 G2 PR149 one independent Sol（高） source-only review: 17-path single commit stack PR143, market morning/close all opted-in dedicated high-scale Expo sender. Focus RLS/SECURITY DEFINER, DB lease/claim/fencing, fanout and source idempotency, project wide 600 msg/sec, ambiguous Expo/individual device >90 risk, sending_enabled OFF mid-flight, silent misses, 10k/100k realistic latency vs mock, important-news isolation, app deep-link and off-by-default rollout. Exact PR149 head 31c509df1c08ecc437ca4b70541284f223c836e2, PR143 base 889ca1b44cf82bd3ecb913818dca568456849feb. No product changes, no merge/deploy/live API. Return C2 to this G2 chat.
+- allocation: H2 completed ONE source-only independent review of Draft PR149 exact31c509df on protected PR143889ca1b4, verdict CHANGES_REQUIRED / PRODUCTION_NO_GO. Six reproduced P2: feedOFF afterenqueue still sends; source-age cutoff replaced by queue-age; token91 silently dropped; legal16parallel burst640; opt-in UUID range expands beyondchunk bound; malformed same-count tickets retry ambiguous outcome. Typed44 focused +8 independent repro/control probes, localPG ACL/races/rollback/10k/100k +19mutants PASS; broader1669 G2-reported only. Report main commit5bcbc6e6 read-back, TASK31a31076; prior history protected. Product source/merge/deploy/liveAPI/Expo/production0; ownPG stopped. Return C2 to G2; no G2 reservation or production authority.
 - recommended_model: Sol（高）
 ## Codex H3
 - owner: codex
