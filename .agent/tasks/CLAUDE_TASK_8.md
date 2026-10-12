@@ -1,3 +1,90 @@
+# Claude Task G8 — 日本の一般重大ニュース＋金融ニュース網羅強化 Phase J0（取得→アプリ到達監査と次段実装設計）
+
+- task_id: news-improvement-a-jp-general-major-financial-coverage-j0-g8-20261012
+- owner: claude
+- slot: claude-8
+- status: ready
+- next_owner: claude
+- start_code: G8
+- finish_code: K8
+- return_to: ニュース改善API最適化のちゃ
+- recommended_model: Opus5.5（中）
+- allocation: USER PRIORITY：G8は「ニュース改善A」専任。日本の一般重大ニュースと国内金融・経済・企業ニュースの充実を優先。G9=API最適化B、ほかG/H・別案件のTASK・Report/worktreeには触れない。
+- scope: **Phase J0に限る**：本番read-only事象単位gap監査→取得sourceと合法利用可否の比較→アプリまでのfunnel可視化→offline評価ハーネス/合成fixturesと明示的なPhase J1実装計画。
+- required_quality: 重要ニュースの取りこぼし（recall）優先。ただし事実未確認の誤報・無許諾コンテンツ利用・既存配信遅延を許容しない。
+- safety: production read-only aggregate SELECT only、実API有料呼出/追加Web Search実課金/本番書込み/PR merge/deploy禁止。
+- freeze: PR #129（head 81251b316ae44a634a1b4108b420a18765d17261 / OPEN Draft）・PR #116の10/13固定production worktree・G9ほか全slotを変更しない。
+
+## ユーザーの新しい優先要望（2026-10-12）
+
+かぶモリで国内情報を大幅強化する：
+1. **一般重大ニュース**：重大事件、企業不祥事、事故、災害、サイバー攻撃、訴訟、社会的問題、政策急変等（投資・市場への影響のあるものを中心とし、未確認の犯罪疑惑を事実扱いしない）。
+2. **金融・経済**：日銀・金利・為替・景気・物価・財務省/金融庁・銀行/証券/保険/市場インフラ・規制/税制・国家政策。
+3. **日本企業**：TDnet/IRに加え、IRに出る前の不祥事・障害・製品事故・訴訟・行政処分・M&A・サプライチェーン等。
+4. **アプリ掲載を拡大**：X投稿基準とは独立させ、見逃せないニュースは広く一覧へ。Pushは緊急・重大のみを基本にし、ユーザー設定とFact/権利/出典確認を守る。記事取得数・X公開数・アプリ表示数・Pushを混同しない。
+5. これまでの「公式・無料ソースで兆候、重要な穴のみ限定Web補完、取りこぼし最小、API費用抑制」は維持。規約に抵触する無料RSSスクレイピングで穴埋めしない。
+
+## 現状の根拠（ChatGPTによる2026-10-12 JST本番read-only集計）
+
+- 過去7日間 `news_discovery_signals` の `source_id like 'jp_%'` は173件、`important_news_candidates` の `source_name='jp_official'` は11件（公開2件）、TDnet公開86件。**173→11は単純な同一記事の追跡ではない**。必ずURL/normalized title/event単位で照合し、母集団・期間・権利・dedupe差を説明して正確なfunnelにする。
+- 全レーン過去7日 candidates943件 / X公開146件 / app_title_ja非null20件 / important_news Push sent79件。ただし**app_copyの有無≠アプリ表示**。公開146件の追加app_copy=0でも、Fact通過のpost本文・日本語開示・原語fallback・既存RPCによる表示はあり得る。既存 `get_my_important_stock_news` と `get_my_important_stock_news_phase5_base` の可視性フィルタ・`alert_settings`・追跡銘柄条件・アプリホーム市場3件/保有3件上限を読むこと。過去の203?といった未検証数字は使わない。
+- 本番 `important-news-monitor` Edge v102と現在mainに `IMPORTANT_NEWS_JP_OFFICIAL_LANE=enabled` でのみ走る独立経路あり。現行コードでも`jp_mof_news`、`jp_fsa_news`、`jp_kantei_news`、`jp_caa_news`、`jp_jma_extra`がenabled、`jp_esri`と`jp_jma_eqvol`は意図的にOFF/重複排除。フラグ実値を推測しない。7日で`jp_official`の11件は記録されたが、現時点のON/OFFは未確証。run diagnostics JSONの仕様と観測可能性も調査。
+- `docs/news-coverage/REDESIGN.md`、`docs/news-sources/news_acquisition_architecture.md`、`news_recall_benchmark.md`、`news_source_catalog.md` に先行設計あり。**これを読まずに別の巨大ニュースシステムを設計し直さない**。現状main/本番の進化との差を表形式で明記。
+- PR #129はFed statement＋TDnet決算factsを独立既定OFFにする**別リリース工程**。このTASKではPR129のsource/migration/merge/deployを操作しない。
+
+## Phase J0作業指示
+
+### A. 現状把握（新規実装の前）
+
+1. まず `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md` と本TASK・旧Report、fresh origin/main / worktree/checkout/未commit/競合を確認。G8に割当`ready`、task ID一致・専用独立checkout確保の場合のみ進む。PR129の旧G8作業treeとPR116の本番専用checkoutは一切触らず、**fresh mainから別のG8専用J0 branch/worktree**を作る。
+2. 既存 `_shared/news_discovery`、`news-discovery-observer`、`important-news-monitor` (`jp_official_*`, `breaking_market_*`, `headline_trigger_*`, `news_coverage_*`)、TDnet、`get_my_important_stock_news(_phase5_base)`、`src/lib/news-presentation.ts`, `src/lib/home-news-sections.ts` をread-only調査。責務・漏れ・権利ゲート・ON/OFFを一覧化。
+3. 本番DBへのアクセスは可能なら**匿名/集約read-only SELECTのみ**、個人の保有銘柄、氏名、デバイストークン、ユーザーID、private本文、Secretsは取り出さない。接続できない場合は上記のちゃ監査値に`reported_unverified`注記し、想像で数値を埋めない。
+4. 直近7/14日、平日と10/12祝日を分ける。分野別の`source→signal→candidate→judgement→generation→X公開→app list eligibility→app home→push`を**event_idまたはsource_url等で一対一にトレース**し、数を比較できない段階はNULL/不可と示す。**日本語app_copyを作らない＝表示ゼロ**と誤解しない。JP公式173/11/2の欠落reason（合法sourceなし、規則filter、候補のdedupe、判定no_post、生成failed、アプリseverity、ユーザー表示/最大件数、Push gate）を原因別に分類。アプリの実機表示についてread-onlyデータで証明できない場合は`NOT_VERIFIED_ON_DEVICE`と明記。
+5. Xに出す閾値と、アプリ内の一般ニュース/金融/銘柄別の表示閾値を分けて改善案を設計する。タイトルだけ・Fact未確認の事件を断定しない。Pushは現仕様を勝手に緩めず将来案を提示する。
+
+### B. 国内ソースと一般速報の具体的な埋め方
+
+6. 「金融庁/財務省/首相官邸/消費者庁/気象庁/内閣府/日銀/TDnet/EDINET/JPX」に加えて、**公取委、経産省、警察庁、消防庁、国交省、厚労省、防衛省/外務省、地方・都道府県発表、企業newsroom**等をsource catalog候補として**実際の公式feed/API・公開条件・更新遅延を確認したものだけ**掲載。RSS/APIがない場合は存在すると仮定せず`unknown`にする。
+7. 無料の公的情報だけでは事件・企業不祥事の初報が遅い。**商用利用・機械取得・AI入力・表示/引用それぞれを独立に許される根拠で確認**し、ニュース媒体・転載サイト・Google/Yahoo/NHK等を「公開RSSだからOK」と扱わない。GDELT等のメタデータや合法なシグナルを検討する場合も、メタデータの利用権と元記事の転載権は別。利用条件が不明なら現時点で実装/常時巡回/外部AI送信しない。`internal_trigger_only`さえ規約違反なら使用禁止。
+8. 一般速報の候補は`event (主体・行為・対象・時刻)`で重複統合し、出典URLと検証状態を保管。重大事故/不祥事/訴訟の真偽・確定/捜査段階を混同しない。記事本文・写真の無断複製やAI外部送信はしない。一次情報による確認、複数独立情報、最新性、誤情報の訂正/取消経路を要件として作る。
+9. 限定Web Searchは事故・訴訟・不祥事・戦争初報・金融インフラ障害・急な市場変動の**空白eventだけ**に発火する次段案を作り、抑制・重複防止・日次費用上限/skip条件と誤Fact guardを記載。本TASKでは**実有料呼出なし・予算未承認**。
+10. sourcesは重点順に Tier A（契約不要と確認した公式・安全な信号）/Tier B（利用条件の整理が必要）/Tier C（有料配信契約/許諾検討）に分け、機能と権利の両面で本当に使えるsourceのみ次実装候補へ進める。商用規約をユーザーに事実として断定するときは根拠URLと確認日を添付。
+
+### C. オフラインで再現可能な品質ベンチマーク
+
+11. 過去の`docs/news-sources/news_recall_benchmark.md`を活用し、**著作権本文なしの自作架空合成**fixtureで以下を最低各2例：企業不祥事・事件/事故・金融規制/銀行破綻・日銀政策・地震/ミサイル・行政処分/訴訟・重要でない反例、計14件以上。`discovered / relevant / eligible_for_app / urgent_push`を**別の判定軸**としてオフライン分類する検証スクリプト/テストを `tools/jp-news-coverage/`等のJ0専用・他slot非競合パスに追加可能。既存本番pipeへのimport/DB migration/Edge変更は**不可**。
+12. 失敗要因`no_source, terms_excluded, filtered_rule, no_candidate, judgement_rejected, generation_failed, app_display_gate, push_policy, duplicate_event, unknown`と、`fetched_at`・`first_public_at`・`judgement_at`・`display_eligible_at`（分かる範囲）の列定義を作り、重大事件/金融ニュースの**event単位Recall、アプリ到達率、遅延p50/p90**を測れるようにする。正解集合は本人の毎時監視ログ＋公式発表＋既存候補など多源だが、実ログが入手できないときは`NOT_AVAILABLE`と明記。
+13. 小さな実装PoCは**オフライン・mock・自作fixtureだけ**。外部AI・実WebSearch・第三者本文・本番API・DB書込み不可。正例だけでなく、行政処分との噂混同/誤報/旧ニュース再掲/告発の未検証/外国事件と日本関連なしなどの負例も含める。費用・誤判定・遅延の推定は`estimate`と実測を区別。
+
+### D. 報告と次フェーズ設計
+
+14. 成果を `docs/news-coverage/JP_GENERAL_FINANCIAL_COVERAGE_J0_20261012.md`（実測可観測なfunnel＋missing reasons＋既存設計との矛盾＋source rights matrix＋次J1案）へ保存。J0 offline harness/fixturesはあれば各変更ファイル一覧。推奨J1実装は「権利OKの国内速報信号をshadowのみ追加」「必要時だけWeb補完」「アプリ一覧/市場全体の表示判定改善」の**3本を競合しない順番**に分割し、優先順位・対象ファイル・必要承認・tests・費用ガードを具体化。将来の広域ニュース計画をG8 TASK内に保留メモとして置き続けず、正式な設計文書へ切り分ける。
+15. git diff --check・必要なDeno tests/check/lint・source rights scan・secret scanと、PR129/PR116/G9/他slotへの変更0を確認。G8専用J0のbranchへcommit/pushは可能（安全な独立worktreeがある場合のみ）。新Draft PRは必要なら作成提案だけでよい；既存PR129へのcommit/rebase/mergeは禁止。
+16. 完了時は本TASK末尾の`## Report`に task_id, result, baseline_window, source_candidates, rights_clearance, delivery_funnel, gap_reasons, benchmark/tests, changed_files, commit_hash, branch, push, merge, deploy, remaining_issues, safety_checks, recommended_J1_TASK, next_recommendation を記録。status`review_required`/next_owner`chatgpt`として**K8を「ニュース改善API最適化のちゃ」へ返す**。意図的に未確認の権利・本番有効化条件はBLOCKED/要承認とする。
+
+## Report
+
+- task_id: news-improvement-a-jp-general-major-financial-coverage-j0-g8-20261012
+- result: not_started
+- changed_files: none
+- tests: not_run
+- baseline_window: TBD
+- source_candidates: TBD
+- rights_clearance: not_verified
+- delivery_funnel: TBD
+- commit_hash: none
+- branch: none
+- push: not_performed
+- merge: not_performed
+- deploy: not_performed
+- remaining_issues: 国内一般重大ニュースの合法かつ早い発見経路、アプリ内掲載拡充、実測可能なevent基準の抜け追跡。
+- safety_checks: not_started
+- next_recommendation: J0の監査・offline PoC完了後にK8、確認後にJ1の限定実装を別TASKへ。
+
+---
+
+## Preserved prior G8 TASKs / Reports / evaluations — DO NOT EDIT history below
+
 # Claude Task G8 — PR #129 最小リリース安全装置：新本文取得の独立OFFスイッチ（R5）
 
 - task_id: news-improvement-a-pr129-release-safety-env-switches-g8-20261012
