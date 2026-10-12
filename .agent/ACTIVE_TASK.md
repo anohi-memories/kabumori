@@ -120,15 +120,15 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: kabumori-g2-phase2c-deferred-claude-market-shadow-handler-20261012
+- status: ready
+- task_id: kabumori-g2-ondemand-broadcast-release-integration-20261012
 - start_code: G2
 - finish_code: K2
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 2026-10-12 PR153 6c576567328c99a58c2e4beaed86d155fe875769 source PASS_SOURCE_CANDIDATE_WITH_G6_TEST_BLOCKER / PRODUCTION_NO_GO. Single commit/three G2 files handler/index/new shadow_wiring_test, on protected G6 PR150 then PR148; default OFF, legacy OpenAI identity, waitUntil after completed+trace, deadline/cancel/error isolation. G2 reports 313/313 market report tests PASS and 3 mutation detections. G6 shared AI provider isolation 122/123: Phase1a no-import rule obsolete after authorized handler import; G6 must update only G6-owned isolation test allowlist and rerun on stacked integrated tree. Not merge-ready, real API/prod tests NOT_RUN. G2 done/none/free; no G6/new other slot allocation in this K2. PR143/149/148/150/153 still Draft/unmerged, release gates held.
-- recommended_model: Opus5.5（高） (completed)
+- allocation: USER wants to resume core Kabumori app work without waiting G6 Phase2c isolation test: G2 source-only fresh main integration/readiness of Draft PR143 ondemand server-backed private report (889ca1b4) and Draft PR149 opted-in mass morning/close push (e9bb86c4). Investigate GitHub PR143 mergeable=false with independent G2 worktree; make G2-owned conflict fixes only in NEW integration candidate branch/Draft PR as justified; local disposable PostgreSQL actual migration/RLS/queue/push and app deep-link focused tests. Protect G1 home UI, G5 account/Auth, G6 PR148/150/153 and previous original PRs/branches. No production, no merges, no real API/Expo/Apple build, no gate changes. Return K2. G6 independently ready doing one isolation test; NOT blocker for base app source QA.
+- recommended_model: Opus5.5（高）
 ## Claude G3
 - owner: claude
 - slot: claude-3
