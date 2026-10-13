@@ -23,18 +23,19 @@
 
 ## F2
 - slot: F2
-- status: review_required
+- status: done
 - task_id: kabumori-f2-opus-primary-morning-close-handler-20261013
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG2のちゃ（新F2担当）
 - completion_code: L2
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
-- dependencies: PR170 source-only F6 Opus Primary; generalize BOTH morning & close. F6 changes owner-coordinated. G2 market-report handler ownership preserved.
-- blocker: Draft PR #173（head `3605c2eb88380183b78757e092877ba2ff46c25f`、PR170 の上）PASS_OFFLINE_SOURCE。primary_close は配線済み。primary_both は F6 の部品の変更待ち（検証済みの差分 docs/ai-provider/F2_PRIMARY_BOTH_F6_HANDOFF.patch）。merge・Secret・deploy・モードの設定は別承認。月 $5 では毎日の朝刊・大引けは続かない。L2 待ち
-- slot_use: かぶモリアプリ Opus primary report integration
+- dependencies: PR170→PR173 source candidates; Opus follow-on belongs to F6 task common-ai-f6-opus-primary-both-integration-20261013
+- blocker: none for F2 slot. PR173 Draft/unmerged, production NO_GO, F6 integration dependencies unresolved
+- l2_verdict: PASS_OFFLINE_SOURCE / TRANSFER_F6 / PRODUCTION_NO_GO
+- slot_use: かぶモリアプリ; free after L2, next task must archive current F2 TASK and confirm no conflicts
 
 ## F3
 - slot: F3
