@@ -23,17 +23,17 @@
 
 ## F2
 - slot: F2
-- status: ready
+- status: review_required
 - task_id: kabumori-f2-opus-primary-morning-close-handler-20261013
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ（新F2担当）
 - completion_code: L2
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
 - dependencies: PR170 source-only F6 Opus Primary; generalize BOTH morning & close. F6 changes owner-coordinated. G2 market-report handler ownership preserved.
-- blocker: production Secret/deploy/mode enable require separate safety approval; current $5/mo ledger cap may block daily operation
+- blocker: Draft PR #173（head `3605c2eb88380183b78757e092877ba2ff46c25f`、PR170 の上）PASS_OFFLINE_SOURCE。primary_close は配線済み。primary_both は F6 の部品の変更待ち（検証済みの差分 docs/ai-provider/F2_PRIMARY_BOTH_F6_HANDOFF.patch）。merge・Secret・deploy・モードの設定は別承認。月 $5 では毎日の朝刊・大引けは続かない。L2 待ち
 - slot_use: かぶモリアプリ Opus primary report integration
 
 ## F3

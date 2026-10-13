@@ -7,10 +7,19 @@
 - All live X/Threads/Meta/managed Supabase/Vault/migrations/GRANT/merge/deploy/posting gates remain NO_GO. Remote authorization cannot be marked revoked without evidence.
 
 ## F2 — Opus Primary 朝刊・大引け対応（2026-10-13 JST）
-- User approved existing valid 30-day Anthropic key for initial usage and wants **both** morning and close Opus Primary; automatic OpenAI fallback can be deferred; manual OFF and spending limits maintained.
-- F6 PR170 `46b27326360e66ec843f79bae6d01584088869d0` is accepted as offline source but not wired, merged or deployed. Previous F2 done task archived before reassignment in `.agent_v2/archive/2026-10-13-f2-pr143-mergeability-diagnosis.md`.
-- F2 NEW task `kabumori-f2-opus-primary-morning-close-handler-20261013` ready / Opus5.5（高）, start F2 → L2, returns かぶモリアプリG2のちゃ（新F2担当）. Owns handler-side wiring and tests; F6 provider source remains protected. Source/QA first, no unapproved Secret/deploy/paid API.
-- Today morning has passed; today's closing report remains a target but **live cutover unconfirmed** until ownership coordination, source merge, deployment, secret/quotas validation. Monthly trial cap $5 may block sustained twice-daily use.
+- F2 の TASK `kabumori-f2-opus-primary-morning-close-handler-20261013` は完了報告済み（review_required/chatgpt、L2 待ち）。結果は PASS_OFFLINE_SOURCE、PRODUCTION_NO_GO。
+- Draft PR #173（head `3605c2eb88380183b78757e092877ba2ff46c25f`、base は PR170 の branch）
+  - handler の配線は、F6 の差分案に F2 の3点の追加を足したもの
+    - `primary_both` の未対応は失敗にする
+    - 監査用のモデル名を実際のモデルにする
+    - `primary_last_error` を残す
+  - オフラインの E2E 38件、関連する計480件が PASS
+- `primary_close`（大引けだけ）は、そのまま有効にできる状態。`primary_both`（朝刊も）は、F6 の部品の変更が要る。
+  - 検証済みの差分 `docs/ai-provider/F2_PRIMARY_BOTH_F6_HANDOFF.patch` を、共通AI基盤のちゃへ引き継ぎ。
+- 本番の Cron: 朝刊 07:55（再試行 08:05）、大引け 16:20（再試行 16:35）。
+- 今日の大引けは、L2・merge・Secret・バイト単位の比較・deploy・モードの設定が、16:15 までに別承認で揃った場合だけ有効にできる。揃わなければ見送る。
+- 利用側のゲートは X・アプリとも OFF だった（今朝）。そのため、Opus のレポートはまだ利用者に届かない。
+- 月 $5 の上限では、朝刊・大引けを毎日続けられない（10/21 ごろに止まる）。見直しは別承認。
 
 
 
@@ -74,7 +83,7 @@
 
 ## プロジェクト別現状
 
-- F2の診断TASK `kabumori-f2-pr143-live-mergeability-diagnosis-20261012` はL2受入済み（done/none、PASS_GO_TO_MERGE_DECISION / PRODUCTION_NO_GO）。F8にニュース改善A J1-a診断TASK `news-improvement-a-jp-official-diagnostics-j1a-f8-20261012` を割当済み（ready/claude、L8返却、Sonnet5高）。その他の新系統枠は割当前の状態を各TASKで確認。
+- F2は Opus Primary の handler の配線の TASK を完了報告済み（review_required、L2 待ち、Draft PR #173）。F8にニュース改善A J1-a診断TASK `news-improvement-a-jp-official-diagnostics-j1a-f8-20261012` を割当済み（ready/claude、L8返却、Sonnet5高）。その他の新系統枠は割当前の状態を各TASKで確認。
 - かぶモリアプリ、X自動投稿アプリ（POSTONA）、共通アカウント、共通AI基盤、MIC、ニュース改善などの現状は、旧 `.agent/CURRENT_STATE.md` と旧各TASKが正本。
 
 ## G8 → F8の新規TASK移行
@@ -101,7 +110,7 @@
 
 ## 未マージPR
 
-- F2は診断TASKのみで新規PRなし。旧G2 PR143/149/158は3件ともmainへマージ済み。
+- F2: Draft PR #173（Opus Primary の handler、base は PR170 の branch、未マージ）。旧G2 PR143/149/158は3件ともmainへマージ済み。
 - 新系統導入PR #155はマージ済み。旧系統の未マージPRは旧CURRENT_STATEとGitHubを参照する。
 
 ## deploy待ち
@@ -110,7 +119,7 @@
 
 ## slot競合
 
-- F2は診断中に旧G2/G1/G5/G6など既存slotとの同一ファイル操作を禁止。旧G2の診断TASKは未開始終了済み。
+- F2は `market-report-analysis/handler.ts`・`opus_primary_handler_test.ts` を PR #173 で変更中。F6 の `market_report_primary.ts` は F6 の担当のまま（引き継ぎの差分あり）。shadow の PR #153 も handler.ts を変えるので、後から入る側で調整が要る。
 - 移行期間中は、旧Gn / Hn と新Fn / Jn が同じ境界を同時に変更しないよう、TASKを置くときに新旧両方の索引を確認する。
 
 ## 現在有効な運用判断
@@ -123,7 +132,7 @@
 ## 次工程
 
 - F8で国内ニュースJ1-aを実装、L8で本チャットへ報告（Sonnet5高、production NO_GO）。
-- F2のPR143マージ可否の診断はL2で受入済み。GitHub PR143 mergeable=falseが接続経由では継続するため、実マージ前の最新確認は必須。本番 NO_GO。
+- F2の PR #173 を L2 でレビュー。primary_both は共通AI基盤のちゃが F6 の部品の変更を判断。今日の大引けの有効化・明日の朝刊・予算の見直しは別承認。本番 NO_GO。
 
 1. 旧系統の各slotが完了した時点で、ChatGPTが次の新規TASKを新系統へ置くかを判断する。
 2. 初回の新系統TASK完了時にarchive / MANIFEST / SHA256 / HISTORY_INDEXの保存運用を確認する。
