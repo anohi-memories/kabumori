@@ -85,18 +85,18 @@
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-opus-primary-both-integration-20261013
+- status: ready
+- task_id: common-ai-f6-opus-both-release-preflight-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: F6 PR170 → F2 PR173 (F2 L2 awaiting), F2-owned handler/test changes protected; new F6-only provider both-cycle PR
-- blocker: PASS_OFFLINE_SOURCE Draft PR #175 (161f1f08, F6 provider primary_both, stacked on #173); integrated report suite 319/2 FAIL pending F2-owned opus_primary_handler_test.ts hunk (322/322 with it locally); Edge Secret presence unknown; production NO_GO; budget caps unchanged (proposal $25/120 month, $3/8 day)
-- slot_use: 共通AI基盤 Opus PRIMARY morning + close, today close priority
+- dependencies: PR170 → PR173 → PR175; F2-owned handler test change via F2ちゃ, L2 accepted
+- blocker: PR170 mergeable false; 2 outdated F2 tests; Secret status unknown; release safety and budget gates
+- slot_use: common AI Opus PRIMARY morning/close release preflight, no production mutation
 
 ## F7
 - slot: F7
