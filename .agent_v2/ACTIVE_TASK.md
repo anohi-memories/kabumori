@@ -130,17 +130,17 @@
 
 ## F9
 - slot: F9
-- status: review_required
+- status: done
 - task_id: api-optimization-b-f9-pr174-pr115-rights-audit-offline-20261013
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: ニュース改善API最適化のちゃ
 - completion_code: L9
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F9.md
 - current_report_path: .agent_v2/tasks/F9.md#report
 - dependencies: prior L9 accepted, archived SHA256/read-back; F8/F9 distinct boundaries
-- blocker: none for offline source-only, production/merge/paid API NO_GO
+- blocker: offline audit accepted; PR174 MERGE_HOLD until rights decision for 288 headlines/76 generated texts; legacy PR115 history and 2 main fixtures unresolved
 - slot_use: API最適化B専任。PR174/旧PR115権利・履歴リスクと送信gate/価格のoffline監査。F8ニュース関連を変更しない。
 
 ## F10
