@@ -15,8 +15,10 @@ export const CORS_HEADERS: Record<string, string> = {
 
 const RPC_NAMES: Record<RpcName, string> = {
   preview: 'social_mobile_account_deletion_preview',
+  x_precheck: 'social_mobile_account_deletion_x_precheck',
   acquire: 'social_mobile_account_deletion_acquire',
   release: 'social_mobile_account_deletion_release',
+  stop_x: 'social_mobile_account_deletion_stop_x',
   credentials: 'social_mobile_account_deletion_credentials',
   mark_x_revoked: 'social_mobile_account_deletion_mark_x_revoked',
   mark_apple_revoked: 'social_mobile_account_deletion_mark_apple_revoked',

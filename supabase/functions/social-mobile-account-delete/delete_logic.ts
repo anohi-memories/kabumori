@@ -8,9 +8,11 @@
 //     `sub` == verified user), an explicit confirmation constant and the scope
 //     the user was shown (preview). A different current scope refuses.
 //   * The durable DB state machine (migration 20260928160000) does the
-//     serialization: acquire (lease) -> credentials -> X revoke -> mark (by
+//     serialization: acquire (lease) -> stop X publishing (F3 candidate
+//     social_mobile_account_deletion_stop_x) -> credentials -> X revoke -> mark (by
 //     SHA-256 of exactly the revoked material) -> Apple revoke + durable
-//     checkpoint (only when the login itself is deleted) -> purge -> finalize.
+//     checkpoint (only when the login itself is deleted) -> stop X publishing
+//     again (pre-purge) -> purge -> finalize.
 //     A retry resumes where the DB says it stopped; nothing external is
 //     repeated after its checkpoint.
 //   * Every failure returns a fixed code and releases the lease; success is
@@ -24,7 +26,8 @@ export type DeletionScope = 'social_only' | 'social_and_login';
 
 export const BLOCK_REASONS = [
   'ADMIN_ACCOUNT', 'OWNS_OTHER_WORKSPACE', 'WORKSPACE_NOT_SELF_SERVICE', 'SHARED_WORKSPACE', 'WORKSPACE_ROLE_MISMATCH',
-  'POSTING_IN_PROGRESS', 'CREDENTIAL_REFRESH_IN_PROGRESS', 'CREDENTIAL_OWNERSHIP_AMBIGUOUS', 'UNEXPECTED_DEPENDENT_DATA', 'UNKNOWN',
+  'POSTING_IN_PROGRESS', 'CREDENTIAL_REFRESH_IN_PROGRESS', 'CREDENTIAL_OWNERSHIP_AMBIGUOUS', 'UNEXPECTED_DEPENDENT_DATA',
+  'NON_X_ACCOUNT_PRESENT', 'UNKNOWN',
 ] as const;
 export type BlockReason = (typeof BLOCK_REASONS)[number];
 
@@ -36,7 +39,7 @@ export type DeletionErrorCode =
 
 /** providers and Apple subjects come from the server's view of the user's identities. */
 export type VerifiedUser = { id: string; providers: readonly string[]; appleSubjects: readonly string[] };
-export type RpcName = 'preview' | 'acquire' | 'release' | 'credentials' | 'mark_x_revoked' | 'mark_apple_revoked' | 'purge' | 'finalize' | 'record';
+export type RpcName = 'preview' | 'x_precheck' | 'acquire' | 'release' | 'stop_x' | 'credentials' | 'mark_x_revoked' | 'mark_apple_revoked' | 'purge' | 'finalize' | 'record';
 export type RpcResult = { ok: true; data: unknown } | { ok: false; code: string | null };
 
 export type DeletionDeps = {
@@ -156,6 +159,13 @@ export async function handleAccountDeletion(
   if (current.scope !== scope) return fail(409, 'SCOPE_CHANGED');
   if (apple && current.apple_revoked !== true && !appleCode) return fail(400, 'APPLE_REAUTH_REQUIRED');
 
+  // A non-X social account refuses before anything is recorded (the credential set is bound at acquire).
+  const precheck = await deps.rpc('x_precheck', { p_user_id: userId });
+  if (!precheck.ok) return fail(500, 'FAILED');
+  const nonX = record(precheck.data).non_x_accounts;
+  if (typeof nonX !== 'number' || !Number.isInteger(nonX) || nonX < 0) return fail(500, 'FAILED');
+  if (nonX > 0) return fail(409, 'DELETION_BLOCKED_NON_X_ACCOUNT_PRESENT');
+
   await audit('requested');
   const acquired = await deps.rpc('acquire', { p_expected_scope: scope, p_apple_required: apple, p_user_id: userId });
   if (!acquired.ok) return fail(500, 'FAILED');
@@ -176,6 +186,30 @@ export async function handleAccountDeletion(
     return fail(status, error);
   };
   const leaseLost = (result: RpcResult) => !result.ok && result.code === 'SOCIAL_MOBILE_DELETION_LEASE_LOST';
+
+  // X publishing stops before any credential is read, revoked at X or removed, and again right before the purge:
+  // publish authority revoked, planned reservations cancelled (idempotent). A post in flight, a non-X account or a
+  // shared workspace answers a TYPED block (the stop itself stays in effect) -- never an operator hand-off from here.
+  let unconfirmedPosts = 0;
+  const stopXPublishing = async (): Promise<DeletionResponse | null> => {
+    const halted = await deps.rpc('stop_x', leaseArgs);
+    if (leaseLost(halted)) return fail(409, 'DELETION_IN_PROGRESS');
+    if (!halted.ok) return stop(500, 'FAILED', 'X_STOP_FAILED');
+    const result = record(halted.data);
+    if (result.status === 'blocked') {
+      const reason = blockReason(result.reason);
+      return stop(409, `DELETION_BLOCKED_${reason}`, reason);
+    }
+    if (result.status === 'stopped') {
+      const uncertain = result.reservations_uncertain;
+      unconfirmedPosts = typeof uncertain === 'number' && Number.isInteger(uncertain) && uncertain > 0 ? uncertain : 0;
+      return null;
+    }
+    if (result.status === 'not_applicable') return null;
+    return stop(500, 'FAILED', 'X_STOP_UNEXPECTED');
+  };
+  const stopped = await stopXPublishing();
+  if (stopped) return stopped;
 
   // X: revoke exactly the current material, then record it by fingerprint.
   if (lease.state === 'started') {
@@ -226,6 +260,8 @@ export async function handleAccountDeletion(
     if (!checkpoint.ok) return stop(500, 'FAILED', 'APPLE_CHECKPOINT_FAILED');
   }
 
+  const stoppedAgain = await stopXPublishing();
+  if (stoppedAgain) return stoppedAgain;
   const purge = await deps.rpc('purge', leaseArgs);
   if (leaseLost(purge)) return fail(409, 'DELETION_IN_PROGRESS');
   if (!purge.ok) {
@@ -250,6 +286,8 @@ export async function handleAccountDeletion(
       ok: true,
       login_deleted: done.login_deleted === true,
       ...(done.reason === 'MAIN_APP_ACCOUNT_PRESENT' ? { login_kept_reason: 'MAIN_APP_ACCOUNT_PRESENT' } : {}),
+      // Reservations whose X result was never known: reported, never hidden behind the success.
+      ...(unconfirmedPosts > 0 ? { x_posts_unconfirmed: unconfirmedPosts } : {}),
     },
   };
 }
