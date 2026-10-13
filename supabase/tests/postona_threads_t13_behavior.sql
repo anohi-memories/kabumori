@@ -237,6 +237,15 @@ begin
    where user_id = pg_temp.u('f1') and operation_type = 'account_deletion' and status = 'in_progress';
   r := public.cleanup_threads_provider_footprint(pg_temp.u('f1'));
   perform t13.check(r = '{"code": "LOCAL_REMOVED", "outcome": "local_removed_remote_unverified"}', 'account deletion cleanup: ' || r::text);
+  -- G: ending POSTONA needs its owner's live lease too (F4 live-lease fix): unclaimed -> nothing removed; claimed
+  -- through F5's own claim_service_deletion (the real Phase 6) -> removed.
+  r := public.cleanup_threads_provider_footprint(pg_temp.u('c2'));
+  perform t13.check(r = '{"code": "DELETION_NOT_IN_PROGRESS", "outcome": "blocked"}', 'POSTONA deletion, unclaimed: ' || r::text);
+  perform t13.check(public.threads_provider_connection_state(pg_temp.u('c2')) = 'connected', 'nothing removed before the claim');
+  r := public.claim_service_deletion(pg_temp.u('c2'), 'x_autopost',
+         (select o.id from private.account_lifecycle_operations o
+           where o.user_id = pg_temp.u('c2') and o.operation_type = 'service_deletion' and o.status = 'in_progress'));
+  perform t13.check(r->>'status' = 'acquired', 'POSTONA deletion claimed: ' || r::text);
   r := public.cleanup_threads_provider_footprint(pg_temp.u('c2'));
   perform t13.check(r = '{"code": "LOCAL_REMOVED", "outcome": "local_removed_remote_unverified"}', 'POSTONA deletion cleanup: ' || r::text);
   -- H is only locked (no deletion): the cleanup does nothing.

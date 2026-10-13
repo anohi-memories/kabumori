@@ -65,12 +65,14 @@ declare a uuid := '00000000-0000-4000-8000-0000000000a1'; before text := pg_temp
 begin
   r := public.cleanup_threads_provider_footprint(a);
   perform postona_rel.check(r = '{"code": "DELETION_NOT_IN_PROGRESS", "outcome": "blocked"}', 'no deletion: ' || r::text);
-  -- A deletion past its cleanup step, or already finished, does not authorize either.
-  insert into private.account_lifecycle_operations (user_id, operation_type, status, current_step) values (a, 'account_deletion', 'in_progress', 'ready_for_managed_auth_delete');
+  -- A deletion past its cleanup step does not authorize, even with its owner's live lease.
+  insert into private.account_lifecycle_operations (user_id, operation_type, status, current_step, owner_lease, owner_lease_expires_at)
+  values (a, 'account_deletion', 'in_progress', 'ready_for_managed_auth_delete', gen_random_uuid(), clock_timestamp() + interval '10 minutes');
   r := public.cleanup_threads_provider_footprint(a);
   perform postona_rel.check(r->>'outcome' = 'blocked', 'past the cleanup step: ' || r::text);
-  -- Ending another service (kabumori) does not authorize removing POSTONA's Threads data.
-  insert into private.account_lifecycle_operations (user_id, operation_type, service_key, status, current_step) values (a, 'service_deletion', 'kabumori', 'in_progress', 'cleanup');
+  -- Ending another service (kabumori) does not authorize removing POSTONA's Threads data, even owned.
+  insert into private.account_lifecycle_operations (user_id, operation_type, service_key, status, current_step, owner_lease, owner_lease_expires_at)
+  values (a, 'service_deletion', 'kabumori', 'in_progress', 'cleanup', gen_random_uuid(), clock_timestamp() + interval '10 minutes');
   r := public.cleanup_threads_provider_footprint(a);
   perform postona_rel.check(r->>'outcome' = 'blocked', 'kabumori service deletion: ' || r::text);
   delete from private.account_lifecycle_operations where user_id = a;
@@ -169,11 +171,44 @@ begin
   perform postona_rel.check(r->>'outcome' <> 'confirmed_remote_revoked', 'never a confirmed remote revoke');
 end $$;
 
+-- ---- F4 live-lease fix: ending POSTONA only (service_deletion) also needs its owner's LIVE lease -------------
+do $$
+declare b uuid := '00000000-0000-4000-8000-0000000000b1'; acct text := pg_temp.get('acct_b');
+        before text := pg_temp.footprint(pg_temp.get('acct_b')); states bigint; secrets bigint; r jsonb;
+begin
+  states := (select count(*) from public.social_account_oauth_states where social_account_id = acct);
+  secrets := (select count(*) from vault.secrets);
+  -- Begun but never claimed (no owner): the shipped predicate let ANY caller remove here.
+  insert into private.account_lifecycle_operations (user_id, operation_type, service_key, status, current_step) values (b, 'service_deletion', 'x_autopost', 'in_progress', 'cleanup');
+  r := public.cleanup_threads_provider_footprint(b);
+  perform postona_rel.check(r = '{"code": "DELETION_NOT_IN_PROGRESS", "outcome": "blocked"}', 'unclaimed POSTONA deletion: ' || r::text);
+  -- Claimed, then the owner's lease ended (wall clock), or was released.
+  update private.account_lifecycle_operations set owner_lease = gen_random_uuid(), owner_lease_expires_at = clock_timestamp() - interval '1 second'
+   where user_id = b and operation_type = 'service_deletion';
+  r := public.cleanup_threads_provider_footprint(b);
+  perform postona_rel.check(r->>'outcome' = 'blocked', 'ended lease: ' || r::text);
+  update private.account_lifecycle_operations set owner_lease = null, owner_lease_expires_at = null where user_id = b and operation_type = 'service_deletion';
+  r := public.cleanup_threads_provider_footprint(b);
+  perform postona_rel.check(r->>'outcome' = 'blocked', 'released lease: ' || r::text);
+  -- Someone else's live lease authorizes nothing for this person.
+  insert into private.account_lifecycle_operations (user_id, operation_type, status, current_step, owner_lease, owner_lease_expires_at)
+  values ('00000000-0000-4000-8000-0000000000c1', 'account_deletion', 'in_progress', 'cleanup', gen_random_uuid(), clock_timestamp() + interval '10 minutes');
+  r := public.cleanup_threads_provider_footprint(b);
+  perform postona_rel.check(r->>'outcome' = 'blocked', 'another person''s lease: ' || r::text);
+  delete from private.account_lifecycle_operations where user_id = '00000000-0000-4000-8000-0000000000c1';
+  -- Nothing at all was removed: account, permission, attempts, custody, token, OAuth states, any secret.
+  perform postona_rel.check(pg_temp.footprint(acct) = before, 'nothing removed without a live lease: ' || pg_temp.footprint(acct));
+  perform postona_rel.check((select count(*) from public.social_account_oauth_states where social_account_id = acct) = states and states > 0, 'OAuth state kept');
+  perform postona_rel.check((select count(*) from vault.secrets) = secrets, 'no secret removed');
+end $$;
+
 -- ---- A secret shared with another row is not deleted (reconcile); ending POSTONA only also cleans --------
 do $$
 declare b uuid := '00000000-0000-4000-8000-0000000000b1'; before text := pg_temp.footprint(pg_temp.get('acct_b')); r jsonb; x_ref uuid;
 begin
-  insert into private.account_lifecycle_operations (user_id, operation_type, service_key, status, current_step) values (b, 'service_deletion', 'x_autopost', 'in_progress', 'cleanup');
+  -- The owner claims the POSTONA deletion (what claim_service_deletion writes: a live lease).
+  update private.account_lifecycle_operations set owner_lease = gen_random_uuid(), owner_lease_expires_at = clock_timestamp() + interval '10 minutes'
+   where user_id = b and operation_type = 'service_deletion';
   select vault_access_token_secret_id into x_ref from public.social_accounts where id = 'sa_xb';
   update public.social_accounts set vault_access_token_secret_id = pg_temp.get('secret_b')::uuid where id = 'sa_xb';
   r := public.cleanup_threads_provider_footprint(b);
@@ -181,7 +216,8 @@ begin
   perform postona_rel.check(pg_temp.footprint(pg_temp.get('acct_b')) = before, 'nothing removed');
   update public.social_accounts set vault_access_token_secret_id = x_ref where id = 'sa_xb';
   r := public.cleanup_threads_provider_footprint(b);
-  perform postona_rel.check(r->>'code' = 'LOCAL_REMOVED', 'POSTONA-only end removes Threads: ' || r::text);
+  perform postona_rel.check(r->>'code' = 'LOCAL_REMOVED', 'POSTONA-only end, owned, removes Threads: ' || r::text);
+  perform postona_rel.check(not exists (select 1 from public.social_account_oauth_states where social_account_id = pg_temp.get('acct_b')), 'and its OAuth state');
   perform postona_rel.check(exists (select 1 from public.social_accounts where id = 'sa_xb'), 'the X account itself is not this adapter''s to remove');
 end $$;
 

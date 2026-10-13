@@ -94,22 +94,24 @@ echo "PASS preconditions (publish stack, lifecycle table)"
 
 # F4 race: the owner's lease runs out WHILE the cleanup waits for the person's workspace lock (held by
 # another session for 1.5 s; the lease ends 0.7 s after the call starts). The re-check after the locks
-# must remove nothing (LEASE_NOT_HELD).
+# must remove nothing (LEASE_NOT_HELD) -- for an account deletion and, since the live-lease fix, for the
+# POSTONA-only service deletion. Usage: race_lease <db> <account_deletion|service_deletion> <2-hex tag>
 race_lease() {
-  local db="$1" person='00000000-0000-4000-8000-0000000000e1' out holder
+  local db="$1" kind="$2" tag="$3" person out holder
+  person="00000000-0000-4000-8000-0000000000$tag"
   as_owner "$db" -A -t > /dev/null <<SQL
-select public.fixture_brand('$person', 'xe');
+select public.fixture_brand('$person', 'x$tag');
 select postona_rel.login('$person');
 insert into postona_rel.lifecycle (user_id, state) values ('$person', 'active');
-select postona_rel.connect_threads('$person', public.social_mobile_account_deletion_workspace('$person'), 'e');
+select postona_rel.connect_threads('$person', public.social_mobile_account_deletion_workspace('$person'), 'r$tag');
 SQL
   as_owner "$db" -A -t -c "begin; select public.social_mobile_account_deletion_workspace_lock(public.social_mobile_account_deletion_workspace('$person')); select pg_sleep(1.5); commit;" > /dev/null &
   holder=$!
   sleep 0.3
-  out="$(as_owner "$db" -A -t -c "insert into private.account_lifecycle_operations (user_id, operation_type, status, current_step, owner_lease, owner_lease_expires_at) values ('$person', 'account_deletion', 'in_progress', 'cleanup', gen_random_uuid(), clock_timestamp() + interval '700 milliseconds'); select public.cleanup_threads_provider_footprint('$person')::text;" 2>&1)" || true
+  out="$(as_owner "$db" -A -t -c "insert into private.account_lifecycle_operations (user_id, operation_type, service_key, status, current_step, owner_lease, owner_lease_expires_at) values ('$person', '$kind', case when '$kind' = 'service_deletion' then 'x_autopost' end, 'in_progress', 'cleanup', gen_random_uuid(), clock_timestamp() + interval '700 milliseconds'); select public.cleanup_threads_provider_footprint('$person')::text;" 2>&1)" || true
   wait "$holder" || true
-  [[ "$out" == *'"code": "LEASE_NOT_HELD"'* ]] || { echo "RACE_ANSWER ${out//$'\n'/ }"; return 0; }
-  [[ "$(as_owner "$db" -A -t -c "select count(*) from public.social_accounts where id = 'sa_th_e'")" == 1 ]] || { echo "RACE_REMOVED"; return 0; }
+  [[ "$out" == *'"code": "LEASE_NOT_HELD"'* ]] || { echo "RACE_${kind}_ANSWER ${out//$'\n'/ }"; return 0; }
+  [[ "$(as_owner "$db" -A -t -c "select count(*) from public.social_accounts where id = 'sa_th_r$tag'")" == 1 ]] || { echo "RACE_${kind}_REMOVED"; return 0; }
   echo PASS
 }
 
@@ -118,7 +120,9 @@ prove() {
   db="$(copy "main_$tag" "$base")"
   [[ "$(apply "$db" "$file")" == applied ]] || { echo "APPLY"; return 0; }
   [[ "$(apply "$db" "$file")" == THREADS_CLEANUP_PRECONDITION_ALREADY_APPLIED ]] || { echo "REAPPLY"; return 0; }
-  out="$(race_lease "$(copy "race_$tag" "$db")")"
+  out="$(race_lease "$(copy "race_$tag" "$db")" account_deletion e1)"
+  [[ "$out" == PASS ]] || { echo "$out"; return 0; }
+  out="$(race_lease "$(copy "races_$tag" "$db")" service_deletion e2)"
   [[ "$out" == PASS ]] || { echo "$out"; return 0; }
   if ! out="$(as_owner "$db" -A -t -f "$here/postona_threads_cleanup_behavior.sql" 2>&1)"; then
     echo "BEHAVIOR $(sed -n 's/^.*ERROR: *//p' <<<"$out" | head -1)"; return 0
@@ -126,9 +130,19 @@ prove() {
   grep -q CLEANUP_BEHAVIOR_OK <<<"$out" || { echo "BEHAVIOR_INCOMPLETE"; return 0; }
   echo PASS
 }
+# Fail before: PR #169's candidate (the shipped service-deletion bypass) must FAIL this proof.
+PR169=fd15430ddcd640c5c7389582f37f1b478fc7204c
+if git -C "$here" cat-file -e "${PR169}^{commit}" 2>/dev/null; then
+  git -C "$here" show "$PR169:supabase/candidates/postona_threads_cleanup/threads_provider_cleanup_candidate.sql" > "$tmp/pr169_candidate.sql"
+  before="$(prove "$tmp/pr169_candidate.sql" pr169)"
+  [[ "$before" != PASS ]] || fail "PR #169's candidate passed: the proof does not catch the reproduced defect"
+  echo "PASS fail-before: PR #169 candidate $(shasum -a 256 "$tmp/pr169_candidate.sql" | cut -c1-16) fails (${before:0:110})"
+else
+  echo "SKIP fail-before: git objects of PR #169 ($PR169) not present"
+fi
 result="$(prove "$candidate" real)"
 [[ "$result" == PASS ]] || fail "candidate: $result"
-echo "PASS candidate: apply, re-apply refused, lease race, behavior"
+echo "PASS pass-after: candidate $(shasum -a 256 "$candidate" | cut -c1-16): apply, re-apply refused, lease races (account and POSTONA deletion), behavior"
 
 mutate() {
   local tag="$1" from="$2" to="$3" out="$tmp/mut_$1.sql" got
@@ -143,11 +157,16 @@ mutate no_inflight_check "t.status in ('creating_container', 'publishing', 'publ
 mutate no_shared_secret_check "  if v_secret is not null and exists (
        select 1 from public.social_accounts o" "  if false and exists (
        select 1 from public.social_accounts o"
-mutate any_service_deletion "(o.operation_type = 'service_deletion' and o.service_key = 'x_autopost')" "(o.operation_type = 'service_deletion')"
-# F4 (lease): an account deletion must hold a live owner lease, by the wall clock, re-checked after the locks.
-mutate no_lease_check "(o.operation_type = 'account_deletion' and o.owner_lease is not null
-            and o.owner_lease_expires_at > pg_catalog.clock_timestamp())" "(o.operation_type = 'account_deletion')"
-mutate lease_by_tx_start "o.owner_lease_expires_at > pg_catalog.clock_timestamp()" "o.owner_lease_expires_at > pg_catalog.now()"
+# F4 live-lease fix: the predicate is G5's own; each mutation inlines a weaker one in its place.
+predicate="  select private.account_lifecycle_cleanup_authorized(p_user_id)"
+inline() {  # $1 = the inlined where-clause tail
+  printf '%s\n%s' "  select exists (" "    select 1 from private.account_lifecycle_operations o where o.user_id = p_user_id and o.status = 'in_progress' and $1)"
+}
+# The shipped PR #169 predicate: a service deletion authorized with NO lease (the reproduced defect).
+mutate shipped_service_bypass "$predicate" "$(inline "o.current_step = 'cleanup' and ((o.operation_type = 'account_deletion' and o.owner_lease is not null and o.owner_lease_expires_at > pg_catalog.clock_timestamp()) or (o.operation_type = 'service_deletion' and o.service_key = 'x_autopost'))")"
+mutate any_service_deletion "$predicate" "$(inline "o.owner_lease is not null and o.owner_lease_expires_at > clock_timestamp() and ((o.operation_type = 'account_deletion' and o.current_step = 'cleanup') or o.operation_type = 'service_deletion')")"
+mutate account_any_step "$predicate" "$(inline "o.owner_lease is not null and o.owner_lease_expires_at > clock_timestamp() and (o.operation_type = 'account_deletion' or (o.operation_type = 'service_deletion' and o.service_key = 'x_autopost'))")"
+mutate lease_by_tx_start "$predicate" "$(inline "o.owner_lease is not null and o.owner_lease_expires_at > now() and ((o.operation_type = 'account_deletion' and o.current_step = 'cleanup') or (o.operation_type = 'service_deletion' and o.service_key = 'x_autopost'))")"
 mutate no_recheck_after_locks "  if not public.threads_cleanup_authorized(p_user_id) then
     return pg_catalog.jsonb_build_object('outcome', 'blocked', 'code', 'LEASE_NOT_HELD');" "  if false then
     return pg_catalog.jsonb_build_object('outcome', 'blocked', 'code', 'LEASE_NOT_HELD');"
