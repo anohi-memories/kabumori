@@ -377,3 +377,13 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 - 2026-10-13 | F9 | `api-optimization-b-f9-rights-safe-provider-compare-pr-readiness-20261013` | `.agent_v2/archive/2026-10-13-f9-api-optimization-b-f9-rights-safe-provider-compare-pr-readiness-20261013/files/.agent_v2/tasks/F9.md` | L9 accepted; MANIFEST/SHA256SUMS/restore verified.
 
 | 2026-10-13 | F2 | `kabumori-f2-opus-primary-both-handler-test-sync-20261013` | Opus Primary both handler regression | L2 PASS_OFFLINE_TEST_ONLY / PRODUCTION_NO_GO | #176 | `.agent_v2/archive/2026-10-13-F2-kabumori-f2-opus-primary-both-handler-test-sync-20261013/` | SHA256 441d519a37a1f0e3aed8b8be74a4a8e50ab627e7fc2570747b77d7dd78f7559e; read-back verified |
+
+## F5 Phase6 completion archive — 2026-10-13
+- task_id: `common-account-f5-phase6-postona-provider-cleanup-service-deletion-20261013`
+- original_path: `.agent_v2/tasks/F5.md`
+- archive_path: `.agent_v2/archive/2026-10-13-F5-common-account-f5-phase6-postona-provider-cleanup-service-deletion-20261013/files/.agent_v2/tasks/F5.md`
+- bytes: 21409
+- SHA256: `bd81b558347b63f4252cd151cf165cb0d18c57c6d8439a8eb81efde84317a99f`
+- original_blob: `eadc2e727068d110a87f0e80d7223fbe4d0623af`
+- restore: GitHub blob and exact UTF-8 content equality read-back verified; see archived MANIFEST and SHA256SUMS
+- L5: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; PR178 Draft head 83334a091ded5571cf595fd99d7a035627564735
