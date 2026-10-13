@@ -10,17 +10,18 @@ tpl="$1"; shift
 CONN=("$@")
 export LC_ALL=C
 fail=0
-VARIANTS="current a b c" ACL=1 "$here/real_matrix.sh" "$tpl" "${CONN[@]}" | grep -E '^(##|sig )' > "$here/.acl.txt"
+VARIANTS="current ${CHECK_VARIANTS:-a b c}" ACL=1 "$here/real_matrix.sh" "$tpl" "${CONN[@]}" | grep -E '^(##|sig )' > "$here/.acl.txt"
 extract() { awk -v v="$1" '/^## /{cur=$2} cur==v && /^sig /' "$here/.acl.txt" | grep -v "important_news_feed_"; }
-for v in a b c; do
+for v in ${CHECK_VARIANTS:-a b c}; do
   if ! diff <(extract current) <(extract $v) >/dev/null; then echo "FAIL: function signature/ACL differs for variant $v"; diff <(extract current) <(extract $v); fail=1; fi
 done
-helpers="$(awk '/^## a/{f=1} f && /important_news_feed_/' "$here/.acl.txt" | grep -v 'acl={postgres=X/postgres}' || true)"
+first="${CHECK_VARIANTS:-a b c}"; first="${first%% *}"
+helpers="$(awk -v v="$first" '/^## /{cur=$2} cur==v && /important_news_feed_/' "$here/.acl.txt" | grep -v 'acl={postgres=X/postgres}' || true)"
 if [ -n "$helpers" ]; then echo "FAIL: feed helpers executable by app roles:"; echo "$helpers"; fail=1; fi
-helper_count="$(awk '/^## a/{f=1} /^## b/{f=0} f && /important_news_feed_/' "$here/.acl.txt" | wc -l | tr -d ' ')"
+helper_count="$(awk -v v="$first" '/^## /{cur=$2} cur==v && /important_news_feed_/' "$here/.acl.txt" | wc -l | tr -d ' ')"
 [ "$helper_count" = "4" ] || { echo "FAIL: expected 4 feed helpers, found $helper_count"; fail=1; }
 
-db="j1b3_v_a"
+db="j1b3_v_$first"
 anon="$(psql "${CONN[@]}" -d "$db" -qAt -c "set role anon; select count(*) from public.get_my_important_stock_news(5);" 2>&1 | tail -1)"
 echo "$anon" | grep -qi "permission denied" || { echo "FAIL: anon could execute the feed: $anon"; fail=1; }
 direct="$(psql "${CONN[@]}" -d "$db" -qAt -c "set role authenticated; select count(*) from public.important_news_candidates;" 2>&1 | tail -1)"
@@ -38,7 +39,7 @@ push() {
 }
 push current > "$here/.push_current.txt" || { echo "FAIL: push producers did not run on current"; fail=1; }
 if grep -qiE "error|psql:" "$here/.push_current.txt"; then echo "FAIL: push output contains errors"; fail=1; fi
-for v in a b c; do
+for v in ${CHECK_VARIANTS:-a b c}; do
   push $v > "$here/.push_$v.txt" || { echo "FAIL: push producers did not run on $v"; fail=1; }
   diff -q "$here/.push_current.txt" "$here/.push_$v.txt" >/dev/null || { echo "FAIL: Push producer output differs for variant $v"; fail=1; }
 done

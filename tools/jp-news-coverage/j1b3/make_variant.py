@@ -4,6 +4,9 @@ import sys, pathlib
 src = pathlib.Path(__file__).resolve().parents[1] / "j1b" / "candidate" / "20261013_J1B2_news_feed_domestic_visibility_CANDIDATE.sql"
 text = src.read_text()
 variant = sys.argv[1]
+if variant == "p_perf_a":
+    sys.stdout.write((pathlib.Path(__file__).resolve().parents[1] / "j1b4" / "candidate" / "p_perf_a.sql").read_text())
+    raise SystemExit(0)
 
 def once(old: str, new: str) -> None:
     global text
