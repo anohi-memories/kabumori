@@ -420,3 +420,6 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 - L5: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; Draft PR183 f2565cc0412f8127f95f00a728d16bf83af74667
 
 - 2026-10-13 | F3 | `postona-f3-x-service-end-saga-wiring-20261013` | L3 PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO, PR189 Draft | `.agent_v2/archive/2026-10-13-F3-postona-f3-x-service-end-saga-wiring-20261013/files/.agent_v2/tasks/F3.md` | SHA256 `c3cc256c946076748647a8cd54514955cc11c68a66c5b7d43dfe98a44ce3ac58`; blob/read-back verified.
+
+- 2026-10-14 | F8 | `news-improvement-a-f8-j1b4-performance-security-offline-20261013` | L8 accepted source, release held | `.agent_v2/archive/2026-10-14-f8-news-improvement-a-f8-j1b4-performance-security-offline-20261013/files/.agent_v2/tasks/F8.md` | SHA256 f4d03ac67e37ff29461b07a91ae7f31f444b2641e01683a00684ff11546c1d73; exact read-back verified; source blob stored.
+- 2026-10-14 | F9 | `api-optimization-b-f9-clean-replacement-final-rights-gate-20261013` | L9 accepted source, release held | `.agent_v2/archive/2026-10-14-f9-api-optimization-b-f9-clean-replacement-final-rights-gate-20261013/files/.agent_v2/tasks/F9.md` | SHA256 78fec4cefda0abc800fe1b175339c9d438903908ba39d55f2baa289ac3c2facc; exact read-back verified; source blob stored.
