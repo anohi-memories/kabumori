@@ -358,3 +358,7 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 | 2026-09-11 | H2 | `close-report-1700-schedule-and-close-source-hardening-20260911` | H2 — close-report 17:00 schedule and close-source hardening… | implementation and production schedule alignment complete; C2 review … | — | `955a3ab5edc95a63fce181c07c0d7460b7e2961c` | T:H2R#L4930 R:H2R#L4930 | — |
 | 2026-09-10（id） | H2 | `morning-report-fact-diagnostics-and-greeting-status-fix-20260910` | Review and safety | review_required | — | — | T:H2R#L5148 R:H2R#L5148 | — |
 | 2026-09-10（id） | H2 | `close-report-live-data-and-voice-retry-hardening-20260910` | H2 Follow-up E — production deploy verification | deployed and byte-verified; C2 review required | — | — | T:H2R#L4987 R:H2R#L4987 | — |
+
+## 新系統の完了作業
+
+| 2026-10-13 | F2 | `kabumori-f2-pr143-live-mergeability-diagnosis-20261012` | PR143 mergeability diagnosis | done / L2 accepted | archived | `.agent_v2/archive/2026-10-13-f2-pr143-mergeability-diagnosis.md` | `b1f19982b27af3ea55afe20a78a7ce9927538452` (archive write commit) |
