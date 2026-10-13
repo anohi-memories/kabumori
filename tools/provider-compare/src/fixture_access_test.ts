@@ -3,10 +3,12 @@ import test from "node:test";
 import { type CaseFixture, loadCases } from "./fixtures.ts";
 import {
   type BodyManifest,
+  isWithheldTitle,
   manifestFor,
   resolveRunnableCases,
   rightsStateOf,
   runtimeBodiesFromRows,
+  runtimeTitlesFromRows,
   sha256Hex,
   stripUnconfirmedBodies,
   summariseExclusions,
@@ -55,6 +57,11 @@ test("the committed manifest, audit and rights-safe file agree: 22 cases, 18 unc
     } else {
       assert.equal(body, null, `${item.caseId}: ${entry.rightsState} must carry no body`);
     }
+    if (entry.rightsState === "rights_unconfirmed") {
+      // The headline is withheld too: a placeholder in the file, its length and SHA-256 in the manifest.
+      assert.ok(isWithheldTitle(item.candidate.title), `${item.caseId}: headline must be withheld`);
+      assert.ok((entry.titleChars ?? 0) > 0 && /^[0-9a-f]{64}$/.test(entry.titleSha256 ?? ""), item.caseId);
+    }
   }
 });
 
@@ -93,7 +100,7 @@ test("no window of a removed body survives in the committed candidate records (s
   assert.deepEqual(scanJson({ cases: safeCases.map((c) => c.candidate) }, index, 24), []);
 });
 
-test("against the real bodies (when the private legacy file is available): no window outside headline fields", {
+test("against the real bodies (when the private legacy file is available): no window anywhere, headlines included", {
   skip: Deno.env.get("PROVIDER_COMPARE_LEGACY_FILE") ? false : "no private legacy file (expected in CI; owners run scripts/body_leak_scan.ts)",
 }, async () => {
   const file = JSON.parse(await Deno.readTextFile(Deno.env.get("PROVIDER_COMPARE_LEGACY_FILE") as string)) as { cases: CaseFixture[] };
@@ -104,7 +111,7 @@ test("against the real bodies (when the private legacy file is available): no wi
   }
   assert.equal(bodies.size, 18);
   const index = buildIndex(bodies, 40);
-  assert.deepEqual(scanJson({ cases: safeCases }, index, 40, (path) => path.endsWith(".title")), []);
+  assert.deepEqual(scanJson({ cases: safeCases }, index, 40), []);
 });
 
 test("every committed fixture file stores a body only for a host whose terms allow it", async () => {
@@ -151,19 +158,24 @@ test("without an opt-in every unconfirmed case is excluded as needs_rights_revie
 });
 
 test("with an opt-in and matching local rows, the bodies are attached and verified", async () => {
-  const runtime = runtimeBodiesFromRows(bodyRows(legacy));
-  const r = await resolveRunnableCases(safeCases, manifest, { runtimeBodies: runtime });
+  const rows = bodyRows(legacy);
+  const r = await resolveRunnableCases(safeCases, manifest, { runtimeBodies: runtimeBodiesFromRows(rows), runtimeTitles: runtimeTitlesFromRows(rows) });
   assert.equal(r.excluded.length, 0);
   assert.equal(r.ready.length, 22);
   assert.equal(Object.values(r.provenance).filter((p) => p === "attached_verified").length, 18);
   for (const item of r.ready) {
     const original = legacy.find((c) => c.caseId === item.caseId)!;
     assert.equal(item.candidate.bodySummary, original.candidate.bodySummary, item.caseId);
+    assert.equal(item.candidate.title, original.candidate.title, item.caseId);
   }
 });
 
 test("rows that are not the fingerprinted bodies (the real manifest vs synthetic rows) are excluded, never attached", async () => {
-  const r = await resolveRunnableCases(safeCases, realManifest, { runtimeBodies: runtimeBodiesFromRows(bodyRows(legacy)) });
+  const synthRows = bodyRows(legacy);
+  const r = await resolveRunnableCases(safeCases, realManifest, {
+    runtimeBodies: runtimeBodiesFromRows(synthRows),
+    runtimeTitles: runtimeTitlesFromRows(synthRows),
+  });
   assert.equal(r.excluded.length, 18);
   assert.ok(r.excluded.every((e) => e.state === "body_hash_mismatch"));
   assert.equal(r.ready.length, 4);
@@ -173,10 +185,18 @@ test("a changed row, a missing row and an empty export are excluded, never run w
   const rows = bodyRows(legacy);
   const victim = legacy.find((c) => manifest.entries.find((e) => e.caseId === c.caseId)!.rightsState === "rights_unconfirmed")!;
   const changed = rows.map((r) => (r.id.startsWith(id8(victim)) ? { ...r, body_summary: `${r.body_summary}（更新）` } : r));
-  const a = await resolveRunnableCases(safeCases, manifest, { runtimeBodies: runtimeBodiesFromRows(changed) });
+  const withTitles = (list: typeof rows) => ({ runtimeBodies: runtimeBodiesFromRows(list), runtimeTitles: runtimeTitlesFromRows(list) });
+  const a = await resolveRunnableCases(safeCases, manifest, withTitles(changed));
   assert.deepEqual(a.excluded.map((e) => [e.caseId, e.state]), [[victim.caseId, "body_hash_mismatch"]]);
-  const b = await resolveRunnableCases(safeCases, manifest, { runtimeBodies: runtimeBodiesFromRows(rows.filter((r) => !r.id.startsWith(id8(victim)))) });
+  const b = await resolveRunnableCases(safeCases, manifest, withTitles(rows.filter((r) => !r.id.startsWith(id8(victim)))));
   assert.deepEqual(b.excluded.map((e) => [e.caseId, e.state]), [[victim.caseId, "body_source_missing"]]);
+  // The headline is verified like the body: a changed headline, or an export without headlines, attaches nothing.
+  const retitled = rows.map((r) => (r.id.startsWith(id8(victim)) ? { ...r, title: `${r.title}（更新）` } : r));
+  const t = await resolveRunnableCases(safeCases, manifest, withTitles(retitled));
+  assert.deepEqual(t.excluded.map((e) => [e.caseId, e.state]), [[victim.caseId, "body_hash_mismatch"]]);
+  const noTitles = await resolveRunnableCases(safeCases, manifest, { runtimeBodies: runtimeBodiesFromRows(rows), runtimeTitles: null });
+  assert.equal(noTitles.excluded.length, 18);
+  assert.ok(noTitles.excluded.every((e) => e.state === "body_source_missing"));
   // A source that returned nothing (for example because the publisher answered 403) leaves all 18 cases unavailable.
   const c = await resolveRunnableCases(safeCases, manifest, { runtimeBodies: new Map() });
   assert.equal(c.excluded.length, 18);

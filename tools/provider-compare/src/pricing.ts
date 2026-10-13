@@ -66,6 +66,9 @@ export const MODEL_PRICES: Readonly<Record<string, ModelPrice>> = {
   "gpt-5.6-sol": { provider: "openai", inputPerMTok: 4, outputPerMTok: 20, webSearchPer1000: 10, verified: "ledger_assumption" },
   "gpt-6.1-sol": {
     provider: "openai", inputPerMTok: 2, outputPerMTok: 10, webSearchPer1000: 10, verified: "ledger_assumption",
+    // Prompts above 272K tokens are billed at the higher tier (the production provider catalog, model_catalog.ts). News
+    // prompts here are a few thousand tokens, so this never applies to a comparison run; it keeps the arithmetic the same.
+    longContext: { overPromptTokens: 272_000, inputPerMTok: 4, outputPerMTok: 15, cacheWritePerMTok: 4, cacheReadPerMTok: 0.2 },
     note: "social_ai_model_policy.ts says verified 2026-10-07",
   },
 };

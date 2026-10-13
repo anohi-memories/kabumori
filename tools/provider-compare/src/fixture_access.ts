@@ -26,7 +26,25 @@ export type ManifestEntry = {
   bodyChars: number;
   /** SHA-256 of the sanitised body the fixture carried; null when there was no body. */
   bodySha256: string | null;
+  /**
+   * The headline of a rights_unconfirmed case is withheld from the committed file too (TITLE_WITHHELD); this is the
+   * length and SHA-256 of the real one, so a headline re-read from a local export can be verified. Absent in manifests
+   * written before headlines were withheld.
+   */
+  titleChars?: number;
+  titleSha256?: string | null;
 };
+
+/** What stands in for the headline of a case whose source terms are unconfirmed (suffixed with the case id so titles stay unique). */
+export const TITLE_WITHHELD = "（見出し非保持: 権利未確認）";
+
+export function withheldTitleFor(caseId: string): string {
+  return `${TITLE_WITHHELD}#${caseId.slice(-8)}`;
+}
+
+export function isWithheldTitle(title: string): boolean {
+  return title.startsWith(TITLE_WITHHELD);
+}
 
 export type BodyManifest = {
   version: 1;
@@ -73,6 +91,8 @@ export async function manifestFor(cases: readonly CaseFixture[], generatedFrom: 
       rightsState: rightsStateOf(item.candidate.sourceUrl, hasBody),
       bodyChars: hasBody ? body.length : 0,
       bodySha256: hasBody ? await sha256Hex(body) : null,
+      titleChars: item.candidate.title.length,
+      titleSha256: item.candidate.title.length > 0 ? await sha256Hex(item.candidate.title) : null,
     });
   }
   return {
@@ -83,12 +103,15 @@ export async function manifestFor(cases: readonly CaseFixture[], generatedFrom: 
   };
 }
 
-/** The same cases with every body that may not be stored replaced by null. Cases with open terms are returned untouched. */
+/**
+ * The same cases with every body that may not be stored replaced by null, and the headline of such a case replaced by
+ * a placeholder (withheldTitleFor). Cases with open terms (and cases that never had a body) are returned untouched.
+ */
 export function stripUnconfirmedBodies(cases: readonly CaseFixture[]): CaseFixture[] {
   return cases.map((item) => {
     const body = item.candidate.bodySummary;
     if (body === null || body.length === 0 || bodyMayBeStored(item.candidate.sourceUrl)) return item;
-    return { ...item, candidate: { ...item.candidate, bodySummary: null } };
+    return { ...item, candidate: { ...item.candidate, bodySummary: null, title: withheldTitleFor(item.caseId) } };
   });
 }
 
@@ -103,9 +126,22 @@ export function runtimeBodiesFromRows(rows: ReadonlyArray<Record<string, unknown
   return out;
 }
 
+/** id8 -> title, from the same JSON-lines export (a headline the manifest fingerprints is attached only when it verifies). */
+export function runtimeTitlesFromRows(rows: ReadonlyArray<Record<string, unknown>>): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const row of rows) {
+    const id = typeof row.id === "string" ? row.id.slice(0, 8) : null;
+    const title = typeof row.title === "string" ? row.title : null;
+    if (id !== null && title !== null) out.set(id, title);
+  }
+  return out;
+}
+
 export type ResolveOptions = {
   /** null = the operator has not opted in: nothing is attached and every rights_unconfirmed case is excluded. */
   runtimeBodies: ReadonlyMap<string, string> | null;
+  /** Headlines from the same export; required for a case whose manifest entry fingerprints its headline. */
+  runtimeTitles?: ReadonlyMap<string, string> | null;
 };
 
 export async function resolveRunnableCases(
@@ -158,7 +194,20 @@ export async function resolveRunnableCases(
       excluded.push({ caseId: item.caseId, state: "body_hash_mismatch", reason: "the exported body differs from the fingerprinted one (production row changed)" });
       continue;
     }
-    ready.push({ ...item, candidate: { ...item.candidate, bodySummary: sanitised } });
+    let title = item.candidate.title;
+    if (entry.titleSha256 !== undefined && entry.titleSha256 !== null) {
+      const rawTitle = options.runtimeTitles?.get(item.caseId.slice(-8));
+      if (rawTitle === undefined) {
+        excluded.push({ caseId: item.caseId, state: "body_source_missing", reason: "the local export has no headline for this case" });
+        continue;
+      }
+      if ((await sha256Hex(rawTitle)) !== entry.titleSha256) {
+        excluded.push({ caseId: item.caseId, state: "body_hash_mismatch", reason: "the exported headline differs from the fingerprinted one" });
+        continue;
+      }
+      title = rawTitle;
+    }
+    ready.push({ ...item, candidate: { ...item.candidate, bodySummary: sanitised, title } });
     provenance[item.caseId] = "attached_verified";
   }
   return { ready, excluded, provenance };

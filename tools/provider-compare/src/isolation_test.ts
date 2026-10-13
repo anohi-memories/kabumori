@@ -66,6 +66,8 @@ test("production code is read only through an allow-list of pure request builder
     "supabase/functions/important-news-monitor/breaking_market_source_fetchers.ts",
     "supabase/functions/important-news-monitor/breaking_market_daily_schedule.ts",
     "supabase/functions/important-news-monitor/news_candidate_logic.ts",
+    // read-only price table, compared with the harness's own table (pricing_catalog_consistency_test.ts)
+    "supabase/functions/_shared/ai_provider/model_catalog.ts",
   ]);
   const imported = new Set<string>();
   for (const file of await harnessFiles()) {

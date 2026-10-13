@@ -20,8 +20,9 @@ The OpenAI side of every task production already ran is **replayed from the stor
 call is repeated. Cases: `fixtures/cases.rights_safe.json` (22 real candidates: BOJ, FX, geopolitics, North Korea, domestic
 incidents, an FSA action, TDnet earnings / capital / governance, generation failures, a known miss, negative controls).
 
-**Rights.** The repository holds no TDnet / BBC / Al Jazeera / AP article text. For those 18 cases the file has `bodySummary:
-null`, and `fixtures/cases_body_manifest.json` records each body's length and SHA-256. A local run can re-attach the bodies
+**Rights.** The repository holds no TDnet / BBC / Al Jazeera / AP article text, and no headline of those articles. For those
+18 cases the file has `bodySummary: null` and a placeholder headline, and `fixtures/cases_body_manifest.json` records
+each body's and each headline's length and SHA-256. A local run can re-attach the bodies
 from a read-only export (`--runtime-bodies <rows.jsonl>`, rows from `scripts/export_cases.sql`); a row is accepted only when
 its SHA-256 matches. Attaching is **local only**: whether a case may be sent to a vendor is decided per case by
 `src/external_send_gate.ts` from `fixtures/body_licences.json` (empty: nothing with unconfirmed terms can be sent, whatever

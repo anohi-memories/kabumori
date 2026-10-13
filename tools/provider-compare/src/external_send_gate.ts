@@ -10,7 +10,7 @@
 //
 // This file is pure: no network, no subprocess, no file access (the loader reads the register and hands it in).
 import type { CaseFixture } from "./fixtures.ts";
-import type { BodyManifest, ManifestEntry } from "./fixture_access.ts";
+import { type BodyManifest, isWithheldTitle, type ManifestEntry } from "./fixture_access.ts";
 import type { NeutralRequest, Provider, ProviderResult } from "./types.ts";
 import { bodyMayBeStored } from "./body_policy.ts";
 import { ZERO_USAGE } from "./types.ts";
@@ -246,6 +246,9 @@ export function planExternalSend(input: SendInput): SendPlan {
     } else {
       const body = item.candidate.bodySummary;
       if (body !== null && body.length > 0) blockedBodies.push(body);
+      // A headline re-attached from a local export is withheld text too (the committed placeholder is not).
+      const title = item.candidate.title;
+      if (title.length > 0 && !isWithheldTitle(title)) blockedBodies.push(title);
     }
   }
   return {

@@ -16,6 +16,7 @@ import {
   type Exclusion,
   resolveRunnableCases,
   runtimeBodiesFromRows,
+  runtimeTitlesFromRows,
   summariseExclusions,
 } from "./fixture_access.ts";
 import { EMPTY_LICENCE_REGISTER, type LicenceRegister, parseLicenceRegister } from "./external_send_gate.ts";
@@ -84,8 +85,10 @@ export async function loadRunnableCases(options: LoadOptions): Promise<LoadedCas
   const manifest = JSON.parse(await Deno.readTextFile(new URL("cases_body_manifest.json", dir))) as BodyManifest;
   if (manifest.version !== 1 || !Array.isArray(manifest.entries)) throw new Error("BODY_MANIFEST_INVALID");
   const licences = await loadLicenceRegister(options.fixturesDir);
-  const runtimeBodies = options.runtimeBodiesPath ? runtimeBodiesFromRows(await readJsonLines(options.runtimeBodiesPath)) : null;
-  const resolved = await resolveRunnableCases(cases, manifest, { runtimeBodies });
+  const rows = options.runtimeBodiesPath ? await readJsonLines(options.runtimeBodiesPath) : null;
+  const runtimeBodies = rows ? runtimeBodiesFromRows(rows) : null;
+  const runtimeTitles = rows ? runtimeTitlesFromRows(rows) : null;
+  const resolved = await resolveRunnableCases(cases, manifest, { runtimeBodies, runtimeTitles });
   return {
     mode: "rights_safe",
     cases: resolved.ready,

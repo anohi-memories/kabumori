@@ -36,6 +36,11 @@ export function syntheticBodyFor(caseId: string, chars: number): string {
   return body;
 }
 
+/** A synthetic headline for a case whose real headline is withheld; distinct per case, resembles no publication. */
+export function syntheticTitleFor(caseId: string): string {
+  return `${markerOf(caseId)}：合成の見出し（試験用）`;
+}
+
 export type SyntheticLegacy = {
   /** Same 22 cases as the committed file; the unconfirmed ones carry a synthetic body, the open-terms ones their real body. */
   cases: CaseFixture[];
@@ -50,7 +55,10 @@ export async function syntheticLegacy(): Promise<SyntheticLegacy> {
   const cases = safe.map((item) => {
     const entry = real.entries.find((e) => e.caseId === item.caseId);
     if (!entry || entry.rightsState !== "rights_unconfirmed") return item;
-    return { ...item, candidate: { ...item.candidate, bodySummary: syntheticBodyFor(item.caseId, entry.bodyChars) } };
+    return {
+      ...item,
+      candidate: { ...item.candidate, bodySummary: syntheticBodyFor(item.caseId, entry.bodyChars), title: syntheticTitleFor(item.caseId) },
+    };
   });
   return { cases, manifest: await manifestFor(cases, "synthetic (tests only)") };
 }
@@ -81,8 +89,12 @@ export async function writeSyntheticLegacyFile(): Promise<string> {
 }
 
 /** JSON-lines rows in the shape scripts/export_cases.sql writes (`id`, `body_summary`), for the cases that have a body. */
-export function bodyRowsOf(cases: readonly CaseFixture[]): Array<{ id: string; body_summary: string }> {
+export function bodyRowsOf(cases: readonly CaseFixture[]): Array<{ id: string; title: string; body_summary: string }> {
   return cases
     .filter((c) => c.candidate.bodySummary)
-    .map((c) => ({ id: `${c.caseId.slice(-8)}-0000-4000-8000-000000000000`, body_summary: c.candidate.bodySummary as string }));
+    .map((c) => ({
+      id: `${c.caseId.slice(-8)}-0000-4000-8000-000000000000`,
+      title: c.candidate.title,
+      body_summary: c.candidate.bodySummary as string,
+    }));
 }
