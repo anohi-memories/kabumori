@@ -29,6 +29,12 @@
 
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F8/F9 L8/L9 acceptance (2026-10-14 JST)
+- F8 `news-improvement-a-f8-j1b5-security-review-readiness-20261014`: done/next_owner:none, PASS_OFFLINE_REVIEW_READINESS / SOL_REVIEW_REQUIRED / PRODUCTION_NO_GO. Draft PR196 (stacked over PR191), local security 14 checks and equivalence 30 feeds reportedly PASS; independent tests not rerun here. Production/Preview read/write, merge and deploy not performed. Next: separate Sol（高） DB/RPC/security review, then Preview read-only measurements and explicit product release decision. Existing TDnet content in `company_identity_fixtures.ts` needs separate owner-owned synthetic-fixture task.
+- F9 `api-optimization-b-f9-clean-pr190-residual-rights-tests-20261014`: done/next_owner:none, PASS_OFFLINE_AUDIT / MERGE_HOLD. Draft PR195 stacked on clean Draft PR190, 330 Deno tests PASS/1 ignored reported, not independently rerun here. No 40+-character exact overlap against known reference dataset, but incomplete source sampling and rights clearance remain unresolved. Historical PR115/174/184 refs remain untouched. No paid/external model sends.
+- F8 and F9 TASK + ACTIVE_TASK completion recorded. Before reuse, archive both completed TASKs/Reports with SHA256/readback and update HISTORY_INDEX. No production permissions granted.
+
+
 ## F5 Phase8 統合検証割当（2026-10-13 JST）
 - F5 `common-account-f5-phase8-x-threads-lifecycle-integrated-security-20261013`: ready/claude, Opus5.5（高）, F5→L5, return `共通アカウントG5のちゃ（新F5担当）`. Source-only local PG17/isolated overlayでF3 X PR189・F4 Threads PR180・F5 PR183を統合検証。F3/F4所有ソースは読み取りのみ、別worktree／Draft stacked PR、production NO_GO。
 - 前F5 Phase7 `common-account-f5-phase7-auth-lifecycle-release-preflight-20261013` はL5 done、PR183 Draft head `f2565cc0412f8127f95f00a728d16bf83af74667`。TASK+Report archive `.agent_v2/archive/2026-10-13-F5-common-account-f5-phase7-auth-lifecycle-release-preflight-20261013/` 原文一致/read-back・SHA256SUMS・MANIFEST・HISTORY_INDEX保存済み。
