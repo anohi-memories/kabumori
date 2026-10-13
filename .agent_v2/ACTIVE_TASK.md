@@ -8,18 +8,18 @@
 
 ## F1
 - slot: F1
-- status: done
-- task_id: kabumori-f1-ai-ask-v1-phase-b0-security-preflight-20261013
+- status: ready
+- task_id: kabumori-f1-ai-ask-b0-j1-r1-r8-design-correction-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F1.md
 - current_report_path: .agent_v2/tasks/F1.md#report
-- dependencies: Phase A Draft PR166; G2 merged PR143/149/158; F5 common Auth; G6 provider; G8 news; G9 cost
-- blocker: security architecture preflight and user decisions before live data/API
-- slot_use: かぶモリアプリ AIに聞く V1 Phase B0 セキュリティ事前設計（read-only／offline、本番NO_GO）
+- dependencies: J1 Report R1-R8; Phase B0 PR171; Phase A PR166; F5/G6 protected
+- blocker: B1 implementation NO_GO until focused J re-review
+- slot_use: AIに聞く B0 security design corrections
 
 ## F2
 - slot: F2
