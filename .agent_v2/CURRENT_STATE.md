@@ -1,5 +1,9 @@
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F2 L2 accepted — 2026-10-13
+- F2 Opus handler TASK accepted as PASS_OFFLINE_SOURCE / TRANSFER_F6 / PRODUCTION_NO_GO. F2 done/none; user assigned further Opus work to F6, whose new source integration TASK is ready. F2 next task is V1 read-only production preflight after archiving this completed TASK. No production actions.
+
+
 ## F6 Opus PRIMARY both-cycle — 2026-10-13
 - New F6 `common-ai-f6-opus-primary-both-integration-20261013` **ready/claude**, **Opus5.5（高）**, F6→L6, return 共通AI基盤のちゃ. Prior F6 close-only task archived at `.agent_v2/archive/2026-10-13-f6-opus-primary-close-v0.md` with matching blob/read-back and HISTORY_INDEX updated.
 - F6 to implement only provider-owned primary_both changes for morning/close (derived from F2 `F2_PRIMARY_BOTH_F6_HANDOFF.patch`) in NEW Draft PR stacked on F2 PR173. F2 PR173 `review_required` waiting F2ちゃ L2, so protected F2 handler/tests remain untouched. F6 owns this project's AI code; any F2 code adjustment routed by handoff to F2ちゃ.
