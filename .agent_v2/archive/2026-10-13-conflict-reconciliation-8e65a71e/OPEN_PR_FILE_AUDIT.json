@@ -1,0 +1,4250 @@
+[
+  {
+    "number": 172,
+    "title": "chore(agent): 完全移行前の旧履歴保存と競合停止記録",
+    "head": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+    "head_ref": "codex/full-agent-migration-20261013",
+    "base": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": ".agent_v2/HISTORY_INDEX.md",
+        "status": "modified",
+        "sha": "c71b0475388f14207a63e29484cc1f0a66e0cee4",
+        "additions": 25,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/MANIFEST.json",
+        "status": "added",
+        "sha": "d749aa2e3b27b72f9a4d959a3d3a6f7e3c1787c4",
+        "additions": 571,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/MANIFEST.md",
+        "status": "added",
+        "sha": "52524c01443f678ff7bc7c96f03c9e598d924ea7",
+        "additions": 45,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/RESTORE.md",
+        "status": "added",
+        "sha": "f7d84cc4f97390992f6bd90215cc3cac13645873",
+        "additions": 7,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/RESTORE_RESULT.json",
+        "status": "added",
+        "sha": "e5b26865f96cd0f5212c500f8521f3f518015575",
+        "additions": 38,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/SHA256SUMS",
+        "status": "added",
+        "sha": "6371ceafa60a1bce010d102964cab306d2de572f",
+        "additions": 64,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/evidence/OPEN_PR_FILE_AUDIT.json",
+        "status": "added",
+        "sha": "372cd0604957ea324c71f589b6969dc997e56036",
+        "additions": 511,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/evidence/PREFLIGHT.json",
+        "status": "added",
+        "sha": "baac61dd96ca75fb7952a95e5e4855bdbdc67642",
+        "additions": 909,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/ACTIVE_TASK.md",
+        "status": "added",
+        "sha": "5999de4b3297128321c554fea1eb1f0fed88f965",
+        "additions": 259,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CHATGPT_HANDOFF.md",
+        "status": "added",
+        "sha": "10a4cf650b12b2c5033a4dc0689a061257d48eac",
+        "additions": 61,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CLAUDE_REPORT.md",
+        "status": "added",
+        "sha": "540dea05b87b886e7a5680b1e4e168fa11a85b84",
+        "additions": 40,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CODEX_REPORT.md",
+        "status": "added",
+        "sha": "45f41d5c5fbafd9ba55f42cde56997cd3f13a555",
+        "additions": 3131,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CODEX_REPORT_2.md",
+        "status": "added",
+        "sha": "d3d6b4cd9cfd954680b5f15ca6ab1a990fbe3288",
+        "additions": 5887,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CODEX_REPORT_3.md",
+        "status": "added",
+        "sha": "267b544de4c5c5e2d6850e14001c6dba2217f015",
+        "additions": 164,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CODEX_REPORT_4.md",
+        "status": "added",
+        "sha": "c2ac315c8fa54de71ecda8f6e6e1192bfecadf60",
+        "additions": 244,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CODEX_REPORT_5.md",
+        "status": "added",
+        "sha": "e5a255ed4c9ad8d6f8d88170c08e34258c6f76ea",
+        "additions": 78,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CURRENT_STATE.md",
+        "status": "added",
+        "sha": "a793d97a0de96750f1215360f0674518f0d71b46",
+        "additions": 7464,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/ORCHESTRATION.md",
+        "status": "added",
+        "sha": "9e0f9ff11bc97d5f68c70bc299c25fd28b96424f",
+        "additions": 518,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/archive/CLAUDE_TASK_4_pre_threads_20261011.md",
+        "status": "added",
+        "sha": "e8f10a36db5a95d3676395a4f7f949982958dd0f",
+        "additions": 4446,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/archive/CLAUDE_TASK_4_threads_edge_pre_codex_20261011.md",
+        "status": "added",
+        "sha": "370ab0b75412088dc2a34ab2aeb3679ba4aea158",
+        "additions": 80,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/room_handoffs/X_AUTOPOST_CHAT.md",
+        "status": "added",
+        "sha": "5bc2e0395fe3c134d9ce79c0f853263d04138b69",
+        "additions": 65,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK.md",
+        "status": "added",
+        "sha": "4087995ec18e55de08bc5c7bfae21ecc3de8a949",
+        "additions": 13044,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_1.md",
+        "status": "added",
+        "sha": "3cbfccaa831e55491e2512d0bbb2f1366de258ef",
+        "additions": 9239,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_10.md",
+        "status": "added",
+        "sha": "77010ef5bfec31c2ff682099d3c8bcd535d66572",
+        "additions": 701,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_3.md",
+        "status": "added",
+        "sha": "af269ed0e3fec74b96b52f834fe76d71497aaad8",
+        "additions": 7310,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_4.md",
+        "status": "added",
+        "sha": "ae0a90ce0903d71ca65f639a33a0b2cc77b84c75",
+        "additions": 459,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_5.md",
+        "status": "added",
+        "sha": "9460e2e3e04f535c60b836e445c32a1e4678fe70",
+        "additions": 8280,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_6.md",
+        "status": "added",
+        "sha": "76e4b2135ddb0cf6eb8f3a270deb2ba8a06df9d0",
+        "additions": 1128,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_7.md",
+        "status": "added",
+        "sha": "a31efd0b8f571dc65d9cefa7c8440aa55bc88956",
+        "additions": 120,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_8.md",
+        "status": "added",
+        "sha": "b7c5653f77d31075a676ba6325375807493fe7d7",
+        "additions": 572,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_9.md",
+        "status": "added",
+        "sha": "8bd42aa5dabc9c148f74b142659cbeb39292f826",
+        "additions": 337,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK.md",
+        "status": "added",
+        "sha": "8598f77e9b91f89027966dec0ee39f65fc668a06",
+        "additions": 5577,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_2.md",
+        "status": "added",
+        "sha": "891ec88c432b0e8674e5ccc28cb9265e0d5c4371",
+        "additions": 4166,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_3.md",
+        "status": "added",
+        "sha": "6d3e6ba47b1cd97fbf1d548ee140a11c37e599b1",
+        "additions": 356,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_4.md",
+        "status": "added",
+        "sha": "2c87d27f8122ab590e0bb68d73eb800ed4fa11bd",
+        "additions": 148,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_5.md",
+        "status": "added",
+        "sha": "7bfc072aee4f5f18936c430d9cc87026c3ceadfe",
+        "additions": 199,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/AGENTS.md",
+        "status": "added",
+        "sha": "2260957fa89f791a52520c243959f9db85af2ba6",
+        "additions": 34,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/CLAUDE.md",
+        "status": "added",
+        "sha": "bbddd299120967131ffe55551fb94d4d9283f04c",
+        "additions": 33,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/HANDOFF.md",
+        "status": "added",
+        "sha": "2a608d05301cfaf0649faf62d53d9d0d4bdf8a42",
+        "additions": 565,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/HANDOFF_TEMPLATE.md",
+        "status": "added",
+        "sha": "e3f66324574ed19d3dcd0c8ab0cceac498fde713",
+        "additions": 52,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/PROJECT_RULES.md",
+        "status": "added",
+        "sha": "7ca274ffdd49fa01b8dc63566b0d74b9df1f20b9",
+        "additions": 203,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR10/base/.agent/ACTIVE_TASK.md",
+        "status": "added",
+        "sha": "7909f09d68dad73a62460070596dd9cb1e85ea4a",
+        "additions": 60,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR10/base/.agent/CODEX_REPORT.md",
+        "status": "added",
+        "sha": "90c4188cf75c75b9a047954eb70b89ed21349eb3",
+        "additions": 1971,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR10/base/.agent/CURRENT_STATE.md",
+        "status": "added",
+        "sha": "74757812a20974de3125929348f9db507ab2b7a3",
+        "additions": 57,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR10/base/.agent/tasks/CODEX_TASK.md",
+        "status": "added",
+        "sha": "2cc7a09f76ef0a837dba166c3edb7fb831c11a4f",
+        "additions": 206,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR10/changes.diff",
+        "status": "added",
+        "sha": "946494657e3b091dc255b7472a91914647600206",
+        "additions": 206,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR10/head/.agent/ACTIVE_TASK.md",
+        "status": "added",
+        "sha": "1087f5e766980d4b595038ac9c7237bd0ec8600e",
+        "additions": 60,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR10/head/.agent/CODEX_REPORT.md",
+        "status": "added",
+        "sha": "4f0628a8590c8b08b02bd8effaac9204f452f5a0",
+        "additions": 1990,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR10/head/.agent/CURRENT_STATE.md",
+        "status": "added",
+        "sha": "13907db3085c963a478c7b6556dfca038a61a298",
+        "additions": 56,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR10/head/.agent/tasks/CODEX_TASK.md",
+        "status": "added",
+        "sha": "92a6fdcef6e1cc2103c953e072387d8fe2b6b1a0",
+        "additions": 206,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR10/head/docs/RELEASE_READINESS_AUDIT_2026-09.md",
+        "status": "added",
+        "sha": "e51d8c47f390f20850628cf59c02bbc856346666",
+        "additions": 113,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR10/metadata.json",
+        "status": "added",
+        "sha": "bc41424218303a6164beca5a78eeaa6fb45fe17e",
+        "additions": 20,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR11/base/.agent/ACTIVE_TASK.md",
+        "status": "added",
+        "sha": "7909f09d68dad73a62460070596dd9cb1e85ea4a",
+        "additions": 60,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR11/base/.agent/CURRENT_STATE.md",
+        "status": "added",
+        "sha": "74757812a20974de3125929348f9db507ab2b7a3",
+        "additions": 57,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR11/base/.agent/tasks/CODEX_TASK.md",
+        "status": "added",
+        "sha": "bf71cf09deba264ae8afd3e5b3d45b877485f62a",
+        "additions": 109,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR11/changes.diff",
+        "status": "added",
+        "sha": "3e64336f25a26304b5e1331284495344650653ae",
+        "additions": 69,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR11/head/.agent/ACTIVE_TASK.md",
+        "status": "added",
+        "sha": "bb81cc71685de5f6d7fad7952f8275a52d22d96a",
+        "additions": 60,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR11/head/.agent/CURRENT_STATE.md",
+        "status": "added",
+        "sha": "4ea4ac6018e053d100e9e7c7aaf163befc188c22",
+        "additions": 56,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR11/head/.agent/tasks/CODEX_TASK.md",
+        "status": "added",
+        "sha": "44655719531f20477d9302379fec7be163dbfdc6",
+        "additions": 114,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR11/metadata.json",
+        "status": "added",
+        "sha": "5a5aa43e3deedba4fe64a7cc4e89798efdf0761b",
+        "additions": 18,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR161/base/.agent/ACTIVE_TASK.md",
+        "status": "added",
+        "sha": "4fd70d286f90fd7c4c48ced69189429ce5fd3460",
+        "additions": 257,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR161/base/.agent/CODEX_REPORT_5.md",
+        "status": "added",
+        "sha": "e707065c4443f8400e50a7866e95beb47b15c978",
+        "additions": 58,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR161/base/.agent/CURRENT_STATE.md",
+        "status": "added",
+        "sha": "e5d38fe58511b23ef0c90590fb186d96fc555873",
+        "additions": 7442,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR161/base/.agent/tasks/CODEX_TASK_5.md",
+        "status": "added",
+        "sha": "27ca70502771669ff2951a890868bf8ed9d9c015",
+        "additions": 196,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR161/changes.diff",
+        "status": "added",
+        "sha": "683eac222f48db9b976ecab6ad9a875a3910762e",
+        "additions": 146,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR161/head/.agent/ACTIVE_TASK.md",
+        "status": "added",
+        "sha": "65d552b891d2d04dca3bf3404833116e392257ff",
+        "additions": 258,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR161/head/.agent/CODEX_REPORT_5.md",
+        "status": "added",
+        "sha": "505dee0f2ae27919cf5e1c2ebc20dce9c48c234a",
+        "additions": 121,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR161/head/.agent/CURRENT_STATE.md",
+        "status": "added",
+        "sha": "a5e430affcf1fee6494f6a2cec6111c2f71e7cf9",
+        "additions": 7449,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR161/head/.agent/tasks/CODEX_TASK_5.md",
+        "status": "added",
+        "sha": "1f7650bf6152f7b9f6add81cfcea19fff27a290b",
+        "additions": 211,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/unmerged-prs/PR161/metadata.json",
+        "status": "added",
+        "sha": "64ff1d6e93a20cb77340cf10da0b43ff9d58b6c4",
+        "additions": 19,
+        "deletions": 0
+      },
+      {
+        "path": ".agent_v2/migrations/FULL_MIGRATION_20261013.md",
+        "status": "added",
+        "sha": "44c9e5e27bdbf39246bd5d2d76a8291ca9b433b5",
+        "additions": 66,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 171,
+    "title": "docs(ai-ask): AIに聞く V1 Phase B0 — サーバー・認証・費用境界の実装前設計（read-only・Draft）",
+    "head": "0beda46186efe1db680909f369e2571609851d81",
+    "head_ref": "claude/f1-ai-ask-v1-phase-b0-design-20261013",
+    "base": "018a54e50fbf0cf4052bc1241b492fd462c70e8c",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/release-readiness/kabumori-app/AI_ASK_V1_PHASE_B0_SECURITY_DESIGN.md",
+        "status": "added",
+        "sha": "5ff8bf2a2040411ba6ecf0270ee593d74b32ce57",
+        "additions": 347,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 170,
+    "title": "F6 V0: Claude Opus primary for the shared close market report (default OFF, not wired; handler patch attached)",
+    "head": "46b27326360e66ec843f79bae6d01584088869d0",
+    "head_ref": "claude/f6-opus-primary-close-v0-20261013",
+    "base": "59a04f7054c34bb141a437c39e709e1fe82ccad8",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/ai-provider/F6_OPUS_PRIMARY_CLOSE_V0.md",
+        "status": "added",
+        "sha": "94ad8dc1c3881c22c880fd49b944b47c6b9dc6e0",
+        "additions": 128,
+        "deletions": 0
+      },
+      {
+        "path": "docs/ai-provider/F6_OPUS_PRIMARY_HANDLER_V0.patch",
+        "status": "added",
+        "sha": "fb36e449b1ffd2c1af6699d0b7aaa1fe6a3af94a",
+        "additions": 552,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/ai_provider/market_report_primary.ts",
+        "status": "added",
+        "sha": "dea45f91f1a484c215e075b5b34828a5110911c5",
+        "additions": 253,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/ai_provider/market_report_primary_test.ts",
+        "status": "added",
+        "sha": "1abdb654e38e038a55646e4ffb3515964729c1a9",
+        "additions": 409,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 169,
+    "title": "POSTONA F4: Threads writers on the real G5 lifecycle (F5 owner fence, disconnect removal policy; gates off)",
+    "head": "fd15430ddcd640c5c7389582f37f1b478fc7204c",
+    "head_ref": "claude/f4-postona-threads-t13-writer-guards-20261013",
+    "base": "02fd1989303879979b137f8338f8bc6944f266b1",
+    "base_ref": "claude/f4-postona-threads-disconnect-20261012",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "apps/social-mobile/src/domain/threads-disconnect.ts",
+        "status": "modified",
+        "sha": "70df21fd1e97f3f29692d2bb154af2ff38670107",
+        "additions": 1,
+        "deletions": 1
+      },
+      {
+        "path": "docs/postona/threads-t13-writer-guards-v1.md",
+        "status": "added",
+        "sha": "e494ea336e037f2881cca6fceb960070ed5c017b",
+        "additions": 63,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_cleanup/threads_provider_cleanup_candidate.sql",
+        "status": "modified",
+        "sha": "cf09fbb6cb1f823df48e313834e3a8a25ddaea84",
+        "additions": 15,
+        "deletions": 1
+      },
+      {
+        "path": "supabase/candidates/postona_threads_disconnect/threads_disconnect_candidate.sql",
+        "status": "modified",
+        "sha": "61efd1120a18129d52ce3f1be3163297c3a617f6",
+        "additions": 43,
+        "deletions": 16
+      },
+      {
+        "path": "supabase/candidates/postona_threads_lifecycle_guards/threads_writer_lifecycle_guards_candidate.sql",
+        "status": "added",
+        "sha": "4942d3ac665c98204188bd095f5f838e0f9f5353",
+        "additions": 239,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_manual_publish.ts",
+        "status": "modified",
+        "sha": "4b5ddd7c6e74560bf8de350c1d2686bf33d55d4c",
+        "additions": 3,
+        "deletions": 3
+      },
+      {
+        "path": "supabase/tests/postona_threads_cleanup_behavior.sql",
+        "status": "modified",
+        "sha": "1230378363d44d49160dcfd116f2322eebb37257",
+        "additions": 16,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_cleanup_fixture.sql",
+        "status": "modified",
+        "sha": "dc6b223e94538d6f23719e01c9ea1920564bb839",
+        "additions": 58,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_cleanup_run.sh",
+        "status": "modified",
+        "sha": "98398b89035408ff1ce003197a1c7aab5eb08331",
+        "additions": 4,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_disconnect_behavior.sql",
+        "status": "modified",
+        "sha": "99f628f5fa38dcda0891bb2183abbdb492022f5d",
+        "additions": 31,
+        "deletions": 6
+      },
+      {
+        "path": "supabase/tests/postona_threads_disconnect_run.sh",
+        "status": "modified",
+        "sha": "e3b0fc432fe738324985d7ce4c9a4bd88a25ad80",
+        "additions": 8,
+        "deletions": 1
+      },
+      {
+        "path": "supabase/tests/postona_threads_t13_behavior.sql",
+        "status": "added",
+        "sha": "aae0bf03e5ebeadf6f6851e51ee5b379cb519ee8",
+        "additions": 249,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_t13_fixture.sql",
+        "status": "added",
+        "sha": "015b2994df16becc07907818a49b1df885e6f51e",
+        "additions": 212,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_t13_run.sh",
+        "status": "added",
+        "sha": "7b5eaa61cf21e8a74d53b5ee1f4ddf0a19d3b232",
+        "additions": 284,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 168,
+    "title": "feat(postona): F3 X 予約の本番入口・本人確認・DB 実接続・G5 結びつけ候補（本番OFF・未デプロイ・PR163 の上に積む・下書き）",
+    "head": "4b491668d030d1e9ecefacf0448fdd06d5ce57fc",
+    "head_ref": "claude/f3-postona-x-reservation-live-boundary-20261013",
+    "base": "9359e949d0704c08653a4d61dd5791f4d4febec9",
+    "base_ref": "claude/g3-postona-x-reservation-api-wiring-v1-20261012",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "apps/social-mobile/src/app/(tabs)/schedule.tsx",
+        "status": "modified",
+        "sha": "e5dc7dc096f6e7bf92bd258ced92ee85086e36ad",
+        "additions": 8,
+        "deletions": 4
+      },
+      {
+        "path": "apps/social-mobile/src/features/schedule/live-reservation-store.ts",
+        "status": "added",
+        "sha": "78c22fed879c667b6bf76482ab2eac54e77a5651",
+        "additions": 39,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/schedule/reservation-store.ts",
+        "status": "modified",
+        "sha": "9657c96d3deaa4a78ecb3aa52d4e42fa6e09dbe9",
+        "additions": 8,
+        "deletions": 7
+      },
+      {
+        "path": "apps/social-mobile/tests/remote-reservation-store.test.mjs",
+        "status": "modified",
+        "sha": "02b0c8985fc2155b8b0f8e267d865bd735c78fdb",
+        "additions": 35,
+        "deletions": 3
+      },
+      {
+        "path": "apps/social-mobile/tests/reservation-flow.test.mjs",
+        "status": "modified",
+        "sha": "f57b0a9bee6007129e5ba7f6b8b8c9bfd3b82f99",
+        "additions": 1,
+        "deletions": 1
+      },
+      {
+        "path": "apps/social-mobile/tests/schedule-screen-wiring.test.mjs",
+        "status": "modified",
+        "sha": "6fbdb86b9c2071afcce2dc62e9dca9a935eb1ec1",
+        "additions": 24,
+        "deletions": 3
+      },
+      {
+        "path": "supabase/candidates/postona_x_reservations/003_postona_x_resv_g5_binding.sql",
+        "status": "added",
+        "sha": "dd848a0747bf8bddef204e141aeb306e2a40c214",
+        "additions": 86,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_x_reservations/003_postona_x_resv_g5_binding_rollback.sql",
+        "status": "added",
+        "sha": "6bd8ae5165501f2a99dc66e15b82b1721fe5c3b7",
+        "additions": 17,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_x_reservations/g5_binding/g5_binding_behavior.sql",
+        "status": "added",
+        "sha": "6dfcb5258ccb736172fb0b35f0f31faded8c92e8",
+        "additions": 120,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_x_reservations/g5_binding_run.sh",
+        "status": "added",
+        "sha": "3d8ab811c44156d0aaf732dc1ce156563010b39f",
+        "additions": 183,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_x_reservations/live_boundary/live_boundary_test.ts",
+        "status": "added",
+        "sha": "06c6178408c24d04006647c9c3d00e0b1f719476",
+        "additions": 231,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_x_reservations/live_boundary_run.sh",
+        "status": "added",
+        "sha": "bb2ef38075145a2a29eba2577aae2390aa3bb0a5",
+        "additions": 66,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/postona_reservations/api.ts",
+        "status": "modified",
+        "sha": "ce7b54ef96b6defd8596aab23239fef8ddbcc406",
+        "additions": 2,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/postona_reservations/live_adapters_test.ts",
+        "status": "added",
+        "sha": "14d1ffdf8a058aa9502551e78aace7541b98d47e",
+        "additions": 149,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/postona_reservations/postgres_db.ts",
+        "status": "added",
+        "sha": "943744a791db8a18b9df9218e9573112c6b7b5c2",
+        "additions": 101,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/postona_reservations/postgres_driver.ts",
+        "status": "added",
+        "sha": "7ab622217c6c974021f07ab0e38eea38c3ad2e65",
+        "additions": 34,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/postona_reservations/supabase_auth.ts",
+        "status": "added",
+        "sha": "0b6e636b422cc575404ddabf6bb0ea976e7ac75b",
+        "additions": 69,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/postona-x-reservations/http.ts",
+        "status": "added",
+        "sha": "5b885d66339f51097594a800383466ce9645eb4a",
+        "additions": 97,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/postona-x-reservations/http_test.ts",
+        "status": "added",
+        "sha": "270057f17e20bc6c7d4b08c01d5747da2b23c1c9",
+        "additions": 75,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/postona-x-reservations/index.ts",
+        "status": "added",
+        "sha": "80b6caf2b842653bb49b6091bb67b07ba0bfd413",
+        "additions": 8,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 167,
+    "title": "POSTONA F4: Threads-only disconnect + lease-safe Threads cleanup (source only, gates off)",
+    "head": "02fd1989303879979b137f8338f8bc6944f266b1",
+    "head_ref": "claude/f4-postona-threads-disconnect-20261012",
+    "base": "98287392327eabfd5092a3ba89dde51a2e8beff6",
+    "base_ref": "claude/g4-postona-threads-connect-wiring-20261012",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "apps/social-mobile/src/app/accounts/index.tsx",
+        "status": "modified",
+        "sha": "32997a500c7d5ab9a0aa94158b7fa24339119885",
+        "additions": 2,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/domain/threads-disconnect.ts",
+        "status": "added",
+        "sha": "e1d73fcadeabdb83bc5c8b61379a7b0c005f1f9b",
+        "additions": 156,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/threads-disconnect/threads-disconnect-card.tsx",
+        "status": "added",
+        "sha": "bc21178e57e538dd4fa7551cbe7cc05c87e7f149",
+        "additions": 75,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/threads-disconnect/threads-disconnect-runner.ts",
+        "status": "added",
+        "sha": "276715260d84449a73e89ed02b5b5a9c05462130",
+        "additions": 45,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/threads-disconnect/threads-disconnect-runtime.ts",
+        "status": "added",
+        "sha": "a6f4ce2b025c0e745a9481719bdd4744ec3687bd",
+        "additions": 27,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/threads-disconnect/use-threads-disconnect.ts",
+        "status": "added",
+        "sha": "998b31befe1b3318c394daa9980511f56ae4e9ce",
+        "additions": 73,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/tests/threads-disconnect.test.mjs",
+        "status": "added",
+        "sha": "1bf85c5f91eb47bd5f6b5184d6fc33cd4d9bb728",
+        "additions": 291,
+        "deletions": 0
+      },
+      {
+        "path": "docs/postona/threads-disconnect-and-lease-safe-cleanup-v1.md",
+        "status": "added",
+        "sha": "59e9784a4e81b7f8efadfbcdf74ce8e5ce813700",
+        "additions": 85,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_cleanup/threads_provider_cleanup_candidate.sql",
+        "status": "modified",
+        "sha": "86820eaeda067b5658699ff3a48cb7c8d8090980",
+        "additions": 29,
+        "deletions": 9
+      },
+      {
+        "path": "supabase/candidates/postona_threads_disconnect/threads_disconnect_candidate.sql",
+        "status": "added",
+        "sha": "1458a22f4154ba36cb4c1cc4fd6faa15fe12d712",
+        "additions": 214,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_integration/connect_cleanup_smoke.ts",
+        "status": "modified",
+        "sha": "5ad6223578dee1438fa29055f36f6bf0c9ce6eec",
+        "additions": 52,
+        "deletions": 14
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_disconnect.ts",
+        "status": "added",
+        "sha": "22fb75234f7f40235758cb98360e008b64211e36",
+        "additions": 199,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_disconnect_test.ts",
+        "status": "added",
+        "sha": "4214bf1ade2f3a4ac915f492417c9552f575631d",
+        "additions": 187,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_provider_cleanup.ts",
+        "status": "modified",
+        "sha": "898e4314ed4fbda258c1d7fe6cf34c18608d0184",
+        "additions": 65,
+        "deletions": 24
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_provider_cleanup_test.ts",
+        "status": "modified",
+        "sha": "c822b9e925eb5fe422ce8eb3f38e82899b0e87a6",
+        "additions": 124,
+        "deletions": 29
+      },
+      {
+        "path": "supabase/functions/social-mobile-threads-disconnect/http.ts",
+        "status": "added",
+        "sha": "2621e1347ccc979fd9668a8c25d6c3f6b434559b",
+        "additions": 31,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/social-mobile-threads-disconnect/http_test.ts",
+        "status": "added",
+        "sha": "86d1521c3deeb92009732659612ccc947e3a242d",
+        "additions": 22,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/social-mobile-threads-disconnect/index.ts",
+        "status": "added",
+        "sha": "68d28d8fec7355781798f4ef3baf86ed27cd8187",
+        "additions": 6,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_cleanup_behavior.sql",
+        "status": "modified",
+        "sha": "bfd190b854dc0d1250c8c8ea8a6f534a147470ea",
+        "additions": 24,
+        "deletions": 1
+      },
+      {
+        "path": "supabase/tests/postona_threads_cleanup_fixture.sql",
+        "status": "modified",
+        "sha": "0ba8b284955a222f5eb9c1d58a5f55cb65291b2b",
+        "additions": 10,
+        "deletions": 5
+      },
+      {
+        "path": "supabase/tests/postona_threads_cleanup_run.sh",
+        "status": "modified",
+        "sha": "0234fef1d626d423f0594416a21a2c5517262d01",
+        "additions": 33,
+        "deletions": 2
+      },
+      {
+        "path": "supabase/tests/postona_threads_connect_smoke_run.sh",
+        "status": "modified",
+        "sha": "4dc364d91bb642cd02852bad00743684fae0abe0",
+        "additions": 8,
+        "deletions": 7
+      },
+      {
+        "path": "supabase/tests/postona_threads_disconnect_behavior.sql",
+        "status": "added",
+        "sha": "6b1813a7baa6506ae1fc9127f7311d7881598cc8",
+        "additions": 295,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_disconnect_run.sh",
+        "status": "added",
+        "sha": "0f89bc9f06bd8da47f9f940af62a258a195b58b0",
+        "additions": 187,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 166,
+    "title": "feat(ai-ask): AIに聞く V1 Phase A — 対話UIと型付き接続契約（サーバー未接続・本番は準備中・Draft）",
+    "head": "83b51efcf3cdb207eb0bab4c6a8dddbc1f5352f4",
+    "head_ref": "claude/f1-ai-ask-v1-phase-a-20261012",
+    "base": "49e958ea503a33dca4027485e22cf27eb13f428a",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/release-readiness/kabumori-app/AI_ASK_V1_PHASE_A_CONTRACT.md",
+        "status": "added",
+        "sha": "a3d0d9692e34cd0afe4bb4eec64c2137317647d6",
+        "additions": 154,
+        "deletions": 0
+      },
+      {
+        "path": "src/app/ai.tsx",
+        "status": "modified",
+        "sha": "ad7517578484f12083e207c6c7e3de83128abc36",
+        "additions": 252,
+        "deletions": 14
+      },
+      {
+        "path": "src/components/ai-ask/answer-card.tsx",
+        "status": "added",
+        "sha": "578a2bada28fd1ac7b64925ad0c48152081fea20",
+        "additions": 98,
+        "deletions": 0
+      },
+      {
+        "path": "src/lib/ai-ask-mock.ts",
+        "status": "added",
+        "sha": "3de97371e388d17e6caf2db84946962b9da2e7ca",
+        "additions": 95,
+        "deletions": 0
+      },
+      {
+        "path": "src/lib/ai-ask.ts",
+        "status": "added",
+        "sha": "cbad6b41163d911a720eced17b5d8f65130b7e66",
+        "additions": 324,
+        "deletions": 0
+      },
+      {
+        "path": "tests/app/ai-ask-screen_test.ts",
+        "status": "added",
+        "sha": "c313d41f80d3f3f5dc03ae31bfdd1c78a9ffde7f",
+        "additions": 115,
+        "deletions": 0
+      },
+      {
+        "path": "tests/app/ai-ask_test.ts",
+        "status": "added",
+        "sha": "93aebf94e7701f4e24d5e39614d735368fe80c73",
+        "additions": 295,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 165,
+    "title": "feat(account): 共通アカウント F5 実アプリの契約テスト（実コード×実 SQL）とワークスペースの利用権判定（ソース候補・#152 に積む下書き）",
+    "head": "4638891f6c7ff432e08d462019594e1ec3d66f07",
+    "head_ref": "claude/f5-phase5-app-entitlement-contract-20261012",
+    "base": "ccea1fe8132c6f573a768f0df5a033a05c62ef2c",
+    "base_ref": "claude/g5-phase4-core-account-gateway-20261012",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/common-account/phase5-app-integration.md",
+        "status": "added",
+        "sha": "da5997fb851bdb73354d0c252ff13f294c3e017b",
+        "additions": 112,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/migrations/20261012230000_common_account_service_brand_state.sql",
+        "status": "added",
+        "sha": "54b3a7cc390857d458e5f957476dd070a3984aac",
+        "additions": 212,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_brand_state_behavior.sql",
+        "status": "added",
+        "sha": "77ec26ea8b5a57a6c2ae50c7157bffd136840a54",
+        "additions": 196,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_brand_state_mutations.py",
+        "status": "added",
+        "sha": "20fd020114908174b773296c164fb032a46c4264",
+        "additions": 93,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_brand_state_rollback.sql",
+        "status": "added",
+        "sha": "10b1d2d5813152022fca64c4574c439bdd646886",
+        "additions": 41,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_brand_state_run.sh",
+        "status": "added",
+        "sha": "d456720b83298ee31e3686bf1a2b4bbd51e8f209",
+        "additions": 275,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_core_fence_run.sh",
+        "status": "modified",
+        "sha": "0bde727eacd6e33b413a15cb94a029f0180158da",
+        "additions": 10,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_phase5_app_contract_test.ts",
+        "status": "added",
+        "sha": "45b3d6c543c046afd7cd255f062853ff604ba408",
+        "additions": 388,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 164,
+    "title": "feat(news): jp_official診断をrun diagnosticsへ永続化 (J1-a, Draft)",
+    "head": "141d851267898ff7e28151a9e7e73121a3bb75aa",
+    "head_ref": "claude/news-jp-official-diagnostics-j1a-f8-20261012",
+    "base": "22ea18472a4b17763672a041b41b2ddfc5b0a633",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "supabase/functions/important-news-monitor/index.ts",
+        "status": "modified",
+        "sha": "d969c0f2f0f010b99afd9a678f64aa9b78bec963",
+        "additions": 11,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/important-news-monitor/jp_official_diagnostics_persist_test.ts",
+        "status": "added",
+        "sha": "1ac7b360d08d8681186c4ec0e5d030394cc9d99f",
+        "additions": 104,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/important-news-monitor/news_collection_diagnostics.ts",
+        "status": "modified",
+        "sha": "71bee01079f6906db2a3d603354a40385f7bec1c",
+        "additions": 71,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/important-news-monitor/news_collection_diagnostics_test.ts",
+        "status": "modified",
+        "sha": "aa6ae029854fb02058a087705fcb618cd26114d3",
+        "additions": 101,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 163,
+    "title": "feat(postona): X 予約の API 候補とアプリの接続 V1（本番OFF・未デプロイ・PR151 の上に積む・下書き）",
+    "head": "9359e949d0704c08653a4d61dd5791f4d4febec9",
+    "head_ref": "claude/g3-postona-x-reservation-api-wiring-v1-20261012",
+    "base": "0cd5c596a4d553df924a16c1f5091815e74b199a",
+    "base_ref": "claude/g3-postona-reservation-confirmation-ux-v1-20261012",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "apps/social-mobile/src/app/(tabs)/schedule.tsx",
+        "status": "modified",
+        "sha": "cfe21944734230c630aa99b977337fc4f41985d2",
+        "additions": 173,
+        "deletions": 9
+      },
+      {
+        "path": "apps/social-mobile/src/domain/reservation-flow.ts",
+        "status": "modified",
+        "sha": "ec4c197a83264ad702cdd5abec94260f487d71bf",
+        "additions": 8,
+        "deletions": 1
+      },
+      {
+        "path": "apps/social-mobile/src/features/schedule/remote-reservation-store.ts",
+        "status": "added",
+        "sha": "0ea2ec88596d6d1aefc5da4614c6436f86d87402",
+        "additions": 179,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/schedule/reservation-store.ts",
+        "status": "modified",
+        "sha": "4b5130b40fec9dc63e2c4c91c38cb2cadb51ff54",
+        "additions": 9,
+        "deletions": 2
+      },
+      {
+        "path": "apps/social-mobile/src/features/schedule/schedule-composer.tsx",
+        "status": "modified",
+        "sha": "54f03ba528ec165ba97c3e8789922a03dbb3ee7f",
+        "additions": 3,
+        "deletions": 1
+      },
+      {
+        "path": "apps/social-mobile/src/features/schedule/server-reservation-card.tsx",
+        "status": "added",
+        "sha": "83dabdb68bd616bea87a7823ae034348b01d7881",
+        "additions": 76,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/schedule/server-reservations-state.ts",
+        "status": "added",
+        "sha": "2ed42d487059abd798d76da0bfe2251ddc949754",
+        "additions": 96,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/tests/remote-reservation-store.test.mjs",
+        "status": "added",
+        "sha": "ee40864f05f43e702f7fb5de9333bcbc84bb72a6",
+        "additions": 240,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/tests/reservation-flow.test.mjs",
+        "status": "modified",
+        "sha": "13df783314ecd2106d97710154d052ff44f97fb4",
+        "additions": 9,
+        "deletions": 1
+      },
+      {
+        "path": "apps/social-mobile/tests/schedule-screen-wiring.test.mjs",
+        "status": "modified",
+        "sha": "8f492f31b563eb7460433c685e00c3f726734fba",
+        "additions": 254,
+        "deletions": 3
+      },
+      {
+        "path": "supabase/candidates/postona_x_reservations/002_postona_x_resv_api_role.sql",
+        "status": "added",
+        "sha": "06e70a17eb332845a886998a762691afb93ed7c6",
+        "additions": 105,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_x_reservations/api_e2e/api_e2e.test.mjs",
+        "status": "added",
+        "sha": "b9c131515080883eaacf81b2c33db58629fa7ca7",
+        "additions": 225,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_x_reservations/api_e2e/psql_db.mjs",
+        "status": "added",
+        "sha": "a81f44ed3accc0fd72e62cdfd868242aa2bacd0b",
+        "additions": 63,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_x_reservations/api_e2e_run.sh",
+        "status": "added",
+        "sha": "af18252e43c6f05f566c8f1c8666aa991ee1ae22",
+        "additions": 102,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/postona_reservations/api.ts",
+        "status": "added",
+        "sha": "b8355cf4677060a229367f45fb1ac50f192551ff",
+        "additions": 269,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/postona_reservations/api_test.ts",
+        "status": "added",
+        "sha": "ae4488fb35cd43dfb026801261b1e90c08e4153b",
+        "additions": 195,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 162,
+    "title": "G6: stable slow-shadow timeout tests F1/F2 (test only, stacked on #157)",
+    "head": "93de927aec8726a6269d9c6747b998d29df113da",
+    "head_ref": "claude/g6-f1-f2-timeout-tests-20261012",
+    "base": "9b952d64a9ec954e74af7e762c9df4e4c2e2f3a5",
+    "base_ref": "claude/g6-phase2c-isolation-allowlist-20261012",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "supabase/functions/_shared/ai_provider/market_report_shadow_test.ts",
+        "status": "modified",
+        "sha": "1aa1dd8a174780e7a6bb44204977a4c2f8b55e96",
+        "additions": 9,
+        "deletions": 2
+      },
+      {
+        "path": "supabase/functions/_shared/ai_provider/market_report_wiring_test.ts",
+        "status": "modified",
+        "sha": "9001f87105a27e6d8726f9be9a707b2945aef780",
+        "additions": 7,
+        "deletions": 1
+      }
+    ]
+  },
+  {
+    "number": 161,
+    "title": "chore(agent): H5 runtime wiring report and C5 handoff only",
+    "head": "1ef3aaa43e72540f6f6ac5c2dd97820aaa3259d2",
+    "head_ref": "codex/h5-owner-wiring-report-20261012",
+    "base": "b012da640a33518cee52c2927e4d3c21ff253bf7",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": ".agent/ACTIVE_TASK.md",
+        "status": "modified",
+        "sha": "65d552b891d2d04dca3bf3404833116e392257ff",
+        "additions": 3,
+        "deletions": 2
+      },
+      {
+        "path": ".agent/CODEX_REPORT_5.md",
+        "status": "modified",
+        "sha": "505dee0f2ae27919cf5e1c2ebc20dce9c48c234a",
+        "additions": 63,
+        "deletions": 0
+      },
+      {
+        "path": ".agent/CURRENT_STATE.md",
+        "status": "modified",
+        "sha": "a5e430affcf1fee6494f6a2cec6111c2f71e7cf9",
+        "additions": 7,
+        "deletions": 0
+      },
+      {
+        "path": ".agent/tasks/CODEX_TASK_5.md",
+        "status": "modified",
+        "sha": "1f7650bf6152f7b9f6add81cfcea19fff27a290b",
+        "additions": 17,
+        "deletions": 2
+      }
+    ]
+  },
+  {
+    "number": 160,
+    "title": "docs(release): かぶモリ V1 リリース前の機能・残課題の棚卸し（①・read-only 監査・Draft）",
+    "head": "c785d560abee781f1b83b7110c51b52b42fce083",
+    "head_ref": "claude/g1-v1-release-gap-inventory-20261012",
+    "base": "b012da640a33518cee52c2927e4d3c21ff253bf7",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/release-readiness/kabumori-app/V1_GAP_INVENTORY_2026-10-12.md",
+        "status": "added",
+        "sha": "60462995c2aedc9b68010185345027aec2ab23f4",
+        "additions": 136,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 159,
+    "title": "POSTONA H5: disabled real SDK/owner runtime wiring and custody atomicity",
+    "head": "163675c62835e84417905f98f97ceedd4dd1bcd9",
+    "head_ref": "codex/h5-threads-owner-runtime-wiring-20261012",
+    "base": "b4fa672f97592e87682671454e868a92098cbd56",
+    "base_ref": "codex/h5-threads-runtime-20261011",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/postona/threads-owner-runtime-wiring-20261012.md",
+        "status": "added",
+        "sha": "afa728a13f868b522d0a9e3ea24b3c2f7e30f831",
+        "additions": 35,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/claim_candidate.sql",
+        "status": "modified",
+        "sha": "c4003bbe65de75e9ee0ab160dec1066d5a11165f",
+        "additions": 2,
+        "deletions": 2
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/owner_transport.ts",
+        "status": "modified",
+        "sha": "d8cab6516e94566bb875f2caa102403b693459f5",
+        "additions": 10,
+        "deletions": 3
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/runtime.ts",
+        "status": "modified",
+        "sha": "d528bcadd5cd0af1e0f816e7bcd87e3a3c8680b4",
+        "additions": 5,
+        "deletions": 1
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/wiring/composed_handler.smoke.ts",
+        "status": "added",
+        "sha": "14c49e9235ba9e4ba7057395a4d3d29df7a8e1af",
+        "additions": 339,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/wiring/config.ts",
+        "status": "added",
+        "sha": "5e768ec4d5e7f233d7a5df9a8b19bf57a431c006",
+        "additions": 83,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/wiring/connector_test.ts",
+        "status": "added",
+        "sha": "2cf77d5d5b68e49bea4a7f2db2b10dc87d5c630d",
+        "additions": 114,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/wiring/custody_port.ts",
+        "status": "added",
+        "sha": "cd1fb43fbf5ae44791fbc1081167eca66449575c",
+        "additions": 35,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/wiring/deno.json",
+        "status": "added",
+        "sha": "10335581cd4ce4f968e3a7f934f4dc3ffb2dbc69",
+        "additions": 8,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/wiring/deno.lock",
+        "status": "added",
+        "sha": "e84c0d7b611474a02f1e574cbea26580cfbb3f5c",
+        "additions": 105,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/wiring/nondeployable.ts",
+        "status": "added",
+        "sha": "1d013a2ee56e04442a9453bc9554cf39359097ea",
+        "additions": 11,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/wiring/offline.fixture.ts",
+        "status": "added",
+        "sha": "46c8bcbda685f0e4d8cb6c8dd87d7fc17d53c1b4",
+        "additions": 21,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/wiring/postgres_connector.ts",
+        "status": "added",
+        "sha": "cc68220ba96fa35b5866ca23ec8cbf40bafd3bd4",
+        "additions": 109,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/wiring/postgres_integration.smoke.ts",
+        "status": "added",
+        "sha": "82909504f1dcb6ddf82d95a1ffe18b9a4e64aaf4",
+        "additions": 342,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/wiring/postgres_setup_run.sh",
+        "status": "added",
+        "sha": "3554436fd4778417937740b051bf5a5d68daa6db",
+        "additions": 42,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/wiring/server_factory.ts",
+        "status": "added",
+        "sha": "3dc07d9ba13f443700c5272bc1a4e4ffae908d61",
+        "additions": 115,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/wiring/source_isolation.smoke.ts",
+        "status": "added",
+        "sha": "4faf05b93b464be0b4f64c6875f9fd92fd9d27fd",
+        "additions": 80,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/wiring/source_overlay_run.sh",
+        "status": "added",
+        "sha": "fd7465909c0da0e485a3245bf450421fde9f6924",
+        "additions": 21,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 157,
+    "title": "G6 Phase 2c: isolation test allowlist for the market report handler (test only, offline)",
+    "head": "9b952d64a9ec954e74af7e762c9df4e4c2e2f3a5",
+    "head_ref": "claude/g6-phase2c-isolation-allowlist-20261012",
+    "base": "6c576567328c99a58c2e4beaed86d155fe875769",
+    "base_ref": "g2-phase2c-market-shadow-20261012",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "supabase/functions/_shared/ai_provider/isolation_test.ts",
+        "status": "modified",
+        "sha": "512e6c8a16bdfc36cd0dbf905e5cafb5910d6d11",
+        "additions": 180,
+        "deletions": 16
+      }
+    ]
+  },
+  {
+    "number": 154,
+    "title": "feat(postona): Threads アプリの接続フロー・接続の受け渡し口・退会時の後片付けアダプター（ゲートOFF・#144に積む下書き）",
+    "head": "98287392327eabfd5092a3ba89dde51a2e8beff6",
+    "head_ref": "claude/g4-postona-threads-connect-wiring-20261012",
+    "base": "09fd2c49114b7d26c23b71a3084574dc6a5a7ad6",
+    "base_ref": "claude/g4-postona-threads-integration-20261011",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "apps/social-mobile/src/app/accounts/[id].tsx",
+        "status": "modified",
+        "sha": "689f16707378bff776b02256f21ec59f7eaa5d93",
+        "additions": 1,
+        "deletions": 1
+      },
+      {
+        "path": "apps/social-mobile/src/app/accounts/index.tsx",
+        "status": "modified",
+        "sha": "3848d81066169b588f6a491a97ec89af676e4a3e",
+        "additions": 1,
+        "deletions": 1
+      },
+      {
+        "path": "apps/social-mobile/src/domain/threads-connect.ts",
+        "status": "modified",
+        "sha": "8f8f78174f9b8f41012df05491bdcff9b270dda1",
+        "additions": 109,
+        "deletions": 1
+      },
+      {
+        "path": "apps/social-mobile/src/features/threads-connect/threads-connect-card.tsx",
+        "status": "modified",
+        "sha": "c2ce5342e4cf3907367fcf21e960e4aa135ceabb",
+        "additions": 25,
+        "deletions": 20
+      },
+      {
+        "path": "apps/social-mobile/src/features/threads-connect/threads-connect-runtime.ts",
+        "status": "added",
+        "sha": "a9ec5dd7ecd976558cc3a7315f4c17e4a40690c3",
+        "additions": 60,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/threads-connect/threads-connect-starter.ts",
+        "status": "added",
+        "sha": "3f598f8c48e26901103f3ec3736f12ce38caaf64",
+        "additions": 101,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/threads-connect/use-threads-connect.ts",
+        "status": "added",
+        "sha": "693cb9d535c6493e3212f316ac5f4202c921f1d3",
+        "additions": 59,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/tests/threads-connect.test.mjs",
+        "status": "modified",
+        "sha": "293aa665085c2abd346a1c2bea8c921669256a7f",
+        "additions": 244,
+        "deletions": 54
+      },
+      {
+        "path": "docs/postona/threads-mobile-connect-and-cleanup-v1.md",
+        "status": "added",
+        "sha": "bf476cd0d2dfdb24c6e5b868be0ebd1a54b0371f",
+        "additions": 68,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_cleanup/threads_provider_cleanup_candidate.sql",
+        "status": "added",
+        "sha": "e282814b33fd6256cfa3dd2dd5ff8a0c7df66a29",
+        "additions": 159,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_integration/connect_cleanup_smoke.ts",
+        "status": "added",
+        "sha": "4b2491e48f1f0a2bdfc61c641845f919598b11bb",
+        "additions": 94,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_connect_edge.ts",
+        "status": "added",
+        "sha": "262e47603ff3c40963007ce0ef16c96db923d0a5",
+        "additions": 195,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_connect_edge_test.ts",
+        "status": "added",
+        "sha": "a68c8d90df3fb466c5687c20e71f7b5ca759dd1d",
+        "additions": 181,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_provider_cleanup.ts",
+        "status": "added",
+        "sha": "a9f63603428847f5782e3a872632d384b29e0f4f",
+        "additions": 88,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_provider_cleanup_test.ts",
+        "status": "added",
+        "sha": "dbcdfa623104654f623bfd027ca530f7f00bac9b",
+        "additions": 69,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_cleanup_behavior.sql",
+        "status": "added",
+        "sha": "282b2d504a655fda872970e5b1da49acc7f313a9",
+        "additions": 149,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_cleanup_fixture.sql",
+        "status": "added",
+        "sha": "e72727f682e21b6e10b8c2777f5b9355aa61f643",
+        "additions": 14,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_cleanup_run.sh",
+        "status": "added",
+        "sha": "6aac569ac84a7ff1cb268fd8883e151ca8587323",
+        "additions": 123,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_connect_smoke_run.sh",
+        "status": "added",
+        "sha": "42e4602136f179df014c95623aed5b616fc8d9b2",
+        "additions": 46,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 153,
+    "title": "市況レポートの handler に Claude 比較処理を既定 OFF で接続（Phase 2c、PR150 の上に積む・ソースのみ）",
+    "head": "6c576567328c99a58c2e4beaed86d155fe875769",
+    "head_ref": "g2-phase2c-market-shadow-20261012",
+    "base": "18d9058aa8bd451f3cd0181f8570a31484750035",
+    "base_ref": "claude/g6-phase2b-market-report-wiring-20261012",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "supabase/functions/market-report-analysis/handler.ts",
+        "status": "modified",
+        "sha": "c2e40c91b0eb749f5768c2c009b95f6fa0aa0755",
+        "additions": 124,
+        "deletions": 6
+      },
+      {
+        "path": "supabase/functions/market-report-analysis/index.ts",
+        "status": "modified",
+        "sha": "ebda9a6a4e84520d9e25663cd9a2a1cc8da2d5b6",
+        "additions": 8,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/market-report-analysis/shadow_wiring_test.ts",
+        "status": "added",
+        "sha": "2867d2b0fb55ff772ec38bdf1f5a62f4effdef43",
+        "additions": 439,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 152,
+    "title": "feat(account): 共通アカウント Phase 4 書込フェンスとプロフィール根の閉鎖・プロバイダ後始末ポート（実装・ソース候補・#121 に積む下書き）",
+    "head": "ccea1fe8132c6f573a768f0df5a033a05c62ef2c",
+    "head_ref": "claude/g5-phase4-core-account-gateway-20261012",
+    "base": "76b50e1e03f82faaa3460bab1603afa8fef3ce44",
+    "base_ref": "claude/g5-phase3b-identity-writer-fence-20261010",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/common-account/phase3a-deletion-orchestrator.md",
+        "status": "modified",
+        "sha": "47d685e3631977c1f42bc67486e83ff3f57a4c81",
+        "additions": 6,
+        "deletions": 0
+      },
+      {
+        "path": "docs/common-account/phase4-core-integration.md",
+        "status": "added",
+        "sha": "b859d02d1a3eb1283a0b2ac6fed77d55be788c13",
+        "additions": 143,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/account-delete/lifecycle_logic.ts",
+        "status": "modified",
+        "sha": "d175415f3bdca44921ffae598f7b28261f2a3100",
+        "additions": 58,
+        "deletions": 3
+      },
+      {
+        "path": "supabase/functions/account-delete/provider_cleanup.ts",
+        "status": "added",
+        "sha": "94a250759ac4b3e3a0ed604e7c65f486f2eabc74",
+        "additions": 172,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/account-delete/provider_cleanup_flow_test.ts",
+        "status": "added",
+        "sha": "edabf9ef447603fe12d34c8a737dd35f4c8c41ba",
+        "additions": 244,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/account-delete/provider_cleanup_test.ts",
+        "status": "added",
+        "sha": "834b74f1f732508db281756e88ea81b458b59117",
+        "additions": 178,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/account-delete/wiring_test.ts",
+        "status": "modified",
+        "sha": "58a3cc4765d849383936611fe643f95e2c4fb780",
+        "additions": 7,
+        "deletions": 1
+      },
+      {
+        "path": "supabase/migrations/20261012130000_common_account_core_service_fence.sql",
+        "status": "added",
+        "sha": "455b9a6c13beaab8a25dc018d25d966d6e77a240",
+        "additions": 276,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_core_fence_behavior.sql",
+        "status": "added",
+        "sha": "7a39a04c91301f458df21df130b9da025c81e97e",
+        "additions": 353,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_core_fence_fixture.sql",
+        "status": "added",
+        "sha": "ff15ca7ec587d411b5b87ae03684070ce0609b39",
+        "additions": 23,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_core_fence_mutations.py",
+        "status": "added",
+        "sha": "caee5f7c986eac139592c037f50df2cddcc21b93",
+        "additions": 152,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_core_fence_rollback.sql",
+        "status": "added",
+        "sha": "b7d62b1bf7408b0c2c5bb94ef4b6efef421abaf5",
+        "additions": 97,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_core_fence_run.sh",
+        "status": "added",
+        "sha": "243cc05803398144d18e5e802eb41c7dd10f70a2",
+        "additions": 450,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_phase4_e2e_test.ts",
+        "status": "added",
+        "sha": "cd41b92bdf550281f8bcff4b27f55ee7878e4019",
+        "additions": 218,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_phase4_ts_mutations.py",
+        "status": "added",
+        "sha": "de5b69de45e283e3efdfe14b9b504cad890cbd3d",
+        "additions": 106,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 151,
+    "title": "feat(postona): 投稿予約の確認 UI V1（ローカルのプレビューのみ・保存OFF・PR145 の上に積む・下書き）",
+    "head": "0cd5c596a4d553df924a16c1f5091815e74b199a",
+    "head_ref": "claude/g3-postona-reservation-confirmation-ux-v1-20261012",
+    "base": "8820fa8de0f978767535472f5a44f8623bc74a30",
+    "base_ref": "claude/g3-postona-x-reservations-offline-v1-20261011",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "apps/social-mobile/src/app/(tabs)/schedule.tsx",
+        "status": "modified",
+        "sha": "94ea61363a10fd7863c52088709de74de0d4a283",
+        "additions": 91,
+        "deletions": 61
+      },
+      {
+        "path": "apps/social-mobile/src/features/schedule/confirmation-state.ts",
+        "status": "added",
+        "sha": "411f1c99ad8a3b169cd1c09a3c859477a7f1abb2",
+        "additions": 87,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/schedule/preview-card.tsx",
+        "status": "added",
+        "sha": "91cc1605f93b26752aaa384ed525533c983ff0d4",
+        "additions": 118,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/schedule/schedule-labels.ts",
+        "status": "added",
+        "sha": "fda182e3b53886709d0f575f06976521fdd9e2f1",
+        "additions": 11,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/schedule/sha256.ts",
+        "status": "added",
+        "sha": "112489665eebd7ec7e131a7a09ca2180beeb88e1",
+        "additions": 5,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/schedule/time-edit.ts",
+        "status": "added",
+        "sha": "932b78e4b23673058c96b21bced9b9601a5ea77b",
+        "additions": 39,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/tests/reservation-confirmation.test.mjs",
+        "status": "added",
+        "sha": "b7e37858893212623708a3d4db00806b78051042",
+        "additions": 318,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/tests/schedule-planner.test.mjs",
+        "status": "modified",
+        "sha": "318c43704f333f57b6a53d72135278e87ce442c0",
+        "additions": 10,
+        "deletions": 2
+      },
+      {
+        "path": "apps/social-mobile/tests/schedule-screen-wiring.test.mjs",
+        "status": "modified",
+        "sha": "21526fcf1251efd3478c15fd0db29a8957e64347",
+        "additions": 213,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 150,
+    "title": "G6 Phase 2b: deferred market report shadow wiring + handler-boundary harness (offline, not wired)",
+    "head": "18d9058aa8bd451f3cd0181f8570a31484750035",
+    "head_ref": "claude/g6-phase2b-market-report-wiring-20261012",
+    "base": "a71de72b3bcfc88547b616f789df7765283565ed",
+    "base_ref": "claude/g6-phase2a-market-report-adapter-20261012",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/ai-provider/PHASE2B_MARKET_REPORT_WIRING_PLAN.md",
+        "status": "added",
+        "sha": "67d610c29d8a4ff40c207fc5b207588043b1c51a",
+        "additions": 361,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/ai_provider/market_report_wiring.ts",
+        "status": "added",
+        "sha": "ae195b01b0e5dd9fe138b26cad72b421ae3b82af",
+        "additions": 170,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/ai_provider/market_report_wiring_test.ts",
+        "status": "added",
+        "sha": "f147adfad2e8721905f0ac34c995346a45e776f4",
+        "additions": 498,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 148,
+    "title": "feat(ai-provider): market report shadow connection candidate (Phase 2a, source only, default off)",
+    "head": "a71de72b3bcfc88547b616f789df7765283565ed",
+    "head_ref": "claude/g6-phase2a-market-report-adapter-20261012",
+    "base": "4bdc4e61c8ed22e9039931a4fb7d3653829a5a5c",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/ai-provider/PHASE2A_MARKET_REPORT_ADAPTER.md",
+        "status": "added",
+        "sha": "b3994a4bb14117bb4466247c4cd3f5824bc4c462",
+        "additions": 127,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/ai_provider/market_report_shadow.ts",
+        "status": "added",
+        "sha": "f9b9e97e86e4ee50e2fe09c392f77347ab859559",
+        "additions": 322,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/ai_provider/market_report_shadow_test.ts",
+        "status": "added",
+        "sha": "380b9f3a84b0bb973f4bd94b1b845444869b2665",
+        "additions": 405,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 147,
+    "title": "docs(account): 共通アカウント Phase 3i アカウント閉鎖の段階的プロトコルと安全境界（設計とオフライン回帰テスト・下書き）",
+    "head": "38051f023bfd150f29829a075b6f87fa7c1e3e5f",
+    "head_ref": "claude/g5-phase3i-lifecycle-safety-design-20261012",
+    "base": "694f1e605b1a790143ba8a200004ba70c00bc5c2",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/common-account/phase3i-lifecycle-safety-design.md",
+        "status": "added",
+        "sha": "306c6fe9629b3281bb062d233d16b5fac521ab50",
+        "additions": 257,
+        "deletions": 0
+      },
+      {
+        "path": "tools/common-account-lifecycle-safety/README.md",
+        "status": "added",
+        "sha": "d0ec145ae86715496bb7e961f32b9c20ae47a298",
+        "additions": 18,
+        "deletions": 0
+      },
+      {
+        "path": "tools/common-account-lifecycle-safety/invariants_test.ts",
+        "status": "added",
+        "sha": "cdf3cb3e4c66e4053b6ff032240eef22d00fb0a1",
+        "additions": 179,
+        "deletions": 0
+      },
+      {
+        "path": "tools/common-account-lifecycle-safety/mutations.py",
+        "status": "added",
+        "sha": "6228d9dd4a2d94d41791b03a8fec2b8dbd6633ee",
+        "additions": 90,
+        "deletions": 0
+      },
+      {
+        "path": "tools/common-account-lifecycle-safety/protocol.ts",
+        "status": "added",
+        "sha": "14fa26dc60c0693b7b8eefd33146b304c86e44c0",
+        "additions": 260,
+        "deletions": 0
+      },
+      {
+        "path": "tools/common-account-lifecycle-safety/protocol_test.ts",
+        "status": "added",
+        "sha": "7993ffba06d92aea4a261df85e4f7c4fd2155c97",
+        "additions": 231,
+        "deletions": 0
+      },
+      {
+        "path": "tools/common-account-lifecycle-safety/static_test.ts",
+        "status": "added",
+        "sha": "db1005657fc3ecff1b928a37b7a329d35f50e999",
+        "additions": 30,
+        "deletions": 0
+      },
+      {
+        "path": "tools/common-account-lifecycle-safety/world.ts",
+        "status": "added",
+        "sha": "c46e7f8ea87500f486e2460e2542143ff0dde04e",
+        "additions": 372,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 146,
+    "title": "test(account): 共通アカウント Phase 3h ローカル OSS（Supabase + Keycloak）での認証の小さな実測（LOCAL_OSS_PARTIAL_EVIDENCE・下書き）",
+    "head": "faf8007a4ab5c925430c7cc6a9896046e30ce25a",
+    "head_ref": "claude/g5-phase3h-local-oss-keycloak-pilot-20261011",
+    "base": "628eca09a01128c51f3295aa95ac568c250dbed2",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/common-account/phase3h-local-oss-pilot.md",
+        "status": "added",
+        "sha": "98b076111253e759403e9a8250ef8cf8dbf22e35",
+        "additions": 168,
+        "deletions": 0
+      },
+      {
+        "path": "tools/common-account-local-pilot/README.md",
+        "status": "added",
+        "sha": "0eba259dfbf5359fd7f6bd085500514aa052d840",
+        "additions": 10,
+        "deletions": 0
+      },
+      {
+        "path": "tools/common-account-local-pilot/cases.py",
+        "status": "added",
+        "sha": "5232c7df3836f49fcaf6ebc1ee1278a7602d4395",
+        "additions": 545,
+        "deletions": 0
+      },
+      {
+        "path": "tools/common-account-local-pilot/core.py",
+        "status": "added",
+        "sha": "50d226c5063d3bd5de5be42d5dd40b58c97730e2",
+        "additions": 245,
+        "deletions": 0
+      },
+      {
+        "path": "tools/common-account-local-pilot/extra.py",
+        "status": "added",
+        "sha": "e589aa08e82fa7f5760cd4dd5ee6647aa53b0265",
+        "additions": 106,
+        "deletions": 0
+      },
+      {
+        "path": "tools/common-account-local-pilot/prepare.py",
+        "status": "added",
+        "sha": "c0686bcb95273c6b99153c88d2d640d1b1420a4b",
+        "additions": 125,
+        "deletions": 0
+      },
+      {
+        "path": "tools/common-account-local-pilot/test_fail_closed.py",
+        "status": "added",
+        "sha": "2cff19023051aed9e008f5d9d9ccce9b12433fba",
+        "additions": 135,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 145,
+    "title": "feat(postona): X 予約の保存・実行の境界 V1（オフライン候補・本番OFF・下書き）",
+    "head": "8820fa8de0f978767535472f5a44f8623bc74a30",
+    "head_ref": "claude/g3-postona-x-reservations-offline-v1-20261011",
+    "base": "4bdc4e61c8ed22e9039931a4fb7d3653829a5a5c",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "apps/social-mobile/src/app/(tabs)/schedule.tsx",
+        "status": "modified",
+        "sha": "1337ab6f05e9bd6e7dbeb57fea5b1e1d454da0d3",
+        "additions": 9,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/domain/reservation-flow.ts",
+        "status": "added",
+        "sha": "a983967abc8b4bea5647e9e0033f702d707f7897",
+        "additions": 217,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/schedule/reservation-store.ts",
+        "status": "added",
+        "sha": "b4b570bf186768a89a46fb83afa7de92fe30d9e7",
+        "additions": 41,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/tests/reservation-flow.test.mjs",
+        "status": "added",
+        "sha": "fe95988bf450c10d50eeb82a06ee8ff393cf4089",
+        "additions": 213,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/tests/schedule-screen-wiring.test.mjs",
+        "status": "modified",
+        "sha": "3b22197660679ced0358972b15036a687bdc00d8",
+        "additions": 3,
+        "deletions": 0
+      },
+      {
+        "path": "docs/postona/x-reservation-persistence-offline-v1-20261011.md",
+        "status": "added",
+        "sha": "d307168d3752d7d6e21335839bb877cb442789ea",
+        "additions": 150,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_x_reservations/001_postona_x_reservations.sql",
+        "status": "added",
+        "sha": "d3f40d18fbfe233d75d74dcbe79cf0c2f42778c6",
+        "additions": 705,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_x_reservations/run.sh",
+        "status": "added",
+        "sha": "3b2b04f8ceb56d4bddef63c0ba5dbf7f43e48112",
+        "additions": 127,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_x_reservations/test_behavior.sql",
+        "status": "added",
+        "sha": "a00dc5dc72f9f65dfc3a3d724ea94798be7ef371",
+        "additions": 373,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_x_reservations/test_fixture.sql",
+        "status": "added",
+        "sha": "ecabee6926edfafac1dd7d47cf8f1a74f4cfee28",
+        "additions": 66,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/postona_reservations/worker.ts",
+        "status": "added",
+        "sha": "c4e114848eda92373ddc789078cb9abe59e83a68",
+        "additions": 128,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/postona_reservations/worker_test.ts",
+        "status": "added",
+        "sha": "159bf7808624a1fe9d2c9c9ef5a598a13169a18c",
+        "additions": 169,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 144,
+    "title": "feat(postona): Threads 接続→許可→投稿→読み戻しの統合（P1修正・トークン期限・接続入口／オフライン・無効・#140に積む下書き）",
+    "head": "09fd2c49114b7d26c23b71a3084574dc6a5a7ad6",
+    "head_ref": "claude/g4-postona-threads-integration-20261011",
+    "base": "2e75a6a842e70f3de78558681803b60935fb4251",
+    "base_ref": "claude/g4-postona-threads-manual-publish-20261011",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "apps/social-mobile/src/app/accounts/[id].tsx",
+        "status": "modified",
+        "sha": "3f38fe5059da72c4f133a68c78d1a877bfe40e17",
+        "additions": 2,
+        "deletions": 1
+      },
+      {
+        "path": "apps/social-mobile/src/app/accounts/index.tsx",
+        "status": "modified",
+        "sha": "5c99edce16c79cca86e178e220d8cc65b7d00aad",
+        "additions": 4,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/domain/threads-connect.ts",
+        "status": "added",
+        "sha": "071495381df02e77a795430b22faa104bc5dd2fd",
+        "additions": 78,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/domain/threads-manual-publish.ts",
+        "status": "modified",
+        "sha": "c408651ed0749fb49d3b6bd409a52af565cb1d10",
+        "additions": 2,
+        "deletions": 1
+      },
+      {
+        "path": "apps/social-mobile/src/features/threads-connect/threads-connect-card.tsx",
+        "status": "added",
+        "sha": "6c60ed6261cfe13ee759f3c43cd91aecfb17dab7",
+        "additions": 47,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/tests/threads-connect.test.mjs",
+        "status": "added",
+        "sha": "949c602a312f71da0e0ac76822b8dc7d2b41ed8b",
+        "additions": 111,
+        "deletions": 0
+      },
+      {
+        "path": "docs/postona/threads-connect-publish-integration-v1.md",
+        "status": "added",
+        "sha": "0a6610fda5980ddced885f1db82902ca87de5506",
+        "additions": 106,
+        "deletions": 0
+      },
+      {
+        "path": "docs/postona/threads-manual-publish-v1.md",
+        "status": "modified",
+        "sha": "b53f6ef00c8551afd59ed59f6ba34ad619b74808",
+        "additions": 2,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_integration/integration_smoke.sql",
+        "status": "added",
+        "sha": "cf2d360a05e7fba183b4a9091540b8c1a20f8ca6",
+        "additions": 154,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_integration/integration_smoke.ts",
+        "status": "added",
+        "sha": "447a002767e0d9813666c8c364ad9fd78ba9746d",
+        "additions": 119,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_publish/threads_credential_custody_candidate.sql",
+        "status": "added",
+        "sha": "8adcac7a80540c46755b5c77aa01bd21a47bafa8",
+        "additions": 131,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_publish/threads_publish_release_candidate.sql",
+        "status": "added",
+        "sha": "93d8e158bf2592352cd76bbfcaf5b5342faffb5b",
+        "additions": 422,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_connect_publish_integration.ts",
+        "status": "added",
+        "sha": "7673ec260b56a439c450345403c0439903672427",
+        "additions": 86,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_connect_publish_integration_test.ts",
+        "status": "added",
+        "sha": "82cedf8ff402469a888d0120bb658b0ae952ef86",
+        "additions": 129,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_manual_publish.ts",
+        "status": "modified",
+        "sha": "3130607f826cddbffad95fcf92afe300b96b9bcf",
+        "additions": 55,
+        "deletions": 40
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_manual_publish_fake.ts",
+        "status": "modified",
+        "sha": "9be3aaec21b538ca3abcc79324dc402db3a72958",
+        "additions": 51,
+        "deletions": 54
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_manual_publish_test.ts",
+        "status": "modified",
+        "sha": "8fbbd2ae92077be58feefdf36e3dc6664f1f5fb3",
+        "additions": 53,
+        "deletions": 45
+      },
+      {
+        "path": "supabase/functions/social-mobile-threads-publish/http.ts",
+        "status": "modified",
+        "sha": "1bbfe2d957df6f8090a46be3df1769c315c9b930",
+        "additions": 76,
+        "deletions": 38
+      },
+      {
+        "path": "supabase/functions/social-mobile-threads-publish/http_test.ts",
+        "status": "modified",
+        "sha": "985bea8910f3eac1cc8ba0d8df5c5e1a61028dd8",
+        "additions": 56,
+        "deletions": 28
+      },
+      {
+        "path": "supabase/functions/social-mobile-threads-publish/logic.ts",
+        "status": "modified",
+        "sha": "c67fd478ba32a820e1fa31843b02251f1365ce15",
+        "additions": 10,
+        "deletions": 7
+      },
+      {
+        "path": "supabase/tests/postona_threads_integration_run.sh",
+        "status": "added",
+        "sha": "9708f805df5874cc1cac6ab84182af1480cc7471",
+        "additions": 140,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_release_behavior.sql",
+        "status": "added",
+        "sha": "d66a07fe6d02e76316bc42e3846251883aa0ac2a",
+        "additions": 335,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_release_fixture.sql",
+        "status": "added",
+        "sha": "43cbc67a806604f1fd17d31b347ff2b5a49bad97",
+        "additions": 183,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_release_run.sh",
+        "status": "added",
+        "sha": "88813415413f8e7e4f56a263b26b9b8ac3f93365",
+        "additions": 312,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 141,
+    "title": "fix(personalized-reports): 個別レポートの配信を安定させる（20人の上限・完成の保護・止まった生成中）",
+    "head": "4bc5c0177aa74085eb488604a00e2b66c7fe527c",
+    "head_ref": "g2-personalized-p1-20261011",
+    "base": "28e6ee7e8bd0f2726971cee273e18a90c8cebd60",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "supabase/functions/personalized-reports/delivery_lifecycle.ts",
+        "status": "added",
+        "sha": "fe636bfbbd8ce89537b9e45cd89589bf20ec9800",
+        "additions": 229,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/personalized-reports/delivery_lifecycle_test.ts",
+        "status": "added",
+        "sha": "054039ac8511218e9c638ebdd13cdb09f1aa3d8f",
+        "additions": 316,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/personalized-reports/delivery_policy_test.ts",
+        "status": "modified",
+        "sha": "8d1063e752c35158cc0fc264952b7d12f50462e2",
+        "additions": 4,
+        "deletions": 1
+      },
+      {
+        "path": "supabase/functions/personalized-reports/index.ts",
+        "status": "modified",
+        "sha": "5a5347526e1bade8f187ee57d5186b96eb37efc8",
+        "additions": 52,
+        "deletions": 25
+      }
+    ]
+  },
+  {
+    "number": 140,
+    "title": "feat(postona): Threads 手動テキスト投稿 V1（公式2段階投稿・都度の権限再判定・画面／ソースのみ・無効・下書き）",
+    "head": "2e75a6a842e70f3de78558681803b60935fb4251",
+    "head_ref": "claude/g4-postona-threads-manual-publish-20261011",
+    "base": "d89f04391246e0be7fc1d1ab9269cb8e72323287",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "apps/social-mobile/src/app/accounts/[id].tsx",
+        "status": "modified",
+        "sha": "afb0910389ef74dab6f23023f76e0168dfddf90a",
+        "additions": 2,
+        "deletions": 1
+      },
+      {
+        "path": "apps/social-mobile/src/domain/threads-manual-publish.ts",
+        "status": "added",
+        "sha": "41c40ce5dd42e583647b49147d1924bdd88b7511",
+        "additions": 294,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/threads-publish/threads-publish-card.tsx",
+        "status": "added",
+        "sha": "5390f4348caa571012c98c5407ceb92f930db415",
+        "additions": 108,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/src/features/threads-publish/use-threads-manual-publish.ts",
+        "status": "added",
+        "sha": "2c195db40ce6e2d17e0ff6e435aabf191490a708",
+        "additions": 157,
+        "deletions": 0
+      },
+      {
+        "path": "apps/social-mobile/tests/threads-manual-publish.test.mjs",
+        "status": "added",
+        "sha": "b3b689f40ad51654e349c9d02598bfa2be00b956",
+        "additions": 307,
+        "deletions": 0
+      },
+      {
+        "path": "docs/postona/threads-manual-publish-v1.md",
+        "status": "added",
+        "sha": "cbbfc00049cc8a29245a43af4094786695c6e067",
+        "additions": 151,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_publish/threads_manual_publish_candidate.sql",
+        "status": "added",
+        "sha": "c464858d414d5ec6046594695460405690c118e5",
+        "additions": 641,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_manual_publish.ts",
+        "status": "added",
+        "sha": "0f18275861e67a7926262a9ecc796e7a0808d081",
+        "additions": 410,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_manual_publish_fake.ts",
+        "status": "added",
+        "sha": "ee6d23643902a8f00a05a92d104ed14c6c2647bc",
+        "additions": 335,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_manual_publish_test.ts",
+        "status": "added",
+        "sha": "db119d8c840b562cfb3ade05a6763dbe3d5d4e4f",
+        "additions": 448,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_publish_contract.ts",
+        "status": "added",
+        "sha": "7c9e7109fdc97fb1a2ea863a499db6c0e1dccc8d",
+        "additions": 382,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_publish_contract_test.ts",
+        "status": "added",
+        "sha": "f6cf84989e601e4bf25e71a3399a2cbf166a404e",
+        "additions": 294,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/social-mobile-threads-publish/http.ts",
+        "status": "added",
+        "sha": "001e706b323de16ff9eeea8e666c7a68297a6b07",
+        "additions": 218,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/social-mobile-threads-publish/http_test.ts",
+        "status": "added",
+        "sha": "d494bec220c658e23567ab330c235352dd76c645",
+        "additions": 100,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/social-mobile-threads-publish/index.ts",
+        "status": "added",
+        "sha": "3812a23f0afa933060844e012ad3d9d68589f9fe",
+        "additions": 6,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/social-mobile-threads-publish/logic.ts",
+        "status": "added",
+        "sha": "e8b6097cde3719cbc0ca3007b5b8743609fd1636",
+        "additions": 341,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/social-mobile-threads-publish/logic_test.ts",
+        "status": "added",
+        "sha": "9444ae4dce0ba5aff640ce36f37867a7d64e2f5c",
+        "additions": 202,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_publish_behavior.sql",
+        "status": "added",
+        "sha": "368a2afaf02255ec274b3cadb1e2febece4b2a09",
+        "additions": 442,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_publish_fixture.sql",
+        "status": "added",
+        "sha": "a8841afe3dbb39f59af808ad2549b31f4072e0fc",
+        "additions": 125,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_publish_run.sh",
+        "status": "added",
+        "sha": "4d405713662c31b94f9ced7a0d48f6a2470aab66",
+        "additions": 219,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 139,
+    "title": "POSTONA H5: disabled authenticated Threads runtime bridge candidate",
+    "head": "b4fa672f97592e87682671454e868a92098cbd56",
+    "head_ref": "codex/h5-threads-runtime-20261011",
+    "base": "e38788d6677082138f0990453c7d2f00549666d0",
+    "base_ref": "codex/h1-threads-edge-offline-20261011",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/postona/threads-auth-runtime-integration.md",
+        "status": "added",
+        "sha": "e0fbf0518178f990c52ddf886f91b059b15af114",
+        "additions": 50,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/claim_candidate.sql",
+        "status": "added",
+        "sha": "1af585cdfdfed7e5f7366e6e9a57175119975b71",
+        "additions": 97,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/deletion_contract.ts",
+        "status": "added",
+        "sha": "ead66826161899bb44231151d63fff6dadcc2d49",
+        "additions": 20,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/disabled_entry.ts",
+        "status": "added",
+        "sha": "cc88e21fa7ce5ef216e275f2443c19ceaaca1121",
+        "additions": 12,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/owner_transport.ts",
+        "status": "added",
+        "sha": "55a0d68b719f015a2868bc9e523d65c8178f4efe",
+        "additions": 191,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/parent_integration_run.sh",
+        "status": "added",
+        "sha": "d859f53f09dd17d39797deab522324f0b8ae27b2",
+        "additions": 62,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/postgres_behavior.sql",
+        "status": "added",
+        "sha": "1ee9e966efe732eab772791128de0f7416353de0",
+        "additions": 53,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/postgres_fixture.sql",
+        "status": "added",
+        "sha": "c65a6606c2f8a127b9526d70a11d4158606da8a4",
+        "additions": 27,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/postgres_run.sh",
+        "status": "added",
+        "sha": "29f4df8aef678b721296ba4c21996e8102635262",
+        "additions": 69,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/runtime.ts",
+        "status": "added",
+        "sha": "d5f122d27af5306bc08371114886f22496b5b0be",
+        "additions": 186,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/runtime_test.ts",
+        "status": "added",
+        "sha": "18b7231035ab2cf149157126dccabfb970239275",
+        "additions": 367,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_auth_runtime/verified_actor.ts",
+        "status": "added",
+        "sha": "d0924fcef6ded529647caa7338d59c805a0857bb",
+        "additions": 80,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/threads-oauth-connect-user/index.ts",
+        "status": "added",
+        "sha": "837573c50b13ba38cebf98a360297122c3fbd830",
+        "additions": 4,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 137,
+    "title": "docs(account): 共通アカウント Phase 3g 無料の OAuth/OIDC テスト環境の実現性（IDP_PREPAUSE_BLOCKED・下書き）",
+    "head": "eba0ba5abc56f8188a03d567d319754e4ac8ea4c",
+    "head_ref": "claude/g5-phase3g-free-idp-feasibility-20261011",
+    "base": "d1046319af21eb956640bb7a73ca721fa973b3b8",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/common-account/phase3g-free-idp-test-feasibility.md",
+        "status": "added",
+        "sha": "e2db20ca65b739e71b0f3779c17754a6e373e01a",
+        "additions": 137,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 135,
+    "title": "POSTONA: mock-only Threads OAuth Edge integration candidate",
+    "head": "e38788d6677082138f0990453c7d2f00549666d0",
+    "head_ref": "codex/h1-threads-edge-offline-20261011",
+    "base": "c30f246409a77080cbc03aef6c4cb72b5481e125",
+    "base_ref": "claude/g4-postona-threads-workspace-oauth-20261010",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "supabase/candidates/postona_threads_edge/README.md",
+        "status": "added",
+        "sha": "bb07bd8097b03806bfff844aedd0c8960d57a4b4",
+        "additions": 121,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_edge/offline_candidate.ts",
+        "status": "added",
+        "sha": "3cf19527d1662be6821d910e01fee2e9abb8a73b",
+        "additions": 400,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_edge/offline_candidate_test.ts",
+        "status": "added",
+        "sha": "4e13255436fb14e7b511639e05a6c2f6ecdd18eb",
+        "additions": 733,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_threads_edge/offline_isolation_test.ts",
+        "status": "added",
+        "sha": "68d78f79f25bfcd8a63cc298b4e0b39d0cab7b6d",
+        "additions": 42,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 134,
+    "title": "test(account): 共通アカウント Phase 3f H2 再レビュー残件 R1・R4・R5 の限定修正（オフライン・PR130 に積む・下書き）",
+    "head": "1d4de2c73c42221ad4b2f9b1f231c271aa084907",
+    "head_ref": "claude/g5-phase3f-e11-r1-r4-r5-fix-20261011",
+    "base": "5943fad5f724191f6ae77f3baf826a4c7698d542",
+    "base_ref": "claude/g5-phase3e-e11-review-corrective-20261011",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/catalog_extended_readback.sql",
+        "status": "modified",
+        "sha": "34780c05ebcfa7ddc44427413d07e1646dd473e9",
+        "additions": 14,
+        "deletions": 9
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/e11_matrix.ts",
+        "status": "modified",
+        "sha": "b7195a62d2abf3b50edbfae58e17bfa0a0a45b5b",
+        "additions": 86,
+        "deletions": 19
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/e11_matrix_test.ts",
+        "status": "modified",
+        "sha": "a8e60713a9067762c6bcb3765af6e38cda83319c",
+        "additions": 4,
+        "deletions": 4
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/evidence.ts",
+        "status": "modified",
+        "sha": "b06e1cc62db93684b42e845d66dff13208909fdf",
+        "additions": 6,
+        "deletions": 4
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/evidence_test.ts",
+        "status": "modified",
+        "sha": "bf7a549aa8d8fc469f54f011b23e8bd88b5850f6",
+        "additions": 1,
+        "deletions": 1
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/harness_mutations.py",
+        "status": "modified",
+        "sha": "0a99328531b1e7933ccc875ecb91b924002f2536",
+        "additions": 20,
+        "deletions": 9
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/phase3f_regression_test.ts",
+        "status": "added",
+        "sha": "c1bc04818a837cce632da9c89394c6932ebb2503",
+        "additions": 131,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/readback_local_run.sh",
+        "status": "modified",
+        "sha": "84f23336ac190b8eb30379fd2fec9ff03d6aad82",
+        "additions": 37,
+        "deletions": 2
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/target_readback.sql",
+        "status": "modified",
+        "sha": "812c8d728d5f60a4cdb35e1a478baed85629157f",
+        "additions": 45,
+        "deletions": 57
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/test_support.ts",
+        "status": "modified",
+        "sha": "f88c5858bbf657bd1a6f07aa8b1e72cb6699189a",
+        "additions": 4,
+        "deletions": 2
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/witness.ts",
+        "status": "modified",
+        "sha": "1616c3d76357e58d27a664381d0e877687a49629",
+        "additions": 22,
+        "deletions": 9
+      }
+    ]
+  },
+  {
+    "number": 130,
+    "title": "test(account): 共通アカウント Phase 3e E11 オフライン補正（H2 指摘 R1〜R5、PR122 に積む・下書き）",
+    "head": "5943fad5f724191f6ae77f3baf826a4c7698d542",
+    "head_ref": "claude/g5-phase3e-e11-review-corrective-20261011",
+    "base": "f17a47e36632fff4a1f4cfb0b860df200e1c99e1",
+    "base_ref": "claude/g5-phase3c-disposable-proof-readiness-20261010",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/common-account/phase3c-disposable-supabase-proof-runbook.md",
+        "status": "modified",
+        "sha": "9cf8d7d3dc6bbb3fa17a1ccb27a20ed816e374c9",
+        "additions": 158,
+        "deletions": 20
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/catalog.ts",
+        "status": "modified",
+        "sha": "23838586a5d6d3509e9b9de98a55087b481bbc61",
+        "additions": 32,
+        "deletions": 7
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/catalog_extended_readback.sql",
+        "status": "added",
+        "sha": "cd429f1e988cab615107a8a6435284b673c52e2d",
+        "additions": 76,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/catalog_test.ts",
+        "status": "modified",
+        "sha": "9b2e83dcd54649c68d836da93f3034b0c99d7da5",
+        "additions": 19,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/cli_test.ts",
+        "status": "modified",
+        "sha": "13c89fc1b784c3345dbf1bac691c85082b19fdf1",
+        "additions": 6,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/e11_matrix.ts",
+        "status": "added",
+        "sha": "439525997e4fa3af2ff42c9a3e79949728d76d6e",
+        "additions": 167,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/e11_matrix_test.ts",
+        "status": "added",
+        "sha": "daa017f2e931d4852067df5fa74470c3e47acc3f",
+        "additions": 86,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/e4_bound.ts",
+        "status": "added",
+        "sha": "8352952ce27aed9c784c66dae8c5fcd60f3c3e8d",
+        "additions": 61,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/e4_bound_test.ts",
+        "status": "added",
+        "sha": "4c1603be7079837986969156af6b232502031b2d",
+        "additions": 50,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/evidence.ts",
+        "status": "modified",
+        "sha": "f5f28412c4faa389aa73cb0a68601eb76cc5350a",
+        "additions": 71,
+        "deletions": 14
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/evidence_test.ts",
+        "status": "modified",
+        "sha": "7ddba77006679c4d4c263f6811d661d211f3dfd8",
+        "additions": 74,
+        "deletions": 18
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/guard.ts",
+        "status": "modified",
+        "sha": "ff0149c6741103b0d6a93c29dd772dc32e84a4b6",
+        "additions": 14,
+        "deletions": 1
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/guard_test.ts",
+        "status": "modified",
+        "sha": "75cc8c257283312d67ae59f533eee3a7ee4df6f1",
+        "additions": 19,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/harness_mutations.py",
+        "status": "modified",
+        "sha": "dab6cf2da8b33684b60a830e60df39e038389c6e",
+        "additions": 32,
+        "deletions": 3
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/operator_checklist.md",
+        "status": "modified",
+        "sha": "06049fcbe2a6e8bc1726b62158258a320527f827",
+        "additions": 18,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/plan.ts",
+        "status": "modified",
+        "sha": "bfdb6b5d312cca20bfe855e931f1806793305277",
+        "additions": 15,
+        "deletions": 1
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/readback_local_run.sh",
+        "status": "added",
+        "sha": "c5c4ceb680bfdc905926c310c20d97c543033edd",
+        "additions": 177,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/static_test.ts",
+        "status": "modified",
+        "sha": "d0ff5592abda394e3bdf9d0177ce49419331815f",
+        "additions": 7,
+        "deletions": 3
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/target_readback.sql",
+        "status": "added",
+        "sha": "25576102367f4423942ee196544b36835c753e33",
+        "additions": 61,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/test_support.ts",
+        "status": "added",
+        "sha": "a22b7cfb200bb18680bef186c20c0b70f8c0ef7e",
+        "additions": 63,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/witness.ts",
+        "status": "added",
+        "sha": "46a8efb24520e9aa66f2463f569b0e3ca0976057",
+        "additions": 137,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/witness_test.ts",
+        "status": "added",
+        "sha": "9b216260362e87c418fdb478d59d8916a9d73d6f",
+        "additions": 52,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 129,
+    "title": "feat(news): Phase 7 決算短信・FOMC本文取得の統合 (Draft)",
+    "head": "81251b316ae44a634a1b4108b420a18765d17261",
+    "head_ref": "claude/news-body-integration-phase7-20261011",
+    "base": "77a627daf03a981d65d3b6d04aa1995866a49451",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "supabase/functions/_shared/news_body_extraction/README.md",
+        "status": "added",
+        "sha": "14124bace1609b7f4decb2f5d253c36d0fde7b66",
+        "additions": 29,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/news_body_extraction/body_quality.ts",
+        "status": "added",
+        "sha": "cec1bbd5f4bbdee98ae18e454f218eaca84daabf",
+        "additions": 62,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/news_body_extraction/boj_document_text.ts",
+        "status": "added",
+        "sha": "eb43b0faabe163985dce11ab177c6f862b6b6823",
+        "additions": 89,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/news_body_extraction/fomc_statement_facts.ts",
+        "status": "added",
+        "sha": "655b4d5f825129a567401869933ba00275d1fc0c",
+        "additions": 229,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/news_body_extraction/kessan_tanshin_facts.ts",
+        "status": "added",
+        "sha": "dcbb7de0e903cf1c68081e5fae9744557b970893",
+        "additions": 408,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/news_body_extraction/news_body_extraction_test.ts",
+        "status": "added",
+        "sha": "961e06435f8abdb87d37894dd8c3794791a081dc",
+        "additions": 272,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/news_body_extraction/review_fixes_test.ts",
+        "status": "added",
+        "sha": "a3a86e6e9d0018d88bb5b780d84f20e2a27d683b",
+        "additions": 261,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/important-news-monitor/candidate_body_fill.ts",
+        "status": "added",
+        "sha": "c44c5aea3f6dc8eb8ec30770f58d310a644ba615",
+        "additions": 79,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/important-news-monitor/candidate_body_fill_test.ts",
+        "status": "added",
+        "sha": "0b27f1448408bb342c3627993da8fadf36c061df",
+        "additions": 104,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/important-news-monitor/fed_statement_enrichment.ts",
+        "status": "added",
+        "sha": "faab8d7f8170e5883c8b698ae7aa41d0d9694c15",
+        "additions": 279,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/important-news-monitor/fed_statement_enrichment_test.ts",
+        "status": "added",
+        "sha": "c24c58f969a4b06a32186cb4d30c7828d4b30026",
+        "additions": 280,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/important-news-monitor/index.ts",
+        "status": "modified",
+        "sha": "584aa4bf6c549a97709f3ad6d4a36b440ad8bff2",
+        "additions": 70,
+        "deletions": 3
+      },
+      {
+        "path": "supabase/functions/important-news-monitor/judgement_body_race_test.ts",
+        "status": "added",
+        "sha": "a95ffc26ebf2f175ac26f54b427302b0f26ed09a",
+        "additions": 121,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/important-news-monitor/kessan_pdf_body_integration_test.ts",
+        "status": "added",
+        "sha": "b0cbcb8f332c3fcd7056c0392eb3261ee6fe89fc",
+        "additions": 110,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/important-news-monitor/official_source_fetchers.ts",
+        "status": "modified",
+        "sha": "9549c7b46ad3940c3c9e78686f46e6bf8b929c22",
+        "additions": 37,
+        "deletions": 2
+      },
+      {
+        "path": "supabase/functions/important-news-monitor/release_flags_test.ts",
+        "status": "added",
+        "sha": "da8f2a925e7f08dd746350e107f81e421b7c68ea",
+        "additions": 173,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 128,
+    "title": "docs(account): 共通アカウント Phase 3d 写真アプリ一時停止・検証・復旧の手順と準備評価（オフラインのみ・下書き）",
+    "head": "e9244d29ea944156cf1479c0976053d433469e06",
+    "head_ref": "claude/g5-phase3d-pause-restore-preflight-20261010",
+    "base": "aa801dd8be52e1524d1ae5b814bb15e7069c617d",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/common-account/phase3d-family-photo-pause-restore-execution-window.md",
+        "status": "added",
+        "sha": "101fb504585b0fbb8403e2f42d1db553a8c9e12d",
+        "additions": 147,
+        "deletions": 0
+      },
+      {
+        "path": "docs/common-account/phase3d-proof-readiness-assessment.md",
+        "status": "added",
+        "sha": "e9ca89cde7a37543946e771411fab1ce7be1f514",
+        "additions": 99,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 127,
+    "title": "docs(postona): X自動投稿 Stage 3B 本番接続の準備（ソース・オフライン検証のみ・下書き）",
+    "head": "4b0278228e726b65d782e9b231eb6fe84d9173ad",
+    "head_ref": "claude/g3-postona-x-autopost-readiness-20261010",
+    "base": "f7eccc7f9fe8f9ecb7f7e8b13181a0d4901bcb8e",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/postona/x-autopost-stage3b-production-readiness-20261010.md",
+        "status": "added",
+        "sha": "0949f0f3ab51728b320d307309ad0161015b975f",
+        "additions": 181,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_x_autopost_readiness/prod_catalog.sh",
+        "status": "added",
+        "sha": "2d3bd6f792f14c1c52c937cf954b4e6761824283",
+        "additions": 64,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_x_autopost_readiness/prod_catalog.sql",
+        "status": "added",
+        "sha": "ae52eab892e2dd0ac946daa8f9c19fa84c8fedd3",
+        "additions": 82,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_x_autopost_readiness/readiness_behavior.sql",
+        "status": "added",
+        "sha": "e02fd50ff3b409e73f9133758aa1a2fde3ac6bc9",
+        "additions": 103,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_x_autopost_readiness/run.sh",
+        "status": "added",
+        "sha": "339e0fdda60c7c206d8d9a3dae8893cdf2827bb4",
+        "additions": 109,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 126,
+    "title": "feat(postona): X 接続の硬化候補 v2（先取りの再現と対策・未適用・到達不能・ソースのみ・下書き）",
+    "head": "65f49f98dab39b974e6e4b450f376a37f99ef1ac",
+    "head_ref": "claude/g4-postona-x-oauth-hardening-20261010",
+    "base": "eba79b4ec232c96cd4b6de2b74621f26d89e732a",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/postona/x-oauth-hardening-candidate-20261010.md",
+        "status": "added",
+        "sha": "40d41e451b7f02127558092ee4dec43f8378c43b",
+        "additions": 193,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/candidates/postona_x_oauth_hardening_candidate.sql",
+        "status": "added",
+        "sha": "978bc8eda2b659b06a5981960c8451596e0248a7",
+        "additions": 353,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/x_connect_rpc_contract.ts",
+        "status": "added",
+        "sha": "af2347af09fb012d45cc747aae65ff5c22cc4518",
+        "additions": 130,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/x_connect_rpc_contract_test.ts",
+        "status": "added",
+        "sha": "5343c2089bae33c7516c01583a13b7404eef4084",
+        "additions": 138,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_x_oauth_hardening_behavior.sql",
+        "status": "added",
+        "sha": "4a1263930167744bd7e56744471e732ea86f8e2d",
+        "additions": 583,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_x_oauth_hardening_run.sh",
+        "status": "added",
+        "sha": "6fbff298ce94a46a1de3c2a2b22e08575d40acf2",
+        "additions": 453,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_x_oauth_hardening_test_fixture.sql",
+        "status": "added",
+        "sha": "94022c74f1c65f8ea868af3600e6dcf928886e9b",
+        "additions": 10,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 125,
+    "title": "docs(mic): Stage 1 formal verification design (DESIGN ONLY)",
+    "head": "aa47e40d2a3ba7ec8bfc7d1d30c8eb51d53f2c48",
+    "head_ref": "claude/mic-stage1-verification-design-20261010",
+    "base": "e77354bd0eb60b1c8ba7561a2582328d54cd2897",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/mic/stage1-formal-verification-design-20261010.md",
+        "status": "added",
+        "sha": "4f668def1a2aa9b4f824968a796b301513f23e30",
+        "additions": 800,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 124,
+    "title": "feat(postona): Threads ワークスペースと OAuth begin/consume/complete の候補（未適用・到達不能・ソースのみ・下書き）",
+    "head": "c30f246409a77080cbc03aef6c4cb72b5481e125",
+    "head_ref": "claude/g4-postona-threads-workspace-oauth-20261010",
+    "base": "5ef03b7131b3991d8c2d721dd6401b7c185e6314",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/postona/threads-connection-phase2b.md",
+        "status": "modified",
+        "sha": "6d9237d4c90ea98b7365cd299aca12b8166ef8d6",
+        "additions": 150,
+        "deletions": 3
+      },
+      {
+        "path": "supabase/candidates/postona_threads_oauth_workspace_candidate.sql",
+        "status": "added",
+        "sha": "7e7fce8b17dda37cf58bc3d64c6c69f2aec9173b",
+        "additions": 388,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_connect_rpc_contract.ts",
+        "status": "added",
+        "sha": "d397cb73131305cd3f04f60e95dc54fc755011ed",
+        "additions": 164,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/_shared/social/threads_connect_rpc_contract_test.ts",
+        "status": "added",
+        "sha": "7416b0f27fd5fb62ae1b76a690146e99f9edeed2",
+        "additions": 178,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_oauth_behavior.sql",
+        "status": "added",
+        "sha": "09941f9bd83d5bedb738a5d8231e5c3b7679b080",
+        "additions": 584,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_oauth_mock_t13_fixture.sql",
+        "status": "added",
+        "sha": "9eca02a9101c803794c8349f566500b48c6b13ba",
+        "additions": 75,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_oauth_run.sh",
+        "status": "added",
+        "sha": "40e986838491f254da9e7d041b15e939551e6fda",
+        "additions": 415,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/postona_threads_oauth_test_fixture.sql",
+        "status": "added",
+        "sha": "20890b867c078ea0b4f224918588728bfe6d24f8",
+        "additions": 53,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 123,
+    "title": "test(social-mobile): AI相談V1 本番接続の実行バンドル（S0〜S5、適用済みの記録）",
+    "head": "9349fc79e9a8f7f67ca47b9e5c7281ad37334f13",
+    "head_ref": "claude/g3-consult-v1-activation-20261010",
+    "base": "6709cfeb34fd745379a24b44f021d287109966c4",
+    "base_ref": "main",
+    "draft": false,
+    "state": "open",
+    "files": [
+      {
+        "path": "supabase/tests/social_mobile_content_settings_activation/apply_guard_post.sql",
+        "status": "added",
+        "sha": "98beef1b0a2ed0bfb664f863cfd69f49b01ebe47",
+        "additions": 17,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/social_mobile_content_settings_activation/apply_guard_pre.sql",
+        "status": "added",
+        "sha": "28e08c072f4c3db0de0f1d3d20fc1174d5770b4e",
+        "additions": 24,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/social_mobile_content_settings_activation/check.py",
+        "status": "added",
+        "sha": "c1d4373e21610405864c2a2419b88a932d3c077a",
+        "additions": 243,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/social_mobile_content_settings_activation/expected_readback.json",
+        "status": "added",
+        "sha": "a738017c69f75fbf51e8d78b69144d55e5fb8493",
+        "additions": 196,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/social_mobile_content_settings_activation/preflight.sql",
+        "status": "added",
+        "sha": "a0beb50d653b6d7e68af9ba55dbe7221d2a3805e",
+        "additions": 79,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/social_mobile_content_settings_activation/readback.sql",
+        "status": "added",
+        "sha": "4d6cb3475c4aafdf8845fd62abc16386cc4a8d72",
+        "additions": 70,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/social_mobile_content_settings_activation/run.sh",
+        "status": "added",
+        "sha": "32cc050ba38a3a73391907ab4c1c3dfc102bece5",
+        "additions": 257,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/social_mobile_content_settings_activation/smoke.py",
+        "status": "added",
+        "sha": "4cbf51b80fb8c974d22d72c011f6cae4d8c1f1be",
+        "additions": 256,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/social_mobile_content_settings_activation/snapshot.sql",
+        "status": "added",
+        "sha": "c28b7b2926b811a280ab1a70ce3fe0e4486f81a9",
+        "additions": 30,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 122,
+    "title": "test(account): 共通アカウント Phase 3c 使い捨て Supabase 検証の事前準備（オフラインのみ・下書き）",
+    "head": "f17a47e36632fff4a1f4cfb0b860df200e1c99e1",
+    "head_ref": "claude/g5-phase3c-disposable-proof-readiness-20261010",
+    "base": "98f50802313895ddafbd17b78c4a2858acd0e89b",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/common-account/phase3c-disposable-supabase-proof-runbook.md",
+        "status": "added",
+        "sha": "9b76fa7f7b0a8f9e88025bcb2521e61f711aa038",
+        "additions": 359,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/catalog.ts",
+        "status": "added",
+        "sha": "1e873b19841db1f1838756bf9e0ff880482363ba",
+        "additions": 222,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/catalog_fingerprint.sql",
+        "status": "added",
+        "sha": "1dcc79835417ba147040e758bbff2a08dac8a99e",
+        "additions": 64,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/catalog_test.ts",
+        "status": "added",
+        "sha": "49c4388ee75bedb3d3f01adf3d49fa9287725115",
+        "additions": 65,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/cli.ts",
+        "status": "added",
+        "sha": "bae3a506f24e987a0ac2f3e5af7f70cb9edebc8a",
+        "additions": 79,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/cli_test.ts",
+        "status": "added",
+        "sha": "93f807b5d01e6ea8bfb3b3d5d00b13dcd86d66ab",
+        "additions": 92,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/evidence.ts",
+        "status": "added",
+        "sha": "c6b7dfe15cfb75df56be564716d36936c4572c54",
+        "additions": 62,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/evidence_test.ts",
+        "status": "added",
+        "sha": "4b18101a0ebee102cdbd7e71ae7c55691777d6d0",
+        "additions": 71,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/fingerprint_local_run.sh",
+        "status": "added",
+        "sha": "ab01aaf50d869a6dd93435fd71588d85b2238a2b",
+        "additions": 80,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/fixtures/project_marker.sample.json",
+        "status": "added",
+        "sha": "8a7f903a4976a5849542463ea6d7a164838b53d3",
+        "additions": 10,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/fixtures/run_request.sample.json",
+        "status": "added",
+        "sha": "3cb39a065a5fd265dccd4a2f1aa33273c3c9c1bf",
+        "additions": 18,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/fixtures/used_projects.sample.json",
+        "status": "added",
+        "sha": "55e4f5d6b78588aa3796364070c89ebd983bb0f6",
+        "additions": 4,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/guard.ts",
+        "status": "added",
+        "sha": "8ca64608d982294d9b0a5466b818f184e081a3fa",
+        "additions": 172,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/guard_test.ts",
+        "status": "added",
+        "sha": "8edec46f7a77bdc60b88f6beb789363d22761735",
+        "additions": 184,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/harness_mutations.py",
+        "status": "added",
+        "sha": "38379274cae2aa248d0df32b31978ff685a0542b",
+        "additions": 92,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/operator_checklist.md",
+        "status": "added",
+        "sha": "2d17d5009e19f1d4dab283cc38bea5c00c1c419c",
+        "additions": 53,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/plan.ts",
+        "status": "added",
+        "sha": "0ad39fcc7a6e8caaf98cf1220f732a8a27ed2860",
+        "additions": 38,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/pr121_e1_e12_rows.md",
+        "status": "added",
+        "sha": "442f767e755dc6733839d9756817acaf7036d6db",
+        "additions": 12,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/redact.ts",
+        "status": "added",
+        "sha": "bf8db2d9196e907d4b23cb383bd5b95b42012f6e",
+        "additions": 114,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/redact_test.ts",
+        "status": "added",
+        "sha": "e6797eff05137611d90d6b3d829a1dbe60d52518",
+        "additions": 79,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_disposable_e2e/static_test.ts",
+        "status": "added",
+        "sha": "feea4177ba134d8fc068e16d08a2a7f980881c9c",
+        "additions": 50,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 121,
+    "title": "feat(account): 共通アカウント Phase 3b 本人確認方法の追加と書き込みの fence 実現性調査＋未接続の書き込みガード（ソースのみ・下書き）",
+    "head": "76b50e1e03f82faaa3460bab1603afa8fef3ce44",
+    "head_ref": "claude/g5-phase3b-identity-writer-fence-20261010",
+    "base": "c2a9c0d6209658c8517dd699b5346dc30383512c",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/common-account/phase3a-deletion-orchestrator.md",
+        "status": "modified",
+        "sha": "d23c2fee65705d68bea94eb07d098109d29f756e",
+        "additions": 3,
+        "deletions": 0
+      },
+      {
+        "path": "docs/common-account/phase3b-identity-writer-fence-feasibility.md",
+        "status": "added",
+        "sha": "b202f74550a8085d6914b073b506dce1bc888bf2",
+        "additions": 375,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/migrations/20261010051938_common_account_service_write_guard.sql",
+        "status": "added",
+        "sha": "da587631cfe8872e3ccf6fd521b919a5439c6574",
+        "additions": 183,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_write_guard_behavior.sql",
+        "status": "added",
+        "sha": "e81962a6ec65a2e6528daab71d4be0cbf0d5941e",
+        "additions": 229,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_write_guard_fixture.sql",
+        "status": "added",
+        "sha": "32cd803cf27f416029f0eb194456ab935139825c",
+        "additions": 100,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_write_guard_mutations.py",
+        "status": "added",
+        "sha": "315a66f5b208239a3c04b63c732d62f1c1c15c44",
+        "additions": 153,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_write_guard_rollback.sql",
+        "status": "added",
+        "sha": "7c8a7755d18def5f307741d86be41f90f59c426a",
+        "additions": 20,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/tests/common_account_write_guard_run.sh",
+        "status": "added",
+        "sha": "fad21146b8dbebd91a762da1dd186da4a9337c1a",
+        "additions": 334,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 115,
+    "title": "feat(api-optimization): OpenAI/Claude 比較環境と Claude API 導入準備（本番変更なし）",
+    "head": "8f4305574d1895a9f3b45c91470792bed7edb774",
+    "head_ref": "claude/b-claude-api-compare-20261009",
+    "base": "4e05f8d45e33b95d6bfce37ec5258260c115d2af",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": "docs/model-optimization/CLAUDE_API_PREPARATION_2026-10-09.md",
+        "status": "added",
+        "sha": "e3e6d0ff43f239f7a629d8fd47177e003fbb06f4",
+        "additions": 115,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/README.md",
+        "status": "added",
+        "sha": "0ebcd7cd2cea15e06aad106916ba4307c6cacd34",
+        "additions": 77,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/data/openai_ledger_snapshot_2026-10-09.json",
+        "status": "added",
+        "sha": "b8f92f1f7a84c3a5fcf444e2dc2679c8ef570728",
+        "additions": 41,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/fixtures/cases.json",
+        "status": "added",
+        "sha": "030cd7097b1cb7075cec89ea83f87d3e3339e63f",
+        "additions": 1081,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/scripts/build_cases.ts",
+        "status": "added",
+        "sha": "8df7803d94d14fd31b9f848bc9734fde8c94a494",
+        "additions": 124,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/scripts/export_cases.sql",
+        "status": "added",
+        "sha": "d22c4269a757d8782fd1838db84201e4b3ff8248",
+        "additions": 21,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/budget.ts",
+        "status": "added",
+        "sha": "43bd57a2503b2d31114e6afa4dd17452a8a64895",
+        "additions": 76,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/budget_test.ts",
+        "status": "added",
+        "sha": "fa64d067824738537f44a6b2a72e6b6940134513",
+        "additions": 71,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/capture.ts",
+        "status": "added",
+        "sha": "0cd5010f3e7e85cde31c1afbeff0a7720c6f6dcc",
+        "additions": 34,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/cli.ts",
+        "status": "added",
+        "sha": "fbbe0e6ad0a470c3e041efebb9eec17363a16755",
+        "additions": 130,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/cli_test.ts",
+        "status": "added",
+        "sha": "f4c2d8ea490732c65ed5501483adc579469c62ed",
+        "additions": 75,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/cost_simulation.ts",
+        "status": "added",
+        "sha": "6675e5a71c30c0659b231377886785c7b82e8ba8",
+        "additions": 165,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/cost_simulation_test.ts",
+        "status": "added",
+        "sha": "5591e8a2be9b3b1cc0e1c735f9eff0431e61fe2e",
+        "additions": 91,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/estimate.ts",
+        "status": "added",
+        "sha": "eb5286e745d5b1f6dd5120122a8d8d5b20d9acb0",
+        "additions": 69,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/fixtures.ts",
+        "status": "added",
+        "sha": "66d9fe2e6e2ca75118f7c188cc52f1c3406543f6",
+        "additions": 79,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/fixtures_test.ts",
+        "status": "added",
+        "sha": "9d36f362028aa0e2a73b72369edb6a07c834810f",
+        "additions": 123,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/isolation_test.ts",
+        "status": "added",
+        "sha": "b344517577074de0bf55c87a9c45ac3c4360e690",
+        "additions": 133,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/keys.ts",
+        "status": "added",
+        "sha": "bdb41b1a0167d6aec41c329a357faeb0e236489a",
+        "additions": 51,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/keys_test.ts",
+        "status": "added",
+        "sha": "25a544f3f9f6e635d4b644632b81d4da9542a9e5",
+        "additions": 48,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/ledger_snapshot.ts",
+        "status": "added",
+        "sha": "841e019918e9008a2d47e9466d975b84a87d2481",
+        "additions": 50,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/metrics.ts",
+        "status": "added",
+        "sha": "a700cceedd931c1c50d8326fcc5932e363d9c94e",
+        "additions": 201,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/metrics_test.ts",
+        "status": "added",
+        "sha": "71a442e77801d2aaf98c3240d984bc1d2d386661",
+        "additions": 160,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/neutral.ts",
+        "status": "added",
+        "sha": "61aa58901c2cc2dac7b1427fa343d3e319122312",
+        "additions": 68,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/pricing.ts",
+        "status": "added",
+        "sha": "cc153aabf5e4b9e89d5772e1989571b56c44076b",
+        "additions": 121,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/pricing_test.ts",
+        "status": "added",
+        "sha": "1d2cc1988e857f550747b5153bdccdcf2af95da7",
+        "additions": 85,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/probe.ts",
+        "status": "added",
+        "sha": "9346640867d0adfdb0d32f6cb206a438c9a2c314",
+        "additions": 141,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/probe_cli.ts",
+        "status": "added",
+        "sha": "e1c379fc92fc27919c9c3bf09e1fb741cba8b0fb",
+        "additions": 65,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/probe_test.ts",
+        "status": "added",
+        "sha": "746aae066b977d904b7153e9a5459827eee5a4fe",
+        "additions": 102,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/provider_spec.ts",
+        "status": "added",
+        "sha": "3a4e4fe2afac93bdb580a4366a9659f8e4870057",
+        "additions": 44,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/provider_spec_test.ts",
+        "status": "added",
+        "sha": "c203843c34d5696d7ac3557fdf737a82469d483e",
+        "additions": 25,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/providers/anthropic.ts",
+        "status": "added",
+        "sha": "6635e76e2c428339da8536c62a62ab4cdd7ec3d5",
+        "additions": 236,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/providers/anthropic_test.ts",
+        "status": "added",
+        "sha": "b26e98a098a096283628e0d1c99071c1605eb78e",
+        "additions": 286,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/providers/common.ts",
+        "status": "added",
+        "sha": "3a496fb27f4f1bff930a969ae8781d4bd8cee057",
+        "additions": 59,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/providers/mock.ts",
+        "status": "added",
+        "sha": "c25604e240a81c99d126930ec15b77c95b705d35",
+        "additions": 69,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/providers/openai.ts",
+        "status": "added",
+        "sha": "e72986ddec4cfb4ed34327cf2f192b766043bde9",
+        "additions": 176,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/providers/openai_test.ts",
+        "status": "added",
+        "sha": "0c03547b30d80d08d09ae4c4502c3c3d612cb707",
+        "additions": 196,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/providers/recorded.ts",
+        "status": "added",
+        "sha": "eb9a4ab94a57337127f01edccaf91e393fb088f7",
+        "additions": 106,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/redact.ts",
+        "status": "added",
+        "sha": "e281b2f50223c3d3f67fc65f618a913d8ad1aff3",
+        "additions": 36,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/redact_test.ts",
+        "status": "added",
+        "sha": "f9ea353f48281abb1c4ddf39f70652c498d3f07c",
+        "additions": 41,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/retry.ts",
+        "status": "added",
+        "sha": "ff0650d4c5b3220333c68394a72db42be2ebd855",
+        "additions": 83,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/retry_test.ts",
+        "status": "added",
+        "sha": "53775b39d0645fdde980b88eac3ccda079b4bde9",
+        "additions": 117,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/runner.ts",
+        "status": "added",
+        "sha": "5b345c63d1d940ac25529243965cf9a9e229804c",
+        "additions": 252,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/runner_test.ts",
+        "status": "added",
+        "sha": "e0bbfc7129aaf2f51274d70a3a363dc945222d3d",
+        "additions": 151,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/sanitize.ts",
+        "status": "added",
+        "sha": "a724734c3bfa0515eec337aaf5d439b5850f3539",
+        "additions": 30,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/schema.ts",
+        "status": "added",
+        "sha": "69944d1e2b712e1ed53850c50a09e4fca6173c6b",
+        "additions": 61,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/schema_test.ts",
+        "status": "added",
+        "sha": "e5ccc78d7036b8bee2315e4940c7196d66da66a3",
+        "additions": 96,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/tasks.ts",
+        "status": "added",
+        "sha": "3e3de308ee36f775daf9da31101fed69dd9bd772",
+        "additions": 158,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/tasks_test.ts",
+        "status": "added",
+        "sha": "313b0edc63516f79d472d70eb54503386d1e3d2a",
+        "additions": 121,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/types.ts",
+        "status": "added",
+        "sha": "71b738e8704f984a051b7da18f6e26979d29e11f",
+        "additions": 98,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/usage_dimensions.ts",
+        "status": "added",
+        "sha": "653e9d96d37b2e18e1ce9bfcb0cb6be63be7815c",
+        "additions": 78,
+        "deletions": 0
+      },
+      {
+        "path": "tools/provider-compare/src/usage_dimensions_test.ts",
+        "status": "added",
+        "sha": "d6f80b243ad98b5c5ad618a6371d3e4c5a94159c",
+        "additions": 70,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 33,
+    "title": "feat(admin): Web password recovery and invite flow (G4)",
+    "head": "0cc48fe3ac1c376d747a74b6b31ea34990615805",
+    "head_ref": "g4/admin-password-recovery-20260925",
+    "base": "0735c63ef452b5c34948736c6c844c062c16e2ba",
+    "base_ref": "main",
+    "draft": false,
+    "state": "open",
+    "files": [
+      {
+        "path": "apps/admin/.env.local.example",
+        "status": "modified",
+        "sha": "2789b03f6296510f4f399cbd357e0d40e1a46e6a",
+        "additions": 3,
+        "deletions": 0
+      },
+      {
+        "path": "apps/admin/netlify.toml",
+        "status": "modified",
+        "sha": "da0fcef31dffd235d12b766a430a9acb5244a66f",
+        "additions": 6,
+        "deletions": 0
+      },
+      {
+        "path": "apps/admin/src/app/auth/confirm/route.ts",
+        "status": "added",
+        "sha": "531522b07d5276e6b6ea46684b5a65c82264f4e4",
+        "additions": 49,
+        "deletions": 0
+      },
+      {
+        "path": "apps/admin/src/app/forgot-password/forgot-password-form.tsx",
+        "status": "added",
+        "sha": "c80b5276045cfc8562121ff139ebf5395eb8d37b",
+        "additions": 86,
+        "deletions": 0
+      },
+      {
+        "path": "apps/admin/src/app/forgot-password/page.tsx",
+        "status": "added",
+        "sha": "682bd028eeb0c49e046cda9e19d70fd604d44fc3",
+        "additions": 33,
+        "deletions": 0
+      },
+      {
+        "path": "apps/admin/src/app/login/page.tsx",
+        "status": "modified",
+        "sha": "340f5f4c66c1df42f07546734c6f55d0a18e0f45",
+        "additions": 10,
+        "deletions": 0
+      },
+      {
+        "path": "apps/admin/src/app/reset-password/page.tsx",
+        "status": "added",
+        "sha": "b3236da8b06d2954dd5801b673898e6eb9f0efda",
+        "additions": 29,
+        "deletions": 0
+      },
+      {
+        "path": "apps/admin/src/app/reset-password/recovery-link-fallback.tsx",
+        "status": "added",
+        "sha": "0fa21641931ad9746bfe40f19f99dd44d2f7ec09",
+        "additions": 62,
+        "deletions": 0
+      },
+      {
+        "path": "apps/admin/src/app/reset-password/reset-password-form.tsx",
+        "status": "added",
+        "sha": "2aade112270bcf8d10dc82ab685b7a28b899b1e7",
+        "additions": 175,
+        "deletions": 0
+      },
+      {
+        "path": "apps/admin/src/lib/actions/recovery-context.ts",
+        "status": "added",
+        "sha": "175c0864544e80cd98a2034bbd5d2ad84f932370",
+        "additions": 43,
+        "deletions": 0
+      },
+      {
+        "path": "apps/admin/src/lib/admin-route-boundary.test.ts",
+        "status": "added",
+        "sha": "35bfd63accfccdd5e62b8908aa2e53b9a01a20f5",
+        "additions": 240,
+        "deletions": 0
+      },
+      {
+        "path": "apps/admin/src/lib/invite-purpose.test.ts",
+        "status": "added",
+        "sha": "a3d48ef71c1390e6951982c31d5e3ad014234203",
+        "additions": 332,
+        "deletions": 0
+      },
+      {
+        "path": "apps/admin/src/lib/invite-purpose.ts",
+        "status": "added",
+        "sha": "f19233be97fae9e348af1845d6987bb77f0211ef",
+        "additions": 219,
+        "deletions": 0
+      },
+      {
+        "path": "apps/admin/src/lib/password-recovery.test.ts",
+        "status": "added",
+        "sha": "12436a557293c749e36ac8f53d497b0cf6a98da1",
+        "additions": 521,
+        "deletions": 0
+      },
+      {
+        "path": "apps/admin/src/lib/password-recovery.ts",
+        "status": "added",
+        "sha": "e87a9605293306dc2d6fca3f0b756df35e81af14",
+        "additions": 343,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 11,
+    "title": "chore(agent): record important news caller auth blocker",
+    "head": "6ef9f327c13f144b0f5525e7064880c98ca24081",
+    "head_ref": "codex/important-news-caller-auth-blocker-20260923",
+    "base": "5c6dc33eb3f8d8fb91928a71568963ecf57447e9",
+    "base_ref": "main",
+    "draft": true,
+    "state": "open",
+    "files": [
+      {
+        "path": ".agent/ACTIVE_TASK.md",
+        "status": "modified",
+        "sha": "bb81cc71685de5f6d7fad7952f8275a52d22d96a",
+        "additions": 2,
+        "deletions": 2
+      },
+      {
+        "path": ".agent/CURRENT_STATE.md",
+        "status": "modified",
+        "sha": "4ea4ac6018e053d100e9e7c7aaf163befc188c22",
+        "additions": 4,
+        "deletions": 5
+      },
+      {
+        "path": ".agent/tasks/CODEX_TASK.md",
+        "status": "modified",
+        "sha": "44655719531f20477d9302379fec7be163dbfdc6",
+        "additions": 7,
+        "deletions": 2
+      }
+    ]
+  },
+  {
+    "number": 10,
+    "title": "docs: audit Kabumori release readiness",
+    "head": "04f966e2dcb243b86b145c1e141dc8a4244e6d58",
+    "head_ref": "codex/kabumori-release-readiness-audit-20260923",
+    "base": "f4e1fe98b679d6a7e29c3c7d150ddad0312085b8",
+    "base_ref": "main",
+    "draft": false,
+    "state": "open",
+    "files": [
+      {
+        "path": ".agent/ACTIVE_TASK.md",
+        "status": "modified",
+        "sha": "1087f5e766980d4b595038ac9c7237bd0ec8600e",
+        "additions": 2,
+        "deletions": 2
+      },
+      {
+        "path": ".agent/CODEX_REPORT.md",
+        "status": "modified",
+        "sha": "4f0628a8590c8b08b02bd8effaac9204f452f5a0",
+        "additions": 19,
+        "deletions": 0
+      },
+      {
+        "path": ".agent/CURRENT_STATE.md",
+        "status": "modified",
+        "sha": "13907db3085c963a478c7b6556dfca038a61a298",
+        "additions": 4,
+        "deletions": 5
+      },
+      {
+        "path": ".agent/tasks/CODEX_TASK.md",
+        "status": "modified",
+        "sha": "92a6fdcef6e1cc2103c953e072387d8fe2b6b1a0",
+        "additions": 2,
+        "deletions": 2
+      },
+      {
+        "path": "docs/RELEASE_READINESS_AUDIT_2026-09.md",
+        "status": "added",
+        "sha": "e51d8c47f390f20850628cf59c02bbc856346666",
+        "additions": 113,
+        "deletions": 0
+      }
+    ]
+  },
+  {
+    "number": 3,
+    "title": "H1: roll out privacy-minimal important-news search diagnostics",
+    "head": "0ea64addffdcd9f5b62ce57efd1de7d295b34a7d",
+    "head_ref": "codex/h1-search-diagnostics-production-rollout-20260922",
+    "base": "2b5eec744f3ad9e3afb5db83b67bf3d4135d779e",
+    "base_ref": "main",
+    "draft": false,
+    "state": "open",
+    "files": [
+      {
+        "path": "supabase/functions/important-news-shadow/index.ts",
+        "status": "modified",
+        "sha": "f29ff5bcd9c733b73652c949f6eb3f2625742375",
+        "additions": 76,
+        "deletions": 53
+      },
+      {
+        "path": "supabase/functions/important-news-shadow/search_telemetry.ts",
+        "status": "added",
+        "sha": "8beb145cad3f8faf108edf5ae52b312c824ab4e4",
+        "additions": 167,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/functions/important-news-shadow/search_telemetry_test.ts",
+        "status": "added",
+        "sha": "f74b63da9c733808fee76b8a61e1725e994dac1b",
+        "additions": 214,
+        "deletions": 0
+      },
+      {
+        "path": "supabase/migrations/20260921115317_important_news_search_diagnostics.sql",
+        "status": "added",
+        "sha": "65a8c41eee215396242f53c34da405a5eee29916",
+        "additions": 36,
+        "deletions": 0
+      }
+    ]
+  }
+]

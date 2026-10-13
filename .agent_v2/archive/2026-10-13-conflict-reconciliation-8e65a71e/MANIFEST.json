@@ -1,0 +1,25 @@
+{
+  "snapshot_kind": "pre-edit state and reconciliation evidence; not cutover approval",
+  "source_commit": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+  "compared_main": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+  "captured_at_jst": "2026-10-13T14:31:03.615786+09:00",
+  "files": [
+    {
+      "original_path": ".agent_v2/CURRENT_STATE.md",
+      "archive_path": ".agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/before/.agent_v2/CURRENT_STATE.md",
+      "size": 14389,
+      "sha256": "7935102d41865bec86699ad73b008ba031dab4528e062200185fdf289c2b9190",
+      "source_commit": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+      "git_blob": "a7122f449e072afdadabf0a499646bc7065d74a0"
+    },
+    {
+      "original_path": ".agent_v2/migrations/FULL_MIGRATION_20261013.md",
+      "archive_path": ".agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/before/.agent_v2/migrations/FULL_MIGRATION_20261013.md",
+      "size": 7764,
+      "sha256": "353f20e8b90af70cfa812fd9c2f303ebd38bdc48549b4a9e3ee9f8b2a9b51147",
+      "source_commit": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+      "git_blob": "44c9e5e27bdbf39246bd5d2d76a8291ca9b433b5"
+    }
+  ],
+  "restore_verification": "RESTORE_RESULT.json"
+}

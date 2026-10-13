@@ -383,3 +383,15 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 | G8 | `news-improvement-a-jp-official-diagnostics-j1a-g8-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_8.md` |
 | G9 | `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_9.md` |
 | G10 | `agent-v2-dual-slot-migration-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_10.md` |
+
+
+## 2026-10-13 — 完全移行準備の競合整理・変更前状態保存
+
+- task_id: agent-full-migration-final-snapshot-cutover-20261013（30枠外の制御TASK、slot未割当）
+- source_commit: 8e65a71e3dc7b144ec511fa853ffe08e522dc827; compared_main: b7ce2c4fd94225542a66aef94042ca528cc47f09
+- archive_path: `.agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/`
+- original_path: `.agent_v2/CURRENT_STATE.md`、`.agent_v2/migrations/FULL_MIGRATION_20261013.md`（変更前全文2ファイル）。
+- size/SHA256/Git blob/source commit: `MANIFEST.json`。空ディレクトリへの2/2実復元・元commitバイト一致: `RESTORE_RESULT.json`。今回全保存物: `EVIDENCE_MANIFEST.json`と`SHA256SUMS`。
+- 30枠最新metadata、全46open PRのファイル一覧、3PR/12パスのmain突合、134登録worktreeの境界は同archive内のJSON。前回snapshot SHA256 64/64再照合。
+- PR172保全branch: `backup/pr172-pre-conflict-prep-8e65a71-20261013`。3PRは未変更・未close、旧管理差分merge経路とローカル保全条件が残る。旧checkoutのHANDOFFも未コミットのためrootへの追記を避け、下記専用Reportを引継ぎ先とする。
+- 検索Report: `.agent_v2/migrations/CONFLICT_RECONCILIATION_20261013.md`。推薦実装Opus5.5（高）、独立レビューSol（高）。正式昇格・独立レビュー・main merge・productionは未実施。現在状態の正本ではなく履歴検索索引。

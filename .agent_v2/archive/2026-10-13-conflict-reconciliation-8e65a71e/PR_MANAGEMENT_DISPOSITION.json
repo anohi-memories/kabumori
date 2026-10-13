@@ -1,0 +1,134 @@
+[
+  {
+    "pr": 10,
+    "path": ".agent/ACTIVE_TASK.md",
+    "merge_base": "f4e1fe98b679d6a7e29c3c7d150ddad0312085b8",
+    "head": "04f966e2dcb243b86b145c1e141dc8a4244e6d58",
+    "main": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+    "main_blob": "5999de4b3297128321c554fea1eb1f0fed88f965",
+    "head_blob": "1087f5e766980d4b595038ac9c7237bd0ec8600e",
+    "same_as_main": false,
+    "disposition": "ARCHIVE_ONLY_EXCLUDE_FROM_CURRENT_MANAGEMENT"
+  },
+  {
+    "pr": 10,
+    "path": ".agent/CODEX_REPORT.md",
+    "merge_base": "f4e1fe98b679d6a7e29c3c7d150ddad0312085b8",
+    "head": "04f966e2dcb243b86b145c1e141dc8a4244e6d58",
+    "main": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+    "main_blob": "45f41d5c5fbafd9ba55f42cde56997cd3f13a555",
+    "head_blob": "4f0628a8590c8b08b02bd8effaac9204f452f5a0",
+    "same_as_main": false,
+    "disposition": "ARCHIVE_ONLY_EXCLUDE_FROM_CURRENT_MANAGEMENT"
+  },
+  {
+    "pr": 10,
+    "path": ".agent/CURRENT_STATE.md",
+    "merge_base": "f4e1fe98b679d6a7e29c3c7d150ddad0312085b8",
+    "head": "04f966e2dcb243b86b145c1e141dc8a4244e6d58",
+    "main": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+    "main_blob": "a793d97a0de96750f1215360f0674518f0d71b46",
+    "head_blob": "13907db3085c963a478c7b6556dfca038a61a298",
+    "same_as_main": false,
+    "disposition": "ARCHIVE_ONLY_EXCLUDE_FROM_CURRENT_MANAGEMENT"
+  },
+  {
+    "pr": 10,
+    "path": ".agent/tasks/CODEX_TASK.md",
+    "merge_base": "f4e1fe98b679d6a7e29c3c7d150ddad0312085b8",
+    "head": "04f966e2dcb243b86b145c1e141dc8a4244e6d58",
+    "main": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+    "main_blob": "8598f77e9b91f89027966dec0ee39f65fc668a06",
+    "head_blob": "92a6fdcef6e1cc2103c953e072387d8fe2b6b1a0",
+    "same_as_main": false,
+    "disposition": "ARCHIVE_ONLY_EXCLUDE_FROM_CURRENT_MANAGEMENT"
+  },
+  {
+    "pr": 10,
+    "path": "docs/RELEASE_READINESS_AUDIT_2026-09.md",
+    "merge_base": "f4e1fe98b679d6a7e29c3c7d150ddad0312085b8",
+    "head": "04f966e2dcb243b86b145c1e141dc8a4244e6d58",
+    "main": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+    "main_blob": null,
+    "head_blob": "e51d8c47f390f20850628cf59c02bbc856346666",
+    "same_as_main": false,
+    "disposition": "PRESERVE_DATED_AUDIT_IN_ARCHIVE_DO_NOT_PROMOTE_AS_CURRENT"
+  },
+  {
+    "pr": 11,
+    "path": ".agent/ACTIVE_TASK.md",
+    "merge_base": "f6881db976670bcfac7a441a0defc8996e6340af",
+    "head": "6ef9f327c13f144b0f5525e7064880c98ca24081",
+    "main": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+    "main_blob": "5999de4b3297128321c554fea1eb1f0fed88f965",
+    "head_blob": "bb81cc71685de5f6d7fad7952f8275a52d22d96a",
+    "same_as_main": false,
+    "disposition": "ARCHIVE_ONLY_EXCLUDE_FROM_CURRENT_MANAGEMENT"
+  },
+  {
+    "pr": 11,
+    "path": ".agent/CURRENT_STATE.md",
+    "merge_base": "f6881db976670bcfac7a441a0defc8996e6340af",
+    "head": "6ef9f327c13f144b0f5525e7064880c98ca24081",
+    "main": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+    "main_blob": "a793d97a0de96750f1215360f0674518f0d71b46",
+    "head_blob": "4ea4ac6018e053d100e9e7c7aaf163befc188c22",
+    "same_as_main": false,
+    "disposition": "ARCHIVE_ONLY_EXCLUDE_FROM_CURRENT_MANAGEMENT"
+  },
+  {
+    "pr": 11,
+    "path": ".agent/tasks/CODEX_TASK.md",
+    "merge_base": "f6881db976670bcfac7a441a0defc8996e6340af",
+    "head": "6ef9f327c13f144b0f5525e7064880c98ca24081",
+    "main": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+    "main_blob": "8598f77e9b91f89027966dec0ee39f65fc668a06",
+    "head_blob": "44655719531f20477d9302379fec7be163dbfdc6",
+    "same_as_main": false,
+    "disposition": "ARCHIVE_ONLY_EXCLUDE_FROM_CURRENT_MANAGEMENT"
+  },
+  {
+    "pr": 161,
+    "path": ".agent/ACTIVE_TASK.md",
+    "merge_base": "b012da640a33518cee52c2927e4d3c21ff253bf7",
+    "head": "1ef3aaa43e72540f6f6ac5c2dd97820aaa3259d2",
+    "main": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+    "main_blob": "5999de4b3297128321c554fea1eb1f0fed88f965",
+    "head_blob": "65d552b891d2d04dca3bf3404833116e392257ff",
+    "same_as_main": false,
+    "disposition": "ARCHIVE_ONLY_EXCLUDE_FROM_CURRENT_MANAGEMENT"
+  },
+  {
+    "pr": 161,
+    "path": ".agent/CODEX_REPORT_5.md",
+    "merge_base": "b012da640a33518cee52c2927e4d3c21ff253bf7",
+    "head": "1ef3aaa43e72540f6f6ac5c2dd97820aaa3259d2",
+    "main": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+    "main_blob": "e5a255ed4c9ad8d6f8d88170c08e34258c6f76ea",
+    "head_blob": "505dee0f2ae27919cf5e1c2ebc20dce9c48c234a",
+    "same_as_main": false,
+    "disposition": "ARCHIVE_ONLY_EXCLUDE_FROM_CURRENT_MANAGEMENT"
+  },
+  {
+    "pr": 161,
+    "path": ".agent/CURRENT_STATE.md",
+    "merge_base": "b012da640a33518cee52c2927e4d3c21ff253bf7",
+    "head": "1ef3aaa43e72540f6f6ac5c2dd97820aaa3259d2",
+    "main": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+    "main_blob": "a793d97a0de96750f1215360f0674518f0d71b46",
+    "head_blob": "a5e430affcf1fee6494f6a2cec6111c2f71e7cf9",
+    "same_as_main": false,
+    "disposition": "ARCHIVE_ONLY_EXCLUDE_FROM_CURRENT_MANAGEMENT"
+  },
+  {
+    "pr": 161,
+    "path": ".agent/tasks/CODEX_TASK_5.md",
+    "merge_base": "b012da640a33518cee52c2927e4d3c21ff253bf7",
+    "head": "1ef3aaa43e72540f6f6ac5c2dd97820aaa3259d2",
+    "main": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+    "main_blob": "7bfc072aee4f5f18936c430d9cc87026c3ceadfe",
+    "head_blob": "1f7650bf6152f7b9f6add81cfcea19fff27a290b",
+    "same_as_main": false,
+    "disposition": "ARCHIVE_ONLY_EXCLUDE_FROM_CURRENT_MANAGEMENT"
+  }
+]

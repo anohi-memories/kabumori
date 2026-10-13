@@ -12,25 +12,23 @@
 - current_task_path: .agent_v2/migrations/FULL_MIGRATION_20261013.md
 - current_report_path: .agent_v2/migrations/FULL_MIGRATION_20261013.md#report
 - dependencies: PR #10 / #11 / #161 の旧管理差分保護・整理、fresh main・新規TASK・全30枠再確認、最終snapshot、独立レビュー
-- blocker: 未マージの旧管理差分3件とCURRENT_STATEの古い割当記述。ユーザー指示「競合時は停止しバックアップだけ進める」を適用
+- blocker: 3PRの旧管理merge経路、旧checkout未コミット管理変更、切替時snapshot/slot明示割当/正式昇格/独立レビューが未完。CURRENT_STATEの古い新枠割当記述は今回整理済み
 
 ## 目的と今回の範囲
 
-段階移行を完了するため、旧履歴を完全保護した後に軽量基盤を正式 `.agent/` へ昇格する。本記録は専用TASKの制御文書であり、F/Jの空き枠を自動消費せず、既存slotのTASK・Report・完了判定を上書きしない。今回の実行は再確認・追加snapshot・未マージ差分保護・Draft PRまで。正式昇格は競合が残るため未実施。
+段階移行を完了するため、旧履歴を完全保護した後に軽量基盤を正式 `.agent/` へ昇格する。本記録は専用TASKの制御文書であり、F/Jの空き枠を自動消費せず、既存slotのTASK・Report・完了判定を上書きしない。今回の継続実行はユーザー明示承認に基づくPR172保全・3PR差分突合・CURRENT_STATE整理・30枠/PR/worktree監査・追加保存まで。正式昇格は未実施。
 
 ## 変更可 / 変更不可 / 安全制約
 
-- 今回変更可: 新規 `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/`、HISTORY_INDEX末尾への索引追記、本制御TASK。
-- 今回変更不可: 旧 `.agent/` 全ファイル、既存archive、既存F/J TASK・Report・ACTIVE_TASK・CURRENT_STATE、他slotのbranch・worktree・未コミット変更・dev server、既存PRのhead/base/state。
+- 今回変更可: 新規 `.agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/`、HISTORY_INDEX末尾、CURRENT_STATE、本制御TASKとCONFLICT_RECONCILIATION_20261013.md、保全branchとPR172へのfast-forward/説明更新。
+- 今回変更不可: 旧 `.agent/` 全ファイル、既存archive、既存F/J slot TASK・Report・ACTIVE_TASK、他slotのbranch・worktree・未コミット変更・dev server、既存PRのhead/base/state。
 - アプリ・DB/Auth/RLS/migration/RPC/Edge/secrets/Cron・本番deploy・SNS・有料API・EASの操作禁止。force push禁止。独立レビュー完了前のmain merge禁止。
 
 ## 競合の証拠と次の判断
 
-1. PR #10 `04f966e2dcb243b86b145c1e141dc8a4244e6d58`: 旧H1 TASK/Report/ACTIVE/CURRENT_STATEとrelease audit文書。移行後の管理表にそのままmergeしない。監査文書を保持した管理差分除外の候補を別途作るか、履歴保護後のclose判断を元担当と確認する。
-2. PR #11 `6ef9f327c13f144b0f5525e7064880c98ca24081`: 旧H1 TASK/ACTIVE/CURRENT_STATEのみ。過去のcaller auth blocker記録を現状と照合し、残る課題と履歴を区別して整理する。
-3. PR #161 `1ef3aaa43e72540f6f6ac5c2dd97820aaa3259d2`: 旧H5 TASK/Report/ACTIVE/CURRENT_STATE。mainのC5受入は既にdone/noneだが、PRはreview_required/chatgptを再導入する。保存済み履歴とmainの受入を照合後、元担当の整理判断を行う。
+詳細な突合・今回の扱い・未実施事項は `CONFLICT_RECONCILIATION_20261013.md` を参照。3PRの旧管理11パスは現行管理へ取り込まない。PR10の監査文書も保存済み歴史資料として参照する。PR11の認証課題は解決判定していない。PR161はmainのC5受入done/noneと正式実装Reportを区別し、古い返却状態を再注入しない。
 
-3件とも今回変更・closeしていない。全45件のopen PRファイル一覧を確認し、管理基盤を変更するPRはこの3件。CURRENT_STATEには古いready記述が残る。TASK/ACTIVEの最新metadataに基づく現在状態に整合させる工程が必要。製品の未実装・Security review・production HOLDは移行で解消した扱いにしない。
+全46open PR（172含む）のファイル確認で、他の管理差分PRなし。3PRのHEADは前回保存時と同一だが、close/supersedeや旧差分除外は未実施のため切替保留を維持する。30枠の現在割当は整合・未処理完了コードを示す最新next_ownerなし。旧checkoutの未コミット管理7ファイルと不在登録worktree1件を保護。CURRENT_STATEを最新TASKへ整理したが、旧CURRENT_STATE/F2 blockerの歴史的記述・Report形式整合は正式切替前に再確認する。
 
 ## 正式昇格を再開するときの実行指示（推薦 Opus5.5（高））
 
@@ -50,17 +48,18 @@
 
 ## Report
 
-- executor: Codex（ユーザーが承認した継続作業）
-- result: BACKUP_CANDIDATE_VERIFIED / CUTOVER_BLOCKED / INDEPENDENT_REVIEW_PENDING
+- executor: Codex（ユーザーが承認した移行準備継続）
+- result: RECONCILIATION_DOCUMENTED / CURRENT_STATE_CORRECTED / CUTOVER_BLOCKED / INDEPENDENT_REVIEW_PENDING
 - source_commit: b7ce2c4fd94225542a66aef94042ca528cc47f09
-- changed_files: 新規snapshotディレクトリ、HISTORY_INDEX末尾、本制御TASKのみ
-- slot_state_readback: G1–G10/H1–H5全done/none、F1–F6/F8 done/none、F7/F9/F10/J1–J5 idle/none。TASKとACTIVE_TASK一致。現在のtask_id重複なし。slotを再割当・完了更新していない
-- tests: snapshot内RESTORE_RESULT.jsonを参照。SHA256・元commit比較・実復元・PR patch復元を確認
-- commit_hash / push / PR: この記録を含むPR headをGitHubから確認。記録自身のcommit SHAは自己参照にせず、PR最新headとgit logを正本とする
+- protected_pr172_head: 8e65a71e3dc7b144ec511fa853ffe08e522dc827（backup/pr172-pre-conflict-prep-8e65a71-20261013、GitHub read-back一致）
+- changed_files: CURRENT_STATE、本制御TASK、CONFLICT_RECONCILIATION、追加archive、HISTORY_INDEX末尾
+- slot_state_readback: G1–G10/H1–H5 done/none、F1–F6/F8 done/none、F7/F9/F10/J1–J5 idle/none。TASK先頭/ACTIVEの現在割当30/30整合、task_id重複0。slotを再割当・完了更新していない
+- tests: 前回snapshot SHA256 64/64再照合、変更前2ファイル実復元・元commit一致、archive既存バイト不変、索引append-only、変更範囲/参照先/diff check、GitHub read-back。追加archiveのRESTORE_RESULT.json/SHA256SUMSを参照
+- commit_hash / push / PR: 本文自身のcommit SHAは自己参照にせずPR172の最新HEADとgit logで確認。lease付き非force ref更新とGitHubファイルread-backを行う
 - merge: NOT_PERFORMED
 - deploy / production / paid_calls: 0
-- remaining_issues: 3PRの旧管理差分整理、CURRENT_STATE整合、切替時fresh snapshot、実装slot割当、正式昇格、独立Sol（高）レビュー
-- safety_checks: 他slot/旧.agent/既存archive/製品source/production無変更。独立checkoutのみ使用
-- next_recommendation: 保存候補のDraft PRを確認し、上記競合整理後に専用slotへ正式切替TASKを割当。現在のG/H/F/J開始コードは継続
+- remaining_issues: 3PRのmerge経路除外判断、旧checkout未コミット管理変更/共有HANDOFFと不在worktree確認、正式切替前再照合/追加snapshot/slot割当/正式昇格/独立Sol（高）レビュー
+- safety_checks: 旧.agent/既存archive/slot TASK・Report・ACTIVE/製品source/他checkout/production無変更。独立worktree。旧方式削除・正式昇格・main mergeなし
+- next_recommendation: CONFLICT_RECONCILIATIONの未解決条件を満たしてから正式切替TASKを明示割当。現行G/H/F/JとK/C/L/Vの意味は継続
 
 返却先: こでくろ連携部屋のちゃ。今回は番号slot未割当の移行制御作業であり、Cn/Vnを発行しない。

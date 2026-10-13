@@ -1,0 +1,17 @@
+{
+  "result": "PASS",
+  "new_originals_restored": 2,
+  "original_bytes_and_git_source_match": true,
+  "previous_snapshot_sha256_pass": 64,
+  "slot_task_active_pass": 30,
+  "pending_by_latest_header": 0,
+  "duplicate_task_id": 0,
+  "open_prs_checked": 46,
+  "managed_prs_excluding_172": [
+    10,
+    11,
+    161
+  ],
+  "production_security_review": "NOT_RUN / STILL_REQUIRED",
+  "product_tests": "NOT_RUN (management documents only)"
+}

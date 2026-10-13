@@ -1,0 +1,13 @@
+f531d9d54f8ba7d2c72ae3835bb3f594213b99d5463fc1088731d11005007dee  .agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/EVIDENCE_MANIFEST.json
+b38f04c8a2ce3ac1f102cf401dbd7b6315ab69157674f3a71dcd9ede69fbc1d5  .agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/FINAL_VALIDATION.json
+9c9d1ff386910989ad4d424711beef344e56457f0bd08dc2d900a1d41b83ced9  .agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/HANDOFF_COLLISION.json
+22fdf40431ebc509e7e8a4a7daaf1632256e19e4f7009d00998a8fb6aadd831a  .agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/MANIFEST.json
+bf69d48eb6f4fbb34dec90494b44d92b84bb772577641f866034e2f558fdf429  .agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/MANIFEST.md
+81df352fa9c5f95f4d26cabefa67a42d9ed13253dee765d4da9a7c5f2b0f25b6  .agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/OPEN_PR_FILE_AUDIT.json
+6274b24b5ff15ca6fc6ba0ca0732b206372e8b5c13dc8b2f01a38dc714094770  .agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/PR_MANAGEMENT_DISPOSITION.json
+4e8ff787c7bb033beeddf2a96b7bb1026911b52997e99ee9628f9c0ead635f4f  .agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/RESTORE.md
+af555d423882865438f174c75e420d176ab064e49f9f954e13dbc2507595ead1  .agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/RESTORE_RESULT.json
+153701f24f1be00be7e46dd181ef060d901f525933484b8e061b0a33c2214603  .agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/SLOT_METADATA.json
+e29020dd07ecac2586490899f6db4ddd6e94431a3a135259c09874e7aee3737a  .agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/WORKTREE_AUDIT.json
+7935102d41865bec86699ad73b008ba031dab4528e062200185fdf289c2b9190  .agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/before/.agent_v2/CURRENT_STATE.md
+353f20e8b90af70cfa812fd9c2f303ebd38bdc48549b4a9e3ee9f8b2a9b51147  .agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/before/.agent_v2/migrations/FULL_MIGRATION_20261013.md

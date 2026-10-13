@@ -1,0 +1,679 @@
+[
+  {
+    "path": "/Users/yuya/.codex/.chatgpt-projects/g-p-6a8e60a4be3081918ef2c28c1b2cc386/kabumori-h1-candidate",
+    "head": "451d1812aa443522307401e163fb34296e4de772",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/.codex/.chatgpt-projects/g-p-6a8e60a4be3081918ef2c28c1b2cc386/kabumori-h1-control-sync",
+    "head": "4addaac9152ce8a9d58cfabed7f8ce7f1336435f",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori",
+    "head": "e9cb57f713d15e58e82fb4b2230099d2fe6789b8",
+    "managed_uncommitted": [
+      " M .agent/ACTIVE_TASK.md",
+      " M .agent/CODEX_REPORT.md",
+      " M .agent/CODEX_REPORT_2.md",
+      " M .agent/CURRENT_STATE.md",
+      " M .agent/tasks/CLAUDE_TASK.md",
+      " M .agent/tasks/CODEX_TASK.md",
+      " M .agent/tasks/CODEX_TASK_2.md"
+    ]
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-ailab-rollout",
+    "head": "35302261181f7f54e49870d7322d2112098fcd8c",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-ailab-stageb",
+    "head": "19515f6dab3486ec9f5acf771b1ca998a0f207e6",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-b-claude-api",
+    "head": "96d2aebbaeffad749be5d267346f683074dd0202",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-common-ai-budget-ledger",
+    "head": "8ef3843f51e771088dfe58e2e5a262db0b62644a",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-common-ai-phase1c",
+    "head": "0c3a8e77c5811e94f93d6710cff44da07d95aaa5",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-common-ai-phase1d",
+    "head": "61be0dfb631b4caf85cdcf4b2a947206faab29bd",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-common-ai-provider",
+    "head": "2ddae0dcb3f1e062ce7d853207bcc9dfbe0fb226",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-dep",
+    "head": "920daec7a94d548f91381526e9060ca0f9fe8608",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-ex",
+    "head": "b8d10833a992bc285a89d3ab37b2c3acd995bad0",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-f3-resv-live",
+    "head": "4b491668d030d1e9ecefacf0448fdd06d5ce57fc",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-f4-threads-disconnect",
+    "head": "02fd1989303879979b137f8338f8bc6944f266b1",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-f4-threads-t13",
+    "head": "fd15430ddcd640c5c7389582f37f1b478fc7204c",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-f5-phase5",
+    "head": "4638891f6c7ff432e08d462019594e1ec3d66f07",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-f6-handler-patch",
+    "head": "d0ad0c1f1862ca3d1fb1f697e07a863018af92ba",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-f6-opus-primary",
+    "head": "46b27326360e66ec843f79bae6d01584088869d0",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-f8-j1a",
+    "head": "141d851267898ff7e28151a9e7e73121a3bb75aa",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-fed",
+    "head": "0c4e054cb20f3a5efb5c1e458f6417d91ddd0680",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-fresh",
+    "head": "e2ccfcc2e50942ed709eefdb1e62f87cbd693286",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g10-agent-v2",
+    "head": "287c5625477cfff5982877573d8c5e68ffe6cffd",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g2-broadcast",
+    "head": "e9bb86c44808d87ad8cbd3de4f1d1564066f958a",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g2-delivery-first",
+    "head": "319a442edcd61c07274e3409d8864234f9d77cd4",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g2-fact-v2",
+    "head": "68d45dde1be34715267b5066fa3b3686d756b79e",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g2-market-report-reliability",
+    "head": "e15a07ba29ff9d516f7262bbdd7581300b8f341d",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g2-ondemand",
+    "head": "889ca1b44cf82bd3ecb913818dca568456849feb",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g2-personalized-p1",
+    "head": "4bc5c0177aa74085eb488604a00e2b66c7fe527c",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g2-phase2c",
+    "head": "6c576567328c99a58c2e4beaed86d155fe875769",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g2-v1-integration",
+    "head": "93f22041eb6224228fd0336272e9c1872d8fce58",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g2-v1-qa",
+    "head": "ea7bbd07d06533d359a733d3dce65169d0e24283",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g3-ai-consult",
+    "head": "1f33c58ca82a9d33d8c5c7282e0ac5c2fbb4aca9",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g3-ai-consult-v1",
+    "head": "98d3cb727a967c2a921da6afee3faafa85cb9de6",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g3-ai-lab-continuity",
+    "head": "fb4afb21d7ce808de3257bebc8062aed93353dec",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g3-consult-activation",
+    "head": "9349fc79e9a8f7f67ca47b9e5c7281ad37334f13",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g3-model-policy",
+    "head": "78a43ae878205f726111dde1002bd28ea8e82b97",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g3-phase1d",
+    "head": "bcc01312c638f5922db4ffd6255ddddf6f611183",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g3-pr41-acl",
+    "head": "c509117f8addf5a8687d60d9c18ae271b2c1777c",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g3-pr41-live",
+    "head": "280aa0f83d4f039ba3e43f32da202a91fd2333f2",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g3-pr81-apply",
+    "head": "af4c89968f25f960f2d9af11d18b4db6eb63462d",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g3-reservation-confirm-ui",
+    "head": "0cd5c596a4d553df924a16c1f5091815e74b199a",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g3-resv-api",
+    "head": "9359e949d0704c08653a4d61dd5791f4d4febec9",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g3-schema-gate",
+    "head": "2eebb066edfaec6c036c7c5c38c386e7c81670ac",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g3-unified-schedule",
+    "head": "f6b8f866b449cd432f649c132bbaa2e70a9f2ace",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g3-x-autopost-readiness",
+    "head": "4b0278228e726b65d782e9b231eb6fe84d9173ad",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g3-x-reservations",
+    "head": "8820fa8de0f978767535472f5a44f8623bc74a30",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g4-mg-reliability",
+    "head": "3d5475849217e1ca9f40bbedf12a42c0e5671504",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g4-phase2a1",
+    "head": "2b2f1c1fb4a7188fad5dda3346e802f19bb30983",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g4-phase2a2",
+    "head": "c0b6c03cb909d91f72b58424d64c6dfae1b8f14f",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g4-phase2b",
+    "head": "9b71757068271cce38cedda12f6d74e705ac13ca",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g4-phase2b-oauth",
+    "head": "c30f246409a77080cbc03aef6c4cb72b5481e125",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g4-postona",
+    "head": "df718397d015f76f91684f0b4ed3bdd9e43f539d",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g4-pr76-rollout",
+    "head": "29018665f3c65196b49990877aea6533320dc8c5",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g4-threads-connect",
+    "head": "98287392327eabfd5092a3ba89dde51a2e8beff6",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g4-threads-edge",
+    "head": "c30f246409a77080cbc03aef6c4cb72b5481e125",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g4-threads-integration",
+    "head": "09fd2c49114b7d26c23b71a3084574dc6a5a7ad6",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g4-threads-publish",
+    "head": "2e75a6a842e70f3de78558681803b60935fb4251",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g4-x-oauth-hardening",
+    "head": "65f49f98dab39b974e6e4b450f376a37f99ef1ac",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g4-x-preclaim-containment",
+    "head": "c257a9e42da4dc5a8c99df547d74b96cd7a5cef8",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-backfill",
+    "head": "d9719dc60d878a7ff8cbea734b644475f6e57c73",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-p2prod",
+    "head": "bb193f2bcd6c6b405bb88a78dbde6399edd1af5f",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-phase2",
+    "head": "ba35b642d30ce423a8683feffcd26aec325b45ee",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-phase3a",
+    "head": "c4db7e77572cc2bb6ea45bc37bbf0082c9c5742d",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-phase3b",
+    "head": "76b50e1e03f82faaa3460bab1603afa8fef3ce44",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-phase3c",
+    "head": "f17a47e36632fff4a1f4cfb0b860df200e1c99e1",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-phase3d",
+    "head": "e9244d29ea944156cf1479c0976053d433469e06",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-phase3e",
+    "head": "5943fad5f724191f6ae77f3baf826a4c7698d542",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-phase3f",
+    "head": "1d4de2c73c42221ad4b2f9b1f231c271aa084907",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-phase3g",
+    "head": "eba0ba5abc56f8188a03d567d319754e4ac8ea4c",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-phase3h",
+    "head": "faf8007a4ab5c925430c7cc6a9896046e30ce25a",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-phase3i",
+    "head": "38051f023bfd150f29829a075b6f87fa7c1e3e5f",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-phase4",
+    "head": "ccea1fe8132c6f573a768f0df5a033a05c62ef2c",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-pr112c",
+    "head": "b60272c433b57bac1acb00c13d4fda7ff96f1f2f",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-pr112d",
+    "head": "54b9435b0dcc0d0e79ae6eba4340eee44508141c",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g5-prod-gate",
+    "head": "cab1f0fe488a7576e5c9864d8c34e38afaa757e7",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g6-common-ai",
+    "head": "be0be6421aa58882c833769655060d2342f3666a",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g6-f1f2",
+    "head": "93de927aec8726a6269d9c6747b998d29df113da",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g6-phase2c",
+    "head": "9b952d64a9ec954e74af7e762c9df4e4c2e2f3a5",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g6-qa-20261012",
+    "head": "4e80c79dc42c11fbc1ca105665514b0dd32842d3",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g7-mic",
+    "head": "aa47e40d2a3ba7ec8bfc7d1d30c8eb51d53f2c48",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g8-j0",
+    "head": "d0be8977afc2ee53626e10c52a106e36e6c35168",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g9-clean-replacement",
+    "head": "c476ef8a5c5a0294c3df8e4fefebc8722f2e1102",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-g9-fixture-rights",
+    "head": "65c95589564845e7b343fe9d0acc7d293bebf783",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-gen",
+    "head": "55b69cf73e26c8ffd467befa48aeb1f7d9bdc3d3",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-h5-policy",
+    "head": "9fef46590917be9ff9083811c9ab186d8083683f",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-jpa",
+    "head": "2d91de67778ee0e9e87c8c0921a7e72bfc1ded53",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-jpa-int",
+    "head": "2061269c97a69bdbe15109be57373880718579a9",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-jpb",
+    "head": "725b995e2a7a2ebee1946d905cb5b2945be97cf7",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-jpb2",
+    "head": "a4219c27fad8f2877fe9634a14176b3e9f3c0d8f",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-jpb3",
+    "head": "a4db0f87cc1ea89870a5cde1761613474876a625",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-latest",
+    "head": "4e88b7c24dabdb49a62fa8172574193442650a86",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-mic-slice0-deploy",
+    "head": "80acc4c33446870d17a394aca604c9d913c752cc",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-mic-stage1-design",
+    "head": "7e548b9f2bff583664fc48a3ec1d658e552509d9",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-mic-stage1-slice0",
+    "head": "41dcfcd5fa4554fdc4a8b08c5192409451cc7af9",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-multibrand",
+    "head": "341e5dc5c03147394a99b2b71d148d2ba06c9c89",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-n1-news-sources",
+    "head": "1ef3a2af986c1e696f66cf99d80d6160e5a8c44f",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-n3",
+    "head": "1823a6cceaec1a035213b51ef160eabbb4ca627c",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-n3-final-review",
+    "head": "437ada19b688f5f92e93b9a74b224b13cc083fed",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-n3-hardening",
+    "head": "ab4fe150b115345fe15c9447db2e1e7787cb4f43",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-n3-main-integration",
+    "head": "aad2f1a543e63b2ddf9cfca081cfafcef16be632",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-n4-canary",
+    "head": "59108acab7c8445c169bbd05f24f10af4f120ce7",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-n4-fix-url",
+    "head": "f11fa84e7ef28d35e4d58db51f07666eb6f9bf92",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-n4-freshness",
+    "head": "3d09c1583e886ecfb40155e881080f2b46ac0268",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-n4-integration",
+    "head": "d30a897e4178af96d23443dc164141bdb4884a16",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-n4-local-observation",
+    "head": "d0d941815d878a8eb9bb0411687779a2cb1ab5cf",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-n5b",
+    "head": "8b57bac58a3074a58377d07fa399167dbbd545b5",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-n5b-int",
+    "head": "3dd87baaaca909c005db96a3cd79a7766cc26323",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-n5d",
+    "head": "8d8d401f47d5fc305f93014fb7b361cafaf57336",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-n5d-int",
+    "head": "a3f0da4f597b1fad8c3988924a4aeaed8362a1bc",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-p7",
+    "head": "81251b316ae44a634a1b4108b420a18765d17261",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-pf",
+    "head": "a26e4365ebcb701491629892e8bae207d28833c2",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-preview",
+    "head": "f976ae2dd504d8a8f77f81999c8ce844437a1663",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-review-policy-restore",
+    "head": "6ff60b3f3b13ed35098b8f74edcf9ccf06e1a627",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-slot-expansion",
+    "head": "d1046319af21eb956640bb7a73ca721fa973b3b8",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-t1",
+    "head": "221914e316efc5576d9a48c499f79159614271e3",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori-t1-interim",
+    "head": "4d8bd9845ac9411bc1c05d9084fcbf51be383dbd",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori/.claude/worktrees/angry-williamson-557f1f",
+    "head": "e9cb57f713d15e58e82fb4b2230099d2fe6789b8",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori/.claude/worktrees/claude-api-migration-phase0-9dd5eb",
+    "head": "920daec7a94d548f91381526e9060ca0f9fe8608",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori/.claude/worktrees/codex-review-return-rules-5bd0a0",
+    "head": "8eb59d6975de73544958bfe51cae52ba1de8f32c",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori/.claude/worktrees/g4-x-admin-pr15",
+    "head": "16424aa86c2a20e4ecb855433eef5801834ed250",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori/.claude/worktrees/g5-f7a405",
+    "head": "47a2ed6a1635177ba82004eace4bddb42d9d53e3",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori/.claude/worktrees/ios-push-e2e",
+    "head": "2bbaeffe87e4d1f04a8691dae0490a1105c3e3c0",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori/.claude/worktrees/kabumori-task-expansion-7e9c7c",
+    "head": "e9cb57f713d15e58e82fb4b2230099d2fe6789b8",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori/.claude/worktrees/kurochang4-room-setup-f05111",
+    "head": "e9cb57f713d15e58e82fb4b2230099d2fe6789b8",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori/.claude/worktrees/mic-phase3a-scenario",
+    "head": "af64be8aef6ff224c57836ad0bb8b03b3d51374d",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori/.claude/worktrees/pr48-rpc-security-review-d58beb",
+    "head": "51457826ea6c29d9c94ac0066786df8927fa1274",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori/.claude/worktrees/relaxed-napier-81832c",
+    "head": "676ce44b3d7f9282276428fbfee0dedc4ce4d385",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori/.claude/worktrees/separate-worktree-setup-df69ce",
+    "head": "e9cb57f713d15e58e82fb4b2230099d2fe6789b8",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/Users/yuya/Developer/kabumori/.claude/worktrees/stoic-taussig-7452ad",
+    "head": "920daec7a94d548f91381526e9060ca0f9fe8608",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/private/tmp/claude-501/-Users-yuya-Developer-kabumori/295baa6c-3426-498e-a1a9-99606b61d16e/scratchpad/g3-status",
+    "available": false
+  },
+  {
+    "path": "/private/tmp/claude-501/-Users-yuya-Developer-kabumori/295baa6c-3426-498e-a1a9-99606b61d16e/scratchpad/g3-status-fresh",
+    "head": "8d7d0defc4eea68e173a4fc0b1381793c5d34fc9",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/private/tmp/kabumori-h5-wiring-20261012.EzokAp/integration",
+    "head": "98287392327eabfd5092a3ba89dde51a2e8beff6",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/private/tmp/kabumori-h5-wiring-20261012.EzokAp/report",
+    "head": "1ef3aaa43e72540f6f6ac5c2dd97820aaa3259d2",
+    "managed_uncommitted": []
+  },
+  {
+    "path": "/private/tmp/kabumori-h5-wiring-20261012.EzokAp/source",
+    "head": "163675c62835e84417905f98f97ceedd4dd1bcd9",
+    "managed_uncommitted": []
+  }
+]
