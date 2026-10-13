@@ -1,3 +1,8 @@
+## F8/F9 new tasks 2026-10-14
+- F8 news-improvement-a-f8-j1b5-security-review-readiness-20261014: ready, Claude Opus5.5（高）, return L8. Offline final DB/RPC review packet for J1-b4 candidate PR191, Sol（高）review pending. No Preview/production or managed migration.
+- F9 api-optimization-b-f9-clean-pr190-residual-rights-tests-20261014: ready, Claude Opus5.5（高）, return L9. Rights residue and offline regression tests for clean candidate PR190. PR115/174/184/190 protected; merge/external sends prohibited.
+- Prior F8/F9 marked done, archives created with byte-identical read-back and SHA256SUMS, HISTORY_INDEX entries recorded. Both slots must use independent worktrees and nonoverlapping paths.
+
 ## F3 J3 V3 指摘修正 — 2026-10-13
 - F3新TASK `postona-f3-j3-v3-r1-r3-security-fixes-20261013`: ready/claude、Opus5.5（高）、F3→L3、返却先POSTONA G3のちゃ。J3 V3（`.agent_v2/reports/J3.md`）独立再現P2×3: R1 purge/finalize失敗retryで未確認投稿警告消失、R2 HTTP action:'delete'欠落、R3ロック待ち中リース期限切れ。F3-owned sourceのみ修正、F5 Phase8の共通状態・リースには触れず調整。
 - 前F3 TASK `postona-f3-x-service-end-saga-wiring-20261013`（L3 accepted、Draft PR189 `4fd7084d067d2a9f589fd7fecaee70720bc60812`）archive `.agent_v2/archive/2026-10-13-F3-postona-f3-x-service-end-saga-wiring-20261013/`、SHA256 `c3cc256c946076748647a8cd54514955cc11c68a66c5b7d43dfe98a44ce3ac58`、GitHub blob復元一致、HISTORY_INDEX済。
