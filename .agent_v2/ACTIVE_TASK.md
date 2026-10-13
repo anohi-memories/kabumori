@@ -86,17 +86,17 @@
 
 ## F6
 - slot: F6
-- status: review_required
+- status: done
 - task_id: common-ai-f6-opus-primary-close-report-v0-20261013
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
 - dependencies: common AI provider PR148→150→153→157→162 Draft/unmerged; G2 PR143/149 merged; coordination with market-report-analysis owner G2/F2 mandatory
-- blocker: PASS_OFFLINE_SOURCE Draft PR #170 (46b27326, default OFF, not wired); handler.ts wiring delivered as verified patch (F2 ownership coordination needed); live Oct13 cutover needs separate approvals: patch merge, Edge Secret, deploy, mode flip before 16:15 JST; budget caps unchanged
+- blocker: L6 ACCEPTED PASS_OFFLINE_SOURCE / PRODUCTION_NO_GO — PASS_OFFLINE_SOURCE Draft PR #170 (46b27326, default OFF, not wired); handler.ts wiring delivered as verified patch (F2 ownership coordination needed); live Oct13 cutover needs separate approvals: patch merge, Edge Secret, deploy, mode flip before 16:15 JST; budget caps unchanged
 - slot_use: 2026-10-13 close-only Opus Primary V0, morning legacy unchanged, source-first
 
 ## F7
