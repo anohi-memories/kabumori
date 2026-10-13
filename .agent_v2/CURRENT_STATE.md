@@ -1,7 +1,11 @@
 # Current State v2（新系統・現在有効な情報だけ）
 
 ## F2｜Opus primary_both handlerテスト修正（2026-10-13 JST）
-- 新F2 TASK `kabumori-f2-opus-primary-both-handler-test-sync-20261013` を `ready / claude` に登録。推薦 Sonnet5（中）、F2→L2。F6 PR175 `161f1f08` に積む新規Draft PRで、F2所有 `opus_primary_handler_test.ts` の古いMODE_UNSUPPORTED期待2件のみ修正。PR170/173/175と他slotのbranch/worktreeは変更禁止。本番NO_GO。
+- F2 TASK `kabumori-f2-opus-primary-both-handler-test-sync-20261013` は完了報告済み（review_required/chatgpt、L2 待ち）。結果は PASS_OFFLINE_TEST_ONLY。
+  - Draft PR #176（head `d13efc52176665898f1c38a1e389f9973fc3de00`、base は PR175 の branch）
+  - 変更は `opus_primary_handler_test.ts` の1ファイルだけ
+  - 41/41・market-report-analysis 324/324 が PASS（差分の部分だけの状態では 39/322 で、F6 の報告と一致）
+  - 本番 NO_GO
 - 前F2 TASK/Reportは `.agent_v2/archive/2026-10-13-F2-kabumori-f2-opus-primary-morning-close-handler-20261013/` に保存、MANIFEST/SHA256SUMSとread-back一致を確認、HISTORY_INDEX更新。F6は独立したOpus provider作業のownerを継続。
 
 ## F9 API最適化B — L9完了（2026-10-13 JST）
@@ -27,19 +31,11 @@
 - All live X/Threads/Meta/managed Supabase/Vault/migrations/GRANT/merge/deploy/posting gates remain NO_GO. Remote authorization cannot be marked revoked without evidence.
 
 ## F2 — Opus Primary 朝刊・大引け対応（2026-10-13 JST）
-- F2 の TASK `kabumori-f2-opus-primary-morning-close-handler-20261013` は完了報告済み（review_required/chatgpt、L2 待ち）。結果は PASS_OFFLINE_SOURCE、PRODUCTION_NO_GO。
-- Draft PR #173（head `3605c2eb88380183b78757e092877ba2ff46c25f`、base は PR170 の branch）
-  - handler の配線は、F6 の差分案に F2 の3点の追加を足したもの
-    - `primary_both` の未対応は失敗にする
-    - 監査用のモデル名を実際のモデルにする
-    - `primary_last_error` を残す
-  - オフラインの E2E 38件、関連する計480件が PASS
-- `primary_close`（大引けだけ）は、そのまま有効にできる状態。`primary_both`（朝刊も）は、F6 の部品の変更が要る。
-  - 検証済みの差分 `docs/ai-provider/F2_PRIMARY_BOTH_F6_HANDOFF.patch` を、共通AI基盤のちゃへ引き継ぎ。
+- 積み上げは Draft・未マージ: PR170（F6 の部品）→ PR173（F2 の handler、L2 受入済み）→ PR175（F6 の primary_both）→ PR176（F2 のテストの整合）。
+  - #175 だけを先に入れると F2 のテストが落ちる。4つをまとめて、順に merge する（別承認）。
 - 本番の Cron: 朝刊 07:55（再試行 08:05）、大引け 16:20（再試行 16:35）。
-- 今日の大引けは、L2・merge・Secret・バイト単位の比較・deploy・モードの設定が、16:15 までに別承認で揃った場合だけ有効にできる。揃わなければ見送る。
-- 利用側のゲートは X・アプリとも OFF だった（今朝）。そのため、Opus のレポートはまだ利用者に届かない。
-- 月 $5 の上限では、朝刊・大引けを毎日続けられない（10/21 ごろに止まる）。見直しは別承認。
+- 利用側のゲートは X・アプリとも OFF（10/13 の朝）。
+- 月 $5 の上限では、朝刊・大引けを毎日続けられない。見直しは別承認。
 
 
 
@@ -108,7 +104,7 @@
 
 ## プロジェクト別現状
 
-- F2は Opus Primary の handler の配線の TASK を完了報告済み（review_required、L2 待ち、Draft PR #173）。F8にニュース改善A J1-a診断TASK `news-improvement-a-jp-official-diagnostics-j1a-f8-20261012` を割当済み（ready/claude、L8返却、Sonnet5高）。その他の新系統枠は割当前の状態を各TASKで確認。
+- F2は primary_both のテストの整合の TASK を完了報告済み（review_required、L2 待ち、Draft PR #176）。F8にニュース改善A J1-a診断TASK `news-improvement-a-jp-official-diagnostics-j1a-f8-20261012` を割当済み（ready/claude、L8返却、Sonnet5高）。その他の新系統枠は割当前の状態を各TASKで確認。
 - かぶモリアプリ、X自動投稿アプリ（POSTONA）、共通アカウント、共通AI基盤、MIC、ニュース改善などの現状は、旧 `.agent/CURRENT_STATE.md` と旧各TASKが正本。
 
 ## G8 → F8の新規TASK移行
@@ -135,7 +131,7 @@
 
 ## 未マージPR
 
-- F2: Draft PR #173（Opus Primary の handler、base は PR170 の branch、未マージ）。旧G2 PR143/149/158は3件ともmainへマージ済み。
+- F2: Draft PR #173（handler、base は PR170）と Draft PR #176（テスト、base は PR175）。どちらも未マージ。旧G2 PR143/149/158は3件ともmainへマージ済み。
 - 新系統導入PR #155はマージ済み。旧系統の未マージPRは旧CURRENT_STATEとGitHubを参照する。
 
 ## deploy待ち
@@ -144,7 +140,7 @@
 
 ## slot競合
 
-- F2は `market-report-analysis/handler.ts`・`opus_primary_handler_test.ts` を PR #173 で変更中。F6 の `market_report_primary.ts` は F6 の担当のまま（引き継ぎの差分あり）。shadow の PR #153 も handler.ts を変えるので、後から入る側で調整が要る。
+- F2は `market-report-analysis/handler.ts`（#173）と `opus_primary_handler_test.ts`（#173・#176）を変更中。F6 の `market_report_primary.ts` は F6 の担当（#175）。F6 の仮の適用が、作業場所 kabumori-g6-qa-20261012 と kabumori-f6-handler-patch に、コミットされずに残っている（中身は差分の結果と同じ）。shadow の PR #153 も handler.ts を変えるので、後から入る側で調整が要る。
 - 移行期間中は、旧Gn / Hn と新Fn / Jn が同じ境界を同時に変更しないよう、TASKを置くときに新旧両方の索引を確認する。
 
 ## 現在有効な運用判断
@@ -157,7 +153,7 @@
 ## 次工程
 
 - F8で国内ニュースJ1-aを実装、L8で本チャットへ報告（Sonnet5高、production NO_GO）。
-- F2の PR #173 を L2 でレビュー。primary_both は共通AI基盤のちゃが F6 の部品の変更を判断。今日の大引けの有効化・明日の朝刊・予算の見直しは別承認。本番 NO_GO。
+- F2の PR #176 を L2 でレビュー。そのあと #170→#173→#175→#176 をまとめて merge するかを、共通AI基盤のちゃと決める（別承認）。本番 NO_GO。
 
 1. 旧系統の各slotが完了した時点で、ChatGPTが次の新規TASKを新系統へ置くかを判断する。
 2. 初回の新系統TASK完了時にarchive / MANIFEST / SHA256 / HISTORY_INDEXの保存運用を確認する。
