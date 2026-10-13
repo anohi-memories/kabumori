@@ -5,6 +5,11 @@
 
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F9 L9 権利監査完了（2026-10-13 JST）
+- F9 `api-optimization-b-f9-pr174-pr115-rights-audit-offline-20261013` L9 PASS_OFFLINE_AUDIT / MERGE_HOLD。TASK/ACTIVE_TASKは done/next_owner:none。監査 branch `claude/f9-pr174-pr115-audit-20261013` commit F9報告 `e5e124896b62d00afa4d8edab62d0d42a33af6ce`、追加文書1ファイルのみ（GitHub compare確認）。304 tests PASS / 1 ignored はF9報告、ChatGPT未再実行。
+- PR174は見出し288件と生成投稿文76件の取り扱い判断待ち。PR115旧本文18件は旧Git refsに残存、main既存2fixtureもF8/F2の所有者判断が必要。旧PR115/174を勝手にclose/merge/削除/履歴書換しない。利用許諾未確認のまま有料API/外部AI送信はNO_GO。
+- 次F9 TASK前に完了TASKをarchive/MANIFEST/SHA256SUMS/restore/HISTORY_INDEX保存必須。F8国内ニュース作業には非干渉。
+
 ## F8 J1-b 国内ニュースアプリ掲載（2026-10-13）
 - F8 `news-improvement-a-f8-j1b-app-visibility-offline-design-20261013` L8 PASS_OFFLINE_DESIGN / IMPLEMENTATION_HOLD、done/next_owner:none。成果 branch `claude/news-j1b-app-visibility-offline-f8-20261013` commit `e912d59c24c9a66fe6b41e5f01fb6172f62cff82`（F8 Report）、設計1＋offline PG17 RPC matrix 8ファイル。検証8variant一致はClaude報告でChatGPT未再実行。DB/RPC/アプリ本体、本番変更なし。
 - 重要な設計残件: v3単独は震度6強emergencyを消す。v2+v3bの組合せはテーマ追加後もrejected/no_post金融行政処分(C3/C8)を非表示にする。X投稿基準とアプリ掲載の分離(O1)、追跡なし利用者のcritical/high配信(O2)、続報重複(O3)、テーマ→sector(O4)の明示判断が次実装条件。migration/RPC PreviewとSol（高）レビューが必要で本番NO_GO。
