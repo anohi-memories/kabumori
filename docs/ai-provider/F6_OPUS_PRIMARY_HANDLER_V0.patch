@@ -1,0 +1,552 @@
+diff --git a/supabase/functions/_shared/ai_provider/isolation_test.ts b/supabase/functions/_shared/ai_provider/isolation_test.ts
+index b0948070..ba6958f7 100644
+--- a/supabase/functions/_shared/ai_provider/isolation_test.ts
++++ b/supabase/functions/_shared/ai_provider/isolation_test.ts
+@@ -1,9 +1,12 @@
+-// Isolation and Edge / Deno compatibility of the provider module (required test 29, and the Phase 1a scope):
++// Isolation and Edge / Deno compatibility of the provider module (required test 29, and the Primary scope):
+ //   - runtime sources use web-standard APIs only: no node: imports, no Deno.* (the environment is read through the
+ //     injected reader), no console output;
+ //   - the only external dependency is the exactly pinned official Anthropic SDK, in the Anthropic adapter only;
+ //   - provider hosts and model ids appear only where they belong;
+-//   - nothing in production imports this module yet, and no app references it or the Anthropic key.
++//   - F6 V0 (Opus primary for the close report): the shared market report handler is the ONE production user.
++//     Outside this module, only the files in AUTHORIZED_REFERENCES name it, with exactly those imports; of all
++//     deployable sources only that handler and its entry point reach it (directly or through other files); the
++//     Anthropic SDK and key names stay inside it (plus the handler's offline test); no app references it or the key.
+ import assert from "node:assert/strict";
+ import test from "node:test";
+ 
+@@ -73,23 +76,179 @@ test("provider hosts appear only in their adapters; model ids only in the catalo
+   }
+ });
+ 
+-test("Phase 1a scope: no production function imports the provider module yet", async () => {
+-  const offenders: string[] = [];
+-  for await (const file of walk(FUNCTIONS_DIR)) {
+-    if (file.href.startsWith(MODULE_DIR.href)) continue;
+-    const text = await Deno.readTextFile(file);
+-    if (/_shared\/ai_provider\//u.test(text) || /from\s+["'][^"']*ai_provider\//u.test(text)) offenders.push(file.pathname);
++// ---- Primary scope ------------------------------------------------------------------------------------------------
++// The checks below are pure functions over a file tree (path relative to supabase/functions/ -> text), so the same
++// code runs on the repository and on synthetic trees that must be refused.
++
++type Tree = ReadonlyMap<string, string>;
++
++const MODULE_PREFIX = "_shared/ai_provider/";
++
++/** Every file outside this module that names it, with every specifier it uses for it. Nothing else may. */
++const AUTHORIZED_REFERENCES: Record<string, readonly string[]> = {
++  "market-report-analysis/handler.ts": [
++    "../_shared/ai_provider/market_report_primary.ts",
++  ],
++};
++
++/** The deployable sources that may reach this module through their imports: the handler and its entry point. */
++const AUTHORIZED_REACHERS = ["market-report-analysis/handler.ts", "market-report-analysis/index.ts"];
++
++/** Outside this module, the Anthropic SDK and ANTHROPIC_* names appear only in the handler's offline test. */
++const AUTHORIZED_ANTHROPIC_NAMES = ["market-report-analysis/opus_primary_handler_test.ts"];
++
++const isTestFile = (path: string) => path.endsWith("_test.ts") || path.endsWith("/test_support.ts");
++const isCode = (path: string) => /\.(ts|tsx|js|mjs)$/u.test(path);
++
++/** Files outside the module that mention it -> sorted specifiers; a mention outside a string literal is "<bare>". */
++function directReferences(tree: Tree): Record<string, string[]> {
++  const out: Record<string, string[]> = {};
++  for (const [path, text] of tree) {
++    if (path.startsWith(MODULE_PREFIX) || !/ai_provider\//u.test(text)) continue;
++    const literals = [...text.matchAll(/["'`]([^"'`\n]*ai_provider\/[^"'`\n]*)["'`]/gu)].map((m) => m[1]);
++    const mentions = text.match(/ai_provider\//gu)?.length ?? 0;
++    const specifiers = new Set(literals);
++    if (mentions !== literals.length) specifiers.add("<bare>");
++    out[path] = [...specifiers].sort();
+   }
+-  assert.deepEqual(offenders, []);
++  return out;
++}
++
++/** Relative imports (static, re-export, side-effect, dynamic) of one file, resolved to tree paths. */
++function relativeImports(path: string, text: string): string[] {
++  const body = code(text);
++  const specifiers = [
++    ...body.matchAll(/\bfrom\s*["']([^"']+)["']/gu),
++    ...body.matchAll(/\bimport\s*["']([^"']+)["']/gu),
++    ...body.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/gu),
++  ].map((m) => m[1]).filter((s) => s.startsWith("./") || s.startsWith("../"));
++  const base = new URL(path, "file:///functions/");
++  return specifiers.map((s) => decodeURIComponent(new URL(s, base).pathname).replace(/^\/functions\//u, ""));
++}
++
++/** Deployable (non-test) sources outside the module whose import graph reaches the module. */
++function reachingProductionFiles(tree: Tree): string[] {
++  const memo = new Map<string, boolean>();
++  const reaches = (path: string, stack: Set<string>): boolean => {
++    if (path.startsWith(MODULE_PREFIX)) return true;
++    const known = memo.get(path);
++    if (known !== undefined) return known;
++    const text = tree.get(path);
++    if (text === undefined || stack.has(path)) return false;
++    stack.add(path);
++    const result = relativeImports(path, text).some((dep) => reaches(dep, stack));
++    stack.delete(path);
++    memo.set(path, result);
++    return result;
++  };
++  return [...tree.keys()]
++    .filter((path) => !path.startsWith(MODULE_PREFIX) && isCode(path) && !isTestFile(path) && reaches(path, new Set()))
++    .sort();
++}
++
++/** Files outside the module that name the Anthropic SDK or an ANTHROPIC_* setting. */
++function anthropicNames(tree: Tree): string[] {
++  return [...tree.entries()]
++    .filter(([path, text]) => !path.startsWith(MODULE_PREFIX) && /@anthropic-ai\/|\bANTHROPIC_[A-Z_]+/u.test(text))
++    .map(([path]) => path)
++    .sort();
++}
++
++/** App files (src/, apps/) that name the provider module, the Anthropic key or its SDK. */
++function appLeaks(tree: Tree): string[] {
++  return [...tree.entries()].filter(([, text]) => /ai_provider|ANTHROPIC_API_KEY|@anthropic-ai\/sdk/u.test(text)).map(([path]) => path).sort();
++}
++
++async function readTree(root: URL): Promise<Map<string, string>> {
++  const tree = new Map<string, string>();
++  for await (const file of walk(root)) tree.set(file.href.slice(root.href.length), await Deno.readTextFile(file));
++  return tree;
++}
++
++const functionsTree = readTree(FUNCTIONS_DIR);
++
++async function appTree(): Promise<Map<string, string>> {
++  const tree = new Map<string, string>();
++  for (const dir of ["src/", "apps/"]) {
++    for (const [path, text] of await readTree(new URL(dir, REPO_ROOT))) tree.set(dir + path, text);
++  }
++  return tree;
++}
++
++const sortedAuthorized = () =>
++  Object.fromEntries(Object.entries(AUTHORIZED_REFERENCES).map(([path, specifiers]) => [path, [...specifiers].sort()]));
++
++test("Primary scope: only the authorized market report files name the provider module, with exactly these imports", async () => {
++  assert.deepEqual(directReferences(await functionsTree), sortedAuthorized());
++});
++
++test("Primary scope: of all deployable sources, only the market report handler and its entry point reach the module", async () => {
++  assert.deepEqual(reachingProductionFiles(await functionsTree), AUTHORIZED_REACHERS);
++});
++
++test("Primary scope: the Anthropic SDK and ANTHROPIC_* names stay in the module (and the handler's offline test)", async () => {
++  assert.deepEqual(anthropicNames(await functionsTree), AUTHORIZED_ANTHROPIC_NAMES);
+ });
+ 
+ test("apps never reference the provider module or the Anthropic key (keys stay server-side)", async () => {
+-  const offenders: string[] = [];
+-  for (const dir of ["src/", "apps/"]) {
+-    for await (const file of walk(new URL(dir, REPO_ROOT))) {
+-      const text = await Deno.readTextFile(file);
+-      if (/ai_provider|ANTHROPIC_API_KEY|@anthropic-ai\/sdk/u.test(text)) offenders.push(file.pathname);
+-    }
++  assert.deepEqual(appLeaks(await appTree()), []);
++});
++
++test("Primary scope: every widening is refused (synthetic trees built on the real one)", async () => {
++  const real = await functionsTree;
++  const withFile = (path: string, text: string) => new Map([...real, [path, text]]);
++  const refusedDirect = (tree: Tree, path: string) => {
++    assert.notDeepEqual(directReferences(tree), sortedAuthorized(), `${path}: direct reference not refused`);
++    assert.ok(path in directReferences(tree), path);
++  };
++
++  // Another Edge Function imports the module (static, dynamic, re-export, side effect): refused twice over.
++  for (const [path, text] of [
++    ["x-test-post/index.ts", `${real.get("x-test-post/index.ts") ?? ""}\nimport { executeAiRequest } from "../_shared/ai_provider/mod.ts";\n`],
++    ["personalized-reports/ai.ts", `export const load = () => import("../_shared/ai_provider/execute.ts");\n`],
++    ["social-mobile-consult/provider.ts", `export * from "../_shared/ai_provider/mod.ts";\n`],
++    ["important-news-monitor/boot.ts", `import "../_shared/ai_provider/anthropic_adapter.ts";\n`],
++  ] as const) {
++    const tree = withFile(path, text);
++    refusedDirect(tree, path);
++    assert.ok(reachingProductionFiles(tree).includes(path), `${path}: reach not refused`);
++  }
++
++  // Indirect: a deployable file that imports the handler reaches the module without naming it.
++  const bridge = withFile("_shared/report_bridge.ts", `export { handleRequest } from "../market-report-analysis/handler.ts";\n`);
++  assert.deepEqual(directReferences(bridge), sortedAuthorized(), "no direct reference");
++  assert.deepEqual(reachingProductionFiles(bridge), ["_shared/report_bridge.ts", ...AUTHORIZED_REACHERS]);
++
++  // The handler imports one more provider file, or another market report source starts using the module.
++  const handler = real.get("market-report-analysis/handler.ts")!;
++  refusedDirect(
++    withFile("market-report-analysis/handler.ts", `${handler}\nimport { AnthropicAdapter } from "../_shared/ai_provider/anthropic_adapter.ts";\n`),
++    "market-report-analysis/handler.ts",
++  );
++  const extra = withFile("market-report-analysis/extra.ts", `import { prepareMarketReportShadow } from "../_shared/ai_provider/market_report_wiring.ts";\n`);
++  refusedDirect(extra, "market-report-analysis/extra.ts");
++  assert.ok(reachingProductionFiles(extra).includes("market-report-analysis/extra.ts"));
++
++  // Another function's test may not use the module either (the allowlist names files, not directories or kinds).
++  refusedDirect(withFile("x-test-post/provider_test.ts", `import { fakeEnv } from "../_shared/ai_provider/test_support.ts";\n`), "x-test-post/provider_test.ts");
++
++  // A path mentioned outside a string literal is still a reference.
++  assert.deepEqual(directReferences(withFile("x-test-post/notes.ts", "// see _shared/ai_provider/mod.ts\n"))["x-test-post/notes.ts"], ["<bare>"]);
++
++  // Production code outside the module may not read the Anthropic key or import its SDK.
++  for (const [path, text] of [
++    ["personalized-reports/claude.ts", `export const key = Deno.env.get("ANTHROPIC_API_KEY");\n`],
++    ["market-report-analysis/handler.ts", `${handler}\nimport Anthropic from "npm:@anthropic-ai/sdk@0.132.1";\n`],
++  ] as const) {
++    assert.ok(anthropicNames(withFile(path, text)).includes(path), `${path}: Anthropic name not refused`);
++  }
++
++  // App leaks are still found.
++  for (const [path, text] of [
++    ["src/lib/ai.ts", `const key = process.env.ANTHROPIC_API_KEY;\n`],
++    ["src/lib/sdk.ts", `import Anthropic from "@anthropic-ai/sdk";\n`],
++    ["apps/social-mobile/src/ai.ts", `import { executeAiRequest } from "../../../supabase/functions/_shared/ai_provider/mod.ts";\n`],
++  ] as const) {
++    assert.deepEqual(appLeaks(new Map([[path, text]])), [path]);
+   }
+-  assert.deepEqual(offenders, []);
+ });
+diff --git a/supabase/functions/market-report-analysis/handler.ts b/supabase/functions/market-report-analysis/handler.ts
+index e3e7cf2e..ce83e5e2 100644
+--- a/supabase/functions/market-report-analysis/handler.ts
++++ b/supabase/functions/market-report-analysis/handler.ts
+@@ -11,6 +11,12 @@
+ //
+ // Auth: verify_jwt = false + X-Cron-Secret (existing
+ // SEND_PUSH_NOTIFICATIONS_CRON_SECRET, same as the other report functions).
++//
++// Close report with Claude as PRIMARY (F6 V0, default OFF): only when KABUMORI_MARKET_REPORT_AI_MODE is exactly
++// "primary_close" AND the report is "close", every model call (generate and Fact) goes to the configured Anthropic
++// model through the shared provider and its budget ledger: one attempt, no retry, no automatic OpenAI fallback. A
++// failure fails the cycle like an OpenAI failure (the next cron run retries); "on but incomplete" fails closed with
++// ANALYSIS_PRIMARY_CONFIG:<reason>. Any other value, and the morning report, keep the OpenAI requester untouched.
+ 
+ import type { MarketDataPacket } from "../market-report-data-packet/packet_schema.ts";
+ import { decideRunWindow, type ReportType } from "../market-report-data-packet/session_logic.ts";
+@@ -26,6 +32,7 @@ import {
+ } from "./analysis_logic.ts";
+ import { persistTraces, promptHash, traceRows } from "./debug_trace.ts";
+ import { auditDiagnostics } from "../_shared/kabumori_ai_models.ts";
++import { type MarketReportPrimaryRecord, PRIMARY_RUN_BUDGET_MS, prepareMarketReportPrimary } from "../_shared/ai_provider/market_report_primary.ts";
+ import {
+   fetchWithTransportRetry,
+   newTransportStats,
+@@ -160,7 +167,21 @@ const NEWS_COLUMNS = [
+   "generated_text", "generation_fact_status",
+ ].join(",");
+ 
++const SAFE_DETAIL = /^[A-Za-z0-9_.:@/-]{1,80}$/;
++
++/** One structured line per primary call: identifiers and numbers only (no prompt, output, news or key). */
++function logPrimaryCall(record: MarketReportPrimaryRecord): void {
++  try {
++    const detail = record.detail === null ? null : SAFE_DETAIL.test(record.detail) ? record.detail : "REDACTED";
++    console.log(JSON.stringify({ event: "market_report_primary", ...record, detail }));
++  } catch {
++    // Logging never affects the report.
++  }
++}
++
+ export async function handleRequest(req: Request, deps: Deps): Promise<Response> {
++  // Start of this invocation: the primary's calls must all start before startedAtMs + PRIMARY_RUN_BUDGET_MS.
++  const startedAtMs = deps.now().getTime();
+   if (req.method !== "POST") return respond({ error: "METHOD_NOT_ALLOWED" }, 405);
+   const expectedSecret = deps.env("SEND_PUSH_NOTIFICATIONS_CRON_SECRET");
+   if (!expectedSecret || req.headers.get("X-Cron-Secret") !== expectedSecret) {
+@@ -209,6 +230,10 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
+   // `model` is the generation model (kept for existing readers); the rest is the audit tuple of each role:
+   // logical role, actual model, reasoning and the registry configuration version.
+   const diagnostics: Record<string, string> = { model: ANALYSIS_MODEL, ...auditDiagnostics() };
++  // The model that wrote this cycle's report (ANALYSIS_MODEL unless the close report runs on the primary).
++  let reportModel = ANALYSIS_MODEL;
++  // The primary's ledger-settled calls and cost so far, also for a failed cycle (empty when not on the primary).
++  let primaryCost: () => Record<string, string> = () => ({});
+   const transport = newTransportStats();
+   // Test-phase debug evidence: every generation of this invocation, kept whole. Written best-effort after the
+   // run is settled (success, failure or exception) and never in the way of delivery.
+@@ -221,7 +246,7 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
+     traced = true;
+     const rows = traceRows({
+       reportType, tradingDate, cycleId: claim!.cycle_id, dataPacketId: claim!.data_packet_id, reportPacketId,
+-      invocationId, attempt: claim!.attempt, model: ANALYSIS_MODEL, basePromptHash: traceBasePromptHash,
++      invocationId, attempt: claim!.attempt, model: reportModel, basePromptHash: traceBasePromptHash,
+     }, records);
+     await persistTraces((table, batch) => db.insert(table, batch), rows);
+   };
+@@ -262,9 +287,35 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
+     diagnostics.direction = input.direction;
+     traceBasePromptHash = await promptHash(String(generationRequestBody(input, []).instructions)).catch(() => null);
+ 
++    const primary = prepareMarketReportPrimary({
++      readEnv: (name) => deps.env(name),
++      reportType,
++      claim: { cycle_id: claim.cycle_id, attempt: claim.attempt },
++      deadlineAtMs: startedAtMs + PRIMARY_RUN_BUDGET_MS,
++      sink: logPrimaryCall,
++      fetch: (input, init) => deps.fetch(input, init),
++      nowMs: () => deps.now().getTime(),
++    });
++    if (primary.mode === "invalid") {
++      const code = `ANALYSIS_PRIMARY_CONFIG:${primary.reason}`;
++      await fail(code);
++      await writeTraces(null);
++      return respond({ status: "failed", error: code, reportType, tradingDate, attempt: claim.attempt }, 500);
++    }
++    if (primary.mode === "primary") {
++      reportModel = primary.model;
++      diagnostics.model = primary.model;
++      diagnostics.ai_primary = `${primary.provider}:${primary.model}`;
++    }
++    if (primary.mode === "primary") {
++      primaryCost = () => ({ primary_calls: String(primary.totals().calls), cost_usd: String(primary.totals().costUsd) });
++    }
++
+     const outcome = await generateSharedAnalysis(
+       input,
+-      openAiRequester(openAiApiKey, deps.fetch, { stats: transport, sleep: deps.sleep ?? realSleep }),
++      primary.mode === "primary"
++        ? primary.requester
++        : openAiRequester(openAiApiKey, deps.fetch, { stats: transport, sleep: deps.sleep ?? realSleep }),
+       deps.now,
+       records,
+     );
+@@ -275,6 +326,9 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
+     diagnostics.input_tokens = String(outcome.inputTokens);
+     diagnostics.output_tokens = String(outcome.outputTokens);
+     diagnostics.cost_usd = String(outcome.costUsd);
++    // On the primary, the report's cost is what the ledger settled for Claude (outcome.costUsd prices OpenAI tokens).
++    Object.assign(diagnostics, primaryCost());
++    const costUsd = Number(diagnostics.cost_usd);
+ 
+     if (!outcome.ok) {
+       await fail(outcome.error, { issues: outcome.issues.join(" / ").slice(0, 900) });
+@@ -282,17 +336,18 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
+       return respond({ status: "failed", error: outcome.error, issues: outcome.issues, reportType, tradingDate, attempt: claim.attempt });
+     }
+ 
+-    const contentHash = await reportContentHash(outcome.packet);
++    const packet = reportModel === ANALYSIS_MODEL ? outcome.packet : { ...outcome.packet, model: reportModel };
++    const contentHash = await reportContentHash(packet);
+     const packetId = await db.rpc<string>("complete_market_report_analysis", {
+       p_cycle_id: claim.cycle_id,
+       p_claim_token: claim.claim_token,
+-      p_payload: outcome.packet,
++      p_payload: packet,
+       p_content_hash: contentHash,
+-      p_model: ANALYSIS_MODEL,
++      p_model: reportModel,
+       p_generation_calls: outcome.calls,
+       p_input_tokens: outcome.inputTokens,
+       p_output_tokens: outcome.outputTokens,
+-      p_api_cost_usd: outcome.costUsd,
++      p_api_cost_usd: costUsd,
+       p_diagnostics: diagnostics,
+     });
+     await writeTraces(packetId);
+@@ -303,13 +358,13 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
+       attempt: claim.attempt,
+       reportPacketId: packetId,
+       contentHash,
+-      direction: outcome.packet.market_direction,
++      direction: packet.market_direction,
+       calls: outcome.calls,
+-      costUsd: outcome.costUsd,
++      costUsd,
+     });
+   } catch (error) {
+     const code = safeCode(error);
+-    await fail(code, transportDiagnostics(transport));
++    await fail(code, { ...transportDiagnostics(transport), ...primaryCost() });
+     await writeTraces(null);
+     return respond({ status: "failed", error: code, reportType, tradingDate, transportRetries: transport.retries }, 500);
+   }
+diff --git a/supabase/functions/market-report-analysis/opus_primary_handler_test.ts b/supabase/functions/market-report-analysis/opus_primary_handler_test.ts
+new file mode 100644
+index 00000000..96801002
+--- /dev/null
++++ b/supabase/functions/market-report-analysis/opus_primary_handler_test.ts
+@@ -0,0 +1,179 @@
++// F6 V0 handler E2E (offline): the shared report handler with KABUMORI_MARKET_REPORT_AI_MODE=primary_close. Real
++// handleRequest, repository fixtures, fake DB / OpenAI / Anthropic / ledger; any other host fails the test.
++import assert from "node:assert/strict";
++import test from "node:test";
++import { ANALYSIS_MODEL } from "./analysis_logic.ts";
++import { buildAnalysisInput } from "./analysis_input.ts";
++import { type Deps, handleRequest } from "./handler.ts";
++import { rich0917, richMorning1001 } from "./test_support.ts";
++
++const directory = new URL("./fixtures/", import.meta.url);
++const load = async (name: string) => JSON.parse(await Deno.readTextFile(new URL(name, directory)));
++const FIXTURES = {
++  close: { data: await load("close_2026-09-17_data_packet.json"), news: await load("close_2026-09-17_news_rows.json"), make: rich0917, now: "2026-09-17T07:20:00Z" },
++  morning: { data: await load("morning_2026-10-01_data_packet.json"), news: await load("morning_2026-10-01_news_rows.json"), make: richMorning1001, now: "2026-09-30T22:55:20Z" },
++};
++const SUPABASE = "https://project-ref.supabase.co";
++const SECRET = "cron-secret-for-tests";
++const SERVICE_KEY = "service-secret-NOT-REAL";
++const OPENAI_KEY = "openai-test-key-NOT-REAL";
++const ANTHROPIC_KEY = "sk-ant-api03-NOT-REAL-handler-0000000000";
++const PRIMARY = "claude-opus-5-5";
++const CYCLE = "11111111-1111-4111-8111-111111111111";
++
++type Call = { url: string; body: Record<string, unknown> | null };
++
++function harness(options: { reportType: "close" | "morning"; env?: Record<string, string | undefined>; claude?: "ok" | 529 }) {
++  const fixture = FIXTURES[options.reportType];
++  const analysis = fixture.make(buildAnalysisInput({
++    dataPacket: fixture.data.payload, dataPacketId: fixture.data.id, dataContentHash: fixture.data.content_hash, newsRows: fixture.news,
++  }));
++  const calls: Call[] = [];
++  let reservations = 0;
++  const json = (value: unknown, status = 200, headers: Record<string, string> = {}) =>
++    new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json", ...headers } });
++  const fetchMock: typeof fetch = async (input, init) => {
++    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
++    const raw = input instanceof Request ? await input.clone().text() : typeof init?.body === "string" ? init.body : "";
++    const body = raw ? JSON.parse(raw) : null;
++    calls.push({ url, body });
++    if (url === "https://api.openai.com/v1/responses") {
++      const isFact = String(body?.instructions).includes("Factチェッカー");
++      const payload = isFact ? { passed: true, issues: [], objective_issues: [] } : analysis;
++      return json({ output: [{ content: [{ type: "output_text", text: JSON.stringify(payload) }] }], usage: { input_tokens: 900, output_tokens: 300 } });
++    }
++    if (url.startsWith("https://api.anthropic.com/")) {
++      if (options.claude === 529) return json({ type: "error", error: { type: "overloaded_error", message: "fake" } }, 529);
++      const system = typeof body.system === "string" ? body.system : (body.system as Array<{ text: string }>).map((part) => part.text).join("");
++      const payload = system.includes("Factチェッカー") ? { passed: true, issues: [], objective_issues: [] } : analysis;
++      return json({
++        id: "msg_fake", type: "message", role: "assistant", model: PRIMARY, stop_reason: "end_turn", stop_sequence: null,
++        content: [{ type: "text", text: JSON.stringify(payload) }],
++        usage: { input_tokens: 20_000, output_tokens: 9_000, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
++      }, 200, { "request-id": "req_handler_e2e" });
++    }
++    if (!url.startsWith(`${SUPABASE}/rest/v1/`)) throw new Error(`UNEXPECTED_HOST:${url}`);
++    const path = url.slice(`${SUPABASE}/rest/v1/`.length);
++    if (path === "rpc/ai_ledger_reserve") return json({ allowed: true, reservation_id: `00000000-0000-4000-8000-00000000000${++reservations}`, status: "reserved" });
++    if (path === "rpc/ai_ledger_mark_sent") return json({ status: "sent", may_send: true });
++    if (path === "rpc/ai_ledger_settle") return json({ status: "settled", duplicate: false });
++    if (path.startsWith("market_holidays")) return json([{ holiday_date: "2026-09-21" }]);
++    if (path === "rpc/claim_market_report_analysis") {
++      return json([{ cycle_id: CYCLE, claim_token: "22222222-2222-4222-8222-222222222222", attempt: 1, outcome: "claimed", data_packet_id: fixture.data.id }]);
++    }
++    if (path.startsWith("market_data_packets")) {
++      return json([{ id: fixture.data.id, content_hash: fixture.data.content_hash, payload: fixture.data.payload, data_quality_status: "partial" }]);
++    }
++    if (path.startsWith("important_news_candidates")) return json(fixture.news);
++    if (path === "rpc/complete_market_report_analysis") return json("33333333-3333-4333-8333-333333333333");
++    if (path === "rpc/fail_market_report_analysis") return json("failed");
++    if (path.startsWith("market_report_generation_traces")) return new Response(null, { status: 201 });
++    throw new Error(`UNEXPECTED_PATH:${path}`);
++  };
++  const env: Record<string, string | undefined> = {
++    SUPABASE_URL: SUPABASE,
++    SUPABASE_SECRET_KEYS: JSON.stringify({ default: SERVICE_KEY }),
++    SEND_PUSH_NOTIFICATIONS_CRON_SECRET: SECRET,
++    OPENAI_API_KEY: OPENAI_KEY,
++    ANTHROPIC_API_KEY: ANTHROPIC_KEY,
++    KABUMORI_MARKET_REPORT_AI_MODE: "primary_close",
++    KABUMORI_MARKET_REPORT_PRIMARY_MODEL: PRIMARY,
++    ...options.env,
++  };
++  const deps: Deps = { env: (name) => env[name], fetch: fetchMock, now: () => new Date(fixture.now), sleep: () => Promise.resolve() };
++  const req = new Request("https://functions.local/market-report-analysis", {
++    method: "POST", headers: { "Content-Type": "application/json", "X-Cron-Secret": SECRET }, body: JSON.stringify({ mode: options.reportType }),
++  });
++  const of = (prefix: string) => calls.filter((call) => call.url.startsWith(prefix));
++  return {
++    calls, deps, req,
++    openai: () => of("https://api.openai.com/"),
++    claude: () => of("https://api.anthropic.com/"),
++    ledger: () => of(`${SUPABASE}/rest/v1/rpc/ai_ledger_`),
++    rpc: (name: string) => calls.find((call) => call.url === `${SUPABASE}/rest/v1/rpc/${name}`)?.body ?? null,
++  };
++}
++
++async function withLogs<T>(fn: () => Promise<T>): Promise<{ value: T; lines: string[] }> {
++  const lines: string[] = [];
++  const original = console.log;
++  console.log = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
++  try {
++    return { value: await fn(), lines };
++  } finally {
++    console.log = original;
++  }
++}
++
++test("close + primary_close: Claude writes the stored report; model and cost say so; no OpenAI call", async () => {
++  const h = harness({ reportType: "close" });
++  const { value: res, lines } = await withLogs(() => handleRequest(h.req, h.deps));
++  const body = await res.json();
++  assert.equal(body.status, "completed", JSON.stringify(body));
++  assert.equal(h.openai().length, 0);
++  assert.equal(h.claude().length, 2);
++  assert.equal(h.ledger().length, 6);
++  const complete = h.rpc("complete_market_report_analysis")!;
++  assert.equal(complete.p_model, PRIMARY);
++  assert.equal((complete.p_payload as { model: string }).model, PRIMARY);
++  assert.equal((complete.p_payload as { schema_version: string }).schema_version, "market_report_packet.v1");
++  const diagnostics = complete.p_diagnostics as Record<string, string>;
++  assert.equal(diagnostics.model, PRIMARY);
++  assert.equal(diagnostics.ai_primary, `anthropic:${PRIMARY}`);
++  assert.equal(diagnostics.primary_calls, "2");
++  assert.equal(Number(diagnostics.cost_usd), complete.p_api_cost_usd);
++  assert.ok((complete.p_api_cost_usd as number) > 0.26, "Claude's settled cost, not OpenAI prices");
++  assert.equal(body.costUsd, complete.p_api_cost_usd);
++  // Logs: one line per Claude call, identifiers and numbers only.
++  const events = lines.map((line) => JSON.parse(line)).filter((line) => line.event === "market_report_primary");
++  assert.deepEqual(events.map((e) => [e.step, e.ok, e.callId]), [
++    ["generate", true, `mrp:${CYCLE}:a1:generate:1`],
++    ["fact", true, `mrp:${CYCLE}:a1:fact:1`],
++  ]);
++  const everything = lines.join("\n") + JSON.stringify(complete);
++  for (const secret of [ANTHROPIC_KEY, SERVICE_KEY, OPENAI_KEY]) assert.ok(!everything.includes(secret), "no key in logs or rows");
++  assert.ok(!lines.join("\n").includes("あなたは日本株の市場レポート編集者です"), "no prompt in logs");
++});
++
++test("mode unset: the close report is exactly today's OpenAI path (model, cost, calls)", async () => {
++  const h = harness({ reportType: "close", env: { KABUMORI_MARKET_REPORT_AI_MODE: undefined } });
++  const body = await (await handleRequest(h.req, h.deps)).json();
++  assert.equal(body.status, "completed");
++  assert.deepEqual([h.openai().length, h.claude().length, h.ledger().length], [2, 0, 0]);
++  const complete = h.rpc("complete_market_report_analysis")!;
++  assert.equal(complete.p_model, ANALYSIS_MODEL);
++  assert.equal((complete.p_payload as { model: string }).model, ANALYSIS_MODEL);
++  assert.equal((complete.p_diagnostics as Record<string, string>).ai_primary, undefined);
++});
++
++test("morning + primary_close: the morning report stays on OpenAI", async () => {
++  const h = harness({ reportType: "morning" });
++  const body = await (await handleRequest(h.req, h.deps)).json();
++  assert.equal(body.status, "completed", JSON.stringify(body));
++  assert.deepEqual([h.openai().length, h.claude().length, h.ledger().length], [2, 0, 0]);
++  assert.equal(h.rpc("complete_market_report_analysis")!.p_model, ANALYSIS_MODEL);
++});
++
++test("primary_close without the Anthropic key fails the cycle closed: no model call, no OpenAI fallback", async () => {
++  const h = harness({ reportType: "close", env: { ANTHROPIC_API_KEY: undefined } });
++  const res = await handleRequest(h.req, h.deps);
++  const body = await res.json();
++  assert.equal(res.status, 500);
++  assert.equal(body.error, "ANALYSIS_PRIMARY_CONFIG:KEY_MISSING");
++  assert.deepEqual([h.openai().length, h.claude().length, h.ledger().length], [0, 0, 0]);
++  assert.equal(h.rpc("fail_market_report_analysis")!.p_error, "ANALYSIS_PRIMARY_CONFIG:KEY_MISSING");
++  assert.equal(h.rpc("complete_market_report_analysis"), null);
++});
++
++test("Claude overloaded: the cycle fails (next cron run retries), one request, no OpenAI fallback, cost recorded", async () => {
++  const h = harness({ reportType: "close", claude: 529 });
++  const { value: res } = await withLogs(() => handleRequest(h.req, h.deps));
++  const body = await res.json();
++  assert.equal(res.status, 500);
++  assert.equal(body.error, "ANALYSIS_PRIMARY_GENERATE_FAILED:OVERLOADED");
++  assert.deepEqual([h.openai().length, h.claude().length], [0, 1]);
++  const failed = h.rpc("fail_market_report_analysis")!;
++  assert.equal(failed.p_error, "ANALYSIS_PRIMARY_GENERATE_FAILED:OVERLOADED");
++  assert.equal((failed.p_diagnostics as Record<string, string>).primary_calls, "1");
++  assert.equal(h.rpc("complete_market_report_analysis"), null);
++});
