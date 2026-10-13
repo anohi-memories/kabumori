@@ -101,6 +101,15 @@ if want preflight; then
   psql_q "$d" -c "alter function private.account_lifecycle_owned_operation(uuid,uuid,uuid) rename to account_lifecycle_owned_operation_moved" >/dev/null
   refused_with "$d" COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_FOUNDATION_MISSING
   "${S[@]}" -d postgres -c "drop database $d with (force)" >/dev/null
+  # Release order (Phase 7): without the Phase 4 state decision, or without the Phase 5 workspace-owner state, refused.
+  "${S[@]}" -d postgres -c "create database $d template $tpl owner $owner" >/dev/null
+  psql_q "$d" -c "alter function public.common_account_brand_service_state(text,text) rename to common_account_brand_service_state_moved" >/dev/null
+  refused_with "$d" COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_BRAND_STATE_MISSING
+  "${S[@]}" -d postgres -c "drop database $d with (force)" >/dev/null
+  "${S[@]}" -d postgres -c "create database $d template $tpl owner $owner" >/dev/null
+  psql_q "$d" -c "alter function private.account_lifecycle_service_state_refusal(uuid,text) rename to account_lifecycle_service_state_refusal_moved" >/dev/null
+  refused_with "$d" COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_CORE_FENCE_MISSING
+  "${S[@]}" -d postgres -c "drop database $d with (force)" >/dev/null
   echo "COMMON_ACCOUNT_SERVICE_DELETION_PREFLIGHT_PASS"
 fi
 

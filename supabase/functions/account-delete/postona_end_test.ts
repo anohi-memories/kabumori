@@ -222,6 +222,67 @@ test('a retry cannot erase the fact that the remote grant was not verified revok
   assert.equal(w.state.svc?.results.threads, 'local_removed_remote_unverified');
 });
 
+test('a removal already on record needs the person\'s consent, taken from the retry itself; none is asked twice', async () => {
+  // The registration says "supported" (nothing is asked up front), the adapter answers "unverified": the first
+  // attempt stops after the removal; the end is stuck unless the retry can bring the consent.
+  const w = withThreads();
+  w.deps.providerRemoteRevoke = { threads: 'supported' };
+  const first = await withdraw(w);
+  assert.equal(error(first), 'PROVIDER_REMOTE_UNVERIFIED');
+  assert.equal(w.state.threads, false);
+  assert.equal(w.state.svc?.results.threads, 'local_removed_remote_unverified');
+  assert.equal(w.state.svc?.ack ?? null, null, 'no acknowledgement was given');
+  // A retry without consent: stopped again at once, X is not touched, the lease is given back.
+  const xBefore = w.state.calls.x;
+  const second = await withdraw(w);
+  assert.equal(error(second), 'REMOTE_UNVERIFIED_ACK_REQUIRED');
+  assert.deepEqual(bodyOf(second).providers, [{ provider: 'threads', result: 'local_removed_remote_unverified' }]);
+  assert.equal(w.state.calls.x, xBefore, 'X is not run before the consent');
+  assert.equal(w.state.svc?.lease, null);
+  assert.equal(w.state.services.x_autopost, 'deleting');
+  // A retry with the person\'s consent: recorded, then the same operation ends; the fact stays reported.
+  const third = await withdraw(w, ACK);
+  assert.equal(third.status, 200);
+  assert.deepEqual(w.state.svc?.ack, ['threads']);
+  assert.deepEqual(bodyOf(third).remote_unverified, ['threads']);
+  assert.equal(w.state.services.x_autopost, 'ended');
+});
+
+test('consent given earlier stays: a retry that brings none is not asked again when the answer is on record', async () => {
+  const w = withThreads({ rpcFailOnce: { finish_owned_service: 1 } });
+  const first = await withdraw(w, ACK);
+  assert.equal(first.status, 500, 'the end itself failed once, after the removal and its answer were recorded');
+  assert.equal(w.state.svc?.results.threads, 'local_removed_remote_unverified');
+  assert.deepEqual(w.state.svc?.ack, ['threads']);
+  const second = await withdraw(w); // no acknowledgement in this request: the earlier one is on the record
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  assert.deepEqual(bodyOf(second).remote_unverified, ['threads']);
+});
+
+test('consent given earlier stays: a resumed end after a crash does not ask again, and still reports the grant as unverified', async () => {
+  const w = withThreads();
+  // First attempt: acknowledged, removed, then the process "dies" before the answer was recorded.
+  const adapter = w.deps.providers![0];
+  w.deps.providers = [{
+    ...adapter,
+    cleanup: async () => {
+      w.state.threads = false;
+      lose(w); // the lease ends while the removal runs; its answer is not used
+      return 'local_removed_remote_unverified';
+    },
+  }];
+  const first = await withdraw(w, ACK);
+  assert.equal(error(first), 'DELETION_IN_PROGRESS');
+  assert.deepEqual(w.state.svc?.ack, ['threads']);
+  assert.equal(w.state.svc?.results.threads, 'pending', 'its answer was never recorded');
+  // The retry brings no consent (the preview no longer lists a connection): none is needed, it is on the record.
+  w.deps.providers = [threads(w)];
+  const second = await withdraw(w);
+  assert.equal(second.status, 200);
+  assert.deepEqual(bodyOf(second).providers, { threads: 'not_connected', x: 'done' });
+  assert.deepEqual(bodyOf(second).remote_unverified, ['threads'], 'acknowledged + only "not connected" is still unverified');
+});
+
 test('an answer nobody expected: the operator override records an acknowledgement; without it everything stops', async () => {
   // World without a connected Threads row in the snapshot: no acknowledgement was asked, yet the adapter answers
   // "local removed, remote unverified" (a leftover credential).

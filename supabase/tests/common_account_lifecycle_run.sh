@@ -471,6 +471,14 @@ rollback_refuses() {  # label, expected message
   [[ "$("${query[@]}" -c "select to_regclass('public.common_accounts') is not null and to_regprocedure('private.account_lifecycle_guard_account_delete()') is not null")" == t ]] || { echo "FAIL rollback removed objects: $1" >&2; exit 1; }
 }
 rollback_refuses "deletion in flight" "COMMON_ACCOUNT_ROLLBACK_REFUSED_OPERATIONS_EXIST"
+# Phase 7: a later phase's function (plpgsql: no recorded dependency) must stop the rollback instead of being left
+# behind callable and broken. Phase 2's restart RPCs and a Phase 6-style public function are stood in by stubs.
+"${as_owner[@]}" -c "create function public.reactivate_kabumori_service(p bigint) returns jsonb language sql as \$f\$ select '{}'::jsonb \$f\$"
+rollback_refuses "a Phase 2 restart function present" "COMMON_ACCOUNT_ROLLBACK_REFUSED_LATER_PHASE_PRESENT"
+"${as_owner[@]}" -c "drop function public.reactivate_kabumori_service(bigint)"
+"${as_owner[@]}" -c "create function private.account_lifecycle_service_state_refusal(p uuid, s text) returns text language sql as \$f\$ select null::text \$f\$"
+rollback_refuses "a Phase 4 decision function present" "COMMON_ACCOUNT_ROLLBACK_REFUSED_LATER_PHASE_PRESENT"
+"${as_owner[@]}" -c "drop function private.account_lifecycle_service_state_refusal(uuid, text)"
 # TEST ONLY: remove fake logins through the shadow Auth cascade before clearing
 # durable operations. Direct common-row deletion must not impersonate it.
 "${as_owner[@]}" -c "delete from auth.users where id in (select user_id from public.common_accounts)" -c "delete from private.account_lifecycle_operations"

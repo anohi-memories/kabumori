@@ -186,6 +186,10 @@ mutation "rollback ignores finished lifecycle operations" rollback \
   "  if exists (select 1 from private.account_lifecycle_operations) then" \
   "  if exists (select 1 from private.account_lifecycle_operations where status = 'in_progress') then" \
   "FAIL rollback ran: finished lifecycle operation"
+mutation "rollback no longer refuses while a later phase is present" rollback \
+  "    raise exception 'COMMON_ACCOUNT_ROLLBACK_REFUSED_LATER_PHASE_PRESENT';" \
+  "    null;" \
+  "FAIL rollback refusal for a Phase 2 restart function present"
 # --- F4: entitlement identity -------------------------------------------------------
 mutation "an entitlement can be transferred to another person" candidate \
   "  if new.user_id is distinct from old.user_id or new.service_key is distinct from old.service_key then" \

@@ -213,6 +213,19 @@ select pg_temp.finish(:'cd_u', :'cd_op', :'cd_lease') as f \gset cd_
 select pg_temp.expect(:'cd_f'::jsonb ->> 'status' = 'ended' and :'cd_f'::jsonb -> 'remote_unverified' = '[]'::jsonb,
                       'C-crash2: without an acknowledgement a "not connected" answer reports nothing');
 
+-- C-claim. A claim answers what an earlier attempt left on record, including the acknowledgement already given.
+select pg_temp.person(53) as u \gset cl_
+select pg_temp.account(:'cl_u', 'threads');
+select pg_temp.begin_service(:'cl_u') as op \gset cl_
+select pg_temp.claim(:'cl_u', :'cl_op') as c \gset cl1_
+select pg_temp.expect(:'cl1_c'::jsonb -> 'acknowledged' = '[]'::jsonb, 'C-claim1: nothing acknowledged yet');
+select (:'cl1_c'::jsonb ->> 'lease') as lease \gset cl1_
+select pg_temp.svc(format('select public.acknowledge_owned_remote_unverified(%L::uuid, ''x_autopost'', %L::uuid, %L::uuid, array[''threads''])', :'cl_u', :'cl_op', :'cl1_lease'));
+update private.account_lifecycle_operations set owner_lease_expires_at = clock_timestamp() - interval '1 second' where id = :'cl_op';
+select pg_temp.claim(:'cl_u', :'cl_op') as c \gset cl2_
+select pg_temp.expect(:'cl2_c'::jsonb -> 'acknowledged' = '["threads"]'::jsonb and :'cl2_c'::jsonb -> 'provider_results' ->> 'threads' = 'pending',
+                      'C-claim2: a later claim carries the acknowledgement and the results on record');
+
 -- C-x. X is always accounted for: even if the record lost its `x` key, the end is refused.
 select pg_temp.person(50) as u \gset cx_
 select pg_temp.begin_service(:'cx_u') as op \gset cx_

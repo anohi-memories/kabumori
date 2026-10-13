@@ -16,7 +16,7 @@ import tempfile
 HERE = pathlib.Path(__file__).resolve().parent
 CANDIDATE = HERE.parent / "migrations" / "20261013120000_common_account_service_deletion_ownership.sql"
 RUNNER = HERE / "common_account_service_deletion_run.sh"
-SECTIONS = "behavior,races"
+SECTIONS = "preflight,behavior,races"
 
 MUTANTS = [
     ("the lease is judged at the transaction start (now()), not the wall clock",
@@ -52,6 +52,15 @@ MUTANTS = [
     ("an acknowledged provider that only says not connected is no longer reported as remote-unverified",
      "   where v = 'local_removed_remote_unverified'\n      or (v = 'not_connected' and k = any (coalesce(v_operation.remote_unverified_ack_providers, '{}'::text[])));\n",
      "   where v = 'local_removed_remote_unverified';\n"),
+    ("Phase 6 no longer requires the Phase 4 state decision (release order is not enforced)",
+     "  if to_regprocedure('private.account_lifecycle_service_state_refusal(uuid,text)') is null then\n    raise exception 'COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_CORE_FENCE_MISSING';\n  end if;\n",
+     ""),
+    ("Phase 6 no longer requires the Phase 5 workspace-owner state",
+     "  if to_regprocedure('public.common_account_brand_service_state(text,text)') is null then\n    raise exception 'COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_BRAND_STATE_MISSING';\n  end if;\n",
+     ""),
+    ("a claim no longer carries the acknowledgement already on record",
+     "    'acknowledged', (select to_jsonb(coalesce(remote_unverified_ack_providers, '{}'::text[]))\n                       from private.account_lifecycle_operations where id = v_operation.id));",
+     "    'acknowledged', '[]'::jsonb);"),
     ("the finished operation keeps its lease",
      "    update private.account_lifecycle_operations\n       set owner_lease = null, owner_lease_expires_at = null, updated_at = now()\n     where id = p_operation_id;\n    return v_answer || jsonb_build_object('provider_results'",
      "    return v_answer || jsonb_build_object('provider_results'"),

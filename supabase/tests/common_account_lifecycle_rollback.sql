@@ -24,6 +24,29 @@ begin
   if to_regclass('private.account_lifecycle_settings') is null then
     raise exception 'COMMON_ACCOUNT_FOUNDATION_NOT_APPLIED';
   end if;
+  -- Phase 7 (F5): later phases are plpgsql and register no dependency on these tables, so a DROP without
+  -- CASCADE cannot notice them: it would remove the tables and leave callable, broken functions behind (a Phase 2
+  -- restart RPC that fails at run time). Any function of the lifecycle family that this file does not remove means
+  -- a later phase is present: refused, nothing removed. Phase 2 and Phase 3a have no emergency rollback of their
+  -- own (forward-only; docs/common-account/phase7-release-preflight.md section 4).
+  if exists (
+    select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+     where (n.nspname = 'private' and p.proname like 'account\_lifecycle\_%' and p.proname not in (
+              'account_lifecycle_backfill', 'account_lifecycle_start_service', 'account_lifecycle_authorization_problems',
+              'account_lifecycle_readiness_refusal', 'account_lifecycle_required_checkpoints', 'account_lifecycle_requirements_valid',
+              'account_lifecycle_managed_ownership', 'account_lifecycle_deletion_blockers', 'account_lifecycle_footprint',
+              'account_lifecycle_lock', 'account_lifecycle_settings_changed', 'account_lifecycle_touch_settings',
+              'account_lifecycle_requirements_changed', 'account_lifecycle_guard_checkpoint_registry',
+              'account_lifecycle_builtin_checkpoints', 'account_lifecycle_touch_entitlement',
+              'account_lifecycle_guard_entitlement_identity', 'account_lifecycle_account_changed',
+              'account_lifecycle_touch_account', 'account_lifecycle_invalidate_readiness', 'account_lifecycle_guard_account_delete'))
+        or (n.nspname = 'public' and (p.proname like '%common\_account%' or p.proname like '%service\_deletion%'
+              or p.proname like 'reactivate\_%\_service') and p.proname not in (
+              'common_account_deletion_eligibility', 'begin_common_account_deletion', 'record_common_account_deletion_checkpoint',
+              'clear_common_account_deletion_checkpoint', 'abort_common_account_deletion', 'prepare_common_account_auth_delete',
+              'begin_service_deletion', 'finish_service_deletion', 'abort_service_deletion'))) then
+    raise exception 'COMMON_ACCOUNT_ROLLBACK_REFUSED_LATER_PHASE_PRESENT';
+  end if;
   if (select count(*) from private.account_lifecycle_settings) <> 1 then
     raise exception 'COMMON_ACCOUNT_ROLLBACK_REFUSED_SETTINGS_NOT_AFFIRMED';
   end if;

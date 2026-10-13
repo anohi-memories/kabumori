@@ -136,7 +136,10 @@ export const REASON_CODES = [
   'SERVICE_NOT_DELETABLE', 'LIFECYCLE_STATE_INCONSISTENT', 'ACCOUNT_DELETION_IN_PROGRESS',
   'SERVICES_REMAIN', 'LIFECYCLE_SETTINGS_INVALID', 'MANAGED_CHECKPOINT_REGISTRY_INVALID',
   'MANAGED_CHECKPOINTS_MISSING', 'MANAGED_OWNERSHIP_REMAINS', 'ACCOUNT_DELETION_NOT_IN_PROGRESS',
-  'REQUIRED_CHECKPOINTS_CHANGED', 'LIFECYCLE_VERSION_CHANGED', 'REQUIREMENT_EPOCH_CHANGED', 'NOT_READY', 'UNKNOWN',
+  'REQUIRED_CHECKPOINTS_CHANGED', 'LIFECYCLE_VERSION_CHANGED', 'REQUIREMENT_EPOCH_CHANGED', 'NOT_READY',
+  // The service end's own database answers (Phase 6): why `finish_owned_service_deletion` / the Phase 1 finish said
+  // not ready. Fixed codes, no data.
+  'PROVIDER_RESULTS_UNSETTLED', 'REMOTE_UNVERIFIED_NOT_ACKNOWLEDGED', 'SERVICE_FOOTPRINT_REMAINS', 'UNKNOWN',
 ] as const;
 const reasonCode = (value: unknown) => ((REASON_CODES as readonly unknown[]).includes(value) ? value as string : 'UNKNOWN');
 const reasonCodes = (value: unknown) => [...new Set((Array.isArray(value) && value.length ? value : ['UNKNOWN']).map(reasonCode))];
@@ -365,6 +368,27 @@ async function endPostona(args: {
     (await call(deps, 'record_provider_result', { ...own, p_provider: provider, p_result: result }))?.status === 'recorded';
 
   try {
+    // A removal that an earlier attempt already made (and that stopped or crashed after it) is on record as "local
+    // removed, remote unverified". The end cannot complete without the person's acknowledgement of it: taken from
+    // THIS request when the database has none yet, and recorded. Without it the end stops here, before any provider
+    // or X is touched again; the answer names the providers, so the client can ask the person and send it again.
+    const onRecord = Object.entries(asRecord(claimed.provider_results))
+      .filter(([provider, result]) => result === 'local_removed_remote_unverified' && PROVIDER_KEY_RE.test(provider))
+      .map(([provider]) => provider);
+    const acknowledgedOnRecord = strings(claimed.acknowledged) ?? [];
+    const unacknowledged = onRecord.filter((p) => !acknowledgedOnRecord.includes(p));
+    const withheld = unacknowledged.filter((p) => !acknowledged.includes(p));
+    if (withheld.length > 0) {
+      return refuse(fail(409, 'REMOTE_UNVERIFIED_ACK_REQUIRED', {
+        providers: withheld.map((provider) => ({ provider, result: 'local_removed_remote_unverified' })),
+      }));
+    }
+    if (unacknowledged.length > 0) {
+      const ack = await call(deps, 'acknowledge_unverified', { ...own, p_providers: unacknowledged });
+      if (ack?.status === 'lease_lost') return { ok: false, response: args.lost() };
+      if (ack?.status !== 'recorded') return refuse(fail(500, 'FAILED'));
+    }
+
     const snapshot = await providerSnapshot(deps, userId);
     if (!snapshot) return refuse(fail(500, 'FAILED'));
     const others = snapshot.platforms.filter((p) => p !== 'x');
