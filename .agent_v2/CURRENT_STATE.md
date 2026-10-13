@@ -1,3 +1,7 @@
+## F2｜ゆめちゃんAI評論家 朝刊/大引け（2026-10-13）
+- F2 new TASK `kabumori-f2-yume-market-commentator-morning-close-quality-20261013` ready/claude; Opus5.5（高）; start F2→L2. Goal: morning AI market direction forecast, close forecast-vs-result review and next-session thesis, immutable original prediction, fact/speculation separation, disclaimer preserved; source-only without touching F6 provider or production.
+- Previous F2 X/app cutover preflight L2 PASS_READONLY_PREFLIGHT / CUTOVER_PLAN_READY / PRODUCTION_NO_GO. PR179 remains Draft; previous TASK/Report archived with manifest SHA256 restore verified and indexed. X gate was turned ON by user at 18:07 and requires actual next-session verification; app consumer gate remained OFF per F2 readback. Consumer production switch is separate from this quality task.
+
 ## F4 Threads cleanup lease fix (2026-10-13 JST)
 - F5 Phase6 PR178 HEAD `83334a091ded5571cf595fd99d7a035627564735` found F4 PR169 `threads_cleanup_authorized` permits POSTONA service_deletion Threads credential cleanup without a live owner lease. Reproduced in F5 disposable PG17 overlay; must fix before adapter registration / managed use.
 - NEW F4 `postona-f4-threads-cleanup-live-lease-security-fix-20261013` ready/claude, Opus5.5（高）, F4→L4, return POSTONA｜マルチSNS化・開発統括（G4）のちゃ. Only F4-owned SQL candidate and tests. Use F5 `private.account_lifecycle_cleanup_authorized(uuid)` fail-closed predicate, live lease pre/post conditions, regression before/after, owner ACL preservation.
