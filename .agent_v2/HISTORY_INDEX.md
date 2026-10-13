@@ -398,3 +398,5 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 
 - 2026-10-13 | F8 | `news-improvement-a-f8-j1b2-visibility-policy-migration-candidate-20261013` | L8 source acceptance, completed | `.agent_v2/archive/2026-10-13-f8-news-improvement-a-f8-j1b2-visibility-policy-migration-candidate-20261013/files/.agent_v2/tasks/F8.md` | SHA256 `90048a073f500e44882c0ab53fe0df7b91d6e6b991399752f8a9e4a441cac5cb`; restore verified.
 - 2026-10-13 | F9 | `api-optimization-b-f9-pr174-pr115-rights-audit-offline-20261013` | L9 source acceptance, completed | `.agent_v2/archive/2026-10-13-f9-api-optimization-b-f9-pr174-pr115-rights-audit-offline-20261013/files/.agent_v2/tasks/F9.md` | SHA256 `2b3c363d75e8162e60910b0e80688fd513f4178fb618ce0a11b4b3b619f099bc`; restore verified.
+
+| 2026-10-13 | F2 | `kabumori-f2-shared-market-report-x-app-consumer-cutover-20261013` | X/app consumer cutover preflight | L2 PASS_READONLY_PREFLIGHT / CUTOVER_PLAN_READY / PRODUCTION_NO_GO | #179 | `.agent_v2/archive/2026-10-13-F2-kabumori-f2-shared-market-report-x-app-consumer-cutover-20261013/` | SHA256 e7ec085b1553841dd420ba765bc25124ccfda47aeb2aea6abaf77a8fa8c00c42, restore read-back verified |
