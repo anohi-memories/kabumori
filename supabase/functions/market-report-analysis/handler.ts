@@ -11,6 +11,14 @@
 //
 // Auth: verify_jwt = false + X-Cron-Secret (existing
 // SEND_PUSH_NOTIFICATIONS_CRON_SECRET, same as the other report functions).
+//
+// Claude as PRIMARY (F6 V0 + F2, default OFF). KABUMORI_MARKET_REPORT_AI_MODE decides, through the shared provider's
+// prepareMarketReportPrimary (which reports it routes are its own): "primary_close" routes the close report,
+// "primary_both" the morning and the close report. A routed report sends every model call (generate and Fact) to the
+// configured Anthropic model through the shared provider and its budget ledger: one attempt, no retry, no automatic
+// OpenAI fallback. A failure fails the cycle like an OpenAI failure (the next cron run retries); "on but incomplete"
+// fails closed with ANALYSIS_PRIMARY_CONFIG:<reason>, and so does "primary_both" on a provider build that does not
+// route it yet (MODE_UNSUPPORTED), never silently OpenAI. Any other value keeps the OpenAI requester untouched.
 
 import type { MarketDataPacket } from "../market-report-data-packet/packet_schema.ts";
 import { decideRunWindow, type ReportType } from "../market-report-data-packet/session_logic.ts";
@@ -26,6 +34,12 @@ import {
 } from "./analysis_logic.ts";
 import { persistTraces, promptHash, traceRows } from "./debug_trace.ts";
 import { auditDiagnostics } from "../_shared/kabumori_ai_models.ts";
+import {
+  MARKET_REPORT_AI_MODE_ENV,
+  type MarketReportPrimaryRecord,
+  PRIMARY_RUN_BUDGET_MS,
+  prepareMarketReportPrimary,
+} from "../_shared/ai_provider/market_report_primary.ts";
 import {
   fetchWithTransportRetry,
   newTransportStats,
@@ -160,7 +174,27 @@ const NEWS_COLUMNS = [
   "generated_text", "generation_fact_status",
 ].join(",");
 
+/** Morning and close on the primary. The shared provider decides whether it routes it; this handler never does. */
+const PRIMARY_BOTH_MODE = "primary_both";
+
+const SAFE_DETAIL = /^[A-Za-z0-9_.:@/-]{1,80}$/;
+
+function safeDetail(detail: string | null): string | null {
+  return detail === null ? null : SAFE_DETAIL.test(detail) ? detail : "REDACTED";
+}
+
+/** One structured line per primary call: identifiers and numbers only (no prompt, output, news or key). */
+function logPrimaryCall(record: MarketReportPrimaryRecord): void {
+  try {
+    console.log(JSON.stringify({ event: "market_report_primary", ...record, detail: safeDetail(record.detail) }));
+  } catch {
+    // Logging never affects the report.
+  }
+}
+
 export async function handleRequest(req: Request, deps: Deps): Promise<Response> {
+  // Start of this invocation: the primary's calls must all start before startedAtMs + PRIMARY_RUN_BUDGET_MS.
+  const startedAtMs = deps.now().getTime();
   if (req.method !== "POST") return respond({ error: "METHOD_NOT_ALLOWED" }, 405);
   const expectedSecret = deps.env("SEND_PUSH_NOTIFICATIONS_CRON_SECRET");
   if (!expectedSecret || req.headers.get("X-Cron-Secret") !== expectedSecret) {
@@ -209,6 +243,12 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
   // `model` is the generation model (kept for existing readers); the rest is the audit tuple of each role:
   // logical role, actual model, reasoning and the registry configuration version.
   const diagnostics: Record<string, string> = { model: ANALYSIS_MODEL, ...auditDiagnostics() };
+  // The model that wrote this cycle's report (ANALYSIS_MODEL unless the report runs on the primary).
+  let reportModel = ANALYSIS_MODEL;
+  // The primary's ledger-settled calls and cost so far, also for a failed cycle (empty when not on the primary).
+  let primaryCost: () => Record<string, string> = () => ({});
+  // The last failed primary call as `<code>:<detail>` (e.g. BUDGET_DENIED:CALL_LIMIT), codes only.
+  let primaryLastError: string | null = null;
   const transport = newTransportStats();
   // Test-phase debug evidence: every generation of this invocation, kept whole. Written best-effort after the
   // run is settled (success, failure or exception) and never in the way of delivery.
@@ -221,7 +261,7 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
     traced = true;
     const rows = traceRows({
       reportType, tradingDate, cycleId: claim!.cycle_id, dataPacketId: claim!.data_packet_id, reportPacketId,
-      invocationId, attempt: claim!.attempt, model: ANALYSIS_MODEL, basePromptHash: traceBasePromptHash,
+      invocationId, attempt: claim!.attempt, model: reportModel, basePromptHash: traceBasePromptHash,
     }, records);
     await persistTraces((table, batch) => db.insert(table, batch), rows);
   };
@@ -262,9 +302,45 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
     diagnostics.direction = input.direction;
     traceBasePromptHash = await promptHash(String(generationRequestBody(input, []).instructions)).catch(() => null);
 
+    const primary = prepareMarketReportPrimary({
+      readEnv: (name) => deps.env(name),
+      reportType,
+      claim: { cycle_id: claim.cycle_id, attempt: claim.attempt },
+      deadlineAtMs: startedAtMs + PRIMARY_RUN_BUDGET_MS,
+      sink: (record) => {
+        if (!record.ok) primaryLastError = `${record.errorCode ?? "UNKNOWN"}:${safeDetail(record.detail) ?? "-"}`;
+        logPrimaryCall(record);
+      },
+      fetch: (input, init) => deps.fetch(input, init),
+      nowMs: () => deps.now().getTime(),
+    });
+    // "primary_both" asks for Claude on this report too; a provider that answers legacy does not route it yet.
+    const unsupported = primary.mode === "legacy" && deps.env(MARKET_REPORT_AI_MODE_ENV) === PRIMARY_BOTH_MODE;
+    if (primary.mode === "invalid" || unsupported) {
+      const code = `ANALYSIS_PRIMARY_CONFIG:${primary.mode === "invalid" ? primary.reason : "MODE_UNSUPPORTED"}`;
+      await fail(code);
+      await writeTraces(null);
+      return respond({ status: "failed", error: code, reportType, tradingDate, attempt: claim.attempt }, 500);
+    }
+    if (primary.mode === "primary") {
+      reportModel = primary.model;
+      // Every audit field that names a model names the one that actually wrote and checked this report.
+      diagnostics.model = primary.model;
+      diagnostics.ai_generate_model = primary.model;
+      diagnostics.ai_fact_model = primary.model;
+      diagnostics.ai_primary = `${primary.provider}:${primary.model}`;
+      primaryCost = () => ({
+        primary_calls: String(primary.totals().calls),
+        cost_usd: String(primary.totals().costUsd),
+        ...(primaryLastError === null ? {} : { primary_last_error: primaryLastError }),
+      });
+    }
+
     const outcome = await generateSharedAnalysis(
       input,
-      openAiRequester(openAiApiKey, deps.fetch, { stats: transport, sleep: deps.sleep ?? realSleep }),
+      primary.mode === "primary"
+        ? primary.requester
+        : openAiRequester(openAiApiKey, deps.fetch, { stats: transport, sleep: deps.sleep ?? realSleep }),
       deps.now,
       records,
     );
@@ -275,6 +351,9 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
     diagnostics.input_tokens = String(outcome.inputTokens);
     diagnostics.output_tokens = String(outcome.outputTokens);
     diagnostics.cost_usd = String(outcome.costUsd);
+    // On the primary, the report's cost is what the ledger settled for Claude (outcome.costUsd prices OpenAI tokens).
+    Object.assign(diagnostics, primaryCost());
+    const costUsd = Number(diagnostics.cost_usd);
 
     if (!outcome.ok) {
       await fail(outcome.error, { issues: outcome.issues.join(" / ").slice(0, 900) });
@@ -282,17 +361,18 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
       return respond({ status: "failed", error: outcome.error, issues: outcome.issues, reportType, tradingDate, attempt: claim.attempt });
     }
 
-    const contentHash = await reportContentHash(outcome.packet);
+    const packet = reportModel === ANALYSIS_MODEL ? outcome.packet : { ...outcome.packet, model: reportModel };
+    const contentHash = await reportContentHash(packet);
     const packetId = await db.rpc<string>("complete_market_report_analysis", {
       p_cycle_id: claim.cycle_id,
       p_claim_token: claim.claim_token,
-      p_payload: outcome.packet,
+      p_payload: packet,
       p_content_hash: contentHash,
-      p_model: ANALYSIS_MODEL,
+      p_model: reportModel,
       p_generation_calls: outcome.calls,
       p_input_tokens: outcome.inputTokens,
       p_output_tokens: outcome.outputTokens,
-      p_api_cost_usd: outcome.costUsd,
+      p_api_cost_usd: costUsd,
       p_diagnostics: diagnostics,
     });
     await writeTraces(packetId);
@@ -303,13 +383,13 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
       attempt: claim.attempt,
       reportPacketId: packetId,
       contentHash,
-      direction: outcome.packet.market_direction,
+      direction: packet.market_direction,
       calls: outcome.calls,
-      costUsd: outcome.costUsd,
+      costUsd,
     });
   } catch (error) {
     const code = safeCode(error);
-    await fail(code, transportDiagnostics(transport));
+    await fail(code, { ...transportDiagnostics(transport), ...primaryCost() });
     await writeTraces(null);
     return respond({ status: "failed", error: code, reportType, tradingDate, transportRetries: transport.retries }, 500);
   }

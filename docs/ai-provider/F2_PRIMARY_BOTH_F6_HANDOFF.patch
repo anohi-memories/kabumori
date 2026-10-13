@@ -1,0 +1,150 @@
+diff --git a/supabase/functions/_shared/ai_provider/market_report_primary.ts b/supabase/functions/_shared/ai_provider/market_report_primary.ts
+index dea45f91..c1c2b979 100644
+--- a/supabase/functions/_shared/ai_provider/market_report_primary.ts
++++ b/supabase/functions/_shared/ai_provider/market_report_primary.ts
+@@ -1,10 +1,11 @@
+-// F6 V0 (2026-10-13): Claude as the PRIMARY generator of the shared CLOSE market report. Not a shadow. Default off.
++// F6 V0 (2026-10-13): Claude as the PRIMARY generator of the shared market report. Not a shadow. Default off.
+ // Contract and activation: docs/ai-provider/F6_OPUS_PRIMARY_CLOSE_V0.md.
+ //
+ // prepareMarketReportPrimary(...) -> one of
+-//   legacy:  KABUMORI_MARKET_REPORT_AI_MODE is not exactly "primary_close", or the report is not "close". The caller
+-//            keeps its OpenAI requester untouched; only the mode variable was read.
+-//   invalid: "primary_close" for a close report, but it cannot run (model, key, ledger or claim missing). The caller
++//   legacy:  KABUMORI_MARKET_REPORT_AI_MODE is not exactly "primary_close" or "primary_both", or the mode does not
++//            route this report ("primary_close": close only; "primary_both": morning and close). The caller keeps
++//            its OpenAI requester untouched; only the mode variable was read.
++//   invalid: a primary mode for a report it routes, but it cannot run (model, key, ledger or claim missing). The caller
+ //            fails the report with ANALYSIS_PRIMARY_CONFIG:<reason>; it never falls back to OpenAI silently.
+ //   primary: every model call of the report (generate AND fact) goes to the configured Anthropic catalog model through
+ //            executeAiRequest and the budget ledger: one transport attempt, no retry, no automatic OpenAI fallback,
+@@ -25,6 +26,8 @@ import type { AiCostBasis, AiReasoningEffort, AiRequest } from "./types.ts";
+ 
+ export const MARKET_REPORT_AI_MODE_ENV = "KABUMORI_MARKET_REPORT_AI_MODE";
+ export const PRIMARY_CLOSE_MODE = "primary_close";
++/** The morning and the close report on the primary (2026-10-13 request, F2 handoff). */
++export const PRIMARY_BOTH_MODE = "primary_both";
+ /** The primary model, by configuration (this layer never names a model); it must be an Anthropic catalog model. */
+ export const MARKET_REPORT_PRIMARY_MODEL_ENV = "KABUMORI_MARKET_REPORT_PRIMARY_MODEL";
+ export const PRIMARY_PROVIDER = "anthropic";
+@@ -157,8 +160,9 @@ export function primaryLedgerFromEdgeEnv(readEnv: EnvReader, fetchImpl?: FetchLi
+ 
+ export function prepareMarketReportPrimary(options: PrepareMarketReportPrimaryOptions): PreparedMarketReportPrimary {
+   const mode = readOne(options.readEnv, MARKET_REPORT_AI_MODE_ENV);
+-  if (mode !== PRIMARY_CLOSE_MODE) return { mode: "legacy", reason: "OFF" };
+-  if (options.reportType !== "close") return { mode: "legacy", reason: "NOT_CLOSE" };
++  if (mode !== PRIMARY_CLOSE_MODE && mode !== PRIMARY_BOTH_MODE) return { mode: "legacy", reason: "OFF" };
++  const routed = options.reportType === "close" || (mode === PRIMARY_BOTH_MODE && options.reportType === "morning");
++  if (!routed) return { mode: "legacy", reason: mode === PRIMARY_CLOSE_MODE ? "NOT_CLOSE" : "NOT_ROUTED" };
+ 
+   const model = readOne(options.readEnv, MARKET_REPORT_PRIMARY_MODEL_ENV) ?? "";
+   if (findModelSpec(model)?.provider !== PRIMARY_PROVIDER) return { mode: "invalid", reason: "MODEL_INVALID" };
+diff --git a/supabase/functions/_shared/ai_provider/market_report_primary_test.ts b/supabase/functions/_shared/ai_provider/market_report_primary_test.ts
+index 1abdb654..2b752b24 100644
+--- a/supabase/functions/_shared/ai_provider/market_report_primary_test.ts
++++ b/supabase/functions/_shared/ai_provider/market_report_primary_test.ts
+@@ -407,3 +407,56 @@ test("records and errors carry no key, prompt or report text; the primary reads
+   const noisy = await run({ case: CLOSE_0930, net: noisyNet, prepare: { sink: () => { throw new Error("recorder down"); } } });
+   assert.equal(noisy.outcome?.ok, true);
+ });
++
++// ---- primary_both (F2 handoff, 2026-10-13): the morning report too -------------------------------------------------
++
++test("primary_both makes the canonical morning AND close reports with Claude only; primary_close still routes close only", async () => {
++  const both = { ...ENV, [MARKET_REPORT_AI_MODE_ENV]: "primary_both" };
++  for (const c of [MORNING_1001, CLOSE_0930]) {
++    const legacy = await legacyBaseline(c, (input) => [{ payload: c.make(input) }, { payload: PASS }]);
++    assert.equal(legacy.outcome?.ok, true);
++    const input = inputOf(await loadFixture(c.fixture));
++    const net = network({ claude: claudeReport(c.make(input)) });
++    const r = await run({ case: c, net, env: both });
++    assert.equal(r.prepared.mode, "primary", c.label);
++    assert.equal(r.outcome?.ok, true, r.error ?? "");
++    assert.deepEqual(r.outcome!.ok && r.outcome!.packet, legacy.outcome!.ok && legacy.outcome!.packet, c.label);
++    assert.equal(r.hash, legacy.hash);
++    assert.equal(net.openai.length, 0);
++    assert.deepEqual(net.claude.map((call) => call.system), legacy.net.openai.map((body) => body.instructions));
++    assert.deepEqual(net.ledger.reserves.map((p) => p.request_id), [`mrp:${CYCLE}:a1:generate:1`, `mrp:${CYCLE}:a1:fact:1`]);
++  }
++  // Only the exact value; the morning under primary_close is unchanged (NOT_CLOSE, covered above).
++  const close = inputOf(await loadFixture(CLOSE_0930.fixture));
++  for (const mode of ["PRIMARY_BOTH", "primary_both ", " primary_both", "primary-both", "both"]) {
++    const legacyNet = network({ openai: [{ payload: richClose0930(close) }, { payload: PASS }] });
++    const off = await run({ case: CLOSE_0930, net: legacyNet, env: { ...ENV, [MARKET_REPORT_AI_MODE_ENV]: mode } });
++    assert.deepEqual([off.prepared.mode, off.prepared.reason], ["legacy", "OFF"], mode);
++    assert.deepEqual([legacyNet.openai.length, legacyNet.claude.length, legacyNet.ledger.calls.length], [2, 0, 0], mode);
++  }
++  // Incomplete configuration fails closed for the morning report too.
++  const morningNet = network({});
++  const incomplete = await run({ case: MORNING_1001, net: morningNet, env: { ...both, ANTHROPIC_API_KEY: undefined } });
++  assert.deepEqual([incomplete.prepared.mode, incomplete.prepared.reason], ["invalid", "KEY_MISSING"]);
++  assert.deepEqual([morningNet.openai.length, morningNet.claude.length, morningNet.ledger.calls.length], [0, 0, 0]);
++});
++
++test("primary_both, one trial ledger for a whole day: morning + close fit; the day's 6 calls end a third report", async () => {
++  const both = { ...ENV, [MARKET_REPORT_AI_MODE_ENV]: "primary_both" };
++  const ledger = new FakeLedger();
++  // Each report is its own cycle; a re-run of a report is the same cycle with the next claim attempt.
++  const MORNING_CYCLE = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
++  const day: Array<[Case, string, number]> = [[MORNING_1001, MORNING_CYCLE, 1], [CLOSE_0930, CYCLE, 1], [CLOSE_0930, CYCLE, 2], [CLOSE_0930, CYCLE, 3]];
++  const results: string[] = [];
++  for (const [c, cycleId, attempt] of day) {
++    const input = inputOf(await loadFixture(c.fixture));
++    const net = network({ claude: claudeReport(c.make(input)), ledger });
++    const r = await run({ case: c, net, env: both, claim: { cycle_id: cycleId, attempt } });
++    results.push(r.outcome?.ok ? `ok:${net.claude.length}` : `${r.error}:${r.records.at(-1)?.detail}`);
++  }
++  // Morning (2 calls) and close (2 calls) both made; a re-run of the close (attempt 2) still fits 6 calls; attempt 3
++  // is refused before anything is sent.
++  assert.deepEqual(results, ["ok:2", "ok:2", "ok:2", "ANALYSIS_PRIMARY_GENERATE_FAILED:BUDGET_DENIED:CALL_LIMIT"]);
++  assert.equal(ledger.day.calls, 6);
++  assert.ok(ledger.day.usd <= 2, `day spend ${ledger.day.usd}`);
++});
+diff --git a/supabase/functions/market-report-analysis/opus_primary_handler_test.ts b/supabase/functions/market-report-analysis/opus_primary_handler_test.ts
+index 06c4771a..e842cd72 100644
+--- a/supabase/functions/market-report-analysis/opus_primary_handler_test.ts
++++ b/supabase/functions/market-report-analysis/opus_primary_handler_test.ts
+@@ -231,21 +231,35 @@ test("OFF with no Anthropic key, model or ledger configured at all: unchanged Op
+   assert.deepEqual([h.openai().length, h.claude().length, h.ledger().length], [2, 0, 0]);
+ });
+ 
+-// ---- primary_both on this provider build: fail closed, never silently OpenAI ----------------------------------------
++// ---- primary_both: the morning and the close report on Claude ---------------------------------------------------------
+ 
+ for (const reportType of ["close", "morning"] as const) {
+-  test(`${reportType} + primary_both on a provider that does not route it: MODE_UNSUPPORTED, no model call`, async () => {
++  test(`${reportType} + primary_both: Claude writes the stored report; model, audit and cost say so; no OpenAI call`, async () => {
+     const h = harness({ reportType, env: { KABUMORI_MARKET_REPORT_AI_MODE: "primary_both" } });
+-    const res = await handleRequest(h.req, h.deps);
++    const { value: res, lines } = await withLogs(() => handleRequest(h.req, h.deps));
+     const body = await res.json();
+-    assert.equal(res.status, 500);
+-    assert.equal(body.error, "ANALYSIS_PRIMARY_CONFIG:MODE_UNSUPPORTED");
+-    assert.deepEqual([h.openai().length, h.claude().length, h.ledger().length], [0, 0, 0]);
+-    assert.equal(h.rpc("fail_market_report_analysis")!.p_error, "ANALYSIS_PRIMARY_CONFIG:MODE_UNSUPPORTED");
+-    assert.equal(h.rpc("complete_market_report_analysis"), null);
++    assert.equal(body.status, "completed", JSON.stringify(body));
++    assert.deepEqual([h.openai().length, h.claude().length, h.ledger().length], [0, 2, 6]);
++    const complete = h.rpc("complete_market_report_analysis")!;
++    assert.equal(complete.p_model, PRIMARY);
++    assert.equal((complete.p_payload as { model: string }).model, PRIMARY);
++    assert.equal((complete.p_payload as { report_type: string }).report_type, reportType);
++    const diagnostics = complete.p_diagnostics as Record<string, string>;
++    assert.deepEqual([diagnostics.ai_generate_model, diagnostics.ai_fact_model, diagnostics.ai_primary], [PRIMARY, PRIMARY, `anthropic:${PRIMARY}`]);
++    assert.equal(Number(diagnostics.cost_usd), complete.p_api_cost_usd);
++    assert.deepEqual(h.reserves().map((p) => p.request_id), [`mrp:${CYCLE}:a1:generate:1`, `mrp:${CYCLE}:a1:fact:1`]);
++    assertNoKeyLeak(h, lines);
+   });
+ }
+ 
++test("morning + primary_both without the Anthropic key: fails closed (KEY_MISSING), no OpenAI fallback", async () => {
++  const h = harness({ reportType: "morning", env: { KABUMORI_MARKET_REPORT_AI_MODE: "primary_both", ANTHROPIC_API_KEY: undefined } });
++  const res = await handleRequest(h.req, h.deps);
++  assert.equal(res.status, 500);
++  assert.equal((await res.json()).error, "ANALYSIS_PRIMARY_CONFIG:KEY_MISSING");
++  assert.deepEqual([h.openai().length, h.claude().length, h.ledger().length], [0, 0, 0]);
++});
++
+ // ---- configuration gaps: fail closed -------------------------------------------------------------------------------
+ 
+ for (const [label, env, reason] of [
