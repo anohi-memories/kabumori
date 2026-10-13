@@ -5,6 +5,11 @@
 
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F8 J1-b2 L8 acceptance（2026-10-13）
+- F8 `news-improvement-a-f8-j1b2-visibility-policy-migration-candidate-20261013`: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; done/next_owner:none。Draft PR181 head 94b478a70f5921ef4f0f03d2ad68a4842dc11f35 (F8 Report)。SQL candidateのみ、実migrationやDB適用なし。
+- 実装候補はフィード専用helper4個＋既存wrapper置換。X/Push共有helper未変更。候補 a（sector/all_useful）、b（high/criticalを全員）、c（他rejected表示も絞る）の採用ポリシーが未決。F8報告のPG17 matrix5variant成功はChatGPT未再実行。Sol（高）独立レビュー/実スキーマ検証/個別DB承認までmerge・Preview・production NO_GO。
+- 次F8 TASK前にarchive/MANIFEST/SHA256/restore/HISTORY_INDEXへ記録。F9の独立作業を保護。
+
 ## F8進行中 / F9履歴保存保留（2026-10-13）
 - F8 J1-b previous TASK archived with manifest/SHA256/read-back and indexed. NEW F8 `news-improvement-a-f8-j1b2-visibility-policy-migration-candidate-20261013` ready/claude, Opus5.5（高）, return L8. App visibility source/offline candidate only; any migration must have Sol（高） review and explicit approval before DB/Preview/production apply.
 - F9 prior L9 task remains done/none. Archive copy and MANIFEST.json/.md were created/read-back, but SHA256SUMS write hit OpenAI safety block; archive process incomplete and F9 reallocation is withheld. Do not overwrite F9 TASK or start unregistered work. Legacy PR115 history and PR174 rights risk (288 headlines / 76 generated texts) remain under hold, no merge/deploy/paid API.
