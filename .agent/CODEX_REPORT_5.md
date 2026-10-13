@@ -2,20 +2,67 @@
 - task_id: common-ai-h5-claude-multimodel-consumer-bridge-m2-20261014
 - owner: codex
 - slot: codex-5
-- status: ready
-- result: NOT_STARTED
-- next_owner: codex
+- status: review_required
+- result: IMPLEMENTED_OFFLINE_CANDIDATE / F6_IMPORT_BOUNDARY_BLOCKED / MERGE_HOLD / PRODUCTION_NO_GO
+- next_owner: chatgpt
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: C5
 - recommended_model: Sol（高）
-- changed_files: none
-- tests: not_run
-- commit_hash: none
-- push: not_performed
+- changed_files: 9 new source/doc files (PR198); 3 H5 bookkeeping files (separate Draft, main sync pending)
+- tests: H5 27 PASS/0 FAIL; F6 baseline19 PASS/0 FAIL; candidate unchanged F6 regression16 PASS/3 FAIL
+- commit_hash: 4223d5c01389474406291c8e4578207e317638b9 (source)
+- push: source branch verified; H5 bookkeeping separate review branch
 - merge: not_performed
 - deploy: not_performed
 - production_changes: none
-- next_action: H5 start with independent worktree; return to named chat with C5.
+- next_action: C5 source review; bounded F6 isolation/env handoff before merge; no production activation.
+
+## H5 implementation report — 2026-10-14 JST / Sol（高）
+
+### Scope / exact source
+
+- Explicit user H5 temporary implementation; not a normal review slot reassignment. Old Threads C5/history preserved, no Claude failure inferred. Current task alone uses H5→C5; separate J5 task untouched.
+- [Draft PR198](https://github.com/anohi-memories/kabumori/pull/198), source branch `codex/h5-claude-consumer-m2-20261014`, head `4223d5c01389474406291c8e4578207e317638b9`. Base `claude/f6-anthropic-multimodel-m1-20261013`, exact protected PR187 `a7e1d3f3f6b3812e9b8b0c0f7c29835e25505d6b`, still OPEN/Draft at pre-push readback. F6 branch/policy/catalog/mod/tests not edited/rebased.
+- Fresh origin/main at start `1c3c404d`; immediately before source push `3ffeaf89cd6000aeb0b9086cd677ddcfa1b8bbe6`; report pre-push readback `6e2f46ca13c4055fc17b18abec11d2926b51789e`. Intervening J3/J5 control updates do not overlap H5 source/bookkeeping targets. Dedicated source/report/baseline worktrees under `/private/tmp/kabumori-h5-m2-20261014.UB5vOx`; cleanbase/other slots/old worktrees not changed.
+- Source-only Draft / no merge. New bridge not imported by existing deployed function or app. Existing Opus morning/close and F2/F8/F9/F1/POSTONA behavior untouched. Recommended C5 disposition: accept isolated deliverable only if desired; **MERGE_HOLD**, not global PASS/live-ready.
+
+### Changed source files (9 new paths only)
+
+- `supabase/functions/_shared/ai_consumer_bridge/bridge.ts`: public F6 policy calls, server registered role, narrowing-only model/effort/output limits, verified authority attribution, schema/Fact checks, deterministic scoped claims, deadline/cost/audit sanitization. No native env/fetch/router/activation/default fake backend.
+- `supabase/functions/_shared/ai_consumer_bridge/types.ts`: explicit required authorization, durable atomic claim, injected transport and four-method shared budget interfaces; audit-safe fixed response/error types.
+- `supabase/functions/_shared/ai_consumer_bridge/offline_samples_test.ts`: two synthetic examples — registered Haiku severity / Sonnet summary; test-only fake claim/ledger/readers/transport. No real article/PII/API credential.
+- `supabase/functions/_shared/ai_consumer_bridge/bridge_test.ts`: adversarial request/authority/cache/tenant/budget/idempotency/retry/schema/Fact/timeout/unknown/redaction tests.
+- `supabase/functions/_shared/ai_consumer_bridge/isolation_test.ts`: no native secret/network access/new live wiring.
+- `supabase/functions/_shared/ai_consumer_bridge/offline_run.sh`: denied native network; child-process unset real-key/auth/baseURL/webhook/custom-header defaults; only two empty optional SDK env slots permitted.
+- `supabase/functions/_shared/ai_consumer_bridge/deno.json` and `deno.lock`: bridge-scoped reproducible SDK/transitive imports; F6 lock unchanged.
+- `docs/ai-provider/H5_M2_CONSUMER_BRIDGE.md`: actual interface/port requirements, owner integration, quality/rights/cost gates, rollback, precise blockers.
+- Bookkeeping only `.agent/tasks/CODEX_TASK_5.md`, `.agent/CODEX_REPORT_5.md`, H5 block in `.agent/ACTIVE_TASK.md`; CURRENT_STATE/new indexes/other slots not edited. Prior Report history below separator unchanged.
+
+### Independently executed evidence (not inferred from F6 Report)
+
+1. `bash supabase/functions/_shared/ai_consumer_bridge/offline_run.sh`: **27 PASS / 0 FAIL** (25 bridge/example tests + 2 own isolation). Native network denied; mocked transport, explicit dummy reader, child-process scrubbed SDK defaults. Unauthorized role/model/time/token/tenant overrides rejected before key/reservation/send; budget/cost refusal sends0; concurrent fake workers claim once; duplicate returns validated cached result, content/revision drift refuses; schema/Fact rejection no regeneration; no 404 fallback; deadline accounts potentially sent cost and never auto-replays; malformed cache/store/hook failures sanitized.
+2. Exact PR187 detached baseline: unchanged `model_policy_test.ts` + `isolation_test.ts` **19 PASS / 0 FAIL**. Same denied native network/scrubbed optional SDK env procedure.
+3. New H5 source + same untouched F6 files: **16 PASS / 3 FAIL**. Policy11 PASS; isolation5 PASS/3 FAIL. Exact failing names: `only the authorized market report files name the provider module, with exactly these imports`; `of all deployable sources, only the market report handler and its entry point reach the module`; `every widening is refused (synthetic trees built on the real one)`. Direct public H5 imports are visible, intentionally not hidden/suppressed. This demonstrates **F6_IMPORT_BOUNDARY_BLOCKED**, not a successful full regression.
+4. `deno check --config .../ai_consumer_bridge/deno.json .../bridge.ts`, Deno lint of5 TS files, `bash -n .../offline_run.sh`, `git diff --check`: PASS. Only allowed files staged; source diff9 additions. Runtime scan shows only required injected reader/fetch, no native env/console/API key values. Official Supabase dependency guidance informed scoped imports/lock and nonactivation checks.
+5. Initial fully denied-env mock tests failed before fake send: pinned Anthropic SDK0.132.1 reads optional custom-header/webhook defaults even when apiKey/authToken/baseURL/logLevel are explicit. SDK source inspection and a sanitized mock diagnostic identified this (no real network); final reproducible runner unsets these only in child, permits only empty optional slots. No secret value output/transcription. Do not claim all historical runs passed or SDK fully env-independent.
+
+Local evidence logs: `/private/tmp/kabumori-h5-m2-20261014.UB5vOx/bridge-final.log`, `f6-baseline.log`, `f6-regression.log`. Tests are offline fakes and do not establish managed permissions, actual billing, provider availability, real monthly concurrency, live quality or feature readiness. No live provider/paid probe performed.
+
+### Required F6 and consumer-owner handoff / remaining risks
+
+- **Before merge**, F6 owner must approve exact bounded bridge/types/test import reachability without opening arbitrary live handlers or SDK/key access, then rerun both isolation suites. H5 does not edit the existing isolation test, broaden scope by obfuscation, or silently accept its failures.
+- F6 owns SDK construction: optional native custom-header/webhook env default suppression/containment remains unproven for live runtime. Scrubbed offline procedure is evidence only, not production env change or activation authorization.
+- Auth/tenant verifier, durable atomic claim store and reviewed shared ledger must be provided by approved consumer tasks. FakeStore/FakeLedger exist only in tests. No implicit anonymous/system grant; F6 UUID subject contract preserved; POSTONA IDs require its owner-approved mapping. Ongoing revocation requires consumer/ledger fencing; claim UNKNOWN must not expire into resend.
+- Role/policy budgets: total estimated worst-case retries bounded before reserve/send, four ledger methods required; no alternative model/provider or business regeneration. Catalog cost math is pinned F6 estimate, not verified real invoice or guaranteed hard billing cap. Monthly/global ceilings/ledger idempotency/recovery/permissions not provisioned here.
+- F8/F9/F1/F2/POSTONA each requires separate prompt/schema/rights/quality/cost/activation TASK. Existing Opus primary stays unchanged. Rollback later disables only new consumer wiring, retains sent/unknown claim+ledger evidence, no automatic fallback.
+- Independent security review (J1–J4 if C5 owner decides) and separate smallest paid-pilot approval still needed; no production approval from these PASS results.
+
+### Delivery / safety / next step
+
+- Source commit/push and Draft PR198: performed. H5 bookkeeping submitted as separate main-targeted Draft PR; main metadata remains pending coordinator-reviewed merge, not falsely marked synced. No direct main push, no force push, no PR merge.
+- PR198 readback: OPEN/Draft, exact head/base verified, changed_files9. Existing automatic Vercel check **FAIL — Deployment rate limited, retry in24h**; no retry/settings change requested or executed. No successful deploy claimed. GitHub CI is not globally PASS; no source-check success inferred from the local suite.
+- DB/production read-write, Auth/RLS/RPC/Edge deploy/secrets/Vault/Cron, actual AI/provider/X/Threads APIs, paid calls, live feature switches, old branch deletion/rename, other slot checkout/reset/rebase/file changes: **NONE**. Parent task history and F6 files preserved; production mutation window CLOSED.
+- Next safe action: C5 source-only review → F6-owned boundary/environment handoff → separate consumer/durable-budget gates. **共通AI基盤のちゃ（OpenAI・Claude API専用チャット）へ C5 を送ってください。**
 ---
 
 # C5 acceptance — H5 authenticated owner runtime wiring (2026-10-13 JST)
