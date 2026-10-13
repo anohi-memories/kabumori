@@ -70,22 +70,19 @@
 
 ## F5
 - slot: F5
-- status: done
-- task_id: common-account-f5-phase7-auth-lifecycle-release-preflight-20261013
+- status: ready
+- task_id: common-account-f5-phase8-x-threads-lifecycle-integrated-security-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: old G5 K5 done; F5 Phase5/6 L5 accepted and archived; PR121→152→165→178 Draft; F4 live lease guard correction and F3 X runtime separate
-- blocker: production NO_GO; managed GoTrue/PostgREST/Auth/Storage unverified, F4 lease fix and F3 integration pending
-- slot_use: 共通ID・利用登録・退会のdisposable PG/Auth release preflight / source-only Phase7; other slots protected
-- previous_archive: .agent_v2/archive/2026-10-13-F5-common-account-f5-phase6-postona-provider-cleanup-service-deletion-20261013/
-- latest_result: IMPLEMENTED_SOURCE_CANDIDATE — Draft PR #183 head f2565cc0412f8127f95f00a728d16bf83af74667 stacked on PR178 83334a091ded5571cf595fd99d7a035627564735 (PR165 4638891f6c7ff432e08d462019594e1ec3d66f07, PR152 ccea1fe8132c6f573a768f0df5a033a05c62ef2c, PR121 76b50e1e03f82faaa3460bab1603afa8fef3ce44): release preflight for the whole common-account chain (order/dependency refusals, read-only managed probe + disposable gate, rollback ladder, provider-state matrix, user notices) and fixes (Phase 6 needed Phase 4/5; Phase 1 rollback left broken Phase 2 functions; resumed POSTONA end could get stuck without consent); local PG17 only, production NO_GO; managed M1-M10 checklist not run. Report: .agent_v2/tasks/F5.md#report
-
-- l5_verdict: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; Draft PR183 head f2565cc0412f8127f95f00a728d16bf83af74667; local preflight candidate and corrections accepted, managed M1-M10/F4/F3/app deletion wiring still blocked; no merge/deploy.
+- dependencies: F5 Draft PR121→152→165→178→183; F3 X PR189; F4 Threads PR180; verify fresh heads on start
+- blocker: production NO_GO, actual managed GoTrue/PostgREST/Auth/Storage and app deletion wiring not verified
+- slot_use: Phase8 common account / X / Threads source-only disposable overlay integration and security regression
+- previous_archive: .agent_v2/archive/2026-10-13-F5-common-account-f5-phase7-auth-lifecycle-release-preflight-20261013/
 
 ## F6
 - slot: F6
