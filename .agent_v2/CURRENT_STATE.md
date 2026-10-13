@@ -1,5 +1,8 @@
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F2 L2｜Opus primary_both handler regression (2026-10-13)
+- F2 `kabumori-f2-opus-primary-both-handler-test-sync-20261013` L2 PASS_OFFLINE_TEST_ONLY / PRODUCTION_NO_GO, done/none. PR #176 Draft head `d13efc52176665898f1c38a1e389f9973fc3de00`, 1 F2-owned test file only. Reported 41 handler + 324 integrated PASS (not independently rerun), Vercel CI rate-limited. PR170→173→175→176 remains Draft/unmerged; F6 leads release gate. No production/paid API/Edge changes.
+
 ## F2｜Opus primary_both handlerテスト修正（2026-10-13 JST）
 - F2 TASK `kabumori-f2-opus-primary-both-handler-test-sync-20261013` は完了報告済み（review_required/chatgpt、L2 待ち）。結果は PASS_OFFLINE_TEST_ONLY。
   - Draft PR #176（head `d13efc52176665898f1c38a1e389f9973fc3de00`、base は PR175 の branch）
