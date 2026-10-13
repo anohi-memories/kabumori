@@ -65,8 +65,9 @@ CHAIN_FILES=(
   20261012130000_common_account_core_service_fence.sql
   20261012230000_common_account_service_brand_state.sql
   20261013120000_common_account_service_deletion_ownership.sql
+  20261013140000_common_account_service_reconciliation_facts.sql
 )
-CHAIN_NAMES=(P1 P2 P3a P3b P4 P5 P6)
+CHAIN_NAMES=(P1 P2 P3a P3b P4 P5 P6 P8)
 ALREADY_APPLIED=(
   COMMON_ACCOUNT_FOUNDATION_ALREADY_APPLIED
   COMMON_ACCOUNT_START_INTENT_ALREADY_APPLIED
@@ -75,6 +76,7 @@ ALREADY_APPLIED=(
   COMMON_ACCOUNT_CORE_FENCE_ALREADY_APPLIED
   COMMON_ACCOUNT_BRAND_STATE_ALREADY_APPLIED
   COMMON_ACCOUNT_SERVICE_OWNERSHIP_ALREADY_APPLIED
+  COMMON_ACCOUNT_RECONCILIATION_ALREADY_APPLIED
 )
 # "<migration number>|<state it is applied to: 0 = baseline, k = baseline + first k phases>|<expected refusal>"
 ORDER_CASES=(
@@ -89,6 +91,8 @@ ORDER_CASES=(
   "7|0|COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_FOUNDATION_MISSING"
   "7|4|COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_CORE_FENCE_MISSING"
   "7|5|COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_BRAND_STATE_MISSING"
+  "8|0|COMMON_ACCOUNT_RECONCILIATION_PREFLIGHT_PHASE6_MISSING"
+  "8|6|COMMON_ACCOUNT_RECONCILIATION_PREFLIGHT_PHASE6_MISSING"
 )
 
 "${S[@]}" -d postgres >/dev/null <<SQL
@@ -126,9 +130,9 @@ check_static() {
   expected="$(printf '%s ' "${CHAIN_FILES[@]}")"
   [[ "$listed" == "$expected" ]] || fail "static: directory order differs from the release order"
   # no migration of the chain depends on a LATER member by name (a cheap check for copy/paste dependencies)
-  for i in 0 1 2 3 4 5 6; do
+  for i in 0 1 2 3 4 5 6 7; do
     local j
-    for ((j = i + 1; j < 7; j++)); do
+    for ((j = i + 1; j < 8; j++)); do
       if grep -q "${CHAIN_FILES[$j]%.sql}" "$migrations/${CHAIN_FILES[$i]}"; then
         fail "static: ${CHAIN_NAMES[$i]} names the later migration ${CHAIN_NAMES[$j]}"
       fi
@@ -177,9 +181,9 @@ apply_guard_fixture() {  # test stand-ins of the Phase 3b suite (auth.sessions, 
   "${S[@]}" -d "$1" -c "alter function public.fixture_foreign_owner_service_write(text) owner to kb_cal_svc_child" >/dev/null
 }
 
-T0="$(db t0)"; T1="$(db t1)"; T2="$(db t2)"; T3="$(db t3)"; T3F="$(db t3f)"; T4="$(db t4)"; T5="$(db t5)"; T6="$(db t6)"; T7="$(db t7)"
+T0="$(db t0)"; T1="$(db t1)"; T2="$(db t2)"; T3="$(db t3)"; T3F="$(db t3f)"; T4="$(db t4)"; T5="$(db t5)"; T6="$(db t6)"; T7="$(db t7)"; T8="$(db t8)"
 tpl_of() {  # state number -> template database
-  case "$1" in 0) echo "$T0" ;; 1) echo "$T1" ;; 2) echo "$T2" ;; 3) echo "$T3F" ;; 4) echo "$T4" ;; 5) echo "$T5" ;; 6) echo "$T6" ;; 7) echo "$T7" ;; esac
+  case "$1" in 0) echo "$T0" ;; 1) echo "$T1" ;; 2) echo "$T2" ;; 3) echo "$T3F" ;; 4) echo "$T4" ;; 5) echo "$T5" ;; 6) echo "$T6" ;; 7) echo "$T7" ;; 8) echo "$T8" ;; esac
 }
 ensure_worlds() {
   [[ -n "${WORLDS_READY:-}" ]] && return 0
@@ -192,6 +196,7 @@ ensure_worlds() {
   mk "$T5" "$T4"; psql_o "$T5" -f "$migrations/${CHAIN_FILES[4]}" >/dev/null
   mk "$T6" "$T5"; psql_o "$T6" -f "$migrations/${CHAIN_FILES[5]}" >/dev/null
   mk "$T7" "$T6"; psql_o "$T7" -f "$migrations/${CHAIN_FILES[6]}" >/dev/null
+  mk "$T8" "$T7"; psql_o "$T8" -f "$migrations/${CHAIN_FILES[7]}" >/dev/null
   WORLDS_READY=1
 }
 
@@ -207,9 +212,9 @@ refused_with() {  # database file code -> refused with exactly that code; the ca
 # =====================================================================================================================
 if want chain; then
   check_static
-  echo "PASS chain/static: seven single-transaction files, release order = file order, no duplicate version prefix"
+  echo "PASS chain/static: eight single-transaction files, release order = file order, no duplicate version prefix"
   ensure_worlds
-  echo "PASS chain/in-order: Phase 1, 2, 3a, (guard fixture), 3b, 4, 5, 6 apply on the production-shaped baseline"
+  echo "PASS chain/in-order: Phase 1, 2, 3a, (guard fixture), 3b, 4, 5, 6, 8 apply on the production-shaped baseline"
   n=0
   for entry in "${ORDER_CASES[@]}"; do
     k="${entry%%|*}"; rest="${entry#*|}"; base="${rest%%|*}"; code="${rest#*|}"
@@ -224,12 +229,12 @@ if want chain; then
   i=0
   for f in "${CHAIN_FILES[@]}"; do
     d="$(db "again$i")"
-    mk "$d" "$T7"
+    mk "$d" "$T8"
     refused_with "$d" "$migrations/$f" "${ALREADY_APPLIED[$i]}"
     drop_db "$d"
     i=$((i + 1))
   done
-  echo "PASS chain/reapply: each of the seven refuses a second application with its own code"
+  echo "PASS chain/reapply: each of the eight refuses a second application with its own code"
   # Phase 3b has no Phase 3a requirement (it never calls it). The release order puts 3a first; if a ledger ever had
   # them the other way round, the final catalog must be the same.
   d="$(db commute)"
@@ -252,11 +257,11 @@ run_probe() {  # database [session setting yes|no]
   fi
 }
 probe_line() { grep -E "^$2\\|" <<<"$1" | head -1; }
-install_ledger() {  # the managed project's ledger, stood in with the seven versions
+install_ledger() {  # the managed project's ledger, stood in with the eight versions
   psql_q "$1" -c "create schema if not exists supabase_migrations; create table supabase_migrations.schema_migrations (version text primary key, name text);
                   insert into supabase_migrations.schema_migrations (version, name)
                   select split_part(v, '_', 1), substr(v, 16) from unnest(array[
-                    '20261001150000_x', '20261006230000_x', '20261009120000_x', '20261010051938_x', '20261012130000_x', '20261012230000_x', '20261013120000_x']) v" >/dev/null
+                    '20261001150000_x', '20261006230000_x', '20261009120000_x', '20261010051938_x', '20261012130000_x', '20261012230000_x', '20261013120000_x', '20261013140000_x']) v" >/dev/null
 }
 install_marker() {
   psql_q "$1" -c "create table if not exists public.kabumori_disposable_marker (project_ref text primary key, created_at timestamptz default now());
@@ -278,7 +283,7 @@ if want probe; then
   echo "PASS probe/static: one read-only transaction, no writing keyword"
 
   pd="$(db probe)"
-  mk "$pd" "$T7"
+  mk "$pd" "$T8"
   out="$(run_probe "$pd" yes)"
   [[ "$(probe_line "$out" G0_disposable_gate)" == G0_disposable_gate\|STOP\|* ]] || fail "the probe must STOP without the disposable marker"
   [[ "$(wc -l <<<"$out" | tr -d ' ')" == 2 ]] || fail "a stopped probe must print only the STOP line and the result"
@@ -324,6 +329,7 @@ if want probe; then
   mutate "a ledger gap (3b present, 3a missing)" owner "delete from supabase_migrations.schema_migrations where version = '20261009120000'" A4_ledger_no_gap FAIL
   mutate "a lifecycle trigger on auth.users" owner "create trigger rp_extra after delete on auth.users for each row execute function private.account_lifecycle_touch_account()" D3_no_chain_trigger_on_auth_users FAIL
   mutate "the Phase 6 columns dropped" owner "alter table private.account_lifecycle_operations drop column provider_results cascade" E4_phase6_columns FAIL
+  mutate "the Phase 8 reconciliation column dropped" owner "alter table private.account_lifecycle_operations drop column reconciliation" E4_phase8_column FAIL
   # B6 changes a cluster-wide role membership: granted, probed and revoked in one go (never left behind)
   md="$(db mb6)"; mk "$md" "$pd"
   "${S[@]}" -d postgres -c "grant $owner to authenticator" >/dev/null
@@ -338,20 +344,25 @@ if want probe; then
   "${S[@]}" -d postgres -c "alter role authenticator in database $md set pgrst.db_schemas = 'public,private'" >/dev/null
   out="$(run_probe "$md" yes)"; [[ "$(probe_line "$out" K1_private_schema_not_exposed)" == K1_private_schema_not_exposed\|FAIL\|* ]] || fail "K1 must fail when private is exposed"
   drop_db "$md"
-  echo "PASS probe/regressions: 17 deliberate regressions (16 SQL changes + the owner membership) each flip the check they are meant to flip"
+  echo "PASS probe/regressions: 18 deliberate regressions (17 SQL changes + the owner membership) each flip the check they are meant to flip"
 
   # a world that stopped at an earlier phase must not pass A2 (and must say which phases are missing)
-  md="$(db early)"; mk "$md" "$T6"; install_marker "$md"
+  md="$(db early)"; mk "$md" "$T7"; install_marker "$md"
   out="$(run_probe "$md" yes)"
-  [[ "$(probe_line "$out" A2_phase_all_present)" == A2_phase_all_present\|FAIL\|absent:\ P6 ]] || fail "a world without Phase 6 must fail A2 and name Phase 6"
+  [[ "$(probe_line "$out" A2_phase_all_present)" == A2_phase_all_present\|FAIL\|absent:\ P8 ]] || fail "a world without Phase 8 must fail A2 and name Phase 8"
+  [[ "$(probe_line "$out" A1_phase_prefix)" == A1_phase_prefix\|PASS\|* ]] || fail "a world that stopped cleanly after Phase 6 is a prefix"
+  drop_db "$md"
+  md="$(db early6)"; mk "$md" "$T6"; install_marker "$md"
+  out="$(run_probe "$md" yes)"
+  [[ "$(probe_line "$out" A2_phase_all_present)" == A2_phase_all_present\|FAIL\|absent:\ P6,P8 ]] || fail "a world without Phase 6 must fail A2 and name Phase 6 and 8"
   [[ "$(probe_line "$out" A1_phase_prefix)" == A1_phase_prefix\|PASS\|* ]] || fail "a world that stopped cleanly after Phase 5 is a prefix"
   [[ "$(probe_line "$out" RELEASE_PREFLIGHT)" == RELEASE_PREFLIGHT\|FAIL\|* ]] || fail "a world without Phase 6 must fail the release line"
   drop_db "$md"
   md="$(db early2)"; mk "$md" "$T5"; install_marker "$md"
   out="$(run_probe "$md" yes)"
-  [[ "$(probe_line "$out" A2_phase_all_present)" == A2_phase_all_present\|FAIL\|absent:\ P5,P6 ]] || fail "a world without Phases 5 and 6 must name both"
+  [[ "$(probe_line "$out" A2_phase_all_present)" == A2_phase_all_present\|FAIL\|absent:\ P5,P6,P8 ]] || fail "a world without Phases 5, 6 and 8 must name all three"
   drop_db "$md"
-  echo "PASS probe/partial: a world that stopped after Phase 4 or 5 fails the release line and names what is missing"
+  echo "PASS probe/partial: a world that stopped after Phase 4, 5 or 6 fails the release line and names what is missing"
 fi
 
 # =====================================================================================================================
@@ -359,8 +370,9 @@ if want rollback; then
   ensure_worlds
   snap() { fp "$1" | grep -v ' kb_cal_rp_owner=X/' ; }
   fp "$T3F" > "$tmp/s_t3f.txt"; fp "$T4" > "$tmp/s_t4.txt"; fp "$T5" > "$tmp/s_t5.txt"; fp "$T6" > "$tmp/s_t6.txt"; fp "$T7" > "$tmp/s_t7.txt"
+  fp "$T8" > "$tmp/s_t8.txt"
   rb="$(db rb)"
-  mk "$rb" "$T7"
+  mk "$rb" "$T8"
   # Phase 6 keeps its additive columns and the two check constraints on them on purpose (data survives a rollback);
   # nothing else of any phase may remain.
   remnants="$tmp/remnants.txt"
@@ -370,6 +382,8 @@ col private.account_lifecycle_operations.remote_unverified_ack_at timestamp with
 col private.account_lifecycle_operations.remote_unverified_ack_providers text[] -
 con private.account_lifecycle_operations account_lifecycle_operations_ack_shape CHECK (((remote_unverified_ack_at IS NULL) = (remote_unverified_ack_providers IS NULL)))
 con private.account_lifecycle_operations account_lifecycle_operations_provider_results_shape CHECK ((jsonb_typeof(provider_results) = 'object'::text))
+col private.account_lifecycle_operations.reconciliation jsonb -
+con private.account_lifecycle_operations account_lifecycle_operations_reconciliation_shape CHECK (((jsonb_typeof(reconciliation) = 'object'::text) AND ((reconciliation - 'x_posts_unconfirmed'::text) = '{}'::jsonb) AND ((NOT (reconciliation ? 'x_posts_unconfirmed'::text)) OR (jsonb_typeof((reconciliation -> 'x_posts_unconfirmed'::text)) = 'number'::text))))
 TXT
   # Phase 4's rollback puts public.ensure_my_profile() back as the REAL migration 20260924100000 defines it; the
   # test baseline carries the lifecycle fixture's stand-in instead. That one function is therefore compared by value
@@ -392,20 +406,21 @@ TXT
       [[ -z "$(comm -13 "$tmp/remnants.sorted" "$tmp/extra.sorted")" ]] || { comm -13 "$tmp/remnants.sorted" "$tmp/extra.sorted" >&2; fail "rollback of $label left more than the documented remnants"; }
     fi
   }
+  step "Phase 8" "$here/common_account_service_reconciliation_rollback.sql" "$tmp/s_t7.txt"
   step "Phase 6" "$here/common_account_service_deletion_rollback.sql" "$tmp/s_t6.txt"
   step "Phase 5" "$here/common_account_brand_state_rollback.sql" "$tmp/s_t5.txt"
   step "Phase 4" "$here/common_account_core_fence_rollback.sql" "$tmp/s_t4.txt"
   [[ "$(psql_q "$rb" -c "select md5(pg_get_functiondef('public.ensure_my_profile()'::regprocedure))")" == "$real_ensure_md5" ]] \
     || fail "Phase 4 rollback did not put the real ensure_my_profile() back"
   step "Phase 3b" "$here/common_account_write_guard_rollback.sql" "$tmp/s_t3f.txt"
-  echo "PASS rollback/reverse: Phase 6 -> 5 -> 4 -> 3b each restore the previous catalog exactly (Phase 6 additive remnants only)"
+  echo "PASS rollback/reverse: Phase 8 -> 6 -> 5 -> 4 -> 3b each restore the previous catalog exactly (Phase 6 and 8 additive remnants only)"
   # forward again from the rolled-back state: the same final catalog
-  for i in 3 4 5 6; do psql_o "$rb" -f "$migrations/${CHAIN_FILES[$i]}" >/dev/null || fail "re-apply of ${CHAIN_NAMES[$i]} after rollback"; done
-  [[ "$(fp_md5 "$rb")" == "$(fp_md5 "$T7")" ]] || fail "re-applying forward after the rollbacks does not reach the final catalog"
+  for i in 3 4 5 6 7; do psql_o "$rb" -f "$migrations/${CHAIN_FILES[$i]}" >/dev/null || fail "re-apply of ${CHAIN_NAMES[$i]} after rollback"; done
+  [[ "$(fp_md5 "$rb")" == "$(fp_md5 "$T8")" ]] || fail "re-applying forward after the rollbacks does not reach the final catalog"
   drop_db "$rb"
   echo "PASS rollback/reapply: forward again reaches the identical final catalog"
   # Phase 1 drops tables and its dependants are plpgsql (no recorded dependency): it must refuse by itself
-  for st in 2 7; do
+  for st in 2 8; do
     d="$(db "p1rb$st")"; mk "$d" "$(tpl_of "$st")"
     before="$(fp_md5 "$d")"
     out="$(psql_o "$d" -f "$here/common_account_lifecycle_rollback.sql" 2>&1)" && fail "Phase 1 rollback ran with a later phase present (state $st)"
@@ -431,7 +446,7 @@ deno_test() {  # database test-file
 }
 if want matrix; then
   ensure_worlds
-  md="$(db matrix)"; mk "$md" "$T7"
+  md="$(db matrix)"; mk "$md" "$T8"
   psql_o "$md" -f "$here/common_account_core_fence_fixture.sql" >/dev/null
   # TEST STAND-IN: the platform check widened as the real Phase 2a-2 migration (20261007150000) does
   psql_o "$md" -c "alter table public.social_accounts drop constraint social_accounts_platform_check;
@@ -450,7 +465,8 @@ fi
 # =====================================================================================================================
 if want runners; then
   for r in common_account_lifecycle_run.sh common_account_service_start_intent_run.sh common_account_deletion_completion_run.sh \
-           common_account_write_guard_run.sh common_account_core_fence_run.sh common_account_brand_state_run.sh common_account_service_deletion_run.sh; do
+           common_account_write_guard_run.sh common_account_core_fence_run.sh common_account_brand_state_run.sh common_account_service_deletion_run.sh \
+           common_account_service_reconciliation_run.sh; do
     if bash "$here/$r" > "$tmp/runner.log" 2>&1; then
       echo "PASS runners/$r: $(tail -1 "$tmp/runner.log")"
     else
