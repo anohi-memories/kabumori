@@ -6,12 +6,18 @@
 #    of the exact protected sources (nothing is merged, checked out or pushed; an overlay path that already
 #    exists stops the run):
 #      PR #124 c30f246409a77080cbc03aef6c4cb72b5481e125  G4 Threads OAuth / workspace candidate + its test fixture
-#      PR #165 4638891f6c7ff432e08d462019594e1ec3d66f07  F5 (stacked on G5 PR #152 ccea1fe8 -> PR #121 76b50e1e):
-#              the Phase 3b guard fixture, the Phase 3b guard (T13), Phase 4 and the F5 workspace service state
+#      PR #178 83334a091ded5571cf595fd99d7a035627564735  F5 Phase 6 (stacked on F5 PR #165 4638891f -> G5 PR #152 ccea1fe8
+#              -> PR #121 76b50e1e): the Phase 3b guard fixture, the Phase 3b guard (T13), Phase 4, the F5
+#              workspace service state and Phase 6 (service-deletion owner lease, cleanup predicate)
+#      PR #169 fd15430ddcd640c5c7389582f37f1b478fc7204c  F4 (the cleanup candidate BEFORE the live-lease fix, for
+#              fail-before only)
 # 2. On a LOCAL Unix-socket PostgreSQL 17 cluster, as a per-run non-superuser owner: G5's own world (the
 #    lifecycle fixtures and the REAL Phase 1 / 2 / 3a / 3b / 4 / F5 migrations), the X and Phase 2a-2 migrations,
 #    PR #124, the G4 publish stack, the Threads cleanup and disconnect candidates, postona_threads_t13_fixture.sql,
-#    then the F4 guards candidate (threads_writer_lifecycle_guards_candidate.sql):
+#    then the F4 guards candidate (threads_writer_lifecycle_guards_candidate.sql); before that, the cleanup
+#    live-lease fix: fail-before on PR #169's cleanup candidate and pass-after on this branch's (R7: a claimed
+#    POSTONA deletion whose lease ends during the lock wait; postona_threads_t13_cleanup_lease.sql: begin -> claim
+#    -> ended / released / other person's lease -> taken over, account deletion), and the guards:
 #      a. preconditions: drifted replaced body, G5 decision missing or reachable by an API role; re-apply refused;
 #      b. two-session races: an owner's POSTONA ending while an admin's release waits (F5 decides after the
 #         wait); a non-member naming another workspace never queues on its owner; lock order (the owner's
@@ -38,8 +44,9 @@ head="$(git -C "$repo" rev-parse HEAD)"
 psql_bin="${PSQL:-psql}"
 fail() { echo "FAIL $*" >&2; exit 1; }
 PR124=c30f246409a77080cbc03aef6c4cb72b5481e125
-PR165=4638891f6c7ff432e08d462019594e1ec3d66f07
-for sha in "$PR124" "$PR165"; do
+PR178=83334a091ded5571cf595fd99d7a035627564735
+PR169=fd15430ddcd640c5c7389582f37f1b478fc7204c
+for sha in "$PR124" "$PR178" "$PR169"; do
   git -C "$repo" cat-file -e "${sha}^{commit}" 2>/dev/null || fail "missing git objects for $sha (fetch its branch first)"
 done
 
@@ -69,10 +76,13 @@ overlay() {
   for path in "$@"; do echo "$sha $(shasum -a 256 "$tree/$path" | cut -c1-16) $path" >> "$tree/T13_MANIFEST.txt"; done
 }
 overlay "$PR124" supabase/candidates/postona_threads_oauth_workspace_candidate.sql supabase/tests/postona_threads_oauth_test_fixture.sql
-overlay "$PR165" supabase/tests/common_account_write_guard_fixture.sql \
+overlay "$PR178" supabase/tests/common_account_write_guard_fixture.sql \
   supabase/migrations/20261010051938_common_account_service_write_guard.sql \
   supabase/migrations/20261012130000_common_account_core_service_fence.sql \
-  supabase/migrations/20261012230000_common_account_service_brand_state.sql
+  supabase/migrations/20261012230000_common_account_service_brand_state.sql \
+  supabase/migrations/20261013120000_common_account_service_deletion_ownership.sql
+mkdir -p "$tree/pr169" && git -C "$repo" show "$PR169:supabase/candidates/postona_threads_cleanup/threads_provider_cleanup_candidate.sql" > "$tree/pr169/threads_provider_cleanup_candidate.sql"
+echo "$PR169 $(shasum -a 256 "$tree/pr169/threads_provider_cleanup_candidate.sql" | cut -c1-16) supabase/candidates/postona_threads_cleanup/threads_provider_cleanup_candidate.sql (fail-before copy)" >> "$tree/T13_MANIFEST.txt"
 t="$tree/supabase/tests"; m="$tree/supabase/migrations"; c="$tree/supabase/candidates"
 guards="${THREADS_GUARDS_CANDIDATE:-$c/postona_threads_lifecycle_guards/threads_writer_lifecycle_guards_candidate.sql}"
 
@@ -116,15 +126,81 @@ q "$world" -c "alter table public.social_accounts alter column publish_enabled s
 awk 'index($0,"create function public.x_account_refresh_reset_on_reconnect()") == 1 {on=1} on {print} on && $0=="$$;" {exit}' "$m/20260925140000_x_account_credential_refresh_core.sql" | q "$world" > /dev/null
 q "$world" -c "revoke all on function public.x_account_refresh_reset_on_reconnect() from public,anon,authenticated,service_role; create trigger social_accounts_x_refresh_reset_on_reconnect after update of verified_at on public.social_accounts for each row when(new.connection_status='identity_verified' and new.verified_at is distinct from old.verified_at) execute function public.x_account_refresh_reset_on_reconnect();" > /dev/null
 [[ "$(apply "$world" "$m/20261007150000_postona_social_accounts_multi_provider.sql")" == applied ]] || fail "Phase 2a-2 did not apply"
+# Phase 6 reads social_accounts.platform (Phase 2a-2), so it comes after it.
+[[ "$(apply "$world" "$m/20261013120000_common_account_service_deletion_ownership.sql")" == applied ]] \
+  || fail "G5/F5 Phase 6 did not apply: $(apply "$(copy "why6_$RANDOM" "$world")" "$m/20261013120000_common_account_service_deletion_ownership.sql")"
 "${as_super[@]}" -d "$world" -c 'create schema extensions; grant usage on schema extensions to public; create extension pgcrypto with schema extensions;' > /dev/null
 as_owner "$world" -f "$t/postona_threads_oauth_test_fixture.sql" > /dev/null
 for f in "$c/postona_threads_oauth_workspace_candidate.sql" "$c/postona_threads_publish/threads_credential_custody_candidate.sql" \
-  "$c/postona_threads_publish/threads_manual_publish_candidate.sql" "$c/postona_threads_publish/threads_publish_release_candidate.sql" \
-  "$c/postona_threads_cleanup/threads_provider_cleanup_candidate.sql" "$c/postona_threads_disconnect/threads_disconnect_candidate.sql"; do
+  "$c/postona_threads_publish/threads_manual_publish_candidate.sql" "$c/postona_threads_publish/threads_publish_release_candidate.sql"; do
   [[ "$(apply "$world" "$f")" == applied ]] || fail "$(basename "$f") did not apply on the real G5 world: $(apply "$(copy "why_$RANDOM" "$world")" "$f")"
 done
-as_owner "$world" -f "$t/postona_threads_t13_fixture.sql" > /dev/null
-echo "PASS world: real G5 (T13 + Phase 4 + F5) + X + 2a-2 + #124 + publish stack + cleanup + disconnect"
+# Two worlds from here: the cleanup candidate of this branch, and PR #169's (before the live-lease fix).
+finish_world() {
+  local db="$1" cleanup_file="$2" f
+  for f in "$cleanup_file" "$c/postona_threads_disconnect/threads_disconnect_candidate.sql"; do
+    [[ "$(apply "$db" "$f")" == applied ]] || fail "$(basename "$f") did not apply on the real G5 world: $(apply "$(copy "why_$RANDOM" "$db")" "$f")"
+  done
+  as_owner "$db" -f "$t/postona_threads_t13_fixture.sql" > /dev/null
+}
+world_pr169="$(copy w169 "$world")"
+finish_world "$world_pr169" "$tree/pr169/threads_provider_cleanup_candidate.sql"
+finish_world "$world" "$c/postona_threads_cleanup/threads_provider_cleanup_candidate.sql"
+echo "PASS world: real G5 (T13 + Phase 4 + F5 + Phase 6) + X + 2a-2 + #124 + publish stack + cleanup + disconnect"
+# The cleanup candidate refuses to install without G5's cleanup predicate, or with one an API role can run.
+db="$(copy no_predicate "$world_pr169")"
+q "$db" -c "drop function public.cleanup_threads_provider_footprint(uuid); drop function public.threads_provider_connection_state(uuid); drop function public.threads_cleanup_authorized(uuid); drop function private.account_lifecycle_cleanup_authorized(uuid);" > /dev/null
+got="$(apply "$db" "$c/postona_threads_cleanup/threads_provider_cleanup_candidate.sql")"
+[[ "$got" == THREADS_CLEANUP_PRECONDITION_LIFECYCLE ]] || fail "cleanup without G5's predicate: $got"
+db="$(copy predicate_reachable "$world_pr169")"
+q "$db" -c "drop function public.cleanup_threads_provider_footprint(uuid); drop function public.threads_provider_connection_state(uuid); drop function public.threads_cleanup_authorized(uuid);" > /dev/null
+"${as_super[@]}" -d "$db" -c "grant execute on function private.account_lifecycle_cleanup_authorized(uuid) to service_role" > /dev/null
+got="$(apply "$db" "$c/postona_threads_cleanup/threads_provider_cleanup_candidate.sql")"
+[[ "$got" == THREADS_CLEANUP_PRECONDITION_LIFECYCLE ]] || fail "cleanup with G5's predicate reachable by service_role: $got"
+echo "PASS cleanup preconditions (G5 predicate missing / reachable by an API role)"
+
+# ---- The live-lease fix: fail before (PR #169) / pass after (this branch), on the real Phase 6 ----------------
+# R7: a CLAIMED POSTONA deletion whose lease ends while the cleanup waits for the workspace lock: nothing removed.
+race_service_lease() {
+  local db="$1" out holder p='00000000-0000-4000-8000-0000000000e9'
+  q "$db" -c "select t13.person('$p', 'raceserv'); create table t13.svc as select (public.begin_service_deletion('$p', 'x_autopost') ->> 'operation_id')::uuid as op;
+select public.claim_service_deletion('$p', 'x_autopost', (select op from t13.svc));" > /dev/null
+  q "$db" -c "begin; select public.social_mobile_account_deletion_workspace_lock(public.social_mobile_account_deletion_workspace('$p')); select pg_sleep(1.5); commit;" > /dev/null &
+  holder=$!; sleep 0.3
+  out="$(q "$db" -c "update private.account_lifecycle_operations set owner_lease_expires_at = clock_timestamp() + interval '700 milliseconds' where id = (select op from t13.svc); select public.cleanup_threads_provider_footprint('$p')::text;" 2>&1)" || true
+  wait "$holder" || true
+  [[ "$out" == *'"code": "LEASE_NOT_HELD"'* ]] || { echo "R7_SERVICE_LEASE ${out//$'\n'/ }"; return 0; }
+  [[ "$(q "$db" -c "select count(*) from public.social_accounts where brand_id = public.social_mobile_account_deletion_workspace('$p') and platform = 'threads'")" == 1 ]] \
+    || { echo "R7_REMOVED"; return 0; }
+  echo PASS
+}
+lease_proof() {
+  local db="$1" tag="$2" out
+  out="$(race_service_lease "$(copy "r7_$tag" "$db")")"
+  [[ "$out" == PASS ]] || { echo "$out"; return 0; }
+  if ! out="$(as_owner "$(copy "lp_$tag" "$db")" -A -t -f "$t/postona_threads_t13_cleanup_lease.sql" 2>&1)"; then
+    echo "LEASE_BEHAVIOR $(sed -n 's/^.*ERROR: *//p' <<<"$out" | head -1)"; return 0
+  fi
+  grep -q T13_CLEANUP_LEASE_OK <<<"$out" || { echo "LEASE_BEHAVIOR_INCOMPLETE"; return 0; }
+  echo PASS
+}
+before="$(lease_proof "$world_pr169" pr169)"
+[[ "$before" != PASS ]] || fail "fail-before: PR #169's cleanup passed the live-lease proof (the defect is not reproduced)"
+echo "PASS fail-before: PR #169 cleanup candidate fails (${before:0:150})"
+# The race alone also fails before (it is not only the behavior file that catches it).
+before_race="$(race_service_lease "$(copy r7b_pr169 "$world_pr169")")"
+[[ "$before_race" != PASS ]] || fail "fail-before: PR #169's cleanup passed the service-lease race"
+echo "PASS fail-before (race): ${before_race:0:120}"
+# ... and the behavior file alone fails before, at the unclaimed POSTONA deletion.
+if before_sql="$(as_owner "$(copy lpb_pr169 "$world_pr169")" -A -t -f "$t/postona_threads_t13_cleanup_lease.sql" 2>&1)"; then
+  fail "fail-before: PR #169's cleanup passed postona_threads_t13_cleanup_lease.sql"
+fi
+before_sql="$(sed -n 's/^.*ERROR: *//p' <<<"$before_sql" | head -1)"
+[[ "$before_sql" == *"unclaimed POSTONA deletion"* ]] || fail "fail-before failed for another reason: $before_sql"
+echo "PASS fail-before (behavior): ${before_sql:0:140}"
+after="$(lease_proof "$world" fix)"
+[[ "$after" == PASS ]] || fail "pass-after: $after"
+echo "PASS pass-after: this branch's cleanup candidate (R7 service-lease race + postona_threads_t13_cleanup_lease.sql)"
 
 # ---- 3a. Preconditions of the guards candidate ---------------------------------------------------------------
 expect_refused() { local label="$1" db="$2" code="$3" got; got="$(apply "$db" "$guards")"; [[ "$got" == "$code" ]] || fail "$label: $got"; }
@@ -281,4 +357,4 @@ mutate busy_as_blocked "    when lock_not_available or deadlock_detected then
       return 'BUSY';
 " ""
 cat "$tree/T13_MANIFEST.txt"
-echo "ALL PASS (RUN: local disposable PG17 with the REAL G5 T13 / Phase 4 / F5 migrations. NOT_RUN: managed Supabase Auth / PostgREST / Vault, H5 owner transport, Meta, production)"
+echo "ALL PASS (RUN: local disposable PG17 with the REAL G5 T13 / Phase 4 / F5 / Phase 6 migrations. NOT_RUN: managed Supabase Auth / PostgREST / Vault, H5 owner transport, Meta, production)"

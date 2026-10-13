@@ -57,7 +57,7 @@ POSTONA の Threads には、**サーバー側で人なしに動く処理（ワ�
 
 | 担当 | 内容 |
 |---|---|
-| **F5（G5）** | (1) 後片付けアダプターの登録と、削除処理のロールへの `threads_provider_connection_state(uuid)`・`cleanup_threads_provider_footprint(uuid)` の EXECUTE 付与（独立レビュー後、G5 のファイルで）。(2) **POSTONA だけの終了（service_deletion）に所有者 lease が無い**: 用意できれば Threads 側も同じ確認を足す。(3) Threads は外部の取り消しを確認できないため、**アカウント全体の削除は `acceptRemoteUnverified` を許すかの判断が必要**（許さないと Threads がつながった人の削除は止まる）。(4) 今回の F5 の使い方（`assert_brand_service_active` を定義者関数の中で、行ロックの前に）が F5 の意図どおりかの確認。Threads には人なしのワーカーが無いので `common_account_brand_service_state`（読み取りの判定）は使っていない。 |
+| **F5（G5）** | (1) 後片付けアダプターの登録と、削除処理のロールへの `threads_provider_connection_state(uuid)`・`cleanup_threads_provider_footprint(uuid)` の EXECUTE 付与（独立レビュー後、G5 のファイルで）。(2) ~~POSTONA だけの終了（service_deletion）に所有者 lease が無い~~ → **解決済み**（2026-10-13）: F5 Phase 6（PR #178）が lease を用意し、F4 の後片付けが G5 の判定 `private.account_lifecycle_cleanup_authorized` に追従（`threads-cleanup-live-lease-fix-v1.md`）。(3) Threads は外部の取り消しを確認できないため、**アカウント全体の削除は `acceptRemoteUnverified` を許すかの判断が必要**（許さないと Threads がつながった人の削除は止まる）。(4) 今回の F5 の使い方（`assert_brand_service_active` を定義者関数の中で、行ロックの前に）が F5 の意図どおりかの確認。Threads には人なしのワーカーが無いので `common_account_brand_service_state`（読み取りの判定）は使っていない。 |
 | **H5** | 変更依頼なし。いまの形（`assert_actor` で T13 → セッション FOR SHARE → #124 の関数、接続の完了とトークン期限の記録を同じトランザクションで）を保つこと。所有者経路が本人のクレームなしに #124 の関数を呼ぶと T13 が必ず拒否する（安全側）。 |
 | **G3（F3）** | X の予約・投稿・saga・認証には触れていない。X 側の F5 配線（PR #165 の文書 §4）は G3 側の作業。 |
 | **既知の限界** | Threads への HTTP 呼び出しの間はデータベースのロックが及ばない（トークンを渡した後の1回は止められない。次の段階は必ず再確認）。所有者の POSTONA が終わった後は、送信中かもしれない投稿の照合（confirm／reconcile）も T13 で止まる（#144 のまま）。その場合は人が確認し、退会時の後片付けは `reconciliation_required` で止まる。 |

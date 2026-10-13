@@ -1,8 +1,9 @@
 -- Fake-only, applied by postona_threads_cleanup_run.sh / postona_threads_disconnect_run.sh on the G4 publish
 -- world after the release fixture. A stand-in of G5's private.account_lifecycle_operations with exactly the
 -- columns and CHECKs of 20261001150000_common_account_lifecycle_foundation.sql and the owner lease of
--- 20261009120000_common_account_deletion_completion.sql (lease shape, owner scope) that the Threads
--- candidates read (it is NOT G5's table and carries none of its guards). Disposable local database only.
+-- 20261009120000_common_account_deletion_completion.sql (lease shape), with Phase 6's owner scope
+-- (20261013120000, PR #178: a service deletion may carry an owner lease too), that the Threads candidates read
+-- (it is NOT G5's table and carries none of its guards). Disposable local database only.
 create table private.account_lifecycle_operations (
   id uuid primary key default gen_random_uuid(),
   user_id uuid,
@@ -13,10 +14,26 @@ create table private.account_lifecycle_operations (
   owner_lease uuid,
   owner_lease_expires_at timestamptz,
   check ((operation_type = 'service_deletion') = (service_key is not null)),
+  check (current_step = 'cleanup' or operation_type = 'account_deletion'),
   constraint account_lifecycle_operations_lease_shape check ((owner_lease is null) = (owner_lease_expires_at is null)),
-  constraint account_lifecycle_operations_owner_scope check (operation_type = 'account_deletion' or owner_lease is null)
+  constraint account_lifecycle_operations_owner_scope check (operation_type in ('account_deletion', 'service_deletion'))
 );
 revoke all on table private.account_lifecycle_operations from public, anon, authenticated, service_role;
+
+-- G5/F5 Phase 6's cleanup predicate, VERBATIM from 20261013120000_common_account_service_deletion_ownership.sql
+-- (PR #178 83334a091ded5571cf595fd99d7a035627564735) over the stand-in table above; owner-only as there. The real
+-- one is proven by postona_threads_t13_run.sh on the real Phase 6 migration.
+create function private.account_lifecycle_cleanup_authorized(p_user_id uuid)
+returns boolean language sql stable security definer set search_path = ''
+as $$
+  select p_user_id is not null and exists (
+    select 1 from private.account_lifecycle_operations o
+     where o.user_id = p_user_id and o.status = 'in_progress'
+       and o.owner_lease is not null and o.owner_lease_expires_at > clock_timestamp()
+       and ((o.operation_type = 'account_deletion' and o.current_step = 'cleanup')
+            or (o.operation_type = 'service_deletion' and o.service_key = 'x_autopost')))
+$$;
+revoke all on function private.account_lifecycle_cleanup_authorized(uuid) from public, anon, authenticated, service_role;
 
 -- A stand-in of G5 Phase 4's private.account_lifecycle_service_state_refusal (20261012130000), following its
 -- contract over the release fixture's postona_rel.lifecycle states (+ 'suspended') and the table above: null =
