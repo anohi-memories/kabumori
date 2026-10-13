@@ -8,10 +8,10 @@
 
 ## F1
 - slot: F1
-- status: review_required
+- status: done
 - task_id: kabumori-f1-ai-ask-b0-j2-r2-r3-r8-correction-20261013
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
 - recommended_model: Opus5.5（高）
