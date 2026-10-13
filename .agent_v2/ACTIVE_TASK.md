@@ -224,7 +224,7 @@
 
 ## J5
 - slot: J5
-- status: ready
+- status: in_progress
 - task_id: postona-j5-account-deletion-legacy-bypass-ui-bridge-20261014
 - owner: codex
 - next_owner: codex
