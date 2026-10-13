@@ -5,6 +5,11 @@
 
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F8進行中 / F9履歴保存保留（2026-10-13）
+- F8 J1-b previous TASK archived with manifest/SHA256/read-back and indexed. NEW F8 `news-improvement-a-f8-j1b2-visibility-policy-migration-candidate-20261013` ready/claude, Opus5.5（高）, return L8. App visibility source/offline candidate only; any migration must have Sol（高） review and explicit approval before DB/Preview/production apply.
+- F9 prior L9 task remains done/none. Archive copy and MANIFEST.json/.md were created/read-back, but SHA256SUMS write hit OpenAI safety block; archive process incomplete and F9 reallocation is withheld. Do not overwrite F9 TASK or start unregistered work. Legacy PR115 history and PR174 rights risk (288 headlines / 76 generated texts) remain under hold, no merge/deploy/paid API.
+- F8 and F9 boundaries are separate; F8 may proceed independently. No production mutations authorized.
+
 ## F9 L9 権利監査完了（2026-10-13 JST）
 - F9 `api-optimization-b-f9-pr174-pr115-rights-audit-offline-20261013` L9 PASS_OFFLINE_AUDIT / MERGE_HOLD。TASK/ACTIVE_TASKは done/next_owner:none。監査 branch `claude/f9-pr174-pr115-audit-20261013` commit F9報告 `e5e124896b62d00afa4d8edab62d0d42a33af6ce`、追加文書1ファイルのみ（GitHub compare確認）。304 tests PASS / 1 ignored はF9報告、ChatGPT未再実行。
 - PR174は見出し288件と生成投稿文76件の取り扱い判断待ち。PR115旧本文18件は旧Git refsに残存、main既存2fixtureもF8/F2の所有者判断が必要。旧PR115/174を勝手にclose/merge/削除/履歴書換しない。利用許諾未確認のまま有料API/外部AI送信はNO_GO。
