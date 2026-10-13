@@ -34,3 +34,16 @@ from (values
 ) as t(n, status, importance, category, title, source_name, severity, relevance, fact, mins);
 -- C3/C8 are the same event (duplicate pair for the dedupe check)
 update public.important_news_candidates set title = '[C8] 金融庁が地方銀行に業務改善命令（続報）' where id = '20000000-0000-0000-0000-000000000008';
+
+-- ---- J1-b2 additions: Fact failures, rumours, follow-ups, non-official source, company news, no-tracking all_useful user
+insert into public.alert_settings(user_id, notification_preset) values ('10000000-0000-0000-0000-000000000005', 'all_useful'); -- u5: all_useful, tracks nothing
+insert into public.important_news_candidates
+  (id, status, importance, category, title, source_type, source_name, source_url, published_at, coverage_severity,
+   japan_market_relevance, fact_check_status, company_code)
+values
+  ('20000000-0000-0000-0000-000000000011', 'rejected', 'no_post', 'administrative_action', '[C11] 金融庁が信用金庫に業務改善命令（事実確認未了）', 'market_macro', 'jp_official', 'https://www.example.go.jp/11', now() - interval '35 minutes', 'medium', 'medium', 'needs_review', null),
+  ('20000000-0000-0000-0000-000000000012', 'rejected', 'no_post', 'major_security_incident', '[C12] 大手通信会社で大規模障害との未確認情報', 'market_macro', 'breaking_market', 'https://example.test/12', now() - interval '25 minutes', 'high', 'high', 'passed', null),
+  ('20000000-0000-0000-0000-000000000013', 'rejected', 'no_post', 'other_market_moving', '[C13] 大手工場で爆発事故 消防が発表（第2報）', 'market_macro', 'jp_official', 'https://www.example.go.jp/13', now() - interval '58 minutes', 'high', 'high', 'passed', null),
+  ('20000000-0000-0000-0000-000000000015', 'rejected', 'no_post', 'earnings', '[C15] テスト自動車 決算短信（TDnet）', 'tdnet', 'tdnet', 'https://www.release.tdnet.info/15', now() - interval '45 minutes', 'medium', 'medium', 'passed', '72030');
+-- C13 is the same event as C5 (title differs only by a follow-up marker)
+update public.important_news_candidates set title = '[C5] 大手工場で爆発事故 消防が発表' where id = '20000000-0000-0000-0000-000000000005';

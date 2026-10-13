@@ -1,8 +1,5 @@
 current
-v1_domestic_high_for_all
-v2_domestic_themes
-v3_base_excludes_rejected
 v3b_base_excludes_rejected_except_emergency
-v1_domestic_high_for_all,v2_domestic_themes
-v2_domestic_themes,v3b_base_excludes_rejected_except_emergency
-v1_domestic_high_for_all,v2_domestic_themes,v3b_base_excludes_rejected_except_emergency
+j1b2_a
+j1b2_b
+j1b2_c
