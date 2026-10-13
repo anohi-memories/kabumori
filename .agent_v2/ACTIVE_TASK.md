@@ -38,18 +38,18 @@
 
 ## F3
 - slot: F3
-- status: review_required
+- status: done
 - task_id: postona-f3-j3-v3-r1-r3-security-fixes-20261013
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA G3のちゃ（新F3担当・X投稿／予約担当）
 - completion_code: L3
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F3.md
 - current_report_path: .agent_v2/tasks/F3.md#report
 - dependencies: J3 V3 CHANGES_REQUIRED R1/R2/R3; F3 PR189/182; F5 Phase8 active, F4 PR180/169
-- blocker: R1 durable state may need F5-owned contract; no shared file edits; G4 Issue131; production NO_GO
-- slot_use: J3 P2 R1 uncertainty-loss, R2 missing action, R3 lease-expiry-after-lock scoped fixes; independent F3 branch, return L3. Previous F3 task archived and indexed.
+- blocker: R1/R3 mandatory Codex Sol（高） focused rereview; F5 Phase8 durable count/T10 wiring; G4 Issue131; production NO_GO
+- slot_use: L3 PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO; F3 Draft PR192 HEAD 9384818e, nine owned files, reported PG fail-before/pass-after. F3 done/unreserved, archive before reuse.
 
 ## F4
 - slot: F4
