@@ -1,5 +1,12 @@
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F5 Phase7 共通認証・退会 release preflight（2026-10-13）
+- F5 new `common-account-f5-phase7-auth-lifecycle-release-preflight-20261013`: ready/claude、Opus5.5（高）、F5→L5、return `共通アカウントG5のちゃ（新F5担当）`。source-only：実アプリ既存経路とDB/ACL/退会処理をdisposable PGで検証可能なrunnerへまとめ、managed環境での未検証事項とSTOP条件を具体化。production NO_GO。
+- 前F5 Phase6 `common-account-f5-phase6-postona-provider-cleanup-service-deletion-20261013` はL5 PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO、PR178 Draft（head `83334a091ded5571cf595fd99d7a035627564735`）。TASK＋Reportをappend-only archive `.agent_v2/archive/2026-10-13-F5-common-account-f5-phase6-postona-provider-cleanup-service-deletion-20261013/`へ保存、元blob一致・SHA256/read-back確認、HISTORY_INDEX追記。
+- F4の `threads_cleanup_authorized` が生存lease無しでもcleanupを許可する問題は申し送り文書 `docs/common-account/F5_TO_F4_PHASE6_LEASE_GUARD_HANDOFF_20261013.md` に記録。F4担当による新TASKの限定修正待ち。F5はF4/ThreadsやF3/Xのsource/worktree/PRに触れない。
+- PR121→152→165→178はDraft/unmerged、本番GoTrue/Auth/Storage/PostgREST確認は未実施。F4/F3連携の後にSol（高）の独立統合レビューを1回判断。
+
+
 ## F2 X/app shared report consumer cutover preflight (2026-10-13)
 - F2 new task `kabumori-f2-shared-market-report-x-app-consumer-cutover-20261013` ready/claude, Sonnet5（高）, return L2. User wants X and app migrated together after Opus source merge. Task scope: production read-only/deployed-vs-main diff, route/duplicate safeguards, offline consumer tests, staged cutover and rollback plan. Gates were x=false, app=false; deployed x-test-post/personalized-reports differ from main. No DB mutation, secret, deploy, SNS post or gate ON authorized by this task; F6 provider production window is separate.
 
