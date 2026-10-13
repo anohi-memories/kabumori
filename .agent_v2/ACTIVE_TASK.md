@@ -23,19 +23,18 @@
 
 ## F2
 - slot: F2
-- status: done
-- task_id: kabumori-f2-yume-market-commentator-morning-close-quality-20261013
+- status: ready
+- task_id: kabumori-f2-emergency-market-report-app-feed-broadcast-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ（新F2担当）
 - completion_code: L2
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
-- dependencies: F6 Opus Primary provider, stored morning report for immutable forecast, X/app consumer contracts
-- blocker: PR188 Draft/unmerged; production and consumer compatibility verification pending separate release gate
-- l2_verdict: PASS_OFFLINE_SOURCE / PRODUCTION_NO_GO
-- slot_use: ゆめちゃんAI評論家 朝刊/大引けの独自予想と事後検証の品質改善（source-only）
+- dependencies: main PR143/149/158, F6 generator; current X/app consumer ON, old individualized scheduled Cron OFF
+- blocker: feed migration, broadcast migration, worker & Cron, device validation and staged production approvals
+- slot_use: EMERGENCY 共通市況アプリ配信・一斉通知を最短で整備（1時間目標）
 
 ## F3
 - slot: F3
