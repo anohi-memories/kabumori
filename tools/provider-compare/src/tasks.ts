@@ -1,4 +1,6 @@
 import type { CaseFixture } from "./fixtures.ts";
+import { POST_WITHHELD } from "./eval_redaction.ts";
+import { RESIDUAL_WITHHELD } from "./residual_redaction.ts";
 import type { NeutralRequest } from "./types.ts";
 import { captureOpenAiRequest } from "./capture.ts";
 import { fromOpenAiResponsesBody } from "./neutral.ts";
@@ -93,7 +95,10 @@ function priorLuna(fixture: CaseFixture): ModelJudgement {
 
 /** The post exactly as production stored it: headline label, body and the appended source line. Fact / Voice check this. */
 export function recordedFinalText(fixture: CaseFixture): string | null {
-  return fixture.recorded.generation?.text ?? null;
+  const text = fixture.recorded.generation?.text ?? null;
+  // A withheld post is a placeholder, not a post: it is never used as an input (fail closed).
+  if (text !== null && (text.startsWith(POST_WITHHELD) || text.startsWith(RESIDUAL_WITHHELD))) return null;
+  return text;
 }
 
 /** The draft body production's draft step returned, i.e. the stored post minus the label and source line it adds later. */

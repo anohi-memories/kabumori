@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "note": "Pointers, lengths and SHA-256 of withheld strings only; no text. maskedContentSha256 is the digest of the file with those pointers blanked, equal before and after withholding.",
+  "files": {
+    "cases.rights_safe.json": {
+      "minRun": 20,
+      "withheld": [
+        {
+          "pointer": "/cases/18/recorded/judgement/affectedEntities/0",
+          "chars": 22,
+          "sha256": "2c7c41527cf6d17670343cf6a2f86ca1643fae89bb6062e3f86010a45b6e0c3e",
+          "longestRun": 22
+        },
+        {
+          "pointer": "/cases/20/recorded/generation/text",
+          "chars": 214,
+          "sha256": "d5a7c9bc484d6f9d201ca17bb5a109b4fa396bbc25f4648333964232a4d82407",
+          "longestRun": 30
+        }
+      ],
+      "maskedContentSha256": "d9ea0516e79c5dcf17a778651851fd94d35a9f4164385b6af139635a225693b4"
+    },
+    "eval_expansion.json": {
+      "minRun": 20,
+      "withheld": [
+        {
+          "pointer": "/cases/95/label/keyFacts/0",
+          "chars": 35,
+          "sha256": "be30e7ad04e9ba875c78c35dced22fd3e0aa1c7e7d0c71eb8209aad6bc7be882",
+          "longestRun": 20
+        },
+        {
+          "pointer": "/cases/153/recorded/judgement/affectedEntities/1",
+          "chars": 24,
+          "sha256": "cac95d42b989d0d283caa3f83912d7b9a237e520056c89d5628183616b483371",
+          "longestRun": 24
+        },
+        {
+          "pointer": "/cases/159/label/keyFacts/0",
+          "chars": 22,
+          "sha256": "75e7ff53054ee783790cc18897f70d2395feb5986426accf2d0cbf59b5bf4dc8",
+          "longestRun": 22
+        },
+        {
+          "pointer": "/cases/188/label/keyFacts/0",
+          "chars": 31,
+          "sha256": "8e11e7643ec23fa493858451917365e2b49ead0574ff3cb2d197432acba8178f",
+          "longestRun": 31
+        }
+      ],
+      "maskedContentSha256": "f1ac071aad9298ebaf7ad3a2be01f16f04bd3be1400d510339ee38ea760c3474"
+    },
+    "eval_nopost_sample.json": {
+      "minRun": 20,
+      "withheld": [
+        {
+          "pointer": "/cases/60/label/keyFacts/0",
+          "chars": 20,
+          "sha256": "fb39a21ed72d4fd4653ee0f9722f3a2bb530121010f5a2f210e163e68357be7f",
+          "longestRun": 20
+        },
+        {
+          "pointer": "/cases/67/label/keyFacts/0",
+          "chars": 44,
+          "sha256": "5a0fb3398ddda0a3e9ecdebdb7bdc70422022ef06f159e20c157a940c71e063a",
+          "longestRun": 27
+        },
+        {
+          "pointer": "/cases/79/label/keyFacts/0",
+          "chars": 23,
+          "sha256": "1843a790d61ccabecc6c1e75dc256ed9432393f0f84922ac323ad5b112199bca",
+          "longestRun": 23
+        },
+        {
+          "pointer": "/cases/83/label/keyFacts/0",
+          "chars": 24,
+          "sha256": "f6c2c4a627c11ed007725335a2ee22d66dd63d794bc14170ce810e2941b55379",
+          "longestRun": 21
+        },
+        {
+          "pointer": "/cases/113/label/keyFacts/0",
+          "chars": 27,
+          "sha256": "06898dd04310c575189531a83009e17bf1d54cd382050c79e1fc95f58042b1f3",
+          "longestRun": 20
+        },
+        {
+          "pointer": "/cases/133/label/keyFacts/0",
+          "chars": 22,
+          "sha256": "e142296f135e4b29426ef504a22bf002fe001066a67b64fd9bba85bd5bd4a14a",
+          "longestRun": 22
+        }
+      ],
+      "maskedContentSha256": "dc5b8aac985d948c9a3f429e35cf80fec66f822020d746f68633ebe3033c825d"
+    },
+    "eval_labels.json": {
+      "minRun": 20,
+      "withheld": [
+        {
+          "pointer": "/labels/33689f20/keyFacts/0",
+          "chars": 35,
+          "sha256": "be30e7ad04e9ba875c78c35dced22fd3e0aa1c7e7d0c71eb8209aad6bc7be882",
+          "longestRun": 20
+        },
+        {
+          "pointer": "/labels/beeb96ea/keyFacts/0",
+          "chars": 22,
+          "sha256": "75e7ff53054ee783790cc18897f70d2395feb5986426accf2d0cbf59b5bf4dc8",
+          "longestRun": 22
+        },
+        {
+          "pointer": "/labels/faefab96/keyFacts/0",
+          "chars": 31,
+          "sha256": "8e11e7643ec23fa493858451917365e2b49ead0574ff3cb2d197432acba8178f",
+          "longestRun": 31
+        }
+      ],
+      "maskedContentSha256": "c33bf2127d1ff761b8d92b9700b65270efd0091686ee0760a8e6e655b19b5731"
+    },
+    "eval_labels_nopost.json": {
+      "minRun": 20,
+      "withheld": [
+        {
+          "pointer": "/labels/0b2f438c/3",
+          "chars": 20,
+          "sha256": "fb39a21ed72d4fd4653ee0f9722f3a2bb530121010f5a2f210e163e68357be7f",
+          "longestRun": 20
+        },
+        {
+          "pointer": "/labels/16a0eec4/3",
+          "chars": 44,
+          "sha256": "5a0fb3398ddda0a3e9ecdebdb7bdc70422022ef06f159e20c157a940c71e063a",
+          "longestRun": 27
+        },
+        {
+          "pointer": "/labels/466bb274/3",
+          "chars": 24,
+          "sha256": "f6c2c4a627c11ed007725335a2ee22d66dd63d794bc14170ce810e2941b55379",
+          "longestRun": 21
+        },
+        {
+          "pointer": "/labels/94ebccf4/3",
+          "chars": 27,
+          "sha256": "06898dd04310c575189531a83009e17bf1d54cd382050c79e1fc95f58042b1f3",
+          "longestRun": 20
+        },
+        {
+          "pointer": "/labels/3a409532/3",
+          "chars": 23,
+          "sha256": "1843a790d61ccabecc6c1e75dc256ed9432393f0f84922ac323ad5b112199bca",
+          "longestRun": 23
+        },
+        {
+          "pointer": "/labels/d02db068/3",
+          "chars": 22,
+          "sha256": "e142296f135e4b29426ef504a22bf002fe001066a67b64fd9bba85bd5bd4a14a",
+          "longestRun": 22
+        }
+      ],
+      "maskedContentSha256": "de81930217f6620370544853514b3068ab8ef8b62a16080a347ef1478ce0a066"
+    }
+  }
+}

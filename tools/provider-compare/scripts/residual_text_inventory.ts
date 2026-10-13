@@ -28,10 +28,19 @@ for (const c of (await readJson(legacyPath)).cases) {
 }
 const rowsPath = arg("--rows");
 if (rowsPath) {
+  // Only headlines of sources without confirmed terms are references (the headline of an open-terms source is retained on
+  // purpose and repeats in its own body). An id that is not in the committed datasets is kept as a reference.
+  const openIds = new Set<string>();
+  for (const name of ["eval_expansion.json", "eval_nopost_sample.json"]) {
+    for (const c of (await readJson(new URL(name, dir))).cases) {
+      if (bodyMayBeStored(String(c.candidate?.sourceUrl ?? c.sourceUrl ?? ""))) openIds.add(String(c.candidateId).slice(0, 8));
+    }
+  }
   for (const line of (await Deno.readTextFile(rowsPath)).split("\n")) {
     if (!line.startsWith("{")) continue;
     const row = JSON.parse(line) as { id?: string; title?: string };
-    if (typeof row.id === "string" && typeof row.title === "string") references.push({ key: `title:${row.id.slice(0, 8)}`, text: row.title });
+    if (typeof row.id !== "string" || typeof row.title !== "string" || openIds.has(row.id.slice(0, 8))) continue;
+    references.push({ key: `title:${row.id.slice(0, 8)}`, text: row.title });
   }
 }
 console.log(`references=${references.length}`);
