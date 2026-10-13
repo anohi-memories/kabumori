@@ -71,7 +71,7 @@ M = [
      "  if (state.accountStatus === 'deleting') return fail(409, 'WITHDRAW_BLOCKED', { reasons: ['ACCOUNT_DELETION_IN_PROGRESS'] });\n  if (state.accountStatus === 'locked')",
      "  if (state.accountStatus === 'locked')"),
     ('a failed session revocation is ignored', L, "  if (!revoked) return stop(fail(502, 'SESSION_REVOKE_FAILED'));", "  void revoked;"),
-    ('X failure is ignored', L, "    if (outcome !== 'done') return refuse(fail(502, 'X_CLEANUP_FAILED'));\n", ""),
+    ('X failure is ignored', L, "    if (outcome !== 'done') return refuse(fail(502, 'X_CLEANUP_FAILED', xReasons));\n", ""),
     ('the server logs the person', L, "  const { token, user } = caller;\n  const userId = user.id;\n  const body = record(input.body);",
      "  const { token, user } = caller;\n  const userId = user.id;\n  console.log('deleting', userId);\n  const body = record(input.body);"),
     ('an unknown reason code is passed through', L, "const reasonCode = (value: unknown) => ((REASON_CODES as readonly unknown[]).includes(value) ? value as string : 'UNKNOWN');",

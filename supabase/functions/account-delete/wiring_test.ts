@@ -71,7 +71,7 @@ test('the legacy direct delete is gone: no module deletes a login outside the li
   assert.ok(logic.indexOf("call(deps, 'complete'") > deleteAt, 'the read-back follows it');
   // Success is only ever the verified read-back.
   assert.equal(logic.match(/outcome: 'deleted'/gu)?.length, 1);
-  assert.match(logic, /if \(done\?\.status === 'completed' && done\.login_deleted === true\) \{\n\s+return \{ status: 200, body: \{ ok: true, outcome: 'deleted'(, \.\.\.\(Object\.keys\(providerSummary\)\.length \? \{ providers: providerSummary \} : \{\}\))?(, \.\.\.\(remoteUnverified\.length \? \{ remote_unverified: remoteUnverified \} : \{\}\))? \} \};/u);
+  assert.match(logic, /if \(done\?\.status === 'completed' && done\.login_deleted === true\) \{\n\s+return \{ status: 200, body: \{ ok: true, outcome: 'deleted'(, \.\.\.\(Object\.keys\(providerSummary\)\.length \? \{ providers: providerSummary \} : \{\}\))?(, \.\.\.\(remoteUnverified\.length \? \{ remote_unverified: remoteUnverified \} : \{\}\))?(, \.\.\.\(xPostsUnconfirmed > 0 \? \{ x_posts_unconfirmed: xPostsUnconfirmed \} : \{\}\))? \} \};/u);
   // Phase 6: POSTONA is ended only through the owned path -- the legacy finish is never called, the service lease is
   // claimed before X is touched, every provider answer is recorded, and the owner's end precedes Kabumori.
   assert.ok(!/call\(deps, 'finish_service_deletion'/u.test(logic), 'the legacy finish (refused by the database for POSTONA) is not used');

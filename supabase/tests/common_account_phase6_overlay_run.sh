@@ -64,6 +64,7 @@ for path in supabase/migrations/20261010051938_common_account_service_write_guar
             supabase/migrations/20261012130000_common_account_core_service_fence.sql \
             supabase/migrations/20261012230000_common_account_service_brand_state.sql \
             supabase/migrations/20261013120000_common_account_service_deletion_ownership.sql \
+            supabase/migrations/20261013140000_common_account_service_reconciliation_facts.sql \
             supabase/tests/common_account_write_guard_fixture.sql; do
   mkdir -p "$tree/$(dirname "$path")"
   cp "$g5/$path" "$tree/$path"
@@ -127,7 +128,8 @@ for f in 20261001150000_common_account_lifecycle_foundation.sql 20261006230000_c
 done
 as_owner "$world" -f "$t/common_account_write_guard_fixture.sql" >/dev/null
 for f in 20261010051938_common_account_service_write_guard.sql 20261012130000_common_account_core_service_fence.sql \
-         20261012230000_common_account_service_brand_state.sql 20261013120000_common_account_service_deletion_ownership.sql; do
+         20261012230000_common_account_service_brand_state.sql 20261013120000_common_account_service_deletion_ownership.sql \
+         20261013140000_common_account_service_reconciliation_facts.sql; do
   [[ "$(apply "$world" "$m/$f")" == applied ]] || fail "G5 $f did not apply: $(apply "$(copy "why_$RANDOM" "$world")" "$m/$f")"
 done
 as_owner "$world" -f "$t/postona_social_accounts_multi_provider_fixture.sql" >/dev/null

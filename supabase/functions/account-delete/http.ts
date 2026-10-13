@@ -23,6 +23,7 @@ import {
   type LifecycleRpcName,
   type RpcResult,
   type XCleanupOutcome,
+  type XCleanupResult,
 } from './lifecycle_logic.ts';
 import { revokeAppleGrantOutcome } from './apple_outcome.ts';
 import { providerRegistration } from './provider_registry.ts';
@@ -51,6 +52,10 @@ export const RPC_NAMES: Record<LifecycleRpcName, string> = {
   acknowledge_unverified: 'acknowledge_owned_remote_unverified',
   finish_owned_service: 'finish_owned_service_deletion',
   provider_snapshot: 'common_account_provider_snapshot',
+  record_reconciliation: 'record_owned_service_deletion_reconciliation',
+  service_end_result: 'common_account_service_end_result',
+  // F3's saga (PR #192, optional): the caller acknowledges the durable count it has recorded in its own state.
+  ack_x_unconfirmed: 'social_mobile_account_deletion_x_unconfirmed_ack',
 };
 
 /** The existing X deletion saga, reached as the X app reaches it. */
@@ -60,20 +65,55 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 const json = (body: unknown, status: number) => Response.json(body, { status });
 
-/** Maps the X saga's fixed error codes onto the adapter's outcomes; anything unknown is a failure. */
-export function xOutcomeOf(status: number, body: unknown): XCleanupOutcome {
-  const data = typeof body === 'object' && body !== null ? body as Record<string, unknown> : {};
-  if (status >= 200 && status < 300 && data.ok === true) {
-    return data.login_deleted === false ? 'done' : data.login_deleted === true ? 'login_deleted' : 'failed';
+/** F3's BLOCK_REASONS (supabase/functions/social-mobile-account-delete/delete_logic.ts), mirrored. */
+export const X_BLOCK_REASONS = [
+  'ADMIN_ACCOUNT', 'OWNS_OTHER_WORKSPACE', 'WORKSPACE_NOT_SELF_SERVICE', 'SHARED_WORKSPACE', 'WORKSPACE_ROLE_MISMATCH',
+  'POSTING_IN_PROGRESS', 'CREDENTIAL_REFRESH_IN_PROGRESS', 'CREDENTIAL_OWNERSHIP_AMBIGUOUS', 'UNEXPECTED_DEPENDENT_DATA',
+  'NON_X_ACCOUNT_PRESENT', 'UNKNOWN',
+] as const;
+
+/**
+ * Maps the X saga's answer onto a TYPED result (F3's PR #189 contract, `xServiceEndOutcomeOf`; mirrored here because a
+ * function bundle cannot import another function's source -- the overlay test supabase/tests/
+ * common_account_phase8_integrated_test.ts holds the two mappers equal on every answer the saga can give).
+ * Nothing ambiguous is `done`: an unknown shape, a missing `login_deleted`, a malformed count are failures.
+ */
+export function xResultOf(status: number, body: unknown): XCleanupResult {
+  const data = typeof body === 'object' && body !== null && !Array.isArray(body) ? body as Record<string, unknown> : {};
+  if (status === 200 && data.ok === true) {
+    if (data.login_deleted === true) return { outcome: 'login_deleted' };
+    if (data.login_deleted !== false) return { outcome: 'failed' };
+    const unconfirmed = data.x_posts_unconfirmed;
+    if (unconfirmed !== undefined && !(typeof unconfirmed === 'number' && Number.isInteger(unconfirmed) && unconfirmed > 0)) return { outcome: 'failed' };
+    return typeof unconfirmed === 'number' ? { outcome: 'done', unconfirmedPosts: unconfirmed } : { outcome: 'done' };
   }
   const error = typeof data.error === 'string' ? data.error : '';
-  if (error === 'DELETION_IN_PROGRESS') return 'in_progress';
-  if (error === 'SCOPE_CHANGED' || error === 'SCOPE_REQUIRED') return 'scope_refused';
-  if (error.startsWith('DELETION_BLOCKED_') || error === 'DELETION_OPERATOR_REQUIRED') return 'blocked';
-  return 'failed';
+  if (error === 'DELETION_IN_PROGRESS') return { outcome: 'in_progress' };
+  if (error === 'SCOPE_CHANGED' || error === 'SCOPE_REQUIRED') return { outcome: 'scope_refused' };
+  if (error.startsWith('DELETION_BLOCKED_')) {
+    // F3's BLOCK_REASONS (mirrored; the contract test compares the two lists). A reason this server does not know
+    // is a failure, as F3's own mapper says: never a typed, retryable block.
+    const reason = error.slice('DELETION_BLOCKED_'.length);
+    return (X_BLOCK_REASONS as readonly string[]).includes(reason) ? { outcome: 'blocked', reason } : { outcome: 'failed' };
+  }
+  if (error === 'DELETION_OPERATOR_REQUIRED') return { outcome: 'blocked', reason: 'OPERATOR_REQUIRED' };
+  // The remote authorization is NOT verified revoked / the local state must be read back before any retry.
+  if (error === 'X_REVOKE_FAILED' || error === 'CREDENTIALS_CHANGED' || error === 'FINALIZE_FAILED') return { outcome: 'failed', reason: error };
+  return { outcome: 'failed' };
 }
 
-export function createHandler(env: { get: (name: string) => string | undefined }, fetchImpl: FetchLike = fetch) {
+/** The word of {@link xResultOf}; kept for callers (and tests) that only need the outcome. */
+export function xOutcomeOf(status: number, body: unknown): XCleanupOutcome {
+  return xResultOf(status, body).outcome;
+}
+
+export function createHandler(
+  env: { get: (name: string) => string | undefined },
+  fetchImpl: FetchLike = fetch,
+  // The provider registration is injectable so that an integration test can hold the SHIPPED (empty, fail-closed)
+  // registry and the reviewed candidate side by side; production always uses the default.
+  registrationOf: typeof providerRegistration = providerRegistration,
+) {
   return async (req: Request): Promise<Response> => {
     if (req.method !== 'POST') return json({ ok: false, error: 'METHOD_NOT_ALLOWED' }, 405);
     const body = await req.json().catch(() => null) as { action?: unknown } | null;
@@ -101,7 +141,7 @@ export function createHandler(env: { get: (name: string) => string | undefined }
       return { status: response.status, body: await response.json().catch(() => null) };
     };
 
-    const registration = providerRegistration({ supabaseUrl, serviceKey, fetchImpl });
+    const registration = registrationOf({ supabaseUrl, serviceKey, fetchImpl });
     const deps: LifecycleDeps = {
       getUser: async (token) => {
         const response = await fetchImpl(`${supabaseUrl}/auth/v1/user`, { headers: asPerson(token) });
@@ -151,7 +191,7 @@ export function createHandler(env: { get: (name: string) => string | undefined }
           const { status, body: answer } = await callX(token, {
             action: 'delete', confirmation: X_DELETE_CONFIRMATION, expected_scope: 'social_only',
           });
-          return xOutcomeOf(status, answer);
+          return xResultOf(status, answer);
         },
       },
       deleteLogin: async (userId) => {

@@ -211,7 +211,7 @@ RQ=(psql_q "$db_run")
 # Phase 5 workspace state and the Phase 6 owner lease: POSTONA can then only be ended through its owner.
 db_e2e="kabumori_cal_cf_e2e_$tag"
 "${S[@]}" -d postgres -c "create database $db_e2e template $db_run owner $owner" >/dev/null
-for extra in 20261012230000_common_account_service_brand_state.sql 20261013120000_common_account_service_deletion_ownership.sql; do
+for extra in 20261012230000_common_account_service_brand_state.sql 20261013120000_common_account_service_deletion_ownership.sql 20261013140000_common_account_service_reconciliation_facts.sql; do
   if [[ -f "$migrations/$extra" ]]; then psql_o "$db_e2e" -f "$migrations/$extra" >/dev/null 2>&1 || { echo "FAIL applying $extra for the e2e database" >&2; exit 1; }; fi
 done
 

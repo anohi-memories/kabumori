@@ -104,10 +104,41 @@ export const ERROR_NOTICES: Readonly<Record<LifecycleErrorCode, Notice>> = {
 /** What to show for a code the app does not know yet: never the server's text, never a success. */
 export const UNKNOWN_CODE_NOTICE: Notice = n(GENERIC_END, 'retry', true);
 
+/**
+ * Why X could not be cleaned right now: the typed reasons of an X_CLEANUP_BLOCKED / X_CLEANUP_FAILED answer
+ * (`reasons`), as ONE line under the code's own notice. A reason this table does not know has no line (the notice of
+ * the code stands). None of them says that anything was revoked, ended or published.
+ */
+export const X_REASON_NOTICES: Readonly<Record<string, string>> = {
+  POSTING_IN_PROGRESS: '投稿の送信中です。これ以上の予約投稿は停止しました。送信が終わってから、もう一度お試しください。',
+  CREDENTIAL_REFRESH_IN_PROGRESS: 'X連携の更新処理が進行中です。少し待ってから、もう一度お試しください。',
+  NON_X_ACCOUNT_PRESENT: '連携しているほかのSNSのデータが残っています。それらを先に整理する必要があります。' + CONTACT,
+  X_REVOKE_FAILED: 'Xの認可の取り消しを確認できませんでした。時間をおいて、もう一度お試しください。',
+  CREDENTIALS_CHANGED: '手続きの途中でX連携の状態が変わりました。運営で確認します。',
+  FINALIZE_FAILED: '最後の確認が完了していません。運営で確認します。',
+  ADMIN_ACCOUNT: 'このアカウントは、アプリからは削除できません。' + CONTACT,
+  OWNS_OTHER_WORKSPACE: 'このアカウントは、アプリからは削除できません。' + CONTACT,
+  WORKSPACE_NOT_SELF_SERVICE: 'このアカウントは、アプリからは削除できません。' + CONTACT,
+  SHARED_WORKSPACE: 'ほかの人と共有しているため、アプリからは削除できません。' + CONTACT,
+  WORKSPACE_ROLE_MISMATCH: 'このアカウントは、アプリからは削除できません。' + CONTACT,
+  CREDENTIAL_OWNERSHIP_AMBIGUOUS: '運営で確認が必要な状態です。' + CONTACT,
+  UNEXPECTED_DEPENDENT_DATA: '運営で確認が必要な状態です。' + CONTACT,
+  OPERATOR_REQUIRED: '運営で確認が必要な状態です。' + CONTACT,
+  UNKNOWN: '運営で確認が必要な状態です。' + CONTACT,
+};
+
+/**
+ * X posts whose result was never known (Phase 8: `x_posts_unconfirmed`). The text neither says that they were
+ * published nor that they were not: this system does not know, and says where the person can look.
+ */
+export const xPostsUnconfirmedLine = (count: number): string =>
+  `Xへの投稿結果を確認できなかった予約が${count}件あります。実際に投稿されたかどうかは、Xでご確認ください。`;
+
 export type EndResultBody = {
   outcome?: unknown;
   providers?: unknown;
   remote_unverified?: unknown;
+  x_posts_unconfirmed?: unknown;
 };
 
 /**
@@ -126,5 +157,7 @@ export function resultLines(body: EndResultBody, kind: 'postona_end' | 'account_
     const notice = REMOTE_UNVERIFIED[provider];
     if (notice) lines.push(notice.remote);
   }
+  const unconfirmed = body.x_posts_unconfirmed;
+  if (typeof unconfirmed === 'number' && Number.isInteger(unconfirmed) && unconfirmed > 0) lines.push(xPostsUnconfirmedLine(unconfirmed));
   return lines;
 }

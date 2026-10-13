@@ -54,7 +54,7 @@ export type LifecycleRpcName =
   | 'begin_account_deletion' | 'claim' | 'renew' | 'release' | 'owned_checkpoint' | 'owned_prepare'
   | 'begin_external_step' | 'settle_external_step' | 'storage_objects' | 'complete' | 'record_error'
   | 'claim_service' | 'renew_service' | 'release_service' | 'record_provider_result' | 'acknowledge_unverified'
-  | 'finish_owned_service' | 'provider_snapshot';
+  | 'finish_owned_service' | 'provider_snapshot' | 'record_reconciliation' | 'service_end_result' | 'ack_x_unconfirmed';
 export type RpcResult = { ok: true; data: unknown } | { ok: false };
 
 /** providers and Apple subjects come from the server's view of the person's identities. */
@@ -65,11 +65,23 @@ export type VerifiedUser = { id: string; providers: readonly string[]; appleSubj
  * the person's own token, exactly as the X app calls it, and always in scope `social_only`.
  */
 export type XCleanupOutcome = 'done' | 'scope_refused' | 'in_progress' | 'blocked' | 'failed' | 'login_deleted';
+/**
+ * What the X bridge learned beyond the word (F3's PR #189 contract, mirrored in http.ts `xOutcomeOf`): a `done` may
+ * carry X posts whose result was never known; a block or a reconciliation carries its typed reason. A bridge that
+ * only knows the word returns the string; the result is then the word alone.
+ */
+export type XCleanupResult = {
+  outcome: XCleanupOutcome;
+  /** `done` only: X posts whose publish result was never confirmed (the person may have to check X). */
+  unconfirmedPosts?: number;
+  /** A block (DELETION_BLOCKED_<reason>) or a reconciliation (X_REVOKE_FAILED, CREDENTIALS_CHANGED, FINALIZE_FAILED). */
+  reason?: string;
+};
 export type XServiceCleaner = {
   /** The saga's read-only preview for this person, or null when it could not be read. */
   preview(token: string): Promise<{ scope: string; state: string } | null>;
   /** Runs (or resumes) the saga in scope social_only. */
-  run(token: string): Promise<XCleanupOutcome>;
+  run(token: string): Promise<XCleanupOutcome | XCleanupResult>;
 };
 
 export type LifecycleDeps = {
@@ -124,6 +136,8 @@ export type LifecycleErrorCode =
 
 type FailureBody = {
   ok: false; error: LifecycleErrorCode; reasons?: string[]; sessions_revoked?: true;
+  /** X posts whose result was never known, when a failure still has to tell the person (Phase 8). */
+  x_posts_unconfirmed?: number;
   /** Fixed provider keys and fixed result codes of the provider cleanup step (provider_cleanup.ts). */
   providers?: { provider: string; result: string }[];
 };
@@ -139,7 +153,12 @@ export const REASON_CODES = [
   'REQUIRED_CHECKPOINTS_CHANGED', 'LIFECYCLE_VERSION_CHANGED', 'REQUIREMENT_EPOCH_CHANGED', 'NOT_READY',
   // The service end's own database answers (Phase 6): why `finish_owned_service_deletion` / the Phase 1 finish said
   // not ready. Fixed codes, no data.
-  'PROVIDER_RESULTS_UNSETTLED', 'REMOTE_UNVERIFIED_NOT_ACKNOWLEDGED', 'SERVICE_FOOTPRINT_REMAINS', 'UNKNOWN',
+  'PROVIDER_RESULTS_UNSETTLED', 'REMOTE_UNVERIFIED_NOT_ACKNOWLEDGED', 'SERVICE_FOOTPRINT_REMAINS',
+  // The X saga's typed answers (F3 PR #189 contract): why it stopped, or what must be read back before a retry.
+  'POSTING_IN_PROGRESS', 'CREDENTIAL_REFRESH_IN_PROGRESS', 'NON_X_ACCOUNT_PRESENT', 'SHARED_WORKSPACE',
+  'OWNS_OTHER_WORKSPACE', 'WORKSPACE_NOT_SELF_SERVICE', 'WORKSPACE_ROLE_MISMATCH', 'CREDENTIAL_MATERIAL_MISSING',
+  'CREDENTIAL_OWNERSHIP_AMBIGUOUS', 'CREDENTIALS_CHANGED', 'UNEXPECTED_DEPENDENT_DATA', 'X_REVOKE_FAILED',
+  'FINALIZE_FAILED', 'OPERATOR_REQUIRED', 'UNKNOWN',
 ] as const;
 const reasonCode = (value: unknown) => ((REASON_CODES as readonly unknown[]).includes(value) ? value as string : 'UNKNOWN');
 const reasonCodes = (value: unknown) => [...new Set((Array.isArray(value) && value.length ? value : ['UNKNOWN']).map(reasonCode))];
@@ -147,7 +166,7 @@ const reasonCodes = (value: unknown) => [...new Set((Array.isArray(value) && val
 const fail = (
   status: number,
   error: LifecycleErrorCode,
-  extra: { reasons?: string[]; sessionsRevoked?: boolean; providers?: { provider: string; result: string }[] } = {},
+  extra: { reasons?: string[]; sessionsRevoked?: boolean; providers?: { provider: string; result: string }[]; xPostsUnconfirmed?: number } = {},
 ): LifecycleResponse => ({
   status,
   body: {
@@ -156,6 +175,7 @@ const fail = (
     ...(extra.reasons ? { reasons: extra.reasons } : {}),
     ...(extra.sessionsRevoked ? { sessions_revoked: true as const } : {}),
     ...(extra.providers ? { providers: extra.providers } : {}),
+    ...(extra.xPostsUnconfirmed ? { x_posts_unconfirmed: extra.xPostsUnconfirmed } : {}),
   },
 });
 const record = (value: unknown) => (typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {});
@@ -314,7 +334,33 @@ type EndScope =
   | { kind: 'account'; operationId: string; lease: string; owned: () => Promise<boolean> };
 type PostonaEnd =
   | { ok: false; response: LifecycleResponse }
-  | { ok: true; outcome: 'ended' | 'already_ended' | 'not_registered'; providers: Record<string, string>; remoteUnverified: string[] };
+  | {
+    ok: true; outcome: 'ended' | 'already_ended' | 'not_registered'; providers: Record<string, string>;
+    remoteUnverified: string[]; xPostsUnconfirmed: number;
+  };
+
+/** What an earlier end left on record (the durable answer of common_account_service_end_result), or nothing. */
+type EndFacts = { providers: Record<string, string>; remoteUnverified: string[]; xPostsUnconfirmed: number };
+const NO_FACTS: EndFacts = { providers: {}, remoteUnverified: [], xPostsUnconfirmed: 0 };
+/** How often the unconfirmed-post fact is offered to the database before the end gives up (the saga cannot repeat it). */
+const FACT_ATTEMPTS = 3;
+/** null = the record could not be read (the call failed, or the database has no such function): never "nothing on
+ *  record". Callers that would otherwise answer from the record stop instead. */
+async function endFacts(deps: LifecycleDeps, userId: string): Promise<EndFacts | null> {
+  const data = await call(deps, 'service_end_result', { p_user_id: userId, p_service_key: 'x_autopost' });
+  if (!data || typeof data.status !== 'string') return null;
+  if (data.status === 'none') return NO_FACTS;
+  const providers: Record<string, string> = {};
+  for (const [provider, result] of Object.entries(asRecord(data.provider_results))) {
+    if ((provider === 'x' || PROVIDER_KEY_RE.test(provider)) && typeof result === 'string') providers[provider] = result;
+  }
+  const count = asRecord(data.reconciliation).x_posts_unconfirmed;
+  return {
+    providers,
+    remoteUnverified: (strings(data.remote_unverified) ?? []).filter((p) => PROVIDER_KEY_RE.test(p)),
+    xPostsUnconfirmed: typeof count === 'number' && Number.isInteger(count) && count > 0 ? count : 0,
+  };
+}
 
 const DURABLE_RESULT: Record<string, string> = {
   not_connected: 'not_connected', confirmed_remote_revoked: 'confirmed_remote_revoked',
@@ -339,7 +385,10 @@ async function endPostona(args: {
   if (!begun) return refuse(fail(500, 'FAILED'));
   if (begun.status === 'blocked') return refuse(fail(409, 'DELETION_BLOCKED', { reasons: [reasonCode(begun.reason)] }));
   if (begun.status === 'not_registered' || begun.status === 'already_ended') {
-    return { ok: true, outcome: begun.status, providers: {}, remoteUnverified: [] };
+    // An end that already happened keeps its answer: read it back (never hide an unconfirmed X post behind "ended").
+    const facts = begun.status === 'already_ended' ? await endFacts(deps, userId) : NO_FACTS;
+    if (!facts) return refuse(fail(500, 'FAILED'));
+    return { ok: true, outcome: begun.status, ...facts };
   }
   const operationId = begun.operation_id;
   if ((begun.status !== 'started' && begun.status !== 'in_progress') || typeof operationId !== 'string' || !UUID.test(operationId)) {
@@ -368,6 +417,10 @@ async function endPostona(args: {
     (await call(deps, 'record_provider_result', { ...own, p_provider: provider, p_result: result }))?.status === 'recorded';
 
   try {
+    // What an earlier attempt left on record must be readable BEFORE anything is touched: a retry that cannot read it
+    // could end "clean" after an unconfirmed X post, and a database without this read is not the database this code
+    // was built for (deploy the migration first; roll the code back first).
+    if ((await endFacts(deps, userId)) === null) return refuse(fail(500, 'FAILED'));
     // A removal that an earlier attempt already made (and that stopped or crashed after it) is on record as "local
     // removed, remote unverified". The end cannot complete without the person's acknowledgement of it: taken from
     // THIS request when the database has none yet, and recorded. Without it the end stops here, before any provider
@@ -440,19 +493,50 @@ async function endPostona(args: {
     // providers are removed first; and nothing is removed before the read-only checks above have passed.
     if (!(await owned())) return { ok: false, response: args.lost() };
     let outcome: XCleanupOutcome = 'failed';
+    let unconfirmedPosts = 0;
+    let xReason: string | null = null;
     try {
-      outcome = await deps.x.run(token);
+      const answer = await deps.x.run(token);
+      if (typeof answer === 'string') {
+        outcome = answer;
+      } else {
+        outcome = answer.outcome;
+        if (typeof answer.unconfirmedPosts === 'number' && Number.isInteger(answer.unconfirmedPosts) && answer.unconfirmedPosts > 0) {
+          unconfirmedPosts = answer.unconfirmedPosts;
+        }
+        xReason = typeof answer.reason === 'string' ? answer.reason : null;
+      }
     } catch {
       outcome = 'failed';
     }
     // The saga removed the login itself (it must not in social_only): nothing can be verified any more.
     if (outcome === 'login_deleted') return { ok: false, response: fail(500, 'DELETION_VERIFICATION_PENDING') };
+    // X posts whose result was never known are a durable fact BEFORE X is recorded as done, and so before anything can
+    // end: a crash or a retry that finds the end already done must still say so (J3 V3 R1: never an apparently clean
+    // completion). A saga that has purged cannot repeat the count, so the record is tried a few times; if it cannot be
+    // made, X is NOT recorded as done (it stays to be reconciled) and the person is told the count in this answer.
+    if (outcome === 'done' && unconfirmedPosts > 0) {
+      let fact: Record<string, unknown> | null = null;
+      for (let attempt = 0; attempt < FACT_ATTEMPTS && fact?.status !== 'recorded' && fact?.status !== 'lease_lost'; attempt++) {
+        fact = await call(deps, 'record_reconciliation', { ...own, p_fact: 'x_posts_unconfirmed', p_count: unconfirmedPosts });
+      }
+      if (fact?.status === 'lease_lost') return { ok: false, response: args.lost() };
+      if (fact?.status !== 'recorded') {
+        await record('x', 'reconciliation_required');
+        return refuse(fail(500, 'FAILED', { xPostsUnconfirmed: unconfirmedPosts }));
+      }
+      // The saga keeps its own durable checkpoint of these posts and repeats it until the caller, which now holds the
+      // fact in its own durable state, acknowledges it (compare-and-clear on the count it saw). Best effort: a saga
+      // without that function, or a count that changed, only means the saga keeps over-reporting; nothing is lost.
+      await call(deps, 'ack_x_unconfirmed', { p_user_id: userId, p_expected: unconfirmedPosts });
+    }
     const xRecorded = await record('x', outcome === 'done' ? 'done' : outcome === 'blocked' ? 'blocked' : 'reconciliation_required');
     if (!xRecorded) return { ok: false, response: args.lost() };
+    const xReasons = xReason ? { reasons: [reasonCode(xReason)] } : {};
     if (outcome === 'scope_refused') return refuse(fail(409, 'X_CLEANUP_UNSUPPORTED'));
     if (outcome === 'in_progress') return refuse(fail(409, 'X_CLEANUP_IN_PROGRESS'));
-    if (outcome === 'blocked') return refuse(fail(409, 'X_CLEANUP_BLOCKED'));
-    if (outcome !== 'done') return refuse(fail(502, 'X_CLEANUP_FAILED'));
+    if (outcome === 'blocked') return refuse(fail(409, 'X_CLEANUP_BLOCKED', xReasons));
+    if (outcome !== 'done') return refuse(fail(502, 'X_CLEANUP_FAILED', xReasons));
 
     // The end: the database checks, in the transaction of the end itself, that this is still the owner (its lease,
     // on the wall clock, after its locks), that every answer is settled and acknowledged, and reads the footprint
@@ -472,7 +556,13 @@ async function endPostona(args: {
       if ((provider === 'x' || PROVIDER_KEY_RE.test(provider)) && typeof result === 'string') summary[provider] = result;
     }
     const unverified = (strings(finished.remote_unverified) ?? []).filter((p) => PROVIDER_KEY_RE.test(p));
-    return { ok: true, outcome: 'ended', providers: summary, remoteUnverified: unverified };
+    // The durable record is the single source of the unconfirmed-post count (it is sticky at its maximum, so a
+    // saga that forgot on a retry cannot lower it); this request's own count is the floor if the read fails.
+    const facts = (await endFacts(deps, userId)) ?? NO_FACTS;
+    return {
+      ok: true, outcome: 'ended', providers: summary, remoteUnverified: unverified,
+      xPostsUnconfirmed: Math.max(facts.xPostsUnconfirmed, unconfirmedPosts),
+    };
   } finally {
     // Ownership is given back on every path out (a no-op when it was lost or the end cleared it).
     await call(deps, 'release_service', own);
@@ -579,7 +669,20 @@ export async function handleWithdrawPostona(input: { authorization: string | nul
   if (state.accountStatus === 'locked') return fail(409, 'WITHDRAW_BLOCKED', { reasons: ['ACCOUNT_LOCKED'] });
   const postona = state.services.find((s) => s.service === 'x_autopost');
   if (!postona) return { status: 200, body: { ok: true, outcome: 'not_registered' } };
-  if (postona.status === 'ended') return { status: 200, body: { ok: true, outcome: 'already_ended' } };
+  if (postona.status === 'ended') {
+    // An end that already happened: the same answer it gave (including X posts whose result was never known).
+    const facts = await endFacts(deps, user.id);
+    if (!facts) return fail(500, 'FAILED');
+    return {
+      status: 200,
+      body: {
+        ok: true, outcome: 'already_ended',
+        ...(Object.keys(facts.providers).length ? { providers: facts.providers } : {}),
+        ...(facts.remoteUnverified.length ? { remote_unverified: facts.remoteUnverified } : {}),
+        ...(facts.xPostsUnconfirmed > 0 ? { x_posts_unconfirmed: facts.xPostsUnconfirmed } : {}),
+      },
+    };
+  }
 
   // The X saga keeps the login only in scope social_only; a person whose login it would remove is refused.
   const preview = await xPreview(deps, token);
@@ -605,6 +708,7 @@ export async function handleWithdrawPostona(input: { authorization: string | nul
       outcome: ended.outcome,
       providers: ended.providers,
       ...(ended.remoteUnverified.length ? { remote_unverified: ended.remoteUnverified } : {}),
+      ...(ended.xPostsUnconfirmed > 0 ? { x_posts_unconfirmed: ended.xPostsUnconfirmed } : {}),
     },
   };
 }
@@ -753,6 +857,7 @@ async function ownedDeletion({ deps, token, user, operationId, owner, appleCode,
   // the owner. A lost lease anywhere stops here with nothing ended.
   let remoteUnverified: string[] = [];
   let providerSummary: Record<string, string> = {};
+  let xPostsUnconfirmed = 0;
   // 4a. X and the other providers.
   if (!(await owned())) return lost();
   const ended = await endPostona({
@@ -762,6 +867,7 @@ async function ownedDeletion({ deps, token, user, operationId, owner, appleCode,
   if (!ended.ok) return ended.response;
   remoteUnverified = ended.remoteUnverified;
   providerSummary = ended.providers;
+  xPostsUnconfirmed = ended.xPostsUnconfirmed;
   if (ended.outcome !== 'ended') {
     // POSTONA was never started or was already ended: a provider credential may still be there (T10). There is
     // no service deletion to record into, so the adapters run under this deletion's lease and an unverified
@@ -913,7 +1019,7 @@ async function ownedDeletion({ deps, token, user, operationId, owner, appleCode,
   for (let attempt = 0; attempt < 2; attempt++) {
     const done = await call(deps, 'complete', { p_user_id: userId, p_operation_id: operationId });
     if (done?.status === 'completed' && done.login_deleted === true) {
-      return { status: 200, body: { ok: true, outcome: 'deleted', ...(Object.keys(providerSummary).length ? { providers: providerSummary } : {}), ...(remoteUnverified.length ? { remote_unverified: remoteUnverified } : {}) } };
+      return { status: 200, body: { ok: true, outcome: 'deleted', ...(Object.keys(providerSummary).length ? { providers: providerSummary } : {}), ...(remoteUnverified.length ? { remote_unverified: remoteUnverified } : {}), ...(xPostsUnconfirmed > 0 ? { x_posts_unconfirmed: xPostsUnconfirmed } : {}) } };
     }
     if (done?.status === 'login_present') return fail(500, 'AUTH_DELETE_UNCONFIRMED', { sessionsRevoked });
     if (attempt === 0 && (done?.status === 'not_verified' || done?.status === 'residue_found') && done.reason === 'MANAGED_STORAGE_OWNED'

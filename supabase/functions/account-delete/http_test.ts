@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { CONFIRMATION as X_DELETE_CONFIRMATION } from '../social-mobile-account-delete/delete_logic.ts';
-import { createHandler, X_DELETION_FUNCTION, xOutcomeOf } from './http.ts';
+import { createHandler, X_DELETION_FUNCTION, xOutcomeOf, xResultOf } from './http.ts';
 import { DELETE_CONFIRMATION, WITHDRAW_CONFIRMATION } from './lifecycle_logic.ts';
 
 const URL_ = 'https://fixture.supabase.co';
@@ -35,6 +35,7 @@ function network(overrides: Record<string, (seen: Seen) => Response> = {}) {
     begin_service_deletion: () => ({ status: 'started', operation_id: XOP }),
     finish_service_deletion: () => ({ status: 'blocked', reason: 'OWNED_FINISH_REQUIRED' }),
     common_account_provider_snapshot: () => ({ workspace: 'u_fixture', platforms: ['x'] }),
+    common_account_service_end_result: () => ({ status: 'none' }),
     claim_service_deletion: () => ({ status: 'acquired', lease: SLEASE, fence: 1, provider_results: { x: 'pending' } }),
     renew_service_deletion_claim: () => ({ status: 'owned', fence: 1 }),
     release_service_deletion_claim: () => ({ status: 'released' }),
@@ -196,6 +197,21 @@ test('the X saga adapter maps only the saga\'s fixed answers, and anything unkno
     assert.equal(xOutcomeOf(500, { ok: false, error }), 'failed', error);
   }
   assert.equal(xOutcomeOf(404, null), 'failed', 'the X function is not deployed');
+});
+
+test('the X result keeps what the saga told: the unconfirmed-post count, the block reason, the failure reason', () => {
+  assert.deepEqual(xResultOf(200, { ok: true, login_deleted: false }), { outcome: 'done' });
+  assert.deepEqual(xResultOf(200, { ok: true, login_deleted: false, x_posts_unconfirmed: 3 }), { outcome: 'done', unconfirmedPosts: 3 });
+  // a count nobody can interpret is a failure, never a clean "done"
+  for (const bad of [0, -1, 1.5, '3', null]) {
+    assert.deepEqual(xResultOf(200, { ok: true, login_deleted: false, x_posts_unconfirmed: bad }), { outcome: 'failed' }, `count ${String(bad)}`);
+  }
+  assert.deepEqual(xResultOf(409, { ok: false, error: 'DELETION_BLOCKED_POSTING_IN_PROGRESS' }), { outcome: 'blocked', reason: 'POSTING_IN_PROGRESS' });
+  assert.deepEqual(xResultOf(409, { ok: false, error: 'DELETION_BLOCKED_NOT_A_REASON' }), { outcome: 'failed' }, 'an unknown reason is a failure, not a retryable block');
+  assert.deepEqual(xResultOf(409, { ok: false, error: 'DELETION_OPERATOR_REQUIRED' }), { outcome: 'blocked', reason: 'OPERATOR_REQUIRED' });
+  assert.deepEqual(xResultOf(502, { ok: false, error: 'X_REVOKE_FAILED' }), { outcome: 'failed', reason: 'X_REVOKE_FAILED' });
+  assert.deepEqual(xResultOf(409, { ok: false, error: 'CREDENTIALS_CHANGED' }), { outcome: 'failed', reason: 'CREDENTIALS_CHANGED' });
+  assert.deepEqual(xResultOf(200, { ok: true, login_deleted: true }), { outcome: 'login_deleted' });
 });
 
 test('a blocked release gate refuses a deletion before any write, over the network too', async () => {

@@ -7,12 +7,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { X_BLOCK_REASONS } from '../functions/account-delete/http.ts';
 import {
   ERROR_NOTICES,
   POSTONA_END_VS_ACCOUNT_DELETE,
   REMOTE_UNVERIFIED,
   resultLines,
   UNKNOWN_CODE_NOTICE,
+  X_REASON_NOTICES,
+  xPostsUnconfirmedLine,
 } from '../functions/account-delete/user_notices.ts';
 
 const read = (path: string) => Deno.readTextFileSync(new URL(path, import.meta.url));
@@ -96,6 +99,35 @@ test('result lines: the local result first, the remote line separate, only what 
   assert.deepEqual(resultLines({ outcome: 'weird', remote_unverified: ['threads'] }, 'postona_end'), []);
   // an unknown provider has no text to invent
   assert.equal(resultLines({ outcome: 'ended', remote_unverified: ['someone_else'] }, 'postona_end').length, 1);
+});
+
+// ---- Phase 8: the typed X reasons and the unconfirmed posts ----------------------------------------------------------
+test('every typed X reason has one line, and none of them claims a revocation, an end or a publication', () => {
+  const reasons = [...X_BLOCK_REASONS, 'X_REVOKE_FAILED', 'CREDENTIALS_CHANGED', 'FINALIZE_FAILED', 'OPERATOR_REQUIRED'];
+  assert.deepEqual(Object.keys(X_REASON_NOTICES).sort(), [...reasons].sort());
+  const claims = [...CLAIMS_OF_REVOCATION, /削除しました/u, /終了しました/u, /完了しました/u, /投稿されました/u];
+  for (const [reason, text] of Object.entries(X_REASON_NOTICES)) {
+    assert.ok(hasCjk(text), `${reason}: a Japanese text`);
+    assert.ok(!/[A-Z]{2,}_[A-Z_]+/u.test(text), `${reason}: the text never shows a code`);
+    for (const claim of claims) assert.ok(!claim.test(text), `${reason}: "${text}" must not claim ${claim}`);
+  }
+});
+
+test('X posts whose result was never known: a separate line that says neither "posted" nor "not posted"', () => {
+  const line = xPostsUnconfirmedLine(2);
+  assert.match(line, /2件/u);
+  assert.match(line, /Xでご確認/u);
+  assert.doesNotMatch(line, /投稿されました|投稿されていません|投稿されませんでした|キャンセル|取り消/u);
+  const ended = resultLines({ outcome: 'ended', providers: { x: 'done' }, x_posts_unconfirmed: 2 }, 'postona_end');
+  assert.equal(ended.length, 2);
+  assert.equal(ended[1], line);
+  const again = resultLines({ outcome: 'already_ended', x_posts_unconfirmed: 2 }, 'postona_end');
+  assert.equal(again[again.length - 1], line, 'a later read says it too');
+  const deleted = resultLines({ outcome: 'deleted', remote_unverified: ['threads'], x_posts_unconfirmed: 1 }, 'account_delete');
+  assert.deepEqual(deleted.slice(1), [REMOTE_UNVERIFIED.threads.remote, xPostsUnconfirmedLine(1)], 'the remote line first, then the unconfirmed posts');
+  for (const bad of [0, -1, 1.5, '2', null, undefined]) {
+    assert.deepEqual(resultLines({ outcome: 'ended', x_posts_unconfirmed: bad }, 'postona_end').length, 1, `no line for ${String(bad)}`);
+  }
 });
 
 // ---- what the real app clients map today (the expected/actual error list for the app owners) ----------------------

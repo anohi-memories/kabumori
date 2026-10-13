@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 
 import type { AppleRevocationOutcome } from './apple_outcome.ts';
-import { DELETE_CONFIRMATION, type LifecycleDeps, type LifecycleRpcName, type XCleanupOutcome } from './lifecycle_logic.ts';
+import { DELETE_CONFIRMATION, type LifecycleDeps, type LifecycleRpcName, type XCleanupOutcome, type XCleanupResult } from './lifecycle_logic.ts';
 
 export const NOW = 1_800_000_000;
 export const USER = '11111111-1111-4111-8111-111111111111';
@@ -42,7 +42,7 @@ export type WorldOptions = {
   gate?: 'open' | 'blocked';
   storage?: StorageObject[];
   bucketsOwned?: boolean;
-  xRun?: XCleanupOutcome[];
+  xRun?: (XCleanupOutcome | XCleanupResult)[];
   xPreviewFails?: boolean;
   sessionRevoke?: boolean[];
   appleRevoke?: (AppleRevocationOutcome | 'throw')[];
@@ -57,6 +57,8 @@ export type WorldOptions = {
   lateWorkspace?: boolean;
   completeOverride?: (Record<string, unknown> | 'error')[];
   rpcError?: LifecycleRpcName;
+  /** The record read of an end answers something that is not an answer (a stray function of another shape). */
+  malformedEndResult?: boolean;
   /** The named RPC fails (database error) this many times, then works. */
   rpcFailOnce?: Partial<Record<LifecycleRpcName, number>>;
   /** Between the first prepare and the revalidation, an object is uploaded. */
@@ -103,10 +105,12 @@ export function world(options: WorldOptions = {}) {
       external: null | 'apple_revocation' | 'managed_auth_delete'; externalStarted: number; intent: null | string[];
     },
     xServiceOp: null as string | null,
+    /** The counts the caller acknowledged to the X saga's durable checkpoint (F3 PR #192). */
+    xAcks: [] as number[],
     /** The POSTONA service deletion (Phase 6): its own lease, fence, per-provider results and acknowledgement. */
     svc: null as null | {
       id: string; status: 'in_progress' | 'completed' | 'aborted'; lease: string | null; leaseExpires: number; fence: number;
-      results: Record<string, string>; ack: string[] | null;
+      results: Record<string, string>; ack: string[] | null; recon: Record<string, number>;
     },
     threads: options.threads ?? false,
     revokedTokens: new Set<string>(),
@@ -170,7 +174,7 @@ export function world(options: WorldOptions = {}) {
       state.services.x_autopost = 'deleting';
       state.version += 1;
       state.xServiceOp = newId();
-      state.svc = { id: state.xServiceOp, status: 'in_progress', lease: null, leaseExpires: 0, fence: 0, results: {}, ack: null };
+      state.svc = { id: state.xServiceOp, status: 'in_progress', lease: null, leaseExpires: 0, fence: 0, results: {}, ack: null, recon: {} };
       return { status: 'started', operation_id: state.xServiceOp };
     },
     // The Phase 6 database refuses POSTONA through the legacy entry point.
@@ -249,6 +253,31 @@ export function world(options: WorldOptions = {}) {
       svc.status = 'completed';
       svc.lease = null;
       return { status: 'ended', provider_results: { ...svc.results }, remote_unverified: unverified };
+    },
+    record_reconciliation: (args) => {
+      const svc = state.svc;
+      if (!svc || svc.status !== 'in_progress' || svc.lease !== args.p_lease || svc.leaseExpires <= state.clock) return { status: 'lease_lost' };
+      const fact = String(args.p_fact);
+      const count = Number(args.p_count);
+      if (fact !== 'x_posts_unconfirmed' || !Number.isInteger(count) || count < 1) throw new Error('ACCOUNT_LIFECYCLE_RECONCILIATION_FACT_INVALID');
+      svc.recon[fact] = Math.max(svc.recon[fact] ?? 0, count);
+      return { status: 'recorded', count: svc.recon[fact] };
+    },
+    ack_x_unconfirmed: (args) => {
+      state.xAcks.push(Number(args.p_expected));
+      return { status: 'acknowledged', cleared: Number(args.p_expected) };
+    },
+    service_end_result: () => {
+      if (options.malformedEndResult) return { weird: true };
+      const svc = state.svc;
+      if (!svc) return { status: 'none' };
+      const acked = svc.ack ?? [];
+      return {
+        status: svc.status, operation_id: svc.id, provider_results: { ...svc.results },
+        remote_unverified: Object.entries(svc.results)
+          .filter(([k, v]) => v === 'local_removed_remote_unverified' || (v === 'not_connected' && acked.includes(k))).map(([k]) => k).sort(),
+        acknowledged: [...acked], reconciliation: { ...svc.recon },
+      };
     },
     provider_snapshot: () => ({
       workspace: 'u_fixture',
@@ -444,10 +473,11 @@ export function world(options: WorldOptions = {}) {
         effects.push('x:run');
         state.calls.x += 1;
         await hook('x');
-        const outcome = shift(xRun, 'done' as XCleanupOutcome);
+        const answer = shift(xRun, 'done' as XCleanupOutcome | XCleanupResult);
+        const outcome = typeof answer === 'string' ? answer : answer.outcome;
         if (outcome === 'done') state.xWorkspace = false;
         if (outcome === 'login_deleted') { state.xWorkspace = false; removeLogin(); }
-        return outcome;
+        return answer;
       },
     },
     deleteLogin: async (userId) => {

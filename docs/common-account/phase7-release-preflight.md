@@ -5,7 +5,7 @@ real OAuth / X / Threads / Meta call, no user created.** Production NO_GO (secti
 No F3/G3 (X), F4/G4 (Threads), H5, F1/F2 or app file was changed.
 
 This phase does not add a feature. It answers one question with a command: *is the whole common-account chain
-(Phase 1, 2, 3a, 3b, 4, 5, 6) safe to carry to a disposable managed environment, and what exactly must be read back
+(Phase 1, 2, 3a, 3b, 4, 5, 6 and, since Phase 8, the reconciliation facts) safe to carry to a disposable managed environment, and what exactly must be read back
 there before anyone may think of a release?*
 
 ```bash
@@ -19,9 +19,9 @@ python3 supabase/tests/common_account_release_preflight_mutations.py            
 
 | Stage | Proves |
 | --- | --- |
-| `chain` | the seven migrations are single `BEGIN … COMMIT` files in release order (file order = release order, no duplicate version prefix, none names a later one); they apply in order on the production-shaped baseline; **11 out-of-order applications are each refused with their own fixed code and leave the catalog byte-identical**; each refuses a second application with its own code; Phase 3a and 3b commute |
-| `probe` | `supabase/preflight/common_account_release_probe.sql` (the read-only probe for a disposable managed project, section 8) passes on the full chain, STOPs without its disposable gate, is read-only by construction, and **17 deliberate regressions each flip the check they are meant to flip** |
-| `rollback` | the emergency rollbacks of Phase 6 → 5 → 4 → 3b restore the previous catalog exactly (only Phase 6's documented additive remnants remain); a forward re-apply reaches the identical final catalog; Phase 1's rollback refuses while any later phase is present |
+| `chain` | the eight migrations (Phase 8's `20261013140000` is the eighth; see `phase8-integrated-security.md`) are single `BEGIN … COMMIT` files in release order (file order = release order, no duplicate version prefix, none names a later one); they apply in order on the production-shaped baseline; **13 out-of-order applications are each refused with their own fixed code and leave the catalog byte-identical**; each refuses a second application with its own code; Phase 3a and 3b commute |
+| `probe` | `supabase/preflight/common_account_release_probe.sql` (the read-only probe for a disposable managed project, section 8) passes on the full chain, STOPs without its disposable gate, is read-only by construction, and **18 deliberate regressions each flip the check they are meant to flip** |
+| `rollback` | the emergency rollbacks of Phase 8 → 6 → 5 → 4 → 3b restore the previous catalog exactly (only the documented additive remnants of Phases 6 and 8 remain); a forward re-apply reaches the identical final catalog; Phase 1's rollback refuses while any later phase is present |
 | `matrix` | the provider-state matrix of the POSTONA end against the real SQL (section 5): 17 cases + the whole account |
 | `notices` | every server error code has a user notice; a remote authorization that could not be revoked is never described as revoked; the POSTONA-end vs account-deletion difference is pinned; the real app clients' gaps are listed |
 | `runners` | the per-phase runners (lifecycle, start intent, deletion completion, write guard, core fence incl. e2e + app contract, brand state, service deletion) |
@@ -37,6 +37,7 @@ python3 supabase/tests/common_account_release_preflight_mutations.py            
 | 4 | service fence | `20261012130000_common_account_core_service_fence` | 3b | `COMMON_ACCOUNT_CORE_FENCE_PREFLIGHT_FOUNDATION_MISSING` | `common_account_core_fence_rollback.sql` (keeps shared functions others use) |
 | 5 | workspace-owner state | `20261012230000_common_account_service_brand_state` | 4 | `COMMON_ACCOUNT_BRAND_STATE_PREFLIGHT_FOUNDATION_MISSING` | `common_account_brand_state_rollback.sql` |
 | 6 | service-deletion ownership | `20261013120000_common_account_service_deletion_ownership` | 4, 5 | `…_PREFLIGHT_FOUNDATION_MISSING` / `…_CORE_FENCE_MISSING` / `…_BRAND_STATE_MISSING` | `common_account_service_deletion_rollback.sql` (keeps additive columns) |
+| 8 | reconciliation facts (Phase 8) | `20261013140000_common_account_service_reconciliation_facts` | 6 | `COMMON_ACCOUNT_RECONCILIATION_PREFLIGHT_PHASE6_MISSING` | `common_account_service_reconciliation_rollback.sql` (keeps the column and its data; a re-apply works) |
 
 External prerequisites the chain assumes but does not create: the social-mobile onboarding and account-deletion
 migrations (`20260919120000`, `20260922003101`, `20260928160000`), `public.ensure_my_profile()`
