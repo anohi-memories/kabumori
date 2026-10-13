@@ -207,10 +207,10 @@
 
 ## J4
 - slot: J4
-- status: ready
+- status: review_required
 - task_id: kabumori-j4-ai-ask-b0-v3-review-20261013
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: V4
 - recommended_model: Sol（高）
