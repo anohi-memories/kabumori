@@ -371,3 +371,5 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 | 2026-10-13 | F6 | `common-ai-f6-opus-primary-both-integration-20261013` | Opus Primary both-cycle provider | L6 F6_SOURCE PASS / F2_TEST_BLOCKED / PRODUCTION_NO_GO | #175 | `.agent_v2/archive/2026-10-13-f6-opus-primary-both-integration.md` | blob read-back identical |
 
 | 2026-10-13 | F2 | `kabumori-f2-opus-primary-morning-close-handler-20261013` | Opus Primary handler wiring | L2 PASS_OFFLINE_SOURCE / TRANSFER_F6 / PRODUCTION_NO_GO | #173 | `.agent_v2/archive/2026-10-13-F2-kabumori-f2-opus-primary-morning-close-handler-20261013/` | SHA256 `683c2d86b7f423724436c6a429f65fe263b1fb408d0ae6605f403792f31d149b`, GitHub byte-equal restore read-back |
+
+| 2026-10-13 | F6 | `common-ai-f6-opus-both-release-preflight-20261013` | Opus source/deployment preflight | L6 PASS_PREFLIGHT / RELEASE_NO_GO | #170,#173,#175,#176 | `.agent_v2/archive/2026-10-13-f6-opus-release-preflight.md` | archive read-back identical |
