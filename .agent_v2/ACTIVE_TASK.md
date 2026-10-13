@@ -115,18 +115,18 @@
 
 ## F8
 - slot: F8
-- status: done
-- task_id: news-improvement-a-f8-j1b-app-visibility-offline-design-20261013
+- status: ready
+- task_id: news-improvement-a-f8-j1b2-visibility-policy-migration-candidate-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: ニュース改善API最適化のちゃ
 - completion_code: L8
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F8.md
 - current_report_path: .agent_v2/tasks/F8.md#report
-- dependencies: prior L8 accepted, archived SHA256/read-back; F8/F9 distinct boundaries
-- blocker: J1-b implementation HOLD pending O1-O4 publication policy, DB/RPC separate task and Sol security review; no production approval
-- slot_use: ニュース改善A専任。J1-bアプリ掲載判定のread-only解析・合成fixture・設計のみ。DB/migration/RPC本体は別承認。F9/API最適化Bの対象を変更しない。
+- dependencies: J1-b L8 accepted, archived, SHA256 verified/indexed
+- blocker: DB migration candidate offline only, requires Sol（高）review and separate application approval
+- slot_use: 国内ニュース改善A専任。J1-b2: app visibility policy/SQL candidate and synthetic proof. F9 PR174 and other slots protected.
 
 ## F9
 - slot: F9
