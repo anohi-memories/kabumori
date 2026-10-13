@@ -3,7 +3,13 @@
 - F5 PR178 Phase6 predicate/registration dependent; F3 X integration still separate. Independent J1–J4 Sol（高） integration security review before any managed permission, deployment, merge, activation, or real Threads/X/Meta operation. F4 source TASK now complete and must be archived before another F4 allocation.
 
 ## F2｜ゆめちゃんAI評論家 朝刊/大引け（2026-10-13）
-- F2 new TASK `kabumori-f2-yume-market-commentator-morning-close-quality-20261013` ready/claude; Opus5.5（高）; start F2→L2. Goal: morning AI market direction forecast, close forecast-vs-result review and next-session thesis, immutable original prediction, fact/speculation separation, disclaimer preserved; source-only without touching F6 provider or production.
+- F2 TASK `kabumori-f2-yume-market-commentator-morning-close-quality-20261013` は完了報告済み（review_required/chatgpt、L2 待ち）。結果は PASS_OFFLINE_SOURCE / PRODUCTION_NO_GO。
+  - Draft PR #188（head `62cd009e029885d9df5f2dd7e2620b66c32439ed`）
+  - 朝刊: ゆめちゃんの日経平均の予想（±0.3%未満は横ばい）
+  - 大引け: コードが判定する答え合わせと、次の見立て
+  - 予想の正本は、変えられない朝刊の共通レポート（migration 不要）
+  - 事実と予想で検査の基準を分けた（利用者の追加の指示を取り込んだ）
+  - 640件が PASS。F6 の部品と本番は変更なし
 - Previous F2 X/app cutover preflight L2 PASS_READONLY_PREFLIGHT / CUTOVER_PLAN_READY / PRODUCTION_NO_GO. PR179 remains Draft; previous TASK/Report archived with manifest SHA256 restore verified and indexed. X gate was turned ON by user at 18:07 and requires actual next-session verification; app consumer gate remained OFF per F2 readback. Consumer production switch is separate from this quality task.
 
 ## F4 Threads cleanup lease fix (2026-10-13 JST)
@@ -59,7 +65,7 @@
 
 
 ## F2 X/app shared report consumer cutover preflight (2026-10-13)
-- F2 の TASK `kabumori-f2-shared-market-report-x-app-consumer-cutover-20261013` は完了報告済み（review_required/chatgpt、L2 待ち）。結果は PASS_READONLY_PREFLIGHT / CUTOVER_PLAN_READY / PRODUCTION_NO_GO。
+- F2 の TASK `kabumori-f2-shared-market-report-x-app-consumer-cutover-20261013` は L2 受入済み（PASS_READONLY_PREFLIGHT / CUTOVER_PLAN_READY / PRODUCTION_NO_GO）。
   - **2026-10-13 18:07 JST、利用者が x_enabled=true にした**（読み戻し済み、app_enabled=false のまま）。今日の大引けの X（17:00）は旧来の経路で失敗済み。明日 10/14 08:20 の X の朝刊から、共通の朝刊を投稿する（x-test-post v145、免責文なし）。戻し方は x_enabled=false
   - Draft PR #179（RUNBOOK のみ）
   - 本番の読み取り（16:24 JST）: 今日の大引けは Opus（claude-opus-5-5）で完成（16:21、Fact passed、$0.19）。x_enabled / app_enabled は false
@@ -81,7 +87,7 @@
 - F2 `kabumori-f2-opus-primary-both-handler-test-sync-20261013` L2 PASS_OFFLINE_TEST_ONLY / PRODUCTION_NO_GO, done/none. PR #176 Draft head `d13efc52176665898f1c38a1e389f9973fc3de00`, 1 F2-owned test file only. Reported 41 handler + 324 integrated PASS (not independently rerun), Vercel CI rate-limited. PR170→173→175→176 remains Draft/unmerged; F6 leads release gate. No production/paid API/Edge changes.
 
 ## F2｜Opus primary_both handlerテスト修正（2026-10-13 JST）
-- F2 TASK `kabumori-f2-opus-primary-both-handler-test-sync-20261013` は完了報告済み（review_required/chatgpt、L2 待ち）。結果は PASS_OFFLINE_TEST_ONLY。
+- F2 TASK `kabumori-f2-opus-primary-both-handler-test-sync-20261013` は L2 受入済み（PASS_OFFLINE_TEST_ONLY）。PR #176 は main へマージ済み。
   - Draft PR #176（head `d13efc52176665898f1c38a1e389f9973fc3de00`、base は PR175 の branch）
   - 変更は `opus_primary_handler_test.ts` の1ファイルだけ
   - 41/41・market-report-analysis 324/324 が PASS（差分の部分だけの状態では 39/322 で、F6 の報告と一致）

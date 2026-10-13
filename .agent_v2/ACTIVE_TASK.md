@@ -23,17 +23,17 @@
 
 ## F2
 - slot: F2
-- status: ready
+- status: review_required
 - task_id: kabumori-f2-yume-market-commentator-morning-close-quality-20261013
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ（新F2担当）
 - completion_code: L2
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
 - dependencies: F6 Opus Primary provider, stored morning report for immutable forecast, X/app consumer contracts
-- blocker: forecast history persistence and F6-owned provider changes require separate coordination; production NO_GO
+- blocker: Draft PR #188（head `62cd009e029885d9df5f2dd7e2620b66c32439ed`、base main）PASS_OFFLINE_SOURCE。予想の正本は変えられない朝刊の記録（migration 不要）。F6 の部品は変更なし。merge・deploy は別承認。L2 待ち
 - slot_use: ゆめちゃんAI評論家 朝刊/大引けの独自予想と事後検証の品質改善（source-only）
 
 ## F3
