@@ -118,33 +118,33 @@
 
 ## F8
 - slot: F8
-- status: done
-- task_id: news-improvement-a-f8-j1b2-visibility-policy-migration-candidate-20261013
+- status: ready
+- task_id: news-improvement-a-f8-j1b3-real-schema-proof-review-packet-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: ニュース改善API最適化のちゃ
 - completion_code: L8
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F8.md
 - current_report_path: .agent_v2/tasks/F8.md#report
-- dependencies: J1-b L8 accepted, archived, SHA256 verified/indexed
-- blocker: source candidate accepted; SQL needs Sol（高） security review and separate product/DB authorization before release
-- slot_use: 国内ニュース改善A専任。J1-b2: app visibility policy/SQL candidate and synthetic proof. F9 PR174 and other slots protected.
+- dependencies: previous L8 accepted and archived; F8 and F9 isolated
+- blocker: offline only; production/merge/deploy/paid API prohibited
+- slot_use: DB/RPC real-schema offline proof and Sol review handoff; PR181 source protected
 
 ## F9
 - slot: F9
-- status: done
-- task_id: api-optimization-b-f9-pr174-pr115-rights-audit-offline-20261013
+- status: ready
+- task_id: api-optimization-b-f9-rights-safe-eval-fixture-redaction-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: ニュース改善API最適化のちゃ
 - completion_code: L9
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F9.md
 - current_report_path: .agent_v2/tasks/F9.md#report
-- dependencies: prior L9 accepted, archived SHA256/read-back; F8/F9 distinct boundaries
-- blocker: offline audit accepted; PR174 MERGE_HOLD until rights decision for 288 headlines/76 generated texts; legacy PR115 history and 2 main fixtures unresolved
-- slot_use: API最適化B専任。PR174/旧PR115権利・履歴リスクと送信gate/価格のoffline監査。F8ニュース関連を変更しない。
+- dependencies: previous L9 accepted and archived; F8 and F9 isolated
+- blocker: offline only; production/merge/deploy/paid API prohibited
+- slot_use: Redact 288 rights-unconfirmed headlines/76 generated posts in isolated candidate; PR174 and PR115 protected
 
 ## F10
 - slot: F10
