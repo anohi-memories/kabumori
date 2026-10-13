@@ -407,3 +407,87 @@ test("records and errors carry no key, prompt or report text; the primary reads 
   const noisy = await run({ case: CLOSE_0930, net: noisyNet, prepare: { sink: () => { throw new Error("recorder down"); } } });
   assert.equal(noisy.outcome?.ok, true);
 });
+
+// ---- primary_both (F2 handoff, 2026-10-13): the morning report too -------------------------------------------------
+
+test("primary_both makes the canonical morning AND close reports with Claude only; primary_close still routes close only", async () => {
+  const both = { ...ENV, [MARKET_REPORT_AI_MODE_ENV]: "primary_both" };
+  for (const c of [MORNING_1001, CLOSE_0930]) {
+    const legacy = await legacyBaseline(c, (input) => [{ payload: c.make(input) }, { payload: PASS }]);
+    assert.equal(legacy.outcome?.ok, true);
+    const input = inputOf(await loadFixture(c.fixture));
+    const net = network({ claude: claudeReport(c.make(input)) });
+    const r = await run({ case: c, net, env: both });
+    assert.equal(r.prepared.mode, "primary", c.label);
+    assert.equal(r.outcome?.ok, true, r.error ?? "");
+    assert.deepEqual(r.outcome!.ok && r.outcome!.packet, legacy.outcome!.ok && legacy.outcome!.packet, c.label);
+    assert.equal(r.hash, legacy.hash);
+    assert.equal(net.openai.length, 0);
+    assert.deepEqual(net.claude.map((call) => call.system), legacy.net.openai.map((body) => body.instructions));
+    assert.deepEqual(net.ledger.reserves.map((p) => p.request_id), [`mrp:${CYCLE}:a1:generate:1`, `mrp:${CYCLE}:a1:fact:1`]);
+  }
+  // Only the exact value; the morning under primary_close is unchanged (NOT_CLOSE, covered above).
+  const close = inputOf(await loadFixture(CLOSE_0930.fixture));
+  for (const mode of ["PRIMARY_BOTH", "primary_both ", " primary_both", "primary-both", "both"]) {
+    const legacyNet = network({ openai: [{ payload: richClose0930(close) }, { payload: PASS }] });
+    const off = await run({ case: CLOSE_0930, net: legacyNet, env: { ...ENV, [MARKET_REPORT_AI_MODE_ENV]: mode } });
+    assert.deepEqual([off.prepared.mode, off.prepared.reason], ["legacy", "OFF"], mode);
+    assert.deepEqual([legacyNet.openai.length, legacyNet.claude.length, legacyNet.ledger.calls.length], [2, 0, 0], mode);
+  }
+  // Incomplete configuration fails closed for the morning report too.
+  const morningNet = network({});
+  const incomplete = await run({ case: MORNING_1001, net: morningNet, env: { ...both, ANTHROPIC_API_KEY: undefined } });
+  assert.deepEqual([incomplete.prepared.mode, incomplete.prepared.reason], ["invalid", "KEY_MISSING"]);
+  assert.deepEqual([morningNet.openai.length, morningNet.claude.length, morningNet.ledger.calls.length], [0, 0, 0]);
+});
+
+test("primary_both, one trial ledger for a whole day: morning + close fit; the day's 6 calls end a third report", async () => {
+  const both = { ...ENV, [MARKET_REPORT_AI_MODE_ENV]: "primary_both" };
+  const ledger = new FakeLedger();
+  // Each report is its own cycle; a re-run of a report is the same cycle with the next claim attempt.
+  const MORNING_CYCLE = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+  const day: Array<[Case, string, number]> = [[MORNING_1001, MORNING_CYCLE, 1], [CLOSE_0930, CYCLE, 1], [CLOSE_0930, CYCLE, 2], [CLOSE_0930, CYCLE, 3]];
+  const results: string[] = [];
+  for (const [c, cycleId, attempt] of day) {
+    const input = inputOf(await loadFixture(c.fixture));
+    const net = network({ claude: claudeReport(c.make(input)), ledger });
+    const r = await run({ case: c, net, env: both, claim: { cycle_id: cycleId, attempt } });
+    results.push(r.outcome?.ok ? `ok:${net.claude.length}` : `${r.error}:${r.records.at(-1)?.detail}`);
+  }
+  // Morning (2 calls) and close (2 calls) both made; a re-run of the close (attempt 2) still fits 6 calls; attempt 3
+  // is refused before anything is sent.
+  assert.deepEqual(results, ["ok:2", "ok:2", "ok:2", "ANALYSIS_PRIMARY_GENERATE_FAILED:BUDGET_DENIED:CALL_LIMIT"]);
+  assert.equal(ledger.day.calls, 6);
+  assert.ok(ledger.day.usd <= 2, `day spend ${ledger.day.usd}`);
+});
+
+test("primary_both: a failed morning run fails closed and the 08:05 retry is a new claim attempt on Claude", async () => {
+  const both = { ...ENV, [MARKET_REPORT_AI_MODE_ENV]: "primary_both" };
+  const MORNING_CYCLE = "6f1e2d3c-4b5a-4968-8776-5a4b3c2d1e0f";
+  const ledger = new FakeLedger();
+  const down = network({ claude: () => jsonResponse(529, anthropicError(529, "overloaded_error", "fake")), ledger });
+  const first = await run({ case: MORNING_1001, net: down, env: both, claim: { cycle_id: MORNING_CYCLE, attempt: 1 } });
+  assert.equal(first.error, "ANALYSIS_PRIMARY_GENERATE_FAILED:OVERLOADED");
+  assert.deepEqual([down.claude.length, down.openai.length], [1, 0], "one request, no retry, no OpenAI fallback");
+  const input = inputOf(await loadFixture(MORNING_1001.fixture));
+  const up = network({ claude: claudeReport(richMorning1001(input)), ledger });
+  const retry = await run({ case: MORNING_1001, net: up, env: both, claim: { cycle_id: MORNING_CYCLE, attempt: 2 } });
+  assert.equal(retry.outcome?.ok, true, retry.error ?? "");
+  assert.deepEqual(retry.records.map((x) => x.callId), [`mrp:${MORNING_CYCLE}:a2:generate:1`, `mrp:${MORNING_CYCLE}:a2:fact:1`]);
+  assert.equal(up.openai.length, 0);
+});
+
+test("primary_both routes only the two report types; anything else stays legacy without reading more settings", () => {
+  const reads: string[] = [];
+  const env: Record<string, string | undefined> = { ...ENV, [MARKET_REPORT_AI_MODE_ENV]: "primary_both" };
+  const prepared = prepareMarketReportPrimary({
+    readEnv: (name) => { reads.push(name); return env[name]; },
+    reportType: "evening",
+    claim: { cycle_id: CYCLE, attempt: 1 },
+    deadlineAtMs: Date.now() + 130_000,
+    sink: () => {},
+    fetch: () => Promise.reject(new Error("no network")),
+  });
+  assert.deepEqual([prepared.mode, prepared.reason], ["legacy", "NOT_ROUTED"]);
+  assert.deepEqual(reads, [MARKET_REPORT_AI_MODE_ENV]);
+});
