@@ -5,6 +5,7 @@
 //   preview                -> read-only state for the confirmation screens
 //   withdraw_kabumori      -> かぶモリの利用を終了 (the login and other services stay)
 //   delete_common_account  -> 共通アカウントを削除 (the whole person, lifecycle-ordered)
+//   withdraw_postona       -> POSTONAの利用を終了 (X and every connected provider; the login and Kabumori stay)
 // Anything else -- including the legacy call with no body, which used to hard-delete the login -- is
 // refused with ACTION_REQUIRED before any request leaves this function.
 //
@@ -17,12 +18,14 @@ import {
   handleDeleteCommonAccount,
   handlePreview,
   handleWithdrawKabumori,
+  handleWithdrawPostona,
   type LifecycleDeps,
   type LifecycleRpcName,
   type RpcResult,
   type XCleanupOutcome,
 } from './lifecycle_logic.ts';
 import { revokeAppleGrantOutcome } from './apple_outcome.ts';
+import { providerRegistration } from './provider_registry.ts';
 
 export const RPC_NAMES: Record<LifecycleRpcName, string> = {
   release_gate: 'common_account_deletion_release_gate',
@@ -41,6 +44,13 @@ export const RPC_NAMES: Record<LifecycleRpcName, string> = {
   storage_objects: 'common_account_deletion_storage_objects',
   complete: 'complete_common_account_deletion',
   record_error: 'record_common_account_deletion_error',
+  claim_service: 'claim_service_deletion',
+  renew_service: 'renew_service_deletion_claim',
+  release_service: 'release_service_deletion_claim',
+  record_provider_result: 'record_owned_service_deletion_provider_result',
+  acknowledge_unverified: 'acknowledge_owned_remote_unverified',
+  finish_owned_service: 'finish_owned_service_deletion',
+  provider_snapshot: 'common_account_provider_snapshot',
 };
 
 /** The existing X deletion saga, reached as the X app reaches it. */
@@ -68,7 +78,7 @@ export function createHandler(env: { get: (name: string) => string | undefined }
     if (req.method !== 'POST') return json({ ok: false, error: 'METHOD_NOT_ALLOWED' }, 405);
     const body = await req.json().catch(() => null) as { action?: unknown } | null;
     const action = body?.action;
-    if (action !== 'preview' && action !== 'withdraw_kabumori' && action !== 'delete_common_account') {
+    if (action !== 'preview' && action !== 'withdraw_kabumori' && action !== 'withdraw_postona' && action !== 'delete_common_account') {
       return json({ ok: false, error: 'ACTION_REQUIRED' }, 400);
     }
     const supabaseUrl = env.get('SUPABASE_URL');
@@ -91,6 +101,7 @@ export function createHandler(env: { get: (name: string) => string | undefined }
       return { status: response.status, body: await response.json().catch(() => null) };
     };
 
+    const registration = providerRegistration({ supabaseUrl, serviceKey, fetchImpl });
     const deps: LifecycleDeps = {
       getUser: async (token) => {
         const response = await fetchImpl(`${supabaseUrl}/auth/v1/user`, { headers: asPerson(token) });
@@ -127,6 +138,8 @@ export function createHandler(env: { get: (name: string) => string | undefined }
       },
       // A typed outcome (H2 rereview R2): an ambiguous answer is 'unknown', never a failure.
       revokeApple: apple ? (code, subjects) => revokeAppleGrantOutcome(apple, code, subjects, Math.floor(Date.now() / 1000), fetchImpl) : null,
+      providers: registration.adapters,
+      providerRemoteRevoke: registration.remoteRevoke,
       x: {
         preview: async (token) => {
           const { status, body: answer } = await callX(token, { action: 'preview' });
@@ -162,7 +175,9 @@ export function createHandler(env: { get: (name: string) => string | undefined }
         ? await handlePreview({ authorization }, deps)
         : action === 'withdraw_kabumori'
           ? await handleWithdrawKabumori({ authorization, body }, deps)
-          : await handleDeleteCommonAccount({ authorization, body }, deps);
+          : action === 'withdraw_postona'
+            ? await handleWithdrawPostona({ authorization, body }, deps)
+            : await handleDeleteCommonAccount({ authorization, body }, deps);
       return json(result.body, result.status);
     } catch {
       return json({ ok: false, error: 'FAILED' }, 500);

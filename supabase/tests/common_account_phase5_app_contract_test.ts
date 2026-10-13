@@ -170,9 +170,14 @@ const count = (table: string, column: string, user: string) => sql(`select count
 const version = async (user: string) => Number(await sql(`select lifecycle_version from public.common_accounts where user_id = '${user}'`));
 const svc = async (statement: string) => JSON.parse(await sql(`begin; set local role service_role; select to_jsonb(${statement}); commit;`));
 async function endPostona(user: string) {
+  // Phase 6: POSTONA ends only through its owner (the legacy finish refuses it).
   const begun = await svc(`public.begin_service_deletion('${user}'::uuid, 'x_autopost')`);
   assert.equal(begun.status, 'started');
-  const finished = await svc(`public.finish_service_deletion('${user}'::uuid, 'x_autopost', '${begun.operation_id}'::uuid)`);
+  const claimed = await svc(`public.claim_service_deletion('${user}'::uuid, 'x_autopost', '${begun.operation_id}'::uuid)`);
+  assert.equal(claimed.status, 'acquired');
+  const recorded = await svc(`public.record_owned_service_deletion_provider_result('${user}'::uuid, 'x_autopost', '${begun.operation_id}'::uuid, '${claimed.lease}'::uuid, 'x', 'done')`);
+  assert.equal(recorded.status, 'recorded');
+  const finished = await svc(`public.finish_owned_service_deletion('${user}'::uuid, 'x_autopost', '${begun.operation_id}'::uuid, '${claimed.lease}'::uuid)`);
   assert.equal(finished.status, 'ended');
 }
 const hitsFor = (user: string) => hits.filter((h) => h.sub === user);

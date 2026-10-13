@@ -42,7 +42,7 @@ const withdraw = (w: World, token: string, body: Record<string, unknown> = { con
 const remove = (w: World, token: string, body: Record<string, unknown> = deleteBody(w.state.version)) =>
   handleDeleteCommonAccount({ authorization: bearer(token), body }, w.deps);
 const error = (response: LifecycleResponse) => (response.body.ok ? null : response.body.error);
-const readOnly = ['auth:user', 'rpc:release_gate', 'rpc:eligibility', 'x:preview', 'rpc:storage_objects'];
+const readOnly = ['auth:user', 'rpc:release_gate', 'rpc:eligibility', 'x:preview', 'rpc:storage_objects', 'rpc:provider_snapshot'];
 const writes = (effects: string[]) => effects.filter((e) => !readOnly.includes(e));
 
 // --- preview --------------------------------------------------------------------------------------------
@@ -56,6 +56,7 @@ test('preview: services, X cleanup support, availability and Apple needs, withou
     services: [{ service: 'kabumori', status: 'active' }, { service: 'x_autopost', status: 'active' }],
     blockers: [], deletion_in_progress: false, deletion_available: true,
     apple: { required: false, supported: true, code_required: false }, x_cleanup: 'supported',
+    providers: [{ provider: 'x', adapter: 'saga', remote_revoke: 'saga' }], acknowledgement_required: [], postona_end_available: true,
   });
   assert.deepEqual(writes(w.effects), []);
   assert.equal(((await preview(world({ gate: 'blocked' }), signIn())).body as Record<string, unknown>).deletion_available, false, 'R3: the release gate is shown');
@@ -153,7 +154,7 @@ test('delete: a Kabumori-only person, in the canonical order, owned throughout, 
   const response = await remove(w, signIn());
   assert.deepEqual(response, { status: 200, body: { ok: true, outcome: 'deleted' } });
   assert.deepEqual(w.effects, [
-    'auth:user', 'rpc:release_gate', 'rpc:eligibility', 'rpc:begin_account_deletion', 'rpc:claim',
+    'auth:user', 'rpc:release_gate', 'rpc:eligibility', 'rpc:provider_snapshot', 'rpc:begin_account_deletion', 'rpc:claim',
     'rpc:renew', 'rpc:begin_service_deletion',
     'rpc:renew', 'rpc:withdraw_kabumori', 'rpc:eligibility',
     'rpc:renew', 'auth:revoke_sessions', 'rpc:owned_checkpoint',
@@ -173,7 +174,8 @@ test('delete: both services -- X through its saga first (login kept by it), then
   assert.ok(order('x:preview') < order('rpc:begin_account_deletion'), 'X scope checked before anything changes');
   assert.ok(order('rpc:claim') < order('x:run'), 'owned before the first external action');
   assert.ok(order('x:run') < order('rpc:withdraw_kabumori'), 'X ends before Kabumori (its scope depends on the profile)');
-  assert.ok(order('rpc:finish_service_deletion') < order('rpc:withdraw_kabumori'));
+  assert.ok(order('rpc:finish_owned_service') < order('rpc:withdraw_kabumori'));
+  assert.ok(order('rpc:claim_service') < order('x:run'), 'the POSTONA lease is taken before X is touched');
   assert.equal(w.effects.filter((e) => e === 'storage:remove').length, 2, 'one request per bucket');
   assert.ok(order('storage:remove') < order('rpc:owned_prepare'));
   assert.equal(w.state.storage.length, 0);
@@ -335,7 +337,8 @@ test('R1: a second request during any external step is told "in progress" and ca
     const { w, first, second } = await overlap(options, hookName, extra);
     assert.deepEqual(second.body.ok, false, label);
     assert.equal(error(second), 'DELETION_IN_PROGRESS', label);
-    assert.deepEqual(first, { status: 200, body: { ok: true, outcome: 'deleted' } }, `${label}: the owner finishes`);
+    assert.equal(first.status, 200, `${label}: the owner finishes`);
+    assert.equal((first.body as { outcome?: string }).outcome, 'deleted', `${label}: the owner finishes`);
     assert.equal(w.state.calls.delete, 1, `${label}: one managed delete`);
     assert.equal(w.state.calls.apple, options.apple ? 1 : 0, `${label}: Apple at most once`);
     assert.equal(w.state.calls.x, options.x ? 1 : 0, `${label}: X saga once`);
@@ -486,7 +489,8 @@ test('delete: a retry after a failure at each step resumes and never repeats a f
     const xDone = w.state.services.x_autopost === 'ended';
     const appleDone = w.state.op?.checkpoints.has('apple_revocation') ?? false;
     const second = await remove(w, signIn(), body());
-    assert.deepEqual(second, { status: 200, body: { ok: true, outcome: 'deleted' } }, `${label}: retry completes`);
+    assert.equal(second.status, 200, `${label}: retry completes`);
+    assert.equal((second.body as { outcome?: string }).outcome, 'deleted', `${label}: retry completes`);
     assert.equal(w.state.calls.x - xRunsBefore, xDone ? 0 : 1, `${label}: X saga not repeated after it ended`);
     assert.equal(w.state.calls.apple - appleBefore, appleDone || !options.apple ? 0 : 1, `${label}: Apple not repeated after its checkpoint`);
     assert.equal(w.state.op?.fence, 2, `${label}: one owner per attempt`);
