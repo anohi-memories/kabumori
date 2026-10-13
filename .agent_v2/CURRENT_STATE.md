@@ -69,6 +69,11 @@
 - 新J1 `kabumori-j1-ai-ask-b0-independent-security-review-20261013` ready/codex、推薦 **Sol（高）**、開始J1 → 完了V1、返却先「かぶモリアプリG1のちゃ（新F1担当）」。J1はread-only独立設計レビューのみ（本人/Auth/RLS、根拠・注入、費用上限・冪等、同意・G6依存、D1-D8）。
 - B1 server/client実装・本番API/DB/Edge・有料API・deploy・mergeは未承認。J1指摘の確認後、ユーザー判断と独立した別TASKで進める。
 
+## F1 AIに聞く B0 J1指摘修正 — 2026-10-13 JST
+- J1独立レビュー`kabumori-j1-ai-ask-b0-independent-security-review-20261013` V1=CHANGES_REQUIRED（P1×5/P2×3）、J1 done。Phase B1のDB/Edge/本番接続はNO_GO。
+- F1過去B0 TASK `kabumori-f1-ai-ask-v1-phase-b0-security-preflight-20261013` L1完了の原本を `.agent_v2/archive/2026-10-13-F1-kabumori-f1-ai-ask-v1-phase-b0-security-preflight-20261013/` に保存。SHA256 `caf8d633603badce2e66710cb52c011362e3edfe862cd6b75734cf171e09aef0`、復元read-back確認、HISTORY_INDEX登録済み。
+- F1新TASK `kabumori-f1-ai-ask-b0-j1-r1-r8-design-correction-20261013` ready/claude、Opus5.5（高）、F1→L1、返却先「かぶモリアプリG1のちゃ（新F1担当）」。J1 R1-R8を設計文書の新Draft修正PRで対応し、focused再レビューへ返す。PR166/171を保護。実本番・有料AI・Auth/DB/Edge・migration・merge/deploy変更は禁止。
+
 ## 移行の状態
 
 - 新系統 `.agent_v2/` はPR #155のmainマージ（`4e80c79dc42c11fbc1ca105665514b0dd32842d3`）により有効。新F/J枠は新規TASKを明示割当した後に使用する。
