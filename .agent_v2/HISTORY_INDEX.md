@@ -71,6 +71,7 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 
 | 完了日 | slot | task_id | 作業名 | result | PR番号 | final commit SHA | archive参照先 | remaining issue参照先 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-13 | F1 | `kabumori-f1-ai-ask-b0-j1-r1-r8-design-correction-20261013` | AIに聞く B0 8件設計修正 | PASS_DESIGN_CORRECTION / J2 CHANGES_REQUIRED | #177 | `2f33cffd4754a5576b112623b3aedc2dd31740b8` | `.agent_v2/archive/2026-10-13-F1-kabumori-f1-ai-ask-b0-j1-r1-r8-design-correction-20261013/files/.agent_v2/tasks/F1.md` | J2 Report R2/R3/R8 |
 | 2026-10-13 | F1 | `kabumori-f1-ai-ask-v1-phase-b0-security-preflight-20261013` | AIに聞く Phase B0 セキュリティ設計 | PASS_DESIGN_CANDIDATE / J1 CHANGES_REQUIRED | #171 | `0beda46186efe1db680909f369e2571609851d81` | `.agent_v2/archive/2026-10-13-F1-kabumori-f1-ai-ask-v1-phase-b0-security-preflight-20261013/files/.agent_v2/tasks/F1.md` | J1 Report R1–R8; B0 archived Report |
 | 2026-10-13 | F1 | `kabumori-f1-ai-ask-v1-phase-a-ui-contract-20261012` | AIに聞く V1 Phase A 対話UI・安全契約 | PASS_SOURCE_PHASE_A | #166 | `83b51efcf3cdb207eb0bab4c6a8dddbc1f5352f4` | `.agent_v2/archive/2026-10-13-F1-kabumori-f1-ai-ask-v1-phase-a-ui-contract-20261012/files/.agent_v2/tasks/F1.md` | 同 archive TASK の `## Report` Phase B remaining_issues |
 
