@@ -358,3 +358,28 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 | 2026-09-11 | H2 | `close-report-1700-schedule-and-close-source-hardening-20260911` | H2 — close-report 17:00 schedule and close-source hardening… | implementation and production schedule alignment complete; C2 review … | — | `955a3ab5edc95a63fce181c07c0d7460b7e2961c` | T:H2R#L4930 R:H2R#L4930 | — |
 | 2026-09-10（id） | H2 | `morning-report-fact-diagnostics-and-greeting-status-fix-20260910` | Review and safety | review_required | — | — | T:H2R#L5148 R:H2R#L5148 | — |
 | 2026-09-10（id） | H2 | `close-report-live-data-and-voice-retry-hardening-20260910` | H2 Follow-up E — production deploy verification | deployed and byte-verified; C2 review required | — | — | T:H2R#L4987 R:H2R#L4987 | — |
+
+
+## 2026-10-13 完全移行前の最終snapshot候補（切替未実施）
+
+- 元commit: `b7ce2c4fd94225542a66aef94042ca528cc47f09`。旧.agent全28ファイル＋共有5ファイル、SHA256・実復元・Git blob一致確認済み。PR #10/#11/#161の旧管理差分もbase/head・patchで保護、実patch復元PASS。
+- MANIFEST: `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/MANIFEST.json`、検証結果: `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/RESTORE_RESULT.json`、30枠と競合: `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/evidence/PREFLIGHT.json`。
+- 正式昇格は未実施。既存の検索索引・archiveは維持。切替前にfresh mainと新規TASKを再確認し、変化があれば追加snapshotが必要。
+
+| slot | latest task_id at source commit | status | preserved task path |
+| --- | --- | --- | --- |
+| H1 | `postona-h1-threads-oauth-edge-offline-implementation-20261011` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK.md` |
+| H2 | `kabumori-pr149-broadcast-fanout-push-security-review-h2-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_2.md` |
+| H3 | `agent-v2-pr155-dual-slot-migration-review-h3-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_3.md` |
+| H4 | `common-account-g5-phase4-pr152-pr121-security-review-h4-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_4.md` |
+| H5 | `postona-h5-threads-auth-owner-runtime-final-wiring-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_5.md` |
+| G1 | `kabumori-g1-ai-ask-v1-phase-a-ui-contract-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_1.md` |
+| G2 | `kabumori-g2-pr143-live-mergeability-diagnosis-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK.md` |
+| G3 | `postona-g3-x-reservation-api-client-wiring-offline-v1-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_3.md` |
+| G4 | `postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_4.md` |
+| G5 | `common-account-g5-phase4-h4-c4-r1-r2-repair-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_5.md` |
+| G6 | `common-ai-provider-g6-f1-f2-timeout-tests-stability-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_6.md` |
+| G7 | `mic-stage1-formal-verification-design-finalization-g7-20261011` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_7.md` |
+| G8 | `news-improvement-a-jp-official-diagnostics-j1a-g8-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_8.md` |
+| G9 | `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_9.md` |
+| G10 | `agent-v2-dual-slot-migration-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_10.md` |

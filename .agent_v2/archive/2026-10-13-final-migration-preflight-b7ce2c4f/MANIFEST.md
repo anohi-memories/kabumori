@@ -1,0 +1,45 @@
+# Final migration snapshot candidate
+
+- Source commit: `b7ce2c4fd94225542a66aef94042ca528cc47f09`
+- Captured: 2026-10-13T12:26:17+09:00
+- Old `.agent/`: 28 files; shared rules/handoff: 5 files.
+- Promotion BLOCKED by PR #10 / #11 / #161 and stale CURRENT_STATE. Re-snapshot if source changes before cutover.
+- Existing archives and old `.agent/` remain untouched.
+
+| original_path | archive_path | size | SHA256 | source commit |
+| --- | --- | --- | --- | --- |
+| `.agent/ACTIVE_TASK.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/ACTIVE_TASK.md` | 22354 | `7a8100bb1c4cbec0d9fb327364fb8152eb4a0fdaa69cbdd2badb0257e2a960cb` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/CHATGPT_HANDOFF.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CHATGPT_HANDOFF.md` | 3652 | `e18c48fc47917cedf3baccf79774cab994ef8d164b644bdf8aa5375f6a0d91e2` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/CLAUDE_REPORT.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CLAUDE_REPORT.md` | 5330 | `cf129783c0f0568b04a692f2fd52bfb9442023e282f88b2e65d468837d24dd93` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/CODEX_REPORT.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CODEX_REPORT.md` | 525969 | `33cb918645145f1940587953f996831f085ac9c9bf18325c11cd7ff3eeada4f6` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/CODEX_REPORT_2.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CODEX_REPORT_2.md` | 814077 | `ae042e68d34946ce69811cda4a734e93c085a94de8e214694cb432d13a11753b` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/CODEX_REPORT_3.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CODEX_REPORT_3.md` | 26581 | `a9d051ccc387f9f0f126efb75bcb005b4e4b95e33cc11bd8e63e18df25709ac5` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/CODEX_REPORT_4.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CODEX_REPORT_4.md` | 27769 | `5ea33338d47e09d74156e7fb3054454724ed1389e47531af0f52b2139741e82b` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/CODEX_REPORT_5.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CODEX_REPORT_5.md` | 8460 | `a498acf8dd3cd245cb98d207ec546d53ba47d677f041534c7d13021d12ae1bc9` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/CURRENT_STATE.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/CURRENT_STATE.md` | 822385 | `46db55f134211304d544dfe9f526f15580d5a222fc757a6e90796adc94f3a270` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/ORCHESTRATION.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/ORCHESTRATION.md` | 35656 | `062774cf4c8ad8b56d1f473333ac456e6a1adba2103b1eaa1fafd3575c6246eb` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/archive/CLAUDE_TASK_4_pre_threads_20261011.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/archive/CLAUDE_TASK_4_pre_threads_20261011.md` | 307561 | `3ab04a32937ed6c2bc0c8d8809d58b64faec52f58a115a6bc58d3b93d93a9027` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/archive/CLAUDE_TASK_4_threads_edge_pre_codex_20261011.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/archive/CLAUDE_TASK_4_threads_edge_pre_codex_20261011.md` | 9222 | `3da37797f41365b3baceb29ae24ee50774236846a35837b4df696748e7b5f69e` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/room_handoffs/X_AUTOPOST_CHAT.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/room_handoffs/X_AUTOPOST_CHAT.md` | 3700 | `5abea8f1adb531fb7a5f9c8e453e081e5cee1d8ddf4f9772f3c0306dc09452fa` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/tasks/CLAUDE_TASK.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK.md` | 838992 | `cb6c6616b611fd8554382415334aa7e5c7cf97cb806722015270a93cb0ecf052` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/tasks/CLAUDE_TASK_1.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_1.md` | 598627 | `9c7a22f2760f0e73a9be1fb9bff59669f7389c98319f029c7b633fdccac4b597` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/tasks/CLAUDE_TASK_10.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_10.md` | 26790 | `907def5217552ec9b5a8632a60cb8b64d4a4723212ed1877d65aa30768f8dbc1` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/tasks/CLAUDE_TASK_3.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_3.md` | 521909 | `bd33911232a5433d4bc8303d9788e223845492d01ad7b608cb6ce9c231828a29` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/tasks/CLAUDE_TASK_4.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_4.md` | 102173 | `d4b63ea5c21414f33b6dcf9afa0df452927ef5759169f6013a69b102077bb71e` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/tasks/CLAUDE_TASK_5.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_5.md` | 635959 | `8793fdbb3ca4e002534ade2a60969dd37074718ca372be534fbb17737da7bdf8` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/tasks/CLAUDE_TASK_6.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_6.md` | 125034 | `6c7e2128a3422563598e7e820b726db53be7e95a576979757d3ce47eff51abad` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/tasks/CLAUDE_TASK_7.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_7.md` | 17627 | `d7559f747e2ea7990f95f824e224683130e1ecbed43beb6cfcd542cc6ca7e209` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/tasks/CLAUDE_TASK_8.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_8.md` | 88266 | `32f11955ca10146fee5e755f5c5cef5cce5fbd7eff4175bb3fb0eeac4b709d4f` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/tasks/CLAUDE_TASK_9.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_9.md` | 50686 | `8794ca15c621c5c1a6c32d4ce64457c3c4c1f6ec6ffcac2f06dcf361ef153787` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/tasks/CODEX_TASK.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK.md` | 285770 | `072a47249ac5746c1a7c22398276432d83a15dc8cd0ff09869e99a018e7e23bf` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/tasks/CODEX_TASK_2.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_2.md` | 218981 | `858efc7cf89c557ed9d359a45b55c39f0199315530b6ccee29183fe6e73baca5` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/tasks/CODEX_TASK_3.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_3.md` | 30915 | `835d9f422a4e7509901ebca8ece64d11a11f33bc4ade7caa0c20cd70e8e61024` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/tasks/CODEX_TASK_4.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_4.md` | 13818 | `985cec3f1b7954c52b28eee921d03a5e4f444f97d3de1131ed7bd9cde978e4b7` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `.agent/tasks/CODEX_TASK_5.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_5.md` | 31875 | `6150f8257bf866e0a9b4137d666a4aaddf634ffe3fb67357f69eb72d2b7cf5f8` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `AGENTS.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/AGENTS.md` | 3046 | `1e942cec0f8026d0d8ad17edada42d794296d3913e66f4c758ef6a015d95d7d6` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `CLAUDE.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/CLAUDE.md` | 2977 | `ec296f6b8079c8a9cb0b3d2cb28b7d44950da41bea9ca5d11ada0c7cb3b71674` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `HANDOFF.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/HANDOFF.md` | 49771 | `180ce7cf74f0c5f1a9f6c2dd56f61285ee036b4ca582f7f2e84764becd84cc9c` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `HANDOFF_TEMPLATE.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/HANDOFF_TEMPLATE.md` | 737 | `338d724192a2c10dc9bffa947b4584434102f07c1da2adb2ec3704cab810c70a` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+| `PROJECT_RULES.md` | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/PROJECT_RULES.md` | 21843 | `8e6370bf0f8d0334c55b50b6e0988b30175e69de968249c34952588ff464af47` | `b7ce2c4fd94225542a66aef94042ca528cc47f09` |
+
+PR preservation includes exact diff, changed-file base/head copies and a successful actual patch restore. Evidence hashes and source commits are in MANIFEST.json.

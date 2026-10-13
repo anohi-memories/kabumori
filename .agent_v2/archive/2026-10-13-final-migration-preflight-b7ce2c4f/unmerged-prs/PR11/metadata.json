@@ -1,0 +1,18 @@
+{
+  "number": 11,
+  "title": "chore(agent): record important news caller auth blocker",
+  "state": "open",
+  "draft": true,
+  "html_url": "https://github.com/anohi-memories/kabumori/pull/11",
+  "updated_at": "2026-09-23T10:44:19Z",
+  "head_sha": "6ef9f327c13f144b0f5525e7064880c98ca24081",
+  "merge_base_sha": "f6881db976670bcfac7a441a0defc8996e6340af",
+  "observed_base_sha": "5c6dc33eb3f8d8fb91928a71568963ecf57447e9",
+  "base_ref": "main",
+  "head_ref": "codex/important-news-caller-auth-blocker-20260923",
+  "files": [
+    ".agent/ACTIVE_TASK.md",
+    ".agent/CURRENT_STATE.md",
+    ".agent/tasks/CODEX_TASK.md"
+  ]
+}

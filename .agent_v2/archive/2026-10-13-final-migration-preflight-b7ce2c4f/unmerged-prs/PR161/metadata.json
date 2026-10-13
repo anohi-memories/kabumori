@@ -1,0 +1,19 @@
+{
+  "number": 161,
+  "title": "chore(agent): H5 runtime wiring report and C5 handoff only",
+  "state": "open",
+  "draft": true,
+  "html_url": "https://github.com/anohi-memories/kabumori/pull/161",
+  "updated_at": "2026-10-12T11:06:52Z",
+  "head_sha": "1ef3aaa43e72540f6f6ac5c2dd97820aaa3259d2",
+  "merge_base_sha": "b012da640a33518cee52c2927e4d3c21ff253bf7",
+  "observed_base_sha": "b012da640a33518cee52c2927e4d3c21ff253bf7",
+  "base_ref": "main",
+  "head_ref": "codex/h5-owner-wiring-report-20261012",
+  "files": [
+    ".agent/ACTIVE_TASK.md",
+    ".agent/CODEX_REPORT_5.md",
+    ".agent/CURRENT_STATE.md",
+    ".agent/tasks/CODEX_TASK_5.md"
+  ]
+}

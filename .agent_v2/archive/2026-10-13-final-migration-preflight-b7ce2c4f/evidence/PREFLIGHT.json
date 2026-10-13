@@ -1,0 +1,909 @@
+{
+  "captured_at_jst": "2026-10-13T12:26:17+09:00",
+  "source_commit": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+  "slots": [
+    {
+      "code": "H1",
+      "path": ".agent/tasks/CODEX_TASK.md",
+      "task": {
+        "task_id": "postona-h1-threads-oauth-edge-offline-implementation-20261011",
+        "owner": "codex",
+        "slot": "codex-1",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "**POSTONA｜マルチSNS化・開発統括（G4）のちゃ**",
+        "completion_code": "C1",
+        "recommended_model": "**Sol（高）**",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "postona-h1-threads-oauth-edge-offline-implementation-20261011",
+        "owner": "codex",
+        "slot": "codex-1",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "POSTONA｜マルチSNS化・開発統括（G4）のちゃ",
+        "completion_code": "C1",
+        "recommended_model": "Sol（高） (completed)",
+        "blocker": null
+      },
+      "start_code": "H1",
+      "completion_from_index": "C1"
+    },
+    {
+      "code": "H2",
+      "path": ".agent/tasks/CODEX_TASK_2.md",
+      "task": {
+        "task_id": "kabumori-pr149-broadcast-fanout-push-security-review-h2-20261012",
+        "owner": "codex",
+        "slot": "codex-2",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "かぶモリアプリG2のちゃ",
+        "completion_code": "C2",
+        "recommended_model": "**Sol（高）**",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "kabumori-pr149-broadcast-fanout-push-security-review-h2-20261012",
+        "owner": "codex",
+        "slot": "codex-2",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "かぶモリアプリG2のちゃ",
+        "completion_code": "C2",
+        "recommended_model": "Sol（高） (completed)",
+        "blocker": null
+      },
+      "start_code": "H2",
+      "completion_from_index": "C2"
+    },
+    {
+      "code": "H3",
+      "path": ".agent/tasks/CODEX_TASK_3.md",
+      "task": {
+        "task_id": "agent-v2-pr155-dual-slot-migration-review-h3-20261012",
+        "owner": "codex",
+        "slot": "codex-3",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "**こでくろ連携部屋のちゃ**",
+        "completion_code": "C3",
+        "recommended_model": "**Sol（高）**",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "agent-v2-pr155-dual-slot-migration-review-h3-20261012",
+        "owner": "codex",
+        "slot": "codex-3",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "こでくろ連携部屋のちゃ",
+        "completion_code": "C3",
+        "recommended_model": "Sol（高）",
+        "blocker": null
+      },
+      "start_code": "H3",
+      "completion_from_index": "C3"
+    },
+    {
+      "code": "H4",
+      "path": ".agent/tasks/CODEX_TASK_4.md",
+      "task": {
+        "task_id": "common-account-g5-phase4-pr152-pr121-security-review-h4-20261012",
+        "owner": "codex",
+        "slot": "codex-4",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "共通アカウントG5のちゃ",
+        "completion_code": "C4",
+        "recommended_model": "**Sol（高）**",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "common-account-g5-phase4-pr152-pr121-security-review-h4-20261012",
+        "owner": "codex",
+        "slot": "codex-4",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "共通アカウントG5のちゃ",
+        "completion_code": "C4",
+        "recommended_model": "Sol（高） (completed)",
+        "blocker": null
+      },
+      "start_code": "H4",
+      "completion_from_index": "C4"
+    },
+    {
+      "code": "H5",
+      "path": ".agent/tasks/CODEX_TASK_5.md",
+      "task": {
+        "task_id": "postona-h5-threads-auth-owner-runtime-final-wiring-20261012",
+        "owner": "codex",
+        "slot": "codex-5",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "**POSTONA｜マルチSNS化・開発統括（G4）のちゃ**",
+        "completion_code": "C5",
+        "recommended_model": "**Sol（高）**",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "postona-h5-threads-auth-owner-runtime-final-wiring-20261012",
+        "owner": "codex",
+        "slot": "codex-5",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "POSTONA｜マルチSNS化・開発統括（G4）のちゃ",
+        "completion_code": "C5",
+        "recommended_model": "Sol（高）",
+        "blocker": null
+      },
+      "start_code": "H5",
+      "completion_from_index": "C5"
+    },
+    {
+      "code": "G1",
+      "path": ".agent/tasks/CLAUDE_TASK_1.md",
+      "task": {
+        "task_id": "kabumori-g1-ai-ask-v1-phase-a-ui-contract-20261012",
+        "owner": "claude",
+        "slot": "claude-1",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "かぶモリアプリG1のちゃ",
+        "completion_code": null,
+        "recommended_model": "**Opus5.5（中）**",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "kabumori-g1-ai-ask-v1-phase-a-ui-contract-20261012",
+        "owner": "claude",
+        "slot": "claude-1",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "かぶモリアプリG1のちゃ",
+        "completion_code": null,
+        "recommended_model": "Opus5.5（中）",
+        "blocker": null
+      },
+      "start_code": "G1",
+      "completion_from_index": "K1"
+    },
+    {
+      "code": "G2",
+      "path": ".agent/tasks/CLAUDE_TASK.md",
+      "task": {
+        "task_id": "kabumori-g2-pr143-live-mergeability-diagnosis-20261012",
+        "owner": "claude",
+        "slot": "claude-2",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "かぶモリアプリG2のちゃ",
+        "completion_code": null,
+        "recommended_model": "**Sonnet5（高）**",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "kabumori-g2-pr143-live-mergeability-diagnosis-20261012",
+        "owner": "claude",
+        "slot": "claude-2",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "かぶモリアプリG2のちゃ",
+        "completion_code": null,
+        "recommended_model": "Sonnet5（高）",
+        "blocker": null
+      },
+      "start_code": "G2",
+      "completion_from_index": "K2"
+    },
+    {
+      "code": "G3",
+      "path": ".agent/tasks/CLAUDE_TASK_3.md",
+      "task": {
+        "task_id": "postona-g3-x-reservation-api-client-wiring-offline-v1-20261012",
+        "owner": "claude",
+        "slot": "claude-3",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）",
+        "completion_code": null,
+        "recommended_model": "**Opus5.5（高）**",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "postona-g3-x-reservation-api-client-wiring-offline-v1-20261012",
+        "owner": "claude",
+        "slot": "claude-3",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "POSTONA G3のちゃ（AI自動投稿・X予約担当チャット）",
+        "completion_code": null,
+        "recommended_model": "Opus5.5（高）",
+        "blocker": null
+      },
+      "start_code": "G3",
+      "completion_from_index": "K3"
+    },
+    {
+      "code": "G4",
+      "path": ".agent/tasks/CLAUDE_TASK_4.md",
+      "task": {
+        "task_id": "postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012",
+        "owner": "claude",
+        "slot": "claude-4",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "**POSTONA｜マルチSNS化・開発統括（G4）のちゃ**",
+        "completion_code": null,
+        "recommended_model": "**Opus5.5（高）**",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012",
+        "owner": "claude",
+        "slot": "claude-4",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "POSTONA｜マルチSNS化・開発統括（G4）のちゃ",
+        "completion_code": null,
+        "recommended_model": "Opus5.5（高） (completed K4)",
+        "blocker": null
+      },
+      "start_code": "G4",
+      "completion_from_index": "K4"
+    },
+    {
+      "code": "G5",
+      "path": ".agent/tasks/CLAUDE_TASK_5.md",
+      "task": {
+        "task_id": "common-account-g5-phase4-h4-c4-r1-r2-repair-20261012",
+        "owner": "claude",
+        "slot": "claude-5",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "共通アカウントG5のちゃ",
+        "completion_code": null,
+        "recommended_model": "**Opus5.5（高）**",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "common-account-g5-phase4-h4-c4-r1-r2-repair-20261012",
+        "owner": "claude",
+        "slot": "claude-5",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "共通アカウントG5のちゃ",
+        "completion_code": null,
+        "recommended_model": "Opus5.5（高） (completed)",
+        "blocker": null
+      },
+      "start_code": "G5",
+      "completion_from_index": "K5"
+    },
+    {
+      "code": "G6",
+      "path": ".agent/tasks/CLAUDE_TASK_6.md",
+      "task": {
+        "task_id": "common-ai-provider-g6-f1-f2-timeout-tests-stability-20261012",
+        "owner": "claude",
+        "slot": "claude-6",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "共通AI基盤のちゃ（OpenAI・Claude API専用チャット）",
+        "completion_code": null,
+        "recommended_model": "**Sonnet5（中）**",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "common-ai-provider-g6-f1-f2-timeout-tests-stability-20261012",
+        "owner": "claude",
+        "slot": "claude-6",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "共通AI基盤のちゃ（OpenAI・Claude API専用チャット）",
+        "completion_code": null,
+        "recommended_model": "Sonnet5（中）",
+        "blocker": null
+      },
+      "start_code": "G6",
+      "completion_from_index": "K6"
+    },
+    {
+      "code": "G7",
+      "path": ".agent/tasks/CLAUDE_TASK_7.md",
+      "task": {
+        "task_id": "mic-stage1-formal-verification-design-finalization-g7-20261011",
+        "owner": "claude",
+        "slot": "claude-7",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "MICのちゃ（Market Intelligence Core専用チャット）",
+        "completion_code": "K7",
+        "recommended_model": "Opus5.5（高）",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "mic-stage1-formal-verification-design-finalization-g7-20261011",
+        "owner": "claude",
+        "slot": "claude-7",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "MICのちゃ（Market Intelligence Core専用チャット）",
+        "completion_code": "K7",
+        "recommended_model": "Opus5.5（高）",
+        "blocker": null
+      },
+      "start_code": "G7",
+      "completion_from_index": "K7"
+    },
+    {
+      "code": "G8",
+      "path": ".agent/tasks/CLAUDE_TASK_8.md",
+      "task": {
+        "task_id": "news-improvement-a-jp-official-diagnostics-j1a-g8-20261012",
+        "owner": "claude",
+        "slot": "claude-8",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "ニュース改善API最適化のちゃ",
+        "completion_code": null,
+        "recommended_model": "Sonnet5（高）",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "news-improvement-a-jp-official-diagnostics-j1a-g8-20261012",
+        "owner": "claude",
+        "slot": "claude-8",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "ニュース改善API最適化のちゃ",
+        "completion_code": null,
+        "recommended_model": "Sonnet5（高）",
+        "blocker": null
+      },
+      "start_code": "G8",
+      "completion_from_index": "K8"
+    },
+    {
+      "code": "G9",
+      "path": ".agent/tasks/CLAUDE_TASK_9.md",
+      "task": {
+        "task_id": "api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011",
+        "owner": "claude",
+        "slot": "claude-9",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "ニュース改善API最適化のちゃ",
+        "completion_code": null,
+        "recommended_model": "Opus5.5（高）",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011",
+        "owner": "claude",
+        "slot": "claude-9",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "ニュース改善API最適化のちゃ",
+        "completion_code": null,
+        "recommended_model": "Opus5.5（高） (completed)",
+        "blocker": null
+      },
+      "start_code": "G9",
+      "completion_from_index": "K9"
+    },
+    {
+      "code": "G10",
+      "path": ".agent/tasks/CLAUDE_TASK_10.md",
+      "task": {
+        "task_id": "agent-v2-dual-slot-migration-20261012",
+        "owner": "claude",
+        "slot": "claude-10",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": null,
+        "completion_code": null,
+        "recommended_model": "**Opus5.5（高）**",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "agent-v2-dual-slot-migration-20261012",
+        "owner": "claude",
+        "slot": "claude-10",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": null,
+        "completion_code": null,
+        "recommended_model": "Opus5.5（高）",
+        "blocker": null
+      },
+      "start_code": "G10",
+      "completion_from_index": "K10"
+    },
+    {
+      "code": "F1",
+      "path": ".agent_v2/tasks/F1.md",
+      "task": {
+        "task_id": "kabumori-f1-ai-ask-v1-phase-b0-security-preflight-20261013",
+        "owner": "claude",
+        "slot": "F1",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "かぶモリアプリG1のちゃ（新F1担当）",
+        "completion_code": "L1",
+        "recommended_model": "Opus5.5（高）",
+        "blocker": "security architecture preflight and user decisions before live data/API"
+      },
+      "index": {
+        "task_id": "kabumori-f1-ai-ask-v1-phase-b0-security-preflight-20261013",
+        "owner": "claude",
+        "slot": "F1",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "かぶモリアプリG1のちゃ（新F1担当）",
+        "completion_code": "L1",
+        "recommended_model": "Opus5.5（高）",
+        "blocker": "security architecture preflight and user decisions before live data/API"
+      },
+      "start_code": "F1",
+      "completion_from_index": "L1"
+    },
+    {
+      "code": "F2",
+      "path": ".agent_v2/tasks/F2.md",
+      "task": {
+        "task_id": "kabumori-f2-pr143-live-mergeability-diagnosis-20261012",
+        "owner": "claude",
+        "slot": "F2",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "かぶモリアプリ G2（新F2担当）のちゃ",
+        "completion_code": "L2",
+        "recommended_model": "**Sonnet5（高）**",
+        "blocker": "GitHub PR143 mergeable=false against recently advanced main; local overlap preliminary 0"
+      },
+      "index": {
+        "task_id": "kabumori-f2-pr143-live-mergeability-diagnosis-20261012",
+        "owner": "claude",
+        "slot": "F2",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "かぶモリアプリ G2（新F2担当）のちゃ",
+        "completion_code": "L2",
+        "recommended_model": "Sonnet5（高）",
+        "blocker": "GitHub PR143 currently reports mergeable=false via connected metadata; fresh verification needed at merge execution"
+      },
+      "start_code": "F2",
+      "completion_from_index": "L2"
+    },
+    {
+      "code": "F3",
+      "path": ".agent_v2/tasks/F3.md",
+      "task": {
+        "task_id": "postona-f3-x-reservation-live-boundary-source-integration-20261012",
+        "owner": "claude",
+        "slot": "F3",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "POSTONA G3のちゃ（新F3担当・AI自動投稿／X予約担当チャット）",
+        "completion_code": "L3",
+        "recommended_model": "**Opus5.5（高）**",
+        "blocker": "G4本物のXアカウント本人確認とG5の確定entitlement/lifecycle契約が未統合。source/isolated testは進行可能、production統合・実投稿はNO_GO。"
+      },
+      "index": {
+        "task_id": "postona-f3-x-reservation-live-boundary-source-integration-20261012",
+        "owner": "claude",
+        "slot": "F3",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "POSTONA G3のちゃ（新F3担当・AI自動投稿／X予約担当チャット）",
+        "completion_code": "L3",
+        "recommended_model": "Opus5.5（高）",
+        "blocker": "G4 X verified-account Issue131 and G5/F5 actual production approved entitlement/lifecycle + managed Auth/role/secret proof; integration security review; production NO_GO"
+      },
+      "start_code": "F3",
+      "completion_from_index": "L3"
+    },
+    {
+      "code": "F4",
+      "path": ".agent_v2/tasks/F4.md",
+      "task": {
+        "task_id": "postona-f4-threads-t13-authenticated-writer-integration-20261013",
+        "owner": "claude",
+        "slot": "F4",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "POSTONA｜マルチSNS化・開発統括（G4）のちゃ",
+        "completion_code": "L4",
+        "recommended_model": "Opus5.5（高）",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "postona-f4-threads-t13-authenticated-writer-integration-20261013",
+        "owner": "claude",
+        "slot": "F4",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "POSTONA｜マルチSNS化・開発統括（G4）のちゃ",
+        "completion_code": "L4",
+        "recommended_model": "Opus5.5（高）",
+        "blocker": "F5 contract owner boundary and H5 guarded writer interface must be checked with independent source overlay; live production NO_GO; F4 reported Draft PR169 head fd15430ddcd640c5c7389582f37f1b478fc7204c (base PR167 branch), awaiting L4"
+      },
+      "start_code": "F4",
+      "completion_from_index": "L4"
+    },
+    {
+      "code": "F5",
+      "path": ".agent_v2/tasks/F5.md",
+      "task": {
+        "task_id": "common-account-f5-phase5-app-auth-entitlement-integration-20261012",
+        "owner": "claude",
+        "slot": "F5",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "共通アカウントG5のちゃ（新F5担当）",
+        "completion_code": "L5",
+        "recommended_model": "**Opus5.5（高）**",
+        "blocker": "managed Supabase real auth/Storage/provider and app-owner file integration remain gated; no production approval"
+      },
+      "index": {
+        "task_id": "common-account-f5-phase5-app-auth-entitlement-integration-20261012",
+        "owner": "claude",
+        "slot": "F5",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "共通アカウントG5のちゃ（新F5担当）",
+        "completion_code": "L5",
+        "recommended_model": "Opus5.5（高）",
+        "blocker": "production/no managed Auth; app-owner wiring separate, must be explicitly coordinated"
+      },
+      "start_code": "F5",
+      "completion_from_index": "L5"
+    },
+    {
+      "code": "F6",
+      "path": ".agent_v2/tasks/F6.md",
+      "task": {
+        "task_id": "common-ai-f6-opus-primary-close-report-v0-20261013",
+        "owner": "claude",
+        "slot": "F6",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "共通AI基盤のちゃ（OpenAI・Claude API専用チャット）",
+        "completion_code": "L6",
+        "recommended_model": "**Opus5.5（高）**",
+        "blocker": null
+      },
+      "index": {
+        "task_id": "common-ai-f6-opus-primary-close-report-v0-20261013",
+        "owner": "claude",
+        "slot": "F6",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "共通AI基盤のちゃ（OpenAI・Claude API専用チャット）",
+        "completion_code": "L6",
+        "recommended_model": "Opus5.5（高）",
+        "blocker": "L6 ACCEPTED PASS_OFFLINE_SOURCE / PRODUCTION_NO_GO — PASS_OFFLINE_SOURCE Draft PR #170 (46b27326, default OFF, not wired); handler.ts wiring delivered as verified patch (F2 ownership coordination needed); live Oct13 cutover needs separate approvals: patch merge, Edge Secret, deploy, mode flip before 16:15 JST; budget caps unchanged"
+      },
+      "start_code": "F6",
+      "completion_from_index": "L6"
+    },
+    {
+      "code": "F7",
+      "path": ".agent_v2/tasks/F7.md",
+      "task": {
+        "task_id": "none",
+        "owner": "claude",
+        "slot": "F7",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当。割当時に必ず記入）",
+        "completion_code": "L7",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "index": {
+        "task_id": "none",
+        "owner": "claude",
+        "slot": "F7",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当）",
+        "completion_code": "L7",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "start_code": "F7",
+      "completion_from_index": "L7"
+    },
+    {
+      "code": "F8",
+      "path": ".agent_v2/tasks/F8.md",
+      "task": {
+        "task_id": "news-improvement-a-jp-official-diagnostics-j1a-f8-20261012",
+        "owner": "claude",
+        "slot": "F8",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "ニュース改善API最適化のちゃ",
+        "completion_code": "L8",
+        "recommended_model": "Sonnet5（高）",
+        "blocker": "none（production deployment requires separate authorization）"
+      },
+      "index": {
+        "task_id": "news-improvement-a-jp-official-diagnostics-j1a-f8-20261012",
+        "owner": "claude",
+        "slot": "F8",
+        "status": "done",
+        "next_owner": "none",
+        "return_to": "ニュース改善API最適化のちゃ",
+        "completion_code": "L8",
+        "recommended_model": "Sonnet5（高）",
+        "blocker": "none for source; PR164 merge/deploy remain on hold pending separate approval and updated integration review"
+      },
+      "start_code": "F8",
+      "completion_from_index": "L8"
+    },
+    {
+      "code": "F9",
+      "path": ".agent_v2/tasks/F9.md",
+      "task": {
+        "task_id": "none",
+        "owner": "claude",
+        "slot": "F9",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当。割当時に必ず記入）",
+        "completion_code": "L9",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "index": {
+        "task_id": "none",
+        "owner": "claude",
+        "slot": "F9",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当）",
+        "completion_code": "L9",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "start_code": "F9",
+      "completion_from_index": "L9"
+    },
+    {
+      "code": "F10",
+      "path": ".agent_v2/tasks/F10.md",
+      "task": {
+        "task_id": "none",
+        "owner": "claude",
+        "slot": "F10",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当。割当時に必ず記入）",
+        "completion_code": "L10",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "index": {
+        "task_id": "none",
+        "owner": "claude",
+        "slot": "F10",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当）",
+        "completion_code": "L10",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "start_code": "F10",
+      "completion_from_index": "L10"
+    },
+    {
+      "code": "J1",
+      "path": ".agent_v2/tasks/J1.md",
+      "task": {
+        "task_id": "none",
+        "owner": "codex",
+        "slot": "J1",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当。割当時に必ず記入）",
+        "completion_code": "V1",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "index": {
+        "task_id": "none",
+        "owner": "codex",
+        "slot": "J1",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当）",
+        "completion_code": "V1",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "start_code": "J1",
+      "completion_from_index": "V1"
+    },
+    {
+      "code": "J2",
+      "path": ".agent_v2/tasks/J2.md",
+      "task": {
+        "task_id": "none",
+        "owner": "codex",
+        "slot": "J2",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当。割当時に必ず記入）",
+        "completion_code": "V2",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "index": {
+        "task_id": "none",
+        "owner": "codex",
+        "slot": "J2",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当）",
+        "completion_code": "V2",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "start_code": "J2",
+      "completion_from_index": "V2"
+    },
+    {
+      "code": "J3",
+      "path": ".agent_v2/tasks/J3.md",
+      "task": {
+        "task_id": "none",
+        "owner": "codex",
+        "slot": "J3",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当。割当時に必ず記入）",
+        "completion_code": "V3",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "index": {
+        "task_id": "none",
+        "owner": "codex",
+        "slot": "J3",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当）",
+        "completion_code": "V3",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "start_code": "J3",
+      "completion_from_index": "V3"
+    },
+    {
+      "code": "J4",
+      "path": ".agent_v2/tasks/J4.md",
+      "task": {
+        "task_id": "none",
+        "owner": "codex",
+        "slot": "J4",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当。割当時に必ず記入）",
+        "completion_code": "V4",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "index": {
+        "task_id": "none",
+        "owner": "codex",
+        "slot": "J4",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当）",
+        "completion_code": "V4",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "start_code": "J4",
+      "completion_from_index": "V4"
+    },
+    {
+      "code": "J5",
+      "path": ".agent_v2/tasks/J5.md",
+      "task": {
+        "task_id": "none",
+        "owner": "codex",
+        "slot": "J5",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当。割当時に必ず記入）",
+        "completion_code": "V5",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "index": {
+        "task_id": "none",
+        "owner": "codex",
+        "slot": "J5",
+        "status": "idle",
+        "next_owner": "none",
+        "return_to": "none（未割当）",
+        "completion_code": "V5",
+        "recommended_model": "none",
+        "blocker": "none"
+      },
+      "start_code": "J5",
+      "completion_from_index": "V5"
+    }
+  ],
+  "active_or_pending_slots": [],
+  "duplicate_current_task_ids": [],
+  "current_state_warning": "CURRENT_STATE contains stale ready/submission records; TASK and ACTIVE_TASK latest metadata agree on done/idle. Prior submission Report status is historical, not a new allocation.",
+  "unmerged_management_prs": [
+    {
+      "baseRefName": "main",
+      "headRefName": "codex/h5-owner-wiring-report-20261012",
+      "headRefOid": "1ef3aaa43e72540f6f6ac5c2dd97820aaa3259d2",
+      "isDraft": true,
+      "number": 161,
+      "title": "chore(agent): H5 runtime wiring report and C5 handoff only",
+      "updatedAt": "2026-10-12T11:06:52Z",
+      "management_files": [
+        ".agent/ACTIVE_TASK.md",
+        ".agent/CODEX_REPORT_5.md",
+        ".agent/CURRENT_STATE.md",
+        ".agent/tasks/CODEX_TASK_5.md"
+      ],
+      "changed_file_count": 4
+    },
+    {
+      "baseRefName": "main",
+      "headRefName": "codex/important-news-caller-auth-blocker-20260923",
+      "headRefOid": "6ef9f327c13f144b0f5525e7064880c98ca24081",
+      "isDraft": true,
+      "number": 11,
+      "title": "chore(agent): record important news caller auth blocker",
+      "updatedAt": "2026-09-23T10:44:19Z",
+      "management_files": [
+        ".agent/ACTIVE_TASK.md",
+        ".agent/CURRENT_STATE.md",
+        ".agent/tasks/CODEX_TASK.md"
+      ],
+      "changed_file_count": 3
+    },
+    {
+      "baseRefName": "main",
+      "headRefName": "codex/kabumori-release-readiness-audit-20260923",
+      "headRefOid": "04f966e2dcb243b86b145c1e141dc8a4244e6d58",
+      "isDraft": false,
+      "number": 10,
+      "title": "docs: audit Kabumori release readiness",
+      "updatedAt": "2026-09-23T10:19:30Z",
+      "management_files": [
+        ".agent/ACTIVE_TASK.md",
+        ".agent/CODEX_REPORT.md",
+        ".agent/CURRENT_STATE.md",
+        ".agent/tasks/CODEX_TASK.md"
+      ],
+      "changed_file_count": 5
+    }
+  ],
+  "open_pr_count": 45,
+  "checkout": "/Users/yuya/.codex/.chatgpt-projects/g-p-6a8e60a4be3081918ef2c28c1b2cc386/kabumori-full-migration-20261013",
+  "git_common_dir": ".git",
+  "independent_checkout": true,
+  "slot_allocation_changed": false,
+  "cutover": "BLOCKED",
+  "blockers": [
+    "PR10/11/161 still contain old management deltas; future merge can overwrite/resurrect state.",
+    "CURRENT_STATE stale entries need reconciliation before promotion.",
+    "Fresh recheck, snapshot if source changed, and independent Sol（高） review required before merge."
+  ]
+}

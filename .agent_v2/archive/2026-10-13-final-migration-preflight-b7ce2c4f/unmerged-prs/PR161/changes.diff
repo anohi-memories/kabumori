@@ -1,0 +1,146 @@
+diff --git a/.agent/ACTIVE_TASK.md b/.agent/ACTIVE_TASK.md
+index 4fd70d28..65d552b8 100644
+--- a/.agent/ACTIVE_TASK.md
++++ b/.agent/ACTIVE_TASK.md
+@@ -94,15 +94,16 @@
+ ## Codex H5
+ - owner: codex
+ - slot: codex-5
+-- status: ready
++- status: review_required
+ - task_id: postona-h5-threads-auth-owner-runtime-final-wiring-20261012
+ - start_code: H5
+ - finish_code: C5
+ - completion_code: C5
+-- next_owner: codex
++- next_owner: chatgpt
+ - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
+ - source: .agent/tasks/CODEX_TASK_5.md
+ - report: .agent/CODEX_REPORT_5.md
++- completion: H5 new Draft PR159 exact `163675c62835e84417905f98f97ceedd4dd1bcd9` stacked on protected PR139, H5-only18 files. Real SDK/TLS driver/source G4 handler composition, SHARE revocation fix and same-tx custody code implemented; unit/runtime47 + overlay18 + actual-driver local fake PG6 PASS, old KEY SHARE fail-before reproduced. All5 gates false/Edge503; actual owner/Auth/TLS/Meta/pilot and repaired G5/G4 T10 semantic compatibility still NO_GO. No own final review or live action; C5 bounded source evaluation pending. Control records via separate H5-only Draft PR, not direct main mutation.
+ - allocation: User 2026-10-12 “つぎいこう”, continuing toward 1 real authorized POSTONA→Threads test post. **臨時実装**, Codex Sol（高）, prior user explicitly permitted H5 when needed; ChatGPT deemed Codex appropriate because H5 owns PR139 verified Auth/owner SQL/OAuth state source while G5 G5 Phase4 repair is independently ready and G4 PR154 source is finished. H5 source NEW independent H5 branch stacked on PR139 exact b4fa672f97592e87682671454e868a92098cbd56; original PR139/135/124 unchanged, G4 PR154 98287392327eabfd5092a3ba89dde51a2e8beff6 and G5 PR152 5ad5bb40cadf013f00553acd5509f4f74fdbff7c protected. Build REAL server-side Supabase SDK getClaims/getUser verifier composition, dedicated non-super TLS parameterized owner Postgres connector, H5-owned auth.sessions FOR SHARE revocation race correction and local dual-session regression, same-transaction account-token-expiry custody port compatible with G4 PR144, fail-closed edge start/callback server composition contract with G4 module via disposable overlay. New code/test source and focused Deno/PG proof required, not memo-only. Existing H5 Edge must remain 503 and ALL Threads publish/connect source/mobile gates FALSE; NO production Auth/DB/Meta/Vault/API/SQL grants/deploy/merge/real connection/post, no paid call. Never fake session claims/service_role grants, never edit G5/G4/G3/H1-H4 source/slot files, no shared worktree. Actual operator Meta/callback/owner credentials remain separate authorization. Return C5 to POSTONA G4 chat; independent Sol（高） reviewer from H1–H4 before live activation, H5 cannot self-review.
+ - recommended_model: Sol（高）
+ ## Claude G1
+diff --git a/.agent/CODEX_REPORT_5.md b/.agent/CODEX_REPORT_5.md
+index e707065c..505dee0f 100644
+--- a/.agent/CODEX_REPORT_5.md
++++ b/.agent/CODEX_REPORT_5.md
+@@ -1,3 +1,66 @@
++## H5 FINAL — authenticated owner runtime wiring source — 2026-10-12 JST
++
++- task_id: `postona-h5-threads-auth-owner-runtime-final-wiring-20261012`
++- result: **SOURCE_COMPOSITION_IMPLEMENTED / LIVE_NO_GO / INDEPENDENT_REVIEW_REQUIRED** (implementation evidence, not own final security PASS)
++- status: review_required / next_owner: chatgpt
++- return_to: **POSTONA｜マルチSNS化・開発統括（G4）のちゃ** / completion_code: **C5**
++- recommended_model: Sol（高）; type: 臨時実装
++- 臨時実装理由/Claude limitation: ChatGPT explicitly chose H5 for its already-owned PR139 high-risk Auth/SQL boundary, while G4/G5 workstreams were separately allocated. No unverified claim that Claude is generally unable/safety-blocked; this is owner-specific temporary assignment, not a bypass or permanent implementation slot.
++- implementation_scope: actual pinned SDK/driver/source handler composition, H5 session row SHARE correction, same-transaction G4 account-custody integration port, focused offline/local proof and operator prerequisites. No publish/mobile/G5 source changes.
++- source_commit_hash: **163675c62835e84417905f98f97ceedd4dd1bcd9**
++- source_push: CONFIRMED new `codex/h5-threads-owner-runtime-wiring-20261012`; GitHub readback exact.
++- source_PR: [Draft PR159](https://github.com/anohi-memories/kabumori/pull/159), OPEN/Draft/unmerged; base `codex/h5-threads-runtime-20261011` (protected PR139 head `b4fa672f97592e87682671454e868a92098cbd56`). 18 H5-only files: 3 edits +15 new. No force push, existing owner branch mutated0.
++- own_bookkeeping_sync: separate Draft control PR against fresh main (not direct main mutation). Only H5 Report/TASK/H5 ACTIVE block/relevant H5 CURRENT_STATE note, prior histories preserved. Main has prior ready state until coordinator approval; no merge performed.
++- merge/deploy/activation/EAS/real post: **NOT_PERFORMED**.
++- real Supabase/Auth/DB/Vault/Meta/Threads/X/provider/API calls: **0**. GitHub/public docs/registries read; SQL apply restricted to explicitly dedicated disposable local fake PG. No real credential/env inspected, registered or changed.
++
++### Changes / functional code
++
++- Edited ONLY `supabase/candidates/postona_threads_auth_runtime/{claim_candidate.sql,owner_transport.ts,runtime.ts}`. New `wiring/{server_factory.ts,config.ts,postgres_connector.ts,custody_port.ts,nondeployable.ts,deno.json,deno.lock,offline.fixture.ts,connector_test.ts,composed_handler.smoke.ts,source_isolation.smoke.ts,postgres_integration.smoke.ts,postgres_setup_run.sh,source_overlay_run.sh}` and `docs/postona/threads-owner-runtime-wiring-20261012.md`.
++- Real supabase-js2.115.0 getClaims/getUser (signature, configured issuer/project, non-anonymous authenticated user/session/expiry) → sealed principal; actual @db/postgres0.19.5 dedicated parameterized driver → owner/T13/verified SET LOCAL claims; existing provider/attestation runtime → injected pinned G4 HTTP factory. SDK/driver exact pinned with scoped lockfile. Factory is functional source, not mock-only architecture; actual Edge remains hard-disabled503/unwired, no env activation route. Nondeployable seam deliberately imports no absent G4 path on PR139 base.
++- Explicit expected-project direct host5432, non-default non-API owner, CA PEM/TLS enforcement/session check, one connection attempt, statement4s/lock2s/idle-tx6s/connect-query5s/close500ms, sanitized constructor/query errors and late-connect close; no pool/DSN/unverified user/service-role proxy/high-privilege fallback.
++- H5 SQL now FOR SHARE after T13, before workspace/account/Vault. Locks serialize non-key not_after UPDATE and session deletion only during SQL transaction, not Meta HTTP or passage of time. Real managed revocation policies are not inferred.
++- Before begin/complete token writer, G4 custody signature/return/owner/invoker/search_path and PUBLIC/API/inherited reachability checked. Bound claimed account from owner SQL only; **same connection/transaction** parent complete→custody(observed expiry)→outcome→COMMIT. Missing/failed custody prevents connected and rolls back parent state/Vault token; conservative provider expires_in clock captured BEFORE exchange, no 60-day fallback/old attempt authority.
++- Actual-driver test exposed PR139 duplicate SET LOCAL output column names; H5 query now uses unique aliases. No G4/G5 function source modified. Unknown commit never retries/reports fictitious rollback; Meta timeout never retries; receipt contains no token/code and does not grant publish authority.
++
++### Exact protected source / independence
++
++- Fresh main start `34b64ad4`, prepush fresh `b012da640a33518cee52c2927e4d3c21ff253bf7` (other slots changed control files only; own H5 TASK/Report no conflict). Source/report/disposable combination separated under `/private/tmp/kabumori-h5-wiring-20261012.EzokAp`, new source from exact PR139; no reuse/reset/prune of prior or other worktrees.
++- Readback OPEN/Draft exact preserved: PR139 b4fa672f97592e87682671454e868a92098cbd56; PR135 e38788d6677082138f0990453c7d2f00549666d0; PR124 c30f246409a77080cbc03aef6c4cb72b5481e125; G4 PR154 98287392327eabfd5092a3ba89dde51a2e8beff6 on PR144 09fd2c49114b7d26c23b71a3084574dc6a5a7ad6 on PR140 2e75a6a842e70f3de78558681803b60935fb4251; G5 PR121 76b50e1e03f82faaa3460bab1603afa8fef3ce44.
++- G5 PR152 advanced legitimately from task allocation5ad5bb40 to **ccea1fe8132c6f573a768f0df5a033a05c62ef2c**, C4 R1/R2 correction accepted by its own K5; H5 used repaired source read-only. T13 source file same contract from PR121; latest provider port smoke retested. H5 made no G5 source/slot/main mutation.
++
++### RUN — focused evidence (actual code, offline services)
++
++| Check | Result / boundary |
++| --- | --- |
++| Config/actual driver construction + touched H5 regression | **47 PASS** =15 focused connector/config +32 runtime. No runtime net/env permission. |
++| Real SDK/RSA-JWKS + actual G4 HTTP + H5 owner composition | **16 PASS** fake Auth/SQL/Meta: valid flow, replay, bad signature/issuer/expiry/role/anonymous, foreign actor, missing custody/owner/session, malformed envelopes/account-swap, Meta unknown/8s timeout no retry, late freeze, custody failure, commit response lost. Negative precommit outcomes0 committed credential; lost complete COMMIT1 may be durable, reported UNKNOWN not0. |
++| Overlay isolation / repaired G5 port | **2 PASS** all5 gates false, source composition unreachable from actual Edge, no code console/env/serve; revised G5 port refuses lease lost after hasConnection before cleanup (0 mutation). |
++| Actual Deno driver + real PR124/G4 custody/G5 T13 on fake PG | **6 PASS** exact account/ref/recorded_by/expiry same transaction, completion-first blocks non-key revoke UPDATE, update-first wait rechecks revoked row→0 token/custody write, missing/API-executable custody drift→0 token, trigger-injected custody failure after parent→Vault/state/token rollback, missing session/ended service/replay/foreign actor/cross-workspace duplicate code/swapped state refusal. |
++| Deliberate old KEY SHARE mutation | **1 expected FAIL** LOCK_BARRIER_NOT_REACHED: revoke UPDATE did not wait; corrected SHARE version PASS. |
++| Build/lint/shell/diff | nondeployable deno check PASS; lint12 files PASS; bash syntax + source/staged diff check PASS; secrets/log scan only dummy fixtures/denial role names/comments, no real credentials/native live calls. |
++
++- Local PG17.11 socket56525 only, fake DB `h5_wiring_12318` / non-super `h5_wiring_owner_12318`; **real pinned G5 T13 source** (not PR124 mock), real parent/G4 custody + fake Auth/Vault tables. Test-only fixture permissions are not deployment grants. This is not managed Supabase/Auth/TLS evidence. Final logs `/private/tmp/kabumori-h5-wiring-20261012.EzokAp/{unit-final.log,overlay.log,pg-focused.log,pg-old-lock.log}`; overlay `/private/tmp/h5-wiring-overlay.EcwUgI`, copied G4/G5 sources never committed/pushed into H5.
++- Repro commands and operator checklist in new H5 doc. Broad unchanged G4 app258/G5 suites/old combined176 **NOT_RUN intentionally**, scope-focused work requested. Existing X source/branches untouched; no live X regression/provider calls made.
++
++### Remaining dependencies / precise LIVE blocker
++
++1. **No approved provisioned owner channel**: actual non-super LOGIN which is same reviewed parent/T13/custody owner, Auth SELECT + row-lock UPDATE authority, effective role/ACL, TLS CA/hostname/direct connectivity/connection pressure and controlled server credential isolation. Source connector refuses default postgres/service_role/other privilege fallback; does not move ownership or grant around a managed denial. Operator-designed reviewed route and approval required; managed policy/owner proof NOT_RUN.
++2. Real GoTrue session timebox/inactivity/signout and runtime TLS/CA/DNS are NOT_VERIFIED by fake Auth/local Unix driver. No claims that locks span HTTP/natural TTL.
++3. Exact schema source/apply ordering, Vault attestation key custody, Meta developer app/scopes/tester/HTTPS verified iOS universal + Android links/device/callback, one named tester and explicit controlled pilot approval. None supplied/accessed/activated.
++4. **Fresh G4/G5 T10 semantic mismatch**: repaired G5 `ProviderCleanupContext.stillOwned()` must be consulted inside adapter before awaited mutations; G4 PR154 adapter ignores context internally. Structural type/lease-before-cleanup smoke is NOT safe registration proof. G4/G5 owners must reconcile/authorize actual adapter registration; H5 did not repair foreign-owned code.
++5. Source runtime still reports uncertain if token issued remotely or commit response lost; no replay/reconcile executor provided. G4 readback/per-account manual consent still separate authority. All five gates/Edge503 stay OFF.
++
++### Safety / next recommendation
++
++Supabase/Postgres skills influenced SDK signature/issuer verification, package pin+lock, least-privilege refusals and short lock-ordered SQL transactions. Production URL/DNS/DB/Auth/Vault/secrets/entitlements/Cron/buckets and other slots/source files/branch heads unchanged; no actual merge/deploy/connection/post/paid call. H5 implementation is not its own independent final security review.
++
++C5 should inspect source PR159 and this separate control PR, decide bounded source completion and free H5, then allocate one independent H1–H4 Sol（高） focused Auth/owner/custody review before any managed right/DB/Meta activation. Resolve the named owner and G4/G5 T10 dependencies separately; do not park H5 for later operator work.
++
++**POSTONA｜マルチSNS化・開発統括（G4）のちゃ へ C5 を送ってください。**
++
++---
++
+ # C5 ChatGPT acceptance record — POSTONA Threads authenticated runtime bridge — 2026-10-11 JST
+ 
+ - task_id: **postona-threads-oauth-runtime-bridge-h5-20261011**
+diff --git a/.agent/CURRENT_STATE.md b/.agent/CURRENT_STATE.md
+index e5d38fe5..a5e430af 100644
+--- a/.agent/CURRENT_STATE.md
++++ b/.agent/CURRENT_STATE.md
+@@ -1,3 +1,10 @@
++## H5 FINAL — POSTONA real source runtime wiring / LIVE_NO_GO — 2026-10-12 JST
++
++- H5 task `postona-h5-threads-auth-owner-runtime-final-wiring-20261012`, candidate status **review_required/next_owner chatgpt**, return C5 to **POSTONA｜マルチSNS化・開発統括（G4）のちゃ**. Source [Draft PR159](https://github.com/anohi-memories/kabumori/pull/159) exact `163675c62835e84417905f98f97ceedd4dd1bcd9`, base protected PR139; H5-only18 files. Functional pinned SDK/getClaims/getUser/issuer + dedicated enforced-TLS parameterized driver + typed G4 HTTP composition, actual H5 SHARE revocation lock and same-transaction account expiry/custody writer implemented. Edge remains503 and all5 static gates false; no actual connection/post/merge/deploy/apply/real Auth/DB/Meta/API or secrets changes.
++- Focused evidence: unit/runtime47 PASS, pinned G4/repaired G5 source overlay18 PASS, actual Deno driver/real parent/G5 T13/G4 custody local fake PG6 PASS; old KEY SHARE mutation FAIL→SHARE PASS. Live managed owner/Auth/TLS/session/app-link/Meta eligibility/pilot NOT_RUN. **External dependency:** G5 PR152 repaired head `ccea1fe8132c6f573a768f0df5a033a05c62ef2c` now requires internal adapter stillOwned checks; G4 PR154 adapter does not implement that semantic context. Owners must reconcile T10 before registration; H5 did not edit their code/slot. C5 evaluates bounded implementation; independent H1–H4 Sol（高） source/security review remains mandatory before live activation. H5 own control sync is separate Draft PR, not main direct push; detailed new top `.agent/CODEX_REPORT_5.md` preserves prior C5 history.
++
++---
++
+ ## G2 報告 — かぶモリ V1 の PR143 → PR149 → PR158 マージ直前の確認 — 2026-10-12 JST
+ 
+ - G2 `kabumori-g2-v1-three-pr-final-merge-preflight-20261012`: **GO_TO_MERGE_DECISION／PRODUCTION_NO_GO**（マージ・Draft の解除はしていない）。
+diff --git a/.agent/tasks/CODEX_TASK_5.md b/.agent/tasks/CODEX_TASK_5.md
+index 27ca7050..1f7650bf 100644
+--- a/.agent/tasks/CODEX_TASK_5.md
++++ b/.agent/tasks/CODEX_TASK_5.md
+@@ -3,8 +3,8 @@
+ - task_id: postona-h5-threads-auth-owner-runtime-final-wiring-20261012
+ - owner: codex
+ - slot: codex-5
+-- status: ready
+-- next_owner: codex
++- status: review_required
++- next_owner: chatgpt
+ - start_code: H5
+ - finish_code: C5
+ - completion_code: C5
+@@ -20,6 +20,21 @@
+ 
+ ## Verified state and protected PR dependencies at allocation (2026-10-12 JST)
+ 
++H5 startup 2026-10-12: fresh main `34b64ad4`; new isolated source/report/integration worktrees under `/private/tmp/kabumori-h5-wiring-20261012.EzokAp`. Source is exactly PR139-based new branch `codex/h5-threads-owner-runtime-wiring-20261012`; G4 PR154 unchanged. G5 PR152 advanced legitimately to `ccea1fe8132c6f573a768f0df5a033a05c62ef2c` and current G5 TASK done after K5; compatibility must use/read this repaired version as well, without editing G5. All production/pilot gates stay NO_GO.
++
++## Report — H5 bounded source implementation / 2026-10-12 JST
++
++- task_id: postona-h5-threads-auth-owner-runtime-final-wiring-20261012
++- result: SOURCE_COMPOSITION_IMPLEMENTED / MANAGED_OWNER_PILOT_NO_GO / INDEPENDENT_REVIEW_REQUIRED
++- source: Draft [PR159](https://github.com/anohi-memories/kabumori/pull/159), exact `163675c62835e84417905f98f97ceedd4dd1bcd9`, base protected PR139 branch `codex/h5-threads-runtime-20261011`. 18 H5-only paths (3 scoped edits +15 new), source pushed/readback, parents unchanged. New code constructs real pinned SDK/parameterized TLS driver+G4 handler port; existing Edge always503 and all five source gates false.
++- tests: focused unit/runtime47 PASS; pinned G4/G5 source overlay18 PASS; actual Deno driver+real source G5 T13/PR124/G4 custody local fake PG6 PASS; deliberate KEY SHARE fail-before1 FAIL, corrected SHARE PASS; check/lint12/bash/diff PASS. Managed Auth/TLS/owner/Meta/device/pilot NOT_RUN.
++- blockers: actual approved dedicated owner/TLS/Auth session privileges and managed policies; schema/apply/attestation/operator Meta/tester/app links; G4 PR154 cleanup ignores repaired G5 context.stillOwned during mutation, so T10 registration still needs its owners. H5 changed no G4/G5 source or slot.
++- merge/deploy/flag-enable/real Supabase/Auth/DB/Vault/Meta/X/provider/API calls: 0; no production grant/secret/migration or real post. This is not own final security review.
++- shared bookkeeping: separate H5-only Draft PR against fresh main, not direct main push. Canonical main remains prior state until explicitly accepted by coordinator; complete detail in new top `.agent/CODEX_REPORT_5.md`.
++- next_owner: chatgpt; return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ; completion_code: C5. C5 evaluates this bounded source and frees H5; later independent H1–H4 Sol（高） review before rights/DB/Meta activation.
++
++POSTONA｜マルチSNS化・開発統括（G4）のちゃ へ C5 を送ってください。
++
+ - Fresh GitHub `origin/main` at assignment **`add7685c782195a3a1a93cafeed5af88852b809d`** (refresh locally on start).
+ - **H5 Draft [PR139](https://github.com/anohi-memories/kabumori/pull/139)**: exact `b4fa672f97592e87682671454e868a92098cbd56`, OPEN/DRAFT/UNMERGED, 13 H5-owned paths; base H1 [PR135](https://github.com/anohi-memories/kabumori/pull/135) `e38788d6677082138f0990453c7d2f00549666d0`; ancestor G4 [PR124](https://github.com/anohi-memories/kabumori/pull/124) `c30f246409a77080cbc03aef6c4cb72b5481e125`. H5 PR139 has candidate `verified_actor.ts` (real getClaims+getUser interface), `owner_transport.ts` (injected SQL client, strict owner role and SET LOCAL verified actor, one-shot commit), `runtime.ts` (signed actor/state/code exchange and complete), `claim_candidate.sql` (durable claim), and `supabase/functions/threads-oauth-connect-user/index.ts` (intentionally 503 via disabled_entry).
+ - **G4 Draft [PR154](https://github.com/anohi-memories/kabumori/pull/154)** exact `98287392327eabfd5092a3ba89dde51a2e8beff6`, base G4 PR144 `09fd2c49114b7d26c23b71a3084574dc6a5a7ad6` → PR140 `2e75a6a842e70f3de78558681803b60935fb4251`. G4 owns `supabase/functions/_shared/social/threads_connect_edge.ts`, app-auth browser/callback/read-back source and Threads G5 T10 `threads_provider_cleanup.ts` + owner SQL. **PR139 vs PR154 paths overlap NONE**; no direct product edits to G4 files. Current G4 gate `THREADS_CONNECT_UI_ENABLED=false`, G4 `THREADS_CONNECT_EDGE_WIRED=false`; all publish gates off.
