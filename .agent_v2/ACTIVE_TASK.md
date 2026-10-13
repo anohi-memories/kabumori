@@ -195,18 +195,18 @@
 
 ## J3
 - slot: J3
-- status: idle
-- task_id: none
+- status: ready
+- task_id: postona-j3-x-service-end-saga-integrated-security-review-20261013
 - owner: codex
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: codex
+- return_to: POSTONA G3のちゃ（新F3担当・X投稿／予約担当）
 - completion_code: V3
-- recommended_model: none
+- recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J3.md
 - current_report_path: .agent_v2/reports/J3.md
-- dependencies: none
-- blocker: none
-- slot_use: レビュー・バグ修正・検証（案件固定なし）
+- dependencies: F3 PR189→182→168→163→151→145; F5 PR183/178→165→152→121; F4 PR180/169; X Issue131
+- blocker: full F5 T10 service-delete bridge and managed X/Auth unverified; source security review only; production NO_GO
+- slot_use: POSTONA X連携解除/サービス終了の独立セキュリティレビュー（J3→V3）。既存F3/F4/F5 PRはread-only。
 
 ## J4
 - slot: J4
