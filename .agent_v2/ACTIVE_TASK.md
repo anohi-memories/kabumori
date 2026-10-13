@@ -8,18 +8,18 @@
 
 ## F1
 - slot: F1
-- status: done
-- task_id: kabumori-f1-ai-ask-b0-j2-r2-r3-r8-correction-20261013
+- status: ready
+- task_id: kabumori-f1-ai-ask-b0-terminal-finish-auth-fix-20261014
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
-- recommended_model: Opus5.5（高）
+- recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F1.md
 - current_report_path: .agent_v2/tasks/F1.md#report
-- dependencies: J2 residual R2/R3/R8; PR177; PR166/171 protected
-- blocker: B1 and production NO_GO until independent focused review
-- slot_use: AIに聞く B0 J2残件3件の設計修正
+- dependencies: J4 R3-P2 (terminal finish AUTH); PR186 v3; PR177/171/166 protected
+- blocker: B1 and production NO_GO until independent focused re-review
+- slot_use: AIに聞く B0 終端finish再返却の認可修正（J4残件1件）
 
 ## F2
 - slot: F2
