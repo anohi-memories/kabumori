@@ -70,10 +70,10 @@
 
 ## F5
 - slot: F5
-- status: review_required
+- status: done
 - task_id: common-account-f5-phase8-x-threads-lifecycle-integrated-security-20261013
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
@@ -84,6 +84,8 @@
 - slot_use: Phase8 common account / X / Threads source-only disposable overlay integration and security regression
 - previous_archive: .agent_v2/archive/2026-10-13-F5-common-account-f5-phase7-auth-lifecycle-release-preflight-20261013/
 - latest_result: IMPLEMENTED_SOURCE_CANDIDATE — Draft PR #193 head 314aeac47a02ce80aea3d94426a563dfbe57ad7c stacked on PR183 f2565cc0412f8127f95f00a728d16bf83af74667 (PR178 83334a09, PR165 4638891f, PR152 ccea1fe8, PR121 76b50e1e unchanged): real F3 PR189 + F4 PR180 + G4 PR124 sources assembled unmodified in a disposable PG17/Edge overlay (e2e 29, F3/F4 own suites unchanged, apply order/refusals/commutation, cross-stack rollback ladder + read-backs, privilege inventory, seeded lock-order stress); F5 fixes: typed X result bridge equal to F3 mapper, durable x_posts_unconfirmed (migration 20261013140000, unapplied) recorded before X done + ack of F3 PR192 checkpoint, unreadable end record fails closed; F3-owned finding L1 (3-way lock cycle on the legacy saga path, reproduced + verified one-statement repair), F3 R2' POSTONA-only scope, G3 T13 wiring, G4 legacy login-deleting path; local PG17 only, production NO_GO; managed M1-M10 not run. Report: .agent_v2/tasks/F5.md#report
+
+- l5_verdict: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO (2026-10-14); Draft PR193 head 314aeac47a02ce80aea3d94426a563dfbe57ad7c. F3-L1/R2', G3 onboarding T13, G4 old deletion path are safety blockers. No merge/deploy.
 
 ## F6
 - slot: F6
