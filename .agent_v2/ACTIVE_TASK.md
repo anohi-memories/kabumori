@@ -161,10 +161,10 @@
 
 ## J1
 - slot: J1
-- status: ready
+- status: review_required
 - task_id: kabumori-j1-ai-ask-b0-independent-security-review-20261013
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: V1
 - recommended_model: Sol（高）
