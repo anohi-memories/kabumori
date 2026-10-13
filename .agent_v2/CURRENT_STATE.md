@@ -1,5 +1,10 @@
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F8 / F9 同時進行（2026-10-13 JST）
+- F8 `news-improvement-a-f8-j1b-app-visibility-offline-design-20261013` ready/claude、Opus5.5（高）、L8返却。日本ニュースのアプリ可視性・RPC基準のread-only分析と合成fixture/設計に限定。migration/RPC/production本体は変更しない。
+- F9 `api-optimization-b-f9-pr174-pr115-rights-audit-offline-20261013` ready/claude、Opus5.5（高）、L9返却。Draft PR174・旧PR115の権利/履歴/価格/送信ゲートのoffline監査。旧PR115操作・PR174 merge・有料APIなし。
+- 両slotの直前TASK/Reportをarchive保存し SHA256SUMS・read-back確認済み、HISTORY_INDEXに追記。F8はdocs/news-coverage/tools/jp-news-coverage、F9はdocs/model-optimization/tools/provider-compareに分離。別worktree必須。PR116/129/164/174、F2/F6、旧G8/G9などの所有変更を禁止。実本番操作はNO_GO。
+
 ## Opus production integration release gate (2026-10-13)
 - F6 new task `common-ai-f6-opus-both-integration-release-gate-20261013` ready / Opus5.5（高）, F6→L6, owner 共通AI基盤のちゃ. Old F6 preflight archived with matching blob and HISTORY_INDEX updated.
 - Anthropic API key is now REGISTERED per user and Claude Code confirmation; live name readback needed before cutover, secret value never handled. PR170→173→175→176 all Draft/unmerged and release gate pending. F2 L2 task is done, F2 ACTIVE_TASK may still lag; do not edit F2 metadata from this chat.
