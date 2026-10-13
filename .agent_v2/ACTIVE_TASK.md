@@ -161,18 +161,18 @@
 
 ## J1
 - slot: J1
-- status: idle
-- task_id: none
+- status: ready
+- task_id: kabumori-j1-ai-ask-b0-independent-security-review-20261013
 - owner: codex
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: codex
+- return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: V1
-- recommended_model: none
+- recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J1.md
 - current_report_path: .agent_v2/reports/J1.md
-- dependencies: none
-- blocker: none
-- slot_use: レビュー・バグ修正・検証（案件固定なし）
+- dependencies: F1 Phase B0 PR171; Phase A PR166; G2/G5/F5/G6 read-only dependencies
+- blocker: none for source-only pre-review; Phase B1/live remains NO_GO
+- slot_use: 独立セキュリティ設計レビュー（AIに聞く Phase B0）
 
 ## J2
 - slot: J2
