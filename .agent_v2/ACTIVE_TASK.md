@@ -94,7 +94,7 @@
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
 - dependencies: stacked PR170→173→175→176, F2 L2 source done; deployment includes 7 unapplied F2 changes; X/app shared consumer gates OFF
-- blocker: SOURCE_MERGE_CANDIDATE (4-PR composition PASS: report 324, _shared 613; no conflict; PR170 false = GitHub UNKNOWN while recomputing) / RELEASE_NO_GO pending approvals: 4-PR merge, F2 bundled-deploy of 7 commits, PRIMARY_MODEL secret, deploy byte check, mode ON; consumer gates OFF (x-test-post v144 & personalized-reports v45 behind main); earliest 2026-10-14 07:55
+- blocker: LIVE — Opus primary_both active since 2026-10-13 15:45 JST (deploy v32 byte-verified, budget $25/120 month $3/8 day); 10/13 close made by claude-opus-5-5 at 16:21 (2 calls, $0.1875, fact passed); consumer gates still OFF (not delivered); 1306 close value looks stale (432.5 = 10/9) — data-packet owner to check
 - slot_use: shared AI Opus Primary morning/close source integration release gate
 
 ## F7
