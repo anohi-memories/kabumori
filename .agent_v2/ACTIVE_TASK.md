@@ -38,7 +38,7 @@
 
 ## F3
 - slot: F3
-- status: ready
+- status: in_progress
 - task_id: postona-f3-x-service-end-saga-wiring-20261013
 - owner: claude
 - next_owner: claude
