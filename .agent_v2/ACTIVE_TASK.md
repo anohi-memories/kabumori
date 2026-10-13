@@ -194,18 +194,18 @@
 
 ## J3
 - slot: J3
-- status: ready
+- status: review_required
 - task_id: postona-j3-x-saga-r1-r3-focused-rereview-20261014
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: POSTONA G3のちゃ（新F3担当・X投稿／予約担当）
 - completion_code: V3
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J3.md
 - current_report_path: .agent_v2/reports/J3.md
 - dependencies: F3 PR192 9384818e stacked on PR189 4fd7084d, J3 V3 archived findings; F5 Phase8, F4 PR180, G4 Issue131
-- blocker: local focused security re-review only; full integrated F3/F5/F4 gate and managed Auth/X still pending; production NO_GO
-- slot_use: Re-review F3 R1 durable uncertainty + ACK and R3 lock wait wall-clock lease, plus R2 HTTP action. Previous J3 TASK+Report archived with SHA256 and HISTORY_INDEX.
+- blocker: CHANGES_REQUIRED P2 x3 (ACK ABA / later row-lock lease expiry / rollback checkpoint race); integrated F3/F5/F4 gate and managed Auth/X pending; production NO_GO
+- slot_use: Focused PR192 review complete; Report records independently reproduced defects and passing original fixes. Return V3 to POSTONA G3のちゃ（新F3担当・X投稿／予約担当）. No product changes.
 
 ## J4
 - slot: J4
