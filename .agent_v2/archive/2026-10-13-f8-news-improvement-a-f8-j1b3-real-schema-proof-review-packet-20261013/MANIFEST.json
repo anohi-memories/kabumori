@@ -7,5 +7,6 @@
   "source_blob_sha": "4730a0656cadbe95f4aaa960f0abd20639d88000",
   "archive_blob_sha": "4730a0656cadbe95f4aaa960f0abd20639d88000",
   "restore_readback_verified": true,
-  "sha256": "pending SHA256SUMS verification"
+  "sha256": "94e7c3f43c7961e4680e98da036fc07d9890bce0ffff7469f3f874d1e37e8eba",
+  "source_commit": "last modifying commit not independently resolved; source Git blob recorded"
 }
