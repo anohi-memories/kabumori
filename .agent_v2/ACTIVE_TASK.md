@@ -23,19 +23,18 @@
 
 ## F2
 - slot: F2
-- status: done
-- task_id: kabumori-f2-opus-primary-both-handler-test-sync-20261013
+- status: ready
+- task_id: kabumori-f2-shared-market-report-x-app-consumer-cutover-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ（新F2担当）
 - completion_code: L2
-- recommended_model: Sonnet5（中）
+- recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
-- dependencies: PR170→PR173→PR175; test-only new F2 Draft PR stacked on #175, F6 provider source protected
-- blocker: source PR170→173→175→176 remains Draft/unmerged; Vercel CI rate-limited; production NO_GO
-- l2_verdict: PASS_OFFLINE_TEST_ONLY / PRODUCTION_NO_GO
-- slot_use: かぶモリアプリ / F6 Opus primary_both integration test 2 expectations
+- dependencies: F6 Opus main merge; X/app consumer settings both OFF; production provider deployment and old/new routing readback required
+- blocker: x-test-post and personalized-reports deployed sources differ from main; consumer gate approval and independent prod mutation window not yet granted
+- slot_use: かぶモリ共有朝刊/大引け X・アプリ切り替え preflight (read-only & offline)
 
 ## F3
 - slot: F3
