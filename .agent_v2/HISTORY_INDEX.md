@@ -71,6 +71,7 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 
 | 完了日 | slot | task_id | 作業名 | result | PR番号 | final commit SHA | archive参照先 | remaining issue参照先 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-13 | F1 | `kabumori-f1-ai-ask-b0-j2-r2-r3-r8-correction-20261013` | B0 v3 design correction | J4 R3-P2 outstanding | #186 | `25d1b612073450ee31b39458c8a4fc0308328cd4` | `.agent_v2/archive/2026-10-13-F1-kabumori-f1-ai-ask-b0-j2-r2-r3-r8-correction-20261013/files/.agent_v2/tasks/F1.md` | J4 Report |
 | 2026-10-13 | F1 | `kabumori-f1-ai-ask-b0-j1-r1-r8-design-correction-20261013` | AIに聞く B0 8件設計修正 | PASS_DESIGN_CORRECTION / J2 CHANGES_REQUIRED | #177 | `2f33cffd4754a5576b112623b3aedc2dd31740b8` | `.agent_v2/archive/2026-10-13-F1-kabumori-f1-ai-ask-b0-j1-r1-r8-design-correction-20261013/files/.agent_v2/tasks/F1.md` | J2 Report R2/R3/R8 |
 | 2026-10-13 | F1 | `kabumori-f1-ai-ask-v1-phase-b0-security-preflight-20261013` | AIに聞く Phase B0 セキュリティ設計 | PASS_DESIGN_CANDIDATE / J1 CHANGES_REQUIRED | #171 | `0beda46186efe1db680909f369e2571609851d81` | `.agent_v2/archive/2026-10-13-F1-kabumori-f1-ai-ask-v1-phase-b0-security-preflight-20261013/files/.agent_v2/tasks/F1.md` | J1 Report R1–R8; B0 archived Report |
 | 2026-10-13 | F1 | `kabumori-f1-ai-ask-v1-phase-a-ui-contract-20261012` | AIに聞く V1 Phase A 対話UI・安全契約 | PASS_SOURCE_PHASE_A | #166 | `83b51efcf3cdb207eb0bab4c6a8dddbc1f5352f4` | `.agent_v2/archive/2026-10-13-F1-kabumori-f1-ai-ask-v1-phase-a-ui-contract-20261012/files/.agent_v2/tasks/F1.md` | 同 archive TASK の `## Report` Phase B remaining_issues |
@@ -405,3 +406,21 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 
 - 2026-10-13 | F8 | `news-improvement-a-f8-j1b3-real-schema-proof-review-packet-20261013` | L8 source accepted; production held | `.agent_v2/archive/2026-10-13-f8-news-improvement-a-f8-j1b3-real-schema-proof-review-packet-20261013/files/.agent_v2/tasks/F8.md` | SHA256 94e7c3f43c7961e4680e98da036fc07d9890bce0ffff7469f3f874d1e37e8eba, restore checked.
 - 2026-10-13 | F9 | `api-optimization-b-f9-rights-safe-eval-fixture-redaction-20261013` | L9 source accepted; production held | `.agent_v2/archive/2026-10-13-f9-api-optimization-b-f9-rights-safe-eval-fixture-redaction-20261013/files/.agent_v2/tasks/F9.md` | SHA256 aa95f2c50084fda1baa51c4d8a4afbd864df5e89e3709ad4ab04a6d802184d2b, restore checked.
+
+| 2026-10-13 | F2 | `kabumori-f2-yume-market-commentator-morning-close-quality-20261013` | Yume market forecast and fact/opinion separation | L2 PASS_OFFLINE_SOURCE / PRODUCTION_NO_GO | #188 | `.agent_v2/archive/2026-10-13-F2-kabumori-f2-yume-market-commentator-morning-close-quality-20261013/` | SHA256 a68665a0e1639bd1205042ad81fda9582a90cce55ffc15691c18d11645377100, restore verified |
+
+## F5 Phase7 completion archive — 2026-10-13
+- task_id: `common-account-f5-phase7-auth-lifecycle-release-preflight-20261013`
+- original_path: `.agent_v2/tasks/F5.md`
+- archive_path: `.agent_v2/archive/2026-10-13-F5-common-account-f5-phase7-auth-lifecycle-release-preflight-20261013/files/.agent_v2/tasks/F5.md`
+- size: 19739 bytes
+- SHA256: `8ed7947f0917e68b674c3e47f925f3a63fd37d16177d1be595afa45fe2a68848`
+- original_blob: `312b552f0c74c77e82ed8380cad466bdfea9d7ea`
+- restore: source and archive exact UTF-8 content and blob SHA read-back matched. MANIFEST and SHA256SUMS saved.
+- L5: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; Draft PR183 f2565cc0412f8127f95f00a728d16bf83af74667
+
+- 2026-10-13 | F3 | `postona-f3-x-service-end-saga-wiring-20261013` | L3 PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO, PR189 Draft | `.agent_v2/archive/2026-10-13-F3-postona-f3-x-service-end-saga-wiring-20261013/files/.agent_v2/tasks/F3.md` | SHA256 `c3cc256c946076748647a8cd54514955cc11c68a66c5b7d43dfe98a44ce3ac58`; blob/read-back verified.
+
+- 2026-10-14 | F8 | `news-improvement-a-f8-j1b4-performance-security-offline-20261013` | L8 accepted source, release held | `.agent_v2/archive/2026-10-14-f8-news-improvement-a-f8-j1b4-performance-security-offline-20261013/files/.agent_v2/tasks/F8.md` | SHA256 f4d03ac67e37ff29461b07a91ae7f31f444b2641e01683a00684ff11546c1d73; exact read-back verified; source blob stored.
+- 2026-10-14 | F9 | `api-optimization-b-f9-clean-replacement-final-rights-gate-20261013` | L9 accepted source, release held | `.agent_v2/archive/2026-10-14-f9-api-optimization-b-f9-clean-replacement-final-rights-gate-20261013/files/.agent_v2/tasks/F9.md` | SHA256 78fec4cefda0abc800fe1b175339c9d438903908ba39d55f2baa289ac3c2facc; exact read-back verified; source blob stored.
+- 2026-10-14 | J3 | `postona-j3-x-service-end-saga-integrated-security-review-20261013` | V3 CHANGES_REQUIRED P2 R1/R2/R3 / PRODUCTION_NO_GO | `.agent_v2/archive/2026-10-14-J3-postona-j3-x-service-end-saga-integrated-security-review-20261013/` | TASK SHA256 `65b1e4a69dfd80c8c3366496e1f39eedeeb736ff00ef0f24decf72c6978d1062`; Report SHA256 `90cba7fbdee85fbbdf076513dbaf105ca76df76f473803b1625c529fbb4e6ae8`; archive Git blob exact read-back verified.

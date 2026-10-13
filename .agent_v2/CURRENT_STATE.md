@@ -1,3 +1,13 @@
+## F8/F9 new tasks 2026-10-14
+- F8 news-improvement-a-f8-j1b5-security-review-readiness-20261014: ready, Claude Opus5.5（高）, return L8. Offline final DB/RPC review packet for J1-b4 candidate PR191, Sol（高）review pending. No Preview/production or managed migration.
+- F9 api-optimization-b-f9-clean-pr190-residual-rights-tests-20261014: ready, Claude Opus5.5（高）, return L9. Rights residue and offline regression tests for clean candidate PR190. PR115/174/184/190 protected; merge/external sends prohibited.
+- Prior F8/F9 marked done, archives created with byte-identical read-back and SHA256SUMS, HISTORY_INDEX entries recorded. Both slots must use independent worktrees and nonoverlapping paths.
+
+## F3 J3 V3 指摘修正 — 2026-10-13
+- F3新TASK `postona-f3-j3-v3-r1-r3-security-fixes-20261013`: ready/claude、Opus5.5（高）、F3→L3、返却先POSTONA G3のちゃ。J3 V3（`.agent_v2/reports/J3.md`）独立再現P2×3: R1 purge/finalize失敗retryで未確認投稿警告消失、R2 HTTP action:'delete'欠落、R3ロック待ち中リース期限切れ。F3-owned sourceのみ修正、F5 Phase8の共通状態・リースには触れず調整。
+- 前F3 TASK `postona-f3-x-service-end-saga-wiring-20261013`（L3 accepted、Draft PR189 `4fd7084d067d2a9f589fd7fecaee70720bc60812`）archive `.agent_v2/archive/2026-10-13-F3-postona-f3-x-service-end-saga-wiring-20261013/`、SHA256 `c3cc256c946076748647a8cd54514955cc11c68a66c5b7d43dfe98a44ce3ac58`、GitHub blob復元一致、HISTORY_INDEX済。
+- F5 Phase8 `common-account-f5-phase8-x-threads-lifecycle-integrated-security-20261013` は別担当ready、F4 Threadsは保護。PRはDraft/unmerged、source/offlineのみ、production NO_GO。
+
 ## F4 L4 — Threads cleanup live-lease fix accepted (2026-10-13 JST)
 - F4 `postona-f4-threads-cleanup-live-lease-security-fix-20261013` accepted PASS_SOURCE_FIX / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; done/none. Draft PR180 exact HEAD `7c4f457834cddb42b72be6b74996e643b213e8c8` stacked on protected PR169. Verified F4-only 10 files, `threads_cleanup_authorized` now invokes F5's `private.account_lifecycle_cleanup_authorized(uuid)` for live lease for both account_deletion/service_deletion; reported local fail-before/pass-after and Deno118, NOT independently rerun.
 - F5 PR178 Phase6 predicate/registration dependent; F3 X integration still separate. Independent J1–J4 Sol（高） integration security review before any managed permission, deployment, merge, activation, or real Threads/X/Meta operation. F4 source TASK now complete and must be archived before another F4 allocation.
@@ -18,6 +28,12 @@
 - Prior F4 T13 TASK archived verbatim with SHA256, restore comparison and HISTORY_INDEX. Source new independent worktree/stacked Draft on PR169; protected F5/F3/H5/old G4 branches unchanged. Production NO_GO; integrated independent J1–J4 Sol（高） review after L4 and X-side coordination.
 
 # Current State v2（新系統・現在有効な情報だけ）
+
+## F5 Phase8 統合検証割当（2026-10-13 JST）
+- F5 `common-account-f5-phase8-x-threads-lifecycle-integrated-security-20261013`: ready/claude, Opus5.5（高）, F5→L5, return `共通アカウントG5のちゃ（新F5担当）`. Source-only local PG17/isolated overlayでF3 X PR189・F4 Threads PR180・F5 PR183を統合検証。F3/F4所有ソースは読み取りのみ、別worktree／Draft stacked PR、production NO_GO。
+- 前F5 Phase7 `common-account-f5-phase7-auth-lifecycle-release-preflight-20261013` はL5 done、PR183 Draft head `f2565cc0412f8127f95f00a728d16bf83af74667`。TASK+Report archive `.agent_v2/archive/2026-10-13-F5-common-account-f5-phase7-auth-lifecycle-release-preflight-20261013/` 原文一致/read-back・SHA256SUMS・MANIFEST・HISTORY_INDEX保存済み。
+- F3 X停止saga PR189・F4 Threads lease修正 PR180はそれぞれL3/L4 source受入候補、未マージ。本番Auth/DB/Edge/Meta/X/Threads/managed検証とアプリ退会routingは未承認・別工程。Phase8後に空きJ1〜J4でSol（高）の独立統合レビューを判断。
+
 
 ## F8/F9 parallel next tasks (2026-10-13)
 - F8 `news-improvement-a-f8-j1b4-performance-security-offline-20261013`: ready/claude, Opus5.5（高）, L8. Local SQL performance/security validation for PR181/185 and Sol review packet. No managed migration, Preview or production operation; reported PG17 subset 91/116 migrations and N400 O(n²) concern still require review.

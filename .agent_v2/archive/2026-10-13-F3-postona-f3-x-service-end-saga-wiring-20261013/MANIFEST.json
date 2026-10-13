@@ -1,0 +1,11 @@
+{
+  "task_id": "postona-f3-x-service-end-saga-wiring-20261013",
+  "original_path": ".agent_v2/tasks/F3.md",
+  "archive_path": ".agent_v2/archive/2026-10-13-F3-postona-f3-x-service-end-saga-wiring-20261013/files/.agent_v2/tasks/F3.md",
+  "size": 19172,
+  "sha256": "c3cc256c946076748647a8cd54514955cc11c68a66c5b7d43dfe98a44ce3ac58",
+  "original_blob_sha": "75c2e7b4702297796bb16b2d159f2155e9d336e2",
+  "original_commit_sha": "d5ae0cb53eb79645ea7dbf3f463a418ab9583013",
+  "archive_commit_sha": "42587757ba6c89cc4b3280976da7492cd6daafe7",
+  "restore_verified": "GitHub UTF-8 exact match and blob SHA match before TASK replacement"
+}

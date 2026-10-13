@@ -10,6 +10,8 @@
 // "market_report_packet.v1" by a table check, so the richer X digest and the app story travel as
 // optional fields marked by presentation_version. A stored packet without them renders as before.
 
+import type { YumeView } from "./market_report_yume.ts";
+
 export const REPORT_SCHEMA_VERSION = "market_report_packet.v1";
 export const PRESENTATION_VERSION = "market_presentation.v2";
 
@@ -90,6 +92,11 @@ export type MarketReportPacket = {
   presentation_version?: typeof PRESENTATION_VERSION;
   app_story?: AppStoryDraft;
   session_views?: SessionView[];
+  /**
+   * ゆめちゃん's own call (2026-10-13): an opinion kept apart from the fact sections. Morning: today's Nikkei 225 call;
+   * close: the look-back at the morning call (verdict decided in code) and the next-session view. Optional and additive.
+   */
+  yume?: YumeView;
   /**
    * quality_warnings never block delivery; they are recorded for observation.
    * ai_status: "passed" when the delivered text passed the Fact check; "advisory" when the Fact check reported

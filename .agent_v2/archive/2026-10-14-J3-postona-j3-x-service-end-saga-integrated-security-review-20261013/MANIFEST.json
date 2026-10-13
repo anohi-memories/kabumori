@@ -1,0 +1,25 @@
+{
+  "task_id": "postona-j3-x-service-end-saga-integrated-security-review-20261013",
+  "source_commit": "0036f9b111a5ac7c6cfb4264b4fbf79c92d20838",
+  "files": [
+    {
+      "original_path": ".agent_v2/tasks/J3.md",
+      "archive_path": ".agent_v2/archive/2026-10-14-J3-postona-j3-x-service-end-saga-integrated-security-review-20261013/files/.agent_v2/tasks/J3.md",
+      "bytes": 5830,
+      "sha256": "65b1e4a69dfd80c8c3366496e1f39eedeeb736ff00ef0f24decf72c6978d1062",
+      "git_blob": "3b6476701cfd6851e4501f3346da2c6ec19e4dbb"
+    },
+    {
+      "original_path": ".agent_v2/reports/J3.md",
+      "archive_path": ".agent_v2/archive/2026-10-14-J3-postona-j3-x-service-end-saga-integrated-security-review-20261013/files/.agent_v2/reports/J3.md",
+      "bytes": 14902,
+      "sha256": "90cba7fbdee85fbbdf076513dbaf105ca76df76f473803b1625c529fbb4e6ae8",
+      "git_blob": "019c798137c99e67bf2d23262fcafeb454c10166"
+    }
+  ],
+  "restore": "GitHub readback exact UTF-8 and blob SHA match; checksum computed and SHA256 selftest passed",
+  "archive_commits": [
+    "847323520ac76568683abf74eaffa0c20cc4fd8d",
+    "4f8c3ee3713745b3c51e641ffa8c496ebdcb1c2b"
+  ]
+}

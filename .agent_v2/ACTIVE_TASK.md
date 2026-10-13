@@ -8,39 +8,38 @@
 
 ## F1
 - slot: F1
-- status: done
-- task_id: kabumori-f1-ai-ask-b0-j2-r2-r3-r8-correction-20261013
+- status: ready
+- task_id: kabumori-f1-ai-ask-b0-terminal-finish-auth-fix-20261014
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
-- recommended_model: Opus5.5（高）
+- recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F1.md
 - current_report_path: .agent_v2/tasks/F1.md#report
-- dependencies: J2 residual R2/R3/R8; PR177; PR166/171 protected
-- blocker: B1 and production NO_GO until independent focused review
-- slot_use: AIに聞く B0 J2残件3件の設計修正
+- dependencies: J4 R3-P2 (terminal finish AUTH); PR186 v3; PR177/171/166 protected
+- blocker: B1 and production NO_GO until independent focused re-review
+- slot_use: AIに聞く B0 終端finish再返却の認可修正（J4残件1件）
 
 ## F2
 - slot: F2
-- status: done
-- task_id: kabumori-f2-yume-market-commentator-morning-close-quality-20261013
+- status: in_progress
+- task_id: kabumori-f2-emergency-market-report-app-feed-broadcast-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ（新F2担当）
 - completion_code: L2
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
-- dependencies: F6 Opus Primary provider, stored morning report for immutable forecast, X/app consumer contracts
-- blocker: PR188 Draft/unmerged; production and consumer compatibility verification pending separate release gate
-- l2_verdict: PASS_OFFLINE_SOURCE / PRODUCTION_NO_GO
-- slot_use: ゆめちゃんAI評論家 朝刊/大引けの独自予想と事後検証の品質改善（source-only）
+- dependencies: main PR143/149/158, F6 generator; current X/app consumer ON, old individualized scheduled Cron OFF
+- blocker: アプリの「きょうの市況」は本番で公開・実機で確認済み。一斉通知は migration・worker v1（main と一致）・Cron jobid 44・送信 ON（pilot 1人）まで完了。最初の送信は 10/14 朝刊の直後で、その読み戻しと実機の確認が残る
+- slot_use: EMERGENCY 共通市況アプリ配信・一斉通知を最短で整備（1時間目標）
 
 ## F3
 - slot: F3
 - status: done
-- task_id: postona-f3-x-service-end-saga-wiring-20261013
+- task_id: postona-f3-j3-v3-r1-r3-security-fixes-20261013
 - owner: claude
 - next_owner: none
 - return_to: POSTONA G3のちゃ（新F3担当・X投稿／予約担当）
@@ -48,9 +47,9 @@
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F3.md
 - current_report_path: .agent_v2/tasks/F3.md#report
-- dependencies: archived L3 PR182; F3 PR168/163/151/145, F5 PR178/183 Phase6/7, F4 Threads PR169/180, G4 Issue131
-- blocker: F5 service deletion T10 lease orchestration unwired; G4 X Issue131 unresolved; Sol（高） independent security review required; production NO_GO
-- slot_use: L3 PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; F3 X stop saga Draft PR189 HEAD 4fd7084d, no merge/deploy. F3 done/unreserved; archive before next task.
+- dependencies: J3 V3 CHANGES_REQUIRED R1/R2/R3; F3 PR189/182; F5 Phase8 active, F4 PR180/169
+- blocker: R1/R3 mandatory Codex Sol（高） focused rereview; F5 Phase8 durable count/T10 wiring; G4 Issue131; production NO_GO
+- slot_use: L3 PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO; F3 Draft PR192 HEAD 9384818e, nine owned files, reported PG fail-before/pass-after. F3 done/unreserved, archive before reuse.
 
 ## F4
 - slot: F4
@@ -72,7 +71,7 @@
 ## F5
 - slot: F5
 - status: done
-- task_id: common-account-f5-phase7-auth-lifecycle-release-preflight-20261013
+- task_id: common-account-f5-phase8-x-threads-lifecycle-integrated-security-20261013
 - owner: claude
 - next_owner: none
 - return_to: 共通アカウントG5のちゃ（新F5担当）
@@ -80,13 +79,13 @@
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: old G5 K5 done; F5 Phase5/6 L5 accepted and archived; PR121→152→165→178 Draft; F4 live lease guard correction and F3 X runtime separate
-- blocker: production NO_GO; managed GoTrue/PostgREST/Auth/Storage unverified, F4 lease fix and F3 integration pending
-- slot_use: 共通ID・利用登録・退会のdisposable PG/Auth release preflight / source-only Phase7; other slots protected
-- previous_archive: .agent_v2/archive/2026-10-13-F5-common-account-f5-phase6-postona-provider-cleanup-service-deletion-20261013/
-- latest_result: IMPLEMENTED_SOURCE_CANDIDATE — Draft PR #183 head f2565cc0412f8127f95f00a728d16bf83af74667 stacked on PR178 83334a091ded5571cf595fd99d7a035627564735 (PR165 4638891f6c7ff432e08d462019594e1ec3d66f07, PR152 ccea1fe8132c6f573a768f0df5a033a05c62ef2c, PR121 76b50e1e03f82faaa3460bab1603afa8fef3ce44): release preflight for the whole common-account chain (order/dependency refusals, read-only managed probe + disposable gate, rollback ladder, provider-state matrix, user notices) and fixes (Phase 6 needed Phase 4/5; Phase 1 rollback left broken Phase 2 functions; resumed POSTONA end could get stuck without consent); local PG17 only, production NO_GO; managed M1-M10 checklist not run. Report: .agent_v2/tasks/F5.md#report
+- dependencies: F5 Draft PR121→152→165→178→183; F3 X PR189; F4 Threads PR180; verify fresh heads on start
+- blocker: production NO_GO; managed GoTrue/PostgREST/Auth/Storage and app deletion wiring not verified; F3 L1 lock order / R2 scope and G3 T13 wiring open
+- slot_use: Phase8 common account / X / Threads source-only disposable overlay integration and security regression
+- previous_archive: .agent_v2/archive/2026-10-13-F5-common-account-f5-phase7-auth-lifecycle-release-preflight-20261013/
+- latest_result: IMPLEMENTED_SOURCE_CANDIDATE — Draft PR #193 head 314aeac47a02ce80aea3d94426a563dfbe57ad7c stacked on PR183 f2565cc0412f8127f95f00a728d16bf83af74667 (PR178 83334a09, PR165 4638891f, PR152 ccea1fe8, PR121 76b50e1e unchanged): real F3 PR189 + F4 PR180 + G4 PR124 sources assembled unmodified in a disposable PG17/Edge overlay (e2e 29, F3/F4 own suites unchanged, apply order/refusals/commutation, cross-stack rollback ladder + read-backs, privilege inventory, seeded lock-order stress); F5 fixes: typed X result bridge equal to F3 mapper, durable x_posts_unconfirmed (migration 20261013140000, unapplied) recorded before X done + ack of F3 PR192 checkpoint, unreadable end record fails closed; F3-owned finding L1 (3-way lock cycle on the legacy saga path, reproduced + verified one-statement repair), F3 R2' POSTONA-only scope, G3 T13 wiring, G4 legacy login-deleting path; local PG17 only, production NO_GO; managed M1-M10 not run. Report: .agent_v2/tasks/F5.md#report
 
-- l5_verdict: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; Draft PR183 head f2565cc0412f8127f95f00a728d16bf83af74667; local preflight candidate and corrections accepted, managed M1-M10/F4/F3/app deletion wiring still blocked; no merge/deploy.
+- l5_verdict: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO (2026-10-14); Draft PR193 head 314aeac47a02ce80aea3d94426a563dfbe57ad7c. F3-L1/R2', G3 onboarding T13, G4 old deletion path are safety blockers. No merge/deploy.
 
 ## F6
 - slot: F6
@@ -121,7 +120,7 @@
 ## F8
 - slot: F8
 - status: ready
-- task_id: news-improvement-a-f8-j1b4-performance-security-offline-20261013
+- task_id: news-improvement-a-f8-j1b5-security-review-readiness-20261014
 - owner: claude
 - next_owner: claude
 - return_to: ニュース改善API最適化のちゃ
@@ -136,7 +135,7 @@
 ## F9
 - slot: F9
 - status: ready
-- task_id: api-optimization-b-f9-clean-replacement-final-rights-gate-20261013
+- task_id: api-optimization-b-f9-clean-pr190-residual-rights-tests-20261014
 - owner: claude
 - next_owner: claude
 - return_to: ニュース改善API最適化のちゃ
@@ -196,7 +195,7 @@
 ## J3
 - slot: J3
 - status: ready
-- task_id: postona-j3-x-service-end-saga-integrated-security-review-20261013
+- task_id: postona-j3-x-saga-r1-r3-focused-rereview-20261014
 - owner: codex
 - next_owner: codex
 - return_to: POSTONA G3のちゃ（新F3担当・X投稿／予約担当）
@@ -204,16 +203,16 @@
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J3.md
 - current_report_path: .agent_v2/reports/J3.md
-- dependencies: F3 PR189→182→168→163→151→145; F5 PR183/178→165→152→121; F4 PR180/169; X Issue131
-- blocker: full F5 T10 service-delete bridge and managed X/Auth unverified; source security review only; production NO_GO
-- slot_use: POSTONA X連携解除/サービス終了の独立セキュリティレビュー（J3→V3）。既存F3/F4/F5 PRはread-only。
+- dependencies: F3 PR192 9384818e stacked on PR189 4fd7084d, J3 V3 archived findings; F5 Phase8, F4 PR180, G4 Issue131
+- blocker: local focused security re-review only; full integrated F3/F5/F4 gate and managed Auth/X still pending; production NO_GO
+- slot_use: Re-review F3 R1 durable uncertainty + ACK and R3 lock wait wall-clock lease, plus R2 HTTP action. Previous J3 TASK+Report archived with SHA256 and HISTORY_INDEX.
 
 ## J4
 - slot: J4
-- status: ready
+- status: done
 - task_id: kabumori-j4-ai-ask-b0-v3-review-20261013
 - owner: codex
-- next_owner: codex
+- next_owner: none
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: V4
 - recommended_model: Sol（高）
