@@ -1,5 +1,11 @@
 # Current State v2（新系統・現在有効な情報だけ）
 
+## Opus production integration release gate (2026-10-13)
+- F6 new task `common-ai-f6-opus-both-integration-release-gate-20261013` ready / Opus5.5（高）, F6→L6, owner 共通AI基盤のちゃ. Old F6 preflight archived with matching blob and HISTORY_INDEX updated.
+- Anthropic API key is now REGISTERED per user and Claude Code confirmation; live name readback needed before cutover, secret value never handled. PR170→173→175→176 all Draft/unmerged and release gate pending. F2 L2 task is done, F2 ACTIVE_TASK may still lag; do not edit F2 metadata from this chat.
+- Actual consumer gates were x=false/app=false: Opus shared generation is not equivalent to X/app delivery. Existing v30 Edge deployment predates 7 F2 report changes, so source release could deploy those as well. F2ちゃ approval needed before rollout. No production action or merge authorized by this task.
+
+
 ## F2 L2｜Opus primary_both handler regression (2026-10-13)
 - F2 `kabumori-f2-opus-primary-both-handler-test-sync-20261013` L2 PASS_OFFLINE_TEST_ONLY / PRODUCTION_NO_GO, done/none. PR #176 Draft head `d13efc52176665898f1c38a1e389f9973fc3de00`, 1 F2-owned test file only. Reported 41 handler + 324 integrated PASS (not independently rerun), Vercel CI rate-limited. PR170→173→175→176 remains Draft/unmerged; F6 leads release gate. No production/paid API/Edge changes.
 
