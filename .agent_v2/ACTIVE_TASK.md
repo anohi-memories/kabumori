@@ -210,18 +210,18 @@
 
 ## J4
 - slot: J4
-- status: idle
-- task_id: none
+- status: ready
+- task_id: kabumori-j4-ai-ask-b0-v3-review-20261013
 - owner: codex
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: codex
+- return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: V4
-- recommended_model: none
+- recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J4.md
 - current_report_path: .agent_v2/reports/J4.md
-- dependencies: none
+- dependencies: PR186 and J2 review
 - blocker: none
-- slot_use: レビュー・バグ修正・検証（案件固定なし）
+- slot_use: AI Ask B0 v3 R2/R3/R8 review
 
 ## J5
 - slot: J5
