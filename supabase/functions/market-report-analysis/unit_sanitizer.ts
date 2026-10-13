@@ -230,8 +230,27 @@ export function sanitizeAnalysis(
     }
     : undefined;
 
+  // 7. ゆめちゃん's call: opinion, checked as forward-looking text (no invented number, date, name or fact; no advice).
+  // It never counts towards coherence; without a safe headline and reasons it is left out whole.
+  const yumeIn = analysis.yume;
+  let yume = yumeIn
+    ? {
+      stance: yumeIn.stance,
+      headline_ja: prose(ctx, "yume.headline_ja", yumeIn.headline_ja, "forward", false),
+      reasons_ja: prose(ctx, "yume.reasons_ja", yumeIn.reasons_ja, "forward", false),
+      counter_ja: prose(ctx, "yume.counter_ja", yumeIn.counter_ja, "forward", false),
+      invalidation_ja: prose(ctx, "yume.invalidation_ja", yumeIn.invalidation_ja, "forward", false),
+      review_ja: prose(ctx, "yume.review_ja", yumeIn.review_ja, "forward", false),
+    }
+    : undefined;
+  if (yumeIn && yume && (!yume.headline_ja || !yume.reasons_ja)) {
+    removed.push({ path: "yume", code: "YUME_DROPPED", detail: "headline or reasons removed", text: yumeIn.headline_ja, action: "removed" });
+    yume = undefined;
+  }
+
+  const { yume: _unsanitizedYume, ...rest } = analysis;
   const sanitized: GeneratedAnalysis = {
-    ...analysis,
+    ...rest,
     headline_ja: headline,
     market_summary_ja: summary,
     claims,
@@ -242,6 +261,7 @@ export function sanitizeAnalysis(
     risks_ja: items(ctx, "risks_ja", analysis.risks_ja, "forward", false),
     x_post: xPost,
     ...(appStory ? { app_story: appStory } : {}),
+    ...(yume ? { yume } : {}),
   };
   const coherent = ctx.counts.kept >= MIN_KEPT_NARRATIVE_UNITS;
   return {

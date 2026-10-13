@@ -34,6 +34,7 @@ import {
 } from "./analysis_logic.ts";
 import { persistTraces, promptHash, traceRows } from "./debug_trace.ts";
 import { auditDiagnostics } from "../_shared/kabumori_ai_models.ts";
+import type { YumeMorningSource } from "../_shared/market_report_yume.ts";
 import {
   MARKET_REPORT_AI_MODE_ENV,
   type MarketReportPrimaryRecord,
@@ -166,6 +167,31 @@ function database(deps: Deps, supabaseUrl: string, key: string): Db {
 }
 
 type ClaimRow = { cycle_id: string | null; claim_token: string | null; attempt: number; outcome: string; data_packet_id: string | null };
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Close only: the same trading date's morning report as stored, for ゆめちゃん's look-back. Packets are immutable and a
+ * completed cycle never changes its current packet, so this is the morning call as published. Read-only and best
+ * effort: a failed read makes the look-back 「判定できません」 (MORNING_READ_FAILED), never the close report.
+ */
+export async function loadMorningReport(db: Pick<Db, "get">, tradingDate: string): Promise<YumeMorningSource> {
+  if (!DATE_ONLY.test(tradingDate)) return "error";
+  try {
+    const cycles = await db.get<Array<{ report_status: string; current_report_packet_id: string | null }>>(
+      `market_report_cycles?select=report_status,current_report_packet_id&report_type=eq.morning&trading_date=eq.${tradingDate}`,
+    );
+    const cycle = cycles?.[0];
+    if (!cycle || cycle.report_status !== "completed" || !cycle.current_report_packet_id) return null;
+    const rows = await db.get<Array<{ id: string; payload: unknown }>>(
+      `market_report_packets?select=id,payload&id=eq.${encodeURIComponent(cycle.current_report_packet_id)}`,
+    );
+    const row = rows?.[0];
+    return row ? { packetId: row.id, packet: row.payload } : "error";
+  } catch {
+    return "error";
+  }
+}
 type DataPacketRow = { id: string; content_hash: string; payload: MarketDataPacket; data_quality_status: string };
 
 const NEWS_COLUMNS = [
@@ -291,12 +317,15 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
         `important_news_candidates?select=${NEWS_COLUMNS}&id=in.(${refIds.join(",")})`,
       );
     }
+    const morning = reportType === "close" ? await loadMorningReport(db, tradingDate) : null;
     const input = buildAnalysisInput({
       dataPacket: dataPacket.payload,
       dataPacketId: dataPacket.id,
       dataContentHash: dataPacket.content_hash,
       newsRows,
+      morning,
     });
+    if (input.yumeReview) diagnostics.yume_review = `${input.yumeReview.verdict}:${input.yumeReview.reason_code}`;
     diagnostics.news_items = String(input.news.length);
     diagnostics.metrics = String(input.majorMoves.length);
     diagnostics.direction = input.direction;

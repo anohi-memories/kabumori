@@ -15,6 +15,7 @@ import {
   REPORT_DISCLAIMER_JA,
   type ReportType,
 } from "./market_report_packet.ts";
+import { reviewLineJa, yumeStorySection } from "./market_report_yume.ts";
 
 export const APP_STORY_VERSION = "app_market_story.v2";
 export const APP_STORY_TARGET_MIN_CHARS = 900;
@@ -116,8 +117,12 @@ function sessionDirectionLine(packet: MarketReportPacket, market: "tokyo" | "us"
 }
 
 function morningCheckLines(close: MarketReportPacket, morning: MarketReportPacket | null): string[] {
-  if (!morning || morning.report_type !== "morning" || morning.trading_date !== close.trading_date) return [];
+  // ゆめちゃん's look-back: the verdict is the code's (decided when the close was generated), her words follow.
+  const review = close.yume?.review;
+  const verdict = review ? [`ゆめちゃんの予想の答え合わせ：${reviewLineJa(review)}`, ...(review.text_ja ? [review.text_ja] : [])] : [];
+  if (!morning || morning.report_type !== "morning" || morning.trading_date !== close.trading_date) return verdict;
   return [
+    ...verdict,
     `朝刊の見立て：${morning.headline_ja}`,
     ...morning.next_watch_ja.slice(0, 3).map((item) => `朝刊で挙げた注目点：${item}`),
     ...sessionLines(close.major_moves, TOKYO_KEYS, "東京市場の結果"),
@@ -151,6 +156,7 @@ export function buildAppMarketStory(packet: MarketReportPacket, morningPacket: M
       section("strong", "🔥 強い・注目テーマ", draft?.strong_ja, themes(packet.strong_themes)),
       section("caution", "⚠️ 注意テーマ・リスク", draft?.caution_ja, [...themes(packet.weak_themes), ...packet.risks_ja]),
       section("watch", "👀 今日の注目点", draft?.watch_ja, packet.next_watch_ja),
+      yumeStorySection(packet),
       section("gaps", "ℹ️ 確認できなかったデータ", "", packet.data_gaps_ja),
     ]
     : [
@@ -168,6 +174,7 @@ export function buildAppMarketStory(packet: MarketReportPacket, morningPacket: M
       section("caution", "⚠️ 弱かったテーマ・リスク", draft?.caution_ja, [...themes(packet.weak_themes), ...packet.risks_ja]),
       section("morning_check", "☀️ 朝刊との答え合わせ", "", morningCheckLines(packet, morningPacket)),
       section("watch", "👀 明日以降の注目点", draft?.watch_ja, packet.next_watch_ja),
+      yumeStorySection(packet),
       section("gaps", "ℹ️ 確認できなかったデータ", "", packet.data_gaps_ja),
     ];
   const present = sections.filter((item): item is AppStorySection => item !== null);
@@ -179,7 +186,8 @@ export function buildAppMarketStory(packet: MarketReportPacket, morningPacket: M
     trading_date: packet.trading_date,
     headline_ja: packet.headline_ja,
     sections: all,
-    char_count: Array.from(appStoryText({ headline_ja: packet.headline_ja, sections: present }, false)).length,
+    // The fact story's own length: ゆめちゃん's opinion section never makes a thin story look complete.
+    char_count: Array.from(appStoryText({ headline_ja: packet.headline_ja, sections: present.filter((item) => item.key !== "yume") }, false)).length,
     total_char_count: Array.from(appStoryText({ headline_ja: packet.headline_ja, sections: all })).length,
   };
 }
