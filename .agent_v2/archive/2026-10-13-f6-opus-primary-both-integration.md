@@ -1,0 +1,118 @@
+# F6 CURRENT TASK — Opus5.5 Primary 朝刊・大引け統合／本番準備
+
+- task_id: common-ai-f6-opus-primary-both-integration-20261013
+- owner: claude
+- slot: F6
+- status: done
+- next_owner: none
+- start_code: F6
+- completion_code: L6
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- recommended_model: **Opus5.5（高）**
+- priority: CRITICAL
+- user_intent: 2026-10-13 大引けと翌日以降の朝刊を Claude Opus5.5 PRIMARY で生成する。期限30日の既存キーを初期運用に使う。利用者は未リリースゆえ配信失敗を許容し、自動OpenAI fallbackは後日でよいと明示。
+- mode: SOURCE_AND_OFFLINE_QA_FIRST; production_mutation_window: CLOSED
+- previous_archive: .agent_v2/archive/2026-10-13-f6-opus-primary-close-v0.md
+
+## Dependencies and handoff
+- F6 PR170 head `46b27326360e66ec843f79bae6d01584088869d0` Draft/unmerged: `market_report_primary.ts`, unit/E2E, docs, un-applied handler patch. Keep original PR170 protected.
+- F2 PR173 head `3605c2eb88380183b78757e092877ba2ff46c25f` Draft/unmerged, stacked on PR170. F2 TASK `kabumori-f2-opus-primary-morning-close-handler-20261013` currently `review_required` awaiting **F2ちゃ L2** formal acceptance. No editing F2 TASK, branch, handler or own PR.
+- F2 provided `docs/ai-provider/F2_PRIMARY_BOTH_F6_HANDOFF.patch`: change F6-owned `market_report_primary.ts` and `market_report_primary_test.ts` plus **F2-owned** `opus_primary_handler_test.ts`. Apply F6-owned changes only. For F2-owned test changes, provide precise handoff to F2ちゃ; do not edit without explicit F2 authorization.
+- Legacy G6 is done, new F6 is the owner for the shared AI provider. Check fresh origin/main, 30-slot new/old ACTIVE_TASK/CURRENT_STATE, pending F2 L2, PR and worktree collisions before implementation. Create fresh independent F6 worktree. Do not overwrite or rebase any protected branch. If F2 L2 review is unresolved, implementation of solely F6-owned files may proceed, but integration merge/deploy must STOP until accepted.
+
+## Implementation
+1. Add exact `primary_both` routing in F6-owned provider so both morning and close call Opus5.5 as PRIMARY for generate and Fact. Keep `primary_close` semantics unchanged, OFF/default always legacy OpenAI, and no simultaneous Shadow.
+2. Keep all existing ledger reserve/send/settle, attempt idempotency, cost/timeout/abort bounds, content validation and canonical packet/hash. No silent OpenAI fallback when primary is enabled; explicit manual OFF rollback remains.
+3. Create **new F6 Draft PR** stacked on PR173 exact head, with *only* F6-owned provider source and provider tests; do not apply/edit F2-owned third patch file. If test completion requires F2 change, record failing test and exact F2 handoff; do not weaken the test. Do not modify PR170 or PR173 branches.
+4. Offline end-to-end with fixtures for BOTH morning and close, retries at 16:35/08:05, error/budget limit behavior and key non-leakage. Deny network/secret env, run relevant provider/market-report/shared suites, lint/check and fresh main merge-tree. Record PASS and residual F2 test failures accurately; never represent un-applied F2 test patch as merged.
+5. Budget: trial policy **$5/month, 40 calls/month, $2/day, 6 calls/day, $1/call**, may exhaust after ~6-7 workdays of two reports/day. Never silently raise. Provide user-facing proposal for policy adjustment separately with actual spending bounds.
+6. Secret: user's active 30-day-expiry key is NOT known to be installed in Supabase. Never read or expose value. Prepare scoped configuration and key rotation guidance. If key absent, STOP live activation; never assume user confirmation equals secret deployment.
+7. Production preparation, not automatic activation: confirm actual Cron schedules, full operational release gate (F2 L2 acceptance, source merge and SHA read-back, Edge Secret, full code deploy byte-readback, primary_both flag, live call observed, stop criterion), and ability to toggle back to OpenAI manually. **Do not deploy, modify Secret/Cron/DB, run paid Opus, or merge to main without separate explicit operation authorization and checks.** User accepts missing report but NOT uncontrolled cost, leaked secrets or data corruption. Coordinate the remaining production gate on the same day if feasible without promises.
+8. End with Report containing changed_files, tests, PR head, current gate decision, blockers and exact next owner. Set `review_required`/next_owner chatgpt; return L6 to 共通AI基盤のちゃ. For F2-owned adjustment provide separate copyable handoff, no F2 direct TASK registration by this chat.
+
+## Acceptance
+- F6-owned Primary both-cycle provider source+test complete with unchanged close-only & OFF modes; no wrong model accounting or secrets leak.
+- Exact F2 integration dependency and owner split maintained; either complete integrated offline tests or explicitly BLOCKED awaiting F2 accepted test patch.
+- No claim of today's Opus live report until production deploy/secret/flag/observability are actually verified.
+
+## Report
+- task_id: common-ai-f6-opus-primary-both-integration-20261013
+- result: **PASS_OFFLINE_SOURCE（F6 の部品）／ BLOCKED_ON_F2_TEST（統合）／ PRODUCTION_NO_GO**
+  - F6 の部品は `primary_both`（朝刊・大引けの両方を Claude）に対応した
+  - 統合した状態では、F2 の handler テスト2件が古い期待（`MODE_UNSUPPORTED`）のままで失敗する
+  - F2 の変更を手元でだけ当てると全件 PASS（コミットはしていない）
+  - 本番は何もしていない。今日の Opus でのレポートは **出ていないし、出たとは言わない**
+- branch / PR
+  - `claude/f6-opus-primary-both-20261013` @ `161f1f08c60b5b66cca2e770c53a783d43319642`
+  - Draft PR [#175](https://github.com/anohi-memories/kabumori/pull/175)。base は PR173 の branch（`3605c2eb88380183b78757e092877ba2ff46c25f`）
+  - 新しい worktree `/Users/yuya/Developer/kabumori-f6-primary-both`
+  - #170（`46b27326…`）と #173（`3605c2eb…`）は変更していない（`ls-remote` で確認）
+  - 最新の main（`40128e8c1b8e7f05bb0ed002bc9421230958c20d`）と `merge-tree` で衝突なし
+- changed_files（F6 所有だけ。+175 / -6）
+  - `supabase/functions/_shared/ai_provider/market_report_primary.ts`
+    - F2 の引き継ぎの差分の F6 部分をそのまま入れた（内容は確認済み）
+    - `PRIMARY_BOTH_MODE = "primary_both"` を足した。朝刊と大引けを Claude に回す
+    - `primary_close` の意味は変えていない（大引けだけ。朝刊は `NOT_CLOSE`）
+    - そのほかの値は legacy のまま。完全一致でだけ ON になる
+  - `supabase/functions/_shared/ai_provider/market_report_primary_test.ts`
+    - F2 の差分の F6 部分（朝刊・大引けとも OpenAI の経路と同じ packet と hash になること、完全一致、朝刊の fail closed、1日分を1つの台帳で流すと朝刊・大引け・大引けの再試行で計6回、その次は `CALL_LIMIT`）
+    - F6 が足したもの: 朝刊が失敗した後、08:05 の再試行が試行番号 2 の新しい呼び出しになること。朝刊・大引け以外の種別は legacy のままで、モード以外の設定を読まないこと
+  - `docs/ai-provider/F6_OPUS_PRIMARY_BOTH_GATE.md`（部品の約束、本番ゲートの今の状態、キーの確認方法、予算）
+  - F2 所有の `market-report-analysis/opus_primary_handler_test.ts` は **変更していない**
+- tests（実通信・鍵・本番 0。deno 2.9.6、macOS arm64）
+  - `market_report_primary_test.ts` 13/13、provider 110/110
+  - `market-report-analysis` **319 PASS / 2 FAIL**
+    - 失敗した2件はどちらも `opus_primary_handler_test.ts:237`: 「close / morning + primary_both on a provider that does not route it: MODE_UNSUPPORTED, no model call」
+    - 部品が `primary_both` に対応したため、期待が古くなった。**テストは緩めていない**
+  - F2 の差分の3つ目の部分を手元でだけ当てた場合: `market-report-analysis` 322/322、handler テスト単体 39/39（元に戻した）
+  - `_shared` 613、personalized 134、X の共有レポート利用側 10、data-packet 42
+  - 通信禁止と鍵・設定の環境変数8つの読み取り禁止で 21/21
+  - `deno check` PASS。lint は provider で問題 0
+  - 差分の秘密情報スキャン 0
+- 予算（ポリシーは変えていない）
+  - 今の上限: 1回 $1、1日 6回・$2、1か月 40回・$5
+  - `primary_both` は普通の日で4回・約 $0.80。再試行や再生成があると6回で、その日の上限に達する
+  - 月 $5 の場合、毎日続けると 6〜7営業日目（10/21 ごろ）に `COST_LIMIT` で止まる（レポートが失敗するだけで、使いすぎにはならない）
+  - **利用者向けの提案（別の本番変更。明示の承認が要る）**: 月 $25・120回、1日 $3・8回、1回 $1。1か月の最大の支出は $25 で止まる
+- キー
+  - 30日の期限付きキーが Supabase の Edge Secret に入っているかは **分からない**。Claude は確かめないし、値も読まない
+  - 利用者が `supabase secrets list --project-ref wsmznyzcvmuitkglfeuj` で名前だけを確かめる。`ANTHROPIC_API_KEY` が無ければ、本番の有効化はそこで止める
+  - 期限の7日前までに入れ替える。期限が切れたら `AUTH` で失敗する（安全側）。`ANTHROPIC_CUSTOM_HEADERS` は登録しない
+- 本番ゲートの判断（2026-10-13 15:05 JST 時点）: **NO_GO**
+  - 足りないもの
+    1. F2 の handler テストの変更
+    2. L6 の評価
+    3. #170 → #173 → #175 の merge と、merge 後の SHA の読み直し
+    4. Edge Secret（登録されているか分からない）
+    5. `market-report-analysis` の deploy と、本番のバイト列の読み直し
+    6. モードの設定
+    7. 最初の呼び出しの観察
+  - Cron（F2 が今日、読み取りだけで確認したもの）: 朝刊 07:55 / 再試行 08:05、大引け 16:20 / 再試行 16:35
+  - **今日 16:20 の大引けに `primary_both` は間に合わせない** ことを推奨する
+    - 今日の大引けだけなら、#170 + #173 で `primary_close` が使える（#175 は不要）
+    - ただし、キーの登録を含むゲート 3〜6 を 16:15 までに終える必要がある。約束はしない
+  - `primary_both` は最短で明日 07:55 の朝刊から（前日の夜〜07:45 に設定）
+  - 共通レポートの利用側のゲート（`market_report_consumer_settings`）は今朝 OFF だった（F2 の確認）。OFF のままなら、Opus のレポートは保存されるだけで、X・アプリには出ない。ON にするのは別の承認
+- blockers
+  - F2 のテストの変更（下の引き継ぎ）
+  - Edge Secret のキーがあるか分からない
+  - Opus の応答時間、本番の plan の wall clock、本物の Anthropic が strict なスキーマを受け付けるか（オフラインでは確かめられない）
+- next owner
+  - L6（共通AI基盤のちゃ）: #175 の評価
+  - F2 のちゃ: 下の引き継ぎ
+  - 利用者: キーの確認と、予算の提案を受けるかの判断
+- merge 0、deploy 0、production 0、paid_calls 0。Secrets・`.env`・鍵は読んでいない。F2 の TASK・branch・PR・handler は変更していない
+
+### F2 のちゃへの引き継ぎ（コピー用。F6 は F2 の TASK を登録しない）
+
+```text
+F6 から F2 へ（2026-10-13）:
+F6 は primary_both に対応した部品を Draft PR #175（head 161f1f08c60b5b66cca2e770c53a783d43319642、base は PR173 の branch）に出しました。F6 所有のファイルだけで、PR170 と PR173 は変更していません。
+この上では、F2 所有の supabase/functions/market-report-analysis/opus_primary_handler_test.ts の2件
+（「close / morning + primary_both on a provider that does not route it: MODE_UNSUPPORTED」）が、期待が古くなって失敗します。
+F2 が用意した docs/ai-provider/F2_PRIMARY_BOTH_F6_HANDOFF.patch の3つ目の部分（opus_primary_handler_test.ts）が、ちょうどその変更です。
+PR175 の head の上に、次の1つだけを当てて、F2 の branch／PR で出してください:
+  git apply --include=supabase/functions/market-report-analysis/opus_primary_handler_test.ts docs/ai-provider/F2_PRIMARY_BOTH_F6_HANDOFF.patch
+F6 が手元でだけ当てた結果は、market-report-analysis 322/322、opus_primary_handler_test.ts 39/39 です（F6 はコミットしていません）。
+handler.ts の変更は不要です。本番（merge・deploy・Secret・モード）はどれも別承認です。
+```
