@@ -53,10 +53,10 @@
 
 ## F4
 - slot: F4
-- status: review_required
+- status: done
 - task_id: postona-f4-threads-t13-authenticated-writer-integration-20261013
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
@@ -64,6 +64,7 @@
 - current_report_path: .agent_v2/tasks/F4.md#report
 - dependencies: F4 PR167, F5 PR165 G5 PR121/152, H5 PR159 (all Draft source); old F4 archived in .agent_v2/archive/2026-10-13-F4-postona-f4-threads-disconnect-lease-safe-v1-20261012/
 - blocker: F5 contract owner boundary and H5 guarded writer interface must be checked with independent source overlay; live production NO_GO; F4 reported Draft PR169 head fd15430ddcd640c5c7389582f37f1b478fc7204c (base PR167 branch), awaiting L4
+- l4_verdict: PASS_SOURCE_IMPLEMENTATION / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; Draft PR169 HEAD fd15430ddcd640c5c7389582f37f1b478fc7204c, 14 Threads paths, source-only; F4 released after L4. Next new task requires archive.
 - slot_use: POSTONA Threads new T13 writer integration; no F3/F5/G5/H5 changes
 
 ## F5
