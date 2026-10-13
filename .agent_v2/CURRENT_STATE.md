@@ -5,6 +5,11 @@
 
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F8 J1-b 国内ニュースアプリ掲載（2026-10-13）
+- F8 `news-improvement-a-f8-j1b-app-visibility-offline-design-20261013` L8 PASS_OFFLINE_DESIGN / IMPLEMENTATION_HOLD、done/next_owner:none。成果 branch `claude/news-j1b-app-visibility-offline-f8-20261013` commit `e912d59c24c9a66fe6b41e5f01fb6172f62cff82`（F8 Report）、設計1＋offline PG17 RPC matrix 8ファイル。検証8variant一致はClaude報告でChatGPT未再実行。DB/RPC/アプリ本体、本番変更なし。
+- 重要な設計残件: v3単独は震度6強emergencyを消す。v2+v3bの組合せはテーマ追加後もrejected/no_post金融行政処分(C3/C8)を非表示にする。X投稿基準とアプリ掲載の分離(O1)、追跡なし利用者のcritical/high配信(O2)、続報重複(O3)、テーマ→sector(O4)の明示判断が次実装条件。migration/RPC PreviewとSol（高）レビューが必要で本番NO_GO。
+- F8次TASK登録前に完了TASKのarchive/MANIFEST/SHA256/restore/HISTORY_INDEX更新必須。F9の同時作業を保護。
+
 ## F5 Phase7 共通認証・退会 release preflight（2026-10-13）
 - F5 new `common-account-f5-phase7-auth-lifecycle-release-preflight-20261013`: ready/claude、Opus5.5（高）、F5→L5、return `共通アカウントG5のちゃ（新F5担当）`。source-only：実アプリ既存経路とDB/ACL/退会処理をdisposable PGで検証可能なrunnerへまとめ、managed環境での未検証事項とSTOP条件を具体化。production NO_GO。
 - 前F5 Phase6 `common-account-f5-phase6-postona-provider-cleanup-service-deletion-20261013` はL5 PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO、PR178 Draft（head `83334a091ded5571cf595fd99d7a035627564735`）。TASK＋Reportをappend-only archive `.agent_v2/archive/2026-10-13-F5-common-account-f5-phase6-postona-provider-cleanup-service-deletion-20261013/`へ保存、元blob一致・SHA256/read-back確認、HISTORY_INDEX追記。
