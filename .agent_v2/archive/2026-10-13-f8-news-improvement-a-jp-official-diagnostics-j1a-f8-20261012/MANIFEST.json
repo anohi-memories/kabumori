@@ -1,0 +1,11 @@
+{
+  "task_id": "news-improvement-a-jp-official-diagnostics-j1a-f8-20261012",
+  "slot": "F8",
+  "original_path": ".agent_v2/tasks/F8.md",
+  "archive_path": ".agent_v2/archive/2026-10-13-f8-news-improvement-a-jp-official-diagnostics-j1a-f8-20261012/files/.agent_v2/tasks/F8.md",
+  "size_bytes": 7986,
+  "sha256": "4391715a86057b299e65b6e818516bea3c46aaa33affbdb27136898726946095",
+  "source_blob_sha": "046baefd3e207827ec2125e6d5584f42727e1b6f",
+  "source_commit": "main (captured source blob SHA; exact last modifying commit not independently resolved)",
+  "restored_verified": true
+}
