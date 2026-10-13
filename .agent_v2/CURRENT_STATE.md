@@ -1,5 +1,10 @@
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F9 API最適化B — L9完了（2026-10-13 JST）
+- F9 `api-optimization-b-f9-rights-safe-provider-compare-pr-readiness-20261013` L9判定 PASS_OFFLINE_DRAFT / RELEASE_HOLD、done/next_owner:none。Draft PR #174 は新規131ファイル（tools/provider-compare と docs/model-optimization のみ）、HEAD F9報告 `ef9876fba680f621b88c2d235a7c011ca5881e2f`。304テストPASS/1 ignoredはClaude報告、ChatGPT未再実行。権利未確認の見出しは非保持で外部送信ゲートを維持。
+- 旧PR #115の権利未確認本文を含む履歴、main既存2fixtureの一致箇所、正式な利用許諾、PR174最終CI/mergeability確認は未解決。PR115変更・close・削除やPR174 merge/deploy、有料API使用を無断実施しない。
+- F9はAPI最適化B専任。次TASK前に完了TASKのarchive・SHA256・restore・HISTORY_INDEX記録を実施する。F8ニュース・F2/F6 AI・他slotを保護。
+
 ## F2 L2 accepted — 2026-10-13
 - F2 Opus handler TASK accepted as PASS_OFFLINE_SOURCE / TRANSFER_F6 / PRODUCTION_NO_GO. F2 done/none; user assigned further Opus work to F6, whose new source integration TASK is ready. F2 next task is V1 read-only production preflight after archiving this completed TASK. No production actions.
 
