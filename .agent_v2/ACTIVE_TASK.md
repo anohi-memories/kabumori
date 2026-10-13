@@ -94,7 +94,7 @@
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
 - dependencies: PR170 → PR173 → PR175; F2-owned handler test change via F2ちゃ, L2 accepted
-- blocker: RELEASE_NO_GO — 4-step source composition PASS (report 322, provider 110, _shared 613) and no conflict vs fresh main; blockers: ANTHROPIC_API_KEY absent in Edge secrets (names-only check), F2 test-only change not in a PR, deploy would also ship 7 undeployed F2 report commits (prod v30 10/07 != main), merge approvals; consumer gates x/app=false so shared reports are not delivered; earliest candidate 10/14 07:55 morning
+- blocker: RELEASE_NO_GO — 4-step source composition PASS (report 322, provider 110, _shared 613) and no conflict vs fresh main; blockers: (ANTHROPIC_API_KEY now registered, names-only check 15:26 JST) F2 test-only change not in a PR, deploy would also ship 7 undeployed F2 report commits (prod v30 10/07 != main), merge approvals; consumer gates x/app=false so shared reports are not delivered; earliest candidate 10/14 07:55 morning
 - slot_use: common AI Opus PRIMARY morning/close release preflight, no production mutation
 
 ## F7
