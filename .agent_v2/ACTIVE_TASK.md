@@ -69,21 +69,19 @@
 
 ## F5
 - slot: F5
-- status: done
-- task_id: common-account-f5-phase6-postona-provider-cleanup-service-deletion-20261013
+- status: ready
+- task_id: common-account-f5-phase7-auth-lifecycle-release-preflight-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: G5 PR121/152, F5 PR165, F4 PR167/169, H5 PR159, F3 X owner coordination
-- blocker: all PRs Draft/unmerged; production NO_GO; source-only lease/Threads adapter integration and remote-unverified policy
-- slot_use: 共通アカウント基盤 F5 Phase6 POSTONA provider cleanup/service_deletion contract; previous F5 archived
-- latest_result: IMPLEMENTED_SOURCE_CANDIDATE — Draft PR #178 head 83334a091ded5571cf595fd99d7a035627564735 stacked on PR165 4638891f6c7ff432e08d462019594e1ec3d66f07 (PR152 ccea1fe8132c6f573a768f0df5a033a05c62ef2c, PR121 76b50e1e03f82faaa3460bab1603afa8fef3ce44): owner lease + durable provider results + acknowledgement for the POSTONA-only service deletion, one end flow for X and Threads, Threads registration/grant candidates, source overlay with F4 PR169 fd15430ddcd640c5c7389582f37f1b478fc7204c (writer guard ordering/ACL: YES; F4-owned correction: threads_cleanup_authorized must need a live lease); local PG17 only, production NO_GO. Report: .agent_v2/tasks/F5.md#report
-
-- l5_verdict: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; PR178 source accepted for handoff, F4 live-lease guard correction required, then Sol（高） integrated security review; no merge/deploy.
+- dependencies: old G5 K5 done; F5 Phase5/6 L5 accepted and archived; PR121→152→165→178 Draft; F4 live lease guard correction and F3 X runtime separate
+- blocker: production NO_GO; managed GoTrue/PostgREST/Auth/Storage unverified, F4 lease fix and F3 integration pending
+- slot_use: 共通ID・利用登録・退会のdisposable PG/Auth release preflight / source-only Phase7; other slots protected
+- previous_archive: .agent_v2/archive/2026-10-13-F5-common-account-f5-phase6-postona-provider-cleanup-service-deletion-20261013/
 
 ## F6
 - slot: F6
