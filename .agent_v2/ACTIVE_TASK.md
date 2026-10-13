@@ -85,10 +85,10 @@
 
 ## F6
 - slot: F6
-- status: review_required
+- status: done
 - task_id: common-ai-f6-opus-primary-both-integration-20261013
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
