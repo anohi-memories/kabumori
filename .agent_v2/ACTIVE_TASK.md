@@ -224,18 +224,18 @@
 
 ## J5
 - slot: J5
-- status: idle
-- task_id: none
+- status: ready
+- task_id: postona-j5-account-deletion-legacy-bypass-ui-bridge-20261014
 - owner: codex
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: codex
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V5
-- recommended_model: none
+- recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J5.md
 - current_report_path: .agent_v2/reports/J5.md
-- dependencies: none
-- blocker: none
-- slot_use: Codex臨時実装の優先枠（基本は空けておく）
+- dependencies: F5 PR193 Phase8 old deletion route G4-1; F4 PR180/169, F3 PR192 and J3 independent review; no mutation outside POSTONA mobile
+- blocker: backend shared account deletion permission/contract and managed environment unverified, production NO_GO
+- slot_use: user-approved Codex emergency implementation of POSTONA mobile shared-ID deletion-bypass closure, not review
 
 ## コード
 
