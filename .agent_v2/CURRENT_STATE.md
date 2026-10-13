@@ -40,6 +40,7 @@
 
 ## F2 X/app shared report consumer cutover preflight (2026-10-13)
 - F2 の TASK `kabumori-f2-shared-market-report-x-app-consumer-cutover-20261013` は完了報告済み（review_required/chatgpt、L2 待ち）。結果は PASS_READONLY_PREFLIGHT / CUTOVER_PLAN_READY / PRODUCTION_NO_GO。
+  - **2026-10-13 18:07 JST、利用者が x_enabled=true にした**（読み戻し済み、app_enabled=false のまま）。今日の大引けの X（17:00）は旧来の経路で失敗済み。明日 10/14 08:20 の X の朝刊から、共通の朝刊を投稿する（x-test-post v145、免責文なし）。戻し方は x_enabled=false
   - Draft PR #179（RUNBOOK のみ）
   - 本番の読み取り（16:24 JST）: 今日の大引けは Opus（claude-opus-5-5）で完成（16:21、Fact passed、$0.19）。x_enabled / app_enabled は false
   - Edge の版: market-report-analysis v33（main と一致）、x-test-post v145・personalized-reports v46（main と違う）。migration 20261009120000 / 20261011150000 / 20261012100000 は未適用
