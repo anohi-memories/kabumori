@@ -3,8 +3,10 @@
 // G5/F5's orchestrator (account-delete, PR #178) owns the order and its own service-deletion lease; it calls the X
 // saga (this function, `social-mobile-account-delete`) with THE PERSON'S OWN token, exactly like the X app:
 //   POST {SUPABASE_URL}/functions/v1/social-mobile-account-delete
-//     { action: 'preview' }                                               -> read-only scope / state
-//     { confirmation: 'DELETE_MY_ACCOUNT', expected_scope: 'social_only' } -> run or resume the saga
+//     { action: 'preview' }                                                                   -> read-only scope / state
+//     { action: 'delete', confirmation: 'DELETE_MY_ACCOUNT', expected_scope: 'social_only' } -> run or resume the saga
+// xServiceEndRequest() is that COMPLETE body (the router refuses a body without action: 'delete' with 400
+// ACTION_REQUIRED). The person is only ever the bearer token's user: the body never names a user.
 // The saga holds ITS OWN deletion lease (social_mobile_account_deletions) and, inside it, stops X publishing
 // (authority revoked, planned reservations cancelled) before any credential is read, revoked at X or removed.
 // F3 does not read or verify F5's service-deletion lease: F5 checks its own lease right before and right after
@@ -13,7 +15,10 @@
 // xServiceEndOutcomeOf maps the saga's HTTP answer onto a TYPED outcome. Nothing ambiguous is ever 'done':
 //   done                     -> X tokens revoked at X (X answered success), workspace purged, login kept
 //                               (social_only). unconfirmedPosts > 0 = X posts whose result was never known
-//                               (reconciliation needed; the person may have to check X).
+//                               (reconciliation needed; the person may have to check X). The count is DURABLE
+//                               (checkpointed before the purge, keyed by the subject hash): a retry after a
+//                               purge / finalize failure or a lease takeover still reports it, until the
+//                               caller acknowledges it (social_mobile_account_deletion_x_unconfirmed_ack).
 //   blocked + reason         -> typed and retryable unless noted: POSTING_IN_PROGRESS (X publishing is already
 //                               stopped; retry when it settles), NON_X_ACCOUNT_PRESENT (remove the other providers
 //                               first), SHARED_WORKSPACE / OWNS_OTHER_WORKSPACE / ADMIN_ACCOUNT /
@@ -34,8 +39,8 @@ export const X_SAGA_SCOPE = 'social_only' as const;
 
 export type XServiceEndPurpose = 'postona_service_end' | 'common_account_deletion';
 
-/** What G5/F5 sends for both purposes (the purpose itself is F5's record; the saga does not need it). */
-export type XServiceEndRequest = { confirmation: 'DELETE_MY_ACCOUNT'; expected_scope: typeof X_SAGA_SCOPE };
+/** The complete HTTP body G5/F5 sends for both purposes (the purpose itself is F5's record; the saga does not need it). */
+export type XServiceEndRequest = { action: 'delete'; confirmation: 'DELETE_MY_ACCOUNT'; expected_scope: typeof X_SAGA_SCOPE };
 
 export type XServiceEndOutcome =
   | { status: 'done'; unconfirmedPosts: number }
@@ -51,7 +56,7 @@ export type XServiceEndOutcome =
 const RETRYABLE: ReadonlySet<BlockReason> = new Set(['POSTING_IN_PROGRESS', 'CREDENTIAL_REFRESH_IN_PROGRESS', 'NON_X_ACCOUNT_PRESENT']);
 
 export function xServiceEndRequest(): XServiceEndRequest {
-  return { confirmation: 'DELETE_MY_ACCOUNT', expected_scope: X_SAGA_SCOPE };
+  return { action: 'delete', confirmation: 'DELETE_MY_ACCOUNT', expected_scope: X_SAGA_SCOPE };
 }
 
 export function xServiceEndOutcomeOf(status: number, body: unknown): XServiceEndOutcome {

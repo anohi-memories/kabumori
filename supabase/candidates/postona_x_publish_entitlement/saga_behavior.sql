@@ -115,4 +115,25 @@ select pg_temp.expect((select outcome_code from postona_x_resv.reservations wher
 select pg_temp.expect(not ((pg_temp.stop(:'u3', :'lease3') ->> 'reconciliation_required')::boolean), 'S5 nothing unknown => no reconciliation');
 select 'S5_IN_FLIGHT_AND_UNCERTAIN_PASS' as result;
 
+-- S6 (R1, J3 V3): the unknown post is checkpointed durably under the subject hash (no raw user id); no API role can
+-- read or write the record; the acknowledgement is service_role only, never during a deletion, compare-and-clear.
+select pg_temp.expect((select count(*) from public.social_mobile_account_deletion_x_unconfirmed
+  where subject_sha256 = public.social_mobile_account_deletion_subject(:'u4')) = 1, 'S6 checkpointed');
+select pg_temp.expect((pg_temp.stop(:'u4', :'lease4') ->> 'x_posts_unconfirmed')::int = 1, 'S6 repeated stop does not double count');
+select pg_temp.expect(pg_temp.as_role('select count(*)::text from public.social_mobile_account_deletion_x_unconfirmed', r) like 'ERR:permission denied%', 'S6 table closed to ' || r)
+  from unnest(array['anon', 'authenticated', 'service_role']) r;
+select pg_temp.expect(pg_temp.as_role(format('select public.social_mobile_account_deletion_x_unconfirmed_ack(%L, 1)::text', :'u4'), r) like 'ERR:permission denied%', 'S6 ack closed to ' || r)
+  from unnest(array['anon', 'authenticated']) r;
+select pg_temp.expect(pg_temp.svc(format('select public.social_mobile_account_deletion_x_unconfirmed_ack(%L, 1) ->> ''status''', :'u4')) = 'deletion_in_progress', 'S6 no ack during a deletion');
+select pg_temp.expect(pg_temp.svc(format('select public.social_mobile_account_deletion_x_unconfirmed_ack(%L, 0)::text', :'u4')) = 'ERR:SOCIAL_MOBILE_DELETION_ACK_INVALID', 'S6 ack needs a positive count');
+select pg_temp.expect((pg_temp.svc(format('select public.social_mobile_account_deletion_x_precheck(%L)::text', :'u4')))::jsonb = '{"non_x_accounts": 0, "x_posts_unconfirmed": 1}'::jsonb, 'S6 precheck reports it');
+select pg_temp.expect((pg_temp.svc(format('select public.social_mobile_account_deletion_x_precheck(%L)::text', :'u3')))::jsonb ->> 'x_posts_unconfirmed' = '0', 'S6 another person has none');
+select 'S6_DURABLE_UNCONFIRMED_ACL_PASS' as result;
+
+-- R3 setup (the two-session cases run in saga_run.sh): two fresh people.
+\set u5 00000000-0000-4000-8000-0000000000a5
+\set u6 00000000-0000-4000-8000-0000000000a6
+select pg_temp.person(:'u5', 'five') is not null as r3_setup_five;
+select pg_temp.person(:'u6', 'six') is not null as r3_setup_six;
+
 select 'X_SAGA_STOP_BEHAVIOR_PASS' as result;

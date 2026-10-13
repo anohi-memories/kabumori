@@ -15,6 +15,10 @@
 //     again (pre-purge) -> purge -> finalize.
 //     A retry resumes where the DB says it stopped; nothing external is
 //     repeated after its checkpoint.
+//   * X posts whose result is unknown are counted from the DB's DURABLE
+//     checkpoint (x_posts_unconfirmed, written before the purge), never from
+//     this request's memory: a retry after a committed purge, a failed
+//     finalize or a lease takeover still reports them.
 //   * Every failure returns a fixed code and releases the lease; success is
 //     reported only after finalize committed.
 //   * Tokens, keys and server messages are never returned or logged.
@@ -88,6 +92,8 @@ export function blockReason(value: unknown): BlockReason {
 }
 
 const isScope = (value: unknown): value is DeletionScope => value === 'social_only' || value === 'social_and_login';
+/** A durable count from the DB: a non-negative integer, or null (= the answer is not trusted). */
+const durableCount = (value: unknown): number | null => (typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null);
 const record = (value: unknown) => (typeof value === 'object' && value !== null ? value as Record<string, unknown> : {});
 
 async function verifiedUser(authorization: string | null, deps: DeletionDeps): Promise<{ token: string; user: VerifiedUser } | null> {
@@ -162,8 +168,9 @@ export async function handleAccountDeletion(
   // A non-X social account refuses before anything is recorded (the credential set is bound at acquire).
   const precheck = await deps.rpc('x_precheck', { p_user_id: userId });
   if (!precheck.ok) return fail(500, 'FAILED');
-  const nonX = record(precheck.data).non_x_accounts;
-  if (typeof nonX !== 'number' || !Number.isInteger(nonX) || nonX < 0) return fail(500, 'FAILED');
+  const nonX = durableCount(record(precheck.data).non_x_accounts);
+  const unconfirmedBefore = durableCount(record(precheck.data).x_posts_unconfirmed);
+  if (nonX === null || unconfirmedBefore === null) return fail(500, 'FAILED');
   if (nonX > 0) return fail(409, 'DELETION_BLOCKED_NON_X_ACCOUNT_PRESENT');
 
   await audit('requested');
@@ -190,7 +197,8 @@ export async function handleAccountDeletion(
   // X publishing stops before any credential is read, revoked at X or removed, and again right before the purge:
   // publish authority revoked, planned reservations cancelled (idempotent). A post in flight, a non-X account or a
   // shared workspace answers a TYPED block (the stop itself stays in effect) -- never an operator hand-off from here.
-  let unconfirmedPosts = 0;
+  // Every stop answer carries the DURABLE count of X posts whose result is unknown (it only grows until acknowledged).
+  let unconfirmedPosts = unconfirmedBefore;
   const stopXPublishing = async (): Promise<DeletionResponse | null> => {
     const halted = await deps.rpc('stop_x', leaseArgs);
     if (leaseLost(halted)) return fail(409, 'DELETION_IN_PROGRESS');
@@ -200,12 +208,11 @@ export async function handleAccountDeletion(
       const reason = blockReason(result.reason);
       return stop(409, `DELETION_BLOCKED_${reason}`, reason);
     }
-    if (result.status === 'stopped') {
-      const uncertain = result.reservations_uncertain;
-      unconfirmedPosts = typeof uncertain === 'number' && Number.isInteger(uncertain) && uncertain > 0 ? uncertain : 0;
+    const durable = durableCount(result.x_posts_unconfirmed);
+    if ((result.status === 'stopped' || result.status === 'not_applicable') && durable !== null) {
+      unconfirmedPosts = Math.max(unconfirmedPosts, durable);
       return null;
     }
-    if (result.status === 'not_applicable') return null;
     return stop(500, 'FAILED', 'X_STOP_UNEXPECTED');
   };
   const stopped = await stopXPublishing();
