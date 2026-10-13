@@ -86,17 +86,17 @@
 
 ## F6
 - slot: F6
-- status: ready
+- status: review_required
 - task_id: common-ai-f6-opus-both-integration-release-gate-20261013
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
 - dependencies: stacked PR170→173→175→176, F2 L2 source done; deployment includes 7 unapplied F2 changes; X/app shared consumer gates OFF
-- blocker: PR170 GitHub mergeability fluctuates; source merge/deploy/feature flags & consumer activation require scoped approval; API key registered per user/Claude check, name readback to be repeated
+- blocker: SOURCE_MERGE_CANDIDATE (4-PR composition PASS: report 324, _shared 613; no conflict; PR170 false = GitHub UNKNOWN while recomputing) / RELEASE_NO_GO pending approvals: 4-PR merge, F2 bundled-deploy of 7 commits, PRIMARY_MODEL secret, deploy byte check, mode ON; consumer gates OFF (x-test-post v144 & personalized-reports v45 behind main); earliest 2026-10-14 07:55
 - slot_use: shared AI Opus Primary morning/close source integration release gate
 
 ## F7
