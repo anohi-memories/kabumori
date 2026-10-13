@@ -4,6 +4,7 @@
 // Deterministic. Bodies are committed only for hosts in src/body_policy.ts; every other body is represented by its length and
 // SHA-256 and re-read from production at run time.
 import type { Importance } from "../src/fixtures.ts";
+import { redactNopostSample } from "../src/eval_redaction.ts";
 import { sanitizeBody } from "../src/sanitize.ts";
 import { bodyMayBeStored } from "../src/body_policy.ts";
 import type { LabelRecord, LabelStatus } from "../src/eval_set.ts";
@@ -89,6 +90,8 @@ export async function buildNopostSample(rows: Row[], labels: LabelsFile, codeVer
   const cases: NopostCase[] = [];
   for (const row of rows) cases.push(await buildNopostCase(row, labels));
   cases.sort((a, b) => a.caseId.localeCompare(b.caseId));
+  // Headlines of unconfirmed sources are not written into the repository.
+  await redactNopostSample({ cases });
   const extra = Object.keys(labels.labels).filter((id) => !rows.some((r) => String(r.id).startsWith(id)));
   if (extra.length > 0) throw new Error(`LABELS_WITHOUT_ROWS:${extra.join(",")}`);
   const cells = new Map<string, { layer: string; source: string; n: number; sampled: number }>();

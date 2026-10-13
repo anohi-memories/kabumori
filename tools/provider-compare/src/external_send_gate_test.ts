@@ -285,6 +285,23 @@ test("a payload that carries a blocked body is refused even under a cleared case
   });
 });
 
+test("a re-attached headline of a blocked case in another case's payload is refused", async () => {
+  await withRuntimeBodies(async (path) => {
+    const loaded = await loadRunnableCases({ fixtures: "rights_safe", runtimeBodiesPath: path, fixturesDir });
+    const plan = planExternalSend(inputFor(loaded));
+    const blocked = loaded.cases.find((c) => unconfirmedIds.includes(c.caseId))!;
+    assert.ok(blocked.candidate.title.length >= 20, "the synthetic headline is long enough to be window-checked");
+    const cleared = plan.allowedCases[0];
+    const request: NeutralRequest = {
+      taskId: "judgement_primary", caseId: cleared.caseId, system: "s", user: `参考: ${blocked.candidate.title}`, maxOutputTokens: 10,
+    };
+    assert.match(checkRequestSendable(request, plan) ?? "", /not cleared/);
+    // the committed placeholder is not text of a source and does not block anything by itself
+    const placeholder: NeutralRequest = { ...request, user: "（見出し非保持: 権利未確認）#00000000" };
+    assert.equal(checkRequestSendable(placeholder, plan), null);
+  });
+});
+
 test("the gate is pure: no network, subprocess, environment or file access in its source", async () => {
   const source = await Deno.readTextFile(new URL("external_send_gate.ts", import.meta.url));
   assert.ok(!/\bfetch\s*\(|XMLHttpRequest|Deno\.connect|WebSocket|Deno\.Command|Deno\.env|Deno\.readTextFile|Deno\.writeTextFile/.test(source));

@@ -4,6 +4,8 @@
 // Deterministic: the same inputs give the same file. Bodies are stored only for hosts listed in src/body_policy.ts
 // (sanitised, 1,800 characters at most); for every other source the body stays in production and is re-read at run time.
 import type { ImportantNewsCategory } from "../../../supabase/functions/important-news-monitor/news_candidate_logic.ts";
+import { redactEvalExpansion } from "../src/eval_redaction.ts";
+import { caseHazards } from "./eval_set_report.ts";
 import type { Importance } from "../src/fixtures.ts";
 import { sanitizeBody } from "../src/sanitize.ts";
 import { bodyMayBeStored } from "../src/body_policy.ts";
@@ -159,6 +161,8 @@ export async function buildEvalSet(rows: Row[], sampleRows: Row[], labels: Label
   }
   if (unlabeled.length > 0) throw new Error(`UNLABELED_ROWS:${unlabeled.join(",")}`);
   cases.sort((a, b) => a.caseId.localeCompare(b.caseId));
+  // Source-derived text (headlines of unconfirmed sources, generated posts) is not written into the repository.
+  await redactEvalExpansion({ cases }, (item) => ({ hazards: caseHazards(item as never) }));
   const quotas: Record<string, number> = {};
   for (const [stratum, value] of Object.entries(strata)) quotas[stratum] = value.sampled;
   return {

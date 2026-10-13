@@ -46,9 +46,9 @@ test("events: one issuer, one category, one day is one event; market items group
   const a = row({ id8: "a0000001", company_code: "25030", category: "administrative_action", title: "公取委の捜索", x_posted: false });
   const b = row({ id8: "a0000002", company_code: "25030", category: "administrative_action", title: "公取委の捜索について（続報）", x_posted: true });
   const c = row({ id8: "a0000003", company_code: "99990", category: "administrative_action" });
-  const m1 = row({ id8: "m0000001", company_code: "", source_type: "breaking_market", title: "Japan beer giants raided over alleged price-fixing cartel", news_jst: "2026-10-07 18:00:00" });
-  const m2 = row({ id8: "m0000002", company_code: "", source_type: "breaking_market", title: "Japan beer giants raided over price-fixing cartel allegation", news_jst: "2026-10-07 20:30:00" });
-  const m3 = row({ id8: "m0000003", company_code: "", source_type: "breaking_market", title: "Yen advances sharply against the dollar", news_jst: "2026-10-07 20:40:00" });
+  const m1 = row({ id8: "m0000001", company_code: "", source_type: "breaking_market", title: "Synthetic brewer group searched over alleged price-fixing probe", news_jst: "2026-10-07 18:00:00" });
+  const m2 = row({ id8: "m0000002", company_code: "", source_type: "breaking_market", title: "Synthetic brewer group searched over price-fixing probe allegation", news_jst: "2026-10-07 20:30:00" });
+  const m3 = row({ id8: "m0000003", company_code: "", source_type: "breaking_market", title: "Synthetic currency pair moves sharply in a test session", news_jst: "2026-10-07 20:40:00" });
   const g = groupEvents([a, b, c, m1, m2, m3]);
   assert.equal(g.get("a0000001"), g.get("a0000002"));
   assert.notEqual(g.get("a0000001"), g.get("a0000003"));

@@ -17,9 +17,9 @@ import { buildReport, TARGET_AREAS } from "../scripts/eval_set_report.ts";
 import { domainOf } from "../scripts/build_eval_set.ts";
 import { bodyMayBeStored } from "./body_policy.ts";
 import { scanJson } from "./secret_scan.ts";
+import { titleKeyOf } from "./eval_redaction.ts";
 
 const [labels, expansion, evalSet, original] = await Promise.all([loadLabels(), loadExpansion(), loadEvalSet(), loadCases()]);
-const normalise = (title: string) => title.normalize("NFKC").toLowerCase().replace(/[\s\p{P}\p{S}]/gu, "");
 
 function synthetic(
   id: string,
@@ -113,7 +113,8 @@ test("the headline set has no duplicated news: unique titles, one headline per e
   for (const item of evalSet.filter(isHeadline)) {
     // Generic titles ("自己株式の取得状況に関するお知らせ") are shared by many issuers; the same news is title + issuer + day.
     const who = item.candidate.companyCode ?? item.candidate.companyName ?? item.candidate.sourceName;
-    const key = `${normalise(item.candidate.title)}|${who}|${item.candidate.publishedAt.slice(0, 10)}`;
+    // A withheld headline is keyed by the hash of its normalised text (src/eval_redaction.ts), so duplicates are still found.
+    const key = `${titleKeyOf(item.candidate)}|${who}|${item.candidate.publishedAt.slice(0, 10)}`;
     assert.ok(!seenTitles.has(key), `${item.caseId} and ${seenTitles.get(key)} share a title, issuer and day`);
     seenTitles.set(key, item.caseId);
   }

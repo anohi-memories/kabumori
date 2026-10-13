@@ -54,7 +54,7 @@ test("scanJson reports the path of a leak in nested data and does not skip any f
 
 test("ordinary Japanese and English disclosure text is clean", () => {
   const samples = [
-    "自己株式の取得状況に関するお知らせ 取得株式数 214,100株、取得価額 335,225,800円",
+    "自己株式の取得状況に関するお知らせ 取得株式数 123,400株、取得価額 234,567,800円",
     "Risk-based capital rules and task-force recommendations were published on the Federal Reserve site.",
     "営業利益 270→410百万円（+51.9%）、経常利益 +53.1%",
   ];

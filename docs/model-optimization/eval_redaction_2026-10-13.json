@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "note": "Counts and content digests only; no source text. contentSha256 is the digest of each dataset with title / generated-post keys removed, measured before redaction and re-checked after.",
+  "files": {
+    "eval_expansion.json": {
+      "cases": 190,
+      "contentSha256": "286ec01747e2b3967fa7f2eebfe8cf44be0569f07f32c1e29c0f23758da4d72d",
+      "hazardCoverage": {
+        "approval_state": {
+          "cases": 11,
+          "independent": 10
+        },
+        "consolidated_vs_standalone": {
+          "cases": 2,
+          "independent": 2
+        },
+        "foreign_currency": {
+          "cases": 4,
+          "independent": 1
+        },
+        "hedge": {
+          "cases": 29,
+          "independent": 17
+        },
+        "multiple_amounts": {
+          "cases": 21,
+          "independent": 11
+        },
+        "negative_or_loss": {
+          "cases": 4,
+          "independent": 2
+        },
+        "subject_pair": {
+          "cases": 17,
+          "independent": 13
+        },
+        "unit_conversion": {
+          "cases": 19,
+          "independent": 12
+        },
+        "withdraw_or_cancel": {
+          "cases": 3,
+          "independent": 1
+        }
+      },
+      "titlesWithheld": 157,
+      "titlesKept": 33,
+      "postsWithheld": 76,
+      "withheldTitlesByHostClass": {
+        "al_jazeera": 24,
+        "bbc": 10,
+        "ap": 8,
+        "other": 2,
+        "tdnet": 113
+      },
+      "withheldBeforeThisRun": 0
+    },
+    "eval_nopost_sample.json": {
+      "cases": 150,
+      "contentSha256": "1dc85f249d529e10c168f5793387275ce48666491bbfc23f3cab45af7015c39a",
+      "hazardCoverage": null,
+      "titlesWithheld": 133,
+      "titlesKept": 17,
+      "postsWithheld": 0,
+      "withheldTitlesByHostClass": {
+        "al_jazeera": 33,
+        "bbc": 3,
+        "ap": 1,
+        "tdnet": 96
+      },
+      "withheldBeforeThisRun": 0
+    }
+  }
+}

@@ -73,7 +73,7 @@
       "status": "ai_provisional",
       "rule": null,
       "suspected": true,
-      "title": "Russia warns NATO of possible nuclear response if Kaliningrad is cut off"
+      "title": "（見出し非保持: 権利未確認）#095f383b"
     },
     {
       "caseId": "nopost-al-jazeera-5377df77",
@@ -82,7 +82,7 @@
       "status": "ai_provisional",
       "rule": null,
       "suspected": true,
-      "title": "Somali pirates killed five crew members on hijacked tanker, officials say"
+      "title": "（見出し非保持: 権利未確認）#5377df77"
     },
     {
       "caseId": "nopost-al-jazeera-74c1786d",
@@ -91,7 +91,7 @@
       "status": "ai_provisional",
       "rule": "R-FEATURE",
       "suspected": true,
-      "title": "Iran war live: Iranian media reports ‘massive explosions’ in Hormuz Strait"
+      "title": "（見出し非保持: 権利未確認）#74c1786d"
     },
     {
       "caseId": "nopost-al-jazeera-d2e702ee",
@@ -100,7 +100,7 @@
       "status": "ai_provisional",
       "rule": null,
       "suspected": true,
-      "title": "US delivers F-16V fighter jets to Taiwan as island eyes threat from China"
+      "title": "（見出し非保持: 権利未確認）#d2e702ee"
     },
     {
       "caseId": "nopost-tdnet-07087ae4",
@@ -109,7 +109,7 @@
       "status": "ai_provisional",
       "rule": "R-REVISION",
       "suspected": true,
-      "title": "個別業績の前期実績値との差異に関するお知らせ"
+      "title": "（見出し非保持: 権利未確認）#07087ae4"
     },
     {
       "caseId": "nopost-tdnet-16a0eec4",
@@ -118,7 +118,7 @@
       "status": "human_review_pending",
       "rule": null,
       "suspected": true,
-      "title": "IgA腎症治療薬「VOYXACT（シベプレンリマブ）」米国で生物製剤承認一部変更申請（sBLA）の段階的提出を完了"
+      "title": "（見出し非保持: 権利未確認）#16a0eec4"
     },
     {
       "caseId": "nopost-tdnet-574850ce",
@@ -127,7 +127,7 @@
       "status": "ai_provisional",
       "rule": null,
       "suspected": true,
-      "title": "2027 年３月期第２四半期（中間期）の決算発表日に関するお知らせ"
+      "title": "（見出し非保持: 権利未確認）#574850ce"
     },
     {
       "caseId": "nopost-tdnet-6fb822d9",
@@ -136,7 +136,7 @@
       "status": "human_review_pending",
       "rule": null,
       "suspected": false,
-      "title": "2027年２月期第２四半期 決算説明資料"
+      "title": "（見出し非保持: 権利未確認）#6fb822d9"
     },
     {
       "caseId": "nopost-tdnet-94ebccf4",
@@ -145,7 +145,7 @@
       "status": "insufficient_evidence",
       "rule": null,
       "suspected": true,
-      "title": "Argo Space社とのミッション2.5に関する打上げ契約に関するお知らせ"
+      "title": "（見出し非保持: 権利未確認）#94ebccf4"
     },
     {
       "caseId": "nopost-tdnet-d0fd4e00",
@@ -154,7 +154,7 @@
       "status": "human_review_pending",
       "rule": null,
       "suspected": true,
-      "title": "一部報道につきまして"
+      "title": "（見出し非保持: 権利未確認）#d0fd4e00"
     },
     {
       "caseId": "nopost-tdnet-e2d11344",
@@ -163,7 +163,7 @@
       "status": "independent_confirmed",
       "rule": "R-REVISION",
       "suspected": true,
-      "title": "連結業績予想の修正に関するお知らせ"
+      "title": "（見出し非保持: 権利未確認）#e2d11344"
     }
   ]
 }
