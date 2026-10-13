@@ -5,6 +5,12 @@
 
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F3 POSTONA Xサービス終了saga接続（2026-10-13 JST）
+- 旧F3 `postona-f3-x-publish-entitlement-guard-20261013` はL3 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO、Draft PR182 `1af5047eb70327c252194220df51e94e8a17ff7e`。TASK/Reportは `.agent_v2/archive/2026-10-13-F3-postona-f3-x-publish-entitlement-guard-20261013/` に保存済み（SHA256 `aa737fc1ee29a515534f24fa8eceead9af85fe419cfa08e85b2a7e6779efe12e`、復元blob一致、MANIFEST、HISTORY_INDEX）。旧G3はdoneで不変。
+- 新F3 `postona-f3-x-service-end-saga-wiring-20261013` ready/claude、Opus5.5（高）、F3→L3、返却先POSTONA G3のちゃ。F3-owned X連携解除/終了sagaをPR182候補X停止関数へ接続するソース限定TASK。F5はPhase6/7の共有削除オーケストレーター所有、F4はThreads所有で保護。独立worktree/新Draft PR、前PR HEAD変更禁止。
+- 本番 `PRODUCTION_NO_GO`。F5 PR178/183等の候補未適用、G4 X Issue131、実X OAuth/revoke・本番DB/Auth/Edge/merge/deploy未承認。共通`claim_due_post()`をF3では変更しない。
+
+
 ## F8 J1-b2 L8 acceptance（2026-10-13）
 - F8 `news-improvement-a-f8-j1b2-visibility-policy-migration-candidate-20261013`: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; done/next_owner:none。Draft PR181 head 94b478a70f5921ef4f0f03d2ad68a4842dc11f35 (F8 Report)。SQL candidateのみ、実migrationやDB適用なし。
 - 実装候補はフィード専用helper4個＋既存wrapper置換。X/Push共有helper未変更。候補 a（sector/all_useful）、b（high/criticalを全員）、c（他rejected表示も絞る）の採用ポリシーが未決。F8報告のPG17 matrix5variant成功はChatGPT未再実行。Sol（高）独立レビュー/実スキーマ検証/個別DB承認までmerge・Preview・production NO_GO。
