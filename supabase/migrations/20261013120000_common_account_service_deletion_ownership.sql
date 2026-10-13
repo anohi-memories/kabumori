@@ -63,6 +63,16 @@ begin
      or to_regclass('public.social_accounts') is null then
     raise exception 'COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_FOUNDATION_MISSING';
   end if;
+  -- The release order is part of the contract (docs/common-account/phase7-release-preflight.md): the lease
+  -- protects nothing unless the Phase 4 state decision (what "deleting" refuses for a person's writes) and the
+  -- Phase 5 workspace-owner state (what F4's writers and the service-role workers read) are already there.
+  -- This file does not call them; the order is enforced here instead of by file names alone.
+  if to_regprocedure('private.account_lifecycle_service_state_refusal(uuid,text)') is null then
+    raise exception 'COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_CORE_FENCE_MISSING';
+  end if;
+  if to_regprocedure('public.common_account_brand_service_state(text,text)') is null then
+    raise exception 'COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_BRAND_STATE_MISSING';
+  end if;
   if (select count(*) from pg_attribute a
        where a.attrelid = 'private.account_lifecycle_operations'::regclass and not a.attisdropped
          and a.attname in ('owner_lease', 'owner_lease_expires_at', 'owner_fence', 'status', 'operation_type', 'service_key')) <> 6
@@ -304,8 +314,12 @@ begin
          updated_at = now()
    where id = v_operation.id
   returning owner_fence into v_fence;
+  -- The answer carries what an earlier attempt left on record: the provider results and which providers the
+  -- person has already acknowledged, so a resumed end asks for a NEW acknowledgement only where one is missing.
   return jsonb_build_object('status', 'acquired', 'lease', v_lease, 'fence', v_fence,
-    'provider_results', (select provider_results from private.account_lifecycle_operations where id = v_operation.id));
+    'provider_results', (select provider_results from private.account_lifecycle_operations where id = v_operation.id),
+    'acknowledged', (select to_jsonb(coalesce(remote_unverified_ack_providers, '{}'::text[]))
+                       from private.account_lifecycle_operations where id = v_operation.id));
 end;
 $$;
 

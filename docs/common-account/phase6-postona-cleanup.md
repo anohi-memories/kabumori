@@ -231,3 +231,18 @@ python3 supabase/tests/common_account_phase4_ts_mutations.py          # 19 port 
 python3 supabase/tests/common_account_phase6_ts_mutations.py          # 15 orchestrator mutants
 deno test --no-config --no-check --allow-run --allow-env --allow-read supabase/functions/account-delete/
 ```
+
+## 12. Amendments of Phase 7 (see `phase7-release-preflight.md`)
+
+* The migration now also requires Phase 4's `account_lifecycle_service_state_refusal` and Phase 5's
+  `common_account_brand_service_state` (refusals `…_PREFLIGHT_CORE_FENCE_MISSING` / `…_BRAND_STATE_MISSING`).
+* `claim_service_deletion` also answers `acknowledged` (the providers the person has already acknowledged on this
+  operation). A removal already on record as `local_removed_remote_unverified` needs the person's acknowledgement:
+  taken from the retry's `acknowledged_remote_unverified` when the database has none yet (recorded), or asked for with
+  `409 REMOTE_UNVERIFIED_ACK_REQUIRED{providers}` before anything else is touched. Without this, a resumed end could
+  never complete.
+* `finish_owned_service_deletion` reports an acknowledged provider whose only recorded answer is "not connected" in
+  `remote_unverified` (the removal committed and its answer was lost).
+* The fixed reason list includes `PROVIDER_RESULTS_UNSETTLED`, `REMOTE_UNVERIFIED_NOT_ACKNOWLEDGED`,
+  `SERVICE_FOOTPRINT_REMAINS`.
+* The user-facing texts are `supabase/functions/account-delete/user_notices.ts` (pinned by a test).

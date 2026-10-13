@@ -196,7 +196,7 @@ export function world(options: WorldOptions = {}) {
         x: 'pending', ...(state.threads ? { threads: 'pending' } : {}),
         ...Object.fromEntries((options.otherPlatforms ?? []).map((platform) => [platform, 'pending'])), ...svc.results,
       };
-      return { status: 'acquired', lease: svc.lease, fence: svc.fence, provider_results: { ...svc.results } };
+      return { status: 'acquired', lease: svc.lease, fence: svc.fence, provider_results: { ...svc.results }, acknowledged: [...(svc.ack ?? [])] };
     },
     renew_service: (args) => {
       const svc = state.svc;
@@ -236,7 +236,10 @@ export function world(options: WorldOptions = {}) {
       const settled = ['done', 'not_connected', 'confirmed_remote_revoked', 'local_removed_remote_unverified'];
       const unsettled = Object.entries(svc.results).filter(([, v]) => !settled.includes(v)).map(([k]) => k).sort();
       if (unsettled.length) return { status: 'not_ready', reason: 'PROVIDER_RESULTS_UNSETTLED', providers: unsettled };
-      const unverified = Object.entries(svc.results).filter(([, v]) => v === 'local_removed_remote_unverified').map(([k]) => k).sort();
+      // an acknowledged provider that only says "not connected" (its removal's answer was lost) is still unverified
+      const unverified = Object.entries(svc.results)
+        .filter(([k, v]) => v === 'local_removed_remote_unverified' || (v === 'not_connected' && (svc.ack ?? []).includes(k)))
+        .map(([k]) => k).sort();
       if (unverified.length && !unverified.every((k) => (svc.ack ?? []).includes(k))) {
         return { status: 'not_ready', reason: 'REMOTE_UNVERIFIED_NOT_ACKNOWLEDGED', providers: unverified };
       }
