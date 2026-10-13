@@ -88,18 +88,18 @@
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-opus-both-integration-release-gate-20261013
+- status: ready
+- task_id: common-ai-f6-anthropic-multimodel-shared-adapter-m1-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: stacked PR170→173→175→176, F2 L2 source done; deployment includes 7 unapplied F2 changes; X/app shared consumer gates OFF
-- blocker: LIVE — Opus primary_both active since 2026-10-13 15:45 JST (deploy v32 byte-verified, budget $25/120 month $3/8 day); 10/13 close made by claude-opus-5-5 at 16:21 (2 calls, $0.1875, fact passed); consumer gates still OFF (not delivered)
-- slot_use: shared AI Opus Primary morning/close source integration release gate
+- dependencies: deployed Opus primary_both stable contract, existing ai_provider/model catalog/ai ledger; F2 owns commentator quality, F8 news, F9 API optimization
+- blocker: source-only; no merge/deploy/paid calls or production config. Other-slot shared file conflict must be verified before coding
+- slot_use: Claude multimodel API common adapter (Sonnet/Haiku/Opus) Phase M1
 
 ## F7
 - slot: F7
