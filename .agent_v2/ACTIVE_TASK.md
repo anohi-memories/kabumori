@@ -89,17 +89,17 @@
 
 ## F6
 - slot: F6
-- status: ready
+- status: review_required
 - task_id: common-ai-f6-anthropic-multimodel-shared-adapter-m1-20261013
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
 - dependencies: deployed Opus primary_both stable contract, existing ai_provider/model catalog/ai ledger; F2 owns commentator quality, F8 news, F9 API optimization
-- blocker: source-only; no merge/deploy/paid calls or production config. Other-slot shared file conflict must be verified before coding
+- blocker: PASS_OFFLINE_SOURCE Draft PR #187 (a7e1d3f3): per-role Claude model policies (Sonnet/Haiku/Opus, versioned aliases, narrow-only overrides, refusals before send, ledger/idempotency unchanged, no auto fallback); 11 tests + 6/6 mutants, provider 121 / report 324 / _shared 624; live primary_both untouched; NOTE consumer gates x/app turned ON 2026-10-13 20:49 JST (not by F6) while x-test-post (10/08) / personalized-reports (09/25) code is behind main
 - slot_use: Claude multimodel API common adapter (Sonnet/Haiku/Opus) Phase M1
 
 ## F7
