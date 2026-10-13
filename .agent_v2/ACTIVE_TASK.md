@@ -23,18 +23,18 @@
 
 ## F2
 - slot: F2
-- status: done
-- task_id: kabumori-f2-pr143-live-mergeability-diagnosis-20261012
+- status: ready
+- task_id: kabumori-f2-opus-primary-morning-close-handler-20261013
 - owner: claude
-- next_owner: none
-- return_to: かぶモリアプリ G2（新F2担当）のちゃ
+- next_owner: claude
+- return_to: かぶモリアプリG2のちゃ（新F2担当）
 - completion_code: L2
-- recommended_model: Sonnet5（高）
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
-- dependencies: PR143 → PR149 → PR158; old G2 unstarted task cancelled
-- blocker: GitHub PR143 currently reports mergeable=false via connected metadata; fresh verification needed at merge execution
-- slot_use: かぶモリアプリ
+- dependencies: PR170 source-only F6 Opus Primary; generalize BOTH morning & close. F6 changes owner-coordinated. G2 market-report handler ownership preserved.
+- blocker: production Secret/deploy/mode enable require separate safety approval; current $5/mo ledger cap may block daily operation
+- slot_use: かぶモリアプリ Opus primary report integration
 
 ## F3
 - slot: F3
