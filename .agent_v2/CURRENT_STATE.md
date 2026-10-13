@@ -33,6 +33,11 @@
 - V1 user wants holdings + market/news grounded questions. **Phase B still needed** for actual working feature: JWT/RLS user isolation, guarded server provider with cost/usage controls, grounding/freshness/citations, privacy/consent, security review. Production still shows 準備中 until separately approved Phase B.
 - F1 available for separately assigned new task after append-only archive and HISTORY_INDEX update. PR166 merge remains separate decision.
 
+## J1 AIに聞く V1 Phase B0 独立レビュー割当 — 2026-10-13 JST
+- F1 B0 `kabumori-f1-ai-ask-v1-phase-b0-security-preflight-20261013` L1で設計候補受入済み、done/none。設計 PR #171 head `0beda46186efe1db680909f369e2571609851d81` はDraft・未マージ。Phase A PR #166もDraft・未マージ。
+- 新J1 `kabumori-j1-ai-ask-b0-independent-security-review-20261013` ready/codex、推薦 **Sol（高）**、開始J1 → 完了V1、返却先「かぶモリアプリG1のちゃ（新F1担当）」。J1はread-only独立設計レビューのみ（本人/Auth/RLS、根拠・注入、費用上限・冪等、同意・G6依存、D1-D8）。
+- B1 server/client実装・本番API/DB/Edge・有料API・deploy・mergeは未承認。J1指摘の確認後、ユーザー判断と独立した別TASKで進める。
+
 ## 移行の状態
 
 - 新系統 `.agent_v2/` はPR #155のmainマージ（`4e80c79dc42c11fbc1ca105665514b0dd32842d3`）により有効。新F/J枠は新規TASKを明示割当した後に使用する。
