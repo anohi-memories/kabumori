@@ -9,7 +9,7 @@ here="$(cd "$(dirname "$0")" && pwd)"; j1b3="$here/../j1b3"; tpl="$1"; shift
 CONN=("$@")
 export LC_ALL=C PGOPTIONS="-c statement_timeout=170000"
 fail=0; empty=0; nonempty_total=0
-for shape in "30 600" "7 900" "400 700" "3 500"; do
+for shape in "30 600" "7 900" "400 700" "3 500" "edge 0"; do
   pool="${shape% *}"; n="${shape#* }"
   for v in a p_perf_a; do
     db="j1b4_eq_$v"
@@ -23,7 +23,7 @@ for shape in "30 600" "7 900" "400 700" "3 500"; do
         execute def;
       end \$\$;" >/dev/null || { echo "FAIL: could not copy original base"; fail=1; continue; }
     psql "${CONN[@]}" -d "$db" -qAt -v ON_ERROR_STOP=1 -f "$here/.eq.sql" >/dev/null 2>&1 || { echo "FAIL: apply $v"; fail=1; continue; }
-    psql "${CONN[@]}" -d "$db" -qAt -v ON_ERROR_STOP=1 -v pool="$pool" -v n="$n" -f "$here/equivalence_seed.sql" >/dev/null 2>"$here/.eq.err" || { echo "FAIL: seed: $(head -c 200 "$here/.eq.err")"; fail=1; continue; }
+    psql "${CONN[@]}" -d "$db" -qAt -v ON_ERROR_STOP=1 -v pool="${pool/edge/1}" -v n="$n" -f "$here/$([ "$pool" = edge ] && echo equivalence_edge_seed.sql || echo equivalence_seed.sql)" >/dev/null 2>"$here/.eq.err" || { echo "FAIL: seed: $(head -c 200 "$here/.eq.err")"; fail=1; continue; }
   done
   for user in 1 2 3 4 5 6; do
     uid="10000000-0000-0000-0000-00000000000$user"
@@ -39,6 +39,15 @@ for shape in "30 600" "7 900" "400 700" "3 500"; do
     nonempty_total=$((nonempty_total+1))
   done
 done
+# the edge-case set must also match the rule-derived expectation (guards against both versions being wrong the same way)
+if [ -f "$here/expected_edge.txt" ]; then
+  for user in 1 2 5 6; do
+    exp="$(grep -E "^u$user:" "$here/expected_edge.txt" | sed -E "s/^u$user: ?//")"
+    uid="10000000-0000-0000-0000-00000000000$user"
+    got="$(psql "${CONN[@]}" -d j1b4_eq_p_perf_a -qAt -c "set role authenticated; set request.jwt.claim.sub = '$uid'; select coalesce(string_agg(substring(title from '\\[E[0-9]+\\]') || ':' || tracking_type, ',' order by title), '') from public.get_my_important_stock_news(50);" | tail -1)"
+    [ "$got" = "$exp" ] || { echo "FAIL edge expectation (user $user): got [$got] expected [$exp]"; fail=1; }
+  done
+fi
 echo "feeds compared: $nonempty_total (empty: $empty)"
 [ "$empty" -lt "$nonempty_total" ] || { echo "FAIL: every compared feed was empty"; fail=1; }
-if [ "$fail" = "0" ]; then echo "J1-b4 equivalence: PASS (base and wrapper identical on 4 data shapes x 6 users)"; else echo "J1-b4 equivalence: FAIL"; exit 1; fi
+if [ "$fail" = "0" ]; then echo "J1-b4 equivalence: PASS (base and wrapper identical on 4 generated data shapes + the edge-case set x 6 users)"; else echo "J1-b4 equivalence: FAIL"; exit 1; fi
