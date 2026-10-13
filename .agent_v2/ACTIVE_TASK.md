@@ -85,18 +85,18 @@
 
 ## F6
 - slot: F6
-- status: idle
-- task_id: none
+- status: ready
+- task_id: common-ai-f6-opus-primary-close-report-v0-20261013
 - owner: claude
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: claude
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
-- recommended_model: none
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: none
-- blocker: none
-- slot_use: 予備枠（ユーザーまたはChatGPTの明示割当専用）
+- dependencies: common AI provider PR148→150→153→157→162 Draft/unmerged; G2 PR143/149 merged; coordination with market-report-analysis owner G2/F2 mandatory
+- blocker: production activation separate safety/approval gate; no automatic fallback required, user accepts failure
+- slot_use: 2026-10-13 close-only Opus Primary V0, morning legacy unchanged, source-first
 
 ## F7
 - slot: F7
