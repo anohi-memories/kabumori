@@ -19,6 +19,12 @@
 
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F5 Phase8 統合検証割当（2026-10-13 JST）
+- F5 `common-account-f5-phase8-x-threads-lifecycle-integrated-security-20261013`: ready/claude, Opus5.5（高）, F5→L5, return `共通アカウントG5のちゃ（新F5担当）`. Source-only local PG17/isolated overlayでF3 X PR189・F4 Threads PR180・F5 PR183を統合検証。F3/F4所有ソースは読み取りのみ、別worktree／Draft stacked PR、production NO_GO。
+- 前F5 Phase7 `common-account-f5-phase7-auth-lifecycle-release-preflight-20261013` はL5 done、PR183 Draft head `f2565cc0412f8127f95f00a728d16bf83af74667`。TASK+Report archive `.agent_v2/archive/2026-10-13-F5-common-account-f5-phase7-auth-lifecycle-release-preflight-20261013/` 原文一致/read-back・SHA256SUMS・MANIFEST・HISTORY_INDEX保存済み。
+- F3 X停止saga PR189・F4 Threads lease修正 PR180はそれぞれL3/L4 source受入候補、未マージ。本番Auth/DB/Edge/Meta/X/Threads/managed検証とアプリ退会routingは未承認・別工程。Phase8後に空きJ1〜J4でSol（高）の独立統合レビューを判断。
+
+
 ## F8/F9 parallel next tasks (2026-10-13)
 - F8 `news-improvement-a-f8-j1b4-performance-security-offline-20261013`: ready/claude, Opus5.5（高）, L8. Local SQL performance/security validation for PR181/185 and Sol review packet. No managed migration, Preview or production operation; reported PG17 subset 91/116 migrations and N400 O(n²) concern still require review.
 - F9 `api-optimization-b-f9-clean-replacement-final-rights-gate-20261013`: ready/claude, Opus5.5（高）, L9. Clean Draft replacement candidate preserving fail-closed model-send gate, residual rights investigation. PR115/174/184 protected, no branch history rewrite, merge, deploy or external model calls.
