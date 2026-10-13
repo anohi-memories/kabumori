@@ -207,3 +207,85 @@ Deno.test("two attempts at once: exactly one runs, the other is in_progress; X i
   assert.equal(revoked.length, 2);
   assert.equal(await authority(bystander.account), "enabled");
 });
+
+// ---------------------------------------------------------------------------------------------------
+// R1 (J3 V3): an X post whose result is unknown survives a committed purge + failed finalize, a crash with a lease
+// takeover and even a whole later run, until it is acknowledged. X is never revoked twice.
+// ---------------------------------------------------------------------------------------------------
+const durableRows = (user: string) =>
+  scalar("select count(*)::int from public.social_mobile_account_deletion_x_unconfirmed where subject_sha256 = public.social_mobile_account_deletion_subject($1::uuid)", [user]);
+
+async function inFlightExpired(user: string, prefix: string) {
+  const p = await person(user, prefix);
+  await owner(`update postona_x_resv.reservations set status = 'claimed', lease_token = gen_random_uuid(), lease_expires_at = now() - interval '1 second'
+               where brand_id = $1 and draft_id = $2`, [p.ws, `${prefix}0`]);
+  return p;
+}
+/** finalize fails once (transport); with crash = true the process also dies before releasing its lease. */
+function finalizeFailsOnce(user: string, crash: boolean) {
+  const base = depsFor(user);
+  let failed = false;
+  const wrapped: DeletionDeps["rpc"] = (name, args) => {
+    if (name === "finalize" && !failed) { failed = true; return Promise.resolve({ ok: false, code: null }); }
+    if (name === "release" && crash) return Promise.resolve({ ok: true, data: null });
+    return rpc(name, args);
+  };
+  return { deps: { ...base.deps, rpc: wrapped }, plain: base.deps, revoked: base.revoked };
+}
+
+Deno.test("R1: expired in-flight -> uncertain -> purge COMMIT -> finalize fails -> retry still reports the unknown X post", async () => {
+  const user = "00000000-0000-4000-8000-0000000000b6";
+  const { ws } = await inFlightExpired(user, "ckpt");
+  const { deps, plain, revoked } = finalizeFailsOnce(user, false);
+  const first = await run(user, deps);
+  assert.deepEqual(first, { status: 500, body: { ok: false, error: "FINALIZE_FAILED" } });
+  assert.equal(await scalar("select state from public.social_mobile_account_deletions where user_id = $1::uuid", [user]), "purged", "the purge committed");
+  assert.equal(await scalar("select count(*)::int from postona_x_resv.reservations where brand_id = $1", [ws]), 0, "the reservation rows are gone");
+  assert.equal(revoked.length, 2);
+  // Second line: the stop step itself (state purged -> not_applicable) still answers the durable count.
+  const lease = await rpc("acquire", { p_expected_scope: "social_only", p_apple_required: false, p_user_id: user });
+  assert.ok(lease.ok);
+  const leaseArgs = { p_lease: (lease.data as { lease: string }).lease, p_user_id: user };
+  assert.deepEqual(await rpc("stop_x", leaseArgs), { ok: true, data: { status: "not_applicable", state: "purged", x_posts_unconfirmed: 1, reconciliation_required: true } });
+  assert.ok((await rpc("release", leaseArgs)).ok);
+  const retry = await run(user, plain);
+  assert.deepEqual(retry, { status: 200, body: { ok: true, login_deleted: false, x_posts_unconfirmed: 1 } });
+  assert.deepEqual(xServiceEndOutcomeOf(retry.status, retry.body), { status: "done", unconfirmedPosts: 1 });
+  assert.equal(revoked.length, 2, "X is never revoked twice");
+  assert.equal(await durableRows(user), 1, "the unknown post is checkpointed durably (until acknowledged)");
+});
+
+Deno.test("R1: a crash after the purge (lease kept) -> in_progress -> lease takeover -> later runs still report it until acknowledged", async () => {
+  const user = "00000000-0000-4000-8000-0000000000b7";
+  await inFlightExpired(user, "crash");
+  const { deps, plain, revoked } = finalizeFailsOnce(user, true);
+  assert.equal((await run(user, deps)).status, 500);
+  assert.deepEqual(await run(user, plain), { status: 409, body: { ok: false, error: "DELETION_IN_PROGRESS" } }, "the dead attempt still holds its lease");
+  await owner("update public.social_mobile_account_deletions set lease_expires_at = now() - interval '1 second' where user_id = $1::uuid", [user]);
+  const takeover = await run(user, plain);
+  assert.deepEqual(takeover, { status: 200, body: { ok: true, login_deleted: false, x_posts_unconfirmed: 1 } });
+  assert.equal(revoked.length, 2, "X is never revoked twice");
+  // A whole new run after the finished deletion (the tombstone is gone) still reports it.
+  assert.deepEqual(await run(user, plain), { status: 200, body: { ok: true, login_deleted: false, x_posts_unconfirmed: 1 } });
+  // The record holds no raw user id: only the subject hash and the random reservation id.
+  assert.equal(await scalar("select count(*)::int from public.social_mobile_account_deletion_x_unconfirmed where subject_sha256 = $1", [await sha256Hex(user)]), 1);
+  // Acknowledgement: service_role only, compare-and-clear.
+  const ack = async (expected: number, role = "service_role") => await withOwner(async (c) => {
+    await c.queryArray("BEGIN");
+    try {
+      await c.queryArray(`SET LOCAL ROLE ${role}`);
+      const r = await c.queryArray<[string]>({ text: "select public.social_mobile_account_deletion_x_unconfirmed_ack($1::uuid, $2)::text", args: [user, expected] });
+      await c.queryArray("COMMIT");
+      return JSON.parse(r.rows[0][0]);
+    } catch (error) {
+      await c.queryArray("ROLLBACK");
+      return { error: (error as { fields?: { message?: string } }).fields?.message ?? "" };
+    }
+  });
+  assert.match((await ack(1, "authenticated")).error, /permission denied/u);
+  assert.deepEqual(await ack(2), { status: "count_changed", x_posts_unconfirmed: 1 });
+  assert.deepEqual(await ack(1), { status: "acknowledged", cleared: 1 });
+  assert.equal(await durableRows(user), 0);
+  assert.deepEqual(await run(user, plain), { status: 200, body: { ok: true, login_deleted: false } });
+  assert.equal(await durableRows(BYSTANDER), 0, "another person has no record");
+});

@@ -85,7 +85,7 @@ grep -q X_SAGA_STOP_PRECONDITION_MISSING "$tmp/r0" || fail "R0 wrong refusal: $(
 own -f "$here/001_x_publish_entitlement_guard.sql" >/dev/null
 perl -pe 's/^commit;$/select 1\/0;\ncommit;/' "$stop_sql" > "$tmp/fail.sql"
 if own -f "$tmp/fail.sql" >/dev/null 2>&1; then fail "injected failure applied"; fi
-[[ "$(val -c "select to_regprocedure('public.social_mobile_account_deletion_stop_x(uuid,uuid)') is null")" == t ]] || fail "partial apply"
+[[ "$(val -c "select to_regprocedure('public.social_mobile_account_deletion_stop_x(uuid,uuid)') is null and to_regclass('public.social_mobile_account_deletion_x_unconfirmed') is null")" == t ]] || fail "partial apply"
 own -f "$stop_sql" >/dev/null
 if own -f "$stop_sql" >"$tmp/r0" 2>&1; then fail "re-apply accepted"; fi
 grep -q X_SAGA_STOP_ALREADY_APPLIED "$tmp/r0" || fail "re-apply refused for another reason"
@@ -93,7 +93,7 @@ echo "R0_REFUSALS_ROLLBACK_REAPPLY_PASS"
 
 # B1: SQL behaviour.
 own -f "$here/saga_behavior.sql" >"$tmp/b1" 2>&1 || { cat "$tmp/b1"; fail "behaviour"; }
-for marker in S1_LEASE_IDEMPOTENT_ACL_PASS S3_FROZEN_STILL_STOPS_PASS S5_IN_FLIGHT_AND_UNCERTAIN_PASS X_SAGA_STOP_BEHAVIOR_PASS; do
+for marker in S1_LEASE_IDEMPOTENT_ACL_PASS S3_FROZEN_STILL_STOPS_PASS S5_IN_FLIGHT_AND_UNCERTAIN_PASS S6_DURABLE_UNCONFIRMED_ACL_PASS X_SAGA_STOP_BEHAVIOR_PASS; do
   grep -q "$marker" "$tmp/b1" || { cat "$tmp/b1"; fail "missing $marker"; }
   echo "$marker"
 done
@@ -122,6 +122,55 @@ s4="$(val -c "set role service_role" -c "select public.social_mobile_account_del
 [[ "$(val -c "set role service_role" -c "select public.social_mobile_account_deletion_x_precheck('$U1') ->> 'non_x_accounts'" | tail -1)" == 1 ]] || fail "S4 precheck count"
 echo "S4_NON_X_AFTER_ACQUIRE_BLOCKED_PASS"
 
+# R3 (J3 V3): two sessions. A holder keeps the person's WORKSPACE lock; stop_x waits on it (observed in pg_locks) while
+# its lease runs out on the wall clock. After the holder releases, stop_x must answer LEASE_LOST and write nothing
+# (authority still enabled, planned reservations untouched, nothing checkpointed). Controls: a valid lease after the
+# same wait stops; two concurrent stops on one lease both succeed in turn (idempotent), no deadlock.
+U5='00000000-0000-4000-8000-0000000000a5'
+U6='00000000-0000-4000-8000-0000000000a6'
+acquire() { val -c "set role service_role" -c "select public.social_mobile_account_deletion_acquire('$1', 'social_only', false) ->> 'lease'" | tail -1; }
+hold_workspace() { own -c "begin" -c "select public.social_mobile_account_deletion_workspace_lock(public.social_mobile_account_deletion_workspace('$1'))" -c "select pg_sleep($2)" -c "commit" >/dev/null; }
+stop_bg() { if val -c "set role service_role" -c "select public.social_mobile_account_deletion_stop_x('$1', '$2')::text" >"$3" 2>&1; then echo ok >"$3.rc"; else echo err >"$3.rc"; fi; }
+wait_until() { local i; for i in $(seq 1 100); do [[ "$(val -c "$1")" == "$2" ]] && return 0; sleep 0.05; done; fail "R3 timed out waiting for: $1"; }
+holder_has_lock="select (count(*) > 0)::text from pg_locks l join pg_stat_activity a on a.pid = l.pid where l.locktype = 'advisory' and l.granted and a.query like '%pg_sleep%'"
+waiting_stop="select count(*)::text from pg_stat_activity a where a.wait_event_type = 'Lock' and a.wait_event = 'advisory' and a.query like '%stop_x%'"
+authority_of() { val -c "select a.state from public.x_account_publish_authority a join public.social_accounts s on s.id = a.social_account_id where s.brand_id = public.social_mobile_account_deletion_workspace('$1')"; }
+planned_of() { val -c "select count(*) from postona_x_resv.reservations where brand_id = public.social_mobile_account_deletion_workspace('$1') and status = 'planned'"; }
+deadlocks0="$(val -c "select deadlocks from pg_stat_database where datname = current_database()")"
+
+lease5="$(acquire "$U5")"; [[ "$lease5" =~ ^[0-9a-f-]{36}$ ]] || fail "R3 acquire: $lease5"
+hold_workspace "$U5" 3 & holder=$!
+wait_until "$holder_has_lock" true
+own -c "update public.social_mobile_account_deletions set lease_expires_at = clock_timestamp() + interval '1 second' where user_id = '$U5'" >/dev/null
+stop_bg "$U5" "$lease5" "$tmp/r3" & stopper=$!
+wait_until "$waiting_stop" 1
+wait "$holder"; wait "$stopper"
+[[ "$(cat "$tmp/r3.rc")" == err ]] && grep -q SOCIAL_MOBILE_DELETION_LEASE_LOST "$tmp/r3" || { cat "$tmp/r3"; fail "R3 lease expired while waiting was accepted"; }
+[[ "$(authority_of "$U5")" == enabled ]] || fail "R3 authority changed under a lost lease"
+[[ "$(planned_of "$U5")" == 2 ]] || fail "R3 reservations changed under a lost lease"
+[[ "$(val -c "select count(*) from public.social_mobile_account_deletion_x_unconfirmed where subject_sha256 = public.social_mobile_account_deletion_subject('$U5')")" == 0 ]] || fail "R3 checkpoint written under a lost lease"
+# Control: a fresh valid lease after the same wait stops.
+lease5b="$(acquire "$U5")"; [[ "$lease5b" =~ ^[0-9a-f-]{36}$ && "$lease5b" != "$lease5" ]] || fail "R3 re-acquire: $lease5b"
+hold_workspace "$U5" 1.5 & holder=$!
+wait_until "$holder_has_lock" true
+stop_bg "$U5" "$lease5b" "$tmp/r3c" & stopper=$!
+wait_until "$waiting_stop" 1
+wait "$holder"; wait "$stopper"
+[[ "$(cat "$tmp/r3c.rc")" == ok ]] && grep -q '"status": "stopped"' "$tmp/r3c" || { cat "$tmp/r3c"; fail "R3 valid lease after the wait"; }
+[[ "$(authority_of "$U5")" == revoked && "$(planned_of "$U5")" == 0 ]] || fail "R3 valid lease did not stop"
+# Two workers on one valid lease, queued behind the holder: both stop, in turn; the cancellations happen once.
+lease6="$(acquire "$U6")"; [[ "$lease6" =~ ^[0-9a-f-]{36}$ ]] || fail "R3 acquire six: $lease6"
+hold_workspace "$U6" 1.5 & holder=$!
+wait_until "$holder_has_lock" true
+stop_bg "$U6" "$lease6" "$tmp/r3w1" & w1=$!
+stop_bg "$U6" "$lease6" "$tmp/r3w2" & w2=$!
+wait "$holder"; wait "$w1"; wait "$w2"
+for w in r3w1 r3w2; do [[ "$(cat "$tmp/$w.rc")" == ok ]] && grep -q '"status": "stopped"' "$tmp/$w" || { cat "$tmp/$w"; fail "R3 worker $w"; }; done
+cancelled="$(cat "$tmp/r3w1" "$tmp/r3w2" | grep -o '"reservations_cancelled": [0-9]*' | awk '{s += $2} END {print s}')"
+[[ "$cancelled" == 2 ]] || fail "R3 two workers cancelled $cancelled (expected 2 in total)"
+[[ "$(val -c "select deadlocks from pg_stat_database where datname = current_database()")" == "$deadlocks0" ]] || fail "R3 deadlock"
+echo "R3_LEASE_EXPIRED_WHILE_WAITING_REFUSED_PASS"
+
 # E1: the REAL saga TypeScript against the real SQL (MOCK_ONLY getUser / revokeX).
 if ! SAGA_OWNER_URL="postgres://$owner@127.0.0.1:$port/$db" SAGA_SUPER_URL="postgres://$super@127.0.0.1:$port/$db" \
   DENO_NO_PACKAGE_JSON=1 deno test --no-config --allow-net=127.0.0.1:"$port" --allow-read --allow-env=SAGA_OWNER_URL,SAGA_SUPER_URL \
@@ -131,9 +180,14 @@ fi
 grep -E "passed|failed" "$tmp/e1" | tail -1
 echo "E1_REAL_SAGA_END_TO_END_PASS"
 
-# RB: rollback removes the function; re-apply works.
+# RB: the rollback REFUSES while unknown-post evidence exists (R1); once it is acknowledged / exported (here: removed by
+# the owner) it removes the functions and the table; re-apply works.
+if own -f "$here/002_x_service_end_saga_stop_rollback.sql" >"$tmp/rb" 2>&1; then fail "RB dropped the unknown-post record"; fi
+grep -q X_SAGA_STOP_ROLLBACK_UNCONFIRMED_PRESENT "$tmp/rb" || { cat "$tmp/rb"; fail "RB refused for another reason"; }
+[[ "$(val -c "select to_regprocedure('public.social_mobile_account_deletion_stop_x(uuid,uuid)') is not null")" == t ]] || fail "RB refusal was not atomic"
+own -c "delete from public.social_mobile_account_deletion_x_unconfirmed" >/dev/null
 own -f "$here/002_x_service_end_saga_stop_rollback.sql" >/dev/null
-[[ "$(val -c "select to_regprocedure('public.social_mobile_account_deletion_stop_x(uuid,uuid)') is null")" == t ]] || fail "RB left the function"
+[[ "$(val -c "select to_regprocedure('public.social_mobile_account_deletion_stop_x(uuid,uuid)') is null and to_regprocedure('public.social_mobile_account_deletion_x_unconfirmed_ack(uuid,integer)') is null and to_regclass('public.social_mobile_account_deletion_x_unconfirmed') is null")" == t ]] || fail "RB left an object"
 own -f "$stop_sql" >/dev/null
 echo "RB_ROLLBACK_REAPPLY_PASS"
 echo "X_SAGA_STOP_ALL_PASS"

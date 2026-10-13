@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BLOCK_REASONS } from './delete_logic.ts';
+import { createHandler } from './http.ts';
 import { xServiceEndOutcomeOf, xServiceEndRequest } from './x_service_end_contract.ts';
 
 test('done only for a social_only success; unconfirmed X posts travel with it; a deleted login is never done', () => {
@@ -35,6 +36,52 @@ test('a remote revoke that X did not confirm, changed material or an unfinished 
   assert.deepEqual(xServiceEndOutcomeOf(502, null), { status: 'failed' });
 });
 
-test('the request is the X app\'s own social_only deletion request (no user id, no other scope)', () => {
-  assert.deepEqual(xServiceEndRequest(), { confirmation: 'DELETE_MY_ACCOUNT', expected_scope: 'social_only' });
+test('the request is the X app\'s own complete social_only delete request (no user id, no other scope)', () => {
+  assert.deepEqual(xServiceEndRequest(), { action: 'delete', confirmation: 'DELETE_MY_ACCOUNT', expected_scope: 'social_only' });
+});
+
+// R2 (J3 V3): the exported request must reach the REAL router (createHandler), not only the pure deletion handler.
+// MOCK_ONLY: Auth and PostgREST answers are canned; no network.
+const FULL = { SUPABASE_URL: 'https://fixture.supabase.co', SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'service', X_CLIENT_ID: 'x-id', X_CLIENT_SECRET: 'x-secret' };
+const b64url = (value: unknown) => btoa(JSON.stringify(value)).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/u, '');
+const callerToken = (sub: string) => `${b64url({ alg: 'none' })}.${b64url({ sub, amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 5 }] })}.sig`;
+
+function routedDeletion(body: unknown) {
+  const calls: { url: string; auth: string | null; body: unknown }[] = [];
+  const fetchImpl = (url: string, init?: RequestInit) => {
+    calls.push({ url, auth: new Headers(init?.headers).get('Authorization'), body: init?.body ? JSON.parse(String(init.body)) : null });
+    if (url.endsWith('/auth/v1/user')) return Promise.resolve(Response.json({ id: 'user-1', identities: [{ provider: 'email', id: 'user-1' }] }));
+    if (url.endsWith('/rpc/social_mobile_account_deletion_preview')) return Promise.resolve(Response.json({ state: 'none', scope: 'social_only', apple_revoked: false }));
+    if (url.endsWith('/rpc/social_mobile_account_deletion_x_precheck')) return Promise.resolve(Response.json({ non_x_accounts: 0, x_posts_unconfirmed: 0 }));
+    if (url.endsWith('/rpc/social_mobile_account_deletion_record')) return Promise.resolve(Response.json(null));
+    if (url.endsWith('/rpc/social_mobile_account_deletion_acquire')) return Promise.resolve(Response.json({ status: 'blocked', reason: 'SHARED_WORKSPACE' }));
+    return Promise.resolve(new Response(null, { status: 500 }));
+  };
+  const request = new Request('https://fn.example/social-mobile-account-delete', {
+    method: 'POST', headers: { Authorization: `Bearer ${callerToken('user-1')}` }, body: JSON.stringify(body),
+  });
+  return createHandler({ get: (name: string) => (FULL as Record<string, string>)[name] }, fetchImpl)(request)
+    .then(async (response) => ({ status: response.status, json: await response.json(), calls }));
+}
+
+test('R2: the exported request reaches Auth and the saga through the real router; identity is the bearer token only', async () => {
+  const routed = await routedDeletion({ ...xServiceEndRequest(), user_id: 'victim', p_user_id: 'victim' });
+  assert.deepEqual(routed.json, { ok: false, error: 'DELETION_BLOCKED_SHARED_WORKSPACE' });
+  assert.equal(routed.status, 409);
+  const auth = routed.calls.find((call) => call.url.endsWith('/auth/v1/user'));
+  assert.equal(auth?.auth, `Bearer ${callerToken('user-1')}`);
+  const rpcUsers = routed.calls.filter((call) => call.url.includes('/rpc/')).map((call) => (call.body as Record<string, unknown>).p_user_id);
+  assert.ok(rpcUsers.length >= 3);
+  assert.ok(rpcUsers.every((user) => user === 'user-1'), JSON.stringify(rpcUsers));
+  assert.deepEqual(xServiceEndOutcomeOf(routed.status, routed.json), { status: 'blocked', reason: 'SHARED_WORKSPACE', retryable: false });
+});
+
+test('R2: a body without action: delete (the old exported shape) or with another action is refused before Auth', async () => {
+  const { action: _action, ...withoutAction } = xServiceEndRequest();
+  for (const body of [withoutAction, { ...withoutAction, action: 'Delete' }, { ...withoutAction, action: 'delete_all' }, { ...withoutAction, action: ['delete'] }]) {
+    const routed = await routedDeletion(body);
+    assert.equal(routed.status, 400, JSON.stringify(body));
+    assert.deepEqual(routed.json, { ok: false, error: 'ACTION_REQUIRED' });
+    assert.equal(routed.calls.length, 0, JSON.stringify(body));
+  }
 });
