@@ -1,0 +1,13 @@
+{
+  "slot": "F3",
+  "task_id": "postona-f3-x-reservation-live-boundary-source-integration-20261012",
+  "date": "2026-10-13",
+  "original_path": ".agent_v2/tasks/F3.md",
+  "archive_path": ".agent_v2/archive/2026-10-13-F3-postona-f3-x-reservation-live-boundary-source-integration-20261012/files/.agent_v2/tasks/F3.md",
+  "size": 23343,
+  "sha256": "670ab1cbf20d54e0d79a62c1e0f080c6d489b5c03b2de8e2e51a8dd3318b7d1d",
+  "source_commit_sha": "282780d0a4e93a270f3187f26be48a2eeec06d60",
+  "archive_create_commit_sha": "214c2c1eee27b10df201a31408228890c427619c",
+  "restore_verification": "GitHub fetch_file UTF-8 content equality with existing F3 TASK; identical blob SHA",
+  "original_blob_sha": "94596807603869d4e5d9afb09f4fa28e3e02b7a3"
+}
