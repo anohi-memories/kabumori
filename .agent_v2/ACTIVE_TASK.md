@@ -23,19 +23,18 @@
 
 ## F2
 - slot: F2
-- status: done
-- task_id: kabumori-f2-opus-primary-morning-close-handler-20261013
+- status: ready
+- task_id: kabumori-f2-opus-primary-both-handler-test-sync-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ（新F2担当）
 - completion_code: L2
-- recommended_model: Opus5.5（高）
+- recommended_model: Sonnet5（中）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
-- dependencies: PR170→PR173 source candidates; Opus follow-on belongs to F6 task common-ai-f6-opus-primary-both-integration-20261013
-- blocker: none for F2 slot. PR173 Draft/unmerged, production NO_GO, F6 integration dependencies unresolved
-- l2_verdict: PASS_OFFLINE_SOURCE / TRANSFER_F6 / PRODUCTION_NO_GO
-- slot_use: かぶモリアプリ; free after L2, next task must archive current F2 TASK and confirm no conflicts
+- dependencies: PR170→PR173→PR175; test-only new F2 Draft PR stacked on #175, F6 provider source protected
+- blocker: none for isolated test update; production NO_GO, source merge requires gate
+- slot_use: かぶモリアプリ / F6 Opus primary_both integration test 2 expectations
 
 ## F3
 - slot: F3
