@@ -1,5 +1,12 @@
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F6 Opus PRIMARY both-cycle — 2026-10-13
+- New F6 `common-ai-f6-opus-primary-both-integration-20261013` **ready/claude**, **Opus5.5（高）**, F6→L6, return 共通AI基盤のちゃ. Prior F6 close-only task archived at `.agent_v2/archive/2026-10-13-f6-opus-primary-close-v0.md` with matching blob/read-back and HISTORY_INDEX updated.
+- F6 to implement only provider-owned primary_both changes for morning/close (derived from F2 `F2_PRIMARY_BOTH_F6_HANDOFF.patch`) in NEW Draft PR stacked on F2 PR173. F2 PR173 `review_required` waiting F2ちゃ L2, so protected F2 handler/tests remain untouched. F6 owns this project's AI code; any F2 code adjustment routed by handoff to F2ちゃ.
+- Today close Opus and next morning remain targets but **not yet live**: neither PR170 nor PR173 merged, no verified Supabase Secret/deploy/feature flag; $5 trial monthly cap unchanged. F6 source/QA only until dedicated production gate. Manual OFF restores OpenAI; no automatic fallback required by user.
+
+
+
 ## F5 Phase6 — POSTONA cleanup / service-deletion source (2026-10-13 JST)
 - NEW F5 `common-account-f5-phase6-postona-provider-cleanup-service-deletion-20261013` **ready / claude**, Opus5.5（高）, F5→L5, return 共通アカウントG5のちゃ（新F5担当）. Prior completed F5 Phase5 TASK+Report archived with manifest, SHA256, restore-readback and HISTORY_INDEX.
 - F5 owns G5 adapter registration and EXECUTE candidate, service_deletion lease/fencing, `local_removed_remote_unverified` consent policy and precise F4/F3 contracts. Stack new Draft on F5 PR165 (currently HEAD `4638891f6c7ff432e08d462019594e1ec3d66f07`); G5 PR121/152, F4 PR167/169, H5 PR159 protected.
