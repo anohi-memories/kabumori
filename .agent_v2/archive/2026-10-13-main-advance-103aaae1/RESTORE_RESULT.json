@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "restored_originals": 1,
+  "source_commit_bytes_match": true,
+  "continuing_tasks": [
+    "F2",
+    "J1"
+  ],
+  "completion_return_pending": 0
+}

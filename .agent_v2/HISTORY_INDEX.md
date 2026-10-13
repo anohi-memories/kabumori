@@ -359,6 +359,10 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 | 2026-09-10（id） | H2 | `morning-report-fact-diagnostics-and-greeting-status-fix-20260910` | Review and safety | review_required | — | — | T:H2R#L5148 R:H2R#L5148 | — |
 | 2026-09-10（id） | H2 | `close-report-live-data-and-voice-retry-hardening-20260910` | H2 Follow-up E — production deploy verification | deployed and byte-verified; C2 review required | — | — | T:H2R#L4987 R:H2R#L4987 | — |
 
+## 新系統の完了作業
+
+| 2026-10-13 | F2 | `kabumori-f2-pr143-live-mergeability-diagnosis-20261012` | PR143 mergeability diagnosis | done / L2 accepted | archived | `.agent_v2/archive/2026-10-13-f2-pr143-mergeability-diagnosis.md` | `b1f19982b27af3ea55afe20a78a7ce9927538452` (archive write commit) |
+
 
 ## 2026-10-13 完全移行前の最終snapshot候補（切替未実施）
 
@@ -395,3 +399,10 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 - 30枠最新metadata、全46open PRのファイル一覧、3PR/12パスのmain突合、134登録worktreeの境界は同archive内のJSON。前回snapshot SHA256 64/64再照合。
 - PR172保全branch: `backup/pr172-pre-conflict-prep-8e65a71-20261013`。3PRは未変更・未close、旧管理差分merge経路とローカル保全条件が残る。旧checkoutのHANDOFFも未コミットのためrootへの追記を避け、下記専用Reportを引継ぎ先とする。
 - 検索Report: `.agent_v2/migrations/CONFLICT_RECONCILIATION_20261013.md`。推薦実装Opus5.5（高）、独立レビューSol（高）。正式昇格・独立レビュー・main merge・productionは未実施。現在状態の正本ではなく履歴検索索引。
+
+
+## 2026-10-13 -- Fresh main allocation detected during reconciliation
+
+- source_commit: `103aaae104a146182b52554a5baa98e6d33529da`。F2/J1新TASKを保護し、30枠を再照合（ready2、完了返却待ち0）。
+- archive_path: `.agent_v2/archive/2026-10-13-main-advance-103aaae1/`。最新mainのCURRENT_STATE原文を保存・1/1実復元、全新旧snapshotバイト保持。
+- 先行mainのHISTORY_INDEX全文をprefixとして保持し、PR172の既存索引追加と今回の検索索引をその後へ合流。mainのF2 archive entryも保持。正式移行はF2/J1完結待ち。

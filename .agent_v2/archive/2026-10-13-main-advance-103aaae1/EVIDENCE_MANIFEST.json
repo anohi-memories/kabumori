@@ -1,0 +1,47 @@
+{
+  "files": [
+    {
+      "archive_path": ".agent_v2/archive/2026-10-13-main-advance-103aaae1/FINAL_VALIDATION.json",
+      "size": 903,
+      "sha256": "abd5da14c6a369b6aea784c5dbe1d933f90cfd3200f8265f8819f076fc3d7a99",
+      "source_commit": "103aaae104a146182b52554a5baa98e6d33529da"
+    },
+    {
+      "archive_path": ".agent_v2/archive/2026-10-13-main-advance-103aaae1/MAIN_ADVANCE.json",
+      "size": 2617,
+      "sha256": "ce364cdbbd899c4bbe8c5a636c709ecf4cbb4a93e10ee3fe61b935f1f6fcc2c2",
+      "source_commit": "103aaae104a146182b52554a5baa98e6d33529da"
+    },
+    {
+      "archive_path": ".agent_v2/archive/2026-10-13-main-advance-103aaae1/MANIFEST.json",
+      "size": 572,
+      "sha256": "751ed3d5a95da4772786af70e40107f18b6fa269de67f77f537f614a24078365",
+      "source_commit": "103aaae104a146182b52554a5baa98e6d33529da"
+    },
+    {
+      "archive_path": ".agent_v2/archive/2026-10-13-main-advance-103aaae1/RESTORE.md",
+      "size": 361,
+      "sha256": "7823980fa5450a652558e6950569a91b0f6094c0f072fbf37d41b3874e2f63d1",
+      "source_commit": "103aaae104a146182b52554a5baa98e6d33529da"
+    },
+    {
+      "archive_path": ".agent_v2/archive/2026-10-13-main-advance-103aaae1/RESTORE_RESULT.json",
+      "size": 169,
+      "sha256": "af5a7621913033ae18061b7c3f35f698c1ee7250454dd654dd6d6a3fde43cc97",
+      "source_commit": "103aaae104a146182b52554a5baa98e6d33529da"
+    },
+    {
+      "archive_path": ".agent_v2/archive/2026-10-13-main-advance-103aaae1/SLOT_METADATA.json",
+      "size": 68042,
+      "sha256": "25816e28173d80fce2e937edf01385c0d09f161ce515803eb2a38bb1076c14f6",
+      "source_commit": "103aaae104a146182b52554a5baa98e6d33529da"
+    },
+    {
+      "archive_path": ".agent_v2/archive/2026-10-13-main-advance-103aaae1/before/.agent_v2/CURRENT_STATE.md",
+      "size": 16276,
+      "sha256": "cca3df2345065ab0e927d10be4fa0323eb02a3e53fe8fd1eed35fc8dd93727cf",
+      "source_commit": "103aaae104a146182b52554a5baa98e6d33529da"
+    }
+  ],
+  "self_hash": "in SHA256SUMS"
+}
