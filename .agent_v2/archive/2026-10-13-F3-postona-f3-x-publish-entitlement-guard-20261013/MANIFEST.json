@@ -1,0 +1,11 @@
+{
+  "task_id": "postona-f3-x-publish-entitlement-guard-20261013",
+  "original_path": ".agent_v2/tasks/F3.md",
+  "archive_path": ".agent_v2/archive/2026-10-13-F3-postona-f3-x-publish-entitlement-guard-20261013/files/.agent_v2/tasks/F3.md",
+  "size": 26487,
+  "sha256": "aa737fc1ee29a515534f24fa8eceead9af85fe419cfa08e85b2a7e6779efe12e",
+  "original_blob_sha": "892a834fca6065a7ed6be7ae79b38e747af0f34e",
+  "source_commit": "621aff14ad02394b5a808c6c472d0746def50788",
+  "archive_commit": "0e0d6496c5a157b653d1f53ab93317f00e0f5f8e",
+  "restore": "exact UTF-8 and blob SHA equality GitHub read-back"
+}
