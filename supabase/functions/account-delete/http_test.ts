@@ -14,6 +14,7 @@ const USER = '11111111-1111-4111-8111-111111111111';
 const OP = '00000000-0000-4000-8000-000000000001';
 const XOP = '00000000-0000-4000-8000-000000000002';
 const LEASE = '00000000-0000-4000-8000-000000000003';
+const SLEASE = '00000000-0000-4000-8000-000000000004';
 const b64 = (value: unknown) => btoa(JSON.stringify(value)).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/u, '');
 const TOKEN = `${b64({ alg: 'HS256' })}.${b64({ sub: USER, amr: [{ method: 'password', timestamp: Math.floor(Date.now() / 1000) - 30 }] })}.sig`;
 const env = (values: Record<string, string> = { SUPABASE_URL: URL_, SUPABASE_ANON_KEY: ANON, SUPABASE_SERVICE_ROLE_KEY: SERVICE }) =>
@@ -32,7 +33,14 @@ function network(overrides: Record<string, (seen: Seen) => Response> = {}) {
       : { account_status: 'deleting', lifecycle_version: 9, services: [{ service_key: 'kabumori', status: 'ended' }, { service_key: 'x_autopost', status: 'ended' }], blockers: [], required_checkpoints: ['session_revocation', 'storage_cleanup'], managed_ownership: [], operation: { operation_id: OP, step: 'cleanup', recorded_checkpoints: [] } }),
     begin_common_account_deletion: () => ({ status: 'started', operation_id: OP, lifecycle_version: 6 }),
     begin_service_deletion: () => ({ status: 'started', operation_id: XOP }),
-    finish_service_deletion: () => ({ status: 'ended' }),
+    finish_service_deletion: () => ({ status: 'blocked', reason: 'OWNED_FINISH_REQUIRED' }),
+    common_account_provider_snapshot: () => ({ workspace: 'u_fixture', platforms: ['x'] }),
+    claim_service_deletion: () => ({ status: 'acquired', lease: SLEASE, fence: 1, provider_results: { x: 'pending' } }),
+    renew_service_deletion_claim: () => ({ status: 'owned', fence: 1 }),
+    release_service_deletion_claim: () => ({ status: 'released' }),
+    record_owned_service_deletion_provider_result: () => ({ status: 'recorded' }),
+    acknowledge_owned_remote_unverified: () => ({ status: 'recorded' }),
+    finish_owned_service_deletion: () => ({ status: 'ended', provider_results: { x: 'done' }, remote_unverified: [] }),
     withdraw_kabumori_service: () => ({ status: 'ended' }),
     common_account_deletion_release_gate: () => ({ managed_auth_delete: { state: 'open', reason: 'TEST' } }),
     claim_common_account_deletion: () => ({ status: 'acquired', lease: LEASE, fence: 1, recorded_checkpoints: [] }),
@@ -102,7 +110,7 @@ test('the legacy call (POST, no body) and any unknown action delete nothing and 
 test('delete over the network: each credential goes only where it belongs, and the login is removed last', async () => {
   const { seen, fetchImpl } = network();
   const response = await createHandler(env(), fetchImpl)(post({ action: 'delete_common_account', confirmation: DELETE_CONFIRMATION, expected_lifecycle_version: 5 }));
-  assert.deepEqual([response.status, await response.json()], [200, { ok: true, outcome: 'deleted' }]);
+  assert.deepEqual([response.status, await response.json()], [200, { ok: true, outcome: 'deleted', providers: { x: 'done' } }]);
   const path = (s: Seen) => s.url.slice(URL_.length);
   for (const s of seen) {
     const p = path(s);
@@ -126,8 +134,16 @@ test('delete over the network: each credential goes only where it belongs, and t
   const intentAt = seen.findIndex((s) => path(s) === '/rest/v1/rpc/begin_common_account_deletion_external_step'
     && (s.body as Record<string, unknown>).p_step === 'managed_auth_delete');
   assert.ok(prepares.every((i) => i < intentAt) && intentAt < adminAt, 'two ready answers, then the recorded intent, precede the managed delete');
-  const owned = seen.filter((s) => (s.body as Record<string, unknown> | null)?.p_lease !== undefined);
+  const owned = seen.filter((s) => (s.body as Record<string, unknown> | null)?.p_lease !== undefined && path(s).includes('common_account_deletion'));
   assert.ok(owned.length >= 8 && owned.every((s) => (s.body as Record<string, unknown>).p_lease === LEASE), 'every owned step carries the lease');
+  // POSTONA (Phase 6) has its own lease, taken by presenting this deletion's: every later step of it carries that one.
+  const claimService = seen.find((s) => path(s) === '/rest/v1/rpc/claim_service_deletion');
+  assert.equal((claimService?.body as Record<string, unknown>).p_account_lease, LEASE, 'the service lease is claimed with the account lease');
+  assert.equal((claimService?.body as Record<string, unknown>).p_account_operation_id, OP);
+  const serviceSteps = seen.filter((s) => path(s).includes('_service_deletion') && path(s) !== '/rest/v1/rpc/claim_service_deletion'
+    && path(s) !== '/rest/v1/rpc/begin_service_deletion' && (s.body as Record<string, unknown> | null)?.p_lease !== undefined);
+  assert.ok(serviceSteps.length >= 4 && serviceSteps.every((s) => (s.body as Record<string, unknown>).p_lease === SLEASE), 'every owned POSTONA step carries its lease');
+  assert.ok(!seen.some((s) => path(s) === '/rest/v1/rpc/finish_service_deletion'), 'the legacy finish is never used for POSTONA');
   assert.ok(seen.findIndex((s) => path(s) === '/rest/v1/rpc/claim_common_account_deletion') < seen.findIndex((s) => path(s).startsWith(`/functions/v1/`) && (s.body as Record<string, unknown>)?.action === 'delete'),
     'owned before the first external action');
   assert.equal(path(seen.at(-2)!), '/rest/v1/rpc/complete_common_account_deletion', 'the read-back is the last step');
@@ -162,7 +178,7 @@ test('an Auth Admin failure is checked by reading the login back; a 404 is verif
   assert.deepEqual([(settled?.body as Record<string, unknown>)?.p_step, (settled?.body as Record<string, unknown>)?.p_outcome], ['managed_auth_delete', 'failed']);
   const gone = network({ '/auth/v1/admin/users/': () => new Response('{}', { status: 404 }) });
   const deleted = await createHandler(env(), gone.fetchImpl)(post({ action: 'delete_common_account', confirmation: DELETE_CONFIRMATION, expected_lifecycle_version: 5 }));
-  assert.deepEqual(await deleted.json(), { ok: true, outcome: 'deleted' });
+  assert.deepEqual(await deleted.json(), { ok: true, outcome: 'deleted', providers: { x: 'done' } });
   assert.ok(gone.seen.some((s) => s.url.endsWith('/rpc/complete_common_account_deletion')));
 });
 

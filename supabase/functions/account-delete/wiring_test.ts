@@ -71,13 +71,20 @@ test('the legacy direct delete is gone: no module deletes a login outside the li
   assert.ok(logic.indexOf("call(deps, 'complete'") > deleteAt, 'the read-back follows it');
   // Success is only ever the verified read-back.
   assert.equal(logic.match(/outcome: 'deleted'/gu)?.length, 1);
-  assert.match(logic, /if \(done\?\.status === 'completed' && done\.login_deleted === true\) \{\n\s+return \{ status: 200, body: \{ ok: true, outcome: 'deleted'(, \.\.\.\(remoteUnverified\.length \? \{ remote_unverified: remoteUnverified \} : \{\}\))? \} \};/u);
-  // Phase 4: the provider cleanup settles before the POSTONA entitlement is ended and before any managed step.
+  assert.match(logic, /if \(done\?\.status === 'completed' && done\.login_deleted === true\) \{\n\s+return \{ status: 200, body: \{ ok: true, outcome: 'deleted'(, \.\.\.\(Object\.keys\(providerSummary\)\.length \? \{ providers: providerSummary \} : \{\}\))?(, \.\.\.\(remoteUnverified\.length \? \{ remote_unverified: remoteUnverified \} : \{\}\))? \} \};/u);
+  // Phase 6: POSTONA is ended only through the owned path -- the legacy finish is never called, the service lease is
+  // claimed before X is touched, every provider answer is recorded, and the owner's end precedes Kabumori.
+  assert.ok(!/call\(deps, 'finish_service_deletion'/u.test(logic), 'the legacy finish (refused by the database for POSTONA) is not used');
+  const end = logic.slice(logic.indexOf('async function endPostona'), logic.indexOf('// Preview (read-only)'));
+  const at = (needle: string) => end.indexOf(needle);
+  assert.ok(at("call(deps, 'claim_service'") > 0 && at("call(deps, 'claim_service'") < at('runProviderCleanups('), 'the service lease before anything is touched');
+  assert.ok(at("call(deps, 'acknowledge_unverified'") > 0 && at("call(deps, 'acknowledge_unverified'") < at('runProviderCleanups('),
+    'the acknowledgement is recorded before any removal');
+  assert.ok(at('runProviderCleanups(') < at('deps.x.run(token)') && at('deps.x.run(token)') < at("call(deps, 'finish_owned_service'"),
+    'the providers, then X (the saga would send a non-X account to an operator), then the owner ends it');
+  assert.ok(at("call(deps, 'record_provider_result'") > 0, 'every answer is recorded');
   const flow = logic.slice(logic.indexOf('async function ownedDeletion'));
-  const providerAt = flow.indexOf('const providerFailure = await providerStep();');
-  const finishAt = flow.indexOf("call(deps, 'finish_service_deletion'");
-  assert.ok(providerAt > 0 && providerAt < finishAt, 'providers settle before POSTONA ends');
-  assert.ok(finishAt < flow.indexOf("call(deps, 'withdraw_kabumori'"), 'POSTONA ends before Kabumori');
+  assert.ok(flow.indexOf('await endPostona(') > 0 && flow.indexOf('await endPostona(') < flow.indexOf("call(deps, 'withdraw_kabumori'"), 'POSTONA ends before Kabumori');
 });
 
 test('the function uses only owned lifecycle calls and never the operator reconciliation', async () => {
@@ -111,13 +118,13 @@ test('the Apple step uses the typed account-delete adapter, never the boolean X 
   }
 });
 
-test('routing refuses everything but the three lifecycle actions before any request', async () => {
+test('routing refuses everything but the four lifecycle actions before any request', async () => {
   const http = code(await read('supabase/functions/account-delete/http.ts'));
   const guard = http.indexOf("return json({ ok: false, error: 'ACTION_REQUIRED' }, 400);");
   const firstFetch = http.indexOf('fetchImpl(');
   const envRead = http.indexOf("env.get('SUPABASE_URL')");
   assert.ok(guard > 0 && guard < envRead && guard < firstFetch);
-  assert.match(http, /if \(action !== 'preview' && action !== 'withdraw_kabumori' && action !== 'delete_common_account'\) \{/u);
+  assert.match(http, /if \(action !== 'preview' && action !== 'withdraw_kabumori' && action !== 'withdraw_postona' && action !== 'delete_common_account'\) \{/u);
   assert.ok(!/console\./u.test(http) && !/console\./u.test(code(await read('supabase/functions/account-delete/lifecycle_logic.ts'))));
 });
 

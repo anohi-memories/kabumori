@@ -24,16 +24,25 @@
 //     that cannot be recorded or is unknown is never replayed: it waits for reconciliation.
 //   * The managed Auth delete is release-blocked by a database gate (H2 R3): until it opens, a deletion
 //     is refused before anything changes (COMMON_ACCOUNT_DELETION_UNAVAILABLE).
+//   * POSTONA (Phase 6): ending it -- inside a whole-account deletion, or alone ("withdraw_postona") -- is
+//     one owned operation (endPostona): the service deletion's own lease, X through its saga (typed outcome,
+//     never edited), every other connected provider through its registered adapter, each answer recorded
+//     durably, and the entitlement ended only by the owner, only when every recorded answer is settled and
+//     every "the remote grant was not verified revoked" is acknowledged by the person (recorded BEFORE the
+//     cleanup that makes it so). A connected provider without an adapter, or without the acknowledgement,
+//     stops everything before anything changes.
 //   * Every failure is a fixed code. Tokens, keys, ids, e-mail addresses, object names and server messages
 //     are never returned or logged.
 import { lastAuthenticatedAt, RECENT_AUTH_SECONDS } from '../social-mobile-account-delete/delete_logic.ts';
 import type { AppleRevocationOutcome } from './apple_outcome.ts';
-import { runProviderCleanups, type ProviderCleanupAdapter, type ProviderCleanupReport } from './provider_cleanup.ts';
+import { runProviderCleanups, type ProviderCleanupAdapter } from './provider_cleanup.ts';
 
 export { RECENT_AUTH_SECONDS };
 
 export const WITHDRAW_CONFIRMATION = 'END_KABUMORI_SERVICE';
 export const DELETE_CONFIRMATION = 'DELETE_COMMON_ACCOUNT';
+export const END_POSTONA_CONFIRMATION = 'END_POSTONA_SERVICE';
+const PROVIDER_KEY_RE = /^[a-z][a-z0-9_]{1,31}$/u;
 /** Storage list -> remove passes per request before the request gives up (and a retry continues). */
 export const STORAGE_PASSES = 3;
 /** Ownership lease (seconds). Longer than any Edge request; the database also refuses a stale owner. */
@@ -43,7 +52,9 @@ const STORAGE_REMOVE_CHUNK = 100;
 export type LifecycleRpcName =
   | 'release_gate' | 'eligibility' | 'withdraw_kabumori' | 'begin_service_deletion' | 'finish_service_deletion'
   | 'begin_account_deletion' | 'claim' | 'renew' | 'release' | 'owned_checkpoint' | 'owned_prepare'
-  | 'begin_external_step' | 'settle_external_step' | 'storage_objects' | 'complete' | 'record_error';
+  | 'begin_external_step' | 'settle_external_step' | 'storage_objects' | 'complete' | 'record_error'
+  | 'claim_service' | 'renew_service' | 'release_service' | 'record_provider_result' | 'acknowledge_unverified'
+  | 'finish_owned_service' | 'provider_snapshot';
 export type RpcResult = { ok: true; data: unknown } | { ok: false };
 
 /** providers and Apple subjects come from the server's view of the person's identities. */
@@ -80,8 +91,15 @@ export type LifecycleDeps = {
    */
   providers?: readonly ProviderCleanupAdapter[];
   /**
-   * Whether a provider whose LOCAL data is gone but whose remote grant is not confirmed revoked may let a
-   * whole-account deletion complete. Default false: the deletion stops (PROVIDER_REMOTE_UNVERIFIED).
+   * What each registered adapter can confirm of the REMOTE grant. A provider not listed is treated as
+   * 'unsupported': the person must acknowledge, before anything changes, that the remote authorization
+   * stays (REMOTE_UNVERIFIED_ACK_REQUIRED). Threads is 'unsupported' (no app-side revoke exists).
+   */
+  providerRemoteRevoke?: Readonly<Record<string, 'supported' | 'unsupported'>>;
+  /**
+   * An operator-level override: an unexpected "local removed, remote unverified" answer from a provider the
+   * person did not acknowledge still stops (PROVIDER_REMOTE_UNVERIFIED) unless this is true; when true the
+   * acknowledgement is recorded as given by the operator path, never silently. Default false.
    */
   acceptRemoteUnverified?: boolean;
   /** Managed Auth Admin delete of the verified login. */
@@ -97,7 +115,8 @@ export type LifecycleErrorCode =
   | 'DELETION_IN_PROGRESS' | 'RECONCILIATION_REQUIRED'
   | 'APPLE_REAUTH_REQUIRED' | 'APPLE_REVOCATION_UNAVAILABLE' | 'APPLE_REVOKE_FAILED'
   | 'X_CLEANUP_UNSUPPORTED' | 'X_CLEANUP_IN_PROGRESS' | 'X_CLEANUP_BLOCKED' | 'X_CLEANUP_FAILED'
-  | 'PROVIDER_CLEANUP_BLOCKED' | 'PROVIDER_REMOTE_UNVERIFIED'
+  | 'PROVIDER_CLEANUP_BLOCKED' | 'PROVIDER_REMOTE_UNVERIFIED' | 'PROVIDER_ADAPTER_MISSING'
+  | 'REMOTE_UNVERIFIED_ACK_REQUIRED' | 'ACKNOWLEDGEMENT_INVALID'
   | 'SERVICE_CLEANUP_INCOMPLETE' | 'SESSION_REVOKE_FAILED'
   | 'STORAGE_CLEANUP_FAILED' | 'STORAGE_NOT_EMPTY' | 'STORAGE_BUCKET_OWNED'
   | 'NOT_READY' | 'AUTH_DELETE_FAILED' | 'AUTH_DELETE_UNCONFIRMED' | 'DELETION_VERIFICATION_PENDING'
@@ -106,7 +125,7 @@ export type LifecycleErrorCode =
 type FailureBody = {
   ok: false; error: LifecycleErrorCode; reasons?: string[]; sessions_revoked?: true;
   /** Fixed provider keys and fixed result codes of the provider cleanup step (provider_cleanup.ts). */
-  providers?: ProviderCleanupReport['providers'];
+  providers?: { provider: string; result: string }[];
 };
 type Body = FailureBody | ({ ok: true } & Record<string, unknown>);
 export type LifecycleResponse = { status: number; body: Body };
@@ -125,7 +144,7 @@ const reasonCodes = (value: unknown) => [...new Set((Array.isArray(value) && val
 const fail = (
   status: number,
   error: LifecycleErrorCode,
-  extra: { reasons?: string[]; sessionsRevoked?: boolean; providers?: ProviderCleanupReport['providers'] } = {},
+  extra: { reasons?: string[]; sessionsRevoked?: boolean; providers?: { provider: string; result: string }[] } = {},
 ): LifecycleResponse => ({
   status,
   body: {
@@ -137,6 +156,7 @@ const fail = (
   },
 });
 const record = (value: unknown) => (typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {});
+const asRecord = record;
 const strings = (value: unknown): string[] | null =>
   Array.isArray(value) && value.every((item) => typeof item === 'string') ? value as string[] : null;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -232,6 +252,210 @@ async function xPreview(deps: LifecycleDeps, token: string) {
 }
 
 // ---------------------------------------------------------------------------------------------------
+// POSTONA end (Phase 6): the ONE owned operation behind both "POSTONAの利用を終了" and the whole-account deletion's
+// POSTONA step. Order, with the reason for each:
+//   begin (entitlement `deleting`: new connections and writes are refused by the guards) -> claim the service
+//   deletion's own lease -> snapshot of what is connected -> a connected provider without an adapter stops
+//   here -> the person's acknowledgement is recorded BEFORE any removal that cannot be revoked remotely -> the
+//   other providers through their adapters (the X saga takes every social account of the workspace for X
+//   material and would send a Threads account to an operator, so they go first) -> X through its saga ->
+//   every answer recorded durably -> the owner ends the entitlement (database: owner, settled answers,
+//   acknowledgement, footprint read-back).
+// A lease lost anywhere stops with nothing recorded after the loss and nothing ended. Never a fabricated
+// cancellation: `done` is the X saga's own word, and Threads is never reported as revoked remotely.
+
+type Snapshot = { platforms: string[] };
+
+async function providerSnapshot(deps: LifecycleDeps, userId: string): Promise<Snapshot | null> {
+  const data = await call(deps, 'provider_snapshot', { p_user_id: userId });
+  const platforms = data ? strings(data.platforms) : null;
+  if (!platforms || !platforms.every((p) => PROVIDER_KEY_RE.test(p) || p === 'x')) return null;
+  return { platforms: [...new Set(platforms)].sort() };
+}
+
+/** The acknowledgement list of a request: absent -> none; otherwise exactly provider keys (never `x`), or null. */
+function parseAcknowledged(value: unknown): string[] | null {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || value.length > 8) return null;
+  const keys: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string' || !PROVIDER_KEY_RE.test(item) || item === 'x') return null;
+    keys.push(item);
+  }
+  return [...new Set(keys)].sort();
+}
+
+const adapterKeys = (deps: LifecycleDeps) => new Set((deps.providers ?? []).map((a) => a.provider));
+const remoteRevokeOf = (deps: LifecycleDeps, provider: string) => deps.providerRemoteRevoke?.[provider] ?? 'unsupported';
+
+/**
+ * What would stop a POSTONA end before anything changes (read-only): a connected provider with no adapter, and
+ * a provider whose remote grant cannot be revoked that the person has not acknowledged.
+ */
+function postonaPreflight(deps: LifecycleDeps, snapshot: Snapshot, acknowledged: readonly string[]): LifecycleResponse | null {
+  const others = snapshot.platforms.filter((p) => p !== 'x');
+  const adapters = adapterKeys(deps);
+  const missing = others.filter((p) => !adapters.has(p));
+  if (missing.length > 0) {
+    return fail(409, 'PROVIDER_ADAPTER_MISSING', { providers: missing.map((provider) => ({ provider, result: 'blocked' as const })) });
+  }
+  const needsAck = others.filter((p) => remoteRevokeOf(deps, p) !== 'supported' && !acknowledged.includes(p));
+  if (needsAck.length > 0) {
+    return fail(409, 'REMOTE_UNVERIFIED_ACK_REQUIRED', { providers: needsAck.map((provider) => ({ provider, result: 'pending' as const })) });
+  }
+  return null;
+}
+
+type EndScope =
+  | { kind: 'service_only' }
+  | { kind: 'account'; operationId: string; lease: string; owned: () => Promise<boolean> };
+type PostonaEnd =
+  | { ok: false; response: LifecycleResponse }
+  | { ok: true; outcome: 'ended' | 'already_ended' | 'not_registered'; providers: Record<string, string>; remoteUnverified: string[] };
+
+const DURABLE_RESULT: Record<string, string> = {
+  not_connected: 'not_connected', confirmed_remote_revoked: 'confirmed_remote_revoked',
+  local_removed_remote_unverified: 'local_removed_remote_unverified', reconciliation_required: 'reconciliation_required',
+  blocked: 'blocked', unreadable: 'reconciliation_required', invalid: 'blocked',
+};
+
+async function endPostona(args: {
+  deps: LifecycleDeps;
+  token: string;
+  userId: string;
+  scope: EndScope;
+  acknowledged: readonly string[];
+  /** Records the failure where the caller keeps one (the account deletion) and returns it. */
+  stop: (response: LifecycleResponse) => Promise<LifecycleResponse>;
+  lost: () => LifecycleResponse;
+}): Promise<PostonaEnd> {
+  const { deps, token, userId, scope, acknowledged } = args;
+  const refuse = async (response: LifecycleResponse): Promise<PostonaEnd> => ({ ok: false, response: await args.stop(response) });
+
+  const begun = await call(deps, 'begin_service_deletion', { p_user_id: userId, p_service_key: 'x_autopost' });
+  if (!begun) return refuse(fail(500, 'FAILED'));
+  if (begun.status === 'blocked') return refuse(fail(409, 'DELETION_BLOCKED', { reasons: [reasonCode(begun.reason)] }));
+  if (begun.status === 'not_registered' || begun.status === 'already_ended') {
+    return { ok: true, outcome: begun.status, providers: {}, remoteUnverified: [] };
+  }
+  const operationId = begun.operation_id;
+  if ((begun.status !== 'started' && begun.status !== 'in_progress') || typeof operationId !== 'string' || !UUID.test(operationId)) {
+    return refuse(fail(500, 'FAILED'));
+  }
+
+  // Ownership of this one service deletion; inside an account deletion it presents that deletion's own lease.
+  const claimed = await call(deps, 'claim_service', {
+    p_user_id: userId, p_service_key: 'x_autopost', p_operation_id: operationId, p_lease_seconds: LEASE_SECONDS,
+    ...(scope.kind === 'account' ? { p_account_operation_id: scope.operationId, p_account_lease: scope.lease } : {}),
+  });
+  if (!claimed) return refuse(fail(500, 'FAILED'));
+  if (claimed.status === 'in_progress') return { ok: false, response: fail(409, 'DELETION_IN_PROGRESS') };
+  if (claimed.status === 'lease_lost') return { ok: false, response: args.lost() };
+  if (claimed.status === 'blocked') {
+    return refuse(fail(409, scope.kind === 'account' ? 'DELETION_BLOCKED' : 'WITHDRAW_BLOCKED', { reasons: [reasonCode(claimed.reason)] }));
+  }
+  const lease = claimed.lease;
+  if (claimed.status !== 'acquired' || typeof lease !== 'string' || !UUID.test(lease)) return refuse(fail(500, 'FAILED'));
+  const own = { p_user_id: userId, p_service_key: 'x_autopost', p_operation_id: operationId, p_lease: lease };
+  const owned = async () => {
+    if (scope.kind === 'account' && !(await scope.owned())) return false;
+    return (await call(deps, 'renew_service', { ...own, p_lease_seconds: LEASE_SECONDS }))?.status === 'owned';
+  };
+  const record = async (provider: string, result: string) =>
+    (await call(deps, 'record_provider_result', { ...own, p_provider: provider, p_result: result }))?.status === 'recorded';
+
+  try {
+    const snapshot = await providerSnapshot(deps, userId);
+    if (!snapshot) return refuse(fail(500, 'FAILED'));
+    const others = snapshot.platforms.filter((p) => p !== 'x');
+
+    // A connected provider nobody can clean is recorded and stops the end before anything is removed.
+    const adapters = adapterKeys(deps);
+    const missing = others.filter((p) => !adapters.has(p));
+    if (missing.length > 0) {
+      for (const provider of missing) await record(provider, 'blocked');
+      return refuse(fail(409, 'PROVIDER_ADAPTER_MISSING', { providers: missing.map((provider) => ({ provider, result: 'blocked' as const })) }));
+    }
+    // The acknowledgement is part of the record before the removal that cannot be revoked remotely.
+    const needsAck = others.filter((p) => remoteRevokeOf(deps, p) !== 'supported');
+    const lacking = needsAck.filter((p) => !acknowledged.includes(p));
+    if (lacking.length > 0) {
+      return refuse(fail(409, 'REMOTE_UNVERIFIED_ACK_REQUIRED', { providers: lacking.map((provider) => ({ provider, result: 'pending' as const })) }));
+    }
+    if (needsAck.length > 0) {
+      const ack = await call(deps, 'acknowledge_unverified', { ...own, p_providers: needsAck });
+      if (ack?.status === 'lease_lost') return { ok: false, response: args.lost() };
+      if (ack?.status !== 'recorded') return refuse(fail(500, 'FAILED'));
+    }
+
+    // The other providers first, each through its owner's adapter; ownership is asked at every boundary inside.
+    if ((deps.providers ?? []).length > 0) {
+      if (!(await owned())) return { ok: false, response: args.lost() };
+      const report = await runProviderCleanups(deps.providers ?? [], userId, { stillOwned: owned });
+      if (report.decision === 'lease_lost') return { ok: false, response: args.lost() };
+      for (const item of report.providers) {
+        const durable = DURABLE_RESULT[item.result];
+        if (durable && !(await record(item.provider, durable))) return { ok: false, response: args.lost() };
+      }
+      if (report.decision === 'reconciliation_required') {
+        return refuse(fail(409, 'RECONCILIATION_REQUIRED', { providers: report.providers }));
+      }
+      if (report.decision === 'blocked') return refuse(fail(409, 'PROVIDER_CLEANUP_BLOCKED', { providers: report.providers }));
+      const unexpected = report.remoteUnverified.filter((p) => !acknowledged.includes(p) && !needsAck.includes(p));
+      if (unexpected.length > 0) {
+        if (deps.acceptRemoteUnverified !== true) {
+          return refuse(fail(409, 'PROVIDER_REMOTE_UNVERIFIED', { providers: report.providers }));
+        }
+        const ack = await call(deps, 'acknowledge_unverified', { ...own, p_providers: unexpected });
+        if (ack?.status !== 'recorded') return refuse(fail(500, 'FAILED'));
+      }
+    }
+
+    // X second, through its own saga (typed outcome; its code is not ours to change). The saga treats every
+    // social account of the workspace as X material and sends a non-X account to an operator, so the other
+    // providers are removed first; and nothing is removed before the read-only checks above have passed.
+    if (!(await owned())) return { ok: false, response: args.lost() };
+    let outcome: XCleanupOutcome = 'failed';
+    try {
+      outcome = await deps.x.run(token);
+    } catch {
+      outcome = 'failed';
+    }
+    // The saga removed the login itself (it must not in social_only): nothing can be verified any more.
+    if (outcome === 'login_deleted') return { ok: false, response: fail(500, 'DELETION_VERIFICATION_PENDING') };
+    const xRecorded = await record('x', outcome === 'done' ? 'done' : outcome === 'blocked' ? 'blocked' : 'reconciliation_required');
+    if (!xRecorded) return { ok: false, response: args.lost() };
+    if (outcome === 'scope_refused') return refuse(fail(409, 'X_CLEANUP_UNSUPPORTED'));
+    if (outcome === 'in_progress') return refuse(fail(409, 'X_CLEANUP_IN_PROGRESS'));
+    if (outcome === 'blocked') return refuse(fail(409, 'X_CLEANUP_BLOCKED'));
+    if (outcome !== 'done') return refuse(fail(502, 'X_CLEANUP_FAILED'));
+
+    // The end: the database checks, in the transaction of the end itself, that this is still the owner (its lease,
+    // on the wall clock, after its locks), that every answer is settled and acknowledged, and reads the footprint
+    // back. A separate ownership question here would only be a second, weaker copy of that check.
+    const finished = await call(deps, 'finish_owned_service', own);
+    if (finished?.status === 'lease_lost') return { ok: false, response: args.lost() };
+    if (finished?.status === 'not_ready') {
+      const providers = (strings(finished.providers) ?? []).filter((p) => p === 'x' || PROVIDER_KEY_RE.test(p));
+      return refuse(fail(409, 'SERVICE_CLEANUP_INCOMPLETE', {
+        reasons: [reasonCode(finished.reason)], providers: providers.map((provider) => ({ provider, result: 'pending' as const })),
+      }));
+    }
+    if (finished?.status !== 'ended') return refuse(fail(500, 'SERVICE_CLEANUP_INCOMPLETE'));
+    const results = asRecord(finished.provider_results);
+    const summary: Record<string, string> = {};
+    for (const [provider, result] of Object.entries(results)) {
+      if ((provider === 'x' || PROVIDER_KEY_RE.test(provider)) && typeof result === 'string') summary[provider] = result;
+    }
+    const unverified = (strings(finished.remote_unverified) ?? []).filter((p) => PROVIDER_KEY_RE.test(p));
+    return { ok: true, outcome: 'ended', providers: summary, remoteUnverified: unverified };
+  } finally {
+    // Ownership is given back on every path out (a no-op when it was lost or the end cleared it).
+    await call(deps, 'release_service', own);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------
 // Preview (read-only): what a whole-account deletion would do now. Shown before the confirmation.
 
 export async function handlePreview(input: { authorization: string | null }, deps: LifecycleDeps): Promise<LifecycleResponse> {
@@ -240,6 +464,12 @@ export async function handlePreview(input: { authorization: string | null }, dep
   const state = await eligibility(deps, caller.user.id);
   if (!state) return fail(500, 'FAILED');
   const apple = appleNeeded(caller.user, state);
+  // Which providers hold a connection, whether this server can clean each, and which need the person's
+  // acknowledgement that the remote authorization stays (shown before the confirmation; nothing changes).
+  const snapshot = await providerSnapshot(deps, caller.user.id);
+  if (!snapshot) return fail(500, 'FAILED');
+  const adapters = adapterKeys(deps);
+  const others = snapshot.platforms.filter((p) => p !== 'x');
   let xCleanup: 'not_needed' | 'supported' | 'unsupported' = 'not_needed';
   if (remaining(state, 'x_autopost')) {
     const preview = await xPreview(deps, caller.token);
@@ -261,6 +491,11 @@ export async function handlePreview(input: { authorization: string | null }, dep
         code_required: apple && !(state.operation?.recordedCheckpoints.includes('apple_revocation') ?? false),
       },
       x_cleanup: xCleanup,
+      providers: snapshot.platforms.map((provider) => provider === 'x'
+        ? { provider, adapter: 'saga' as const, remote_revoke: 'saga' as const }
+        : { provider, adapter: adapters.has(provider) ? 'registered' as const : 'missing' as const, remote_revoke: remoteRevokeOf(deps, provider) }),
+      acknowledgement_required: others.filter((p) => adapters.has(p) && remoteRevokeOf(deps, p) !== 'supported'),
+      postona_end_available: others.every((p) => adapters.has(p)),
     },
   };
 }
@@ -298,6 +533,56 @@ export async function handleWithdrawKabumori(input: { authorization: string | nu
     default:
       return fail(500, 'FAILED');
   }
+}
+
+// ---------------------------------------------------------------------------------------------------
+// POSTONAの利用を終了: ends POSTONA only (X and every connected provider), keeps the login, Kabumori and every
+// other service. The X saga is the existing one (scope social_only); this function owns the ordering.
+
+export async function handleWithdrawPostona(input: { authorization: string | null; body: unknown }, deps: LifecycleDeps): Promise<LifecycleResponse> {
+  const caller = await verifiedCaller(input.authorization, deps);
+  if (!caller) return fail(401, 'AUTH_REQUIRED');
+  const { token, user } = caller;
+  const body = record(input.body);
+  if (body.confirmation !== END_POSTONA_CONFIRMATION) return fail(400, 'CONFIRMATION_REQUIRED');
+  if (!recentlyAuthenticated(token, user.id, deps.nowSeconds())) return fail(403, 'REAUTH_REQUIRED');
+  const acknowledged = parseAcknowledged(body.acknowledged_remote_unverified);
+  if (acknowledged === null) return fail(400, 'ACKNOWLEDGEMENT_INVALID');
+
+  const state = await eligibility(deps, user.id);
+  if (!state) return fail(500, 'FAILED');
+  if (state.accountStatus === 'deleting') return fail(409, 'WITHDRAW_BLOCKED', { reasons: ['ACCOUNT_DELETION_IN_PROGRESS'] });
+  if (state.accountStatus === 'locked') return fail(409, 'WITHDRAW_BLOCKED', { reasons: ['ACCOUNT_LOCKED'] });
+  const postona = state.services.find((s) => s.service === 'x_autopost');
+  if (!postona) return { status: 200, body: { ok: true, outcome: 'not_registered' } };
+  if (postona.status === 'ended') return { status: 200, body: { ok: true, outcome: 'already_ended' } };
+
+  // The X saga keeps the login only in scope social_only; a person whose login it would remove is refused.
+  const preview = await xPreview(deps, token);
+  if (preview?.scope !== 'social_only') return fail(409, 'X_CLEANUP_UNSUPPORTED');
+  // A saga that already waits for an operator cannot finish: refused before another provider is touched.
+  if (preview.state === 'operator_required') return fail(409, 'X_CLEANUP_BLOCKED');
+  // Read-only checks first: nothing changes when a connected provider cannot be cleaned or is unacknowledged.
+  const snapshot = await providerSnapshot(deps, user.id);
+  if (!snapshot) return fail(500, 'FAILED');
+  const refusal = postonaPreflight(deps, snapshot, acknowledged);
+  if (refusal) return refusal;
+
+  const ended = await endPostona({
+    deps, token, userId: user.id, scope: { kind: 'service_only' }, acknowledged,
+    stop: async (response) => response,
+    lost: () => fail(409, 'DELETION_IN_PROGRESS'),
+  });
+  if (!ended.ok) return ended.response;
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      outcome: ended.outcome,
+      providers: ended.providers,
+      ...(ended.remoteUnverified.length ? { remote_unverified: ended.remoteUnverified } : {}),
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -355,6 +640,8 @@ export async function handleDeleteCommonAccount(input: { authorization: string |
   const expected = body.expected_lifecycle_version;
   if (typeof expected !== 'number' || !Number.isSafeInteger(expected) || expected < 0) return fail(400, 'LIFECYCLE_VERSION_REQUIRED');
   const appleCode = typeof body.apple_authorization_code === 'string' && body.apple_authorization_code.length > 0 ? body.apple_authorization_code : null;
+  const acknowledged = parseAcknowledged(body.acknowledged_remote_unverified);
+  if (acknowledged === null) return fail(400, 'ACKNOWLEDGEMENT_INVALID');
 
   // 1. Read-only pre-checks: nothing changes when a requirement of a later step is already unmet.
   if (!(await managedDeleteReleased(deps))) return fail(409, 'COMMON_ACCOUNT_DELETION_UNAVAILABLE');
@@ -370,7 +657,14 @@ export async function handleDeleteCommonAccount(input: { authorization: string |
     // never remove the login itself: that is the managed delete at the end of this flow.
     const preview = await xPreview(deps, token);
     if (preview?.scope !== 'social_only') return fail(409, 'X_CLEANUP_UNSUPPORTED');
+    if (preview.state === 'operator_required') return fail(409, 'X_CLEANUP_BLOCKED');
   }
+  // Connected providers: an adapter for each, and the person's acknowledgement where the remote grant cannot be
+  // revoked -- decided now, before anything changes (the same check runs again under the lease).
+  const providers = await providerSnapshot(deps, userId);
+  if (!providers) return fail(500, 'FAILED');
+  const providerRefusal = postonaPreflight(deps, providers, acknowledged);
+  if (providerRefusal) return providerRefusal;
 
   // 2. Begin, bound to the version the person confirmed. A retry resumes the same operation, but only at
   //    the version the person was shown now.
@@ -393,7 +687,7 @@ export async function handleDeleteCommonAccount(input: { authorization: string |
   if (claimed.status !== 'acquired' || typeof lease !== 'string' || !UUID.test(lease) || !recorded) return fail(500, 'FAILED');
   const owner = { p_user_id: userId, p_operation_id: operationId, p_lease: lease };
   try {
-    return await ownedDeletion({ deps, token, user, operationId, owner, appleCode, apple, appleDone: recorded.includes('apple_revocation') });
+    return await ownedDeletion({ deps, token, user, operationId, owner, appleCode, apple, appleDone: recorded.includes('apple_revocation'), acknowledged });
   } finally {
     // Gives ownership back whatever happened (a no-op when it was lost or the read-back closed it). An
     // unsettled external step stays recorded.
@@ -410,9 +704,10 @@ type Owned = {
   appleCode: string | null;
   apple: boolean;
   appleDone: boolean;
+  acknowledged: readonly string[];
 };
 
-async function ownedDeletion({ deps, token, user, operationId, owner, appleCode, apple, appleDone }: Owned): Promise<LifecycleResponse> {
+async function ownedDeletion({ deps, token, user, operationId, owner, appleCode, apple, appleDone, acknowledged }: Owned): Promise<LifecycleResponse> {
   const userId = user.id;
   let sessionsRevoked = false;
   // Every failure from here on is kept on the operation as a fixed code for an operator (best effort).
@@ -429,64 +724,40 @@ async function ownedDeletion({ deps, token, user, operationId, owner, appleCode,
     (await call(deps, 'owned_checkpoint', { ...owner, p_checkpoint: key, p_recorded: present }))?.status;
   const recordStorage = (present: boolean) => ownedCheckpoint('storage_cleanup', present);
 
-  // The other providers of the person's services, each through its owner's adapter (T10). Every registered
-  // adapter runs; an unsettled answer is never replayed (reconciliation), a refusal stops before anything
-  // else is ended, and a provider that could not confirm its remote grant stops unless accepted. With no
-  // adapter registered this is a no-op.
+  // POSTONA, one owned operation (see endPostona): the service deletion's own lease inside this deletion's
+  // lease, X through its saga, the other providers through their adapters, every answer recorded, the end by
+  // the owner. A lost lease anywhere stops here with nothing ended.
   let remoteUnverified: string[] = [];
-  const providerStep = async (): Promise<LifecycleResponse | null> => {
-    const adapters = deps.providers ?? [];
-    if (adapters.length === 0) return null;
-    if (!(await owned())) return lost();
-    // Ownership is asked again at every awaited boundary inside the port (after each read, after each
-    // cleanup, between adapters); a stale owner stops with nothing recorded and nothing ended (H4-P4-R1).
-    const report = await runProviderCleanups(adapters, userId, { stillOwned: owned });
-    if (report.decision === 'lease_lost') return lost();
-    if (report.decision === 'reconciliation_required') {
-      return stop(fail(409, 'RECONCILIATION_REQUIRED', { sessionsRevoked, providers: report.providers }));
-    }
-    if (report.decision === 'blocked') return stop(fail(409, 'PROVIDER_CLEANUP_BLOCKED', { sessionsRevoked, providers: report.providers }));
-    remoteUnverified = report.remoteUnverified;
-    if (remoteUnverified.length > 0 && deps.acceptRemoteUnverified !== true) {
-      return stop(fail(409, 'PROVIDER_REMOTE_UNVERIFIED', { sessionsRevoked, providers: report.providers }));
-    }
-    // Everything is settled; the caller ends the POSTONA entitlement next. A lease lost since the last
-    // adapter answered must not end it.
-    if (!(await owned())) return lost();
-    return null;
-  };
-
-  // 4a. X first, through its own saga, wrapped by the lifecycle service deletion.
+  let providerSummary: Record<string, string> = {};
+  // 4a. X and the other providers.
   if (!(await owned())) return lost();
-  const xBegun = await call(deps, 'begin_service_deletion', { p_user_id: userId, p_service_key: 'x_autopost' });
-  if (!xBegun) return stop(fail(500, 'FAILED'));
-  if (xBegun.status === 'blocked') return stop(fail(409, 'DELETION_BLOCKED', { reasons: [reasonCode(xBegun.reason)] }));
-  if (xBegun.status === 'started' || xBegun.status === 'in_progress') {
-    const xOperation = xBegun.operation_id;
-    if (typeof xOperation !== 'string' || !UUID.test(xOperation)) return stop(fail(500, 'FAILED'));
-    let outcome: XCleanupOutcome = 'failed';
-    try {
-      outcome = await deps.x.run(token);
-    } catch {
-      outcome = 'failed';
+  const ended = await endPostona({
+    deps, token, userId, scope: { kind: 'account', operationId, lease: owner.p_lease, owned }, acknowledged,
+    stop, lost,
+  });
+  if (!ended.ok) return ended.response;
+  remoteUnverified = ended.remoteUnverified;
+  providerSummary = ended.providers;
+  if (ended.outcome !== 'ended') {
+    // POSTONA was never started or was already ended: a provider credential may still be there (T10). There is
+    // no service deletion to record into, so the adapters run under this deletion's lease and an unverified
+    // remote grant needs the person's acknowledgement (or the operator override) as before.
+    const adapters = deps.providers ?? [];
+    if (adapters.length > 0) {
+      if (!(await owned())) return lost();
+      const report = await runProviderCleanups(adapters, userId, { stillOwned: owned });
+      if (report.decision === 'lease_lost') return lost();
+      if (report.decision === 'reconciliation_required') {
+        return stop(fail(409, 'RECONCILIATION_REQUIRED', { sessionsRevoked, providers: report.providers }));
+      }
+      if (report.decision === 'blocked') return stop(fail(409, 'PROVIDER_CLEANUP_BLOCKED', { sessionsRevoked, providers: report.providers }));
+      const unexpected = report.remoteUnverified.filter((p) => !acknowledged.includes(p));
+      if (unexpected.length > 0 && deps.acceptRemoteUnverified !== true) {
+        return stop(fail(409, 'PROVIDER_REMOTE_UNVERIFIED', { sessionsRevoked, providers: report.providers }));
+      }
+      remoteUnverified = report.remoteUnverified;
+      if (!(await owned())) return lost();
     }
-    // The saga removed the login itself (it must not in social_only): nothing can be verified any more.
-    if (outcome === 'login_deleted') return fail(500, 'DELETION_VERIFICATION_PENDING');
-    if (outcome === 'scope_refused') return stop(fail(409, 'X_CLEANUP_UNSUPPORTED'));
-    if (outcome === 'in_progress') return stop(fail(409, 'X_CLEANUP_IN_PROGRESS'));
-    if (outcome === 'blocked') return stop(fail(409, 'X_CLEANUP_BLOCKED'));
-    if (outcome !== 'done') return stop(fail(502, 'X_CLEANUP_FAILED'));
-    // The POSTONA entitlement is ended only once every other provider of the service is settled (T10).
-    const providerFailure = await providerStep();
-    if (providerFailure) return providerFailure;
-    const finished = await call(deps, 'finish_service_deletion', { p_user_id: userId, p_service_key: 'x_autopost', p_operation_id: xOperation });
-    if (finished?.status !== 'ended') return stop(fail(500, 'SERVICE_CLEANUP_INCOMPLETE'));
-  } else if (xBegun.status !== 'not_registered' && xBegun.status !== 'already_ended') {
-    return stop(fail(500, 'FAILED'));
-  } else {
-    // POSTONA was never started or already ended: a provider credential may still be there (T10).
-    const providerFailure = await providerStep();
-    if (providerFailure) return providerFailure;
   }
 
   // 4b. Kabumori (one transaction: entitlement deleting -> profile cascade -> ended).
@@ -618,7 +889,7 @@ async function ownedDeletion({ deps, token, user, operationId, owner, appleCode,
   for (let attempt = 0; attempt < 2; attempt++) {
     const done = await call(deps, 'complete', { p_user_id: userId, p_operation_id: operationId });
     if (done?.status === 'completed' && done.login_deleted === true) {
-      return { status: 200, body: { ok: true, outcome: 'deleted', ...(remoteUnverified.length ? { remote_unverified: remoteUnverified } : {}) } };
+      return { status: 200, body: { ok: true, outcome: 'deleted', ...(Object.keys(providerSummary).length ? { providers: providerSummary } : {}), ...(remoteUnverified.length ? { remote_unverified: remoteUnverified } : {}) } };
     }
     if (done?.status === 'login_present') return fail(500, 'AUTH_DELETE_UNCONFIRMED', { sessionsRevoked });
     if (attempt === 0 && (done?.status === 'not_verified' || done?.status === 'residue_found') && done.reason === 'MANAGED_STORAGE_OWNED'

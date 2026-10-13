@@ -63,6 +63,10 @@ export type WorldOptions = {
   uploadBeforeRevalidation?: boolean;
   /** Awaited at the entry of an external step (barriers for true overlap). */
   hooks?: Partial<Record<Hook, () => Promise<void>>>;
+  /** A Threads account is connected in the person's workspace (the fake of social_accounts.platform = 'threads'). */
+  threads?: boolean;
+  /** Further platforms connected in the workspace (an unknown provider). */
+  otherPlatforms?: string[];
 };
 
 /** Fake of the Phase 1/2/3a lifecycle database plus Auth/Storage/Apple/X, with the same answers. */
@@ -99,6 +103,12 @@ export function world(options: WorldOptions = {}) {
       external: null | 'apple_revocation' | 'managed_auth_delete'; externalStarted: number; intent: null | string[];
     },
     xServiceOp: null as string | null,
+    /** The POSTONA service deletion (Phase 6): its own lease, fence, per-provider results and acknowledgement. */
+    svc: null as null | {
+      id: string; status: 'in_progress' | 'completed' | 'aborted'; lease: string | null; leaseExpires: number; fence: number;
+      results: Record<string, string>; ack: string[] | null;
+    },
+    threads: options.threads ?? false,
     revokedTokens: new Set<string>(),
     lateUploadDone: false,
     calls: { apple: 0, delete: 0, x: 0, sessions: 0 },
@@ -160,15 +170,87 @@ export function world(options: WorldOptions = {}) {
       state.services.x_autopost = 'deleting';
       state.version += 1;
       state.xServiceOp = newId();
+      state.svc = { id: state.xServiceOp, status: 'in_progress', lease: null, leaseExpires: 0, fence: 0, results: {}, ack: null };
       return { status: 'started', operation_id: state.xServiceOp };
     },
-    finish_service_deletion: (args) => {
-      assert.equal(args.p_operation_id, state.xServiceOp);
-      if (state.xWorkspace) return { status: 'not_ready', reason: 'SERVICE_FOOTPRINT_REMAINS' };
+    // The Phase 6 database refuses POSTONA through the legacy entry point.
+    finish_service_deletion: () => ({ status: 'blocked', reason: 'OWNED_FINISH_REQUIRED' }),
+    claim_service: (args) => {
+      const svc = state.svc;
+      if (!svc || args.p_operation_id !== svc.id || !state.login) return { status: 'not_found' };
+      if (svc.status !== 'in_progress') return { status: 'not_in_progress' };
+      if (args.p_account_operation_id !== undefined && args.p_account_operation_id !== null) {
+        const op = state.op;
+        if (!op || args.p_account_operation_id !== op.id || op.status !== 'in_progress' || op.lease !== args.p_account_lease || op.leaseExpires <= state.clock) {
+          return { status: 'lease_lost' };
+        }
+      } else if (state.account !== 'active' || (state.op && state.op.status === 'in_progress')) {
+        return { status: 'blocked', reason: 'ACCOUNT_DELETION_IN_PROGRESS' };
+      }
+      if (state.services.x_autopost !== 'deleting') return { status: 'blocked', reason: 'LIFECYCLE_STATE_INCONSISTENT' };
+      if (svc.lease && svc.leaseExpires > state.clock) return { status: 'in_progress' };
+      svc.lease = newId();
+      svc.leaseExpires = state.clock + Number(args.p_lease_seconds);
+      svc.fence += 1;
+      svc.results = {
+        x: 'pending', ...(state.threads ? { threads: 'pending' } : {}),
+        ...Object.fromEntries((options.otherPlatforms ?? []).map((platform) => [platform, 'pending'])), ...svc.results,
+      };
+      return { status: 'acquired', lease: svc.lease, fence: svc.fence, provider_results: { ...svc.results } };
+    },
+    renew_service: (args) => {
+      const svc = state.svc;
+      if (!svc || svc.status !== 'in_progress' || svc.lease !== args.p_lease || svc.leaseExpires <= state.clock) return { status: 'lease_lost' };
+      svc.leaseExpires = state.clock + Number(args.p_lease_seconds);
+      return { status: 'owned', fence: svc.fence };
+    },
+    release_service: (args) => {
+      const svc = state.svc;
+      if (!svc || svc.lease !== args.p_lease) return { status: 'not_owned' };
+      svc.lease = null;
+      svc.leaseExpires = 0;
+      return { status: 'released' };
+    },
+    record_provider_result: (args) => {
+      const svc = state.svc;
+      if (!svc || svc.status !== 'in_progress' || svc.lease !== args.p_lease || svc.leaseExpires <= state.clock) return { status: 'lease_lost' };
+      const provider = String(args.p_provider);
+      const result = String(args.p_result);
+      const existing = svc.results[provider];
+      if ((existing === 'local_removed_remote_unverified' || existing === 'confirmed_remote_revoked') && result !== 'confirmed_remote_revoked') {
+        return { status: 'recorded', kept: existing };
+      }
+      svc.results[provider] = result;
+      return { status: 'recorded' };
+    },
+    acknowledge_unverified: (args) => {
+      const svc = state.svc;
+      if (!svc || svc.status !== 'in_progress' || svc.lease !== args.p_lease || svc.leaseExpires <= state.clock) return { status: 'lease_lost' };
+      svc.ack = [...new Set([...(svc.ack ?? []), ...(args.p_providers as string[])])].sort();
+      return { status: 'recorded' };
+    },
+    finish_owned_service: (args) => {
+      const svc = state.svc;
+      if (!svc || svc.status !== 'in_progress' || svc.lease !== args.p_lease || svc.leaseExpires <= state.clock) return { status: 'lease_lost' };
+      if (!('x' in svc.results)) return { status: 'not_ready', reason: 'PROVIDER_RESULTS_UNSETTLED', providers: ['x'] };
+      const settled = ['done', 'not_connected', 'confirmed_remote_revoked', 'local_removed_remote_unverified'];
+      const unsettled = Object.entries(svc.results).filter(([, v]) => !settled.includes(v)).map(([k]) => k).sort();
+      if (unsettled.length) return { status: 'not_ready', reason: 'PROVIDER_RESULTS_UNSETTLED', providers: unsettled };
+      const unverified = Object.entries(svc.results).filter(([, v]) => v === 'local_removed_remote_unverified').map(([k]) => k).sort();
+      if (unverified.length && !unverified.every((k) => (svc.ack ?? []).includes(k))) {
+        return { status: 'not_ready', reason: 'REMOTE_UNVERIFIED_NOT_ACKNOWLEDGED', providers: unverified };
+      }
+      if (state.xWorkspace || state.threads) return { status: 'not_ready', reason: 'SERVICE_FOOTPRINT_REMAINS' };
       state.services.x_autopost = 'ended';
       state.version += 1;
-      return { status: 'ended' };
+      svc.status = 'completed';
+      svc.lease = null;
+      return { status: 'ended', provider_results: { ...svc.results }, remote_unverified: unverified };
     },
+    provider_snapshot: () => ({
+      workspace: 'u_fixture',
+      platforms: [...(state.xWorkspace ? ['x'] : []), ...(state.threads ? ['threads'] : []), ...(options.otherPlatforms ?? [])],
+    }),
     begin_account_deletion: (args) => {
       if (state.account === 'deleting' && state.op) return { status: 'in_progress', operation_id: state.op.id, lifecycle_version: state.version };
       if (args.p_expected_lifecycle_version !== state.version) return { status: 'lifecycle_changed', lifecycle_version: state.version };

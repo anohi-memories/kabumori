@@ -43,7 +43,7 @@ psql_q() { local d="$1"; shift; psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -
 tmp="$(mktemp -d /private/tmp/kabumori-cal-core-fence.XXXXXX)"
 cleanup() {
   rm -rf "$tmp"
-  for d in "$db_dep" "$db_run" "$db_exact" "$tpl" "$tpl_pre"; do
+  for d in "kabumori_cal_cf_e2e_$tag" "$db_dep" "$db_run" "$db_exact" "$tpl" "$tpl_pre"; do
     "${S[@]}" -d postgres -c "drop database if exists $d with (force)" >/dev/null 2>&1 || true
   done
 }
@@ -207,6 +207,13 @@ R=(psql_o "$db_run")
 RQ=(psql_q "$db_run")
 "${R[@]}" -f "$candidate" >/dev/null
 "${R[@]}" -f "$here/common_account_core_fence_fixture.sql" >/dev/null
+# The sections that drive the REAL orchestrator and the apps' real clients (e2e, app) run on a copy that also has the
+# Phase 5 workspace state and the Phase 6 owner lease: POSTONA can then only be ended through its owner.
+db_e2e="kabumori_cal_cf_e2e_$tag"
+"${S[@]}" -d postgres -c "create database $db_e2e template $db_run owner $owner" >/dev/null
+for extra in 20261012230000_common_account_service_brand_state.sql 20261013120000_common_account_service_deletion_ownership.sql; do
+  if [[ -f "$migrations/$extra" ]]; then psql_o "$db_e2e" -f "$migrations/$extra" >/dev/null 2>&1 || { echo "FAIL applying $extra for the e2e database" >&2; exit 1; }; fi
+done
 
 if want behavior; then
   "${RQ[@]}" -f "$here/common_account_core_fence_behavior.sql" > "$tmp/behavior" 2>&1 || true
@@ -357,7 +364,7 @@ fi
 
 if want e2e; then
   # The real orchestrator (TypeScript, unmodified) against the real SQL of this database, through psql.
-  ( cd "$here/../.." && CAL_E2E=1 PGHOST="$host" PGPORT="$port" PGUSER="$owner" PGDATABASE="$db_run" \
+  ( cd "$here/../.." && CAL_E2E=1 PGHOST="$host" PGPORT="$port" PGUSER="$owner" PGDATABASE="$db_e2e" \
       deno test --no-config --no-check --allow-run=psql --allow-env --allow-read supabase/tests/common_account_phase4_e2e_test.ts ) > "$tmp/e2e" 2>&1 \
     || { echo "FAIL e2e" >&2; cat "$tmp/e2e" >&2; exit 1; }
   grep -q ' 4 passed | 0 failed' "$tmp/e2e" || { echo "FAIL e2e: expected 4 passed" >&2; cat "$tmp/e2e" >&2; exit 1; }
@@ -367,7 +374,7 @@ fi
 if want app; then
   # F5: the apps' own enrollment modules (unmodified) against this database's SQL, over HTTP, through a
   # PostgREST stand-in (HS256 tokens, claims, role, one transaction per call, SQLSTATE -> HTTP status).
-  ( cd "$here/../.." && CAL_E2E=1 PGHOST="$host" PGPORT="$port" PGUSER="$owner" PGDATABASE="$db_run" \
+  ( cd "$here/../.." && CAL_E2E=1 PGHOST="$host" PGPORT="$port" PGUSER="$owner" PGDATABASE="$db_e2e" \
       deno test --no-config --no-check --allow-run=psql --allow-net=127.0.0.1 --allow-env --allow-read supabase/tests/common_account_phase5_app_contract_test.ts ) > "$tmp/app" 2>&1 \
     || { echo "FAIL app contract" >&2; cat "$tmp/app" >&2; exit 1; }
   grep -qE ' 14 passed \| 0 failed ' "$tmp/app" || { echo "FAIL app contract: expected 14 passed" >&2; cat "$tmp/app" >&2; exit 1; }

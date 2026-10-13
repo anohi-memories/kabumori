@@ -49,6 +49,7 @@ async function refusal(statement: string): Promise<string | null> {
 const literal = (value: unknown): string => {
   if (value === null || value === undefined) return 'null';
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return `array[${value.map((item) => `'${String(item).replaceAll("'", "''")}'`).join(',')}]::text[]`;
   return `'${String(value).replaceAll("'", "''")}'`;
 };
 const asPerson = (user: string, statement: string) =>
@@ -146,8 +147,8 @@ test('E2E: with the gate opened (test-only DDL) the whole person is deleted in t
   };
   const deps = depsFor(user, events, { providers: [provider] });
   const response = await remove(user, deps);
-  assert.deepEqual(response.body, { ok: true, outcome: 'deleted' });
-  const order = ['rpc:begin_account_deletion', 'rpc:claim', 'x:saga', 'provider:cleanup', 'rpc:finish_service_deletion', 'rpc:withdraw_kabumori',
+  assert.deepEqual(response.body, { ok: true, outcome: 'deleted', providers: { threads: 'confirmed_remote_revoked', x: 'done' } });
+  const order = ['rpc:begin_account_deletion', 'rpc:claim', 'rpc:claim_service', 'provider:cleanup', 'x:saga', 'rpc:finish_owned_service', 'rpc:withdraw_kabumori',
     'auth:logout', 'storage:remove', 'rpc:owned_prepare', 'rpc:begin_external_step', 'auth:delete', 'rpc:complete'].map((e) => events.indexOf(e));
   assert.ok(order.every((index) => index >= 0), `every step ran: ${order}`);
   assert.deepEqual([...order].sort((a, b) => a - b), order, 'in the canonical order');
@@ -161,6 +162,11 @@ test('E2E: with the gate opened (test-only DDL) the whole person is deleted in t
   assert.equal(await one(`select status || '/' || (verified_at is not null) || '/' || (user_id is null) from private.account_lifecycle_operations
                             where subject_sha256 = public.social_mobile_account_deletion_subject('${user}'::uuid) and operation_type = 'account_deletion'`),
                'completed/true/true');
+  // Phase 6: the POSTONA operation kept what X and Threads answered, and holds no lease any more.
+  assert.equal(await one(`select provider_results::text || '/' || (owner_lease is null) from private.account_lifecycle_operations
+                            where subject_sha256 = public.social_mobile_account_deletion_subject('${user}'::uuid) and operation_type = 'service_deletion'
+                              and service_key = 'x_autopost'`),
+               '{"x": "done", "threads": "confirmed_remote_revoked"}/true');
 });
 
 test('E2E: during the freeze every stale-token write is refused by the real database, then the deletion completes', { skip: !enabled }, async () => {
@@ -187,7 +193,8 @@ test('E2E: during the freeze every stale-token write is refused by the real data
   };
   const deps = depsFor(user, events, { providers: [provider] });
   const response = await remove(user, deps);
-  assert.deepEqual(response.body, { ok: true, outcome: 'deleted' });
+  assert.equal(response.status, 200);
+  assert.equal((response.body as { outcome?: string }).outcome, 'deleted');
   assert.equal(attempts.profile, 'ACCOUNT_DELETION_IN_PROGRESS');
   assert.equal(attempts.ensure, 'ACCOUNT_DELETION_IN_PROGRESS');
   assert.equal(attempts.fenced, 'ACCOUNT_DELETION_IN_PROGRESS');
@@ -213,6 +220,6 @@ test('E2E: a blocked provider stops the deletion with the account frozen and the
   answer = 'confirmed_remote_revoked';
   const operationBefore = await one(`select id from private.account_lifecycle_operations where user_id = '${user}' and operation_type = 'account_deletion'`);
   const second = await handleDeleteCommonAccount({ authorization: bearer(token(user)), body: deleteBody(await version(user)) }, deps);
-  assert.deepEqual(second.body, { ok: true, outcome: 'deleted' });
+  assert.deepEqual(second.body, { ok: true, outcome: 'deleted', providers: { threads: 'confirmed_remote_revoked', x: 'done' } });
   assert.equal(await one(`select count(*) from private.account_lifecycle_operations where id = '${operationBefore}'`), '1', 'the same operation completed');
 });
