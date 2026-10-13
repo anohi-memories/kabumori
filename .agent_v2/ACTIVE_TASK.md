@@ -38,18 +38,18 @@
 
 ## F3
 - slot: F3
-- status: review_required
+- status: done
 - task_id: postona-f3-x-publish-entitlement-guard-20261013
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA G3のちゃ（新F3担当・AI自動投稿／X予約担当チャット）
 - completion_code: L3
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F3.md
 - current_report_path: .agent_v2/tasks/F3.md#report
 - dependencies: F5 Phase5 Draft PR165 4638891f (<- PR152 <- PR121); F3 Draft PR145 -> PR151 -> PR163 -> PR168 4b491668; F4 Threads separate; F5 orchestrates service end / SNS unlink; G4 X Issue131
-- blocker: F5 candidate RPCs unmerged/unapplied and G4 verified account unresolved; production publish authority NOT enabled (PRODUCTION_NO_GO)
-- slot_use: POSTONA X投稿・予約実行への共通アカウント利用権統合（ソース＋使い捨てDB、本番OFF、F3→L3）。ChatGPT直接指示を2026-10-13にF3が登録（旧TASKはarchive済み）
+- blocker: F5/G5 unapplied, G4 Issue131, shared claim_due_post prior-filter outstanding, F5 X saga unwired; production NO_GO
+- slot_use: L3 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; PR182 head 1af5047e, six added files. Common claim_due_post unchanged; guard prevents generation/send, no claim-before-filter. F3 done/unreserved.
 ## F4
 - slot: F4
 - status: review_required
