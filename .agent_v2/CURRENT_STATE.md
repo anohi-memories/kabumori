@@ -5,6 +5,12 @@
 
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F8/F9 new parallel TASKs — 2026-10-13
+- F8 `news-improvement-a-f8-j1b3-real-schema-proof-review-packet-20261013` ready/claude, Opus5.5（高）, return L8. Validate PR181 candidate in independent local real-schema PostgreSQL and assemble Sol（高）review packet; migration stays outside managed staging/production, no source merge or deploy.
+- F9 `api-optimization-b-f9-rights-safe-eval-fixture-redaction-20261013` ready/claude, Opus5.5（高）, return L9. Prepare an isolated source candidate to withhold remaining 288 rights-unconfirmed headlines and 76 generated texts while preserving deny-by-default and offline tests. PR174 and legacy PR115 remain unchanged/Draft; no provider external sends.
+- Prior F8 J1-b2 and F9 rights audit TASK+Report archived; manifests, SHA256 and byte-identical read-back verified; HISTORY_INDEX updated. Prior F9 SHA256SUMS blockage retried successfully. F8/F9 independent worktrees and non-overlapping paths; no production/DB mutations authorized.
+
+
 ## F3 POSTONA Xサービス終了saga接続（2026-10-13 JST）
 - 旧F3 `postona-f3-x-publish-entitlement-guard-20261013` はL3 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO、Draft PR182 `1af5047eb70327c252194220df51e94e8a17ff7e`。TASK/Reportは `.agent_v2/archive/2026-10-13-F3-postona-f3-x-publish-entitlement-guard-20261013/` に保存済み（SHA256 `aa737fc1ee29a515534f24fa8eceead9af85fe419cfa08e85b2a7e6779efe12e`、復元blob一致、MANIFEST、HISTORY_INDEX）。旧G3はdoneで不変。
 - 新F3 `postona-f3-x-service-end-saga-wiring-20261013` ready/claude、Opus5.5（高）、F3→L3、返却先POSTONA G3のちゃ。F3-owned X連携解除/終了sagaをPR182候補X停止関数へ接続するソース限定TASK。F5はPhase6/7の共有削除オーケストレーター所有、F4はThreads所有で保護。独立worktree/新Draft PR、前PR HEAD変更禁止。
