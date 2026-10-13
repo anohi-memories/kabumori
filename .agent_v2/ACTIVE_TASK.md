@@ -130,10 +130,10 @@
 
 ## F9
 - slot: F9
-- status: ready
+- status: review_required
 - task_id: api-optimization-b-f9-rights-safe-provider-compare-pr-readiness-20261013
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: ニュース改善API最適化のちゃ
 - completion_code: L9
 - recommended_model: Opus5.5（高）
