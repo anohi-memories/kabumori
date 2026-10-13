@@ -23,19 +23,18 @@
 
 ## F2
 - slot: F2
-- status: done
-- task_id: kabumori-f2-shared-market-report-x-app-consumer-cutover-20261013
+- status: ready
+- task_id: kabumori-f2-yume-market-commentator-morning-close-quality-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ（新F2担当）
 - completion_code: L2
-- recommended_model: Sonnet5（高）
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
-- dependencies: F6 Opus main merge; X/app consumer settings both OFF; production provider deployment and old/new routing readback required
-- blocker: X live post verification and app staged cutover pending separate approval; PR179 Draft; production operations remain gated
-- l2_verdict: PASS_READONLY_PREFLIGHT / CUTOVER_PLAN_READY / PRODUCTION_NO_GO
-- slot_use: かぶモリ共有朝刊/大引け X・アプリ切り替え preflight (read-only & offline)
+- dependencies: F6 Opus Primary provider, stored morning report for immutable forecast, X/app consumer contracts
+- blocker: forecast history persistence and F6-owned provider changes require separate coordination; production NO_GO
+- slot_use: ゆめちゃんAI評論家 朝刊/大引けの独自予想と事後検証の品質改善（source-only）
 
 ## F3
 - slot: F3
