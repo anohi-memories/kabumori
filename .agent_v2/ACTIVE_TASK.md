@@ -38,18 +38,18 @@
 
 ## F3
 - slot: F3
-- status: done
-- task_id: postona-f3-x-service-end-saga-wiring-20261013
+- status: ready
+- task_id: postona-f3-j3-v3-r1-r3-security-fixes-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA G3のちゃ（新F3担当・X投稿／予約担当）
 - completion_code: L3
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F3.md
 - current_report_path: .agent_v2/tasks/F3.md#report
-- dependencies: archived L3 PR182; F3 PR168/163/151/145, F5 PR178/183 Phase6/7, F4 Threads PR169/180, G4 Issue131
-- blocker: F5 service deletion T10 lease orchestration unwired; G4 X Issue131 unresolved; Sol（高） independent security review required; production NO_GO
-- slot_use: L3 PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; F3 X stop saga Draft PR189 HEAD 4fd7084d, no merge/deploy. F3 done/unreserved; archive before next task.
+- dependencies: J3 V3 CHANGES_REQUIRED R1/R2/R3; F3 PR189/182; F5 Phase8 active, F4 PR180/169
+- blocker: R1 durable state may need F5-owned contract; no shared file edits; G4 Issue131; production NO_GO
+- slot_use: J3 P2 R1 uncertainty-loss, R2 missing action, R3 lease-expiry-after-lock scoped fixes; independent F3 branch, return L3. Previous F3 task archived and indexed.
 
 ## F4
 - slot: F4
