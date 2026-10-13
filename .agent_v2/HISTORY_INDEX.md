@@ -407,3 +407,13 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 - 2026-10-13 | F9 | `api-optimization-b-f9-rights-safe-eval-fixture-redaction-20261013` | L9 source accepted; production held | `.agent_v2/archive/2026-10-13-f9-api-optimization-b-f9-rights-safe-eval-fixture-redaction-20261013/files/.agent_v2/tasks/F9.md` | SHA256 aa95f2c50084fda1baa51c4d8a4afbd864df5e89e3709ad4ab04a6d802184d2b, restore checked.
 
 | 2026-10-13 | F2 | `kabumori-f2-yume-market-commentator-morning-close-quality-20261013` | Yume market forecast and fact/opinion separation | L2 PASS_OFFLINE_SOURCE / PRODUCTION_NO_GO | #188 | `.agent_v2/archive/2026-10-13-F2-kabumori-f2-yume-market-commentator-morning-close-quality-20261013/` | SHA256 a68665a0e1639bd1205042ad81fda9582a90cce55ffc15691c18d11645377100, restore verified |
+
+## F5 Phase7 completion archive — 2026-10-13
+- task_id: `common-account-f5-phase7-auth-lifecycle-release-preflight-20261013`
+- original_path: `.agent_v2/tasks/F5.md`
+- archive_path: `.agent_v2/archive/2026-10-13-F5-common-account-f5-phase7-auth-lifecycle-release-preflight-20261013/files/.agent_v2/tasks/F5.md`
+- size: 19739 bytes
+- SHA256: `8ed7947f0917e68b674c3e47f925f3a63fd37d16177d1be595afa45fe2a68848`
+- original_blob: `312b552f0c74c77e82ed8380cad466bdfea9d7ea`
+- restore: source and archive exact UTF-8 content and blob SHA read-back matched. MANIFEST and SHA256SUMS saved.
+- L5: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; Draft PR183 f2565cc0412f8127f95f00a728d16bf83af74667
