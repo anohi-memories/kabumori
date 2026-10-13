@@ -8,18 +8,18 @@
 
 ## F1
 - slot: F1
-- status: done
-- task_id: kabumori-f1-ai-ask-b0-j1-r1-r8-design-correction-20261013
+- status: ready
+- task_id: kabumori-f1-ai-ask-b0-j2-r2-r3-r8-correction-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F1.md
 - current_report_path: .agent_v2/tasks/F1.md#report
-- dependencies: J1 Report R1-R8; Phase B0 PR171; Phase A PR166; F5/G6 protected
-- blocker: B1 implementation NO_GO until focused J re-review
-- slot_use: AIに聞く B0 security design corrections
+- dependencies: J2 residual R2/R3/R8; PR177; PR166/171 protected
+- blocker: B1 and production NO_GO until independent focused review
+- slot_use: AIに聞く B0 J2残件3件の設計修正
 
 ## F2
 - slot: F2
