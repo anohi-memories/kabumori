@@ -130,17 +130,17 @@
 
 ## F9
 - slot: F9
-- status: review_required
+- status: done
 - task_id: api-optimization-b-f9-rights-safe-provider-compare-pr-readiness-20261013
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: ニュース改善API最適化のちゃ
 - completion_code: L9
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F9.md
 - current_report_path: .agent_v2/tasks/F9.md#report
 - dependencies: old G9 R3 K9 done; clean branch c476ef8a
-- blocker: old PR115 unsafe rights/history; no provider calls or release approval
+- blocker: source complete; PR174 remains Draft RELEASE_HOLD. Legacy PR115 rights/history and main fixture overlaps unresolved.
 - slot_use: API最適化B専任（ユーザー明示）
 
 ## F10
