@@ -53,10 +53,10 @@
 
 ## F4
 - slot: F4
-- status: review_required
+- status: done
 - task_id: postona-f4-threads-cleanup-live-lease-security-fix-20261013
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
@@ -66,6 +66,7 @@
 - blocker: production NO_GO, integrated Sol（高） review needed after source fix; F4 reported Draft PR180 head 7c4f457834cddb42b72be6b74996e643b213e8c8 (base PR169 branch), awaiting L4
 - slot_use: POSTONA Threads F5-reported service deletion live-lease security defect; F4-owned source only
 - previous_task_archive: .agent_v2/archive/2026-10-13-F4-postona-f4-threads-t13-authenticated-writer-integration-20261013/
+- l4_verdict: PASS_SOURCE_FIX / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; PR180 head 7c4f457834cddb42b72be6b74996e643b213e8c8 Draft unmerged, 10 F4-scoped changes, reported fail-before/pass-after, F4 available after archive.
 
 ## F5
 - slot: F5
