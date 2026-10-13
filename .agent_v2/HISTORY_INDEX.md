@@ -389,3 +389,5 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 - original_blob: `eadc2e727068d110a87f0e80d7223fbe4d0623af`
 - restore: GitHub blob and exact UTF-8 content equality read-back verified; see archived MANIFEST and SHA256SUMS
 - L5: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; PR178 Draft head 83334a091ded5571cf595fd99d7a035627564735
+
+- 2026-10-13 | F3 | `postona-f3-x-reservation-live-boundary-source-integration-20261012` | L3 PASS_SOURCE_IMPLEMENTATION / PRODUCTION_NO_GO | Draft PR168 | `.agent_v2/archive/2026-10-13-F3-postona-f3-x-reservation-live-boundary-source-integration-20261012/` | SHA256 `670ab1cbf20d54e0d79a62c1e0f080c6d489b5c03b2de8e2e51a8dd3318b7d1d`; GitHub exact blob read-back verified.
