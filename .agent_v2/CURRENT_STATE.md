@@ -1,3 +1,8 @@
+## F4 Threads cleanup lease fix (2026-10-13 JST)
+- F5 Phase6 PR178 HEAD `83334a091ded5571cf595fd99d7a035627564735` found F4 PR169 `threads_cleanup_authorized` permits POSTONA service_deletion Threads credential cleanup without a live owner lease. Reproduced in F5 disposable PG17 overlay; must fix before adapter registration / managed use.
+- NEW F4 `postona-f4-threads-cleanup-live-lease-security-fix-20261013` ready/claude, Opus5.5（高）, F4→L4, return POSTONA｜マルチSNS化・開発統括（G4）のちゃ. Only F4-owned SQL candidate and tests. Use F5 `private.account_lifecycle_cleanup_authorized(uuid)` fail-closed predicate, live lease pre/post conditions, regression before/after, owner ACL preservation.
+- Prior F4 T13 TASK archived verbatim with SHA256, restore comparison and HISTORY_INDEX. Source new independent worktree/stacked Draft on PR169; protected F5/F3/H5/old G4 branches unchanged. Production NO_GO; integrated independent J1–J4 Sol（高） review after L4 and X-side coordination.
+
 # Current State v2（新系統・現在有効な情報だけ）
 
 ## F5 Phase7 共通認証・退会 release preflight（2026-10-13）
