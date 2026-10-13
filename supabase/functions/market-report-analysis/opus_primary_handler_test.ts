@@ -231,20 +231,66 @@ test("OFF with no Anthropic key, model or ledger configured at all: unchanged Op
   assert.deepEqual([h.openai().length, h.claude().length, h.ledger().length], [2, 0, 0]);
 });
 
-// ---- primary_both on this provider build: fail closed, never silently OpenAI ----------------------------------------
+// ---- primary_both: the morning and the close report on Claude ---------------------------------------------------------
 
 for (const reportType of ["close", "morning"] as const) {
-  test(`${reportType} + primary_both on a provider that does not route it: MODE_UNSUPPORTED, no model call`, async () => {
+  test(`${reportType} + primary_both: Claude writes the stored report; model, audit and cost say so; no OpenAI call`, async () => {
     const h = harness({ reportType, env: { KABUMORI_MARKET_REPORT_AI_MODE: "primary_both" } });
-    const res = await handleRequest(h.req, h.deps);
+    const { value: res, lines } = await withLogs(() => handleRequest(h.req, h.deps));
     const body = await res.json();
-    assert.equal(res.status, 500);
-    assert.equal(body.error, "ANALYSIS_PRIMARY_CONFIG:MODE_UNSUPPORTED");
-    assert.deepEqual([h.openai().length, h.claude().length, h.ledger().length], [0, 0, 0]);
-    assert.equal(h.rpc("fail_market_report_analysis")!.p_error, "ANALYSIS_PRIMARY_CONFIG:MODE_UNSUPPORTED");
-    assert.equal(h.rpc("complete_market_report_analysis"), null);
+    assert.equal(body.status, "completed", JSON.stringify(body));
+    assert.deepEqual([h.openai().length, h.claude().length, h.ledger().length], [0, 2, 6]);
+    const complete = h.rpc("complete_market_report_analysis")!;
+    assert.equal(complete.p_model, PRIMARY);
+    assert.equal((complete.p_payload as { model: string }).model, PRIMARY);
+    assert.equal((complete.p_payload as { report_type: string }).report_type, reportType);
+    const diagnostics = complete.p_diagnostics as Record<string, string>;
+    assert.deepEqual([diagnostics.ai_generate_model, diagnostics.ai_fact_model, diagnostics.ai_primary], [PRIMARY, PRIMARY, `anthropic:${PRIMARY}`]);
+    assert.equal(Number(diagnostics.cost_usd), complete.p_api_cost_usd);
+    assert.ok((complete.p_api_cost_usd as number) > 0.26, "Claude's settled cost, not OpenAI prices");
+    assert.deepEqual([diagnostics.primary_calls, diagnostics.primary_last_error], ["2", undefined]);
+    // Generate then Fact, each through the ledger under its own primary role; the second call is the Fact check.
+    assert.deepEqual(h.reserves().map((p) => [p.request_id, p.logical_role, p.provider, p.model, p.subject_kind]), [
+      [`mrp:${CYCLE}:a1:generate:1`, "kabumori.market_report.generate.primary", "anthropic", PRIMARY, "system"],
+      [`mrp:${CYCLE}:a1:fact:1`, "kabumori.market_report.fact.primary", "anthropic", PRIMARY, "system"],
+    ]);
+    const systems = h.claude().map((call) => {
+      const system = call.body?.system;
+      return typeof system === "string" ? system : (system as Array<{ text: string }>).map((part) => part.text).join("");
+    });
+    assert.deepEqual(systems.map((text) => text.includes("Factチェッカー")), [false, true]);
+    assert.deepEqual(primaryEvents(lines).map((e) => [e.step, e.ok]), [["generate", true], ["fact", true]]);
+    assertNoKeyLeak(h, lines);
   });
 }
+
+test("morning + primary_both without the Anthropic key: fails closed (KEY_MISSING), no OpenAI fallback", async () => {
+  const h = harness({ reportType: "morning", env: { KABUMORI_MARKET_REPORT_AI_MODE: "primary_both", ANTHROPIC_API_KEY: undefined } });
+  const res = await handleRequest(h.req, h.deps);
+  assert.equal(res.status, 500);
+  assert.equal((await res.json()).error, "ANALYSIS_PRIMARY_CONFIG:KEY_MISSING");
+  assert.deepEqual([h.openai().length, h.claude().length, h.ledger().length], [0, 0, 0]);
+});
+
+test("morning + primary_both, Claude overloaded: the cycle fails, one request, no OpenAI fallback", async () => {
+  const h = harness({ reportType: "morning", env: { KABUMORI_MARKET_REPORT_AI_MODE: "primary_both" }, claude: 529 });
+  const { value: res, lines } = await withLogs(() => handleRequest(h.req, h.deps));
+  assert.equal(res.status, 500);
+  assert.equal((await res.json()).error, "ANALYSIS_PRIMARY_GENERATE_FAILED:OVERLOADED");
+  assert.deepEqual([h.openai().length, h.claude().length], [0, 1]);
+  assert.equal(h.rpc("complete_market_report_analysis"), null);
+  assert.match((h.rpc("fail_market_report_analysis")!.p_diagnostics as Record<string, string>).primary_last_error, /^OVERLOADED:/u);
+  assertNoKeyLeak(h, lines);
+});
+
+test("morning + primary_both, the day's cap already reached: nothing is sent, BUDGET_DENIED:CALL_LIMIT, no OpenAI", async () => {
+  const h = harness({ reportType: "morning", env: { KABUMORI_MARKET_REPORT_AI_MODE: "primary_both" }, reserve: () => ({ allowed: false, reason: "CALL_LIMIT" }) });
+  const res = await handleRequest(h.req, h.deps);
+  assert.equal(res.status, 500);
+  assert.equal((await res.json()).error, "ANALYSIS_PRIMARY_GENERATE_FAILED:BUDGET_DENIED");
+  assert.deepEqual([h.openai().length, h.claude().length, h.reserves().length], [0, 0, 1]);
+  assert.equal((h.rpc("fail_market_report_analysis")!.p_diagnostics as Record<string, string>).primary_last_error, "BUDGET_DENIED:CALL_LIMIT");
+});
 
 // ---- configuration gaps: fail closed -------------------------------------------------------------------------------
 
