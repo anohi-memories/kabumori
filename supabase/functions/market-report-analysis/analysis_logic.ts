@@ -30,6 +30,16 @@ import {
 } from "../_shared/kabumori_ai_models.ts";
 import { emojiDirectionIssues, MARKET_NAMES, mentionsMarketMetric, metricFactIssues } from "./hard_fact_guards.ts";
 import {
+  YUME_FLAT_BAND_PCT,
+  YUME_STANCES,
+  YUME_TARGET,
+  YUME_VERSION,
+  yumeXLines,
+  type YumeStance,
+  type YumeVerdict,
+  type YumeView,
+} from "../_shared/market_report_yume.ts";
+import {
   type Fallbacks,
   removalCodes,
   type RemovedUnit,
@@ -69,13 +79,13 @@ const COMMON = [
   "「AIによる分析である」旨や「投資判断はご自身で」という注意書きはコードが末尾に付けるので、本文には書きません。「AIが独自調査」のような表現も使いません。",
   "strong_themes / weak_themes は、根拠のある業種・テーマ（例: 半導体、銀行、金利上昇の恩恵を受けやすい業種）だけです。指数名、指数どうしの方向の違い、ニュースの見出し、一般的な観察はテーマにしません。根拠が足りなければ空の配列にします。",
   "TOPIX連動ETF（1306）はTOPIX（指数）そのものではありません。必ず「TOPIX連動ETF（1306）」と書き、見出しや x_post で短くするときも「TOPIX」単独にしません（誤: 「日経平均とTOPIXがそろって下落」、正: 「日経平均とTOPIX連動ETF（1306）がそろって下落」）。1306の値や前日比をTOPIXの値として書きません。",
-  "入力は1日分の値動き（前回値との比較）だけです。「続伸」「続落」「反発」「反落」「年初来」「最高値」「最安値」のような複数日の推移や記録を前提にする言葉は使いません。",
+  "入力は1日分の値動き（前回値との比較）だけです。「続伸」「続落」「反発」「反落」「年初来」「最高値」「最安値」のような複数日の推移や記録を前提にする言葉は使いません（yume の、過去の事実を述べない予想の文の「反発」「反落」だけは使えます）。",
   "古い値（鮮度が「古い値」）は、その日付の値であることを明記したときだけ触れます。",
-  "売買の推奨・断定、将来の値動きの断定、URL、ハッシュタグ、HTML、【速報】等のラベルは書きません。",
+  "売買の推奨・断定、予想だと分からない形での将来の値動きの断定（yume の「〜と予想しています」「〜とみています」は可）、URL、ハッシュタグ、HTML、【速報】等のラベルは書きません。",
   "指標の値や前日比を書くときは、入力の「指標」でその指標に付いている「日付」を同じ文の中で、その指標より前に書きます（例: 「9月30日の日経平均は66,753.72（前日比+1.94%）」）。日付の違う指標を1つの文に並べるときは、それぞれの日付を書きます。ある指標の値・前日比を、別の指標や別の日付のものとして書きません。鮮度が「古い値」の指標は「◯月◯日時点」と書きます。",
   "「材料がありません」「ニュースはありません」「個別材料がない」のように、範囲を示さずに無いと言い切りません（入力にニュースがあるためです）。無いと書くのは「東京市場の値動きの理由を説明するニュースは確認できません」のように、何について無いのかを限定したときだけです。",
   "ニュースには「範囲」（市場全体 / 業種・テーマ / 個別企業）が付いています。市場全体の話（x_post・market_summary_ja・app_story）では、範囲が「市場全体」のニュース（金融政策、通商・規制、地政学、エネルギー、災害など）を先に扱い、次に「業種・テーマ」、最後に「個別企業」の順にします。「個別企業」の開示は、「市場全体」「業種・テーマ」のニュースが無いときか、それらを書いたうえで触れます。key_news もこの順に選びます。",
-  "「東京市場の方向」と「米国市場の方向」は、それぞれの日付の値動きとしてコードが決めたものです。朝刊では、前営業日の東京市場と前夜の米国市場を別々に書き、「市場の方向」のひとこと（まちまち等）だけで両方をまとめません。今日の値動きは予想せず、今日見る点として書きます。",
+  "「東京市場の方向」と「米国市場の方向」は、それぞれの日付の値動きとしてコードが決めたものです。朝刊では、前営業日の東京市場と前夜の米国市場を別々に書き、「市場の方向」のひとこと（まちまち等）だけで両方をまとめません。yume 以外の項目では今日の値動きを予想せず、今日見る点として書きます（予想は yume にだけ書きます）。",
   "x_post はX投稿用の約500字の読み物です。次の6つを書きます。lead_ja: 60字以内の導入1文。points_ja: ちょうど3つ、各40字以内の見出し（下の「3つのポイント」の決まりに従う）。context_ja: 90〜130字の背景の段落（値動きを日付つきでつなぐ。理由は確認できた場合だけ）。news_ja: 70〜110字の重要ニュースの段落（範囲が市場全体のものを優先。書けるニュースが無ければ空文字）。watch_ja: 50〜80字の次に見る点。closing_ja: 40〜60字の一言。見出し・小見出し（📌 📰 👀 💬）とハッシュタグはコードが付けるので書きません。",
   "3つのポイント（x_post.points_ja）は、本文を読む前にその日の市場の中身が分かる見出しです。アプリの「今日のポイント」にも同じ3つが出ます。各見出しは次を守ります。(1) その日の入力にある具体的な語（国・地域、企業・業種、指標、出来事の名前）を最低1つ入れます。「ニュースを確認」「動きを見る」「情勢に注目」「材料を確認」「今後の動向に注意」のように、どの日にも当てはまる見出しは書きません。材料を見出しにするときは、どこの何の出来事かを書きます。(2) 指標名と値・前日比を並べただけの見出しは書かず、値は context_ja と app_story に書きます。ただし、節目を超えた、大幅に上昇・下落した、急変した、政策金利が決まったなど、数値そのものがその日の出来事である場合は、数値を入れた見出しにしてかまいません。そのときも、入力の値と前日比から確かめられる範囲（前日の終値を上回った等）で書き、「初めて」「史上最高」「〜年ぶり」のように入力だけでは確かめられない記録の言葉は使いません。(3) 3つは、その日にもっとも重要な別々のテーマを選びます。同じ指数や同じニュースの言い換えを2回使いません。材料が薄い日は、理由が確認できないことを正直に1つ書いてかまいませんが、3つすべてを抽象的にしません。(4) 煽りや釣りの言い方はしません。(5) 見出しも本文と同じ決まりに従います（入力と逆の方向を書かない、根拠の無い理由を見出しにしない、日付の違う市場を混ぜない、TOPIX連動ETF（1306）をTOPIXと書かない）。",
   "app_story はアプリの「市場全体」の読み物で、x_post より詳しく書きます。見出し・絵文字・指標の数値の一覧はコードが付けるので、各項目には説明の文章だけを書きます（数値を書く場合は上の日付のルールに従う）。summary_ja: 60〜110字で全体をひとこと。overseas_ja: 100〜170字で米国市場の値動き。japan_ja: 120〜200字で東京市場（朝刊は前営業日の結果と今日見る点、大引けは今日の結果）。cross_asset_ja: 80〜150字で為替・金利・半導体・原油。news_ja: 120〜220字で重要ニュースと市場との関係（関係が確認できなければそう書く）。strong_ja: 強い・注目テーマ（根拠が無ければ空文字）。caution_ja: 60〜130字で注意点・リスク。watch_ja: 60〜130字で次に見る点。根拠が足りない項目は無理に埋めず、空文字にします（各項目で「確認できません」を繰り返しません）。app_story の文章には、内容に合う絵文字（📉📈👀など）を全体で2個まで使ってかまいません。📈は上昇、📉は下落した指標の文だけに使い、絵文字で方向や理由をほのめかしません。",
@@ -99,12 +109,31 @@ const CLOSE = [
   "大引けの3つのポイントは、その日の「何が起きたか」「何が重要だったか（根拠のある材料）」「次に何を見るか」から、もっとも重要な3つを選びます。相場を動かした理由を見出しにできるのは、ニュースが理由として明記している（causal の claim がある）場合だけです。無いときは、見えている事実（動いた市場・指標・節目）と、理由が確認できないことを正直に書きます。明日以降の値動きは断定しません。業種や個別株の値動きは、入力のニュースや指標に根拠があるときだけ書きます。",
 ];
 
+// ゆめちゃん (2026-10-13): her own call, written only in `yume` and kept apart from the fact sections. The verdict of the
+// close's look-back is decided in code (market_report_yume.ts) and given to the model as a fixed fact.
+const YUME_COMMON = [
+  "yume は、かぶモリのAI評論家「ゆめちゃん」としての独自の見立てです。ほかの項目（事実の説明）とは分け、予想・仮説はここにだけ書きます。ゆめちゃんはAIで、人間の投資家ではありません。保有・売買・損益などの体験を作りません。",
+  "ゆめちゃんは、薄い一般論や「注目です」で終わらせず、自分の相場観を言い切りすぎない形ではっきり示します。口調は、意見と事実の区別が分かる、落ち着いた評論家の話し言葉の「です・ます」です（例: 「〜とみています」「〜と予想します」「私の見立てでは〜」）。煽り、利益の保証、個別銘柄の売買の推奨、「必ず」「確実に」のような断定、「〜するでしょう」は使いません。",
+  "yume でも、事実は入力のとおりにします。入力に無い数字（目標値や予想値の数字を含む）、日付、固有名詞、ニュース、発表を作りません。数字を使うときは入力の「指標」の値・前日比をそのまま使います。仮説（「〜が支えになりそう」「〜なら下振れしやすい」）は書いてかまいませんが、仮説を事実として書きません。入力の「ゆめちゃんの予想の基準」に従います。複数日の記録を前提にする語（続伸・続落・最高値・年初来など）は使いません。「反発」「反落」は、過去の事実を述べない予想の文（「明日は反発するとみています」）でだけ使えます。",
+  "ゆめちゃんは「私は明日の日本株は反発すると予想しています」「今回の下落は少し売られすぎだと考えています」「私の見立てでは、半導体関連株が先に回復しそうです」のように、主語のある自分の言葉で予想と見解を述べます。予想には客観的な裏付けが無くてかまいません（当たるとは限らないのは前提です）。事実と予想を同じ段落に書くときは、事実は入力どおり、予想は予想と分かる言い方にします。「注目が必要です」「今後の動向を確認しましょう」のような一般論だけで終えません。",
+  "stance は up（上昇）/ down（下落）/ flat（横ばい）から1つ選びます。headline_ja: 40字以内で見立てのひとこと。reasons_ja: 80〜160字で、そう考える理由（入力の事実と一般的な経済の仕組みからの仮説）。counter_ja: 50〜120字で、見立てと逆の材料。invalidation_ja: 40〜100字で、外れるとしたらどんなときか。",
+];
+
+const YUME_MORNING = [
+  "朝刊の yume: stance には、きょう（取引日）の日経平均の終値が、前営業日の終値と比べて、上昇・下落・横ばいのどれになるとゆめちゃんが予想するかを1つ選びます（基準は入力の「ゆめちゃんの予想の基準」）。判断を避けず、前夜の米国市場・為替・ニュースから自分の仮説で選びます。review_ja は空文字にします。",
+];
+
+const YUME_CLOSE = [
+  "大引けの yume: 入力の「朝刊の予想との答え合わせ」の「判定」はコードで確定しています。review_ja には、その判定の言葉（当たり / 部分的に当たり / 外れ / 判定できません）をそのまま入れ、60〜160字でゆめちゃん自身の振り返りを書きます。判定を変えたり、朝刊の予想を後から言い換えたり、言い訳で正当化したりしません。外れた理由の推測は推測と分かる言い方にします。「判定できません」のときは、比べられない理由を書き、朝刊の予想や結果を推測で作りません。",
+  "大引けの yume の stance・headline_ja・reasons_ja・counter_ja・invalidation_ja は、次の営業日の日経平均（同じ基準）についての、ゆめちゃんの見立てです。読み違えやすい点を counter_ja・invalidation_ja に書きます。",
+];
+
 const GENERATION_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: [
     "headline_ja", "market_summary_ja", "claims", "key_news", "strong_themes", "weak_themes",
-    "next_watch_ja", "risks_ja", "x_post", "app_story",
+    "next_watch_ja", "risks_ja", "x_post", "app_story", "yume",
   ],
   properties: {
     headline_ja: { type: "string" },
@@ -175,6 +204,19 @@ const GENERATION_SCHEMA = {
         watch_ja: { type: "string" },
       },
     },
+    yume: {
+      type: "object",
+      additionalProperties: false,
+      required: ["stance", "headline_ja", "reasons_ja", "counter_ja", "invalidation_ja", "review_ja"],
+      properties: {
+        stance: { type: "string", enum: ["up", "down", "flat"] },
+        headline_ja: { type: "string" },
+        reasons_ja: { type: "string" },
+        counter_ja: { type: "string" },
+        invalidation_ja: { type: "string" },
+        review_ja: { type: "string" },
+      },
+    },
   },
 } as const;
 
@@ -201,9 +243,11 @@ const FACT_SCHEMA = {
 
 export const FACT_INSTRUCTIONS = [
   "あなたは市場レポートの厳格なFactチェッカーです。input（根拠）と analysis（生成結果）だけを照合します。Web検索や外部知識は使いません。",
-  "次を検出したら passed を false にします: input に無い数字・日付・固有名詞・事実、数値の書き換えや独自計算、market_direction と矛盾する方向、すでに起きた値動きの理由を news が理由として書いていないのに事実として断定したもの（causal の claim や断定の文）、consistent_with や insufficient_evidence なのに本文が過去の値動きの因果を断定しているもの、TOPIX連動ETF（1306）をTOPIXそのものとして書いたもの（「TOPIX連動型ETF」のような正確な言い換えや、TOPIX への新規採用など指数そのものの話は可）、古い値を最新のように書いたもの、将来の値動きの断定（「明日は上昇します」など）、売買推奨。",
+  "次を検出したら passed を false にします: input に無い数字・日付・固有名詞・事実、数値の書き換えや独自計算、market_direction と矛盾する方向、すでに起きた値動きの理由を news が理由として書いていないのに事実として断定したもの（causal の claim や断定の文）、consistent_with や insufficient_evidence なのに本文が過去の値動きの因果を断定しているもの、TOPIX連動ETF（1306）をTOPIXそのものとして書いたもの（「TOPIX連動型ETF」のような正確な言い換えや、TOPIX への新規採用など指数そのものの話は可）、古い値を最新のように書いたもの、予想だと分からない形での将来の値動きの断定（「明日は上昇します」など。「〜と予想しています」「〜とみています」のように意見だと分かるものは問題にしない）、売買推奨。",
   "input の事実と一般的な経済の仕組みに基づく分析・見通し（「〜と考えられます」「〜しやすい」「〜の可能性があります」など、事実ではなく見立てだと分かる書き方のもの）は、news に同じ記述が無くても問題にしません。見立てとして書かれた過去の値動きの理由（「〜が重しになった可能性があります」）も問題にしません。",
   "自然な言い換えや要約は許容します。x_post の口語的な文体は問題にしません。issues は短い日本語で返します。",
+  "予想・見立て・仮説・市場心理の解釈・今後のシナリオ・予想が外れた理由の考察は、input で根拠が確認できない、外れる可能性がある、という理由だけで passed を false にせず、objective_issues にも入れません。同じ文や段落に事実と予想が混ざっているときは、事実の部分だけを検証し、objective_issues には誤った事実の文だけを入れます（予想の文は入れません）。",
+  "analysis.yume は、AI評論家「ゆめちゃん」の予想・見立て（意見）です。予想していること自体、見立ての方向、事実ではなく意見だと分かる書き方の仮説は問題にしません。ただし、yume の中でも、input に無い数字・日付・固有名詞・ニュースの事実、input と矛盾する事実、「必ず」「確実に」のような断定や利益の保証、売買の推奨は問題にします。大引けでは、yume.review_ja が input の「朝刊の予想との答え合わせ」の「判定」と違う判定を書いていたら問題にします。",
   "objective_issues には、input と客観的に矛盾するものだけを入れます: input と違う数字・日付・方向、古い値を最新とした記述、1306をTOPIXそのものとした記述、input に無い事実の断定、input にある事実を否定・反転した記述（例: input では調査を受けていると公表しているのに「調査を実施していません」）。quote_ja には analysis の該当する文を一字一句そのまま写し、reason_ja に input のどこと矛盾するかを書きます。言い回し・推測の程度・一般論・input から判断できない点は objective_issues に入れず issues にだけ書きます。objective_issues に入れたものも issues に書きます。",
 ].join("\n");
 
@@ -223,6 +267,8 @@ export function generationRequestBody(input: AnalysisInput, previousIssues: stri
         ]
         : []),
       ...X_VOICE,
+      ...YUME_COMMON,
+      ...(input.reportType === "close" ? YUME_CLOSE : YUME_MORNING),
     ].join("\n"),
     input: JSON.stringify(input.modelInput),
     text: { format: { type: "json_schema", name: "market_report_analysis", strict: true, schema: GENERATION_SCHEMA } },
@@ -255,7 +301,21 @@ export type GeneratedAnalysis = {
   x_post: XPost;
   /** Present on presentation v2 output; absent when a v1-shaped analysis is parsed. */
   app_story?: AppStoryDraft;
+  /** ゆめちゃん's call (2026-10-13); absent on older output or when it was dropped as unsafe. */
+  yume?: YumeDraft;
 };
+
+/** ゆめちゃん's call as the model wrote it (opinion). Morning: review_ja is ignored. */
+export type YumeDraft = {
+  stance: YumeStance;
+  headline_ja: string;
+  reasons_ja: string;
+  counter_ja: string;
+  invalidation_ja: string;
+  review_ja: string;
+};
+
+export const YUME_TEXT_KEYS = ["headline_ja", "reasons_ja", "counter_ja", "invalidation_ja", "review_ja"] as const;
 
 const APP_STORY_KEYS = ["summary_ja", "overseas_ja", "japan_ja", "cross_asset_ja", "news_ja", "strong_ja", "caution_ja", "watch_ja"] as const;
 
@@ -295,6 +355,10 @@ export function parseGeneratedAnalysis(payload: unknown): GeneratedAnalysis | nu
       : [];
   const xPost = (item.x_post ?? {}) as Record<string, unknown>;
   const story = item.app_story as Record<string, unknown> | undefined;
+  const yume = item.yume && typeof item.yume === "object" && !Array.isArray(item.yume) ? item.yume as Record<string, unknown> : null;
+  const yumeDraft = yume && YUME_STANCES.includes(yume.stance as YumeStance)
+    ? { stance: yume.stance as YumeStance, ...Object.fromEntries(YUME_TEXT_KEYS.map((key) => [key, text(yume[key])])) } as YumeDraft
+    : null;
   // v2 fields are kept only when the model returned them; a v1-shaped analysis stays v1.
   const xV2 = typeof xPost.context_ja === "string"
     ? { context_ja: text(xPost.context_ja), news_ja: text(xPost.news_ja), watch_ja: text(xPost.watch_ja) }
@@ -315,6 +379,7 @@ export function parseGeneratedAnalysis(payload: unknown): GeneratedAnalysis | nu
     ...(story && typeof story === "object"
       ? { app_story: Object.fromEntries(APP_STORY_KEYS.map((key) => [key, text(story[key])])) as AppStoryDraft }
       : {}),
+    ...(yumeDraft && yumeDraft.headline_ja && yumeDraft.reasons_ja ? { yume: yumeDraft } : {}),
   };
   return analysis.headline_ja && analysis.market_summary_ja ? analysis : null;
 }
@@ -363,6 +428,12 @@ function sameDayClaims(text: string): boolean {
 /** Names that describe an index or a divergence, not a sector/theme. */
 const NON_THEME = /日経平均|TOPIX|NYダウ|S&P|ナスダック|指数|方向差|乖離|報道|発表後/;
 const MULTI_DAY_WORDS = ["続伸", "続落", "反発", "反落", "連騰", "連落", "連敗", "連勝", "年初来", "上場来", "最高値", "最安値", "高値更新", "安値更新"];
+/**
+ * 「明日は反発する」 compares tomorrow with today's move, which is in the input: a call, not an unverifiable multi-day
+ * record (2026-10-13, ゆめちゃん). Allowed only in a forward-looking sentence that states no past fact; 続伸 / 最高値 and
+ * the other record words stay out everywhere.
+ */
+const FORECAST_MOVE_WORDS = new Set(["反発", "反落"]);
 const ADVICE = /買い推奨|売り推奨|買うべき|売るべき|買い時|売り時|目標株価|おすすめ|推奨します|必ず(?:上が|下が|上昇|下落)|確実に(?:上が|下が|上昇|下落)|(?:上昇|下落)するでしょう|(?:上が|下が)るでしょう/u;
 /** Accurate names for the 1306 proxy; any other "TOPIX" reads as the index itself (checked after NFKC). */
 const TOPIX_PROXY_AT = /TOPIX連動型?(?:ETF|上場投信|投信)/y;
@@ -725,6 +796,18 @@ export function speculativeCausalSentences(analysis: GeneratedAnalysis, input: A
   return causalSentences(analysis).filter((sentence) => causalVerdict(sentence, causalNews, input) === "speculative").map(shortQuote);
 }
 
+/** Multi-day words of a text, sentence by sentence (a forecast sentence may say 反発 / 反落). */
+function multiDayWords(text: string, kind: "factual" | "forward"): string[] {
+  const found = new Set<string>();
+  for (const sentence of text.split(/(?<=[。！？!?\n])/u)) {
+    const forecast = kind === "forward" && !PAST_FACT_PROSE.test(sentence);
+    for (const word of MULTI_DAY_WORDS) {
+      if (sentence.includes(word) && !(forecast && FORECAST_MOVE_WORDS.has(word))) found.add(word);
+    }
+  }
+  return [...found];
+}
+
 export function analysisTexts(analysis: GeneratedAnalysis): string[] {
   return [
     analysis.headline_ja,
@@ -737,7 +820,13 @@ export function analysisTexts(analysis: GeneratedAnalysis): string[] {
     ...analysis.risks_ja,
     ...xPostTexts(analysis),
     ...(analysis.app_story ? APP_STORY_KEYS.map((key) => analysis.app_story![key]) : []),
+    ...yumeTexts(analysis),
   ].filter(Boolean);
+}
+
+/** ゆめちゃん's texts: all forward-looking opinion (the look-back's verdict itself is code). */
+function yumeTexts(analysis: GeneratedAnalysis): string[] {
+  return analysis.yume ? YUME_TEXT_KEYS.map((key) => analysis.yume![key]).filter(Boolean) : [];
 }
 
 function xPostTexts(analysis: GeneratedAnalysis): string[] {
@@ -764,6 +853,7 @@ function guardTexts(analysis: GeneratedAnalysis) {
       ...analysis.risks_ja,
       x.watch_ja ?? "",
       ...(story ? [story.caution_ja, story.watch_ja] : []),
+      ...yumeTexts(analysis),
     ].filter(Boolean),
   };
 }
@@ -854,8 +944,15 @@ export function localAnalysisCheck(analysis: GeneratedAnalysis, input: AnalysisI
     }
   }
   warnings.push(...editorialPriorityWarnings(analysis, input));
+  warnings.push(...yumeWarnings(analysis, input));
   warnings.push(...pointsEditorialWarnings(analysis.x_post.points_ja));
-  for (const word of MULTI_DAY_WORDS) if (joined.includes(word)) issues.push(`複数日を前提にする語: ${word}`);
+  const guarded = guardTexts(analysis);
+  const factualTexts = [...guarded.factual, ...analysis.strong_themes.map((theme) => theme.name_ja), ...analysis.weak_themes.map((theme) => theme.name_ja)];
+  const multiDay = new Set([
+    ...factualTexts.flatMap((value) => multiDayWords(value, "factual")),
+    ...guarded.forward.flatMap((value) => multiDayWords(value, "forward")),
+  ]);
+  for (const word of multiDay) issues.push(`複数日を前提にする語: ${word}`);
 
   if (analysis.claims.length < 1) (options.delivery ? warnings : issues).push("claims が空");
   // The generation contract asks for exactly three points; a delivered packet may carry fewer after unit removal.
@@ -942,7 +1039,7 @@ export function unitChecker(input: AnalysisInput, keptClaims: readonly Claim[]):
     for (const issue of metricFactIssues(guardTexts, input)) add(metricCode(issue), issue);
     for (const issue of emojiDirectionIssues([text], input)) add("EMOJI_DIRECTION", issue);
     for (const issue of falseAbsenceClaims([text], hasNews)) add("FALSE_ABSENCE", issue);
-    for (const word of MULTI_DAY_WORDS) if (text.includes(word)) add("MULTI_DAY_WORD", `複数日を前提にする語: ${word}`);
+    for (const word of multiDayWords(text, kind)) add("MULTI_DAY_WORD", `複数日を前提にする語: ${word}`);
     for (const sentence of text.split(/[。！？!?\n]/)) {
       if (kind === "forward" && !PAST_FACT_PROSE.test(sentence)) continue;
       const verdict = causalVerdict(sentence, causalNews, input);
@@ -1140,6 +1237,60 @@ export function pointsEditorialWarnings(points: string[]): string[] {
 // Assembly
 // ---------------------------------------------------------------------------
 
+/** The look-back text must carry the code's verdict word, and never another verdict's. */
+const VERDICT_WORDS: Record<YumeVerdict, { must: RegExp; mustNot: RegExp }> = {
+  hit: { must: /当たり/u, mustNot: /外れ|部分的|判定でき/u },
+  partial: { must: /部分的/u, mustNot: /外れ(?!る)|判定でき/u },
+  miss: { must: /外れ/u, mustNot: /(?<!部分的に)当たり(?!ませ)|判定でき/u },
+  undeterminable: { must: /判定でき|比べられ|答え合わせ(?:は|が)でき/u, mustNot: /当たり|外れ(?!る)/u },
+};
+
+export function yumeReviewConsistent(text: string, verdict: YumeVerdict): boolean {
+  const words = VERDICT_WORDS[verdict];
+  return words.must.test(text) && !words.mustNot.test(text);
+}
+
+/** Quality findings about ゆめちゃん's call. Recorded; a missing or inconsistent part is left out, never a reason to withhold. */
+export function yumeWarnings(analysis: GeneratedAnalysis, input: AnalysisInput): string[] {
+  const yume = analysis.yume;
+  // Absent: older output, or dropped as unsafe (recorded as UNIT_REMOVED:YUME_DROPPED). Not a warning of its own.
+  if (!yume) return [];
+  const warnings: string[] = [];
+  if (!yume.counter_ja) warnings.push("YUME_COUNTER_EMPTY");
+  if (!yume.invalidation_ja) warnings.push("YUME_INVALIDATION_EMPTY");
+  if (input.reportType === "close" && input.yumeReview) {
+    if (!yume.review_ja) warnings.push("YUME_REVIEW_EMPTY");
+    else if (!yumeReviewConsistent(yume.review_ja, input.yumeReview.verdict)) warnings.push(`YUME_REVIEW_INCONSISTENT:${input.yumeReview.verdict}`);
+  }
+  return warnings;
+}
+
+/** ゆめちゃん's view as stored: the call from the model, the definition and (close) the verdict from code. */
+export function yumeViewOf(input: AnalysisInput, draft: YumeDraft | undefined): YumeView | undefined {
+  if (!draft) return undefined;
+  const morning = input.reportType === "morning";
+  const review = !morning && input.yumeReview
+    ? {
+      ...input.yumeReview,
+      // Her words are kept only when they say the same verdict the code decided.
+      text_ja: draft.review_ja && yumeReviewConsistent(draft.review_ja, input.yumeReview.verdict) ? draft.review_ja : "",
+    }
+    : undefined;
+  return {
+    version: YUME_VERSION,
+    target: YUME_TARGET,
+    horizon: morning ? "this_session" : "next_session",
+    horizon_date: morning ? input.tradingDate : null,
+    flat_band_pct: YUME_FLAT_BAND_PCT,
+    stance: draft.stance,
+    headline_ja: draft.headline_ja,
+    reasons_ja: draft.reasons_ja,
+    counter_ja: draft.counter_ja,
+    invalidation_ja: draft.invalidation_ja,
+    ...(review ? { review } : {}),
+  };
+}
+
 export function assemblePacket(
   input: AnalysisInput,
   analysis: GeneratedAnalysis,
@@ -1156,6 +1307,10 @@ export function assemblePacket(
       scope: input.scopeByRef.get(news.ref) ?? "company",
     })));
   const v2 = typeof analysis.x_post.context_ja === "string" && !!analysis.app_story;
+  const yume = yumeViewOf(input, analysis.yume);
+  // ゆめちゃん's lines are the closing paragraph (「💬 今日のひとこと」), which every deployed X formatter renders. The
+  // model's own closing is the fallback when her call was left out.
+  const xPost = yume ? { ...analysis.x_post, closing_ja: yumeXLines(yume).join("\n") } : analysis.x_post;
   return {
     schema_version: REPORT_SCHEMA_VERSION,
     report_type: input.reportType,
@@ -1176,9 +1331,10 @@ export function assemblePacket(
     next_watch_ja: analysis.next_watch_ja.slice(0, 3),
     risks_ja: analysis.risks_ja.slice(0, 3),
     data_gaps_ja: input.dataGapsJa,
-    x_post: analysis.x_post,
+    x_post: xPost,
     ...(v2 ? { presentation_version: PRESENTATION_VERSION, app_story: analysis.app_story } : {}),
     session_views: input.sessionViews,
+    ...(yume ? { yume } : {}),
     fact: {
       local_issues: [],
       ai_status: meta.factStatus ?? "passed",
@@ -1308,7 +1464,8 @@ export const APP_STORY_REWRITE_BELOW_CHARS = 700;
 export const X_POST_REWRITE_BELOW_CHARS = 300;
 
 /** Warnings that are recorded but never worth a generation (a removed unit is already a delivered degradation). */
-const COSMETIC_WARNING = /^X_POST_EMOJI_COUNT|LONGER_THAN_TARGET|が長すぎる$|^X_POST_NEWS_OMITTED$|^X_POINTS_|^SPECULATIVE_CAUSALITY|^UNIT_|^FACT_/;
+// ゆめちゃん's findings never buy a rewrite call: her call is optional, and a missing part is simply left out.
+const COSMETIC_WARNING = /^X_POST_EMOJI_COUNT|LONGER_THAN_TARGET|が長すぎる$|^X_POST_NEWS_OMITTED$|^X_POINTS_|^SPECULATIVE_CAUSALITY|^UNIT_|^FACT_|^YUME_/;
 
 /**
  * Worth one rewrite: everything that is not cosmetic, and an app story or an X body only when it is

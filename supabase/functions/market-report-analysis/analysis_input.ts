@@ -6,6 +6,17 @@
 
 import type { MarketDataPacket, Metric } from "../market-report-data-packet/packet_schema.ts";
 import type { MajorMove, MarketDirection, NewsScope, ReportType, SessionView } from "../_shared/market_report_packet.ts";
+import {
+  bandRuleJa,
+  evaluateMorningForecast,
+  YUME_FLAT_BAND_PCT,
+  YUME_STANCE_JA,
+  YUME_TARGET,
+  YUME_UNDETERMINABLE_JA,
+  YUME_VERDICT_JA,
+  type YumeMorningSource,
+  type YumeReview,
+} from "../_shared/market_report_yume.ts";
 
 export const MAX_NEWS_ITEMS = 15;
 export const FLAT_THRESHOLD_PCT = 0.1;
@@ -78,6 +89,8 @@ export type AnalysisInput = {
   metricFacts: MetricFact[];
   /** Scope by news ref, for ordering key_news in the packet. */
   scopeByRef: Map<string, NewsScope>;
+  /** Close only: the code's look-back at the same day's morning call (null on a morning report). */
+  yumeReview: YumeReview | null;
 };
 
 const MAJOR_CATEGORIES = new Set(["monetary_policy"]);
@@ -279,6 +292,8 @@ export function buildAnalysisInput(args: {
   dataPacketId: string;
   dataContentHash: string;
   newsRows: readonly NewsTextRow[];
+  /** Close only: the same trading date's morning report as stored (immutable), null when none, "error" when unread. */
+  morning?: YumeMorningSource;
 }): AnalysisInput {
   const { dataPacket } = args;
   const { direction, basis } = marketDirection(dataPacket.report_type, dataPacket.metrics);
@@ -308,6 +323,14 @@ export function buildAnalysisInput(args: {
       : Math.abs(metric.change_pct) < FLAT_THRESHOLD_PCT ? 0 : Math.sign(metric.change_pct),
     freshness: metric.freshness as "fresh" | "stale",
   }));
+  const target = facts.find((fact) => fact.key === YUME_TARGET);
+  const yumeReview = dataPacket.report_type === "close"
+    ? evaluateMorningForecast({
+      tradingDate: dataPacket.trading_date,
+      morning: args.morning ?? null,
+      actual: target ? { sessionDate: target.sessionDate, changeDisplay: target.changeDisplay, freshness: target.freshness } : null,
+    })
+    : null;
 
   // Japanese keys only: English field names in the input leaked into the text on
   // 2026-09-18 ("change_pctは+1.38%"). Only the ref identifiers stay ASCII.
@@ -343,6 +366,9 @@ export function buildAnalysisInput(args: {
       企業: item.company,
     })),
     取得できなかったデータ: gaps,
+    // ゆめちゃん's call is judged against this fixed rule (stored in the morning record).
+    ゆめちゃんの予想の基準: bandRuleJa(YUME_FLAT_BAND_PCT),
+    ...(yumeReview ? { 朝刊の予想との答え合わせ: yumeReviewInput(yumeReview) } : {}),
   };
 
   return {
@@ -365,5 +391,25 @@ export function buildAnalysisInput(args: {
     sessionViews: views,
     metricFacts: facts,
     scopeByRef: new Map(news.map((item) => [item.ref, item.scope])),
+    yumeReview,
+  };
+}
+
+/** The look-back as the model sees it: the verdict is fixed; only what the code knows, in Japanese. */
+function yumeReviewInput(review: YumeReview): Record<string, unknown> {
+  if (review.verdict === "undeterminable") {
+    return {
+      判定: YUME_VERDICT_JA.undeterminable,
+      比べられない理由: YUME_UNDETERMINABLE_JA[review.reason_code] ?? "比べられる記録がありません",
+      朝刊の予想: review.morning_stance ? YUME_STANCE_JA[review.morning_stance] : null,
+      朝刊の見立て: review.morning_headline_ja,
+    };
+  }
+  return {
+    判定: YUME_VERDICT_JA[review.verdict],
+    朝刊の予想: YUME_STANCE_JA[review.morning_stance!],
+    朝刊の見立て: review.morning_headline_ja,
+    判定の基準: bandRuleJa(review.flat_band_pct!),
+    実績: `${formatDateJa(review.actual_session_date!)}の日経平均 前日比${review.actual_change_display}`,
   };
 }

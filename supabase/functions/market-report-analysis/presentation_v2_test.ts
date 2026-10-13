@@ -152,7 +152,7 @@ test("App morning: structured story with headings, prose and dated fact lines; r
   const input = inputOf(morning);
   const packet = packetOf(richMorning1001(input), input);
   const story = buildAppMarketStory(packet);
-  assert.deepEqual(story.sections.map((item) => item.key), ["summary", "overseas", "japan", "cross_asset", "news", "caution", "watch", "gaps", "disclaimer"]);
+  assert.deepEqual(story.sections.map((item) => item.key), ["summary", "overseas", "japan", "cross_asset", "news", "caution", "watch", "yume", "gaps", "disclaimer"]);
   assert.deepEqual(story.sections.at(-1), { key: "disclaimer", heading_ja: "", body_ja: REPORT_DISCLAIMER_JA, lines_ja: [] });
   assert.deepEqual(story.sections.map((item) => item.heading_ja).slice(0, 5), [
     "☀️ 今日の市場をひとことで", "🇺🇸 前夜の米国市場", "🇯🇵 今日の日本株をどう見るか", "💹 為替・金利・半導体など", "📰 重要ニュース",
@@ -173,17 +173,25 @@ test("App close: story sections, and the morning packet of the same day is answe
   const input = inputOf(close);
   const packet = packetOf(richClose0930(input), input);
   const story = buildAppMarketStory(packet, v1Morning0930);
-  assert.deepEqual(story.sections.map((item) => item.key), ["summary", "japan", "moves", "news", "caution", "morning_check", "watch", "gaps", "disclaimer"]);
+  assert.deepEqual(story.sections.map((item) => item.key), ["summary", "japan", "moves", "news", "caution", "morning_check", "watch", "yume", "gaps", "disclaimer"]);
   assert.equal(story.sections[0].heading_ja, "🌙 今日の市場をひとことで");
   assert.ok(story.char_count >= APP_STORY_TARGET_MIN_CHARS, `narrative ${story.char_count}`);
   const check = story.sections.find((item) => item.key === "morning_check")!;
   assert.equal(check.heading_ja, "☀️ 朝刊との答え合わせ");
-  assert.equal(check.lines_ja[0], `朝刊の見立て：${v1Morning0930.headline_ja}`);
+  // ゆめちゃん's look-back comes first: this close was generated without a morning call, so it says it cannot be judged.
+  assert.equal(check.lines_ja[0], "ゆめちゃんの予想の答え合わせ：朝の予想との答え合わせはできません（この日の朝刊が見つかりません）");
+  assert.ok(check.lines_ja.includes(`朝刊の見立て：${v1Morning0930.headline_ja}`));
   assert.ok(check.lines_ja.some((line) => line.startsWith("朝刊で挙げた注目点：")));
   assert.ok(check.lines_ja.some((line) => line.startsWith("9月30日の東京市場の結果：日経平均 66,753.72（前日比+1.94%）")));
-  // No morning packet, or one from another day: the section is simply absent.
-  assert.ok(!buildAppMarketStory(packet).sections.some((item) => item.key === "morning_check"));
-  assert.ok(!buildAppMarketStory(packet, v1Morning1001).sections.some((item) => item.key === "morning_check"));
+  // No morning packet, or one from another day: only the code's 「判定できません」 line and her words, nothing reconstructed.
+  for (const other of [null, v1Morning1001]) {
+    const lines = buildAppMarketStory(packet, other).sections.find((item) => item.key === "morning_check")!.lines_ja;
+    assert.equal(lines[0], check.lines_ja[0]);
+    assert.ok(!lines.some((line) => line.startsWith("朝刊の見立て：") || line.startsWith("朝刊で挙げた注目点：")));
+  }
+  // A close without ゆめちゃん's view (older packets) keeps the old behaviour: no morning packet, no section.
+  const { yume: _yume, ...older } = packet;
+  assert.ok(!buildAppMarketStory(older).sections.some((item) => item.key === "morning_check"));
 });
 
 test("a stored v1 packet still renders: the short X body and a story from its existing fields", () => {

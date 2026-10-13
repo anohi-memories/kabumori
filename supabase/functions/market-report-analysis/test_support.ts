@@ -29,6 +29,28 @@ const refOf = (input: AnalysisInput, match: (headline: string, company: string |
   return item.ref;
 };
 
+/**
+ * ゆめちゃん's call as a model would write it (2026-10-13). No metric names or numbers, so it fits every fixture day; the
+ * close has no morning report in these fixtures, so its look-back says it cannot be judged.
+ */
+export const YUME_MORNING_FIXTURE = {
+  stance: "up" as const,
+  headline_ja: "きょうは買いが入りやすい一日とみています",
+  reasons_ja: "急いで売りたくなるような悪い知らせが見当たらず、きょうは買いが入りやすい一日になると考えています。ただ、これは私の見立てで、確かな材料があるわけではありません。",
+  counter_ja: "前日の流れが続かず、利益を確定する売りが先に出る可能性もあります。",
+  invalidation_ja: "取引時間中に大きな売りの材料が出てきたときは、外れるかもしれません。",
+  review_ja: "",
+};
+
+export const YUME_CLOSE_FIXTURE = {
+  stance: "flat" as const,
+  headline_ja: "あすは手がかり待ちで、小動きとみています",
+  reasons_ja: "きょうの値動きの理由はまだはっきりしません。今夜の米国株と為替を見てから動きたい人が多そうなので、あすは方向感が出にくい展開になりやすいと考えています。",
+  counter_ja: "今夜の米国株が大きく動けば、その流れに日本株も引っ張られる可能性があります。",
+  invalidation_ja: "海外で大きな出来事が起きて、売りや買いが一方向に集まったときは外れそうです。",
+  review_ja: "この日の朝刊に予想の記録が無いので、きょうは答え合わせができません。",
+};
+
 /** 2026-09-17 close: Tokyo up on 9/17, US down on 9/16. */
 export function rich0917(input: AnalysisInput): GeneratedAnalysis {
   const shipping = refOf(input, (headline) => headline.includes("中東の主要航路"));
@@ -73,6 +95,7 @@ export function rich0917(input: AnalysisInput): GeneratedAnalysis {
       caution_ja: "前日の米国市場ではNYダウが大きく下げており、今夜の米国株の動き次第で地合いが変わる点に注意が必要です。中東の航路をめぐる緊張も続いています。",
       watch_ja: "今夜の米国株がどう動くか、ドル円が155.05円近辺から動くかが確認点です。中東の航路をめぐる続報と、原油の値動きもあわせて確認します。",
     },
+    yume: YUME_CLOSE_FIXTURE,
   };
 }
 
@@ -126,6 +149,7 @@ export function richClose0930(input: AnalysisInput): GeneratedAnalysis {
       caution_ja: "米国では消費者信頼感が大きく悪化しており、商品やサービスの値上がりが理由に挙げられています。米国とカナダの関税の応酬も続いています。原油は9月22日時点の値までしか確認できていません。",
       watch_ja: "次の米国市場で消費者信頼感の悪化がどう受け止められるか、関税をめぐる続報が出るかが確認点です。東京市場では、今日の上昇が次の取引日も続くかを見ていきます。",
     },
+    yume: YUME_CLOSE_FIXTURE,
   };
 }
 
@@ -179,6 +203,7 @@ export function richMorning1001(input: AnalysisInput): GeneratedAnalysis {
       caution_ja: "米国の主要3指数は方向がそろっておらず、指数だけでは地合いを判断しにくい状況です。エネルギー施設への攻撃など地政学のニュースが続いており、原油の最新の値は9月29日時点までしか確認できていません。",
       watch_ja: "今日は、米国株の方向がそろうか、ドル円が157.00円近辺からどちらに動くかが確認点です。AI企業との自主協定や鉄鋼の枠組みについて、具体的な運用の続報が出るかも見ていきます。",
     },
+    yume: YUME_MORNING_FIXTURE,
   };
 }
 
@@ -236,5 +261,6 @@ export function richClose1001(input: AnalysisInput): GeneratedAnalysis {
       caution_ja: "米国の主要3指数は方向がそろっておらず、東京市場の大きな上昇が続くかは見通しにくい状況です。日本国債の利回りは8月31日時点の値までしか確認できていません。",
       watch_ja: "次の米国市場で主要3指数の方向がそろうか、ドル円が157.00円近辺からどちらに動くかが確認点です。AI関連では、自主協定の運用や電力費用をめぐる議論の続報を見ていきます。",
     },
+    yume: YUME_CLOSE_FIXTURE,
   };
 }
