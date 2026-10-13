@@ -38,7 +38,7 @@ export function syntheticBodyFor(caseId: string, chars: number): string {
 
 /** A synthetic headline for a case whose real headline is withheld; distinct per case, resembles no publication. */
 export function syntheticTitleFor(caseId: string): string {
-  return `${markerOf(caseId)}：合成の見出し（試験用）`;
+  return `${markerOf(caseId)}：合成の見出し（試験用・実在の記事とは無関係）`;
 }
 
 export type SyntheticLegacy = {

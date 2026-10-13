@@ -113,7 +113,7 @@
       "candidateId": "095f383b-3860-41fb-9fbc-86c6935cf1e5",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/9/30/russia-warns-nato-of-possible-nuclear-response-if-kaliningrad-is-cut-off",
-      "title": "Russia warns NATO of possible nuclear response if Kaliningrad is cut off",
+      "title": "（見出し非保持: 権利未確認）#095f383b",
       "companyName": null,
       "companyCode": null,
       "category": "geopolitics",
@@ -149,14 +149,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": true
-      }
+      },
+      "titleChars": 72,
+      "titleSha256": "9e11b0e15770f967c95954c0b26c0541ad7e71052ede96422a81e4ad2ef75deb",
+      "titleKeySha256": "cb948e84acea4716bca3afe51231baf275f44ef7938f687a553ca5696a719988"
     },
     {
       "caseId": "nopost-al-jazeera-10bdf00e",
       "candidateId": "10bdf00e-31df-4905-aa84-741dfb92aa75",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/10/3/rebels-pulling-back-as-addis-ababas-forces-advance-reports-say",
-      "title": "Ethiopia’s government forces retake airport from Tigray rebels in Mekelle",
+      "title": "（見出し非保持: 権利未確認）#10bdf00e",
       "companyName": null,
       "companyCode": null,
       "category": "war_ceasefire",
@@ -192,14 +195,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 73,
+      "titleSha256": "daceb7ede2d6702a63d9d2bd97ac5742a6cd13b2f6bbe3fdd9e753cb1ebc32c6",
+      "titleKeySha256": "33781a2c131f5d10ba37c00b48a8d3ac9a76aff7ebd6eba4bd4f62d752c96800"
     },
     {
       "caseId": "nopost-al-jazeera-2ecd0d62",
       "candidateId": "2ecd0d62-7c82-4d1c-8e02-a53b4bc963ae",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/video/newsfeed/2026/9/30/uks-pm-burnham-sets-out-plans-to-reshape-public-services",
-      "title": "UK‘s PM Burnham sets out plans to reshape public services",
+      "title": "（見出し非保持: 権利未確認）#2ecd0d62",
       "companyName": null,
       "companyCode": null,
       "category": "other_market_moving",
@@ -235,14 +241,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 57,
+      "titleSha256": "70feedda7ff0dbeae12b27110e46ee0742a939184a182f9e9b5844790b141317",
+      "titleKeySha256": "9af1a7bc96f9510addd9c8d8f45ad7c89473b75a0f0ceb70a75a3b44c3d7736a"
     },
     {
       "caseId": "nopost-al-jazeera-36c18e73",
       "candidateId": "36c18e73-708c-4843-ab05-370840e8aa77",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/10/2/russia-tries-to-freeze-ukraine-as-it-suffers-record-casualties-and-retreats",
-      "title": "Russia tries to freeze Ukraine as it suffers record casualties and retreats",
+      "title": "（見出し非保持: 権利未確認）#36c18e73",
       "companyName": null,
       "companyCode": null,
       "category": "geopolitics",
@@ -278,14 +287,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 75,
+      "titleSha256": "5f4787031df525c493ff0720fea1bc936982bc728573b6b7e81ec40ef3b83173",
+      "titleKeySha256": "8f9b22b33005ec516beb5542bb38cfef42f1dbb8bce49dffd1092d3349a6ea42"
     },
     {
       "caseId": "nopost-al-jazeera-37012a0c",
       "candidateId": "37012a0c-2336-40b1-a1e3-12636b6a156e",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/9/29/russian-strike-hits-ukraines-academy-of-sciences-in-kyiv-killing-2",
-      "title": "Russia pounds Ukraine’s Kyiv after deadly strike on Academy of Sciences",
+      "title": "（見出し非保持: 権利未確認）#37012a0c",
       "companyName": null,
       "companyCode": null,
       "category": "geopolitics",
@@ -321,14 +333,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 71,
+      "titleSha256": "26b4adab05ac6bbfa0ae9fb0e1171ff5a9defc7cd87d224a960ea9f5f2d6946a",
+      "titleKeySha256": "b307c3cac180c840797ff59c32d2e9abe614a78b7eb982a9b3caa1cddaaecffd"
     },
     {
       "caseId": "nopost-al-jazeera-3ead3469",
       "candidateId": "3ead3469-8fee-4d57-bda2-e15b63743c6c",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/9/30/hong-kong-journalist-arrested-on-sedition-charge",
-      "title": "Hong Kong journalist arrested on sedition charge",
+      "title": "（見出し非保持: 権利未確認）#3ead3469",
       "companyName": null,
       "companyCode": null,
       "category": "administrative_action",
@@ -364,14 +379,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 48,
+      "titleSha256": "ac54e7d5bdeda04df3290d198778fe341441095cbc46ccbcb35857cedcbe5dc3",
+      "titleKeySha256": "0dbad9af1c10a8e3ca9f5a076472c7dc58c6a81435b6c119510de1f3b0e1cedd"
     },
     {
       "caseId": "nopost-al-jazeera-3f0a238f",
       "candidateId": "3f0a238f-fd9f-4182-b390-a384e39698fc",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/10/8/russia-attack-in-ukraines-kramatorsk-kills-12",
-      "title": "Russian attack on buses in Ukraine’s Kramatorsk kills at least 33 people",
+      "title": "（見出し非保持: 権利未確認）#3f0a238f",
       "companyName": null,
       "companyCode": null,
       "category": "war_ceasefire",
@@ -407,14 +425,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 72,
+      "titleSha256": "7a2d276a05dc2ee246b32347681b6aea0003d21d07e93296350686b172b5c159",
+      "titleKeySha256": "876b77091ef280ce98aebfa2cf0cad6abc6ae2a59a5bda3bc10f9d9c1fa221a4"
     },
     {
       "caseId": "nopost-al-jazeera-41ae1073",
       "candidateId": "41ae1073-8ead-4dc2-853f-4b558f803a4e",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/9/29/why-has-putin-added-15000-new-soldiers-to-russias-army",
-      "title": "Why has Putin added 15,000 new soldiers to Russia’s army?",
+      "title": "（見出し非保持: 権利未確認）#41ae1073",
       "companyName": null,
       "companyCode": null,
       "category": "geopolitics",
@@ -450,14 +471,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 57,
+      "titleSha256": "0a32f9f1dcfd99701e2661bc434f450f66c8b6af308ff70e900dab7d3d462c8c",
+      "titleKeySha256": "1bd1036a7b47ad05e318906eecfcc9a168e13d09ecbe0414bde846429cdf3a35"
     },
     {
       "caseId": "nopost-al-jazeera-4289a5e4",
       "candidateId": "4289a5e4-4ca7-4f91-b1d4-7e6dad9364b2",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/video/newsfeed/2026/10/1/hegseth-announces-20-cut-to-us-military-commanders",
-      "title": "Hegseth announces 20% cut to US military commanders",
+      "title": "（見出し非保持: 権利未確認）#4289a5e4",
       "companyName": null,
       "companyCode": null,
       "category": "us_government_policy",
@@ -493,14 +517,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 51,
+      "titleSha256": "2be880a3b7fca439eb5a21dfa651026f0880dd2e43f551384667717c59fd7bef",
+      "titleKeySha256": "0ff5ea107c6e2ab148a3311786e49e0d682028475229bc43c74934a6325f7c19"
     },
     {
       "caseId": "nopost-al-jazeera-5377df77",
       "candidateId": "5377df77-0fca-487c-a227-13236eedad3f",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/9/30/somali-pirates-killed-five-crew-members-on-hijacked-tanker-officials-say",
-      "title": "Somali pirates killed five crew members on hijacked tanker, officials say",
+      "title": "（見出し非保持: 権利未確認）#5377df77",
       "companyName": null,
       "companyCode": null,
       "category": "major_security_incident",
@@ -536,14 +563,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": true
-      }
+      },
+      "titleChars": 73,
+      "titleSha256": "5cc89065e2e7c127521db6405a562d9a0635fba23ba06983e4714bb23e2c1143",
+      "titleKeySha256": "92b088fe70e623c3ecf8091c352864d03015eb77b73d8a734db61f5e0021cbe9"
     },
     {
       "caseId": "nopost-al-jazeera-60a25b52",
       "candidateId": "60a25b52-f93e-49c6-ba1a-808f7c782a79",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/video/newsfeed/2026/10/8/video-said-to-show-mali-army-in-kidal-after-retaking-city",
-      "title": "Video said to show Mali army in Kidal after retaking city",
+      "title": "（見出し非保持: 権利未確認）#60a25b52",
       "companyName": null,
       "companyCode": null,
       "category": "geopolitics",
@@ -579,14 +609,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 57,
+      "titleSha256": "c8e44f536dd2efb328531ec9158235533ec7fcae06a7783347e77b8521209709",
+      "titleKeySha256": "73191af3b109327d4bec8880bb03444377613c77c374ad4847b7842db1a9438d"
     },
     {
       "caseId": "nopost-al-jazeera-620cfd52",
       "candidateId": "620cfd52-c91d-42f8-9e32-d094b7c9fd1a",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/video/newsfeed/2026/9/28/jerusalem-daily-israeli-incursions-at-al-aqsa-mosque",
-      "title": "Jerusalem Daily: Israeli incursions at Al-Aqsa Mosque",
+      "title": "（見出し非保持: 権利未確認）#620cfd52",
       "companyName": null,
       "companyCode": null,
       "category": "geopolitics",
@@ -622,14 +655,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 53,
+      "titleSha256": "0cf63e8d0623f6cf386c87c8147afb0f7014a9f6c78749861279fa55b2eb0d8e",
+      "titleKeySha256": "0c79ebf2fdadb1d3c417d84e00f67acfb5a4f51a8db0d041a7ac6e42cc0439f2"
     },
     {
       "caseId": "nopost-al-jazeera-74c1786d",
       "candidateId": "74c1786d-9788-411d-b985-52713b05e171",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/liveblog/2026/10/9/iran-war-live-iranian-media-reports-massive-explosions-in-hormuz-strait",
-      "title": "Iran war live: Iranian media reports ‘massive explosions’ in Hormuz Strait",
+      "title": "（見出し非保持: 権利未確認）#74c1786d",
       "companyName": null,
       "companyCode": null,
       "category": "war_ceasefire",
@@ -665,14 +701,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": true
-      }
+      },
+      "titleChars": 74,
+      "titleSha256": "cdb9585bf9041b6b8d484a6da6542f1937612cceeebf66b5f6458e578a3f3d32",
+      "titleKeySha256": "3e7522e5a27332a6cc7e93d228f4726bb872867d3521500a6c7c550788bfc492"
     },
     {
       "caseId": "nopost-al-jazeera-77f4ca45",
       "candidateId": "77f4ca45-ff17-4455-b71b-0ed1bfc0e282",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/gallery/2026/10/7/more-than-200000-displaced-as-fighting-escalates-in-yemen-un-says-2",
-      "title": "More than 200,000 displaced as fighting escalates in Yemen, UN says",
+      "title": "（見出し非保持: 権利未確認）#77f4ca45",
       "companyName": null,
       "companyCode": null,
       "category": "war_ceasefire",
@@ -708,14 +747,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 67,
+      "titleSha256": "db4cc1ce7838e9e3a03ddad5d91608715d27c366dd521a9d60d9d25dbe70661a",
+      "titleKeySha256": "74511d548294460f3ad40266409cdfd960fa9ea89b3e2b7e8df1f86af242bbe5"
     },
     {
       "caseId": "nopost-al-jazeera-7801ff57",
       "candidateId": "7801ff57-9e0c-405f-93de-e944be0d19ed",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/video/newsfeed/2026/9/28/russia-strike-sets-national-academy-of-sciences-of-ukraine-ablaze",
-      "title": "Russia strike sets National Academy of Sciences of Ukraine ablaze",
+      "title": "（見出し非保持: 権利未確認）#7801ff57",
       "companyName": null,
       "companyCode": null,
       "category": "war_ceasefire",
@@ -751,14 +793,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 65,
+      "titleSha256": "e34148450420d1b127adf4b084c95025d7a48f20496db7d52a33486bb788c6b8",
+      "titleKeySha256": "53e04031f5f142e72f930a02b1f6f238b9d1429569e651a9ee2a6ebc2b062f06"
     },
     {
       "caseId": "nopost-al-jazeera-78d88df2",
       "candidateId": "78d88df2-b550-4b18-a8de-108d20fb1ad1",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/9/29/fighting-in-ethiopia-intensifies-whats-the-latest",
-      "title": "Fighting in Ethiopia intensifies: What’s the latest?",
+      "title": "（見出し非保持: 権利未確認）#78d88df2",
       "companyName": null,
       "companyCode": null,
       "category": "war_ceasefire",
@@ -794,14 +839,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 52,
+      "titleSha256": "4f10cbd4978c70ff8bbfa0f3a4255b1b07477c7abe840506c045b059631a7ef5",
+      "titleKeySha256": "cd83f2f8de4a032a11ee12306b6ea3db7af24bba09792b3f5592d44e21c9a625"
     },
     {
       "caseId": "nopost-al-jazeera-7c56fad7",
       "candidateId": "7c56fad7-9492-41b6-b6f6-385f2dc7479d",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/video/newsfeed/2026/10/5/yemen-govt-forces-commence-major-combat-operation-against-houthis",
-      "title": "Yemen gov’t forces commence major combat operation against Houthis",
+      "title": "（見出し非保持: 権利未確認）#7c56fad7",
       "companyName": null,
       "companyCode": null,
       "category": "war_ceasefire",
@@ -837,14 +885,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 66,
+      "titleSha256": "4e37212876f41ec2312b2012ba69d4253460b1958d1ca41dbe34e87ad6e5da0e",
+      "titleKeySha256": "54995fc993a641606fe0d7dedee0c732b0f491bb63b73b6988c427275562faa2"
     },
     {
       "caseId": "nopost-al-jazeera-85af7b64",
       "candidateId": "85af7b64-317c-42d9-86d8-762bec32b767",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/10/6/what-new-measures-is-iran-taking-to-counter-us-economic-pressure",
-      "title": "What new measures is Iran taking to counter US economic pressure?",
+      "title": "（見出し非保持: 権利未確認）#85af7b64",
       "companyName": null,
       "companyCode": null,
       "category": "sanctions",
@@ -880,14 +931,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 65,
+      "titleSha256": "c6a64e7d9e4ec8e09c73133007d2c6e1164f943f164977f670da24d21c35fc4a",
+      "titleKeySha256": "6e468f6c2a4fa4de54d77d8b2af8afa126940f52af67855e082ca12bb20b30c2"
     },
     {
       "caseId": "nopost-al-jazeera-90518072",
       "candidateId": "90518072-aca6-4402-9eda-f103521cacb3",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/gallery/2026/9/28/photos-aftermath-of-a-russian-drone-attack-in-kyiv",
-      "title": "Photos: Russian drone strikes pound civilian targets across Kyiv",
+      "title": "（見出し非保持: 権利未確認）#90518072",
       "companyName": null,
       "companyCode": null,
       "category": "war_ceasefire",
@@ -923,14 +977,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 64,
+      "titleSha256": "c14ce4f285c9e0e5c68d911cc02f1c542ccf76a71732231b67f71a4a8d747397",
+      "titleKeySha256": "762641f8c9d57aab1988ef935e3c2930262bbce27df7836fe6b862f4c25290ac"
     },
     {
       "caseId": "nopost-al-jazeera-980ee1b7",
       "candidateId": "980ee1b7-d9b4-4006-a6ca-96abc8785e32",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/9/29/israeli-settlers-attack-jalud-village-in-occupied-west-bank-torch-homes",
-      "title": "Israeli settlers attack Jalud village in occupied West Bank, torch homes",
+      "title": "（見出し非保持: 権利未確認）#980ee1b7",
       "companyName": null,
       "companyCode": null,
       "category": "geopolitics",
@@ -966,14 +1023,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 72,
+      "titleSha256": "b20bb6bd9ce1fb4dcf48b4c7120c52b32734aad8bdc0d18d356130b17a862814",
+      "titleKeySha256": "79f68d66dc9b40c71416083dd2808125fc370d8925b9f4391f72ad152fbe1223"
     },
     {
       "caseId": "nopost-al-jazeera-9f4cc7fb",
       "candidateId": "9f4cc7fb-02e2-4e02-9310-4f1362e85d06",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/10/5/yemen-war-escalates-whats-the-latest-on-the-battlefield",
-      "title": "Yemen war: What’s the latest, as government forces claim advances?",
+      "title": "（見出し非保持: 権利未確認）#9f4cc7fb",
       "companyName": null,
       "companyCode": null,
       "category": "war_ceasefire",
@@ -1009,14 +1069,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 66,
+      "titleSha256": "68f477b4ff991a4431cfbba5d0a394eed946b40caa463c43f7cc8a48131406e1",
+      "titleKeySha256": "2f23e00c49804fc6344326deec8c0b6a876ca3244e9b644a13d2ddb8cdc5d62c"
     },
     {
       "caseId": "nopost-al-jazeera-a1592251",
       "candidateId": "a1592251-df0b-4642-8b39-15018a6c4bb6",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/video/newsfeed/2026/10/9/a-fathers-agony-after-an-israeli-air-strike-hits-gaza-apartment",
-      "title": "A father’s agony after an Israeli air strike hits Gaza apartment",
+      "title": "（見出し非保持: 権利未確認）#a1592251",
       "companyName": null,
       "companyCode": null,
       "category": "war_ceasefire",
@@ -1052,14 +1115,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 64,
+      "titleSha256": "77ae24d5dc31f11b9a53ccda4c98356411ce8f832c286a5215391c6f9acd5d47",
+      "titleKeySha256": "451114a459bde2fa6160073b542681f95ea6d3f438c07202274289ede1f0e095"
     },
     {
       "caseId": "nopost-al-jazeera-a17a995b",
       "candidateId": "a17a995b-181e-4a23-91d5-07bf25123316",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/10/1/israeli-drone-kills-palestinian-in-gaza-settlers-kill-another-in-west-bank",
-      "title": "Israeli drone kills Palestinian in Gaza, settlers kill another in West Bank",
+      "title": "（見出し非保持: 権利未確認）#a17a995b",
       "companyName": null,
       "companyCode": null,
       "category": "war_ceasefire",
@@ -1095,14 +1161,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 75,
+      "titleSha256": "85a8c5d38186cd4c545894e19be222991e158d879591c63935a9702956da5792",
+      "titleKeySha256": "69abb369fdffcc01d5fcacced0c090f44175c6e9283268ff08021b4c727b34d4"
     },
     {
       "caseId": "nopost-al-jazeera-b403f0b7",
       "candidateId": "b403f0b7-17e0-4698-a32a-177e4a239635",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/opinions/2026/9/29/hormuz-and-yemen-iran-offers-de-escalation-at-a-price-others-will-pay",
-      "title": "Hormuz and Yemen: Iran offers de-escalation at a price others will pay",
+      "title": "（見出し非保持: 権利未確認）#b403f0b7",
       "companyName": null,
       "companyCode": null,
       "category": "geopolitics",
@@ -1138,14 +1207,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 70,
+      "titleSha256": "dc84366af743b1dd198eae9f3f555d4a77b729d2263e085a7ef62ca2beacf44e",
+      "titleKeySha256": "8b43e3694bef78024d6aa8933cf25b23c02a8bfe56111750ec2e211ee5338b29"
     },
     {
       "caseId": "nopost-al-jazeera-b9254857",
       "candidateId": "b9254857-97df-418e-8926-9acc022cbc92",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/10/3/israeli-settlers-attack-palestinian-olive-pickers-in-the-west-bank",
-      "title": "Israeli settlers attack farmers in West Bank pogrom, soldiers hit reporters",
+      "title": "（見出し非保持: 権利未確認）#b9254857",
       "companyName": null,
       "companyCode": null,
       "category": "geopolitics",
@@ -1181,14 +1253,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 75,
+      "titleSha256": "35751b2a08291c4b3beaf5f84bd8ac040db9269dc217fc90c35ff5258af06ea5",
+      "titleKeySha256": "3a9b41e7a4c8cbc9d9c846bfd98a4f45ffd7d07002cc3e5640000f9eb95c0b31"
     },
     {
       "caseId": "nopost-al-jazeera-bf33ed93",
       "candidateId": "bf33ed93-06ce-445f-babc-aa7d8fd1f1a3",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/10/8/india-to-turkiye-can-new-proposals-to-broker-russia-ukraine-truce-succeed",
-      "title": "India to Turkiye, can new proposals to broker Russia-Ukraine truce succeed?",
+      "title": "（見出し非保持: 権利未確認）#bf33ed93",
       "companyName": null,
       "companyCode": null,
       "category": "war_ceasefire",
@@ -1224,14 +1299,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 75,
+      "titleSha256": "c42f91af86c21556ebdc379291b87c2df3e11f4c2303fbb8308d9a46759e2cfc",
+      "titleKeySha256": "f2333d32f19259a5dfb3e247115e629531bbfa52a22beb046e4e8a3a3ecc984d"
     },
     {
       "caseId": "nopost-al-jazeera-d103a858",
       "candidateId": "d103a858-23f2-4a9f-9290-4d1b26dc5e24",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/video/newsfeed/2026/10/1/afghanistan-says-pakistani-airstrikes-killed-women-and-children",
-      "title": "Afghanistan says Pakistani airstrikes killed women and children",
+      "title": "（見出し非保持: 権利未確認）#d103a858",
       "companyName": null,
       "companyCode": null,
       "category": "war_ceasefire",
@@ -1267,14 +1345,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 63,
+      "titleSha256": "5afe08ed5e3494e8b7fdda91abe479e1049e647152f1a9e6bea7efbfd21737d0",
+      "titleKeySha256": "a6511170cef89d02a4bd98376a57e4834fe2ee2144c52e7ae91b640af4fd5c98"
     },
     {
       "caseId": "nopost-al-jazeera-d2e702ee",
       "candidateId": "d2e702ee-6ace-4e27-a267-9deea2bdd2db",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/10/2/us-delivers-f-16v-fighter-jets-to-taiwan-as-island-eyes-threat-from-china",
-      "title": "US delivers F-16V fighter jets to Taiwan as island eyes threat from China",
+      "title": "（見出し非保持: 権利未確認）#d2e702ee",
       "companyName": null,
       "companyCode": null,
       "category": "geopolitics",
@@ -1310,14 +1391,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": true
-      }
+      },
+      "titleChars": 73,
+      "titleSha256": "aadd500a6cb7028a171c40211bc7cdb272216df18d0fff45b206fd59066eff2a",
+      "titleKeySha256": "23aad633f15f1464a4bc1a8c4dc71f77920cb9c416ee6ff785ea1e5bf8295182"
     },
     {
       "caseId": "nopost-al-jazeera-d35032d2",
       "candidateId": "d35032d2-8634-4f08-819b-113364c8c2a4",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/10/5/yemeni-govt-forces-aim-for-sanaa-but-houthi-defeat-will-be-a-challenge",
-      "title": "Yemeni gov’t forces aim for Sanaa, but Houthi defeat will be a challenge",
+      "title": "（見出し非保持: 権利未確認）#d35032d2",
       "companyName": null,
       "companyCode": null,
       "category": "geopolitics",
@@ -1353,14 +1437,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 72,
+      "titleSha256": "c12febe6e0a8de247ae2c5b210ffe33b71d27e7b4715f789e78a2ce151c61961",
+      "titleKeySha256": "4998b887f739dae16082ecedd4f28c8ec96ab2864b70b67af6a7aecccb7a1484"
     },
     {
       "caseId": "nopost-al-jazeera-dd92aacb",
       "candidateId": "dd92aacb-0e7d-4705-be6b-fe1a1f7ab350",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/liveblog/2026/10/6/iran-war-live-yemen-forces-reclaim-strategic-port-city-mocha-from-houthis",
-      "title": "Iran war live: Yemen forces reclaim strategic port city Mocha from Houthis",
+      "title": "（見出し非保持: 権利未確認）#dd92aacb",
       "companyName": null,
       "companyCode": null,
       "category": "geopolitics",
@@ -1396,14 +1483,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 74,
+      "titleSha256": "a3a40cc8fa0a46d804b8598d8596881e65f188b5ef4b4dc457834865806671be",
+      "titleKeySha256": "db3b036cbb3d522fef0fb522ff5ff6a9a40023b7d688cee39f1fa265c8af62f4"
     },
     {
       "caseId": "nopost-al-jazeera-ed439773",
       "candidateId": "ed439773-03c8-4230-a033-bc6318a493ba",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/video/newsfeed/2026/9/30/flydubai-flight-to-israel-diverted-after-attack-on-pilot",
-      "title": "Flydubai flight to Israel diverted after attack on pilot",
+      "title": "（見出し非保持: 権利未確認）#ed439773",
       "companyName": null,
       "companyCode": null,
       "category": "major_security_incident",
@@ -1439,14 +1529,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 56,
+      "titleSha256": "5c73522b2a238e625b2effd67b6b82854a038b2eaf307469fd58db5f259c26b4",
+      "titleKeySha256": "1eeaa275359cef66fbb3b43d20e9ef705cd2b8f68f2d9b6eddba10396ba08076"
     },
     {
       "caseId": "nopost-al-jazeera-f986cf34",
       "candidateId": "f986cf34-218b-470e-9f75-73a1bba80fc8",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/10/6/uk-police-arrest-british-national-linked-to-airbase-incident",
-      "title": "UK police arrest British national linked to airbase incident",
+      "title": "（見出し非保持: 権利未確認）#f986cf34",
       "companyName": null,
       "companyCode": null,
       "category": "major_security_incident",
@@ -1482,14 +1575,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 60,
+      "titleSha256": "f6f0661a44f6c4cfab156e534831368440c405be6ae6c7ab94faad7068929a0f",
+      "titleKeySha256": "654c8a9a97d0506f46eb349a32ddcac84a308a6a037d9f2916c3745f7b2360a4"
     },
     {
       "caseId": "nopost-al-jazeera-fe456ac8",
       "candidateId": "fe456ac8-82a0-4464-b8e3-80bd3dcb1e68",
       "sourceName": "al_jazeera",
       "sourceUrl": "https://www.aljazeera.com/news/2026/9/29/estonia-says-russia-ordered-august-arson-attack-on-defence",
-      "title": "Estonia says Russia ordered August arson attack on defence company",
+      "title": "（見出し非保持: 権利未確認）#fe456ac8",
       "companyName": null,
       "companyCode": null,
       "category": "geopolitics",
@@ -1525,14 +1621,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 66,
+      "titleSha256": "6a072d3f6f4948fb5e02bff5a95bcf8f3117e2eff7584d9044c11e9e56a16481",
+      "titleKeySha256": "d65dcd0d5d1f4d8f6f3c7e8733e90cc1eb9887ae999f25121722bc2f5e79a0c1"
     },
     {
       "caseId": "nopost-bbc-world-1981cc26",
       "candidateId": "1981cc26-a465-405a-9262-0a0f6e729123",
       "sourceName": "bbc_world",
       "sourceUrl": "https://www.bbc.co.uk/news/articles/cmx2qne2j88wo",
-      "title": "OpenAI admits response to Australian government hacks 'not good enough'",
+      "title": "（見出し非保持: 権利未確認）#1981cc26",
       "companyName": null,
       "companyCode": null,
       "category": "major_security_incident",
@@ -1568,14 +1667,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 71,
+      "titleSha256": "cfbfe062f8b1dbdfbc5c74bce3f21e3287b9e039e325090e01ad60039dddfd4a",
+      "titleKeySha256": "de317de4a5c9972552fcf97de7ba95cf0dcff728775fa0096d2dd62476fdcd60"
     },
     {
       "caseId": "nopost-bbc-world-300eaa32",
       "candidateId": "300eaa32-9146-414a-a318-707df98ea890",
       "sourceName": "bbc_world",
       "sourceUrl": "https://www.bbc.co.uk/news/articles/cwj3413e5m1lo",
-      "title": "Trump says 'threat' led US to pull bombers from RAF Fairford",
+      "title": "（見出し非保持: 権利未確認）#300eaa32",
       "companyName": null,
       "companyCode": null,
       "category": "geopolitics",
@@ -1611,14 +1713,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 60,
+      "titleSha256": "1bd3e8022e7fd7b11b6a75e42dd129ba3f5978553c446559fab74fe120514eac",
+      "titleKeySha256": "c5f3fe1932566e3f1f0185f2cb514fe7bc69cb2e7a93895e0bd86dc19228a820"
     },
     {
       "caseId": "nopost-bbc-world-d8a78888",
       "candidateId": "d8a78888-05ba-4855-9f4b-46e978b3cc9d",
       "sourceName": "bbc_world",
       "sourceUrl": "https://www.bbc.co.uk/news/articles/cvj6jkx6g1r0o",
-      "title": "Finland orders halt to work on two Google data centres",
+      "title": "（見出し非保持: 権利未確認）#d8a78888",
       "companyName": null,
       "companyCode": null,
       "category": "administrative_action",
@@ -1654,14 +1759,17 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 54,
+      "titleSha256": "c08b341767ce7028b630086f1560c7a312ce34bbf1c5be340b30fc3557662066",
+      "titleKeySha256": "e871345700f05c6845b3ab778f0c6b047c22621a11f2d68f4c5623b78634d215"
     },
     {
       "caseId": "nopost-breaking-market-259ba58a",
       "candidateId": "259ba58a-c303-4f29-ab69-951c49d37352",
       "sourceName": "breaking_market",
       "sourceUrl": "https://apnews.com/article/7fbc77061abd778608068d3beb1bbbaf",
-      "title": "Asian shares fall as crude oil trades above $100 amid U.S.-Iran conflict",
+      "title": "（見出し非保持: 権利未確認）#259ba58a",
       "companyName": null,
       "companyCode": null,
       "category": "war_ceasefire",
@@ -1697,7 +1805,10 @@
         "primarySourceCheck": "secondary_article_summary",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 72,
+      "titleSha256": "684e216b089a8ef025b9e9b8ef5538da529aa32858c4e346bea668c5ba6290c4",
+      "titleKeySha256": "86edb0241a11849bb8a05cb1209f179b228dc5d21816d6425d372d9a3c560286"
     },
     {
       "caseId": "nopost-breaking-market-63397e35",
@@ -2435,7 +2546,7 @@
       "candidateId": "003d0453-f6d3-40ca-80af-65a574c71e8d",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260911534650.pdf",
-      "title": "ＥＴＦの収益分配金見込額のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#003d0453",
       "companyName": "物流フォーカス",
       "companyCode": "489A0",
       "category": "other_corporate_ir",
@@ -2471,14 +2582,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "8bb57ac53a23bfdbd65ddf6997688ba381c5247adaa77bf0e3af6dec1e03ab7a",
+      "titleKeySha256": "660fe0d5ac3889f9d41dced888fb39f169446d20a5aa7854f71465dedf5d4486"
     },
     {
       "caseId": "nopost-tdnet-0419300b",
       "candidateId": "0419300b-6dc3-4b0c-bba2-f1ec1c4dc862",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261002544999.pdf",
-      "title": "自己株式の取得状況に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#0419300b",
       "companyName": "共和電",
       "companyCode": "68530",
       "category": "share_buyback",
@@ -2514,14 +2628,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "f8e4d7e44a59c36e07a3f1f7d9a2c2beba630342e699f298c1b772024f0f2397",
+      "titleKeySha256": "f8e4d7e44a59c36e07a3f1f7d9a2c2beba630342e699f298c1b772024f0f2397"
     },
     {
       "caseId": "nopost-tdnet-07087ae4",
       "candidateId": "07087ae4-e487-4d72-be44-2d6efa8c6807",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261009548339.pdf",
-      "title": "個別業績の前期実績値との差異に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#07087ae4",
       "companyName": "ワッツ",
       "companyCode": "27350",
       "category": "earnings",
@@ -2557,14 +2674,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": true
-      }
+      },
+      "titleChars": 22,
+      "titleSha256": "d0e25205dc1400f9d2976980a94b45e13c0e9f18ae4747a8d066df7f86888625",
+      "titleKeySha256": "d0e25205dc1400f9d2976980a94b45e13c0e9f18ae4747a8d066df7f86888625"
     },
     {
       "caseId": "nopost-tdnet-08f2d728",
       "candidateId": "08f2d728-1e69-4403-92e3-8ae364d6d07e",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261006546754.pdf",
-      "title": "東京証券取引所 TOKYO PRO Market 上場に伴う当社決算情報等のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#08f2d728",
       "companyName": "Ｐ－デジタルベリー",
       "companyCode": "645A0",
       "category": "other_corporate_ir",
@@ -2600,14 +2720,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 42,
+      "titleSha256": "3e4fb1480758310fd98307e694146b416c2e892b86366d008099db0ebb7111b7",
+      "titleKeySha256": "4b844258614b793a8266fdbbdc34b5930533c3c62c226c2e48c1771ac67acefb"
     },
     {
       "caseId": "nopost-tdnet-094691f0",
       "candidateId": "094691f0-a0a4-4152-8025-cd9dd13fd0e3",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261008547589.pdf",
-      "title": "第三者割当による新株式発行の払込完了に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#094691f0",
       "companyName": "Ｌｉｎｋ－Ｕグループ",
       "companyCode": "44460",
       "category": "other_corporate_ir",
@@ -2643,14 +2766,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 26,
+      "titleSha256": "33f18192391cdb929cee8e367a4a7d551c4aeb587d29b5aad79d0ac721fe880e",
+      "titleKeySha256": "33f18192391cdb929cee8e367a4a7d551c4aeb587d29b5aad79d0ac721fe880e"
     },
     {
       "caseId": "nopost-tdnet-09db3254",
       "candidateId": "09db3254-6605-46cd-8ee9-1cc2ae7b26fa",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260918538410.pdf",
-      "title": "2026年8月度 月次概況（速報）のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#09db3254",
       "companyName": "フリュー",
       "companyCode": "62380",
       "category": "other_corporate_ir",
@@ -2686,14 +2812,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 22,
+      "titleSha256": "e68ba6dec5fb5cb01cc6131f270ab0de0051df88a07a60dc1a2139a3b74f06d9",
+      "titleKeySha256": "e3b22986b56e9d33af65b2f852aff626a3b67c20c13b689b0b3df5d187a96668"
     },
     {
       "caseId": "nopost-tdnet-0b2f438c",
       "candidateId": "0b2f438c-e97a-4c7d-9e90-f98d6fed9d16",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260929542068.pdf",
-      "title": "譲渡制限付株式報酬としての自己株式の処分に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#0b2f438c",
       "companyName": "第一カッター",
       "companyCode": "17160",
       "category": "other_corporate_ir",
@@ -2729,14 +2858,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 28,
+      "titleSha256": "65542e4ca2385dbca35099462cf7f8bfd2545a53561c92c8cd46040fedcece8d",
+      "titleKeySha256": "65542e4ca2385dbca35099462cf7f8bfd2545a53561c92c8cd46040fedcece8d"
     },
     {
       "caseId": "nopost-tdnet-0b7e77d4",
       "candidateId": "0b7e77d4-c570-46cf-acfa-9f63c19263b7",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261008547923.pdf",
-      "title": "自己株式の取得状況に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#0b7e77d4",
       "companyName": "九州ＦＧ",
       "companyCode": "71800",
       "category": "share_buyback",
@@ -2772,14 +2904,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "f8e4d7e44a59c36e07a3f1f7d9a2c2beba630342e699f298c1b772024f0f2397",
+      "titleKeySha256": "f8e4d7e44a59c36e07a3f1f7d9a2c2beba630342e699f298c1b772024f0f2397"
     },
     {
       "caseId": "nopost-tdnet-0cef30c3",
       "candidateId": "0cef30c3-c1a2-4a46-9001-bcee604a8fef",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260914536176.pdf",
-      "title": "株主優待制度の拡充に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#0cef30c3",
       "companyName": "ファーストコーポ",
       "companyCode": "14300",
       "category": "other_corporate_ir",
@@ -2815,14 +2950,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "7ece80567dc8a2d7006ad0a6e805fad3361559c2baf3241e109d0fbc9a5eca1f",
+      "titleKeySha256": "7ece80567dc8a2d7006ad0a6e805fad3361559c2baf3241e109d0fbc9a5eca1f"
     },
     {
       "caseId": "nopost-tdnet-0f515125",
       "candidateId": "0f515125-2d59-4bb5-b3e9-8f4b53e1bcfa",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260914535724.pdf",
-      "title": "（訂正）「（開示事項の変更）改善計画の開示延期に関するお知らせ」の一部訂正に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#0f515125",
       "companyName": "ｕｎｂａｎｋｅｄ",
       "companyCode": "87460",
       "category": "other_corporate_ir",
@@ -2858,14 +2996,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 45,
+      "titleSha256": "88c0ac0cb313ee4656131edf6480bc9b6147d6eeedc64537a6390a10ee308111",
+      "titleKeySha256": "ef44dc0cbc17db998afc30ca80fd5e4ce393c8ff3eeb8da4645bc69d592d4fdf"
     },
     {
       "caseId": "nopost-tdnet-10cce80a",
       "candidateId": "10cce80a-24b1-4558-b97e-8dd2488b4dd1",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260917537577.pdf",
-      "title": "経営改革の方向性について",
+      "title": "（見出し非保持: 権利未確認）#10cce80a",
       "companyName": "エア・ウォーター",
       "companyCode": "40880",
       "category": "other_corporate_ir",
@@ -2901,14 +3042,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 12,
+      "titleSha256": "23589ec10b1ffb424d4542a1800c11fdb59d944e3e92dc31f384424f91d37d85",
+      "titleKeySha256": "23589ec10b1ffb424d4542a1800c11fdb59d944e3e92dc31f384424f91d37d85"
     },
     {
       "caseId": "nopost-tdnet-12ac1d97",
       "candidateId": "12ac1d97-f3f9-4db1-9c8d-e8837aa14ac2",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261007547246.pdf",
-      "title": "【開示事項の経過】（アルケロス鉱山開発プロジェクト）生産開始に向けた取り組みの進捗に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#12ac1d97",
       "companyName": "日鉄鉱",
       "companyCode": "15150",
       "category": "other_corporate_ir",
@@ -2944,14 +3088,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 49,
+      "titleSha256": "d8c1f46d06b449ec5a7bba548e92f6f131d08fb414985ea0b0572ec483678154",
+      "titleKeySha256": "4e718a280ce64d118e4c633f2623754957efeeadef8c314726e109748848701f"
     },
     {
       "caseId": "nopost-tdnet-14cdd8e9",
       "candidateId": "14cdd8e9-1c5d-41da-93b0-ec05e18eb45b",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261007547168.pdf",
-      "title": "ＥＴＦの収益分配金見込額のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#14cdd8e9",
       "companyName": "ｉＳドイツ国債ヘジ",
       "companyCode": "28570",
       "category": "other_corporate_ir",
@@ -2987,14 +3134,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "8bb57ac53a23bfdbd65ddf6997688ba381c5247adaa77bf0e3af6dec1e03ab7a",
+      "titleKeySha256": "660fe0d5ac3889f9d41dced888fb39f169446d20a5aa7854f71465dedf5d4486"
     },
     {
       "caseId": "nopost-tdnet-16a0eec4",
       "candidateId": "16a0eec4-3c4c-44c5-af5a-2db200d65048",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261007547350.pdf",
-      "title": "IgA腎症治療薬「VOYXACT（シベプレンリマブ）」米国で生物製剤承認一部変更申請（sBLA）の段階的提出を完了",
+      "title": "（見出し非保持: 権利未確認）#16a0eec4",
       "companyName": "大塚ＨＤ",
       "companyCode": "45780",
       "category": "other_corporate_ir",
@@ -3031,14 +3181,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": true
-      }
+      },
+      "titleChars": 57,
+      "titleSha256": "d7b86365c05daab1e68c7dba6412a2e0e05ce43111324f3c16949f0287a9df5a",
+      "titleKeySha256": "8475294a079e4d5854ce21df44c5d6c7b9c3763990ef0f8643a6f7042725262d"
     },
     {
       "caseId": "nopost-tdnet-1e39c969",
       "candidateId": "1e39c969-9801-46bb-8e4e-e67ebb01e2b4",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261007547263.pdf",
-      "title": "（訂正・数値データ訂正） 「2026 年７月期 決算短信〔日本基準〕（連結）」の一部訂正について",
+      "title": "（見出し非保持: 権利未確認）#1e39c969",
       "companyName": "Ｇ－リベラウェア",
       "companyCode": "218A0",
       "category": "other_corporate_ir",
@@ -3074,14 +3227,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 48,
+      "titleSha256": "0c921083b56baa86c7266ef2ef07e607da4e2377bb43f4681c5eabf53f6c60a4",
+      "titleKeySha256": "f21f57279f92b57976d7afff3bbf9b4bfd59cfbb1e649fbbe3a323f7ca9ccaa0"
     },
     {
       "caseId": "nopost-tdnet-1fe61231",
       "candidateId": "1fe61231-edbe-4d1f-b640-f9cfbb67a70f",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261009548791.pdf",
-      "title": "2026年９月度 月次速報",
+      "title": "（見出し非保持: 権利未確認）#1fe61231",
       "companyName": "ヴィアＨＤ",
       "companyCode": "79180",
       "category": "other_corporate_ir",
@@ -3117,14 +3273,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 13,
+      "titleSha256": "536bb4a32bcd41bff4cf19314bf7daf8f2a0b8e6ff021118be814150ba5ca448",
+      "titleKeySha256": "d2671c5e2bf20f49e1ea13159e4d31b14d5bb5294161897a297ba24603d6529d"
     },
     {
       "caseId": "nopost-tdnet-2120406a",
       "candidateId": "2120406a-087e-413e-bf1e-8f2ca60ca88d",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261006546777.pdf",
-      "title": "2026年11月期 通期業績予想の修正に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#2120406a",
       "companyName": "シリコンスタジオ",
       "companyCode": "39070",
       "category": "earnings_revision_down",
@@ -3160,14 +3319,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 27,
+      "titleSha256": "df21a034c430e00ab49ecf6cdcf8b9ebc61c243cb4b015fcaa0631e580999841",
+      "titleKeySha256": "a97fb28f890c626f2c3e04954fac1981d18d61b469a7f5b06c2c078586bdb573"
     },
     {
       "caseId": "nopost-tdnet-21f131c6",
       "candidateId": "21f131c6-a377-4da5-9e1a-2686fc3f06c2",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260914535733.pdf",
-      "title": "臨時株主総会招集のための基準日設定に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#21f131c6",
       "companyName": "デジハＨＤ",
       "companyCode": "36760",
       "category": "tob",
@@ -3203,14 +3365,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 25,
+      "titleSha256": "063169191f12cbed8f3d66e3d68424f01d5dde3779d037db7f70f4e19001c3ce",
+      "titleKeySha256": "063169191f12cbed8f3d66e3d68424f01d5dde3779d037db7f70f4e19001c3ce"
     },
     {
       "caseId": "nopost-tdnet-283f2e97",
       "candidateId": "283f2e97-ce3c-4bdf-87d8-ed5351077578",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260909533539.pdf",
-      "title": "2027年1月期第2四半期（中間期）決算短信〔日本基準〕(連結)",
+      "title": "（見出し非保持: 権利未確認）#283f2e97",
       "companyName": "Ｇ－アールプランナー",
       "companyCode": "29830",
       "category": "earnings",
@@ -3246,14 +3411,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 32,
+      "titleSha256": "d031ab54819005ab99443fc0947e51c72bb8122251624754a6d0395b9a0bbf4a",
+      "titleKeySha256": "47b4377b29f69c5451aae056f2329253e6b5689d6a43c138647100d700d80506"
     },
     {
       "caseId": "nopost-tdnet-2905c59a",
       "candidateId": "2905c59a-a3c7-4bb3-9454-ae0a8a339842",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260908533185.pdf",
-      "title": "一括取得型自己株式取得（ASR）における事後調整完了のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#2905c59a",
       "companyName": "戸田建",
       "companyCode": "18600",
       "category": "share_buyback",
@@ -3289,14 +3457,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 31,
+      "titleSha256": "092e72bbc18b5ab7fb4db7abd49460a2347874de518b800551a37defbe2d30a2",
+      "titleKeySha256": "96e11c188c5016aa85d4553194cee7300cca12ff578a13a4419f6c6db167ad2d"
     },
     {
       "caseId": "nopost-tdnet-2acf583f",
       "candidateId": "2acf583f-8f38-4d53-9108-329ff8a532b0",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260911534910.pdf",
-      "title": "資本コストや株価を意識した経営の実現に向けた対応について（アップデート）",
+      "title": "（見出し非保持: 権利未確認）#2acf583f",
       "companyName": "ドライルーブ",
       "companyCode": "49760",
       "category": "other_corporate_ir",
@@ -3332,14 +3503,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 36,
+      "titleSha256": "62346d30234d50f6a6e3db6c69cd59fd0c6e53f5464d39171cc7e1b52392699f",
+      "titleKeySha256": "7d26f16bd669fca70f158dce539fe17d8b0eb70a3ed09ae459d8ea6ddfaadfcc"
     },
     {
       "caseId": "nopost-tdnet-2c43073f",
       "candidateId": "2c43073f-8896-4377-b1a0-c4a98d9e8e3f",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261007547486.pdf",
-      "title": "ETFの収益分配のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#2c43073f",
       "companyName": "日経半導体株ＥＴＦ",
       "companyCode": "200A0",
       "category": "no_dividend",
@@ -3375,14 +3549,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 13,
+      "titleSha256": "6ca985688b66bac00157b4ef0a07618c323cd007ed2792b353782869e766ad20",
+      "titleKeySha256": "a7475b142bef2d804915d24b0a47fb246b49db2a54e19ebd57e9816dd45c19ca"
     },
     {
       "caseId": "nopost-tdnet-32757cda",
       "candidateId": "32757cda-ff13-4828-8811-1c00a8784967",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260916537242.pdf",
-      "title": "2026年7月期（第2期）及び2027年1月期（第3期）における 投資主優待制度の概要決定及び優待制度拡充のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#32757cda",
       "companyName": "Ｒ－霞ヶ関ホテル",
       "companyCode": "401A0",
       "category": "other_corporate_ir",
@@ -3418,14 +3595,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 58,
+      "titleSha256": "42a5cbbe24bef9b002fdbcc2f5c564d8850c354d99f27f34027b900c7fecadb9",
+      "titleKeySha256": "a21a6e540cb76f440530429133822a40484d3db3c07164f0dee02c8b08c730e4"
     },
     {
       "caseId": "nopost-tdnet-348fcd37",
       "candidateId": "348fcd37-9cdc-4c75-86b4-2f8dd22b33cb",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260914535530.pdf",
-      "title": "上場ＥＴＦ(管理会社：シンプレクス・アセット・マネジメント)に関する日々の開示事項",
+      "title": "（見出し非保持: 権利未確認）#348fcd37",
       "companyName": "Ｅ－シンプレクス",
       "companyCode": "16714",
       "category": "other_corporate_ir",
@@ -3461,14 +3641,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 41,
+      "titleSha256": "400669ccf3aa41778ef2bce0f1edca4d60d2217d57237d5d4099e58889f44dd3",
+      "titleKeySha256": "55986173e7ca74aef6f2093fd2667785ad986d45e4b536d01fa45265aead2dd9"
     },
     {
       "caseId": "nopost-tdnet-36ba9af0",
       "candidateId": "36ba9af0-ea69-46cc-b276-093aba45ff7e",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260910534093.pdf",
-      "title": "名古屋証券取引所メイン市場への上場承認に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#36ba9af0",
       "companyName": "アトラＧ",
       "companyCode": "60290",
       "category": "other_corporate_ir",
@@ -3504,14 +3687,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 27,
+      "titleSha256": "575072ccfad18131a2c18cf79dcf3c3d37a1661384c28d712cb4a93c33c26fef",
+      "titleKeySha256": "575072ccfad18131a2c18cf79dcf3c3d37a1661384c28d712cb4a93c33c26fef"
     },
     {
       "caseId": "nopost-tdnet-3a409532",
       "candidateId": "3a409532-60a9-4d13-a78e-5b4ebe8c827f",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260914535663.pdf",
-      "title": "SPDRゴールド・シェアに関する日々の開示事項",
+      "title": "（見出し非保持: 権利未確認）#3a409532",
       "companyName": "Ｅ－ワールド",
       "companyCode": "13264",
       "category": "other_corporate_ir",
@@ -3547,14 +3733,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 23,
+      "titleSha256": "1843a790d61ccabecc6c1e75dc256ed9432393f0f84922ac323ad5b112199bca",
+      "titleKeySha256": "56dca37c7e44f74b0103309e548d176cfb5236ae14c3042b1e73b43955cbf4a7"
     },
     {
       "caseId": "nopost-tdnet-3ae89423",
       "candidateId": "3ae89423-9c51-445f-89c0-2c3e99df3da3",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260908532700.pdf",
-      "title": "2026年10月期第３四半期決算短信〔日本基準〕(連結)",
+      "title": "（見出し非保持: 権利未確認）#3ae89423",
       "companyName": "ＳＣＡＴ",
       "companyCode": "39740",
       "category": "earnings",
@@ -3590,14 +3779,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 28,
+      "titleSha256": "d58fb659fb8d4931bca777591e5361c9bb3954e4f2a9d986d5d766e48084aad7",
+      "titleKeySha256": "4b862223ce0920055ff07b4324a74efa286dde9d1fe162ed1273ca5c82c598a2"
     },
     {
       "caseId": "nopost-tdnet-41d4adb1",
       "candidateId": "41d4adb1-02ce-4922-b310-0dea5fc87f31",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261007547194.pdf",
-      "title": "2026年9月度 受注速報",
+      "title": "（見出し非保持: 権利未確認）#41d4adb1",
       "companyName": "Ｇ－ロゴスＨＤ",
       "companyCode": "205A0",
       "category": "other_corporate_ir",
@@ -3633,14 +3825,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 13,
+      "titleSha256": "27af9e44bd7263874d8566a281f95bfb8c1a190c33427e53253ed80607338aee",
+      "titleKeySha256": "ef2c1046ca6ad279b8bc13daaf721ee919662f7c94a53f25c2f717b9690cfcc2"
     },
     {
       "caseId": "nopost-tdnet-438c6237",
       "candidateId": "438c6237-b3ce-4d1b-bf6a-e57cb4d831ff",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260910533872.pdf",
-      "title": "2026年8月度 受注速報",
+      "title": "（見出し非保持: 権利未確認）#438c6237",
       "companyName": "Ｇ－ロゴスＨＤ",
       "companyCode": "205A0",
       "category": "other_corporate_ir",
@@ -3676,14 +3871,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 13,
+      "titleSha256": "b83ea0da7e1e881495a38979e9821db8ad7434fe30d3e27c98fca57ba099bb6b",
+      "titleKeySha256": "b6c7e7ef081419e9aa310312d69151cdfd764b1741eb9de3c4347c9bccd97036"
     },
     {
       "caseId": "nopost-tdnet-466bb274",
       "candidateId": "466bb274-6ecb-44e1-9b05-e4a7e5a4abb6",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260917538132.pdf",
-      "title": "役員向け及び従業員向け株式給付信託の終了に伴う自己株式の無償取得及び消却に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#466bb274",
       "companyName": "オリコン",
       "companyCode": "48000",
       "category": "other_corporate_ir",
@@ -3719,14 +3917,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 44,
+      "titleSha256": "c31eefd8f9cadc3005bf5712cf9ae11814babcf0552798ac829cd97af118be11",
+      "titleKeySha256": "c31eefd8f9cadc3005bf5712cf9ae11814babcf0552798ac829cd97af118be11"
     },
     {
       "caseId": "nopost-tdnet-46b3633b",
       "candidateId": "46b3633b-8b50-4b31-bb6c-b2f9ae849f80",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261007547093.pdf",
-      "title": "2026年11月期通期連結業績予想に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#46b3633b",
       "companyName": "川口化",
       "companyCode": "43610",
       "category": "earnings",
@@ -3762,14 +3963,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 25,
+      "titleSha256": "6490b5fdbdb7c7a22b832dea4e9b0d42056b89484b99a310fa134ce5002b440f",
+      "titleKeySha256": "6490b5fdbdb7c7a22b832dea4e9b0d42056b89484b99a310fa134ce5002b440f"
     },
     {
       "caseId": "nopost-tdnet-47764dae",
       "candidateId": "47764dae-79cc-4587-8e72-df067e2b3f94",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260929542113.pdf",
-      "title": "カスタマー派遣事業の承継に伴う財務上の特約が付された金銭消費貸借契約の締結に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#47764dae",
       "companyName": "ｆｏｎｆｕｎ",
       "companyCode": "23230",
       "category": "other_corporate_ir",
@@ -3805,14 +4009,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 45,
+      "titleSha256": "cd97aa907adf2fa057470579341581517f9c628fbd97e6a67630a2ed82de2f8c",
+      "titleKeySha256": "cd97aa907adf2fa057470579341581517f9c628fbd97e6a67630a2ed82de2f8c"
     },
     {
       "caseId": "nopost-tdnet-4828c9b1",
       "candidateId": "4828c9b1-c2e0-488d-acba-4161aa54d539",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260910534005.pdf",
-      "title": "2026年８月度 月次売上高（速報）および主要KPIに関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#4828c9b1",
       "companyName": "Ｇ－リベロ",
       "companyCode": "92450",
       "category": "other_corporate_ir",
@@ -3848,14 +4055,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 34,
+      "titleSha256": "6f7029f9b27a6aa8fa177ec58e7784c1fe1d29194612202f98b1d6e4194b337a",
+      "titleKeySha256": "5a004653a84a9c3a99130ea984b4dd6e8c1bd9e03b508caea53ce31f447d329d"
     },
     {
       "caseId": "nopost-tdnet-4d4f7bdd",
       "candidateId": "4d4f7bdd-f23b-4446-8604-7898a6b7157a",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261008547622.pdf",
-      "title": "金銭設定型ETF の解約に係る清算制度への対応に伴う投資信託約款の変更に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#4d4f7bdd",
       "companyName": "ｉＳ新興国債券へジ",
       "companyCode": "26220",
       "category": "other_corporate_ir",
@@ -3891,14 +4101,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 43,
+      "titleSha256": "b85ae2ccca33b33b1326bdace5eb5e3d4d8698161ac9eda8a891475a5b06d40e",
+      "titleKeySha256": "77e2fdc962a599127e3b3914c4afbd6bc692462e9545bcaff1113bc60fdf0176"
     },
     {
       "caseId": "nopost-tdnet-4e73197b",
       "candidateId": "4e73197b-96eb-469c-b7e4-9bb824d65205",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260925540123.pdf",
-      "title": "第三者割当増資にかかる資金使途変更に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#4e73197b",
       "companyName": "ＪＨＤ",
       "companyCode": "27210",
       "category": "other_corporate_ir",
@@ -3934,14 +4147,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 25,
+      "titleSha256": "4dc23a1ad4063ce10c14d18c8484d98aa1ed5772ce19ccdd776beeef15a09a75",
+      "titleKeySha256": "4dc23a1ad4063ce10c14d18c8484d98aa1ed5772ce19ccdd776beeef15a09a75"
     },
     {
       "caseId": "nopost-tdnet-4eede22b",
       "candidateId": "4eede22b-ce31-4c56-b045-c8100abc20a5",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260910534236.pdf",
-      "title": "福岡証券取引所本則市場への重複上場承認に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#4eede22b",
       "companyName": "ソケッツ",
       "companyCode": "36340",
       "category": "other_corporate_ir",
@@ -3977,14 +4193,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 27,
+      "titleSha256": "fa78248616a282fe20556492fc5b9af4e01854f3229ccbadee1c96da79132340",
+      "titleKeySha256": "fa78248616a282fe20556492fc5b9af4e01854f3229ccbadee1c96da79132340"
     },
     {
       "caseId": "nopost-tdnet-52cf6e8c",
       "candidateId": "52cf6e8c-6aeb-46fa-8917-d602fb19ae8c",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261008548139.pdf",
-      "title": "2027年３月期 月次動向（９月度）",
+      "title": "（見出し非保持: 権利未確認）#52cf6e8c",
       "companyName": "綿半ホールディングス",
       "companyCode": "31990",
       "category": "other_corporate_ir",
@@ -4020,14 +4239,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 18,
+      "titleSha256": "40cf02182271551853878dabdd838f9ff7e30991aa075a06e921d0764933c2b5",
+      "titleKeySha256": "f515949d5fc22b6c4e86cd70072d23a978a38eee6a5df6143d5cfc2e4d50e626"
     },
     {
       "caseId": "nopost-tdnet-538b6dc1",
       "candidateId": "538b6dc1-3780-4c7d-be5c-379acba57f64",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261008548247.pdf",
-      "title": "特別損失（減損損失）の計上に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#538b6dc1",
       "companyName": "Ｇ－バリュエンスＨＤ",
       "companyCode": "92700",
       "category": "other_corporate_ir",
@@ -4063,14 +4285,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 21,
+      "titleSha256": "fa62ee0f5b72ded5b1b1991cff2468e96c5ba004df63ed1921d1050245b42aed",
+      "titleKeySha256": "65256329c0449ecdeb3f106ec4b55b05d6feecfb9be320eadde04b74e192911c"
     },
     {
       "caseId": "nopost-tdnet-547ae3db",
       "candidateId": "547ae3db-44b4-44b2-a124-01c41a0e58e7",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261006546392.pdf",
-      "title": "2026年9月度連結月次情報のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#547ae3db",
       "companyName": "ＩＫホールディングス",
       "companyCode": "27220",
       "category": "other_corporate_ir",
@@ -4106,14 +4331,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 19,
+      "titleSha256": "0c63b9383f30f00ec3e5a615dfd9316e009ee94dfacc96e5e06d0fedda5a4dc4",
+      "titleKeySha256": "0c63b9383f30f00ec3e5a615dfd9316e009ee94dfacc96e5e06d0fedda5a4dc4"
     },
     {
       "caseId": "nopost-tdnet-574850ce",
       "candidateId": "574850ce-4f19-47c7-910a-9588a4f2656e",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261008547778.pdf",
-      "title": "2027 年３月期第２四半期（中間期）の決算発表日に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#574850ce",
       "companyName": "池上通",
       "companyCode": "67710",
       "category": "other_corporate_ir",
@@ -4149,14 +4377,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": true
-      }
+      },
+      "titleChars": 33,
+      "titleSha256": "76f83570106ba59c2ef21cfe1d11bb481bde313018d748d39935968ab1a4077e",
+      "titleKeySha256": "6782dd16ceaaec0bb61fbb08c653c07b2e2cd5a9e22b672294e931378beadae1"
     },
     {
       "caseId": "nopost-tdnet-58d03255",
       "candidateId": "58d03255-6cb9-48b0-9ba6-c9239b4f7421",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261007546989.pdf",
-      "title": "自己株式の取得状況に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#58d03255",
       "companyName": "村田製",
       "companyCode": "69810",
       "category": "share_buyback",
@@ -4192,14 +4423,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "f8e4d7e44a59c36e07a3f1f7d9a2c2beba630342e699f298c1b772024f0f2397",
+      "titleKeySha256": "f8e4d7e44a59c36e07a3f1f7d9a2c2beba630342e699f298c1b772024f0f2397"
     },
     {
       "caseId": "nopost-tdnet-5bebaadd",
       "candidateId": "5bebaadd-99b3-48a9-93b7-5084a395c4aa",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261005545685.pdf",
-      "title": "上場ＥＴＦ(管理会社：シンプレクス・アセット・マネジメント)に関する日々の開示事項",
+      "title": "（見出し非保持: 権利未確認）#5bebaadd",
       "companyName": "Ｅ－シンプレクス",
       "companyCode": "16714",
       "category": "other_corporate_ir",
@@ -4235,14 +4469,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 41,
+      "titleSha256": "400669ccf3aa41778ef2bce0f1edca4d60d2217d57237d5d4099e58889f44dd3",
+      "titleKeySha256": "55986173e7ca74aef6f2093fd2667785ad986d45e4b536d01fa45265aead2dd9"
     },
     {
       "caseId": "nopost-tdnet-67ce3994",
       "candidateId": "67ce3994-ca77-4ebd-abec-18e79e2f0adf",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261007547481.pdf",
-      "title": "2027年2月期 第2四半期（中間期）決算短信〔日本基準〕(連結)",
+      "title": "（見出し非保持: 権利未確認）#67ce3994",
       "companyName": "ローツェ",
       "companyCode": "63230",
       "category": "earnings",
@@ -4278,14 +4515,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 33,
+      "titleSha256": "6b40a1ff826fd4187aed5372768e38a34a5fa4f87221520b19296302e818b1c1",
+      "titleKeySha256": "ecef5d61d98c56daa71dc84856d628d619db7a6e9884149853e476674cce7f12"
     },
     {
       "caseId": "nopost-tdnet-69d96c25",
       "candidateId": "69d96c25-3c31-46b3-88cb-230e16a72571",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261006546876.pdf",
-      "title": "2027年２月期 第２四半期（中間期）決算短信〔日本基準〕（連結）",
+      "title": "（見出し非保持: 権利未確認）#69d96c25",
       "companyName": "Ｃ＆Ｒ社",
       "companyCode": "47630",
       "category": "earnings_revision_up",
@@ -4321,14 +4561,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 33,
+      "titleSha256": "02537def4410c5a21a66128fe02ab826e810c17d21a8f46ec1c3294ae1948a0c",
+      "titleKeySha256": "ecef5d61d98c56daa71dc84856d628d619db7a6e9884149853e476674cce7f12"
     },
     {
       "caseId": "nopost-tdnet-6fb822d9",
       "candidateId": "6fb822d9-3df4-4082-8a2d-30b66d1b088b",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261007547192.pdf",
-      "title": "2027年２月期第２四半期 決算説明資料",
+      "title": "（見出し非保持: 権利未確認）#6fb822d9",
       "companyName": "ミトラＧ",
       "companyCode": "60930",
       "category": "earnings",
@@ -4365,14 +4608,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 20,
+      "titleSha256": "f77189d36f8e0a68a0770c7c3029ee6f604931fed0b9dc8494fa7247462c52d9",
+      "titleKeySha256": "169ebf8c303527df95a86da7e7b9b8ac625cbf7374ce95f81bd664a6e2f04e85"
     },
     {
       "caseId": "nopost-tdnet-72be9166",
       "candidateId": "72be9166-5ef5-4d6d-b32d-eae5dca357b8",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260929542253.pdf",
-      "title": "当社グループにおける既存事業の収益改善に向けた構造改革（人員削減等の合理化を含む）の実施及び特別損失計上見込みに関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#72be9166",
       "companyName": "ＢｉｔｃｏｉｎＪＰＮ",
       "companyCode": "81050",
       "category": "other_corporate_ir",
@@ -4408,14 +4654,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 63,
+      "titleSha256": "5bbf17a9ec084d237447a31fc4463455edc3b7b8f5670d7da54d57c27a612c63",
+      "titleKeySha256": "96d39f1f90cd06796806018b5a79e58376446e0ee45db2ac4df4f08e9e96f4fa"
     },
     {
       "caseId": "nopost-tdnet-72e6dac9",
       "candidateId": "72e6dac9-69ac-48c0-b996-e909b51e0791",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260930543742.pdf",
-      "title": "自己株式の取得状況に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#72e6dac9",
       "companyName": "日ハム",
       "companyCode": "22820",
       "category": "share_buyback",
@@ -4451,14 +4700,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "f8e4d7e44a59c36e07a3f1f7d9a2c2beba630342e699f298c1b772024f0f2397",
+      "titleKeySha256": "f8e4d7e44a59c36e07a3f1f7d9a2c2beba630342e699f298c1b772024f0f2397"
     },
     {
       "caseId": "nopost-tdnet-74f758e8",
       "candidateId": "74f758e8-a562-43cf-9e69-cdb3cc0d7a9b",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260910534362.pdf",
-      "title": "「内部統制システムの基本方針」の一部改定に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#74f758e8",
       "companyName": "構造計画ＨＤ",
       "companyCode": "208A0",
       "category": "other_corporate_ir",
@@ -4494,14 +4746,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 28,
+      "titleSha256": "7f5ce5d5aea42ce158db8fa018b11d96c899551a13fd273d2ded167639d144ba",
+      "titleKeySha256": "089144f2b8782fd179835eb5483abed7c94cc876cfe20c2800d59c99f67cb858"
     },
     {
       "caseId": "nopost-tdnet-77421929",
       "candidateId": "77421929-e623-44e6-a1f2-9d40d49d07de",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260911534917.pdf",
-      "title": "2026年７月期 決算短信〔日本基準〕（連結）",
+      "title": "（見出し非保持: 権利未確認）#77421929",
       "companyName": "ＪＭホールディングス",
       "companyCode": "35390",
       "category": "earnings",
@@ -4537,14 +4792,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 23,
+      "titleSha256": "cb34fa95a3a173b9f6f99d1c02155f2872c6f1a2b836e0eba1df3ffd685dc019",
+      "titleKeySha256": "df3766e52e0b26a400b211bdbfdc3229ecd4c8a6427ae0a16d29ac69930d72f0"
     },
     {
       "caseId": "nopost-tdnet-7820ca7f",
       "candidateId": "7820ca7f-2470-48c3-990c-0c2a6e22e683",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260917537611.pdf",
-      "title": "CVCファンド設立に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#7820ca7f",
       "companyName": "ミスミＧ",
       "companyCode": "99620",
       "category": "other_corporate_ir",
@@ -4580,14 +4838,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "ad4f36e0ca2c8783de0fb077545d57a512760fe248994434cd47eeecb92248c0",
+      "titleKeySha256": "4a213b8274a4ff3b291bb44beaf094e8d5d7607bc3c8caed8533dcf2654ea50d"
     },
     {
       "caseId": "nopost-tdnet-7861e108",
       "candidateId": "7861e108-66df-4912-a13a-63361d67c7ba",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260928541295.pdf",
-      "title": "支配株主等に関する事項について",
+      "title": "（見出し非保持: 権利未確認）#7861e108",
       "companyName": "みのや",
       "companyCode": "386A0",
       "category": "other_corporate_ir",
@@ -4623,14 +4884,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 15,
+      "titleSha256": "c080130570bfb50226bad70693de70e135d880b509c306ee835e13c5ef40c511",
+      "titleKeySha256": "c080130570bfb50226bad70693de70e135d880b509c306ee835e13c5ef40c511"
     },
     {
       "caseId": "nopost-tdnet-81858ace",
       "candidateId": "81858ace-b083-43c5-ae03-cdbcc9b74ad6",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260913535388.pdf",
-      "title": "従業員に対する譲渡制限付株式としての自己株式の処分の払込完了に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#81858ace",
       "companyName": "Ｇ－カウリス",
       "companyCode": "153A0",
       "category": "other_corporate_ir",
@@ -4666,14 +4930,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 38,
+      "titleSha256": "915576d1c563d05c80aff2ade7ec858efd92d44ac256e6352109e9b352dc92f4",
+      "titleKeySha256": "915576d1c563d05c80aff2ade7ec858efd92d44ac256e6352109e9b352dc92f4"
     },
     {
       "caseId": "nopost-tdnet-852b5180",
       "candidateId": "852b5180-021f-4441-82b2-5b21cedee828",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260925540070.pdf",
-      "title": "2027年２月期 第２四半期（中間期）決算短信〔日本基準〕(連結)",
+      "title": "（見出し非保持: 権利未確認）#852b5180",
       "companyName": "薬王堂ＨＤ",
       "companyCode": "76790",
       "category": "earnings",
@@ -4709,14 +4976,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 33,
+      "titleSha256": "422916688e883adb8a0696dc779d36c04ed49122b0b3204c0f3e3522a5405146",
+      "titleKeySha256": "ecef5d61d98c56daa71dc84856d628d619db7a6e9884149853e476674cce7f12"
     },
     {
       "caseId": "nopost-tdnet-886950db",
       "candidateId": "886950db-3e6e-44d2-b5b3-9ed197cdbf12",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260924539177.pdf",
-      "title": "上場廃止後の継続的な情報開示に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#886950db",
       "companyName": "Ａｂａｌａｎｃｅ",
       "companyCode": "38560",
       "category": "other_corporate_ir",
@@ -4752,14 +5022,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 22,
+      "titleSha256": "b4b81bb49e0736f4ba3068cf13277432ab3564317e2ee4c44892dc83b4433cb6",
+      "titleKeySha256": "b4b81bb49e0736f4ba3068cf13277432ab3564317e2ee4c44892dc83b4433cb6"
     },
     {
       "caseId": "nopost-tdnet-8a2251b6",
       "candidateId": "8a2251b6-6e75-4849-95bf-c607d3711391",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261008547600.pdf",
-      "title": "金銭設定型ETF の解約に係る清算制度への対応に伴う投資信託約款の変更に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#8a2251b6",
       "companyName": "ｉＳ米＄ＩＧ社債ヘジ",
       "companyCode": "14960",
       "category": "other_corporate_ir",
@@ -4795,14 +5068,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 43,
+      "titleSha256": "b85ae2ccca33b33b1326bdace5eb5e3d4d8698161ac9eda8a891475a5b06d40e",
+      "titleKeySha256": "77e2fdc962a599127e3b3914c4afbd6bc692462e9545bcaff1113bc60fdf0176"
     },
     {
       "caseId": "nopost-tdnet-8bac706f",
       "candidateId": "8bac706f-053f-4015-b80b-845ddad98141",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261005545955.pdf",
-      "title": "2026年11月期 第３四半期決算短信[日本基準](連結)",
+      "title": "（見出し非保持: 権利未確認）#8bac706f",
       "companyName": "大有機化",
       "companyCode": "41870",
       "category": "earnings",
@@ -4838,14 +5114,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 29,
+      "titleSha256": "e00e1853a2c3185c315cb04fd3680f1dba0560e3151f40781a5a04cf6d4520ae",
+      "titleKeySha256": "dc0f5c2fe8adc95fba84b850ee3d7574d00aad3fced365d49ee7c6edd30760b7"
     },
     {
       "caseId": "nopost-tdnet-8c5ef0e4",
       "candidateId": "8c5ef0e4-4b2b-440c-9d81-96bab0dc64bc",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260914535562.pdf",
-      "title": "上場ETF（管理会社：ブラックロック・ジャパン）に関する日々の開示事項",
+      "title": "（見出し非保持: 権利未確認）#8c5ef0e4",
       "companyName": "Ｅ－ブラックロック",
       "companyCode": "13294",
       "category": "other_corporate_ir",
@@ -4881,14 +5160,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 35,
+      "titleSha256": "8bb764c1fa6af2e8a3ac0ae7a5c016583b71ae0de7813d3419f34975ce935c08",
+      "titleKeySha256": "977f3b575fb1e295d717415da7936df445c7065eac8e9c6bc6689ec867d46381"
     },
     {
       "caseId": "nopost-tdnet-8f470763",
       "candidateId": "8f470763-53f8-4e55-afdc-25d6eb03b3b3",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260915536508.pdf",
-      "title": "インベスコQQQトラスト シリーズ1 に関する日々の開示事項",
+      "title": "（見出し非保持: 権利未確認）#8f470763",
       "companyName": "Ｅ－インベスコＱＱＱ",
       "companyCode": "587A4",
       "category": "other_corporate_ir",
@@ -4924,14 +5206,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 30,
+      "titleSha256": "0f1bc3f55d4781128821e84bcd2fa409a7ed83827e49026c9d1a0cc072b001e7",
+      "titleKeySha256": "e6f8a7c3a78b0f6a8b07b8b0e8a8e0d7064bef1c4d10b9feee65737f1a76ae6c"
     },
     {
       "caseId": "nopost-tdnet-8fbd86d7",
       "candidateId": "8fbd86d7-e3f2-4693-b094-acf8c5ab054c",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260918538323.pdf",
-      "title": "イーサリアム（ETH）の追加取得に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#8fbd86d7",
       "companyName": "Ｇ－ＴＯＲＩＣＯ",
       "companyCode": "71380",
       "category": "other_corporate_ir",
@@ -4967,14 +5252,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 24,
+      "titleSha256": "b2b9c95fd35d82ce7658fa4a27cd58335601e4fe08024194a8820d3adff3a8e4",
+      "titleKeySha256": "47cc5ef4777f20dc1cdef14dc0d65999a19c4d7ae39aee114c736d1867b19fc9"
     },
     {
       "caseId": "nopost-tdnet-94ebccf4",
       "candidateId": "94ebccf4-8ec1-4c11-8fae-a4673ffb84f0",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260915536359.pdf",
-      "title": "Argo Space社とのミッション2.5に関する打上げ契約に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#94ebccf4",
       "companyName": "Ｇ－ｉｓｐａｃｅ",
       "companyCode": "93480",
       "category": "other_corporate_ir",
@@ -5010,14 +5298,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": true
-      }
+      },
+      "titleChars": 38,
+      "titleSha256": "c356dcc7a80275598f8e241689b96026bce8720d96e4dc47bb9b2ea5f84b7c58",
+      "titleKeySha256": "b86d76461fb0c24acf99e57cef802c3ef7ac36fea36495a52b3d802b7b12dd0b"
     },
     {
       "caseId": "nopost-tdnet-97334151",
       "candidateId": "97334151-b4bf-466f-baf2-77c3eced8066",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260924539198.pdf",
-      "title": "当社店舗（熊本店）の閉店の知らせ",
+      "title": "（見出し非保持: 権利未確認）#97334151",
       "companyName": "ハピネス＆Ｄ",
       "companyCode": "31740",
       "category": "other_corporate_ir",
@@ -5053,14 +5344,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 16,
+      "titleSha256": "4c110d5dd81fb28445a6e1e74612549dbfe4256fa8c8ccce108a46327f7e9713",
+      "titleKeySha256": "f59a04ebd72f07b3a510a059a1f57f15d00621ef4bc99e3a3eeb6db143b7ac80"
     },
     {
       "caseId": "nopost-tdnet-9cd24d78",
       "candidateId": "9cd24d78-b678-4d32-b292-c02edcb70eed",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261006546359.pdf",
-      "title": "2027年２月期 第２四半期（中間期）決算短信〔日本基準〕（連結）",
+      "title": "（見出し非保持: 権利未確認）#9cd24d78",
       "companyName": "三陽商",
       "companyCode": "80110",
       "category": "earnings",
@@ -5096,14 +5390,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 33,
+      "titleSha256": "02537def4410c5a21a66128fe02ab826e810c17d21a8f46ec1c3294ae1948a0c",
+      "titleKeySha256": "ecef5d61d98c56daa71dc84856d628d619db7a6e9884149853e476674cce7f12"
     },
     {
       "caseId": "nopost-tdnet-a13801ea",
       "candidateId": "a13801ea-9d3c-4534-84be-de3f0acf5928",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260911534987.pdf",
-      "title": "2026年７月期 決算短信〔日本基準〕（連結）",
+      "title": "（見出し非保持: 権利未確認）#a13801ea",
       "companyName": "Ｇ－日本スキー",
       "companyCode": "60400",
       "category": "earnings",
@@ -5139,14 +5436,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 23,
+      "titleSha256": "cb34fa95a3a173b9f6f99d1c02155f2872c6f1a2b836e0eba1df3ffd685dc019",
+      "titleKeySha256": "df3766e52e0b26a400b211bdbfdc3229ecd4c8a6427ae0a16d29ac69930d72f0"
     },
     {
       "caseId": "nopost-tdnet-a4a624a4",
       "candidateId": "a4a624a4-4eab-4af2-a0ee-ef80f2c276d9",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261007546939.pdf",
-      "title": "「中長期経営計画2026」策定に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#a4a624a4",
       "companyName": "ＦＵＪＩＭＩ",
       "companyCode": "53840",
       "category": "other_corporate_ir",
@@ -5182,14 +5482,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 23,
+      "titleSha256": "9c75970722b1eb3980ad56eb9791d8df420ec3a685c55cf350dd58516985ad26",
+      "titleKeySha256": "a36b1233aaade5e5f50e244e1cf48b69c6d01de9703199537f88d0f0cb1b642b"
     },
     {
       "caseId": "nopost-tdnet-a5696e15",
       "candidateId": "a5696e15-0406-4e73-8b41-98be8a6aae4c",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261007547156.pdf",
-      "title": "ＥＴＦの収益分配金見込額のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#a5696e15",
       "companyName": "ｉＳフランス国債ヘジ",
       "companyCode": "22590",
       "category": "no_dividend",
@@ -5225,14 +5528,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "8bb57ac53a23bfdbd65ddf6997688ba381c5247adaa77bf0e3af6dec1e03ab7a",
+      "titleKeySha256": "660fe0d5ac3889f9d41dced888fb39f169446d20a5aa7854f71465dedf5d4486"
     },
     {
       "caseId": "nopost-tdnet-a5b8d4b7",
       "candidateId": "a5b8d4b7-fa8f-4c38-80fa-9cf6055a52b7",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261007547164.pdf",
-      "title": "ＥＴＦの収益分配金見込額のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#a5b8d4b7",
       "companyName": "ｉＳユロＩＧ社債ヘジ",
       "companyCode": "26230",
       "category": "no_dividend",
@@ -5268,14 +5574,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "8bb57ac53a23bfdbd65ddf6997688ba381c5247adaa77bf0e3af6dec1e03ab7a",
+      "titleKeySha256": "660fe0d5ac3889f9d41dced888fb39f169446d20a5aa7854f71465dedf5d4486"
     },
     {
       "caseId": "nopost-tdnet-a786225b",
       "candidateId": "a786225b-1483-4e7d-b749-c657ee899cc0",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260831529016.pdf",
-      "title": "自己株式の取得状況に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#a786225b",
       "companyName": "日本和装",
       "companyCode": "24990",
       "category": "share_buyback",
@@ -5311,14 +5620,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "f8e4d7e44a59c36e07a3f1f7d9a2c2beba630342e699f298c1b772024f0f2397",
+      "titleKeySha256": "f8e4d7e44a59c36e07a3f1f7d9a2c2beba630342e699f298c1b772024f0f2397"
     },
     {
       "caseId": "nopost-tdnet-a9751835",
       "candidateId": "a9751835-97ff-4aff-8bdc-94ad2f7ef8d7",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260917537721.pdf",
-      "title": "規約変更および役員選任のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#a9751835",
       "companyName": "Ｒ－いちごホテル",
       "companyCode": "34630",
       "category": "other_corporate_ir",
@@ -5354,14 +5666,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 16,
+      "titleSha256": "5cc74987c1f1eb3afeb400629d775ac6e75c39bf35ddc1fe4223c155f8e36ddb",
+      "titleKeySha256": "5cc74987c1f1eb3afeb400629d775ac6e75c39bf35ddc1fe4223c155f8e36ddb"
     },
     {
       "caseId": "nopost-tdnet-ac17c11c",
       "candidateId": "ac17c11c-a211-4f7b-9392-795cc85451fb",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260909533830.pdf",
-      "title": "2027年２月期業績予想の修正（上方修正）に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#ac17c11c",
       "companyName": "Ｇ－エルテス",
       "companyCode": "39670",
       "category": "earnings_revision_up",
@@ -5397,14 +5712,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 29,
+      "titleSha256": "5510ad720b78ecfa1ce8b6a695f21167e4394b7fab3a77d68313026b84bf3fee",
+      "titleKeySha256": "9c6be5c5be92e5001d9d48a8f328793662eba74e81c6e382277add8fd75beabd"
     },
     {
       "caseId": "nopost-tdnet-ae8dcc78",
       "candidateId": "ae8dcc78-7513-43e3-b2e8-4169456bf561",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260915536685.pdf",
-      "title": "株式会社USEN WORKINGのUcare事業の会社分割（簡易吸収分割）による当社への承継に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#ae8dcc78",
       "companyName": "メドレー",
       "companyCode": "44800",
       "category": "ma",
@@ -5440,14 +5758,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 54,
+      "titleSha256": "e6fd7eff15bd53b1570334ec4c62c9d68894cd509bfc36ecd03668ffc6810245",
+      "titleKeySha256": "50121a3eaf5a4ab9a5ae2bcf0b2f2b5313689aea04a388be2e90670228efdbeb"
     },
     {
       "caseId": "nopost-tdnet-b6046499",
       "candidateId": "b6046499-9d16-43da-af09-fb803442a81c",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260924539350.pdf",
-      "title": "親会社以外の支配株主の異動に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#b6046499",
       "companyName": "レイヤード",
       "companyCode": "634A0",
       "category": "major_shareholder",
@@ -5483,14 +5804,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 21,
+      "titleSha256": "8e24c2f9856a49b6e0d3e5dddf9cee97d89463773d326aa67a093dfe8ef7c626",
+      "titleKeySha256": "8e24c2f9856a49b6e0d3e5dddf9cee97d89463773d326aa67a093dfe8ef7c626"
     },
     {
       "caseId": "nopost-tdnet-ba584d2e",
       "candidateId": "ba584d2e-8122-410f-b3b4-949cc06103c2",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261006545636.pdf",
-      "title": "ＥＴＦの収益分配金見込額のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#ba584d2e",
       "companyName": "上場ＪリートＭ",
       "companyCode": "25520",
       "category": "other_corporate_ir",
@@ -5526,14 +5850,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "8bb57ac53a23bfdbd65ddf6997688ba381c5247adaa77bf0e3af6dec1e03ab7a",
+      "titleKeySha256": "660fe0d5ac3889f9d41dced888fb39f169446d20a5aa7854f71465dedf5d4486"
     },
     {
       "caseId": "nopost-tdnet-c7d11cb0",
       "candidateId": "c7d11cb0-9e84-472f-a44d-41be26d9784b",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261009548818.pdf",
-      "title": "資金の借入に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#c7d11cb0",
       "companyName": "Ｇ－ジェリービーンズ",
       "companyCode": "30700",
       "category": "other_corporate_ir",
@@ -5569,14 +5896,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 13,
+      "titleSha256": "431ce315bb94328a122c0833fce06e14d1dc276997adc0b0117aec7951fab2d1",
+      "titleKeySha256": "431ce315bb94328a122c0833fce06e14d1dc276997adc0b0117aec7951fab2d1"
     },
     {
       "caseId": "nopost-tdnet-c8924ea3",
       "candidateId": "c8924ea3-b27c-4f41-b986-41f5016f06a1",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260924539343.pdf",
-      "title": "東京証券取引所スタンダード市場への上場に伴う当社決算情報等のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#c8924ea3",
       "companyName": "レイヤード",
       "companyCode": "634A0",
       "category": "other_corporate_ir",
@@ -5612,14 +5942,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 34,
+      "titleSha256": "5668c90b2abbe0bf450c3052bd415053a3e76aa66c9bbdb7cfbe48ca1252dc63",
+      "titleKeySha256": "5668c90b2abbe0bf450c3052bd415053a3e76aa66c9bbdb7cfbe48ca1252dc63"
     },
     {
       "caseId": "nopost-tdnet-c9ee1a5a",
       "candidateId": "c9ee1a5a-d2e1-4495-87e0-84b7f02d0774",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260910534330.pdf",
-      "title": "月次営業レポート（2026年８月度）",
+      "title": "（見出し非保持: 権利未確認）#c9ee1a5a",
       "companyName": "ＡＰＨＤ",
       "companyCode": "31750",
       "category": "other_corporate_ir",
@@ -5655,14 +5988,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 18,
+      "titleSha256": "d7a5fc3aca3ccb6b37b1a6777c68ccc482b746aefd79ad3ec846985615dffd8c",
+      "titleKeySha256": "c603681271bbac660ac18df918f8a4035bb12f0ac88d9caa7d450f6ee1803e1a"
     },
     {
       "caseId": "nopost-tdnet-cccfc2a2",
       "candidateId": "cccfc2a2-f479-48dc-b0ed-0e2b287dbc18",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260915536656.pdf",
-      "title": "2026年８月度月次売上高前年同月比についてのお知らせ",
+      "title": "（見出し非保持: 権利未確認）#cccfc2a2",
       "companyName": "ジェネパ",
       "companyCode": "31950",
       "category": "other_corporate_ir",
@@ -5698,14 +6034,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 27,
+      "titleSha256": "bb97fb7a7534424d8329ace886bd99a19a2a7ea0c0ced15dac61fff58309e854",
+      "titleKeySha256": "3a5eab75cbb5207236067a88c5e4bc05a0cb6ea26d505ef304845ea3a10f2092"
     },
     {
       "caseId": "nopost-tdnet-cd3a9b4a",
       "candidateId": "cd3a9b4a-6742-4492-b687-12bc14c40be9",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261002544953.pdf",
-      "title": "イーサリアム（ETH）の追加取得に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#cd3a9b4a",
       "companyName": "Ｇ－ＴＯＲＩＣＯ",
       "companyCode": "71380",
       "category": "other_corporate_ir",
@@ -5741,14 +6080,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 24,
+      "titleSha256": "b2b9c95fd35d82ce7658fa4a27cd58335601e4fe08024194a8820d3adff3a8e4",
+      "titleKeySha256": "47cc5ef4777f20dc1cdef14dc0d65999a19c4d7ae39aee114c736d1867b19fc9"
     },
     {
       "caseId": "nopost-tdnet-cfb58128",
       "candidateId": "cfb58128-689a-4314-96c2-3a97c26ec148",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260916537485.pdf",
-      "title": "ETFの収益分配金見込額のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#cfb58128",
       "companyName": "ＧＸ半導体",
       "companyCode": "22430",
       "category": "other_corporate_ir",
@@ -5784,14 +6126,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "00d40ce28e41ba998206b4044cfa9cc2956235eeeb97c261ec6d9fc5a619b2e0",
+      "titleKeySha256": "660fe0d5ac3889f9d41dced888fb39f169446d20a5aa7854f71465dedf5d4486"
     },
     {
       "caseId": "nopost-tdnet-cffd57ac",
       "candidateId": "cffd57ac-1271-460c-8596-7d836a84fa59",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260915536514.pdf",
-      "title": "譲渡制限付株式報酬としての新株式発行に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#cffd57ac",
       "companyName": "Ｇ－Ｄ＆Ｍカンパニー",
       "companyCode": "189A0",
       "category": "other_corporate_ir",
@@ -5827,14 +6172,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 26,
+      "titleSha256": "870c12c86eaf18c97c8d8111ff852d8deedb45ddbdbe335009fe44e1f81543b8",
+      "titleKeySha256": "870c12c86eaf18c97c8d8111ff852d8deedb45ddbdbe335009fe44e1f81543b8"
     },
     {
       "caseId": "nopost-tdnet-d02db068",
       "candidateId": "d02db068-2b5a-4330-a13f-c23ff4a7e39a",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261009548304.pdf",
-      "title": "短期売買に係る利益の提供に伴う特別利益の発生に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#d02db068",
       "companyName": "東京衡機",
       "companyCode": "77190",
       "category": "other_corporate_ir",
@@ -5870,14 +6218,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 30,
+      "titleSha256": "48598613cf69af7aa8463d86a5130eb6690c144656a3249675661b428cd86335",
+      "titleKeySha256": "48598613cf69af7aa8463d86a5130eb6690c144656a3249675661b428cd86335"
     },
     {
       "caseId": "nopost-tdnet-d0fd4e00",
       "candidateId": "d0fd4e00-170d-42fe-8c11-0674b01339a7",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261001543807.pdf",
-      "title": "一部報道につきまして",
+      "title": "（見出し非保持: 権利未確認）#d0fd4e00",
       "companyName": "東邦ＨＤ",
       "companyCode": "81290",
       "category": "ma",
@@ -5914,14 +6265,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": true
-      }
+      },
+      "titleChars": 10,
+      "titleSha256": "a989b2c1743930476cc508d05c03b2b0dd8d0cf282f2e89e442c8fa3de311dd8",
+      "titleKeySha256": "a989b2c1743930476cc508d05c03b2b0dd8d0cf282f2e89e442c8fa3de311dd8"
     },
     {
       "caseId": "nopost-tdnet-d129e51c",
       "candidateId": "d129e51c-85a3-4076-9376-39af75915d32",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261006546916.pdf",
-      "title": "自己株式の取得状況に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#d129e51c",
       "companyName": "エスペック",
       "companyCode": "68590",
       "category": "share_buyback",
@@ -5957,14 +6311,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "f8e4d7e44a59c36e07a3f1f7d9a2c2beba630342e699f298c1b772024f0f2397",
+      "titleKeySha256": "f8e4d7e44a59c36e07a3f1f7d9a2c2beba630342e699f298c1b772024f0f2397"
     },
     {
       "caseId": "nopost-tdnet-d541e74f",
       "candidateId": "d541e74f-23b4-4b75-8b70-94a003a9fdde",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260924539640.pdf",
-      "title": "価格改定のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#d541e74f",
       "companyName": "日東工",
       "companyCode": "66510",
       "category": "other_corporate_ir",
@@ -6000,14 +6357,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 9,
+      "titleSha256": "8e231764a5c01edf0e6b51d22c07da48fe993d5c87d074525472da93e23dec2f",
+      "titleKeySha256": "8e231764a5c01edf0e6b51d22c07da48fe993d5c87d074525472da93e23dec2f"
     },
     {
       "caseId": "nopost-tdnet-d63d1b49",
       "candidateId": "d63d1b49-6005-4882-a127-c80e4f95b351",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261008547679.pdf",
-      "title": "主要株主および主要株主である筆頭株主の異動に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#d63d1b49",
       "companyName": "ｍｅｉｔｏ",
       "companyCode": "22070",
       "category": "major_shareholder",
@@ -6043,14 +6403,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 29,
+      "titleSha256": "5ec481f3bf3ccb79d2f522450573f988dc778435517614819b3a7e7c99e6e691",
+      "titleKeySha256": "5ec481f3bf3ccb79d2f522450573f988dc778435517614819b3a7e7c99e6e691"
     },
     {
       "caseId": "nopost-tdnet-def0ad1a",
       "candidateId": "def0ad1a-e125-4bfa-930c-55ce1300b1cc",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260914536276.pdf",
-      "title": "2026年8月度 在籍技術者数、稼働技術者数・稼働率の月次開示に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#def0ad1a",
       "companyName": "コプロＨＤ",
       "companyCode": "70590",
       "category": "other_corporate_ir",
@@ -6086,14 +6449,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 39,
+      "titleSha256": "baa52ece59674553df35a6d1301e7d2b3e275663cbfea4d9386996d5dc09347c",
+      "titleKeySha256": "9579690e3ef0c11b659b9f79544cce561510345e415829c94dd1aa420376fbe7"
     },
     {
       "caseId": "nopost-tdnet-e16b6eb8",
       "candidateId": "e16b6eb8-63af-47d7-bbec-4abfe9bffd7a",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260909533865.pdf",
-      "title": "通期業績予想の修正に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#e16b6eb8",
       "companyName": "Ｐ－翔栄",
       "companyCode": "34830",
       "category": "earnings",
@@ -6129,14 +6495,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "b6871464734083ac054446468ca32ade7406fbe996068d906461a9f0a4f43456",
+      "titleKeySha256": "b6871464734083ac054446468ca32ade7406fbe996068d906461a9f0a4f43456"
     },
     {
       "caseId": "nopost-tdnet-e2d11344",
       "candidateId": "e2d11344-d180-401e-bb8a-169c627933e0",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260916537098.pdf",
-      "title": "連結業績予想の修正に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#e2d11344",
       "companyName": "ジャストプラ",
       "companyCode": "42870",
       "category": "earnings_revision_up",
@@ -6172,14 +6541,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": true
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "662a7c4ca4daf2ef990c5928a679d761541604c7a0f1c1064f60d689f0662b74",
+      "titleKeySha256": "662a7c4ca4daf2ef990c5928a679d761541604c7a0f1c1064f60d689f0662b74"
     },
     {
       "caseId": "nopost-tdnet-e2d74ac5",
       "candidateId": "e2d74ac5-552f-4c2a-b2b0-1b5c4a1b4098",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261008548113.pdf",
-      "title": "ＥＴＦの収益分配のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#e2d74ac5",
       "companyName": "Ｏｎｅ・サウジ",
       "companyCode": "295A0",
       "category": "other_corporate_ir",
@@ -6215,14 +6587,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 13,
+      "titleSha256": "3055e493d899d520f48b506218d7a3917af958131955fbe387d28d9d21ab389d",
+      "titleKeySha256": "a7475b142bef2d804915d24b0a47fb246b49db2a54e19ebd57e9816dd45c19ca"
     },
     {
       "caseId": "nopost-tdnet-e2e18d92",
       "candidateId": "e2e18d92-74b2-4475-8444-8d50dfe1c1f3",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260911534942.pdf",
-      "title": "代表取締役の異動に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#e2e18d92",
       "companyName": "プラネット",
       "companyCode": "23910",
       "category": "other_corporate_ir",
@@ -6258,14 +6633,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 16,
+      "titleSha256": "3a3c8c2d3891bf35a5b0aa1019a90773e0ca272ef634129cc4a4ca22e4273dbc",
+      "titleKeySha256": "3a3c8c2d3891bf35a5b0aa1019a90773e0ca272ef634129cc4a4ca22e4273dbc"
     },
     {
       "caseId": "nopost-tdnet-e42cac81",
       "candidateId": "e42cac81-8c0b-45d5-b963-3c52120720ed",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260917538120.pdf",
-      "title": "資産運用会社における運用ガイドラインの一部変更に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#e42cac81",
       "companyName": "Ｒ－ＣＲＥロジ",
       "companyCode": "34870",
       "category": "other_corporate_ir",
@@ -6301,14 +6679,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 31,
+      "titleSha256": "b0329630e234975eb429ca4f1be3271c8f6af04a06a91dcddce858f4eb65a9b5",
+      "titleKeySha256": "b0329630e234975eb429ca4f1be3271c8f6af04a06a91dcddce858f4eb65a9b5"
     },
     {
       "caseId": "nopost-tdnet-e542bf95",
       "candidateId": "e542bf95-8fe1-4262-9d41-cea122cd47d9",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260902530581.pdf",
-      "title": "2026年7月期 決算短信【日本基準】（連結）",
+      "title": "（見出し非保持: 権利未確認）#e542bf95",
       "companyName": "大盛工",
       "companyCode": "18440",
       "category": "earnings",
@@ -6344,14 +6725,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 23,
+      "titleSha256": "50de7f02632e8bc2415488cf0498cdb72b3187c524cb256019600aa360f8956a",
+      "titleKeySha256": "df3766e52e0b26a400b211bdbfdc3229ecd4c8a6427ae0a16d29ac69930d72f0"
     },
     {
       "caseId": "nopost-tdnet-e99db2f7",
       "candidateId": "e99db2f7-4759-4a01-aee0-2f81cc410237",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261006546489.pdf",
-      "title": "ＥＴＦの収益分配金見込額のお知らせ",
+      "title": "（見出し非保持: 権利未確認）#e99db2f7",
       "companyName": "ＳＭＤＡＭトピックス",
       "companyCode": "25570",
       "category": "other_corporate_ir",
@@ -6387,14 +6771,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 17,
+      "titleSha256": "8bb57ac53a23bfdbd65ddf6997688ba381c5247adaa77bf0e3af6dec1e03ab7a",
+      "titleKeySha256": "660fe0d5ac3889f9d41dced888fb39f169446d20a5aa7854f71465dedf5d4486"
     },
     {
       "caseId": "nopost-tdnet-f43db93a",
       "candidateId": "f43db93a-39bb-4c6a-b261-bd41586ee4ae",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260916537248.pdf",
-      "title": "第三者割当による第８回新株予約権（行使価額修正条項付）の発行に係る払込完了に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#f43db93a",
       "companyName": "Ｇ－マイクロ波化学",
       "companyCode": "92270",
       "category": "other_corporate_ir",
@@ -6430,14 +6817,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 45,
+      "titleSha256": "a7d84719a57ac9084e4700bd3f355e61547d4fe349814c542d847d35d7835412",
+      "titleKeySha256": "c837a360663d08b3330a2fe12ed15047cb6e6c1be8c6739578c87ede6ea20cc6"
     },
     {
       "caseId": "nopost-tdnet-f7701caf",
       "candidateId": "f7701caf-35e5-445d-b0c0-768e7cfae013",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261005546184.pdf",
-      "title": "ポートフォリオの運営実績に関するお知らせ（2026年8月度）",
+      "title": "（見出し非保持: 権利未確認）#f7701caf",
       "companyName": "Ｒ－星野",
       "companyCode": "32870",
       "category": "other_corporate_ir",
@@ -6473,14 +6863,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 30,
+      "titleSha256": "27796f4bc8626c1679cdb708250e135e837b36716cb56e64fba0b976eb877e2a",
+      "titleKeySha256": "8890abe44ee200b537e6137d8cbb7b1ad94929edbeba707688d1d490f7d99f39"
     },
     {
       "caseId": "nopost-tdnet-fe890ffd",
       "candidateId": "fe890ffd-9887-4f50-9f45-b85cbaa51ce0",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120261001544283.pdf",
-      "title": "譲渡制限付株式報酬としての自己株式の処分の払込完了に関するお知らせ",
+      "title": "（見出し非保持: 権利未確認）#fe890ffd",
       "companyName": "ファーマライズＨＤ",
       "companyCode": "27960",
       "category": "other_corporate_ir",
@@ -6516,14 +6909,17 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 33,
+      "titleSha256": "6908b399da4718e0d819dfdfd783cd62f1c680743c0b70e89f71616727f71443",
+      "titleKeySha256": "6908b399da4718e0d819dfdfd783cd62f1c680743c0b70e89f71616727f71443"
     },
     {
       "caseId": "nopost-tdnet-ff2fdab7",
       "candidateId": "ff2fdab7-8efd-481b-b6f8-5ed4844131f1",
       "sourceName": "tdnet",
       "sourceUrl": "https://www.release.tdnet.info/inbs/140120260924539210.pdf",
-      "title": "2026年8月期（2026年2月11日～2026年8月10日）決算短信",
+      "title": "（見出し非保持: 権利未確認）#ff2fdab7",
       "companyName": "ＧＸ中国テック１０",
       "companyCode": "404A0",
       "category": "other_corporate_ir",
@@ -6559,7 +6955,10 @@
         "primarySourceCheck": "stored_extraction_of_official_document",
         "verifier": "none",
         "suspected": false
-      }
+      },
+      "titleChars": 35,
+      "titleSha256": "65d11fc3db8de1730c5a88a0832f9d984f783e7c82181c03cae9d73e2bb646b0",
+      "titleKeySha256": "b9a378b2dfd514d9d34269e7d87e8ecfcdc1e2e9f101e49f9f19af1f8896d46a"
     }
   ]
 }

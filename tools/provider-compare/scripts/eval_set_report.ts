@@ -15,6 +15,22 @@ import { hazardsOf, missRateUpperBound95, positivesNeeded } from "./eval_manifes
 /** Hazard types PR #116 targets, plus consolidated-vs-standalone which the manifest's detector does not cover. */
 const CONSOLIDATED_STANDALONE = /(連結.*個別|個別.*連結|単体|非連結|個別業績)/;
 
+/**
+ * The hazard tags of one case. A case whose source-derived text was withheld (src/eval_redaction.ts) carries the tags that
+ * were computed from that text before it was removed (`derived.hazards`); otherwise they are computed from the text here.
+ */
+export function caseHazards(item: EvalCase): string[] {
+  const stored = (item as EvalCase & { derived?: { hazards?: string[] } }).derived?.hazards;
+  if (stored) return stored;
+  const post = item.recorded.generation?.text ?? "";
+  // Bodies are not stored for most sources (src/body_policy.ts), so the labeller's key facts are scanned as well. With the
+  // bodies re-attached from production the same function sees the full text.
+  const text = [item.candidate.title, item.candidate.bodySummary ?? "", post, ...item.label.keyFacts].join("\n").normalize("NFKC");
+  const tags: string[] = [...hazardsOf(text)];
+  if (CONSOLIDATED_STANDALONE.test(text)) tags.push("consolidated_vs_standalone");
+  return tags;
+}
+
 export function hazardCoverage(cases: readonly EvalCase[]): Record<string, { cases: number; independent: number }> {
   const out: Record<string, { cases: number; independent: number }> = {};
   const add = (hazard: string, item: EvalCase) => {
@@ -23,12 +39,7 @@ export function hazardCoverage(cases: readonly EvalCase[]): Record<string, { cas
     if (item.label.status === "independent_confirmed") out[hazard].independent += 1;
   };
   for (const item of cases.filter(isHeadline)) {
-    const post = item.recorded.generation?.text ?? "";
-    // Bodies are not stored for most sources (src/body_policy.ts), so the labeller's key facts are scanned as well. With the
-    // bodies re-attached from production the same function sees the full text.
-    const text = [item.candidate.title, item.candidate.bodySummary ?? "", post, ...item.label.keyFacts].join("\n").normalize("NFKC");
-    for (const hazard of hazardsOf(text)) add(hazard, item);
-    if (CONSOLIDATED_STANDALONE.test(text)) add("consolidated_vs_standalone", item);
+    for (const hazard of caseHazards(item)) add(hazard, item);
   }
   return Object.fromEntries(Object.entries(out).sort(([a], [b]) => a.localeCompare(b)));
 }
