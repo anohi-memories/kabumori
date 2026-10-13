@@ -117,17 +117,17 @@
 
 ## F8
 - slot: F8
-- status: ready
+- status: done
 - task_id: news-improvement-a-f8-j1b2-visibility-policy-migration-candidate-20261013
 - owner: claude
-- next_owner: claude
+- next_owner: none
 - return_to: ニュース改善API最適化のちゃ
 - completion_code: L8
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F8.md
 - current_report_path: .agent_v2/tasks/F8.md#report
 - dependencies: J1-b L8 accepted, archived, SHA256 verified/indexed
-- blocker: DB migration candidate offline only, requires Sol（高）review and separate application approval
+- blocker: source candidate accepted; SQL needs Sol（高） security review and separate product/DB authorization before release
 - slot_use: 国内ニュース改善A専任。J1-b2: app visibility policy/SQL candidate and synthetic proof. F9 PR174 and other slots protected.
 
 ## F9
