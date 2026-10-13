@@ -38,7 +38,7 @@
 
 ## F3
 - slot: F3
-- status: ready
+- status: in_progress
 - task_id: postona-f3-j3-v3-r1-r3-security-fixes-20261013
 - owner: claude
 - next_owner: claude
