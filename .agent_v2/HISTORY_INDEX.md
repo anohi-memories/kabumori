@@ -78,6 +78,8 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 
 | 2026-10-13 | F5 | `common-account-f5-phase5-app-auth-entitlement-integration-20261012` | 共通ID・POSTONA利用登録・ワークスペース権限 Phase5 | PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO | #165 | `4638891f6c7ff432e08d462019594e1ec3d66f07` | `.agent_v2/archive/2026-10-13-F5-common-account-f5-phase5-app-auth-entitlement-integration-20261012/files/.agent_v2/tasks/F5.md` | 同archive TASKの `## Report` |
 
+| 2026-10-13 | F4 | `postona-f4-threads-t13-authenticated-writer-integration-20261013` | Threads T13/F5 writer guard integration | PASS_SOURCE_IMPLEMENTATION / PRODUCTION_NO_GO | #169 | `fd15430ddcd640c5c7389582f37f1b478fc7204c` | `.agent_v2/archive/2026-10-13-F4-postona-f4-threads-t13-authenticated-writer-integration-20261013/files/.agent_v2/tasks/F4.md` | 同archive TASK `## Report` |
+
 ## 旧系統（G1〜G10 / H1〜H5）の完了・履歴作業
 
 ### 日付不明
