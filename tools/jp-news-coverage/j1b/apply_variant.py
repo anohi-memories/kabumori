@@ -54,6 +54,41 @@ for name in names:
       and news.company_code is null
       and news.effective_severity in ('emergency', 'critical', 'high', 'medium')
       and (news.status <> 'rejected' or news.source_type in ('tdnet', 'company_ir') or news.effective_severity = 'emergency')""")
+    elif name in ("j1b2_a", "j1b2_b", "j1b2_c"):
+        candidate = (pathlib.Path(__file__).resolve().parent / "candidate" /
+                     "20261013_J1B2_news_feed_domestic_visibility_CANDIDATE.sql").read_text()
+        if name == "j1b2_b":
+            old = """    where (
+        ranked.id is not null
+        or exists ("""
+            new = """    where (
+        ranked.id is not null
+        or candidate.effective_severity in ('critical', 'high')
+        or exists ("""
+            if candidate.count(old) != 1:
+                raise SystemExit("j1b2_b edit must match exactly once")
+            candidate = candidate.replace(old, new)
+        if name == "j1b2_c":
+            # additionally hide base-feed rows that are rejected, non-emergency and outside the official allowance
+            old = """  with base_feed as (
+    select * from public.get_my_important_stock_news_phase5_base(50)
+  ),"""
+            new = """  with base_feed as (
+    select base.* from public.get_my_important_stock_news_phase5_base(50) as base
+    where not exists (
+      select 1 from public.important_news_candidates as c
+      where c.id = base.news_id and c.status = 'rejected' and c.company_code is null
+        and c.source_type not in ('tdnet', 'company_ir')
+        and base.severity <> 'emergency'
+        and not (c.fact_check_status = 'passed' and c.source_name = 'jp_official'
+                 and (base.severity in ('critical', 'high')
+                      or c.category in ('administrative_action', 'misconduct', 'litigation', 'major_security_incident')))
+    )
+  ),"""
+            if candidate.count(old) != 1:
+                raise SystemExit("j1b2_c edit must match exactly once")
+            candidate = candidate.replace(old, new)
+        text = text + "\n" + candidate
     else:
         raise SystemExit(f"unknown variant {name}")
 
