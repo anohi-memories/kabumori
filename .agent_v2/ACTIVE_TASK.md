@@ -119,10 +119,10 @@
 
 ## F8
 - slot: F8
-- status: ready
+- status: done
 - task_id: news-improvement-a-f8-j1b4-performance-security-offline-20261013
 - owner: claude
-- next_owner: claude
+- next_owner: none
 - return_to: ニュース改善API最適化のちゃ
 - completion_code: L8
 - recommended_model: Opus5.5（高）
@@ -134,10 +134,10 @@
 
 ## F9
 - slot: F9
-- status: review_required
+- status: done
 - task_id: api-optimization-b-f9-clean-replacement-final-rights-gate-20261013
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: ニュース改善API最適化のちゃ
 - completion_code: L9
 - recommended_model: Opus5.5（高）
