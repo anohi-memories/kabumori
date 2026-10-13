@@ -391,3 +391,4 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 - L5: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; PR178 Draft head 83334a091ded5571cf595fd99d7a035627564735
 
 - 2026-10-13 | F3 | `postona-f3-x-reservation-live-boundary-source-integration-20261012` | L3 PASS_SOURCE_IMPLEMENTATION / PRODUCTION_NO_GO | Draft PR168 | `.agent_v2/archive/2026-10-13-F3-postona-f3-x-reservation-live-boundary-source-integration-20261012/` | SHA256 `670ab1cbf20d54e0d79a62c1e0f080c6d489b5c03b2de8e2e51a8dd3318b7d1d`; GitHub exact blob read-back verified.
+- 2026-10-13 | F8 | `news-improvement-a-f8-j1b-app-visibility-offline-design-20261013` | J1-b offline design L8 PASS_OFFLINE_DESIGN | .agent_v2/archive/2026-10-13-f8-news-improvement-a-f8-j1b-app-visibility-offline-design-20261013/files/.agent_v2/tasks/F8.md | SHA256 e29bf4961d72844340562b7026e37ccbf34a378da9a5970246d6578525f5cb06; read-back verified.
