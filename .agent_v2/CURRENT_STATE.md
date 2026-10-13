@@ -13,6 +13,12 @@
 
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F8/F9 parallel next tasks (2026-10-13)
+- F8 `news-improvement-a-f8-j1b4-performance-security-offline-20261013`: ready/claude, Opus5.5（高）, L8. Local SQL performance/security validation for PR181/185 and Sol review packet. No managed migration, Preview or production operation; reported PG17 subset 91/116 migrations and N400 O(n²) concern still require review.
+- F9 `api-optimization-b-f9-clean-replacement-final-rights-gate-20261013`: ready/claude, Opus5.5（高）, L9. Clean Draft replacement candidate preserving fail-closed model-send gate, residual rights investigation. PR115/174/184 protected, no branch history rewrite, merge, deploy or external model calls.
+- Previous F8/F9 TASKs and Reports archived with SHA256SUMS/MANIFEST/readback, HISTORY_INDEX updated. ACTIVE_TASK reconciliation completed. Independent worktree and nonoverlapping ownership required.
+
+
 ## F8/F9 new parallel TASKs — 2026-10-13
 - F8 `news-improvement-a-f8-j1b3-real-schema-proof-review-packet-20261013` ready/claude, Opus5.5（高）, return L8. Validate PR181 candidate in independent local real-schema PostgreSQL and assemble Sol（高）review packet; migration stays outside managed staging/production, no source merge or deploy.
 - F9 `api-optimization-b-f9-rights-safe-eval-fixture-redaction-20261013` ready/claude, Opus5.5（高）, return L9. Prepare an isolated source candidate to withhold remaining 288 rights-unconfirmed headlines and 76 generated texts while preserving deny-by-default and offline tests. PR174 and legacy PR115 remain unchanged/Draft; no provider external sends.
