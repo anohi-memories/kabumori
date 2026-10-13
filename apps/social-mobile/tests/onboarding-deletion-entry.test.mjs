@@ -76,7 +76,7 @@ async function gateHarness({ input, userId = 'user-1', acknowledged = false, ide
   return { render, state, isHome: (tree) => tree === CHILD || tree?.props?.children === CHILD };
 }
 
-const entryOf = (tree) => pressables(tree).find((p) => label(p).includes('アカウントの削除について'));
+const entryOf = (tree) => pressables(tree).find((p) => label(p).includes('利用終了・共通IDの管理'));
 
 test('every unfinished onboarding state exposes the deletion entry (never Home)', async () => {
   for (const [name, input] of Object.entries(STATES)) {
@@ -134,7 +134,7 @@ test('the deletion screen needs no Home providers, so it works before Home and k
   assert.match(screen, /accountDeletion !== 'available'|!enabled/u, 'feature-off state stays truthful');
   assert.match(screen, /sameDeletionContext/u, 'session pinning unchanged');
   assert.match(screen, /reauthenticate\(/u, 'recent-auth unchanged');
-  assert.match(screen, /ACCOUNT_DELETION_CONFIRM_PHRASE/u, 'typed confirmation unchanged');
+  assert.match(screen, /POSTONA_END_CONFIRM_PHRASE/u, 'typed confirmation unchanged');
   const gate = await readFile(new URL('../src/features/onboarding/onboarding-gate.tsx', import.meta.url), 'utf8');
   assert.equal((gate.match(/<DeletionEntry onOpen=\{openDeletion\} \/>/gu) ?? []).length, 2, 'both non-Home screens carry the entry');
 });

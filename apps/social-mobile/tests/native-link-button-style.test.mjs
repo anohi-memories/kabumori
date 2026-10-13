@@ -154,7 +154,7 @@ test('the two login-methods buttons are standalone pressables that navigate on p
   const sf = await parse('src/app/login-methods.tsx');
   const cases = [
     ['投稿用のX接続を確認する', '/accounts'],
-    ['アカウントの削除について', '/account-deletion'],
+    ['利用終了・共通IDの管理', '/account-deletion'],
   ];
   for (const [label, route] of cases) {
     const found = pressableWithLabel(sf, label);
@@ -176,7 +176,7 @@ test('Settings has a visible account-management entry that opens login-methods, 
   const onPress = attr(found.node, 'onPress')?.getText() ?? '';
   assert.ok(onPress.includes('router.push') && onPress.includes("'/login-methods'"), 'opens /login-methods');
   const text = sf.getFullText();
-  for (const word of ['ログイン方法', '投稿用のXアカウントの接続', 'アカウントの削除']) assert.ok(text.includes(word), word);
+  for (const word of ['ログイン方法', '投稿用のXアカウントの接続', '利用終了・共通IDの管理']) assert.ok(text.includes(word), word);
   assert.ok(text.indexOf('アカウント管理') < text.indexOf('コンテンツ設定'), 'entry sits above the content form');
 });
 

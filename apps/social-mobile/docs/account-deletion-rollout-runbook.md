@@ -1,3 +1,5 @@
+> **RETIRED for current clients (J5, 2026-10-14).** This legacy rollout must not be used to enable deletion. The client now denies the old route regardless of its old build flag. See [the J5 handoff](j5-postona-deletion-boundary.md) for the shared service-only contract, old-build server containment and release blockers. Legacy source/deployment history below is reference only.
+
 # Social-mobile account deletion — production rollout runbook (preflight 2026-09-29)
 
 Preflight result: **READY_FOR_ROLLOUT_WITH_OPERATOR_GATES**. Nothing was applied or deployed (`production_mutation=0`).
