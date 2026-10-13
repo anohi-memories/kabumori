@@ -23,7 +23,7 @@
 
 ## F2
 - slot: F2
-- status: ready
+- status: in_progress
 - task_id: kabumori-f2-emergency-market-report-app-feed-broadcast-20261013
 - owner: claude
 - next_owner: claude
@@ -33,7 +33,7 @@
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
 - dependencies: main PR143/149/158, F6 generator; current X/app consumer ON, old individualized scheduled Cron OFF
-- blocker: feed migration, broadcast migration, worker & Cron, device validation and staged production approvals
+- blocker: 事前確認は完了（23:13 の本番の読み取り）。段階A（migration 20261011150000＋きょうの市況の公開）→ Metro で実機確認 → 段階B（migration 20261012100000＋worker の deploy＋Cron）→ 段階C（送信 ON・pilot）。どれも利用者の承認・実行待ち。最初の通知は 10/14 朝刊の直後
 - slot_use: EMERGENCY 共通市況アプリ配信・一斉通知を最短で整備（1時間目標）
 
 ## F3
