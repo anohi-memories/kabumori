@@ -1,3 +1,8 @@
+## POSTONA J5 Codex emergency implementation — legacy account deletion UI (2026-10-14 JST)
+- User explicitly requested Codex implementation instead of constrained Claude; NEW J5 `postona-j5-account-deletion-legacy-bypass-ui-bridge-20261014` ready/codex, recommended Sol（高）, J5→V5 return POSTONA｜マルチSNS化・開発統括（G4）のちゃ. This is separate from completed F4/F3 task_ids and only G4/F4-owned POSTONA mobile client paths, dedicated clean J5 worktree and Draft PR.
+- F5 Phase8 PR193 detected G4-1: old POSTONA deletion UI calls `social-mobile-account-delete` with a second shared-login-deleting pathway. Codex will remove unsafe client call, separate POSTONA-only service termination from full shared account deletion with explicit consent and honest unknown/remote-unverified blocking; cross-owner server changes documented but forbidden. If F5 contract not ready, no invented endpoint and fail closed.
+- J3 independent X saga R1/R3 review remains ready, unaffected. Production Supabase/Auth/DB/Edge and SNS OAuth/post/delete/merge/deploy remain NO_GO. J5 may not self-review; independent Sol（高） security review of completed integration later.
+
 ## F8/F9 new tasks 2026-10-14
 - F8 news-improvement-a-f8-j1b5-security-review-readiness-20261014: ready, Claude Opus5.5（高）, return L8. Offline final DB/RPC review packet for J1-b4 candidate PR191, Sol（高）review pending. No Preview/production or managed migration.
 - F9 api-optimization-b-f9-clean-pr190-residual-rights-tests-20261014: ready, Claude Opus5.5（高）, return L9. Rights residue and offline regression tests for clean candidate PR190. PR115/174/184/190 protected; merge/external sends prohibited.
