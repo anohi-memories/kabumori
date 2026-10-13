@@ -6,5 +6,6 @@
   "sha256": "caf8d633603badce2e66710cb52c011362e3edfe862cd6b75734cf171e09aef0",
   "source_commit": "92229e402f5dcd45edba331ee5490ce411840100",
   "original_blob_sha": "e3168468977cff50e11523939d2aabe1b9123474",
-  "restore_checked": false
+  "restore_checked": true,
+  "restore_method": "byte-identical GitHub read-back; manifest SHA256 matches SHA256SUMS"
 }
