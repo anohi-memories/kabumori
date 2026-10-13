@@ -52,17 +52,17 @@
 - slot_use: POSTONA X投稿・予約実行への共通アカウント利用権統合（ソース＋使い捨てDB、本番OFF、F3→L3）。ChatGPT直接指示を2026-10-13にF3が登録（旧TASKはarchive済み）
 ## F4
 - slot: F4
-- status: ready
+- status: review_required
 - task_id: postona-f4-threads-cleanup-live-lease-security-fix-20261013
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
 - dependencies: F4 PR169, F5 PR178 Phase6 cleanup_authorized(uuid), protected PR167/154
-- blocker: production NO_GO, integrated Sol（高） review needed after source fix
+- blocker: production NO_GO, integrated Sol（高） review needed after source fix; F4 reported Draft PR180 head 7c4f457834cddb42b72be6b74996e643b213e8c8 (base PR169 branch), awaiting L4
 - slot_use: POSTONA Threads F5-reported service deletion live-lease security defect; F4-owned source only
 - previous_task_archive: .agent_v2/archive/2026-10-13-F4-postona-f4-threads-t13-authenticated-writer-integration-20261013/
 
