@@ -1,10 +1,11 @@
-// F6 V0 (2026-10-13): Claude as the PRIMARY generator of the shared CLOSE market report. Not a shadow. Default off.
+// F6 V0 (2026-10-13): Claude as the PRIMARY generator of the shared market report. Not a shadow. Default off.
 // Contract and activation: docs/ai-provider/F6_OPUS_PRIMARY_CLOSE_V0.md.
 //
 // prepareMarketReportPrimary(...) -> one of
-//   legacy:  KABUMORI_MARKET_REPORT_AI_MODE is not exactly "primary_close", or the report is not "close". The caller
-//            keeps its OpenAI requester untouched; only the mode variable was read.
-//   invalid: "primary_close" for a close report, but it cannot run (model, key, ledger or claim missing). The caller
+//   legacy:  KABUMORI_MARKET_REPORT_AI_MODE is not exactly "primary_close" or "primary_both", or the mode does not
+//            route this report ("primary_close": close only; "primary_both": morning and close). The caller keeps
+//            its OpenAI requester untouched; only the mode variable was read.
+//   invalid: a primary mode for a report it routes, but it cannot run (model, key, ledger or claim missing). The caller
 //            fails the report with ANALYSIS_PRIMARY_CONFIG:<reason>; it never falls back to OpenAI silently.
 //   primary: every model call of the report (generate AND fact) goes to the configured Anthropic catalog model through
 //            executeAiRequest and the budget ledger: one transport attempt, no retry, no automatic OpenAI fallback,
@@ -25,6 +26,8 @@ import type { AiCostBasis, AiReasoningEffort, AiRequest } from "./types.ts";
 
 export const MARKET_REPORT_AI_MODE_ENV = "KABUMORI_MARKET_REPORT_AI_MODE";
 export const PRIMARY_CLOSE_MODE = "primary_close";
+/** The morning and the close report on the primary (2026-10-13 request, F2 handoff). */
+export const PRIMARY_BOTH_MODE = "primary_both";
 /** The primary model, by configuration (this layer never names a model); it must be an Anthropic catalog model. */
 export const MARKET_REPORT_PRIMARY_MODEL_ENV = "KABUMORI_MARKET_REPORT_PRIMARY_MODEL";
 export const PRIMARY_PROVIDER = "anthropic";
@@ -157,8 +160,9 @@ export function primaryLedgerFromEdgeEnv(readEnv: EnvReader, fetchImpl?: FetchLi
 
 export function prepareMarketReportPrimary(options: PrepareMarketReportPrimaryOptions): PreparedMarketReportPrimary {
   const mode = readOne(options.readEnv, MARKET_REPORT_AI_MODE_ENV);
-  if (mode !== PRIMARY_CLOSE_MODE) return { mode: "legacy", reason: "OFF" };
-  if (options.reportType !== "close") return { mode: "legacy", reason: "NOT_CLOSE" };
+  if (mode !== PRIMARY_CLOSE_MODE && mode !== PRIMARY_BOTH_MODE) return { mode: "legacy", reason: "OFF" };
+  const routed = options.reportType === "close" || (mode === PRIMARY_BOTH_MODE && options.reportType === "morning");
+  if (!routed) return { mode: "legacy", reason: mode === PRIMARY_CLOSE_MODE ? "NOT_CLOSE" : "NOT_ROUTED" };
 
   const model = readOne(options.readEnv, MARKET_REPORT_PRIMARY_MODEL_ENV) ?? "";
   if (findModelSpec(model)?.provider !== PRIMARY_PROVIDER) return { mode: "invalid", reason: "MODEL_INVALID" };
