@@ -1,5 +1,11 @@
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F5 Phase6 — POSTONA cleanup / service-deletion source (2026-10-13 JST)
+- NEW F5 `common-account-f5-phase6-postona-provider-cleanup-service-deletion-20261013` **ready / claude**, Opus5.5（高）, F5→L5, return 共通アカウントG5のちゃ（新F5担当）. Prior completed F5 Phase5 TASK+Report archived with manifest, SHA256, restore-readback and HISTORY_INDEX.
+- F5 owns G5 adapter registration and EXECUTE candidate, service_deletion lease/fencing, `local_removed_remote_unverified` consent policy and precise F4/F3 contracts. Stack new Draft on F5 PR165 (currently HEAD `4638891f6c7ff432e08d462019594e1ec3d66f07`); G5 PR121/152, F4 PR167/169, H5 PR159 protected.
+- F3 X authority/booking and F4 Threads writer/cleanup are independently completed source TASKs and not modified here. F5 may use read-only source overlay, no source/slot reassignment to F3/F4. J1 Sol（高） integrated review after compatibility source, not assigned yet.
+- All live X/Threads/Meta/managed Supabase/Vault/migrations/GRANT/merge/deploy/posting gates remain NO_GO. Remote authorization cannot be marked revoked without evidence.
+
 ## F2 — Opus Primary 朝刊・大引け対応（2026-10-13 JST）
 - User approved existing valid 30-day Anthropic key for initial usage and wants **both** morning and close Opus Primary; automatic OpenAI fallback can be deferred; manual OFF and spending limits maintained.
 - F6 PR170 `46b27326360e66ec843f79bae6d01584088869d0` is accepted as offline source but not wired, merged or deployed. Previous F2 done task archived before reassignment in `.agent_v2/archive/2026-10-13-f2-pr143-mergeability-diagnosis.md`.
