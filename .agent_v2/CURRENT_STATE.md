@@ -1,5 +1,8 @@
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F2 X/app shared report consumer cutover preflight (2026-10-13)
+- F2 new task `kabumori-f2-shared-market-report-x-app-consumer-cutover-20261013` ready/claude, Sonnet5（高）, return L2. User wants X and app migrated together after Opus source merge. Task scope: production read-only/deployed-vs-main diff, route/duplicate safeguards, offline consumer tests, staged cutover and rollback plan. Gates were x=false, app=false; deployed x-test-post/personalized-reports differ from main. No DB mutation, secret, deploy, SNS post or gate ON authorized by this task; F6 provider production window is separate.
+
 ## F8 / F9 同時進行（2026-10-13 JST）
 - F8 `news-improvement-a-f8-j1b-app-visibility-offline-design-20261013` ready/claude、Opus5.5（高）、L8返却。日本ニュースのアプリ可視性・RPC基準のread-only分析と合成fixture/設計に限定。migration/RPC/production本体は変更しない。
 - F9 `api-optimization-b-f9-pr174-pr115-rights-audit-offline-20261013` ready/claude、Opus5.5（高）、L9返却。Draft PR174・旧PR115の権利/履歴/価格/送信ゲートのoffline監査。旧PR115操作・PR174 merge・有料APIなし。
