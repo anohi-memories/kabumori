@@ -13,7 +13,8 @@ const fresh = jwt({ sub: USER, amr: [{ method: 'oauth', timestamp: NOW - 3600 },
 type Account = { id: string; revoke_required: boolean; access_token: string | null; refresh_token: string | null };
 
 /** Minimal fake of the DB state machine (the real one is proven in supabase/tests). */
-function fakeDb(options: { scope?: 'social_only' | 'social_and_login'; accounts?: Account[]; blocked?: string; operatorAtCredentials?: boolean; purgeError?: string | null; finalizeLoginDeleted?: boolean } = {}) {
+function fakeDb(options: { scope?: 'social_only' | 'social_and_login'; accounts?: Account[]; blocked?: string; operatorAtCredentials?: boolean; purgeError?: string | null; finalizeLoginDeleted?: boolean;
+  /** The X stop step's answers, in order (default: stopped). */ stopX?: Record<string, unknown>[]; nonX?: number } = {}) {
   const calls: string[] = [];
   let tombstone: null | { state: string; scope: string; appleRequired: boolean; appleRevoked: boolean; lease: string | null } = null;
   let purgeError = options.purgeError ?? null;
@@ -38,6 +39,12 @@ function fakeDb(options: { scope?: 'social_only' | 'social_and_login'; accounts?
       case 'release':
         if (tombstone && tombstone.lease === args.p_lease) tombstone.lease = null;
         return { ok: true, data: null };
+      case 'x_precheck':
+        return { ok: true, data: { non_x_accounts: options.nonX ?? 0 } };
+      case 'stop_x': {
+        const lost = leaseLost(args); if (lost) return lost;
+        return { ok: true, data: options.stopX?.shift() ?? { status: 'stopped', reservations_uncertain: 0 } };
+      }
       case 'credentials': {
         const lost = leaseLost(args); if (lost) return lost;
         if (tombstone!.state !== 'started') return { ok: true, data: { status: 'not_needed' } };
@@ -98,7 +105,7 @@ test('happy path: acquire -> revoke -> mark by fingerprint -> purge -> finalize;
   const { d, external } = deps(db);
   const result = await handleAccountDeletion(del({ user_id: 'someone-else' }), d);
   assert.deepEqual(result, { status: 200, body: { ok: true, login_deleted: true } });
-  assert.deepEqual(db.calls, ['preview', 'record:requested', 'acquire', 'credentials', 'mark_x_revoked', 'purge', 'finalize']);
+  assert.deepEqual(db.calls, ['preview', 'x_precheck', 'record:requested', 'acquire', 'stop_x', 'credentials', 'mark_x_revoked', 'stop_x', 'purge', 'finalize']);
   assert.deepEqual(external, ['x:refresh_token:FAKE_REFRESH', 'x:access_token:FAKE_ACCESS']);
   assert.equal(db.tombstone(), null);
 });
@@ -230,5 +237,73 @@ test('responses never carry tokens; sources never log or trust a body user id', 
     const source = await Deno.readTextFile(new URL(file, dir));
     assert.doesNotMatch(source, /console\.(log|info|warn|error|debug)/u, file);
     assert.doesNotMatch(source, /body\??\.(user_id|p_user_id|userId|id)\b/u, file);
+  }
+});
+
+// ---------------------------------------------------------------------------------------------------
+// F3 (2026-10-13): X publishing stops before any credential is read, revoked at X or removed.
+// ---------------------------------------------------------------------------------------------------
+test('F3 stop: a post in flight or a non-X account blocks with a TYPED reason before credentials or any X call', async () => {
+  for (const reason of ['POSTING_IN_PROGRESS', 'NON_X_ACCOUNT_PRESENT', 'SHARED_WORKSPACE']) {
+    const db = fakeDb({ stopX: [{ status: 'blocked', reason, publishing_stopped: true }] });
+    const { d, external } = deps(db);
+    assert.deepEqual(await handleAccountDeletion(del(), d), { status: 409, body: { ok: false, error: `DELETION_BLOCKED_${reason}` } });
+    assert.deepEqual(db.calls, ['preview', 'x_precheck', 'record:requested', 'acquire', 'stop_x', `record:failed`, 'release'], reason);
+    assert.deepEqual(external, [], `${reason}: nothing revoked at X`);
+    assert.equal(db.tombstone()?.lease, null, 'lease released');
+  }
+});
+
+test('F3 stop: lease lost, an RPC failure or an unknown answer is never a success and touches nothing external', async () => {
+  const cases: [Record<string, unknown> | null, number, string][] = [[null, 500, 'FAILED'], [{ status: 'stopped_maybe' }, 500, 'FAILED']];
+  for (const [answer, status, error] of cases) {
+    const db = fakeDb();
+    const failing = (name: string, args: Record<string, unknown>): Promise<RpcResult> => {
+      if (name === 'stop_x') return Promise.resolve(answer === null ? { ok: false, code: null } : { ok: true, data: answer });
+      return db.rpc(name, args);
+    };
+    const { d, external } = deps(db, { rpc: failing as DeletionDeps['rpc'] });
+    assert.deepEqual(await handleAccountDeletion(del(), d), { status, body: { ok: false, error } });
+    assert.deepEqual(external, []);
+  }
+  const db = fakeDb();
+  const lost = (name: string, args: Record<string, unknown>): Promise<RpcResult> =>
+    (name === 'stop_x' ? Promise.resolve({ ok: false, code: 'SOCIAL_MOBILE_DELETION_LEASE_LOST' }) : db.rpc(name, args));
+  const { d, external } = deps(db, { rpc: lost as DeletionDeps['rpc'] });
+  assert.deepEqual(await handleAccountDeletion(del(), d), { status: 409, body: { ok: false, error: 'DELETION_IN_PROGRESS' } });
+  assert.deepEqual(external, []);
+});
+
+test('F3 stop: blocked again right before the purge (X tokens already revoked) -> no purge; the retry resumes and ends', async () => {
+  const db = fakeDb({ stopX: [{ status: 'stopped', reservations_uncertain: 0 }, { status: 'blocked', reason: 'POSTING_IN_PROGRESS' }] });
+  const { d, external } = deps(db);
+  assert.deepEqual(await handleAccountDeletion(del(), d), { status: 409, body: { ok: false, error: 'DELETION_BLOCKED_POSTING_IN_PROGRESS' } });
+  assert.ok(!db.calls.includes('purge'), 'nothing purged while a post is in flight');
+  assert.equal(external.length, 2, 'the X tokens were revoked once');
+  assert.equal(db.tombstone()?.state, 'x_revoked');
+  const retry = await handleAccountDeletion(del(), d);
+  assert.deepEqual(retry, { status: 200, body: { ok: true, login_deleted: true } });
+  assert.equal(external.length, 2, 'never revoked twice');
+});
+
+test('F3 stop: an X post whose result is unknown is reported with the success, never hidden', async () => {
+  const db = fakeDb({ stopX: [{ status: 'stopped', reservations_uncertain: 1 }, { status: 'stopped', reservations_uncertain: 1 }] });
+  const { d } = deps(db);
+  assert.deepEqual(await handleAccountDeletion(del(), d), { status: 200, body: { ok: true, login_deleted: true, x_posts_unconfirmed: 1 } });
+});
+
+test('F3 precheck: a non-X social account refuses BEFORE anything is recorded (no tombstone, no lease, nothing external)', async () => {
+  const db = fakeDb({ nonX: 1 });
+  const { d, external } = deps(db);
+  assert.deepEqual(await handleAccountDeletion(del(), d), { status: 409, body: { ok: false, error: 'DELETION_BLOCKED_NON_X_ACCOUNT_PRESENT' } });
+  assert.deepEqual(db.calls, ['preview', 'x_precheck']);
+  assert.equal(db.tombstone(), null);
+  assert.deepEqual(external, []);
+  for (const bad of [null, { non_x_accounts: -1 }, { non_x_accounts: '0' }, {}]) {
+    const broken = fakeDb();
+    const rpc = (name: string, args: Record<string, unknown>): Promise<RpcResult> =>
+      (name === 'x_precheck' ? Promise.resolve(bad === null ? { ok: false, code: null } : { ok: true, data: bad }) : broken.rpc(name, args));
+    assert.deepEqual(await handleAccountDeletion(del(), deps(broken, { rpc: rpc as DeletionDeps['rpc'] }).d), { status: 500, body: { ok: false, error: 'FAILED' } }, JSON.stringify(bad));
+    assert.equal(broken.tombstone(), null);
   }
 });
