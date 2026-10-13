@@ -118,33 +118,33 @@
 
 ## F8
 - slot: F8
-- status: done
-- task_id: news-improvement-a-jp-official-diagnostics-j1a-f8-20261012
+- status: ready
+- task_id: news-improvement-a-f8-j1b-app-visibility-offline-design-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: ニュース改善API最適化のちゃ
 - completion_code: L8
-- recommended_model: Sonnet5（高）
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F8.md
 - current_report_path: .agent_v2/tasks/F8.md#report
-- dependencies: G8 J0 accepted; old G8 J1-a unstarted/cancelled
-- blocker: none for source; PR164 merge/deploy remain on hold pending separate approval and updated integration review
-- slot_use: ニュース改善A専任（ユーザー明示割当）
+- dependencies: prior L8 accepted, archived SHA256/read-back; F8/F9 distinct boundaries
+- blocker: none for offline source-only, production/merge/paid API NO_GO
+- slot_use: ニュース改善A専任。J1-bアプリ掲載判定のread-only解析・合成fixture・設計のみ。DB/migration/RPC本体は別承認。F9/API最適化Bの対象を変更しない。
 
 ## F9
 - slot: F9
-- status: done
-- task_id: api-optimization-b-f9-rights-safe-provider-compare-pr-readiness-20261013
+- status: ready
+- task_id: api-optimization-b-f9-pr174-pr115-rights-audit-offline-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: ニュース改善API最適化のちゃ
 - completion_code: L9
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F9.md
 - current_report_path: .agent_v2/tasks/F9.md#report
-- dependencies: old G9 R3 K9 done; clean branch c476ef8a
-- blocker: source complete; PR174 remains Draft RELEASE_HOLD. Legacy PR115 rights/history and main fixture overlaps unresolved.
-- slot_use: API最適化B専任（ユーザー明示）
+- dependencies: prior L9 accepted, archived SHA256/read-back; F8/F9 distinct boundaries
+- blocker: none for offline source-only, production/merge/paid API NO_GO
+- slot_use: API最適化B専任。PR174/旧PR115権利・履歴リスクと送信gate/価格のoffline監査。F8ニュース関連を変更しない。
 
 ## F10
 - slot: F10
