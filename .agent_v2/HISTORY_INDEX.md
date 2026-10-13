@@ -400,3 +400,5 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 - 2026-10-13 | F9 | `api-optimization-b-f9-pr174-pr115-rights-audit-offline-20261013` | L9 source acceptance, completed | `.agent_v2/archive/2026-10-13-f9-api-optimization-b-f9-pr174-pr115-rights-audit-offline-20261013/files/.agent_v2/tasks/F9.md` | SHA256 `2b3c363d75e8162e60910b0e80688fd513f4178fb618ce0a11b4b3b619f099bc`; restore verified.
 
 | 2026-10-13 | F2 | `kabumori-f2-shared-market-report-x-app-consumer-cutover-20261013` | X/app consumer cutover preflight | L2 PASS_READONLY_PREFLIGHT / CUTOVER_PLAN_READY / PRODUCTION_NO_GO | #179 | `.agent_v2/archive/2026-10-13-F2-kabumori-f2-shared-market-report-x-app-consumer-cutover-20261013/` | SHA256 e7ec085b1553841dd420ba765bc25124ccfda47aeb2aea6abaf77a8fa8c00c42, restore read-back verified |
+
+| 2026-10-13 | F6 | `common-ai-f6-opus-both-integration-release-gate-20261013` | Opus Primary merged/deployed, 10/13 close live success (Opus, 2 calls, $0.187508), F6 L6 done | `.agent_v2/archive/2026-10-13-f6-opus-primary-live-cutover.md` | source Git blob `ba33d1804fa9bc16ac90be1f06f23a41f33bf5d3` archive readback identical |
