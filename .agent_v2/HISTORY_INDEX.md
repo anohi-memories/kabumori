@@ -75,6 +75,8 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 
 | 2026-10-13 | F4 | `postona-f4-threads-disconnect-lease-safe-v1-20261012` | POSTONA Threads個別解除・lease安全化 | PASS_SOURCE_IMPLEMENTATION / PRODUCTION_NO_GO | #167 | `02fd1989303879979b137f8338f8bc6944f266b1` | `.agent_v2/archive/2026-10-13-F4-postona-f4-threads-disconnect-lease-safe-v1-20261012/files/.agent_v2/tasks/F4.md` | 同 archive TASK の `## Report` remaining_issues |
 
+| 2026-10-13 | F5 | `common-account-f5-phase5-app-auth-entitlement-integration-20261012` | 共通ID・POSTONA利用登録・ワークスペース権限 Phase5 | PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO | #165 | `4638891f6c7ff432e08d462019594e1ec3d66f07` | `.agent_v2/archive/2026-10-13-F5-common-account-f5-phase5-app-auth-entitlement-integration-20261012/files/.agent_v2/tasks/F5.md` | 同archive TASKの `## Report` |
+
 ## 旧系統（G1〜G10 / H1〜H5）の完了・履歴作業
 
 ### 日付不明
@@ -406,3 +408,8 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 - source_commit: `103aaae104a146182b52554a5baa98e6d33529da`。F2/J1新TASKを保護し、30枠を再照合（ready2、完了返却待ち0）。
 - archive_path: `.agent_v2/archive/2026-10-13-main-advance-103aaae1/`。最新mainのCURRENT_STATE原文を保存・1/1実復元、全新旧snapshotバイト保持。
 - 先行mainのHISTORY_INDEX全文をprefixとして保持し、PR172の既存索引追加と今回の検索索引をその後へ合流。mainのF2 archive entryも保持。正式移行はF2/J1完結待ち。
+
+
+## 2026-10-13 — F5 Phase6新規割当の追加確認
+
+- source_commit: `7adbd97d9981fddfb6d542e0ca7f776ad645e53c`、archive_path: `.agent_v2/archive/2026-10-13-main-advance-7adbd97d/`。30枠再照合、F2/F5/J1 ready、完了返却待ち0。最新mainのCURRENT_STATE原本を1/1実復元。最新main索引prefixと全既存archiveを保持。正式切替は3TASK完結待ち。

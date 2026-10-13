@@ -1,0 +1,14 @@
+{
+  "source_commit": "7adbd97d9981fddfb6d542e0ca7f776ad645e53c",
+  "snapshot_kind": "new F5 allocation evidence; not cutover approval",
+  "files": [
+    {
+      "original_path": ".agent_v2/CURRENT_STATE.md",
+      "archive_path": ".agent_v2/archive/2026-10-13-main-advance-7adbd97d/before/.agent_v2/CURRENT_STATE.md",
+      "size": 17400,
+      "sha256": "4b0960f126152f46fa8c320a8c1040d6da6d64da763ef16d7159baea4963e9c8",
+      "source_commit": "7adbd97d9981fddfb6d542e0ca7f776ad645e53c",
+      "git_blob": "d48d76daa515018bfd5fa2709c7e3cbb25d3cde8"
+    }
+  ]
+}

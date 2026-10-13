@@ -1,12 +1,12 @@
 # Current State v2（新系統・現在有効な情報だけ）
 
-- 更新: 2026-10-13 JST。最終比較main `103aaae104a146182b52554a5baa98e6d33529da`（作業中の新割当を保持）。PR #172上の整理候補であり、main反映・正式移行は未実施。
+- 更新: 2026-10-13 JST。最終比較main `7adbd97d9981fddfb6d542e0ca7f776ad645e53c`（作業中の新割当を保持）。PR #172上の整理候補であり、main反映・正式移行は未実施。
 - 各TASK先頭・ACTIVE_TASKが現在の割当の正本。旧CURRENT_STATEの過去ready記述や実装Reportの返却時statusで、done枠を再開しない。履歴はHISTORY_INDEXとarchiveから参照する。
 
 ## 移行の状態・30枠
 
 - PR #155 merge `4e80c79dc42c11fbc1ca105665514b0dd32842d3`により新系統は有効。旧G/Hで始めたTASKは旧系統で完結し、新規TASKからF/Jへ移す。単独Fは引き続き30枠統括。
-- 最新TASK先頭とACTIVEのtask_id/status/owner/next_owner/return_toを照合。旧G1〜G10/H1〜H5は全done/next_owner:none、新F1/F3〜F6/F8はdone/none、F2はready/next_owner:claude、J1はready/next_owner:codex、F7/F9/F10/J2〜J5はidle/task_id:none。現TASKの二重task_idなし。継続TASKはF2/J1の2件、最新ヘッダー上のreview_required/完了返却待ちは0。正式移行はこの2件の完結待ち。未割当return_toの注釈差はnoneとして一致。今回は他slotの完了判定・割当を変更していない。
+- 最新TASK先頭とACTIVEのtask_id/status/owner/next_owner/return_toを照合。旧G1〜G10/H1〜H5は全done/next_owner:none、新F1/F3/F4/F6/F8はdone/none、F2/F5はready/next_owner:claude、J1はready/next_owner:codex、F7/F9/F10/J2〜J5はidle/task_id:none。現TASKの二重task_idなし。継続TASKはF2/F5/J1の3件、最新ヘッダー上のreview_required/完了返却待ちは0。正式移行はこの3件の完結待ち。未割当return_toの注釈差はnoneとして一致。今回は他slotの完了判定・割当を変更していない。
 - 製品の独立Security review・production HOLDは残っている。実装Reportに残るreview_requiredは返却当時の記録であり、TASK先頭/ACTIVEのdoneを再割当する根拠にしない。
 - 初回snapshot `archive/2026-10-12-initial-migration/`と最終候補 `archive/2026-10-13-final-migration-preflight-b7ce2c4f/`を保持。前回最終候補のSHA256 64/64を今回再照合。PR #172が未マージのため、main上の保存済みとは扱わない。
 - PR #172元HEAD `8e65a71e3dc7b144ec511fa853ffe08e522dc827`を保全ブランチ `backup/pr172-pre-conflict-prep-8e65a71-20261013`に固定し、GitHub read-back一致。変更前の本書と移行TASKを新しいappend-only archiveへ保存・2/2実復元検証。
@@ -17,7 +17,7 @@
 - open PR46件（#172含む）の全変更ファイルを確認。#172以外で管理基盤を変えるのは#10/#11/#161。3件のHEADは保存済みsnapshotと同一。旧管理11パスの差分は現行管理へ戻さず、保存済み原文・patchを履歴として参照する。PR本体・branch・stateは変更していないため、旧差分のmerge経路は未解消。
 - #10の2026-09監査文書はarchiveで保持し、現在のリリース判断に昇格しない。#11のcaller認証課題は今回解決確認していない。#161はmainのC5受入done/noneを優先し、正式実装Reportは保存済み原文で参照する。source PR159と本番審査は別。
 - 134登録worktree/checkoutの境界をread-onlyで確認。旧 `/Users/yuya/Developer/kabumori`に旧管理7ファイルと共有HANDOFF.mdの未コミット変更がある。触らず保持し、正式切替前に担当者が扱いを確定する。登録だけ残る不在worktree1件もあり、pruneせず稼働/保全状態の確認を残す。今回専用worktreeとその他の存在するcheckoutには、開始時に今回のv2変更対象の未コミット変更なし。
-- 旧CURRENT_STATEには過去ready記述が残る。F2の旧診断TASKはmainでarchive済み、新TASK/ACTIVEはreadyで一致。新割当をこの整理で上書きしない。main前進前の30枠証拠は歴史的観測として保持し、最新照合は `archive/2026-10-13-main-advance-103aaae1/SLOT_METADATA.json` を参照する。
+- 旧CURRENT_STATEには過去ready記述が残る。F2の旧診断TASKはmainでarchive済み、新TASK/ACTIVEはreadyで一致。新割当をこの整理で上書きしない。main前進前の30枠証拠は歴史的観測として保持し、最新照合は `archive/2026-10-13-main-advance-7adbd97d/SLOT_METADATA.json` を参照する。
 
 ## かぶモリアプリ・F1/F2
 
@@ -37,8 +37,9 @@
 
 ## 共通アカウント・F5
 
-- F5 `common-account-f5-phase5-app-auth-entitlement-integration-20261012`はdone/none。Draft PR165 HEAD `4638891f6c7ff432e08d462019594e1ec3d66f07`、依存PR121/152も未マージ。旧G5の修正は旧系統で完結。
-- G5-owned backend契約・本人共通ID/service entitlementのsource候補。G1/G2/F1アプリUI/Auth、G3/F3/G4/F4 POSTONA/Threads、H5 transportの接続は所有者ごとの新TASK・独立worktreeで扱う。managed Auth/DBの証明、権限・SQL・lifecycle統合レビュー、production gateは残る。
+- F5の現TASKは `common-account-f5-phase6-postona-provider-cleanup-service-deletion-20261013`、ready/claude、推薦Opus5.5（高）、F5→L5、返却先共通アカウントG5のちゃ（新F5担当）。以前のPhase5 TASK/ReportはmainでMANIFEST/SHA256付きarchiveへ保存済み。
+- F5はadapter登録/EXECUTE候補、service_deletion lease/fencing、local_removed_remote_unverifiedの同意方針、F4/F3への正確な契約をsourceとして担当。Draft PR165を親候補とし、G5 PR121/152、F4 PR167/169、H5 PR159を保護する。F3/F4のsource/TASKを変更・再割当しない。
+- F1/F3/F4への実契約接続・managed Auth/DBの証明・統合Security review・production gateは残る。POSTONA統合レビューは未割当であり、既にAI B0を担当するJ1との二重割当を避け、割当前に空き/競合を確認する。遠隔認可の失効は証拠なしに成功扱いしない。
 
 ## 共通AI基盤・F6
 
@@ -54,5 +55,5 @@
 ## production安全・次工程
 
 - production DB/Auth/RLS/migration/RPC/Edge/secrets/Cron/workflow/実投稿/有料API/EAS/deployはTASKの明示承認と安全ゲートが必要。共通アカウント優先は変更境界が競合する場合のみ。production mutation windowは実write直前に開きread-back後に閉じる。秘密情報は表示・記録・commitしない。
-- F2/J1の継続TASKは担当先で完結させる。次は3PRの旧管理差分を含むmerge経路の除外/close/supersedeの担当判断、旧checkout未コミット変更と不在登録worktreeの確認、fresh mainと全30枠再確認。今回は他PRの整理操作をしていない。
+- F2/F5/J1の継続TASKは担当先で完結させる。次は3PRの旧管理差分を含むmerge経路の除外/close/supersedeの担当判断、旧checkout未コミット変更と不在登録worktreeの確認、fresh mainと全30枠再確認。今回は他PRの整理操作をしていない。
 - 正式昇格には切替時の追加snapshot、F/J現TASK/Reportの保存、実装slotの明示割当とreturn_to/completion_code、独立Sol（高）レビューが必要。推薦実装Opus5.5（高）。その後もmain merge・本番変更は別判断。現在の開始/完了コードは継続する。

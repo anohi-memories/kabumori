@@ -2,7 +2,7 @@
 
 - task_id: agent-full-migration-final-snapshot-cutover-20261013（専用制御TASKの今回Report。新たなslot割当ではない）
 - source_main_initial: b7ce2c4fd94225542a66aef94042ca528cc47f09
-- source_main_final: 103aaae104a146182b52554a5baa98e6d33529da
+- source_main_final: 7adbd97d9981fddfb6d542e0ca7f776ad645e53c
 - protected_pr172_head: 8e65a71e3dc7b144ec511fa853ffe08e522dc827
 - protected_branch: backup/pr172-pre-conflict-prep-8e65a71-20261013（GitHub ref read-back一致）
 - return_to: こでくろ連携部屋のちゃ
@@ -11,7 +11,14 @@
 - recommended_review_model: Sol（高）（正式切替前、実装者と独立）
 - result: RECONCILIATION_DOCUMENTED / CURRENT_STATE_CORRECTED / CUTOVER_BLOCKED
 
-## 最終fresh main再確認 — F2/J1新規TASKを保持
+## 最終7adbd97d再確認 — F5新規TASKも保持
+
+- mainがさらに前進しF5 Phase6 cleanup/service_deletion TASKがreadyになった。最新30枠TASK先頭/ACTIVEを再照合し、F2/F5/J1 ready、F1/F3/F4/F6/F8 done、F7/F9/F10/J2–J5 idle、旧15枠done、完了返却待ち0、task_id重複0を確認。正式移行は継続3TASKの完結待ち。
+- F5 TASKとACTIVE、Phase5 archive/MANIFEST/SHA256、最新CURRENT_STATEのPhase6契約・本番NO_GOを保持。J1はAI設計レビューreadyのため、F5で将来予定されたPOSTONA統合レビューへ二重割当しない。推薦実装Opus5.5（高）、独立レビューSol（高）。
+- 最新mainをcandidate branchへ取り込む際のCURRENT_STATE文書競合を解消。mainへのマージはしていない。最新mainの全slot TASK/Report/ACTIVEと製品sourceはバイト不変、索引はlatest main prefixを保持し全PR172検索追加を合流。
+- `archive/2026-10-13-main-advance-7adbd97d/`に最新30枠証拠、最新main CURRENT_STATE原本の1/1実復元を追加保存。旧64/64、初回13/13、103aaae1追加8/8のhashは保持し再検証する。正式昇格・独立レビュー・main merge・productionは未実施。
+
+## 103aaae1時点の追加観測 — F2/J1新規TASKを保持（現在は下記7adbd97d優先）
 
 反映直前にmainが9commit前進し、F2の朝刊/大引けOpus handler接続TASKとJ1のAI B0独立設計レビューTASKが新規登録された。旧TASKをdone扱いした初回観測は過去の証拠としてarchiveに保持し、最終CURRENT_STATEを最新mainに合わせた。
 
@@ -57,7 +64,7 @@
 
 ## 正式切替の未解決条件
 
-1. 最終mainでreadyのF2/J1を対応L2/V1で完結させてから切替判定する。#10/#11/#161の旧管理差分を含むmerge経路の除外、close/supersedeの担当判断が未実施。#11の認証課題の解決確認は別。
+1. 最終mainでreadyのF2/F5/J1を対応L2/L5/V1で完結させてから切替判定する。#10/#11/#161の旧管理差分を含むmerge経路の除外、close/supersedeの担当判断が未実施。#11の認証課題の解決確認は別。
 2. 旧checkout未コミット変更の保存/扱いと不在登録worktreeの確認、他slotの継続作業・新規TASKを切替直前に再確認。
 3. 最新main/新旧CURRENT_STATE/全30枠/Report受入/新規PRを再照合し、古いblocker記述と現状を区別する。
 4. 切替時に旧基盤・共有文書・現F/J TASK/Reportを追加snapshotしSHA256/実復元/検索索引を検証する。今回の保存候補は切替承認ではない。

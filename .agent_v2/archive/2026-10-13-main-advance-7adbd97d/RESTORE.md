@@ -1,0 +1,1 @@
+Use MANIFEST.json to restore before/.agent_v2/CURRENT_STATE.md into an empty directory. Verify size/SHA256/Git blob against source main 7adbd97d9981fddfb6d542e0ca7f776ad645e53c. Actual restoration 1/1 PASS in RESTORE_RESULT.json. SLOT_METADATA.json records F2/F5/J1 ready. Previous snapshots remain byte-identical. This is not cutover approval.
