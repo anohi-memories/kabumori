@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { bearer, deferred, deleteBody, signIn, world, type World } from './fake_lifecycle.ts';
+import { bearer, deleteBody, signIn, world, type World } from './fake_lifecycle.ts';
 import { handleDeleteCommonAccount, LEASE_SECONDS, type LifecycleResponse } from './lifecycle_logic.ts';
 import type { ProviderCleanupAdapter, ProviderOutcome } from './provider_cleanup.ts';
 
@@ -33,12 +33,12 @@ test('no provider adapter registered: the flow is the one without a provider ste
   assert.ok(!w.effects.some((e) => e.startsWith('provider:')));
 });
 
-test('a confirmed provider is cleaned after the X saga and before POSTONA and Kabumori end; success is unchanged', async () => {
+test('a confirmed provider is cleaned before the X saga, and POSTONA and Kabumori end after it; success carries the answers', async () => {
   const w = world({ x: 'active' });
   w.deps.providers = [threads(w, () => 'confirmed_remote_revoked')];
   const response = await remove(w);
   assert.deepEqual(response.body, { ok: true, outcome: 'deleted', providers: { threads: 'confirmed_remote_revoked', x: 'done' } });
-  const order = ['x:run', 'provider:threads:has', 'provider:threads:cleanup', 'rpc:finish_owned_service', 'rpc:withdraw_kabumori', 'auth:delete'].map((e) => at(w, e));
+  const order = ['provider:threads:has', 'provider:threads:cleanup', 'x:run', 'rpc:finish_owned_service', 'rpc:withdraw_kabumori', 'auth:delete'].map((e) => at(w, e));
   assert.ok(order.every((index) => index >= 0), `all steps ran: ${order}`);
   assert.deepEqual([...order].sort((a, b) => a - b), order, 'in the canonical order');
 });
@@ -118,19 +118,18 @@ test('an unreadable presence is reconciliation (it is not assumed absent)', asyn
 });
 
 test('an owner that lost its lease never calls a provider adapter and never reports success', async () => {
-  const arrived = deferred();
-  const go = deferred();
-  let paused = false;
-  const w = world({ x: 'active', hooks: { x: async () => { if (!paused) { paused = true; arrived.resolve(); await go.promise; } } } });
+  const w = world({ x: 'active' });
   w.deps.providers = [threads(w, () => 'confirmed_remote_revoked')];
-  const first = remove(w);
-  await arrived.promise; // the owner hangs inside the X saga (a crash, from everyone else's view)
-  w.state.clock += LEASE_SECONDS + 1;
-  go.resolve();
-  const stale = await first;
+  // The lease ends right after POSTONA's service deletion began (a crash, from everyone else's view).
+  const begin = w.answers.begin_service_deletion;
+  w.answers.begin_service_deletion = (args) => {
+    const answer = begin(args);
+    w.state.clock += LEASE_SECONDS + 1;
+    return answer;
+  };
+  const stale = await remove(w);
   assert.equal(error(stale), 'DELETION_IN_PROGRESS');
-  assert.ok(!w.effects.includes('provider:threads:cleanup') && !w.effects.includes('provider:threads:has'),
-    'the provider was not touched at all by a stale owner (not even read)');
+  assert.ok(!w.effects.includes('provider:threads:cleanup') && !w.effects.includes('provider:threads:has'), 'no adapter was touched');
   assert.equal(w.state.calls.delete, 0);
 });
 

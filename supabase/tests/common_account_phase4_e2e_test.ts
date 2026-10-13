@@ -148,7 +148,7 @@ test('E2E: with the gate opened (test-only DDL) the whole person is deleted in t
   const deps = depsFor(user, events, { providers: [provider] });
   const response = await remove(user, deps);
   assert.deepEqual(response.body, { ok: true, outcome: 'deleted', providers: { threads: 'confirmed_remote_revoked', x: 'done' } });
-  const order = ['rpc:begin_account_deletion', 'rpc:claim', 'rpc:claim_service', 'x:saga', 'provider:cleanup', 'rpc:finish_owned_service', 'rpc:withdraw_kabumori',
+  const order = ['rpc:begin_account_deletion', 'rpc:claim', 'rpc:claim_service', 'provider:cleanup', 'x:saga', 'rpc:finish_owned_service', 'rpc:withdraw_kabumori',
     'auth:logout', 'storage:remove', 'rpc:owned_prepare', 'rpc:begin_external_step', 'auth:delete', 'rpc:complete'].map((e) => events.indexOf(e));
   assert.ok(order.every((index) => index >= 0), `every step ran: ${order}`);
   assert.deepEqual([...order].sort((a, b) => a - b), order, 'in the canonical order');

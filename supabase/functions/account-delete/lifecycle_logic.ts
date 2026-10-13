@@ -256,9 +256,11 @@ async function xPreview(deps: LifecycleDeps, token: string) {
 // POSTONA step. Order, with the reason for each:
 //   begin (entitlement `deleting`: new connections and writes are refused by the guards) -> claim the service
 //   deletion's own lease -> snapshot of what is connected -> a connected provider without an adapter stops
-//   here -> the person's acknowledgement is recorded BEFORE any removal that cannot be revoked remotely -> X
-//   through its saga -> the other providers through their adapters -> every answer recorded durably -> the
-//   owner ends the entitlement (database: owner, settled answers, acknowledgement, footprint read-back).
+//   here -> the person's acknowledgement is recorded BEFORE any removal that cannot be revoked remotely -> the
+//   other providers through their adapters (the X saga takes every social account of the workspace for X
+//   material and would send a Threads account to an operator, so they go first) -> X through its saga ->
+//   every answer recorded durably -> the owner ends the entitlement (database: owner, settled answers,
+//   acknowledgement, footprint read-back).
 // A lease lost anywhere stops with nothing recorded after the loss and nothing ended. Never a fabricated
 // cancellation: `done` is the X saga's own word, and Threads is never reported as revoked remotely.
 
@@ -386,24 +388,7 @@ async function endPostona(args: {
       if (ack?.status !== 'recorded') return refuse(fail(500, 'FAILED'));
     }
 
-    // X first, through its own saga (typed outcome; its code is not ours to change).
-    if (!(await owned())) return { ok: false, response: args.lost() };
-    let outcome: XCleanupOutcome = 'failed';
-    try {
-      outcome = await deps.x.run(token);
-    } catch {
-      outcome = 'failed';
-    }
-    // The saga removed the login itself (it must not in social_only): nothing can be verified any more.
-    if (outcome === 'login_deleted') return { ok: false, response: fail(500, 'DELETION_VERIFICATION_PENDING') };
-    const xRecorded = await record('x', outcome === 'done' ? 'done' : outcome === 'blocked' ? 'blocked' : 'reconciliation_required');
-    if (!xRecorded) return { ok: false, response: args.lost() };
-    if (outcome === 'scope_refused') return refuse(fail(409, 'X_CLEANUP_UNSUPPORTED'));
-    if (outcome === 'in_progress') return refuse(fail(409, 'X_CLEANUP_IN_PROGRESS'));
-    if (outcome === 'blocked') return refuse(fail(409, 'X_CLEANUP_BLOCKED'));
-    if (outcome !== 'done') return refuse(fail(502, 'X_CLEANUP_FAILED'));
-
-    // The other providers, each through its owner's adapter; ownership is asked at every boundary inside.
+    // The other providers first, each through its owner's adapter; ownership is asked at every boundary inside.
     if ((deps.providers ?? []).length > 0) {
       if (!(await owned())) return { ok: false, response: args.lost() };
       const report = await runProviderCleanups(deps.providers ?? [], userId, { stillOwned: owned });
@@ -425,6 +410,25 @@ async function endPostona(args: {
         if (ack?.status !== 'recorded') return refuse(fail(500, 'FAILED'));
       }
     }
+
+    // X second, through its own saga (typed outcome; its code is not ours to change). The saga treats every
+    // social account of the workspace as X material and sends a non-X account to an operator, so the other
+    // providers are removed first; and nothing is removed before the read-only checks above have passed.
+    if (!(await owned())) return { ok: false, response: args.lost() };
+    let outcome: XCleanupOutcome = 'failed';
+    try {
+      outcome = await deps.x.run(token);
+    } catch {
+      outcome = 'failed';
+    }
+    // The saga removed the login itself (it must not in social_only): nothing can be verified any more.
+    if (outcome === 'login_deleted') return { ok: false, response: fail(500, 'DELETION_VERIFICATION_PENDING') };
+    const xRecorded = await record('x', outcome === 'done' ? 'done' : outcome === 'blocked' ? 'blocked' : 'reconciliation_required');
+    if (!xRecorded) return { ok: false, response: args.lost() };
+    if (outcome === 'scope_refused') return refuse(fail(409, 'X_CLEANUP_UNSUPPORTED'));
+    if (outcome === 'in_progress') return refuse(fail(409, 'X_CLEANUP_IN_PROGRESS'));
+    if (outcome === 'blocked') return refuse(fail(409, 'X_CLEANUP_BLOCKED'));
+    if (outcome !== 'done') return refuse(fail(502, 'X_CLEANUP_FAILED'));
 
     // The end: the database checks, in the transaction of the end itself, that this is still the owner (its lease,
     // on the wall clock, after its locks), that every answer is settled and acknowledged, and reads the footprint
@@ -556,6 +560,8 @@ export async function handleWithdrawPostona(input: { authorization: string | nul
   // The X saga keeps the login only in scope social_only; a person whose login it would remove is refused.
   const preview = await xPreview(deps, token);
   if (preview?.scope !== 'social_only') return fail(409, 'X_CLEANUP_UNSUPPORTED');
+  // A saga that already waits for an operator cannot finish: refused before another provider is touched.
+  if (preview.state === 'operator_required') return fail(409, 'X_CLEANUP_BLOCKED');
   // Read-only checks first: nothing changes when a connected provider cannot be cleaned or is unacknowledged.
   const snapshot = await providerSnapshot(deps, user.id);
   if (!snapshot) return fail(500, 'FAILED');
@@ -651,6 +657,7 @@ export async function handleDeleteCommonAccount(input: { authorization: string |
     // never remove the login itself: that is the managed delete at the end of this flow.
     const preview = await xPreview(deps, token);
     if (preview?.scope !== 'social_only') return fail(409, 'X_CLEANUP_UNSUPPORTED');
+    if (preview.state === 'operator_required') return fail(409, 'X_CLEANUP_BLOCKED');
   }
   // Connected providers: an adapter for each, and the person's acknowledgement where the remote grant cannot be
   // revoked -- decided now, before anything changes (the same check runs again under the lease).

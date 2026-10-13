@@ -63,7 +63,7 @@ test('POSTONA alone: X and Threads, the acknowledgement on the record BEFORE the
   assert.equal(w.state.account, 'active');
   assert.equal(w.state.login, true);
   assert.equal(w.state.profile, true);
-  const order = ['rpc:begin_service_deletion', 'rpc:claim_service', 'x:run', 'provider:threads:has', 'rpc:finish_owned_service', 'rpc:release_service']
+  const order = ['rpc:begin_service_deletion', 'rpc:claim_service', 'provider:threads:has', 'x:run', 'rpc:finish_owned_service', 'rpc:release_service']
     .map((e) => w.effects.indexOf(e));
   assert.deepEqual([...order].sort((a, b) => a - b), order, 'in the owned order');
   assert.ok(order.every((index) => index >= 0));

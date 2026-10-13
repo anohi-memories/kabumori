@@ -183,6 +183,36 @@ select pg_temp.expect(pg_temp.status_of(:'a_u', 'x_autopost') = 'ended', 'C16: t
 select pg_temp.expect((select status = 'completed' and owner_lease is null and provider_results ->> 'threads' = 'local_removed_remote_unverified' from private.account_lifecycle_operations where id = :'a_op'),
                       'C17: completed, lease cleared, the provider facts kept');
 
+-- C-crash. The removal committed but its answer was never recorded (a crash in between): the retry can only say
+-- "not connected" for a provider the person acknowledged. The remote grant is still reported as unverified.
+select pg_temp.person(51) as u \gset cc_
+select pg_temp.account(:'cc_u', 'threads');
+select pg_temp.begin_service(:'cc_u') as op \gset cc_
+select pg_temp.claim(:'cc_u', :'cc_op') ->> 'lease' as lease \gset cc_
+select pg_temp.svc(format('select public.acknowledge_owned_remote_unverified(%L::uuid, ''x_autopost'', %L::uuid, %L::uuid, array[''threads''])', :'cc_u', :'cc_op', :'cc_lease'));
+select pg_temp.rec(:'cc_u', :'cc_op', :'cc_lease', 'x', 'done');
+select pg_temp.rec(:'cc_u', :'cc_op', :'cc_lease', 'threads', 'not_connected');
+delete from public.social_accounts where brand_id = public.social_mobile_account_deletion_workspace(:'cc_u');
+delete from public.brand_memberships where brand_id = public.social_mobile_account_deletion_workspace(:'cc_u');
+delete from public.brands where id = public.social_mobile_account_deletion_workspace(:'cc_u');
+select pg_temp.finish(:'cc_u', :'cc_op', :'cc_lease') as f \gset cc_
+select pg_temp.expect(:'cc_f'::jsonb ->> 'status' = 'ended' and :'cc_f'::jsonb -> 'remote_unverified' = '["threads"]'::jsonb
+                      and :'cc_f'::jsonb -> 'provider_results' ->> 'threads' = 'not_connected',
+                      'C-crash1: an acknowledged provider that only says "not connected" is still reported as remote-unverified');
+-- the same without an acknowledgement is nothing to report (it was never connected as far as this record knows)
+select pg_temp.person(52) as u \gset cd_
+select pg_temp.account(:'cd_u', 'threads');
+select pg_temp.begin_service(:'cd_u') as op \gset cd_
+select pg_temp.claim(:'cd_u', :'cd_op') ->> 'lease' as lease \gset cd_
+select pg_temp.rec(:'cd_u', :'cd_op', :'cd_lease', 'x', 'done');
+select pg_temp.rec(:'cd_u', :'cd_op', :'cd_lease', 'threads', 'not_connected');
+delete from public.social_accounts where brand_id = public.social_mobile_account_deletion_workspace(:'cd_u');
+delete from public.brand_memberships where brand_id = public.social_mobile_account_deletion_workspace(:'cd_u');
+delete from public.brands where id = public.social_mobile_account_deletion_workspace(:'cd_u');
+select pg_temp.finish(:'cd_u', :'cd_op', :'cd_lease') as f \gset cd_
+select pg_temp.expect(:'cd_f'::jsonb ->> 'status' = 'ended' and :'cd_f'::jsonb -> 'remote_unverified' = '[]'::jsonb,
+                      'C-crash2: without an acknowledgement a "not connected" answer reports nothing');
+
 -- C-x. X is always accounted for: even if the record lost its `x` key, the end is refused.
 select pg_temp.person(50) as u \gset cx_
 select pg_temp.begin_service(:'cx_u') as op \gset cx_

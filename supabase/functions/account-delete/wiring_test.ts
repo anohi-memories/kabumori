@@ -77,11 +77,11 @@ test('the legacy direct delete is gone: no module deletes a login outside the li
   assert.ok(!/call\(deps, 'finish_service_deletion'/u.test(logic), 'the legacy finish (refused by the database for POSTONA) is not used');
   const end = logic.slice(logic.indexOf('async function endPostona'), logic.indexOf('// Preview (read-only)'));
   const at = (needle: string) => end.indexOf(needle);
-  assert.ok(at("call(deps, 'claim_service'") > 0 && at("call(deps, 'claim_service'") < at('deps.x.run(token)'), 'the service lease before X');
-  assert.ok(at("call(deps, 'acknowledge_unverified'") > 0 && at("call(deps, 'acknowledge_unverified'") < at('deps.x.run(token)'),
+  assert.ok(at("call(deps, 'claim_service'") > 0 && at("call(deps, 'claim_service'") < at('runProviderCleanups('), 'the service lease before anything is touched');
+  assert.ok(at("call(deps, 'acknowledge_unverified'") > 0 && at("call(deps, 'acknowledge_unverified'") < at('runProviderCleanups('),
     'the acknowledgement is recorded before any removal');
-  assert.ok(at('deps.x.run(token)') < at('runProviderCleanups(') && at('runProviderCleanups(') < at("call(deps, 'finish_owned_service'"),
-    'X, then the providers, then the owner ends it');
+  assert.ok(at('runProviderCleanups(') < at('deps.x.run(token)') && at('deps.x.run(token)') < at("call(deps, 'finish_owned_service'"),
+    'the providers, then X (the saga would send a non-X account to an operator), then the owner ends it');
   assert.ok(at("call(deps, 'record_provider_result'") > 0, 'every answer is recorded');
   const flow = logic.slice(logic.indexOf('async function ownedDeletion'));
   assert.ok(flow.indexOf('await endPostona(') > 0 && flow.indexOf('await endPostona(') < flow.indexOf("call(deps, 'withdraw_kabumori'"), 'POSTONA ends before Kabumori');

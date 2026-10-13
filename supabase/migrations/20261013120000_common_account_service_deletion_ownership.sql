@@ -29,8 +29,10 @@
 --      be revoked by this system is recorded (when, which providers) BEFORE the cleanup that makes it so.
 --   5. public.finish_owned_service_deletion: ends the entitlement only for the current owner, only when every
 --      recorded provider is settled (no `pending`, no `blocked`, no `reconciliation_required`), `x` is among
---      them, and every `local_removed_remote_unverified` is acknowledged; then the unchanged Phase 1 finish
---      (footprint read-back). abort_owned_service_deletion likewise.
+--      them, and every remote grant reported unverified is acknowledged (a provider that answered
+--      `local_removed_remote_unverified`, and a provider the person acknowledged whose only recorded answer is
+--      "not connected": the removal committed and its answer was lost in a crash); then the unchanged Phase 1
+--      finish (footprint read-back). abort_owned_service_deletion likewise.
 --   6. public.finish_service_deletion / abort_service_deletion REFUSE `x_autopost` (OWNED_FINISH_REQUIRED /
 --      OWNED_ABORT_REQUIRED): the only way to end or abort POSTONA is the owned path. Their Kabumori behavior is
 --      unchanged (the Phase 1 bodies moved verbatim into private functions; the replaced bodies are pinned by
@@ -436,8 +438,13 @@ begin
   if cardinality(v_unsettled) > 0 then
     return jsonb_build_object('status', 'not_ready', 'reason', 'PROVIDER_RESULTS_UNSETTLED', 'providers', to_jsonb(v_unsettled));
   end if;
+  -- What stays unverified at the remote: every provider that answered "local removed, remote unverified", and
+  -- every provider the person acknowledged for which only "not connected" is on record: the removal committed and
+  -- its answer was never recorded (a crash in between), so a retry could say nothing more. Never "revoked".
   select coalesce(array_agg(k order by k), '{}'::text[]) into v_unverified
-    from jsonb_each_text(v_operation.provider_results) r(k, v) where v = 'local_removed_remote_unverified';
+    from jsonb_each_text(v_operation.provider_results) r(k, v)
+   where v = 'local_removed_remote_unverified'
+      or (v = 'not_connected' and k = any (coalesce(v_operation.remote_unverified_ack_providers, '{}'::text[])));
   if cardinality(v_unverified) > 0
      and (v_operation.remote_unverified_ack_at is null
           or not (v_unverified <@ coalesce(v_operation.remote_unverified_ack_providers, '{}'::text[]))) then
