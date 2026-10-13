@@ -137,3 +137,29 @@ export function priceTierFor(spec: ModelSpec, promptTokens: number): PriceTier {
   }
   return selected;
 }
+
+// ---- Versioned model aliases (F6 M1, read 2026-10-13) ----------------------------------------------------------------
+// A caller or a model policy may name a model by a VERSIONED alias instead of its id. An alias never moves silently:
+// a newer model gets a new alias (for example anthropic.opus@2027-xx) and callers switch to it explicitly. There is no
+// "latest" alias on purpose. Checked against platform.claude.com/docs/en/about-claude/models/overview (2026-10-13):
+// the Claude API IDs below are dateless pinned snapshots; retirement is not sooner than 2027-09-22 (Opus 5.5),
+// 2027-09-28 (Sonnet 5.5) and 2027-10-07 (Haiku 5.5).
+
+const ALIASES: ReadonlyMap<string, string> = new Map([
+  ["anthropic.opus@2026-10", "claude-opus-5-5"],
+  ["anthropic.sonnet@2026-10", "claude-sonnet-5-5"],
+  ["anthropic.haiku@2026-10", "claude-haiku-5-5"],
+]);
+
+/** The catalog model id a versioned alias names, the id itself for a catalog model, or undefined. */
+export function resolveModelName(name: string): string | undefined {
+  if (typeof name !== "string") return undefined;
+  const aliased = ALIASES.get(name);
+  if (aliased !== undefined) return aliased;
+  return BY_ID.has(name) ? name : undefined;
+}
+
+/** Every versioned alias with the model it names (frozen copy). */
+export function listModelAliases(): ReadonlyArray<{ readonly alias: string; readonly model: string }> {
+  return Object.freeze([...ALIASES].map(([alias, model]) => Object.freeze({ alias, model })));
+}
