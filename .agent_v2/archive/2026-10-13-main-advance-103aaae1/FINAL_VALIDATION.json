@@ -1,0 +1,27 @@
+{
+  "result": "PASS",
+  "latest_main": "103aaae104a146182b52554a5baa98e6d33529da",
+  "preserved_archive_files": 131,
+  "fresh_slot_task_report_active_bytes_match": true,
+  "old_agent_and_product_source_diff_vs_main": 0,
+  "history_latest_main_prefix_preserved": true,
+  "resolved_doc_conflicts": [
+    "CURRENT_STATE.md",
+    "HISTORY_INDEX.md"
+  ],
+  "continuing_tasks": [
+    "F2",
+    "J1"
+  ],
+  "completion_return_pending": 0,
+  "existing_checksum_manifests_pass": {
+    "2026-10-13-F4-postona-f4-threads-disconnect-lease-safe-v1-20261012": 1,
+    "2026-10-13-conflict-reconciliation-8e65a71e": 13,
+    "2026-10-13-final-migration-preflight-b7ce2c4f": 64,
+    "2026-10-13-F1-kabumori-f1-ai-ask-v1-phase-a-ui-contract-20261012": 1,
+    "2026-10-12-initial-migration": 33
+  },
+  "new_main_original_restore": "1/1 PASS",
+  "formal_cutover": "BLOCKED",
+  "main_merge_and_production": "NOT_PERFORMED"
+}

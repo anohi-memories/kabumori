@@ -1,0 +1,8 @@
+{
+  "checkout": "/Users/yuya/Developer/kabumori",
+  "path": "HANDOFF.md",
+  "status": " M HANDOFF.md",
+  "action": "PRESERVED_UNCHANGED; root handoff update deferred due to another checkout's uncommitted change",
+  "dedicated_handoff": ".agent_v2/migrations/CONFLICT_RECONCILIATION_20261013.md",
+  "cutover_gate": "Owner must resolve preservation and handoff boundary before formal promotion"
+}

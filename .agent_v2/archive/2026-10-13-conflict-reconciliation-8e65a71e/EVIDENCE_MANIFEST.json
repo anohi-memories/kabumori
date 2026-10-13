@@ -1,0 +1,101 @@
+{
+  "files": [
+    {
+      "original_path": "FINAL_VALIDATION.json",
+      "archive_path": ".agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/FINAL_VALIDATION.json",
+      "size": 648,
+      "sha256": "b38f04c8a2ce3ac1f102cf401dbd7b6315ab69157674f3a71dcd9ede69fbc1d5",
+      "source_commit": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+      "compared_main": "b7ce2c4fd94225542a66aef94042ca528cc47f09"
+    },
+    {
+      "original_path": "HANDOFF_COLLISION.json",
+      "archive_path": ".agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/HANDOFF_COLLISION.json",
+      "size": 395,
+      "sha256": "9c9d1ff386910989ad4d424711beef344e56457f0bd08dc2d900a1d41b83ced9",
+      "source_commit": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+      "compared_main": "b7ce2c4fd94225542a66aef94042ca528cc47f09"
+    },
+    {
+      "original_path": "MANIFEST.json",
+      "archive_path": ".agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/MANIFEST.json",
+      "size": 1220,
+      "sha256": "22fdf40431ebc509e7e8a4a7daaf1632256e19e4f7009d00998a8fb6aadd831a",
+      "source_commit": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+      "compared_main": "b7ce2c4fd94225542a66aef94042ca528cc47f09"
+    },
+    {
+      "original_path": "MANIFEST.md",
+      "archive_path": ".agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/MANIFEST.md",
+      "size": 1313,
+      "sha256": "bf69d48eb6f4fbb34dec90494b44d92b84bb772577641f866034e2f558fdf429",
+      "source_commit": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+      "compared_main": "b7ce2c4fd94225542a66aef94042ca528cc47f09"
+    },
+    {
+      "original_path": "OPEN_PR_FILE_AUDIT.json",
+      "archive_path": ".agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/OPEN_PR_FILE_AUDIT.json",
+      "size": 143553,
+      "sha256": "81df352fa9c5f95f4d26cabefa67a42d9ed13253dee765d4da9a7c5f2b0f25b6",
+      "source_commit": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+      "compared_main": "b7ce2c4fd94225542a66aef94042ca528cc47f09"
+    },
+    {
+      "original_path": "PR_MANAGEMENT_DISPOSITION.json",
+      "archive_path": ".agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/PR_MANAGEMENT_DISPOSITION.json",
+      "size": 5415,
+      "sha256": "6274b24b5ff15ca6fc6ba0ca0732b206372e8b5c13dc8b2f01a38dc714094770",
+      "source_commit": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+      "compared_main": "b7ce2c4fd94225542a66aef94042ca528cc47f09"
+    },
+    {
+      "original_path": "RESTORE.md",
+      "archive_path": ".agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/RESTORE.md",
+      "size": 993,
+      "sha256": "4e8ff787c7bb033beeddf2a96b7bb1026911b52997e99ee9628f9c0ead635f4f",
+      "source_commit": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+      "compared_main": "b7ce2c4fd94225542a66aef94042ca528cc47f09"
+    },
+    {
+      "original_path": "RESTORE_RESULT.json",
+      "archive_path": ".agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/RESTORE_RESULT.json",
+      "size": 436,
+      "sha256": "af555d423882865438f174c75e420d176ab064e49f9f954e13dbc2507595ead1",
+      "source_commit": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+      "compared_main": "b7ce2c4fd94225542a66aef94042ca528cc47f09"
+    },
+    {
+      "original_path": "SLOT_METADATA.json",
+      "archive_path": ".agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/SLOT_METADATA.json",
+      "size": 73676,
+      "sha256": "153701f24f1be00be7e46dd181ef060d901f525933484b8e061b0a33c2214603",
+      "source_commit": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+      "compared_main": "b7ce2c4fd94225542a66aef94042ca528cc47f09"
+    },
+    {
+      "original_path": "WORKTREE_AUDIT.json",
+      "archive_path": ".agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/WORKTREE_AUDIT.json",
+      "size": 21509,
+      "sha256": "e29020dd07ecac2586490899f6db4ddd6e94431a3a135259c09874e7aee3737a",
+      "source_commit": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+      "compared_main": "b7ce2c4fd94225542a66aef94042ca528cc47f09"
+    },
+    {
+      "original_path": "before/.agent_v2/CURRENT_STATE.md",
+      "archive_path": ".agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/before/.agent_v2/CURRENT_STATE.md",
+      "size": 14389,
+      "sha256": "7935102d41865bec86699ad73b008ba031dab4528e062200185fdf289c2b9190",
+      "source_commit": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+      "compared_main": "b7ce2c4fd94225542a66aef94042ca528cc47f09"
+    },
+    {
+      "original_path": "before/.agent_v2/migrations/FULL_MIGRATION_20261013.md",
+      "archive_path": ".agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/before/.agent_v2/migrations/FULL_MIGRATION_20261013.md",
+      "size": 7764,
+      "sha256": "353f20e8b90af70cfa812fd9c2f303ebd38bdc48549b4a9e3ee9f8b2a9b51147",
+      "source_commit": "8e65a71e3dc7b144ec511fa853ffe08e522dc827",
+      "compared_main": "b7ce2c4fd94225542a66aef94042ca528cc47f09"
+    }
+  ],
+  "self_hash": "in SHA256SUMS"
+}

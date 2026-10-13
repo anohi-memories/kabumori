@@ -364,3 +364,52 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 ## 新系統の完了作業
 
 | 2026-10-13 | F2 | `kabumori-f2-pr143-live-mergeability-diagnosis-20261012` | PR143 mergeability diagnosis | done / L2 accepted | archived | `.agent_v2/archive/2026-10-13-f2-pr143-mergeability-diagnosis.md` | `b1f19982b27af3ea55afe20a78a7ce9927538452` (archive write commit) |
+
+
+## 2026-10-13 完全移行前の最終snapshot候補（切替未実施）
+
+- 元commit: `b7ce2c4fd94225542a66aef94042ca528cc47f09`。旧.agent全28ファイル＋共有5ファイル、SHA256・実復元・Git blob一致確認済み。PR #10/#11/#161の旧管理差分もbase/head・patchで保護、実patch復元PASS。
+- MANIFEST: `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/MANIFEST.json`、検証結果: `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/RESTORE_RESULT.json`、30枠と競合: `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/evidence/PREFLIGHT.json`。
+- 正式昇格は未実施。既存の検索索引・archiveは維持。切替前にfresh mainと新規TASKを再確認し、変化があれば追加snapshotが必要。
+
+| slot | latest task_id at source commit | status | preserved task path |
+| --- | --- | --- | --- |
+| H1 | `postona-h1-threads-oauth-edge-offline-implementation-20261011` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK.md` |
+| H2 | `kabumori-pr149-broadcast-fanout-push-security-review-h2-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_2.md` |
+| H3 | `agent-v2-pr155-dual-slot-migration-review-h3-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_3.md` |
+| H4 | `common-account-g5-phase4-pr152-pr121-security-review-h4-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_4.md` |
+| H5 | `postona-h5-threads-auth-owner-runtime-final-wiring-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CODEX_TASK_5.md` |
+| G1 | `kabumori-g1-ai-ask-v1-phase-a-ui-contract-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_1.md` |
+| G2 | `kabumori-g2-pr143-live-mergeability-diagnosis-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK.md` |
+| G3 | `postona-g3-x-reservation-api-client-wiring-offline-v1-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_3.md` |
+| G4 | `postona-g4-threads-mobile-oauth-and-cleanup-wiring-v1-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_4.md` |
+| G5 | `common-account-g5-phase4-h4-c4-r1-r2-repair-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_5.md` |
+| G6 | `common-ai-provider-g6-f1-f2-timeout-tests-stability-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_6.md` |
+| G7 | `mic-stage1-formal-verification-design-finalization-g7-20261011` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_7.md` |
+| G8 | `news-improvement-a-jp-official-diagnostics-j1a-g8-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_8.md` |
+| G9 | `api-optimization-b-g9-r3-clean-history-provider-compare-replacement-20261011` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_9.md` |
+| G10 | `agent-v2-dual-slot-migration-20261012` | done | `.agent_v2/archive/2026-10-13-final-migration-preflight-b7ce2c4f/files/.agent/tasks/CLAUDE_TASK_10.md` |
+
+
+## 2026-10-13 — 完全移行準備の競合整理・変更前状態保存
+
+- task_id: agent-full-migration-final-snapshot-cutover-20261013（30枠外の制御TASK、slot未割当）
+- source_commit: 8e65a71e3dc7b144ec511fa853ffe08e522dc827; compared_main: b7ce2c4fd94225542a66aef94042ca528cc47f09
+- archive_path: `.agent_v2/archive/2026-10-13-conflict-reconciliation-8e65a71e/`
+- original_path: `.agent_v2/CURRENT_STATE.md`、`.agent_v2/migrations/FULL_MIGRATION_20261013.md`（変更前全文2ファイル）。
+- size/SHA256/Git blob/source commit: `MANIFEST.json`。空ディレクトリへの2/2実復元・元commitバイト一致: `RESTORE_RESULT.json`。今回全保存物: `EVIDENCE_MANIFEST.json`と`SHA256SUMS`。
+- 30枠最新metadata、全46open PRのファイル一覧、3PR/12パスのmain突合、134登録worktreeの境界は同archive内のJSON。前回snapshot SHA256 64/64再照合。
+- PR172保全branch: `backup/pr172-pre-conflict-prep-8e65a71-20261013`。3PRは未変更・未close、旧管理差分merge経路とローカル保全条件が残る。旧checkoutのHANDOFFも未コミットのためrootへの追記を避け、下記専用Reportを引継ぎ先とする。
+- 検索Report: `.agent_v2/migrations/CONFLICT_RECONCILIATION_20261013.md`。推薦実装Opus5.5（高）、独立レビューSol（高）。正式昇格・独立レビュー・main merge・productionは未実施。現在状態の正本ではなく履歴検索索引。
+
+
+## 2026-10-13 -- Fresh main allocation detected during reconciliation
+
+- source_commit: `103aaae104a146182b52554a5baa98e6d33529da`。F2/J1新TASKを保護し、30枠を再照合（ready2、完了返却待ち0）。
+- archive_path: `.agent_v2/archive/2026-10-13-main-advance-103aaae1/`。最新mainのCURRENT_STATE原文を保存・1/1実復元、全新旧snapshotバイト保持。
+- 先行mainのHISTORY_INDEX全文をprefixとして保持し、PR172の既存索引追加と今回の検索索引をその後へ合流。mainのF2 archive entryも保持。正式移行はF2/J1完結待ち。
+
+
+## 2026-10-13 — F5 Phase6新規割当の追加確認
+
+- source_commit: `7adbd97d9981fddfb6d542e0ca7f776ad645e53c`、archive_path: `.agent_v2/archive/2026-10-13-main-advance-7adbd97d/`。30枠再照合、F2/F5/J1 ready、完了返却待ち0。最新mainのCURRENT_STATE原本を1/1実復元。最新main索引prefixと全既存archiveを保持。正式切替は3TASK完結待ち。

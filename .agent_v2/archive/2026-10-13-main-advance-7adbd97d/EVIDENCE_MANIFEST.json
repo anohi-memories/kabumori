@@ -1,0 +1,36 @@
+{
+  "source_commit": "7adbd97d9981fddfb6d542e0ca7f776ad645e53c",
+  "files": [
+    {
+      "archive_path": ".agent_v2/archive/2026-10-13-main-advance-7adbd97d/FINAL_VALIDATION.json",
+      "size": 961,
+      "sha256": "5b207231dc4514ed9b16d48a908d0576608f51fa3adb165f826d6e6ff64d4cb7"
+    },
+    {
+      "archive_path": ".agent_v2/archive/2026-10-13-main-advance-7adbd97d/MANIFEST.json",
+      "size": 563,
+      "sha256": "e1ffe38e51f18366c302f18af0f4d9721926056a97ea5e8cf8e922673ce90731"
+    },
+    {
+      "archive_path": ".agent_v2/archive/2026-10-13-main-advance-7adbd97d/RESTORE.md",
+      "size": 345,
+      "sha256": "35961eea2e752863632ea0014ca39b359c6644ed4d528a6d240d6e4fd022220e"
+    },
+    {
+      "archive_path": ".agent_v2/archive/2026-10-13-main-advance-7adbd97d/RESTORE_RESULT.json",
+      "size": 259,
+      "sha256": "cf15810860036a4a1c2e15a28d1120c788b58705935986a6286d9ca7b4ab971a"
+    },
+    {
+      "archive_path": ".agent_v2/archive/2026-10-13-main-advance-7adbd97d/SLOT_METADATA.json",
+      "size": 62897,
+      "sha256": "67a6420dd8ebfe84b79a56f57450d430a728628f7c2388189a95a7a53c89428a"
+    },
+    {
+      "archive_path": ".agent_v2/archive/2026-10-13-main-advance-7adbd97d/before/.agent_v2/CURRENT_STATE.md",
+      "size": 17400,
+      "sha256": "4b0960f126152f46fa8c320a8c1040d6da6d64da763ef16d7159baea4963e9c8"
+    }
+  ],
+  "self_hash": "in SHA256SUMS"
+}

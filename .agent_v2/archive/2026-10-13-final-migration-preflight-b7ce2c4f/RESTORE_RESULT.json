@@ -1,0 +1,38 @@
+{
+  "source_commit": "b7ce2c4fd94225542a66aef94042ca528cc47f09",
+  "verified_at_jst": "2026-10-13T12:26:17+09:00",
+  "source_byte_comparison": "PASS",
+  "sha256_verified": 64,
+  "old_and_shared_restored": 33,
+  "restored_directory": "/var/folders/dk/1dph1f99373czx_x8kwjsxgc0000gn/T/kabumori-final-agent-restore-_47vlqrd",
+  "git_blob_comparison": "PASS",
+  "complete_path_set": "PASS",
+  "unmerged_pr_patch_restores": [
+    {
+      "pr": 10,
+      "head_sha": "04f966e2dcb243b86b145c1e141dc8a4244e6d58",
+      "merge_base_sha": "f4e1fe98b679d6a7e29c3c7d150ddad0312085b8",
+      "changed_files": 5,
+      "patch_restore": "PASS",
+      "restored_directory": "/var/folders/dk/1dph1f99373czx_x8kwjsxgc0000gn/T/kabumori-pr10-patch-restore-tumkokvv"
+    },
+    {
+      "pr": 11,
+      "head_sha": "6ef9f327c13f144b0f5525e7064880c98ca24081",
+      "merge_base_sha": "f6881db976670bcfac7a441a0defc8996e6340af",
+      "changed_files": 3,
+      "patch_restore": "PASS",
+      "restored_directory": "/var/folders/dk/1dph1f99373czx_x8kwjsxgc0000gn/T/kabumori-pr11-patch-restore-prrc3fi9"
+    },
+    {
+      "pr": 161,
+      "head_sha": "1ef3aaa43e72540f6f6ac5c2dd97820aaa3259d2",
+      "merge_base_sha": "b012da640a33518cee52c2927e4d3c21ff253bf7",
+      "changed_files": 4,
+      "patch_restore": "PASS",
+      "restored_directory": "/var/folders/dk/1dph1f99373czx_x8kwjsxgc0000gn/T/kabumori-pr161-patch-restore-jugur3de"
+    }
+  ],
+  "existing_archive_mutations": 0,
+  "legacy_mutations": 0
+}

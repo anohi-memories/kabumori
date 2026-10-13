@@ -1,0 +1,27 @@
+{
+  "result": "PASS",
+  "source_main": "7adbd97d9981fddfb6d542e0ca7f776ad645e53c",
+  "protected_archive_files_byte_unchanged": 144,
+  "all_existing_checksum_manifests_pass": {
+    "2026-10-13-F4-postona-f4-threads-disconnect-lease-safe-v1-20261012": 1,
+    "2026-10-13-conflict-reconciliation-8e65a71e": 13,
+    "2026-10-13-final-migration-preflight-b7ce2c4f": 64,
+    "2026-10-13-F1-kabumori-f1-ai-ask-v1-phase-a-ui-contract-20261012": 1,
+    "2026-10-13-main-advance-103aaae1": 8,
+    "2026-10-12-initial-migration": 33,
+    "2026-10-13-F5-common-account-f5-phase5-app-auth-entitlement-integration-20261012": 1
+  },
+  "slot_task_report_active_diff_vs_main": 0,
+  "old_agent_and_product_diff_vs_main": 0,
+  "main_index_verbatim_prefix": true,
+  "continuing_tasks": [
+    "F2",
+    "F5",
+    "J1"
+  ],
+  "completion_return_pending": 0,
+  "new_original_restore": "1/1 PASS",
+  "formal_cutover": "BLOCKED",
+  "merge_to_main": "NOT_PERFORMED",
+  "production": 0
+}

@@ -1,0 +1,13 @@
+{
+  "result": "PASS",
+  "source_commit": "7adbd97d9981fddfb6d542e0ca7f776ad645e53c",
+  "restored_originals": 1,
+  "git_bytes_match": true,
+  "task_active_match": 30,
+  "continuing_tasks": [
+    "F2",
+    "F5",
+    "J1"
+  ],
+  "completion_return_pending": 0
+}

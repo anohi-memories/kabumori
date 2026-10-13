@@ -1,0 +1,14 @@
+{
+  "source_commit": "103aaae104a146182b52554a5baa98e6d33529da",
+  "snapshot_kind": "concurrent main allocation evidence; not cutover approval",
+  "files": [
+    {
+      "original_path": ".agent_v2/CURRENT_STATE.md",
+      "archive_path": ".agent_v2/archive/2026-10-13-main-advance-103aaae1/before/.agent_v2/CURRENT_STATE.md",
+      "size": 16276,
+      "sha256": "cca3df2345065ab0e927d10be4fa0323eb02a3e53fe8fd1eed35fc8dd93727cf",
+      "source_commit": "103aaae104a146182b52554a5baa98e6d33529da",
+      "git_blob": "5ba49b82b8368ff9dd6d9b7ff83d937648ad2d9d"
+    }
+  ]
+}

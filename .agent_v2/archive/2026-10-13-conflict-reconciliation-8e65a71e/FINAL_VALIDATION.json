@@ -1,0 +1,19 @@
+{
+  "result": "PASS",
+  "existing_archive_files_byte_unchanged": 116,
+  "legacy_agent_diff": 0,
+  "product_source_diff": 0,
+  "slot_task_report_active_diff": 0,
+  "shared_handoff_diff": 0,
+  "history_index_prefix_unchanged": true,
+  "changed_tracked_files": [
+    ".agent_v2/CURRENT_STATE.md",
+    ".agent_v2/HISTORY_INDEX.md",
+    ".agent_v2/migrations/FULL_MIGRATION_20261013.md"
+  ],
+  "allowed_new_paths_only": true,
+  "git_diff_check": "PASS",
+  "formal_promotion": "NOT_PERFORMED",
+  "independent_Sol_high_review": "PENDING",
+  "root_handoff_update": "DEFERRED due to other checkout uncommitted HANDOFF.md; dedicated migration Report used"
+}

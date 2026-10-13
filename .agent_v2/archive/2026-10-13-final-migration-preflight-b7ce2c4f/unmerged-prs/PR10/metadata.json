@@ -1,0 +1,20 @@
+{
+  "number": 10,
+  "title": "docs: audit Kabumori release readiness",
+  "state": "open",
+  "draft": false,
+  "html_url": "https://github.com/anohi-memories/kabumori/pull/10",
+  "updated_at": "2026-09-23T10:19:30Z",
+  "head_sha": "04f966e2dcb243b86b145c1e141dc8a4244e6d58",
+  "merge_base_sha": "f4e1fe98b679d6a7e29c3c7d150ddad0312085b8",
+  "observed_base_sha": "f4e1fe98b679d6a7e29c3c7d150ddad0312085b8",
+  "base_ref": "main",
+  "head_ref": "codex/kabumori-release-readiness-audit-20260923",
+  "files": [
+    ".agent/ACTIVE_TASK.md",
+    ".agent/CODEX_REPORT.md",
+    ".agent/CURRENT_STATE.md",
+    ".agent/tasks/CODEX_TASK.md",
+    "docs/RELEASE_READINESS_AUDIT_2026-09.md"
+  ]
+}
