@@ -38,18 +38,19 @@
 
 ## F3
 - slot: F3
-- status: done
-- task_id: postona-f3-x-publish-entitlement-guard-20261013
+- status: ready
+- task_id: postona-f3-x-service-end-saga-wiring-20261013
 - owner: claude
-- next_owner: none
-- return_to: POSTONA G3のちゃ（新F3担当・AI自動投稿／X予約担当チャット）
+- next_owner: claude
+- return_to: POSTONA G3のちゃ（新F3担当・X投稿／予約担当）
 - completion_code: L3
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F3.md
 - current_report_path: .agent_v2/tasks/F3.md#report
-- dependencies: F5 Phase5 Draft PR165 4638891f (<- PR152 <- PR121); F3 Draft PR145 -> PR151 -> PR163 -> PR168 4b491668; F4 Threads separate; F5 orchestrates service end / SNS unlink; G4 X Issue131
-- blocker: F5/G5 unapplied, G4 Issue131, shared claim_due_post prior-filter outstanding, F5 X saga unwired; production NO_GO
-- slot_use: L3 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; PR182 head 1af5047e, six added files. Common claim_due_post unchanged; guard prevents generation/send, no claim-before-filter. F3 done/unreserved.
+- dependencies: archived L3 PR182; F3 PR168/163/151/145, F5 PR178/183 Phase6/7, F4 Threads PR169/180, G4 Issue131
+- blocker: F5 cleanup port owner coordination, G4 verified X unresolved, production NO_GO
+- slot_use: X固有サービス終了/連携解除sagaをPR182停止関数に接続（source-only・別Draft PR）。前F3 TASK archive+SHA256+HISTORY_INDEX verified。
+
 ## F4
 - slot: F4
 - status: review_required
