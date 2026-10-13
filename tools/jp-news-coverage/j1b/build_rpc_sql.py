@@ -34,5 +34,15 @@ base = extract_function(read(M4), r"create function public\.get_my_important_sto
 parts.append(base)
 parts.append("alter function public.get_my_important_stock_news(integer) rename to get_my_important_stock_news_phase5_base;")
 parts.append(extract_function(read(M5), r"create function public\.get_my_important_stock_news\("))
+# privileges exactly as the production migration sets them (so the ACL comparison with a candidate is meaningful)
+m5 = read(M5)
+for stmt in (
+    "revoke all on function public.get_my_important_stock_news_phase5_base(integer)\n  from public, anon, authenticated, service_role;",
+    "revoke all on function public.get_my_important_stock_news(integer)\n  from public, anon, authenticated, service_role;",
+    "grant execute on function public.get_my_important_stock_news(integer) to authenticated;",
+):
+    if stmt not in m5:
+        raise SystemExit(f"privilege statement not found in migration: {stmt[:60]!r}")
+    parts.append(stmt)
 pathlib.Path(sys.argv[1]).write_text("\n\n".join(parts) + "\n")
 print("wrote", sys.argv[1])

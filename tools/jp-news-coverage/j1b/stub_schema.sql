@@ -1,4 +1,13 @@
 -- Minimal stub schema for the offline proof (names and columns as used by the feed RPCs). Synthetic only.
+do $$ begin
+  create role anon nologin;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create role authenticated nologin;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create role service_role nologin;
+exception when duplicate_object then null; end $$;
 create schema if not exists auth;
 create or replace function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('app.uid', true), '')::uuid $$;
 create table public.stocks_master (id uuid primary key default gen_random_uuid(), ticker_code text, company_name text, sector text);
