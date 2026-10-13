@@ -71,6 +71,7 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 
 | 完了日 | slot | task_id | 作業名 | result | PR番号 | final commit SHA | archive参照先 | remaining issue参照先 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-13 | F1 | `kabumori-f1-ai-ask-v1-phase-b0-security-preflight-20261013` | AIに聞く Phase B0 セキュリティ設計 | PASS_DESIGN_CANDIDATE / J1 CHANGES_REQUIRED | #171 | `0beda46186efe1db680909f369e2571609851d81` | `.agent_v2/archive/2026-10-13-F1-kabumori-f1-ai-ask-v1-phase-b0-security-preflight-20261013/files/.agent_v2/tasks/F1.md` | J1 Report R1–R8; B0 archived Report |
 | 2026-10-13 | F1 | `kabumori-f1-ai-ask-v1-phase-a-ui-contract-20261012` | AIに聞く V1 Phase A 対話UI・安全契約 | PASS_SOURCE_PHASE_A | #166 | `83b51efcf3cdb207eb0bab4c6a8dddbc1f5352f4` | `.agent_v2/archive/2026-10-13-F1-kabumori-f1-ai-ask-v1-phase-a-ui-contract-20261012/files/.agent_v2/tasks/F1.md` | 同 archive TASK の `## Report` Phase B remaining_issues |
 
 | 2026-10-13 | F4 | `postona-f4-threads-disconnect-lease-safe-v1-20261012` | POSTONA Threads個別解除・lease安全化 | PASS_SOURCE_IMPLEMENTATION / PRODUCTION_NO_GO | #167 | `02fd1989303879979b137f8338f8bc6944f266b1` | `.agent_v2/archive/2026-10-13-F4-postona-f4-threads-disconnect-lease-safe-v1-20261012/files/.agent_v2/tasks/F4.md` | 同 archive TASK の `## Report` remaining_issues |
