@@ -28,7 +28,11 @@
 
 
 ## F2 X/app shared report consumer cutover preflight (2026-10-13)
-- F2 new task `kabumori-f2-shared-market-report-x-app-consumer-cutover-20261013` ready/claude, Sonnet5（高）, return L2. User wants X and app migrated together after Opus source merge. Task scope: production read-only/deployed-vs-main diff, route/duplicate safeguards, offline consumer tests, staged cutover and rollback plan. Gates were x=false, app=false; deployed x-test-post/personalized-reports differ from main. No DB mutation, secret, deploy, SNS post or gate ON authorized by this task; F6 provider production window is separate.
+- F2 の TASK `kabumori-f2-shared-market-report-x-app-consumer-cutover-20261013` は完了報告済み（review_required/chatgpt、L2 待ち）。結果は PASS_READONLY_PREFLIGHT / CUTOVER_PLAN_READY / PRODUCTION_NO_GO。
+  - Draft PR #179（RUNBOOK のみ）
+  - 本番の読み取り（16:24 JST）: 今日の大引けは Opus（claude-opus-5-5）で完成（16:21、Fact passed、$0.19）。x_enabled / app_enabled は false
+  - Edge の版: market-report-analysis v33（main と一致）、x-test-post v145・personalized-reports v46（main と違う）。migration 20261009120000 / 20261011150000 / 20261012100000 は未適用
+  - 切り替えの手順は RUNBOOK の 6 章: X は main の deploy（X 担当の確認）→ x_enabled、アプリは app_enabled／段階3〜7。どれも別承認
 
 ## F8 / F9 同時進行（2026-10-13 JST）
 - F8 `news-improvement-a-f8-j1b-app-visibility-offline-design-20261013` ready/claude、Opus5.5（高）、L8返却。日本ニュースのアプリ可視性・RPC基準のread-only分析と合成fixture/設計に限定。migration/RPC/production本体は変更しない。
@@ -75,11 +79,10 @@
 - All live X/Threads/Meta/managed Supabase/Vault/migrations/GRANT/merge/deploy/posting gates remain NO_GO. Remote authorization cannot be marked revoked without evidence.
 
 ## F2 — Opus Primary 朝刊・大引け対応（2026-10-13 JST）
-- 積み上げは Draft・未マージ: PR170（F6 の部品）→ PR173（F2 の handler、L2 受入済み）→ PR175（F6 の primary_both）→ PR176（F2 のテストの整合）。
-  - #175 だけを先に入れると F2 のテストが落ちる。4つをまとめて、順に merge する（別承認）。
-- 本番の Cron: 朝刊 07:55（再試行 08:05）、大引け 16:20（再試行 16:35）。
-- 利用側のゲートは X・アプリとも OFF（10/13 の朝）。
-- 月 $5 の上限では、朝刊・大引けを毎日続けられない。見直しは別承認。
+- PR170→173→175→176 は 2026-10-13 15:42〜15:43 JST に main へマージ済み。market-report-analysis v33 は 15:44 に deploy 済み。今日の大引けは Opus で完成（F2 の 16:24 の読み取り）。
+- 本番の Cron: 朝刊 07:55（再試行 08:05）、大引け 16:20（再試行 16:35）。X の予約は 08:20 / 17:00、個別レポートは 08:35 / 17:15。
+- 利用側のゲートは X・アプリとも OFF。Opus のレポートは、まだ利用者に届かない。
+- 月 $5 の上限では、朝刊・大引けを毎日続けられない。見直しは別承認（F6）。
 
 
 

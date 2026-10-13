@@ -23,17 +23,17 @@
 
 ## F2
 - slot: F2
-- status: ready
+- status: review_required
 - task_id: kabumori-f2-shared-market-report-x-app-consumer-cutover-20261013
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ（新F2担当）
 - completion_code: L2
 - recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
 - dependencies: F6 Opus main merge; X/app consumer settings both OFF; production provider deployment and old/new routing readback required
-- blocker: x-test-post and personalized-reports deployed sources differ from main; consumer gate approval and independent prod mutation window not yet granted
+- blocker: 事前確認は完了（本番の変更0件）。Draft PR #179（RUNBOOK のみ、head `e1a3eca06b7f4ffd291b7f35e37e57739da57e1a`）。今日の大引けは Opus で完成（16:21）、X・アプリのゲートは OFF のまま。X は x-test-post の main の deploy（X 担当の確認）→ x_enabled、アプリは app_enabled／段階3〜7。どれも別承認。L2 待ち
 - slot_use: かぶモリ共有朝刊/大引け X・アプリ切り替え preflight (read-only & offline)
 
 ## F3
