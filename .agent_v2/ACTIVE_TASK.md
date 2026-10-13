@@ -191,10 +191,10 @@
 
 ## J3
 - slot: J3
-- status: ready
+- status: review_required
 - task_id: postona-j3-x-service-end-saga-integrated-security-review-20261013
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: POSTONA G3のちゃ（新F3担当・X投稿／予約担当）
 - completion_code: V3
 - recommended_model: Sol（高）
@@ -203,6 +203,7 @@
 - dependencies: F3 PR189→182→168→163→151→145; F5 PR183/178→165→152→121; F4 PR180/169; X Issue131
 - blocker: full F5 T10 service-delete bridge and managed X/Auth unverified; source security review only; production NO_GO
 - slot_use: POSTONA X連携解除/サービス終了の独立セキュリティレビュー（J3→V3）。既存F3/F4/F5 PRはread-only。
+- review_result: CHANGES_REQUIRED / PRODUCTION_NO_GO; independently reproduced P2 R1 purge/retry uncertain loss, R2 request action missing, R3 lock-wait expiry. Actual local PG saga/E2E6, parent entitlement, F4 T13+6mutants, F5 owner suite and Deno26/25/231/120 PASS; source edits0. V3 to exact return_to. Full F5 Phase8 integration/managed release pending.
 
 ## J4
 - slot: J4
