@@ -224,10 +224,10 @@
 
 ## J5
 - slot: J5
-- status: in_progress
+- status: review_required
 - task_id: postona-j5-account-deletion-legacy-bypass-ui-bridge-20261014
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V5
 - recommended_model: Sol（高）
@@ -235,7 +235,7 @@
 - current_report_path: .agent_v2/reports/J5.md
 - dependencies: F5 PR193 Phase8 old deletion route G4-1; F4 PR180/169, F3 PR192 and J3 independent review; no mutation outside POSTONA mobile
 - blocker: backend shared account deletion permission/contract and managed environment unverified, production NO_GO
-- slot_use: user-approved Codex emergency implementation of POSTONA mobile shared-ID deletion-bypass closure, not review
+- slot_use: IMPLEMENTED_SOURCE_CANDIDATE Draft PR197 head 2171ee4c; 18 client files, app281/tsc/lint/web-export PASS; source gate OFF; V5 pending, separate Sol（高） review and owner server/managed blockers
 
 ## コード
 
