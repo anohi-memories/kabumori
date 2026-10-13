@@ -75,6 +75,8 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 
 | 2026-10-13 | F4 | `postona-f4-threads-disconnect-lease-safe-v1-20261012` | POSTONA Threads個別解除・lease安全化 | PASS_SOURCE_IMPLEMENTATION / PRODUCTION_NO_GO | #167 | `02fd1989303879979b137f8338f8bc6944f266b1` | `.agent_v2/archive/2026-10-13-F4-postona-f4-threads-disconnect-lease-safe-v1-20261012/files/.agent_v2/tasks/F4.md` | 同 archive TASK の `## Report` remaining_issues |
 
+| 2026-10-13 | F5 | `common-account-f5-phase5-app-auth-entitlement-integration-20261012` | 共通ID・POSTONA利用登録・ワークスペース権限 Phase5 | PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO | #165 | `4638891f6c7ff432e08d462019594e1ec3d66f07` | `.agent_v2/archive/2026-10-13-F5-common-account-f5-phase5-app-auth-entitlement-integration-20261012/files/.agent_v2/tasks/F5.md` | 同archive TASKの `## Report` |
+
 ## 旧系統（G1〜G10 / H1〜H5）の完了・履歴作業
 
 ### 日付不明
@@ -362,3 +364,5 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 ## 新系統の完了作業
 
 | 2026-10-13 | F2 | `kabumori-f2-pr143-live-mergeability-diagnosis-20261012` | PR143 mergeability diagnosis | done / L2 accepted | archived | `.agent_v2/archive/2026-10-13-f2-pr143-mergeability-diagnosis.md` | `b1f19982b27af3ea55afe20a78a7ce9927538452` (archive write commit) |
+
+| 2026-10-13 | F6 | `common-ai-f6-opus-primary-close-report-v0-20261013` | Opus Primary close-only source | L6 PASS_OFFLINE_SOURCE / PRODUCTION_NO_GO | #170 | `.agent_v2/archive/2026-10-13-f6-opus-primary-close-v0.md` | archive content read-back identical |

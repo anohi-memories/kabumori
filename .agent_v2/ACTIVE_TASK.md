@@ -23,18 +23,19 @@
 
 ## F2
 - slot: F2
-- status: ready
+- status: done
 - task_id: kabumori-f2-opus-primary-morning-close-handler-20261013
 - owner: claude
-- next_owner: claude
+- next_owner: none
 - return_to: かぶモリアプリG2のちゃ（新F2担当）
 - completion_code: L2
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
-- dependencies: PR170 source-only F6 Opus Primary; generalize BOTH morning & close. F6 changes owner-coordinated. G2 market-report handler ownership preserved.
-- blocker: production Secret/deploy/mode enable require separate safety approval; current $5/mo ledger cap may block daily operation
-- slot_use: かぶモリアプリ Opus primary report integration
+- dependencies: PR170→PR173 source candidates; Opus follow-on belongs to F6 task common-ai-f6-opus-primary-both-integration-20261013
+- blocker: none for F2 slot. PR173 Draft/unmerged, production NO_GO, F6 integration dependencies unresolved
+- l2_verdict: PASS_OFFLINE_SOURCE / TRANSFER_F6 / PRODUCTION_NO_GO
+- slot_use: かぶモリアプリ; free after L2, next task must archive current F2 TASK and confirm no conflicts
 
 ## F3
 - slot: F3
@@ -69,35 +70,33 @@
 
 ## F5
 - slot: F5
-- status: done
-- task_id: common-account-f5-phase5-app-auth-entitlement-integration-20261012
+- status: ready
+- task_id: common-account-f5-phase6-postona-provider-cleanup-service-deletion-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: old G5 K5 done; PR152 head ccea1fe8132c6f573a768f0df5a033a05c62ef2c stacked PR121 head 76b50e1e03f82faaa3460bab1603afa8fef3ce44; app owner G1/G2/G3/G4 source protected
-- blocker: production/no managed Auth; app-owner wiring separate, must be explicitly coordinated
-- slot_use: 共通アカウント基盤 Phase5 本人Auth/サービス登録のG5-owned接続実装（ユーザー明示割当）
-- l5_verdict: PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; app enrollment existing wiring confirmed; PR165 worker entitlement functions source candidate, G3/G4 publish RPC integration outstanding; no merge/deploy.
-- latest_result: IMPLEMENTED_SOURCE_CANDIDATE — Draft PR #165 head 4638891f6c7ff432e08d462019594e1ec3d66f07 stacked on PR152 ccea1fe8132c6f573a768f0df5a033a05c62ef2c (PR121 76b50e1e03f82faaa3460bab1603afa8fef3ce44): real app enrollment modules vs real SQL contract test (13 scenarios) + workspace service-state primitives for service-role workers; local PG17 only, production NO_GO; G3/G4 wiring requested in docs/common-account/phase5-app-integration.md section 4. Report: .agent_v2/tasks/F5.md#report
+- dependencies: G5 PR121/152, F5 PR165, F4 PR167/169, H5 PR159, F3 X owner coordination
+- blocker: all PRs Draft/unmerged; production NO_GO; source-only lease/Threads adapter integration and remote-unverified policy
+- slot_use: 共通アカウント基盤 F5 Phase6 POSTONA provider cleanup/service_deletion contract; previous F5 archived
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-opus-primary-close-report-v0-20261013
+- status: ready
+- task_id: common-ai-f6-opus-primary-both-integration-20261013
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: common AI provider PR148→150→153→157→162 Draft/unmerged; G2 PR143/149 merged; coordination with market-report-analysis owner G2/F2 mandatory
-- blocker: L6 ACCEPTED PASS_OFFLINE_SOURCE / PRODUCTION_NO_GO — PASS_OFFLINE_SOURCE Draft PR #170 (46b27326, default OFF, not wired); handler.ts wiring delivered as verified patch (F2 ownership coordination needed); live Oct13 cutover needs separate approvals: patch merge, Edge Secret, deploy, mode flip before 16:15 JST; budget caps unchanged
-- slot_use: 2026-10-13 close-only Opus Primary V0, morning legacy unchanged, source-first
+- dependencies: F6 PR170 → F2 PR173 (F2 L2 awaiting), F2-owned handler/test changes protected; new F6-only provider both-cycle PR
+- blocker: Pending F2 L2, source/merge gate, Supabase Edge Secret, scoped deployment and live mode; monthly $5 trial cost cap
+- slot_use: 共通AI基盤 Opus PRIMARY morning + close, today close priority
 
 ## F7
 - slot: F7
@@ -131,18 +130,18 @@
 
 ## F9
 - slot: F9
-- status: idle
-- task_id: none
+- status: ready
+- task_id: api-optimization-b-f9-rights-safe-provider-compare-pr-readiness-20261013
 - owner: claude
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: claude
+- return_to: ニュース改善API最適化のちゃ
 - completion_code: L9
-- recommended_model: none
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F9.md
 - current_report_path: .agent_v2/tasks/F9.md#report
-- dependencies: none
-- blocker: none
-- slot_use: 予備枠（ユーザーまたはChatGPTの明示割当専用）
+- dependencies: old G9 R3 K9 done; clean branch c476ef8a
+- blocker: old PR115 unsafe rights/history; no provider calls or release approval
+- slot_use: API最適化B専任（ユーザー明示）
 
 ## F10
 - slot: F10
