@@ -405,3 +405,5 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 
 - 2026-10-13 | F8 | `news-improvement-a-f8-j1b3-real-schema-proof-review-packet-20261013` | L8 source accepted; production held | `.agent_v2/archive/2026-10-13-f8-news-improvement-a-f8-j1b3-real-schema-proof-review-packet-20261013/files/.agent_v2/tasks/F8.md` | SHA256 94e7c3f43c7961e4680e98da036fc07d9890bce0ffff7469f3f874d1e37e8eba, restore checked.
 - 2026-10-13 | F9 | `api-optimization-b-f9-rights-safe-eval-fixture-redaction-20261013` | L9 source accepted; production held | `.agent_v2/archive/2026-10-13-f9-api-optimization-b-f9-rights-safe-eval-fixture-redaction-20261013/files/.agent_v2/tasks/F9.md` | SHA256 aa95f2c50084fda1baa51c4d8a4afbd864df5e89e3709ad4ab04a6d802184d2b, restore checked.
+
+| 2026-10-13 | F2 | `kabumori-f2-yume-market-commentator-morning-close-quality-20261013` | Yume market forecast and fact/opinion separation | L2 PASS_OFFLINE_SOURCE / PRODUCTION_NO_GO | #188 | `.agent_v2/archive/2026-10-13-F2-kabumori-f2-yume-market-commentator-morning-close-quality-20261013/` | SHA256 a68665a0e1639bd1205042ad81fda9582a90cce55ffc15691c18d11645377100, restore verified |
