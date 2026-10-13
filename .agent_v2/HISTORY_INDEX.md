@@ -417,3 +417,5 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 - original_blob: `312b552f0c74c77e82ed8380cad466bdfea9d7ea`
 - restore: source and archive exact UTF-8 content and blob SHA read-back matched. MANIFEST and SHA256SUMS saved.
 - L5: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; Draft PR183 f2565cc0412f8127f95f00a728d16bf83af74667
+
+- 2026-10-13 | F3 | `postona-f3-x-service-end-saga-wiring-20261013` | L3 PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO, PR189 Draft | `.agent_v2/archive/2026-10-13-F3-postona-f3-x-service-end-saga-wiring-20261013/files/.agent_v2/tasks/F3.md` | SHA256 `c3cc256c946076748647a8cd54514955cc11c68a66c5b7d43dfe98a44ce3ac58`; blob/read-back verified.
