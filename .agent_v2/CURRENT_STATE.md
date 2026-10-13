@@ -1,5 +1,9 @@
 # Current State v2（新系統・現在有効な情報だけ）
 
+## F2｜Opus primary_both handlerテスト修正（2026-10-13 JST）
+- 新F2 TASK `kabumori-f2-opus-primary-both-handler-test-sync-20261013` を `ready / claude` に登録。推薦 Sonnet5（中）、F2→L2。F6 PR175 `161f1f08` に積む新規Draft PRで、F2所有 `opus_primary_handler_test.ts` の古いMODE_UNSUPPORTED期待2件のみ修正。PR170/173/175と他slotのbranch/worktreeは変更禁止。本番NO_GO。
+- 前F2 TASK/Reportは `.agent_v2/archive/2026-10-13-F2-kabumori-f2-opus-primary-morning-close-handler-20261013/` に保存、MANIFEST/SHA256SUMSとread-back一致を確認、HISTORY_INDEX更新。F6は独立したOpus provider作業のownerを継続。
+
 ## F9 API最適化B — L9完了（2026-10-13 JST）
 - F9 `api-optimization-b-f9-rights-safe-provider-compare-pr-readiness-20261013` L9判定 PASS_OFFLINE_DRAFT / RELEASE_HOLD、done/next_owner:none。Draft PR #174 は新規131ファイル（tools/provider-compare と docs/model-optimization のみ）、HEAD F9報告 `ef9876fba680f621b88c2d235a7c011ca5881e2f`。304テストPASS/1 ignoredはClaude報告、ChatGPT未再実行。権利未確認の見出しは非保持で外部送信ゲートを維持。
 - 旧PR #115の権利未確認本文を含む履歴、main既存2fixtureの一致箇所、正式な利用許諾、PR174最終CI/mergeability確認は未解決。PR115変更・close・削除やPR174 merge/deploy、有料API使用を無断実施しない。
