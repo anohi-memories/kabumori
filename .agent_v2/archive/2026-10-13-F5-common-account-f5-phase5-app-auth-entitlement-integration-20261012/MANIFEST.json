@@ -1,0 +1,11 @@
+{
+  "task_id": "common-account-f5-phase5-app-auth-entitlement-integration-20261012",
+  "original_path": ".agent_v2/tasks/F5.md",
+  "archive_path": ".agent_v2/archive/2026-10-13-F5-common-account-f5-phase5-app-auth-entitlement-integration-20261012/files/.agent_v2/tasks/F5.md",
+  "size_bytes": 17597,
+  "SHA256": "8d34d205dbbde799ff8e65e32ce593d3b700f909c70205a30dc63773dccaa7c3",
+  "original_blob_sha": "5a4eefcb53de8737a563c90f7edb0dd2d629768b",
+  "original_main_commit": "snapshot from main immediately before 9ee5050077837ba3052f8a7242fda20df8d7939c (exact parent not independently inspected)",
+  "archive_commit": "9ee5050077837ba3052f8a7242fda20df8d7939c",
+  "read_back": "verbatim UTF8 equality checked; SHA256 computed from UTF8 bytes"
+}
