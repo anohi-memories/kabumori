@@ -1,3 +1,8 @@
+## POSTONA J4 — independent J5 PR197 deletion-client review (2026-10-14 JST)
+- J4 new `postona-j4-pr197-postona-deletion-client-security-review-20261014` ready/codex, recommended Sol（高）, J4→V4 return POSTONA｜マルチSNS化・開発統括（G4）のちゃ. Prior J4 completed TASK+Report archived with SHA256SUMS/manifest, byte readback, and HISTORY_INDEX entry.
+- Review PR197 exact `2171ee4c02ea2eec46562d81595f5460e5507d9d` mobile deletion flow source; server-side older builds may still hit `social-mobile-account-delete`. F5 PR193 / F4 PR180 / F3 PR192 dependencies read-only. J3 V3 found P2×3 in X saga; remain blocker, don't relabel PASS based on J4 mobile review.
+- J4 may update ONLY J4 task/Report/control metadata, not product code or other slot worktrees. All managed Auth, DB, SNS connect/delete, PR merge/deploy and production activation remain NO_GO.
+
 ## 本番の共通朝刊・大引け（2026-10-14 昼の時点）
 - market-report-analysis は main `488a8948`（PR #200）を deploy 済み（ユーザーが実行）。10/14 大引けから、ゆめちゃんのコラム文体・市場全体のニュース選別・`yume.scenario_ja` が入る。
 - `get_app_market_report` は V2（migration `20261014100000`、ユーザーが適用）。結果の記録は旧G2 Report（K2 待ち）。新F2の配信・通知 TASK は in_progress のまま。
