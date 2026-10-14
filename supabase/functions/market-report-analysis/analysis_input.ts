@@ -117,10 +117,35 @@ const SECTOR_CATEGORIES = new Set(["semiconductors", "ai_tech"]);
 const SCOPE_RANK: Record<NewsScope, number> = { broad: 0, sector: 1, company: 2 };
 export const SCOPE_JA: Record<NewsScope, string> = { broad: "市場全体", sector: "業種・テーマ", company: "個別企業" };
 
+// Corporate content, whatever the row's company_code says (2026-10-14 close, Phase 2): a small company's results reached
+// the market-wide report as "市場全体" because its row had no company code and its text mentioned 東証 / 為替, which the
+// coverage keywords turn into japan_market / fx. A broad category earned from a company's own wording is not evidence of
+// a market-wide story, so an item that reads as one company's disclosure is a company item.
+const CORPORATE_CATEGORIES = new Set(["earnings", "corporate"]);
+/** A listed company named by its code (「アクサスHD（3536）」) or by a company form: always one company's news. */
+const COMPANY_NAME_TEXT = /[（(]\s*\d{4}[A-Z]?\s*[）)]|株式会社|ホールディングス|(?<![A-Za-z])HD(?![A-Za-z])|ＨＤ/u;
+/** A company's own disclosure words. Macro news can use them too (「米企業の決算シーズン」), so they count only without macro categories. */
+const DISCLOSURE_TEXT = /決算|業績|増配|減配|配当|自社株|適時開示/u;
+/**
+ * Categories a macro story carries on its own. fx and japan_market are not here: a company's results mention 為替 and 東証
+ * all the time, and the coverage keywords then add those categories to a company item.
+ */
+const MACRO_CATEGORIES = new Set([
+  "monetary_policy", "financial_system", "rates", "geopolitics", "us_market", "regulation_policy", "disaster", "oil_energy",
+  "commodities", "shipping_logistics",
+]);
+
+/** One company's own news: a code on the row or in the text, a company form, or a disclosure without a macro story. */
+export function isCorporateNews(categories: readonly string[], hasCompany: boolean, text = ""): boolean {
+  if (hasCompany || COMPANY_NAME_TEXT.test(text)) return true;
+  const disclosure = categories.some((category) => CORPORATE_CATEGORIES.has(category)) || DISCLOSURE_TEXT.test(text);
+  return disclosure && !categories.some((category) => MACRO_CATEGORIES.has(category));
+}
+
 /** A company's own disclosure is company-scoped unless it is systemic (central bank / financial system). */
-export function newsScope(categories: readonly string[], hasCompany: boolean): NewsScope {
+export function newsScope(categories: readonly string[], hasCompany: boolean, text = ""): NewsScope {
   if (categories.some((category) => SYSTEMIC_CATEGORIES.has(category))) return "broad";
-  if (hasCompany) return "company";
+  if (isCorporateNews(categories, hasCompany, text)) return "company";
   if (categories.some((category) => BROAD_CATEGORIES.has(category))) return "broad";
   return categories.some((category) => SECTOR_CATEGORIES.has(category)) ? "sector" : "company";
 }
@@ -250,21 +275,85 @@ function stripPostDecoration(text: string): string {
 
 // Market-wide selection (2026-10-14, F2). The shared morning/close is about the whole market, so an ordinary company's
 // own disclosure (earnings, dividends, buybacks, a single company's incident) is left out of the model input instead of
-// being ranked last: on thin days the model filled the story with three such items. A company item stays only when it
-// can move a major sector (semiconductors / AI) and is at least high severity, at most MAX_COMPANY_NEWS_ITEMS of them.
+// being ranked last: on thin days the model filled the story with three such items. A company item stays only when its
+// effect can reach the market or a major sector (isMarketMovingCompanyNews), at most MAX_COMPANY_NEWS_ITEMS of them.
 // Holdings-specific news is the personalized reports' job, not this one's. Every excluded item is recorded with a
 // fixed reason code (PROJECT_RULES 候補選定と除外ログ).
-const MARKET_MOVING_COMPANY_CATEGORIES = new Set(["semiconductors", "ai_tech"]);
-const MARKET_MOVING_COMPANY_SEVERITIES = new Set(["emergency", "critical", "high"]);
 export const MAX_COMPANY_NEWS_ITEMS = 2;
 
-export type NewsExclusionReason = "NEWS_TEXT_NOT_FACT_PASSED" | "COMPANY_NOT_MARKET_WIDE" | "COMPANY_NEWS_CAP" | "NEWS_ITEM_CAP";
+/**
+ * Companies whose own news can move the Japanese market or a major sector (2026-10-14, Phase 2): the largest TOPIX
+ * constituents (Core30-class), the semiconductor names the Nikkei moves with, the megabanks, autos, energy and trading
+ * houses. Matched by the listed code. Review this list once a year (TOPIX Core30 changes every October).
+ */
+export const MAJOR_JP_COMPANY_CODES = new Set([
+  "7203", "7267", "7201", "6902", // 自動車: トヨタ、ホンダ、日産、デンソー
+  "8306", "8316", "8411", "8766", "8591", // 金融: 三菱UFJ、三井住友、みずほ、東京海上、オリックス
+  "8035", "6857", "6146", "6920", "7735", "6723", "4063", // 半導体: 東京エレクトロン、アドバンテスト、ディスコ、レーザーテック、SCREEN、ルネサス、信越化学
+  "9984", "9983", "6758", "6861", "6501", "6503", "7011", "6367", "6954", "6981", "7741", "6273", "6098", "7974", "6752", // 主力の大型株
+  "9432", "9433", "9434", // 通信: NTT、KDDI、ソフトバンク
+  "8058", "8031", "8001", // 商社: 三菱商事、三井物産、伊藤忠
+  "1605", "5020", "5401", // エネルギー・素材: INPEX、ENEOS、日本製鉄
+  "4502", "4568", "4519", // 医薬: 武田、第一三共、中外
+  "3382", "9022", "8801", // セブン＆アイ、JR東海、三井不動産
+]);
+/** Overseas companies whose results move the US market and Japanese semiconductor / AI names. */
+const MAJOR_GLOBAL_COMPANY = /エヌビディア|NVIDIA|Nvidia|アップル|Apple|マイクロソフト|Microsoft|アルファベット|Alphabet|グーグル|Google|アマゾン|Amazon|メタ・プラットフォームズ|Meta Platforms|テスラ|Tesla|TSMC|台湾積体電路|ブロードコム|Broadcom/u;
+const MARKET_MOVING_SEVERITIES = new Set(["emergency", "critical", "high"]);
+const CRITICAL_SEVERITIES = new Set(["emergency", "critical"]);
+/**
+ * Sectors through which an unlisted-as-major company's critical news reaches the market. ai_tech is not here: the
+ * coverage keyword tags any text with 「AI」 (an insurer's merger, an accounting restatement), so it is no evidence.
+ */
+const SPILLOVER_CATEGORIES = new Set(["semiconductors", "oil_energy"]);
+
+/** The listed code of a company item (from the row, or 「（3536）」 in its text). */
+function companyCode(item: Pick<NewsInputItem, "company" | "headline_ja">): string | null {
+  const match = `${item.company ?? ""} ${item.headline_ja}`.match(/[（(]\s*(\d{4})[A-Z]?\s*[）)]/u);
+  return match ? match[1] : null;
+}
+
+/**
+ * A company item that can move the market or a major sector: a major company's news of high severity or above, or a
+ * critical item in a spillover sector. An ordinary company's results never qualify, whatever keywords its text has
+ * (an AI or 為替 mention is not a market-wide effect).
+ */
+export function isMarketMovingCompanyNews(
+  item: Pick<NewsInputItem, "scope" | "severity" | "categories" | "company" | "headline_ja">,
+): boolean {
+  if (item.scope !== "company" || !MARKET_MOVING_SEVERITIES.has(item.severity)) return false;
+  const code = companyCode(item);
+  if ((code && MAJOR_JP_COMPANY_CODES.has(code)) || MAJOR_GLOBAL_COMPANY.test(item.headline_ja)) return true;
+  return CRITICAL_SEVERITIES.has(item.severity) && item.categories.some((category) => SPILLOVER_CATEGORIES.has(category));
+}
+
+export type NewsExclusionReason =
+  | "NEWS_TEXT_NOT_FACT_PASSED"
+  | "COMPANY_NOT_MARKET_WIDE"
+  | "COMPANY_NEWS_CAP"
+  | "BROAD_NO_MARKET_LINK_CAP"
+  | "NEWS_ITEM_CAP";
 export type NewsExclusion = { ref: string; reason: NewsExclusionReason };
 
-/** A company item that can move a major sector: semiconductors / AI news of high severity or above. */
-export function isMarketMovingCompanyNews(item: Pick<NewsInputItem, "scope" | "severity" | "categories">): boolean {
-  return item.scope === "company" && MARKET_MOVING_COMPANY_SEVERITIES.has(item.severity) &&
-    item.categories.some((category) => MARKET_MOVING_COMPANY_CATEGORIES.has(category));
+// A broad item is not market-wide just because it is labelled so (Phase 2): most of the "市場全体" items on the fixture
+// days were distant conflicts and accidents with no stated path to prices. Categories that are a path in themselves,
+// or wording that names one (oil, rates, FX, trade, supply, policy, elections), make an item market-linked. The rest
+// keeps at most MAX_UNLINKED_BROAD_ITEMS, and the model is told the link is unconfirmed.
+const MARKET_PATH_CATEGORIES = new Set([
+  "monetary_policy", "rates", "fx", "us_market", "oil_energy", "commodities", "shipping_logistics", "regulation_policy",
+  "financial_system", "semiconductors", "ai_tech",
+]);
+/**
+ * Wording of a path to prices, read in the headline only: the app summaries of news often add a stock line of their own
+ * (「日本株への直接の影響は…」), which would make every item look linked.
+ */
+const MARKET_LINK_TEXT = /株|相場|市場|指数|金利|利回り|国債|為替|円安|円高|ドル|ユーロ|原油|ガス|エネルギー|電力|資源|物価|インフレ|景気|雇用|消費|GDP|生産|輸出|輸入|関税|制裁|貿易|供給|物流|航路|海峡|港湾|半導体|AI|中央銀行|日銀|FRB|利上げ|利下げ|財政|予算|選挙|大統領令/u;
+export const MAX_UNLINKED_BROAD_ITEMS = 2;
+
+/** A broad item whose path to prices is stated by its categories or its headline (critical items always count). */
+export function hasMarketLink(item: Pick<NewsInputItem, "categories" | "headline_ja" | "severity">): boolean {
+  return CRITICAL_SEVERITIES.has(item.severity) || item.categories.some((category) => MARKET_PATH_CATEGORIES.has(category)) ||
+    MARKET_LINK_TEXT.test(item.headline_ja);
 }
 
 /** The items the market-wide report may use, and why each other item was left out. Order is kept. */
@@ -272,9 +361,17 @@ export function selectMarketWideNews(items: readonly NewsInputItem[]): { kept: N
   const kept: NewsInputItem[] = [];
   const excluded: NewsExclusion[] = [];
   let companies = 0;
+  let unlinked = 0;
   for (const item of items) {
-    if (item.scope !== "company" || isMajorNews(item)) {
+    if (isMajorNews(item)) {
       kept.push(item);
+    } else if (item.scope !== "company") {
+      if (hasMarketLink(item)) kept.push(item);
+      else if (unlinked >= MAX_UNLINKED_BROAD_ITEMS) excluded.push({ ref: item.ref, reason: "BROAD_NO_MARKET_LINK_CAP" });
+      else {
+        unlinked += 1;
+        kept.push(item);
+      }
     } else if (!isMarketMovingCompanyNews(item)) {
       excluded.push({ ref: item.ref, reason: "COMPANY_NOT_MARKET_WIDE" });
     } else if (companies >= MAX_COMPANY_NEWS_ITEMS) {
@@ -326,7 +423,11 @@ function rankedNewsItems(rows: readonly NewsTextRow[], refIds: readonly string[]
       categories: Array.isArray(row.coverage_categories) ? row.coverage_categories : [],
       company: row.company_code ? `${row.company_name ?? ""}（${row.company_code.slice(0, 4)}）` : null,
       published_at: row.published_at,
-      scope: newsScope(Array.isArray(row.coverage_categories) ? row.coverage_categories : [], Boolean(row.company_code)),
+      scope: newsScope(
+        Array.isArray(row.coverage_categories) ? row.coverage_categories : [],
+        Boolean(row.company_code),
+        `${headline} ${summary ?? ""}`,
+      ),
       rank: SEVERITY_RANK[row.coverage_severity ?? ""] ?? 0,
       time: row.published_at ?? row.created_at,
     });
@@ -425,6 +526,8 @@ export function buildAnalysisInput(args: {
       要約: item.summary_ja,
       重要材料: isMajorNews(item),
       範囲: SCOPE_JA[item.scope],
+      // Phase 2: whether the item itself states a path to prices (categories or wording). 未確認 = do not make it a main topic.
+      市場との関係: item.scope === "company" || hasMarketLink(item) ? "あり" : "未確認",
       企業: item.company,
     })),
     取得できなかったデータ: gaps,
