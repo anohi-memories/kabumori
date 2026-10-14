@@ -81,7 +81,10 @@ for (const [label, fixture, make] of [["morning", morning, richMorning1001], ["c
   test(`X ${label}: a rich packet renders a ~500-character digest with every section`, () => {
     const input = inputOf(fixture);
     const analysis = make(input);
-    assert.deepEqual(localAnalysisCheck(analysis, input), { hard: [], warnings: [] });
+    // These fixtures are the pre-A案 style: they state "no confirmed reason" more than once, which is now recorded
+    // (REASON_ABSENCE_STATED, telemetry only). Nothing else is flagged.
+    const local = localAnalysisCheck(analysis, input);
+    assert.deepEqual({ ...local, warnings: local.warnings.filter((warning) => !warning.startsWith("REASON_ABSENCE_STATED:")) }, { hard: [], warnings: [] });
     const packet = packetOf(analysis, input);
     assert.equal(packet.schema_version, REPORT_SCHEMA_VERSION, "the stored schema_version is unchanged (table check)");
     assert.equal(packet.presentation_version, PRESENTATION_VERSION);
@@ -367,7 +370,7 @@ test("10/1 replay: the packet that led with one company's impairment is reordere
   assert.ok(ordered[3].headline_ja.includes("減損損失"), "the company notice is kept, after the market-wide items");
   // The v2 story lists market-wide items first and names the company only after them.
   const rich = richMorning1001(input);
-  assert.deepEqual(localAnalysisCheck(rich, input).warnings, []);
+  assert.deepEqual(localAnalysisCheck(rich, input).warnings, ["REASON_ABSENCE_STATED:2"], "only the A案 telemetry on the pre-A案 fixture");
   const news = buildAppMarketStory(packetOf(rich, input)).sections.find((item) => item.key === "news")!;
   assert.ok(news.lines_ja[0].startsWith("トランプ氏、AI企業と自主協定を発表") && news.lines_ja[3].includes("減損損失"));
   assert.ok(!formatSharedXPost(packetOf(rich, input)).includes("ニデック"));
@@ -431,13 +434,15 @@ test("content regeneration is recorded apart from transport retry (the 10/1 morn
   assert.deepEqual(calls, ["generate", "generate", "fact"]);
   const { records, ...trace } = outcome.trace;
   assert.deepEqual(trace, {
-    generations: 2, hardRejections: ["local"], rejectionReasons: ["1306"], qualityRewrite: false, deliveredGeneration: 2, warnings: [],
+    generations: 2, hardRejections: ["local"], rejectionReasons: ["1306"], qualityRewrite: false, deliveredGeneration: 2,
+    // A案 telemetry on the pre-A案 fixture; it never buys a rewrite (qualityRewrite stays false).
+    warnings: ["REASON_ABSENCE_STATED:2"],
     removedUnits: [], factStatus: "passed",
   });
   assert.deepEqual(records.map((record) => [record.generationIndex, record.stage, record.selectedForDelivery]), [[1, "local", false], [2, "delivered", true]]);
   assert.deepEqual(generationDiagnostics(outcome.trace), {
     generation_attempts: "2", content_regenerations: "1", hard_rejections: "local", rejection_reasons: "1306", quality_rewrite: "false",
-    delivered_generation: "2", quality_warnings: "", quality_rewrite_request_failed: "false",
+    delivered_generation: "2", quality_warnings: "REASON_ABSENCE_STATED:2", quality_rewrite_request_failed: "false",
     fact_status: "passed", removed_units: "", removed_unit_count: "0",
   });
   assert.equal(outcome.ok && outcome.packet.fact.generation_attempts, 2);
@@ -463,7 +468,7 @@ test("a quality rewrite that breaks a hard fact falls back to the safe original 
     { step: "generate", payload: thin }, { step: "fact", payload: { passed: true, issues: [] } },
     { step: "generate", payload: richMorning1001(input) }, { step: "fact", payload: { passed: true, issues: [] } },
   ]), NOW);
-  assert.deepEqual(better.ok && [better.trace.deliveredGeneration, better.packet.fact.quality_warnings], [2, []]);
+  assert.deepEqual(better.ok && [better.trace.deliveredGeneration, better.packet.fact.quality_warnings], [2, ["REASON_ABSENCE_STATED:2"]]);
   // With no safe draft, the wrong sentence is removed and the rest delivered after one Fact call (2026-10-07).
   const failed = await generateSharedAnalysis(input, requester([
     { step: "generate", payload: broken }, { step: "generate", payload: broken }, { step: "fact", payload: { passed: true, issues: [] } },
