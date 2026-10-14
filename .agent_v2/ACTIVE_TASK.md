@@ -210,18 +210,18 @@
 
 ## J4
 - slot: J4
-- status: done
-- task_id: kabumori-j4-ai-ask-b0-v3-review-20261013
+- status: ready
+- task_id: postona-j4-pr197-postona-deletion-client-security-review-20261014
 - owner: codex
-- next_owner: none
-- return_to: かぶモリアプリG1のちゃ（新F1担当）
+- next_owner: codex
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V4
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J4.md
 - current_report_path: .agent_v2/reports/J4.md
-- dependencies: PR186 and J2 review
-- blocker: none
-- slot_use: AI Ask B0 v3 R2/R3/R8 review
+- dependencies: J5 PR197, F5 PR193, F4 PR180, F3 PR192 with J3 V3 P2x3; old POSTONA Edge account-delete endpoint
+- blocker: source-only review, no managed/Auth/Meta/X, no release permission; old installed apps may invoke legacy endpoint
+- slot_use: J4 independent review of POSTONA J5 legacy delete-client boundary; previous J4 TASK/Report archived
 
 ## J5
 - slot: J5
