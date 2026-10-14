@@ -128,10 +128,11 @@ export const X_HEADERS: Record<ReportType, string> = {
   close: "【大引け】きょうの日本株まとめ🌙",
 };
 
-const X_POINTS_TITLE: Record<ReportType, (count: number) => string> = {
-  morning: () => "📌 今日の注目ポイント",
-  close: (count) => `📌 今日の${count}ポイント`,
-};
+/**
+ * The same title on the morning and the close, and the same 3 points the app shows first (2026-10-14): the points open
+ * the body, right under the header line.
+ */
+export const X_POINTS_TITLE = "📌 今日のポイント";
 
 const X_WATCH_TITLE: Record<ReportType, string> = {
   morning: "👀 今日見るポイント",
@@ -172,14 +173,15 @@ function xBodyOf(text: string): string {
 function formatXBody(packet: MarketReportPacket): string {
   // Points or a closing removed as factually wrong before delivery are left out with their heading.
   const pointList = packet.x_post.points_ja.map((point) => point.trim()).filter(Boolean);
-  const points = pointList.length > 0
-    ? [X_POINTS_TITLE[packet.report_type](pointList.length), ...pointList.map((point) => `・${point}`)].join("\n")
-    : "";
+  const points = pointList.length > 0 ? [X_POINTS_TITLE, ...pointList.map((point) => `・${point}`)].join("\n") : "";
+  // The header line, then the points (when any survived), then the lead: the body starts with 📌 今日のポイント.
+  const opening = points
+    ? [[X_HEADERS[packet.report_type], points].join("\n"), packet.x_post.lead_ja.trim()]
+    : [[X_HEADERS[packet.report_type], packet.x_post.lead_ja.trim()].join("\n")];
   const closing = packet.x_post.closing_ja.trim();
   if (!isPresentationV2(packet)) {
     return [
-      [X_HEADERS[packet.report_type], packet.x_post.lead_ja.trim()].join("\n"),
-      points,
+      ...opening,
       closing ? `💬 ${closing}` : "",
     ].filter(Boolean).join("\n\n");
   }
@@ -188,8 +190,7 @@ function formatXBody(packet: MarketReportPacket): string {
   const watch = (packet.x_post.watch_ja ?? "").trim();
   // Optional paragraphs are dropped when the evidence did not support them.
   return [
-    [X_HEADERS[packet.report_type], packet.x_post.lead_ja.trim()].join("\n"),
-    points,
+    ...opening,
     context,
     news ? `📰 ${news}` : "",
     watch ? [X_WATCH_TITLE[packet.report_type], watch].join("\n") : "",

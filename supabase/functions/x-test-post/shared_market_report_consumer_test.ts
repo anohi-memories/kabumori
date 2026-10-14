@@ -75,7 +75,8 @@ test("gate ON + completed packet: posts the deterministic shared text once and c
   const result = await publishSharedMarketReport("close", COMPLETED, deps);
   const body = formatSharedXPost(REPORT);
   assert.equal(result.text, appendKabumoriReportFixedHashtags(body));
-  assert.ok(result.text.startsWith("【大引け】きょうの日本株まとめ🌙\nきょうの日本株は日経平均が+0.33%"));
+  assert.ok(result.text.startsWith("【大引け】きょうの日本株まとめ🌙\n📌 今日のポイント\n・"));
+  assert.ok(result.text.includes("\n\nきょうの日本株は日経平均が+0.33%"), "the lead follows the points");
   assert.ok(result.text.startsWith(body));
   assert.deepEqual(log.map((entry) => entry.op), ["createRun", "updateRun", "postToX", "completePost"]);
   const values = log[1].args[1] as Record<string, unknown>;
@@ -175,7 +176,7 @@ test("presentation v2 packet: the X post is the ~500-character digest, formatted
   const length = Array.from(body).length - Array.from(REPORT_DISCLAIMER_JA).length - 2;
   assert.ok(length >= X_POST_TARGET_MIN_CHARS && length <= X_POST_TARGET_MAX_CHARS, `length ${length}`);
   assert.equal(result.text, appendKabumoriReportFixedHashtags(body));
-  for (const heading of ["📌 今日の3ポイント", "📰 ", "👀 明日以降の注目点", "💬 今日のひとこと"]) assert.ok(body.includes(heading), heading);
+  for (const heading of ["📌 今日のポイント", "📰 ", "👀 明日以降の注目点", "💬 今日のひとこと"]) assert.ok(body.includes(heading), heading);
   const values = log[1].args[1] as Record<string, unknown>;
   assert.deepEqual([values.api_cost_usd, values.web_search_calls, values.fact_check_status], [0, 0, "passed"]);
   assert.deepEqual((values.market_data as { quality_warnings: string[] }).quality_warnings, []);

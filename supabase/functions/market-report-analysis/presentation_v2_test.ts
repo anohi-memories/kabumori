@@ -93,9 +93,10 @@ for (const [label, fixture, make] of [["morning", morning, richMorning1001], ["c
     assert.ok(chars(body) >= X_POST_TARGET_MIN_CHARS && chars(body) <= X_POST_TARGET_MAX_CHARS, `length ${chars(body)}`);
     assert.deepEqual([sharedXPostIssues(packet, post), sharedXPostWarnings(packet, post)], [[], []]);
     const sections = post.split("\n\n");
-    assert.ok(sections[0].startsWith(label === "morning" ? "【朝刊】きょうの日本株、ここをチェック☀️\n" : "【大引け】きょうの日本株まとめ🌙\n"));
-    assert.ok(sections[1].startsWith(label === "morning" ? "📌 今日の注目ポイント\n・" : "📌 今日の3ポイント\n・"));
-    assert.equal(sections[1].split("\n").filter((line) => line.startsWith("・")).length, 3, "exactly 3 points");
+    // 2026-10-14: the header line, then 📌 今日のポイント (same title on both reports), then the lead.
+    assert.ok(sections[0].startsWith(label === "morning" ? "【朝刊】きょうの日本株、ここをチェック☀️\n📌 今日のポイント\n・" : "【大引け】きょうの日本株まとめ🌙\n📌 今日のポイント\n・"));
+    assert.equal(sections[0].split("\n").filter((line) => line.startsWith("・")).length, 3, "exactly 3 points");
+    assert.equal(sections[1], analysis.x_post.lead_ja, "the lead follows the points");
     assert.equal(sections[2], analysis.x_post.context_ja, "context paragraph");
     assert.equal(sections[3], `📰 ${analysis.x_post.news_ja}`, "news paragraph");
     assert.ok(sections[4].startsWith(label === "morning" ? "👀 今日見るポイント\n" : "👀 明日以降の注目点\n"));
@@ -197,7 +198,7 @@ test("App close: story sections, and the morning packet of the same day is answe
 test("a stored v1 packet still renders: the short X body and a story from its existing fields", () => {
   assert.equal(v1Morning1001.presentation_version, undefined);
   const post = formatSharedXPost(v1Morning1001);
-  assert.ok(post.includes("\n📌 今日の注目ポイント\n") && post.includes("\n💬 ") && !post.includes("👀"));
+  assert.ok(post.startsWith("【朝刊】きょうの日本株、ここをチェック☀️\n📌 今日のポイント\n") && post.includes("\n💬 ") && !post.includes("👀"));
   assert.deepEqual(sharedXPostIssues(v1Morning1001, post), [], "still postable");
   assert.ok(has(sharedXPostWarnings(v1Morning1001, post), "X_POST_SHORTER_THAN_TARGET"));
   const story = buildAppMarketStory(v1Morning1001);
