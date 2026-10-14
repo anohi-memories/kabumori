@@ -219,7 +219,11 @@ function outlookBlock(report: CompletedMarketReport): MarketReportBlock | null {
 const TOKYO_KEYS = ['nikkei225', 'topix_proxy_1306'];
 const US_KEYS = ['dow', 'sp500', 'nasdaq_composite'];
 
-/** 指標を 東京市場・米国市場・為替・金利・商品など に分ける（返ってきた行だけ。種類の分からない行は3つ目へ）。 */
+/**
+ * 指標を 東京市場・米国市場・為替・金利・商品など に分ける（返ってきた行だけ。種類の分からない行は3つ目へ）。
+ * どの行にも種類が無い（V2 の migration を当てる前の RPC）ときは、分けずに「主な指標」の1つにまとめる
+ * （日経平均を「為替・金利・商品など」に入れない）。
+ */
 export function indicatorGroups(moves: readonly MarketMove[]): MarketIndicatorGroup[] {
   const row = (move: MarketMove): MarketIndicatorRow => ({
     label: move.label,
@@ -228,6 +232,7 @@ export function indicatorGroups(moves: readonly MarketMove[]): MarketIndicatorGr
     sessionDateJa: monthDayJa(move.sessionDate),
     stale: move.stale,
   });
+  if (moves.length > 0 && moves.every((move) => !move.metricKey)) return [{ title: '主な指標', rows: moves.map(row) }];
   const pick = (keys: readonly string[]) =>
     keys.flatMap((key) => moves.filter((move) => move.metricKey === key)).map(row);
   const known = new Set([...TOKYO_KEYS, ...US_KEYS]);

@@ -257,9 +257,9 @@ test("古い回（V1 の返り値）: ゆめちゃんのブロックは無く、
   assert.deepEqual(outlook.bullets, ["米CPI", "円高", "弱めのテーマ：不動産"]);
   // データの時刻が無いときは、レポートの作成時刻（ラベルも変える）。
   assert.equal(block(blocks, "reference").meta, "レポート作成：10月14日 08:05");
-  // V1 は指標の種類を返さないので、すべて3つ目のまとまり（値は作らない）。
+  // V1 は指標の種類を返さないので、分けずに「主な指標」の1つにまとめる（日経平均を為替などに入れない。値は作らない）。
   const groups = block(blocks, "reference").groups ?? [];
-  assert.deepEqual(groups.map((group) => group.title), ["為替・金利・商品など"]);
+  assert.deepEqual(groups.map((group) => group.title), ["主な指標"]);
   assert.equal(groups[0].rows.length, MOVES.length);
 });
 
@@ -289,6 +289,10 @@ test("参考資料: 指標を種類で分ける（東京・米国・その他。
   // 東京・米国の指標が無ければ、そのまとまりは出さない（ナスダックが無くても作らない）。
   const onlyFx = indicatorGroups(view(v2Raw("morning", { major_moves: [MOVES[0]] })).report.majorMoves);
   assert.deepEqual(onlyFx.map((group) => group.title), ["為替・金利・商品など"]);
+  // V2 の migration を当てる前（どの行にも種類が無い）は、分けずに「主な指標」の1つにまとめる。
+  const beforeMigration = indicatorGroups(view(v1Raw("morning")).report.majorMoves);
+  assert.deepEqual(beforeMigration.map((group) => group.title), ["主な指標"]);
+  assert.ok(beforeMigration[0].rows.length > 0);
   assert.equal(dateTimeJa("2026-10-14T06:05:00Z"), "10月14日 15:05");
   assert.equal(dateTimeJa("not a time"), "");
 });
