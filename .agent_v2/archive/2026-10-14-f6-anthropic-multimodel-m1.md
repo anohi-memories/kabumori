@@ -1,0 +1,130 @@
+# F6 — Claude API共通基盤・Sonnet/Haikuマルチモデル対応 Phase M1
+
+- task_id: common-ai-f6-anthropic-multimodel-shared-adapter-m1-20261013
+- owner: claude
+- slot: F6
+- status: done
+- next_owner: none
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- completion_code: L6
+- start_code: F6
+- recommended_model: **Opus5.5（高）**
+- previous_archive: .agent_v2/archive/2026-10-13-f6-opus-primary-live-cutover.md
+- production_mutation_window: CLOSED
+- scope: **source-only / offline implementation**. No production deployment, actual paid Anthropic calls, DB policy/secret changes or consumer activation.
+
+## 目的と分担
+Opus5.5の朝刊・大引け本番生成を維持しつつ、同じ `ANTHROPIC_API_KEY` からユースケースごとに Claude Sonnet / Haiku（必要に応じ Opus）を選べる安全な共通API接続基盤を整える。
+**F6 は provider shared adapter / model catalog / shared ledger契約のみ所有。**
+F2（旧G2）がゆめちゃん朝刊・大引けの予測文・Fact/免責・report handlerを所有し、F8は国内ニュース取得改善、F9はAPI/Web検索コスト最適化を所有する。両担当への横断的な設計提案は可、他slotの実装ファイルを勝手に編集しない。
+
+## 開始前のゲート
+1. fresh origin/main、PROJECT_RULES.md、.agent_v2/ORCHESTRATION.md、新旧 ACTIVE_TASK/CURRENT_STATE、旧 G6/G2 と F2/F8/F9 の最新metadata・未処理完了確認、PR/worktree/checkout の衝突を調べる。完了task_idの二重割当禁止。
+2. 今の live `market-report-analysis`、Opus `primary_both`、台帳上限、X/app consumer gate を**read-only**で把握する。10/13 16:21 の Opus close の成功（$0.187508, 2 calls）は既知。将来の朝刊や配信成功を推定しない。
+3. 同じ `_shared/ai_provider/` を変更する他slotがあれば STOP。独立 clean F6 worktree、他slotに checkout/reset/rebase/force-push 禁止。
+
+## 実装
+A. `supabase/functions/_shared/ai_provider/` 内の既存 provider、model_catalog、ledger/budget、timeout、error/result contract を精査する。重複実装を作らず、既存OpenAI共通基盤と互換なClaude multimodel adapterを設計・実装する。
+B. 呼び出し元が `logical_role` / use-case と明示的なモデルポリシーを渡して、許可済み Sonnet / Haiku / Opus から選択できるようにする。APIキーとモデルの選択は独立。実在するモデルIDは最新の公式Anthropic documentation/API model catalog と突き合わせ、ハードコードで未確認モデルを本番稼働させない。
+C. 固定のallowlist、role別defaultとoverride制約、versioned model alias、model unavailable 時の安全なエラー、上限付きtokens/timeout/retry、予算予約・確定・解放・idempotency、使途別の費用可視化を共通契約として扱う。Opus reportの `primary_both` の現行挙動を完全保持。新しいmodelを選べることと全ユースケースをClaudeへ即切替することは別。
+D. 既存 `ANTHROPIC_API_KEY` はEdge Secrets経由のみ。ログ・PR・Reportに値を表示しない。ユーザー別データ、system prompt、JSON schema/Fact厳格度、権限境界は既存より弱めない。ニュース取りこぼし回避とWeb検索コスト政策（F8/F9）の動作を変えない。
+E. source-only offline smoke and contract tests: Sonnet / Haiku / Opus routing; unknown/disallowed model/role fail-closed; key missing; quota denied; provider timeout; retry/idempotency; cost attribution; structured output; fake/mock provider with **no network and no paid calls**. 既存provider/market report全suiteとTypeScript type/lint、diff check。既存Fact制約を弱めない。
+F. 実ユースケースへの組込は**今回は行わない**。ニュース/F8、API最適化/F9、F2 report handler、F1 AI質問、POSTONAはそれぞれの担当が後続TASKで接続する。そのためのインターフェースとサンプル、アプリ別/role別の見積り・申送りを docs に残す。
+G. プレビュー用 Draft PRのみ。mainへのmergeは別承認。Supabase Edge/DB/Auth/RLS/Cron/Secret/本番フラグ・予算ポリシー・X投稿・アプリ配信・API課金等は変更しない。
+
+## 変更可 / 不可
+- 可: `supabase/functions/_shared/ai_provider/` の既存共通アダプター・catalog・共通テスト、専用設計docs（実際の所有関係と差分確認後のみ）。
+- 不可: F2所有 `market-report-analysis/handler.ts` / report prompts、F8/F9の `important-news-monitor` / news discovery、POSTONA、その他slot owned files、production環境。
+- cross-slot共通ファイルの改変が必要なら事前に具体的なhandoffを用意し、勝手に割当/上書きしない。
+
+## 完了条件・Report
+- 既存Opus `primary_both` の互換維持、Sonnet/Haiku選択のoffline実装とテスト、Mockで限界・コスト・fail-closed確認、重複請求防止、秘密値漏えいなし。
+- 独立worktree・fresh main・競合確認、changed_files、tests、commit/head、Draft PR/base/CI、remaining_issues、no paid/production mutation、次に接続すべきユースケースとownerを明記。
+- `status: review_required`, `next_owner: chatgpt` にして、**共通AI基盤のちゃ（OpenAI・Claude API専用チャット）へ L6** と返却。Review: 料金台帳/アクセス境界に高リスク変更があればCodex Sol（高）を別枠で手配。
+
+## Report
+- task_id: common-ai-f6-anthropic-multimodel-shared-adapter-m1-20261013
+- result: **PASS_OFFLINE_SOURCE**
+  - 用途（role）ごとに Claude の Sonnet / Haiku / Opus を選ぶ共通の仕組みを、ソースとオフラインのテストで作った
+  - 実際の用途への組み込み、本番、実 API は 0
+  - 本番の Opus の朝刊・大引け（`market_report_primary.ts`、`primary_both`）は変えていない
+- branch / commit / PR
+  - `claude/f6-anthropic-multimodel-m1-20261013` @ `a7e1d3f3f6b3812e9b8b0c0f7c29835e25505d6b`
+  - Draft PR [#187](https://github.com/anohi-memories/kabumori/pull/187)（base main）
+  - 最新の main（`2f289d8d`）と `merge-tree` で衝突なし
+  - 新しい worktree `/Users/yuya/Developer/kabumori-f6-multimodel` を `kabumori-fresh` から作った
+- 競合の確認: 開いている PR で `_shared/ai_provider/` に触れているのは、古い shadow の PR（#150 / #157 / #162）だけ
+  - 今回のファイル（`model_policy*`、`model_catalog.ts` の末尾への追加、`mod.ts` の export）とは重ならない
+  - ほかのスロットのファイル・branch・worktree は変更していない
+- changed_files（+701 / -2）
+  - `supabase/functions/_shared/ai_provider/model_catalog.ts`
+    - 版付きの別名 `anthropic.{opus,sonnet,haiku}@2026-10` と `resolveModelName` / `listModelAliases` を足した
+    - 「最新」の別名は作らない。価格は変えていない
+  - `supabase/functions/_shared/ai_provider/model_policy.ts`（新規）
+    - `defineAnthropicModelPolicies`（登録のときに全部を確かめて凍結）
+    - `resolveModelChoice`、`executeWithModelPolicy`、`modelPolicyRequest`
+  - `supabase/functions/_shared/ai_provider/model_policy_test.ts`（新規、11件）
+  - `supabase/functions/_shared/ai_provider/mod.ts`（export を足した）
+  - `docs/ai-provider/F6_M1_ANTHROPIC_MULTIMODEL.md`（新規）
+- モデルの確認（公式、2026-10-13 に WebFetch で読んだ）
+  - pricing ページと models overview ページで、ID `claude-opus-5-5` / `claude-sonnet-5-5` / `claude-haiku-5-5` を確かめた
+  - 価格（$4/$20、$2/$10、Haiku $0.10/$0.50 と 10万トークン超は $0.50/$2.50）、キャッシュ読み込み、1M / 128K、effort の既定、提供終了日も確かめた
+  - カタログの価格は公式と一致した
+  - 手元の参照資料（10/06 の写し）の Sonnet 5.5 のキャッシュ読み込み $0.20 は古い。公式は $0.10（0.05倍）
+- 仕組み
+  - 用途ごとに、許可するモデル（ID か別名）と既定、effort と既定、出力の上限、1回の時間、再試行の上限（1〜3）、1回の上限額（任意）、費用の計上先（application / feature）を決める
+  - 呼び出し側は狭める方向だけ変えられる
+  - 決まりの外は、キーの読み取り・予約・送信の前に拒否する（`ROLE_UNKNOWN`、`MODEL_UNKNOWN`、`MODEL_NOT_ALLOWED`、`EFFORT_NOT_ALLOWED`、`OUTPUT_CAP_EXCEEDED`、`COST_CAP_EXCEEDED`）
+  - 送信は既存の `executeAiRequest` のまま
+    - 同じ `ANTHROPIC_API_KEY`（Edge Secret のみ）
+    - 同じ予算台帳（reserve → mark_sent → settle、`callId` と試行番号でのべき等）
+    - 同じスキーマの検査、時間、費用
+  - 費用の計上は role・model・feature ごと（`attribution`）
+  - 404 `not_found_error` は `modelUnavailable` として返す
+  - **別のモデル・provider への自動切り替えは無い**。server-side の `fallbacks` も使わない（利用者の方針）
+- tests（実通信・鍵・本番 0）
+  - `model_policy_test.ts` 11/11
+    - 3つのモデルへの振り分け、狭める上書き、拒否 10通り（送信・キーの読み取り・予約が 0）
+    - キーが無い・ほかの用途の枠だけ・枠を使い切った: どれも送信 0
+    - 529 の再試行は決まりの回数まで、同じ `callId` で試行ごとに予約。時間切れと 4xx は再試行しない
+    - 404 → `modelUnavailable`、Haiku の 10 万トークン超の単価、スキーマ違反
+    - 間違った決まり 13通り、凍結、別名（「最新」が無い）、漏洩なし
+  - 通信禁止と鍵・設定の環境変数7つの読み取り禁止で、model_policy・isolation・market_report_primary の各テスト: 32/32
+  - mutation 6/6 検出（許可リストの確認、再試行の上限、`@latest` の別名、上限額、出力の上限、effort の確認）
+  - 回帰
+    - provider 121（110 + 11。モデル ID はカタログだけ、という隔離テストを含む）
+    - market-report-analysis 324
+    - `_shared` 624
+  - `deno check`、`deno lint`（32 ファイル）、`git diff --check`、秘密情報スキャン 0
+- 本番の状態（読み取りだけ。2026-10-13 20:56 JST）
+  - `market-report-analysis` は v33（コードは 15:44 の deploy のまま。version は secrets によるもの）、`verify_jwt=false`
+  - Secret は 35件。`ANTHROPIC_API_KEY` あり。モードは `primary_both`、モデルは `claude-opus-5-5`（どちらも digest で一致）
+  - 台帳
+    - 上限: 月 $25・120回、1日 $3・8回、1回 $1
+    - 10/13 の使用: 2回 $0.187508。月 3回 $0.188956
+    - 予約は確定済み3件だけ（詰まったもの 0）
+  - **配信のゲートは x=true・app=true（2026-10-13 20:49:27 JST に変わっていた）**
+    - F6 は変えていない
+    - 18:24 に F2 の配信切り替えの事前点検が L2 で承認された記録がある
+    - 本番の利用側の関数は、X が `x-test-post`（コードは 10/08 07:11）、アプリが `personalized-reports`（コードは 09/25 22:11）。どちらも、15:3x に F6 が確かめた「main より古い」状態のまま
+    - 明日 10/14 07:55 の朝刊は Opus で作られ、X（08:18〜08:22）とアプリ（08:35）が読む。Opus が本番と再試行の両方で失敗すると、その回は届かない（fail closed）
+    - 将来の配信の成功は、この Report では推定しない。F2 が観察する
+- 次につなぐ用途と担当（どれも後の TASK。F6 は勝手につながない）
+
+| 用途 | 担当 |
+|---|---|
+| ニュースの重要度判定（Haiku）・要約（Sonnet） | F8 |
+| API・Web 検索の費用の最適化（Haiku の前処理） | F9 |
+| AI への質問（利用者ごと） | F1 |
+| 市況レポートの決まりへの移行（任意。今は env で Opus） | F2 |
+| POSTONA の投稿の下書き | F3 / F4 |
+
+  - つなぐたびに必要なもの
+    1. 台帳のポリシー（provider + model + feature + subject の枠。本番の DB の変更で、別承認）
+    2. `isolation_test.ts` の許可リストへの追加（F6）
+    3. 品質と費用の評価
+  - 見積もりは docs §4
+- remaining_issues
+  - 料金台帳とアクセス境界は変えていない（台帳の RPC・ポリシー・権限は今のまま）。必要なら Codex Sol（高）のレビューを別に手配
+  - Anthropic の Admin API による利用量の照合（請求との突き合わせ）は、範囲外
+- merge 0、deploy 0、production の変更 0、paid_calls 0。Secret・`.env`・鍵の値は読んでいない（名前と、モード・モデルの digest の照合だけ）
