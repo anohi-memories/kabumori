@@ -8,18 +8,18 @@
 
 ## F1
 - slot: F1
-- status: done
-- task_id: kabumori-f1-ai-ask-b0-terminal-finish-auth-fix-20261014
+- status: ready
+- task_id: kabumori-f1-shared-market-report-home-integration-20261014
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
 - recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F1.md
 - current_report_path: .agent_v2/tasks/F1.md#report
-- dependencies: J4 R3-P2 (terminal finish AUTH); PR186 v3; PR177/171/166 protected
-- blocker: B1 and production NO_GO until independent focused re-review
-- slot_use: AIに聞く B0 終端finish再返却の認可修正（J4残件1件）
+- dependencies: F2 共通市況フィード（L2 accepted）; 既存 get_app_market_report 契約。生成・DB・RPC・Edge は変更しない
+- blocker: なし（一覧取得契約が不足する場合は F2 へ申し送り）
+- slot_use: 共通市況レポートのホーム「今日のポイント」連動と「きょうの市況」履歴閲覧
 
 ## F2
 - slot: F2
