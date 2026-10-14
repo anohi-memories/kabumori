@@ -161,6 +161,58 @@ export function marketReportParams(params: { type?: unknown; date?: unknown }): 
   return { type, date };
 }
 
+/** AI が書いた市況のお話（公開してよい8つの文章。空の文章もある）。V2 の回だけにある。 */
+export type AppMarketStory = {
+  summaryJa: string;
+  overseasJa: string;
+  japanJa: string;
+  crossAssetJa: string;
+  newsJa: string;
+  strongJa: string;
+  cautionJa: string;
+  watchJa: string;
+};
+
+export type YumeStance = 'up' | 'down' | 'flat';
+export type YumeVerdict = 'hit' | 'partial' | 'miss' | 'undeterminable';
+
+/** 朝の予想の答え合わせ（判定はサーバーのコードが決めたもの。text_ja はゆめちゃんのことば）。 */
+export type AppYumeReview = {
+  verdict: YumeVerdict;
+  reasonCode: string;
+  morningStance: YumeStance | null;
+  morningHeadlineJa: string | null;
+  actualChangeDisplay: string | null;
+  actualSessionDate: string | null;
+  textJa: string;
+};
+
+/** ゆめちゃん（AI）の見立て。意見であって事実ではない（事実の項目とは分けて表示する）。 */
+export type AppYumeView = {
+  stance: YumeStance;
+  horizon: 'this_session' | 'next_session';
+  horizonDate: string | null;
+  flatBandPct: number;
+  headlineJa: string;
+  reasonsJa: string;
+  scenarioJa: string;
+  counterJa: string;
+  invalidationJa: string;
+  review: AppYumeReview | null;
+};
+
+export type AppSessionView = { market: 'tokyo' | 'us'; sessionDate: string | null; direction: string };
+export type NewsScope = 'broad' | 'sector' | 'company';
+export type MarketMove = {
+  label: string;
+  value: string;
+  change: string | null;
+  sessionDate: string;
+  stale: boolean;
+  metricKey: string | null;
+};
+export type MarketNews = { headlineJa: string; whyJa: string; scope: NewsScope | null };
+
 export type AppMarketReport =
   | { status: 'disabled' }
   | { status: 'missing' | 'not_ready'; reportType: ReportType; tradingDate: string | null }
@@ -173,22 +225,92 @@ export type AppMarketReport =
     summaryJa: string;
     direction: string;
     pointsJa: string[];
-    majorMoves: Array<{ label: string; value: string; change: string | null; sessionDate: string; stale: boolean }>;
+    majorMoves: MarketMove[];
     claims: Array<{ textJa: string; claimType: string; scope: string }>;
-    keyNews: Array<{ headlineJa: string; whyJa: string }>;
+    keyNews: MarketNews[];
     strongThemes: string[];
     weakThemes: string[];
     nextWatchJa: string[];
     risksJa: string[];
     dataGapsJa: string[];
     generatedAt: string | null;
+    // ここから V2（get_app_market_report の追加の項目）。古い回・古いサーバーでは null / []。
+    presentationVersion: string | null;
+    appStory: AppMarketStory | null;
+    sessionViews: AppSessionView[];
+    yume: AppYumeView | null;
+    /** 元の市場データを取得した時刻（ISO 8601）。 */
+    dataGeneratedAt: string | null;
   };
+
+export type CompletedMarketReport = Extract<AppMarketReport, { status: 'completed' }>;
 
 const strings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : [];
 const objects = (value: unknown): Array<Record<string, unknown>> =>
   Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object') : [];
 const text = (value: unknown): string => (typeof value === 'string' ? value : '');
+const textOrNull = (value: unknown): string | null => (typeof value === 'string' && value.length > 0 ? value : null);
+const record = (value: unknown): Record<string, unknown> | null =>
+  !!value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+const STANCES: readonly YumeStance[] = ['up', 'down', 'flat'];
+const VERDICTS: readonly YumeVerdict[] = ['hit', 'partial', 'miss', 'undeterminable'];
+const NEWS_SCOPES: readonly NewsScope[] = ['broad', 'sector', 'company'];
+/** 横ばいの帯（サーバーの YUME_FLAT_BAND_PCT と同じ）。記録に帯が無い・壊れているときだけ使う。 */
+export const YUME_DEFAULT_FLAT_BAND_PCT = 0.3;
+const stanceOf = (value: unknown): YumeStance | null => (STANCES.includes(value as YumeStance) ? value as YumeStance : null);
+
+function parseAppStory(value: unknown): AppMarketStory | null {
+  const row = record(value);
+  if (!row) return null;
+  return {
+    summaryJa: text(row.summary_ja),
+    overseasJa: text(row.overseas_ja),
+    japanJa: text(row.japan_ja),
+    crossAssetJa: text(row.cross_asset_ja),
+    newsJa: text(row.news_ja),
+    strongJa: text(row.strong_ja),
+    cautionJa: text(row.caution_ja),
+    watchJa: text(row.watch_ja),
+  };
+}
+
+function parseYumeReview(value: unknown): AppYumeReview | null {
+  const row = record(value);
+  if (!row || !VERDICTS.includes(row.verdict as YumeVerdict)) return null;
+  return {
+    verdict: row.verdict as YumeVerdict,
+    reasonCode: text(row.reason_code),
+    morningStance: stanceOf(row.morning_stance),
+    morningHeadlineJa: textOrNull(row.morning_headline_ja),
+    actualChangeDisplay: textOrNull(row.actual_change_display),
+    actualSessionDate: textOrNull(row.actual_session_date),
+    textJa: text(row.text_ja),
+  };
+}
+
+/** ゆめちゃんの見立て。予想・期間・見出し・理由のどれかが欠けたら出さない（null）。 */
+function parseYume(value: unknown): AppYumeView | null {
+  const row = record(value);
+  const stance = stanceOf(row?.stance);
+  if (!row || !stance || (row.horizon !== 'this_session' && row.horizon !== 'next_session')) return null;
+  const headlineJa = text(row.headline_ja).trim();
+  const reasonsJa = text(row.reasons_ja).trim();
+  if (!headlineJa || !reasonsJa) return null;
+  const band = row.flat_band_pct;
+  return {
+    stance,
+    horizon: row.horizon,
+    horizonDate: textOrNull(row.horizon_date),
+    flatBandPct: typeof band === 'number' && Number.isFinite(band) && band > 0 ? band : YUME_DEFAULT_FLAT_BAND_PCT,
+    headlineJa,
+    reasonsJa,
+    scenarioJa: text(row.scenario_ja).trim(),
+    counterJa: text(row.counter_ja).trim(),
+    invalidationJa: text(row.invalidation_ja).trim(),
+    review: parseYumeReview(row.review),
+  };
+}
 
 export function parseAppMarketReport(value: unknown, requested: ReportType): AppMarketReport {
   const row = (value ?? {}) as Record<string, unknown>;
@@ -216,12 +338,15 @@ export function parseAppMarketReport(value: unknown, requested: ReportType): App
       change: text(move.change_pct_display) || null,
       sessionDate: text(move.session_date),
       stale: move.freshness === 'stale',
+      metricKey: textOrNull(move.metric_key),
     })),
     claims: objects(row.claims).filter((claim) => text(claim.text_ja)).map((claim) => ({
       textJa: text(claim.text_ja), claimType: text(claim.claim_type), scope: text(claim.scope),
     })),
     keyNews: objects(row.key_news).filter((news) => text(news.headline_ja)).map((news) => ({
-      headlineJa: text(news.headline_ja), whyJa: text(news.why_it_matters_ja),
+      headlineJa: text(news.headline_ja),
+      whyJa: text(news.why_it_matters_ja),
+      scope: NEWS_SCOPES.includes(news.scope as NewsScope) ? news.scope as NewsScope : null,
     })),
     strongThemes: strings(row.strong_themes),
     weakThemes: strings(row.weak_themes),
@@ -229,5 +354,16 @@ export function parseAppMarketReport(value: unknown, requested: ReportType): App
     risksJa: strings(row.risks_ja),
     dataGapsJa: strings(row.data_gaps_ja),
     generatedAt: typeof row.generated_at === 'string' ? row.generated_at : null,
+    presentationVersion: textOrNull(row.presentation_version),
+    appStory: parseAppStory(row.app_story),
+    sessionViews: objects(row.session_views)
+      .filter((view) => (view.market === 'tokyo' || view.market === 'us') && text(view.direction))
+      .map((view) => ({
+        market: view.market as 'tokyo' | 'us',
+        sessionDate: textOrNull(view.session_date),
+        direction: text(view.direction),
+      })),
+    yume: parseYume(row.yume),
+    dataGeneratedAt: textOrNull(row.data_generated_at),
   };
 }

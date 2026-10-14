@@ -116,8 +116,7 @@ test("one generation + one Fact check produces the packet; usage and cost are co
   assert.equal(packet.presentation_version, "market_presentation.v2");
   assert.equal(packet.fact.generation_attempts, 1);
   const post = formatSharedXPost(packet);
-  assert.ok(post.startsWith("【大引け】きょうの日本株まとめ🌙\n"));
-  assert.ok(post.includes("📌 今日の3ポイント\n・東京市場は米国株安の中でも上昇"));
+  assert.ok(post.startsWith("【大引け】きょうの日本株まとめ🌙\n📌 今日のポイント\n・東京市場は米国株安の中でも上昇"));
   // Only OpenAI Responses bodies, no tools (no web_search).
   for (const call of calls) assert.equal("tools" in call.body, false);
   assert.match(await reportContentHash(packet), /^[0-9a-f]{64}$/);

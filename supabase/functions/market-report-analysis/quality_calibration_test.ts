@@ -87,8 +87,10 @@ test("10/2 live draft: delivered in one generation and one Fact call (was three 
 test("the 486-character X body is inside the target: no length warning", () => {
   const packet = assemblePacket(input, live(), { generatedAt: NOW(), attempts: 1 });
   const post = formatSharedXPost(packet);
-  // The disclaimer is appended by code and not measured: the body is still 486.
-  assert.equal(Array.from(post).length, 486 + 2 + Array.from(REPORT_DISCLAIMER_JA).length);
+  // The disclaimer is appended by code and not measured. The body was 486; the shared title 「📌 今日のポイント」
+  // (2026-10-14) is two characters shorter than the morning's 「📌 今日の注目ポイント」, and moving the points above
+  // the lead adds nothing.
+  assert.equal(Array.from(post).length, 484 + 2 + Array.from(REPORT_DISCLAIMER_JA).length);
   assert.deepEqual(sharedXPostWarnings(packet, post), []);
 });
 

@@ -53,7 +53,7 @@ function harness(openAi: (body: Record<string, unknown>) => Response | Promise<R
   };
   const deps: Deps = {
     env: (name) => ({
-      SUPABASE_URL: SUPABASE, SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-secret" }),
+      SUPABASE_URL: SUPABASE, SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-secret" }), KABUMORI_MARKET_REPORT_NEWS_SELECTION: "all",
       SEND_PUSH_NOTIFICATIONS_CRON_SECRET: "cron-secret", OPENAI_API_KEY: "openai-test-key",
     } as Record<string, string>)[name],
     fetch: fetchMock,

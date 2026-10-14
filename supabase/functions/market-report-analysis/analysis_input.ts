@@ -91,6 +91,8 @@ export type AnalysisInput = {
   scopeByRef: Map<string, NewsScope>;
   /** Close only: the code's look-back at the same day's morning call (null on a morning report). */
   yumeReview: YumeReview | null;
+  /** Referenced news left out of the model input, each with a fixed reason code (recorded in the run diagnostics). */
+  excludedNews: NewsExclusion[];
 };
 
 const MAJOR_CATEGORIES = new Set(["monetary_policy"]);
@@ -246,10 +248,55 @@ function stripPostDecoration(text: string): string {
     .trim();
 }
 
+// Market-wide selection (2026-10-14, F2). The shared morning/close is about the whole market, so an ordinary company's
+// own disclosure (earnings, dividends, buybacks, a single company's incident) is left out of the model input instead of
+// being ranked last: on thin days the model filled the story with three such items. A company item stays only when it
+// can move a major sector (semiconductors / AI) and is at least high severity, at most MAX_COMPANY_NEWS_ITEMS of them.
+// Holdings-specific news is the personalized reports' job, not this one's. Every excluded item is recorded with a
+// fixed reason code (PROJECT_RULES 候補選定と除外ログ).
+const MARKET_MOVING_COMPANY_CATEGORIES = new Set(["semiconductors", "ai_tech"]);
+const MARKET_MOVING_COMPANY_SEVERITIES = new Set(["emergency", "critical", "high"]);
+export const MAX_COMPANY_NEWS_ITEMS = 2;
+
+export type NewsExclusionReason = "NEWS_TEXT_NOT_FACT_PASSED" | "COMPANY_NOT_MARKET_WIDE" | "COMPANY_NEWS_CAP" | "NEWS_ITEM_CAP";
+export type NewsExclusion = { ref: string; reason: NewsExclusionReason };
+
+/** A company item that can move a major sector: semiconductors / AI news of high severity or above. */
+export function isMarketMovingCompanyNews(item: Pick<NewsInputItem, "scope" | "severity" | "categories">): boolean {
+  return item.scope === "company" && MARKET_MOVING_COMPANY_SEVERITIES.has(item.severity) &&
+    item.categories.some((category) => MARKET_MOVING_COMPANY_CATEGORIES.has(category));
+}
+
+/** The items the market-wide report may use, and why each other item was left out. Order is kept. */
+export function selectMarketWideNews(items: readonly NewsInputItem[]): { kept: NewsInputItem[]; excluded: NewsExclusion[] } {
+  const kept: NewsInputItem[] = [];
+  const excluded: NewsExclusion[] = [];
+  let companies = 0;
+  for (const item of items) {
+    if (item.scope !== "company" || isMajorNews(item)) {
+      kept.push(item);
+    } else if (!isMarketMovingCompanyNews(item)) {
+      excluded.push({ ref: item.ref, reason: "COMPANY_NOT_MARKET_WIDE" });
+    } else if (companies >= MAX_COMPANY_NEWS_ITEMS) {
+      excluded.push({ ref: item.ref, reason: "COMPANY_NEWS_CAP" });
+    } else {
+      companies += 1;
+      kept.push(item);
+    }
+  }
+  return { kept, excluded };
+}
+
 /** Fact-passed Japanese text only (same rule as personalized_report_news_inputs). */
 export function newsInputItems(rows: readonly NewsTextRow[], refIds: readonly string[]): NewsInputItem[] {
+  return rankedNewsItems(rows, refIds).items.slice(0, MAX_NEWS_ITEMS);
+}
+
+/** Every usable item, ranked (scope, then severity, then time), and the referenced rows without usable text. */
+function rankedNewsItems(rows: readonly NewsTextRow[], refIds: readonly string[]): { items: NewsInputItem[]; unusable: NewsExclusion[] } {
   const allowed = new Set(refIds);
   const items: Array<NewsInputItem & { rank: number; time: string }> = [];
+  const unusable: NewsExclusion[] = [];
   for (const row of rows) {
     if (!allowed.has(row.id)) continue;
     let headline: string | null = null;
@@ -267,7 +314,10 @@ export function newsInputItems(rows: readonly NewsTextRow[], refIds: readonly st
     ) {
       headline = row.title.trim();
     }
-    if (!headline) continue;
+    if (!headline) {
+      unusable.push({ ref: `news:${row.id}`, reason: "NEWS_TEXT_NOT_FACT_PASSED" });
+      continue;
+    }
     items.push({
       ref: `news:${row.id}`,
       headline_ja: headline,
@@ -281,10 +331,10 @@ export function newsInputItems(rows: readonly NewsTextRow[], refIds: readonly st
       time: row.published_at ?? row.created_at,
     });
   }
-  return items
+  const ranked = items
     .sort((a, b) => SCOPE_RANK[a.scope] - SCOPE_RANK[b.scope] || b.rank - a.rank || b.time.localeCompare(a.time))
-    .slice(0, MAX_NEWS_ITEMS)
     .map(({ rank: _rank, time: _time, ...item }) => item);
+  return { items: ranked, unusable };
 }
 
 export function buildAnalysisInput(args: {
@@ -294,12 +344,24 @@ export function buildAnalysisInput(args: {
   newsRows: readonly NewsTextRow[];
   /** Close only: the same trading date's morning report as stored (immutable), null when none, "error" when unread. */
   morning?: YumeMorningSource;
+  /**
+   * "market_wide": ordinary company news is left out (selectMarketWideNews); the handler's default since 2026-10-14.
+   * "all" (default of this pure builder): every referenced item, the pre-2026-10-14 input the guard fixtures use.
+   */
+  newsSelection?: "market_wide" | "all";
 }): AnalysisInput {
   const { dataPacket } = args;
   const { direction, basis } = marketDirection(dataPacket.report_type, dataPacket.metrics);
   const moves = majorMoves(dataPacket.metrics);
   const gaps = dataGapsJa(dataPacket);
-  const news = newsInputItems(args.newsRows, dataPacket.news_refs.items.map((item) => item.ref_id));
+  const ranked = rankedNewsItems(args.newsRows, dataPacket.news_refs.items.map((item) => item.ref_id));
+  const selection = args.newsSelection === "market_wide" ? selectMarketWideNews(ranked.items) : { kept: ranked.items, excluded: [] };
+  const news = selection.kept.slice(0, MAX_NEWS_ITEMS);
+  const excludedNews: NewsExclusion[] = [
+    ...ranked.unusable,
+    ...selection.excluded,
+    ...selection.kept.slice(MAX_NEWS_ITEMS).map((item) => ({ ref: item.ref, reason: "NEWS_ITEM_CAP" as const })),
+  ];
   const metricRefs = moves.map((move) => `metric:${move.metric_key}`);
   const newsRefs = news.map((item) => item.ref);
 
@@ -392,6 +454,7 @@ export function buildAnalysisInput(args: {
     metricFacts: facts,
     scopeByRef: new Map(news.map((item) => [item.ref, item.scope])),
     yumeReview,
+    excludedNews,
   };
 }
 

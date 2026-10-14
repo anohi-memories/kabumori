@@ -105,7 +105,7 @@ function harness(options: {
   };
   const env: Record<string, string | undefined> = {
     SUPABASE_URL: SUPABASE,
-    SUPABASE_SECRET_KEYS: JSON.stringify({ default: SERVICE_KEY }),
+    SUPABASE_SECRET_KEYS: JSON.stringify({ default: SERVICE_KEY }), KABUMORI_MARKET_REPORT_NEWS_SELECTION: "all",
     SEND_PUSH_NOTIFICATIONS_CRON_SECRET: SECRET,
     OPENAI_API_KEY: OPENAI_KEY,
     ANTHROPIC_API_KEY: ANTHROPIC_KEY,

@@ -174,7 +174,8 @@ test("one bad point plus two safe points delivers two points; one bad App senten
   const packet = outcome.ok ? outcome.packet : null!;
   assert.deepEqual(packet.x_post.points_ja, [delivered().x_post.points_ja[0], delivered().x_post.points_ja[2]]);
   const post = formatSharedXPost(packet);
-  assert.ok(post.includes("📌 今日の2ポイント\n・"), "the heading counts what is delivered");
+  assert.ok(post.includes("📌 今日のポイント\n・"), "the same heading whatever the count (2026-10-14)");
+  assert.equal(post.split("\n\n")[0].split("\n").filter((line) => line.startsWith("・")).length, 2, "two points delivered");
   assert.deepEqual(sharedXPostIssues(packet, post), []);
   assert.equal(packet.app_story!.news_ja, delivered().app_story!.news_ja);
   const removed = packet.fact.removed_units ?? [];

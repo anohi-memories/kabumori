@@ -238,6 +238,7 @@ export function sanitizeAnalysis(
       stance: yumeIn.stance,
       headline_ja: prose(ctx, "yume.headline_ja", yumeIn.headline_ja, "forward", false),
       reasons_ja: prose(ctx, "yume.reasons_ja", yumeIn.reasons_ja, "forward", false),
+      scenario_ja: prose(ctx, "yume.scenario_ja", yumeIn.scenario_ja ?? "", "forward", false),
       counter_ja: prose(ctx, "yume.counter_ja", yumeIn.counter_ja, "forward", false),
       invalidation_ja: prose(ctx, "yume.invalidation_ja", yumeIn.invalidation_ja, "forward", false),
       review_ja: prose(ctx, "yume.review_ja", yumeIn.review_ja, "forward", false),

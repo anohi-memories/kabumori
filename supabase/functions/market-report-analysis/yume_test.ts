@@ -42,7 +42,7 @@ function morningPacket(overrides: Record<string, unknown> = {}, yume: Record<str
     headline_ja: "朝刊の見出し",
     yume: {
       version: YUME_VERSION, target: "nikkei225", horizon: "this_session", horizon_date: "2026-09-30", flat_band_pct: 0.3,
-      stance: "up", headline_ja: "きょうは買いが入りやすい一日とみています", reasons_ja: "理由", counter_ja: "反対", invalidation_ja: "外れる条件",
+      stance: "up", headline_ja: "きょうは買いが入りやすい一日とみています", reasons_ja: "理由", scenario_ja: "", counter_ja: "反対", invalidation_ja: "外れる条件",
       ...yume,
     },
     ...overrides,
@@ -150,7 +150,7 @@ test("morning: the prompt and the schema ask for ゆめちゃん's call; the sto
   assert.ok(instructions.includes("yume 以外の項目では今日の値動きを予想せず"), "the fact sections still do not forecast");
   const schema = (body.text as { format: { schema: { required: string[]; properties: Record<string, { required: string[] }> } } }).format.schema;
   assert.ok(schema.required.includes("yume"));
-  assert.deepEqual(schema.properties.yume.required, ["stance", "headline_ja", "reasons_ja", "counter_ja", "invalidation_ja", "review_ja"]);
+  assert.deepEqual(schema.properties.yume.required, ["stance", "headline_ja", "reasons_ja", "scenario_ja", "counter_ja", "invalidation_ja", "review_ja"]);
   assert.equal((input.modelInput as Record<string, unknown>)["ゆめちゃんの予想の基準"], "日経平均の前日比が±0.3%未満なら横ばい、それ以上なら上昇・下落");
 
   const outcome = await generateSharedAnalysis(input, scripted([
@@ -377,7 +377,7 @@ test("handler E2E: the close run reads the morning record, stores the code's ver
       if (path.startsWith("market_report_generation_traces")) return new Response(null, { status: 201 });
       throw new Error(`UNEXPECTED_PATH:${path}`);
     };
-    const env: Record<string, string> = { SUPABASE_URL: SUPABASE, SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-NOT-REAL" }), SEND_PUSH_NOTIFICATIONS_CRON_SECRET: SECRET, OPENAI_API_KEY: "openai-NOT-REAL" };
+    const env: Record<string, string> = { SUPABASE_URL: SUPABASE, SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-NOT-REAL" }), KABUMORI_MARKET_REPORT_NEWS_SELECTION: "all", SEND_PUSH_NOTIFICATIONS_CRON_SECRET: SECRET, OPENAI_API_KEY: "openai-NOT-REAL" };
     const now = mode === "close" ? "2026-09-30T07:20:00Z" : "2026-09-30T22:55:20Z";
     const deps: Deps = { env: (name) => env[name], fetch: fetchMock, now: () => new Date(now), sleep: () => Promise.resolve() };
     const res = await handleRequest(new Request("https://functions.local/market-report-analysis", {

@@ -14,12 +14,20 @@ export async function loadFixture(name: string): Promise<Fixture> {
   return { data: await read(`${name}_data_packet.json`), news: await read(`${name}_news_rows.json`) };
 }
 
-export function inputOf(fixture: Fixture, overrides: { payload?: MarketDataPacket; news?: NewsTextRow[] } = {}): AnalysisInput {
+/**
+ * The fixture analyses below were written against the full news input (before 2026-10-14), so the guard tests build
+ * that input ("all", the builder's default). The handler's market_wide selection has its own tests.
+ */
+export function inputOf(
+  fixture: Fixture,
+  overrides: { payload?: MarketDataPacket; news?: NewsTextRow[]; newsSelection?: "market_wide" | "all" } = {},
+): AnalysisInput {
   return buildAnalysisInput({
     dataPacket: overrides.payload ?? fixture.data.payload,
     dataPacketId: fixture.data.id,
     dataContentHash: fixture.data.content_hash,
     newsRows: overrides.news ?? fixture.news,
+    newsSelection: overrides.newsSelection,
   });
 }
 
@@ -37,6 +45,7 @@ export const YUME_MORNING_FIXTURE = {
   stance: "up" as const,
   headline_ja: "きょうは買いが入りやすい一日とみています",
   reasons_ja: "急いで売りたくなるような悪い知らせが見当たらず、きょうは買いが入りやすい一日になると考えています。ただ、これは私の見立てで、確かな材料があるわけではありません。",
+  scenario_ja: "朝のうちに買いが先行すれば、そのまま底堅く終わる展開を考えています。売りが先に出ても、大きく崩れなければ横ばい圏で落ち着きそうです。",
   counter_ja: "前日の流れが続かず、利益を確定する売りが先に出る可能性もあります。",
   invalidation_ja: "取引時間中に大きな売りの材料が出てきたときは、外れるかもしれません。",
   review_ja: "",
@@ -46,6 +55,7 @@ export const YUME_CLOSE_FIXTURE = {
   stance: "flat" as const,
   headline_ja: "あすは手がかり待ちで、小動きとみています",
   reasons_ja: "きょうの値動きの理由はまだはっきりしません。今夜の米国株と為替を見てから動きたい人が多そうなので、あすは方向感が出にくい展開になりやすいと考えています。",
+  scenario_ja: "今夜の米国株が落ち着いていれば、あすは小さな値動きで終わる展開を考えています。米国株が大きく動いたときは、その向きに引っ張られそうです。",
   counter_ja: "今夜の米国株が大きく動けば、その流れに日本株も引っ張られる可能性があります。",
   invalidation_ja: "海外で大きな出来事が起きて、売りや買いが一方向に集まったときは外れそうです。",
   review_ja: "この日の朝刊に予想の記録が無いので、きょうは答え合わせができません。",

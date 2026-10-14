@@ -1,14 +1,14 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
+import { buildMarketReportView, type MarketReportBlock } from '@/lib/market-report-view';
 import { fetchAnalysisStatus, fetchAppMarketReport } from '@/lib/ondemand-analysis';
 import { STATUS_OFF, marketReportParams, type AnalysisStatus, type AppMarketReport } from '@/lib/ondemand-analysis-presentation';
 import {
-  CLAIM_TYPE_LABEL,
   REPORT_DISCLAIMER_JA,
   changeDirection,
   formatTimeJa,
@@ -25,6 +25,7 @@ const CHANGE_COLOR = { up: '#b2332b', down: '#2a5fa8', flat: '#5e6d63', none: '#
 // 全員に共通の朝刊・大引け（X と同じ共通の分析）。サーバーが公開してよい項目だけを返す
 // （get_app_market_report）。利用者ごとの AI は呼ばない。
 // 一斉通知から開いたときは ?type=close&date=YYYY-MM-DD で、その日・その種類の回を開く。
+// 本文は buildMarketReportView のブロックの順（ポイント → ゆめちゃん → お話 → 注目材料 → 参考資料）で描く。
 export default function MarketReportScreen() {
   const params = useLocalSearchParams<{ type?: string; date?: string }>();
   const initial = marketReportParams(params);
@@ -35,6 +36,10 @@ export default function MarketReportScreen() {
   const [error, setError] = useState('');
   // 分析の受付が ON のときだけ「保有銘柄をAIで分析する」を出す。
   const [analysis, setAnalysis] = useState<AnalysisStatus>(STATUS_OFF);
+  const blocks = useMemo(() => (report?.status === 'completed' ? buildMarketReportView(report).blocks : []), [report]);
+  // 参考資料（主な市場指標）はいつも最後。分析の入口は、その手前に置く。
+  const bodyBlocks = blocks.filter((block) => block.key !== 'reference');
+  const referenceBlock = blocks.find((block) => block.key === 'reference');
 
   const load = useCallback(async (reportType: ReportType, tradingDate: string | null) => {
     setLoading(true);
@@ -96,76 +101,7 @@ export default function MarketReportScreen() {
               {marketDirectionLabel(report.direction)}
               {report.generatedAt ? `・${formatTimeJa(report.generatedAt)} 作成` : ''}
             </Text>
-            {!!report.summaryJa && <Text style={styles.paragraph}>{report.summaryJa}</Text>}
-
-            {report.pointsJa.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>ポイント</Text>
-                {report.pointsJa.map((point, index) => <Bullet key={`p-${index}`} text={point} />)}
-              </View>
-            )}
-
-            {report.majorMoves.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>主な指標</Text>
-                {report.majorMoves.map((move) => (
-                  <View key={move.label} style={styles.moveRow}>
-                    <Text style={styles.moveLabel}>{move.label}</Text>
-                    <Text style={styles.moveValue}>{move.value}</Text>
-                    <Text style={[styles.moveChange, { color: CHANGE_COLOR[changeDirection(move.change)] }]}>
-                      {move.stale ? '前回値' : move.change ?? '—'}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {report.claims.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>{report.reportType === 'close' ? '今日の動き' : '見ておきたい動き'}</Text>
-                {report.claims.map((claim, index) => (
-                  <Bullet
-                    key={`c-${index}`}
-                    text={claim.textJa}
-                    tag={CLAIM_TYPE_LABEL[claim.claimType] ? `（${CLAIM_TYPE_LABEL[claim.claimType]}）` : ''}
-                  />
-                ))}
-              </View>
-            )}
-
-            {(report.strongThemes.length > 0 || report.weakThemes.length > 0) && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>テーマ</Text>
-                {report.strongThemes.length > 0 && <Text style={styles.paragraph}>強い: {report.strongThemes.join('、')}</Text>}
-                {report.weakThemes.length > 0 && <Text style={styles.paragraph}>弱い: {report.weakThemes.join('、')}</Text>}
-              </View>
-            )}
-
-            {report.keyNews.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>主なニュース</Text>
-                {report.keyNews.map((news, index) => (
-                  <View key={`n-${index}`} style={styles.newsItem}>
-                    <Text style={styles.newsHeadline}>{news.headlineJa}</Text>
-                    {!!news.whyJa && <Text style={styles.newsWhy}>{news.whyJa}</Text>}
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {report.nextWatchJa.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>次に見るポイント</Text>
-                {report.nextWatchJa.map((item, index) => <Bullet key={`w-${index}`} text={item} />)}
-              </View>
-            )}
-
-            {report.risksJa.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>気をつけたい点</Text>
-                {report.risksJa.map((item, index) => <Bullet key={`r-${index}`} text={item} />)}
-              </View>
-            )}
+            {bodyBlocks.map((block) => <ReportBlock key={block.key} block={block} />)}
 
             {analysis.enabled && (
               <Pressable
@@ -177,8 +113,9 @@ export default function MarketReportScreen() {
               </Pressable>
             )}
 
+            {referenceBlock && <ReportBlock block={referenceBlock} />}
+
             <View style={styles.footer}>
-              {report.dataGapsJa.map((note) => <Text key={note} style={styles.footnote}>{note}</Text>)}
               <Text style={styles.footnote}>{REPORT_DISCLAIMER_JA}</Text>
             </View>
           </>
@@ -188,14 +125,47 @@ export default function MarketReportScreen() {
   );
 }
 
-function Bullet({ text, tag = '' }: { text: string; tag?: string }) {
+function ReportBlock({ block }: { block: MarketReportBlock }) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle} accessibilityRole="header">{block.heading}</Text>
+      {!!block.intro && <Text style={styles.paragraph}>{block.intro}</Text>}
+      {!!block.meta && <Text style={styles.meta}>{block.meta}</Text>}
+      {block.paragraphs.map((paragraph, index) => (
+        <View key={`para-${index}`} style={styles.paragraphBlock}>
+          {!!paragraph.subheading && <Text style={styles.subheading}>{paragraph.subheading}</Text>}
+          {!!paragraph.text && <Text style={styles.paragraph}>{paragraph.text}</Text>}
+        </View>
+      ))}
+      {block.groups?.map((group) => (
+        <View key={group.title} style={styles.paragraphBlock}>
+          <Text style={styles.subheading}>{group.title}</Text>
+          {group.rows.map((row, index) => (
+            <View key={`${group.title}-${index}`} style={styles.moveRow}>
+              <View style={styles.moveName}>
+                <Text style={styles.moveLabel}>{row.label}</Text>
+                {!!row.sessionDateJa && <Text style={styles.moveDate}>{row.sessionDateJa}</Text>}
+              </View>
+              <Text style={styles.moveValue}>{row.value}</Text>
+              <Text style={[styles.moveChange, { color: CHANGE_COLOR[changeDirection(row.change)] }]}>
+                {row.stale ? '前回値' : row.change ?? '—'}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ))}
+      {!!block.bulletsTitle && block.bullets.length > 0 && <Text style={styles.subheading}>{block.bulletsTitle}</Text>}
+      {block.bullets.map((item, index) => <Bullet key={`b-${index}`} text={item} />)}
+      {!!block.note && <Text style={styles.footnote}>{block.note}</Text>}
+    </View>
+  );
+}
+
+function Bullet({ text }: { text: string }) {
   return (
     <View style={styles.bulletRow}>
       <Text style={styles.bulletDot}>・</Text>
-      <Text style={styles.bulletText}>
-        {text}
-        {!!tag && <Text style={styles.tag}>{tag}</Text>}
-      </Text>
+      <Text style={styles.bulletText}>{text}</Text>
     </View>
   );
 }
@@ -220,17 +190,17 @@ const styles = StyleSheet.create({
   paragraph: { color: colors.text, fontSize: 15, lineHeight: 23 },
   section: { backgroundColor: colors.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 15, gap: 6 },
   sectionTitle: { color: colors.text, fontWeight: '900', fontSize: 15 },
+  subheading: { color: colors.text, fontWeight: '800', fontSize: 13, lineHeight: 19 },
+  paragraphBlock: { gap: 2 },
   moveRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3 },
-  moveLabel: { color: colors.text, fontSize: 14, flex: 1 },
+  moveName: { flex: 1 },
+  moveLabel: { color: colors.text, fontSize: 14 },
+  moveDate: { color: colors.muted, fontSize: 11 },
   moveValue: { color: colors.text, fontSize: 14, fontWeight: '700', marginRight: 10 },
   moveChange: { fontSize: 13, fontWeight: '800', minWidth: 64, textAlign: 'right' },
-  newsItem: { gap: 2, paddingVertical: 3 },
-  newsHeadline: { color: colors.text, fontWeight: '800', fontSize: 14, lineHeight: 20 },
-  newsWhy: { color: colors.muted, fontSize: 13, lineHeight: 19 },
   bulletRow: { flexDirection: 'row' },
   bulletDot: { color: colors.accent, fontSize: 15, lineHeight: 22 },
   bulletText: { color: colors.text, fontSize: 15, lineHeight: 22, flex: 1 },
-  tag: { color: colors.muted, fontSize: 12 },
   analysisButton: { backgroundColor: colors.accentSoft, borderRadius: 16, padding: 15, gap: 4 },
   analysisTitle: { color: colors.text, fontWeight: '900', fontSize: 16 },
   analysisText: { color: colors.accent, fontWeight: '700', fontSize: 13 },
