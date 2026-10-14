@@ -124,18 +124,20 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: done
 - task_id: kabumori-g2-market-report-yume-column-top-points-20261014
 - start_code: G2
 - finish_code: K2
 - completion_code: K2
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
 - recommended_model: Opus5.5（高）
 - previous_task_archive: .agent_v2/archive/2026-10-14-G2-kabumori-g2-pr143-live-mergeability-diagnosis-20261012/
-- blocker: none for K2. 結果: PR #200 merged `488a8948`（HEAD `b96bdd3c`）、market-report-analysis deploy・migration `20261014100000` 適用はユーザー承認で本人が実行。履歴の行・関数の版・Metro は読み戻し待ち。x-test-post 未deploy（X の並びは未反映）。migration の事後レビュー推奨
+- blocker: none for G2 K2 source completion. **Production follow-ups still OPEN**: X ordering not deployed (x-test-post v145), iPhone Metro/UI not verified, migration SECURITY DEFINER post-review required (Codex Sol（高）), 10/14 close live output not verified; new F2 L2 remains independent.
 - execution_note: 新F2宛ての直接指示のチャットで実施し、ユーザー指示でこの G2 の Report に記録（新F2 の配信・通知 TASK は別で in_progress のまま）
+- k2_verdict: PASS_SOURCE_IMPLEMENTATION / PARTIAL_PRODUCTION / POST_RELEASE_SECURITY_REVIEW_REQUIRED (2026-10-14)
+- k2_readback: PR200 merged 488a8948, market-report-analysis v35 ACTIVE, RPC migration 20261014100000 recorded, get_app_market_report authenticated EXECUTE only; Codex security review pending.
 - allocation: ユーザー明示指定の旧G2新TASK。朝刊/大引けともXとアプリの最上部に「今日のポイント」3つ（同一文言）、ゆめちゃんの話し口調と小見出しの市況コラム、些末な個別企業決算を共通市況から除外、指標一覧はアプリ最末尾の参考資料。配信・AI provider・DB/通知は変更禁止。
 
 ## Claude G3
