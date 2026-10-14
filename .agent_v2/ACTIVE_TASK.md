@@ -8,10 +8,10 @@
 
 ## F1
 - slot: F1
-- status: review_required
+- status: done
 - task_id: kabumori-f1-shared-market-report-home-integration-20261014
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
 - recommended_model: Sonnet5（高）
