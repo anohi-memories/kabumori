@@ -1,3 +1,74 @@
+# G2 CURRENT TASK — 共通朝刊・大引けを「ゆめちゃんの市況コラム」に改善
+
+- task_id: kabumori-g2-market-report-yume-column-top-points-20261014
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- start_code: G2
+- finish_code: K2
+- completion_code: K2
+- return_to: かぶモリアプリG2のちゃ
+- recommended_model: **Opus5.5（高）**
+- task_priority: HIGH — 機能・文章品質優先、全体UIリデザインは別TASK
+- production_mutation_window: CLOSED
+- previous_legacy_task_archive: .agent_v2/archive/2026-10-14-G2-kabumori-g2-pr143-live-mergeability-diagnosis-20261012/
+- source_of_truth: この先頭のCURRENT TASKのみ。以下の「OLD HISTORY」節は過去の内容であり、開始指示ではない。
+- dependency: 新F2 `kabumori-f2-emergency-market-report-app-feed-broadcast-20261013` is in_progress (配信・通知実機確認)。旧G2の新規TASKは**ユーザーの明示指定**であり、新F2へtask_idを移動しない。F6 AI provider・F2配信・F1 AIに聞くの所有境界は必ず維持。
+- no production deploy/merge/write approved by this assignment
+
+## 背景・目的（ユーザー確定仕様）
+今日の市況は硬い新聞記事調で読みづらく、全体市況に関係が薄い個別企業の決算が目立ち、重要指標が本文の途中に散在する。共通朝刊・大引けを「ゆめちゃんが投資家へ自然に語る一本の市況コラム」にする。ただし事実・予想の区別とFactチェックは維持する。Xとアプリは**同じ共通生成データ**から配信する。
+
+## 絶対に守る表示順（朝刊・大引け、X・アプリ共通）
+1. **📌 今日のポイント：3項目を必ず最上部**。Xもアプリも本文/タイトル/ゆめちゃんの話より先に見える位置に置く。3つの内容はXとアプリで同一（見せ方だけ媒体に合わせる）。
+2. **🔮/💭 ゆめちゃんの考察・予想**。朝刊は今日の予想と理由、反対材料。大引けは実際の出来事と朝刊予想の答え合わせ（比較可能なら）および次営業日の見立て。
+3. **📖 市況コラム本文**。短い小見出しを挟みながら、段落同士を自然につなぎ、ひと続きの読み物にする。分断された箇条書きの寄せ集めや「注目しましょう」反復を避ける。
+4. **⚠️ 今後の見通しと注意点**。具体的シナリオとリスク。上と内容が重複しすぎないようにする。
+5. **📊 参考資料・主要市場指標**（アプリのみ）。価格/前日比/日時/鮮度を本文の**最後**の資料欄へまとめる。数字が読みにくい長文へ混ざらないようにする。本文で必要な数字だけ自然に引用可。Xは文字数・可読性に配慮し一覧不要。
+
+### 今日のポイント3項目の選び方
+- **朝刊**: 今日の注目材料・市場の方向を決めそうな要素・警戒点。朝時点の未発生値動きを実績のように書かない。
+- **大引け**: 今日の実際の重要な出来事・確認済みの相場背景/反応・翌営業日の注目材料。
+- 事実・推測を峻別。「3つ埋めるため」だけの抽象表現（「市場の動向に注目」「材料を確認」）や同義語の繰り返しは禁止。日付・方向・1306とTOPIXの区別など既存Hard Factガード維持。
+- 小さな個別企業の通常決算は、市場全体や主要業種を動かす**実質的な影響が検証できない限り**共通朝刊/大引けから原則除外。ニュースがないことを捏造したり、重要な業界/政策/地政学材料を代わりに創作しない。個別企業ニュースは保有銘柄ニュース/銘柄詳細側へ。
+- 重要材料が少ない日は公式・確認済みのマクロ・市場/業種データの範囲で本当に重要な点を選び、企業ニュースで水増ししない。
+
+## 文章表現・体験
+- 市況の事実は明確に、見解は「私は〜と考えています」「私の見立てでは〜」など温かい自然な話し口調。専門用語は短く説明。
+- 長めのレポートを認めるが、**短めの段落＋内容に即した小見出し**で読みやすく。見出しは構造を助けるためで、本文を小カード/長い箇条書きへ細切れにしない。
+- 📈📉🌱🔮💭👀等の絵文字は説明の補助として適量に。株価の方向と異なる📈📉や、煽り・過多・幼児的な文体は禁止。アプリ本文に適度な見出し装飾、Xは長さの上限・Premium運用を含む既存契約を守る。
+- ゆめちゃんの予想・主観・仮説には客観的根拠の証明を要求しない。**既発生のニュース、株価、指標、日時のみ厳密Fact検証**。根拠がない予想だけで全体を配信失敗にしない。
+- 朝刊予想の元データは改変不可の保存済みpacketを参照し、大引けの判定は既存のコードで行う。未保存なら「判定不可」。免責、Opus課金・回数ガード、timeout、idempotency、可用性を維持。
+
+## 実装範囲・競合防止
+- 実装前に**旧G2/新F2のTASK/Report先頭・ACTIVE_TASK/CURRENT_STATE、旧G1/新F1、F6、X担当、fresh origin/main、独立G2 worktree、PR競合、他slotのdirty file/checkout状況**を確認し、共有作業場所を触らない。
+- 主に市場レポートの編集・整形（`market-report-analysis/analysis_logic.ts`, `market_report_story.ts`, `market_report_packet.ts` 等）の必要箇所だけ。アプリ「きょうの市況」表示順を変えるときは、画面実装の所有者F1と差分重複を確認してから限定編集。F2の進行中配信/通知TASKが変更するファイルには触れない。
+- F6の `_shared/ai_provider/`・Secrets/ledger/モデル設定、Supabase DB/Auth/RLS/RPC/migrations、Cron、Edge deploy、Xの投稿関数/実投稿、共通配信ゲート、プッシュ通知 worker、他slot所有ファイルは変更禁止。必要なら担当へ申し送り。
+- **本番マージ・デプロイ/EAS/有料APIは行わない**。独立branchのsource-only Draft PRで提出。productionを使った再生成は禁止。
+- 古いG2の履歴本文はこのファイル末尾に原文保存済み。繰り返し全文を読まない。
+
+## 検証と完了条件
+- morning/close × X/appの**4パターン**で「今日のポイントが最初、内容一致3件、ゆめちゃん→小見出しコラム→見通し、アプリ最後に指標資料」の表示順を確認する。
+- ニュース選択テスト：些末な個社決算の除外、全体相場に本当に重要な個社材料の採用、重要材料が乏しい時のハルシネーション防止。
+- Fact/forecast分離、予想の回顧、過去事実の数値日付、免責文、書式/字数/絵文字、旧consumerとの互換、Opus primary_bothの契約、回帰テストをすべてofflineで実施。
+- Reportに`changed_files`・`tests`・`PR`/HEAD・`commit/push/merge/deploy`・`remaining_issues`・`safety_checks`・`next_owner`・UI側の別owner依存を記載する。
+- レビュー要否はL2/K2受入時にリスクで判断。完了時は**かぶモリアプリG2のちゃへ K2**。
+
+## Report
+- task_id: kabumori-g2-market-report-yume-column-top-points-20261014
+- result: NOT_STARTED
+- changed_files: none
+- tests: NOT_RUN
+- push: no
+- merge: no
+- deploy: no
+- production_changes: 0
+
+---
+
+# OLD HISTORY — LEGACY G2 PREVIOUS TASK / REPORT (original text preserved; do not execute)
+
 # G2 CURRENT TASK — PR143 live mergeability blocker quick diagnosis (pre-authorized merge sequence)
 
 - task_id: kabumori-g2-pr143-live-mergeability-diagnosis-20261012
