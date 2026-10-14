@@ -18,7 +18,7 @@ import {
   type XPost,
 } from "../_shared/market_report_packet.ts";
 import { appStoryWarnings, buildAppMarketStory, orderKeyNews, sessionLines } from "../_shared/market_report_story.ts";
-import type { AnalysisInput } from "./analysis_input.ts";
+import { type AnalysisInput, TOPIX_INDEX_KEY } from "./analysis_input.ts";
 import { falseAbsenceClaims } from "../_shared/absence_claims.ts";
 import { promptHash } from "./debug_trace.ts";
 import {
@@ -107,6 +107,8 @@ const COMMON = [
   "app_story はアプリの「市場全体」の読み物で、x_post より詳しく書きます。アプリは「📌 今日のポイント」→「🔮 ゆめちゃんの考察・予想」（yume）→「📖 今日の相場のお話」→「⚠️ この先の注目材料」→「📊 参考資料｜主な市場指標」の順に並べます。summary_ja・overseas_ja・japan_ja・cross_asset_ja・news_ja・strong_ja は、この順に読まれる1本のコラム「📖 今日の相場のお話」の段落です（短い小見出しはコードが付けます）。各段落は前の段落を受けて書き、話を続けます。caution_ja・watch_ja は「⚠️ この先の注目材料」に入ります。指標の値の一覧は最後にコードが付けるので、本文には解説に必要な数値だけを自然に引用します（数値を書く場合は上の日付のルールに従う）。見出し・小見出し・絵文字・指標の一覧はコードが付けるので、各項目には説明の文章だけを書きます。summary_ja: 80〜160字で、今日の市場をひとことで（事実の要点と、ゆめちゃんの受け止め）。overseas_ja: 米国市場（朝刊は前夜の値動きと日本株への持ち込み方）。japan_ja: 東京市場（朝刊は前営業日の結果と今日の見どころ、大引けは今日の結果と中身の読み方）。cross_asset_ja: 為替・金利・半導体・原油のうち、今日の話に関係するもの。news_ja: 市場全体に大事なニュースと相場とのつながり（つながりがニュースで確認できなければ、ゆめちゃんの見方として書く。大事なニュースが無ければ空文字）。strong_ja: 強い・注目テーマとその理由（根拠が無ければ空文字）。各段落の長さは、伝える中身に合わせます（目安は100〜250字。言うことが無い段落は空文字）。caution_ja: 60〜160字で、相場の注意点と、予想が外れる可能性のあるリスク。watch_ja: 60〜160字で、次に見る具体的な材料（いつ・何を・なぜ）。根拠が足りない項目は無理に埋めず、空文字にします（各項目で「確認できません」を繰り返しません）。app_story の文章には、内容に合う絵文字（📈📉🔮💭🌱⚠️など）を全体で3個まで使ってかまいません。📈は上昇、📉は下落した指標の文だけに使い、絵文字で方向や理由をほのめかしません。",
 ];
 
+/** The TOPIX index itself is in the input (metric:topix): it may be called TOPIX, in index points, never with 1306's yen values. */
+const TOPIX_INDEX = "入力の「TOPIX（東証株価指数）」（metric:topix）は TOPIX 指数そのものです（単位はポイントで、円ではありません）。本文では「TOPIX」と書いてかまいません。TOPIX の値と前日比は metric:topix のものだけを使い、TOPIX連動ETF（1306）の円の値と混同しません。日経平均と TOPIX を比べるのは、入力で同じ日付のときだけです。";
 /** Phase 2: the Japanese market is read from the Nikkei 225 only until a licensed TOPIX source exists. */
 const NO_TOPIX = "入力には TOPIX（指数）の値がありません（TOPIX連動ETF（1306）も使いません）。TOPIX の値・方向や、日経平均と TOPIX の比較を書きません。東京市場の全体感は、日経平均と、入力のニュース・業種の材料から書きます。";
 
@@ -274,6 +276,16 @@ export const FACT_INSTRUCTIONS = [
   "objective_issues には、input と客観的に矛盾するものだけを入れます: input と違う数字・日付・方向、古い値を最新とした記述、1306をTOPIXそのものとした記述、input に無い事実の断定、input にある事実を否定・反転した記述（例: input では調査を受けていると公表しているのに「調査を実施していません」）。quote_ja には analysis の該当する文を一字一句そのまま写し、reason_ja に input のどこと矛盾するかを書きます。言い回し・推測の程度・一般論・input から判断できない点は objective_issues に入れず issues にだけ書きます。objective_issues に入れたものも issues に書きます。",
 ].join("\n");
 
+/** The TOPIX index line when it is in the input; otherwise, without 1306 either, the line that rules TOPIX out. */
+function topixInstructions(input: AnalysisInput): string[] {
+  if (hasTopixIndex(input)) return [TOPIX_INDEX];
+  return input.metricFacts.some((fact) => fact.key === "topix_proxy_1306") ? [] : [NO_TOPIX];
+}
+
+function hasTopixIndex(input: AnalysisInput): boolean {
+  return input.metricFacts.some((fact) => fact.key === TOPIX_INDEX_KEY);
+}
+
 export function generationRequestBody(input: AnalysisInput, previousIssues: string[]): Record<string, unknown> {
   return {
     ...responsesApiParams(MARKET_REPORT_GENERATE_ROLE),
@@ -281,7 +293,7 @@ export function generationRequestBody(input: AnalysisInput, previousIssues: stri
     instructions: [
       ...COMMON,
       ...(input.reportType === "close" ? CLOSE : MORNING),
-      ...(input.metricFacts.some((fact) => fact.key === "topix_proxy_1306") ? [] : [NO_TOPIX]),
+      ...topixInstructions(input),
       "headline_ja: 40字以内。market_summary_ja: 300字以内。claims: 3〜8個・各120字以内。key_news: 入力 news から最大5件・各100字以内。next_watch_ja / risks_ja: 各最大3個・各80字以内。",
       ...(previousIssues.length > 0
         ? [
@@ -945,7 +957,8 @@ export function localAnalysisCheck(analysis: GeneratedAnalysis, input: AnalysisI
   if (/<[a-zA-Z/!][^>]*>/.test(joined)) issues.push("HTMLを含む");
   if (/【(?:重大)?速報】/u.test(joined)) issues.push("速報ラベルを含む");
   if (ADVICE.test(joined)) issues.push("売買推奨・断定表現を含む");
-  const mislabels = topixMislabels(texts);
+  // With the TOPIX index in the input a bare 「TOPIX」 is that index; its values are checked by metricFactIssues.
+  const mislabels = hasTopixIndex(input) ? [] : topixMislabels(texts);
   if (mislabels.length > 0) {
     issues.push(`TOPIX連動ETF（1306）をTOPIXと表記: ${mislabels.slice(0, 2).map((value) => `「${value}」`).join(" ")}`);
   }
@@ -1063,6 +1076,7 @@ export function unitChecker(input: AnalysisInput, keptClaims: readonly Claim[]):
   const hasNews = input.news.length > 0;
   const proxy = input.metricFacts.find((fact) => fact.key === "topix_proxy_1306");
   const hasEtfProxy = proxy !== undefined;
+  const topixIndex = hasTopixIndex(input);
   const proxyTokens = new Set(proxy ? [...numericTokens(proxy.valueDisplay), ...numericTokens(proxy.changeDisplay ?? "")] : []);
   const findings = (text: string, kind: UnitKind): UnitCheck => {
     const remove: UnitFinding[] = [];
@@ -1076,7 +1090,7 @@ export function unitChecker(input: AnalysisInput, keptClaims: readonly Claim[]):
     if (ADVICE.test(text)) add("ADVICE", "売買推奨・断定表現を含む");
     // The disclaimer is added once by code; a model-written copy would repeat it.
     if (MODEL_DISCLAIMER.test(text)) add("MODEL_DISCLAIMER", "注意書き（AIによる分析・投資判断）を本文に書いている");
-    for (const mislabel of topixMislabels([text])) {
+    for (const mislabel of topixIndex ? [] : topixMislabels([text])) {
       add("TOPIX_MISLABEL", hasEtfProxy ? `TOPIX連動ETF（1306）をTOPIXと表記: 「${mislabel}」` : `入力に無いTOPIX（指数）について記載: 「${mislabel}」`);
     }
     const leaked = text.match(INTERNAL_FIELD)?.[0];
@@ -1110,7 +1124,7 @@ export function unitChecker(input: AnalysisInput, keptClaims: readonly Claim[]):
   };
 }
 
-const FALLBACK_TOKYO_KEYS = ["nikkei225", "topix_proxy_1306"];
+const FALLBACK_TOKYO_KEYS = ["nikkei225", TOPIX_INDEX_KEY, "topix_proxy_1306"];
 const FALLBACK_US_KEYS = ["dow", "sp500", "nasdaq_composite"];
 
 /**

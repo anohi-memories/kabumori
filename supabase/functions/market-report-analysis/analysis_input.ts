@@ -194,12 +194,12 @@ function usable(metric: Metric): boolean {
 }
 
 const DIRECTION_KEYS: Record<ReportType, string[]> = {
-  close: ["nikkei225", "topix_proxy_1306"],
+  close: ["nikkei225", "topix_proxy_1306", "topix"],
   morning: ["dow", "sp500", "nasdaq_composite"],
 };
 
 const SESSION_KEYS: Record<SessionView["market"], string[]> = {
-  tokyo: ["nikkei225", "topix_proxy_1306"],
+  tokyo: ["nikkei225", "topix_proxy_1306", "topix"],
   us: ["dow", "sp500", "nasdaq_composite"],
 };
 
@@ -389,14 +389,38 @@ export function selectMarketWideNews(items: readonly NewsInputItem[]): { kept: N
 // index for display; free feeds do not grant it): see docs/market-report-shared-platform/F2_PHASE2_TOPIX_AND_COLUMN.md.
 // Until one is, the shared report reads the Japanese market from the Nikkei 225 only: 1306 is not compared, not used for
 // the market direction, not shown, and the reader is told that TOPIX is not used. 1306 is still collected in the data
-// packet (unchanged) and the personalized reports keep it as a clearly labelled ETF benchmark.
+// packet (unchanged) and the personalized reports keep it as a clearly labelled ETF benchmark. The TOPIX index itself can
+// come in as its own metric ("topix", index points) once the data packet producer is given a source; it is off by default.
 export type JapanMetrics = "nikkei_only" | "legacy_1306";
 export const ETF_PROXY_KEYS = new Set(["topix_proxy_1306"]);
 export const TOPIX_GAP_JA = "TOPIX（指数）は、表示の利用条件を確認できる取得元がまだないため使っていません（TOPIX連動ETFで代用もしません）";
+/**
+ * The TOPIX index itself (index points). Present only when the data packet producer is given a source (off by default);
+ * then it is read like the Nikkei 225, and when it is missing the packet's own gap says so. 1306 never stands in for it.
+ */
+export const TOPIX_INDEX_KEY = "topix";
+export const TOPIX_SESSION_GAP_JA = "TOPIX（指数）は日経平均と同じ日の値が無かったため使っていません";
+
+/**
+ * TOPIX only beside a Nikkei 225 of the same session: a TOPIX value from another session is never compared with it
+ * (dropped from the analysis with TOPIX_SESSION_GAP_JA; the stored packet is not changed).
+ */
+function topixOnNikkeiSession(packet: MarketDataPacket): { packet: MarketDataPacket; gap: string | null } {
+  const topix = packet.metrics.find((metric) => metric.key === TOPIX_INDEX_KEY);
+  if (!topix || !usable(topix)) return { packet, gap: null };
+  const nikkei = packet.metrics.find((metric) => metric.key === "nikkei225");
+  const sameSession = topix.session_date === packet.session.jpx_session_date &&
+    (!nikkei || !usable(nikkei) || nikkei.session_date === topix.session_date);
+  return sameSession ? { packet, gap: null } : { packet: withoutMetrics(packet, new Set([TOPIX_INDEX_KEY])), gap: TOPIX_SESSION_GAP_JA };
+}
 
 /** The data packet as the market-wide analysis sees it without the ETF proxy (the stored packet is not changed). */
 function withoutEtfProxy(packet: MarketDataPacket): MarketDataPacket {
-  const keep = (key: string) => !ETF_PROXY_KEYS.has(key);
+  return withoutMetrics(packet, ETF_PROXY_KEYS);
+}
+
+function withoutMetrics(packet: MarketDataPacket, keys: ReadonlySet<string>): MarketDataPacket {
+  const keep = (key: string) => !keys.has(key);
   // Older stored packets lack some of these lists (e.g. `reused`): absent stays absent.
   const quality = packet.data_quality;
   const filtered = Object.fromEntries(
@@ -484,10 +508,19 @@ export function buildAnalysisInput(args: {
   japanMetrics?: JapanMetrics;
 }): AnalysisInput {
   const japanMetrics = args.japanMetrics ?? "legacy_1306";
-  const dataPacket = japanMetrics === "nikkei_only" ? withoutEtfProxy(args.dataPacket) : args.dataPacket;
+  const hasTopixMetric = args.dataPacket.metrics.some((metric) => metric.key === TOPIX_INDEX_KEY);
+  const topixChecked = topixOnNikkeiSession(
+    japanMetrics === "nikkei_only" ? withoutEtfProxy(args.dataPacket) : args.dataPacket,
+  );
+  const dataPacket = topixChecked.packet;
   const { direction, basis } = marketDirection(dataPacket.report_type, dataPacket.metrics);
   const moves = majorMoves(dataPacket.metrics);
-  const gaps = [...dataGapsJa(dataPacket), ...(japanMetrics === "nikkei_only" ? [TOPIX_GAP_JA] : [])];
+  // With a TOPIX metric in the packet, its own gap (取得できませんでした) or the session gap speaks for it.
+  const gaps = [
+    ...dataGapsJa(dataPacket),
+    ...(topixChecked.gap ? [topixChecked.gap] : []),
+    ...(japanMetrics === "nikkei_only" && !hasTopixMetric ? [TOPIX_GAP_JA] : []),
+  ];
   const ranked = rankedNewsItems(args.newsRows, dataPacket.news_refs.items.map((item) => item.ref_id));
   const selection = args.newsSelection === "market_wide" ? selectMarketWideNews(ranked.items) : { kept: ranked.items, excluded: [] };
   const news = selection.kept.slice(0, MAX_NEWS_ITEMS);

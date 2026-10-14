@@ -45,7 +45,7 @@ export type AppMarketStory = {
   total_char_count: number;
 };
 
-const TOKYO_KEYS = ["nikkei225", "topix_proxy_1306"];
+const TOKYO_KEYS = ["nikkei225", "topix", "topix_proxy_1306"];
 const US_KEYS = ["dow", "sp500", "nasdaq_composite"];
 const CROSS_KEYS = ["sox", "usdjpy", "us2y", "us10y", "jgb2y", "jgb10y", "wti", "brent"];
 

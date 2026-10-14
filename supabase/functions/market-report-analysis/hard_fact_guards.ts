@@ -12,6 +12,8 @@ import type { AnalysisInput, MetricFact } from "./analysis_input.ts";
 const METRIC_ALIASES: Record<string, string[]> = {
   nikkei225: ["日経平均株価", "日経平均", "日経225"],
   topix_proxy_1306: ["TOPIX連動ETF(1306)", "TOPIX連動型ETF(1306)", "TOPIX連動型ETF", "TOPIX連動ETF"],
+  // The index itself; only in the input when the data packet has a TOPIX source (off by default).
+  topix: ["TOPIX(東証株価指数)", "東証株価指数", "TOPIX"],
   dow: ["NYダウ", "ダウ工業株30種平均", "ダウ平均"],
   sp500: ["S&P500", "S&P 500"],
   nasdaq_composite: ["ナスダック総合指数", "ナスダック総合", "ナスダック"],
@@ -28,11 +30,15 @@ const METRIC_ALIASES: Record<string, string[]> = {
 /** Words for a whole market: checked against all of its metrics. */
 const GROUP_ALIASES: Array<{ aliases: string[]; keys: string[] }> = [
   { aliases: ["米国株式市場", "米国市場", "米国株", "米株", "主要3指数"], keys: ["dow", "sp500", "nasdaq_composite"] },
-  { aliases: ["東京株式市場", "東京市場", "日本市場", "日本株"], keys: ["nikkei225", "topix_proxy_1306"] },
+  { aliases: ["東京株式市場", "東京市場", "日本市場", "日本株"], keys: ["nikkei225", "topix_proxy_1306", "topix"] },
 ];
-/** Every name of a metric or a whole market, longest first (for editorial checks that set the names aside). */
+/**
+ * Every name of a metric or a whole market, longest first (for editorial checks that set the names aside). The TOPIX
+ * index names are left out: those checks do not know whether TOPIX is in the input, and with it absent a bare 「TOPIX」
+ * must stay as written (as before the index was added).
+ */
 export const MARKET_NAMES: readonly string[] = [
-  ...Object.values(METRIC_ALIASES).flat(),
+  ...Object.entries(METRIC_ALIASES).filter(([key]) => key !== "topix").flatMap(([, aliases]) => aliases),
   ...GROUP_ALIASES.flatMap((group) => group.aliases),
 ].sort((a, b) => b.length - a.length);
 /** 「東京は上昇」 means the Tokyo market; 「東京エレクトロンは下落」 is a company. Only the bare word counts. */
@@ -40,13 +46,15 @@ const TOKYO_ALONE = /(?<![一-龠ァ-ヶA-Za-z])東京(?=[はもがで、])/gu;
 /** A longer name that only looks like an alias: 日経平均先物 is another instrument, 欧米株 is not US stocks. */
 const NOT_AN_ALIAS: Array<{ alias: string; before?: RegExp; after?: RegExp }> = [
   { alias: "日経平均", after: /^先物/u },
+  // 「TOPIX連動ETF」 is the 1306 ETF, never the index.
+  { alias: "TOPIX", after: /^連動/u },
   { alias: "米株", before: /欧$/u },
   { alias: "米国株", before: /欧$/u },
 ];
 
 /** Metrics of one market share a session; a date written for one market does not date another. */
 const MARKET_OF: Record<string, string> = {
-  nikkei225: "tokyo", topix_proxy_1306: "tokyo",
+  nikkei225: "tokyo", topix_proxy_1306: "tokyo", topix: "tokyo",
   dow: "us", sp500: "us", nasdaq_composite: "us", sox: "us", us2y: "us", us10y: "us",
   usdjpy: "fx", jgb2y: "jgb", jgb10y: "jgb", wti: "oil", brent: "oil",
 };

@@ -297,6 +297,16 @@ test("参考資料: 指標を種類で分ける（東京・米国・その他。
   assert.equal(dateTimeJa("not a time"), "");
 });
 
+test("参考資料: TOPIX（指数）は東京市場の日経平均のすぐ後。ETF（1306）とは別の行で、為替などには入れない", () => {
+  const topix = { metric_key: "topix", label: "TOPIX（東証株価指数）", value_display: "3,412.56", change_pct_display: "+0.66%", session_date: "2026-10-13", freshness: "fresh" };
+  const withEtf = indicatorGroups(view(v2Raw("close", { major_moves: [...MOVES, topix] })).report.majorMoves);
+  assert.deepEqual(withEtf[0].rows.map((row) => row.label), ["日経平均", "TOPIX（東証株価指数）", "TOPIX連動ETF（1306）"]);
+  assert.ok(!withEtf[2].rows.some((row) => row.label.startsWith("TOPIX")));
+  const indexOnly = indicatorGroups(view(v2Raw("close", { major_moves: [MOVES[1], topix] })).report.majorMoves);
+  assert.deepEqual(indexOnly.map((group) => group.title), ["東京市場"]);
+  assert.deepEqual(indexOnly[0].rows[1], { label: "TOPIX（東証株価指数）", value: "3,412.56", change: "+0.66%", sessionDateJa: "10月13日", stale: false });
+});
+
 test("ゆめちゃんの文言はサーバー（market_report_yume.ts）と同じ", () => {
   assert.deepEqual(YUME_STANCE_JA, backend.YUME_STANCE_JA);
   assert.deepEqual(YUME_VERDICT_JA, backend.YUME_VERDICT_JA);
