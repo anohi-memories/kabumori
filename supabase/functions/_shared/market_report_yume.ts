@@ -206,7 +206,8 @@ export function reviewLineJa(review: YumeReview): string {
 export function yumeXLines(view: YumeView): string[] {
   const stance = YUME_STANCE_JA[view.stance];
   if (view.horizon === "this_session") {
-    return [`🔮${YUME_NAME_JA}の予想：きょうの日経平均は「${stance}」とみています。${view.headline_ja}`];
+    // Phase 2: no 「とみています」 of the code's own: her headline already says it in her words (it read twice in a row).
+    return [`🔮${YUME_NAME_JA}の予想：きょうの日経平均は「${stance}」。${view.headline_ja}`];
   }
   const review = view.review && view.review.verdict !== "undeterminable" ? [`🔮${reviewLineJa(view.review)}`] : [];
   return [...review, `${review.length > 0 ? "" : "🔮"}${YUME_NAME_JA}の次の見立ては「${stance}」。${view.headline_ja}`];

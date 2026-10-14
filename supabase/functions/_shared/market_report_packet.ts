@@ -155,7 +155,8 @@ export const X_POST_HARD_MIN_CHARS = 80;
  */
 export const X_POST_HARD_MAX_CHARS = 12_500;
 /** Editorial target for the formatted body (header included, fixed hashtags excluded). */
-export const X_POST_TARGET_MIN_CHARS = 430;
+// Phase 2 (2026-10-14): points, one commentary paragraph and her call; news / watch paragraphs are optional now.
+export const X_POST_TARGET_MIN_CHARS = 330;
 export const X_POST_TARGET_MAX_CHARS = 560;
 export const X_POST_EMOJI_MIN = 3;
 export const X_POST_EMOJI_MAX = 8;
@@ -231,8 +232,8 @@ export function sharedXPostWarnings(packet: MarketReportPacket, text: string): s
   if (emoji < X_POST_EMOJI_MIN || emoji > X_POST_EMOJI_MAX) warnings.push(`X_POST_EMOJI_COUNT:${emoji}`);
   if (isPresentationV2(packet)) {
     if (!(packet.x_post.context_ja ?? "").trim()) warnings.push("X_POST_CONTEXT_OMITTED");
-    if (!(packet.x_post.news_ja ?? "").trim()) warnings.push("X_POST_NEWS_OMITTED");
-    if (!(packet.x_post.watch_ja ?? "").trim()) warnings.push("X_POST_WATCH_OMITTED");
+    // Phase 2 (2026-10-14): the news and watch paragraphs are optional (the commentary carries them), so their absence
+    // is the normal shape and is no longer recorded.
   }
   return warnings;
 }

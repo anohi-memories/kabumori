@@ -217,7 +217,8 @@ function outlookBlock(report: CompletedMarketReport): MarketReportBlock | null {
 }
 
 const TOKYO_KEYS = ['nikkei225', 'topix_proxy_1306'];
-const US_KEYS = ['dow', 'sp500', 'nasdaq_composite'];
+// SOX is the US semiconductor index: it belongs with the US market, not with FX / rates / commodities.
+const US_KEYS = ['dow', 'sp500', 'nasdaq_composite', 'sox'];
 
 /**
  * 指標を 東京市場・米国市場・為替・金利・商品など に分ける（返ってきた行だけ。種類の分からない行は3つ目へ）。

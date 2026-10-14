@@ -207,7 +207,9 @@ test("rewrite: the delivered 10/6 draft costs two calls when the app story is no
   const calls: string[] = [];
   const outcome = await generateSharedAnalysis(input, requester([{ step: "generate", payload: analysis }, { step: "fact", payload: { passed: true, issues: [] } }], calls), NOW);
   assert.equal(outcome.ok, true);
-  assert.ok(check.warnings.some((warning) => warning.startsWith("X_POST_SHORTER_THAN_TARGET")), "X is still short of the target");
+  // Phase 2 (2026-10-14): the X target follows the shorter post (points, one commentary paragraph, her call), so this
+  // 387-character body now meets it; either way the length alone never called the model again.
+  assert.ok(!check.warnings.some((warning) => warning.startsWith("X_POST_SHORTER_THAN_TARGET")), "387 characters meet the Phase 2 target");
   assert.deepEqual(calls, ["generate", "fact"], "the X length alone does not call the model again");
   assert.equal(outcome.trace.qualityRewrite, false);
 });

@@ -169,7 +169,7 @@ test("morning: the prompt and the schema ask for ゆめちゃん's call; the sto
   // X: her call is the closing paragraph; one disclaimer; postable.
   const post = formatSharedXPost(packet);
   // Phase 2: her lines carry their own 🔮 and close the post without the 💬 title.
-  assert.ok(post.includes(`\n\n🔮ゆめちゃんの予想：きょうの日経平均は「上昇」とみています。${YUME_MORNING_FIXTURE.headline_ja}`), post);
+  assert.ok(post.includes(`\n\n🔮ゆめちゃんの予想：きょうの日経平均は「上昇」。${YUME_MORNING_FIXTURE.headline_ja}`), post);
   assert.ok(!post.includes("💬 今日のひとこと"), post);
   assert.equal(post.split(REPORT_DISCLAIMER_JA).length, 2);
   assert.deepEqual(sharedXPostIssues(packet, post), []);
