@@ -3,8 +3,8 @@
 - task_id: kabumori-g2-market-report-yume-column-top-points-20261014
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - start_code: G2
 - finish_code: K2
 - completion_code: K2
@@ -12,6 +12,8 @@
 - recommended_model: **Opus5.5（高）**
 - task_priority: HIGH — 機能・文章品質優先、全体UIリデザインは別TASK
 - production_mutation_window: CLOSED
+- k2_verdict: PASS_SOURCE_IMPLEMENTATION / PARTIAL_PRODUCTION / POST_RELEASE_SECURITY_REVIEW_REQUIRED (2026-10-14)
+- k2_remaining_gates: x-test-post v145 old presentation; Metro/new iPhone screen read-back; J1〜J4 Sol（高） RPC SECURITY DEFINER post-review; 10/14 close live quality, F2 broadcast L2 remains independent
 - previous_legacy_task_archive: .agent_v2/archive/2026-10-14-G2-kabumori-g2-pr143-live-mergeability-diagnosis-20261012/
 - source_of_truth: この先頭のCURRENT TASKのみ。以下の「OLD HISTORY」節は過去の内容であり、開始指示ではない。
 - dependency: 新F2 `kabumori-f2-emergency-market-report-app-feed-broadcast-20261013` is in_progress (配信・通知実機確認)。旧G2の新規TASKは**ユーザーの明示指定**であり、新F2へtask_idを移動しない。F6 AI provider・F2配信・F1 AIに聞くの所有境界は必ず維持。
@@ -157,6 +159,15 @@
 - ChatGPT は K2 で受け入れを判断する
 - 大引けの読み取りの結果で、文体・ニュース選別の追加調整が要るかを決める
 - migration の事後レビューを J1〜J4 に置くかを決める
+
+
+## K2 判定（ChatGPT確認 2026-10-14 JST）
+- 判定: **PASS_SOURCE_IMPLEMENTATION / PARTIAL_PRODUCTION / POST_RELEASE_SECURITY_REVIEW_REQUIRED**。旧G2 TASK のソース実装・オフライン検証を受け入れ、status=done/next_owner=none。**X の新しい表示順、実機の新画面、DB security post-review、本日の大引け品質は完了扱いしない**。
+- GitHub独立read-back: PR #200 merged HEAD `b96bdd3ca95e37407408b73a40db479eaec8bd25`, merge commit `488a89483c35174900fe5585d7c72af938d77ef4`。報告テスト505/613/551/PG16 PASS、既知のX全体テスト4 fail は実行者報告でありChatGPTで未再実行。
+- Supabase本番read-back: `market-report-analysis v35 ACTIVE`; `x-test-post v145 ACTIVE`; `personalized-reports v46 ACTIVE`; `get_app_market_report(text,date)` は `SECURITY DEFINER=true`, `search_path=''`, authenticated EXECUTE=true, anon/service_role EXECUTE=false。関数本文に `scenario_ja`, `data_generated_at` が存在し、`supabase_migrations.schema_migrations` に `20261014100000 app_market_report_story_v2` を確認。これらはアクセス制御の静的read-backであり脆弱性なしの最終保証ではない。
+- 10/14朝刊packet: completed, model `claude-opus-5-5`, `yume` と `app_story` を含む。ただし生成はv35へのdeploy前の回であり、新文体での本番生成の成功をまだ証明しない。
+- 残ゲート: (1) 新アプリのMetro/実機画面の `📌 今日のポイント → 🔮ゆめちゃん → コラム → 見通し → 📊資料` を端末で検証。(2) X並びの本番反映は `x-test-post v145` と main の差分・回帰を確認した上で別承認、無断deploy不可。(3) `20261014100000_app_market_report_story_v2.sql` に対し **Codex J1〜J4 / Sol（高）** の独立事後セキュリティレビュー（RPCの情報公開境界・権限・RLS影響・search_path・rollback・匿名呼出し）を優先。(4) 10/14大引けの生成・実投稿・表示・通知・news selectionとFact/yume品質を読み取る。(5) 新F2の別TASK/L2を勝手に完了しない。
+- production_action_at_K2: **なし**（読取とTASK状態記録のみ）。本番の手順実行はユーザーによるとReportに記載、ChatGPTは本番を書き換えていない。
 
 ---
 
