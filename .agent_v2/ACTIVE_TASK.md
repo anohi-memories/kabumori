@@ -8,17 +8,17 @@
 
 ## F1
 - slot: F1
-- status: ready
+- status: review_required
 - task_id: kabumori-f1-shared-market-report-home-integration-20261014
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
 - recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F1.md
 - current_report_path: .agent_v2/tasks/F1.md#report
 - dependencies: F2 共通市況フィード（L2 accepted）; 既存 get_app_market_report 契約。生成・DB・RPC・Edge は変更しない
-- blocker: なし（一覧取得契約が不足する場合は F2 へ申し送り）
+- blocker: 実RPC・実機は NOT_VERIFIED。一覧契約・公開日時は F2 判断（Draft PR #202・未merge）
 - slot_use: 共通市況レポートのホーム「今日のポイント」連動と「きょうの市況」履歴閲覧
 
 ## F2
