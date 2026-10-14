@@ -259,7 +259,7 @@ const FACT_SCHEMA = {
 export const FACT_INSTRUCTIONS = [
   "あなたは市場レポートの厳格なFactチェッカーです。input（根拠）と analysis（生成結果）だけを照合します。Web検索や外部知識は使いません。",
   "次を検出したら passed を false にします: input に無い数字・日付・固有名詞・事実、数値の書き換えや独自計算、market_direction と矛盾する方向、すでに起きた値動きの理由を news が理由として書いていないのに事実として断定したもの（causal の claim や断定の文）、consistent_with や insufficient_evidence なのに本文が過去の値動きの因果を断定しているもの、TOPIX連動ETF（1306）をTOPIXそのものとして書いたもの（「TOPIX連動型ETF」のような正確な言い換えや、TOPIX への新規採用など指数そのものの話は可）、古い値を最新のように書いたもの、予想だと分からない形での将来の値動きの断定（「明日は上昇します」など。「〜と予想しています」「〜とみています」のように意見だと分かるものは問題にしない）、売買推奨。",
-  "input の事実と一般的な経済の仕組みに基づく分析・見通し（「〜と考えられます」「〜しやすい」「〜の可能性があります」など、事実ではなく見立てだと分かる書き方のもの）は、news に同じ記述が無くても問題にしません。見立てとして書かれた過去の値動きの理由（「〜が重しになった可能性があります」）も問題にしません。",
+  "input の事実と一般的な経済の仕組みに基づく分析・見通し（「〜と考えられます」「〜しやすい」「〜の可能性があります」「私は〜と見ています」「私の見立てでは〜」など、事実ではなく書き手（ゆめちゃん）の見立てだと分かる書き方のもの）は、news に同じ記述が無くても問題にしません。見立てとして書かれた過去の値動きの理由（「〜が重しになった可能性があります」「〜が支えになったと見ています」）も問題にしません。",
   "自然な言い換えや要約は許容します。x_post の口語的な文体は問題にしません。issues は短い日本語で返します。",
   "予想・見立て・仮説・市場心理の解釈・今後のシナリオ・予想が外れた理由の考察は、input で根拠が確認できない、外れる可能性がある、という理由だけで passed を false にせず、objective_issues にも入れません。同じ文や段落に事実と予想が混ざっているときは、事実の部分だけを検証し、objective_issues には誤った事実の文だけを入れます（予想の文は入れません）。",
   "analysis.yume は、AI評論家「ゆめちゃん」の予想・見立て（意見）です。予想していること自体、見立ての方向、事実ではなく意見だと分かる書き方の仮説は問題にしません。ただし、yume の中でも、input に無い数字・日付・固有名詞・ニュースの事実、input と矛盾する事実、「必ず」「確実に」のような断定や利益の保証、売買の推奨は問題にします。大引けでは、yume.review_ja が input の「朝刊の予想との答え合わせ」の「判定」と違う判定を書いていたら問題にします。",
@@ -478,7 +478,9 @@ const CAUSE_ALIASES: Array<[RegExp, string]> = [[/米株/gu, "米国株"], [/NY�
 /** A sentence that itself says the reason is not established. */
 const NEGATED = /(?:確認|断定|判断|特定)でき(?:ませ|な)|分かりませ|わかりませ|分からな|わからな|明記されて(?:い)?(?:ませ|な)|示されて(?:い)?(?:ませ|な)/;
 /** A hedge that still proposes a reason. */
-const SPECULATION = /可能性|とみられ|と見られ|ようで|ようだ|かもしれ|と考えられ|と思われ|でしょう|だろう/;
+// ゆめちゃん's own reading (「〜と見ています」「〜と考えています」「私の見立てでは」, 2026-10-14) is an opinion like 「〜の可能性
+// があります」: a reason she offers in her words is a view, never an asserted fact.
+const SPECULATION = /可能性|とみられ|と見られ|ようで|ようだ|かもしれ|と考えられ|と思われ|でしょう|だろう|と(?:見|み)て(?:い(?:ます|る)|ます)|と考えて(?:い(?:ます|る))|と思(?:います|っています)|見立てでは/;
 /** The effect side names the stock market as a whole (metric names are matched separately). */
 const MARKET_EFFECT = /株式市場|株式相場|株価指数|日本株|国内株|東証|全面(?:高|安)|市場全体|相場全体/u;
 /** A price move; with no subject of its own in the effect it is read as the market's move. */

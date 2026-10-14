@@ -10,7 +10,14 @@ import {
   type NewsInputItem,
   selectMarketWideNews,
 } from "./analysis_input.ts";
-import { assemblePacket, generationRequestBody, parseGeneratedAnalysis } from "./analysis_logic.ts";
+import {
+  assemblePacket,
+  FACT_INSTRUCTIONS,
+  generationRequestBody,
+  parseGeneratedAnalysis,
+  speculativeCausalSentences,
+  unsupportedCausalSentences,
+} from "./analysis_logic.ts";
 import { type Deps, handleRequest, NEWS_SELECTION_ENV, newsExclusionSummary } from "./handler.ts";
 import { sanitizeAnalysis } from "./unit_sanitizer.ts";
 import { codeFallbacks, unitChecker } from "./analysis_logic.ts";
@@ -249,4 +256,28 @@ test("an older packet without a scenario renders as before", () => {
   assert.equal("scenario_ja" in (packet.yume ?? {}), false);
   const section = buildAppMarketStory(packet).sections.find((item) => item.key === "yume")!;
   assert.equal(section.body_ja, [older.headline_ja, older.reasons_ja].join("\n"));
+});
+
+// ---- her reading of a past move is a view, not an asserted cause ----------------------------------------------------
+
+test("「〜と見ています」 marks a reason as her view (advisory, delivered); the same reason stated as fact is still removed", () => {
+  const input = inputOf(close0917);
+  const base = rich0917(input);
+  const withSentence = (sentence: string) => ({ ...base, app_story: { ...base.app_story!, japan_ja: sentence } });
+  const view = withSentence("私は、円安を背景に東京市場は上昇したと見ています。");
+  assert.deepEqual(unsupportedCausalSentences(view, input), []);
+  assert.ok(speculativeCausalSentences(view, input).length > 0, "recorded as speculative (advisory)");
+  for (const phrase of ["上昇したとみています", "上昇したと考えています", "上昇したと思います"]) {
+    assert.deepEqual(unsupportedCausalSentences(withSentence(`円安を背景に東京市場は${phrase}。`), input), [], phrase);
+  }
+  const asserted = withSentence("円安を背景に東京市場は上昇しました。");
+  assert.equal(unsupportedCausalSentences(asserted, input).length, 1, "an asserted cause without news is still an objective error");
+  // A view in one clause does not cover an assertion in another (clause rule, 2026-10-08 H2).
+  const mixed = withSentence("円安を背景に東京市場は上昇しましたが、明日は落ち着くと見ています。");
+  assert.equal(unsupportedCausalSentences(mixed, input).length, 1);
+});
+
+test("the Fact prompt treats her reading as a view", () => {
+  assert.ok(FACT_INSTRUCTIONS.includes("「私は〜と見ています」「私の見立てでは〜」"));
+  assert.ok(FACT_INSTRUCTIONS.includes("「〜が支えになったと見ています」"));
 });
