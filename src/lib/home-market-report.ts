@@ -92,7 +92,7 @@ const monthDaySlash = (date: string) => `${Number(date.slice(5, 7))}/${Number(da
 const monthDayJa = (date: string) => `${Number(date.slice(5, 7))}月${Number(date.slice(8, 10))}日`;
 
 /** 今日の回か。サーバーの判定と、端末の日本時間の日付の両方が「今日」のときだけ（日付をまたいだ保持分を今日と呼ばない）。 */
-export function isCurrentHomeMarketReport(report: HomeMarketReport, todayJst: string): boolean {
+export function isCurrentHomeMarketReport(report: Pick<HomeMarketReport, 'isToday' | 'tradingDate'>, todayJst: string): boolean {
   return report.isToday && report.tradingDate === todayJst;
 }
 

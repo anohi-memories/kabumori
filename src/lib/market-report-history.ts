@@ -5,6 +5,7 @@
 // （今日から 31 日前まで）の外へは進めない。一覧用の契約は docs/market-report-shared-platform/F1_HOME_MARKET_REPORT_CONTRACT.md。
 
 import type { AppMarketReport } from './ondemand-analysis-presentation';
+import type { ReportsTabCard } from './reports-tab';
 import type { ReportType } from './report-presentation';
 
 /** get_app_market_report が受け付ける、今日から遡れる日数（サーバーの `p_trading_date < v_today - 31` と同じ）。 */
@@ -50,4 +51,30 @@ export function datedMarketReportEmptyText(
   const when = `${Number(month)}月${Number(day)}日の${label}`;
   if (report.status === 'not_ready' && date === today) return `${when}は作成中です。少し時間をおいてご覧ください。`;
   return `${when}は公開されていません（休場日、または作成されなかった回です）。`;
+}
+
+/**
+ * 「過去のレポート」の入口の開始日: 基準の回の前の平日（土日だけ飛ばす。祝日・休場日は分からないので飛ばさない）。
+ * サーバーが受け付ける範囲（今日から 31 日前〜）の外・不正な日付なら null。日付ナビが 1 日ずつ動かせる出発点でしかなく、
+ * その日に回があるとは限らない（無ければ詳細画面が「公開されていません」と書く）。
+ */
+export function previousWeekday(date: string, today: string): string | null {
+  const earliest = shiftTradingDate(today, -MARKET_REPORT_HISTORY_DAYS);
+  if (!earliest || !DATE_PATTERN.test(today)) return null;
+  let candidate = shiftTradingDate(date, -1);
+  for (let guard = 0; candidate && guard < 3; guard += 1) {
+    const weekday = new Date(`${candidate}T00:00:00Z`).getUTCDay();
+    if (weekday !== 0 && weekday !== 6) break;
+    candidate = shiftTradingDate(candidate, -1);
+  }
+  return candidate && candidate >= earliest && candidate <= today ? candidate : null;
+}
+
+/**
+ * レポートタブの「過去の朝刊／大引けを日付で見る」の入口の引数（過去の回の一覧を返す関数が無いので、詳細画面の日付ナビを使う）。
+ * 最新の回があれば、その前の平日から。無ければ（直近 7 日に回が無い・失敗）今日から、さかのぼれるようにする。
+ */
+export function reportsTabPastParams(card: ReportsTabCard | null, type: ReportType, today: string): Record<string, string> {
+  const start = card?.kind === 'report' ? previousWeekday(card.report.tradingDate, today) : null;
+  return { type, date: start ?? today, strict: '1' };
 }
