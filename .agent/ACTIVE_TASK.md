@@ -124,16 +124,19 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: kabumori-g2-pr143-live-mergeability-diagnosis-20261012
+- status: ready
+- task_id: kabumori-g2-market-report-yume-column-top-points-20261014
 - start_code: G2
 - finish_code: K2
-- next_owner: none
+- completion_code: K2
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ
 - source: .agent/tasks/CLAUDE_TASK.md
-- recommended_model: Sonnet5（高）
-- superseded: CANCELLED_UNSTARTED per user request; replacement new task in F2 / L2. Old G2 must not start.
-- allocation: User explicitly authorized source-only merge PR143→149→158. Fresh GitHub PR143 now mergeable=false despite no filename overlap with main advancement (PR155 .agent_v2). Narrow read-only G2 independent worktree diagnosis to distinguish actual source conflict vs GitHub metadata; NO merge, production, branch rewrite. Return K2 for merge continuation.
+- recommended_model: Opus5.5（高）
+- previous_task_archive: .agent_v2/archive/2026-10-14-G2-kabumori-g2-pr143-live-mergeability-diagnosis-20261012/
+- blocker: 新F2 `kabumori-f2-emergency-market-report-app-feed-broadcast-20261013` in_progress。G2は独立worktree・ソース差分/ownership競合確認後のみ着手。本番NO_GO
+- allocation: ユーザー明示指定の旧G2新TASK。朝刊/大引けともXとアプリの最上部に「今日のポイント」3つ（同一文言）、ゆめちゃんの話し口調と小見出しの市況コラム、些末な個別企業決算を共通市況から除外、指標一覧はアプリ最末尾の参考資料。配信・AI provider・DB/通知は変更禁止。
+
 ## Claude G3
 - owner: claude
 - slot: claude-3
