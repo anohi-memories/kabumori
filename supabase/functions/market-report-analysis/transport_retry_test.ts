@@ -182,7 +182,7 @@ function harness(plan: { generate: Plan; fact?: Plan; factPassed?: boolean }) {
     return Promise.reject(new Error(`UNEXPECTED:${url}`));
   };
   const deps = (now: string): Deps => ({
-    env: (name) => ({ SUPABASE_URL: SUPABASE, SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-secret" }), KABUMORI_MARKET_REPORT_NEWS_SELECTION: "all", SEND_PUSH_NOTIFICATIONS_CRON_SECRET: SECRET, OPENAI_API_KEY: "openai-test-key" } as Record<string, string>)[name],
+    env: (name) => ({ SUPABASE_URL: SUPABASE, SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-secret" }), KABUMORI_MARKET_REPORT_NEWS_SELECTION: "all", KABUMORI_MARKET_REPORT_JAPAN_METRICS: "legacy_1306", SEND_PUSH_NOTIFICATIONS_CRON_SECRET: SECRET, OPENAI_API_KEY: "openai-test-key" } as Record<string, string>)[name],
     fetch: fetchMock,
     now: () => new Date(now),
     sleep: (ms) => { waits.push(ms); return Promise.resolve(); },

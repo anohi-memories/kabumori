@@ -533,7 +533,7 @@ test("handler: a locally rejected first draft is content regeneration (transport
     return Promise.reject(new Error(`UNEXPECTED:${url}`));
   };
   const deps: Deps = {
-    env: (name) => ({ SUPABASE_URL: SUPABASE, SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-secret" }), KABUMORI_MARKET_REPORT_NEWS_SELECTION: "all", SEND_PUSH_NOTIFICATIONS_CRON_SECRET: SECRET, OPENAI_API_KEY: "openai-test-key" } as Record<string, string>)[name],
+    env: (name) => ({ SUPABASE_URL: SUPABASE, SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-secret" }), KABUMORI_MARKET_REPORT_NEWS_SELECTION: "all", KABUMORI_MARKET_REPORT_JAPAN_METRICS: "legacy_1306", SEND_PUSH_NOTIFICATIONS_CRON_SECRET: SECRET, OPENAI_API_KEY: "openai-test-key" } as Record<string, string>)[name],
     fetch: fetchMock,
     now: () => new Date("2026-09-30T22:55:00Z"),
     sleep: (ms) => { waits.push(ms); return Promise.resolve(); },

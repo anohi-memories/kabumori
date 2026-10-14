@@ -384,6 +384,33 @@ export function selectMarketWideNews(items: readonly NewsInputItem[]): { kept: N
   return { kept, excluded };
 }
 
+// TOPIX (Phase 2, 2026-10-14). The user wants the TOPIX index itself, never the ETF 1306 standing in for it. No source
+// with the right to show TOPIX values in the app and on X is contracted yet (JPX Market Innovation & Research licenses the
+// index for display; free feeds do not grant it): see docs/market-report-shared-platform/F2_PHASE2_TOPIX_AND_COLUMN.md.
+// Until one is, the shared report reads the Japanese market from the Nikkei 225 only: 1306 is not compared, not used for
+// the market direction, not shown, and the reader is told that TOPIX is not used. 1306 is still collected in the data
+// packet (unchanged) and the personalized reports keep it as a clearly labelled ETF benchmark.
+export type JapanMetrics = "nikkei_only" | "legacy_1306";
+export const ETF_PROXY_KEYS = new Set(["topix_proxy_1306"]);
+export const TOPIX_GAP_JA = "TOPIX（指数）は、表示の利用条件を確認できる取得元がまだないため使っていません（TOPIX連動ETFで代用もしません）";
+
+/** The data packet as the market-wide analysis sees it without the ETF proxy (the stored packet is not changed). */
+function withoutEtfProxy(packet: MarketDataPacket): MarketDataPacket {
+  const keep = (key: string) => !ETF_PROXY_KEYS.has(key);
+  // Older stored packets lack some of these lists (e.g. `reused`): absent stays absent.
+  const quality = packet.data_quality;
+  const filtered = Object.fromEntries(
+    (["stale", "unavailable", "intentional_gaps", "proxies", "reused"] as const)
+      .filter((field) => Array.isArray(quality[field]))
+      .map((field) => [field, quality[field].filter(keep)]),
+  );
+  return {
+    ...packet,
+    metrics: packet.metrics.filter((metric) => keep(metric.key)),
+    data_quality: { ...quality, ...filtered },
+  };
+}
+
 /** Fact-passed Japanese text only (same rule as personalized_report_news_inputs). */
 export function newsInputItems(rows: readonly NewsTextRow[], refIds: readonly string[]): NewsInputItem[] {
   return rankedNewsItems(rows, refIds).items.slice(0, MAX_NEWS_ITEMS);
@@ -450,11 +477,17 @@ export function buildAnalysisInput(args: {
    * "all" (default of this pure builder): every referenced item, the pre-2026-10-14 input the guard fixtures use.
    */
   newsSelection?: "market_wide" | "all";
+  /**
+   * "nikkei_only": the TOPIX-linked ETF (1306) is left out of the analysis and a TOPIX gap is stated; the handler's
+   * default since Phase 2. "legacy_1306" (default of this pure builder): the pre-Phase-2 input the guard fixtures use.
+   */
+  japanMetrics?: JapanMetrics;
 }): AnalysisInput {
-  const { dataPacket } = args;
+  const japanMetrics = args.japanMetrics ?? "legacy_1306";
+  const dataPacket = japanMetrics === "nikkei_only" ? withoutEtfProxy(args.dataPacket) : args.dataPacket;
   const { direction, basis } = marketDirection(dataPacket.report_type, dataPacket.metrics);
   const moves = majorMoves(dataPacket.metrics);
-  const gaps = dataGapsJa(dataPacket);
+  const gaps = [...dataGapsJa(dataPacket), ...(japanMetrics === "nikkei_only" ? [TOPIX_GAP_JA] : [])];
   const ranked = rankedNewsItems(args.newsRows, dataPacket.news_refs.items.map((item) => item.ref_id));
   const selection = args.newsSelection === "market_wide" ? selectMarketWideNews(ranked.items) : { kept: ranked.items, excluded: [] };
   const news = selection.kept.slice(0, MAX_NEWS_ITEMS);

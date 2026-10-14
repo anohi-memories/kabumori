@@ -379,7 +379,7 @@ test("handler E2E: the close run reads the morning record, stores the code's ver
       if (path.startsWith("market_report_generation_traces")) return new Response(null, { status: 201 });
       throw new Error(`UNEXPECTED_PATH:${path}`);
     };
-    const env: Record<string, string> = { SUPABASE_URL: SUPABASE, SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-NOT-REAL" }), KABUMORI_MARKET_REPORT_NEWS_SELECTION: "all", SEND_PUSH_NOTIFICATIONS_CRON_SECRET: SECRET, OPENAI_API_KEY: "openai-NOT-REAL" };
+    const env: Record<string, string> = { SUPABASE_URL: SUPABASE, SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-NOT-REAL" }), KABUMORI_MARKET_REPORT_NEWS_SELECTION: "all", KABUMORI_MARKET_REPORT_JAPAN_METRICS: "legacy_1306", SEND_PUSH_NOTIFICATIONS_CRON_SECRET: SECRET, OPENAI_API_KEY: "openai-NOT-REAL" };
     const now = mode === "close" ? "2026-09-30T07:20:00Z" : "2026-09-30T22:55:20Z";
     const deps: Deps = { env: (name) => env[name], fetch: fetchMock, now: () => new Date(now), sleep: () => Promise.resolve() };
     const res = await handleRequest(new Request("https://functions.local/market-report-analysis", {
