@@ -22,7 +22,7 @@
 
 import type { MarketDataPacket } from "../market-report-data-packet/packet_schema.ts";
 import { decideRunWindow, type ReportType } from "../market-report-data-packet/session_logic.ts";
-import { buildAnalysisInput, type NewsTextRow } from "./analysis_input.ts";
+import { buildAnalysisInput, type NewsExclusion, type NewsTextRow } from "./analysis_input.ts";
 import {
   ANALYSIS_MODEL,
   type GenerationRecord,
@@ -60,6 +60,15 @@ export type Deps = {
 };
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
+/** Unset (default): the market-wide news selection. "all": every referenced item, as before 2026-10-14. */
+export const NEWS_SELECTION_ENV = "KABUMORI_MARKET_REPORT_NEWS_SELECTION";
+
+/** "COMPANY_NOT_MARKET_WIDE:12,NEWS_TEXT_NOT_FACT_PASSED:1": exclusion counts by fixed reason code. */
+export function newsExclusionSummary(excluded: readonly NewsExclusion[]): string {
+  const counts = new Map<string, number>();
+  for (const item of excluded) counts.set(item.reason, (counts.get(item.reason) ?? 0) + 1);
+  return [...counts].map(([reason, count]) => `${reason}:${count}`).join(",");
+}
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const OPENAI_TIMEOUT_MS = 90_000;
 
@@ -318,15 +327,25 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
       );
     }
     const morning = reportType === "close" ? await loadMorningReport(db, tradingDate) : null;
+    // Market-wide news selection is the default; "all" restores the pre-2026-10-14 input without a deploy.
+    const newsSelection: "market_wide" | "all" = deps.env(NEWS_SELECTION_ENV) === "all" ? "all" : "market_wide";
     const input = buildAnalysisInput({
       dataPacket: dataPacket.payload,
       dataPacketId: dataPacket.id,
       dataContentHash: dataPacket.content_hash,
       newsRows,
       morning,
+      newsSelection,
     });
     if (input.yumeReview) diagnostics.yume_review = `${input.yumeReview.verdict}:${input.yumeReview.reason_code}`;
     diagnostics.news_items = String(input.news.length);
+    // 除外ログ (PROJECT_RULES): which referenced news the market-wide report left out, and why (fixed codes only).
+    diagnostics.news_selection = newsSelection;
+    diagnostics.news_excluded = String(input.excludedNews.length);
+    if (input.excludedNews.length > 0) {
+      diagnostics.news_excluded_reasons = newsExclusionSummary(input.excludedNews);
+      diagnostics.news_excluded_refs = input.excludedNews.map((item) => `${item.ref}=${item.reason}`).join(",");
+    }
     diagnostics.metrics = String(input.majorMoves.length);
     diagnostics.direction = input.direction;
     traceBasePromptHash = await promptHash(String(generationRequestBody(input, []).instructions)).catch(() => null);

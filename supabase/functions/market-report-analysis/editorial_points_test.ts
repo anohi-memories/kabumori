@@ -68,10 +68,16 @@ test("prompt: the points are headlines with a morning role and a close role", ()
     assert.ok(prompt.includes("もっとも重要な別々のテーマを選びます"));
     assert.ok(prompt.includes("根拠の無い理由を見出しにしない"));
   }
-  assert.ok(morningPrompt.includes("朝刊の3つのポイントは、今日の「注目点」「注意点」「相場を見る軸」"));
+  // 2026-10-14: the roles the user set for the morning and close points.
+  assert.ok(morningPrompt.includes("朝刊の3つのポイントは、今日の「相場を左右しそうな重要材料」「上昇・下落につながりそうな要因」「今日注意して見たい動き」"));
+  assert.ok(morningPrompt.includes("前営業日の東京市場や前夜の米国市場の値動きを、今日起きた動きのように書きません"));
   assert.ok(morningPrompt.includes("上昇した・下落したと言い切りません"));
   assert.ok(!morningPrompt.includes("大引けの3つのポイント"));
-  assert.ok(closePrompt.includes("「何が起きたか」「何が重要だったか（根拠のある材料）」「次に何を見るか」"));
+  assert.ok(closePrompt.includes("「実際に起きた重要な動き」「相場が動いた背景や注目材料（根拠のある材料）」「翌営業日に影響しそうな点」"));
+  assert.ok(closePrompt.includes("実際の出来事を優先します"));
+  for (const prompt of [morningPrompt, closePrompt]) {
+    assert.ok(prompt.includes("本文のいちばん最初に「📌 今日のポイント」として同じ3つがそのまま出ます"), "X and the app share the same 3 points");
+  }
   assert.ok(closePrompt.includes("causal の claim がある"));
   assert.ok(closePrompt.includes("理由が確認できないことを正直に書きます"));
   assert.ok(!closePrompt.includes("朝刊の3つのポイント"));

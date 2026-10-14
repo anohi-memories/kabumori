@@ -71,6 +71,8 @@ export type YumeView = {
   stance: YumeStance;
   headline_ja: string;
   reasons_ja: string;
+  /** The scenario she expects (2026-10-14); absent on older packets. */
+  scenario_ja?: string;
   counter_ja: string;
   invalidation_ja: string;
   /** Close only: the look-back at the same day's morning call. */
@@ -225,7 +227,7 @@ export function yumeStorySection(packet: Pick<MarketReportPacket, "report_type">
   return {
     key: "yume",
     heading_ja: view.horizon === "this_session" ? `🔮 ${YUME_NAME_JA}の予想` : `🔮 ${YUME_NAME_JA}の次の見立て`,
-    body_ja: [view.headline_ja, view.reasons_ja].filter(Boolean).join("\n"),
+    body_ja: [view.headline_ja, view.reasons_ja, view.scenario_ja ?? ""].filter(Boolean).join("\n"),
     lines_ja: lines,
   };
 }
