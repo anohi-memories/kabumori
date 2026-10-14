@@ -1,3 +1,8 @@
+## G2｜朝刊・大引け編集改善（2026-10-14）
+- User explicitly assigned a NEW legacy G2 task `kabumori-g2-market-report-yume-column-top-points-20261014` ready/claude, Opus5.5（高）, G2→K2, return to かぶモリアプリG2のちゃ. 先頭「今日のポイント」3項目はX/app同文・朝夕共通、ゆめちゃんの会話調一本のコラムに小見出し、軽微な個社決算を全体市況から原則除外、アプリ指標一覧は最後の参考資料。SOURCE-ONLY / PRODUCTION_NO_GO。
+- Original legacy G2 TASK+Report/history saved verbatim under `.agent_v2/archive/2026-10-14-G2-kabumori-g2-pr143-live-mergeability-diagnosis-20261012/`, SHA256 checksum/manifests and Git blob readback verified; original contents also remain intact following the new current-task header in `.agent/tasks/CLAUDE_TASK.md`.
+- New F2 broadcast/task still `in_progress`, no interference with its notification/production checks or other worktrees.
+
 ## K6 FINAL — G6 F1/F2 test stability accepted — 2026-10-12 JST
 - G6 TASK `common-ai-provider-g6-f1-f2-timeout-tests-stability-20261012` **done/none**, verdict **PASS_PREMERGE_QA / PRODUCTION_NO_GO**. Draft PR162 exact HEAD `93de927aec8726a6269d9c6747b998d29df113da`, stacked on unchanged PR157; PR148→150→153→157→162 still Draft/unmerged. G6 fixes exactly two test files (6s/6.5s timeout windows; asserts min attempt timing), no runtime changes.
 - G6 self-reported 12/150 focused failures before, 0/100 after, Provider126, report313, shared629 x3, personalized129, X10, data packet42, deny-net73 PASS. ChatGPT independently inspected PR162 diff/metadata but did not run local tests. G6 offline merge-tree with fresh main clean, GitHub PR148 mergeability inconsistent; fresh check required at merge gate.
