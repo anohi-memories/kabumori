@@ -13,9 +13,17 @@
 import { buildMarketDataPacket, type NewsCandidateRow, packetContentHash, type YahooFetchResult } from "./packet_builder.ts";
 import type { StoredPacketRow } from "./session_reuse.ts";
 import type { MicMetricRow, MicThresholdRow } from "./mic_metrics.ts";
-import { METRIC_SPECS, type MicSpec, validateMarketDataPacket, type YahooSpec } from "./packet_schema.ts";
+import {
+  METRIC_SPECS,
+  type MicSpec,
+  specsFor,
+  TOPIX_YAHOO_SYMBOLS,
+  type TopixYahooSymbol,
+  validateMarketDataPacket,
+  type YahooSpec,
+} from "./packet_schema.ts";
 import { addDays, decideRunWindow, newsWindowStart, type ReportType } from "./session_logic.ts";
-import { yahooDailyUrl } from "./yahoo_daily.ts";
+import { parseDailyChart, yahooDailyUrl } from "./yahoo_daily.ts";
 
 export type Deps = {
   env: (name: string) => string | undefined;
@@ -29,6 +37,20 @@ const MIC_LOOKBACK_DAYS = 45;
 // Enough to cover the sessions a packet may need an already-stored value from.
 const STORED_PACKET_LOOKBACK_DAYS = 7;
 const STORED_PACKET_LIMIT = 8;
+
+/**
+ * TOPIX index candidate source (2026-10-14). Unset, "off" or anything unknown: no "topix" metric (the packet is exactly
+ * as before). "yahoo:^TOPX" / "yahoo:998405.T": also fetch that Yahoo chart symbol. Keep it off in production until the
+ * Yahoo terms and the JPX index license allow showing TOPIX (docs/market-report-shared-platform/F2_TOPIX_DIRECT.md).
+ */
+export const TOPIX_SOURCE_ENV = "KABUMORI_MARKET_DATA_TOPIX_SOURCE";
+
+export function topixSource(raw: string | undefined): { symbol: TopixYahooSymbol | null; diagnostic: string } {
+  const value = (raw ?? "").trim();
+  if (value === "" || value === "off") return { symbol: null, diagnostic: "off" };
+  const symbol = TOPIX_YAHOO_SYMBOLS.find((candidate) => value === `yahoo:${candidate}`);
+  return symbol ? { symbol, diagnostic: value } : { symbol: null, diagnostic: "unknown_value_off" };
+}
 
 function respond(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
@@ -116,7 +138,7 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
   const key = secretKey(deps.env);
   if (!supabaseUrl || !key) return respond({ error: "MISSING_CONFIGURATION" }, 500);
 
-  let body: { mode?: unknown; dry_run?: unknown } = {};
+  let body: { mode?: unknown; dry_run?: unknown; topix_source?: unknown } = {};
   try { body = await req.json(); } catch { /* empty body */ }
   const reportType: ReportType | null = body.mode === "morning" || body.mode === "close" ? body.mode : null;
   if (!reportType) return respond({ error: "INVALID_MODE" }, 400);
@@ -164,9 +186,13 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
 
   const diagnostics: Record<string, string> = {};
   try {
-    const yahooSpecs = METRIC_SPECS.filter((spec): spec is YahooSpec =>
-      spec.source === "yahoo_daily" && spec.reportTypes.includes(reportType)
+    // A dry run (no write) may name the candidate itself, so a symbol can be checked without changing the Secret.
+    const topix = topixSource(
+      dryRun && typeof body.topix_source === "string" ? body.topix_source : deps.env(TOPIX_SOURCE_ENV),
     );
+    // Recorded only when set, so a run with the switch off stores exactly what it stored before.
+    if (topix.diagnostic !== "off") diagnostics.topix_source = topix.diagnostic;
+    const yahooSpecs = specsFor(reportType, topix.symbol).filter((spec): spec is YahooSpec => spec.source === "yahoo_daily");
     const micKeys = METRIC_SPECS.filter((spec): spec is MicSpec =>
       spec.source === "mic" && spec.reportTypes.includes(reportType)
     ).map((spec) => spec.micKey);
@@ -217,12 +243,17 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
       newsRows,
       newsWindowStart: windowStart,
       storedPackets: storedPackets ?? [],
+      topixSymbol: topix.symbol,
     });
     const issues = validateMarketDataPacket(packet);
     const contentHash = await packetContentHash(packet);
 
     if (dryRun) {
-      return respond({ status: "dry_run", reportType, tradingDate, issues, contentHash, diagnostics, packet });
+      // What Yahoo itself reported for the TOPIX candidate (identity and the last bars), to check a symbol by hand.
+      const topixFetch = topix.symbol ? yahooResults.find(([symbol]) => symbol === topix.symbol)?.[1].result : undefined;
+      const topixChart = topixFetch?.ok ? parseDailyChart(topixFetch.payload) : null;
+      const topixProbe = topixChart ? { ...topixChart, bars: topixChart.bars.slice(-3) } : null;
+      return respond({ status: "dry_run", reportType, tradingDate, issues, contentHash, diagnostics, packet, topixProbe });
     }
     if (issues.length > 0) {
       await db.rpc("fail_market_report_cycle", {

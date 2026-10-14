@@ -9,6 +9,8 @@ export const SCHEMA_VERSION = "market_data_packet.v1";
 
 /** Must never be shown as TOPIX itself (see DESIGN.md §4, §14). */
 export const TOPIX_PROXY_LABEL = "TOPIX連動ETF（1306）";
+/** The TOPIX index itself (index points), only under the metric key "topix" and never for the ETF. */
+export const TOPIX_INDEX_LABEL = "TOPIX（東証株価指数）";
 
 export type Freshness = "fresh" | "stale" | "unavailable";
 export type Quality = "official" | "trusted_free" | "unofficial_delayed";
@@ -228,14 +230,38 @@ export const METRIC_SPECS: readonly MetricSpec[] = [
   },
 ];
 
+// TOPIX index candidate (2026-10-14, F2 Phase 2 follow-up). Off unless the producer is given one of these Yahoo chart
+// symbols (handler: KABUMORI_MARKET_DATA_TOPIX_SOURCE). Neither symbol has been confirmed against a live response, and
+// showing TOPIX values to readers needs a JPX index license (docs/market-report-shared-platform/F2_TOPIX_DIRECT.md).
+// The value is accepted only when Yahoo reports this exact symbol as a JPY index on Tokyo time; an ETF (1306.T) or any
+// other instrument is identity_mismatch. A missing TOPIX is a gap: nothing ever falls back to 1306.
+export const TOPIX_YAHOO_SYMBOLS = ["^TOPX", "998405.T"] as const;
+export type TopixYahooSymbol = typeof TOPIX_YAHOO_SYMBOLS[number];
+
+export function topixIndexSpec(symbol: TopixYahooSymbol): YahooSpec {
+  return {
+    source: "yahoo_daily", key: "topix", label: TOPIX_INDEX_LABEL, kind: "index", unit: "index_points",
+    currency: "JPY", isProxy: false, proxyFor: null, requiredFor: [], reportTypes: BOTH,
+    symbol, session: "jpx",
+    expect: { symbol, currency: "JPY", timezone: "Asia/Tokyo", instrumentType: "INDEX" },
+  };
+}
+
+/** The catalogue, with the TOPIX index right after the Tokyo metrics when a source is configured. */
+export function metricSpecs(topix: TopixYahooSymbol | null = null): MetricSpec[] {
+  if (!topix) return [...METRIC_SPECS];
+  const at = METRIC_SPECS.findIndex((spec) => spec.key === "topix_proxy_1306") + 1;
+  return [...METRIC_SPECS.slice(0, at), topixIndexSpec(topix), ...METRIC_SPECS.slice(at)];
+}
+
 /** Provider recorded on a value taken from an earlier packet of the same session. */
 export const REUSE_PROVIDER = "market_data_packet";
 
 /** Non-scalar coverage that has no verified source yet (DESIGN.md §4.1). */
 export const INTENTIONAL_SECTION_GAPS = ["sector_performance", "event_calendar"] as const;
 
-export function specsFor(reportType: ReportType): MetricSpec[] {
-  return METRIC_SPECS.filter((spec) => spec.reportTypes.includes(reportType));
+export function specsFor(reportType: ReportType, topix: TopixYahooSymbol | null = null): MetricSpec[] {
+  return metricSpecs(topix).filter((spec) => spec.reportTypes.includes(reportType));
 }
 
 // ---------------------------------------------------------------------------
@@ -333,7 +359,15 @@ export function validateMarketDataPacket(packet: MarketDataPacket): string[] {
     if (metric.fetched_at !== null && !isIsoInstant(metric.fetched_at)) issues.push(`${at}.fetched_at`);
     if (metric.source_url !== null && !isCredentialFreeUrl(metric.source_url)) issues.push(`${at}.source_url`);
     if (metric.is_proxy !== (metric.proxy_for !== null)) issues.push(`${at}.proxy_flags`);
-    if (/^TOPIX$/i.test(metric.label.trim()) || (metric.proxy_for === "TOPIX" && metric.label !== TOPIX_PROXY_LABEL)) {
+    if (metric.key === "topix") {
+      // The index itself: never a proxy, never a yen price.
+      if (metric.label !== TOPIX_INDEX_LABEL || metric.kind !== "index" || metric.is_proxy || metric.unit !== "index_points") {
+        issues.push(`${at}.topix_identity`);
+      }
+    } else if (
+      /^TOPIX$/i.test(metric.label.trim()) || metric.label === TOPIX_INDEX_LABEL ||
+      (metric.proxy_for === "TOPIX" && metric.label !== TOPIX_PROXY_LABEL)
+    ) {
       issues.push(`${at}.topix_label`);
     }
     if (

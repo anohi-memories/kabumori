@@ -10,6 +10,7 @@ import {
   SCHEMA_VERSION,
   type SourceSummary,
   specsFor,
+  type TopixYahooSymbol,
 } from "./packet_schema.ts";
 import { micMetric, type MicMetricRow, type MicThresholdRow } from "./mic_metrics.ts";
 import { expectedJpxSessionDate, expectedUsSessionDate, type ReportType } from "./session_logic.ts";
@@ -50,6 +51,8 @@ export type PacketInputs = {
   newsWindowStart: Date;
   /** Recent packets, newest first, used only to reuse identical-session values. */
   storedPackets?: readonly StoredPacketRow[];
+  /** The TOPIX index candidate source; absent or null leaves the packet exactly as before (no "topix" metric). */
+  topixSymbol?: TopixYahooSymbol | null;
 };
 
 export function toNewsRefs(rows: readonly NewsCandidateRow[], asOf: Date, windowStart: Date): NewsRef[] {
@@ -108,7 +111,7 @@ export function buildMarketDataPacket(inputs: PacketInputs): MarketDataPacket {
   const micMetrics: Metric[] = [];
   const metrics: Metric[] = [];
 
-  for (const spec of specsFor(inputs.reportType)) {
+  for (const spec of specsFor(inputs.reportType, inputs.topixSymbol ?? null)) {
     const required = spec.requiredFor.includes(inputs.reportType);
     if (spec.source === "yahoo_daily") {
       const fetched = inputs.yahoo.get(spec.symbol);
