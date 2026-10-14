@@ -94,18 +94,18 @@
 ## Codex H5
 - owner: codex
 - slot: codex-5
-- status: ready
+- status: done
 - task_id: common-ai-h5-claude-multimodel-consumer-bridge-m2-20261014
 - start_code: H5
 - finish_code: C5
 - completion_code: C5
-- next_owner: codex
+- next_owner: none
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - recommended_model: Sol（高）
 - source: .agent/tasks/CODEX_TASK_5.md
 - report: .agent/CODEX_REPORT_5.md
 - allocation: User expressly requested H5 implementation on 2026-10-14. Old H5 Threads completed and archived. New source-only consumer bridge stacked on F6 PR187 head, no overlap with F6 ai_provider or F2/F8/F9 live products.
-- blocker: Draft PR187 dependency; must verify fresh main, independent worktree, F6 ownership and all other slot conflicts before editing. Production and paid APIs unauthorized.
+- blocker: SOURCE_MERGE_HOLD: PR198 H5 27 PASS but combined F6 3 FAIL due import boundary. F6 repair required; PR199 Draft bookkeeping overlaps main C5 acceptance.
 - slot_use: temporary implementation Claude multimodel consumer bridge M2
 
 ## Claude G1
