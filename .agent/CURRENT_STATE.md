@@ -1,3 +1,9 @@
+## G2 K2 待ち｜朝刊・大引けのゆめちゃんコラム化（2026-10-14）
+- 旧G2 TASK `kabumori-g2-market-report-yume-column-top-points-20261014` は review_required / chatgpt（K2 待ち）。新F2宛ての直接指示のチャットで実施し、ユーザー指示で G2 の Report に記録した。
+- PR #200 を main に merge（`488a89483c35174900fe5585d7c72af938d77ef4`）。本番はユーザーが実行: market-report-analysis を deploy（10/14 大引けから新しい文体・ニュース選別・想定シナリオ）、migration `20261014100000_app_market_report_story_v2`（get_app_market_report が yume / app_story 等も返す）を単体適用。読み戻し済み: SECURITY DEFINER・V2 本文・authenticated だけ実行可、朝刊 10/14 に yume。未確認: 履歴の行、関数の版、Metro 更新後の実機表示。
+- x-test-post は未deploy（X の 📌 先頭の並びは未反映、v145 は main より古い）。migration は SECURITY DEFINER の RPC 変更なので J1〜J4 の事後レビューを推奨（ユーザー判断で後日）。
+- 新F2 `kabumori-f2-emergency-market-report-app-feed-broadcast-20261013`（配信・通知）は in_progress のまま。
+
 ## G2｜朝刊・大引け編集改善（2026-10-14）
 - User explicitly assigned a NEW legacy G2 task `kabumori-g2-market-report-yume-column-top-points-20261014` ready/claude, Opus5.5（高）, G2→K2, return to かぶモリアプリG2のちゃ. 先頭「今日のポイント」3項目はX/app同文・朝夕共通、ゆめちゃんの会話調一本のコラムに小見出し、軽微な個社決算を全体市況から原則除外、アプリ指標一覧は最後の参考資料。SOURCE-ONLY / PRODUCTION_NO_GO。
 - Original legacy G2 TASK+Report/history saved verbatim under `.agent_v2/archive/2026-10-14-G2-kabumori-g2-pr143-live-mergeability-diagnosis-20261012/`, SHA256 checksum/manifests and Git blob readback verified; original contents also remain intact following the new current-task header in `.agent/tasks/CLAUDE_TASK.md`.

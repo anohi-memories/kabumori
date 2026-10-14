@@ -1,3 +1,7 @@
+## 本番の共通朝刊・大引け（2026-10-14 昼の時点）
+- market-report-analysis は main `488a8948`（PR #200）を deploy 済み（ユーザーが実行）。10/14 大引けから、ゆめちゃんのコラム文体・市場全体のニュース選別・`yume.scenario_ja` が入る。
+- `get_app_market_report` は V2（migration `20261014100000`、ユーザーが適用）。結果の記録は旧G2 Report（K2 待ち）。新F2の配信・通知 TASK は in_progress のまま。
+
 ## Legacy G2 content improvements — explicit slot assignment (2026-10-14)
 - New user-explicit old G2 TASK `kabumori-g2-market-report-yume-column-top-points-20261014` ready/claude, Opus5.5（高）, G2→K2; old G2 history backed up and preserved. Top 3 points shared by X/app for morning/close; natural Yume conversational report with microheadings, no irrelevant corporate earnings, indicators reference table at app bottom. G2 source-only; F2 ongoing app feed/broadcast production observation isolated. Avoid parallel file overlap and do not modify F6 provider.
 

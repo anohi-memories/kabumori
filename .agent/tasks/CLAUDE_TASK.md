@@ -3,8 +3,8 @@
 - task_id: kabumori-g2-market-report-yume-column-top-points-20261014
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - start_code: G2
 - finish_code: K2
 - completion_code: K2
@@ -16,6 +16,7 @@
 - source_of_truth: この先頭のCURRENT TASKのみ。以下の「OLD HISTORY」節は過去の内容であり、開始指示ではない。
 - dependency: 新F2 `kabumori-f2-emergency-market-report-app-feed-broadcast-20261013` is in_progress (配信・通知実機確認)。旧G2の新規TASKは**ユーザーの明示指定**であり、新F2へtask_idを移動しない。F6 AI provider・F2配信・F1 AIに聞くの所有境界は必ず維持。
 - no production deploy/merge/write approved by this assignment
+- execution_note: 同じ内容をユーザーが「新F2」宛ての直接指示として別チャット（Claude Code クラウドセッション）に出し、そこで実施した。ユーザーの指示（2026-10-14）により、結果をこの旧G2 TASKの Report に記録して K2 で返す。新F2の TASK ファイル（配信・通知、in_progress）は変更していない。
 
 ## 背景・目的（ユーザー確定仕様）
 今日の市況は硬い新聞記事調で読みづらく、全体市況に関係が薄い個別企業の決算が目立ち、重要指標が本文の途中に散在する。共通朝刊・大引けを「ゆめちゃんが投資家へ自然に語る一本の市況コラム」にする。ただし事実・予想の区別とFactチェックは維持する。Xとアプリは**同じ共通生成データ**から配信する。
@@ -56,14 +57,106 @@
 - レビュー要否はL2/K2受入時にリスクで判断。完了時は**かぶモリアプリG2のちゃへ K2**。
 
 ## Report
+
 - task_id: kabumori-g2-market-report-yume-column-top-points-20261014
-- result: NOT_STARTED
-- changed_files: none
-- tests: NOT_RUN
-- push: no
-- merge: no
-- deploy: no
-- production_changes: 0
+- result: **IMPLEMENTED_MERGED / GENERATION_DEPLOYED / APP_RPC_APPLIED / X_ORDER_NOT_DEPLOYED**
+- 記録: 2026-10-14 JST（実施は新F2宛ての直接指示のチャット。上の execution_note）
+- return_to: かぶモリアプリG2のちゃ / completion_code: K2 / next_owner: chatgpt
+
+### 実装（PR #200、main へ merge 済み）
+
+- PR: https://github.com/anohi-memories/kabumori/pull/200
+  - HEAD `b96bdd3ca95e37407408b73a40db479eaec8bd25`
+  - merge commit `488a89483c35174900fe5585d7c72af938d77ef4`（`--match-head-commit` 相当の HEAD 指定で通常 merge）
+- 生成（`market-report-analysis`）
+  - 文体: ゆめちゃんが読者に語りかけるコラム。事実を根拠にした「私は〜と見ています」の解釈。繰り返し・定型文・AIらしい言い回し・指導口調を抑える
+  - 今日のポイント: 朝刊「相場を左右しそうな重要材料／上昇・下落につながりそうな要因／今日注意して見たい動き」、大引け「実際に起きた重要な動き／背景や注目材料／翌営業日に影響しそうな点」。X とアプリで同じ3つを本文の最初に出す
+  - 朝刊で前営業日・前夜の値動きを今日の動きのように書かない
+  - 予想の向きは `yume` だけが持つ（X の文も yume の stance と逆を書かない）
+  - `yume.scenario_ja`（想定シナリオ）を追加。理由を長めに（100〜200字）
+  - 「〜と見ています」「〜と考えています」「私の見立てでは」を、因果ガード（SPECULATION）と Fact の指示で見立てとして扱う。事実として断定した理由は従来どおり削る
+  - ニュース選別: 一般の個別企業の決算・開示をモデルの入力から外す。半導体・AI の high 以上の個別企業ニュースだけ最大2件残す。政策（monetary_policy 等）は常に残す
+  - 除外ログ: `report_diagnostics` の `news_selection` / `news_excluded` / `news_excluded_reasons` / `news_excluded_refs`（固定の理由コードと news の id だけ）
+  - `KABUMORI_MARKET_REPORT_NEWS_SELECTION=all` で従来の入力に戻せる（Secret。未設定が既定）
+- X（`_shared/market_report_packet.ts`）: 見出し行の直後に「📌 今日のポイント」（朝刊・大引けで同じ見出し）、その後に導入文
+- アプリ「きょうの市況」: 📌 今日のポイント → 🔮 ゆめちゃんの考察・予想 → 📖 今日の相場のお話（小見出し）→ ⚠️ この先の注目材料 → 📊 参考資料｜主な市場指標（いつも最後。市場ごとの取引日・データ取得時刻・未取得のデータ）
+- ゆめちゃんがアプリに出なかった原因: `get_app_market_report` が返す項目を1つずつ組み立てており、`yume` が無かった
+  - migration `20261014100000_app_market_report_story_v2.sql` で関数だけを置き換え
+  - 足した項目: `yume`、`app_story`、`session_views`、`major_moves[].metric_key`、`data_generated_at`
+  - 署名・SECURITY DEFINER・search_path・ゲート・既存の項目・権限は V1 と同じ
+- 手順書: `docs/market-report-shared-platform/F2_YUME_COLUMN_RELEASE_20261014.md`
+
+### changed_files（30）
+
+- 生成: `supabase/functions/market-report-analysis/{analysis_input,analysis_logic,handler,unit_sanitizer,test_support}.ts`、`supabase/functions/_shared/{market_report_packet,market_report_yume}.ts`
+- アプリ: `src/app/market-report.tsx`、`src/lib/market-report-view.ts`（新）、`src/lib/ondemand-analysis-presentation.ts`
+- DB: `supabase/migrations/20261014100000_app_market_report_story_v2.sql`（新）、`supabase/tests/app_market_report_story_v2_{behavior.sql,rollback.sql,run.sh}`（新）
+- テスト: `market-report-analysis/yume_column_test.ts`（新）、同 `{analysis,content_guard,debug_trace,delivery_first,editorial_points,handler,model_registry_integration,opus_primary_handler,presentation_v2,quality_calibration,transport_retry,yume}_test.ts`、`x-test-post/shared_market_report_consumer_test.ts`、`tests/app/market-report-view_test.ts`（新）
+- 文書: `docs/market-report-shared-platform/F2_YUME_COLUMN_RELEASE_20261014.md`（新）
+- 変更していない: F6 の `_shared/ai_provider/`、Secrets、ledger、モデル設定、Cron、通知 worker、配信ゲート、`x-test-post` 本体、`personalized-reports`、`_shared/market_report_story.ts`
+
+### tests（すべてオフライン。merge 後の main `488a8948` でも再実行）
+
+| 対象 | 結果 |
+|---|---|
+| `market-report-analysis` ＋ `x-test-post/shared_market_report_consumer_test.ts` ＋ `personalized-reports`（Deno 2.9.6、型検査あり） | 505 passed / 0 failed |
+| `_shared`（`--no-check`） | 613 passed / 0 failed |
+| `x-test-post` 全体（`--no-check`） | 532 passed / 4 failed（morning_greeting の曜日枠4件。main でも同じ失敗で、今回の変更とは無関係） |
+| アプリ `tests/app/`（`--no-check`、リポジトリの慣例） | 551 passed / 0 failed |
+| `supabase/tests/migration_source_invariants_test.ts` | 11 passed |
+| `npx tsc --noEmit -p tsconfig.json`（`src/`） | 既知の CSS 型の2件だけ |
+| SQL（手元の使い捨て PostgreSQL 16、`app_market_report_story_v2_run.sh`） | `APP_MARKET_REPORT_STORY_V2_ALL_PASS`（事前確認、関数本文以外の差分なし、再適用、取り消しで V1 と完全一致、V1・一斉通知・G2 結合の既存の動作、10通りの変異テスト） |
+
+- 4パターン: X 朝刊・大引け（`presentation_v2_test`、`yume_column_test`）、アプリ 朝刊・大引け（`market-report-view_test`）で「ポイントが最初・同じ3つ・ゆめちゃん→お話→注目材料・指標は最後」を確認
+- ニュース選択: 10/7 大引け（個別企業28件・地政学1件）で市場全体の1件だけが入力に入る、9/30 の AI 個別企業（critical）2件は残る、政策は常に残る、除外は全件が理由コードつき
+- 実モデルでの生成は未実施（有料 API はこの作業では使っていない。ユーザーが試作を見送った）
+
+### commit / push / merge / deploy
+
+- branch `claude/f2-market-report-yume-column-quality-20261014` を push、PR #200 を Draft で作成 → ユーザー承認で Ready → merge
+- 本番（すべてユーザーが Mac の自分のターミナルで実行。Claude は手順と読み戻しの確認だけ）
+  - A: `market-report-analysis` を deploy（作業場所 `kabumori-f2-deploy` を `488a8948` に detach、`--use-api --no-verify-jwt`）。アップロードされたファイルは `488a8948` のもの。合言葉なしの POST は 401
+  - B: `supabase db query --linked -f supabase/migrations/20261014100000_app_market_report_story_v2.sql` を単体で適用（`db push` は不使用）
+  - B の読み戻し: `prosecdef=true`、V2 の本文（`data_generated_at`・`scenario_ja`）あり、authenticated のみ実行可（anon・service_role 不可）
+  - B の利用者の権限での読み取り: 朝刊 10/14 が `completed`・`yume=object`・`stance=up`・`app_story=object`・`data_generated_at` あり。大引け 10/13 は `yume=null`（反映前の回）・`app_story=object`
+- 未確認（ユーザーの実行待ち）
+  - 履歴の行（`supabase_migrations.schema_migrations` に `20261014100000`）の追加と `history=1`
+  - 関数の版（v35 の想定）と `{"error":"UNAUTHORIZED"}` の本文、本番からのダウンロードとのバイト比較
+  - Mac の Metro（`kabumori-f2-release`）を `488a8948` で起動し直し、実機で新しい「きょうの市況」を確認
+- C（`x-test-post` の deploy）: 未実施（勧めない）。本番は 10/08 の v145 で main より古い。deploy すると 10/08 以降の main の変更もまとめて X の実投稿に出る。それまで X の並びは従来どおり（見出し → 導入文 → 📌 今日の注目ポイント／今日の3ポイント）。文体・ポイントの中身・ニュースは A で変わる
+
+### TASK の制約との違い（ユーザーの明示の承認による）
+
+- この TASK は「本番マージ・デプロイ禁止」「DB/RPC/migration 変更禁止」としていたが、ユーザーがこの会話で次を明示的に承認した
+  - PR #200 の merge
+  - `market-report-analysis` の deploy（大引けに反映したいという指示）
+  - migration の今日の適用（Codex レビューは後日）
+- SECURITY DEFINER の RPC の変更なので、方針上は J1〜J4（Sol（高））の事後レビューを推奨
+- `_shared/market_report_packet.ts` の X 整形を変えた（`x-test-post` の実投稿の経路が使う関数）。`x-test-post` は deploy していない
+- アプリ画面（`market-report.tsx`）を変更した。F1 の開いている PR（#166 ほか）とファイルの重なりは無いことを確認した
+
+### remaining_issues
+
+- 今日の大引け（16:15 データ → 16:20 ごろ生成）が新しい版の最初の実地確認。`fact.ai_status`、`fact.removed_units`（YUME_・因果の削除の量）、`yume.scenario_ja`、`report_diagnostics.news_*` を読み取りで確認する
+- `market_report_story.ts` の `buildAppMarketStory`（個別レポートの `market_detail.story`）は旧い並びのまま。アプリはこの story をまだ描いていない
+- `x-test-post` の deploy（X の並び）は、v145 と main の差分確認とレビューの後に別承認
+- migration の事後レビュー（J1〜J4、Sol（高））
+- Draft の比較処理 PR #153（とその上の #157）は `handler.ts` を触っており、もともと main と衝突している。後から入る側で調整が要る
+- 新F2の配信・通知 TASK（`kabumori-f2-emergency-market-report-app-feed-broadcast-20261013`）は in_progress のまま。10/14 大引けの一斉通知の確認が残る（この TASK とは別）
+
+### safety_checks
+
+- 有料 API の呼び出し: 0（この作業の中では）
+- Claude からの本番への書き込み: 0（deploy・migration はユーザーが実行）
+- 秘密の値・利用者の ID・ニュース本文は記録していない
+- 他 slot の TASK・worktree・ブランチ・未コミットの変更には触れていない（作業は独立したクラウドの checkout）
+- 変更していない本番: Secrets、Cron、通知、配信ゲート、`x-test-post`、`personalized-reports`、F6 の provider
+
+### next_recommendation
+
+- ChatGPT は K2 で受け入れを判断する
+- 大引けの読み取りの結果で、文体・ニュース選別の追加調整が要るかを決める
+- migration の事後レビューを J1〜J4 に置くかを決める
 
 ---
 
