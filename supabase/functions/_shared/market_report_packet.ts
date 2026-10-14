@@ -174,27 +174,26 @@ function formatXBody(packet: MarketReportPacket): string {
   // Points or a closing removed as factually wrong before delivery are left out with their heading.
   const pointList = packet.x_post.points_ja.map((point) => point.trim()).filter(Boolean);
   const points = pointList.length > 0 ? [X_POINTS_TITLE, ...pointList.map((point) => `・${point}`)].join("\n") : "";
-  // The header line, then the points (when any survived), then the lead: the body starts with 📌 今日のポイント.
-  const opening = points
-    ? [[X_HEADERS[packet.report_type], points].join("\n"), packet.x_post.lead_ja.trim()]
-    : [[X_HEADERS[packet.report_type], packet.x_post.lead_ja.trim()].join("\n")];
+  const lead = packet.x_post.lead_ja.trim();
+  // The header line, then the points (when any survived), then the commentary: the body starts with 📌 今日のポイント.
+  const opening = points ? [X_HEADERS[packet.report_type], points].join("\n") : [X_HEADERS[packet.report_type], lead].join("\n");
   const closing = packet.x_post.closing_ja.trim();
   if (!isPresentationV2(packet)) {
-    return [
-      ...opening,
-      closing ? `💬 ${closing}` : "",
-    ].filter(Boolean).join("\n\n");
+    return [opening, points ? lead : "", closing ? `💬 ${closing}` : ""].filter(Boolean).join("\n\n");
   }
   const context = (packet.x_post.context_ja ?? "").trim();
   const news = (packet.x_post.news_ja ?? "").trim();
   const watch = (packet.x_post.watch_ja ?? "").trim();
-  // Optional paragraphs are dropped when the evidence did not support them.
+  // Phase 2 (2026-10-14): ① 📌 points ② the short commentary (lead and context as one paragraph) ③ ゆめちゃん's call.
+  // A news or watch paragraph is printed only when the model wrote one (optional since Phase 2; older packets have them).
+  // ゆめちゃん's lines carry their own 🔮 (yumeXLines), so they need no 💬 title; a model closing keeps it.
+  const commentary = [points ? lead : "", context].filter(Boolean).join("\n");
   return [
-    ...opening,
-    context,
+    opening,
+    commentary,
     news ? `📰 ${news}` : "",
     watch ? [X_WATCH_TITLE[packet.report_type], watch].join("\n") : "",
-    closing ? [X_CLOSING_TITLE, closing].join("\n") : "",
+    closing ? (packet.yume ? closing : [X_CLOSING_TITLE, closing].join("\n")) : "",
   ].filter(Boolean).join("\n\n");
 }
 

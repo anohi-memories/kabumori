@@ -193,7 +193,8 @@ test("rewrite: the X body length alone no longer buys a rewrite; a thin body sti
   // The app story keeps PR #77's band: 657 is under the 700 floor and still asks for one rewrite.
   assert.equal(qualityRewriteHints(["X_POST_SHORTER_THAN_TARGET:387", "APP_STORY_SHORTER_THAN_TARGET:657"]).length, 1);
   // The omission checks are unchanged.
-  assert.equal(qualityRewriteHints(["X_POST_CONTEXT_OMITTED", "X_POST_WATCH_OMITTED"]).length, 2);
+  // Phase 2 (2026-10-14): watch_ja is optional on X (news / watch live in context_ja); only a missing context is a defect.
+  assert.equal(qualityRewriteHints(["X_POST_CONTEXT_OMITTED", "X_POST_WATCH_OMITTED"]).length, 1);
 });
 
 test("rewrite: the delivered 10/6 draft costs two calls when the app story is not thin (it cost four with both warnings)", async () => {

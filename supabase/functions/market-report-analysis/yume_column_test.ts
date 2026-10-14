@@ -198,9 +198,9 @@ test("prompt: ゆめちゃん talks to the reader with her own reading of the fa
     const prompt = String(generationRequestBody(input, []).instructions);
     assert.ok(prompt.startsWith("あなたは日本株の市場レポート編集者です。この取引日の市場を、かぶモリのAI評論家「ゆめちゃん」"));
     assert.ok(prompt.includes("情報の羅列ではなく、ゆめちゃん自身の解釈を読んでもらうこと"));
-    assert.ok(prompt.includes("新聞記事・ニュース速報・業務報告書のような硬い文にせず"));
-    assert.ok(prompt.includes("判断には必ず根拠（入力の事実）を添えます"));
-    assert.ok(prompt.includes("同じ情報（同じ指標の値、同じニュース、同じ注意点）を項目をまたいで何度も繰り返しません"));
+    assert.ok(prompt.includes("新聞記事・ニュース速報・業務報告書・AIの要約のような硬い文にしません"));
+    assert.ok(prompt.includes("判断には根拠（入力の事実）を添え"));
+    assert.ok(prompt.includes("同じ情報を繰り返しません。今日のポイント（points_ja）に書いたことを本文でそのまま言い直さず"));
     assert.ok(prompt.includes("AIらしい機械的な言い回し"));
     assert.ok(prompt.includes("yume 以外の項目では今日の値動きを予想せず"), "a direction call lives in yume only");
     assert.ok(prompt.includes("yume の stance と同じ向きにし、逆の向きを書きません"), "X never contradicts her call");

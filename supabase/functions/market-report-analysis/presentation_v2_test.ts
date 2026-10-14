@@ -96,12 +96,13 @@ for (const [label, fixture, make] of [["morning", morning, richMorning1001], ["c
     // 2026-10-14: the header line, then 📌 今日のポイント (same title on both reports), then the lead.
     assert.ok(sections[0].startsWith(label === "morning" ? "【朝刊】きょうの日本株、ここをチェック☀️\n📌 今日のポイント\n・" : "【大引け】きょうの日本株まとめ🌙\n📌 今日のポイント\n・"));
     assert.equal(sections[0].split("\n").filter((line) => line.startsWith("・")).length, 3, "exactly 3 points");
-    assert.equal(sections[1], analysis.x_post.lead_ja, "the lead follows the points");
-    assert.equal(sections[2], analysis.x_post.context_ja, "context paragraph");
-    assert.equal(sections[3], `📰 ${analysis.x_post.news_ja}`, "news paragraph");
-    assert.ok(sections[4].startsWith(label === "morning" ? "👀 今日見るポイント\n" : "👀 明日以降の注目点\n"));
-    assert.ok(sections[5].startsWith("💬 今日のひとこと\n"));
-    assert.equal(sections[6], REPORT_DISCLAIMER_JA);
+    // Phase 2: the lead and the context are one commentary paragraph; news / watch only when written.
+    assert.equal(sections[1], `${analysis.x_post.lead_ja}\n${analysis.x_post.context_ja}`, "the commentary follows the points");
+    assert.equal(sections[2], `📰 ${analysis.x_post.news_ja}`, "news paragraph");
+    assert.ok(sections[3].startsWith(label === "morning" ? "👀 今日見るポイント\n" : "👀 明日以降の注目点\n"));
+    // ゆめちゃん's call closes the post with its own 🔮; a model closing (no call) keeps the 💬 title.
+    assert.ok(sections[4].startsWith(packet.yume ? "🔮" : "💬 今日のひとこと\n"), sections[4]);
+    assert.equal(sections[5], REPORT_DISCLAIMER_JA);
     assert.ok(emojiCount(post) >= 3 && emojiCount(post) <= 8, `emoji ${emojiCount(post)}`);
     assert.ok(!/https?:|[#＃]\S/.test(post), "no URL, no hashtag (fixed hashtags are appended by the X consumer)");
   });
