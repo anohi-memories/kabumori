@@ -4,10 +4,10 @@ import { Image, type ImageSource } from 'expo-image';
 
 import type { KabumoriPalette } from '@/constants/kabumori-theme';
 import { HERO, HOME_COLORS, HOME_LAYOUT } from '@/constants/home-tokens';
-import type { PersonalizedReport } from '@/lib/report-presentation';
 import { reportCardStatus } from '@/lib/home-report-highlights';
 import { heroArtHeight, heroIsExtended, heroPointsTop, heroWidth, HERO_ART_ASPECT } from '@/lib/home-hero-geometry';
-import { selectReportCharacterState, type ReportCharacterState } from '@/lib/report-character-state';
+import type { ReportCharacterState } from '@/lib/report-character-state';
+import { MARKET_CHARACTER_STATE, homeMarketCtaLabel, homeMarketKindLabel, type HomeMarketReport } from '@/lib/home-market-report';
 import { CharacterSlot } from '@/components/home/character-slot';
 
 // The Hero background art (1586x992, lossless). The title 「今日の かぶモリレポート」, the description
@@ -15,10 +15,11 @@ import { CharacterSlot } from '@/components/home/character-slot';
 // double display). It is laid on the art box at its own aspect ratio, never cropped or stretched.
 export const HERO_BACKGROUND_SOURCE: ImageSource = require('@/assets/images/home/report_hero_background.webp');
 
-// Character layer: one of eight approved full-canvas images (1586x992, plus the 03 canvas at 1536x960),
-// chosen deterministically from the stored report by selectReportCharacterState (no network, no AI).
-// Static requires, because Metro resolves assets at build time. No report (loading / empty / error)
-// shows 03 neutral. Every state follows the same full-canvas rule: no per-state offsets or scales.
+// Character layer: one of eight approved full-canvas images (1586x992, plus the 03 canvas at 1536x960).
+// Static requires, because Metro resolves assets at build time. The Hero now shows the shared market report
+// (morning / close for everyone): the holding-impact based expressions of a personalized report do not apply
+// to it, so it always shows 03 neutral (MARKET_CHARACTER_STATE). Every state follows the same full-canvas rule:
+// no per-state offsets or scales.
 const CHARACTER_SOURCES: Record<ReportCharacterState, ImageSource> = {
   very_positive: require('@/assets/images/report-states/report_01_very_positive.webp'),
   positive: require('@/assets/images/report-states/report_02_positive.webp'),
@@ -30,16 +31,17 @@ const CHARACTER_SOURCES: Record<ReportCharacterState, ImageSource> = {
   volatile: require('@/assets/images/report-states/report_08_volatile.webp'),
 };
 
-// Short report-type label shown after the baked-in 「今日のポイント」 label.
-const REPORT_KIND_LABEL: Record<PersonalizedReport['report_type'], string> = { morning: '朝刊', close: '大引け' };
-
 // Readable summary of the baked-in art for VoiceOver (the picture itself carries the words).
 const HERO_ART_LABEL = '今日のかぶモリレポート。今日の市場とあなたの保有銘柄への影響をAIが整理しました。今日のポイント';
 
 type HomeReportHeroProps = {
   palette: KabumoriPalette;
-  report: PersonalizedReport | null;
-  points: string[];
+  /** The shared market report whose saved points are shown (null: loading / empty / error). */
+  report: HomeMarketReport | null;
+  /** JST today on this device; only decides whether the label needs an explicit date. */
+  todayJst: string;
+  /** At least one of the morning / close fetches failed, so the newest report is not confirmed. */
+  unconfirmed: boolean;
   loading: boolean;
   error: string;
   onOpen: () => void;
@@ -47,22 +49,23 @@ type HomeReportHeroProps = {
 };
 
 // The Home hero: one designed block. Layers, back to front:
-//   1. background art -> 2. character (same 1:1 box, one of 8 states) -> 3. live UI (report kind, 1-3 points)
+//   1. background art -> 2. character (same 1:1 box, neutral) -> 3. live UI (report kind + date, 1-3 saved points)
 //   -> 4. CTA (opaque, so it covers the character's lower body where they overlap).
 // Individual points are NOT navigation targets -- the single CTA is the only way into the report.
-export function HomeReportHero({ palette, report, points, loading, error, onOpen, onRetry }: HomeReportHeroProps) {
+export function HomeReportHero({ palette, report, todayJst, unconfirmed, loading, error, onOpen, onRetry }: HomeReportHeroProps) {
   const { width: windowWidth } = useWindowDimensions();
   const [heroHeight, setHeroHeight] = useState(0);
   const hasReport = !!report;
   const status = reportCardStatus(hasReport, loading, error);
-  // Only the points that exist: 1-3, never an empty placeholder row.
+  // Only the saved points that exist: 1-3, never an empty placeholder row and never invented text.
+  const points = report?.points ?? [];
   const shownPoints = points.filter((point) => point.trim().length > 0).slice(0, HERO.maxPoints);
 
   const width = heroWidth(windowWidth, HOME_LAYOUT.gutter);
   const artHeight = heroArtHeight(width);
   const extended = heroIsExtended(heroHeight, artHeight);
-  // The report on screen decides the expression; no report -> 03 neutral. Pure, no network/AI.
-  const characterState = selectReportCharacterState(report);
+  // A shared market report carries no holding-specific meaning: always the neutral expression.
+  const characterState = MARKET_CHARACTER_STATE;
 
   return (
     <View
@@ -102,7 +105,7 @@ export function HomeReportHero({ palette, report, points, loading, error, onOpen
           : null}
         {status === 'report' && report ? (
           <Text style={[styles.reportKind, { color: palette.muted }]} numberOfLines={1}>
-            {REPORT_KIND_LABEL[report.report_type] ?? ''}
+            {homeMarketKindLabel(report, todayJst, unconfirmed)}
           </Text>
         ) : null}
       </View>
@@ -123,6 +126,10 @@ export function HomeReportHero({ palette, report, points, loading, error, onOpen
                 <Text style={styles.retryText}>もう一度試す</Text>
               </Pressable>
             </View>
+          ) : status === 'report' && report && shownPoints.length === 0 ? (
+            <Text style={[styles.status, { color: palette.muted }]}>
+              この回にはポイントがありません。「レポートを見る」から全文を読めます。
+            </Text>
           ) : status === 'report' && report ? (
             <View style={styles.points}>
               {shownPoints.map((point, index) => (
@@ -138,7 +145,7 @@ export function HomeReportHero({ palette, report, points, loading, error, onOpen
             </View>
           ) : (
             <Text style={[styles.status, { color: palette.muted }]}>
-              今日のレポートはまだありません。生成され次第ここに表示されます。
+              共通の朝刊・大引けはまだありません。公開され次第ここに表示されます。
             </Text>
           )}
         </View>
@@ -156,7 +163,7 @@ export function HomeReportHero({ palette, report, points, loading, error, onOpen
             pressed && hasReport && styles.pressed,
           ]}
           accessibilityRole="button"
-          accessibilityLabel="レポートを見る"
+          accessibilityLabel={report ? homeMarketCtaLabel(report) : 'レポートを見る'}
           accessibilityState={{ disabled: !hasReport }}>
           <Text style={[styles.ctaText, { color: hasReport ? '#fff' : palette.muted }]}>レポートを見る →</Text>
         </Pressable>

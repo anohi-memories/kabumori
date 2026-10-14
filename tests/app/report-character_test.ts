@@ -94,7 +94,9 @@ test("the selected character is drawn by the one full-canvas rule, with no per-s
   const slot = await read("src/components/home/character-slot.tsx");
   assert.ok(/<CharacterSlot source=\{CHARACTER_SOURCES\[characterState\]\} style=\{styles\.characterLift\} \/>/.test(hero), "the same single global lift for every state");
   assert.ok(/characterLift: \{ top: -HERO\.characterLift, bottom: HERO\.characterLift \}/.test(hero));
-  assert.ok(hero.includes("selectReportCharacterState(report)"));
+  // The Hero shows the shared market report: the holding-based selection does not apply, it is always neutral.
+  assert.ok(hero.includes("const characterState = MARKET_CHARACTER_STATE;"));
+  assert.ok(!hero.includes("selectReportCharacterState"));
   // Full canvas: absolute fill, contain, uncropped, decorative, frameless, never takes touches.
   assert.ok(slot.includes("StyleSheet.absoluteFill"));
   assert.ok(slot.includes('contentFit="contain"'));

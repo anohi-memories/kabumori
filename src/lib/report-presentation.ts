@@ -473,10 +473,14 @@ export function basisLabel(reportType: ReportType, tradingDate: string): string 
   return `${formatDateJa(tradingDate)}の${reportTypeLabel(reportType)}を基準にした分析`;
 }
 
-/** 共通レポートの日付の見出し。今日の分でなければ、その旨をはっきり書く。 */
-export function marketReportDateLine(report: Extract<AppMarketReport, { status: 'completed' }>): string {
+/**
+ * 共通レポートの日付の見出し。今日の分でなければ、その旨をはっきり書く。
+ * `explicit`: 利用者・ホームが日付を指定して開いた回。直近の回へ戻した表示ではないので、「直近の回を表示しています」とは書かず、過去の回だと示す。
+ */
+export function marketReportDateLine(report: Extract<AppMarketReport, { status: 'completed' }>, explicit = false): string {
   const label = `${formatDateJa(report.tradingDate)}の${reportTypeLabel(report.reportType)}`;
-  return report.isToday ? label : `${label}（今日の分はまだありません。直近の回を表示しています）`;
+  if (report.isToday) return label;
+  return explicit ? `${label}（過去の回）` : `${label}（今日の分はまだありません。直近の回を表示しています）`;
 }
 
 export function marketReportEmptyText(report: Exclude<AppMarketReport, { status: 'completed' }>): string {

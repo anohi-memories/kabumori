@@ -73,3 +73,11 @@ export async function fetchAppMarketReport(reportType: ReportType, tradingDate: 
   if (error) throw new Error('市況レポートを取得できませんでした。');
   return parseAppMarketReport(data, reportType);
 }
+
+/**
+ * ホーム「今日のポイント」用に、朝刊と大引けの最新の公開済みの回を 1 回ずつ読む（RPC は 2 回。日付は渡さない）。
+ * 片方が失敗してももう片方の結果は捨てない（Promise.allSettled）。どちらを出すかは home-market-report.ts が決める。
+ */
+export function fetchHomeMarketReports(): Promise<[PromiseSettledResult<AppMarketReport>, PromiseSettledResult<AppMarketReport>]> {
+  return Promise.allSettled([fetchAppMarketReport('morning'), fetchAppMarketReport('close')]);
+}
