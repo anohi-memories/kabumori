@@ -45,7 +45,7 @@ async function readDeferred(userId: string): Promise<boolean> {
 function DeletionEntry({ onOpen }: { onOpen: () => void }) {
   return (
     <Pressable accessibilityRole="button" onPress={onOpen} style={({ pressed }) => [{ alignItems: 'center', paddingVertical: 10 }, pressed && styles.buttonPressed]}>
-      <Text style={[styles.muted, { textDecorationLine: 'underline' }]}>アカウントの削除について</Text>
+      <Text style={[styles.muted, { textDecorationLine: 'underline' }]}>利用終了・共通IDの管理</Text>
     </Pressable>
   );
 }
