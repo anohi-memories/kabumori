@@ -23,17 +23,17 @@
 
 ## F2
 - slot: F2
-- status: ready
+- status: review_required
 - task_id: kabumori-f2-pause-delivery-brand-queue-offline-design-20261015
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: L2
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
 - dependencies: docs/operations/kabumori-pause/G1_PLAN_20261015.md; F8 pause gate design; J1 common-AI review is separate/protected
-- blocker: production NO_GO; deployed Dispatcher/brand mapping and current queue unverified; design-only
+- blocker: PASS_OFFLINE_DESIGN / PRODUCTION_NO_GO。Draft PR #210（設計 commit `9d1efeb662c79e7d2cb0ac4254adfa7092279a54`）。合成検証16件 PASS。本番の配備版・claim_due_post・Cron #1 の command・今の件数は未確認。G1 の照合待ち（L2）
 - production_mutation_window: FORBIDDEN
 - assigned_checkout: /Users/yuya/.codex/.chatgpt-projects/g-p-6a8e60a4be3081918ef2c28c1b2cc386/kabumori-f2-pause-design-20261015
 - assigned_branch: claude/f2-pause-delivery-design-20261015
