@@ -218,21 +218,21 @@
 
 ## J4
 - slot: J4
-- status: ready
+- status: review_required
 - task_id: postona-j4-pr217-r2c-final-preview-focused-rereview-20261015
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V4
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J4.md
 - current_report_path: .agent_v2/reports/J4.md
-- dependencies: F4 PR211 eb1011f2 stacked PR197 2171ee4c; J4 V4 previous P2x2; F5 PR193 exact handler contract
-- blocker: CHANGES_REQUIRED P2 R2c: late final-preview auth switch retains prior-user warnings in helper return; current screen hides them. Original R1/R2 repros fixed. Separate F5/managed/legacy gates; production NO_GO
-- slot_use: independent P2 R1/R2 POSTONA mobile rerun with actual F5 handler synthetic tests
-- previous_archive: .agent_v2/archive/2026-10-15-J4-postona-j4-pr197-postona-deletion-client-security-review-20261014/
-- v4_verdict: CHANGES_REQUIRED P2 R2c; original R1/R2 repaired, late final-preview cross-account helper warning not sanitized, screen remains guarded. Reviewed PR211, app294 and Deno120 independently PASS, no source modification; J4 released and archive needed before reuse.
-- latest_assignment: PR217 R2c focused security review. Prior task archived.
+- dependencies: PR217 d4bcd09e stacked PR211 eb1011f2 / PR197 2171ee4c; actual F5 PR193 handler; F5 PR214 integration separate
+- blocker: CHANGES_REQUIRED P2: concurrent public preview B/null observations bypass active end sticky fence; stale A settle can return completion/facts. Original serial R2c fixed, screen guarded; production NO_GO
+- slot_use: PR217 focused independent concurrency rereview with actual F5 synthetic seam; no product changes
+- previous_archive: .agent_v2/archive/2026-10-15-J4-postona-j4-pr211-p2-client-fixes-focused-security-rereview-20261015/
+- v4_verdict: CHANGES_REQUIRED P2 x1; original R2c 2 FAIL→2 PASS, focused19/seam8/app313 PASS, new concurrency 4 FAIL/2 controls PASS. Await coordinator V4.
+- latest_assignment: PR217 focused review completed 2026-10-16; return to POSTONA G4 coordinator, V4.
 
 ## J5
 - slot: J5
