@@ -1,5 +1,5 @@
 ## G1｜かぶモリ休止準備 F2/F8設計TASK登録（2026-10-15）
-- GitHub反映：Draft PR207の登録候補。mainへの直接pushは自動承認レビューで拒否、main未反映。F2/F8はfresh origin/mainで新task_idを確認してから正式開始。管理差分の反映承認は本番停止承認と別。
+- GitHub反映：ユーザー承認後、PR207をmainへmerge済み（`d50f0d6f601f9819b24b8ad1a60b540d9c2772ab`）。承認HEAD `a012105d07f559ff1c708c04d2c3bc8d743d778f` とmerge tree一致、F2/F8 TASK・索引・CURRENT_STATE・HISTORY_INDEX・F8 archiveをGitHubから再取得し6/6バイト一致。F2/F8はready、設計作業は未開始。正式開始時はfresh origin/main・専用環境・競合を再確認。本番停止は未承認・未実施。
 - 判定 **OFFLINE_DESIGN_ASSIGNED / PRODUCTION_NO_GO**。統合計画 `docs/operations/kabumori-pause/G1_PLAN_20261015.md`。基準main `9e9c0a0682269de0a5ec25ff4f26ed82043fbfe8`、新旧30枠最新metadata・関連Report・open PR74件を確認。
 - F2新 `kabumori-f2-pause-delivery-brand-queue-offline-design-20261015` **ready / claude / Opus5.5（高） / F2→L2**。ユーザー予約idleから正式割当。Xブランド/予約5件（引継ぎ値・未再測定）/共有Dispatcher/市況fallback/Push/共通AI caller保護の設計・合成検証のみ。
 - F8新 `kabumori-f8-news-hard-pause-http-ai-offline-design-20261015` **ready / claude / Opus5.5（高） / F8→L8**。全HTTP mode/AI dry-run/app_copy/独立X公開/通知のhard-pause設計・合成検証のみ。前F8 TASK/Reportをappend-only archiveへ6909 bytes、SHA256 `3496660d5633c4fc74958ccc53a80f19614f35f117357528c84b846c41e45d8e`、元blob/復元一致・HISTORY_INDEX追記済み。PR196保護。
