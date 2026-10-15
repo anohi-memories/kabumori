@@ -1,3 +1,8 @@
+## G1 かぶモリ休止 J2 独立レビュー main 登録（2026-10-15）
+- 新J2 `kabumori-j2-f2-f8-pause-runtime-integrated-security-review-20261015` ready/codex、Sol（高）、J2→V2、返却先：かぶモリアプリG1のちゃ（運用休止・全体統括）。
+- 対象 F8 Draft PR #212 (b80d5235)、F2 Draft PR #213 (cb34ab7d)。新旧枠・所有範囲を維持し、独立review専用。旧J2 TASK/Reportはappend-only archive、MANIFEST/SHA256SUMS・復元read-back・HISTORY_INDEX登録済み。
+- J1共通AIを保護。F8 is_active fail-closed/1秒キャッシュ/直接X、F2 x-test-postブランド/予約/Push/認証、PR129/164統合条件を重点確認。本番/merge/deployは NO_GO。レビュー開始時に専用clean worktreeを確認。
+
 ## POSTONA J4 V4 PR211 rerereview (2026-10-15 JST)
 - J4 `postona-j4-pr211-p2-client-fixes-focused-security-rereview-20261015` CHANGES_REQUIRED P2 R2c / PRODUCTION_NO_GO; review complete, slot done/none. Exact PR211 HEAD `eb1011f2bd6f8a76ef412f824f0b21629794645b` OPEN/Draft/unmerged. Original J4 P2 R1/R2 confirmed fixed; late final awaited preview changing A→B/null still attaches A's validated X count/Threads warning to end() return. Actual screen guard hides result, no UI leak demonstrated. J4 independently ran app294 PASS, F5 Deno120 PASS, actual handler seam, two negative late-switch repro FAIL.
 - Next G4/F4 source fix: recheck identity after final preview; when current user B/null no previous-user warnings in helper result; maintain same-person warning facts across genuine verification failures. Recommended Opus5.5（高）. No new F4 task assigned in this V4 check. Later independent focused rereview. J3 PR204 source PASS and F5 Phase10 PR214 source candidate exist; managed/staging/legacy server and integration still NO_GO.
