@@ -60,12 +60,14 @@ test("guard: paused refuses every outward call and lets database reads through",
   assert.equal((await h.guarded(`${BASE}/rest/v1/important_news_candidates?select=id`)).ok, true);
 });
 
-test("guard: running passes through; a flip is honoured after the cache expires, never later than the TTL", async () => {
-  const h = guardHarness(true, PAUSE_RECHECK_TTL_MS);
+test("guard: with an explicit positive TTL a flip is honoured after the cache expires; refusals are never cached", async () => {
+  const OPT_IN_TTL = 1_000; // the production default is 0 (PAUSE_RECHECK_TTL_MS); a positive TTL is an explicit opt-in
+  assert.equal(PAUSE_RECHECK_TTL_MS, 0);
+  const h = guardHarness(true, OPT_IN_TTL);
   assert.equal((await h.guarded("https://api.openai.com/v1/responses", { method: "POST" })).ok, true);
   h.set(false);
-  // still inside the cache window: the previous 'running' answer is used (documented bound)
-  h.tick(PAUSE_RECHECK_TTL_MS - 1);
+  // still inside the cache window: the previous 'running' answer is used (documented bound of the opt-in cache)
+  h.tick(OPT_IN_TTL - 1);
   assert.equal((await h.guarded("https://api.openai.com/v1/responses", { method: "POST" })).ok, true);
   h.tick(2);
   await assert.rejects(h.guarded("https://api.openai.com/v1/responses", { method: "POST" }), NewsPausedError);
@@ -91,6 +93,157 @@ test("guard: unreadable / malformed settings and missing configuration refuse ou
   await assert.rejects(noConfig("https://api.openai.com/v1/responses", { method: "POST" }), NewsPausedError);
 });
 
+// ------------------------------------------------------------------------------------------------ J2-R1: out-of-order reads
+
+type PendingRead = { resolve: (value: unknown) => void; settled: boolean };
+
+/** a fetch whose settings reads stay pending until the test resolves them (and that honours AbortSignal like the real one) */
+function deferredHarness(options: { ttlMs?: number; readTimeoutMs?: number; ignoreAbort?: boolean } = {}) {
+  const reads: PendingRead[] = [];
+  const sent: string[] = [];
+  const fetchImpl = ((input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes("important_news_monitor_settings")) {
+      return new Promise<Response>((resolve, reject) => {
+        const read: PendingRead = {
+          settled: false,
+          resolve: (value) => {
+            if (read.settled) return;
+            read.settled = true;
+            resolve(json([{ is_active: value }]));
+          },
+        };
+        reads.push(read);
+        if (!options.ignoreAbort) {
+          init?.signal?.addEventListener("abort", () => {
+            if (!read.settled) {
+              read.settled = true;
+              reject(new DOMException("aborted", "AbortError"));
+            }
+          });
+        }
+      });
+    }
+    sent.push(`${init?.method ?? "GET"} ${url}`);
+    return Promise.resolve(json({ ok: true }));
+  }) as typeof fetch;
+  const guarded = createPauseGuardedFetch({
+    fetchImpl, config: () => ({ supabaseUrl: BASE, serviceRoleKey: "k" }), ttlMs: options.ttlMs ?? 0, readTimeoutMs: options.readTimeoutMs ?? 5_000,
+  });
+  return { guarded, reads, sent };
+}
+const send = (guarded: typeof fetch, what = "https://api.x.com/2/tweets") => guarded(what, { method: "POST" });
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+const settled = async (promise: Promise<unknown>): Promise<"ok" | "refused"> =>
+  promise.then(() => "ok" as const, (error) => { if (error instanceof NewsPausedError) return "refused" as const; throw error; });
+
+test("J2-R1: a stale 'true' that returns after a newer stop observation is refused, and cannot revive anything", async () => {
+  for (const ttlMs of [0, 1_000]) {
+    const h = deferredHarness({ ttlMs });
+    const a = settled(send(h.guarded));            // read 1 starts (will say true, but late)
+    await tick();
+    const b = settled(send(h.guarded));            // read 2 starts after the OFF commit
+    await tick();
+    h.reads[1].resolve(false);                      // newer read observes the stop first
+    assert.equal(await b, "refused");
+    h.reads[0].resolve(true);                       // the old true arrives afterwards
+    assert.equal(await a, "refused", `ttl ${ttlMs}: the stale true must not authorise a send`);
+    const c = settled(send(h.guarded));             // a new call after both
+    await tick();
+    h.reads[2]?.resolve(false);
+    assert.equal(await c, "refused", `ttl ${ttlMs}: a stale true must not leave a running cache`);
+    assert.deepEqual(h.sent, [], `ttl ${ttlMs}: nothing may have been sent`);
+  }
+});
+
+test("J2-R1: both response orders — a read that completes true BEFORE the stop observation is a legitimate authorisation", async () => {
+  // order 1: older true resolves first (authorised pre-stop), then the newer false
+  const one = deferredHarness();
+  const a1 = settled(send(one.guarded));
+  await tick();
+  const b1 = settled(send(one.guarded));
+  await tick();
+  one.reads[0].resolve(true);
+  assert.equal(await a1, "ok");
+  one.reads[1].resolve(false);
+  assert.equal(await b1, "refused");
+  assert.equal(one.sent.length, 1);
+  // order 2: newer false first, then the older true -> refused
+  const two = deferredHarness();
+  const a2 = settled(send(two.guarded));
+  await tick();
+  const b2 = settled(send(two.guarded));
+  await tick();
+  two.reads[1].resolve(false);
+  assert.equal(await b2, "refused");
+  two.reads[0].resolve(true);
+  assert.equal(await a2, "refused");
+  assert.equal(two.sent.length, 0);
+  // after a refusal the very next call needs its own fresh true
+  const c = settled(send(two.guarded));
+  await tick();
+  two.reads[2].resolve(true);
+  assert.equal(await c, "ok", "resume: a fresh true authorises again");
+});
+
+test("J2-R1: unreadable / timeout newer than a pending true also fences the older read", async () => {
+  const h = deferredHarness({ readTimeoutMs: 15 });
+  const a = settled(send(h.guarded));              // pending forever (until resolved by the test)
+  await tick();
+  const b = settled(send(h.guarded));              // times out after 15 ms -> unreadable -> stop observation
+  assert.equal(await b, "refused");
+  h.reads[0].resolve(true);
+  assert.equal(await a, "refused");
+  assert.equal(h.sent.length, 0);
+});
+
+test("J2-R1: a hard deadline bounds the read even when the transport ignores AbortSignal", async () => {
+  const h = deferredHarness({ readTimeoutMs: 20, ignoreAbort: true });
+  const outcome = await Promise.race([
+    settled(send(h.guarded)),
+    new Promise<string>((resolve) => setTimeout(() => resolve("HUNG"), 1_000)),
+  ]);
+  assert.equal(outcome, "refused");
+  assert.equal(h.sent.length, 0);
+});
+
+test("J2-R1: property — in a warm isolate, no send is authorised by a read that a later-started stop observation outran", async () => {
+  let seed = 20261016;
+  const random = () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+  for (let round = 0; round < 150; round += 1) {
+    const h = deferredHarness({ ttlMs: random() < 0.5 ? 0 : 1_000 });
+    const n = 2 + Math.floor(random() * 5);
+    const outcomes: Array<Promise<"ok" | "refused">> = [];
+    const values: boolean[] = [];
+    for (let i = 0; i < n; i += 1) {
+      outcomes.push(settled(send(h.guarded)));
+      await tick();
+      values.push(random() < 0.5);
+    }
+    // resolve in a random order with random answers; track the order stops (false) completed relative to starts
+    const order = [...Array(n).keys()].sort(() => random() - 0.5);
+    const resolvedFalseStartIndexes: number[] = [];
+    const authorised: number[] = [];
+    for (const index of order) {
+      h.reads[index].resolve(values[index]);
+      await tick();
+      if (!values[index]) resolvedFalseStartIndexes.push(index);
+    }
+    const results = await Promise.all(outcomes);
+    // stop observed by a read that started later than i and completed before i completed (completion order = `order`)
+    order.forEach((index, completion) => {
+      if (results[index] === "ok") authorised.push(index);
+      const outrun = order.slice(0, completion).some((other) => other > index && !values[other]);
+      if (outrun) assert.equal(results[index], "refused", `round ${round}: read ${index} was authorised after a later-started stop`);
+      if (!values[index]) assert.equal(results[index], "refused");
+    });
+    assert.equal(h.sent.length, authorised.length);
+  }
+});
+
 // ------------------------------------------------------------------------------------------------ real handler, mocked network
 
 const SECRET = "A".repeat(42) + "A";
@@ -98,7 +251,11 @@ type Counts = { ai: number; x: number; external: number; dbWrite: number; rpc: n
 
 async function callHandler(
   request: Record<string, unknown>,
-  options: { isActive: unknown; readFails?: boolean; flipAfterOutward?: number; flipTo?: unknown; onFlip?: () => void },
+  options: {
+    isActive: unknown; readFails?: boolean; flipAfterOutward?: number; flipTo?: unknown; onFlip?: () => void;
+    /** the setting reads false from the (n+1)-th settings read on (read 1 is the entry gate) */
+    flipAfterSettingsReads?: number;
+  },
 ) {
   let handler: ((req: Request) => Promise<Response>) | null = null;
   const realServe = Deno.serve;
@@ -117,6 +274,7 @@ async function callHandler(
   }
   const counts: Counts = { ai: 0, x: 0, external: 0, dbWrite: 0, rpc: 0, dbRead: 0, blocked: 0 };
   let outwardSeen = 0;
+  let settingsReads = 0;
   let afterFlip = 0;
   let flipped = false;
   let isActive: unknown = options.isActive;
@@ -134,6 +292,8 @@ async function callHandler(
     const method = init?.method ?? "GET";
     if (url.startsWith(`${BASE}/rest/v1/important_news_monitor_settings`) && method === "GET") {
       counts.dbRead += 1;
+      settingsReads += 1;
+      if (options.flipAfterSettingsReads !== undefined && settingsReads > options.flipAfterSettingsReads) isActive = options.flipTo ?? false;
       if (options.readFails) return new Response("down", { status: 500 });
       return json([{ is_active: isActive, luna_enabled: true, sol_escalation_enabled: false, auto_publish: true, updated_at: "2026-10-01T00:00:00Z" }]);
     }
@@ -265,22 +425,26 @@ test("handler: 50 retries while paused add no outward request", async () => {
   assert.equal(sum, 0);
 });
 
-test("handler: pause set mid-request — every outward request after the flip (and after the cache window) is refused", async () => {
-  const realNow = Date.now;
-  let offset = 0;
-  Date.now = () => realNow() + offset;
-  try {
-    // flip happens right after the first outward request; the clock then moves past the guard's cache window
-    const flipped = await callHandler({ mode: "generate_ready" }, {
-      isActive: true, flipAfterOutward: 1, flipTo: false,
-      onFlip: () => { offset += PAUSE_RECHECK_TTL_MS + 5; },
-    });
-    assert.equal(flipped.afterFlip, 0, `outward requests after the flip: ${JSON.stringify(flipped.counts)}`);
-    const normal = await callHandler({ mode: "generate_ready" }, { isActive: true });
-    assert.ok(total(normal.counts) > total(flipped.counts), "the unflipped run does more work than the paused one");
-  } finally {
-    Date.now = realNow;
-  }
+test("handler: pause set mid-request — every outward request after the flip is refused (no cache window by default)", async () => {
+  const flipped = await callHandler({ mode: "generate_ready" }, { isActive: true, flipAfterOutward: 1, flipTo: false });
+  assert.equal(flipped.afterFlip, 0, `outward requests after the flip: ${JSON.stringify(flipped.counts)}`);
+  const normal = await callHandler({ mode: "generate_ready" }, { isActive: true });
+  assert.ok(total(normal.counts) > total(flipped.counts), "the unflipped run does more work than the paused one");
+});
+
+test("handler: final side effects — OFF between the entry gate and the X post / the claim / the AI call / the push enqueue", async () => {
+  // entry gate = settings read 1 (running); every later read says paused
+  const x = await callHandler({ mode: "publish_ready" }, { isActive: true, flipAfterSettingsReads: 1 });
+  assert.deepEqual([x.counts.x, x.counts.ai, x.counts.rpc, x.counts.dbWrite], [0, 0, 0, 0], `publish_ready: ${JSON.stringify(x.counts)}`);
+  const generate = await callHandler({ mode: "generate_ready" }, { isActive: true, flipAfterSettingsReads: 1 });
+  assert.deepEqual([generate.counts.ai, generate.counts.rpc, generate.counts.dbWrite], [0, 0, 0], `generate_ready: ${JSON.stringify(generate.counts)}`);
+  const judge = await callHandler({ mode: "judge_pending", limit: 2 }, { isActive: true, flipAfterSettingsReads: 1 });
+  assert.deepEqual([judge.counts.ai, judge.counts.dbWrite], [0, 0], `judge_pending: ${JSON.stringify(judge.counts)}`);
+  const collect = await callHandler({ fetchSources: true }, { isActive: true, flipAfterSettingsReads: 1 });
+  assert.deepEqual([collect.counts.external, collect.counts.ai, collect.counts.dbWrite], [0, 0, 0], `collect: ${JSON.stringify(collect.counts)}`);
+  // resume: a fresh true is honoured at the very next request
+  const resumed = await callHandler({ mode: "judge_pending", limit: 1 }, { isActive: true });
+  assert.ok(resumed.counts.ai > 0);
 });
 
 test("static: no module-level capture of fetch in the lane modules (the guard replaces the global at install time)", async () => {

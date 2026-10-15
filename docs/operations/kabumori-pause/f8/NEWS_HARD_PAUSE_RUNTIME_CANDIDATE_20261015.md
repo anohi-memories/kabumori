@@ -19,7 +19,7 @@
 - **二層**: 入口ゲート（全mode・未知mode・body上書きを一括で遮断）＋**外向きfetchの共通ガード**（AI・X・Push RPC・外部feed・DBの書込み/claim/RPCを、呼出の直前に再確認）。ガードは個々の呼出箇所ではなく**fetchの出口**に置いたため、34箇所のfetchと将来の追加箇所が自動的に覆われる（`= fetch` の既定引数は呼出時に解決されるのでガード済みfetchが使われる。モジュールレベルでfetchを保持する箇所が無いことを静的テストで固定）。
 - **許可される通信**: `${SUPABASE_URL}/rest/v1/` への GET/HEAD（DB読取）のみ。停止中でもhandlerは応答でき、ガード自身が設定を読める。**それ以外（POST/PATCH/DELETE/rpc/他ホスト/OpenAI/X）は全て設定確認後**。
 - **停止判定**: `is_active===true` のみ継続。行なし・複数行・null・文字列・数値・読取失敗・例外は全て拒否（fail closed）。設定が読めない/環境変数がない場合も外向きは拒否。
-- **キャッシュ**: 「running」の判定を `PAUSE_RECHECK_TTL_MS = 1000ms` だけ保持（拒否はキャッシュしない＝再開を即反映）。停止完了の時点は「フラグ書込み＋最大1秒＋in-flightの完了」の後。TTLは定数（0にすれば毎回確認）。
+- **キャッシュ（J2-R1で変更）**: 既定は **TTL=0＝外向き呼出ごとに自前で権威的に再読込**。正のTTLはテスト用のopt-inのみで、未検証のキャッシュだけに最終egressを依存させない。停止完了は「OFFコミット＋`PAUSE_READ_TIMEOUT_MS`(3s)＋in-flightの完了」の後で、no-new-effectsのread-backで確認する（瞬時ではない）。
 - **許可リストは空**: bodyの `mode`/`dry_run`/`trigger`/`force` では解除できない。`notification_enqueue_dry_run` / `publish_dry_run` も停止中は拒否（設計§4.2）。
 
 ## 3. 検証（合成・オフライン。実network/DB/SDK/環境変数は不使用）
@@ -27,7 +27,7 @@
 **`pause_gate_test.ts`（13件PASS、実 `index.ts` handler を fetch mock 上で実行）**
 1. 状態読取: 厳密に `[{is_active:true}]` のみ running（false/{}/null/"true"/1/空/複数行/object/500/例外は running でない）。
 2. `isDatabaseRead`: GET/HEAD＋自プロジェクトのPostgRESTのみ開放（POST/PATCH/DELETE/rpc/別機能/OpenAI/X/TDnet/類似ドメインは閉）。
-3. ガード: 停止中は全外向き拒否・DB読取は通過／TTL内は旧判定・TTL後に拒否・拒否は非キャッシュ／ttl0で毎回確認／不正値・読取失敗・設定なしで拒否。
+3. ガード: 停止中は全外向き拒否・DB読取は通過／明示的な正TTL（opt-in）ではTTL内は旧判定・TTL後に拒否、拒否は非キャッシュ／既定(ttl0)で毎回確認／不正値・読取失敗・設定なしで拒否。
 4. **handler（17リクエスト形 × 6状態: false・null・欠落・不正"true"・不正1・読取失敗）で、外向き（AI/X/外部取得/DB書込み/RPC）が0、全て 503、`autoPublish:false`**。mode: unpdf_edge_verification・各AI dry-run(3)・notification/publish dry-run・publish_ready・generate_ready・judge_pending・scheduled/manual収集・candidates のみ・未知mode＋fetchSources・大文字違い・body上書き3種。
 5. 認証不変: 誤secretは設定読取前に401、GETは405（外部呼出0）。
 6. 稼働中は通常どおり（judge_pending→AI、generate_ready→書込み/RPC、収集→外部取得/書込み）。
@@ -65,3 +65,19 @@
 - 配備版・本番の設定値・Cron・キュー・in-flightは未確認（本番read禁止）。
 - ガードは「fetch」経由の外向き通信を覆う。Deno標準fetch以外の経路（WebSocket等）はこのfunctionに存在しないことを確認したが、将来の追加は静的テスト（モジュールレベル保持）では検出できない。
 - 実handlerのテストは外向きをmockで数えたもの（実network不使用）。本番deploy・Preview実行の証明ではない。
+
+## 9. J2-R1 限定修正（V2 CHANGES_REQUIRED P1、`.agent_v2/reports/J2.md`）
+
+**欠陥（J2が再現）**: ① await越しの古い true 応答が、後発の false 観測の後に running キャッシュを復活させ、OFF後に新規の外向き送信（X/DB write/claim）を許し得る。② 正のTTL(1s)は、OFF後の新規送信を許す期間であり強い停止保証ではない。③ 設定読取に期限が無い。
+
+**修正（`pause_gate.ts`）**
+- **線形化契約**: 外向き呼出ごとに**自前の読取**（既定TTL0）。各読取に単調増加の開始番号を付け、**後に開始した読取が停止（paused/unreadable/timeout）を観測した後は、それより前に開始した読取は完了時に必ず拒否**（古い true は何も許可せず、キャッシュも復活させない）。
+- **読取の期限**: `PAUSE_READ_TIMEOUT_MS = 3000`。AbortSignalに加え、signalを無視するtransportでも `Promise.race` の期限で unreadable（拒否）。
+- 正のキャッシュは opt-in（テスト用）。有効なのは「最新の停止観測より後に開始した読取」のみ。
+- **明示する限界**: 自前の読取が「OFFコミットより前に開始し、完了も前」なら、読取遅延(≤3s)の間は送信され得る。送信済みHTTPは取り消せない。「flip＋1秒で停止」とは主張しない。
+
+**検証**
+- `pause_gate_test.ts` 19件PASS（追加6件）: 古いtrueが新しい停止観測の後に戻る（ttl 0/1000の両方）→拒否・キャッシュ非復活・送信0／両応答順（古いtrueが先に完了＝OFF前の正当な認可、後に完了＝拒否）／新しいunreadable/timeoutが古いtrueを拒否／signalを無視するtransportでも期限で拒否／150ラウンドの property（暖かいisolateで複数同時呼出、乱順応答）／実handlerで「入口ゲート通過後に設定がOFF」→X・claim・AI・push enqueue・DB書込み・外部取得が全て0、resumeは新しいtrueで即再開。
+- **旧実装(b80d5235)で新テスト5件が失敗**（欠陥の再現）、修正後は全PASS。
+- 変異テスト10種すべて検出（追加: stale-true フェンス削除・読取期限削除・停止観測の不記録。「キャッシュ側のフェンス」は `cache=null` と二重の防御で、片方だけの除去は等価変異のため対象外）。
+- important-news-monitor 全体 746 PASS、lint 97（baseline同数）、型は既存TS2322のみ。PR129/164とのmerge-treeは競合なし。

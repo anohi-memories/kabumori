@@ -37,12 +37,20 @@ run_mutant remove_entry_gate index.ts '  if (pauseState !== "running") {' '  if 
 run_mutant remove_egress_guard index.ts 'installNewsPauseGuard();' '// removed'
 run_mutant guard_never_refuses pause_gate.ts '        throw new NewsPausedError(state);' '        return await options.fetchImpl(input, init);'
 run_mutant accept_missing_or_null pause_gate.ts 'return rows[0]?.is_active === true ? "running" : "paused";' 'return rows[0]?.is_active !== false ? "running" : "paused";'
-run_mutant unreadable_is_running pause_gate.ts '    return "unreadable";
-  }
-}' '    return "running";
-  }
-}'
+run_mutant unreadable_is_running pause_gate.ts '    } catch {
+      return "unreadable";
+    }
+  })();' '    } catch {
+      return "running";
+    }
+  })();'
 run_mutant database_writes_pass_the_guard pause_gate.ts '  if (verb !== "GET" && verb !== "HEAD") return false;' '  if (verb === "") return false;'
 run_mutant no_config_allows pause_gate.ts '    if (!config) throw new NewsPausedError("unreadable");' '    if (!config) return await options.fetchImpl(input, init);'
+# J2-R1 mutants: the stale-true fence, the hard read deadline and the cache fence
+run_mutant stale_true_not_fenced pause_gate.ts '      if (stopSequence > mine) {' '      if (false) {'
+run_mutant read_deadline_removed pause_gate.ts '    return await Promise.race([read, deadline]);' '    return await read;'
+# (the cache fence `cache.sequence > stopSequence` is defence in depth next to `cache = null` on every stop; removing only
+#  one of the two is an equivalent mutant, so it is intentionally not listed)
+run_mutant stop_observation_not_recorded pause_gate.ts '        stopSequence = Math.max(stopSequence, mine);' '        void mine;'
 rm -rf "$base"
 if [ "$MISSED" = "0" ]; then echo "runtime mutation check: all mutants detected"; else echo "runtime mutation check: SOME MUTANTS NOT DETECTED"; exit 1; fi

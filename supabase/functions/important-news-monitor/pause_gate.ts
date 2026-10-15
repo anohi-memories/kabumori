@@ -10,10 +10,23 @@
 // Anything that is not exactly `is_active === true` (false, null, missing row, malformed value, unreadable) is "paused":
 // callers cannot unlock it with the request body, `mode`, `dry_run`, `trigger` or any other field.
 //
-// What this cannot do: cancel a request that was already sent to OpenAI / X / a feed before the flag changed. After the flag
-// flips, the next outward call is refused as soon as the cached state expires (PAUSE_RECHECK_TTL_MS).
+// Linearization contract (J2-R1):
+//   * every outward call performs its OWN authoritative read of the setting (no positive cache by default: TTL 0);
+//   * each read gets a monotonically increasing start sequence; once a read that STARTED LATER has observed a stop
+//     (paused / unreadable / timeout), every read that started earlier is refused when it completes — a slow stale
+//     "true" can never authorise a send after a newer stop observation, and can never revive a cache;
+//   * a read has a hard deadline (PAUSE_READ_TIMEOUT_MS); timeout = unreadable = refused;
+//   * the opt-in positive cache (ttlMs > 0, used only by tests) is valid only for a read that started after the newest
+//     observed stop, and never longer than ttlMs.
+// What this still cannot do: cancel a request that was already sent to OpenAI / X / a feed, and a call whose own read
+// started and completed with "true" BEFORE the flag changed may send up to the read latency (<= PAUSE_READ_TIMEOUT_MS)
+// after the OFF commit. Stop completion therefore = OFF commit + PAUSE_READ_TIMEOUT_MS + completion of in-flight requests,
+// confirmed by the no-new-effects read-back; it is not instantaneous.
 
-export const PAUSE_RECHECK_TTL_MS = 1_000;
+/** Positive-authorisation cache. 0 = re-read before every outward call (default and the production setting). */
+export const PAUSE_RECHECK_TTL_MS = 0;
+/** Hard deadline of one setting read; exceeding it is treated as unreadable (refused). */
+export const PAUSE_READ_TIMEOUT_MS = 3_000;
 export const NEWS_PAUSED_CODE = "NEWS_HARD_PAUSED";
 
 export type PauseState = "running" | "paused" | "unreadable";
@@ -27,23 +40,39 @@ export class NewsPausedError extends Error {
 
 type FetchLike = typeof fetch;
 
-/** Reads the single setting. Never throws; any failure is "unreadable" (treated as paused by every caller). */
+/** Reads the single setting. Never throws; any failure or timeout is "unreadable" (refused by every caller). */
 export async function readNewsPauseState(
   supabaseUrl: string,
   serviceRoleKey: string,
   fetchImpl: FetchLike,
+  timeoutMs = PAUSE_READ_TIMEOUT_MS,
 ): Promise<PauseState> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<PauseState>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve("unreadable");
+    }, timeoutMs);
+  });
+  const read = (async (): Promise<PauseState> => {
+    try {
+      const result = await fetchImpl(
+        `${supabaseUrl}/rest/v1/important_news_monitor_settings?id=eq.true&select=is_active`,
+        { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` }, signal: controller.signal },
+      );
+      if (!result.ok) return "unreadable";
+      const rows = await result.json() as Array<{ is_active?: unknown }>;
+      if (!Array.isArray(rows) || rows.length !== 1) return "paused";
+      return rows[0]?.is_active === true ? "running" : "paused";
+    } catch {
+      return "unreadable";
+    }
+  })();
   try {
-    const result = await fetchImpl(
-      `${supabaseUrl}/rest/v1/important_news_monitor_settings?id=eq.true&select=is_active`,
-      { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
-    );
-    if (!result.ok) return "unreadable";
-    const rows = await result.json() as Array<{ is_active?: unknown }>;
-    if (!Array.isArray(rows) || rows.length !== 1) return "paused";
-    return rows[0]?.is_active === true ? "running" : "paused";
-  } catch {
-    return "unreadable";
+    return await Promise.race([read, deadline]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
@@ -53,6 +82,7 @@ export type GuardOptions = {
   config: () => { supabaseUrl: string; serviceRoleKey: string } | null;
   ttlMs?: number;
   now?: () => number;
+  readTimeoutMs?: number;
 };
 
 /** True for the calls that stay open while paused: read-only requests to this project's PostgREST. */
@@ -67,15 +97,18 @@ function requestUrl(input: string | URL | Request): string {
 }
 
 /**
- * Returns a fetch that refuses every outward call unless the pause setting is exactly "running".
- * The decision is cached for `ttlMs` (default PAUSE_RECHECK_TTL_MS); a "running" answer is the only one ever cached
- * for that long, a refusal is re-evaluated at the next call so a resume is picked up without waiting.
+ * Returns a fetch that refuses every outward call unless an authoritative read of the pause setting, started for THAT call,
+ * returned exactly "running" and no later-started read has observed a stop (see the linearization contract above).
  */
 export function createPauseGuardedFetch(options: GuardOptions): FetchLike {
   const ttl = options.ttlMs ?? PAUSE_RECHECK_TTL_MS;
   // resolved per call so tests (and a fake clock) can control it
   const now = options.now ?? (() => Date.now());
-  let runningUntil = 0;
+  const readTimeout = options.readTimeoutMs ?? PAUSE_READ_TIMEOUT_MS;
+  let sequence = 0;
+  /** highest start sequence among reads that completed with a stop (paused / unreadable / timeout) */
+  let stopSequence = 0;
+  let cache: { sequence: number; until: number } | null = null;
 
   const guarded = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const config = options.config();
@@ -84,13 +117,21 @@ export function createPauseGuardedFetch(options: GuardOptions): FetchLike {
     // No configuration at all: nothing outward may happen (this also covers a missing SUPABASE_URL).
     if (!config) throw new NewsPausedError("unreadable");
     if (isDatabaseRead(url, method, config.supabaseUrl)) return await options.fetchImpl(input, init);
-    if (now() >= runningUntil) {
-      const state = await readNewsPauseState(config.supabaseUrl, config.serviceRoleKey, options.fetchImpl);
+    const cached = ttl > 0 && cache !== null && now() < cache.until && cache.sequence > stopSequence;
+    if (!cached) {
+      const mine = ++sequence;
+      const state = await readNewsPauseState(config.supabaseUrl, config.serviceRoleKey, options.fetchImpl, readTimeout);
       if (state !== "running") {
-        runningUntil = 0;
+        stopSequence = Math.max(stopSequence, mine);
+        cache = null;
         throw new NewsPausedError(state);
       }
-      runningUntil = ttl > 0 ? now() + ttl : 0;
+      // a read that started later already observed a stop: this older "true" is stale and must not authorise anything
+      if (stopSequence > mine) {
+        cache = null;
+        throw new NewsPausedError("paused");
+      }
+      if (ttl > 0) cache = { sequence: mine, until: now() + ttl };
     }
     return await options.fetchImpl(input, init);
   };
