@@ -1,3 +1,7 @@
+## F5 J3 V3 P2最小修正TASK登録 — 2026-10-16
+- `common-account-f5-j3-v3-p2-known-x-warning-count-fix-20261016` ready/claude、Sonnet5（高）、F5→L5、返却先 共通アカウントG5のちゃ（新F5担当）。J3 V3が独立実証したX snapshot_changed 1→9後にrecorder失敗すると既知9件を1件と表示するP2だけを修正・回帰。F5 PR214 HEAD `bc290ab618508a8fbaba1abfad308c52d86e4689`保護、新Draft stacked候補。production NO_GO。D1同意は別release STOP、旧チェーン全面レビューはしない。
+- 前F5 Phase10 TASK/Report `.agent_v2/archive/2026-10-16-F5-common-account-f5-phase10-postona-x-ack-snapshot-reconciliation-20261015/` に保存済み（UTF8/原GitHub blob一致、SHA256 `a6045175c0dc139c4fbb70439fb32507a35ad1738692398762db6cf06adaba24`、MANIFEST/SHA256SUMS、HISTORY_INDEX更新）。コード・本番・他slotのTASK/PRは不変更。
+
 ## POSTONA J4 PR217 review allocation (2026-10-15)
 - J4 `postona-j4-pr217-r2c-final-preview-focused-rereview-20261015` ready/codex, Sol（高）, J4→V4 return POSTONA｜マルチSNS化・開発統括（G4）のちゃ. Target Draft PR217 HEAD d4bcd09e; focus final A→B/null identity and preserved same-person warnings, actual F5 PR193 handler synthetic seam, 313-app regression suite, no product writes.
 - Prior J4 TASK/Report archived with exact Git blob read-back. Manifest/SHA256 checklist pending completion. Source OFF, production/merge/deploy NO_GO.
