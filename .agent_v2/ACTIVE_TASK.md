@@ -210,17 +210,17 @@
 
 ## J4
 - slot: J4
-- status: ready
+- status: review_required
 - task_id: postona-j4-pr197-postona-deletion-client-security-review-20261014
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V4
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J4.md
 - current_report_path: .agent_v2/reports/J4.md
 - dependencies: J5 PR197, F5 PR193, F4 PR180, F3 PR192 with J3 V3 P2x3; old POSTONA Edge account-delete endpoint
-- blocker: source-only review, no managed/Auth/Meta/X, no release permission; old installed apps may invoke legacy endpoint
+- blocker: J4 CHANGES_REQUIRED P2x2 (incomplete success response / post-response warning loss); F3/J3 P2x3, legacy server containment and managed F5/F4 gates remain; production NO_GO
 - slot_use: J4 independent review of POSTONA J5 legacy delete-client boundary; previous J4 TASK/Report archived
 
 ## J5
