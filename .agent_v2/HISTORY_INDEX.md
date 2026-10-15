@@ -446,3 +446,7 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 - L5: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO, PR193 Draft head 314aeac47a02ce80aea3d94426a563dfbe57ad7c
 
 | 2026-10-15 | J1 | `kabumori-j1-ai-ask-b0-independent-security-review-20261013` | V1 done; prior AI-ask independent design review archived before new J1 assignment | `.agent_v2/archive/2026-10-15-j1-ai-ask-b0-review-task.md` / `.agent_v2/archive/2026-10-15-j1-ai-ask-b0-review-report.md` | source blobs `4207640f994701bfa342ad98ab0b23b74a7dfa15` / `e65a0ee3e89b60dfa58833aa73d4411a79bc0b96`, both exact read-back |
+
+## 新系統の中止・凍結TASK（完了扱いではない）
+
+- 2026-10-15 | F2 | `kabumori-f2-topix-pr201-203-premerge-safety-corrections-20261015` | **CANCELLED_UNSTARTED_BY_USER**（readyだった限定安全修正TASKをユーザーが停止し、F2をかぶモリ運用停止用に空き枠化。L2完了・実装済みではない） | PR #201/#203 はDraft/未マージ・未deploy、既存成果は保護 | `.agent_v2/archive/2026-10-15-F2-kabumori-f2-topix-pr201-203-premerge-safety-corrections-20261015/files/.agent_v2/tasks/F2.md` | original_source_blob `fb51b00fb1b12df04dbf0e9a48e90ec275cd1ded`; source_snapshot_commit `ed230b6b037a2f7b142dde3c70dcc0aead201ace`; size 7343 bytes; SHA256 `327498d9506823f0d91903ec2547dd12c237a35157a0b92b2ebf4230c58ef557`; MANIFEST(JSON/MD) / SHA256SUMS / GitHub blob復元read-back一致。その他のかぶモリ配信停止はG1統括から別TASKとして明示割当する。
