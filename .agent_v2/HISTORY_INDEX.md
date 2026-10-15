@@ -469,3 +469,11 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 - L5: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; PR206 Draft a84a9b6abb8c8d4706bba5f8a12e5c1aef3d3b8c
 
 - 2026-10-15 | J3 | `postona-j3-x-saga-r1-r3-focused-rereview-20261014` | V3 CHANGES_REQUIRED P2×3, PR192 / PRODUCTION_NO_GO | `.agent_v2/archive/2026-10-15-J3-postona-j3-x-saga-r1-r3-focused-rereview-20261014/` | TASK SHA256 `53a8922f81e23c404d5ef8b4cbbcfb570ef290e341b220a3aa96104e2c9359d5`, Report SHA256 `45f0a7d694625e3951be1203f3111c8916569a6bd903738be917ebea24e3674e`; exact restore verified.
+
+
+## 2026-10-15 G1 pause design completion archives (L2/L8 accepted)
+
+- F2 | task_id: kabumori-f2-pause-delivery-brand-queue-offline-design-20261015 | original_path: .agent_v2/tasks/F2.md | archive_path: .agent_v2/archive/2026-10-15-f2-pause-offline-design-accepted.md | size: 13608 bytes | SHA256: 14ac47e01a7a4efba4326049bdcba2b98e7c1d9d05b569526c26cdc1f0e60764 | original PR #210 HEAD: 02aa67112778b86e1ff05bca181adace88862885 | original Git blob: 16cacfd7e81ec8155ec7cb3842c62f7e59480ae2 | restore/read-back: exact content and Git blob match | verdict: G1 L2 PASS_OFFLINE_DESIGN; production NO_GO.
+- F8 | task_id: kabumori-f8-news-hard-pause-http-ai-offline-design-20261015 | original_path: .agent_v2/tasks/F8.md | archive_path: .agent_v2/archive/2026-10-15-f8-pause-offline-design-accepted.md | size: 11301 bytes | SHA256: 0386872d026202fe5a521c62f080db4ca4ccc0945245bcf2ac79bd715ff10225 | original PR #209 HEAD: 85b014c9b2251decadeb0bd9daa5025e2323c684 | original Git blob: 5576072239e2541c4d133cd113343fbed1c27321 | restore/read-back: exact content and Git blob match | verdict: G1 L8 PASS_OFFLINE_DESIGN; production NO_GO.
+
+Both archive paths are append-only originals. These index entries are history links, NOT current task assignments.
