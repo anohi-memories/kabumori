@@ -170,18 +170,20 @@
 
 ## J1
 - slot: J1
-- status: review_required
-- task_id: common-ai-j1-f6-h5-pr187-198-205-security-review-20261015
+- status: ready
+- task_id: common-ai-j1-pr219-r1-r2-focused-rereview-20261016
 - owner: codex
-- next_owner: chatgpt
+- next_owner: codex
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: V1
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J1.md
 - current_report_path: .agent_v2/reports/J1.md
-- dependencies: Draft #187 a7e1d3f3 → Draft #198 4223d5c0 → Draft #205 4cd2cbdd, F6 L6 accepted, H5 C5 accepted
-- blocker: source-only independent security audit; no merge/deploy/production/paid calls; all provider and bridge source protected
-- slot_use: Independent Claude API header/env, tenant/entitlement, ledger, import boundary review
+- dependencies: V1 first review CHANGES_REQUIRED P2x2 archived; F6 L6 PASS_SOURCE_FIX PR219 be35cc93 on PR205; PR187→198→205→219 Draft, no merge
+- blocker: independent focused R1/R2 fixes review and 500/502/503 possibly billed ledger undercount; production/merge/deploy NO_GO
+- previous_task_archive: .agent_v2/archive/2026-10-16-j1-f6-h5-security-review-task.md
+- previous_report_archive: .agent_v2/archive/2026-10-16-j1-f6-h5-security-review-report.md
+- slot_use: PR219 source-only independent delta security rereview
 
 ## J2
 - slot: J2
