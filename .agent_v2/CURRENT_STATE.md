@@ -1,3 +1,7 @@
+## POSTONA J4 PR217 review allocation (2026-10-15)
+- J4 `postona-j4-pr217-r2c-final-preview-focused-rereview-20261015` ready/codex, Sol（高）, J4→V4 return POSTONA｜マルチSNS化・開発統括（G4）のちゃ. Target Draft PR217 HEAD d4bcd09e; focus final A→B/null identity and preserved same-person warnings, actual F5 PR193 handler synthetic seam, 313-app regression suite, no product writes.
+- Prior J4 TASK/Report archived with exact Git blob read-back. Manifest/SHA256 checklist pending completion. Source OFF, production/merge/deploy NO_GO.
+
 ## POSTONA F4 L4 PR217 R2c source accepted (2026-10-15)
 - F4 `postona-f4-pr211-r2c-final-preview-identity-fix-20261015` done/none, L4 PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO. Draft PR217 head `d4bcd09e8c0a67a87afff867c69b135b1a26ba4a` stacked on PR211, 5 POSTONA app files. Actual diff confirms sticky user A→B/null suppression in returned helper response while same-person validated warnings retained. Claude reported fail-before/pass-after R2c 19/19, F5 actual synthetic handler seam 8/8, app 313 PASS, tsc/lint PASS; ChatGPT did not rerun.
 - Next independent Codex Sol（高） focused security review, including concurrency/races and F5 handler contract. No release of old server deletion route or live Auth/DB/Threads/X; source gate OFF, merge/deploy/production NO_GO. Archive F4 accepted TASK+Report before next use.
