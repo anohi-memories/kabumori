@@ -89,6 +89,10 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 | 2026-10-15 | J5 | `postona-j5-pr197-p2-response-warning-preservation-fix-20261015` | cancelled before start; new F4 task | CANCELLED_UNSTARTED | none | none | `.agent_v2/archive/2026-10-15-J5-cancelled-postona-p2-task-before-start/` | TASK and Report |
 | 2026-10-15 | F4 | `postona-f4-threads-cleanup-live-lease-security-fix-20261013` | Threads cleanup lease fix | PASS_SOURCE_FIX / NO_GO | #180 | `7c4f4578` | `.agent_v2/archive/2026-10-15-F4-postona-f4-threads-cleanup-live-lease-security-fix-20261013/` | TASK + L4 acceptance |
 
+| 2026-10-15 | J4 | `postona-j4-pr197-postona-deletion-client-security-review-20261014` | POSTONA client P2x2 review | CHANGES_REQUIRED / PRODUCTION_NO_GO | #197 | `2171ee4c02ea2eec46562d81595f5460e5507d9d` | `.agent_v2/archive/2026-10-15-J4-postona-j4-pr197-postona-deletion-client-security-review-20261014/` | TASK/Report Git blob readback verified; SHA256SUMS pending |
+
+| 2026-10-15 | F4 | `postona-f4-pr197-p2-response-warning-preservation-20261015` | PR211 R1/R2 client fixes | PASS_SOURCE_FIX / NO_GO | #211 | `eb1011f2bd6f8a76ef412f824f0b21629794645b` | `.agent_v2/archive/2026-10-15-F4-postona-f4-pr197-p2-response-warning-preservation-20261015/` | TASK with embedded Report, Git blob restored; SHA256 pending |
+
 ## 旧系統（G1〜G10 / H1〜H5）の完了・履歴作業
 
 ### 日付不明
@@ -477,3 +481,33 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 - F8 | task_id: kabumori-f8-news-hard-pause-http-ai-offline-design-20261015 | original_path: .agent_v2/tasks/F8.md | archive_path: .agent_v2/archive/2026-10-15-f8-pause-offline-design-accepted.md | size: 11301 bytes | SHA256: 0386872d026202fe5a521c62f080db4ca4ccc0945245bcf2ac79bd715ff10225 | original PR #209 HEAD: 85b014c9b2251decadeb0bd9daa5025e2323c684 | original Git blob: 5576072239e2541c4d133cd113343fbed1c27321 | restore/read-back: exact content and Git blob match | verdict: G1 L8 PASS_OFFLINE_DESIGN; production NO_GO.
 
 Both archive paths are append-only originals. These index entries are history links, NOT current task assignments.
+| 2026-10-15 | F6 | `common-ai-f6-h5-consumer-bridge-import-boundary-repair-20261014` | L6 accepted offline source; PR205 Draft; review J1 pending | `.agent_v2/archive/2026-10-15-f6-h5-bridge-boundary-repair.md` | original Git blob `2f1da05c1b379c0ff3f245d75f9b75534529d118`, archive read-back identical; source length 8821 chars |
+
+## J2 completed security-design review archive — 2026-10-15
+- old_task_id: `kabumori-j2-ai-ask-b0-r1-r8-focused-rereview-20261013`
+- archive: `.agent_v2/archive/2026-10-15-J2-ai-ask-b0-r1-r8-focused-rereview-20261013/` (append-only)
+- original_path: `.agent_v2/tasks/J2.md`; archive_path: `.agent_v2/archive/2026-10-15-J2-ai-ask-b0-r1-r8-focused-rereview-20261013/files/.agent_v2/tasks/J2.md`; size 5347 bytes; SHA256 `0eaf7b7ae5edc4a3ec8ee1adaed052110ac37510974c3236cd8708cd3f0469dc`; original Git blob `eacb7765bec56425625fa83fce64172b26a05fa5`.
+- original_path: `.agent_v2/reports/J2.md`; archive_path: `.agent_v2/archive/2026-10-15-J2-ai-ask-b0-r1-r8-focused-rereview-20261013/files/.agent_v2/reports/J2.md`; size 21774 bytes; SHA256 `91c099abc28f0aab08572e58e1be8facae257030337327e41b73a30405357cda`; original Git blob `f76bf93e4f2160194019e329f8af1ba25010270d`.
+- MANIFEST.json / SHA256SUMS saved; original and archived Git blobs/content read-back byte-for-byte match. Current TASK is separate new J2 security review; index is historical only.
+
+## J3 PR204 focused review archive — 2026-10-15
+- task_id: `postona-j3-pr204-p2x3-security-rereview-20261015`
+- archive_root: `.agent_v2/archive/2026-10-15-J3-postona-j3-pr204-p2x3-security-rereview-20261015/`
+- original_path: `.agent_v2/tasks/J3.md`; archive_path: `.agent_v2/archive/2026-10-15-J3-postona-j3-pr204-p2x3-security-rereview-20261015/files/.agent_v2/tasks/J3.md`; size: 4706 bytes; SHA256: `5f76caeb3e29d3b0431d85de58f8dabf9702038936b5c7fe5e9bc234db09c000`; blob: `a7bc0948e1fc1a4ff21bb7a7f00a94868d8efeec`
+- original_path: `.agent_v2/reports/J3.md`; archive_path: `.agent_v2/archive/2026-10-15-J3-postona-j3-pr204-p2x3-security-rereview-20261015/files/.agent_v2/reports/J3.md`; size: 11461 bytes; SHA256: `6548d53b7fb625ee9c75fb3504edf582f6da0e51d125f39479001e5dd8eaf869`; blob: `09a4333ad7fdc3a0f9ea6f4878f78292b37c8dcb`
+- restore: both original UTF-8 contents and GitHub blob SHAs match archived copies; MANIFEST and SHA256SUMS stored.
+- result: V3 PASS_SOURCE_REVIEW / PRODUCTION_NO_GO, F3 PR204 reviewed.
+
+## F6 OpenAI→Anthropic inventory L6 archive — 2026-10-15
+- task_id: `common-ai-f6-openai-anthropic-migration-inventory-20261015`
+- original_path: `.agent_v2/tasks/F6.md`
+- archive_path: `.agent_v2/archive/2026-10-15-f6-openai-anthropic-inventory-plan.md`
+- original Git blob: `7e05bac202085f5714c252aa2fd8207973f8e3cf`; restored archived blob identical; 5195 characters; SHA256 pending independent local archive manifest validation.
+- L6 PASS_OFFLINE_PLAN; PR216 Draft unmerged; J1 R1/R2 outstanding; source archive append-only.
+
+## J1 first Claude API independent security review archive — 2026-10-16
+- task_id: `common-ai-j1-f6-h5-pr187-198-205-security-review-20261015`
+- V1 accepted result: CHANGES_REQUIRED P2×2; R1 import privilege guard, R2 retry after possible billing. Follow-up F6 PR219 completed source candidate; no source merge/production.
+- original_path: `.agent_v2/tasks/J1.md`; archive_path: `.agent_v2/archive/2026-10-16-j1-f6-h5-security-review-task.md`; Git blob `3b35532273a5da850fdd6958fd515b5ee5b3c411`; archive exact Git blob/content match, 4454 characters.
+- original_path: `.agent_v2/reports/J1.md`; archive_path: `.agent_v2/archive/2026-10-16-j1-f6-h5-security-review-report.md`; Git blob `aeb7d8872fd8d78e71224a094e9527a5f606afe1`; archive exact Git blob/content match, 21106 characters.
+- sha256 / separate MANIFEST pending; append-only archive, previous control metadata preserved.

@@ -1,3 +1,36 @@
+## POSTONA J4 PR217 review allocation (2026-10-15)
+- J4 `postona-j4-pr217-r2c-final-preview-focused-rereview-20261015` ready/codex, Sol（高）, J4→V4 return POSTONA｜マルチSNS化・開発統括（G4）のちゃ. Target Draft PR217 HEAD d4bcd09e; focus final A→B/null identity and preserved same-person warnings, actual F5 PR193 handler synthetic seam, 313-app regression suite, no product writes.
+- Prior J4 TASK/Report archived with exact Git blob read-back. Manifest/SHA256 checklist pending completion. Source OFF, production/merge/deploy NO_GO.
+
+## POSTONA F4 L4 PR217 R2c source accepted (2026-10-15)
+- F4 `postona-f4-pr211-r2c-final-preview-identity-fix-20261015` done/none, L4 PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO. Draft PR217 head `d4bcd09e8c0a67a87afff867c69b135b1a26ba4a` stacked on PR211, 5 POSTONA app files. Actual diff confirms sticky user A→B/null suppression in returned helper response while same-person validated warnings retained. Claude reported fail-before/pass-after R2c 19/19, F5 actual synthetic handler seam 8/8, app 313 PASS, tsc/lint PASS; ChatGPT did not rerun.
+- Next independent Codex Sol（高） focused security review, including concurrency/races and F5 handler contract. No release of old server deletion route or live Auth/DB/Threads/X; source gate OFF, merge/deploy/production NO_GO. Archive F4 accepted TASK+Report before next use.
+
+## J3 F5 Phase10 限定レビュー割当（2026-10-15）
+- J3 `common-account-j3-f5-pr214-snapshot-ack-focused-review-20261015` ready/codex、Sol（高）、J3→V3、return `共通アカウントG5のちゃ（新F5担当）`。F5 Phase10 Draft PR214 `bc290ab618508a8fbaba1abfad308c52d86e4689`の差分とF3 PR204の結合だけを独立read-only security review。前J3 V3 PASSしたF3 PR204 R1a/R3a/R1bは再レビューしない。共通ID全削除D1の利用者通知・同意は別設計判断として残す。Production/managed/Auth/DB/merge/deploy NO_GO。
+- 前J3 TASK/Report両方を`.agent_v2/archive/2026-10-15-J3-postona-j3-pr204-p2x3-security-rereview-20261015/`へappend-only保存、blob SHA・原文復元照合、SHA256SUMS/MANIFEST/HISTORY_INDEX更新済み。他slot TASK/PRは未変更。
+
+## POSTONA F4 — J4 P2 R2c final-preview identity fix (2026-10-15 JST)
+- NEW F4 `postona-f4-pr211-r2c-final-preview-identity-fix-20261015` ready/claude, Opus5.5（高）, F4→L4 return POSTONA｜マルチSNS化・開発統括（G4）のちゃ. J4 V4 flagged P2 R2c: delayed read-back preview after A→B/null wrongly retains A's X count and Threads warning in helper return, though current TSX screen protects visibility. Correct only that source boundary without discarding same-user warnings.
+- Target protected Draft PR211 HEAD `eb1011f2bd6f8a76ef412f824f0b21629794645b`; new isolated stacked Draft candidate, no merge/deploy. Prior F4 TASK incl Report archived `.agent_v2/archive/2026-10-15-F4-postona-f4-pr197-p2-response-warning-preservation-20261015/`, byte-equal blob restore; manifest/HISTORY_INDEX saved; SHA256SUMS finalization pending. J4 independent rereview required afterward; production NO_GO. No other slot/POSTONA X/shared Auth work changed.
+
+## G1 かぶモリ休止 J2 独立レビュー main 登録（2026-10-15）
+- 新J2 `kabumori-j2-f2-f8-pause-runtime-integrated-security-review-20261015` ready/codex、Sol（高）、J2→V2、返却先：かぶモリアプリG1のちゃ（運用休止・全体統括）。
+- 対象 F8 Draft PR #212 (b80d5235)、F2 Draft PR #213 (cb34ab7d)。新旧枠・所有範囲を維持し、独立review専用。旧J2 TASK/Reportはappend-only archive、MANIFEST/SHA256SUMS・復元read-back・HISTORY_INDEX登録済み。
+- J1共通AIを保護。F8 is_active fail-closed/1秒キャッシュ/直接X、F2 x-test-postブランド/予約/Push/認証、PR129/164統合条件を重点確認。本番/merge/deployは NO_GO。レビュー開始時に専用clean worktreeを確認。
+
+## POSTONA J4 V4 PR211 rerereview (2026-10-15 JST)
+- J4 `postona-j4-pr211-p2-client-fixes-focused-security-rereview-20261015` CHANGES_REQUIRED P2 R2c / PRODUCTION_NO_GO; review complete, slot done/none. Exact PR211 HEAD `eb1011f2bd6f8a76ef412f824f0b21629794645b` OPEN/Draft/unmerged. Original J4 P2 R1/R2 confirmed fixed; late final awaited preview changing A→B/null still attaches A's validated X count/Threads warning to end() return. Actual screen guard hides result, no UI leak demonstrated. J4 independently ran app294 PASS, F5 Deno120 PASS, actual handler seam, two negative late-switch repro FAIL.
+- Next G4/F4 source fix: recheck identity after final preview; when current user B/null no previous-user warnings in helper result; maintain same-person warning facts across genuine verification failures. Recommended Opus5.5（高）. No new F4 task assigned in this V4 check. Later independent focused rereview. J3 PR204 source PASS and F5 Phase10 PR214 source candidate exist; managed/staging/legacy server and integration still NO_GO.
+
+## POSTONA J4 PR211 focused independent rereview (2026-10-15)
+- J4 `postona-j4-pr211-p2-client-fixes-focused-security-rereview-20261015` ready/codex, Sol（高）, J4→V4 return POSTONA｜マルチSNS化・開発統括（G4）のちゃ. Target F4 Draft PR211 exact HEAD `eb1011f2bd6f8a76ef412f824f0b21629794645b` stacked PR197. Check J4 original V4 P2 R1/R2 repairs, rerun actual F5 PR193 lifecycle-handler synthetic integration probes, and cross-user warning isolation.
+- Previous J4 TASK and Report byte-equal archived at `.agent_v2/archive/2026-10-15-J4-postona-j4-pr197-postona-deletion-client-security-review-20261014/`, Git blob integrity verified and history indexed. Separate SHA256SUMS pending finalization (not claim complete). No source/release changes. Production NO_GO, other F3/F5/legacy server gates remain.
+
+## POSTONA F4 L4 PR211 accepted (2026-10-15 JST)
+- F4 `postona-f4-pr197-p2-response-warning-preservation-20261015` done/none after L4, verdict PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO. PR211 head `eb1011f2bd6f8a76ef412f824f0b21629794645b` OPEN/Draft/unmerged based on protected PR197 `2171ee4c02ea2eec46562d81595f5460e5507d9d`, five F4 mobile source/test/doc changes. R1 incomplete provider summary fails closed; R2 validated same-user X count and Threads remote-unverified retained on session/readback error. Reported fail-before/pass-after and app 294 PASS; ChatGPT read actual diff but did not rerun tests.
+- Required: independent J1–J4 Sol（高） focused rereview including F5 PR193 actual handler/contract probe, cross-user warning leak, transient auth/preview error. Legacy deletion endpoint, F3/J3 X saga, F5/G5 managed Auth/lifecycle and F4 Threads remote still NO_GO. New F4 task only after archiving accepted TASK/Report.
+
 ## POSTONA F4 resumed (2026-10-15)
 - User asked to switch unstarted J5 P2 task to Claude F4. J5 cancelled/idle, old task archived; no J5 source PR existed. F4 NEW `postona-f4-pr197-p2-response-warning-preservation-20261015` ready / Opus5.5（高） / F4→L4 / POSTONA G4ちゃ; distinct task_id.
 - Fix J4 V4 P2 R1 truncated `ended` response false success and R2 missing X/Threads warnings after readback error, based on PR197; new Draft source only. Old F4 Threads lease task archived; PR180 protected.
