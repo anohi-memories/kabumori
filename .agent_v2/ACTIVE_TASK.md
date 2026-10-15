@@ -184,10 +184,10 @@
 
 ## J2
 - slot: J2
-- status: ready
+- status: review_required
 - task_id: kabumori-j2-f2-f8-pause-runtime-integrated-security-review-20261015
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: V2
 - recommended_model: Sol（高）
