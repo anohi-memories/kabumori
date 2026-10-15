@@ -1,0 +1,21 @@
+{
+  "task_id": "postona-j3-x-saga-r1-r3-focused-rereview-20261014",
+  "source_commit": "132463fde597b6b99803da4d87b2bcdb8cb553a9",
+  "restore": "Exact UTF-8 content and Git blob SHA readback checked on both files before replacement",
+  "files": [
+    {
+      "original_path": ".agent_v2/tasks/J3.md",
+      "archive_path": ".agent_v2/archive/2026-10-15-J3-postona-j3-x-saga-r1-r3-focused-rereview-20261014/files/.agent_v2/tasks/J3.md",
+      "size": 5212,
+      "sha256": "53a8922f81e23c404d5ef8b4cbbcfb570ef290e341b220a3aa96104e2c9359d5",
+      "blob": "ee26e1602ee2e00bd7e5bd308c46d29325cd7eae"
+    },
+    {
+      "original_path": ".agent_v2/reports/J3.md",
+      "archive_path": ".agent_v2/archive/2026-10-15-J3-postona-j3-x-saga-r1-r3-focused-rereview-20261014/files/.agent_v2/reports/J3.md",
+      "size": 11762,
+      "sha256": "45f0a7d694625e3951be1203f3111c8916569a6bd903738be917ebea24e3674e",
+      "blob": "f97eda677a525c543dd65b3c3febdea55531ba23"
+    }
+  ]
+}
