@@ -23,17 +23,17 @@
 
 ## F2
 - slot: F2
-- status: ready
+- status: review_required
 - task_id: kabumori-f2-pause-delivery-runtime-candidate-20261015
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: L2
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
 - dependencies: F2 design PR #210 merged; F8 news gate runtime; shared POSTONA/AI protected
-- blocker: offline implementation only; production NO_GO; live Cron #1/claim/schema and pending queues unverified
+- blocker: PASS_OFFLINE_SOURCE_CANDIDATE / PRODUCTION_NO_GO。Draft PR #213（候補 commit `07ad0a1e69b5cd09cb66cfab25c5bbf51d5fbecc`）。停止候補9件・tools 22件・x-test-post とブランドの全体772件が PASS、negative control 10種。ニュースの X は F8、本番の snapshot と Sol のレビューは未。G1 の照合待ち（L2）
 - production_mutation_window: FORBIDDEN
 - previous_archive: .agent_v2/archive/2026-10-15-f2-pause-offline-design-accepted.md
 - slot_use: kabumori X gate/planner/queue/Push source-only candidate after L2 design archived
