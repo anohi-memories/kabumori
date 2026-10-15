@@ -1,3 +1,7 @@
+## J3 F5 Phase10 限定レビュー割当（2026-10-15）
+- J3 `common-account-j3-f5-pr214-snapshot-ack-focused-review-20261015` ready/codex、Sol（高）、J3→V3、return `共通アカウントG5のちゃ（新F5担当）`。F5 Phase10 Draft PR214 `bc290ab618508a8fbaba1abfad308c52d86e4689`の差分とF3 PR204の結合だけを独立read-only security review。前J3 V3 PASSしたF3 PR204 R1a/R3a/R1bは再レビューしない。共通ID全削除D1の利用者通知・同意は別設計判断として残す。Production/managed/Auth/DB/merge/deploy NO_GO。
+- 前J3 TASK/Report両方を`.agent_v2/archive/2026-10-15-J3-postona-j3-pr204-p2x3-security-rereview-20261015/`へappend-only保存、blob SHA・原文復元照合、SHA256SUMS/MANIFEST/HISTORY_INDEX更新済み。他slot TASK/PRは未変更。
+
 ## POSTONA F4 — J4 P2 R2c final-preview identity fix (2026-10-15 JST)
 - NEW F4 `postona-f4-pr211-r2c-final-preview-identity-fix-20261015` ready/claude, Opus5.5（高）, F4→L4 return POSTONA｜マルチSNS化・開発統括（G4）のちゃ. J4 V4 flagged P2 R2c: delayed read-back preview after A→B/null wrongly retains A's X count and Threads warning in helper return, though current TSX screen protects visibility. Correct only that source boundary without discarding same-user warnings.
 - Target protected Draft PR211 HEAD `eb1011f2bd6f8a76ef412f824f0b21629794645b`; new isolated stacked Draft candidate, no merge/deploy. Prior F4 TASK incl Report archived `.agent_v2/archive/2026-10-15-F4-postona-f4-pr197-p2-response-warning-preservation-20261015/`, byte-equal blob restore; manifest/HISTORY_INDEX saved; SHA256SUMS finalization pending. J4 independent rereview required afterward; production NO_GO. No other slot/POSTONA X/shared Auth work changed.
