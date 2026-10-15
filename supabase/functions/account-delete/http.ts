@@ -27,6 +27,7 @@ import {
 } from './lifecycle_logic.ts';
 import { revokeAppleGrantOutcome } from './apple_outcome.ts';
 import { providerRegistration } from './provider_registry.ts';
+import { xUnconfirmedPairOf } from './x_unconfirmed.ts';
 
 export const RPC_NAMES: Record<LifecycleRpcName, string> = {
   release_gate: 'common_account_deletion_release_gate',
@@ -53,8 +54,11 @@ export const RPC_NAMES: Record<LifecycleRpcName, string> = {
   finish_owned_service: 'finish_owned_service_deletion',
   provider_snapshot: 'common_account_provider_snapshot',
   record_reconciliation: 'record_owned_service_deletion_reconciliation',
+  // Phase 10: the pair (count, evidence-set snapshot) is recorded in the end's own durable state BEFORE it is
+  // acknowledged to F3's saga; the count-only recorder above remains for a saga answer that names no set.
+  record_x_unconfirmed: 'record_owned_service_deletion_x_unconfirmed',
   service_end_result: 'common_account_service_end_result',
-  // F3's saga (PR #192, optional): the caller acknowledges the durable count it has recorded in its own state.
+  // F3's saga (PR #204): the caller acknowledges the exact snapshot it has recorded in its own state (never a count).
   ack_x_unconfirmed: 'social_mobile_account_deletion_x_unconfirmed_ack',
 };
 
@@ -83,9 +87,11 @@ export function xResultOf(status: number, body: unknown): XCleanupResult {
   if (status === 200 && data.ok === true) {
     if (data.login_deleted === true) return { outcome: 'login_deleted' };
     if (data.login_deleted !== false) return { outcome: 'failed' };
-    const unconfirmed = data.x_posts_unconfirmed;
-    if (unconfirmed !== undefined && !(typeof unconfirmed === 'number' && Number.isInteger(unconfirmed) && unconfirmed > 0)) return { outcome: 'failed' };
-    return typeof unconfirmed === 'number' ? { outcome: 'done', unconfirmedPosts: unconfirmed } : { outcome: 'done' };
+    // The count and the name of the evidence set come together or not at all (F3 PR #204): a count without its
+    // snapshot (or the reverse, or a malformed one) is not an answer this end can bind an acknowledgement to.
+    const pair = xUnconfirmedPairOf(data.x_posts_unconfirmed, data.x_unconfirmed_snapshot);
+    if (pair === 'invalid') return { outcome: 'failed' };
+    return pair ? { outcome: 'done', unconfirmedPosts: pair.count, unconfirmedSnapshot: pair.snapshot } : { outcome: 'done' };
   }
   const error = typeof data.error === 'string' ? data.error : '';
   if (error === 'DELETION_IN_PROGRESS') return { outcome: 'in_progress' };

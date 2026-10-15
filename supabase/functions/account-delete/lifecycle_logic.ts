@@ -36,6 +36,7 @@
 import { lastAuthenticatedAt, RECENT_AUTH_SECONDS } from '../social-mobile-account-delete/delete_logic.ts';
 import type { AppleRevocationOutcome } from './apple_outcome.ts';
 import { runProviderCleanups, type ProviderCleanupAdapter } from './provider_cleanup.ts';
+import { ACK_ROUNDS, SNAPSHOT_PATTERN, xUnconfirmedAckArgs, xUnconfirmedAckOutcomeOf } from './x_unconfirmed.ts';
 
 export { RECENT_AUTH_SECONDS };
 
@@ -54,7 +55,8 @@ export type LifecycleRpcName =
   | 'begin_account_deletion' | 'claim' | 'renew' | 'release' | 'owned_checkpoint' | 'owned_prepare'
   | 'begin_external_step' | 'settle_external_step' | 'storage_objects' | 'complete' | 'record_error'
   | 'claim_service' | 'renew_service' | 'release_service' | 'record_provider_result' | 'acknowledge_unverified'
-  | 'finish_owned_service' | 'provider_snapshot' | 'record_reconciliation' | 'service_end_result' | 'ack_x_unconfirmed';
+  | 'finish_owned_service' | 'provider_snapshot' | 'record_reconciliation' | 'record_x_unconfirmed' | 'service_end_result'
+  | 'ack_x_unconfirmed';
 export type RpcResult = { ok: true; data: unknown } | { ok: false };
 
 /** providers and Apple subjects come from the server's view of the person's identities. */
@@ -74,6 +76,8 @@ export type XCleanupResult = {
   outcome: XCleanupOutcome;
   /** `done` only: X posts whose publish result was never confirmed (the person may have to check X). */
   unconfirmedPosts?: number;
+  /** `done` only, with the count: the saga's 64-hex name of that exact evidence set (F3 PR #204). */
+  unconfirmedSnapshot?: string;
   /** A block (DELETION_BLOCKED_<reason>) or a reconciliation (X_REVOKE_FAILED, CREDENTIALS_CHANGED, FINALIZE_FAILED). */
   reason?: string;
 };
@@ -215,7 +219,13 @@ async function call(deps: LifecycleDeps, name: LifecycleRpcName, args: Record<st
   }
 }
 
-type ServiceState = { service: 'kabumori' | 'x_autopost'; status: string };
+/**
+ * `service` is any registered service key, not only the two this code knows: another app's entitlement must neither
+ * break nor be touched by ending POSTONA or Kabumori (Phase 10). A service this code cannot end simply keeps the
+ * whole-account deletion from completing (it is "remaining"); it never makes a single-service flow unreadable.
+ */
+type ServiceState = { service: string; status: string };
+const SERVICE_KEY_RE = /^[a-z][a-z0-9_]{1,31}$/u;
 type Eligibility = {
   accountStatus: string;
   lifecycleVersion: number;
@@ -236,7 +246,7 @@ async function eligibility(deps: LifecycleDeps, userId: string): Promise<Eligibi
   const operation = data.operation === null || data.operation === undefined ? null : record(data.operation);
   if (typeof data.account_status !== 'string' || typeof version !== 'number' || !Number.isSafeInteger(version) || version < 0
       || !services || !blockers || !required) return null;
-  if (!services.every((s) => (s.service_key === 'kabumori' || s.service_key === 'x_autopost') && typeof s.status === 'string')) return null;
+  if (!services.every((s) => typeof s.service_key === 'string' && SERVICE_KEY_RE.test(s.service_key) && typeof s.status === 'string')) return null;
   let parsedOperation: Eligibility['operation'] = null;
   if (operation) {
     const recorded = strings(operation.recorded_checkpoints);
@@ -246,7 +256,7 @@ async function eligibility(deps: LifecycleDeps, userId: string): Promise<Eligibi
   return {
     accountStatus: data.account_status,
     lifecycleVersion: version,
-    services: services.map((s) => ({ service: s.service_key as ServiceState['service'], status: s.status as string })),
+    services: services.map((s) => ({ service: s.service_key as string, status: s.status as string })),
     blockers,
     requiredCheckpoints: required,
     operation: parsedOperation,
@@ -261,7 +271,7 @@ async function managedDeleteReleased(deps: LifecycleDeps): Promise<boolean> {
 
 const appleNeeded = (user: VerifiedUser, state: Eligibility) =>
   state.requiredCheckpoints.includes('apple_revocation') || user.providers.includes('apple');
-const remaining = (state: Eligibility, service: ServiceState['service']) => {
+const remaining = (state: Eligibility, service: string) => {
   const found = state.services.find((s) => s.service === service);
   return found !== undefined && found.status !== 'ended';
 };
@@ -415,6 +425,52 @@ async function endPostona(args: {
   };
   const record = async (provider: string, result: string) =>
     (await call(deps, 'record_provider_result', { ...own, p_provider: provider, p_result: result }))?.status === 'recorded';
+  /**
+   * Records the unconfirmed-post pair durably, then acknowledges THAT snapshot to the saga; when the saga's set changed
+   * under it (`snapshot_changed`) the NEW pair is recorded first and only then acknowledged, a bounded number of times.
+   * Anything that is not an acknowledgement (a deletion running at the saga, the count-only refusal, an unreadable
+   * answer, a failed call) clears nothing: the saga keeps over-reporting, which is the safe direction. A count whose
+   * set has no name is kept (the count-only record) but never acknowledged and never turned into "done".
+   */
+  const settleUnconfirmed = async (count: number, snapshot: string | null): Promise<
+    { kind: 'ok'; count: number } | { kind: 'lost' } | { kind: 'stop'; response: LifecycleResponse }
+  > => {
+    let highest = count;
+    const keep = async (n: number, name: string | null): Promise<'recorded' | 'lease_lost' | 'failed'> => {
+      let fact: Record<string, unknown> | null = null;
+      for (let attempt = 0; attempt < FACT_ATTEMPTS && fact?.status !== 'recorded' && fact?.status !== 'lease_lost'; attempt++) {
+        fact = name === null
+          ? await call(deps, 'record_reconciliation', { ...own, p_fact: 'x_posts_unconfirmed', p_count: n })
+          : await call(deps, 'record_x_unconfirmed', { ...own, p_count: n, p_snapshot: name });
+      }
+      return fact?.status === 'recorded' ? 'recorded' : fact?.status === 'lease_lost' ? 'lease_lost' : 'failed';
+    };
+    if (snapshot === null) {
+      const kept = await keep(count, null);
+      if (kept === 'lease_lost') return { kind: 'lost' };
+      return {
+        kind: 'stop',
+        response: kept === 'recorded'
+          ? fail(502, 'X_CLEANUP_FAILED', { xPostsUnconfirmed: count })
+          : fail(500, 'FAILED', { xPostsUnconfirmed: count }),
+      };
+    }
+    let pair = { count, snapshot };
+    for (let round = 0; ; round++) {
+      const kept = await keep(pair.count, pair.snapshot);
+      if (kept === 'lease_lost') return { kind: 'lost' };
+      if (kept !== 'recorded') return { kind: 'stop', response: fail(500, 'FAILED', { xPostsUnconfirmed: highest }) };
+      highest = Math.max(highest, pair.count);
+      if (round >= ACK_ROUNDS) break;
+      const ack = xUnconfirmedAckOutcomeOf(await call(deps, 'ack_x_unconfirmed', xUnconfirmedAckArgs(userId, pair.snapshot)));
+      if (ack.status === 'snapshot_changed' && ack.snapshot !== null) {
+        pair = { count: ack.count, snapshot: ack.snapshot };
+        continue;
+      }
+      break;
+    }
+    return { kind: 'ok', count: highest };
+  };
 
   try {
     // What an earlier attempt left on record must be readable BEFORE anything is touched: a retry that cannot read it
@@ -494,6 +550,7 @@ async function endPostona(args: {
     if (!(await owned())) return { ok: false, response: args.lost() };
     let outcome: XCleanupOutcome = 'failed';
     let unconfirmedPosts = 0;
+    let unconfirmedSnapshot: string | null = null;
     let xReason: string | null = null;
     try {
       const answer = await deps.x.run(token);
@@ -504,6 +561,9 @@ async function endPostona(args: {
         if (typeof answer.unconfirmedPosts === 'number' && Number.isInteger(answer.unconfirmedPosts) && answer.unconfirmedPosts > 0) {
           unconfirmedPosts = answer.unconfirmedPosts;
         }
+        if (typeof answer.unconfirmedSnapshot === 'string' && SNAPSHOT_PATTERN.test(answer.unconfirmedSnapshot)) {
+          unconfirmedSnapshot = answer.unconfirmedSnapshot;
+        }
         xReason = typeof answer.reason === 'string' ? answer.reason : null;
       }
     } catch {
@@ -511,24 +571,20 @@ async function endPostona(args: {
     }
     // The saga removed the login itself (it must not in social_only): nothing can be verified any more.
     if (outcome === 'login_deleted') return { ok: false, response: fail(500, 'DELETION_VERIFICATION_PENDING') };
-    // X posts whose result was never known are a durable fact BEFORE X is recorded as done, and so before anything can
-    // end: a crash or a retry that finds the end already done must still say so (J3 V3 R1: never an apparently clean
-    // completion). A saga that has purged cannot repeat the count, so the record is tried a few times; if it cannot be
-    // made, X is NOT recorded as done (it stays to be reconciled) and the person is told the count in this answer.
+    // X posts whose result was never known (F3 PR #204: a count AND the name of that exact evidence set) are a durable
+    // fact of this end BEFORE X is recorded as done and BEFORE the saga is told it may forget the set; only then is
+    // that exact snapshot acknowledged. A crash, a retry that finds the end already done, or a takeover must still say
+    // so (J3 V3 R1: never an apparently clean completion). The saga's answer is not repeatable once it has purged, so
+    // the record is tried a few times; if it cannot be made, X is NOT recorded as done (it stays to be reconciled), the
+    // set is NOT acknowledged, and the person is told the count in this answer.
     if (outcome === 'done' && unconfirmedPosts > 0) {
-      let fact: Record<string, unknown> | null = null;
-      for (let attempt = 0; attempt < FACT_ATTEMPTS && fact?.status !== 'recorded' && fact?.status !== 'lease_lost'; attempt++) {
-        fact = await call(deps, 'record_reconciliation', { ...own, p_fact: 'x_posts_unconfirmed', p_count: unconfirmedPosts });
-      }
-      if (fact?.status === 'lease_lost') return { ok: false, response: args.lost() };
-      if (fact?.status !== 'recorded') {
+      const settled = await settleUnconfirmed(unconfirmedPosts, unconfirmedSnapshot);
+      if (settled.kind === 'lost') return { ok: false, response: args.lost() };
+      if (settled.kind === 'stop') {
         await record('x', 'reconciliation_required');
-        return refuse(fail(500, 'FAILED', { xPostsUnconfirmed: unconfirmedPosts }));
+        return refuse(settled.response);
       }
-      // The saga keeps its own durable checkpoint of these posts and repeats it until the caller, which now holds the
-      // fact in its own durable state, acknowledges it (compare-and-clear on the count it saw). Best effort: a saga
-      // without that function, or a count that changed, only means the saga keeps over-reporting; nothing is lost.
-      await call(deps, 'ack_x_unconfirmed', { p_user_id: userId, p_expected: unconfirmedPosts });
+      unconfirmedPosts = settled.count;
     }
     const xRecorded = await record('x', outcome === 'done' ? 'done' : outcome === 'blocked' ? 'blocked' : 'reconciliation_required');
     if (!xRecorded) return { ok: false, response: args.lost() };

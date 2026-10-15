@@ -199,12 +199,20 @@ test('the X saga adapter maps only the saga\'s fixed answers, and anything unkno
   assert.equal(xOutcomeOf(404, null), 'failed', 'the X function is not deployed');
 });
 
-test('the X result keeps what the saga told: the unconfirmed-post count, the block reason, the failure reason', () => {
+test('the X result keeps what the saga told: the unconfirmed pair (count + evidence-set snapshot), the block reason, the failure reason', () => {
+  const SNAP = '0123456789abcdef'.repeat(4);
   assert.deepEqual(xResultOf(200, { ok: true, login_deleted: false }), { outcome: 'done' });
-  assert.deepEqual(xResultOf(200, { ok: true, login_deleted: false, x_posts_unconfirmed: 3 }), { outcome: 'done', unconfirmedPosts: 3 });
+  assert.deepEqual(xResultOf(200, { ok: true, login_deleted: false, x_posts_unconfirmed: 3, x_unconfirmed_snapshot: SNAP }),
+    { outcome: 'done', unconfirmedPosts: 3, unconfirmedSnapshot: SNAP });
   // a count nobody can interpret is a failure, never a clean "done"
   for (const bad of [0, -1, 1.5, '3', null]) {
-    assert.deepEqual(xResultOf(200, { ok: true, login_deleted: false, x_posts_unconfirmed: bad }), { outcome: 'failed' }, `count ${String(bad)}`);
+    assert.deepEqual(xResultOf(200, { ok: true, login_deleted: false, x_posts_unconfirmed: bad, x_unconfirmed_snapshot: SNAP }), { outcome: 'failed' }, `count ${String(bad)}`);
+  }
+  // the count and the name of the set come together (F3 PR #204): either one alone is not an answer to bind an ACK to
+  assert.deepEqual(xResultOf(200, { ok: true, login_deleted: false, x_posts_unconfirmed: 3 }), { outcome: 'failed' }, 'a count without its set');
+  assert.deepEqual(xResultOf(200, { ok: true, login_deleted: false, x_unconfirmed_snapshot: SNAP }), { outcome: 'failed' }, 'a set without its count');
+  for (const bad of ['', 'ABC', SNAP.toUpperCase(), SNAP.slice(1), `${SNAP}0`, 7, null]) {
+    assert.deepEqual(xResultOf(200, { ok: true, login_deleted: false, x_posts_unconfirmed: 1, x_unconfirmed_snapshot: bad }), { outcome: 'failed' }, `snapshot ${String(bad)}`);
   }
   assert.deepEqual(xResultOf(409, { ok: false, error: 'DELETION_BLOCKED_POSTING_IN_PROGRESS' }), { outcome: 'blocked', reason: 'POSTING_IN_PROGRESS' });
   assert.deepEqual(xResultOf(409, { ok: false, error: 'DELETION_BLOCKED_NOT_A_REASON' }), { outcome: 'failed' }, 'an unknown reason is a failure, not a retryable block');

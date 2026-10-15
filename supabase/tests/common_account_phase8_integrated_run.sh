@@ -2,8 +2,9 @@
 # F5 Phase 8: the common account (Phase 1..8) + F3's X service-end saga + F4's Threads cleanup, assembled in ONE
 # disposable local database from the REAL sources of three stacks, none of them modified:
 #
-#   F5  this checkout (PR #121 -> #152 -> #165 -> #178 -> #183 -> Phase 8)           G5 owns the common lifecycle
-#   F3  PR #189 head (PR #145 -> #151 -> #163 -> #168 -> #182 -> #189)               X reservations, publish guard, saga stop
+#   F5  this checkout (PR #121 -> #152 -> #165 -> #178 -> #183 -> #193 -> #206 -> Phase 10)  G5 owns the common lifecycle
+#   F3  PR #204 head (PR #145 -> #151 -> #163 -> #168 -> #182 -> #189 -> #192 -> #204)  X reservations, publish guard, saga stop,
+#                                                                                      durable unconfirmed-post checkpoint + snapshot ACK
 #   F4  PR #180 head (PR #167 -> #169 -> #180) + G4 PR #124 (two read-only files)    Threads OAuth / publish / cleanup / guards
 #
 # The F3 and F4 trees come from `git archive` of their branch heads into a throw-away directory; the repository,
@@ -23,7 +24,7 @@ super="${CAL_PGSUPER:?CAL_PGSUPER required}"
 case "$host" in /private/tmp/*|/tmp/*) ;; *) echo "Refusing: CAL_PGHOST must be a local /tmp socket directory." >&2; exit 2 ;; esac
 here="$(cd "$(dirname "$0")" && pwd)"
 repo="$(git -C "$here" rev-parse --show-toplevel)"
-F3="${F3_SHA:-4fd7084d067d2a9f589fd7fecaee70720bc60812}"
+F3="${F3_SHA:-45b08a879749b853d3dc77465d9e65e8fd684305}"
 F4="${F4_SHA:-7c4f457834cddb42b72be6b74996e643b213e8c8}"
 PR124="${PR124_SHA:-c30f246409a77080cbc03aef6c4cb72b5481e125}"
 sections="${CAL_P8_SECTIONS:-all}"
@@ -120,10 +121,11 @@ f5_fence() {  # database: Phase 3b writer guard + Phase 4 core fence
     must "$d" "$m/$f" "F5 $f"
   done
 }
-f5_rest() {  # database: Phase 5 workspace state, Phase 6 service-deletion ownership, Phase 8 reconciliation facts
+f5_rest() {  # database: Phase 5 workspace state, Phase 6 service-deletion ownership, Phase 8 reconciliation facts, Phase 9, Phase 10
   local d="$1" f
   for f in 20261012230000_common_account_service_brand_state.sql 20261013120000_common_account_service_deletion_ownership.sql \
-           20261013140000_common_account_service_reconciliation_facts.sql 20261015090000_common_account_enrollment_session_fence.sql; do
+           20261013140000_common_account_service_reconciliation_facts.sql 20261015090000_common_account_enrollment_session_fence.sql \
+           20261015120000_common_account_x_unconfirmed_snapshot_record.sql; do
     must "$d" "$m/$f" "F5 $f"
   done
 }
@@ -192,7 +194,7 @@ x_stack "$world"
 # F3's own suites assume F3's own baseline (account defaults of its fixtures); they run on THIS snapshot (F5 Phase 1..8 +
 # F3 only), which is F3's world with the current F5 chain under it. The Threads steps below change social_accounts.
 x_only="$(copy xonly "$world")"
-echo "PASS world/x: F5 Phase 1..8 + the real saga SQL + Stage 3B authority + F3 reservations 001-003 + entitlement guard 001 + saga stop 002"
+echo "PASS world/x: F5 Phase 1..10 + the real saga SQL + Stage 3B authority + F3 reservations 001-003 + entitlement guard 001 + saga stop 002"
 threads_base "$world"
 threads_lifecycle "$world"
 echo "PASS world/threads: + multi-provider social_accounts + PR124 + G4 publish stack + F4 cleanup (live lease) + disconnect + writer guards"
@@ -224,8 +226,13 @@ val "$ordered" -c "create or replace function postona_x_resv.g4_x_account_verifi
   alter table private.account_lifecycle_release_gates drop constraint if exists account_lifecycle_release_gates_blocked_only;
   update private.account_lifecycle_release_gates set state = 'open';" >/dev/null
 
-# Phase 8 rolled back (F5's own rollback file, on a copy of the granted world) for the "code newer / older than the database" tests.
+# Phase 10 rolled back alone (F5's own rollback file, on a copy of the granted world): the Phase 10 code on a database
+# that has Phase 8 but not the snapshot recorder. Then Phase 10 and Phase 8 both rolled back (Phase 10 first, the
+# ladder's order) for the "code newer / older than the database" tests of Phase 8.
+rolled_p10="$(copy rolled_back_p10 "$granted")"
+own "$rolled_p10" -f "$t/common_account_x_unconfirmed_snapshot_rollback.sql" >/dev/null
 rolled="$(copy rolled_back "$granted")"
+own "$rolled" -f "$t/common_account_x_unconfirmed_snapshot_rollback.sql" >/dev/null
 own "$rolled" -f "$t/common_account_service_reconciliation_rollback.sql" >/dev/null
 # The Phase 7 Edge code (the head of PR #183, pinned) as the "older code" of those tests.
 P7="${F5_P7_SHA:-f2565cc0412f8127f95f00a728d16bf83af74667}"
@@ -235,6 +242,21 @@ git -C "$repo" archive "$P7" supabase/functions/account-delete | tar -x -C "$tre
 cp -R "$tree/p7/supabase/functions/account-delete" "$ov/functions/account-delete-p7"
 cp "$repo/supabase/candidates/common_account_provider_registration/provider_registry.threads.candidate.ts" "$ov/functions/account-delete-p7/provider_registry.ts"
 echo "F5-Phase7 $P7" >> "$tree/MANIFEST.txt"
+# The Phase 9 Edge code (the head of PR #206, pinned): the count-only acknowledgement consumer, "older code" of Phase 10.
+P9="${F5_P9_SHA:-a84a9b6abb8c8d4706bba5f8a12e5c1aef3d3b8c}"
+git -C "$repo" cat-file -e "${P9}^{commit}" 2>/dev/null || fail "missing git objects for the Phase 9 head $P9"
+mkdir -p "$tree/p9"
+git -C "$repo" archive "$P9" supabase/functions/account-delete | tar -x -C "$tree/p9"
+cp -R "$tree/p9/supabase/functions/account-delete" "$ov/functions/account-delete-p9"
+cp "$repo/supabase/candidates/common_account_provider_registration/provider_registry.threads.candidate.ts" "$ov/functions/account-delete-p9/provider_registry.ts"
+echo "F5-Phase9 $P9" >> "$tree/MANIFEST.txt"
+
+# A copy of the granted world in which the closed list of service keys has one more member -- a future app (a single
+# constraint, in a throw-away database; no candidate is changed). Used to prove that ending POSTONA alone leaves every
+# other service's entitlement exactly as it was.
+future="$(copy future_app "$granted")"
+val "$future" -c "alter table public.service_entitlements drop constraint service_entitlements_service_key_check;
+  alter table public.service_entitlements add constraint service_entitlements_service_key_check check (service_key in ('kabumori', 'x_autopost', 'future_app'));" >/dev/null
 
 # The same order database with F3's lock_own repaired (proof overlay: G5's locks BEFORE the reservation row). Used only
 # by the lock-order finding F3-L1's "fix proof" test.
@@ -242,7 +264,7 @@ ordered_fix="$(copy ordered_fix "$ordered")"
 own "$ordered_fix" -f "$t/common_account_phase8_f3_lock_order_fix_proof.sql" >/dev/null
 
 run_deno() {  # test-file
-  ( cd "$tree/overlay" && CAL_E2E=1 PGHOST="$host" PGPORT="$port" PGUSER="$owner" PGDATABASE="$granted" PGDATABASE_NOGRANT="$nogrant" PGDATABASE_ORDER="$ordered" PGDATABASE_ORDER_FIX="$ordered_fix" PGDATABASE_P8_ROLLED_BACK="$rolled" \
+  ( cd "$tree/overlay" && CAL_E2E=1 PGHOST="$host" PGPORT="$port" PGUSER="$owner" PGDATABASE="$granted" PGDATABASE_NOGRANT="$nogrant" PGDATABASE_ORDER="$ordered" PGDATABASE_ORDER_FIX="$ordered_fix" PGDATABASE_P8_ROLLED_BACK="$rolled" PGDATABASE_P10_ROLLED_BACK="$rolled_p10" PGDATABASE_FUTURE="$future" \
       deno test --no-config --no-check --allow-run=psql --allow-env --allow-read "$1" ) > "$tree/deno.log" 2>&1 \
     || { sed 's/\x1b\[[0-9;]*m//g' "$tree/deno.log" | grep -v '^$' | head -80 >&2; fail "$1"; }
   sed 's/\x1b\[[0-9;]*m//g' "$tree/deno.log" | grep -E "observed:" || true
@@ -317,10 +339,11 @@ if want apply; then
   must "$d" "$m/20261013120000_common_account_service_deletion_ownership.sql" "F5 Phase 6 (alternative order)"
   must "$d" "$m/20261013140000_common_account_service_reconciliation_facts.sql" "F5 Phase 8 (alternative order)"
   must "$d" "$m/20261015090000_common_account_enrollment_session_fence.sql" "F5 Phase 9 (alternative order)"
+  must "$d" "$m/20261015120000_common_account_x_unconfirmed_snapshot_record.sql" "F5 Phase 10 (alternative order)"
   val "$x_only" -f "$t/common_account_phase8_catalog.sql" > "$tree/cat_canonical.txt"
   val "$d" -f "$t/common_account_phase8_catalog.sql" > "$tree/cat_alt.txt"
   if ! cmp -s "$tree/cat_canonical.txt" "$tree/cat_alt.txt"; then diff "$tree/cat_canonical.txt" "$tree/cat_alt.txt" | head -30 >&2; fail "apply order: the alternative order gives another schema"; fi
-  echo "PASS apply/commutes: P4 -> F3 reservations -> P5 -> F3 entitlement guard + saga -> P6 -> P8 == P4..P8 -> F3 ($(wc -l < "$tree/cat_alt.txt" | tr -d ' ') catalog lines)"
+  echo "PASS apply/commutes: P4 -> F3 reservations -> P5 -> F3 entitlement guard + saga -> P6 -> P8 -> P9 -> P10 == P4..P10 -> F3 ($(wc -l < "$tree/cat_alt.txt" | tr -d ' ') catalog lines)"
   # 7d. Every file of the three stacks is refused on the finished world, and nothing changes.
   d="$(copy reapply "$granted")"
   before="$(fp "$d")"
@@ -339,6 +362,7 @@ F5_P5 $m/20261012230000_common_account_service_brand_state.sql
 F5_P6 $m/20261013120000_common_account_service_deletion_ownership.sql
 F5_P8 $m/20261013140000_common_account_service_reconciliation_facts.sql
 F5_P9 $m/20261015090000_common_account_enrollment_session_fence.sql
+F5_P10 $m/20261015120000_common_account_x_unconfirmed_snapshot_record.sql
 F3_STAGE3B $m/20261006160200_x_account_publish_authority.sql
 F3_RESV001 $x_resv/001_postona_x_reservations.sql
 F3_RESV002 $x_resv/002_postona_x_resv_api_role.sql
@@ -357,7 +381,7 @@ EOF
   after="$(fp "$d")"
   [[ "$before" == "$after" ]] || fail "a re-apply changed the finished world"
   [[ -z "$accepted" ]] || echo "  (accepted as a no-op, catalog unchanged:$accepted)"
-  echo "PASS apply/reapply: 23 files of three stacks re-applied on the finished world; the catalog is unchanged"
+  echo "PASS apply/reapply: 24 files of three stacks re-applied on the finished world; the catalog is unchanged"
   # 7e. The activation gates as shipped.
   [[ "$(val "$world" -c "select count(*) from private.account_lifecycle_release_gates where gate = 'managed_auth_delete' and state = 'blocked' and reason = 'IDENTITY_CHANGE_FENCE_MISSING'")" == 1 ]] \
     || fail "managed_auth_delete is not BLOCKED as shipped"
@@ -388,6 +412,7 @@ if want rollback; then
   step "F3 saga stop 002" "$x_ent/002_x_service_end_saga_stop_rollback.sql"
   step "F3 entitlement guard 001" "$x_ent/001_x_publish_entitlement_guard_rollback.sql"
   step "F3 reservations G5 binding 003" "$x_resv/003_postona_x_resv_g5_binding_rollback.sql"
+  step "F5 Phase 10" "$t/common_account_x_unconfirmed_snapshot_rollback.sql"
   step "F5 Phase 9" "$t/common_account_enrollment_fence_rollback.sql"
   step "F5 Phase 8" "$t/common_account_service_reconciliation_rollback.sql"
   step "F5 Phase 6" "$t/common_account_service_deletion_rollback.sql"
@@ -400,7 +425,7 @@ if want rollback; then
   # documented remnants: Phase 6 and Phase 8 keep their additive columns and the check constraints on them (data survives)
   grep -v -E '^(col|con) private\.account_lifecycle_operations[. ](provider_results|remote_unverified_ack_at|remote_unverified_ack_providers|account_lifecycle_operations_ack_shape|account_lifecycle_operations_provider_results_shape|reconciliation|account_lifecycle_operations_reconciliation_shape)' "$tree/rb_extra.txt" > "$tree/rb_unexpected.txt" || true
   if [[ -s "$tree/rb_unexpected.txt" ]]; then head -20 "$tree/rb_unexpected.txt" >&2; fail "the ladder left more than the documented additive remnants"; fi
-  echo "PASS rollback/ladder: F3 saga 002 -> entitlement 001 -> binding 003 -> F5 Phase 8 -> 6 -> 5 return the catalog to Phase 4 + F3 reservations 001/002 (documented Phase 6/8 remnants only: $(wc -l < "$tree/rb_extra.txt" | tr -d ' ') lines)"
+  echo "PASS rollback/ladder: F3 saga 002 -> entitlement 001 -> binding 003 -> F5 Phase 10 -> 9 -> 8 -> 6 -> 5 return the catalog to Phase 4 + F3 reservations 001/002 (documented Phase 6/8 remnants only: $(wc -l < "$tree/rb_extra.txt" | tr -d ' ') lines)"
 
   # (2) F5 alone rolled back while F3 and F4 stay applied (the dangerous partial rollback): what still answers, and how.
   d="$(copy rb_partial "$granted")"
@@ -417,7 +442,7 @@ if want rollback; then
   base_view="$(readback)"
   echo "  read-back at the finished world:  $base_view"
   [[ "$base_view" == true\|false\|* ]] || fail "unexpected read-back at the finished world: $base_view"
-  for r in "common_account_enrollment_fence_rollback.sql:F5 Phase 9" "common_account_service_reconciliation_rollback.sql:F5 Phase 8" "common_account_service_deletion_rollback.sql:F5 Phase 6" \
+  for r in "common_account_x_unconfirmed_snapshot_rollback.sql:F5 Phase 10" "common_account_enrollment_fence_rollback.sql:F5 Phase 9" "common_account_service_reconciliation_rollback.sql:F5 Phase 8" "common_account_service_deletion_rollback.sql:F5 Phase 6" \
            "common_account_brand_state_rollback.sql:F5 Phase 5" "common_account_core_fence_rollback.sql:F5 Phase 4"; do
     out="$(psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$t/${r%%:*}" 2>&1)" || fail "partial rollback of ${r##*:} was refused: $(sed -n 's/^.*ERROR: *//p' <<<"$out" | head -1)"
     view="$(readback)"
@@ -428,7 +453,7 @@ if want rollback; then
     [[ "$a" == true ]] || fail "F3's decision after ${r##*:}: $a"
     [[ "$b" != true ]] || fail "F4's cleanup authorization became true after ${r##*:}"
   done
-  echo "PASS rollback/partial: with F3 and F4 applied, rolling F5 back Phase 8 -> 6 -> 5 -> 4 keeps the shared fence functions F3/F4 use; F4's cleanup authorization turns into an error (fail closed), never true"
+  echo "PASS rollback/partial: with F3 and F4 applied, rolling F5 back Phase 10 -> 9 -> 8 -> 6 -> 5 -> 4 keeps the shared fence functions F3/F4 use; F4's cleanup authorization turns into an error (fail closed), never true"
 fi
 
 # ---- 8. The privilege boundary of the assembled world ---------------------------------------------------------------

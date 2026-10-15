@@ -14,12 +14,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createHandler as createCommonHandler, X_BLOCK_REASONS, xResultOf } from '../functions/account-delete/http.ts';
+import { createHandler as createCommonHandler, RPC_NAMES, X_BLOCK_REASONS, xResultOf } from '../functions/account-delete/http.ts';
+import {
+  ACK_ROUNDS,
+  xUnconfirmedAckArgs,
+  xUnconfirmedAckOutcomeOf,
+} from '../functions/account-delete/x_unconfirmed.ts';
 import { providerRegistration as emptyRegistration } from '../functions/account-delete/provider_registry.empty.ts';
 import { providerRegistration as threadsRegistration } from '../functions/account-delete/provider_registry.ts';
 import { BLOCK_REASONS } from '../functions/social-mobile-account-delete/delete_logic.ts';
 import { createHandler as createXHandler } from '../functions/social-mobile-account-delete/http.ts';
-import { xServiceEndOutcomeOf, xServiceEndRequest } from '../functions/social-mobile-account-delete/x_service_end_contract.ts';
+import {
+  X_UNCONFIRMED_ACK_RPC,
+  xServiceEndOutcomeOf,
+  xServiceEndRequest,
+  xUnconfirmedAckArgs as f3AckArgs,
+  xUnconfirmedAckOutcomeOf as f3AckOutcomeOf,
+} from '../functions/social-mobile-account-delete/x_service_end_contract.ts';
 
 const enabled = Deno.env.get('CAL_E2E') === '1';
 const GRANTED = Deno.env.get('PGDATABASE') ?? '';
@@ -84,6 +95,10 @@ type Net = {
   beforeRpc?: Record<string, () => Promise<void>>;
   /** After true: every Data API call fails (the process "died"). */
   dead: boolean;
+  /** Rewrites the saga's JSON answer before it reaches the caller (a stale / foreign / malformed answer). */
+  tamperSaga?: (body: Record<string, unknown>) => Record<string, unknown>;
+  /** The named Data API function fails (HTTP 500, nothing runs) this many more times. */
+  failRpc?: Record<string, number>;
   unrouted: string[];
   rpcCalls: string[];
   /** Messages of Data API calls that failed (a deadlock or a lock timeout inside a handler's RPC shows up here). */
@@ -133,6 +148,11 @@ function makeNet(db: string, extra: Partial<Net> = {}): { net: Net; fetch: (inpu
       if (net.dead) return Response.json({ message: 'process gone' }, { status: 500 });
       const fn = path.slice('/rest/v1/rpc/'.length);
       net.rpcCalls.push(fn);
+      if ((net.failRpc?.[fn] ?? 0) > 0) {
+        net.failRpc![fn] -= 1;
+        net.rpcErrors.push(`${fn}: injected failure`);
+        return Response.json({ message: 'injected failure' }, { status: 500 });
+      }
       const hook = net.beforeRpc?.[fn];
       if (hook) {
         delete net.beforeRpc![fn];
@@ -162,11 +182,17 @@ function makeNet(db: string, extra: Partial<Net> = {}): { net: Net; fetch: (inpu
       } catch {
         net.sagaActions.push('?');
       }
-      const response = await xHandler(new Request(input, { method: 'POST', headers, body: String(init?.body ?? '') }));
+      let response = await xHandler(new Request(input, { method: 'POST', headers, body: String(init?.body ?? '') }));
+      const isRun = net.sagaActions[net.sagaActions.length - 1] === 'delete';
+      // sagaAnswers holds what the saga REALLY answered; a tampered answer (a test stand-in) is only what the caller sees
       const copy = response.clone();
       net.sagaAnswers.push({ status: copy.status, body: await copy.json().catch(() => null) });
+      if (net.tamperSaga && isRun) {
+        const original = await response.json() as Record<string, unknown>;
+        response = Response.json(net.tamperSaga(original), { status: response.status });
+      }
       // only the run (a delete), never the read-only preview
-      if (net.afterSaga && net.sagaActions[net.sagaActions.length - 1] === 'delete') await net.afterSaga();
+      if (net.afterSaga && isRun) await net.afterSaga();
       return response;
     }
     if (path === '/auth/v1/logout') {
@@ -242,7 +268,7 @@ const authority = (db: string, account: string) =>
   sql(`select coalesce((select state from public.x_account_publish_authority where social_account_id = ${q(account)}), 'none')`, db);
 const reservationStates = async (db: string, workspace: string) =>
   (await sql(`select coalesce(string_agg(status, ',' order by position), '') from postona_x_resv.reservations where brand_id = ${q(workspace)}`, db));
-type OpView = { status: string; leased: boolean; results: Record<string, string>; ack: string[]; reconciliation: Record<string, number> } | null;
+type OpView = { status: string; leased: boolean; results: Record<string, string>; ack: string[]; reconciliation: { x_posts_unconfirmed?: number; x_unconfirmed_snapshots?: string[] } } | null;
 const operation = async (db: string, user: string): Promise<OpView> =>
   JSON.parse(await sql(`select coalesce((select jsonb_build_object('status', status, 'leased', owner_lease is not null and owner_lease_expires_at > clock_timestamp(),
       'results', provider_results, 'ack', coalesce(remote_unverified_ack_providers, '{}'::text[]), 'reconciliation', reconciliation)
@@ -284,10 +310,20 @@ async function bystanderOf(db: string, net: Net) {
 
 test('I0 the contract: F5\'s mapper equals F3\'s on every answer the saga can give', { skip: !enabled }, () => {
   assert.deepEqual([...X_BLOCK_REASONS].sort(), [...BLOCK_REASONS].sort(), 'the two lists of block reasons are the same');
+  const SNAP = 'f'.repeat(64);
   const cases: [number, unknown][] = [
-    [200, { ok: true, login_deleted: false }], [200, { ok: true, login_deleted: false, x_posts_unconfirmed: 2 }],
+    [200, { ok: true, login_deleted: false }], [200, { ok: true, login_deleted: false, x_posts_unconfirmed: 2, x_unconfirmed_snapshot: SNAP }],
     [200, { ok: true, login_deleted: true }], [200, { ok: true }], [200, { ok: true, login_deleted: false, x_posts_unconfirmed: 0 }],
     [200, { ok: true, login_deleted: false, x_posts_unconfirmed: 'x' }],
+    // the pair comes together (PR #204): a count alone, a snapshot alone, a malformed or foreign-shaped one
+    [200, { ok: true, login_deleted: false, x_posts_unconfirmed: 2 }],
+    [200, { ok: true, login_deleted: false, x_unconfirmed_snapshot: SNAP }],
+    [200, { ok: true, login_deleted: false, x_posts_unconfirmed: 2, x_unconfirmed_snapshot: SNAP.toUpperCase() }],
+    [200, { ok: true, login_deleted: false, x_posts_unconfirmed: 2, x_unconfirmed_snapshot: SNAP.slice(1) }],
+    [200, { ok: true, login_deleted: false, x_posts_unconfirmed: 2, x_unconfirmed_snapshot: 7 }],
+    [200, { ok: true, login_deleted: false, x_posts_unconfirmed: 2, x_unconfirmed_snapshot: null }],
+    [200, { ok: true, login_deleted: false, x_posts_unconfirmed: 0, x_unconfirmed_snapshot: SNAP }],
+    [200, { ok: true, login_deleted: false, x_posts_unconfirmed: 1.5, x_unconfirmed_snapshot: SNAP }],
     ...BLOCK_REASONS.map((reason): [number, unknown] => [409, { ok: false, error: `DELETION_BLOCKED_${reason}` }]),
     [409, { ok: false, error: 'DELETION_BLOCKED_SOMETHING_NEW' }],
     [409, { ok: false, error: 'DELETION_OPERATOR_REQUIRED' }], [409, { ok: false, error: 'DELETION_IN_PROGRESS' }],
@@ -304,13 +340,36 @@ test('I0 the contract: F5\'s mapper equals F3\'s on every answer the saga can gi
     const theirs = xServiceEndOutcomeOf(status, body);
     const ours = xResultOf(status, body);
     assert.equal(ours.outcome, word(theirs.status), `${status} ${JSON.stringify(body)}`);
-    if (theirs.status === 'done') assert.equal(ours.unconfirmedPosts ?? 0, theirs.unconfirmedPosts);
+    if (theirs.status === 'done') {
+      assert.equal(ours.unconfirmedPosts ?? 0, theirs.unconfirmedPosts, `count of ${JSON.stringify(body)}`);
+      assert.equal(ours.unconfirmedSnapshot ?? null, theirs.unconfirmedSnapshot, `snapshot of ${JSON.stringify(body)}`);
+    }
     if (theirs.status === 'blocked') assert.equal(ours.reason, theirs.reason);
     if (theirs.status === 'reconciliation_required') assert.equal(ours.reason, theirs.reason);
   }
   // F3's request body is what F5 sends; the route's `action: 'delete'` is part of F3's body from PR #192 on and is added
   // here for PR #189 (where F3's helper leaves it out). Both ways the same complete body results.
   assert.deepEqual({ action: 'delete', ...xServiceEndRequest() }, { action: 'delete', confirmation: 'DELETE_MY_ACCOUNT', expected_scope: 'social_only' });
+
+  // The acknowledgement: the same RPC, the same arguments, the same reading of every answer the saga can give.
+  assert.equal(RPC_NAMES.ack_x_unconfirmed, X_UNCONFIRMED_ACK_RPC);
+  const user = '00000000-0000-4000-8000-0000000000aa';
+  assert.deepEqual(xUnconfirmedAckArgs(user, SNAP), f3AckArgs(user, SNAP));
+  assert.deepEqual(Object.keys(xUnconfirmedAckArgs(user, SNAP)).sort(), ['p_snapshot', 'p_user_id'], 'never a count');
+  assert.throws(() => xUnconfirmedAckArgs(user, 'not-a-snapshot'));
+  assert.throws(() => f3AckArgs(user, 'not-a-snapshot'));
+  const acks: unknown[] = [
+    { status: 'acknowledged', replay: false, cleared: 2 }, { status: 'acknowledged', replay: true, cleared: 2 },
+    { status: 'acknowledged', replay: false }, { status: 'acknowledged', replay: false, cleared: 0 }, { status: 'acknowledged', cleared: 2 },
+    { status: 'snapshot_changed', x_posts_unconfirmed: 3, x_unconfirmed_snapshot: SNAP },
+    { status: 'snapshot_changed', x_posts_unconfirmed: 0, x_unconfirmed_snapshot: null },
+    { status: 'snapshot_changed', x_posts_unconfirmed: 3, x_unconfirmed_snapshot: null },
+    { status: 'snapshot_changed', x_posts_unconfirmed: 3, x_unconfirmed_snapshot: 'ABC' },
+    { status: 'snapshot_changed' }, { status: 'deletion_in_progress' }, { status: 'snapshot_required' },
+    { status: 'something_new' }, {}, null, 'acknowledged', [],
+  ];
+  for (const body of acks) assert.deepEqual(xUnconfirmedAckOutcomeOf(body), f3AckOutcomeOf(body), JSON.stringify(body));
+  assert.ok(ACK_ROUNDS >= 1 && ACK_ROUNDS <= 8, 'a small, fixed number of rounds');
 });
 
 test('I1 POSTONA alone: X publishing stops and X is revoked, Threads goes with the person\'s consent, nothing else moves', { skip: !enabled }, async () => {
@@ -436,7 +495,7 @@ test('I6 X revoke unknown: nothing is purged, nothing ended; the remote authoriz
   assert.equal(await entitlement(db, p.user), 'ended');
 });
 
-test('I7 X posts whose result was never known are reported and kept: on the answer, on the record, on a later read', { skip: !enabled }, async () => {
+test('I7 X posts whose result was never known are reported and kept: on the answer, on the record, on a later read; the saga is acknowledged by its snapshot', { skip: !enabled }, async () => {
   const db = GRANTED;
   const { net, handler } = setup(db);
   const p = await person(db, net, { threads: false, kabumori: true, tag: 'uncertain' });
@@ -446,20 +505,26 @@ test('I7 X posts whose result was never known are reported and kept: on the answ
   assert.equal(response.status, 200, JSON.stringify(response.body));
   assert.equal(response.body.outcome, 'ended');
   assert.equal(response.body.x_posts_unconfirmed, 1);
-  assert.deepEqual((await operation(db, p.user))?.reconciliation, { x_posts_unconfirmed: 1 });
+  // the saga named the exact set; F5 recorded that name BEFORE the acknowledgement
+  const answered = net.sagaAnswers.filter((a) => (a.body as { x_posts_unconfirmed?: number } | null)?.x_posts_unconfirmed !== undefined);
+  assert.equal(answered.length, 1);
+  const snapshot = (answered[0].body as { x_unconfirmed_snapshot: string }).x_unconfirmed_snapshot;
+  assert.match(snapshot, /^[0-9a-f]{64}$/u);
+  assert.deepEqual((await operation(db, p.user))?.reconciliation, { x_posts_unconfirmed: 1, x_unconfirmed_snapshots: [snapshot] });
   // another device / a retry that lost the answer reads the same thing; the saga has nothing left to say
   const again = await call(handler, p.user, END);
   assert.equal(again.status, 200);
   assert.equal(again.body.outcome, 'already_ended');
   assert.equal(again.body.x_posts_unconfirmed, 1);
-  // Where F3's saga keeps its own durable checkpoint (PR #192 on): F5 recorded the fact first and then acknowledged it,
-  // so the saga does not keep repeating it. With PR #189 there is no such table and nothing to acknowledge.
-  if ((await sql(`select to_regclass('public.social_mobile_account_deletion_x_unconfirmed') is not null`, db)) === 't') {
-    assert.equal(await count(db, `select count(*) from public.social_mobile_account_deletion_x_unconfirmed
-                                   where subject_sha256 = public.social_mobile_account_deletion_subject('${p.user}'::uuid)`), 0,
-      'the saga\'s checkpoint was acknowledged after the fact was on record here');
-    assert.ok(net.rpcCalls.includes('social_mobile_account_deletion_x_unconfirmed_ack'));
-  }
+  // F3's durable checkpoint: acknowledged by that snapshot after the pair was on record here (a receipt remains)
+  assert.equal(await count(db, `select count(*) from public.social_mobile_account_deletion_x_unconfirmed
+                                 where subject_sha256 = public.social_mobile_account_deletion_subject('${p.user}'::uuid)`), 0,
+    'the saga\'s checkpoint was acknowledged after the pair was on record here');
+  assert.equal(await sql(`select r.snapshot from public.social_mobile_account_deletion_x_unconfirmed_ack_receipts r
+                           where r.subject_sha256 = public.social_mobile_account_deletion_subject('${p.user}'::uuid)`, db), snapshot);
+  const order = net.rpcCalls.filter((fn) => fn === 'record_owned_service_deletion_x_unconfirmed' || fn === 'social_mobile_account_deletion_x_unconfirmed_ack');
+  assert.deepEqual(order, ['record_owned_service_deletion_x_unconfirmed', 'social_mobile_account_deletion_x_unconfirmed_ack']);
+  assert.ok(!net.rpcCalls.includes('record_owned_service_deletion_reconciliation'), 'the count-only recorder is not used for a named set');
 });
 
 test('I8 a process that dies after X was revoked and Threads removed: the lease holds others off; a takeover completes it once', { skip: !enabled }, async () => {
@@ -696,6 +761,278 @@ test('I16 (observed) a reconnection started while the saga runs: what the end do
     reconnect: (attempt as { ok: boolean } | null)?.ok, response: response.body, entitlement: await entitlement(db, p.user),
     xResult: op?.results.x, sagaState: state, accountsLeft: await accountsLeft(db, p.workspace),
   }));
+});
+
+// ======================================================================================================================
+// Phase 10 (F5): F3 PR #204's durable X unconfirmed-post checkpoint and its SNAPSHOT-bound acknowledgement, consumed by
+// F5's lifecycle. Everything below runs F5's real handler against F3's real saga handler and the real SQL of both; the
+// only stand-ins are single statements marked as such (a second writer of F3's checkpoint table, a tampered saga answer,
+// an injected Data API failure, a hook that "kills" the process). Never an X, Threads or Meta call.
+// ======================================================================================================================
+const subjectOf = (user: string) => `public.social_mobile_account_deletion_subject('${user}'::uuid)`;
+type Checkpoint = { count: number; snapshot: string | null };
+const checkpoint = async (db: string, user: string): Promise<Checkpoint> => {
+  const r = JSON.parse(await sql(`select public.social_mobile_account_deletion_x_unconfirmed_snapshot(${subjectOf(user)})`, db)) as
+    { x_posts_unconfirmed: number; x_unconfirmed_snapshot: string | null };
+  return { count: r.x_posts_unconfirmed, snapshot: r.x_unconfirmed_snapshot };
+};
+const receipts = async (db: string, user: string) =>
+  (await sql(`select coalesce(string_agg(snapshot || ':' || cleared, ',' order by snapshot), '') from public.social_mobile_account_deletion_x_unconfirmed_ack_receipts
+               where subject_sha256 = ${subjectOf(user)}`, db)).split(',').filter(Boolean);
+/** An X post whose result is not known: the reservation was claimed and its lease ran out without an answer. */
+const uncertain = (db: string, p: Person, index = 0) =>
+  sql(`update postona_x_resv.reservations set status = 'claimed', lease_token = gen_random_uuid(), lease_expires_at = now() - interval '1 minute'
+        where id = '${p.reservations[index]}'::uuid`, db);
+/** STAND-IN: a second writer of F3's checkpoint (another run of the saga found one more unknown post). */
+const addCheckpointRow = (db: string, user: string) =>
+  sql(`insert into public.social_mobile_account_deletion_x_unconfirmed (subject_sha256, reservation_id) values (${subjectOf(user)}, gen_random_uuid())`, db);
+const f3Ack = async (db: string, user: string, snapshot: string) =>
+  JSON.parse(await sql(`begin; set local role service_role; select to_jsonb(public.social_mobile_account_deletion_x_unconfirmed_ack('${user}'::uuid, ${q(snapshot)}::text)); commit;`, db).then((out) => out.split('\n').find((l) => l.startsWith('{')) ?? 'null')) as Record<string, unknown>;
+const f3AckCountOnly = async (db: string, user: string, expected: number) =>
+  JSON.parse((await sql(`begin; set local role service_role; select to_jsonb(public.social_mobile_account_deletion_x_unconfirmed_ack('${user}'::uuid, ${expected}::integer)); commit;`, db))
+    .split('\n').find((l) => l.startsWith('{')) ?? 'null') as Record<string, unknown>;
+const sagaAnswerPair = (net: Net) => {
+  const run = net.sagaAnswers.filter((a) => (a.body as { x_posts_unconfirmed?: number } | null)?.x_posts_unconfirmed !== undefined);
+  return run.map((a) => (a.body as { x_posts_unconfirmed: number; x_unconfirmed_snapshot: string }));
+};
+
+test('X1 no cross-person acceptance: a snapshot of ANOTHER person (a tampered answer) clears nothing of theirs; the person\'s own set is recorded under its own name and acknowledged', { skip: !enabled }, async () => {
+  const db = GRANTED;
+  const { net, handler } = setup(db);
+  const a = await person(db, net, { threads: false, kabumori: true, tag: 'x1a' });
+  const b = await person(db, net, { threads: false, kabumori: true, tag: 'x1b' });
+  await uncertain(db, a);
+  await uncertain(db, b);
+  // A's evidence exists at F3 (STAND-IN: written by the saga's own checkpoint function through a first run for A)
+  await sql(`insert into public.social_mobile_account_deletion_x_unconfirmed (subject_sha256, reservation_id) values (${subjectOf(a.user)}, '${a.reservations[0]}'::uuid)`, db);
+  const aSet = await checkpoint(db, a.user);
+  assert.equal(aSet.count, 1);
+  // B's end, but the saga's answer carries A's snapshot (a stale / foreign / mixed-up answer)
+  net.tamperSaga = (body) => ({ ...body, x_unconfirmed_snapshot: aSet.snapshot });
+  const response = await call(handler, b.user, END);
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  const bSet = sagaAnswerPair(net)[0];
+  assert.notEqual(bSet.x_unconfirmed_snapshot, aSet.snapshot, 'the real answer named B\'s own set');
+  assert.deepEqual(await checkpoint(db, a.user), aSet, 'A\'s evidence is untouched by B\'s end');
+  assert.deepEqual(await receipts(db, a.user), [], 'nothing of A was acknowledged');
+  assert.equal(await checkpoint(db, b.user).then((c) => c.count), 0, 'B\'s own set was cleared, by its own name');
+  assert.deepEqual((await receipts(db, b.user)).map((r) => r.split(':')[0]), [bSet.x_unconfirmed_snapshot]);
+  // F5 recorded what it was told FIRST (A's name, harmless extra), then B's real pair; both stay
+  assert.deepEqual((await operation(db, b.user))?.reconciliation, { x_posts_unconfirmed: 1, x_unconfirmed_snapshots: [aSet.snapshot, bSet.x_unconfirmed_snapshot] });
+  assert.equal(response.body.x_posts_unconfirmed, 1);
+  assert.equal(await entitlement(db, b.user), 'ended');
+  // the old count-only form (the former F5 consumer) clears NOTHING at F3, whatever the count
+  await addCheckpointRow(db, b.user);
+  assert.deepEqual(await f3AckCountOnly(db, b.user, 1), { status: 'snapshot_required' });
+  assert.equal((await checkpoint(db, b.user)).count, 1, 'the count-only call cleared nothing');
+});
+
+test('X2 ABA: a later independent set of the SAME size is never cleared by a delayed / replayed acknowledgement of the earlier one; the earlier record stays', { skip: !enabled }, async () => {
+  const db = GRANTED;
+  const { net, handler } = setup(db);
+  const p = await person(db, net, { threads: false, kabumori: true, tag: 'x2' });
+  await uncertain(db, p);
+  const first = await call(handler, p.user, END);
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  const s1 = sagaAnswerPair(net)[0].x_unconfirmed_snapshot;
+  assert.equal((await checkpoint(db, p.user)).count, 0, 'S1 acknowledged and cleared');
+  // a LATER, independent set with the same count (one more unknown post found by a later run of the saga)
+  await addCheckpointRow(db, p.user);
+  const s2 = await checkpoint(db, p.user);
+  assert.equal(s2.count, 1);
+  assert.notEqual(s2.snapshot, s1);
+  // the delayed duplicate of S1's acknowledgement: answered as already done, clears nothing
+  const replay = await f3Ack(db, p.user, s1);
+  assert.deepEqual([replay.status, replay.replay], ['acknowledged', true]);
+  assert.deepEqual(await checkpoint(db, p.user), s2, 'S2 is untouched by the replay of S1');
+  assert.deepEqual(await f3AckCountOnly(db, p.user, 1), { status: 'snapshot_required' });
+  assert.deepEqual(await checkpoint(db, p.user), s2, 'and by a count-only acknowledgement of the same size');
+  // F5's record of the earlier end is still there, unchanged
+  assert.deepEqual((await operation(db, p.user))?.reconciliation, { x_posts_unconfirmed: 1, x_unconfirmed_snapshots: [s1] });
+  // S2 is only cleared by S2's own name
+  const own = await f3Ack(db, p.user, s2.snapshot as string);
+  assert.deepEqual([own.status, own.replay, own.cleared], ['acknowledged', false, 1]);
+});
+
+test('X3 the saga\'s set changes between its answer and the acknowledgement: the NEW pair is recorded first, then acknowledged; both names stay on record', { skip: !enabled }, async () => {
+  const db = GRANTED;
+  const { net, handler } = setup(db);
+  const p = await person(db, net, { threads: false, kabumori: true, tag: 'x3' });
+  await uncertain(db, p);
+  net.beforeRpc = {
+    // STAND-IN: right before the acknowledgement, another run of the saga checkpoints one more unknown post
+    social_mobile_account_deletion_x_unconfirmed_ack: () => addCheckpointRow(db, p.user),
+  };
+  const response = await call(handler, p.user, END);
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  const s1 = sagaAnswerPair(net)[0].x_unconfirmed_snapshot;
+  const rec = (await operation(db, p.user))?.reconciliation;
+  assert.equal(rec?.x_posts_unconfirmed, 2);
+  assert.equal(rec?.x_unconfirmed_snapshots?.length, 2);
+  assert.equal(rec?.x_unconfirmed_snapshots?.[0], s1, 'the first pair was recorded before it was acknowledged');
+  assert.equal(response.body.x_posts_unconfirmed, 2);
+  assert.equal((await checkpoint(db, p.user)).count, 0, 'the changed set was acknowledged by ITS name');
+  assert.deepEqual(await receipts(db, p.user), [`${rec?.x_unconfirmed_snapshots?.[1]}:2`], 'only the new set was cleared; S1 never was (it no longer named anything)');
+  assert.deepEqual(net.rpcCalls.filter((fn) => fn === 'record_owned_service_deletion_x_unconfirmed' || fn === 'social_mobile_account_deletion_x_unconfirmed_ack'),
+    ['record_owned_service_deletion_x_unconfirmed', 'social_mobile_account_deletion_x_unconfirmed_ack',
+      'record_owned_service_deletion_x_unconfirmed', 'social_mobile_account_deletion_x_unconfirmed_ack']);
+});
+
+test('X4 the acknowledgement cannot be made: the end completes, the evidence is on record and still at the saga (over-reporting); the recorded name clears it later', { skip: !enabled }, async () => {
+  const db = GRANTED;
+  const { net, handler } = setup(db, { failRpc: { social_mobile_account_deletion_x_unconfirmed_ack: 9 } });
+  const p = await person(db, net, { threads: false, kabumori: true, tag: 'x4' });
+  await uncertain(db, p);
+  const response = await call(handler, p.user, END);
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  assert.equal(response.body.x_posts_unconfirmed, 1, 'the person is told');
+  const rec = (await operation(db, p.user))?.reconciliation;
+  assert.equal(rec?.x_posts_unconfirmed, 1);
+  assert.equal(rec?.x_unconfirmed_snapshots?.length, 1);
+  assert.deepEqual(await checkpoint(db, p.user), { count: 1, snapshot: rec?.x_unconfirmed_snapshots?.[0] }, 'the saga still holds the set');
+  assert.equal(await entitlement(db, p.user), 'ended');
+  // the name F5 recorded is the right handle: acknowledged later (by an operator job or the next end), it clears exactly that set
+  const later = await f3Ack(db, p.user, rec?.x_unconfirmed_snapshots?.[0] as string);
+  assert.deepEqual([later.status, later.cleared], ['acknowledged', 1]);
+});
+
+test('X5 the process dies between the record and the acknowledgement: nothing is lost; the takeover records the same name once and acknowledges it', { skip: !enabled }, async () => {
+  const db = GRANTED;
+  const { net, handler } = setup(db);
+  const p = await person(db, net, { threads: false, kabumori: true, tag: 'x5' });
+  await uncertain(db, p);
+  net.beforeRpc = {
+    social_mobile_account_deletion_x_unconfirmed_ack: () => { net.dead = true; return Promise.reject(new Error('process gone')); },
+  };
+  const first = await call(handler, p.user, END);
+  assert.notEqual(first.status, 200, 'a dead process cannot report a success');
+  net.dead = false;
+  const s = await checkpoint(db, p.user);
+  assert.equal(s.count, 1, 'the saga still holds the set (never acknowledged)');
+  assert.deepEqual((await operation(db, p.user))?.reconciliation, { x_posts_unconfirmed: 1, x_unconfirmed_snapshots: [s.snapshot] }, 'but it is on record here');
+  assert.equal(await entitlement(db, p.user), 'deleting');
+  await expireServiceLease(db, p.user);
+  const second = await call(handler, p.user, END);
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  assert.equal(second.body.x_posts_unconfirmed, 1);
+  assert.deepEqual((await operation(db, p.user))?.reconciliation, { x_posts_unconfirmed: 1, x_unconfirmed_snapshots: [s.snapshot] }, 'recorded once');
+  assert.equal((await checkpoint(db, p.user)).count, 0);
+  assert.deepEqual((await receipts(db, p.user)).map((r) => r.split(':')[0]), [s.snapshot]);
+  assert.equal(await entitlement(db, p.user), 'ended');
+});
+
+test('X6 a stale lease (the owner lost it between the saga\'s answer and the record): nothing is written, nothing acknowledged; the next owner records and acknowledges', { skip: !enabled }, async () => {
+  const db = GRANTED;
+  const { net, handler } = setup(db);
+  const p = await person(db, net, { threads: false, kabumori: true, tag: 'x6' });
+  await uncertain(db, p);
+  net.afterSaga = () => expireServiceLease(db, p.user).then(() => undefined);
+  const first = await call(handler, p.user, END);
+  assert.equal(first.body.error, 'DELETION_IN_PROGRESS');
+  net.afterSaga = undefined;
+  assert.deepEqual((await operation(db, p.user))?.reconciliation, {}, 'the stale owner wrote nothing');
+  assert.ok(!net.rpcCalls.includes('social_mobile_account_deletion_x_unconfirmed_ack'), 'and acknowledged nothing');
+  assert.equal((await checkpoint(db, p.user)).count, 1, 'the saga still holds the set');
+  const second = await call(handler, p.user, END);
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  assert.equal(second.body.x_posts_unconfirmed, 1);
+  assert.equal((await checkpoint(db, p.user)).count, 0);
+  assert.equal((await operation(db, p.user))?.reconciliation.x_unconfirmed_snapshots?.length, 1);
+});
+
+test('X7 the common ID is not deleted while the evidence is incomplete: the pair cannot be recorded -> the login stays, X is not "done", the saga is not told to forget; the retry deletes', { skip: !enabled }, async () => {
+  const db = GRANTED;
+  await sql(`alter table private.account_lifecycle_release_gates drop constraint if exists account_lifecycle_release_gates_blocked_only;
+             update private.account_lifecycle_release_gates set state = 'open'`, db);
+  const { net, handler } = setup(db, { failRpc: { record_owned_service_deletion_x_unconfirmed: 99 } });
+  const p = await person(db, net, { threads: false, kabumori: true, tag: 'x7' });
+  await uncertain(db, p);
+  const version = Number(await sql(`select lifecycle_version from public.common_accounts where user_id = '${p.user}'`, db));
+  const body = { action: 'delete_common_account', confirmation: 'DELETE_COMMON_ACCOUNT', expected_lifecycle_version: version };
+  const stopped = await call(handler, p.user, body);
+  assert.equal(stopped.status, 500, JSON.stringify(stopped.body));
+  assert.equal(stopped.body.error, 'FAILED');
+  assert.equal(stopped.body.x_posts_unconfirmed, 1, 'the person is told the count in this answer');
+  assert.equal(await count(db, `select count(*) from auth.users where id = '${p.user}'`), 1, 'the login is NOT deleted');
+  assert.equal((await operation(db, p.user))?.results.x, 'reconciliation_required');
+  assert.equal((await checkpoint(db, p.user)).count, 1, 'the saga was not told to forget the set');
+  assert.ok(!net.rpcCalls.includes('social_mobile_account_deletion_x_unconfirmed_ack'));
+  assert.equal(await entitlement(db, p.user), 'deleting');
+  // the recorder works again; the lease of the stopped attempt was given back, so the retry goes straight through
+  net.failRpc = {};
+  const version2 = Number(await sql(`select lifecycle_version from public.common_accounts where user_id = '${p.user}'`, db));
+  const done = await call(handler, p.user, { ...body, expected_lifecycle_version: version2 });
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(done.body.outcome, 'deleted');
+  assert.equal(done.body.x_posts_unconfirmed, 1);
+  assert.equal(await count(db, `select count(*) from auth.users where id = '${p.user}'`), 0);
+  assert.equal((await checkpoint(db, p.user)).count, 0, 'acknowledged by its snapshot before the login went');
+});
+
+const FUTURE = Deno.env.get('PGDATABASE_FUTURE') ?? '';
+test('X8 ending POSTONA alone leaves the login, Kabumori (even suspended or ended) and another app\'s entitlement exactly as they were', { skip: !enabled || !FUTURE }, async () => {
+  const db = FUTURE;   // = the granted world with the service_key list widened by one key: a future app (STAND-IN, one constraint)
+  for (const kabumoriState of ['suspended', 'ended', 'active'] as const) {
+    const { net, handler } = setup(db);
+    const p = await person(db, net, { threads: false, kabumori: true, tag: `x8${kabumoriState}` });
+    await uncertain(db, p);
+    await sql(`update public.service_entitlements set status = '${kabumoriState}', ended_at = ${kabumoriState === 'ended' ? 'now()' : 'null'}
+                where user_id = '${p.user}'::uuid and service_key = 'kabumori'`, db);
+    await sql(`insert into public.service_entitlements (user_id, service_key, status, source, activated_at)
+               values ('${p.user}'::uuid, 'future_app', 'active', 'operator', now())`, db);
+    const rows = (service: string) => sql(`select coalesce((select to_jsonb(e)::text from public.service_entitlements e
+                                            where e.user_id = '${p.user}'::uuid and e.service_key = ${q(service)}), 'none')`, db);
+    const before = { kabumori: await rows('kabumori'), future: await rows('future_app') };
+    const response = await call(handler, p.user, END);
+    assert.equal(response.status, 200, `${kabumoriState}: ${JSON.stringify(response.body)} ${JSON.stringify(net.rpcErrors)} ${JSON.stringify(net.rpcCalls)}`);
+    assert.equal(response.body.outcome, 'ended');
+    assert.equal(response.body.x_posts_unconfirmed, 1);
+    assert.equal(await entitlement(db, p.user), 'ended');
+    assert.equal(await rows('kabumori'), before.kabumori, `${kabumoriState}: Kabumori's entitlement row is byte-for-byte the same`);
+    assert.equal(await rows('future_app'), before.future, `${kabumoriState}: the other app's entitlement row is byte-for-byte the same`);
+    assert.equal(await count(db, `select count(*) from auth.users where id = '${p.user}'`), 1, 'the login stays');
+    assert.equal(await sql(`select status from public.common_accounts where user_id = '${p.user}'::uuid`, db), 'active', 'the common account stays active');
+    assert.equal(await count(db, `select count(*) from public.profiles where id = '${p.user}'`), 1, 'Kabumori data stays');
+    assert.equal(await accountsLeft(db, p.workspace), 0, 'the POSTONA workspace is purged');
+  }
+});
+
+// ---- the Phase 10 code on a database that does not have the recorder; the Phase 9 code on the Phase 10 database ----------
+const P10_ROLLED_BACK = Deno.env.get('PGDATABASE_P10_ROLLED_BACK') ?? '';
+test('R3 the Phase 10 code on a database whose Phase 10 was rolled back: an unconfirmed set stops the end before it is acknowledged; a clean end still works', { skip: !enabled || !P10_ROLLED_BACK }, async () => {
+  const db = P10_ROLLED_BACK;
+  const { net, handler } = setup(db);
+  const clean = await person(db, net, { threads: false, kabumori: true, tag: 'r3clean' });
+  const ok = await call(handler, clean.user, END);
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(await entitlement(db, clean.user), 'ended', 'nothing to record: the end does not need the recorder');
+  const p = await person(db, net, { threads: false, kabumori: true, tag: 'r3' });
+  await uncertain(db, p);
+  const stopped = await call(handler, p.user, END);
+  assert.equal(stopped.status, 500, JSON.stringify(stopped.body));
+  assert.equal(stopped.body.error, 'FAILED');
+  assert.equal(stopped.body.x_posts_unconfirmed, 1);
+  assert.equal((await checkpoint(db, p.user)).count, 1, 'the saga still holds the set: it was never told to forget it');
+  assert.ok(!net.rpcCalls.includes('social_mobile_account_deletion_x_unconfirmed_ack'));
+  assert.equal(await entitlement(db, p.user), 'deleting', 'not ended');
+  assert.equal((await operation(db, p.user))?.results.x, 'reconciliation_required');
+});
+
+test('R4 the Phase 9 code (count-only acknowledgement) on the Phase 10 database with F3 PR #204: the end completes with the count recorded; the saga clears nothing and over-reports', { skip: !enabled }, async () => {
+  const db = GRANTED;
+  const p9 = await import('../functions/account-delete-p9/http.ts');
+  const { net, fetch } = makeNet(db);
+  const handler = p9.createHandler(env, fetch) as (req: Request) => Promise<Response>;
+  const p = await person(db, net, { threads: false, kabumori: true, tag: 'r4' });
+  await uncertain(db, p);
+  const response = await call(handler, p.user, END);
+  console.log('R4 observed: ' + JSON.stringify({ status: response.status, body: response.body }));
+  // PR #204's saga answers a count AND a snapshot; the Phase 9 mapper reads the count and records it (count-only)
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  assert.equal(response.body.x_posts_unconfirmed, 1);
+  assert.deepEqual((await operation(db, p.user))?.reconciliation, { x_posts_unconfirmed: 1 }, 'the count is on record');
+  assert.equal((await checkpoint(db, p.user)).count, 1, 'the count-only acknowledgement cleared nothing: the saga keeps over-reporting (safe)');
+  assert.equal(await entitlement(db, p.user), 'ended');
 });
 
 // ======================================================================================================================
