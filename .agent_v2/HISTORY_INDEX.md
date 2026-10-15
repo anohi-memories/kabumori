@@ -467,3 +467,5 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 - source_blob: `bbcd4bf649ffc470b4c0f40a8527a434fdca1521`
 - restore: source and archive matched exact UTF-8 text and blob SHA, MANIFEST/SHA256SUMS saved
 - L5: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; PR206 Draft a84a9b6abb8c8d4706bba5f8a12e5c1aef3d3b8c
+
+- 2026-10-15 | J3 | `postona-j3-x-saga-r1-r3-focused-rereview-20261014` | V3 CHANGES_REQUIRED P2×3, PR192 / PRODUCTION_NO_GO | `.agent_v2/archive/2026-10-15-J3-postona-j3-x-saga-r1-r3-focused-rereview-20261014/` | TASK SHA256 `53a8922f81e23c404d5ef8b4cbbcfb570ef290e341b220a3aa96104e2c9359d5`, Report SHA256 `45f0a7d694625e3951be1203f3111c8916569a6bd903738be917ebea24e3674e`; exact restore verified.
