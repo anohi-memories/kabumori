@@ -85,7 +85,7 @@ grep -q X_SAGA_STOP_PRECONDITION_MISSING "$tmp/r0" || fail "R0 wrong refusal: $(
 own -f "$here/001_x_publish_entitlement_guard.sql" >/dev/null
 perl -pe 's/^commit;$/select 1\/0;\ncommit;/' "$stop_sql" > "$tmp/fail.sql"
 if own -f "$tmp/fail.sql" >/dev/null 2>&1; then fail "injected failure applied"; fi
-[[ "$(val -c "select to_regprocedure('public.social_mobile_account_deletion_stop_x(uuid,uuid)') is null and to_regclass('public.social_mobile_account_deletion_x_unconfirmed') is null")" == t ]] || fail "partial apply"
+[[ "$(val -c "select to_regprocedure('public.social_mobile_account_deletion_stop_x(uuid,uuid)') is null and to_regclass('public.social_mobile_account_deletion_x_unconfirmed') is null and to_regclass('public.social_mobile_account_deletion_x_unconfirmed_ack_receipts') is null")" == t ]] || fail "partial apply"
 own -f "$stop_sql" >/dev/null
 if own -f "$stop_sql" >"$tmp/r0" 2>&1; then fail "re-apply accepted"; fi
 grep -q X_SAGA_STOP_ALREADY_APPLIED "$tmp/r0" || fail "re-apply refused for another reason"
@@ -131,7 +131,7 @@ U6='00000000-0000-4000-8000-0000000000a6'
 acquire() { val -c "set role service_role" -c "select public.social_mobile_account_deletion_acquire('$1', 'social_only', false) ->> 'lease'" | tail -1; }
 hold_workspace() { own -c "begin" -c "select public.social_mobile_account_deletion_workspace_lock(public.social_mobile_account_deletion_workspace('$1'))" -c "select pg_sleep($2)" -c "commit" >/dev/null; }
 stop_bg() { if val -c "set role service_role" -c "select public.social_mobile_account_deletion_stop_x('$1', '$2')::text" >"$3" 2>&1; then echo ok >"$3.rc"; else echo err >"$3.rc"; fi; }
-wait_until() { local i; for i in $(seq 1 100); do [[ "$(val -c "$1")" == "$2" ]] && return 0; sleep 0.05; done; fail "R3 timed out waiting for: $1"; }
+wait_until() { local i; for i in $(seq 1 100); do [[ "$(val -c "$1")" == "$2" ]] && return 0; sleep 0.05; done; fail "timed out waiting for: $1"; }
 holder_has_lock="select (count(*) > 0)::text from pg_locks l join pg_stat_activity a on a.pid = l.pid where l.locktype = 'advisory' and l.granted and a.query like '%pg_sleep%'"
 waiting_stop="select count(*)::text from pg_stat_activity a where a.wait_event_type = 'Lock' and a.wait_event = 'advisory' and a.query like '%stop_x%'"
 authority_of() { val -c "select a.state from public.x_account_publish_authority a join public.social_accounts s on s.id = a.social_account_id where s.brand_id = public.social_mobile_account_deletion_workspace('$1')"; }
@@ -169,7 +169,65 @@ for w in r3w1 r3w2; do [[ "$(cat "$tmp/$w.rc")" == ok ]] && grep -q '"status": "
 cancelled="$(cat "$tmp/r3w1" "$tmp/r3w2" | grep -o '"reservations_cancelled": [0-9]*' | awk '{s += $2} END {print s}')"
 [[ "$cancelled" == 2 ]] || fail "R3 two workers cancelled $cancelled (expected 2 in total)"
 [[ "$(val -c "select deadlocks from pg_stat_database where datname = current_database()")" == "$deadlocks0" ]] || fail "R3 deadlock"
+# An expired lease takes no row lock: after the workspace wait it refuses at once, without queueing behind a worker
+# that holds the X account row (the early wall-clock fence; the late fence alone would wait for that worker).
+lease5c="$lease5b" # still live (the control above)
+own -c "begin" -c "select 1 from public.social_accounts where brand_id = public.social_mobile_account_deletion_workspace('$U5') for update" -c "select pg_sleep(6)" -c "commit" >/dev/null & row_holder=$!
+wait_until "select (count(*) > 0)::text from pg_stat_activity a where a.state = 'active' and a.query like 'select pg_sleep(6)%'" true
+hold_workspace "$U5" 2 & holder=$!
+wait_until "$holder_has_lock" true
+own -c "update public.social_mobile_account_deletions set lease_expires_at = clock_timestamp() + interval '1 second' where user_id = '$U5'" >/dev/null
+stop_bg "$U5" "$lease5c" "$tmp/r3e" & stopper=$!
+wait "$holder"; wait "$stopper"
+[[ "$(val -c "select (count(*) > 0)::text from pg_stat_activity a where a.state = 'active' and a.query like 'select pg_sleep(6)%'")" == true ]] || fail "R3 an expired lease queued behind the worker's row"
+[[ "$(cat "$tmp/r3e.rc")" == err ]] && grep -q SOCIAL_MOBILE_DELETION_LEASE_LOST "$tmp/r3e" || { cat "$tmp/r3e"; fail "R3 expired lease after the workspace wait"; }
+wait "$row_holder"
 echo "R3_LEASE_EXPIRED_WHILE_WAITING_REFUSED_PASS"
+
+# R3a (J3 V3 re-review): the lease runs out while stop_x waits on a ROW lock it needs AFTER the early clock check --
+# the X account row (the stop's social_accounts FOR UPDATE) or an expired claimed reservation (the sweep). stop_x
+# must answer LEASE_LOST and the WHOLE transaction must roll back: authority still enabled, planned reservations
+# untouched, no service_stop audit, the reservation still claimed, nothing checkpointed. Control: a valid lease
+# after the same row wait stops.
+U7='00000000-0000-4000-8000-0000000000a7'
+U8='00000000-0000-4000-8000-0000000000a8'
+hold_rows() { own -c "begin" -c "$2" -c "select pg_sleep($3)" -c "commit" >/dev/null; }
+holder_sleeping="select (count(*) > 0)::text from pg_stat_activity a where a.state = 'active' and a.query like 'select pg_sleep(%'"
+row_waiting_stop="select count(*)::text from pg_stat_activity a where a.wait_event_type = 'Lock' and a.wait_event in ('transactionid', 'tuple') and a.query like '%stop_x%'"
+stop_audits_of() { val -c "select count(*) from postona_x_resv.audit a where a.user_id = '$1' and a.action = 'service_stop'"; }
+unconfirmed_of() { val -c "select count(*) from public.social_mobile_account_deletion_x_unconfirmed where subject_sha256 = public.social_mobile_account_deletion_subject('$1')"; }
+expire_in_one_second() { own -c "update public.social_mobile_account_deletions set lease_expires_at = clock_timestamp() + interval '1 second' where user_id = '$1'" >/dev/null; }
+row_wait_case() { # $1 user, $2 lease, $3 locking statement, $4 out file
+  hold_rows "$1" "$3" 3 & holder=$!
+  wait_until "$holder_sleeping" true
+  expire_in_one_second "$1"
+  stop_bg "$1" "$2" "$4" & stopper=$!
+  wait_until "$row_waiting_stop" 1
+  wait "$holder"; wait "$stopper"
+}
+# (a) the X account row.
+lease7="$(acquire "$U7")"; [[ "$lease7" =~ ^[0-9a-f-]{36}$ ]] || fail "R3a acquire: $lease7"
+row_wait_case "$U7" "$lease7" "select 1 from public.social_accounts where brand_id = public.social_mobile_account_deletion_workspace('$U7') for update" "$tmp/r3a"
+[[ "$(cat "$tmp/r3a.rc")" == err ]] && grep -q SOCIAL_MOBILE_DELETION_LEASE_LOST "$tmp/r3a" || { cat "$tmp/r3a"; fail "R3a account-row wait across expiry was accepted"; }
+[[ "$(authority_of "$U7")" == enabled && "$(planned_of "$U7")" == 2 && "$(stop_audits_of "$U7")" == 0 ]] || fail "R3a account-row wait left a partial stop"
+# (b) an expired claimed reservation held by a worker (the sweep waits on it).
+own -c "update postona_x_resv.reservations set status = 'claimed', lease_token = gen_random_uuid(), lease_expires_at = now() - interval '1 second' where brand_id = public.social_mobile_account_deletion_workspace('$U8') and position = 0" >/dev/null
+lease8="$(acquire "$U8")"; [[ "$lease8" =~ ^[0-9a-f-]{36}$ ]] || fail "R3a acquire eight: $lease8"
+row_wait_case "$U8" "$lease8" "select 1 from postona_x_resv.reservations where brand_id = public.social_mobile_account_deletion_workspace('$U8') and status = 'claimed' for update" "$tmp/r3b"
+[[ "$(cat "$tmp/r3b.rc")" == err ]] && grep -q SOCIAL_MOBILE_DELETION_LEASE_LOST "$tmp/r3b" || { cat "$tmp/r3b"; fail "R3a reservation-row wait across expiry was accepted"; }
+[[ "$(val -c "select status from postona_x_resv.reservations where brand_id = public.social_mobile_account_deletion_workspace('$U8') and position = 0")" == claimed ]] || fail "R3a sweep committed under a lost lease"
+[[ "$(authority_of "$U8")" == enabled && "$(planned_of "$U8")" == 1 && "$(stop_audits_of "$U8")" == 0 && "$(unconfirmed_of "$U8")" == 0 ]] || fail "R3a reservation-row wait left a partial stop"
+# Control: a fresh valid lease after the same account-row wait stops (and the sweep/checkpoint commit together).
+lease8b="$(acquire "$U8")"; [[ "$lease8b" =~ ^[0-9a-f-]{36}$ ]] || fail "R3a re-acquire: $lease8b"
+hold_rows "$U8" "select 1 from public.social_accounts where brand_id = public.social_mobile_account_deletion_workspace('$U8') for update" 1.5 & holder=$!
+wait_until "$holder_sleeping" true
+stop_bg "$U8" "$lease8b" "$tmp/r3c2" & stopper=$!
+wait_until "$row_waiting_stop" 1
+wait "$holder"; wait "$stopper"
+[[ "$(cat "$tmp/r3c2.rc")" == ok ]] && grep -q '"status": "stopped"' "$tmp/r3c2" || { cat "$tmp/r3c2"; fail "R3a valid lease after the row wait"; }
+[[ "$(authority_of "$U8")" == revoked && "$(planned_of "$U8")" == 0 && "$(unconfirmed_of "$U8")" == 1 ]] || fail "R3a valid lease did not stop as one unit"
+[[ "$(val -c "select deadlocks from pg_stat_database where datname = current_database()")" == "$deadlocks0" ]] || fail "R3a deadlock"
+echo "R3A_ROW_WAIT_EXPIRY_ROLLS_BACK_PASS"
 
 # E1: the REAL saga TypeScript against the real SQL (MOCK_ONLY getUser / revokeX).
 if ! SAGA_OWNER_URL="postgres://$owner@127.0.0.1:$port/$db" SAGA_SUPER_URL="postgres://$super@127.0.0.1:$port/$db" \
@@ -180,14 +238,43 @@ fi
 grep -E "passed|failed" "$tmp/e1" | tail -1
 echo "E1_REAL_SAGA_END_TO_END_PASS"
 
-# RB: the rollback REFUSES while unknown-post evidence exists (R1); once it is acknowledged / exported (here: removed by
-# the owner) it removes the functions and the table; re-apply works.
-if own -f "$here/002_x_service_end_saga_stop_rollback.sql" >"$tmp/rb" 2>&1; then fail "RB dropped the unknown-post record"; fi
+# RB: the rollback REFUSES while unknown-post evidence exists (R1); a refusal changes nothing.
+rollback_sql="$here/002_x_service_end_saga_stop_rollback.sql"
+objects_present="select (to_regprocedure('public.social_mobile_account_deletion_stop_x(uuid,uuid)') is not null
+  and to_regprocedure('public.social_mobile_account_deletion_x_unconfirmed_ack(uuid,text)') is not null
+  and to_regclass('public.social_mobile_account_deletion_x_unconfirmed') is not null
+  and to_regclass('public.social_mobile_account_deletion_x_unconfirmed_ack_receipts') is not null)::text"
+if own -f "$rollback_sql" >"$tmp/rb" 2>&1; then fail "RB dropped the unknown-post record"; fi
 grep -q X_SAGA_STOP_ROLLBACK_UNCONFIRMED_PRESENT "$tmp/rb" || { cat "$tmp/rb"; fail "RB refused for another reason"; }
-[[ "$(val -c "select to_regprocedure('public.social_mobile_account_deletion_stop_x(uuid,uuid)') is not null")" == t ]] || fail "RB refusal was not atomic"
-own -c "delete from public.social_mobile_account_deletion_x_unconfirmed" >/dev/null
-own -f "$here/002_x_service_end_saga_stop_rollback.sql" >/dev/null
-[[ "$(val -c "select to_regprocedure('public.social_mobile_account_deletion_stop_x(uuid,uuid)') is null and to_regprocedure('public.social_mobile_account_deletion_x_unconfirmed_ack(uuid,integer)') is null and to_regclass('public.social_mobile_account_deletion_x_unconfirmed') is null")" == t ]] || fail "RB left an object"
+[[ "$(val -c "$objects_present")" == true ]] || fail "RB refusal was not atomic"
+own -c "delete from public.social_mobile_account_deletion_x_unconfirmed" >/dev/null # TEST STAND-IN: evidence acknowledged / exported
+
+# R1b (J3 V3 re-review): a stop_x that has WRITTEN a checkpoint but not committed while the rollback runs. The rollback
+# must wait for it (lock first) and then see what it committed: writer commits -> refused, nothing dropped, the
+# evidence kept; writer aborts -> the rollback proceeds.
+U9='00000000-0000-4000-8000-0000000000a9'
+U10='00000000-0000-4000-8000-0000000000aa'
+writer_has_written="select (count(*) > 0)::text from pg_locks l join pg_stat_activity a on a.pid = l.pid
+  where l.relation = to_regclass('public.social_mobile_account_deletion_x_unconfirmed') and l.mode = 'RowExclusiveLock' and l.granted and a.query like 'select pg_sleep(%'"
+rollback_waiting="select count(*)::text from pg_stat_activity a where a.wait_event_type = 'Lock' and a.wait_event = 'relation' and (a.query like '%lock table%' or a.query like '%drop table%')"
+writer_case() { # $1 user, $2 commit|rollback, $3 out file
+  own -c "update postona_x_resv.reservations set status = 'claimed', lease_token = gen_random_uuid(), lease_expires_at = now() - interval '1 second' where brand_id = public.social_mobile_account_deletion_workspace('$1') and position = 0" >/dev/null
+  local lease; lease="$(acquire "$1")"; [[ "$lease" =~ ^[0-9a-f-]{36}$ ]] || fail "R1b acquire: $lease"
+  own -c "begin" -c "set local role service_role" -c "select public.social_mobile_account_deletion_stop_x('$1', '$lease') is not null" \
+      -c "reset role" -c "select pg_sleep(2)" -c "$2" >/dev/null & writer=$!
+  wait_until "$writer_has_written" true
+  if own -f "$rollback_sql" >"$3" 2>&1; then echo ok >"$3.rc"; else echo err >"$3.rc"; fi & roller=$!
+  wait_until "$rollback_waiting" 1
+  wait "$writer"; wait "$roller"
+}
+writer_case "$U9" commit "$tmp/r1b"
+[[ "$(cat "$tmp/r1b.rc")" == err ]] && grep -q X_SAGA_STOP_ROLLBACK_UNCONFIRMED_PRESENT "$tmp/r1b" || { cat "$tmp/r1b"; fail "R1b rollback dropped evidence a concurrent writer committed"; }
+[[ "$(val -c "$objects_present")" == true && "$(unconfirmed_of "$U9")" == 1 ]] || fail "R1b refusal changed tables / functions / evidence"
+own -c "delete from public.social_mobile_account_deletion_x_unconfirmed" >/dev/null # TEST STAND-IN: acknowledged / exported
+writer_case "$U10" rollback "$tmp/r1b2"
+[[ "$(cat "$tmp/r1b2.rc")" == ok ]] || { cat "$tmp/r1b2"; fail "R1b rollback after an aborted writer"; }
+[[ "$(val -c "select (to_regprocedure('public.social_mobile_account_deletion_stop_x(uuid,uuid)') is null and to_regprocedure('public.social_mobile_account_deletion_x_unconfirmed_ack(uuid,integer)') is null and to_regprocedure('public.social_mobile_account_deletion_x_unconfirmed_ack(uuid,text)') is null and to_regprocedure('public.social_mobile_account_deletion_x_unconfirmed_snapshot(text)') is null and to_regclass('public.social_mobile_account_deletion_x_unconfirmed') is null and to_regclass('public.social_mobile_account_deletion_x_unconfirmed_ack_receipts') is null)::text")" == true ]] || fail "RB left an object"
+echo "R1B_ROLLBACK_WAITS_FOR_WRITERS_PASS"
 own -f "$stop_sql" >/dev/null
 echo "RB_ROLLBACK_REAPPLY_PASS"
 echo "X_SAGA_STOP_ALL_PASS"

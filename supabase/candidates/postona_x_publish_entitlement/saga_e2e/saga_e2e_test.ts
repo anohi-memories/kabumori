@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { Client } from "jsr:@db/postgres@0.19.5";
 import { CONFIRMATION, handleAccountDeletion, type DeletionDeps, type RpcName, type RpcResult } from "../../../functions/social-mobile-account-delete/delete_logic.ts";
 import { sha256Hex } from "../../../functions/social-mobile-account-delete/http.ts";
-import { xServiceEndOutcomeOf, xServiceEndRequest } from "../../../functions/social-mobile-account-delete/x_service_end_contract.ts";
+import { xServiceEndOutcomeOf, xServiceEndRequest, xUnconfirmedAckArgs, xUnconfirmedAckOutcomeOf } from "../../../functions/social-mobile-account-delete/x_service_end_contract.ts";
 
 const OWNER_URL = Deno.env.get("SAGA_OWNER_URL")!;
 const SUPER_URL = Deno.env.get("SAGA_SUPER_URL")!;
@@ -107,6 +107,25 @@ async function person(user: string, prefix: string): Promise<{ ws: string; accou
   return { ws, account };
 }
 const authority = (account: string) => scalar("select state from public.x_account_publish_authority where social_account_id = $1", [account]);
+/** The current durable snapshot of a person's unknown-post evidence (read as the owner; null when none). */
+const snapshotOf = async (user: string) => (await scalar(
+  "select public.social_mobile_account_deletion_x_unconfirmed_snapshot(public.social_mobile_account_deletion_subject($1::uuid)) ->> 'x_unconfirmed_snapshot'", [user])) ?? null;
+/** The ACK RPC as PostgREST would run it (service_role by default): a number = the former count-only call. */
+const ackRpc = (user: string, arg: number | string, role = "service_role") => withOwner(async (c) => {
+  await c.queryArray("BEGIN");
+  try {
+    await c.queryArray(`SET LOCAL ROLE ${role}`);
+    const text = typeof arg === "number"
+      ? "select public.social_mobile_account_deletion_x_unconfirmed_ack(p_user_id => $1::uuid, p_expected => $2::integer)::text"
+      : "select public.social_mobile_account_deletion_x_unconfirmed_ack(p_user_id => $1::uuid, p_snapshot => $2::text)::text";
+    const r = await c.queryArray<[string]>({ text, args: [user, arg] });
+    await c.queryArray("COMMIT");
+    return JSON.parse(r.rows[0][0]) as Record<string, unknown>;
+  } catch (error) {
+    await c.queryArray("ROLLBACK");
+    return { error: (error as { fields?: { message?: string } }).fields?.message ?? "" } as Record<string, unknown>;
+  }
+});
 
 const BYSTANDER = "00000000-0000-4000-8000-0000000000b9";
 let bystander: { ws: string; account: string };
@@ -123,7 +142,7 @@ Deno.test("POSTONA end (social_only): stop -> revoke at X -> pre-purge cleanup -
   const { deps, revoked } = depsFor(user);
   const answer = await run(user, deps);
   assert.deepEqual(answer, { status: 200, body: { ok: true, login_deleted: false } });
-  assert.deepEqual(xServiceEndOutcomeOf(answer.status, answer.body), { status: "done", unconfirmedPosts: 0 });
+  assert.deepEqual(xServiceEndOutcomeOf(answer.status, answer.body), { status: "done", unconfirmedPosts: 0, unconfirmedSnapshot: null });
   assert.deepEqual(revoked, ["refresh_token:fake_happy_REFRESH", "access_token:fake_happy_ACCESS"], "X revoked exactly once each");
   assert.equal(await scalar("select count(*)::int from public.social_accounts where brand_id = $1", [ws]), 0);
   assert.equal(await authority(account), undefined, "authority row removed with the workspace");
@@ -149,8 +168,10 @@ Deno.test("a reservation in flight blocks with a TYPED reason before any X call;
   // The worker's lease runs out without a result: the next attempt fences it to 'uncertain' and reports it.
   await owner("update postona_x_resv.reservations set lease_expires_at = now() - interval '1 second' where brand_id = $1 and status = 'claimed'", [ws]);
   const done = await run(user, deps);
-  assert.deepEqual(done, { status: 200, body: { ok: true, login_deleted: false, x_posts_unconfirmed: 1 } });
-  assert.deepEqual(xServiceEndOutcomeOf(done.status, done.body), { status: "done", unconfirmedPosts: 1 });
+  const snapshot = await snapshotOf(user);
+  assert.match(String(snapshot), /^[0-9a-f]{64}$/u);
+  assert.deepEqual(done, { status: 200, body: { ok: true, login_deleted: false, x_posts_unconfirmed: 1, x_unconfirmed_snapshot: snapshot } });
+  assert.deepEqual(xServiceEndOutcomeOf(done.status, done.body), { status: "done", unconfirmedPosts: 1, unconfirmedSnapshot: snapshot });
 });
 
 Deno.test("X does not confirm the revoke: reconciliation_required, never done; publishing already stopped; a retry ends it", async () => {
@@ -246,11 +267,12 @@ Deno.test("R1: expired in-flight -> uncertain -> purge COMMIT -> finalize fails 
   const lease = await rpc("acquire", { p_expected_scope: "social_only", p_apple_required: false, p_user_id: user });
   assert.ok(lease.ok);
   const leaseArgs = { p_lease: (lease.data as { lease: string }).lease, p_user_id: user };
-  assert.deepEqual(await rpc("stop_x", leaseArgs), { ok: true, data: { status: "not_applicable", state: "purged", x_posts_unconfirmed: 1, reconciliation_required: true } });
+  const snapshot = await snapshotOf(user);
+  assert.deepEqual(await rpc("stop_x", leaseArgs), { ok: true, data: { status: "not_applicable", state: "purged", x_posts_unconfirmed: 1, x_unconfirmed_snapshot: snapshot, reconciliation_required: true } });
   assert.ok((await rpc("release", leaseArgs)).ok);
   const retry = await run(user, plain);
-  assert.deepEqual(retry, { status: 200, body: { ok: true, login_deleted: false, x_posts_unconfirmed: 1 } });
-  assert.deepEqual(xServiceEndOutcomeOf(retry.status, retry.body), { status: "done", unconfirmedPosts: 1 });
+  assert.deepEqual(retry, { status: 200, body: { ok: true, login_deleted: false, x_posts_unconfirmed: 1, x_unconfirmed_snapshot: snapshot } });
+  assert.deepEqual(xServiceEndOutcomeOf(retry.status, retry.body), { status: "done", unconfirmedPosts: 1, unconfirmedSnapshot: snapshot });
   assert.equal(revoked.length, 2, "X is never revoked twice");
   assert.equal(await durableRows(user), 1, "the unknown post is checkpointed durably (until acknowledged)");
 });
@@ -263,29 +285,69 @@ Deno.test("R1: a crash after the purge (lease kept) -> in_progress -> lease take
   assert.deepEqual(await run(user, plain), { status: 409, body: { ok: false, error: "DELETION_IN_PROGRESS" } }, "the dead attempt still holds its lease");
   await owner("update public.social_mobile_account_deletions set lease_expires_at = now() - interval '1 second' where user_id = $1::uuid", [user]);
   const takeover = await run(user, plain);
-  assert.deepEqual(takeover, { status: 200, body: { ok: true, login_deleted: false, x_posts_unconfirmed: 1 } });
+  const snapshot = await snapshotOf(user);
+  assert.deepEqual(takeover, { status: 200, body: { ok: true, login_deleted: false, x_posts_unconfirmed: 1, x_unconfirmed_snapshot: snapshot } });
   assert.equal(revoked.length, 2, "X is never revoked twice");
   // A whole new run after the finished deletion (the tombstone is gone) still reports it.
-  assert.deepEqual(await run(user, plain), { status: 200, body: { ok: true, login_deleted: false, x_posts_unconfirmed: 1 } });
+  assert.deepEqual(await run(user, plain), { status: 200, body: { ok: true, login_deleted: false, x_posts_unconfirmed: 1, x_unconfirmed_snapshot: snapshot } });
   // The record holds no raw user id: only the subject hash and the random reservation id.
   assert.equal(await scalar("select count(*)::int from public.social_mobile_account_deletion_x_unconfirmed where subject_sha256 = $1", [await sha256Hex(user)]), 1);
-  // Acknowledgement: service_role only, compare-and-clear.
-  const ack = async (expected: number, role = "service_role") => await withOwner(async (c) => {
-    await c.queryArray("BEGIN");
-    try {
-      await c.queryArray(`SET LOCAL ROLE ${role}`);
-      const r = await c.queryArray<[string]>({ text: "select public.social_mobile_account_deletion_x_unconfirmed_ack($1::uuid, $2)::text", args: [user, expected] });
-      await c.queryArray("COMMIT");
-      return JSON.parse(r.rows[0][0]);
-    } catch (error) {
-      await c.queryArray("ROLLBACK");
-      return { error: (error as { fields?: { message?: string } }).fields?.message ?? "" };
-    }
-  });
-  assert.match((await ack(1, "authenticated")).error, /permission denied/u);
-  assert.deepEqual(await ack(2), { status: "count_changed", x_posts_unconfirmed: 1 });
-  assert.deepEqual(await ack(1), { status: "acknowledged", cleared: 1 });
+  // Acknowledgement: service_role only, bound to the exact snapshot.
+  assert.match(String((await ackRpc(user, String(snapshot), "authenticated")).error), /permission denied/u);
+  assert.deepEqual(await ackRpc(user, 1), { status: "snapshot_required" }, "a bare count never clears");
+  assert.deepEqual(await ackRpc(user, String(snapshot)), { status: "acknowledged", replay: false, cleared: 1 });
   assert.equal(await durableRows(user), 0);
   assert.deepEqual(await run(user, plain), { status: 200, body: { ok: true, login_deleted: false } });
   assert.equal(await durableRows(BYSTANDER), 0, "another person has no record");
+});
+
+// ---------------------------------------------------------------------------------------------------
+// R1a (J3 V3 re-review): two REAL service cycles of one person leave two DIFFERENT evidence sets of the SAME size.
+// ---------------------------------------------------------------------------------------------------
+Deno.test("R1a (J3 reproduction): a count-only ACK (what F5 PR193 sends) never clears; a stale one cannot remove later evidence", async () => {
+  const user = "00000000-0000-4000-8000-0000000000b8";
+  const { deps } = depsFor(user);
+  await inFlightExpired(user, "abaone");
+  const first = await run(user, deps);
+  assert.equal(first.status, 200);
+  assert.equal((first.body as Record<string, unknown>).x_posts_unconfirmed, 1);
+  await ackRpc(user, 1); // caller B acknowledges by count
+  await inFlightExpired(user, "abatwo"); // the person reconnects; another post ends unknown
+  const second = await run(user, deps);
+  assert.equal(second.status, 200);
+  await ackRpc(user, 1); // caller A's delayed / retried count-only ACK of the FIRST cycle
+  const later = await run(user, deps);
+  assert.ok(Number((later.body as Record<string, unknown>).x_posts_unconfirmed) >= 1, `the second cycle's evidence was cleared by a stale ACK: ${JSON.stringify(later.body)}`);
+});
+
+Deno.test("R1a: the snapshot ACK clears exactly the set it names; a replayed or stale snapshot never clears a later same-size set", async () => {
+  const user = "00000000-0000-4000-8000-0000000000ba";
+  const { deps, revoked } = depsFor(user);
+  await inFlightExpired(user, "snapone");
+  const first = await run(user, deps);
+  const s1 = String((first.body as Record<string, unknown>).x_unconfirmed_snapshot);
+  assert.deepEqual(first.body, { ok: true, login_deleted: false, x_posts_unconfirmed: 1, x_unconfirmed_snapshot: s1 });
+  // Caller B (who recorded count + snapshot) acknowledges; a replay is answered from the receipt, clearing nothing.
+  const acked = await ackRpc(user, xUnconfirmedAckArgs(user, s1).p_snapshot);
+  assert.deepEqual(xUnconfirmedAckOutcomeOf(acked), { status: "acknowledged", cleared: 1, replay: false });
+  assert.deepEqual(xUnconfirmedAckOutcomeOf(await ackRpc(user, s1)), { status: "acknowledged", cleared: 1, replay: true });
+  assert.equal(await durableRows(user), 0);
+  // A second real cycle: one new unknown post -- the same COUNT, a different set.
+  await inFlightExpired(user, "snaptwo");
+  const second = await run(user, deps);
+  const s2 = String((second.body as Record<string, unknown>).x_unconfirmed_snapshot);
+  assert.deepEqual(second.body, { ok: true, login_deleted: false, x_posts_unconfirmed: 1, x_unconfirmed_snapshot: s2 });
+  assert.notEqual(s2, s1);
+  // Caller A's stale ACK of the first set: answered as that old receipt, the new set untouched.
+  assert.deepEqual(await ackRpc(user, s1), { status: "acknowledged", replay: true, cleared: 1 });
+  assert.deepEqual(await ackRpc(user, 1), { status: "snapshot_required" });
+  assert.equal(await durableRows(user), 1, "the second set is still there");
+  // A snapshot nobody saw: refused, the current pair is returned to be RECORDED before any new ACK.
+  const unknown = await ackRpc(user, "f".repeat(64));
+  assert.deepEqual(xUnconfirmedAckOutcomeOf(unknown), { status: "snapshot_changed", count: 1, snapshot: s2 });
+  assert.deepEqual(await run(user, deps), { status: 200, body: { ok: true, login_deleted: false, x_posts_unconfirmed: 1, x_unconfirmed_snapshot: s2 } });
+  // Only the snapshot of the second set clears it.
+  assert.deepEqual(await ackRpc(user, s2), { status: "acknowledged", replay: false, cleared: 1 });
+  assert.deepEqual(await run(user, deps), { status: 200, body: { ok: true, login_deleted: false } });
+  assert.equal(revoked.length, 4, "each cycle revoked its own X tokens once");
 });

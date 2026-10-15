@@ -18,7 +18,18 @@
 //                               (reconciliation needed; the person may have to check X). The count is DURABLE
 //                               (checkpointed before the purge, keyed by the subject hash): a retry after a
 //                               purge / finalize failure or a lease takeover still reports it, until the
-//                               caller acknowledges it (social_mobile_account_deletion_x_unconfirmed_ack).
+//                               caller acknowledges it. unconfirmedSnapshot names that exact evidence set.
+//
+// Acknowledging the unknown X posts (J3 V3 R1a; service_role RPC, after the caller RECORDED count + snapshot in its
+// own durable state):
+//   POST /rest/v1/rpc/social_mobile_account_deletion_x_unconfirmed_ack  { p_user_id, p_snapshot }  (xUnconfirmedAckArgs)
+//   xUnconfirmedAckOutcomeOf(body):
+//     acknowledged{cleared, replay} -> that exact set is cleared (replay = it already was; nothing cleared again)
+//     snapshot_changed{count, snapshot} -> the set is not the one recorded: nothing cleared. Record the NEW pair first,
+//                                     then acknowledge THAT snapshot (never blindly the one this answer carries)
+//     deletion_in_progress          -> a deletion of this person is running: nothing cleared; ack after it ends
+//     snapshot_required             -> the former count-only call ({ p_user_id, p_expected }): it clears NOTHING
+//     failed                        -> anything else: nothing is known to be cleared; keep over-reporting
 //   blocked + reason         -> typed and retryable unless noted: POSTING_IN_PROGRESS (X publishing is already
 //                               stopped; retry when it settles), NON_X_ACCOUNT_PRESENT (remove the other providers
 //                               first), SHARED_WORKSPACE / OWNS_OTHER_WORKSPACE / ADMIN_ACCOUNT /
@@ -32,7 +43,7 @@
 //   auth_required            -> the person's token was refused / not recent enough
 //   login_deleted            -> must never happen in scope social_only: treat as a verification failure
 //   failed                   -> anything else (unknown body, 5xx)
-import { BLOCK_REASONS, type BlockReason } from './delete_logic.ts';
+import { BLOCK_REASONS, type BlockReason, SNAPSHOT_PATTERN } from './delete_logic.ts';
 
 export const X_SAGA_FUNCTION = 'social-mobile-account-delete';
 export const X_SAGA_SCOPE = 'social_only' as const;
@@ -43,7 +54,7 @@ export type XServiceEndPurpose = 'postona_service_end' | 'common_account_deletio
 export type XServiceEndRequest = { action: 'delete'; confirmation: 'DELETE_MY_ACCOUNT'; expected_scope: typeof X_SAGA_SCOPE };
 
 export type XServiceEndOutcome =
-  | { status: 'done'; unconfirmedPosts: number }
+  | { status: 'done'; unconfirmedPosts: number; unconfirmedSnapshot: string | null }
   | { status: 'blocked'; reason: BlockReason; retryable: boolean }
   | { status: 'operator_required' }
   | { status: 'reconciliation_required'; reason: 'X_REVOKE_FAILED' | 'CREDENTIALS_CHANGED' | 'FINALIZE_FAILED' }
@@ -65,8 +76,11 @@ export function xServiceEndOutcomeOf(status: number, body: unknown): XServiceEnd
     if (data.login_deleted === true) return { status: 'login_deleted' };
     if (data.login_deleted !== false) return { status: 'failed' };
     const unconfirmed = data.x_posts_unconfirmed;
-    if (unconfirmed !== undefined && !(typeof unconfirmed === 'number' && Number.isInteger(unconfirmed) && unconfirmed > 0)) return { status: 'failed' };
-    return { status: 'done', unconfirmedPosts: typeof unconfirmed === 'number' ? unconfirmed : 0 };
+    const snapshot = data.x_unconfirmed_snapshot;
+    if (unconfirmed === undefined && snapshot === undefined) return { status: 'done', unconfirmedPosts: 0, unconfirmedSnapshot: null };
+    if (!(typeof unconfirmed === 'number' && Number.isInteger(unconfirmed) && unconfirmed > 0)) return { status: 'failed' };
+    if (typeof snapshot !== 'string' || !SNAPSHOT_PATTERN.test(snapshot)) return { status: 'failed' };
+    return { status: 'done', unconfirmedPosts: unconfirmed, unconfirmedSnapshot: snapshot };
   }
   const error = typeof data.error === 'string' ? data.error : '';
   if (error.startsWith('DELETION_BLOCKED_')) {
@@ -84,6 +98,42 @@ export function xServiceEndOutcomeOf(status: number, body: unknown): XServiceEnd
     case 'SCOPE_REQUIRED': return { status: 'scope_refused' };
     case 'AUTH_REQUIRED':
     case 'REAUTH_REQUIRED': return { status: 'auth_required' };
+    default: return { status: 'failed' };
+  }
+}
+
+export const X_UNCONFIRMED_ACK_RPC = 'social_mobile_account_deletion_x_unconfirmed_ack';
+
+/** The ACK arguments: the person and the exact snapshot the caller recorded. Never a bare count. */
+export function xUnconfirmedAckArgs(userId: string, snapshot: string): { p_user_id: string; p_snapshot: string } {
+  if (!SNAPSHOT_PATTERN.test(snapshot)) throw new Error('X_UNCONFIRMED_SNAPSHOT_INVALID');
+  return { p_user_id: userId, p_snapshot: snapshot };
+}
+
+export type XUnconfirmedAckOutcome =
+  | { status: 'acknowledged'; cleared: number; replay: boolean }
+  | { status: 'snapshot_changed'; count: number; snapshot: string | null }
+  | { status: 'deletion_in_progress' }
+  | { status: 'snapshot_required' }
+  | { status: 'failed' };
+
+export function xUnconfirmedAckOutcomeOf(body: unknown): XUnconfirmedAckOutcome {
+  const data = typeof body === 'object' && body !== null && !Array.isArray(body) ? body as Record<string, unknown> : {};
+  const count = (value: unknown) => (typeof value === 'number' && Number.isInteger(value) ? value : null);
+  switch (data.status) {
+    case 'acknowledged': {
+      const cleared = count(data.cleared);
+      return cleared !== null && cleared > 0 && typeof data.replay === 'boolean' ? { status: 'acknowledged', cleared, replay: data.replay } : { status: 'failed' };
+    }
+    case 'snapshot_changed': {
+      const current = count(data.x_posts_unconfirmed);
+      const snapshot = data.x_unconfirmed_snapshot;
+      if (current === 0 && snapshot === null) return { status: 'snapshot_changed', count: 0, snapshot: null };
+      return current !== null && current > 0 && typeof snapshot === 'string' && SNAPSHOT_PATTERN.test(snapshot)
+        ? { status: 'snapshot_changed', count: current, snapshot } : { status: 'failed' };
+    }
+    case 'deletion_in_progress': return { status: 'deletion_in_progress' };
+    case 'snapshot_required': return { status: 'snapshot_required' };
     default: return { status: 'failed' };
   }
 }

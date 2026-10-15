@@ -12,6 +12,9 @@ const fresh = jwt({ sub: USER, amr: [{ method: 'oauth', timestamp: NOW - 3600 },
 
 type Account = { id: string; revoke_required: boolean; access_token: string | null; refresh_token: string | null };
 
+const SA = 'a'.repeat(64);
+const SB = 'b'.repeat(64);
+
 /** Minimal fake of the DB state machine (the real one is proven in supabase/tests). */
 function fakeDb(options: { scope?: 'social_only' | 'social_and_login'; accounts?: Account[]; blocked?: string; operatorAtCredentials?: boolean; purgeError?: string | null; finalizeLoginDeleted?: boolean;
   /** The X stop step's answers, in order (default: stopped). */ stopX?: Record<string, unknown>[]; nonX?: number;
@@ -41,10 +44,10 @@ function fakeDb(options: { scope?: 'social_only' | 'social_and_login'; accounts?
         if (tombstone && tombstone.lease === args.p_lease) tombstone.lease = null;
         return { ok: true, data: null };
       case 'x_precheck':
-        return { ok: true, data: { non_x_accounts: options.nonX ?? 0, x_posts_unconfirmed: options.unconfirmed ?? 0 } };
+        return { ok: true, data: { non_x_accounts: options.nonX ?? 0, x_posts_unconfirmed: options.unconfirmed ?? 0, x_unconfirmed_snapshot: (options.unconfirmed ?? 0) > 0 ? SA : null } };
       case 'stop_x': {
         const lost = leaseLost(args); if (lost) return lost;
-        return { ok: true, data: options.stopX?.shift() ?? { status: 'stopped', reservations_uncertain: 0, x_posts_unconfirmed: 0 } };
+        return { ok: true, data: options.stopX?.shift() ?? { status: 'stopped', reservations_uncertain: 0, x_posts_unconfirmed: 0, x_unconfirmed_snapshot: null } };
       }
       case 'credentials': {
         const lost = leaseLost(args); if (lost) return lost;
@@ -256,10 +259,13 @@ test('F3 stop: a post in flight or a non-X account blocks with a TYPED reason be
 });
 
 test('F3 stop: lease lost, an RPC failure or an unknown answer is never a success and touches nothing external', async () => {
-  const cases: [Record<string, unknown> | null, number, string][] = [[null, 500, 'FAILED'], [{ status: 'stopped_maybe', x_posts_unconfirmed: 0 }, 500, 'FAILED'],
+  const cases: [Record<string, unknown> | null, number, string][] = [[null, 500, 'FAILED'], [{ status: 'stopped_maybe', x_posts_unconfirmed: 0, x_unconfirmed_snapshot: null }, 500, 'FAILED'],
     // R1: an answer without a trustworthy DURABLE count is never taken as a stop.
     [{ status: 'stopped', reservations_uncertain: 0 }, 500, 'FAILED'], [{ status: 'not_applicable' }, 500, 'FAILED'],
-    [{ status: 'stopped', x_posts_unconfirmed: -1 }, 500, 'FAILED'], [{ status: 'stopped', x_posts_unconfirmed: '1' }, 500, 'FAILED']];
+    [{ status: 'stopped', x_posts_unconfirmed: -1, x_unconfirmed_snapshot: null }, 500, 'FAILED'], [{ status: 'stopped', x_posts_unconfirmed: '1', x_unconfirmed_snapshot: SA }, 500, 'FAILED'],
+    // R1a: the count and its snapshot must agree (a count without the evidence it names is not trusted).
+    [{ status: 'stopped', x_posts_unconfirmed: 0 }, 500, 'FAILED'], [{ status: 'stopped', x_posts_unconfirmed: 1, x_unconfirmed_snapshot: null }, 500, 'FAILED'],
+    [{ status: 'stopped', x_posts_unconfirmed: 1, x_unconfirmed_snapshot: 'abc' }, 500, 'FAILED'], [{ status: 'not_applicable', x_posts_unconfirmed: 0, x_unconfirmed_snapshot: SA }, 500, 'FAILED']];
   for (const [answer, status, error] of cases) {
     const db = fakeDb();
     const failing = (name: string, args: Record<string, unknown>): Promise<RpcResult> => {
@@ -279,7 +285,7 @@ test('F3 stop: lease lost, an RPC failure or an unknown answer is never a succes
 });
 
 test('F3 stop: blocked again right before the purge (X tokens already revoked) -> no purge; the retry resumes and ends', async () => {
-  const db = fakeDb({ stopX: [{ status: 'stopped', reservations_uncertain: 0, x_posts_unconfirmed: 0 }, { status: 'blocked', reason: 'POSTING_IN_PROGRESS' }] });
+  const db = fakeDb({ stopX: [{ status: 'stopped', reservations_uncertain: 0, x_posts_unconfirmed: 0, x_unconfirmed_snapshot: null }, { status: 'blocked', reason: 'POSTING_IN_PROGRESS' }] });
   const { d, external } = deps(db);
   assert.deepEqual(await handleAccountDeletion(del(), d), { status: 409, body: { ok: false, error: 'DELETION_BLOCKED_POSTING_IN_PROGRESS' } });
   assert.ok(!db.calls.includes('purge'), 'nothing purged while a post is in flight');
@@ -291,20 +297,21 @@ test('F3 stop: blocked again right before the purge (X tokens already revoked) -
 });
 
 test('F3 stop: an X post whose result is unknown is reported with the success, never hidden', async () => {
-  const db = fakeDb({ stopX: [{ status: 'stopped', reservations_uncertain: 1, x_posts_unconfirmed: 1 }, { status: 'stopped', reservations_uncertain: 1, x_posts_unconfirmed: 1 }] });
+  const db = fakeDb({ stopX: [{ status: 'stopped', reservations_uncertain: 1, x_posts_unconfirmed: 1, x_unconfirmed_snapshot: SA }, { status: 'stopped', reservations_uncertain: 1, x_posts_unconfirmed: 1, x_unconfirmed_snapshot: SA }] });
   const { d } = deps(db);
-  assert.deepEqual(await handleAccountDeletion(del(), d), { status: 200, body: { ok: true, login_deleted: true, x_posts_unconfirmed: 1 } });
+  assert.deepEqual(await handleAccountDeletion(del(), d), { status: 200, body: { ok: true, login_deleted: true, x_posts_unconfirmed: 1, x_unconfirmed_snapshot: SA } });
 });
 
 test('R1: the count comes from the DURABLE checkpoint -- a resumed purged run (stop not_applicable) or a precheck still reports it', async () => {
-  const resumed = fakeDb({ stopX: [{ status: 'not_applicable', state: 'purged', x_posts_unconfirmed: 2 }, { status: 'not_applicable', state: 'purged', x_posts_unconfirmed: 2 }] });
-  assert.deepEqual(await handleAccountDeletion(del(), deps(resumed).d), { status: 200, body: { ok: true, login_deleted: true, x_posts_unconfirmed: 2 } });
+  const resumed = fakeDb({ stopX: [{ status: 'not_applicable', state: 'purged', x_posts_unconfirmed: 2, x_unconfirmed_snapshot: SB }, { status: 'not_applicable', state: 'purged', x_posts_unconfirmed: 2, x_unconfirmed_snapshot: SB }] });
+  assert.deepEqual(await handleAccountDeletion(del(), deps(resumed).d), { status: 200, body: { ok: true, login_deleted: true, x_posts_unconfirmed: 2, x_unconfirmed_snapshot: SB } });
   // The current workspace has nothing uncertain any more (already purged), the durable record still has it.
-  const after = fakeDb({ unconfirmed: 3, stopX: [{ status: 'stopped', reservations_uncertain: 0, x_posts_unconfirmed: 3 }, { status: 'stopped', reservations_uncertain: 0, x_posts_unconfirmed: 3 }] });
-  assert.deepEqual(await handleAccountDeletion(del(), deps(after).d), { status: 200, body: { ok: true, login_deleted: true, x_posts_unconfirmed: 3 } });
-  // The precheck alone (read before acquire) is enough: a later stop answer never lowers it.
-  const precheckOnly = fakeDb({ unconfirmed: 1 });
-  assert.deepEqual(await handleAccountDeletion(del(), deps(precheckOnly).d), { status: 200, body: { ok: true, login_deleted: true, x_posts_unconfirmed: 1 } });
+  const after = fakeDb({ unconfirmed: 3, stopX: [{ status: 'stopped', reservations_uncertain: 0, x_posts_unconfirmed: 3, x_unconfirmed_snapshot: SA }, { status: 'stopped', reservations_uncertain: 0, x_posts_unconfirmed: 3, x_unconfirmed_snapshot: SA }] });
+  assert.deepEqual(await handleAccountDeletion(del(), deps(after).d), { status: 200, body: { ok: true, login_deleted: true, x_posts_unconfirmed: 3, x_unconfirmed_snapshot: SA } });
+  // R1a: the answer under the lease is the whole, consistent pair (the set may have been acknowledged and grown again
+  // between the precheck and the acquire): the reported count and snapshot are always the latest pair, never mixed.
+  const changed = fakeDb({ unconfirmed: 1, stopX: [{ status: 'stopped', reservations_uncertain: 1, x_posts_unconfirmed: 1, x_unconfirmed_snapshot: SB }, { status: 'stopped', reservations_uncertain: 1, x_posts_unconfirmed: 1, x_unconfirmed_snapshot: SB }] });
+  assert.deepEqual(await handleAccountDeletion(del(), deps(changed).d), { status: 200, body: { ok: true, login_deleted: true, x_posts_unconfirmed: 1, x_unconfirmed_snapshot: SB } });
 });
 
 test('F3 precheck: a non-X social account refuses BEFORE anything is recorded (no tombstone, no lease, nothing external)', async () => {
@@ -314,8 +321,9 @@ test('F3 precheck: a non-X social account refuses BEFORE anything is recorded (n
   assert.deepEqual(db.calls, ['preview', 'x_precheck']);
   assert.equal(db.tombstone(), null);
   assert.deepEqual(external, []);
-  for (const bad of [null, { non_x_accounts: -1, x_posts_unconfirmed: 0 }, { non_x_accounts: '0', x_posts_unconfirmed: 0 }, {}, { non_x_accounts: 0 },
-    { non_x_accounts: 0, x_posts_unconfirmed: -1 }, { non_x_accounts: 0, x_posts_unconfirmed: 0.5 }]) {
+  for (const bad of [null, { non_x_accounts: -1, x_posts_unconfirmed: 0, x_unconfirmed_snapshot: null }, { non_x_accounts: '0', x_posts_unconfirmed: 0, x_unconfirmed_snapshot: null }, {}, { non_x_accounts: 0 },
+    { non_x_accounts: 0, x_posts_unconfirmed: -1, x_unconfirmed_snapshot: null }, { non_x_accounts: 0, x_posts_unconfirmed: 0.5, x_unconfirmed_snapshot: null },
+    { non_x_accounts: 0, x_posts_unconfirmed: 0 }, { non_x_accounts: 0, x_posts_unconfirmed: 1, x_unconfirmed_snapshot: null }, { non_x_accounts: 0, x_posts_unconfirmed: 0, x_unconfirmed_snapshot: SA }]) {
     const broken = fakeDb();
     const rpc = (name: string, args: Record<string, unknown>): Promise<RpcResult> =>
       (name === 'x_precheck' ? Promise.resolve(bad === null ? { ok: false, code: null } : { ok: true, data: bad }) : broken.rpc(name, args));
