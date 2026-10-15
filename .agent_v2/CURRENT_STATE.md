@@ -1,3 +1,13 @@
+## MIC F7｜Stage 1 S1-A SOURCE ONLY へ条件付きGO（2026-10-15 17時台 JST）
+
+- Supabase stock-x-autopost `wsmznyzcvmuitkglfeuj` を2026-10-15に本番read-only集計。2026-10-14 00:00 JST以降、State25（no_change21 / evaluated4）、failed/running0、shadow記録21/21、no_change AI usage0、unexpected shadow status0。Slice0配備2026-10-07 16:11 JST以降State78（no_change67 / evaluated11）、shadow67/67、failed0。最新State実行10/15 15:15 JST。
+- equity_indexは自然 `no_new_observation` 未観測（10/14・15はbelow_thresholdまたは重要変化でevaluated）。SOURCE-only S1-A実装は条件付きGO、ローカルSQL合成テストでno_new_observation／no pointer advanceの再現PASS必須。本番GOではない。
+- commoditiesのBRENT/WTI最新観測は10/06で止まりshadow `not_verifiable/observation_not_acceptable` 継続。データ品質は別改善課題（認識していないままverifiedを許さないことが必須）。ratesの10/13-14米金利観測staleは10/15 15:15 JST runでbelow_thresholdに復帰。
+- production前提read-only：34 metric・multi-source0・最新anchor tie0・market_metrics766行、State RPCはmaterialとno_changeの従来2本、current trigger1/terminal run trigger1。正式verification RPC/DB列は未導入。Scenarioは10/15 10:25 JSTに再AI評価、confidence0.780・valid_until 10/18 06:15 JST（確認時有効）。
+- user指定「次回新規MIC TASKはF7、旧G7を使わない」を適用。旧G7 `mic-stage1-formal-verification-design-finalization-g7-20261011` はK7完了済み・旧正本は不変。新F7 `mic-stage1-formal-verification-s1a-source-f7-20261015` **ready / claude / Opus5.5（高） / F7→L7 / MICのちゃ**、`.agent_v2/tasks/F7.md`にSOURCE ONLY/production NO_GO TASK登録済み。新旧task_id二重割当なし。F7 Claude作業は未開始・GitHub TASK登録だけ実施。
+- 正本設計：旧G7作成 [Draft PR125](https://github.com/anohi-memories/kabumori/pull/125) head `aa47e40d2a3ba7ec8bfc7d1d30c8eb51d53f2c48` OPEN/Draft/unmerged（本件で不変）。F7はfresh mainから専用独立worktreeを構築後、新規migration **ソースのみ**＋SQL42/変異5テスト・競合/権限/rollback証明。U12イベント窓／U13状態表示とDB再導出の検証。S1-B Edge変更、DB remote migration実適用、merge/deploy、Cron/Auth/Secret、Scenario変更は禁止。S1-A/B source実装後に別枠Codex Sol（高）重点レビュー、Productionには別途承認が必要。
+- 今回GitHubで触れたのは新系統のF7 TASK/ACTIVE_TASK/CURRENT_STATEだけ。旧G7や他slotのTASK/Report、商品コード、PR125、Production write操作はしていない。Macのworktree独立性・未コミット変更の実地確認は**F7開始時ゲート**とし、未確認のまま成功扱いにしない。
+
 ## POSTONA J4 V4 review — two P2 client fixes (2026-10-15 JST)
 - J4 `postona-j4-pr197-postona-deletion-client-security-review-20261014`: V4 CHANGES_REQUIRED P2×2 / PRODUCTION_NO_GO, done/none. Target Draft PR197 HEAD `2171ee4c02ea2eec46562d81595f5460e5507d9d`, unchanged/unmerged.
 - P2-R1 incomplete ended provider summary accepted as success, can mask durable X uncertain count and Threads remote-unverified. P2-R2 post-mutation session/read-back errors drop known warning evidence. J4 independently reran mobile 281 tests and F5 Deno120, reproduced faults with negative synthetic tests; no product edits.
