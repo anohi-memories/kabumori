@@ -217,17 +217,17 @@
 
 ## J4
 - slot: J4
-- status: ready
+- status: review_required
 - task_id: postona-j4-pr211-p2-client-fixes-focused-security-rereview-20261015
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V4
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J4.md
 - current_report_path: .agent_v2/reports/J4.md
 - dependencies: F4 PR211 eb1011f2 stacked PR197 2171ee4c; J4 V4 previous P2x2; F5 PR193 exact handler contract
-- blocker: production NO_GO; focus review only, F3/F5/legacy server separate
+- blocker: CHANGES_REQUIRED P2 R2c: late final-preview auth switch retains prior-user warnings in helper return; current screen hides them. Original R1/R2 repros fixed. Separate F5/managed/legacy gates; production NO_GO
 - slot_use: independent P2 R1/R2 POSTONA mobile rerun with actual F5 handler synthetic tests
 - previous_archive: .agent_v2/archive/2026-10-15-J4-postona-j4-pr197-postona-deletion-client-security-review-20261014/
 
