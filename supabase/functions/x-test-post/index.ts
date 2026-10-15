@@ -76,6 +76,11 @@ import {
   loadBrandContext,
 } from "../_shared/brand/brand_context.ts";
 import { assertBrandPublishAllowed } from "../_shared/brand/publish_guard.ts";
+import {
+  assertKabumoriGenerationAllowed,
+  isKabumoriGenerationOnlyMode,
+  kabumoriSendRecheck,
+} from "./kabumori_pause_guard.ts";
 import { loadBrandXTokens } from "../_shared/brand/token_loader.ts";
 import { xOAuthClientRegistryFromEnv } from "../_shared/x_v2_account_refresh.ts";
 import { createVaultAccountCredentialRpc, VaultAccountXAuth } from "./vault_account_auth.ts";
@@ -222,6 +227,12 @@ type XAuthContext = {
   allowRefresh?: boolean;
   /** Vault-backed exact-account credentials; when set, X requests go through it only. */
   vaultAccount?: VaultAccountXAuth;
+  /**
+   * Kabumori's legacy auth only (kabumori pause, F2 2026-10-15): run immediately before each X create request
+   * (also after a refresh retry). It re-reads the brand, so a pause applied while the post was being generated
+   * stops the send. Any error means no request is sent.
+   */
+  beforeSend?: () => Promise<void>;
 };
 
 type InteractionTopic = {
@@ -3215,6 +3226,7 @@ async function postToX(
     }
     return sent.body;
   }
+  await auth.beforeSend?.();
   let result = await requestXPost(
     auth.tokens.accessToken,
     text,
@@ -3226,6 +3238,7 @@ async function postToX(
       throw new Error("X_REQUEST_FAILED:401");
     }
     await refreshXTokens(auth);
+    await auth.beforeSend?.();
     result = await requestXPost(
       auth.tokens.accessToken,
       text,
@@ -3335,6 +3348,18 @@ Deno.serve(async (req) => {
     supabaseUrlForFailure = supabaseUrl;
     serviceRoleKeyForFailure = serviceRoleKey;
 
+    // Kabumori pause (F2 2026-10-15): generation-only modes call the model (text / image) without posting. When the
+    // Kabumori brand is disabled or inactive they are refused here, before any model call. dry_run / live run as before.
+    if (isKabumoriGenerationOnlyMode(requestBody.mode)) {
+      try {
+        await assertKabumoriGenerationAllowed(() =>
+          loadBrandContext({ supabaseUrl, serviceRoleKey, brandId: LEGACY_KABUMORI_BRAND_ID })
+        );
+      } catch (error) {
+        return jsonResponse({ success: false, error: safeErrorCode(error), ai_called: 0, x_api_called: 0 }, 423);
+      }
+    }
+
     if (isMorningGreetingManualPublish) {
       const xAccessToken = Deno.env.get("X_OAUTH2_ACCESS_TOKEN");
       const xRefreshToken = Deno.env.get("X_OAUTH2_REFRESH_TOKEN");
@@ -3387,6 +3412,9 @@ Deno.serve(async (req) => {
           supabaseUrl,
           serviceRoleKey,
           refreshExecuted: false,
+          beforeSend: kabumoriSendRecheck(() =>
+            loadBrandContext({ supabaseUrl, serviceRoleKey, brandId: LEGACY_KABUMORI_BRAND_ID })
+          ),
         };
         const result = await runMorningGreetingManualPublish({
           supabaseUrl,
@@ -3394,6 +3422,7 @@ Deno.serve(async (req) => {
           openAiApiKey,
           brandId: brandContext.brand.id,
           xAuth: manualXAuth,
+          beforeSend: manualXAuth.beforeSend,
           now: referenceTime,
         });
         return jsonResponse(result, result.skipped ? 200 : 201);
@@ -4053,6 +4082,9 @@ Deno.serve(async (req) => {
         supabaseUrl,
         serviceRoleKey,
         refreshExecuted: false,
+        beforeSend: kabumoriSendRecheck(() =>
+          loadBrandContext({ supabaseUrl, serviceRoleKey, brandId: LEGACY_KABUMORI_BRAND_ID })
+        ),
       };
     })();
 
@@ -4723,6 +4755,7 @@ Deno.serve(async (req) => {
         openAiApiKey,
         brandId: brandContext.brand.id,
         xAuth,
+        beforeSend: xAuth.beforeSend,
       });
       await callRpc(supabaseUrl, serviceRoleKey, "complete_morning_greeting_post", {
         p_scheduled_post_id: scheduledPost.id,
