@@ -1,0 +1,27 @@
+{
+  "task_id": "postona-j5-account-deletion-legacy-bypass-ui-bridge-20261014",
+  "archive_date": "2026-10-15",
+  "source_commits": [
+    "5d4c78dd7270903c027b2ffcd6247d6b1acd04a8",
+    "390251460417b9e4f839844d3130a236d70e264d"
+  ],
+  "entries": [
+    {
+      "original_path": ".agent_v2/tasks/J5.md",
+      "archive_path": ".agent_v2/archive/2026-10-15-J5-postona-j5-account-deletion-legacy-bypass-ui-bridge-20261014/files/.agent_v2/tasks/J5.md",
+      "size_bytes": 7764,
+      "sha256": "a8d04442319798b078a9e6c21e674d34947665c4c298f25f2fe52f754a76a035",
+      "blob_sha": "a12598a5bda3fd77d80fac156cde5010c11c24ef",
+      "restore_equal": true
+    },
+    {
+      "original_path": ".agent_v2/reports/J5.md",
+      "archive_path": ".agent_v2/archive/2026-10-15-J5-postona-j5-account-deletion-legacy-bypass-ui-bridge-20261014/files/.agent_v2/reports/J5.md",
+      "size_bytes": 9512,
+      "sha256": "6354f790f11930be7ec72f158248600719a296fdb03bdadc87144f643621626e",
+      "blob_sha": "3056046fcf4e992040a5e4c4f9b5fe4db0626bda",
+      "restore_equal": true
+    }
+  ],
+  "restore": "GitHub original and archived files byte-equal and blob SHA matches"
+}
