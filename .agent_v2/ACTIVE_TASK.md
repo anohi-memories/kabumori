@@ -199,19 +199,19 @@
 
 ## J3
 - slot: J3
-- status: done
-- task_id: postona-j3-pr204-p2x3-security-rereview-20261015
+- status: ready
+- task_id: common-account-j3-f5-pr214-snapshot-ack-focused-review-20261015
 - owner: codex
-- next_owner: none
-- return_to: POSTONA G3のちゃ（新F3担当・X投稿／予約担当）
+- next_owner: codex
+- return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: V3
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J3.md
 - current_report_path: .agent_v2/reports/J3.md
-- dependencies: F3 L3 PR204 45b08a87 stacked PR192; F5 Phase10 PR206/193 ACK integration; F4 PR180, G4 Issue131
-- blocker: PR204 focused source PASS; F5 Phase10 snapshot ACK integration, inherited lease/lock concerns and managed gate pending; production NO_GO
-- slot_use: V3 ACCEPTED PASS_SOURCE_REVIEW / PRODUCTION_NO_GO; Codex Sol（高） original P2 R1a/R3a/R1b closed for exact PR204 45b08a87. F5 Phase10 integration pending. Archive J3 before reuse.
-- previous_archive: .agent_v2/archive/2026-10-15-J3-postona-j3-x-saga-r1-r3-focused-rereview-20261014/
+- dependencies: F5 Phase10 Draft PR214 bc290ab618508a8fbaba1abfad308c52d86e4689 stacked PR206; F3 PR204 45b08a87 source PASS V3
+- blocker: source-only, D1 full-account deletion consent unresolved, managed Auth/DB not verified, production NO_GO
+- slot_use: narrowly focused new F5 snapshot ACK/SQL/other-entitlement PR214 security review, prior F3 PR204 fixes not reviewed again
+- previous_archive: .agent_v2/archive/2026-10-15-J3-postona-j3-pr204-p2x3-security-rereview-20261015/
 
 ## J4
 - slot: J4
