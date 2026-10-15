@@ -1,4 +1,5 @@
 ## G1｜かぶモリ休止準備 F2/F8設計TASK登録（2026-10-15）
+- GitHub反映：Draft PR207の登録候補。mainへの直接pushは自動承認レビューで拒否、main未反映。F2/F8はfresh origin/mainで新task_idを確認してから正式開始。管理差分の反映承認は本番停止承認と別。
 - 判定 **OFFLINE_DESIGN_ASSIGNED / PRODUCTION_NO_GO**。統合計画 `docs/operations/kabumori-pause/G1_PLAN_20261015.md`。基準main `9e9c0a0682269de0a5ec25ff4f26ed82043fbfe8`、新旧30枠最新metadata・関連Report・open PR74件を確認。
 - F2新 `kabumori-f2-pause-delivery-brand-queue-offline-design-20261015` **ready / claude / Opus5.5（高） / F2→L2**。ユーザー予約idleから正式割当。Xブランド/予約5件（引継ぎ値・未再測定）/共有Dispatcher/市況fallback/Push/共通AI caller保護の設計・合成検証のみ。
 - F8新 `kabumori-f8-news-hard-pause-http-ai-offline-design-20261015` **ready / claude / Opus5.5（高） / F8→L8**。全HTTP mode/AI dry-run/app_copy/独立X公開/通知のhard-pause設計・合成検証のみ。前F8 TASK/Reportをappend-only archiveへ6909 bytes、SHA256 `3496660d5633c4fc74958ccc53a80f19614f35f117357528c84b846c41e45d8e`、元blob/復元一致・HISTORY_INDEX追記済み。PR196保護。

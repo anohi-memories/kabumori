@@ -880,5 +880,13 @@
         104
       ]
     ]
+  },
+  "publication": {
+    "pr": "https://github.com/anohi-memories/kabumori/pull/207",
+    "branch": "chore/g1-pause-plan-20261015",
+    "status": "DRAFT_CANDIDATE_PENDING_MAIN",
+    "direct_main_push": "auto-review rejected before execution",
+    "start_gate": "fresh origin/main contains assigned task_id",
+    "production_authorized": false
   }
 }
