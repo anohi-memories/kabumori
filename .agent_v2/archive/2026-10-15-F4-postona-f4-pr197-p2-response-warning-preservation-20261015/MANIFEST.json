@@ -1,0 +1,11 @@
+{
+  "task_id": "postona-f4-pr197-p2-response-warning-preservation-20261015",
+  "original_path": ".agent_v2/tasks/F4.md",
+  "archive_path": ".agent_v2/archive/2026-10-15-F4-postona-f4-pr197-p2-response-warning-preservation-20261015/files/.agent_v2/tasks/F4.md",
+  "original_blob": "dbbe1e965c989b8de1691459450f84803f11922d",
+  "size_bytes": 10971,
+  "source_commit": "ed7f4482e561e8699cd6597e7f17b33ad6e8c24f",
+  "archive_commit": "cf0fb464d5e1155630accc6e3eac71237b994b35",
+  "readback_equal": true,
+  "sha256_status": "pending"
+}
