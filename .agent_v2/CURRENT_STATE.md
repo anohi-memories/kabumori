@@ -1,3 +1,7 @@
+## F3 J3 V3 P2追加修正（2026-10-15）
+- F3 `postona-f3-j3-v3-ack-lease-rollback-corrections-20261015`: ready/claude、推薦Opus5.5（高）、F3→L3、返却POSTONA G3のちゃ。J3の最新V3 CHANGES_REQUIRED P2 R1a count-only ACK ABA、R3a post-check row lock lease expiry、R1b rollback checkpoint raceをF3所有sourceで修正、使い捨てPGで再現と回帰。F5 PR193のtyped ACK consumerはF5担当に契約を返す。F4/G4 protected、production NO_GO。
+- 前F3 TASK `postona-f3-j3-v3-r1-r3-security-fixes-20261013` はarchive `.agent_v2/archive/2026-10-15-F3-postona-f3-j3-v3-r1-r3-security-fixes-20261013/`、SHA256 `fd2b777b4c3d04041eab3dfc68cf2293b4aa6d4d0d7697457e2964fae29a89af`、blob/UTF8復元照合、HISTORY_INDEX済。PR192 Draftは未マージ。
+
 ## F2 L2 — Phase2 TOPIX Candidate Premerge Correction (2026-10-15 JST)
 - GitHub verified: Draft PR #201 head `6977ca3c82f2138bb27f9cd47a4abab98f59852e`, Draft PR #203 head `46cd29be26b16133a1a5488461a5972f3253e98f`; PR203 stacked on PR201, both open/unmerged. Cloud source tests reportedly pass; no independent local rerun and no live Yahoo TOPIX symbol validation. Production/merge/deploy NO_GO.
 - L2 outcome: **CHANGES_REQUIRED_SOURCE_PREMERGE**. PR203 `topixOnNikkeiSession` accepts usable TOPIX when Nikkei is absent/unusable; `market-report-data-packet` dry-run `topix_source` can cause external Yahoo fetch even with normal Secret OFF (requires cron secret, but lacks separate explicit probe gate). Both need offline correction before merge/release. No current production mutation.
