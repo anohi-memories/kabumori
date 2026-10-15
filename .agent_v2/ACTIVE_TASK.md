@@ -23,20 +23,19 @@
 
 ## F2
 - slot: F2
-- status: done
-- task_id: kabumori-f2-emergency-market-report-app-feed-broadcast-20261013
+- status: ready
+- task_id: kabumori-f2-topix-pr201-203-premerge-safety-corrections-20261015
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG2のちゃ（新F2担当）
 - completion_code: L2
-- recommended_model: Opus5.5（高）
+- recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
-- dependencies: main PR143/149/158, F6 generator; current X/app consumer ON, old individualized scheduled Cron OFF
-- blocker: 10/14 morning/close broadcast server delivery completed (pilot 1 user x 1 device, each sent=1 failed=0 unknown=0). iPhone notification receipt/tap still unverified; EAS standalone app pending; X display order not deployed; separate K2 RPC security post-review pending.
-- slot_use: L2 PASS_SERVER_DELIVERY / DEVICE_PUSH_RECEPTION_UNVERIFIED (2026-10-14). This completed task is app feed + pilot notification; TOPIX/news/column-quality Phase2 is not yet registered in F2. Archive before assigning next task.
+- dependencies: stacked Draft PR201 exact 6977ca3c / PR203 exact 46cd29be; previous F2 archive 2026-10-15 confirmed. TOPIX actual Yahoo symbol and JPX/Yahoo/Nikkei rights unverified.
+- blocker: L2 CHANGES_REQUIRED_SOURCE_PREMERGE / PRODUCTION_NO_GO. (1) TOPIX date guard when Nikkei missing/unusable, (2) dry-run topix_source bypasses default OFF to permit an external fetch. Fix both offline on new stacked Draft, do not modify PR201/203 originals.
+- slot_use: Source-only guard correction of PR201/203. No API/network/merge/deploy/Secret/Cron/X/post/notification/EAS permission.
 
-- l2_verdict: PASS_SERVER_DELIVERY / DEVICE_PUSH_RECEPTION_UNVERIFIED
 ## F3
 - slot: F3
 - status: done
