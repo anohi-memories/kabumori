@@ -23,17 +23,17 @@
 
 ## F2
 - slot: F2
-- status: ready
+- status: review_required
 - task_id: kabumori-f2-pause-delivery-runtime-candidate-20261015
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: L2
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
 - dependencies: F2 design PR #210 merged; F8 news gate runtime; shared POSTONA/AI protected
-- blocker: V2 J2-R2 P1 unauthenticated AI preview + J2-R3 P2 restore ownership drift; focused corrections in own TASK. #213 Draft; production NO_GO
+- blocker: L2 PASS_SOURCE_FIX / SECURITY_FOCUSED_REREVIEW_REQUIRED; Draft #213 head c10f1da593ba3dc365cf340e9569ae1caa9789b1; J2 R2(P1)/R3(P2) corrected in source candidate; production NO_GO; managed preflight pending
 - production_mutation_window: FORBIDDEN
 - previous_archive: .agent_v2/archive/2026-10-15-f2-pause-offline-design-accepted.md
 - slot_use: kabumori X gate/planner/queue/Push source-only candidate after L2 design archived
@@ -123,17 +123,17 @@
 
 ## F8
 - slot: F8
-- status: ready
+- status: review_required
 - task_id: kabumori-f8-news-hard-pause-runtime-candidate-20261015
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: L8
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F8.md
 - current_report_path: .agent_v2/tasks/F8.md#report
 - dependencies: F8 design PR #209 merged; F2 source candidate; protected PR129/#164 same-handler integration
-- blocker: V2 J2-R1 P1 stale positive pause-state race and TTL; focused corrections in own TASK. #212 Draft; production NO_GO
+- blocker: L8 PASS_SOURCE_FIX / SECURITY_FOCUSED_REREVIEW_REQUIRED; Draft #212 head d04ff9d2227bbb0e43d7ddbcf8c3b5cc7ad54d3a; J2 R1(P1) correction in source candidate; production NO_GO; observer #43/managed preflight pending
 - production_mutation_window: FORBIDDEN
 - previous_archive: .agent_v2/archive/2026-10-15-f8-pause-offline-design-accepted.md
 - slot_use: important-news-monitor all-mode hard pause source-only candidate after L8 design archived
