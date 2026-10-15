@@ -1,3 +1,9 @@
+## F2｜旧TOPIX/市況改善を中止・運用停止処理用にidle確保（2026-10-15）
+- ユーザー明示: かぶモリの従来開発をこれ以上進めず、今後の「かぶモリ運用休止・配信停止処理」でF2を利用する。**今は未割当**。F2 TASK / ACTIVE_TASKを `status: idle` / `task_id: none` / `next_owner: none` / `recommended_model: none` に戻し、F2開始禁止（正式新TASK待ち）。
+- 旧F2 `kabumori-f2-topix-pr201-203-premerge-safety-corrections-20261015` は `ready` で未着手。L2実装完了とは扱わず **CANCELLED_UNSTARTED_BY_USER**。TASK末尾Reportを含め原文7343バイトをappend-only archive `.agent_v2/archive/2026-10-15-F2-kabumori-f2-topix-pr201-203-premerge-safety-corrections-20261015/files/.agent_v2/tasks/F2.md` に保存。SHA256 `327498d9506823f0d91903ec2547dd12c237a35157a0b92b2ebf4230c58ef557`、original Git blob `fb51b00fb1b12df04dbf0e9a48e90ec275cd1ded`、MANIFEST.md/json・SHA256SUMS・原本read-back済。HISTORY_INDEX追記済。
+- TOPIX / 市況文章 Phase2 Draft PR #201 `6977ca3c82f2138bb27f9cd47a4abab98f59852e` と候補PR #203 `46cd29be26b16133a1a5488461a5972f3253e98f` は作業凍結・保護（未マージ・未deploy）。従前L2指摘の2 guard修正は未実装のまま保留。未実施を完了と扱わない。
+- F2の配信系停止read-only調査はG1全体統括に返却済み。本番Cron/DB設定・X/Push・共有Dispatcher等は**今回未変更**。G1の新TASKで停止順序・POSTONA保護・独立作業環境・production承認を確定するまで停止writeを行わない。旧G2 TASKを再開・F2へ移動しない。
+
 ## MIC F7｜Stage 1 S1-A SOURCE ONLY へ条件付きGO（2026-10-15 17時台 JST）
 
 ## F5 Phase9 — POSTONA先行共通ログイン・利用登録（2026-10-15）
