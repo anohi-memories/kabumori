@@ -1,0 +1,11 @@
+{
+  "task_id": "postona-f3-j3-v3-r1-r3-security-fixes-20261013",
+  "original_path": ".agent_v2/tasks/F3.md",
+  "archive_path": ".agent_v2/archive/2026-10-15-F3-postona-f3-j3-v3-r1-r3-security-fixes-20261013/files/.agent_v2/tasks/F3.md",
+  "size": 18009,
+  "sha256": "fd2b777b4c3d04041eab3dfc68cf2293b4aa6d4d0d7697457e2964fae29a89af",
+  "original_blob_sha": "a29113a4c2c405c88a8d99c1f749f7b4bd4b143b",
+  "original_commit": "f5f0b4a11236482e13fcffb63cbac66b3a7740e5",
+  "archive_commit": "d0487e0d76c85d845e92ffb04b4cc0f635bcb870",
+  "restore": "Exact content and Git blob match verified before replacement"
+}
