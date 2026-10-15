@@ -92,18 +92,18 @@
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-h5-consumer-bridge-import-boundary-repair-20261014
+- status: ready
+- task_id: common-ai-f6-openai-anthropic-migration-inventory-20261015
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: F6 PR187 (a7e1d3f3), H5 PR198 (4223d5c0), H5 C5 done/merge hold; H5 PR199 bookkeeping unmerged
-- blocker: L6 PASS_OFFLINE_SOURCE; independent Codex Sol(高) header/auth/tenant/budget security review required before merge/deploy.  PASS_OFFLINE_SOURCE Draft PR #205 (4cd2cbdd) on #198: 3 isolation failures fixed by exact allowlist + new name-level least privilege and entry-point checks (nothing relaxed); SDK env containment (webhookKey null, header-contained fetch pins x-api-key/version); isolation 9, containment 4, H5 27+2, provider 126, report 324, _shared 658, mutants 8/8; order #187→#198→#205; Codex Sol review recommended
-- slot_use: F6 safety boundary repair for H5 Claude consumer bridge M2
+- dependencies: F6 PR187 → H5 PR198 → F6 PR205 Draft, J1 independent Sol security review ready
+- blocker: review and offline inventory required before production; no merge/deploy or API switching
+- slot_use: POSTONA-first full OpenAI API inventory and Anthropic migration plan
 
 ## F7
 - slot: F7
