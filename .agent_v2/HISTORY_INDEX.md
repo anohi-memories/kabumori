@@ -434,3 +434,13 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 | 2026-10-15 | F2 | `kabumori-f2-emergency-market-report-app-feed-broadcast-20261013` | L2 PASS_SERVER_DELIVERY / iPhone push reception unverified; completed F2 app-feed and pilot notification | `.agent_v2/archive/2026-10-15-F2-kabumori-f2-emergency-market-report-app-feed-broadcast-20261013/files/.agent_v2/tasks/F2.md` | SHA256 `d736b3cd94950794fc1bc402f508e07ae1eb34dfd4084af3f4b0b7e3e78b05c2`, original commit `72e571b24c7c175ff3249b49fe82de6f71d09349`, archived Git blob matched; MANIFEST and SHA256SUMS read-back verified.
 
 - 2026-10-15 | F3 | `postona-f3-j3-v3-r1-r3-security-fixes-20261013` | L3 PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO, Draft PR192 | `.agent_v2/archive/2026-10-15-F3-postona-f3-j3-v3-r1-r3-security-fixes-20261013/files/.agent_v2/tasks/F3.md` | SHA256 `fd2b777b4c3d04041eab3dfc68cf2293b4aa6d4d0d7697457e2964fae29a89af`; restore exact blob/content verified.
+
+## F5 Phase8 completion archive — 2026-10-15
+- task_id: `common-account-f5-phase8-x-threads-lifecycle-integrated-security-20261013`
+- original_path: `.agent_v2/tasks/F5.md`
+- archive_path: `.agent_v2/archive/2026-10-15-F5-common-account-f5-phase8-x-threads-lifecycle-integrated-security-20261013/files/.agent_v2/tasks/F5.md`
+- size: 26399 bytes
+- SHA256: `af683c6ad2a8e6ab7aad27d62e2dce3c9d118be1ba581771937337ee00093cba`
+- original_blob: `c098b9ea3058a98dbf51218b0ada3d649ac4eff2`
+- restore: exact UTF-8 source/archive and blob SHA matched on read-back; MANIFEST and SHA256SUMS saved.
+- L5: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO, PR193 Draft head 314aeac47a02ce80aea3d94426a563dfbe57ad7c
