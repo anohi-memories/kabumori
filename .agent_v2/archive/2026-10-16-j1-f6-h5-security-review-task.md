@@ -1,0 +1,51 @@
+# J1 — Claude API共通基盤（F6/H5）独立セキュリティレビュー
+
+- task_id: common-ai-j1-f6-h5-pr187-198-205-security-review-20261015
+- owner: codex
+- slot: J1
+- status: review_required
+- next_owner: chatgpt
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- completion_code: V1
+- start_code: J1
+- recommended_model: **Sol（高）**
+- review_required: true
+- production_mutation_window: CLOSED
+- previous_task_archive: .agent_v2/archive/2026-10-15-j1-ai-ask-b0-review-task.md
+- previous_report_archive: .agent_v2/archive/2026-10-15-j1-ai-ask-b0-review-report.md
+
+## 目的
+F6のClaudeマルチモデルAPIとH5のconsumer bridgeについて、**H5実装者とは独立したCodex Sol（高）**で、認証ヘッダー・テナント分離・予算台帳・権限境界の安全性を深掘りする。POSTONA向けの将来利用前のsource-only監査。**レビュー専用：コード修正・merge・deploy・production変更不可。**
+
+## 正確な対象
+- F6 PR #187 Draft: a7e1d3f3f6b3812e9b8b0c0f7c29835e25505d6b
+- H5 PR #198 Draft: 4223d5c01389474406291c8e4578207e317638b9, base PR187 branch
+- F6 PR #205 Draft: 4cd2cbdd51a68bc537cd0fc81dc8f1c7ee059f21, base PR198 branch
+- H5 PR #199 is separate bookkeeping Draft; DO NOT merge/reconcile it in this review.
+- Prior F6 L6: PASS_OFFLINE_SOURCE; original 3 import regressions resolved; provider 126, report 324, shared 658, H5 27, mutation 8/8 according to Claude Report. Independent reviewer must verify, not assume.
+- F6 and old H5 slot status done. Do not modify their tasks or worktrees.
+
+## 開始ゲート
+1. fresh origin/main and exact PR heads/base/changed paths, PROJECT_RULES.md, .agent_v2/ORCHESTRATION.md, old/new ACTIVE_TASK/CURRENT_STATE, pending V1 and other slots, clean independent J1 worktree. If ownership/worktree conflicts STOP.
+2. Read only relevant code/PR diffs, report extracts; avoid massive task/history reads.
+
+## セキュリティ監査
+A. Anthropic SDK env/header injection: ANTHROPIC_CUSTOM_HEADERS, ANTHROPIC_WEBHOOK_SIGNING_KEY, x-api-key, Authorization, anthropic-version, override of accept/content-type and destination; test with malicious env and mocked fetch. Check SDK fetch wrapper ordering, no credential leakage, no legacy OpenAI regressions.
+B. Import and entrypoint least privilege: allowlist exact names/paths, namespace aliases, export *, transitive imports, dynamic imports, symlinks/import maps, mutation resistant denial; ensure no unintended Edge consumer receives private provider/ledger functions.
+C. H5 bridge: trusted user/tenant provenance, brand/account entitlement, authorize port fail-closed, cross-user and cross-brand isolation, forged logical role/model, override bounds, abuse of operationId/idempotency key, retries/timeouts and ambiguous outcomes; no double billing or bypass.
+D. Budget ledger: application/feature/provider/model/subject, reserve/mark_sent/settle/release/recover, concurrency/rollback limits, denial before network; distinguish in-memory fixture from durable managed DB proof. Do not invoke production RPC.
+E. Opus market-report primary_both backward compatibility and no auto fallback. Review implications for future POSTONA integration separately from source safety.
+F. Reproduce relevant offline suites with deny-net/fake credentials and adversarial tests. Clearly label source review, unverified production invariants, severity P0/P1/P2 and minimum fixes/owner. Do not silence failing tests.
+
+## 許可・禁止
+- Allowed: isolated checkout + read-only GitHub source, local mocked tests, J1 task/report/ACTIVE metadata updates, review documentation within J1 owned files.
+- Forbidden: edit F6/H5 provider/bridge source or PRs/branches, other slot files, real Claude calls, paid API, Supabase DB/Auth/RLS/RPC/Cron/secrets, external posting, merging, deploying, changing production gates or setting credentials.
+
+## 完了条件・返却
+Report to `.agent_v2/reports/J1.md` with verdict PASS_REVIEW_CANDIDATE or CHANGES_REQUIRED, tests, findings with file/line/repro/severity/owner, changed_files, commit/push, PR/head readback, deployment=none, remaining issues, production=NO_GO until separate authorization. Set J1 status review_required / next_owner chatgpt and ACTIVE_TASK metadata; return **共通AI基盤のちゃ（OpenAI・Claude API専用チャット）へ V1 を送ってください。**
+
+## Report
+- result: CHANGES_REQUIRED / P2×2 / SOURCE_REVIEW_ONLY / MERGE_HOLD / PRODUCTION_NO_GO
+- tests: provider+bridge155 PASS, market-report324 PASS, J1 unique adversarial15 PASS; full shared TYPECHECK_FAILED5 unchanged locations, scoped lint1 and bridge JSON fmt1 disclosed. No test/source silencing or implementation.
+- report: .agent_v2/reports/J1.md (exact heads, file/line/repro/owner/acceptance, limitations)
+- production: untouched
