@@ -105,18 +105,18 @@
 
 ## F7
 - slot: F7
-- status: idle
-- task_id: none
+- status: ready
+- task_id: mic-stage1-formal-verification-s1a-source-f7-20261015
 - owner: claude
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: claude
+- return_to: MICのちゃ（Market Intelligence Core専用チャット）
 - completion_code: L7
-- recommended_model: none
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F7.md
 - current_report_path: .agent_v2/tasks/F7.md#report
-- dependencies: none
-- blocker: none
-- slot_use: 予備枠（ユーザーまたはChatGPTの明示割当専用）
+- dependencies: 旧G7 K7 PASS_DESIGN_ONLY、PR125 Draft design head aa47e40d、2026-10-15 shadow read-only GO_FOR_SOURCE_IMPLEMENTATION（S1-Aのみ）
+- blocker: Production/merge/deploy NO_GO。F7開始時にfresh main・独立worktree・他slot競合を再確認。U1 equity no_new_observationはSQL合成テストで証明必須
+- slot_use: MIC専属の新規F7 TASK（ユーザー明示指定の段階移行）。S1-A新RPC/migration source＋42 SQL tests/5 mutation plans；S1-B/他境界は別TASK。既存G7完了TASKの移動なし
 
 ## F8
 - slot: F8
