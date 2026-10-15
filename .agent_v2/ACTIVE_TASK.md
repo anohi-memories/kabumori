@@ -92,11 +92,11 @@
 
 ## F6
 - slot: F6
-- status: review_required
+- status: done
 - task_id: common-ai-f6-j1-import-timeout-security-fix-20261015
 - owner: claude
-- next_owner: chatgpt
-- blocker: FIXED_SOURCE_ONLY Draft PR #219 (be35cc93, base PR205 branch): R1 guard fail-closed (dynamic import = *, computed/bare/missing/symlink/unreadable/remap refused, handler pinned to 4 primary names, no allowlist widening; 9 real-file holes refused, 3 old regressions kept); R2 only 429/529/OpenAI503 retried, 504/timeout/lost-connection/other 5xx one attempt, retryOnTimeout:true REQUEST_INVALID; provider139 bridge27 market324 shared671 PASS, typecheck same 5 pre-existing errors; production NO_GO
+- next_owner: none
+- blocker: L6 PASS_SOURCE_FIX, independent R1/R2 delta security rereview and maybe-billed 5xx ledger accounting decision pending; PR219 Draft unmerged, production NO_GO
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
