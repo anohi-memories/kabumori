@@ -409,6 +409,82 @@ test('the saga\'s set changed under the acknowledgement: the NEW pair is recorde
   assert.equal(bodyOf(churned).x_posts_unconfirmed, 4);
 });
 
+const SNAP_D = 'd'.repeat(64);
+const SNAP_E = 'e'.repeat(64);
+const changed = (count: number, snapshot: string) => ({ status: 'snapshot_changed', x_posts_unconfirmed: count, x_unconfirmed_snapshot: snapshot });
+/** Makes recording of the named evidence sets fail (a database error), counting the attempts per name. */
+function failRecordOf(w: World, names: string[]) {
+  const attempts: Record<string, number> = {};
+  const original = w.deps.rpc;
+  w.deps.rpc = (name, args) => {
+    if (name === 'record_x_unconfirmed' && typeof args.p_snapshot === 'string' && names.includes(args.p_snapshot)) {
+      attempts[args.p_snapshot] = (attempts[args.p_snapshot] ?? 0) + 1;
+      w.effects.push(`rpc:${name}`);
+      return Promise.resolve({ ok: false });
+    }
+    return original(name, args);
+  };
+  return attempts;
+}
+
+test('J3 V3 P2 R1: a larger set learned from the saga is shown even when it cannot be recorded; nothing unrecorded is acknowledged or ended', async () => {
+  // the saga answers 1 / S1 (recorded); at the acknowledgement it reports 9 / S2; recording S2 fails every time
+  const w = world({ x: 'active', xRun: [pair(1, SNAP_A)], xAckAnswers: [changed(9, SNAP_B)] });
+  const attempts = failRecordOf(w, [SNAP_B]);
+  const response = await withdraw(w);
+  assert.equal(response.status, 500, JSON.stringify(response.body));
+  assert.equal(error(response), 'FAILED');
+  assert.equal(bodyOf(response).x_posts_unconfirmed, 9, 'the person is told the count the saga reported, not the older recorded one');
+  assert.equal(attempts[SNAP_B], 3, 'bounded: three tries to record S2');
+  assert.deepEqual(w.state.svc?.recon, { x_posts_unconfirmed: 1, x_unconfirmed_snapshots: [SNAP_A] }, 'the durable record is exactly the old one');
+  assert.deepEqual(w.state.xAcks, [SNAP_A], 'S2 was never acknowledged');
+  assert.equal(w.state.svc?.results.x, 'reconciliation_required', 'X is not recorded as done');
+  assert.ok(!w.effects.includes('rpc:finish_owned_service'), 'the service is not finished');
+  assert.equal(w.state.services.x_autopost, 'deleting');
+  assert.equal(w.state.login, true, 'the login is untouched');
+  // the same for the whole account: the person's login is NOT deleted, and the larger count is in the answer
+  const whole = world({ x: 'active', xRun: [pair(1, SNAP_A)], xAckAnswers: [changed(9, SNAP_B)], gate: 'open' });
+  failRecordOf(whole, [SNAP_B]);
+  const refused = await handleDeleteCommonAccount({ authorization: bearer(signIn()), body: deleteBody(whole.state.version) }, whole.deps);
+  assert.equal(refused.status, 500, JSON.stringify(refused.body));
+  assert.equal(bodyOf(refused).x_posts_unconfirmed, 9);
+  assert.equal(whole.state.login, true, 'the common login is not deleted');
+  assert.equal(whole.state.calls.delete, 0);
+});
+
+test('J3 V3 P2 R1: the record failure of the LAST bounded attempt reports the largest count observed', async () => {
+  // three acknowledgements each follow a changed set (2, 3, 4); the fourth pair is the one that is only recorded
+  const w = world({
+    x: 'active', xRun: [pair(1, SNAP_A)],
+    xAckAnswers: [changed(2, SNAP_B), changed(3, SNAP_C), changed(4, SNAP_D), changed(9, SNAP_E)],
+  });
+  failRecordOf(w, [SNAP_D]);
+  const response = await withdraw(w);
+  assert.equal(response.status, 500, JSON.stringify(response.body));
+  assert.equal(bodyOf(response).x_posts_unconfirmed, 4, 'the count of the pair that could not be recorded is not lost');
+  assert.deepEqual(w.state.svc?.recon, { x_posts_unconfirmed: 3, x_unconfirmed_snapshots: [SNAP_A, SNAP_B, SNAP_C] });
+  assert.deepEqual(w.state.xAcks, [SNAP_A, SNAP_B, SNAP_C], 'three acknowledgements; the unrecorded set is never acknowledged');
+  assert.ok(!w.effects.includes('rpc:finish_owned_service'));
+  assert.equal(w.state.services.x_autopost, 'deleting');
+});
+
+test('J3 V3 P2 R1: a changed answer with a malformed name is neither recorded nor acknowledged, and an observed count is never lowered', async () => {
+  const w = world({ x: 'active', xRun: [pair(5, SNAP_A)], xAckAnswers: [changed(9, 'NOT-A-SNAPSHOT')] });
+  const response = await withdraw(w);
+  // characterized, unchanged: an unusable answer clears nothing; the end completes non-clean with what is on record
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  assert.equal(bodyOf(response).x_posts_unconfirmed, 5);
+  assert.deepEqual(w.state.svc?.recon, { x_posts_unconfirmed: 5, x_unconfirmed_snapshots: [SNAP_A] }, 'no malformed name was recorded');
+  assert.deepEqual(w.state.xAcks, [SNAP_A], 'and none was acknowledged');
+  assert.equal(w.effects.filter((e) => e === 'rpc:record_x_unconfirmed').length, 1);
+  // a later changed answer with a SMALLER count never lowers what was observed or recorded
+  const lower = world({ x: 'active', xRun: [pair(5, SNAP_A)], xAckAnswers: [changed(2, SNAP_B)] });
+  failRecordOf(lower, [SNAP_B]);
+  const stopped = await withdraw(lower);
+  assert.equal(stopped.status, 500);
+  assert.equal(bodyOf(stopped).x_posts_unconfirmed, 5, 'the maximum observed, even though the later set was smaller');
+});
+
 test('an acknowledgement that clears nothing never loses or lowers the evidence', async () => {
   const answers: [string, Record<string, unknown> | 'error'][] = [
     ['deletion in progress', { status: 'deletion_in_progress' }],

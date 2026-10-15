@@ -457,10 +457,13 @@ async function endPostona(args: {
     }
     let pair = { count, snapshot };
     for (let round = 0; ; round++) {
+      // `highest` is what has been OBSERVED (a valid pair the saga named), not what is already on record: it rises before
+      // the attempt to record, so a failure to record a larger set (J3 V3 P2 R1: 1 -> 9) still tells the person 9. It is
+      // only a number shown; nothing is acknowledged or ended on its account.
+      highest = Math.max(highest, pair.count);
       const kept = await keep(pair.count, pair.snapshot);
       if (kept === 'lease_lost') return { kind: 'lost' };
       if (kept !== 'recorded') return { kind: 'stop', response: fail(500, 'FAILED', { xPostsUnconfirmed: highest }) };
-      highest = Math.max(highest, pair.count);
       if (round >= ACK_ROUNDS) break;
       const ack = xUnconfirmedAckOutcomeOf(await call(deps, 'ack_x_unconfirmed', xUnconfirmedAckArgs(userId, pair.snapshot)));
       if (ack.status === 'snapshot_changed' && ack.snapshot !== null) {
