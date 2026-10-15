@@ -84,6 +84,8 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 
 | 2026-10-14 | J4 | `kabumori-j4-ai-ask-b0-v3-review-20261013` | AI Ask B0 v3 review | CHANGES_REQUIRED | #186 | `25d1b612073450ee31b39458c8a4fc0308328cd4` | `.agent_v2/archive/2026-10-14-J4-kabumori-j4-ai-ask-b0-v3-review-20261013/files/.agent_v2/tasks/J4.md` | archived report |
 
+| 2026-10-15 | J5 | `postona-j5-account-deletion-legacy-bypass-ui-bridge-20261014` | POSTONA deletion client source | PASS_SOURCE_IMPLEMENTATION / PRODUCTION_NO_GO | #197 | `2171ee4c02ea2eec46562d81595f5460e5507d9d` | `.agent_v2/archive/2026-10-15-J5-postona-j5-account-deletion-legacy-bypass-ui-bridge-20261014/files/.agent_v2/tasks/J5.md` | same archive reports/J5.md |
+
 ## 旧系統（G1〜G10 / H1〜H5）の完了・履歴作業
 
 ### 日付不明
