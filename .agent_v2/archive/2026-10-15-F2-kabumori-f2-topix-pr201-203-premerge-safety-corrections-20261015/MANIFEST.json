@@ -1,0 +1,21 @@
+{
+  "task_id": "kabumori-f2-topix-pr201-203-premerge-safety-corrections-20261015",
+  "slot": "F2",
+  "archive_date": "2026-10-15",
+  "original_path": ".agent_v2/tasks/F2.md",
+  "archive_path": ".agent_v2/archive/2026-10-15-F2-kabumori-f2-topix-pr201-203-premerge-safety-corrections-20261015/files/.agent_v2/tasks/F2.md",
+  "size_bytes": 7343,
+  "sha256": "327498d9506823f0d91903ec2547dd12c237a35157a0b92b2ebf4230c58ef557",
+  "source_commit": "ed230b6b037a2f7b142dde3c70dcc0aead201ace",
+  "source_blob": "fb51b00fb1b12df04dbf0e9a48e90ec275cd1ded",
+  "source_status": "ready",
+  "archive_disposition": "CANCELLED_UNSTARTED_BY_USER",
+  "restore_verified": true,
+  "git_blob_readback_verified": true,
+  "sha256_verified_against_source_bytes": true,
+  "related_prs": [
+    201,
+    203
+  ],
+  "production_mutation": false
+}
