@@ -89,6 +89,8 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 | 2026-10-15 | J5 | `postona-j5-pr197-p2-response-warning-preservation-fix-20261015` | cancelled before start; new F4 task | CANCELLED_UNSTARTED | none | none | `.agent_v2/archive/2026-10-15-J5-cancelled-postona-p2-task-before-start/` | TASK and Report |
 | 2026-10-15 | F4 | `postona-f4-threads-cleanup-live-lease-security-fix-20261013` | Threads cleanup lease fix | PASS_SOURCE_FIX / NO_GO | #180 | `7c4f4578` | `.agent_v2/archive/2026-10-15-F4-postona-f4-threads-cleanup-live-lease-security-fix-20261013/` | TASK + L4 acceptance |
 
+| 2026-10-15 | J4 | `postona-j4-pr197-postona-deletion-client-security-review-20261014` | POSTONA client P2x2 review | CHANGES_REQUIRED / PRODUCTION_NO_GO | #197 | `2171ee4c02ea2eec46562d81595f5460e5507d9d` | `.agent_v2/archive/2026-10-15-J4-postona-j4-pr197-postona-deletion-client-security-review-20261014/` | TASK/Report Git blob readback verified; SHA256SUMS pending |
+
 ## 旧系統（G1〜G10 / H1〜H5）の完了・履歴作業
 
 ### 日付不明
@@ -477,3 +479,4 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 - F8 | task_id: kabumori-f8-news-hard-pause-http-ai-offline-design-20261015 | original_path: .agent_v2/tasks/F8.md | archive_path: .agent_v2/archive/2026-10-15-f8-pause-offline-design-accepted.md | size: 11301 bytes | SHA256: 0386872d026202fe5a521c62f080db4ca4ccc0945245bcf2ac79bd715ff10225 | original PR #209 HEAD: 85b014c9b2251decadeb0bd9daa5025e2323c684 | original Git blob: 5576072239e2541c4d133cd113343fbed1c27321 | restore/read-back: exact content and Git blob match | verdict: G1 L8 PASS_OFFLINE_DESIGN; production NO_GO.
 
 Both archive paths are append-only originals. These index entries are history links, NOT current task assignments.
+| 2026-10-15 | F6 | `common-ai-f6-h5-consumer-bridge-import-boundary-repair-20261014` | L6 accepted offline source; PR205 Draft; review J1 pending | `.agent_v2/archive/2026-10-15-f6-h5-bridge-boundary-repair.md` | original Git blob `2f1da05c1b379c0ff3f245d75f9b75534529d118`, archive read-back identical; source length 8821 chars |

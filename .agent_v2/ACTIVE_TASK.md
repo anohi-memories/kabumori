@@ -56,28 +56,29 @@
 
 ## F4
 - slot: F4
-- status: review_required
+- status: done
 - task_id: postona-f4-pr197-p2-response-warning-preservation-20261015
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
-- dependencies: F4 PR169, F5 PR178 Phase6 cleanup_authorized(uuid), protected PR167/154
-- blocker: production NO_GO, integrated Sol（高） review needed after source fix; F4 reported Draft PR180 head 7c4f457834cddb42b72be6b74996e643b213e8c8 (base PR169 branch), awaiting L4
-- slot_use: POSTONA Threads F5-reported service deletion live-lease security defect; F4-owned source only
+- dependencies: PR197 + PR211, F5 PR193 response contract; J4 V4 P2 R1/R2
+- blocker: Sol（高） independent rereview and managed integration, production NO_GO
+- slot_use: F4 P2 response completeness and warning preservation source accepted, slot released
 - previous_task_archive: .agent_v2/archive/2026-10-13-F4-postona-f4-threads-t13-authenticated-writer-integration-20261013/
 - l4_verdict: PASS_SOURCE_FIX / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; PR180 head 7c4f457834cddb42b72be6b74996e643b213e8c8 Draft unmerged, 10 F4-scoped changes, reported fail-before/pass-after, F4 available after archive.
 - assignment_note: J4 V4 P2x2 app fix; new F4 task, prior J5 cancelled.
+- l4_verdict_20261015: PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO; PR211 head eb1011f2bd6f8a76ef412f824f0b21629794645b, 5 files, reported 294 tests PASS, independent J4-style F5 handler probes not rerun.
 
 ## F5
 - slot: F5
-- status: ready
+- status: review_required
 - task_id: common-account-f5-phase10-postona-x-ack-snapshot-reconciliation-20261015
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
@@ -87,21 +88,22 @@
 - blocker: F3 ACK snapshot contract L3 pending; managed Auth/RLS/GoTrue unverified; production NO_GO
 - slot_use: Phase10 POSTONA common lifecycle ACK snapshot integration; かぶモリ休止は別担当
 - previous_archive: .agent_v2/archive/2026-10-15-F5-common-account-f5-phase9-postona-shared-login-enrollment-20261015/
+- latest_result: IMPLEMENTED_SOURCE_CANDIDATE — Draft PR #214 head bc290ab618508a8fbaba1abfad308c52d86e4689 stacked on PR206 a84a9b6abb8c8d4706bba5f8a12e5c1aef3d3b8c (PR193 314aeac4, PR183 f2565cc0, PR178 83334a09, PR165 4638891f, PR152 ccea1fe8, PR121 76b50e1e, F3 PR204 45b08a87, F4 PR180 7c4f4578, POSTONA PR197 2171ee4c unchanged): F3 PR204 snapshot-bound ACK consumed in the F5 POSTONA end — (count, snapshot) pair recorded durably BEFORE acknowledging that exact snapshot, a changed set is recorded first then acknowledged (bounded), a pair that cannot be recorded never lets X be done and never lets the saga forget; one new unapplied migration 20261015120000 (shape CHECK widened by x_unconfirmed_snapshots, service_role-only recorder, rollback keeps data); F5-owned fix: another service's entitlement no longer makes single-service flows unreadable; proofs on local PG17 only: migration runner + 25/25 mutants, Edge 140 tests + 36/36, assembled F3 PR204+F4+F5 e2e 39 (X1-X8 ABA/cross-person/crash/takeover/stale lease/rollback/common-ID block/other-app entitlement preserved), release preflight ten-member chain; handoffs: F3 inherited hold()/F3-L1/R2' (POSTONA-only person cannot end POSTONA alone), G3 T13, G4 PR197/PR211, F4 Threads no app-side revoke; open D1 (whole-account deletion reports the unconfirmed count in the response only); production NO_GO. Report: .agent_v2/tasks/F5.md#report
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-h5-consumer-bridge-import-boundary-repair-20261014
+- status: ready
+- task_id: common-ai-f6-openai-anthropic-migration-inventory-20261015
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: F6 PR187 (a7e1d3f3), H5 PR198 (4223d5c0), H5 C5 done/merge hold; H5 PR199 bookkeeping unmerged
-- blocker: L6 PASS_OFFLINE_SOURCE; independent Codex Sol(高) header/auth/tenant/budget security review required before merge/deploy.  PASS_OFFLINE_SOURCE Draft PR #205 (4cd2cbdd) on #198: 3 isolation failures fixed by exact allowlist + new name-level least privilege and entry-point checks (nothing relaxed); SDK env containment (webhookKey null, header-contained fetch pins x-api-key/version); isolation 9, containment 4, H5 27+2, provider 126, report 324, _shared 658, mutants 8/8; order #187→#198→#205; Codex Sol review recommended
-- slot_use: F6 safety boundary repair for H5 Claude consumer bridge M2
+- dependencies: F6 PR187 → H5 PR198 → F6 PR205 Draft, J1 independent Sol security review ready
+- blocker: review and offline inventory required before production; no merge/deploy or API switching
+- slot_use: POSTONA-first full OpenAI API inventory and Anthropic migration plan
 
 ## F7
 - slot: F7
@@ -213,19 +215,19 @@
 
 ## J4
 - slot: J4
-- status: done
-- task_id: postona-j4-pr197-postona-deletion-client-security-review-20261014
+- status: ready
+- task_id: postona-j4-pr211-p2-client-fixes-focused-security-rereview-20261015
 - owner: codex
-- next_owner: none
+- next_owner: codex
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V4
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J4.md
 - current_report_path: .agent_v2/reports/J4.md
-- dependencies: J5 PR197, F5 PR193, F4 PR180, F3 PR192 with J3 V3 P2x3; old POSTONA Edge account-delete endpoint
-- blocker: J4 CHANGES_REQUIRED P2x2 (incomplete success response / post-response warning loss); F3/J3 P2x3, legacy server containment and managed F5/F4 gates remain; production NO_GO
-- slot_use: J4 independent review of POSTONA J5 legacy delete-client boundary; previous J4 TASK/Report archived
-- v4_verdict: CHANGES_REQUIRED P2x2 (PR197 incomplete provider summary accepted; known warnings lost after read-back errors); review complete J4 released. Source fix new G4/F4 or explicitly Codex J5 task; archive before reuse, production NO_GO.
+- dependencies: F4 PR211 eb1011f2 stacked PR197 2171ee4c; J4 V4 previous P2x2; F5 PR193 exact handler contract
+- blocker: production NO_GO; focus review only, F3/F5/legacy server separate
+- slot_use: independent P2 R1/R2 POSTONA mobile rerun with actual F5 handler synthetic tests
+- previous_archive: .agent_v2/archive/2026-10-15-J4-postona-j4-pr197-postona-deletion-client-security-review-20261014/
 
 ## J5
 - slot: J5
