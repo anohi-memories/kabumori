@@ -233,18 +233,19 @@
 
 ## J5
 - slot: J5
-- status: ready
-- task_id: postona-j5-pr197-p2-response-warning-preservation-fix-20261015
+- status: idle
+- task_id: none
 - owner: codex
-- next_owner: codex
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V5
-- recommended_model: Sol（高）
+- recommended_model: none
 - current_task_path: .agent_v2/tasks/J5.md
 - current_report_path: .agent_v2/reports/J5.md
 - dependencies: J4 V4 CHANGES_REQUIRED P2 R1/R2, PR197 HEAD 2171ee4c, F5 PR193 typed response; no F3/F5/F4 backend changes
 - blocker: PRODUCTION_NO_GO, owner server/Auth/SNS and independent review remain
 - slot_use: user-directed Codex emergency POSTONA client fix, outcome mandatory evidence and warning preservation, original J5 archived
+- cancellation: prior unstarted task archived; new F4 task owns correction.
 
 ## コード
 
