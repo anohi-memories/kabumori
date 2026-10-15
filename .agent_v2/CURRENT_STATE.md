@@ -1,3 +1,9 @@
+## G1 かぶモリ休止 — F2/F8独立レビューJ2登録候補（2026-10-15）
+- F2 runtime Draft PR #213 HEAD cb34ab7d89887c21f3f53aa8865d2b2b03ce7eb4、F8 runtime Draft PR #212 HEAD b80d5235e4d5d3600b654d95567bb22ac5d7c962。G1 L2/L8はsource-only候補受理、独立レビュー未済、production NO_GO。
+- 新J2 task_id `kabumori-j2-f2-f8-pause-runtime-integrated-security-review-20261015` ready/codex、推薦 Sol（高）、J2→V2、return_to かぶモリアプリG1のちゃ（運用休止・全体統括）。旧J2のAIに聞くTASK/Reportはarchive、SHA256/復元検証、HISTORY_INDEX追記済み。
+- 対象はF2 POSTONA非影響/認証/予約/PushとF8 1秒キャッシュ/in-flight/直接X/認証/全mode、PR129/164との統合回帰。旧J2/AUTHレビューへ戻さない。
+- この管理PRではproduct source、他slot、managed DB/Cron/Edge/Secret、X/Push、deploy/merge/本番停止は変更しない。J1共通AI枠を保護。レビュー実行時はfresh mainとclean独立worktreeが必須。
+
 ## POSTONA F4 L4 PR211 accepted (2026-10-15 JST)
 - F4 `postona-f4-pr197-p2-response-warning-preservation-20261015` done/none after L4, verdict PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO. PR211 head `eb1011f2bd6f8a76ef412f824f0b21629794645b` OPEN/Draft/unmerged based on protected PR197 `2171ee4c02ea2eec46562d81595f5460e5507d9d`, five F4 mobile source/test/doc changes. R1 incomplete provider summary fails closed; R2 validated same-user X count and Threads remote-unverified retained on session/readback error. Reported fail-before/pass-after and app 294 PASS; ChatGPT read actual diff but did not rerun tests.
 - Required: independent J1–J4 Sol（高） focused rereview including F5 PR193 actual handler/contract probe, cross-user warning leak, transient auth/preview error. Legacy deletion endpoint, F3/J3 X saga, F5/G5 managed Auth/lifecycle and F4 Threads remote still NO_GO. New F4 task only after archiving accepted TASK/Report.
