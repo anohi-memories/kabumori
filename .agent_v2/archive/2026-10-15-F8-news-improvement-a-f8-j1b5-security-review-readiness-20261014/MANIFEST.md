@@ -1,0 +1,10 @@
+# F8 completion archive
+
+- original_path: `.agent_v2/tasks/F8.md`
+- archive_path: `.agent_v2/archive/2026-10-15-F8-news-improvement-a-f8-j1b5-security-review-readiness-20261014/files/.agent_v2/tasks/F8.md`
+- size: 6909 bytes
+- SHA256: `3496660d5633c4fc74958ccc53a80f19614f35f117357528c84b846c41e45d8e`
+- source_commit: `9e9c0a0682269de0a5ec25ff4f26ed82043fbfe8`
+- source_blob: `0f36fe2f35d351f96ca240d46ba120ec770d7027`
+- restore: copied bytes equal original and original Git blob (verified before replacement).
+- disposition: L8 accepted source candidate; PR196 and all production/review holds retained.
