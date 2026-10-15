@@ -489,3 +489,11 @@ Both archive paths are append-only originals. These index entries are history li
 - original_path: `.agent_v2/tasks/J2.md`; archive_path: `.agent_v2/archive/2026-10-15-J2-ai-ask-b0-r1-r8-focused-rereview-20261013/files/.agent_v2/tasks/J2.md`; size 5347 bytes; SHA256 `0eaf7b7ae5edc4a3ec8ee1adaed052110ac37510974c3236cd8708cd3f0469dc`; original Git blob `eacb7765bec56425625fa83fce64172b26a05fa5`.
 - original_path: `.agent_v2/reports/J2.md`; archive_path: `.agent_v2/archive/2026-10-15-J2-ai-ask-b0-r1-r8-focused-rereview-20261013/files/.agent_v2/reports/J2.md`; size 21774 bytes; SHA256 `91c099abc28f0aab08572e58e1be8facae257030337327e41b73a30405357cda`; original Git blob `f76bf93e4f2160194019e329f8af1ba25010270d`.
 - MANIFEST.json / SHA256SUMS saved; original and archived Git blobs/content read-back byte-for-byte match. Current TASK is separate new J2 security review; index is historical only.
+
+## J3 PR204 focused review archive — 2026-10-15
+- task_id: `postona-j3-pr204-p2x3-security-rereview-20261015`
+- archive_root: `.agent_v2/archive/2026-10-15-J3-postona-j3-pr204-p2x3-security-rereview-20261015/`
+- original_path: `.agent_v2/tasks/J3.md`; archive_path: `.agent_v2/archive/2026-10-15-J3-postona-j3-pr204-p2x3-security-rereview-20261015/files/.agent_v2/tasks/J3.md`; size: 4706 bytes; SHA256: `5f76caeb3e29d3b0431d85de58f8dabf9702038936b5c7fe5e9bc234db09c000`; blob: `a7bc0948e1fc1a4ff21bb7a7f00a94868d8efeec`
+- original_path: `.agent_v2/reports/J3.md`; archive_path: `.agent_v2/archive/2026-10-15-J3-postona-j3-pr204-p2x3-security-rereview-20261015/files/.agent_v2/reports/J3.md`; size: 11461 bytes; SHA256: `6548d53b7fb625ee9c75fb3504edf582f6da0e51d125f39479001e5dd8eaf869`; blob: `09a4333ad7fdc3a0f9ea6f4878f78292b37c8dcb`
+- restore: both original UTF-8 contents and GitHub blob SHAs match archived copies; MANIFEST and SHA256SUMS stored.
+- result: V3 PASS_SOURCE_REVIEW / PRODUCTION_NO_GO, F3 PR204 reviewed.
