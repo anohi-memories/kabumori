@@ -115,19 +115,32 @@ select pg_temp.expect((select outcome_code from postona_x_resv.reservations wher
 select pg_temp.expect(not ((pg_temp.stop(:'u3', :'lease3') ->> 'reconciliation_required')::boolean), 'S5 nothing unknown => no reconciliation');
 select 'S5_IN_FLIGHT_AND_UNCERTAIN_PASS' as result;
 
--- S6 (R1, J3 V3): the unknown post is checkpointed durably under the subject hash (no raw user id); no API role can
--- read or write the record; the acknowledgement is service_role only, never during a deletion, compare-and-clear.
+-- S6 (R1 / R1a, J3 V3): the unknown post is checkpointed durably under the subject hash (no raw user id); no API role
+-- can read or write the record or its receipts or call the snapshot helper; the acknowledgement is service_role only,
+-- never during a deletion, and names the exact snapshot (a bare count clears nothing).
 select pg_temp.expect((select count(*) from public.social_mobile_account_deletion_x_unconfirmed
   where subject_sha256 = public.social_mobile_account_deletion_subject(:'u4')) = 1, 'S6 checkpointed');
 select pg_temp.expect((pg_temp.stop(:'u4', :'lease4') ->> 'x_posts_unconfirmed')::int = 1, 'S6 repeated stop does not double count');
-select pg_temp.expect(pg_temp.as_role('select count(*)::text from public.social_mobile_account_deletion_x_unconfirmed', r) like 'ERR:permission denied%', 'S6 table closed to ' || r)
+select encode(sha256(convert_to('x_unconfirmed:v1:' || public.social_mobile_account_deletion_subject(:'u4') || ':' || r.id::text, 'UTF8')), 'hex') as snap4
+  from postona_x_resv.reservations r where r.brand_id = :'ws4' and r.status = 'uncertain' \gset
+select pg_temp.expect(pg_temp.stop(:'u4', :'lease4') ->> 'x_unconfirmed_snapshot' = :'snap4', 'S6 stop answers the exact snapshot');
+select pg_temp.expect(pg_temp.as_role(format('select count(*)::text from public.%I', tbl), r) like 'ERR:permission denied%', 'S6 ' || tbl || ' closed to ' || r)
+  from unnest(array['anon', 'authenticated', 'service_role']) r,
+       unnest(array['social_mobile_account_deletion_x_unconfirmed', 'social_mobile_account_deletion_x_unconfirmed_ack_receipts']) tbl;
+select pg_temp.expect(pg_temp.as_role(format('select public.social_mobile_account_deletion_x_unconfirmed_snapshot(%L)::text', 'x'), r) like 'ERR:permission denied%', 'S6 snapshot helper closed to ' || r)
   from unnest(array['anon', 'authenticated', 'service_role']) r;
-select pg_temp.expect(pg_temp.as_role(format('select public.social_mobile_account_deletion_x_unconfirmed_ack(%L, 1)::text', :'u4'), r) like 'ERR:permission denied%', 'S6 ack closed to ' || r)
-  from unnest(array['anon', 'authenticated']) r;
-select pg_temp.expect(pg_temp.svc(format('select public.social_mobile_account_deletion_x_unconfirmed_ack(%L, 1) ->> ''status''', :'u4')) = 'deletion_in_progress', 'S6 no ack during a deletion');
-select pg_temp.expect(pg_temp.svc(format('select public.social_mobile_account_deletion_x_unconfirmed_ack(%L, 0)::text', :'u4')) = 'ERR:SOCIAL_MOBILE_DELETION_ACK_INVALID', 'S6 ack needs a positive count');
-select pg_temp.expect((pg_temp.svc(format('select public.social_mobile_account_deletion_x_precheck(%L)::text', :'u4')))::jsonb = '{"non_x_accounts": 0, "x_posts_unconfirmed": 1}'::jsonb, 'S6 precheck reports it');
-select pg_temp.expect((pg_temp.svc(format('select public.social_mobile_account_deletion_x_precheck(%L)::text', :'u3')))::jsonb ->> 'x_posts_unconfirmed' = '0', 'S6 another person has none');
+select pg_temp.expect(pg_temp.as_role(format('select public.social_mobile_account_deletion_x_unconfirmed_ack(%L, %s)::text', :'u4', arg), r) like 'ERR:permission denied%', 'S6 ack closed to ' || r)
+  from unnest(array['anon', 'authenticated']) r, unnest(array['1', quote_literal(:'snap4')]) arg;
+select pg_temp.expect(pg_temp.svc(format('select public.social_mobile_account_deletion_x_unconfirmed_ack(%L, %L::text) ->> ''status''', :'u4', :'snap4')) = 'deletion_in_progress', 'S6 no ack during a deletion');
+select pg_temp.expect(pg_temp.svc(format('select public.social_mobile_account_deletion_x_unconfirmed_ack(%L, 1)::text', :'u4')) = '{"status": "snapshot_required"}', 'S6 a bare count is refused typed');
+select pg_temp.expect(pg_temp.svc(format('select public.social_mobile_account_deletion_x_unconfirmed_ack(%L, %L::text)::text', :'u4', s)) = 'ERR:SOCIAL_MOBILE_DELETION_ACK_INVALID', 'S6 ack needs a snapshot ' || coalesce(s, 'null'))
+  from unnest(array['abc', upper(:'snap4'), null]) s;
+select pg_temp.expect((select count(*) from public.social_mobile_account_deletion_x_unconfirmed
+  where subject_sha256 = public.social_mobile_account_deletion_subject(:'u4')) = 1, 'S6 nothing cleared by any refused ack');
+select pg_temp.expect((pg_temp.svc(format('select public.social_mobile_account_deletion_x_precheck(%L)::text', :'u4')))::jsonb
+  = jsonb_build_object('non_x_accounts', 0, 'x_posts_unconfirmed', 1, 'x_unconfirmed_snapshot', :'snap4', 'reconciliation_required', true), 'S6 precheck reports it');
+select pg_temp.expect((pg_temp.svc(format('select public.social_mobile_account_deletion_x_precheck(%L)::text', :'u3')))::jsonb
+  = '{"non_x_accounts": 0, "x_posts_unconfirmed": 0, "x_unconfirmed_snapshot": null, "reconciliation_required": false}'::jsonb, 'S6 another person has none');
 select 'S6_DURABLE_UNCONFIRMED_ACL_PASS' as result;
 
 -- R3 setup (the two-session cases run in saga_run.sh): two fresh people.
@@ -135,5 +148,14 @@ select 'S6_DURABLE_UNCONFIRMED_ACL_PASS' as result;
 \set u6 00000000-0000-4000-8000-0000000000a6
 select pg_temp.person(:'u5', 'five') is not null as r3_setup_five;
 select pg_temp.person(:'u6', 'six') is not null as r3_setup_six;
+-- R3a / R1b setup: four more fresh people (row-lock waits, rollback race).
+\set u7 00000000-0000-4000-8000-0000000000a7
+\set u8 00000000-0000-4000-8000-0000000000a8
+\set u9 00000000-0000-4000-8000-0000000000a9
+\set u10 00000000-0000-4000-8000-0000000000aa
+select pg_temp.person(:'u7', 'seven') is not null as r3a_setup_seven;
+select pg_temp.person(:'u8', 'eight') is not null as r3a_setup_eight;
+select pg_temp.person(:'u9', 'nine') is not null as r1b_setup_nine;
+select pg_temp.person(:'u10', 'ten') is not null as r1b_setup_ten;
 
 select 'X_SAGA_STOP_BEHAVIOR_PASS' as result;
