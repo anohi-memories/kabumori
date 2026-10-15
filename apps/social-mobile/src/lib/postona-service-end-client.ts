@@ -1,5 +1,5 @@
 import { sameDeletionContext, type DeletionContext } from '../domain/account-deletion.ts';
-import { endFailure, parseEndPreview, parseEndResult, POSTONA_END_CONFIRMATION, POSTONA_END_CONFIRM_PHRASE, type EndFailure, type EndPreview, type EndResult } from '../domain/postona-service-end.ts';
+import { endFactsOf, endFailure, parseEndPreview, parseEndResult, POSTONA_END_CONFIRMATION, POSTONA_END_CONFIRM_PHRASE, type EndFacts, type EndFailure, type EndPreview, type EndResult } from '../domain/postona-service-end.ts';
 
 type SessionView = { userId: string; sessionId: string | null; accessToken: string };
 export type BoundEndPreview = EndPreview & { context: DeletionContext };
@@ -35,6 +35,9 @@ export function createPostonaEndClient(deps: Deps) {
     if (!deps.enabled) return endFailure('POSTONA_END_UNAVAILABLE');
     if (busy) return endFailure('DELETION_IN_PROGRESS');
     busy = true;
+    // What this person's own, validated answer stated (bound to input.context: the screen shows a result only to
+    // that same login). Kept on every path after the answer arrived, so an exception while confirming never drops it.
+    let facts: EndFacts | undefined;
     try {
       if (!issued.has(input.preview) || !sameDeletionContext(input.context, input.preview.context)) return endFailure('LIFECYCLE_CHANGED');
       if (!input.preview.postonaAvailable) return endFailure('POSTONA_END_UNAVAILABLE');
@@ -48,20 +51,31 @@ export function createPostonaEndClient(deps: Deps) {
       // A mutation consumes its preview/consent. Every retry needs another preview.
       issued.delete(input.preview);
       const response = await deps.call({ action: 'withdraw_postona', confirmation: POSTONA_END_CONFIRMATION, acknowledged_remote_unverified: [...input.acknowledged] }, current.accessToken);
-      const after = await deps.session();
-      if (!sameDeletionContext(input.context, after ?? { userId: null, sessionId: null })) return endFailure('SESSION_CHANGED', response.body);
+      // Parsed first (pure): only a fully valid answer yields facts; a truncated or inconsistent one never does.
       const result = parseEndResult(response.status, response.body, input.acknowledged);
+      if (result.ok) facts = endFactsOf(result);
+      let after: SessionView | null;
+      try {
+        after = await deps.session();
+      } catch {
+        return endFailure('RESULT_UNCONFIRMED', response.body, facts);
+      }
+      if (!sameDeletionContext(input.context, after ?? { userId: null, sessionId: null })) {
+        // Another person (or nobody) is signed in now: none of the previous person's facts are attached.
+        const samePerson = after !== null && after.userId === input.context.userId;
+        return endFailure('SESSION_CHANGED', samePerson ? response.body : undefined, samePerson ? facts : undefined);
+      }
       if (!result.ok) return result;
       // Read-only definitive read-back: account + Kabumori unchanged, only POSTONA ended/absent.
       const verified = await preview();
-      if (!verified.ok || !sameDeletionContext(input.context, verified.context)) return endFailure('RESULT_UNCONFIRMED', response.body);
+      if (!verified.ok || !sameDeletionContext(input.context, verified.context)) return endFailure('RESULT_UNCONFIRMED', response.body, facts);
       const postona = verified.services.find((s) => s.service === 'x_autopost');
       const oldKabumori = input.preview.services.find((s) => s.service === 'kabumori')?.status;
       const kabumori = verified.services.find((s) => s.service === 'kabumori')?.status;
       if (verified.accountStatus !== 'active' || kabumori !== oldKabumori || verified.deletionInProgress
-        || (result.outcome === 'not_registered' ? postona !== undefined : postona?.status !== 'ended')) return endFailure('RESULT_UNCONFIRMED', response.body);
+        || (result.outcome === 'not_registered' ? postona !== undefined : postona?.status !== 'ended')) return endFailure('RESULT_UNCONFIRMED', response.body, facts);
       return result;
-    } catch { return endFailure('RESULT_UNCONFIRMED'); }
+    } catch { return endFailure('RESULT_UNCONFIRMED', undefined, facts); }
     finally { busy = false; }
   }
   return { preview, end };

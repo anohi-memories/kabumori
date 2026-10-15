@@ -57,7 +57,10 @@ test('active POSTONA, changed Kabumori or missing common-account/Auth read-back 
 test('unknown/legacy/login-deleting/incomplete provider results fail closed, including unconsented remote grant', () => {
   for (const body of [null, [], {}, { ok: true }, { ok: true, login_deleted: true }, { ...ended, login_deleted: true }, { ...ended, outcome: 'deleted' }, { ...ended, x_posts_unconfirmed: -1 }, { ...ended, x_posts_unconfirmed: '2' }, { ...ended, providers: { threads: 'blocked' } }, { ...ended, remote_unverified: ['unknown'] }, { ...ended, remote_unverified: [] }, { ...ended, remote_unverified: ['threads', 'threads'] }]) assert.equal(parseEndResult(200, body, ['threads']).ok, false, JSON.stringify(body));
   assert.equal(parseEndResult(200, ended, []).ok, false); assert.equal(parseEndResult(202, ended, ['threads']).ok, false);
-  assert.equal(parseEndResult(200, { ok: true, outcome: 'already_ended', remote_unverified: ['threads'], x_posts_unconfirmed: 2 }, ['threads']).ok, true);
+  // F5 PR193 derives remote_unverified from the recorded provider results, so a durable answer names both (F4 P2-R1:
+  // a remote-unverified provider without its recorded result is not an F5 shape and is refused).
+  assert.equal(parseEndResult(200, { ok: true, outcome: 'already_ended', providers: { x: 'done', threads: 'local_removed_remote_unverified' }, remote_unverified: ['threads'], x_posts_unconfirmed: 2 }, ['threads']).ok, true);
+  assert.equal(parseEndResult(200, { ok: true, outcome: 'already_ended', remote_unverified: ['threads'], x_posts_unconfirmed: 2 }, ['threads']).ok, false);
   assert.equal(parseEndResult(200, { ok: true, outcome: 'not_registered' }, []).ok, true);
 });
 test('malformed preview, unknown provider and inconsistent consent block; busy or missing adapter unavailable', () => {
