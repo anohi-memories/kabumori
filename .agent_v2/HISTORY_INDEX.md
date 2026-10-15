@@ -511,3 +511,11 @@ Both archive paths are append-only originals. These index entries are history li
 - original_path: `.agent_v2/tasks/J1.md`; archive_path: `.agent_v2/archive/2026-10-16-j1-f6-h5-security-review-task.md`; Git blob `3b35532273a5da850fdd6958fd515b5ee5b3c411`; archive exact Git blob/content match, 4454 characters.
 - original_path: `.agent_v2/reports/J1.md`; archive_path: `.agent_v2/archive/2026-10-16-j1-f6-h5-security-review-report.md`; Git blob `aeb7d8872fd8d78e71224a094e9527a5f606afe1`; archive exact Git blob/content match, 21106 characters.
 - sha256 / separate MANIFEST pending; append-only archive, previous control metadata preserved.
+
+## F5 Phase10 completed archive — 2026-10-16
+- task_id: `common-account-f5-phase10-postona-x-ack-snapshot-reconciliation-20261015`
+- original_path: `.agent_v2/tasks/F5.md`
+- archive_path: `.agent_v2/archive/2026-10-16-F5-common-account-f5-phase10-postona-x-ack-snapshot-reconciliation-20261015/files/.agent_v2/tasks/F5.md`
+- size: 20508 bytes; SHA256: `a6045175c0dc139c4fbb70439fb32507a35ad1738692398762db6cf06adaba24`
+- original_blob: `aad705aae413bae0e62a9d978a4d80e84b1f7389`; restore: exact UTF-8 source/archive and blob SHA matched. MANIFEST/SHA256SUMS stored.
+- L5: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; J3 V3 later CHANGES_REQUIRED P2 R1 on PR214.
