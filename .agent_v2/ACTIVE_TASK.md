@@ -91,11 +91,11 @@
 
 ## F6
 - slot: F6
-- status: review_required
+- status: done
 - task_id: common-ai-f6-openai-anthropic-migration-inventory-20261015
 - owner: claude
-- next_owner: chatgpt
-- blocker: INVENTORY_AND_PLAN_DONE docs-only Draft PR #216 (1dc7b72e): 30 OpenAI call sites (POSTONA 2, Kabumori 27, unused adapter 1); Oct 1-15 OpenAI ~$19 (MIC ~60%); POSTONA cost unrecorded; plan F6 stage 0 (M2 OpenAI-in-policy two-step, free-text JSON, POSTONA attribution, ledger caps, web_search tool) -> POSTONA consult/preview/AI Lab/user brands (F3) -> Kabumori after G1 pause; image edit not replaceable; 9 issues routed
+- next_owner: none
+- blocker: L6 PASS_OFFLINE_PLAN; J1 R1/R2 fixes pending; all PR merge and production NO_GO
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
