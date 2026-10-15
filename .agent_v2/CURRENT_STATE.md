@@ -1,3 +1,7 @@
+## POSTONA F4 L4 PR217 R2c source accepted (2026-10-15)
+- F4 `postona-f4-pr211-r2c-final-preview-identity-fix-20261015` done/none, L4 PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO. Draft PR217 head `d4bcd09e8c0a67a87afff867c69b135b1a26ba4a` stacked on PR211, 5 POSTONA app files. Actual diff confirms sticky user A→B/null suppression in returned helper response while same-person validated warnings retained. Claude reported fail-before/pass-after R2c 19/19, F5 actual synthetic handler seam 8/8, app 313 PASS, tsc/lint PASS; ChatGPT did not rerun.
+- Next independent Codex Sol（高） focused security review, including concurrency/races and F5 handler contract. No release of old server deletion route or live Auth/DB/Threads/X; source gate OFF, merge/deploy/production NO_GO. Archive F4 accepted TASK+Report before next use.
+
 ## J3 F5 Phase10 限定レビュー割当（2026-10-15）
 - J3 `common-account-j3-f5-pr214-snapshot-ack-focused-review-20261015` ready/codex、Sol（高）、J3→V3、return `共通アカウントG5のちゃ（新F5担当）`。F5 Phase10 Draft PR214 `bc290ab618508a8fbaba1abfad308c52d86e4689`の差分とF3 PR204の結合だけを独立read-only security review。前J3 V3 PASSしたF3 PR204 R1a/R3a/R1bは再レビューしない。共通ID全削除D1の利用者通知・同意は別設計判断として残す。Production/managed/Auth/DB/merge/deploy NO_GO。
 - 前J3 TASK/Report両方を`.agent_v2/archive/2026-10-15-J3-postona-j3-pr204-p2x3-security-rereview-20261015/`へappend-only保存、blob SHA・原文復元照合、SHA256SUMS/MANIFEST/HISTORY_INDEX更新済み。他slot TASK/PRは未変更。
