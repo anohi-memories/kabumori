@@ -1,0 +1,24 @@
+{
+  "archived_at": "2026-10-15",
+  "reason": "unstarted J5 cancelled at user request, not transferred task_id",
+  "entries": [
+    {
+      "original_path": ".agent_v2/tasks/J5.md",
+      "archive_path": ".agent_v2/archive/2026-10-15-J5-cancelled-postona-p2-task-before-start/files/.agent_v2/tasks/J5.md",
+      "source_blob": "88ab428f70d5e53cdc9c4161cfd78152bf66a356",
+      "archive_blob": "88ab428f70d5e53cdc9c4161cfd78152bf66a356",
+      "size_bytes": 4835,
+      "sha256": "bca632a6e8580aa952979d8e2ab36111b2f9e41e6474e0af2461c4c4af2d761a",
+      "readback": true
+    },
+    {
+      "original_path": ".agent_v2/reports/J5.md",
+      "archive_path": ".agent_v2/archive/2026-10-15-J5-cancelled-postona-p2-task-before-start/files/.agent_v2/reports/J5.md",
+      "source_blob": "53daeb52572d876ed635083ff5a92ac1ba029498",
+      "archive_blob": "53daeb52572d876ed635083ff5a92ac1ba029498",
+      "size_bytes": 742,
+      "sha256": "09fb9986730775271428f857572c6bfc2430704067a280e15259595c47d42ff9",
+      "readback": true
+    }
+  ]
+}
