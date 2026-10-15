@@ -19,12 +19,22 @@ export type EndResult = {
   ok: true; outcome: 'ended' | 'already_ended' | 'not_registered';
   remoteUnverified: string[]; xPostsUnconfirmed: number; lines: string[];
 };
+/** Warnings a validated answer of this person's own request stated: kept when a later check cannot confirm the end. */
+export type EndFacts = Readonly<{ remoteUnverified: readonly string[]; xPostsUnconfirmed: number }>;
 const record = (v: unknown): Record<string, unknown> | null => typeof v === 'object' && v !== null && !Array.isArray(v) ? v as Record<string, unknown> : null;
 const strings = (v: unknown): string[] | null => Array.isArray(v) && v.every((x) => typeof x === 'string') && new Set(v).size === v.length ? v : null;
 const countOf = (v: unknown) => v === undefined ? 0 : typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? v : null;
 const own = (obj: object, key: string) => Object.prototype.hasOwnProperty.call(obj, key);
+const REMOTE_RESULT = 'local_removed_remote_unverified';
+const THREADS_RESULTS: readonly unknown[] = ['not_connected', 'confirmed_remote_revoked', REMOTE_RESULT];
 
-export function endFailure(code: string, body?: unknown): EndFailure {
+export const endFactsOf = (result: EndResult): EndFacts => ({ remoteUnverified: [...result.remoteUnverified], xPostsUnconfirmed: result.xPostsUnconfirmed });
+
+/**
+ * A failure notice. `facts` (validated, this person's own answer) add the remote-authorization line per provider and
+ * the X uncertainty line, never a completion or a revocation; without them only what the body itself states is added.
+ */
+export function endFailure(code: string, body?: unknown, facts?: EndFacts): EndFailure {
   const data = record(body);
   const notice = own(ERROR_NOTICES, code) ? ERROR_NOTICES[code as keyof typeof ERROR_NOTICES] : UNKNOWN_CODE_NOTICE;
   const clientNotice: Record<string, string> = {
@@ -37,7 +47,9 @@ export function endFailure(code: string, body?: unknown): EndFailure {
   if ((code === 'X_CLEANUP_BLOCKED' || code === 'X_CLEANUP_FAILED') && data) {
     for (const reason of strings(data.reasons) ?? []) if (own(X_REASON_NOTICES, reason)) lines.push(X_REASON_NOTICES[reason]);
   }
-  const count = countOf(data?.x_posts_unconfirmed);
+  const remote = facts ? facts.remoteUnverified : (strings(data?.remote_unverified) ?? []).filter((p) => own(REMOTE_UNVERIFIED, p));
+  for (const provider of remote) if (own(REMOTE_UNVERIFIED, provider)) lines.push(REMOTE_UNVERIFIED[provider].remote);
+  const count = facts ? facts.xPostsUnconfirmed : countOf(data?.x_posts_unconfirmed);
   if (count) lines.push(xPostsUnconfirmedLine(count));
   return { ok: false, code, lines, retryable: !own(clientNotice, code) && notice.retryable };
 }
@@ -82,15 +94,39 @@ export function parseEndPreview(status: number, body: unknown): EndPreview | End
   };
 }
 
+/**
+ * The answer of withdraw_postona, by F5 PR193's exact variants (handleWithdrawPostona):
+ *   ended          `providers` ALWAYS (X recorded `done`); `remote_unverified` / `x_posts_unconfirmed` only when non-empty
+ *   already_ended  `providers` / `remote_unverified` / `x_posts_unconfirmed` each only when on record
+ *   not_registered none of them
+ * and F5's rule for `remote_unverified` (common_account_service_end_result): a provider answered "local removed,
+ * remote unverified", or it was acknowledged and answered "not connected" (the removal's answer was lost). Both
+ * directions are checked. Anything else -- a truncated or inconsistent answer -- is RESULT_UNCONFIRMED: the read-back
+ * preview carries no provider results, so it cannot supply missing warnings.
+ */
 export function parseEndResult(status: number, body: unknown, acknowledged: readonly string[]): EndResult | EndFailure {
   const d = record(body);
   if (status !== 200 || d?.ok !== true) return failureOf(body);
-  const remote = d.remote_unverified === undefined ? [] : strings(d.remote_unverified);
+  const unconfirmed = () => endFailure('RESULT_UNCONFIRMED', body);
+  const outcome = d.outcome;
+  if ((outcome !== 'ended' && outcome !== 'already_ended' && outcome !== 'not_registered') || d.login_deleted === true) return unconfirmed();
+  if (outcome === 'not_registered' && (d.providers !== undefined || d.remote_unverified !== undefined || d.x_posts_unconfirmed !== undefined)) return unconfirmed();
+  if (outcome === 'ended' && d.providers === undefined) return unconfirmed();
   const providers = d.providers === undefined ? {} : record(d.providers);
+  const remote = d.remote_unverified === undefined ? [] : strings(d.remote_unverified);
   const count = countOf(d.x_posts_unconfirmed);
-  if (!['ended', 'already_ended', 'not_registered'].includes(d.outcome as string) || d.login_deleted === true
-    || !remote || remote.some((p) => !own(REMOTE_UNVERIFIED, p) || (d.outcome === 'ended' && !acknowledged.includes(p))) || !providers || count === null
-    || Object.entries(providers).some(([p, r]) => p === 'x' ? r !== 'done' : p !== 'threads' || !['not_connected', 'confirmed_remote_revoked', 'local_removed_remote_unverified'].includes(r as string))
-    || Object.entries(providers).some(([p, r]) => (r === 'local_removed_remote_unverified') !== remote.includes(p))) return endFailure('RESULT_UNCONFIRMED', body);
-  return { ok: true, outcome: d.outcome as EndResult['outcome'], remoteUnverified: remote, xPostsUnconfirmed: count, lines: resultLines(d, 'postona_end') };
+  if (!providers || !remote || count === null || (d.remote_unverified !== undefined && remote.length === 0)) return unconfirmed();
+  if (outcome === 'ended' && providers.x !== 'done') return unconfirmed();
+  for (const [provider, result] of Object.entries(providers)) {
+    if (provider === 'x' ? result !== 'done' : provider !== 'threads' || !THREADS_RESULTS.includes(result)) return unconfirmed();
+    if (result === REMOTE_RESULT && !remote.includes(provider)) return unconfirmed();
+  }
+  for (const provider of remote) {
+    if (!own(REMOTE_UNVERIFIED, provider)) return unconfirmed();
+    if (providers[provider] !== REMOTE_RESULT && providers[provider] !== 'not_connected') return unconfirmed();
+    if (outcome === 'ended' && !acknowledged.includes(provider)) return unconfirmed();
+  }
+  // A fresh end accounts for every provider the person was asked to consent about.
+  if (outcome === 'ended' && acknowledged.some((provider) => providers[provider] === undefined)) return unconfirmed();
+  return { ok: true, outcome, remoteUnverified: remote, xPostsUnconfirmed: count, lines: resultLines(d, 'postona_end') };
 }
