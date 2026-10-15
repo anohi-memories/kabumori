@@ -23,18 +23,20 @@
 
 ## F2
 - slot: F2
-- status: ready
-- task_id: kabumori-f2-topix-pr201-203-premerge-safety-corrections-20261015
+- status: idle
+- task_id: none
 - owner: claude
-- next_owner: claude
-- return_to: かぶモリアプリG2のちゃ（新F2担当）
+- next_owner: none
+- return_to: none（未割当。新TASKでG1統括が確定）
 - completion_code: L2
-- recommended_model: Sonnet5（高）
+- recommended_model: none（新TASK割当時に必須）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
-- dependencies: stacked Draft PR201 exact 6977ca3c / PR203 exact 46cd29be; previous F2 archive 2026-10-15 confirmed. TOPIX actual Yahoo symbol and JPX/Yahoo/Nikkei rights unverified.
-- blocker: L2 CHANGES_REQUIRED_SOURCE_PREMERGE / PRODUCTION_NO_GO. (1) TOPIX date guard when Nikkei missing/unusable, (2) dry-run topix_source bypasses default OFF to permit an external fetch. Fix both offline on new stacked Draft, do not modify PR201/203 originals.
-- slot_use: Source-only guard correction of PR201/203. No API/network/merge/deploy/Secret/Cron/X/post/notification/EAS permission.
+- dependencies: none（未割当。旧Phase2 PR #201/#203 は保護・停止）
+- blocker: none（空き枠。かぶモリの本番停止・Cron・DB操作は別TASKと明示承認が必要）
+- slot_use: **かぶモリ運用休止・停止処理向けに空けておく**。ユーザー／G1統括の次の明示割当まで実行禁止。旧TOPIX/市況改善を再開しない。
+- previous_archive: .agent_v2/archive/2026-10-15-F2-kabumori-f2-topix-pr201-203-premerge-safety-corrections-20261015/
+- previous_disposition: CANCELLED_UNSTARTED_BY_USER（ready未着手のためdone扱いしない）
 
 ## F3
 - slot: F3
