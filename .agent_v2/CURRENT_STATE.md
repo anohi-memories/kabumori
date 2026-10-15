@@ -1,5 +1,11 @@
 ## MIC F7｜Stage 1 S1-A SOURCE ONLY へ条件付きGO（2026-10-15 17時台 JST）
 
+## F5 Phase9 — POSTONA先行共通ログイン・利用登録（2026-10-15）
+- F5 new `common-account-f5-phase9-postona-shared-login-enrollment-20261015` ready/claude、Opus5.5（高）、F5→L5、返却先「共通アカウントG5のちゃ（新F5担当）」。共通ID/共通AuthとPOSTONA利用登録を最優先にする。かぶモリの現役サービス利用やプロファイルに依存させず、将来アプリにも使えるapp-scoped entitlementを維持。source-only、production NO_GO。
+- 前F5 Phase8 `common-account-f5-phase8-x-threads-lifecycle-integrated-security-20261013` L5完了済み、Draft PR193 head `314aeac47a02ce80aea3d94426a563dfbe57ad7c`。TASK/Reportを`.agent_v2/archive/2026-10-15-F5-common-account-f5-phase8-x-threads-lifecycle-integrated-security-20261013/`へappend-only保存、MANIFEST/SHA256SUMS、原blobとUTF-8復元read-back一致、HISTORY_INDEX更新。
+- F3はACK・lease修正のL3待ち、J4のPOSTONA退会クライアントPR197にP2×2。F5はF3/F4/G4/POSTONAアプリの所有コードを変更せず、共通Auth/利用権限だけ独立実装・offline実証。実managed GoTrue/PostgREST/RLS、SNS、DB/Auth本番、merge/deployは別承認が必要。
+
+
 - Supabase stock-x-autopost `wsmznyzcvmuitkglfeuj` を2026-10-15に本番read-only集計。2026-10-14 00:00 JST以降、State25（no_change21 / evaluated4）、failed/running0、shadow記録21/21、no_change AI usage0、unexpected shadow status0。Slice0配備2026-10-07 16:11 JST以降State78（no_change67 / evaluated11）、shadow67/67、failed0。最新State実行10/15 15:15 JST。
 - equity_indexは自然 `no_new_observation` 未観測（10/14・15はbelow_thresholdまたは重要変化でevaluated）。SOURCE-only S1-A実装は条件付きGO、ローカルSQL合成テストでno_new_observation／no pointer advanceの再現PASS必須。本番GOではない。
 - commoditiesのBRENT/WTI最新観測は10/06で止まりshadow `not_verifiable/observation_not_acceptable` 継続。データ品質は別改善課題（認識していないままverifiedを許さないことが必須）。ratesの10/13-14米金利観測staleは10/15 15:15 JST runでbelow_thresholdに復帰。
