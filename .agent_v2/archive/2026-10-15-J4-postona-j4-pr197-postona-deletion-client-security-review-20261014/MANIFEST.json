@@ -1,0 +1,21 @@
+{
+  "task_id": "postona-j4-pr197-postona-deletion-client-security-review-20261014",
+  "date": "2026-10-15",
+  "entries": [
+    {
+      "original_path": ".agent_v2/tasks/J4.md",
+      "archive_path": ".agent_v2/archive/2026-10-15-J4-postona-j4-pr197-postona-deletion-client-security-review-20261014/files/.agent_v2/tasks/J4.md",
+      "blob_sha": "49f5fde50f64064abfba748a4f547f92e5523513",
+      "size_bytes": 7931,
+      "restore_verified": true
+    },
+    {
+      "original_path": ".agent_v2/reports/J4.md",
+      "archive_path": ".agent_v2/archive/2026-10-15-J4-postona-j4-pr197-postona-deletion-client-security-review-20261014/files/.agent_v2/reports/J4.md",
+      "blob_sha": "d70231347bce8bfae3b72c06ee858ab5350013e6",
+      "size_bytes": 11670,
+      "restore_verified": true
+    }
+  ],
+  "checksum_status": "Git blob SHA verified; SHA256SUMS pending separate completion"
+}
