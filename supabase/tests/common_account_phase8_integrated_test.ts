@@ -99,6 +99,10 @@ type Net = {
   tamperSaga?: (body: Record<string, unknown>) => Record<string, unknown>;
   /** The named Data API function fails (HTTP 500, nothing runs) this many more times. */
   failRpc?: Record<string, number>;
+  /** A Data API call fails (HTTP 500, nothing runs) whenever this answers true for its name and arguments. */
+  failWhen?: (fn: string, args: Record<string, unknown>) => boolean;
+  /** Rewrites the JSON answer of the named Data API function (a foreign or malformed answer) after it ran. */
+  tamperRpc?: Record<string, (answer: Record<string, unknown>) => Record<string, unknown>>;
   unrouted: string[];
   rpcCalls: string[];
   /** Messages of Data API calls that failed (a deadlock or a lock timeout inside a handler's RPC shows up here). */
@@ -159,6 +163,10 @@ function makeNet(db: string, extra: Partial<Net> = {}): { net: Net; fetch: (inpu
         await hook();
       }
       const args = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+      if (net.failWhen?.(fn, args)) {
+        net.rpcErrors.push(`${fn}: injected failure`);
+        return Response.json({ message: 'injected failure' }, { status: 500 });
+      }
       const named = Object.entries(args).map(([key, value]) => `${key} => ${lit(value)}`).join(', ');
       const call = `public.${fn}(${named})`;
       // PostgREST answers JSON: a text result is a JSON string, a jsonb result its object, void is null.
@@ -172,7 +180,10 @@ function makeNet(db: string, extra: Partial<Net> = {}): { net: Net; fetch: (inpu
         const status = /permission denied/u.test(message) ? 403 : /does not exist/u.test(message) ? 404 : 400;
         return Response.json({ message }, { status });
       }
-      return new Response((await isVoid(net.db, fn)) || r.out === '' ? 'null' : r.out, { status: 200, headers: { 'content-type': 'application/json' } });
+      let answer = (await isVoid(net.db, fn)) || r.out === '' ? 'null' : r.out;
+      const rewrite = net.tamperRpc?.[fn];
+      if (rewrite) answer = JSON.stringify(rewrite(JSON.parse(answer) as Record<string, unknown>));
+      return new Response(answer, { status: 200, headers: { 'content-type': 'application/json' } });
     }
     if (path === '/functions/v1/social-mobile-account-delete') {
       try {
@@ -967,6 +978,117 @@ test('X7 the common ID is not deleted while the evidence is incomplete: the pair
   assert.equal(done.body.x_posts_unconfirmed, 1);
   assert.equal(await count(db, `select count(*) from auth.users where id = '${p.user}'`), 0);
   assert.equal((await checkpoint(db, p.user)).count, 0, 'acknowledged by its snapshot before the login went');
+});
+
+// ---- J3 V3 P2 R1 (PR #214 review): a known larger count is never shown smaller because it could not be recorded ----------
+const ACK_FN = 'social_mobile_account_deletion_x_unconfirmed_ack';
+const RECORD_FN = 'record_owned_service_deletion_x_unconfirmed';
+const FINISH_FN = 'finish_owned_service_deletion';
+const openGates = (db: string) => sql(`alter table private.account_lifecycle_release_gates drop constraint if exists account_lifecycle_release_gates_blocked_only;
+                                       update private.account_lifecycle_release_gates set state = 'open'`, db);
+
+test('X9 1 -> 9: the saga reports a larger set, recording it fails three times: HTTP 500 says 9; the old record, the saga\'s evidence and the login stay; S2 is never acknowledged; the service is not finished', { skip: !enabled }, async () => {
+  const db = GRANTED;
+  const { net, handler } = setup(db);
+  const p = await person(db, net, { threads: false, kabumori: true, tag: 'x9' });
+  await uncertain(db, p);
+  net.beforeRpc = {
+    // STAND-IN (as X3): right before the acknowledgement, concurrent saga runs checkpoint eight more unknown posts
+    [ACK_FN]: async () => { for (let i = 0; i < 8; i++) await addCheckpointRow(db, p.user); },
+  };
+  net.failWhen = (fn, args) => fn === RECORD_FN && Number(args.p_count) === 9;
+  const response = await call(handler, p.user, END);
+  assert.equal(response.status, 500, JSON.stringify(response.body));
+  assert.equal(response.body.error, 'FAILED');
+  assert.equal(response.body.x_posts_unconfirmed, 9, 'the known count, not the older recorded 1');
+  const s1 = sagaAnswerPair(net)[0].x_unconfirmed_snapshot;
+  assert.deepEqual((await operation(db, p.user))?.reconciliation, { x_posts_unconfirmed: 1, x_unconfirmed_snapshots: [s1] }, 'the durable record is exactly the old pair');
+  const saga = await checkpoint(db, p.user);
+  assert.equal(saga.count, 9, 'the saga\'s evidence is intact');
+  assert.notEqual(saga.snapshot, s1);
+  assert.equal(net.rpcCalls.filter((fn) => fn === ACK_FN).length, 1, 'only S1 was acknowledged; the unrecorded S2 never');
+  assert.equal(net.rpcCalls.filter((fn) => fn === RECORD_FN).length, 4, 'S1 once, S2 three times (bounded)');
+  assert.ok(!net.rpcCalls.includes(FINISH_FN), 'the service was not finished');
+  assert.deepEqual(await receipts(db, p.user), [], 'nothing was cleared at the saga');
+  assert.equal((await operation(db, p.user))?.results.x, 'reconciliation_required', 'X is not on record as done');
+  assert.equal(await entitlement(db, p.user), 'deleting');
+  assert.equal(await entitlement(db, p.user, 'kabumori'), 'active');
+  assert.equal(await count(db, `select count(*) from auth.users where id = '${p.user}'`), 1, 'the common login is untouched');
+  assert.equal(await sql(`select status from public.common_accounts where user_id = '${p.user}'::uuid`, db), 'active');
+  // the recorder works again: the retry records S2 and acknowledges it; the larger count is on record and shown
+  net.failWhen = undefined;
+  const retry = await call(handler, p.user, END);
+  assert.equal(retry.status, 200, JSON.stringify(retry.body));
+  assert.equal(retry.body.x_posts_unconfirmed, 9);
+  const rec = (await operation(db, p.user))?.reconciliation;
+  assert.equal(rec?.x_posts_unconfirmed, 9);
+  assert.deepEqual(rec?.x_unconfirmed_snapshots?.length, 2);
+  assert.equal((await checkpoint(db, p.user)).count, 0);
+  assert.equal(await entitlement(db, p.user), 'ended');
+});
+
+test('X10 1 -> 9 inside the whole-account deletion: the login is not deleted and the answer says 9', { skip: !enabled }, async () => {
+  const db = GRANTED;
+  await openGates(db);
+  const { net, handler } = setup(db);
+  const p = await person(db, net, { threads: false, kabumori: true, tag: 'x10' });
+  await uncertain(db, p);
+  net.beforeRpc = { [ACK_FN]: async () => { for (let i = 0; i < 8; i++) await addCheckpointRow(db, p.user); } };
+  net.failWhen = (fn, args) => fn === RECORD_FN && Number(args.p_count) === 9;
+  const version = Number(await sql(`select lifecycle_version from public.common_accounts where user_id = '${p.user}'`, db));
+  const response = await call(handler, p.user, { action: 'delete_common_account', confirmation: 'DELETE_COMMON_ACCOUNT', expected_lifecycle_version: version });
+  assert.equal(response.status, 500, JSON.stringify(response.body));
+  assert.equal(response.body.x_posts_unconfirmed, 9);
+  assert.equal(await count(db, `select count(*) from auth.users where id = '${p.user}'`), 1, 'the common login is NOT deleted');
+  assert.equal((await checkpoint(db, p.user)).count, 9, 'the saga\'s evidence is intact');
+  assert.equal(net.rpcCalls.filter((fn) => fn === ACK_FN).length, 1);
+  assert.ok(!net.rpcCalls.includes(FINISH_FN));
+  assert.equal(await entitlement(db, p.user), 'deleting');
+});
+
+test('X11 the record failure of the LAST bounded acknowledgement round reports the largest count observed (1 -> 2 -> 3 -> 4)', { skip: !enabled }, async () => {
+  const db = GRANTED;
+  const { net, handler } = setup(db);
+  const p = await person(db, net, { threads: false, kabumori: true, tag: 'x11' });
+  await uncertain(db, p);
+  let adds = 0;
+  const addOne = async () => {
+    await addCheckpointRow(db, p.user);
+    adds += 1;
+    if (adds < 3) net.beforeRpc![ACK_FN] = addOne;   // the set changes before each of the three acknowledgements
+  };
+  net.beforeRpc = { [ACK_FN]: addOne };
+  net.failWhen = (fn, args) => fn === RECORD_FN && Number(args.p_count) === 4;
+  const response = await call(handler, p.user, END);
+  assert.equal(response.status, 500, JSON.stringify(response.body));
+  assert.equal(response.body.x_posts_unconfirmed, 4, 'the fourth pair was observed; recording it failed');
+  const rec = (await operation(db, p.user))?.reconciliation;
+  assert.equal(rec?.x_posts_unconfirmed, 3);
+  assert.equal(rec?.x_unconfirmed_snapshots?.length, 3, 'three pairs on record');
+  assert.equal((await checkpoint(db, p.user)).count, 4, 'the saga holds the fourth set');
+  assert.equal(net.rpcCalls.filter((fn) => fn === ACK_FN).length, 3, 'three acknowledgements; the unrecorded fourth set never');
+  assert.ok(!net.rpcCalls.includes(FINISH_FN));
+  assert.equal(await entitlement(db, p.user), 'deleting');
+  assert.equal(await count(db, `select count(*) from auth.users where id = '${p.user}'`), 1);
+});
+
+test('X12 (observed) a changed answer whose snapshot is malformed: nothing malformed is recorded or acknowledged; the saga keeps its evidence; the end completes non-clean with what is on record', { skip: !enabled }, async () => {
+  const db = GRANTED;
+  const { net, handler } = setup(db);
+  const p = await person(db, net, { threads: false, kabumori: true, tag: 'x12' });
+  await uncertain(db, p);
+  net.beforeRpc = { [ACK_FN]: () => addCheckpointRow(db, p.user) };
+  net.tamperRpc = { [ACK_FN]: (answer) => (answer.status === 'snapshot_changed' ? { ...answer, x_unconfirmed_snapshot: 'NOT-A-SNAPSHOT' } : answer) };
+  const response = await call(handler, p.user, END);
+  console.log('X12 observed: ' + JSON.stringify({ status: response.status, body: response.body }));
+  const s1 = sagaAnswerPair(net)[0].x_unconfirmed_snapshot;
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  assert.equal(response.body.x_posts_unconfirmed, 1);
+  assert.deepEqual((await operation(db, p.user))?.reconciliation, { x_posts_unconfirmed: 1, x_unconfirmed_snapshots: [s1] }, 'no malformed name was recorded');
+  assert.equal(net.rpcCalls.filter((fn) => fn === RECORD_FN).length, 1);
+  assert.equal(net.rpcCalls.filter((fn) => fn === ACK_FN).length, 1, 'and none was acknowledged');
+  assert.equal((await checkpoint(db, p.user)).count, 2, 'the saga still holds all of its evidence');
+  assert.deepEqual(await receipts(db, p.user), []);
 });
 
 const FUTURE = Deno.env.get('PGDATABASE_FUTURE') ?? '';

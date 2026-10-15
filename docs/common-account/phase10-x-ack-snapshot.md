@@ -117,6 +117,8 @@ A re-apply over either state is accepted. Never `CASCADE`.
 | saga answers `deletion_in_progress` | no clearing; continue | another run of this person's deletion exists at the saga |
 | saga is older than PR #204 (count without name) | `X_CLEANUP_FAILED{x_posts_unconfirmed}`, count kept, no acknowledgement | deploy order below; fails closed |
 | 17th distinct evidence set of one operation | recorder raises; end stops (`FAILED` with the count) | something is wrong: stop, never truncate |
+| a larger set is observed (`snapshot_changed`, e.g. 1 → 9) and **recording it fails** (also the last bounded round) | `FAILED{x_posts_unconfirmed: <largest observed>}`; the older record stays; that set is **not** acknowledged; X not `done`; service not finished; login untouched | the count shown is what was *observed*, not only what was *recorded* (J3 V3 P2 R1, fixed in the follow-up PR; `X9`–`X11`) |
+| `snapshot_changed` with a malformed name | nothing malformed is recorded or acknowledged; the saga keeps its evidence; the end completes non-clean with what is on record (observed, unchanged; `X12`) | an unusable answer clears nothing |
 | ending while a previous un-acknowledged set exists at the saga | the saga's answer repeats it; record is a no-op; acknowledged now | idempotent |
 
 ## 5. Ending POSTONA alone preserves the login and every other service (integrated `X8`, unit test)
