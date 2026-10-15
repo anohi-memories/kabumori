@@ -56,10 +56,10 @@
 
 ## F4
 - slot: F4
-- status: ready
+- status: review_required
 - task_id: postona-f4-pr211-r2c-final-preview-identity-fix-20261015
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
