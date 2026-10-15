@@ -1,3 +1,8 @@
+## POSTONA F4 resumed (2026-10-15)
+- User asked to switch unstarted J5 P2 task to Claude F4. J5 cancelled/idle, old task archived; no J5 source PR existed. F4 NEW `postona-f4-pr197-p2-response-warning-preservation-20261015` ready / Opus5.5（高） / F4→L4 / POSTONA G4ちゃ; distinct task_id.
+- Fix J4 V4 P2 R1 truncated `ended` response false success and R2 missing X/Threads warnings after readback error, based on PR197; new Draft source only. Old F4 Threads lease task archived; PR180 protected.
+- Production NO_GO, no SNS actions, no PR merge/deploy; F3/F5 own tasks separate.
+
 ## F5 Phase10 — POSTONA共通アカウント開発継続（2026-10-15）
 - F5 `common-account-f5-phase10-postona-x-ack-snapshot-reconciliation-20261015`: ready/claude, Opus5.5（高）, F5→L5, return `共通アカウントG5のちゃ（新F5担当）`. F3 PR204のX不確定投稿snapshot ACKをF5共通退会にsource-only接続。POSTONA最優先、将来の複数アプリ共通ID/entitlement維持、かぶモリ運用休止は別作業。
 - 前F5 Phase9 L5 done, PR206 head `a84a9b6abb8c8d4706bba5f8a12e5c1aef3d3b8c` Draft未merge。TASK/Reportを`.agent_v2/archive/2026-10-15-F5-common-account-f5-phase9-postona-shared-login-enrollment-20261015/`にappend-only保存・MANIFEST・SHA256SUMS・original blob/UTF-8 read-back一致、HISTORY_INDEX更新済み。
