@@ -143,8 +143,16 @@ async function person(): Promise<string> {
   return user;
 }
 const nowS = () => Math.floor(Date.now() / 1000);
-const tokenFor = (user: string, extra: Record<string, unknown> = {}) =>
-  mint({ sub: user, role: 'authenticated', session_id: crypto.randomUUID(), aud: 'authenticated', exp: nowS() + 3600, ...extra });
+// A token of a real sign-in belongs to a live session row (GoTrue creates it with the sign-in); the stand-in's
+// auth.sessions gets one, so the explicit restart's live-session requirement (Phase 9) is exercised as in life.
+// A login that does not exist (the removed-login scenario) simply gets no row.
+const tokenFor = async (user: string, extra: Record<string, unknown> = {}) => {
+  const session = 'session_id' in extra ? extra.session_id : crypto.randomUUID();
+  if (typeof session === 'string') {
+    await psql(`insert into auth.sessions (id, user_id) values ('${session}', '${user}') on conflict do nothing`);
+  }
+  return mint({ sub: user, role: 'authenticated', session_id: session, aud: 'authenticated', exp: nowS() + 3600, ...extra });
+};
 const APPS = {
   kabumori: { label: 'Kabumori', mod: kabumori, service: 'kabumori' as const },
   postona: { label: 'POSTONA', mod: postona, service: 'x_autopost' as const },
