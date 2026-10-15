@@ -161,6 +161,31 @@ export function marketReportParams(params: { type?: unknown; date?: unknown }): 
   return { type, date };
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * 共通の市況の画面が、どの回を開くか。
+ * - 通知（type・date）: 日付の回が読めなければ直近の回へ戻してよい（strict ではない）。
+ * - ホーム「今日のポイント」（type・date・strict=1、id は公開レポートの ID）: 指定の回だけを開く。読めなくても別の回にしない。
+ * strict は日付があるときだけ有効。id は形が UUID のときだけ受け取る。
+ */
+export type MarketReportRequest = { type: ReportType; date: string | null; strict: boolean; reportId: string | null };
+
+export function marketReportRequest(params: { type?: unknown; date?: unknown; strict?: unknown; id?: unknown }): MarketReportRequest {
+  const { type, date } = marketReportParams(params);
+  return {
+    type,
+    date,
+    strict: date !== null && params.strict === '1',
+    reportId: typeof params.id === 'string' && UUID_PATTERN.test(params.id) ? params.id : null,
+  };
+}
+
+/** 開いた回が、指定の種類・日付の完成した回か（strict のとき、違う回なら出さない）。 */
+export function isRequestedMarketReport(report: AppMarketReport, type: ReportType, date: string): boolean {
+  return report.status === 'completed' && report.reportType === type && report.tradingDate === date;
+}
+
 /** AI が書いた市況のお話（公開してよい8つの文章。空の文章もある）。V2 の回だけにある。 */
 export type AppMarketStory = {
   summaryJa: string;
@@ -221,6 +246,8 @@ export type AppMarketReport =
     reportType: ReportType;
     tradingDate: string;
     isToday: boolean;
+    /** 公開されている回の一意な ID（report_packet_id）。無い・形が違うときは null。 */
+    reportPacketId: string | null;
     headlineJa: string;
     summaryJa: string;
     direction: string;
@@ -328,6 +355,7 @@ export function parseAppMarketReport(value: unknown, requested: ReportType): App
     reportType,
     tradingDate: row.trading_date,
     isToday: row.is_today === true,
+    reportPacketId: typeof row.report_packet_id === 'string' && UUID_PATTERN.test(row.report_packet_id) ? row.report_packet_id : null,
     headlineJa: text(row.headline_ja),
     summaryJa: text(row.market_summary_ja),
     direction: text(row.market_direction),

@@ -65,7 +65,7 @@ test("the Hero draws none of the baked-in art text natively (no double display)"
 
 test("the Hero keeps only the live UI: report kind, numbered points and the CTA", async () => {
   const hero = await read("src/components/home/home-report-hero.tsx");
-  assert.ok(hero.includes("REPORT_KIND_LABEL[report.report_type]") && hero.includes("morning: '朝刊', close: '大引け'"), "朝刊 / 大引け stays live and short");
+  assert.ok(hero.includes("homeMarketKindLabel(report, todayJst, unconfirmed)"), "朝刊 / 大引け (with the date when it is not today's) stays live and short");
   assert.ok(hero.includes("HOME_COLORS.point[index]") && hero.includes("{index + 1}"), "numbered circles stay native");
   assert.ok(hero.includes("レポートを見る →"));
 });
@@ -109,11 +109,13 @@ test("the Hero is sized from the art's own aspect ratio, not fixed pixels", asyn
   assert.ok(hero.includes("paddingTop: heroPointsTop(artHeight)"), "points start under the baked underline");
 });
 
-test("Home data orchestration is unchanged: same three fetches, refresh, JST rollover", async () => {
+test("Home data orchestration: news + shared morning/close report + topic fetches, refresh, JST rollover", async () => {
   const home = await read("src/app/(tabs)/index.tsx");
+  assert.ok(!home.includes("fetchRecentReports"), "the Hero is the shared market report, not a personalized report");
   for (const needle of [
     "fetchMyImportantStockNews()",
-    "fetchRecentReports()",
+    "fetchHomeMarketReports()",
+    "resolveHomeMarketState(previous.report, marketResults.value)",
     "fetchDailyTopic(level, today)",
     "RefreshControl",
     "setTodayJstValue(today)",

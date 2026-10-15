@@ -1,5 +1,7 @@
-// Home opens the report on the ROOT stack (like the portfolio), so 戻る / the edge swipe lands on Home instead of
-// switching to the レポート tab and revealing its list. Route structure is pinned by reading the sources as text.
+// Home opens the shared market report (きょうの市況) on the ROOT stack, so 戻る / the edge swipe lands on Home instead of
+// switching to the レポート tab and revealing its list. Home no longer opens a personalized report: the
+// personalized reports stay reachable from the レポート tab and the portfolio. Route structure is pinned by
+// reading the sources as text.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -7,10 +9,11 @@ const repoRoot = new URL("../../", import.meta.url);
 const read = (path: string) => Deno.readTextFile(new URL(path, repoRoot));
 const code = async (path: string) => (await read(path)).replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/^\s*\/\/.*$/gm, "");
 
-test("Home's 「レポートを見る」 opens the root report detail with the report id", async () => {
+test("Home's 「レポートを見る」 opens the shared market report with the exact published report (type, date, id, strict)", async () => {
   const home = await code("src/app/(tabs)/index.tsx");
-  assert.ok(home.includes("router.push({ pathname: '/report-detail', params: { id: report.id } })"));
-  assert.equal((home.match(/pathname: '\/report-detail'/g) ?? []).length, 1, "one report entry on Home");
+  assert.ok(home.includes("router.push({ pathname: '/market-report', params: homeMarketRouteParams(market.report) })"));
+  assert.equal((home.match(/pathname: '\/market-report'/g) ?? []).length, 1, "one report entry on Home");
+  assert.ok(!home.includes("/report-detail"), "Home does not open a personalized report any more");
 });
 
 test("Home never uses the nested /reports/[id] (it would switch the tab and land on the reports list)", async () => {
@@ -20,7 +23,8 @@ test("Home never uses the nested /reports/[id] (it would switch the tab and land
 
 test("each origin keeps its own contract: Home and the portfolio -> root, the レポート tab -> nested", async () => {
   const origins: Array<[string, string, boolean]> = [
-    ["src/app/(tabs)/index.tsx", "/report-detail", true],
+    ["src/app/(tabs)/index.tsx", "/market-report", true],
+    ["src/app/(tabs)/index.tsx", "/report-detail", false],
     ["src/components/portfolio/portfolio-sections.tsx", "/report-detail", true],
     ["src/app/(tabs)/reports/index.tsx", "/reports/[id]", true],
   ];

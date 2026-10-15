@@ -141,7 +141,8 @@ test("配線: 処理はサーバーで行い、アプリは依頼と読み取り
 test("配線: 入口はサーバーが公開したときだけ。詳細画面は source=analysis で分析結果を読む", async () => {
   const list = await code("src/app/(tabs)/reports/index.tsx");
   assert.ok(list.includes("fetchAnalysisStatus().catch(() => STATUS_OFF)"));
-  assert.ok(list.includes("{ondemand.marketFeedEnabled && ("));
+  // 共通の朝刊・大引けはカードとして常に出す（準備中・取得失敗もカードで説明する）。保有銘柄のAI分析の入口だけが公開のゲート次第。
+  assert.ok(!list.includes("ondemand.marketFeedEnabled"));
   assert.ok(list.includes("{ondemand.enabled && ("));
   const detail = await code("src/app/(tabs)/reports/[id].tsx");
   assert.ok(detail.includes("analysis ? fetchAnalysisReport(String(id)) : fetchReport(String(id))"));
