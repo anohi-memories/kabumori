@@ -39,7 +39,7 @@ export type AnthropicModelPolicy = {
   readonly maxOutputTokens: number;
   /** Per HTTP attempt. */
   readonly timeoutMs: number;
-  /** 1..3; transient failures only, within the deadline; timeouts are never retried. */
+  /** 1..3; only a rate limit or overload reported as not processed is retried (retry.ts); a possibly billed failure never is. */
   readonly maxTransportAttempts: number;
   /** Optional local ceiling on one attempt's upper-bound cost (USD); above it nothing is reserved or sent. */
   readonly maxUpperBoundUsdPerAttempt?: number;

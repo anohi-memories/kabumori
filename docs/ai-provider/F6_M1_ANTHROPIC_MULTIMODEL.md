@@ -53,7 +53,7 @@
 | `allowedEfforts` / `defaultEffort` | 使ってよい effort と既定 |
 | `maxOutputTokens` | 出力の上限（思考を含む）。どの許可モデルのカタログ上限も超えない |
 | `timeoutMs` | 1回の送信の時間の上限（1〜600 秒） |
-| `maxTransportAttempts` | 1〜3。一時的な失敗（429 / 5xx）だけ再試行する。時間切れは再試行しない |
+| `maxTransportAttempts` | 1〜3。処理されなかったと分かる拒否（429 / 529）だけ再試行する。時間切れ・504・送信後の切断・その他の 5xx は再試行しない（J1 R2。`F6_J1_R1_R2_FIX.md`） |
 | `maxUpperBoundUsdPerAttempt`（任意） | 1回の上限額。超えるなら予約も送信もしない |
 
 - `defineAnthropicModelPolicies(version, policies)` は、登録のときに全部を確かめる。間違いは `ModelPolicyError` で、実行時ではなく起動時に分かる
