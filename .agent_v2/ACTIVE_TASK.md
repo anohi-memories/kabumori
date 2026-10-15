@@ -56,22 +56,19 @@
 
 ## F4
 - slot: F4
-- status: done
-- task_id: postona-f4-pr197-p2-response-warning-preservation-20261015
+- status: ready
+- task_id: postona-f4-pr211-r2c-final-preview-identity-fix-20261015
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
-- dependencies: PR197 + PR211, F5 PR193 response contract; J4 V4 P2 R1/R2
-- blocker: Sol（高） independent rereview and managed integration, production NO_GO
-- slot_use: F4 P2 response completeness and warning preservation source accepted, slot released
-- previous_task_archive: .agent_v2/archive/2026-10-13-F4-postona-f4-threads-t13-authenticated-writer-integration-20261013/
-- l4_verdict: PASS_SOURCE_FIX / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; PR180 head 7c4f457834cddb42b72be6b74996e643b213e8c8 Draft unmerged, 10 F4-scoped changes, reported fail-before/pass-after, F4 available after archive.
-- assignment_note: J4 V4 P2x2 app fix; new F4 task, prior J5 cancelled.
-- l4_verdict_20261015: PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO; PR211 head eb1011f2bd6f8a76ef412f824f0b21629794645b, 5 files, reported 294 tests PASS, independent J4-style F5 handler probes not rerun.
+- dependencies: J4 V4 CHANGES_REQUIRED P2 R2c, PR211 exact eb1011f2, F5 PR193 handler read-only
+- blocker: independent Sol（高） rereview and managed POSTONA integration; production NO_GO
+- slot_use: one bounded POSTONA client fix for late final-preview A→B/null user cross-warning return
+- previous_archive: .agent_v2/archive/2026-10-15-F4-postona-f4-pr197-p2-response-warning-preservation-20261015/
 
 ## F5
 - slot: F5
