@@ -1,8 +1,13 @@
-## F2｜旧TOPIX/市況改善を中止・運用停止処理用にidle確保（2026-10-15）
-- ユーザー明示: かぶモリの従来開発をこれ以上進めず、今後の「かぶモリ運用休止・配信停止処理」でF2を利用する。**今は未割当**。F2 TASK / ACTIVE_TASKを `status: idle` / `task_id: none` / `next_owner: none` / `recommended_model: none` に戻し、F2開始禁止（正式新TASK待ち）。
-- 旧F2 `kabumori-f2-topix-pr201-203-premerge-safety-corrections-20261015` は `ready` で未着手。L2実装完了とは扱わず **CANCELLED_UNSTARTED_BY_USER**。TASK末尾Reportを含め原文7343バイトをappend-only archive `.agent_v2/archive/2026-10-15-F2-kabumori-f2-topix-pr201-203-premerge-safety-corrections-20261015/files/.agent_v2/tasks/F2.md` に保存。SHA256 `327498d9506823f0d91903ec2547dd12c237a35157a0b92b2ebf4230c58ef557`、original Git blob `fb51b00fb1b12df04dbf0e9a48e90ec275cd1ded`、MANIFEST.md/json・SHA256SUMS・原本read-back済。HISTORY_INDEX追記済。
-- TOPIX / 市況文章 Phase2 Draft PR #201 `6977ca3c82f2138bb27f9cd47a4abab98f59852e` と候補PR #203 `46cd29be26b16133a1a5488461a5972f3253e98f` は作業凍結・保護（未マージ・未deploy）。従前L2指摘の2 guard修正は未実装のまま保留。未実施を完了と扱わない。
-- F2の配信系停止read-only調査はG1全体統括に返却済み。本番Cron/DB設定・X/Push・共有Dispatcher等は**今回未変更**。G1の新TASKで停止順序・POSTONA保護・独立作業環境・production承認を確定するまで停止writeを行わない。旧G2 TASKを再開・F2へ移動しない。
+## G1｜かぶモリ休止準備 F2/F8設計TASK登録（2026-10-15）
+- GitHub反映：Draft PR207の登録候補。mainへの直接pushは自動承認レビューで拒否、main未反映。F2/F8はfresh origin/mainで新task_idを確認してから正式開始。管理差分の反映承認は本番停止承認と別。
+- 判定 **OFFLINE_DESIGN_ASSIGNED / PRODUCTION_NO_GO**。統合計画 `docs/operations/kabumori-pause/G1_PLAN_20261015.md`。基準main `9e9c0a0682269de0a5ec25ff4f26ed82043fbfe8`、新旧30枠最新metadata・関連Report・open PR74件を確認。
+- F2新 `kabumori-f2-pause-delivery-brand-queue-offline-design-20261015` **ready / claude / Opus5.5（高） / F2→L2**。ユーザー予約idleから正式割当。Xブランド/予約5件（引継ぎ値・未再測定）/共有Dispatcher/市況fallback/Push/共通AI caller保護の設計・合成検証のみ。
+- F8新 `kabumori-f8-news-hard-pause-http-ai-offline-design-20261015` **ready / claude / Opus5.5（高） / F8→L8**。全HTTP mode/AI dry-run/app_copy/独立X公開/通知のhard-pause設計・合成検証のみ。前F8 TASK/Reportをappend-only archiveへ6909 bytes、SHA256 `3496660d5633c4fc74958ccc53a80f19614f35f117357528c84b846c41e45d8e`、元blob/復元一致・HISTORY_INDEX追記済み。PR196保護。
+- 返却先は双方 **かぶモリアプリG1のちゃ（運用休止・全体統括）**。専用checkout/branchはTASK記載。変更範囲は各f2/f8のdocs/toolsと自己TASK/索引節のみ。G1が共有計画/CURRENT_STATEを統合。
+- 重要：monitorIsActiveはscheduled収集だけ。judge_pending/generate_ready/課金dry-runは先に分岐。ニュースpublish_readyは独自token→X送信でx-test-postのbrand guardを通らない。ブランド設定だけの停止保証は禁止。PR129/164が同じニュースindex.tsを変更するため、今回runtime編集は双方禁止。
+- F3 review_required/L3待ち、F7 ready/MIC、F6 done/L6受入、J1 ready/共通AI PR187→198→205レビューを保護。J1の結果は休止ゲートの独立PASSではない。旧G/H TASKと他slotは変更しない。PR202内F1管理差分があるためF1再割当なし。
+- 旧F2 TOPIX/市況改善は **CANCELLED_UNSTARTED_BY_USER** のまま。前archive `.agent_v2/archive/2026-10-15-F2-kabumori-f2-topix-pr201-203-premerge-safety-corrections-20261015/`、SHA256 `327498d9506823f0d91903ec2547dd12c237a35157a0b92b2ebf4230c58ef557` 保護。PR201/203を再開・merge・deployしない。
+- 次工程：L2/L8照合→必要なら別TASKでruntime候補→空き別J枠Sol（高）独立検証→本番read-only snapshot/具体計画→ユーザーの別の本番承認。本番Cron/DB/Edge/Secret/APIキー/X/Push/課金/EASは未変更・禁止、mutation windowはFORBIDDEN。
 
 ## MIC F7｜Stage 1 S1-A SOURCE ONLY へ条件付きGO（2026-10-15 17時台 JST）
 
