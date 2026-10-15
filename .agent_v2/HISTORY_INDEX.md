@@ -477,3 +477,10 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 - F8 | task_id: kabumori-f8-news-hard-pause-http-ai-offline-design-20261015 | original_path: .agent_v2/tasks/F8.md | archive_path: .agent_v2/archive/2026-10-15-f8-pause-offline-design-accepted.md | size: 11301 bytes | SHA256: 0386872d026202fe5a521c62f080db4ca4ccc0945245bcf2ac79bd715ff10225 | original PR #209 HEAD: 85b014c9b2251decadeb0bd9daa5025e2323c684 | original Git blob: 5576072239e2541c4d133cd113343fbed1c27321 | restore/read-back: exact content and Git blob match | verdict: G1 L8 PASS_OFFLINE_DESIGN; production NO_GO.
 
 Both archive paths are append-only originals. These index entries are history links, NOT current task assignments.
+
+## J2 completed security-design review archive — 2026-10-15
+- old_task_id: `kabumori-j2-ai-ask-b0-r1-r8-focused-rereview-20261013`
+- archive: `.agent_v2/archive/2026-10-15-J2-ai-ask-b0-r1-r8-focused-rereview-20261013/` (append-only)
+- original_path: `.agent_v2/tasks/J2.md`; archive_path: `.agent_v2/archive/2026-10-15-J2-ai-ask-b0-r1-r8-focused-rereview-20261013/files/.agent_v2/tasks/J2.md`; size 5347 bytes; SHA256 `0eaf7b7ae5edc4a3ec8ee1adaed052110ac37510974c3236cd8708cd3f0469dc`; original Git blob `eacb7765bec56425625fa83fce64172b26a05fa5`.
+- original_path: `.agent_v2/reports/J2.md`; archive_path: `.agent_v2/archive/2026-10-15-J2-ai-ask-b0-r1-r8-focused-rereview-20261013/files/.agent_v2/reports/J2.md`; size 21774 bytes; SHA256 `91c099abc28f0aab08572e58e1be8facae257030337327e41b73a30405357cda`; original Git blob `f76bf93e4f2160194019e329f8af1ba25010270d`.
+- MANIFEST.json / SHA256SUMS saved; original and archived Git blobs/content read-back byte-for-byte match. Current TASK is separate new J2 security review; index is historical only.
