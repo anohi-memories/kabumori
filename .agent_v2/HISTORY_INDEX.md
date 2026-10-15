@@ -89,6 +89,8 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 | 2026-10-15 | J5 | `postona-j5-pr197-p2-response-warning-preservation-fix-20261015` | cancelled before start; new F4 task | CANCELLED_UNSTARTED | none | none | `.agent_v2/archive/2026-10-15-J5-cancelled-postona-p2-task-before-start/` | TASK and Report |
 | 2026-10-15 | F4 | `postona-f4-threads-cleanup-live-lease-security-fix-20261013` | Threads cleanup lease fix | PASS_SOURCE_FIX / NO_GO | #180 | `7c4f4578` | `.agent_v2/archive/2026-10-15-F4-postona-f4-threads-cleanup-live-lease-security-fix-20261013/` | TASK + L4 acceptance |
 
+| 2026-10-15 | J4 | `postona-j4-pr197-postona-deletion-client-security-review-20261014` | POSTONA client P2x2 review | CHANGES_REQUIRED / PRODUCTION_NO_GO | #197 | `2171ee4c02ea2eec46562d81595f5460e5507d9d` | `.agent_v2/archive/2026-10-15-J4-postona-j4-pr197-postona-deletion-client-security-review-20261014/` | TASK/Report Git blob readback verified; SHA256SUMS pending |
+
 ## 旧系統（G1〜G10 / H1〜H5）の完了・履歴作業
 
 ### 日付不明
