@@ -24,10 +24,12 @@ P3A = MIG + "20261009120000_common_account_deletion_completion.sql"
 P4 = MIG + "20261012130000_common_account_core_service_fence.sql"
 P5 = MIG + "20261012230000_common_account_service_brand_state.sql"
 P6 = MIG + "20261013120000_common_account_service_deletion_ownership.sql"
+P10 = MIG + "20261015120000_common_account_x_unconfirmed_snapshot_record.sql"
 PROBE = "supabase/preflight/common_account_release_probe.sql"
 RB1 = "supabase/tests/common_account_lifecycle_rollback.sql"
 RB6 = "supabase/tests/common_account_service_deletion_rollback.sql"
 RB3B = "supabase/tests/common_account_write_guard_rollback.sql"
+RB10 = "supabase/tests/common_account_x_unconfirmed_snapshot_rollback.sql"
 
 # (label, file, find, replace, expected failing stage label fragment)
 MUTANTS = [
@@ -59,6 +61,15 @@ MUTANTS = [
      "drop function public.common_account_provider_snapshot(uuid);\n", "", "rollback"),
     ("the Phase 3b rollback leaves the guard", RB3B,
      "drop function private.account_lifecycle_assert_active_service_write(uuid, text);\n", "", "rollback"),
+    ("Phase 10 no longer refuses an application without Phase 8", P10,
+     "    raise exception 'COMMON_ACCOUNT_X_UNCONFIRMED_PREFLIGHT_PHASE8_MISSING';", "    null;", "chain"),
+    ("Phase 10 refuses a second application with another code", P10,
+     "COMMON_ACCOUNT_X_UNCONFIRMED_ALREADY_APPLIED", "COMMON_ACCOUNT_X_UNCONFIRMED_APPLIED_TWICE", "chain"),
+    ("the probe's inventory forgets the Phase 10 recorder", PROBE,
+     "    ('public.record_owned_service_deletion_x_unconfirmed(uuid,text,uuid,uuid,integer,text)', 'definer', 'search_path=\"\"', 'service_role', 'v', 'jsonb'),\n",
+     "", "probe"),
+    ("the Phase 10 rollback forgets the function", RB10,
+     "drop function public.record_owned_service_deletion_x_unconfirmed(uuid, text, uuid, uuid, integer, text);\n", "", "rollback"),
     ("the Phase 1 rollback no longer refuses while a later phase is present", RB1,
      "    raise exception 'COMMON_ACCOUNT_ROLLBACK_REFUSED_LATER_PHASE_PRESENT';\n", "    null;\n", "rollback"),
 ]

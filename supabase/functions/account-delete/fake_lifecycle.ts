@@ -61,6 +61,11 @@ export type WorldOptions = {
   malformedEndResult?: boolean;
   /** The named RPC fails (database error) this many times, then works. */
   rpcFailOnce?: Partial<Record<LifecycleRpcName, number>>;
+  /**
+   * The saga's answers to the snapshot acknowledgement, in order (then the default: acknowledged). 'error' = the call
+   * fails. The fake keeps the snapshots it was asked for in `state.xAcks`.
+   */
+  xAckAnswers?: (Record<string, unknown> | 'error')[];
   /** Between the first prepare and the revalidation, an object is uploaded. */
   uploadBeforeRevalidation?: boolean;
   /** Awaited at the entry of an external step (barriers for true overlap). */
@@ -69,6 +74,8 @@ export type WorldOptions = {
   threads?: boolean;
   /** Further platforms connected in the workspace (an unknown provider). */
   otherPlatforms?: string[];
+  /** Entitlements of OTHER services the person holds (a future app): present in the eligibility, never touched. */
+  otherServices?: { service_key: string; status: string }[];
 };
 
 /** Fake of the Phase 1/2/3a lifecycle database plus Auth/Storage/Apple/X, with the same answers. */
@@ -83,6 +90,7 @@ export function world(options: WorldOptions = {}) {
   const deleteLogin = [...(options.deleteLogin ?? [])];
   const completeOverride = [...(options.completeOverride ?? [])];
   const failOnce: Partial<Record<LifecycleRpcName, number>> = { ...(options.rpcFailOnce ?? {}) };
+  const xAckAnswers = [...(options.xAckAnswers ?? [])];
   let reappear = options.storageReappear ?? 0;
   let ids = 0;
   const newId = () => `00000000-0000-4000-8000-${String(++ids).padStart(12, '0')}`;
@@ -105,12 +113,15 @@ export function world(options: WorldOptions = {}) {
       external: null | 'apple_revocation' | 'managed_auth_delete'; externalStarted: number; intent: null | string[];
     },
     xServiceOp: null as string | null,
-    /** The counts the caller acknowledged to the X saga's durable checkpoint (F3 PR #192). */
-    xAcks: [] as number[],
+    /** The snapshots the caller acknowledged to the X saga's durable checkpoint (F3 PR #204), in order. */
+    xAcks: [] as string[],
+    /** The complete arguments of every acknowledgement (never a bare count). */
+    xAckArgs: [] as Record<string, unknown>[],
     /** The POSTONA service deletion (Phase 6): its own lease, fence, per-provider results and acknowledgement. */
     svc: null as null | {
       id: string; status: 'in_progress' | 'completed' | 'aborted'; lease: string | null; leaseExpires: number; fence: number;
-      results: Record<string, string>; ack: string[] | null; recon: Record<string, number>;
+      results: Record<string, string>; ack: string[] | null;
+      recon: { x_posts_unconfirmed?: number; x_unconfirmed_snapshots?: string[] };
     },
     threads: options.threads ?? false,
     revokedTokens: new Set<string>(),
@@ -124,8 +135,10 @@ export function world(options: WorldOptions = {}) {
     if (state.op?.status === 'in_progress') state.op.status = 'login_removed';
     state.account = 'active';
   };
-  const serviceList = () => (['kabumori', 'x_autopost'] as const)
-    .filter((key) => state.services[key] !== null).map((key) => ({ service_key: key, status: state.services[key] }));
+  const serviceList = (): { service_key: string; status: string | null }[] => [
+    ...(['kabumori', 'x_autopost'] as const).filter((key) => state.services[key] !== null).map((key) => ({ service_key: key as string, status: state.services[key] })),
+    ...(options.otherServices ?? []),
+  ];
   const remainingServices = () => serviceList().filter((s) => s.status !== 'ended').map((s) => s.service_key);
   /** The open operation when `lease` is its unexpired lease (private.account_lifecycle_owned_operation). */
   const owned = (args: Record<string, unknown>) => {
@@ -260,12 +273,33 @@ export function world(options: WorldOptions = {}) {
       const fact = String(args.p_fact);
       const count = Number(args.p_count);
       if (fact !== 'x_posts_unconfirmed' || !Number.isInteger(count) || count < 1) throw new Error('ACCOUNT_LIFECYCLE_RECONCILIATION_FACT_INVALID');
-      svc.recon[fact] = Math.max(svc.recon[fact] ?? 0, count);
-      return { status: 'recorded', count: svc.recon[fact] };
+      svc.recon.x_posts_unconfirmed = Math.max(svc.recon.x_posts_unconfirmed ?? 0, count);
+      return { status: 'recorded', count: svc.recon.x_posts_unconfirmed };
+    },
+    record_x_unconfirmed: (args) => {
+      const svc = state.svc;
+      const count = Number(args.p_count);
+      const snapshot = args.p_snapshot;
+      if (!Number.isInteger(count) || count < 1 || count > 100000 || typeof snapshot !== 'string' || !/^[0-9a-f]{64}$/u.test(snapshot)) {
+        throw new Error('ACCOUNT_LIFECYCLE_X_UNCONFIRMED_INVALID');
+      }
+      if (!svc || svc.status !== 'in_progress' || svc.lease !== args.p_lease || svc.leaseExpires <= state.clock) return { status: 'lease_lost' };
+      const sets = svc.recon.x_unconfirmed_snapshots ?? [];
+      if (!sets.includes(snapshot)) {
+        if (sets.length >= 16) throw new Error('ACCOUNT_LIFECYCLE_X_UNCONFIRMED_TOO_MANY');
+        sets.push(snapshot);
+      }
+      svc.recon = { x_posts_unconfirmed: Math.max(svc.recon.x_posts_unconfirmed ?? 0, count), x_unconfirmed_snapshots: sets };
+      return { status: 'recorded', count: svc.recon.x_posts_unconfirmed, snapshots: sets.length };
     },
     ack_x_unconfirmed: (args) => {
-      state.xAcks.push(Number(args.p_expected));
-      return { status: 'acknowledged', cleared: Number(args.p_expected) };
+      state.xAckArgs.push({ ...args });
+      if (typeof args.p_snapshot === 'string') state.xAcks.push(args.p_snapshot);
+      const scripted = xAckAnswers.shift();
+      if (scripted === 'error') throw new Error('ack failed');
+      if (scripted) return scripted;
+      // Without a script the saga holds exactly the set it was asked for: acknowledged, cleared.
+      return typeof args.p_snapshot === 'string' ? { status: 'acknowledged', replay: false, cleared: 1 } : { status: 'snapshot_required' };
     },
     service_end_result: () => {
       if (options.malformedEndResult) return { weird: true };

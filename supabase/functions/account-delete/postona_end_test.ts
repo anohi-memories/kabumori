@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { bearer, deferred, deleteBody, signIn, world, type World, type WorldOptions } from './fake_lifecycle.ts';
+import { bearer, deferred, deleteBody, signIn, USER, world, type World, type WorldOptions } from './fake_lifecycle.ts';
 import {
   END_POSTONA_CONFIRMATION,
   handleDeleteCommonAccount,
@@ -20,6 +20,11 @@ const error = (response: LifecycleResponse) => (response.body.ok ? null : respon
 const bodyOf = (response: LifecycleResponse) => response.body as Record<string, unknown>;
 const lose = (w: World) => { w.state.clock += LEASE_SECONDS + 1; };
 const ACK = { acknowledged_remote_unverified: ['threads'] };
+/** Names of X evidence sets (F3 PR #204 snapshots: 64 lowercase hex). */
+const SNAP_A = 'a'.repeat(64);
+const SNAP_B = 'b'.repeat(64);
+const SNAP_C = 'c'.repeat(64);
+const pair = (count: number, snapshot: string) => ({ outcome: 'done' as const, unconfirmedPosts: count, unconfirmedSnapshot: snapshot });
 
 /** A Threads adapter that removes the (fake) connection and answers as the real one does: never "remote revoked". */
 function threads(w: World, answer: () => ProviderOutcome | 'throw' = () => 'local_removed_remote_unverified'): ProviderCleanupAdapter {
@@ -284,12 +289,12 @@ test('consent given earlier stays: a resumed end after a crash does not ask agai
 });
 
 test('X posts whose result was never known are a durable fact: reported, never hidden behind the end, kept by a retry', async () => {
-  const w = world({ x: 'active', xRun: [{ outcome: 'done', unconfirmedPosts: 3 }] });
+  const w = world({ x: 'active', xRun: [pair(3, SNAP_A)] });
   const first = await withdraw(w);
   assert.equal(first.status, 200);
   assert.deepEqual(bodyOf(first).providers, { x: 'done' });
   assert.equal(bodyOf(first).x_posts_unconfirmed, 3);
-  assert.deepEqual(w.state.svc?.recon, { x_posts_unconfirmed: 3 }, 'on the record before the end');
+  assert.deepEqual(w.state.svc?.recon, { x_posts_unconfirmed: 3, x_unconfirmed_snapshots: [SNAP_A] }, 'the pair is on the record before the end');
   assert.equal(w.state.services.x_autopost, 'ended');
   // A second request (another device, a retry after a lost answer) reads the same answer back.
   const again = await withdraw(w);
@@ -299,15 +304,16 @@ test('X posts whose result was never known are a durable fact: reported, never h
 });
 
 test('the unconfirmed-post count is sticky at its maximum: a saga that forgot on a retry cannot lower it', async () => {
-  const w = world({ x: 'active', xRun: [{ outcome: 'done', unconfirmedPosts: 4 }], rpcFailOnce: { finish_owned_service: 1 } });
+  const w = world({ x: 'active', xRun: [pair(4, SNAP_A)], rpcFailOnce: { finish_owned_service: 1 } });
   const first = await withdraw(w);
   assert.equal(first.status, 500, 'the end itself failed once, after X answered');
-  assert.deepEqual(w.state.svc?.recon, { x_posts_unconfirmed: 4 });
+  assert.deepEqual(w.state.svc?.recon, { x_posts_unconfirmed: 4, x_unconfirmed_snapshots: [SNAP_A] });
   // The retry: the saga (purged, finalize pending) now answers a plain done -- the record keeps the count.
   w.state.xWorkspace = true;
   const second = await withdraw(w);
   assert.equal(second.status, 200);
   assert.equal(bodyOf(second).x_posts_unconfirmed, 4);
+  assert.deepEqual(w.state.svc?.recon, { x_posts_unconfirmed: 4, x_unconfirmed_snapshots: [SNAP_A] }, 'and the named set stays on record');
 });
 
 test('a database that cannot answer the record of an end (migration not applied / rolled back under newer code): nothing is touched', async () => {
@@ -332,15 +338,15 @@ test('a database that cannot answer the record of an end (migration not applied 
   assert.equal(error(again), 'FAILED');
 });
 
-test('a transient failure to record the unconfirmed count is retried; a lasting one never lets X be "done" without it', async () => {
-  const transient = world({ x: 'active', xRun: [{ outcome: 'done', unconfirmedPosts: 2 }], rpcFailOnce: { record_reconciliation: 2 } });
+test('a transient failure to record the unconfirmed pair is retried; a lasting one never lets X be "done" without it', async () => {
+  const transient = world({ x: 'active', xRun: [pair(2, SNAP_A)], rpcFailOnce: { record_x_unconfirmed: 2 } });
   const ok = await withdraw(transient);
   assert.equal(ok.status, 200);
   assert.equal(bodyOf(ok).x_posts_unconfirmed, 2);
-  assert.deepEqual(transient.state.svc?.recon, { x_posts_unconfirmed: 2 });
-  assert.equal(transient.effects.filter((e) => e === 'rpc:record_reconciliation').length, 3, 'two failures, one success');
+  assert.deepEqual(transient.state.svc?.recon, { x_posts_unconfirmed: 2, x_unconfirmed_snapshots: [SNAP_A] });
+  assert.equal(transient.effects.filter((e) => e === 'rpc:record_x_unconfirmed').length, 3, 'two failures, one success');
 
-  const lasting = world({ x: 'active', xRun: [{ outcome: 'done', unconfirmedPosts: 2 }], rpcError: 'record_reconciliation' });
+  const lasting = world({ x: 'active', xRun: [pair(2, SNAP_A)], rpcError: 'record_x_unconfirmed' });
   const failed = await withdraw(lasting);
   assert.equal(failed.status, 500);
   assert.equal(error(failed), 'FAILED');
@@ -348,38 +354,150 @@ test('a transient failure to record the unconfirmed count is retried; a lasting 
   assert.equal(lasting.state.svc?.results?.x, 'reconciliation_required', 'X is not on record as done');
   assert.equal(lasting.state.services.x_autopost, 'deleting', 'nothing ended');
   assert.ok(!lasting.effects.includes('rpc:finish_owned_service'));
-  assert.equal(lasting.effects.filter((e) => e === 'rpc:record_reconciliation').length, 3, 'bounded');
+  assert.equal(lasting.effects.filter((e) => e === 'rpc:record_x_unconfirmed').length, 3, 'bounded');
+  assert.deepEqual(lasting.state.xAcks, [], 'and the saga was never told it may forget the set');
 });
 
-test('the saga\'s durable checkpoint is acknowledged only after the count is on record here, with the count it reported; a failed acknowledgement ends nothing', async () => {
-  const w = world({ x: 'active', xRun: [{ outcome: 'done', unconfirmedPosts: 2 }] });
+test('the saga\'s checkpoint is acknowledged by its SNAPSHOT, only after the pair is on record here; a failed acknowledgement ends nothing wrong', async () => {
+  const w = world({ x: 'active', xRun: [pair(2, SNAP_A)] });
   const response = await withdraw(w);
   assert.equal(response.status, 200);
-  assert.deepEqual(w.state.xAcks, [2]);
-  const order = w.effects.filter((e) => e === 'rpc:record_reconciliation' || e === 'rpc:ack_x_unconfirmed');
-  assert.deepEqual(order, ['rpc:record_reconciliation', 'rpc:ack_x_unconfirmed'], 'recorded first, then acknowledged');
-  // an acknowledgement that fails (the saga has no such function, or it answers an error) does not matter to the end
-  const lacking = world({ x: 'active', xRun: [{ outcome: 'done', unconfirmedPosts: 2 }], rpcError: 'ack_x_unconfirmed' });
+  assert.deepEqual(w.state.xAcks, [SNAP_A]);
+  assert.deepEqual(w.state.xAckArgs, [{ p_user_id: USER, p_snapshot: SNAP_A }], 'exactly the person and the snapshot: no count');
+  const order = w.effects.filter((e) => e === 'rpc:record_x_unconfirmed' || e === 'rpc:ack_x_unconfirmed');
+  assert.deepEqual(order, ['rpc:record_x_unconfirmed', 'rpc:ack_x_unconfirmed'], 'recorded first, then acknowledged');
+  assert.ok(!w.effects.includes('rpc:record_reconciliation'), 'the count-only recorder is not used for a named set');
+  // an acknowledgement that fails (the saga has no such function, or it answers an error) leaves the saga over-reporting
+  const lacking = world({ x: 'active', xRun: [pair(2, SNAP_A)], rpcError: 'ack_x_unconfirmed' });
   const ended = await withdraw(lacking);
   assert.equal(ended.status, 200);
   assert.equal(bodyOf(ended).x_posts_unconfirmed, 2);
-  assert.deepEqual(lacking.state.svc?.recon, { x_posts_unconfirmed: 2 });
-  // nothing unconfirmed: nothing to acknowledge
+  assert.deepEqual(lacking.state.svc?.recon, { x_posts_unconfirmed: 2, x_unconfirmed_snapshots: [SNAP_A] });
+  // nothing unconfirmed: nothing to acknowledge, nothing recorded
   const clean = world({ x: 'active' });
   assert.equal((await withdraw(clean)).status, 200);
   assert.deepEqual(clean.state.xAcks, []);
-  // the count could not be recorded: the saga's checkpoint is NOT acknowledged (it is then the only copy left)
-  const lasting = world({ x: 'active', xRun: [{ outcome: 'done', unconfirmedPosts: 2 }], rpcError: 'record_reconciliation' });
-  assert.equal((await withdraw(lasting)).status, 500);
-  assert.deepEqual(lasting.state.xAcks, []);
+  assert.deepEqual(clean.state.svc?.recon, {});
+  // the pair could not be recorded: the saga's checkpoint is NOT acknowledged (it is then the only copy left)
+  const unrecorded = world({ x: 'active', xRun: [pair(2, SNAP_A)], rpcError: 'record_x_unconfirmed' });
+  assert.equal((await withdraw(unrecorded)).status, 500);
+  assert.deepEqual(unrecorded.state.xAcks, []);
 });
 
-test('a lease lost while the unconfirmed count is recorded: nothing is ended', async () => {
-  const w = world({ x: 'active', xRun: [{ outcome: 'done', unconfirmedPosts: 2 }] });
-  w.deps.x.run = () => { lose(w); return Promise.resolve({ outcome: 'done', unconfirmedPosts: 2 }); };
+test('the saga\'s set changed under the acknowledgement: the NEW pair is recorded first, then acknowledged; never blindly the old one', async () => {
+  const w = world({
+    x: 'active', xRun: [pair(2, SNAP_A)],
+    xAckAnswers: [{ status: 'snapshot_changed', x_posts_unconfirmed: 5, x_unconfirmed_snapshot: SNAP_B }],
+  });
+  const response = await withdraw(w);
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  assert.equal(bodyOf(response).x_posts_unconfirmed, 5, 'the larger set is what the person is told');
+  assert.deepEqual(w.state.xAcks, [SNAP_A, SNAP_B]);
+  assert.deepEqual(w.effects.filter((e) => e === 'rpc:record_x_unconfirmed' || e === 'rpc:ack_x_unconfirmed'),
+    ['rpc:record_x_unconfirmed', 'rpc:ack_x_unconfirmed', 'rpc:record_x_unconfirmed', 'rpc:ack_x_unconfirmed']);
+  assert.deepEqual(w.state.svc?.recon, { x_posts_unconfirmed: 5, x_unconfirmed_snapshots: [SNAP_A, SNAP_B] }, 'both sets stay on record');
+  // a changing set is followed a bounded number of times, and the last one seen is still RECORDED (never lost)
+  const names = ['d', 'e', 'f', 'g', 'h'].map((c) => c.repeat(64));
+  const churn = world({
+    x: 'active', xRun: [pair(1, SNAP_A)],
+    xAckAnswers: names.map((snapshot, i) => ({ status: 'snapshot_changed', x_posts_unconfirmed: 2 + i, x_unconfirmed_snapshot: snapshot })),
+  });
+  const churned = await withdraw(churn);
+  assert.equal(churned.status, 200);
+  assert.equal(churn.state.xAcks.length, 3, 'three rounds, no more');
+  assert.deepEqual(churn.state.svc?.recon?.x_unconfirmed_snapshots, [SNAP_A, names[0], names[1], names[2]], 'the fourth set is recorded, not acknowledged');
+  assert.equal(bodyOf(churned).x_posts_unconfirmed, 4);
+});
+
+test('an acknowledgement that clears nothing never loses or lowers the evidence', async () => {
+  const answers: [string, Record<string, unknown> | 'error'][] = [
+    ['deletion in progress', { status: 'deletion_in_progress' }],
+    ['the count-only refusal', { status: 'snapshot_required' }],
+    ['an empty set (cleared elsewhere)', { status: 'snapshot_changed', x_posts_unconfirmed: 0, x_unconfirmed_snapshot: null }],
+    ['an unreadable answer', { weird: true }],
+    ['an acknowledgement without a cleared count', { status: 'acknowledged', replay: false }],
+    ['a changed set with a malformed name', { status: 'snapshot_changed', x_posts_unconfirmed: 2, x_unconfirmed_snapshot: 'XYZ' }],
+    ['a failed call', 'error'],
+  ];
+  for (const [label, answer] of answers) {
+    const w = world({ x: 'active', xRun: [pair(3, SNAP_A)], xAckAnswers: [answer] });
+    const response = await withdraw(w);
+    assert.equal(response.status, 200, label);
+    assert.equal(bodyOf(response).x_posts_unconfirmed, 3, label);
+    assert.deepEqual(w.state.svc?.recon, { x_posts_unconfirmed: 3, x_unconfirmed_snapshots: [SNAP_A] }, label);
+    assert.deepEqual(w.state.xAcks, [SNAP_A], `${label}: asked once for that snapshot, nothing else`);
+  }
+  // a replay of an acknowledgement that already happened is an acknowledgement
+  const replay = world({ x: 'active', xRun: [pair(3, SNAP_A)], xAckAnswers: [{ status: 'acknowledged', replay: true, cleared: 3 }] });
+  assert.equal((await withdraw(replay)).status, 200);
+});
+
+test('a count whose evidence set has no name is kept, never acknowledged and never "done"', async () => {
+  const w = world({ x: 'active', xRun: [{ outcome: 'done', unconfirmedPosts: 3 }] });
+  const response = await withdraw(w);
+  assert.equal(response.status, 502);
+  assert.equal(error(response), 'X_CLEANUP_FAILED');
+  assert.equal(bodyOf(response).x_posts_unconfirmed, 3);
+  assert.deepEqual(w.state.svc?.recon, { x_posts_unconfirmed: 3 }, 'the count is kept (count-only record)');
+  assert.deepEqual(w.state.xAcks, [], 'and nothing is acknowledged');
+  assert.equal(w.state.svc?.results.x, 'reconciliation_required');
+  assert.equal(w.state.services.x_autopost, 'deleting');
+  // a malformed name is the same as none
+  const malformed = world({ x: 'active', xRun: [{ outcome: 'done', unconfirmedPosts: 3, unconfirmedSnapshot: 'NOT-HEX' }] });
+  assert.equal(error(await withdraw(malformed)), 'X_CLEANUP_FAILED');
+  assert.deepEqual(malformed.state.xAcks, []);
+});
+
+test('a lease lost while the unconfirmed pair is recorded: nothing is acknowledged, nothing is ended', async () => {
+  const w = world({ x: 'active', xRun: [pair(2, SNAP_A)] });
+  w.deps.x.run = () => { lose(w); return Promise.resolve(pair(2, SNAP_A)); };
   const response = await withdraw(w);
   assert.equal(error(response), 'DELETION_IN_PROGRESS');
   assert.equal(w.state.services.x_autopost, 'deleting');
+  assert.deepEqual(w.state.xAcks, [], 'the saga still holds the set: the next owner records and acknowledges it');
+  assert.deepEqual(w.state.svc?.recon, {}, 'nothing was written by the stale owner');
+});
+
+test('a lease lost between the record and the acknowledgement: the set IS on record, so nothing is lost; the next owner ends it', async () => {
+  const w = world({ x: 'active', xRun: [pair(2, SNAP_A)] });
+  const original = w.deps.rpc;
+  w.deps.rpc = async (name, args) => {
+    const result = await original(name, args);
+    if (name === 'record_x_unconfirmed') lose(w);   // the lease runs out right after the pair was recorded
+    return result;
+  };
+  const first = await withdraw(w);
+  assert.equal(error(first), 'DELETION_IN_PROGRESS');
+  assert.deepEqual(w.state.svc?.recon, { x_posts_unconfirmed: 2, x_unconfirmed_snapshots: [SNAP_A] });
+  assert.equal(w.state.services.x_autopost, 'deleting');
+  w.deps.rpc = original;
+  w.state.xWorkspace = true;
+  const second = await withdraw(w);
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  assert.equal(bodyOf(second).x_posts_unconfirmed, 2);
+  assert.ok(w.state.xAcks.includes(SNAP_A), 'acknowledged by the owner that finished');
+});
+
+test('another app\'s entitlement neither breaks nor is touched by ending POSTONA; the whole-account deletion cannot complete past a service it cannot end', async () => {
+  const other = [{ service_key: 'future_app', status: 'active' }];
+  const w = world({ x: 'active', xRun: [pair(2, SNAP_A)], otherServices: other });
+  const response = await withdraw(w);
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  assert.equal(bodyOf(response).outcome, 'ended');
+  assert.equal(w.state.services.x_autopost, 'ended');
+  assert.equal(w.state.services.kabumori, 'active', 'Kabumori is untouched');
+  assert.deepEqual(other, [{ service_key: 'future_app', status: 'active' }], 'the other app\'s entitlement is untouched');
+  assert.equal(w.state.login, true, 'the login stays');
+  // a key that is not a service key at all is still an unreadable answer (nothing is touched)
+  const strange = world({ x: 'active', otherServices: [{ service_key: 'Bad Key!', status: 'active' }] });
+  assert.equal((await withdraw(strange)).status, 500);
+  assert.ok(!strange.effects.includes('x:run'));
+  // the whole account: the unknown service is not ended by this code, so the login is never deleted
+  const whole = world({ x: 'active', kabumori: 'active', gate: 'open', otherServices: [{ service_key: 'future_app', status: 'active' }] });
+  const refused = await handleDeleteCommonAccount({ authorization: bearer(signIn()), body: deleteBody(whole.state.version) }, whole.deps);
+  assert.notEqual(refused.status, 200, JSON.stringify(refused.body));
+  assert.equal(whole.state.login, true, 'the login is not deleted');
+  assert.equal(whole.calls?.delete ?? whole.state.calls.delete, 0);
 });
 
 test('the saga\'s typed answers keep their reason; none of them is a success', async () => {
@@ -401,7 +519,7 @@ test('the saga\'s typed answers keep their reason; none of them is a success', a
 });
 
 test('the whole account reports the unconfirmed X posts too', async () => {
-  const w = world({ x: 'active', xRun: [{ outcome: 'done', unconfirmedPosts: 5 }], gate: 'open' });
+  const w = world({ x: 'active', xRun: [pair(5, SNAP_C)], gate: 'open' });
   const response = await handleDeleteCommonAccount({ authorization: bearer(signIn()), body: deleteBody(w.state.version) }, w.deps);
   assert.equal(response.status, 200, JSON.stringify(response.body));
   assert.equal(bodyOf(response).outcome, 'deleted');

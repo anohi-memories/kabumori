@@ -19,8 +19,8 @@
 -- Usage:   PGOPTIONS='-c kabumori.disposable_probe=yes' psql -X -A -t -v ON_ERROR_STOP=1 -f \
 --            supabase/preflight/common_account_release_probe.sql "<connection string of the DISPOSABLE database>"
 --
--- Expected inventory: the 77 functions, 7 relations, 11 triggers and 2 policies the chain creates (Phase 1, 2, 3a,
--- 3b, 4, 5, 6, 8, 9), reviewed by hand from a clean apply on PostgreSQL 17 (docs/common-account/phase7-release-preflight.md
+-- Expected inventory: the 78 functions, 7 relations, 11 triggers and 2 policies the chain creates (Phase 1, 2, 3a,
+-- 3b, 4, 5, 6, 8, 9, 10), reviewed by hand from a clean apply on PostgreSQL 17 (docs/common-account/phase7-release-preflight.md
 -- section 3). A function that is not in the list, or whose security attributes differ, is a FAIL.
 begin read only;
 set local search_path = pg_catalog;
@@ -103,6 +103,7 @@ exp_fn(sig, sec, cfg, roles, vol, ret) as (values
     ('public.record_common_account_deletion_error(uuid,uuid,text)', 'definer', 'search_path=""', 'service_role', 'v', 'jsonb'),
     ('public.record_owned_service_deletion_provider_result(uuid,text,uuid,uuid,text,text)', 'definer', 'search_path=""', 'service_role', 'v', 'jsonb'),
     ('public.record_owned_service_deletion_reconciliation(uuid,text,uuid,uuid,text,integer)', 'definer', 'search_path=""', 'service_role', 'v', 'jsonb'),
+    ('public.record_owned_service_deletion_x_unconfirmed(uuid,text,uuid,uuid,integer,text)', 'definer', 'search_path=""', 'service_role', 'v', 'jsonb'),
     ('public.common_account_service_end_result(uuid,text)', 'definer', 'search_path=""', 'service_role', 's', 'jsonb'),
     ('public.release_common_account_deletion_claim(uuid,uuid,uuid)', 'definer', 'search_path=""', 'service_role', 'v', 'jsonb'),
     ('public.release_service_deletion_claim(uuid,text,uuid,uuid)', 'definer', 'search_path=""', 'service_role', 'v', 'jsonb'),
@@ -186,14 +187,16 @@ markers(phase, ord, fn) as (values
   ('P5', 6, 'public.common_account_brand_service_state(text,text)'),
   ('P6', 7, 'public.claim_service_deletion(uuid,text,uuid,uuid,uuid,integer)'),
   ('P8', 8, 'public.common_account_service_end_result(uuid,text)'),
-  ('P9', 9, 'private.account_lifecycle_enrollment_fence(uuid,boolean)')
+  ('P9', 9, 'private.account_lifecycle_enrollment_fence(uuid,boolean)'),
+  ('P10', 10, 'public.record_owned_service_deletion_x_unconfirmed(uuid,text,uuid,uuid,integer,text)')
 ),
 phase_state as (
   select m.phase, m.ord, exists (select 1 from cat_fn f where f.sig = m.fn) as present from markers m
 ),
 chain_versions(ord, version) as (values
   (1, '20261001150000'), (2, '20261006230000'), (3, '20261009120000'), (4, '20261010051938'),
-  (5, '20261012130000'), (6, '20261012230000'), (7, '20261013120000'), (8, '20261013140000'), (9, '20261015090000')
+  (5, '20261012130000'), (6, '20261012230000'), (7, '20261013120000'), (8, '20261013140000'), (9, '20261015090000'),
+  (10, '20261015120000')
 ),
 ledger as (
   select pg_catalog.to_regclass('supabase_migrations.schema_migrations') is not null as present
@@ -401,6 +404,14 @@ checks(ord, id, status, detail) as (
                        and p.prosrc like '%account_lifecycle_enrollment_fence%') = 5
               then 'PASS' else 'FAIL' end,
          'the five public enrollment functions call the Phase 9 fence (a partial rollback or a hand edit would show here)'
+  union all
+  select 506, 'E6_unconfirmed_snapshot_shape',
+         case when exists (select 1 from pg_constraint c where c.conrelid = pg_catalog.to_regclass('private.account_lifecycle_operations')
+                             and c.conname = 'account_lifecycle_operations_reconciliation_shape' and c.contype = 'c'
+                             and pg_get_constraintdef(c.oid) like '%x_unconfirmed_snapshots%'
+                             and pg_get_constraintdef(c.oid) like '%[0-9a-f]{64}%')
+              then 'PASS' else 'FAIL' end,
+         'the reconciliation shape names the X unconfirmed evidence sets as 64-hex snapshots (Phase 10; a rollback that kept data leaves it wider, never narrower than the data)'
   union all
   -- ---- H. Auth (read only) ----------------------------------------------------------------------------------
   select 600, 'H1_auth_sessions_shape',

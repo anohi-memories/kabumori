@@ -170,3 +170,29 @@ test('the profile RPC takes no id argument and derives the user from auth.uid()'
   assert.ok(!/ensure_my_profile\(\s*p_/.test(migrationSource));
   assert.match(migrationSource, /grant execute on function public\.ensure_my_profile\(\) to authenticated;/);
 });
+
+test('Phase 10: the X unconfirmed set is recorded under its own name before it is acknowledged, and a bare count is never sent', async () => {
+  const logic = code(await read('supabase/functions/account-delete/lifecycle_logic.ts'));
+  const http = code(await read('supabase/functions/account-delete/http.ts'));
+  const unconfirmed = code(await read('supabase/functions/account-delete/x_unconfirmed.ts'));
+  // The only acknowledgement argument builder is the snapshot-bound one; the count-only argument is gone.
+  assert.ok(!/\bp_expected\b/u.test(logic) && !/\bp_expected\b/u.test(http) && !/\bp_expected\b/u.test(unconfirmed), 'no count-only acknowledgement argument');
+  assert.equal(logic.match(/call\(deps, 'ack_x_unconfirmed'/gu)?.length, 1, 'one acknowledgement call site');
+  assert.match(logic, /call\(deps, 'ack_x_unconfirmed', xUnconfirmedAckArgs\(userId, pair\.snapshot\)\)/u);
+  assert.match(http, /ack_x_unconfirmed: 'social_mobile_account_deletion_x_unconfirmed_ack'/u);
+  assert.match(http, /record_x_unconfirmed: 'record_owned_service_deletion_x_unconfirmed'/u);
+  // Inside the one settle function the pair is recorded (and its lease checked) before every acknowledgement, and the
+  // acknowledgement result is read only through the mapper that mirrors F3's.
+  const settle = logic.slice(logic.indexOf('const settleUnconfirmed'), logic.indexOf('try {', logic.indexOf('const settleUnconfirmed')));
+  assert.ok(settle.indexOf("call(deps, 'record_x_unconfirmed'") > 0, 'the pair is recorded');
+  assert.ok(settle.indexOf("call(deps, 'record_x_unconfirmed'") < settle.indexOf("call(deps, 'ack_x_unconfirmed'"), 'recorded before acknowledged');
+  assert.ok(settle.indexOf("kept === 'lease_lost'") > 0 && settle.indexOf("kept === 'lease_lost'") < settle.indexOf("call(deps, 'ack_x_unconfirmed'"), 'a lost lease stops before the acknowledgement');
+  assert.ok(settle.includes('xUnconfirmedAckOutcomeOf('), 'the answer is read through the typed mapper');
+  // Everything that records or acknowledges happens before X is recorded as done, and so before the end can finish.
+  const end = logic.slice(logic.indexOf('async function endPostona'), logic.indexOf('// Preview (read-only)'));
+  assert.ok(end.indexOf('settleUnconfirmed(unconfirmedPosts, unconfirmedSnapshot)') > 0
+    && end.indexOf('settleUnconfirmed(unconfirmedPosts, unconfirmedSnapshot)') < end.indexOf("record('x', outcome === 'done'")
+    && end.indexOf("record('x', outcome === 'done'") < end.indexOf("call(deps, 'finish_owned_service'"));
+  // The saga's snapshot pattern is the one place that decides what a snapshot looks like.
+  assert.equal(unconfirmed.match(/\[0-9a-f\]\{64\}/gu)?.length, 1);
+});

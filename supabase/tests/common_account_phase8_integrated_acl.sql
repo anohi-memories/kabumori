@@ -120,17 +120,22 @@ declare
     'public.claim_service_deletion(uuid,text,uuid,uuid,uuid,integer)', 'public.finish_owned_service_deletion(uuid,text,uuid,uuid)',
     'public.record_owned_service_deletion_provider_result(uuid,text,uuid,uuid,text,text)',
     'public.record_owned_service_deletion_reconciliation(uuid,text,uuid,uuid,text,integer)',
+    -- F5 Phase 10: the recorder of the unconfirmed-post evidence set (count + snapshot name)
+    'public.record_owned_service_deletion_x_unconfirmed(uuid,text,uuid,uuid,integer,text)',
     'public.acknowledge_owned_remote_unverified(uuid,text,uuid,uuid,text[])',
     'public.common_account_service_end_result(uuid,text)', 'public.common_account_brand_service_state(text,text)',
     'public.common_account_provider_snapshot(uuid)', 'public.withdraw_kabumori_service(uuid)',
     -- F3 (X saga stop, publish authority)
     'public.social_mobile_account_deletion_stop_x(uuid,uuid)', 'public.social_mobile_account_deletion_x_precheck(uuid)',
+    -- F3 PR #204: the snapshot acknowledgement and the count-only shim that clears nothing
+    'public.social_mobile_account_deletion_x_unconfirmed_ack(uuid,text)', 'public.social_mobile_account_deletion_x_unconfirmed_ack(uuid,integer)',
     'public.postona_x_stop_account_publishing(text,text)', 'public.postona_x_stop_publishing_for_user(uuid,text)',
     'public.set_x_account_publish_authority(text,text,text,timestamp with time zone,timestamp with time zone)'];
   v_internal text[] := array[
     'private.account_lifecycle_lock(uuid,boolean,boolean)', 'private.account_lifecycle_cleanup_authorized(uuid)',
     'private.account_lifecycle_service_state_refusal(uuid,text)', 'private.account_lifecycle_owned_service_operation(uuid,text,uuid,uuid)',
     'public.threads_cleanup_authorized(uuid)', 'public.social_mobile_account_deletion_hold(uuid,uuid)',
+    'public.social_mobile_account_deletion_x_unconfirmed_snapshot(text)',
     'postona_x_resv.g5_x_autopost_allowed(uuid)', 'postona_x_resv.g4_x_account_verified(uuid,text)', 'postona_x_resv.pre_publish_check(uuid,uuid)',
     'postona_x_resv.claim_due(text,integer,integer)', 'postona_x_resv.finish(uuid,uuid,text,text,text)', 'postona_x_resv.lock_own(uuid,integer)'];
   v text; v_oid regprocedure;
