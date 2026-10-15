@@ -8,6 +8,7 @@ import type { BrandContext, BrandPublishMode } from "../_shared/brand/brand_cont
 import type { XAuthContext } from "../_shared/x_oauth2_post.ts";
 import {
   assertKabumoriGenerationAllowed,
+  authorizeKabumoriGenerationIngress,
   isKabumoriGenerationOnlyMode,
   KABUMORI_GENERATION_ONLY_MODES,
   kabumoriSendRecheck,
@@ -62,6 +63,28 @@ test("generation-only modes: allowed on live and dry_run, refused on disabled / 
   assert.ok(isKabumoriGenerationOnlyMode("morning_report_dry_run"));
   for (const mode of [undefined, null, "", "publish_morning_greeting_manual", "dispatch", "brand_post"]) {
     assert.equal(isKabumoriGenerationOnlyMode(mode), false, String(mode));
+  }
+});
+
+test("ingress decision: caller first (a throwing / false check is 401 and the brand is not read), then the pause (423)", async () => {
+  let brandReads = 0;
+  const loadBrand = (mode: BrandPublishMode) => () => {
+    brandReads += 1;
+    return Promise.resolve(context(mode));
+  };
+  const safeCode = (error: unknown) => error instanceof Error ? error.message : "UNEXPECTED_ERROR";
+  const cases: Array<[() => Promise<boolean>, BrandPublishMode, unknown]> = [
+    [() => Promise.reject(new Error("AUTH_LOOKUP_CRASHED")), "live", { allowed: false, status: 401, error: "GENERATION_INGRESS_UNAUTHORIZED" }],
+    [() => Promise.resolve(false), "live", { allowed: false, status: 401, error: "GENERATION_INGRESS_UNAUTHORIZED" }],
+    [() => Promise.resolve(true), "disabled", { allowed: false, status: 423, error: "BRAND_PUBLISH_MODE_DISABLED" }],
+    [() => Promise.resolve(true), "dry_run", { allowed: true }],
+    [() => Promise.resolve(true), "live", { allowed: true }],
+  ];
+  for (const [isAdminCaller, mode, expected] of cases) {
+    brandReads = 0;
+    const decision = await authorizeKabumoriGenerationIngress({ isAdminCaller, loadBrand: loadBrand(mode), safeCode });
+    assert.deepEqual(decision, expected);
+    assert.equal(brandReads, (decision as { status?: number }).status === 401 ? 0 : 1, "the brand is read only for an authorized caller");
   }
 });
 

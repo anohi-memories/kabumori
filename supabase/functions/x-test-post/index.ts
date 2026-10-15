@@ -77,7 +77,7 @@ import {
 } from "../_shared/brand/brand_context.ts";
 import { assertBrandPublishAllowed } from "../_shared/brand/publish_guard.ts";
 import {
-  assertKabumoriGenerationAllowed,
+  authorizeKabumoriGenerationIngress,
   isKabumoriGenerationOnlyMode,
   kabumoriSendRecheck,
 } from "./kabumori_pause_guard.ts";
@@ -3348,15 +3348,22 @@ Deno.serve(async (req) => {
     supabaseUrlForFailure = supabaseUrl;
     serviceRoleKeyForFailure = serviceRoleKey;
 
-    // Kabumori pause (F2 2026-10-15): generation-only modes call the model (text / image) without posting. When the
-    // Kabumori brand is disabled or inactive they are refused here, before any model call. dry_run / live run as before.
+    // Kabumori pause (F2 2026-10-15/16): generation-only modes call paid models (text / image) without posting. The
+    // caller must be a registered admin (401 otherwise, before anything else is read), and Kabumori must not be paused
+    // (423 when disabled / inactive). dry_run / live run as before for an admin. Fail closed on every error.
     if (isKabumoriGenerationOnlyMode(requestBody.mode)) {
-      try {
-        await assertKabumoriGenerationAllowed(() =>
-          loadBrandContext({ supabaseUrl, serviceRoleKey, brandId: LEGACY_KABUMORI_BRAND_ID })
-        );
-      } catch (error) {
-        return jsonResponse({ success: false, error: safeErrorCode(error), ai_called: 0, x_api_called: 0 }, 423);
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+      const decision = await authorizeKabumoriGenerationIngress({
+        isAdminCaller: async () =>
+          !!anonKey && (await resolveAdminAuthorization({
+            authorizationHeader: req.headers.get("Authorization"),
+            supabaseUrl, anonKey, serviceRoleKey,
+          })).authorized,
+        loadBrand: () => loadBrandContext({ supabaseUrl, serviceRoleKey, brandId: LEGACY_KABUMORI_BRAND_ID }),
+        safeCode: safeErrorCode,
+      });
+      if (!decision.allowed) {
+        return jsonResponse({ success: false, error: decision.error, ai_called: 0, x_api_called: 0 }, decision.status);
       }
     }
 

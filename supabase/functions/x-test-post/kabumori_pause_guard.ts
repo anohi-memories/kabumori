@@ -50,3 +50,35 @@ export async function assertKabumoriGenerationAllowed(load: KabumoriBrandLoader)
   if (context.brand.id !== LEGACY_KABUMORI_BRAND_ID) throw new Error("KABUMORI_SEND_RECHECK_BRAND_MISMATCH");
   assertBrandDryRunAllowed(context);
 }
+
+export type GenerationIngressDecision =
+  | { allowed: true }
+  | { allowed: false; status: 401 | 423; error: string };
+
+/**
+ * The generation-only ingress (2026-10-16, J2-R2): who is calling first, then whether Kabumori allows it. These modes
+ * reach paid models (text / image) without posting, and before this they had no caller check at all. A caller must be a
+ * registered admin (Supabase Auth user in admin_users, the same check the manual greeting publish uses); anything else is
+ * 401 before the brand is even read. An authorized caller is then refused with 423 while Kabumori is paused. Every
+ * error on either step is fail closed. Nothing here is reached by the scheduled dispatcher path or by other brands.
+ */
+export async function authorizeKabumoriGenerationIngress(args: {
+  /** Resolves the caller (fail closed): false for a missing / invalid / non-admin credential or any lookup error. */
+  isAdminCaller: () => Promise<boolean>;
+  loadBrand: KabumoriBrandLoader;
+  safeCode: (error: unknown) => string;
+}): Promise<GenerationIngressDecision> {
+  let admin = false;
+  try {
+    admin = await args.isAdminCaller();
+  } catch {
+    admin = false;
+  }
+  if (!admin) return { allowed: false, status: 401, error: "GENERATION_INGRESS_UNAUTHORIZED" };
+  try {
+    await assertKabumoriGenerationAllowed(args.loadBrand);
+  } catch (error) {
+    return { allowed: false, status: 423, error: args.safeCode(error) };
+  }
+  return { allowed: true };
+}
