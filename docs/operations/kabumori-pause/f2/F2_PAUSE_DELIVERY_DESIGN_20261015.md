@@ -230,7 +230,7 @@ select enabled, sending_enabled from public.market_report_broadcast_settings;
 - processing は送信の途中なので、戻さない・再送しない。
 - 待ち行列の扱い（G1 で決める）は2択。
   - 少数・新しいなら、そのまま送らせる。
-  - 送りたくなければ、操作の直前の snapshot の id だけを `skipped` にし、`last_error_code` に休止の印を残す（戻すには別手順）。
+  - 送りたくなければ、操作の直前の snapshot の id だけを `skipped` にし、`push_last_error_code` に休止の印を残す（戻すには別手順。列名は 2026-10-15 の停止候補の TASK で訂正）。
 - repo 上、notifications の producer はすべてかぶモリのもの。POSTONA は Push を送らない。そのため、#9 は空回りになるだけで止めない。
 
 ## 9. 共通 AI と POSTONA の保護（caller の地図）

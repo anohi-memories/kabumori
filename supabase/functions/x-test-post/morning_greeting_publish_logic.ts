@@ -169,6 +169,11 @@ export async function runMorningGreetingManualPublish(args: {
   openAiApiKey: string;
   brandId: string;
   xAuth: XAuthContext;
+  /**
+   * Kabumori pause (F2 2026-10-15): run immediately before each X request (media upload and post, also after a
+   * refresh retry). Throws to stop the send when the brand was paused while this run was in progress.
+   */
+  beforeSend?: () => Promise<void>;
   now?: Date;
   fetchImpl?: FetchLike;
   buildPayload?: (args: {
@@ -259,6 +264,7 @@ export async function runMorningGreetingManualPublish(args: {
     // status (403, 5xx, ...) is not retried — those are not "the token expired", so retrying could double
     // a request whose outcome is otherwise ambiguous.
     const mediaResult = await requestXWithAuthRefresh(args.xAuth, async (accessToken) => {
+      await args.beforeSend?.();
       const form = new FormData();
       form.append("media", new Blob([imageBytes], { type: "image/png" }), `${dateJst}.png`);
       form.append("media_category", "tweet_image");
@@ -280,6 +286,7 @@ export async function runMorningGreetingManualPublish(args: {
     xApiCalled += 1;
     xPostApiCalled += 1;
     const postResult = await requestXWithAuthRefresh(args.xAuth, async (accessToken) => {
+      await args.beforeSend?.();
       const response = await fetchImpl(X_POST_URL, {
         method: "POST",
         headers: {
