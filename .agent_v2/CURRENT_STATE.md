@@ -1,3 +1,7 @@
+## POSTONA F4 L4 PR211 accepted (2026-10-15 JST)
+- F4 `postona-f4-pr197-p2-response-warning-preservation-20261015` done/none after L4, verdict PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO. PR211 head `eb1011f2bd6f8a76ef412f824f0b21629794645b` OPEN/Draft/unmerged based on protected PR197 `2171ee4c02ea2eec46562d81595f5460e5507d9d`, five F4 mobile source/test/doc changes. R1 incomplete provider summary fails closed; R2 validated same-user X count and Threads remote-unverified retained on session/readback error. Reported fail-before/pass-after and app 294 PASS; ChatGPT read actual diff but did not rerun tests.
+- Required: independent J1–J4 Sol（高） focused rereview including F5 PR193 actual handler/contract probe, cross-user warning leak, transient auth/preview error. Legacy deletion endpoint, F3/J3 X saga, F5/G5 managed Auth/lifecycle and F4 Threads remote still NO_GO. New F4 task only after archiving accepted TASK/Report.
+
 ## POSTONA F4 resumed (2026-10-15)
 - User asked to switch unstarted J5 P2 task to Claude F4. J5 cancelled/idle, old task archived; no J5 source PR existed. F4 NEW `postona-f4-pr197-p2-response-warning-preservation-20261015` ready / Opus5.5（高） / F4→L4 / POSTONA G4ちゃ; distinct task_id.
 - Fix J4 V4 P2 R1 truncated `ended` response false success and R2 missing X/Threads warnings after readback error, based on PR197; new Draft source only. Old F4 Threads lease task archived; PR180 protected.
