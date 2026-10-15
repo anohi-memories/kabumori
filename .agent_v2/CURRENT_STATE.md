@@ -1,3 +1,7 @@
+## POSTONA F4 — J4 P2 R2c final-preview identity fix (2026-10-15 JST)
+- NEW F4 `postona-f4-pr211-r2c-final-preview-identity-fix-20261015` ready/claude, Opus5.5（高）, F4→L4 return POSTONA｜マルチSNS化・開発統括（G4）のちゃ. J4 V4 flagged P2 R2c: delayed read-back preview after A→B/null wrongly retains A's X count and Threads warning in helper return, though current TSX screen protects visibility. Correct only that source boundary without discarding same-user warnings.
+- Target protected Draft PR211 HEAD `eb1011f2bd6f8a76ef412f824f0b21629794645b`; new isolated stacked Draft candidate, no merge/deploy. Prior F4 TASK incl Report archived `.agent_v2/archive/2026-10-15-F4-postona-f4-pr197-p2-response-warning-preservation-20261015/`, byte-equal blob restore; manifest/HISTORY_INDEX saved; SHA256SUMS finalization pending. J4 independent rereview required afterward; production NO_GO. No other slot/POSTONA X/shared Auth work changed.
+
 ## G1 かぶモリ休止 J2 独立レビュー main 登録（2026-10-15）
 - 新J2 `kabumori-j2-f2-f8-pause-runtime-integrated-security-review-20261015` ready/codex、Sol（高）、J2→V2、返却先：かぶモリアプリG1のちゃ（運用休止・全体統括）。
 - 対象 F8 Draft PR #212 (b80d5235)、F2 Draft PR #213 (cb34ab7d)。新旧枠・所有範囲を維持し、独立review専用。旧J2 TASK/Reportはappend-only archive、MANIFEST/SHA256SUMS・復元read-back・HISTORY_INDEX登録済み。
