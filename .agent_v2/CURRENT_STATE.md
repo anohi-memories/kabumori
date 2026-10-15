@@ -1,3 +1,8 @@
+## POSTONA J4 V4 review — two P2 client fixes (2026-10-15 JST)
+- J4 `postona-j4-pr197-postona-deletion-client-security-review-20261014`: V4 CHANGES_REQUIRED P2×2 / PRODUCTION_NO_GO, done/none. Target Draft PR197 HEAD `2171ee4c02ea2eec46562d81595f5460e5507d9d`, unchanged/unmerged.
+- P2-R1 incomplete ended provider summary accepted as success, can mask durable X uncertain count and Threads remote-unverified. P2-R2 post-mutation session/read-back errors drop known warning evidence. J4 independently reran mobile 281 tests and F5 Deno120, reproduced faults with negative synthetic tests; no product edits.
+- Next product owner G4/F4 app (or user-authorized J5 emergency implementation after prior archive) must implement variant-specific complete result validation and retain current-user-bound known warnings through read-back failure. Separate old server deletion bypass, F3/J3 P2×3, F5/managed environment remain release blockers. No merge/deploy/live account or SNS actions permitted.
+
 ## F3 J3 V3 P2追加修正（2026-10-15）
 - F3 `postona-f3-j3-v3-ack-lease-rollback-corrections-20261015`: ready/claude、推薦Opus5.5（高）、F3→L3、返却POSTONA G3のちゃ。J3の最新V3 CHANGES_REQUIRED P2 R1a count-only ACK ABA、R3a post-check row lock lease expiry、R1b rollback checkpoint raceをF3所有sourceで修正、使い捨てPGで再現と回帰。F5 PR193のtyped ACK consumerはF5担当に契約を返す。F4/G4 protected、production NO_GO。
 - 前F3 TASK `postona-f3-j3-v3-r1-r3-security-fixes-20261013` はarchive `.agent_v2/archive/2026-10-15-F3-postona-f3-j3-v3-r1-r3-security-fixes-20261013/`、SHA256 `fd2b777b4c3d04041eab3dfc68cf2293b4aa6d4d0d7697457e2964fae29a89af`、blob/UTF8復元照合、HISTORY_INDEX済。PR192 Draftは未マージ。
