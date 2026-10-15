@@ -13,13 +13,19 @@ type Deps = {
 export function createPostonaEndClient(deps: Deps) {
   const issued = new WeakSet<BoundEndPreview>();
   let busy = false;
-  async function preview(): Promise<BoundEndPreview | EndFailure> {
+  /**
+   * The preview. `seen` hears every session read that answered (a read that throws observes nobody: unknown).
+   * With `expected` (the end's own read-back), a login other than that exact one makes no request at all.
+   */
+  async function readPreview(seen?: (view: SessionView | null) => void, expected?: DeletionContext): Promise<BoundEndPreview | EndFailure> {
     if (!deps.enabled) return endFailure('POSTONA_END_UNAVAILABLE');
+    const read = async () => { const view = await deps.session(); seen?.(view); return view; };
     try {
-      const current = await deps.session();
+      const current = await read();
       if (!current?.sessionId || !current.userId) return endFailure('AUTH_REQUIRED');
+      if (expected && !sameDeletionContext(expected, current)) return endFailure('SESSION_CHANGED');
       const response = await deps.call({ action: 'preview' }, current.accessToken);
-      const after = await deps.session();
+      const after = await read();
       if (!sameDeletionContext({ userId: current.userId, sessionId: current.sessionId }, after ?? { userId: null, sessionId: null })) return endFailure('SESSION_CHANGED');
       const parsed = parseEndPreview(response.status, response.body);
       if (!parsed.ok) return parsed;
@@ -31,13 +37,43 @@ export function createPostonaEndClient(deps: Deps) {
       return bound;
     } catch { return endFailure('RESULT_UNCONFIRMED'); }
   }
+  const preview = () => readPreview();
   async function end(input: EndInput): Promise<EndResult | EndFailure> {
     if (!deps.enabled) return endFailure('POSTONA_END_UNAVAILABLE');
     if (busy) return endFailure('DELETION_IN_PROGRESS');
     busy = true;
-    // What this person's own, validated answer stated (bound to input.context: the screen shows a result only to
-    // that same login). Kept on every path after the answer arrived, so an exception while confirming never drops it.
+    // What this person's own, validated answer stated, and that answer's body. Kept on every path after the answer
+    // arrived (an exception while confirming never drops them) -- but handed back only while THIS person is the one
+    // last observed signed in (P2-R2c): once another person or nobody is positively observed, none of it is returned.
     let facts: EndFacts | undefined;
+    let body: unknown;
+    let answered = false;
+    // The last login a session read actually answered with (a read that throws leaves it unchanged: unknown), and
+    // whether ANY read since the mutation started saw another person or nobody. That is sticky: a later read that
+    // shows this person again (a switch back, or a stale read arriving out of order) never brings the facts back.
+    let lastSeen: SessionView | null = null;
+    let switched = false;
+    const see = (view: SessionView | null) => {
+      if (view === null || view.userId !== input.context.userId) switched = true;
+      lastSeen = view;
+    };
+    const samePerson = () => !switched && lastSeen !== null && lastSeen.userId === input.context.userId;
+    const exactLogin = () => lastSeen !== null && sameDeletionContext(input.context, lastSeen);
+    /**
+     * The last step of every answer after the mutation: one more session read, then
+     *   another person / nobody seen at any read since the mutation -> SESSION_CHANGED with nothing of this person's;
+     *   this person, exactly this login -> the answer as it is;
+     *   this person on another session, or the read failed (unknown) -> never a completion: a success becomes
+     *   RESULT_UNCONFIRMED carrying this person's validated warnings.
+     */
+    const settle = async (outcome: EndResult | EndFailure): Promise<EndResult | EndFailure> => {
+      let observed = true;
+      try { see(await deps.session()); } catch { observed = false; }
+      if (!samePerson()) return endFailure('SESSION_CHANGED');
+      if (outcome.ok && !(observed && exactLogin())) return endFailure('RESULT_UNCONFIRMED', body, facts);
+      return outcome;
+    };
+    const unconfirmed = () => settle(endFailure('RESULT_UNCONFIRMED', body, facts));
     try {
       if (!issued.has(input.preview) || !sameDeletionContext(input.context, input.preview.context)) return endFailure('LIFECYCLE_CHANGED');
       if (!input.preview.postonaAvailable) return endFailure('POSTONA_END_UNAVAILABLE');
@@ -48,34 +84,39 @@ export function createPostonaEndClient(deps: Deps) {
       const current = await deps.session();
       if (!current?.sessionId) return endFailure('AUTH_REQUIRED');
       if (!sameDeletionContext(input.context, current)) return endFailure('SESSION_CHANGED');
+      see(current);
       // A mutation consumes its preview/consent. Every retry needs another preview.
       issued.delete(input.preview);
       const response = await deps.call({ action: 'withdraw_postona', confirmation: POSTONA_END_CONFIRMATION, acknowledged_remote_unverified: [...input.acknowledged] }, current.accessToken);
+      answered = true;
+      body = response.body;
       // Parsed first (pure): only a fully valid answer yields facts; a truncated or inconsistent one never does.
       const result = parseEndResult(response.status, response.body, input.acknowledged);
       if (result.ok) facts = endFactsOf(result);
-      let after: SessionView | null;
       try {
-        after = await deps.session();
+        see(await deps.session());
       } catch {
-        return endFailure('RESULT_UNCONFIRMED', response.body, facts);
+        return await unconfirmed();
       }
-      if (!sameDeletionContext(input.context, after ?? { userId: null, sessionId: null })) {
-        // Another person (or nobody) is signed in now: none of the previous person's facts are attached.
-        const samePerson = after !== null && after.userId === input.context.userId;
-        return endFailure('SESSION_CHANGED', samePerson ? response.body : undefined, samePerson ? facts : undefined);
+      if (!exactLogin()) {
+        // Another person (or nobody): SESSION_CHANGED with nothing of this person's (settle decides it again).
+        return await settle(endFailure('SESSION_CHANGED', samePerson() ? body : undefined, samePerson() ? facts : undefined));
       }
-      if (!result.ok) return result;
-      // Read-only definitive read-back: account + Kabumori unchanged, only POSTONA ended/absent.
-      const verified = await preview();
-      if (!verified.ok || !sameDeletionContext(input.context, verified.context)) return endFailure('RESULT_UNCONFIRMED', response.body, facts);
+      if (!result.ok) return await settle(result);
+      // Read-only definitive read-back of THIS login: account + Kabumori unchanged, only POSTONA ended/absent.
+      const verified = await readPreview(see, input.context);
+      if (!verified.ok || !sameDeletionContext(input.context, verified.context)) return await unconfirmed();
       const postona = verified.services.find((s) => s.service === 'x_autopost');
       const oldKabumori = input.preview.services.find((s) => s.service === 'kabumori')?.status;
       const kabumori = verified.services.find((s) => s.service === 'kabumori')?.status;
       if (verified.accountStatus !== 'active' || kabumori !== oldKabumori || verified.deletionInProgress
-        || (result.outcome === 'not_registered' ? postona !== undefined : postona?.status !== 'ended')) return endFailure('RESULT_UNCONFIRMED', response.body, facts);
-      return result;
-    } catch { return endFailure('RESULT_UNCONFIRMED', undefined, facts); }
+        || (result.outcome === 'not_registered' ? postona !== undefined : postona?.status !== 'ended')) return await unconfirmed();
+      return await settle(result);
+    } catch {
+      // Before the answer: nothing of this person's is known. After it: the same identity rule as everywhere else.
+      if (!answered) return endFailure('RESULT_UNCONFIRMED');
+      return samePerson() ? endFailure('RESULT_UNCONFIRMED', body, facts) : endFailure('SESSION_CHANGED');
+    }
     finally { busy = false; }
   }
   return { preview, end };
