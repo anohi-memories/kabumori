@@ -175,7 +175,7 @@ test("missing key and budget refusals fail closed with no request; a role withou
   assert.equal(net.calls.length, 0);
 });
 
-test("transient failures retry within the policy's attempt cap under one callId; timeouts and 4xx do not", async () => {
+test("transient failures retry within the policy's attempt cap under one callId; timeouts (ours or a 504) and 4xx do not", async () => {
   const flaky = recordingFetch((_c, i) => i === 0 ? jsonResponse(529, anthropicError(529, "overloaded_error", "busy")) : jsonResponse(200, anthropicBody(PAYLOAD)));
   const ledger = new RecordingGuard([{ id: "all", scope: {}, maxCalls: 100, maxEstimatedUsd: 100 }]);
   const retried = executed(await executeWithModelPolicy(REGISTRY, call("test.classify.haiku", { callId: "job-42:classify" }),
@@ -197,6 +197,14 @@ test("transient failures retry within the policy's attempt cap under one callId;
   const timedOut = executed(await executeWithModelPolicy(fast, call("test.fast"), testDeps(slow.fetch, { nowMs: Date.now, sleep: undefined }).deps));
   assert.ok(Date.now() - t0 < 10_000, "bounded by the policy timeout");
   assert.deepEqual([!timedOut.result.ok && timedOut.result.errorCode, slow.calls.length], ["TIMEOUT", 1], "a timeout is never retried");
+
+  // J1 R2: the provider's own timeout (504 timeout_error) may have been processed and billed: one request, not two.
+  const late = recordingFetch((_c, i) => i === 0 ? jsonResponse(504, anthropicError(504, "timeout_error", "late")) : jsonResponse(200, anthropicBody(PAYLOAD)));
+  const lateLedger = new RecordingGuard([{ id: "all", scope: {}, maxCalls: 100, maxEstimatedUsd: 100 }]);
+  const serverTimeout = executed(await executeWithModelPolicy(REGISTRY, call("test.classify.haiku", { callId: "job-43:classify" }),
+    testDeps(late.fetch, { budget: lateLedger }).deps));
+  assert.deepEqual([!serverTimeout.result.ok && serverTimeout.result.errorCode, late.calls.length], ["SERVER_ERROR", 1], "a 504 is never retried");
+  assert.deepEqual(lateLedger.reserves, [{ callId: "job-43:classify", attempt: 1, role: "test.classify.haiku" }]);
 });
 
 test("a model the API does not serve is reported as unavailable; no other model or provider is tried", async () => {

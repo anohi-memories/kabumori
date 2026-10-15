@@ -21,7 +21,7 @@ import {
   testDeps,
   VALID_PAYLOAD,
 } from "./test_support.ts";
-import type { AiFailure, AiRequest, AiResult, AiSuccess } from "./types.ts";
+import type { AiFailure, AiRequest, AiResult, AiSuccess, AiTransportPolicy } from "./types.ts";
 
 function sequence(...responses: Array<Responder>): Responder {
   return (call, index, init) => responses[Math.min(index, responses.length - 1)](call, index, init);
@@ -127,14 +127,18 @@ test("10. 529 is retried with backoff", async () => {
   assert.deepEqual(sleeps, [1_000]);
 });
 
-test("11. transient 5xx are retried within the attempt limit", async () => {
-  const { result, calls, sleeps } = await run(
+test("11. among 5xx only an overload (OpenAI 503) is retried; 500 / 502 / 504 end the call after one request (J1 R2)", async () => {
+  const overloaded = await run(
     sampleRequest("openai"),
-    sequence(status(502, { error: { message: "bad gateway" } }), status(503, { error: { message: "unavailable" } }), ok(openAiBody(VALID_PAYLOAD))),
+    sequence(status(503, { error: { message: "unavailable" } }), status(503, { error: { message: "unavailable" } }), ok(openAiBody(VALID_PAYLOAD))),
   );
-  success(result);
-  assert.equal(calls.length, 3);
-  assert.deepEqual(sleeps, [1_000, 2_000]);
+  success(overloaded.result);
+  assert.equal(overloaded.calls.length, 3);
+  assert.deepEqual(overloaded.sleeps, [1_000, 2_000]);
+  for (const code of [500, 502, 504]) {
+    const { result, calls, sleeps } = await run(sampleRequest("openai"), sequence(status(code, { error: { message: "x" } }), ok(openAiBody(VALID_PAYLOAD))));
+    assert.deepEqual([failure(result).errorCode, calls.length, sleeps.length], ["SERVER_ERROR", 1, 0], `${code}`);
+  }
 });
 
 test("12. authentication failure is not retried", async () => {
@@ -165,21 +169,21 @@ test("14./26. timeout: not retried by default, charged at the upper bound, usage
   assert.equal(budget.state()[0].estimatedUsd, upper, "the guard keeps the upper bound for the unknown attempt");
 });
 
-test("14. timeout is retried only when the request opts in", async () => {
-  const request = sampleRequest("openai", { timeoutMs: 1_000, transport: { maxAttempts: 2, retryOnTimeout: true } });
-  const { result, calls } = await run(request, sequence((_c, _i, init) => hangUntilAborted(init), ok(openAiBody(VALID_PAYLOAD))));
-  const value = success(result);
-  assert.equal(calls.length, 2);
-  assert.equal(value.costBasis, "includes_upper_bound");
-  assert.equal(value.usage.unknownUsageAttempts, 1);
+test("14. asking to retry after a timeout is refused before any key read or request (J1 R2: no opt-in)", async () => {
+  const transport = { maxAttempts: 2, retryOnTimeout: true } as unknown as AiTransportPolicy;
+  const request = sampleRequest("openai", { timeoutMs: 1_000, transport });
+  const { result, calls, envReads } = await run(request, sequence((_c, _i, init) => hangUntilAborted(init), ok(openAiBody(VALID_PAYLOAD))));
+  const value = failure(result);
+  assert.deepEqual([value.errorCode, value.detail, calls.length, envReads.length], ["REQUEST_INVALID", "transport", 0, 0]);
 });
 
-test("15. a network failure is retried; its attempt is charged at the upper bound", async () => {
+test("15. a network failure is not retried (it may have reached the provider); its attempt is charged at the upper bound", async () => {
   const { result, calls } = await run(sampleRequest("openai"), sequence(() => Promise.reject(new TypeError("connection reset")), ok(openAiBody(VALID_PAYLOAD))));
-  const value = success(result);
-  assert.equal(calls.length, 2);
-  assert.equal(value.attempts[0].errorCode, "NETWORK");
+  const value = failure(result);
+  assert.equal(calls.length, 1);
+  assert.equal(value.errorCode, "NETWORK");
   assert.equal(value.attempts[0].costIsUpperBound, true);
+  assert.equal(value.costBasis, "includes_upper_bound");
 });
 
 test("16. a refusal is returned as a failure and never re-run", async () => {
@@ -227,17 +231,21 @@ test("20. no implicit fallback: a failing provider is never replaced by the othe
 
 test("21. usage totals add known attempts and count the unknown one; cost adds measured and upper bound", async () => {
   const request = sampleRequest("anthropic");
-  const { result } = await run(
+  const { result, calls } = await run(
     request,
     sequence(status(529, anthropicError(529, "overloaded_error", "busy")), () => Promise.reject(new TypeError("reset")), ok(anthropicBody(VALID_PAYLOAD))),
   );
-  const value = success(result);
-  assert.equal(value.transportAttempts, 3);
-  assert.equal(value.inputTokens, 800);
+  // The overload was not processed, so it is retried; the lost connection may have been, so the call ends there.
+  const value = failure(result);
+  assert.deepEqual([value.errorCode, value.transportAttempts, calls.length], ["NETWORK", 2, 2]);
+  assert.equal(value.usage.inputTokens, 0);
   assert.equal(value.usage.unknownUsageAttempts, 1);
   const upper = upperBoundAttemptCostUsd(findModelSpec("claude-opus-5-5")!, request);
-  assert.equal(value.estimatedCostUsd, Math.round((upper + (800 * 4 + 400 * 20) / 1_000_000) * 1e8) / 1e8);
+  assert.equal(value.estimatedCostUsd, upper);
   assert.equal(value.costBasis, "includes_upper_bound");
+  const succeeded = success((await run(request, sequence(status(429, anthropicError(429, "rate_limit_error", "slow")), ok(anthropicBody(VALID_PAYLOAD))))).result);
+  assert.deepEqual([succeeded.transportAttempts, succeeded.inputTokens, succeeded.usage.unknownUsageAttempts, succeeded.costBasis], [2, 800, 0, "measured"]);
+  assert.equal(succeeded.estimatedCostUsd, Math.round(((800 * 4 + 400 * 20) / 1_000_000) * 1e8) / 1e8);
 });
 
 test("22. cache usage is reported and priced (Anthropic reads / writes, OpenAI cached input)", async () => {

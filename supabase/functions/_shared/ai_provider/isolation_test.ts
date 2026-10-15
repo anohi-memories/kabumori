@@ -8,8 +8,11 @@
 //     unwired H5 consumer bridge library (F6 / H5 boundary, 2026-10-15). Of all deployable sources only
 //     AUTHORIZED_REACHERS reach it, and of the Edge Function entry points only market-report-analysis/index.ts.
 //     A deployable file that imports the public entry (mod.ts) may use exactly the names in AUTHORIZED_MOD_IMPORTS
-//     (least privilege: no ledger guard construction, no secret readers, no unpoliced executeAiRequest). The
+//     (least privilege: no ledger guard construction, no secret readers, no unpoliced executeAiRequest); the report
+//     handler likewise takes exactly its names from market_report_primary.ts (AUTHORIZED_PROVIDER_IMPORTS). The
 //     Anthropic SDK and key names stay inside it (plus the handler's offline test); no app references it or the key.
+//   - The scan fails closed (F6 J1 R1, 2026-10-16): a dynamic import() hands over every export, and whatever it
+//     cannot follow (computed or bare specifiers, missing or unreadable files, symlinks, import maps) is refused.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -24,21 +27,6 @@ async function moduleSources(): Promise<Array<{ name: string; text: string }>> {
     out.push({ name: entry.name, text: await Deno.readTextFile(new URL(entry.name, MODULE_DIR)) });
   }
   return out;
-}
-
-async function* walk(dir: URL): AsyncGenerator<URL> {
-  const entries: Deno.DirEntry[] = [];
-  try {
-    for await (const entry of Deno.readDir(dir)) entries.push(entry);
-  } catch {
-    return;
-  }
-  for (const entry of entries) {
-    if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
-    const child = new URL(entry.name + (entry.isDirectory ? "/" : ""), dir);
-    if (entry.isDirectory) yield* walk(child);
-    else if (/\.(ts|tsx|js|mjs|json)$/u.test(entry.name)) yield child;
-  }
 }
 
 function code(text: string): string {
@@ -82,6 +70,14 @@ test("provider hosts appear only in their adapters; model ids only in the catalo
 // ---- Primary scope ------------------------------------------------------------------------------------------------
 // The checks below are pure functions over a file tree (path relative to supabase/functions/ -> text), so the same
 // code runs on the repository and on synthetic trees that must be refused.
+//
+// Fail closed (F6 J1 R1, 2026-10-16). Imports are read from the raw text, so a comment or a string cannot hide one
+// (at worst a text adds an edge). Whatever the scan cannot follow is refused instead of counting as "does not reach":
+// an import() whose argument is not one plain string literal, a bare / absolute / data: specifier, a relative import
+// of a file the scanned tree does not have (missing, another letter case, a hidden or skipped directory, outside the
+// functions directory), a symlink, an unreadable file or directory, and any configuration that can remap specifiers
+// (import maps, scopes, workspaces, links, patches, package.json). A deployable file takes from a module file only
+// the names listed for it; a dynamic import(), a namespace import or `export *` takes "*" (every export).
 
 type Tree = ReadonlyMap<string, string>;
 
@@ -112,42 +108,64 @@ const AUTHORIZED_REACHERS = [
 const AUTHORIZED_ENTRY_POINTS = ["market-report-analysis/index.ts"];
 
 /**
- * Deployable files that import the public entry (mod.ts), with exactly the names each may import from it. Anything
- * else (a namespace import, `export *`, SupabaseLedgerBudgetGuard, InMemoryBudgetGuard, resolveProviderApiKey,
- * resolveSecret, executeAiRequest, ...) is refused: the bridge spends only through model policies and caller deps.
+ * Deployable files that import a file of the module -> per module file, exactly the names each may take from it.
+ * Anything else is refused: "*" (a namespace import, `export *` or a dynamic import(), which hands over every
+ * export), a default or side-effect import, an import clause the scan cannot read ("<unparsed>"), or another name
+ * (SupabaseLedgerBudgetGuard, InMemoryBudgetGuard, resolveProviderApiKey, resolveSecret, executeAiRequest,
+ * primaryLedgerFromEdgeEnv, ...). The bridge spends only through model policies and caller deps; the report handler
+ * only through its primary.
  */
-const AUTHORIZED_MOD_IMPORTS: Record<string, readonly string[]> = {
-  "_shared/ai_consumer_bridge/bridge.ts": [
-    "AiReasoningEffort",
-    "AiSubject",
-    "assertSchemaSupported",
-    "BudgetGuard",
-    "defineAnthropicModelPolicies",
-    "executeWithModelPolicy",
-    "findModelSpec",
-    "ModelPolicyRegistry",
-    "modelPolicyRequest",
-    "resolveModelChoice",
-    "upperBoundAttemptCostUsd",
-    "validateAgainstSchema",
-    "validateAiRequest",
-  ],
-  "_shared/ai_consumer_bridge/types.ts": ["AiSubject", "AnthropicModelPolicy", "ExecuteDeps", "JsonSchema"],
+const AUTHORIZED_PROVIDER_IMPORTS: Record<string, Record<string, readonly string[]>> = {
+  "_shared/ai_consumer_bridge/bridge.ts": {
+    "_shared/ai_provider/mod.ts": [
+      "AiReasoningEffort",
+      "AiSubject",
+      "assertSchemaSupported",
+      "BudgetGuard",
+      "defineAnthropicModelPolicies",
+      "executeWithModelPolicy",
+      "findModelSpec",
+      "ModelPolicyRegistry",
+      "modelPolicyRequest",
+      "resolveModelChoice",
+      "upperBoundAttemptCostUsd",
+      "validateAgainstSchema",
+      "validateAiRequest",
+    ],
+  },
+  "_shared/ai_consumer_bridge/types.ts": {
+    "_shared/ai_provider/mod.ts": ["AiSubject", "AnthropicModelPolicy", "ExecuteDeps", "JsonSchema"],
+  },
+  "market-report-analysis/handler.ts": {
+    "_shared/ai_provider/market_report_primary.ts": [
+      "MARKET_REPORT_AI_MODE_ENV",
+      "MarketReportPrimaryRecord",
+      "PRIMARY_RUN_BUDGET_MS",
+      "prepareMarketReportPrimary",
+    ],
+  },
 };
 
 /** Outside this module, the Anthropic SDK and ANTHROPIC_* names appear only in the handler's offline test. */
 const AUTHORIZED_ANTHROPIC_NAMES = ["market-report-analysis/opus_primary_handler_test.ts"];
 
+/** Specifiers that never name a file of this tree: the package registries, Node built-ins and HTTPS modules. */
+const EXTERNAL_SPECIFIER = /^(?:npm:|jsr:|node:|https:\/\/)/u;
+
+/** Keys of a Deno config / import map / package.json that can send a specifier to another file. */
+const REMAPPING_KEYS = ["imports", "scopes", "importMap", "workspace", "workspaces", "links", "patch"];
+
 const isTestFile = (path: string) => path.endsWith("_test.ts") || path.endsWith("/test_support.ts");
 const isCode = (path: string) => /\.(ts|tsx|js|mjs)$/u.test(path);
+const isDeployable = (path: string) => !path.startsWith(MODULE_PREFIX) && isCode(path) && !isTestFile(path);
 
-/** Files outside the module that mention it -> sorted specifiers; a mention outside a string literal is "<bare>". */
+/** Files outside the module that mention it (any letter case) -> sorted specifiers; a mention outside a string literal is "<bare>". */
 function directReferences(tree: Tree): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const [path, text] of tree) {
-    if (path.startsWith(MODULE_PREFIX) || !/ai_provider\//u.test(text)) continue;
-    const literals = [...text.matchAll(/["'`]([^"'`\n]*ai_provider\/[^"'`\n]*)["'`]/gu)].map((m) => m[1]);
-    const mentions = text.match(/ai_provider\//gu)?.length ?? 0;
+    if (path.startsWith(MODULE_PREFIX) || !/ai_provider\//iu.test(text)) continue;
+    const literals = [...text.matchAll(/["'`]([^"'`\n]*ai_provider\/[^"'`\n]*)["'`]/giu)].map((m) => m[1]);
+    const mentions = text.match(/ai_provider\//giu)?.length ?? 0;
     const specifiers = new Set(literals);
     if (mentions !== literals.length) specifiers.add("<bare>");
     out[path] = [...specifiers].sort();
@@ -155,16 +173,94 @@ function directReferences(tree: Tree): Record<string, string[]> {
   return out;
 }
 
-/** Relative imports (static, re-export, side-effect, dynamic) of one file, resolved to tree paths. */
-function relativeImports(path: string, text: string): string[] {
-  const body = code(text);
-  const specifiers = [
-    ...body.matchAll(/\bfrom\s*["']([^"']+)["']/gu),
-    ...body.matchAll(/\bimport\s*["']([^"']+)["']/gu),
-    ...body.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/gu),
-  ].map((m) => m[1]).filter((s) => s.startsWith("./") || s.startsWith("../"));
-  const base = new URL(path, "file:///functions/");
-  return specifiers.map((s) => decodeURIComponent(new URL(s, base).pathname).replace(/^\/functions\//u, ""));
+type ImportEdge = {
+  /** The specifier, or null when it is computed (an import() whose argument is not one plain string literal). */
+  readonly specifier: string | null;
+  /** What it takes: names, "default:<local>", "*" (every export), "<side-effect>" or "<unparsed>". */
+  readonly names: readonly string[];
+  /** False for a `from "x"` that is not plainly part of an import / export statement (it may be text in a string). */
+  readonly statement: boolean;
+};
+
+/** `{ a, b as c }`, `* as ns`, `*`, `x`, `x, { a }`, `x, * as ns`, each optionally after `type`; no quotes. */
+const PLAIN_CLAUSE =
+  /^\s*(?:type\s+)?(?:\{[^{}"'`;]*\}|\*(?:\s+as\s+[\w$]+)?|[\w$]+(?:\s*,\s*(?:\{[^{}"'`;]*\}|\*\s+as\s+[\w$]+))?)\s*$/u;
+
+/** The names a plain import / export clause takes. */
+function clauseNames(clause: string): string[] {
+  const names = new Set<string>();
+  const body = clause.trim().replace(/^type\s+/u, "");
+  if (body.includes("*")) names.add("*");
+  const braces = body.match(/\{([^}]*)\}/u);
+  if (braces) {
+    for (const part of braces[1].split(",")) {
+      const name = part.trim().replace(/^type\s+/u, "").split(/\s+as\s+/u)[0].trim();
+      if (name) names.add(name);
+    }
+  }
+  const head = body.replace(/\{[^}]*\}/u, "").replace(/\*(?:\s+as\s+[\w$]+)?/u, "").replace(/,/gu, " ").trim();
+  if (head) names.add(`default:${head}`);
+  return [...names];
+}
+
+/** The argument of the import( starting at `start`: its value if it is one plain string literal, else null. */
+function literalArgument(text: string, start: number): string | null {
+  let i = start;
+  while (/\s/u.test(text[i] ?? "")) i += 1;
+  const quote = text[i];
+  if (quote !== '"' && quote !== "'" && quote !== "`") return null;
+  const end = text.indexOf(quote, i + 1);
+  if (end < 0) return null;
+  const value = text.slice(i + 1, end);
+  // An escape, an interpolation or a line break would have to be evaluated: computed.
+  if (/[\\\n]|\$\{/u.test(value)) return null;
+  let j = end + 1;
+  while (/\s/u.test(text[j] ?? "")) j += 1;
+  // `import("x")` or `import("x", options)`; "x" + y, "x".concat(y) and anything else are computed.
+  return text[j] === ")" || text[j] === "," ? value : null;
+}
+
+/** Every import of a file: `import ... from`, `export ... from`, `import "x"` and import(), from the raw text. */
+function importEdges(text: string): ImportEdge[] {
+  const edges: ImportEdge[] = [];
+  const keywordEnds = [...text.matchAll(/\b(?:import|export)\b/gu)].map((m) => m.index + m[0].length);
+  let k = -1;
+  for (const m of text.matchAll(/\bfrom\s*(["'])([^"'\n]*)\1/gu)) {
+    while (k + 1 < keywordEnds.length && keywordEnds[k + 1] <= m.index) k += 1;
+    const clause = k >= 0 ? text.slice(keywordEnds[k], m.index) : null;
+    const plain = clause !== null && PLAIN_CLAUSE.test(clause);
+    edges.push({ specifier: m[2], names: plain ? clauseNames(clause) : ["<unparsed>"], statement: plain });
+  }
+  for (const m of text.matchAll(/\bimport\s*(["'])([^"'\n]*)\1/gu)) edges.push({ specifier: m[2], names: ["<side-effect>"], statement: true });
+  for (const m of text.matchAll(/\bimport\s*\(/gu)) {
+    edges.push({ specifier: literalArgument(text, m.index + m[0].length), names: ["*"], statement: true });
+  }
+  return edges;
+}
+
+type Resolution = { readonly path: string } | { readonly external: true } | { readonly unresolved: true };
+
+/** Where a specifier used in `from` points: a file of the tree (or of the module), an external package, or nowhere. */
+function resolveSpecifier(from: string, specifier: string | null, tree: Tree): Resolution {
+  if (specifier === null) return { unresolved: true };
+  if (specifier.startsWith("./") || specifier.startsWith("../")) {
+    try {
+      const pathname = decodeURIComponent(new URL(specifier, new URL(from, "file:///functions/")).pathname);
+      const path = pathname.slice("/functions/".length);
+      if (pathname.startsWith("/functions/") && (tree.has(path) || path.startsWith(MODULE_PREFIX))) return { path };
+    } catch {
+      // A malformed escape cannot be followed.
+    }
+    return { unresolved: true };
+  }
+  return EXTERNAL_SPECIFIER.test(specifier) ? { external: true } : { unresolved: true };
+}
+
+/** The files of the tree (or of the module) one file imports. */
+function localImports(path: string, text: string, tree: Tree): string[] {
+  return importEdges(text)
+    .map((edge) => resolveSpecifier(path, edge.specifier, tree))
+    .flatMap((resolution) => "path" in resolution ? [resolution.path] : []);
 }
 
 /** Deployable (non-test) sources outside the module whose import graph reaches the module. */
@@ -177,14 +273,12 @@ function reachingProductionFiles(tree: Tree): string[] {
     const text = tree.get(path);
     if (text === undefined || stack.has(path)) return false;
     stack.add(path);
-    const result = relativeImports(path, text).some((dep) => reaches(dep, stack));
+    const result = localImports(path, text, tree).some((dep) => reaches(dep, stack));
     stack.delete(path);
     memo.set(path, result);
     return result;
   };
-  return [...tree.keys()]
-    .filter((path) => !path.startsWith(MODULE_PREFIX) && isCode(path) && !isTestFile(path) && reaches(path, new Set()))
-    .sort();
+  return [...tree.keys()].filter((path) => isDeployable(path) && reaches(path, new Set())).sort();
 }
 
 /** Edge Function entry points (<function>/index.ts) among the deployable sources that reach the module. */
@@ -193,32 +287,74 @@ function reachingEntryPoints(tree: Tree): string[] {
 }
 
 /**
- * Deployable files that import or re-export from the module's public entry (mod.ts) -> the sorted names they take
- * ("*" for a namespace import or `export *`). Aliases count by the imported name.
+ * Imports the scan cannot follow, in every file outside the module that deployable code loads (the deployable files
+ * and whatever they import, tests included) -> "path: specifier" ("<computed>" for a computed import()).
  */
-function modImports(tree: Tree): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  for (const [path, text] of tree) {
-    if (path.startsWith(MODULE_PREFIX) || !isCode(path) || isTestFile(path)) continue;
-    const names = new Set<string>();
-    for (const m of code(text).matchAll(/\b(?:import|export)\s+(type\s+)?([^;]*?)\s*from\s*["']([^"']+)["']/gu)) {
-      const target = relativeImports(path, `import x from "${m[3]}";`)[0];
-      if (target !== `${MODULE_PREFIX}mod.ts`) continue;
-      const clause = m[2];
-      if (/\*/u.test(clause)) names.add("*");
-      const braces = clause.match(/\{([^}]*)\}/u);
-      if (braces) {
-        for (const part of braces[1].split(",")) {
-          const name = part.trim().replace(/^type\s+/u, "").split(/\s+as\s+/u)[0].trim();
-          if (name) names.add(name);
-        }
-      }
-      const head = clause.replace(/\{[^}]*\}/u, "").replace(/\*\s+as\s+\w+/u, "").replace(/,/gu, " ").trim();
-      if (head && head !== "type") names.add(`default:${head}`);
+function unresolvedImports(tree: Tree): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const queue = [...tree.keys()].filter(isDeployable);
+  while (queue.length > 0) {
+    const path = queue.pop()!;
+    if (seen.has(path) || path.startsWith(MODULE_PREFIX)) continue;
+    seen.add(path);
+    const text = tree.get(path);
+    if (text === undefined || !isCode(path)) continue;
+    for (const edge of importEdges(text)) {
+      const resolution = resolveSpecifier(path, edge.specifier, tree);
+      if ("path" in resolution) queue.push(resolution.path);
+      if (!("unresolved" in resolution)) continue;
+      const relative = edge.specifier !== null && /^\.\.?\//u.test(edge.specifier);
+      // A bare word after `from` inside a text (SQL, prose) is not an import; every other edge must be followed.
+      if (edge.statement || relative) out.push(`${path}: ${edge.specifier ?? "<computed>"}`);
     }
-    if (names.size > 0) out[path] = [...names].sort((a, b) => a.localeCompare(b, "en"));
+  }
+  return out.sort();
+}
+
+/**
+ * Deployable files outside the module that import its files -> module file -> the sorted names taken from it
+ * (dynamic imports included: "*").
+ */
+function providerImports(tree: Tree): Record<string, Record<string, string[]>> {
+  const out: Record<string, Record<string, string[]>> = {};
+  for (const [path, text] of tree) {
+    if (!isDeployable(path)) continue;
+    for (const edge of importEdges(text)) {
+      const resolution = resolveSpecifier(path, edge.specifier, tree);
+      if (!("path" in resolution) || !resolution.path.startsWith(MODULE_PREFIX)) continue;
+      const byTarget = (out[path] ??= {});
+      byTarget[resolution.path] = [...new Set([...(byTarget[resolution.path] ?? []), ...edge.names])].sort((a, b) => a.localeCompare(b, "en"));
+    }
   }
   return out;
+}
+
+/** Deno configs, import maps and package.json files that can remap a specifier -> "path: keys" (or "unreadable"). */
+function remappingConfigs(tree: Tree): string[] {
+  const out: string[] = [];
+  for (const [path, text] of tree) {
+    const name = path.slice(path.lastIndexOf("/") + 1);
+    if (name === "package.json") {
+      out.push(`${path}: package.json`);
+      continue;
+    }
+    if (!/^(?:deno\.jsonc?|import_map[^/]*\.jsonc?)$/u.test(name)) continue;
+    let value: unknown;
+    try {
+      value = JSON.parse(name.endsWith(".jsonc") ? code(text) : text);
+    } catch {
+      out.push(`${path}: unreadable`);
+      continue;
+    }
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      out.push(`${path}: unreadable`);
+      continue;
+    }
+    const keys = REMAPPING_KEYS.filter((key) => key in value);
+    if (keys.length > 0) out.push(`${path}: ${keys.join(",")}`);
+  }
+  return out.sort();
 }
 
 /** Files outside the module that name the Anthropic SDK or an ANTHROPIC_* setting. */
@@ -234,13 +370,46 @@ function appLeaks(tree: Tree): string[] {
   return [...tree.entries()].filter(([, text]) => /ai_provider|ANTHROPIC_API_KEY|@anthropic-ai\/sdk/u.test(text)).map(([path]) => path).sort();
 }
 
-async function readTree(root: URL): Promise<Map<string, string>> {
+type DirReader = (dir: URL) => AsyncIterable<Deno.DirEntry>;
+type TextReader = (file: URL) => Promise<string>;
+
+/**
+ * Code and JSON files under `dir`. Nothing is skipped silently: an unreadable directory and every symlink (another
+ * name for a file or directory, which the scan would miss or see twice) go to `issues`, and are never followed.
+ */
+async function* walk(dir: URL, label: string, issues: string[], readDir: DirReader): AsyncGenerator<URL> {
+  const entries: Deno.DirEntry[] = [];
+  try {
+    for await (const entry of readDir(dir)) entries.push(entry);
+  } catch {
+    issues.push(`unreadable directory: ${label || "."}`);
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+    const name = entry.name + (entry.isDirectory ? "/" : "");
+    const child = new URL(encodeURIComponent(entry.name) + (entry.isDirectory ? "/" : ""), dir);
+    if (entry.isSymlink) issues.push(`symlink: ${label}${entry.name}`);
+    else if (entry.isDirectory) yield* walk(child, label + name, issues, readDir);
+    else if (/\.(ts|tsx|js|mjs|json|jsonc)$/u.test(entry.name)) yield child;
+  }
+}
+
+async function readTree(root: URL, issues: string[] = [], readDir: DirReader = Deno.readDir, readText: TextReader = Deno.readTextFile) {
   const tree = new Map<string, string>();
-  for await (const file of walk(root)) tree.set(file.href.slice(root.href.length), await Deno.readTextFile(file));
+  for await (const file of walk(root, "", issues, readDir)) {
+    const path = decodeURIComponent(file.href.slice(root.href.length));
+    try {
+      tree.set(path, await readText(file));
+    } catch {
+      issues.push(`unreadable file: ${path}`);
+    }
+  }
   return tree;
 }
 
-const functionsTree = readTree(FUNCTIONS_DIR);
+const functionsIssues: string[] = [];
+const functionsTree = readTree(FUNCTIONS_DIR, functionsIssues);
 
 async function appTree(): Promise<Map<string, string>> {
   const tree = new Map<string, string>();
@@ -252,8 +421,12 @@ async function appTree(): Promise<Map<string, string>> {
 
 const sortedAuthorized = () =>
   Object.fromEntries(Object.entries(AUTHORIZED_REFERENCES).map(([path, specifiers]) => [path, [...specifiers].sort()]));
-const sortedModImports = () =>
-  Object.fromEntries(Object.entries(AUTHORIZED_MOD_IMPORTS).map(([path, names]) => [path, [...names].sort((a, b) => a.localeCompare(b, "en"))]));
+const sortedProviderImports = (): Record<string, Record<string, string[]>> =>
+  Object.fromEntries(
+    Object.entries(AUTHORIZED_PROVIDER_IMPORTS).map((
+      [path, targets],
+    ) => [path, Object.fromEntries(Object.entries(targets).map(([target, names]) => [target, [...names].sort((a, b) => a.localeCompare(b, "en"))]))]),
+  );
 
 test("Provider scope: only the authorized files (report handler, consumer bridge) name the provider module, with exactly these imports", async () => {
   assert.deepEqual(directReferences(await functionsTree), sortedAuthorized());
@@ -265,8 +438,16 @@ test("Provider scope: of all deployable sources only the authorized ones reach t
   assert.deepEqual(reachingEntryPoints(tree), AUTHORIZED_ENTRY_POINTS);
 });
 
-test("Provider scope: deployable importers of mod.ts take exactly their authorized names (least privilege)", async () => {
-  assert.deepEqual(modImports(await functionsTree), sortedModImports());
+test("Provider scope: deployable importers take exactly their authorized names from each module file (least privilege)", async () => {
+  assert.deepEqual(providerImports(await functionsTree), sortedProviderImports());
+});
+
+test("Provider scope: the scan is complete: every file read, no symlink, every import followed, no specifier remapping", async () => {
+  const tree = await functionsTree;
+  assert.ok(tree.size > 100, "scanned the functions directory");
+  assert.deepEqual(functionsIssues, []);
+  assert.deepEqual(unresolvedImports(tree), []);
+  assert.deepEqual(remappingConfigs(tree), []);
 });
 
 test("Provider scope: the Anthropic SDK and ANTHROPIC_* names stay in the module (and the handler's offline test)", async () => {
@@ -276,6 +457,11 @@ test("Provider scope: the Anthropic SDK and ANTHROPIC_* names stay in the module
 test("apps never reference the provider module or the Anthropic key (keys stay server-side)", async () => {
   assert.deepEqual(appLeaks(await appTree()), []);
 });
+
+const BRIDGE = "_shared/ai_consumer_bridge/bridge.ts";
+const BRIDGE_TYPES = "_shared/ai_consumer_bridge/types.ts";
+const HANDLER = "market-report-analysis/handler.ts";
+const MOD = "_shared/ai_provider/mod.ts";
 
 test("Provider scope: every widening is refused (synthetic trees built on the real one)", async () => {
   const real = await functionsTree;
@@ -303,11 +489,8 @@ test("Provider scope: every widening is refused (synthetic trees built on the re
   assert.deepEqual(reachingProductionFiles(bridge), [...AUTHORIZED_REACHERS, "_shared/report_bridge.ts"].sort());
 
   // The handler imports one more provider file, or another market report source starts using the module.
-  const handler = real.get("market-report-analysis/handler.ts")!;
-  refusedDirect(
-    withFile("market-report-analysis/handler.ts", `${handler}\nimport { AnthropicAdapter } from "../_shared/ai_provider/anthropic_adapter.ts";\n`),
-    "market-report-analysis/handler.ts",
-  );
+  const handler = real.get(HANDLER)!;
+  refusedDirect(withFile(HANDLER, `${handler}\nimport { AnthropicAdapter } from "../_shared/ai_provider/anthropic_adapter.ts";\n`), HANDLER);
   const extra = withFile("market-report-analysis/extra.ts", `import { prepareMarketReportShadow } from "../_shared/ai_provider/market_report_wiring.ts";\n`);
   refusedDirect(extra, "market-report-analysis/extra.ts");
   assert.ok(reachingProductionFiles(extra).includes("market-report-analysis/extra.ts"));
@@ -321,16 +504,16 @@ test("Provider scope: every widening is refused (synthetic trees built on the re
   // Production code outside the module may not read the Anthropic key or import its SDK.
   for (const [path, text] of [
     ["personalized-reports/claude.ts", `export const key = Deno.env.get("ANTHROPIC_API_KEY");\n`],
-    ["market-report-analysis/handler.ts", `${handler}\nimport Anthropic from "npm:@anthropic-ai/sdk@0.132.1";\n`],
+    [HANDLER, `${handler}\nimport Anthropic from "npm:@anthropic-ai/sdk@0.132.1";\n`],
   ] as const) {
     assert.ok(anthropicNames(withFile(path, text)).includes(path), `${path}: Anthropic name not refused`);
   }
 
   // The consumer bridge (2026-10-15): it may not widen its imports, and nothing may start using it unnoticed.
-  const bridgeSource = real.get("_shared/ai_consumer_bridge/bridge.ts")!;
+  const bridgeSource = real.get(BRIDGE)!;
   const modRefused = (tree: Tree, path: string, label: string) => {
-    assert.ok(path in sortedModImports(), `${path} is an authorized importer`);
-    assert.notDeepEqual(modImports(tree)[path], sortedModImports()[path], `${path} (${label}): mod.ts widening not refused`);
+    assert.ok(path in sortedProviderImports(), `${path} is an authorized importer`);
+    assert.notDeepEqual(providerImports(tree)[path], sortedProviderImports()[path], `${path} (${label}): widening not refused`);
   };
   for (const [extraImport, label] of [
     [`import { SupabaseLedgerBudgetGuard } from "../ai_provider/mod.ts";`, "ledger guard construction"],
@@ -340,12 +523,9 @@ test("Provider scope: every widening is refused (synthetic trees built on the re
     [`export * from "../ai_provider/mod.ts";`, "re-export of everything"],
     [`export { InMemoryBudgetGuard } from "../ai_provider/mod.ts";`, "re-export of an in-memory budget"],
   ] as const) {
-    modRefused(withFile("_shared/ai_consumer_bridge/bridge.ts", `${extraImport}\n${bridgeSource}`), "_shared/ai_consumer_bridge/bridge.ts", label);
+    modRefused(withFile(BRIDGE, `${extraImport}\n${bridgeSource}`), BRIDGE, label);
   }
-  refusedDirect(
-    withFile("_shared/ai_consumer_bridge/bridge.ts", `${bridgeSource}\nimport { SupabaseLedgerBudgetGuard } from "../ai_provider/ledger_guard.ts";\n`),
-    "_shared/ai_consumer_bridge/bridge.ts",
-  );
+  refusedDirect(withFile(BRIDGE, `${bridgeSource}\nimport { SupabaseLedgerBudgetGuard } from "../ai_provider/ledger_guard.ts";\n`), BRIDGE);
   refusedDirect(withFile("_shared/ai_consumer_bridge/helper.ts", `export { executeWithModelPolicy } from "../ai_provider/mod.ts";\n`), "_shared/ai_consumer_bridge/helper.ts");
   refusedDirect(withFile("_shared/ai_consumer_bridge/new_test.ts", `import { fakeEnv } from "../ai_provider/test_support.ts";\n`), "_shared/ai_consumer_bridge/new_test.ts");
   // An Edge Function that starts using the bridge reaches the module: refused until the allowlist names it.
@@ -370,4 +550,199 @@ test("Provider scope: every widening is refused (synthetic trees built on the re
   ] as const) {
     assert.deepEqual(appLeaks(new Map([[path, text]])), [path]);
   }
+});
+
+test("J1 R1: dynamic, computed, aliased, symlinked, transitive and unreadable paths are refused (fail closed)", async () => {
+  const real = await functionsTree;
+  const withFiles = (...files: Array<readonly [string, string]>) => new Map([...real, ...files]);
+  const bridgeSource = real.get(BRIDGE)!;
+  const typesSource = real.get(BRIDGE_TYPES)!;
+  const handler = real.get(HANDLER)!;
+  const importsRefused = (tree: Tree, path: string, label: string) =>
+    assert.notDeepEqual(providerImports(tree)[path], sortedProviderImports()[path], `${path} (${label}): not refused`);
+  const unresolved = (tree: Tree, path: string, label: string) =>
+    assert.ok(unresolvedImports(tree).some((item) => item.startsWith(`${path}: `)), `${path} (${label}): unfollowable import not refused`);
+
+  // 1. The exact J1 reproduction: the authorized bridge takes the whole public entry through import(). It uses only
+  //    the specifier the bridge already has and reaches nothing new, so only the symbol policy can see it.
+  const r1 = withFiles([BRIDGE, `${bridgeSource}\nexport const auditOnlyMutation = async () =>\n  (await import("../ai_provider/mod.ts")).executeAiRequest;\n`]);
+  assert.deepEqual(directReferences(r1), sortedAuthorized());
+  assert.deepEqual(reachingProductionFiles(r1), AUTHORIZED_REACHERS);
+  assert.ok(providerImports(r1)[BRIDGE][MOD].includes("*"), "import() hands over every export");
+  importsRefused(r1, BRIDGE, "J1 exact reproduction");
+
+  // 2. Dynamic namespace forms, in the bridge, its types and the handler.
+  for (const [path, source, extra] of [
+    [BRIDGE, bridgeSource, `export const provider = await import("../ai_provider/mod.ts");`],
+    [BRIDGE, bridgeSource, `export const run = () => import("../ai_provider/mod.ts").then((m) => m.executeAiRequest);`],
+    [BRIDGE, bridgeSource, `export const guard = async () => (await import('../ai_provider/mod.ts', { with: {} })).SupabaseLedgerBudgetGuard;`],
+    [BRIDGE, bridgeSource, "export const key = async () => (await import(`../ai_provider/mod.ts`)).resolveProviderApiKey;"],
+    [BRIDGE_TYPES, typesSource, `export type Provider = typeof import("../ai_provider/mod.ts");`],
+    [HANDLER, handler, `export const primary = () => import("../_shared/ai_provider/market_report_primary.ts");`],
+  ] as const) {
+    importsRefused(withFiles([path, `${source}\n${extra}\n`]), path, extra);
+  }
+
+  // 3. Computed paths: whatever they evaluate to, the scan cannot follow them, so they are refused. (None of these
+  //    names the module literally, and the old scan saw no edge at all.)
+  for (const [path, text] of [
+    [BRIDGE, `${bridgeSource}\nconst target = "../ai_" + "provider/mod.ts";\nexport const load = () => import(target);\n`],
+    ["x-test-post/ai_loader.ts", 'const dir = ["ai", "consumer", "bridge"].join("_");\nexport const load = () => import(`../_shared/${dir}/bridge.ts`);\n'],
+    ["x-test-post/ai_loader.ts", `export const load = () => import("../_shared/ai_" + "consumer_bridge/bridge.ts");\n`],
+    ["x-test-post/ai_loader.ts", `export const load = () => import("../_shared/ai\\u005fconsumer_bridge/bridge.ts");\n`],
+    ["x-test-post/ai_loader.ts", `export const load = (name: string) => import(name);\n`],
+    ["x-test-post/ai_loader.ts", `export const load = () => import(\n  "../_shared/" + ["ai", "provider"].join("_") + "/mod.ts"\n);\n`],
+  ] as const) {
+    const tree = withFiles([path, text]);
+    unresolved(tree, path, text);
+    assert.equal(directReferences(tree)["x-test-post/ai_loader.ts"], undefined, "no literal mention");
+  }
+
+  // 4. Aliases: any config that can remap a specifier is refused, and so is every bare / absolute / data: import.
+  for (const [path, text] of [
+    ["x-test-post/deno.json", JSON.stringify({ imports: { "s/": "../_shared/" } })],
+    ["x-test-post/deno.json", JSON.stringify({ imports: { "./harmless.ts": "../_shared/ai_consumer_bridge/bridge.ts" } })],
+    ["import_map.json", JSON.stringify({ scopes: { "./x-test-post/": { "./harmless.ts": "./_shared/ai_consumer_bridge/bridge.ts" } } })],
+    ["deno.jsonc", `{\n  // a workspace member is a local package\n  "workspace": ["./_shared/ai_consumer_bridge"]\n}\n`],
+    ["x-test-post/deno.json", JSON.stringify({ links: ["../_shared/ai_consumer_bridge"] })],
+    ["x-test-post/deno.json", JSON.stringify({ importMap: "../import_map.json" })],
+    ["x-test-post/deno.json", JSON.stringify({ patch: ["../_shared/ai_consumer_bridge"] })],
+    ["x-test-post/package.json", JSON.stringify({ name: "x", dependencies: { consumer: "file:../_shared/ai_consumer_bridge" } })],
+    ["x-test-post/deno.json", "{ not json"],
+  ] as const) {
+    assert.ok(remappingConfigs(withFiles([path, text])).some((item) => item.startsWith(`${path}: `)), `${path}: ${text}`);
+  }
+  for (const text of [
+    `import { createConsumerBridge } from "s/ai%5Fconsumer%5Fbridge/bridge.ts";\n`,
+    `import { createConsumerBridge } from "consumer";\n`,
+    `import "consumer";\n`,
+    `export * from "/Users/someone/kabumori/supabase/functions/_shared/ai_consumer_bridge/bridge.ts";\n`,
+    `import { createConsumerBridge } from "file:///srv/functions/_shared/ai_consumer_bridge/bridge.ts";\n`,
+    `export const m = () => import("data:application/javascript,export%20default%201");\n`,
+    `import { createConsumerBridge } from "http://localhost:8000/bridge.ts";\n`,
+  ]) {
+    unresolved(withFiles(["x-test-post/alias.ts", text]), "x-test-post/alias.ts", text);
+  }
+
+  // 5. Symlinks and unreadable entries are reported, never followed or skipped (injected reader: nothing is written).
+  type FakeEntry = { name: string; kind: "file" | "dir" | "symlink" };
+  const fakeTree: Record<string, FakeEntry[] | "denied"> = {
+    "file:///fake/": [{ name: "x-test-post", kind: "dir" }],
+    "file:///fake/x-test-post/": [
+      { name: "index.ts", kind: "file" },
+      { name: "consumer", kind: "symlink" },
+      { name: "provider.ts", kind: "symlink" },
+      { name: "generated", kind: "dir" },
+      { name: "secret.ts", kind: "file" },
+    ],
+    "file:///fake/x-test-post/generated/": "denied",
+  };
+  const fakeReadDir: DirReader = async function* (dir) {
+    const listing = fakeTree[dir.href];
+    if (listing === undefined || listing === "denied") throw new Deno.errors.PermissionDenied("denied");
+    for (const entry of listing) {
+      yield { name: entry.name, isFile: entry.kind === "file", isDirectory: entry.kind === "dir", isSymlink: entry.kind === "symlink" };
+    }
+  };
+  const fakeReadText: TextReader = (file) =>
+    file.href.endsWith("secret.ts")
+      ? Promise.reject(new Deno.errors.PermissionDenied("denied"))
+      : Promise.resolve(`import "./consumer/bridge.ts";\nimport "./provider.ts";\nimport "./generated/shim.ts";\n`);
+  const issues: string[] = [];
+  const fake = await readTree(new URL("file:///fake/"), issues, fakeReadDir, fakeReadText);
+  assert.deepEqual(issues.sort(), [
+    "symlink: x-test-post/consumer",
+    "symlink: x-test-post/provider.ts",
+    "unreadable directory: x-test-post/generated/",
+    "unreadable file: x-test-post/secret.ts",
+  ]);
+  assert.deepEqual([...fake.keys()], ["x-test-post/index.ts"]);
+  // What they would have hidden is not "unreachable": every import of it is unfollowable, so it is refused too.
+  assert.deepEqual(unresolvedImports(fake), [
+    "x-test-post/index.ts: ./consumer/bridge.ts",
+    "x-test-post/index.ts: ./generated/shim.ts",
+    "x-test-post/index.ts: ./provider.ts",
+  ]);
+
+  // 6. Export-star and transitive paths.
+  importsRefused(withFiles([BRIDGE_TYPES, `${typesSource}\nexport * from "../ai_provider/mod.ts";\n`]), BRIDGE_TYPES, "types re-export everything");
+  importsRefused(withFiles([HANDLER, `${handler}\nexport * from "../_shared/ai_provider/market_report_primary.ts";\n`]), HANDLER, "handler re-exports the primary");
+  importsRefused(withFiles([HANDLER, `${handler}\nimport { primaryLedgerFromEdgeEnv } from "../_shared/ai_provider/market_report_primary.ts";\n`]), HANDLER, "handler takes the ledger");
+  importsRefused(withFiles([HANDLER, `${handler}\nimport * as primary from "../_shared/ai_provider/market_report_primary.ts";\n`]), HANDLER, "handler namespace");
+  // A chain of new files ending at the bridge, or a deployable file that loads a test fixture: every link reaches.
+  const chain = withFiles(
+    ["x-test-post/a.ts", `export * from "./b.ts";\n`],
+    ["x-test-post/b.ts", `export * from "../_shared/c.ts";\n`],
+    ["_shared/c.ts", `export { createConsumerBridge } from "./ai_consumer_bridge/bridge.ts";\n`],
+  );
+  assert.deepEqual(reachingProductionFiles(chain), [...AUTHORIZED_REACHERS, "_shared/c.ts", "x-test-post/a.ts", "x-test-post/b.ts"].sort());
+  const fixture = withFiles(["x-test-post/fixtures.ts", `export { world } from "../_shared/ai_consumer_bridge/offline_samples_test.ts";\n`]);
+  assert.ok(reachingProductionFiles(fixture).includes("x-test-post/fixtures.ts"));
+  // An import after a string that looks like a comment opener is still read (the old scan stripped it as a comment).
+  for (const prefix of [`const s = "a//b"; `, `const s = "/*"; `]) {
+    importsRefused(withFiles([BRIDGE, `${bridgeSource}\n${prefix}import { executeAiRequest as run } from "../ai_provider/mod.ts";\n`]), BRIDGE, prefix);
+  }
+  // A string-named import clause cannot be read: refused, not ignored.
+  importsRefused(withFiles([BRIDGE, `${bridgeSource}\nimport { "executeAiRequest" as run } from "../ai_provider/mod.ts";\n`]), BRIDGE, "string-named import");
+
+  // 7. Unresolved edges: an import of a file the scanned tree does not have is refused, never "does not reach".
+  for (const text of [
+    `import "./generated/provider_shim.ts";\n`,
+    `import { executeAiRequest } from "../_shared/AI_PROVIDER/mod.ts";\n`,
+    `import "./.hidden/shim.ts";\n`,
+    `import "./node_modules/shim/index.ts";\n`,
+    `import "../../../src/lib/ai.ts";\n`,
+    `import "./%E0%A4%A.ts";\n`,
+    `export const load = () => import("./missing.ts");\n`,
+  ]) {
+    unresolved(withFiles(["x-test-post/shim_user.ts", text]), "x-test-post/shim_user.ts", text);
+  }
+  // A path in another letter case is a reference too (case-insensitive file systems resolve it).
+  assert.ok("x-test-post/shim_user.ts" in directReferences(withFiles(["x-test-post/shim_user.ts", `import "../_shared/AI_PROVIDER/mod.ts";\n`])));
+});
+
+test("J1 R1: ordinary imports stay accepted (no false refusal)", async () => {
+  const real = await functionsTree;
+  const valid = new Map([
+    ...real,
+    [
+      "x-new-fn/index.ts",
+      [
+        `import { serveDir } from "jsr:@std/http@1.0.0";`,
+        `import { z } from "npm:zod@3.23.8";`,
+        `import { decodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";`,
+        `import { Buffer } from "node:buffer";`,
+        `import { helper } from "./helper.ts";`,
+        `import type { Shape } from "./helper.ts";`,
+        `import data from "./data.json" with { type: "json" };`,
+        `import "./side.ts";`,
+        `import {`,
+        `  helper as helperAgain,`,
+        `  type Shape as ShapeAgain,`,
+        `} from "./helper.ts";`,
+        `export { helper as again } from "./helper.ts";`,
+        `export * from "./helper.ts";`,
+        `const sql = 'select id from "public"."reports"';`,
+        `// Notes may mention from "somewhere" freely.`,
+        `export const lazy = () => import("./helper.ts");`,
+        `export const lazyJson = () => import("./data.json", { with: { type: "json" } });`,
+        `export const shared = () => import("../_shared/x_post_config.ts");`,
+        ``,
+      ].join("\n"),
+    ],
+    ["x-new-fn/helper.ts", "export const helper = 1;\nexport type Shape = { a: number };\n"],
+    ["x-new-fn/side.ts", "export {};\n"],
+    ["x-new-fn/data.json", JSON.stringify({ imports: 3, scopes: ["a"] })],
+    ["x-new-fn/deno.json", JSON.stringify({ lock: false, nodeModulesDir: "none", compilerOptions: { strict: true } })],
+    ["_shared/x_post_config.ts", real.get("_shared/x_post_config.ts") ?? "export const config = 1;\n"],
+    // The bridge may restate its authorized names, type-only and over several lines.
+    [BRIDGE, `import type {\n  AiSubject,\n  BudgetGuard,\n} from "../ai_provider/mod.ts";\n${real.get(BRIDGE)!}`],
+  ]);
+  // Compared with the real tree, so this test fails only when the ordinary imports themselves are refused.
+  assert.deepEqual(unresolvedImports(valid), unresolvedImports(real));
+  assert.deepEqual(remappingConfigs(valid), remappingConfigs(real));
+  assert.deepEqual(reachingProductionFiles(valid), reachingProductionFiles(real));
+  assert.deepEqual(reachingEntryPoints(valid), reachingEntryPoints(real));
+  assert.deepEqual(providerImports(valid), providerImports(real));
+  assert.deepEqual(directReferences(valid), directReferences(real));
 });

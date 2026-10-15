@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { classifyHttpError, classifyTransportError, messageFor, retryAfterMsFrom } from "./errors.ts";
-import { DEFAULT_RETRY_TIMING, nextRetryDelayMs } from "./retry.ts";
+import { DEFAULT_RETRY_TIMING, isKnownUnsent, isValidTransportPolicy, nextRetryDelayMs } from "./retry.ts";
 import { anthropicError } from "./test_support.ts";
 import type { AiErrorCode } from "./types.ts";
 
@@ -81,7 +81,7 @@ test("transport failures: timeout and lost connection may have been billed", () 
   assert.equal(classifyTransportError(false).maybeBilled, true);
 });
 
-test("retry decisions: attempts cap, non-retryable codes, timeout opt-in, retry-after cap, backoff", () => {
+test("retry decisions: attempts cap, non-retryable codes, retry-after cap, backoff", () => {
   const rate = anthropic(429, anthropicError(429, "rate_limit_error", "x"));
   const policy = { maxAttempts: 3 };
   assert.equal(nextRetryDelayMs(policy, DEFAULT_RETRY_TIMING, 1, rate, () => 1), 1_000);
@@ -91,10 +91,54 @@ test("retry decisions: attempts cap, non-retryable codes, timeout opt-in, retry-
   assert.equal(nextRetryDelayMs({ maxAttempts: 1 }, DEFAULT_RETRY_TIMING, 1, rate, () => 1), null, "maxAttempts 1 = no retry here");
   assert.equal(nextRetryDelayMs({ maxAttempts: 9 }, DEFAULT_RETRY_TIMING, 3, rate, () => 1), null, "hard cap 3 even if misconfigured");
   assert.equal(nextRetryDelayMs(policy, DEFAULT_RETRY_TIMING, 1, anthropic(401, null), () => 1), null);
-  assert.equal(nextRetryDelayMs(policy, DEFAULT_RETRY_TIMING, 1, classifyTransportError(true), () => 1), null, "timeouts are not retried by default");
-  assert.equal(nextRetryDelayMs({ maxAttempts: 3, retryOnTimeout: true }, DEFAULT_RETRY_TIMING, 1, classifyTransportError(true), () => 1), 1_000);
+  assert.equal(nextRetryDelayMs(policy, DEFAULT_RETRY_TIMING, 1, classifyTransportError(true), () => 1), null, "timeouts are never retried");
   const longWait = anthropic(429, anthropicError(429, "rate_limit_error", "x"), { "retry-after": "60" });
   assert.equal(nextRetryDelayMs(policy, DEFAULT_RETRY_TIMING, 1, longWait, () => 1), null, "a 60 s wait ends the retries");
   const shortWait = anthropic(529, anthropicError(529, "overloaded_error", "x"), { "retry-after": "4" });
   assert.equal(nextRetryDelayMs(policy, DEFAULT_RETRY_TIMING, 1, shortWait, () => 1), 4_000);
+});
+
+test("R2: only a failure reported as not processed is retried; anything possibly billed is final", () => {
+  const policy = { maxAttempts: 3 };
+  const retried = [
+    anthropic(429, anthropicError(429, "rate_limit_error", "x")),
+    anthropic(529, anthropicError(529, "overloaded_error", "x")),
+    openai(429, { error: { type: "requests", code: "rate_limit_exceeded", message: "m" } }),
+    openai(503, { error: { message: "slow down" } }),
+  ];
+  for (const error of retried) {
+    assert.equal(isKnownUnsent(error), true, `${error.httpStatus}`);
+    assert.equal(nextRetryDelayMs(policy, DEFAULT_RETRY_TIMING, 1, error, () => 1), 1_000, `${error.httpStatus}`);
+  }
+  const final = [
+    anthropic(504, anthropicError(504, "timeout_error", "x")),
+    anthropic(500, anthropicError(500, "timeout_error", "x")),
+    anthropic(500, anthropicError(500, "api_error", "x")),
+    anthropic(503, null),
+    openai(504, { error: { message: "m" } }),
+    openai(500, { error: { message: "m" } }),
+    openai(502, { error: { message: "m" } }),
+    classifyTransportError(true),
+    classifyTransportError(false),
+  ];
+  for (const error of final) {
+    assert.equal(error.retryable, true, "the classification still says transient (callers may run a new operation later)");
+    assert.equal(isKnownUnsent(error), false, `${error.code} ${error.httpStatus}`);
+    assert.equal(nextRetryDelayMs(policy, DEFAULT_RETRY_TIMING, 1, error, () => 1), null, `${error.code} ${error.httpStatus}`);
+  }
+  // Each condition stands on its own: a timeout or a lost connection is never "known unsent", even if a
+  // classification forgot maybeBilled; a rate limit marked possibly billed, or a non-retryable one, is not retried.
+  for (const error of [classifyTransportError(true), classifyTransportError(false)]) {
+    assert.equal(isKnownUnsent({ ...error, maybeBilled: false }), false, error.code);
+  }
+  const rate = anthropic(429, anthropicError(429, "rate_limit_error", "x"));
+  assert.equal(nextRetryDelayMs(policy, DEFAULT_RETRY_TIMING, 1, { ...rate, maybeBilled: true }, () => 1), null);
+  assert.equal(nextRetryDelayMs(policy, DEFAULT_RETRY_TIMING, 1, { ...rate, retryable: false }, () => 1), null);
+});
+
+test("R2: a transport policy asking to retry after a timeout is invalid (refused, not ignored)", () => {
+  assert.equal(isValidTransportPolicy({ maxAttempts: 2 }), true);
+  assert.equal(isValidTransportPolicy({ maxAttempts: 2, retryOnTimeout: false }), true);
+  assert.equal(isValidTransportPolicy({ maxAttempts: 2, retryOnTimeout: true } as unknown as { maxAttempts: number }), false);
+  assert.equal(isValidTransportPolicy({ maxAttempts: 2, retryOnTimeout: "yes" } as unknown as { maxAttempts: number }), false);
 });
