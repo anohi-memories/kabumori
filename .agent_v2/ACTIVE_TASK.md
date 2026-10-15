@@ -186,18 +186,19 @@
 
 ## J2
 - slot: J2
-- status: done
-- task_id: kabumori-j2-ai-ask-b0-r1-r8-focused-rereview-20261013
+- status: ready
+- task_id: kabumori-j2-f2-f8-pause-runtime-integrated-security-review-20261015
 - owner: codex
-- next_owner: none
-- return_to: かぶモリアプリG1のちゃ（新F1担当）
+- next_owner: codex
+- return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: V2
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
-- dependencies: J1 review, PR177
-- blocker: none
-- slot_use: AIに聞く設計限定再レビュー
+- dependencies: F8 Draft #212 b80d5235, F2 Draft #213 cb34ab7d, PR129/164; J1 common-AI reserved
+- blocker: source-only independent security review; production NO_GO; no merge/deploy
+- previous_archive: .agent_v2/archive/2026-10-15-J2-ai-ask-b0-r1-r8-focused-rereview-20261013/
+- slot_use: F2/F8 pause runtime combined independent review; Sol(高); J2→V2
 
 ## J3
 - slot: J3
