@@ -3,9 +3,12 @@
 //     injected reader), no console output;
 //   - the only external dependency is the exactly pinned official Anthropic SDK, in the Anthropic adapter only;
 //   - provider hosts and model ids appear only where they belong;
-//   - F6 V0 (Opus primary for the close report): the shared market report handler is the ONE production user.
-//     Outside this module, only the files in AUTHORIZED_REFERENCES name it, with exactly those imports; of all
-//     deployable sources only that handler and its entry point reach it (directly or through other files); the
+//   - Provider scope: outside this module, only the files in AUTHORIZED_REFERENCES name it, with exactly those
+//     imports: the shared market report handler (F6 V0 / F2, the one Edge entry point that reaches it) and the
+//     unwired H5 consumer bridge library (F6 / H5 boundary, 2026-10-15). Of all deployable sources only
+//     AUTHORIZED_REACHERS reach it, and of the Edge Function entry points only market-report-analysis/index.ts.
+//     A deployable file that imports the public entry (mod.ts) may use exactly the names in AUTHORIZED_MOD_IMPORTS
+//     (least privilege: no ledger guard construction, no secret readers, no unpoliced executeAiRequest). The
 //     Anthropic SDK and key names stay inside it (plus the handler's offline test); no app references it or the key.
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -89,10 +92,48 @@ const AUTHORIZED_REFERENCES: Record<string, readonly string[]> = {
   "market-report-analysis/handler.ts": [
     "../_shared/ai_provider/market_report_primary.ts",
   ],
+  // H5 consumer bridge (PR #198): an unwired server library and its offline tests.
+  "_shared/ai_consumer_bridge/bridge.ts": ["../ai_provider/mod.ts"],
+  "_shared/ai_consumer_bridge/types.ts": ["../ai_provider/mod.ts"],
+  "_shared/ai_consumer_bridge/bridge_test.ts": ["../ai_provider/test_support.ts"],
+  "_shared/ai_consumer_bridge/isolation_test.ts": ["../ai_provider/mod.ts"],
+  "_shared/ai_consumer_bridge/offline_samples_test.ts": ["../ai_provider/mod.ts", "../ai_provider/test_support.ts"],
 };
 
-/** The deployable sources that may reach this module through their imports: the handler and its entry point. */
-const AUTHORIZED_REACHERS = ["market-report-analysis/handler.ts", "market-report-analysis/index.ts"];
+/** The deployable sources that may reach this module: the report handler and its entry point, and the bridge library. */
+const AUTHORIZED_REACHERS = [
+  "_shared/ai_consumer_bridge/bridge.ts",
+  "_shared/ai_consumer_bridge/types.ts",
+  "market-report-analysis/handler.ts",
+  "market-report-analysis/index.ts",
+];
+
+/** Edge Function entry points (<function>/index.ts) that may reach this module. */
+const AUTHORIZED_ENTRY_POINTS = ["market-report-analysis/index.ts"];
+
+/**
+ * Deployable files that import the public entry (mod.ts), with exactly the names each may import from it. Anything
+ * else (a namespace import, `export *`, SupabaseLedgerBudgetGuard, InMemoryBudgetGuard, resolveProviderApiKey,
+ * resolveSecret, executeAiRequest, ...) is refused: the bridge spends only through model policies and caller deps.
+ */
+const AUTHORIZED_MOD_IMPORTS: Record<string, readonly string[]> = {
+  "_shared/ai_consumer_bridge/bridge.ts": [
+    "AiReasoningEffort",
+    "AiSubject",
+    "assertSchemaSupported",
+    "BudgetGuard",
+    "defineAnthropicModelPolicies",
+    "executeWithModelPolicy",
+    "findModelSpec",
+    "ModelPolicyRegistry",
+    "modelPolicyRequest",
+    "resolveModelChoice",
+    "upperBoundAttemptCostUsd",
+    "validateAgainstSchema",
+    "validateAiRequest",
+  ],
+  "_shared/ai_consumer_bridge/types.ts": ["AiSubject", "AnthropicModelPolicy", "ExecuteDeps", "JsonSchema"],
+};
 
 /** Outside this module, the Anthropic SDK and ANTHROPIC_* names appear only in the handler's offline test. */
 const AUTHORIZED_ANTHROPIC_NAMES = ["market-report-analysis/opus_primary_handler_test.ts"];
@@ -146,6 +187,40 @@ function reachingProductionFiles(tree: Tree): string[] {
     .sort();
 }
 
+/** Edge Function entry points (<function>/index.ts) among the deployable sources that reach the module. */
+function reachingEntryPoints(tree: Tree): string[] {
+  return reachingProductionFiles(tree).filter((path) => /^[^/_][^/]*\/index\.ts$/u.test(path));
+}
+
+/**
+ * Deployable files that import or re-export from the module's public entry (mod.ts) -> the sorted names they take
+ * ("*" for a namespace import or `export *`). Aliases count by the imported name.
+ */
+function modImports(tree: Tree): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [path, text] of tree) {
+    if (path.startsWith(MODULE_PREFIX) || !isCode(path) || isTestFile(path)) continue;
+    const names = new Set<string>();
+    for (const m of code(text).matchAll(/\b(?:import|export)\s+(type\s+)?([^;]*?)\s*from\s*["']([^"']+)["']/gu)) {
+      const target = relativeImports(path, `import x from "${m[3]}";`)[0];
+      if (target !== `${MODULE_PREFIX}mod.ts`) continue;
+      const clause = m[2];
+      if (/\*/u.test(clause)) names.add("*");
+      const braces = clause.match(/\{([^}]*)\}/u);
+      if (braces) {
+        for (const part of braces[1].split(",")) {
+          const name = part.trim().replace(/^type\s+/u, "").split(/\s+as\s+/u)[0].trim();
+          if (name) names.add(name);
+        }
+      }
+      const head = clause.replace(/\{[^}]*\}/u, "").replace(/\*\s+as\s+\w+/u, "").replace(/,/gu, " ").trim();
+      if (head && head !== "type") names.add(`default:${head}`);
+    }
+    if (names.size > 0) out[path] = [...names].sort((a, b) => a.localeCompare(b, "en"));
+  }
+  return out;
+}
+
 /** Files outside the module that name the Anthropic SDK or an ANTHROPIC_* setting. */
 function anthropicNames(tree: Tree): string[] {
   return [...tree.entries()]
@@ -177,16 +252,24 @@ async function appTree(): Promise<Map<string, string>> {
 
 const sortedAuthorized = () =>
   Object.fromEntries(Object.entries(AUTHORIZED_REFERENCES).map(([path, specifiers]) => [path, [...specifiers].sort()]));
+const sortedModImports = () =>
+  Object.fromEntries(Object.entries(AUTHORIZED_MOD_IMPORTS).map(([path, names]) => [path, [...names].sort((a, b) => a.localeCompare(b, "en"))]));
 
-test("Primary scope: only the authorized market report files name the provider module, with exactly these imports", async () => {
+test("Provider scope: only the authorized files (report handler, consumer bridge) name the provider module, with exactly these imports", async () => {
   assert.deepEqual(directReferences(await functionsTree), sortedAuthorized());
 });
 
-test("Primary scope: of all deployable sources, only the market report handler and its entry point reach the module", async () => {
-  assert.deepEqual(reachingProductionFiles(await functionsTree), AUTHORIZED_REACHERS);
+test("Provider scope: of all deployable sources only the authorized ones reach the module; of the entry points only the report", async () => {
+  const tree = await functionsTree;
+  assert.deepEqual(reachingProductionFiles(tree), AUTHORIZED_REACHERS);
+  assert.deepEqual(reachingEntryPoints(tree), AUTHORIZED_ENTRY_POINTS);
 });
 
-test("Primary scope: the Anthropic SDK and ANTHROPIC_* names stay in the module (and the handler's offline test)", async () => {
+test("Provider scope: deployable importers of mod.ts take exactly their authorized names (least privilege)", async () => {
+  assert.deepEqual(modImports(await functionsTree), sortedModImports());
+});
+
+test("Provider scope: the Anthropic SDK and ANTHROPIC_* names stay in the module (and the handler's offline test)", async () => {
   assert.deepEqual(anthropicNames(await functionsTree), AUTHORIZED_ANTHROPIC_NAMES);
 });
 
@@ -194,7 +277,7 @@ test("apps never reference the provider module or the Anthropic key (keys stay s
   assert.deepEqual(appLeaks(await appTree()), []);
 });
 
-test("Primary scope: every widening is refused (synthetic trees built on the real one)", async () => {
+test("Provider scope: every widening is refused (synthetic trees built on the real one)", async () => {
   const real = await functionsTree;
   const withFile = (path: string, text: string) => new Map([...real, [path, text]]);
   const refusedDirect = (tree: Tree, path: string) => {
@@ -217,7 +300,7 @@ test("Primary scope: every widening is refused (synthetic trees built on the rea
   // Indirect: a deployable file that imports the handler reaches the module without naming it.
   const bridge = withFile("_shared/report_bridge.ts", `export { handleRequest } from "../market-report-analysis/handler.ts";\n`);
   assert.deepEqual(directReferences(bridge), sortedAuthorized(), "no direct reference");
-  assert.deepEqual(reachingProductionFiles(bridge), ["_shared/report_bridge.ts", ...AUTHORIZED_REACHERS]);
+  assert.deepEqual(reachingProductionFiles(bridge), [...AUTHORIZED_REACHERS, "_shared/report_bridge.ts"].sort());
 
   // The handler imports one more provider file, or another market report source starts using the module.
   const handler = real.get("market-report-analysis/handler.ts")!;
@@ -242,6 +325,42 @@ test("Primary scope: every widening is refused (synthetic trees built on the rea
   ] as const) {
     assert.ok(anthropicNames(withFile(path, text)).includes(path), `${path}: Anthropic name not refused`);
   }
+
+  // The consumer bridge (2026-10-15): it may not widen its imports, and nothing may start using it unnoticed.
+  const bridgeSource = real.get("_shared/ai_consumer_bridge/bridge.ts")!;
+  const modRefused = (tree: Tree, path: string, label: string) => {
+    assert.ok(path in sortedModImports(), `${path} is an authorized importer`);
+    assert.notDeepEqual(modImports(tree)[path], sortedModImports()[path], `${path} (${label}): mod.ts widening not refused`);
+  };
+  for (const [extraImport, label] of [
+    [`import { SupabaseLedgerBudgetGuard } from "../ai_provider/mod.ts";`, "ledger guard construction"],
+    [`import { executeAiRequest as run } from "../ai_provider/mod.ts";`, "unpoliced execution (aliased)"],
+    [`import { resolveProviderApiKey, type SecretValue } from "../ai_provider/mod.ts";`, "secret readers"],
+    [`import * as provider from "../ai_provider/mod.ts";`, "namespace import"],
+    [`export * from "../ai_provider/mod.ts";`, "re-export of everything"],
+    [`export { InMemoryBudgetGuard } from "../ai_provider/mod.ts";`, "re-export of an in-memory budget"],
+  ] as const) {
+    modRefused(withFile("_shared/ai_consumer_bridge/bridge.ts", `${extraImport}\n${bridgeSource}`), "_shared/ai_consumer_bridge/bridge.ts", label);
+  }
+  refusedDirect(
+    withFile("_shared/ai_consumer_bridge/bridge.ts", `${bridgeSource}\nimport { SupabaseLedgerBudgetGuard } from "../ai_provider/ledger_guard.ts";\n`),
+    "_shared/ai_consumer_bridge/bridge.ts",
+  );
+  refusedDirect(withFile("_shared/ai_consumer_bridge/helper.ts", `export { executeWithModelPolicy } from "../ai_provider/mod.ts";\n`), "_shared/ai_consumer_bridge/helper.ts");
+  refusedDirect(withFile("_shared/ai_consumer_bridge/new_test.ts", `import { fakeEnv } from "../ai_provider/test_support.ts";\n`), "_shared/ai_consumer_bridge/new_test.ts");
+  // An Edge Function that starts using the bridge reaches the module: refused until the allowlist names it.
+  for (const [path, text] of [
+    ["x-test-post/ai.ts", `export { createConsumerBridge } from "../_shared/ai_consumer_bridge/bridge.ts";\n`],
+    ["social-mobile-consult/index.ts", `${real.get("social-mobile-consult/index.ts") ?? ""}\nimport "../_shared/ai_consumer_bridge/bridge.ts";\n`],
+  ] as const) {
+    const tree = withFile(path, text);
+    assert.deepEqual(directReferences(tree), sortedAuthorized(), `${path} names only the bridge`);
+    assert.ok(reachingProductionFiles(tree).includes(path), `${path}: reach through the bridge not refused`);
+  }
+  assert.ok(
+    reachingEntryPoints(withFile("social-mobile-consult/index.ts", `import "../_shared/ai_consumer_bridge/types.ts";\n`)).includes("social-mobile-consult/index.ts"),
+    "a new entry point is refused",
+  );
 
   // App leaks are still found.
   for (const [path, text] of [
