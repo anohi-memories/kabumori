@@ -23,23 +23,20 @@
 
 ## F2
 - slot: F2
-- status: review_required
-- task_id: kabumori-f2-pause-delivery-brand-queue-offline-design-20261015
+- status: ready
+- task_id: kabumori-f2-pause-delivery-runtime-candidate-20261015
 - owner: claude
-- next_owner: chatgpt
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: L2
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
-- dependencies: docs/operations/kabumori-pause/G1_PLAN_20261015.md; F8 pause gate design; J1 common-AI review is separate/protected
-- blocker: PASS_OFFLINE_DESIGN / PRODUCTION_NO_GO。Draft PR #210（設計 commit `9d1efeb662c79e7d2cb0ac4254adfa7092279a54`）。合成検証16件 PASS。本番の配備版・claim_due_post・Cron #1 の command・今の件数は未確認。G1 の照合待ち（L2）
+- dependencies: F2 design PR #210 merged; F8 news gate runtime; shared POSTONA/AI protected
+- blocker: offline implementation only; production NO_GO; live Cron #1/claim/schema and pending queues unverified
 - production_mutation_window: FORBIDDEN
-- assigned_checkout: /Users/yuya/.codex/.chatgpt-projects/g-p-6a8e60a4be3081918ef2c28c1b2cc386/kabumori-f2-pause-design-20261015
-- assigned_branch: claude/f2-pause-delivery-design-20261015
-- previous_archive: .agent_v2/archive/2026-10-15-F2-kabumori-f2-topix-pr201-203-premerge-safety-corrections-20261015/
-- previous_disposition: CANCELLED_UNSTARTED_BY_USER（ready未着手のためdone扱いしない）
-- slot_use: G1休止準備の正式新規割当。設計・合成オフライン検証のみ、runtime/production変更禁止。
+- previous_archive: .agent_v2/archive/2026-10-15-f2-pause-offline-design-accepted.md
+- slot_use: kabumori X gate/planner/queue/Push source-only candidate after L2 design archived
 
 ## F3
 - slot: F3
@@ -123,22 +120,20 @@
 
 ## F8
 - slot: F8
-- status: review_required
-- task_id: kabumori-f8-news-hard-pause-http-ai-offline-design-20261015
+- status: ready
+- task_id: kabumori-f8-news-hard-pause-runtime-candidate-20261015
 - owner: claude
-- next_owner: chatgpt
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: L8
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F8.md
 - current_report_path: .agent_v2/tasks/F8.md#report
-- dependencies: docs/operations/kabumori-pause/G1_PLAN_20261015.md; F2 delivery design; protected PR129/164/181/185/191/196 and F9
-- blocker: production NO_GO; PR129/164 also change important-news-monitor/index.ts; design-only until runtime ownership/integration resolved
+- dependencies: F8 design PR #209 merged; F2 source candidate; protected PR129/#164 same-handler integration
+- blocker: offline implementation only; production NO_GO; PR129/164 index.ts integration and deployed version unverified
 - production_mutation_window: FORBIDDEN
-- assigned_checkout: /Users/yuya/.codex/.chatgpt-projects/g-p-6a8e60a4be3081918ef2c28c1b2cc386/kabumori-f8-pause-design-20261015
-- assigned_branch: claude/f8-news-hard-pause-design-20261015
-- previous_archive: .agent_v2/archive/2026-10-15-F8-news-improvement-a-f8-j1b5-security-review-readiness-20261014/
-- slot_use: G1休止準備の正式新規割当。設計・合成オフライン検証のみ、runtime/production変更禁止。
+- previous_archive: .agent_v2/archive/2026-10-15-f8-pause-offline-design-accepted.md
+- slot_use: important-news-monitor all-mode hard pause source-only candidate after L8 design archived
 
 ## F9
 - slot: F9
