@@ -38,7 +38,7 @@
 
 ## F3
 - slot: F3
-- status: ready
+- status: in_progress
 - task_id: postona-f3-j3-v3-ack-lease-rollback-corrections-20261015
 - owner: claude
 - next_owner: claude
