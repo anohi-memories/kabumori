@@ -9,7 +9,8 @@
       "size_bytes": 5347,
       "source_blob": "eacb7765bec56425625fa83fce64172b26a05fa5",
       "archive_blob": "eacb7765bec56425625fa83fce64172b26a05fa5",
-      "restore_verified": true
+      "restore_verified": true,
+      "sha256": "0eaf7b7ae5edc4a3ec8ee1adaed052110ac37510974c3236cd8708cd3f0469dc"
     },
     {
       "original_path": ".agent_v2/reports/J2.md",
@@ -17,9 +18,10 @@
       "size_bytes": 21774,
       "source_blob": "f76bf93e4f2160194019e329f8af1ba25010270d",
       "archive_blob": "f76bf93e4f2160194019e329f8af1ba25010270d",
-      "restore_verified": true
+      "restore_verified": true,
+      "sha256": "91c099abc28f0aab08572e58e1be8facae257030337327e41b73a30405357cda"
     }
   ],
-  "sha256_status": "pending (Git blob and byte-for-byte restore verified)",
+  "sha256_status": "computed; source/archive byte-for-byte read-back verified",
   "append_only": true
 }
