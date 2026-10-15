@@ -75,10 +75,10 @@
 
 ## F5
 - slot: F5
-- status: review_required
+- status: done
 - task_id: common-account-f5-phase10-postona-x-ack-snapshot-reconciliation-20261015
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
@@ -89,6 +89,8 @@
 - slot_use: Phase10 POSTONA common lifecycle ACK snapshot integration; かぶモリ休止は別担当
 - previous_archive: .agent_v2/archive/2026-10-15-F5-common-account-f5-phase9-postona-shared-login-enrollment-20261015/
 - latest_result: IMPLEMENTED_SOURCE_CANDIDATE — Draft PR #214 head bc290ab618508a8fbaba1abfad308c52d86e4689 stacked on PR206 a84a9b6abb8c8d4706bba5f8a12e5c1aef3d3b8c (PR193 314aeac4, PR183 f2565cc0, PR178 83334a09, PR165 4638891f, PR152 ccea1fe8, PR121 76b50e1e, F3 PR204 45b08a87, F4 PR180 7c4f4578, POSTONA PR197 2171ee4c unchanged): F3 PR204 snapshot-bound ACK consumed in the F5 POSTONA end — (count, snapshot) pair recorded durably BEFORE acknowledging that exact snapshot, a changed set is recorded first then acknowledged (bounded), a pair that cannot be recorded never lets X be done and never lets the saga forget; one new unapplied migration 20261015120000 (shape CHECK widened by x_unconfirmed_snapshots, service_role-only recorder, rollback keeps data); F5-owned fix: another service's entitlement no longer makes single-service flows unreadable; proofs on local PG17 only: migration runner + 25/25 mutants, Edge 140 tests + 36/36, assembled F3 PR204+F4+F5 e2e 39 (X1-X8 ABA/cross-person/crash/takeover/stale lease/rollback/common-ID block/other-app entitlement preserved), release preflight ten-member chain; handoffs: F3 inherited hold()/F3-L1/R2' (POSTONA-only person cannot end POSTONA alone), G3 T13, G4 PR197/PR211, F4 Threads no app-side revoke; open D1 (whole-account deletion reports the unconfirmed count in the response only); production NO_GO. Report: .agent_v2/tasks/F5.md#report
+
+- l5_verdict: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO (2026-10-15); Draft PR214 bc290ab618508a8fbaba1abfad308c52d86e4689, reported PG17 integrated e2e39 + Edge140 and mutation suites. Full-ID deletion D1 consent, F3 legacy issues, G3 T13, POSTONA route, managed Auth and independent security review pending. No merge/deploy.
 
 ## F6
 - slot: F6
