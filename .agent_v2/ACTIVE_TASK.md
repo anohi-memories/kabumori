@@ -200,18 +200,18 @@
 
 ## J3
 - slot: J3
-- status: ready
+- status: review_required
 - task_id: common-account-j3-f5-pr214-snapshot-ack-focused-review-20261015
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: V3
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J3.md
 - current_report_path: .agent_v2/reports/J3.md
 - dependencies: F5 Phase10 Draft PR214 bc290ab618508a8fbaba1abfad308c52d86e4689 stacked PR206; F3 PR204 45b08a87 source PASS V3
-- blocker: source-only, D1 full-account deletion consent unresolved, managed Auth/DB not verified, production NO_GO
-- slot_use: narrowly focused new F5 snapshot ACK/SQL/other-entitlement PR214 security review, prior F3 PR204 fixes not reviewed again
+- blocker: CHANGES_REQUIRED P2: snapshot_changed known9 becomes failure warning1 if re-record fails; D1 full-ID consent and managed gate unresolved; production NO_GO
+- slot_use: Focused PR214 review complete; SQL/E2E39/unit140/selected mutants PASS, independent warning-count regression FAIL; return V3 to 共通アカウントG5のちゃ（新F5担当）. Prior F3 PASS not reopened.
 - previous_archive: .agent_v2/archive/2026-10-15-J3-postona-j3-pr204-p2x3-security-rereview-20261015/
 
 ## J4
