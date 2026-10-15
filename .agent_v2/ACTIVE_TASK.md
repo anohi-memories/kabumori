@@ -76,22 +76,19 @@
 
 ## F5
 - slot: F5
-- status: done
-- task_id: common-account-f5-phase9-postona-shared-login-enrollment-20261015
+- status: ready
+- task_id: common-account-f5-phase10-postona-x-ack-snapshot-reconciliation-20261015
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: F5 PR121→152→165→178→183→193; F3/J3 security corrections; F4 PR180; POSTONA app PR197 / J4 client review
-- blocker: source-only; managed Auth/RLS/GoTrue and app UI not proven, pending F3 ACK and J4 fixes, production NO_GO
-- slot_use: Phase9 POSTONA-first shared sign-in / registration / entitlement integrated candidate; future apps supported
-- previous_archive: .agent_v2/archive/2026-10-15-F5-common-account-f5-phase8-x-threads-lifecycle-integrated-security-20261013/
-- latest_result: IMPLEMENTED_SOURCE_CANDIDATE — Draft PR #206 head a84a9b6abb8c8d4706bba5f8a12e5c1aef3d3b8c stacked on PR193 314aeac47a02ce80aea3d94426a563dfbe57ad7c (PR183 f2565cc0, PR178 83334a09, PR165 4638891f, PR152 ccea1fe8, PR121 76b50e1e unchanged): POSTONA-first shared sign-in/enrollment proven offline with the apps' real enrollment modules over fake GoTrue/PostgREST seams and the repository SQL (16 tests; no Kabumori profile/entitlement/RPC needed; idempotency, duplicate/concurrent sign-up, refresh, stale/forged/expired tokens, isolation, lifecycle, independence, races); F5 fixes (migration 20261015090000, unapplied): signed-out device's unexpired token could restart an ended service, guest session was enrolled; mutations 14/14, preflight chain of nine; handoffs: G3 T13 wiring of X onboarding RPCs (server does not enforce x_autopost entitlement), F3 PR204 ACK-snapshot consumer pending in F5; local PG17 only, production NO_GO; managed M1-M12 not run. Report: .agent_v2/tasks/F5.md#report
-
-- l5_verdict: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO (2026-10-15); Draft PR206 head a84a9b6abb8c8d4706bba5f8a12e5c1aef3d3b8c. Managed M1-M12 not executed; G3 T13, G4 old deletion path, F3 PR204 ACK consumer and J4 mobile fixes remain. No merge/deploy.
+- dependencies: F5 PR121→152→165→178→183→193→206; F3 PR204 L3 pending; F4 PR180; POSTONA PR197/J4
+- blocker: F3 ACK snapshot contract L3 pending; managed Auth/RLS/GoTrue unverified; production NO_GO
+- slot_use: Phase10 POSTONA common lifecycle ACK snapshot integration; かぶモリ休止は別担当
+- previous_archive: .agent_v2/archive/2026-10-15-F5-common-account-f5-phase9-postona-shared-login-enrollment-20261015/
 
 ## F6
 - slot: F6
