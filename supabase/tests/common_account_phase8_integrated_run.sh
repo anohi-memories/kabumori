@@ -123,7 +123,7 @@ f5_fence() {  # database: Phase 3b writer guard + Phase 4 core fence
 f5_rest() {  # database: Phase 5 workspace state, Phase 6 service-deletion ownership, Phase 8 reconciliation facts
   local d="$1" f
   for f in 20261012230000_common_account_service_brand_state.sql 20261013120000_common_account_service_deletion_ownership.sql \
-           20261013140000_common_account_service_reconciliation_facts.sql; do
+           20261013140000_common_account_service_reconciliation_facts.sql 20261015090000_common_account_enrollment_session_fence.sql; do
     must "$d" "$m/$f" "F5 $f"
   done
 }
@@ -316,6 +316,7 @@ if want apply; then
   x_ent_stack "$d"
   must "$d" "$m/20261013120000_common_account_service_deletion_ownership.sql" "F5 Phase 6 (alternative order)"
   must "$d" "$m/20261013140000_common_account_service_reconciliation_facts.sql" "F5 Phase 8 (alternative order)"
+  must "$d" "$m/20261015090000_common_account_enrollment_session_fence.sql" "F5 Phase 9 (alternative order)"
   val "$x_only" -f "$t/common_account_phase8_catalog.sql" > "$tree/cat_canonical.txt"
   val "$d" -f "$t/common_account_phase8_catalog.sql" > "$tree/cat_alt.txt"
   if ! cmp -s "$tree/cat_canonical.txt" "$tree/cat_alt.txt"; then diff "$tree/cat_canonical.txt" "$tree/cat_alt.txt" | head -30 >&2; fail "apply order: the alternative order gives another schema"; fi
@@ -337,6 +338,7 @@ F5_P4 $m/20261012130000_common_account_core_service_fence.sql
 F5_P5 $m/20261012230000_common_account_service_brand_state.sql
 F5_P6 $m/20261013120000_common_account_service_deletion_ownership.sql
 F5_P8 $m/20261013140000_common_account_service_reconciliation_facts.sql
+F5_P9 $m/20261015090000_common_account_enrollment_session_fence.sql
 F3_STAGE3B $m/20261006160200_x_account_publish_authority.sql
 F3_RESV001 $x_resv/001_postona_x_reservations.sql
 F3_RESV002 $x_resv/002_postona_x_resv_api_role.sql
@@ -355,7 +357,7 @@ EOF
   after="$(fp "$d")"
   [[ "$before" == "$after" ]] || fail "a re-apply changed the finished world"
   [[ -z "$accepted" ]] || echo "  (accepted as a no-op, catalog unchanged:$accepted)"
-  echo "PASS apply/reapply: 22 files of three stacks re-applied on the finished world; the catalog is unchanged"
+  echo "PASS apply/reapply: 23 files of three stacks re-applied on the finished world; the catalog is unchanged"
   # 7e. The activation gates as shipped.
   [[ "$(val "$world" -c "select count(*) from private.account_lifecycle_release_gates where gate = 'managed_auth_delete' and state = 'blocked' and reason = 'IDENTITY_CHANGE_FENCE_MISSING'")" == 1 ]] \
     || fail "managed_auth_delete is not BLOCKED as shipped"
@@ -386,6 +388,7 @@ if want rollback; then
   step "F3 saga stop 002" "$x_ent/002_x_service_end_saga_stop_rollback.sql"
   step "F3 entitlement guard 001" "$x_ent/001_x_publish_entitlement_guard_rollback.sql"
   step "F3 reservations G5 binding 003" "$x_resv/003_postona_x_resv_g5_binding_rollback.sql"
+  step "F5 Phase 9" "$t/common_account_enrollment_fence_rollback.sql"
   step "F5 Phase 8" "$t/common_account_service_reconciliation_rollback.sql"
   step "F5 Phase 6" "$t/common_account_service_deletion_rollback.sql"
   step "F5 Phase 5" "$t/common_account_brand_state_rollback.sql"
@@ -414,7 +417,7 @@ if want rollback; then
   base_view="$(readback)"
   echo "  read-back at the finished world:  $base_view"
   [[ "$base_view" == true\|false\|* ]] || fail "unexpected read-back at the finished world: $base_view"
-  for r in "common_account_service_reconciliation_rollback.sql:F5 Phase 8" "common_account_service_deletion_rollback.sql:F5 Phase 6" \
+  for r in "common_account_enrollment_fence_rollback.sql:F5 Phase 9" "common_account_service_reconciliation_rollback.sql:F5 Phase 8" "common_account_service_deletion_rollback.sql:F5 Phase 6" \
            "common_account_brand_state_rollback.sql:F5 Phase 5" "common_account_core_fence_rollback.sql:F5 Phase 4"; do
     out="$(psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$t/${r%%:*}" 2>&1)" || fail "partial rollback of ${r##*:} was refused: $(sed -n 's/^.*ERROR: *//p' <<<"$out" | head -1)"
     view="$(readback)"

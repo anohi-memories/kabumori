@@ -19,8 +19,8 @@
 -- Usage:   PGOPTIONS='-c kabumori.disposable_probe=yes' psql -X -A -t -v ON_ERROR_STOP=1 -f \
 --            supabase/preflight/common_account_release_probe.sql "<connection string of the DISPOSABLE database>"
 --
--- Expected inventory: the 76 functions, 7 relations, 11 triggers and 2 policies the chain creates (Phase 1, 2, 3a,
--- 3b, 4, 5, 6, 8), reviewed by hand from a clean apply on PostgreSQL 17 (docs/common-account/phase7-release-preflight.md
+-- Expected inventory: the 77 functions, 7 relations, 11 triggers and 2 policies the chain creates (Phase 1, 2, 3a,
+-- 3b, 4, 5, 6, 8, 9), reviewed by hand from a clean apply on PostgreSQL 17 (docs/common-account/phase7-release-preflight.md
 -- section 3). A function that is not in the list, or whose security attributes differ, is a FAIL.
 begin read only;
 set local search_path = pg_catalog;
@@ -37,6 +37,7 @@ owner_role as (
     from pg_class c where c.oid = pg_catalog.to_regclass('public.common_accounts')
 ),
 exp_fn(sig, sec, cfg, roles, vol, ret) as (values
+    ('private.account_lifecycle_enrollment_fence(uuid,boolean)', 'definer', 'search_path=""', '', 'v', 'void'),
     ('private.account_lifecycle_abort_service_deletion(uuid,text,uuid)', 'definer', 'search_path=""', '', 'v', 'jsonb'),
     ('private.account_lifecycle_account_changed()', 'definer', 'search_path=""', '', 'v', 'trigger'),
     ('private.account_lifecycle_active_answer(uuid,text,boolean)', 'definer', 'search_path=""', '', 's', 'jsonb'),
@@ -184,14 +185,15 @@ markers(phase, ord, fn) as (values
   ('P4', 5, 'private.account_lifecycle_service_state_refusal(uuid,text)'),
   ('P5', 6, 'public.common_account_brand_service_state(text,text)'),
   ('P6', 7, 'public.claim_service_deletion(uuid,text,uuid,uuid,uuid,integer)'),
-  ('P8', 8, 'public.common_account_service_end_result(uuid,text)')
+  ('P8', 8, 'public.common_account_service_end_result(uuid,text)'),
+  ('P9', 9, 'private.account_lifecycle_enrollment_fence(uuid,boolean)')
 ),
 phase_state as (
   select m.phase, m.ord, exists (select 1 from cat_fn f where f.sig = m.fn) as present from markers m
 ),
 chain_versions(ord, version) as (values
   (1, '20261001150000'), (2, '20261006230000'), (3, '20261009120000'), (4, '20261010051938'),
-  (5, '20261012130000'), (6, '20261012230000'), (7, '20261013120000'), (8, '20261013140000')
+  (5, '20261012130000'), (6, '20261012230000'), (7, '20261013120000'), (8, '20261013140000'), (9, '20261015090000')
 ),
 ledger as (
   select pg_catalog.to_regclass('supabase_migrations.schema_migrations') is not null as present
@@ -390,6 +392,15 @@ checks(ord, id, status, detail) as (
                                  and c.conname = 'account_lifecycle_operations_reconciliation_shape' and c.contype = 'c')
               then 'PASS' else 'FAIL' end,
          'the durable reconciliation facts (x_posts_unconfirmed) column and its shape constraint on private.account_lifecycle_operations'
+  union all
+  select 505, 'E5_enrollment_fence_wired',
+         case when (select count(*) from pg_proc p
+                     where p.pronamespace = pg_catalog.to_regnamespace('public')
+                       and p.proname in ('start_kabumori_service', 'start_x_autopost_service', 'ensure_my_profile',
+                                         'reactivate_kabumori_service', 'reactivate_x_autopost_service')
+                       and p.prosrc like '%account_lifecycle_enrollment_fence%') = 5
+              then 'PASS' else 'FAIL' end,
+         'the five public enrollment functions call the Phase 9 fence (a partial rollback or a hand edit would show here)'
   union all
   -- ---- H. Auth (read only) ----------------------------------------------------------------------------------
   select 600, 'H1_auth_sessions_shape',
