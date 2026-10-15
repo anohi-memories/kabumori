@@ -497,3 +497,10 @@ Both archive paths are append-only originals. These index entries are history li
 - original_path: `.agent_v2/reports/J3.md`; archive_path: `.agent_v2/archive/2026-10-15-J3-postona-j3-pr204-p2x3-security-rereview-20261015/files/.agent_v2/reports/J3.md`; size: 11461 bytes; SHA256: `6548d53b7fb625ee9c75fb3504edf582f6da0e51d125f39479001e5dd8eaf869`; blob: `09a4333ad7fdc3a0f9ea6f4878f78292b37c8dcb`
 - restore: both original UTF-8 contents and GitHub blob SHAs match archived copies; MANIFEST and SHA256SUMS stored.
 - result: V3 PASS_SOURCE_REVIEW / PRODUCTION_NO_GO, F3 PR204 reviewed.
+
+## F6 OpenAI→Anthropic inventory L6 archive — 2026-10-15
+- task_id: `common-ai-f6-openai-anthropic-migration-inventory-20261015`
+- original_path: `.agent_v2/tasks/F6.md`
+- archive_path: `.agent_v2/archive/2026-10-15-f6-openai-anthropic-inventory-plan.md`
+- original Git blob: `7e05bac202085f5714c252aa2fd8207973f8e3cf`; restored archived blob identical; 5195 characters; SHA256 pending independent local archive manifest validation.
+- L6 PASS_OFFLINE_PLAN; PR216 Draft unmerged; J1 R1/R2 outstanding; source archive append-only.
