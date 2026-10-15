@@ -1,3 +1,8 @@
+## POSTONA J5 focus — J4 P2 R1/R2 client correction (2026-10-15 JST)
+- NEW J5 `postona-j5-pr197-p2-response-warning-preservation-fix-20261015` ready/codex, Sol（高）, J5→V5 return POSTONA｜マルチSNS化・開発統括（G4）のちゃ. Former J5 TASK+Report archived with SHA256SUMS, MANIFEST, byte-for-byte GitHub readback and HISTORY_INDEX update.
+- Source-only separate Draft stacked on PR197 HEAD `2171ee4c02ea2eec46562d81595f5460e5507d9d`. Fix J4 V4 R1 missing provider summary success and R2 post-response failure losing validated user-bound X/Threads warnings, reproduce fail-before/pass-after. Strictly `apps/social-mobile` focused paths; F3/F5/H5 and F4 SQL untouched. New J5 task registered but implementation NOT STARTED.
+- User explicitly wants POSTONA development continued separately from かぶモリ operations suspension; do not stop common Cron/Dispatcher/Auth. No prod writes/deploy/merge/real SNS/managed changes. Later independent J1–J4 Sol（高） focused review required.
+
 ## G1｜かぶモリ休止準備 F2/F8設計TASK登録（2026-10-15）
 - GitHub反映：ユーザー承認後、PR207をmainへmerge済み（`d50f0d6f601f9819b24b8ad1a60b540d9c2772ab`）。承認HEAD `a012105d07f559ff1c708c04d2c3bc8d743d778f` とmerge tree一致、F2/F8 TASK・索引・CURRENT_STATE・HISTORY_INDEX・F8 archiveをGitHubから再取得し6/6バイト一致。F2/F8はready、設計作業は未開始。正式開始時はfresh origin/main・専用環境・競合を再確認。本番停止は未承認・未実施。
 - 判定 **OFFLINE_DESIGN_ASSIGNED / PRODUCTION_NO_GO**。統合計画 `docs/operations/kabumori-pause/G1_PLAN_20261015.md`。基準main `9e9c0a0682269de0a5ec25ff4f26ed82043fbfe8`、新旧30枠最新metadata・関連Report・open PR74件を確認。
