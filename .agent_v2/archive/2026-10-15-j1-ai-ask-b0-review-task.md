@@ -1,0 +1,52 @@
+# J1 — AIに聞く V1 Phase B0 独立セキュリティ設計レビュー
+
+- task_id: kabumori-j1-ai-ask-b0-independent-security-review-20261013
+- owner: codex
+- slot: J1
+- status: done
+- next_owner: none
+- return_to: かぶモリアプリG1のちゃ（新F1担当）
+- completion_code: V1
+- start_code: J1
+- recommended_model: Sol（高）
+- current_task_path: .agent_v2/tasks/J1.md
+- current_report_path: .agent_v2/reports/J1.md
+- dependencies: F1 B0 Draft PR #171 HEAD 0beda46186efe1db680909f369e2571609851d81; Phase A Draft PR #166; G2 source already merged; F5 common account; G6 AI provider
+- blocker: None for source-only design review; all live services remain NO_GO
+- review_required: true
+
+## 目的
+Claude F1が作成した「AIに聞く」V1 Phase B0設計を、Codexが**独立した視点で**安全性・実現可能性・費用上限を監査する。実装ではなく事前設計レビュー。PASSならB1候補を安全な別TASKへ分割する。レビュー結果を無視して本番へ進めない。
+
+## 対象範囲
+- PR171 `docs/release-readiness/kabumori-app/AI_ASK_V1_PHASE_B0_SECURITY_DESIGN.md` 全体（§0〜§15）、特に認証§3、データ§4、検証§5、費用§7、ロールバック§9、テスト§11、判断§14。
+- PR166 `AI_ASK_V1_PHASE_A_CONTRACT.md` と `src/lib/ai-ask.ts` は read-only。設計と既存G2/F5/G6/G8/G9境界との矛盾・依存・本番適用前提を確認する。
+- G6共有台帳の実在API・予算ガード、JWT本人確定、RLSを通した本人保有情報だけの取得、サービスロールとユーザーロールの権限分離、ニュース根拠の鮮度、注入防御、料金のat-most-once試行と障害後の再試行、同意と個人情報公開ページ整合、feature OFFとrollback。
+- threat scenarios: 匿名/失効JWT、偽造user_id、別ユーザー保有情報混入、RLS漏れ、証拠IDすり替え・不明時刻・モデルの数字捏造、外部ニュースprompt injection、同一requestId同時実行と通信中断、クォータ競合、日付境界、本人削除直後、provider/ledger失敗、二重課金、kill switch。
+- D1〜D8の要判断事項を、デフォルト推奨・未決定時の停止ゲート・理由に整理。B1-a DBとB1-b Edgeを分離する具体的条件とB1-c UIのPR166依存を確認。
+
+## 変更可
+- `.agent_v2/reports/J1.md` の最新Reportのみ（Codexの担当出力）。
+- 必要な場合、個別のreview comment/設計指摘。ただし別slotのTASK/ReportやPR変更は禁止。
+
+## 変更不可
+- F1の設計書/PR171、PR166、全アプリ・DB/migrations/RPC/RLS/Auth/Edge/AI provider/ニュース・usage ledger・secrets・workflow、既存G/F/H/JのTASKと作業環境、本番設定/DB/API、PR merge/deploy。J1を実装枠に転用しない。
+
+## 安全制約
+- fresh origin/main、PROJECT_RULES、.agent_v2/ORCHESTRATION.md、旧新ACTIVE/CURRENT必要部分、J1/F1/G2/F5/G6最新metadataとPRのexact headをread-onlyで確認。独立のclean J1 worktree。全slot変更対象の衝突検査。
+- 必要ならlocal disposable PostgreSQLやフェイクプロバイダーで再現テスト可。ただしlive Supabase、実アカウント、実OpenAI/Claude API、paid calls、production secrets等の使用禁止。
+- 設計のみの文書レビューを「実Security実装がPASSした」と誤認させない。ソース実装後にも独立セキュリティ検証が必要。
+
+## 実行指示
+1. PR171の内容を既存source-of-truthと突合。リスクR1〜R13、ゲートG0〜G7、J観点J-1〜J-8、テストT1〜T22を検証する。
+2. 具体的な悪用・並行実行シナリオで、成立する境界/欠落する境界をP0〜P3に分類。指摘は該当ファイル・セクション・再現手順・最小修正案を書く。重大指摘はB1の着手前に修正を求める。
+3. 最終判定 `PASS_DESIGN_PRE_REVIEW` / `CHANGES_REQUIRED` / `BLOCKED` とB1への進行条件を区別。D1〜D8の推奨初期値案・ユーザー判断が必須な箇所を報告。
+4. 実行したテストとNOT_RUNを分離。main/PR HEAD、変更ファイル、push/merge/deploy/productionの有無、残課題をReportに記入。
+
+## 完了条件
+- Review Summary、findings(P severity, root cause, repro/test, ownership)、risk/coverage、recommendationsと受入基準、実行検証、source-only/no-live証明。
+- `.agent_v2/reports/J1.md` と J1 TASK metadataを `review_required / next_owner: chatgpt` に更新し、`V1`で かぶモリアプリG1のちゃ（新F1担当）に返却。
+- Codex自己merge・実装・本番操作をしない。
+
+## Report
+最新Reportは `.agent_v2/reports/J1.md`。2026-10-13独立設計レビュー完了: **CHANGES_REQUIRED / DESIGN_REVIEW_ONLY / PRODUCTION_NO_GO**。P1五件・P2三件、ローカルPG台帳反例6群・Deno66件を確認。実装/本番Security PASSではない。PR171/166・他slot・全ソースは未変更。指摘修正と未決定D1〜D8のゲート確認後にfocused delta review、B1/merge/deployは別承認。返却V1。
