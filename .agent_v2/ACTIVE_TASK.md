@@ -125,20 +125,20 @@
 
 ## F8
 - slot: F8
-- status: ready
+- status: review_required
 - task_id: kabumori-f8-news-hard-pause-runtime-candidate-20261015
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: L8
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F8.md
 - current_report_path: .agent_v2/tasks/F8.md#report
 - dependencies: F8 design PR #209 merged; F2 source candidate; protected PR129/#164 same-handler integration
-- blocker: source-only continuation F8 PR164→129→212 integration/fixture & stop preflight plan; no actual merge/deploy/production; observer #43 pending
+- blocker: L8 PASS_SOURCE_CANDIDATE PR225 7d0ff7b4 (807/807 mocked PASS); open Draft integration, observer #43, Cron/Push/in-flight and live read-only preflight NOT_VERIFIED; production NO_GO
 - production_mutation_window: FORBIDDEN
 - previous_archive: .agent_v2/archive/2026-10-15-f8-pause-offline-design-accepted.md
-- slot_use: original task_id continuation; integration simulation and read-only preflight plan; L8 return
+- slot_use: original F8 task integration source candidate received, next owner G1; no merge/deploy
 
 ## F9
 - slot: F9
