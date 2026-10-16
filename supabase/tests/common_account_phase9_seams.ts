@@ -232,6 +232,26 @@ export function startSeams(options: SeamOptions = {}): Promise<Seams> {
       const email = await q(`select coalesce(email, '') from auth.users where id = ${lit(String(checked.claims.sub))}`);
       return json({ id: checked.claims.sub, email: email || null, aud: 'authenticated', role: 'authenticated' });
     }
+    if (req.method === 'GET' && path === '/settings') {
+      // the public settings endpoint (Phase 11 model): provider flags, sign-up switch, confirmation mode
+      return json({ external: { email: true, apple: false, google: false, x: false }, disable_signup: false, mailer_autoconfirm: autoconfirm });
+    }
+    if (req.method === 'POST' && path === '/admin/users') {
+      // admin create-user (Phase 11 model): service key only; the e-mail counts as confirmed when asked
+      if (req.headers.get('apikey') !== SERVICE_KEY || bearer !== SERVICE_KEY) return gotrueError(401, 'not_admin', 'User not allowed');
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+      const password = typeof body.password === 'string' ? body.password : '';
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/u.test(email) || password.length < 8) return gotrueError(422, 'validation_failed', 'invalid user');
+      let userId: string;
+      try {
+        userId = await createUser(email);
+        await q(`insert into auth.identities (user_id, provider, provider_id) values (${lit(userId)}, 'email', ${lit(userId)})`);
+      } catch {
+        return gotrueError(422, 'email_exists', 'A user with this email address has already been registered');
+      }
+      passwords.set(userId, password);
+      return json({ id: userId, email, aud: 'authenticated', role: 'authenticated' });
+    }
     const admin = /^\/admin\/users\/([0-9a-f-]{36})$/u.exec(path);
     if (admin && req.method === 'DELETE') {
       if (req.headers.get('apikey') !== SERVICE_KEY || bearer !== SERVICE_KEY) return gotrueError(401, 'not_admin', 'User not allowed');
@@ -243,21 +263,36 @@ export function startSeams(options: SeamOptions = {}): Promise<Seams> {
 
   const postgrest = async (req: Request, url: URL): Promise<Response> => {
     const match = /^\/rest\/v1\/rpc\/([a-z_]+)$/u.exec(url.pathname);
-    if (req.method !== 'POST' || !match) return json({ code: 'PGRST125', message: 'Invalid path specified in request URL' }, 404);
-    const fn = match[1];
+    // Phase 11 model: a GET of the two person-readable tables, with the person's own role (so RLS and column grants decide)
+    const tableMatch = /^\/rest\/v1\/(service_entitlements|common_accounts)$/u.exec(url.pathname);
+    if (!(req.method === 'POST' && match) && !(req.method === 'GET' && tableMatch)) return json({ code: 'PGRST125', message: 'Invalid path specified in request URL' }, 404);
+    const fn = match?.[1] ?? '';
     const reply = (status: number, body: unknown, who?: { sub?: unknown; role?: unknown }) => {
       hits.push({ path: url.pathname, status, sub: who?.sub, role: who?.role });
       return json(body, status);
     };
-    if (req.headers.get('apikey') !== APIKEY) return reply(401, { code: 'PGRST301', message: 'No API key found in request' });
+    const serviceCall = req.headers.get('apikey') === SERVICE_KEY && req.headers.get('authorization') === `Bearer ${SERVICE_KEY}`;
+    if (req.headers.get('apikey') !== APIKEY && !serviceCall) return reply(401, { code: 'PGRST301', message: 'No API key found in request' });
     const bearer = /^Bearer (\S+)$/u.exec(req.headers.get('authorization') ?? '');
     if (!bearer) return reply(401, { code: 'PGRST302', message: 'Anonymous access is disabled' });
-    const checked = await verify(bearer[1]);
+    const checked: { claims: Claims } | 'bad' | 'expired' = serviceCall ? { claims: { role: 'service_role', sub: null } } : await verify(bearer[1]);
     if (checked === 'expired') return reply(401, { code: 'PGRST303', message: 'JWT expired' });
     if (checked === 'bad') return reply(401, { code: 'PGRST301', message: 'JWSError JWSInvalidSignature' });
     const { claims } = checked;
     const who = { sub: claims.sub, role: claims.role };
-    if (claims.role !== 'authenticated' && claims.role !== 'anon') return reply(401, { code: '42704', message: 'role does not exist' }, who);
+    if (claims.role !== 'authenticated' && claims.role !== 'anon' && claims.role !== 'service_role') return reply(401, { code: '42704', message: 'role does not exist' }, who);
+    if (tableMatch) {
+      const columns = (url.searchParams.get('select') ?? '*').split(',');
+      if (!columns.every((column) => /^[a-z_]+$/u.test(column) || column === '*')) return reply(400, { code: 'PGRST100', message: 'bad select' }, who);
+      const read = await psql(
+        `begin; set local "request.jwt.claims" = ${lit(JSON.stringify(claims))}; set local role ${claims.role}; `
+        + `select coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) from (select ${columns.join(', ')} from public.${tableMatch[1]}) t; commit;`,
+        { verbose: true, database: options.database },
+      );
+      if (read.ok) return reply(200, JSON.parse(read.out), who);
+      const failure = /ERROR:\s+([0-9A-Z]{5}): ([^\n]*)/u.exec(read.err);
+      return reply(failure?.[1] === '42501' ? (claims.role === 'anon' ? 401 : 403) : 400, { code: failure?.[1] ?? 'XX000', message: failure?.[2] ?? 'error', details: null, hint: null }, who);
+    }
     if (!exposed.has(fn)) return reply(404, { code: 'PGRST202', message: `Could not find the function public.${fn} in the schema cache` }, who);
     const args = await req.json().catch(() => ({})) as Record<string, unknown>;
     const named: string[] = [];
