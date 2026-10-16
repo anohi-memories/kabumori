@@ -580,3 +580,9 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - task_id: kabumori-f8-news-hard-pause-runtime-candidate-20261015; original_path: .agent_v2/tasks/F8.md; archive_path: .agent_v2/archive/2026-10-16-F8-observer-stop-gap-design/files/.agent_v2/tasks/F8.md; 25483 bytes; SHA256 b8adb5482ef67274f67f3eb665b6aadbad892ec7265c3a5081adbd233d3a78b7; original/restored Git blob 9fee537bcad0e8d3b3f17968820a7e4bbd1825ba. MANIFEST.json/SHA256SUMS saved; restore matched; append-only.
 
 - 2026-10-16 | F10 | `orchestration-v3-reliable-task-registration-f10-20261016` | V3 initial source prototype accepted L10; Draft PR #229 HEAD `7ce49c0b07df95e0ba044211d7fcb478d7341c3a`; full TASK/Report archived. | `.agent_v2/archive/2026-10-16-F10-orchestration-v3-reliable-task-registration-f10-20261016/` | SHA256 `77d8d03f710d8b3c4a1c2e6acbfbb0f9e3dbeeec417c5d9c842bbde6115818f0`, byte/blob read-back verified.
+
+## F5 Phase12 archive — 2026-10-16
+- task_id: `common-account-f5-phase12-schema-baseline-cron-isolation-offline-20261016`
+- original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-16-F5-common-account-f5-phase12-schema-baseline-cron-isolation-offline-20261016/files/.agent_v2/tasks/F5.md`
+- bytes: 18420; SHA256: `7538eda6d3448746b075fe897f00239ae67f3fc4b4b7ec45e196b171a070948b`; original_blob: `84dc59bc9351b0b3b5a7af59108c538bdcc14cb4`
+- read-back: exact content and blob SHA matched, MANIFEST and SHA256SUMS stored. L5 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; J1 V1 P2×4 requires a new F5 source-only fix.
