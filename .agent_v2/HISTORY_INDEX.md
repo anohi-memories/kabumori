@@ -533,3 +533,9 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - size: 13114 bytes; SHA256: `a7cd04453b6a2c0e2234ab91cf34a843ee7fc58d044201d574c2037ff8d7c883`
 - source_blob: `92629551a17e573b7cd7f7625256be3f887a135b`; exact UTF-8 and git blob verified on read-back; MANIFEST/SHA256SUMS saved.
 - L5 PASS_SOURCE_FIX / PRODUCTION_NO_GO; PR220 49b912292f434b5306b3c9e36f8c72466de2f124.
+
+## J3 PR214 review archived for reuse — 2026-10-16
+- task_id: common-account-j3-f5-pr214-snapshot-ack-focused-review-20261015
+- original_path: .agent_v2/tasks/J3.md; archive_path: .agent_v2/archive/2026-10-16-J3-common-account-pr214-review/files/.agent_v2/tasks/J3.md; size: 5466 bytes; SHA256 ae20e31f91556b3987bbd22848d24267efac72b32ce34c531b5d0721338ff984; source blob 3d4d97ef9fa6752a8cf88413fba1a2759bbe56f4
+- original_path: .agent_v2/reports/J3.md; archive_path: .agent_v2/archive/2026-10-16-J3-common-account-pr214-review/files/.agent_v2/reports/J3.md; size: 12802 bytes; SHA256 5ad225dc4bfa01a3141c28ab2b00b5fede48649d1c74c7be8b848443ca183211; source blob 670c640871d1cfe2a1af338626eef292478467c3
+- MANIFEST.json, SHA256SUMS, GitHub read-back/restoration verified, archive append-only. New task is independent J3 F2/F8 review; older result retained.
