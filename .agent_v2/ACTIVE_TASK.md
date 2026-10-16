@@ -90,11 +90,11 @@
 
 ## F6
 - slot: F6
-- status: review_required
+- status: done
 - task_id: common-ai-f6-pr231-regex-division-parser-bypass-fix-20261016
 - owner: claude
-- next_owner: chatgpt
-- blocker: FIXED_SOURCE_ONLY Draft PR #234 (2ba13ee1, base PR231 2a696aff): rawEdges reads every import/export/from keyword of the raw text on its own (no candidate swallows another, lexer-independent; parser-covered offsets keep exact names), block comments end at first */, lexer regex/division fixed (x.if, of, function/class expressions, ternary vs case/label colon, top level, export default, for await); 4 counterexamples missed by all 16 PR231 guard tests now refused; no allowlist widening, A1/ledger untouched; provider146 bridge27 market324 merged507 PASS, 509 files lexed, 12 mutants killed; shared 5 type errors + 1 permission block NOT_RERUN; production NO_GO
+- next_owner: none
+- blocker: L6 PASS_SOURCE_FIX PR234; focused independent source security verification pending; merge/deploy/production NO_GO.
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
