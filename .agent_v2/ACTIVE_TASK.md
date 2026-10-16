@@ -184,35 +184,35 @@
 
 ## J2
 - slot: J2
-- status: review_required
-- task_id: kabumori-j2-f2-f8-pause-three-findings-focused-rereview-20261016
+- status: idle
+- task_id: none
 - owner: codex
-- next_owner: chatgpt
-- return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
+- next_owner: none
+- return_to: none
 - completion_code: V2
-- recommended_model: Sol（高）
+- recommended_model: none
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
-- dependencies: F8 Draft #212 d04ff9d2227bbb0e43d7ddbcf8c3b5cc7ad54d3a; F2 Draft #213 c10f1da593ba3dc365cf340e9569ae1caa9789b1; PR129/164 protected
-- blocker: CHANGES_REQUIRED P1 R1 residual: concurrent entry OFF does not fence pending egress true, mock X still sent. R2/R3 PASS; production/merge/deploy NO_GO.
-- previous_archive: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-integrated-review/
-- slot_use: Three-findings focused independent rereview complete; archive SHA256/restore 2/2 PASS; tests 79 PASS / 1 FAIL; return V2 to かぶモリアプリG1のちゃ（運用休止・全体統括）.
+- dependencies: none for new task; independent worktree and conflicts must be checked at new assignment
+- blocker: none in task metadata; prior V2 outcome archived
+- previous_archive: .agent_v2/archive/2026-10-17-J2-focused-review-closed/
+- slot_use: available for a newly registered distinct task_id only; do not start while idle
 
 ## J3
 - slot: J3
-- status: review_required
-- task_id: kabumori-j3-f2-f8-pause-three-findings-focused-rereview-20261016
+- status: idle
+- task_id: none
 - owner: codex
-- next_owner: chatgpt
-- return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
+- next_owner: none
+- return_to: none
 - completion_code: V3
-- recommended_model: Sol（高）
+- recommended_model: none
 - current_task_path: .agent_v2/tasks/J3.md
 - current_report_path: .agent_v2/reports/J3.md
-- dependencies: F8 PR212 d04ff9d2, F2 PR213 c10f1da5, prior J2 review; J2 protected/possibly already running
-- blocker: USER_STOPPED_DUPLICATE_REVIEW; not completed or archived; outstanding worktree/Report NOT_VERIFIED; do not restart; production NO_GO
-- previous_archive: .agent_v2/archive/2026-10-16-J3-common-account-pr214-review/
-- slot_use: paused/cancelled by user after J2 duplication; G1 reconcile before reallocation
+- dependencies: none for new task; independent worktree and conflicts must be checked at new assignment
+- blocker: previous review user-cancelled; old worktree/uncommitted state NOT_VERIFIED; protect it at next startup
+- previous_archive: .agent_v2/archive/2026-10-17-J3-duplicate-review-cancelled/
+- slot_use: available for a newly registered distinct task_id only; do not start while idle
 
 ## J4
 - slot: J4
