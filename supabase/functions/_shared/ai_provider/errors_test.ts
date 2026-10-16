@@ -142,3 +142,37 @@ test("R2: a transport policy asking to retry after a timeout is invalid (refused
   assert.equal(isValidTransportPolicy({ maxAttempts: 2, retryOnTimeout: true } as unknown as { maxAttempts: number }), false);
   assert.equal(isValidTransportPolicy({ maxAttempts: 2, retryOnTimeout: "yes" } as unknown as { maxAttempts: number }), false);
 });
+
+test("A1: only a documented refusal status is not billed; every other status may have been processed", () => {
+  const refused: Array<[number, unknown]> = [
+    [400, anthropicError(400, "invalid_request_error", "messages: bad")],
+    [401, anthropicError(401, "authentication_error", "x")],
+    [402, anthropicError(402, "billing_error", "x")],
+    [403, anthropicError(403, "permission_error", "x")],
+    [404, anthropicError(404, "not_found_error", "x")],
+    [413, anthropicError(413, "request_too_large", "x")],
+    [429, anthropicError(429, "rate_limit_error", "x")],
+    [529, anthropicError(529, "overloaded_error", "x")],
+  ];
+  for (const [code, body] of refused) assert.equal(anthropic(code, body).maybeBilled, false, `anthropic ${code}`);
+  for (const code of [500, 502, 503, 504, 507, 408, 409, 422, 418]) {
+    assert.equal(anthropic(code, anthropicError(code, "api_error", "x")).maybeBilled, true, `anthropic ${code}`);
+    assert.equal(anthropic(code, null).maybeBilled, true, `anthropic ${code} without a body`);
+  }
+  for (const code of [400, 401, 403, 404, 429, 503]) assert.equal(openai(code, { error: { type: "x", code: null, message: "m" } }).maybeBilled, false, `openai ${code}`);
+  for (const code of [500, 502, 504, 520, 408, 409, 422]) assert.equal(openai(code, { error: { type: "x", code: null, message: "m" } }).maybeBilled, true, `openai ${code}`);
+});
+
+test("A1: an error type never turns an uncertain status into a known refusal (no retry, possibly billed)", () => {
+  const policy = { maxAttempts: 3 };
+  for (const [code, type] of [[500, "rate_limit_error"], [500, "overloaded_error"], [503, "overloaded_error"], [502, "rate_limit_error"]] as const) {
+    const error = anthropic(code, anthropicError(code, type, "x"));
+    assert.deepEqual([error.code, error.maybeBilled], ["SERVER_ERROR", true], `${code} ${type}`);
+    assert.equal(nextRetryDelayMs(policy, DEFAULT_RETRY_TIMING, 1, error, () => 1), null, `${code} ${type}`);
+  }
+  const quota = openai(500, { error: { type: "insufficient_quota", code: "insufficient_quota", message: "m" } });
+  assert.deepEqual([quota.code, quota.maybeBilled], ["CREDIT_EXHAUSTED", true]);
+  const billing = anthropic(500, anthropicError(500, "billing_error", "x"));
+  assert.deepEqual([billing.code, billing.maybeBilled], ["CREDIT_EXHAUSTED", true]);
+  assert.equal(anthropic(400, anthropicError(400, "timeout_error", "x")).maybeBilled, true, "a timeout type is always uncertain");
+});

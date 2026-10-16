@@ -182,11 +182,81 @@ type ImportEdge = {
   readonly statement: boolean;
 };
 
+/**
+ * ECMAScript trivia, legal between any two tokens (F6 J1 R1a, 2026-10-16): white space and line terminators (`\s`
+ * covers every Unicode space, U+2028 / U+2029 and the BOM), block comments and line comments. `import/* x *\/(...)`,
+ * `import // x` + a new line + `(...)` and `from/* x *\/"..."` are ordinary imports.
+ */
+const TRIVIA = String.raw`(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n\r\u2028\u2029]*)*`;
+/** A string literal (group 1 = quote, group 2 = raw body), escapes and line continuations included. */
+const STRING_LITERAL = String.raw`(["'])((?:[^"'\\\n\r]|\\(?:\r\n|[\s\S])|(?!\1)["'])*)\1`;
+const FROM_CLAUSE = new RegExp(String.raw`\bfrom${TRIVIA}${STRING_LITERAL}`, "gu");
+const SIDE_EFFECT_IMPORT = new RegExp(String.raw`\bimport${TRIVIA}${STRING_LITERAL}`, "gu");
+const DYNAMIC_IMPORT = new RegExp(String.raw`\bimport${TRIVIA}\(`, "gu");
+/** A keyword followed by a comment that never ends: a module the loader rejects, and the scan cannot read. */
+const UNTERMINATED_TRIVIA = new RegExp(String.raw`\b(?:import|export|from)${TRIVIA}\/\*(?![\s\S]*\*\/)`, "gu");
+const TRIVIA_AT = new RegExp(TRIVIA, "uy");
+const STRING_AT = new RegExp(STRING_LITERAL, "uy");
+const COMMENT = /\/\*[\s\S]*?\*\/|\/\/[^\n\r\u2028\u2029]*/gu;
+
+/** The index after the trivia starting at `i`. */
+function skipTrivia(text: string, i: number): number {
+  TRIVIA_AT.lastIndex = i;
+  return TRIVIA_AT.exec(text) ? TRIVIA_AT.lastIndex : i;
+}
+
+/**
+ * The value of a string literal body: escapes and line continuations decoded the way the module loader sees them, or
+ * null for anything a strict-mode module would reject (legacy octal escapes) or the scan does not decode.
+ */
+function decodeString(body: string): string | null {
+  let out = "";
+  for (let i = 0; i < body.length; i += 1) {
+    const ch = body[i];
+    if (ch !== "\\") {
+      out += ch;
+      continue;
+    }
+    const next = body[i + 1];
+    i += 1;
+    if (next === undefined) return null;
+    if (next === "\r") {
+      if (body[i + 1] === "\n") i += 1;
+    } else if (next === "\n" || next === "\u2028" || next === "\u2029") {
+      // A line continuation adds nothing.
+    } else if (next === "u") {
+      const braced = /^\{([0-9a-fA-F]{1,6})\}/u.exec(body.slice(i + 1));
+      const plain = /^[0-9a-fA-F]{4}/u.exec(body.slice(i + 1));
+      if (braced) {
+        const code = parseInt(braced[1], 16);
+        if (code > 0x10ffff) return null;
+        out += String.fromCodePoint(code);
+        i += braced[0].length;
+      } else if (plain) {
+        out += String.fromCharCode(parseInt(plain[0], 16));
+        i += 4;
+      } else return null;
+    } else if (next === "x") {
+      const hex = /^[0-9a-fA-F]{2}/u.exec(body.slice(i + 1));
+      if (!hex) return null;
+      out += String.fromCharCode(parseInt(hex[0], 16));
+      i += 2;
+    } else if (next === "0" && !/[0-9]/u.test(body[i + 1] ?? "")) {
+      out += "\0";
+    } else if (/[0-9]/u.test(next)) {
+      return null;
+    } else {
+      out += ({ b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v" } as Record<string, string>)[next] ?? next;
+    }
+  }
+  return out;
+}
+
 /** `{ a, b as c }`, `* as ns`, `*`, `x`, `x, { a }`, `x, * as ns`, each optionally after `type`; no quotes. */
 const PLAIN_CLAUSE =
   /^\s*(?:type\s+)?(?:\{[^{}"'`;]*\}|\*(?:\s+as\s+[\w$]+)?|[\w$]+(?:\s*,\s*(?:\{[^{}"'`;]*\}|\*\s+as\s+[\w$]+))?)\s*$/u;
 
-/** The names a plain import / export clause takes. */
+/** The names a plain import / export clause (comments removed) takes. */
 function clauseNames(clause: string): string[] {
   const names = new Set<string>();
   const body = clause.trim().replace(/^type\s+/u, "");
@@ -203,38 +273,53 @@ function clauseNames(clause: string): string[] {
   return [...names];
 }
 
-/** The argument of the import( starting at `start`: its value if it is one plain string literal, else null. */
+/**
+ * The argument of the import( ending at `start`: its value if it is one string literal (trivia allowed around it,
+ * optionally followed by import options), else null (computed).
+ */
 function literalArgument(text: string, start: number): string | null {
-  let i = start;
-  while (/\s/u.test(text[i] ?? "")) i += 1;
-  const quote = text[i];
-  if (quote !== '"' && quote !== "'" && quote !== "`") return null;
-  const end = text.indexOf(quote, i + 1);
-  if (end < 0) return null;
-  const value = text.slice(i + 1, end);
-  // An escape, an interpolation or a line break would have to be evaluated: computed.
-  if (/[\\\n]|\$\{/u.test(value)) return null;
-  let j = end + 1;
-  while (/\s/u.test(text[j] ?? "")) j += 1;
+  const i = skipTrivia(text, start);
+  let value: string | null;
+  let after: number;
+  if (text[i] === "`") {
+    const end = text.indexOf("`", i + 1);
+    if (end < 0) return null;
+    value = text.slice(i + 1, end);
+    // An escape or an interpolation would have to be evaluated: computed.
+    if (/[\\]|\$\{/u.test(value)) return null;
+    after = end + 1;
+  } else {
+    STRING_AT.lastIndex = i;
+    const literal = STRING_AT.exec(text);
+    if (!literal) return null;
+    value = decodeString(literal[2]);
+    after = STRING_AT.lastIndex;
+  }
+  const j = skipTrivia(text, after);
   // `import("x")` or `import("x", options)`; "x" + y, "x".concat(y) and anything else are computed.
-  return text[j] === ")" || text[j] === "," ? value : null;
+  return value !== null && (text[j] === ")" || text[j] === ",") ? value : null;
 }
 
-/** Every import of a file: `import ... from`, `export ... from`, `import "x"` and import(), from the raw text. */
+/**
+ * Every import of a file: `import ... from`, `export ... from`, `import "x"` and import(), from the raw text (a
+ * comment or a string cannot hide one), with any legal trivia between the tokens. A specifier that cannot be decoded
+ * is null, so it is refused like a computed one.
+ */
 function importEdges(text: string): ImportEdge[] {
   const edges: ImportEdge[] = [];
   const keywordEnds = [...text.matchAll(/\b(?:import|export)\b/gu)].map((m) => m.index + m[0].length);
   let k = -1;
-  for (const m of text.matchAll(/\bfrom\s*(["'])([^"'\n]*)\1/gu)) {
+  for (const m of text.matchAll(FROM_CLAUSE)) {
     while (k + 1 < keywordEnds.length && keywordEnds[k + 1] <= m.index) k += 1;
-    const clause = k >= 0 ? text.slice(keywordEnds[k], m.index) : null;
+    const clause = k >= 0 ? text.slice(keywordEnds[k], m.index).replace(COMMENT, " ") : null;
     const plain = clause !== null && PLAIN_CLAUSE.test(clause);
-    edges.push({ specifier: m[2], names: plain ? clauseNames(clause) : ["<unparsed>"], statement: plain });
+    edges.push({ specifier: decodeString(m[2]), names: plain ? clauseNames(clause) : ["<unparsed>"], statement: plain });
   }
-  for (const m of text.matchAll(/\bimport\s*(["'])([^"'\n]*)\1/gu)) edges.push({ specifier: m[2], names: ["<side-effect>"], statement: true });
-  for (const m of text.matchAll(/\bimport\s*\(/gu)) {
+  for (const m of text.matchAll(SIDE_EFFECT_IMPORT)) edges.push({ specifier: decodeString(m[2]), names: ["<side-effect>"], statement: true });
+  for (const m of text.matchAll(DYNAMIC_IMPORT)) {
     edges.push({ specifier: literalArgument(text, m.index + m[0].length), names: ["*"], statement: true });
   }
+  for (const _ of text.matchAll(UNTERMINATED_TRIVIA)) edges.push({ specifier: null, names: ["<unparsed>"], statement: true });
   return edges;
 }
 
@@ -589,7 +674,6 @@ test("J1 R1: dynamic, computed, aliased, symlinked, transitive and unreadable pa
     [BRIDGE, `${bridgeSource}\nconst target = "../ai_" + "provider/mod.ts";\nexport const load = () => import(target);\n`],
     ["x-test-post/ai_loader.ts", 'const dir = ["ai", "consumer", "bridge"].join("_");\nexport const load = () => import(`../_shared/${dir}/bridge.ts`);\n'],
     ["x-test-post/ai_loader.ts", `export const load = () => import("../_shared/ai_" + "consumer_bridge/bridge.ts");\n`],
-    ["x-test-post/ai_loader.ts", `export const load = () => import("../_shared/ai\\u005fconsumer_bridge/bridge.ts");\n`],
     ["x-test-post/ai_loader.ts", `export const load = (name: string) => import(name);\n`],
     ["x-test-post/ai_loader.ts", `export const load = () => import(\n  "../_shared/" + ["ai", "provider"].join("_") + "/mod.ts"\n);\n`],
   ] as const) {
@@ -597,6 +681,10 @@ test("J1 R1: dynamic, computed, aliased, symlinked, transitive and unreadable pa
     unresolved(tree, path, text);
     assert.equal(directReferences(tree)["x-test-post/ai_loader.ts"], undefined, "no literal mention");
   }
+
+  // An escaped specifier is decoded the way the loader decodes it (J1 R1a), so it is followed: it reaches the module.
+  const escaped = withFiles(["x-test-post/ai_loader.ts", `export const load = () => import("../_shared/ai\\u005fconsumer_bridge/bridge.ts");\n`]);
+  assert.ok(reachingProductionFiles(escaped).includes("x-test-post/ai_loader.ts"), "escaped specifier");
 
   // 4. Aliases: any config that can remap a specifier is refused, and so is every bare / absolute / data: import.
   for (const [path, text] of [
@@ -701,6 +789,93 @@ test("J1 R1: dynamic, computed, aliased, symlinked, transitive and unreadable pa
   assert.ok("x-test-post/shim_user.ts" in directReferences(withFiles(["x-test-post/shim_user.ts", `import "../_shared/AI_PROVIDER/mod.ts";\n`])));
 });
 
+test("J1 R1a: comment trivia, escapes and line continuations cannot hide an import (fail closed)", async () => {
+  const real = await functionsTree;
+  const withFiles = (...files: Array<readonly [string, string]>) => new Map([...real, ...files]);
+  const bridgeSource = real.get(BRIDGE)!;
+  const handler = real.get(HANDLER)!;
+  const importsRefused = (tree: Tree, path: string, label: string) =>
+    assert.notDeepEqual(providerImports(tree)[path], sortedProviderImports()[path], `${path} (${label}): not refused`);
+  const unresolved = (tree: Tree, path: string, label: string) =>
+    assert.ok(unresolvedImports(tree).some((item) => item.startsWith(`${path}: `)), `${path} (${label}): unfollowable import not refused`);
+
+  // 1. The exact J1 R1a reproduction: a comment between `import` and `(` in the authorized bridge.
+  const r1a = withFiles([BRIDGE, `${bridgeSource}\nexport const auditOnlyMutation = async () =>\n  (await import/* audit */("../ai_provider/mod.ts")).executeAiRequest;\n`]);
+  assert.deepEqual(directReferences(r1a), sortedAuthorized(), "it uses only the specifier the bridge already has");
+  assert.deepEqual(reachingProductionFiles(r1a), AUTHORIZED_REACHERS, "and reaches nothing new");
+  assert.ok(providerImports(r1a)[BRIDGE][MOD].includes("*"), "import() with trivia still hands over every export");
+  importsRefused(r1a, BRIDGE, "J1 R1a exact reproduction");
+
+  // 2. Other legal trivia and namespace access around a literal dynamic import.
+  for (const extra of [
+    `export const a = () => import // a line comment\n("../ai_provider/mod.ts");`,
+    `export const b = () => import\u2028("../ai_provider/mod.ts");`,
+    `export const c = () => import /* one */ /* two */ (/* before */ "../ai_provider/mod.ts" /* after */);`,
+    `export const d = async () => (await import/**/('../ai_provider/mod.ts', { with: {} }))["SupabaseLedgerBudgetGuard"];`,
+    `export const e = () => import/**/("../ai_provider/mod.ts").then(({ resolveProviderApiKey }) => resolveProviderApiKey);`,
+    `export const f = async () => { const { executeAiRequest: run } = await import/*\n multi-line\n*/("../ai_provider/mod.ts"); return run; };`,
+  ]) {
+    importsRefused(withFiles([BRIDGE, `${bridgeSource}\n${extra}\n`]), BRIDGE, extra);
+  }
+  importsRefused(withFiles([HANDLER, `${handler}\nexport const p = () => import/* x */("../_shared/ai_provider/market_report_primary.ts");\n`]), HANDLER, "handler");
+
+  // 3. Commented computed imports: still computed, still refused.
+  for (const text of [
+    `export const load = (target: string) => import/* c */(target);\n`,
+    `export const load = () => import/**/("../_shared/ai_" + "consumer_bridge/bridge.ts");\n`,
+    `export const load = () => import // c\n(["..", "_shared", "ai_consumer_bridge", "bridge.ts"].join("/"));\n`,
+    "export const load = () => import/**/(`../_shared/${\"ai_consumer_bridge\"}/bridge.ts`);\n",
+    `export const load = () => import/* unterminated\n("../_shared/ai_consumer_bridge/bridge.ts");\n`,
+  ]) {
+    unresolved(withFiles(["x-test-post/ai_loader.ts", text]), "x-test-post/ai_loader.ts", text);
+  }
+
+  // 4. Static imports with trivia: the specifier and the names are still read.
+  for (const extra of [
+    `import { executeAiRequest } from/* c */"../ai_provider/mod.ts";`,
+    `import/* c */{ executeAiRequest }/* c */from/* c */"../ai_provider/mod.ts";`,
+    `import { findModelSpec, /* } */ executeAiRequest } from "../ai_provider/mod.ts";`,
+    `export/**/*/**/from/**/"../ai_provider/mod.ts";`,
+    `export * as everything from // c\n"../ai_provider/mod.ts";`,
+    `import/* c */"../ai_provider/mod.ts";`,
+  ]) {
+    importsRefused(withFiles([BRIDGE, `${extra}\n${bridgeSource}`]), BRIDGE, extra);
+  }
+  // A new Edge file that loads the bridge with trivia reaches the module.
+  for (const text of [
+    `import/**/"../_shared/ai_consumer_bridge/bridge.ts";\n`,
+    `export { createConsumerBridge } from/* c */"../_shared/ai_consumer_bridge/bridge.ts";\n`,
+    `export * from // c\n"../_shared/ai_consumer_bridge/types.ts";\n`,
+  ]) {
+    assert.ok(reachingProductionFiles(withFiles(["x-test-post/ai.ts", text])).includes("x-test-post/ai.ts"), text);
+  }
+
+  // 5. Escapes and line continuations inside the specifier are decoded the way the loader decodes them.
+  for (const specifier of [
+    String.raw`../ai\u005fprovider/mod.ts`,
+    String.raw`../ai\x5fprovider/mod.ts`,
+    String.raw`../ai\u{5f}provider/mod.ts`,
+    "../ai_\\\nprovider/mod.ts",
+    "../ai_\\\r\nprovider/mod.ts",
+  ]) {
+    const tree = withFiles([BRIDGE, `import { executeAiRequest } from "${specifier}";\n${bridgeSource}`]);
+    assert.ok(providerImports(tree)[BRIDGE][MOD].includes("executeAiRequest"), specifier);
+    importsRefused(tree, BRIDGE, specifier);
+    const dynamic = withFiles([BRIDGE, `${bridgeSource}\nexport const g = () => import("${specifier}");\n`]);
+    importsRefused(dynamic, BRIDGE, `dynamic ${specifier}`);
+  }
+  // Not a module specifier the scan can follow: a legacy octal escape (a syntax error in a module), refused.
+  unresolved(withFiles(["x-test-post/octal.ts", String.raw`import "./\101.ts";` + "\n"]), "x-test-post/octal.ts", "octal escape");
+
+  // 6. Transitive export with trivia through a chain of new files.
+  const chain = withFiles(
+    ["x-test-post/a.ts", `export * from/**/"./b.ts";\n`],
+    ["x-test-post/b.ts", `export * from // c\n"../_shared/c.ts";\n`],
+    ["_shared/c.ts", `export { createConsumerBridge } from/* c */"./ai_consumer_bridge/bridge.ts";\n`],
+  );
+  assert.deepEqual(reachingProductionFiles(chain), [...AUTHORIZED_REACHERS, "_shared/c.ts", "x-test-post/a.ts", "x-test-post/b.ts"].sort());
+});
+
 test("J1 R1: ordinary imports stay accepted (no false refusal)", async () => {
   const real = await functionsTree;
   const valid = new Map([
@@ -725,6 +900,9 @@ test("J1 R1: ordinary imports stay accepted (no false refusal)", async () => {
         `const sql = 'select id from "public"."reports"';`,
         `// Notes may mention from "somewhere" freely.`,
         `export const lazy = () => import("./helper.ts");`,
+        `import { helper as helperThree /* why */, type Shape as ShapeThree } from /* local */ "./helper.ts"; // trailing`,
+        `export const lazyCommented = () => import(/* chunk */ "./helper.ts");`,
+        `export const lazyLine = () => import // next line\n("./helper.ts");`,
         `export const lazyJson = () => import("./data.json", { with: { type: "json" } });`,
         `export const shared = () => import("../_shared/x_post_config.ts");`,
         ``,
@@ -736,7 +914,7 @@ test("J1 R1: ordinary imports stay accepted (no false refusal)", async () => {
     ["x-new-fn/deno.json", JSON.stringify({ lock: false, nodeModulesDir: "none", compilerOptions: { strict: true } })],
     ["_shared/x_post_config.ts", real.get("_shared/x_post_config.ts") ?? "export const config = 1;\n"],
     // The bridge may restate its authorized names, type-only and over several lines.
-    [BRIDGE, `import type {\n  AiSubject,\n  BudgetGuard,\n} from "../ai_provider/mod.ts";\n${real.get(BRIDGE)!}`],
+    [BRIDGE, `import type {\n  AiSubject, // who\n  BudgetGuard,\n} from /* public entry */ "../ai_provider/mod.ts";\n${real.get(BRIDGE)!}`],
   ]);
   // Compared with the real tree, so this test fails only when the ordinary imports themselves are refused.
   assert.deepEqual(unresolvedImports(valid), unresolvedImports(real));

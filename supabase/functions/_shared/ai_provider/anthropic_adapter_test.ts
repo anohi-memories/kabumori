@@ -93,14 +93,17 @@ test("16. refusal and 17. incomplete stop reasons are failures that keep usage",
 });
 
 test("19. the SDK makes exactly one HTTP attempt on 529 / 429 / 500 (its retries are off)", async () => {
-  for (const [status, type] of [[529, "overloaded_error"], [429, "rate_limit_error"], [500, "api_error"]] as const) {
+  const zero = { inputTokens: 0, cacheReadInputTokens: 0, cacheWrite5mInputTokens: 0, cacheWrite1hInputTokens: 0, outputTokens: 0, reasoningOutputTokens: null };
+  // A documented refusal (429 / 529) used nothing; a 500 may follow processing, so its usage is unknown (J1 A1).
+  for (const [status, type, usage] of [[529, "overloaded_error", zero], [429, "rate_limit_error", zero], [500, "api_error", null]] as const) {
     const { adapterCall, recorder } = call(() => jsonResponse(status, anthropicError(status, type, "x"), { "retry-after": "0", "x-should-retry": "true" }));
     const outcome = await callAnthropic(adapterCall);
     assert.equal(recorder.calls.length, 1, `${status}: one fetch`);
     assert.ok(!outcome.ok);
     if (!outcome.ok) {
       assert.equal(outcome.error.httpStatus, status);
-      assert.deepEqual(outcome.usage, { inputTokens: 0, cacheReadInputTokens: 0, cacheWrite5mInputTokens: 0, cacheWrite1hInputTokens: 0, outputTokens: 0, reasoningOutputTokens: null });
+      assert.equal(outcome.error.maybeBilled, usage === null, `${status}: maybeBilled`);
+      assert.deepEqual(outcome.usage, usage, `${status}: usage`);
     }
   }
 });

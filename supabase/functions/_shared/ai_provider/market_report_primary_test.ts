@@ -304,12 +304,16 @@ test("on but incomplete is refused (fail closed, never a silent OpenAI fallback)
 });
 
 test("a failed Claude generation fails the report: one request, no retry, no OpenAI fallback, settled in the ledger", async () => {
-  for (const [status, type, code] of [[529, "overloaded_error", "OVERLOADED"], [429, "rate_limit_error", "RATE_LIMITED"], [500, "api_error", "SERVER_ERROR"]] as const) {
+  // A documented refusal (529 / 429) settles failed at $0; a 500 may have been processed, so it settles unknown at
+  // its upper bound (J1 A1).
+  for (const [status, type, code, outcome] of [[529, "overloaded_error", "OVERLOADED", "failed"], [429, "rate_limit_error", "RATE_LIMITED", "failed"], [500, "api_error", "SERVER_ERROR", "unknown"]] as const) {
     const net = network({ claude: () => jsonResponse(status, anthropicError(status, type, "fake")) });
     const r = await run({ case: CLOSE_0930, net });
     assert.equal(r.error, `ANALYSIS_PRIMARY_GENERATE_FAILED:${code}`);
     assert.deepEqual([net.claude.length, net.openai.length], [1, 0], code);
-    assert.deepEqual(net.ledger.settlements.map((s) => s.outcome), ["failed"], code);
+    assert.deepEqual(net.ledger.settlements.map((s) => s.outcome), [outcome], code);
+    if (outcome === "failed") assert.equal(net.ledger.settlements[0].cost, 0, code);
+    else assert.ok(net.ledger.settlements[0].cost > 0, `${code}: charged at the upper bound, not $0`);
     assert.deepEqual([r.records[0].ok, r.records[0].errorCode], [false, code]);
   }
 });
