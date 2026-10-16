@@ -539,3 +539,9 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - original_path: .agent_v2/tasks/J3.md; archive_path: .agent_v2/archive/2026-10-16-J3-common-account-pr214-review/files/.agent_v2/tasks/J3.md; size: 5466 bytes; SHA256 ae20e31f91556b3987bbd22848d24267efac72b32ce34c531b5d0721338ff984; source blob 3d4d97ef9fa6752a8cf88413fba1a2759bbe56f4
 - original_path: .agent_v2/reports/J3.md; archive_path: .agent_v2/archive/2026-10-16-J3-common-account-pr214-review/files/.agent_v2/reports/J3.md; size: 12802 bytes; SHA256 5ad225dc4bfa01a3141c28ab2b00b5fede48649d1c74c7be8b848443ca183211; source blob 670c640871d1cfe2a1af338626eef292478467c3
 - MANIFEST.json, SHA256SUMS, GitHub read-back/restoration verified, archive append-only. New task is independent J3 F2/F8 review; older result retained.
+
+## J2 integrated review archive — independent verification 2026-10-16
+- task_id: `kabumori-j2-f2-f8-pause-runtime-integrated-security-review-20261015`; archive: `.agent_v2/archive/2026-10-16-J2-f2-f8-pause-integrated-review/`.
+- source_commit: `7f9aceca11e0d412f1428d9947ab93012e940d4e`. Original `.agent_v2/tasks/J2.md` → `files/.agent_v2/tasks/J2.md`: 5529 bytes; SHA256 `c5375385ef00e1f5764e16eb35c376761293f10a3a197143ea8eb0df45318c69`; source_blob `a0a1914f70ee97c2bbb830538dcc63aeb59ac377`.
+- Original `.agent_v2/reports/J2.md` → `files/.agent_v2/reports/J2.md`: 24938 bytes; SHA256 `dbc6a8e7831c2be5516bec66ae054c854772e98c251e16aede7414b261af7bf3`; source_blob `625ab52df4a18a7f06ce3120e3b16656298529cf`.
+- J2 independently regenerated SHA256, verified `SHA256SUMS` 2/2 OK, matched source-commit blobs, and compared both restored files byte-for-byte (2/2 exit 0). Existing archived originals / MANIFEST / checksums preserved; append-only proof: `MANIFEST_SHA256_VERIFICATION_20261016.md`. Prior pending SHA256 note is superseded by this verified result. Completed before focused rereview; production NO_GO.
