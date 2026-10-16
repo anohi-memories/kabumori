@@ -123,17 +123,17 @@
 
 ## F8
 - slot: F8
-- status: ready
+- status: review_required
 - task_id: kabumori-f8-news-hard-pause-runtime-candidate-20261015
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: L8
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F8.md
 - current_report_path: .agent_v2/tasks/F8.md#report
 - dependencies: F8 design PR #209 merged; F2 source candidate; protected PR129/#164 same-handler integration
-- blocker: J2 V2 residual P1 entry OFF vs pending egress true; focused fix assigned in F8 TASK, PR212 exact head d04ff9d2; production NO_GO
+- blocker: L8 PASS_SOURCE_FIX J2 residual R1 corrected at Draft #212 b38064c2; final merge/integration/prerequisite checks needed; production NO_GO
 - production_mutation_window: FORBIDDEN
 - previous_archive: .agent_v2/archive/2026-10-15-f8-pause-offline-design-accepted.md
 - slot_use: important-news-monitor all-mode hard pause source-only candidate after L8 design archived
