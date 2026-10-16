@@ -92,11 +92,11 @@
 
 ## F6
 - slot: F6
-- status: review_required
+- status: done
 - task_id: common-ai-f6-pr219-j1-r1a-a1-correction-20261016
 - owner: claude
-- next_owner: chatgpt
-- blocker: FIXED_SOURCE_ONLY Draft PR #222 (11835df1, base PR219 be35cc93): R1a trivia/escape-aware import scan (7 real-file mutations missed by all 14 PR219 guard tests now refused; no allowlist widening); A1 only documented refusal statuses unbilled, 5xx/undocumented -> unknown/upper_bound (J1 1.5x cap repro: 3 sends -> 1); no DB change; provider144 bridge27 market324 merged505 PASS; shared typed blocked by same 5 pre-existing errors, scoped no-check 675 PASS + 1 permission-blocked NOT_VERIFIED; production NO_GO
+- next_owner: none
+- blocker: L6 PASS_SOURCE_FIX; PR222 R1a/A1 independent focused security delta review required; existing typed errors and NOT_VERIFIED; merge/deploy/production NO_GO
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
