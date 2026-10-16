@@ -16,7 +16,7 @@ const env = {
   [ENV.projectRef]: REF, [ENV.allowlist]: REF, [ENV.denylist]: PRODUCTION_REF, [ENV.apiUrl]: `https://${REF}.supabase.co`, [ENV.confirm]: REF,
   [ENV.publishableKey]: 'sb_publishable_synthetic_key_value', [ENV.serviceKey]: SECRET,
   [ENV.dbUrl]: `postgres://postgres:synthetic@db.${REF}.supabase.co:5432/postgres`, [ENV.baselineSha256]: 'f'.repeat(64),
-  [ENV.baselinePath]: '/tmp/b.sql', [ENV.emailDomain]: 'accept.example.test',
+  [ENV.baselinePath]: '/tmp/b.sql', [ENV.inventorySha256]: 'e'.repeat(64), [ENV.emailDomain]: 'accept.example.test',
 };
 const decision = resolveTarget(env, { execute: true });
 assert.equal(decision.ok, true);
@@ -37,7 +37,7 @@ function recording(options: { marker?: () => string } = {}) {
   };
   return { calls, transport };
 }
-const reader = { read: (path: string) => (path === 'ok.sql' ? 'select 1;' : path === 'evil.sql' ? `select cron.schedule('j','* * * * *','select 1'); -- ${PRODUCTION_REF}.supabase.co\nselect 'https://${PRODUCTION_REF}.supabase.co';` : '') };
+const reader = { read: (path: string) => (path === 'ok.sql' ? 'create table public.t (a int);' : path === 'evil.sql' ? `select cron.schedule('j','* * * * *','select 1'); -- ${PRODUCTION_REF}.supabase.co\nselect 'https://${PRODUCTION_REF}.supabase.co';` : '') };
 const step = (id: string, access: 'read' | 'mutate', body: Step['run'], extra: Partial<Step> = {}): Step => ({
   id, title: id, access, mode: 'automated', modelled: false, expected: 'x', stop: 'y', run: body, ...extra,
 });
@@ -91,7 +91,7 @@ test('a read-only step may not mutate; a GET is fine', async () => {
 });
 
 test('a file is sent only when pinned, unchanged and clean', async () => {
-  const digest = await sha256Hex('select 1;');
+  const digest = await sha256Hex('create table public.t (a int);');
   const apply = (path: string) => step(`F:${path}`, 'mutate', async (ctx) => {
     await ctx.applyFile({ id: path, path, kind: 'chain' });
     return { status: 'PASS', detail: 'applied' };
@@ -100,7 +100,7 @@ test('a file is sent only when pinned, unchanged and clean', async () => {
     ['ok.sql', { 'ok.sql': digest }, 'PASS', null],
     ['ok.sql', {}, 'FAIL', /not pinned/u],
     ['ok.sql', { 'ok.sql': 'e'.repeat(64) }, 'FAIL', /differs from its pinned digest/u],
-    ['evil.sql', { 'evil.sql': await sha256Hex(reader.read('evil.sql')) }, 'FAIL', /FOREIGN_PROJECT_HOST,CRON_SCHEDULE|CRON_SCHEDULE/u],
+    ['evil.sql', { 'evil.sql': await sha256Hex(reader.read('evil.sql')) }, 'FAIL', /CRON_REFERENCE/u],
   ];
   for (const [path, files, status, pattern] of cases) {
     const { calls, transport } = recording();

@@ -1,0 +1,1788 @@
+{
+  "version": 1,
+  "requirements": {
+    "schemas": [
+      "private"
+    ],
+    "roles": [
+      "anon",
+      "authenticated",
+      "service_role"
+    ],
+    "relations": [
+      "auth.identities",
+      "auth.users",
+      "public.admin_users",
+      "public.alert_category_settings",
+      "public.alert_settings",
+      "public.brand_memberships",
+      "public.brands",
+      "public.device_push_tokens",
+      "public.notifications",
+      "public.personalized_reports",
+      "public.profiles",
+      "public.social_account_oauth_states",
+      "public.social_accounts",
+      "public.social_mobile_account_deletions",
+      "public.tracked_stocks",
+      "storage.buckets",
+      "storage.objects"
+    ],
+    "columns": [
+      {
+        "relation": "auth.identities",
+        "column": "provider",
+        "type": "text"
+      },
+      {
+        "relation": "auth.identities",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "auth.users",
+        "column": "id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.admin_users",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.alert_category_settings",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.alert_settings",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.brand_memberships",
+        "column": "brand_id",
+        "type": "text"
+      },
+      {
+        "relation": "public.brand_memberships",
+        "column": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "relation": "public.brand_memberships",
+        "column": "role",
+        "type": "text"
+      },
+      {
+        "relation": "public.brand_memberships",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.brands",
+        "column": "code_profile_key",
+        "type": "text"
+      },
+      {
+        "relation": "public.brands",
+        "column": "id",
+        "type": "text"
+      },
+      {
+        "relation": "public.device_push_tokens",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.notifications",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.personalized_reports",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.profiles",
+        "column": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "relation": "public.profiles",
+        "column": "id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.social_account_oauth_states",
+        "column": "brand_id",
+        "type": "text"
+      },
+      {
+        "relation": "public.social_account_oauth_states",
+        "column": "initiated_by_user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.social_accounts",
+        "column": "brand_id",
+        "type": "text"
+      },
+      {
+        "relation": "public.social_accounts",
+        "column": "connection_status",
+        "type": "text"
+      },
+      {
+        "relation": "public.social_mobile_account_deletions",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.social_mobile_account_deletions",
+        "column": "workspace_id",
+        "type": "text"
+      },
+      {
+        "relation": "public.tracked_stocks",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "storage.buckets",
+        "column": "owner_id",
+        "type": "text"
+      },
+      {
+        "relation": "storage.objects",
+        "column": "owner_id",
+        "type": "text"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "relation": "auth.identities",
+        "columns": [
+          "user_id"
+        ],
+        "references": "auth.users",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.admin_users",
+        "columns": [
+          "user_id"
+        ],
+        "references": "auth.users",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.alert_category_settings",
+        "columns": [
+          "user_id"
+        ],
+        "references": "public.profiles",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.alert_settings",
+        "columns": [
+          "user_id"
+        ],
+        "references": "public.profiles",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.brand_memberships",
+        "columns": [
+          "brand_id"
+        ],
+        "references": "public.brands",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.brand_memberships",
+        "columns": [
+          "user_id"
+        ],
+        "references": "auth.users",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.device_push_tokens",
+        "columns": [
+          "user_id"
+        ],
+        "references": "public.profiles",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.notifications",
+        "columns": [
+          "user_id"
+        ],
+        "references": "public.profiles",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.personalized_reports",
+        "columns": [
+          "user_id"
+        ],
+        "references": "public.profiles",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.profiles",
+        "columns": [
+          "id"
+        ],
+        "references": "auth.users",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.social_account_oauth_states",
+        "columns": [
+          "brand_id"
+        ],
+        "references": "public.brands",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "a"
+      },
+      {
+        "relation": "public.social_account_oauth_states",
+        "columns": [
+          "initiated_by_user_id"
+        ],
+        "references": "auth.users",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.social_accounts",
+        "columns": [
+          "brand_id"
+        ],
+        "references": "public.brands",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "a"
+      },
+      {
+        "relation": "public.tracked_stocks",
+        "columns": [
+          "user_id"
+        ],
+        "references": "public.profiles",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      }
+    ],
+    "functions": [
+      "public.social_mobile_account_deletion_subject(uuid)",
+      "public.social_mobile_account_deletion_workspace(uuid)"
+    ]
+  },
+  "relations": [
+    {
+      "name": "auth.identities",
+      "class": "platform_managed",
+      "createdBy": [],
+      "alteredBy": [],
+      "inFixture": true,
+      "inReplay": true
+    },
+    {
+      "name": "auth.users",
+      "class": "platform_managed",
+      "createdBy": [],
+      "alteredBy": [],
+      "inFixture": true,
+      "inReplay": true
+    },
+    {
+      "name": "public.admin_users",
+      "class": "repository_created",
+      "createdBy": [
+        "20260901064201"
+      ],
+      "alteredBy": [],
+      "inFixture": true,
+      "inReplay": true
+    },
+    {
+      "name": "public.alert_category_settings",
+      "class": "repository_created",
+      "createdBy": [
+        "20260913140000"
+      ],
+      "alteredBy": [],
+      "inFixture": true,
+      "inReplay": true
+    },
+    {
+      "name": "public.alert_settings",
+      "class": "repository_created",
+      "createdBy": [
+        "20260901061217"
+      ],
+      "alteredBy": [
+        "20260911200000",
+        "20260913140000"
+      ],
+      "inFixture": true,
+      "inReplay": true
+    },
+    {
+      "name": "public.brand_memberships",
+      "class": "repository_created",
+      "createdBy": [
+        "20260918120000"
+      ],
+      "alteredBy": [],
+      "inFixture": true,
+      "inReplay": false
+    },
+    {
+      "name": "public.brands",
+      "class": "absent_from_repository",
+      "createdBy": [],
+      "alteredBy": [],
+      "inFixture": true,
+      "inReplay": false
+    },
+    {
+      "name": "public.device_push_tokens",
+      "class": "repository_created",
+      "createdBy": [
+        "20260903160000"
+      ],
+      "alteredBy": [],
+      "inFixture": true,
+      "inReplay": true
+    },
+    {
+      "name": "public.notifications",
+      "class": "repository_created",
+      "createdBy": [
+        "20260901061217"
+      ],
+      "alteredBy": [
+        "20260912100000"
+      ],
+      "inFixture": true,
+      "inReplay": true
+    },
+    {
+      "name": "public.personalized_reports",
+      "class": "repository_created",
+      "createdBy": [
+        "20260911230000"
+      ],
+      "alteredBy": [],
+      "inFixture": true,
+      "inReplay": true
+    },
+    {
+      "name": "public.profiles",
+      "class": "repository_created",
+      "createdBy": [
+        "20260901061217"
+      ],
+      "alteredBy": [],
+      "inFixture": true,
+      "inReplay": true
+    },
+    {
+      "name": "public.social_account_oauth_states",
+      "class": "repository_altered_only",
+      "createdBy": [],
+      "alteredBy": [
+        "20260919120000"
+      ],
+      "inFixture": true,
+      "inReplay": false
+    },
+    {
+      "name": "public.social_accounts",
+      "class": "repository_altered_only",
+      "createdBy": [],
+      "alteredBy": [
+        "20260924023133",
+        "20261007150000"
+      ],
+      "inFixture": true,
+      "inReplay": false
+    },
+    {
+      "name": "public.social_mobile_account_deletions",
+      "class": "repository_created",
+      "createdBy": [
+        "20260928160000"
+      ],
+      "alteredBy": [],
+      "inFixture": true,
+      "inReplay": false
+    },
+    {
+      "name": "public.tracked_stocks",
+      "class": "repository_created",
+      "createdBy": [
+        "20260901061217"
+      ],
+      "alteredBy": [],
+      "inFixture": true,
+      "inReplay": true
+    },
+    {
+      "name": "storage.buckets",
+      "class": "platform_managed",
+      "createdBy": [],
+      "alteredBy": [],
+      "inFixture": true,
+      "inReplay": true
+    },
+    {
+      "name": "storage.objects",
+      "class": "platform_managed",
+      "createdBy": [],
+      "alteredBy": [],
+      "inFixture": true,
+      "inReplay": true
+    }
+  ],
+  "functions": [
+    {
+      "signature": "public.social_mobile_account_deletion_subject(uuid)",
+      "class": "repository_created",
+      "createdBy": [
+        "20260928160000"
+      ],
+      "inFixture": true,
+      "inReplay": false
+    },
+    {
+      "signature": "public.social_mobile_account_deletion_workspace(uuid)",
+      "class": "repository_created",
+      "createdBy": [
+        "20260928160000"
+      ],
+      "inFixture": true,
+      "inReplay": false
+    }
+  ],
+  "schemas": [
+    {
+      "name": "private",
+      "class": "repository_created",
+      "createdBy": [
+        "20260901064201"
+      ]
+    }
+  ],
+  "roles": [
+    {
+      "name": "anon",
+      "class": "platform_managed"
+    },
+    {
+      "name": "authenticated",
+      "class": "platform_managed"
+    },
+    {
+      "name": "service_role",
+      "class": "platform_managed"
+    }
+  ],
+  "columns": [
+    {
+      "relation": "auth.identities",
+      "column": "provider",
+      "type": "text",
+      "inFixture": true,
+      "inMigrations": true,
+      "source": "platform_assumed",
+      "typeDiffers": false
+    },
+    {
+      "relation": "auth.identities",
+      "column": "user_id",
+      "type": "uuid",
+      "inFixture": true,
+      "inMigrations": true,
+      "source": "platform_assumed",
+      "typeDiffers": false
+    },
+    {
+      "relation": "auth.users",
+      "column": "id",
+      "type": "uuid",
+      "inFixture": true,
+      "inMigrations": true,
+      "source": "platform_assumed",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.admin_users",
+      "column": "user_id",
+      "type": "uuid",
+      "inFixture": true,
+      "inMigrations": true,
+      "source": "migrations",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.alert_category_settings",
+      "column": "user_id",
+      "type": "uuid",
+      "inFixture": true,
+      "inMigrations": true,
+      "source": "migrations",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.alert_settings",
+      "column": "user_id",
+      "type": "uuid",
+      "inFixture": true,
+      "inMigrations": true,
+      "source": "migrations",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.brand_memberships",
+      "column": "brand_id",
+      "type": "text",
+      "inFixture": true,
+      "inMigrations": false,
+      "source": "blocked_replay",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.brand_memberships",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "inFixture": true,
+      "inMigrations": false,
+      "source": "blocked_replay",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.brand_memberships",
+      "column": "role",
+      "type": "text",
+      "inFixture": true,
+      "inMigrations": false,
+      "source": "blocked_replay",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.brand_memberships",
+      "column": "user_id",
+      "type": "uuid",
+      "inFixture": true,
+      "inMigrations": false,
+      "source": "blocked_replay",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.brands",
+      "column": "code_profile_key",
+      "type": "text",
+      "inFixture": true,
+      "inMigrations": false,
+      "source": "fixture_only",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.brands",
+      "column": "id",
+      "type": "text",
+      "inFixture": true,
+      "inMigrations": false,
+      "source": "fixture_only",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.device_push_tokens",
+      "column": "user_id",
+      "type": "uuid",
+      "inFixture": true,
+      "inMigrations": true,
+      "source": "migrations",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.notifications",
+      "column": "user_id",
+      "type": "uuid",
+      "inFixture": true,
+      "inMigrations": true,
+      "source": "migrations",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.personalized_reports",
+      "column": "user_id",
+      "type": "uuid",
+      "inFixture": true,
+      "inMigrations": true,
+      "source": "migrations",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.profiles",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "inFixture": true,
+      "inMigrations": true,
+      "source": "migrations",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.profiles",
+      "column": "id",
+      "type": "uuid",
+      "inFixture": true,
+      "inMigrations": true,
+      "source": "migrations",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.social_account_oauth_states",
+      "column": "brand_id",
+      "type": "text",
+      "inFixture": true,
+      "inMigrations": false,
+      "source": "fixture_only",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.social_account_oauth_states",
+      "column": "initiated_by_user_id",
+      "type": "uuid",
+      "inFixture": true,
+      "inMigrations": false,
+      "source": "fixture_only",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "brand_id",
+      "type": "text",
+      "inFixture": true,
+      "inMigrations": false,
+      "source": "fixture_only",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "connection_status",
+      "type": "text",
+      "inFixture": true,
+      "inMigrations": false,
+      "source": "fixture_only",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.social_mobile_account_deletions",
+      "column": "user_id",
+      "type": "uuid",
+      "inFixture": true,
+      "inMigrations": false,
+      "source": "blocked_replay",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.social_mobile_account_deletions",
+      "column": "workspace_id",
+      "type": "text",
+      "inFixture": true,
+      "inMigrations": false,
+      "source": "blocked_replay",
+      "typeDiffers": false
+    },
+    {
+      "relation": "public.tracked_stocks",
+      "column": "user_id",
+      "type": "uuid",
+      "inFixture": true,
+      "inMigrations": true,
+      "source": "migrations",
+      "typeDiffers": false
+    },
+    {
+      "relation": "storage.buckets",
+      "column": "owner_id",
+      "type": "text",
+      "inFixture": true,
+      "inMigrations": true,
+      "source": "platform_assumed",
+      "typeDiffers": false
+    },
+    {
+      "relation": "storage.objects",
+      "column": "owner_id",
+      "type": "text",
+      "inFixture": true,
+      "inMigrations": true,
+      "source": "platform_assumed",
+      "typeDiffers": false
+    }
+  ],
+  "foreignKeys": [
+    {
+      "key": "auth.identities(user_id)->auth.users(id) on delete c",
+      "inFixture": true,
+      "inReplay": true,
+      "touchesUnknown": false
+    },
+    {
+      "key": "public.admin_users(user_id)->auth.users(id) on delete c",
+      "inFixture": true,
+      "inReplay": true,
+      "touchesUnknown": false
+    },
+    {
+      "key": "public.alert_category_settings(user_id)->public.profiles(id) on delete c",
+      "inFixture": true,
+      "inReplay": true,
+      "touchesUnknown": false
+    },
+    {
+      "key": "public.alert_settings(user_id)->public.profiles(id) on delete c",
+      "inFixture": true,
+      "inReplay": true,
+      "touchesUnknown": false
+    },
+    {
+      "key": "public.brand_memberships(brand_id)->public.brands(id) on delete c",
+      "inFixture": true,
+      "inReplay": false,
+      "touchesUnknown": true
+    },
+    {
+      "key": "public.brand_memberships(user_id)->auth.users(id) on delete c",
+      "inFixture": true,
+      "inReplay": false,
+      "touchesUnknown": false
+    },
+    {
+      "key": "public.device_push_tokens(user_id)->public.profiles(id) on delete c",
+      "inFixture": true,
+      "inReplay": true,
+      "touchesUnknown": false
+    },
+    {
+      "key": "public.notifications(user_id)->public.profiles(id) on delete c",
+      "inFixture": true,
+      "inReplay": true,
+      "touchesUnknown": false
+    },
+    {
+      "key": "public.personalized_reports(user_id)->public.profiles(id) on delete c",
+      "inFixture": true,
+      "inReplay": true,
+      "touchesUnknown": false
+    },
+    {
+      "key": "public.profiles(id)->auth.users(id) on delete c",
+      "inFixture": true,
+      "inReplay": true,
+      "touchesUnknown": false
+    },
+    {
+      "key": "public.social_account_oauth_states(brand_id)->public.brands(id) on delete a",
+      "inFixture": true,
+      "inReplay": false,
+      "touchesUnknown": true
+    },
+    {
+      "key": "public.social_account_oauth_states(initiated_by_user_id)->auth.users(id) on delete c",
+      "inFixture": true,
+      "inReplay": false,
+      "touchesUnknown": true
+    },
+    {
+      "key": "public.social_accounts(brand_id)->public.brands(id) on delete a",
+      "inFixture": true,
+      "inReplay": false,
+      "touchesUnknown": true
+    },
+    {
+      "key": "public.tracked_stocks(user_id)->public.profiles(id) on delete c",
+      "inFixture": true,
+      "inReplay": true,
+      "touchesUnknown": false
+    }
+  ],
+  "fixtureOnlyColumns": [
+    {
+      "relation": "public.brands",
+      "column": "code_profile_key",
+      "type": "text"
+    },
+    {
+      "relation": "public.brands",
+      "column": "created_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "relation": "public.brands",
+      "column": "display_name",
+      "type": "text"
+    },
+    {
+      "relation": "public.brands",
+      "column": "id",
+      "type": "text"
+    },
+    {
+      "relation": "public.brands",
+      "column": "is_active",
+      "type": "boolean"
+    },
+    {
+      "relation": "public.brands",
+      "column": "publish_mode",
+      "type": "text"
+    },
+    {
+      "relation": "public.brands",
+      "column": "updated_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "relation": "public.social_account_oauth_states",
+      "column": "brand_id",
+      "type": "text"
+    },
+    {
+      "relation": "public.social_account_oauth_states",
+      "column": "code_verifier_vault_secret_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.social_account_oauth_states",
+      "column": "consumed_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "relation": "public.social_account_oauth_states",
+      "column": "created_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "relation": "public.social_account_oauth_states",
+      "column": "expires_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "relation": "public.social_account_oauth_states",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.social_account_oauth_states",
+      "column": "initiated_by_user_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.social_account_oauth_states",
+      "column": "redirect_uri",
+      "type": "text"
+    },
+    {
+      "relation": "public.social_account_oauth_states",
+      "column": "social_account_id",
+      "type": "text"
+    },
+    {
+      "relation": "public.social_account_oauth_states",
+      "column": "state_hash",
+      "type": "text"
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "brand_id",
+      "type": "text"
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "connection_status",
+      "type": "text"
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "created_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "handle",
+      "type": "text"
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "id",
+      "type": "text"
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "last_connection_error_code",
+      "type": "text"
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "oauth_client_ref",
+      "type": "text"
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "platform",
+      "type": "text"
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "platform_user_id",
+      "type": "text"
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "publish_enabled",
+      "type": "boolean"
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "updated_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "vault_access_token_secret_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "vault_refresh_token_secret_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.social_accounts",
+      "column": "verified_at",
+      "type": "timestamp with time zone"
+    }
+  ],
+  "replay": [
+    {
+      "file": "20260828190000_create_tips.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260828203000_create_post_scheduler.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260828213000_expand_tips_catalog.sql",
+      "applied": false,
+      "error": "relation \"tips_seed\" does not exist"
+    },
+    {
+      "file": "20260828220000_add_scheduled_difficulty.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260828223000_create_interaction_posts.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260828225000_expand_interaction_topics.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260828231000_create_oauth_token_store.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260828234000_add_interaction_collision_avoidance.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260828235500_add_target_question_format.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260829010000_add_useful_tips.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260829030000_add_morning_report.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260829050000_add_close_report.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260830022244_add_us_premarket_report.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260830022321_fix_and_add_us_premarket_report.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260830084000_enable_daily_useful_tips.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260830093000_add_us_premarket_report.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260830100000_add_important_news_monitor_foundation.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260830110000_add_tdnet_company_ir_sources.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260830112826_restore_missing_close_report_dependency.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260830120000_add_important_news_ai_judgement.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260830130000_add_important_news_post_generation.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260830140000_add_important_news_x_publish.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260830141000_separate_important_news_x_published_at.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260901044548_add_morning_greeting_schedule.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260901061217_add_kabumori_mvp_tables.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260901064201_add_admin_dashboard_access.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260903060000_add_morning_report_retry.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260903120000_add_publish_claims.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260903150000_kabumori_grants.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260903160000_add_device_push_tokens.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260903170000_add_stocks_master_sync_runs.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260904010000_add_important_news_generation_issues.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260904170000_add_posting_windows_admin_update.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260904180000_add_market_macro_source_type.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260904190000_add_useful_tip_generation_diagnostics.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260904200000_add_breaking_market_source_type.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260904210000_add_generation_claim_and_voice_retry.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260905010000_enable_morning_greeting_auto_dispatch.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260905140638_get_my_important_stock_news.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260908110000_add_important_news_publish_ready_cron.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260910163500_add_send_push_notifications_dispatch_cron.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260910200000_include_published_in_important_stock_news_feed.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260911090000_app_severity_news_feed.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260911120000_market_relevance_news_feed.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260911150000_news_feed_presentation_fields.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260911170000_news_app_copy_ja.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260911200000_market_critical_alerts_dedupe.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260911230000_personalized_reports.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260912090000_add_market_intelligence_core_phase1a.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260912100000_harden_push_notification_claims.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260912180000_news_coverage_classification.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260913090000_add_market_intelligence_state_layer_phase1b.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260913140000_broad_news_visibility_notification_presets.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260914090000_mic_phase1b_hardening_fred_freshness_grace.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260915090000_mic_phase1b_hardening_stale_after_threshold.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260916090000_mic_phase1b_fred_cadence_fix.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260916100000_mic_phase1b_automation_cron.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260917120000_broad_news_phase5_all_useful_scope_and_run_diagnostics.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260918090000_mic_fx_phase1_usdjpy.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260918120000_social_mobile_brand_memberships.sql",
+      "applied": false,
+      "error": "PHASE4_PREFLIGHT_MISSING_TABLE:brands"
+    },
+    {
+      "file": "20260919090000_mic_fx_phase1_automation_cron.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260919100000_market_report_data_packets_phase1.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260919120000_social_mobile_x_oauth_onboarding.sql",
+      "applied": false,
+      "error": "relation \"public.social_accounts\" does not exist"
+    },
+    {
+      "file": "20260919195155_important_news_shadow_phase1.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260920090000_mic_equity_index_phase1.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260920100000_market_report_packets_phase2.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260921090000_mic_equity_index_phase1_automation_cron.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260921115317_important_news_search_diagnostics.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260921133533_mic_fed_target_range_rates.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260921221336_mic_fed_fomc_statement_phase2b2.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260922045046_social_mobile_content_settings_candidate.sql",
+      "applied": false,
+      "error": "relation \"public.brands\" does not exist"
+    },
+    {
+      "file": "20260922090000_mic_macro_indicators_phase1a.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260922093000_mic_central_bank_decision_event_type_phase2b3.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260922100000_mic_fed_statement_diffs_phase2b5.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260922110000_important_news_app_copy_v2_source_backed_candidates.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260923035652_allow_gpt6_important_news_model_metadata.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260923050259_mic_fed_ai_usage_receipt_phase2b5i.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260923090000_mic_macro_indicators_phase1a_automation_cron.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260923102327_x_autopost_phase0_brand_scoped_uniqueness.sql",
+      "applied": false,
+      "error": "PHASE0_UNIQUENESS_PREFLIGHT_SCOPED_INDEX_MISMATCH:posting_windows_brand_post_type_slot_key"
+    },
+    {
+      "file": "20260923110440_important_news_monitor_caller_auth.sql",
+      "applied": false,
+      "error": "IMPORTANT_NEWS_MONITOR_CRON_SECRET_NOT_CONFIGURED"
+    },
+    {
+      "file": "20260923120000_social_mobile_history_access_token_reader.sql",
+      "applied": false,
+      "error": "SOCIAL_MOBILE_HISTORY_READER_SCHEMA_MISSING"
+    },
+    {
+      "file": "20260924023133_x_autopost_phase1b_account_bound_queue.sql",
+      "applied": false,
+      "error": "relation \"public.social_accounts\" does not exist"
+    },
+    {
+      "file": "20260924090000_mic_macro_indicators_phase1b_estat_cpi.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260924093000_mic_estat_activation_and_gated_macro_cron.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260924100000_ensure_my_profile.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260924150000_mic_state_evidence_phase2c1.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260924160000_x_autopost_phase1d_claim_domain_partition.sql",
+      "applied": false,
+      "error": "function public.schedule_account_bound_post_v2(text, text, date, text, smallint, timestamp with time zone) does not exist"
+    },
+    {
+      "file": "20260924170000_x_autopost_phase1e_claim_bound_credential_reader.sql",
+      "applied": false,
+      "error": "relation \"public.post_queue_attempts_v2\" does not exist"
+    },
+    {
+      "file": "20260924180000_x_autopost_phase1f_atomic_completion.sql",
+      "applied": false,
+      "error": "relation \"public.post_queue_attempts_v2\" does not exist"
+    },
+    {
+      "file": "20260925090000_x_autopost_phase1g_multistep_completion.sql",
+      "applied": false,
+      "error": "PHASE1G_PRECONDITION_PHASE1F_MISSING"
+    },
+    {
+      "file": "20260925120000_x_autopost_phase1h_dispatch_resume.sql",
+      "applied": false,
+      "error": "PHASE1H_PRECONDITION_PHASE1E_1G_MISSING"
+    },
+    {
+      "file": "20260925140000_x_account_credential_refresh_core.sql",
+      "applied": false,
+      "error": "CORE_PRECONDITION_VAULT_OR_QUEUE_MISSING"
+    },
+    {
+      "file": "20260925150000_x_autopost_phase1i_account_refresh.sql",
+      "applied": false,
+      "error": "PHASE1I_PRECONDITION_PHASE1H_OR_VAULT_MISSING"
+    },
+    {
+      "file": "20260926032054_x_account_refresh_rollout_authority.sql",
+      "applied": false,
+      "error": "STAGE3A_PRECONDITION_REFRESH_CORE_MISSING"
+    },
+    {
+      "file": "20260928120000_mic_scenario_layer_phase3a.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260928123000_add_daily_kabumori_tip_rpc.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260928160000_social_mobile_account_deletion_candidate.sql",
+      "applied": false,
+      "error": "SOCIAL_MOBILE_DELETION_PREREQUISITE_MISSING"
+    },
+    {
+      "file": "20260929090000_news_discovery_observer.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20260930090000_mic_scenario_automation_cron_phase3c.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20261001150000_common_account_lifecycle_foundation.sql",
+      "applied": false,
+      "error": "COMMON_ACCOUNT_PREFLIGHT_MISSING_TABLE:public.brands"
+    },
+    {
+      "file": "20261002090000_mic_jgb_nikkei_observation_grace_stage0.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20261003090000_social_mobile_publish_permission_boundary.sql",
+      "applied": false,
+      "error": "PUBLISH_PERMISSION_PRECONDITION_MISSING"
+    },
+    {
+      "file": "20261003120000_social_mobile_content_settings_hardening.sql",
+      "applied": false,
+      "error": "SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_DRIFT: table is absent (apply the candidate first)"
+    },
+    {
+      "file": "20261004090000_ai_lab_topic_claims.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20261006160000_vault_account_brand_post_completion.sql",
+      "applied": false,
+      "error": "STAGE3B_PRECONDITION_MISSING"
+    },
+    {
+      "file": "20261006160100_social_mobile_publish_settings_reader.sql",
+      "applied": false,
+      "error": "relation \"public.brands\" does not exist"
+    },
+    {
+      "file": "20261006160200_x_account_publish_authority.sql",
+      "applied": false,
+      "error": "STAGE3B_PUBLISH_PRECONDITION_MISSING"
+    },
+    {
+      "file": "20261006230000_common_account_service_start_intent.sql",
+      "applied": false,
+      "error": "COMMON_ACCOUNT_START_INTENT_PREFLIGHT_FOUNDATION_MISSING"
+    },
+    {
+      "file": "20261007120000_market_report_generation_traces.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20261007150000_postona_social_accounts_multi_provider.sql",
+      "applied": false,
+      "error": "relation \"public.social_accounts\" does not exist"
+    },
+    {
+      "file": "20261007173000_ai_lab_topic_evergreen_capacity.sql",
+      "applied": true,
+      "error": null
+    },
+    {
+      "file": "20261009120000_common_account_deletion_completion.sql",
+      "applied": false,
+      "error": "COMMON_ACCOUNT_DELETION_COMPLETION_PREFLIGHT_FOUNDATION_MISSING"
+    },
+    {
+      "file": "20261010051938_common_account_service_write_guard.sql",
+      "applied": false,
+      "error": "COMMON_ACCOUNT_WRITE_GUARD_PREFLIGHT_FOUNDATION_MISSING"
+    },
+    {
+      "file": "20261012130000_common_account_core_service_fence.sql",
+      "applied": false,
+      "error": "COMMON_ACCOUNT_CORE_FENCE_PREFLIGHT_FOUNDATION_MISSING"
+    },
+    {
+      "file": "20261012230000_common_account_service_brand_state.sql",
+      "applied": false,
+      "error": "COMMON_ACCOUNT_BRAND_STATE_PREFLIGHT_FOUNDATION_MISSING"
+    },
+    {
+      "file": "20261013120000_common_account_service_deletion_ownership.sql",
+      "applied": false,
+      "error": "COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_FOUNDATION_MISSING"
+    },
+    {
+      "file": "20261013140000_common_account_service_reconciliation_facts.sql",
+      "applied": false,
+      "error": "COMMON_ACCOUNT_RECONCILIATION_PREFLIGHT_PHASE6_MISSING"
+    },
+    {
+      "file": "20261015090000_common_account_enrollment_session_fence.sql",
+      "applied": false,
+      "error": "COMMON_ACCOUNT_ENROLLMENT_FENCE_PREFLIGHT_CHAIN_MISSING"
+    },
+    {
+      "file": "20261015120000_common_account_x_unconfirmed_snapshot_record.sql",
+      "applied": false,
+      "error": "COMMON_ACCOUNT_X_UNCONFIRMED_PREFLIGHT_PHASE8_MISSING"
+    }
+  ],
+  "unknown": {
+    "relations": [
+      "public.brands",
+      "public.social_account_oauth_states",
+      "public.social_accounts"
+    ],
+    "columns": [
+      "public.brands.code_profile_key",
+      "public.brands.id",
+      "public.social_account_oauth_states.brand_id",
+      "public.social_account_oauth_states.initiated_by_user_id",
+      "public.social_accounts.brand_id",
+      "public.social_accounts.connection_status"
+    ],
+    "foreignKeys": [
+      "public.brand_memberships(brand_id)->public.brands(id) on delete c",
+      "public.social_account_oauth_states(brand_id)->public.brands(id) on delete a",
+      "public.social_account_oauth_states(initiated_by_user_id)->auth.users(id) on delete c",
+      "public.social_accounts(brand_id)->public.brands(id) on delete a"
+    ],
+    "functions": []
+  },
+  "createdButNotReplayable": [
+    "public.brand_memberships",
+    "public.social_mobile_account_deletions"
+  ],
+  "inventory": {
+    "querySha256": "93b1ca05e381989c342aa1add93e7ab710d6b69110b758151fb131fc8d5926cb",
+    "worlds": {
+      "fixture": {
+        "lines": 398,
+        "byKind": {
+          "column": 158,
+          "constraint": 91,
+          "default_acl": 4,
+          "extension": 1,
+          "function": 34,
+          "index": 37,
+          "language": 1,
+          "membership": 10,
+          "meta": 1,
+          "relation": 36,
+          "role": 8,
+          "schema": 5,
+          "trigger": 11,
+          "view_reference": 1
+        },
+        "findings": [],
+        "contractItems": 87,
+        "contractDigest": "7e8b0702af872f560e5e4ca9d3377536fb52284ff52553451dd0049d9bfa21bd"
+      },
+      "replay": {
+        "lines": 2024,
+        "byKind": {
+          "column": 1008,
+          "constraint": 539,
+          "extension": 2,
+          "function": 79,
+          "index": 189,
+          "language": 1,
+          "membership": 10,
+          "meta": 1,
+          "policy": 55,
+          "relation": 81,
+          "role": 8,
+          "schema": 8,
+          "trigger": 36,
+          "view_reference": 7
+        },
+        "findings": [
+          {
+            "code": "COLUMN_MISSING",
+            "subject": "public.brand_memberships.brand_id"
+          },
+          {
+            "code": "COLUMN_MISSING",
+            "subject": "public.brand_memberships.created_at"
+          },
+          {
+            "code": "COLUMN_MISSING",
+            "subject": "public.brand_memberships.role"
+          },
+          {
+            "code": "COLUMN_MISSING",
+            "subject": "public.brand_memberships.user_id"
+          },
+          {
+            "code": "COLUMN_MISSING",
+            "subject": "public.brands.code_profile_key"
+          },
+          {
+            "code": "COLUMN_MISSING",
+            "subject": "public.brands.id"
+          },
+          {
+            "code": "COLUMN_MISSING",
+            "subject": "public.social_account_oauth_states.brand_id"
+          },
+          {
+            "code": "COLUMN_MISSING",
+            "subject": "public.social_account_oauth_states.initiated_by_user_id"
+          },
+          {
+            "code": "COLUMN_MISSING",
+            "subject": "public.social_accounts.brand_id"
+          },
+          {
+            "code": "COLUMN_MISSING",
+            "subject": "public.social_accounts.connection_status"
+          },
+          {
+            "code": "COLUMN_MISSING",
+            "subject": "public.social_mobile_account_deletions.user_id"
+          },
+          {
+            "code": "COLUMN_MISSING",
+            "subject": "public.social_mobile_account_deletions.workspace_id"
+          },
+          {
+            "code": "FOREIGN_KEY_MISSING",
+            "subject": "public.brand_memberships(brand_id)->public.brands(id)"
+          },
+          {
+            "code": "FOREIGN_KEY_MISSING",
+            "subject": "public.brand_memberships(user_id)->auth.users(id)"
+          },
+          {
+            "code": "FOREIGN_KEY_MISSING",
+            "subject": "public.social_account_oauth_states(brand_id)->public.brands(id)"
+          },
+          {
+            "code": "FOREIGN_KEY_MISSING",
+            "subject": "public.social_account_oauth_states(initiated_by_user_id)->auth.users(id)"
+          },
+          {
+            "code": "FOREIGN_KEY_MISSING",
+            "subject": "public.social_accounts(brand_id)->public.brands(id)"
+          },
+          {
+            "code": "FUNCTION_MISSING",
+            "subject": "public.social_mobile_account_deletion_subject(uuid)"
+          },
+          {
+            "code": "FUNCTION_MISSING",
+            "subject": "public.social_mobile_account_deletion_workspace(uuid)"
+          },
+          {
+            "code": "RELATION_MISSING",
+            "subject": "public.brand_memberships"
+          },
+          {
+            "code": "RELATION_MISSING",
+            "subject": "public.brands"
+          },
+          {
+            "code": "RELATION_MISSING",
+            "subject": "public.social_account_oauth_states"
+          },
+          {
+            "code": "RELATION_MISSING",
+            "subject": "public.social_accounts"
+          },
+          {
+            "code": "RELATION_MISSING",
+            "subject": "public.social_mobile_account_deletions"
+          }
+        ],
+        "contractItems": 58,
+        "contractDigest": "463304c9997ee93c00aa87f4e67c8d81edbe8d39adc7ec2b0a90b7a6c2987208"
+      }
+    }
+  }
+}

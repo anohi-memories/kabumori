@@ -24,6 +24,7 @@ export const ENV = {
   dbUrl: 'KABUMORI_DISPOSABLE_DB_URL',
   baselineSha256: 'KABUMORI_DISPOSABLE_BASELINE_SHA256',
   baselinePath: 'KABUMORI_DISPOSABLE_BASELINE_PATH',
+  inventorySha256: 'KABUMORI_DISPOSABLE_INVENTORY_SHA256',
   emailDomain: 'KABUMORI_DISPOSABLE_TEST_EMAIL_DOMAIN',
 } as const;
 
@@ -37,7 +38,7 @@ export const GUARD_CODES = [
   'API_URL_MISSING', 'API_URL_INVALID', 'API_URL_REF_MISMATCH', 'CONFIRM_MISSING', 'CONFIRM_MISMATCH',
   'PUBLISHABLE_KEY_MISSING', 'PUBLISHABLE_KEY_WRONG_KIND', 'SERVICE_KEY_MISSING', 'SERVICE_KEY_NOT_A_SERVICE_KEY',
   'DB_URL_MISSING', 'DB_URL_INVALID', 'DB_URL_REF_MISMATCH', 'EMAIL_DOMAIN_MISSING', 'EMAIL_DOMAIN_NOT_CONTROLLED',
-  'BASELINE_DIGEST_MISSING', 'BASELINE_PATH_MISSING',
+  'BASELINE_DIGEST_MISSING', 'BASELINE_PATH_MISSING', 'INVENTORY_DIGEST_MISSING',
 ] as const;
 export type GuardCode = (typeof GUARD_CODES)[number];
 
@@ -132,6 +133,8 @@ export function resolveTarget(env: Env, options: ResolveOptions = {}): Decision 
     if (trim(env[ENV.baselineSha256]) === '') fail('BASELINE_DIGEST_MISSING', `${ENV.baselineSha256} (the SHA-256 of the reviewed baseline schema) is not set`);
     else if (!/^[0-9a-f]{64}$/u.test(trim(env[ENV.baselineSha256]))) fail('BASELINE_DIGEST_MISSING', `${ENV.baselineSha256} is not a SHA-256`);
     if (trim(env[ENV.baselinePath]) === '') fail('BASELINE_PATH_MISSING', `${ENV.baselinePath} (the reviewed baseline schema file) is not set`);
+    // the contract digest of the production inventory the OWNER approved: without it the baseline cannot be read back
+    if (!/^[0-9a-f]{64}$/u.test(trim(env[ENV.inventorySha256]))) fail('INVENTORY_DIGEST_MISSING', `${ENV.inventorySha256} (the SHA-256 of the approved baseline contract) is not set or is not a SHA-256`);
   }
 
   if (failures.length > 0) return { ok: false, failures };

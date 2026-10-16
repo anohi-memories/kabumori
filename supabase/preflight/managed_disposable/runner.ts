@@ -10,7 +10,9 @@
 //     scan found nothing;
 //   * the first FAIL / STOP ends the run; teardown still runs;
 //   * nothing is reported PASS that was not measured, and every text that leaves goes through the redactor.
-import { type Decision, makeRedactor, scanSqlForForeignTargets, type Target } from './guard.ts';
+import type { Requirements } from './baseline_requirements.ts';
+import { type Decision, makeRedactor, type Target } from './guard.ts';
+import { indirectNetworkCalls, scanSql } from './sql_scan.ts';
 
 export type Status = 'PASS' | 'FAIL' | 'STOP' | 'WARN' | 'INFO' | 'MANUAL' | 'NOT_RUN';
 export type Verdict = { status: Exclude<Status, 'NOT_RUN'>; detail: string; manual?: string[] };
@@ -40,7 +42,20 @@ export interface Transport {
 }
 
 export type PlanFile = { id: string; path: string; kind: 'chain' | 'baseline' };
-export type Lock = { files: Record<string, string> };
+/** What the review accepted in a pinned file, statement by statement (lock.ts builds it; any difference is a refusal). */
+export type Reviewed = { dynamic: string[]; writes: string[]; selects: string[] };
+export type Lock = {
+  /** SHA-256 of every file the harness may send */
+  files: Record<string, string>;
+  /** accepted dynamic statements / write targets / top-level selects per file; a file without an entry accepts none */
+  reviewed?: Record<string, Reviewed>;
+  /** functions of the repository corpus that reach the network or cron: a file that calls one is refused */
+  networkFunctions?: string[];
+  /** what the chain requires of the baseline (read out of the Phase 1 preflight at lock time; the baseline read-back step checks it) */
+  requirements?: Requirements;
+  /** SHA-256 of the contract subset of the production inventory the owner approved. Supplied by the operator at run time, never stored in the lock file. */
+  approvedInventory?: string;
+};
 
 export type Step = {
   id: string;
@@ -66,6 +81,8 @@ export type Ctx = {
   probe(path: string): Promise<string>;
   hold(query: string, seconds: number): Promise<{ release(): Promise<void> }>;
   applyFile(file: PlanFile): Promise<string>;
+  /** what the baseline read-back compares the project with */
+  baseline: { requirements?: Requirements; approvedInventory?: string };
   /** a synthetic address on the controlled domain, unique to this run */
   email(tag: string): string;
   created: CreatedUser[];
@@ -108,6 +125,21 @@ const sha256Hex = async (text: string) => {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 };
+
+/** Every reason a file's text may not be sent: a blocking finding, or a reviewable one the lock did not accept. */
+export async function refusalsFor(bytes: string, reviewed: Reviewed | undefined, networkFunctions: readonly string[], targetRef: string): Promise<string[]> {
+  const scan = scanSql(bytes, { targetRef });
+  const reasons = new Set<string>();
+  for (const finding of scan.findings) if (finding.severity === 'block') reasons.add(finding.code);
+  for (const finding of indirectNetworkCalls(scan, new Set(networkFunctions))) reasons.add(finding.code);
+  const dynamic = new Set(reviewed?.dynamic ?? []);
+  for (const statement of scan.dynamic) if (!dynamic.has(await sha256Hex(statement.text))) reasons.add('DYNAMIC_SQL');
+  const writes = new Set(reviewed?.writes ?? []);
+  for (const table of scan.writes) if (!writes.has(table)) reasons.add('DATA_WRITE');
+  const selects = new Set(reviewed?.selects ?? []);
+  for (const statement of scan.topLevelSelects) if (!selects.has(await sha256Hex(statement.text))) reasons.add('TOP_LEVEL_SELECT');
+  return [...reasons].sort();
+}
 
 export async function run(steps: readonly Step[], options: RunOptions): Promise<Report> {
   const redact = makeRedactor(options.secrets ?? []);
@@ -156,10 +188,17 @@ export async function run(steps: readonly Step[], options: RunOptions): Promise<
       runId,
       created,
       memo,
+      baseline: { requirements: options.lock.requirements, approvedInventory: options.lock.approvedInventory },
       email: (tag) => `p11-${runId}-${tag}@${target.emailDomain}`,
       log: () => {},
       sql: (query) => transport.sqlRead(query),
-      probe: (path) => transport.sqlProbe(path),
+      probe: async (path) => {
+        // a probe file is read-only SQL the review pinned: it is sent only when its bytes are the pinned bytes
+        const pinned = options.lock.files[path];
+        if (pinned === undefined) throw new Error(`probe file ${path} is not pinned in the plan lock`);
+        if ((await sha256Hex(options.reader.read(path))) !== pinned) throw new Error(`probe file ${path} differs from its pinned digest`);
+        return transport.sqlProbe(path);
+      },
       hold: async (query, seconds) => {
         if (mutating) await verifyIdentity();
         return transport.sqlHoldLock(query, seconds);
@@ -177,8 +216,8 @@ export async function run(steps: readonly Step[], options: RunOptions): Promise<
         if (pinned === undefined) throw new Error(`file ${file.path} is not pinned in the plan lock`);
         const bytes = options.reader.read(file.path);
         if ((await sha256Hex(bytes)) !== pinned) throw new Error(`file ${file.path} differs from its pinned digest`);
-        const findings = scanSqlForForeignTargets(bytes, target.projectRef);
-        if (findings.length > 0) throw new Error(`file ${file.path} refused: ${findings.map((f) => f.code).join(',')}`);
+        const refusals = await refusalsFor(bytes, options.lock.reviewed?.[file.path], options.lock.networkFunctions ?? [], target.projectRef);
+        if (refusals.length > 0) throw new Error(`file ${file.path} refused: ${refusals.join(',')}`);
         await verifyIdentity();
         return transport.sqlApplyFile(file.path, bytes);
       },

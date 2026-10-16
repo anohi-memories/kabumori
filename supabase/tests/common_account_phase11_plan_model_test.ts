@@ -11,8 +11,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { ENV, resolveTarget } from '../preflight/managed_disposable/guard.ts';
-import { MODELLED, STEPS } from '../preflight/managed_disposable/plan.ts';
-import { type HttpRequest, type HttpResponse, render, run, type Transport } from '../preflight/managed_disposable/runner.ts';
+import { canonicalize, contractSubset, parseInventory } from '../preflight/managed_disposable/inventory.ts';
+import { INVENTORY_PATH, MODELLED, STEPS } from '../preflight/managed_disposable/plan.ts';
+import { type HttpRequest, type HttpResponse, type Lock, render, run, type Transport } from '../preflight/managed_disposable/runner.ts';
 import { APIKEY, ENROLLMENT_RPCS, type Seams, SERVICE_KEY, sql, startSeams } from './common_account_phase9_seams.ts';
 
 const enabled = Deno.env.get('CAL_E2E') === '1';
@@ -26,7 +27,7 @@ if (enabled && (!HARNESS || !WRONG_MARKER || !TAMPER || !NOFENCE || !REF || !PRO
 
 const repoRoot = new URL('../../', import.meta.url);
 const readRepo = (path: string) => Deno.readTextFileSync(new URL(path, repoRoot));
-const lock = enabled ? JSON.parse(readRepo('supabase/preflight/managed_disposable/plan.lock.json')) as { files: Record<string, string> } : { files: {} };
+const lock: Lock = enabled ? JSON.parse(readRepo('supabase/preflight/managed_disposable/plan.lock.json')) as Lock : { files: {} };
 
 const EXPOSED = [...ENROLLMENT_RPCS, 'begin_service_deletion', 'claim_service_deletion', 'record_owned_service_deletion_provider_result', 'finish_owned_service_deletion'];
 const decoder = new TextDecoder();
@@ -35,7 +36,7 @@ const environment = (ref = REF, denied = PRODUCTION_LIKE) => ({
   [ENV.projectRef]: ref, [ENV.allowlist]: ref, [ENV.denylist]: denied, [ENV.apiUrl]: `https://${ref}.supabase.co`, [ENV.confirm]: ref,
   [ENV.publishableKey]: APIKEY, [ENV.serviceKey]: SERVICE_KEY,
   [ENV.dbUrl]: `postgresql://postgres:synthetic@db.${ref}.supabase.co:5432/postgres`,
-  [ENV.baselineSha256]: 'f'.repeat(64), [ENV.baselinePath]: '/synthetic/baseline.sql', [ENV.emailDomain]: 'accept.example.test',
+  [ENV.baselineSha256]: 'f'.repeat(64), [ENV.baselinePath]: '/synthetic/baseline.sql', [ENV.inventorySha256]: 'e'.repeat(64), [ENV.emailDomain]: 'accept.example.test',
 });
 
 async function psqlChild(database: string, args: string[], options: { stdin?: string; probe?: boolean } = {}) {
@@ -82,7 +83,9 @@ function modelTransport(seams: Seams, database: string, counters: Counters): Tra
       // MODEL ONLY: the Phase 3b suite's writer stand-ins (and their auth.sessions) go in right before the guard file,
       // exactly where the preflight runner puts them; a managed project has the real thing
       if (path.includes('20261010051938_common_account_service_write_guard')) {
-        const fixture = await psqlChild(database, ['-f', '-'], { stdin: readRepo('supabase/tests/common_account_write_guard_fixture.sql') });
+        const fixture = await psqlChild(database, ['-f', '-'], {
+          stdin: readRepo('supabase/tests/common_account_write_guard_fixture.sql').replace('create table auth.sessions (', 'create table if not exists auth.sessions ('),
+        });
         if (!fixture.success) throw new Error(`stand-in fixture: ${decoder.decode(fixture.stderr).slice(0, 200)}`);
       }
       const out = await psqlChild(database, ['-f', '-'], { stdin: bytes });
@@ -103,6 +106,14 @@ function modelTransport(seams: Seams, database: string, counters: Counters): Tra
   };
 }
 
+/** What an owner would approve: the contract digest of the baseline's own inventory (read through the same query the plan uses). */
+async function approvedContract(database: string): Promise<string> {
+  const out = await psqlChild(database, ['-f', '-'], { stdin: readRepo(INVENTORY_PATH) });
+  if (!out.success) throw new Error(`inventory: ${decoder.decode(out.stderr).slice(0, 300)}`);
+  if (!lock.requirements) throw new Error('the lock carries no requirements');
+  return (await canonicalize(contractSubset(parseInventory(decoder.decode(out.stdout).trim()), lock.requirements))).digest;
+}
+
 const reader = (override: Record<string, (text: string) => string> = {}) => ({
   read: (path: string) => (override[path] ?? ((text: string) => text))(readRepo(path)),
 });
@@ -113,7 +124,8 @@ test('the model run: the plan applies the ten chain files and passes the probe a
     const decision = resolveTarget(environment(), { execute: true });
     assert.equal(decision.ok, true, JSON.stringify(decision));
     const counters: Counters = { http: 0, sql: 0, apply: 0 };
-    const report = await run(STEPS, { mode: 'execute', decision, transport: modelTransport(seams, HARNESS, counters), lock, reader: reader(), secrets: [APIKEY, SERVICE_KEY], only: MODELLED });
+    const approved = { ...lock, approvedInventory: await approvedContract(HARNESS) };
+    const report = await run(STEPS, { mode: 'execute', decision, transport: modelTransport(seams, HARNESS, counters), lock: approved, reader: reader(), secrets: [APIKEY, SERVICE_KEY], only: MODELLED });
     console.log(`model observed:\n${render(report, [APIKEY, SERVICE_KEY])}`);
     const byId = new Map(report.results.map((r) => [r.id, r]));
     for (const id of MODELLED) {
@@ -130,6 +142,30 @@ test('the model run: the plan applies the ten chain files and passes the probe a
     // M7 left an item for the operator: the run is not "complete"
     assert.ok((byId.get('M7')?.manual?.length ?? 0) >= 1);
     assert.equal(report.complete, false);
+  } finally {
+    await seams.stop();
+  }
+});
+
+test('the baseline read-back: another approved contract STOPs at G3b, before any chain file, and teardown still runs', { skip: !enabled }, async () => {
+  const seams = await startSeams({ database: TAMPER, autoconfirm: true, exposed: EXPOSED });
+  try {
+    const decision = resolveTarget(environment(), { execute: true });
+    assert.equal(decision.ok, true);
+    const counters: Counters = { http: 0, sql: 0, apply: 0 };
+    const other = { ...lock, approvedInventory: '0'.repeat(64) };
+    const report = await run(STEPS, { mode: 'execute', decision, transport: modelTransport(seams, TAMPER, counters), lock: other, reader: reader(), only: MODELLED });
+    const byId = new Map(report.results.map((r) => [r.id, r]));
+    assert.equal(byId.get('G1')?.status, 'PASS');
+    assert.equal(byId.get('G3b')?.status, 'STOP', JSON.stringify(byId.get('G3b')));
+    assert.match(byId.get('G3b')?.detail ?? '', /differs from the approved one/u);
+    assert.equal(byId.get('G3-P1')?.status, 'NOT_RUN');
+    assert.equal(report.stoppedAt, 'G3b');
+    assert.equal(counters.apply, 0, 'no chain file was sent');
+    assert.equal(byId.get('T1')?.status, 'PASS', 'teardown still runs');
+    // and without any approval the plan cannot even be started
+    const none = resolveTarget({ ...environment(), [ENV.inventorySha256]: undefined }, { execute: true });
+    assert.equal(none.ok, false);
   } finally {
     await seams.stop();
   }
@@ -160,7 +196,7 @@ test('a chain file whose bytes differ from its pin is never sent; the files befo
     assert.equal(decision.ok, true);
     const counters: Counters = { http: 0, sql: 0, apply: 0 };
     const tampered = reader({ 'supabase/migrations/20261006230000_common_account_service_start_intent.sql': (text) => `${text}\n-- edited after review\n` });
-    const report = await run(STEPS, { mode: 'execute', decision, transport: modelTransport(seams, TAMPER, counters), lock, reader: tampered, only: MODELLED });
+    const report = await run(STEPS, { mode: 'execute', decision, transport: modelTransport(seams, TAMPER, counters), lock: { ...lock, approvedInventory: await approvedContract(TAMPER) }, reader: tampered, only: MODELLED });
     const byId = new Map(report.results.map((r) => [r.id, r]));
     assert.equal(byId.get('G3-P1')?.status, 'PASS');
     assert.equal(byId.get('G3-P2')?.status, 'FAIL');

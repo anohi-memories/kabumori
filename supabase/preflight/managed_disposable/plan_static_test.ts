@@ -6,7 +6,8 @@ import test from 'node:test';
 
 import { projectRefsIn, scanSqlForForeignTargets } from './guard.ts';
 import { buildLock } from './lock.ts';
-import { BASELINE, CHAIN, classifyLinking, MODELLED, PROBE_PATH, STEPS } from './plan.ts';
+import type { Lock } from './runner.ts';
+import { BASELINE, CHAIN, classifyLinking, INVENTORY_PATH, MODELLED, PROBE_PATH, STEPS } from './plan.ts';
 
 const root = new URL('../../../', import.meta.url);
 const here = new URL('./', import.meta.url);
@@ -14,11 +15,15 @@ const read = (path: string) => Deno.readTextFileSync(new URL(path, root));
 const readHere = (name: string) => Deno.readTextFileSync(new URL(name, here));
 const SYNTHETIC = 'aaaaaaaaaaaaaaaaaaaa';
 
-test('the lock pins exactly the bytes of the chain and the probe on disk', async () => {
-  const lock = JSON.parse(readHere('plan.lock.json')) as { files: Record<string, string> };
+test('the lock pins exactly the bytes of the chain, the probe and the inventory query on disk', async () => {
+  const lock = JSON.parse(readHere('plan.lock.json')) as Lock;
   const expectedPaths = [...CHAIN.map((file) => file.path), PROBE_PATH].sort();
-  assert.deepEqual(Object.keys(lock.files).sort(), expectedPaths);
-  const fresh = await buildLock(expectedPaths, read);
+  assert.deepEqual(Object.keys(lock.files).sort(), [...expectedPaths, INVENTORY_PATH].sort());
+  const corpus: Record<string, string> = {};
+  for (const entry of Deno.readDirSync(new URL('supabase/migrations/', root))) {
+    if (entry.isFile && entry.name.endsWith('.sql')) corpus[entry.name] = read(`supabase/migrations/${entry.name}`);
+  }
+  const fresh = await buildLock(expectedPaths, read, corpus, [INVENTORY_PATH]);
   assert.deepEqual(lock, fresh, 'a changed migration or probe needs a deliberate `cli.ts --write-lock` and a reviewed diff');
   assert.ok(!(BASELINE.path in lock.files), 'the baseline is operator-supplied: its digest comes from the environment, never from the repository');
 });
@@ -46,7 +51,9 @@ test('the plan: every gate and check M1-M12 exists once, in a sane order, with a
   const ids = STEPS.map((step) => step.id);
   assert.equal(new Set(ids).size, ids.length);
   for (let i = 1; i <= 12; i++) assert.ok(ids.includes(`M${i}`), `M${i}`);
-  for (const id of ['G1', 'G2', 'G3a', 'G4', 'T1']) assert.ok(ids.includes(id), id);
+  for (const id of ['G1', 'G2', 'G3a', 'G3b', 'G3c', 'G4', 'T1']) assert.ok(ids.includes(id), id);
+  assert.ok(ids.indexOf('G3-P10') < ids.indexOf('G3c') && ids.indexOf('G3c') < ids.indexOf('G4'), 'the silence is read back after the last chain file');
+  assert.ok(ids.indexOf('G3a') < ids.indexOf('G3b') && ids.indexOf('G3b') < ids.indexOf('G3-P1'), 'the baseline is read back before the first chain file is sent');
   assert.ok(ids.indexOf('G1') < ids.indexOf('G3a') && ids.indexOf('G3a') < ids.indexOf('G3-P1') && ids.indexOf('G3-P10') < ids.indexOf('G4') && ids.indexOf('G4') < ids.indexOf('M1'));
   assert.equal(ids[ids.length - 1], 'T1');
   assert.equal(STEPS.find((step) => step.id === 'T1')?.always, true);
