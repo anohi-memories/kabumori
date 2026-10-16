@@ -155,7 +155,7 @@
 
 ## F10
 - slot: F10
-- status: ready
+- status: in_progress
 - task_id: orchestration-v3-reliable-task-registration-f10-20261016
 - owner: claude
 - next_owner: claude
