@@ -1,0 +1,12 @@
+{
+  "task_id": "postona-f4-pr211-r2c-final-preview-identity-fix-20261015",
+  "archive_date": "2026-10-16",
+  "original_path": ".agent_v2/tasks/F4.md",
+  "archive_path": ".agent_v2/archive/2026-10-16-F4-postona-f4-pr211-r2c-final-preview-identity-fix-20261015/files/.agent_v2/tasks/F4.md",
+  "original_blob_sha": "8169799df1a137e28ccaa174842145aa7e1eeb89",
+  "archive_blob_sha": "8169799df1a137e28ccaa174842145aa7e1eeb89",
+  "size_bytes": 14046,
+  "archive_source_commit": "cf0fb464d5e1155630accc6e3eac71237b994b35",
+  "readback_equal": true,
+  "sha256_status": "pending"
+}
