@@ -56,10 +56,10 @@
 
 ## F4
 - slot: F4
-- status: review_required
+- status: done
 - task_id: postona-f4-mobile-auth-entitlement-x-threads-integration-readiness-20261016
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
@@ -73,6 +73,7 @@
 - current_assignment: J4 V4 concurrent public-preview monotonic identity fence P2; new F4 TASK, source only, production NO_GO.
 - l4_verdict_20261016: PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO; PR221 dcae62c6 Draft, 4 mobile files, reported 23/23 focused + 14/14 actual F5 handler seam + app336 PASS; independent Sol focused review needed.
 - review_decision: user waived extra Codex rereview for PR221 source; any new security-boundary changes still require risk-based review.
+- l4_verdict_mobile_20261016: PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; PR227 HEAD 639a002f Draft; userId-based read snapshot guard, reported 8 focused/app285/local-combined450 PASS; no extra Codex review, cross-user release safety still pending.
 
 ## F5
 - slot: F5
