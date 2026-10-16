@@ -93,6 +93,8 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 
 | 2026-10-15 | F4 | `postona-f4-pr197-p2-response-warning-preservation-20261015` | PR211 R1/R2 client fixes | PASS_SOURCE_FIX / NO_GO | #211 | `eb1011f2bd6f8a76ef412f824f0b21629794645b` | `.agent_v2/archive/2026-10-15-F4-postona-f4-pr197-p2-response-warning-preservation-20261015/` | TASK with embedded Report, Git blob restored; SHA256 pending |
 
+| 2026-10-16 | F4 | `postona-f4-pr211-r2c-final-preview-identity-fix-20261015` | PR217 R2c serial identity fix | PASS_SOURCE_FIX / NO_GO | #217 | `d4bcd09e8c0a67a87afff867c69b135b1a26ba4a` | `.agent_v2/archive/2026-10-16-F4-postona-f4-pr211-r2c-final-preview-identity-fix-20261015/` | TASK+Report blob restored; SHA256 metadata pending |
+
 ## 旧系統（G1〜G10 / H1〜H5）の完了・履歴作業
 
 ### 日付不明
