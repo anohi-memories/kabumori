@@ -1,0 +1,12 @@
+{
+  "task_id": "orchestration-v3-reliable-task-registration-f10-20261016",
+  "original_path": ".agent_v2/tasks/F10.md",
+  "archive_path": ".agent_v2/archive/2026-10-16-F10-orchestration-v3-reliable-task-registration-f10-20261016/files/.agent_v2/tasks/F10.md",
+  "size_bytes": 15393,
+  "sha256": "77d8d03f710d8b3c4a1c2e6acbfbb0f9e3dbeeec417c5d9c842bbde6115818f0",
+  "git_blob_sha": "05187aa5ed8b50091842d7b8bb2f14d48a94bca6",
+  "restore_verified": true,
+  "source_ref": "main",
+  "archived_at": "2026-10-16",
+  "note": "immutable source task accepted at L10; archive append-only"
+}
