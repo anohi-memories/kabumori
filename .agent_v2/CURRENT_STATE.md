@@ -1,3 +1,8 @@
+## POSTONA F4 R2 concurrent public-preview identity fix (2026-10-16)
+- J4 V4 PR217 review CHANGES_REQUIRED P2×1 (concurrent public preview sees B/null but active A end misses it); J4 TASK done and ACTIVE_TASK reconciled after prior write conflict.
+- F4 NEW `postona-f4-pr217-concurrent-preview-identity-fence-p2-20261016` ready/claude; Opus5.5（高）, F4→L4 return POSTONA｜マルチSNS化・開発統括（G4）のちゃ; new Draft stacked on PR217 HEAD d4bcd09e, source only. Sticky identity fence must include concurrent public preview session observations; original serial protections remain. Production NO_GO.
+- Old F4 accepted TASK+embedded Report archived at `.agent_v2/archive/2026-10-16-F4-postona-f4-pr211-r2c-final-preview-identity-fix-20261015/` with blob readback; checksum metadata being finalized separately. No product, PR or production actions performed here.
+
 ## F5 J3 V3 P2最小修正TASK登録 — 2026-10-16
 - `common-account-f5-j3-v3-p2-known-x-warning-count-fix-20261016` ready/claude、Sonnet5（高）、F5→L5、返却先 共通アカウントG5のちゃ（新F5担当）。J3 V3が独立実証したX snapshot_changed 1→9後にrecorder失敗すると既知9件を1件と表示するP2だけを修正・回帰。F5 PR214 HEAD `bc290ab618508a8fbaba1abfad308c52d86e4689`保護、新Draft stacked候補。production NO_GO。D1同意は別release STOP、旧チェーン全面レビューはしない。
 - 前F5 Phase10 TASK/Report `.agent_v2/archive/2026-10-16-F5-common-account-f5-phase10-postona-x-ack-snapshot-reconciliation-20261015/` に保存済み（UTF8/原GitHub blob一致、SHA256 `a6045175c0dc139c4fbb70439fb32507a35ad1738692398762db6cf06adaba24`、MANIFEST/SHA256SUMS、HISTORY_INDEX更新）。コード・本番・他slotのTASK/PRは不変更。
