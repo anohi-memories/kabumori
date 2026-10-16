@@ -131,7 +131,7 @@
 - current_task_path: .agent_v2/tasks/F8.md
 - current_report_path: .agent_v2/tasks/F8.md#report
 - dependencies: previous L8 observer gap design archived; Draft PR228 41fc4f58; PauseCoordinator contract PR212 b38064c2
-- blocker: L8 PASS_SOURCE_CANDIDATE Draft PR232 db41bdae; observer independent narrow security verification required before integration; production NO_GO
+- blocker: V4 PASS_FOCUSED_REVIEW (direct J4 independent review, PR232 db41bdae, 175 PASS, 12 mutants, no findings); integration/managed read-only preflight/Cron and in-flight checks NOT_VERIFIED; production NO_GO
 - production_mutation_window: FORBIDDEN
 - previous_archive: .agent_v2/archive/2026-10-16-F8-observer-stop-gap-design/
 - slot_use: observer entry+egress gate implemented as source candidate; G1 to route focused validation
