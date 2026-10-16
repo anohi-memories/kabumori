@@ -1,3 +1,7 @@
+## F5 J1 V1 P2×4 安全ガード修正（2026-10-16）
+- F5 `common-account-f5-j1-v1-phase12-security-guards-p2x4-fix-20261016` ready/claude, Opus5.5（高）, F5→L5, return `共通アカウントG5のちゃ（新F5担当）`. J1 V1で独立再現したP2×4（probe検査/実行のTOCTOU、--only G3b前提飛ばし、二段関数経由のnetwork見逃し、inventory diff secret漏洩）をF5所有のsourceだけで修正。先にFAIL→修正後PASS。新独立Draft PRをPR226 `3d87a8457ddade3209583cbb820d5e5feec23f00`上に作成、親PR変更禁止。managed・本番 Supabase接続・実施は禁止NO_GO。追加reviewは新規安全境界に限定。
+- Phase12 L5 source done, TASK/Report archived `.agent_v2/archive/2026-10-16-F5-common-account-f5-phase12-schema-baseline-cron-isolation-offline-20261016/`、SHA256 `7538eda6d3448746b075fe897f00239ae67f3fc4b4b7ec45e196b171a070948b`、元blob/UTF-8復元一致、MANIFEST/SHA256SUMSとHISTORY_INDEX保存済み。その他slot TASK/Report/PRは不変更。
+
 ## J1 F5 Phase12 限定安全ガードレビュー（2026-10-16）
 - J1 `common-account-j1-f5-pr226-disposable-guard-focused-review-20261016` ready/codex, Sol（高）, J1→V1, return `共通アカウントG5のちゃ（新F5担当）`. Target Draft PR226 exact HEAD `3d87a8457ddade3209583cbb820d5e5feec23f00`. Phase12 scanner・inventory秘匿・G3b/G3c guardのみ独立評価し、過去のF5/F3統合レビューは繰り返さない。本番schema-only read・managed disposable実行・merge/deployは未承認NO_GO。
 - 前J1 TASK+Report（common-ai PR222）をappend-only archive `.agent_v2/archive/2026-10-16-J1-common-ai-j1-pr222-r1a-a1-focused-review-20261016/` にread-back復元一致で保存、MANIFEST/SHA256SUMSとHISTORY_INDEX更新。他slotは未変更。
