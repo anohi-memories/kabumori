@@ -88,19 +88,19 @@
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-pr222-import-lexer-r1b-r1c-fix-20261016
+- status: ready
+- task_id: common-ai-f6-pr231-regex-division-parser-bypass-fix-20261016
 - owner: claude
-- next_owner: none
-- blocker: L6 PASS_SOURCE_FIX PR231; J1 limited independent parser-security recheck pending, merge/deploy/production NO_GO.
+- next_owner: claude
+- blocker: external Claude independent review PR231 P2 bypass due regex/division heuristic and non-overlap textEdges; merge/deploy/production NO_GO
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: J1 PR222 V1 P2/P3, protected Draft PR187→198→205→219→222
-- previous_archive: .agent_v2/archive/2026-10-16-f6-pr222-source-fix.md
-- slot_use: F6 parser-only source correction
+- dependencies: protected Draft PR187→198→205→219→222→231, previous Claude review CHANGES_REQUIRED
+- previous_archive: .agent_v2/archive/2026-10-16-f6-pr231-lexer-source-fix.md
+- slot_use: F6 focused PR231 parser bypass correction, source-only
 
 ## F7
 - slot: F7
