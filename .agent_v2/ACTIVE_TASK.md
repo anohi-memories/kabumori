@@ -91,19 +91,19 @@
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-pr219-j1-r1a-a1-correction-20261016
+- status: ready
+- task_id: common-ai-f6-pr222-import-lexer-r1b-r1c-fix-20261016
 - owner: claude
-- next_owner: none
-- blocker: L6 PASS_SOURCE_FIX; PR222 R1a/A1 independent focused security delta review required; existing typed errors and NOT_VERIFIED; merge/deploy/production NO_GO
+- next_owner: claude
+- blocker: PR222 lexer boundary R1b P2 and R1c P3 correction required; production NO_GO
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: J1 V1 CHANGES_REQUIRED P2×2; protected Draft PR187→198→205→219; source-only
-- previous_archive: .agent_v2/archive/2026-10-16-f6-j1-r1-r2-source-fix.md
-- slot_use: narrow R1a/A1 security correction, POSTONA live wiring excluded
+- dependencies: J1 PR222 V1 P2/P3, protected Draft PR187→198→205→219→222
+- previous_archive: .agent_v2/archive/2026-10-16-f6-pr222-source-fix.md
+- slot_use: F6 parser-only source correction
 
 ## F7
 - slot: F7
