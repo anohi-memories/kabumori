@@ -110,6 +110,8 @@ async function runFetchCycle(flag: string | undefined) {
         return json([]);
       }
       if (table === "important_news_monitor_runs") return method === "POST" ? json([{ id: "run-1" }], 201) : new Response(null, { status: 204 });
+      // F8 pause gate: the setting must be explicitly running; integration fixture only
+      if (table === "important_news_monitor_settings") return json([{ is_active: true }]);
       return json([]);
     }
     outbound.push(`${url.hostname}${url.pathname}`);

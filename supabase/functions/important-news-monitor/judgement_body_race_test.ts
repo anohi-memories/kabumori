@@ -45,7 +45,7 @@ async function runJudgePending(rows: Row[], whileModelRuns: () => Promise<void>,
         usage: { input_tokens: 100, output_tokens: 20 },
       });
     }
-    if (url.pathname.endsWith("/important_news_monitor_settings")) return json([{ luna_enabled: true, sol_escalation_enabled: false }]);
+    if (url.pathname.endsWith("/important_news_monitor_settings")) return json([{ is_active: true, luna_enabled: true, sol_escalation_enabled: false }]);
     if (url.pathname.endsWith("/ai_usage_events")) return new Response(null, { status: 201 });
     if (url.pathname.endsWith("/important_news_candidates")) {
       const p = url.searchParams;

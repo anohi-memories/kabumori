@@ -38,6 +38,8 @@ async function runCycle(flag: string | undefined, options: { failDiagnosticsWrit
           return new Response(null, { status: 204 });
         }
       }
+      // F8 pause gate: the setting must be explicitly running; integration fixture only
+      if (table === "important_news_monitor_settings") return json([{ is_active: true }]);
       if (table === "news_discovery_signals") return json(options.signals ?? []);
       if (table === "important_news_candidates" && method === "POST") return json([{ id: "c1" }], 201);
       return json([]);
