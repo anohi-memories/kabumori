@@ -521,3 +521,5 @@ Both archive paths are append-only originals. These index entries are history li
 - size: 20508 bytes; SHA256: `a6045175c0dc139c4fbb70439fb32507a35ad1738692398762db6cf06adaba24`
 - original_blob: `aad705aae413bae0e62a9d978a4d80e84b1f7389`; restore: exact UTF-8 source/archive and blob SHA matched. MANIFEST/SHA256SUMS stored.
 - L5: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; J3 V3 later CHANGES_REQUIRED P2 R1 on PR214.
+
+J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-integrated-review/ (append-only, restore verified). TASK SHA256 c5375385ef00e1f5764e16eb35c376761293f10a3a197143ea8eb0df45318c69, 5529 bytes; Report SHA256 dbc6a8e7831c2be5516bec66ae054c854772e98c251e16aede7414b261af7bf3, 24938 bytes. Original paths .agent_v2/tasks/J2.md and .agent_v2/reports/J2.md; archive files/ mirrors those paths; MANIFEST.json and SHA256SUMS present.
