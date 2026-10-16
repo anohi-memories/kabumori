@@ -1,0 +1,11 @@
+{
+  "task_id": "postona-f3-j3-v3-ack-lease-rollback-corrections-20261015",
+  "original_path": ".agent_v2/tasks/F3.md",
+  "archive_path": ".agent_v2/archive/2026-10-16-F3-postona-f3-j3-v3-ack-lease-rollback-corrections-20261015/files/.agent_v2/tasks/F3.md",
+  "size": 21504,
+  "sha256": "2a71cd256945fa5c0978ae73aca8c3b530130ef4fd7173f4a785166822b72cf2",
+  "git_blob": "81d429200254f00930cb4ca26a0948efe306154a",
+  "original_commit": "d481b2116f4d4b0a442e2381ccea6d368dea632c",
+  "restore": "byte and git blob identical on readback",
+  "archive_commit": "5f5558d730f423ff9a4094057c3fd3e75cd69447"
+}
