@@ -1,0 +1,44 @@
+# J4 — PR217 POSTONA late-session-switch security rereview
+
+- task_id: postona-j4-pr217-r2c-final-preview-focused-rereview-20261015
+- slot: J4
+- owner: codex
+- status: done
+- next_owner: none
+- start_code: J4
+- completion_code: V4
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
+- recommended_model: Sol（高）
+- review_required: true
+- production_permission: NO_GO
+- target: Draft PR217 HEAD d4bcd09e8c0a67a87afff867c69b135b1a26ba4a; stacked on PR211 HEAD eb1011f2bd6f8a76ef412f824f0b21629794645b, parent PR197. Verify fresh.
+- dependency: J4 V4 P2 R2c in archived previous Report; F4 L4 acceptance; F5 PR193 actual synthetic lifecycle handler. Separate F5 PR214 integration and F3 PR204 managed gates.
+- previous_archive: .agent_v2/archive/2026-10-15-J4-postona-j4-pr211-p2-client-fixes-focused-security-rereview-20261015/
+- blocker: source-only review, production NO_GO; deployed legacy deletion endpoint, F5 managed Auth/DB, X/Threads provider safety not certified.
+
+## Objective
+Independently verify F4 PR217 closes **P2 R2c** without regressions. The client may not return user A's X uncertainty/Threads authorization warning facts after a late positive switch to user B or logout during final preview/settle; keep A's validated warnings on same-person network/verification failures without false success.
+
+## Mandatory preflight
+Read PROJECT_RULES.md and both orchestration docs, relevant old/new ACTIVE_TASK/CURRENT_STATE, archived J4 V4 Report P2 R2c, current F4 L4 Report, PR217 exact patch/HEAD and protected PR211/197. Fresh origin/main, all slot worktree/checkout and file conflict inventory. Independent clean J4 worktree or read-only disposable overlay. No changes to product, F3/F4/F5/J5 branches or PRs.
+
+## Tests
+1. Reproduce former R2c against prior PR211 and verify fix at PR217 with deterministic late A→B and A→null during paused final read-back, switch-back and stale out-of-order reads; ensure sticky suppression on every error/exception/late callback. Independently examine settle/catch concurrency and re-entrant session reads for late switch windows; no A facts on positive B/null observation.
+2. Verify same-user network failure, read-back rejection/session exception and same-person reauth retain A warning count2 and Threads remote-unverified but do not claim completion; race/concurrency and double tap safe.
+3. Run PR217 19 focused tests, 8 actual F5 PR193 handler seam tests from apps/social-mobile/tests/seam/run-postona-end-f5-seam.sh (synthetic world), full app node tests (previous 313), typecheck and lint. Distinguish rerun from Claude reported. Preserve R1/R2 old regressions and accepted F5 variants.
+4. Check app gate literal POSTONA_END_SOURCE_ENABLED=false, legacy route disabled, whole common-ID deletion unavailable, no exposure through actual screen for B. Exact PR217 5-file scope, secrets/diff check. If unexecuted test state NOT_RUN.
+5. No managed/production/real API/SNS/DB/Auth/Edge/Secrets/Cron, merge, deploy, EAS or force push. Record old deployed endpoint, future F5 PR214, F3 X source vs managed and F4 Threads remote as separate release STOPs.
+
+## Deliverable
+Report PASS_SOURCE_REREVIEW or CHANGES_REQUIRED with reproducible evidence/path/lines, reviewed SHA, tests, changed_files, push/merge/deploy/safety and remaining issues in .agent_v2/reports/J4.md. Update only J4 metadata to review_required/chatgpt. Return V4 to POSTONA｜マルチSNS化・開発統括（G4）のちゃ. A focused PASS does not approve production.
+
+
+## Latest J4 review — 2026-10-16 JST
+- result: CHANGES_REQUIRED P2 × 1 — concurrent public preview does not feed the active end's sticky identity fence.
+- verified: original R2c before/after (PR211 2 FAIL → PR217 2 PASS), focused19/19, actual F5 PR193 seam8/8, app313/313, TypeScript/Lint PASS.
+- residual: while final settle read is pending, a same-client public preview positively sees B/null; late stale A completion returns success with A warnings, or a throwing read still returns A warnings. Independent matrix: 4 safety assertions FAIL, 2 same-person controls PASS.
+- limit: actual screen remains guarded; no visible cross-user leak or managed/production exposure demonstrated. Source gate stays OFF.
+- reviewed_head: d4bcd09e8c0a67a87afff867c69b135b1a26ba4a; PR211/197/193 unchanged.
+- report: .agent_v2/reports/J4.md
+- next: coordinator returns bounded concurrency correction to G4/F4 (recommended Opus5.5（高） for Claude, Sol（高） if Codex explicitly assigned), preserving same-person warnings and existing display guard.
+- changes: J4 control files only; no product edits, merge/deploy/managed/API operations; production NO_GO.
