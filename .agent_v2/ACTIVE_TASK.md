@@ -72,22 +72,19 @@
 
 ## F5
 - slot: F5
-- status: done
-- task_id: common-account-f5-phase12-schema-baseline-cron-isolation-offline-20261016
+- status: ready
+- task_id: common-account-f5-j1-v1-phase12-security-guards-p2x4-fix-20261016
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: F5 PR121→152→165→178→183→193→206→214→220→223; F3 PR204; F4 PR180; G3 T13, POSTONA G4 and full-ID D1
-- blocker: BG1 incomplete schema baseline and BG2 unsafe production Cron/network migrations; production and managed disposable operations not authorized
-- slot_use: Phase12 source-only baseline provenance/unsafe migration isolation with negative local tests; POSTONA shared Auth focus
-- previous_archive: .agent_v2/archive/2026-10-16-F5-common-account-f5-phase11-postona-managed-auth-isolated-test-readiness-20261016/
-- latest_result: PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; Phase12 PR226 head 3d87a845 Draft stacked on PR223 (28695586); BG1 unknown baseline = 3 relations/6 columns/4 FKs (+2 dependents), read-only schema-only inventory designed and proved on local PG17 (24 sentinels, 57 assertions), BG2 fail-closed scanner+lock, 8 unsafe cron/net migrations isolated, plan G3b/G3c; mutants 28+37+60; no production/managed access; S0 NO_GO, independent review needed.
-
-- l5_verdict: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO (2026-10-16). Draft PR226 head 3d87a8457ddade3209583cbb820d5e5feec23f00; source-only offline inventory/scanner and guard results accepted without independent rerun. Production schema-only inventory and managed disposable not executed or authorized. Security review required before real operation; no merge/deploy.
+- dependencies: J1 V1 CHANGES_REQUIRED P2×4; F5 PR226 3d87a8457ddade3209583cbb820d5e5feec23f00; parent PR223 28695586f63a30c739a44b829e79a7950932b5e7
+- blocker: probe TOCTOU / --only G3b bypass / transitive network helper miss / unsafe inventory diff; real Supabase inventory and managed disposable unauthorized, production NO_GO
+- slot_use: F5-owned four-P2 focused source correction and fail-before/pass-after tests; POSTONA shared Auth priority
+- previous_archive: .agent_v2/archive/2026-10-16-F5-common-account-f5-phase12-schema-baseline-cron-isolation-offline-20261016/
 
 ## F6
 - slot: F6
