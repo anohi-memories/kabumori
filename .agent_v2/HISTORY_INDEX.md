@@ -553,3 +553,5 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - size: 16357 bytes; SHA256: `4018debb00ae9d69bab391158ae585152011798d3acbb880ac695e0cb206dc19`
 - source_blob: `b2c96649466f8cbcc7e012530b47fb44711a5d55`; exact UTF-8 and blob SHA restore verified; MANIFEST/SHA256SUMS saved.
 - L5 PASS_SOURCE_PREPARATION / MANAGED_TEST_NOT_RUN / PRODUCTION_NO_GO, Draft PR223 head 28695586f63a30c739a44b829e79a7950932b5e7.
+
+- F4 2026-10-16: `postona-f4-pr217-concurrent-preview-identity-fence-p2-20261016` archived under `.agent_v2/archive/2026-10-16-F4-postona-f4-pr217-concurrent-preview-identity-fence-p2-20261016/`, PR221 Draft, user waived repeated review, production NO_GO. SHA256 pending.
