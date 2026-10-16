@@ -568,3 +568,10 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - task_id: `common-ai-f6-pr219-j1-r1a-a1-correction-20261016`; L6 PASS_SOURCE_FIX; J1 PR222 review requires R1b P2/R1c P3 follow-up.
 - original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-16-f6-pr222-source-fix.md`; source/archive Git blob `60498efa09c36a18cf59b5746fa4145afac40885`, 8813 characters, restored exact content confirmed.
 - original commit: F6 L6 TASK `13f0a0166f3c66b467027661ab71c99e5c85840e` and ACTIVE `a3f0a95dabb9a7950cd3e19527b32bc68ad788af`. SHA256/MANIFEST pending independent validation.
+
+## J1 PR222 prior review archive — 2026-10-16
+- task_id: `common-ai-j1-pr222-r1a-a1-focused-review-20261016`
+- archive_root: `.agent_v2/archive/2026-10-16-J1-common-ai-j1-pr222-r1a-a1-focused-review-20261016/`
+- original_path: `.agent_v2/tasks/J1.md`; archive_path: `.agent_v2/archive/2026-10-16-J1-common-ai-j1-pr222-r1a-a1-focused-review-20261016/files/.agent_v2/tasks/J1.md`; size: 5255 bytes; SHA256: `79954d7233764099ac9678f997c10e0b6b075acf3d3d47c49bc36a5ecb854c15`; original_blob: `1a81c3d36f4fc63bd188071e30211807d25abd3f`
+- original_path: `.agent_v2/reports/J1.md`; archive_path: `.agent_v2/archive/2026-10-16-J1-common-ai-j1-pr222-r1a-a1-focused-review-20261016/files/.agent_v2/reports/J1.md`; size: 14839 bytes; SHA256: `85400de33f2e704d4adea86338bd0f29f03686c55aad369dbd93569bdd5a85a8`; original_blob: `4bb45074c2b4546f4cd7635ce2cbad5c9f15921b`
+- restore: both archive source bytes and blob SHAs were read-back verified against original; SHA256SUMS and MANIFEST stored.
