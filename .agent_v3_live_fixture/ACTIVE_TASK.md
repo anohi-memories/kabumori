@@ -5,7 +5,7 @@
 This file is derived. The canonical state of each slot is the header of its TASK file. If this index
 disagrees with a TASK header, the TASK header wins and this index is stale.
 
-- source_digest: 87dd3924040cbaead5bc718d27ab9cd7ff6b9932c8d4d5fb572967aa507d5b92
+- source_digest: b143b02100c48e938a8d70a973fb74c078f22c0910a6b71a94bf464f78041940
 
 ## F1
 - task_id: none
@@ -19,13 +19,13 @@ disagrees with a TASK header, the TASK header wins and this index is stale.
 - report_path: .agent_v3_live_fixture/tasks/F1.md#report
 
 ## F2
-- task_id: none
-- status: idle
-- next_owner: none
-- return_to: none
+- task_id: live-fixture-f2-parallel-20261016
+- status: ready
+- next_owner: claude
+- return_to: agent-v3-live-fixture
 - completion_code: L2
 - owner: claude
-- recommended_model: none
+- recommended_model: Opus5.5（高）
 - task_path: .agent_v3_live_fixture/tasks/F2.md
 - report_path: .agent_v3_live_fixture/tasks/F2.md#report
 
