@@ -87,6 +87,7 @@ import {
 } from "./breaking_market_source_fetchers.ts";
 import { dailySlotConsumedAt, selectDailyBreakingMarketQueries } from "./breaking_market_daily_schedule.ts";
 import { buildCollectionRunDiagnostics } from "./news_collection_diagnostics.ts";
+import { enforceNewsPauseEntry, installNewsPauseGuard } from "./pause_gate.ts";
 import {
   judgeCandidateWithEscalation,
   requestImportantNewsJudgement,
@@ -1675,6 +1676,10 @@ async function enqueuePresetImportantNewsNotifications(
   }
 }
 
+// F8 hard pause: every outward call (AI, X, push RPC, external feeds, database writes / claims) re-checks the news
+// is_active setting just before it is made. See pause_gate.ts.
+installNewsPauseGuard();
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return response({ error: "POST_REQUIRED" }, 405);
 
@@ -1689,6 +1694,16 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) return response({ error: "SERVER_CONFIGURATION_MISSING" }, 500);
+
+  // F8 hard pause entry gate: after authentication, before any mode dispatch or body handling. Anything other than
+  // is_active === true (paused, missing, malformed, unreadable) refuses the whole request; nothing in the body can unlock it.
+  const pauseState = await enforceNewsPauseEntry(supabaseUrl, serviceRoleKey, fetch);
+  if (pauseState !== "running") {
+    return response(
+      { error: pauseState === "unreadable" ? "NEWS_PAUSE_STATE_UNREADABLE" : "NEWS_HARD_PAUSED", autoPublish: false },
+      503,
+    );
+  }
 
   let runId: string | null = null;
   try {
