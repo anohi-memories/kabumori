@@ -525,3 +525,11 @@ Both archive paths are append-only originals. These index entries are history li
 J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-integrated-review/ (append-only, restore verified). TASK SHA256 c5375385ef00e1f5764e16eb35c376761293f10a3a197143ea8eb0df45318c69, 5529 bytes; Report SHA256 dbc6a8e7831c2be5516bec66ae054c854772e98c251e16aede7414b261af7bf3, 24938 bytes. Original paths .agent_v2/tasks/J2.md and .agent_v2/reports/J2.md; archive files/ mirrors those paths; MANIFEST.json and SHA256SUMS present.
 
 - 2026-10-16 | F3 | `postona-f3-j3-v3-ack-lease-rollback-corrections-20261015` | L3 PASS_SOURCE_FIX; PR204 head 45b08a87; J3 V3 PASS_SOURCE_REVIEW; production NO_GO | `.agent_v2/archive/2026-10-16-F3-postona-f3-j3-v3-ack-lease-rollback-corrections-20261015/` | 21504 bytes; SHA256 `2a71cd256945fa5c0978ae73aca8c3b530130ef4fd7173f4a785166822b72cf2`; original Git blob `81d42920`; byte-equivalent restore verified.
+
+## F5 P2 correction archive — 2026-10-16
+- task_id: `common-account-f5-j3-v3-p2-known-x-warning-count-fix-20261016`
+- original_path: `.agent_v2/tasks/F5.md`
+- archive_path: `.agent_v2/archive/2026-10-16-F5-common-account-f5-j3-v3-p2-known-x-warning-count-fix-20261016/files/.agent_v2/tasks/F5.md`
+- size: 13114 bytes; SHA256: `a7cd04453b6a2c0e2234ab91cf34a843ee7fc58d044201d574c2037ff8d7c883`
+- source_blob: `92629551a17e573b7cd7f7625256be3f887a135b`; exact UTF-8 and git blob verified on read-back; MANIFEST/SHA256SUMS saved.
+- L5 PASS_SOURCE_FIX / PRODUCTION_NO_GO; PR220 49b912292f434b5306b3c9e36f8c72466de2f124.
