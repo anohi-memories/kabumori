@@ -154,18 +154,18 @@
 
 ## F10
 - slot: F10
-- status: review_required
+- status: done
 - task_id: orchestration-v3-reliable-task-registration-f10-20261016
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリ30枠統括のちゃ（このチャット）
 - completion_code: L10
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F10.md
 - current_report_path: .agent_v2/tasks/F10.md#report
 - dependencies: PROJECT_RULES / old-new ORCHESTRATION / protected Draft PR172 / recent failed registration evidence
-- blocker: tool safety rejection root cause unproven; V3 independent source only; no live cutover/merge/production
-- slot_use: 新管理基盤V3 登録信頼性の原因調査・独立候補実装（旧G/H・現行F/Jは不変更）
+- blocker: L10 PASS_SOURCE_CANDIDATE / V3_CUTOVER_NO_GO — GitHub connector atomic write and branch CAS proof, independent Sol（高） review pending
+- slot_use: V3 source prototype Draft PR229 accepted at L10; slot done/unreserved; no main merge/cutover
 
 ## J1
 - slot: J1
