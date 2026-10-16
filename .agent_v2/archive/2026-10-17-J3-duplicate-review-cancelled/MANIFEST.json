@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-17",
+  "disposition": "User stopped duplicate review; not completed",
+  "files": [
+    {
+      "original_path": ".agent_v2/tasks/J3.md",
+      "archive_path": ".agent_v2/archive/2026-10-17-J3-duplicate-review-cancelled/task.md",
+      "source_blob": "af14a7052016f72a5ff0990f455602f33e3cdb23",
+      "size_bytes": 3574,
+      "sha256": "004f434d22c1dd54727f643d5e70371cbdf56d7f72568eb4fe3a23e3e623b18c",
+      "restore_verified": true
+    },
+    {
+      "original_path": ".agent_v2/reports/J3.md",
+      "archive_path": ".agent_v2/archive/2026-10-17-J3-duplicate-review-cancelled/report.md",
+      "source_blob": "b6587847875c26b3e55f05dce27b3c064a023eb2",
+      "size_bytes": 502,
+      "sha256": "964f9af3880656aa5821e9939a2903e439544900d640d11529cd284953725bf9",
+      "restore_verified": true
+    }
+  ]
+}
