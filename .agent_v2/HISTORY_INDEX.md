@@ -591,3 +591,9 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - task_id: `common-ai-f6-pr222-import-lexer-r1b-r1c-fix-20261016`; L6 PASS_SOURCE_FIX; external independent Claude review CHANGES_REQUIRED/P2 parser bypass.
 - original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-16-f6-pr231-lexer-source-fix.md`; original and restored Git blob `ca3417c23ed679e1e35b2f49b2e85a78c7c303e6`, 8548 characters; exact Git blob match confirmed.
 - SHA256/MANIFEST pending independent validation; archive append-only. Source prior completion commit 3c698eeb839210539c229e57c621fc53307d0611.
+
+## F5 Phase12 P2x4 completion archive — 2026-10-17
+- task_id: `common-account-f5-j1-v1-phase12-security-guards-p2x4-fix-20261016`
+- original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-17-F5-common-account-f5-j1-v1-phase12-security-guards-p2x4-fix-20261016/files/.agent_v2/tasks/F5.md`
+- size: 15095 bytes; SHA256: `d23bdc4cdfa6a03833ba5465703fb446c07addad49a3ae471cf95b0dedc7bf64`; original_blob: `273617e73979fb88639dad1963b8619ef6b0a970`
+- restore: UTF-8 content and blob matched on read-back; MANIFEST and SHA256SUMS stored. L5 PASS_SOURCE_FIX / SECURITY_RECHECK_REQUIRED / PRODUCTION_NO_GO. Draft PR233 unchanged.
