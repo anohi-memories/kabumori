@@ -1,0 +1,15 @@
+{
+  "files": {
+    "supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql": "e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3",
+    "supabase/migrations/20261006230000_common_account_service_start_intent.sql": "2c736e5aa70c61bf5563eee185d226fbde2c7f37f034c262f5e4b31f81888fa4",
+    "supabase/migrations/20261009120000_common_account_deletion_completion.sql": "fd340765dd1aa8891b4391573568c36741701b762be928964e19d020aee3b68c",
+    "supabase/migrations/20261010051938_common_account_service_write_guard.sql": "d6db1c1343a409ab169c4c4821ca8b6f1159621a80dd8544bda21c7efc2f5e4a",
+    "supabase/migrations/20261012130000_common_account_core_service_fence.sql": "88dd4507b9b2c2d07d9c9d03fd1853d470fcbedf2c06d778a0d94a5d2e8a40e0",
+    "supabase/migrations/20261012230000_common_account_service_brand_state.sql": "3131444556e5d56f54e476cf2e428f176a2099abcdd342b36642a659327f6efd",
+    "supabase/migrations/20261013120000_common_account_service_deletion_ownership.sql": "ce10e9736812292630b99da7d2636a1d9d48b11cddbbd1701dd5919c26ad5f68",
+    "supabase/migrations/20261013140000_common_account_service_reconciliation_facts.sql": "5745621a188f30ec3ff6c40ca8bebb2b450b0bc2dba53d94a62fc4aebfe3ad9f",
+    "supabase/migrations/20261015090000_common_account_enrollment_session_fence.sql": "129d8b803bb375435d3fdc307ff844acb0a5e31df4021ee3d8c5be8239b81060",
+    "supabase/migrations/20261015120000_common_account_x_unconfirmed_snapshot_record.sql": "766e6fce56ef56c2ede40f77b870bcef7600f83701130ba6324dbc0fc2ff0a27",
+    "supabase/preflight/common_account_release_probe.sql": "bd435b584e8dbb2628d44208cc048e85d0fc133b5159aa1cdfd8ab055a433885"
+  }
+}
