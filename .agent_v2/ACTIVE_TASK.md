@@ -122,20 +122,20 @@
 
 ## F8
 - slot: F8
-- status: ready
+- status: review_required
 - task_id: kabumori-f8-news-hard-pause-runtime-candidate-20261015
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: L8
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F8.md
 - current_report_path: .agent_v2/tasks/F8.md#report
 - dependencies: F8 design PR #209 merged; F2 source candidate; protected PR129/#164 same-handler integration
-- blocker: investigate actual news-discovery-observer owner/stop bypass; source-only design; PR #43 is NOT observer PR; production NO_GO
+- blocker: L8 PASS_DESIGN_ONLY observer stop-gap plan Draft PR228 HEAD 41fc4f58; observer runtime gate NOT_IMPLEMENTED, owner/worktree and live cron NOT_VERIFIED, production NO_GO
 - production_mutation_window: FORBIDDEN
 - previous_archive: .agent_v2/archive/2026-10-15-f8-pause-offline-design-accepted.md
-- slot_use: same F8 task continuation, observer/Cron/Push stop-leak scope and ownership investigation; L8
+- slot_use: observer stop-gap SOURCE-ONLY plan received; next owner G1, implementation requires separate TASK and worktree gate
 
 ## F9
 - slot: F9
