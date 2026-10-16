@@ -14,7 +14,8 @@ delivery, AI or deployment**, and a future app must be addable as one more indep
 # a DRY RUN (the default): prints the plan, the gates, and why an execution would be refused. Calls nothing.
 deno run --no-config --allow-read --allow-env=KABUMORI_DISPOSABLE_PROJECT_REF,KABUMORI_DISPOSABLE_ALLOWLIST,KABUMORI_PRODUCTION_PROJECT_REFS,\
 KABUMORI_DISPOSABLE_API_URL,KABUMORI_DISPOSABLE_CONFIRM,KABUMORI_DISPOSABLE_PUBLISHABLE_KEY,KABUMORI_DISPOSABLE_SERVICE_ROLE_KEY,\
-KABUMORI_DISPOSABLE_DB_URL,KABUMORI_DISPOSABLE_BASELINE_SHA256,KABUMORI_DISPOSABLE_BASELINE_PATH,KABUMORI_DISPOSABLE_TEST_EMAIL_DOMAIN \
+KABUMORI_DISPOSABLE_DB_URL,KABUMORI_DISPOSABLE_BASELINE_SHA256,KABUMORI_DISPOSABLE_BASELINE_PATH,KABUMORI_DISPOSABLE_INVENTORY_SHA256,\
+KABUMORI_DISPOSABLE_TEST_EMAIL_DOMAIN \
   supabase/preflight/managed_disposable/cli.ts
 
 deno test --no-config --no-check --allow-read supabase/preflight/managed_disposable/       # 27 offline tests (guard, runner, static, transports)
@@ -123,6 +124,7 @@ The harness scans it for foreign hosts / cron / database HTTP before sending it.
 | `KABUMORI_DISPOSABLE_PUBLISHABLE_KEY`, `KABUMORI_DISPOSABLE_SERVICE_ROLE_KEY` | the project's keys (the right kinds) |
 | `KABUMORI_DISPOSABLE_DB_URL` | `postgresql://…@db.<ref>.supabase.co/…` or the pooler form whose user is `postgres.<ref>` |
 | `KABUMORI_DISPOSABLE_BASELINE_PATH`, `KABUMORI_DISPOSABLE_BASELINE_SHA256` | the reviewed baseline file and its digest |
+| `KABUMORI_DISPOSABLE_INVENTORY_SHA256` | **(Phase 12)** the SHA-256 of the baseline *contract* the owner approved from a production inventory; execution is refused without it ([phase12](phase12-schema-baseline-and-cron-isolation.md) §2, §3.5) |
 | `KABUMORI_DISPOSABLE_TEST_EMAIL_DOMAIN` | a domain the operator controls (never a public mail provider) |
 
 **Stage D — dry run, then execute one gate at a time.**
@@ -158,6 +160,8 @@ operator acts and the harness reads back.
 | G1 | the project says which project it is | marker row = the allowlisted ref | no marker / another ref / two rows | Auto | yes |
 | G2 | Auth settings (public endpoint) | e-mail ON; sign-ups open; autoconfirm recorded | e-mail provider OFF | Auto | yes |
 | G3a | baseline schema | digest matches; scan clean; the 17 relations exist | digest / scan / SQL error | Auto | no |
+| G3b | **(Phase 12)** baseline read-back: the project's own schema inventory (read-only) | the contract subset provides every required object and its SHA-256 is the approved one; the cron / network footprint is recorded | no approved digest, a required object missing or retyped, any drift, secret-shaped text | Auto | yes |
+| G3c | **(Phase 12)** the chain left the project silent | cron jobs and cron / net / http triggers are exactly what G3b recorded | either count changed | Auto | yes |
 | G3-P1 … P10 | chain files in release order, each followed by its marker function | file applies as written; marker present | any `COMMON_ACCOUNT_*` refusal, digest mismatch, missing marker | Auto | yes |
 | G4 | read-only release probe | `RELEASE_PREFLIGHT\|PASS\|fail=0`; ledger WARNs listed | any FAIL / STOP line | Auto | yes |
 | **M1** | `auth.sessions` readable by the owner of the lifecycle objects | columns `id,user_id,not_after`; owner has SELECT | unreadable (the writer guard and the fence cannot work) | Auto | yes |

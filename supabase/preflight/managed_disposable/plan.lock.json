@@ -1,5 +1,6 @@
 {
   "files": {
+    "supabase/preflight/managed_disposable/inventory/schema_inventory.sql": "93b1ca05e381989c342aa1add93e7ab710d6b69110b758151fb131fc8d5926cb",
     "supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql": "e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3",
     "supabase/migrations/20261006230000_common_account_service_start_intent.sql": "2c736e5aa70c61bf5563eee185d226fbde2c7f37f034c262f5e4b31f81888fa4",
     "supabase/migrations/20261009120000_common_account_deletion_completion.sql": "fd340765dd1aa8891b4391573568c36741701b762be928964e19d020aee3b68c",
@@ -11,5 +12,425 @@
     "supabase/migrations/20261015090000_common_account_enrollment_session_fence.sql": "129d8b803bb375435d3fdc307ff844acb0a5e31df4021ee3d8c5be8239b81060",
     "supabase/migrations/20261015120000_common_account_x_unconfirmed_snapshot_record.sql": "766e6fce56ef56c2ede40f77b870bcef7600f83701130ba6324dbc0fc2ff0a27",
     "supabase/preflight/common_account_release_probe.sql": "bd435b584e8dbb2628d44208cc048e85d0fc133b5159aa1cdfd8ab055a433885"
+  },
+  "reviewed": {
+    "supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql": {
+      "dynamic": [
+        "9a7d41b08006429ad6e68d0a10d7fc49e9c39c3ab7ecaeb83b5bdc76a2d88e39"
+      ],
+      "writes": [
+        "private.account_lifecycle_managed_checkpoints",
+        "private.account_lifecycle_operations",
+        "private.account_lifecycle_settings",
+        "public.common_accounts",
+        "public.profiles",
+        "public.service_entitlements"
+      ],
+      "selects": []
+    },
+    "supabase/migrations/20261006230000_common_account_service_start_intent.sql": {
+      "dynamic": [],
+      "writes": [
+        "public.profiles",
+        "public.service_entitlements"
+      ],
+      "selects": []
+    },
+    "supabase/migrations/20261009120000_common_account_deletion_completion.sql": {
+      "dynamic": [
+        "08ead585b1578dd6ebcc95ea441baccd903779d7615081a63158bc3e5b88cb73",
+        "322e10c6b0ded6756b153620e1568cfe9691a33361c7bcf8d07a6e06351aa1f5",
+        "3c8a43e32758d7ce845e946fdbb99bd46d87bbda90860f7695832a3c6a0eade7",
+        "961f8e23b09026cdf5b9a0a2f181a91c5085a144f3e55cb1778a94bc4c1535c3"
+      ],
+      "writes": [
+        "private.account_lifecycle_operations",
+        "private.account_lifecycle_release_gates"
+      ],
+      "selects": []
+    },
+    "supabase/migrations/20261010051938_common_account_service_write_guard.sql": {
+      "dynamic": [],
+      "writes": [],
+      "selects": []
+    },
+    "supabase/migrations/20261012130000_common_account_core_service_fence.sql": {
+      "dynamic": [],
+      "writes": [],
+      "selects": []
+    },
+    "supabase/migrations/20261012230000_common_account_service_brand_state.sql": {
+      "dynamic": [],
+      "writes": [],
+      "selects": []
+    },
+    "supabase/migrations/20261013120000_common_account_service_deletion_ownership.sql": {
+      "dynamic": [],
+      "writes": [
+        "private.account_lifecycle_operations",
+        "public.service_entitlements"
+      ],
+      "selects": []
+    },
+    "supabase/migrations/20261013140000_common_account_service_reconciliation_facts.sql": {
+      "dynamic": [],
+      "writes": [
+        "private.account_lifecycle_operations"
+      ],
+      "selects": []
+    },
+    "supabase/migrations/20261015090000_common_account_enrollment_session_fence.sql": {
+      "dynamic": [],
+      "writes": [],
+      "selects": []
+    },
+    "supabase/migrations/20261015120000_common_account_x_unconfirmed_snapshot_record.sql": {
+      "dynamic": [],
+      "writes": [
+        "private.account_lifecycle_operations"
+      ],
+      "selects": []
+    },
+    "supabase/preflight/common_account_release_probe.sql": {
+      "dynamic": [
+        "05a3ce537d5206e6d9abb1aa03a228b51812f5dcdb72321c7a507b6ea8e1f528",
+        "0980b8f60d88a99eb7c8f57147953dfc00f173624bf40c9fd1b60a35cc5dac2b",
+        "356156c04ecf9be10581ffc29da0e3aa96837d7dedf9a62d09eb0fe3bc8fdf45",
+        "35fb261a78eb2e71dfffb7e55eb92aa816adf957a5f9abf7aa8769b2418ff8c9",
+        "56618fb3ffa600210de62d258f1d6b34e3c44fb888f13bf82a15bc044ba2a069",
+        "67f920d43aadda7f1499df3ecdaa280ccd51e77241ec4c7977621e164710d809",
+        "937f10683e9cba12c6892070d478484318680521fc5404afbf94c69d4270fa7c",
+        "c542e316895d505abb64a4a6047a1638bfb7e726c076d3771e03dc94ba5b5abd",
+        "f6ce7c0a9d315a660aca02a729458e564f395cd8a97686f3f0a325c98c2a64c9",
+        "fb2ffa04267f82d5f8fb32f6d395a0c78ea6fbe2fe94b7ffaa09acbeb0dd17fd",
+        "fe85a2c7fb0646dd6235e4e945ec1bbe5803d46f2ac55bbe8d81ea51874782d7"
+      ],
+      "writes": [],
+      "selects": [
+        "52f54393ce9b62b64e91d71909c55e3f9ef453761497530af5c02bd18b1283d1"
+      ]
+    }
+  },
+  "networkFunctions": [],
+  "requirements": {
+    "schemas": [
+      "private"
+    ],
+    "roles": [
+      "anon",
+      "authenticated",
+      "service_role"
+    ],
+    "relations": [
+      "auth.identities",
+      "auth.users",
+      "public.admin_users",
+      "public.alert_category_settings",
+      "public.alert_settings",
+      "public.brand_memberships",
+      "public.brands",
+      "public.device_push_tokens",
+      "public.notifications",
+      "public.personalized_reports",
+      "public.profiles",
+      "public.social_account_oauth_states",
+      "public.social_accounts",
+      "public.social_mobile_account_deletions",
+      "public.tracked_stocks",
+      "storage.buckets",
+      "storage.objects"
+    ],
+    "columns": [
+      {
+        "relation": "auth.identities",
+        "column": "provider",
+        "type": "text"
+      },
+      {
+        "relation": "auth.identities",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "auth.users",
+        "column": "id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.admin_users",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.alert_category_settings",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.alert_settings",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.brand_memberships",
+        "column": "brand_id",
+        "type": "text"
+      },
+      {
+        "relation": "public.brand_memberships",
+        "column": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "relation": "public.brand_memberships",
+        "column": "role",
+        "type": "text"
+      },
+      {
+        "relation": "public.brand_memberships",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.brands",
+        "column": "code_profile_key",
+        "type": "text"
+      },
+      {
+        "relation": "public.brands",
+        "column": "id",
+        "type": "text"
+      },
+      {
+        "relation": "public.device_push_tokens",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.notifications",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.personalized_reports",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.profiles",
+        "column": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "relation": "public.profiles",
+        "column": "id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.social_account_oauth_states",
+        "column": "brand_id",
+        "type": "text"
+      },
+      {
+        "relation": "public.social_account_oauth_states",
+        "column": "initiated_by_user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.social_accounts",
+        "column": "brand_id",
+        "type": "text"
+      },
+      {
+        "relation": "public.social_accounts",
+        "column": "connection_status",
+        "type": "text"
+      },
+      {
+        "relation": "public.social_mobile_account_deletions",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.social_mobile_account_deletions",
+        "column": "workspace_id",
+        "type": "text"
+      },
+      {
+        "relation": "public.tracked_stocks",
+        "column": "user_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "storage.buckets",
+        "column": "owner_id",
+        "type": "text"
+      },
+      {
+        "relation": "storage.objects",
+        "column": "owner_id",
+        "type": "text"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "relation": "auth.identities",
+        "columns": [
+          "user_id"
+        ],
+        "references": "auth.users",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.admin_users",
+        "columns": [
+          "user_id"
+        ],
+        "references": "auth.users",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.alert_category_settings",
+        "columns": [
+          "user_id"
+        ],
+        "references": "public.profiles",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.alert_settings",
+        "columns": [
+          "user_id"
+        ],
+        "references": "public.profiles",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.brand_memberships",
+        "columns": [
+          "brand_id"
+        ],
+        "references": "public.brands",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.brand_memberships",
+        "columns": [
+          "user_id"
+        ],
+        "references": "auth.users",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.device_push_tokens",
+        "columns": [
+          "user_id"
+        ],
+        "references": "public.profiles",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.notifications",
+        "columns": [
+          "user_id"
+        ],
+        "references": "public.profiles",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.personalized_reports",
+        "columns": [
+          "user_id"
+        ],
+        "references": "public.profiles",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.profiles",
+        "columns": [
+          "id"
+        ],
+        "references": "auth.users",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.social_account_oauth_states",
+        "columns": [
+          "brand_id"
+        ],
+        "references": "public.brands",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "a"
+      },
+      {
+        "relation": "public.social_account_oauth_states",
+        "columns": [
+          "initiated_by_user_id"
+        ],
+        "references": "auth.users",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      },
+      {
+        "relation": "public.social_accounts",
+        "columns": [
+          "brand_id"
+        ],
+        "references": "public.brands",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "a"
+      },
+      {
+        "relation": "public.tracked_stocks",
+        "columns": [
+          "user_id"
+        ],
+        "references": "public.profiles",
+        "referencedColumns": [
+          "id"
+        ],
+        "onDelete": "c"
+      }
+    ],
+    "functions": [
+      "public.social_mobile_account_deletion_subject(uuid)",
+      "public.social_mobile_account_deletion_workspace(uuid)"
+    ]
   }
 }

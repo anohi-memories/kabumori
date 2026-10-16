@@ -21,6 +21,7 @@ const full = (over: Env = {}): Env => ({
   [ENV.dbUrl]: `postgresql://postgres:synthetic-password@db.${DISPOSABLE}.supabase.co:5432/postgres`,
   [ENV.baselineSha256]: 'f'.repeat(64),
   [ENV.baselinePath]: '/tmp/synthetic-baseline.sql',
+  [ENV.inventorySha256]: 'e'.repeat(64),
   [ENV.emailDomain]: 'accept.example.test',
   ...over,
 });
@@ -66,6 +67,9 @@ test('execution refuses each missing piece with its own code', () => {
     [full({ [ENV.emailDomain]: undefined }), 'EMAIL_DOMAIN_MISSING'],
     [full({ [ENV.baselineSha256]: undefined }), 'BASELINE_DIGEST_MISSING'],
     [full({ [ENV.baselinePath]: undefined }), 'BASELINE_PATH_MISSING'],
+    [full({ [ENV.inventorySha256]: undefined }), 'INVENTORY_DIGEST_MISSING'],
+    [full({ [ENV.inventorySha256]: 'not-a-digest' }), 'INVENTORY_DIGEST_MISSING'],
+    [full({ [ENV.inventorySha256]: 'E'.repeat(64) }), 'INVENTORY_DIGEST_MISSING'],
   ];
   for (const [env, code] of cases) assert.ok(codes(env).includes(code), `${code}: ${codes(env).join(',')}`);
 });

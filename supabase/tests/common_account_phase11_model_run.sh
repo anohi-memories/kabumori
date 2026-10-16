@@ -64,6 +64,9 @@ for f in 20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql 20
 done
 own "$base" -f "$t/common_account_lifecycle_fixture.sql" >/dev/null
 own "$base" -f "$t/common_account_phase9_auth_fixture.sql" >/dev/null
+# GoTrue's own auth.sessions: a managed project has it before any chain file (Phase 12's baseline read-back requires it);
+# the write-guard stand-in below then only adds its writers (its CREATE TABLE is made IF NOT EXISTS by the model)
+own "$base" -c "create table if not exists auth.sessions (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users (id) on delete cascade, created_at timestamptz not null default now(), not_after timestamptz)" >/dev/null
 own "$base" -c "create table public.kabumori_disposable_marker (project_ref text primary key, created_at timestamptz not null default now())" >/dev/null
 echo "PASS model baseline: the production-shaped baseline without any chain file"
 
@@ -81,7 +84,7 @@ done
 
 own "$nofence" -f "$m/20261001150000_common_account_lifecycle_foundation.sql" >/dev/null
 for f in 20261006230000_common_account_service_start_intent.sql 20261009120000_common_account_deletion_completion.sql; do own "$nofence" -f "$m/$f" >/dev/null; done
-own "$nofence" -f "$t/common_account_write_guard_fixture.sql" >/dev/null
+sed 's/^create table auth.sessions (/create table if not exists auth.sessions (/' "$t/common_account_write_guard_fixture.sql" | own "$nofence" -f - >/dev/null
 for f in 20261010051938_common_account_service_write_guard.sql 20261012130000_common_account_core_service_fence.sql \
          20261012230000_common_account_service_brand_state.sql 20261013120000_common_account_service_deletion_ownership.sql \
          20261013140000_common_account_service_reconciliation_facts.sql 20261015120000_common_account_x_unconfirmed_snapshot_record.sql; do

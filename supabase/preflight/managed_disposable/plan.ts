@@ -3,9 +3,12 @@
 // stage M = the twelve acceptance checks of docs/common-account/phase9-shared-login-enrollment.md section 9;
 // stage T = teardown. Every step declares whether it may mutate (the runner verifies the project's identity before
 // each such call), what it expects and when it STOPs the run.
+import { verifyInventory } from './inventory.ts';
 import type { Ctx, PlanFile, Step, Verdict } from './runner.ts';
 
 export const PROBE_PATH = 'supabase/preflight/common_account_release_probe.sql';
+/** The read-only, schema-only inventory query (Phase 12). It is run through the same read-only probe channel as the release probe. */
+export const INVENTORY_PATH = 'supabase/preflight/managed_disposable/inventory/schema_inventory.sql';
 
 /** The chain, in release order (the same list the Phase 7 preflight runner pins). `marker` = the function that shows the phase is present. */
 export const CHAIN: readonly (PlanFile & { marker: string })[] = [
@@ -113,6 +116,19 @@ const probeVerdict = (lines: string, label: string): Verdict => {
   return fail(`${label}: ${last || 'no result line'}`);
 };
 
+/**
+ * What the chain must NOT change: how many cron jobs the project holds and how many user triggers run a function that
+ * mentions cron / net / http. Read through the read-only session; `cron.job` is read only when the project has it.
+ */
+async function silenceFootprint(ctx: Ctx): Promise<string> {
+  const hasCron = (await ctx.sql(`select to_regclass('cron.job') is not null`)).trim() === 't';
+  const jobs = hasCron ? (await ctx.sql('select count(*) from cron.job')).trim() : '0';
+  const triggers = (await ctx.sql(
+    `select count(*) from pg_trigger t join pg_proc p on p.oid = t.tgfoid where not t.tgisinternal and lower(p.prosrc) ~ '(\\mnet\\.|pg_net|http_post|http_get|\\mcron\\.|pg_cron)'`,
+  )).trim();
+  return `cron_jobs=${jobs} network_triggers=${triggers}`;
+}
+
 export const STEPS: readonly Step[] = [
   {
     id: 'G1', title: 'the project says which project it is (marker row)', access: 'read', mode: 'automated', modelled: true,
@@ -147,6 +163,19 @@ export const STEPS: readonly Step[] = [
       return pass('baseline applied');
     },
   },
+  {
+    id: 'G3b', title: 'baseline read-back: the project\'s own schema inventory against the approved contract digest', access: 'read', mode: 'automated', modelled: true,
+    expected: 'the contract subset of the project\'s inventory provides every object the chain requires, and its SHA-256 equals KABUMORI_DISPOSABLE_INVENTORY_SHA256',
+    stop: 'no approved digest, a required object missing or of another type, any difference from the approved contract, secret-shaped text in the output, or an unreadable inventory',
+    run: async (ctx) => {
+      const requirements = ctx.baseline.requirements;
+      if (!requirements) return stop('the plan lock carries no baseline requirements: regenerate it with cli.ts --write-lock');
+      const verdict = await verifyInventory(await ctx.probe(INVENTORY_PATH), requirements, ctx.baseline.approvedInventory);
+      if (verdict.status !== 'PASS') return stop(verdict.detail);
+      ctx.memo.silenceBefore = await silenceFootprint(ctx);
+      return pass(`${verdict.detail}; ${String(ctx.memo.silenceBefore)}`);
+    },
+  },
   ...CHAIN.map((file): Step => ({
     id: `G3-${file.id}`, title: `chain file ${file.id}`, access: 'mutate', mode: 'automated', modelled: true,
     expected: `${file.path.split('/').pop()} applies as written and its marker function exists`,
@@ -157,6 +186,17 @@ export const STEPS: readonly Step[] = [
       return present === 't' ? pass(`${file.id} applied; ${file.marker} present`) : stop(`${file.id} applied but its marker function is absent`);
     },
   })),
+  {
+    id: 'G3c', title: 'the chain left the project silent: no cron job and no network trigger was added', access: 'read', mode: 'automated', modelled: true,
+    expected: 'the number of cron jobs and of user triggers that reach cron / net / http is exactly what G3b recorded before the first chain file',
+    stop: 'the count of either went up (or down): a migration armed, or removed, something that calls out',
+    run: async (ctx) => {
+      const before = ctx.memo.silenceBefore;
+      if (typeof before !== 'string') return stop('G3b did not record the footprint before the chain: nothing to compare with');
+      const after = await silenceFootprint(ctx);
+      return after === before ? pass(`unchanged (${after})`) : stop(`the footprint changed: before ${before}, after ${after}`);
+    },
+  },
   {
     id: 'G4', title: 'release probe on the full chain (read-only)', access: 'read', mode: 'automated', modelled: true,
     expected: 'RELEASE_PREFLIGHT|PASS|fail=0 (warnings for the ledger are listed, never ignored)',
