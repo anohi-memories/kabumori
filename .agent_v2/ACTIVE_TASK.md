@@ -91,11 +91,11 @@
 
 ## F6
 - slot: F6
-- status: ready
+- status: review_required
 - task_id: common-ai-f6-pr222-import-lexer-r1b-r1c-fix-20261016
 - owner: claude
-- next_owner: claude
-- blocker: PR222 lexer boundary R1b P2 and R1c P3 correction required; production NO_GO
+- next_owner: chatgpt
+- blocker: FIXED_SOURCE_ONLY Draft PR #231 (2a696aff, base PR222 11835df1): import guard now lexes modules (literals/comments never code, block comment ends at first */) and parses import/export/import() edges; R1b string-fragment bypass (3 real-file mutations missed by all 15 PR222 guard tests) refused, R1c commented legal imports accepted; no allowlist widening, A1/ledger untouched; provider145 bridge27 market324 merged506 PASS, 509 files lexed, 11 lexer mutants killed; shared 5 type errors + 1 permission block NOT_RERUN; production NO_GO
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
