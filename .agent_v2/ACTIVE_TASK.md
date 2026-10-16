@@ -183,7 +183,7 @@
 - blocker: CHANGES_REQUIRED P2×1 raw-trivia string-fragment import bypass + P3×1 valid named-import false rejection; A1 five-status accounting/cap fixed. Source merge HOLD / production NO_GO; prior blocked verification remains NOT_VERIFIED and was not retried.
 - previous_task_archive: .agent_v2/archive/2026-10-16-j1-pr219-focused-rereview-task.md
 - previous_report_archive: .agent_v2/archive/2026-10-16-j1-pr219-focused-rereview-report.md
-- slot_use: PR222 focused rereview complete; typed provider+bridge173/market324 PASS, independent acceptance2 FAIL; J1-only completion sync pending; return V1 to 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）.
+- slot_use: PR222 focused rereview complete; typed provider+bridge173/market324 PASS, independent acceptance2 FAIL; content commit 97576ada1f60161615456f02df13a5ad8e5d349c normally pushed to main and read-back PASS; return V1 to 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）.
 
 ## J2
 - slot: J2
