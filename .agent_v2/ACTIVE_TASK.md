@@ -40,7 +40,7 @@
 
 ## F3
 - slot: F3
-- status: ready
+- status: in_progress
 - task_id: postona-f3-x-reservation-oauth-entitlement-dispatch-integration-20261016
 - owner: claude
 - next_owner: claude
