@@ -561,3 +561,5 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - original_path: `.agent_v2/tasks/J1.md`; archive_path: `.agent_v2/archive/2026-10-16-j1-pr219-focused-rereview-task.md`; original/restored Git blob `68293d3193138fee04d24d733dbce2fdae9329bd`, 5097 UTF-8 characters.
 - original_path: `.agent_v2/reports/J1.md`; archive_path: `.agent_v2/archive/2026-10-16-j1-pr219-focused-rereview-report.md`; original/restored Git blob `a74b38e88ff8718e5a467b8cac0ebaf52846b624`, 16470 UTF-8 characters.
 - SHA256/MANIFEST pending separate verification; immutable archive content verified by identical Git blob.
+
+- F4 2026-10-16: `postona-f4-mobile-auth-entitlement-x-threads-integration-readiness-20261016` (PR227, source accepted, NO_GO) archive `.agent_v2/archive/2026-10-16-F4-postona-f4-mobile-auth-entitlement-x-threads-integration-readiness-20261016/`; TASK+Report Git blob readback verified; SHA256 pending.
