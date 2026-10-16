@@ -136,10 +136,11 @@ deno run --no-config --allow-read --allow-env=<the names above> supabase/preflig
 ... cli.ts --execute --only=G1,G2
 # 3. the baseline and the chain, one file at a time with its marker check
 ... cli.ts --execute --only=G1,G3a
-... cli.ts --execute --only=G1,G3-P1   (then G3-P2, G3-P3a, G3-P3b, G3-P4, G3-P5, G3-P6, G3-P8, G3-P9, G3-P10)
+... cli.ts --execute --only=G1,G3b,G3-P1   (then G3-P2, G3-P3a, G3-P3b, G3-P4, G3-P5, G3-P6, G3-P8, G3-P9, G3-P10, each WITH G3b:
+                                           a mutating step is refused unless the baseline read-back is selected with it and passes in that run)
 # 4. the release probe, then the acceptance checks, then teardown
 ... cli.ts --execute --only=G1,G4
-... cli.ts --execute --only=G1,G2,M1,M4,M2,M6,M7,M5,M8,M10,M11,M12,M9,M3,T1   # G2 first: M2 needs the autoconfirm mode it records
+... cli.ts --execute --only=G1,G2,G3b,M1,M4,M2,M6,M7,M5,M8,M10,M11,M12,M9,M3,T1   # G2 first: M2 needs the autoconfirm mode it records; G3b: every mutating check needs the baseline read-back in the same run
 ```
 
 Each invocation prints one line per step (`PASS` / `FAIL` / `STOP` / `WARN` / `INFO` / `MANUAL` / `NOT_RUN`) and a

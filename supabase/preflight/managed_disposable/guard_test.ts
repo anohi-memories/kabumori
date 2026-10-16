@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ENV, type Env, makeRedactor, parseDbUrl, parseHostedUrl, projectRefsIn, resolveTarget, scanSqlForForeignTargets } from './guard.ts';
+import { ENV, type Env, type GuardCode, makeRedactor, parseDbUrl, parseHostedUrl, projectRefsIn, resolveTarget, scanSqlForForeignTargets } from './guard.ts';
 
 const DISPOSABLE = 'aaaaaaaaaaaaaaaaaaaa';
 const OTHER_TEST = 'bbbbbbbbbbbbbbbbbbbb';
@@ -52,7 +52,7 @@ test('a dry run needs no project, no secret and no confirmation, and says so', (
 });
 
 test('execution refuses each missing piece with its own code', () => {
-  const cases: [Env, string][] = [
+  const cases: [Env, GuardCode][] = [
     [full({ [ENV.projectRef]: undefined }), 'TARGET_REF_MISSING'],
     [full({ [ENV.projectRef]: 'short' }), 'TARGET_REF_MALFORMED'],
     [full({ [ENV.allowlist]: undefined }), 'ALLOWLIST_MISSING'],

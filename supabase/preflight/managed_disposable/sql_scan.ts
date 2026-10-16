@@ -23,7 +23,13 @@ export type FindingCode =
   | 'UNICODE_ESCAPE' | 'UNTRUSTED_LANGUAGE' | 'DYNAMIC_SQL' | 'DATA_WRITE' | 'TOP_LEVEL_SELECT' | 'INDIRECT_NETWORK_CALL' | 'UNKNOWN_STATEMENT' | 'UNTERMINATED_LITERAL';
 
 export type Finding = { code: FindingCode; severity: Severity; line: number; detail: string; fingerprint?: string };
-export type FunctionDefinition = { name: string; networkCapable: boolean };
+/**
+ * A function (or procedure) the file defines. `calls` are the names it calls (its own name excluded), so the corpus can
+ * be closed over: a helper that calls a helper that calls net.http_post is network capable too. `dynamic` = its text
+ * assembles / runs SQL at run time (EXECUTE, PREPARE, query_to_xml...): what it reaches cannot be known lexically.
+ * An `alter function A rename to B` is recorded as B calling A (an alias reaches whatever the original reaches).
+ */
+export type FunctionDefinition = { name: string; networkCapable: boolean; calls: string[]; dynamic: boolean };
 export type ScanResult = {
   findings: Finding[];
   /** fingerprints (SHA-256 is added by the caller; the text is normalized) of every dynamic statement, with its line */
@@ -220,7 +226,9 @@ const RULES: { code: FindingCode; pattern: RegExp; detail: string }[] = [
 const DYNAMIC = /(?<!grant\s)(?<!revoke\s)(?<!['"])\b(execute|prepare|query_to_xml(?:_and_xmlschema)?|cursor_to_xml)\b(?!['"])(?!\s+(on\s|function\b|procedure\b|privilege))/giu;
 // a write names its target: INSERT INTO t, UPDATE t [alias] SET, DELETE FROM t, TRUNCATE t, MERGE INTO t (not `ON UPDATE`, `AFTER DELETE ON`)
 const WRITE = /\b(?:insert\s+into\s+(?:only\s+)?|update\s+(?:only\s+)?(?=[a-z_][a-z0-9_.]*(?:\s+(?:as\s+)?[a-z_][a-z0-9_]*)?\s+set\b)|delete\s+from\s+(?:only\s+)?|truncate\s+(?:table\s+)?(?:only\s+)?(?!on\b)|merge\s+into\s+)([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?)/giu;
-const FUNCTION_DEF = /\bcreate\s+(?:or\s+replace\s+)?function\s+([a-z_][a-z0-9_.]*)\s*\(/giu;
+const FUNCTION_DEF = /\bcreate\s+(?:or\s+replace\s+)?(?:function|procedure)\s+([a-z_][a-z0-9_.]*)\s*\(/giu;
+const FUNCTION_RENAME = /\balter\s+(?:function|procedure)\s+([a-z_][a-z0-9_.]*)\s*(?:\([^)]*\))?\s+rename\s+to\s+([a-z_][a-z0-9_]*)/giu;
+const CALL = /\b([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?)\s*\(/giu;
 const KNOWN_STATEMENTS = new Set([
   'begin', 'commit', 'end', 'rollback', 'start', 'set', 'reset', 'create', 'alter', 'drop', 'grant', 'revoke', 'comment',
   'do', 'select', 'with', 'insert', 'update', 'delete', 'lock',
@@ -229,20 +237,30 @@ const KNOWN_STATEMENTS = new Set([
 const collapse = (text: string) => text.replace(/\s+/gu, ' ').trim().toLowerCase();
 const lineOf = (text: string, index: number) => text.slice(0, index).split('\n').length;
 
-/** Collects the dollar-quoted bodies of CREATE FUNCTION statements (their text, normalized). */
+/**
+ * Collects every CREATE FUNCTION / PROCEDURE statement (normalized). The WHOLE statement is the body: a body in dollar
+ * quotes, in single quotes (`AS '...'`) or SQL-standard (`BEGIN ATOMIC`) is scanned alike, so no spelling hides a call.
+ */
 function functionBodies(text: string): { name: string; body: string }[] {
   const found: { name: string; body: string }[] = [];
   for (const statement of splitStatements(text)) {
     FUNCTION_DEF.lastIndex = 0;
     const def = FUNCTION_DEF.exec(statement.text);
     if (!def) continue;
-    const tag = /\$([A-Za-z_][A-Za-z0-9_]*)?\$/u.exec(statement.text);
-    if (!tag) continue;
-    const open = statement.text.indexOf(tag[0]);
-    const close = statement.text.indexOf(tag[0], open + tag[0].length);
-    found.push({ name: def[1], body: statement.text.slice(open, close === -1 ? undefined : close) });
+    found.push({ name: def[1], body: statement.text });
   }
   return found;
+}
+
+/** Names called inside `text` (`name(` or `schema.name(`), lower-case, without `own`. */
+function callsIn(text: string, own: string): string[] {
+  const called = new Set<string>();
+  CALL.lastIndex = 0;
+  for (const match of text.matchAll(CALL)) {
+    const name = match[1].toLowerCase();
+    if (name !== own) called.add(name);
+  }
+  return [...called].sort();
 }
 
 // a function body that CALLS out or touches cron (a URL string in data is not a call)
@@ -310,7 +328,17 @@ export function scanSql(sql: string, options: ScanOptions = {}): ScanResult {
 
   const definedFunctions: FunctionDefinition[] = [];
   for (const { name, body } of functionBodies(text)) {
-    definedFunctions.push({ name: name.toLowerCase(), networkCapable: NETWORK_BODY.some((pattern) => matches(pattern, body)) });
+    const lower = name.toLowerCase();
+    definedFunctions.push({
+      name: lower,
+      networkCapable: NETWORK_BODY.some((pattern) => matches(pattern, body)),
+      calls: callsIn(body, lower),
+      dynamic: matches(DYNAMIC, body),
+    });
+  }
+  FUNCTION_RENAME.lastIndex = 0;
+  for (const match of text.matchAll(FUNCTION_RENAME)) {
+    definedFunctions.push({ name: match[2].toLowerCase(), networkCapable: false, calls: [match[1].toLowerCase()], dynamic: false });
   }
 
   const called = new Set<string>();
@@ -347,27 +375,65 @@ function statementEnd(text: string, start: number): number {
 
 // ---- the corpus: helper functions that reach the network, and who calls them -------------------------------------------
 
-/** Names (with and without the `public.` prefix) of every function in the corpus whose body reaches the network or cron. */
-export function networkFunctionNames(scans: readonly ScanResult[]): Set<string> {
-  const names = new Set<string>();
-  for (const scan of scans) {
-    for (const fn of scan.definedFunctions) {
-      if (!fn.networkCapable) continue;
-      names.add(fn.name);
-      const bare = fn.name.split('.').pop() as string;
-      names.add(bare);
-      names.add(`public.${bare}`);
+const bare = (name: string) => name.slice(name.lastIndexOf('.') + 1);
+
+/**
+ * Closes a property over the call graph of the corpus: a function has it when its text has it, or when it calls a
+ * function that has it, to a fixed point (so multi-hop helpers, cycles and helpers split over files are all reached).
+ * Names are matched WITHOUT their schema and without a signature: any definition of a bare name that has the property
+ * taints the bare name for every schema and overload. Over-approximating is the safe direction.
+ */
+function closure(scans: readonly ScanResult[], direct: (fn: FunctionDefinition) => boolean): Set<string> {
+  const definitions = scans.flatMap((scan) => scan.definedFunctions);
+  const tainted = new Set<string>();
+  for (const fn of definitions) if (direct(fn)) tainted.add(bare(fn.name));
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const fn of definitions) {
+      const name = bare(fn.name);
+      if (!tainted.has(name) && fn.calls.some((called) => tainted.has(bare(called)))) {
+        tainted.add(name);
+        changed = true;
+      }
     }
   }
+  const names = new Set<string>();
+  for (const fn of definitions) {
+    if (!tainted.has(bare(fn.name))) continue;
+    names.add(fn.name);
+    names.add(bare(fn.name));
+    names.add(`public.${bare(fn.name)}`);
+  }
   return names;
+}
+
+/** Names (with and without a schema) of every corpus function that reaches the network or cron, directly or through helpers. */
+export function networkFunctionNames(scans: readonly ScanResult[]): Set<string> {
+  return closure(scans, (fn) => fn.networkCapable);
+}
+
+/** Names of corpus functions that run SQL assembled at run time, directly or through helpers: what they reach is unknowable. */
+export function dynamicFunctionNames(scans: readonly ScanResult[]): Set<string> {
+  return closure(scans, (fn) => fn.dynamic);
+}
+
+/**
+ * Calls (as written, lower-case) of corpus functions that run SQL assembled at run time, by a scan that does not define
+ * them. What such a callee reaches is unknowable lexically, so each one is an effect the review must accept by name.
+ */
+export function indirectDynamicCalls(scan: ScanResult, dynamic: ReadonlySet<string>): string[] {
+  const own = new Set(scan.definedFunctions.map((fn) => fn.name));
+  const tainted = new Set([...dynamic].map(bare));
+  return scan.calledNames.filter((name) => tainted.has(bare(name)) && !own.has(name)).sort();
 }
 
 /** Calls of corpus network helpers by a scan that does not itself define them. */
 export function indirectNetworkCalls(scan: ScanResult, network: ReadonlySet<string>): Finding[] {
   const own = new Set(scan.definedFunctions.map((fn) => fn.name));
+  const tainted = new Set([...network].map(bare));
   const out: Finding[] = [];
   for (const name of scan.calledNames) {
-    if (network.has(name) && !own.has(name)) {
+    if (tainted.has(bare(name)) && !own.has(name)) {
       out.push({ code: 'INDIRECT_NETWORK_CALL', severity: 'block', line: 1, detail: `calls ${name}, which reaches the network or cron` });
     }
   }

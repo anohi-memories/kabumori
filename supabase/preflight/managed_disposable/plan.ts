@@ -4,7 +4,7 @@
 // stage T = teardown. Every step declares whether it may mutate (the runner verifies the project's identity before
 // each such call), what it expects and when it STOPs the run.
 import { verifyInventory } from './inventory.ts';
-import type { Ctx, PlanFile, Step, Verdict } from './runner.ts';
+import { BASELINE_GATE, type Ctx, type PlanFile, type Step, type Verdict } from './runner.ts';
 
 export const PROBE_PATH = 'supabase/preflight/common_account_release_probe.sql';
 /** The read-only, schema-only inventory query (Phase 12). It is run through the same read-only probe channel as the release probe. */
@@ -129,7 +129,7 @@ async function silenceFootprint(ctx: Ctx): Promise<string> {
   return `cron_jobs=${jobs} network_triggers=${triggers}`;
 }
 
-export const STEPS: readonly Step[] = [
+const PLAN_STEPS: readonly Step[] = [
   {
     id: 'G1', title: 'the project says which project it is (marker row)', access: 'read', mode: 'automated', modelled: true,
     expected: 'public.kabumori_disposable_marker holds exactly one row, and it is the allowlisted ref',
@@ -164,16 +164,17 @@ export const STEPS: readonly Step[] = [
     },
   },
   {
-    id: 'G3b', title: 'baseline read-back: the project\'s own schema inventory against the approved contract digest', access: 'read', mode: 'automated', modelled: true,
+    id: BASELINE_GATE, title: 'baseline read-back: the project\'s own schema inventory against the approved contract digest', access: 'read', mode: 'automated', modelled: true,
     expected: 'the contract subset of the project\'s inventory provides every object the chain requires, and its SHA-256 equals KABUMORI_DISPOSABLE_INVENTORY_SHA256',
     stop: 'no approved digest, a required object missing or of another type, any difference from the approved contract, secret-shaped text in the output, or an unreadable inventory',
     run: async (ctx) => {
       const requirements = ctx.baseline.requirements;
       if (!requirements) return stop('the plan lock carries no baseline requirements: regenerate it with cli.ts --write-lock');
       const verdict = await verifyInventory(await ctx.probe(INVENTORY_PATH), requirements, ctx.baseline.approvedInventory);
-      if (verdict.status !== 'PASS') return stop(verdict.detail);
+      if (verdict.status !== 'PASS' || verdict.digest === undefined) return stop(verdict.detail);
       ctx.memo.silenceBefore = await silenceFootprint(ctx);
-      return pass(`${verdict.detail}; ${String(ctx.memo.silenceBefore)}`);
+      // the evidence the runner binds to this run: the contract digest that was approved, and the pinned query that produced it
+      return { ...pass(`${verdict.detail}; ${String(ctx.memo.silenceBefore)}`), evidence: { kind: 'baseline_contract' as const, digest: verdict.digest, probePath: INVENTORY_PATH } };
     },
   },
   ...CHAIN.map((file): Step => ({
@@ -430,4 +431,14 @@ export const STEPS: readonly Step[] = [
 ];
 
 /** The ordered ids a model run exercises. */
+/**
+ * Every step that mutates the project -- the chain files and the acceptance checks that create logins -- requires the
+ * baseline read-back to have passed in the same run. Exceptions: G3a (it applies the baseline the read-back then checks)
+ * and teardown (`always`), which must stay runnable alone. The runner enforces this at the selection, at the step and
+ * again at the mutation itself (applyFile / non-GET http / held lock).
+ */
+export const STEPS: readonly Step[] = PLAN_STEPS.map((step) => (
+  step.access === 'mutate' && step.always !== true && step.id !== 'G3a' ? { ...step, requires: [BASELINE_GATE] } : step
+));
+
 export const MODELLED = STEPS.filter((step) => step.modelled).map((step) => step.id);

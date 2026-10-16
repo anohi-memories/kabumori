@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { indirectNetworkCalls, networkFunctionNames, scanSql, splitStatements, normalize, type FindingCode } from './sql_scan.ts';
+import { dynamicFunctionNames, indirectDynamicCalls, indirectNetworkCalls, networkFunctionNames, scanSql, splitStatements, normalize, type FindingCode } from './sql_scan.ts';
 import { refusalsFor } from './runner.ts';
 import { buildLock, sha256Hex } from './lock.ts';
 
@@ -72,8 +72,8 @@ test('helper functions and indirect setup: the call of a network-capable functio
   const helper = scanSql(`create function public.ping() returns void language plpgsql as $$ begin perform net.http_post(url := 'x'); end $$;`);
   const jobs = scanSql(`create function public.schedule_all() returns void language plpgsql as $$ begin perform cron.schedule('a','* * * * *','select 1'); end $$;`);
   const innocent = scanSql(`create function public.add_one(a int) returns int language sql as $$ select a + 1 $$;`);
-  assert.deepEqual(helper.definedFunctions, [{ name: 'public.ping', networkCapable: true }]);
-  assert.deepEqual(innocent.definedFunctions, [{ name: 'public.add_one', networkCapable: false }]);
+  assert.deepEqual(helper.definedFunctions, [{ name: 'public.ping', networkCapable: true, calls: ['net.http_post'], dynamic: false }]);
+  assert.deepEqual(innocent.definedFunctions, [{ name: 'public.add_one', networkCapable: false, calls: [], dynamic: false }]);
   const network = networkFunctionNames([helper, jobs, innocent]);
   for (const name of ['public.ping', 'ping', 'public.schedule_all', 'schedule_all']) assert.ok(network.has(name), name);
   assert.ok(!network.has('add_one'));
@@ -188,4 +188,58 @@ test('the repository corpus: the production-targeting cron files are blocked, th
   }
   assert.deepEqual(scanSql(read('supabase/preflight/common_account_release_probe.sql')).findings.filter((f) => f.severity === 'block'), []);
   assert.deepEqual([...network], [], 'no repository function wraps cron or the network (the eight files call them at top level)');
+});
+
+// ---- J1 V1 R3: the corpus is closed over its call graph -------------------------------------------------------------------
+
+const corpusOf = (...sources: string[]) => sources.map((source) => scanSql(source));
+const refusedCall = (corpus: ReturnType<typeof corpusOf>, sql: string) => indirectNetworkCalls(scanSql(sql), networkFunctionNames(corpus)).length > 0;
+
+test('network capability reaches a caller through any number of helpers, in any file, however the body is spelled', () => {
+  const leaf = "create function public.audit_leaf() returns void language plpgsql as $$ begin perform net.http_post('x', '{}'::jsonb); end $$;";
+  const middle = 'create function public.audit_middle() returns void language plpgsql as $$ begin perform public.audit_leaf(); end $$;';
+  const top = 'create function public.audit_top() returns void language sql as $$ select public.audit_middle() $$;';
+  const corpus = corpusOf(leaf, middle, top);
+  for (const call of ['select public.audit_leaf();', 'select public.audit_middle();', 'select public.audit_top();', 'select audit_top();']) {
+    assert.ok(refusedCall(corpus, call), call);
+  }
+  assert.ok(!refusedCall(corpus, 'select public.unrelated();'));
+  // the order of the corpus does not matter
+  assert.ok(refusedCall(corpusOf(top, middle, leaf), 'select public.audit_top();'));
+  // a body in single quotes, a procedure, an SQL-standard body
+  assert.ok(refusedCall(corpusOf("create function public.q() returns void language sql as 'select net.http_post(''x'', ''{}''::jsonb)';"), 'select public.q();'));
+  assert.ok(refusedCall(corpusOf("create procedure public.p() language plpgsql as $$ begin perform cron.schedule('a', '* * * * *', 'select 1'); end $$;"), 'call public.p();'));
+  assert.ok(refusedCall(corpusOf('create function public.s() returns void language sql begin atomic select net.http_post(\'x\', \'{}\'::jsonb); end;'), 'select public.s();'));
+});
+
+test('cycles, aliases and signature ambiguity are taken conservatively', () => {
+  const corpus = corpusOf(
+    "create function a.leaf() returns void language sql as $$ select net.http_post('x', '{}'::jsonb) $$;",
+    'create function public.one() returns void language plpgsql as $$ begin perform public.two(); perform a.leaf(); end $$;',
+    'create function public.two() returns void language plpgsql as $$ begin perform public.one(); end $$;',
+    'alter function public.two() rename to renamed_two;',
+    'create function public.over(int) returns int language sql as $$ select 1 $$;',
+    "create function public.over(text) returns void language sql as $$ select net.http_post('x', '{}'::jsonb) $$;",
+  );
+  assert.ok(refusedCall(corpus, 'select public.two();'), 'a member of a cycle');
+  assert.ok(refusedCall(corpus, 'select public.renamed_two();'), 'an alias reaches whatever the original reaches');
+  assert.ok(refusedCall(corpus, 'select public.leaf();'), 'the schema does not exempt a call: the bare name is tainted');
+  assert.ok(refusedCall(corpus, 'select public.over(1);'), 'one overload that reaches the network taints the name');
+  assert.ok(!refusedCall(corpus, 'select public.harmless();'));
+});
+
+test('a function that runs run-time SQL taints its callers: the call needs a named acceptance, not a guess', () => {
+  const corpus = corpusOf(
+    "create function public.run_it(q text) returns void language plpgsql as $$ begin execute q; end $$;",
+    'create function public.wrap(q text) returns void language sql as $$ select public.run_it(q) $$;',
+    'create function public.plain() returns int language sql as $$ select 1 $$;',
+  );
+  const dynamic = dynamicFunctionNames(corpus);
+  for (const name of ['public.run_it', 'run_it', 'public.wrap', 'wrap']) assert.ok(dynamic.has(name), name);
+  assert.ok(!dynamic.has('plain'));
+  assert.deepEqual(indirectDynamicCalls(scanSql('select public.wrap(1);'), dynamic), ['public.wrap']);
+  assert.deepEqual(indirectDynamicCalls(scanSql('select public.plain();'), dynamic), []);
+  // the defining file is not "calling" itself; a file that defines the wrapper but not the callee is calling the callee
+  assert.deepEqual(indirectDynamicCalls(corpus[0], dynamic), []);
+  assert.deepEqual(indirectDynamicCalls(corpus[1], dynamic), ['public.run_it']);
 });

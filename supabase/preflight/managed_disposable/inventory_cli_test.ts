@@ -63,3 +63,29 @@ test('diff: drift is exit 1 and names objects and attributes; identical inventor
   assert.equal(none.code, 0);
   assert.match(none.output, /no drift/u);
 });
+
+test('an unreadable or unusual path is never echoed, by check or by diff (J1 V1 R4)', async () => {
+  const sentinel = ['sb_secret_', 'PathSentinel0123456789'].join('');
+  const throwing = () => { throw new Error(`ENOENT ${sentinel}`); };
+  const checked = await runInventoryCli(['check', `/tmp/${sentinel}/m.ndjson`], throwing, provenance);
+  const diffed = await runInventoryCli(['diff', `/tmp/${sentinel}/a.ndjson`, `/tmp/${sentinel}/b.ndjson`], throwing, provenance);
+  for (const result of [checked, diffed]) {
+    assert.equal(result.code, 1);
+    assert.ok(!result.output.includes(sentinel), result.output);
+    assert.ok(!result.output.includes('/tmp/'), result.output);
+  }
+  // a clean `check` no longer prints the manifest path at all
+  const clean = await runInventoryCli(['check', `/tmp/${sentinel}/m.ndjson`], () => toText(syntheticInventory(provenance.requirements)), provenance);
+  assert.equal(clean.code, 0);
+  assert.ok(!clean.output.includes(sentinel) && !clean.output.includes('/tmp/'));
+});
+
+test('diff stops on a manifest that is outside the closed shape contract, with codes and counts only', async () => {
+  const odd = syntheticInventory(provenance.requirements);
+  odd.push({ k: 'relation', key: 'public.extra_table', a: { relkind: 'r', row_sample: 'leak' } } as unknown as Line);
+  const read = files({ a: toText(syntheticInventory(provenance.requirements)), b: toText(odd) });
+  const result = await runInventoryCli(['diff', 'a', 'b'], read, provenance);
+  assert.equal(result.code, 1);
+  assert.match(result.output, /STOP the observed manifest violates the inventory contract \(.*UNEXPECTED_ATTRIBUTE=1/u);
+  assert.ok(!result.output.includes('extra_table') && !result.output.includes('row_sample'));
+});

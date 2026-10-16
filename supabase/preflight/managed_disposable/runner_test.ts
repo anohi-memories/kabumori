@@ -6,7 +6,7 @@ import test from 'node:test';
 
 import { ENV, resolveTarget } from './guard.ts';
 import { sha256Hex } from './lock.ts';
-import { type HttpRequest, type HttpResponse, render, run, type Step, type Transport } from './runner.ts';
+import { BASELINE_GATE, type HttpRequest, type HttpResponse, refusalsFor, render, run, type Step, type Transport, unsafeSelection } from './runner.ts';
 
 const REF = 'aaaaaaaaaaaaaaaaaaaa';
 const PRODUCTION_REF = 'cccccccccccccccccccc';
@@ -37,11 +37,23 @@ function recording(options: { marker?: () => string } = {}) {
   };
   return { calls, transport };
 }
-const reader = { read: (path: string) => (path === 'ok.sql' ? 'create table public.t (a int);' : path === 'evil.sql' ? `select cron.schedule('j','* * * * *','select 1'); -- ${PRODUCTION_REF}.supabase.co\nselect 'https://${PRODUCTION_REF}.supabase.co';` : '') };
+const GATE_PATH = 'gate.sql';
+const GATE_BYTES = 'select 1; -- the pinned baseline probe';
+const APPROVED = 'e'.repeat(64);
+const reader = { read: (path: string) => (path === GATE_PATH ? GATE_BYTES : path === 'ok.sql' ? 'create table public.t (a int);' : path === 'evil.sql' ? `select cron.schedule('j','* * * * *','select 1'); -- ${PRODUCTION_REF}.supabase.co\nselect 'https://${PRODUCTION_REF}.supabase.co';` : '') };
 const step = (id: string, access: 'read' | 'mutate', body: Step['run'], extra: Partial<Step> = {}): Step => ({
   id, title: id, access, mode: 'automated', modelled: false, expected: 'x', stop: 'y', run: body, ...extra,
 });
 const ok = () => Promise.resolve({ status: 'PASS' as const, detail: 'fine' });
+/** the baseline read-back as the runner must see it: a pinned probe is sent, and evidence names the approved digest and that probe */
+const gate = (over: Partial<{ digest: string; probePath: string; send: boolean }> = {}): Step => step(BASELINE_GATE, 'read', async (ctx) => {
+  if (over.send !== false) await ctx.probe(GATE_PATH);
+  return {
+    status: 'PASS', detail: 'the baseline contract equals the approved digest',
+    evidence: { kind: 'baseline_contract', digest: over.digest ?? APPROVED, probePath: over.probePath ?? GATE_PATH },
+  };
+});
+const gatedLock = async (files: Record<string, string> = {}) => ({ files: { ...files, [GATE_PATH]: await sha256Hex(GATE_BYTES) }, approvedInventory: APPROVED });
 
 test('a dry run touches no transport at all and reports nothing as passed', async () => {
   const { calls, transport } = recording();
@@ -68,12 +80,12 @@ test('the identity is re-read before every mutating call, and a changed marker s
     for (let i = 0; i < 4; i++) await ctx.http({ method: 'POST', path: `/x/${i}`, key: 'publishable' });
     return { status: 'PASS', detail: 'sent four' };
   });
-  const report = await run([mutating], { mode: 'execute', decision, transport, lock: { files: {} }, reader });
+  const report = await run([gate(), mutating], { mode: 'execute', decision, transport, lock: await gatedLock(), reader });
   const sent = calls.filter((c) => c.kind === 'http').map((c) => c.detail);
   assert.deepEqual(sent, ['POST /x/0', 'POST /x/1'], 'the third and fourth requests were never sent');
   // each sent request is immediately preceded by an identity read
   calls.forEach((call, index) => { if (call.kind === 'http') assert.equal(calls[index - 1].kind, 'identity'); });
-  assert.equal(report.results[0].status, 'STOP');
+  assert.equal(report.results[1].status, 'STOP');
   assert.equal(report.stoppedAt, 'M');
 });
 
@@ -104,9 +116,9 @@ test('a file is sent only when pinned, unchanged and clean', async () => {
   ];
   for (const [path, files, status, pattern] of cases) {
     const { calls, transport } = recording();
-    const report = await run([apply(path)], { mode: 'execute', decision, transport, lock: { files }, reader });
-    assert.equal(report.results[0].status, status, `${path}: ${report.results[0].detail}`);
-    if (pattern) assert.match(report.results[0].detail, pattern);
+    const report = await run([gate(), apply(path)], { mode: 'execute', decision, transport, lock: await gatedLock(files), reader });
+    assert.equal(report.results[1].status, status, `${path}: ${report.results[1].detail}`);
+    if (pattern) assert.match(report.results[1].detail, pattern);
     const applied = calls.filter((c) => c.kind === 'apply');
     assert.equal(applied.length, status === 'PASS' ? 1 : 0, `${path} applied ${applied.length} time(s)`);
     if (status === 'PASS') assert.equal(calls[calls.findIndex((c) => c.kind === 'apply') - 1].kind, 'identity');
@@ -146,4 +158,103 @@ test('an error that carries a secret is redacted in the result and in the render
   const text = render(report, [SECRET]);
   assert.ok(!text.includes(SECRET) && !text.includes('synthetic@'), text);
   assert.match(report.results[0].detail, /\[REDACTED\]|postgres:\/\/\[REDACTED\]/u);
+});
+
+// ---- the baseline gate and the selection (J1 V1 R2) ----------------------------------------------------------------------
+
+const chainApply = (path = 'ok.sql'): Step => step('G3-X', 'mutate', async (ctx) => {
+  await ctx.applyFile({ id: 'X', path, kind: 'chain' });
+  return { status: 'PASS', detail: 'applied' };
+});
+
+test('no chain file, login or held lock is sent before the baseline read-back passed in this run', async () => {
+  const digest = await sha256Hex('create table public.t (a int);');
+  const post = step('POST', 'mutate', async (ctx) => {
+    await ctx.http({ method: 'POST', path: '/auth/v1/signup', key: 'publishable' });
+    return { status: 'PASS', detail: 'sent' };
+  });
+  const hold = step('HOLD', 'mutate', async (ctx) => {
+    await ctx.hold('select 1', 1);
+    return { status: 'PASS', detail: 'held' };
+  });
+  for (const mutating of [chainApply(), post, hold]) {
+    const { calls, transport } = recording();
+    const report = await run([mutating], { mode: 'execute', decision, transport, lock: await gatedLock({ 'ok.sql': digest }), reader });
+    assert.equal(report.results[0].status, 'STOP', mutating.id);
+    assert.match(report.results[0].detail, /baseline read-back \(G3b\) has not passed in this run/u);
+    assert.deepEqual(calls.filter((c) => c.kind === 'apply' || c.kind === 'http' || c.kind === 'hold'), [], `${mutating.id} sent nothing`);
+  }
+});
+
+test('a gate PASS is only believed with evidence bound to the approved digest and to a probe this run sent', async () => {
+  const digest = await sha256Hex('create table public.t (a int);');
+  const lock = await gatedLock({ 'ok.sql': digest });
+  const cases: [string, Step, RegExp][] = [
+    ['another digest', gate({ digest: 'd'.repeat(64) }), /without evidence/u],
+    ['a probe that was never sent', gate({ send: false }), /without evidence/u],
+    ['a probe path nobody pinned', gate({ probePath: 'other.sql' }), /without evidence/u],
+  ];
+  for (const [name, bad, pattern] of cases) {
+    const { calls, transport } = recording();
+    const report = await run([bad, chainApply()], { mode: 'execute', decision, transport, lock, reader });
+    assert.equal(report.results[0].status, 'STOP', name);
+    assert.match(report.results[0].detail, pattern, name);
+    assert.equal(report.results[1].status, 'NOT_RUN', name);
+    assert.equal(calls.filter((c) => c.kind === 'apply').length, 0, name);
+  }
+  // and no approval digest in the lock means no grant, whatever the evidence says
+  const { calls, transport } = recording();
+  const noApproval = await run([gate(), chainApply()], { mode: 'execute', decision, transport, lock: { files: lock.files }, reader });
+  assert.equal(noApproval.results[0].status, 'STOP');
+  assert.equal(calls.filter((c) => c.kind === 'apply').length, 0);
+});
+
+test('a step that requires another is not run until it passed; teardown (always) needs nothing', async () => {
+  const { calls, transport } = recording();
+  const needs: Step = { ...step('NEEDS', 'mutate', ok), requires: [BASELINE_GATE] };
+  const failingGate = step(BASELINE_GATE, 'read', () => Promise.resolve({ status: 'STOP' as const, detail: 'drift' }));
+  const teardown: Step = { ...step('T', 'mutate', async (ctx) => {
+    await ctx.http({ method: 'DELETE', path: '/auth/v1/admin/users/1', key: 'service' });
+    return { status: 'PASS', detail: 'removed' };
+  }), always: true };
+  const report = await run([failingGate, needs, teardown], { mode: 'execute', decision, transport, lock: { files: {} }, reader });
+  assert.deepEqual(report.results.map((r) => `${r.id}:${r.status}`), [`${BASELINE_GATE}:STOP`, 'NEEDS:NOT_RUN', 'T:PASS']);
+  assert.equal(calls.filter((c) => c.kind === 'http').length, 1, 'only the teardown request was sent');
+  // a requirement whose provider did not pass in a run where nothing stopped it
+  const skipped = await run([step(BASELINE_GATE, 'read', () => Promise.resolve({ status: 'WARN' as const, detail: 'unsure' })), needs], { mode: 'execute', decision, transport: recording().transport, lock: { files: {} }, reader });
+  assert.equal(skipped.results[1].status, 'STOP');
+  assert.match(skipped.results[1].detail, /G3b has not passed/u);
+});
+
+test('an unsafe selection is refused before the first transport action', async () => {
+  const steps: Step[] = [step('G1', 'read', ok), step(BASELINE_GATE, 'read', ok), { ...step('G3-P1', 'mutate', ok), requires: [BASELINE_GATE] }, { ...step('T1', 'mutate', ok), always: true }];
+  assert.deepEqual(unsafeSelection(steps), []);
+  assert.deepEqual(unsafeSelection(steps, ['G1', BASELINE_GATE, 'G3-P1']), []);
+  assert.deepEqual(unsafeSelection(steps, ['G3-P1']), ['G3-P1 requires G3b, which is not selected']);
+  assert.deepEqual(unsafeSelection(steps, ['G1', 'G3-P1']), ['G3-P1 requires G3b, which is not selected']);
+  assert.deepEqual(unsafeSelection(steps, ['T1']), [], 'teardown may be selected alone');
+  assert.deepEqual(unsafeSelection(steps, [BASELINE_GATE]), [], 'a read-only precheck may be selected alone');
+  assert.deepEqual(unsafeSelection(steps, ['G3-PI']), ['unknown step G3-PI']);
+  assert.deepEqual(unsafeSelection([steps[2], steps[1]], undefined), ['G3-P1 requires G3b, which comes later']);
+
+  const { calls, transport } = recording();
+  const report = await run(steps, { mode: 'execute', decision, transport, lock: await gatedLock(), reader, only: ['G3-P1'] });
+  assert.deepEqual(calls, [], 'not even an identity read');
+  assert.deepEqual(report.refused?.map((r) => r.code), ['UNSAFE_SELECTION']);
+  assert.equal(report.results.length, 0);
+  assert.equal(report.complete, false);
+});
+
+test('a call of a corpus function that runs run-time SQL is refused unless the lock names it for that file (J1 V1 R3)', async () => {
+  const sql = 'select public.wrap(1);';
+  const dynamic = ['public.wrap', 'wrap', 'public.run_it', 'run_it'];
+  const unaccepted = await refusalsFor(sql, { dynamic: [], writes: [], selects: [] }, [], REF, dynamic);
+  assert.ok(unaccepted.includes('INDIRECT_DYNAMIC_CALL'), unaccepted.join(','));
+  const accepted = await refusalsFor(sql, { dynamic: [], writes: [], selects: [], indirectDynamic: ['public.wrap'] }, [], REF, dynamic);
+  assert.ok(!accepted.includes('INDIRECT_DYNAMIC_CALL'), accepted.join(','));
+  // naming another callee does not accept this one
+  const other = await refusalsFor(sql, { dynamic: [], writes: [], selects: [], indirectDynamic: ['public.other'] }, [], REF, dynamic);
+  assert.ok(other.includes('INDIRECT_DYNAMIC_CALL'));
+  // and with no corpus list at all there is nothing to call
+  assert.ok(!(await refusalsFor(sql, undefined, [], REF)).includes('INDIRECT_DYNAMIC_CALL'));
 });

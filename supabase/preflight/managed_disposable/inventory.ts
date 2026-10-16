@@ -137,16 +137,19 @@ export function validateShape(lines: readonly Line[]): Finding[] {
 }
 
 /** Secret-shaped text anywhere in the raw output. The query emits none; this is the second lock on the same door. */
+// Prefixes are matched even INSIDE an identifier (`s_sb_secret_...`, `x.sk_live_...`): `_` is a word character, so a
+// plain \b would let a key-shaped value hide behind a prefix. Only a preceding letter / digit blocks a match (that keeps
+// `task_...` from reading as `sk_...`).
 const SECRET_PATTERNS: readonly { code: string; pattern: RegExp }[] = [
-  { code: 'JWT', pattern: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}/u },
-  { code: 'SUPABASE_KEY', pattern: /\bsb_(secret|publishable)_[A-Za-z0-9_-]{6,}/u },
-  { code: 'CONNECTION_STRING', pattern: /\bpostgres(?:ql)?:\/\/[^\s"']+/iu },
-  { code: 'URL', pattern: /\bhttps?:\/\/[^\s"']+/iu },
-  { code: 'SUPABASE_HOST', pattern: /\b[a-z0-9]{20}\.supabase\.(co|in|net)\b/iu },
+  { code: 'JWT', pattern: /(?<![A-Za-z0-9])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}/u },
+  { code: 'SUPABASE_KEY', pattern: /sb_(secret|publishable)_[A-Za-z0-9_-]{6,}/iu },
+  { code: 'CONNECTION_STRING', pattern: /postgres(?:ql)?:\/\/[^\s"']+/iu },
+  { code: 'URL', pattern: /https?:\/\/[^\s"']+/iu },
+  { code: 'SUPABASE_HOST', pattern: /[a-z0-9]{20}\.supabase\.(co|in|net)/iu },
   { code: 'PRIVATE_KEY', pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/u },
-  { code: 'AWS_KEY', pattern: /\b(AKIA|ASIA)[0-9A-Z]{16}\b/u },
-  { code: 'LONG_TOKEN', pattern: /\b(?:sk|pk|rk|xox[abp])[-_][A-Za-z0-9_-]{16,}/u },
-  { code: 'BEARER', pattern: /\bbearer\s+[A-Za-z0-9._~+/-]{16,}/iu },
+  { code: 'AWS_KEY', pattern: /(?<![A-Za-z0-9])(AKIA|ASIA)[0-9A-Z]{16}(?![A-Za-z0-9])/u },
+  { code: 'LONG_TOKEN', pattern: /(?<![A-Za-z0-9])(?:sk|pk|rk|xox[abp])[-_][A-Za-z0-9_-]{16,}/u },
+  { code: 'BEARER', pattern: /bearer\s+[A-Za-z0-9._~+/-]{16,}/iu },
 ];
 export function secretFindings(text: string): Finding[] {
   const found: Finding[] = [];

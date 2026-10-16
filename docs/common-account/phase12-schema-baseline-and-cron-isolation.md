@@ -1,6 +1,6 @@
 # Phase 12 — schema baseline (BG1) and cron isolation (BG2), offline
 
-Status: **source candidate, offline only. Production NO_GO.** Nothing here connects to, reads from or writes to a managed
+Status: **source candidate, offline only. Production NO_GO.** (§8 records the four P2 corrections of the J1 V1 review.) Nothing here connects to, reads from or writes to a managed
 project, production or otherwise. Every proof ran on throw-away local PostgreSQL 17 databases with fake data.
 Parent: [Phase 11](phase11-managed-disposable-readiness.md) (PR #223). Release gates stay OFF; `managed_auth_delete` and
 `IDP_PREPAUSE_BLOCKED` stay BLOCKED.
@@ -358,3 +358,25 @@ operates production Supabase: they hold the inventory run (A1/A2) and the export
 No production inventory; no approved digest; no baseline export; no disposable project; no managed-service behaviour
 (PostgREST status mapping, real RLS, GoTrue linking, `auth.sessions` privilege); no independent review of Phases 9–12.
 `managed_auth_delete` BLOCKED, `IDP_PREPAUSE_BLOCKED` BLOCKED, all release gates OFF.
+
+## 8. J1 V1 corrections (R1 – R4), 2026-10-16
+
+J1 V1 reviewed PR #226 and reproduced four P2 defects in this phase's guards. Each was reproduced against the exact PR #226
+source (`3d87a845`), then fixed; the reproductions are kept as
+[`j1_p2_reproductions_test.ts`](../../supabase/preflight/managed_disposable/j1_p2_reproductions_test.ts). Source-only; no
+managed or production access; every transport in the tests is a stub or a local-database stand-in.
+
+| | Defect (before) | Correction (after) |
+| --- | --- | --- |
+| **R1** | `ctx.probe` hashed `reader.read(path)` and then handed only the *path* to `sqlProbe`; the real transport read the file a second time and piped that to psql. A replacement written after the check was executed. | `Transport.sqlProbe(path, bytes)`: the runner reads the path **once**, verifies the pinned digest, and passes those bytes. The real transport reads no file at all (a static test forbids `readTextFile` in `transports.ts`). The test replaces the file after the check and asserts psql's stdin is the pinned bytes and the path was read once. |
+| **R2** | `--only=G3-P1` skipped G3b: the first chain file was applied with an unverified (merely 64-hex) approved digest. | Three layers. (a) `Step.requires` (every mutating step except G3a and teardown requires `G3b`): an unsafe selection — a required step not selected, ordered later, or an unknown id — is refused **before any transport action**, not even an identity read; the CLI dry run prints it. (b) A required step is not run unless its requirement PASSED in this run. (c) At the mutation boundary itself (`applyFile`, any non-GET request, a held lock) a **baseline grant** is required: it exists only after G3b PASSED with evidence that names the approved digest *and* a probe whose pinned bytes this run actually sent; a PASS without that evidence is converted to STOP. Teardown stays runnable alone. Each chain invocation therefore carries G3b (`--only=G1,G3b,G3-P2`); the model run asserts the contract digest is the same before and after the chain, so this is stable. |
+| **R3** | `networkFunctionNames` recorded only functions whose own body mentions cron / net, so `leaf (net.http_post) → middle → top SELECT` was accepted. Also found: a leaf with a single-quoted body (`AS '…'`), a `PROCEDURE`, and a renamed function were not recognised at all. | The corpus is closed over its call graph to a fixed point (multi-hop, cycles, helpers split over files); names are matched by bare name, so a schema or an overload does not exempt a call; the whole `CREATE FUNCTION / PROCEDURE` statement is read (any body spelling); `ALTER FUNCTION … RENAME` is an alias edge. The indirect-network finding is **blocking and independent of the lock**: a pinned SELECT fingerprint does not accept it. Functions that run run-time SQL (`EXECUTE`, …) are closed the same way: a call to one is `INDIRECT_DYNAMIC_CALL` unless the lock names it per file (`reviewed.indirectDynamic`; the committed lock names exactly three for P3a and eleven for the read-only probe). The lock also carries the closed `networkFunctions` / `dynamicFunctions` lists. |
+| **R4** | `inventory_cli diff` parsed and printed both inputs without the secret scan or the shape contract; two equal contaminated manifests said "no drift", and a different pair echoed the offending identifier. | `diff` vets **both raw inputs** — read, secret scan, parse, closed shape — before comparing or formatting, exactly like `check`. A contaminated input (equal or different) is STOP with finding **codes and counts only**: no value, object name or path; a read failure carries no message (`check` no longer prints the manifest path either). While fixing it a second defect surfaced: the secret patterns used a leading `\b`, and `_` is a word character, so `s_sb_secret_…` or `x_sk_live_…` (a key behind an identifier prefix) was not seen; the prefixes now match inside identifiers (a letter or digit still blocks, so `task_…` is not `sk_…`). |
+
+Also: `guard_test.ts` inherited a `TS2345` (`[Env, string][]` against the narrower `GuardCode` union) from PR #223; the case list is
+now typed `[Env, GuardCode][]` and every file of the directory type-checks without `--no-check`.
+
+**Not changed, still true.** G3c is after-the-fact and count-only; the inventory has still never been run on a managed
+database; D1 whole-ID deletion consent, G3 T13, F3 legacy, POSTONA mobile issues and managed auth remain separate release
+STOPs. Lexical scanning cannot see SQL assembled at run time from data: it fails closed on the *presence* of such a callee and
+asks for a named acceptance, it does not resolve what it would do.

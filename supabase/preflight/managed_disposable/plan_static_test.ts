@@ -6,7 +6,7 @@ import test from 'node:test';
 
 import { projectRefsIn, scanSqlForForeignTargets } from './guard.ts';
 import { buildLock } from './lock.ts';
-import type { Lock } from './runner.ts';
+import { BASELINE_GATE, type Lock, unsafeSelection } from './runner.ts';
 import { BASELINE, CHAIN, classifyLinking, INVENTORY_PATH, MODELLED, PROBE_PATH, STEPS } from './plan.ts';
 
 const root = new URL('../../../', import.meta.url);
@@ -26,6 +26,27 @@ test('the lock pins exactly the bytes of the chain, the probe and the inventory 
   const fresh = await buildLock(expectedPaths, read, corpus, [INVENTORY_PATH]);
   assert.deepEqual(lock, fresh, 'a changed migration or probe needs a deliberate `cli.ts --write-lock` and a reviewed diff');
   assert.ok(!(BASELINE.path in lock.files), 'the baseline is operator-supplied: its digest comes from the environment, never from the repository');
+});
+
+test('every mutating step requires the baseline read-back in the same run; only G3a and teardown do not (J1 V1 R2)', () => {
+  const mutating = STEPS.filter((step) => step.access === 'mutate');
+  assert.ok(mutating.length >= 12);
+  for (const step of mutating) {
+    if (step.id === 'G3a' || step.always === true) assert.equal(step.requires, undefined, `${step.id} is the baseline apply or the teardown`);
+    else assert.deepEqual(step.requires, [BASELINE_GATE], `${step.id} must require ${BASELINE_GATE}`);
+  }
+  assert.deepEqual(STEPS.filter((step) => step.always === true).map((step) => step.id), ['T1']);
+  assert.deepEqual(unsafeSelection(STEPS, MODELLED), [], 'the modelled selection carries its gate');
+  assert.deepEqual(unsafeSelection(STEPS), [], 'the whole plan is a safe selection');
+  assert.ok(unsafeSelection(STEPS, ['G3-P1']).length === 1 && unsafeSelection(STEPS, ['M4']).length === 1);
+  assert.deepEqual(unsafeSelection(STEPS, ['G1', 'G3b', 'G3-P1']), []);
+  assert.deepEqual(unsafeSelection(STEPS, ['T1']), []);
+});
+
+test('the real transport never reads a file for a probe: the runner hands it the verified bytes (J1 V1 R1)', () => {
+  const source = readHere('transports.ts');
+  assert.ok(!/readTextFile|readFile|Deno\.open/u.test(source.replace(/\/\/[^\n]*/gu, '')), 'transports.ts must not read the file system');
+  assert.match(source, /sqlProbe: \(_path, bytes\) => psql\(psqlInvocation\(config\.dbUrl, 'probe', bytes\)\)/u);
 });
 
 test('the chain is the Phase 7 release order, and every file is clean to send', () => {
