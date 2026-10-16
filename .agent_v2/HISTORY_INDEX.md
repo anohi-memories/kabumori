@@ -545,3 +545,11 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - source_commit: `7f9aceca11e0d412f1428d9947ab93012e940d4e`. Original `.agent_v2/tasks/J2.md` → `files/.agent_v2/tasks/J2.md`: 5529 bytes; SHA256 `c5375385ef00e1f5764e16eb35c376761293f10a3a197143ea8eb0df45318c69`; source_blob `a0a1914f70ee97c2bbb830538dcc63aeb59ac377`.
 - Original `.agent_v2/reports/J2.md` → `files/.agent_v2/reports/J2.md`: 24938 bytes; SHA256 `dbc6a8e7831c2be5516bec66ae054c854772e98c251e16aede7414b261af7bf3`; source_blob `625ab52df4a18a7f06ce3120e3b16656298529cf`.
 - J2 independently regenerated SHA256, verified `SHA256SUMS` 2/2 OK, matched source-commit blobs, and compared both restored files byte-for-byte (2/2 exit 0). Existing archived originals / MANIFEST / checksums preserved; append-only proof: `MANIFEST_SHA256_VERIFICATION_20261016.md`. Prior pending SHA256 note is superseded by this verified result. Completed before focused rereview; production NO_GO.
+
+## F5 Phase11 archive — 2026-10-16
+- task_id: `common-account-f5-phase11-postona-managed-auth-isolated-test-readiness-20261016`
+- original_path: `.agent_v2/tasks/F5.md`
+- archive_path: `.agent_v2/archive/2026-10-16-F5-common-account-f5-phase11-postona-managed-auth-isolated-test-readiness-20261016/files/.agent_v2/tasks/F5.md`
+- size: 16357 bytes; SHA256: `4018debb00ae9d69bab391158ae585152011798d3acbb880ac695e0cb206dc19`
+- source_blob: `b2c96649466f8cbcc7e012530b47fb44711a5d55`; exact UTF-8 and blob SHA restore verified; MANIFEST/SHA256SUMS saved.
+- L5 PASS_SOURCE_PREPARATION / MANAGED_TEST_NOT_RUN / PRODUCTION_NO_GO, Draft PR223 head 28695586f63a30c739a44b829e79a7950932b5e7.
