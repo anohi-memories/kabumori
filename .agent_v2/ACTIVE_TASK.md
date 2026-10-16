@@ -169,20 +169,19 @@
 
 ## J1
 - slot: J1
-- status: done
-- task_id: common-ai-j1-pr222-r1a-a1-focused-review-20261016
+- status: ready
+- task_id: common-account-j1-f5-pr226-disposable-guard-focused-review-20261016
 - owner: codex
-- next_owner: none
-- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- next_owner: codex
+- return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: V1
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J1.md
 - current_report_path: .agent_v2/reports/J1.md
-- dependencies: prior V1 CHANGES_REQUIRED P2x2 archived; F6 L6 source fix Draft PR222 11835df1 based PR219 be35cc93; protected #187→#198→#205→#219→#222
-- blocker: V1 accepted CHANGES_REQUIRED P2 R1b scanner bypass + P3 R1c false rejection. Accounting A1 PASS. New F6 parser fix needed. Source merge HOLD, production NO_GO.
-- previous_task_archive: .agent_v2/archive/2026-10-16-j1-pr219-focused-rereview-task.md
-- previous_report_archive: .agent_v2/archive/2026-10-16-j1-pr219-focused-rereview-report.md
-- slot_use: PR222 focused rereview complete; typed provider+bridge173/market324 PASS, independent acceptance2 FAIL; content commit 97576ada1f60161615456f02df13a5ad8e5d349c normally pushed to main and read-back PASS; return V1 to 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）.
+- dependencies: F5 Phase12 Draft PR226 3d87a8457ddade3209583cbb820d5e5feec23f00 on PR223 28695586f63a30c739a44b829e79a7950932b5e7
+- blocker: source-only focused review; actual production read-only inventory and managed disposable not authorized, production NO_GO
+- slot_use: independent focused scanner/inventory/runner safety guard review; previous common-AI PR222 review not repeated
+- previous_archive: .agent_v2/archive/2026-10-16-J1-common-ai-j1-pr222-r1a-a1-focused-review-20261016/
 
 ## J2
 - slot: J2
