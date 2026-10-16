@@ -41,6 +41,14 @@ function fakeStore(rows: { id: string; body: string; publishable?: boolean }[]) 
       calls.push(`finish:${id}:${outcome}:${postId ?? "-"}`);
       return Promise.resolve(outcome);
     },
+    releaseUnsent(id, lease) {
+      const row = state.get(id)!;
+      calls.push(`release:${id}`);
+      if (row.status !== "claimed" || row.lease !== lease) return Promise.resolve("lease_lost");
+      row.status = "planned";
+      row.lease = null;
+      return Promise.resolve("released");
+    },
   };
   return { store, state, calls };
 }
@@ -76,7 +84,7 @@ test("published / rejected / unknown outcomes map to published / failed / uncert
     { kind: "unknown", code: "PROVIDER_TIMEOUT" },
   ]);
   const report = await runReservationDelivery({ store, publisher: pub, worker: "w" });
-  assert.deepEqual(report, { claimed: 3, published: 1, failedBeforeSend: 1, uncertain: 1, skipped: 0, notAvailable: false });
+  assert.deepEqual(report, { claimed: 3, published: 1, failedBeforeSend: 1, uncertain: 1, skipped: 0, released: 0, notAvailable: false, stopped: false });
   assert.deepEqual(pub.sent, ["そのまま送る本文", "b", "c"]);
   assert.deepEqual([...state.values()].map((r) => r.status), ["published", "failed", "uncertain"]);
 });
@@ -105,13 +113,23 @@ test("a lost lease or a row no longer publishable is never sent", async () => {
   assert.equal(report.skipped, 1);
   assert.deepEqual(pub.sent, ["b"]);
   assert.equal(state.get("b")!.status, "published");
-  // A failing pre-publish check (store error) is treated as LEASE_LOST: not sent.
+  // A failing pre-publish check (store error): not sent; handed back when the store confirms it is still ours.
   const second = fakeStore([{ id: "c", body: "c" }]);
   second.store.prePublishCheck = () => Promise.reject(new Error("db down"));
   const pub2 = publisher([{ kind: "published", providerPostId: "1" }]);
   const r2 = await runReservationDelivery({ store: second.store, publisher: pub2, worker: "w" });
-  assert.equal(r2.skipped, 1);
+  assert.equal(r2.released, 1);
+  assert.equal(second.state.get("c")!.status, "planned");
   assert.deepEqual(pub2.sent, []);
+  // ... and when the hand-back cannot be confirmed either, it is only skipped (never sent, never re-sent).
+  const third = fakeStore([{ id: "d", body: "d" }]);
+  third.store.prePublishCheck = () => Promise.reject(new Error("db down"));
+  third.store.releaseUnsent = () => Promise.reject(new Error("db down"));
+  const pub3 = publisher([{ kind: "published", providerPostId: "1" }]);
+  const r3 = await runReservationDelivery({ store: third.store, publisher: pub3, worker: "w" });
+  assert.equal(r3.skipped, 1);
+  assert.equal(r3.released, 0);
+  assert.deepEqual(pub3.sent, []);
 });
 
 test("if the outcome cannot be recorded, the run reports uncertain and does not re-send", async () => {
@@ -133,7 +151,7 @@ test("a finish after the lease deadline ('lease_lost') is counted uncertain, nev
   };
   const pub = publisher([{ kind: "published", providerPostId: "99" }, { kind: "rejected_before_send", code: "PROVIDER_REJECTED" }]);
   const report = await runReservationDelivery({ store, publisher: pub, worker: "w" });
-  assert.deepEqual(report, { claimed: 2, published: 0, failedBeforeSend: 0, uncertain: 2, skipped: 0, notAvailable: false });
+  assert.deepEqual(report, { claimed: 2, published: 0, failedBeforeSend: 0, uncertain: 2, skipped: 0, released: 0, notAvailable: false, stopped: false });
   const again = await runReservationDelivery({ store, publisher: pub, worker: "w" });
   assert.equal(again.claimed, 0);
   assert.deepEqual(pub.sent, ["a", "b"], "one attempt each");
@@ -166,4 +184,54 @@ test("source: no provider, OpenAI, Vault or live queue access in the delivery mo
   const code = source.replace(/\/\*[\s\S]*?\*\//gu, "").replace(/\/\/.*$/gmu, "");
   assert.doesNotMatch(code, /^import /mu, "no imports");
   assert.doesNotMatch(code, /fetch\(|api\.x\.com|twitter|openai|vault|claim_due_post|brand_post|Deno\.env/iu);
+});
+
+// ---------------------------------------------------------------------------------------------------
+// F3 dispatch (2026-10-16): a claimed row that was NOT sent is handed back, never left to become 'uncertain'.
+// ---------------------------------------------------------------------------------------------------
+test("graceful shutdown: rows claimed but not yet sent are handed back to planned; the next run sends each once", async () => {
+  const { store, state, calls } = fakeStore([{ id: "r1", body: "one" }, { id: "r2", body: "two" }, { id: "r3", body: "three" }]);
+  const pub = publisher([{ kind: "published", providerPostId: "101" }, { kind: "published", providerPostId: "102" }, { kind: "published", providerPostId: "103" }]);
+  let sends = 0;
+  const first = await runReservationDelivery({ store, publisher: { available: true, publish: (a, t) => { sends += 1; return pub.publish(a, t); } }, worker: "w1", shouldStop: () => sends >= 1 });
+  assert.equal(first.published, 1);
+  assert.equal(first.released, 2);
+  assert.equal(first.stopped, true);
+  assert.deepEqual([...state.values()].map((row) => row.status), ["published", "planned", "planned"]);
+  assert.ok(calls.includes("release:r2") && calls.includes("release:r3"));
+  const second = await runReservationDelivery({ store, publisher: pub, worker: "w2" });
+  assert.equal(second.published, 2);
+  assert.deepEqual(pub.sent, ["one", "two", "three"], "each text exactly once");
+});
+
+test("RELEASED from the store (busy fence / lease out before send) and an unreadable check are never sent", async () => {
+  const { store, state } = fakeStore([{ id: "r1", body: "one" }, { id: "r2", body: "two" }]);
+  let checks = 0;
+  const check = store.prePublishCheck.bind(store);
+  store.prePublishCheck = (id, lease) => {
+    checks += 1;
+    if (checks === 1) {
+      const row = state.get(id)!;
+      row.status = "planned";
+      row.lease = null;
+      return Promise.resolve("RELEASED");
+    }
+    if (checks === 2) return Promise.reject(new Error("connection reset"));
+    return check(id, lease);
+  };
+  const pub = publisher([]);
+  const report = await runReservationDelivery({ store, publisher: pub, worker: "w1" });
+  assert.deepEqual(pub.sent, [], "nothing sent");
+  assert.equal(report.released, 2);
+  assert.deepEqual([...state.values()].map((row) => row.status), ["planned", "planned"]);
+});
+
+test("a shouldStop that throws stops the run (fail closed): everything claimed is handed back unsent", async () => {
+  const { store, state } = fakeStore([{ id: "r1", body: "one" }]);
+  const pub = publisher([]);
+  const report = await runReservationDelivery({ store, publisher: pub, worker: "w1", shouldStop: () => { throw new Error("signal"); } });
+  assert.equal(report.stopped, true);
+  assert.equal(report.released, 1);
+  assert.deepEqual(pub.sent, []);
+  assert.equal(state.get("r1")!.status, "planned");
 });
