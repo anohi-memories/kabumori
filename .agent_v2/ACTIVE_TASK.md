@@ -40,10 +40,10 @@
 
 ## F3
 - slot: F3
-- status: review_required
+- status: done
 - task_id: postona-f3-x-reservation-oauth-entitlement-dispatch-integration-20261016
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA G3のちゃ（新F3担当・X投稿／予約担当）
 - completion_code: L3
 - recommended_model: Opus5.5（高）
@@ -51,7 +51,7 @@
 - current_report_path: .agent_v2/tasks/F3.md#report
 - dependencies: G3 PR145/151/163, F3 PR204, F5 PR214 and active P2 fix, F4 PR217, G4 Issue131
 - blocker: F5/G4 Auth entitlement and OAuth owner guards, F3-L1/R2', production NO_GO
-- slot_use: X reservation API, ownership, OAuth/entitlement, worker integration; source only
+- slot_use: L3 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; PR224 head 2a9d6473, PG17 D3 10 cases reported, 28 mutants, G4/G3/F5 integration outstanding; archive before reuse.
 - previous_archive: .agent_v2/archive/2026-10-16-F3-postona-f3-j3-v3-ack-lease-rollback-corrections-20261015/
 
 ## F4
