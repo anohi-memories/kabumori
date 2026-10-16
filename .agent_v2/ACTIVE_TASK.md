@@ -186,19 +186,19 @@
 
 ## J2
 - slot: J2
-- status: review_required
-- task_id: kabumori-j2-f2-f8-pause-runtime-integrated-security-review-20261015
+- status: ready
+- task_id: kabumori-j2-f2-f8-pause-three-findings-focused-rereview-20261016
 - owner: codex
-- next_owner: chatgpt
+- next_owner: codex
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: V2
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
-- dependencies: F8 Draft #212 b80d5235, F2 Draft #213 cb34ab7d, PR129/164; J1 common-AI reserved
-- blocker: source-only independent security review; production NO_GO; no merge/deploy
-- previous_archive: .agent_v2/archive/2026-10-15-J2-ai-ask-b0-r1-r8-focused-rereview-20261013/
-- slot_use: F2/F8 pause runtime combined independent review; Sol(高); J2→V2
+- dependencies: F8 PR212 d04ff9d2; F2 PR213 c10f1da5; previous J2 V2 report; PR129/164 protected
+- blocker: source-only focused review; production NO_GO; SHA256 archive receipt pending
+- previous_archive: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-integrated-review/
+- slot_use: J2-R1/R2/R3 focused rereview only; return V2
 
 ## J3
 - slot: J3
