@@ -23,17 +23,17 @@
 
 ## F2
 - slot: F2
-- status: ready
+- status: review_required
 - task_id: kabumori-f2-pause-delivery-runtime-candidate-20261015
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: L2
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
 - dependencies: F2 design PR #210 merged; F8 news gate runtime; shared POSTONA/AI protected
-- blocker: V2 J2-R2 P1 unauthenticated AI preview + J2-R3 P2 restore ownership drift; focused corrections in own TASK. #213 Draft; production NO_GO
+- blocker: L2 PASS_SOURCE_FIX / SECURITY_FOCUSED_REREVIEW_REQUIRED; Draft #213 head c10f1da593ba3dc365cf340e9569ae1caa9789b1; J2 R2(P1)/R3(P2) corrected in source candidate; production NO_GO; managed preflight pending
 - production_mutation_window: FORBIDDEN
 - previous_archive: .agent_v2/archive/2026-10-15-f2-pause-offline-design-accepted.md
 - slot_use: kabumori X gate/planner/queue/Push source-only candidate after L2 design archived
@@ -41,7 +41,7 @@
 ## F3
 - slot: F3
 - status: done
-- task_id: postona-f3-j3-v3-ack-lease-rollback-corrections-20261015
+- task_id: postona-f3-x-reservation-oauth-entitlement-dispatch-integration-20261016
 - owner: claude
 - next_owner: none
 - return_to: POSTONA G3のちゃ（新F3担当・X投稿／予約担当）
@@ -49,15 +49,15 @@
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F3.md
 - current_report_path: .agent_v2/tasks/F3.md#report
-- dependencies: J3 V3 P2 R1a/R3a/R1b; F3 PR192→189, F5 PR193 Phase8, F4 PR180, G4 Issue131
-- blocker: Codex Sol（高） focused R1a/R3a/R1b review; F5 snapshot ACK integration, inherited hold() now(), F3-L1 lock cycle; production NO_GO
-- slot_use: L3 PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO; PR204 Draft HEAD 45b08a87, 9 F3-owned files, local E2E10/48 mutants reported; F3 done, archive before reuse.
-- previous_archive: .agent_v2/archive/2026-10-15-F3-postona-f3-j3-v3-r1-r3-security-fixes-20261013/
+- dependencies: G3 PR145/151/163, F3 PR204, F5 PR214 and active P2 fix, F4 PR217, G4 Issue131
+- blocker: F5/G4 Auth entitlement and OAuth owner guards, F3-L1/R2', production NO_GO
+- slot_use: L3 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; PR224 head 2a9d6473, PG17 D3 10 cases reported, 28 mutants, G4/G3/F5 integration outstanding; archive before reuse.
+- previous_archive: .agent_v2/archive/2026-10-16-F3-postona-f3-j3-v3-ack-lease-rollback-corrections-20261015/
 
 ## F4
 - slot: F4
 - status: done
-- task_id: postona-f4-pr211-r2c-final-preview-identity-fix-20261015
+- task_id: postona-f4-pr217-concurrent-preview-identity-fence-p2-20261016
 - owner: claude
 - next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
@@ -70,11 +70,13 @@
 - slot_use: one bounded POSTONA client fix for late final-preview A→B/null user cross-warning return
 - previous_archive: .agent_v2/archive/2026-10-15-F4-postona-f4-pr197-p2-response-warning-preservation-20261015/
 - l4_verdict_r2c: PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO; PR217 head d4bcd09e Draft, 5 files, Claude reports app313 and F5 seam8 PASS; Codex verification outstanding; F4 released.
+- current_assignment: J4 V4 concurrent public-preview monotonic identity fence P2; new F4 TASK, source only, production NO_GO.
+- l4_verdict_20261016: PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO; PR221 dcae62c6 Draft, 4 mobile files, reported 23/23 focused + 14/14 actual F5 handler seam + app336 PASS; independent Sol focused review needed.
 
 ## F5
 - slot: F5
 - status: done
-- task_id: common-account-f5-phase10-postona-x-ack-snapshot-reconciliation-20261015
+- task_id: common-account-f5-phase11-postona-managed-auth-isolated-test-readiness-20261016
 - owner: claude
 - next_owner: none
 - return_to: 共通アカウントG5のちゃ（新F5担当）
@@ -82,29 +84,27 @@
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: F5 PR121→152→165→178→183→193→206; F3 PR204 L3 pending; F4 PR180; POSTONA PR197/J4
-- blocker: F3 ACK snapshot contract L3 pending; managed Auth/RLS/GoTrue unverified; production NO_GO
-- slot_use: Phase10 POSTONA common lifecycle ACK snapshot integration; かぶモリ休止は別担当
-- previous_archive: .agent_v2/archive/2026-10-15-F5-common-account-f5-phase9-postona-shared-login-enrollment-20261015/
-- latest_result: IMPLEMENTED_SOURCE_CANDIDATE — Draft PR #214 head bc290ab618508a8fbaba1abfad308c52d86e4689 stacked on PR206 a84a9b6abb8c8d4706bba5f8a12e5c1aef3d3b8c (PR193 314aeac4, PR183 f2565cc0, PR178 83334a09, PR165 4638891f, PR152 ccea1fe8, PR121 76b50e1e, F3 PR204 45b08a87, F4 PR180 7c4f4578, POSTONA PR197 2171ee4c unchanged): F3 PR204 snapshot-bound ACK consumed in the F5 POSTONA end — (count, snapshot) pair recorded durably BEFORE acknowledging that exact snapshot, a changed set is recorded first then acknowledged (bounded), a pair that cannot be recorded never lets X be done and never lets the saga forget; one new unapplied migration 20261015120000 (shape CHECK widened by x_unconfirmed_snapshots, service_role-only recorder, rollback keeps data); F5-owned fix: another service's entitlement no longer makes single-service flows unreadable; proofs on local PG17 only: migration runner + 25/25 mutants, Edge 140 tests + 36/36, assembled F3 PR204+F4+F5 e2e 39 (X1-X8 ABA/cross-person/crash/takeover/stale lease/rollback/common-ID block/other-app entitlement preserved), release preflight ten-member chain; handoffs: F3 inherited hold()/F3-L1/R2' (POSTONA-only person cannot end POSTONA alone), G3 T13, G4 PR197/PR211, F4 Threads no app-side revoke; open D1 (whole-account deletion reports the unconfirmed count in the response only); production NO_GO. Report: .agent_v2/tasks/F5.md#report
-
-- l5_verdict: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO (2026-10-15); Draft PR214 bc290ab618508a8fbaba1abfad308c52d86e4689, reported PG17 integrated e2e39 + Edge140 and mutation suites. Full-ID deletion D1 consent, F3 legacy issues, G3 T13, POSTONA route, managed Auth and independent security review pending. No merge/deploy.
+- dependencies: F5 PR121→152→165→178→183→193→206→214→220; F3 PR204; F4 PR180; G3 T13 / G4 client
+- blocker: managed GoTrue/Auth/RLS/HTTP unverified; no managed execution authorized; full deletion D1 and owner gates unresolved, production NO_GO
+- slot_use: Phase11 offline-only disposable Supabase validation planning, guard scripts and acceptance tests; POSTONA priority
+- previous_archive: .agent_v2/archive/2026-10-16-F5-common-account-f5-j3-v3-p2-known-x-warning-count-fix-20261016/
+- latest_result: PREPARED_SOURCE_ONLY — Draft PR #223 head 28695586f63a30c739a44b829e79a7950932b5e7 stacked on PR220 49b912292f434b5306b3c9e36f8c72466de2f124 (PR214 bc290ab6, PR206 a84a9b6a, F3 PR204 45b08a87, POSTONA PR197/211 unchanged): managed-disposable acceptance harness (dry-run default, target guard with allowlist/deny list/typed confirmation, identity re-read before every mutation, SHA-256-pinned files, foreign-host/cron/http scan, redaction, teardown), M1-M12 plan with STOP criteria and stage GO/NO_GO, owner hand-offs; offline proofs: 27 tests, 30/30 harness mutants, model run 5 (plan executed over fake GoTrue/PostgREST + local PG, M5 fail-before), Phase 9 regression PASS; findings BG1 (repo migrations are not a self-sufficient baseline: brands/social_accounts/social_account_oauth_states created by no migration, 33/120 fail on a bare stand-in DB) and BG2 (8 migrations call the production URL via cron.schedule/net.http_post); no managed project, credential, user, secret, migration or grant used; D1 remains a separate release STOP; production NO_GO. Report: .agent_v2/tasks/F5.md#report
 
 ## F6
 - slot: F6
 - status: done
-- task_id: common-ai-f6-j1-import-timeout-security-fix-20261015
+- task_id: common-ai-f6-pr219-j1-r1a-a1-correction-20261016
 - owner: claude
 - next_owner: none
-- blocker: L6 PASS_SOURCE_FIX, independent R1/R2 delta security rereview and maybe-billed 5xx ledger accounting decision pending; PR219 Draft unmerged, production NO_GO
+- blocker: L6 PASS_SOURCE_FIX; PR222 R1a/A1 independent focused security delta review required; existing typed errors and NOT_VERIFIED; merge/deploy/production NO_GO
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: J1 V1 CHANGES_REQUIRED R1/R2; Draft PR187→198→205; inventory PR216 Draft unmerged; H5 finished; F3/F4/F5 protected
-- previous_archive: .agent_v2/archive/2026-10-15-f6-openai-anthropic-inventory-plan.md
-- slot_use: Focused Claude common API boundary/security fix, separate POSTONA migration after L6
+- dependencies: J1 V1 CHANGES_REQUIRED P2×2; protected Draft PR187→198→205→219; source-only
+- previous_archive: .agent_v2/archive/2026-10-16-f6-j1-r1-r2-source-fix.md
+- slot_use: narrow R1a/A1 security correction, POSTONA live wiring excluded
 
 ## F7
 - slot: F7
@@ -133,7 +133,7 @@
 - current_task_path: .agent_v2/tasks/F8.md
 - current_report_path: .agent_v2/tasks/F8.md#report
 - dependencies: F8 design PR #209 merged; F2 source candidate; protected PR129/#164 same-handler integration
-- blocker: V2 J2-R1 P1 stale positive pause-state race and TTL; focused corrections in own TASK. #212 Draft; production NO_GO
+- blocker: J2 V2 residual P1 entry OFF vs pending egress true; focused fix assigned in F8 TASK, PR212 exact head d04ff9d2; production NO_GO
 - production_mutation_window: FORBIDDEN
 - previous_archive: .agent_v2/archive/2026-10-15-f8-pause-offline-design-accepted.md
 - slot_use: important-news-monitor all-mode hard pause source-only candidate after L8 design archived
@@ -155,40 +155,40 @@
 
 ## F10
 - slot: F10
-- status: idle
-- task_id: none
+- status: ready
+- task_id: orchestration-v3-reliable-task-registration-f10-20261016
 - owner: claude
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: claude
+- return_to: かぶモリ30枠統括のちゃ（このチャット）
 - completion_code: L10
-- recommended_model: none
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F10.md
 - current_report_path: .agent_v2/tasks/F10.md#report
-- dependencies: none
-- blocker: none
-- slot_use: 予備枠（ユーザーまたはChatGPTの明示割当専用）
+- dependencies: PROJECT_RULES / old-new ORCHESTRATION / protected Draft PR172 / recent failed registration evidence
+- blocker: tool safety rejection root cause unproven; V3 independent source only; no live cutover/merge/production
+- slot_use: 新管理基盤V3 登録信頼性の原因調査・独立候補実装（旧G/H・現行F/Jは不変更）
 
 ## J1
 - slot: J1
-- status: ready
+- status: review_required
 - task_id: common-ai-j1-pr219-r1-r2-focused-rereview-20261016
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: V1
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J1.md
 - current_report_path: .agent_v2/reports/J1.md
 - dependencies: V1 first review CHANGES_REQUIRED P2x2 archived; F6 L6 PASS_SOURCE_FIX PR219 be35cc93 on PR205; PR187→198→205→219 Draft, no merge
-- blocker: independent focused R1/R2 fixes review and 500/502/503 possibly billed ledger undercount; production/merge/deploy NO_GO
+- blocker: CHANGES_REQUIRED / P2×2 / PRODUCTION_NO_GO: commented dynamic import still bypasses guard; uncertain HTTP500/502/Anthropic503 settle measured zero. Source merge HOLD; blocked verification remains NOT_VERIFIED.
 - previous_task_archive: .agent_v2/archive/2026-10-16-j1-f6-h5-security-review-task.md
 - previous_report_archive: .agent_v2/archive/2026-10-16-j1-f6-h5-security-review-report.md
-- slot_use: PR219 source-only independent delta security rereview
+- slot_use: PR219 focused independent rereview complete; R2 504 retry fixed, R1 residual and accounting need F6 correction. J1 completion content commit 1abbc6e34b60848525b83041635f29a9b8e044d9 pushed to main and read-back PASS; return V1 to 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）.
 
 ## J2
 - slot: J2
 - status: review_required
-- task_id: kabumori-j2-f2-f8-pause-runtime-integrated-security-review-20261015
+- task_id: kabumori-j2-f2-f8-pause-three-findings-focused-rereview-20261016
 - owner: codex
 - next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
@@ -196,46 +196,44 @@
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
-- dependencies: F8 Draft #212 b80d5235, F2 Draft #213 cb34ab7d, PR129/164; J1 common-AI reserved
-- blocker: source-only independent security review; production NO_GO; no merge/deploy
-- previous_archive: .agent_v2/archive/2026-10-15-J2-ai-ask-b0-r1-r8-focused-rereview-20261013/
-- slot_use: F2/F8 pause runtime combined independent review; Sol(高); J2→V2
+- dependencies: F8 Draft #212 d04ff9d2227bbb0e43d7ddbcf8c3b5cc7ad54d3a; F2 Draft #213 c10f1da593ba3dc365cf340e9569ae1caa9789b1; PR129/164 protected
+- blocker: CHANGES_REQUIRED P1 R1 residual: concurrent entry OFF does not fence pending egress true, mock X still sent. R2/R3 PASS; production/merge/deploy NO_GO.
+- previous_archive: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-integrated-review/
+- slot_use: Three-findings focused independent rereview complete; archive SHA256/restore 2/2 PASS; tests 79 PASS / 1 FAIL; return V2 to かぶモリアプリG1のちゃ（運用休止・全体統括）.
 
 ## J3
 - slot: J3
-- status: done
-- task_id: common-account-j3-f5-pr214-snapshot-ack-focused-review-20261015
+- status: review_required
+- task_id: kabumori-j3-f2-f8-pause-three-findings-focused-rereview-20261016
 - owner: codex
-- next_owner: none
-- return_to: 共通アカウントG5のちゃ（新F5担当）
+- next_owner: chatgpt
+- return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: V3
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J3.md
 - current_report_path: .agent_v2/reports/J3.md
-- dependencies: F5 Phase10 Draft PR214 bc290ab618508a8fbaba1abfad308c52d86e4689 stacked PR206; F3 PR204 45b08a87 source PASS V3
-- blocker: CHANGES_REQUIRED P2: snapshot_changed known9 becomes failure warning1 if re-record fails; D1 full-ID consent and managed gate unresolved; production NO_GO
-- slot_use: Focused PR214 review complete; SQL/E2E39/unit140/selected mutants PASS, independent warning-count regression FAIL; return V3 to 共通アカウントG5のちゃ（新F5担当）. Prior F3 PASS not reopened.
-- previous_archive: .agent_v2/archive/2026-10-15-J3-postona-j3-pr204-p2x3-security-rereview-20261015/
-
-- v3_verdict: CHANGES_REQUIRED P2×1 / PRODUCTION_NO_GO; F5 PR214 new regression: known x_posts_unconfirmed 9 mistakenly reported 1 when re-record after snapshot_changed fails. Repair only F5 lifecycle highest value and focused negative test; full account deletion D1 explicit consent remains separate stop. Previous F3 PR204 V3 PASS unaffected.
+- dependencies: F8 PR212 d04ff9d2, F2 PR213 c10f1da5, prior J2 review; J2 protected/possibly already running
+- blocker: USER_STOPPED_DUPLICATE_REVIEW; not completed or archived; outstanding worktree/Report NOT_VERIFIED; do not restart; production NO_GO
+- previous_archive: .agent_v2/archive/2026-10-16-J3-common-account-pr214-review/
+- slot_use: paused/cancelled by user after J2 duplication; G1 reconcile before reallocation
 
 ## J4
 - slot: J4
-- status: ready
+- status: done
 - task_id: postona-j4-pr217-r2c-final-preview-focused-rereview-20261015
 - owner: codex
-- next_owner: codex
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V4
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J4.md
 - current_report_path: .agent_v2/reports/J4.md
-- dependencies: F4 PR211 eb1011f2 stacked PR197 2171ee4c; J4 V4 previous P2x2; F5 PR193 exact handler contract
-- blocker: CHANGES_REQUIRED P2 R2c: late final-preview auth switch retains prior-user warnings in helper return; current screen hides them. Original R1/R2 repros fixed. Separate F5/managed/legacy gates; production NO_GO
-- slot_use: independent P2 R1/R2 POSTONA mobile rerun with actual F5 handler synthetic tests
-- previous_archive: .agent_v2/archive/2026-10-15-J4-postona-j4-pr197-postona-deletion-client-security-review-20261014/
-- v4_verdict: CHANGES_REQUIRED P2 R2c; original R1/R2 repaired, late final-preview cross-account helper warning not sanitized, screen remains guarded. Reviewed PR211, app294 and Deno120 independently PASS, no source modification; J4 released and archive needed before reuse.
-- latest_assignment: PR217 R2c focused security review. Prior task archived.
+- dependencies: PR217 d4bcd09e stacked PR211 eb1011f2 / PR197 2171ee4c; actual F5 PR193 handler; F5 PR214 integration separate
+- blocker: CHANGES_REQUIRED P2: concurrent public preview B/null observations bypass active end sticky fence; stale A settle can return completion/facts. Original serial R2c fixed, screen guarded; production NO_GO
+- slot_use: PR217 focused independent concurrency rereview with actual F5 synthetic seam; no product changes
+- previous_archive: .agent_v2/archive/2026-10-15-J4-postona-j4-pr211-p2-client-fixes-focused-security-rereview-20261015/
+- v4_verdict: CHANGES_REQUIRED P2 x1; original R2c 2 FAIL→2 PASS, focused19/seam8/app313 PASS, new concurrency 4 FAIL/2 controls PASS. Await coordinator V4.
+- latest_assignment: PR217 focused review completed 2026-10-16; return to POSTONA G4 coordinator, V4.
 
 ## J5
 - slot: J5

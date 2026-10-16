@@ -1,0 +1,27 @@
+{
+  "task_id": "kabumori-j2-f2-f8-pause-runtime-integrated-security-review-20261015",
+  "result": "CHANGES_REQUIRED",
+  "archive_date": "2026-10-16",
+  "files": [
+    {
+      "original_path": ".agent_v2/tasks/J2.md",
+      "archive_path": ".agent_v2/archive/2026-10-16-J2-f2-f8-pause-integrated-review/files/.agent_v2/tasks/J2.md",
+      "source_blob": "a0a1914f70ee97c2bbb830538dcc63aeb59ac377",
+      "size_chars": 3923,
+      "restored": true,
+      "sha256": "c5375385ef00e1f5764e16eb35c376761293f10a3a197143ea8eb0df45318c69",
+      "size_bytes": 5529
+    },
+    {
+      "original_path": ".agent_v2/reports/J2.md",
+      "archive_path": ".agent_v2/archive/2026-10-16-J2-f2-f8-pause-integrated-review/files/.agent_v2/reports/J2.md",
+      "source_blob": "625ab52df4a18a7f06ce3120e3b16656298529cf",
+      "size_chars": 24795,
+      "restored": true,
+      "sha256": "dbc6a8e7831c2be5516bec66ae054c854772e98c251e16aede7414b261af7bf3",
+      "size_bytes": 24938
+    }
+  ],
+  "hash_algorithm": "SHA256",
+  "sha256_verified": true
+}

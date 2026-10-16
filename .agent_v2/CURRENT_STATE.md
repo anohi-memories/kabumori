@@ -1,3 +1,20 @@
+## POSTONA F4 L4 PR221 concurrent identity fence (2026-10-16)
+- F4 `postona-f4-pr217-concurrent-preview-identity-fence-p2-20261016` L4 accepted PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO, F4 done/none. Draft PR221 HEAD `dcae62c6f61dc67372ea502a1cf5e7d1d598d852` base PR217 HEAD `d4bcd09e8c0a67a87afff867c69b135b1a26ba4a`, 4 mobile files (1 runtime); test reports 23/23 focused, actual F5 PR193 synthetic handler 14/14, app336, tsc/lint PASS, 11/12 mutants detected. User change seen by concurrent public preview now shared with active end monotonic identity fence. ChatGPT did not independently run tests.
+- Independent Codex J1–J4 Sol（高） targeted review required before source security acceptance. Managed Auth/DB, X/Threads, deployed legacy deletion endpoint and F5 integration remain production STOPs. No merge/deploy/feature enable/real operations. Archive this F4 task with embedded Report before next allocation.
+
+## F5 Phase11 POSTONA managed隔離検証の準備（2026-10-16）
+- F5 `common-account-f5-phase11-postona-managed-auth-isolated-test-readiness-20261016` ready/claude、Opus5.5（高）、F5→L5、返却先 共通アカウントG5のちゃ（新F5担当）。POSTONA共通ID新規登録/ログイン/entitlementのmanaged disposable検証に向けたsource-only準備・DRY_RUN拒否ガード・M1–M12チェックを実装する。**実Supabase/Auth/DB/RLS/Edge/ユーザー作成、migration適用、merge/deploy、本番操作は未承認・NO_GO**。ユーザーの別承認が必要。
+- 前F5 P2 correction L5 done、Draft PR220 head `49b912292f434b5306b3c9e36f8c72466de2f124`保護。TASK/Reportは `.agent_v2/archive/2026-10-16-F5-common-account-f5-j3-v3-p2-known-x-warning-count-fix-20261016/`に保存、SHA256 `a7cd04453b6a2c0e2234ab91cf34a843ee7fc58d044201d574c2037ff8d7c883`、blob/UTF8復元照合、MANIFEST/SHA256SUMSとHISTORY_INDEX保存済み。他スロットの変更は禁止。全ID削除D1は別release STOP。
+
+## POSTONA F4 R2 concurrent public-preview identity fix (2026-10-16)
+- J4 V4 PR217 review CHANGES_REQUIRED P2×1 (concurrent public preview sees B/null but active A end misses it); J4 TASK done and ACTIVE_TASK reconciled after prior write conflict.
+- F4 NEW `postona-f4-pr217-concurrent-preview-identity-fence-p2-20261016` ready/claude; Opus5.5（高）, F4→L4 return POSTONA｜マルチSNS化・開発統括（G4）のちゃ; new Draft stacked on PR217 HEAD d4bcd09e, source only. Sticky identity fence must include concurrent public preview session observations; original serial protections remain. Production NO_GO.
+- Old F4 accepted TASK+embedded Report archived at `.agent_v2/archive/2026-10-16-F4-postona-f4-pr211-r2c-final-preview-identity-fix-20261015/` with blob readback; checksum metadata being finalized separately. No product, PR or production actions performed here.
+
+## F5 J3 V3 P2最小修正TASK登録 — 2026-10-16
+- `common-account-f5-j3-v3-p2-known-x-warning-count-fix-20261016` ready/claude、Sonnet5（高）、F5→L5、返却先 共通アカウントG5のちゃ（新F5担当）。J3 V3が独立実証したX snapshot_changed 1→9後にrecorder失敗すると既知9件を1件と表示するP2だけを修正・回帰。F5 PR214 HEAD `bc290ab618508a8fbaba1abfad308c52d86e4689`保護、新Draft stacked候補。production NO_GO。D1同意は別release STOP、旧チェーン全面レビューはしない。
+- 前F5 Phase10 TASK/Report `.agent_v2/archive/2026-10-16-F5-common-account-f5-phase10-postona-x-ack-snapshot-reconciliation-20261015/` に保存済み（UTF8/原GitHub blob一致、SHA256 `a6045175c0dc139c4fbb70439fb32507a35ad1738692398762db6cf06adaba24`、MANIFEST/SHA256SUMS、HISTORY_INDEX更新）。コード・本番・他slotのTASK/PRは不変更。
+
 ## POSTONA J4 PR217 review allocation (2026-10-15)
 - J4 `postona-j4-pr217-r2c-final-preview-focused-rereview-20261015` ready/codex, Sol（高）, J4→V4 return POSTONA｜マルチSNS化・開発統括（G4）のちゃ. Target Draft PR217 HEAD d4bcd09e; focus final A→B/null identity and preserved same-person warnings, actual F5 PR193 handler synthetic seam, 313-app regression suite, no product writes.
 - Prior J4 TASK/Report archived with exact Git blob read-back. Manifest/SHA256 checklist pending completion. Source OFF, production/merge/deploy NO_GO.

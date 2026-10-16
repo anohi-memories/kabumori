@@ -93,6 +93,8 @@ snapshot時点で各slotのTASK先頭にあったもの。状態の正本は旧 
 
 | 2026-10-15 | F4 | `postona-f4-pr197-p2-response-warning-preservation-20261015` | PR211 R1/R2 client fixes | PASS_SOURCE_FIX / NO_GO | #211 | `eb1011f2bd6f8a76ef412f824f0b21629794645b` | `.agent_v2/archive/2026-10-15-F4-postona-f4-pr197-p2-response-warning-preservation-20261015/` | TASK with embedded Report, Git blob restored; SHA256 pending |
 
+| 2026-10-16 | F4 | `postona-f4-pr211-r2c-final-preview-identity-fix-20261015` | PR217 R2c serial identity fix | PASS_SOURCE_FIX / NO_GO | #217 | `d4bcd09e8c0a67a87afff867c69b135b1a26ba4a` | `.agent_v2/archive/2026-10-16-F4-postona-f4-pr211-r2c-final-preview-identity-fix-20261015/` | TASK+Report blob restored; SHA256 metadata pending |
+
 ## 旧系統（G1〜G10 / H1〜H5）の完了・履歴作業
 
 ### 日付不明
@@ -511,3 +513,35 @@ Both archive paths are append-only originals. These index entries are history li
 - original_path: `.agent_v2/tasks/J1.md`; archive_path: `.agent_v2/archive/2026-10-16-j1-f6-h5-security-review-task.md`; Git blob `3b35532273a5da850fdd6958fd515b5ee5b3c411`; archive exact Git blob/content match, 4454 characters.
 - original_path: `.agent_v2/reports/J1.md`; archive_path: `.agent_v2/archive/2026-10-16-j1-f6-h5-security-review-report.md`; Git blob `aeb7d8872fd8d78e71224a094e9527a5f606afe1`; archive exact Git blob/content match, 21106 characters.
 - sha256 / separate MANIFEST pending; append-only archive, previous control metadata preserved.
+
+## F5 Phase10 completed archive — 2026-10-16
+- task_id: `common-account-f5-phase10-postona-x-ack-snapshot-reconciliation-20261015`
+- original_path: `.agent_v2/tasks/F5.md`
+- archive_path: `.agent_v2/archive/2026-10-16-F5-common-account-f5-phase10-postona-x-ack-snapshot-reconciliation-20261015/files/.agent_v2/tasks/F5.md`
+- size: 20508 bytes; SHA256: `a6045175c0dc139c4fbb70439fb32507a35ad1738692398762db6cf06adaba24`
+- original_blob: `aad705aae413bae0e62a9d978a4d80e84b1f7389`; restore: exact UTF-8 source/archive and blob SHA matched. MANIFEST/SHA256SUMS stored.
+- L5: PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; J3 V3 later CHANGES_REQUIRED P2 R1 on PR214.
+
+J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-integrated-review/ (append-only, restore verified). TASK SHA256 c5375385ef00e1f5764e16eb35c376761293f10a3a197143ea8eb0df45318c69, 5529 bytes; Report SHA256 dbc6a8e7831c2be5516bec66ae054c854772e98c251e16aede7414b261af7bf3, 24938 bytes. Original paths .agent_v2/tasks/J2.md and .agent_v2/reports/J2.md; archive files/ mirrors those paths; MANIFEST.json and SHA256SUMS present.
+
+- 2026-10-16 | F3 | `postona-f3-j3-v3-ack-lease-rollback-corrections-20261015` | L3 PASS_SOURCE_FIX; PR204 head 45b08a87; J3 V3 PASS_SOURCE_REVIEW; production NO_GO | `.agent_v2/archive/2026-10-16-F3-postona-f3-j3-v3-ack-lease-rollback-corrections-20261015/` | 21504 bytes; SHA256 `2a71cd256945fa5c0978ae73aca8c3b530130ef4fd7173f4a785166822b72cf2`; original Git blob `81d42920`; byte-equivalent restore verified.
+
+## F5 P2 correction archive — 2026-10-16
+- task_id: `common-account-f5-j3-v3-p2-known-x-warning-count-fix-20261016`
+- original_path: `.agent_v2/tasks/F5.md`
+- archive_path: `.agent_v2/archive/2026-10-16-F5-common-account-f5-j3-v3-p2-known-x-warning-count-fix-20261016/files/.agent_v2/tasks/F5.md`
+- size: 13114 bytes; SHA256: `a7cd04453b6a2c0e2234ab91cf34a843ee7fc58d044201d574c2037ff8d7c883`
+- source_blob: `92629551a17e573b7cd7f7625256be3f887a135b`; exact UTF-8 and git blob verified on read-back; MANIFEST/SHA256SUMS saved.
+- L5 PASS_SOURCE_FIX / PRODUCTION_NO_GO; PR220 49b912292f434b5306b3c9e36f8c72466de2f124.
+
+## J3 PR214 review archived for reuse — 2026-10-16
+- task_id: common-account-j3-f5-pr214-snapshot-ack-focused-review-20261015
+- original_path: .agent_v2/tasks/J3.md; archive_path: .agent_v2/archive/2026-10-16-J3-common-account-pr214-review/files/.agent_v2/tasks/J3.md; size: 5466 bytes; SHA256 ae20e31f91556b3987bbd22848d24267efac72b32ce34c531b5d0721338ff984; source blob 3d4d97ef9fa6752a8cf88413fba1a2759bbe56f4
+- original_path: .agent_v2/reports/J3.md; archive_path: .agent_v2/archive/2026-10-16-J3-common-account-pr214-review/files/.agent_v2/reports/J3.md; size: 12802 bytes; SHA256 5ad225dc4bfa01a3141c28ab2b00b5fede48649d1c74c7be8b848443ca183211; source blob 670c640871d1cfe2a1af338626eef292478467c3
+- MANIFEST.json, SHA256SUMS, GitHub read-back/restoration verified, archive append-only. New task is independent J3 F2/F8 review; older result retained.
+
+## J2 integrated review archive — independent verification 2026-10-16
+- task_id: `kabumori-j2-f2-f8-pause-runtime-integrated-security-review-20261015`; archive: `.agent_v2/archive/2026-10-16-J2-f2-f8-pause-integrated-review/`.
+- source_commit: `7f9aceca11e0d412f1428d9947ab93012e940d4e`. Original `.agent_v2/tasks/J2.md` → `files/.agent_v2/tasks/J2.md`: 5529 bytes; SHA256 `c5375385ef00e1f5764e16eb35c376761293f10a3a197143ea8eb0df45318c69`; source_blob `a0a1914f70ee97c2bbb830538dcc63aeb59ac377`.
+- Original `.agent_v2/reports/J2.md` → `files/.agent_v2/reports/J2.md`: 24938 bytes; SHA256 `dbc6a8e7831c2be5516bec66ae054c854772e98c251e16aede7414b261af7bf3`; source_blob `625ab52df4a18a7f06ce3120e3b16656298529cf`.
+- J2 independently regenerated SHA256, verified `SHA256SUMS` 2/2 OK, matched source-commit blobs, and compared both restored files byte-for-byte (2/2 exit 0). Existing archived originals / MANIFEST / checksums preserved; append-only proof: `MANIFEST_SHA256_VERIFICATION_20261016.md`. Prior pending SHA256 note is superseded by this verified result. Completed before focused rereview; production NO_GO.
