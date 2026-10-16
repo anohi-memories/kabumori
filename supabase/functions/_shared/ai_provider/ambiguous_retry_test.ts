@@ -103,6 +103,7 @@ const ok = (provider: AiProvider): Responder => () =>
   jsonResponse(200, provider === "anthropic" ? anthropicBody(VALID_PAYLOAD) : openAiBody(VALID_PAYLOAD));
 const status = (code: number, body: unknown, headers: Record<string, string> = {}): Responder => () => jsonResponse(code, body, headers);
 const lostAfterSend: Responder = () => Promise.reject(new TypeError("connection reset by peer"));
+const ok200 = (body: unknown): Responder => () => jsonResponse(200, body);
 
 async function run(request: AiRequest, responder: Responder, ledger = new ContractLedger()) {
   const net = recordingFetch(responder);
@@ -149,19 +150,75 @@ test("R2: a 504 / timeout_error or a connection lost after send is sent once, ev
   }
 });
 
-test("R2: other server errors (500 api_error, 502, Anthropic 503) are not known to be unsent and are not retried", async () => {
+test("R2 / A1: other server errors (500, 502, Anthropic 503) are sent once and settled unknown at the upper bound, never $0", async () => {
   const rows: Array<[AiProvider, number, unknown]> = [
     ["anthropic", 500, anthropicError(500, "api_error", "internal")],
+    ["anthropic", 502, null],
     ["anthropic", 503, null],
     ["openai", 500, { error: { type: "server_error", code: null, message: "x" } }],
     ["openai", 502, { error: { message: "bad gateway" } }],
   ];
   for (const [provider, code, body] of rows) {
-    const request = sampleRequest(provider, { transport: { maxAttempts: 3 } });
-    const { result, calls, envReads } = await run(request, sequence(status(code, body), ok(provider)));
-    assert.deepEqual([failure(result).errorCode, calls.length], ["SERVER_ERROR", 1], `${provider} ${code}`);
+    const label = `${provider} ${code}`;
+    const request = sampleRequest(provider, { callId: "a1-5xx", transport: { maxAttempts: 3 } });
+    const { result, calls, envReads, ledger } = await run(request, sequence(status(code, body), ok(provider)));
+    const value = failure(result);
+    assert.deepEqual([value.errorCode, calls.length], ["SERVER_ERROR", 1], label);
+    assert.deepEqual([value.costBasis, value.estimatedCostUsd, value.usage.unknownUsageAttempts], ["includes_upper_bound", upper(request), 1], label);
+    assert.deepEqual(ledger.events, ["reserve a1-5xx#1", "markSent a1-5xx#1", "settle a1-5xx#1 unknown/upper_bound"], label);
+    assert.equal(ledger.rows.get("a1-5xx#1")!.costUsd, upper(request), label);
+    assert.equal(ledger.rows.get("a1-5xx#1")!.settlement?.httpStatus, code, label);
     assertNoFallback(request, calls, envReads);
   }
+});
+
+test("A1: repeated operations answered by a 5xx cannot slip past a shared cost cap (each is held at its upper bound)", async () => {
+  for (const [provider, code, body] of [
+    ["anthropic", 500, anthropicError(500, "api_error", "internal")],
+    ["openai", 502, { error: { message: "bad gateway" } }],
+  ] as const) {
+    const request = sampleRequest(provider, { transport: { maxAttempts: 3 } });
+    const ledger = new ContractLedger(upper(request) * 1.5);
+    const net = recordingFetch(status(code, body));
+    const results = [];
+    for (const id of ["a1-op-1", "a1-op-2", "a1-op-3"]) {
+      results.push(await executeAiRequest({ ...request, callId: id }, testDeps(net.fetch, { budget: ledger }).deps));
+    }
+    assert.equal(net.calls.length, 1, `${provider} ${code}: only the first operation is sent`);
+    assert.deepEqual(results.map((result) => [failure(result).errorCode, failure(result).detail]), [
+      ["SERVER_ERROR", failure(results[0]).detail],
+      ["BUDGET_DENIED", "COST_LIMIT"],
+      ["BUDGET_DENIED", "COST_LIMIT"],
+    ]);
+    assert.equal(ledger.totalUsd(), upper(request));
+  }
+});
+
+test("A1: a known refusal stays $0 and measured usage is kept; missing usage is charged at the upper bound", async () => {
+  // 429 / 529 / OpenAI 503: documented refusals, nothing used.
+  for (const [provider, code, body] of [
+    ["anthropic", 429, anthropicError(429, "rate_limit_error", "slow")],
+    ["anthropic", 529, anthropicError(529, "overloaded_error", "busy")],
+    ["openai", 503, { error: { message: "slow down" } }],
+  ] as const) {
+    const request = sampleRequest(provider, { callId: "a1-refused", transport: { maxAttempts: 1 } });
+    const { calls, ledger } = await run(request, status(code, body));
+    assert.equal(calls.length, 1);
+    assert.deepEqual(ledger.events.at(-1), "settle a1-refused#1 failed/measured", `${provider} ${code}`);
+    assert.equal(ledger.rows.get("a1-refused#1")!.costUsd, 0, `${provider} ${code}`);
+  }
+  // A failed OpenAI response that reports usage is priced from that usage; without usage it is unknown.
+  const request = sampleRequest("openai", { callId: "a1-usage", transport: { maxAttempts: 3 } });
+  const measured = await run(request, ok200(openAiBody(null, { status: "failed" })));
+  assert.equal(measured.calls.length, 1);
+  assert.deepEqual(measured.ledger.events.at(-1), "settle a1-usage#1 failed/measured");
+  assert.ok(measured.ledger.rows.get("a1-usage#1")!.costUsd! > 0 && measured.ledger.rows.get("a1-usage#1")!.costUsd! < upper(request));
+  const withoutUsage = openAiBody(null, { status: "failed" }) as Record<string, unknown>;
+  delete withoutUsage.usage;
+  const unknown = await run(request, ok200(withoutUsage));
+  assert.equal(unknown.calls.length, 1);
+  assert.deepEqual(unknown.ledger.events.at(-1), "settle a1-usage#1 unknown/upper_bound");
+  assert.equal(unknown.ledger.totalUsd(), upper(request));
 });
 
 test("R2: a client timeout is sent once; asking to retry after a timeout is refused before any key read, reservation or request", async () => {

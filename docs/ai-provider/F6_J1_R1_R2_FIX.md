@@ -107,7 +107,8 @@ deno test --no-check --cached-only --frozen --config ../j1-before/supabase/funct
 - 読み込みの検査は CI の検査で、実行時の囲い（sandbox）ではない。`eval` や `new Function`、`Worker` に渡す文字列で読み込むことまでは見ない（いまの functions には無い）
 - functions の外の設定（リポジトリ直下の `deno.json` / `package.json`、`supabase/config.toml` の `import_map`、deploy のときの `--import-map`）は読んでいない。`config.toml` は main に無い
 - `from "x"` が普通の import の形でないとき、相対でない読み込み先は数えない（SQL や文を誤検知しないため）。ただし別名の設定が止まるので、そういう読み込み先がこの木のファイルに解決されることはない
-- 500 / 502 / Anthropic 503 は送り直さなくなったが、費用は今まで通り「課金なし（0 円）」で精算する。provider が実際には課金していたら、台帳が少なく数える。市況レポートの動きを変えないため、今回は変えていない（レビューで判断が要る）
+- ~~500 / 502 / Anthropic 503 は送り直さなくなったが、費用は今まで通り「課金なし（0 円）」で精算する~~ → J1 の再レビュー（A1）を受けて、課金の可能性ありとして最大額で精算するよう直した（`F6_J1_R1A_A1_FIX.md`）
+- コメントを挟んだ `import/* x */(...)` などが検査をすり抜けた（J1 の再レビュー、R1a）→ 直した（`F6_J1_R1A_A1_FIX.md`）
 - 呼び出し元が、失敗のあと新しい `callId` / 新しい操作で呼び直せば、それは新しい有料の呼び出しになる。それを決めるのは呼び出し元（H5 の bridge は同じ operationId を重複させない）
 
 ## 5. H5 への引き継ぎ（H5 のファイルは変えていない）
