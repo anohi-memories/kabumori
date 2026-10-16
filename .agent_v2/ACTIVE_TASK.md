@@ -56,10 +56,10 @@
 
 ## F4
 - slot: F4
-- status: review_required
+- status: done
 - task_id: postona-f4-service-end-auth-gate-g1-g2-design-20261016
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
@@ -69,6 +69,7 @@
 - blocker: source-only G1/G2 design, cross-owner integration; production NO_GO
 - slot_use: trace stale entitlement after service-end and reauth session remount; F4-owned plan and tests only
 - previous_archive: .agent_v2/archive/2026-10-16-F4-postona-f4-mobile-auth-entitlement-x-threads-integration-readiness-20261016/
+- l4_verdict_20261016_g1g2: PASS_DESIGN / PRODUCTION_NO_GO; PR230 HEAD e6725a16 design+pending spec, no runtime code; review waived; F5/H5 contract coordination remains before implementation.
 
 ## F5
 - slot: F5
