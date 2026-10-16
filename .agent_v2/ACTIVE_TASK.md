@@ -154,18 +154,18 @@
 
 ## F10
 - slot: F10
-- status: idle
-- task_id: none
+- status: ready
+- task_id: orchestration-v3-reliable-task-registration-f10-20261016
 - owner: claude
-- next_owner: none
-- return_to: none（未割当）
+- next_owner: claude
+- return_to: かぶモリ30枠統括のちゃ（このチャット）
 - completion_code: L10
-- recommended_model: none
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F10.md
 - current_report_path: .agent_v2/tasks/F10.md#report
-- dependencies: none
-- blocker: none
-- slot_use: 予備枠（ユーザーまたはChatGPTの明示割当専用）
+- dependencies: PROJECT_RULES / old-new ORCHESTRATION / protected Draft PR172 / recent failed registration evidence
+- blocker: tool safety rejection root cause unproven; V3 independent source only; no live cutover/merge/production
+- slot_use: 新管理基盤V3 登録信頼性の原因調査・独立候補実装（旧G/H・現行F/Jは不変更）
 
 ## J1
 - slot: J1
