@@ -52,6 +52,9 @@ import {
   planImportantNewsFetchGroups,
   planSourceFairCandidateBatch,
 } from "./fetch_resource_limit_logic.ts";
+import { enrichFedStatementCandidates } from "./fed_statement_enrichment.ts";
+import { fillMissingCandidateBody, storedStatementStates } from "./candidate_body_fill.ts";
+import { classifyFedMonetaryTitle } from "../_shared/news_body_extraction/fomc_statement_facts.ts";
 import { fetchOfficialPageText } from "./jp_official_enrichment.ts";
 import { collapseSameEventItems, createPermanentFailureMemory, runJpOfficialFill } from "./jp_official_lane_logic.ts";
 import { JP_OFFICIAL_SOURCES } from "./jp_official_filters.ts";
@@ -87,6 +90,7 @@ import {
 } from "./breaking_market_source_fetchers.ts";
 import { dailySlotConsumedAt, selectDailyBreakingMarketQueries } from "./breaking_market_daily_schedule.ts";
 import { buildCollectionRunDiagnostics } from "./news_collection_diagnostics.ts";
+import { enforceNewsPauseEntry, installNewsPauseGuard } from "./pause_gate.ts";
 import {
   judgeCandidateWithEscalation,
   requestImportantNewsJudgement,
@@ -174,6 +178,9 @@ type StoredCandidate = {
   company_code: string | null;
   entity_key: string | null;
   published_at: string;
+  status?: string;
+  body_summary?: string | null;
+  source_name?: string | null;
 };
 
 type CandidateResult = {
@@ -380,14 +387,25 @@ function comparable(row: StoredCandidate): DuplicateComparable {
   };
 }
 
+/**
+ * IMPORTANT_NEWS_FED_STATEMENT_BODY_ENRICHMENT=enabled turns on the reading of the official FOMC statement page (and the
+ * stored-state lookup / body fill that go with it). Anything else is OFF: the Fed feed is then processed exactly as before
+ * PR #129 — no extra read, fetch or write.
+ */
+function fedStatementBodyEnrichmentEnabled(): boolean {
+  return Deno.env.get("IMPORTANT_NEWS_FED_STATEMENT_BODY_ENRICHMENT") === "enabled";
+}
+
 async function selectCandidates(
   supabaseUrl: string,
   serviceRoleKey: string,
   filters: Record<string, string | string[]>,
   limit = 20,
+  withState = false,
 ): Promise<StoredCandidate[]> {
   const params = new URLSearchParams({
-    select: "id,source_url,normalized_title,content_hash,company_code,entity_key,published_at",
+    select: "id,source_url,normalized_title,content_hash,company_code,entity_key,published_at" +
+      (withState ? ",status,body_summary,source_name" : ""),
     limit: String(limit),
   });
   for (const [key, value] of Object.entries(filters)) {
@@ -851,6 +869,12 @@ async function saveCandidateJudgement(
     })
     : null;
   const params = new URLSearchParams({ id: `eq.${candidateId}`, status: "eq.pending_judgement" });
+  // The judgement was made on the body read at selection time. A body can only appear later through
+  // fillMissingCandidateBody, which writes to rows whose body is empty — so a judgement made WITHOUT a body is saved only
+  // while the body is still empty (one conditional UPDATE: the check and the write cannot be separated). Otherwise the
+  // row stays pending_judgement and is judged again with the official body on the next run.
+  const judgedWithoutBody = candidate !== undefined && (candidate.bodySummary ?? "").trim().length === 0;
+  if (judgedWithoutBody) params.set("or", "(body_summary.is.null,body_summary.eq.)");
   const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${params}`, {
     method: "PATCH",
     headers: headers(serviceRoleKey, "return=representation"),
@@ -881,7 +905,19 @@ async function saveCandidateJudgement(
   });
   if (!result.ok) throw new Error("NEWS_JUDGEMENT_SAVE_FAILED");
   const rows = await result.json() as unknown[];
-  if (rows.length !== 1) throw new Error("NEWS_JUDGEMENT_CANDIDATE_CHANGED");
+  if (rows.length === 1) return;
+  if (judgedWithoutBody) {
+    // 0 rows: tell "the body arrived while the model was judging" (stale, left pending) from "the row moved on".
+    const probe = new URLSearchParams({ id: `eq.${candidateId}`, select: "status,body_summary", limit: "1" });
+    const check = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${probe}`, { headers: headers(serviceRoleKey) });
+    if (check.ok) {
+      const [row] = await check.json() as Array<{ status?: unknown; body_summary?: unknown }>;
+      if (row?.status === "pending_judgement" && typeof row.body_summary === "string" && row.body_summary.trim().length > 0) {
+        throw new Error("NEWS_JUDGEMENT_STALE_BODY_CHANGED");
+      }
+    }
+  }
+  throw new Error("NEWS_JUDGEMENT_CANDIDATE_CHANGED");
 }
 
 // P0.6: immediateGeneration is omitted entirely for dry runs and for no_post candidates (nothing was
@@ -1675,6 +1711,10 @@ async function enqueuePresetImportantNewsNotifications(
   }
 }
 
+// F8 hard pause: every outward call (AI, X, push RPC, external feeds, database writes / claims) re-checks the news
+// is_active setting just before it is made. See pause_gate.ts.
+installNewsPauseGuard();
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return response({ error: "POST_REQUIRED" }, 405);
 
@@ -1689,6 +1729,16 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) return response({ error: "SERVER_CONFIGURATION_MISSING" }, 500);
+
+  // F8 hard pause entry gate: after authentication, before any mode dispatch or body handling. Anything other than
+  // is_active === true (paused, missing, malformed, unreadable) refuses the whole request; nothing in the body can unlock it.
+  const pauseState = await enforceNewsPauseEntry(supabaseUrl, serviceRoleKey, fetch);
+  if (pauseState !== "running") {
+    return response(
+      { error: pauseState === "unreadable" ? "NEWS_PAUSE_STATE_UNREADABLE" : "NEWS_HARD_PAUSED", autoPublish: false },
+      503,
+    );
+  }
 
   let runId: string | null = null;
   try {
@@ -2098,7 +2148,39 @@ Deno.serve(async (req) => {
       const fetchedBySource: Array<{ sourceKey: string; candidates: IncomingNewsCandidate[] }> = [];
       for (const source of MARKET_MACRO_SOURCES) {
         try {
-          const candidates = await fetchMarketMacroSource(source);
+          let candidates = await fetchMarketMacroSource(source);
+          if (source.key === "fed" && fedStatementBodyEnrichmentEnabled()) {
+            // Phase 7: FOMC statement items carry no description; read the official statement page. Statement items whose
+            // facts cannot be read are withheld (retried while fresh) instead of being judged on the headline alone.
+            const statements: Array<{ sourceUrl: string; normalizedUrl: string }> = [];
+            for (const candidate of candidates) {
+              if (classifyFedMonetaryTitle(candidate.title) !== "statement") continue;
+              statements.push({
+                sourceUrl: candidate.sourceUrl,
+                normalizedUrl: (await prepareNewsCandidate(parseIncoming(candidate))).sourceUrl,
+              });
+            }
+            const stored = await storedStatementStates(
+              statements,
+              async (url) => (await selectCandidates(supabaseUrl, serviceRoleKey, { source_url: `eq.${url}` }, 1, true))[0] ?? null,
+            );
+            const enrichment = await enrichFedStatementCandidates(candidates, fetch, { stored });
+            candidates = enrichment.candidates;
+            sourceErrors.push(...enrichment.errors.map((error) => `market_macro:fed:${error}`));
+            // A stored, still unjudged statement that had no body gets the official body (guarded update, see below).
+            for (const update of enrichment.bodyUpdates) {
+              try {
+                const prepared = await prepareNewsCandidate(parseIncoming({
+                  sourceType: "market_macro", sourceUrl: update.sourceUrl, sourceName: "market_macro", title: "fed statement",
+                  bodySummary: update.bodySummary, category: "frb", publishedAt: new Date().toISOString(),
+                }));
+                const filled = await fillMissingCandidateBody(supabaseUrl, serviceRoleKey, update.id, prepared.bodySummary ?? "");
+                if (filled !== "filled") sourceErrors.push("market_macro:fed:fed_statement:body_fill_skipped");
+              } catch (error) {
+                sourceErrors.push(`market_macro:fed:fed_statement:body_fill_failed:${safeError(error)}`);
+              }
+            }
+          }
           marketMacroFetchedCount += candidates.length;
           fetchedBySource.push({ sourceKey: source.key, candidates });
           marketMacroProviderDiagnostics.push({
@@ -2303,6 +2385,17 @@ Deno.serve(async (req) => {
     const collectionDiagnostics = buildCollectionRunDiagnostics({
       marketMacroProviders: marketMacroProviderDiagnostics,
       breakingMarketQueries: breakingMarketDiagnostics,
+      jpOfficial: {
+        enabled: jpOfficial.enabled,
+        signalsRead: jpOfficial.signalsRead,
+        selected: jpOfficial.selected,
+        alreadyKnown: jpOfficial.alreadyKnown,
+        inserted: jpOfficial.inserted,
+        deferred: jpOfficial.deferred,
+        enrichedPages: jpOfficial.enrichedPages,
+        skipped: jpOfficial.skipped,
+        drops: jpOfficial.drops,
+      },
       headlineTrigger: headlineTrigger
         ? {
           lane: headlineTrigger.diagnostics,

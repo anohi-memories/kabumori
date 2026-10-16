@@ -1,0 +1,229 @@
+// Phase 6 (offline): facts of an FOMC statement from the official federalreserve.gov press-release page.
+//
+// Finding (2026-10-11): https://www.federalreserve.gov/feeds/press_monetary.xml items carry a title and a link and an
+// EMPTY description, so an item such as "Federal Reserve issues FOMC statement" reaches the pipeline as a headline only:
+// no decision, no change, no target range, no vote. The official statement page itself is a short public HTML page
+// (≈1,100 characters of article text) and holds exactly those facts.
+//
+// Rights: Federal Reserve Board web content is U.S. government work and may be reproduced with attribution; this module
+// still fetches nothing and stores nothing. Pure functions; fail-closed: no decision or no range found => not ok.
+
+export type FedMonetaryItemKind = "statement" | "minutes" | "implementation_note" | "projections" | "other";
+
+export function classifyFedMonetaryTitle(title: string): FedMonetaryItemKind {
+  const t = title.normalize("NFKC").toLowerCase();
+  if (/issues fomc statement|fomc statement/u.test(t)) return "statement";
+  if (/minutes of the federal open market committee|fomc minutes/u.test(t)) return "minutes";
+  if (/implementation note/u.test(t)) return "implementation_note";
+  if (/economic projections/u.test(t)) return "projections";
+  return "other";
+}
+
+/**
+ * What the fetched page itself says it is: the <title> and the headings of the article, classified like a feed title.
+ * A page whose own heading is not the FOMC statement (minutes, projections, a note) is never read as one.
+ */
+export function fomcDocumentKind(html: string): FedMonetaryItemKind {
+  const heading = [
+    html.match(/<title[^>]*>([\s\S]*?)<\/title>/iu)?.[1] ?? "",
+    ...Array.from(html.matchAll(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/giu), (match) => match[1]),
+  ].join(" ").replace(/<[^>]*>/gu, " ").replace(/\s+/gu, " ");
+  if (/minutes|implementation note|economic projections/iu.test(heading)) return classifyFedMonetaryTitle(heading) === "statement" ? "other" : classifyFedMonetaryTitle(heading);
+  return classifyFedMonetaryTitle(heading);
+}
+
+export type FomcStatementFacts = {
+  ok: boolean;
+  issues: string[];
+  releaseDate: string | null;
+  action: "raise" | "lower" | "maintain" | null;
+  /** Change of the target range in basis points (0 when maintained); null when not stated. */
+  changeBp: number | null;
+  rangeLowerPct: number | null;
+  rangeUpperPct: number | null;
+  rangeText: string | null;
+  votesFor: number | null;
+  votesAgainst: number | null;
+  dissenters: string[];
+  /** The dissent sentence exists but the names / count could not be read with certainty (names are then not output). */
+  dissentersUncertain: boolean;
+};
+
+function articleText(html: string): string {
+  const stripped = html
+    .replace(/<script[\s\S]*?<\/script>/giu, " ")
+    .replace(/<style[\s\S]*?<\/style>/giu, " ")
+    .replace(/<!--[\s\S]*?-->/gu, " ");
+  // From the article container to the page footer. (The share buttons sit BEFORE the statement body, so they are not an end marker.)
+  const start = /<div[^>]*\bid="article"[^>]*>/iu.exec(stripped);
+  let raw = start ? stripped.slice(start.index + start[0].length) : stripped;
+  const end = /Last Update:|Return to top|<div[^>]*\bid="footer"|<footer\b/iu.exec(raw);
+  if (end) raw = raw.slice(0, end.index);
+  return raw
+    .replace(/<[^>]*>/gu, " ")
+    .replace(/&nbsp;|&#160;/gu, " ")
+    .replace(/&amp;/gu, "&")
+    .replace(/&#8211;|&ndash;/gu, "–")
+    .replace(/&#8217;|&rsquo;/gu, "'")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+/** "3-3/4" -> 3.75, "4" -> 4, "1/4" -> 0.25, "3.75" -> 3.75; null when not a number. */
+export function parseFedRatePercent(raw: string): number | null {
+  const text = raw.trim().replace(/[–—]/gu, "-");
+  const mixed = text.match(/^(\d+)-(\d+)\/(\d+)$/u);
+  if (mixed) return Number(mixed[1]) + Number(mixed[2]) / Number(mixed[3]);
+  const fraction = text.match(/^(\d+)\/(\d+)$/u);
+  if (fraction) return Number(fraction[1]) / Number(fraction[2]);
+  return /^\d+(?:\.\d+)?$/u.test(text) ? Number(text) : null;
+}
+
+const MONTH_NAME = "(?:January|February|March|April|May|June|July|August|September|October|November|December)";
+
+/** A decision sentence that is a reference to an earlier meeting / earlier action / a quotation, not this meeting's decision. */
+function isHistoricalDecision(sentence: string): boolean {
+  return new RegExp(
+    [
+      "\\b(?:at|in|during|since|following)\\s+(?:its|the|their)\\s+(?:[A-Za-z]+\\s+){0,3}?(?:meeting|meetings)\\b(?<!this\\s+meeting)",
+      "\\b(?:previous|prior|last|earlier|preceding|past)\\b",
+      `\\b(?:in|since|during|at)\\s+${MONTH_NAME}\\b`,
+      "\\bhad\\s+(?:decided|raised|lowered|reduced|cut)\\b",
+      "[\"“”]",
+    ].join("|"),
+    "iu",
+  ).test(sentence) && !/\bat this meeting\b|\btoday\b/iu.test(sentence.split(/decided/iu)[0] ?? "");
+}
+
+const RATE = String.raw`(\d+(?:-\d+\/\d+|\/\d+|\.\d+)?)`;
+
+export function extractFomcStatementFacts(html: string): FomcStatementFacts {
+  const text = articleText(html);
+  const issues: string[] = [];
+  const releaseDate = text.match(/\b((?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4})\b/u)?.[1] ?? null;
+
+  // The decision is ONE sentence of this meeting: action, range and change are all read from that same sentence. A
+  // sentence that refers to an earlier meeting / earlier action ("At its July meeting, the Committee decided to raise …")
+  // is history, not the decision. Two different current decisions are ambiguous and are not guessed between.
+  const decisions: Array<{ action: NonNullable<FomcStatementFacts["action"]>; sentence: string }> = [];
+  for (const sentence of text.split(/(?<![A-Z])(?<!\ba\.m)(?<!\bp\.m)\.\s+(?=[A-Z])/u)) {
+    if (!/target range/iu.test(sentence) || isHistoricalDecision(sentence)) continue;
+    let sentenceAction: NonNullable<FomcStatementFacts["action"]> | null = null;
+    if (/decided to raise the target range/iu.test(sentence)) sentenceAction = "raise";
+    else if (/decided to (?:lower|reduce|cut) the target range/iu.test(sentence)) sentenceAction = "lower";
+    else if (/decided to (?:maintain|keep|leave)[^.]{0,60}target range|target range[^.]{0,60}unchanged/iu.test(sentence)) sentenceAction = "maintain";
+    if (sentenceAction) decisions.push({ action: sentenceAction, sentence });
+  }
+  const parseDecision = (sentence: string) => {
+    const found = new RegExp(`target range[^.]{0,120}?(?:to|at)\\s+${RATE}\\s+to\\s+${RATE}\\s+percent`, "iu").exec(sentence) ??
+      new RegExp(`${RATE}\\s+to\\s+${RATE}\\s+percent`, "iu").exec(sentence);
+    return {
+      range: found,
+      lower: found ? parseFedRatePercent(found[1]) : null,
+      upper: found ? parseFedRatePercent(found[2]) : null,
+    };
+  };
+  const signature = (item: (typeof decisions)[number]) => {
+    const parsed = parseDecision(item.sentence);
+    return `${item.action}|${parsed.lower}|${parsed.upper}|${item.sentence.match(/by\s+(\d+(?:\/\d+|\.\d+)?)\s+(?:percentage points?|basis points?)/iu)?.[0] ?? ""}`;
+  };
+  const distinct = new Set(decisions.map(signature));
+  const chosen = distinct.size === 1 ? decisions[0] : null;
+  if (distinct.size > 1) issues.push("AMBIGUOUS_DECISION");
+
+  const action: FomcStatementFacts["action"] = chosen?.action ?? null;
+  const parsedRange = chosen ? parseDecision(chosen.sentence) : { range: null, lower: null, upper: null };
+  const range = parsedRange.range;
+  const rangeLowerPct = parsedRange.lower;
+  const rangeUpperPct = parsedRange.upper;
+
+  let changeBp: number | null = null;
+  const pp = chosen?.sentence.match(/by\s+(\d+(?:\/\d+|\.\d+)?)\s+percentage points?/iu);
+  const bp = chosen?.sentence.match(/by\s+(\d+)\s+basis points?/iu);
+  if (pp) {
+    const value = parseFedRatePercent(pp[1]);
+    changeBp = value === null ? null : Math.round(value * 100);
+  } else if (bp) changeBp = Number(bp[1]);
+  else if (action === "maintain") changeBp = 0;
+
+  let votesFor: number | null = null;
+  let votesAgainst: number | null = null;
+  const vote = text.match(/(?:by\s+a\s+)?(\d{1,2})\s*[–-]\s*(\d{1,2})\s+vote/iu);
+  if (vote) {
+    votesFor = Number(vote[1]);
+    votesAgainst = Number(vote[2]);
+  }
+  const unanimousEvidence = /by unanimous vote|unanimously/iu.test(text);
+  if (!vote && unanimousEvidence) votesAgainst = 0;
+
+  // "Voting against this action were Christopher J. Waller and Michelle W. Bowman, who preferred …": a period after a
+  // single capital letter is a middle initial, not the end of the sentence, and the reason clause is not a name.
+  const dissenters: string[] = [];
+  let dissentersUncertain = false;
+  const against = /Voting against (?:this action|the action|these actions)?\s*(?:was|were)[:\s]+/iu.exec(text);
+  if (against) {
+    const tail = text.slice(against.index + against[0].length);
+    const sentenceEnd = /(?<![\s.][A-Z])\.(?=\s|$)/u.exec(tail);
+    let segment = sentenceEnd ? tail.slice(0, sentenceEnd.index) : tail.slice(0, 200);
+    segment = segment.replace(/,?\s+who\b[\s\S]*$/iu, "").replace(/;[\s\S]*$/u, "").trim();
+    const parts = segment.split(/\s*,\s*(?:and\s+)?|\s+and\s+/u).map((part) => part.trim()).filter(Boolean);
+    const plausible = parts.length > 0 && parts.every((part) => /^[A-Z][A-Za-z'’-]*\.?(?:\s+[A-Z][A-Za-z'’.-]*){1,4}$/u.test(part));
+    if (plausible) dissenters.push(...parts);
+    else dissentersUncertain = true;
+    if (dissenters.length > 0) {
+      if (vote && votesAgainst !== dissenters.length) {
+        // the stated count and the names disagree: neither is trusted for the names
+        dissenters.length = 0;
+        dissentersUncertain = true;
+      } else if (!vote && unanimousEvidence) {
+        dissenters.length = 0;
+        dissentersUncertain = true;
+        votesAgainst = null;
+      } else if (!vote) {
+        votesAgainst = dissenters.length;
+      }
+    }
+  }
+
+  if (action === null) issues.push("NO_DECISION_FOUND");
+  if (rangeLowerPct === null || rangeUpperPct === null) issues.push("NO_TARGET_RANGE");
+  else if (rangeUpperPct <= rangeLowerPct) issues.push("RANGE_NOT_ASCENDING");
+  if ((action === "raise" || action === "lower") && changeBp === null) issues.push("CHANGE_SIZE_UNKNOWN");
+  if (action === "raise" && changeBp !== null && changeBp <= 0) issues.push("CHANGE_SIGN_MISMATCH");
+  return {
+    ok: issues.length === 0,
+    issues,
+    releaseDate,
+    action,
+    changeBp,
+    rangeLowerPct,
+    rangeUpperPct,
+    rangeText: range ? `${range[1]} to ${range[2]} percent` : null,
+    votesFor,
+    votesAgainst,
+    dissenters,
+    dissentersUncertain,
+  };
+}
+
+const ACTION_JA: Record<NonNullable<FomcStatementFacts["action"]>, string> = {
+  raise: "引き上げ",
+  lower: "引き下げ",
+  maintain: "据え置き",
+};
+
+/** One labelled block of facts for the judgement context; null unless the decision and the range are both certain. */
+export function renderFomcStatementSummary(facts: FomcStatementFacts, officialUrl: string | null = null): string | null {
+  if (!facts.ok || facts.action === null || facts.rangeLowerPct === null || facts.rangeUpperPct === null) return null;
+  const change = facts.action === "maintain" ? "変更なし" : `${facts.changeBp}bp${ACTION_JA[facts.action]}`;
+  const vote = facts.votesFor !== null && facts.votesAgainst !== null
+    ? `票決 賛成${facts.votesFor}・反対${facts.votesAgainst}`
+    : facts.votesAgainst === 0 ? "全会一致" : "票決数の記載なし";
+  const lines = [
+    `【FOMC声明（公式ページから抽出）】${facts.releaseDate ?? "日付不明"}`,
+    `政策金利（FF金利誘導目標レンジ）: ${facts.rangeLowerPct}〜${facts.rangeUpperPct}%（${ACTION_JA[facts.action]}、${change}）`,
+    vote + (facts.dissenters.length > 0 && !facts.dissentersUncertain ? `（反対: ${facts.dissenters.join("、")}）` : ""),
+  ];
+  if (officialUrl) lines.push(`出典: ${officialUrl}`);
+  return lines.join("\n");
+}
