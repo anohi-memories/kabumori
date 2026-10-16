@@ -153,10 +153,10 @@
 
 ## F10
 - slot: F10
-- status: in_progress
+- status: review_required
 - task_id: orchestration-v3-pr229-security-review-high-medium-fixes-f10-20261016
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリ30枠統括のちゃ（このチャット）
 - completion_code: L10
 - recommended_model: Opus5.5（高）
