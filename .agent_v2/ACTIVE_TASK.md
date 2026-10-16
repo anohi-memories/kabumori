@@ -185,19 +185,19 @@
 
 ## J2
 - slot: J2
-- status: ready
+- status: review_required
 - task_id: kabumori-j2-f2-f8-pause-three-findings-focused-rereview-20261016
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: V2
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
-- dependencies: F8 PR212 d04ff9d2; F2 PR213 c10f1da5; previous J2 V2 report; PR129/164 protected
-- blocker: source-only focused review; production NO_GO; history verification complete
+- dependencies: F8 Draft #212 d04ff9d2227bbb0e43d7ddbcf8c3b5cc7ad54d3a; F2 Draft #213 c10f1da593ba3dc365cf340e9569ae1caa9789b1; PR129/164 protected
+- blocker: CHANGES_REQUIRED P1 R1 residual: concurrent entry OFF does not fence pending egress true, mock X still sent. R2/R3 PASS; production/merge/deploy NO_GO.
 - previous_archive: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-integrated-review/
-- slot_use: J2-R1/R2/R3 focused rereview only; return V2
+- slot_use: Three-findings focused independent rereview complete; archive SHA256/restore 2/2 PASS; tests 79 PASS / 1 FAIL; return V2 to かぶモリアプリG1のちゃ（運用休止・全体統括）.
 
 ## J3
 - slot: J3
