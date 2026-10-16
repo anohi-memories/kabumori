@@ -1,3 +1,7 @@
+## F5 Phase11 POSTONA managed隔離検証の準備（2026-10-16）
+- F5 `common-account-f5-phase11-postona-managed-auth-isolated-test-readiness-20261016` ready/claude、Opus5.5（高）、F5→L5、返却先 共通アカウントG5のちゃ（新F5担当）。POSTONA共通ID新規登録/ログイン/entitlementのmanaged disposable検証に向けたsource-only準備・DRY_RUN拒否ガード・M1–M12チェックを実装する。**実Supabase/Auth/DB/RLS/Edge/ユーザー作成、migration適用、merge/deploy、本番操作は未承認・NO_GO**。ユーザーの別承認が必要。
+- 前F5 P2 correction L5 done、Draft PR220 head `49b912292f434b5306b3c9e36f8c72466de2f124`保護。TASK/Reportは `.agent_v2/archive/2026-10-16-F5-common-account-f5-j3-v3-p2-known-x-warning-count-fix-20261016/`に保存、SHA256 `a7cd04453b6a2c0e2234ab91cf34a843ee7fc58d044201d574c2037ff8d7c883`、blob/UTF8復元照合、MANIFEST/SHA256SUMSとHISTORY_INDEX保存済み。他スロットの変更は禁止。全ID削除D1は別release STOP。
+
 ## POSTONA F4 R2 concurrent public-preview identity fix (2026-10-16)
 - J4 V4 PR217 review CHANGES_REQUIRED P2×1 (concurrent public preview sees B/null but active A end misses it); J4 TASK done and ACTIVE_TASK reconciled after prior write conflict.
 - F4 NEW `postona-f4-pr217-concurrent-preview-identity-fence-p2-20261016` ready/claude; Opus5.5（高）, F4→L4 return POSTONA｜マルチSNS化・開発統括（G4）のちゃ; new Draft stacked on PR217 HEAD d4bcd09e, source only. Sticky identity fence must include concurrent public preview session observations; original serial protections remain. Production NO_GO.
