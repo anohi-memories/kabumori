@@ -76,20 +76,19 @@
 
 ## F5
 - slot: F5
-- status: done
-- task_id: common-account-f5-phase11-postona-managed-auth-isolated-test-readiness-20261016
+- status: ready
+- task_id: common-account-f5-phase12-schema-baseline-cron-isolation-offline-20261016
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: F5 PR121→152→165→178→183→193→206→214→220; F3 PR204; F4 PR180; G3 T13 / G4 client
-- blocker: managed GoTrue/Auth/RLS/HTTP unverified; no managed execution authorized; full deletion D1 and owner gates unresolved, production NO_GO
-- slot_use: Phase11 offline-only disposable Supabase validation planning, guard scripts and acceptance tests; POSTONA priority
-- previous_archive: .agent_v2/archive/2026-10-16-F5-common-account-f5-j3-v3-p2-known-x-warning-count-fix-20261016/
-- latest_result: PREPARED_SOURCE_ONLY — Draft PR #223 head 28695586f63a30c739a44b829e79a7950932b5e7 stacked on PR220 49b912292f434b5306b3c9e36f8c72466de2f124 (PR214 bc290ab6, PR206 a84a9b6a, F3 PR204 45b08a87, POSTONA PR197/211 unchanged): managed-disposable acceptance harness (dry-run default, target guard with allowlist/deny list/typed confirmation, identity re-read before every mutation, SHA-256-pinned files, foreign-host/cron/http scan, redaction, teardown), M1-M12 plan with STOP criteria and stage GO/NO_GO, owner hand-offs; offline proofs: 27 tests, 30/30 harness mutants, model run 5 (plan executed over fake GoTrue/PostgREST + local PG, M5 fail-before), Phase 9 regression PASS; findings BG1 (repo migrations are not a self-sufficient baseline: brands/social_accounts/social_account_oauth_states created by no migration, 33/120 fail on a bare stand-in DB) and BG2 (8 migrations call the production URL via cron.schedule/net.http_post); no managed project, credential, user, secret, migration or grant used; D1 remains a separate release STOP; production NO_GO. Report: .agent_v2/tasks/F5.md#report
+- dependencies: F5 PR121→152→165→178→183→193→206→214→220→223; F3 PR204; F4 PR180; G3 T13, POSTONA G4 and full-ID D1
+- blocker: BG1 incomplete schema baseline and BG2 unsafe production Cron/network migrations; production and managed disposable operations not authorized
+- slot_use: Phase12 source-only baseline provenance/unsafe migration isolation with negative local tests; POSTONA shared Auth focus
+- previous_archive: .agent_v2/archive/2026-10-16-F5-common-account-f5-phase11-postona-managed-auth-isolated-test-readiness-20261016/
 
 ## F6
 - slot: F6
