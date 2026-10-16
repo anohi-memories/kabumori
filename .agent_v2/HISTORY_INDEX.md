@@ -563,3 +563,8 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - SHA256/MANIFEST pending separate verification; immutable archive content verified by identical Git blob.
 
 - F4 2026-10-16: `postona-f4-mobile-auth-entitlement-x-threads-integration-readiness-20261016` (PR227, source accepted, NO_GO) archive `.agent_v2/archive/2026-10-16-F4-postona-f4-mobile-auth-entitlement-x-threads-integration-readiness-20261016/`; TASK+Report Git blob readback verified; SHA256 pending.
+
+## F6 PR222 import/cost correction archive — 2026-10-16
+- task_id: `common-ai-f6-pr219-j1-r1a-a1-correction-20261016`; L6 PASS_SOURCE_FIX; J1 PR222 review requires R1b P2/R1c P3 follow-up.
+- original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-16-f6-pr222-source-fix.md`; source/archive Git blob `60498efa09c36a18cf59b5746fa4145afac40885`, 8813 characters, restored exact content confirmed.
+- original commit: F6 L6 TASK `13f0a0166f3c66b467027661ab71c99e5c85840e` and ACTIVE `a3f0a95dabb9a7950cd3e19527b32bc68ad788af`. SHA256/MANIFEST pending independent validation.
