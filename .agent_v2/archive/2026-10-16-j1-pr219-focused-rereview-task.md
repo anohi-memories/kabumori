@@ -1,0 +1,43 @@
+# J1 — F6 PR219 R1/R2 差分限定セキュリティ再レビュー
+- task_id: common-ai-j1-pr219-r1-r2-focused-rereview-20261016
+- slot: J1
+- owner: codex
+- status: review_required
+- next_owner: chatgpt
+- start_code: J1
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- completion_code: V1
+- recommended_model: **Sol（高）**
+- review_required: true
+- production_mutation_window: CLOSED
+- previous_task_archive: .agent_v2/archive/2026-10-16-j1-f6-h5-security-review-task.md
+- previous_report_archive: .agent_v2/archive/2026-10-16-j1-f6-h5-security-review-report.md
+
+## Purpose and sources
+Independently verify ONLY the F6 fixes for J1 V1 P2 R1 (module import least privilege) and R2 (possible-billed retry), plus 500/502/503 uncertain-cost ledger handling. Original J1 report is immutable in archive and the initial R1/R2 evidence remains valid. F6 L6 PASS_SOURCE_FIX (not independently accepted for production); its Draft PR #219 head `be35cc93205fedd6af1321aaeb1fc38d71e9b946`, based on PR #205 head `4cd2cbdd51a68bc537cd0fc81dc8f1c7ee059f21`. Preserve stack #187 → #198 → #205 → #219. Other inventory PR #216 is docs-only and not part of security change. This is NOT general repo security review.
+
+## Start / conflict gate
+Check fresh origin/main, PROJECT_RULES.md, new and legacy ACTIVE_TASK/CURRENT_STATE, old G6/H5 finished, F6 completed L6, J1 prior archive, current PR heads/ancestry/diffs and other slot changed files/branch/worktree. Use a clean independently isolated J1 worktree. Never touch owners' worktrees, unsaved changes or overlapping files. If protected heads drift or conflict discovered, stop and report.
+
+## Review focus
+1. R1: independently reproduce original dynamic namespace `import("../ai_provider/mod.ts")` bypass against PR205, then verify PR219 rejects it. Test computed/nonliteral imports, config/import-map alias, casing, symlinks/canonical path, nested/transitive and export-star, failure-to-read or missing paths. Ensure known safe legitimate import forms pass, no blanket allowlist widening; check scanner limitations (eval/Worker and out-of-scope config) for actual reachability before acceptance.
+2. R2: independently reproduce PR205 504/timeout_error two-send under maxTransportAttempts2 and assert only one attempt after PR219. Probe 500, 502, Anthropic 503, timeout after dispatch, connection reset, markSent uncertainty, 429/529 and explicitly known-unsent OpenAI 503, replay/unknown settlement, idempotency, budget reservation, caps, no fallback and primary_both legacy OpenAI compatibility.
+3. Accounting: F6 Report says 500/502/Anthropic503 are no longer retried but may settle to $0 despite real bill possible. Verify exact `maybeBilled` and ledger rules; classify severity (P0/P1/P2) and minimum fix before consumer activation. Distinguish potential undercount from demonstrated actual invoice.
+4. Re-run focused offline suites under deny-net/dummy credentials; provider, H5 bridge, market report, mutation/counterexample checks. Existing 5 all-shared type errors must be reported accurately (do not claim full typed PASS when --no-check). Re-review only changed behavior plus relevant interfaces; no unrelated reviews.
+
+## Permissions
+Read-only code review, mocked tests and own J1 TASK/Report/ACTIVE metadata only. Do not change F6 source/PR219 or H5/POSTONA/F3/F4/F5/G1 files, no real API/keys, secrets, paid calls, Supabase DB/Auth/RLS/RPC/Cron/Edge, SNS, merge/deploy or production. No repo-wide suppression to force tests green.
+
+## Completion / handoff
+Report verdict PASS_SOURCE_REVIEW_CANDIDATE or CHANGES_REQUIRED, severity and exact paths/lines, reproduction, test PASS/FAIL and known limitations, commit/push/read-back, Draft head, changed files (review records only), remaining issues, source-only merge hold and production NO_GO. Set J1 status review_required/next_owner chatgpt in TASK, Report, ACTIVE and return: **共通AI基盤のちゃ（OpenAI・Claude API専用チャット）へ V1 を送ってください。**
+## Report
+- result: CHANGES_REQUIRED / P2×2 / PRODUCTION_NO_GO
+- source_merge: HOLD
+- summary: Exact original R1 literal-import counterexample is now rejected, but legal commented dynamic import still bypasses the provider/H5 guards. Original R2 504 two-send is fixed (two -> one); uncertain HTTP500/502/Anthropic503 still settle measured zero.
+- tests: Provider+bridge typed 168 PASS; market report typed 324 PASS; independent 13 new cases 11 PASS / 2 acceptance FAIL (plus 4 imported sample executions PASS); actual original guard mutation 14 PASS demonstrates missed widening. All-shared typed blocked by unchanged 5 baseline errors; no-check runtime 670 PASS / 1 permission-blocked NOT_VERIFIED, not retried.
+- report: .agent_v2/reports/J1.md
+- git_sync: SUCCESS; review-content commit 1abbc6e34b60848525b83041635f29a9b8e044d9 normally pushed to main and fetched/read back with exact TASK/Report/J1 ACTIVE match. All blocked checks remain NOT_VERIFIED and were not rerun.
+- commit_hash: 1abbc6e34b60848525b83041635f29a9b8e044d9 (review-content commit; subsequent receipt-only metadata commit is identifiable from Git history)
+- merge: NOT_PERFORMED
+- deploy: NOT_PERFORMED
+- production: unchanged
