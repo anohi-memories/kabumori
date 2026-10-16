@@ -575,3 +575,6 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - original_path: `.agent_v2/tasks/J1.md`; archive_path: `.agent_v2/archive/2026-10-16-J1-common-ai-j1-pr222-r1a-a1-focused-review-20261016/files/.agent_v2/tasks/J1.md`; size: 5255 bytes; SHA256: `79954d7233764099ac9678f997c10e0b6b075acf3d3d47c49bc36a5ecb854c15`; original_blob: `1a81c3d36f4fc63bd188071e30211807d25abd3f`
 - original_path: `.agent_v2/reports/J1.md`; archive_path: `.agent_v2/archive/2026-10-16-J1-common-ai-j1-pr222-r1a-a1-focused-review-20261016/files/.agent_v2/reports/J1.md`; size: 14839 bytes; SHA256: `85400de33f2e704d4adea86338bd0f29f03686c55aad369dbd93569bdd5a85a8`; original_blob: `4bb45074c2b4546f4cd7635ce2cbad5c9f15921b`
 - restore: both archive source bytes and blob SHAs were read-back verified against original; SHA256SUMS and MANIFEST stored.
+
+## F8 observer stop-gap design archive (2026-10-16)
+- task_id: kabumori-f8-news-hard-pause-runtime-candidate-20261015; original_path: .agent_v2/tasks/F8.md; archive_path: .agent_v2/archive/2026-10-16-F8-observer-stop-gap-design/files/.agent_v2/tasks/F8.md; 25483 bytes; SHA256 b8adb5482ef67274f67f3eb665b6aadbad892ec7265c3a5081adbd233d3a78b7; original/restored Git blob 9fee537bcad0e8d3b3f17968820a7e4bbd1825ba. MANIFEST.json/SHA256SUMS saved; restore matched; append-only.
