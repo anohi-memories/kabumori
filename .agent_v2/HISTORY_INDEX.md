@@ -586,3 +586,8 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-16-F5-common-account-f5-phase12-schema-baseline-cron-isolation-offline-20261016/files/.agent_v2/tasks/F5.md`
 - bytes: 18420; SHA256: `7538eda6d3448746b075fe897f00239ae67f3fc4b4b7ec45e196b171a070948b`; original_blob: `84dc59bc9351b0b3b5a7af59108c538bdcc14cb4`
 - read-back: exact content and blob SHA matched, MANIFEST and SHA256SUMS stored. L5 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; J1 V1 P2×4 requires a new F5 source-only fix.
+
+## F6 PR231 lexer source fix archive — 2026-10-16
+- task_id: `common-ai-f6-pr222-import-lexer-r1b-r1c-fix-20261016`; L6 PASS_SOURCE_FIX; external independent Claude review CHANGES_REQUIRED/P2 parser bypass.
+- original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-16-f6-pr231-lexer-source-fix.md`; original and restored Git blob `ca3417c23ed679e1e35b2f49b2e85a78c7c303e6`, 8548 characters; exact Git blob match confirmed.
+- SHA256/MANIFEST pending independent validation; archive append-only. Source prior completion commit 3c698eeb839210539c229e57c621fc53307d0611.
