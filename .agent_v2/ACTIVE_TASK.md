@@ -93,19 +93,19 @@
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-j1-import-timeout-security-fix-20261015
+- status: ready
+- task_id: common-ai-f6-pr219-j1-r1a-a1-correction-20261016
 - owner: claude
-- next_owner: none
-- blocker: L6 PASS_SOURCE_FIX, independent R1/R2 delta security rereview and maybe-billed 5xx ledger accounting decision pending; PR219 Draft unmerged, production NO_GO
+- next_owner: claude
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: J1 V1 CHANGES_REQUIRED R1/R2; Draft PR187→198→205; inventory PR216 Draft unmerged; H5 finished; F3/F4/F5 protected
-- previous_archive: .agent_v2/archive/2026-10-15-f6-openai-anthropic-inventory-plan.md
-- slot_use: Focused Claude common API boundary/security fix, separate POSTONA migration after L6
+- dependencies: J1 V1 CHANGES_REQUIRED P2×2; protected Draft PR187→198→205→219; source-only
+- blocker: commented dynamic import guard bypass; unknown HTTP500/502/Anthropic503 measured-zero settlement; no PR merge/deploy/production
+- previous_archive: .agent_v2/archive/2026-10-16-f6-j1-r1-r2-source-fix.md
+- slot_use: narrow R1a/A1 security correction, POSTONA live wiring excluded
 
 ## F7
 - slot: F7
