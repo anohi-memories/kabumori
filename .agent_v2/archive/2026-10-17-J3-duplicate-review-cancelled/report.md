@@ -1,0 +1,12 @@
+# J3 Report — F2/F8 three-finding focused rereview
+- task_id: kabumori-j3-f2-f8-pause-three-findings-focused-rereview-20261016
+- status: ready
+- next_owner: codex
+- return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
+- completion_code: V3
+- recommended_model: Sol（高）
+- result: NOT_STARTED / SOURCE_ONLY
+- target_prs: #212 d04ff9d2227bbb0e43d7ddbcf8c3b5cc7ad54d3a; #213 c10f1da593ba3dc365cf340e9569ae1caa9789b1
+- changed_files: none
+- tests: not_run
+- production: NO_GO
