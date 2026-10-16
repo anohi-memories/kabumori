@@ -71,9 +71,10 @@ test("provider hosts appear only in their adapters; model ids only in the catalo
 // The checks below are pure functions over a file tree (path relative to supabase/functions/ -> text), so the same
 // code runs on the repository and on synthetic trees that must be refused.
 //
-// Fail closed (F6 J1 R1, 2026-10-16). Imports are read from the module's tokens (lexer and parser below, J1 R1b /
-// R1c), and the text of every comment and literal is scanned as well, so neither can hide one (at worst a text adds an
-// edge). Whatever the scan cannot follow is refused instead of counting as "does not reach":
+// Fail closed (F6 J1 R1, 2026-10-16). Imports are read twice: from the module's tokens (lexer and parser below, J1
+// R1b / R1c), and from every import / from keyword of the raw text on its own (rawEdges, PR231 review), so neither a
+// comment, a literal nor a wrong regex / division guess can hide one (at worst a text adds an edge). Whatever the scan
+// cannot follow is refused instead of counting as "does not reach":
 // an import() whose argument is not one plain string literal, a bare / absolute / data: specifier, a relative import
 // of a file the scanned tree does not have (missing, another letter case, a hidden or skipped directory, outside the
 // functions directory), a symlink, an unreadable file or directory, and any configuration that can remap specifiers
@@ -185,20 +186,21 @@ type ImportEdge = {
 
 /**
  * ECMAScript trivia, legal between any two tokens (F6 J1 R1a, 2026-10-16): white space and line terminators (`\s`
- * covers every Unicode space, U+2028 / U+2029 and the BOM), block comments and line comments. `import/* x *\/(...)`,
- * `import // x` + a new line + `(...)` and `from/* x *\/"..."` are ordinary imports.
+ * covers every Unicode space, U+2028 / U+2029 and the BOM), block comments and line comments. A block comment ends
+ * at its FIRST "*\/" (J1 R1c). `import/* x *\/(...)`, `import // x` + a new line + `(...)` and `from/* x *\/"..."`
+ * are ordinary imports.
  */
-const TRIVIA = String.raw`(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n\r\u2028\u2029]*)*`;
+const BLOCK_COMMENT = String.raw`\/\*[^*]*\*+(?:[^\/*][^*]*\*+)*\/`;
+const TRIVIA = String.raw`(?:\s|${BLOCK_COMMENT}|\/\/[^\n\r\u2028\u2029]*)*`;
 /** A string literal (group 1 = quote, group 2 = raw body), escapes and line continuations included. */
 const STRING_LITERAL = String.raw`(["'])((?:[^"'\\\n\r]|\\(?:\r\n|[\s\S])|(?!\1)["'])*)\1`;
-const FROM_CLAUSE = new RegExp(String.raw`\bfrom${TRIVIA}${STRING_LITERAL}`, "gu");
-const SIDE_EFFECT_IMPORT = new RegExp(String.raw`\bimport${TRIVIA}${STRING_LITERAL}`, "gu");
-const DYNAMIC_IMPORT = new RegExp(String.raw`\bimport${TRIVIA}\(`, "gu");
-/** A keyword followed by a comment that never ends: a module the loader rejects, and the scan cannot read. */
-const UNTERMINATED_TRIVIA = new RegExp(String.raw`\b(?:import|export|from)${TRIVIA}\/\*(?![\s\S]*\*\/)`, "gu");
 const TRIVIA_AT = new RegExp(TRIVIA, "uy");
 const STRING_AT = new RegExp(STRING_LITERAL, "uy");
-const COMMENT = /\/\*[\s\S]*?\*\/|\/\/[^\n\r\u2028\u2029]*/gu;
+/** Read right after a keyword: trivia then a string literal, trivia then "(", trivia then "/*". */
+const TRIVIA_STRING_AT = new RegExp(TRIVIA + STRING_LITERAL, "uy");
+const TRIVIA_PAREN_AT = new RegExp(TRIVIA + String.raw`\(`, "uy");
+const TRIVIA_COMMENT_START_AT = new RegExp(TRIVIA + String.raw`\/\*`, "uy");
+const COMMENT = new RegExp(String.raw`${BLOCK_COMMENT}|\/\/[^\n\r\u2028\u2029]*`, "gu");
 
 /** The index after the trivia starting at `i`. */
 function skipTrivia(text: string, i: number): number {
@@ -302,54 +304,76 @@ function literalArgument(text: string, start: number): string | null {
 }
 
 /**
- * The import forms found in a piece of TEXT: a comment, a string, a template chunk or a regex body, read with the
- * trivia-aware patterns above. Code is read by the lexer below. Text is scanned too because the one guess a lexer
- * without a full parser makes (does "/" start a regex or divide?) could, if wrong, turn code into text; this scan
- * can only add edges, never remove one.
+ * Every import form that starts at an `import`, `export` or `from` keyword anywhere in the RAW text, each read on its
+ * own (F6 PR231 review, 2026-10-17): a candidate never consumes the text of another, so a fake comment opened inside a
+ * string cannot swallow the real import after it. It does not depend on the lexer either: whatever the lexer guesses
+ * about "/" (regex or division), a real import is a keyword followed by trivia and then "(" or a string, and it is
+ * found here. Candidates the parser already read from code tokens (`covered`: the offsets of those keywords) are
+ * skipped so their exact names stand; every other candidate (in a comment or literal, or code the lexer misread) is
+ * added as an edge, which can only make the scan stricter.
  */
-function textEdges(text: string): ImportEdge[] {
+function rawEdges(text: string, covered: ReadonlySet<number>): ImportEdge[] {
   const edges: ImportEdge[] = [];
   const keywordEnds = [...text.matchAll(/\b(?:import|export)\b/gu)].map((m) => m.index + m[0].length);
   let k = -1;
-  for (const m of text.matchAll(FROM_CLAUSE)) {
-    while (k + 1 < keywordEnds.length && keywordEnds[k + 1] <= m.index) k += 1;
-    const clause = k >= 0 ? text.slice(keywordEnds[k], m.index).replace(COMMENT, " ") : null;
-    const plain = clause !== null && PLAIN_CLAUSE.test(clause);
-    edges.push({ specifier: decodeString(m[2]), names: plain ? clauseNames(clause) : ["<unparsed>"], statement: plain });
+  for (const m of text.matchAll(/\b(?:import|export|from)\b/gu)) {
+    const after = m.index + m[0].length;
+    // A keyword followed by a comment that never ends: a module the loader rejects, and the scan cannot read.
+    TRIVIA_COMMENT_START_AT.lastIndex = after;
+    if (TRIVIA_COMMENT_START_AT.exec(text) && text.indexOf("*/", TRIVIA_COMMENT_START_AT.lastIndex) < 0) {
+      edges.push({ specifier: null, names: ["<unparsed>"], statement: true });
+    }
+    if (covered.has(m.index)) continue;
+    if (m[0] === "from") {
+      TRIVIA_STRING_AT.lastIndex = after;
+      const literal = TRIVIA_STRING_AT.exec(text);
+      if (!literal) continue;
+      while (k + 1 < keywordEnds.length && keywordEnds[k + 1] <= m.index) k += 1;
+      const clause = k >= 0 ? text.slice(keywordEnds[k], m.index).replace(COMMENT, " ") : null;
+      const plain = clause !== null && PLAIN_CLAUSE.test(clause);
+      edges.push({ specifier: decodeString(literal[2]), names: plain ? clauseNames(clause) : ["<unparsed>"], statement: plain });
+    } else if (m[0] === "import") {
+      TRIVIA_PAREN_AT.lastIndex = after;
+      if (TRIVIA_PAREN_AT.exec(text)) {
+        edges.push({ specifier: literalArgument(text, TRIVIA_PAREN_AT.lastIndex), names: ["*"], statement: true });
+        continue;
+      }
+      TRIVIA_STRING_AT.lastIndex = after;
+      const literal = TRIVIA_STRING_AT.exec(text);
+      if (literal) edges.push({ specifier: decodeString(literal[2]), names: ["<side-effect>"], statement: true });
+    }
   }
-  for (const m of text.matchAll(SIDE_EFFECT_IMPORT)) edges.push({ specifier: decodeString(m[2]), names: ["<side-effect>"], statement: true });
-  for (const m of text.matchAll(DYNAMIC_IMPORT)) {
-    edges.push({ specifier: literalArgument(text, m.index + m[0].length), names: ["*"], statement: true });
-  }
-  for (const _ of text.matchAll(UNTERMINATED_TRIVIA)) edges.push({ specifier: null, names: ["<unparsed>"], statement: true });
   return edges;
 }
 
-// ---- Lexer and module-edge parser (F6 J1 R1b / R1c, 2026-10-16) ----------------------------------------------------
+// ---- Lexer and module-edge parser (F6 J1 R1b / R1c, 2026-10-16; PR231 review, 2026-10-17) ----------------------
 // The module is split into tokens the way an ECMAScript / TypeScript lexer does: white space, line terminators and
 // comments are trivia (a block comment ends at its FIRST "*/"); string, template, regex and number literals are single
-// tokens; names and punctuators are the rest. Text inside a literal or a comment is never read as code, so a string
-// such as "import/*" cannot open a comment, and comments between the tokens of an import are just trivia. The edges
-// are then read from the tokens by the grammar of import / export declarations and import(). The one context guess is
-// whether "/" starts a regex or divides; it follows the usual rules (a regex after an operator, after a keyword such
-// as return, after the ")" of if / while / for / with and after the "}" of a block; otherwise division), and textEdges
-// covers the text of every literal and comment in case a guess is wrong. Malformed input (an unterminated string,
-// template, regex or comment, unbalanced brackets, an unknown character) makes the whole file unparsed: refused.
+// tokens; names and punctuators are the rest. The edges are read from the tokens by the grammar of import / export
+// declarations and import(), which gives their exact names.
+// The lexer has one context guess: does "/" start a regex or divide? It follows the language's rules as far as a
+// tokenizer can (a regex after an operator or "(", after keywords such as return / typeof / case / default, after the
+// ")" of if / while / for / with (not of a property named if), after "of" only inside a for (...), after the "}" of a
+// block or of a function / class DECLARATION; division after a name, a literal, ")", "]", the "}" of an object literal
+// or of a function / class EXPRESSION, and after TypeScript's x!). A guess can still be wrong for contrived code, so
+// the parser's edges are never the only detector: rawEdges reads every import / from keyword of the raw text on its
+// own and adds every candidate the parser did not read from code. Malformed input (an unterminated string, template,
+// regex or comment, unbalanced brackets, an unknown character) makes the whole file unparsed: refused.
 // This is a static CI check of the source, not a runtime sandbox.
 
 type Token =
-  | { readonly kind: "name"; readonly value: string; readonly escaped: boolean }
-  | { readonly kind: "punct"; readonly value: string }
-  | { readonly kind: "string"; readonly value: string | null }
-  | { readonly kind: "template"; readonly value: string | null }
-  | { readonly kind: "regex" }
-  | { readonly kind: "number" };
+  | { readonly kind: "name"; readonly start: number; readonly value: string; readonly escaped: boolean }
+  | { readonly kind: "punct"; readonly start: number; readonly value: string }
+  | { readonly kind: "string"; readonly start: number; readonly value: string | null }
+  | { readonly kind: "template"; readonly start: number; readonly value: string | null }
+  | { readonly kind: "regex"; readonly start: number }
+  | { readonly kind: "number"; readonly start: number };
 
-type Lexed = { readonly tokens: readonly Token[]; readonly texts: readonly string[]; readonly error: string | null };
+type Lexed = { readonly tokens: readonly Token[]; readonly error: string | null };
 
 const WHITE_SPACE_AT = /\s+/uy;
 const LINE_BREAK = /[\n\r\u2028\u2029]/u;
-const LINE_COMMENT_AT = /\/\/([^\n\r\u2028\u2029]*)/uy;
+const LINE_COMMENT_AT = /\/\/[^\n\r\u2028\u2029]*/uy;
 const HASHBANG_AT = /#![^\n\r\u2028\u2029]*/uy;
 const NAME_AT = /(?:[\p{ID_Start}$_#]|\\u[0-9a-fA-F]{4}|\\u\{[0-9a-fA-F]+\})(?:[\p{ID_Continue}$]|\\u[0-9a-fA-F]{4}|\\u\{[0-9a-fA-F]+\})*/uy;
 const NUMBER_AT = /(?:0[xXoObB][0-9a-fA-F_]+n?|(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:[eE][+-]?\d[\d_]*)?n?)/uy;
@@ -360,52 +384,80 @@ const PUNCTUATORS = [
   "=>", "==", "!=", "<=", ">=", "&&", "||", "??", "?.", "++", "--", "+=", "-=", "*=", "%=", "&=", "|=", "^=", "<<", ">>", "**",
   "{", "}", "(", ")", "[", "]", ";", ",", "<", ">", "+", "-", "*", "%", "&", "|", "^", "!", "~", "?", ":", "=", ".", "@",
 ];
-/** Keywords after which an expression (so a regex, or an object literal) starts. */
+/** Reserved words (a module is strict code) after which an expression, so a regex, starts. */
 const KEYWORDS_BEFORE_EXPRESSION: ReadonlySet<string> = new Set([
-  "return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw", "case", "do", "else", "yield", "await",
+  "return", "typeof", "instanceof", "in", "new", "delete", "void", "throw", "case", "default", "do", "else", "yield", "await",
 ]);
 const CONTROL_KEYWORDS: ReadonlySet<string> = new Set(["if", "while", "for", "with"]);
+/** Punctuators after which a "{" is a type or a value, never the body of a function / class just declared. */
+const TYPE_POSITION_PUNCTUATORS: ReadonlySet<string> = new Set([":", "|", "&", "<", ",", "=", "(", "?", "=>"]);
+/** Bracket kinds whose content is a list of statements. */
+const STATEMENT_BRACES: ReadonlySet<string> = new Set(["{block", "{fexpr"]);
 
 function decodeName(raw: string): string {
   return raw.replace(/\\u\{([0-9a-fA-F]+)\}|\\u([0-9a-fA-F]{4})/gu, (_m, braced, plain) => String.fromCodePoint(parseInt(braced ?? plain, 16)));
 }
 
-/** Whether a "{" after `prev` opens a block (a "/" after its "}" starts a regex) rather than an object literal. */
-function braceOpensBlock(prev: Token | undefined): boolean {
-  if (prev === undefined) return true;
-  if (prev.kind === "punct") return [")", "]", "}", ";", "{", "=>", ">"].includes(prev.value);
-  if (prev.kind === "name") return !KEYWORDS_BEFORE_EXPRESSION.has(prev.value) || prev.value === "do" || prev.value === "else";
-  return false;
-}
-
 function lexModule(text: string): Lexed {
   const tokens: Token[] = [];
-  const texts: string[] = [];
-  // Open brackets: "(" or "(if" (after if / while / for / with), "[", "{block", "{expr", and "${" (a substitution).
+  // Open brackets: "(" / "(if" (after if / while / with) / "(for", "[", "{block" (a block or a declared function /
+  // class body), "{expr" (an object literal or a type), "{fexpr" (the body of a function / class expression), "${".
   const open: string[] = [];
+  // Per bracket depth, the "?" of conditional expressions still waiting for their ":".
+  const pendingTernaries: number[] = [0];
+  // After `function` / `class`: the bracket depth its body opens at, and whether it is an expression.
+  let pendingBody: { readonly depth: number; readonly expression: boolean } | null = null;
   let regexAllowed = true;
+  let lastCloseWasControl = false;
+  let lastColonWasTernary = false;
   let i = 0;
-  const fail = (reason: string): Lexed => ({ tokens, texts, error: `${reason}@${i}` });
+  const fail = (reason: string): Lexed => ({ tokens, error: `${reason}@${i}` });
   const sticky = (pattern: RegExp): RegExpExecArray | null => {
     pattern.lastIndex = i;
     const match = pattern.exec(text);
     if (match) i = pattern.lastIndex;
     return match;
   };
+  const push = (bracket: string) => {
+    open.push(bracket);
+    pendingTernaries.push(0);
+  };
+  const pop = (): string | undefined => {
+    pendingTernaries.pop();
+    return open.pop();
+  };
+  const isProperty = (index: number) => {
+    const before = tokens[index - 1];
+    return before?.kind === "punct" && (before.value === "." || before.value === "?.");
+  };
+  const nameValue = (token: Token | undefined) => token?.kind === "name" ? token.value : null;
+  // Whether the innermost bracket holds statements (the top level of the module does too).
+  const inStatements = () => open.length === 0 || STATEMENT_BRACES.has(open.at(-1)!);
+  // Whether a statement may start after `prev` (so `function` / `class` there is a declaration).
+  const statementStart = (prev: Token | undefined): boolean => {
+    if (prev === undefined) return true;
+    if (prev.kind === "punct") {
+      if (prev.value === ";" || prev.value === "}") return true;
+      if (prev.value === "{") return inStatements();
+      if (prev.value === ")") return lastCloseWasControl;
+      if (prev.value === ":") return !lastColonWasTernary && inStatements();
+      return false;
+    }
+    return prev.kind === "name" && ["else", "do", "export", "default"].includes(prev.value);
+  };
   // A template chunk from i (just after "`", or after the "}" that closes a substitution) up to "`" or "${".
-  const templateChunk = (whole: boolean): boolean => {
+  const templateChunk = (whole: boolean, start: number): boolean => {
     let j = i;
     while (j < text.length && text[j] !== "`" && !(text[j] === "$" && text[j + 1] === "{")) j += text[j] === "\\" ? 2 : 1;
     if (j >= text.length) return false;
     const raw = text.slice(i, j);
-    texts.push(raw);
     if (text[j] === "`") {
-      tokens.push({ kind: "template", value: whole ? decodeString(raw) : null });
+      tokens.push({ kind: "template", start, value: whole ? decodeString(raw) : null });
       i = j + 1;
       regexAllowed = false;
     } else {
-      tokens.push({ kind: "template", value: null });
-      open.push("${");
+      tokens.push({ kind: "template", start, value: null });
+      push("${");
       i = j + 2;
       regexAllowed = true;
     }
@@ -415,31 +467,30 @@ function lexModule(text: string): Lexed {
   if (text.startsWith("#!")) sticky(HASHBANG_AT);
   while (i < text.length) {
     if (sticky(WHITE_SPACE_AT)) continue;
+    const start = i;
     const ch = text[i];
     const next = text[i + 1];
     if (ch === "/" && next === "/") {
-      texts.push(sticky(LINE_COMMENT_AT)![1]);
+      sticky(LINE_COMMENT_AT);
       continue;
     }
     if (ch === "/" && next === "*") {
       const end = text.indexOf("*/", i + 2);
       if (end < 0) return fail("unterminated comment");
-      texts.push(text.slice(i + 2, end));
       i = end + 2;
       continue;
     }
     if (ch === '"' || ch === "'") {
       const literal = sticky(STRING_AT);
       if (!literal) return fail("unterminated string");
-      texts.push(literal[2]);
-      tokens.push({ kind: "string", value: decodeString(literal[2]) });
+      tokens.push({ kind: "string", start, value: decodeString(literal[2]) });
       regexAllowed = false;
       continue;
     }
     if (ch === "`" || (ch === "}" && open.at(-1) === "${")) {
-      if (ch === "}") open.pop();
+      if (ch === "}") pop();
       i += 1;
-      if (!templateChunk(ch === "`")) return fail("unterminated template");
+      if (!templateChunk(ch === "`", start)) return fail("unterminated template");
       continue;
     }
     if (ch === "/" && regexAllowed) {
@@ -455,16 +506,15 @@ function lexModule(text: string): Lexed {
         else if (c === "]") inClass = false;
         else if (c === "/" && !inClass) break;
       }
-      texts.push(text.slice(i + 1, j));
       i = j + 1;
       sticky(REGEX_FLAGS_AT);
-      tokens.push({ kind: "regex" });
+      tokens.push({ kind: "regex", start });
       regexAllowed = false;
       continue;
     }
     if (/\d/u.test(ch) || (ch === "." && /\d/u.test(next ?? ""))) {
       sticky(NUMBER_AT);
-      tokens.push({ kind: "number" });
+      tokens.push({ kind: "number", start });
       regexAllowed = false;
       continue;
     }
@@ -473,9 +523,14 @@ function lexModule(text: string): Lexed {
     if (name) {
       const escaped = name[0].includes("\\");
       const value = escaped ? decodeName(name[0]) : name[0];
-      const property = prev?.kind === "punct" && (prev.value === "." || prev.value === "?.");
-      tokens.push({ kind: "name", value, escaped });
-      regexAllowed = !property && KEYWORDS_BEFORE_EXPRESSION.has(value);
+      const property = isProperty(tokens.length);
+      if (!property && (value === "function" || value === "class")) {
+        const before = nameValue(prev) === "async" && !isProperty(tokens.length - 1) ? tokens.at(-2) : prev;
+        pendingBody = { depth: open.length, expression: !statementStart(before) };
+      }
+      tokens.push({ kind: "name", start, value, escaped });
+      // `of` is an operator only inside the head of a for statement; elsewhere it is a name.
+      regexAllowed = !property && (KEYWORDS_BEFORE_EXPRESSION.has(value) || (value === "of" && open.at(-1) === "(for"));
       continue;
     }
     const punct = ch === "/"
@@ -483,38 +538,58 @@ function lexModule(text: string): Lexed {
       : PUNCTUATORS.find((candidate) => text.startsWith(candidate, i) && !(candidate === "?." && /\d/u.test(text[i + 2] ?? "")));
     if (punct === undefined) return fail("unexpected character");
     i += punct.length;
-    tokens.push({ kind: "punct", value: punct });
+    tokens.push({ kind: "punct", start, value: punct });
     if (punct === "(") {
-      open.push(prev?.kind === "name" && CONTROL_KEYWORDS.has(prev.value) ? "(if" : "(");
+      const keyword = nameValue(prev) !== null && !isProperty(tokens.length - 2) ? nameValue(prev) : null;
+      // `for await (` is a for statement too.
+      const forAwait = keyword === "await" && nameValue(tokens.at(-3)) === "for" && !isProperty(tokens.length - 3);
+      push(keyword === "for" || forAwait ? "(for" : keyword !== null && CONTROL_KEYWORDS.has(keyword) ? "(if" : "(");
       regexAllowed = true;
     } else if (punct === "[") {
-      open.push("[");
+      push("[");
       regexAllowed = true;
     } else if (punct === "{") {
-      open.push(braceOpensBlock(prev) ? "{block" : "{expr");
+      const level = open.length;
+      let kind: string;
+      if (pendingBody !== null && pendingBody.depth === level && !(prev?.kind === "punct" && TYPE_POSITION_PUNCTUATORS.has(prev.value)) &&
+        !(prev?.kind === "name" && (prev.value === "extends" || prev.value === "implements"))) {
+        kind = pendingBody.expression ? "{fexpr" : "{block";
+        pendingBody = null;
+      } else if (prev === undefined) kind = "{block";
+      else if (prev.kind === "punct") {
+        kind = [")", "]", "}", ";", "{", "=>", ">"].includes(prev.value) || (prev.value === ":" && !lastColonWasTernary && inStatements())
+          ? "{block"
+          : "{expr";
+      } else if (prev.kind === "name") {
+        kind = !KEYWORDS_BEFORE_EXPRESSION.has(prev.value) || prev.value === "do" || prev.value === "else" ? "{block" : "{expr";
+      } else kind = "{expr";
+      push(kind);
       regexAllowed = true;
     } else if (punct === ")" || punct === "]" || punct === "}") {
-      const top = open.pop();
-      const expected = punct === ")" ? ["(", "(if"] : punct === "]" ? ["["] : ["{block", "{expr"];
+      const top = pop();
+      const expected = punct === ")" ? ["(", "(if", "(for"] : punct === "]" ? ["["] : ["{block", "{expr", "{fexpr"];
       if (top === undefined || !expected.includes(top)) return fail(`unbalanced ${punct}`);
-      regexAllowed = top === "(if" || top === "{block";
+      lastCloseWasControl = top === "(if" || top === "(for";
+      regexAllowed = lastCloseWasControl || top === "{block";
+      if (pendingBody !== null && open.length < pendingBody.depth) pendingBody = null;
     } else if (punct === "!") {
       // After an expression "!" is TypeScript's non-null assertion (`x! / 2` divides); otherwise it is logical not.
       // regexAllowed still holds the state before "!", which is exactly that distinction.
     } else {
+      if (punct === "?") pendingTernaries[open.length] += 1;
+      if (punct === ":") {
+        lastColonWasTernary = pendingTernaries[open.length] > 0;
+        if (lastColonWasTernary) pendingTernaries[open.length] -= 1;
+      }
+      if (punct === ";" && pendingBody !== null && open.length <= pendingBody.depth) pendingBody = null;
       regexAllowed = punct !== "++" && punct !== "--";
     }
   }
   if (open.length > 0) return fail("unclosed bracket");
-  return { tokens, texts, error: null };
+  return { tokens, error: null };
 }
 
-/**
- * An import / export clause starting at `start` and ending with `from "specifier"`: the names it takes ("*" for a
- * namespace import or `export *`, "default:<local>" for a default import). null for anything that is not one of the
- * forms ECMAScript and TypeScript allow (refused); "local" for `export { ... }` without `from` (no module is loaded).
- */
-function parseClause(tokens: readonly Token[], start: number, kind: "import" | "export"): ImportEdge | null | "local" {
+function parseClause(tokens: readonly Token[], start: number, kind: "import" | "export"): { readonly edge: ImportEdge; readonly fromAt: number } | null | "local" {
   const names: string[] = [];
   let k = start;
   const punctAt = (j: number, value: string) => {
@@ -570,14 +645,18 @@ function parseClause(tokens: readonly Token[], start: number, kind: "import" | "
   } else if (names.length === 0) return null;
   if (fromString(k)) {
     const specifier = tokens[k + 1] as { readonly kind: "string"; readonly value: string | null };
-    return { specifier: specifier.value, names, statement: true };
+    return { edge: { specifier: specifier.value, names, statement: true }, fromAt: tokens[k].start };
   }
   return kind === "export" && !names.includes("*") ? "local" : null;
 }
 
-/** Module edges in a token stream: import declarations, side-effect imports, re-exports and import(). */
-function moduleEdges(tokens: readonly Token[]): ImportEdge[] {
+/**
+ * Module edges in a token stream (import declarations, side-effect imports, re-exports and import()), and the offsets
+ * of the import / from keywords they were read at (rawEdges skips those candidates).
+ */
+function moduleEdges(tokens: readonly Token[]): { readonly edges: ImportEdge[]; readonly covered: Set<number> } {
   const edges: ImportEdge[] = [];
+  const covered = new Set<number>();
   const punctAt = (j: number, value: string) => {
     const token = tokens[j];
     return token?.kind === "punct" && token.value === value;
@@ -594,6 +673,7 @@ function moduleEdges(tokens: readonly Token[]): ImportEdge[] {
       continue;
     }
     const next = tokens[k + 1];
+    covered.add(token.start);
     if (token.value === "import") {
       if (punctAt(k + 1, ".")) continue; // import.meta
       if (punctAt(k + 1, "(")) {
@@ -616,7 +696,10 @@ function moduleEdges(tokens: readonly Token[]): ImportEdge[] {
       }
       const clause = parseClause(tokens, k + 1, "import");
       if (clause === null || clause === "local") unparsed(null);
-      else edges.push(clause);
+      else {
+        edges.push(clause.edge);
+        covered.add(clause.fromAt);
+      }
       continue;
     }
     // Only `export * ... from` and `export { ... } from` (optionally `export type`) load a module.
@@ -624,25 +707,32 @@ function moduleEdges(tokens: readonly Token[]): ImportEdge[] {
     if (!punctAt(k + 1, "{") && !punctAt(k + 1, "*") && !(typed && (punctAt(k + 2, "{") || punctAt(k + 2, "*")))) continue;
     const clause = parseClause(tokens, k + 1, "export");
     if (clause === null) unparsed(null);
-    else if (clause !== "local") edges.push(clause);
+    else if (clause !== "local") {
+      edges.push(clause.edge);
+      covered.add(clause.fromAt);
+    }
   }
-  return edges;
+  return { edges, covered };
 }
 
 const edgeCache = new Map<string, readonly ImportEdge[]>();
 
 /**
- * Every module edge of a file: the edges the parser reads from the code tokens, plus what textEdges finds in the
- * text of each comment and literal (it can only add edges). A file the lexer cannot read is refused as a whole
- * ("<unparsed>") and its raw text is still scanned.
+ * Every module edge of a file: the edges the parser reads from the code tokens (exact names), plus every candidate of
+ * the raw scan the parser did not read (rawEdges: comments, literals, or code a wrong "/" guess hid). A file the lexer
+ * cannot read is refused as a whole ("<unparsed>") and every raw candidate still counts.
  */
 function importEdges(text: string): readonly ImportEdge[] {
   const cached = edgeCache.get(text);
   if (cached) return cached;
   const lexed = lexModule(text);
-  const edges = lexed.error !== null
-    ? [{ specifier: null, names: ["<unparsed>"], statement: true }, ...textEdges(text)]
-    : [...moduleEdges(lexed.tokens), ...lexed.texts.flatMap(textEdges)];
+  let edges: ImportEdge[];
+  if (lexed.error !== null) {
+    edges = [{ specifier: null, names: ["<unparsed>"], statement: true }, ...rawEdges(text, new Set())];
+  } else {
+    const parsed = moduleEdges(lexed.tokens);
+    edges = [...parsed.edges, ...rawEdges(text, parsed.covered)];
+  }
   edgeCache.set(text, edges);
   return edges;
 }
@@ -1302,6 +1392,96 @@ test("J1 R1b / R1c: code is read as tokens; literals and comments can neither fa
   // 7. Import-like text inside literals and comments is scanned conservatively: it may refuse, it never hides.
   unresolved(withFiles(["x-new-fn/index.ts", `export const doc = "load it with import('./missing.ts')";\n`]), "x-new-fn/index.ts", "string");
   assert.deepEqual(unresolvedImports(withFiles(["x-new-fn/index.ts", "export const doc = `see import { helper } from \"./helper.ts\"`;\n"], helper)), []);
+});
+
+test("PR231 review: a regex / division guess can neither hide an import nor let one candidate swallow another", async () => {
+  const real = await functionsTree;
+  const withFiles = (...files: Array<readonly [string, string]>) => new Map([...real, ...files]);
+  const bridgeSource = real.get(BRIDGE)!;
+  const importsRefused = (tree: Tree, path: string, label: string) =>
+    assert.notDeepEqual(providerImports(tree)[path], sortedProviderImports()[path], `${path} (${label}): not refused`);
+  const fragments = `["import/*", import("../ai_provider/mod.ts"), "*/('./types.ts')"]`;
+  const counterexamples = [
+    `const w = { if: (n: number) => n };\nexport const q1 = w.if(1) / <any>${fragments} / 2;`,
+    `const of = 2;\nexport const q2 = of / <any>${fragments} / 2;`,
+    `export const q3 = function () { return 1; } / <any>${fragments} / 2;`,
+    `const k = Number("1");\nswitch (k) { case 1: { } /'/.test("import/*"), import("../ai_provider/mod.ts"), \`*/("./types.ts")\`, /'/.test("y"); }`,
+  ];
+  const realImport = (edges: readonly ImportEdge[]) =>
+    edges.some((edge) => edge.specifier === "../ai_provider/mod.ts" && edge.names.includes("*"));
+
+  for (const code of counterexamples) {
+    // The full guard refuses it.
+    importsRefused(withFiles([BRIDGE, `${bridgeSource}\n${code}\n`]), BRIDGE, code);
+    // Each detector finds the real import on its own: the parser (the lexer now guesses "/" right here) ...
+    const lexed = lexModule(code);
+    assert.equal(lexed.error, null, code);
+    assert.ok(realImport(moduleEdges(lexed.tokens).edges), `parser: ${code}`);
+    // ... and the raw scan, which does not use the lexer at all.
+    assert.ok(realImport(rawEdges(code, new Set())), `raw scan: ${code}`);
+  }
+
+  // One raw candidate never consumes another: the fake comment opened in "import/*" yields its own (fake) edge, and
+  // the real import inside that span is still read.
+  const span = `"import/*", import("../ai_provider/mod.ts"), "*/('./types.ts')"`;
+  const spanEdges = rawEdges(span, new Set());
+  assert.ok(spanEdges.some((edge) => edge.specifier === "./types.ts"), "the fake candidate");
+  assert.ok(realImport(spanEdges), "the real candidate");
+
+  // The raw scan alone reads the J1 R1c layout right: a block comment ends at its first "*/", so no comment can be
+  // stretched over the clause into a fake side-effect import.
+  const r1c = `import/**/{ findModelSpec as same }/* ordinary */from/**/"../ai_provider/mod.ts";`;
+  assert.deepEqual(rawEdges(r1c, new Set()), [{ specifier: "../ai_provider/mod.ts", names: ["findModelSpec"], statement: true }]);
+
+  // "/" is read as the language reads it.
+  const regexes = (code: string) => {
+    const lexed = lexModule(code);
+    assert.equal(lexed.error, null, code);
+    return lexed.tokens.filter((token) => token.kind === "regex").length;
+  };
+  for (const [code, count] of [
+    [`const w = { if: (n: number) => n }; const a = w.if(1) / 2 / 3;`, 0],
+    [`if (a) /x/.test("y");`, 1],
+    [`const of = 2; const b = of / 2 / 3;`, 0],
+    [`for (const x of /a/.exec("a")!) { }`, 1],
+    [`for await (const x of y) /'/.test(x);`, 1],
+    [`const c = function () { return 1; } / 2 / 3;`, 0],
+    [`const d = async function () { return 1; } / 2 / 3;`, 0],
+    [`const e = class { } / 2 / 3;`, 0],
+    [`function f() { }\n/'/.test("x");`, 1],
+    [`class G { }\n/'/.test("x");`, 1],
+    [`export function h(): { a: number } { return { a: 1 }; }\n/'/.test("x");`, 1],
+    [`const i = (): { a: number } => ({ a: 1 }); const j = i() / 2 / 3;`, 0],
+    [`const o = { a: 1 } / 2 / 3;`, 0],
+    [`switch (k) { case 1: { } /'/.test("x"); }`, 1],
+    [`label: { } /'/.test("x");`, 1],
+    [`const t = k ? { a: 1 } : { b: 2 } / 2 / 3;`, 0],
+    [`const u = k ? function () { } : 1 / 2 / 3;`, 0],
+    [`export default /'/;`, 1],
+    [`const v = x! / y / 2;`, 0],
+    [`const z = !/'/.test("x");`, 1],
+    [`const r = a.return / 2 / 3;`, 0],
+  ] as const) {
+    assert.equal(regexes(code), count, code);
+  }
+
+  // Ordinary code full of regexes, divisions, ternaries and functions still imports nothing it should not.
+  const ordinary = [
+    `import { helper } from "./helper.ts";`,
+    `const w = { if: (n: number) => n, of: 2 };`,
+    `const of = w.of / 2;`,
+    `export const ratio = (a: number | undefined, b: number) => a! / b / 2 + w.if(of) / 3;`,
+    `export const fn = function () { return 1; } / 2;`,
+    `export function decl() { return helper; }`,
+    `/'/.test("x") ? 1 : 2;`,
+    `for (const m of /a/g.exec("a") ?? []) void m;`,
+    `export const pick = (k: number) => k ? { a: 1 } : { b: 2 };`,
+  ].join("\n");
+  const helper = ["x-new-fn/helper.ts", "export const helper = 1;\n"] as const;
+  const tree = withFiles(["x-new-fn/index.ts", ordinary], helper);
+  assert.deepEqual(unresolvedImports(tree), unresolvedImports(real));
+  assert.deepEqual(providerImports(tree), providerImports(real));
+  assert.equal(lexModule(ordinary).error, null);
 });
 
 test("J1 R1: ordinary imports stay accepted (no false refusal)", async () => {
