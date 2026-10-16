@@ -73,22 +73,20 @@
 
 ## F5
 - slot: F5
-- status: done
-- task_id: common-account-f5-j1-v1-phase12-security-guards-p2x4-fix-20261016
+- status: ready
+- task_id: common-account-f5-postona-service-end-entitlement-epoch-g1-g2-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: J1 V1 CHANGES_REQUIRED P2×4; F5 PR226 3d87a8457ddade3209583cbb820d5e5feec23f00; parent PR223 28695586f63a30c739a44b829e79a7950932b5e7
-- blocker: probe TOCTOU / --only G3b bypass / transitive network helper miss / unsafe inventory diff; real Supabase inventory and managed disposable unauthorized, production NO_GO
-- slot_use: F5-owned four-P2 focused source correction and fail-before/pass-after tests; POSTONA shared Auth priority
-- previous_archive: .agent_v2/archive/2026-10-16-F5-common-account-f5-phase12-schema-baseline-cron-isolation-offline-20261016/
-- latest_result: PASS_SOURCE_FIX / PRODUCTION_NO_GO; J1 V1 P2 R1-R4 fixed, PR233 head 499a9e1f Draft stacked on PR226 (3d87a845); fail-before on exact PR226 source 5/6 then pass 6/6, 84 managed_disposable tests, typecheck+lint clean, mutants 37+49+66 detected; mocked/local only, no managed or production access; focused J1 recheck of runner grant/selection, scanner closure and diff input vetting needed.
-
-- l5_verdict: PASS_SOURCE_FIX / SECURITY_RECHECK_REQUIRED / PRODUCTION_NO_GO (2026-10-16). PR233 head 499a9e1fac595064fbc3928725be8907db1b692b; implementer reports P2 R1-R4 fixed, 6/6 reproductions, 84 local tests, 152/152 mutants; no managed operations. Focused security recheck only before any live use; D1 and owner blockers remain.
+- dependencies: F4 PR230 e6725a165cd8f116a964926cdfceaa9334590491 design B + F4-owned lifecycle provider/surface implementation pending; POSTONA client PR197/211/217/221 ancestry; H5 reauthentication contract read-only; F5 prior PR233 499a9e1f security guard stack independent
+- blocker: F4 provider runtime path/signature and ancestry/changed-path isolation must be confirmed in preflight; Phase12 PR233 security recheck separate; production NO_GO
+- slot_use: POSTONA G1 stale enrollment after service end, G2 same-user session turnover support within F5-owned ServiceEnrollmentGate and gate-only tests
+- previous_archive: .agent_v2/archive/2026-10-17-F5-common-account-f5-j1-v1-phase12-security-guards-p2x4-fix-20261016/
+- review_required: focused F4/F5 joint Auth and cross-user integration review after implementation only
 
 ## F6
 - slot: F6
