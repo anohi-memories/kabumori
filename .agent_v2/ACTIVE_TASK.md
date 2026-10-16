@@ -56,22 +56,23 @@
 
 ## F4
 - slot: F4
-- status: done
-- task_id: postona-f4-pr217-concurrent-preview-identity-fence-p2-20261016
+- status: ready
+- task_id: postona-f4-mobile-auth-entitlement-x-threads-integration-readiness-20261016
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
 - dependencies: J4 V4 CHANGES_REQUIRED P2 R2c, PR211 exact eb1011f2, F5 PR193 handler read-only
-- blocker: independent Sol（高） rereview and managed POSTONA integration; production NO_GO
-- slot_use: one bounded POSTONA client fix for late final-preview A→B/null user cross-warning return
+- blocker: source-only integration readiness, F3/F5/Threads managed owners, production NO_GO
+- slot_use: POSTONA mobile integration readiness for login, entitlement, X reservations, Threads and service lifecycle
 - previous_archive: .agent_v2/archive/2026-10-15-F4-postona-f4-pr197-p2-response-warning-preservation-20261015/
 - l4_verdict_r2c: PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO; PR217 head d4bcd09e Draft, 5 files, Claude reports app313 and F5 seam8 PASS; Codex verification outstanding; F4 released.
 - current_assignment: J4 V4 concurrent public-preview monotonic identity fence P2; new F4 TASK, source only, production NO_GO.
 - l4_verdict_20261016: PASS_SOURCE_FIX / SECURITY_REREVIEW_REQUIRED / PRODUCTION_NO_GO; PR221 dcae62c6 Draft, 4 mobile files, reported 23/23 focused + 14/14 actual F5 handler seam + app336 PASS; independent Sol focused review needed.
+- review_decision: user waived extra Codex rereview for PR221 source; any new security-boundary changes still require risk-based review.
 
 ## F5
 - slot: F5
