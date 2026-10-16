@@ -76,6 +76,39 @@ export async function readNewsPauseState(
   }
 }
 
+/**
+ * Shared stop-observation state (J2-R1 residual). The ENTRY gate and the EGRESS guard of one isolate use the same
+ * coordinator, so a stop (paused / unreadable / timeout) observed at request entry immediately fences every older,
+ * still-pending authorisation read of an in-flight request.
+ */
+export type PauseCoordinator = {
+  /** start sequence of a new authoritative read */
+  begin(): number;
+  /** records a completed read; returns true only if it may authorise (running and not outrun by a later stop) */
+  complete(startSequence: number, state: PauseState): boolean;
+  /** highest start sequence that observed a stop */
+  stopSequence(): number;
+};
+
+export function createPauseCoordinator(): PauseCoordinator {
+  let sequence = 0;
+  let stopped = 0;
+  return {
+    begin: () => ++sequence,
+    complete: (startSequence, state) => {
+      if (state !== "running") {
+        stopped = Math.max(stopped, startSequence);
+        return false;
+      }
+      return stopped <= startSequence;
+    },
+    stopSequence: () => stopped,
+  };
+}
+
+/** the coordinator used by the installed guard and by the entry gate of this isolate */
+export const sharedPauseCoordinator: PauseCoordinator = createPauseCoordinator();
+
 export type GuardOptions = {
   fetchImpl: FetchLike;
   /** lazily resolved so the guard can be installed at module load, before the environment is read */
@@ -83,6 +116,8 @@ export type GuardOptions = {
   ttlMs?: number;
   now?: () => number;
   readTimeoutMs?: number;
+  /** defaults to a private coordinator; the installed guard uses sharedPauseCoordinator */
+  coordinator?: PauseCoordinator;
 };
 
 /** True for the calls that stay open while paused: read-only requests to this project's PostgREST. */
@@ -105,9 +140,7 @@ export function createPauseGuardedFetch(options: GuardOptions): FetchLike {
   // resolved per call so tests (and a fake clock) can control it
   const now = options.now ?? (() => Date.now());
   const readTimeout = options.readTimeoutMs ?? PAUSE_READ_TIMEOUT_MS;
-  let sequence = 0;
-  /** highest start sequence among reads that completed with a stop (paused / unreadable / timeout) */
-  let stopSequence = 0;
+  const coordinator = options.coordinator ?? createPauseCoordinator();
   let cache: { sequence: number; until: number } | null = null;
 
   const guarded = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
@@ -117,25 +150,37 @@ export function createPauseGuardedFetch(options: GuardOptions): FetchLike {
     // No configuration at all: nothing outward may happen (this also covers a missing SUPABASE_URL).
     if (!config) throw new NewsPausedError("unreadable");
     if (isDatabaseRead(url, method, config.supabaseUrl)) return await options.fetchImpl(input, init);
-    const cached = ttl > 0 && cache !== null && now() < cache.until && cache.sequence > stopSequence;
+    const cached = ttl > 0 && cache !== null && now() < cache.until && cache.sequence > coordinator.stopSequence();
     if (!cached) {
-      const mine = ++sequence;
+      const mine = coordinator.begin();
       const state = await readNewsPauseState(config.supabaseUrl, config.serviceRoleKey, options.fetchImpl, readTimeout);
-      if (state !== "running") {
-        stopSequence = Math.max(stopSequence, mine);
+      if (!coordinator.complete(mine, state)) {
         cache = null;
-        throw new NewsPausedError(state);
-      }
-      // a read that started later already observed a stop: this older "true" is stale and must not authorise anything
-      if (stopSequence > mine) {
-        cache = null;
-        throw new NewsPausedError("paused");
+        // "paused" for a stale true as well: it was outrun by a later-started stop observation
+        throw new NewsPausedError(state === "running" ? "paused" : state);
       }
       if (ttl > 0) cache = { sequence: mine, until: now() + ttl };
     }
     return await options.fetchImpl(input, init);
   };
   return guarded as FetchLike;
+}
+
+/**
+ * ENTRY gate read. Records its observation in the shared coordinator, so an OFF / unreadable / timeout seen here fences
+ * every egress authorisation read that started earlier and is still pending. Returns the state to act on.
+ */
+export async function enforceNewsPauseEntry(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  fetchImpl: FetchLike,
+  coordinator: PauseCoordinator = sharedPauseCoordinator,
+  timeoutMs = PAUSE_READ_TIMEOUT_MS,
+): Promise<PauseState> {
+  const mine = coordinator.begin();
+  const state = await readNewsPauseState(supabaseUrl, serviceRoleKey, fetchImpl, timeoutMs);
+  if (!coordinator.complete(mine, state)) return state === "running" ? "paused" : state;
+  return "running";
 }
 
 const GUARD_FLAG = "__newsPauseGuard";
@@ -147,6 +192,7 @@ export function installNewsPauseGuard(): void {
   const original = globalThis.fetch.bind(globalThis);
   const guarded = createPauseGuardedFetch({
     fetchImpl: original,
+    coordinator: sharedPauseCoordinator,
     config: () => {
       const supabaseUrl = Deno.env.get("SUPABASE_URL");
       const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

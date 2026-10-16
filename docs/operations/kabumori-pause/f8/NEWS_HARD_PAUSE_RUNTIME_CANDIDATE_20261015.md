@@ -81,3 +81,23 @@
 - **旧実装(b80d5235)で新テスト5件が失敗**（欠陥の再現）、修正後は全PASS。
 - 変異テスト10種すべて検出（追加: stale-true フェンス削除・読取期限削除・停止観測の不記録。「キャッシュ側のフェンス」は `cache=null` と二重の防御で、片方だけの除去は等価変異のため対象外）。
 - important-news-monitor 全体 746 PASS、lint 97（baseline同数）、型は既存TS2322のみ。PR129/164とのmerge-treeは競合なし。
+
+## 10. J2-R1 残存（V2再検証）の限定修正：入口とegressの停止観測を共有
+
+**残存した反例（J2再現）**: 実handlerで A が外向き直前のtrue読取を開始し応答保留 → B が**入口ゲート**でOFFを観測して503拒否 → A に古いtrueが返り新しいX送信が1回。入口のOFF観測がegress側の停止番号に反映されていなかった。
+
+**修正（`pause_gate.ts` / `index.ts` は1識別子のみ）**
+- 停止観測を `PauseCoordinator`（読取開始番号・最新の停止番号）として**同一isolate内の入口とegressで共有**（`sharedPauseCoordinator`）。
+- 入口ゲートは `enforceNewsPauseEntry` を使い、同じcoordinatorに記録する。入口で OFF / unreadable / timeout を観測した時点で、それより前に開始した**未完了のegress認可読取はすべて失効**（完了時に拒否）。停止観測より前に完了したtrueは正当な認可として扱う（OFFより前の送信は取消不可、という契約を維持）。
+- 既定TTL 0・3秒の強制timeout・fail closed・既送信HTTP取消不可・DB GET/HEADの扱いは不変。
+
+**検証**
+- 実handler・同一warm isolateで（読取を序数で保留し後から解放）、J2の敵対シナリオを再現テスト化:
+  1. Aのegress認可読取を保留 → B が入口でOFF観測し503 → Aに古いtrue → **A の新規外向き0**。
+  2. 逆順（Aのtrueが先に完了）→ Aは正当に進み、その後のBは503（正の対照）。
+  3. Bの入口読取が unreadable → A の古いtrueも拒否、`NEWS_PAUSE_STATE_UNREADABLE`。
+  4. 複数の暖かいリクエストが保留中 → 1回の入口停止で全て失効、resumeは新しいtrueで即再開。
+  各シナリオは、まずprobe実行で「最初の外向き効果を認可する設定読取の番号」を求めてから保留する（空振りの0を防止）。
+- **旧実装(d04ff9d2)で上記の1・3・4が失敗**（再現）、修正後は全PASS（pause_gate_test 23件）。
+- 変異テスト12種すべて検出（追加: 入口の停止観測を記録しない／egressが共有coordinatorを使わない／停止番号フェンス削除）。
+- important-news-monitor 全体 750 PASS、lint 97（baseline同数）、型は既存TS2322のみ。PR129/164とのmerge-treeは競合なし。

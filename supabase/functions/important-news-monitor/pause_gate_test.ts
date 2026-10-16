@@ -447,6 +447,186 @@ test("handler: final side effects — OFF between the entry gate and the X post 
   assert.ok(resumed.counts.ai > 0);
 });
 
+// ------------------------------------------------------------------------------------------------ J2-R1 residual: entry vs egress
+
+/**
+ * One imported handler (= one warm isolate, one guard, one shared stop-observation state). Settings reads can be held
+ * pending by their ordinal number and released later; everything below the guard is counted.
+ */
+async function warmIsolate(options: { hold: number[]; initial?: unknown; unreadableReads?: number[] }) {
+  let handler: ((req: Request) => Promise<Response>) | null = null;
+  const realServe = Deno.serve;
+  const realFetch = globalThis.fetch;
+  // deno-lint-ignore no-explicit-any
+  (Deno as any).serve = (h: (req: Request) => Promise<Response>) => { handler = h; return { finished: Promise.resolve() }; };
+  const keep: Record<string, string | undefined> = {};
+  for (const [name, value] of Object.entries({
+    IMPORTANT_NEWS_CRON_SECRET: SECRET, SUPABASE_URL: BASE, SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+    OPENAI_API_KEY: "sk-test-not-real", X_OAUTH2_ACCESS_TOKEN: "t", X_OAUTH2_REFRESH_TOKEN: "r", X_CLIENT_ID: "c", X_CLIENT_SECRET: "s",
+  })) {
+    keep[name] = Deno.env.get(name);
+    Deno.env.set(name, value);
+  }
+  let isActive: unknown = options.initial ?? true;
+  let readNumber = 0;
+  const held = new Map<number, () => void>();
+  const counts: Counts = { ai: 0, x: 0, external: 0, dbWrite: 0, rpc: 0, dbRead: 0, blocked: 0 };
+  let firstOutwardAfterRead = 0;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    if (!(method === "GET" && url.startsWith(BASE)) && firstOutwardAfterRead === 0) firstOutwardAfterRead = readNumber;
+    if (url.startsWith(`${BASE}/rest/v1/important_news_monitor_settings`) && method === "GET") {
+      readNumber += 1;
+      const mine = readNumber;
+      const answer = () => options.unreadableReads?.includes(mine)
+        ? new Response("down", { status: 500 })
+        : json([{ is_active: isActive, luna_enabled: true, sol_escalation_enabled: false, auto_publish: true, updated_at: "2026-10-01T00:00:00Z" }]);
+      if (options.hold.includes(mine)) {
+        // the value is captured NOW (the old answer), delivered later
+        const frozen = options.unreadableReads?.includes(mine) ? answer() : json([{ is_active: isActive, auto_publish: true, updated_at: "2026-10-01T00:00:00Z", luna_enabled: true }]);
+        return await new Promise<Response>((resolve) => { held.set(mine, () => resolve(frozen)); });
+      }
+      return answer();
+    }
+    if (url.startsWith(BASE)) {
+      if (method === "GET") {
+        return json([{
+          id: "00000000-0000-0000-0000-000000000001", source_type: "market_macro", source_url: "https://example.test/1", source_name: "jp_official",
+          title: "テスト", body_summary: "本文", category: "fx", published_at: new Date().toISOString(), status: "ready_for_publish",
+          importance: "important", generated_text: "x", generation_fact_status: "passed", generation_voice_status: "passed",
+          content_hash: "a".repeat(64), generated_at: new Date().toISOString(),
+        }]);
+      }
+      if (url.includes("/rest/v1/rpc/")) counts.rpc += 1;
+      else counts.dbWrite += 1;
+      return json([{ id: "00000000-0000-0000-0000-000000000001" }]);
+    }
+    if (url.includes("openai.com")) counts.ai += 1;
+    else if (url.includes("x.com") || url.includes("twitter.com")) counts.x += 1;
+    else counts.external += 1;
+    return new Response("offline", { status: 503 });
+  }) as typeof fetch;
+  await import(`./index.ts?pause-gate-warm-${crypto.randomUUID()}`);
+  assert.ok(handler);
+  const call = (request: Record<string, unknown>) => (handler as (req: Request) => Promise<Response>)(new Request("https://fn.test/", {
+    method: "POST", headers: { "x-important-news-cron-secret": SECRET, "content-type": "application/json" }, body: JSON.stringify(request),
+  }));
+  return {
+    call,
+    counts,
+    setActive: (value: unknown) => { isActive = value; },
+    release: (n: number) => held.get(n)?.(),
+    isHeld: (n: number) => held.has(n),
+    firstOutwardAfterRead: () => firstOutwardAfterRead,
+    outward: () => counts.ai + counts.x + counts.external + counts.dbWrite + counts.rpc,
+    close: () => {
+      globalThis.fetch = realFetch;
+      // deno-lint-ignore no-explicit-any
+      (Deno as any).serve = realServe;
+      for (const [name, value] of Object.entries(keep)) {
+        if (value === undefined) Deno.env.delete(name);
+        else Deno.env.set(name, value);
+      }
+    },
+  };
+}
+const until = async (condition: () => boolean) => { for (let i = 0; i < 200 && !condition(); i += 1) await tick(); };
+
+/** which settings read authorises the first outward effect of this request when nothing is held (a probe run) */
+async function egressReadOf(request: Record<string, unknown>): Promise<number> {
+  const probe = await warmIsolate({ hold: [] });
+  try {
+    await (await probe.call(request)).text();
+    const n = probe.firstOutwardAfterRead();
+    assert.ok(n >= 2 && probe.outward() > 0, `probe: the request must reach an outward effect (read ${n}, ${JSON.stringify(probe.counts)})`);
+    return n;
+  } finally {
+    probe.close();
+  }
+}
+const A_REQUEST = { mode: "judge_pending", limit: 1 };
+
+test("J2-R1 residual: A's pending egress 'true' is refused after request B observed OFF at the ENTRY gate (real handler, one warm isolate)", async () => {
+  const egress = await egressReadOf(A_REQUEST);
+  const w = await warmIsolate({ hold: [egress] });
+  try {
+    const a = w.call(A_REQUEST);
+    await until(() => w.isHeld(egress));
+    assert.ok(w.isHeld(egress), "A is waiting on its egress authorisation read");
+    w.setActive(false);                               // OFF commits
+    const b = await w.call({ mode: "generate_ready" });
+    assert.equal(b.status, 503);                      // B observes OFF at the entry gate
+    w.release(egress);                                // the OLD true arrives for A
+    await a.then((r) => r.text()).catch(() => "");
+    assert.equal(w.outward(), 0, `A made new outward requests after B's 503: ${JSON.stringify(w.counts)}`);
+  } finally {
+    w.close();
+  }
+});
+
+test("J2-R1 residual: reverse order — A's true completes BEFORE B's stop observation, so A was legitimately authorised", async () => {
+  const egress = await egressReadOf(A_REQUEST);
+  const w = await warmIsolate({ hold: [egress] });
+  try {
+    const a = w.call(A_REQUEST);
+    await until(() => w.isHeld(egress));
+    w.release(egress);                                // A's read completes true first
+    await a.then((r) => r.text()).catch(() => "");
+    assert.ok(w.outward() > 0, `A should have proceeded: ${JSON.stringify(w.counts)}`);
+    w.setActive(false);
+    const b = await w.call({ mode: "generate_ready" });
+    assert.equal(b.status, 503);
+  } finally {
+    w.close();
+  }
+});
+
+test("J2-R1 residual: B's entry read unreadable / failing also fences A's older pending true", async () => {
+  const egress = await egressReadOf(A_REQUEST);
+  // B's entry gate is the next settings read after A's last one before the hold; make the read number right after A's
+  // pending read fail (A's own flow performs no further settings read while it waits on its held read)
+  const w = await warmIsolate({ hold: [egress], unreadableReads: [egress + 1] });
+  try {
+    const a = w.call(A_REQUEST);
+    await until(() => w.isHeld(egress));
+    const b = await w.call({ mode: "generate_ready" });
+    assert.equal(b.status, 503);
+    assert.equal((await b.json() as { error: string }).error, "NEWS_PAUSE_STATE_UNREADABLE");
+    w.release(egress);
+    await a.then((r) => r.text()).catch(() => "");
+    assert.equal(w.outward(), 0, JSON.stringify(w.counts));
+  } finally {
+    w.close();
+  }
+});
+
+test("J2-R1 residual: several warm requests pending at once are all fenced by one entry-gate stop; resume needs a fresh true", async () => {
+  const egress = await egressReadOf(A_REQUEST);
+  // A1 holds read `egress`; A2 starts afterwards: its entry read is egress+1 and its own egress read is the next after that
+  const w = await warmIsolate({ hold: [egress, egress + 1 + (egress - 1)] });
+  try {
+    const a1 = w.call(A_REQUEST);
+    await until(() => w.isHeld(egress));
+    const a2 = w.call(A_REQUEST);
+    await until(() => w.isHeld(egress + egress));
+    w.setActive(false);
+    const b = await w.call({ mode: "generate_ready" });
+    assert.equal(b.status, 503);
+    w.release(egress);
+    w.release(egress + egress);
+    await Promise.all([a1, a2].map((p) => p.then((r) => r.text()).catch(() => "")));
+    assert.equal(w.outward(), 0, JSON.stringify(w.counts));
+    // resume: the next request must authorise itself with a fresh true read
+    w.setActive(true);
+    const c = await w.call(A_REQUEST);
+    assert.notEqual(c.status, 503);
+    assert.ok(w.counts.ai > 0, "resumed request reached the AI lane");
+  } finally {
+    w.close();
+  }
+});
+
 test("static: no module-level capture of fetch in the lane modules (the guard replaces the global at install time)", async () => {
   const dir = new URL("./", import.meta.url);
   for await (const entry of Deno.readDir(dir)) {
@@ -460,7 +640,7 @@ test("static: index.ts places the entry gate after authentication and before bod
   const index = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
   const serve = index.indexOf("Deno.serve(async (req) => {");
   const auth = index.indexOf("UNAUTHORIZED", serve);
-  const gate = index.indexOf("readNewsPauseState(supabaseUrl, serviceRoleKey, fetch)", serve);
+  const gate = index.indexOf("enforceNewsPauseEntry(supabaseUrl, serviceRoleKey, fetch)", serve);
   const parse = index.indexOf("await req.json()", serve);
   assert.ok(serve > 0 && auth > serve && gate > auth && parse > gate, "order: serve < auth < gate < body parse");
   assert.ok(index.indexOf("installNewsPauseGuard();") > 0 && index.indexOf("installNewsPauseGuard();") < serve);

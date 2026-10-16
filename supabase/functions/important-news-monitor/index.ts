@@ -87,7 +87,7 @@ import {
 } from "./breaking_market_source_fetchers.ts";
 import { dailySlotConsumedAt, selectDailyBreakingMarketQueries } from "./breaking_market_daily_schedule.ts";
 import { buildCollectionRunDiagnostics } from "./news_collection_diagnostics.ts";
-import { installNewsPauseGuard, readNewsPauseState } from "./pause_gate.ts";
+import { enforceNewsPauseEntry, installNewsPauseGuard } from "./pause_gate.ts";
 import {
   judgeCandidateWithEscalation,
   requestImportantNewsJudgement,
@@ -1697,7 +1697,7 @@ Deno.serve(async (req) => {
 
   // F8 hard pause entry gate: after authentication, before any mode dispatch or body handling. Anything other than
   // is_active === true (paused, missing, malformed, unreadable) refuses the whole request; nothing in the body can unlock it.
-  const pauseState = await readNewsPauseState(supabaseUrl, serviceRoleKey, fetch);
+  const pauseState = await enforceNewsPauseEntry(supabaseUrl, serviceRoleKey, fetch);
   if (pauseState !== "running") {
     return response(
       { error: pauseState === "unreadable" ? "NEWS_PAUSE_STATE_UNREADABLE" : "NEWS_HARD_PAUSED", autoPublish: false },
