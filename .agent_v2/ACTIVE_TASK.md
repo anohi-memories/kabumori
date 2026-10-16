@@ -74,22 +74,19 @@
 
 ## F5
 - slot: F5
-- status: done
-- task_id: common-account-f5-j3-v3-p2-known-x-warning-count-fix-20261016
+- status: ready
+- task_id: common-account-f5-phase11-postona-managed-auth-isolated-test-readiness-20261016
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
-- recommended_model: Sonnet5（高）
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: J3 V3 CHANGES_REQUIRED P2×1; F5 PR214 bc290ab618508a8fbaba1abfad308c52d86e4689; F3 PR204 45b08a87
-- blocker: known X count 1→9 under recorder failure displays stale 1; full account delete D1 STOP, managed environment and other-owner gates unresolved, production NO_GO
-- slot_use: narrow F5 source regression fix only, no repeated full chain review
-- previous_archive: .agent_v2/archive/2026-10-16-F5-common-account-f5-phase10-postona-x-ack-snapshot-reconciliation-20261015/
-- latest_result: FIXED_SOURCE_CANDIDATE — Draft PR #220 head 49b912292f434b5306b3c9e36f8c72466de2f124 stacked on PR214 bc290ab618508a8fbaba1abfad308c52d86e4689 (PR206 a84a9b6a, F3 PR204 45b08a87 unchanged): J3 V3 P2 R1 fixed in one reordered statement — the largest OBSERVED unconfirmed count is shown (HTTP 500 says 9, not 1) when recording a larger set (snapshot_changed 1->9) fails; unrecorded snapshot never acknowledged, X not done, service not finished, login untouched, old durable record and F3 evidence kept; fail-before on PR214: unit 2 + real handler/SQL X9/X10/X11 fail; pass-after: Edge 143, e2e 43 (new X9-X12), TS mutations 39/39; no migration/RPC/grant/app/F3 change; D1 remains a separate release STOP; production NO_GO. Report: .agent_v2/tasks/F5.md#report
-
-- l5_verdict: PASS_SOURCE_FIX / PRODUCTION_NO_GO (2026-10-16); Draft PR220 49b912292f434b5306b3c9e36f8c72466de2f124, reported Edge143, integrated43, mutation39/39. J3 P2 warning count fix accepted. Full-ID deletion consent D1, managed Auth and other-owner gates remain blockers. No merge/deploy.
+- dependencies: F5 PR121→152→165→178→183→193→206→214→220; F3 PR204; F4 PR180; G3 T13 / G4 client
+- blocker: managed GoTrue/Auth/RLS/HTTP unverified; no managed execution authorized; full deletion D1 and owner gates unresolved, production NO_GO
+- slot_use: Phase11 offline-only disposable Supabase validation planning, guard scripts and acceptance tests; POSTONA priority
+- previous_archive: .agent_v2/archive/2026-10-16-F5-common-account-f5-j3-v3-p2-known-x-warning-count-fix-20261016/
 
 ## F6
 - slot: F6
