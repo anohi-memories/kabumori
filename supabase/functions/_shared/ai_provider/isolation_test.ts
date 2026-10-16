@@ -71,8 +71,9 @@ test("provider hosts appear only in their adapters; model ids only in the catalo
 // The checks below are pure functions over a file tree (path relative to supabase/functions/ -> text), so the same
 // code runs on the repository and on synthetic trees that must be refused.
 //
-// Fail closed (F6 J1 R1, 2026-10-16). Imports are read from the raw text, so a comment or a string cannot hide one
-// (at worst a text adds an edge). Whatever the scan cannot follow is refused instead of counting as "does not reach":
+// Fail closed (F6 J1 R1, 2026-10-16). Imports are read from the module's tokens (lexer and parser below, J1 R1b /
+// R1c), and the text of every comment and literal is scanned as well, so neither can hide one (at worst a text adds an
+// edge). Whatever the scan cannot follow is refused instead of counting as "does not reach":
 // an import() whose argument is not one plain string literal, a bare / absolute / data: specifier, a relative import
 // of a file the scanned tree does not have (missing, another letter case, a hidden or skipped directory, outside the
 // functions directory), a symlink, an unreadable file or directory, and any configuration that can remap specifiers
@@ -301,11 +302,12 @@ function literalArgument(text: string, start: number): string | null {
 }
 
 /**
- * Every import of a file: `import ... from`, `export ... from`, `import "x"` and import(), from the raw text (a
- * comment or a string cannot hide one), with any legal trivia between the tokens. A specifier that cannot be decoded
- * is null, so it is refused like a computed one.
+ * The import forms found in a piece of TEXT: a comment, a string, a template chunk or a regex body, read with the
+ * trivia-aware patterns above. Code is read by the lexer below. Text is scanned too because the one guess a lexer
+ * without a full parser makes (does "/" start a regex or divide?) could, if wrong, turn code into text; this scan
+ * can only add edges, never remove one.
  */
-function importEdges(text: string): ImportEdge[] {
+function textEdges(text: string): ImportEdge[] {
   const edges: ImportEdge[] = [];
   const keywordEnds = [...text.matchAll(/\b(?:import|export)\b/gu)].map((m) => m.index + m[0].length);
   let k = -1;
@@ -320,6 +322,328 @@ function importEdges(text: string): ImportEdge[] {
     edges.push({ specifier: literalArgument(text, m.index + m[0].length), names: ["*"], statement: true });
   }
   for (const _ of text.matchAll(UNTERMINATED_TRIVIA)) edges.push({ specifier: null, names: ["<unparsed>"], statement: true });
+  return edges;
+}
+
+// ---- Lexer and module-edge parser (F6 J1 R1b / R1c, 2026-10-16) ----------------------------------------------------
+// The module is split into tokens the way an ECMAScript / TypeScript lexer does: white space, line terminators and
+// comments are trivia (a block comment ends at its FIRST "*/"); string, template, regex and number literals are single
+// tokens; names and punctuators are the rest. Text inside a literal or a comment is never read as code, so a string
+// such as "import/*" cannot open a comment, and comments between the tokens of an import are just trivia. The edges
+// are then read from the tokens by the grammar of import / export declarations and import(). The one context guess is
+// whether "/" starts a regex or divides; it follows the usual rules (a regex after an operator, after a keyword such
+// as return, after the ")" of if / while / for / with and after the "}" of a block; otherwise division), and textEdges
+// covers the text of every literal and comment in case a guess is wrong. Malformed input (an unterminated string,
+// template, regex or comment, unbalanced brackets, an unknown character) makes the whole file unparsed: refused.
+// This is a static CI check of the source, not a runtime sandbox.
+
+type Token =
+  | { readonly kind: "name"; readonly value: string; readonly escaped: boolean }
+  | { readonly kind: "punct"; readonly value: string }
+  | { readonly kind: "string"; readonly value: string | null }
+  | { readonly kind: "template"; readonly value: string | null }
+  | { readonly kind: "regex" }
+  | { readonly kind: "number" };
+
+type Lexed = { readonly tokens: readonly Token[]; readonly texts: readonly string[]; readonly error: string | null };
+
+const WHITE_SPACE_AT = /\s+/uy;
+const LINE_BREAK = /[\n\r\u2028\u2029]/u;
+const LINE_COMMENT_AT = /\/\/([^\n\r\u2028\u2029]*)/uy;
+const HASHBANG_AT = /#![^\n\r\u2028\u2029]*/uy;
+const NAME_AT = /(?:[\p{ID_Start}$_#]|\\u[0-9a-fA-F]{4}|\\u\{[0-9a-fA-F]+\})(?:[\p{ID_Continue}$]|\\u[0-9a-fA-F]{4}|\\u\{[0-9a-fA-F]+\})*/uy;
+const NUMBER_AT = /(?:0[xXoObB][0-9a-fA-F_]+n?|(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:[eE][+-]?\d[\d_]*)?n?)/uy;
+const REGEX_FLAGS_AT = /[\p{ID_Continue}$]*/uy;
+/** Longest first. "/" and "/=" are decided separately (regex or division). */
+const PUNCTUATORS = [
+  ">>>=", "...", "===", "!==", "**=", "<<=", ">>=", ">>>", "&&=", "||=", "??=",
+  "=>", "==", "!=", "<=", ">=", "&&", "||", "??", "?.", "++", "--", "+=", "-=", "*=", "%=", "&=", "|=", "^=", "<<", ">>", "**",
+  "{", "}", "(", ")", "[", "]", ";", ",", "<", ">", "+", "-", "*", "%", "&", "|", "^", "!", "~", "?", ":", "=", ".", "@",
+];
+/** Keywords after which an expression (so a regex, or an object literal) starts. */
+const KEYWORDS_BEFORE_EXPRESSION: ReadonlySet<string> = new Set([
+  "return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw", "case", "do", "else", "yield", "await",
+]);
+const CONTROL_KEYWORDS: ReadonlySet<string> = new Set(["if", "while", "for", "with"]);
+
+function decodeName(raw: string): string {
+  return raw.replace(/\\u\{([0-9a-fA-F]+)\}|\\u([0-9a-fA-F]{4})/gu, (_m, braced, plain) => String.fromCodePoint(parseInt(braced ?? plain, 16)));
+}
+
+/** Whether a "{" after `prev` opens a block (a "/" after its "}" starts a regex) rather than an object literal. */
+function braceOpensBlock(prev: Token | undefined): boolean {
+  if (prev === undefined) return true;
+  if (prev.kind === "punct") return [")", "]", "}", ";", "{", "=>", ">"].includes(prev.value);
+  if (prev.kind === "name") return !KEYWORDS_BEFORE_EXPRESSION.has(prev.value) || prev.value === "do" || prev.value === "else";
+  return false;
+}
+
+function lexModule(text: string): Lexed {
+  const tokens: Token[] = [];
+  const texts: string[] = [];
+  // Open brackets: "(" or "(if" (after if / while / for / with), "[", "{block", "{expr", and "${" (a substitution).
+  const open: string[] = [];
+  let regexAllowed = true;
+  let i = 0;
+  const fail = (reason: string): Lexed => ({ tokens, texts, error: `${reason}@${i}` });
+  const sticky = (pattern: RegExp): RegExpExecArray | null => {
+    pattern.lastIndex = i;
+    const match = pattern.exec(text);
+    if (match) i = pattern.lastIndex;
+    return match;
+  };
+  // A template chunk from i (just after "`", or after the "}" that closes a substitution) up to "`" or "${".
+  const templateChunk = (whole: boolean): boolean => {
+    let j = i;
+    while (j < text.length && text[j] !== "`" && !(text[j] === "$" && text[j + 1] === "{")) j += text[j] === "\\" ? 2 : 1;
+    if (j >= text.length) return false;
+    const raw = text.slice(i, j);
+    texts.push(raw);
+    if (text[j] === "`") {
+      tokens.push({ kind: "template", value: whole ? decodeString(raw) : null });
+      i = j + 1;
+      regexAllowed = false;
+    } else {
+      tokens.push({ kind: "template", value: null });
+      open.push("${");
+      i = j + 2;
+      regexAllowed = true;
+    }
+    return true;
+  };
+
+  if (text.startsWith("#!")) sticky(HASHBANG_AT);
+  while (i < text.length) {
+    if (sticky(WHITE_SPACE_AT)) continue;
+    const ch = text[i];
+    const next = text[i + 1];
+    if (ch === "/" && next === "/") {
+      texts.push(sticky(LINE_COMMENT_AT)![1]);
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      const end = text.indexOf("*/", i + 2);
+      if (end < 0) return fail("unterminated comment");
+      texts.push(text.slice(i + 2, end));
+      i = end + 2;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const literal = sticky(STRING_AT);
+      if (!literal) return fail("unterminated string");
+      texts.push(literal[2]);
+      tokens.push({ kind: "string", value: decodeString(literal[2]) });
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "`" || (ch === "}" && open.at(-1) === "${")) {
+      if (ch === "}") open.pop();
+      i += 1;
+      if (!templateChunk(ch === "`")) return fail("unterminated template");
+      continue;
+    }
+    if (ch === "/" && regexAllowed) {
+      let j = i + 1;
+      let inClass = false;
+      for (;; j += 1) {
+        const c = text[j];
+        if (c === undefined || LINE_BREAK.test(c)) return fail("unterminated regex");
+        if (c === "\\") {
+          j += 1;
+          if (text[j] === undefined || LINE_BREAK.test(text[j])) return fail("unterminated regex");
+        } else if (c === "[") inClass = true;
+        else if (c === "]") inClass = false;
+        else if (c === "/" && !inClass) break;
+      }
+      texts.push(text.slice(i + 1, j));
+      i = j + 1;
+      sticky(REGEX_FLAGS_AT);
+      tokens.push({ kind: "regex" });
+      regexAllowed = false;
+      continue;
+    }
+    if (/\d/u.test(ch) || (ch === "." && /\d/u.test(next ?? ""))) {
+      sticky(NUMBER_AT);
+      tokens.push({ kind: "number" });
+      regexAllowed = false;
+      continue;
+    }
+    const prev = tokens.at(-1);
+    const name = sticky(NAME_AT);
+    if (name) {
+      const escaped = name[0].includes("\\");
+      const value = escaped ? decodeName(name[0]) : name[0];
+      const property = prev?.kind === "punct" && (prev.value === "." || prev.value === "?.");
+      tokens.push({ kind: "name", value, escaped });
+      regexAllowed = !property && KEYWORDS_BEFORE_EXPRESSION.has(value);
+      continue;
+    }
+    const punct = ch === "/"
+      ? (next === "=" ? "/=" : "/")
+      : PUNCTUATORS.find((candidate) => text.startsWith(candidate, i) && !(candidate === "?." && /\d/u.test(text[i + 2] ?? "")));
+    if (punct === undefined) return fail("unexpected character");
+    i += punct.length;
+    tokens.push({ kind: "punct", value: punct });
+    if (punct === "(") {
+      open.push(prev?.kind === "name" && CONTROL_KEYWORDS.has(prev.value) ? "(if" : "(");
+      regexAllowed = true;
+    } else if (punct === "[") {
+      open.push("[");
+      regexAllowed = true;
+    } else if (punct === "{") {
+      open.push(braceOpensBlock(prev) ? "{block" : "{expr");
+      regexAllowed = true;
+    } else if (punct === ")" || punct === "]" || punct === "}") {
+      const top = open.pop();
+      const expected = punct === ")" ? ["(", "(if"] : punct === "]" ? ["["] : ["{block", "{expr"];
+      if (top === undefined || !expected.includes(top)) return fail(`unbalanced ${punct}`);
+      regexAllowed = top === "(if" || top === "{block";
+    } else if (punct === "!") {
+      // After an expression "!" is TypeScript's non-null assertion (`x! / 2` divides); otherwise it is logical not.
+      // regexAllowed still holds the state before "!", which is exactly that distinction.
+    } else {
+      regexAllowed = punct !== "++" && punct !== "--";
+    }
+  }
+  if (open.length > 0) return fail("unclosed bracket");
+  return { tokens, texts, error: null };
+}
+
+/**
+ * An import / export clause starting at `start` and ending with `from "specifier"`: the names it takes ("*" for a
+ * namespace import or `export *`, "default:<local>" for a default import). null for anything that is not one of the
+ * forms ECMAScript and TypeScript allow (refused); "local" for `export { ... }` without `from` (no module is loaded).
+ */
+function parseClause(tokens: readonly Token[], start: number, kind: "import" | "export"): ImportEdge | null | "local" {
+  const names: string[] = [];
+  let k = start;
+  const punctAt = (j: number, value: string) => {
+    const token = tokens[j];
+    return token?.kind === "punct" && token.value === value;
+  };
+  const nameAt = (j: number): string | null => {
+    const token = tokens[j];
+    return token?.kind === "name" && !token.escaped ? token.value : null;
+  };
+  // A module export name: an identifier or a string (`{ "a-b" as c }`).
+  const exportName = (j: number): string | null => {
+    const token = tokens[j];
+    return token?.kind === "name" && !token.escaped ? token.value : token?.kind === "string" ? token.value : null;
+  };
+  const fromString = (j: number) => nameAt(j) === "from" && tokens[j + 1]?.kind === "string";
+
+  // A `type` modifier, unless `type` is itself the default binding (`import type from "x"`, `import type, { a }`).
+  if (nameAt(k) === "type" && !(kind === "import" && (fromString(k + 1) || punctAt(k + 1, ",")))) k += 1;
+  if (kind === "import" && nameAt(k) !== null) {
+    names.push(`default:${nameAt(k)}`);
+    k += 1;
+    if (punctAt(k, ",") && (punctAt(k + 1, "{") || punctAt(k + 1, "*"))) k += 1;
+    else if (!fromString(k)) return null;
+  }
+  if (punctAt(k, "*")) {
+    names.push("*");
+    k += 1;
+    if (nameAt(k) === "as") {
+      if (exportName(k + 1) === null) return null;
+      k += 2;
+    } else if (kind === "import") return null;
+  } else if (punctAt(k, "{")) {
+    k += 1;
+    while (!punctAt(k, "}")) {
+      if (nameAt(k) === "type") {
+        const typeIsTheName = punctAt(k + 1, ",") || punctAt(k + 1, "}") ||
+          (nameAt(k + 1) === "as" && exportName(k + 2) !== null && (punctAt(k + 3, ",") || punctAt(k + 3, "}")));
+        if (!typeIsTheName) k += 1;
+      }
+      const imported = exportName(k);
+      if (imported === null) return null;
+      k += 1;
+      if (nameAt(k) === "as") {
+        if (exportName(k + 1) === null) return null;
+        k += 2;
+      }
+      names.push(imported);
+      if (punctAt(k, ",")) k += 1;
+      else if (!punctAt(k, "}")) return null;
+    }
+    k += 1;
+  } else if (names.length === 0) return null;
+  if (fromString(k)) {
+    const specifier = tokens[k + 1] as { readonly kind: "string"; readonly value: string | null };
+    return { specifier: specifier.value, names, statement: true };
+  }
+  return kind === "export" && !names.includes("*") ? "local" : null;
+}
+
+/** Module edges in a token stream: import declarations, side-effect imports, re-exports and import(). */
+function moduleEdges(tokens: readonly Token[]): ImportEdge[] {
+  const edges: ImportEdge[] = [];
+  const punctAt = (j: number, value: string) => {
+    const token = tokens[j];
+    return token?.kind === "punct" && token.value === value;
+  };
+  const unparsed = (specifier: string | null) => edges.push({ specifier, names: ["<unparsed>"], statement: true });
+  for (let k = 0; k < tokens.length; k += 1) {
+    const token = tokens[k];
+    if (token.kind !== "name" || (token.value !== "import" && token.value !== "export")) continue;
+    // A property or key named import / export (`x.import`, `{ import: 1 }`) loads nothing.
+    if (punctAt(k - 1, ".") || punctAt(k - 1, "?.") || punctAt(k + 1, ":")) continue;
+    // An escaped keyword is a syntax error in a module; the scan does not guess what was meant.
+    if (token.escaped) {
+      unparsed(null);
+      continue;
+    }
+    const next = tokens[k + 1];
+    if (token.value === "import") {
+      if (punctAt(k + 1, ".")) continue; // import.meta
+      if (punctAt(k + 1, "(")) {
+        const argument = tokens[k + 2];
+        const literal = (argument?.kind === "string" || argument?.kind === "template") && (punctAt(k + 3, ")") || punctAt(k + 3, ","));
+        edges.push({ specifier: literal ? (argument as { readonly value: string | null }).value : null, names: ["*"], statement: true });
+        continue;
+      }
+      if (next?.kind === "string") {
+        edges.push({ specifier: next.value, names: ["<side-effect>"], statement: true });
+        continue;
+      }
+      // TypeScript `import x = require("y")` loads a module (refused); `import x = A.B` is a namespace alias.
+      if (next?.kind === "name" && punctAt(k + 2, "=")) {
+        const required = tokens[k + 5];
+        if (tokens[k + 3]?.kind === "name" && (tokens[k + 3] as { value: string }).value === "require") {
+          unparsed(required?.kind === "string" ? required.value : null);
+        }
+        continue;
+      }
+      const clause = parseClause(tokens, k + 1, "import");
+      if (clause === null || clause === "local") unparsed(null);
+      else edges.push(clause);
+      continue;
+    }
+    // Only `export * ... from` and `export { ... } from` (optionally `export type`) load a module.
+    const typed = next?.kind === "name" && next.value === "type";
+    if (!punctAt(k + 1, "{") && !punctAt(k + 1, "*") && !(typed && (punctAt(k + 2, "{") || punctAt(k + 2, "*")))) continue;
+    const clause = parseClause(tokens, k + 1, "export");
+    if (clause === null) unparsed(null);
+    else if (clause !== "local") edges.push(clause);
+  }
+  return edges;
+}
+
+const edgeCache = new Map<string, readonly ImportEdge[]>();
+
+/**
+ * Every module edge of a file: the edges the parser reads from the code tokens, plus what textEdges finds in the
+ * text of each comment and literal (it can only add edges). A file the lexer cannot read is refused as a whole
+ * ("<unparsed>") and its raw text is still scanned.
+ */
+function importEdges(text: string): readonly ImportEdge[] {
+  const cached = edgeCache.get(text);
+  if (cached) return cached;
+  const lexed = lexModule(text);
+  const edges = lexed.error !== null
+    ? [{ specifier: null, names: ["<unparsed>"], statement: true }, ...textEdges(text)]
+    : [...moduleEdges(lexed.tokens), ...lexed.texts.flatMap(textEdges)];
+  edgeCache.set(text, edges);
   return edges;
 }
 
@@ -874,6 +1198,110 @@ test("J1 R1a: comment trivia, escapes and line continuations cannot hide an impo
     ["_shared/c.ts", `export { createConsumerBridge } from/* c */"./ai_consumer_bridge/bridge.ts";\n`],
   );
   assert.deepEqual(reachingProductionFiles(chain), [...AUTHORIZED_REACHERS, "_shared/c.ts", "x-test-post/a.ts", "x-test-post/b.ts"].sort());
+});
+
+test("J1 R1b / R1c: code is read as tokens; literals and comments can neither fake nor hide an import", async () => {
+  const real = await functionsTree;
+  const withFiles = (...files: Array<readonly [string, string]>) => new Map([...real, ...files]);
+  const bridgeSource = real.get(BRIDGE)!;
+  const typesSource = real.get(BRIDGE_TYPES)!;
+  const importsRefused = (tree: Tree, path: string, label: string) =>
+    assert.notDeepEqual(providerImports(tree)[path], sortedProviderImports()[path], `${path} (${label}): not refused`);
+  const importsAccepted = (tree: Tree, label: string) => {
+    assert.deepEqual(providerImports(tree), sortedProviderImports(), `${label}: legal import refused`);
+    assert.deepEqual(unresolvedImports(tree), [], label);
+  };
+  const unresolved = (tree: Tree, path: string, label: string) =>
+    assert.ok(unresolvedImports(tree).some((item) => item.startsWith(`${path}: `)), `${path} (${label}): not refused`);
+
+  // 1. The exact J1 R1b reproduction: two string fragments that look like a comment around a real import().
+  const r1b = withFiles([BRIDGE, `${bridgeSource}\nconst auditNoteBefore = "import/*";\nexport const auditOnlyMutation = async () =>\n  (await import("../ai_provider/mod.ts")).executeAiRequest;\nconst auditNoteAfter = "*/('./types.ts')";\n`]);
+  assert.deepEqual(directReferences(r1b), sortedAuthorized(), "no new specifier");
+  assert.deepEqual(reachingProductionFiles(r1b), AUTHORIZED_REACHERS, "no new reacher");
+  assert.ok(providerImports(r1b)[BRIDGE][MOD].includes("*"), "the real import() is read from the code tokens");
+  importsRefused(r1b, BRIDGE, "J1 R1b exact reproduction");
+
+  // 2. The same trick with other literals and around other imports.
+  for (const extra of [
+    "const a = `import/*`;\nexport const b = async () => (await import(\"../ai_provider/mod.ts\")).resolveProviderApiKey;\nconst c = `*/(\"./types.ts\")`;",
+    "const a = 'import/*';\nimport { SupabaseLedgerBudgetGuard } from '../ai_provider/mod.ts';\nconst c = '*/\"./types.ts\"';",
+    "const a = `import/*${1}`;\nexport const b = () => import(\"../ai_provider/mod.ts\");\nconst c = `${2}*/(\"./types.ts\")`;",
+    "const a = /import\\/*/u;\nexport const b = () => import(\"../ai_provider/mod.ts\");\nconst c = /*\\/(\"\\.\\/types\\.ts\")/u;".replace("/*\\/", "/[*]\\/"),
+    "// import/*\nexport const b = () => import(\"../ai_provider/mod.ts\");\n// */('./types.ts')",
+  ]) {
+    importsRefused(withFiles([BRIDGE, `${bridgeSource}\n${extra}\n`]), BRIDGE, extra);
+  }
+  unresolved(
+    withFiles(["x-test-post/ai_loader.ts", 'const x = "import/*";\nconst dir = ["ai", "consumer", "bridge"].join("_");\nexport const load = () => import(`../_shared/${dir}/bridge.ts`);\nconst y = "*/(\'./index.ts\')";\n']),
+    "x-test-post/ai_loader.ts",
+    "fragments around a computed import",
+  );
+
+  // 3. The exact J1 R1c reproduction and other legal comment layouts: accepted (allowed names only).
+  for (const extra of [
+    `import/**/{ findModelSpec as same }/* ordinary */from/**/"../ai_provider/mod.ts";`,
+    `import /* a */ type /* b */ { /* c */ AiSubject /* d */ as /* e */ S /* f */, BudgetGuard } /* g */ from /* h */ "../ai_provider/mod.ts" /* i */;`,
+    `import { findModelSpec } /* ** / */ from // a line comment\n"../ai_provider/mod.ts";`,
+    `import {\n  // one\n  validateAiRequest, /* two */\n  type ModelPolicyRegistry, // three\n} from "../ai_provider/mod.ts";`,
+  ]) {
+    importsAccepted(withFiles([BRIDGE, `${extra}\n${bridgeSource}`]), extra);
+  }
+  importsAccepted(withFiles([BRIDGE_TYPES, `${typesSource}\nexport /* x */ type /* y */ { AiSubject } /* z */ from "../ai_provider/mod.ts";\n`]), "types re-export");
+  // A block comment ends at its first "*/": what follows is code again, and it is read.
+  importsRefused(withFiles([BRIDGE, `import/* /* not nested */ { executeAiRequest } from "../ai_provider/mod.ts";\n${bridgeSource}`]), BRIDGE, "first */");
+
+  // 4. Grammar: what loads a module is an edge, what does not is not.
+  const helper = ["x-new-fn/helper.ts", "export const helper = 1;\nexport default 2;\n"] as const;
+  for (const [text, expected] of [
+    [`import type from "./helper.ts";\nexport { type };`, [["./helper.ts", ["default:type"]]]],
+    [`import { type } from "./helper.ts";\nexport { type };`, [["./helper.ts", ["type"]]]],
+    [`import { type as kind } from "./helper.ts";\nexport { kind };`, [["./helper.ts", ["type"]]]],
+    [`import def, * as all from "./helper.ts";\nexport { all, def };`, [["./helper.ts", ["*", "default:def"]]]],
+    [`export * as everything from "./helper.ts";`, [["./helper.ts", ["*"]]]],
+    [`const helper = 1;\nexport { helper };\nexport { helper as again };`, []],
+    [`const o = { import: 1, export: 2 };\nexport const v = o.import + o.export;`, []],
+    [`export const meta = import.meta.url;`, []],
+  ] as const) {
+    const got = importEdges(text).map((edge) => [edge.specifier, [...edge.names].sort()]);
+    assert.deepEqual(got, expected, text);
+    assert.deepEqual(unresolvedImports(withFiles(["x-new-fn/index.ts", text], helper)), [], text);
+  }
+  // Not readable as one of those forms: refused, never skipped.
+  // TypeScript `import x = require(...)` is followed, and taking a module file that way is refused.
+  importsRefused(withFiles([BRIDGE, `import provider = require("../ai_provider/mod.ts");\n${bridgeSource}`]), BRIDGE, "import = require");
+  for (const text of [
+    String.raw`export const load = () => \u0069mport("../ai_provider/mod.ts");` + "\n",
+    `import defer * as later from "./helper.ts";\n`,
+    `import { a b } from "./helper.ts";\n`,
+  ]) {
+    unresolved(withFiles(["x-new-fn/index.ts", text], helper), "x-new-fn/index.ts", text);
+  }
+
+  // 5. Malformed source is refused as a whole (and its raw text is still scanned).
+  for (const text of [
+    `const s = "never closed;\nexport const x = 1;\n`,
+    "const t = `never closed;\n",
+    `/* never closed\nexport const x = 1;\n`,
+    `export const f = () => { return 1;\n`,
+    `export const r = /never closed;\n`,
+    `export const g = (x: number) => x ]\n`,
+  ]) {
+    unresolved(withFiles(["x-new-fn/index.ts", text]), "x-new-fn/index.ts", text);
+  }
+
+  // 6. "/" after an expression divides (TypeScript `x!` included); after a block it starts a regex. If a guess is
+  //    wrong, the code it turned into text is still scanned: the import below is refused either way.
+  for (const extra of [
+    "const ratio = (a: number | undefined, b: number) => a! / b / 2;\nexport const h = () => import(\"../ai_provider/mod.ts\");",
+    "if (Math.random() > 2) { } /import(?:x)/u.test(\"y\");\nexport const h = () => import(\"../ai_provider/mod.ts\");",
+    "const v = function () { return 1; } / 2; export const h = () => import(\"../ai_provider/mod.ts\"); const w = 4 / 2;",
+  ]) {
+    importsRefused(withFiles([BRIDGE, `${bridgeSource}\n${extra}\n`]), BRIDGE, extra);
+  }
+
+  // 7. Import-like text inside literals and comments is scanned conservatively: it may refuse, it never hides.
+  unresolved(withFiles(["x-new-fn/index.ts", `export const doc = "load it with import('./missing.ts')";\n`]), "x-new-fn/index.ts", "string");
+  assert.deepEqual(unresolvedImports(withFiles(["x-new-fn/index.ts", "export const doc = `see import { helper } from \"./helper.ts\"`;\n"], helper)), []);
 });
 
 test("J1 R1: ordinary imports stay accepted (no false refusal)", async () => {
