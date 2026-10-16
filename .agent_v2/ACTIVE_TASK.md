@@ -123,20 +123,20 @@
 
 ## F8
 - slot: F8
-- status: ready
+- status: review_required
 - task_id: kabumori-f8-news-discovery-observer-pause-gate-20261016
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: L8
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F8.md
 - current_report_path: .agent_v2/tasks/F8.md#report
 - dependencies: previous L8 observer gap design archived; Draft PR228 41fc4f58; PauseCoordinator contract PR212 b38064c2
-- blocker: source-only implementation; independent worktree/owner gate at start; observer runtime and external Cron NOT_VERIFIED; production NO_GO
+- blocker: L8 PASS_SOURCE_CANDIDATE Draft PR232 db41bdae; observer independent narrow security verification required before integration; production NO_GO
 - production_mutation_window: FORBIDDEN
 - previous_archive: .agent_v2/archive/2026-10-16-F8-observer-stop-gap-design/
-- slot_use: observer entry+egress fail-closed pause gate, independent source-only Draft PR; L8 return
+- slot_use: observer entry+egress gate implemented as source candidate; G1 to route focused validation
 
 ## F9
 - slot: F9
