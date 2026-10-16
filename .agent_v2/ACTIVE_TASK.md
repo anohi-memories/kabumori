@@ -201,21 +201,19 @@
 
 ## J3
 - slot: J3
-- status: done
-- task_id: common-account-j3-f5-pr214-snapshot-ack-focused-review-20261015
+- status: ready
+- task_id: kabumori-j3-f2-f8-pause-three-findings-focused-rereview-20261016
 - owner: codex
-- next_owner: none
-- return_to: 共通アカウントG5のちゃ（新F5担当）
+- next_owner: codex
+- return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: V3
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J3.md
 - current_report_path: .agent_v2/reports/J3.md
-- dependencies: F5 Phase10 Draft PR214 bc290ab618508a8fbaba1abfad308c52d86e4689 stacked PR206; F3 PR204 45b08a87 source PASS V3
-- blocker: CHANGES_REQUIRED P2: snapshot_changed known9 becomes failure warning1 if re-record fails; D1 full-ID consent and managed gate unresolved; production NO_GO
-- slot_use: Focused PR214 review complete; SQL/E2E39/unit140/selected mutants PASS, independent warning-count regression FAIL; return V3 to 共通アカウントG5のちゃ（新F5担当）. Prior F3 PASS not reopened.
-- previous_archive: .agent_v2/archive/2026-10-15-J3-postona-j3-pr204-p2x3-security-rereview-20261015/
-
-- v3_verdict: CHANGES_REQUIRED P2×1 / PRODUCTION_NO_GO; F5 PR214 new regression: known x_posts_unconfirmed 9 mistakenly reported 1 when re-record after snapshot_changed fails. Repair only F5 lifecycle highest value and focused negative test; full account deletion D1 explicit consent remains separate stop. Previous F3 PR204 V3 PASS unaffected.
+- dependencies: F8 PR212 d04ff9d2, F2 PR213 c10f1da5, prior J2 review; J2 protected/possibly already running
+- blocker: offline source only; confirm own independent clean checkout; production NO_GO
+- previous_archive: .agent_v2/archive/2026-10-16-J3-common-account-pr214-review/
+- slot_use: F2/F8 3 findings independent rereview; return V3 to G1
 
 ## J4
 - slot: J4
