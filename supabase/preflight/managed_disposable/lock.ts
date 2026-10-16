@@ -5,7 +5,7 @@
 // changed digest means a changed migration, a changed `reviewed` list means a changed effect.
 import { extractRequirements, PREFLIGHT_MIGRATION } from './baseline_requirements.ts';
 import type { Lock, Reviewed } from './runner.ts';
-import { networkFunctionNames, scanSql } from './sql_scan.ts';
+import { dynamicFunctionNames, indirectDynamicCalls, networkFunctionNames, scanSql } from './sql_scan.ts';
 
 export async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -18,6 +18,11 @@ export async function buildLock(
 ): Promise<Lock> {
   const files: Record<string, string> = {};
   const reviewed: Record<string, Reviewed> = {};
+  // the corpus is closed over its call graph first: a helper that reaches the network / run-time SQL through other helpers counts
+  const scans = Object.values(corpus).map((text) => scanSql(text));
+  const networkFunctions = [...networkFunctionNames(scans)].sort();
+  const dynamicNames = dynamicFunctionNames(scans);
+  const dynamicFunctions = [...dynamicNames].sort();
   // files that are only ever READ by a probe channel (the inventory query): pinned by digest, never scanned as a migration
   for (const path of pinnedOnly) files[path] = await sha256Hex(read(path));
   for (const path of [...paths].sort()) {
@@ -30,10 +35,9 @@ export async function buildLock(
       dynamic: (await Promise.all(scan.dynamic.map((statement) => sha256Hex(statement.text)))).sort(),
       writes: scan.writes,
       selects: (await Promise.all(scan.topLevelSelects.map((statement) => sha256Hex(statement.text)))).sort(),
+      indirectDynamic: indirectDynamicCalls(scan, dynamicNames),
     };
   }
-  const scans = Object.values(corpus).map((text) => scanSql(text));
-  const networkFunctions = [...networkFunctionNames(scans)].sort();
   // what the chain requires of the baseline: read out of the Phase 1 preflight itself, so a changed preflight is a changed lock.
   // (An unreadable preflight leaves it out; the baseline read-back step then STOPs on "no requirements" rather than passing.)
   let requirements: Lock['requirements'];
@@ -42,5 +46,5 @@ export async function buildLock(
   } catch {
     requirements = undefined;
   }
-  return { files, reviewed, networkFunctions, ...(requirements ? { requirements } : {}) };
+  return { files, reviewed, networkFunctions, dynamicFunctions, ...(requirements ? { requirements } : {}) };
 }

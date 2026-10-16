@@ -12,10 +12,18 @@
 //   * nothing is reported PASS that was not measured, and every text that leaves goes through the redactor.
 import type { Requirements } from './baseline_requirements.ts';
 import { type Decision, makeRedactor, type Target } from './guard.ts';
-import { indirectNetworkCalls, scanSql } from './sql_scan.ts';
+import { indirectDynamicCalls, indirectNetworkCalls, scanSql } from './sql_scan.ts';
 
 export type Status = 'PASS' | 'FAIL' | 'STOP' | 'WARN' | 'INFO' | 'MANUAL' | 'NOT_RUN';
-export type Verdict = { status: Exclude<Status, 'NOT_RUN'>; detail: string; manual?: string[] };
+/**
+ * Evidence a step hands the runner: "the project's own baseline contract equals the approved one". The runner does not
+ * trust it as written: it must carry the approved digest and name a probe whose pinned bytes the runner itself sent.
+ */
+export type BaselineEvidence = { kind: 'baseline_contract'; digest: string; probePath: string };
+export type Verdict = { status: Exclude<Status, 'NOT_RUN'>; detail: string; manual?: string[]; evidence?: BaselineEvidence };
+
+/** The id of the step whose PASS (with valid evidence) unlocks every chain mutation. Owned here, used by the plan. */
+export const BASELINE_GATE = 'G3b';
 
 export type HttpRequest = {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -35,22 +43,28 @@ export interface Transport {
   sqlRead(query: string): Promise<string>;
   /** sends one pinned file as written (its own BEGIN/COMMIT) */
   sqlApplyFile(path: string, bytes: string): Promise<string>;
-  /** runs the read-only release probe file with its disposable session setting; returns its lines */
-  sqlProbe(path: string): Promise<string>;
+  /**
+   * runs a read-only probe with its disposable session setting; returns its lines. `bytes` are the bytes the runner already
+   * verified against the pin: an implementation sends exactly these and MUST NOT read `path` (or anything else) itself --
+   * a second read after the check would be a different, unverified query. `path` is a label for logs only.
+   */
+  sqlProbe(path: string, bytes: string): Promise<string>;
   /** holds a row lock for `seconds` from a second connection; resolves when it is held */
   sqlHoldLock(query: string, seconds: number): Promise<{ release(): Promise<void> }>;
 }
 
 export type PlanFile = { id: string; path: string; kind: 'chain' | 'baseline' };
 /** What the review accepted in a pinned file, statement by statement (lock.ts builds it; any difference is a refusal). */
-export type Reviewed = { dynamic: string[]; writes: string[]; selects: string[] };
+export type Reviewed = { dynamic: string[]; writes: string[]; selects: string[]; /** corpus functions that run run-time SQL which this file calls, accepted by name */ indirectDynamic?: string[] };
 export type Lock = {
   /** SHA-256 of every file the harness may send */
   files: Record<string, string>;
   /** accepted dynamic statements / write targets / top-level selects per file; a file without an entry accepts none */
   reviewed?: Record<string, Reviewed>;
-  /** functions of the repository corpus that reach the network or cron: a file that calls one is refused */
+  /** functions of the repository corpus that reach the network or cron, directly or through helpers: a file that calls one is refused */
   networkFunctions?: string[];
+  /** functions of the repository corpus that run SQL assembled at run time, directly or through helpers: a call needs a named acceptance */
+  dynamicFunctions?: string[];
   /** what the chain requires of the baseline (read out of the Phase 1 preflight at lock time; the baseline read-back step checks it) */
   requirements?: Requirements;
   /** SHA-256 of the contract subset of the production inventory the owner approved. Supplied by the operator at run time, never stored in the lock file. */
@@ -69,6 +83,11 @@ export type Step = {
   stop: string;
   /** runs even after a FAIL / STOP (teardown) */
   always?: boolean;
+  /**
+   * step ids that must have PASSED earlier in THIS run. A step is never run, and a selection that leaves one out is
+   * refused before the first transport action. Teardown (`always`) is exempt: it must stay runnable on its own.
+   */
+  requires?: readonly string[];
   run(ctx: Ctx): Promise<Verdict>;
 };
 
@@ -121,17 +140,49 @@ export class IdentityError extends Error {
   }
 }
 
+/** A mutation was attempted before the baseline read-back passed in this run. It is a STOP, never a FAIL to retry. */
+export class GateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GateError';
+  }
+}
+
+/**
+ * Why a selection of steps is unsafe (empty when it is fine). A step that `requires` another must come with it, and
+ * after it; an unknown id is refused rather than silently ignored (a typo must not select nothing).
+ */
+export function unsafeSelection(steps: readonly Pick<Step, 'id' | 'requires'>[], only?: readonly string[]): string[] {
+  const ids = steps.map((step) => step.id);
+  const selected = new Set(only ?? ids);
+  const problems: string[] = [];
+  for (const name of selected) if (!ids.includes(name)) problems.push(`unknown step ${name}`);
+  for (const step of steps) {
+    if (!selected.has(step.id)) continue;
+    for (const need of step.requires ?? []) {
+      if (!ids.includes(need)) problems.push(`${step.id} requires ${need}, which is not a step of this plan`);
+      else if (!selected.has(need)) problems.push(`${step.id} requires ${need}, which is not selected`);
+      else if (ids.indexOf(need) > ids.indexOf(step.id)) problems.push(`${step.id} requires ${need}, which comes later`);
+    }
+  }
+  return problems;
+}
+
 const sha256Hex = async (text: string) => {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 };
 
 /** Every reason a file's text may not be sent: a blocking finding, or a reviewable one the lock did not accept. */
-export async function refusalsFor(bytes: string, reviewed: Reviewed | undefined, networkFunctions: readonly string[], targetRef: string): Promise<string[]> {
+export async function refusalsFor(
+  bytes: string, reviewed: Reviewed | undefined, networkFunctions: readonly string[], targetRef: string, dynamicFunctions: readonly string[] = [],
+): Promise<string[]> {
   const scan = scanSql(bytes, { targetRef });
   const reasons = new Set<string>();
   for (const finding of scan.findings) if (finding.severity === 'block') reasons.add(finding.code);
   for (const finding of indirectNetworkCalls(scan, new Set(networkFunctions))) reasons.add(finding.code);
+  const indirect = new Set(reviewed?.indirectDynamic ?? []);
+  for (const name of indirectDynamicCalls(scan, new Set(dynamicFunctions))) if (!indirect.has(name)) reasons.add('INDIRECT_DYNAMIC_CALL');
   const dynamic = new Set(reviewed?.dynamic ?? []);
   for (const statement of scan.dynamic) if (!dynamic.has(await sha256Hex(statement.text))) reasons.add('DYNAMIC_SQL');
   const writes = new Set(reviewed?.writes ?? []);
@@ -168,12 +219,27 @@ export async function run(steps: readonly Step[], options: RunOptions): Promise<
   if (!options.decision.ok) {
     return { ...summarize(), refused: options.decision.failures.map((f) => ({ code: f.code, detail: redact(f.detail) })), results: [], complete: false };
   }
+  // an unsafe partial selection is refused before the first transport action (not even an identity read)
+  const unsafe = unsafeSelection(steps, options.only);
+  if (unsafe.length > 0) {
+    return { ...summarize(), refused: unsafe.map((detail) => ({ code: 'UNSAFE_SELECTION', detail })), results: [], complete: false };
+  }
   const target = options.decision.target;
   const transport = options.transport;
   if (!transport) throw new Error('execute needs a transport');
   const runId = options.runId ?? crypto.randomUUID().replaceAll('-', '').slice(0, 12);
   const created: CreatedUser[] = [];
   const memo: Record<string, unknown> = {};
+  /** digest of the bytes each probe path was sent with in this run */
+  const sentProbes = new Map<string, string>();
+  /** set only by a PASS of the baseline gate whose evidence names this run's approved digest and a probe the runner sent */
+  let baselineGrant: { ref: string; digest: string } | undefined;
+  const passed = new Set<string>();
+  const requireBaselineGrant = (what: string) => {
+    if (!baselineGrant || baselineGrant.ref !== target.projectRef || baselineGrant.digest !== options.lock.approvedInventory) {
+      throw new GateError(`${what} is a mutation and the baseline read-back (${BASELINE_GATE}) has not passed in this run`);
+    }
+  };
 
   // identity: the project itself says which project it is, and it is the allowlisted one
   const verifyIdentity = async () => {
@@ -193,30 +259,43 @@ export async function run(steps: readonly Step[], options: RunOptions): Promise<
       log: () => {},
       sql: (query) => transport.sqlRead(query),
       probe: async (path) => {
-        // a probe file is read-only SQL the review pinned: it is sent only when its bytes are the pinned bytes
+        // a probe file is read-only SQL the review pinned: it is sent only when its bytes are the pinned bytes, and the
+        // bytes that were checked are the bytes that are sent (one read; the transport receives them and reads nothing)
         const pinned = options.lock.files[path];
         if (pinned === undefined) throw new Error(`probe file ${path} is not pinned in the plan lock`);
-        if ((await sha256Hex(options.reader.read(path))) !== pinned) throw new Error(`probe file ${path} differs from its pinned digest`);
-        return transport.sqlProbe(path);
+        const bytes = options.reader.read(path);
+        const digest = await sha256Hex(bytes);
+        if (digest !== pinned) throw new Error(`probe file ${path} differs from its pinned digest`);
+        sentProbes.set(path, digest);
+        return transport.sqlProbe(path, bytes);
       },
       hold: async (query, seconds) => {
-        if (mutating) await verifyIdentity();
+        if (mutating) {
+          if (!step.always) requireBaselineGrant('a held lock');
+          await verifyIdentity();
+        }
         return transport.sqlHoldLock(query, seconds);
       },
       http: async (request) => {
         if (request.method !== 'GET') {
           if (!mutating) throw new Error(`step ${step.id} is declared read-only and may not send ${request.method}`);
+          // teardown (`always`) removes this run's own logins and must stay runnable on its own
+          if (!step.always) requireBaselineGrant(`${request.method} ${request.path}`);
           await verifyIdentity();
         }
         return transport.http(request);
       },
       applyFile: async (file) => {
         if (!mutating) throw new Error(`step ${step.id} is declared read-only and may not apply a file`);
+        // the mutation boundary itself: a chain file is never sent unless the baseline read-back passed in THIS run, for
+        // this project and for the approved digest (a step filter, a custom plan or a direct call cannot get around it)
+        // (every file except the operator's baseline itself: the baseline is what the read-back then checks)
+        if (file.kind !== 'baseline') requireBaselineGrant(`file ${file.path}`);
         const pinned = options.lock.files[file.path];
         if (pinned === undefined) throw new Error(`file ${file.path} is not pinned in the plan lock`);
         const bytes = options.reader.read(file.path);
         if ((await sha256Hex(bytes)) !== pinned) throw new Error(`file ${file.path} differs from its pinned digest`);
-        const refusals = await refusalsFor(bytes, options.lock.reviewed?.[file.path], options.lock.networkFunctions ?? [], target.projectRef);
+        const refusals = await refusalsFor(bytes, options.lock.reviewed?.[file.path], options.lock.networkFunctions ?? [], target.projectRef, options.lock.dynamicFunctions ?? []);
         if (refusals.length > 0) throw new Error(`file ${file.path} refused: ${refusals.join(',')}`);
         await verifyIdentity();
         return transport.sqlApplyFile(file.path, bytes);
@@ -234,14 +313,30 @@ export async function run(steps: readonly Step[], options: RunOptions): Promise<
       results.push({ id: step.id, title: step.title, status: 'NOT_RUN', detail: `not run: stopped at ${stoppedAt}` });
       continue;
     }
+    const missing = (step.requires ?? []).filter((need) => !passed.has(need));
+    if (missing.length > 0) {
+      results.push({ id: step.id, title: step.title, status: 'STOP', detail: `not run: ${missing.join(', ')} has not passed in this run` });
+      stoppedAt ??= step.id;
+      continue;
+    }
     try {
       if (step.access === 'mutate') await verifyIdentity();
-      const verdict = await step.run(ctxFor(step));
+      let verdict = await step.run(ctxFor(step));
+      if (step.id === BASELINE_GATE && verdict.status === 'PASS') {
+        const evidence = verdict.evidence;
+        const bound = evidence !== undefined && evidence.kind === 'baseline_contract' && options.lock.approvedInventory !== undefined
+          && evidence.digest === options.lock.approvedInventory
+          && sentProbes.get(evidence.probePath) !== undefined && sentProbes.get(evidence.probePath) === options.lock.files[evidence.probePath];
+        if (bound && evidence) baselineGrant = { ref: target.projectRef, digest: evidence.digest };
+        else verdict = { status: 'STOP', detail: `${BASELINE_GATE} reported PASS without evidence bound to the approved digest and to a probe this run sent` };
+      }
       results.push({ id: step.id, title: step.title, status: verdict.status, detail: redact(verdict.detail), ...(verdict.manual ? { manual: verdict.manual.map(redact) } : {}) });
+      if (verdict.status === 'PASS') passed.add(step.id);
       if ((verdict.status === 'FAIL' || verdict.status === 'STOP') && !stoppedAt) stoppedAt = step.id;
     } catch (failure) {
       const message = failure instanceof Error ? failure.message : String(failure);
-      results.push({ id: step.id, title: step.title, status: failure instanceof IdentityError ? 'STOP' : 'FAIL', detail: redact(message).slice(0, 400) });
+      const stopping = failure instanceof IdentityError || failure instanceof GateError;
+      results.push({ id: step.id, title: step.title, status: stopping ? 'STOP' : 'FAIL', detail: redact(message).slice(0, 400) });
       stoppedAt ??= step.id;
     }
   }

@@ -78,7 +78,8 @@ export function createRealTransport(config: RealConfig): Transport {
     },
     sqlRead: (query) => psql(psqlInvocation(config.dbUrl, 'read', query)),
     sqlApplyFile: (_path, bytes) => psql(psqlInvocation(config.dbUrl, 'apply', bytes)),
-    sqlProbe: async (path) => psql(psqlInvocation(config.dbUrl, 'probe', await Deno.readTextFile(path))),
+    // the runner hands over the bytes it verified; this transport never reads a file (a second read would be a second, unchecked query)
+    sqlProbe: (_path, bytes) => psql(psqlInvocation(config.dbUrl, 'probe', bytes)),
     sqlHoldLock: (query, seconds) => {
       const hold = psqlInvocation(config.dbUrl, 'hold', `begin; ${query}; select pg_sleep(${Math.max(1, Math.floor(seconds))}); commit;`);
       const done = psql(hold).catch(() => '');

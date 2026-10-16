@@ -26,7 +26,8 @@
         "public.profiles",
         "public.service_entitlements"
       ],
-      "selects": []
+      "selects": [],
+      "indirectDynamic": []
     },
     "supabase/migrations/20261006230000_common_account_service_start_intent.sql": {
       "dynamic": [],
@@ -34,7 +35,8 @@
         "public.profiles",
         "public.service_entitlements"
       ],
-      "selects": []
+      "selects": [],
+      "indirectDynamic": []
     },
     "supabase/migrations/20261009120000_common_account_deletion_completion.sql": {
       "dynamic": [
@@ -47,22 +49,30 @@
         "private.account_lifecycle_operations",
         "private.account_lifecycle_release_gates"
       ],
-      "selects": []
+      "selects": [],
+      "indirectDynamic": [
+        "private.account_lifecycle_authorization_problems",
+        "private.account_lifecycle_managed_ownership",
+        "public.prepare_common_account_auth_delete"
+      ]
     },
     "supabase/migrations/20261010051938_common_account_service_write_guard.sql": {
       "dynamic": [],
       "writes": [],
-      "selects": []
+      "selects": [],
+      "indirectDynamic": []
     },
     "supabase/migrations/20261012130000_common_account_core_service_fence.sql": {
       "dynamic": [],
       "writes": [],
-      "selects": []
+      "selects": [],
+      "indirectDynamic": []
     },
     "supabase/migrations/20261012230000_common_account_service_brand_state.sql": {
       "dynamic": [],
       "writes": [],
-      "selects": []
+      "selects": [],
+      "indirectDynamic": []
     },
     "supabase/migrations/20261013120000_common_account_service_deletion_ownership.sql": {
       "dynamic": [],
@@ -70,26 +80,30 @@
         "private.account_lifecycle_operations",
         "public.service_entitlements"
       ],
-      "selects": []
+      "selects": [],
+      "indirectDynamic": []
     },
     "supabase/migrations/20261013140000_common_account_service_reconciliation_facts.sql": {
       "dynamic": [],
       "writes": [
         "private.account_lifecycle_operations"
       ],
-      "selects": []
+      "selects": [],
+      "indirectDynamic": []
     },
     "supabase/migrations/20261015090000_common_account_enrollment_session_fence.sql": {
       "dynamic": [],
       "writes": [],
-      "selects": []
+      "selects": [],
+      "indirectDynamic": []
     },
     "supabase/migrations/20261015120000_common_account_x_unconfirmed_snapshot_record.sql": {
       "dynamic": [],
       "writes": [
         "private.account_lifecycle_operations"
       ],
-      "selects": []
+      "selects": [],
+      "indirectDynamic": []
     },
     "supabase/preflight/common_account_release_probe.sql": {
       "dynamic": [
@@ -108,10 +122,55 @@
       "writes": [],
       "selects": [
         "52f54393ce9b62b64e91d71909c55e3f9ef453761497530af5c02bd18b1283d1"
+      ],
+      "indirectDynamic": [
+        "private.account_lifecycle_authorization_problems",
+        "private.account_lifecycle_managed_ownership",
+        "private.account_lifecycle_readiness_refusal",
+        "private.account_lifecycle_residue",
+        "private.account_lifecycle_storage_inventory",
+        "public.begin_common_account_deletion_external_step",
+        "public.common_account_deletion_eligibility",
+        "public.common_account_deletion_storage_objects",
+        "public.complete_common_account_deletion",
+        "public.prepare_common_account_auth_delete",
+        "public.prepare_owned_common_account_auth_delete"
       ]
     }
   },
   "networkFunctions": [],
+  "dynamicFunctions": [
+    "account_lifecycle_authorization_problems",
+    "account_lifecycle_managed_ownership",
+    "account_lifecycle_readiness_refusal",
+    "account_lifecycle_residue",
+    "account_lifecycle_storage_inventory",
+    "ai_lab_topic_claims_create",
+    "begin_common_account_deletion_external_step",
+    "common_account_deletion_eligibility",
+    "common_account_deletion_storage_objects",
+    "complete_common_account_deletion",
+    "pg_temp.ai_lab_topic_claims_create",
+    "prepare_common_account_auth_delete",
+    "prepare_owned_common_account_auth_delete",
+    "private.account_lifecycle_authorization_problems",
+    "private.account_lifecycle_managed_ownership",
+    "private.account_lifecycle_readiness_refusal",
+    "private.account_lifecycle_residue",
+    "private.account_lifecycle_storage_inventory",
+    "public.account_lifecycle_authorization_problems",
+    "public.account_lifecycle_managed_ownership",
+    "public.account_lifecycle_readiness_refusal",
+    "public.account_lifecycle_residue",
+    "public.account_lifecycle_storage_inventory",
+    "public.ai_lab_topic_claims_create",
+    "public.begin_common_account_deletion_external_step",
+    "public.common_account_deletion_eligibility",
+    "public.common_account_deletion_storage_objects",
+    "public.complete_common_account_deletion",
+    "public.prepare_common_account_auth_delete",
+    "public.prepare_owned_common_account_auth_delete"
+  ],
   "requirements": {
     "schemas": [
       "private"

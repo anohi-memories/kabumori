@@ -8,7 +8,7 @@
 import { ENV, projectRefsIn, resolveTarget } from './guard.ts';
 import { buildLock } from './lock.ts';
 import { BASELINE, CHAIN, INVENTORY_PATH, PROBE_PATH, STEPS } from './plan.ts';
-import { type Lock, render, run } from './runner.ts';
+import { type Lock, render, run, unsafeSelection } from './runner.ts';
 import { createRealTransport } from './transports.ts';
 
 const here = new URL('.', import.meta.url);
@@ -56,6 +56,8 @@ const secrets = [env[ENV.publishableKey], env[ENV.serviceKey], env[ENV.dbUrl]];
 if (!execute) {
   const report = await run(STEPS, { mode: 'dry-run', decision, lock, reader });
   console.log(render(report, secrets));
+  const unsafe = unsafeSelection(STEPS, only);
+  if (unsafe.length > 0) console.log(`an execution of this --only selection would be REFUSED before any call: ${unsafe.join('; ')}`);
   const readiness = resolveTarget(env, { execute: true, repositoryRefs: repositoryRefs() });
   console.log(readiness.ok ? 'an execution would pass the target guard' : `an execution would be REFUSED: ${readiness.failures.map((f) => f.code).join(', ')}`);
   Deno.exit(0);

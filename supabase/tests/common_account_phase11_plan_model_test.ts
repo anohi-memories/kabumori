@@ -92,9 +92,9 @@ function modelTransport(seams: Seams, database: string, counters: Counters): Tra
       if (!out.success) throw new Error(decoder.decode(out.stderr).split('\n').find((line) => /ERROR/u.test(line)) ?? 'psql failed');
       return decoder.decode(out.stdout).trim();
     },
-    async sqlProbe(path) {
+    async sqlProbe(_path, bytes) {
       counters.sql += 1;
-      const out = await psqlChild(database, ['-f', '-'], { stdin: readRepo(path), probe: true });
+      const out = await psqlChild(database, ['-f', '-'], { stdin: bytes, probe: true });
       if (!out.success) throw new Error(decoder.decode(out.stderr).slice(0, 300));
       return decoder.decode(out.stdout).trim();
     },
@@ -137,6 +137,8 @@ test('the model run: the plan applies the ten chain files and passes the probe a
     assert.equal(report.stoppedAt, undefined);
     assert.equal(counters.apply, 10, 'exactly the ten chain files were sent');
     assert.equal(await sql(`select to_regprocedure('public.record_owned_service_deletion_x_unconfirmed(uuid,text,uuid,uuid,integer,text)') is not null`, HARNESS), 't');
+    // the chain does not change the baseline CONTRACT (so G3b can be re-run per chain file, one gate at a time)
+    assert.equal(await approvedContract(HARNESS), approved.approvedInventory, 'the contract digest is the same before and after the chain');
     // teardown removed every login the run created
     assert.equal(await sql('select count(*) from auth.users', HARNESS), '0');
     // M7 left an item for the operator: the run is not "complete"
@@ -166,6 +168,26 @@ test('the baseline read-back: another approved contract STOPs at G3b, before any
     // and without any approval the plan cannot even be started
     const none = resolveTarget({ ...environment(), [ENV.inventorySha256]: undefined }, { execute: true });
     assert.equal(none.ok, false);
+  } finally {
+    await seams.stop();
+  }
+});
+
+test('J1 V1 R2 in the model: --only=G3-P1 alone is refused before any call, and an unapproved digest with the gate selected applies nothing', { skip: !enabled }, async () => {
+  const seams = await startSeams({ database: TAMPER, autoconfirm: true, exposed: EXPOSED });
+  try {
+    const decision = resolveTarget(environment(), { execute: true });
+    assert.equal(decision.ok, true);
+    const alone = { http: 0, sql: 0, apply: 0 };
+    const refused = await run(STEPS, { mode: 'execute', decision, transport: modelTransport(seams, TAMPER, alone), lock: { ...lock, approvedInventory: 'e'.repeat(64) }, reader: reader(), only: ['G3-P1'] });
+    assert.deepEqual(refused.refused?.map((r) => r.code), ['UNSAFE_SELECTION']);
+    assert.deepEqual(alone, { http: 0, sql: 0, apply: 0 }, 'not a single transport action');
+    assert.equal(await sql(`select to_regprocedure('public.start_kabumori_service()') is null`, TAMPER), 't');
+    const counters: Counters = { http: 0, sql: 0, apply: 0 };
+    const gated = await run(STEPS, { mode: 'execute', decision, transport: modelTransport(seams, TAMPER, counters), lock: { ...lock, approvedInventory: 'e'.repeat(64) }, reader: reader(), only: ['G1', 'G3b', 'G3-P1'] });
+    assert.equal(counters.apply, 0);
+    assert.equal(gated.results.find((r) => r.id === 'G3b')?.status, 'STOP');
+    assert.equal(await sql(`select to_regprocedure('public.start_kabumori_service()') is null`, TAMPER), 't', 'nothing was applied');
   } finally {
     await seams.stop();
   }
@@ -215,9 +237,10 @@ test('fail-before: in a world without the Phase 9 fence the plan\'s M5 detects t
   try {
     const decision = resolveTarget(environment(), { execute: true });
     assert.equal(decision.ok, true);
-    const report = await run(STEPS, { mode: 'execute', decision, transport: modelTransport(seams, NOFENCE, { http: 0, sql: 0, apply: 0 }), lock, reader: reader(), only: ['G1', 'M5'] });
+    const report = await run(STEPS, { mode: 'execute', decision, transport: modelTransport(seams, NOFENCE, { http: 0, sql: 0, apply: 0 }), lock: { ...lock, approvedInventory: await approvedContract(NOFENCE) }, reader: reader(), only: ['G1', 'G3b', 'M5'] });
     const byId = new Map(report.results.map((r) => [r.id, r]));
     assert.equal(byId.get('G1')?.status, 'PASS');
+    assert.equal(byId.get('G3b')?.status, 'PASS', 'a mutating check is selected only together with the baseline read-back');
     assert.equal(byId.get('M5')?.status, 'STOP', JSON.stringify(byId.get('M5')));
     assert.match(byId.get('M5')?.detail ?? '', /restarted the ended service/u);
   } finally {

@@ -63,6 +63,11 @@ test('the secret scan sees keys, URLs, connection strings and Supabase hosts, an
   assert.ok(sample(secretValue(['https', '://hooks.example.com/x'])).includes('SECRET_URL'));
   assert.ok(sample(secretValue(['abcdefghij0123456789', '.supabase.co'])).includes('SECRET_SUPABASE_HOST'));
   assert.deepEqual(sample('-----BEGIN RSA PRIVATE KEY-----'), ['SECRET_PRIVATE_KEY']);
+  // a key-shaped value behind an identifier prefix is still a key (J1 V1 R4: `_` is a word character, \b missed it)
+  assert.deepEqual(sample(secretValue(['"key":"s_sb_secret_', 'R4SyntheticSentinel0123456789"'])), ['SECRET_SUPABASE_KEY']);
+  assert.deepEqual(sample(secretValue(['"key":"public.t_sk_live_', 'abcdefghijklmnopqrstuvwx"'])), ['SECRET_LONG_TOKEN']);
+  assert.deepEqual(sample(secretValue(['"key":"x_AKIA', 'ABCDEFGHIJKLMNOP"'])), ['SECRET_AWS_KEY']);
+  assert.deepEqual(sample('"key":"public.task_sk_lite"'), [], 'a prefix inside a longer word is not a key');
   assert.deepEqual(sample(toText(synthetic())), [], 'the schema vocabulary (secret, token, supabase_host as a key name) is not a finding');
 });
 
