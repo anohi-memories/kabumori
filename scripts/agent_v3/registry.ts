@@ -44,7 +44,7 @@ export type ChangeSet = {
 };
 
 export class PlanError extends Error {
-  readonly kind: "same_slot_conflict" | "invalid" | "not_archived" | "occupied" | "not_found";
+  readonly kind: "same_slot_conflict" | "invalid" | "not_archived" | "occupied" | "not_found" | "destination" | "report_mismatch";
   constructor(kind: PlanError["kind"], message: string) {
     super(message);
     this.name = "PlanError";
@@ -89,15 +89,29 @@ function clean(value: string): string {
 }
 
 // The header is the leading run of `- key: value` lines (blank lines allowed) before the first `## ` heading.
+// A UTF-8 BOM and CRLF line endings are tolerated so a file saved by another editor parses the same way.
+function headerLines(text: string): string[] {
+  const lines = text.replace(/^﻿/, "").split("\n").map((l) => l.replace(/\r$/, ""));
+  const end = lines.findIndex((l) => l.startsWith("## "));
+  return end < 0 ? lines : lines.slice(0, end);
+}
+
 export function parseHeader(text: string | null): Header {
   const header: Header = {};
   if (text === null) return header;
-  for (const line of text.split("\n")) {
-    if (line.startsWith("## ")) break;
+  for (const line of headerLines(text)) {
     const m = line.match(/^- ([a-z_]+): *(.*)$/);
     if (m && !(m[1] in header)) header[m[1]] = clean(m[2]);
   }
   return header;
+}
+
+// An indented `- key:` line in the header area is not read as a field, so it would silently be ignored;
+// a TASK containing one is refused instead.
+export function validateTaskText(text: string): string[] {
+  return headerLines(text)
+    .filter((l) => /^\s+- [a-z_]+:/.test(l))
+    .map((l) => `indented header field ${JSON.stringify(l.trim().slice(0, 40))}`);
 }
 
 export function keyFields(h: Header): Header {
@@ -286,10 +300,82 @@ function slotDef(defs: SlotDef[], slot: string): SlotDef {
   return d;
 }
 
-export type Expect = { task_id: string; status: string };
+export type ListFiles = (prefix: string) => string[];
+
+// What the caller saw when it decided to write. task_sha256 is the SHA256 of the whole TASK file (UTF-8
+// bytes), so an edit that keeps task_id and status but changes the body is still detected as someone else's
+// change. report_sha256 does the same for a Codex Report file ("missing" when the file does not exist).
+export type Expect = { task_id: string; status: string; task_sha256: string; report_sha256?: string };
+
+const SHA256 = /^[0-9a-f]{64}$/;
+const SAFE_ROOT = /^\.agent_v3[A-Za-z0-9_-]*$/;
+const SAFE_SEGMENT = /^[A-Za-z0-9._@-]+$/;
+
+export function contentSha256(text: string | null): string {
+  return text === null ? "missing" : sha256(new TextEncoder().encode(text));
+}
+
+export type SlotState = { slot: string; task_id: string; status: string; task_sha256: string; report_sha256: string | null };
+
+export function slotState(defs: SlotDef[], read: ReadFile, slot: string): SlotState {
+  const def = slotDef(defs, slot);
+  const task = read(def.taskPath);
+  const h = parseHeader(task);
+  return {
+    slot,
+    task_id: h.task_id ?? "",
+    status: h.status ?? "",
+    task_sha256: contentSha256(task),
+    report_sha256: def.reportPath ? contentSha256(read(def.reportPath)) : null,
+  };
+}
+
+// Writes are confined to one V3 root. The live .agent/ and .agent_v2/ systems, .github/ and anything outside
+// the root can never be part of a change set, whatever a planner produced.
+export function assertSafeRoot(root: string): void {
+  if (!SAFE_ROOT.test(root)) throw new PlanError("destination", `root ${root} is not an allowed V3 root (.agent_v3*)`);
+}
+
+export function assertWithinRoot(paths: Iterable<string>, root: string): void {
+  assertSafeRoot(root);
+  for (const path of paths) {
+    const segments = path.split("/");
+    if (segments[0] !== root || segments.length < 2 || segments.some((s) => s === "" || s === "." || s === ".." || !SAFE_SEGMENT.test(s))) {
+      throw new PlanError("destination", `path ${JSON.stringify(path)} is outside ${root} or not a plain relative path`);
+    }
+  }
+}
+
+function checkExpect(def: SlotDef, read: ReadFile, expect: Expect, needReport: boolean): Header {
+  if (!SHA256.test(expect.task_sha256 ?? "")) {
+    throw new PlanError("invalid", `${def.slot}: expect.task_sha256 is required (64 hex); run \`show\` to read the current state`);
+  }
+  const task = read(def.taskPath);
+  const before = parseHeader(task);
+  const seen = `${before.task_id}/${before.status}/${contentSha256(task).slice(0, 12)}`;
+  if ((before.task_id ?? "") !== expect.task_id || (before.status ?? "") !== expect.status || contentSha256(task) !== expect.task_sha256) {
+    throw new PlanError("same_slot_conflict", `${def.slot} is ${seen}, caller expected ${expect.task_id}/${expect.status}/${expect.task_sha256.slice(0, 12)}`);
+  }
+  if (needReport && def.reportPath) {
+    const want = expect.report_sha256 ?? "";
+    if (want !== "missing" && !SHA256.test(want)) throw new PlanError("invalid", `${def.slot}: expect.report_sha256 is required`);
+    if (contentSha256(read(def.reportPath)) !== want) {
+      throw new PlanError("same_slot_conflict", `${def.slot} Report changed since the caller read it`);
+    }
+  }
+  return before;
+}
+
+export function planInit(defs: SlotDef[], root: string, list: ListFiles): ChangeSet {
+  assertSafeRoot(root);
+  const existing = list(`${root}/`);
+  if (existing.length) throw new PlanError("occupied", `${root} already has ${existing.length} file(s), e.g. ${existing[0]}`);
+  return { files: initRoot(defs, root), expectations: new Map(), message: `agent_v3: initialise ${root}` };
+}
 
 // Plan a TASK-file write for one slot. `expect` is what the caller believed the slot held when it decided
-// to write; if the base no longer matches, another writer got there first and the plan is refused.
+// to write; if the base no longer matches (including the body), another writer got there first and the
+// plan is refused instead of overwriting their change.
 export function planTaskWrite(
   defs: SlotDef[],
   root: string,
@@ -300,16 +386,11 @@ export function planTaskWrite(
   reportText: string | null,
   message: string,
 ): ChangeSet {
+  assertSafeRoot(root);
   const def = slotDef(defs, slot);
-  const before = parseHeader(read(def.taskPath));
-  if ((before.task_id ?? "") !== expect.task_id || (before.status ?? "") !== expect.status) {
-    throw new PlanError(
-      "same_slot_conflict",
-      `${slot} is ${before.task_id}/${before.status}, caller expected ${expect.task_id}/${expect.status}`,
-    );
-  }
+  const before = checkExpect(def, read, expect, reportText !== null);
   const after = parseHeader(newTaskText);
-  const errors = validateHeader(def, after);
+  const errors = [...validateHeader(def, after), ...validateTaskText(newTaskText)];
   if (errors.length) throw new PlanError("invalid", `${slot}: ${errors.join("; ")}`);
   if (after.task_id !== before.task_id) {
     // A new task only ever lands on an idle slot. A done slot is archived first (which resets it to idle),
@@ -338,25 +419,32 @@ export function planArchive(
   defs: SlotDef[],
   root: string,
   read: ReadFile,
+  list: ListFiles,
   slot: string,
-  expectTaskId: string,
+  expect: Expect,
   baseCommit: string,
   date: string,
 ): ChangeSet {
+  assertSafeRoot(root);
   const def = slotDef(defs, slot);
-  const task = read(def.taskPath);
-  const h = parseHeader(task);
-  if (h.task_id !== expectTaskId || h.status !== "done") {
-    throw new PlanError("same_slot_conflict", `${slot} is ${h.task_id}/${h.status}, expected ${expectTaskId}/done`);
-  }
+  const h = checkExpect(def, read, expect, true);
+  if (h.status !== "done") throw new PlanError("same_slot_conflict", `${slot} is ${h.status}, only a done slot is archived`);
+  if (!TASK_ID.test(expect.task_id)) throw new PlanError("invalid", `bad task_id ${expect.task_id}`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new PlanError("invalid", `bad date ${date}`);
-  const dir = `${root}/archive/${date}-${slot}-${expectTaskId}`;
-  if (read(`${dir}/MANIFEST.json`) !== null) throw new PlanError("invalid", `${dir} already exists (append-only)`);
-  const originals: [string, string][] = [[def.taskPath, task!]];
+  const task = read(def.taskPath)!;
+  const originals: [string, string][] = [[def.taskPath, task]];
   if (def.reportPath) {
+    // A Codex slot is archived only together with the Report of the same task; otherwise the history would
+    // lose the Report while the slot is reset to idle.
     const report = read(def.reportPath);
-    if (report !== null) originals.push([def.reportPath, report]);
+    const reportTask = parseHeader(report).task_id;
+    if (report === null) throw new PlanError("report_mismatch", `${slot} Report is missing; not archiving`);
+    if (reportTask !== expect.task_id) throw new PlanError("report_mismatch", `${slot} Report is for ${reportTask}, not ${expect.task_id}`);
+    originals.push([def.reportPath, report]);
   }
+  const dir = `${root}/archive/${date}-${slot}-${expect.task_id}`;
+  const existing = list(`${dir}/`);
+  if (existing.length) throw new PlanError("occupied", `${dir} already has ${existing.length} file(s) (append-only)`);
   const files = new Map<string, string | null>();
   const entries = originals.map(([path, text]) => {
     const archivePath = `${dir}/files/${path}`;
@@ -365,18 +453,18 @@ export function planArchive(
       original_path: path,
       archive_path: archivePath,
       size: new TextEncoder().encode(text).length,
-      sha256: sha256(text),
+      sha256: contentSha256(text),
       snapshot_commit: baseCommit,
     };
   });
-  files.set(`${dir}/MANIFEST.json`, JSON.stringify({ slot, task_id: expectTaskId, snapshot_commit: baseCommit, files: entries }, null, 2) + "\n");
+  files.set(`${dir}/MANIFEST.json`, JSON.stringify({ slot, task_id: expect.task_id, snapshot_commit: baseCommit, files: entries }, null, 2) + "\n");
   files.set(`${dir}/SHA256SUMS`, entries.map((e) => `${e.sha256}  files/${e.original_path}\n`).join(""));
-  const result = (task!.match(/^- result: *(.*)$/m)?.[1] ?? "").replace(/\|/g, "/").slice(0, 80);
+  const result = (task.match(/^- result: *(.*)$/m)?.[1] ?? "").replace(/\|/g, "/").slice(0, 80);
   const history = read(historyIndexPath(root)) ?? "";
-  files.set(historyIndexPath(root), `${history}| ${date} | ${slot} | ${expectTaskId} | ${clean(result)} | ${dir} |\n`);
+  files.set(historyIndexPath(root), `${history}| ${date} | ${slot} | ${expect.task_id} | ${clean(result)} | ${dir} |\n`);
   files.set(def.taskPath, idleTemplate(def, root));
   if (def.reportPath) files.set(def.reportPath, idleReport(def));
   files.set(indexPath(root), deriveIndex(defs, overlay(read, files)));
   const idle = keyFields(parseHeader(idleTemplate(def, root)));
-  return { files, expectations: new Map([[slot, idle]]), message: `agent_v3(${slot}): archive ${expectTaskId} and reset to idle` };
+  return { files, expectations: new Map([[slot, idle]]), message: `agent_v3(${slot}): archive ${expect.task_id} and reset to idle` };
 }
