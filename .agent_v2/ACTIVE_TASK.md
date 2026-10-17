@@ -157,18 +157,18 @@
 
 ## F10
 - slot: F10
-- status: done
-- task_id: orchestration-v3-pr229-security-review-high-medium-fixes-f10-20261016
+- status: ready
+- task_id: orchestration-v3-pr229-n1-n2-focused-correction-f10-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリ30枠統括のちゃ（このチャット）
 - completion_code: L10
-- recommended_model: Opus5.5（高）
+- recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F10.md
 - current_report_path: .agent_v2/tasks/F10.md#report
-- dependencies: Draft PR229 (7ce49c0b) independent review CHANGES_REQUIRED; previous F10 TASK archived; old/new operating systems protected
-- blocker: L10 PASS_SOURCE_FIX / V3_CUTOVER_NO_GO — focused independent rereview, branch CAS and ChatGPT connector write proof outstanding
-- slot_use: PR229 H1-H3/M1-M4/L1-L7 source fixes accepted at L10; F10 done/unreserved; no merge/cutover
+- dependencies: PR #229 HEAD 284286248e561e55e8aef7682081998878d05cfa; independent rereview N1/N2 only; previous F10 TASK archived
+- blocker: V3 cutover/main merge NO_GO; branch CAS and ChatGPT connector path unverified
+- slot_use: V3 PR229 remaining N1 pushurl validation and N2 BOM archive preservation focused correction
 
 ## J1
 - slot: J1
