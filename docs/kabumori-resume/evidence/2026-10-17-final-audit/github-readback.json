@@ -1,0 +1,67 @@
+{
+  "audit_commit": "81fec48497ef674b4d083116103baf705702a847",
+  "verified_at_utc": "2026-10-17T10:31:45.362796+00:00",
+  "repository": "anohi-memories/kabumori",
+  "pull_request": "https://github.com/anohi-memories/kabumori/pull/245",
+  "main_updated": false,
+  "result": "PASS",
+  "files": [
+    {
+      "path": "docs/kabumori-resume/FINAL_AUDIT_2026-10-17.md",
+      "bytes": 13720,
+      "sha256": "39815926569a40fde8ec2f0edc99b6b60b6659ae4ac63be4402e0bebc6ad59e5",
+      "github_blob_sha": "62f6daee5cb48db1421d63be6bfc353ff4d250bb",
+      "byte_equal": true
+    },
+    {
+      "path": "docs/kabumori-resume/README.md",
+      "bytes": 2212,
+      "sha256": "91215d59b472b5977317f151e3a56a34f21f167c1f8a9f4ecbacb90d85f79411",
+      "github_blob_sha": "3bb48776439739f99bd070eeb81f5d920d03ebb2",
+      "byte_equal": true
+    },
+    {
+      "path": "docs/kabumori-resume/evidence/2026-10-17-final-audit/SHA256SUMS",
+      "bytes": 686,
+      "sha256": "320a50f338b0416eafe502c625c884bed0b5662713d38a640871b62d066d834b",
+      "github_blob_sha": "58ba6f7b14966425c64bc87b9e5526ce6414b21c",
+      "byte_equal": true
+    },
+    {
+      "path": "docs/kabumori-resume/evidence/2026-10-17-final-audit/github-runs.json",
+      "bytes": 3086,
+      "sha256": "45a652c773e14dac4e474f91fbc5a55146abe0004b3e258fc8e6e8602e70fbe2",
+      "github_blob_sha": "d37539131d3b21a126430d32054f50d88c0c643b",
+      "byte_equal": true
+    },
+    {
+      "path": "docs/kabumori-resume/evidence/2026-10-17-final-audit/github-workflows.json",
+      "bytes": 271,
+      "sha256": "419bca55013c0760d4a58b5abff327b729fb8519295b00fc10b7a4a369498a65",
+      "github_blob_sha": "2189296eadd3ae57e111b6e07c6404bbe8006c77",
+      "byte_equal": true
+    },
+    {
+      "path": "docs/kabumori-resume/evidence/2026-10-17-final-audit/log-observations.sql",
+      "bytes": 804,
+      "sha256": "7fa0d4796549a367b237e03e3cb33863c03eeae0bc0e305a531e4672280fbc81",
+      "github_blob_sha": "c43625ee871970abff40efe702c06fdc7a33983f",
+      "byte_equal": true
+    },
+    {
+      "path": "docs/kabumori-resume/evidence/2026-10-17-final-audit/observations.json",
+      "bytes": 100041,
+      "sha256": "79b242d04273022c33ec555eaedcba725a42e692a6da0f5585679ee9da7efae5",
+      "github_blob_sha": "2f4c96c53fea63a8743386e26575c9dac2e37010",
+      "byte_equal": true
+    },
+    {
+      "path": "docs/kabumori-resume/evidence/2026-10-17-final-audit/postgres-observations.sql",
+      "bytes": 5574,
+      "sha256": "661d18b42ffd4ac37a8804d9d0d6c06977f5099bac55abc87573a0bdb979eb22",
+      "github_blob_sha": "bf2f788fc65605ad526b7b36f58018cf1365f283",
+      "byte_equal": true
+    }
+  ],
+  "note": "Immutable commit read-back: all 8 initial documentation files byte-equal. Verification record is appended in a later documentation-only commit; main update awaits user approval."
+}
