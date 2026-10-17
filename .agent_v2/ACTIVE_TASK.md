@@ -89,19 +89,19 @@
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-pr231-regex-division-parser-bypass-fix-20261016
+- status: ready
+- task_id: common-ai-f6-pr234-escaped-keyword-guard-fix-20261017
 - owner: claude
-- next_owner: none
-- blocker: L6 PASS_SOURCE_FIX PR234; focused independent source security verification pending; merge/deploy/production NO_GO.
+- next_owner: claude
+- blocker: PR234 independent Claude review CHANGES_REQUIRED P2 escaped Unicode import keyword and lexer mismatch; production NO_GO
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: protected Draft PR187→198→205→219→222→231, previous Claude review CHANGES_REQUIRED
-- previous_archive: .agent_v2/archive/2026-10-16-f6-pr231-lexer-source-fix.md
-- slot_use: F6 focused PR231 parser bypass correction, source-only
+- dependencies: Draft PR187→198→205→219→222→231→234, independent Claude review P2
+- previous_archive: .agent_v2/archive/2026-10-17-f6-pr234-rawedges-source-fix.md
+- slot_use: F6 escaped keyword source-only security fix
 
 ## F7
 - slot: F7
