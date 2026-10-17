@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "note": "Explicit, auditable licences to send a stored third-party body to an external AI provider. EMPTY on purpose: no publisher has confirmed such permission. A SHA-256 match or an operator opt-in is NOT a licence. Add a record only with evidence (evidenceRef) that can be checked later; see docs/model-optimization/G9_R2_EXTERNAL_SEND_GATE_AND_LICENCES_2026-10-11.md. Record shape: { caseId, state: licence_confirmed|denied, scope: external_provider_send, bodySha256, providers: [anthropic|openai], covers: [title, body, recorded_text], evidenceRef, confirmedBy, confirmedOn: YYYY-MM-DD, expiresOn?: YYYY-MM-DD }. A denied record overrides any confirmation.",
+  "entries": []
+}

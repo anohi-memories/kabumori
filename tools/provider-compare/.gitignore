@@ -1,0 +1,3 @@
+# Private local inputs: files that hold third-party article text must never be committed.
+.local/
+*.legacy.json
